@@ -1,0 +1,31 @@
+package:
+  name: ara
+  authors:
+    - "Matheus Cavalcante <matheusd@iis.ee.ethz.ch>"
+    - "Matteo Perotti <mperotti@iis.ee.ethz.ch>"
+    - "Basile Bougenot <basileb@student.ethz.ch>"
+    - "Nils Wistoff <nwistoff@iis.ee.ethz.ch>"
+    - "Paul Scheffler <paulsc@iis.ee.ethz.ch>"
+
+dependencies:
+  axi:                { git: "https://github.com/pulp-platform/axi.git",                version: 0.29.1 }
+  common_cells:       { git: "https://github.com/pulp-platform/common_cells.git",       version: 1.22.1 }
+  tech_cells_generic: { git: "https://github.com/pulp-platform/tech_cells_generic.git", version: 0.2.1  }
+
+workspace:
+  checkout_dir: "hardware/deps"
+
+export_include_dirs:
+  - hardware/include
+
+sources:
+  files:
+    # Headers
+    - hardware/include/spatz_pkg.sv
+
+    # Sources
+    - hardware/src/spatz.sv
+
+    - target: spatz_test
+      files:
+        - hardware/tb/spatz_tb.sv
