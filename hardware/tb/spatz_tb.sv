@@ -32,18 +32,26 @@ module spatz_tb;
 			#(ClockPeriod);
 
 		rst_n = 1'b1;
+
+		repeat (10)
+			#(ClockPeriod)
+
+		$finish;
 	end
 
 	///////////
 	// Spatz //
 	///////////
 
-	logic inv;
-
 	spatz dut (
-		.clk_i	(clk),
-		.rst_ni	(rst_n),
-		.inv_o	(inv)
+		.clk_i					(clk),
+		.rst_ni					(rst_n),
+		.instr_i        (32'h0c257557),
+		.instr_illegal_o(),
+		.instr_valid_i  (1'b1),
+		.rs1_i          (32'd128),
+		.rs2_i 					('0),
+		.rd_o           ()
 	);
 
 endmodule : spatz_tb
