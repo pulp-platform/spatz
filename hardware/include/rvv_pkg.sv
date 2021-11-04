@@ -21,9 +21,9 @@ package rvv_pkg;
 
   typedef enum logic [2:0] {
     LMUL_RES = 3'b100,
-    LMUL_1_8 = 3'b101,
-    LMUL_1_4 = 3'b110,
-    LMUL_1_2 = 3'b111,
+    LMUL_F8 = 3'b101,
+    LMUL_F4 = 3'b110,
+    LMUL_F2 = 3'b111,
     LMUL_1   = 3'b000,
     LMUL_2   = 3'b001,
     LMUL_4   = 3'b010,

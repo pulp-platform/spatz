@@ -34,7 +34,7 @@ module spatz_tb;
 		rst_n = 1'b1;
 
 		repeat (10)
-			#(ClockPeriod)
+			#(ClockPeriod);
 
 		$finish;
 	end
@@ -43,15 +43,48 @@ module spatz_tb;
 	// Spatz //
 	///////////
 
+	riscv_pkg::instr_t instr;
+	logic instr_valid;
+	spatz_pkg::elen_t rs1;
+	spatz_pkg::elen_t rs2;
+
 	spatz dut (
 		.clk_i					(clk),
 		.rst_ni					(rst_n),
-		.instr_i        (32'h0c257557),
+		.instr_i        (instr),
 		.instr_illegal_o(),
 		.instr_valid_i  (1'b1),
-		.rs1_i          (32'd128),
-		.rs2_i 					('0),
+		.rs1_i          (rs1),
+		.rs2_i 					(rs2),
 		.rd_o           ()
 	);
+
+	initial begin
+		instr = '0;
+		rs1 = '0;
+		rs2 = '0;
+
+		wait (rst_n == 1'b1);
+
+		// vl_exp = 64
+		instr = 32'h0c257557;
+		rs1 = 32'd128;
+		rs2 = '0;
+
+		@(negedge clk);
+
+		// vl_exp = 128
+		instr = 32'h08207557;
+		rs1 = 32'd128;
+		rs2 = '0;
+
+		@(negedge clk);
+
+		// vl_exp stays the same
+		instr = 32'h00207057;
+		rs1 = 32'd128;
+		rs2 = '0;
+
+	end
 
 endmodule : spatz_tb

@@ -74,7 +74,20 @@ module spatz
 				vtype_d = decoded_data.vtype;
 				if (~decoded_data.op_cgf.keep_vl) begin
 					// Normal stripmining mode
-					vl_d = (MAXVL < decoded_data.rs1) ? MAXVL : decoded_data.rs1;
+					automatic int unsigned vlmax = 0;
+					vlmax = VLENB >> decoded_data.vtype.vsew;
+
+					unique case (decoded_data.vtype.vlmul)
+						LMUL_F2: vlmax >>= 1;
+						LMUL_F4: vlmax >>= 2;
+						LMUL_F8: vlmax >>= 3;
+						LMUL_1: vlmax <<= 0;
+						LMUL_2: vlmax <<= 1;
+						LMUL_4: vlmax <<= 2;
+						LMUL_8: vlmax <<= 3;
+					endcase
+
+					vl_d = (decoded_data.rs1 == '1) ? MAXVL : (vlmax < decoded_data.rs1) ? vlmax : decoded_data.rs1;
 				end
 			end
   	end
