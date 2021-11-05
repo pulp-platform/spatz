@@ -63,7 +63,9 @@ package spatz_pkg;
     // Store instructions
     VSE, VSSE, VSXE,
     // Config instruction
-    VCFG
+    VCFG,
+    // VCSR
+    VCSR
   } op_e;
 
   ///////////////////
@@ -72,7 +74,15 @@ package spatz_pkg;
 
   typedef struct packed {
     logic keep_vl;
+    logic write_vstart;
+    logic set_vstart;
+    logic clear_vstart;
+    logic reset_vstart;
   } op_cfg_t;
+
+  typedef struct packed {
+    vcsr_reg_e addr;
+  } op_csr_t;
 
   // Result from decoder
   typedef struct packed {
@@ -96,6 +106,7 @@ package spatz_pkg;
     op_e      op;
 
     op_cfg_t  op_cgf;
+    op_csr_t  op_csr;
 
     // Spatz config details
     vtype_t   vtype;

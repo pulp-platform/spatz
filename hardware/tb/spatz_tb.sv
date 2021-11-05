@@ -35,7 +35,7 @@ module spatz_tb;
 		rst_n = 1'b1;
 
 		@(posedge clk);
-		repeat (10)
+		repeat (20)
 			#(ClockPeriod);
 
 		$finish;
@@ -49,6 +49,7 @@ module spatz_tb;
 	logic instr_valid;
 	spatz_pkg::elen_t rs1;
 	spatz_pkg::elen_t rs2;
+	spatz_pkg::elen_t rd;
 
 	spatz dut (
 		.clk_i					(clk),
@@ -58,7 +59,7 @@ module spatz_tb;
 		.instr_valid_i  (1'b1),
 		.rs1_i          (rs1),
 		.rs2_i 					(rs2),
-		.rd_o           ()
+		.rd_o           (rd)
 	);
 
 	initial begin
@@ -72,29 +73,80 @@ module spatz_tb;
 		// vl_exp = 64 (e8, m4)
 		instr = 32'h0c257557;
 		rs1 = 32'd128;
-		rs2 = '0;
 
 		@(posedge clk);
 
-		// vl_exp = 128 (e8, m4)
-		instr = 32'h08207557;
-		rs1 = 32'd128;
-		rs2 = '0;
-
-		@(posedge clk);
-
-		// vl_exp stays the same, ratio stays the same (e16, m8)
-		instr = 32'h00B07057;
-		rs1 = 32'd128;
-		rs2 = '0;
+		// check vl for 64 length
+		instr = 32'hC2012173;
+		rs1 = 32'd0;
+		@(negedge clk);
+		assert (rd == 32'd64);
 
 		@(posedge clk);
 
 		// vl_exp stays the same, but ratio changes (e16, m2) -> illegal
 		instr = 32'h00907057;
 		rs1 = 32'd128;
-		rs2 = '0;
 
+		@(posedge clk);
+
+		// check vl for zero length
+		instr = 32'hC2012173;
+		rs1 = 32'd0;
+		@(negedge clk);
+		assert (rd == 0);
+
+		@(posedge clk);
+
+		// vl_exp = 128 (e8, m4)
+		instr = 32'h08207557;
+		rs1 = 32'd128;
+
+		@(posedge clk);
+
+		// vl_exp stays the same, ratio stays the same (e16, m8)
+		instr = 32'h00B07057;
+		rs1 = 32'd128;
+
+		@(posedge clk);
+
+		// check vtype for (vm0, vt0, e16, m8) configuration
+		instr = 32'hC2112173;
+		rs1 = 32'd0;
+		@(negedge clk);
+		assert (rd == 32'(8'b00001011));
+
+		@(posedge clk);
+
+		// check vlenb
+		instr = 32'hC2212173;
+		rs1 = 32'd0;
+		@(negedge clk);
+		assert (rd == spatz_pkg::VLENB);
+
+		@(posedge clk);
+
+		// set vstart to 6 (over immediate) and check vstart for 0
+		instr = 32'h00836173;
+		rs1 = 32'd1;
+		@(negedge clk);
+		assert (rd == 0);
+
+		@(posedge clk);
+
+		// set vstart to 4 and check vstart for 6
+		instr = 32'h00811173;
+		rs1 = 32'd4;
+		@(negedge clk);
+		assert (rd == 6);
+
+		@(posedge clk);
+
+		// check vstart for 4
+		instr = 32'h00812173;
+		rs1 = 32'd0;
+		@(negedge clk);
+		assert (rd == 4);
 	end
 
 endmodule : spatz_tb

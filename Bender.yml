@@ -21,12 +21,12 @@ export_include_dirs:
 sources:
   files:
     # Headers
+    - hardware/include/riscv_instr.sv
     - hardware/include/riscv_pkg.sv
     - hardware/include/rvv_pkg.sv
     - hardware/include/spatz_pkg.sv
 
     # Sources
-    - hardware/src/inst.sverilog
     - hardware/src/spatz_decoder.sv
     - hardware/src/spatz.sv
 
