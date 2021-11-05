@@ -35,7 +35,6 @@ module spatz_decoder import spatz_pkg::*; import rvv_pkg::*; (
 
   always_comb begin : proc_decoder
   	illegal_instr = 1'b0;
-
   	decoded_data_o = '0;
 
   	if (instr_valid_i) begin
@@ -51,7 +50,10 @@ module spatz_decoder import spatz_pkg::*; import rvv_pkg::*; (
 	  		riscv_pkg::OpcodeVec: begin
 	  			unique case (instr_i[14:12])
 	  				OPCFG: begin
-	  					decoded_data_o.rd = instr_i[11:7];
+	  					automatic int unsigned setvl_rs1 = instr_i[19:15];
+	  					automatic int unsigned setvl_rd	 = instr_i[11:7];
+
+	  					decoded_data_o.rd = setvl_rd;
 	  					decoded_data_o.use_rd = 1'b1;
 	  					decoded_data_o.op = VCFG;
 
@@ -59,18 +61,18 @@ module spatz_decoder import spatz_pkg::*; import rvv_pkg::*; (
 	  					if (instr_i[31] == 1'b0) begin
 	  						decoded_data_o.vtype = {1'b0, instr_i[27:20]};
 	  						decoded_data_o.rs1 	 = rs1_i;
-	  					end else if (instr_i == 2'b11) begin
+	  					end else if (instr_i[31:30] == 2'b11) begin
 								decoded_data_o.vtype = {1'b0, instr_i[27:20]};
-								decoded_data_o.rs1 	 = {{27{1'b0}},instr_i[19:15]};
-	  					end else if (instr_i == 7'b1000000) begin
+								decoded_data_o.rs1 	 = elen_t'(setvl_rs1);
+	  					end else if (instr_i[31:25] == 7'b1000000) begin
 	  						decoded_data_o.vtype = {1'b0, rs2_i[7:0]};
 	  						decoded_data_o.rs1 	 = rs1_i;
 	  					end
 
 	  					// Set to maxvl or new desired value
-	  					decoded_data_o.rs1 = (instr_i[19:15] == '0 && instr_i[11:7] != '0) ? '1 : decoded_data_o.rs1;
+	  					decoded_data_o.rs1 = (setvl_rs1 == '0 && setvl_rd != '0) ? '1 : decoded_data_o.rs1;
 	  					// Keep vl
-	  					decoded_data_o.op_cgf.keep_vl = instr_i[19:15] == '0 && instr_i[11:7] == '0;
+	  					decoded_data_o.op_cgf.keep_vl = setvl_rs1 == '0 && setvl_rd == '0;
 	  				end // OPCFG
 	  				default: $error("Unsupported OpcodeVec function.");
 	  			endcase
