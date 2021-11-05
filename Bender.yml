@@ -28,6 +28,7 @@ sources:
 
     # Sources
     - hardware/src/spatz_decoder.sv
+    - hardware/src/spatz_vcsr.sv
     - hardware/src/spatz.sv
 
     - target: spatz_test
