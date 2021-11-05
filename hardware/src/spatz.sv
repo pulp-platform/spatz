@@ -88,6 +88,12 @@ module spatz
 					endcase
 
 					vl_d = (decoded_data.rs1 == '1) ? MAXVL : (vlmax < decoded_data.rs1) ? vlmax : decoded_data.rs1;
+				end else begin
+					// If new vtype changes ration, mark as illegal
+					if (($signed(decoded_data.vtype.vsew) - $signed(vtype_q.vsew)) != ($signed(decoded_data.vtype.vlmul) - $signed(vtype_q.vlmul))) begin
+						vtype_d = '{vill: 1'b1, default: '0};
+						vl_d		= '0;
+					end
 				end
 			end
   	end

@@ -25,14 +25,16 @@ module spatz_tb;
 	always #(ClockPeriod/2) clk = !clk;
 
 	initial begin
-		clk 	= 1'b0;
+		clk 	= 1'b1;
 		rst_n = 1'b0;
 
 		repeat (5)
 			#(ClockPeriod);
 
+		#(ClockPeriod/4);
 		rst_n = 1'b1;
 
+		@(posedge clk);
 		repeat (10)
 			#(ClockPeriod);
 
@@ -65,23 +67,31 @@ module spatz_tb;
 		rs2 = '0;
 
 		wait (rst_n == 1'b1);
+		@(posedge clk);
 
-		// vl_exp = 64
+		// vl_exp = 64 (e8, m4)
 		instr = 32'h0c257557;
 		rs1 = 32'd128;
 		rs2 = '0;
 
-		@(negedge clk);
+		@(posedge clk);
 
-		// vl_exp = 128
+		// vl_exp = 128 (e8, m4)
 		instr = 32'h08207557;
 		rs1 = 32'd128;
 		rs2 = '0;
 
-		@(negedge clk);
+		@(posedge clk);
 
-		// vl_exp stays the same
-		instr = 32'h00207057;
+		// vl_exp stays the same, ratio stays the same (e16, m8)
+		instr = 32'h00B07057;
+		rs1 = 32'd128;
+		rs2 = '0;
+
+		@(posedge clk);
+
+		// vl_exp stays the same, but ratio changes (e16, m2) -> illegal
+		instr = 32'h00907057;
 		rs1 = 32'd128;
 		rs2 = '0;
 
