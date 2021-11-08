@@ -72,10 +72,10 @@ module spatz
 	  		VCSR: begin
 	  			if (decoded_data.use_rd) begin
 		  			unique case (decoded_data.op_csr.addr)
-		  				CSR_VSTART: rd = 32'(vstart);
-		  				CSR_VL: 		rd = 32'(vl);
-		  				CSR_VTYPE: 	rd = 32'(vtype);
-		  				CSR_VLENB: 	rd = 32'(VLENB);
+		  				riscv_instr::CSR_VSTART: rd = 32'(vstart);
+		  				riscv_instr::CSR_VL: 		rd = 32'(vl);
+		  				riscv_instr::CSR_VTYPE: 	rd = 32'(vtype);
+		  				riscv_instr::CSR_VLENB: 	rd = 32'(VLENB);
 		  			endcase
 		  		end
 	  		end

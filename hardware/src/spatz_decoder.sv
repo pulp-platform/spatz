@@ -360,57 +360,40 @@ module spatz_decoder import spatz_pkg::*; import rvv_pkg::*; (
 	  			decoded_data_o.rs1 = csr_is_imm ? 32'(csr_rs1) : rs1_i;
 	  			reset_vstart = 1'b0;
 
+	  			case (csr_addr)
+						riscv_instr::CSR_VSTART,
+						riscv_instr::CSR_VL,
+						riscv_instr::CSR_VTYPE,
+						riscv_instr::CSR_VLENB,
+						riscv_instr::CSR_VXSAT,
+						riscv_instr::CSR_VXRM,
+						riscv_instr::CSR_VCSR: begin
+							decoded_data_o.op_csr.addr = csr_addr;
+						end
+						default: illegal_instr = 1'b1;
+					endcase
+
 	  			unique casez (instr_i)
 	  				riscv_instr::CSRRW,
 	  				riscv_instr::CSRRWI: begin
-	  					case (csr_addr)
-	  						CSR_VSTART: begin
-	  							decoded_data_o.use_rd = csr_rd != '0;
-	  							decoded_data_o.op_csr.addr = CSR_VSTART;
-	  							decoded_data_o.op_cgf.write_vstart = 1'b1;
-	  						end
-	  						CSR_VL: decoded_data_o.op_csr.addr = CSR_VL;
-	  						CSR_VTYPE: decoded_data_o.op_csr.addr = CSR_VTYPE;
-	  						CSR_VLENB: decoded_data_o.op_csr.addr = CSR_VLENB;
-	  						CSR_VXSAT: decoded_data_o.op_csr.addr = CSR_VXSAT;
-	  						CSR_VXRM: decoded_data_o.op_csr.addr = CSR_VXRM;
-	  						CSR_VCSR: decoded_data_o.op_csr.addr = CSR_VCSR;
-	  						default: illegal_instr = 1'b1;
-	  					endcase
+	  					if (csr_addr ==	riscv_instr::CSR_VSTART) begin
+  							decoded_data_o.use_rd = csr_rd != '0;
+  							decoded_data_o.op_cgf.write_vstart = 1'b1;
+  						end
 	  				end
 
 	  				riscv_instr::CSRRS,
 	  				riscv_instr::CSRRSI: begin
-	  					case (csr_addr)
-	  						CSR_VSTART: begin
-	  							decoded_data_o.op_csr.addr = CSR_VSTART;
-	  							decoded_data_o.op_cgf.set_vstart = csr_rs1 != '0;
-	  						end
-	  						CSR_VL: decoded_data_o.op_csr.addr = CSR_VL;
-	  						CSR_VTYPE: decoded_data_o.op_csr.addr = CSR_VTYPE;
-	  						CSR_VLENB: decoded_data_o.op_csr.addr = CSR_VLENB;
-	  						CSR_VXSAT: decoded_data_o.op_csr.addr = CSR_VXSAT;
-	  						CSR_VXRM: decoded_data_o.op_csr.addr = CSR_VXRM;
-	  						CSR_VCSR: decoded_data_o.op_csr.addr = CSR_VCSR;
-	  						default: illegal_instr = 1'b1;
-	  					endcase
+	  					if (csr_addr ==	riscv_instr::CSR_VSTART) begin
+	  						decoded_data_o.op_cgf.set_vstart = csr_rs1 != '0;
+  						end
 	  				end
 
 	  				riscv_instr::CSRRC,
 	  				riscv_instr::CSRRCI: begin
-	  					case (csr_addr)
-	  						CSR_VSTART: begin
-	  							decoded_data_o.op_csr.addr = CSR_VSTART;
-	  							decoded_data_o.op_cgf.clear_vstart = csr_rs1 != '0;
-	  						end
-	  						CSR_VL: decoded_data_o.op_csr.addr = CSR_VL;
-	  						CSR_VTYPE: decoded_data_o.op_csr.addr = CSR_VTYPE;
-	  						CSR_VLENB: decoded_data_o.op_csr.addr = CSR_VLENB;
-	  						CSR_VXSAT: decoded_data_o.op_csr.addr = CSR_VXSAT;
-	  						CSR_VXRM: decoded_data_o.op_csr.addr = CSR_VXRM;
-	  						CSR_VCSR: decoded_data_o.op_csr.addr = CSR_VCSR;
-	  						default: illegal_instr = 1'b1;
-	  					endcase
+	  					if (csr_addr ==	riscv_instr::CSR_VSTART) begin
+	  						decoded_data_o.op_cgf.clear_vstart = csr_rs1 != '0;
+  						end
 	  				end
 	  				default: begin
 	  					illegal_instr = 1'b1;

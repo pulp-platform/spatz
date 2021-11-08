@@ -83,7 +83,7 @@ package spatz_pkg;
   } op_cfg_t;
 
   typedef struct packed {
-    vcsr_reg_e addr;
+    logic [11:0] addr;
   } op_csr_t;
 
   typedef struct packed {

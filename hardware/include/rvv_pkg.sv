@@ -53,20 +53,6 @@ package rvv_pkg;
     OPCFG = 3'b111
   } opcodev_func3_e;
 
-  ////////////
-  //  CSRs  //
-  ////////////
-
-  typedef enum logic [11:0] {
-    CSR_VSTART = 12'h008,
-    CSR_VXSAT  = 12'h009,
-    CSR_VXRM   = 12'h00A,
-    CSR_VCSR   = 12'h00F,
-    CSR_VL     = 12'hC20,
-    CSR_VTYPE  = 12'hC21,
-    CSR_VLENB  = 12'hC22
-  } vcsr_reg_e;
-
   ////////////////////
   //  Instructions  //
   ////////////////////
