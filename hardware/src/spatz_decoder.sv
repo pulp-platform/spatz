@@ -159,6 +159,8 @@ module spatz_decoder import spatz_pkg::*; import rvv_pkg::*; (
 	  end // Instruction valid
   end // proc_decoder
 
-  assign instr_illegal_o = illegal_instr;
+  // Check if instruction is legal and if calculated output is valid
+  assign instr_illegal_o = instr_valid_i & illegal_instr;
+  assign valid_o = instr_valid_i & ~illegal_instr;
 
 endmodule : spatz_decoder

@@ -56,7 +56,7 @@ module spatz_tb;
 		.rst_ni					(rst_n),
 		.instr_i        (instr),
 		.instr_illegal_o(),
-		.instr_valid_i  (1'b1),
+		.instr_valid_i  (instr_valid),
 		.rs1_i          (rs1),
 		.rs2_i 					(rs2),
 		.rd_o           (rd)
@@ -64,11 +64,14 @@ module spatz_tb;
 
 	initial begin
 		instr = '0;
+		instr_valid = '0;
 		rs1 = '0;
 		rs2 = '0;
 
 		wait (rst_n == 1'b1);
 		@(posedge clk);
+
+		instr_valid = '1;
 
 		// vl_exp = 64 (e8, m4)
 		instr = 32'h0c257557;

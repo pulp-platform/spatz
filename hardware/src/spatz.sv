@@ -35,6 +35,7 @@ module spatz
 	elen_t rd;
 
 	spatz_req_t decoded_data;
+	logic 			decoder_valid;
 
 	assign instr = instr_i;
 	assign instr_valid = instr_valid_i;
@@ -66,18 +67,20 @@ module spatz
 
   always_comb begin : proc_controller
   	rd = '0;
-  	case (decoded_data.op)
-  		VCSR: begin
-  			if (decoded_data.use_rd) begin
-	  			unique case (decoded_data.op_csr.addr)
-	  				CSR_VSTART: rd = 32'(vstart);
-	  				CSR_VL: 		rd = 32'(vl);
-	  				CSR_VTYPE: 	rd = 32'(vtype);
-	  				CSR_VLENB: 	rd = 32'(VLENB);
-	  			endcase
+  	if (decoder_valid) begin
+	  	case (decoded_data.op)
+	  		VCSR: begin
+	  			if (decoded_data.use_rd) begin
+		  			unique case (decoded_data.op_csr.addr)
+		  				CSR_VSTART: rd = 32'(vstart);
+		  				CSR_VL: 		rd = 32'(vl);
+		  				CSR_VTYPE: 	rd = 32'(vtype);
+		  				CSR_VLENB: 	rd = 32'(VLENB);
+		  			endcase
+		  		end
 	  		end
-  		end
-  	endcase // Operation type
+	  	endcase // Operation type
+	  end
   end
 
   /////////////
@@ -95,7 +98,8 @@ module spatz
 		.rs1_i          (rs1),
 		.rs2_i          (rs2),
 
-		.decoded_data_o (decoded_data)
+		.decoded_data_o (decoded_data),
+		.valid_o        (decoder_valid)
 	);
 
 endmodule : spatz
