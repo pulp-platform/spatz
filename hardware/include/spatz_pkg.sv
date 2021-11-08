@@ -91,6 +91,10 @@ package spatz_pkg;
     logic use_carry_borrow_in;
   } op_arith_t;
 
+  typedef struct packed {
+    logic vm;
+  } op_mem_t;
+
   // Result from decoder
   typedef struct packed {
     // Used vector registers
@@ -112,9 +116,11 @@ package spatz_pkg;
     // Instruction operation
     op_e      op;
 
+    // Operation specific details
     op_cfg_t    op_cgf;
     op_csr_t    op_csr;
     op_arith_t  op_arith;
+    op_mem_t    op_mem;
 
     // Spatz config details
     vtype_t   vtype;

@@ -38,14 +38,26 @@ module spatz_decoder import spatz_pkg::*; import rvv_pkg::*; (
   	decoded_data_o = '0;
 
   	if (instr_valid_i) begin
-	  	unique case (instr_i[6:0])
-	  		riscv_pkg::OpcodeLoadFP: begin
-	  			$error("Unsupported Instruction (OpcodeLoadFP).");
-	  		end // OpcodeLoadFP
+  		automatic int unsigned opcode = instr_i[6:0];
 
+	  	unique case (opcode)
+	  		riscv_pkg::OpcodeLoadFP,
 	  		riscv_pkg::OpcodeStoreFP: begin
-	  			$error("Unsupported Instruction (OpcodeStoreFP).");
-	  		end // OpcodeStoreFP
+	  			automatic int unsigned ls_vd 		= instr_i[11:7];
+	  			automatic int unsigned ls_rs1 	= instr_i[19:15];
+	  			automatic int unsigned ls_s2 		= instr_i[24:20];
+	  			automatic int unsigned ls_width = instr_i[14:12];
+	  			automatic int unsigned ls_vm 		= instr_i[25];
+	  			automatic int unsigned ls_mop 	= instr_i[27:26];
+	  			automatic int unsigned ls_mew 	= instr_i[28];
+	  			automatic int unsigned ls_nf 		= instr_i[31:29];
+
+	  			automatic logic is_load = (opcode == riscv_pkg::OpcodeLoadFP);
+
+	  			decoded_data_o.op_mem.vm = ls_vm;
+
+	  			$error("Unsupported Load/Store Instruction.");
+	  		end // OpcodeLoadFP or OpcodeStoreFP
 
 	  		riscv_pkg::OpcodeVec: begin
 	  			automatic int unsigned func3 = instr_i[14:12];
@@ -75,7 +87,7 @@ module spatz_decoder import spatz_pkg::*; import rvv_pkg::*; (
   					decoded_data_o.rs1 = (setvl_rs1 == '0 && setvl_rd != '0) ? '1 : decoded_data_o.rs1;
   					// Keep vl
   					decoded_data_o.op_cgf.keep_vl = setvl_rs1 == '0 && setvl_rd == '0;
-  				// Arithmetic instruction
+  				// Arithmetic instruction (except for masked and widening)
   				end else begin
   					automatic int unsigned arith_s1 = instr_i[19:15];
   					automatic int unsigned arith_s2 = instr_i[24:20];
@@ -397,7 +409,7 @@ module spatz_decoder import spatz_pkg::*; import rvv_pkg::*; (
 	  				end
 	  				default: begin
 	  					illegal_instr = 1'b1;
-	  					$error("Unsupported Instruction (OpcodeSystem).");
+	  					$error("Unsupported CSR Instruction.");
 	  				end
 	  			endcase // CSR
 	  		end // OpcodeSystem
