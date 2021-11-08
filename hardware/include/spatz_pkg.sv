@@ -22,6 +22,8 @@ package spatz_pkg;
   localparam int unsigned VLENB = VLEN / 8;
   // Maximum vector length in elements
   localparam int unsigned MAXVL = VLEN;
+  // Number of vector registers
+  localparam int unsigned NRVREG = 32;
 
   //////////////////////
   // Type Definitions //
@@ -30,7 +32,7 @@ package spatz_pkg;
   // Vector length register
   typedef logic [$clog2(MAXVL+1)-1:0] vlen_t;
   // Operad register
-  typedef logic [4:0] opreg_t;
+  typedef logic [$clog2(NRVREG)-1:0] opreg_t;
 
   // Element of length type
   typedef logic [ELEN-1:0] elen_t;
@@ -44,8 +46,8 @@ package spatz_pkg;
     VADD, VSUB, VADC, VSBC, VRSUB, VMINU, VMIN, VMAXU, VMAX, VAND, VOR, VXOR,
     // Shifts,
     VSLL, VSRL, VSRA, VNSRL, VNSRA,
-    // Merge
-    VMERGE,
+    // Merge and Move
+    VMERGE, VMV,
     // Mul/Mul-Add
     VMUL, VMULH, VMULHU, VMULHSU, VMACC, VNMSAC, VMADD, VNMSUB,
     // Div
@@ -84,6 +86,11 @@ package spatz_pkg;
     vcsr_reg_e addr;
   } op_csr_t;
 
+  typedef struct packed {
+    logic vm;
+    logic use_carry_borrow_in;
+  } op_arith_t;
+
   // Result from decoder
   typedef struct packed {
     // Used vector registers
@@ -105,8 +112,9 @@ package spatz_pkg;
     // Instruction operation
     op_e      op;
 
-    op_cfg_t  op_cgf;
-    op_csr_t  op_csr;
+    op_cfg_t    op_cgf;
+    op_csr_t    op_csr;
+    op_arith_t  op_arith;
 
     // Spatz config details
     vtype_t   vtype;
