@@ -94,13 +94,11 @@ $(buildpath)/compile_$(config).tcl: $(config_file) Makefile ../Bender.yml $(shel
 sim: compile
 	cd $(buildpath) && \
 	$(questa_cmd) vsim $(questa_args) $(library).$(top_level) -do ../scripts/run.tcl
-	./scripts/return_status.sh $(buildpath)/transcript
 
 .PHONY: simc
 simc: compile
 	cd $(buildpath) && \
 	$(questa_cmd) vsim -c $(questa_args) $(library).$(top_level) -do "run -a"
-	./scripts/return_status.sh $(buildpath)/transcript
 
 # DPIs
 .PHONY: dpi
