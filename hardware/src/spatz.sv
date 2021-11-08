@@ -8,14 +8,14 @@ module spatz
 	import spatz_pkg::*; 
 	import rvv_pkg::*; 
 (
-	input 	logic	clk_i,
-	input 	logic rst_ni,
+	input  logic clk_i,
+	input  logic rst_ni,
 
-	input riscv_pkg::instr_t instr_i,
-	input logic 	instr_valid_i,
+	input  riscv_pkg::instr_t instr_i,
+	input  logic 	instr_valid_i,
 	output logic 	instr_illegal_o,
-	input elen_t rs1_i,
-	input elen_t rs2_i,
+	input  elen_t rs1_i,
+	input  elen_t rs2_i,
 
 	output elen_t rd_o
 );

@@ -27,6 +27,7 @@ sources:
     - hardware/include/spatz_pkg.sv
 
     # Sources
+    - hardware/src/spatz_simd_lane.sv
     - hardware/src/spatz_decoder.sv
     - hardware/src/spatz_vcsr.sv
     - hardware/src/spatz.sv
