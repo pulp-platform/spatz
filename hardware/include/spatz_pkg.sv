@@ -128,4 +128,23 @@ package spatz_pkg;
     vlen_t    vstart;
   } spatz_req_t;
 
+  /////////////////////
+  // Decoder Request //
+  /////////////////////
+
+  typedef struct packed {
+    // Instruction
+    riscv_pkg::instr_t instr;
+    // Rs values
+    elen_t rs1;
+    elen_t rs2;
+  } decoder_req_t;
+
+  typedef struct packed {
+    // Illegal instruction
+    logic instr_illegal;
+    // Spatz request
+    spatz_req_t spatz_req;
+  } decoder_rsp_t;
+
  endpackage : spatz_pkg

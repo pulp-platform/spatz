@@ -5,19 +5,20 @@
 // Author: Domenic Wüthrich, ETH Zurich
 
 module spatz 
-	import spatz_pkg::*; 
-	import rvv_pkg::*; 
+	import spatz_pkg::*;
+	import rvv_pkg::*;
 (
 	input  logic clk_i,
 	input  logic rst_ni,
-
-	input  riscv_pkg::instr_t instr_i,
-	input  logic 	instr_valid_i,
-	output logic 	instr_illegal_o,
-	input  elen_t rs1_i,
-	input  elen_t rs2_i,
-
-	output elen_t rd_o
+	// X-Interface Issue
+	input  logic x_issue_valid_i,
+	output logic x_issue_ready_o,
+	input  core_v_xif_pkg::x_issue_req_t  x_issue_req_i,
+	output core_v_xif_pkg::x_issue_resp_t x_issue_resp_o,
+	// X-Interface Result
+  output logic x_result_valid_o,
+  input  logic x_result_ready_i,
+  output core_v_xif_pkg::x_result_t x_result_o
 );
 
 	// Include FF
@@ -27,61 +28,66 @@ module spatz
 	// Signals //
 	/////////////
 
-	riscv_pkg::instr_t instr;
-	logic 	instr_valid;
-	logic 	instr_illegal;
-	elen_t rs1;
-	elen_t rs2;
-	elen_t rd;
+	// CSR registers
+	vlen_t 	vstart;
+	vlen_t 	vl;
+	vtype_t vtype;
 
-	spatz_req_t decoded_data;
-	logic 			decoder_valid;
+	// Decoder req
+	decoder_req_t decoder_req;
+	logic 				decoder_req_valid;
+	// Decoder rsp
+	decoder_rsp_t decoder_rsp;
+	logic 				decoder_rsp_valid;
 
-	assign instr = instr_i;
-	assign instr_valid = instr_valid_i;
-	assign instr_illegal_o = instr_illegal;
-	assign rs1 = rs1_i;
-	assign rs2 = rs2_i;
-	assign rd_o = rd;
+	// Spatz req
+	spatz_req_t spatz_req;
+	logic 			spatz_req_valid;
 
 	//////////
 	// CSRs //
 	//////////
 
-	vlen_t 	vstart;
-	vlen_t 	vl;
-	vtype_t vtype;
-
 	spatz_vcsr i_vcsr (
-		.clk_i     (clk_i),
-		.rst_ni    (rst_ni),
-		.vcsr_req_i(decoded_data),
-		.vtype_o   (vtype),
-		.vl_o      (vl),
-		.vstart_o  (vstart)
+		.clk_i     				(clk_i),
+		.rst_ni    				(rst_ni),
+		// VCSR req
+		.vcsr_req_valid_i (spatz_req_valid),
+		.vcsr_req_i 			(spatz_req),
+		// CSR register signals
+		.vtype_o   				(vtype),
+		.vl_o      				(vl),
+		.vstart_o  				(vstart)
 	);
 
   ////////////////
   // Controller //
   ////////////////
 
-  always_comb begin : proc_controller
-  	rd = '0;
-  	if (decoder_valid) begin
-	  	case (decoded_data.op)
-	  		VCSR: begin
-	  			if (decoded_data.use_rd) begin
-		  			unique case (decoded_data.op_csr.addr)
-		  				riscv_instr::CSR_VSTART: rd = 32'(vstart);
-		  				riscv_instr::CSR_VL: 		rd = 32'(vl);
-		  				riscv_instr::CSR_VTYPE: 	rd = 32'(vtype);
-		  				riscv_instr::CSR_VLENB: 	rd = 32'(VLENB);
-		  			endcase
-		  		end
-	  		end
-	  	endcase // Operation type
-	  end
-  end
+  spatz_controller i_controller (
+  	.clk_i              (clk_i),
+  	.rst_ni             (rst_ni),
+  	// X-intf
+  	.x_issue_valid_i    (x_issue_valid_i),
+  	.x_issue_ready_o    (x_issue_ready_o),
+  	.x_issue_req_i      (x_issue_req_i),
+  	.x_issue_resp_o     (x_issue_resp_o),
+  	.x_result_valid_o   (x_result_valid_o),
+  	.x_result_ready_i   (x_result_ready_i),
+  	.x_result_o         (x_result_o),
+  	// Decoder
+  	.decoder_req_valid_o(decoder_req_valid),
+  	.decoder_req_o      (decoder_req),
+  	.decoder_rsp_valid_i(decoder_rsp_valid),
+  	.decoder_rsp_i      (decoder_rsp),
+  	// CSRs
+  	.vstart_i           (vstart),
+  	.vl_i               (vl),
+  	.vtype_i            (vtype),
+  	// Spatz req
+  	.spatz_req_valid_o  (spatz_req_valid),
+  	.spatz_req_o        (spatz_req)
+  );
 
   /////////////
   // Decoder //
@@ -90,16 +96,12 @@ module spatz
 	spatz_decoder i_decoder (
 		.clk_i (clk_i),
 		.rst_ni(rst_ni),
-
-		.instr_i        (instr),
-		.instr_valid_i  (instr_valid),
-		.instr_illegal_o(instr_illegal),
-
-		.rs1_i          (rs1),
-		.rs2_i          (rs2),
-
-		.decoded_data_o (decoded_data),
-		.valid_o        (decoder_valid)
+		// Request
+		.decoder_req_i      (decoder_req),
+		.decoder_req_valid_i(decoder_req_valid),
+		// Response
+		.decoder_rsp_o      (decoder_rsp),
+		.decoder_rsp_valid_o(decoder_rsp_valid)
 	);
 
 endmodule : spatz

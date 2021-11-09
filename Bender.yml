@@ -24,12 +24,14 @@ sources:
     - hardware/include/riscv_instr.sv
     - hardware/include/riscv_pkg.sv
     - hardware/include/rvv_pkg.sv
+    - hardware/include/core_v_xif_pkg.sv
     - hardware/include/spatz_pkg.sv
 
     # Sources
     - hardware/src/spatz_simd_lane.sv
     - hardware/src/spatz_decoder.sv
     - hardware/src/spatz_vcsr.sv
+    - hardware/src/spatz_controller.sv
     - hardware/src/spatz.sv
 
     - target: spatz_test
