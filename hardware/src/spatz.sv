@@ -28,11 +28,6 @@ module spatz
   // Signals //
   /////////////
 
-  // CSR registers
-  vlen_t  vstart;
-  vlen_t  vl;
-  vtype_t vtype;
-
   // Spatz req
   spatz_req_t spatz_req;
   logic       spatz_req_valid;
