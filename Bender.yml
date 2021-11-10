@@ -30,7 +30,6 @@ sources:
     # Sources
     - hardware/src/spatz_simd_lane.sv
     - hardware/src/spatz_decoder.sv
-    - hardware/src/spatz_vcsr.sv
     - hardware/src/spatz_controller.sv
     - hardware/src/spatz.sv
 
