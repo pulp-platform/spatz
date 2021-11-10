@@ -21,7 +21,7 @@ module spatz_simd import spatz_pkg::*; #(
   output logic [Width-1:0] result_o
 );
 
-  logic is_unsigned = (operation_i == VMINU) | (operation_i == VMAXU) | (operation_i == VMULHU) | (operation_i == VMULHSU);
+  logic is_unsigned = (operation_i == VMINU) || (operation_i == VMAXU) || (operation_i == VMULHU) || (operation_i == VMULHSU);
 
   ////////////////
   // Multiplier //
@@ -37,22 +37,12 @@ module spatz_simd import spatz_pkg::*; #(
 
   // Select multiplier operands
   always_comb begin : proc_mult_operands
-    unique case (operation_i)
-      VMUL,
-      VMULH,
-      VMULHU,
-      VMULHSU,
-      VMACC,
-      VNMSAC: begin
-        mult_op1 = op_s1_i;
-        mult_op2 = op_s2_i;
-      end
-      VMADD,
-      VNMSUB: begin
-        mult_op1 = op_s1_i;
-        mult_op2 = op_d_i;
-      end
-    endcase
+    mult_op1 = op_s1_i;
+    mult_op2 = op_s2_i;
+    if ((operation_i == VMADD) || (operation_i == VNMSUB)) begin
+      mult_op1 = op_s1_i;
+      mult_op2 = op_d_i;
+    end
   end // proc_mult_operands
 
   ////////////
