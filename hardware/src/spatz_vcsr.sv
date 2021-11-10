@@ -5,21 +5,21 @@
 // Author: Domenic Wüthrich, ETH Zurich
 
 module spatz_vcsr import spatz_pkg::*; import rvv_pkg::*; (
-	input	 logic clk_i,
-	input  logic rst_ni,
+  input  logic clk_i,
+  input  logic rst_ni,
   // CSR request
   input  logic       vcsr_req_valid_i,
   input  spatz_req_t vcsr_req_i,
   // CSR registers
-	output vtype_t vtype_o,
-	output vlen_t  vl_o,
-	output vlen_t  vstart_o
+  output vtype_t vtype_o,
+  output vlen_t  vl_o,
+  output vlen_t  vstart_o
 );
 
-	// Include FF
-	`include "common_cells/registers.svh"
+  // Include FF
+  `include "common_cells/registers.svh"
 
-	// CSR registers
+  // CSR registers
   vlen_t  vstart_d, vstart_q;
   vlen_t  vl_d, vl_q;
   vtype_t vtype_d, vtype_q;
@@ -93,8 +93,8 @@ module spatz_vcsr import spatz_pkg::*; import rvv_pkg::*; (
   end
 
   // Assign outputs
-  assign vtype_o 	= vtype_q;
-  assign vl_o 		= vl_q;
+  assign vtype_o  = vtype_q;
+  assign vl_o     = vl_q;
   assign vstart_o = vstart_q;
 
 endmodule : spatz_vcsr

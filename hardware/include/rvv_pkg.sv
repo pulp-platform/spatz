@@ -38,7 +38,7 @@ package rvv_pkg;
     vlmul_e vlmul;
   } vtype_t;
 
-	///////////////
+  ///////////////
   //  Opcodes  //
   ///////////////
 

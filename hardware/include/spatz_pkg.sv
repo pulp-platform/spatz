@@ -8,7 +8,7 @@ package spatz_pkg;
 
   import rvv_pkg::*;
 
-	//////////////////
+  //////////////////
   //  Parameters  //
   //////////////////
 
