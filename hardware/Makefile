@@ -47,7 +47,7 @@ endif
 ifdef preload
 	questa_args += +PRELOAD=$(preload)
 endif
-#questa_args += -sv_lib $(dpi_library)/spatz_dpi 
+#questa_args += -sv_lib $(dpi_library)/spatz_dpi
 questa_args += -work $(library) -voptargs=+acc
 questa_args += -suppress vsim-3009 -suppress vopt-7033
 
@@ -67,12 +67,6 @@ all: compile
 $(buildpath):
 	mkdir -p $(buildpath)
 
-# Bender
-bender:
-	@[ -x ./bender ] && echo "Bender already exists." || \
-	(cat $(SPATZ_DIR)/scripts/bender-init | bash -s -- 0.21.0)
-	@echo "$$(./bender --version) available."
-
 # Library
 .PHONY: lib
 lib: $(buildpath) $(buildpath)/$(library)
@@ -81,7 +75,7 @@ $(buildpath)/$(library):
 
 # Compilation
 .PHONY: compile
-compile: lib $(buildpath) bender $(buildpath)/compile_$(config).tcl
+compile: lib $(buildpath) $(buildpath)/compile_$(config).tcl
 $(buildpath)/compile_$(config).tcl: $(config_file) Makefile ../Bender.yml $(shell find src -type f) $(shell find ../config -type f) $(shell find include -type f) $(shell find tb -type f) $(shell find deps -type f)
 	$(bender) script vsim --vlog-arg="$(vlog_args)" -t rtl -t asic -t spatz_test $(bender_defs) > $(buildpath)/compile_$(config).tcl
 	echo "exit" >> $(buildpath)/compile_$(config).tcl
