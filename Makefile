@@ -40,7 +40,7 @@ else
 endif
 
 # Default target
-all: toolchain riscv-isa-sim
+all: toolchain riscv-isa-sim bender
 
 # GCC and LLVM Toolchains
 .PHONY: toolchain toolchain-gcc toolchain-llvm toolchain-llvm-main toolchain-llvm-newlib toolchain-llvm-rt
