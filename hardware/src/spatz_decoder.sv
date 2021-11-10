@@ -15,9 +15,6 @@ module spatz_decoder import spatz_pkg::*; import rvv_pkg::*; (
   output logic         decoder_rsp_valid_o
 );
 
-  // Include FF
-  `include "common_cells/registers.svh"
-
   /////////////
   // Signals //
   /////////////
