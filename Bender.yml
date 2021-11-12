@@ -22,6 +22,7 @@ sources:
     # Sources
     - hardware/src/riscv_instr.sv
     - hardware/src/spatz_simd_lane.sv
+    - hardware/src/spatz_ipu.sv
     - hardware/src/spatz_vfu.sv
     - hardware/src/spatz_vrf.sv
     - hardware/src/spatz_decoder.sv
