@@ -82,17 +82,19 @@ module spatz_tb;
     x_issue_valid = '1;
     x_result_ready = '1;
 
-    // vl_exp = 64 (e8, m4)
+    // vl_exp = 128 (e8, m2)
     x_issue_req.instr = 32'h0c257557;
-    x_issue_req.rs[0] = 32'd128;
+    x_issue_req.rs[0] = 32'd256;
+    @(negedge clk);
+    assert (x_result.data == 32'd128);
 
     @(posedge clk);
 
-    // check vl for 64 length
+    // check vl for 128 length
     x_issue_req.instr = 32'hC2012173;
     x_issue_req.rs[0] = 32'd0;
     @(negedge clk);
-    assert (x_result.data == 32'd64);
+    assert (x_result.data == 32'd128);
 
     @(posedge clk);
 
@@ -110,15 +112,19 @@ module spatz_tb;
 
     @(posedge clk);
 
-    // vl_exp = 128 (e8, m4)
+    // vl_exp = 256 (e8, m4)
     x_issue_req.instr = 32'h08207557;
-    x_issue_req.rs[0] = 32'd128;
+    x_issue_req.rs[0] = 32'd256;
+    @(negedge clk);
+    assert (x_result.data == 32'd256);
 
     @(posedge clk);
 
     // vl_exp stays the same, ratio stays the same (e16, m8)
     x_issue_req.instr = 32'h00B07057;
-    x_issue_req.rs[0] = 32'd128;
+    x_issue_req.rs[0] = 32'd256;
+    @(negedge clk);
+    assert (x_result.data == 32'd256);
 
     @(posedge clk);
 
