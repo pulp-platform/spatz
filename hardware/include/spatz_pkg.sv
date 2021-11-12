@@ -42,9 +42,9 @@ package spatz_pkg;
   typedef logic [ELEN-1:0] elen_t;
 
   // VREG address type
-  typedef logic [4:0][VELE-1:0]   vreg_addr_t;
-  typedef logic [N_IPU*ELENB-1:0] vreg_be_t;
-  typedef logic [N_IPU*ELEN-1:0]  vreg_data_t;
+  typedef logic [4:0][$clog2(VELE)-1:0] vreg_addr_t;
+  typedef logic [N_IPU*ELENB-1:0]       vreg_be_t;
+  typedef logic [N_IPU*ELEN-1:0]        vreg_data_t;
 
   /////////////////////
   // Operation Types //
