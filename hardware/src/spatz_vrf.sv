@@ -5,7 +5,6 @@
 // Author: Domenic Wüthrich, ETH Zurich
 
 module spatz_vrf import spatz_pkg::*; #(
-  parameter int unsigned DATA_WIDTH = 32,
   parameter int unsigned NR_READ_PORTS = 0,
   parameter int unsigned NR_WRITE_PORTS = 0
 ) (
@@ -22,5 +21,12 @@ module spatz_vrf import spatz_pkg::*; #(
   output vreg_data_t [NR_READ_PORTS-1:0] rdata_o,
   output logic       [NR_READ_PORTS-1:0] rvalid_o
 );
+
+  // Write dummy out
+  assign wvalid_o = '1;
+
+  // Read dummy in
+  assign rdata_o  = '0;
+  assign rvalid_o = '1;
 
 endmodule : spatz_vrf
