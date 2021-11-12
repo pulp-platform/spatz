@@ -168,6 +168,12 @@ module spatz_tb;
 
     @(posedge clk);
 
+    // check vstart for 4
+    x_issue_req.instr = 32'h03F0C0D7;
+    x_issue_req.rs[0] = 32'd15;
+
+    @(posedge clk);
+
     // check illegal instruction
     x_issue_req.instr = 32'h00812174;
     x_issue_req.rs[0] = 32'd0;
