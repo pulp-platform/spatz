@@ -26,12 +26,14 @@ module spatz_vfu import spatz_pkg::*; (
 
   logic vfu_is_ready;
   logic op1_is_ready, op2_is_ready, op3_is_ready;
-  logic operands_ready = op1_is_ready && op2_is_ready && op3_is_ready;
+  logic operands_ready;
+  assign operands_ready = op1_is_ready && op2_is_ready && op3_is_ready;
 
   logic last_group;
   logic result_written;
 
-  logic new_request = spatz_req_valid_i && vfu_is_ready && (spatz_req_i.ex_unit == VFU);
+  logic new_request;
+  assign new_request = spatz_req_valid_i && vfu_is_ready && (spatz_req_i.ex_unit == VFU);
 
   logic [N_IPU*ELEN-1:0]  operand1, operand2, operand3;
   logic [N_IPU*ELENB-1:0] carry;
@@ -68,13 +70,13 @@ module spatz_vfu import spatz_pkg::*; (
     end else if (spatz_req_q.vl != 0 && operands_ready && result_written) begin
       // Change number of remaining elements
       if (spatz_req_q.vtype.vsew == rvv_pkg::EW_8) begin
-        spatz_req_d.vl >>= $clog2(N_IPU) + 2;
+        spatz_req_d.vl -= $clog2(N_IPU) * 4;
         last_group = spatz_req_d.vl <= $clog2(N_IPU) * 4;
       end else if (spatz_req_q.vtype.vsew == rvv_pkg::EW_16) begin
-        spatz_req_d.vl >>= $clog2(N_IPU) + 1;
+        spatz_req_d.vl -= $clog2(N_IPU) * 2;
         last_group = spatz_req_d.vl <= $clog2(N_IPU) * 2;
       end else begin
-        spatz_req_d.vl >>= $clog2(N_IPU);
+        spatz_req_d.vl -= $clog2(N_IPU);
         last_group = spatz_req_d.vl <= $clog2(N_IPU);
       end
     end
@@ -113,6 +115,8 @@ module spatz_vfu import spatz_pkg::*; (
 
   always_comb begin : proc_op_req
     vreg_r_req = '0;
+    vreg_we = '0;
+    vreg_wbe = '0;
 
     if (!vfu_is_ready || last_group) begin
       // Request operands
@@ -136,9 +140,10 @@ module spatz_vfu import spatz_pkg::*; (
   assign op1_is_ready = vrf_rvalid_i[1];
   assign op2_is_ready = vrf_rvalid_i[0];
   assign op3_is_ready = vrf_rvalid_i[2];
-  assign operand1 = vrf_rdata_i[1];
+  assign operand1 = spatz_req_q.use_vs1 ? vrf_rdata_i[1] : spatz_req_q.vtype.vsew == rvv_pkg::EW_8 ? {4*N_IPU{spatz_req_q.rs1[7:0]}} : spatz_req_q.vtype.vsew == rvv_pkg::EW_16 ? {2*N_IPU{spatz_req_q.rs1[15:0]}} : {N_IPU{spatz_req_q.rs1}};
   assign operand2 = vrf_rdata_i[0];
   assign operand3 = vrf_rdata_i[2];
+  assign result_written = vrf_wvalid_i;
 
   //////////
   // IPUs //

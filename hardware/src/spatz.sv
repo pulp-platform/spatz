@@ -24,6 +24,13 @@ module spatz
   // Include FF
   `include "common_cells/registers.svh"
 
+  ////////////////
+  // Parameters //
+  ////////////////
+
+  localparam NrWritePorts = 1;
+  localparam NrReadPorts  = 3;
+
   /////////////
   // Signals //
   /////////////
@@ -31,6 +38,8 @@ module spatz
   // Spatz req
   spatz_req_t spatz_req;
   logic       spatz_req_valid;
+
+  logic       vfu_req_ready;
 
   ////////////////
   // Controller //
@@ -49,7 +58,66 @@ module spatz
     .x_result_o         (x_result_o),
     // Spatz req
     .spatz_req_valid_o  (spatz_req_valid),
-    .spatz_req_o        (spatz_req)
+    .spatz_req_o        (spatz_req),
+    // VFU rsp
+    .vfu_req_ready_i    (vfu_req_ready)
+  );
+
+  /////////
+  // VRF //
+  /////////
+
+  // Write ports
+  vreg_addr_t [NrWritePorts-1:0] vrf_waddr;
+  vreg_data_t [NrWritePorts-1:0] vrf_wdata;
+  logic       [NrWritePorts-1:0] vrf_we;
+  vreg_be_t   [NrWritePorts-1:0] vrf_wbe;
+  logic       [NrWritePorts-1:0] vrf_wvalid;
+  // Read ports
+  vreg_addr_t [NrReadPorts-1:0] vrf_raddr;
+  logic       [NrReadPorts-1:0] vrf_re;
+  vreg_data_t [NrReadPorts-1:0] vrf_rdata;
+  logic       [NrReadPorts-1:0] vrf_rvalid;
+
+  spatz_vrf #(
+    .NR_READ_PORTS (NrReadPorts),
+    .NR_WRITE_PORTS(NrWritePorts)
+  ) i_vrf (
+    .clk_i   (clk_i),
+    // Write Ports
+    .waddr_i (vrf_waddr),
+    .wdata_i (vrf_wdata),
+    .we_i    (vrf_we),
+    .wbe_i   (vrf_wbe),
+    .wvalid_o(vrf_wvalid),
+    // Read Ports
+    .raddr_i (vrf_raddr),
+    .re_i    (vrf_re),
+    .rdata_o (vrf_rdata),
+    .rvalid_o(vrf_rvalid)
+  );
+
+  /////////
+  // VFU //
+  /////////
+
+  spatz_vfu i_vfu (
+    .clk_i            (clk_i),
+    .rst_ni           (rst_ni),
+    // Request
+    .spatz_req_i      (spatz_req),
+    .spatz_req_valid_i(spatz_req_valid),
+    .spatz_req_ready_o(vfu_req_ready),
+    // VRF
+    .vrf_waddr_o      (vrf_waddr[0]),
+    .vrf_wdata_o      (vrf_wdata[0]),
+    .vrf_we_o         (vrf_we[0]),
+    .vrf_wbe_o        (vrf_wbe[0]),
+    .vrf_wvalid_i     (vrf_wvalid[0]),
+    .vrf_raddr_o      (vrf_raddr[2:0]),
+    .vrf_re_o         (vrf_re[2:0]),
+    .vrf_rdata_i      (vrf_rdata[2:0]),
+    .vrf_rvalid_i     (vrf_rvalid[2:0])
   );
 
 endmodule : spatz

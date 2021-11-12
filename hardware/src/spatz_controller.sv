@@ -21,7 +21,9 @@ module spatz_controller
   output core_v_xif_pkg::x_result_t x_result_o,
   // Spatz req
   output logic spatz_req_valid_o,
-  output spatz_req_t spatz_req_o
+  output spatz_req_t spatz_req_o,
+  // VFU
+  input  logic vfu_req_ready_i
 );
 
   // Include FF
@@ -138,7 +140,7 @@ module spatz_controller
   // Controller //
   ////////////////
 
-  logic spatz_ready = 1'b1;
+  logic spatz_ready;
 
   always_comb begin : proc_decoder
     decoder_req = '0;
@@ -154,6 +156,7 @@ module spatz_controller
   end // proc_decoder
 
   always_comb begin : proc_controller
+    spatz_ready = 1'b1;
     x_issue_resp_o = '0;
     x_result_o = '0;
     x_result_valid_o = '0;
@@ -187,17 +190,22 @@ module spatz_controller
           end
         end // CON
         VFU: begin
-          spatz_req.vtype = vtype_q;
-          spatz_req.vl = vl_q;
-          spatz_req.vstart = vstart_q;
-          spatz_req_valid = 1'b1;
+          if (!vfu_req_ready_i) begin
+            // Stall accelerator request
+            spatz_ready = 1'b0;
+          end else begin
+            spatz_req.vtype  = vtype_q;
+            spatz_req.vl     = vl_q;
+            spatz_req.vstart = vstart_q;
+            spatz_req_valid  = 1'b1;
+          end
         end // VFU
         LSU: begin
 
-        end
+        end // LSU
         SLD: begin
 
-        end
+        end // SLD
       endcase // Operation type
     // New instruction is illegal
     end else if (decoder_rsp_valid & decoder_rsp.instr_illegal) begin
