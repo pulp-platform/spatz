@@ -12,18 +12,22 @@ package spatz_pkg;
   //  Parameters  //
   //////////////////
 
+  // Number of IPUs in VFU (between 2 and 8)
+  localparam int unsigned N_IPU = `ifdef N_IPU `N_IPU `else 2 `endif;
   // Maximum size of a single vector element in bits
   localparam int unsigned ELEN = 32;
   // Maximum size of a single vector element in bytes
   localparam int unsigned ELENB = ELEN / 8;
   // Number of bits in a vector register
-  localparam int unsigned VLEN = `ifdef VLEN `VLEN `else 0 `endif;
+  localparam int unsigned VLEN = N_IPU * (`ifdef VLEN `VLEN `else 0 `endif);
   // Number of bytes in a vector register
   localparam int unsigned VLENB = VLEN / 8;
   // Maximum vector length in elements
   localparam int unsigned MAXVL = VLEN;
   // Number of vector registers
   localparam int unsigned NRVREG = 32;
+  // Number of elements in a vector register
+  localparam int unsigned VELE = VLEN/ELEN;
 
   //////////////////////
   // Type Definitions //
@@ -36,6 +40,11 @@ package spatz_pkg;
 
   // Element of length type
   typedef logic [ELEN-1:0] elen_t;
+
+  // VREG address type
+  typedef logic [4:0][VELE-1:0]   vreg_addr_t;
+  typedef logic [N_IPU*ELENB-1:0] vreg_be_t;
+  typedef logic [N_IPU*ELEN-1:0]  vreg_data_t;
 
   /////////////////////
   // Operation Types //
@@ -70,6 +79,10 @@ package spatz_pkg;
     VCSR
   } op_e;
 
+  typedef enum logic [1:0] {
+    CON, LSU, SLD, VFU
+  } ex_unit_e;
+
   ///////////////////
   // Spatz request //
   ///////////////////
@@ -98,34 +111,36 @@ package spatz_pkg;
   // Result from decoder
   typedef struct packed {
     // Used vector registers
-    opreg_t   vs1;
-    logic     use_vs1;
-    opreg_t   vs2;
-    logic     use_vs2;
-    opreg_t   vd;
-    logic     use_vd;
+    opreg_t    vs1;
+    logic      use_vs1;
+    opreg_t    vs2;
+    logic      use_vs2;
+    opreg_t    vd;
+    logic      use_vd;
+    logic      vd_is_src;
 
     // Scalar input values
-    elen_t    rs1;
-    elen_t    rs2;
+    elen_t     rs1;
+    elen_t     rs2;
 
     // Destination register
-    elen_t    rd;
-    logic     use_rd;
+    elen_t     rd;
+    logic      use_rd;
 
     // Instruction operation
-    op_e      op;
+    op_e       op;
+    ex_unit_e  ex_unit;
 
     // Operation specific details
-    op_cfg_t    op_cgf;
-    op_csr_t    op_csr;
-    op_arith_t  op_arith;
-    op_mem_t    op_mem;
+    op_cfg_t   op_cgf;
+    op_csr_t   op_csr;
+    op_arith_t op_arith;
+    op_mem_t   op_mem;
 
     // Spatz config details
-    vtype_t   vtype;
-    vlen_t    vl;
-    vlen_t    vstart;
+    vtype_t    vtype;
+    vlen_t     vl;
+    vlen_t     vstart;
   } spatz_req_t;
 
   /////////////////////

@@ -163,23 +163,40 @@ module spatz_controller
     // New decoded instruction if valid
     if (decoder_rsp_valid && ~decoder_rsp.instr_illegal) begin
       spatz_req_valid = 1'b1;
-      case (decoder_rsp.spatz_req.op)
-        // Read CSR and write back to cpu
-        VCSR: begin
-          if (decoder_rsp.spatz_req.use_rd) begin
-            unique case (decoder_rsp.spatz_req.op_csr.addr)
-              riscv_instr::CSR_VSTART: x_result_o.data = 32'(vstart_q);
-              riscv_instr::CSR_VL:     x_result_o.data = 32'(vl_q);
-              riscv_instr::CSR_VTYPE:  x_result_o.data = 32'(vtype_q);
-              riscv_instr::CSR_VLENB:  x_result_o.data = 32'(VLENB);
-            endcase
+      case (decoder_rsp.spatz_req.ex_unit)
+        CON: begin
+          // Read CSR and write back to cpu
+          if (decoder_rsp.spatz_req.op == VCSR) begin
+            if (decoder_rsp.spatz_req.use_rd) begin
+              unique case (decoder_rsp.spatz_req.op_csr.addr)
+                riscv_instr::CSR_VSTART: x_result_o.data = 32'(vstart_q);
+                riscv_instr::CSR_VL:     x_result_o.data = 32'(vl_q);
+                riscv_instr::CSR_VTYPE:  x_result_o.data = 32'(vtype_q);
+                riscv_instr::CSR_VLENB:  x_result_o.data = 32'(VLENB);
+              endcase
+            end
+            x_result_valid_o = 1'b1;
+            x_result_o.we = 1'b1;
+            x_issue_resp_o.writeback = 1'b1;
+          end else begin
+            // Change configuration and send back vl
+            x_result_o.data = 32'(vl_d);
+            x_result_o.we = 1'b1;
+            x_result_valid_o = 1'b1;
+            x_issue_resp_o.writeback = 1'b1;
           end
-          x_result_valid_o = 1'b1;
-          x_result_o.we = 1'b1;
-          x_issue_resp_o.writeback = 1'b1;
+        end // CON
+        VFU: begin
+          spatz_req.vtype = vtype_q;
+          spatz_req.vl = vl_q;
+          spatz_req.vstart = vstart_q;
+          spatz_req_valid = 1'b1;
+        end // VFU
+        LSU: begin
+
         end
-        VCFG: begin
-          x_result_valid_o = 1'b1;
+        SLD: begin
+
         end
       endcase // Operation type
     // New instruction is illegal

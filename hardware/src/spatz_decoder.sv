@@ -50,6 +50,7 @@ module spatz_decoder import spatz_pkg::*; import rvv_pkg::*; (
           automatic logic is_load = (opcode == riscv_pkg::OpcodeLoadFP);
 
           spatz_req.op_mem.vm = ls_vm;
+          spatz_req.ex_unit = LSU;
 
           $error("Unsupported Load/Store Instruction.");
         end // OpcodeLoadFP or OpcodeStoreFP
@@ -65,6 +66,7 @@ module spatz_decoder import spatz_pkg::*; import rvv_pkg::*; (
             spatz_req.rd = setvl_rd;
             spatz_req.use_rd = 1'b1;
             spatz_req.op = VCFG;
+            spatz_req.ex_unit = CON;
 
             // Extract vtype
             if (decoder_req_i.instr[31] == 1'b0) begin
@@ -94,6 +96,7 @@ module spatz_decoder import spatz_pkg::*; import rvv_pkg::*; (
             spatz_req.vs2 = arith_s2;
             spatz_req.use_vd = 1'b1;
             spatz_req.vd = arith_d;
+            spatz_req.ex_unit = VFU;
             // Decide which operands to use (vs1 or rs1 or imm)
             unique case (func3)
               OPIVV,
@@ -317,21 +320,25 @@ module spatz_decoder import spatz_pkg::*; import rvv_pkg::*; (
               riscv_instr::VMACC_VV,
               riscv_instr::VMACC_VX: begin
                 spatz_req.op = VMACC;
+                spatz_req.vd_is_src = 1'b1;
               end
 
               riscv_instr::VNMSAC_VV,
               riscv_instr::VNMSAC_VX: begin
                 spatz_req.op = VNMSAC;
+                spatz_req.vd_is_src = 1'b1;
               end
 
               riscv_instr::VMADD_VV,
               riscv_instr::VMADD_VX: begin
                 spatz_req.op = VMADD;
+                spatz_req.vd_is_src = 1'b1;
               end
 
               riscv_instr::VNMSUB_VV,
               riscv_instr::VNMSUB_VX: begin
                 spatz_req.op = VNMSUB;
+                spatz_req.vd_is_src = 1'b1;
               end
 
               // Vector Merge
@@ -362,6 +369,7 @@ module spatz_decoder import spatz_pkg::*; import rvv_pkg::*; (
           automatic int unsigned csr_is_imm = decoder_req_i.instr[14];
 
           spatz_req.op = VCSR;
+          spatz_req.ex_unit = CON;
           spatz_req.rd = csr_rd;
           spatz_req.use_rd = 1'b1;
           spatz_req.rs1 = csr_is_imm ? 32'(csr_rs1) : decoder_req_i.rs1;
