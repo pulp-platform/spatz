@@ -23,10 +23,10 @@ module spatz_vrf import spatz_pkg::*; #(
 );
 
   // Write dummy out
-  assign wvalid_o = '1;
+  assign wvalid_o = we_i;
 
   // Read dummy in
   assign rdata_o  = '0;
-  assign rvalid_o = '1;
+  assign rvalid_o = re_i;
 
 endmodule : spatz_vrf

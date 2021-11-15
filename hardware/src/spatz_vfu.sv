@@ -19,7 +19,7 @@ module spatz_vfu import spatz_pkg::*; (
   output vreg_be_t         vrf_wbe_o,
   input  logic             vrf_wvalid_i,
   output vreg_addr_t [2:0] vrf_raddr_o,
-  input  logic       [2:0] vrf_re_o,
+  output logic       [2:0] vrf_re_o,
   input  vreg_data_t [2:0] vrf_rdata_i,
   input  logic       [2:0] vrf_rvalid_i
 );
