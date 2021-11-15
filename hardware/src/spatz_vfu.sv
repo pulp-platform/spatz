@@ -69,11 +69,11 @@ module spatz_vfu import spatz_pkg::*; (
     end else if (spatz_req_q.vl != 0 && operands_ready && result_written) begin
       // Change number of remaining elements
       if (spatz_req_q.vtype.vsew == rvv_pkg::EW_8) begin
-        spatz_req_d.vl -= N_IPU * 4;
+        spatz_req_d.vl = last_group ? 0 : spatz_req_q.vl - N_IPU * 4;
       end else if (spatz_req_q.vtype.vsew == rvv_pkg::EW_16) begin
-        spatz_req_d.vl -= N_IPU * 2;
+        spatz_req_d.vl = last_group ? 0 : spatz_req_q.vl - N_IPU * 2;
       end else begin
-        spatz_req_d.vl -= N_IPU;
+        spatz_req_d.vl = last_group ? 0 : spatz_req_q.vl - N_IPU;
       end
     end else if (spatz_req_q.vl == 0) begin
       spatz_req_d = '0;
@@ -126,6 +126,8 @@ module spatz_vfu import spatz_pkg::*; (
     end
   end
 
+
+
   always_comb begin : proc_op_req
     vreg_r_req = '0;
     vreg_we = '0;
@@ -138,7 +140,18 @@ module spatz_vfu import spatz_pkg::*; (
       // Distribute operands
       if (operands_ready) begin
         vreg_we  = spatz_req_q.use_vd;
-        vreg_wbe = result_be;
+        vreg_wbe = '1;
+
+        if (last_group) begin
+          automatic logic [N_IPU*4-1:0] base_mask = '1;
+          if (spatz_req_q.vtype.vsew == rvv_pkg::EW_8) begin
+            vreg_wbe = base_mask >> spatz_req_q.vl[$clog2(N_IPU * 4)-1:0];
+          end else if (spatz_req_q.vtype.vsew == rvv_pkg::EW_16) begin
+            vreg_wbe = base_mask >> spatz_req_q.vl[$clog2(N_IPU * 2)-1:0];
+          end else begin
+            vreg_wbe = base_mask >> spatz_req_q.vl[$clog2(N_IPU)-1:0];
+          end
+        end
       end
     end
   end : proc_op_req
@@ -156,7 +169,7 @@ module spatz_vfu import spatz_pkg::*; (
   assign operand1 = spatz_req_q.use_vs1 ? vrf_rdata_i[1] : spatz_req_q.vtype.vsew == rvv_pkg::EW_8 ? {4*N_IPU{spatz_req_q.rs1[7:0]}} : spatz_req_q.vtype.vsew == rvv_pkg::EW_16 ? {2*N_IPU{spatz_req_q.rs1[15:0]}} : {N_IPU{spatz_req_q.rs1}};
   assign operand2 = vrf_rdata_i[0];
   assign operand3 = vrf_rdata_i[2];
-  assign result_written = vrf_wvalid_i;
+  assign result_written = spatz_req_q.use_vd ? vrf_wvalid_i : 1'b1;
 
   //////////
   // IPUs //
