@@ -73,6 +73,7 @@ module spatz_tb;
 
   initial begin
     x_issue_req = '0;
+    x_issue_req.rs_valid = '1;
     x_issue_valid = '0;
     x_result_ready = '0;
 
@@ -85,6 +86,7 @@ module spatz_tb;
     // vl_exp = 128 (e8, m4)
     x_issue_req.instr = 32'h0c257557;
     x_issue_req.rs[0] = 32'd256;
+    x_issue_req.id = 0;
     @(negedge clk);
     assert (x_result.data == 32'd128);
 
@@ -93,6 +95,7 @@ module spatz_tb;
     // check vl for 128 length
     x_issue_req.instr = 32'hC2012173;
     x_issue_req.rs[0] = 32'd0;
+    x_issue_req.id = 1;
     @(negedge clk);
     assert (x_result.data == 32'd128);
 
@@ -101,12 +104,14 @@ module spatz_tb;
     // vl_exp stays the same, but ratio changes (e16, m2) -> illegal
     x_issue_req.instr = 32'h00907057;
     x_issue_req.rs[0] = 32'd128;
+    x_issue_req.id = 2;
 
     @(posedge clk);
 
     // check vl for zero length
     x_issue_req.instr = 32'hC2012173;
     x_issue_req.rs[0] = 32'd0;
+    x_issue_req.id = 3;
     @(negedge clk);
     assert (x_result.data == 0);
 
@@ -115,6 +120,7 @@ module spatz_tb;
     // vl_exp = 256 (e8, m4)
     x_issue_req.instr = 32'h08207557;
     x_issue_req.rs[0] = 32'd256;
+    x_issue_req.id = 4;
     @(negedge clk);
     assert (x_result.data == 32'd256);
 
@@ -123,6 +129,7 @@ module spatz_tb;
     // vl_exp stays the same, ratio stays the same (e16, m8)
     x_issue_req.instr = 32'h00B07057;
     x_issue_req.rs[0] = 32'd256;
+    x_issue_req.id = 5;
     @(negedge clk);
     assert (x_result.data == 32'd256);
 
@@ -131,6 +138,7 @@ module spatz_tb;
     // check vtype for (vm0, vt0, e16, m8) configuration
     x_issue_req.instr = 32'hC2112173;
     x_issue_req.rs[0] = 32'd0;
+    x_issue_req.id = 6;
     @(negedge clk);
     assert (x_result.data == 32'(8'b00001011));
 
@@ -139,6 +147,7 @@ module spatz_tb;
     // check vlenb
     x_issue_req.instr = 32'hC2212173;
     x_issue_req.rs[0] = 32'd0;
+    x_issue_req.id = 7;
     @(negedge clk);
     assert (x_result.data == spatz_pkg::VLENB);
 
@@ -147,6 +156,7 @@ module spatz_tb;
     // set vstart to 6 (over immediate) and check vstart for 0
     x_issue_req.instr = 32'h00836173;
     x_issue_req.rs[0] = 32'd1;
+    x_issue_req.id = 8;
     @(negedge clk);
     assert (x_result.data == 0);
 
@@ -155,6 +165,7 @@ module spatz_tb;
     // set vstart to 4 and check vstart for 6
     x_issue_req.instr = 32'h00811173;
     x_issue_req.rs[0] = 32'd4;
+    x_issue_req.id = 9;
     @(negedge clk);
     assert (x_result.data == 6);
 
@@ -163,6 +174,7 @@ module spatz_tb;
     // check vstart for 4
     x_issue_req.instr = 32'h00812173;
     x_issue_req.rs[0] = 32'd0;
+    x_issue_req.id = 10;
     @(negedge clk);
     assert (x_result.data == 4);
 
@@ -171,6 +183,7 @@ module spatz_tb;
     // vl_exp = 128 (e8, m4)
     x_issue_req.instr = 32'h0c257557;
     x_issue_req.rs[0] = 32'd127;
+    x_issue_req.id = 11;
     @(negedge clk);
     assert (x_result.data == 32'd127);
 
@@ -179,14 +192,24 @@ module spatz_tb;
     // Execute Add instruction (vx)
     x_issue_req.instr = 32'h03F0C0D7;
     x_issue_req.rs[0] = 32'd15;
+    x_issue_req.id = 12;
+
+    @(posedge clk);
+    wait (x_issue_ready == 1'b1);
+
+    // Execute Or instruction (vx)
+    x_issue_req.instr = 32'h2AF0C0D7;
+    x_issue_req.rs[0] = 32'd15;
+    x_issue_req.id = 13;
 
     @(posedge clk);
 
     // check illegal instruction
     x_issue_req.instr = 32'h00812174;
     x_issue_req.rs[0] = 32'd0;
+    x_issue_req.id = 14;
     @(negedge clk);
-    assert (x_issue_resp.exc == 1);
+    assert (x_issue_resp.accept == 1'b0);
 
     @(posedge clk);
 
