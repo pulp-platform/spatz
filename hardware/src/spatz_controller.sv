@@ -75,7 +75,7 @@ module spatz_controller
 
       if (decoder_rsp.spatz_req.op == VCFG) begin
         // Check if vtype is valid
-        if ((vtype_d.vsew > EW_32) || (vtype_d.vlmul == LMUL_RES) || (vtype_d.vlmul + $clog2(ELEN) - 1 < vtype_d.vsew)) begin
+        if ((vtype_d.vsew > EW_32) || (vtype_d.vlmul == LMUL_RES) || (signed'(vtype_d.vlmul) + signed'($clog2(ELENB)) < signed'(vtype_d.vsew))) begin
           // Invalid
           vtype_d = '{vill: 1'b1, default: '0};
           vl_d    = '0;
@@ -190,7 +190,11 @@ module spatz_controller
           end
         end // CON
         VFU: begin
-          if (!vfu_req_ready_i) begin
+          // vtype is illegal -> illegal instruction
+          if (vtype_q.vill) begin
+            x_issue_resp_o.exc = 1'b1;
+            x_result_o.exc = 1'b1;
+          end else if (!vfu_req_ready_i) begin
             // Stall accelerator request
             spatz_ready = 1'b0;
           end else begin
@@ -201,10 +205,18 @@ module spatz_controller
           end
         end // VFU
         LSU: begin
-
+          // vtype is illegal -> illegal instruction
+          if (vtype_q.vill) begin
+            x_issue_resp_o.exc = 1'b1;
+            x_result_o.exc = 1'b1;
+          end
         end // LSU
         SLD: begin
-
+          // vtype is illegal -> illegal instruction
+          if (vtype_q.vill) begin
+            x_issue_resp_o.exc = 1'b1;
+            x_result_o.exc = 1'b1;
+          end
         end // SLD
       endcase // Operation type
     // New instruction is illegal
