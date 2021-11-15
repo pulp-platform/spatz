@@ -35,7 +35,7 @@ module spatz_tb;
     rst_n = 1'b1;
 
     @(posedge clk);
-    repeat (20)
+    repeat (200)
       #(ClockPeriod);
 
     $finish;
@@ -82,7 +82,7 @@ module spatz_tb;
     x_issue_valid = '1;
     x_result_ready = '1;
 
-    // vl_exp = 128 (e8, m2)
+    // vl_exp = 128 (e8, m4)
     x_issue_req.instr = 32'h0c257557;
     x_issue_req.rs[0] = 32'd256;
     @(negedge clk);
@@ -168,7 +168,15 @@ module spatz_tb;
 
     @(posedge clk);
 
-    // check vstart for 4
+    // vl_exp = 128 (e8, m4)
+    x_issue_req.instr = 32'h0c257557;
+    x_issue_req.rs[0] = 32'd127;
+    @(negedge clk);
+    assert (x_result.data == 32'd127);
+
+    @(posedge clk);
+
+    // Execute Add instruction (vx)
     x_issue_req.instr = 32'h03F0C0D7;
     x_issue_req.rs[0] = 32'd15;
 
