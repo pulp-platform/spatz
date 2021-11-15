@@ -40,27 +40,31 @@ module spatz
   logic       spatz_req_valid;
 
   logic       vfu_req_ready;
+  logic       vfu_rsp_valid;
+  vfu_rsp_t   vfu_rsp;
 
   ////////////////
   // Controller //
   ////////////////
 
   spatz_controller i_controller (
-    .clk_i              (clk_i),
-    .rst_ni             (rst_ni),
+    .clk_i            (clk_i),
+    .rst_ni           (rst_ni),
     // X-intf
-    .x_issue_valid_i    (x_issue_valid_i),
-    .x_issue_ready_o    (x_issue_ready_o),
-    .x_issue_req_i      (x_issue_req_i),
-    .x_issue_resp_o     (x_issue_resp_o),
-    .x_result_valid_o   (x_result_valid_o),
-    .x_result_ready_i   (x_result_ready_i),
-    .x_result_o         (x_result_o),
+    .x_issue_valid_i  (x_issue_valid_i),
+    .x_issue_ready_o  (x_issue_ready_o),
+    .x_issue_req_i    (x_issue_req_i),
+    .x_issue_resp_o   (x_issue_resp_o),
+    .x_result_valid_o (x_result_valid_o),
+    .x_result_ready_i (x_result_ready_i),
+    .x_result_o       (x_result_o),
     // Spatz req
-    .spatz_req_valid_o  (spatz_req_valid),
-    .spatz_req_o        (spatz_req),
-    // VFU rsp
-    .vfu_req_ready_i    (vfu_req_ready)
+    .spatz_req_valid_o(spatz_req_valid),
+    .spatz_req_o      (spatz_req),
+    // VFU
+    .vfu_req_ready_i  (vfu_req_ready),
+    .vfu_rsp_valid_i  (vfu_rsp_valid),
+    .vfu_rsp_i        (vfu_rsp)
   );
 
   /////////
@@ -108,6 +112,9 @@ module spatz
     .spatz_req_i      (spatz_req),
     .spatz_req_valid_i(spatz_req_valid),
     .spatz_req_ready_o(vfu_req_ready),
+    // Response
+    .vfu_rsp_valid_o  (vfr_rsp_valid),
+    .vfu_rsp_o        (vfu_rsp),
     // VRF
     .vrf_waddr_o      (vrf_waddr[0]),
     .vrf_wdata_o      (vrf_wdata[0]),

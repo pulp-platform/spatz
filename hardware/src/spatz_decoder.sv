@@ -72,12 +72,14 @@ module spatz_decoder import spatz_pkg::*; import rvv_pkg::*; (
             if (decoder_req_i.instr[31] == 1'b0) begin
               spatz_req.vtype = {1'b0, decoder_req_i.instr[27:20]};
               spatz_req.rs1   = decoder_req_i.rs1;
+              illegal_instr   = ~decoder_req_i.rs1_valid;
             end else if (decoder_req_i.instr[31:30] == 2'b11) begin
               spatz_req.vtype = {1'b0, decoder_req_i.instr[27:20]};
               spatz_req.rs1   = elen_t'(setvl_rs1);
             end else if (decoder_req_i.instr[31:25] == 7'b1000000) begin
               spatz_req.vtype = {1'b0, decoder_req_i.rs2[7:0]};
               spatz_req.rs1   = decoder_req_i.rs1;
+              illegal_instr   = ~decoder_req_i.rs1_valid || ~decoder_req_i.rs2_valid;
             end
 
             // Set to maxvl or new desired value
@@ -110,6 +112,7 @@ module spatz_decoder import spatz_pkg::*; import rvv_pkg::*; (
               OPIVX,
               OPMVX: begin
                 spatz_req.rs1 = decoder_req_i.rs1;
+                illegal_instr = ~decoder_req_i.rs1_valid;
               end
               OPFVV,
               OPFVF: illegal_instr = 1'b1;
@@ -373,6 +376,7 @@ module spatz_decoder import spatz_pkg::*; import rvv_pkg::*; (
           spatz_req.rd = csr_rd;
           spatz_req.use_rd = 1'b1;
           spatz_req.rs1 = csr_is_imm ? 32'(csr_rs1) : decoder_req_i.rs1;
+          illegal_instr = csr_is_imm ? 1'b0 : ~decoder_req_i.rs1_valid;
           reset_vstart = 1'b0;
 
           case (csr_addr)

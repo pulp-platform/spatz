@@ -11,7 +11,9 @@ module spatz_vfu import spatz_pkg::*; (
   input  spatz_req_t spatz_req_i,
   input  logic       spatz_req_valid_i,
   output logic       spatz_req_ready_o,
-  // Spatz rsp
+  // VFU rsp
+  output logic     vfu_rsp_valid_o,
+  output vfu_rsp_t vfu_rsp_o,
   // VRF
   output vreg_addr_t       vrf_waddr_o,
   output vreg_data_t       vrf_wdata_o,
@@ -93,6 +95,16 @@ module spatz_vfu import spatz_pkg::*; (
       end
   end
 
+  always_comb begin : proc_vfu_rsp
+    vfu_rsp_valid_o = 1'b0;
+    vfu_rsp_o       = '0;
+
+    if (last_group && operands_ready && result_written) begin
+      vfu_rsp_o.id   = spatz_req_q.id;
+      vfu_rsp_valid_o = 1'b1;
+    end
+  end
+
   ///////////////////////
   // Operand Requester //
   ///////////////////////
@@ -126,8 +138,6 @@ module spatz_vfu import spatz_pkg::*; (
     end
   end
 
-
-
   always_comb begin : proc_op_req
     vreg_r_req = '0;
     vreg_we = '0;
@@ -157,9 +167,9 @@ module spatz_vfu import spatz_pkg::*; (
   end : proc_op_req
 
   assign vrf_raddr_o = vreg_addr_q;
-  assign vrf_re_o = vreg_r_req;
-  assign vrf_we_o = vreg_we;
-  assign vrf_wbe_o = vreg_wbe;
+  assign vrf_re_o    = vreg_r_req;
+  assign vrf_we_o    = vreg_we;
+  assign vrf_wbe_o   = vreg_wbe;
   assign vrf_waddr_o = vreg_addr_q;
   assign vrf_wdata_o = result;
 

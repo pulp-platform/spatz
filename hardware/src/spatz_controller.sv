@@ -23,7 +23,9 @@ module spatz_controller
   output logic spatz_req_valid_o,
   output spatz_req_t spatz_req_o,
   // VFU
-  input  logic vfu_req_ready_i
+  input  logic     vfu_req_ready_i,
+  input  logic     vfu_rsp_valid_i,
+  input  vfu_rsp_t vfu_rsp_i
 );
 
   // Include FF
@@ -140,23 +142,29 @@ module spatz_controller
   // Controller //
   ////////////////
 
-  logic spatz_ready;
+  // Spatz ready to handle new request
+  logic spatz_ready_q, spatz_ready_d;
 
+  `FF(spatz_ready_q, spatz_ready_d, '1);
+
+  // Decode new instruction if new request arrives
   always_comb begin : proc_decoder
     decoder_req = '0;
     decoder_req_valid = 1'b0;
 
     // Decode new instruction if one is received and spatz is ready
-    if (x_issue_valid_i & spatz_ready) begin
-      decoder_req.instr = x_issue_req_i.instr;
-      decoder_req.rs1   = x_issue_req_i.rs[0];
-      decoder_req.rs2   = x_issue_req_i.rs[1];
-      decoder_req_valid = 1'b1;
+    if (x_issue_valid_i & spatz_ready_q) begin
+      decoder_req.instr     = x_issue_req_i.instr;
+      decoder_req.rs1       = x_issue_req_i.rs[0];
+      decoder_req.rs1_valid = x_issue_req_i.rs_valid[0];
+      decoder_req.rs2       = x_issue_req_i.rs[1];
+      decoder_req.rs2_valid = x_issue_req_i.rs_valid[1];
+      decoder_req_valid     = 1'b1;
     end
   end // proc_decoder
 
   always_comb begin : proc_controller
-    spatz_ready = 1'b1;
+    spatz_ready_d = spatz_ready_q;
     x_issue_resp_o = '0;
     x_result_o = '0;
     x_result_valid_o = '0;
@@ -165,25 +173,30 @@ module spatz_controller
 
     // New decoded instruction if valid
     if (decoder_rsp_valid && ~decoder_rsp.instr_illegal) begin
+      spatz_req.id = x_issue_req_i.id;
       spatz_req_valid = 1'b1;
+      x_issue_resp_o.accept = 1'b1;
       case (decoder_rsp.spatz_req.ex_unit)
         CON: begin
+          spatz_ready_d = 1'b1;
           // Read CSR and write back to cpu
           if (decoder_rsp.spatz_req.op == VCSR) begin
             if (decoder_rsp.spatz_req.use_rd) begin
               unique case (decoder_rsp.spatz_req.op_csr.addr)
-                riscv_instr::CSR_VSTART: x_result_o.data = 32'(vstart_q);
-                riscv_instr::CSR_VL:     x_result_o.data = 32'(vl_q);
-                riscv_instr::CSR_VTYPE:  x_result_o.data = 32'(vtype_q);
-                riscv_instr::CSR_VLENB:  x_result_o.data = 32'(VLENB);
+                riscv_instr::CSR_VSTART: x_result_o.data = elen_t'(vstart_q);
+                riscv_instr::CSR_VL:     x_result_o.data = elen_t'(vl_q);
+                riscv_instr::CSR_VTYPE:  x_result_o.data = elen_t'(vtype_q);
+                riscv_instr::CSR_VLENB:  x_result_o.data = elen_t'(VLENB);
               endcase
             end
+            x_result_o.id = x_issue_req_i.id;
             x_result_valid_o = 1'b1;
             x_result_o.we = 1'b1;
             x_issue_resp_o.writeback = 1'b1;
           end else begin
             // Change configuration and send back vl
-            x_result_o.data = 32'(vl_d);
+            x_result_o.id = x_issue_req_i.id;
+            x_result_o.data = elen_t'(vl_d);
             x_result_o.we = 1'b1;
             x_result_valid_o = 1'b1;
             x_issue_resp_o.writeback = 1'b1;
@@ -196,7 +209,7 @@ module spatz_controller
             x_result_o.exc = 1'b1;
           end else if (!vfu_req_ready_i) begin
             // Stall accelerator request
-            spatz_ready = 1'b0;
+            spatz_ready_d = 1'b0;
           end else begin
             spatz_req.vtype  = vtype_q;
             spatz_req.vl     = vl_q;
@@ -205,28 +218,27 @@ module spatz_controller
           end
         end // VFU
         LSU: begin
+          x_issue_resp_o.loadstore = 1'b1;
           // vtype is illegal -> illegal instruction
           if (vtype_q.vill) begin
-            x_issue_resp_o.exc = 1'b1;
-            x_result_o.exc = 1'b1;
+            x_issue_resp_o.accept = 1'b0;
           end
         end // LSU
         SLD: begin
+          x_issue_resp_o.loadstore = 1'b1;
           // vtype is illegal -> illegal instruction
           if (vtype_q.vill) begin
-            x_issue_resp_o.exc = 1'b1;
-            x_result_o.exc = 1'b1;
+            x_issue_resp_o.accept = 1'b0;
           end
         end // SLD
       endcase // Operation type
     // New instruction is illegal
     end else if (decoder_rsp_valid & decoder_rsp.instr_illegal) begin
-      x_issue_resp_o.exc = 1'b1;
-      x_result_o.exc = 1'b1;
+      x_issue_resp_o.accept = 1'b0;
     end
   end // proc_controller
 
-  assign x_issue_ready_o = spatz_ready;
+  assign x_issue_ready_o = spatz_ready_q;
 
   assign spatz_req_o       = spatz_req;
   assign spatz_req_valid_o = spatz_req_valid;

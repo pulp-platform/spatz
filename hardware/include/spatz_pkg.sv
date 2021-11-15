@@ -46,6 +46,8 @@ package spatz_pkg;
   typedef logic [N_IPU*ELENB-1:0]    vreg_be_t;
   typedef logic [N_IPU*ELEN-1:0]     vreg_data_t;
 
+  typedef logic [3:0] instr_id_t;
+
   /////////////////////
   // Operation Types //
   /////////////////////
@@ -110,6 +112,9 @@ package spatz_pkg;
 
   // Result from decoder
   typedef struct packed {
+    // Instructio ID
+    instr_id_t id;
+
     // Used vector registers
     opreg_t    vs1;
     logic      use_vs1;
@@ -152,7 +157,9 @@ package spatz_pkg;
     riscv_pkg::instr_t instr;
     // Rs values
     elen_t rs1;
+    logic  rs1_valid;
     elen_t rs2;
+    logic  rs2_valid;
   } decoder_req_t;
 
   typedef struct packed {
@@ -161,5 +168,18 @@ package spatz_pkg;
     // Spatz request
     spatz_req_t spatz_req;
   } decoder_rsp_t;
+
+  //////////////////
+  // VFU Response //
+  //////////////////
+
+  typedef struct packed {
+    // Instruction ID
+    instr_id_t id;
+
+    // WB
+    logic      wb;
+    elen_t     result;
+  } vfu_rsp_t;
 
  endpackage : spatz_pkg
