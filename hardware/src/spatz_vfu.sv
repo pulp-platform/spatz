@@ -48,13 +48,13 @@ module spatz_vfu import spatz_pkg::*; (
 
   always_ff @(posedge clk_i or negedge rst_ni) begin : proc_spatz_req
     if(~rst_ni) begin
-      spatz_req_q <= 0;
+      spatz_req_q <= '0;
     end else begin
       spatz_req_q <= spatz_req_d;
     end
   end
 
-  assign vfu_is_ready = (spatz_req_q.vl == '0) || (last_group && operands_ready && result_written);
+  assign vfu_is_ready = (spatz_req_q.vl == 0) || (last_group && operands_ready && result_written);
   assign spatz_req_ready_o = vfu_is_ready;
 
   ///////////////////
@@ -63,24 +63,35 @@ module spatz_vfu import spatz_pkg::*; (
 
   always_comb begin : proc_state_handler
     spatz_req_d = spatz_req_q;
-    last_group = 1'b0;
 
     if (new_request) begin
       spatz_req_d = spatz_req_i;
     end else if (spatz_req_q.vl != 0 && operands_ready && result_written) begin
       // Change number of remaining elements
       if (spatz_req_q.vtype.vsew == rvv_pkg::EW_8) begin
-        spatz_req_d.vl -= $clog2(N_IPU) * 4;
-        last_group = spatz_req_d.vl <= $clog2(N_IPU) * 4;
+        spatz_req_d.vl -= N_IPU * 4;
       end else if (spatz_req_q.vtype.vsew == rvv_pkg::EW_16) begin
-        spatz_req_d.vl -= $clog2(N_IPU) * 2;
-        last_group = spatz_req_d.vl <= $clog2(N_IPU) * 2;
+        spatz_req_d.vl -= N_IPU * 2;
       end else begin
-        spatz_req_d.vl -= $clog2(N_IPU);
-        last_group = spatz_req_d.vl <= $clog2(N_IPU);
+        spatz_req_d.vl -= N_IPU;
       end
+    end else if (spatz_req_q.vl == 0) begin
+      spatz_req_d = '0;
     end
   end : proc_state_handler
+
+  // Determine if we are currently handling the last group
+  always_comb begin : proc_last_group
+    last_group = 1'b0;
+
+    if (spatz_req_q.vtype.vsew == rvv_pkg::EW_8) begin
+        last_group = spatz_req_q.vl <= N_IPU * 4;
+      end else if (spatz_req_q.vtype.vsew == rvv_pkg::EW_16) begin
+        last_group = spatz_req_q.vl <= N_IPU * 2;
+      end else begin
+        last_group = spatz_req_q.vl <= N_IPU;
+      end
+  end
 
   ///////////////////////
   // Operand Requester //
@@ -102,14 +113,16 @@ module spatz_vfu import spatz_pkg::*; (
   always_comb begin : proc_vreg_addr
     vreg_addr_d = vreg_addr_q;
 
-    if (new_request && vfu_is_ready) begin
-      vreg_addr_d[0] = {spatz_req_q.vs2, $clog2(VELE)'(0)};
-      vreg_addr_d[1] = {spatz_req_q.vs1, $clog2(VELE)'(0)};
-      vreg_addr_d[2] = {spatz_req_q.vd,  $clog2(VELE)'(0)};
-    end else if (operands_ready && result_written) begin
-      vreg_addr_d[0] = vreg_addr_q[0] + N_IPU;
-      vreg_addr_d[1] = vreg_addr_q[1] + N_IPU;
-      vreg_addr_d[2] = vreg_addr_q[2] + N_IPU;
+    if (new_request) begin
+      vreg_addr_d[0] = {spatz_req_i.vs2, $clog2(VELE)'(0)};
+      vreg_addr_d[1] = {spatz_req_i.vs1, $clog2(VELE)'(0)};
+      vreg_addr_d[2] = {spatz_req_i.vd,  $clog2(VELE)'(0)};
+    end else if (spatz_req_d.vl != 0 && operands_ready && result_written) begin
+      vreg_addr_d[0] = vreg_addr_q[0] + 1;
+      vreg_addr_d[1] = vreg_addr_q[1] + 1;
+      vreg_addr_d[2] = vreg_addr_q[2] + 1;
+    end else if (spatz_req_d.vl == 0) begin
+      vreg_addr_d = '0;
     end
   end
 
@@ -118,9 +131,9 @@ module spatz_vfu import spatz_pkg::*; (
     vreg_we = '0;
     vreg_wbe = '0;
 
-    if (!vfu_is_ready || last_group) begin
+    if (spatz_req_q.vl != 0) begin
       // Request operands
-      vreg_r_req = {spatz_req_q.use_vs2, spatz_req_q.use_vs1, spatz_req_q.vd_is_src};
+      vreg_r_req = {spatz_req_q.vd_is_src, spatz_req_q.use_vs1, spatz_req_q.use_vs2};
 
       // Distribute operands
       if (operands_ready) begin
@@ -137,9 +150,9 @@ module spatz_vfu import spatz_pkg::*; (
   assign vrf_waddr_o = vreg_addr_q;
   assign vrf_wdata_o = result;
 
-  assign op1_is_ready = vrf_rvalid_i[1];
-  assign op2_is_ready = vrf_rvalid_i[0];
-  assign op3_is_ready = vrf_rvalid_i[2];
+  assign op1_is_ready = spatz_req_q.use_vs1   ? vrf_rvalid_i[1] : 1'b1;
+  assign op2_is_ready = spatz_req_q.use_vs2   ? vrf_rvalid_i[0] : 1'b1;
+  assign op3_is_ready = spatz_req_q.vd_is_src ? vrf_rvalid_i[2] : 1'b1;
   assign operand1 = spatz_req_q.use_vs1 ? vrf_rdata_i[1] : spatz_req_q.vtype.vsew == rvv_pkg::EW_8 ? {4*N_IPU{spatz_req_q.rs1[7:0]}} : spatz_req_q.vtype.vsew == rvv_pkg::EW_16 ? {2*N_IPU{spatz_req_q.rs1[15:0]}} : {N_IPU{spatz_req_q.rs1}};
   assign operand2 = vrf_rdata_i[0];
   assign operand3 = vrf_rdata_i[2];

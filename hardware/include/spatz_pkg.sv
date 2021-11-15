@@ -26,8 +26,8 @@ package spatz_pkg;
   localparam int unsigned MAXVL = VLEN;
   // Number of vector registers
   localparam int unsigned NRVREG = 32;
-  // Number of elements in a vector register
-  localparam int unsigned VELE = VLEN/ELEN;
+  // Number of addressable elements in a vector register
+  localparam int unsigned VELE = (`ifdef VLEN `VLEN `else 0 `endif)/ELEN;
 
   //////////////////////
   // Type Definitions //
@@ -42,9 +42,9 @@ package spatz_pkg;
   typedef logic [ELEN-1:0] elen_t;
 
   // VREG address type
-  typedef logic [4:0][$clog2(VELE)-1:0] vreg_addr_t;
-  typedef logic [N_IPU*ELENB-1:0]       vreg_be_t;
-  typedef logic [N_IPU*ELEN-1:0]        vreg_data_t;
+  typedef logic [5+$clog2(VELE)-1:0] vreg_addr_t;
+  typedef logic [N_IPU*ELENB-1:0]    vreg_be_t;
+  typedef logic [N_IPU*ELEN-1:0]     vreg_data_t;
 
   /////////////////////
   // Operation Types //
