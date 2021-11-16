@@ -154,13 +154,12 @@ module spatz_vfu import spatz_pkg::*; (
 
         if (last_group) begin
           automatic logic [N_IPU*4-1:0] base_mask = '1;
-          if (spatz_req_q.vtype.vsew == rvv_pkg::EW_8) begin
-            vreg_wbe = base_mask >> (N_IPU * 4 - spatz_req_q.vl[$clog2(N_IPU * 4)-1:0]);
-          end else if (spatz_req_q.vtype.vsew == rvv_pkg::EW_16) begin
-            vreg_wbe = base_mask >> (N_IPU * 2 - spatz_req_q.vl[$clog2(N_IPU * 2)-1:0]);
-          end else begin
-            vreg_wbe = base_mask >> (N_IPU - spatz_req_q.vl[$clog2(N_IPU)-1:0]);
-          end
+          automatic int opa = spatz_req_q.vtype.vsew == rvv_pkg::EW_8  ? N_IPU*4 :
+                              spatz_req_q.vtype.vsew == rvv_pkg::EW_16 ? N_IPU*2 : N_IPU;
+          automatic int opb = spatz_req_q.vtype.vsew == rvv_pkg::EW_8  ? spatz_req_q.vl[$clog2(N_IPU * 4):0] :
+                              spatz_req_q.vtype.vsew == rvv_pkg::EW_16 ? spatz_req_q.vl[$clog2(N_IPU * 2):0] :
+                                                                         spatz_req_q.vl[$clog2(N_IPU):0];
+          vreg_wbe = base_mask >> opa - opb;
         end
       end
     end
