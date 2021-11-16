@@ -100,7 +100,7 @@ module spatz_vfu import spatz_pkg::*; (
     vfu_rsp_o       = '0;
 
     if (last_group && operands_ready && result_written) begin
-      vfu_rsp_o.id   = spatz_req_q.id;
+      vfu_rsp_o.id    = spatz_req_q.id;
       vfu_rsp_valid_o = 1'b1;
     end
   end
@@ -155,11 +155,11 @@ module spatz_vfu import spatz_pkg::*; (
         if (last_group) begin
           automatic logic [N_IPU*4-1:0] base_mask = '1;
           if (spatz_req_q.vtype.vsew == rvv_pkg::EW_8) begin
-            vreg_wbe = base_mask >> spatz_req_q.vl[$clog2(N_IPU * 4)-1:0];
+            vreg_wbe = base_mask >> (N_IPU * 4 - spatz_req_q.vl[$clog2(N_IPU * 4)-1:0]);
           end else if (spatz_req_q.vtype.vsew == rvv_pkg::EW_16) begin
-            vreg_wbe = base_mask >> spatz_req_q.vl[$clog2(N_IPU * 2)-1:0];
+            vreg_wbe = base_mask >> (N_IPU * 2 - spatz_req_q.vl[$clog2(N_IPU * 2)-1:0]);
           end else begin
-            vreg_wbe = base_mask >> spatz_req_q.vl[$clog2(N_IPU)-1:0];
+            vreg_wbe = base_mask >> (N_IPU - spatz_req_q.vl[$clog2(N_IPU)-1:0]);
           end
         end
       end

@@ -113,7 +113,7 @@ module spatz
     .spatz_req_valid_i(spatz_req_valid),
     .spatz_req_ready_o(vfu_req_ready),
     // Response
-    .vfu_rsp_valid_o  (vfr_rsp_valid),
+    .vfu_rsp_valid_o  (vfu_rsp_valid),
     .vfu_rsp_o        (vfu_rsp),
     // VRF
     .vrf_waddr_o      (vrf_waddr[0]),
