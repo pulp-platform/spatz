@@ -162,21 +162,21 @@ module spatz_tb;
 
     @(posedge clk);
 
-    // set vstart to 4 and check vstart for 6
+    // set vstart to 5 and check vstart for 6
     x_issue_req.instr = 32'h00811173;
-    x_issue_req.rs[0] = 32'd4;
+    x_issue_req.rs[0] = 32'd5;
     x_issue_req.id = 9;
     @(negedge clk);
     assert (x_result.data == 6);
 
     @(posedge clk);
 
-    // check vstart for 4
+    // check vstart for 5
     x_issue_req.instr = 32'h00812173;
     x_issue_req.rs[0] = 32'd0;
     x_issue_req.id = 10;
     @(negedge clk);
-    assert (x_result.data == 4);
+    assert (x_result.data == 5);
 
     @(posedge clk);
 
@@ -197,12 +197,12 @@ module spatz_tb;
     @(posedge clk);
     wait (x_issue_ready == 1'b1);
 
-    // Execute Or instruction (vx)
+   /* // Execute Or instruction (vx)
     x_issue_req.instr = 32'h2AF0C0D7;
     x_issue_req.rs[0] = 32'd15;
     x_issue_req.id = 13;
 
-    @(posedge clk);
+    @(posedge clk);*/
 
     // check illegal instruction
     x_issue_req.instr = 32'h00812174;
