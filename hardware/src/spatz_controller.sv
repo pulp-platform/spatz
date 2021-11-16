@@ -77,7 +77,7 @@ module spatz_controller
 
       if (decoder_rsp.spatz_req.op == VCFG) begin
         // Check if vtype is valid
-        if ((vtype_d.vsew > EW_32) || (vtype_d.vlmul == LMUL_RES) || (signed'(vtype_d.vlmul) + signed'($clog2(ELENB)) < signed'(vtype_d.vsew))) begin
+        if ((vtype_d.vsew > EW_32) || (vtype_d.vlmul == LMUL_RES) || (vtype_d.vlmul == LMUL_F8) || (signed'(vtype_d.vlmul) + signed'($clog2(ELENB)) < signed'(vtype_d.vsew))) begin
           // Invalid
           vtype_d = '{vill: 1'b1, default: '0};
           vl_d    = '0;
@@ -94,7 +94,6 @@ module spatz_controller
             unique case (decoder_rsp.spatz_req.vtype.vlmul)
               LMUL_F2: vlmax >>= 1;
               LMUL_F4: vlmax >>= 2;
-              LMUL_F8: vlmax >>= 3;
               LMUL_1: vlmax <<= 0;
               LMUL_2: vlmax <<= 1;
               LMUL_4: vlmax <<= 2;

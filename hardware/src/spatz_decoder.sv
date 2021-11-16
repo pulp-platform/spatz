@@ -83,7 +83,7 @@ module spatz_decoder import spatz_pkg::*; import rvv_pkg::*; (
             end
 
             // Set to maxvl or new desired value
-            spatz_req.rs1 = (setvl_rs1 == '0 && setvl_rd != '0) ? '1 : spatz_req.rs1;
+            spatz_req.rs1 = (setvl_rs1 == 0 && setvl_rd != 0) ? '1 : spatz_req.rs1;
             // Keep vl
             spatz_req.op_cgf.keep_vl = setvl_rs1 == '0 && setvl_rd == '0;
           // Arithmetic instruction (except for masked and widening)
