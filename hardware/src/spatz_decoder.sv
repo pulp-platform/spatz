@@ -121,239 +121,239 @@ module spatz_decoder import spatz_pkg::*; import rvv_pkg::*; (
             // Check what arithmetic operation is requested
             unique casez (decoder_req_i.instr)
               // Vector Arithmetic
-              riscv_instr::VADD_VV,
-              riscv_instr::VADD_VX,
-              riscv_instr::VADD_VI: begin
+              riscv_instruction::VADD_VV,
+              riscv_instruction::VADD_VX,
+              riscv_instruction::VADD_VI: begin
                 spatz_req.op = VADD;
               end
 
-              riscv_instr::VSUB_VV,
-              riscv_instr::VSUB_VX: begin
+              riscv_instruction::VSUB_VV,
+              riscv_instruction::VSUB_VX: begin
                 spatz_req.op = VSUB;
               end
 
-              riscv_instr::VRSUB_VX,
-              riscv_instr::VRSUB_VI: begin
+              riscv_instruction::VRSUB_VX,
+              riscv_instruction::VRSUB_VI: begin
                 spatz_req.op = VRSUB;
               end
 
               // Vector Logic
-              riscv_instr::VAND_VV,
-              riscv_instr::VAND_VX,
-              riscv_instr::VAND_VI: begin
+              riscv_instruction::VAND_VV,
+              riscv_instruction::VAND_VX,
+              riscv_instruction::VAND_VI: begin
                 spatz_req.op = VAND;
               end
 
-              riscv_instr::VOR_VV,
-              riscv_instr::VOR_VX,
-              riscv_instr::VOR_VI: begin
+              riscv_instruction::VOR_VV,
+              riscv_instruction::VOR_VX,
+              riscv_instruction::VOR_VI: begin
                 spatz_req.op = VOR;
               end
 
-              riscv_instr::VXOR_VV,
-              riscv_instr::VXOR_VX,
-              riscv_instr::VXOR_VI: begin
+              riscv_instruction::VXOR_VV,
+              riscv_instruction::VXOR_VX,
+              riscv_instruction::VXOR_VI: begin
                 spatz_req.op = VXOR;
               end
 
               // Vector Arithmetic with Carry
-              riscv_instr::VADC_VVM,
-              riscv_instr::VADC_VXM,
-              riscv_instr::VADC_VIM: begin
+              riscv_instruction::VADC_VVM,
+              riscv_instruction::VADC_VXM,
+              riscv_instruction::VADC_VIM: begin
                 spatz_req.op = VADC;
               end
 
-              riscv_instr::VMADC_VV,
-              riscv_instr::VMADC_VX,
-              riscv_instr::VMADC_VI: begin
+              riscv_instruction::VMADC_VV,
+              riscv_instruction::VMADC_VX,
+              riscv_instruction::VMADC_VI: begin
                 spatz_req.op = VMADC;
               end
 
-              riscv_instr::VMADC_VVM,
-              riscv_instr::VMADC_VXM,
-              riscv_instr::VMADC_VIM: begin
+              riscv_instruction::VMADC_VVM,
+              riscv_instruction::VMADC_VXM,
+              riscv_instruction::VMADC_VIM: begin
                 spatz_req.op = VMADC;
                 spatz_req.op_arith.use_carry_borrow_in = 1'b1;
               end
 
-              riscv_instr::VSBC_VVM,
-              riscv_instr::VSBC_VXM: begin
+              riscv_instruction::VSBC_VVM,
+              riscv_instruction::VSBC_VXM: begin
                 spatz_req.op = VSBC;
               end
 
-              riscv_instr::VMSBC_VV,
-              riscv_instr::VMSBC_VX: begin
+              riscv_instruction::VMSBC_VV,
+              riscv_instruction::VMSBC_VX: begin
                 spatz_req.op = VMSBC;
               end
 
-              riscv_instr::VMSBC_VVM,
-              riscv_instr::VMSBC_VXM: begin
+              riscv_instruction::VMSBC_VVM,
+              riscv_instruction::VMSBC_VXM: begin
                 spatz_req.op = VMSBC;
                 spatz_req.op_arith.use_carry_borrow_in = 1'b1;
               end
 
               // Vector Shift
-              riscv_instr::VSLL_VV,
-              riscv_instr::VSLL_VX,
-              riscv_instr::VSLL_VI: begin
+              riscv_instruction::VSLL_VV,
+              riscv_instruction::VSLL_VX,
+              riscv_instruction::VSLL_VI: begin
                 spatz_req.op = VSLL;
               end
 
-              riscv_instr::VSRL_VV,
-              riscv_instr::VSRL_VX,
-              riscv_instr::VSRL_VI: begin
+              riscv_instruction::VSRL_VV,
+              riscv_instruction::VSRL_VX,
+              riscv_instruction::VSRL_VI: begin
                 spatz_req.op = VSRL;
               end
 
-              riscv_instr::VSRA_VV,
-              riscv_instr::VSRA_VX,
-              riscv_instr::VSRA_VI: begin
+              riscv_instruction::VSRA_VV,
+              riscv_instruction::VSRA_VX,
+              riscv_instruction::VSRA_VI: begin
                 spatz_req.op = VSRA;
               end
 
               // Vector Min/Max
-              riscv_instr::VMIN_VV,
-              riscv_instr::VMIN_VX: begin
+              riscv_instruction::VMIN_VV,
+              riscv_instruction::VMIN_VX: begin
                 spatz_req.op = VMIN;
               end
 
-              riscv_instr::VMINU_VV,
-              riscv_instr::VMINU_VX: begin
+              riscv_instruction::VMINU_VV,
+              riscv_instruction::VMINU_VX: begin
                 spatz_req.op = VMINU;
               end
 
-              riscv_instr::VMAX_VV,
-              riscv_instr::VMAX_VX: begin
+              riscv_instruction::VMAX_VV,
+              riscv_instruction::VMAX_VX: begin
                 spatz_req.op = VMAX;
               end
 
-              riscv_instr::VMAXU_VV,
-              riscv_instr::VMAXU_VX: begin
+              riscv_instruction::VMAXU_VV,
+              riscv_instruction::VMAXU_VX: begin
                 spatz_req.op = VMAXU;
               end
 
               // Vector Comparison
-              riscv_instr::VMSEQ_VV,
-              riscv_instr::VMSEQ_VX,
-              riscv_instr::VMSEQ_VI: begin
+              riscv_instruction::VMSEQ_VV,
+              riscv_instruction::VMSEQ_VX,
+              riscv_instruction::VMSEQ_VI: begin
                 spatz_req.op = VMSEQ;
               end
 
-              riscv_instr::VMSNE_VV,
-              riscv_instr::VMSNE_VX,
-              riscv_instr::VMSNE_VI: begin
+              riscv_instruction::VMSNE_VV,
+              riscv_instruction::VMSNE_VX,
+              riscv_instruction::VMSNE_VI: begin
                 spatz_req.op = VMSNE;
               end
 
-              riscv_instr::VMSLTU_VV,
-              riscv_instr::VMSLTU_VX: begin
+              riscv_instruction::VMSLTU_VV,
+              riscv_instruction::VMSLTU_VX: begin
                 spatz_req.op = VMSLTU;
               end
 
-              riscv_instr::VMSLT_VV,
-              riscv_instr::VMSLT_VX: begin
+              riscv_instruction::VMSLT_VV,
+              riscv_instruction::VMSLT_VX: begin
                 spatz_req.op = VMSLT;
               end
 
-              riscv_instr::VMSLEU_VV,
-              riscv_instr::VMSLEU_VX,
-              riscv_instr::VMSLEU_VI: begin
+              riscv_instruction::VMSLEU_VV,
+              riscv_instruction::VMSLEU_VX,
+              riscv_instruction::VMSLEU_VI: begin
                 spatz_req.op = VMSLEU;
               end
 
-              riscv_instr::VMSLE_VV,
-              riscv_instr::VMSLE_VX,
-              riscv_instr::VMSLE_VI: begin
+              riscv_instruction::VMSLE_VV,
+              riscv_instruction::VMSLE_VX,
+              riscv_instruction::VMSLE_VI: begin
                 spatz_req.op = VMSLE;
               end
 
-              riscv_instr::VMSGTU_VX,
-              riscv_instr::VMSGTU_VI: begin
+              riscv_instruction::VMSGTU_VX,
+              riscv_instruction::VMSGTU_VI: begin
                 spatz_req.op = VMSGTU;
               end
 
-              riscv_instr::VMSGT_VX,
-              riscv_instr::VMSGT_VI: begin
+              riscv_instruction::VMSGT_VX,
+              riscv_instruction::VMSGT_VI: begin
                 spatz_req.op = VMSGT;
               end
 
               // Vector Multiply
-              riscv_instr::VMUL_VV,
-              riscv_instr::VMUL_VX: begin
+              riscv_instruction::VMUL_VV,
+              riscv_instruction::VMUL_VX: begin
                 spatz_req.op = VMUL;
               end
 
-              riscv_instr::VMULH_VV,
-              riscv_instr::VMULH_VX: begin
+              riscv_instruction::VMULH_VV,
+              riscv_instruction::VMULH_VX: begin
                 spatz_req.op = VMULH;
               end
 
-              riscv_instr::VMULHU_VV,
-              riscv_instr::VMULHU_VX: begin
+              riscv_instruction::VMULHU_VV,
+              riscv_instruction::VMULHU_VX: begin
                 spatz_req.op = VMULHU;
               end
 
-              riscv_instr::VMULHSU_VV,
-              riscv_instr::VMULHSU_VX: begin
+              riscv_instruction::VMULHSU_VV,
+              riscv_instruction::VMULHSU_VX: begin
                 spatz_req.op = VMULHSU;
               end
 
               // Vector Division
-              riscv_instr::VDIVU_VV,
-              riscv_instr::VDIVU_VX: begin
+              riscv_instruction::VDIVU_VV,
+              riscv_instruction::VDIVU_VX: begin
                 spatz_req.op = VDIVU;
               end
 
-              riscv_instr::VDIV_VV,
-              riscv_instr::VDIV_VX: begin
+              riscv_instruction::VDIV_VV,
+              riscv_instruction::VDIV_VX: begin
                 spatz_req.op = VDIV;
               end
 
-              riscv_instr::VREMU_VV,
-              riscv_instr::VREMU_VX: begin
+              riscv_instruction::VREMU_VV,
+              riscv_instruction::VREMU_VX: begin
                 spatz_req.op = VREMU;
               end
 
-              riscv_instr::VREM_VV,
-              riscv_instr::VREM_VX: begin
+              riscv_instruction::VREM_VV,
+              riscv_instruction::VREM_VX: begin
                 spatz_req.op = VREM;
               end
 
               // Vector Multiply-Add
-              riscv_instr::VMACC_VV,
-              riscv_instr::VMACC_VX: begin
+              riscv_instruction::VMACC_VV,
+              riscv_instruction::VMACC_VX: begin
                 spatz_req.op = VMACC;
                 spatz_req.vd_is_src = 1'b1;
               end
 
-              riscv_instr::VNMSAC_VV,
-              riscv_instr::VNMSAC_VX: begin
+              riscv_instruction::VNMSAC_VV,
+              riscv_instruction::VNMSAC_VX: begin
                 spatz_req.op = VNMSAC;
                 spatz_req.vd_is_src = 1'b1;
               end
 
-              riscv_instr::VMADD_VV,
-              riscv_instr::VMADD_VX: begin
+              riscv_instruction::VMADD_VV,
+              riscv_instruction::VMADD_VX: begin
                 spatz_req.op = VMADD;
                 spatz_req.vd_is_src = 1'b1;
               end
 
-              riscv_instr::VNMSUB_VV,
-              riscv_instr::VNMSUB_VX: begin
+              riscv_instruction::VNMSUB_VV,
+              riscv_instruction::VNMSUB_VX: begin
                 spatz_req.op = VNMSUB;
                 spatz_req.vd_is_src = 1'b1;
               end
 
               // Vector Merge
-              riscv_instr::VMERGE_VVM,
-              riscv_instr::VMERGE_VXM,
-              riscv_instr::VMERGE_VIM: begin
+              riscv_instruction::VMERGE_VVM,
+              riscv_instruction::VMERGE_VXM,
+              riscv_instruction::VMERGE_VIM: begin
                 spatz_req.op = VMERGE;
               end
 
-              riscv_instr::VMV_V_V,
-              riscv_instr::VMV_V_X,
-              riscv_instr::VMV_V_I: begin
+              riscv_instruction::VMV_V_V,
+              riscv_instruction::VMV_V_X,
+              riscv_instruction::VMV_V_I: begin
                 spatz_req.op = VMV;
               end
 
@@ -380,37 +380,37 @@ module spatz_decoder import spatz_pkg::*; import rvv_pkg::*; (
           reset_vstart = 1'b0;
 
           case (csr_addr)
-            riscv_instr::CSR_VSTART,
-            riscv_instr::CSR_VL,
-            riscv_instr::CSR_VTYPE,
-            riscv_instr::CSR_VLENB,
-            riscv_instr::CSR_VXSAT,
-            riscv_instr::CSR_VXRM,
-            riscv_instr::CSR_VCSR: begin
+            riscv_instruction::CSR_VSTART,
+            riscv_instruction::CSR_VL,
+            riscv_instruction::CSR_VTYPE,
+            riscv_instruction::CSR_VLENB,
+            riscv_instruction::CSR_VXSAT,
+            riscv_instruction::CSR_VXRM,
+            riscv_instruction::CSR_VCSR: begin
               spatz_req.op_csr.addr = csr_addr;
             end
             default: illegal_instr = 1'b1;
           endcase
 
           unique casez (decoder_req_i.instr)
-            riscv_instr::CSRRW,
-            riscv_instr::CSRRWI: begin
-              if (csr_addr == riscv_instr::CSR_VSTART) begin
+            riscv_instruction::CSRRW,
+            riscv_instruction::CSRRWI: begin
+              if (csr_addr == riscv_instruction::CSR_VSTART) begin
                 spatz_req.use_rd = csr_rd != '0;
                 spatz_req.op_cgf.write_vstart = 1'b1;
               end
             end
 
-            riscv_instr::CSRRS,
-            riscv_instr::CSRRSI: begin
-              if (csr_addr == riscv_instr::CSR_VSTART) begin
+            riscv_instruction::CSRRS,
+            riscv_instruction::CSRRSI: begin
+              if (csr_addr == riscv_instruction::CSR_VSTART) begin
                 spatz_req.op_cgf.set_vstart = csr_rs1 != '0;
               end
             end
 
-            riscv_instr::CSRRC,
-            riscv_instr::CSRRCI: begin
-              if (csr_addr == riscv_instr::CSR_VSTART) begin
+            riscv_instruction::CSRRC,
+            riscv_instruction::CSRRCI: begin
+              if (csr_addr == riscv_instruction::CSR_VSTART) begin
                 spatz_req.op_cgf.clear_vstart = csr_rs1 != '0;
               end
             end
