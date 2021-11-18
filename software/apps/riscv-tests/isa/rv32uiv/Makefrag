@@ -78,11 +78,10 @@ rv32uiv_sc_tests = vadd \
                    vls \
                    vs \
                    vs1r \
-                   vse1 \
                    vss \
                    vsetivli
 
-#rv32uiv_sc_tests = vaadd vaaddu vadc vasub vasubu vcompress vfirst vid viota vl vlff vl_nocheck vlx vmsbf vmsif vmsof vpopc_m vrgather vsadd vsaddu vsetvl vsetivli vsetvli vsmul vssra vssrl vssub vssubu vsux vsx
+#rv32uiv_sc_tests = vaadd vaaddu vadc vasub vasubu vcompress vfirst vid viota vl vlff vl_nocheck vlx vmsbf vmsif vmsof vpopc_m vrgather vsadd vsaddu vsetvl vsetivli vsetvli vsmul vssra vssrl vssub vssubu vsux vsx vse1
 
 rv32uiv_p_tests = $(addprefix rv32uiv-p-, $(rv32uiv_sc_tests))
 
