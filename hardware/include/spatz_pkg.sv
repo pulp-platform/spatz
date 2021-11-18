@@ -116,36 +116,36 @@ package spatz_pkg;
     instr_id_t id;
 
     // Used vector registers
-    opreg_t    vs1;
-    logic      use_vs1;
-    opreg_t    vs2;
-    logic      use_vs2;
-    opreg_t    vd;
-    logic      use_vd;
-    logic      vd_is_src;
+    opreg_t     vs1;
+    logic       use_vs1;
+    opreg_t     vs2;
+    logic       use_vs2;
+    opreg_t     vd;
+    logic       use_vd;
+    logic       vd_is_src;
 
     // Scalar input values
-    elen_t     rs1;
-    elen_t     rs2;
+    elen_t      rs1;
+    elen_t      rs2;
 
     // Destination register
-    elen_t     rd;
-    logic      use_rd;
+    logic [4:0] rd;
+    logic       use_rd;
 
     // Instruction operation
-    op_e       op;
-    ex_unit_e  ex_unit;
+    op_e        op;
+    ex_unit_e   ex_unit;
 
     // Operation specific details
-    op_cfg_t   op_cgf;
-    op_csr_t   op_csr;
-    op_arith_t op_arith;
-    op_mem_t   op_mem;
+    op_cfg_t    op_cgf;
+    op_csr_t    op_csr;
+    op_arith_t  op_arith;
+    op_mem_t    op_mem;
 
     // Spatz config details
-    vtype_t    vtype;
-    vlen_t     vl;
-    vlen_t     vstart;
+    vtype_t     vtype;
+    vlen_t      vl;
+    vlen_t      vstart;
   } spatz_req_t;
 
   /////////////////////
