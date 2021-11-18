@@ -58,7 +58,7 @@ vlog_args += -suppress vlog-2583 -suppress vlog-13314 -suppress vlog-13233
 vlog_args += -work $(library)
 
 # Defines
-bender_defs += --define VLEN=$(vlen)
+vlog_defs += -DVLEN=$(vlen) -DN_IPU=$(n_ipu)
 
 # Default target
 all: compile
@@ -77,7 +77,7 @@ $(buildpath)/$(library):
 .PHONY: compile
 compile: lib $(buildpath) $(buildpath)/compile_$(config).tcl
 $(buildpath)/compile_$(config).tcl: $(config_file) Makefile ../Bender.yml $(shell find src -type f) $(shell find ../config -type f) $(shell find include -type f) $(shell find tb -type f) $(shell find deps -type f)
-	$(bender) script vsim --vlog-arg="$(vlog_args)" -t rtl -t asic -t spatz_test $(bender_defs) > $(buildpath)/compile_$(config).tcl
+	$(bender) script vsim --vlog-arg="$(vlog_args)" $(vlog_defs) -t rtl -t asic -t spatz_test $(bender_defs) > $(buildpath)/compile_$(config).tcl
 	echo "exit" >> $(buildpath)/compile_$(config).tcl
 	cd $(buildpath) && $(questa_cmd) vsim -work $(library) -c -do compile_$(config).tcl
 	# Remove the file if compilation did not succeed
