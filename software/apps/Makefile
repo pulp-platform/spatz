@@ -10,11 +10,14 @@ SOFTWARE_DIR := $(abspath $(ROOT_DIR)/..)
 RUNTIME_DIR := $(abspath $(SOFTWARE_DIR)/runtime)
 BIN_DIR := $(abspath $(SOFTWARE_DIR)/bin)
 APPS_DIR := $(ROOT_DIR)
+TESTS_DIR := $(abspath $(ROOT_DIR)/riscv-tests/isa)
 # This will overwrite the ROOT_DIR variable from the included makefile
 include $(RUNTIME_DIR)/runtime.mk
+include $(RUNTIME_DIR)/riscv_tests.mk
 
 APPS := $(patsubst $(APPS_DIR)/%/main.c,%,$(shell find $(APPS_DIR) -name "main.c"))
 BINARIES := $(addprefix $(BIN_DIR)/,$(APPS))
+SPATZ_BINARIES := $(addprefix $(BIN_DIR), $(spatz_tests))
 
 # Make all applications
 all: $(BINARIES)
@@ -25,6 +28,15 @@ $(APPS): % : $(BIN_DIR)/% $(APPS_DIR)/Makefile $(shell find $(RUNTIME_DIR)/**.{S
 $(BINARIES): $(BIN_DIR)/%: %/main.c.o $(RUNTIME) $(LINKER_SCRIPT)
 	mkdir -p $(dir $@)
 	$(RISCV_CC) -Iinclude $(RISCV_LDFLAGS) -o $@ $< $(RUNTIME) -T$(RUNTIME_DIR)/link.ld
+	$(RISCV_OBJDUMP) $(RISCV_OBJDUMP_FLAGS) -D $@ > $@.dump
+
+riscv_tests: $(SPATZ_BINARIES)
+
+TESTS_rv32uiv := $(addprefix $(BIN_DIR), $(rv_32uiv_spatz_tests))
+
+$(BIN_DIR)/rv32uiv-spatz-%: $(TESTS_DIR)/rv32uiv/%.c $(RUNTIME) $(LINKER_SCRIPT)
+	mkdir -p $(dir $@)
+	$(RISCV_CC) -Iinclude -I$(TESTS_DIR)/macros/scalar -I$(TESTS_DIR)/macros/vector $(RISCV_LDFLAGS) -o $@ $< $(RUNTIME) -T$(RUNTIME_DIR)/link.ld
 	$(RISCV_OBJDUMP) $(RISCV_OBJDUMP_FLAGS) -D $@ > $@.dump
 
 .PHONY: clean
