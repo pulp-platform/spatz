@@ -41,7 +41,6 @@ SECTIONS {
 
   .l2 : ALIGN(0x10) {
     *(.l2)
-    timer = .;
     . = . + 0x8;
     l2_alloc_base = ALIGN(0x10);
   } > L2

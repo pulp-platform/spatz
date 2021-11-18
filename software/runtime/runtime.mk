@@ -45,6 +45,7 @@ RISCV_CCFLAGS  ?= $(RISCV_FLAGS)
 RISCV_CXXFLAGS ?= $(RISCV_FLAGS)
 RISCV_LDFLAGS  ?= -static -nostartfiles -lm #-L$(ROOT_DIR) #--target=$(RISCV_TARGET) --sysroot=$(GCC_INSTALL_DIR)/$(RISCV_TARGET) --gcc-toolchain=$(GCC_INSTALL_DIR)
 
+RISCV_STRIP_FLAGS   ?= -ffunction-sections -Wl,--gc-sections
 RISCV_OBJDUMP_FLAGS ?= --mattr=+experimental-v
 
 LINKER_SCRIPT ?= $(ROOT_DIR)/arch.link.ld
