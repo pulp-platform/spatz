@@ -71,9 +71,7 @@ rv32uiv_sc_tests = vadd \
                    vslideup \
                    vslidedown \
                    vslide1up \
-                   vfslide1up \
                    vslide1down \
-                   vfslide1down \
                    vl \
                    vl1r \
                    vle1 \

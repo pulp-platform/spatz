@@ -11,7 +11,7 @@ void TEST_CASE1(void) {
   VSET(4, e8, m1);
   volatile uint8_t OUT1[] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
                              0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
-  uint64_t stride = 3;
+  uint32_t stride = 3;
   VLOAD_8(v1, 0x9f, 0xe4, 0x19, 0x20);
   asm volatile("vsse8.v v1, (%0), %1" ::"r"(OUT1), "r"(stride));
   VVCMP_U8(1, OUT1, 0x9f, 0x00, 0x00, 0xe4, 0x00, 0x00, 0x19, 0x00, 0x00, 0x20,
@@ -23,7 +23,7 @@ void TEST_CASE2(void) {
   volatile uint16_t OUT1[] = {0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000,
                               0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000,
                               0x0000, 0x0000, 0x0000, 0x0000};
-  uint64_t stride = 4;
+  uint32_t stride = 4;
   VLOAD_16(v1, 0x9f11, 0xe478, 0x1549, 0x3240, 0x2f11, 0xe448, 0x1546, 0x3220);
   asm volatile("vsse16.v v1, (%0), %1" ::"r"(OUT1), "r"(stride));
   VVCMP_U16(2, OUT1, 0x9f11, 0x0000, 0xe478, 0x0000, 0x1549, 0x0000, 0x3240,
@@ -37,7 +37,7 @@ void TEST_CASE3(void) {
                               0x00000000, 0x00000000, 0x00000000, 0x00000000,
                               0x00000000, 0x00000000, 0x00000000, 0x00000000,
                               0x00000000, 0x00000000, 0x00000000, 0x00000000};
-  uint64_t stride = 8;
+  uint32_t stride = 8;
   VLOAD_32(v1, 0x9f872456, 0xe1356784, 0x13241139, 0x20862497);
   asm volatile("vsse32.v v1, (%0), %1" ::"r"(OUT1), "r"(stride));
   VVCMP_U32(3, OUT1, 0x9f872456, 0x00000000, 0xe1356784, 0x00000000, 0x13241139,
@@ -51,7 +51,7 @@ void TEST_CASE5(void) {
   VSET(4, e8, m1);
   volatile uint8_t OUT1[] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
                              0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
-  uint64_t stride = 3;
+  uint32_t stride = 3;
   VLOAD_8(v0, 0xAA);
   VLOAD_8(v1, 0x9f, 0xe4, 0x19, 0x20);
   asm volatile("vsse8.v v1, (%0), %1, v0.t" ::"r"(OUT1), "r"(stride));
@@ -67,7 +67,7 @@ int main(void) {
   TEST_CASE2();
   TEST_CASE3();
 
-  TEST_CASE4();
+  TEST_CASE5();
 
   EXIT_CHECK();
 }
