@@ -33,7 +33,7 @@ RISCV_STRIP   ?= $(RISCV_PREFIX)llvm-strip
 
 # Defines
 DEFINES += -DPRINTF_DISABLE_SUPPORT_FLOAT -DPRINTF_DISABLE_SUPPORT_LONG_LONG -DPRINTF_DISABLE_SUPPORT_PTRDIFF_T
-DEFINES += -DVLEN=$(vlen)
+DEFINES += -DVLEN=$(vlen) -DN_IPU=$(n_ipu)
 
 # Common flags
 RISCV_WARNINGS += -Wunused-variable -Wall -Wextra -Wno-unused-command-line-argument # -Werror
@@ -43,14 +43,15 @@ LLVM_FLAGS     ?= -march=rv32imv0p10 -mabi=$(RISCV_ABI) -menable-experimental-ex
 RISCV_FLAGS    ?= $(LLVM_FLAGS) -mcmodel=medany -I$(ROOT_DIR) -std=gnu99 -O3 -ffast-math -fno-common -fno-builtin-printf $(DEFINES) $(RISCV_WARNINGS)
 RISCV_CCFLAGS  ?= $(RISCV_FLAGS)
 RISCV_CXXFLAGS ?= $(RISCV_FLAGS)
-RISCV_LDFLAGS  ?= -static -nostartfiles -lm -lgcc -mcmodel=small --target=$(RISCV_TARGET) --sysroot=$(GCC_INSTALL_DIR)/$(RISCV_TARGET) --gcc-toolchain=$(GCC_INSTALL_DIR) -L$(ROOT_DIR)
+RISCV_LDFLAGS  ?= -static -nostartfiles -lm #-L$(ROOT_DIR) #--target=$(RISCV_TARGET) --sysroot=$(GCC_INSTALL_DIR)/$(RISCV_TARGET) --gcc-toolchain=$(GCC_INSTALL_DIR)
 
 RISCV_OBJDUMP_FLAGS ?= --mattr=+experimental-v
 
-LINKER_SCRIPT ?= $(ROOT_DIR)/arch.ld
+LINKER_SCRIPT ?= $(ROOT_DIR)/arch.link.ld
 RUNTIME ?= $(ROOT_DIR)/crt0.S.o $(ROOT_DIR)/printf.c.o $(ROOT_DIR)/string.c.o $(ROOT_DIR)/serial.c.o
 
-.INTERMEDIATE: $(RUNTIME) $(LINKER_SCRIPT)
+%.h.pch: %.h
+	$(RISCV_CC) $(RISCV_CCFLAGS) -x c-header $< -o $@
 
 %.S.o: %.S
 	$(RISCV_CC) $(RISCV_CCFLAGS) -c $< -o $@
