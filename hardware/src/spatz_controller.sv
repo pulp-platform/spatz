@@ -189,12 +189,14 @@ module spatz_controller
               endcase
             end
             x_result_o.id = x_issue_req_i.id;
+            x_result_o.rd = x_issue_req_i.id;
             x_result_valid_o = 1'b1;
             x_result_o.we = 1'b1;
             x_issue_resp_o.writeback = 1'b1;
           end else begin
             // Change configuration and send back vl
             x_result_o.id = x_issue_req_i.id;
+            x_result_o.rd = x_issue_req_i.id;
             x_result_o.data = elen_t'(vl_d);
             x_result_o.we = 1'b1;
             x_result_valid_o = 1'b1;
