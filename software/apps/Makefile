@@ -45,6 +45,5 @@ clean:
 	rm -vf $(addsuffix .dump,$(BINARIES))
 	rm -vf $(addsuffix /main.c.o,$(APPS))
 	rm -vf $(RUNTIME)
-	rm -vf $(LINKER_SCRIPT)
 
 .INTERMEDIATE: $(addsuffix /main.c.o,$(APPS))
