@@ -22,8 +22,13 @@ int main() {
 
   uint32_t vlen = 128;
   uint32_t actual_vlen = 0;
-  
-  asm volatile("vsetvli %0, %1, e8, m4, ta, ma" : "=r"(actual_vlen) : "r"(vlen));
+  uint32_t a = 0xcd;
+  uint32_t csr;
 
-  return actual_vlen;
+  asm volatile("vsetvli %0, %1, e8, m4, ta, ma" : "=r"(actual_vlen) : "r"(vlen));
+  asm volatile("vrsub.vx v8, v0, %[a]" :: [a]"r"(a));
+  asm volatile("vadd.vi v4, v0, 5");
+  asm volatile("csrrs %[csr], vl, x0" : [csr]"=r"(csr));
+
+  return actual_vlen-csr;
 }
