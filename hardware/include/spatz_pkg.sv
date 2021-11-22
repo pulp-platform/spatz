@@ -175,11 +175,12 @@ package spatz_pkg;
 
   typedef struct packed {
     // Instruction ID
-    instr_id_t id;
+    instr_id_t  id;
 
     // WB
-    logic      wb;
-    elen_t     result;
+    logic       wb;
+    logic [4:0] rd;
+    elen_t      result;
   } vfu_rsp_t;
 
  endpackage : spatz_pkg
