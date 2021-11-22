@@ -119,6 +119,21 @@ module spatz_controller
     end // spatz_req_valid
   end
 
+  ////////////////
+  // Scoreboard //
+  ////////////////
+
+  typedef struct packed {
+    ex_unit_e write;
+    ex_unit_e read;
+  } sb_t;
+
+  // Scoreboard keeping track of which execution unit is
+  // accessing which register.
+  // CON = None
+  sb_t [NRVREG-1:0][1:0] sb_q, sb_d;
+  `FF(sb_q, sb_d, '0)
+
   //////////////
   // Decoding //
   //////////////
@@ -189,7 +204,7 @@ module spatz_controller
   always_comb begin : proc_issue
     retire_csr = 1'b0;
     spatz_ready_d = spatz_ready_q;
-    spatz_req = decoder_rsp.spatz_req;
+    spatz_req = spatz_req_buffer_empty_q ? decoder_rsp.spatz_req : spatz_req_buffer_q;
     spatz_req.id = x_issue_req_i.id;
     spatz_req_valid = 1'b0;
 
