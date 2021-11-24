@@ -17,7 +17,7 @@ package core_v_xif_pkg;
   parameter X_DATAWIDTH = 32;
   parameter X_NUM_RS    = 2;
   parameter X_NUM_FRS   = 0;
-  parameter X_ID_WIDTH  = 4;
+  parameter X_ID_WIDTH  = 5;
   parameter X_MEM_WIDTH = 32;
   parameter X_RFR_WIDTH = 32;
   parameter X_RFW_WIDTH = 32;
