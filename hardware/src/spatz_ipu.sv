@@ -23,7 +23,8 @@ module spatz_ipu import spatz_pkg::*; (
   // Signals //
   /////////////
 
-  logic is_signed = operation_i inside {VMIN, VMAX, VMULH};
+  logic is_signed;
+  assign is_signed = operation_i inside {VMIN, VMAX, VMULH};
 
   typedef struct packed {
     // Operands in
