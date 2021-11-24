@@ -29,17 +29,27 @@ int main() {
   uint32_t val = 64;
 
   asm volatile("vsetvli %0, %1, e8, m4, ta, ma" : "=r"(actual_vlen) : "r"(vlen));
+  asm volatile("csrrs %[csr], vl, x0" : [csr]"=r"(csr));
+  if (actual_vlen != csr) return 1;
   asm volatile("vrsub.vx v8, v0, %[a]" :: [a]"r"(a));
   asm volatile("vadd.vi v4, v8, 5");
+  // Shorten vl by one
+  vlen -= 1;
+  asm volatile("vsetvli %0, %1, e8, m4, ta, ma" : "=r"(actual_vlen) : "r"(vlen));
+  asm volatile("csrrs %[csr], vl, x0" : [csr]"=r"(csr));
+  if (actual_vlen != csr) return 2;
+  // Set vstart to one (second element)
+  asm volatile("csrrwi x0, vstart, 1");
   // Clear registers and execute macc
   asm volatile("vadd.vi v0, v0, 2");
   asm volatile("vadd.vx v12, v12, %[val]" :: [val]"r"(val));
   asm volatile("vadd.vi v28, v28, 5");
   asm volatile("vmacc.vv v28, v0, v12");
-  asm volatile("vadd.vi v22, v28, 0");
+  asm volatile("vadd.vi v20, v28, 0");
+  // Buffer instruction to make sure vadd will finish within simulation
   asm volatile("csrrs %[csr], vl, x0" : [csr]"=r"(csr));
 
-  return actual_vlen-csr;
+  return 0;
 }
 
 // clang-format on
