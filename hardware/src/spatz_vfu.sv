@@ -187,7 +187,7 @@ module spatz_vfu import spatz_pkg::*; (
   assign vrf_re_o    = vreg_r_req;
   assign vrf_we_o    = vreg_we;
   assign vrf_wbe_o   = vreg_wbe;
-  assign vrf_waddr_o = vreg_addr_q;
+  assign vrf_waddr_o = vreg_addr_q[2];
   assign vrf_wdata_o = result;
 
   // Operand signals
