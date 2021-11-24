@@ -38,7 +38,7 @@ void TEST_CASE2(void) {
 void TEST_CASE3(void) {
   uint32_t avl, vtype, vl;
   uint32_t vlmul = 3;
-  uint32_t vsew = 3;
+  uint32_t vsew = 1;
   uint32_t vta = 0;
   uint32_t vma = 0;
   uint32_t golden_vtype;
