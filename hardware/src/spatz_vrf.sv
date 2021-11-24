@@ -37,7 +37,8 @@ module spatz_vrf import spatz_pkg::*; #(
       .NR_WRITE_PORTS(NR_WRITE_PORTS),
       .NR_REGS       (NRVREG),
       .REG_WIDTH     (VLEN/NR_BANKS),
-      .ELEM_WIDTH    (N_IPU*ELEN)
+      .ELEM_WIDTH    (N_IPU*ELEN),
+      .VADDR_WIDTH   ($bits(vreg_addr_t))
     ) i_vregfile (
       .clk_i  (clk_i),
       .rst_ni (rst_ni),
@@ -52,23 +53,24 @@ module spatz_vrf import spatz_pkg::*; #(
 
 endmodule : spatz_vrf
 
-module vregfile import spatz_pkg::*; #(
+module vregfile #(
   parameter int unsigned NR_READ_PORTS  = 0,
   parameter int unsigned NR_WRITE_PORTS = 0,
   parameter int unsigned NR_REGS        = 32,
   parameter int unsigned REG_WIDTH      = 32,
-  parameter int unsigned ELEM_WIDTH     = 32
+  parameter int unsigned ELEM_WIDTH     = 32,
+  parameter int unsigned VADDR_WIDTH    = 5
 ) (
   input  logic clk_i,
   input  logic rst_ni,
   // Write ports
-  input  vreg_addr_t [NR_WRITE_PORTS-1:0] waddr_i,
-  input  vreg_data_t [NR_WRITE_PORTS-1:0] wdata_i,
-  input  logic       [NR_WRITE_PORTS-1:0] we_i,
-  input  vreg_be_t   [NR_WRITE_PORTS-1:0] wbe_i,
+  input  logic [NR_WRITE_PORTS-1:0][VADDR_WIDTH-1:0]  waddr_i,
+  input  logic [NR_WRITE_PORTS-1:0][ELEM_WIDTH-1:0]   wdata_i,
+  input  logic [NR_WRITE_PORTS-1:0]                   we_i,
+  input  logic [NR_WRITE_PORTS-1:0][ELEM_WIDTH/8-1:0] wbe_i,
   // Read ports
-  input  vreg_addr_t [NR_READ_PORTS-1:0] raddr_i,
-  output vreg_data_t [NR_READ_PORTS-1:0] rdata_o
+  input  logic [NR_READ_PORTS-1:0][VADDR_WIDTH-1:0]   raddr_i,
+  output logic [NR_READ_PORTS-1:0][ELEM_WIDTH-1:0]    rdata_o
 );
 
   localparam int unsigned NUM_ELEM_PER_REG = REG_WIDTH/ELEM_WIDTH;
@@ -104,7 +106,7 @@ module vregfile import spatz_pkg::*; #(
     for (genvar j = 0; j < NR_REGS; j++) begin
       for (genvar k = 0; k < NUM_ELEM_PER_REG; k++) begin
         always_comb begin
-          if (we_i[i] && waddr_i[i][$bits(vreg_addr_t)-1:$clog2(NUM_ELEM_PER_REG)] == j && waddr_i[i][$clog2(NUM_ELEM_PER_REG)-1:0] == k) waddr_onehot[i][j][k] = 1'b1;
+          if (we_i[i] && waddr_i[i][VADDR_WIDTH-1:$clog2(NUM_ELEM_PER_REG)] == j && waddr_i[i][$clog2(NUM_ELEM_PER_REG)-1:0] == k) waddr_onehot[i][j][k] = 1'b1;
           else waddr_onehot[i][j][k] = 1'b0;
         end
       end
@@ -136,6 +138,6 @@ module vregfile import spatz_pkg::*; #(
     end
   end
 
-  for (genvar i = 0; i < NR_READ_PORTS; i++) assign rdata_o[i] = mem[raddr_i[i][$bits(vreg_addr_t)-1:$clog2(NUM_ELEM_PER_REG)]][raddr_i[i][$clog2(NUM_ELEM_PER_REG)-1:0]];
+  for (genvar i = 0; i < NR_READ_PORTS; i++) assign rdata_o[i] = mem[raddr_i[i][VADDR_WIDTH-1:$clog2(NUM_ELEM_PER_REG)]][raddr_i[i][$clog2(NUM_ELEM_PER_REG)-1:0]];
 
 endmodule : vregfile
