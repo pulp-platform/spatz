@@ -86,13 +86,13 @@ module spatz_vrf import spatz_pkg::*; #(
         we[i] = 1'b1;
         wbe[i] = wbe_i[0];
         wvalid_o[0] = 1'b1;
-      end else if (we_i[1] && !we_i[0] && waddr_i[1][$bits(vreg_addr_t)-$clog2(NRVREG)-1:$clog2(NrElemPerBank)] == i) begin
+      end else if (we_i[1] && waddr_i[1][$bits(vreg_addr_t)-$clog2(NRVREG)-1:$clog2(NrElemPerBank)] == i) begin
         waddr[i] = gen_vreg_addr(waddr_i[1]);
         wdata[i] = wdata_i[1];
         we[i] = 1'b1;
         wbe[i] = wbe_i[1];
         wvalid_o[1] = 1'b1;
-      end else if (we_i[2] && !(|we_i[1:0]) && waddr_i[2][$bits(vreg_addr_t)-$clog2(NRVREG)-1:$clog2(NrElemPerBank)] == i) begin
+      end else if (we_i[2] && waddr_i[2][$bits(vreg_addr_t)-$clog2(NRVREG)-1:$clog2(NrElemPerBank)] == i) begin
         waddr[i] = gen_vreg_addr(waddr_i[2]);
         wdata[i] = wdata_i[2];
         we[i] = 1'b1;
