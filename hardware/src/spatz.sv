@@ -28,9 +28,8 @@ module spatz
   // Parameters //
   ////////////////
 
-  localparam NrWritePorts = 1;
-  localparam NrReadPorts  = 3;
-  localparam NrVRegBanks  = 1;
+  localparam NrWritePorts = 3;
+  localparam NrReadPorts  = 5;
 
   /////////////
   // Signals //
@@ -86,8 +85,7 @@ module spatz
 
   spatz_vrf #(
     .NR_READ_PORTS (NrReadPorts),
-    .NR_WRITE_PORTS(NrWritePorts),
-    .NR_BANKS      (NrVRegBanks)
+    .NR_WRITE_PORTS(NrWritePorts)
   ) i_vrf (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
@@ -130,6 +128,28 @@ module spatz
     .vrf_rvalid_i     (vrf_rvalid[2:0])
   );
 
+  //////////
+  // VLSU //
+  //////////
+
+  assign vrf_waddr[1] = '0;
+  assign vrf_wdata[1] = '0;
+  assign vrf_we[1]    = '0;
+  assign vrf_wbe[1]   = '0;
+  assign vrf_raddr[3] = '0;
+  assign vrf_re[3]    = '0;
+
+  //////////
+  // VSLD //
+  //////////
+
+  assign vrf_waddr[2] = '0;
+  assign vrf_wdata[2] = '0;
+  assign vrf_we[2]    = '0;
+  assign vrf_wbe[2]   = '0;
+  assign vrf_raddr[4] = '0;
+  assign vrf_re[4]    = '0;
+
   ////////////////
   // Assertions //
   ////////////////
@@ -142,8 +162,5 @@ module spatz
 
   if (spatz_pkg::ELEN > spatz_pkg::VLEN)
     $error("[spatz] The size of one element can not exceede the length of one vector register.");
-
-  if (spatz_pkg::N_IPU*spatz_pkg::ELEN*NrVRegBanks > spatz_pkg::VLEN)
-    $error("[spatz] The vector register length has to be larger than N_IPU*ELEN*NrVRegBanks.");
 
 endmodule : spatz
