@@ -85,7 +85,7 @@ module spatz_simd_lane import spatz_pkg::*; #(
     simd_result = '0;
     unique case (operation_i)
       VADD, VMACC, VMADD, VADC: simd_result = adder_result[Width-1:0];
-      VSUB, VRSUB, VNMSAC, VNMSUB, VSBC: simd_result = adder_result[Width-1:0];
+      VSUB, VRSUB, VNMSAC, VNMSUB, VSBC: simd_result = subtractor_result[Width-1:0];
       VMIN, VMINU: simd_result = $signed({op_s1_i[Width-1] & is_signed_i, op_s1_i[Width-1]}) <=
                                  $signed({op_s2_i[Width-1] & is_signed_i, op_s2_i[Width-1]}) ?
                                  op_s1_i : op_s2_i;
