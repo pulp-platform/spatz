@@ -46,6 +46,8 @@ int main() {
   asm volatile("vadd.vi v28, v28, 5");
   asm volatile("vmacc.vv v28, v0, v12");
   asm volatile("vadd.vi v20, v28, 0");
+  // Execute instruction with vs1 and vs2 as source, and vd as destination
+  asm volatile("vsub.vv v16, v20, v0");
   // Buffer instruction to make sure vadd will finish within simulation
   asm volatile("csrrs %[csr], vl, x0" : [csr]"=r"(csr));
 
