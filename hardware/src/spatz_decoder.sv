@@ -51,8 +51,6 @@ module spatz_decoder import spatz_pkg::*; import rvv_pkg::*; (
 
           spatz_req.op_mem.vm = ls_vm;
           spatz_req.ex_unit = LSU;
-
-          $error("Unsupported Load/Store Instruction.");
         end // OpcodeLoadFP or OpcodeStoreFP
 
         riscv_pkg::OpcodeVec: begin
@@ -359,7 +357,6 @@ module spatz_decoder import spatz_pkg::*; import rvv_pkg::*; (
 
               default: begin
                 illegal_instr = 1'b1;
-                $error("Unsupported Vector Arithmetic Instruction.");
               end
             endcase // Arithmetic Instruction Type
           end
@@ -416,14 +413,12 @@ module spatz_decoder import spatz_pkg::*; import rvv_pkg::*; (
             end
             default: begin
               illegal_instr = 1'b1;
-              $error("Unsupported CSR Instruction.");
             end
           endcase // CSR
         end // OpcodeSystem
 
         default: begin
           illegal_instr = 1'b1;
-          $error("Unsupported Instruction.");
         end
       endcase // Opcodes
 
