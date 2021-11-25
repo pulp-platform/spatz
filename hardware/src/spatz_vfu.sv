@@ -26,9 +26,16 @@ module spatz_vfu import spatz_pkg::*; (
   input  logic       [2:0] vrf_rvalid_i
 );
 
+  // Include FF
+  `include "common_cells/registers.svh"
+
   /////////////
   // Signals //
   /////////////
+
+  // Spatz request
+  spatz_req_t spatz_req_d, spatz_req_q;
+  `FF(spatz_req_q, spatz_req_d, '0)
 
   // Is vfu and the ipu operands ready
   logic vfu_is_ready;
@@ -69,20 +76,6 @@ module spatz_vfu import spatz_pkg::*; (
   assign vstart_ngropus = spatz_req_i.vtype.vsew == rvv_pkg::EW_8  ? vlen_t'( spatz_req_i.vstart[$size(vlen_t)-1:$clog2(N_IPU * 4)])         :
                           spatz_req_i.vtype.vsew == rvv_pkg::EW_16 ? vlen_t'({spatz_req_i.vstart[$size(vlen_t)-1:$clog2(N_IPU * 2)], 1'b0 }) :
                                                                      vlen_t'({spatz_req_i.vstart[$size(vlen_t)-1:$clog2(N_IPU)],     2'b00});
-
-  ///////////////
-  // Spatz Req //
-  ///////////////
-
-  spatz_req_t spatz_req_d, spatz_req_q;
-
-  always_ff @(posedge clk_i or negedge rst_ni) begin : proc_spatz_req
-    if(~rst_ni) begin
-      spatz_req_q <= '0;
-    end else begin
-      spatz_req_q <= spatz_req_d;
-    end
-  end
 
   ///////////////////
   // State Handler //
