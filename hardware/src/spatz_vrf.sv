@@ -124,8 +124,8 @@ module spatz_vrf import spatz_pkg::*; #(
         rdata_o[1] = rdata[i][1];
         rvalid_o[1] = 1'b1;
       end else if (re_i[4] && raddr_i[4][$bits(vreg_addr_t)-$clog2(NRVREG)-1:$clog2(NrElemPerBank)] == i) begin
-        raddr[i][4] = gen_vreg_addr(raddr_i[4]);
-        rdata_o[4] = rdata[i][4];
+        raddr[i][1] = gen_vreg_addr(raddr_i[4]);
+        rdata_o[4] = rdata[i][1];
         rvalid_o[4] = 1'b1;
       end
       // Bank read port 2 - Priority: vd (2) -> lsu (3) -> sld (4)
@@ -134,12 +134,12 @@ module spatz_vrf import spatz_pkg::*; #(
         rdata_o[2] = rdata[i][2];
         rvalid_o[2] = 1'b1;
       end else if (re_i[3] && raddr_i[3][$bits(vreg_addr_t)-$clog2(NRVREG)-1:$clog2(NrElemPerBank)] == i) begin
-        raddr[i][3] = gen_vreg_addr(raddr_i[3]);
-        rdata_o[3] = rdata[i][3];
+        raddr[i][2] = gen_vreg_addr(raddr_i[3]);
+        rdata_o[3] = rdata[i][2];
         rvalid_o[3] = 1'b1;
       end else if (re_i[4] && raddr_i[4][$bits(vreg_addr_t)-$clog2(NRVREG)-1:$clog2(NrElemPerBank)] == i) begin
-        raddr[i][4] = gen_vreg_addr(raddr_i[4]);
-        rdata_o[4] = rdata[i][4];
+        raddr[i][2] = gen_vreg_addr(raddr_i[4]);
+        rdata_o[4] = rdata[i][2];
         rvalid_o[4] = 1'b1;
       end
     end

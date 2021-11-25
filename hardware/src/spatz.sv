@@ -137,7 +137,7 @@ module spatz
   assign vrf_we[1]    = '0;
   assign vrf_wbe[1]   = '0;
   assign vrf_raddr[3] = '0;
-  assign vrf_re[3]    = '0;
+  assign vrf_re[3]    = '1;
 
   //////////
   // VSLD //
@@ -148,7 +148,7 @@ module spatz
   assign vrf_we[2]    = '0;
   assign vrf_wbe[2]   = '0;
   assign vrf_raddr[4] = '0;
-  assign vrf_re[4]    = '0;
+  assign vrf_re[4]    = '1;
 
   ////////////////
   // Assertions //
