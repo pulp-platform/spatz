@@ -20,7 +20,7 @@ module spatz_decoder import spatz_pkg::*; import rvv_pkg::*; (
   /////////////
 
   logic illegal_instr;
-  logic reset_vstart = 1'b1;
+  logic reset_vstart;
 
   spatz_req_t spatz_req;
 
@@ -31,6 +31,7 @@ module spatz_decoder import spatz_pkg::*; import rvv_pkg::*; (
   always_comb begin : proc_decoder
     illegal_instr = 1'b0;
     spatz_req = '0;
+    reset_vstart = 1'b1;
 
     if (decoder_req_valid_i) begin
       automatic int unsigned opcode = decoder_req_i.instr[6:0];
