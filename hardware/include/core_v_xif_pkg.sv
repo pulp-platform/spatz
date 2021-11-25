@@ -18,16 +18,16 @@
 package core_v_xif_pkg;
 
   // ADJUST THE PARAMETERS ACCORDING TO YOUR IMPLEMENTATION
-  parameter X_DATAWIDTH = 32;
-  parameter X_NUM_RS    = 2;
-  parameter X_NUM_FRS   = 0;
-  parameter X_ID_WIDTH  = 5;
-  parameter X_MEM_WIDTH = 32;
-  parameter X_RFR_WIDTH = 32;
-  parameter X_RFW_WIDTH = 32;
-  parameter X_MISA      = 32'h0000_0000;
-  parameter FLEN        = 32;
-  parameter XLEN        = 32;
+  localparam X_DATAWIDTH = 32;
+  localparam X_NUM_RS    = 2;
+  localparam X_NUM_FRS   = 0;
+  localparam X_ID_WIDTH  = 5;
+  localparam X_MEM_WIDTH = 32;
+  localparam X_RFR_WIDTH = 32;
+  localparam X_RFW_WIDTH = 32;
+  localparam X_MISA      = 32'h0000_0000;
+  localparam FLEN        = 32;
+  localparam XLEN        = 32;
 
   // DO NOT CHANGE THE STRUCTS
   typedef struct packed {
