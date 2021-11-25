@@ -7,9 +7,13 @@
 // this License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
 // CONDITIONS OF ANY KIND, either express or implied. See the License for the
 // specific language governing permissions and limitations under the License.
-
+//
 // CORE-V-XIF Package
 // Contributor: Moritz Imfeld <moimfeld@student.ethz.ch>
+//
+// For more details see: https://docs.openhwgroup.org/projects/openhw-group-core-v-xif/index.html
+//                   or: https://github.com/openhwgroup/core-v-xif
+//
 
 package core_v_xif_pkg;
 
