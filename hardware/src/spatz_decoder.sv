@@ -113,8 +113,7 @@ module spatz_decoder import spatz_pkg::*; import rvv_pkg::*; (
                 spatz_req.rs1 = decoder_req_i.rs1;
                 illegal_instr = ~decoder_req_i.rs1_valid;
               end
-              OPFVV,
-              OPFVF: illegal_instr = 1'b1;
+              default: illegal_instr = 1'b1;
             endcase
 
             // Check what arithmetic operation is requested

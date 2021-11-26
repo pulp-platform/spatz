@@ -99,10 +99,11 @@ module spatz_controller
             unique case (spatz_req.vtype.vlmul)
               LMUL_F2: vlmax >>= 1;
               LMUL_F4: vlmax >>= 2;
-              LMUL_1: vlmax <<= 0;
-              LMUL_2: vlmax <<= 1;
-              LMUL_4: vlmax <<= 2;
-              LMUL_8: vlmax <<= 3;
+              LMUL_1:  vlmax <<= 0;
+              LMUL_2:  vlmax <<= 1;
+              LMUL_4:  vlmax <<= 2;
+              LMUL_8:  vlmax <<= 3;
+              default: vlmax = vlmax;
             endcase
 
             vl_d = (spatz_req.rs1 == '1) ? MAXVL : (vlmax < spatz_req.rs1) ? vlmax : spatz_req.rs1;
@@ -127,8 +128,8 @@ module spatz_controller
   // Scoreboard keeping track of which execution unit is
   // accessing which register.
   // CON = None
-  logic [NRVREG-1:0] sb_q, sb_d;
-  `FF(sb_q, sb_d, '0)
+  //logic [NRVREG-1:0] sb_q, sb_d;
+  //`FF(sb_q, sb_d, '0)
 
   //////////////
   // Decoding //
@@ -194,9 +195,9 @@ module spatz_controller
 
   logic retire_csr;
 
-  logic operands_ready, destination_ready;
-  assign operands_ready = (decoder_rsp_valid | ~spatz_req_buffer_empty_q) & (spatz_req.use_vs1 & ~sb_q[spatz_req.vs1]);
-  assign destination_ready = (decoder_rsp_valid | ~spatz_req_buffer_empty_q) & (~spatz_req.use_vd | (spatz_req.use_vd & ~sb_q[spatz_req.vd]));
+  //logic operands_ready, destination_ready;
+  //assign operands_ready = (decoder_rsp_valid | ~spatz_req_buffer_empty_q) & (spatz_req.use_vs1 & ~sb_q[spatz_req.vs1]);
+  //assign destination_ready = (decoder_rsp_valid | ~spatz_req_buffer_empty_q) & (~spatz_req.use_vd | (spatz_req.use_vd & ~sb_q[spatz_req.vd]));
 
   logic stall, vfu_stall, vlsu_stall, vsld_stall;
   assign stall = vfu_stall | vlsu_stall | vsld_stall;
@@ -300,6 +301,7 @@ module spatz_controller
             riscv_instr::CSR_VXSAT:  x_result_o.data = '0;
             riscv_instr::CSR_VXRM:   x_result_o.data = '0;
             riscv_instr::CSR_VCSR:   x_result_o.data = '0;
+            default:                 x_result_o.data = '0;
           endcase
         end
         x_result_o.id = spatz_req.id;
