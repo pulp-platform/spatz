@@ -18,11 +18,16 @@ module spatz
   // X-Interface Result
   output logic x_result_valid_o,
   input  logic x_result_ready_i,
-  output core_v_xif_pkg::x_result_t x_result_o
+  output core_v_xif_pkg::x_result_t x_result_o,
+  // X-Interface Memory Request
+  output logic x_mem_valid_o,
+  input  logic x_mem_ready_i,
+  output core_v_xif_pkg::x_mem_req_t  x_mem_req_o,
+  input  core_v_xif_pkg::x_mem_resp_t x_mem_resp_i,
+  //X-Interface Memory Result
+  input  logic x_mem_result_valid_i,
+  input  core_v_xif_pkg::x_mem_result_t x_mem_result_i
 );
-
-  // Include FF
-  `include "common_cells/registers.svh"
 
   ////////////////
   // Parameters //
@@ -42,6 +47,10 @@ module spatz
   logic       vfu_req_ready;
   logic       vfu_rsp_valid;
   vfu_rsp_t   vfu_rsp;
+
+  logic       vlsu_req_ready;
+  logic       vlsu_rsp_valid;
+  vlsu_rsp_t  vlsu_rsp;
 
   ////////////////
   // Controller //
@@ -64,7 +73,11 @@ module spatz
     // VFU
     .vfu_req_ready_i  (vfu_req_ready),
     .vfu_rsp_valid_i  (vfu_rsp_valid),
-    .vfu_rsp_i        (vfu_rsp)
+    .vfu_rsp_i        (vfu_rsp),
+    // VFU
+    .vlsu_req_ready_i  (vlsu_req_ready),
+    .vlsu_rsp_valid_i  (vlsu_rsp_valid),
+    .vlsu_rsp_i        (vlsu_rsp)
   );
 
   /////////
@@ -132,12 +145,34 @@ module spatz
   // VLSU //
   //////////
 
-  assign vrf_waddr[1] = '0;
-  assign vrf_wdata[1] = '0;
-  assign vrf_we[1]    = '0;
-  assign vrf_wbe[1]   = '0;
-  assign vrf_raddr[3] = '0;
-  assign vrf_re[3]    = '1;
+  spatz_vlsu i_vlsu (
+    .clk_i            (clk_i),
+    .rst_ni           (rst_ni),
+    // Request
+    .spatz_req_i      (spatz_req),
+    .spatz_req_valid_i(spatz_req_valid),
+    .spatz_req_ready_o(vlsu_req_ready),
+    // Response
+    .vlsu_rsp_valid_o (vlsu_rsp_valid),
+    .vlsu_rsp_o       (vlsu_rsp),
+    // VRF
+    .vrf_waddr_o      (vrf_waddr[1]),
+    .vrf_wdata_o      (vrf_wdata[1]),
+    .vrf_we_o         (vrf_we[1]),
+    .vrf_wbe_o        (vrf_wbe[1]),
+    .vrf_wvalid_i     (vrf_wvalid[1]),
+    .vrf_raddr_o      (vrf_raddr[3]),
+    .vrf_re_o         (vrf_re[3]),
+    .vrf_rdata_i      (vrf_rdata[3]),
+    .vrf_rvalid_i     (vrf_rvalid[3]),
+    // X-Interface Memory
+    .x_mem_valid_o        (x_mem_valid_o),
+    .x_mem_ready_i        (x_mem_ready_i),
+    .x_mem_req_o          (x_mem_req_o),
+    .x_mem_resp_i         (x_mem_resp_i),
+    .x_mem_result_valid_i(x_mem_result_valid_i),
+    .x_mem_result_i       (x_mem_result_i)
+  );
 
   //////////
   // VSLD //

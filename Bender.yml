@@ -25,6 +25,7 @@ sources:
     - hardware/src/spatz_ipu.sv
     - hardware/src/spatz_vfu.sv
     - hardware/src/spatz_vrf.sv
+    - hardware/src/spatz_vlsu.sv
     - hardware/src/spatz_decoder.sv
     - hardware/src/spatz_controller.sv
     - hardware/src/spatz.sv

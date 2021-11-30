@@ -183,4 +183,13 @@ package spatz_pkg;
     elen_t      result;
   } vfu_rsp_t;
 
+  ///////////////////
+  // VLSU Response //
+  ///////////////////
+
+  typedef struct packed {
+    // Instruction ID
+    instr_id_t  id;
+  } vlsu_rsp_t;
+
  endpackage : spatz_pkg

@@ -25,7 +25,11 @@ module spatz_controller
   // VFU
   input  logic     vfu_req_ready_i,
   input  logic     vfu_rsp_valid_i,
-  input  vfu_rsp_t vfu_rsp_i
+  input  vfu_rsp_t vfu_rsp_i,
+  // VLSU
+  input  logic      vlsu_req_ready_i,
+  input  logic      vlsu_rsp_valid_i,
+  input  vlsu_rsp_t vlsu_rsp_i
 );
 
   // Include FF
@@ -203,7 +207,8 @@ module spatz_controller
   assign stall = vfu_stall | vlsu_stall | vsld_stall;
   assign vfu_stall = ~vfu_req_ready_i & ((decoder_rsp_valid & (spatz_req.ex_unit == VFU))
                      | (~spatz_req_buffer_empty_q & (spatz_req_buffer_q.ex_unit == VFU)));
-  assign vlsu_stall = 1'b0;
+  assign vlsu_stall = ~vlsu_req_ready_i & ((decoder_rsp_valid & (spatz_req.ex_unit == LSU))
+                     | (~spatz_req_buffer_empty_q & (spatz_req_buffer_q.ex_unit == LSU)));
   assign vsld_stall = 1'b0;
 
   always_comb begin : proc_issue
@@ -234,12 +239,22 @@ module spatz_controller
       spatz_ready_d = 1'b1;
       spatz_req_valid = 1'b1;
 
-      if (spatz_req.ex_unit != CON) begin
-        // Overwrite csrs in request if it is not destined to csr regs
+      if (spatz_req.ex_unit == VFU) begin
+        // Overwrite all csrs in request
+        spatz_req.vtype  = vtype_q;
+        spatz_req.vl     = vl_q;
+        spatz_req.vstart = vstart_q;
+      end if (spatz_req.ex_unit == LSU) begin
+        // Overwrite vl and vstart in request (preserve vtype with vsew)
+        spatz_req.vl     = vl_q;
+        spatz_req.vstart = vstart_q;
+      end if (spatz_req.ex_unit == SLD) begin
+        // Overwrite all csrs in request
         spatz_req.vtype  = vtype_q;
         spatz_req.vl     = vl_q;
         spatz_req.vstart = vstart_q;
       end else begin
+        // Do not overwrite csrs, but retire new ones
         retire_csr = 1'b1;
       end
     end
@@ -269,7 +284,6 @@ module spatz_controller
           end
         end // LSU
         SLD: begin
-          x_issue_resp_o.loadstore = 1'b1;
           // vtype is illegal -> illegal instruction
           if (vtype_q.vill) begin
             x_issue_resp_o.accept = 1'b0;

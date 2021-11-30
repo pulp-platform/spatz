@@ -48,10 +48,39 @@ module spatz_decoder import spatz_pkg::*; import rvv_pkg::*; (
           automatic int unsigned ls_mew   = decoder_req_i.instr[28];
           automatic int unsigned ls_nf    = decoder_req_i.instr[31:29];
 
-          automatic logic is_load = (opcode == riscv_pkg::OpcodeLoadFP);
+          unique case ({ls_mew, ls_width})
+            4'b0000: spatz_req.vtype.vsew = EW_8;
+            4'b0101: spatz_req.vtype.vsew = EW_16;
+            4'b0110: spatz_req.vtype.vsew = EW_32;
+            default: illegal_instr = 1'b1;
+          endcase
 
           spatz_req.op_mem.vm = ls_vm;
           spatz_req.ex_unit = LSU;
+
+          unique casez (decoder_req_i.instr)
+            riscv_instruction::VLE8_V,
+            riscv_instruction::VLE16_V,
+            riscv_instruction::VLE32_V: begin
+              spatz_req.op     = VLE;
+              spatz_req.vd     = ls_vd;
+              spatz_req.use_vd = 1'b1;
+              spatz_req.rs1    = decoder_req_i.rs1;
+              illegal_instr    = ~decoder_req_i.rs1_valid;
+            end
+            riscv_instruction::VSE8_V,
+            riscv_instruction::VSE16_V,
+            riscv_instruction::VSE32_V: begin
+              spatz_req.op     = VSE;
+              spatz_req.vd     = ls_vd;
+              spatz_req.use_vd = 1'b1;
+              spatz_req.rs1    = decoder_req_i.rs1;
+              illegal_instr    = ~decoder_req_i.rs1_valid;
+            end
+            default: begin
+              illegal_instr = 1'b1;
+            end
+          endcase // decoder_req_i.instr
         end // OpcodeLoadFP or OpcodeStoreFP
 
         riscv_pkg::OpcodeVec: begin
