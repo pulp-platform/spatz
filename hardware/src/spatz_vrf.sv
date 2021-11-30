@@ -175,25 +175,25 @@ module spatz_vrf import spatz_pkg::*; #(
   ////////////////
 
   if (NR_READ_PORTS < 1)
-    $error("[spatz] The number of read ports has to be greater than zero.");
+    $error("[spatz_vrf] The number of read ports has to be greater than zero.");
 
   if (NR_WRITE_PORTS < 1)
-    $error("[spatz] The number of write ports has to be greater than zero.");
+    $error("[spatz_vrf] The number of write ports has to be greater than zero.");
 
   if (NR_READ_PORTS / NrReadPortsPerBank > NrBanks)
-    $error("[spatz] The number of vregfile banks needs to be increased to handle the number of read ports.");
+    $error("[spatz_vrf] The number of vregfile banks needs to be increased to handle the number of read ports.");
 
   if (NR_WRITE_PORTS / NrWritePortsPerBank > NrBanks)
-    $error("[spatz] The number of vregfile banks needs to be increased to handle the number of write ports.");
+    $error("[spatz_vrf] The number of vregfile banks needs to be increased to handle the number of write ports.");
 
   if (NrElemPerBank == 0)
-    $error("[spatz] The number of elements per bank can not be zero.");
+    $error("[spatz_vrf] The number of elements per bank can not be zero.");
 
   if (RegWidth < ElemWidth)
-    $error("[spatz] The register width has to be bigger than the element width.");
+    $error("[spatz_vrf] The register width has to be bigger than the element width.");
 
   if (spatz_pkg::N_IPU*spatz_pkg::ELEN*NrBanks > spatz_pkg::VLEN)
-    $error("[spatz] The vector register length has to be equal to or larger than N_IPU*ELEN*NrVRegBanks.");
+    $error("[spatz_vrf] The vector register length has to be equal to or larger than N_IPU*ELEN*NrVRegBanks.");
 
 endmodule : spatz_vrf
 
