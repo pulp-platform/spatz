@@ -205,10 +205,8 @@ module spatz_controller
 
   logic stall, vfu_stall, vlsu_stall, vsld_stall;
   assign stall = vfu_stall | vlsu_stall | vsld_stall;
-  assign vfu_stall = ~vfu_req_ready_i & ((decoder_rsp_valid & (spatz_req.ex_unit == VFU))
-                     | (~spatz_req_buffer_empty_q & (spatz_req_buffer_q.ex_unit == VFU)));
-  assign vlsu_stall = ~vlsu_req_ready_i & ((decoder_rsp_valid & (spatz_req.ex_unit == LSU))
-                     | (~spatz_req_buffer_empty_q & (spatz_req_buffer_q.ex_unit == LSU)));
+  assign vfu_stall  = ~vfu_req_ready_i & (spatz_req.ex_unit == VFU) & (decoder_rsp_valid | ~spatz_req_buffer_empty_q);
+  assign vlsu_stall = ~vfu_req_ready_i & (spatz_req.ex_unit == LSU) & (decoder_rsp_valid | ~spatz_req_buffer_empty_q);
   assign vsld_stall = 1'b0;
 
   always_comb begin : proc_issue
@@ -229,11 +227,6 @@ module spatz_controller
       spatz_ready_d = 1'b0;
     // New decoded instruction if valid
     end else if ((decoder_rsp_valid && ~spatz_req_illegal) || (!spatz_req_buffer_empty_q && !stall)) begin
-      // Resolve and reset buffer
-      if (!spatz_req_buffer_empty_q) begin
-        spatz_req = spatz_req_buffer_q;
-      end
-
       // Reset request buffer and accept new instructions
       spatz_req_buffer_empty_d = 1'b1;
       spatz_ready_d = 1'b1;
