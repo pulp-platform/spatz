@@ -242,10 +242,10 @@ module vregfile #(
   end
 
   tc_clk_gating i_regfile_cg (
-    .clk_i,
-    .en_i      ( |we_i  ),
-    .test_en_i ( 1'b0   ),
-    .clk_o     ( clk    )
+    .clk_i    ( clk_i ),
+    .en_i     ( |we_i ),
+    .test_en_i( 1'b0  ),
+    .clk_o    ( clk   )
   );
 
   // Sample Input Data
@@ -257,13 +257,14 @@ module vregfile #(
         for (genvar l = 0; l < ELEM_WBE; l++) begin
           if (NUM_ELEM_PER_REG > 1) begin
             always_comb begin
-              if (we_i[i] && ((wbe_i[i][l] && ENABLE_WBE) || ~ENABLE_WBE) && waddr_i[i][VADDR_WIDTH-1:$clog2(NUM_ELEM_PER_REG)] == j && waddr_i[i][$clog2(NUM_ELEM_PER_REG)-1:0] == k) waddr_onehot[i][j][k][l] = 1'b1;
-              else waddr_onehot[i][j][k][l] = 1'b0;
+              waddr_onehot[i][j][k][l] = (we_i[i] && ((wbe_i[i][l] && ENABLE_WBE) || ~ENABLE_WBE)
+                                                  && waddr_i[i][VADDR_WIDTH-1:$clog2(NUM_ELEM_PER_REG)] == j
+                                                  && waddr_i[i][$clog2(NUM_ELEM_PER_REG)-1:0] == k);
             end
           end else begin
-              always_comb begin
-              if (we_i[i] && ((wbe_i[i][l] && ENABLE_WBE) || ~ENABLE_WBE) && waddr_i[i][VADDR_WIDTH-1:0] == j) waddr_onehot[i][j][k][l] = 1'b1;
-              else waddr_onehot[i][j][k][l] = 1'b0;
+            always_comb begin
+              waddr_onehot[i][j][k][l] = (we_i[i] && ((wbe_i[i][l] && ENABLE_WBE) || ~ENABLE_WBE)
+                                                  && waddr_i[i][VADDR_WIDTH-1:0] == j);
             end
           end
         end
@@ -275,10 +276,10 @@ module vregfile #(
     for (genvar j = 0; j < NUM_ELEM_PER_REG; j++) begin
       for (genvar k = 0; k < ELEM_WBE; k++) begin
         tc_clk_gating i_regfile_cg (
-          .clk_i     ( clk                          ),
-          .en_i      ( |waddr_onehot_trans[i][j][k] ),
-          .test_en_i ( 1'b0                         ),
-          .clk_o     ( mem_clocks[i][j][k]          )
+          .clk_i    ( clk                          ),
+          .en_i     ( |waddr_onehot_trans[i][j][k] ),
+          .test_en_i( 1'b0                         ),
+          .clk_o    ( mem_clocks[i][j][k]          )
         );
       end
     end
@@ -289,10 +290,13 @@ module vregfile #(
       for (int unsigned j = 0; j < NUM_ELEM_PER_REG; j++) begin
         for (int unsigned k = 0; k < ELEM_WBE; k++) begin
           for (int unsigned l = 0; l < NR_WRITE_PORTS; l++) begin
+            // pragma translate_off
             if (!rst_ni) begin
-              mem[i][j] = '0;
-            end if (mem_clocks[i][j][k]) begin
-              mem[i][j][ELEM_WBE_SIZE*k +: ELEM_WBE_SIZE] = wdata_q[l][ELEM_WBE_SIZE*k +: ELEM_WBE_SIZE];
+              mem[i][j] <= '0;
+            end else
+            // pragma translate_on
+            if (mem_clocks[i][j][k]) begin
+              mem[i][j][ELEM_WBE_SIZE*k +: ELEM_WBE_SIZE] <= wdata_q[l][ELEM_WBE_SIZE*k +: ELEM_WBE_SIZE];
             end
           end
         end
@@ -301,9 +305,13 @@ module vregfile #(
   end
 
   if (NUM_ELEM_PER_REG > 1) begin
-    for (genvar i = 0; i < NR_READ_PORTS; i++) assign rdata_o[i] = mem[raddr_i[i][VADDR_WIDTH-1:$clog2(NUM_ELEM_PER_REG)]][raddr_i[i][$clog2(NUM_ELEM_PER_REG)-1:0]];
+    for (genvar i = 0; i < NR_READ_PORTS; i++) begin
+      assign rdata_o[i] = mem[raddr_i[i][VADDR_WIDTH-1:$clog2(NUM_ELEM_PER_REG)]][raddr_i[i][$clog2(NUM_ELEM_PER_REG)-1:0]];
+    end
   end else begin
-    for (genvar i = 0; i < NR_READ_PORTS; i++) assign rdata_o[i] = mem[raddr_i[i][VADDR_WIDTH-1:0]][0];
+    for (genvar i = 0; i < NR_READ_PORTS; i++) begin
+      assign rdata_o[i] = mem[raddr_i[i][VADDR_WIDTH-1:0]][0];
+    end
   end
 
 endmodule : vregfile
