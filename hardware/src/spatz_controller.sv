@@ -7,18 +7,22 @@
 module spatz_controller
   import spatz_pkg::*;
   import rvv_pkg::*;
-(
+#(
+  parameter type x_issue_req_t  = logic,
+  parameter type x_issue_resp_t = logic,
+  parameter type x_result_t     = logic
+) (
   input  logic clk_i,
   input  logic rst_ni,
   // X-Interface Issue
   input  logic x_issue_valid_i,
   output logic x_issue_ready_o,
-  input  core_v_xif_pkg::x_issue_req_t  x_issue_req_i,
-  output core_v_xif_pkg::x_issue_resp_t x_issue_resp_o,
+  input  x_issue_req_t  x_issue_req_i,
+  output x_issue_resp_t x_issue_resp_o,
   // X-Interface Result
   output logic x_result_valid_o,
   input  logic x_result_ready_i,
-  output core_v_xif_pkg::x_result_t x_result_o,
+  output x_result_t x_result_o,
   // Spatz req
   output logic spatz_req_valid_o,
   output spatz_req_t spatz_req_o,
@@ -61,6 +65,7 @@ module spatz_controller
   `FF(vl_q, vl_d, '0)
   `FF(vtype_q, vtype_d, '{vill: 1'b1, default: '0})
 
+  /* verilator lint_off LATCH */
   always_comb begin : proc_vcsr
     vstart_d = vstart_q;
     vl_d     = vl_q;
@@ -124,6 +129,7 @@ module spatz_controller
       end // spatz_req.op == VCFG
     end // spatz_req_valid
   end
+  /* verilator lint_on LATCH */
 
   ////////////////
   // Scoreboard //

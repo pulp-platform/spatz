@@ -7,26 +7,34 @@
 module spatz
   import spatz_pkg::*;
   import rvv_pkg::*;
-(
+#(
+  parameter NR_MEM_PORTS        = 1,
+  parameter type x_issue_req_t  = logic,
+  parameter type x_issue_resp_t = logic,
+  parameter type x_result_t     = logic,
+  parameter type x_mem_req_t    = logic,
+  parameter type x_mem_resp_t   = logic,
+  parameter type x_mem_result_t = logic
+) (
   input  logic clk_i,
   input  logic rst_ni,
   // X-Interface Issue
-  input  logic x_issue_valid_i,
-  output logic x_issue_ready_o,
-  input  core_v_xif_pkg::x_issue_req_t  x_issue_req_i,
-  output core_v_xif_pkg::x_issue_resp_t x_issue_resp_o,
+  input  logic          x_issue_valid_i,
+  output logic          x_issue_ready_o,
+  input  x_issue_req_t  x_issue_req_i,
+  output x_issue_resp_t x_issue_resp_o,
   // X-Interface Result
-  output logic x_result_valid_o,
-  input  logic x_result_ready_i,
-  output core_v_xif_pkg::x_result_t x_result_o,
+  output logic      x_result_valid_o,
+  input  logic      x_result_ready_i,
+  output x_result_t x_result_o,
   // X-Interface Memory Request
-  output logic x_mem_valid_o,
-  input  logic x_mem_ready_i,
-  output core_v_xif_pkg::x_mem_req_t  x_mem_req_o,
-  input  core_v_xif_pkg::x_mem_resp_t x_mem_resp_i,
+  output logic          [NR_MEM_PORTS-1:0] x_mem_valid_o,
+  input  logic          [NR_MEM_PORTS-1:0] x_mem_ready_i,
+  output x_mem_req_t    [NR_MEM_PORTS-1:0] x_mem_req_o,
+  input  x_mem_resp_t   [NR_MEM_PORTS-1:0] x_mem_resp_i,
   //X-Interface Memory Result
-  input  logic x_mem_result_valid_i,
-  input  core_v_xif_pkg::x_mem_result_t x_mem_result_i
+  input  logic          [NR_MEM_PORTS-1:0] x_mem_result_valid_i,
+  input  x_mem_result_t [NR_MEM_PORTS-1:0] x_mem_result_i
 );
 
   ////////////////
@@ -56,7 +64,11 @@ module spatz
   // Controller //
   ////////////////
 
-  spatz_controller i_controller (
+  spatz_controller #(
+    .x_issue_req_t (x_issue_req_t),
+    .x_issue_resp_t(x_issue_resp_t),
+    .x_result_t    (x_result_t)
+  ) i_controller (
     .clk_i            (clk_i),
     .rst_ni           (rst_ni),
     // X-intf
@@ -145,7 +157,12 @@ module spatz
   // VLSU //
   //////////
 
-  spatz_vlsu i_vlsu (
+  spatz_vlsu #(
+    .NR_MEM_PORTS  (NR_MEM_PORTS),
+    .x_mem_req_t   (x_mem_req_t),
+    .x_mem_resp_t  (x_mem_resp_t),
+    .x_mem_result_t(x_mem_result_t)
+  ) i_vlsu (
     .clk_i            (clk_i),
     .rst_ni           (rst_ni),
     // Request

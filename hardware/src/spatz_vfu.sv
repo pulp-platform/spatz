@@ -142,6 +142,7 @@ module spatz_vfu import spatz_pkg::*; (
     end
   end
 
+  /* verilator lint_off LATCH */
   always_comb begin : proc_op_req
     vreg_r_req = '0;
     vreg_we = '0;
@@ -174,6 +175,7 @@ module spatz_vfu import spatz_pkg::*; (
       end
     end
   end : proc_op_req
+  /* verilator lint_on LATCH */
 
   // Register file signals
   assign vrf_raddr_o = vreg_addr_q;

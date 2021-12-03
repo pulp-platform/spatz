@@ -4,7 +4,13 @@
 
 // Author: Domenic Wüthrich, ETH Zurich
 
-module spatz_vlsu import spatz_pkg::*; (
+module spatz_vlsu import spatz_pkg::*; #(
+  parameter NR_MEM_PORTS         = 1,
+  parameter NR_OUTSTANDING_LOADS = 8,
+  parameter type x_mem_req_t     = logic,
+  parameter type x_mem_resp_t    = logic,
+  parameter type x_mem_result_t  = logic
+) (
   input  logic clk_i,
   input  logic rst_ni,
   // Spatz req
@@ -25,13 +31,13 @@ module spatz_vlsu import spatz_pkg::*; (
   input  vreg_data_t vrf_rdata_i,
   input  logic       vrf_rvalid_i,
   // X-Interface Memory Request
-  output logic                        x_mem_valid_o,
-  input  logic                        x_mem_ready_i,
-  output core_v_xif_pkg::x_mem_req_t  x_mem_req_o,
-  input  core_v_xif_pkg::x_mem_resp_t x_mem_resp_i,
+  output logic          [NR_MEM_PORTS-1:0] x_mem_valid_o,
+  input  logic          [NR_MEM_PORTS-1:0] x_mem_ready_i,
+  output x_mem_req_t    [NR_MEM_PORTS-1:0] x_mem_req_o,
+  input  x_mem_resp_t   [NR_MEM_PORTS-1:0] x_mem_resp_i,
   //X-Interface Memory Result
-  input  logic                          x_mem_result_valid_i,
-  input  core_v_xif_pkg::x_mem_result_t x_mem_result_i
+  input  logic          [NR_MEM_PORTS-1:0] x_mem_result_valid_i,
+  input  x_mem_result_t [NR_MEM_PORTS-1:0] x_mem_result_i
 );
 
   // Include FF
@@ -56,17 +62,55 @@ module spatz_vlsu import spatz_pkg::*; (
   logic new_request;
   assign new_request = spatz_req_valid_i && vlsu_is_ready && (spatz_req_i.ex_unit == LSU);
 
+  // Is instruction a load
+  logic is_load;
+  assign is_load = (spatz_req_q.op == VLE) || (spatz_req_q.op == VLSE) || (spatz_req_q.op == VLXE);
+
   assign spatz_req_ready_o = vlsu_is_ready;
+
+  assign vlsu_rsp_valid_o = '0;
+  assign vlsu_rsp_o = '0;
 
   ///////////////////
   // State Handler //
   ///////////////////
+
+  vreg_addr_t [2:0] vreg_addr_q, vreg_addr_d;
 
   always_comb begin : proc_state
     spatz_req_d = spatz_req_q;
 
     if (new_request) begin
       spatz_req_d = spatz_req_i;
+    end
+    if (vreg_addr_q == '1) begin
+      spatz_req_d.vl = '0;
+    end
+  end
+
+  always_ff @(posedge clk_i or negedge rst_ni) begin : proc_vreg_addr_q
+    if(~rst_ni) begin
+      vreg_addr_q <= 0;
+    end else begin
+      vreg_addr_q <= vreg_addr_d;
+    end
+  end
+
+  always_comb begin : proc_
+    vrf_waddr_o = '0;
+    vrf_wdata_o = '0;
+    vrf_we_o = '0;
+    vrf_wbe_o = '0;
+    vreg_addr_d = vreg_addr_q;
+    if (spatz_req_q.vl != '0 && spatz_req_q.rs1 == '0) begin
+      vrf_waddr_o = vreg_addr_q;
+      vrf_wdata_o = '0;
+      vrf_we_o = '1;
+      vrf_wbe_o = '1;
+
+      if (vrf_wvalid_i) begin
+        vreg_addr_d = vreg_addr_q + 1;
+      end
     end
   end
 
@@ -75,23 +119,23 @@ module spatz_vlsu import spatz_pkg::*; (
   /////////////////
 
   logic result_queue_empty, result_queue_full, result_queue_push, result_queue_pop;
-  core_v_xif_pkg::x_mem_result_t result_queue_data;
+  x_mem_result_t result_queue_data;
 
   always_comb begin : proc_mem_req
     x_mem_req_o = '0;
-    x_mem_valid_o = 1'b0;
+    x_mem_valid_o = '0;
     result_queue_pop = 1'b0;
-    if (spatz_req_d.op == VLE && new_request) begin
-      x_mem_req_o.id = spatz_req_i.id;
-      x_mem_req_o.addr = spatz_req_i.rs1;
-      x_mem_valid_o = 1'b1;
-    end else if (spatz_req_i.op == VSE && new_request) begin
+    if (spatz_req_d.op == VLE && new_request && spatz_req_d.rs1 != '0) begin
+      x_mem_req_o[0].id = spatz_req_i.id;
+      x_mem_req_o[0].addr = spatz_req_i.rs1;
+      x_mem_valid_o[0] = 1'b1;
+    end else if (spatz_req_i.op == VSE && new_request && spatz_req_d.rs1 != '0) begin
       if (!result_queue_empty) begin
-        x_mem_req_o.id = spatz_req_i.id;
-        x_mem_req_o.addr = spatz_req_i.rs1;
-        x_mem_req_o.we = 1'b1;
-        x_mem_req_o.wdata = result_queue_data.rdata;
-        x_mem_valid_o = 1'b1;
+        x_mem_req_o[1].id = spatz_req_i.id;
+        x_mem_req_o[1].addr = spatz_req_i.rs1;
+        x_mem_req_o[1].we = 1'b1;
+        x_mem_req_o[1].wdata = result_queue_data.rdata;
+        x_mem_valid_o[1] = 1'b1;
         result_queue_pop = 1'b1;
       end
     end
@@ -103,9 +147,9 @@ module spatz_vlsu import spatz_pkg::*; (
 
   // Fifo storing new loaded values not yet saved to vregfile
   fifo_v3 #(
-    .FALL_THROUGH( 1                     ),
-    .DATA_WIDTH  ( $bits(x_mem_result_i) ),
-    .DEPTH       ( 4                     )
+    .FALL_THROUGH( 1                       ),
+    .DATA_WIDTH  ( $bits(x_mem_result_i[0])),
+    .DEPTH       ( 4                       )
   ) i_fifo (
     .clk_i     ( clk_i              ),
     .rst_ni    ( rst_ni             ),
@@ -114,7 +158,7 @@ module spatz_vlsu import spatz_pkg::*; (
     .full_o    ( result_queue_full  ),
     .empty_o   ( result_queue_empty ),
     .usage_o   ( /* Unused */       ),
-    .data_i    ( x_mem_result_i     ),
+    .data_i    ( x_mem_result_i[0]  ),
     .push_i    ( result_queue_push  ),
     .data_o    ( result_queue_data  ),
     .pop_i     ( result_queue_pop   )
@@ -122,7 +166,7 @@ module spatz_vlsu import spatz_pkg::*; (
 
   always_comb begin : proc_mem_res
     result_queue_push = 1'b0;
-    if (x_mem_result_valid_i && !result_queue_full) begin
+    if (x_mem_result_valid_i[0] && !result_queue_full) begin
       result_queue_push = 1'b1;
     end
 
@@ -131,10 +175,6 @@ module spatz_vlsu import spatz_pkg::*; (
     end
   end
 
-  assign vrf_waddr_o = '0;
-  assign vrf_wdata_o = '0;
-  assign vrf_we_o = '0;
-  assign vrf_wbe_o = '0;
   assign vrf_raddr_o = '0;
   assign vrf_re_o = '0;
 
