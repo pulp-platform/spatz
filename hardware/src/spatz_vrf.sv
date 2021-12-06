@@ -238,12 +238,8 @@ module vregfile #(
 
   for (genvar i = 0; i < NR_WRITE_PORTS; i++) begin
     // Sample Input Data
-    always_ff @(posedge clk or negedge rst_ni) begin
-      if(~rst_ni) begin
-        wdata_q[i] <= 0;
-      end else begin
-        wdata_q[i] <= wdata_i[i];
-      end
+    always_ff @(posedge clk) begin
+      wdata_q[i] <= wdata_i[i];
     end
   end
 
@@ -253,12 +249,12 @@ module vregfile #(
       for (genvar k = 0; k < NUM_ELEM_PER_REG; k++) begin
         for (genvar l = 0; l < NUM_BYTES_PER_ELEM; l++) begin
           if (NUM_ELEM_PER_REG == 'd1) begin
-            assign waddr_onehot[j][k][l][i] = (we_i[i] && ((wbe_i[i][l] && ENABLE_WBE) || ~ENABLE_WBE)
-                                                       && waddr_i[i][VADDR_WIDTH-1:0] == j);
+            assign waddr_onehot[j][k][l][i] = (we_i[i] & ((wbe_i[i][l] & ENABLE_WBE) | ~ENABLE_WBE)
+                                                       & waddr_i[i][VADDR_WIDTH-1:0] == j);
           end else begin
-            assign waddr_onehot[j][k][l][i] = (we_i[i] && ((wbe_i[i][l] && ENABLE_WBE) || ~ENABLE_WBE)
-                                                       && waddr_i[i][VADDR_WIDTH-1:$clog2(NUM_ELEM_PER_REG)] == j
-                                                       && waddr_i[i][$clog2(NUM_ELEM_PER_REG)-1:0] == k);
+            assign waddr_onehot[j][k][l][i] = (we_i[i] & ((wbe_i[i][l] & ENABLE_WBE) | ~ENABLE_WBE)
+                                                       & waddr_i[i][VADDR_WIDTH-1:$clog2(NUM_ELEM_PER_REG)] == j
+                                                       & waddr_i[i][$clog2(NUM_ELEM_PER_REG)-1:0] == k);
           end
         end
       end
