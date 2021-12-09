@@ -81,6 +81,9 @@ module spatz_vlsu
   logic is_addr_unaligned;
   assign is_addr_unaligned = spatz_req_q.rs1[1:0] != 2'b00;
 
+  logic is_single_element_operation;
+  assign is_single_element_operation = is_addr_unaligned;
+
   assign spatz_req_ready_o = vlsu_is_ready;
 
   assign vlsu_rsp_valid_o = '0;
@@ -98,6 +101,9 @@ module spatz_vlsu
   logic  [NR_MEM_PORTS-1:0] buffer_full;
   logic  [NR_MEM_PORTS-1:0] buffer_empty;
 
+  logic  [NR_MEM_PORTS-1:0][$clog2(NR_OUTSTANDING_LOADS)-1:0] buffer_id_diff;
+
+  vlen_t [NR_MEM_PORTS-1:0] mem_counter_max;
   logic  [NR_MEM_PORTS-1:0] mem_counter_clear;
   logic  [NR_MEM_PORTS-1:0] mem_counter_en;
   logic  [NR_MEM_PORTS-1:0] mem_counter_load;
@@ -143,29 +149,29 @@ module spatz_vlsu
 
   elen_t      [NR_MEM_PORTS-1:0] mem_req_addr;
   vreg_addr_t [NR_MEM_PORTS-1:0] vreg_addr;
-  logic       [NR_MEM_PORTS-1:0][$clog2(NR_OUTSTANDING_LOADS)-1:0] buffer_id_diff;
 
   always_comb begin : gen_mem_req_addr
     for (int unsigned i = 0; i < NR_MEM_PORTS; i++) begin : gen_elem_access
+      automatic int unsigned base_addr = {spatz_req_q.rs1[$bits(elen_t)-1:2], 2'b00};
+      automatic int unsigned diff = 'd0;
+      if (is_single_element_operation) begin
+        unique case (spatz_req_q.vtype.vsew)
+          EW_8: diff = buffer_id_diff[i] & ({$size(buffer_id_diff){1'b1}} << $clog2(ew_to_bytes(EW_8)));
+          EW_16: diff = buffer_id_diff[i] & ({$size(buffer_id_diff){1'b1}} << $clog2(ew_to_bytes(EW_16)));
+          EW_32: diff = buffer_id_diff[i] & ({$size(buffer_id_diff){1'b1}} << $clog2(ew_to_bytes(EW_32)));
+          default: diff = buffer_id_diff[i];
+        endcase
+      end else begin
+        diff = buffer_id_diff[i];
+      end
+
       mem_req_addr[i] = '0;
-      buffer_id_diff[i] = buffer_id[i] - buffer_rid[i];
 
       unique case (spatz_req_q.op)
-        VLE: begin
-          automatic int unsigned offset = ((vreg_elem_id << $clog2(N_IPU)) + ($unsigned(buffer_id_diff[i]) << $clog2(NR_MEM_PORTS)) + i) << 2;
-          mem_req_addr[i] = spatz_req_q.rs1 + offset;
-        end
+        VLE,
         VSE: begin
-          automatic int unsigned offset = ((vreg_elem_id << $clog2(N_IPU)) - ($unsigned(buffer_id_diff[i]) << $clog2(NR_MEM_PORTS)) + i) << 2;
-          mem_req_addr[i] = spatz_req_q.rs1 + offset;
-        end
-        VLSE: begin
-          automatic int unsigned offset = ((vreg_elem_id << $clog2(N_IPU)) + ($unsigned(buffer_id_diff[i]) << $clog2(NR_MEM_PORTS)) + i) << 2;
-          mem_req_addr[i] = spatz_req_q.rs1 + offset * $signed(spatz_req_q.rs2);
-        end
-        VSSE: begin
-          automatic int unsigned offset = ((vreg_elem_id << $clog2(N_IPU)) - ($unsigned(buffer_id_diff[i]) << $clog2(NR_MEM_PORTS)) + i) << 2;
-          mem_req_addr[i] = spatz_req_q.rs1 + offset * $signed(spatz_req_q.rs2);
+          automatic logic [31:0] addr = spatz_req_q.rs1 + {mem_counter_value[i][$bits(vlen_t)-1:2] << $clog2(NR_MEM_PORTS), mem_counter_value[i][1:0]} + (i << 2);
+          mem_req_addr[i] = {addr[31:2], 2'b00};
         end
         default: begin
           mem_req_addr[i] = '0;
@@ -214,10 +220,10 @@ module spatz_vlsu
     vreg_counter_load_value = '0;
 
     vreg_counter_clear = new_vlsu_request;
-    vreg_counter_delta = ew_to_bytes(spatz_req_q.vtype.vsew) << $clog2(NR_MEM_PORTS);
+    vreg_counter_delta = is_single_element_operation ? N_IPU : ew_to_bytes(spatz_req_q.vtype.vsew) << $clog2(NR_MEM_PORTS);
     vreg_counter_en = (is_load & vrf_wvalid_i & vrf_we_o) | (~is_load & vrf_rvalid_i & vrf_re_o);
 
-    vreg_operation_valid = (vreg_counter_value <= spatz_req_q.vl) & ~is_vl_zero;
+    vreg_operation_valid = (vreg_counter_value < spatz_req_q.vl) & ~is_vl_zero;
 
     vreg_elem_id = vreg_counter_value >> $clog2(ELENB*N_IPU);
   end
@@ -245,10 +251,11 @@ module spatz_vlsu
       mem_counter_load_value[i] = '0;
 
       mem_counter_clear[i] = new_vlsu_request;
-      mem_counter_delta[i] = ew_to_bytes(spatz_req_q.vtype.vsew);
+      mem_counter_delta[i] = is_single_element_operation ? 'd1 : ew_to_bytes(spatz_req_q.vtype.vsew);
       mem_counter_en[i] = x_mem_ready_i[i];
+      mem_counter_max[i] = (spatz_req_q.vl >> $clog2(NR_MEM_PORTS)) + (spatz_req_q.vl[$clog2(NR_MEM_PORTS)-1:0] & (i + 'd1));
 
-      mem_operation_valid[i] = (mem_counter_value[i] < ((spatz_req_q.vl >> $clog2(NR_MEM_PORTS)) + (spatz_req_q.vl[$clog2(NR_MEM_PORTS)-1:0] & (i + 'd1)))) & ~is_vl_zero;
+      mem_operation_valid[i] = (mem_counter_value[i] < mem_counter_max[i]) & ~is_vl_zero;
     end
   end
 
@@ -276,6 +283,8 @@ module spatz_vlsu
       .full_o   (buffer_full[i]),
       .empty_o  (buffer_empty[i])
     );
+
+    assign buffer_id_diff[i] = buffer_id[i] - buffer_rid[i];
   end
 
   ///////////////////////////////
@@ -315,7 +324,11 @@ module spatz_vlsu
         vrf_waddr_o = vreg_addr;
         vrf_wdata_o = buffer_rdata;
         vrf_we_o = 1'b1;
-        vrf_wbe_o = '1;
+        if (is_single_element_operation) begin
+          vrf_wbe_o = 'd1 << vreg_counter_value[$clog2(ELENB)-1:0];
+        end else begin
+          vrf_wbe_o = '1;
+        end
 
         // Pop stored element and free space in buffer
         buffer_pop = {NR_MEM_PORTS{vrf_wvalid_i}};
@@ -330,9 +343,18 @@ module spatz_vlsu
         end
 
         // Write the load result to the buffer
-        buffer_wdata[i] = x_mem_result_i[i].rdata;
         buffer_wid[i] = x_mem_result_i[i].id;
         buffer_push[i] = x_mem_result_valid_i[i];
+
+        for (int unsigned i = 0; i < NR_MEM_PORTS; i++) begin
+          automatic logic [ELEN-1:0] data = x_mem_result_i[i].rdata;
+          unique case (spatz_req_q.rs1[1:0])
+           2'b00: buffer_wdata[i] = data;
+           2'b01: buffer_wdata[i] = {data[7:0], data[31:8]};
+           2'b10: buffer_wdata[i] = {data[15:0], data[31:16]};
+           2'b11: buffer_wdata[i] = {data[23:0], data[31:24]};
+          endcase
+        end
       end
     end else begin
       // Read new element from the register file and store
@@ -342,18 +364,42 @@ module spatz_vlsu
         vrf_re_o = 1'b1;
 
         // Push element to buffer if read from vregfile
-        buffer_req_id = '1;
         buffer_wid = buffer_id;
-        buffer_wdata = vrf_rdata_i;
-        buffer_push = {NR_MEM_PORTS{vrf_rvalid_i}};
+        buffer_req_id = '1;
+        buffer_push = vrf_rvalid_i;
+
+        for (int unsigned i = 0; i < NR_MEM_PORTS; i++) begin
+          automatic logic [ELEN-1:0] data = vrf_rdata_i[32*i +: 32];
+          unique case (spatz_req_q.rs1[1:0])
+           2'b00: buffer_wdata[i] = data;
+           2'b01: buffer_wdata[i] = {data[23:0], data[31:24]};
+           2'b10: buffer_wdata[i] = {data[15:0], data[31:16]};
+           2'b11: buffer_wdata[i] = {data[7:0], data[31:8]};
+          endcase
+
+          buffer_req_id = '1;
+          buffer_push[i] = vrf_rvalid_i;
+        end
       end
 
       for (int unsigned i = 0; i < NR_MEM_PORTS; i++) begin
         // Read element from buffer and execute memory request
-        mem_req_svalid[i] = buffer_rvalid[i];
-        mem_req_strb[i] = '1;
-        mem_req_id[i] = buffer_rid[i];
-        buffer_pop[i] = x_mem_ready_i[i];
+        if (mem_operation_valid) begin
+          mem_req_svalid[i] = buffer_rvalid[i];
+          mem_req_id[i] = buffer_rid[i];
+          buffer_pop[i] = x_mem_ready_i[i];
+        end else begin
+          if (!buffer_empty[i]) begin
+            buffer_pop[i] = 1'b1;
+          end
+        end
+
+        if (is_single_element_operation) begin
+          automatic logic [1:0] shift = mem_counter_value[i][$clog2(ELENB)-1:0] + spatz_req_q.rs1[1:0];
+          mem_req_strb[i] = 'd1 << shift;
+        end else begin
+          mem_req_strb[i] = '1;
+        end
       end
     end
   end
