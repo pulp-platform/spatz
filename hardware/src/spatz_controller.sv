@@ -211,15 +211,15 @@ module spatz_controller
 
   logic stall, vfu_stall, vlsu_stall, vsld_stall;
   assign stall = vfu_stall | vlsu_stall | vsld_stall;
-  assign vfu_stall  = ~vfu_req_ready_i & (spatz_req.ex_unit == VFU) & (decoder_rsp_valid | ~spatz_req_buffer_empty_q);
-  assign vlsu_stall = ~vfu_req_ready_i & (spatz_req.ex_unit == LSU) & (decoder_rsp_valid | ~spatz_req_buffer_empty_q);
+  assign vfu_stall  = ~vfu_req_ready_i  & (spatz_req.ex_unit == VFU) & (decoder_rsp_valid | ~spatz_req_buffer_empty_q);
+  assign vlsu_stall = ~vlsu_req_ready_i & (spatz_req.ex_unit == LSU) & (decoder_rsp_valid | ~spatz_req_buffer_empty_q);
   assign vsld_stall = 1'b0;
 
   always_comb begin : proc_issue
     retire_csr = 1'b0;
     spatz_ready_d = spatz_ready_q;
     spatz_req = spatz_req_buffer_empty_q ? decoder_rsp.spatz_req : spatz_req_buffer_q;
-    spatz_req.id = x_issue_req_i.id;
+    spatz_req.id = decoder_rsp_valid ? x_issue_req_i.id : spatz_req.id;
     spatz_req_illegal = decoder_rsp_valid ? decoder_rsp.instr_illegal : 1'b0;
     spatz_req_valid = 1'b0;
 
