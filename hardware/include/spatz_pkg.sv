@@ -42,9 +42,9 @@ package spatz_pkg;
   typedef logic [ELEN-1:0] elen_t;
 
   // VREG address type
-  typedef logic [5+$clog2(VELE)-1:0] vreg_addr_t;
-  typedef logic [N_IPU*ELENB-1:0]    vreg_be_t;
-  typedef logic [N_IPU*ELEN-1:0]     vreg_data_t;
+  typedef logic [$clog2(NRVREG)+$clog2(VELE)-1:0] vreg_addr_t;
+  typedef logic [N_IPU*ELENB-1:0]                 vreg_be_t;
+  typedef logic [N_IPU*ELEN-1:0]                  vreg_data_t;
 
   typedef logic [3:0] instr_id_t;
 
@@ -148,9 +148,9 @@ package spatz_pkg;
     vlen_t      vstart;
   } spatz_req_t;
 
-  /////////////////////
-  // Decoder Request //
-  /////////////////////
+  /////////////////////////////////
+  // Decoder Request and Response//
+  /////////////////////////////////
 
   typedef struct packed {
     // Instruction
@@ -190,6 +190,17 @@ package spatz_pkg;
   typedef struct packed {
     // Instruction ID
     instr_id_t  id;
+
+    // Did the memory request trigger an exception
+    logic exc;
   } vlsu_rsp_t;
+
+  ///////////////
+  // Functions //
+  ///////////////
+
+  function automatic logic [$clog2(ELENB):0] ew_to_bytes(vew_e vsew);
+    ew_to_bytes = ELENB >> vsew;
+  endfunction
 
  endpackage : spatz_pkg
