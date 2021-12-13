@@ -248,7 +248,13 @@ module spatz_vlsu
       mem_counter_clear[i] = new_vlsu_request;
       mem_counter_delta[i] = is_single_element_operation ? 'd1 : ew_to_bytes(spatz_req_q.vtype.vsew);
       mem_counter_en[i] = x_mem_ready_i[i];
-      mem_counter_max[i] = (spatz_req_q.vl >> $clog2(NR_MEM_PORTS)) + (spatz_req_q.vl[$clog2(NR_MEM_PORTS)-1:0] & (i + 'd1));
+      //mem_counter_max[i] = (spatz_req_q.vl >> $clog2(NR_MEM_PORTS)) + (spatz_req_q.vl[$clog2(NR_MEM_PORTS)-1:0] & (i + 'd1));
+      unique case (spatz_req_q.vtype.vsew)
+        EW_8:  mem_counter_max[i] = ((spatz_req_q.vl >> ($clog2(NR_MEM_PORTS) + 2)) << 2) + (spatz_req_q.vl[$clog2(NR_MEM_PORTS) + 2 - 1:2] > i ? 'd4 : spatz_req_q.vl[$clog2(NR_MEM_PORTS) + 2 - 1:2] == i ? spatz_req_q.vl[2 - 1:0] : 'd0);
+        EW_16: mem_counter_max[i] = ((spatz_req_q.vl >> ($clog2(NR_MEM_PORTS) + 1)) << 1) + (spatz_req_q.vl[$clog2(NR_MEM_PORTS) + 1 - 1:1] > i ? 'd2 : spatz_req_q.vl[$clog2(NR_MEM_PORTS) + 1 - 1:1] == i ? spatz_req_q.vl[1 - 1:0] : 'd0);
+        EW_32: mem_counter_max[i] = ((spatz_req_q.vl >> ($clog2(NR_MEM_PORTS) + 0)) << 0) + (spatz_req_q.vl[$clog2(NR_MEM_PORTS) + 0 - 1:0] > i ? 'd1 : 'd0);
+        default: mem_counter_max[i] = 'd0;
+      endcase
 
       mem_operation_valid[i] = (mem_counter_value[i] < mem_counter_max[i]) & ~is_vl_zero;
       mem_operation_last[i] = mem_operation_valid[i] & (mem_counter_value[i] + mem_counter_delta[i] >= mem_counter_max[i]);
@@ -312,7 +318,7 @@ module spatz_vlsu
     mem_req_strb   = '0;
     mem_req_svalid = '0;
     mem_req_lvalid = '0;
-    mem_req_last   = '0;
+    mem_req_last   = mem_operation_last;
 
     if (is_load) begin
       // If we have a valid element in the buffer,
