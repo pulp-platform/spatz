@@ -195,12 +195,4 @@ package spatz_pkg;
     logic exc;
   } vlsu_rsp_t;
 
-  ///////////////
-  // Functions //
-  ///////////////
-
-  function automatic logic [$clog2(ELENB):0] ew_to_bytes(vew_e vsew);
-    ew_to_bytes = ELENB >> vsew;
-  endfunction
-
  endpackage : spatz_pkg
