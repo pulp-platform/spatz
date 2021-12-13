@@ -144,6 +144,7 @@ module spatz_vlsu
 
     if (new_vlsu_request) begin
       spatz_req_d = spatz_req_i;
+      // Convert the vl to number of bytes for all element widths
       unique case (spatz_req_i.vtype.vsew)
         EW_8:  spatz_req_d.vl = spatz_req_i.vl;
         EW_16: spatz_req_d.vl = spatz_req_i.vl << 1;
@@ -341,7 +342,7 @@ module spatz_vlsu
           for (int unsigned j = 0; j < NrIPUsPerMemPort; j++) begin
             if (buffer_rvalid[i] && (NrIPUsPerMemPort == 'd1 ? 1'b1 : vreg_counter_value[idx_width(NrIPUsPerMemPort)-1:0] == j)) begin
               for (int unsigned k = 0; k < ELENB; k++) begin
-                vrf_wbe_o[ELENB*(i+j*NrIPUsPerMemPort)+k +: 'd1] = ((k + i*ELENB) >> spatz_req_q.vtype.vsew) < vreg_counter_delta;
+                vrf_wbe_o[ELENB*(i+j*NrIPUsPerMemPort)+k +: 'd1] = (k + i*ELENB) < vreg_counter_delta;
               end
             end
           end
@@ -411,7 +412,9 @@ module spatz_vlsu
           automatic logic [1:0] shift = mem_counter_value[i][$clog2(ELENB)-1:0] + spatz_req_q.rs1[1:0];
           mem_req_strb[i] = 'd1 << shift;
         end else begin
-          mem_req_strb[i] = '1;
+          for (int unsigned k = 0; k < ELENB; k++) begin
+            mem_req_strb[i][k +: 'd1] = k < mem_counter_delta[i];
+          end
         end
       end
     end
