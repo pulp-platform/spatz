@@ -91,6 +91,9 @@ module spatz_vlsu
   logic is_single_element_operation;
   assign is_single_element_operation = is_addr_unaligned;
 
+  logic [2:0] single_element_size;
+  assign single_element_size = 1'b1 << spatz_req_q.vtype.vsew;
+
   assign spatz_req_ready_o = vlsu_is_ready;
 
   assign vlsu_rsp_valid_o = '0;
@@ -221,13 +224,13 @@ module spatz_vlsu
     automatic int unsigned delta = spatz_req_q.vl - vreg_counter_value;
 
     vreg_operation_valid = (delta != 'd0) & ~is_vl_zero;
-    vreg_operation_last  = vreg_operation_valid & (delta <= (is_single_element_operation ? N_IPU : 'd4 << $clog2(N_IPU)));
+    vreg_operation_last  = vreg_operation_valid & (delta <= (is_single_element_operation ? single_element_size << $clog2(N_IPU) : 'd4 << $clog2(N_IPU)));
 
     vreg_counter_load = 1'b0;
     vreg_counter_load_value = '0;
 
     vreg_counter_clear = new_vlsu_request;
-    vreg_counter_delta = delta == 'd0 ? 'd0 : vreg_operation_last ? delta : is_single_element_operation ? N_IPU : 'd4 << $clog2(NR_MEM_PORTS);
+    vreg_counter_delta = delta == 'd0 ? 'd0 : vreg_operation_last ? delta : is_single_element_operation ? single_element_size << $clog2(N_IPU) : 'd4 << $clog2(N_IPU);
     vreg_counter_en = (is_load & vrf_wvalid_i & vrf_we_o) | (~is_load & vrf_rvalid_i & vrf_re_o);
 
     vreg_elem_id = vreg_counter_value >> $clog2(ELENB*N_IPU);
@@ -255,13 +258,13 @@ module spatz_vlsu
       automatic int unsigned delta = mem_counter_max[i] - mem_counter_value[i];
 
       mem_operation_valid[i] = (delta != 'd0) & ~is_vl_zero;
-      mem_operation_last[i]  = mem_operation_valid[i] & (delta <= (is_single_element_operation ? 'd1 : 'd4));
+      mem_operation_last[i]  = mem_operation_valid[i] & (delta <= (is_single_element_operation ? single_element_size : 'd4));
 
       mem_counter_load[i] = 1'b0;
       mem_counter_load_value[i] = '0;
 
       mem_counter_clear[i] = new_vlsu_request;
-      mem_counter_delta[i] = delta == 'd0 ? 'd0 : is_single_element_operation ? 'd1 : mem_operation_last[i] ? delta : 'd4;
+      mem_counter_delta[i] = delta == 'd0 ? 'd0 : is_single_element_operation ? single_element_size : mem_operation_last[i] ? delta : 'd4;
       mem_counter_en[i] = x_mem_ready_i[i];
 
       mem_counter_max[i] = ((spatz_req_q.vl >> ($clog2(NR_MEM_PORTS) + 2)) << 2) + (spatz_req_q.vl[$clog2(NR_MEM_PORTS) + 2 - 1:2] > i ? 'd4 : spatz_req_q.vl[$clog2(NR_MEM_PORTS) + 2 - 1:2] == i ? spatz_req_q.vl[2 - 1:0] : 'd0);
@@ -410,7 +413,9 @@ module spatz_vlsu
 
         if (is_single_element_operation) begin
           automatic logic [1:0] shift = mem_counter_value[i][$clog2(ELENB)-1:0] + spatz_req_q.rs1[1:0];
-          mem_req_strb[i] = 'd1 << shift;
+          automatic logic [3:0] mask = spatz_req_q.vtype.vsew == rvv_pkg::EW_8  ? 4'b0001 :
+                                       spatz_req_q.vtype.vsew == rvv_pkg::EW_16 ? 4'b0011 : 4'b1111;
+          mem_req_strb[i] = mask << shift;
         end else begin
           for (int unsigned k = 0; k < ELENB; k++) begin
             mem_req_strb[i][k +: 'd1] = k < mem_counter_delta[i];
