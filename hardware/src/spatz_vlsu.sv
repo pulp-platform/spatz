@@ -229,8 +229,8 @@ module spatz_vlsu
   end
 
   always_comb begin
-    for (int unsigned i = 0; i < NR_MEM_PORTS; i++) begin
-      automatic int unsigned max   = ((spatz_req_q.vl >> ($clog2(N_IPU) + $clog2(ELENB))) << $clog2(ELENB)) + (spatz_req_q.vl[$clog2(N_IPU)+$clog2(ELENB)-1:$clog2(ELENB)] > i ? ELENB : spatz_req_q.vl[$clog2(N_IPU)+$clog2(ELENB)-1:$clog2(ELENB)] == i ? spatz_req_q.vl[$clog2(ELENB)-1:0] : 'd0);
+    for (int unsigned i = 0; i < N_IPU; i++) begin
+      automatic int unsigned max   = N_IPU == 'd1 ? spatz_req_q.vl : ((spatz_req_q.vl >> ($clog2(N_IPU) + $clog2(ELENB))) << $clog2(ELENB)) + (spatz_req_q.vl[idx_width(N_IPU)+$clog2(ELENB)-1:$clog2(ELENB)] > i ? ELENB : spatz_req_q.vl[idx_width(N_IPU)+$clog2(ELENB)-1:$clog2(ELENB)] == i ? spatz_req_q.vl[$clog2(ELENB)-1:0] : 'd0);
       automatic int unsigned delta = max - vreg_counter_value[i];
 
       vreg_operation_valid[i] = (delta != 'd0) & ~is_vl_zero;
@@ -243,12 +243,21 @@ module spatz_vlsu
       vreg_counter_delta[i] = !vreg_operation_valid[i] ? 'd0 :
                                is_single_element_operation ? single_element_size :
                                vreg_operation_last[i] ? delta : 'd4;
-      vreg_counter_en[i]    = (is_load & vrf_wvalid_i & vrf_we_o) | (~is_load & vrf_rvalid_i & vrf_re_o);
+
+      if (NrIPUsPerMemPort == 'd1) begin
+        vreg_counter_en[i] = (is_load & vrf_wvalid_i & vrf_we_o) | (~is_load & vrf_rvalid_i & vrf_re_o);
+      end else begin
+        if (i == 'd0) begin
+          vreg_counter_en[i] = ((is_load & vrf_wvalid_i & vrf_we_o) | (~is_load & vrf_rvalid_i & vrf_re_o)) & ((vreg_counter_value[NrIPUsPerMemPort-1][$bits(vlen_t)-1:$clog2(ELENB)] == vreg_counter_value[0][$bits(vlen_t)-1:$clog2(ELENB)]) & (vreg_counter_value[1][$bits(vlen_t)-1:$clog2(ELENB)] == vreg_counter_value[0][$bits(vlen_t)-1:$clog2(ELENB)]));
+        end else begin
+          vreg_counter_en[i] = ((is_load & vrf_wvalid_i & vrf_we_o) | (~is_load & vrf_rvalid_i & vrf_re_o)) & (vreg_counter_value[i-1][$bits(vlen_t)-1:$clog2(ELENB)] != vreg_counter_value[i][$bits(vlen_t)-1:$clog2(ELENB)]);
+        end
+      end
 
       vreg_counter_max[i] = max;
     end
 
-    vreg_elem_id = vreg_counter_value[0] >> $clog2(ELENB);
+    vreg_elem_id = vreg_counter_value[NrIPUsPerMemPort-1] >> $clog2(ELENB);
   end
 
   for (genvar i = 0; i < NR_MEM_PORTS; i++) begin
@@ -270,7 +279,7 @@ module spatz_vlsu
 
   always_comb begin
     for (int unsigned i = 0; i < NR_MEM_PORTS; i++) begin
-      automatic int unsigned max   = ((spatz_req_q.vl >> ($clog2(NR_MEM_PORTS) + $clog2(MemDataWidthB))) << $clog2(MemDataWidthB)) + (spatz_req_q.vl[$clog2(NR_MEM_PORTS)+$clog2(MemDataWidthB)-1:$clog2(MemDataWidthB)] > i ? MemDataWidthB : spatz_req_q.vl[$clog2(NR_MEM_PORTS)+$clog2(MemDataWidthB)-1:$clog2(MemDataWidthB)] == i ? spatz_req_q.vl[$clog2(MemDataWidthB)-1:0] : 'd0);
+      automatic int unsigned max   = NR_MEM_PORTS == 'd1 ? spatz_req_q.vl : ((spatz_req_q.vl >> ($clog2(NR_MEM_PORTS) + $clog2(MemDataWidthB))) << $clog2(MemDataWidthB)) + (spatz_req_q.vl[idx_width(NR_MEM_PORTS)+$clog2(MemDataWidthB)-1:$clog2(MemDataWidthB)] > i ? MemDataWidthB : spatz_req_q.vl[idx_width(NR_MEM_PORTS)+$clog2(MemDataWidthB)-1:$clog2(MemDataWidthB)] == i ? spatz_req_q.vl[$clog2(MemDataWidthB)-1:0] : 'd0);
       automatic int unsigned delta = max - mem_counter_value[i];
 
       mem_operation_valid[i] = (delta != 'd0) & ~is_vl_zero;
@@ -361,16 +370,16 @@ module spatz_vlsu
           vrf_wdata_o[VregDataWidthPerMemPort*i +: VregDataWidthPerMemPort] = {NrIPUsPerMemPort{buffer_rdata[i]}};
 
           for (int unsigned j = 0; j < NrIPUsPerMemPort; j++) begin
-            automatic int unsigned idx = i+j*NrIPUsPerMemPort;
-            if (buffer_rvalid[i] && (NrIPUsPerMemPort == 'd1 ? 1'b1 : vreg_counter_value[idx][idx_width(NrIPUsPerMemPort)+$clog2(ELENB)-1:$clog2(ELENB)] == j)) begin
+            automatic int unsigned idx = i*NrIPUsPerMemPort + j;
+            if (vreg_counter_en[idx]) begin
               if (is_single_element_operation) begin
                 automatic logic [$clog2(ELENB)-1:0] shift = vreg_counter_value[idx][$clog2(ELENB)-1:0];
-                automatic logic [ELENB-1:0]          mask = spatz_req_q.vtype.vsew == rvv_pkg::EW_8  ? ELENB'(1'b1) :
-                                                            spatz_req_q.vtype.vsew == rvv_pkg::EW_16 ? ELENB'(2'b11) : ELENB'(4'b1111);
+                automatic logic [ELENB-1:0]          mask = spatz_req_q.vtype.vsew == rvv_pkg::EW_8  ? 1'b1 :
+                                                            spatz_req_q.vtype.vsew == rvv_pkg::EW_16 ? 2'b11 : 4'b1111;
                 vrf_wbe_o[ELENB*idx +: ELENB] = mask << shift;
               end else begin
                 for (int unsigned k = 0; k < ELENB; k++) begin
-                  vrf_wbe_o[ELENB*idx+k +: 'd1] = k < vreg_counter_delta[i];
+                  vrf_wbe_o[ELENB*idx+k +: 'd1] = k < vreg_counter_delta[idx];
                 end
               end
             end
@@ -413,7 +422,13 @@ module spatz_vlsu
         buffer_push = vrf_rvalid_i;
 
         for (int unsigned i = 0; i < NR_MEM_PORTS; i++) begin
-          automatic logic [ELEN-1:0] data = vrf_rdata_i[32*i +: 32];
+          automatic logic [ELEN-1:0] data = vrf_rdata_i[ELEN*i +: ELEN];
+          for (int unsigned j = 0; j < NrIPUsPerMemPort; j++) begin
+            automatic int unsigned idx = i*NrIPUsPerMemPort + j;
+            if (vreg_counter_en[idx]) begin
+              data = vrf_rdata_i[ELEN*idx +: ELEN];
+            end
+          end
           unique case (spatz_req_q.rs1[1:0])
            2'b00: buffer_wdata[i] = data;
            2'b01: buffer_wdata[i] = {data[23:0], data[31:24]};
