@@ -7,7 +7,7 @@
 
 #include "vector_macros.h"
 
-#define AXI_DWIDTH 128
+#define AXI_DWIDTH 32
 
 static volatile uint8_t ALIGNED_I8[16] __attribute__((aligned(AXI_DWIDTH))) = {
     0xe0, 0xd3, 0x40, 0xd1, 0x84, 0x48, 0x89, 0x88,
@@ -40,7 +40,7 @@ void TEST_CASE2(void) {
 }
 
 void TEST_CASE3(void) {
-  VSET(15, e32, m1);
+  VSET(15, e32, m2);
   asm volatile("vle32.v v1, (%0)" ::"r"(&ALIGNED_I32[1]));
   VCMP_U32(3, v1, 0xf9aa71f0, 0xa11a9384, 0x99991348, 0x9fa831c7, 0x38197598,
            0x18931795, 0x81937598, 0x18747547, 0x3eeeeeee, 0x90139301,

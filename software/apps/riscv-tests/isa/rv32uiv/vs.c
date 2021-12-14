@@ -6,7 +6,7 @@
 
 #include "vector_macros.h"
 
-#define AXI_DWIDTH 128
+#define AXI_DWIDTH 32
 
 static volatile uint8_t ALIGNED_O8[16] __attribute__((aligned(AXI_DWIDTH))) = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -44,7 +44,7 @@ void TEST_CASE2(void) {
 }
 
 void TEST_CASE3(void) {
-  VSET(15, e32, m1);
+  VSET(15, e32, m2);
   VLOAD_32(v1, 0xe1356784, 0x13241139, 0x20862497, 0x9f872456, 0xe1356784,
            0x13241139, 0x20862497, 0x9f872456, 0xe1356784, 0x13241139,
            0x20862497, 0x9f872456, 0xe1356784, 0x13241139, 0x20862497);
