@@ -389,25 +389,27 @@ module spatz_vlsu
         vrf_we_o = &buffer_rvalid | (&(buffer_rvalid | diff_zero) & ~(|mem_operation_valid));
 
         for (int unsigned i = 0; i < NR_MEM_PORTS; i++) begin
-          automatic logic [ELEN-1:0] data = {NrIPUsPerMemPort{buffer_rdata[i]}};
+          automatic logic [ELEN-1:0] data = buffer_rdata[i];
           unique case (is_strided ? vreg_addr_offset : spatz_req_q.rs1[1:0])
            2'b00: data = data;
            2'b01: data = {data[7:0], data[31:8]};
            2'b10: data = {data[15:0], data[31:16]};
            2'b11: data = {data[23:0], data[31:24]};
           endcase
-          if (is_strided) begin
-            unique case (vreg_counter_value[i][1:0])
-             2'b00: data = data;
-             2'b01: data = {data[23:0], data[31:24]};
-             2'b10: data = {data[15:0], data[31:16]};
-             2'b11: data = {data[7:0], data[31:8]};
-            endcase
-          end
-          vrf_wdata_o[VregDataWidthPerMemPort*i +: VregDataWidthPerMemPort] = data;
 
           for (int unsigned j = 0; j < NrIPUsPerMemPort; j++) begin
             automatic int unsigned idx = i*NrIPUsPerMemPort + j;
+
+            if (is_strided) begin
+              unique case (vreg_counter_value[idx][1:0])
+               2'b00: data = data;
+               2'b01: data = {data[23:0], data[31:24]};
+               2'b10: data = {data[15:0], data[31:16]};
+               2'b11: data = {data[7:0], data[31:8]};
+              endcase
+            end
+            vrf_wdata_o[ELEN*idx +: ELEN] = data;
+
             if (vreg_counter_en[idx]) begin
               if (is_single_element_operation) begin
                 automatic logic [$clog2(ELENB)-1:0] shift = vreg_counter_value[idx][$clog2(ELENB)-1:0];
