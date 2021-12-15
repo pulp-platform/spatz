@@ -525,8 +525,11 @@ module spatz_vlsu
   // Assertions //
   ////////////////
 
-  if (NR_MEM_PORTS > $bits(vrf_wdata_o)/$bits(x_mem_result_i[0].rdata))
-    $error("[spatz_vlsu] There are too many spatz memory ports. Consider reducing NR_MEM_PORTS parameter.");
+  if (MemDataWidth != ELEN)
+    $error("[spatz_vlsu] The memory data width needs to be equal to %d.", ELEN);
+
+  if (NR_MEM_PORTS > N_IPU)
+    $error("[spatz_vlsu] The number of memory ports needs to be smaller or equal to the number of IPUs.");
 
   if (NR_MEM_PORTS != 2**$clog2(NR_MEM_PORTS))
     $error("[spatz_vlsu] The NR_MEM_PORTS parameter needs to be a power of two");
