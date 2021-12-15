@@ -34,7 +34,9 @@ module spatz
   input  x_mem_resp_t   [NR_MEM_PORTS-1:0] x_mem_resp_i,
   //X-Interface Memory Result
   input  logic          [NR_MEM_PORTS-1:0] x_mem_result_valid_i,
-  input  x_mem_result_t [NR_MEM_PORTS-1:0] x_mem_result_i
+  input  x_mem_result_t [NR_MEM_PORTS-1:0] x_mem_result_i,
+  // X-Interface Memory Finished
+  output logic x_mem_finished_o
 );
 
   ////////////////
@@ -183,12 +185,13 @@ module spatz
     .vrf_rdata_i      (vrf_rdata[3]),
     .vrf_rvalid_i     (vrf_rvalid[3]),
     // X-Interface Memory
-    .x_mem_valid_o        (x_mem_valid_o),
-    .x_mem_ready_i        (x_mem_ready_i),
-    .x_mem_req_o          (x_mem_req_o),
-    .x_mem_resp_i         (x_mem_resp_i),
+    .x_mem_valid_o       (x_mem_valid_o),
+    .x_mem_ready_i       (x_mem_ready_i),
+    .x_mem_req_o         (x_mem_req_o),
+    .x_mem_resp_i        (x_mem_resp_i),
     .x_mem_result_valid_i(x_mem_result_valid_i),
-    .x_mem_result_i       (x_mem_result_i)
+    .x_mem_result_i      (x_mem_result_i),
+    .x_mem_finished_o    (x_mem_finished_o)
   );
 
   //////////
