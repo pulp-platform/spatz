@@ -247,8 +247,8 @@ module spatz_vlsu
       if (NrIPUsPerMemPort == 'd1) begin
         vreg_counter_en[i] = (is_load & vrf_wvalid_i & vrf_we_o) | (~is_load & vrf_rvalid_i & vrf_re_o);
       end else begin
-        if (i == 'd0) begin
-          vreg_counter_en[i] = ((is_load & vrf_wvalid_i & vrf_we_o) | (~is_load & vrf_rvalid_i & vrf_re_o)) & ((vreg_counter_value[NrIPUsPerMemPort-1][$bits(vlen_t)-1:$clog2(ELENB)] == vreg_counter_value[0][$bits(vlen_t)-1:$clog2(ELENB)]) & (vreg_counter_value[1][$bits(vlen_t)-1:$clog2(ELENB)] == vreg_counter_value[0][$bits(vlen_t)-1:$clog2(ELENB)]));
+        if (i%NrIPUsPerMemPort == 'd0) begin
+          vreg_counter_en[i] = ((is_load & vrf_wvalid_i & vrf_we_o) | (~is_load & vrf_rvalid_i & vrf_re_o)) & ((vreg_counter_value[NrIPUsPerMemPort/NR_MEM_PORTS-1][$bits(vlen_t)-1:$clog2(ELENB)] == vreg_counter_value[i][$bits(vlen_t)-1:$clog2(ELENB)]) & (vreg_counter_value[i+1][$bits(vlen_t)-1:$clog2(ELENB)] == vreg_counter_value[i][$bits(vlen_t)-1:$clog2(ELENB)]));
         end else begin
           vreg_counter_en[i] = ((is_load & vrf_wvalid_i & vrf_we_o) | (~is_load & vrf_rvalid_i & vrf_re_o)) & (vreg_counter_value[i-1][$bits(vlen_t)-1:$clog2(ELENB)] != vreg_counter_value[i][$bits(vlen_t)-1:$clog2(ELENB)]);
         end
