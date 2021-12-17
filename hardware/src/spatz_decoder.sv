@@ -138,10 +138,10 @@ module spatz_decoder import spatz_pkg::*; import rvv_pkg::*; (
             spatz_req.op_cgf.keep_vl = setvl_rs1 == '0 && setvl_rd == '0;
           // Arithmetic instruction (except for masked and widening)
           end else begin
-            automatic int unsigned arith_s1 = decoder_req_i.instr[19:15];
-            automatic int unsigned arith_s2 = decoder_req_i.instr[24:20];
-            automatic int unsigned arith_d  = decoder_req_i.instr[11:7];
-            automatic int unsigned arith_vm = decoder_req_i.instr[25];
+            automatic logic [4:0] arith_s1 = decoder_req_i.instr[19:15];
+            automatic logic [4:0] arith_s2 = decoder_req_i.instr[24:20];
+            automatic logic [4:0] arith_d  = decoder_req_i.instr[11:7];
+            automatic bit         arith_vm = decoder_req_i.instr[25];
 
             spatz_req.op_arith.vm = arith_vm;
             spatz_req.use_vs2 = 1'b1;
@@ -157,7 +157,7 @@ module spatz_decoder import spatz_pkg::*; import rvv_pkg::*; (
                 spatz_req.vs1 = arith_s1;
               end
               OPIVI: begin
-                spatz_req.rs1 = elen_t'($signed(arith_s1));
+                spatz_req.rs1 = elen_t'(signed'(arith_s1));
               end
               OPIVX,
               OPMVX: begin
