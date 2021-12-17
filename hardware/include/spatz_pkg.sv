@@ -177,6 +177,11 @@ package spatz_pkg;
     // Instruction ID
     instr_id_t  id;
 
+    // Retiring registers
+    opreg_t vs2;
+    opreg_t vs1;
+    opreg_t vd;
+
     // WB
     logic       wb;
     logic [4:0] rd;
@@ -190,6 +195,9 @@ package spatz_pkg;
   typedef struct packed {
     // Instruction ID
     instr_id_t  id;
+
+    // Retiring registers
+    opreg_t vd;
 
     // Did the memory request trigger an exception
     logic exc;

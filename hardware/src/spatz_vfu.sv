@@ -104,6 +104,9 @@ module spatz_vfu import spatz_pkg::*; (
 
     if (last_group && group_commited) begin
       vfu_rsp_o.id    = spatz_req_q.id;
+      vfu_rsp_o.vs2   = spatz_req_q.vs2;
+      vfu_rsp_o.vs1   = spatz_req_q.vs1;
+      vfu_rsp_o.vd    = spatz_req_q.vd;
       vfu_rsp_valid_o = 1'b1;
     end
   end

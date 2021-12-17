@@ -104,9 +104,6 @@ module spatz_vlsu
 
   assign spatz_req_ready_o = vlsu_is_ready;
 
-  assign vlsu_rsp_valid_o = '0;
-  assign vlsu_rsp_o = '0;
-
   elen_t [NR_MEM_PORTS-1:0] buffer_wdata;
   id_t   [NR_MEM_PORTS-1:0] buffer_wid;
   logic  [NR_MEM_PORTS-1:0] buffer_push;
@@ -167,6 +164,18 @@ module spatz_vlsu
       endcase
     end else if (!is_vl_zero && vlsu_is_ready && !new_vlsu_request) begin
       spatz_req_d = '0;
+    end
+  end
+
+  // Respond to controller if we are finished executing
+  always_comb begin : vlsu_rsp
+    vlsu_rsp_valid_o = 1'b0;
+    vlsu_rsp_o       = '0;
+
+    if (vlsu_is_ready && spatz_req_q.vl != '0) begin
+      vlsu_rsp_o.id    = spatz_req_q.id;
+      vlsu_rsp_o.vd    = spatz_req_q.vd;
+      vlsu_rsp_valid_o = 1'b1;
     end
   end
 
