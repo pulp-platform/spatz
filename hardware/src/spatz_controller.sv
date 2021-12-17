@@ -8,9 +8,10 @@ module spatz_controller
   import spatz_pkg::*;
   import rvv_pkg::*;
 #(
-  parameter type x_issue_req_t  = logic,
-  parameter type x_issue_resp_t = logic,
-  parameter type x_result_t     = logic
+  parameter int unsigned NrVregfilePorts  = 1,
+  parameter type         x_issue_req_t    = logic,
+  parameter type         x_issue_resp_t   = logic,
+  parameter type         x_result_t       = logic
 ) (
   input  logic clk_i,
   input  logic rst_ni,
@@ -33,7 +34,11 @@ module spatz_controller
   // VLSU
   input  logic      vlsu_req_ready_i,
   input  logic      vlsu_rsp_valid_i,
-  input  vlsu_rsp_t vlsu_rsp_i
+  input  vlsu_rsp_t vlsu_rsp_i,
+  // Vregfile Scoreboarding
+  input  logic       [NrVregfilePorts-1:0] sb_enable_i,
+  output logic       [NrVregfilePorts-1:0] sb_enable_o,
+  input  vreg_addr_t [NrVregfilePorts-1:0] sb_addr_i
 );
 
   // Include FF
@@ -131,16 +136,6 @@ module spatz_controller
   end
   /* verilator lint_on LATCH */
 
-  ////////////////
-  // Scoreboard //
-  ////////////////
-
-  // Scoreboard keeping track of which execution unit is
-  // accessing which register.
-  // CON = None
-  //logic [NRVREG-1:0] sb_q, sb_d;
-  //`FF(sb_q, sb_d, '0)
-
   //////////////
   // Decoding //
   //////////////
@@ -199,21 +194,157 @@ module spatz_controller
     end
   end
 
+  ////////////////
+  // Scoreboard //
+  ////////////////
+
+  function automatic logic [$clog2(VELE*8)-1:0] vrf_element(vreg_addr_t addr, vlmul_e lmul);
+    unique case (lmul)
+      LMUL_F8,
+      LMUL_F4,
+      LMUL_F2,
+      LMUL_1: vrf_element = addr[$clog2(VELE)-1:0];
+      LMUL_2: vrf_element = addr[$clog2(VELE*2)-1:0];
+      LMUL_4: vrf_element = addr[$clog2(VELE*4)-1:0];
+      LMUL_8: vrf_element = addr[$clog2(VELE*8)-1:0];
+      default: vrf_element = '0;
+    endcase
+  endfunction
+
+  typedef struct packed {
+    logic valid;
+    logic [$clog2(NrVregfilePorts)-1:0] port;
+  } sb_metadata_t;
+
+  typedef struct packed {
+    logic valid;
+    logic [$clog2(VELE*8)-1:0] element;
+    logic deps_valid;
+    logic [$clog2(NrVregfilePorts)-1:0] deps;
+  } sb_port_metadata_t;
+
+  sb_metadata_t [NRVREG-1:0] sb_q, sb_d;
+  `FF(sb_q, sb_d, '0)
+
+  sb_port_metadata_t [NrVregfilePorts-1:0] sb_port_q, sb_port_d;
+  `FF(sb_port_q, sb_port_d, '0)
+
+  logic scoreboard_stall;
+
+  always_comb begin : score_board
+    sb_d  = sb_q;
+    sb_port_d = sb_port_q;
+
+    sb_enable_o = '0;
+
+    // Finished unit
+    if (vfu_rsp_valid_i) begin
+      sb_port_d[0].valid = 1'b0;
+      if (sb_q[vfu_rsp_i.vs2].valid && sb_q[vfu_rsp_i.vs2].port == 'd0) sb_d[vfu_rsp_i.vs2].valid = 1'b0;
+      sb_port_d[1].valid = 1'b0;
+      if (sb_q[vfu_rsp_i.vs1].valid && sb_q[vfu_rsp_i.vs1].port == 'd1) sb_d[vfu_rsp_i.vs1].valid = 1'b0;
+      sb_port_d[2].valid = 1'b0;
+      sb_port_d[5].valid = 1'b0;
+      if (sb_q[vfu_rsp_i.vd].valid && (sb_q[vfu_rsp_i.vd].port == 'd2 || sb_q[vfu_rsp_i.vd].port == 'd5)) sb_d[vfu_rsp_i.vd].valid = 1'b0;
+    end
+    if (vlsu_rsp_valid_i) begin
+      sb_port_d[3].valid = 1'b0;
+      sb_port_d[6].valid = 1'b0;
+      if (sb_q[vlsu_rsp_i.vd].valid && (sb_q[vlsu_rsp_i.vd].port == 'd3 || sb_q[vlsu_rsp_i.vd].port == 'd6)) sb_d[vlsu_rsp_i.vd].valid = 1'b0;
+    end
+
+    // New instruction check
+    if (spatz_req_valid) begin
+      if (spatz_req.ex_unit == VFU) begin
+        sb_port_d[0].valid = spatz_req.use_vs2;
+        sb_port_d[0].element = '0;
+        sb_port_d[0].deps_valid = sb_q[spatz_req.vs2].valid;
+        sb_port_d[0].deps = sb_q[spatz_req.vs2].port;
+
+        sb_d[spatz_req.vs2].valid = spatz_req.use_vs2;
+        if (spatz_req.use_vs2) sb_d[spatz_req.vs2].port = 'd0;
+
+        sb_port_d[1].valid = spatz_req.use_vs1;
+        sb_port_d[1].element = '0;
+        sb_port_d[1].deps_valid = sb_q[spatz_req.vs1].valid;
+        sb_port_d[1].deps = sb_q[spatz_req.vs1].port;
+
+        sb_d[spatz_req.vs1].valid = spatz_req.use_vs1;
+        if (spatz_req.use_vs1) sb_d[spatz_req.vs1].port = 'd1;
+
+        sb_port_d[2].valid = spatz_req.use_vd & spatz_req.vd_is_src;
+        sb_port_d[2].element = '0;
+        sb_port_d[2].deps_valid = sb_q[spatz_req.vd].valid;
+        sb_port_d[2].deps = sb_q[spatz_req.vd].port;
+
+        sb_d[spatz_req.vd].valid = spatz_req.use_vd & spatz_req.vd_is_src;
+        if (spatz_req.use_vd & spatz_req.vd_is_src) sb_d[spatz_req.vd].port = 'd2;
+
+        sb_port_d[5].valid = spatz_req.use_vd;
+        sb_port_d[5].element = '0;
+        sb_port_d[5].deps_valid = sb_q[spatz_req.vd].valid;
+        sb_port_d[5].deps = sb_q[spatz_req.vd].port;
+
+        sb_d[spatz_req.vd].valid = spatz_req.use_vd;
+        if (spatz_req.use_vd) sb_d[spatz_req.vd].port = 'd5;
+      end else if (spatz_req.ex_unit == LSU) begin
+        sb_port_d[3].valid = spatz_req.use_vd & spatz_req.vd_is_src;
+        sb_port_d[3].element = '0;
+        sb_port_d[3].deps_valid = sb_q[spatz_req.vd].valid;
+        sb_port_d[3].deps = sb_q[spatz_req.vd].port;
+
+        sb_d[spatz_req.vd].valid = spatz_req.use_vd & spatz_req.vd_is_src;
+        if (spatz_req.use_vd & spatz_req.vd_is_src) sb_d[spatz_req.vd].port = 'd3;
+
+        sb_port_d[6].valid = spatz_req.use_vd & ~spatz_req.vd_is_src;
+        sb_port_d[6].element = '0;
+        sb_port_d[6].deps_valid = sb_q[spatz_req.vd].valid;
+        sb_port_d[6].deps = sb_q[spatz_req.vd].port;
+
+        sb_d[spatz_req.vd].valid = spatz_req.use_vd & ~spatz_req.vd_is_src;
+        if (spatz_req.use_vd & ~spatz_req.vd_is_src) sb_d[spatz_req.vd].port = 'd6;
+      end else if (spatz_req.ex_unit == SLD) begin
+        sb_port_d[4].valid = spatz_req.use_vs2;
+        sb_port_d[4].element = '0;
+        sb_port_d[4].deps_valid = sb_q[spatz_req.vs2].valid;
+        sb_port_d[4].deps = sb_q[spatz_req.vs2].port;
+
+        sb_d[spatz_req.vs2].valid = spatz_req.use_vs2;
+        if (spatz_req.use_vs2) sb_d[spatz_req.vs2].port = 'd4;
+
+        sb_port_d[7].valid = spatz_req.use_vd;
+        sb_port_d[7].element = '0;
+        sb_port_d[7].deps_valid = sb_q[spatz_req.vd].valid;
+        sb_port_d[7].deps = sb_q[spatz_req.vd].port;
+
+        sb_d[spatz_req.vd].valid = spatz_req.use_vd;
+        if (spatz_req.use_vd) sb_d[spatz_req.vd].port = 'd7;
+      end
+    end
+
+    for (int unsigned port = 0; port < NrVregfilePorts; port++) begin
+      automatic int unsigned element = vrf_element(sb_addr_i[port], vtype_q.vlmul);
+      automatic sb_port_metadata_t deps = sb_port_q[sb_port_q[port].deps];
+
+      sb_port_d[port].element = element;
+      if (sb_enable_i[port] && ((sb_port_q[port].deps_valid && ((deps.valid && element != deps.element) || !deps.valid)) || !sb_port_q[port].deps_valid)) begin
+        sb_enable_o[port] = 1'b1;
+      end
+    end
+  end
+
   /////////////
   // Issuing //
   /////////////
 
   logic retire_csr;
 
-  //logic operands_ready, destination_ready;
-  //assign operands_ready = (decoder_rsp_valid | ~spatz_req_buffer_empty_q) & (spatz_req.use_vs1 & ~sb_q[spatz_req.vs1]);
-  //assign destination_ready = (decoder_rsp_valid | ~spatz_req_buffer_empty_q) & (~spatz_req.use_vd | (spatz_req.use_vd & ~sb_q[spatz_req.vd]));
-
-  logic stall, vfu_stall, vlsu_stall, vsld_stall;
-  assign stall = vfu_stall | vlsu_stall | vsld_stall;
+  logic stall, vfu_stall, vlsu_stall, vsld_stall, csr_stall;
+  assign stall = vfu_stall | vlsu_stall | vsld_stall | csr_stall;
   assign vfu_stall  = ~vfu_req_ready_i  & (spatz_req.ex_unit == VFU) & (decoder_rsp_valid | ~spatz_req_buffer_empty_q);
   assign vlsu_stall = ~vlsu_req_ready_i & (spatz_req.ex_unit == LSU) & (decoder_rsp_valid | ~spatz_req_buffer_empty_q);
   assign vsld_stall = 1'b0;
+  assign csr_stall  = (~vfu_req_ready_i | ~vlsu_req_ready_i) & (spatz_req.ex_unit == CON) & (spatz_req.vtype.vlmul != vtype_q.vlmul) & (decoder_rsp_valid | ~spatz_req_buffer_empty_q);
 
   always_comb begin : proc_issue
     retire_csr = 1'b0;

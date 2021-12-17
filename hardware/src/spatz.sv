@@ -62,38 +62,6 @@ module spatz
   logic       vlsu_rsp_valid;
   vlsu_rsp_t  vlsu_rsp;
 
-  ////////////////
-  // Controller //
-  ////////////////
-
-  spatz_controller #(
-    .x_issue_req_t (x_issue_req_t),
-    .x_issue_resp_t(x_issue_resp_t),
-    .x_result_t    (x_result_t)
-  ) i_controller (
-    .clk_i            (clk_i),
-    .rst_ni           (rst_ni),
-    // X-intf
-    .x_issue_valid_i  (x_issue_valid_i),
-    .x_issue_ready_o  (x_issue_ready_o),
-    .x_issue_req_i    (x_issue_req_i),
-    .x_issue_resp_o   (x_issue_resp_o),
-    .x_result_valid_o (x_result_valid_o),
-    .x_result_ready_i (x_result_ready_i),
-    .x_result_o       (x_result_o),
-    // Spatz req
-    .spatz_req_valid_o(spatz_req_valid),
-    .spatz_req_o      (spatz_req),
-    // VFU
-    .vfu_req_ready_i  (vfu_req_ready),
-    .vfu_rsp_valid_i  (vfu_rsp_valid),
-    .vfu_rsp_i        (vfu_rsp),
-    // VFU
-    .vlsu_req_ready_i  (vlsu_req_ready),
-    .vlsu_rsp_valid_i  (vlsu_rsp_valid),
-    .vlsu_rsp_i        (vlsu_rsp)
-  );
-
   /////////
   // VRF //
   /////////
@@ -129,6 +97,46 @@ module spatz
     .rvalid_o(vrf_rvalid)
   );
 
+  ////////////////
+  // Controller //
+  ////////////////
+
+  logic [NrReadPorts-1:0]  sb_re;
+  logic [NrWritePorts-1:0] sb_we;
+
+  spatz_controller #(
+    .NrVregfilePorts (NrReadPorts+NrWritePorts),
+    .x_issue_req_t   (x_issue_req_t),
+    .x_issue_resp_t  (x_issue_resp_t),
+    .x_result_t      (x_result_t)
+  ) i_controller (
+    .clk_i            (clk_i),
+    .rst_ni           (rst_ni),
+    // X-intf
+    .x_issue_valid_i  (x_issue_valid_i),
+    .x_issue_ready_o  (x_issue_ready_o),
+    .x_issue_req_i    (x_issue_req_i),
+    .x_issue_resp_o   (x_issue_resp_o),
+    .x_result_valid_o (x_result_valid_o),
+    .x_result_ready_i (x_result_ready_i),
+    .x_result_o       (x_result_o),
+    // Spatz req
+    .spatz_req_valid_o(spatz_req_valid),
+    .spatz_req_o      (spatz_req),
+    // VFU
+    .vfu_req_ready_i  (vfu_req_ready),
+    .vfu_rsp_valid_i  (vfu_rsp_valid),
+    .vfu_rsp_i        (vfu_rsp),
+    // VFU
+    .vlsu_req_ready_i (vlsu_req_ready),
+    .vlsu_rsp_valid_i (vlsu_rsp_valid),
+    .vlsu_rsp_i       (vlsu_rsp),
+    // Scoreboard check
+    .sb_addr_i        ({vrf_waddr, vrf_raddr}),
+    .sb_enable_i      ({sb_we, sb_re}),
+    .sb_enable_o      ({vrf_we, vrf_re})
+  );
+
   /////////
   // VFU //
   /////////
@@ -146,11 +154,11 @@ module spatz
     // VRF
     .vrf_waddr_o      (vrf_waddr[0]),
     .vrf_wdata_o      (vrf_wdata[0]),
-    .vrf_we_o         (vrf_we[0]),
+    .vrf_we_o         (sb_we[0]),
     .vrf_wbe_o        (vrf_wbe[0]),
     .vrf_wvalid_i     (vrf_wvalid[0]),
     .vrf_raddr_o      (vrf_raddr[2:0]),
-    .vrf_re_o         (vrf_re[2:0]),
+    .vrf_re_o         (sb_re[2:0]),
     .vrf_rdata_i      (vrf_rdata[2:0]),
     .vrf_rvalid_i     (vrf_rvalid[2:0])
   );
@@ -177,11 +185,11 @@ module spatz
     // VRF
     .vrf_waddr_o      (vrf_waddr[1]),
     .vrf_wdata_o      (vrf_wdata[1]),
-    .vrf_we_o         (vrf_we[1]),
+    .vrf_we_o         (sb_we[1]),
     .vrf_wbe_o        (vrf_wbe[1]),
     .vrf_wvalid_i     (vrf_wvalid[1]),
     .vrf_raddr_o      (vrf_raddr[3]),
-    .vrf_re_o         (vrf_re[3]),
+    .vrf_re_o         (sb_re[3]),
     .vrf_rdata_i      (vrf_rdata[3]),
     .vrf_rvalid_i     (vrf_rvalid[3]),
     // X-Interface Memory
@@ -200,10 +208,10 @@ module spatz
 
   assign vrf_waddr[2] = '0;
   assign vrf_wdata[2] = '0;
-  assign vrf_we[2]    = '0;
+  assign sb_we[2]    = '0;
   assign vrf_wbe[2]   = '0;
   assign vrf_raddr[4] = '0;
-  assign vrf_re[4]    = '1;
+  assign sb_re[4]    = '0;
 
   ////////////////
   // Assertions //
