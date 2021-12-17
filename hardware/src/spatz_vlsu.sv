@@ -462,7 +462,9 @@ module spatz_vlsu
             end
           end
 
-          buffer_push[i] = vrf_rvalid_i;
+          buffer_wid[i]    = buffer_id[i];
+          buffer_req_id[i] = vrf_rvalid_i;
+          buffer_push[i]   = vrf_rvalid_i;
         end
       end
 
