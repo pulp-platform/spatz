@@ -24,9 +24,9 @@
 
 // Define Matrix dimensions:
 // C = AB with A=[MxN], B=[NxP], C=[MxP]
-#define M 128
-#define N 128
-#define P 128
+#define M 64
+#define N 64
+#define P 64
 // Specify how the matrices A and B should be initialized
 // The entries will follow this format:
 // a(i,j) = A_a*i + A_b*j + A_c
