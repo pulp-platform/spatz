@@ -1,8 +1,11 @@
 // Copyright 2021 ETH Zurich and University of Bologna.
 // Licensed under the Apache License, Version 2.0, see LICENSE for details.
 // SPDX-License-Identifier: Apache-2.0
-
+//
 // Author: Domenic Wüthrich, ETH Zurich
+//
+// The IPU distributes the operands to the four SIMD lanes and afterwards
+// collects the results.
 
 module spatz_ipu import spatz_pkg::*; (
   input  logic clk_i,
@@ -23,9 +26,11 @@ module spatz_ipu import spatz_pkg::*; (
   // Signals //
   /////////////
 
+  // Is the operation signed
   logic is_signed;
   assign is_signed = operation_i inside {VMIN, VMAX, VMULH};
 
+  // SIMD input signals
   typedef struct packed {
     // Operands in
     logic [1:0][2:0][7:0] ew8_op;
@@ -37,6 +42,7 @@ module spatz_ipu import spatz_pkg::*; (
     logic       ew32_carry;
   } simd_lanes_inp_t;
 
+  // SIMD output signals
   typedef struct packed {
     // Results
     logic [1:0][7:0] ew8_res;
@@ -51,7 +57,8 @@ module spatz_ipu import spatz_pkg::*; (
   // Distributor //
   /////////////////
 
-  always_comb begin : proc_distributor
+  // Distribute operands to the SIMD lanes
+  always_comb begin : distributor
     lane_signal_inp = '0;
 
     if (sew_i == rvv_pkg::EW_8) begin
@@ -109,7 +116,8 @@ module spatz_ipu import spatz_pkg::*; (
   // Collector //
   ///////////////
 
-  always_comb begin : proc_collector
+  // Collect results from the SIMD lanes
+  always_comb begin : collector
     if (sew_i == rvv_pkg::EW_8) begin
       result_o = {lane_signal_res.ew32_res[7:0], lane_signal_res.ew16_res[7:0], lane_signal_res.ew8_res[1], lane_signal_res.ew8_res[0]};
     end else if (sew_i == rvv_pkg::EW_16) begin

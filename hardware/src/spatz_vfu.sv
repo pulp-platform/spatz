@@ -1,8 +1,12 @@
 // Copyright 2021 ETH Zurich and University of Bologna.
 // Licensed under the Apache License, Version 2.0, see LICENSE for details.
 // SPDX-License-Identifier: Apache-2.0
-
+//
 // Author: Domenic Wüthrich, ETH Zurich
+//
+// The Vector Functional Unit (VFU) executes all arithmetic and logical
+// vector instructions. It can be configured with a parameterizable amount
+// of IPUs that work in parallel.
 
 module spatz_vfu import spatz_pkg::*; (
   input  logic clk_i,
@@ -47,6 +51,7 @@ module spatz_vfu import spatz_pkg::*; (
   logic new_request;
   assign new_request = spatz_req_valid_i && vfu_is_ready && (spatz_req_i.ex_unit == VFU);
 
+  // IPU operands and result signals
   logic [N_IPU*ELEN-1:0]  operand1, operand2, operand3;
   logic [N_IPU*ELENB-1:0] carry;
   logic [N_IPU*ELENB-1:0] result_be;
@@ -62,12 +67,14 @@ module spatz_vfu import spatz_pkg::*; (
   // Have we reached the last group to calculate
   logic last_group;
   assign last_group = spatz_req_q.vl <= n_group_elem;
+  // Had the group been commited back to the register file
   logic group_commited;
   assign group_commited = operands_ready && result_written;
 
   // Is vl and vstart zero
   logic  vl_is_zero;
   assign vl_is_zero = spatz_req_q.vl == 0;
+  // Is the vstart zero
   logic  vstart_is_zero;
   assign vstart_is_zero = spatz_req_q.vstart == 0;
 
@@ -97,7 +104,7 @@ module spatz_vfu import spatz_pkg::*; (
     end
   end : proc_state_handler
 
-  // Respond to controller if we are finished executing
+  // Respond to controller when we are finished executing
   always_comb begin : proc_vfu_rsp
     vfu_rsp_valid_o = 1'b0;
     vfu_rsp_o       = '0;
@@ -115,18 +122,13 @@ module spatz_vfu import spatz_pkg::*; (
   // Operand Requester //
   ///////////////////////
 
-  vreg_addr_t [2:0] vreg_addr_q, vreg_addr_d;
   vreg_be_t         vreg_wbe;
   logic             vreg_we;
   logic [2:0]       vreg_r_req;
 
-  always_ff @(posedge clk_i or negedge rst_ni) begin : proc_vreg_addr_q
-    if(~rst_ni) begin
-      vreg_addr_q <= 0;
-    end else begin
-      vreg_addr_q <= vreg_addr_d;
-    end
-  end
+  // Address register
+  vreg_addr_t [2:0] vreg_addr_q, vreg_addr_d;
+  `FF(vreg_addr_q, vreg_addr_d, '0)
 
   // Calculate new vector register address
   always_comb begin : proc_vreg_addr

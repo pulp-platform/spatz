@@ -1,8 +1,11 @@
 // Copyright 2021 ETH Zurich and University of Bologna.
 // Licensed under the Apache License, Version 2.0, see LICENSE for details.
 // SPDX-License-Identifier: Apache-2.0
-
+//
 // Author: Domenic Wüthrich, ETH Zurich
+//
+// The SIMD lane calculates all simd operations given for a give distinct
+// element width.
 
 module spatz_simd_lane import spatz_pkg::*; #(
   parameter int unsigned Width = 8
@@ -34,14 +37,14 @@ module spatz_simd_lane import spatz_pkg::*; #(
                        $signed({mult_op2[Width-1] & is_signed_i, mult_op2});
 
   // Select multiplier operands
-  always_comb begin : proc_mult_operands
+  always_comb begin : mult_operands
     mult_op1 = op_s1_i;
     mult_op2 = op_s2_i;
     if ((operation_i == VMADD) || (operation_i == VNMSUB)) begin
       mult_op1 = op_s1_i;
       mult_op2 = op_d_i;
     end
-  end // proc_mult_operands
+  end // mult_operands
 
   ////////////
   // Result //
@@ -54,7 +57,7 @@ module spatz_simd_lane import spatz_pkg::*; #(
   logic [Width-1:0] arith_op2; // Minuend
 
   // Select arithmetic operands
-  always_comb begin : proc_arith_op
+  always_comb begin : arith_op
     unique case (operation_i)
       VMACC,
       VNMSAC: begin
@@ -75,13 +78,13 @@ module spatz_simd_lane import spatz_pkg::*; #(
         arith_op2 = op_s2_i;
       end
     endcase // operation_i
-  end // proc_arith_op
+  end // arith_op
 
   assign adder_result      = $signed(arith_op2) + $signed(arith_op1) + carry_i;
   assign subtractor_result = $signed(arith_op2) - $signed(arith_op1) - carry_i;
 
   // Calculate arithmetic and logics and select correct result
-  always_comb begin : proc_simd
+  always_comb begin : simd
     simd_result = '0;
     unique case (operation_i)
       VADD, VMACC, VMADD, VADC: simd_result = adder_result[Width-1:0];
@@ -108,7 +111,7 @@ module spatz_simd_lane import spatz_pkg::*; #(
       VMV: simd_result = op_s1_i;
       default simd_result = '0;
     endcase // operation_i
-  end // proc_simd
+  end // simd
 
   assign result_o = simd_result;
 

@@ -1,8 +1,10 @@
 // Copyright 2021 ETH Zurich and University of Bologna.
 // Licensed under the Apache License, Version 2.0, see LICENSE for details.
 // SPDX-License-Identifier: Apache-2.0
-
+//
 // Author: Domenic Wüthrich, ETH Zurich
+//
+// The register file stores all vectors.
 
 module spatz_vrf import spatz_pkg::*; #(
   parameter int unsigned NR_READ_PORTS  = 5,
@@ -45,6 +47,7 @@ module spatz_vrf import spatz_pkg::*; #(
   // Functions //
   ///////////////
 
+  // Calculate the register from the vector address
   function automatic vregfile_addr_t gen_vreg_addr (vreg_addr_t vaddr);
     if (NrElemPerBank == 'd1) begin
       gen_vreg_addr = vaddr[$bits(vreg_addr_t)-1:$bits(vreg_addr_t)-$clog2(NRVREG)];
@@ -78,6 +81,8 @@ module spatz_vrf import spatz_pkg::*; #(
     wbe = '0;
     wvalid_o = '0;
 
+    // For each bank, we have a priority based access scheme. First priority always has the VFU,
+    // second priority has the LSU, and third priority had the slide unit.
     for (int unsigned i = 0; i < NrBanks; i++) begin
       // Bank write port 0 - Priority: vd (0) -> lsu (1) -> sld (2)
       if (we_i[0] && waddr_i[0][$bits(vreg_addr_t)-$clog2(NRVREG)-1:$clog2(NrElemPerBank)] == i) begin
@@ -111,6 +116,10 @@ module spatz_vrf import spatz_pkg::*; #(
     rvalid_o = '0;
     rdata_o = '0;
 
+    // For each port or each bank we have a priority based access scheme.
+    // Port zero can only be accessed by the VFU (vs2). Port one can be accessed by
+    // the VFU (vs1) and then by the slide unit. Port two can be accessed first by the
+    // VFU (vd), then by the LSU, and finally by the slide unit.
     for (int unsigned i = 0; i < NrBanks; i++) begin
       // Bank read port 0 - Priority: vs2 (0)
       if (re_i[0] && raddr_i[0][$bits(vreg_addr_t)-$clog2(NRVREG)-1:$clog2(NrElemPerBank)] == i) begin
@@ -229,6 +238,7 @@ module vregfile #(
   logic [NR_WRITE_PORTS-1:0][NUM_BYTES_PER_ELEM-1:0][NUM_BYTES_PER_ELEM_SIZE-1:0]       wdata_q;
   logic [NR_REGS-1:0][NUM_ELEM_PER_REG-1:0][NUM_BYTES_PER_ELEM-1:0][NR_WRITE_PORTS-1:0] waddr_onehot;
 
+  // Main vregfile clock gate
   tc_clk_gating i_regfile_cg (
     .clk_i    ( clk_i ),
     .en_i     ( |we_i ),
@@ -236,13 +246,14 @@ module vregfile #(
     .clk_o    ( clk   )
   );
 
+  // Sample Input Data
   for (genvar i = 0; i < NR_WRITE_PORTS; i++) begin
-    // Sample Input Data
     always_ff @(posedge clk) begin
       wdata_q[i] <= wdata_i[i];
     end
   end
 
+  // Create latch clock signal
   for (genvar i = 0; i < NR_WRITE_PORTS; i++) begin
     // Select which destination bytes to write into
     for (genvar j = 0; j < NR_REGS; j++) begin
@@ -261,6 +272,7 @@ module vregfile #(
     end
   end
 
+  // Store new data to memory
   for (genvar i = 0; i < NR_REGS; i++) begin
     for (genvar j = 0; j < NUM_ELEM_PER_REG; j++) begin
       for (genvar k = 0; k < NUM_BYTES_PER_ELEM; k++) begin
@@ -285,6 +297,7 @@ module vregfile #(
     end
   end
 
+  // Read data from memory
   for (genvar i = 0; i < NR_READ_PORTS; i++) begin
     if (NUM_ELEM_PER_REG == 'd1) begin
       assign rdata_o[i] = mem[raddr_i[i]];

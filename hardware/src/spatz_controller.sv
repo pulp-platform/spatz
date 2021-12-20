@@ -1,8 +1,12 @@
 // Copyright 2021 ETH Zurich and University of Bologna.
 // Licensed under the Apache License, Version 2.0, see LICENSE for details.
 // SPDX-License-Identifier: Apache-2.0
-
+//
 // Author: Domenic Wüthrich, ETH Zurich
+//
+// The controller contains all of the CSR registers, the instruction decoder,
+// the operation issuer, the register scoreboard, and the result write back to
+// the main core.
 
 module spatz_controller
   import spatz_pkg::*;
@@ -77,13 +81,13 @@ module spatz_controller
     vtype_d  = vtype_q;
 
     if (spatz_req_valid) begin
-
-      // Reset vstart to zero
+      // Reset vstart to zero if we have a new non CSR operation
       if (spatz_req.op_cgf.reset_vstart) begin
         vstart_d = '0;
       end
 
-      // Set new vstart when written over vcsrs
+      // Set new vstart if we have a VCSR instruction
+      // that accesses the vstart register.
       if (spatz_req.op == VCSR) begin
         if (spatz_req.op_cgf.write_vstart) begin
           vstart_d = vlen_t'(spatz_req.rs1);
@@ -94,6 +98,7 @@ module spatz_controller
         end
       end
 
+      // Change vtype and vl if we have a config instruction
       if (spatz_req.op == VCFG) begin
         // Check if vtype is valid
         if ((vtype_d.vsew > EW_32) || (vtype_d.vlmul == LMUL_RES) || (vtype_d.vlmul == LMUL_F8) || (signed'(vtype_d.vlmul) + signed'($clog2(ELENB)) < signed'(vtype_d.vsew))) begin
@@ -198,6 +203,7 @@ module spatz_controller
   // Scoreboard //
   ////////////////
 
+  // Extract element id from vrf address (is dependent on lmul)
   function automatic logic [$clog2(VELE*8)-1:0] vrf_element(vreg_addr_t addr, vlmul_e lmul);
     unique case (lmul)
       LMUL_F8,
@@ -211,11 +217,13 @@ module spatz_controller
     endcase
   endfunction
 
+  // Scoreboard metadata
   typedef struct packed {
     logic valid;
     logic [$clog2(NrVregfilePorts)-1:0] port;
   } sb_metadata_t;
 
+  // Port scoreboard metadata
   typedef struct packed {
     logic valid;
     logic [$clog2(VELE*8)-1:0] element;
@@ -223,13 +231,15 @@ module spatz_controller
     logic [$clog2(NrVregfilePorts)-1:0] deps;
   } sb_port_metadata_t;
 
+  // Register file scoreboard. Keeps track which vector is currently being
+  // accessed by a vrf port of a unit (last port that has accessed the vector).
   sb_metadata_t [NRVREG-1:0] sb_q, sb_d;
   `FF(sb_q, sb_d, '0)
 
+  // Port scoreboard. Keeps track of which element is currently being accessed,
+  // and if the port access is dependent on another one (read and write).
   sb_port_metadata_t [NrVregfilePorts-1:0] sb_port_q, sb_port_d;
   `FF(sb_port_q, sb_port_d, '0)
-
-  logic scoreboard_stall;
 
   always_comb begin : score_board
     sb_d  = sb_q;
@@ -237,25 +247,35 @@ module spatz_controller
 
     sb_enable_o = '0;
 
-    // Finished unit
+    // A unit has finished its vrf access. Set the port scoreboard to invalid,
+    // and if the vrf scoreboard still has the port listed as last accessed, set it
+    // to invalid as well.
     if (vfu_rsp_valid_i) begin
+      // VS2
       sb_port_d[0].valid = 1'b0;
       if (sb_q[vfu_rsp_i.vs2].valid && sb_q[vfu_rsp_i.vs2].port == 'd0) sb_d[vfu_rsp_i.vs2].valid = 1'b0;
+      // VS1
       sb_port_d[1].valid = 1'b0;
       if (sb_q[vfu_rsp_i.vs1].valid && sb_q[vfu_rsp_i.vs1].port == 'd1) sb_d[vfu_rsp_i.vs1].valid = 1'b0;
+      // VD (read and write)
       sb_port_d[2].valid = 1'b0;
       sb_port_d[5].valid = 1'b0;
       if (sb_q[vfu_rsp_i.vd].valid && (sb_q[vfu_rsp_i.vd].port == 'd2 || sb_q[vfu_rsp_i.vd].port == 'd5)) sb_d[vfu_rsp_i.vd].valid = 1'b0;
     end
     if (vlsu_rsp_valid_i) begin
+      // VD (read and write)
       sb_port_d[3].valid = 1'b0;
       sb_port_d[6].valid = 1'b0;
       if (sb_q[vlsu_rsp_i.vd].valid && (sb_q[vlsu_rsp_i.vd].port == 'd3 || sb_q[vlsu_rsp_i.vd].port == 'd6)) sb_d[vlsu_rsp_i.vd].valid = 1'b0;
     end
 
-    // New instruction check
+    // Initialize the scoreboard metadata if we have a new instruction issued.
+    // Set the ports of the unit to valid if they are being used, reset the currently
+    // accessed element to zero, and check if the port has a dependency. If the port is
+    // used, then not this down in the vrf scoreboard as well.
     if (spatz_req_valid) begin
       if (spatz_req.ex_unit == VFU) begin
+        // VS2
         sb_port_d[0].valid = spatz_req.use_vs2;
         sb_port_d[0].element = '0;
         sb_port_d[0].deps_valid = sb_q[spatz_req.vs2].valid;
@@ -264,6 +284,7 @@ module spatz_controller
         sb_d[spatz_req.vs2].valid = spatz_req.use_vs2;
         if (spatz_req.use_vs2) sb_d[spatz_req.vs2].port = 'd0;
 
+        // VS1
         sb_port_d[1].valid = spatz_req.use_vs1;
         sb_port_d[1].element = '0;
         sb_port_d[1].deps_valid = sb_q[spatz_req.vs1].valid;
@@ -272,6 +293,7 @@ module spatz_controller
         sb_d[spatz_req.vs1].valid = spatz_req.use_vs1;
         if (spatz_req.use_vs1) sb_d[spatz_req.vs1].port = 'd1;
 
+        // VD (read)
         sb_port_d[2].valid = spatz_req.use_vd & spatz_req.vd_is_src;
         sb_port_d[2].element = '0;
         sb_port_d[2].deps_valid = sb_q[spatz_req.vd].valid;
@@ -280,6 +302,7 @@ module spatz_controller
         sb_d[spatz_req.vd].valid = spatz_req.use_vd & spatz_req.vd_is_src;
         if (spatz_req.use_vd & spatz_req.vd_is_src) sb_d[spatz_req.vd].port = 'd2;
 
+        // VD (write)
         sb_port_d[5].valid = spatz_req.use_vd;
         sb_port_d[5].element = '0;
         sb_port_d[5].deps_valid = sb_q[spatz_req.vd].valid;
@@ -288,6 +311,7 @@ module spatz_controller
         sb_d[spatz_req.vd].valid = spatz_req.use_vd;
         if (spatz_req.use_vd) sb_d[spatz_req.vd].port = 'd5;
       end else if (spatz_req.ex_unit == LSU) begin
+        // VD (read)
         sb_port_d[3].valid = spatz_req.use_vd & spatz_req.vd_is_src;
         sb_port_d[3].element = '0;
         sb_port_d[3].deps_valid = sb_q[spatz_req.vd].valid;
@@ -296,6 +320,7 @@ module spatz_controller
         sb_d[spatz_req.vd].valid = spatz_req.use_vd & spatz_req.vd_is_src;
         if (spatz_req.use_vd & spatz_req.vd_is_src) sb_d[spatz_req.vd].port = 'd3;
 
+        // VD (write)
         sb_port_d[6].valid = spatz_req.use_vd & ~spatz_req.vd_is_src;
         sb_port_d[6].element = '0;
         sb_port_d[6].deps_valid = sb_q[spatz_req.vd].valid;
@@ -304,6 +329,7 @@ module spatz_controller
         sb_d[spatz_req.vd].valid = spatz_req.use_vd & ~spatz_req.vd_is_src;
         if (spatz_req.use_vd & ~spatz_req.vd_is_src) sb_d[spatz_req.vd].port = 'd6;
       end else if (spatz_req.ex_unit == SLD) begin
+        // VS2
         sb_port_d[4].valid = spatz_req.use_vs2;
         sb_port_d[4].element = '0;
         sb_port_d[4].deps_valid = sb_q[spatz_req.vs2].valid;
@@ -312,6 +338,7 @@ module spatz_controller
         sb_d[spatz_req.vs2].valid = spatz_req.use_vs2;
         if (spatz_req.use_vs2) sb_d[spatz_req.vs2].port = 'd4;
 
+        // VD (write)
         sb_port_d[7].valid = spatz_req.use_vd;
         sb_port_d[7].element = '0;
         sb_port_d[7].deps_valid = sb_q[spatz_req.vd].valid;
@@ -322,13 +349,22 @@ module spatz_controller
       end
     end
 
+    // For every port, update the element that is currently being accessed.
+    // If the desired element if lower than the one of the dependency, then
+    // grant access to the register file.
     for (int unsigned port = 0; port < NrVregfilePorts; port++) begin
       automatic int unsigned element = vrf_element(sb_addr_i[port], vtype_q.vlmul);
       automatic sb_port_metadata_t deps = sb_port_q[sb_port_q[port].deps];
 
-      sb_port_d[port].element = element;
-      if (sb_enable_i[port] && ((sb_port_q[port].deps_valid && ((deps.valid && element != deps.element) || !deps.valid)) || !sb_port_q[port].deps_valid)) begin
-        sb_enable_o[port] = 1'b1;
+      if (sb_enable_i[port]) begin
+        // Update id of accessed element
+        sb_port_d[port].element = element;
+
+        // Check if we have a dependency, and if so if we are accessing an element that has already been accessed by it.
+        if ((sb_port_q[port].deps_valid && ((deps.valid && element != deps.element) || !deps.valid)) || !sb_port_q[port].deps_valid) begin
+          // Grant port access to register file
+          sb_enable_o[port] = 1'b1;
+        end
       end
     end
   end
@@ -337,8 +373,13 @@ module spatz_controller
   // Issuing //
   /////////////
 
+  // Retire CSR instruction and write back result to main core.
   logic retire_csr;
 
+  // We stall issuing a new instruction if the corresponding execution unit is
+  // not ready yet, or we have a change in LMUL, for which we need to let all the
+  // units finish first before scheduling a new operation (to avoid running into
+  // issues with the socreboard).
   logic stall, vfu_stall, vlsu_stall, vsld_stall, csr_stall;
   assign stall = vfu_stall | vlsu_stall | vsld_stall | csr_stall;
   assign vfu_stall  = ~vfu_req_ready_i  & (spatz_req.ex_unit == VFU) & (decoder_rsp_valid | ~spatz_req_buffer_empty_q);
@@ -346,9 +387,11 @@ module spatz_controller
   assign vsld_stall = 1'b0;
   assign csr_stall  = (~vfu_req_ready_i | ~vlsu_req_ready_i) & (spatz_req.ex_unit == CON) & (spatz_req.vtype.vlmul != vtype_q.vlmul) & (decoder_rsp_valid | ~spatz_req_buffer_empty_q);
 
-  always_comb begin : proc_issue
+  // Issue not operation to execution units
+  always_comb begin : ex_issue
     retire_csr = 1'b0;
     spatz_ready_d = spatz_ready_q;
+    // If the request buffer is not empty, issue its contents for the next operation
     spatz_req = spatz_req_buffer_empty_q ? decoder_rsp.spatz_req : spatz_req_buffer_q;
     spatz_req.id = decoder_rsp_valid ? x_issue_req_i.id : spatz_req.id;
     spatz_req_illegal = decoder_rsp_valid ? decoder_rsp.instr_illegal : 1'b0;
@@ -357,12 +400,12 @@ module spatz_controller
     spatz_req_buffer_d       = spatz_req_buffer_q;
     spatz_req_buffer_empty_d = spatz_req_buffer_empty_q;
 
-    // New istruction wants to access busy resource
+    // New instruction wants to access busy resource. Store it in the request buffer.
     if (decoder_rsp_valid && stall) begin
       spatz_req_buffer_d = spatz_req;
       spatz_req_buffer_empty_d = 1'b0;
       spatz_ready_d = 1'b0;
-    // New decoded instruction if valid
+    // We have a ew instruction and there is no stall.
     end else if ((decoder_rsp_valid && ~spatz_req_illegal) || (!spatz_req_buffer_empty_q && !stall)) begin
       // Reset request buffer and accept new instructions
       spatz_req_buffer_empty_d = 1'b1;
@@ -388,12 +431,15 @@ module spatz_controller
         retire_csr = 1'b1;
       end
     end
-  end // proc_issue
+  end // ex_issue
 
-  always_comb begin : proc_x_issue_resp
+  // Respond to core about the decoded instruction.
+  always_comb begin : x_issue_resp
     x_issue_resp_o = '0;
 
+    // We have a new valid instruction
     if (decoder_rsp_valid && !spatz_req_illegal) begin
+      // Accept the new instruction
       x_issue_resp_o.accept = 1'b1;
 
       case (spatz_req.ex_unit)
@@ -420,16 +466,20 @@ module spatz_controller
           end
         end // SLD
       endcase // Operation type
+    // The decoding resulted in an illegal instruction
     end else if (decoder_rsp_valid && spatz_req_illegal) begin
+      // Do not accept it
       x_issue_resp_o.accept = 1'b0;
     end
-  end // proc_x_issue_resp
+  end // x_issue_resp
 
   //////////////
   // Retiring //
   //////////////
 
-  always_comb begin : proc_retire
+  // Retire an operation/instruction and write back result to core
+  // if necessary.
+  always_comb begin : retire
     x_result_o = '0;
     x_result_valid_o = '0;
 
@@ -461,10 +511,12 @@ module spatz_controller
         x_result_valid_o = 1'b1;
       end
     end
-  end // proc_retire
+  end // retire
 
+  // Signal to core that Spatz is ready for a new instruction
   assign x_issue_ready_o = spatz_ready_q;
 
+  // Send request off to execution units
   assign spatz_req_o       = spatz_req;
   assign spatz_req_valid_o = spatz_req_valid;
 

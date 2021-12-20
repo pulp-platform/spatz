@@ -1,8 +1,11 @@
 // Copyright 2021 ETH Zurich and University of Bologna.
 // Licensed under the Apache License, Version 2.0, see LICENSE for details.
 // SPDX-License-Identifier: Apache-2.0
-
+//
 // Author: Domenic Wüthrich, ETH Zurich
+//
+// The deocder takes in a new instruction that is offloaded to Spatz
+// and analyzes and decodes it.
 
 module spatz_decoder import spatz_pkg::*; import rvv_pkg::*; (
   input  logic clk_i,
@@ -19,24 +22,30 @@ module spatz_decoder import spatz_pkg::*; import rvv_pkg::*; (
   // Signals //
   /////////////
 
+  // Is the instruction illegal
   logic illegal_instr;
+  // Do we want to reset the current vstart CSR value
   logic reset_vstart;
 
+  // New spatz request from decoded instruction
   spatz_req_t spatz_req;
 
   /////////////
   // Decoder //
   /////////////
 
-  always_comb begin : proc_decoder
+  always_comb begin : decoder
     illegal_instr = 1'b0;
     spatz_req = '0;
     reset_vstart = 1'b1;
 
+    // We have a new instruction that need to be decoded
     if (decoder_req_valid_i) begin
+      // Retrieve the opcode
       automatic int unsigned opcode = decoder_req_i.instr[6:0];
 
       unique case (opcode)
+        // Load and store instruction
         riscv_pkg::OpcodeLoadFP,
         riscv_pkg::OpcodeStoreFP: begin
           automatic int unsigned ls_vd    = decoder_req_i.instr[11:7];
@@ -48,6 +57,7 @@ module spatz_decoder import spatz_pkg::*; import rvv_pkg::*; (
           automatic int unsigned ls_mew   = decoder_req_i.instr[28];
           automatic int unsigned ls_nf    = decoder_req_i.instr[31:29];
 
+          // Retrieve VSEW
           unique case ({ls_mew, ls_width})
             4'b0000: spatz_req.vtype.vsew = EW_8;
             4'b0101: spatz_req.vtype.vsew = EW_16;
@@ -58,6 +68,7 @@ module spatz_decoder import spatz_pkg::*; import rvv_pkg::*; (
           spatz_req.op_mem.vm = ls_vm;
           spatz_req.ex_unit = LSU;
 
+          // Check which type of load or store operation is requested
           unique casez (decoder_req_i.instr)
             riscv_instruction::VLE8_V,
             riscv_instruction::VLE16_V,
@@ -68,6 +79,7 @@ module spatz_decoder import spatz_pkg::*; import rvv_pkg::*; (
               spatz_req.rs1    = decoder_req_i.rs1;
               illegal_instr    = ~decoder_req_i.rs1_valid;
             end
+
             riscv_instruction::VLSE8_V,
             riscv_instruction::VLSE16_V,
             riscv_instruction::VLSE32_V: begin
@@ -76,8 +88,9 @@ module spatz_decoder import spatz_pkg::*; import rvv_pkg::*; (
               spatz_req.use_vd = 1'b1;
               spatz_req.rs1    = decoder_req_i.rs1;
               spatz_req.rs2    = decoder_req_i.rs2;
-              illegal_instr    = ~decoder_req_i.rs1_valid;
+              illegal_instr    = ~decoder_req_i.rs1_valid | ~decoder_req_i.rs2_valid;
             end
+
             riscv_instruction::VSE8_V,
             riscv_instruction::VSE16_V,
             riscv_instruction::VSE32_V: begin
@@ -88,6 +101,7 @@ module spatz_decoder import spatz_pkg::*; import rvv_pkg::*; (
               spatz_req.rs1       = decoder_req_i.rs1;
               illegal_instr       = ~decoder_req_i.rs1_valid;
             end
+
             riscv_instruction::VSSE8_V,
             riscv_instruction::VSSE16_V,
             riscv_instruction::VSSE32_V: begin
@@ -97,7 +111,7 @@ module spatz_decoder import spatz_pkg::*; import rvv_pkg::*; (
               spatz_req.vd_is_src = 1'b1;
               spatz_req.rs1       = decoder_req_i.rs1;
               spatz_req.rs2       = decoder_req_i.rs2;
-              illegal_instr       = ~decoder_req_i.rs1_valid;
+              illegal_instr       = ~decoder_req_i.rs1_valid | ~decoder_req_i.rs2_valid;
             end
             default: begin
               illegal_instr = 1'b1;
@@ -105,6 +119,7 @@ module spatz_decoder import spatz_pkg::*; import rvv_pkg::*; (
           endcase // decoder_req_i.instr
         end // OpcodeLoadFP or OpcodeStoreFP
 
+        // Vector instruction
         riscv_pkg::OpcodeVec: begin
           automatic int unsigned func3 = decoder_req_i.instr[14:12];
 
@@ -149,6 +164,7 @@ module spatz_decoder import spatz_pkg::*; import rvv_pkg::*; (
             spatz_req.use_vd = 1'b1;
             spatz_req.vd = arith_d;
             spatz_req.ex_unit = VFU;
+
             // Decide which operands to use (vs1 or rs1 or imm)
             unique case (func3)
               OPIVV,
@@ -413,6 +429,7 @@ module spatz_decoder import spatz_pkg::*; import rvv_pkg::*; (
           end
         end // OpcodeVec
 
+        // CSR instruction
         riscv_pkg::OpcodeSystem: begin
           automatic int unsigned csr_addr   = decoder_req_i.instr[31:20];
           automatic int unsigned csr_rd     = decoder_req_i.instr[11:7];
@@ -427,6 +444,7 @@ module spatz_decoder import spatz_pkg::*; import rvv_pkg::*; (
           illegal_instr = csr_is_imm ? 1'b0 : ~decoder_req_i.rs1_valid;
           reset_vstart = 1'b0;
 
+          // Check if CSR access is really destined for Spatz
           case (csr_addr)
             riscv_instruction::CSR_VSTART,
             riscv_instruction::CSR_VL,
@@ -440,6 +458,7 @@ module spatz_decoder import spatz_pkg::*; import rvv_pkg::*; (
             default: illegal_instr = 1'b1;
           endcase
 
+          // Check type of CSR access (read/write)
           unique casez (decoder_req_i.instr)
             riscv_instruction::CSRRW,
             riscv_instruction::CSRRWI: begin
@@ -473,9 +492,10 @@ module spatz_decoder import spatz_pkg::*; import rvv_pkg::*; (
         end
       endcase // Opcodes
 
+      // Add correct reset_vstart value
       spatz_req.op_cgf.reset_vstart = illegal_instr ? 1'b0 : reset_vstart;
     end // Instruction valid
-  end // proc_decoder
+  end : decoder
 
   // Check if rsp valid and assign spatz_req
   assign decoder_rsp_o.spatz_req = spatz_req;

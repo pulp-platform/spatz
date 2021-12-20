@@ -1,7 +1,7 @@
 // Copyright 2021 ETH Zurich and University of Bologna.
 // Licensed under the Apache License, Version 2.0, see LICENSE for details.
 // SPDX-License-Identifier: Apache-2.0
-
+//
 // Author: Domenic Wüthrich, ETH Zurich
 
 package spatz_pkg;
@@ -41,11 +41,12 @@ package spatz_pkg;
   // Element of length type
   typedef logic [ELEN-1:0] elen_t;
 
-  // VREG address type
+  // VREG address, byte enable, and data type
   typedef logic [$clog2(NRVREG)+$clog2(VELE)-1:0] vreg_addr_t;
   typedef logic [N_IPU*ELENB-1:0]                 vreg_be_t;
   typedef logic [N_IPU*ELEN-1:0]                  vreg_data_t;
 
+  // Instruction ID
   typedef logic [3:0] instr_id_t;
 
   /////////////////////

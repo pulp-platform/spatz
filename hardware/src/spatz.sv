@@ -1,20 +1,29 @@
 // Copyright 2021 ETH Zurich and University of Bologna.
 // Licensed under the Apache License, Version 2.0, see LICENSE for details.
 // SPDX-License-Identifier: Apache-2.0
-
+//
 // Author: Domenic Wüthrich, ETH Zurich
+//
+// This is the toplevel module of Spatz. It contains all other SPatz modules.
+// This includes the Controller, which interfaces with the main core and handles
+// instruction decoding, operation issuing to the other units, and result write
+// back to the core. The Vector Function Unit (VFU) is the high high throughput
+// unit that executes all arithmetic and logical operations. The Load/Store Unit
+// (LSU) is used to load vectors from memory to the register file and store them
+// back again. Finally, the Vector Register File (VRF) is the main register file
+// that stores all of the currently used vectors close to the execution units.
 
 module spatz
   import spatz_pkg::*;
   import rvv_pkg::*;
 #(
-  parameter NR_MEM_PORTS        = 1,
-  parameter type x_issue_req_t  = logic,
-  parameter type x_issue_resp_t = logic,
-  parameter type x_result_t     = logic,
-  parameter type x_mem_req_t    = logic,
-  parameter type x_mem_resp_t   = logic,
-  parameter type x_mem_result_t = logic
+  parameter int unsigned NR_MEM_PORTS = 1,
+  parameter type x_issue_req_t        = logic,
+  parameter type x_issue_resp_t       = logic,
+  parameter type x_result_t           = logic,
+  parameter type x_mem_req_t          = logic,
+  parameter type x_mem_resp_t         = logic,
+  parameter type x_mem_result_t       = logic
 ) (
   input  logic clk_i,
   input  logic rst_ni,
@@ -43,6 +52,7 @@ module spatz
   // Parameters //
   ////////////////
 
+  // Number of ports of the vector register file
   localparam NrWritePorts = 3;
   localparam NrReadPorts  = 5;
 
@@ -101,6 +111,7 @@ module spatz
   // Controller //
   ////////////////
 
+  // Scoreboard read enable and write enable input signals
   logic [NrReadPorts-1:0]  sb_re;
   logic [NrWritePorts-1:0] sb_we;
 
@@ -225,5 +236,8 @@ module spatz
 
   if (spatz_pkg::ELEN > spatz_pkg::VLEN)
     $error("[spatz] The size of one element can not exceede the length of one vector register.");
+
+  if (NR_MEM_PORTS == 0)
+    $error("[spatz] Spatz requires at least one memory port.");
 
 endmodule : spatz
