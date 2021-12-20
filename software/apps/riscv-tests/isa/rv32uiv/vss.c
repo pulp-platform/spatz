@@ -32,7 +32,7 @@ void TEST_CASE2(void) {
 }
 
 void TEST_CASE3(void) {
-  VSET(4, e32, m1);
+  VSET(4, e32, m2);
   volatile uint32_t OUT1[] = {0x00000000, 0x00000000, 0x00000000, 0x00000000,
                               0x00000000, 0x00000000, 0x00000000, 0x00000000,
                               0x00000000, 0x00000000, 0x00000000, 0x00000000,
@@ -67,7 +67,7 @@ int main(void) {
   TEST_CASE2();
   TEST_CASE3();
 
-  TEST_CASE5();
+  //TEST_CASE5();
 
   EXIT_CHECK();
 }

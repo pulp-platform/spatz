@@ -26,7 +26,7 @@ void TEST_CASE2(void) {
 }
 
 void TEST_CASE3(void) {
-  VSET(4, e32, m1);
+  VSET(4, e32, m2);
   volatile uint32_t INP1[] = {0x9fe41920, 0x8f2e05e0, 0xf9aa71f0, 0xc394bbd3,
                               0xa11a9384, 0xa7163840, 0x99991348, 0xa9f38cd1};
   uint64_t stride = 8;
@@ -89,7 +89,7 @@ void TEST_CASE12(void) {
 }
 
 void TEST_CASE13(void) {
-  VSET(4, e32, m1);
+  VSET(4, e32, m2);
   volatile uint32_t INP1[] = {0x9fe41920, 0x8f2e05e0, 0xf9aa71f0, 0xc394bbd3,
                               0xa11a9384, 0xa7163840, 0x99991348, 0xa9f38cd1};
   uint64_t stride = 8;
@@ -112,9 +112,9 @@ int main(void) {
 
   TEST_CASE8();
 
-  TEST_CASE11();
-  TEST_CASE12();
-  TEST_CASE13();
+  //TEST_CASE11();
+  //TEST_CASE12();
+  //TEST_CASE13();
 
   EXIT_CHECK();
 }
