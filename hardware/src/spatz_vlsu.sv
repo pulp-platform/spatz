@@ -156,10 +156,12 @@ module spatz_vlsu
   // Is the memory operation valid and are we at the last one
   logic [NrMemPorts-1:0] mem_operation_valid;
   logic [NrMemPorts-1:0] mem_operation_last;
+  logic [NrMemPorts-1:0] mem_operations_finished;
 
   // Is the register file operation valid and are we at the last one
   logic [N_IPU-1:0] vreg_operation_valid;
   logic [N_IPU-1:0] vreg_operation_last;
+  logic [N_IPU-1:0] vreg_operations_finished;
 
   ///////////////////
   // State Handler //
@@ -199,7 +201,7 @@ module spatz_vlsu
   end
 
   // Are we ready to accept a new instruction from the controller
-  assign vlsu_is_ready = ~(|vreg_operation_valid) & ~(|mem_operation_valid);
+  assign vlsu_is_ready = &vreg_operations_finished & &mem_operations_finished;
 
   // Signal when we are finished with with accessing the memory (necessary
   // for the case with more than one memory port)
@@ -288,9 +290,11 @@ module spatz_vlsu
       automatic int unsigned max   = N_IPU == 'd1 ? spatz_req_q.vl : ((spatz_req_q.vl >> ($clog2(N_IPU) + $clog2(ELENB))) << $clog2(ELENB)) + (spatz_req_q.vl[idx_width(N_IPU)+$clog2(ELENB)-1:$clog2(ELENB)] > i ? ELENB : spatz_req_q.vl[idx_width(N_IPU)+$clog2(ELENB)-1:$clog2(ELENB)] == i ? spatz_req_q.vl[$clog2(ELENB)-1:0] : 'd0);
       // How many elements are left to do
       automatic int unsigned delta = max - vreg_counter_value[i];
+      automatic logic vrf_transaction_valid = (is_load & vrf_wvalid_i & vrf_we_o) | (~is_load & vrf_rvalid_i & vrf_re_o);
 
-      vreg_operation_valid[i] = (delta != 'd0) & ~is_vl_zero;
-      vreg_operation_last[i]  = vreg_operation_valid[i] & (delta <= (is_single_element_operation ? single_element_size : 'd4));
+      vreg_operation_valid[i]     = (delta != 'd0) & ~is_vl_zero;
+      vreg_operation_last[i]      = vreg_operation_valid[i] & (delta <= (is_single_element_operation ? single_element_size : 'd4));
+      vreg_operations_finished[i] = ~vreg_operation_valid[i] | (vreg_operation_last[i] & vrf_transaction_valid);
 
       vreg_counter_load[i]       = 1'b0;
       vreg_counter_load_value[i] = '0;
@@ -304,12 +308,12 @@ module spatz_vlsu
       // write back an element every single time and have to wait until the one
       // before us has already received its elements.
       if (NrIPUsPerMemPort == 'd1) begin
-        vreg_counter_en[i] = vreg_operation_valid[i] & ((is_load & vrf_wvalid_i & vrf_we_o) | (~is_load & vrf_rvalid_i & vrf_re_o));
+        vreg_counter_en[i] = vreg_operation_valid[i] & vrf_transaction_valid;
       end else begin
         if (i%NrIPUsPerMemPort == 'd0) begin
-          vreg_counter_en[i] = vreg_operation_valid[i] & ((is_load & vrf_wvalid_i & vrf_we_o) | (~is_load & vrf_rvalid_i & vrf_re_o)) & ((vreg_counter_value[NrIPUsPerMemPort/NrMemPorts-1][$bits(vlen_t)-1:$clog2(ELENB)] == vreg_counter_value[i][$bits(vlen_t)-1:$clog2(ELENB)]) & (vreg_counter_value[i+1][$bits(vlen_t)-1:$clog2(ELENB)] == vreg_counter_value[i][$bits(vlen_t)-1:$clog2(ELENB)]));
+          vreg_counter_en[i] = vreg_operation_valid[i] & vrf_transaction_valid & ((vreg_counter_value[NrIPUsPerMemPort/NrMemPorts-1][$bits(vlen_t)-1:$clog2(ELENB)] == vreg_counter_value[i][$bits(vlen_t)-1:$clog2(ELENB)]) & (vreg_counter_value[i+1][$bits(vlen_t)-1:$clog2(ELENB)] == vreg_counter_value[i][$bits(vlen_t)-1:$clog2(ELENB)]));
         end else begin
-          vreg_counter_en[i] = vreg_operation_valid[i] & ((is_load & vrf_wvalid_i & vrf_we_o) | (~is_load & vrf_rvalid_i & vrf_re_o)) & (vreg_counter_value[i-1][$bits(vlen_t)-1:$clog2(ELENB)] != vreg_counter_value[i][$bits(vlen_t)-1:$clog2(ELENB)]);
+          vreg_counter_en[i] = vreg_operation_valid[i] & vrf_transaction_valid & (vreg_counter_value[i-1][$bits(vlen_t)-1:$clog2(ELENB)] != vreg_counter_value[i][$bits(vlen_t)-1:$clog2(ELENB)]);
         end
       end
 
@@ -345,8 +349,9 @@ module spatz_vlsu
       // How many elements are left to do
       automatic int unsigned delta = max - mem_counter_value[i];
 
-      mem_operation_valid[i] = (delta != 'd0) & ~is_vl_zero;
-      mem_operation_last[i]  = mem_operation_valid[i] & (delta <= (is_single_element_operation ? single_element_size : 'd4));
+      mem_operation_valid[i]     = (delta != 'd0) & ~is_vl_zero;
+      mem_operation_last[i]      = mem_operation_valid[i] & (delta <= (is_single_element_operation ? single_element_size : 'd4));
+      mem_operations_finished[i] = ~mem_operation_valid[i] | (mem_operation_last[i] & x_mem_ready_i[i]);
 
       mem_counter_load[i]       = 1'b0;
       mem_counter_load_value[i] = '0;
