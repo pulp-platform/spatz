@@ -19,26 +19,32 @@ module spatz_controller
 ) (
   input  logic clk_i,
   input  logic rst_ni,
+
   // X-Interface Issue
-  input  logic x_issue_valid_i,
-  output logic x_issue_ready_o,
+  input  logic          x_issue_valid_i,
+  output logic          x_issue_ready_o,
   input  x_issue_req_t  x_issue_req_i,
   output x_issue_resp_t x_issue_resp_o,
+
   // X-Interface Result
-  output logic x_result_valid_o,
-  input  logic x_result_ready_i,
+  output logic      x_result_valid_o,
+  input  logic      x_result_ready_i,
   output x_result_t x_result_o,
+
   // Spatz req
-  output logic spatz_req_valid_o,
+  output logic       spatz_req_valid_o,
   output spatz_req_t spatz_req_o,
+
   // VFU
   input  logic     vfu_req_ready_i,
   input  logic     vfu_rsp_valid_i,
   input  vfu_rsp_t vfu_rsp_i,
+
   // VLSU
   input  logic      vlsu_req_ready_i,
   input  logic      vlsu_rsp_valid_i,
   input  vlsu_rsp_t vlsu_rsp_i,
+
   // Vregfile Scoreboarding
   input  logic       [NrVregfilePorts-1:0] sb_enable_i,
   output logic       [NrVregfilePorts-1:0] sb_enable_o,

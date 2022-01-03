@@ -17,35 +17,38 @@ module spatz
   import spatz_pkg::*;
   import rvv_pkg::*;
 #(
-  parameter int unsigned NR_MEM_PORTS = 1,
-  parameter type x_issue_req_t        = logic,
-  parameter type x_issue_resp_t       = logic,
-  parameter type x_result_t           = logic,
-  parameter type x_mem_req_t          = logic,
-  parameter type x_mem_resp_t         = logic,
-  parameter type x_mem_result_t       = logic
+  parameter int unsigned NrMemPorts = 1,
+  parameter type x_issue_req_t      = logic,
+  parameter type x_issue_resp_t     = logic,
+  parameter type x_result_t         = logic,
+  parameter type x_mem_req_t        = logic,
+  parameter type x_mem_resp_t       = logic,
+  parameter type x_mem_result_t     = logic
 ) (
   input  logic clk_i,
   input  logic rst_ni,
+
   // X-Interface Issue
   input  logic          x_issue_valid_i,
   output logic          x_issue_ready_o,
   input  x_issue_req_t  x_issue_req_i,
   output x_issue_resp_t x_issue_resp_o,
+
   // X-Interface Result
   output logic      x_result_valid_o,
   input  logic      x_result_ready_i,
   output x_result_t x_result_o,
+
   // X-Interface Memory Request
-  output logic          [NR_MEM_PORTS-1:0] x_mem_valid_o,
-  input  logic          [NR_MEM_PORTS-1:0] x_mem_ready_i,
-  output x_mem_req_t    [NR_MEM_PORTS-1:0] x_mem_req_o,
-  input  x_mem_resp_t   [NR_MEM_PORTS-1:0] x_mem_resp_i,
+  output logic          [NrMemPorts-1:0] x_mem_valid_o,
+  input  logic          [NrMemPorts-1:0] x_mem_ready_i,
+  output x_mem_req_t    [NrMemPorts-1:0] x_mem_req_o,
+  input  x_mem_resp_t   [NrMemPorts-1:0] x_mem_resp_i,
   //X-Interface Memory Result
-  input  logic          [NR_MEM_PORTS-1:0] x_mem_result_valid_i,
-  input  x_mem_result_t [NR_MEM_PORTS-1:0] x_mem_result_i,
+  input  logic          [NrMemPorts-1:0] x_mem_result_valid_i,
+  input  x_mem_result_t [NrMemPorts-1:0] x_mem_result_i,
   // X-Interface Memory Finished
-  output logic x_mem_finished_o
+  output logic                           x_mem_finished_o
 );
 
   ////////////////
@@ -89,8 +92,8 @@ module spatz
   logic       [NrReadPorts-1:0] vrf_rvalid;
 
   spatz_vrf #(
-    .NR_READ_PORTS (NrReadPorts),
-    .NR_WRITE_PORTS(NrWritePorts)
+    .NrReadPorts (NrReadPorts),
+    .NrWritePorts(NrWritePorts)
   ) i_vrf (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
@@ -179,7 +182,7 @@ module spatz
   //////////
 
   spatz_vlsu #(
-    .NR_MEM_PORTS  (NR_MEM_PORTS),
+    .NrMemPorts  (NrMemPorts),
     .x_mem_req_t   (x_mem_req_t),
     .x_mem_resp_t  (x_mem_resp_t),
     .x_mem_result_t(x_mem_result_t)
@@ -237,7 +240,7 @@ module spatz
   if (spatz_pkg::ELEN > spatz_pkg::VLEN)
     $error("[spatz] The size of one element can not exceede the length of one vector register.");
 
-  if (NR_MEM_PORTS == 0)
+  if (NrMemPorts == 0)
     $error("[spatz] Spatz requires at least one memory port.");
 
 endmodule : spatz

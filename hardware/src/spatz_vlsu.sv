@@ -12,13 +12,13 @@ module spatz_vlsu
   import rvv_pkg::*;
   import cf_math_pkg::idx_width;
 #(
-  parameter NR_MEM_PORTS         = 1,
-  parameter NR_OUTSTANDING_LOADS = 8,
-  parameter type x_mem_req_t     = logic,
-  parameter type x_mem_resp_t    = logic,
-  parameter type x_mem_result_t  = logic,
+  parameter NrMemPorts          = 1,
+  parameter NrOutstandingLoads  = 8,
+  parameter type x_mem_req_t    = logic,
+  parameter type x_mem_resp_t   = logic,
+  parameter type x_mem_result_t = logic,
   // Dependant parameters. DO NOT CHANGE!
-  localparam int unsigned IdWidth = idx_width(NR_OUTSTANDING_LOADS)
+  localparam int unsigned IdWidth = idx_width(NrOutstandingLoads)
 ) (
   input  logic clk_i,
   input  logic rst_ni,
@@ -40,13 +40,13 @@ module spatz_vlsu
   input  vreg_data_t vrf_rdata_i,
   input  logic       vrf_rvalid_i,
   // X-Interface Memory Request
-  output logic          [NR_MEM_PORTS-1:0] x_mem_valid_o,
-  input  logic          [NR_MEM_PORTS-1:0] x_mem_ready_i,
-  output x_mem_req_t    [NR_MEM_PORTS-1:0] x_mem_req_o,
-  input  x_mem_resp_t   [NR_MEM_PORTS-1:0] x_mem_resp_i,
+  output logic          [NrMemPorts-1:0] x_mem_valid_o,
+  input  logic          [NrMemPorts-1:0] x_mem_ready_i,
+  output x_mem_req_t    [NrMemPorts-1:0] x_mem_req_o,
+  input  x_mem_resp_t   [NrMemPorts-1:0] x_mem_resp_i,
   //X-Interface Memory Result
-  input  logic          [NR_MEM_PORTS-1:0] x_mem_result_valid_i,
-  input  x_mem_result_t [NR_MEM_PORTS-1:0] x_mem_result_i,
+  input  logic          [NrMemPorts-1:0] x_mem_result_valid_i,
+  input  x_mem_result_t [NrMemPorts-1:0] x_mem_result_i,
   // X-Interface Memory Finished
   output logic x_mem_finished_o
 );
@@ -58,7 +58,7 @@ module spatz_vlsu
   // Localparams //
   /////////////////
 
-  localparam int unsigned NrIPUsPerMemPort = N_IPU/NR_MEM_PORTS;
+  localparam int unsigned NrIPUsPerMemPort = N_IPU/NrMemPorts;
   localparam int unsigned VregDataWidthPerMemPort = ELEN*NrIPUsPerMemPort;
 
   localparam int unsigned MemDataWidth  = $bits(x_mem_req_o[0].wdata);
@@ -114,29 +114,29 @@ module spatz_vlsu
   assign spatz_req_ready_o = vlsu_is_ready;
 
   // Buffer signals
-  elen_t [NR_MEM_PORTS-1:0] buffer_wdata;
-  id_t   [NR_MEM_PORTS-1:0] buffer_wid;
-  logic  [NR_MEM_PORTS-1:0] buffer_push;
-  logic  [NR_MEM_PORTS-1:0] buffer_rvalid;
-  elen_t [NR_MEM_PORTS-1:0] buffer_rdata;
-  logic  [NR_MEM_PORTS-1:0] buffer_pop;
-  id_t   [NR_MEM_PORTS-1:0] buffer_rid;
-  logic  [NR_MEM_PORTS-1:0] buffer_req_id;
-  id_t   [NR_MEM_PORTS-1:0] buffer_id;
-  logic  [NR_MEM_PORTS-1:0] buffer_full;
-  logic  [NR_MEM_PORTS-1:0] buffer_empty;
+  elen_t [NrMemPorts-1:0] buffer_wdata;
+  id_t   [NrMemPorts-1:0] buffer_wid;
+  logic  [NrMemPorts-1:0] buffer_push;
+  logic  [NrMemPorts-1:0] buffer_rvalid;
+  elen_t [NrMemPorts-1:0] buffer_rdata;
+  logic  [NrMemPorts-1:0] buffer_pop;
+  id_t   [NrMemPorts-1:0] buffer_rid;
+  logic  [NrMemPorts-1:0] buffer_req_id;
+  id_t   [NrMemPorts-1:0] buffer_id;
+  logic  [NrMemPorts-1:0] buffer_full;
+  logic  [NrMemPorts-1:0] buffer_empty;
 
-  logic  [NR_MEM_PORTS-1:0][$clog2(NR_OUTSTANDING_LOADS)-1:0] buffer_id_diff;
+  logic  [NrMemPorts-1:0][$clog2(NrOutstandingLoads)-1:0] buffer_id_diff;
 
   // Memory counter signals
-  vlen_t [NR_MEM_PORTS-1:0] mem_counter_max;
-  logic  [NR_MEM_PORTS-1:0] mem_counter_clear;
-  logic  [NR_MEM_PORTS-1:0] mem_counter_en;
-  logic  [NR_MEM_PORTS-1:0] mem_counter_load;
-  vlen_t [NR_MEM_PORTS-1:0] mem_counter_delta;
-  vlen_t [NR_MEM_PORTS-1:0] mem_counter_load_value;
-  vlen_t [NR_MEM_PORTS-1:0] mem_counter_value;
-  logic  [NR_MEM_PORTS-1:0] mem_counter_overflow;
+  vlen_t [NrMemPorts-1:0] mem_counter_max;
+  logic  [NrMemPorts-1:0] mem_counter_clear;
+  logic  [NrMemPorts-1:0] mem_counter_en;
+  logic  [NrMemPorts-1:0] mem_counter_load;
+  vlen_t [NrMemPorts-1:0] mem_counter_delta;
+  vlen_t [NrMemPorts-1:0] mem_counter_load_value;
+  vlen_t [NrMemPorts-1:0] mem_counter_value;
+  logic  [NrMemPorts-1:0] mem_counter_overflow;
 
   // Vector register file counter signals
   vlen_t [N_IPU-1:0] vreg_counter_max;
@@ -154,8 +154,8 @@ module spatz_vlsu
   logic [$clog2(ELENB)-1:0] vreg_byte_id;
 
   // Is the memory operation valid and are we at the last one
-  logic [NR_MEM_PORTS-1:0] mem_operation_valid;
-  logic [NR_MEM_PORTS-1:0] mem_operation_last;
+  logic [NrMemPorts-1:0] mem_operation_valid;
+  logic [NrMemPorts-1:0] mem_operation_last;
 
   // Is the register file operation valid and are we at the last one
   logic [N_IPU-1:0] vreg_operation_valid;
@@ -209,28 +209,26 @@ module spatz_vlsu
   // Address Generation //
   ////////////////////////
 
-  elen_t      [NR_MEM_PORTS-1:0]      mem_req_addr;
-  logic       [NR_MEM_PORTS-1:0][1:0] mem_req_addr_offset;
+  elen_t      [NrMemPorts-1:0]      mem_req_addr;
+  logic       [NrMemPorts-1:0][1:0] mem_req_addr_offset;
 
   vreg_addr_t       vreg_addr;
   logic       [1:0] vreg_addr_offset;
 
   // Calculate the memory address for each memory port
   always_comb begin : gen_mem_req_addr
-    for (int unsigned i = 0; i < NR_MEM_PORTS; i++) begin : gen_elem_access
+    for (int unsigned i = 0; i < NrMemPorts; i++) begin : gen_elem_access
       mem_req_addr[i]        = '0;
       mem_req_addr_offset[i] = 2'b00;
 
       unique case (spatz_req_q.op)
         VLE,
-        VSE: begin
-          automatic logic [31:0] addr = spatz_req_q.rs1 + {mem_counter_value[i][$bits(vlen_t)-1:2] << $clog2(NR_MEM_PORTS), mem_counter_value[i][1:0]} + (i << 2);
-          mem_req_addr[i] = {addr[31:2], 2'b00};
-          mem_req_addr_offset[i] = addr[1:0];
-        end
+        VSE,
         VLSE,
         VSSE: begin
-          automatic logic [31:0] addr = spatz_req_q.rs1 + ({mem_counter_value[i][$bits(vlen_t)-1:2] << $clog2(NR_MEM_PORTS), mem_counter_value[i][1:0]} + (i << 2)) * (spatz_req_q.rs2 >> spatz_req_q.vtype.vsew);
+          automatic int unsigned stride = is_strided ? spatz_req_q.rs2 >> spatz_req_q.vtype.vsew : 'd1;
+          automatic logic [31:0] addr   = spatz_req_q.rs1 + ({mem_counter_value[i][$bits(vlen_t)-1:2] << $clog2(NrMemPorts), mem_counter_value[i][1:0]} + (i << 2)) * stride;
+
           mem_req_addr[i] = {addr[31:2], 2'b00};
           mem_req_addr_offset[i] = addr[1:0];
         end
@@ -309,7 +307,7 @@ module spatz_vlsu
         vreg_counter_en[i] = vreg_operation_valid[i] & ((is_load & vrf_wvalid_i & vrf_we_o) | (~is_load & vrf_rvalid_i & vrf_re_o));
       end else begin
         if (i%NrIPUsPerMemPort == 'd0) begin
-          vreg_counter_en[i] = vreg_operation_valid[i] & ((is_load & vrf_wvalid_i & vrf_we_o) | (~is_load & vrf_rvalid_i & vrf_re_o)) & ((vreg_counter_value[NrIPUsPerMemPort/NR_MEM_PORTS-1][$bits(vlen_t)-1:$clog2(ELENB)] == vreg_counter_value[i][$bits(vlen_t)-1:$clog2(ELENB)]) & (vreg_counter_value[i+1][$bits(vlen_t)-1:$clog2(ELENB)] == vreg_counter_value[i][$bits(vlen_t)-1:$clog2(ELENB)]));
+          vreg_counter_en[i] = vreg_operation_valid[i] & ((is_load & vrf_wvalid_i & vrf_we_o) | (~is_load & vrf_rvalid_i & vrf_re_o)) & ((vreg_counter_value[NrIPUsPerMemPort/NrMemPorts-1][$bits(vlen_t)-1:$clog2(ELENB)] == vreg_counter_value[i][$bits(vlen_t)-1:$clog2(ELENB)]) & (vreg_counter_value[i+1][$bits(vlen_t)-1:$clog2(ELENB)] == vreg_counter_value[i][$bits(vlen_t)-1:$clog2(ELENB)]));
         end else begin
           vreg_counter_en[i] = vreg_operation_valid[i] & ((is_load & vrf_wvalid_i & vrf_we_o) | (~is_load & vrf_rvalid_i & vrf_re_o)) & (vreg_counter_value[i-1][$bits(vlen_t)-1:$clog2(ELENB)] != vreg_counter_value[i][$bits(vlen_t)-1:$clog2(ELENB)]);
         end
@@ -323,7 +321,7 @@ module spatz_vlsu
 
   // For each memory port we count how many elements we have already loaded/stored.
   // Multiple counters are needed all memory ports can work independent of each other.
-  for (genvar i = 0; i < NR_MEM_PORTS; i++) begin : gen_mem_counters
+  for (genvar i = 0; i < NrMemPorts; i++) begin : gen_mem_counters
     delta_counter #(
       .WIDTH($bits(vlen_t))
     ) i_delta_counter_mem (
@@ -341,9 +339,9 @@ module spatz_vlsu
   end
 
   always_comb begin
-    for (int unsigned i = 0; i < NR_MEM_PORTS; i++) begin
+    for (int unsigned i = 0; i < NrMemPorts; i++) begin
       // The total amount of elements we have to work through
-      automatic int unsigned max   = NR_MEM_PORTS == 'd1 ? spatz_req_q.vl : ((spatz_req_q.vl >> ($clog2(NR_MEM_PORTS) + $clog2(MemDataWidthB))) << $clog2(MemDataWidthB)) + (spatz_req_q.vl[idx_width(NR_MEM_PORTS)+$clog2(MemDataWidthB)-1:$clog2(MemDataWidthB)] > i ? MemDataWidthB : spatz_req_q.vl[idx_width(NR_MEM_PORTS)+$clog2(MemDataWidthB)-1:$clog2(MemDataWidthB)] == i ? spatz_req_q.vl[$clog2(MemDataWidthB)-1:0] : 'd0);
+      automatic int unsigned max   = NrMemPorts == 'd1 ? spatz_req_q.vl : ((spatz_req_q.vl >> ($clog2(NrMemPorts) + $clog2(MemDataWidthB))) << $clog2(MemDataWidthB)) + (spatz_req_q.vl[idx_width(NrMemPorts)+$clog2(MemDataWidthB)-1:$clog2(MemDataWidthB)] > i ? MemDataWidthB : spatz_req_q.vl[idx_width(NrMemPorts)+$clog2(MemDataWidthB)-1:$clog2(MemDataWidthB)] == i ? spatz_req_q.vl[$clog2(MemDataWidthB)-1:0] : 'd0);
       // How many elements are left to do
       automatic int unsigned delta = max - mem_counter_value[i];
 
@@ -369,10 +367,10 @@ module spatz_vlsu
 
   // The reorder buffer decouples the memory side from the register file side.
   // All elements from one side to the other go through it.
-  for (genvar i = 0; i < NR_MEM_PORTS; i++) begin : gen_buffer
+  for (genvar i = 0; i < NrMemPorts; i++) begin : gen_buffer
     reorder_buffer #(
       .DataWidth  (ELEN),
-      .NumWords   (NR_OUTSTANDING_LOADS),
+      .NumWords   (NrOutstandingLoads),
       .FallThrough(1'b0)
     ) i_reorder_buffer (
       .clk_i    (clk_i),
@@ -398,12 +396,12 @@ module spatz_vlsu
   ///////////////////////////////
 
   // Memory request signals
-  id_t  [NR_MEM_PORTS-1:0]                   mem_req_id;
-  logic [NR_MEM_PORTS-1:0][MemDataWidth-1:0] mem_req_data;
-  logic [NR_MEM_PORTS-1:0]                   mem_req_svalid;
-  logic [NR_MEM_PORTS-1:0][ELEN/8-1:0]       mem_req_strb;
-  logic [NR_MEM_PORTS-1:0]                   mem_req_lvalid;
-  logic [NR_MEM_PORTS-1:0]                   mem_req_last;
+  id_t  [NrMemPorts-1:0]                   mem_req_id;
+  logic [NrMemPorts-1:0][MemDataWidth-1:0] mem_req_data;
+  logic [NrMemPorts-1:0]                   mem_req_svalid;
+  logic [NrMemPorts-1:0][ELEN/8-1:0]       mem_req_strb;
+  logic [NrMemPorts-1:0]                   mem_req_lvalid;
+  logic [NrMemPorts-1:0]                   mem_req_last;
 
   /* verilator lint_off LATCH */
   always_comb begin
@@ -432,15 +430,15 @@ module spatz_vlsu
       // store it back to the register file
       if (|vreg_operation_valid) begin
         // Calculate difference between read and write id in buffer
-        automatic logic [NR_MEM_PORTS-1:0] diff_zero;
-        for (int unsigned i = 0; i < NR_MEM_PORTS; i++) diff_zero[i] = buffer_id_diff[i] == 'd0;
+        automatic logic [NrMemPorts-1:0] diff_zero;
+        for (int unsigned i = 0; i < NrMemPorts; i++) diff_zero[i] = buffer_id_diff[i] == 'd0;
 
         vrf_waddr_o = vreg_addr;
         // Enable write back to vregfile if we have a valid element in all buffers that still
         // need to write something back.
         vrf_we_o = &buffer_rvalid | (&(buffer_rvalid | diff_zero) & ~(|mem_operation_valid));
 
-        for (int unsigned i = 0; i < NR_MEM_PORTS; i++) begin
+        for (int unsigned i = 0; i < NrMemPorts; i++) begin
           automatic logic [ELEN-1:0] data = buffer_rdata[i];
 
           // Shift data to correct position if we have an unaligned memory request
@@ -482,10 +480,10 @@ module spatz_vlsu
         end
 
         // Pop stored element and free space in buffer
-        buffer_pop = buffer_rvalid & {NR_MEM_PORTS{vrf_wvalid_i}};
+        buffer_pop = buffer_rvalid & {NrMemPorts{vrf_wvalid_i}};
       end
 
-      for (int unsigned i = 0; i < NR_MEM_PORTS; i++) begin
+      for (int unsigned i = 0; i < NrMemPorts; i++) begin
         // Write the load result to the buffer
         buffer_wdata[i] = x_mem_result_i[i].rdata;
         buffer_wid[i] = x_mem_result_i[i].id;
@@ -508,7 +506,7 @@ module spatz_vlsu
         vrf_re_o = 1'b1;
 
         // Push element to buffer if read from vregfile
-        for (int unsigned i = 0; i < NR_MEM_PORTS; i++) begin
+        for (int unsigned i = 0; i < NrMemPorts; i++) begin
           for (int unsigned j = 0; j < NrIPUsPerMemPort; j++) begin
             automatic int unsigned idx = i*NrIPUsPerMemPort + j;
             if (vreg_counter_en[idx]) begin
@@ -522,7 +520,7 @@ module spatz_vlsu
         end
       end
 
-      for (int unsigned i = 0; i < NR_MEM_PORTS; i++) begin
+      for (int unsigned i = 0; i < NrMemPorts; i++) begin
         // Read element from buffer and execute memory request
         if (mem_operation_valid[i]) begin
           automatic logic [MemDataWidth-1:0] data = buffer_rdata[i];
@@ -573,7 +571,7 @@ module spatz_vlsu
   /* verilator lint_on LATCH */
 
   // Create memory requests
-  for (genvar i = 0; i < NR_MEM_PORTS; i++) begin : gen_mem_req
+  for (genvar i = 0; i < NrMemPorts; i++) begin : gen_mem_req
     assign x_mem_req_o[i].id    = mem_req_id[i];
     assign x_mem_req_o[i].addr  = mem_req_addr[i];
     assign x_mem_req_o[i].mode  = '0; // Request always uses user privilege level
@@ -593,10 +591,10 @@ module spatz_vlsu
   if (MemDataWidth != ELEN)
     $error("[spatz_vlsu] The memory data width needs to be equal to %d.", ELEN);
 
-  if (NR_MEM_PORTS > N_IPU)
+  if (NrMemPorts > N_IPU)
     $error("[spatz_vlsu] The number of memory ports needs to be smaller or equal to the number of IPUs.");
 
-  if (NR_MEM_PORTS != 2**$clog2(NR_MEM_PORTS))
-    $error("[spatz_vlsu] The NR_MEM_PORTS parameter needs to be a power of two");
+  if (NrMemPorts != 2**$clog2(NrMemPorts))
+    $error("[spatz_vlsu] The NrMemPorts parameter needs to be a power of two");
 
 endmodule : spatz_vlsu

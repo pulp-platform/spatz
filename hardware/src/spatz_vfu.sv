@@ -8,7 +8,9 @@
 // vector instructions. It can be configured with a parameterizable amount
 // of IPUs that work in parallel.
 
-module spatz_vfu import spatz_pkg::*; (
+module spatz_vfu
+  import spatz_pkg::*;
+(
   input  logic clk_i,
   input  logic rst_ni,
   // Spatz req

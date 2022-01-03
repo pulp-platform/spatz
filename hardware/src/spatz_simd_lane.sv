@@ -7,7 +7,9 @@
 // The SIMD lane calculates all simd operations given for a give distinct
 // element width.
 
-module spatz_simd_lane import spatz_pkg::*; #(
+module spatz_simd_lane
+  import spatz_pkg::*;
+#(
   parameter int unsigned Width = 8
 ) (
   input  logic clk_i,

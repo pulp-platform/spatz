@@ -149,9 +149,9 @@ package spatz_pkg;
     vlen_t      vstart;
   } spatz_req_t;
 
-  /////////////////////////////////
-  // Decoder Request and Response//
-  /////////////////////////////////
+  //////////////////////////////////
+  // Decoder Request and Response //
+  //////////////////////////////////
 
   typedef struct packed {
     // Instruction

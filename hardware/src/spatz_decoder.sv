@@ -7,7 +7,10 @@
 // The deocder takes in a new instruction that is offloaded to Spatz
 // and analyzes and decodes it.
 
-module spatz_decoder import spatz_pkg::*; import rvv_pkg::*; (
+module spatz_decoder
+  import spatz_pkg::*;
+  import rvv_pkg::*;
+(
   input  logic clk_i,
   input  logic rst_ni,
   // Request

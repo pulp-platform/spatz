@@ -7,7 +7,9 @@
 // The IPU distributes the operands to the four SIMD lanes and afterwards
 // collects the results.
 
-module spatz_ipu import spatz_pkg::*; (
+module spatz_ipu
+  import spatz_pkg::*;
+(
   input  logic clk_i,
   input  logic rst_ni,
   // Operation Signals
