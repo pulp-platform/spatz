@@ -87,24 +87,24 @@ module spatz_vrf
     // second priority has the LSU, and third priority had the slide unit.
     for (int unsigned i = 0; i < NrBanks; i++) begin
       // Bank write port 0 - Priority: vd (0) -> lsu (1) -> sld (2)
-      if (we_i[0] && waddr_i[0][$bits(vreg_addr_t)-$clog2(NRVREG)-1:$clog2(NrElemPerBank)] == i) begin
-        waddr[i] = gen_vreg_addr(waddr_i[0]);
-        wdata[i] = wdata_i[0];
+      if (we_i[VFU_VD_WD] && waddr_i[VFU_VD_WD][$bits(vreg_addr_t)-$clog2(NRVREG)-1:$clog2(NrElemPerBank)] == i) begin
+        waddr[i] = gen_vreg_addr(waddr_i[VFU_VD_WD]);
+        wdata[i] = wdata_i[VFU_VD_WD];
         we[i] = 1'b1;
-        wbe[i] = wbe_i[0];
-        wvalid_o[0] = 1'b1;
-      end else if (we_i[1] && waddr_i[1][$bits(vreg_addr_t)-$clog2(NRVREG)-1:$clog2(NrElemPerBank)] == i) begin
-        waddr[i] = gen_vreg_addr(waddr_i[1]);
-        wdata[i] = wdata_i[1];
+        wbe[i] = wbe_i[VFU_VD_WD];
+        wvalid_o[VFU_VD_WD] = 1'b1;
+      end else if (we_i[VLSU_VD_WD] && waddr_i[VLSU_VD_WD][$bits(vreg_addr_t)-$clog2(NRVREG)-1:$clog2(NrElemPerBank)] == i) begin
+        waddr[i] = gen_vreg_addr(waddr_i[VLSU_VD_WD]);
+        wdata[i] = wdata_i[VLSU_VD_WD];
         we[i] = 1'b1;
-        wbe[i] = wbe_i[1];
-        wvalid_o[1] = 1'b1;
-      end else if (we_i[2] && waddr_i[2][$bits(vreg_addr_t)-$clog2(NRVREG)-1:$clog2(NrElemPerBank)] == i) begin
-        waddr[i] = gen_vreg_addr(waddr_i[2]);
-        wdata[i] = wdata_i[2];
+        wbe[i] = wbe_i[VLSU_VD_WD];
+        wvalid_o[VLSU_VD_WD] = 1'b1;
+      end else if (we_i[VSLD_VD_WD] && waddr_i[VSLD_VD_WD][$bits(vreg_addr_t)-$clog2(NRVREG)-1:$clog2(NrElemPerBank)] == i) begin
+        waddr[i] = gen_vreg_addr(waddr_i[VSLD_VD_WD]);
+        wdata[i] = wdata_i[VSLD_VD_WD];
         we[i] = 1'b1;
-        wbe[i] = wbe_i[2];
-        wvalid_o[2] = 1'b1;
+        wbe[i] = wbe_i[VSLD_VD_WD];
+        wvalid_o[VSLD_VD_WD] = 1'b1;
       end
     end
   end
@@ -123,35 +123,35 @@ module spatz_vrf
     // the VFU (vs1) and then by the slide unit. Port two can be accessed first by the
     // VFU (vd), then by the LSU, and finally by the slide unit.
     for (int unsigned i = 0; i < NrBanks; i++) begin
-      // Bank read port 0 - Priority: vs2 (0)
-      if (re_i[0] && raddr_i[0][$bits(vreg_addr_t)-$clog2(NRVREG)-1:$clog2(NrElemPerBank)] == i) begin
-        raddr[i][0] = gen_vreg_addr(raddr_i[0]);
-        rdata_o[0] = rdata[i][0];
-        rvalid_o[0] = 1'b1;
+      // Bank read port 0 - Priority: vs2
+      if (re_i[VFU_VS2_RD] && raddr_i[VFU_VS2_RD][$bits(vreg_addr_t)-$clog2(NRVREG)-1:$clog2(NrElemPerBank)] == i) begin
+        raddr[i][0] = gen_vreg_addr(raddr_i[VFU_VS2_RD]);
+        rdata_o[VFU_VS2_RD] = rdata[i][0];
+        rvalid_o[VFU_VS2_RD] = 1'b1;
       end
-      // Bank read port 1 - Priority: vs1 (1) -> sld (4)
-      if (re_i[1] && raddr_i[1][$bits(vreg_addr_t)-$clog2(NRVREG)-1:$clog2(NrElemPerBank)] == i) begin
-        raddr[i][1] = gen_vreg_addr(raddr_i[1]);
-        rdata_o[1] = rdata[i][1];
-        rvalid_o[1] = 1'b1;
-      end else if (re_i[4] && raddr_i[4][$bits(vreg_addr_t)-$clog2(NRVREG)-1:$clog2(NrElemPerBank)] == i) begin
-        raddr[i][1] = gen_vreg_addr(raddr_i[4]);
-        rdata_o[4] = rdata[i][1];
-        rvalid_o[4] = 1'b1;
+      // Bank read port 1 - Priority: vs1 -> sld
+      if (re_i[VFU_VS1_RD] && raddr_i[VFU_VS1_RD][$bits(vreg_addr_t)-$clog2(NRVREG)-1:$clog2(NrElemPerBank)] == i) begin
+        raddr[i][1] = gen_vreg_addr(raddr_i[VFU_VS1_RD]);
+        rdata_o[VFU_VS1_RD] = rdata[i][1];
+        rvalid_o[VFU_VS1_RD] = 1'b1;
+      end else if (re_i[VSLD_VS2_RD] && raddr_i[VSLD_VS2_RD][$bits(vreg_addr_t)-$clog2(NRVREG)-1:$clog2(NrElemPerBank)] == i) begin
+        raddr[i][1] = gen_vreg_addr(raddr_i[VSLD_VS2_RD]);
+        rdata_o[VSLD_VS2_RD] = rdata[i][1];
+        rvalid_o[VSLD_VS2_RD] = 1'b1;
       end
-      // Bank read port 2 - Priority: vd (2) -> lsu (3) -> sld (4)
-      if (re_i[2] && raddr_i[2][$bits(vreg_addr_t)-$clog2(NRVREG)-1:$clog2(NrElemPerBank)] == i) begin
-        raddr[i][2] = gen_vreg_addr(raddr_i[2]);
-        rdata_o[2] = rdata[i][2];
-        rvalid_o[2] = 1'b1;
-      end else if (re_i[3] && raddr_i[3][$bits(vreg_addr_t)-$clog2(NRVREG)-1:$clog2(NrElemPerBank)] == i) begin
-        raddr[i][2] = gen_vreg_addr(raddr_i[3]);
-        rdata_o[3] = rdata[i][2];
-        rvalid_o[3] = 1'b1;
-      end else if (re_i[4] && raddr_i[4][$bits(vreg_addr_t)-$clog2(NRVREG)-1:$clog2(NrElemPerBank)] == i) begin
-        raddr[i][2] = gen_vreg_addr(raddr_i[4]);
-        rdata_o[4] = rdata[i][2];
-        rvalid_o[4] = 1'b1;
+      // Bank read port 2 - Priority: vd -> lsu -> sld
+      if (re_i[VFU_VD_RD] && raddr_i[VFU_VD_RD][$bits(vreg_addr_t)-$clog2(NRVREG)-1:$clog2(NrElemPerBank)] == i) begin
+        raddr[i][2] = gen_vreg_addr(raddr_i[VFU_VD_RD]);
+        rdata_o[VFU_VD_RD] = rdata[i][2];
+        rvalid_o[VFU_VD_RD] = 1'b1;
+      end else if (re_i[VLSU_VD_RD] && raddr_i[VLSU_VD_RD][$bits(vreg_addr_t)-$clog2(NRVREG)-1:$clog2(NrElemPerBank)] == i) begin
+        raddr[i][2] = gen_vreg_addr(raddr_i[VLSU_VD_RD]);
+        rdata_o[VLSU_VD_RD] = rdata[i][2];
+        rvalid_o[VLSU_VD_RD] = 1'b1;
+      end else if (re_i[VSLD_VS2_RD] && raddr_i[VSLD_VS2_RD][$bits(vreg_addr_t)-$clog2(NRVREG)-1:$clog2(NrElemPerBank)] == i) begin
+        raddr[i][2] = gen_vreg_addr(raddr_i[VSLD_VS2_RD]);
+        rdata_o[VSLD_VS2_RD] = rdata[i][2];
+        rvalid_o[VSLD_VS2_RD] = 1'b1;
       end
     end
   end

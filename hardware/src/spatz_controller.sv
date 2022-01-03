@@ -45,6 +45,11 @@ module spatz_controller
   input  logic      vlsu_rsp_valid_i,
   input  vlsu_rsp_t vlsu_rsp_i,
 
+  // VLSU
+  input  logic      vsld_req_ready_i,
+  input  logic      vsld_rsp_valid_i,
+  input  vsld_rsp_t vsld_rsp_i,
+
   // Vregfile Scoreboarding
   input  logic       [NrVregfilePorts-1:0] sb_enable_i,
   output logic       [NrVregfilePorts-1:0] sb_enable_o,
@@ -230,16 +235,16 @@ module spatz_controller
 
   // Scoreboard metadata
   typedef struct packed {
-    logic valid;
-    logic [$clog2(NrVregfilePorts)-1:0] port;
+    logic     valid;
+    sb_port_e [$clog2(NrVregfilePorts)-1:0] port;
   } sb_metadata_t;
 
   // Port scoreboard metadata
   typedef struct packed {
-    logic valid;
-    logic [$clog2(VELE*8)-1:0] element;
-    logic deps_valid;
-    logic [$clog2(NrVregfilePorts)-1:0] deps;
+    logic     valid;
+    logic     [$clog2(VELE*8)-1:0] element;
+    logic     deps_valid;
+    sb_port_e [$clog2(NrVregfilePorts)-1:0] deps;
   } sb_port_metadata_t;
 
   // Register file scoreboard. Keeps track which vector is currently being
@@ -282,21 +287,28 @@ module spatz_controller
     // to invalid as well.
     if (vfu_rsp_valid_i) begin
       // VS2
-      sb_port_d[0].valid = 1'b0;
-      if (sb_q[vfu_rsp_i.vs2].valid && sb_q[vfu_rsp_i.vs2].port == 'd0) sb_d[vfu_rsp_i.vs2].valid = 1'b0;
+      sb_port_d[SB_VFU_VS2_RD].valid = 1'b0;
+      if (sb_q[vfu_rsp_i.vs2].valid && sb_q[vfu_rsp_i.vs2].port == SB_VFU_VS2_RD) sb_d[vfu_rsp_i.vs2].valid = 1'b0;
       // VS1
-      sb_port_d[1].valid = 1'b0;
-      if (sb_q[vfu_rsp_i.vs1].valid && sb_q[vfu_rsp_i.vs1].port == 'd1) sb_d[vfu_rsp_i.vs1].valid = 1'b0;
+      sb_port_d[SB_VFU_VS1_RD].valid = 1'b0;
+      if (sb_q[vfu_rsp_i.vs1].valid && sb_q[vfu_rsp_i.vs1].port == SB_VFU_VS1_RD) sb_d[vfu_rsp_i.vs1].valid = 1'b0;
       // VD (read and write)
-      sb_port_d[2].valid = 1'b0;
-      sb_port_d[5].valid = 1'b0;
-      if (sb_q[vfu_rsp_i.vd].valid && (sb_q[vfu_rsp_i.vd].port == 'd2 || sb_q[vfu_rsp_i.vd].port == 'd5)) sb_d[vfu_rsp_i.vd].valid = 1'b0;
+      sb_port_d[SB_VFU_VD_RD].valid = 1'b0;
+      sb_port_d[SB_VFU_VD_WD].valid = 1'b0;
+      if (sb_q[vfu_rsp_i.vd].valid && (sb_q[vfu_rsp_i.vd].port == SB_VFU_VD_RD || sb_q[vfu_rsp_i.vd].port == SB_VFU_VD_WD)) sb_d[vfu_rsp_i.vd].valid = 1'b0;
     end
     if (vlsu_rsp_valid_i) begin
       // VD (read and write)
-      sb_port_d[3].valid = 1'b0;
-      sb_port_d[6].valid = 1'b0;
-      if (sb_q[vlsu_rsp_i.vd].valid && (sb_q[vlsu_rsp_i.vd].port == 'd3 || sb_q[vlsu_rsp_i.vd].port == 'd6)) sb_d[vlsu_rsp_i.vd].valid = 1'b0;
+      sb_port_d[SB_VLSU_VD_RD].valid = 1'b0;
+      sb_port_d[SB_VLSU_VD_WD].valid = 1'b0;
+      if (sb_q[vlsu_rsp_i.vd].valid && (sb_q[vlsu_rsp_i.vd].port == SB_VLSU_VD_RD || sb_q[vlsu_rsp_i.vd].port == SB_VLSU_VD_WD)) sb_d[vlsu_rsp_i.vd].valid = 1'b0;
+    end
+    if (vsld_rsp_valid_i) begin
+      // VD (read and write)
+      sb_port_d[SB_VSLD_VS2_RD].valid = 1'b0;
+      if (sb_q[vsld_rsp_i.vs2].valid && sb_q[vsld_rsp_i.vs2].port == SB_VSLD_VS2_RD) sb_d[vsld_rsp_i.vs2].valid = 1'b0;
+      sb_port_d[SB_VSLD_VD_WD].valid = 1'b0;
+      if (sb_q[vlsu_rsp_i.vd].valid && sb_q[vlsu_rsp_i.vd].port == SB_VSLD_VD_WD) sb_d[vlsu_rsp_i.vd].valid = 1'b0;
     end
 
     sb_reset = sb_d;
@@ -308,76 +320,76 @@ module spatz_controller
     if (spatz_req_valid) begin
       if (spatz_req.ex_unit == VFU) begin
         // VS2
-        sb_port_d[0].valid = spatz_req.use_vs2;
-        sb_port_d[0].element = '0;
-        sb_port_d[0].deps_valid = sb_reset[spatz_req.vs2].valid;
-        sb_port_d[0].deps = sb_q[spatz_req.vs2].port;
+        sb_port_d[SB_VFU_VS2_RD].valid = spatz_req.use_vs2;
+        sb_port_d[SB_VFU_VS2_RD].element = '0;
+        sb_port_d[SB_VFU_VS2_RD].deps_valid = sb_reset[spatz_req.vs2].valid;
+        sb_port_d[SB_VFU_VS2_RD].deps = sb_q[spatz_req.vs2].port;
 
         sb_d[spatz_req.vs2].valid = spatz_req.use_vs2;
-        if (spatz_req.use_vs2) sb_d[spatz_req.vs2].port = 'd0;
+        if (spatz_req.use_vs2) sb_d[spatz_req.vs2].port = SB_VFU_VS2_RD;
 
         // VS1
-        sb_port_d[1].valid = spatz_req.use_vs1;
-        sb_port_d[1].element = '0;
-        sb_port_d[1].deps_valid = sb_reset[spatz_req.vs1].valid;
-        sb_port_d[1].deps = sb_q[spatz_req.vs1].port;
+        sb_port_d[SB_VFU_VS1_RD].valid = spatz_req.use_vs1;
+        sb_port_d[SB_VFU_VS1_RD].element = '0;
+        sb_port_d[SB_VFU_VS1_RD].deps_valid = sb_reset[spatz_req.vs1].valid;
+        sb_port_d[SB_VFU_VS1_RD].deps = sb_q[spatz_req.vs1].port;
 
         sb_d[spatz_req.vs1].valid = spatz_req.use_vs1;
-        if (spatz_req.use_vs1) sb_d[spatz_req.vs1].port = 'd1;
+        if (spatz_req.use_vs1) sb_d[spatz_req.vs1].port = SB_VFU_VS1_RD;
 
         // VD (read)
-        sb_port_d[2].valid = spatz_req.use_vd & spatz_req.vd_is_src;
-        sb_port_d[2].element = '0;
-        sb_port_d[2].deps_valid = sb_reset[spatz_req.vd].valid;
-        sb_port_d[2].deps = sb_q[spatz_req.vd].port;
+        sb_port_d[SB_VFU_VD_RD].valid = spatz_req.use_vd & spatz_req.vd_is_src;
+        sb_port_d[SB_VFU_VD_RD].element = '0;
+        sb_port_d[SB_VFU_VD_RD].deps_valid = sb_reset[spatz_req.vd].valid;
+        sb_port_d[SB_VFU_VD_RD].deps = sb_q[spatz_req.vd].port;
 
         sb_d[spatz_req.vd].valid = spatz_req.use_vd & spatz_req.vd_is_src;
-        if (spatz_req.use_vd & spatz_req.vd_is_src) sb_d[spatz_req.vd].port = 'd2;
+        if (spatz_req.use_vd & spatz_req.vd_is_src) sb_d[spatz_req.vd].port = SB_VFU_VD_RD;
 
         // VD (write)
-        sb_port_d[5].valid = spatz_req.use_vd;
-        sb_port_d[5].element = '0;
-        sb_port_d[5].deps_valid = sb_reset[spatz_req.vd].valid;
-        sb_port_d[5].deps = sb_q[spatz_req.vd].port;
+        sb_port_d[SB_VFU_VD_WD].valid = spatz_req.use_vd;
+        sb_port_d[SB_VFU_VD_WD].element = '0;
+        sb_port_d[SB_VFU_VD_WD].deps_valid = sb_reset[spatz_req.vd].valid;
+        sb_port_d[SB_VFU_VD_WD].deps = sb_q[spatz_req.vd].port;
 
         sb_d[spatz_req.vd].valid = spatz_req.use_vd;
-        if (spatz_req.use_vd) sb_d[spatz_req.vd].port = 'd5;
+        if (spatz_req.use_vd) sb_d[spatz_req.vd].port = SB_VFU_VD_WD;
       end else if (spatz_req.ex_unit == LSU) begin
         // VD (read)
-        sb_port_d[3].valid = spatz_req.use_vd & spatz_req.vd_is_src;
-        sb_port_d[3].element = '0;
-        sb_port_d[3].deps_valid = sb_reset[spatz_req.vd].valid;
-        sb_port_d[3].deps = sb_q[spatz_req.vd].port;
+        sb_port_d[SB_VLSU_VD_RD].valid = spatz_req.use_vd & spatz_req.vd_is_src;
+        sb_port_d[SB_VLSU_VD_RD].element = '0;
+        sb_port_d[SB_VLSU_VD_RD].deps_valid = sb_reset[spatz_req.vd].valid;
+        sb_port_d[SB_VLSU_VD_RD].deps = sb_q[spatz_req.vd].port;
 
         sb_d[spatz_req.vd].valid = spatz_req.use_vd & spatz_req.vd_is_src;
-        if (spatz_req.use_vd & spatz_req.vd_is_src) sb_d[spatz_req.vd].port = 'd3;
+        if (spatz_req.use_vd & spatz_req.vd_is_src) sb_d[spatz_req.vd].port = SB_VLSU_VD_RD;
 
         // VD (write)
-        sb_port_d[6].valid = spatz_req.use_vd & ~spatz_req.vd_is_src;
-        sb_port_d[6].element = '0;
-        sb_port_d[6].deps_valid = sb_reset[spatz_req.vd].valid;
-        sb_port_d[6].deps = sb_q[spatz_req.vd].port;
+        sb_port_d[SB_VLSU_VD_WD].valid = spatz_req.use_vd & ~spatz_req.vd_is_src;
+        sb_port_d[SB_VLSU_VD_WD].element = '0;
+        sb_port_d[SB_VLSU_VD_WD].deps_valid = sb_reset[spatz_req.vd].valid;
+        sb_port_d[SB_VLSU_VD_WD].deps = sb_q[spatz_req.vd].port;
 
         sb_d[spatz_req.vd].valid = spatz_req.use_vd & ~spatz_req.vd_is_src;
-        if (spatz_req.use_vd & ~spatz_req.vd_is_src) sb_d[spatz_req.vd].port = 'd6;
+        if (spatz_req.use_vd & ~spatz_req.vd_is_src) sb_d[spatz_req.vd].port = SB_VLSU_VD_WD;
       end else if (spatz_req.ex_unit == SLD) begin
         // VS2
-        sb_port_d[4].valid = spatz_req.use_vs2;
-        sb_port_d[4].element = '0;
-        sb_port_d[4].deps_valid = sb_reset[spatz_req.vs2].valid;
-        sb_port_d[4].deps = sb_q[spatz_req.vs2].port;
+        sb_port_d[SB_VSLD_VS2_RD].valid = spatz_req.use_vs2;
+        sb_port_d[SB_VSLD_VS2_RD].element = '0;
+        sb_port_d[SB_VSLD_VS2_RD].deps_valid = sb_reset[spatz_req.vs2].valid;
+        sb_port_d[SB_VSLD_VS2_RD].deps = sb_q[spatz_req.vs2].port;
 
         sb_d[spatz_req.vs2].valid = spatz_req.use_vs2;
-        if (spatz_req.use_vs2) sb_d[spatz_req.vs2].port = 'd4;
+        if (spatz_req.use_vs2) sb_d[spatz_req.vs2].port = SB_VSLD_VS2_RD;
 
         // VD (write)
-        sb_port_d[7].valid = spatz_req.use_vd;
-        sb_port_d[7].element = '0;
-        sb_port_d[7].deps_valid = sb_reset[spatz_req.vd].valid;
-        sb_port_d[7].deps = sb_q[spatz_req.vd].port;
+        sb_port_d[SB_VSLD_VD_WD].valid = spatz_req.use_vd;
+        sb_port_d[SB_VSLD_VD_WD].element = '0;
+        sb_port_d[SB_VSLD_VD_WD].deps_valid = sb_reset[spatz_req.vd].valid;
+        sb_port_d[SB_VSLD_VD_WD].deps = sb_q[spatz_req.vd].port;
 
         sb_d[spatz_req.vd].valid = spatz_req.use_vd;
-        if (spatz_req.use_vd) sb_d[spatz_req.vd].port = 'd7;
+        if (spatz_req.use_vd) sb_d[spatz_req.vd].port = SB_VSLD_VD_WD;
       end
     end
   end
