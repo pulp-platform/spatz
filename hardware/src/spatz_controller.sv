@@ -204,7 +204,7 @@ module spatz_controller
     .full_o    (req_buffer_full),
     .empty_o   (req_buffer_empty),
     .usage_o   (/* Unused */),
-    .data_i    (decoder_rsp),
+    .data_i    (decoder_rsp.spatz_req),
     .push_i    (decoder_rsp_valid),
     .data_o    (buffer_spatz_req),
     .pop_i     (req_buffer_pop)
@@ -244,7 +244,7 @@ module spatz_controller
 
   // Register file scoreboard. Keeps track which vector is currently being
   // accessed by a vrf port of a unit (last port that has accessed the vector).
-  sb_metadata_t [NRVREG-1:0] sb_q, sb_d;
+  sb_metadata_t [NRVREG-1:0] sb_q, sb_d, sb_reset;
   `FF(sb_q, sb_d, '0)
 
   // Port scoreboard. Keeps track of which element is currently being accessed,
@@ -257,6 +257,25 @@ module spatz_controller
     sb_port_d = sb_port_q;
 
     sb_enable_o = '0;
+
+    // For every port, update the element that is currently being accessed.
+    // If the desired element if lower than the one of the dependency, then
+    // grant access to the register file.
+    for (int unsigned port = 0; port < NrVregfilePorts; port++) begin
+      automatic int unsigned element = vrf_element(sb_addr_i[port], vtype_q.vlmul);
+      automatic sb_port_metadata_t deps = sb_port_q[sb_port_q[port].deps];
+
+      if (sb_enable_i[port]) begin
+        // Update id of accessed element
+        sb_port_d[port].element = element;
+
+        // Check if we have a dependency, and if so if we are accessing an element that has already been accessed by it.
+        if ((sb_port_q[port].deps_valid && ((deps.valid && element != deps.element) || !deps.valid)) || !sb_port_q[port].deps_valid) begin
+          // Grant port access to register file
+          sb_enable_o[port] = 1'b1;
+        end
+      end
+    end
 
     // A unit has finished its vrf access. Set the port scoreboard to invalid,
     // and if the vrf scoreboard still has the port listed as last accessed, set it
@@ -280,16 +299,18 @@ module spatz_controller
       if (sb_q[vlsu_rsp_i.vd].valid && (sb_q[vlsu_rsp_i.vd].port == 'd3 || sb_q[vlsu_rsp_i.vd].port == 'd6)) sb_d[vlsu_rsp_i.vd].valid = 1'b0;
     end
 
+    sb_reset = sb_d;
+
     // Initialize the scoreboard metadata if we have a new instruction issued.
     // Set the ports of the unit to valid if they are being used, reset the currently
     // accessed element to zero, and check if the port has a dependency. If the port is
-    // used, then not this down in the vrf scoreboard as well.
+    // used, then note this down in the vrf scoreboard as well.
     if (spatz_req_valid) begin
       if (spatz_req.ex_unit == VFU) begin
         // VS2
         sb_port_d[0].valid = spatz_req.use_vs2;
         sb_port_d[0].element = '0;
-        sb_port_d[0].deps_valid = sb_q[spatz_req.vs2].valid;
+        sb_port_d[0].deps_valid = sb_reset[spatz_req.vs2].valid;
         sb_port_d[0].deps = sb_q[spatz_req.vs2].port;
 
         sb_d[spatz_req.vs2].valid = spatz_req.use_vs2;
@@ -298,7 +319,7 @@ module spatz_controller
         // VS1
         sb_port_d[1].valid = spatz_req.use_vs1;
         sb_port_d[1].element = '0;
-        sb_port_d[1].deps_valid = sb_q[spatz_req.vs1].valid;
+        sb_port_d[1].deps_valid = sb_reset[spatz_req.vs1].valid;
         sb_port_d[1].deps = sb_q[spatz_req.vs1].port;
 
         sb_d[spatz_req.vs1].valid = spatz_req.use_vs1;
@@ -307,7 +328,7 @@ module spatz_controller
         // VD (read)
         sb_port_d[2].valid = spatz_req.use_vd & spatz_req.vd_is_src;
         sb_port_d[2].element = '0;
-        sb_port_d[2].deps_valid = sb_q[spatz_req.vd].valid;
+        sb_port_d[2].deps_valid = sb_reset[spatz_req.vd].valid;
         sb_port_d[2].deps = sb_q[spatz_req.vd].port;
 
         sb_d[spatz_req.vd].valid = spatz_req.use_vd & spatz_req.vd_is_src;
@@ -316,7 +337,7 @@ module spatz_controller
         // VD (write)
         sb_port_d[5].valid = spatz_req.use_vd;
         sb_port_d[5].element = '0;
-        sb_port_d[5].deps_valid = sb_q[spatz_req.vd].valid;
+        sb_port_d[5].deps_valid = sb_reset[spatz_req.vd].valid;
         sb_port_d[5].deps = sb_q[spatz_req.vd].port;
 
         sb_d[spatz_req.vd].valid = spatz_req.use_vd;
@@ -325,7 +346,7 @@ module spatz_controller
         // VD (read)
         sb_port_d[3].valid = spatz_req.use_vd & spatz_req.vd_is_src;
         sb_port_d[3].element = '0;
-        sb_port_d[3].deps_valid = sb_q[spatz_req.vd].valid;
+        sb_port_d[3].deps_valid = sb_reset[spatz_req.vd].valid;
         sb_port_d[3].deps = sb_q[spatz_req.vd].port;
 
         sb_d[spatz_req.vd].valid = spatz_req.use_vd & spatz_req.vd_is_src;
@@ -334,7 +355,7 @@ module spatz_controller
         // VD (write)
         sb_port_d[6].valid = spatz_req.use_vd & ~spatz_req.vd_is_src;
         sb_port_d[6].element = '0;
-        sb_port_d[6].deps_valid = sb_q[spatz_req.vd].valid;
+        sb_port_d[6].deps_valid = sb_reset[spatz_req.vd].valid;
         sb_port_d[6].deps = sb_q[spatz_req.vd].port;
 
         sb_d[spatz_req.vd].valid = spatz_req.use_vd & ~spatz_req.vd_is_src;
@@ -343,7 +364,7 @@ module spatz_controller
         // VS2
         sb_port_d[4].valid = spatz_req.use_vs2;
         sb_port_d[4].element = '0;
-        sb_port_d[4].deps_valid = sb_q[spatz_req.vs2].valid;
+        sb_port_d[4].deps_valid = sb_reset[spatz_req.vs2].valid;
         sb_port_d[4].deps = sb_q[spatz_req.vs2].port;
 
         sb_d[spatz_req.vs2].valid = spatz_req.use_vs2;
@@ -352,30 +373,11 @@ module spatz_controller
         // VD (write)
         sb_port_d[7].valid = spatz_req.use_vd;
         sb_port_d[7].element = '0;
-        sb_port_d[7].deps_valid = sb_q[spatz_req.vd].valid;
+        sb_port_d[7].deps_valid = sb_reset[spatz_req.vd].valid;
         sb_port_d[7].deps = sb_q[spatz_req.vd].port;
 
         sb_d[spatz_req.vd].valid = spatz_req.use_vd;
         if (spatz_req.use_vd) sb_d[spatz_req.vd].port = 'd7;
-      end
-    end
-
-    // For every port, update the element that is currently being accessed.
-    // If the desired element if lower than the one of the dependency, then
-    // grant access to the register file.
-    for (int unsigned port = 0; port < NrVregfilePorts; port++) begin
-      automatic int unsigned element = vrf_element(sb_addr_i[port], vtype_q.vlmul);
-      automatic sb_port_metadata_t deps = sb_port_q[sb_port_q[port].deps];
-
-      if (sb_enable_i[port]) begin
-        // Update id of accessed element
-        sb_port_d[port].element = element;
-
-        // Check if we have a dependency, and if so if we are accessing an element that has already been accessed by it.
-        if ((sb_port_q[port].deps_valid && ((deps.valid && element != deps.element) || !deps.valid)) || !sb_port_q[port].deps_valid) begin
-          // Grant port access to register file
-          sb_enable_o[port] = 1'b1;
-        end
       end
     end
   end
