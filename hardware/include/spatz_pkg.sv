@@ -154,8 +154,12 @@ package spatz_pkg;
   //////////////////////////////////
 
   typedef struct packed {
+    // Request id
+    instr_id_t id;
+
     // Instruction
     riscv_pkg::instr_t instr;
+
     // Rs values
     elen_t rs1;
     logic  rs1_valid;

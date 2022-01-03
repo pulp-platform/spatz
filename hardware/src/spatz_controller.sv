@@ -58,10 +58,6 @@ module spatz_controller
   // Signals //
   /////////////
 
-  // Spatz ready to handle new request
-  logic spatz_ready_q, spatz_ready_d;
-  `FF(spatz_ready_q, spatz_ready_d, '1);
-
   // Spatz request
   spatz_req_t spatz_req;
   logic       spatz_req_valid;
@@ -175,12 +171,13 @@ module spatz_controller
     decoder_req_valid = 1'b0;
 
     // Decode new instruction if one is received and spatz is ready
-    if (x_issue_valid_i && spatz_ready_q) begin
+    if (x_issue_valid_i && x_issue_ready_o) begin
       decoder_req.instr     = x_issue_req_i.instr;
       decoder_req.rs1       = x_issue_req_i.rs[0];
       decoder_req.rs1_valid = x_issue_req_i.rs_valid[0];
       decoder_req.rs2       = x_issue_req_i.rs[1];
       decoder_req.rs2_valid = x_issue_req_i.rs_valid[1];
+      decoder_req.id        = x_issue_req_i.id;
       decoder_req_valid     = 1'b1;
     end
   end // proc_decode
@@ -189,21 +186,29 @@ module spatz_controller
   // Request Buffer //
   ////////////////////
 
-  // Spatz request buffer
-  spatz_req_t spatz_req_buffer_q, spatz_req_buffer_d;
-  logic       spatz_req_buffer_empty_q, spatz_req_buffer_empty_d;
+  // Spatz request
+  spatz_req_t buffer_spatz_req;
+  // Buffer state signals
+  logic req_buffer_full, req_buffer_empty, req_buffer_pop;
 
-  // Spatz request buffer is used when there is a new request but execution
-  // unit is still busy
-  always_ff @(posedge clk_i or negedge rst_ni) begin : proc_spatz_req_buffer
-    if(~rst_ni) begin
-      spatz_req_buffer_q       <= 0;
-      spatz_req_buffer_empty_q <= 0;
-    end else begin
-      spatz_req_buffer_q       <= spatz_req_buffer_d;
-      spatz_req_buffer_empty_q <= spatz_req_buffer_empty_d;
-    end
-  end
+  // One element wide instruction buffer
+  fifo_v3 #(
+    .FALL_THROUGH(1'b1),
+    .DATA_WIDTH  ($bits(spatz_req_t)),
+    .DEPTH       ('d1)
+  ) i_req_buffer (
+    .clk_i     (clk_i),
+    .rst_ni    (rst_ni),
+    .flush_i   (1'b0),
+    .testmode_i(1'b0),
+    .full_o    (req_buffer_full),
+    .empty_o   (req_buffer_empty),
+    .usage_o   (/* Unused */),
+    .data_i    (decoder_rsp),
+    .push_i    (decoder_rsp_valid),
+    .data_o    (buffer_spatz_req),
+    .pop_i     (req_buffer_pop)
+  );
 
   ////////////////
   // Scoreboard //
@@ -383,41 +388,30 @@ module spatz_controller
   logic retire_csr;
 
   // We stall issuing a new instruction if the corresponding execution unit is
-  // not ready yet, or we have a change in LMUL, for which we need to let all the
+  // not ready yet. Or we have a change in LMUL, for which we need to let all the
   // units finish first before scheduling a new operation (to avoid running into
   // issues with the socreboard).
   logic stall, vfu_stall, vlsu_stall, vsld_stall, csr_stall;
-  assign stall = vfu_stall | vlsu_stall | vsld_stall | csr_stall;
-  assign vfu_stall  = ~vfu_req_ready_i  & (spatz_req.ex_unit == VFU) & (decoder_rsp_valid | ~spatz_req_buffer_empty_q);
-  assign vlsu_stall = ~vlsu_req_ready_i & (spatz_req.ex_unit == LSU) & (decoder_rsp_valid | ~spatz_req_buffer_empty_q);
+  assign stall = (vfu_stall | vlsu_stall | vsld_stall | csr_stall) & ~req_buffer_empty;
+  assign vfu_stall  = ~vfu_req_ready_i  & (spatz_req.ex_unit == VFU);
+  assign vlsu_stall = ~vlsu_req_ready_i & (spatz_req.ex_unit == LSU);
   assign vsld_stall = 1'b0;
-  assign csr_stall  = (~vfu_req_ready_i | ~vlsu_req_ready_i) & (spatz_req.ex_unit == CON) & (spatz_req.vtype.vlmul != vtype_q.vlmul) & (decoder_rsp_valid | ~spatz_req_buffer_empty_q);
+  assign csr_stall  = (~vfu_req_ready_i | ~vlsu_req_ready_i) & (spatz_req.ex_unit == CON) & (spatz_req.vtype.vlmul != vtype_q.vlmul);
 
-  // Issue not operation to execution units
+  // Pop the buffer if we do not have a unit stall
+  assign req_buffer_pop = ~stall & ~req_buffer_empty;
+
+  // Issue new operation to execution units
   always_comb begin : ex_issue
-    retire_csr = 1'b0;
-    spatz_ready_d = spatz_ready_q;
-    // If the request buffer is not empty, issue its contents for the next operation
-    spatz_req = spatz_req_buffer_empty_q ? decoder_rsp.spatz_req : spatz_req_buffer_q;
-    spatz_req.id = decoder_rsp_valid ? x_issue_req_i.id : spatz_req.id;
+    retire_csr    = 1'b0;
+
+    // Define new spatz request
+    spatz_req = buffer_spatz_req;
     spatz_req_illegal = decoder_rsp_valid ? decoder_rsp.instr_illegal : 1'b0;
-    spatz_req_valid = 1'b0;
+    spatz_req_valid   = req_buffer_pop & ~spatz_req_illegal;
 
-    spatz_req_buffer_d       = spatz_req_buffer_q;
-    spatz_req_buffer_empty_d = spatz_req_buffer_empty_q;
-
-    // New instruction wants to access busy resource. Store it in the request buffer.
-    if (decoder_rsp_valid && stall) begin
-      spatz_req_buffer_d = spatz_req;
-      spatz_req_buffer_empty_d = 1'b0;
-      spatz_ready_d = 1'b0;
-    // We have a ew instruction and there is no stall.
-    end else if ((decoder_rsp_valid && ~spatz_req_illegal) || (!spatz_req_buffer_empty_q && !stall)) begin
-      // Reset request buffer and accept new instructions
-      spatz_req_buffer_empty_d = 1'b1;
-      spatz_ready_d = 1'b1;
-      spatz_req_valid = 1'b1;
-
+    // We have a new instruction and there is no stall.
+    if (spatz_req_valid) begin
       if (spatz_req.ex_unit == VFU) begin
         // Overwrite all csrs in request
         spatz_req.vtype  = vtype_q;
@@ -433,7 +427,7 @@ module spatz_controller
         spatz_req.vl     = vl_q;
         spatz_req.vstart = vstart_q;
       end else begin
-        // Do not overwrite csrs, but retire new ones
+        // Do not overwrite csrs, but retire new csr information
         retire_csr = 1'b1;
       end
     end
@@ -520,7 +514,7 @@ module spatz_controller
   end // retire
 
   // Signal to core that Spatz is ready for a new instruction
-  assign x_issue_ready_o = spatz_ready_q;
+  assign x_issue_ready_o = ~req_buffer_full;
 
   // Send request off to execution units
   assign spatz_req_o       = spatz_req;

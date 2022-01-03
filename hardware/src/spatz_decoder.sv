@@ -497,6 +497,7 @@ module spatz_decoder
 
       // Add correct reset_vstart value
       spatz_req.op_cgf.reset_vstart = illegal_instr ? 1'b0 : reset_vstart;
+      spatz_req.id = decoder_req_i.id;
     end // Instruction valid
   end : decoder
 
