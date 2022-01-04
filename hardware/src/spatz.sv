@@ -235,7 +235,7 @@ module spatz
   assign vrf_raddr[VSLD_VS2_RD] = '0;
   assign sb_re[VSLD_VS2_RD]     = '0;
 
-  assign vsld_req_ready = 1'b0;
+  assign vsld_req_ready = 1'b1;
   assign vsld_rsp_valid = 1'b0;
   assign vsld_rsp       = '0;
 

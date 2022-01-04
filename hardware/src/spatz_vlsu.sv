@@ -84,11 +84,11 @@ module spatz_vlsu
 
   // Has a new vfu execution request arrived
   logic new_vlsu_request;
-  assign new_vlsu_request = spatz_req_valid_i && vlsu_is_ready && (spatz_req_i.ex_unit == LSU);
+  assign new_vlsu_request = spatz_req_valid_i & vlsu_is_ready & (spatz_req_i.ex_unit == LSU);
 
   // Is instruction a load
   logic is_load;
-  assign is_load = (spatz_req_q.op == VLE) || (spatz_req_q.op == VLSE) || (spatz_req_q.op == VLXE);
+  assign is_load = (spatz_req_q.op == VLE) | (spatz_req_q.op == VLSE) | (spatz_req_q.op == VLXE);
 
   // Is the vector length zero (no active instruction)
   logic  is_vl_zero;
@@ -193,7 +193,7 @@ module spatz_vlsu
     vlsu_rsp_o       = '0;
 
     // Write back accessed register file vector to clear scoreboard entry
-    if (vlsu_is_ready && spatz_req_q.vl != '0) begin
+    if (vlsu_is_ready && (spatz_req_q.vl != '0)) begin
       vlsu_rsp_o.id    = spatz_req_q.id;
       vlsu_rsp_o.vd    = spatz_req_q.vd;
       vlsu_rsp_valid_o = 1'b1;
@@ -201,7 +201,7 @@ module spatz_vlsu
   end
 
   // Are we ready to accept a new instruction from the controller
-  assign vlsu_is_ready = &vreg_operations_finished & &mem_operations_finished;
+  assign vlsu_is_ready = (&vreg_operations_finished) & (&mem_operations_finished);
 
   // Signal when we are finished with with accessing the memory (necessary
   // for the case with more than one memory port)

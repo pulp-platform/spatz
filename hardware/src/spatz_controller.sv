@@ -236,7 +236,7 @@ module spatz_controller
   // Scoreboard metadata
   typedef struct packed {
     logic     valid;
-    sb_port_e [$clog2(NrVregfilePorts)-1:0] port;
+    sb_port_e port;
   } sb_metadata_t;
 
   // Port scoreboard metadata
@@ -244,7 +244,7 @@ module spatz_controller
     logic     valid;
     logic     [$clog2(VELE*8)-1:0] element;
     logic     deps_valid;
-    sb_port_e [$clog2(NrVregfilePorts)-1:0] deps;
+    sb_port_e deps;
   } sb_port_metadata_t;
 
   // Register file scoreboard. Keeps track which vector is currently being
@@ -304,9 +304,10 @@ module spatz_controller
       if (sb_q[vlsu_rsp_i.vd].valid && (sb_q[vlsu_rsp_i.vd].port == SB_VLSU_VD_RD || sb_q[vlsu_rsp_i.vd].port == SB_VLSU_VD_WD)) sb_d[vlsu_rsp_i.vd].valid = 1'b0;
     end
     if (vsld_rsp_valid_i) begin
-      // VD (read and write)
+      // VS2
       sb_port_d[SB_VSLD_VS2_RD].valid = 1'b0;
       if (sb_q[vsld_rsp_i.vs2].valid && sb_q[vsld_rsp_i.vs2].port == SB_VSLD_VS2_RD) sb_d[vsld_rsp_i.vs2].valid = 1'b0;
+      // VD (write)
       sb_port_d[SB_VSLD_VD_WD].valid = 1'b0;
       if (sb_q[vlsu_rsp_i.vd].valid && sb_q[vlsu_rsp_i.vd].port == SB_VSLD_VD_WD) sb_d[vlsu_rsp_i.vd].valid = 1'b0;
     end
@@ -320,73 +321,73 @@ module spatz_controller
     if (spatz_req_valid) begin
       if (spatz_req.ex_unit == VFU) begin
         // VS2
-        sb_port_d[SB_VFU_VS2_RD].valid = spatz_req.use_vs2;
-        sb_port_d[SB_VFU_VS2_RD].element = '0;
+        sb_port_d[SB_VFU_VS2_RD].valid      = spatz_req.use_vs2;
+        sb_port_d[SB_VFU_VS2_RD].element    = '0;
         sb_port_d[SB_VFU_VS2_RD].deps_valid = sb_reset[spatz_req.vs2].valid;
-        sb_port_d[SB_VFU_VS2_RD].deps = sb_q[spatz_req.vs2].port;
+        sb_port_d[SB_VFU_VS2_RD].deps       = sb_q[spatz_req.vs2].port;
 
         sb_d[spatz_req.vs2].valid = spatz_req.use_vs2;
         if (spatz_req.use_vs2) sb_d[spatz_req.vs2].port = SB_VFU_VS2_RD;
 
         // VS1
-        sb_port_d[SB_VFU_VS1_RD].valid = spatz_req.use_vs1;
-        sb_port_d[SB_VFU_VS1_RD].element = '0;
+        sb_port_d[SB_VFU_VS1_RD].valid      = spatz_req.use_vs1;
+        sb_port_d[SB_VFU_VS1_RD].element    = '0;
         sb_port_d[SB_VFU_VS1_RD].deps_valid = sb_reset[spatz_req.vs1].valid;
-        sb_port_d[SB_VFU_VS1_RD].deps = sb_q[spatz_req.vs1].port;
+        sb_port_d[SB_VFU_VS1_RD].deps       = sb_q[spatz_req.vs1].port;
 
         sb_d[spatz_req.vs1].valid = spatz_req.use_vs1;
         if (spatz_req.use_vs1) sb_d[spatz_req.vs1].port = SB_VFU_VS1_RD;
 
         // VD (read)
-        sb_port_d[SB_VFU_VD_RD].valid = spatz_req.use_vd & spatz_req.vd_is_src;
-        sb_port_d[SB_VFU_VD_RD].element = '0;
+        sb_port_d[SB_VFU_VD_RD].valid      = spatz_req.use_vd & spatz_req.vd_is_src;
+        sb_port_d[SB_VFU_VD_RD].element    = '0;
         sb_port_d[SB_VFU_VD_RD].deps_valid = sb_reset[spatz_req.vd].valid;
-        sb_port_d[SB_VFU_VD_RD].deps = sb_q[spatz_req.vd].port;
+        sb_port_d[SB_VFU_VD_RD].deps       = sb_q[spatz_req.vd].port;
 
         sb_d[spatz_req.vd].valid = spatz_req.use_vd & spatz_req.vd_is_src;
         if (spatz_req.use_vd & spatz_req.vd_is_src) sb_d[spatz_req.vd].port = SB_VFU_VD_RD;
 
         // VD (write)
-        sb_port_d[SB_VFU_VD_WD].valid = spatz_req.use_vd;
-        sb_port_d[SB_VFU_VD_WD].element = '0;
+        sb_port_d[SB_VFU_VD_WD].valid      = spatz_req.use_vd;
+        sb_port_d[SB_VFU_VD_WD].element    = '0;
         sb_port_d[SB_VFU_VD_WD].deps_valid = sb_reset[spatz_req.vd].valid;
-        sb_port_d[SB_VFU_VD_WD].deps = sb_q[spatz_req.vd].port;
+        sb_port_d[SB_VFU_VD_WD].deps       = sb_q[spatz_req.vd].port;
 
         sb_d[spatz_req.vd].valid = spatz_req.use_vd;
         if (spatz_req.use_vd) sb_d[spatz_req.vd].port = SB_VFU_VD_WD;
       end else if (spatz_req.ex_unit == LSU) begin
         // VD (read)
-        sb_port_d[SB_VLSU_VD_RD].valid = spatz_req.use_vd & spatz_req.vd_is_src;
-        sb_port_d[SB_VLSU_VD_RD].element = '0;
+        sb_port_d[SB_VLSU_VD_RD].valid      = spatz_req.use_vd & spatz_req.vd_is_src;
+        sb_port_d[SB_VLSU_VD_RD].element    = '0;
         sb_port_d[SB_VLSU_VD_RD].deps_valid = sb_reset[spatz_req.vd].valid;
-        sb_port_d[SB_VLSU_VD_RD].deps = sb_q[spatz_req.vd].port;
+        sb_port_d[SB_VLSU_VD_RD].deps       = sb_q[spatz_req.vd].port;
 
         sb_d[spatz_req.vd].valid = spatz_req.use_vd & spatz_req.vd_is_src;
         if (spatz_req.use_vd & spatz_req.vd_is_src) sb_d[spatz_req.vd].port = SB_VLSU_VD_RD;
 
         // VD (write)
-        sb_port_d[SB_VLSU_VD_WD].valid = spatz_req.use_vd & ~spatz_req.vd_is_src;
-        sb_port_d[SB_VLSU_VD_WD].element = '0;
+        sb_port_d[SB_VLSU_VD_WD].valid      = spatz_req.use_vd & ~spatz_req.vd_is_src;
+        sb_port_d[SB_VLSU_VD_WD].element    = '0;
         sb_port_d[SB_VLSU_VD_WD].deps_valid = sb_reset[spatz_req.vd].valid;
-        sb_port_d[SB_VLSU_VD_WD].deps = sb_q[spatz_req.vd].port;
+        sb_port_d[SB_VLSU_VD_WD].deps       = sb_q[spatz_req.vd].port;
 
         sb_d[spatz_req.vd].valid = spatz_req.use_vd & ~spatz_req.vd_is_src;
         if (spatz_req.use_vd & ~spatz_req.vd_is_src) sb_d[spatz_req.vd].port = SB_VLSU_VD_WD;
       end else if (spatz_req.ex_unit == SLD) begin
         // VS2
-        sb_port_d[SB_VSLD_VS2_RD].valid = spatz_req.use_vs2;
-        sb_port_d[SB_VSLD_VS2_RD].element = '0;
+        sb_port_d[SB_VSLD_VS2_RD].valid      = spatz_req.use_vs2;
+        sb_port_d[SB_VSLD_VS2_RD].element    = '0;
         sb_port_d[SB_VSLD_VS2_RD].deps_valid = sb_reset[spatz_req.vs2].valid;
-        sb_port_d[SB_VSLD_VS2_RD].deps = sb_q[spatz_req.vs2].port;
+        sb_port_d[SB_VSLD_VS2_RD].deps       = sb_q[spatz_req.vs2].port;
 
         sb_d[spatz_req.vs2].valid = spatz_req.use_vs2;
         if (spatz_req.use_vs2) sb_d[spatz_req.vs2].port = SB_VSLD_VS2_RD;
 
         // VD (write)
-        sb_port_d[SB_VSLD_VD_WD].valid = spatz_req.use_vd;
-        sb_port_d[SB_VSLD_VD_WD].element = '0;
+        sb_port_d[SB_VSLD_VD_WD].valid      = spatz_req.use_vd;
+        sb_port_d[SB_VSLD_VD_WD].element    = '0;
         sb_port_d[SB_VSLD_VD_WD].deps_valid = sb_reset[spatz_req.vd].valid;
-        sb_port_d[SB_VSLD_VD_WD].deps = sb_q[spatz_req.vd].port;
+        sb_port_d[SB_VSLD_VD_WD].deps       = sb_q[spatz_req.vd].port;
 
         sb_d[spatz_req.vd].valid = spatz_req.use_vd;
         if (spatz_req.use_vd) sb_d[spatz_req.vd].port = SB_VSLD_VD_WD;
@@ -409,18 +410,18 @@ module spatz_controller
   assign stall = (vfu_stall | vlsu_stall | vsld_stall | csr_stall) & ~req_buffer_empty;
   assign vfu_stall  = ~vfu_req_ready_i  & (spatz_req.ex_unit == VFU);
   assign vlsu_stall = ~vlsu_req_ready_i & (spatz_req.ex_unit == LSU);
-  assign vsld_stall = 1'b0;
-  assign csr_stall  = (~vfu_req_ready_i | ~vlsu_req_ready_i) & (spatz_req.ex_unit == CON) & (spatz_req.vtype.vlmul != vtype_q.vlmul);
+  assign vsld_stall = ~vsld_req_ready_i & (spatz_req.ex_unit == SLD);
+  assign csr_stall  = (~vfu_req_ready_i | ~vlsu_req_ready_i | ~vsld_req_ready_i) & (spatz_req.ex_unit == CON) & (buffer_spatz_req.vtype.vlmul != vtype_q.vlmul);
 
   // Pop the buffer if we do not have a unit stall
   assign req_buffer_pop = ~stall & ~req_buffer_empty;
 
   // Issue new operation to execution units
   always_comb begin : ex_issue
-    retire_csr    = 1'b0;
+    retire_csr = 1'b0;
 
     // Define new spatz request
-    spatz_req = buffer_spatz_req;
+    spatz_req         = buffer_spatz_req;
     spatz_req_illegal = decoder_rsp_valid ? decoder_rsp.instr_illegal : 1'b0;
     spatz_req_valid   = req_buffer_pop & ~spatz_req_illegal;
 
@@ -452,11 +453,11 @@ module spatz_controller
     x_issue_resp_o = '0;
 
     // We have a new valid instruction
-    if (decoder_rsp_valid && !spatz_req_illegal) begin
+    if (decoder_rsp_valid && !decoder_rsp.instr_illegal) begin
       // Accept the new instruction
       x_issue_resp_o.accept = 1'b1;
 
-      case (spatz_req.ex_unit)
+      case (decoder_rsp.spatz_req.ex_unit)
         CON: begin
           x_issue_resp_o.writeback = spatz_req.use_rd;
         end // CON
@@ -481,7 +482,7 @@ module spatz_controller
         end // SLD
       endcase // Operation type
     // The decoding resulted in an illegal instruction
-    end else if (decoder_rsp_valid && spatz_req_illegal) begin
+    end else if (decoder_rsp_valid && decoder_rsp.instr_illegal) begin
       // Do not accept it
       x_issue_resp_o.accept = 1'b0;
     end
