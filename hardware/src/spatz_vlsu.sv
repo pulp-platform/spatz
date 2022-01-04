@@ -22,13 +22,16 @@ module spatz_vlsu
 ) (
   input  logic clk_i,
   input  logic rst_ni,
+
   // Spatz req
   input  spatz_req_t spatz_req_i,
   input  logic       spatz_req_valid_i,
   output logic       spatz_req_ready_o,
+
   // VFU rsp
   output logic      vlsu_rsp_valid_o,
   output vlsu_rsp_t vlsu_rsp_o,
+
   // VRF
   output vreg_addr_t vrf_waddr_o,
   output vreg_data_t vrf_wdata_o,
@@ -39,6 +42,7 @@ module spatz_vlsu
   output logic       vrf_re_o,
   input  vreg_data_t vrf_rdata_i,
   input  logic       vrf_rvalid_i,
+
   // X-Interface Memory Request
   output logic          [NrMemPorts-1:0] x_mem_valid_o,
   input  logic          [NrMemPorts-1:0] x_mem_ready_i,
@@ -48,7 +52,7 @@ module spatz_vlsu
   input  logic          [NrMemPorts-1:0] x_mem_result_valid_i,
   input  x_mem_result_t [NrMemPorts-1:0] x_mem_result_i,
   // X-Interface Memory Finished
-  output logic x_mem_finished_o
+  output logic                           x_mem_finished_o
 );
 
   // Include FF
@@ -58,7 +62,7 @@ module spatz_vlsu
   // Localparams //
   /////////////////
 
-  localparam int unsigned NrIPUsPerMemPort = N_IPU/NrMemPorts;
+  localparam int unsigned NrIPUsPerMemPort        = N_IPU/NrMemPorts;
   localparam int unsigned VregDataWidthPerMemPort = ELEN*NrIPUsPerMemPort;
 
   localparam int unsigned MemDataWidth  = $bits(x_mem_req_o[0].wdata);
@@ -220,44 +224,18 @@ module spatz_vlsu
   // Calculate the memory address for each memory port
   always_comb begin : gen_mem_req_addr
     for (int unsigned i = 0; i < NrMemPorts; i++) begin : gen_elem_access
-      mem_req_addr[i]        = '0;
-      mem_req_addr_offset[i] = 2'b00;
+      automatic int unsigned stride = is_strided ? spatz_req_q.rs2 >> spatz_req_q.vtype.vsew : 'd1;
+      automatic logic [31:0] addr   = spatz_req_q.rs1 + ({mem_counter_value[i][$bits(vlen_t)-1:2] << $clog2(NrMemPorts), mem_counter_value[i][1:0]} + (i << 2)) * stride;
 
-      unique case (spatz_req_q.op)
-        VLE,
-        VSE,
-        VLSE,
-        VSSE: begin
-          automatic int unsigned stride = is_strided ? spatz_req_q.rs2 >> spatz_req_q.vtype.vsew : 'd1;
-          automatic logic [31:0] addr   = spatz_req_q.rs1 + ({mem_counter_value[i][$bits(vlen_t)-1:2] << $clog2(NrMemPorts), mem_counter_value[i][1:0]} + (i << 2)) * stride;
-
-          mem_req_addr[i] = {addr[31:2], 2'b00};
-          mem_req_addr_offset[i] = addr[1:0];
-        end
-        default: begin
-          mem_req_addr[i] = '0;
-        end
-      endcase
+      mem_req_addr[i] = {addr[31:2], 2'b00};
+      mem_req_addr_offset[i] = addr[1:0];
     end
   end
 
   // Calculate the register file address
   always_comb begin : gen_vreg_addr
-    vreg_addr        = '0;
-    vreg_addr_offset = 2'b00;
-
-    unique case (spatz_req_q.op)
-      VLE,
-      VSE,
-      VLSE,
-      VSSE: begin
-        vreg_addr = {spatz_req_q.vd, {$clog2(VELE){1'b0}}} + $unsigned(vreg_elem_id);
-        vreg_addr_offset = vreg_counter_value[1:0] * spatz_req_q.rs2 + spatz_req_q.rs1;
-      end
-      default: begin
-        vreg_addr = '0;
-      end
-    endcase
+    vreg_addr = {spatz_req_q.vd, {$clog2(VELE){1'b0}}} + $unsigned(vreg_elem_id);
+    vreg_addr_offset = vreg_counter_value[1:0] * spatz_req_q.rs2 + spatz_req_q.rs1;
   end
 
   //////////////
@@ -284,6 +262,7 @@ module spatz_vlsu
     );
   end
 
+  /* verilator lint_off SELRANGE */
   always_comb begin
     for (int unsigned i = 0; i < N_IPU; i++) begin
       // The total amount of elements we have to work through
@@ -322,6 +301,7 @@ module spatz_vlsu
 
     vreg_elem_id = vreg_counter_value[NrIPUsPerMemPort-1] >> $clog2(ELENB);
   end
+  /* verilator lint_on SELRANGE */
 
   // For each memory port we count how many elements we have already loaded/stored.
   // Multiple counters are needed all memory ports can work independent of each other.
