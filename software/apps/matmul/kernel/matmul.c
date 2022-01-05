@@ -103,18 +103,17 @@ void matmul_vec_4x4(int32_t *c, const int32_t *a, const int32_t *b,
     // Calculate pointer to the matrix A
     a = a_ + ++n;
 
-    asm volatile("vmacc.vx v0, %0, v16" ::"r"(t0));
-    t0 = *a, a += N;
-
     // Load one row of B
     asm volatile("vle32.v v20, (%0);" ::"r"(b));
-    b += P;
 
+    asm volatile("vmacc.vx v0, %0, v16" ::"r"(t0));
     asm volatile("vmacc.vx v4, %0, v16" ::"r"(t1));
-    t1 = *a, a += N;
     asm volatile("vmacc.vx v8, %0, v16" ::"r"(t2));
-    t2 = *a, a += N;
     asm volatile("vmacc.vx v12, %0, v16" ::"r"(t3));
+    b += P;
+    t0 = *a, a += N;
+    t1 = *a, a += N;
+    t2 = *a, a += N;
     t3 = *a;
 
     a = a_ + ++n;
@@ -122,18 +121,17 @@ void matmul_vec_4x4(int32_t *c, const int32_t *a, const int32_t *b,
     if (n == N)
       break;
 
-    asm volatile("vmacc.vx v0, %0, v20" ::"r"(t0));
-    t0 = *a, a += N;
-
     // Load one row of B
     asm volatile("vle32.v v16, (%0);" ::"r"(b));
-    b += P;
 
+    asm volatile("vmacc.vx v0, %0, v20" ::"r"(t0));
     asm volatile("vmacc.vx v4, %0, v20" ::"r"(t1));
-    t1 = *a, a += N;
     asm volatile("vmacc.vx v8, %0, v20" ::"r"(t2));
-    t2 = *a, a += N;
     asm volatile("vmacc.vx v12, %0, v20" ::"r"(t3));
+    b += P;
+    t0 = *a, a += N;
+    t1 = *a, a += N;
+    t2 = *a, a += N;
     t3 = *a;
   }
 
@@ -228,26 +226,25 @@ void matmul_vec_8x8(int32_t *c, const int32_t *a, const int32_t *b,
     // Calculate pointer to the matrix A
     a = a_ + ++n;
 
-    asm volatile("vmacc.vx v0, %0, v18" ::"r"(t0));
-    t0 = *a, a += N;
-
     // Load one row of B
     asm volatile("vle32.v v20, (%0);" ::"r"(b));
-    b += P;
 
+    asm volatile("vmacc.vx v0, %0, v18" ::"r"(t0));
     asm volatile("vmacc.vx v2, %0, v18" ::"r"(t1));
-    t1 = *a, a += N;
     asm volatile("vmacc.vx v4, %0, v18" ::"r"(t2));
-    t2 = *a, a += N;
     asm volatile("vmacc.vx v6, %0, v18" ::"r"(t3));
-    t3 = *a, a += N;
     asm volatile("vmacc.vx v8, %0, v18" ::"r"(t4));
-    t4 = *a, a += N;
     asm volatile("vmacc.vx v10, %0, v18" ::"r"(t5));
-    t5 = *a, a += N;
     asm volatile("vmacc.vx v12, %0, v18" ::"r"(t6));
-    t6 = *a, a += N;
     asm volatile("vmacc.vx v14, %0, v18" ::"r"(t7));
+    b += P;
+    t0 = *a, a += N;
+    t1 = *a, a += N;
+    t2 = *a, a += N;
+    t3 = *a, a += N;
+    t4 = *a, a += N;
+    t5 = *a, a += N;
+    t6 = *a, a += N;
     t7 = *a;
 
     a = a_ + ++n;
@@ -255,26 +252,25 @@ void matmul_vec_8x8(int32_t *c, const int32_t *a, const int32_t *b,
     if (n == N)
       break;
 
-    asm volatile("vmacc.vx v0, %0, v20" ::"r"(t0));
-    t0 = *a, a += N;
-
     // Load one row of B
     asm volatile("vle32.v v18, (%0);" ::"r"(b));
-    b += P;
 
+    asm volatile("vmacc.vx v0, %0, v20" ::"r"(t0));
     asm volatile("vmacc.vx v2, %0, v20" ::"r"(t1));
-    t1 = *a, a += N;
     asm volatile("vmacc.vx v4, %0, v20" ::"r"(t2));
-    t2 = *a, a += N;
     asm volatile("vmacc.vx v6, %0, v20" ::"r"(t3));
-    t3 = *a, a += N;
     asm volatile("vmacc.vx v8, %0, v20" ::"r"(t4));
-    t4 = *a, a += N;
     asm volatile("vmacc.vx v10, %0, v20" ::"r"(t5));
-    t5 = *a, a += N;
     asm volatile("vmacc.vx v12, %0, v20" ::"r"(t6));
-    t6 = *a, a += N;
     asm volatile("vmacc.vx v14, %0, v20" ::"r"(t7));
+    b += P;
+    t0 = *a, a += N;
+    t1 = *a, a += N;
+    t2 = *a, a += N;
+    t3 = *a, a += N;
+    t4 = *a, a += N;
+    t5 = *a, a += N;
+    t6 = *a, a += N;
     t7 = *a;
   }
 
