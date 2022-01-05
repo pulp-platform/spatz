@@ -99,30 +99,33 @@ int test_case;
   printf("PASSED.\n");
 
 // Check the results against a vector of golden values
-#define VCMP(T,str,casenum,vexp,act...)                                               \
-  T vact[] = {act};                                                                   \
-  MEMORY_BARRIER;                                                                     \
-  for (unsigned int i = 1; i < sizeof(vact)/sizeof(T); i++) {                         \
-    if (vexp[i] != vact[i]) {                                                         \
-      printf("Index %d FAILED. Got "#str", expected "#str".\n", i, vexp[i], vact[i]); \
-      num_failed++;                                                                   \
-      return;                                                                         \
-    }                                                                                 \
-  }                                                                                   \
-  printf("PASSED.\n");
+#define VCMP(T,str,casenum,vexp,act...)                                                 \
+  do {                                                                                  \
+    T vact[] = {act};                                                                   \
+    MEMORY_BARRIER;                                                                     \
+    for (unsigned int i = 1; i < sizeof(vact)/sizeof(T); i++) {                         \
+      if (vexp[i] != vact[i]) {                                                         \
+        printf("Index %d FAILED. Got "#str", expected "#str".\n", i, vexp[i], vact[i]); \
+        num_failed++;                                                                   \
+        return;                                                                         \
+      }                                                                                 \
+    }                                                                                   \
+    printf("PASSED.\n");                                                                \
+  } while (0)
 
 // Check the results against an in-memory vector of golden values
-#define VMCMP(T,str,casenum,vexp,vgold,size)                                          \
-  printf("Checking the results of the test case %d:\n", casenum);                     \
-  MEMORY_BARRIER;                                                                     \
-  for (unsigned int i = 0; i < size; i++) {                                           \
-    if (vexp[i] != vgold[i]) {                                                        \
-      printf("Index %d FAILED. Got "#str", expected "#str".\n", i, vexp[i], vgold[i]);\
-      num_failed++;                                                                   \
-      return;                                                                         \
-    }                                                                                 \
-  }                                                                                   \
-  printf("PASSED.\n");
+#define VMCMP(T,str,casenum,vexp,vgold,size)                                            \
+  do {                                                                                  \
+    MEMORY_BARRIER;                                                                     \
+    for (unsigned int i = 0; i < size; i++) {                                           \
+      if (vexp[i] != vgold[i]) {                                                        \
+        printf("Index %d FAILED. Got "#str", expected "#str".\n", i, vexp[i], vgold[i]);\
+        num_failed++;                                                                   \
+        return;                                                                         \
+      }                                                                                 \
+    }                                                                                   \
+    printf("PASSED.\n");                                                                \
+  } while(0)
 
 // Macros to set vector length, type and multiplier
 #define VSET(VLEN,VTYPE,LMUL)                                                          \
@@ -185,23 +188,23 @@ int test_case;
  ***************************/
 
 // Vector comparison
-#define VCMP_U64(casenum,vect,act...) {VSTORE_U64(vect); VCMP(uint64_t,%lu, casenum,Ru64,act)}
-#define VCMP_U32(casenum,vect,act...) {VSTORE_U32(vect); VCMP(uint32_t,%u,  casenum,Ru32,act)}
-#define VCMP_U16(casenum,vect,act...) {VSTORE_U16(vect); VCMP(uint16_t,%hu, casenum,Ru16,act)}
-#define VCMP_U8(casenum,vect,act...)  {VSTORE_U8(vect);  VCMP(uint8_t, %hhu,casenum,Ru8, act)}
+#define VCMP_U64(casenum,vect,act...) {VSTORE_U64(vect); VCMP(uint64_t,%lu, casenum,Ru64,act);}
+#define VCMP_U32(casenum,vect,act...) {VSTORE_U32(vect); VCMP(uint32_t,%u,  casenum,Ru32,act);}
+#define VCMP_U16(casenum,vect,act...) {VSTORE_U16(vect); VCMP(uint16_t,%hu, casenum,Ru16,act);}
+#define VCMP_U8(casenum,vect,act...)  {VSTORE_U8(vect);  VCMP(uint8_t, %hhu,casenum,Ru8, act);}
 
-#define VVCMP_U64(casenum,ptr64,act...) {VCMP(uint64_t,%lu,casenum,ptr64,act)}
-#define VVCMP_U32(casenum,ptr32,act...) {VCMP(uint32_t,%u, casenum,ptr32,act)}
-#define VVCMP_U16(casenum,ptr16,act...) {VCMP(uint16_t,%hu,casenum,ptr16,act)}
-#define VVCMP_U8(casenum,ptr8,act...)  {VCMP(uint8_t, %hhu,casenum,ptr8, act)}
+#define VVCMP_U64(casenum,ptr64,act...) {VCMP(uint64_t,%lu,casenum,ptr64,act);}
+#define VVCMP_U32(casenum,ptr32,act...) {VCMP(uint32_t,%u, casenum,ptr32,act);}
+#define VVCMP_U16(casenum,ptr16,act...) {VCMP(uint16_t,%hu,casenum,ptr16,act);}
+#define VVCMP_U8(casenum,ptr8,act...)  {VCMP(uint8_t, %hhu,casenum,ptr8, act);}
 
-#define VCMP_I64(casenum,vect,act...) {VSTORE_I64(vect); VCMP(int64_t,%ld, casenum,Ri64,act)}
-#define VCMP_I32(casenum,vect,act...) {VSTORE_I32(vect); VCMP(int32_t,%d,  casenum,Ri32,act)}
-#define VCMP_I16(casenum,vect,act...) {VSTORE_I16(vect); VCMP(int16_t,%hd, casenum,Ri16,act)}
-#define VCMP_I8(casenum,vect,act...)  {VSTORE_I8(vect);  VCMP(int8_t, %hhd,casenum,Ri8, act)}
+#define VCMP_I64(casenum,vect,act...) {VSTORE_I64(vect); VCMP(int64_t,%ld, casenum,Ri64,act);}
+#define VCMP_I32(casenum,vect,act...) {VSTORE_I32(vect); VCMP(int32_t,%d,  casenum,Ri32,act);}
+#define VCMP_I16(casenum,vect,act...) {VSTORE_I16(vect); VCMP(int16_t,%hd, casenum,Ri16,act);}
+#define VCMP_I8(casenum,vect,act...)  {VSTORE_I8(vect);  VCMP(int8_t, %hhd,casenum,Ri8, act);}
 
-#define VCMP_F64(casenum,vect,act...) {VSTORE_F64(vect); VCMP(double,%lf,casenum,Rf64,act)}
-#define VCMP_F32(casenum,vect,act...) {VSTORE_F32(vect); VCMP(float, %f, casenum,Rf32,act)}
+#define VCMP_F64(casenum,vect,act...) {VSTORE_F64(vect); VCMP(double,%lf,casenum,Rf64,act);}
+#define VCMP_F32(casenum,vect,act...) {VSTORE_F32(vect); VCMP(float, %f, casenum,Rf32,act);}
 
 // Vector load
 #define VLOAD_64(vreg,vec...) VLOAD(uint64_t,e64,vreg,vec)

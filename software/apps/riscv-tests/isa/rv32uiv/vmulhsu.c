@@ -27,17 +27,17 @@ void TEST_CASE1(void) {
            0xac6d, 0x50b3, 0xe262, 0xef3a, 0xe37f, 0xfc6b, 0xd04d, 0xf58f,
            0xeae2);
 
-  VSET(16, e32, m1);
-  VLOAD_32(v2, 0xeded4bf3, 0xc9e27167, 0x4175509c, 0x80a3ae04, 0x9f1b2c07,
+  VSET(16, e32, m2);
+  VLOAD_32(v4, 0xeded4bf3, 0xc9e27167, 0x4175509c, 0x80a3ae04, 0x9f1b2c07,
            0x87ea397b, 0x862e2800, 0x3cd09f37, 0x9a313d78, 0x596661ee,
            0x31f99717, 0x64e65802, 0xbd567027, 0xf7c459be, 0x57b6d9cd,
            0x94bc3eb4);
-  VLOAD_32(v3, 0xa147b233, 0x19880f3d, 0x8dd8815e, 0xbc318dca, 0x2c436b94,
+  VLOAD_32(v6, 0xa147b233, 0x19880f3d, 0x8dd8815e, 0xbc318dca, 0x2c436b94,
            0x29ba4191, 0x637f89b7, 0xe39d7818, 0xf48ff2d6, 0xb1dc7c7e,
            0xfa5da298, 0x5c1aae36, 0x83e04069, 0xecf36c08, 0x40d2e3a3,
            0xe7468a97);
-  asm volatile("vmulhsu.vv v1, v2, v3");
-  VCMP_I32(3, v1, 0xf49d2cff, 0xfa9a5a26, 0x2444f976, 0xa25f8c94, 0xef3f26f6,
+  asm volatile("vmulhsu.vv v2, v4, v6");
+  VCMP_I32(3, v2, 0xf49d2cff, 0xfa9a5a26, 0x2444f976, 0xa25f8c94, 0xef3f26f6,
            0xec6d24a0, 0xd0a728d5, 0x361265a6, 0x9ebdaf85, 0x3e1cc92b,
            0x30e004f5, 0x244d4baf, 0xdda8d640, 0xf8612ea2, 0x1635f870,
            0x9f184dfb);
@@ -66,19 +66,19 @@ void TEST_CASE2(void) {
   VCMP_I16(6, v1, 0, 0x2e28, 0, 0xffaf, 0, 0x199f, 0, 0xac6d, 0, 0xe262, 0,
            0xe37f, 0, 0xd04d, 0, 0xeae2);
 
-  VSET(16, e32, m1);
-  VLOAD_32(v2, 0xeded4bf3, 0xc9e27167, 0x4175509c, 0x80a3ae04, 0x9f1b2c07,
+  VSET(16, e32, m2);
+  VLOAD_32(v4, 0xeded4bf3, 0xc9e27167, 0x4175509c, 0x80a3ae04, 0x9f1b2c07,
            0x87ea397b, 0x862e2800, 0x3cd09f37, 0x9a313d78, 0x596661ee,
            0x31f99717, 0x64e65802, 0xbd567027, 0xf7c459be, 0x57b6d9cd,
            0x94bc3eb4);
-  VLOAD_32(v3, 0xa147b233, 0x19880f3d, 0x8dd8815e, 0xbc318dca, 0x2c436b94,
+  VLOAD_32(v6, 0xa147b233, 0x19880f3d, 0x8dd8815e, 0xbc318dca, 0x2c436b94,
            0x29ba4191, 0x637f89b7, 0xe39d7818, 0xf48ff2d6, 0xb1dc7c7e,
            0xfa5da298, 0x5c1aae36, 0x83e04069, 0xecf36c08, 0x40d2e3a3,
            0xe7468a97);
   VLOAD_8(v0, 0xAA, 0xAA);
-  VCLEAR(v1);
-  asm volatile("vmulhsu.vv v1, v2, v3, v0.t");
-  VCMP_I32(7, v1, 0, 0xfa9a5a26, 0, 0xa25f8c94, 0, 0xec6d24a0, 0, 0x361265a6, 0,
+  VCLEAR(v2);
+  asm volatile("vmulhsu.vv v2, v4, v6, v0.t");
+  VCMP_I32(7, v2, 0, 0xfa9a5a26, 0, 0xa25f8c94, 0, 0xec6d24a0, 0, 0x361265a6, 0,
            0x3e1cc92b, 0, 0x244d4baf, 0, 0xf8612ea2, 0, 0x9f184dfb);
 };
 
@@ -100,14 +100,14 @@ void TEST_CASE3(void) {
            0xfff5, 0x00b7, 0xff1e, 0x00d6, 0x0173, 0x011b, 0x005b, 0xfe7d,
            0x0069);
 
-  VSET(16, e32, m1);
-  VLOAD_32(v2, 0xa7cac3f7, 0xb3894e05, 0xbac8e70b, 0x05479577, 0x19d8bf63,
+  VSET(16, e32, m2);
+  VLOAD_32(v4, 0xa7cac3f7, 0xb3894e05, 0xbac8e70b, 0x05479577, 0x19d8bf63,
            0xb952c1ad, 0x9eaa74c0, 0x9e38d5c8, 0x51c77b3b, 0xa5f44521,
            0x65042faa, 0x8e7e5345, 0x76ae481c, 0x0ab27b6f, 0xa388cf2b,
            0x58218f7f);
   scalar = 7389998;
-  asm volatile("vmulhsu.vx v1, v2, %[A]" ::[A] "r"(scalar));
-  VCMP_I32(11, v1, 0xffd92575, 0xffde51c5, 0xffe1831f, 0x00025357, 0x000b6288,
+  asm volatile("vmulhsu.vx v2, v4, %[A]" ::[A] "r"(scalar));
+  VCMP_I32(11, v2, 0xffd92575, 0xffde51c5, 0xffe1831f, 0x00025357, 0x000b6288,
            0xffe0de52, 0xffd5205d, 0xffd4ee51, 0x0024059f, 0xffd85637,
            0x002c7ed9, 0xffce00ba, 0x003446bb, 0x0004b63d, 0xffd7455b,
            0x0026d1e0);
@@ -134,16 +134,16 @@ void TEST_CASE4(void) {
   VCMP_I16(14, v1, 0, 0xff3a, 0, 0x001c, 0, 0x005d, 0, 0xfff5, 0, 0xff1e, 0,
            0x0173, 0, 0x005b, 0, 0x0069);
 
-  VSET(16, e32, m1);
-  VLOAD_32(v2, 0xa7cac3f7, 0xb3894e05, 0xbac8e70b, 0x05479577, 0x19d8bf63,
+  VSET(16, e32, m2);
+  VLOAD_32(v4, 0xa7cac3f7, 0xb3894e05, 0xbac8e70b, 0x05479577, 0x19d8bf63,
            0xb952c1ad, 0x9eaa74c0, 0x9e38d5c8, 0x51c77b3b, 0xa5f44521,
            0x65042faa, 0x8e7e5345, 0x76ae481c, 0x0ab27b6f, 0xa388cf2b,
            0x58218f7f);
   scalar = 7389998;
   VLOAD_8(v0, 0xAA, 0xAA);
-  VCLEAR(v1);
-  asm volatile("vmulhsu.vx v1, v2, %[A], v0.t" ::[A] "r"(scalar));
-  VCMP_I32(15, v1, 0, 0xffde51c5, 0, 0x00025357, 0, 0xffe0de52, 0, 0xffd4ee51,
+  VCLEAR(v2);
+  asm volatile("vmulhsu.vx v2, v4, %[A], v0.t" ::[A] "r"(scalar));
+  VCMP_I32(15, v2, 0, 0xffde51c5, 0, 0x00025357, 0, 0xffe0de52, 0, 0xffd4ee51,
            0, 0xffd85637, 0, 0xffce00ba, 0, 0x0004b63d, 0, 0x0026d1e0);
 };
 
@@ -152,9 +152,9 @@ int main(void) {
   enable_vec();
 
   TEST_CASE1();
-  TEST_CASE2();
+  //TEST_CASE2();
   TEST_CASE3();
-  TEST_CASE4();
+  //TEST_CASE4();
 
   EXIT_CHECK();
 }
