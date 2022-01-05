@@ -21,6 +21,9 @@
 
 #include "kernel/matmul.c"
 #include "printf.h"
+#ifdef MEMPOOL
+#include "runtime.h"
+#endif
 
 // Define Matrix dimensions:
 // C = AB with A=[MxN], B=[NxP], C=[MxP]
@@ -111,7 +114,24 @@ int main() {
 
     // Matrices are initialized --> Start calculating
     printf("Calculating matmul...\n");
+
+    #ifdef MEMPOOL
+    uint32_t start = mempool_get_timer();
+    #endif
+
     matmul(c, a, b, s, s, s);
+
+    #ifdef MEMPOOL
+    // Metrics
+    uint32_t end = mempool_get_timer();
+    uint32_t runtime = end - start;
+    uint32_t performance = 1000 * 2 * s * s * s / runtime;
+    uint32_t utilization =  performance / (2 * N_IPU);
+
+    printf("The execution took %d cycles.\n", runtime);
+    printf("The performance is %d OP/1000cycle (%d%%o utilization).\n", performance,
+           utilization);
+    #endif
 
     // Verify the result
     printf("Verifying result...\n");
