@@ -257,6 +257,9 @@ module spatz_controller
   sb_port_metadata_t [NrVregfilePorts-1:0] sb_port_q, sb_port_d;
   `FF(sb_port_q, sb_port_d, '0)
 
+  // Currently accessed (requested) elements from all ports
+  logic [NrVregfilePorts-1:0][$clog2(VELE*8)-1:0] sb_accessed_element;
+
   always_comb begin : score_board
     sb_d  = sb_q;
     sb_port_d = sb_port_q;
@@ -267,15 +270,20 @@ module spatz_controller
     // If the desired element if lower than the one of the dependency, then
     // grant access to the register file.
     for (int unsigned port = 0; port < NrVregfilePorts; port++) begin
-      automatic int unsigned element = vrf_element(sb_addr_i[port], vtype_q.vlmul);
-      automatic sb_port_metadata_t deps = sb_port_q[sb_port_q[port].deps];
+      sb_accessed_element[port] = vrf_element(sb_addr_i[port], vtype_q.vlmul);
+    end
+
+    for (int unsigned port = 0; port < NrVregfilePorts; port++) begin
+      automatic int unsigned element = sb_accessed_element[port];
+      automatic int unsigned deps_port = sb_port_q[port].deps;
+      automatic sb_port_metadata_t deps = sb_port_q[deps_port];
 
       if (sb_enable_i[port]) begin
         // Update id of accessed element
         sb_port_d[port].element = element;
 
         // Check if we have a dependency, and if so if we are accessing an element that has already been accessed by it.
-        if ((sb_port_q[port].deps_valid && ((deps.valid && element != deps.element) || !deps.valid)) || !sb_port_q[port].deps_valid) begin
+        if ((sb_port_q[port].deps_valid && ((deps.valid && (element != deps.element || (element != sb_accessed_element[deps_port] && sb_enable_i[deps_port]))) || !deps.valid)) || !sb_port_q[port].deps_valid) begin
           // Grant port access to register file
           sb_enable_o[port] = 1'b1;
         end
