@@ -35,8 +35,8 @@ module spatz_vrf
   localparam int unsigned NrReadPortsPerBank  = 3;
   localparam int unsigned NrWritePortsPerBank = 1;
 
-  localparam int unsigned RegWidth  = VLEN/NrBanks;
-  localparam int unsigned ElemWidth = N_IPU*ELEN;
+  localparam int unsigned RegWidth      = VLEN/NrBanks;
+  localparam int unsigned ElemWidth     = N_IPU*ELEN;
   localparam int unsigned NrElemPerBank = RegWidth/ElemWidth;
 
   //////////////
@@ -84,7 +84,7 @@ module spatz_vrf
     wvalid_o = '0;
 
     // For each bank, we have a priority based access scheme. First priority always has the VFU,
-    // second priority has the LSU, and third priority had the slide unit.
+    // second priority has the LSU, and third priority has the slide unit.
     for (int unsigned i = 0; i < NrBanks; i++) begin
       // Bank write port 0 - Priority: vd (0) -> lsu (1) -> sld (2)
       if (we_i[VFU_VD_WD] && waddr_i[VFU_VD_WD][$bits(vreg_addr_t)-$clog2(NRVREG)-1:$clog2(NrElemPerBank)] == i) begin
@@ -125,32 +125,32 @@ module spatz_vrf
     for (int unsigned i = 0; i < NrBanks; i++) begin
       // Bank read port 0 - Priority: vs2
       if (re_i[VFU_VS2_RD] && raddr_i[VFU_VS2_RD][$bits(vreg_addr_t)-$clog2(NRVREG)-1:$clog2(NrElemPerBank)] == i) begin
-        raddr[i][0] = gen_vreg_addr(raddr_i[VFU_VS2_RD]);
-        rdata_o[VFU_VS2_RD] = rdata[i][0];
+        raddr[i][0]          = gen_vreg_addr(raddr_i[VFU_VS2_RD]);
+        rdata_o[VFU_VS2_RD]  = rdata[i][0];
         rvalid_o[VFU_VS2_RD] = 1'b1;
       end
       // Bank read port 1 - Priority: vs1 -> sld
       if (re_i[VFU_VS1_RD] && raddr_i[VFU_VS1_RD][$bits(vreg_addr_t)-$clog2(NRVREG)-1:$clog2(NrElemPerBank)] == i) begin
-        raddr[i][1] = gen_vreg_addr(raddr_i[VFU_VS1_RD]);
-        rdata_o[VFU_VS1_RD] = rdata[i][1];
+        raddr[i][1]          = gen_vreg_addr(raddr_i[VFU_VS1_RD]);
+        rdata_o[VFU_VS1_RD]  = rdata[i][1];
         rvalid_o[VFU_VS1_RD] = 1'b1;
       end else if (re_i[VSLD_VS2_RD] && raddr_i[VSLD_VS2_RD][$bits(vreg_addr_t)-$clog2(NRVREG)-1:$clog2(NrElemPerBank)] == i) begin
-        raddr[i][1] = gen_vreg_addr(raddr_i[VSLD_VS2_RD]);
-        rdata_o[VSLD_VS2_RD] = rdata[i][1];
+        raddr[i][1]           = gen_vreg_addr(raddr_i[VSLD_VS2_RD]);
+        rdata_o[VSLD_VS2_RD]  = rdata[i][1];
         rvalid_o[VSLD_VS2_RD] = 1'b1;
       end
       // Bank read port 2 - Priority: vd -> lsu -> sld
       if (re_i[VFU_VD_RD] && raddr_i[VFU_VD_RD][$bits(vreg_addr_t)-$clog2(NRVREG)-1:$clog2(NrElemPerBank)] == i) begin
-        raddr[i][2] = gen_vreg_addr(raddr_i[VFU_VD_RD]);
-        rdata_o[VFU_VD_RD] = rdata[i][2];
+        raddr[i][2]         = gen_vreg_addr(raddr_i[VFU_VD_RD]);
+        rdata_o[VFU_VD_RD]  = rdata[i][2];
         rvalid_o[VFU_VD_RD] = 1'b1;
       end else if (re_i[VLSU_VD_RD] && raddr_i[VLSU_VD_RD][$bits(vreg_addr_t)-$clog2(NRVREG)-1:$clog2(NrElemPerBank)] == i) begin
-        raddr[i][2] = gen_vreg_addr(raddr_i[VLSU_VD_RD]);
-        rdata_o[VLSU_VD_RD] = rdata[i][2];
+        raddr[i][2]          = gen_vreg_addr(raddr_i[VLSU_VD_RD]);
+        rdata_o[VLSU_VD_RD]  = rdata[i][2];
         rvalid_o[VLSU_VD_RD] = 1'b1;
       end else if (re_i[VSLD_VS2_RD] && raddr_i[VSLD_VS2_RD][$bits(vreg_addr_t)-$clog2(NRVREG)-1:$clog2(NrElemPerBank)] == i) begin
-        raddr[i][2] = gen_vreg_addr(raddr_i[VSLD_VS2_RD]);
-        rdata_o[VSLD_VS2_RD] = rdata[i][2];
+        raddr[i][2]           = gen_vreg_addr(raddr_i[VSLD_VS2_RD]);
+        rdata_o[VSLD_VS2_RD]  = rdata[i][2];
         rvalid_o[VSLD_VS2_RD] = 1'b1;
       end
     end
@@ -203,7 +203,7 @@ module spatz_vrf
   if (RegWidth < ElemWidth)
     $error("[spatz_vrf] The register width has to be bigger than the element width.");
 
-  if (spatz_pkg::N_IPU*spatz_pkg::ELEN*NrBanks > spatz_pkg::VLEN)
+  if (spatz_pkg::N_IPU * spatz_pkg::ELEN * NrBanks > spatz_pkg::VLEN)
     $error("[spatz_vrf] The vector register length has to be equal to or larger than N_IPU*ELEN*NrVRegBanks.");
 
 endmodule : spatz_vrf
