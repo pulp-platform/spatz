@@ -108,7 +108,7 @@ module spatz_controller
       // Change vtype and vl if we have a config instruction
       if (spatz_req.op == VCFG) begin
         // Check if vtype is valid
-        if ((vtype_d.vsew > EW_32) || (vtype_d.vlmul inside {LMUL_RES, LMUL_F8}) || (signed'(vtype_d.vlmul) + signed'($clog2(ELENB)) < signed'(vtype_d.vsew))) begin
+        if ((spatz_req.vtype.vsew > EW_32) || (spatz_req.vtype.vlmul inside {LMUL_RES, LMUL_F8}) || (signed'(spatz_req.vtype.vlmul) + signed'($clog2(ELEN)) < signed'(spatz_req.vtype.vsew))) begin
           // Invalid
           vtype_d = '{vill: 1'b1, default: '0};
           vl_d    = '0;
