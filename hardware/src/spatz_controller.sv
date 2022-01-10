@@ -476,7 +476,8 @@ module spatz_controller
           end
         end // VFU
         LSU: begin
-          x_issue_resp_o.loadstore = 1'b1;
+          x_issue_resp_o.load  =  spatz_req.op_mem.is_load;
+          x_issue_resp_o.store = ~spatz_req.op_mem.is_load;
           // vtype is illegal -> illegal instruction
           if (vtype_q.vill) begin
             x_issue_resp_o.accept = 1'b0;

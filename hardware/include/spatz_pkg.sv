@@ -118,6 +118,7 @@ package spatz_pkg;
 
   typedef struct packed {
     logic vm;
+    logic is_load;
   } op_mem_t;
 
   // Result from decoder

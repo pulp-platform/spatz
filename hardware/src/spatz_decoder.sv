@@ -76,45 +76,49 @@ module spatz_decoder
             riscv_instruction::VLE8_V,
             riscv_instruction::VLE16_V,
             riscv_instruction::VLE32_V: begin
-              spatz_req.op     = VLE;
-              spatz_req.vd     = ls_vd;
-              spatz_req.use_vd = 1'b1;
-              spatz_req.rs1    = decoder_req_i.rs1;
-              illegal_instr    = ~decoder_req_i.rs1_valid;
+              spatz_req.op             = VLE;
+              spatz_req.op_mem.is_load = 1'b1;
+              spatz_req.vd             = ls_vd;
+              spatz_req.use_vd         = 1'b1;
+              spatz_req.rs1            = decoder_req_i.rs1;
+              illegal_instr            = ~decoder_req_i.rs1_valid;
             end
 
             riscv_instruction::VLSE8_V,
             riscv_instruction::VLSE16_V,
             riscv_instruction::VLSE32_V: begin
-              spatz_req.op     = VLSE;
-              spatz_req.vd     = ls_vd;
-              spatz_req.use_vd = 1'b1;
-              spatz_req.rs1    = decoder_req_i.rs1;
-              spatz_req.rs2    = decoder_req_i.rs2;
-              illegal_instr    = ~decoder_req_i.rs1_valid | ~decoder_req_i.rs2_valid;
+              spatz_req.op             = VLSE;
+              spatz_req.op_mem.is_load = 1'b1;
+              spatz_req.vd             = ls_vd;
+              spatz_req.use_vd         = 1'b1;
+              spatz_req.rs1            = decoder_req_i.rs1;
+              spatz_req.rs2            = decoder_req_i.rs2;
+              illegal_instr            = ~decoder_req_i.rs1_valid | ~decoder_req_i.rs2_valid;
             end
 
             riscv_instruction::VSE8_V,
             riscv_instruction::VSE16_V,
             riscv_instruction::VSE32_V: begin
-              spatz_req.op        = VSE;
-              spatz_req.vd        = ls_vd;
-              spatz_req.use_vd    = 1'b1;
-              spatz_req.vd_is_src = 1'b1;
-              spatz_req.rs1       = decoder_req_i.rs1;
-              illegal_instr       = ~decoder_req_i.rs1_valid;
+              spatz_req.op             = VSE;
+              spatz_req.op_mem.is_load = 1'b0;
+              spatz_req.vd             = ls_vd;
+              spatz_req.use_vd         = 1'b1;
+              spatz_req.vd_is_src      = 1'b1;
+              spatz_req.rs1            = decoder_req_i.rs1;
+              illegal_instr            = ~decoder_req_i.rs1_valid;
             end
 
             riscv_instruction::VSSE8_V,
             riscv_instruction::VSSE16_V,
             riscv_instruction::VSSE32_V: begin
-              spatz_req.op        = VSSE;
-              spatz_req.vd        = ls_vd;
-              spatz_req.use_vd    = 1'b1;
-              spatz_req.vd_is_src = 1'b1;
-              spatz_req.rs1       = decoder_req_i.rs1;
-              spatz_req.rs2       = decoder_req_i.rs2;
-              illegal_instr       = ~decoder_req_i.rs1_valid | ~decoder_req_i.rs2_valid;
+              spatz_req.op             = VSSE;
+              spatz_req.op_mem.is_load = 1'b0;
+              spatz_req.vd             = ls_vd;
+              spatz_req.use_vd         = 1'b1;
+              spatz_req.vd_is_src      = 1'b1;
+              spatz_req.rs1            = decoder_req_i.rs1;
+              spatz_req.rs2            = decoder_req_i.rs2;
+              illegal_instr            = ~decoder_req_i.rs1_valid | ~decoder_req_i.rs2_valid;
             end
             default: begin
               illegal_instr = 1'b1;

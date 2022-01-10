@@ -92,7 +92,7 @@ module spatz_vlsu
 
   // Is instruction a load
   logic is_load;
-  assign is_load = (spatz_req_q.op == VLE) | (spatz_req_q.op == VLSE) | (spatz_req_q.op == VLXE);
+  assign is_load = spatz_req_q.op_mem.is_load;
 
   // Is the vector length zero (no active instruction)
   logic  is_vl_zero;
