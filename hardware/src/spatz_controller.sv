@@ -45,7 +45,7 @@ module spatz_controller
   input  logic      vlsu_rsp_valid_i,
   input  vlsu_rsp_t vlsu_rsp_i,
 
-  // VLSU
+  // VSLD
   input  logic      vsld_req_ready_i,
   input  logic      vsld_rsp_valid_i,
   input  vsld_rsp_t vsld_rsp_i,
@@ -108,7 +108,7 @@ module spatz_controller
       // Change vtype and vl if we have a config instruction
       if (spatz_req.op == VCFG) begin
         // Check if vtype is valid
-        if ((vtype_d.vsew > EW_32) || (vtype_d.vlmul == LMUL_RES) || (vtype_d.vlmul == LMUL_F8) || (signed'(vtype_d.vlmul) + signed'($clog2(ELENB)) < signed'(vtype_d.vsew))) begin
+        if ((vtype_d.vsew > EW_32) || (vtype_d.vlmul inside {LMUL_RES, LMUL_F8}) || (signed'(vtype_d.vlmul) + signed'($clog2(ELENB)) < signed'(vtype_d.vsew))) begin
           // Invalid
           vtype_d = '{vill: 1'b1, default: '0};
           vl_d    = '0;
@@ -119,7 +119,7 @@ module spatz_controller
           vtype_d = spatz_req.vtype;
           if (!spatz_req.op_cgf.keep_vl) begin
             // Normal stripmining mode or set to MAXVL
-            automatic int unsigned vlmax = 0;
+            automatic logic [MAXVL-1:0] vlmax = 0;
             vlmax = VLENB >> spatz_req.vtype.vsew;
 
             unique case (spatz_req.vtype.vlmul)
@@ -194,25 +194,22 @@ module spatz_controller
   // Spatz request
   spatz_req_t buffer_spatz_req;
   // Buffer state signals
-  logic req_buffer_full, req_buffer_empty, req_buffer_pop;
+  logic req_buffer_ready, req_buffer_valid, req_buffer_pop;
 
   // One element wide instruction buffer
-  fifo_v3 #(
-    .FALL_THROUGH(1'b1),
-    .DATA_WIDTH  ($bits(spatz_req_t)),
-    .DEPTH       ('d1)
+  fall_through_register #(
+    .T(spatz_req_t)
   ) i_req_buffer (
     .clk_i     (clk_i),
     .rst_ni    (rst_ni),
-    .flush_i   (1'b0),
+    .clr_i     (1'b0),
     .testmode_i(1'b0),
-    .full_o    (req_buffer_full),
-    .empty_o   (req_buffer_empty),
-    .usage_o   (/* Unused */),
+    .ready_o   (req_buffer_ready),
+    .valid_o   (req_buffer_valid),
     .data_i    (decoder_rsp.spatz_req),
-    .push_i    (decoder_rsp_valid),
+    .valid_i   (decoder_rsp_valid),
     .data_o    (buffer_spatz_req),
-    .pop_i     (req_buffer_pop)
+    .ready_i   (req_buffer_pop)
   );
 
   ////////////////
@@ -265,12 +262,15 @@ module spatz_controller
     sb_port_d = sb_port_q;
 
     sb_enable_o = '0;
+    sb_accessed_element = '0;
 
     // For every port, update the element that is currently being accessed.
     // If the desired element if lower than the one of the dependency, then
     // grant access to the register file.
     for (int unsigned port = 0; port < NrVregfilePorts; port++) begin
-      sb_accessed_element[port] = vrf_element(sb_addr_i[port], vtype_q.vlmul);
+      if (sb_enable_i[port]) begin
+        sb_accessed_element[port] = vrf_element(sb_addr_i[port], vtype_q.vlmul);
+      end
     end
 
     for (int unsigned port = 0; port < NrVregfilePorts; port++) begin
@@ -415,14 +415,14 @@ module spatz_controller
   // units finish first before scheduling a new operation (to avoid running into
   // issues with the socreboard).
   logic stall, vfu_stall, vlsu_stall, vsld_stall, csr_stall;
-  assign stall = (vfu_stall | vlsu_stall | vsld_stall | csr_stall) & ~req_buffer_empty;
+  assign stall = (vfu_stall | vlsu_stall | vsld_stall | csr_stall) & req_buffer_valid;
   assign vfu_stall  = ~vfu_req_ready_i  & (spatz_req.ex_unit == VFU);
   assign vlsu_stall = ~vlsu_req_ready_i & (spatz_req.ex_unit == LSU);
   assign vsld_stall = ~vsld_req_ready_i & (spatz_req.ex_unit == SLD);
   assign csr_stall  = (~vfu_req_ready_i | ~vlsu_req_ready_i | ~vsld_req_ready_i) & (spatz_req.ex_unit == CON) & (buffer_spatz_req.vtype.vlmul != vtype_q.vlmul);
 
   // Pop the buffer if we do not have a unit stall
-  assign req_buffer_pop = ~stall & ~req_buffer_empty;
+  assign req_buffer_pop = ~stall & req_buffer_valid;
 
   // Issue new operation to execution units
   always_comb begin : ex_issue
@@ -537,7 +537,7 @@ module spatz_controller
   end // retire
 
   // Signal to core that Spatz is ready for a new instruction
-  assign x_issue_ready_o = ~req_buffer_full;
+  assign x_issue_ready_o = req_buffer_ready;
 
   // Send request off to execution units
   assign spatz_req_o       = spatz_req;
