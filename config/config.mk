@@ -16,9 +16,9 @@
 
 # Author: Domenic Wüthrich, ETH Zurich
 
-# Length of each vector register in bits (for a single IPU)
-# min size is vlen=64
-vlen ?= 128
+# Length of each vector register in bits
+# min size is vlen=n_ipu*32
+vlen ?= 256
 
 # Number of IPUs (between 2 and 8)
 n_ipu ?= 2

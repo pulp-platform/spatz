@@ -249,8 +249,11 @@ module spatz
   if (spatz_pkg::N_IPU != 2**$clog2(spatz_pkg::N_IPU))
     $error("[spatz] The number of IPUs needs to be a power of two");
 
-  if (spatz_pkg::ELEN > spatz_pkg::VLEN)
-    $error("[spatz] The size of one element can not exceede the length of one vector register.");
+  if (spatz_pkg::VLEN != 2**$clog2(spatz_pkg::VLEN))
+    $error("[spatz] The vector length needs to be a power of two");
+
+  if (spatz_pkg::ELEN*spatz_pkg::N_IPU > spatz_pkg::VLEN)
+    $error("[spatz] VLEN needs a min size of N_IPU*%d.", spatz_pkg::ELEN);
 
   if (NrMemPorts == 0)
     $error("[spatz] Spatz requires at least one memory port.");

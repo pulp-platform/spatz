@@ -19,7 +19,7 @@ package spatz_pkg;
   // Maximum size of a single vector element in bytes
   localparam int unsigned ELENB = ELEN / 8;
   // Number of bits in a vector register
-  localparam int unsigned VLEN = N_IPU * (`ifdef VLEN `VLEN `else 0 `endif);
+  localparam int unsigned VLEN = `ifdef VLEN `VLEN `else 0 `endif;
   // Number of bytes in a vector register
   localparam int unsigned VLENB = VLEN / 8;
   // Maximum vector length in elements
@@ -27,7 +27,7 @@ package spatz_pkg;
   // Number of vector registers
   localparam int unsigned NRVREG = 32;
   // Number of addressable elements in a vector register
-  localparam int unsigned VELE = (`ifdef VLEN `VLEN `else 0 `endif)/ELEN;
+  localparam int unsigned VELE = VLEN/(N_IPU*ELEN);
 
   //////////////////////
   // Type Definitions //
@@ -35,7 +35,7 @@ package spatz_pkg;
 
   // Vector length register
   typedef logic [$clog2(MAXVL+1)-1:0] vlen_t;
-  // Operad register
+  // Operand register
   typedef logic [$clog2(NRVREG)-1:0] opreg_t;
 
   // Element of length type
@@ -47,12 +47,13 @@ package spatz_pkg;
   typedef logic [N_IPU*ELEN-1:0]                  vreg_data_t;
 
   // Instruction ID
-  typedef logic [3:0] instr_id_t;
+  typedef logic [4:0] instr_id_t;
 
   /////////////////////
   // Operation Types //
   /////////////////////
 
+  // Vector operations
   typedef enum logic [6:0] {
     // Arithmetic and logic instructions
     VADD, VSUB, VADC, VSBC, VRSUB, VMINU, VMIN, VMAXU, VMAX, VAND, VOR, VXOR,
@@ -82,8 +83,16 @@ package spatz_pkg;
     VCSR
   } op_e;
 
+  // Execution units
   typedef enum logic [1:0] {
-    CON, LSU, SLD, VFU
+    // Controller
+    CON,
+    // Load/Store unit
+    LSU,
+    // Slide unit
+    SLD,
+    // Functional unit
+    VFU
   } ex_unit_e;
 
   ///////////////////
@@ -113,7 +122,7 @@ package spatz_pkg;
 
   // Result from decoder
   typedef struct packed {
-    // Instructio ID
+    // Instruction ID
     instr_id_t id;
 
     // Used vector registers

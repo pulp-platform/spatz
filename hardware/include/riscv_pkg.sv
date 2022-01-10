@@ -10,10 +10,10 @@ package riscv_pkg;
   //  Opcodes  //
   ///////////////
 
-  localparam OpcodeVec      = 7'b101_0111;
-  localparam OpcodeStoreFP  = 7'b010_0111;
-  localparam OpcodeLoadFP   = 7'b000_0111;
-  localparam OpcodeSystem   = 7'b111_0011;
+  localparam logic [6:0] OpcodeVec      = 7'b101_0111;
+  localparam logic [6:0] OpcodeStoreFP  = 7'b010_0111;
+  localparam logic [6:0] OpcodeLoadFP   = 7'b000_0111;
+  localparam logic [6:0] OpcodeSystem   = 7'b111_0011;
 
   //////////////
   // Typedefs //
