@@ -21,20 +21,30 @@
 
 #include <stdint.h>
 
-void matmul(int32_t *c, const int32_t *a, const int32_t *b,
-             const unsigned long int m, const unsigned long int n,
-             const unsigned long int p);
-
-void matmul_4x4(int32_t *c, const int32_t *a, const int32_t *b,
+uint32_t matmul(int32_t *c, const int32_t *a, const int32_t *b,
                  const unsigned long int m, const unsigned long int n,
-                 const unsigned long int p);
+                 const unsigned long int p, const uint32_t threadId,
+                 const uint32_t numThreads);
+
+uint32_t matmul_2x2(int32_t *c, const int32_t *a, const int32_t *b,
+                     const unsigned long int m, const unsigned long int n,
+                     const unsigned long int p, const uint32_t threadId,
+                     const uint32_t numThreads);
+void matmul_vec_2x2_slice_init();
+void matmul_vec_2x2(int32_t *c, const int32_t *a, const int32_t *b,
+                     const unsigned long int n, const unsigned long int p);
+uint32_t matmul_4x4(int32_t *c, const int32_t *a, const int32_t *b,
+                     const unsigned long int m, const unsigned long int n,
+                     const unsigned long int p, const uint32_t threadId,
+                     const uint32_t numThreads);
 void matmul_vec_4x4_slice_init();
 void matmul_vec_4x4(int32_t *c, const int32_t *a, const int32_t *b,
                      const unsigned long int n, const unsigned long int p);
 
-void matmul_8x8(int32_t *c, const int32_t *a, const int32_t *b,
-                 const unsigned long int m, const unsigned long int n,
-                 const unsigned long int p);
+uint32_t matmul_8x8(int32_t *c, const int32_t *a, const int32_t *b,
+                     const unsigned long int m, const unsigned long int n,
+                     const unsigned long int p, const uint32_t threadId,
+                     const uint32_t numThreads);
 void matmul_vec_8x8_slice_init();
 void matmul_vec_8x8(int32_t *c, const int32_t *a, const int32_t *b,
                      const unsigned long int n, const unsigned long int p);
