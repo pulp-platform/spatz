@@ -71,74 +71,68 @@ uint32_t matmul_2x2(int32_t *c, const int32_t *a, const int32_t *b,
     for (unsigned long int m = threadId*block_size; m < M; m += block_size*numThreads) {
       // Find pointer to the submatrices
       const int32_t *a_ = a + m * N;
+
+      // Prefetch one row of matrix B
+      int32_t *b__ = b_;
+      asm volatile("vle32.v v16, (%0);" ::"r"(b__));
+      b__ += P;
+
       int32_t *c__ = c_ + m * P;
 
-      matmul_vec_2x2_slice_init();
-      matmul_vec_2x2(c__, a_, b_, N, P);
+      // Temporary variables
+      int32_t t0, t1;
+
+      // Original pointer
+      int32_t *a__ = a_;
+
+
+      // Prefetch one row of scalar values
+      asm volatile("vmv.v.i v0,  0");
+      t0 = *a__, a__ += N;
+      asm volatile("vmv.v.i v4,  0");
+      t1 = *a__;
+
+      // Compute the multiplication
+      unsigned long int n = 0;
+
+      while (n < N) {
+        // Calculate pointer to the matrix A
+        a__ = a_ + ++n;
+
+        // Load one row of B
+        asm volatile("vle32.v v20, (%0);" ::"r"(b__));
+        b__ += P;
+
+        asm volatile("vmacc.vx v0, %0, v16" ::"r"(t0));
+        t0 = *a__, a__ += N;
+        asm volatile("vmacc.vx v4, %0, v16" ::"r"(t1));
+        t1 = *a__;
+
+        a__ = a_ + ++n;
+
+        if (n == N)
+          break;
+
+        // Load one row of B
+        asm volatile("vle32.v v16, (%0);" ::"r"(b__));
+        b__ += P;
+
+        asm volatile("vmacc.vx v0, %0, v20" ::"r"(t0));
+        t0 = *a__, a__ += N;
+        asm volatile("vmacc.vx v4, %0, v20" ::"r"(t1));
+        t1 = *a__;
+      }
+
+      // Last iteration: store results
+      asm volatile("vmacc.vx v0, %0, v20" ::"r"(t0));
+      asm volatile("vse32.v v0, (%0);" ::"r"(c__));
+      c__ += P;
+      asm volatile("vmacc.vx v4, %0, v20" ::"r"(t1));
+      asm volatile("vse32.v v4, (%0);" ::"r"(c__));
     }
   }
 
   return block_size_p;
-}
-
-void matmul_vec_2x2_slice_init() {
-  asm volatile("vmv.v.i v0,  0");
-  asm volatile("vmv.v.i v4,  0");
-}
-
-void matmul_vec_2x2(int32_t *c, const int32_t *a, const int32_t *b,
-                     const unsigned long int N, const unsigned long int P) {
-  // Temporary variables
-  int32_t t0, t1;
-
-  // Original pointer
-  const int32_t *a_ = a;
-
-  // Prefetch one row of matrix B
-  asm volatile("vle32.v v16, (%0);" ::"r"(b));
-  b += P;
-
-  // Prefetch one row of scalar values
-  t0 = *a, a += N;
-  t1 = *a;
-
-  // Compute the multiplication
-  unsigned long int n = 0;
-
-  while (n < N) {
-    // Calculate pointer to the matrix A
-    a = a_ + ++n;
-
-    // Load one row of B
-    asm volatile("vle32.v v20, (%0);" ::"r"(b));
-
-    asm volatile("vmacc.vx v0, %0, v16" ::"r"(t0));
-    asm volatile("vmacc.vx v4, %0, v16" ::"r"(t1));
-    b += P;
-    t0 = *a, a += N;
-    t1 = *a;
-
-    a = a_ + ++n;
-
-    if (n == N)
-      break;
-
-    // Load one row of B
-    asm volatile("vle32.v v16, (%0);" ::"r"(b));
-
-    asm volatile("vmacc.vx v0, %0, v20" ::"r"(t0));
-    asm volatile("vmacc.vx v4, %0, v20" ::"r"(t1));
-    b += P;
-    t0 = *a, a += N;
-    t1 = *a;
-  }
-
-  // Last iteration: store results
-  asm volatile("vmacc.vx v0, %0, v20" ::"r"(t0));
-  asm volatile("vse32.v v0, (%0);" ::"r"(c));
-  c += P;
-  asm volatile("vmacc.vx v4, %0, v20" ::"r"(t1));
-  asm volatile("vse32.v v4, (%0);" ::"r"(c));
 }
 
 // ---------------
@@ -181,92 +175,85 @@ uint32_t matmul_4x4(int32_t *c, const int32_t *a, const int32_t *b,
     for (unsigned long int m = threadId*block_size; m < M; m += block_size*numThreads) {
       // Find pointer to the submatrices
       const int32_t *a_ = a + m * N;
+
+      // Prefetch one row of matrix B
+      int32_t *b__ = b_;
+      asm volatile("vle32.v v16, (%0);" ::"r"(b__));
+      b__ += P;
+
       int32_t *c__ = c_ + m * P;
 
-      matmul_vec_4x4_slice_init();
-      matmul_vec_4x4(c__, a_, b_, N, P);
+      // Temporary variables
+      int32_t t0, t1, t2, t3;
+
+      // Original pointer
+      int32_t *a__ = a_;
+
+      // Prefetch one row of scalar values and clear vector registers
+      asm volatile("vmv.v.i v0,  0");
+      t0 = *a__, a__ += N;
+      asm volatile("vmv.v.i v4,  0");
+      t1 = *a__, a__ += N;
+      asm volatile("vmv.v.i v8,  0");
+      t2 = *a__, a__ += N;
+      asm volatile("vmv.v.i v12,  0");
+      t3 = *a__;
+
+      // Compute the multiplication
+      unsigned long int n = 0;
+
+      while (n < N) {
+        // Calculate pointer to the matrix A
+        a__ = a_ + ++n;
+
+        // Load one row of B
+        asm volatile("vle32.v v20, (%0);" ::"r"(b__));
+        b__ += P;
+
+        asm volatile("vmacc.vx v0, %0, v16" ::"r"(t0));
+        t0 = *a__, a__ += N;
+        asm volatile("vmacc.vx v4, %0, v16" ::"r"(t1));
+        t1 = *a__, a__ += N;
+        asm volatile("vmacc.vx v8, %0, v16" ::"r"(t2));
+        t2 = *a__, a__ += N;
+        asm volatile("vmacc.vx v12, %0, v16" ::"r"(t3));
+        t3 = *a__;
+
+        a__ = a_ + ++n;
+
+        if (n == N)
+          break;
+
+        // Load one row of B
+        asm volatile("vle32.v v16, (%0);" ::"r"(b__));
+        b__ += P;
+
+        asm volatile("vmacc.vx v0, %0, v20" ::"r"(t0));
+        t0 = *a__, a__ += N;
+        asm volatile("vmacc.vx v4, %0, v20" ::"r"(t1));
+        t1 = *a__, a__ += N;
+        asm volatile("vmacc.vx v8, %0, v20" ::"r"(t2));
+        t2 = *a__, a__ += N;
+        asm volatile("vmacc.vx v12, %0, v20" ::"r"(t3));
+        t3 = *a__;
+      }
+
+      // Last iteration: store results
+      asm volatile("vmacc.vx v0, %0, v20" ::"r"(t0));
+      asm volatile("vse32.v v0, (%0);" ::"r"(c__));
+      c__ += P;
+      asm volatile("vmacc.vx v4, %0, v20" ::"r"(t1));
+      asm volatile("vse32.v v4, (%0);" ::"r"(c__));
+      c__ += P;
+      asm volatile("vmacc.vx v8, %0, v20" ::"r"(t2));
+      asm volatile("vse32.v v8, (%0);" ::"r"(c__));
+      c__ += P;
+      asm volatile("vmacc.vx v12, %0, v20" ::"r"(t3));
+      asm volatile("vse32.v v12, (%0);" ::"r"(c__));
     }
   }
 
   return block_size_p;
-}
-
-void matmul_vec_4x4_slice_init() {
-  asm volatile("vmv.v.i v0,  0");
-  asm volatile("vmv.v.i v4,  0");
-  asm volatile("vmv.v.i v8,  0");
-  asm volatile("vmv.v.i v12, 0");
-}
-
-void matmul_vec_4x4(int32_t *c, const int32_t *a, const int32_t *b,
-                     const unsigned long int N, const unsigned long int P) {
-  // Temporary variables
-  int32_t t0, t1, t2, t3;
-
-  // Original pointer
-  const int32_t *a_ = a;
-
-  // Prefetch one row of matrix B
-  asm volatile("vle32.v v16, (%0);" ::"r"(b));
-  b += P;
-
-  // Prefetch one row of scalar values
-  t0 = *a, a += N;
-  t1 = *a, a += N;
-  t2 = *a, a += N;
-  t3 = *a;
-
-  // Compute the multiplication
-  unsigned long int n = 0;
-
-  while (n < N) {
-    // Calculate pointer to the matrix A
-    a = a_ + ++n;
-
-    // Load one row of B
-    asm volatile("vle32.v v20, (%0);" ::"r"(b));
-
-    asm volatile("vmacc.vx v0, %0, v16" ::"r"(t0));
-    asm volatile("vmacc.vx v4, %0, v16" ::"r"(t1));
-    asm volatile("vmacc.vx v8, %0, v16" ::"r"(t2));
-    asm volatile("vmacc.vx v12, %0, v16" ::"r"(t3));
-    b += P;
-    t0 = *a, a += N;
-    t1 = *a, a += N;
-    t2 = *a, a += N;
-    t3 = *a;
-
-    a = a_ + ++n;
-
-    if (n == N)
-      break;
-
-    // Load one row of B
-    asm volatile("vle32.v v16, (%0);" ::"r"(b));
-
-    asm volatile("vmacc.vx v0, %0, v20" ::"r"(t0));
-    asm volatile("vmacc.vx v4, %0, v20" ::"r"(t1));
-    asm volatile("vmacc.vx v8, %0, v20" ::"r"(t2));
-    asm volatile("vmacc.vx v12, %0, v20" ::"r"(t3));
-    b += P;
-    t0 = *a, a += N;
-    t1 = *a, a += N;
-    t2 = *a, a += N;
-    t3 = *a;
-  }
-
-  // Last iteration: store results
-  asm volatile("vmacc.vx v0, %0, v20" ::"r"(t0));
-  asm volatile("vse32.v v0, (%0);" ::"r"(c));
-  c += P;
-  asm volatile("vmacc.vx v4, %0, v20" ::"r"(t1));
-  asm volatile("vse32.v v4, (%0);" ::"r"(c));
-  c += P;
-  asm volatile("vmacc.vx v8, %0, v20" ::"r"(t2));
-  asm volatile("vse32.v v8, (%0);" ::"r"(c));
-  c += P;
-  asm volatile("vmacc.vx v12, %0, v20" ::"r"(t3));
-  asm volatile("vse32.v v12, (%0);" ::"r"(c));
 }
 
 // ---------------
@@ -310,126 +297,119 @@ uint32_t matmul_8x8(int32_t *c, const int32_t *a, const int32_t *b,
     for (unsigned long int m = threadId*block_size; m < M; m += block_size*numThreads) {
       // Find pointer to the submatrices
       const int32_t *a_ = a + m * N;
+
+      // Prefetch one row of matrix B
+      int32_t *b__ = b_;
+      asm volatile("vle32.v v18, (%0);" ::"r"(b__));
+      b__ += P;
+
       int32_t *c__ = c_ + m * P;
 
-      matmul_vec_8x8_slice_init();
-      matmul_vec_8x8(c__, a_, b_, N, P);
+      // Temporary variables
+      int32_t t0, t1, t2, t3, t4, t5, t6, t7;
+
+      // Original pointer
+      int32_t *a__ = a_;
+
+      // Prefetch one row of scalar values
+      asm volatile("vmv.v.i v0,  0");
+      t0 = *a__, a__ += N;
+      asm volatile("vmv.v.i v2,  0");
+      t1 = *a__, a__ += N;
+      asm volatile("vmv.v.i v4,  0");
+      t2 = *a__, a__ += N;
+      asm volatile("vmv.v.i v6,  0");
+      t3 = *a__, a__ += N;
+      asm volatile("vmv.v.i v8,  0");
+      t4 = *a__, a__ += N;
+      asm volatile("vmv.v.i v10,  0");
+      t5 = *a__, a__ += N;
+      asm volatile("vmv.v.i v12,  0");
+      t6 = *a__, a__ += N;
+      asm volatile("vmv.v.i v14,  0");
+      t7 = *a__;
+
+      // Compute the multiplication
+      unsigned long int n = 0;
+
+      while (n < N) {
+        // Calculate pointer to the matrix A
+        a__ = a_ + ++n;
+
+        // Load one row of B
+        asm volatile("vle32.v v20, (%0);" ::"r"(b__));
+        b__ += P;
+
+        asm volatile("vmacc.vx v0, %0, v18" ::"r"(t0));
+        t0 = *a__, a__ += N;
+        asm volatile("vmacc.vx v2, %0, v18" ::"r"(t1));
+        t1 = *a__, a__ += N;
+        asm volatile("vmacc.vx v4, %0, v18" ::"r"(t2));
+        t2 = *a__, a__ += N;
+        asm volatile("vmacc.vx v6, %0, v18" ::"r"(t3));
+        t3 = *a__, a__ += N;
+        asm volatile("vmacc.vx v8, %0, v18" ::"r"(t4));
+        t4 = *a__, a__ += N;
+        asm volatile("vmacc.vx v10, %0, v18" ::"r"(t5));
+        t5 = *a__, a__ += N;
+        asm volatile("vmacc.vx v12, %0, v18" ::"r"(t6));
+        t6 = *a__, a__ += N;
+        asm volatile("vmacc.vx v14, %0, v18" ::"r"(t7));
+        t7 = *a__;
+
+        a__ = a_ + ++n;
+
+        if (n == N)
+          break;
+
+        // Load one row of B
+        asm volatile("vle32.v v18, (%0);" ::"r"(b__));
+        b__ += P;
+
+        asm volatile("vmacc.vx v0, %0, v20" ::"r"(t0));
+        t0 = *a__, a__ += N;
+        asm volatile("vmacc.vx v2, %0, v20" ::"r"(t1));
+        t1 = *a__, a__ += N;
+        asm volatile("vmacc.vx v4, %0, v20" ::"r"(t2));
+        t2 = *a__, a__ += N;
+        asm volatile("vmacc.vx v6, %0, v20" ::"r"(t3));
+        t3 = *a__, a__ += N;
+        asm volatile("vmacc.vx v8, %0, v20" ::"r"(t4));
+        t4 = *a__, a__ += N;
+        asm volatile("vmacc.vx v10, %0, v20" ::"r"(t5));
+        t5 = *a__, a__ += N;
+        asm volatile("vmacc.vx v12, %0, v20" ::"r"(t6));
+        t6 = *a__, a__ += N;
+        asm volatile("vmacc.vx v14, %0, v20" ::"r"(t7));
+        t7 = *a__;
+      }
+
+      // Last iteration: store results
+      asm volatile("vmacc.vx v0, %0, v20" ::"r"(t0));
+      asm volatile("vse32.v v0, (%0);" ::"r"(c__));
+      c__ += P;
+      asm volatile("vmacc.vx v2, %0, v20" ::"r"(t1));
+      asm volatile("vse32.v v2, (%0);" ::"r"(c__));
+      c__ += P;
+      asm volatile("vmacc.vx v4, %0, v20" ::"r"(t2));
+      asm volatile("vse32.v v4, (%0);" ::"r"(c__));
+      c__ += P;
+      asm volatile("vmacc.vx v6, %0, v20" ::"r"(t3));
+      asm volatile("vse32.v v6, (%0);" ::"r"(c__));
+      c__ += P;
+      asm volatile("vmacc.vx v8, %0, v20" ::"r"(t4));
+      asm volatile("vse32.v v8, (%0);" ::"r"(c__));
+      c__ += P;
+      asm volatile("vmacc.vx v10, %0, v20" ::"r"(t5));
+      asm volatile("vse32.v v10, (%0);" ::"r"(c__));
+      c__ += P;
+      asm volatile("vmacc.vx v12, %0, v20" ::"r"(t6));
+      asm volatile("vse32.v v12, (%0);" ::"r"(c__));
+      c__ += P;
+      asm volatile("vmacc.vx v14, %0, v20" ::"r"(t7));
+      asm volatile("vse32.v v14, (%0);" ::"r"(c__));
     }
   }
 
   return block_size_p;
-}
-
-void matmul_vec_8x8_slice_init() {
-  asm volatile("vmv.v.i v0,  0");
-  asm volatile("vmv.v.i v2,  0");
-  asm volatile("vmv.v.i v4,  0");
-  asm volatile("vmv.v.i v6,  0");
-  asm volatile("vmv.v.i v8,  0");
-  asm volatile("vmv.v.i v10, 0");
-  asm volatile("vmv.v.i v12, 0");
-  asm volatile("vmv.v.i v14, 0");
-}
-
-void matmul_vec_8x8(int32_t *c, const int32_t *a, const int32_t *b,
-                     const unsigned long int N, const unsigned long int P) {
-  // Temporary variables
-  int32_t t0, t1, t2, t3, t4, t5, t6, t7;
-
-  // Original pointer
-  const int32_t *a_ = a;
-
-  // Prefetch one row of matrix B
-  asm volatile("vle32.v v18, (%0);" ::"r"(b));
-  b += P;
-
-  // Prefetch one row of scalar values
-  t0 = *a, a += N;
-  t1 = *a, a += N;
-  t2 = *a, a += N;
-  t3 = *a, a += N;
-  t4 = *a, a += N;
-  t5 = *a, a += N;
-  t6 = *a, a += N;
-  t7 = *a;
-
-  // Compute the multiplication
-  unsigned long int n = 0;
-
-  while (n < N) {
-    // Calculate pointer to the matrix A
-    a = a_ + ++n;
-
-    // Load one row of B
-    asm volatile("vle32.v v20, (%0);" ::"r"(b));
-
-    asm volatile("vmacc.vx v0, %0, v18" ::"r"(t0));
-    asm volatile("vmacc.vx v2, %0, v18" ::"r"(t1));
-    asm volatile("vmacc.vx v4, %0, v18" ::"r"(t2));
-    b += P;
-    asm volatile("vmacc.vx v6, %0, v18" ::"r"(t3));
-    t0 = *a, a += N;
-    asm volatile("vmacc.vx v8, %0, v18" ::"r"(t4));
-    t1 = *a, a += N;
-    asm volatile("vmacc.vx v10, %0, v18" ::"r"(t5));
-    t2 = *a, a += N;
-    asm volatile("vmacc.vx v12, %0, v18" ::"r"(t6));
-    t3 = *a, a += N;
-    asm volatile("vmacc.vx v14, %0, v18" ::"r"(t7));
-    t4 = *a, a += N;
-    t5 = *a, a += N;
-    t6 = *a, a += N;
-    t7 = *a;
-
-    a = a_ + ++n;
-
-    if (n == N)
-      break;
-
-    // Load one row of B
-    asm volatile("vle32.v v18, (%0);" ::"r"(b));
-
-    asm volatile("vmacc.vx v0, %0, v20" ::"r"(t0));
-    asm volatile("vmacc.vx v2, %0, v20" ::"r"(t1));
-    asm volatile("vmacc.vx v4, %0, v20" ::"r"(t2));
-    b += P;
-    asm volatile("vmacc.vx v6, %0, v20" ::"r"(t3));
-    t0 = *a, a += N;
-    asm volatile("vmacc.vx v8, %0, v20" ::"r"(t4));
-    t1 = *a, a += N;
-    asm volatile("vmacc.vx v10, %0, v20" ::"r"(t5));
-    t2 = *a, a += N;
-    asm volatile("vmacc.vx v12, %0, v20" ::"r"(t6));
-    t3 = *a, a += N;
-    asm volatile("vmacc.vx v14, %0, v20" ::"r"(t7));
-    t4 = *a, a += N;
-    t5 = *a, a += N;
-    t6 = *a, a += N;
-    t7 = *a;
-  }
-
-  // Last iteration: store results
-  asm volatile("vmacc.vx v0, %0, v20" ::"r"(t0));
-  asm volatile("vse32.v v0, (%0);" ::"r"(c));
-  c += P;
-  asm volatile("vmacc.vx v2, %0, v20" ::"r"(t1));
-  asm volatile("vse32.v v2, (%0);" ::"r"(c));
-  c += P;
-  asm volatile("vmacc.vx v4, %0, v20" ::"r"(t2));
-  asm volatile("vse32.v v4, (%0);" ::"r"(c));
-  c += P;
-  asm volatile("vmacc.vx v6, %0, v20" ::"r"(t3));
-  asm volatile("vse32.v v6, (%0);" ::"r"(c));
-  c += P;
-  asm volatile("vmacc.vx v8, %0, v20" ::"r"(t4));
-  asm volatile("vse32.v v8, (%0);" ::"r"(c));
-  c += P;
-  asm volatile("vmacc.vx v10, %0, v20" ::"r"(t5));
-  asm volatile("vse32.v v10, (%0);" ::"r"(c));
-  c += P;
-  asm volatile("vmacc.vx v12, %0, v20" ::"r"(t6));
-  asm volatile("vse32.v v12, (%0);" ::"r"(c));
-  c += P;
-  asm volatile("vmacc.vx v14, %0, v20" ::"r"(t7));
-  asm volatile("vse32.v v14, (%0);" ::"r"(c));
 }
