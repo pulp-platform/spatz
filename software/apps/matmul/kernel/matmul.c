@@ -20,16 +20,15 @@
 
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 
-uint32_t matmul(int32_t *c, const int32_t *a, const int32_t *b,
-             const unsigned long int M, const unsigned long int N,
-             const unsigned long int P, const uint32_t threadId,
-             const uint32_t numThreads) {
-  if (M <= 8 && numThreads > 1) {
-    return matmul_2x2(c, a, b, M, N, P, threadId, numThreads);
-  } else if (M <= 4 && numThreads == 1 || (M <= 16 && numThreads > 1)) {
-    return matmul_4x4(c, a, b, M, N, P, threadId, numThreads);
+void matmul(int32_t *c, const int32_t *a, const int32_t *b,
+            const unsigned long int M, const unsigned long int N,
+            const unsigned long int P) {
+  if (M <= 4) {
+    return matmul_2x2(c, a, b, M, N, P);
+  } else if (M <= 8) {
+    return matmul_4x4(c, a, b, M, N, P);
   } else {
-    return matmul_8x8(c, a, b, M, N, P, threadId, numThreads);
+    return matmul_8x8(c, a, b, M, N, P);
   }
 }
 
@@ -37,23 +36,18 @@ uint32_t matmul(int32_t *c, const int32_t *a, const int32_t *b,
 // 2x2
 // ---------------
 
-uint32_t matmul_2x2(int32_t *c, const int32_t *a, const int32_t *b,
+void matmul_2x2(int32_t *c, const int32_t *a, const int32_t *b,
                 const unsigned long int M, const unsigned long int N,
-                const unsigned long int P, const uint32_t threadId,
-                const uint32_t numThreads) {
+                const unsigned long int P) {
   // We work on 4 rows of the matrix at once
   const unsigned long int block_size = 2;
   unsigned long int block_size_p;
 
   // Set the vector configuration
-#ifdef DISABLE_MULTICORE
   asm volatile("vsetvli %0, %1, e32, m2, ta, ma" : "=r"(block_size_p) : "r"(P));
-#else
-  asm volatile("vsetvli %0, %1, e32, m1, ta, ma" : "=r"(block_size_p) : "r"(P));
-#endif
 
   // Slice the matrix into a manageable number of columns p_
-  for (unsigned long int p = (threadId%(M/block_size))*block_size_p; p < P; p += block_size_p*(numThreads/(M/block_size))) {
+  for (unsigned long int p = 0; p < P; p += block_size_p) {
     // Set the vector length
     const unsigned long int p_ = MIN(P - p, block_size_p);
 
@@ -61,14 +55,10 @@ uint32_t matmul_2x2(int32_t *c, const int32_t *a, const int32_t *b,
     const int32_t *b_ = b + p;
     int32_t *c_ = c + p;
 
-#ifdef DISABLE_MULTICORE
     asm volatile("vsetvli zero, %0, e32, m2, ta, ma" ::"r"(p_));
-#else
-    asm volatile("vsetvli zero, %0, e32, m1, ta, ma" ::"r"(p_));
-#endif
 
     // Iterate over the rows
-    for (unsigned long int m = threadId*block_size; m < M; m += block_size*numThreads) {
+    for (unsigned long int m = 0; m < M; m += block_size) {
       // Find pointer to the submatrices
       const int32_t *a_ = a + m * N;
 
@@ -134,33 +124,24 @@ uint32_t matmul_2x2(int32_t *c, const int32_t *a, const int32_t *b,
       asm volatile("vse32.v v4, (%0);" ::"r"(c__));
     }
   }
-
-  return block_size_p;
 }
 
 // ---------------
 // 4x4
 // ---------------
 
-uint32_t matmul_4x4(int32_t *c, const int32_t *a, const int32_t *b,
+void matmul_4x4(int32_t *c, const int32_t *a, const int32_t *b,
                  const unsigned long int M, const unsigned long int N,
-                 const unsigned long int P, const uint32_t threadId,
-                 const uint32_t numThreads) {
+                 const unsigned long int P) {
   // We work on 4 rows of the matrix at once
   const unsigned long int block_size = 4;
   unsigned long int block_size_p;
 
   // Set the vector configuration
-#ifdef DISABLE_MULTICORE
   asm volatile("vsetvli %0, %1, e32, m4, ta, ma" : "=r"(block_size_p) : "r"(P));
-#else
-  asm volatile("vsetvli %0, %1, e32, mf2, ta, ma" : "=r"(block_size_p) : "r"(P));
-#endif
 
   // Slice the matrix into a manageable number of columns p_
-  uint32_t increment = numThreads/(M/block_size);
-  increment = increment == 0 ? 1 : increment;
-  for (unsigned long int p = (threadId%(M/block_size))*block_size_p; p < P; p += block_size_p*increment) {
+  for (unsigned long int p = 0; p < P; p += block_size_p) {
     // Set the vector length
     const unsigned long int p_ = MIN(P - p, block_size_p);
 
@@ -168,14 +149,10 @@ uint32_t matmul_4x4(int32_t *c, const int32_t *a, const int32_t *b,
     const int32_t *b_ = b + p;
     int32_t *c_ = c + p;
 
-#ifdef DISABLE_MULTICORE
     asm volatile("vsetvli zero, %0, e32, m4, ta, ma" ::"r"(p_));
-#else
-    asm volatile("vsetvli zero, %0, e32, mf2, ta, ma" ::"r"(p_));
-#endif
 
     // Iterate over the rows
-    for (unsigned long int m = threadId*block_size; m < M; m += block_size*numThreads) {
+    for (unsigned long int m = 0; m < M; m += block_size) {
       // Find pointer to the submatrices
       const int32_t *a_ = a + m * N;
 
@@ -258,18 +235,15 @@ uint32_t matmul_4x4(int32_t *c, const int32_t *a, const int32_t *b,
       asm volatile("vse32.v v12, (%0);" ::"r"(c__));
     }
   }
-
-  return block_size_p;
 }
 
 // ---------------
 // 8x8
 // ---------------
 
-uint32_t matmul_8x8(int32_t *c, const int32_t *a, const int32_t *b,
+void matmul_8x8(int32_t *c, const int32_t *a, const int32_t *b,
                  const unsigned long int M, const unsigned long int N,
-                 const unsigned long int P, const uint32_t threadId,
-                 const uint32_t numThreads) {
+                 const unsigned long int P) {
   // We work on 8 rows of the matrix at once
   const unsigned long int block_size = 8;
   unsigned long int block_size_p;
@@ -278,22 +252,18 @@ uint32_t matmul_8x8(int32_t *c, const int32_t *a, const int32_t *b,
   asm volatile("vsetvli %0, %1, e32, m2, ta, ma" : "=r"(block_size_p) : "r"(P));
 
   // Slice the matrix into a manageable number of columns p_
-  uint32_t div = M/block_size;
-  uint32_t increment = numThreads/div;
-  if (increment == 0) increment = 1;
-  for (unsigned long int p = (threadId%div)*block_size_p; p < P; p += block_size_p*increment) {
+  for (unsigned long int p = 0; p < P; p += block_size_p) {
     // Set the vector length
-    //const unsigned long int p_ = MIN(P - p, block_size_p);
+    const unsigned long int p_ = MIN(P - p, block_size_p);
 
     // Find pointers to the submatrices
     const int32_t *b_ = b + p;
     int32_t *c_ = c + p;
 
-    uint32_t p_ = P - p;
     asm volatile("vsetvli zero, %0, e32, m2, ta, ma" ::"r"(p_));
 
     // Iterate over the rows
-    for (unsigned long int m = threadId*block_size; m < M; m += block_size*numThreads) {
+    for (unsigned long int m = 0; m < M; m += block_size) {
       // Find pointer to the submatrices
       const int32_t *a_ = a + m * N;
 
@@ -412,6 +382,4 @@ uint32_t matmul_8x8(int32_t *c, const int32_t *a, const int32_t *b,
       asm volatile("vse32.v v14, (%0);" ::"r"(c__));
     }
   }
-
-  return block_size_p;
 }
