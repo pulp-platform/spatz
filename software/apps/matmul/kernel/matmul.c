@@ -26,7 +26,7 @@ uint32_t matmul(int32_t *c, const int32_t *a, const int32_t *b,
              const uint32_t numThreads) {
   if (M <= 8 && numThreads > 1) {
     return matmul_2x2(c, a, b, M, N, P, threadId, numThreads);
-  } else if (M <= 16 && numThreads == 1 || (M <= 16 && numThreads > 1)) {
+  } else if (M <= 4 && numThreads == 1 || (M <= 16 && numThreads > 1)) {
     return matmul_4x4(c, a, b, M, N, P, threadId, numThreads);
   } else {
     return matmul_8x8(c, a, b, M, N, P, threadId, numThreads);
@@ -122,6 +122,9 @@ uint32_t matmul_2x2(int32_t *c, const int32_t *a, const int32_t *b,
         asm volatile("vmacc.vx v4, %0, v20" ::"r"(t1));
         t1 = *a__;
       }
+
+      // Prefetch M variable to avoid lw after vse32.v instructions
+      asm volatile("add zero, zero, %0" ::"r"(M));
 
       // Last iteration: store results
       asm volatile("vmacc.vx v0, %0, v20" ::"r"(t0));
@@ -238,6 +241,9 @@ uint32_t matmul_4x4(int32_t *c, const int32_t *a, const int32_t *b,
         t3 = *a__;
       }
 
+      // Prefetch M variable to avoid lw after vse32.v instructions
+      asm volatile("add zero, zero, %0" ::"r"(M));
+
       // Last iteration: store results
       asm volatile("vmacc.vx v0, %0, v20" ::"r"(t0));
       asm volatile("vse32.v v0, (%0);" ::"r"(c__));
@@ -276,16 +282,18 @@ uint32_t matmul_8x8(int32_t *c, const int32_t *a, const int32_t *b,
   else asm volatile("vsetvli %0, %1, e32, m2, ta, ma" : "=r"(block_size_p) : "r"(P));
 #endif
   // Slice the matrix into a manageable number of columns p_
-  uint32_t increment = numThreads/(M/block_size);
-  increment = increment == 0 ? 1 : increment;
-  for (unsigned long int p = (threadId%(M/block_size))*block_size_p; p < P; p += block_size_p*increment) {
+  uint32_t div = M/block_size;
+  uint32_t increment = numThreads/div;
+  if (increment == 0) increment = 1;
+  for (unsigned long int p = (threadId%div)*block_size_p; p < P; p += block_size_p*increment) {
     // Set the vector length
-    const unsigned long int p_ = MIN(P - p, block_size_p);
+    //const unsigned long int p_ = MIN(P - p, block_size_p);
 
     // Find pointers to the submatrices
     const int32_t *b_ = b + p;
     int32_t *c_ = c + p;
 
+    uint32_t p_ = P - p;
 #ifdef DISABLE_MULTICORE
     asm volatile("vsetvli zero, %0, e32, m2, ta, ma" ::"r"(p_));
 #else
@@ -383,6 +391,9 @@ uint32_t matmul_8x8(int32_t *c, const int32_t *a, const int32_t *b,
         asm volatile("vmacc.vx v14, %0, v20" ::"r"(t7));
         t7 = *a__;
       }
+
+      // Prefetch M variable to avoid lw after vse32.v instructions
+      asm volatile("add zero, zero, %0" ::"r"(M));
 
       // Last iteration: store results
       asm volatile("vmacc.vx v0, %0, v20" ::"r"(t0));
