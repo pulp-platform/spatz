@@ -275,12 +275,8 @@ uint32_t matmul_8x8(int32_t *c, const int32_t *a, const int32_t *b,
   unsigned long int block_size_p;
 
   // Set the vector configuration
-#ifdef DISABLE_MULTICORE
   asm volatile("vsetvli %0, %1, e32, m2, ta, ma" : "=r"(block_size_p) : "r"(P));
-#else
-  if (M == 32) asm volatile("vsetvli %0, %1, e32, m1, ta, ma" : "=r"(block_size_p) : "r"(P));
-  else asm volatile("vsetvli %0, %1, e32, m2, ta, ma" : "=r"(block_size_p) : "r"(P));
-#endif
+
   // Slice the matrix into a manageable number of columns p_
   uint32_t div = M/block_size;
   uint32_t increment = numThreads/div;
@@ -294,12 +290,7 @@ uint32_t matmul_8x8(int32_t *c, const int32_t *a, const int32_t *b,
     int32_t *c_ = c + p;
 
     uint32_t p_ = P - p;
-#ifdef DISABLE_MULTICORE
     asm volatile("vsetvli zero, %0, e32, m2, ta, ma" ::"r"(p_));
-#else
-    if (M == 32) asm volatile("vsetvli zero, %0, e32, m1, ta, ma" ::"r"(p_));
-    else asm volatile("vsetvli zero, %0, e32, m2, ta, ma" ::"r"(p_));
-#endif
 
     // Iterate over the rows
     for (unsigned long int m = threadId*block_size; m < M; m += block_size*numThreads) {
