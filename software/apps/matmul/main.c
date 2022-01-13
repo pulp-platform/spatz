@@ -136,7 +136,7 @@ int main() {
     /////////////////
 
     // Set matrix dimension
-    uint32_t dim = MATRIX_DIM
+    uint32_t dim = MATRIX_DIM;
 
     // Initialize matrices
     init_matrix(a, 0, dim, dim, A_a, A_b, A_c);
@@ -149,7 +149,7 @@ int main() {
 
     // Check and display results
     PRINT_HEADER(dim, 0);
-    PERFORMANCE(timer_end - timer_start, s, 0, 1);
+    PERFORMANCE(timer_end - timer_start, dim, 0, 1);
     VERIFY(c, 0, dim, dim, 0, dim, A_a, A_b, A_c, B_a, B_b, B_c, 0);
   #else
 
