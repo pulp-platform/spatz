@@ -46,9 +46,8 @@ void matmul_8x8(int32_t *c, const int32_t *a, const int32_t *b,
 \
     const int32_t *a_ = a + m_start * N; \
 \
-    int32_t *b__ = b_; \
-    asm volatile("vle32.v v18, (%0);" ::"r"(b__)); \
-    b__ += P; \
+    asm volatile("vle32.v v18, (%0);" ::"r"(b_)); \
+    int32_t *b__ = b_ + P; \
 \
     int32_t *c__ = c_ + m_start * P; \
 \
@@ -162,10 +161,9 @@ void matmul_8x8(int32_t *c, const int32_t *a, const int32_t *b,
 \
     const int32_t *a_ = a + m_start * N; \
 \
-    int32_t *b__ = b_; \
-    asm volatile("vle32.v v16, (%0);" ::"r"(b__)); \
-    b__ += P; \
+    asm volatile("vle32.v v16, (%0);" ::"r"(b_)); \
 \
+    int32_t *b__ = b_ + P; \
     int32_t *c__ = c_ + m_start * P; \
 \
     int32_t t0, t1, t2, t3; \
@@ -242,10 +240,9 @@ void matmul_8x8(int32_t *c, const int32_t *a, const int32_t *b,
 \
     const int32_t *a_ = a + m_start * N; \
 \
-    int32_t *b__ = b_; \
-    asm volatile("vle32.v v16, (%0);" ::"r"(b__)); \
-    b__ += P; \
+    asm volatile("vle32.v v16, (%0);" ::"r"(b_)); \
 \
+    int32_t *b__ = b_ + P; \
     int32_t *c__ = c_ + m_start * P; \
 \
     int32_t t0, t1; \

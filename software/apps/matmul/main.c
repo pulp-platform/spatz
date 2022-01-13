@@ -18,6 +18,7 @@
 
 #include <stdint.h>
 #include <string.h>
+#include <stdbool.h>
 
 #include "kernel/matmul.c"
 #include "printf.h"
@@ -26,27 +27,27 @@
 #include "synchronization.h"
 #endif
 
-#define PERFORMANCE(runtime, dim, core_id, num_cores) do { \
-  if (core_id == 0) { \
-    uint32_t performance = 1000 * 2 * dim * dim * dim / runtime; \
-    uint32_t utilization =  performance / (2 * num_cores * N_IPU); \
- \
-    printf("The execution took %d cycles.\n", runtime); \
-    printf("The performance is %d OP/1000cycle (%d%%o utilization).\n", performance, \
-           utilization); \
-  } \
+#define PERFORMANCE(runtime, dim, core_id, num_cores) do {                            \
+  if (core_id == 0) {                                                                 \
+    uint32_t performance = 1000 * 2 * dim * dim * dim / runtime;                      \
+    uint32_t utilization =  performance / (2 * num_cores * N_IPU);                    \
+                                                                                      \
+    printf("The execution took %d cycles.\n", runtime);                               \
+    printf("The performance is %d OP/1000cycle (%d%%o utilization).\n", performance,  \
+           utilization);                                                              \
+  }                                                                                   \
 } while (0)
 
-#define VERIFY(c, m_start, m_end, s, p_start, p_end, A_a, A_b, A_c, B_a, B_b, B_c, core_id) do {\
+#define VERIFY(c, m_start, m_end, s, p_start, p_end, A_a, A_b, A_c, B_a, B_b, B_c, core_id) do {        \
   int32_t error = verify_matrix(c, m_start, m_end, s, p_start, p_end, s, A_a, A_b, A_c, B_a, B_b, B_c); \
- \
-  if (error != 0) { \
-    printf("Error core %d: c[%d]=%d\n", core_id, error, c[error]); \
-    return error; \
-  } \
+                                                                                                        \
+  if (error != 0) {                                                                                     \
+    printf("Error core %d: c[%d]=%d\n", core_id, error, c[error]);                                      \
+    return error;                                                                                       \
+  }                                                                                                     \
 } while (0)
 
-#define PRINT_HEADER(size, core_id) do {\
+#define PRINT_HEADER(size, core_id) do {                                  \
   if (core_id == 0) printf("\n----- (%dx%d) matmul -----\n", size, size); \
 } while (0)
 
@@ -54,9 +55,12 @@
 #define CORES_PER_TILE 2
 // Define Matrix dimensions:
 // C = AB with A=[MxN], B=[NxP], C=[MxP]
-#define M 64
-#define N 64
-#define P 64
+#ifndef MATRIX_DIM
+#define MATRIX_DIM 8
+#endif
+#define M MATRIX_DIM
+#define N MATRIX_DIM
+#define P MATRIX_DIM
 // Specify how the matrices A and B should be initialized
 // The entries will follow this format:
 // a(i,j) = A_a*i + A_b*j + A_c
@@ -125,51 +129,93 @@ int main() {
   uint32_t tile_id = core_id/CORES_PER_TILE;
   uint32_t num_cores = mempool_get_core_count();
 
-  if (core_id == 0) {
-    printf("\n");
-    printf("============\n");
-    printf("=  MATMUL  =\n");
-    printf("============\n");
-    printf("\n");
-    printf("\n");
-  }
-
   #ifdef DISABLE_MULTICORE
-    for (uint32_t s = 4; s <= M; s *= 2) {
-      // Initialize matrices
-      init_matrix(a, 0, s, s, A_a, A_b, A_c);
-      init_matrix(b, 0, s, s, B_a, B_b, B_c);
 
-      uint32_t timer_start = mempool_get_timer();
-      matmul(c, a, b, s, s, s);
-      uint32_t timer_end = mempool_get_timer();
+    /////////////////
+    // Single Core //
+    /////////////////
 
-      PRINT_HEADER(s, 0);
-      PERFORMANCE(timer_end - timer_start, s, 0, 1);
-      VERIFY(c, 0, s, s, 0, s, A_a, A_b, A_c, B_a, B_b, B_c, 0);
-    }
+    // Set matrix dimension
+    uint32_t dim = MATRIX_DIM
+
+    // Initialize matrices
+    init_matrix(a, 0, dim, dim, A_a, A_b, A_c);
+    init_matrix(b, 0, dim, dim, B_a, B_b, B_c);
+
+    // Execute matmul and measure runtime
+    uint32_t timer_start = mempool_get_timer();
+    matmul(c, a, b, dim, dim, dim);
+    uint32_t timer_end = mempool_get_timer();
+
+    // Check and display results
+    PRINT_HEADER(dim, 0);
+    PERFORMANCE(timer_end - timer_start, s, 0, 1);
+    VERIFY(c, 0, dim, dim, 0, dim, A_a, A_b, A_c, B_a, B_b, B_c, 0);
   #else
+
+    ////////////////
+    // Multi Core //
+    ////////////////
+
     uint32_t timer_start, timer_end, timer;
     uint32_t row_start, row_end;
 
     uint32_t m_start, m_end;
     uint32_t p_start, p_end;
+    uint32_t vlen;
     uint32_t dim;
+    bool p_split;
+    uint32_t measure_iterations;
 
-    timer = (uint32_t)-1;
-
+    // Initialize multicore barrier
     mempool_barrier_init(core_id);
 
-    /////////
-    // 8x8 //
-    /////////
+    // Reset timer
+    timer = (uint32_t)-1;
 
-    // P-Split
-    dim = 8;
-    m_start = dim/TILES*(tile_id);
-    m_end   = dim/TILES*(tile_id+1);
-    p_start = dim/2*core_id_tile;
-    p_end   = dim/2*(core_id_tile+1);
+    // Set matrix dimension
+    dim = MATRIX_DIM;
+
+    // Define execution parameters
+    switch (MATRIX_DIM) {
+      case 8:
+        vlen = 4;
+        p_split = true;
+        measure_iterations = 8;
+        break;
+      case 16:
+        vlen = 8;
+        p_split = true;
+        measure_iterations = 4;
+        break;
+      case 32:
+        vlen = 16;
+        p_split = true;
+        measure_iterations = 4;
+        break;
+      case 64:
+        vlen = 16;
+        p_split = false;
+        measure_iterations = 2;
+        break;
+      default:
+        return 1;
+    }
+
+    // Define way to split up matrix
+    if (p_split) {
+      // P-Split
+      m_start = dim/TILES*(tile_id);
+      m_end   = dim/TILES*(tile_id+1);
+      p_start = dim/2*core_id_tile;
+      p_end   = dim/2*(core_id_tile+1);
+    } else {
+      // M-Split
+      m_start = dim/(TILES*CORES_PER_TILE)*(core_id);
+      m_end   = dim/(TILES*CORES_PER_TILE)*(core_id+1);
+      p_start = 0;
+      p_end   = dim;
+    }
 
     // Initialize matrices
     row_start = dim/(TILES*CORES_PER_TILE)*(core_id);
@@ -177,15 +223,26 @@ int main() {
     init_matrix(a, row_start, row_end, dim, A_a, A_b, A_c);
     init_matrix(b, row_start, row_end, dim, B_a, B_b, B_c);
 
-    for (int i = 0; i < 8; i++) {
+    // Execute matmul a few times and measure runtime
+    for (int i = 0; i < measure_iterations; i++) {
       // Wait for all cores to finish
       mempool_barrier(num_cores);
+
       // Start timer
       timer_start = mempool_get_timer();
+
       // Calculate matmul
-      MATMUL_2XVLEN_PARA(c, a, b, m_start, m_end, dim, p_start, p_end, dim, 4);
+      #if MATRIX_DIM == 8
+        MATMUL_2XVLEN_PARA(c, a, b, m_start, m_end, dim, p_start, p_end, dim, vlen);
+      #elif MATRIX_DIM == 16
+        MATMUL_4XVLEN_PARA(c, a, b, m_start, m_end, dim, p_start, p_end, dim, vlen);
+      #else
+        MATMUL_8XVLEN_PARA(c, a, b, m_start, m_end, dim, p_start, p_end, dim, vlen);
+      #endif
+      // Wait for all cores to finish matmul
       mempool_barrier(num_cores);
-      // End timer
+
+      // End timer and check if new best runtime
       timer_end = mempool_get_timer();
       uint32_t timer_temp = timer_end - timer_start;
       if (core_id == 0) {
@@ -195,147 +252,12 @@ int main() {
       }
     }
 
+    // Check and display results
     PRINT_HEADER(dim, core_id);
     PERFORMANCE(timer, dim, core_id, num_cores);
     VERIFY(c, m_start, m_end, dim, p_start, p_end, A_a, A_b, A_c, B_a, B_b, B_c, core_id);
 
-    // Reset timer;
-    timer = (uint32_t)-1;
-
-    mempool_barrier(num_cores);
-
-    ///////////
-    // 16x16 //
-    ///////////
-
-    // P-Split
-    dim = 16;
-    m_start = dim/TILES*(tile_id);
-    m_end   = dim/TILES*(tile_id+1);
-    p_start = dim/2*core_id_tile;
-    p_end   = dim/2*(core_id_tile+1);
-
-    // Initialize matrices
-    row_start = dim/(TILES*CORES_PER_TILE)*(core_id);
-    row_end   = dim/(TILES*CORES_PER_TILE)*(core_id+1);
-    init_matrix(a, row_start, row_end, dim, A_a, A_b, A_c);
-    init_matrix(b, row_start, row_end, dim, B_a, B_b, B_c);
-
-    for (int i = 0; i < 4; i++) {
-      // Wait for all cores to finish
-      mempool_barrier(num_cores);
-      // Start timer
-      timer_start = mempool_get_timer();
-      // Calculate matmul
-      MATMUL_4XVLEN_PARA(c, a, b, m_start, m_end, dim, p_start, p_end, dim, 8);
-      mempool_barrier(num_cores);
-      // End timer
-      timer_end = mempool_get_timer();
-      uint32_t timer_temp = timer_end - timer_start;
-      if (core_id == 0) {
-        if (timer_temp < timer) {
-          timer = timer_temp;
-        }
-      }
-    }
-
-    PRINT_HEADER(dim, core_id);
-    PERFORMANCE(timer, dim, core_id, num_cores);
-    VERIFY(c, m_start, m_end, dim, p_start, p_end, A_a, A_b, A_c, B_a, B_b, B_c, core_id);
-
-    // Reset timer;
-    timer = (uint32_t)-1;
-
-    mempool_barrier(num_cores);
-
-    ///////////
-    // 32x32 //
-    ///////////
-
-    // P-Split
-    dim = 32;
-    m_start = dim/TILES*(tile_id);
-    m_end   = dim/TILES*(tile_id+1);
-    p_start = dim/2*core_id_tile;
-    p_end   = dim/2*(core_id_tile+1);
-
-    // Initialize matrices
-    row_start = dim/(TILES*CORES_PER_TILE)*(core_id);
-    row_end   = dim/(TILES*CORES_PER_TILE)*(core_id+1);
-    init_matrix(a, row_start, row_end, dim, A_a, A_b, A_c);
-    init_matrix(b, row_start, row_end, dim, B_a, B_b, B_c);
-
-    for (int i = 0; i < 4; i++) {
-      // Wait for all cores to finish
-      mempool_barrier(num_cores);
-      // Start timer
-      timer_start = mempool_get_timer();
-      // Calculate matmul
-      MATMUL_8XVLEN_PARA(c, a, b, m_start, m_end, dim, p_start, p_end, dim, 16);
-      mempool_barrier(num_cores);
-      // End timer
-      timer_end = mempool_get_timer();
-      uint32_t timer_temp = timer_end - timer_start;
-      if (core_id == 0) {
-        if (timer_temp < timer) {
-          timer = timer_temp;
-        }
-      }
-    }
-
-    PRINT_HEADER(dim, core_id);
-    PERFORMANCE(timer, dim, core_id, num_cores);
-    VERIFY(c, m_start, m_end, dim, p_start, p_end, A_a, A_b, A_c, B_a, B_b, B_c, core_id);
-
-    // Reset timer;
-    timer = (uint32_t)-1;
-
-    mempool_barrier(num_cores);
-
-    ///////////
-    // 64x64 //
-    ///////////
-
-    // M-Split
-    dim = 64;
-    m_start = dim/(TILES*CORES_PER_TILE)*(core_id);
-    m_end   = dim/(TILES*CORES_PER_TILE)*(core_id+1);
-    p_start = 0;
-    p_end   = dim;
-
-    // Initialize matrices
-    row_start = dim/(TILES*CORES_PER_TILE)*(core_id);
-    row_end   = dim/(TILES*CORES_PER_TILE)*(core_id+1);
-    init_matrix(a, row_start, row_end, dim, A_a, A_b, A_c);
-    init_matrix(b, row_start, row_end, dim, B_a, B_b, B_c);
-
-    if (core_id == 0) printf("HI");
-
-    for (int i = 0; i < 2; i++) {
-      // Wait for all cores to finish
-      mempool_barrier(num_cores);
-      // Start timer
-      timer_start = mempool_get_timer();
-      // Calculate matmul
-      MATMUL_8XVLEN_PARA(c, a, b, m_start, m_end, dim, p_start, p_end, dim, 16);
-      mempool_barrier(num_cores);
-      // End timer
-      timer_end = mempool_get_timer();
-      uint32_t timer_temp = timer_end - timer_start;
-      if (core_id == 0) {
-        if (timer_temp < timer) {
-          timer = timer_temp;
-        }
-      }
-    }
-
-    PRINT_HEADER(dim, core_id);
-    PERFORMANCE(timer, dim, core_id, num_cores);
-    VERIFY(c, m_start, m_end, dim, p_start, p_end, A_a, A_b, A_c, B_a, B_b, B_c, core_id);
-
-    // Reset timer;
-    timer = (uint32_t)-1;
-
+    // Wait for core 0 to finish displaying results
     mempool_barrier(num_cores);
   #endif
 
