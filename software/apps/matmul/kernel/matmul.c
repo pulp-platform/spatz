@@ -52,7 +52,7 @@ void matmul_2x2(int32_t *c, const int32_t *a, const int32_t *b,
     const unsigned long int p_ = MIN(P - p, block_size_p);
 
     // Find pointers to the submatrices
-    const int32_t *b_ = b + p;
+    int32_t *b_ = (int32_t*)b + p;
     int32_t *c_ = c + p;
 
     asm volatile("vsetvli zero, %0, e32, m2, ta, ma" ::"r"(p_));
@@ -60,7 +60,7 @@ void matmul_2x2(int32_t *c, const int32_t *a, const int32_t *b,
     // Iterate over the rows
     for (unsigned long int m = 0; m < M; m += block_size) {
       // Find pointer to the submatrices
-      const int32_t *a_ = a + m * N;
+      int32_t *a_ = (int32_t*)a + m * N;
 
       // Prefetch one row of matrix B
       int32_t *b__ = b_;
@@ -146,7 +146,7 @@ void matmul_4x4(int32_t *c, const int32_t *a, const int32_t *b,
     const unsigned long int p_ = MIN(P - p, block_size_p);
 
     // Find pointers to the submatrices
-    const int32_t *b_ = b + p;
+    int32_t *b_ = (int32_t*)b + p;
     int32_t *c_ = c + p;
 
     asm volatile("vsetvli zero, %0, e32, m4, ta, ma" ::"r"(p_));
@@ -154,7 +154,7 @@ void matmul_4x4(int32_t *c, const int32_t *a, const int32_t *b,
     // Iterate over the rows
     for (unsigned long int m = 0; m < M; m += block_size) {
       // Find pointer to the submatrices
-      const int32_t *a_ = a + m * N;
+      int32_t *a_ = (int32_t*)a + m * N;
 
       // Prefetch one row of matrix B
       int32_t *b__ = b_;
@@ -257,7 +257,7 @@ void matmul_8x8(int32_t *c, const int32_t *a, const int32_t *b,
     const unsigned long int p_ = MIN(P - p, block_size_p);
 
     // Find pointers to the submatrices
-    const int32_t *b_ = b + p;
+    int32_t *b_ = (int32_t*)b + p;
     int32_t *c_ = c + p;
 
     asm volatile("vsetvli zero, %0, e32, m2, ta, ma" ::"r"(p_));
@@ -265,7 +265,7 @@ void matmul_8x8(int32_t *c, const int32_t *a, const int32_t *b,
     // Iterate over the rows
     for (unsigned long int m = 0; m < M; m += block_size) {
       // Find pointer to the submatrices
-      const int32_t *a_ = a + m * N;
+      int32_t *a_ = (int32_t*)a + m * N;
 
       // Prefetch one row of matrix B
       int32_t *b__ = b_;

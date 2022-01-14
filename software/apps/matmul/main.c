@@ -124,11 +124,6 @@ void print_matrix(int32_t const *matrix, uint32_t num_rows,
 }
 
 int main() {
-  uint32_t core_id = mempool_get_core_id();
-  uint32_t core_id_tile = core_id%CORES_PER_TILE;
-  uint32_t tile_id = core_id/CORES_PER_TILE;
-  uint32_t num_cores = mempool_get_core_count();
-
   #ifdef DISABLE_MULTICORE
 
     /////////////////
@@ -150,12 +145,17 @@ int main() {
     // Check and display results
     PRINT_HEADER(dim, 0);
     PERFORMANCE(timer_end - timer_start, dim, 0, 1);
-    VERIFY(c, 0, dim, dim, 0, dim, A_a, A_b, A_c, B_a, B_b, B_c, 0);
+    VERIFY(c, 0, (int32_t)dim, (int32_t)dim, 0, (int32_t)dim, A_a, A_b, A_c, B_a, B_b, B_c, 0);
   #else
 
     ////////////////
     // Multi Core //
     ////////////////
+
+    uint32_t core_id = mempool_get_core_id();
+    uint32_t core_id_tile = core_id%CORES_PER_TILE;
+    uint32_t tile_id = core_id/CORES_PER_TILE;
+    uint32_t num_cores = mempool_get_core_count();
 
     uint32_t timer_start, timer_end, timer;
     uint32_t row_start, row_end;
@@ -224,7 +224,7 @@ int main() {
     init_matrix(b, row_start, row_end, dim, B_a, B_b, B_c);
 
     // Execute matmul a few times and measure runtime
-    for (int i = 0; i < measure_iterations; i++) {
+    for (uint32_t i = 0; i < measure_iterations; i++) {
       // Wait for all cores to finish
       mempool_barrier(num_cores);
 
@@ -255,7 +255,8 @@ int main() {
     // Check and display results
     PRINT_HEADER(dim, core_id);
     PERFORMANCE(timer, dim, core_id, num_cores);
-    VERIFY(c, m_start, m_end, dim, p_start, p_end, A_a, A_b, A_c, B_a, B_b, B_c, core_id);
+    VERIFY(c, (int32_t)m_start, (int32_t)m_end, (int32_t)dim, (int32_t)p_start,
+           (int32_t)p_end, A_a, A_b, A_c, B_a, B_b, B_c, core_id);
 
     // Wait for core 0 to finish displaying results
     mempool_barrier(num_cores);

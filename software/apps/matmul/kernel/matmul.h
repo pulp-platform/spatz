@@ -41,10 +41,10 @@ void matmul_8x8(int32_t *c, const int32_t *a, const int32_t *b,
   asm volatile("vsetvli zero, %0, e32, m2, ta, ma" :: "r"(vlen)); \
 \
   for (unsigned long int p = p_start; p < p_end; p += vlen) { \
-    const int32_t *b_ = b + p; \
+    int32_t *b_ = b + p; \
     int32_t *c_ = c + p; \
 \
-    const int32_t *a_ = a + m_start * N; \
+    int32_t *a_ = a + m_start * N; \
 \
     asm volatile("vle32.v v18, (%0);" ::"r"(b_)); \
     int32_t *b__ = b_ + P; \
@@ -156,10 +156,10 @@ void matmul_8x8(int32_t *c, const int32_t *a, const int32_t *b,
   asm volatile("vsetvli zero, %0, e32, m4, ta, ma" :: "r"(vlen)); \
 \
   for (unsigned long int p = p_start; p < p_end; p += vlen) { \
-    const int32_t *b_ = b + p; \
+    int32_t *b_ = b + p; \
     int32_t *c_ = c + p; \
 \
-    const int32_t *a_ = a + m_start * N; \
+    int32_t *a_ = a + m_start * N; \
 \
     asm volatile("vle32.v v16, (%0);" ::"r"(b_)); \
 \
@@ -235,10 +235,10 @@ void matmul_8x8(int32_t *c, const int32_t *a, const int32_t *b,
   asm volatile("vsetvli zero, %0, e32, m8, ta, ma" :: "r"(vlen)); \
 \
   for (unsigned long int p = p_start; p < p_end; p += vlen) { \
-    const int32_t *b_ = b + p; \
+    int32_t *b_ = b + p; \
     int32_t *c_ = c + p; \
 \
-    const int32_t *a_ = a + m_start * N; \
+    int32_t *a_ = a + m_start * N; \
 \
     asm volatile("vle32.v v16, (%0);" ::"r"(b_)); \
 \
