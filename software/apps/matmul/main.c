@@ -27,10 +27,10 @@
 #include "synchronization.h"
 #endif
 
-#define PERFORMANCE(runtime, dim, core_id, num_cores) do {                            \
+#define PERFORMANCE(runtime, dim, core_id, num_cores, num_ipus) do {                  \
   if (core_id == 0) {                                                                 \
     uint32_t performance = 1000 * 2 * dim * dim * dim / runtime;                      \
-    uint32_t utilization =  performance / (2 * num_cores * N_IPU);                    \
+    uint32_t utilization =  performance / (2 * num_cores * num_ipus);                 \
                                                                                       \
     printf("The execution took %d cycles.\n", runtime);                               \
     printf("The performance is %d OP/1000cycle (%d%%o utilization).\n", performance,  \
@@ -55,6 +55,9 @@
 #define CORES_PER_TILE 2
 // Define Matrix dimensions:
 // C = AB with A=[MxN], B=[NxP], C=[MxP]
+#ifndef N_IPU
+#define N_IPU 1
+#endif
 #ifndef MATRIX_DIM
 #define MATRIX_DIM 8
 #endif
@@ -144,7 +147,7 @@ int main() {
 
     // Check and display results
     PRINT_HEADER(dim, 0);
-    PERFORMANCE(timer_end - timer_start, dim, 0, 1);
+    PERFORMANCE(timer_end - timer_start, dim, 0, 1, N_IPU);
     VERIFY(c, 0, (int32_t)dim, (int32_t)dim, 0, (int32_t)dim, A_a, A_b, A_c, B_a, B_b, B_c, 0);
   #else
 
@@ -254,7 +257,7 @@ int main() {
 
     // Check and display results
     PRINT_HEADER(dim, core_id);
-    PERFORMANCE(timer, dim, core_id, num_cores);
+    PERFORMANCE(timer, dim, core_id, num_cores, N_IPU);
     VERIFY(c, (int32_t)m_start, (int32_t)m_end, (int32_t)dim, (int32_t)p_start,
            (int32_t)p_end, A_a, A_b, A_c, B_a, B_b, B_c, core_id);
 
