@@ -60,7 +60,7 @@ void TEST_CASE8(void) {
   VSET(4, e16, m1);
   volatile uint16_t INP1[] = {0x9fe4, 0x1920, 0x8f2e, 0x05e0,
                               0xf9aa, 0x71f0, 0xc394, 0xbbd3};
-  uint64_t stride = -4;
+  int64_t stride = -4;
   asm volatile("vlse16.v v1, (%0), %1" ::"r"(&INP1[7]), "r"(stride));
   VCMP_U16(8, v1, 0xbbd3, 0x71f0, 0x05e0, 0x1920);
 }
