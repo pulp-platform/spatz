@@ -148,6 +148,8 @@ module spatz_decoder
               spatz_req.vtype = {1'b0, decoder_req_i.rs2[7:0]};
               spatz_req.rs1   = decoder_req_i.rs1;
               illegal_instr   = ~decoder_req_i.rs1_valid || ~decoder_req_i.rs2_valid;
+            end else begin
+              illegal_instr   = 1'b1;
             end
 
             // Set to maxvl or new desired value
