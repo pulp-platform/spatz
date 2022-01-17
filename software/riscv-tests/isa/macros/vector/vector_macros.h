@@ -207,10 +207,10 @@ int test_case;
 #define VCMP_F32(casenum,vect,act...) {VSTORE_F32(vect); VCMP(float, %f, casenum,Rf32,act);}
 
 // Vector load
-#define VLOAD_64(vreg,vec...) VLOAD(uint64_t,e64,vreg,vec)
-#define VLOAD_32(vreg,vec...) VLOAD(uint32_t,e32,vreg,vec)
-#define VLOAD_16(vreg,vec...) VLOAD(uint16_t,e16,vreg,vec)
-#define VLOAD_8(vreg,vec...)  VLOAD(uint8_t, e8, vreg,vec)
+#define VLOAD_64(vreg,vec...) VLOAD(int64_t,e64,vreg,vec)
+#define VLOAD_32(vreg,vec...) VLOAD(int32_t,e32,vreg,vec)
+#define VLOAD_16(vreg,vec...) VLOAD(int16_t,e16,vreg,vec)
+#define VLOAD_8(vreg,vec...)  VLOAD(int8_t, e8, vreg,vec)
 
 // Vector store
 #define VSTORE_U64(vreg) VSTORE(uint64_t,e64,vreg,Ru64)
