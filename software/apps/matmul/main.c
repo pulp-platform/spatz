@@ -38,8 +38,8 @@
   }                                                                                   \
 } while (0)
 
-#define VERIFY(c, m_start, m_end, s, p_start, p_end, A_a, A_b, A_c, B_a, B_b, B_c, core_id) do {        \
-  int32_t error = verify_matrix(c, m_start, m_end, s, p_start, p_end, s, A_a, A_b, A_c, B_a, B_b, B_c); \
+#define VERIFY(c, row_start, row_end, s, A_a, A_b, A_c, B_a, B_b, B_c, core_id) do {                    \
+  int32_t error = verify_matrix(c, row_start, row_end, s, s, A_a, A_b, A_c, B_a, B_b, B_c);             \
                                                                                                         \
   if (error != 0) {                                                                                     \
     printf("Error core %d: c[%d]=%d\n", core_id, error, c[error]);                                      \
@@ -51,8 +51,10 @@
   if (core_id == 0) printf("\n----- (%dx%d) matmul -----\n", size, size); \
 } while (0)
 
-#define TILES 4
-#define CORES_PER_TILE 2
+#define STRINGIFY(x) #x
+#define TOSTRING(x) STRINGIFY(x)
+
+#define GROUPS 4
 // Define Matrix dimensions:
 // C = AB with A=[MxN], B=[NxP], C=[MxP]
 #ifndef N_IPU
@@ -60,6 +62,12 @@
 #endif
 #ifndef MATRIX_DIM
 #define MATRIX_DIM 8
+#endif
+#ifndef KERNEL_M
+#define KERNEL_M 2
+#endif
+#ifndef KERNEL_P
+#define KERNEL_P 2
 #endif
 #define M MATRIX_DIM
 #define N MATRIX_DIM
@@ -81,9 +89,15 @@
 #define B_b 1
 #define B_c 16
 
-int32_t a[M * N] __attribute__((aligned(32), section(".l1_prio")));
-int32_t b[N * P] __attribute__((aligned(32), section(".l1_prio")));
-int32_t c[M * P] __attribute__((aligned(32), section(".l1_prio")));
+#ifndef MATRIX_LOC
+#define MATRIX_LOC l1_prio
+#endif
+
+#define MATRIX_LOC_STR "." TOSTRING(MATRIX_LOC)
+
+int32_t a[M * N] __attribute__((aligned(32), section(MATRIX_LOC_STR)));
+int32_t b[N * P] __attribute__((aligned(32), section(MATRIX_LOC_STR)));
+int32_t c[M * P] __attribute__((aligned(32), section(MATRIX_LOC_STR)));
 
 // Initialize the matrices
 void init_matrix(int32_t *matrix, uint32_t rows_start, uint32_t rows_end,
@@ -96,11 +110,11 @@ void init_matrix(int32_t *matrix, uint32_t rows_start, uint32_t rows_end,
 }
 
 // Verify the matrices
-int verify_matrix(int32_t *matrix, int32_t m_start, int32_t m_end, int32_t n,
-                  int32_t p_start, int32_t p_end, int32_t p, int32_t aa,
-                  int32_t ab, int32_t ac, int32_t ba, int32_t bb, int32_t bc) {
-  for (int32_t i = m_start; i < m_end; i++) {
-    for (int32_t j = p_start; j < p_end; j++) {
+int verify_matrix(int32_t *matrix, int32_t row_start, int32_t row_end,
+                  int32_t n, int32_t p, int32_t aa, int32_t ab,
+                  int32_t ac, int32_t ba, int32_t bb, int32_t bc) {
+  for (int32_t i = row_start; i < row_end; i++) {
+    for (int32_t j = 0; j < p; j++) {
       int32_t lin = (aa * bb * i * j + aa * bc * i + ac * bb * j + ac * bc) * n;
       int32_t qua =
           ((aa * ba * i + ab * bb * j + ab * bc + ba * ac) * (n * (n - 1))) / 2;
@@ -136,39 +150,53 @@ int main() {
     // Set matrix dimension
     uint32_t dim = MATRIX_DIM;
 
+    uint32_t kernel_size = KERNEL_M;
+    uint32_t vl = KERNEL_P;
+
+    if ((dim*dim) < (kernel_size*vl)) return -1;
+
     // Initialize matrices
     init_matrix(a, 0, dim, dim, A_a, A_b, A_c);
     init_matrix(b, 0, dim, dim, B_a, B_b, B_c);
 
     // Execute matmul and measure runtime
     uint32_t timer_start = mempool_get_timer();
-    matmul(c, a, b, dim, dim, dim);
+    if (kernel_size == 2) {
+      matmul_2x2(c, a, b, M, 0, M, N, P, 0, P, vl);
+    } else if (kernel_size == 4) {
+      matmul_4x4(c, a, b, M, 0, M, N, P, 0, P, vl);
+    } else if (kernel_size == 8) {
+      matmul_8x8(c, a, b, M, 0, M, N, P, 0, P, vl);
+    } else {
+      return -2;
+    }
     uint32_t timer_end = mempool_get_timer();
 
     // Check and display results
     PRINT_HEADER(dim, 0);
     PERFORMANCE(timer_end - timer_start, dim, 0, 1, N_IPU);
-    VERIFY(c, 0, (int32_t)dim, (int32_t)dim, 0, (int32_t)dim, A_a, A_b, A_c, B_a, B_b, B_c, 0);
+    VERIFY(c, 0, (int32_t)dim, (int32_t)dim, A_a, A_b, A_c, B_a, B_b, B_c, 0);
   #else
 
     ////////////////
     // Multi Core //
     ////////////////
 
-    uint32_t core_id = mempool_get_core_id();
-    uint32_t core_id_tile = core_id%CORES_PER_TILE;
-    uint32_t tile_id = core_id/CORES_PER_TILE;
     uint32_t num_cores = mempool_get_core_count();
+    uint32_t cores_per_group = num_cores/GROUPS;
+    uint32_t core_id = mempool_get_core_id();
+    uint32_t core_id_group = core_id%cores_per_group;
+    uint32_t group_id = core_id/cores_per_group;
 
     uint32_t timer_start, timer_end, timer;
     uint32_t row_start, row_end;
 
     uint32_t m_start, m_end;
     uint32_t p_start, p_end;
-    uint32_t vlen;
+    uint32_t vl;
     uint32_t dim;
-    bool p_split;
-    uint32_t measure_iterations;
+    uint32_t kernel_size;
+    uint32_t measure_iterations = 1;
 
     // Initialize multicore barrier
     mempool_barrier_init(core_id);
@@ -178,53 +206,49 @@ int main() {
 
     // Set matrix dimension
     dim = MATRIX_DIM;
+    kernel_size = KERNEL_M;
+    vl = KERNEL_P;
 
-    // Define execution parameters
-    switch (MATRIX_DIM) {
-      case 8:
-        vlen = 4;
-        p_split = true;
-        measure_iterations = 8;
-        break;
-      case 16:
-        vlen = 8;
-        p_split = true;
-        measure_iterations = 4;
-        break;
-      case 32:
-        vlen = 16;
-        p_split = true;
-        measure_iterations = 4;
-        break;
-      case 64:
-        vlen = 16;
-        p_split = false;
-        measure_iterations = 2;
-        break;
-      default:
-        return 1;
-    }
+    // Can every core execute its desired kernel?
+    if ((dim*dim)/(kernel_size*vl) < num_cores) return -1;
 
-    // Define way to split up matrix
-    if (p_split) {
-      // P-Split
-      m_start = dim/TILES*(tile_id);
-      m_end   = dim/TILES*(tile_id+1);
-      p_start = dim/2*core_id_tile;
-      p_end   = dim/2*(core_id_tile+1);
+    // Block dimension of gropu
+    uint32_t dim_group = dim/GROUPS;
+    // Number of parallel cores in m direction
+    uint32_t split_m_count = dim_group/kernel_size;
+
+    if (split_m_count < cores_per_group) {
+      // Split P dimension up
+      uint32_t split_p_count = cores_per_group/split_m_count;
+      p_start = dim/split_p_count*(core_id_group%split_p_count);
+      p_end   = dim/split_p_count*((core_id_group%split_p_count)+1);
+      m_start = dim_group*group_id + kernel_size*(core_id_group/split_p_count);
+      m_end   = dim_group*group_id + kernel_size*(core_id_group/split_p_count+1);
     } else {
-      // M-Split
-      m_start = dim/(TILES*CORES_PER_TILE)*(core_id);
-      m_end   = dim/(TILES*CORES_PER_TILE)*(core_id+1);
+      // Work over complete P dimension
       p_start = 0;
       p_end   = dim;
+      m_start = dim_group*group_id + split_m_count*core_id_group;
+      m_end   = dim_group*group_id + split_m_count*(core_id_group+1);
     }
 
     // Initialize matrices
-    row_start = dim/(TILES*CORES_PER_TILE)*(core_id);
-    row_end   = dim/(TILES*CORES_PER_TILE)*(core_id+1);
-    init_matrix(a, row_start, row_end, dim, A_a, A_b, A_c);
-    init_matrix(b, row_start, row_end, dim, B_a, B_b, B_c);
+    uint32_t cores_per_row = num_cores/dim;
+    uint32_t do_init_verify = 1;
+    if (dim < num_cores) {
+      row_start = core_id/cores_per_row;
+      row_end   = core_id/cores_per_row+1;
+      // Core will skip matrix init and verify parts
+      do_init_verify = (core_id%cores_per_row) == 0;
+    } else {
+      row_start = dim/num_cores*(core_id);
+      row_end   = dim/num_cores*(core_id+1);
+    }
+
+    if (do_init_verify) {
+      init_matrix(a, row_start, row_end, dim, A_a, A_b, A_c);
+      init_matrix(b, row_start, row_end, dim, B_a, B_b, B_c);
+    }
 
     // Execute matmul a few times and measure runtime
     for (uint32_t i = 0; i < measure_iterations; i++) {
@@ -235,13 +259,15 @@ int main() {
       timer_start = mempool_get_timer();
 
       // Calculate matmul
-      #if MATRIX_DIM == 8
-        MATMUL_2XVLEN_PARA(c, a, b, m_start, m_end, dim, p_start, p_end, dim, vlen);
-      #elif MATRIX_DIM == 16
-        MATMUL_4XVLEN_PARA(c, a, b, m_start, m_end, dim, p_start, p_end, dim, vlen);
-      #else
-        MATMUL_8XVLEN_PARA(c, a, b, m_start, m_end, dim, p_start, p_end, dim, vlen);
-      #endif
+      if (kernel_size == 2) {
+        MATMUL_2XVL_PARA(c, a, b, dim, m_start, m_end, dim, dim, p_start, p_end, vl);
+      } else if (kernel_size == 4) {
+        MATMUL_4XVL_PARA(c, a, b, dim, m_start, m_end, dim, dim, p_start, p_end, vl);
+      } else if (kernel_size == 8) {
+        MATMUL_8XVL_PARA(c, a, b, dim, m_start, m_end, dim, dim, p_start, p_end, vl);
+      } else {
+        return -2;
+      }
       // Wait for all cores to finish matmul
       mempool_barrier(num_cores);
 
@@ -258,8 +284,10 @@ int main() {
     // Check and display results
     PRINT_HEADER(dim, core_id);
     PERFORMANCE(timer, dim, core_id, num_cores, N_IPU);
-    VERIFY(c, (int32_t)m_start, (int32_t)m_end, (int32_t)dim, (int32_t)p_start,
-           (int32_t)p_end, A_a, A_b, A_c, B_a, B_b, B_c, core_id);
+    if (do_init_verify) {
+      VERIFY(c, (int32_t)row_start, (int32_t)row_end, (int32_t)dim,
+             A_a, A_b, A_c, B_a, B_b, B_c, core_id);
+    }
 
     // Wait for core 0 to finish displaying results
     mempool_barrier(num_cores);

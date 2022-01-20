@@ -24,11 +24,11 @@ void matmul(int32_t *c, const int32_t *a, const int32_t *b,
             const unsigned long int M, const unsigned long int N,
             const unsigned long int P) {
   if (M <= 4) {
-    return matmul_2x2(c, a, b, M, N, P);
+    matmul_2x2(c, a, b, M, 0, M, N, P, 0, P, P);
   } else if (M <= 8) {
-    return matmul_4x4(c, a, b, M, N, P);
+    matmul_4x4(c, a, b, M, 0, M, N, P, 0, P, P);
   } else {
-    return matmul_8x8(c, a, b, M, N, P);
+    matmul_8x8(c, a, b, M, 0, M, N, P, 0, P, P);
   }
 }
 
@@ -37,17 +37,19 @@ void matmul(int32_t *c, const int32_t *a, const int32_t *b,
 // ---------------
 
 void matmul_2x2(int32_t *c, const int32_t *a, const int32_t *b,
-                const unsigned long int M, const unsigned long int N,
-                const unsigned long int P) {
+                const unsigned long int M, unsigned long int m_start,
+                unsigned long int m_end, const unsigned long int N,
+                const unsigned long int P, unsigned long int p_start,
+                unsigned long int p_end, unsigned long int vl) {
   // We work on 4 rows of the matrix at once
   const unsigned long int block_size = 2;
   unsigned long int block_size_p;
 
   // Set the vector configuration
-  asm volatile("vsetvli %0, %1, e32, m2, ta, ma" : "=r"(block_size_p) : "r"(P));
+  asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(block_size_p) : "r"(vl));
 
   // Slice the matrix into a manageable number of columns p_
-  for (unsigned long int p = 0; p < P; p += block_size_p) {
+  for (unsigned long int p = p_start; p < p_end; p += block_size_p) {
     // Set the vector length
     const unsigned long int p_ = MIN(P - p, block_size_p);
 
@@ -55,10 +57,10 @@ void matmul_2x2(int32_t *c, const int32_t *a, const int32_t *b,
     int32_t *b_ = (int32_t*)b + p;
     int32_t *c_ = c + p;
 
-    asm volatile("vsetvli zero, %0, e32, m2, ta, ma" ::"r"(p_));
+    asm volatile("vsetvli zero, %0, e32, m8, ta, ma" ::"r"(p_));
 
     // Iterate over the rows
-    for (unsigned long int m = 0; m < M; m += block_size) {
+    for (unsigned long int m = m_start; m < m_end; m += block_size) {
       // Find pointer to the submatrices
       int32_t *a_ = (int32_t*)a + m * N;
 
@@ -79,7 +81,7 @@ void matmul_2x2(int32_t *c, const int32_t *a, const int32_t *b,
       // Prefetch one row of scalar values
       asm volatile("vmv.v.i v0,  0");
       t0 = *a__, a__ += N;
-      asm volatile("vmv.v.i v4,  0");
+      asm volatile("vmv.v.i v8,  0");
       t1 = *a__;
 
       // Compute the multiplication
@@ -90,12 +92,12 @@ void matmul_2x2(int32_t *c, const int32_t *a, const int32_t *b,
         a__ = a_ + ++n;
 
         // Load one row of B
-        asm volatile("vle32.v v20, (%0);" ::"r"(b__));
+        asm volatile("vle32.v v24, (%0);" ::"r"(b__));
         b__ += P;
 
         asm volatile("vmacc.vx v0, %0, v16" ::"r"(t0));
         t0 = *a__, a__ += N;
-        asm volatile("vmacc.vx v4, %0, v16" ::"r"(t1));
+        asm volatile("vmacc.vx v8, %0, v16" ::"r"(t1));
         t1 = *a__;
 
         a__ = a_ + ++n;
@@ -107,9 +109,9 @@ void matmul_2x2(int32_t *c, const int32_t *a, const int32_t *b,
         asm volatile("vle32.v v16, (%0);" ::"r"(b__));
         b__ += P;
 
-        asm volatile("vmacc.vx v0, %0, v20" ::"r"(t0));
+        asm volatile("vmacc.vx v0, %0, v24" ::"r"(t0));
         t0 = *a__, a__ += N;
-        asm volatile("vmacc.vx v4, %0, v20" ::"r"(t1));
+        asm volatile("vmacc.vx v8, %0, v24" ::"r"(t1));
         t1 = *a__;
       }
 
@@ -117,11 +119,11 @@ void matmul_2x2(int32_t *c, const int32_t *a, const int32_t *b,
       asm volatile("add zero, zero, %0" ::"r"(M));
 
       // Last iteration: store results
-      asm volatile("vmacc.vx v0, %0, v20" ::"r"(t0));
+      asm volatile("vmacc.vx v0, %0, v24" ::"r"(t0));
       asm volatile("vse32.v v0, (%0);" ::"r"(c__));
       c__ += P;
-      asm volatile("vmacc.vx v4, %0, v20" ::"r"(t1));
-      asm volatile("vse32.v v4, (%0);" ::"r"(c__));
+      asm volatile("vmacc.vx v8, %0, v24" ::"r"(t1));
+      asm volatile("vse32.v v8, (%0);" ::"r"(c__));
     }
   }
 }
@@ -131,17 +133,19 @@ void matmul_2x2(int32_t *c, const int32_t *a, const int32_t *b,
 // ---------------
 
 void matmul_4x4(int32_t *c, const int32_t *a, const int32_t *b,
-                 const unsigned long int M, const unsigned long int N,
-                 const unsigned long int P) {
+                const unsigned long int M, unsigned long int m_start,
+                unsigned long int m_end, const unsigned long int N,
+                const unsigned long int P, unsigned long int p_start,
+                unsigned long int p_end, unsigned long int vl) {
   // We work on 4 rows of the matrix at once
   const unsigned long int block_size = 4;
   unsigned long int block_size_p;
 
   // Set the vector configuration
-  asm volatile("vsetvli %0, %1, e32, m4, ta, ma" : "=r"(block_size_p) : "r"(P));
+  asm volatile("vsetvli %0, %1, e32, m4, ta, ma" : "=r"(block_size_p) : "r"(vl));
 
   // Slice the matrix into a manageable number of columns p_
-  for (unsigned long int p = 0; p < P; p += block_size_p) {
+  for (unsigned long int p = p_start; p < p_end; p += block_size_p) {
     // Set the vector length
     const unsigned long int p_ = MIN(P - p, block_size_p);
 
@@ -152,7 +156,7 @@ void matmul_4x4(int32_t *c, const int32_t *a, const int32_t *b,
     asm volatile("vsetvli zero, %0, e32, m4, ta, ma" ::"r"(p_));
 
     // Iterate over the rows
-    for (unsigned long int m = 0; m < M; m += block_size) {
+    for (unsigned long int m = m_start; m < m_end; m += block_size) {
       // Find pointer to the submatrices
       int32_t *a_ = (int32_t*)a + m * N;
 
@@ -242,17 +246,19 @@ void matmul_4x4(int32_t *c, const int32_t *a, const int32_t *b,
 // ---------------
 
 void matmul_8x8(int32_t *c, const int32_t *a, const int32_t *b,
-                 const unsigned long int M, const unsigned long int N,
-                 const unsigned long int P) {
+                const unsigned long int M, unsigned long int m_start,
+                unsigned long int m_end, const unsigned long int N,
+                const unsigned long int P, unsigned long int p_start,
+                unsigned long int p_end, unsigned long int vl) {
   // We work on 8 rows of the matrix at once
   const unsigned long int block_size = 8;
   unsigned long int block_size_p;
 
   // Set the vector configuration
-  asm volatile("vsetvli %0, %1, e32, m2, ta, ma" : "=r"(block_size_p) : "r"(P));
+  asm volatile("vsetvli %0, %1, e32, m2, ta, ma" : "=r"(block_size_p) : "r"(vl));
 
   // Slice the matrix into a manageable number of columns p_
-  for (unsigned long int p = 0; p < P; p += block_size_p) {
+  for (unsigned long int p = p_start; p < p_end; p += block_size_p) {
     // Set the vector length
     const unsigned long int p_ = MIN(P - p, block_size_p);
 
@@ -263,7 +269,7 @@ void matmul_8x8(int32_t *c, const int32_t *a, const int32_t *b,
     asm volatile("vsetvli zero, %0, e32, m2, ta, ma" ::"r"(p_));
 
     // Iterate over the rows
-    for (unsigned long int m = 0; m < M; m += block_size) {
+    for (unsigned long int m = m_start; m < m_end; m += block_size) {
       // Find pointer to the submatrices
       int32_t *a_ = (int32_t*)a + m * N;
 
