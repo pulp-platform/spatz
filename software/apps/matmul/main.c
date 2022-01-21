@@ -32,8 +32,8 @@
     uint32_t performance = 1000 * 2 * dim * dim * dim / runtime;                      \
     uint32_t utilization =  performance / (2 * num_cores * num_ipus);                 \
                                                                                       \
-    printf("The execution took %d cycles.\n", runtime);                               \
-    printf("The performance is %d OP/1000cycle (%d%%o utilization).\n", performance,  \
+    printf("The execution took %u cycles.\n", runtime);                               \
+    printf("The performance is %u OP/1000cycle (%u%%o utilization).\n", performance,  \
            utilization);                                                              \
   }                                                                                   \
 } while (0)
