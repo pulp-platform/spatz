@@ -18,18 +18,6 @@ git submodule sync --recursive
 
 ## Dependencies
 
-To install all dependencies at once run:
-
-```bash
-make
-```
-
-If there is only a need to compile code, you can install llvm and gcc using:
-
-```bash
-make toolchain
-```
-
 When simulatig RTL code, an installation of Bender is required to generate simulation scripts:
 
 ```bash
