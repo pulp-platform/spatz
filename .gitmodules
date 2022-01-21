@@ -10,9 +10,6 @@
 [submodule "hardware/deps/tech_cells_generic"]
 	path = hardware/deps/tech_cells_generic
 	url = https://github.com/pulp-platform/tech_cells_generic.git
-[submodule "toolchain/newlib"]
-	path = toolchain/newlib
-	url = https://sourceware.org/git/newlib-cygwin.git
 [submodule "toolchain/riscv-llvm"]
 	path = toolchain/riscv-llvm
 	url = https://github.com/llvm/llvm-project.git
