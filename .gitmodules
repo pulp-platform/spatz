@@ -10,9 +10,6 @@
 [submodule "hardware/deps/tech_cells_generic"]
 	path = hardware/deps/tech_cells_generic
 	url = https://github.com/pulp-platform/tech_cells_generic.git
-[submodule "toolchain/riscv-gnu-toolchain"]
-	path = toolchain/riscv-gnu-toolchain
-	url = https://github.com/riscv/riscv-gnu-toolchain.git
 [submodule "hardware/deps/common_verification"]
 	path = hardware/deps/common_verification
 	url = https://github.com/pulp-platform/common_verification.git
