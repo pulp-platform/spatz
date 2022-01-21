@@ -213,9 +213,9 @@ int main() {
     if ((dim*dim)/(kernel_size*vl) < num_cores) return -1;
 
     // Block dimension of gropu
-    uint32_t dim_group = dim/GROUPS;
+    uint32_t dim_group = dim/GROUPS; //8
     // Number of parallel cores in m direction
-    uint32_t split_m_count = dim_group/kernel_size;
+    uint32_t split_m_count = dim_group/kernel_size; //4
 
     if (split_m_count < cores_per_group) {
       // Split P dimension up
@@ -228,8 +228,8 @@ int main() {
       // Work over complete P dimension
       p_start = 0;
       p_end   = dim;
-      m_start = dim_group*group_id + kernel_size*core_id_group;
-      m_end   = dim_group*group_id + kernel_size*(core_id_group+1);
+      m_start = dim_group*group_id + (dim_group/cores_per_group)*core_id_group;
+      m_end   = dim_group*group_id + (dim_group/cores_per_group)*(core_id_group+1);
     }
 
     // Initialize matrices
