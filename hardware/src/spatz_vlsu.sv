@@ -531,7 +531,7 @@ module spatz_vlsu
           mem_req_svalid[i] = buffer_rvalid[i];
           mem_req_id[i] = buffer_rid[i];
           mem_req_last[i] = mem_operation_last[i];
-          buffer_pop[i] = x_mem_ready_i[i];
+          buffer_pop[i] = x_mem_ready_i[i] & x_mem_valid_o[i];
 
           // Create byte enable signal for memory request
           if (is_single_element_operation) begin
