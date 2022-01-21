@@ -228,8 +228,8 @@ int main() {
       // Work over complete P dimension
       p_start = 0;
       p_end   = dim;
-      m_start = dim_group*group_id + split_m_count*core_id_group;
-      m_end   = dim_group*group_id + split_m_count*(core_id_group+1);
+      m_start = dim_group*group_id + kernel_size*core_id_group;
+      m_end   = dim_group*group_id + kernel_size*(core_id_group+1);
     }
 
     // Initialize matrices
