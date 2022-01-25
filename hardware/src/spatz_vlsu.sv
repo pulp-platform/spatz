@@ -235,7 +235,7 @@ module spatz_vlsu
   // Calculate the register file address
   always_comb begin : gen_vreg_addr
     vreg_addr = {spatz_req_q.vd, {$clog2(VELE){1'b0}}} + $unsigned(vreg_elem_id);
-    vreg_addr_offset = vreg_counter_value[1:0] * spatz_req_q.rs2 + spatz_req_q.rs1;
+    vreg_addr_offset = vreg_byte_id * spatz_req_q.rs2 + spatz_req_q.rs1;
   end
 
   //////////////
@@ -301,6 +301,7 @@ module spatz_vlsu
     end
 
     vreg_elem_id = vreg_counter_value[NrIPUsPerMemPort-1] >> $clog2(ELENB);
+    vreg_byte_id = vreg_counter_value[0][$clog2(ELENB)-1:0];
   end
   /* verilator lint_on SELRANGE */
 
