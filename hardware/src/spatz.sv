@@ -243,9 +243,6 @@ module spatz
   // Assertions //
   ////////////////
 
-  if (spatz_pkg::N_IPU <= 1)
-    $error("[spatz] The number of IPUs needs to be at least two.");
-
   if (spatz_pkg::N_IPU != 2**$clog2(spatz_pkg::N_IPU))
     $error("[spatz] The number of IPUs needs to be a power of two");
 
