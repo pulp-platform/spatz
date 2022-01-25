@@ -121,6 +121,11 @@ package spatz_pkg;
     logic is_load;
   } op_mem_t;
 
+  typedef struct packed {
+    logic vm;
+    logic one_up_down;
+  } op_sld_t;
+
   // Result from decoder
   typedef struct packed {
     // Instruction ID
@@ -152,6 +157,7 @@ package spatz_pkg;
     op_csr_t    op_csr;
     op_arith_t  op_arith;
     op_mem_t    op_mem;
+    op_sld_t    op_sld;
 
     // Spatz config details
     vtype_t     vtype;

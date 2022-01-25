@@ -168,6 +168,7 @@ module spatz_decoder
             automatic bit         arith_vm = decoder_req_i.instr[25];
 
             spatz_req.op_arith.vm = arith_vm;
+            spatz_req.op_sld.vm = arith_vm;
             spatz_req.use_vs2 = 1'b1;
             spatz_req.vs2 = arith_s2;
             spatz_req.use_vd = 1'b1;
@@ -429,6 +430,31 @@ module spatz_decoder
               riscv_instruction::VMV_V_X,
               riscv_instruction::VMV_V_I: begin
                 spatz_req.op = VMV;
+              end
+
+              // Vector Slide
+              riscv_instruction::VSLIDEUP_VX,
+              riscv_instruction::VSLIDEUP_VI: begin
+                spatz_req.op = VSLIDEUP;
+                spatz_req.ex_unit = SLD;
+              end
+
+              riscv_instruction::VSLIDE1UP_VX: begin
+                spatz_req.op = VSLIDEUP;
+                spatz_req.op_sld.one_up_down = 1'b1;
+                spatz_req.ex_unit = SLD;
+              end
+
+              riscv_instruction::VSLIDEDOWN_VX,
+              riscv_instruction::VSLIDEDOWN_VI: begin
+                spatz_req.op = VSLIDEDOWN;
+                spatz_req.ex_unit = SLD;
+              end
+
+              riscv_instruction::VSLIDE1DOWN_VX: begin
+                spatz_req.op = VSLIDEDOWN;
+                spatz_req.op_sld.one_up_down = 1'b1;
+                spatz_req.ex_unit = SLD;
               end
 
               default: begin
