@@ -273,7 +273,6 @@ module spatz_vlsu
 
       vreg_operation_valid[i]     = (delta != 'd0) & ~is_vl_zero;
       vreg_operation_last[i]      = vreg_operation_valid[i] & (delta <= (is_single_element_operation ? single_element_size : 'd4));
-      vreg_operations_finished[i] = ~vreg_operation_valid[i] | (vreg_operation_last[i] & vrf_transaction_valid);
 
       vreg_counter_load[i]       = 1'b0;
       vreg_counter_load_value[i] = '0;
@@ -295,6 +294,8 @@ module spatz_vlsu
           vreg_counter_en[i] = vreg_operation_valid[i] & vrf_transaction_valid & (vreg_counter_value[i-1][$bits(vlen_t)-1:$clog2(ELENB)] != vreg_counter_value[i][$bits(vlen_t)-1:$clog2(ELENB)]);
         end
       end
+
+      vreg_operations_finished[i] = ~vreg_operation_valid[i] | (vreg_operation_last[i] & vreg_counter_en[i]);
 
       vreg_counter_max[i] = max;
     end
@@ -331,7 +332,6 @@ module spatz_vlsu
 
       mem_operation_valid[i]     = (delta != 'd0) & ~is_vl_zero;
       mem_operation_last[i]      = mem_operation_valid[i] & (delta <= (is_single_element_operation ? single_element_size : 'd4));
-      mem_operations_finished[i] = ~mem_operation_valid[i] | (mem_operation_last[i] & x_mem_ready_i[i]);
 
       mem_counter_load[i]       = 1'b0;
       mem_counter_load_value[i] = '0;
@@ -340,7 +340,9 @@ module spatz_vlsu
       mem_counter_delta[i] = !mem_operation_valid[i] ? 'd0 :
                               is_single_element_operation ? single_element_size :
                               mem_operation_last[i] ? delta : 'd4;
-      mem_counter_en[i]    = x_mem_ready_i[i];
+      mem_counter_en[i]    = x_mem_ready_i[i] & x_mem_valid_o[i];
+
+      mem_operations_finished[i] = ~mem_operation_valid[i] | (mem_operation_last[i] & mem_counter_en[i]);
 
       mem_counter_max[i] = max;
     end
@@ -476,7 +478,7 @@ module spatz_vlsu
 
         // Request a new id and and execute memory request
         if (~buffer_full[i] && mem_operation_valid[i]) begin
-          buffer_req_id[i] = x_mem_ready_i[i];
+          buffer_req_id[i] = x_mem_ready_i[i] & x_mem_valid_o[i];
           mem_req_lvalid[i] = 1'b1;
           mem_req_id[i] = buffer_id[i];
           mem_req_last[i] = mem_operation_last[i];
