@@ -48,9 +48,9 @@ module spatz_simd_lane
     end
   end // mult_operands
 
-  ////////////
-  // Result //
-  ////////////
+  ////////////////////////
+  // Adder / Subtractor //
+  ////////////////////////
 
   logic [Width:0]   adder_result;
   logic [Width:0]   subtractor_result;
@@ -85,17 +85,21 @@ module spatz_simd_lane
   assign adder_result      = $signed(arith_op2) + $signed(arith_op1) + carry_i;
   assign subtractor_result = $signed(arith_op2) - $signed(arith_op1) - carry_i;
 
+  ////////////
+  // Result //
+  ////////////
+
   // Calculate arithmetic and logics and select correct result
   always_comb begin : simd
     simd_result = '0;
     unique case (operation_i)
       VADD, VMACC, VMADD, VADC: simd_result = adder_result[Width-1:0];
       VSUB, VRSUB, VNMSAC, VNMSUB, VSBC: simd_result = subtractor_result[Width-1:0];
-      VMIN, VMINU: simd_result = $signed({op_s1_i[Width-1] & is_signed_i, op_s1_i[Width-1]}) <=
-                                 $signed({op_s2_i[Width-1] & is_signed_i, op_s2_i[Width-1]}) ?
+      VMIN, VMINU: simd_result = $signed({op_s1_i[Width-1] & is_signed_i, op_s1_i}) <=
+                                 $signed({op_s2_i[Width-1] & is_signed_i, op_s2_i}) ?
                                  op_s1_i : op_s2_i;
-      VMAX, VMAXU: simd_result = $signed({op_s1_i[Width-1] & is_signed_i, op_s1_i[Width-1]}) >
-                                 $signed({op_s2_i[Width-1] & is_signed_i, op_s2_i[Width-1]}) ?
+      VMAX, VMAXU: simd_result = $signed({op_s1_i[Width-1] & is_signed_i, op_s1_i}) >
+                                 $signed({op_s2_i[Width-1] & is_signed_i, op_s2_i}) ?
                                  op_s1_i : op_s2_i;
       VAND: simd_result = op_s1_i & op_s2_i;
       VOR:  simd_result = op_s1_i | op_s2_i;
