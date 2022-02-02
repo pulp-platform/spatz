@@ -22,9 +22,10 @@
 
 #include "conv2d.h"
 
-#ifndef SPIKE
 #include "printf.h"
+#ifdef MEMPOOL
 #include "runtime.h"
+#include "synchronization.h"
 #endif
 
 // Define Matrix dimensions:
@@ -32,19 +33,18 @@
 // The filter is a square matrix, and F is odd
 
 // Matrices defined in data.S
-extern int64_t i[] __attribute__((
-    aligned(4 * NR_LANES))); // [ (M+floor(F/2)) * (N+floor(F/2)) ]
-extern int64_t f[] __attribute__((aligned(4 * NR_LANES)));        // [ F*F ]
-extern int64_t o[] __attribute__((aligned(4 * NR_LANES)));        // [ M*N ]
-extern int64_t golden_o[] __attribute__((aligned(4 * NR_LANES))); // [ M*N ]
+extern int32_t i[] __attribute__((aligned(4))); // [ (M+floor(F/2)) * (N+floor(F/2)) ]
+extern int32_t f[] __attribute__((aligned(4)));        // [ F*F ]
+extern int32_t o[] __attribute__((aligned(4)));        // [ M*N ]
+extern int32_t golden_o[] __attribute__((aligned(4))); // [ M*N ]
 // M, N, F defined in data.S
-extern int64_t M;
-extern int64_t N;
-extern int64_t F;
+extern int32_t M;
+extern int32_t N;
+extern int32_t F;
 
 // Verify the matrices
-int verify_matrix(int64_t *matrix, int64_t *golden_matrix, int64_t R,
-                  int64_t C) {
+int verify_matrix(int32_t *matrix, int32_t *golden_matrix, int32_t R,
+                  int32_t C) {
   for (int r = 0; r < R; ++r)
     for (int c = 0; c < C; ++c)
       if (matrix[c + C * r] != golden_matrix[c + C * r]) {
@@ -55,11 +55,11 @@ int verify_matrix(int64_t *matrix, int64_t *golden_matrix, int64_t R,
   return 0;
 }
 
-void print_matrix(int64_t const *matrix, uint64_t num_rows,
-                  uint64_t num_columns) {
-  printf("0x%8X\n", (uint64_t)matrix);
-  for (uint64_t i = 0; i < num_rows; ++i) {
-    for (uint64_t j = 0; j < num_columns; ++j) {
+void print_matrix(int32_t const *matrix, uint32_t num_rows,
+                  uint32_t num_columns) {
+  printf("0x%8X\n", (uint32_t)matrix);
+  for (uint32_t i = 0; i < num_rows; ++i) {
+    for (uint32_t j = 0; j < num_columns; ++j) {
       printf("%10d ", matrix[i * num_columns + j]);
     }
     printf("\n");
@@ -75,7 +75,7 @@ int main() {
   printf("\n");
 
   // Call the main kernel, and measure cycles
-  start_timer();
+  uint32_t timer_start = timer_start = mempool_get_timer();
   if (F == 3)
     conv2d_3x3(o, i, f, M, N, F);
   else if (F == 5)
@@ -87,7 +87,8 @@ int main() {
   stop_timer();
 
   // Performance metrics
-  int64_t runtime = get_timer();
+  uint32_t timer_end = mempool_get_timer();
+  uint32_t runtime = timer_end - timer_start;
   printf("The execution took %d cycles.\n", runtime);
 
   // Verify correctness
