@@ -95,9 +95,9 @@
 
 #define MATRIX_LOC_STR "." TOSTRING(MATRIX_LOC)
 
-int32_t a[M * N] __attribute__((aligned(32), section(MATRIX_LOC_STR)));
-int32_t b[N * P] __attribute__((aligned(32), section(MATRIX_LOC_STR)));
-int32_t c[M * P] __attribute__((aligned(32), section(MATRIX_LOC_STR)));
+int32_t a[M * N] __attribute__((aligned(4), section(MATRIX_LOC_STR)));
+int32_t b[N * P] __attribute__((aligned(4), section(MATRIX_LOC_STR)));
+int32_t c[M * P] __attribute__((aligned(4), section(MATRIX_LOC_STR)));
 
 // Initialize the matrices
 void init_matrix(int32_t *matrix, uint32_t rows_start, uint32_t rows_end,
