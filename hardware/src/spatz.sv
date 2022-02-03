@@ -75,9 +75,9 @@ module spatz
   logic       vlsu_rsp_valid;
   vlsu_rsp_t  vlsu_rsp;
 
-  logic       vsld_req_ready;
-  logic       vsld_rsp_valid;
-  vsld_rsp_t  vsld_rsp;
+  logic       vsldu_req_ready;
+  logic       vsldu_rsp_valid;
+  vsldu_rsp_t vsldu_rsp;
 
   /////////
   // VRF //
@@ -150,9 +150,9 @@ module spatz
     .vlsu_rsp_valid_i (vlsu_rsp_valid),
     .vlsu_rsp_i       (vlsu_rsp),
     // VLSD
-    .vsld_req_ready_i (vsld_req_ready),
-    .vsld_rsp_valid_i (vsld_rsp_valid),
-    .vsld_rsp_i       (vsld_rsp),
+    .vsldu_req_ready_i(vsldu_req_ready),
+    .vsldu_rsp_valid_i(vsldu_rsp_valid),
+    .vsldu_rsp_i      (vsldu_rsp),
     // Scoreboard check
     .sb_addr_i        ({vrf_waddr, vrf_raddr}),
     .sb_enable_i      ({sb_we, sb_re}),
@@ -224,20 +224,31 @@ module spatz
     .x_mem_finished_o    (x_mem_finished_o)
   );
 
-  //////////
-  // VSLD //
-  //////////
+  ///////////
+  // VSLDU //
+  ///////////
 
-  assign vrf_waddr[VSLD_VD_WD]  = '0;
-  assign vrf_wdata[VSLD_VD_WD]  = '0;
-  assign sb_we[VSLD_VD_WD]      = '0;
-  assign vrf_wbe[VSLD_VD_WD]    = '0;
-  assign vrf_raddr[VSLD_VS2_RD] = '0;
-  assign sb_re[VSLD_VS2_RD]     = '0;
-
-  assign vsld_req_ready = 1'b1;
-  assign vsld_rsp_valid = 1'b0;
-  assign vsld_rsp       = '0;
+  spatz_vsldu i_vsldu (
+    .clk_i            (clk_i),
+    .rst_ni           (rst_ni),
+    // Request
+    .spatz_req_i      (spatz_req),
+    .spatz_req_valid_i(spatz_req_valid),
+    .spatz_req_ready_o(vsldu_req_ready),
+    // Response
+    .vsldu_rsp_valid_o(vsldu_rsp_valid),
+    .vsldu_rsp_o      (vsldu_rsp),
+    // VRF
+    .vrf_waddr_o      (vrf_waddr[VSLDU_VD_WD]),
+    .vrf_wdata_o      (vrf_wdata[VSLDU_VD_WD]),
+    .vrf_we_o         (sb_we[VSLDU_VD_WD]),
+    .vrf_wbe_o        (vrf_wbe[VSLDU_VD_WD]),
+    .vrf_wvalid_i     (vrf_wvalid[VSLDU_VD_WD]),
+    .vrf_raddr_o      (vrf_raddr[VSLDU_VS2_RD]),
+    .vrf_re_o         (sb_re[VSLDU_VS2_RD]),
+    .vrf_rdata_i      (vrf_rdata[VSLDU_VS2_RD]),
+    .vrf_rvalid_i     (vrf_rvalid[VSLDU_VS2_RD])
+  );
 
   ////////////////
   // Assertions //

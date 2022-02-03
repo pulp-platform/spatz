@@ -28,6 +28,8 @@ package spatz_pkg;
   localparam int unsigned NRVREG = 32;
   // Number of addressable elements in a vector register
   localparam int unsigned VELE = VLEN/(N_IPU*ELEN);
+  // Number of bytes in a vector register element
+  localparam int unsigned VELEB = N_IPU*ELENB;
 
   //////////////////////
   // Type Definitions //
@@ -224,9 +226,9 @@ package spatz_pkg;
     logic exc;
   } vlsu_rsp_t;
 
-  ///////////////////
-  // VSLD Response //
-  ///////////////////
+  ////////////////////
+  // VSLDU Response //
+  ////////////////////
 
   typedef struct packed {
     // Instruction ID
@@ -235,7 +237,7 @@ package spatz_pkg;
     // Retiring registers
     opreg_t vd;
     opreg_t vs2;
-  } vsld_rsp_t;
+  } vsldu_rsp_t;
 
   //////////////////
   // VRF/SB Ports //
@@ -246,13 +248,13 @@ package spatz_pkg;
     VFU_VS1_RD,
     VFU_VD_RD,
     VLSU_VD_RD,
-    VSLD_VS2_RD
+    VSLDU_VS2_RD
   } vreg_port_rd_e;
 
   typedef enum logic [1:0] {
     VFU_VD_WD,
     VLSU_VD_WD,
-    VSLD_VD_WD
+    VSLDU_VD_WD
   } vreg_port_wd_e;
 
   typedef enum logic [2:0] {
@@ -260,10 +262,10 @@ package spatz_pkg;
     SB_VFU_VS1_RD,
     SB_VFU_VD_RD,
     SB_VLSU_VD_RD,
-    SB_VSLD_VS2_RD,
+    SB_VSLDU_VS2_RD,
     SB_VFU_VD_WD,
     SB_VLSU_VD_WD,
-    SB_VSLD_VD_WD
+    SB_VSLDU_VD_WD
   } sb_port_e;
 
  endpackage : spatz_pkg

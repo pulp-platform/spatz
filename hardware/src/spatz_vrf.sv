@@ -99,12 +99,12 @@ module spatz_vrf
         we[i] = 1'b1;
         wbe[i] = wbe_i[VLSU_VD_WD];
         wvalid_o[VLSU_VD_WD] = 1'b1;
-      end else if (we_i[VSLD_VD_WD] && waddr_i[VSLD_VD_WD][$clog2(NrElemPerBank)+$clog2(NrBanks)-1:$clog2(NrElemPerBank)] == i) begin
-        waddr[i] = gen_vreg_addr(waddr_i[VSLD_VD_WD]);
-        wdata[i] = wdata_i[VSLD_VD_WD];
+      end else if (we_i[VSLDU_VD_WD] && waddr_i[VSLDU_VD_WD][$clog2(NrElemPerBank)+$clog2(NrBanks)-1:$clog2(NrElemPerBank)] == i) begin
+        waddr[i] = gen_vreg_addr(waddr_i[VSLDU_VD_WD]);
+        wdata[i] = wdata_i[VSLDU_VD_WD];
         we[i] = 1'b1;
-        wbe[i] = wbe_i[VSLD_VD_WD];
-        wvalid_o[VSLD_VD_WD] = 1'b1;
+        wbe[i] = wbe_i[VSLDU_VD_WD];
+        wvalid_o[VSLDU_VD_WD] = 1'b1;
       end
     end
   end
@@ -134,10 +134,10 @@ module spatz_vrf
         raddr[i][1]          = gen_vreg_addr(raddr_i[VFU_VS1_RD]);
         rdata_o[VFU_VS1_RD]  = rdata[i][1];
         rvalid_o[VFU_VS1_RD] = 1'b1;
-      end else if (re_i[VSLD_VS2_RD] && raddr_i[VSLD_VS2_RD][$clog2(NrElemPerBank)+$clog2(NrBanks)-1:$clog2(NrElemPerBank)] == i) begin
-        raddr[i][1]           = gen_vreg_addr(raddr_i[VSLD_VS2_RD]);
-        rdata_o[VSLD_VS2_RD]  = rdata[i][1];
-        rvalid_o[VSLD_VS2_RD] = 1'b1;
+      end else if (re_i[VSLDU_VS2_RD] && raddr_i[VSLDU_VS2_RD][$clog2(NrElemPerBank)+$clog2(NrBanks)-1:$clog2(NrElemPerBank)] == i) begin
+        raddr[i][1]            = gen_vreg_addr(raddr_i[VSLDU_VS2_RD]);
+        rdata_o[VSLDU_VS2_RD]  = rdata[i][1];
+        rvalid_o[VSLDU_VS2_RD] = 1'b1;
       end
       // Bank read port 2 - Priority: vd -> lsu -> sld
       if (re_i[VFU_VD_RD] && raddr_i[VFU_VD_RD][$clog2(NrElemPerBank)+$clog2(NrBanks)-1:$clog2(NrElemPerBank)] == i) begin
@@ -148,10 +148,10 @@ module spatz_vrf
         raddr[i][2]          = gen_vreg_addr(raddr_i[VLSU_VD_RD]);
         rdata_o[VLSU_VD_RD]  = rdata[i][2];
         rvalid_o[VLSU_VD_RD] = 1'b1;
-      end else if (re_i[VSLD_VS2_RD] && raddr_i[VSLD_VS2_RD][$clog2(NrElemPerBank)+$clog2(NrBanks)-1:$clog2(NrElemPerBank)] == i) begin
-        raddr[i][2]           = gen_vreg_addr(raddr_i[VSLD_VS2_RD]);
-        rdata_o[VSLD_VS2_RD]  = rdata[i][2];
-        rvalid_o[VSLD_VS2_RD] = 1'b1;
+      end else if (re_i[VSLDU_VS2_RD] && raddr_i[VSLDU_VS2_RD][$clog2(NrElemPerBank)+$clog2(NrBanks)-1:$clog2(NrElemPerBank)] == i) begin
+        raddr[i][2]            = gen_vreg_addr(raddr_i[VSLDU_VS2_RD]);
+        rdata_o[VSLDU_VS2_RD]  = rdata[i][2];
+        rvalid_o[VSLDU_VS2_RD] = 1'b1;
       end
     end
   end

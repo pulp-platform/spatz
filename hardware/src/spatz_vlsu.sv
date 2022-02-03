@@ -28,7 +28,7 @@ module spatz_vlsu
   input  logic       spatz_req_valid_i,
   output logic       spatz_req_ready_o,
 
-  // VFU rsp
+  // VLSU rsp
   output logic      vlsu_rsp_valid_o,
   output vlsu_rsp_t vlsu_rsp_o,
 
@@ -86,7 +86,7 @@ module spatz_vlsu
   // Is vfu and the ipu operands ready
   logic vlsu_is_ready;
 
-  // Has a new vfu execution request arrived
+  // Has a new vlsu execution request arrived
   logic new_vlsu_request;
   assign new_vlsu_request = spatz_req_valid_i & vlsu_is_ready & (spatz_req_i.ex_unit == LSU);
 

@@ -45,10 +45,10 @@ module spatz_controller
   input  logic      vlsu_rsp_valid_i,
   input  vlsu_rsp_t vlsu_rsp_i,
 
-  // VSLD
-  input  logic      vsld_req_ready_i,
-  input  logic      vsld_rsp_valid_i,
-  input  vsld_rsp_t vsld_rsp_i,
+  // VSLDU
+  input  logic       vsldu_req_ready_i,
+  input  logic       vsldu_rsp_valid_i,
+  input  vsldu_rsp_t vsldu_rsp_i,
 
   // Vregfile Scoreboarding
   input  logic       [NrVregfilePorts-1:0] sb_enable_i,
@@ -311,13 +311,13 @@ module spatz_controller
       sb_port_d[SB_VLSU_VD_WD].valid = 1'b0;
       if (sb_q[vlsu_rsp_i.vd].valid && (sb_q[vlsu_rsp_i.vd].port == SB_VLSU_VD_RD || sb_q[vlsu_rsp_i.vd].port == SB_VLSU_VD_WD)) sb_d[vlsu_rsp_i.vd].valid = 1'b0;
     end
-    if (vsld_rsp_valid_i) begin
+    if (vsldu_rsp_valid_i) begin
       // VS2
-      sb_port_d[SB_VSLD_VS2_RD].valid = 1'b0;
-      if (sb_q[vsld_rsp_i.vs2].valid && sb_q[vsld_rsp_i.vs2].port == SB_VSLD_VS2_RD) sb_d[vsld_rsp_i.vs2].valid = 1'b0;
+      sb_port_d[SB_VSLDU_VS2_RD].valid = 1'b0;
+      if (sb_q[vsldu_rsp_i.vs2].valid && sb_q[vsldu_rsp_i.vs2].port == SB_VSLDU_VS2_RD) sb_d[vsldu_rsp_i.vs2].valid = 1'b0;
       // VD (write)
-      sb_port_d[SB_VSLD_VD_WD].valid = 1'b0;
-      if (sb_q[vlsu_rsp_i.vd].valid && sb_q[vlsu_rsp_i.vd].port == SB_VSLD_VD_WD) sb_d[vlsu_rsp_i.vd].valid = 1'b0;
+      sb_port_d[SB_VSLDU_VD_WD].valid = 1'b0;
+      if (sb_q[vsldu_rsp_i.vd].valid && sb_q[vsldu_rsp_i.vd].port == SB_VSLDU_VD_WD) sb_d[vsldu_rsp_i.vd].valid = 1'b0;
     end
 
     sb_reset = sb_d;
@@ -383,22 +383,22 @@ module spatz_controller
         if (spatz_req.use_vd & ~spatz_req.vd_is_src) sb_d[spatz_req.vd].port = SB_VLSU_VD_WD;
       end else if (spatz_req.ex_unit == SLD) begin
         // VS2
-        sb_port_d[SB_VSLD_VS2_RD].valid      = spatz_req.use_vs2;
-        sb_port_d[SB_VSLD_VS2_RD].element    = '0;
-        sb_port_d[SB_VSLD_VS2_RD].deps_valid = sb_reset[spatz_req.vs2].valid;
-        sb_port_d[SB_VSLD_VS2_RD].deps       = sb_q[spatz_req.vs2].port;
+        sb_port_d[SB_VSLDU_VS2_RD].valid      = spatz_req.use_vs2;
+        sb_port_d[SB_VSLDU_VS2_RD].element    = '0;
+        sb_port_d[SB_VSLDU_VS2_RD].deps_valid = sb_reset[spatz_req.vs2].valid;
+        sb_port_d[SB_VSLDU_VS2_RD].deps       = sb_q[spatz_req.vs2].port;
 
         sb_d[spatz_req.vs2].valid = spatz_req.use_vs2;
-        if (spatz_req.use_vs2) sb_d[spatz_req.vs2].port = SB_VSLD_VS2_RD;
+        if (spatz_req.use_vs2) sb_d[spatz_req.vs2].port = SB_VSLDU_VS2_RD;
 
         // VD (write)
-        sb_port_d[SB_VSLD_VD_WD].valid      = spatz_req.use_vd;
-        sb_port_d[SB_VSLD_VD_WD].element    = '0;
-        sb_port_d[SB_VSLD_VD_WD].deps_valid = sb_reset[spatz_req.vd].valid;
-        sb_port_d[SB_VSLD_VD_WD].deps       = sb_q[spatz_req.vd].port;
+        sb_port_d[SB_VSLDU_VD_WD].valid      = spatz_req.use_vd;
+        sb_port_d[SB_VSLDU_VD_WD].element    = '0;
+        sb_port_d[SB_VSLDU_VD_WD].deps_valid = sb_reset[spatz_req.vd].valid;
+        sb_port_d[SB_VSLDU_VD_WD].deps       = sb_q[spatz_req.vd].port;
 
         sb_d[spatz_req.vd].valid = spatz_req.use_vd;
-        if (spatz_req.use_vd) sb_d[spatz_req.vd].port = SB_VSLD_VD_WD;
+        if (spatz_req.use_vd) sb_d[spatz_req.vd].port = SB_VSLDU_VD_WD;
       end
     end
   end
@@ -414,12 +414,12 @@ module spatz_controller
   // not ready yet. Or we have a change in LMUL, for which we need to let all the
   // units finish first before scheduling a new operation (to avoid running into
   // issues with the socreboard).
-  logic stall, vfu_stall, vlsu_stall, vsld_stall, csr_stall;
-  assign stall = (vfu_stall | vlsu_stall | vsld_stall | csr_stall) & req_buffer_valid;
-  assign vfu_stall  = ~vfu_req_ready_i  & (spatz_req.ex_unit == VFU);
-  assign vlsu_stall = ~vlsu_req_ready_i & (spatz_req.ex_unit == LSU);
-  assign vsld_stall = ~vsld_req_ready_i & (spatz_req.ex_unit == SLD);
-  assign csr_stall  = (~vfu_req_ready_i | ~vlsu_req_ready_i | ~vsld_req_ready_i) & (spatz_req.ex_unit == CON) & (buffer_spatz_req.vtype.vlmul != vtype_q.vlmul);
+  logic stall, vfu_stall, vlsu_stall, vsldu_stall, csr_stall;
+  assign stall       = (vfu_stall | vlsu_stall | vsldu_stall | csr_stall) & req_buffer_valid;
+  assign vfu_stall   = ~vfu_req_ready_i   & (spatz_req.ex_unit == VFU);
+  assign vlsu_stall  = ~vlsu_req_ready_i  & (spatz_req.ex_unit == LSU);
+  assign vsldu_stall = ~vsldu_req_ready_i & (spatz_req.ex_unit == SLD);
+  assign csr_stall   = (~vfu_req_ready_i | ~vlsu_req_ready_i | ~vsldu_req_ready_i) & (spatz_req.ex_unit == CON) & (buffer_spatz_req.vtype.vlmul != vtype_q.vlmul);
 
   // Pop the buffer if we do not have a unit stall
   assign req_buffer_pop = ~stall & req_buffer_valid;

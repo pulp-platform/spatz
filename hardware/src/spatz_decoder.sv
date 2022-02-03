@@ -437,24 +437,36 @@ module spatz_decoder
               riscv_instruction::VSLIDEUP_VI: begin
                 spatz_req.op = VSLIDEUP;
                 spatz_req.ex_unit = SLD;
+                if (func3 == OPIVI) begin
+                  spatz_req.rs1 = elen_t'(arith_s1);
+                end
               end
 
               riscv_instruction::VSLIDE1UP_VX: begin
                 spatz_req.op = VSLIDEUP;
                 spatz_req.op_sld.one_up_down = 1'b1;
                 spatz_req.ex_unit = SLD;
+                if (func3 == OPIVI) begin
+                  spatz_req.rs1 = elen_t'(arith_s1);
+                end
               end
 
               riscv_instruction::VSLIDEDOWN_VX,
               riscv_instruction::VSLIDEDOWN_VI: begin
                 spatz_req.op = VSLIDEDOWN;
                 spatz_req.ex_unit = SLD;
+                if (func3 == OPIVI) begin
+                  spatz_req.rs1 = elen_t'(arith_s1);
+                end
               end
 
               riscv_instruction::VSLIDE1DOWN_VX: begin
                 spatz_req.op = VSLIDEDOWN;
                 spatz_req.op_sld.one_up_down = 1'b1;
                 spatz_req.ex_unit = SLD;
+                if (func3 == OPIVI) begin
+                  spatz_req.rs1 = elen_t'(arith_s1);
+                end
               end
 
               default: begin
