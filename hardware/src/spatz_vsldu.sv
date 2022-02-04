@@ -152,21 +152,22 @@ module spatz_vsldu
     automatic logic vrf_transaction_valid = (vrf_wvalid_i & vrf_we_o) & (vrf_rvalid_i & vrf_re_o);
 
     vreg_counter_load_value = spatz_req_q.vstart;
-    if (!spatz_req_d.op_sld.one_up_down && spatz_req_d.vstart < slide_amount_d && spatz_req_i.op == VSLIDEUP) begin
+    if (!spatz_req_d.op_sld.one_up_down && spatz_req_d.vstart < slide_amount_d && spatz_req_i.op == VSLIDEUP && new_vsldu_request) begin
       vreg_counter_load_value = slide_amount_d;
+    end else if (!spatz_req_q.op_sld.one_up_down && spatz_req_q.vstart < slide_amount_q && spatz_req_q.op == VSLIDEUP && ~new_vsldu_request) begin
+      vreg_counter_load_value = slide_amount_q;
     end
     vreg_counter_load = new_vsldu_request;
 
     vreg_operation_valid     = (delta != 'd0) & ~is_vl_zero;
     vreg_operation_first     = vreg_operation_valid &
-                               (~spatz_req_q.op_sld.one_up_down && is_slide_up && spatz_req_q.vstart < slide_amount_q ? vreg_counter_value == slide_amount_q :
-                               vreg_counter_value == spatz_req_q.vstart);
+                               vreg_counter_value == vreg_counter_load_value;
     vreg_operation_last      = vreg_operation_valid & (delta <= VELEB);
 
     vreg_counter_clear = 1'b0;
     vreg_counter_delta = ~vreg_operation_valid ? 'd0 :
                          vreg_operation_last   ? delta :
-                         vreg_operation_first  ? VELEB - spatz_req_q.vstart[$clog2(VELEB)-1:0] :
+                         vreg_operation_first  ? VELEB - vreg_counter_load_value[$clog2(VELEB)-1:0] :
                          VELEB;
 
     vreg_counter_en = vrf_transaction_valid;
@@ -223,7 +224,7 @@ module spatz_vsldu
     for (int b_src = 0; b_src < VELEB; b_src++) begin
       if (b_src >= in_elem_offset) begin
         // high elements
-        for (int b_dst = 0; b_dst < b_src; b_dst++) begin
+        for (int b_dst = 0; b_dst <= b_src; b_dst++) begin
           if (b_src-b_dst == in_elem_offset) begin
             data_high[b_dst*8 +: 8] = data_in[b_src*8 +: 8];
           end
