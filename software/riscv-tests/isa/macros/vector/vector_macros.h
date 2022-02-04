@@ -105,7 +105,7 @@ int test_case;
     MEMORY_BARRIER;                                                                     \
     for (unsigned int i = 1; i < sizeof(vact)/sizeof(T); i++) {                         \
       if (vexp[i] != vact[i]) {                                                         \
-        printf("Index %d FAILED. Got "#str", expected "#str".\n", i, vexp[i], vact[i]); \
+        printf("[TC %d] Index %d FAILED. Got "#str", expected "#str".\n", casenum, i, vexp[i], vact[i]); \
         num_failed++;                                                                   \
         return;                                                                         \
       }                                                                                 \
@@ -119,7 +119,7 @@ int test_case;
     MEMORY_BARRIER;                                                                     \
     for (unsigned int i = 0; i < size; i++) {                                           \
       if (vexp[i] != vgold[i]) {                                                        \
-        printf("Index %d FAILED. Got "#str", expected "#str".\n", i, vexp[i], vgold[i]);\
+        printf("[TC %d] Index %d FAILED. Got "#str", expected "#str".\n", casenum, i, vexp[i], vgold[i]);\
         num_failed++;                                                                   \
         return;                                                                         \
       }                                                                                 \
