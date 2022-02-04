@@ -95,24 +95,16 @@ module spatz_vsldu
       spatz_req_d = spatz_req_i;
       slide_amount_d = spatz_req_i.op_sld.one_up_down ? 'd1 : spatz_req_i.rs1;
 
-      // Convert the vl to number of bytes for all element widths
-      unique case (spatz_req_i.vtype.vsew)
-        EW_8:  begin
-          spatz_req_d.vl = spatz_req_i.vl;
-        end
-        EW_16: begin
-          spatz_req_d.vl = spatz_req_i.vl << 1;
-          slide_amount_d = slide_amount_d << 1;
-        end
-        EW_32: begin
-          spatz_req_d.vl = spatz_req_i.vl << 2;
-          slide_amount_d = slide_amount_d << 2;
-        end
-        default: begin
-          spatz_req_d.vl = '0;
-          slide_amount_d = '0;
-        end
-      endcase
+      // Convert vl/vstart/slide_amount to number of bytes for all element widths
+      if (spatz_req_i.vtype.vsew == EW_16) begin
+        spatz_req_d.vl     = spatz_req_i.vl << 1;
+        spatz_req_d.vstart = spatz_req_i.vstart << 1;
+        slide_amount_d     = slide_amount_d << 1;
+      end else if (spatz_req_i.vtype.vsew == EW_32) begin
+        spatz_req_d.vl     = spatz_req_i.vl << 2;
+        spatz_req_d.vstart = spatz_req_i.vstart << 2;
+        slide_amount_d     = slide_amount_d << 2;
+      end
     end else if (!is_vl_zero && vsldu_is_ready && !new_vsldu_request) begin
       // If we are ready for a new instruction but there is none, clear req register
       spatz_req_d = '0;
@@ -159,16 +151,23 @@ module spatz_vsldu
     // Have both vrf read and write executed successfully
     automatic logic vrf_transaction_valid = (vrf_wvalid_i & vrf_we_o) & (vrf_rvalid_i & vrf_re_o);
 
+    vreg_counter_load_value = spatz_req_q.vstart;
+    if (!spatz_req_d.op_sld.one_up_down && spatz_req_d.vstart < slide_amount_d && spatz_req_i.op == VSLIDEUP) begin
+      vreg_counter_load_value = slide_amount_d;
+    end
+    vreg_counter_load = new_vsldu_request;
+
     vreg_operation_valid     = (delta != 'd0) & ~is_vl_zero;
-    vreg_operation_first     = vreg_operation_valid & (vreg_counter_value == 'd0);
+    vreg_operation_first     = vreg_operation_valid &
+                               (~spatz_req_q.op_sld.one_up_down && is_slide_up && spatz_req_q.vstart < slide_amount_q ? vreg_counter_value == slide_amount_q :
+                               vreg_counter_value == spatz_req_q.vstart);
     vreg_operation_last      = vreg_operation_valid & (delta <= VELEB);
 
-    vreg_counter_load       = 1'b0;
-    vreg_counter_load_value = '0;
-
-    vreg_counter_clear = new_vsldu_request;
+    vreg_counter_clear = 1'b0;
     vreg_counter_delta = ~vreg_operation_valid ? 'd0 :
-                         vreg_operation_last   ? delta : VELEB;
+                         vreg_operation_last   ? delta :
+                         vreg_operation_first  ? VELEB - spatz_req_q.vstart[$clog2(VELEB)-1:0] :
+                         VELEB;
 
     vreg_counter_en = vrf_transaction_valid;
 
@@ -183,11 +182,10 @@ module spatz_vsldu
   vlen_t sld_offset_rd, sld_offset_wd;
 
   always_comb begin
-    sld_offset_rd = is_slide_up ? slide_amount_q : 'd0;
-    vrf_raddr_o = {spatz_req_q.vs2, $clog2(VELE)'(1'b0)} + vreg_counter_value[$bits(vlen_t)-1:$clog2(VELEB)] + sld_offset_rd[$bits(vlen_t)-1:$clog2(VELEB)];
+    sld_offset_rd = is_slide_up ? -slide_amount_q[$bits(vlen_t)-1:$clog2(VELEB)] : slide_amount_q[$bits(vlen_t)-1:$clog2(VELEB)];
+    vrf_raddr_o = {spatz_req_q.vs2, $clog2(VELE)'(1'b0)} + vreg_counter_value[$bits(vlen_t)-1:$clog2(VELEB)] + sld_offset_rd;
 
-    sld_offset_wd = is_slide_up ? '0 : slide_amount_q;
-    vrf_waddr_o = {spatz_req_q.vd, $clog2(VELE)'(1'b0)} + vreg_counter_value[$bits(vlen_t)-1:$clog2(VELEB)] + sld_offset_rd[$bits(vlen_t)-1:$clog2(VELEB)];
+    vrf_waddr_o = {spatz_req_q.vd, $clog2(VELE)'(1'b0)} + vreg_counter_value[$bits(vlen_t)-1:$clog2(VELEB)];
   end
 
   ////////////
@@ -217,6 +215,9 @@ module spatz_vsldu
       end
     end else begin
       data_in = vrf_rdata_i;
+      if (vreg_counter_value >= MAXVL - slide_amount_q) begin
+        data_in = '0;
+      end
     end
 
     for (int b_src = 0; b_src < VELEB; b_src++) begin
@@ -238,14 +239,14 @@ module spatz_vsldu
     end
 
     if (is_slide_up) begin
-      shift_overflow_d = data_low;
+      if (vreg_counter_en) shift_overflow_d = data_low;
       data_out = data_high | shift_overflow_q;
     end else begin
-      shift_overflow_d = data_high;
+      if (vreg_counter_en) shift_overflow_d = data_high;
       data_out = data_low | shift_overflow_q;
 
       if (spatz_req_q.op_sld.one_up_down && vreg_operation_last) begin
-        data_out = data_low | spatz_req_q.rs1;
+        data_out = data_out | spatz_req_q.rs1 << 8*(vreg_counter_delta-(3'b001<<spatz_req_q.vtype.vsew));
       end
     end
 
@@ -254,36 +255,29 @@ module spatz_vsldu
       for (int b_src = 0; b_src < VELEB; b_src++) begin
         vrf_wdata_o[(VELEB-b_src-1)*8 +: 8] = data_out[b_src*8 +: 8];
       end
+
       if (spatz_req_q.op_sld.one_up_down && vreg_operation_first) begin
-        if (N_IPU > 1) begin
-          unique case (spatz_req_i.vtype.vsew)
-            EW_8:  begin
-              vrf_wdata_o = {vrf_wdata_o[N_IPU*ELEN-1:8], spatz_req_q.rs1[7:0]};
-            end
-            EW_16: begin
-              vrf_wdata_o = {vrf_wdata_o[N_IPU*ELEN-1:16], spatz_req_q.rs1[15:0]};
-            end
-            EW_32: begin
-              vrf_wdata_o = {vrf_wdata_o[N_IPU*ELEN-1:32], spatz_req_q.rs1[31:0]};
-            end
-            default: begin
-              vrf_wdata_o = vrf_wdata_o;
-            end
-          endcase
-        end else begin
-          vrf_wdata_o = spatz_req_q.rs1;
-        end
-      end else begin
-        data_out = data_high | spatz_req_q.rs1;
+        vrf_wdata_o = vrf_wdata_o | spatz_req_q.rs1 << 8*spatz_req_q.vstart;
       end
     end else begin
       vrf_wdata_o = data_out;
     end
+
+    for (int i = 0; i < VELEB; i++) begin
+      vrf_wbe_o[i] = i < vreg_counter_delta;
+    end
+
+    if (vreg_operation_first) begin
+      for (int i = 0; i < VELEB; i++) begin
+        vrf_wbe_o[i] = (i >= vreg_counter_value[$clog2(VELEB)-1:0]) & (i < (vreg_counter_value[$clog2(VELEB)-1:0] + vreg_counter_delta));
+      end
+    end
+
+    if (vreg_operations_finished) shift_overflow_d = '0;
   end
 
   // VRF signals
   assign vrf_re_o  = vreg_operation_valid;
   assign vrf_we_o  = vrf_re_o & vrf_rvalid_i;
-  assign vrf_wbe_o = '1;
 
 endmodule : spatz_vsldu
