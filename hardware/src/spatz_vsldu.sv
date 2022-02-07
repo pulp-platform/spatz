@@ -105,6 +105,9 @@ module spatz_vsldu
         spatz_req_d.vstart = spatz_req_i.vstart << 2;
         slide_amount_d     = slide_amount_d << 2;
       end
+
+      // We need an extra cycle when executing slide downs (+ VELEB)
+      spatz_req_d.vl = (spatz_req_i.op == VSLIDEUP) ? spatz_req_d.vl : spatz_req_d.vl + VELEB;
     end else if (!is_vl_zero && vsldu_is_ready && !new_vsldu_request) begin
       // If we are ready for a new instruction but there is none, clear req register
       spatz_req_d = '0;
@@ -118,7 +121,7 @@ module spatz_vsldu
     vsldu_rsp_o       = '0;
 
     // Write back accessed register file vector to clear scoreboard entry
-    if (vsldu_is_ready && (spatz_req_q.vl != '0)) begin
+    if (vsldu_is_ready && ~is_vl_zero) begin
       vsldu_rsp_o.id    = spatz_req_q.id;
       vsldu_rsp_o.vd    = spatz_req_q.vd;
       vsldu_rsp_o.vs2   = spatz_req_q.vs2;
@@ -144,18 +147,16 @@ module spatz_vsldu
   );
 
   always_comb begin
-    // The total amount of elements we have to work through
-    automatic int unsigned max = is_slide_up ? spatz_req_q.vl : spatz_req_q.vl + VELEB;
     // How many elements are left to do
-    automatic int unsigned delta = max - vreg_counter_value;
-    // Have both vrf read and write executed successfully
-    automatic logic vrf_transaction_valid = (vrf_wvalid_i & vrf_we_o) & (vrf_rvalid_i & vrf_re_o);
+    automatic int unsigned delta = spatz_req_q.vl - vreg_counter_value;
 
-    vreg_counter_load_value = spatz_req_q.vstart;
+    vreg_counter_load_value = spatz_req_d.vstart;
     if (!spatz_req_d.op_sld.one_up_down && spatz_req_d.vstart < slide_amount_d && spatz_req_i.op == VSLIDEUP && new_vsldu_request) begin
       vreg_counter_load_value = slide_amount_d;
-    end else if (!spatz_req_q.op_sld.one_up_down && spatz_req_q.vstart < slide_amount_q && spatz_req_q.op == VSLIDEUP && ~new_vsldu_request) begin
+    end else if (!spatz_req_q.op_sld.one_up_down && spatz_req_q.vstart < slide_amount_q && is_slide_up && ~new_vsldu_request) begin
       vreg_counter_load_value = slide_amount_q;
+    end else if (~new_vsldu_request) begin
+      vreg_counter_load_value = spatz_req_q.vstart;
     end
     vreg_counter_load = new_vsldu_request;
 
@@ -174,7 +175,6 @@ module spatz_vsldu
 
     vreg_operations_finished = ~vreg_operation_valid | (vreg_operation_last & vreg_counter_en);
   end
-
 
   ////////////////////////
   // Address Generation //
@@ -257,6 +257,10 @@ module spatz_vsldu
 
       // Insert rs1 element at the last position
       if (spatz_req_q.op_sld.one_up_down && vreg_operation_last) begin
+        for (int b = 0; b < VLENB; b++) begin
+          data_out[b*8 +: 8] = ((b+1 >> spatz_req_q.vtype.vsew) < (vreg_counter_delta >> spatz_req_q.vtype.vsew)) ?
+                               data_low[b*8 +: 8] | shift_overflow_q[b*8 +: 8] : data_low[b*8 +: 8];
+        end
         data_out = data_out | spatz_req_q.rs1 << 8*(vreg_counter_delta-(3'b001<<spatz_req_q.vtype.vsew));
       end
     end
@@ -287,6 +291,7 @@ module spatz_vsldu
       end
     end
 
+    // Reset overflow register when finished
     if (vreg_operations_finished) shift_overflow_d = '0;
   end
 
