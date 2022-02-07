@@ -61,8 +61,13 @@ module spatz_vsldu
   logic  is_slide_up;
   assign is_slide_up = spatz_req_q.op == VSLIDEUP;
 
+  // Number of bytes we slide up or down
   vlen_t slide_amount_q, slide_amount_d;
   `FF(slide_amount_q, slide_amount_d, '0)
+
+  // Are we doing a vregfile read prefetch (when we slide down)
+  logic prefetch_q, prefetch_d;
+  `FF(prefetch_q, prefetch_d, 1'b0);
 
   // Signal to the controller if we are ready for a new instruction or not
   assign spatz_req_ready_o = vsldu_is_ready;
@@ -90,6 +95,7 @@ module spatz_vsldu
   always_comb begin
     spatz_req_d = spatz_req_q;
     slide_amount_d = slide_amount_q;
+    prefetch_d = prefetch_q;
 
     if (new_vsldu_request) begin
       spatz_req_d = spatz_req_i;
@@ -106,13 +112,14 @@ module spatz_vsldu
         slide_amount_d     = slide_amount_d << 2;
       end
 
-      // We need an extra cycle when executing slide downs (+ VELEB)
-      spatz_req_d.vl = (spatz_req_i.op == VSLIDEUP) ? spatz_req_d.vl : spatz_req_d.vl + VELEB;
+      prefetch_d = spatz_req_i.op == VSLIDEUP ? spatz_req_d.vstart >= VELEB : 1'b1;
     end else if (!is_vl_zero && vsldu_is_ready && !new_vsldu_request) begin
       // If we are ready for a new instruction but there is none, clear req register
       spatz_req_d = '0;
       slide_amount_d = '0;
     end
+
+    if (prefetch_q && vrf_re_o && vrf_rvalid_i) prefetch_d = 1'b0;
   end
 
   // Respond to controller if we are finished executing
@@ -161,9 +168,9 @@ module spatz_vsldu
     vreg_counter_load = new_vsldu_request;
 
     vreg_operation_valid = (delta != 'd0) & ~is_vl_zero;
-    vreg_operation_first = vreg_operation_valid &
+    vreg_operation_first = vreg_operation_valid & ~prefetch_q &
                            vreg_counter_value == vreg_counter_load_value;
-    vreg_operation_last  = vreg_operation_valid & (delta <= VELEB);
+    vreg_operation_last  = vreg_operation_valid & ~prefetch_q & (delta <= (VELEB - vreg_counter_value[$clog2(VELEB)-1:0]));
 
     vreg_counter_clear = 1'b0;
     vreg_counter_delta = ~vreg_operation_valid ? 'd0 :
@@ -171,7 +178,7 @@ module spatz_vsldu
                          vreg_operation_first  ? VELEB - vreg_counter_load_value[$clog2(VELEB)-1:0] :
                          VELEB;
 
-    vreg_counter_en = vrf_re_o & vrf_rvalid_i & ((vrf_we_o & vrf_wvalid_i & (is_slide_up | (~is_slide_up & ~vreg_operation_first))) | ~is_slide_up & vreg_operation_first);
+    vreg_counter_en = vrf_re_o & vrf_rvalid_i & vrf_we_o & vrf_wvalid_i;
 
     vreg_operations_finished = ~vreg_operation_valid | (vreg_operation_last & vreg_counter_en);
   end
@@ -183,11 +190,11 @@ module spatz_vsldu
   vlen_t sld_offset_rd, sld_offset_wd;
 
   always_comb begin
-    sld_offset_rd = is_slide_up ? -slide_amount_q[$bits(vlen_t)-1:$clog2(VELEB)] : slide_amount_q[$bits(vlen_t)-1:$clog2(VELEB)];
+    sld_offset_rd = is_slide_up ? (prefetch_q ? -slide_amount_q[$bits(vlen_t)-1:$clog2(VELEB)] - 1 : -slide_amount_q[$bits(vlen_t)-1:$clog2(VELEB)]) :
+                    prefetch_q ? slide_amount_q[$bits(vlen_t)-1:$clog2(VELEB)] : slide_amount_q[$bits(vlen_t)-1:$clog2(VELEB)] + 1;
     vrf_raddr_o = {spatz_req_q.vs2, $clog2(VELE)'(1'b0)} + vreg_counter_value[$bits(vlen_t)-1:$clog2(VELEB)] + sld_offset_rd;
 
-    sld_offset_wd = is_slide_up ? 'd0 : -1;
-    vrf_waddr_o = {spatz_req_q.vd, $clog2(VELE)'(1'b0)} + vreg_counter_value[$bits(vlen_t)-1:$clog2(VELEB)] + sld_offset_wd;
+    vrf_waddr_o = {spatz_req_q.vd, $clog2(VELE)'(1'b0)} + vreg_counter_value[$bits(vlen_t)-1:$clog2(VELEB)];
   end
 
   ////////////
@@ -249,19 +256,19 @@ module spatz_vsldu
 
     // Combine overflow and direct elements together
     if (is_slide_up) begin
-      if (vreg_counter_en) shift_overflow_d = data_low;
+      if (vreg_counter_en || prefetch_q) shift_overflow_d = data_low;
       data_out = data_high | shift_overflow_q;
     end else begin
-      if (vreg_counter_en) shift_overflow_d = data_high;
+      if (vreg_counter_en || prefetch_q) shift_overflow_d = data_high;
       data_out = data_low | shift_overflow_q;
 
       // Insert rs1 element at the last position
       if (spatz_req_q.op_sld.one_up_down && vreg_operation_last) begin
         for (int b = 0; b < VLENB; b++) begin
-          data_out[b*8 +: 8] = ((b+1 >> spatz_req_q.vtype.vsew) < (vreg_counter_delta >> spatz_req_q.vtype.vsew)) ?
+          data_out[b*8 +: 8] = ((b+1 >> spatz_req_q.vtype.vsew) < (spatz_req_q.vl[$clog2(VELEB)-1:0] >> spatz_req_q.vtype.vsew)) ?
                                data_low[b*8 +: 8] | shift_overflow_q[b*8 +: 8] : data_low[b*8 +: 8];
         end
-        data_out = data_out | spatz_req_q.rs1 << 8*(vreg_counter_delta-(3'b001<<spatz_req_q.vtype.vsew));
+        data_out = data_out | spatz_req_q.rs1 << 8*(spatz_req_q.vl[$clog2(VELEB)-1:0]-(3'b001<<spatz_req_q.vtype.vsew));
       end
     end
 
@@ -272,8 +279,8 @@ module spatz_vsldu
       end
 
       // Insert rs1 element at the first position
-      if (spatz_req_q.op_sld.one_up_down && vreg_operation_first) begin
-        vrf_wdata_o = vrf_wdata_o | spatz_req_q.rs1 << 8*spatz_req_q.vstart;
+      if (spatz_req_q.op_sld.one_up_down && vreg_operation_first && spatz_req_q.vstart == 'd0) begin
+        vrf_wdata_o = vrf_wdata_o | spatz_req_q.rs1;
       end
     end else begin
       vrf_wdata_o = data_out;
@@ -296,7 +303,7 @@ module spatz_vsldu
   end
 
   // VRF signals
-  assign vrf_re_o  = vreg_operation_valid;
-  assign vrf_we_o  = vrf_re_o & vrf_rvalid_i & (is_slide_up | (~is_slide_up & ~vreg_operation_first));
+  assign vrf_re_o  = vreg_operation_valid | prefetch_q;
+  assign vrf_we_o  = vrf_re_o & vrf_rvalid_i & ~prefetch_q;
 
 endmodule : spatz_vsldu

@@ -330,7 +330,7 @@ module spatz_controller
       if (spatz_req.ex_unit == VFU) begin
         // VS2
         sb_port_d[SB_VFU_VS2_RD].valid      = spatz_req.use_vs2;
-        sb_port_d[SB_VFU_VS2_RD].element    = spatz_req.vstart[$clog2(VELEB)-1:0];
+        sb_port_d[SB_VFU_VS2_RD].element    = spatz_req.vstart[$bits(vlen_t)-1:$clog2(VELEB)];
         sb_port_d[SB_VFU_VS2_RD].deps_valid = sb_reset[spatz_req.vs2].valid;
         sb_port_d[SB_VFU_VS2_RD].deps       = sb_q[spatz_req.vs2].port;
 
@@ -339,7 +339,7 @@ module spatz_controller
 
         // VS1
         sb_port_d[SB_VFU_VS1_RD].valid      = spatz_req.use_vs1;
-        sb_port_d[SB_VFU_VS1_RD].element    = spatz_req.vstart[$clog2(VELEB)-1:0];
+        sb_port_d[SB_VFU_VS1_RD].element    = spatz_req.vstart[$bits(vlen_t)-1:$clog2(VELEB)];
         sb_port_d[SB_VFU_VS1_RD].deps_valid = sb_reset[spatz_req.vs1].valid;
         sb_port_d[SB_VFU_VS1_RD].deps       = sb_q[spatz_req.vs1].port;
 
@@ -348,7 +348,7 @@ module spatz_controller
 
         // VD (read)
         sb_port_d[SB_VFU_VD_RD].valid      = spatz_req.use_vd & spatz_req.vd_is_src;
-        sb_port_d[SB_VFU_VD_RD].element    = spatz_req.vstart[$clog2(VELEB)-1:0];
+        sb_port_d[SB_VFU_VD_RD].element    = spatz_req.vstart[$bits(vlen_t)-1:$clog2(VELEB)];
         sb_port_d[SB_VFU_VD_RD].deps_valid = sb_reset[spatz_req.vd].valid;
         sb_port_d[SB_VFU_VD_RD].deps       = sb_q[spatz_req.vd].port;
 
@@ -357,7 +357,7 @@ module spatz_controller
 
         // VD (write)
         sb_port_d[SB_VFU_VD_WD].valid      = spatz_req.use_vd;
-        sb_port_d[SB_VFU_VD_WD].element    = spatz_req.vstart[$clog2(VELEB)-1:0];
+        sb_port_d[SB_VFU_VD_WD].element    = spatz_req.vstart[$bits(vlen_t)-1:$clog2(VELEB)];
         sb_port_d[SB_VFU_VD_WD].deps_valid = sb_reset[spatz_req.vd].valid;
         sb_port_d[SB_VFU_VD_WD].deps       = sb_q[spatz_req.vd].port;
 
@@ -366,7 +366,7 @@ module spatz_controller
       end else if (spatz_req.ex_unit == LSU) begin
         // VD (read)
         sb_port_d[SB_VLSU_VD_RD].valid      = spatz_req.use_vd & spatz_req.vd_is_src;
-        sb_port_d[SB_VLSU_VD_RD].element    = spatz_req.vstart[$clog2(VELEB)-1:0];
+        sb_port_d[SB_VLSU_VD_RD].element    = spatz_req.vstart[$bits(vlen_t)-1:$clog2(VELEB)];
         sb_port_d[SB_VLSU_VD_RD].deps_valid = sb_reset[spatz_req.vd].valid;
         sb_port_d[SB_VLSU_VD_RD].deps       = sb_q[spatz_req.vd].port;
 
@@ -375,7 +375,7 @@ module spatz_controller
 
         // VD (write)
         sb_port_d[SB_VLSU_VD_WD].valid      = spatz_req.use_vd & ~spatz_req.vd_is_src;
-        sb_port_d[SB_VLSU_VD_WD].element    = spatz_req.vstart[$clog2(VELEB)-1:0];
+        sb_port_d[SB_VLSU_VD_WD].element    = spatz_req.vstart[$bits(vlen_t)-1:$clog2(VELEB)];
         sb_port_d[SB_VLSU_VD_WD].deps_valid = sb_reset[spatz_req.vd].valid;
         sb_port_d[SB_VLSU_VD_WD].deps       = sb_q[spatz_req.vd].port;
 
@@ -384,7 +384,7 @@ module spatz_controller
       end else if (spatz_req.ex_unit == SLD) begin
         // VS2
         sb_port_d[SB_VSLDU_VS2_RD].valid      = spatz_req.use_vs2;
-        sb_port_d[SB_VSLDU_VS2_RD].element    = spatz_req.vstart[$clog2(VELEB)-1:0];
+        sb_port_d[SB_VSLDU_VS2_RD].element    = spatz_req.vstart[$bits(vlen_t)-1:$clog2(VELEB)];
         sb_port_d[SB_VSLDU_VS2_RD].deps_valid = sb_reset[spatz_req.vs2].valid;
         sb_port_d[SB_VSLDU_VS2_RD].deps       = sb_q[spatz_req.vs2].port;
 
@@ -393,7 +393,7 @@ module spatz_controller
 
         // VD (write)
         sb_port_d[SB_VSLDU_VD_WD].valid      = spatz_req.use_vd;
-        sb_port_d[SB_VSLDU_VD_WD].element    = spatz_req.vstart[$clog2(VELEB)-1:0];
+        sb_port_d[SB_VSLDU_VD_WD].element    = spatz_req.vstart[$bits(vlen_t)-1:$clog2(VELEB)];
         sb_port_d[SB_VSLDU_VD_WD].deps_valid = sb_reset[spatz_req.vd].valid;
         sb_port_d[SB_VSLDU_VD_WD].deps       = sb_q[spatz_req.vd].port;
 
