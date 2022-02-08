@@ -8,7 +8,7 @@
 #include "vector_macros.h"
 
 void TEST_CASE1() {
-  uint64_t scalar = 99;
+  uint32_t scalar = 99;
 
   VSET(16, e8, m1);
   VLOAD_8(v2, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16);
@@ -30,7 +30,7 @@ void TEST_CASE1() {
 }
 
 void TEST_CASE2() {
-  uint64_t scalar = 99;
+  uint32_t scalar = 99;
 
   VSET(16, e8, m1);
   VLOAD_8(v2, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16);
