@@ -264,11 +264,12 @@ module spatz_vsldu
 
       // Insert rs1 element at the last position
       if (spatz_req_q.op_sld.one_up_down && vreg_operation_last) begin
-        for (int b = 0; b < VLENB; b++) begin
-          data_out[b*8 +: 8] = ((b+1 >> spatz_req_q.vtype.vsew) < (spatz_req_q.vl[$clog2(VELEB)-1:0] >> spatz_req_q.vtype.vsew)) ?
-                               data_low[b*8 +: 8] | shift_overflow_q[b*8 +: 8] : data_low[b*8 +: 8];
+        for (int b = 0; b < VELEB; b++) begin
+          if (b >= (vreg_counter_value[$clog2(VELEB)-1:0] + vreg_counter_delta - (3'b001<<spatz_req_q.vtype.vsew))) begin
+            data_out[b*8 +: 8] = data_low[b*8 +: 8];
+          end
         end
-        data_out = data_out | spatz_req_q.rs1 << 8*(spatz_req_q.vl[$clog2(VELEB)-1:0]-(3'b001<<spatz_req_q.vtype.vsew));
+        data_out = data_out | spatz_req_q.rs1 << 8*(vreg_counter_value[$clog2(VELEB)-1:0]+vreg_counter_delta-(3'b001<<spatz_req_q.vtype.vsew));
       end
     end
 
