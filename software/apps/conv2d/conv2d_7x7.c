@@ -42,29 +42,29 @@ void conv2d_7x7(int32_t *o, int32_t *i, int32_t *f, int32_t R, int32_t C,
 // Load 2 rows of the output matrix
 void conv2d_vec_4xC_slice_init_7x7(int32_t *o, int32_t C) {
   // Helper variables
-  int32_t ldo = C << 3;
+  int32_t lwo = C << 2;
 
   // Set the vector configuration
   asm volatile("vsetvli zero, %0, e32, m2, ta, ma" ::"r"(C));
   // Fetch 2 output rows
-  asm volatile("vmv.v.i v0,  0; add %0, %0, %1" : "+&r"(o) : "r"(ldo));
+  asm volatile("vmv.v.i v0,  0; add %0, %0, %1" : "+&r"(o) : "r"(lwo));
   asm volatile("vmv.v.i v2,  0;" : "+r"(o));
 }
 
 // Load 4 rows of the output matrix
 void conv2d_vec_4xC_slice_preload_7x7(int32_t *i, int32_t C, int32_t F) {
   // Helper variables
-  int32_t ldi = (C + F - 1) << 3;
+  int32_t lwi = (C + F - 1) << 2;
 
   // Set the vector configuration
   asm volatile("vsetvli zero, %0, e32, m2, ta, ma" ::"r"(C + F - 1));
   // Fetch the first F-1 = 6 input rows
-  asm volatile("vle64.v v4,  (%0); add %0, %0, %1" : "+&r"(i) : "r"(ldi));
-  asm volatile("vle64.v v6,  (%0); add %0, %0, %1" : "+&r"(i) : "r"(ldi));
-  asm volatile("vle64.v v8,  (%0); add %0, %0, %1" : "+&r"(i) : "r"(ldi));
-  asm volatile("vle64.v v10, (%0); add %0, %0, %1" : "+&r"(i) : "r"(ldi));
-  asm volatile("vle64.v v12, (%0); add %0, %0, %1" : "+&r"(i) : "r"(ldi));
-  asm volatile("vle64.v v14, (%0); add %0, %0, %1" : "+r"(i));
+  asm volatile("vle32.v v4,  (%0); add %0, %0, %1" : "+&r"(i) : "r"(lwi));
+  asm volatile("vle32.v v6,  (%0); add %0, %0, %1" : "+&r"(i) : "r"(lwi));
+  asm volatile("vle32.v v8,  (%0); add %0, %0, %1" : "+&r"(i) : "r"(lwi));
+  asm volatile("vle32.v v10, (%0); add %0, %0, %1" : "+&r"(i) : "r"(lwi));
+  asm volatile("vle32.v v12, (%0); add %0, %0, %1" : "+&r"(i) : "r"(lwi));
+  asm volatile("vle32.v v14, (%0); add %0, %0, %1" : "+r"(i));
 }
 
 // Calculate 4 output matrix rows
@@ -76,47 +76,47 @@ void conv2d_vec_4xC_7x7(int32_t *o, int32_t *i, int32_t *f, int32_t C,
   int32_t slamt;
 
   // Helper variables
-  int32_t ldo = C << 3;
-  int32_t ldi = (C + F - 1) << 3;
-  int32_t ldf = F << 3;
+  int32_t lwo = C << 2;
+  int32_t lwi = (C + F - 1) << 2;
+  int32_t lwf = F << 2;
   int32_t *f_;
 
   // Compute on C elements
   asm volatile("vsetvli zero, %0, e32, m2, ta, ma" ::"r"(C + F - 1));
   // Fetch other 2 rows of the input matrix
-  asm volatile("vle64.v v16, (%0); add %0, %0, %1" : "+&r"(i) : "r"(ldi));
-  asm volatile("vle64.v v18, (%0); add %0, %0, %1" : "+&r"(i) : "r"(ldi));
+  asm volatile("vle32.v v16, (%0); add %0, %0, %1" : "+&r"(i) : "r"(lwi));
+  asm volatile("vle32.v v18, (%0); add %0, %0, %1" : "+&r"(i) : "r"(lwi));
 
   // Compute on C elements
   asm volatile("vsetvli zero, %0, e32, m2, ta, ma" ::"r"(C));
   f_ = f;
   // Fetch the first column of the filter, and start calculating its
   // contribution on the two output rows (v0, v2)
-  asm volatile("ld %1, (%0); add %0, %0, %2" : "+&r"(f_), "=&r"(t0) : "r"(ldf));
+  asm volatile("lw %1, (%0); add %0, %0, %2" : "+&r"(f_), "=&r"(t0) : "r"(lwf));
   asm volatile("vmacc.vx v0, %0, v4" ::"r"(t0));
   asm volatile("vmacc.vx v2, %0, v6" ::"r"(t0));
 
-  asm volatile("ld %1, (%0); add %0, %0, %2" : "+&r"(f_), "=&r"(t1) : "r"(ldf));
+  asm volatile("lw %1, (%0); add %0, %0, %2" : "+&r"(f_), "=&r"(t1) : "r"(lwf));
   asm volatile("vmacc.vx v0, %0, v6" ::"r"(t1));
   asm volatile("vmacc.vx v2, %0, v8" ::"r"(t1));
 
-  asm volatile("ld %1, (%0); add %0, %0, %2" : "+&r"(f_), "=&r"(t2) : "r"(ldf));
+  asm volatile("lw %1, (%0); add %0, %0, %2" : "+&r"(f_), "=&r"(t2) : "r"(lwf));
   asm volatile("vmacc.vx v0, %0, v8" ::"r"(t2));
   asm volatile("vmacc.vx v2, %0, v10" ::"r"(t2));
 
-  asm volatile("ld %1, (%0); add %0, %0, %2" : "+&r"(f_), "=&r"(t3) : "r"(ldf));
+  asm volatile("lw %1, (%0); add %0, %0, %2" : "+&r"(f_), "=&r"(t3) : "r"(lwf));
   asm volatile("vmacc.vx v0, %0, v10" ::"r"(t3));
   asm volatile("vmacc.vx v2, %0, v12" ::"r"(t3));
 
-  asm volatile("ld %1, (%0); add %0, %0, %2" : "+&r"(f_), "=&r"(t4) : "r"(ldf));
+  asm volatile("lw %1, (%0); add %0, %0, %2" : "+&r"(f_), "=&r"(t4) : "r"(lwf));
   asm volatile("vmacc.vx v0, %0, v12" ::"r"(t4));
   asm volatile("vmacc.vx v2, %0, v14" ::"r"(t4));
 
-  asm volatile("ld %1, (%0); add %0, %0, %2" : "+&r"(f_), "=&r"(t5) : "r"(ldf));
+  asm volatile("lw %1, (%0); add %0, %0, %2" : "+&r"(f_), "=&r"(t5) : "r"(lwf));
   asm volatile("vmacc.vx v0, %0, v14" ::"r"(t5));
   asm volatile("vmacc.vx v2, %0, v16" ::"r"(t5));
 
-  asm volatile("ld %1, (%0);" : "+&r"(f_), "=&r"(t6));
+  asm volatile("lw %1, (%0);" : "+&r"(f_), "=&r"(t6));
   asm volatile("vmacc.vx v0, %0, v16" ::"r"(t6));
   asm volatile("vmacc.vx v2, %0, v18" ::"r"(t6));
 
@@ -127,48 +127,48 @@ void conv2d_vec_4xC_7x7(int32_t *o, int32_t *i, int32_t *f, int32_t C,
     // Fetch the other columns of the filter (except for the last one), and
     // start calculating their contributions on the two output rows (v0, v2) To
     // do so, at each iteration slide down the input rows by one
-    asm volatile("ld %1, (%0); add %0, %0, %2"
+    asm volatile("lw %1, (%0); add %0, %0, %2"
                  : "+&r"(f_), "=&r"(t0)
-                 : "r"(ldf));
+                 : "r"(lwf));
     asm volatile("vslidedown.vx v20, v4,  %0" ::"r"(slamt));
     asm volatile("vmacc.vx v0, %0, v20" ::"r"(t0));
 
-    asm volatile("ld %1, (%0); add %0, %0, %2"
+    asm volatile("lw %1, (%0); add %0, %0, %2"
                  : "+&r"(f_), "=&r"(t1)
-                 : "r"(ldf));
+                 : "r"(lwf));
     asm volatile("vslidedown.vx v22, v6,  %0" ::"r"(slamt));
     asm volatile("vmacc.vx v0, %0, v22" ::"r"(t1));
     asm volatile("vmacc.vx v2, %0, v22" ::"r"(t0));
 
-    asm volatile("ld %1, (%0); add %0, %0, %2"
+    asm volatile("lw %1, (%0); add %0, %0, %2"
                  : "+&r"(f_), "=&r"(t2)
-                 : "r"(ldf));
+                 : "r"(lwf));
     asm volatile("vslidedown.vx v24, v8,  %0" ::"r"(slamt));
     asm volatile("vmacc.vx v0, %0, v24" ::"r"(t2));
     asm volatile("vmacc.vx v2, %0, v24" ::"r"(t1));
 
-    asm volatile("ld %1, (%0); add %0, %0, %2"
+    asm volatile("lw %1, (%0); add %0, %0, %2"
                  : "+&r"(f_), "=&r"(t3)
-                 : "r"(ldf));
+                 : "r"(lwf));
     asm volatile("vslidedown.vx v26, v10, %0" ::"r"(slamt));
     asm volatile("vmacc.vx v0, %0, v26" ::"r"(t3));
     asm volatile("vmacc.vx v2, %0, v26" ::"r"(t2));
 
-    asm volatile("ld %1, (%0); add %0, %0, %2"
+    asm volatile("lw %1, (%0); add %0, %0, %2"
                  : "+&r"(f_), "=&r"(t4)
-                 : "r"(ldf));
+                 : "r"(lwf));
     asm volatile("vslidedown.vx v28, v12, %0" ::"r"(slamt));
     asm volatile("vmacc.vx v0, %0, v28" ::"r"(t4));
     asm volatile("vmacc.vx v2, %0, v28" ::"r"(t3));
 
-    asm volatile("ld %1, (%0); add %0, %0, %2"
+    asm volatile("lw %1, (%0); add %0, %0, %2"
                  : "+&r"(f_), "=&r"(t5)
-                 : "r"(ldf));
+                 : "r"(lwf));
     asm volatile("vslidedown.vx v30, v14, %0" ::"r"(slamt));
     asm volatile("vmacc.vx v0, %0, v30" ::"r"(t5));
     asm volatile("vmacc.vx v2, %0, v30" ::"r"(t4));
 
-    asm volatile("ld %1, (%0);" : "+&r"(f_), "=&r"(t6));
+    asm volatile("lw %1, (%0);" : "+&r"(f_), "=&r"(t6));
     asm volatile("vslidedown.vx v20, v16, %0" ::"r"(slamt));
     asm volatile("vmacc.vx v0, %0, v20" ::"r"(t6));
     asm volatile("vmacc.vx v2, %0, v20" ::"r"(t5));
@@ -180,44 +180,44 @@ void conv2d_vec_4xC_7x7(int32_t *o, int32_t *i, int32_t *f, int32_t C,
   f_ = f + (F - 1);
   slamt = F - 1;
   // Repeat for the last filter column, and then store the output rows
-  asm volatile("ld %1, (%0); add %0, %0, %2" : "+&r"(f_), "=&r"(t0) : "r"(ldf));
+  asm volatile("lw %1, (%0); add %0, %0, %2" : "+&r"(f_), "=&r"(t0) : "r"(lwf));
   asm volatile("vslidedown.vx v20, v4,  %0" ::"r"(slamt));
   asm volatile("vmacc.vx v0, %0, v20" ::"r"(t0));
 
-  asm volatile("ld %1, (%0); add %0, %0, %2" : "+&r"(f_), "=&r"(t1) : "r"(ldf));
+  asm volatile("lw %1, (%0); add %0, %0, %2" : "+&r"(f_), "=&r"(t1) : "r"(lwf));
   asm volatile("vslidedown.vx v22, v6,  %0" ::"r"(slamt));
   asm volatile("vmacc.vx v0, %0, v22" ::"r"(t1));
   asm volatile("vmacc.vx v2, %0, v22" ::"r"(t0));
 
-  asm volatile("ld %1, (%0); add %0, %0, %2" : "+&r"(f_), "=&r"(t2) : "r"(ldf));
+  asm volatile("lw %1, (%0); add %0, %0, %2" : "+&r"(f_), "=&r"(t2) : "r"(lwf));
   asm volatile("vslidedown.vx v24, v8,  %0" ::"r"(slamt));
   asm volatile("vmacc.vx v0, %0, v24" ::"r"(t2));
   asm volatile("vmacc.vx v2, %0, v24" ::"r"(t1));
 
-  asm volatile("ld %1, (%0); add %0, %0, %2" : "+&r"(f_), "=&r"(t3) : "r"(ldf));
+  asm volatile("lw %1, (%0); add %0, %0, %2" : "+&r"(f_), "=&r"(t3) : "r"(lwf));
   asm volatile("vslidedown.vx v26, v10, %0" ::"r"(slamt));
   asm volatile("vmacc.vx v0, %0, v26" ::"r"(t3));
   asm volatile("vmacc.vx v2, %0, v26" ::"r"(t2));
 
-  asm volatile("ld %1, (%0); add %0, %0, %2" : "+&r"(f_), "=&r"(t4) : "r"(ldf));
+  asm volatile("lw %1, (%0); add %0, %0, %2" : "+&r"(f_), "=&r"(t4) : "r"(lwf));
   asm volatile("vslidedown.vx v28, v12, %0" ::"r"(slamt));
   asm volatile("vmacc.vx v0, %0, v28" ::"r"(t4));
   asm volatile("vmacc.vx v2, %0, v28" ::"r"(t3));
 
-  asm volatile("ld %1, (%0); add %0, %0, %2" : "+&r"(f_), "=&r"(t5) : "r"(ldf));
+  asm volatile("lw %1, (%0); add %0, %0, %2" : "+&r"(f_), "=&r"(t5) : "r"(lwf));
   asm volatile("vslidedown.vx v30, v14, %0" ::"r"(slamt));
   asm volatile("vmacc.vx v0, %0, v30" ::"r"(t5));
   asm volatile("vmacc.vx v2, %0, v30" ::"r"(t4));
 
-  asm volatile("ld %1, (%0);" : "+&r"(f_), "=&r"(t6));
+  asm volatile("lw %1, (%0);" : "+&r"(f_), "=&r"(t6));
   asm volatile("vslidedown.vx v20, v16, %0" ::"r"(slamt));
   asm volatile("vmacc.vx v0, %0, v20" ::"r"(t6));
-  asm volatile("vse64.v  v0, (%0); add %0, %0, %1" : "+&r"(o) : "r"(ldo));
+  asm volatile("vse32.v  v0, (%0); add %0, %0, %1" : "+&r"(o) : "r"(lwo));
   asm volatile("vmacc.vx v2, %0, v20" ::"r"(t5));
 
   asm volatile("vslidedown.vx v22, v18, %0" ::"r"(slamt));
   asm volatile("vmacc.vx v2, %0, v22" ::"r"(t6));
-  asm volatile("vse64.v  v2, (%0); add %0, %0, %1" : "+&r"(o) : "r"(ldo));
+  asm volatile("vse32.v  v2, (%0); add %0, %0, %1" : "+&r"(o) : "r"(lwo));
 }
 
 void conv2d_vec_4xC_slice_move_7x7(int32_t C, int32_t F) {

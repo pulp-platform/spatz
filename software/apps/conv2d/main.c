@@ -20,7 +20,9 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "conv2d.h"
+#include "conv2d_3x3.c"
+#include "conv2d_5x5.c"
+#include "conv2d_7x7.c"
 
 #include "printf.h"
 #ifdef MEMPOOL
@@ -84,7 +86,6 @@ int main() {
     conv2d_7x7(o, i, f, M, N, F);
   else
     printf("Error: the filter size is different from 3 or 5 or 7.\n");
-  stop_timer();
 
   // Performance metrics
   uint32_t timer_end = mempool_get_timer();
