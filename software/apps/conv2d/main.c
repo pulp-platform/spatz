@@ -40,9 +40,13 @@ extern int32_t f[] __attribute__((aligned(4)));        // [ F*F ]
 extern int32_t o[] __attribute__((aligned(4)));        // [ M*N ]
 extern int32_t golden_o[] __attribute__((aligned(4))); // [ M*N ]
 // M, N, F defined in data.S
-extern int32_t M;
-extern int32_t N;
-extern int32_t F;
+#define M 64
+#define N 64
+#define F 3
+
+int32_t i_l1[(M+F/2*2)*(N+F/2*2)] __attribute__((aligned(4), section(".l1_prio"))); // [ (M+floor(F/2)) * (N+floor(F/2)) ]
+int32_t f_l1[F*F] __attribute__((aligned(4), section(".l1_prio")));        // [ F*F ]
+int32_t o_l1[M*N] __attribute__((aligned(4), section(".l1_prio")));        // [ M*N ]
 
 // Verify the matrices
 int verify_matrix(int32_t *matrix, int32_t *golden_matrix, int32_t R,
@@ -76,14 +80,22 @@ int main() {
   printf("\n");
   printf("\n");
 
+  for (int idx = 0; idx < (M+F/2*2)*(N+F/2*2); idx++) {
+    i_l1[idx] = i[idx];
+  }
+
+  for (int idx = 0; idx < F*F; idx++) {
+    f_l1[idx] = f[idx];
+  }
+
   // Call the main kernel, and measure cycles
   uint32_t timer_start = timer_start = mempool_get_timer();
   if (F == 3)
-    conv2d_3x3(o, i, f, M, N, F);
+    conv2d_3x3(o_l1, i_l1, f_l1);
   else if (F == 5)
-    conv2d_5x5(o, i, f, M, N, F);
+    conv2d_5x5(o_l1, i_l1, f_l1, M, N, F);
   else if (F == 7)
-    conv2d_7x7(o, i, f, M, N, F);
+    conv2d_7x7(o_l1, i_l1, f_l1, M, N, F);
   else
     printf("Error: the filter size is different from 3 or 5 or 7.\n");
 
@@ -94,7 +106,7 @@ int main() {
 
   // Verify correctness
   printf("Verifying result...\n");
-  int error = verify_matrix(o, golden_o, M, N);
+  int error = verify_matrix(o_l1, golden_o, M, N);
   if (error != 0) {
     printf("Fail.\n");
   } else {

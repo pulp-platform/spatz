@@ -3,8 +3,11 @@
 
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 
-void conv2d_3x3(int32_t *o, int32_t *i, int32_t *f, int32_t R, int32_t C,
-                int32_t F) {
+#define R 64
+#define C 64
+#define F 3
+
+void conv2d_3x3(int32_t *o, int32_t *i, int32_t *f) {
   // We work on 4 rows of the output matrix at once
   int32_t block_size_o = 4;
   // We work on block_size_o + F - 1 rows of the input matrix at once
@@ -25,15 +28,15 @@ void conv2d_3x3(int32_t *o, int32_t *i, int32_t *f, int32_t R, int32_t C,
     int32_t *o_ = o + c;
 
     // For simplicity, compute over the padding rows as well
-    conv2d_vec_4xC_slice_init_3x3(o_, c_, C);
+    //conv2d_vec_4xC_slice_init_3x3(c_);
     // Preload the first two input rows -> This is not needed in the other rounds
-    conv2d_vec_4xC_slice_preload_3x3(i_, c_, C, F);
+    conv2d_vec_4xC_slice_preload_3x3(i_, c_);
     // The first F-1 rows have already been loaded by
     // conv2d_vec_4xC_slice_preload_3x3()
     int32_t *i__ = i_ + (F - 1) * (C + F - 1);
-    conv2d_vec_4xC_3x3(o_, i__, f, c_, C, F);
+    conv2d_vec_4xC_3x3(o_, i__, f, c_);
     // Re-use some of the already-loaded input rows
-    conv2d_vec_4xC_slice_move_3x3(c_, C, F);
+    //conv2d_vec_4xC_slice_move_3x3(c_);
 
     // Iterate over the output rows
     for (int32_t r = block_size_o; r < R; r += block_size_o) {
@@ -41,33 +44,30 @@ void conv2d_3x3(int32_t *o, int32_t *i, int32_t *f, int32_t R, int32_t C,
       o_ = o + r * C + c;
 
       // For simplicity, compute over the padding rows as well
-      conv2d_vec_4xC_slice_init_3x3(o_, c_, C);
+      //conv2d_vec_4xC_slice_init_3x3(c_);
       // The first F-1 rows have already been loaded by
       // conv2d_vec_4xC_slice_init()
       i__ = i_ + (F - 1) * (C + F - 1);
-      conv2d_vec_4xC_3x3(o_, i__, f, c_, C, F);
+      conv2d_vec_4xC_3x3(o_, i__, f, c_);
       // Re-use some of the already-loaded input rows
-      conv2d_vec_4xC_slice_move_3x3(c_, C, F);
+      //conv2d_vec_4xC_slice_move_3x3(c_);
     }
   }
 }
 
 // Load 4 rows of the output matrix
-void conv2d_vec_4xC_slice_init_3x3(int32_t *o, int32_t c, int32_t C) {
-  // Helper variables
-  int32_t lwo = C << 2;
-
+void conv2d_vec_4xC_slice_init_3x3(int32_t c) {
   // Set the vector configuration
   asm volatile("vsetvli zero, %0, e32, m2, ta, ma" ::"r"(c));
   // Fetch 4 output rows
-  asm volatile("vmv.v.i v0,  0; add %0, %0, %1" : "+&r"(o) : "r"(lwo));
-  asm volatile("vmv.v.i v2,  0; add %0, %0, %1" : "+&r"(o) : "r"(lwo));
-  asm volatile("vmv.v.i v4,  0; add %0, %0, %1" : "+&r"(o) : "r"(lwo));
-  asm volatile("vmv.v.i v6,  0;" : "+r"(o));
+  asm volatile("vmv.v.i v0,  0");
+  asm volatile("vmv.v.i v2,  0");
+  asm volatile("vmv.v.i v4,  0");
+  asm volatile("vmv.v.i v6,  0");
 }
 
 // Load 4 rows of the output matrix
-void conv2d_vec_4xC_slice_preload_3x3(int32_t *i, int32_t c, int32_t C, int32_t F) {
+void conv2d_vec_4xC_slice_preload_3x3(int32_t *i, int32_t c) {
   // Helper variables
   int32_t lwi = (C + F - 1) << 2;
 
@@ -79,33 +79,36 @@ void conv2d_vec_4xC_slice_preload_3x3(int32_t *i, int32_t c, int32_t C, int32_t 
 }
 
 // Calculate 4 output matrix rows
-void conv2d_vec_4xC_3x3(int32_t *o, int32_t *i, int32_t *f, int32_t c, int32_t C,
-                        int32_t F) {
+void conv2d_vec_4xC_3x3(int32_t *o, int32_t *i, int32_t *f, int32_t c) {
 
   // Temporary variables
   int32_t t0, t1, t2;
 
   // Helper variables
-  int32_t lwo = C << 2;
   int32_t lwi = (C + F - 1) << 2;
-  int32_t lwf = F << 2;
   int32_t *f_;
 
   // Compute on C elements
   asm volatile("vsetvli zero, %0, e32, m2, ta, ma" ::"r"(c + F - 1));
   // Fetch 4 + F - 1 - 2 rows of the input matrix
   asm volatile("vle32.v v12, (%0); add %0, %0, %1" : "+&r"(i) : "r"(lwi));
-  asm volatile("vle32.v v14, (%0); add %0, %0, %1" : "+&r"(i) : "r"(lwi));
-  asm volatile("vle32.v v16, (%0); add %0, %0, %1" : "+&r"(i) : "r"(lwi));
-  asm volatile("vle32.v v18, (%0); add %0, %0, %1" : "+&r"(i) : "r"(lwi));
-
+  asm volatile("vmv.v.i v0,  0");
   f_ = f;
+  int32_t lwo = C << 2;
+  asm volatile("vle32.v v14, (%0); add %0, %0, %1" : "+&r"(i) : "r"(lwi));
+  asm volatile("vmv.v.i v2,  0");
+  int32_t lwf = F << 2;
   asm volatile("lw %1, (%0); add %0, %0, %2" : "+&r"(f_), "=&r"(t0) : "r"(lwf));
+  asm volatile("vle32.v v16, (%0); add %0, %0, %1" : "+&r"(i) : "r"(lwi));
+  asm volatile("vmv.v.i v4,  0");
+  asm volatile("lw %1, (%0); add %0, %0, %2" : "+&r"(f_), "=&r"(t1) : "r"(lwf));
+  asm volatile("vle32.v v18, (%0); add %0, %0, %1" : "+&r"(i) : "r"(lwi));
+  asm volatile("vmv.v.i v6,  0");
+
   asm volatile("vsetvli zero, %0, e32, m2, ta, ma" ::"r"(c));
   // Compute on C elements
   // Fetch the first column of the filter, and start calculating its
   // contribution on the four output rows (v0, v2, v4, v6)
-  asm volatile("lw %1, (%0); add %0, %0, %2" : "+&r"(f_), "=&r"(t1) : "r"(lwf));
   asm volatile("vmacc.vx v0, %0, v8" ::"r"(t0));
   asm volatile("vmacc.vx v2, %0, v10" ::"r"(t0));
   asm volatile("vmacc.vx v4, %0, v12" ::"r"(t0));
@@ -184,12 +187,22 @@ void conv2d_vec_4xC_3x3(int32_t *o, int32_t *i, int32_t *f, int32_t c, int32_t C
 
   asm volatile("vmacc.vx v6, %0, v30" ::"r"(t2));
   asm volatile("vse32.v  v6, (%0);" : "+r"(o));
-}
 
-void conv2d_vec_4xC_slice_move_3x3(int32_t c, int32_t C, int32_t F) {
   // Move C+F-1 elements
   asm volatile("vsetvli zero, %0, e32, m2, ta, ma" ::"r"(c + F - 1));
   // Move the last floor(F/2) + 1 input rows
   asm volatile("vmv.v.v v8, v16");
   asm volatile("vmv.v.v v10, v18");
 }
+
+void conv2d_vec_4xC_slice_move_3x3(int32_t c) {
+  // Move C+F-1 elements
+  asm volatile("vsetvli zero, %0, e32, m2, ta, ma" ::"r"(c + F - 1));
+  // Move the last floor(F/2) + 1 input rows
+  asm volatile("vmv.v.v v8, v16");
+  asm volatile("vmv.v.v v10, v18");
+}
+
+#undef R
+#undef C
+#undef F

@@ -3,13 +3,11 @@
 
 #include <stdint.h>
 
-void conv2d_3x3(int32_t *o, int32_t *i, int32_t *f, int32_t R, int32_t C,
-                int32_t F);
-void conv2d_vec_4xC_slice_init_3x3(int32_t *o, int32_t c, int32_t C);
-void conv2d_vec_4xC_slice_preload_3x3(int32_t *i, int32_t c, int32_t C, int32_t F);
-void conv2d_vec_4xC_slice_move_3x3(int32_t c, int32_t C, int32_t F);
-void conv2d_vec_4xC_3x3(int32_t *o, int32_t *i, int32_t *f, int32_t c, int32_t C,
-                        int32_t F);
+void conv2d_3x3(int32_t *o, int32_t *i, int32_t *f);
+void conv2d_vec_4xC_slice_init_3x3(int32_t c);
+void conv2d_vec_4xC_slice_preload_3x3(int32_t *i, int32_t c);
+void conv2d_vec_4xC_slice_move_3x3(int32_t c);
+void conv2d_vec_4xC_3x3(int32_t *o, int32_t *i, int32_t *f, int32_t c);
 
 void conv2d_5x5(int32_t *o, int32_t *i, int32_t *f, int32_t R, int32_t C,
                 int32_t F);
