@@ -89,7 +89,7 @@ int main() {
   }
 
   // Call the main kernel, and measure cycles
-  uint32_t timer_start = timer_start = mempool_get_timer();
+  uint32_t timer_start = mempool_get_timer();
   if (F == 3)
     conv2d_3x3(o_l1, i_l1, f_l1);
   else if (F == 5)
@@ -102,7 +102,12 @@ int main() {
   // Performance metrics
   uint32_t timer_end = mempool_get_timer();
   uint32_t runtime = timer_end - timer_start;
-  printf("The execution took %d cycles.\n", runtime);
+  uint32_t performance = 1000 * 2 * F * F * M * N / runtime;
+  uint32_t utilization = performance / (2 * 4);
+
+  printf("The execution took %u cycles.\n", runtime);
+  printf("The performance is %u OP/1000cycles (%u%%o utilization).\n",
+         performance, utilization);
 
   // Verify correctness
   printf("Verifying result...\n");
