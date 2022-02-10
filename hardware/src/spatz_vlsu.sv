@@ -209,7 +209,7 @@ module spatz_vlsu
 
   // Signal when we are finished with with accessing the memory (necessary
   // for the case with more than one memory port)
-  assign x_mem_finished_o = vlsu_is_ready & (spatz_req_q.vl != 'd0);
+  assign x_mem_finished_o = vlsu_is_ready & ((spatz_req_q.vl != 'd0) | (new_vlsu_request & spatz_req_i.vl == 'd0));
 
   ////////////////////////
   // Address Generation //
