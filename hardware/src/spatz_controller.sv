@@ -322,6 +322,12 @@ module spatz_controller
 
     sb_reset = sb_d;
 
+    for (int unsigned port = 0; port < NrVregfilePorts; port++) begin
+      if (sb_port_d[port].valid && sb_port_d[port].deps_valid && !sb_port_d[sb_port_q[port].deps].valid) begin
+        sb_port_d[port].deps_valid = 1'b0;
+      end
+    end
+
     // Initialize the scoreboard metadata if we have a new instruction issued.
     // Set the ports of the unit to valid if they are being used, reset the currently
     // accessed element to zero, and check if the port has a dependency. If the port is
@@ -414,12 +420,13 @@ module spatz_controller
   // not ready yet. Or we have a change in LMUL, for which we need to let all the
   // units finish first before scheduling a new operation (to avoid running into
   // issues with the socreboard).
-  logic stall, vfu_stall, vlsu_stall, vsldu_stall, csr_stall;
-  assign stall       = (vfu_stall | vlsu_stall | vsldu_stall | csr_stall) & req_buffer_valid;
-  assign vfu_stall   = ~vfu_req_ready_i   & (spatz_req.ex_unit == VFU);
-  assign vlsu_stall  = ~vlsu_req_ready_i  & (spatz_req.ex_unit == LSU);
-  assign vsldu_stall = ~vsldu_req_ready_i & (spatz_req.ex_unit == SLD);
-  assign csr_stall   = (~vfu_req_ready_i | ~vlsu_req_ready_i | ~vsldu_req_ready_i) & (spatz_req.ex_unit == CON) & (buffer_spatz_req.vtype.vlmul != vtype_q.vlmul);
+  logic stall, vfu_stall, vlsu_stall, vsldu_stall, csr_stall, vstart_stall;
+  assign stall        = (vfu_stall | vlsu_stall | vsldu_stall | csr_stall | vstart_stall) & req_buffer_valid;
+  assign vfu_stall    = ~vfu_req_ready_i   & (spatz_req.ex_unit == VFU);
+  assign vlsu_stall   = ~vlsu_req_ready_i  & (spatz_req.ex_unit == LSU);
+  assign vsldu_stall  = ~vsldu_req_ready_i & (spatz_req.ex_unit == SLD);
+  assign csr_stall    = (~vfu_req_ready_i | ~vlsu_req_ready_i | ~vsldu_req_ready_i) & (spatz_req.ex_unit == CON) & (buffer_spatz_req.vtype.vlmul != vtype_q.vlmul);
+  assign vstart_stall = (~vfu_req_ready_i | ~vlsu_req_ready_i | ~vsldu_req_ready_i) & (vstart_q != 'd0);
 
   // Pop the buffer if we do not have a unit stall
   assign req_buffer_pop = ~stall & req_buffer_valid;
