@@ -75,7 +75,7 @@ void conv2d_vec_4xC_slice_preload_3x3(int32_t *i, int32_t c) {
   asm volatile("vsetvli zero, %0, e32, m2, ta, ma" ::"r"(c + F - 1));
   // Fetch the first floor(F/2) + 1 input rows
   asm volatile("vle32.v v8,  (%0); add %0, %0, %1" : "+&r"(i) : "r"(lwi));
-  asm volatile("vle32.v v10, (%0); add %0, %0, %1" : "+r"(i));
+  asm volatile("vle32.v v10, (%0)" :: "r"(i));
 }
 
 // Calculate 4 output matrix rows

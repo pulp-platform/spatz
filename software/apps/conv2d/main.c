@@ -42,7 +42,7 @@ extern int32_t golden_o[] __attribute__((aligned(4))); // [ M*N ]
 // M, N, F defined in data.S
 #define M 64
 #define N 64
-#define F 3
+#define F 7
 
 int32_t i_l1[(M+F/2*2)*(N+F/2*2)] __attribute__((aligned(4), section(".l1_prio"))); // [ (M+floor(F/2)) * (N+floor(F/2)) ]
 int32_t f_l1[F*F] __attribute__((aligned(4), section(".l1_prio")));        // [ F*F ]
@@ -95,7 +95,7 @@ int main() {
   else if (F == 5)
     conv2d_5x5(o_l1, i_l1, f_l1, M, N, F);
   else if (F == 7)
-    conv2d_7x7(o_l1, i_l1, f_l1, M, N, F);
+    conv2d_7x7(o_l1, i_l1, f_l1);
   else
     printf("Error: the filter size is different from 3 or 5 or 7.\n");
 
