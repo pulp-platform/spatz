@@ -343,7 +343,7 @@ module spatz_vlsu
                               mem_operation_last[i] ? delta : 'd4;
       mem_counter_en[i]    = x_mem_ready_i[i] & x_mem_valid_o[i];
 
-      mem_operations_finished[i] = ~mem_operation_valid[i] | (mem_operation_last[i] & mem_counter_en[i]);
+      mem_operations_finished[i] = ~mem_operation_valid[i]; // | (mem_operation_last[i] & mem_counter_en[i]);
 
       mem_counter_max[i] = max;
     end
