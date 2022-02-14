@@ -216,20 +216,6 @@ module spatz_controller
   // Scoreboard //
   ////////////////
 
-  // Extract element id from vrf address (is dependent on lmul)
-  function automatic logic [$clog2(VELE*8)-1:0] vrf_element(vreg_addr_t addr, vlmul_e lmul);
-    unique case (lmul)
-      LMUL_F8,
-      LMUL_F4,
-      LMUL_F2,
-      LMUL_1: vrf_element = addr[$clog2(VELE)-1:0];
-      LMUL_2: vrf_element = addr[$clog2(VELE*2)-1:0];
-      LMUL_4: vrf_element = addr[$clog2(VELE*4)-1:0];
-      LMUL_8: vrf_element = addr[$clog2(VELE*8)-1:0];
-      default: vrf_element = '0;
-    endcase
-  endfunction
-
   // Scoreboard metadata
   typedef struct packed {
     logic     valid;
@@ -254,38 +240,73 @@ module spatz_controller
   sb_port_metadata_t [NrVregfilePorts-1:0] sb_port_q, sb_port_d;
   `FF(sb_port_q, sb_port_d, '0)
 
-  // Currently accessed (requested) elements from all ports
-  logic [NrVregfilePorts-1:0][$clog2(VELE*8)-1:0] sb_accessed_element;
+  logic sb_deps_valid_vs1;
+  logic sb_deps_valid_vs2;
+  logic sb_deps_valid_vd;
+
+  sb_port_e sb_port_vs1;
+  sb_port_e sb_port_vs2;
+  sb_port_e sb_port_vd;
+
+  logic sb_deps_valid_vs1_update;
+  logic sb_deps_valid_vs2_update;
+  logic sb_deps_valid_vd_rd_update;
+  logic sb_deps_valid_vd_wd_update;
+
+  sb_port_e sb_port_vs1_update;
+  sb_port_e sb_port_vs2_update;
+  sb_port_e sb_port_vd_rd_update;
+  sb_port_e sb_port_vd_wd_update;
 
   always_comb begin : score_board
     sb_d  = sb_q;
     sb_port_d = sb_port_q;
 
     sb_enable_o = '0;
-    sb_accessed_element = '0;
+
+    sb_deps_valid_vs1 = 1'b0;
+    sb_deps_valid_vs2 = 1'b0;
+    sb_deps_valid_vd  = 1'b0;
+
+    sb_port_vs1 = SB_VFU_VS2_RD;
+    sb_port_vs2 = SB_VFU_VS2_RD;
+    sb_port_vd  = SB_VFU_VS2_RD;
+
+    sb_deps_valid_vs1_update   = 1'b0;
+    sb_deps_valid_vs2_update   = 1'b0;
+    sb_deps_valid_vd_rd_update = 1'b0;
+    sb_deps_valid_vd_wd_update = 1'b0;
+
+    sb_port_vs1_update   = SB_VFU_VS2_RD;
+    sb_port_vs2_update   = SB_VFU_VS2_RD;
+    sb_port_vd_rd_update = SB_VFU_VS2_RD;
+    sb_port_vd_wd_update = SB_VFU_VS2_RD;
 
     // For every port, update the element that is currently being accessed.
-    // If the desired element if lower than the one of the dependency, then
+    // If the desired element is lower than the one of the dependency, then
     // grant access to the register file.
     for (int unsigned port = 0; port < NrVregfilePorts; port++) begin
       if (sb_enable_i[port]) begin
-        sb_accessed_element[port] = vrf_element(sb_addr_i[port], vtype_q.vlmul);
+        // Update id of accessed element
+        sb_port_d[port].element = sb_addr_i[port][$clog2(VELE*8)-1:0];
       end
     end
 
     for (int unsigned port = 0; port < NrVregfilePorts; port++) begin
-      automatic int unsigned element = sb_accessed_element[port];
-      automatic int unsigned deps_port = sb_port_q[port].deps;
-      automatic sb_port_metadata_t deps = sb_port_q[deps_port];
-
-      if (sb_enable_i[port]) begin
-        // Update id of accessed element
-        sb_port_d[port].element = element;
-
-        // Check if we have a dependency, and if so if we are accessing an element that has already been accessed by it.
-        if ((sb_port_q[port].deps_valid && ((deps.valid && (element < deps.element || (element < sb_accessed_element[deps_port] && sb_enable_i[deps_port]))) || !deps.valid)) || !sb_port_q[port].deps_valid) begin
-          // Grant port access to register file
-          sb_enable_o[port] = 1'b1;
+      for (int unsigned deps = 0; deps < NrVregfilePorts; deps++) begin
+        if ((port inside {SB_VFU_VS2_RD, SB_VFU_VS1_RD, SB_VFU_VD_RD, SB_VFU_VD_WD} && deps inside {SB_VLSU_VD_RD, SB_VSLDU_VS2_RD, SB_VLSU_VD_WD, SB_VSLDU_VD_WD}) ||
+            (port inside {SB_VLSU_VD_RD, SB_VLSU_VD_WD} && deps inside {SB_VFU_VS2_RD, SB_VFU_VS1_RD, SB_VFU_VD_RD, SB_VSLDU_VS2_RD, SB_VFU_VD_WD, SB_VSLDU_VD_WD}) ||
+            (port inside {SB_VSLDU_VS2_RD, SB_VSLDU_VD_WD} && deps inside {SB_VFU_VS2_RD, SB_VFU_VS1_RD, SB_VFU_VD_RD, SB_VLSU_VD_RD, SB_VFU_VD_WD, SB_VLSU_VD_WD})) begin
+          if (sb_enable_i[port]) begin
+            if (!sb_port_q[port].deps_valid) begin
+              sb_enable_o[port] = 1'b1;
+            end else if (sb_port_q[port].deps_valid && deps == sb_port_q[port].deps) begin
+              if ((sb_port_q[deps].valid && (sb_port_d[port].element < sb_port_d[deps].element)) || !sb_port_q[deps].valid) begin
+                // Grant port access to register file
+                sb_enable_o[port] = 1'b1;
+              end
+            end
+          end
         end
       end
     end
@@ -322,9 +343,18 @@ module spatz_controller
 
     sb_reset = sb_d;
 
+    // Clear deps valid when dependency has finished
     for (int unsigned port = 0; port < NrVregfilePorts; port++) begin
-      if (sb_port_d[port].valid && sb_port_d[port].deps_valid && !sb_port_d[sb_port_q[port].deps].valid) begin
-        sb_port_d[port].deps_valid = 1'b0;
+      for (int unsigned deps = 0; deps < NrVregfilePorts; deps++) begin
+        if ((port inside {SB_VFU_VS2_RD, SB_VFU_VS1_RD, SB_VFU_VD_RD, SB_VFU_VD_WD} && deps inside {SB_VLSU_VD_RD, SB_VSLDU_VS2_RD, SB_VLSU_VD_WD, SB_VSLDU_VD_WD}) ||
+            (port inside {SB_VLSU_VD_RD, SB_VLSU_VD_WD} && deps inside {SB_VFU_VS2_RD, SB_VFU_VS1_RD, SB_VFU_VD_RD, SB_VSLDU_VS2_RD, SB_VFU_VD_WD, SB_VSLDU_VD_WD}) ||
+            (port inside {SB_VSLDU_VS2_RD, SB_VSLDU_VD_WD} && deps inside {SB_VFU_VS2_RD, SB_VFU_VS1_RD, SB_VFU_VD_RD, SB_VLSU_VD_RD, SB_VFU_VD_WD, SB_VLSU_VD_WD})) begin
+          if (deps == sb_port_q[port].deps) begin
+            if (sb_port_d[port].valid && sb_port_d[port].deps_valid && !sb_port_d[deps].valid) begin
+              sb_port_d[port].deps_valid = 1'b0;
+            end
+          end
+        end
       end
     end
 
@@ -333,79 +363,97 @@ module spatz_controller
     // accessed element to zero, and check if the port has a dependency. If the port is
     // used, then note this down in the vrf scoreboard as well.
     if (spatz_req_valid) begin
+      sb_deps_valid_vs1 = sb_reset[spatz_req.vs1].valid;
+      sb_deps_valid_vs2 = sb_reset[spatz_req.vs2].valid;
+      sb_deps_valid_vd  = sb_reset[spatz_req.vd].valid;
+
+      sb_port_vs1 = sb_q[spatz_req.vs1].port;
+      sb_port_vs2 = sb_q[spatz_req.vs2].port;
+      sb_port_vd  = sb_q[spatz_req.vd].port;
+
       if (spatz_req.ex_unit == VFU) begin
         // VS2
         sb_port_d[SB_VFU_VS2_RD].valid      = spatz_req.use_vs2;
         sb_port_d[SB_VFU_VS2_RD].element    = spatz_req.vstart[$bits(vlen_t)-1:$clog2(VELEB)];
-        sb_port_d[SB_VFU_VS2_RD].deps_valid = sb_reset[spatz_req.vs2].valid;
-        sb_port_d[SB_VFU_VS2_RD].deps       = sb_q[spatz_req.vs2].port;
+        sb_port_d[SB_VFU_VS2_RD].deps_valid = sb_deps_valid_vs2 & ~(sb_port_vs2 inside {SB_VFU_VS2_RD, SB_VFU_VS1_RD, SB_VFU_VD_RD, SB_VFU_VD_WD});
+        sb_port_d[SB_VFU_VS2_RD].deps       = sb_port_vs2;
 
-        sb_d[spatz_req.vs2].valid = spatz_req.use_vs2;
-        if (spatz_req.use_vs2) sb_d[spatz_req.vs2].port = SB_VFU_VS2_RD;
+        if (spatz_req.use_vs2) sb_deps_valid_vs2_update = spatz_req.use_vs2;
+        if (spatz_req.use_vs2) sb_port_vs2_update = SB_VFU_VS2_RD;
 
         // VS1
         sb_port_d[SB_VFU_VS1_RD].valid      = spatz_req.use_vs1;
         sb_port_d[SB_VFU_VS1_RD].element    = spatz_req.vstart[$bits(vlen_t)-1:$clog2(VELEB)];
-        sb_port_d[SB_VFU_VS1_RD].deps_valid = sb_reset[spatz_req.vs1].valid;
-        sb_port_d[SB_VFU_VS1_RD].deps       = sb_q[spatz_req.vs1].port;
+        sb_port_d[SB_VFU_VS1_RD].deps_valid = sb_deps_valid_vs1 & ~(sb_port_vs1 inside {SB_VFU_VS2_RD, SB_VFU_VS1_RD, SB_VFU_VD_RD, SB_VFU_VD_WD});
+        sb_port_d[SB_VFU_VS1_RD].deps       = sb_port_vs1;
 
-        sb_d[spatz_req.vs1].valid = spatz_req.use_vs1;
-        if (spatz_req.use_vs1) sb_d[spatz_req.vs1].port = SB_VFU_VS1_RD;
+        if (spatz_req.use_vs1) sb_deps_valid_vs1_update = spatz_req.use_vs1;
+        if (spatz_req.use_vs1) sb_port_vs1_update = SB_VFU_VS1_RD;
 
         // VD (read)
         sb_port_d[SB_VFU_VD_RD].valid      = spatz_req.use_vd & spatz_req.vd_is_src;
         sb_port_d[SB_VFU_VD_RD].element    = spatz_req.vstart[$bits(vlen_t)-1:$clog2(VELEB)];
-        sb_port_d[SB_VFU_VD_RD].deps_valid = sb_reset[spatz_req.vd].valid;
-        sb_port_d[SB_VFU_VD_RD].deps       = sb_q[spatz_req.vd].port;
+        sb_port_d[SB_VFU_VD_RD].deps_valid = sb_deps_valid_vd & ~(sb_port_vd inside {SB_VFU_VS2_RD, SB_VFU_VS1_RD, SB_VFU_VD_RD, SB_VFU_VD_WD});
+        sb_port_d[SB_VFU_VD_RD].deps       = sb_port_vd;
 
-        sb_d[spatz_req.vd].valid = spatz_req.use_vd & spatz_req.vd_is_src;
-        if (spatz_req.use_vd & spatz_req.vd_is_src) sb_d[spatz_req.vd].port = SB_VFU_VD_RD;
+        if (spatz_req.use_vd & spatz_req.vd_is_src) sb_deps_valid_vd_rd_update = spatz_req.use_vd & spatz_req.vd_is_src;
+        if (spatz_req.use_vd & spatz_req.vd_is_src) sb_port_vd_rd_update = SB_VFU_VD_RD;
 
         // VD (write)
         sb_port_d[SB_VFU_VD_WD].valid      = spatz_req.use_vd;
         sb_port_d[SB_VFU_VD_WD].element    = spatz_req.vstart[$bits(vlen_t)-1:$clog2(VELEB)];
-        sb_port_d[SB_VFU_VD_WD].deps_valid = sb_reset[spatz_req.vd].valid;
-        sb_port_d[SB_VFU_VD_WD].deps       = sb_q[spatz_req.vd].port;
+        sb_port_d[SB_VFU_VD_WD].deps_valid = sb_deps_valid_vd & ~(sb_port_vd inside {SB_VFU_VS2_RD, SB_VFU_VS1_RD, SB_VFU_VD_RD, SB_VFU_VD_WD});
+        sb_port_d[SB_VFU_VD_WD].deps       = sb_port_vd;
 
-        sb_d[spatz_req.vd].valid = spatz_req.use_vd;
-        if (spatz_req.use_vd) sb_d[spatz_req.vd].port = SB_VFU_VD_WD;
+        if (spatz_req.use_vd) sb_deps_valid_vd_wd_update = spatz_req.use_vd;
+        if (spatz_req.use_vd) sb_port_vd_wd_update = SB_VFU_VD_WD;
       end else if (spatz_req.ex_unit == LSU) begin
         // VD (read)
         sb_port_d[SB_VLSU_VD_RD].valid      = spatz_req.use_vd & spatz_req.vd_is_src;
         sb_port_d[SB_VLSU_VD_RD].element    = spatz_req.vstart[$bits(vlen_t)-1:$clog2(VELEB)];
-        sb_port_d[SB_VLSU_VD_RD].deps_valid = sb_reset[spatz_req.vd].valid;
-        sb_port_d[SB_VLSU_VD_RD].deps       = sb_q[spatz_req.vd].port;
+        sb_port_d[SB_VLSU_VD_RD].deps_valid = sb_deps_valid_vd & ~(sb_port_vd inside {SB_VLSU_VD_RD, SB_VLSU_VD_WD});
+        sb_port_d[SB_VLSU_VD_RD].deps       = sb_port_vd;
 
-        sb_d[spatz_req.vd].valid = spatz_req.use_vd & spatz_req.vd_is_src;
-        if (spatz_req.use_vd & spatz_req.vd_is_src) sb_d[spatz_req.vd].port = SB_VLSU_VD_RD;
+        if (spatz_req.use_vd & spatz_req.vd_is_src) sb_deps_valid_vd_rd_update = spatz_req.use_vd & spatz_req.vd_is_src;
+        if (spatz_req.use_vd & spatz_req.vd_is_src) sb_port_vd_rd_update = SB_VLSU_VD_RD;
 
         // VD (write)
         sb_port_d[SB_VLSU_VD_WD].valid      = spatz_req.use_vd & ~spatz_req.vd_is_src;
         sb_port_d[SB_VLSU_VD_WD].element    = spatz_req.vstart[$bits(vlen_t)-1:$clog2(VELEB)];
-        sb_port_d[SB_VLSU_VD_WD].deps_valid = sb_reset[spatz_req.vd].valid;
-        sb_port_d[SB_VLSU_VD_WD].deps       = sb_q[spatz_req.vd].port;
+        sb_port_d[SB_VLSU_VD_WD].deps_valid = sb_deps_valid_vd & ~(sb_port_vd inside {SB_VLSU_VD_RD, SB_VLSU_VD_WD});
+        sb_port_d[SB_VLSU_VD_WD].deps       = sb_port_vd;
 
-        sb_d[spatz_req.vd].valid = spatz_req.use_vd & ~spatz_req.vd_is_src;
-        if (spatz_req.use_vd & ~spatz_req.vd_is_src) sb_d[spatz_req.vd].port = SB_VLSU_VD_WD;
+        if (spatz_req.use_vd & ~spatz_req.vd_is_src) sb_deps_valid_vd_wd_update = spatz_req.use_vd & ~spatz_req.vd_is_src;
+        if (spatz_req.use_vd & ~spatz_req.vd_is_src) sb_port_vd_wd_update = SB_VLSU_VD_WD;
       end else if (spatz_req.ex_unit == SLD) begin
         // VS2
         sb_port_d[SB_VSLDU_VS2_RD].valid      = spatz_req.use_vs2;
         sb_port_d[SB_VSLDU_VS2_RD].element    = spatz_req.vstart[$bits(vlen_t)-1:$clog2(VELEB)];
-        sb_port_d[SB_VSLDU_VS2_RD].deps_valid = sb_reset[spatz_req.vs2].valid;
-        sb_port_d[SB_VSLDU_VS2_RD].deps       = sb_q[spatz_req.vs2].port;
+        sb_port_d[SB_VSLDU_VS2_RD].deps_valid = sb_deps_valid_vs2 & ~(sb_port_vs2 inside {SB_VSLDU_VS2_RD, SB_VSLDU_VD_WD});
+        sb_port_d[SB_VSLDU_VS2_RD].deps       = sb_port_vs2;
 
-        sb_d[spatz_req.vs2].valid = spatz_req.use_vs2;
-        if (spatz_req.use_vs2) sb_d[spatz_req.vs2].port = SB_VSLDU_VS2_RD;
+        if (spatz_req.use_vs2) sb_deps_valid_vs2_update = spatz_req.use_vs2;
+        if (spatz_req.use_vs2) sb_port_vs2_update = SB_VSLDU_VS2_RD;
 
         // VD (write)
         sb_port_d[SB_VSLDU_VD_WD].valid      = spatz_req.use_vd;
         sb_port_d[SB_VSLDU_VD_WD].element    = spatz_req.vstart[$bits(vlen_t)-1:$clog2(VELEB)];
-        sb_port_d[SB_VSLDU_VD_WD].deps_valid = sb_reset[spatz_req.vd].valid;
-        sb_port_d[SB_VSLDU_VD_WD].deps       = sb_q[spatz_req.vd].port;
+        sb_port_d[SB_VSLDU_VD_WD].deps_valid = sb_deps_valid_vd & ~(sb_port_vd inside {SB_VSLDU_VS2_RD, SB_VSLDU_VD_WD});
+        sb_port_d[SB_VSLDU_VD_WD].deps       = sb_port_vd;
 
-        sb_d[spatz_req.vd].valid = spatz_req.use_vd;
-        if (spatz_req.use_vd) sb_d[spatz_req.vd].port = SB_VSLDU_VD_WD;
+        if (spatz_req.use_vd) sb_deps_valid_vd_wd_update = spatz_req.use_vd;
+        if (spatz_req.use_vd) sb_port_vd_wd_update = SB_VSLDU_VD_WD;
       end
+
+      if (sb_deps_valid_vs1_update) sb_d[spatz_req.vs1].valid = sb_deps_valid_vs1_update;
+      if (sb_deps_valid_vs2_update) sb_d[spatz_req.vs2].valid = sb_deps_valid_vs2_update;
+      if (sb_deps_valid_vd_rd_update || sb_deps_valid_vd_wd_update)
+        sb_d[spatz_req.vd].valid = sb_deps_valid_vd_rd_update | sb_deps_valid_vd_wd_update;
+
+      if (sb_deps_valid_vs1_update) sb_d[spatz_req.vs1].port = sb_port_vs1_update;
+      if (sb_deps_valid_vs2_update) sb_d[spatz_req.vs2].port = sb_port_vs2_update;
+      if (sb_deps_valid_vd_rd_update || sb_deps_valid_vd_wd_update)
+        sb_d[spatz_req.vd].port = sb_deps_valid_vd_wd_update ? sb_port_vd_wd_update : sb_port_vd_rd_update;
     end
   end
 
@@ -420,13 +468,11 @@ module spatz_controller
   // not ready yet. Or we have a change in LMUL, for which we need to let all the
   // units finish first before scheduling a new operation (to avoid running into
   // issues with the socreboard).
-  logic stall, vfu_stall, vlsu_stall, vsldu_stall, csr_stall, vstart_stall;
-  assign stall        = (vfu_stall | vlsu_stall | vsldu_stall | csr_stall | vstart_stall) & req_buffer_valid;
+  logic stall, vfu_stall, vlsu_stall, vsldu_stall;
+  assign stall        = (vfu_stall | vlsu_stall | vsldu_stall) & req_buffer_valid;
   assign vfu_stall    = ~vfu_req_ready_i   & (spatz_req.ex_unit == VFU);
   assign vlsu_stall   = ~vlsu_req_ready_i  & (spatz_req.ex_unit == LSU);
   assign vsldu_stall  = ~vsldu_req_ready_i & (spatz_req.ex_unit == SLD);
-  assign csr_stall    = (~vfu_req_ready_i | ~vlsu_req_ready_i | ~vsldu_req_ready_i) & (spatz_req.ex_unit == CON) & (buffer_spatz_req.vtype.vlmul != vtype_q.vlmul);
-  assign vstart_stall = (~vfu_req_ready_i | ~vlsu_req_ready_i | ~vsldu_req_ready_i) & (vstart_q != 'd0);
 
   // Pop the buffer if we do not have a unit stall
   assign req_buffer_pop = ~stall & req_buffer_valid;
