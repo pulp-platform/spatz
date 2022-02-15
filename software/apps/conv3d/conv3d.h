@@ -24,7 +24,7 @@
 
 void conv3d_CHx7x7(int32_t *o, int32_t *i, int32_t *f);
 
-void conv3d_CHx7x7_block(int32_t *o, int32_t *i, int32_t *f, int32_t n_);
+void conv3d_CHx7x7_block(int32_t *o, int32_t *i, uint32_t num_rows, int32_t *f, uint32_t n_);
 
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 

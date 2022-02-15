@@ -45,8 +45,11 @@
 
 #include "conv3d.h"
 
-#define M 64
-#define N 64
+#ifndef MATRIX_DIM
+#define MATRIX_DIM 64
+#endif
+#define M MATRIX_DIM
+#define N MATRIX_DIM
 #define C 3
 #define F 7
 
@@ -60,19 +63,19 @@ void conv3d_CHx7x7(int32_t *o, int32_t *i, int32_t *f) {
   // Slice the matrix into a manageable number of columns n_
   for (uint32_t n = 0; n < N; n += block_size_n) {
     // Set the vector length
-    const uint32_t n_ = MIN(N - n, block_size_n);
+    uint32_t n_ = MIN(N - n, block_size_n);
 
     // Find pointers to the submatrices
-    const int32_t *i_ = i + n;
+    int32_t *i_ = i + n;
     int32_t *o_ = o + n;
 
     asm volatile("vsetvli zero, %0, e32, m2, ta, ma" ::"r"(n_));
 
-    conv3d_CHx7x7_block(o_, i_, f, n_);
+    conv3d_CHx7x7_block(o_, i_, M, f, n_);
   }
 }
 
-void conv3d_CHx7x7_block(int32_t *o, int32_t *i, int32_t *f, int32_t n_) {
+void conv3d_CHx7x7_block(int32_t *o, int32_t *i, uint32_t num_rows, int32_t *f, uint32_t n_) {
 
   // Helper variables
   int32_t lwo = N << 2;
@@ -404,7 +407,8 @@ void conv3d_CHx7x7_block(int32_t *o, int32_t *i, int32_t *f, int32_t n_) {
   // (The last F-1 rows do not contribute to F output rows each, so keep them
   // outside of this loop) (We keep F rows outside because of the unrolling by
   // 2, just for easeness)
-  for (int j = 0; j < ((M + F - 1) - 2 * F) / 2; ++j) {
+  // limit: ((M + F - 1) - 2 * F) / 2
+  for (uint32_t j = 0; j < (num_rows - F - 1) / 2; ++j) {
     // Work on F output rows
 
     // Loop on the channels
