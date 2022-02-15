@@ -211,11 +211,13 @@ int main() {
 
     // Can every core execute its desired kernel?
     if ((dim*dim)/(kernel_size*vl) < num_cores) return -1;
+    // Does the vl fit inside the dim
+    if (vl > dim) return -2;
 
-    // Block dimension of gropu
-    uint32_t dim_group = dim/GROUPS; //8
+    // Block dimension of group
+    uint32_t dim_group = dim/GROUPS;
     // Number of parallel cores in m direction
-    uint32_t split_m_count = dim_group/kernel_size; //4
+    uint32_t split_m_count = dim_group/kernel_size;
 
     if (split_m_count < cores_per_group) {
       // Split P dimension up
