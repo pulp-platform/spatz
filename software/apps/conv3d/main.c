@@ -106,6 +106,8 @@ int main() {
     // Single Core //
     /////////////////
 
+    num_cores = 1;
+
     copy_matrix(i, i_l1, (M+F/2*2)*(N+F/2*2)*CH);
     copy_matrix(f, f_l1, F*F*CH);
 
@@ -171,7 +173,7 @@ int main() {
   if (core_id == 0) {
     uint32_t runtime = timer_end - timer_start;
     uint32_t performance = 1000 * 2 * CH * F * F * M * N / runtime;
-    uint32_t utilization = performance / (2 * 2);
+    uint32_t utilization = performance / (2 * num_cores * N_IPU);
 
     printf("The execution took %u cycles.\n", runtime);
     printf("The performance is %u OP/1000cycles (%u%%o utilization).\n",
@@ -179,7 +181,7 @@ int main() {
 
     // Verify correctness
     printf("Verifying result...\n");
-    int error = verify_matrix(o, golden_o, M, N);
+    int error = verify_matrix(o_l1, golden_o, M, N);
     if (error != 0) {
       printf("Fail.\n");
     } else {
