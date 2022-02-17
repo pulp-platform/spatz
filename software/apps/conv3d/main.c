@@ -71,15 +71,13 @@ void copy_matrix(int32_t *src, int32_t *dst, uint32_t size) {
   }
 }
 
-int verify_matrix(int32_t *matrix, int32_t *golden_matrix, int32_t R,
-                  int32_t C) {
-  for (int r = 0; r < R; ++r)
-    for (int c = 0; c < C; ++c)
-      if (matrix[c + C * r] != golden_matrix[c + C * r]) {
-        printf("Error: o[%d][%d] = %ld, instead of %ld\n", r, c,
-               matrix[c + C * r], golden_matrix[c + C * r]);
-        return 1;
-      }
+int verify_matrix(int32_t *matrix, int32_t *golden_matrix, int32_t size) {
+  for (uint32_t idx = 0; idx < size; idx++) {
+    if (matrix[idx] != golden_matrix[idx]) {
+      return idx;
+    }
+  }
+
   return 0;
 }
 
@@ -146,6 +144,7 @@ int main() {
 
     if (num_rows < 8) return -5;
 
+
     uint32_t row_offset = (dim + F - 1)*num_rows*(core_id/column_split);
     uint32_t column_offset = column_id*vl;
     //int32_t *i_start = i + i_offset;
@@ -154,8 +153,11 @@ int main() {
     uint32_t row_offset_o = dim*num_rows*(core_id/column_split);
     int32_t *o_l1_start = o_l1 + row_offset_o + column_offset;
 
-    if (core_id == 0) {
-      copy_matrix(i, i_l1, (M+F/2*2)*(N+F/2*2)*CH);
+    for (uint32_t row = core_id; row < (M+F/2*2)*CH; row+=num_cores) {
+      copy_matrix(i+row*(N+F/2*2), i_l1+row*(N+F/2*2), (N+F/2*2));
+    }
+
+    if (core_id == num_cores-1) {
       copy_matrix(f, f_l1, F*F*CH);
     }
 
@@ -181,17 +183,16 @@ int main() {
     printf("The execution took %u cycles.\n", runtime);
     printf("The performance is %u OP/1000cycles (%u%%o utilization).\n",
            performance, utilization);
-
     // Verify correctness
     printf("Verifying result...\n");
-    int error = verify_matrix(o_l1, golden_o, M, N);
+  }
+
+  for (uint32_t row = core_id; row < M; row+=num_cores) {
+    int error = verify_matrix(o_l1+row*N, golden_o+row*N, N);
     if (error != 0) {
       printf("Fail.\n");
-    } else {
-      printf("Passed.\n");
+      return row*N+error;
     }
-
-    return error;
   }
 
   #ifndef DISABLE_MULTICORE
