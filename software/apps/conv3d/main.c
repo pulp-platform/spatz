@@ -35,13 +35,16 @@
 #ifndef MATRIX_DIM
 #define MATRIX_DIM 64
 #endif
+#ifndef KERNEL_M
+#define KERNEL_M 3
+#endif
 #ifndef KERNEL_P
 #define KERNEL_P 8
 #endif
 #define M MATRIX_DIM
 #define N MATRIX_DIM
 #define F 7
-#define CH 3
+#define CH KERNEL_M
 
 // Define Matrix dimensions:
 // o = i ° f, with i=[(M+F-1)x(N+f-1)xCH], f=[FxFxCH], o=[MxN]
@@ -114,7 +117,7 @@ int main() {
     // Call the main kernel, and measure cycles
     uint32_t timer_start = mempool_get_timer();
     // Execute convolution
-    conv3d_CHx7x7(o, i_l1, f_l1);
+    conv3d_CHx7x7(o_l1, i_l1, f_l1);
 
   #else
 

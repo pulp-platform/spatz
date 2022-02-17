@@ -48,9 +48,12 @@
 #ifndef MATRIX_DIM
 #define MATRIX_DIM 64
 #endif
+#ifndef KERNEL_M
+#define KERNEL_M 3
+#endif
 #define M MATRIX_DIM
 #define N MATRIX_DIM
-#define C 3
+#define C KERNEL_M
 #define F 7
 
 void conv3d_CHx7x7(int32_t *o, int32_t *i, int32_t *f) {
