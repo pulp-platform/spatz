@@ -46,10 +46,10 @@
 #include "conv3d.h"
 
 #ifndef MATRIX_DIM
-#define MATRIX_DIM 64
+#define MATRIX_DIM 32
 #endif
 #ifndef KERNEL_M
-#define KERNEL_M 3
+#define KERNEL_M 1
 #endif
 #define M MATRIX_DIM
 #define N MATRIX_DIM

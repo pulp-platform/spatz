@@ -33,10 +33,10 @@
 #define N_IPU 2
 #endif
 #ifndef MATRIX_DIM
-#define MATRIX_DIM 64
+#define MATRIX_DIM 32
 #endif
 #ifndef KERNEL_M
-#define KERNEL_M 3
+#define KERNEL_M 1
 #endif
 #ifndef KERNEL_P
 #define KERNEL_P 8
@@ -72,7 +72,7 @@ void copy_matrix(int32_t *src, int32_t *dst, uint32_t size) {
 }
 
 int verify_matrix(int32_t *matrix, int32_t *golden_matrix, int32_t size) {
-  for (uint32_t idx = 0; idx < size; idx++) {
+  for (int idx = 0; idx < size; idx++) {
     if (matrix[idx] != golden_matrix[idx]) {
       return idx;
     }
@@ -191,7 +191,7 @@ int main() {
     int error = verify_matrix(o_l1+row*N, golden_o+row*N, N);
     if (error != 0) {
       printf("Fail.\n");
-      return row*N+error;
+      return (int)row*N+error;
     }
   }
 
