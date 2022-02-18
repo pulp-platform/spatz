@@ -156,6 +156,8 @@ void conv3d_CHx7x7_block(int32_t *o, int32_t *i, uint32_t num_rows, int32_t *f, 
       // channel (ch) of the filter (f)
       int32_t base_idx_1 = (2 * k + 1) + (ch * fch_len);
 
+      int32_t sld_elem = *i_slide_ptr_0++;
+
       if ((k | ch) == 0)
         asm volatile("vmul.vx v16, v0, %0" ::"r"(f[0 + base_idx_0]));
       else
@@ -164,38 +166,45 @@ void conv3d_CHx7x7_block(int32_t *o, int32_t *i, uint32_t num_rows, int32_t *f, 
         asm volatile("vmul.vx v18, v4, %0" ::"r"(f[0 + base_idx_0]));
       else
         asm volatile("vmacc.vx v18, %0, v4" ::"r"(f[0 + base_idx_0]));
-      asm volatile("vslide1down.vx v2, v0, %0" ::"r"(*i_slide_ptr_0++));
+      asm volatile("vslide1down.vx v2, v0, %0" ::"r"(sld_elem));
+      sld_elem = *i_slide_ptr_1++;
       asm volatile("vmacc.vx v16, %0, v4" ::"r"(f[7 + base_idx_0]));
       if ((k | ch) == 0)
         asm volatile("vmul.vx v22, v12, %0" ::"r"(f[0 + base_idx_0]));
       else
         asm volatile("vmacc.vx v22, %0, v12" ::"r"(f[0 + base_idx_0]));
-      asm volatile("vslide1down.vx v6, v4, %0" ::"r"(*i_slide_ptr_1++));
+      asm volatile("vslide1down.vx v6, v4, %0" ::"r"(sld_elem));
+      sld_elem = *i_slide_ptr_2++;
       asm volatile("vmacc.vx v18, %0, v8" ::"r"(f[7 + base_idx_0]));
       asm volatile("vmacc.vx v16, %0, v8" ::"r"(f[14 + base_idx_0]));
-      asm volatile("vslide1down.vx v10, v8, %0" ::"r"(*i_slide_ptr_2++));
+      asm volatile("vslide1down.vx v10, v8, %0" ::"r"(sld_elem));
+      sld_elem = *i_slide_ptr_3++;
       if ((k | ch) == 0)
         asm volatile("vmul.vx v20, v8, %0" ::"r"(f[0 + base_idx_0]));
       else
         asm volatile("vmacc.vx v20, %0, v8" ::"r"(f[0 + base_idx_0]));
       asm volatile("vmacc.vx v18, %0, v12" ::"r"(f[14 + base_idx_0]));
       asm volatile("vmacc.vx v16, %0, v12" ::"r"(f[21 + base_idx_0]));
-      asm volatile("vslide1down.vx v14, v12, %0" ::"r"(*i_slide_ptr_3++));
+      asm volatile("vslide1down.vx v14, v12, %0" ::"r"(sld_elem));
+      sld_elem = *i_slide_ptr_0++;
       asm volatile("vmacc.vx v20, %0, v12" ::"r"(f[7 + base_idx_0]));
 
       asm volatile("vmacc.vx v16, %0, v2" ::"r"(f[0 + base_idx_1]));
       asm volatile("vmacc.vx v18, %0, v6" ::"r"(f[0 + base_idx_1]));
-      asm volatile("vslide1down.vx v0, v2, %0" ::"r"(*i_slide_ptr_0++));
+      asm volatile("vslide1down.vx v0, v2, %0" ::"r"(sld_elem));
+      sld_elem = *i_slide_ptr_1++;
       asm volatile("vmacc.vx v16, %0, v6" ::"r"(f[7 + base_idx_1]));
       asm volatile("vmacc.vx v18, %0, v10" ::"r"(f[7 + base_idx_1]));
       asm volatile("vmacc.vx v20, %0, v10" ::"r"(f[0 + base_idx_1]));
-      asm volatile("vslide1down.vx v4, v6, %0" ::"r"(*i_slide_ptr_1++));
+      asm volatile("vslide1down.vx v4, v6, %0" ::"r"(sld_elem));
+      sld_elem = *i_slide_ptr_2++;
       asm volatile("vmacc.vx v16, %0, v10" ::"r"(f[14 + base_idx_1]));
       asm volatile("vmacc.vx v18, %0, v14" ::"r"(f[14 + base_idx_1]));
-      asm volatile("vslide1down.vx v8, v10, %0" ::"r"(*i_slide_ptr_2++));
+      asm volatile("vslide1down.vx v8, v10, %0" ::"r"(sld_elem));
+      sld_elem = *i_slide_ptr_3++;
       asm volatile("vmacc.vx v22, %0, v14" ::"r"(f[0 + base_idx_1]));
       asm volatile("vmacc.vx v16, %0, v14" ::"r"(f[21 + base_idx_1]));
-      asm volatile("vslide1down.vx v12, v14, %0" ::"r"(*i_slide_ptr_3++));
+      asm volatile("vslide1down.vx v12, v14, %0" ::"r"(sld_elem));
       asm volatile("vmacc.vx v20, %0, v14" ::"r"(f[7 + base_idx_1]));
     }
 
@@ -252,21 +261,26 @@ void conv3d_CHx7x7_block(int32_t *o, int32_t *i, uint32_t num_rows, int32_t *f, 
       // channel (ch) of the filter (f)
       int32_t base_idx_1 = (2 * k + 1) + (ch * fch_len);
 
+      int32_t sld_elem = *i_slide_ptr_0++;
+
       // Unroll 0
       asm volatile("vmacc.vx v16, %0, v2" ::"r"(f[28 + base_idx_0]));
       asm volatile("vmacc.vx v18, %0, v2" ::"r"(f[21 + base_idx_0]));
       asm volatile("vmacc.vx v16, %0, v6" ::"r"(f[35 + base_idx_0]));
       asm volatile("vmacc.vx v18, %0, v6" ::"r"(f[28 + base_idx_0]));
       asm volatile("vmacc.vx v16, %0, v10" ::"r"(f[42 + base_idx_0]));
-      asm volatile("vslide1down.vx v0, v2, %0" ::"r"(*i_slide_ptr_0++));
+      asm volatile("vslide1down.vx v0, v2, %0" ::"r"(sld_elem));
+      sld_elem = *i_slide_ptr_1++;
 
       asm volatile("vmacc.vx v18, %0, v10" ::"r"(f[35 + base_idx_0]));
-      asm volatile("vslide1down.vx v4, v6, %0" ::"r"(*i_slide_ptr_1++));
+      asm volatile("vslide1down.vx v4, v6, %0" ::"r"(sld_elem));
+      sld_elem = *i_slide_ptr_2++;
 
       asm volatile("vmacc.vx v20, %0, v2" ::"r"(f[14 + base_idx_0]));
       asm volatile("vmacc.vx v20, %0, v6" ::"r"(f[21 + base_idx_0]));
       asm volatile("vmacc.vx v20, %0, v10" ::"r"(f[28 + base_idx_0]));
-      asm volatile("vslide1down.vx v8, v10, %0" ::"r"(*i_slide_ptr_2++));
+      asm volatile("vslide1down.vx v8, v10, %0" ::"r"(sld_elem));
+      sld_elem = *i_slide_ptr_0++;
 
       asm volatile("vmacc.vx v22, %0, v2" ::"r"(f[7 + base_idx_0]));
       asm volatile("vmacc.vx v22, %0, v6" ::"r"(f[14 + base_idx_0]));
@@ -294,17 +308,19 @@ void conv3d_CHx7x7_block(int32_t *o, int32_t *i, uint32_t num_rows, int32_t *f, 
       asm volatile("vmacc.vx v16, %0, v0" ::"r"(f[28 + base_idx_1]));
       asm volatile("vmacc.vx v16, %0, v4" ::"r"(f[35 + base_idx_1]));
       asm volatile("vmacc.vx v16, %0, v8" ::"r"(f[42 + base_idx_1]));
-      asm volatile("vslide1down.vx v2, v0, %0" ::"r"(*i_slide_ptr_0++));
+      asm volatile("vslide1down.vx v2, v0, %0" ::"r"(sld_elem));
+      sld_elem = *i_slide_ptr_1++;
 
       asm volatile("vmacc.vx v18, %0, v0" ::"r"(f[21 + base_idx_1]));
       asm volatile("vmacc.vx v18, %0, v4" ::"r"(f[28 + base_idx_1]));
       asm volatile("vmacc.vx v18, %0, v8" ::"r"(f[35 + base_idx_1]));
-      asm volatile("vslide1down.vx v6, v4, %0" ::"r"(*i_slide_ptr_1++));
+      asm volatile("vslide1down.vx v6, v4, %0" ::"r"(sld_elem));
+      sld_elem = *i_slide_ptr_2++;
 
       asm volatile("vmacc.vx v20, %0, v0" ::"r"(f[14 + base_idx_1]));
       asm volatile("vmacc.vx v20, %0, v4" ::"r"(f[21 + base_idx_1]));
       asm volatile("vmacc.vx v20, %0, v8" ::"r"(f[28 + base_idx_1]));
-      asm volatile("vslide1down.vx v10, v8, %0" ::"r"(*i_slide_ptr_2++));
+      asm volatile("vslide1down.vx v10, v8, %0" ::"r"(sld_elem));
 
       asm volatile("vmacc.vx v22, %0, v0" ::"r"(f[7 + base_idx_1]));
       asm volatile("vmacc.vx v22, %0, v4" ::"r"(f[14 + base_idx_1]));
@@ -444,15 +460,18 @@ void conv3d_CHx7x7_block(int32_t *o, int32_t *i, uint32_t num_rows, int32_t *f, 
         // channel (ch) of the filter (f)
         int32_t base_idx_1 = (2 * k + 1) + (ch * fch_len);
 
+        int32_t sld_elem = *i_slide_ptr_0++;
+
         // Calculate F contributions of the input rows, on F different output
         // rows
         asm volatile("vmacc.vx v16, %0, v0" ::"r"(f6_buf));
-        asm volatile("vmacc.vx v18, %0, v0" ::"r"(f5_buf));
         f6_buf = f[42 + base_idx_1];
-        asm volatile("vmacc.vx v20, %0, v0" ::"r"(f4_buf));
+        asm volatile("vmacc.vx v18, %0, v0" ::"r"(f5_buf));
         f5_buf = f[35 + base_idx_1];
-        asm volatile("vslide1down.vx v2, v0, %0" ::"r"(*i_slide_ptr_0++));
+        asm volatile("vmacc.vx v20, %0, v0" ::"r"(f4_buf));
         f4_buf = f[28 + base_idx_1];
+        asm volatile("vslide1down.vx v2, v0, %0" ::"r"(sld_elem));
+        sld_elem = *i_slide_ptr_0++;
         asm volatile("vmacc.vx v22, %0, v0" ::"r"(f3_buf));
         f3_buf = f[21 + base_idx_1];
         asm volatile("vmacc.vx v24, %0, v0" ::"r"(f2_buf));
@@ -468,12 +487,12 @@ void conv3d_CHx7x7_block(int32_t *o, int32_t *i, uint32_t num_rows, int32_t *f, 
         // Nalculate F contributions of the input rows, on F different output
         // rows
         asm volatile("vmacc.vx v16, %0, v2" ::"r"(f6_buf));
-        asm volatile("vmacc.vx v18, %0, v2" ::"r"(f5_buf));
         f6_buf = f[42 + base_idx_0];
-        asm volatile("vmacc.vx v20, %0, v2" ::"r"(f4_buf));
+        asm volatile("vmacc.vx v18, %0, v2" ::"r"(f5_buf));
         f5_buf = f[35 + base_idx_0];
-        asm volatile("vslide1down.vx v0, v2, %0" ::"r"(*i_slide_ptr_0++));
+        asm volatile("vmacc.vx v20, %0, v2" ::"r"(f4_buf));
         f4_buf = f[28 + base_idx_0];
+        asm volatile("vslide1down.vx v0, v2, %0" ::"r"(sld_elem));
         asm volatile("vmacc.vx v22, %0, v2" ::"r"(f3_buf));
         f3_buf = f[21 + base_idx_0];
         asm volatile("vmacc.vx v24, %0, v2" ::"r"(f2_buf));
@@ -557,13 +576,16 @@ void conv3d_CHx7x7_block(int32_t *o, int32_t *i, uint32_t num_rows, int32_t *f, 
         // channel (ch) of the filter (f)
         int32_t base_idx_1 = (2 * k + 1) + (ch * fch_len);
 
+        int32_t sld_elem = *i_slide_ptr_1++;
+
         asm volatile("vmacc.vx v16, %0, v2" ::"r"(f6_buf));
-        asm volatile("vmacc.vx v18, %0, v2" ::"r"(f5_buf));
         f6_buf = f[42 + base_idx_1];
-        asm volatile("vmacc.vx v20, %0, v2" ::"r"(f4_buf));
+        asm volatile("vmacc.vx v18, %0, v2" ::"r"(f5_buf));
         f5_buf = f[35 + base_idx_1];
-        asm volatile("vslide1down.vx v0, v2, %0" ::"r"(*i_slide_ptr_1++));
+        asm volatile("vmacc.vx v20, %0, v2" ::"r"(f4_buf));
         f4_buf = f[28 + base_idx_1];
+        asm volatile("vslide1down.vx v0, v2, %0" ::"r"(sld_elem));
+        sld_elem = *i_slide_ptr_1++;
         asm volatile("vmacc.vx v22, %0, v2" ::"r"(f3_buf));
         f3_buf = f[21 + base_idx_1];
         asm volatile("vmacc.vx v24, %0, v2" ::"r"(f2_buf));
@@ -577,12 +599,12 @@ void conv3d_CHx7x7_block(int32_t *o, int32_t *i, uint32_t num_rows, int32_t *f, 
         f0_buf = f[0 + base_idx_1];
 
         asm volatile("vmacc.vx v16, %0, v0" ::"r"(f6_buf));
-        asm volatile("vmacc.vx v18, %0, v0" ::"r"(f5_buf));
         f6_buf = f[42 + base_idx_0];
-        asm volatile("vmacc.vx v20, %0, v0" ::"r"(f4_buf));
+        asm volatile("vmacc.vx v18, %0, v0" ::"r"(f5_buf));
         f5_buf = f[35 + base_idx_0];
-        asm volatile("vslide1down.vx v2, v0, %0" ::"r"(*i_slide_ptr_1++));
+        asm volatile("vmacc.vx v20, %0, v0" ::"r"(f4_buf));
         f4_buf = f[28 + base_idx_0];
+        asm volatile("vslide1down.vx v2, v0, %0" ::"r"(sld_elem));
         asm volatile("vmacc.vx v22, %0, v0" ::"r"(f3_buf));
         f3_buf = f[21 + base_idx_0];
         asm volatile("vmacc.vx v24, %0, v0" ::"r"(f2_buf));
@@ -674,6 +696,7 @@ void conv3d_CHx7x7_block(int32_t *o, int32_t *i, uint32_t num_rows, int32_t *f, 
     // Main kernel, unrolled by 2
     // Process 4 input rows
     for (int k = 0; k < F / 2; ++k) {
+      int32_t sld_elem = *i_slide_ptr_0++;
       // Two base indexes because of the unrolling
       // Point to the first element of the current column (k) of the current
       // channel (ch) of the filter (f)
@@ -682,8 +705,9 @@ void conv3d_CHx7x7_block(int32_t *o, int32_t *i, uint32_t num_rows, int32_t *f, 
       // channel (ch) of the filter (f)
       int32_t base_idx_1 = (2 * k + 1) + (ch * fch_len);
 
-      asm volatile("vslide1down.vx v2, v0, %0" ::"r"(*i_slide_ptr_0++));
+      asm volatile("vslide1down.vx v2, v0, %0" ::"r"(sld_elem));
       asm volatile("vmacc.vx v16, %0, v0" ::"r"(f[42 + base_idx_0]));
+      sld_elem = *i_slide_ptr_1++;
       asm volatile("vmacc.vx v18, %0, v0" ::"r"(f[35 + base_idx_0]));
       asm volatile("vmacc.vx v20, %0, v0" ::"r"(f[28 + base_idx_0]));
       asm volatile("vmacc.vx v22, %0, v0" ::"r"(f[21 + base_idx_0]));
@@ -693,47 +717,53 @@ void conv3d_CHx7x7_block(int32_t *o, int32_t *i, uint32_t num_rows, int32_t *f, 
         asm volatile("vmul.vx v28, v0, %0" ::"r"(f[0 + base_idx_0]));
       else
         asm volatile("vmacc.vx v28, %0, v0" ::"r"(f[0 + base_idx_0]));
-      asm volatile("vslide1down.vx v6, v4, %0" ::"r"(*i_slide_ptr_1++));
+      asm volatile("vslide1down.vx v6, v4, %0" ::"r"(sld_elem));
       asm volatile("vmacc.vx v18, %0, v4" ::"r"(f[42 + base_idx_0]));
+      sld_elem = *i_slide_ptr_2++;
       asm volatile("vmacc.vx v20, %0, v4" ::"r"(f[35 + base_idx_0]));
       asm volatile("vmacc.vx v22, %0, v4" ::"r"(f[28 + base_idx_0]));
       asm volatile("vmacc.vx v24, %0, v4" ::"r"(f[21 + base_idx_0]));
       asm volatile("vmacc.vx v26, %0, v4" ::"r"(f[14 + base_idx_0]));
       asm volatile("vmacc.vx v28, %0, v4" ::"r"(f[7 + base_idx_0]));
-      asm volatile("vslide1down.vx v10, v8, %0" ::"r"(*i_slide_ptr_2++));
+      asm volatile("vslide1down.vx v10, v8, %0" ::"r"(sld_elem));
       asm volatile("vmacc.vx v20, %0, v8" ::"r"(f[42 + base_idx_0]));
+      sld_elem = *i_slide_ptr_3++;
       asm volatile("vmacc.vx v22, %0, v8" ::"r"(f[35 + base_idx_0]));
       asm volatile("vmacc.vx v24, %0, v8" ::"r"(f[28 + base_idx_0]));
       asm volatile("vmacc.vx v26, %0, v8" ::"r"(f[21 + base_idx_0]));
       asm volatile("vmacc.vx v28, %0, v8" ::"r"(f[14 + base_idx_0]));
-      asm volatile("vslide1down.vx v14, v12, %0" ::"r"(*i_slide_ptr_3++));
+      asm volatile("vslide1down.vx v14, v12, %0" ::"r"(sld_elem));
       asm volatile("vmacc.vx v22, %0, v12" ::"r"(f[42 + base_idx_0]));
+      sld_elem = *i_slide_ptr_0++;
       asm volatile("vmacc.vx v24, %0, v12" ::"r"(f[35 + base_idx_0]));
       asm volatile("vmacc.vx v26, %0, v12" ::"r"(f[28 + base_idx_0]));
       asm volatile("vmacc.vx v28, %0, v12" ::"r"(f[21 + base_idx_0]));
 
-      asm volatile("vslide1down.vx v0, v2, %0" ::"r"(*i_slide_ptr_0++));
+      asm volatile("vslide1down.vx v0, v2, %0" ::"r"(sld_elem));
       asm volatile("vmacc.vx v16, %0, v2" ::"r"(f[42 + base_idx_1]));
+      sld_elem = *i_slide_ptr_1++;
       asm volatile("vmacc.vx v18, %0, v2" ::"r"(f[35 + base_idx_1]));
       asm volatile("vmacc.vx v20, %0, v2" ::"r"(f[28 + base_idx_1]));
       asm volatile("vmacc.vx v22, %0, v2" ::"r"(f[21 + base_idx_1]));
       asm volatile("vmacc.vx v24, %0, v2" ::"r"(f[14 + base_idx_1]));
       asm volatile("vmacc.vx v26, %0, v2" ::"r"(f[7 + base_idx_1]));
       asm volatile("vmacc.vx v28, %0, v2" ::"r"(f[0 + base_idx_1]));
-      asm volatile("vslide1down.vx v4, v6, %0" ::"r"(*i_slide_ptr_1++));
+      asm volatile("vslide1down.vx v4, v6, %0" ::"r"(sld_elem));
       asm volatile("vmacc.vx v18, %0, v6" ::"r"(f[42 + base_idx_1]));
+      sld_elem = *i_slide_ptr_2++;
       asm volatile("vmacc.vx v20, %0, v6" ::"r"(f[35 + base_idx_1]));
       asm volatile("vmacc.vx v22, %0, v6" ::"r"(f[28 + base_idx_1]));
       asm volatile("vmacc.vx v24, %0, v6" ::"r"(f[21 + base_idx_1]));
       asm volatile("vmacc.vx v26, %0, v6" ::"r"(f[14 + base_idx_1]));
       asm volatile("vmacc.vx v28, %0, v6" ::"r"(f[7 + base_idx_1]));
-      asm volatile("vslide1down.vx v8, v10, %0" ::"r"(*i_slide_ptr_2++));
+      asm volatile("vslide1down.vx v8, v10, %0" ::"r"(sld_elem));
       asm volatile("vmacc.vx v20, %0, v10" ::"r"(f[42 + base_idx_1]));
+      sld_elem = *i_slide_ptr_3++;
       asm volatile("vmacc.vx v22, %0, v10" ::"r"(f[35 + base_idx_1]));
       asm volatile("vmacc.vx v24, %0, v10" ::"r"(f[28 + base_idx_1]));
       asm volatile("vmacc.vx v26, %0, v10" ::"r"(f[21 + base_idx_1]));
       asm volatile("vmacc.vx v28, %0, v10" ::"r"(f[14 + base_idx_1]));
-      asm volatile("vslide1down.vx v12, v14, %0" ::"r"(*i_slide_ptr_3++));
+      asm volatile("vslide1down.vx v12, v14, %0" ::"r"(sld_elem));
       asm volatile("vmacc.vx v22, %0, v14" ::"r"(f[42 + base_idx_1]));
       asm volatile("vmacc.vx v24, %0, v14" ::"r"(f[35 + base_idx_1]));
       asm volatile("vmacc.vx v26, %0, v14" ::"r"(f[28 + base_idx_1]));
@@ -824,6 +854,7 @@ void conv3d_CHx7x7_block(int32_t *o, int32_t *i, uint32_t num_rows, int32_t *f, 
 
     // Main kernel, unrolled by 2
     for (int k = 0; k < F / 2; ++k) {
+      int32_t sld_elem = *i_slide_ptr_0++;
       // Two base indexes because of the unrolling
       // Point to the first element of the current column (k) of the current
       // channel (ch) of the filter (f)
@@ -832,23 +863,28 @@ void conv3d_CHx7x7_block(int32_t *o, int32_t *i, uint32_t num_rows, int32_t *f, 
       // channel (ch) of the filter (f)
       int32_t base_idx_1 = (2 * k + 1) + (ch * fch_len);
 
-      asm volatile("vslide1down.vx v0, v2, %0" ::"r"(*i_slide_ptr_0++));
+      asm volatile("vslide1down.vx v0, v2, %0" ::"r"(sld_elem));
       asm volatile("vmacc.vx v24, %0, v2" ::"r"(f[42 + base_idx_0]));
+      sld_elem = *i_slide_ptr_1++;
       asm volatile("vmacc.vx v26, %0, v2" ::"r"(f[35 + base_idx_0]));
-      asm volatile("vslide1down.vx v4, v6, %0" ::"r"(*i_slide_ptr_1++));
+      asm volatile("vslide1down.vx v4, v6, %0" ::"r"(sld_elem));
       asm volatile("vmacc.vx v28, %0, v2" ::"r"(f[28 + base_idx_0]));
+      sld_elem = *i_slide_ptr_2++;
       asm volatile("vmacc.vx v26, %0, v6" ::"r"(f[42 + base_idx_0]));
-      asm volatile("vslide1down.vx v8, v10, %0" ::"r"(*i_slide_ptr_2++));
+      asm volatile("vslide1down.vx v8, v10, %0" ::"r"(sld_elem));
       asm volatile("vmacc.vx v28, %0, v6" ::"r"(f[35 + base_idx_0]));
+      sld_elem = *i_slide_ptr_0++;
       asm volatile("vmacc.vx v28, %0, v10" ::"r"(f[42 + base_idx_0]));
 
-      asm volatile("vslide1down.vx v2, v0, %0" ::"r"(*i_slide_ptr_0++));
+      asm volatile("vslide1down.vx v2, v0, %0" ::"r"(sld_elem));
       asm volatile("vmacc.vx v24, %0, v0" ::"r"(f[42 + base_idx_1]));
+      sld_elem = *i_slide_ptr_1++;
       asm volatile("vmacc.vx v26, %0, v0" ::"r"(f[35 + base_idx_1]));
-      asm volatile("vslide1down.vx v6, v4, %0" ::"r"(*i_slide_ptr_1++));
+      asm volatile("vslide1down.vx v6, v4, %0" ::"r"(sld_elem));
       asm volatile("vmacc.vx v28, %0, v0" ::"r"(f[28 + base_idx_1]));
+      sld_elem = *i_slide_ptr_2++;
       asm volatile("vmacc.vx v26, %0, v4" ::"r"(f[42 + base_idx_1]));
-      asm volatile("vslide1down.vx v10, v8, %0" ::"r"(*i_slide_ptr_2++));
+      asm volatile("vslide1down.vx v10, v8, %0" ::"r"(sld_elem));
       asm volatile("vmacc.vx v28, %0, v4" ::"r"(f[35 + base_idx_1]));
       asm volatile("vmacc.vx v28, %0, v8" ::"r"(f[42 + base_idx_1]));
     }
