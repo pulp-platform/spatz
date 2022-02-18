@@ -79,7 +79,7 @@ module spatz_controller
 
   `FF(vstart_q, vstart_d, '0)
   `FF(vl_q, vl_d, '0)
-  `FF(vtype_q, vtype_d, '{vill: 1'b1, default: '0})
+  `FF(vtype_q, vtype_d, '{vill: 1'b1, vsew: EW_8, vlmul: LMUL_1, default: '0})
 
   /* verilator lint_off LATCH */
   always_comb begin : proc_vcsr
@@ -110,7 +110,7 @@ module spatz_controller
         // Check if vtype is valid
         if ((spatz_req.vtype.vsew > EW_32) || (spatz_req.vtype.vlmul inside {LMUL_RES, LMUL_F8}) || (signed'(spatz_req.vtype.vlmul) + signed'($clog2(ELEN)) < signed'(spatz_req.vtype.vsew))) begin
           // Invalid
-          vtype_d = '{vill: 1'b1, default: '0};
+          vtype_d = '{vill: 1'b1, vsew: EW_8, vlmul: LMUL_1, default: '0};
           vl_d    = '0;
         end else begin
           // Valid
@@ -138,7 +138,7 @@ module spatz_controller
 
             // If new vtype changes ration, mark as illegal
             if (($signed(spatz_req.vtype.vsew) - $signed(vtype_q.vsew)) != ($signed(spatz_req.vtype.vlmul) - $signed(vtype_q.vlmul))) begin
-              vtype_d = '{vill: 1'b1, default: '0};
+              vtype_d = '{vill: 1'b1, vsew: EW_8, vlmul: LMUL_1, default: '0};
               vl_d    = '0;
             end
           end
@@ -216,71 +216,30 @@ module spatz_controller
   // Scoreboard //
   ////////////////
 
-  // Scoreboard metadata
-  typedef struct packed {
-    logic     valid;
-    sb_port_e port;
-  } sb_metadata_t;
-
   // Port scoreboard metadata
   typedef struct packed {
     logic     valid;
+    opreg_t   reg_idx;
     logic     [$clog2(VELE*8)-1:0] element;
     logic     deps_valid;
     sb_port_e deps;
   } sb_port_metadata_t;
-
-  // Register file scoreboard. Keeps track which vector is currently being
-  // accessed by a vrf port of a unit (last port that has accessed the vector).
-  sb_metadata_t [NRVREG-1:0] sb_q, sb_d, sb_reset;
-  `FF(sb_q, sb_d, '0)
 
   // Port scoreboard. Keeps track of which element is currently being accessed,
   // and if the port access is dependent on another one (read and write).
   sb_port_metadata_t [NrVregfilePorts-1:0] sb_port_q, sb_port_d;
   `FF(sb_port_q, sb_port_d, '0)
 
-  logic sb_deps_valid_vs1;
-  logic sb_deps_valid_vs2;
-  logic sb_deps_valid_vd;
-
-  sb_port_e sb_port_vs1;
-  sb_port_e sb_port_vs2;
-  sb_port_e sb_port_vd;
-
-  logic sb_deps_valid_vs1_update;
-  logic sb_deps_valid_vs2_update;
-  logic sb_deps_valid_vd_rd_update;
-  logic sb_deps_valid_vd_wd_update;
-
-  sb_port_e sb_port_vs1_update;
-  sb_port_e sb_port_vs2_update;
-  sb_port_e sb_port_vd_rd_update;
-  sb_port_e sb_port_vd_wd_update;
+  logic     [NrVregfilePorts-1:0] sb_deps_match_valid;
+  sb_port_e [NrVregfilePorts-1:0] sb_deps_match_port;
 
   always_comb begin : score_board
-    sb_d  = sb_q;
     sb_port_d = sb_port_q;
 
     sb_enable_o = '0;
 
-    sb_deps_valid_vs1 = 1'b0;
-    sb_deps_valid_vs2 = 1'b0;
-    sb_deps_valid_vd  = 1'b0;
-
-    sb_port_vs1 = SB_VFU_VS2_RD;
-    sb_port_vs2 = SB_VFU_VS2_RD;
-    sb_port_vd  = SB_VFU_VS2_RD;
-
-    sb_deps_valid_vs1_update   = 1'b0;
-    sb_deps_valid_vs2_update   = 1'b0;
-    sb_deps_valid_vd_rd_update = 1'b0;
-    sb_deps_valid_vd_wd_update = 1'b0;
-
-    sb_port_vs1_update   = SB_VFU_VS2_RD;
-    sb_port_vs2_update   = SB_VFU_VS2_RD;
-    sb_port_vd_rd_update = SB_VFU_VS2_RD;
-    sb_port_vd_wd_update = SB_VFU_VS2_RD;
+    sb_deps_match_valid = '0;
+    sb_deps_match_port  = '0;
 
     // For every port, update the element that is currently being accessed.
     // If the desired element is lower than the one of the dependency, then
@@ -315,44 +274,34 @@ module spatz_controller
     // and if the vrf scoreboard still has the port listed as last accessed, set it
     // to invalid as well.
     if (vfu_rsp_valid_i) begin
-      // VS2
-      sb_port_d[SB_VFU_VS2_RD].valid = 1'b0;
-      if (sb_q[vfu_rsp_i.vs2].valid && sb_q[vfu_rsp_i.vs2].port == SB_VFU_VS2_RD) sb_d[vfu_rsp_i.vs2].valid = 1'b0;
-      // VS1
-      sb_port_d[SB_VFU_VS1_RD].valid = 1'b0;
-      if (sb_q[vfu_rsp_i.vs1].valid && sb_q[vfu_rsp_i.vs1].port == SB_VFU_VS1_RD) sb_d[vfu_rsp_i.vs1].valid = 1'b0;
-      // VD (read and write)
-      sb_port_d[SB_VFU_VD_RD].valid = 1'b0;
-      sb_port_d[SB_VFU_VD_WD].valid = 1'b0;
-      if (sb_q[vfu_rsp_i.vd].valid && (sb_q[vfu_rsp_i.vd].port == SB_VFU_VD_RD || sb_q[vfu_rsp_i.vd].port == SB_VFU_VD_WD)) sb_d[vfu_rsp_i.vd].valid = 1'b0;
+      for (int unsigned port = 0; port < NrVregfilePorts; port++) begin
+        if (port inside {SB_VFU_VS2_RD, SB_VFU_VS1_RD, SB_VFU_VD_RD, SB_VFU_VD_WD}) begin
+          sb_port_d[port].valid = 1'b0;
+        end else begin
+          if (sb_port_q[port].valid && sb_port_q[port].deps_valid && sb_port_q[port].deps inside {SB_VFU_VS2_RD, SB_VFU_VS1_RD, SB_VFU_VD_RD, SB_VFU_VD_WD}) begin
+            sb_port_d[port].deps_valid = 1'b0;
+          end
+        end
+      end
     end
     if (vlsu_rsp_valid_i) begin
-      // VD (read and write)
-      sb_port_d[SB_VLSU_VD_RD].valid = 1'b0;
-      sb_port_d[SB_VLSU_VD_WD].valid = 1'b0;
-      if (sb_q[vlsu_rsp_i.vd].valid && (sb_q[vlsu_rsp_i.vd].port == SB_VLSU_VD_RD || sb_q[vlsu_rsp_i.vd].port == SB_VLSU_VD_WD)) sb_d[vlsu_rsp_i.vd].valid = 1'b0;
+      for (int unsigned port = 0; port < NrVregfilePorts; port++) begin
+        if (port inside {SB_VLSU_VD_RD, SB_VLSU_VD_WD}) begin
+          sb_port_d[port].valid = 1'b0;
+        end else begin
+          if (sb_port_q[port].valid && sb_port_q[port].deps_valid && sb_port_q[port].deps inside {SB_VLSU_VD_RD, SB_VLSU_VD_WD}) begin
+            sb_port_d[port].deps_valid = 1'b0;
+          end
+        end
+      end
     end
     if (vsldu_rsp_valid_i) begin
-      // VS2
-      sb_port_d[SB_VSLDU_VS2_RD].valid = 1'b0;
-      if (sb_q[vsldu_rsp_i.vs2].valid && sb_q[vsldu_rsp_i.vs2].port == SB_VSLDU_VS2_RD) sb_d[vsldu_rsp_i.vs2].valid = 1'b0;
-      // VD (write)
-      sb_port_d[SB_VSLDU_VD_WD].valid = 1'b0;
-      if (sb_q[vsldu_rsp_i.vd].valid && sb_q[vsldu_rsp_i.vd].port == SB_VSLDU_VD_WD) sb_d[vsldu_rsp_i.vd].valid = 1'b0;
-    end
-
-    sb_reset = sb_d;
-
-    // Clear deps valid when dependency has finished
-    for (int unsigned port = 0; port < NrVregfilePorts; port++) begin
-      for (int unsigned deps = 0; deps < NrVregfilePorts; deps++) begin
-        if ((port inside {SB_VFU_VS2_RD, SB_VFU_VS1_RD, SB_VFU_VD_RD, SB_VFU_VD_WD} && deps inside {SB_VLSU_VD_RD, SB_VSLDU_VS2_RD, SB_VLSU_VD_WD, SB_VSLDU_VD_WD}) ||
-            (port inside {SB_VLSU_VD_RD, SB_VLSU_VD_WD} && deps inside {SB_VFU_VS2_RD, SB_VFU_VS1_RD, SB_VFU_VD_RD, SB_VSLDU_VS2_RD, SB_VFU_VD_WD, SB_VSLDU_VD_WD}) ||
-            (port inside {SB_VSLDU_VS2_RD, SB_VSLDU_VD_WD} && deps inside {SB_VFU_VS2_RD, SB_VFU_VS1_RD, SB_VFU_VD_RD, SB_VLSU_VD_RD, SB_VFU_VD_WD, SB_VLSU_VD_WD})) begin
-          if (deps == sb_port_q[port].deps) begin
-            if (sb_port_d[port].valid && sb_port_d[port].deps_valid && !sb_port_d[deps].valid) begin
-              sb_port_d[port].deps_valid = 1'b0;
-            end
+      for (int unsigned port = 0; port < NrVregfilePorts; port++) begin
+        if (port inside {SB_VSLDU_VS2_RD, SB_VSLDU_VD_WD}) begin
+          sb_port_d[port].valid = 1'b0;
+        end else begin
+          if (sb_port_q[port].valid && sb_port_q[port].deps_valid && sb_port_q[port].deps inside {SB_VSLDU_VS2_RD, SB_VSLDU_VD_WD}) begin
+            sb_port_d[port].deps_valid = 1'b0;
           end
         end
       end
@@ -363,97 +312,119 @@ module spatz_controller
     // accessed element to zero, and check if the port has a dependency. If the port is
     // used, then note this down in the vrf scoreboard as well.
     if (spatz_req_valid) begin
-      sb_deps_valid_vs1 = sb_reset[spatz_req.vs1].valid;
-      sb_deps_valid_vs2 = sb_reset[spatz_req.vs2].valid;
-      sb_deps_valid_vd  = sb_reset[spatz_req.vd].valid;
-
-      sb_port_vs1 = sb_q[spatz_req.vs1].port;
-      sb_port_vs2 = sb_q[spatz_req.vs2].port;
-      sb_port_vd  = sb_q[spatz_req.vd].port;
-
       if (spatz_req.ex_unit == VFU) begin
         // VS2
-        sb_port_d[SB_VFU_VS2_RD].valid      = spatz_req.use_vs2;
-        sb_port_d[SB_VFU_VS2_RD].element    = spatz_req.vstart[$bits(vlen_t)-1:$clog2(VELEB)];
-        sb_port_d[SB_VFU_VS2_RD].deps_valid = sb_deps_valid_vs2 & ~(sb_port_vs2 inside {SB_VFU_VS2_RD, SB_VFU_VS1_RD, SB_VFU_VD_RD, SB_VFU_VD_WD});
-        sb_port_d[SB_VFU_VS2_RD].deps       = sb_port_vs2;
+        for (int unsigned port = 0; port < NrVregfilePorts; port++) begin
+          if (port inside {SB_VLSU_VD_RD, SB_VSLDU_VS2_RD, SB_VLSU_VD_WD, SB_VSLDU_VD_WD}) begin
+            if (spatz_req.vs2 == sb_port_d[port].reg_idx && sb_port_d[port].valid) begin
+              sb_deps_match_valid[SB_VFU_VS2_RD] = 1'b1;
+              sb_deps_match_port[SB_VFU_VS2_RD]  = sb_port_e'(port);
+            end
+          end
+        end
 
-        if (spatz_req.use_vs2) sb_deps_valid_vs2_update = spatz_req.use_vs2;
-        if (spatz_req.use_vs2) sb_port_vs2_update = SB_VFU_VS2_RD;
+        sb_port_d[SB_VFU_VS2_RD].valid      = spatz_req.use_vs2;
+        sb_port_d[SB_VFU_VS2_RD].reg_idx    = spatz_req.vs2;
+        sb_port_d[SB_VFU_VS2_RD].element    = spatz_req.vstart[$bits(vlen_t)-1:$clog2(VELEB)];
+        sb_port_d[SB_VFU_VS2_RD].deps_valid = sb_deps_match_valid[SB_VFU_VS2_RD];
+        sb_port_d[SB_VFU_VS2_RD].deps       = sb_deps_match_port[SB_VFU_VS2_RD];
 
         // VS1
+        for (int unsigned port = 0; port < NrVregfilePorts; port++) begin
+          if (port inside {SB_VLSU_VD_RD, SB_VSLDU_VS2_RD, SB_VLSU_VD_WD, SB_VSLDU_VD_WD}) begin
+            if (spatz_req.vs1 == sb_port_d[port].reg_idx && sb_port_d[port].valid) begin
+              sb_deps_match_valid[SB_VFU_VS1_RD] = 1'b1;
+              sb_deps_match_port[SB_VFU_VS1_RD]  = sb_port_e'(port);
+            end
+          end
+        end
+
         sb_port_d[SB_VFU_VS1_RD].valid      = spatz_req.use_vs1;
+        sb_port_d[SB_VFU_VS1_RD].reg_idx    = spatz_req.vs1;
         sb_port_d[SB_VFU_VS1_RD].element    = spatz_req.vstart[$bits(vlen_t)-1:$clog2(VELEB)];
-        sb_port_d[SB_VFU_VS1_RD].deps_valid = sb_deps_valid_vs1 & ~(sb_port_vs1 inside {SB_VFU_VS2_RD, SB_VFU_VS1_RD, SB_VFU_VD_RD, SB_VFU_VD_WD});
-        sb_port_d[SB_VFU_VS1_RD].deps       = sb_port_vs1;
+        sb_port_d[SB_VFU_VS1_RD].deps_valid = sb_deps_match_valid[SB_VFU_VS1_RD];
+        sb_port_d[SB_VFU_VS1_RD].deps       = sb_deps_match_port[SB_VFU_VS1_RD];
 
-        if (spatz_req.use_vs1) sb_deps_valid_vs1_update = spatz_req.use_vs1;
-        if (spatz_req.use_vs1) sb_port_vs1_update = SB_VFU_VS1_RD;
+        // VD
+        for (int unsigned port = 0; port < NrVregfilePorts; port++) begin
+          if (port inside {SB_VLSU_VD_RD, SB_VSLDU_VS2_RD, SB_VLSU_VD_WD, SB_VSLDU_VD_WD}) begin
+            if (spatz_req.vd == sb_port_d[port].reg_idx && sb_port_d[port].valid) begin
+              sb_deps_match_valid[SB_VFU_VD_RD] = 1'b1;
+              sb_deps_match_port[SB_VFU_VD_RD]  = sb_port_e'(port);
+              sb_deps_match_valid[SB_VFU_VD_WD] = 1'b1;
+              sb_deps_match_port[SB_VFU_VD_WD]  = sb_port_e'(port);
+            end
+          end
+        end
 
-        // VD (read)
         sb_port_d[SB_VFU_VD_RD].valid      = spatz_req.use_vd & spatz_req.vd_is_src;
+        sb_port_d[SB_VFU_VD_RD].reg_idx    = spatz_req.vd;
         sb_port_d[SB_VFU_VD_RD].element    = spatz_req.vstart[$bits(vlen_t)-1:$clog2(VELEB)];
-        sb_port_d[SB_VFU_VD_RD].deps_valid = sb_deps_valid_vd & ~(sb_port_vd inside {SB_VFU_VS2_RD, SB_VFU_VS1_RD, SB_VFU_VD_RD, SB_VFU_VD_WD});
-        sb_port_d[SB_VFU_VD_RD].deps       = sb_port_vd;
+        sb_port_d[SB_VFU_VD_RD].deps_valid = sb_deps_match_valid[SB_VFU_VD_RD];
+        sb_port_d[SB_VFU_VD_RD].deps       = sb_deps_match_port[SB_VFU_VD_RD];
 
-        if (spatz_req.use_vd & spatz_req.vd_is_src) sb_deps_valid_vd_rd_update = spatz_req.use_vd & spatz_req.vd_is_src;
-        if (spatz_req.use_vd & spatz_req.vd_is_src) sb_port_vd_rd_update = SB_VFU_VD_RD;
-
-        // VD (write)
         sb_port_d[SB_VFU_VD_WD].valid      = spatz_req.use_vd;
+        sb_port_d[SB_VFU_VD_WD].reg_idx    = spatz_req.vd;
         sb_port_d[SB_VFU_VD_WD].element    = spatz_req.vstart[$bits(vlen_t)-1:$clog2(VELEB)];
-        sb_port_d[SB_VFU_VD_WD].deps_valid = sb_deps_valid_vd & ~(sb_port_vd inside {SB_VFU_VS2_RD, SB_VFU_VS1_RD, SB_VFU_VD_RD, SB_VFU_VD_WD});
-        sb_port_d[SB_VFU_VD_WD].deps       = sb_port_vd;
-
-        if (spatz_req.use_vd) sb_deps_valid_vd_wd_update = spatz_req.use_vd;
-        if (spatz_req.use_vd) sb_port_vd_wd_update = SB_VFU_VD_WD;
+        sb_port_d[SB_VFU_VD_WD].deps_valid = sb_deps_match_valid[SB_VFU_VD_WD];
+        sb_port_d[SB_VFU_VD_WD].deps       = sb_deps_match_port[SB_VFU_VD_WD];
       end else if (spatz_req.ex_unit == LSU) begin
-        // VD (read)
+        // VD
+        for (int unsigned port = 0; port < NrVregfilePorts; port++) begin
+          if (port inside {SB_VFU_VS2_RD, SB_VFU_VS1_RD, SB_VFU_VD_RD, SB_VSLDU_VS2_RD, SB_VFU_VD_WD, SB_VSLDU_VD_WD}) begin
+            if (spatz_req.vd == sb_port_d[port].reg_idx && sb_port_d[port].valid) begin
+              sb_deps_match_valid[SB_VLSU_VD_RD] = 1'b1;
+              sb_deps_match_port[SB_VLSU_VD_RD]  = sb_port_e'(port);
+              sb_deps_match_valid[SB_VLSU_VD_WD] = 1'b1;
+              sb_deps_match_port[SB_VLSU_VD_WD]  = sb_port_e'(port);
+            end
+          end
+        end
+
         sb_port_d[SB_VLSU_VD_RD].valid      = spatz_req.use_vd & spatz_req.vd_is_src;
+        sb_port_d[SB_VLSU_VD_RD].reg_idx    = spatz_req.vd;
         sb_port_d[SB_VLSU_VD_RD].element    = spatz_req.vstart[$bits(vlen_t)-1:$clog2(VELEB)];
-        sb_port_d[SB_VLSU_VD_RD].deps_valid = sb_deps_valid_vd & ~(sb_port_vd inside {SB_VLSU_VD_RD, SB_VLSU_VD_WD});
-        sb_port_d[SB_VLSU_VD_RD].deps       = sb_port_vd;
+        sb_port_d[SB_VLSU_VD_RD].deps_valid = sb_deps_match_valid[SB_VLSU_VD_RD];
+        sb_port_d[SB_VLSU_VD_RD].deps       = sb_deps_match_port[SB_VLSU_VD_RD];
 
-        if (spatz_req.use_vd & spatz_req.vd_is_src) sb_deps_valid_vd_rd_update = spatz_req.use_vd & spatz_req.vd_is_src;
-        if (spatz_req.use_vd & spatz_req.vd_is_src) sb_port_vd_rd_update = SB_VLSU_VD_RD;
-
-        // VD (write)
         sb_port_d[SB_VLSU_VD_WD].valid      = spatz_req.use_vd & ~spatz_req.vd_is_src;
+        sb_port_d[SB_VLSU_VD_WD].reg_idx    = spatz_req.vd;
         sb_port_d[SB_VLSU_VD_WD].element    = spatz_req.vstart[$bits(vlen_t)-1:$clog2(VELEB)];
-        sb_port_d[SB_VLSU_VD_WD].deps_valid = sb_deps_valid_vd & ~(sb_port_vd inside {SB_VLSU_VD_RD, SB_VLSU_VD_WD});
-        sb_port_d[SB_VLSU_VD_WD].deps       = sb_port_vd;
-
-        if (spatz_req.use_vd & ~spatz_req.vd_is_src) sb_deps_valid_vd_wd_update = spatz_req.use_vd & ~spatz_req.vd_is_src;
-        if (spatz_req.use_vd & ~spatz_req.vd_is_src) sb_port_vd_wd_update = SB_VLSU_VD_WD;
+        sb_port_d[SB_VLSU_VD_WD].deps_valid = sb_deps_match_valid[SB_VLSU_VD_WD];
+        sb_port_d[SB_VLSU_VD_WD].deps       = sb_deps_match_port[SB_VLSU_VD_WD];
       end else if (spatz_req.ex_unit == SLD) begin
         // VS2
+        for (int unsigned port = 0; port < NrVregfilePorts; port++) begin
+          if (port inside {SB_VFU_VS2_RD, SB_VFU_VS1_RD, SB_VFU_VD_RD, SB_VLSU_VD_RD, SB_VFU_VD_WD, SB_VLSU_VD_WD}) begin
+            if (spatz_req.vs2 == sb_port_d[port].reg_idx && sb_port_d[port].valid) begin
+              sb_deps_match_valid[SB_VSLDU_VS2_RD] = 1'b1;
+              sb_deps_match_port[SB_VSLDU_VS2_RD]  = sb_port_e'(port);
+            end
+          end
+        end
+
         sb_port_d[SB_VSLDU_VS2_RD].valid      = spatz_req.use_vs2;
+        sb_port_d[SB_VSLDU_VS2_RD].reg_idx    = spatz_req.vs2;
         sb_port_d[SB_VSLDU_VS2_RD].element    = spatz_req.vstart[$bits(vlen_t)-1:$clog2(VELEB)];
-        sb_port_d[SB_VSLDU_VS2_RD].deps_valid = sb_deps_valid_vs2 & ~(sb_port_vs2 inside {SB_VSLDU_VS2_RD, SB_VSLDU_VD_WD});
-        sb_port_d[SB_VSLDU_VS2_RD].deps       = sb_port_vs2;
+        sb_port_d[SB_VSLDU_VS2_RD].deps_valid = sb_deps_match_valid[SB_VSLDU_VS2_RD];
+        sb_port_d[SB_VSLDU_VS2_RD].deps       = sb_deps_match_port[SB_VSLDU_VS2_RD];
 
-        if (spatz_req.use_vs2) sb_deps_valid_vs2_update = spatz_req.use_vs2;
-        if (spatz_req.use_vs2) sb_port_vs2_update = SB_VSLDU_VS2_RD;
+        // VD
+        for (int unsigned port = 0; port < NrVregfilePorts; port++) begin
+          if (port inside {SB_VFU_VS2_RD, SB_VFU_VS1_RD, SB_VFU_VD_RD, SB_VLSU_VD_RD, SB_VFU_VD_WD, SB_VLSU_VD_WD}) begin
+            if (spatz_req.vd == sb_port_d[port].reg_idx && sb_port_d[port].valid) begin
+              sb_deps_match_valid[SB_VSLDU_VD_WD] = 1'b1;
+              sb_deps_match_port[SB_VSLDU_VD_WD]  = sb_port_e'(port);
+            end
+          end
+        end
 
-        // VD (write)
         sb_port_d[SB_VSLDU_VD_WD].valid      = spatz_req.use_vd;
+        sb_port_d[SB_VSLDU_VD_WD].reg_idx    = spatz_req.vd;
         sb_port_d[SB_VSLDU_VD_WD].element    = spatz_req.vstart[$bits(vlen_t)-1:$clog2(VELEB)];
-        sb_port_d[SB_VSLDU_VD_WD].deps_valid = sb_deps_valid_vd & ~(sb_port_vd inside {SB_VSLDU_VS2_RD, SB_VSLDU_VD_WD});
-        sb_port_d[SB_VSLDU_VD_WD].deps       = sb_port_vd;
-
-        if (spatz_req.use_vd) sb_deps_valid_vd_wd_update = spatz_req.use_vd;
-        if (spatz_req.use_vd) sb_port_vd_wd_update = SB_VSLDU_VD_WD;
+        sb_port_d[SB_VSLDU_VD_WD].deps_valid = sb_deps_match_valid[SB_VSLDU_VD_WD];
+        sb_port_d[SB_VSLDU_VD_WD].deps       = sb_deps_match_port[SB_VSLDU_VD_WD];
       end
-
-      if (sb_deps_valid_vs1_update) sb_d[spatz_req.vs1].valid = sb_deps_valid_vs1_update;
-      if (sb_deps_valid_vs2_update) sb_d[spatz_req.vs2].valid = sb_deps_valid_vs2_update;
-      if (sb_deps_valid_vd_rd_update || sb_deps_valid_vd_wd_update)
-        sb_d[spatz_req.vd].valid = sb_deps_valid_vd_rd_update | sb_deps_valid_vd_wd_update;
-
-      if (sb_deps_valid_vs1_update) sb_d[spatz_req.vs1].port = sb_port_vs1_update;
-      if (sb_deps_valid_vs2_update) sb_d[spatz_req.vs2].port = sb_port_vs2_update;
-      if (sb_deps_valid_vd_rd_update || sb_deps_valid_vd_wd_update)
-        sb_d[spatz_req.vd].port = sb_deps_valid_vd_wd_update ? sb_port_vd_wd_update : sb_port_vd_rd_update;
     end
   end
 
