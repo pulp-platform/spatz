@@ -170,6 +170,8 @@ int main() {
     // Execute convolution
     conv3d_CHx7x7_block(o_l1_start, i_l1_start, num_rows, f_l1, vl);
 
+    mempool_barrier(num_cores);
+
   #endif
 
   // Performance metrics
