@@ -231,6 +231,7 @@ module spatz_controller
   sb_port_metadata_t [NrVregfilePorts-1:0] sb_port_q, sb_port_d;
   `FF(sb_port_q, sb_port_d, '0)
 
+  // Do we have a dependency match to an existing port.
   logic     [NrVregfilePorts-1:0] sb_deps_match_valid;
   sb_port_e [NrVregfilePorts-1:0] sb_deps_match_port;
 
@@ -240,7 +241,7 @@ module spatz_controller
     sb_enable_o = '0;
 
     sb_deps_match_valid = '0;
-    sb_deps_match_port  = '0;
+    sb_deps_match_port  = sb_port_e'('0);
 
     // For every port, update the element that is currently being accessed.
     // If the desired element is lower than the one of the dependency, then
@@ -271,9 +272,8 @@ module spatz_controller
       end
     end
 
-    // A unit has finished its vrf access. Set the port scoreboard to invalid,
-    // and if the vrf scoreboard still has the port listed as last accessed, set it
-    // to invalid as well.
+    // A unit has finished its vrf access. Set the port scoreboard to invalid.
+    // For every port, check if a dependency has existed. If so, invalidate it.
     if (vfu_rsp_valid_i) begin
       for (int unsigned port = 0; port < NrVregfilePorts; port++) begin
         if (port inside {SB_VFU_VS2_RD, SB_VFU_VS1_RD, SB_VFU_VD_RD, SB_VFU_VD_WD}) begin
@@ -310,8 +310,7 @@ module spatz_controller
 
     // Initialize the scoreboard metadata if we have a new instruction issued.
     // Set the ports of the unit to valid if they are being used, reset the currently
-    // accessed element to zero, and check if the port has a dependency. If the port is
-    // used, then note this down in the vrf scoreboard as well.
+    // accessed element to vstart, and check if the port has a dependency.
     if (spatz_req_valid) begin
       if (spatz_req.ex_unit == VFU) begin
         // VS2
