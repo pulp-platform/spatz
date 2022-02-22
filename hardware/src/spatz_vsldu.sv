@@ -99,13 +99,20 @@ module spatz_vsldu
 
     if (new_vsldu_request) begin
       spatz_req_d = spatz_req_i;
-      slide_amount_d = spatz_req_i.op_sld.one_up_down ? 'd1 : spatz_req_i.rs1;
+      slide_amount_d = spatz_req_i.op_sld.insert ? (spatz_req_i.op_sld.vmv ? 'd0 : 'd1) : spatz_req_i.rs1;
 
       // Convert vl/vstart/slide_amount to number of bytes for all element widths
-      if (spatz_req_i.vtype.vsew == EW_16) begin
+      if (spatz_req_i.vtype.vsew == EW_8) begin
+        if (spatz_req_i.op_sld.vmv && spatz_req_d.op_sld.insert) begin
+          spatz_req_d.rs1 = {4{spatz_req_i.rs1[7:0]}};
+        end
+      end else if (spatz_req_i.vtype.vsew == EW_16) begin
         spatz_req_d.vl     = spatz_req_i.vl << 1;
         spatz_req_d.vstart = spatz_req_i.vstart << 1;
         slide_amount_d     = slide_amount_d << 1;
+        if (spatz_req_i.op_sld.vmv && spatz_req_d.op_sld.insert) begin
+          spatz_req_d.rs1 = {2{spatz_req_i.rs1[15:0]}};
+        end
       end else if (spatz_req_i.vtype.vsew == EW_32) begin
         spatz_req_d.vl     = spatz_req_i.vl << 2;
         spatz_req_d.vstart = spatz_req_i.vstart << 2;
@@ -158,9 +165,9 @@ module spatz_vsldu
     automatic int unsigned delta = spatz_req_q.vl - vreg_counter_value;
 
     vreg_counter_load_value = spatz_req_d.vstart;
-    if (!spatz_req_d.op_sld.one_up_down && spatz_req_d.vstart < slide_amount_d && spatz_req_i.op == VSLIDEUP && new_vsldu_request) begin
+    if (!spatz_req_d.op_sld.insert && spatz_req_d.vstart < slide_amount_d && spatz_req_i.op == VSLIDEUP && new_vsldu_request) begin
       vreg_counter_load_value = slide_amount_d;
-    end else if (!spatz_req_q.op_sld.one_up_down && spatz_req_q.vstart < slide_amount_q && is_slide_up && ~new_vsldu_request) begin
+    end else if (!spatz_req_q.op_sld.insert && spatz_req_q.vstart < slide_amount_q && is_slide_up && ~new_vsldu_request) begin
       vreg_counter_load_value = slide_amount_q;
     end else if (~new_vsldu_request) begin
       vreg_counter_load_value = spatz_req_q.vstart;
@@ -178,7 +185,8 @@ module spatz_vsldu
                          vreg_operation_first  ? VELEB - vreg_counter_load_value[$clog2(VELEB)-1:0] :
                          VELEB;
 
-    vreg_counter_en = vrf_re_o & vrf_rvalid_i & vrf_we_o & vrf_wvalid_i;
+    vreg_counter_en = ((spatz_req_q.use_vs2 & vrf_re_o & vrf_rvalid_i) | ~spatz_req_q.use_vs2) &
+                      ((spatz_req_q.use_vd & vrf_we_o & vrf_wvalid_i) | ~spatz_req_q.use_vd);
 
     vreg_operations_finished = ~vreg_operation_valid | (vreg_operation_last & vreg_counter_en);
   end
@@ -191,7 +199,7 @@ module spatz_vsldu
 
   always_comb begin
     sld_offset_rd = is_slide_up ? (prefetch_q ? -slide_amount_q[$bits(vlen_t)-1:$clog2(VELEB)] - 1 : -slide_amount_q[$bits(vlen_t)-1:$clog2(VELEB)]) :
-                    prefetch_q ? slide_amount_q[$bits(vlen_t)-1:$clog2(VELEB)] : slide_amount_q[$bits(vlen_t)-1:$clog2(VELEB)] + 1;
+                                   prefetch_q ? slide_amount_q[$bits(vlen_t)-1:$clog2(VELEB)] : slide_amount_q[$bits(vlen_t)-1:$clog2(VELEB)] + 1;
     vrf_raddr_o = {spatz_req_q.vs2, $clog2(VELE)'(1'b0)} + vreg_counter_value[$bits(vlen_t)-1:$clog2(VELEB)] + sld_offset_rd;
 
     vrf_waddr_o = {spatz_req_q.vd, $clog2(VELE)'(1'b0)} + vreg_counter_value[$bits(vlen_t)-1:$clog2(VELEB)];
@@ -216,13 +224,18 @@ module spatz_vsldu
 
   always_comb begin
     shift_overflow_d = shift_overflow_q;
-    data_in = '0;
-    data_out = '0;
-    data_high = '0;
-    data_low = '0;
 
-    // If we have a slide up operation, flip all bytes around (d[-i] = d[i])
-    if (is_slide_up) begin
+    data_in   = '0;
+    data_out  = '0;
+    data_high = '0;
+    data_low  = '0;
+
+    if (is_slide_up & spatz_req_q.op_sld.insert && spatz_req_q.op_sld.vmv) begin
+      for (int b_src = 0; b_src < VELEB; b_src++) begin
+        data_in[(VELEB-b_src-1)*8 +: 8] = {N_IPU{spatz_req_q.rs1}}[b_src*8 +: 8];
+      end
+    end else if (is_slide_up) begin
+      // If we have a slide up operation, flip all bytes around (d[-i] = d[i])
       for (int b_src = 0; b_src < VELEB; b_src++) begin
         data_in[(VELEB-b_src-1)*8 +: 8] = vrf_rdata_i[b_src*8 +: 8];
       end
@@ -230,7 +243,7 @@ module spatz_vsldu
       data_in = vrf_rdata_i;
 
       // If we are already over the MAXVL, all continuing elements are zero
-      if ((vreg_counter_value >= MAXVL - slide_amount_q) || (vreg_operation_last && spatz_req_q.op_sld.one_up_down)) begin
+      if ((vreg_counter_value >= MAXVL - slide_amount_q) || (vreg_operation_last && spatz_req_q.op_sld.insert)) begin
         data_in = '0;
       end
     end
@@ -263,7 +276,7 @@ module spatz_vsldu
       data_out = data_low | shift_overflow_q;
 
       // Insert rs1 element at the last position
-      if (spatz_req_q.op_sld.one_up_down && vreg_operation_last) begin
+      if (spatz_req_q.op_sld.insert && vreg_operation_last) begin
         for (int b = 0; b < VELEB; b++) begin
           if (b >= (vreg_counter_value[$clog2(VELEB)-1:0] + vreg_counter_delta - (3'b001<<spatz_req_q.vtype.vsew))) begin
             data_out[b*8 +: 8] = data_low[b*8 +: 8];
@@ -280,7 +293,7 @@ module spatz_vsldu
       end
 
       // Insert rs1 element at the first position
-      if (spatz_req_q.op_sld.one_up_down && vreg_operation_first && spatz_req_q.vstart == 'd0) begin
+      if (spatz_req_q.op_sld.insert && !spatz_req_q.op_sld.vmv && vreg_operation_first && spatz_req_q.vstart == 'd0) begin
         vrf_wdata_o = vrf_wdata_o | spatz_req_q.rs1;
       end
     end else begin
@@ -304,7 +317,7 @@ module spatz_vsldu
   end
 
   // VRF signals
-  assign vrf_re_o  = vreg_operation_valid | prefetch_q;
-  assign vrf_we_o  = vrf_re_o & vrf_rvalid_i & ~prefetch_q;
+  assign vrf_re_o = spatz_req_q.use_vs2 & (vreg_operation_valid | prefetch_q);
+  assign vrf_we_o = spatz_req_q.use_vd & vrf_re_o & vrf_rvalid_i & ~prefetch_q;
 
 endmodule : spatz_vsldu

@@ -429,7 +429,12 @@ module spatz_decoder
               riscv_instruction::VMV_V_V,
               riscv_instruction::VMV_V_X,
               riscv_instruction::VMV_V_I: begin
-                spatz_req.op = VMV;
+                // vmv is the same as a zero slide
+                spatz_req.op = VSLIDEUP;
+                spatz_req.ex_unit = SLD;
+                spatz_req.op_sld.insert = (func3 == OPIVI | func3 == OPIVX);
+                spatz_req.op_sld.vmv = 1'b1;
+                spatz_req.vs2 = spatz_req.vs1;
               end
 
               // Vector Slide
@@ -444,7 +449,7 @@ module spatz_decoder
 
               riscv_instruction::VSLIDE1UP_VX: begin
                 spatz_req.op = VSLIDEUP;
-                spatz_req.op_sld.one_up_down = 1'b1;
+                spatz_req.op_sld.insert = 1'b1;
                 spatz_req.ex_unit = SLD;
                 if (func3 == OPIVI) begin
                   spatz_req.rs1 = elen_t'(arith_s1);
@@ -462,7 +467,7 @@ module spatz_decoder
 
               riscv_instruction::VSLIDE1DOWN_VX: begin
                 spatz_req.op = VSLIDEDOWN;
-                spatz_req.op_sld.one_up_down = 1'b1;
+                spatz_req.op_sld.insert = 1'b1;
                 spatz_req.ex_unit = SLD;
                 if (func3 == OPIVI) begin
                   spatz_req.rs1 = elen_t'(arith_s1);

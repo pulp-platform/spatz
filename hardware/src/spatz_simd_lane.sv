@@ -114,7 +114,6 @@ module spatz_simd_lane
       VMULHSU: simd_result = mult_result[2*Width-1:Width];
       VMADC: simd_result = Width'(adder_result[Width]);
       VMSBC: simd_result = Width'(subtractor_result[Width]);
-      VMV: simd_result = op_s1_i;
       default simd_result = '0;
     endcase // operation_i
   end // simd
