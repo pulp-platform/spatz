@@ -4,11 +4,18 @@
 
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 
-#define R 64
-#define C 64
-#define F 3
+#ifndef MATRIX_DIM
+#define MATRIX_DIM 64
+#endif
+#ifndef KERNEL_M
+#define KERNEL_M 3
+#endif
 
-void conv2d_3x3(int32_t *o, int32_t *i, int32_t *f) {
+#define R MATRIX_DIM
+#define C MATRIX_DIM
+#define F KERNEL_M
+
+void conv2d_3x3(int32_t *o, int32_t *i, int32_t *f, int32_t num_rows, int32_t num_columns) {
   // We work on 4 rows of the output matrix at once
   int32_t block_size_o = 4;
   // We work on block_size_o + F - 1 rows of the input matrix at once
@@ -17,11 +24,11 @@ void conv2d_3x3(int32_t *o, int32_t *i, int32_t *f) {
   int32_t *i_cpy = i;
 
   // Set the vector configuration
-  asm volatile("vsetvli %0, %1, e32, m2, ta, ma" : "=r"(block_size_c) : "r"(C));
+  asm volatile("vsetvli %0, %1, e32, m2, ta, ma" : "=r"(block_size_c) : "r"(num_columns));
 
-  for (int32_t c = 0; c < C; c += block_size_c) {
+  for (int32_t c = 0; c < num_columns; c += block_size_c) {
 
-    int32_t c_ = MIN(C - c, block_size_c);
+    int32_t c_ = MIN(num_columns - c, block_size_c);
 
     // First iteration round, r = 0
     int32_t *i = i_cpy + c;
@@ -39,7 +46,7 @@ void conv2d_3x3(int32_t *o, int32_t *i, int32_t *f) {
     t1 = *(f+F);
 
     // Iterate over the output rows
-    for (int32_t r = 0; r < R; r += block_size_o) {
+    for (int32_t r = 0; r < num_rows; r += block_size_o) {
       // Temporary filter variables
 
       // Slide element insert

@@ -20,15 +20,16 @@ def emit(name, array, alignment='4'):
 
 # Define the filter size
 if len(sys.argv) > 1:
-	filter_size = int(sys.argv[1])
+    matrix_width = int(sys.argv[1])
+    filter_size = int(sys.argv[2])
 	# Filter size must be odd
-	assert(filter_size % 2 == 1), "The filter size must be an odd integer number"
+    assert(filter_size % 2 == 1), "The filter size must be an odd integer number"
 else:
 	filter_size = 3
 
 # Input image
-M = 64
-N = 64
+M = matrix_width
+N = matrix_width
 padding = int(filter_size/2)
 M_pad = M + 2*padding
 N_pad = N + 2*padding
