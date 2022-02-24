@@ -42,7 +42,7 @@ extern int32_t golden_o[] __attribute__((aligned(4))); // [ M*N ]
 // M, N, F defined in data.S
 #define M 64
 #define N 64
-#define F 7
+#define F 3
 
 int32_t i_l1[(M+F/2*2)*(N+F/2*2)] __attribute__((aligned(4), section(".l1_prio"))); // [ (M+floor(F/2)) * (N+floor(F/2)) ]
 int32_t f_l1[F*F] __attribute__((aligned(4), section(".l1_prio")));        // [ F*F ]
@@ -103,7 +103,7 @@ int main() {
   uint32_t timer_end = mempool_get_timer();
   uint32_t runtime = timer_end - timer_start;
   uint32_t performance = 1000 * 2 * F * F * M * N / runtime;
-  uint32_t utilization = performance / (2 * 4);
+  uint32_t utilization = performance / 4;
 
   printf("The execution took %u cycles.\n", runtime);
   printf("The performance is %u OP/1000cycles (%u%%o utilization).\n",
