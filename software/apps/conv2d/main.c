@@ -68,7 +68,7 @@ void copy_matrix(int32_t *src, int32_t *dst, uint32_t size) {
 int verify_matrix(int32_t *matrix, int32_t *golden_matrix, int32_t size) {
   for (int idx = 0; idx < size; idx++) {
     if (matrix[idx] != golden_matrix[idx]) {
-      return idx;
+      return idx == 0 ? -1 : idx;
     }
   }
 
@@ -93,7 +93,7 @@ int main() {
   int32_t f_stack[F*F];
 
   if (F != 3 && F != 7) {
-    printf("Error: the filter size is different from 3.\n");
+    printf("Error: the filter size is different from 3 or 7.\n");
     return -1;
   }
 
@@ -129,9 +129,6 @@ int main() {
     // Set matrix dimension
     uint32_t dim = MATRIX_DIM;
     uint32_t vl = KERNEL_P;
-    #if F == 7
-      vl *= 2;
-    #endif
 
     // Can every core execute its desired kernel?
     if ((dim*dim)/vl < num_cores) return -2;

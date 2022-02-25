@@ -163,41 +163,38 @@ void conv2d_3x3(int32_t *o, int32_t *i, int32_t *f, int32_t num_rows, int32_t nu
       i_ += lwi;
       sld_elem = *i_;
       asm volatile("vmacc.vx v0, %0, v10" ::"r"(t1));
-      asm volatile("vmacc.vx v2, %0, v10" ::"r"(t0));
-
-      // Preload o_ to avoid lw after vector store
-      asm volatile("add zero, zero, %0" :: "r"(o_));
-
-      asm volatile("vslide1down.vx v14, v26, %0" ::"r"(sld_elem));
-      i_ += lwi;
-      sld_elem = *i_;
       asm volatile("vmacc.vx v0, %0, v12" ::"r"(t2));
+      i_ += lwi;
+      int32_t sld_elem_tmp = *i_;
       asm volatile("vse32.v  v0, (%0)" :: "r"(o__));
       o__ += lwo;
+      asm volatile("vmv.v.v v8, v16");
+      asm volatile("vmacc.vx v2, %0, v10" ::"r"(t0));
+      asm volatile("vmv.v.v v10, v18");
+
       asm volatile("vmacc.vx v2, %0, v12" ::"r"(t1));
       asm volatile("vmacc.vx v4, %0, v12" ::"r"(t0));
 
-      asm volatile("vslide1down.vx v12, v28, %0" ::"r"(sld_elem));
+      asm volatile("vslide1down.vx v14, v26, %0" ::"r"(sld_elem));
+      asm volatile("vmacc.vx v2, %0, v14" ::"r"(t2));
+      asm volatile("vslide1down.vx v16, v28, %0" ::"r"(sld_elem_tmp));
       i_ += lwi;
       sld_elem = *i_;
-      asm volatile("vmacc.vx v2, %0, v14" ::"r"(t2));
       asm volatile("vse32.v  v2, (%0)" :: "r"(o__));
       o__ += lwo;
       asm volatile("vmacc.vx v4, %0, v14" ::"r"(t1));
-      asm volatile("vmv.v.v v8, v16");
       asm volatile("vmacc.vx v6, %0, v14" ::"r"(t0));
 
-      asm volatile("vslide1down.vx v14, v30, %0" ::"r"(sld_elem));
-      asm volatile("vmacc.vx v4, %0, v12" ::"r"(t2));
+      asm volatile("vmacc.vx v4, %0, v16" ::"r"(t2));
       f_ = f;
       t0 = *f_;
       f_ += lwf;
       asm volatile("vse32.v  v4, (%0)" :: "r"(o__));
       o__ += lwo;
-      asm volatile("vmv.v.v v10, v18");
-      asm volatile("vmacc.vx v6, %0, v12" ::"r"(t1));
+      asm volatile("vmacc.vx v6, %0, v16" ::"r"(t1));
+      asm volatile("vslide1down.vx v18, v30, %0" ::"r"(sld_elem));
 
-      asm volatile("vmacc.vx v6, %0, v14" ::"r"(t2));
+      asm volatile("vmacc.vx v6, %0, v18" ::"r"(t2));
       t1 = *f_;
       asm volatile("vse32.v  v6, (%0);" : "+r"(o__));
 

@@ -25,6 +25,7 @@ if len(sys.argv) > 1:
 	# Filter size must be odd
     assert(filter_size % 2 == 1), "The filter size must be an odd integer number"
 else:
+    matrix_width = 64
 	filter_size = 3
 
 # Input image
