@@ -38,12 +38,13 @@ def emit(name, array, alignment='4'):
 if len(sys.argv) > 1:
         matrix_width = int(sys.argv[1])
         filter_size = int(sys.argv[2])
-        channels = int(sys.argv[3])
+        channels = 1 #int(sys.argv[3])
         # Filter size must be odd
         assert(filter_size % 2 == 1), "The filter size must be an odd integer number"
 else:
         matrix_width = 64
         filter_size = 7
+        channels = 1
 
 # Input image. Take a square image
 M = matrix_width

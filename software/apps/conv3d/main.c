@@ -22,6 +22,7 @@
 #include <string.h>
 
 #include "conv3d_3x7x7.c"
+#include "conv3d_3x3x3.c"
 
 #include "printf.h"
 #ifdef MEMPOOL
@@ -36,15 +37,15 @@
 #define MATRIX_DIM 32
 #endif
 #ifndef KERNEL_M
-#define KERNEL_M 1
+#define KERNEL_M 3
 #endif
 #ifndef KERNEL_P
-#define KERNEL_P 8
+#define KERNEL_P 16
 #endif
 #define M MATRIX_DIM
 #define N MATRIX_DIM
-#define F 7
-#define CH KERNEL_M
+#define F KERNEL_M
+#define CH 1
 
 // Define Matrix dimensions:
 // o = i ° f, with i=[(M+F-1)x(N+f-1)xCH], f=[FxFxCH], o=[MxN]
@@ -56,13 +57,9 @@ extern int32_t f[] __attribute__((aligned(4)));        // [ F*F*CH ]
 extern int32_t o[] __attribute__((aligned(4)));        // [ M*N ]
 extern int32_t golden_o[] __attribute__((aligned(4))); // [ M*N ]
 // M, N, F defined in data.S
-/*extern int32_t M;
-extern int32_t N;
-extern int32_t CH;
-extern int32_t F;*/
 
 int32_t i_l1[(M+F/2*2)*(N+F/2*2)*CH] __attribute__((aligned(4), section(".l1_prio"))); // [ (M+floor(F/2)) * (N+floor(F/2)) * CH ]
-int32_t f_l1[F*F*CH] __attribute__((aligned(4), section(".l1_prio")));        // [ F*F*CH ]
+//int32_t f_l1[F*F*CH] __attribute__((aligned(4), section(".l1_prio")));        // [ F*F*CH ]
 int32_t o_l1[M*N] __attribute__((aligned(4), section(".l1_prio")));        // [ M*N ]
 
 void copy_matrix(int32_t *src, int32_t *dst, uint32_t size) {
@@ -74,7 +71,7 @@ void copy_matrix(int32_t *src, int32_t *dst, uint32_t size) {
 int verify_matrix(int32_t *matrix, int32_t *golden_matrix, int32_t size) {
   for (int idx = 0; idx < size; idx++) {
     if (matrix[idx] != golden_matrix[idx]) {
-      return idx;
+      return idx == 0 ? -1 : idx;
     }
   }
 
@@ -92,12 +89,14 @@ void print_matrix(int32_t const *matrix, uint32_t num_rows,
   }
 }
 
+
 int main() {
   uint32_t num_cores = mempool_get_core_count();
   uint32_t core_id = mempool_get_core_id();
+  int32_t f_stack[F*F*CH];
 
-  if (F != 7) {
-    printf("Error: the filter size is different from 7.\n");
+  if (F != 7 && F != 3) {
+    printf("Error: the filter size is different from 3 or 7.\n");
     return -1;
   }
 
@@ -110,12 +109,16 @@ int main() {
     num_cores = 1;
 
     copy_matrix(i, i_l1, (M+F/2*2)*(N+F/2*2)*CH);
-    copy_matrix(f, f_l1, F*F*CH);
+    copy_matrix(f, f_stack, F*F*CH);
 
     // Call the main kernel, and measure cycles
     uint32_t timer_start = mempool_get_timer();
     // Execute convolution
-    conv3d_CHx7x7(o_l1, i_l1, f_l1);
+    #if F == 3
+      conv3d_CHx3x3(o_l1, i_l1, f_stack);
+    #elif F == 7
+      conv3d_CHx7x7(o_l1, i_l1, f_stack);
+    #endif
 
   #else
 
@@ -144,7 +147,6 @@ int main() {
 
     if (num_rows < 8) return -5;
 
-
     uint32_t row_offset = (dim + F - 1)*num_rows*(core_id/column_split);
     uint32_t column_offset = column_id*vl;
     //int32_t *i_start = i + i_offset;
@@ -157,9 +159,7 @@ int main() {
       copy_matrix(i+row*(N+F/2*2), i_l1+row*(N+F/2*2), (N+F/2*2));
     }
 
-    if (core_id == num_cores-1) {
-      copy_matrix(f, f_l1, F*F*CH);
-    }
+    copy_matrix(f, f_stack, F*F*CH);
 
     asm volatile("vsetvli zero, %0, e32, m2, ta, ma" ::"r"(vl));
 
@@ -168,7 +168,11 @@ int main() {
 
     uint32_t timer_start = mempool_get_timer();
     // Execute convolution
-    conv3d_CHx7x7_block(o_l1_start, i_l1_start, num_rows, f_l1, vl);
+    #if F == 3
+      conv3d_CHx3x3_block(o_l1_start, i_l1_start, num_rows, f_stack, vl);
+    #elif F == 7
+      conv3d_CHx7x7_block(o_l1_start, i_l1_start, num_rows, f_stack, vl);
+    #endif
 
     mempool_barrier(num_cores);
 
