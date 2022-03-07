@@ -295,8 +295,11 @@ module spatz_vlsu
       vreg_counter_load[i]       = new_vlsu_request;
       vreg_counter_load_value[i] = N_IPU == 'd1 ? spatz_req_d.vstart : ((spatz_req_d.vstart >> ($clog2(N_IPU) + $clog2(ELENB))) << $clog2(ELENB)) + (spatz_req_d.vstart[idx_width(N_IPU)+$clog2(ELENB)-1:$clog2(ELENB)] > i ? ELENB : spatz_req_d.vstart[idx_width(N_IPU)+$clog2(ELENB)-1:$clog2(ELENB)] == i ? spatz_req_d.vstart[$clog2(ELENB)-1:0] : 'd0);
 
-      vreg_operation_valid[i] = (delta != 'd0) & ~is_vl_zero &
-                                (catchup[i] | ~catchup[i] & ~|catchup);
+      if (NrIPUsPerMemPort == 'd1) begin
+        vreg_operation_valid[i] = (delta != 'd0) & ~is_vl_zero & (catchup[i] | ~catchup[i] & ~|catchup);
+      end else begin
+        vreg_operation_valid[i] = (delta != 'd0) & ~is_vl_zero;
+      end
       vreg_operation_last[i]  = vreg_operation_valid[i] & (delta <= (is_single_element_operation ? single_element_size : ELENB));
 
       vreg_counter_clear[i] = 1'b0;
@@ -311,7 +314,7 @@ module spatz_vlsu
         vreg_counter_en[i] = vreg_operation_valid[i] & vrf_transaction_valid;
       end else begin
         if (i%NrIPUsPerMemPort == 'd0) begin
-          vreg_counter_en[i] = vreg_operation_valid[i] & vrf_transaction_valid & ((vreg_counter_value[NrIPUsPerMemPort/NrMemPorts-1][$bits(vlen_t)-1:$clog2(ELENB)] == vreg_counter_value[i][$bits(vlen_t)-1:$clog2(ELENB)]) & (vreg_counter_value[i+1][$bits(vlen_t)-1:$clog2(ELENB)] == vreg_counter_value[i][$bits(vlen_t)-1:$clog2(ELENB)]));
+          vreg_counter_en[i] = vreg_operation_valid[i] & vrf_transaction_valid & (vreg_counter_value[NrIPUsPerMemPort/NrMemPorts-1][$bits(vlen_t)-1:$clog2(ELENB)] == vreg_counter_value[i][$bits(vlen_t)-1:$clog2(ELENB)]) & (vreg_counter_value[i+1][$bits(vlen_t)-1:$clog2(ELENB)] == vreg_counter_value[i][$bits(vlen_t)-1:$clog2(ELENB)]);
         end else begin
           vreg_counter_en[i] = vreg_operation_valid[i] & vrf_transaction_valid & (vreg_counter_value[i-1][$bits(vlen_t)-1:$clog2(ELENB)] != vreg_counter_value[i][$bits(vlen_t)-1:$clog2(ELENB)]);
         end
