@@ -230,9 +230,9 @@ module spatz_vsldu
     data_high = '0;
     data_low  = '0;
 
-    if (is_slide_up & spatz_req_q.op_sld.insert && spatz_req_q.op_sld.vmv) begin
+    if (is_slide_up && spatz_req_q.op_sld.insert && spatz_req_q.op_sld.vmv) begin
       for (int b_src = 0; b_src < VELEB; b_src++) begin
-        data_in[(VELEB-b_src-1)*8 +: 8] = {N_IPU{spatz_req_q.rs1}}[b_src*8 +: 8];
+        data_in[(VELEB-b_src-1)*8 +: 8] = spatz_req_q.rs1[b_src*8%ELEN +: 8];
       end
     end else if (is_slide_up) begin
       // If we have a slide up operation, flip all bytes around (d[-i] = d[i])
