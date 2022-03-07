@@ -34,9 +34,9 @@ uint16_t vector_sld[SLD_LENGTH_INIT] = {0x0001, 0x0203, 0x0405, 0x0607, 0x0809, 
 uint16_t vector_sld_res[SLD_LENGTH];
 
 int main() {
-  ////////////////
-  // Stripminig //
-  ////////////////
+  //////////////////
+  // Strip Mining //
+  //////////////////
 
   // Stripmining loop
   int32_t remaining_elem = VEC_LENGTH-UNALIGNED;
@@ -59,6 +59,46 @@ int main() {
     if (vector1[i] + vector2[i] != vector_res[i]) return i+1;
   }
 
+  /////////////
+  // VLE/VSE //
+  /////////////
+
+  for (int vstart = 0; vstart < VEC_LENGTH; vstart++) {
+    // VLOAD
+
+    asm volatile("vsetvli zero, %0, e8, m2, ta, ma" ::"r"(VEC_LENGTH));
+    asm volatile("vmv.v.i v8, 0");
+    asm volatile("csrrw zero, vstart, %0"::"r"(vstart));
+    asm volatile("vle8.v v8, (%0)" :: "r"(vector1));
+    asm volatile("vse8.v v8, (%0)" :: "r"(vector_res));
+
+    for (int i = 0; i < vstart; i++) {
+      if (vector_res[i] != 0) return i+1;
+    }
+    for (int i = vstart; i < VEC_LENGTH; i++) {
+      if (vector1[i] != vector_res[i]) return i+1;
+    }
+
+    // VSTORE
+
+    // Clear result vector
+    for (int i = 0; i < VEC_LENGTH; i++) {
+      vector_res[i] = 0;
+    }
+
+    asm volatile("vsetvli zero, %0, e8, m2, ta, ma" ::"r"(VEC_LENGTH));
+    asm volatile("vle8.v v8, (%0)" :: "r"(vector1));
+    asm volatile("csrrw zero, vstart, %0"::"r"(vstart));
+    asm volatile("vse8.v v8, (%0)" :: "r"(vector_res));
+
+    for (int i = 0; i < vstart; i++) {
+      if (vector_res[i] != 0) return i+1;
+    }
+    for (int i = vstart; i < VEC_LENGTH; i++) {
+      if (vector1[i] != vector_res[i]) return i+1;
+    }
+  }
+
   ////////////
   // VSLIDE //
   ////////////
@@ -73,8 +113,6 @@ int main() {
     asm volatile("csrrw zero, vstart, %0"::"r"(vstart));
     asm volatile("vslide1up.vx v9, v8, %0" :: "r"(elem_insert));
     asm volatile("vse16.v v9, (%0)" :: "r"(vector_sld_res));
-
-    for (int i = 0; i < 10; i++) asm volatile("addi zero, zero, 1");
 
     if (vstart == 0) {
       if (vector_sld_res[0] != elem_insert) return 1;
@@ -91,8 +129,6 @@ int main() {
       asm volatile("csrrw zero, vstart, %0"::"r"(vstart));
       asm volatile("vslideup.vx v11, v10, %0" :: "r"(sld_amt));
       asm volatile("vse16.v v11, (%0)" :: "r"(vector_sld_res));
-
-      for (int i = 0; i < 10; i++) asm volatile("addi zero, zero, 1");
 
       for (int i = vstart; i < SLD_LENGTH; i++) {
         if (i < sld_amt) {
@@ -111,8 +147,6 @@ int main() {
     asm volatile("vslide1down.vx v7, v6, %0" :: "r"(elem_insert));
     asm volatile("vse16.v v7, (%0)" :: "r"(vector_sld_res));
 
-    for (int i = 0; i < 10; i++) asm volatile("addi zero, zero, 1");
-
     for (int i = vstart; i < SLD_LENGTH-1; i++) {
       if (vector_sld_res[i] != vector_sld[i+1]) return i+1;
     }
@@ -127,8 +161,6 @@ int main() {
       asm volatile("csrrw zero, vstart, %0"::"r"(vstart));
       asm volatile("vslidedown.vx v2, v4, %0" :: "r"(sld_amt));
       asm volatile("vse16.v v2, (%0)" :: "r"(vector_sld_res));
-
-      for (int i = 0; i < 10; i++) asm volatile("addi zero, zero, 1");
 
       for (int i = vstart; i < SLD_LENGTH; i++) {
         if (i < 256-sld_amt) {
