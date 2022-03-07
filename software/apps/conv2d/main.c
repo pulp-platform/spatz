@@ -164,9 +164,9 @@ int main() {
     uint32_t timer_start = mempool_get_timer();
     // Execute convolution
     #if F == 3
-      conv2d_3x3(o_l1_start, i_l1_start, f_stack, num_rows, vl);
+      conv2d_3x3(o_l1_start, i_l1_start, f_stack, (int32_t)num_rows, (int32_t)vl);
     #elif F == 7
-      conv2d_7x7(o_l1_start, i_l1_start, f_stack, num_rows, vl);
+      conv2d_7x7(o_l1_start, i_l1_start, f_stack, (int32_t)num_rows, (int32_t)vl);
     #endif
 
     mempool_barrier(num_cores);
