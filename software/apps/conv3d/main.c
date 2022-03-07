@@ -145,7 +145,7 @@ int main() {
 
     uint32_t num_rows = dim*column_split/num_cores;
 
-    if (num_rows < 8) return -5;
+    if (num_rows < (F + 1)) return -5;
 
     uint32_t row_offset = (dim + F - 1)*num_rows*(core_id/column_split);
     uint32_t column_offset = column_id*vl;
@@ -161,7 +161,11 @@ int main() {
 
     copy_matrix(f, f_stack, F*F*CH);
 
-    asm volatile("vsetvli zero, %0, e32, m2, ta, ma" ::"r"(vl));
+    #if F == 3
+      asm volatile("vsetvli zero, %0, e32, m4, ta, ma" ::"r"(vl));
+    #elif F == 7
+      asm volatile("vsetvli zero, %0, e32, m2, ta, ma" ::"r"(vl));
+    #endif
 
     // Wait for all cores to finish matrix copy
     mempool_barrier(num_cores);

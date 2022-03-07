@@ -58,7 +58,7 @@ void conv3d_CHx3x3(int32_t *o, int32_t *i, int32_t *f) {
   uint32_t block_size_n;
 
   // Set the vector configuration
-  asm volatile("vsetvli %0, %1, e32, m2, ta, ma" : "=r"(block_size_n) : "r"(N));
+  asm volatile("vsetvli %0, %1, e32, m4, ta, ma" : "=r"(block_size_n) : "r"(N));
 
   // Slice the matrix into a manageable number of columns n_
   for (uint32_t n = 0; n < N; n += block_size_n) {
@@ -69,7 +69,7 @@ void conv3d_CHx3x3(int32_t *o, int32_t *i, int32_t *f) {
     int32_t *i_ = i + n;
     int32_t *o_ = o + n;
 
-    asm volatile("vsetvli zero, %0, e32, m2, ta, ma" ::"r"(n_));
+    asm volatile("vsetvli zero, %0, e32, m4, ta, ma" ::"r"(n_));
 
     conv3d_CHx3x3_block(o_, i_, M, f, n_);
   }
@@ -105,7 +105,7 @@ void conv3d_CHx3x3_block(int32_t *o, int32_t *i, uint32_t num_rows, int32_t *f, 
   f1_buf = f[3];
   f2_buf = f[6];
 
-  asm volatile("vle32.v v4, (%0)" :: "r"(i__));
+  asm volatile("vle32.v v8, (%0)" :: "r"(i__));
 
 
   ////////////////
@@ -136,30 +136,30 @@ void conv3d_CHx3x3_block(int32_t *o, int32_t *i, uint32_t num_rows, int32_t *f, 
     int32_t sld_elem = *i_slide_ptr_0++;
 
     if (ch == 0)
-      asm volatile("vmul.vx v24, v0, %0" ::"r"(f0_buf));
+      asm volatile("vmul.vx v16, v0, %0" ::"r"(f0_buf));
     else
-      asm volatile("vmacc.vx v24, %0, v0" ::"r"(f0_buf));
+      asm volatile("vmacc.vx v16, %0, v0" ::"r"(f0_buf));
     if (ch == 0)
-      asm volatile("vmul.vx v26, v4, %0" ::"r"(f0_buf));
+      asm volatile("vmul.vx v20, v8, %0" ::"r"(f0_buf));
     else
-      asm volatile("vmacc.vx v26, %0, v4" ::"r"(f0_buf));
+      asm volatile("vmacc.vx v20, %0, v8" ::"r"(f0_buf));
     f0_buf = f[0 + base_idx_1];
-    asm volatile("vslide1down.vx v2, v0, %0" ::"r"(sld_elem));
+    asm volatile("vslide1down.vx v4, v0, %0" ::"r"(sld_elem));
     sld_elem = *i_slide_ptr_1++;
-    asm volatile("vmacc.vx v24, %0, v4" ::"r"(f1_buf));
+    asm volatile("vmacc.vx v16, %0, v8" ::"r"(f1_buf));
     f1_buf = f[3 + base_idx_1];
-    asm volatile("vslide1down.vx v6, v4, %0" ::"r"(sld_elem));
+    asm volatile("vslide1down.vx v12, v8, %0" ::"r"(sld_elem));
     sld_elem = *i_slide_ptr_0++;
 
 
-    asm volatile("vmacc.vx v24, %0, v2" ::"r"(f0_buf));
-    asm volatile("vmacc.vx v26, %0, v6" ::"r"(f0_buf));
+    asm volatile("vmacc.vx v16, %0, v4" ::"r"(f0_buf));
+    asm volatile("vmacc.vx v20, %0, v12" ::"r"(f0_buf));
     f0_buf = f[0 + base_idx_2];
-    asm volatile("vslide1down.vx v0, v2, %0" ::"r"(sld_elem));
+    asm volatile("vslide1down.vx v0, v4, %0" ::"r"(sld_elem));
     sld_elem = *i_slide_ptr_1++;
-    asm volatile("vmacc.vx v24, %0, v6" ::"r"(f1_buf));
+    asm volatile("vmacc.vx v16, %0, v12" ::"r"(f1_buf));
     f1_buf = f[3 + base_idx_2];
-    asm volatile("vslide1down.vx v4, v6, %0" ::"r"(sld_elem));
+    asm volatile("vslide1down.vx v8, v12, %0" ::"r"(sld_elem));
     sld_elem = *i_slide_ptr_0++;
 
     if (ch != C - 1) {
@@ -168,17 +168,17 @@ void conv3d_CHx3x3_block(int32_t *o, int32_t *i, uint32_t num_rows, int32_t *f, 
 
       // Don't slide during the last iteration but preload the
       // next two input rows of channel ch + 1
-      asm volatile("vmacc.vx v24, %0, v0" ::"r"(f0_buf));
+      asm volatile("vmacc.vx v16, %0, v0" ::"r"(f0_buf));
 
       asm volatile("vle32.v v0, (%0); add %0, %0, %1"
                    : "+&r"(i__)
                    : "r"(lwi_pad));
 
-      asm volatile("vmacc.vx v26, %0, v4" ::"r"(f0_buf));
+      asm volatile("vmacc.vx v20, %0, v8" ::"r"(f0_buf));
       f0_buf = f[0 + base_idx_0];
-      asm volatile("vmacc.vx v24, %0, v4" ::"r"(f1_buf));
+      asm volatile("vmacc.vx v16, %0, v8" ::"r"(f1_buf));
 
-      asm volatile("vle32.v v4, (%0)" :: "r"(i__));
+      asm volatile("vle32.v v8, (%0)" :: "r"(i__));
 
       f1_buf = f[3 + base_idx_0];
     }
@@ -187,12 +187,12 @@ void conv3d_CHx3x3_block(int32_t *o, int32_t *i, uint32_t num_rows, int32_t *f, 
   // Bump the input ptr
   i_ += 2 * (N + F - 1);
 
-  asm volatile("vle32.v v2, (%0)" :: "r"(i_));
+  asm volatile("vle32.v v4, (%0)" :: "r"(i_));
 
-  asm volatile("vmacc.vx v24, %0, v0" ::"r"(f0_buf));
-  asm volatile("vmacc.vx v26, %0, v4" ::"r"(f0_buf));
+  asm volatile("vmacc.vx v16, %0, v0" ::"r"(f0_buf));
+  asm volatile("vmacc.vx v20, %0, v8" ::"r"(f0_buf));
   f0_buf = f[0];
-  asm volatile("vmacc.vx v24, %0, v4" ::"r"(f1_buf));
+  asm volatile("vmacc.vx v16, %0, v8" ::"r"(f1_buf));
   f1_buf = f[3];
 
   ///////////
@@ -220,29 +220,29 @@ void conv3d_CHx3x3_block(int32_t *o, int32_t *i, uint32_t num_rows, int32_t *f, 
     int32_t sld_elem = *i_slide_ptr_0++;
 
     // Unroll 0
-    asm volatile("vmacc.vx v24, %0, v2" ::"r"(f2_buf));
+    asm volatile("vmacc.vx v16, %0, v4" ::"r"(f2_buf));
     f2_buf = f[6 + base_idx_1];
-    asm volatile("vslide1down.vx v0, v2, %0" ::"r"(sld_elem));
+    asm volatile("vslide1down.vx v0, v4, %0" ::"r"(sld_elem));
     sld_elem = *i_slide_ptr_0++;
 
-    asm volatile("vmacc.vx v26, %0, v2" ::"r"(f1_buf));
+    asm volatile("vmacc.vx v20, %0, v4" ::"r"(f1_buf));
     f1_buf = f[3 + base_idx_1];
 
     if (ch == 0)
-      asm volatile("vmul.vx v28, v2, %0" ::"r"(f0_buf));
+      asm volatile("vmul.vx v24, v4, %0" ::"r"(f0_buf));
     else
-      asm volatile("vmacc.vx v28, %0, v2" ::"r"(f0_buf));
+      asm volatile("vmacc.vx v24, %0, v4" ::"r"(f0_buf));
     f0_buf = f[0 + base_idx_1];
 
     // Unroll 1
-    asm volatile("vmacc.vx v24, %0, v0" ::"r"(f2_buf));
-    asm volatile("vslide1down.vx v2, v0, %0" ::"r"(sld_elem));
+    asm volatile("vmacc.vx v16, %0, v0" ::"r"(f2_buf));
+    asm volatile("vslide1down.vx v4, v0, %0" ::"r"(sld_elem));
     f2_buf  = f[6 + base_idx_2];
 
-    asm volatile("vmacc.vx v26, %0, v0" ::"r"(f1_buf));
+    asm volatile("vmacc.vx v20, %0, v0" ::"r"(f1_buf));
     f1_buf = f[3 + base_idx_2];
 
-    asm volatile("vmacc.vx v28, %0, v0" ::"r"(f0_buf));
+    asm volatile("vmacc.vx v24, %0, v0" ::"r"(f0_buf));
     f0_buf = f[0 + base_idx_2];
 
     // The very last iterations require mixing the instructions with the store
@@ -256,28 +256,28 @@ void conv3d_CHx3x3_block(int32_t *o, int32_t *i, uint32_t num_rows, int32_t *f, 
       // Don't slide the elements here
 
       // Preload next input row of channel ch+1
-      asm volatile("vle32.v v30, (%0)" :: "r"(i__));
+      asm volatile("vle32.v v28, (%0)" :: "r"(i__));
 
-      asm volatile("vmacc.vx v24, %0, v2" ::"r"(f2_buf));
+      asm volatile("vmacc.vx v16, %0, v4" ::"r"(f2_buf));
       f2_buf = f[6 + base_idx_0];
 
-      asm volatile("vmacc.vx v26, %0, v2" ::"r"(f1_buf));
+      asm volatile("vmacc.vx v20, %0, v4" ::"r"(f1_buf));
       f1_buf = f[3 + base_idx_0];
 
-      asm volatile("vmacc.vx v28, %0, v2" ::"r"(f0_buf));
-      asm volatile("vmv.v.v v2, v30");
+      asm volatile("vmacc.vx v24, %0, v4" ::"r"(f0_buf));
+      asm volatile("vmv.v.v v4, v28");
       f0_buf = f[0 + base_idx_0];
     }
   }
 
 
-  asm volatile("vmacc.vx v24, %0, v2" ::"r"(f2_buf));
-  asm volatile("vse32.v v24, (%0); add %0, %0, %1" : "+&r"(o) : "r"(lwo));
+  asm volatile("vmacc.vx v16, %0, v4" ::"r"(f2_buf));
+  asm volatile("vse32.v v16, (%0); add %0, %0, %1" : "+&r"(o) : "r"(lwo));
   f2_buf = f[6];
 
-  asm volatile("vmacc.vx v26, %0, v2" ::"r"(f1_buf));
+  asm volatile("vmacc.vx v20, %0, v4" ::"r"(f1_buf));
   f1_buf = f[3];
-  asm volatile("vmv.v.v v24, v26");
+  asm volatile("vmv.v.v v16, v20");
 
   // Bump the input ptr
   i_ += (N + F - 1);
@@ -287,9 +287,9 @@ void conv3d_CHx3x3_block(int32_t *o, int32_t *i, uint32_t num_rows, int32_t *f, 
 
   i_slide_ptr_0 = i_ + n_;
 
-  asm volatile("vmacc.vx v28, %0, v2" ::"r"(f0_buf));
+  asm volatile("vmacc.vx v24, %0, v4" ::"r"(f0_buf));
   f0_buf = f[0];
-  asm volatile("vmv.v.v v26, v28");
+  asm volatile("vmv.v.v v20, v24");
 
   ////////////
   // REGIME //
@@ -326,46 +326,46 @@ void conv3d_CHx3x3_block(int32_t *o, int32_t *i, uint32_t num_rows, int32_t *f, 
 
       // Calculate F contributions of the input rows, on F different output
       // rows
-      asm volatile("vmacc.vx v24, %0, v0" ::"r"(f2_buf));
+      asm volatile("vmacc.vx v16, %0, v0" ::"r"(f2_buf));
       f2_buf = f[6 + base_idx_1];
-      asm volatile("vmacc.vx v26, %0, v0" ::"r"(f1_buf));
+      asm volatile("vmacc.vx v20, %0, v0" ::"r"(f1_buf));
       f1_buf = f[3 + base_idx_1];
-      asm volatile("vslide1down.vx v2, v0, %0" ::"r"(sld_elem));
+      asm volatile("vslide1down.vx v4, v0, %0" ::"r"(sld_elem));
       sld_elem = *i_slide_ptr_0++;
       if (ch == 0)
-        asm volatile("vmul.vx v28, v0, %0" ::"r"(f0_buf));
+        asm volatile("vmul.vx v24, v0, %0" ::"r"(f0_buf));
       else
-        asm volatile("vmacc.vx v28, %0, v0" ::"r"(f0_buf));
+        asm volatile("vmacc.vx v24, %0, v0" ::"r"(f0_buf));
       f0_buf = f[0 + base_idx_1];
 
 
       // Nalculate F contributions of the input rows, on F different output
       // rows
-      asm volatile("vmacc.vx v24, %0, v2" ::"r"(f2_buf));
+      asm volatile("vmacc.vx v16, %0, v4" ::"r"(f2_buf));
       f2_buf = f[6 + base_idx_2];
-      asm volatile("vmacc.vx v26, %0, v2" ::"r"(f1_buf));
+      asm volatile("vmacc.vx v20, %0, v4" ::"r"(f1_buf));
       f1_buf = f[3 + base_idx_2];
-      asm volatile("vslide1down.vx v0, v2, %0" ::"r"(sld_elem));
-      asm volatile("vmacc.vx v28, %0, v2" ::"r"(f0_buf));
+      asm volatile("vslide1down.vx v0, v4, %0" ::"r"(sld_elem));
+      asm volatile("vmacc.vx v24, %0, v4" ::"r"(f0_buf));
       f0_buf = f[0 + base_idx_2];
       if (ch != C - 1) {
         // Point to the first element of the channel ch
         i__ = i_ + ich_len * (ch + 1);
         // Preload next input row
-        asm volatile("vle32.v v30, (%0)" :: "r"(i__));
+        asm volatile("vle32.v v28, (%0)" :: "r"(i__));
 
         // Start calculating the next pointers to the elements to be slided in
 
-        asm volatile("vmacc.vx v24, %0, v0" ::"r"(f2_buf));
+        asm volatile("vmacc.vx v16, %0, v0" ::"r"(f2_buf));
 
         // Calculate next base idx
         int32_t base_idx_0 = fch_len * (ch + 1);
 
         f2_buf = f[6 + base_idx_0];
-        asm volatile("vmacc.vx v26, %0, v0" ::"r"(f1_buf));
+        asm volatile("vmacc.vx v20, %0, v0" ::"r"(f1_buf));
         f1_buf = f[3 + base_idx_0];
-        asm volatile("vmacc.vx v28, %0, v0" ::"r"(f0_buf));
-        asm volatile("vmv.v.v v0, v30");
+        asm volatile("vmacc.vx v24, %0, v0" ::"r"(f0_buf));
+        asm volatile("vmv.v.v v0, v28");
         f0_buf = f[0 + base_idx_0];
 
         i_slide_ptr_0 = i__ + n_;
@@ -373,20 +373,20 @@ void conv3d_CHx3x3_block(int32_t *o, int32_t *i, uint32_t num_rows, int32_t *f, 
     }
 
     // The last iteration is used to mask the latency of the store and the moves
-    asm volatile("vmacc.vx v24, %0, v0" ::"r"(f2_buf));
-    asm volatile("vse32.v  v24, (%0); add %0, %0, %1" : "+&r"(o) : "r"(lwo));
-    asm volatile("vmacc.vx v26, %0, v0" ::"r"(f1_buf));
-    asm volatile("vmv.v.v v24, v26");
+    asm volatile("vmacc.vx v16, %0, v0" ::"r"(f2_buf));
+    asm volatile("vse32.v  v16, (%0); add %0, %0, %1" : "+&r"(o) : "r"(lwo));
+    asm volatile("vmacc.vx v20, %0, v0" ::"r"(f1_buf));
+    asm volatile("vmv.v.v v16, v20");
 
     // Bump the input ptr
     i_ += N + F - 1;
     // Preload next input row of channel 0
-    asm volatile("vle32.v v2, (%0)" :: "r"(i_));
+    asm volatile("vle32.v v4, (%0)" :: "r"(i_));
     i_slide_ptr_1 = i_ + n_;
 
-    asm volatile("vmacc.vx v28, %0, v0" ::"r"(f0_buf));
+    asm volatile("vmacc.vx v24, %0, v0" ::"r"(f0_buf));
     f2_buf = f[6];
-    asm volatile("vmv.v.v v26, v28");
+    asm volatile("vmv.v.v v20, v24");
     f1_buf = f[3];
     f0_buf = f[0];
 
@@ -407,41 +407,41 @@ void conv3d_CHx3x3_block(int32_t *o, int32_t *i, uint32_t num_rows, int32_t *f, 
 
       int32_t sld_elem = *i_slide_ptr_1++;
 
-      asm volatile("vmacc.vx v24, %0, v2" ::"r"(f2_buf));
+      asm volatile("vmacc.vx v16, %0, v4" ::"r"(f2_buf));
       f2_buf = f[6 + base_idx_1];
-      asm volatile("vslide1down.vx v0, v2, %0" ::"r"(sld_elem));
+      asm volatile("vslide1down.vx v0, v4, %0" ::"r"(sld_elem));
       sld_elem = *i_slide_ptr_1++;
-      asm volatile("vmacc.vx v26, %0, v2" ::"r"(f1_buf));
+      asm volatile("vmacc.vx v20, %0, v4" ::"r"(f1_buf));
       f1_buf = f[3 + base_idx_1];
       if (ch == 0)
-        asm volatile("vmul.vx v28, v2, %0" ::"r"(f0_buf));
+        asm volatile("vmul.vx v24, v4, %0" ::"r"(f0_buf));
       else
-        asm volatile("vmacc.vx v28, %0, v2" ::"r"(f0_buf));
+        asm volatile("vmacc.vx v24, %0, v4" ::"r"(f0_buf));
       f0_buf = f[0 + base_idx_1];
 
-      asm volatile("vmacc.vx v24, %0, v0" ::"r"(f2_buf));
-      asm volatile("vslide1down.vx v2, v0, %0" ::"r"(sld_elem));
+      asm volatile("vmacc.vx v16, %0, v0" ::"r"(f2_buf));
+      asm volatile("vslide1down.vx v4, v0, %0" ::"r"(sld_elem));
       f2_buf = f[6 + base_idx_2];
-      asm volatile("vmacc.vx v26, %0, v0" ::"r"(f1_buf));
+      asm volatile("vmacc.vx v20, %0, v0" ::"r"(f1_buf));
       f1_buf = f[3 + base_idx_2];
-      asm volatile("vmacc.vx v28, %0, v0" ::"r"(f0_buf));
+      asm volatile("vmacc.vx v24, %0, v0" ::"r"(f0_buf));
       f0_buf = f[0 + base_idx_2];
 
       if (ch != C - 1) {
         // Point to the first element of the channel ch+1
         i__ = i_ + ich_len * (ch + 1);
-        asm volatile("vle32.v v30, (%0)" :: "r"(i__));
+        asm volatile("vle32.v v28, (%0)" :: "r"(i__));
 
-        asm volatile("vmacc.vx v24, %0, v2" ::"r"(f2_buf));
+        asm volatile("vmacc.vx v16, %0, v4" ::"r"(f2_buf));
 
         // Calculate next base idx
         int32_t base_idx_0 = fch_len * (ch + 1);
 
         f2_buf = f[6 + base_idx_0];
-        asm volatile("vmacc.vx v26, %0, v2" ::"r"(f1_buf));
+        asm volatile("vmacc.vx v20, %0, v4" ::"r"(f1_buf));
         f1_buf = f[3 + base_idx_0];
-        asm volatile("vmacc.vx v28, %0, v2" ::"r"(f0_buf));
-        asm volatile("vmv.v.v v2, v30");
+        asm volatile("vmacc.vx v24, %0, v4" ::"r"(f0_buf));
+        asm volatile("vmv.v.v v4, v28");
         f0_buf = f[0 + base_idx_0];
 
         i_slide_ptr_1 = i__ + n_;
@@ -449,10 +449,10 @@ void conv3d_CHx3x3_block(int32_t *o, int32_t *i, uint32_t num_rows, int32_t *f, 
     }
 
     // The last iteration is used to mask the latency of the store and the moves
-    asm volatile("vmacc.vx v24, %0, v2" ::"r"(f2_buf));
-    asm volatile("vse32.v  v24, (%0); add %0, %0, %1" : "+&r"(o) : "r"(lwo));
-    asm volatile("vmacc.vx v26, %0, v2" ::"r"(f1_buf));
-    asm volatile("vmv.v.v v24, v26");
+    asm volatile("vmacc.vx v16, %0, v4" ::"r"(f2_buf));
+    asm volatile("vse32.v  v16, (%0); add %0, %0, %1" : "+&r"(o) : "r"(lwo));
+    asm volatile("vmacc.vx v20, %0, v4" ::"r"(f1_buf));
+    asm volatile("vmv.v.v v16, v20");
 
     // Bump the input ptr
     i_ += N + F - 1;
@@ -460,16 +460,16 @@ void conv3d_CHx3x3_block(int32_t *o, int32_t *i, uint32_t num_rows, int32_t *f, 
     asm volatile("vle32.v v0, (%0)" :: "r"(i_));
     i_slide_ptr_0 = i_ + n_;
 
-    asm volatile("vmacc.vx v28, %0, v2" ::"r"(f0_buf));
+    asm volatile("vmacc.vx v24, %0, v4" ::"r"(f0_buf));
     f2_buf = f[6];
-    asm volatile("vmv.v.v v26, v28");
+    asm volatile("vmv.v.v v20, v24");
     f1_buf = f[3];
     f0_buf = f[0];
 
   }
 
   i__ = i_ + lwi;
-  asm volatile("vle32.v v4, (%0)" :: "r"(i__));
+  asm volatile("vle32.v v8, (%0)" :: "r"(i__));
 
   ////////////////////////
   // Row I-F -> (I-1)-1 //
@@ -496,32 +496,32 @@ void conv3d_CHx3x3_block(int32_t *o, int32_t *i, uint32_t num_rows, int32_t *f, 
     // channel (ch) of the filter (f)
     int32_t base_idx_2 = 2 + (fch_len * ch);
 
-    asm volatile("vmacc.vx v24, %0, v0" ::"r"(f2_buf));
-    asm volatile("vslide1down.vx v2, v0, %0" ::"r"(sld_elem));
+    asm volatile("vmacc.vx v16, %0, v0" ::"r"(f2_buf));
+    asm volatile("vslide1down.vx v4, v0, %0" ::"r"(sld_elem));
     sld_elem = *i_slide_ptr_1++;
-    asm volatile("vmacc.vx v26, %0, v0" ::"r"(f1_buf));
+    asm volatile("vmacc.vx v20, %0, v0" ::"r"(f1_buf));
     if (ch == 0)
-      asm volatile("vmul.vx v28, v0, %0" ::"r"(f0_buf));
+      asm volatile("vmul.vx v24, v0, %0" ::"r"(f0_buf));
     else
-      asm volatile("vmacc.vx v28, %0, v0" ::"r"(f0_buf));
+      asm volatile("vmacc.vx v24, %0, v0" ::"r"(f0_buf));
     f0_buf = f[0 + base_idx_1];
-    asm volatile("vslide1down.vx v6, v4, %0" ::"r"(sld_elem));
+    asm volatile("vslide1down.vx v12, v8, %0" ::"r"(sld_elem));
     sld_elem = *i_slide_ptr_0++;
-    asm volatile("vmacc.vx v26, %0, v4" ::"r"(f2_buf));
+    asm volatile("vmacc.vx v20, %0, v8" ::"r"(f2_buf));
     f2_buf = f[6 + base_idx_1];
-    asm volatile("vmacc.vx v28, %0, v4" ::"r"(f1_buf));
+    asm volatile("vmacc.vx v24, %0, v8" ::"r"(f1_buf));
     f1_buf = f[3 + base_idx_1];
 
-    asm volatile("vslide1down.vx v0, v2, %0" ::"r"(sld_elem));
+    asm volatile("vslide1down.vx v0, v4, %0" ::"r"(sld_elem));
     sld_elem = *i_slide_ptr_1++;
-    asm volatile("vmacc.vx v24, %0, v2" ::"r"(f2_buf));
-    asm volatile("vmacc.vx v26, %0, v2" ::"r"(f1_buf));
-    asm volatile("vmacc.vx v28, %0, v2" ::"r"(f0_buf));
+    asm volatile("vmacc.vx v16, %0, v4" ::"r"(f2_buf));
+    asm volatile("vmacc.vx v20, %0, v4" ::"r"(f1_buf));
+    asm volatile("vmacc.vx v24, %0, v4" ::"r"(f0_buf));
     f0_buf = f[0 + base_idx_2];
-    asm volatile("vslide1down.vx v4, v6, %0" ::"r"(sld_elem));
-    asm volatile("vmacc.vx v26, %0, v6" ::"r"(f2_buf));
+    asm volatile("vslide1down.vx v8, v12, %0" ::"r"(sld_elem));
+    asm volatile("vmacc.vx v20, %0, v12" ::"r"(f2_buf));
     f2_buf = f[6 + base_idx_2];
-    asm volatile("vmacc.vx v28, %0, v6" ::"r"(f1_buf));
+    asm volatile("vmacc.vx v24, %0, v12" ::"r"(f1_buf));
     f1_buf = f[3 + base_idx_2];
 
     if (ch != C - 1) {
@@ -530,38 +530,38 @@ void conv3d_CHx3x3_block(int32_t *o, int32_t *i, uint32_t num_rows, int32_t *f, 
 
       i__ = i_ + ich_len * (ch + 1);
 
-      asm volatile("vmacc.vx v24, %0, v0" ::"r"(f2_buf));
-      asm volatile("vmacc.vx v26, %0, v0" ::"r"(f1_buf));
-      asm volatile("vmacc.vx v28, %0, v0" ::"r"(f0_buf));
+      asm volatile("vmacc.vx v16, %0, v0" ::"r"(f2_buf));
+      asm volatile("vmacc.vx v20, %0, v0" ::"r"(f1_buf));
+      asm volatile("vmacc.vx v24, %0, v0" ::"r"(f0_buf));
       f0_buf = f[0 + base_idx_0];
 
       asm volatile("vle32.v v0, (%0); add %0, %0, %1"
                    : "+&r"(i__)
                    : "r"(lwi_pad));
 
-      asm volatile("vmacc.vx v26, %0, v4" ::"r"(f2_buf));
+      asm volatile("vmacc.vx v20, %0, v8" ::"r"(f2_buf));
       f2_buf = f[6 + base_idx_0];
-      asm volatile("vmacc.vx v28, %0, v4" ::"r"(f1_buf));
+      asm volatile("vmacc.vx v24, %0, v8" ::"r"(f1_buf));
       f1_buf = f[3 + base_idx_0];
 
-      asm volatile("vle32.v v4, (%0)" :: "r"(i__));
+      asm volatile("vle32.v v8, (%0)" :: "r"(i__));
     }
   }
 
-  asm volatile("vmacc.vx v24, %0, v0" ::"r"(f2_buf));
-  asm volatile("vse32.v  v24, (%0); add %0, %0, %1" : "+&r"(o) : "r"(lwo));
-  asm volatile("vmacc.vx v26, %0, v0" ::"r"(f1_buf));
-  asm volatile("vmacc.vx v28, %0, v0" ::"r"(f0_buf));
+  asm volatile("vmacc.vx v16, %0, v0" ::"r"(f2_buf));
+  asm volatile("vse32.v  v16, (%0); add %0, %0, %1" : "+&r"(o) : "r"(lwo));
+  asm volatile("vmacc.vx v20, %0, v0" ::"r"(f1_buf));
+  asm volatile("vmacc.vx v24, %0, v0" ::"r"(f0_buf));
   f0_buf = f[0];
-  asm volatile("vmacc.vx v26, %0, v4" ::"r"(f2_buf));
+  asm volatile("vmacc.vx v20, %0, v8" ::"r"(f2_buf));
   f2_buf = f[6];
-  asm volatile("vse32.v  v26, (%0); add %0, %0, %1" : "+&r"(o) : "r"(lwo));
-  asm volatile("vmacc.vx v28, %0, v4" ::"r"(f1_buf));
+  asm volatile("vse32.v  v20, (%0); add %0, %0, %1" : "+&r"(o) : "r"(lwo));
+  asm volatile("vmacc.vx v24, %0, v8" ::"r"(f1_buf));
   f1_buf = f[3];
 
   // Bump the input ptr
   i_ += 2 * (N + F - 1);
-  asm volatile("vle32.v v2, (%0)" :: "r"(i_));
+  asm volatile("vle32.v v4, (%0)" :: "r"(i_));
 
   //////////////////////////
   // Row (I-1)-3 -> (I-1) //
@@ -585,30 +585,30 @@ void conv3d_CHx3x3_block(int32_t *o, int32_t *i, uint32_t num_rows, int32_t *f, 
     // channel (ch) of the filter (f)
     int32_t base_idx_2 = 2 + (fch_len * ch);
 
-    asm volatile("vslide1down.vx v0, v2, %0" ::"r"(sld_elem));
+    asm volatile("vslide1down.vx v0, v4, %0" ::"r"(sld_elem));
     sld_elem = *i_slide_ptr_0++;
-    asm volatile("vmacc.vx v28, %0, v2" ::"r"(f2_buf));
+    asm volatile("vmacc.vx v24, %0, v4" ::"r"(f2_buf));
     f2_buf = f[6 + base_idx_1];
 
-    asm volatile("vslide1down.vx v2, v0, %0" ::"r"(sld_elem));
-    asm volatile("vmacc.vx v28, %0, v0" ::"r"(f2_buf));
+    asm volatile("vslide1down.vx v4, v0, %0" ::"r"(sld_elem));
+    asm volatile("vmacc.vx v24, %0, v0" ::"r"(f2_buf));
     f2_buf = f[6 + base_idx_2];
 
     if (ch != C - 1) {
       int32_t base_idx_0 = fch_len * (ch + 1);
 
       i__ = i_ + ich_len * (ch + 1);
-      asm volatile("vle32.v v30, (%0)" :: "r"(i__));
+      asm volatile("vle32.v v28, (%0)" :: "r"(i__));
 
-      asm volatile("vmacc.vx v28, %0, v2" ::"r"(f2_buf));
+      asm volatile("vmacc.vx v24, %0, v4" ::"r"(f2_buf));
       f2_buf = f[6 + base_idx_0];
 
-      asm volatile("vmv.v.v v2 v30");
+      asm volatile("vmv.v.v v4 v28");
     }
   }
 
-  asm volatile("vmacc.vx v28, %0, v2" ::"r"(f2_buf));
-  asm volatile("vse32.v  v28, (%0)" :: "r"(o));
+  asm volatile("vmacc.vx v24, %0, v4" ::"r"(f2_buf));
+  asm volatile("vse32.v  v24, (%0)" :: "r"(o));
 }
 
 /*
@@ -622,17 +622,17 @@ void conv3d_CHx3x3_block(int32_t *o, int32_t *i, uint32_t num_rows, int32_t *f, 
   // Kernel
   for (int k = 0; k < F; ++k) {
     // Nalculate F*F contributions of the input rows, on F different output rows
-    // v28 should be initialized during the first iteration
+    // v24 should be initialized during the first iteration
     asm volatile("vmacc.vx v16, %0, v0" :: "r"(f[42  + (2*k)]));
     asm volatile("vmacc.vx v18, %0, v0" :: "r"(f[35  + (2*k)]));
     asm volatile("vmacc.vx v20, %0, v0" :: "r"(f[28 + (2*k)]));
     asm volatile("vmacc.vx v22, %0, v0" :: "r"(f[21 + (2*k)]));
-    asm volatile("vmacc.vx v24, %0, v0" :: "r"(f[14 + (2*k)]));
-    asm volatile("vmacc.vx v26, %0, v0" :: "r"(f[7 + (2*k)]));
+    asm volatile("vmacc.vx v16, %0, v0" :: "r"(f[14 + (2*k)]));
+    asm volatile("vmacc.vx v20, %0, v0" :: "r"(f[7 + (2*k)]));
     if (k == 0)
-      asm volatile("vmul.vx v28, v0, %0" :: "r"(f[0 + (2*k)]));
+      asm volatile("vmul.vx v24, v0, %0" :: "r"(f[0 + (2*k)]));
     else
-      asm volatile("vmacc.vx v28, %0, v0" :: "r"(f[0 + (2*k)]));
+      asm volatile("vmacc.vx v24, %0, v0" :: "r"(f[0 + (2*k)]));
     // Slide the input row by one, and inject the next scalar element of the row
     asm volatile("vslide1down.vx v0, v0, %0" :: "r"(*i_slide_ptr_0++));
   }
@@ -642,7 +642,7 @@ void conv3d_CHx3x3_block(int32_t *o, int32_t *i, uint32_t num_rows, int32_t *f, 
   // To avoid these operations, unroll the loop via software, renaming the
   registers manually asm volatile("vmv.v.v v16, v18"); asm volatile("vmv.v.v
   v18, v20"); asm volatile("vmv.v.v v20, v22"); asm volatile("vmv.v.v v22,
-  v24"); asm volatile("vmv.v.v v24, v26"); asm volatile("vmv.v.v v26, v28");
+  v16"); asm volatile("vmv.v.v v16, v20"); asm volatile("vmv.v.v v20, v24");
 */
 
 #undef M
