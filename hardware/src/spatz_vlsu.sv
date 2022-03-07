@@ -532,8 +532,8 @@ module spatz_vlsu
           end
 
           buffer_wid[i]    = buffer_id[i];
-          buffer_req_id[i] = vrf_rvalid_i;
-          buffer_push[i]   = vrf_rvalid_i;
+          buffer_req_id[i] = vrf_rvalid_i & |vreg_counter_en[i * NrIPUsPerMemPort +: NrIPUsPerMemPort];
+          buffer_push[i]   = buffer_req_id[i];
         end
       end
 
