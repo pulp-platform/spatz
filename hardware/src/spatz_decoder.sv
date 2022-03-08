@@ -272,18 +272,27 @@ module spatz_decoder
               riscv_instruction::VSLL_VX,
               riscv_instruction::VSLL_VI: begin
                 spatz_req.op = VSLL;
+                if (func3 == OPIVI) begin
+                  spatz_req.rs1 = elen_t'(arith_s1);
+                end
               end
 
               riscv_instruction::VSRL_VV,
               riscv_instruction::VSRL_VX,
               riscv_instruction::VSRL_VI: begin
                 spatz_req.op = VSRL;
+                if (func3 == OPIVI) begin
+                  spatz_req.rs1 = elen_t'(arith_s1);
+                end
               end
 
               riscv_instruction::VSRA_VV,
               riscv_instruction::VSRA_VX,
               riscv_instruction::VSRA_VI: begin
                 spatz_req.op = VSRA;
+                if (func3 == OPIVI) begin
+                  spatz_req.rs1 = elen_t'(arith_s1);
+                end
               end
 
               // Vector Min/Max

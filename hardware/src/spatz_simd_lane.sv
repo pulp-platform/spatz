@@ -59,7 +59,7 @@ module spatz_simd_lane
   logic [Width-1:0] arith_op2; // Minuend
 
   // Select arithmetic operands
-  always_comb begin : arith_op
+  always_comb begin : arith_operands
     unique case (operation_i)
       VMACC,
       VNMSAC: begin
@@ -80,10 +80,56 @@ module spatz_simd_lane
         arith_op2 = op_s2_i;
       end
     endcase // operation_i
-  end // arith_op
+  end // arith_operands
 
   assign adder_result      = $signed(arith_op2) + $signed(arith_op1) + carry_i;
   assign subtractor_result = $signed(arith_op2) - $signed(arith_op1) - carry_i;
+
+  /////////////
+  // Shifter //
+  /////////////
+
+  logic [$clog2(Width)-1:0] shift_amount;
+  logic [Width-1:0] shift_operand;
+  if (Width >= 32) begin
+    always_comb begin : shift_operands
+      unique case (sew_i)
+        rvv_pkg::EW_16: begin
+          shift_amount = op_s1_i[3:0];
+          if (operation_i == VSRA) shift_operand = $signed(op_s2_i[15:0]);
+          else shift_operand = $unsigned(op_s2_i[15:0]);
+        end
+        rvv_pkg::EW_32: begin
+          shift_amount = op_s1_i[4:0];
+          shift_operand = op_s2_i[31:0];
+        end
+        default: begin
+          shift_amount = op_s1_i[2:0];
+          if (operation_i == VSRA) shift_operand = $signed(op_s2_i[7:0]);
+          else shift_operand = $unsigned(op_s2_i[7:0]);
+        end
+      endcase
+    end // shift_operands
+  end else if (Width >= 16) begin
+    always_comb begin : shift_operands
+      unique case (sew_i)
+        rvv_pkg::EW_16: begin
+          shift_amount = op_s1_i[3:0];
+          shift_operand = op_s2_i[15:0];
+        end
+        default: begin
+          shift_amount = op_s1_i[2:0];
+          if (operation_i == VSRA) shift_operand = $signed(op_s2_i[7:0]);
+          else shift_operand = $unsigned(op_s2_i[7:0]);
+        end
+      endcase
+    end // shift_operands
+  end else begin
+    always_comb begin
+      shift_amount = op_s1_i[2:0];
+      shift_operand = op_s2_i[7:0];
+    end
+  end
 
   ////////////
   // Result //
@@ -104,9 +150,9 @@ module spatz_simd_lane
       VAND: simd_result = op_s1_i & op_s2_i;
       VOR:  simd_result = op_s1_i | op_s2_i;
       VXOR: simd_result = op_s1_i ^ op_s2_i;
-      VSLL: simd_result = $unsigned(op_s1_i) << op_s2_i[$clog2(Width)-1:0];
-      VSRL: simd_result = $unsigned(op_s1_i) >> op_s2_i[$clog2(Width)-1:0];
-      VSRA: simd_result = $signed(op_s1_i) >>> op_s2_i[$clog2(Width)-1:0];
+      VSLL: simd_result = shift_operand << shift_amount;
+      VSRL: simd_result = shift_operand >> shift_amount;
+      VSRA: simd_result = $signed(shift_operand) >>> shift_amount;
       // TODO: Change selection when SEW does not equal Width
       VMUL: simd_result = mult_result[Width-1:0];
       VMULH: simd_result = mult_result[2*Width-1:Width];

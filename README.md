@@ -87,9 +87,9 @@ The goal of Spatz is to implement all instructions belonging to the Zve32x vecto
 | vand.{vv, vx, vi}                 |    ✅   |
 | vor.{vv, vx, vi}                  |    ✅   |
 | vxor.{vv, vx, vi}                 |    ✅   |
-| vssl.{vv, vx, vi}                 |    ❌   |
-| vsrl.{vv, vx, vi}                 |    ❌   |
-| vsra.{vv, vx, vi}                 |    ❌   |
+| vssl.{vv, vx, vi}                 |    ✅   |
+| vsrl.{vv, vx, vi}                 |    ✅   |
+| vsra.{vv, vx, vi}                 |    ✅   |
 | vnsrl.{wv, wx, wi}                |    ❌   |
 | vnsra.{wv, wx, wi}                |    ❌   |
 | vmseq.{vv, vx, vi}                |    ❌   |
