@@ -201,43 +201,5 @@ int main() {
     mempool_barrier(num_cores);
   #endif
 
-  /*for (int idx = 0; idx < (M+F/2*2)*(N+F/2*2); idx++) {
-    i_l1[idx] = i[idx];
-  }
-
-  for (int idx = 0; idx < F*F; idx++) {
-    f_l1[idx] = f[idx];
-  }
-
-  // Call the main kernel, and measure cycles
-  uint32_t timer_start = mempool_get_timer();
-  if (F == 3)
-    conv2d_3x3(o_l1, i_l1, f_l1, M, N);
-  else if (F == 5)
-    conv2d_5x5(o_l1, i_l1, f_l1, M, N, F);
-  else if (F == 7)
-    conv2d_7x7(o_l1, i_l1, f_l1);
-  else
-    printf("Error: the filter size is different from 3 or 5 or 7.\n");
-
-  // Performance metrics
-  uint32_t timer_end = mempool_get_timer();
-  uint32_t runtime = timer_end - timer_start;
-  uint32_t performance = 1000 * 2 * F * F * M * N / runtime;
-  uint32_t utilization = performance / 4;
-
-  printf("The execution took %u cycles.\n", runtime);
-  printf("The performance is %u OP/1000cycles (%u%%o utilization).\n",
-         performance, utilization);
-
-  // Verify correctness
-  printf("Verifying result...\n");
-  int error = verify_matrix(o_l1, golden_o, M, N);
-  if (error != 0) {
-    printf("Fail.\n");
-  } else {
-    printf("Passed.\n");
-  }*/
-
   return 0;
 }
