@@ -155,9 +155,14 @@ module spatz_simd_lane
       VSRA: simd_result = $signed(shift_operand) >>> shift_amount;
       // TODO: Change selection when SEW does not equal Width
       VMUL: simd_result = mult_result[Width-1:0];
-      VMULH: simd_result = mult_result[2*Width-1:Width];
-      VMULHU: simd_result = mult_result[2*Width-1:Width];
-      VMULHSU: simd_result = mult_result[2*Width-1:Width];
+      VMULH, VMULHU, VMULHSU: begin
+        simd_result = mult_result[2*Width-1:Width];
+        for (int i = 0; i < $clog2(Width/8); i++) begin
+          if (sew_i == rvv_pkg::vew_e'(i)) begin
+            simd_result = mult_result[8*(2**i) +: Width];
+          end
+        end
+      end
       VMADC: simd_result = Width'(adder_result[Width]);
       VMSBC: simd_result = Width'(subtractor_result[Width]);
       default simd_result = '0;

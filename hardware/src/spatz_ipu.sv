@@ -30,7 +30,7 @@ module spatz_ipu
 
   // Is the operation signed
   logic is_signed;
-  assign is_signed = operation_i inside {VMIN, VMAX, VMULH};
+  assign is_signed = operation_i inside {VMIN, VMAX, VMULH, VMULHSU};
 
   // SIMD input signals
   typedef struct packed {
@@ -65,10 +65,8 @@ module spatz_ipu
 
     if (sew_i == rvv_pkg::EW_8) begin
       if (is_signed) begin
-        lane_signal_inp.ew32_op[0] = 32'($signed(op_s1_i[31:24]));
         lane_signal_inp.ew32_op[1] = 32'($signed(op_s2_i[31:24]));
         lane_signal_inp.ew32_op[2] = 32'($signed(op_d_i[31:24]));
-        lane_signal_inp.ew16_op[0] = 16'($signed(op_s1_i[23:16]));
         lane_signal_inp.ew16_op[1] = 16'($signed(op_s2_i[23:16]));
         lane_signal_inp.ew16_op[2] = 16'($signed(op_d_i[23:16]));
       end else begin
@@ -79,6 +77,8 @@ module spatz_ipu
         lane_signal_inp.ew16_op[1] = 16'(op_s2_i[23:16]);
         lane_signal_inp.ew16_op[2] = 16'(op_d_i[23:16]);
       end
+      lane_signal_inp.ew32_op[0] = is_signed & operation_i != VMULHSU ? 32'($signed(op_s1_i[31:24])) : 32'(op_s1_i[31:24]);
+      lane_signal_inp.ew16_op[0] = is_signed & operation_i != VMULHSU ? 16'($signed(op_s1_i[23:16])) : 16'(op_s1_i[23:16]);
       lane_signal_inp.ew8_op[1][0] = op_s1_i[15:8];
       lane_signal_inp.ew8_op[1][1] = op_s2_i[15:8];
       lane_signal_inp.ew8_op[1][2] = op_d_i[15:8];
@@ -92,7 +92,6 @@ module spatz_ipu
       lane_signal_inp.ew32_carry   = carry_i[3];
     end else if (sew_i == rvv_pkg::EW_16) begin
       if (is_signed) begin
-        lane_signal_inp.ew32_op[0] = 32'($signed(op_s1_i[31:16]));
         lane_signal_inp.ew32_op[1] = 32'($signed(op_s2_i[31:16]));
         lane_signal_inp.ew32_op[2] = 32'($signed(op_d_i[31:16]));
       end else begin
@@ -100,6 +99,7 @@ module spatz_ipu
         lane_signal_inp.ew32_op[1] = 32'((op_s2_i[31:16]));
         lane_signal_inp.ew32_op[2] = 32'((op_d_i[31:16]));
       end
+      lane_signal_inp.ew32_op[0] = is_signed & operation_i != VMULHSU ? 32'($signed(op_s1_i[31:16])) : 32'((op_s1_i[31:16]));
       lane_signal_inp.ew16_op[0] = op_s1_i[15:0];
       lane_signal_inp.ew16_op[1] = op_s2_i[15:0];
       lane_signal_inp.ew16_op[2] = op_d_i[15:0];
