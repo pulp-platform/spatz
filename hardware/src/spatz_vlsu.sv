@@ -278,9 +278,15 @@ module spatz_vlsu
     );
   end
 
+  // Do we need to catch up to reach element idx parity (because of non-zero vstart)
+  vlen_t vreg_start_0;
+  assign vreg_start_0 = N_IPU == 'd1 ?
+                        spatz_req_q.vstart :
+                        ((spatz_req_q.vstart >> ($clog2(N_IPU) + $clog2(ELENB))) << $clog2(ELENB)) + (spatz_req_q.vstart[idx_width(N_IPU)+$clog2(ELENB)-1:$clog2(ELENB)] > 'd0 ? ELENB :
+                         spatz_req_q.vstart[idx_width(N_IPU)+$clog2(ELENB)-1:$clog2(ELENB)] == 'd0 ? spatz_req_q.vstart[$clog2(ELENB)-1:0] : 'd0);
   logic [N_IPU-1:0] catchup;
   for (genvar i = 0; i < N_IPU; i++) begin
-    assign catchup[i] = (vreg_counter_value[i] < vreg_counter_load_value[0]) & (vreg_counter_max[i] != vreg_counter_value[i]);
+    assign catchup[i] = (vreg_counter_value[i] < vreg_start_0) & (vreg_counter_max[i] != vreg_counter_value[i]);
   end
 
   /* verilator lint_off SELRANGE */
@@ -325,15 +331,13 @@ module spatz_vlsu
       vreg_counter_max[i] = max;
     end
 
-    if (vreg_counter_value[0] > vreg_counter_load_value[0]) begin
+    if (vreg_counter_value[0] > vreg_start_0) begin
       vreg_elem_id = vreg_counter_value[NrIPUsPerMemPort-1] >> $clog2(ELENB);
       vreg_byte_id = vreg_counter_value[0][$clog2(ELENB)-1:0];
     end else begin
       vreg_elem_id = vreg_counter_value[N_IPU-1] >> $clog2(ELENB);
       vreg_byte_id = vreg_counter_value[N_IPU-1][$clog2(ELENB)-1:0];
     end
-    /*vreg_elem_id = vreg_counter_value[0] > vreg_counter_load_value[0] ? vreg_counter_value[NrIPUsPerMemPort-1] >> $clog2(ELENB) : vreg_counter_value[N_IPU-1] >> $clog2(ELENB);
-    vreg_byte_id = vreg_counter_value[0] > vreg_counter_load_value[0] ? vreg_counter_value[0][$clog2(ELENB)-1:0] : vreg_counter_value[N_IPU-1][$clog2(ELENB)-1:0];*/
   end
   /* verilator lint_on SELRANGE */
 
