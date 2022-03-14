@@ -34,7 +34,9 @@ void conv2d_7x7(int32_t *o, int32_t *i, int32_t *f, int32_t num_rows, int32_t nu
     int32_t *i = i_cpy + c;
     int32_t *o_ = o + c;
 
-    int32_t lwi = (C + F - 1);
+    int32_t lwi = C + F - 1;
+    int32_t lwf = F;
+    int32_t lwo = C;
 
     int32_t t0, t1, t2, t3, t4, t5, t6;
     t0 = *f;
@@ -62,9 +64,6 @@ void conv2d_7x7(int32_t *o, int32_t *i, int32_t *f, int32_t num_rows, int32_t nu
     // Iterate over the output rows
     for (int32_t r = 0; r < num_rows; r += block_size_o) {
       // Helper variables
-      int32_t lwo = C;
-      int32_t lwi = (C + F - 1);
-      int32_t lwf = F;
       int32_t *f_ = f + (lwf << 1);
       int32_t *o__ = o_;
       int32_t sld_elem;

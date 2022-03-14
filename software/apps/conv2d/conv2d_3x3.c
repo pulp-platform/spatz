@@ -34,45 +34,41 @@ void conv2d_3x3(int32_t *o, int32_t *i, int32_t *f, int32_t num_rows, int32_t nu
     int32_t *i = i_cpy + c;
     int32_t *o_ = o + c;
 
-    // Preload the first two input rows -> This is not needed in the other rounds
-    int32_t *i__ = i;
-    asm volatile("vle32.v v8,  (%0)" :: "r"(i__));
-    i__ += (C + F - 1);
-    asm volatile("vle32.v v10, (%0)" :: "r"(i__));
+    int32_t lwi = C + F - 1;
+    int32_t lwf = F;
+    int32_t lwo = C;
 
     // Preload t0 and t1
     int32_t t0, t1, t2;
     t0 = *f;
     t1 = *(f+F);
 
+    // Preload the first two input rows -> This is not needed in the other rounds
+    int32_t *i__ = i;
+    asm volatile("vle32.v v8,  (%0)" :: "r"(i__));
+    i__ += lwi;
+    asm volatile("vmv.v.i v0,  0");
+    asm volatile("vmacc.vx v0, %0, v8" ::"r"(t0));
+    asm volatile("vle32.v v10, (%0)" :: "r"(i__));
+    asm volatile("vmv.v.i v2,  0");
+    asm volatile("vmacc.vx v2, %0, v10" ::"r"(t0));
+
     // Iterate over the output rows
     for (int32_t r = 0; r < num_rows; r += block_size_o) {
-      // Temporary filter variables
-
-      // Slide element insert
-      int32_t *i_ = i + c_;
-      int32_t *i__ = i + (F - 1) * (C + F - 1);
-      int32_t sld_elem;
-
       // Helper variables
-      int32_t lwi = C + F - 1;
-      int32_t lwf = F;
-      int32_t lwo = C;
       int32_t *f_ = f + (lwf << 1);
       int32_t *o__ = o_;
+      int32_t sld_elem;
 
       // Instructions in first part are ordered in a messy way, so
       // that we are able to hide latency of vector loads and stores
 
-      asm volatile("vmv.v.i v0,  0");
-      asm volatile("vmacc.vx v0, %0, v8" ::"r"(t0));
-      asm volatile("vmv.v.i v2,  0");
-      asm volatile("vmacc.vx v2, %0, v10" ::"r"(t0));
-
+      int32_t *i__ = i + (F - 1) * (C + F - 1);
       asm volatile("vle32.v v12, (%0)" :: "r"(i__));
       i__ += lwi;
 
       asm volatile("vmacc.vx v0, %0, v10" ::"r"(t1));
+      int32_t *i_ = i + c_;
       sld_elem = *i_;
       asm volatile("vmv.v.i v4,  0");
       asm volatile("vmacc.vx v4, %0, v12" ::"r"(t0));
@@ -89,22 +85,21 @@ void conv2d_3x3(int32_t *o, int32_t *i, int32_t *f, int32_t num_rows, int32_t nu
       asm volatile("vmacc.vx v0, %0, v12" ::"r"(t2));
       asm volatile("vmv.v.i v6,  0");
 
+      asm volatile("vmacc.vx v6, %0, v14" ::"r"(t0));
+
       asm volatile("vle32.v v16, (%0)" :: "r"(i__));
       i__ += lwi;
 
-      asm volatile("vmacc.vx v6, %0, v14" ::"r"(t0));
       asm volatile("vmacc.vx v4, %0, v14" ::"r"(t1));
       asm volatile("vmacc.vx v2, %0, v14" ::"r"(t2));
+      asm volatile("vmacc.vx v6, %0, v16" ::"r"(t1));
 
       asm volatile("vle32.v v18, (%0)" :: "r"(i__));
-
-      asm volatile("vmacc.vx v6, %0, v16" ::"r"(t1));
 
       f_ = f + 1;
       t0 = *f_;
       f_ += lwf;
       asm volatile("vmacc.vx v4, %0, v16" ::"r"(t2));
-      asm volatile("vmacc.vx v6, %0, v18" ::"r"(t2));
 
       // Fetch the middle column of the filter, and start calculating its
       // contributions on the output rows To do so, slide down the input rows by one
@@ -114,6 +109,7 @@ void conv2d_3x3(int32_t *o, int32_t *i, int32_t *f, int32_t num_rows, int32_t nu
       i_ += lwi;
       sld_elem = *i_;
       asm volatile("vmacc.vx v0, %0, v20" ::"r"(t0));
+      asm volatile("vmacc.vx v6, %0, v18" ::"r"(t2));
 
       t2 = *f_;
       asm volatile("vslide1down.vx v24, v12, %0" ::"r"(sld_elem));
@@ -198,8 +194,12 @@ void conv2d_3x3(int32_t *o, int32_t *i, int32_t *f, int32_t num_rows, int32_t nu
       t1 = *f_;
       asm volatile("vse32.v  v6, (%0);" : "+r"(o__));
 
+      asm volatile("vmv.v.i v0,  0");
+      asm volatile("vmacc.vx v0, %0, v8" ::"r"(t0));
       i += block_size_o * (C + F - 1);
       o_ += block_size_o * C;
+      asm volatile("vmv.v.i v2,  0");
+      asm volatile("vmacc.vx v2, %0, v10" ::"r"(t0));
     }
   }
 }
