@@ -234,6 +234,11 @@ module spatz_controller
   // Do we have a dependency match to an existing port.
   logic     [NrVregfilePorts-1:0] sb_deps_match_valid;
   sb_port_e [NrVregfilePorts-1:0] sb_deps_match_port;
+  logic     [NrVregfilePorts-1:0][$clog2(VELE*8)-1:0] sb_port_current_element;
+
+  for (genvar port = 0; port < NrVregfilePorts; port++) begin
+    assign sb_port_current_element[port] = sb_enable_i[port] ? sb_addr_i[port][$clog2(VELE*8)-1:0] : sb_port_q[port].element;
+  end
 
   always_comb begin : score_board
     sb_port_d = sb_port_q;
@@ -247,10 +252,8 @@ module spatz_controller
     // If the desired element is lower than the one of the dependency, then
     // grant access to the register file.
     for (int unsigned port = 0; port < NrVregfilePorts; port++) begin
-      if (sb_enable_i[port]) begin
-        // Update id of accessed element
-        sb_port_d[port].element = sb_addr_i[port][$clog2(VELE*8)-1:0];
-      end
+      // Update id of accessed element
+      sb_port_d[port].element = sb_port_current_element[port];
     end
 
     for (int unsigned port = 0; port < NrVregfilePorts; port++) begin
@@ -262,7 +265,7 @@ module spatz_controller
             if (!sb_port_q[port].deps_valid) begin
               sb_enable_o[port] = 1'b1;
             end else if (sb_port_q[port].deps_valid && deps == sb_port_q[port].deps) begin
-              if ((sb_port_q[deps].valid && (sb_port_d[port].element < sb_port_d[deps].element)) || !sb_port_q[deps].valid) begin
+              if ((sb_port_q[deps].valid && (sb_port_current_element[port] < sb_port_current_element[deps])) || !sb_port_q[deps].valid) begin
                 // Grant port access to register file
                 sb_enable_o[port] = 1'b1;
               end
