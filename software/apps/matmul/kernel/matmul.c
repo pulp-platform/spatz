@@ -33,7 +33,7 @@ void matmul(int32_t *c, const int32_t *a, const int32_t *b,
 }
 
 void matmul_single_unrolled(int32_t *c, const int32_t *a, const int32_t *b,
-                            const unsigned long int M, const unsigned long int N,
+                            const unsigned long int N,
                             const unsigned long int P, unsigned long int vl) {
   // Set VL
   asm volatile("vsetvli zero, %0, e32, m2, ta, ma" :: "r"(vl));

@@ -35,7 +35,7 @@ int main() {
     mempool_wfi();
   }
 
-  for (int i = 0; i < SIZE; i++) {
+  for (uint32_t i = 0; i < SIZE; i++) {
     vector[i] = (0xabababab >> (i%32)) + i;
   }
 

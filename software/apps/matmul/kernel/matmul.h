@@ -26,7 +26,7 @@ void matmul(int32_t *c, const int32_t *a, const int32_t *b,
             const unsigned long int P);
 
 inline void matmul_single_unrolled(int32_t *c, const int32_t *a, const int32_t *b,
-                            const unsigned long int M, const unsigned long int N,
+                            const unsigned long int N,
                             const unsigned long int P, unsigned long int vl)  __attribute__((always_inline));
 void matmul_2x2(int32_t *c, const int32_t *a, const int32_t *b,
                 const unsigned long int M, unsigned long int m_start,

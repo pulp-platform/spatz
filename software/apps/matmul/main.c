@@ -162,7 +162,7 @@ int main() {
     // Execute matmul and measure runtime
     uint32_t timer_start = mempool_get_timer();
     if (dim <= 8 && kernel_size == 8 && vl == 8) {
-      matmul_single_unrolled(c, a, b, dim, dim, dim, dim);
+      matmul_single_unrolled(c, a, b, dim, dim, dim);
     } else if (kernel_size == 2) {
       matmul_2x2(c, a, b, M, 0, M, N, P, 0, P, vl);
     } else if (kernel_size == 4) {
