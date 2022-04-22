@@ -2,7 +2,7 @@
 
 Spatz is a vector coprocessor based on the [RISC-V vector extension spec v1.0](https://github.com/riscv/riscv-v-spec/releases/tag/v1.0).
 
-For an example on how is integrated into a system and connected to a scalar core, please refere to the [MemPool project}(https://iis-git.ee.ethz.ch/mempool/mempool.git).
+For an example on how is integrated into a system and connected to a scalar core, please refere to the [MemPool project](https://iis-git.ee.ethz.ch/mempool/mempool.git).
 
 ## Get Started
 
