@@ -76,45 +76,49 @@ module spatz_decoder
             riscv_instruction::VLE8_V,
             riscv_instruction::VLE16_V,
             riscv_instruction::VLE32_V: begin
-              spatz_req.op     = VLE;
-              spatz_req.vd     = ls_vd;
-              spatz_req.use_vd = 1'b1;
-              spatz_req.rs1    = decoder_req_i.rs1;
-              illegal_instr    = ~decoder_req_i.rs1_valid;
+              spatz_req.op             = VLE;
+              spatz_req.op_mem.is_load = 1'b1;
+              spatz_req.vd             = ls_vd;
+              spatz_req.use_vd         = 1'b1;
+              spatz_req.rs1            = decoder_req_i.rs1;
+              illegal_instr            = ~decoder_req_i.rs1_valid;
             end
 
             riscv_instruction::VLSE8_V,
             riscv_instruction::VLSE16_V,
             riscv_instruction::VLSE32_V: begin
-              spatz_req.op     = VLSE;
-              spatz_req.vd     = ls_vd;
-              spatz_req.use_vd = 1'b1;
-              spatz_req.rs1    = decoder_req_i.rs1;
-              spatz_req.rs2    = decoder_req_i.rs2;
-              illegal_instr    = ~decoder_req_i.rs1_valid | ~decoder_req_i.rs2_valid;
+              spatz_req.op             = VLSE;
+              spatz_req.op_mem.is_load = 1'b1;
+              spatz_req.vd             = ls_vd;
+              spatz_req.use_vd         = 1'b1;
+              spatz_req.rs1            = decoder_req_i.rs1;
+              spatz_req.rs2            = decoder_req_i.rs2;
+              illegal_instr            = ~decoder_req_i.rs1_valid | ~decoder_req_i.rs2_valid;
             end
 
             riscv_instruction::VSE8_V,
             riscv_instruction::VSE16_V,
             riscv_instruction::VSE32_V: begin
-              spatz_req.op        = VSE;
-              spatz_req.vd        = ls_vd;
-              spatz_req.use_vd    = 1'b1;
-              spatz_req.vd_is_src = 1'b1;
-              spatz_req.rs1       = decoder_req_i.rs1;
-              illegal_instr       = ~decoder_req_i.rs1_valid;
+              spatz_req.op             = VSE;
+              spatz_req.op_mem.is_load = 1'b0;
+              spatz_req.vd             = ls_vd;
+              spatz_req.use_vd         = 1'b1;
+              spatz_req.vd_is_src      = 1'b1;
+              spatz_req.rs1            = decoder_req_i.rs1;
+              illegal_instr            = ~decoder_req_i.rs1_valid;
             end
 
             riscv_instruction::VSSE8_V,
             riscv_instruction::VSSE16_V,
             riscv_instruction::VSSE32_V: begin
-              spatz_req.op        = VSSE;
-              spatz_req.vd        = ls_vd;
-              spatz_req.use_vd    = 1'b1;
-              spatz_req.vd_is_src = 1'b1;
-              spatz_req.rs1       = decoder_req_i.rs1;
-              spatz_req.rs2       = decoder_req_i.rs2;
-              illegal_instr       = ~decoder_req_i.rs1_valid | ~decoder_req_i.rs2_valid;
+              spatz_req.op             = VSSE;
+              spatz_req.op_mem.is_load = 1'b0;
+              spatz_req.vd             = ls_vd;
+              spatz_req.use_vd         = 1'b1;
+              spatz_req.vd_is_src      = 1'b1;
+              spatz_req.rs1            = decoder_req_i.rs1;
+              spatz_req.rs2            = decoder_req_i.rs2;
+              illegal_instr            = ~decoder_req_i.rs1_valid | ~decoder_req_i.rs2_valid;
             end
             default: begin
               illegal_instr = 1'b1;
@@ -164,6 +168,7 @@ module spatz_decoder
             automatic bit         arith_vm = decoder_req_i.instr[25];
 
             spatz_req.op_arith.vm = arith_vm;
+            spatz_req.op_sld.vm = arith_vm;
             spatz_req.use_vs2 = 1'b1;
             spatz_req.vs2 = arith_s2;
             spatz_req.use_vd = 1'b1;
@@ -267,18 +272,27 @@ module spatz_decoder
               riscv_instruction::VSLL_VX,
               riscv_instruction::VSLL_VI: begin
                 spatz_req.op = VSLL;
+                if (func3 == OPIVI) begin
+                  spatz_req.rs1 = elen_t'(arith_s1);
+                end
               end
 
               riscv_instruction::VSRL_VV,
               riscv_instruction::VSRL_VX,
               riscv_instruction::VSRL_VI: begin
                 spatz_req.op = VSRL;
+                if (func3 == OPIVI) begin
+                  spatz_req.rs1 = elen_t'(arith_s1);
+                end
               end
 
               riscv_instruction::VSRA_VV,
               riscv_instruction::VSRA_VX,
               riscv_instruction::VSRA_VI: begin
                 spatz_req.op = VSRA;
+                if (func3 == OPIVI) begin
+                  spatz_req.rs1 = elen_t'(arith_s1);
+                end
               end
 
               // Vector Min/Max
@@ -424,7 +438,49 @@ module spatz_decoder
               riscv_instruction::VMV_V_V,
               riscv_instruction::VMV_V_X,
               riscv_instruction::VMV_V_I: begin
-                spatz_req.op = VMV;
+                // vmv is the same as a zero slide
+                spatz_req.op = VSLIDEUP;
+                spatz_req.ex_unit = SLD;
+                spatz_req.op_sld.insert = (func3 == OPIVI | func3 == OPIVX);
+                spatz_req.op_sld.vmv = 1'b1;
+                spatz_req.vs2 = spatz_req.vs1;
+              end
+
+              // Vector Slide
+              riscv_instruction::VSLIDEUP_VX,
+              riscv_instruction::VSLIDEUP_VI: begin
+                spatz_req.op = VSLIDEUP;
+                spatz_req.ex_unit = SLD;
+                if (func3 == OPIVI) begin
+                  spatz_req.rs1 = elen_t'(arith_s1);
+                end
+              end
+
+              riscv_instruction::VSLIDE1UP_VX: begin
+                spatz_req.op = VSLIDEUP;
+                spatz_req.op_sld.insert = 1'b1;
+                spatz_req.ex_unit = SLD;
+                if (func3 == OPIVI) begin
+                  spatz_req.rs1 = elen_t'(arith_s1);
+                end
+              end
+
+              riscv_instruction::VSLIDEDOWN_VX,
+              riscv_instruction::VSLIDEDOWN_VI: begin
+                spatz_req.op = VSLIDEDOWN;
+                spatz_req.ex_unit = SLD;
+                if (func3 == OPIVI) begin
+                  spatz_req.rs1 = elen_t'(arith_s1);
+                end
+              end
+
+              riscv_instruction::VSLIDE1DOWN_VX: begin
+                spatz_req.op = VSLIDEDOWN;
+                spatz_req.op_sld.insert = 1'b1;
+                spatz_req.ex_unit = SLD;
+                if (func3 == OPIVI) begin
+                  spatz_req.rs1 = elen_t'(arith_s1);
+                end
               end
 
               default: begin

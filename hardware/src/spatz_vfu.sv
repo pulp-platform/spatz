@@ -10,6 +10,7 @@
 
 module spatz_vfu
   import spatz_pkg::*;
+  import cf_math_pkg::idx_width;
 (
   input  logic clk_i,
   input  logic rst_ni,
@@ -168,12 +169,12 @@ module spatz_vfu
         // create the byte enable (be) mask for write back to register file.
         if (last_group || !vstart_is_zero) begin
           automatic logic [N_IPU*4-1:0] base_mask = '1;
-          automatic int vend = spatz_req_q.vtype.vsew == rvv_pkg::EW_8  ? spatz_req_q.vl[$clog2(N_IPU * 4):0] :
-                               spatz_req_q.vtype.vsew == rvv_pkg::EW_16 ? spatz_req_q.vl[$clog2(N_IPU * 2):0] :
-                                                                          spatz_req_q.vl[$clog2(N_IPU):0];
-          automatic int vstart = spatz_req_q.vtype.vsew == rvv_pkg::EW_8  ?         spatz_req_q.vstart[$clog2(N_IPU * 4)-1:0]  :
-                                 spatz_req_q.vtype.vsew == rvv_pkg::EW_16 ? {1'b0,  spatz_req_q.vstart[$clog2(N_IPU * 2)-1:0]} :
-                                                                            {2'b00, spatz_req_q.vstart[$clog2(N_IPU)-1:0]};
+          automatic int vend = spatz_req_q.vtype.vsew == rvv_pkg::EW_8  ? spatz_req_q.vl[idx_width(N_IPU * 4):0] :
+                               spatz_req_q.vtype.vsew == rvv_pkg::EW_16 ? spatz_req_q.vl[idx_width(N_IPU * 2):0] :
+                                                                          spatz_req_q.vl[idx_width(N_IPU):0];
+          automatic int vstart = spatz_req_q.vtype.vsew == rvv_pkg::EW_8  ?         spatz_req_q.vstart[idx_width(N_IPU * 4)-1:0]  :
+                                 spatz_req_q.vtype.vsew == rvv_pkg::EW_16 ? {1'b0,  spatz_req_q.vstart[idx_width(N_IPU * 2)-1:0]} :
+                                                                            {2'b00, spatz_req_q.vstart[idx_width(N_IPU)-1:0]};
           automatic int subtrahend = !vstart_is_zero ? vstart : vend;
           automatic int shift = n_group_elem - subtrahend;
           vreg_wbe = base_mask >> shift;

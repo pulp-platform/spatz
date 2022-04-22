@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2022-04-22
+### Added
+- Vector Slide Unit (VSLDU) with support for:
+    - Slide up (`vslideup.{vx, vi}`)
+    - Slide down (`vslidedown.{vx, vi}`)
+    - Slide up by one (`vlside1up.vx`)
+    - Slide down by one (`vlside1down.vx`)
+- VSTART support for all functional units
+- AXPY application
+- Basic test application
+- conv2d application
+- conv3d application
+- Instruction power usage measurement application
+
+### Changed
+- Adapt Scoreboard of controller
+- Move vector move instruction from VFU to VSLDU
+- Fix for multiple instructions in VFU
+- Adapt matmul application for faster kernel execution
+- Adapt RISC-V vector tests to work with Spatz
+
+### Removed
+- Toolchain
+
 ## [0.1.0] - 2022-01-05
 ### Added
 - Spatz top level module
