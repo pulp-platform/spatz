@@ -2,6 +2,8 @@
 
 Spatz is a vector coprocessor based on the [RISC-V vector extension spec v1.0](https://github.com/riscv/riscv-v-spec/releases/tag/v1.0).
 
+For an example on how is integrated into a system and connected to a scalar core, please refere to the [MemPool project}(https://iis-git.ee.ethz.ch/mempool/mempool.git).
+
 ## Get Started
 
 Make sure you clone this repository recursively to get all the necessary submodules:
@@ -22,20 +24,6 @@ When simulatig RTL code, an installation of Bender is required to generate simul
 
 ```bash
 make bender
-```
-
-## Simulation
-
-Simulation of Spatz can be started from the `hardware` directory by using the following command:
-
-```bash
-make sim
-```
-
-This compile the hardware, open QuestaSim, and simulate Spatz. If there is no need to look at the signal waves, a headless simulation can be startet by typing:
-
-```bash
-make simc
 ```
 
 ## Supported Instructions
