@@ -30,13 +30,19 @@ module spatz_simd_lane
   // Multiplier //
   ////////////////
 
+  logic               is_mult;
   logic [2*Width-1:0] mult_result;
   logic [Width-1:0]   mult_op1;
   logic [Width-1:0]   mult_op2;
 
   // Multiplier
-  assign mult_result = $signed({mult_op1[Width-1] & is_signed_i & ~(operation_i == VMULHSU), mult_op1}) *
-                       $signed({mult_op2[Width-1] & is_signed_i, mult_op2});
+  assign is_mult = (operation_i inside {VMACC, VNMSAC, VMADD, VNMSUB, VMUL, VMULH, VMULHU, VMULHSU});
+  always_comb begin: multiplier
+    mult_result = '0;
+    if (is_mult)
+      mult_result = $signed({mult_op1[Width-1] & is_signed_i & ~(operation_i == VMULHSU), mult_op1}) *
+                    $signed({mult_op2[Width-1] & is_signed_i, mult_op2});
+  end: multiplier
 
   // Select multiplier operands
   always_comb begin : mult_operands
