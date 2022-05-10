@@ -28,21 +28,21 @@ void matmul(int32_t *c, const int32_t *a, const int32_t *b,
 inline void matmul_single_unrolled(int32_t *c, const int32_t *a, const int32_t *b,
                             const unsigned long int N,
                             const unsigned long int P, unsigned long int vl)  __attribute__((always_inline));
-void matmul_2x2(int32_t *c, const int32_t *a, const int32_t *b,
+inline void matmul_2x2(int32_t *c, const int32_t *a, const int32_t *b,
                 const unsigned long int M, unsigned long int m_start,
                 unsigned long int m_end, const unsigned long int N,
                 const unsigned long int P, unsigned long int p_start,
-                unsigned long int p_end, unsigned long int vl);
-void matmul_4x4(int32_t *c, const int32_t *a, const int32_t *b,
+                unsigned long int p_end, unsigned long int vl)  __attribute__((always_inline));
+inline void matmul_4x4(int32_t *c, const int32_t *a, const int32_t *b,
                 const unsigned long int M, unsigned long int m_start,
                 unsigned long int m_end, const unsigned long int N,
                 const unsigned long int P, unsigned long int p_start,
-                unsigned long int p_end, unsigned long int vl);
-void matmul_8x8(int32_t *c, const int32_t *a, const int32_t *b,
+                unsigned long int p_end, unsigned long int vl)  __attribute__((always_inline));
+inline void matmul_8x8(int32_t *c, const int32_t *a, const int32_t *b,
                 const unsigned long int M, unsigned long int m_start,
                 unsigned long int m_end, const unsigned long int N,
                 const unsigned long int P, unsigned long int p_start,
-                unsigned long int p_end, unsigned long int vl);
+                unsigned long int p_end, unsigned long int vl)  __attribute__((always_inline));
 
 #define MATMUL_8XVL_PARA(c, a, b, M, m_start, m_end, N, P, p_start, p_end, vl) do { \
 \
