@@ -21,10 +21,8 @@
 #include "synchronization.h"
 #endif
 
-#define SIZE 16
+#define SIZE 32
 #define REPEAT 40
-
-volatile uint32_t vector[SIZE] __attribute__((section(".l1")));
 
 uint32_t block;
 
@@ -35,6 +33,7 @@ int main() {
     mempool_wfi();
   }
 
+  uint32_t vector[SIZE];
   for (uint32_t i = 0; i < SIZE; i++) {
     vector[i] = (0xabababab >> (i%32)) + i;
   }
