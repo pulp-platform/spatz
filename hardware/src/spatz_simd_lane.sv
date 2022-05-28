@@ -7,62 +7,58 @@
 // The SIMD lane calculates all simd operations given for a give distinct
 // element width.
 
-module spatz_simd_lane
-  import spatz_pkg::*;
-#(
-  parameter int unsigned Width = 8
-) (
-  input  logic clk_i,
-  input  logic rst_ni,
-  // Operation Signals
-  input  op_e              operation_i,
-  input  logic [Width-1:0] op_s1_i,
-  input  logic [Width-1:0] op_s2_i,
-  input  logic [Width-1:0] op_d_i,
-  input  logic             is_signed_i,
-  input  logic             carry_i,
-  input  rvv_pkg::vew_e    sew_i,
-  // Result Output
-  output logic [Width-1:0] result_o
-);
+module spatz_simd_lane import spatz_pkg::*; import rvv_pkg::vew_e; #(
+    parameter int  unsigned Width  = 8,
+    // Derived parameters. Do not change!
+    parameter type          data_t = logic [Width-1:0]
+  ) (
+    input  logic  clk_i,
+    input  logic  rst_ni,
+    // Operation Signals
+    input  op_e   operation_i,
+    input  logic  operation_valid_i,
+    input  data_t op_s1_i,
+    input  data_t op_s2_i,
+    input  data_t op_d_i,
+    input  logic  is_signed_i,
+    input  logic  carry_i,
+    input  vew_e  sew_i,
+    // Result Output
+    output data_t result_o
+  );
 
   ////////////////
   // Multiplier //
   ////////////////
 
-  logic               is_mult;
-  logic [2*Width-1:0] mult_result;
-  logic [Width-1:0]   mult_op1;
-  logic [Width-1:0]   mult_op2;
+  logic                is_mult;
+  logic  [2*Width-1:0] mult_result;
+  data_t               mult_op1;
+  data_t               mult_op2;
 
   // Multiplier
-  assign is_mult = (operation_i inside {VMACC, VNMSAC, VMADD, VNMSUB, VMUL, VMULH, VMULHU, VMULHSU});
-  always_comb begin: multiplier
-    mult_result = '0;
-    if (is_mult)
-      mult_result = $signed({mult_op1[Width-1] & is_signed_i & ~(operation_i == VMULHSU), mult_op1}) *
-                    $signed({mult_op2[Width-1] & is_signed_i, mult_op2});
-  end: multiplier
+  assign is_mult     = operation_valid_i && (operation_i inside {VMACC, VNMSAC, VMADD, VNMSUB, VMUL, VMULH, VMULHU, VMULHSU});
+  assign mult_result = is_mult ? $signed({mult_op1[Width-1] & is_signed_i & ~(operation_i == VMULHSU), mult_op1}) * $signed({mult_op2[Width-1] & is_signed_i, mult_op2}) : 'x;
 
   // Select multiplier operands
   always_comb begin : mult_operands
     mult_op1 = op_s1_i;
     mult_op2 = op_s2_i;
-    if ((operation_i == VMADD) || (operation_i == VNMSUB)) begin
+    if (operation_i inside {VMADD, VNMSUB}) begin
       mult_op1 = op_s1_i;
       mult_op2 = op_d_i;
     end
-  end // mult_operands
+  end: mult_operands
 
   ////////////////////////
   // Adder / Subtractor //
   ////////////////////////
 
-  logic [Width:0]   adder_result;
-  logic [Width:0]   subtractor_result;
-  logic [Width-1:0] simd_result;
-  logic [Width-1:0] arith_op1; // Subtrahend
-  logic [Width-1:0] arith_op2; // Minuend
+  logic  [Width:0] adder_result;
+  logic  [Width:0] subtractor_result;
+  data_t           simd_result;
+  data_t           arith_op1;        // Subtrahend
+  data_t           arith_op2;        // Minuend
 
   // Select arithmetic operands
   always_comb begin : arith_operands
@@ -86,33 +82,33 @@ module spatz_simd_lane
         arith_op2 = op_s2_i;
       end
     endcase // operation_i
-  end // arith_operands
+  end       // arith_operands
 
-  assign adder_result      = $signed(arith_op2) + $signed(arith_op1) + carry_i;
-  assign subtractor_result = $signed(arith_op2) - $signed(arith_op1) - carry_i;
+  assign adder_result      = operation_valid_i ? $signed(arith_op2) + $signed(arith_op1) + carry_i : 'x;
+  assign subtractor_result = operation_valid_i ? $signed(arith_op2) - $signed(arith_op1) - carry_i : 'x;
 
   /////////////
   // Shifter //
   /////////////
 
   logic [$clog2(Width)-1:0] shift_amount;
-  logic [Width-1:0] shift_operand;
+  logic [Width-1:0]         shift_operand;
   if (Width >= 32) begin
     always_comb begin : shift_operands
       unique case (sew_i)
         rvv_pkg::EW_16: begin
           shift_amount = op_s1_i[3:0];
           if (operation_i == VSRA) shift_operand = $signed(op_s2_i[15:0]);
-          else shift_operand = $unsigned(op_s2_i[15:0]);
+          else shift_operand                     = $unsigned(op_s2_i[15:0]);
         end
         rvv_pkg::EW_32: begin
-          shift_amount = op_s1_i[4:0];
+          shift_amount  = op_s1_i[4:0];
           shift_operand = op_s2_i[31:0];
         end
         default: begin
           shift_amount = op_s1_i[2:0];
           if (operation_i == VSRA) shift_operand = $signed(op_s2_i[7:0]);
-          else shift_operand = $unsigned(op_s2_i[7:0]);
+          else shift_operand                     = $unsigned(op_s2_i[7:0]);
         end
       endcase
     end // shift_operands
@@ -120,19 +116,19 @@ module spatz_simd_lane
     always_comb begin : shift_operands
       unique case (sew_i)
         rvv_pkg::EW_16: begin
-          shift_amount = op_s1_i[3:0];
+          shift_amount  = op_s1_i[3:0];
           shift_operand = op_s2_i[15:0];
         end
         default: begin
           shift_amount = op_s1_i[2:0];
           if (operation_i == VSRA) shift_operand = $signed(op_s2_i[7:0]);
-          else shift_operand = $unsigned(op_s2_i[7:0]);
+          else shift_operand                     = $unsigned(op_s2_i[7:0]);
         end
       endcase
     end // shift_operands
   end else begin
     always_comb begin
-      shift_amount = op_s1_i[2:0];
+      shift_amount  = op_s1_i[2:0];
       shift_operand = op_s2_i[7:0];
     end
   end
@@ -143,36 +139,33 @@ module spatz_simd_lane
 
   // Calculate arithmetic and logics and select correct result
   always_comb begin : simd
-    simd_result = '0;
-    unique case (operation_i)
-      VADD, VMACC, VMADD, VADC: simd_result = adder_result[Width-1:0];
-      VSUB, VRSUB, VNMSAC, VNMSUB, VSBC: simd_result = subtractor_result[Width-1:0];
-      VMIN, VMINU: simd_result = $signed({op_s1_i[Width-1] & is_signed_i, op_s1_i}) <=
-                                 $signed({op_s2_i[Width-1] & is_signed_i, op_s2_i}) ?
-                                 op_s1_i : op_s2_i;
-      VMAX, VMAXU: simd_result = $signed({op_s1_i[Width-1] & is_signed_i, op_s1_i}) >
-                                 $signed({op_s2_i[Width-1] & is_signed_i, op_s2_i}) ?
-                                 op_s1_i : op_s2_i;
-      VAND: simd_result = op_s1_i & op_s2_i;
-      VOR:  simd_result = op_s1_i | op_s2_i;
-      VXOR: simd_result = op_s1_i ^ op_s2_i;
-      VSLL: simd_result = shift_operand << shift_amount;
-      VSRL: simd_result = shift_operand >> shift_amount;
-      VSRA: simd_result = $signed(shift_operand) >>> shift_amount;
-      // TODO: Change selection when SEW does not equal Width
-      VMUL: simd_result = mult_result[Width-1:0];
-      VMULH, VMULHU, VMULHSU: begin
-        simd_result = mult_result[2*Width-1:Width];
-        for (int i = 0; i < $clog2(Width/8); i++) begin
-          if (sew_i == rvv_pkg::vew_e'(i)) begin
-            simd_result = mult_result[8*(2**i) +: Width];
+    simd_result = 'x;
+    if (operation_valid_i)
+      unique case (operation_i)
+        VADD, VMACC, VMADD, VADC         : simd_result = adder_result[Width-1:0];
+        VSUB, VRSUB, VNMSAC, VNMSUB, VSBC: simd_result = subtractor_result[Width-1:0];
+        VMIN, VMINU                      : simd_result = $signed({op_s1_i[Width-1] & is_signed_i, op_s1_i}) <= $signed({op_s2_i[Width-1] & is_signed_i, op_s2_i}) ? op_s1_i : op_s2_i;
+        VMAX, VMAXU                      : simd_result = $signed({op_s1_i[Width-1] & is_signed_i, op_s1_i}) > $signed({op_s2_i[Width-1] & is_signed_i, op_s2_i}) ? op_s1_i : op_s2_i;
+        VAND                             : simd_result = op_s1_i & op_s2_i;
+        VOR                              : simd_result = op_s1_i | op_s2_i;
+        VXOR                             : simd_result = op_s1_i ^ op_s2_i;
+        VSLL                             : simd_result = shift_operand << shift_amount;
+        VSRL                             : simd_result = shift_operand >> shift_amount;
+        VSRA                             : simd_result = $signed(shift_operand) >>> shift_amount;
+        // TODO: Change selection when SEW does not equal Width
+        VMUL                             : simd_result = mult_result[Width-1:0];
+        VMULH, VMULHU, VMULHSU           : begin
+          simd_result = mult_result[2*Width-1:Width];
+          for (int i = 0; i < $clog2(Width/8); i++) begin
+            if (sew_i == rvv_pkg::vew_e'(i)) begin
+              simd_result = mult_result[8*(2**i) +: Width];
+            end
           end
         end
-      end
-      VMADC: simd_result = Width'(adder_result[Width]);
-      VMSBC: simd_result = Width'(subtractor_result[Width]);
-      default simd_result = '0;
-    endcase // operation_i
+        VMADC: simd_result = Width'(adder_result[Width]);
+        VMSBC: simd_result = Width'(subtractor_result[Width]);
+        default simd_result = 'x;
+      endcase // operation_i
   end // simd
 
   assign result_o = simd_result;

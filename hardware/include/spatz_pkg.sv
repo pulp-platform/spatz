@@ -49,6 +49,7 @@ package spatz_pkg;
 
   // Element of length type
   typedef logic [ELEN-1:0] elen_t;
+  typedef logic [ELENB-1:0] elenb_t;
 
   // VREG address, byte enable, and data type
   typedef struct packed {
