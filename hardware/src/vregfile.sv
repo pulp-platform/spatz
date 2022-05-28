@@ -22,6 +22,7 @@ module vregfile import spatz_pkg::*; #(
     input  strb_t                   wbe_i,
     // Read ports
     input  addr_t [NrReadPorts-1:0] raddr_i,
+    input  logic  [NrReadPorts-1:0] re_i,
     output data_t [NrReadPorts-1:0] rdata_o
   );
 
@@ -87,7 +88,7 @@ module vregfile import spatz_pkg::*; #(
 
   // Read data from memory
   for (genvar port = 0; port < NrReadPorts; port++) begin: gen_read_mem
-    assign rdata_o[port] = mem[raddr_i[port]];
+    assign rdata_o[port] = re_i[port] ? mem[raddr_i[port]] : 'x;
   end: gen_read_mem
 
 endmodule : vregfile

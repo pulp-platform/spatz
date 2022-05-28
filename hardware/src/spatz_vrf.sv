@@ -55,6 +55,7 @@ module spatz_vrf
 
   // Read signals
   vregfile_addr_t [NrVRFBanks-1:0][NrReadPortsPerBank-1:0] raddr;
+  logic           [NrVRFBanks-1:0][NrReadPortsPerBank-1:0] re;
   vreg_data_t     [NrVRFBanks-1:0][NrReadPortsPerBank-1:0] rdata;
 
   ///////////////////
@@ -100,8 +101,9 @@ module spatz_vrf
 
   always_comb begin : proc_read
     raddr    = '0;
+    re       = '0;
     rvalid_o = '0;
-    rdata_o  = '0;
+    rdata_o  = 'x;
 
     // For each port or each bank we have a priority based access scheme.
     // Port zero can only be accessed by the VFU (vs2). Port one can be accessed by
@@ -111,30 +113,36 @@ module spatz_vrf
       // Bank read port 0 - Priority: vs2
       if (re_i[VFU_VS2_RD] && raddr_i[VFU_VS2_RD].bank == bank) begin
         raddr[bank][0]       = raddr_i[VFU_VS2_RD].vreg;
+        re[bank][0]          = 1'b1;
         rdata_o[VFU_VS2_RD]  = rdata[bank][0];
         rvalid_o[VFU_VS2_RD] = 1'b1;
       end
       // Bank read port 1 - Priority: vs1 -> sld
       if (re_i[VFU_VS1_RD] && raddr_i[VFU_VS1_RD].bank == bank) begin
         raddr[bank][1]       = raddr_i[VFU_VS1_RD].vreg;
+        re[bank][1]          = 1'b1;
         rdata_o[VFU_VS1_RD]  = rdata[bank][1];
         rvalid_o[VFU_VS1_RD] = 1'b1;
       end else if (re_i[VSLDU_VS2_RD] && raddr_i[VSLDU_VS2_RD].bank == bank) begin
         raddr[bank][1]         = raddr_i[VSLDU_VS2_RD].vreg;
+        re[bank][1]            = 1'b1;
         rdata_o[VSLDU_VS2_RD]  = rdata[bank][1];
         rvalid_o[VSLDU_VS2_RD] = 1'b1;
       end
       // Bank read port 2 - Priority: vd -> lsu -> sld
       if (re_i[VFU_VD_RD] && raddr_i[VFU_VD_RD].bank == bank) begin
         raddr[bank][2]      = raddr_i[VFU_VD_RD].vreg;
+        re[bank][2]         = 1'b1;
         rdata_o[VFU_VD_RD]  = rdata[bank][2];
         rvalid_o[VFU_VD_RD] = 1'b1;
       end else if (re_i[VLSU_VD_RD] && raddr_i[VLSU_VD_RD].bank == bank) begin
         raddr[bank][2]       = raddr_i[VLSU_VD_RD].vreg;
+        re[bank][2]          = 1'b1;
         rdata_o[VLSU_VD_RD]  = rdata[bank][2];
         rvalid_o[VLSU_VD_RD] = 1'b1;
       end else if (re_i[VSLDU_VS2_RD] && raddr_i[VSLDU_VS2_RD].bank == bank) begin
         raddr[bank][2]         = raddr_i[VSLDU_VS2_RD].vreg;
+        re[bank][2]            = 1'b1;
         rdata_o[VSLDU_VS2_RD]  = rdata[bank][2];
         rvalid_o[VSLDU_VS2_RD] = 1'b1;
       end
@@ -156,6 +164,7 @@ module spatz_vrf
       .we_i   (we[bank]   ),
       .wbe_i  (wbe[bank]  ),
       .raddr_i(raddr[bank]),
+      .re_i   (re[bank]   ),
       .rdata_o(rdata[bank])
     );
   end
