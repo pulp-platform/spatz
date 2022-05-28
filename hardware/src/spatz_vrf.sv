@@ -108,16 +108,17 @@ module spatz_vrf
     // For each port or each bank we have a priority based access scheme.
     // Port zero can only be accessed by the VFU (vs2). Port one can be accessed by
     // the VFU (vs1) and then by the slide unit. Port two can be accessed first by the
-    // VFU (vd), then by the LSU, and finally by the slide unit.
+    // VFU (vd), then by the LSU.
     for (int unsigned bank = 0; bank < NrVRFBanks; bank++) begin
-      // Bank read port 0 - Priority: vs2
+      // Bank read port 0 - Priority: VFU (2)
       if (re_i[VFU_VS2_RD] && raddr_i[VFU_VS2_RD].bank == bank) begin
         raddr[bank][0]       = raddr_i[VFU_VS2_RD].vreg;
         re[bank][0]          = 1'b1;
         rdata_o[VFU_VS2_RD]  = rdata[bank][0];
         rvalid_o[VFU_VS2_RD] = 1'b1;
       end
-      // Bank read port 1 - Priority: vs1 -> sld
+
+      // Bank read port 1 - Priority: VFU (1) -> VSLDU
       if (re_i[VFU_VS1_RD] && raddr_i[VFU_VS1_RD].bank == bank) begin
         raddr[bank][1]       = raddr_i[VFU_VS1_RD].vreg;
         re[bank][1]          = 1'b1;
@@ -129,7 +130,8 @@ module spatz_vrf
         rdata_o[VSLDU_VS2_RD]  = rdata[bank][1];
         rvalid_o[VSLDU_VS2_RD] = 1'b1;
       end
-      // Bank read port 2 - Priority: vd -> lsu -> sld
+
+      // Bank read port 2 - Priority: VFU (D) -> VLSU
       if (re_i[VFU_VD_RD] && raddr_i[VFU_VD_RD].bank == bank) begin
         raddr[bank][2]      = raddr_i[VFU_VD_RD].vreg;
         re[bank][2]         = 1'b1;
@@ -140,11 +142,6 @@ module spatz_vrf
         re[bank][2]          = 1'b1;
         rdata_o[VLSU_VD_RD]  = rdata[bank][2];
         rvalid_o[VLSU_VD_RD] = 1'b1;
-      end else if (re_i[VSLDU_VS2_RD] && raddr_i[VSLDU_VS2_RD].bank == bank) begin
-        raddr[bank][2]         = raddr_i[VSLDU_VS2_RD].vreg;
-        re[bank][2]            = 1'b1;
-        rdata_o[VSLDU_VS2_RD]  = rdata[bank][2];
-        rvalid_o[VSLDU_VS2_RD] = 1'b1;
       end
     end
   end
