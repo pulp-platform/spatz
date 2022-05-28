@@ -11,53 +11,46 @@
 module spatz_controller
   import spatz_pkg::*;
   import rvv_pkg::*;
-#(
-  parameter int unsigned NrVregfilePorts  = 1,
-  parameter type         x_issue_req_t    = logic,
-  parameter type         x_issue_resp_t   = logic,
-  parameter type         x_result_t       = logic
-) (
-  input  logic clk_i,
-  input  logic rst_ni,
+  #(
+    parameter int  unsigned NrVregfilePorts = 1,
+    parameter type          x_issue_req_t   = logic,
+    parameter type          x_issue_resp_t  = logic,
+    parameter type          x_result_t      = logic
+  ) (
+    input  logic                                clk_i,
+    input  logic                                rst_ni,
+    // X-Interface Issue
+    input  logic                                x_issue_valid_i,
+    output logic                                x_issue_ready_o,
+    input  x_issue_req_t                        x_issue_req_i,
+    output x_issue_resp_t                       x_issue_resp_o,
+    // X-Interface Result
+    output logic                                x_result_valid_o,
+    input  logic                                x_result_ready_i,
+    output x_result_t                           x_result_o,
+    // Spatz request
+    output logic                                spatz_req_valid_o,
+    output spatz_req_t                          spatz_req_o,
+    // VFU
+    input  logic                                vfu_req_ready_i,
+    input  logic                                vfu_rsp_valid_i,
+    input  vfu_rsp_t                            vfu_rsp_i,
+    // VLSU
+    input  logic                                vlsu_req_ready_i,
+    input  logic                                vlsu_rsp_valid_i,
+    input  vlsu_rsp_t                           vlsu_rsp_i,
+    // VSLDU
+    input  logic                                vsldu_req_ready_i,
+    input  logic                                vsldu_rsp_valid_i,
+    input  vsldu_rsp_t                          vsldu_rsp_i,
+    // VRF Scoreboard
+    input  logic          [NrVregfilePorts-1:0] sb_enable_i,
+    output logic          [NrVregfilePorts-1:0] sb_enable_o,
+    input  vreg_addr_t    [NrVregfilePorts-1:0] sb_addr_i
+  );
 
-  // X-Interface Issue
-  input  logic          x_issue_valid_i,
-  output logic          x_issue_ready_o,
-  input  x_issue_req_t  x_issue_req_i,
-  output x_issue_resp_t x_issue_resp_o,
-
-  // X-Interface Result
-  output logic      x_result_valid_o,
-  input  logic      x_result_ready_i,
-  output x_result_t x_result_o,
-
-  // Spatz req
-  output logic       spatz_req_valid_o,
-  output spatz_req_t spatz_req_o,
-
-  // VFU
-  input  logic     vfu_req_ready_i,
-  input  logic     vfu_rsp_valid_i,
-  input  vfu_rsp_t vfu_rsp_i,
-
-  // VLSU
-  input  logic      vlsu_req_ready_i,
-  input  logic      vlsu_rsp_valid_i,
-  input  vlsu_rsp_t vlsu_rsp_i,
-
-  // VSLDU
-  input  logic       vsldu_req_ready_i,
-  input  logic       vsldu_rsp_valid_i,
-  input  vsldu_rsp_t vsldu_rsp_i,
-
-  // Vregfile Scoreboarding
-  input  logic       [NrVregfilePorts-1:0] sb_enable_i,
-  output logic       [NrVregfilePorts-1:0] sb_enable_o,
-  input  vreg_addr_t [NrVregfilePorts-1:0] sb_addr_i
-);
-
-  // Include FF
-  `include "common_cells/registers.svh"
+// Include FF
+`include "common_cells/registers.svh"
 
   /////////////
   // Signals //
@@ -81,17 +74,17 @@ module spatz_controller
   `FF(vl_q, vl_d, '0)
   `FF(vtype_q, vtype_d, '{vill: 1'b1, vsew: EW_8, vlmul: LMUL_1, default: '0})
 
-  /* verilator lint_off LATCH */
   always_comb begin : proc_vcsr
+    automatic logic [MAXVL-1:0] vlmax = 0;
+
     vstart_d = vstart_q;
     vl_d     = vl_q;
     vtype_d  = vtype_q;
 
     if (spatz_req_valid) begin
       // Reset vstart to zero if we have a new non CSR operation
-      if (spatz_req.op_cgf.reset_vstart) begin
+      if (spatz_req.op_cgf.reset_vstart)
         vstart_d = '0;
-      end
 
       // Set new vstart if we have a VCSR instruction
       // that accesses the vstart register.
@@ -119,16 +112,15 @@ module spatz_controller
           vtype_d = spatz_req.vtype;
           if (!spatz_req.op_cgf.keep_vl) begin
             // Normal stripmining mode or set to MAXVL
-            automatic logic [MAXVL-1:0] vlmax = 0;
             vlmax = VLENB >> spatz_req.vtype.vsew;
 
             unique case (spatz_req.vtype.vlmul)
               LMUL_F2: vlmax >>= 1;
               LMUL_F4: vlmax >>= 2;
-              LMUL_1:  vlmax <<= 0;
-              LMUL_2:  vlmax <<= 1;
-              LMUL_4:  vlmax <<= 2;
-              LMUL_8:  vlmax <<= 3;
+              LMUL_1 : vlmax <<= 0;
+              LMUL_2 : vlmax <<= 1;
+              LMUL_4 : vlmax <<= 2;
+              LMUL_8 : vlmax <<= 3;
               default: vlmax = vlmax;
             endcase
 
@@ -146,7 +138,6 @@ module spatz_controller
       end // spatz_req.op == VCFG
     end // spatz_req_valid
   end
-  /* verilator lint_on LATCH */
 
   //////////////
   // Decoding //
@@ -160,19 +151,19 @@ module spatz_controller
   logic         decoder_rsp_valid;
 
   spatz_decoder i_decoder (
-    .clk_i (clk_i),
-    .rst_ni(rst_ni),
+    .clk_i              (clk_i            ),
+    .rst_ni             (rst_ni           ),
     // Request
-    .decoder_req_i      (decoder_req),
+    .decoder_req_i      (decoder_req      ),
     .decoder_req_valid_i(decoder_req_valid),
     // Response
-    .decoder_rsp_o      (decoder_rsp),
+    .decoder_rsp_o      (decoder_rsp      ),
     .decoder_rsp_valid_o(decoder_rsp_valid)
   );
 
   // Decode new instruction if new request arrives
   always_comb begin : proc_decode
-    decoder_req = '0;
+    decoder_req       = '0;
     decoder_req_valid = 1'b0;
 
     // Decode new instruction if one is received and spatz is ready
@@ -194,22 +185,22 @@ module spatz_controller
   // Spatz request
   spatz_req_t buffer_spatz_req;
   // Buffer state signals
-  logic req_buffer_ready, req_buffer_valid, req_buffer_pop;
+  logic       req_buffer_ready, req_buffer_valid, req_buffer_pop;
 
   // One element wide instruction buffer
   fall_through_register #(
     .T(spatz_req_t)
   ) i_req_buffer (
-    .clk_i     (clk_i),
-    .rst_ni    (rst_ni),
-    .clr_i     (1'b0),
-    .testmode_i(1'b0),
-    .ready_o   (req_buffer_ready),
-    .valid_o   (req_buffer_valid),
+    .clk_i     (clk_i                ),
+    .rst_ni    (rst_ni               ),
+    .clr_i     (1'b0                 ),
+    .testmode_i(1'b0                 ),
+    .ready_o   (req_buffer_ready     ),
+    .valid_o   (req_buffer_valid     ),
     .data_i    (decoder_rsp.spatz_req),
-    .valid_i   (decoder_rsp_valid),
-    .data_o    (buffer_spatz_req),
-    .ready_i   (req_buffer_pop)
+    .valid_i   (decoder_rsp_valid    ),
+    .data_o    (buffer_spatz_req     ),
+    .ready_i   (req_buffer_pop       )
   );
 
   ////////////////
@@ -218,11 +209,11 @@ module spatz_controller
 
   // Port scoreboard metadata
   typedef struct packed {
-    logic     valid;
-    opreg_t   reg_idx;
-    logic     [$clog2(VELE*8)-1:0] element;
-    logic     last_accessed;
-    logic     deps_valid;
+    logic valid;
+    vreg_t reg_idx;
+    logic [$clog2(NrWordsPerVector*8)-1:0] element;
+    logic last_accessed;
+    logic deps_valid;
     sb_port_e deps;
   } sb_port_metadata_t;
 
@@ -232,15 +223,15 @@ module spatz_controller
   `FF(sb_port_q, sb_port_d, '0)
 
   // Do we have a dependency match to an existing port.
-  logic     [NrVregfilePorts-1:0] sb_deps_match_valid;
-  sb_port_e [NrVregfilePorts-1:0] sb_deps_match_port;
-  logic     [NrVregfilePorts-1:0][$clog2(VELE*8)-1:0] sb_port_current_element;
+  logic     [NrVregfilePorts-1:0]                                 sb_deps_match_valid;
+  sb_port_e [NrVregfilePorts-1:0]                                 sb_deps_match_port;
+  logic     [NrVregfilePorts-1:0][$clog2(NrWordsPerVector*8)-1:0] sb_port_current_element;
 
-  for (genvar port = 0; port < NrVregfilePorts; port++) begin
-    assign sb_port_current_element[port] = sb_enable_i[port] ? sb_addr_i[port][$clog2(VELE*8)-1:0] : sb_port_q[port].element;
-  end
+  for (genvar port = 0; port < NrVregfilePorts; port++) begin: gen_sb_port_current_element
+    assign sb_port_current_element[port] = sb_enable_i[port] ? sb_addr_i[port][$clog2(NrWordsPerVector*8)-1:0] : sb_port_q[port].element;
+  end: gen_sb_port_current_element
 
-  always_comb begin : score_board
+  always_comb begin : scoreboard
     sb_port_d = sb_port_q;
 
     sb_enable_o = '0;
@@ -251,10 +242,9 @@ module spatz_controller
     // For every port, update the element that is currently being accessed.
     // If the desired element is lower than the one of the dependency, then
     // grant access to the register file.
-    for (int unsigned port = 0; port < NrVregfilePorts; port++) begin
+    for (int unsigned port = 0; port < NrVregfilePorts; port++)
       // Update id of accessed element
       sb_port_d[port].element = sb_port_current_element[port];
-    end
 
     for (int unsigned port = 0; port < NrVregfilePorts; port++) begin
       for (int unsigned deps = 0; deps < NrVregfilePorts; deps++) begin
@@ -329,7 +319,7 @@ module spatz_controller
 
         sb_port_d[SB_VFU_VS2_RD].valid         = spatz_req.use_vs2;
         sb_port_d[SB_VFU_VS2_RD].reg_idx       = spatz_req.vs2;
-        sb_port_d[SB_VFU_VS2_RD].element       = spatz_req.vstart[$bits(vlen_t)-1:$clog2(VELEB)];
+        sb_port_d[SB_VFU_VS2_RD].element       = spatz_req.vstart[$bits(vlen_t)-1:$clog2(VRFWordBWidth)];
         sb_port_d[SB_VFU_VS2_RD].last_accessed = spatz_req.use_vs2;
         sb_port_d[SB_VFU_VS2_RD].deps_valid    = sb_deps_match_valid[SB_VFU_VS2_RD];
         sb_port_d[SB_VFU_VS2_RD].deps          = sb_deps_match_port[SB_VFU_VS2_RD];
@@ -347,7 +337,7 @@ module spatz_controller
 
         sb_port_d[SB_VFU_VS1_RD].valid         = spatz_req.use_vs1;
         sb_port_d[SB_VFU_VS1_RD].reg_idx       = spatz_req.vs1;
-        sb_port_d[SB_VFU_VS1_RD].element       = spatz_req.vstart[$bits(vlen_t)-1:$clog2(VELEB)];
+        sb_port_d[SB_VFU_VS1_RD].element       = spatz_req.vstart[$bits(vlen_t)-1:$clog2(VRFWordBWidth)];
         sb_port_d[SB_VFU_VS1_RD].last_accessed = spatz_req.use_vs1;
         sb_port_d[SB_VFU_VS1_RD].deps_valid    = sb_deps_match_valid[SB_VFU_VS1_RD];
         sb_port_d[SB_VFU_VS1_RD].deps          = sb_deps_match_port[SB_VFU_VS1_RD];
@@ -367,14 +357,14 @@ module spatz_controller
 
         sb_port_d[SB_VFU_VD_RD].valid         = spatz_req.use_vd & spatz_req.vd_is_src;
         sb_port_d[SB_VFU_VD_RD].reg_idx       = spatz_req.vd;
-        sb_port_d[SB_VFU_VD_RD].element       = spatz_req.vstart[$bits(vlen_t)-1:$clog2(VELEB)];
+        sb_port_d[SB_VFU_VD_RD].element       = spatz_req.vstart[$bits(vlen_t)-1:$clog2(VRFWordBWidth)];
         sb_port_d[SB_VFU_VD_RD].last_accessed = spatz_req.use_vd;
         sb_port_d[SB_VFU_VD_RD].deps_valid    = sb_deps_match_valid[SB_VFU_VD_RD];
         sb_port_d[SB_VFU_VD_RD].deps          = sb_deps_match_port[SB_VFU_VD_RD];
 
         sb_port_d[SB_VFU_VD_WD].valid         = spatz_req.use_vd;
         sb_port_d[SB_VFU_VD_WD].reg_idx       = spatz_req.vd;
-        sb_port_d[SB_VFU_VD_WD].element       = spatz_req.vstart[$bits(vlen_t)-1:$clog2(VELEB)];
+        sb_port_d[SB_VFU_VD_WD].element       = spatz_req.vstart[$bits(vlen_t)-1:$clog2(VRFWordBWidth)];
         sb_port_d[SB_VFU_VD_WD].last_accessed = spatz_req.use_vd;
         sb_port_d[SB_VFU_VD_WD].deps_valid    = sb_deps_match_valid[SB_VFU_VD_WD];
         sb_port_d[SB_VFU_VD_WD].deps          = sb_deps_match_port[SB_VFU_VD_WD];
@@ -394,14 +384,14 @@ module spatz_controller
 
         sb_port_d[SB_VLSU_VD_RD].valid         = spatz_req.use_vd & spatz_req.vd_is_src;
         sb_port_d[SB_VLSU_VD_RD].reg_idx       = spatz_req.vd;
-        sb_port_d[SB_VLSU_VD_RD].element       = spatz_req.vstart[$bits(vlen_t)-1:$clog2(VELEB)];
+        sb_port_d[SB_VLSU_VD_RD].element       = spatz_req.vstart[$bits(vlen_t)-1:$clog2(VRFWordBWidth)];
         sb_port_d[SB_VLSU_VD_RD].last_accessed = spatz_req.use_vd;
         sb_port_d[SB_VLSU_VD_RD].deps_valid    = sb_deps_match_valid[SB_VLSU_VD_RD];
         sb_port_d[SB_VLSU_VD_RD].deps          = sb_deps_match_port[SB_VLSU_VD_RD];
 
         sb_port_d[SB_VLSU_VD_WD].valid         = spatz_req.use_vd & ~spatz_req.vd_is_src;
         sb_port_d[SB_VLSU_VD_WD].reg_idx       = spatz_req.vd;
-        sb_port_d[SB_VLSU_VD_WD].element       = spatz_req.vstart[$bits(vlen_t)-1:$clog2(VELEB)];
+        sb_port_d[SB_VLSU_VD_WD].element       = spatz_req.vstart[$bits(vlen_t)-1:$clog2(VRFWordBWidth)];
         sb_port_d[SB_VLSU_VD_WD].last_accessed = spatz_req.use_vd;
         sb_port_d[SB_VLSU_VD_WD].deps_valid    = sb_deps_match_valid[SB_VLSU_VD_WD];
         sb_port_d[SB_VLSU_VD_WD].deps          = sb_deps_match_port[SB_VLSU_VD_WD];
@@ -419,7 +409,7 @@ module spatz_controller
 
         sb_port_d[SB_VSLDU_VS2_RD].valid         = spatz_req.use_vs2;
         sb_port_d[SB_VSLDU_VS2_RD].reg_idx       = spatz_req.vs2;
-        sb_port_d[SB_VSLDU_VS2_RD].element       = spatz_req.vstart[$bits(vlen_t)-1:$clog2(VELEB)];
+        sb_port_d[SB_VSLDU_VS2_RD].element       = spatz_req.vstart[$bits(vlen_t)-1:$clog2(VRFWordBWidth)];
         sb_port_d[SB_VSLDU_VS2_RD].last_accessed = spatz_req.use_vs2;
         sb_port_d[SB_VSLDU_VS2_RD].deps_valid    = sb_deps_match_valid[SB_VSLDU_VS2_RD];
         sb_port_d[SB_VSLDU_VS2_RD].deps          = sb_deps_match_port[SB_VSLDU_VS2_RD];
@@ -437,7 +427,7 @@ module spatz_controller
 
         sb_port_d[SB_VSLDU_VD_WD].valid         = spatz_req.use_vd;
         sb_port_d[SB_VSLDU_VD_WD].reg_idx       = spatz_req.vd;
-        sb_port_d[SB_VSLDU_VD_WD].element       = spatz_req.vstart[$bits(vlen_t)-1:$clog2(VELEB)];
+        sb_port_d[SB_VSLDU_VD_WD].element       = spatz_req.vstart[$bits(vlen_t)-1:$clog2(VRFWordBWidth)];
         sb_port_d[SB_VSLDU_VD_WD].last_accessed = spatz_req.use_vd;
         sb_port_d[SB_VSLDU_VD_WD].deps_valid    = sb_deps_match_valid[SB_VSLDU_VD_WD];
         sb_port_d[SB_VSLDU_VD_WD].deps          = sb_deps_match_port[SB_VSLDU_VD_WD];
@@ -457,10 +447,10 @@ module spatz_controller
   // units finish first before scheduling a new operation (to avoid running into
   // issues with the socreboard).
   logic stall, vfu_stall, vlsu_stall, vsldu_stall;
-  assign stall        = (vfu_stall | vlsu_stall | vsldu_stall) & req_buffer_valid;
-  assign vfu_stall    = ~vfu_req_ready_i   & (spatz_req.ex_unit == VFU);
-  assign vlsu_stall   = ~vlsu_req_ready_i  & (spatz_req.ex_unit == LSU);
-  assign vsldu_stall  = ~vsldu_req_ready_i & (spatz_req.ex_unit == SLD);
+  assign stall       = (vfu_stall | vlsu_stall | vsldu_stall) & req_buffer_valid;
+  assign vfu_stall   = ~vfu_req_ready_i & (spatz_req.ex_unit == VFU);
+  assign vlsu_stall  = ~vlsu_req_ready_i & (spatz_req.ex_unit == LSU);
+  assign vsldu_stall = ~vsldu_req_ready_i & (spatz_req.ex_unit == SLD);
 
   // Pop the buffer if we do not have a unit stall
   assign req_buffer_pop = ~stall & req_buffer_valid;
@@ -544,7 +534,7 @@ module spatz_controller
   // Retire an operation/instruction and write back result to core
   // if necessary.
   always_comb begin : retire
-    x_result_o = '0;
+    x_result_o       = '0;
     x_result_valid_o = '0;
 
     if (retire_csr) begin
@@ -553,25 +543,25 @@ module spatz_controller
         if (spatz_req.use_rd) begin
           unique case (spatz_req.op_csr.addr)
             riscv_instr::CSR_VSTART: x_result_o.data = elen_t'(vstart_q);
-            riscv_instr::CSR_VL:     x_result_o.data = elen_t'(vl_q);
-            riscv_instr::CSR_VTYPE:  x_result_o.data = elen_t'(vtype_q);
-            riscv_instr::CSR_VLENB:  x_result_o.data = elen_t'(VLENB);
-            riscv_instr::CSR_VXSAT:  x_result_o.data = '0;
-            riscv_instr::CSR_VXRM:   x_result_o.data = '0;
-            riscv_instr::CSR_VCSR:   x_result_o.data = '0;
-            default:                 x_result_o.data = '0;
+            riscv_instr::CSR_VL    : x_result_o.data = elen_t'(vl_q);
+            riscv_instr::CSR_VTYPE : x_result_o.data = elen_t'(vtype_q);
+            riscv_instr::CSR_VLENB : x_result_o.data = elen_t'(VLENB);
+            riscv_instr::CSR_VXSAT : x_result_o.data = '0;
+            riscv_instr::CSR_VXRM  : x_result_o.data = '0;
+            riscv_instr::CSR_VCSR  : x_result_o.data = '0;
+            default: x_result_o.data                 = '0;
           endcase
         end
-        x_result_o.id = spatz_req.id;
-        x_result_o.rd = spatz_req.rd;
+        x_result_o.id    = spatz_req.id;
+        x_result_o.rd    = spatz_req.rd;
         x_result_valid_o = 1'b1;
-        x_result_o.we = 1'b1;
+        x_result_o.we    = 1'b1;
       end else begin
         // Change configuration and send back vl
-        x_result_o.id = spatz_req.id;
-        x_result_o.rd = spatz_req.rd;
-        x_result_o.data = elen_t'(vl_d);
-        x_result_o.we = 1'b1;
+        x_result_o.id    = spatz_req.id;
+        x_result_o.rd    = spatz_req.rd;
+        x_result_o.data  = elen_t'(vl_d);
+        x_result_o.we    = 1'b1;
         x_result_valid_o = 1'b1;
       end
     end
