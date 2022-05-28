@@ -35,38 +35,51 @@ int main() {
 
   uint32_t vector[SIZE];
   for (uint32_t i = 0; i < SIZE; i++) {
-    vector[i] = (0xabababab >> (i%32)) + i;
+    vector[i] = (0xabababab >> (i % 32)) + i;
   }
 
   int32_t vector_size;
 
-  asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vector_size) : "r"(SIZE));
+  asm volatile("vsetvli %0, %1, e32, m8, ta, ma"
+               : "=r"(vector_size)
+               : "r"(SIZE));
 
-  if (vector_size != SIZE) return SIZE-vector_size;
+  if (vector_size != SIZE)
+    return SIZE - vector_size;
 
-  for (int i = 0; i < REPEAT; i++) asm volatile("vle32.v v0, (%[vector])" :: [vector]"r"(vector));
+  for (int i = 0; i < REPEAT; i++)
+    asm volatile("vle32.v v0, (%[vector])" ::[vector] "r"(vector));
 
-  for (int i = 0; i < SIZE; i++) asm volatile("nop");
+  for (int i = 0; i < SIZE; i++)
+    asm volatile("nop");
 
   block = 1;
 
   uint32_t insert = vector[0];
 
-  for (int i = 0; i < REPEAT; i++) asm volatile("vslide1down.vx v8, v0, %0" :: "r"(insert));
+  for (int i = 0; i < REPEAT; i++)
+    asm volatile("vslide1down.vx v8, v0, %0" ::"r"(insert));
 
-  for (int i = 0; i < SIZE; i++) asm volatile("nop");
+  for (int i = 0; i < SIZE; i++)
+    asm volatile("nop");
 
-  for (int i = 0; i < REPEAT; i++) asm volatile("vadd.vv v16, v0, v8");
+  for (int i = 0; i < REPEAT; i++)
+    asm volatile("vadd.vv v16, v0, v8");
 
-  for (int i = 0; i < SIZE; i++) asm volatile("nop");
+  for (int i = 0; i < SIZE; i++)
+    asm volatile("nop");
 
-  for (int i = 0; i < REPEAT; i++) asm volatile("vmul.vv v16, v8, v0");
+  for (int i = 0; i < REPEAT; i++)
+    asm volatile("vmul.vv v16, v8, v0");
 
-  for (int i = 0; i < SIZE; i++) asm volatile("nop");
+  for (int i = 0; i < SIZE; i++)
+    asm volatile("nop");
 
-  for (int i = 0; i < REPEAT; i++) asm volatile("vmacc.vv v16, v8, v0");
+  for (int i = 0; i < REPEAT; i++)
+    asm volatile("vmacc.vv v16, v8, v0");
 
-  for (int i = 0; i < SIZE; i++) asm volatile("nop");
+  for (int i = 0; i < SIZE; i++)
+    asm volatile("nop");
 
   return 0;
 }
