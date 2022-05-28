@@ -10,16 +10,16 @@
 module spatz_decoder
   import spatz_pkg::*;
   import rvv_pkg::*;
-(
-  input  logic clk_i,
-  input  logic rst_ni,
-  // Request
-  input decoder_req_t decoder_req_i,
-  input logic         decoder_req_valid_i,
-  // Response
-  output decoder_rsp_t decoder_rsp_o,
-  output logic         decoder_rsp_valid_o
-);
+  (
+    input  logic         clk_i,
+    input  logic         rst_ni,
+    // Request
+    input  decoder_req_t decoder_req_i,
+    input  logic         decoder_req_valid_i,
+    // Response
+    output decoder_rsp_t decoder_rsp_o,
+    output logic         decoder_rsp_valid_o
+  );
 
   /////////////
   // Signals //
@@ -39,8 +39,8 @@ module spatz_decoder
 
   always_comb begin : decoder
     illegal_instr = 1'b0;
-    spatz_req = '0;
-    reset_vstart = 1'b1;
+    spatz_req     = '0;
+    reset_vstart  = 1'b1;
 
     // We have a new instruction that need to be decoded
     if (decoder_req_valid_i) begin
@@ -51,25 +51,25 @@ module spatz_decoder
         // Load and store instruction
         riscv_pkg::OpcodeLoadFP,
         riscv_pkg::OpcodeStoreFP: begin
-          automatic int unsigned ls_vd    = decoder_req_i.instr[11:7];
-          automatic int unsigned ls_rs1   = decoder_req_i.instr[19:15];
-          automatic int unsigned ls_s2    = decoder_req_i.instr[24:20];
-          automatic int unsigned ls_width = decoder_req_i.instr[14:12];
-          automatic int unsigned ls_vm    = decoder_req_i.instr[25];
-          automatic int unsigned ls_mop   = decoder_req_i.instr[27:26];
-          automatic int unsigned ls_mew   = decoder_req_i.instr[28];
-          automatic int unsigned ls_nf    = decoder_req_i.instr[31:29];
+          automatic vreg_t ls_vd         = decoder_req_i.instr[11:7];
+          automatic vreg_t ls_rs1        = decoder_req_i.instr[19:15];
+          automatic vreg_t ls_s2         = decoder_req_i.instr[24:20];
+          automatic logic [2:0] ls_width = decoder_req_i.instr[14:12];
+          automatic logic ls_vm          = decoder_req_i.instr[25];
+          automatic logic [1:0] ls_mop   = decoder_req_i.instr[27:26];
+          automatic logic ls_mew         = decoder_req_i.instr[28];
+          automatic logic [2:0] ls_nf    = decoder_req_i.instr[31:29];
 
           // Retrieve VSEW
           unique case ({ls_mew, ls_width})
             4'b0000: spatz_req.vtype.vsew = EW_8;
             4'b0101: spatz_req.vtype.vsew = EW_16;
             4'b0110: spatz_req.vtype.vsew = EW_32;
-            default: illegal_instr = 1'b1;
+            default: illegal_instr        = 1'b1;
           endcase
 
           spatz_req.op_mem.vm = ls_vm;
-          spatz_req.ex_unit = LSU;
+          spatz_req.ex_unit   = LSU;
 
           // Check which type of load or store operation is requested
           unique casez (decoder_req_i.instr)
@@ -124,20 +124,20 @@ module spatz_decoder
               illegal_instr = 1'b1;
             end
           endcase // decoder_req_i.instr
-        end // OpcodeLoadFP or OpcodeStoreFP
+        end       // OpcodeLoadFP or OpcodeStoreFP
 
         // Vector instruction
         riscv_pkg::OpcodeVec: begin
-          automatic int unsigned func3 = decoder_req_i.instr[14:12];
+          automatic opcodev_func3_e func3 = opcodev_func3_e'(decoder_req_i.instr[14:12]);
 
           // Config instruction
           if (func3 == OPCFG) begin
-            automatic int unsigned setvl_rs1 = decoder_req_i.instr[19:15];
-            automatic int unsigned setvl_rd  = decoder_req_i.instr[11:7];
+            automatic vreg_t setvl_rs1 = decoder_req_i.instr[19:15];
+            automatic vreg_t setvl_rd  = decoder_req_i.instr[11:7];
 
-            spatz_req.rd = setvl_rd;
-            spatz_req.use_rd = 1'b1;
-            spatz_req.op = VCFG;
+            spatz_req.rd      = setvl_rd;
+            spatz_req.use_rd  = 1'b1;
+            spatz_req.op      = VCFG;
             spatz_req.ex_unit = CON;
 
             // Extract vtype
@@ -153,34 +153,34 @@ module spatz_decoder
               spatz_req.rs1   = decoder_req_i.rs1;
               illegal_instr   = ~decoder_req_i.rs1_valid || ~decoder_req_i.rs2_valid;
             end else begin
-              illegal_instr   = 1'b1;
+              illegal_instr = 1'b1;
             end
 
             // Set to maxvl or new desired value
-            spatz_req.rs1 = (setvl_rs1 == 0 && setvl_rd != 0) ? '1 : spatz_req.rs1;
+            spatz_req.rs1            = (setvl_rs1 == 0 && setvl_rd != 0) ? '1 : spatz_req.rs1;
             // Keep vl
             spatz_req.op_cgf.keep_vl = setvl_rs1 == '0 && setvl_rd == '0;
           // Arithmetic instruction (except for masked and widening)
           end else begin
-            automatic logic [4:0] arith_s1 = decoder_req_i.instr[19:15];
-            automatic logic [4:0] arith_s2 = decoder_req_i.instr[24:20];
-            automatic logic [4:0] arith_d  = decoder_req_i.instr[11:7];
-            automatic bit         arith_vm = decoder_req_i.instr[25];
+            automatic vreg_t arith_s1 = decoder_req_i.instr[19:15];
+            automatic vreg_t arith_s2 = decoder_req_i.instr[24:20];
+            automatic vreg_t arith_d  = decoder_req_i.instr[11:7];
+            automatic logic arith_vm  = decoder_req_i.instr[25];
 
             spatz_req.op_arith.vm = arith_vm;
-            spatz_req.op_sld.vm = arith_vm;
-            spatz_req.use_vs2 = 1'b1;
-            spatz_req.vs2 = arith_s2;
-            spatz_req.use_vd = 1'b1;
-            spatz_req.vd = arith_d;
-            spatz_req.ex_unit = VFU;
+            spatz_req.op_sld.vm   = arith_vm;
+            spatz_req.use_vs2     = 1'b1;
+            spatz_req.vs2         = arith_s2;
+            spatz_req.use_vd      = 1'b1;
+            spatz_req.vd          = arith_d;
+            spatz_req.ex_unit     = VFU;
 
             // Decide which operands to use (vs1 or rs1 or imm)
             unique case (func3)
               OPIVV,
               OPMVV: begin
                 spatz_req.use_vs1 = 1'b1;
-                spatz_req.vs1 = arith_s1;
+                spatz_req.vs1     = arith_s1;
               end
               OPIVI: begin
                 spatz_req.rs1 = elen_t'(signed'(arith_s1));
@@ -247,7 +247,7 @@ module spatz_decoder
               riscv_instruction::VMADC_VVM,
               riscv_instruction::VMADC_VXM,
               riscv_instruction::VMADC_VIM: begin
-                spatz_req.op = VMADC;
+                spatz_req.op                           = VMADC;
                 spatz_req.op_arith.use_carry_borrow_in = 1'b1;
               end
 
@@ -263,7 +263,7 @@ module spatz_decoder
 
               riscv_instruction::VMSBC_VVM,
               riscv_instruction::VMSBC_VXM: begin
-                spatz_req.op = VMSBC;
+                spatz_req.op                           = VMSBC;
                 spatz_req.op_arith.use_carry_borrow_in = 1'b1;
               end
 
@@ -406,25 +406,25 @@ module spatz_decoder
               // Vector Multiply-Add
               riscv_instruction::VMACC_VV,
               riscv_instruction::VMACC_VX: begin
-                spatz_req.op = VMACC;
+                spatz_req.op        = VMACC;
                 spatz_req.vd_is_src = 1'b1;
               end
 
               riscv_instruction::VNMSAC_VV,
               riscv_instruction::VNMSAC_VX: begin
-                spatz_req.op = VNMSAC;
+                spatz_req.op        = VNMSAC;
                 spatz_req.vd_is_src = 1'b1;
               end
 
               riscv_instruction::VMADD_VV,
               riscv_instruction::VMADD_VX: begin
-                spatz_req.op = VMADD;
+                spatz_req.op        = VMADD;
                 spatz_req.vd_is_src = 1'b1;
               end
 
               riscv_instruction::VNMSUB_VV,
               riscv_instruction::VNMSUB_VX: begin
-                spatz_req.op = VNMSUB;
+                spatz_req.op        = VNMSUB;
                 spatz_req.vd_is_src = 1'b1;
               end
 
@@ -439,17 +439,17 @@ module spatz_decoder
               riscv_instruction::VMV_V_X,
               riscv_instruction::VMV_V_I: begin
                 // vmv is the same as a zero slide
-                spatz_req.op = VSLIDEUP;
-                spatz_req.ex_unit = SLD;
-                spatz_req.op_sld.insert = (func3 == OPIVI | func3 == OPIVX);
-                spatz_req.op_sld.vmv = 1'b1;
-                spatz_req.vs2 = spatz_req.vs1;
+                spatz_req.op            = VSLIDEUP;
+                spatz_req.ex_unit       = SLD;
+                spatz_req.op_sld.insert = (func3 == OPIVI || func3 == OPIVX);
+                spatz_req.op_sld.vmv    = 1'b1;
+                spatz_req.vs2           = spatz_req.vs1;
               end
 
               // Vector Slide
               riscv_instruction::VSLIDEUP_VX,
               riscv_instruction::VSLIDEUP_VI: begin
-                spatz_req.op = VSLIDEUP;
+                spatz_req.op      = VSLIDEUP;
                 spatz_req.ex_unit = SLD;
                 if (func3 == OPIVI) begin
                   spatz_req.rs1 = elen_t'(arith_s1);
@@ -457,9 +457,9 @@ module spatz_decoder
               end
 
               riscv_instruction::VSLIDE1UP_VX: begin
-                spatz_req.op = VSLIDEUP;
+                spatz_req.op            = VSLIDEUP;
                 spatz_req.op_sld.insert = 1'b1;
-                spatz_req.ex_unit = SLD;
+                spatz_req.ex_unit       = SLD;
                 if (func3 == OPIVI) begin
                   spatz_req.rs1 = elen_t'(arith_s1);
                 end
@@ -467,7 +467,7 @@ module spatz_decoder
 
               riscv_instruction::VSLIDEDOWN_VX,
               riscv_instruction::VSLIDEDOWN_VI: begin
-                spatz_req.op = VSLIDEDOWN;
+                spatz_req.op      = VSLIDEDOWN;
                 spatz_req.ex_unit = SLD;
                 if (func3 == OPIVI) begin
                   spatz_req.rs1 = elen_t'(arith_s1);
@@ -475,9 +475,9 @@ module spatz_decoder
               end
 
               riscv_instruction::VSLIDE1DOWN_VX: begin
-                spatz_req.op = VSLIDEDOWN;
+                spatz_req.op            = VSLIDEDOWN;
                 spatz_req.op_sld.insert = 1'b1;
-                spatz_req.ex_unit = SLD;
+                spatz_req.ex_unit       = SLD;
                 if (func3 == OPIVI) begin
                   spatz_req.rs1 = elen_t'(arith_s1);
                 end
@@ -492,18 +492,18 @@ module spatz_decoder
 
         // CSR instruction
         riscv_pkg::OpcodeSystem: begin
-          automatic int unsigned csr_addr   = decoder_req_i.instr[31:20];
-          automatic int unsigned csr_rd     = decoder_req_i.instr[11:7];
-          automatic int unsigned csr_rs1    = decoder_req_i.instr[19:15];
-          automatic int unsigned csr_is_imm = decoder_req_i.instr[14];
+          automatic logic [11:0] csr_addr = decoder_req_i.instr[31:20];
+          automatic vreg_t csr_rd         = decoder_req_i.instr[11:7];
+          automatic vreg_t csr_rs1        = decoder_req_i.instr[19:15];
+          automatic logic csr_is_imm      = decoder_req_i.instr[14];
 
-          spatz_req.op = VCSR;
+          spatz_req.op      = VCSR;
           spatz_req.ex_unit = CON;
-          spatz_req.rd = csr_rd;
-          spatz_req.use_rd = 1'b1;
-          spatz_req.rs1 = csr_is_imm ? 32'(csr_rs1) : decoder_req_i.rs1;
-          illegal_instr = csr_is_imm ? 1'b0 : ~decoder_req_i.rs1_valid;
-          reset_vstart = 1'b0;
+          spatz_req.rd      = csr_rd;
+          spatz_req.use_rd  = 1'b1;
+          spatz_req.rs1     = csr_is_imm ? 32'(csr_rs1) : decoder_req_i.rs1;
+          illegal_instr     = csr_is_imm ? 1'b0         : ~decoder_req_i.rs1_valid;
+          reset_vstart      = 1'b0;
 
           // Check if CSR access is really destined for Spatz
           case (csr_addr)
@@ -524,7 +524,7 @@ module spatz_decoder
             riscv_instruction::CSRRW,
             riscv_instruction::CSRRWI: begin
               if (csr_addr == riscv_instruction::CSR_VSTART) begin
-                spatz_req.use_rd = csr_rd != '0;
+                spatz_req.use_rd              = csr_rd != '0;
                 spatz_req.op_cgf.write_vstart = 1'b1;
               end
             end
@@ -546,7 +546,7 @@ module spatz_decoder
               illegal_instr = 1'b1;
             end
           endcase // CSR
-        end // OpcodeSystem
+        end       // OpcodeSystem
 
         default: begin
           illegal_instr = 1'b1;
@@ -555,13 +555,13 @@ module spatz_decoder
 
       // Add correct reset_vstart value
       spatz_req.op_cgf.reset_vstart = illegal_instr ? 1'b0 : reset_vstart;
-      spatz_req.id = decoder_req_i.id;
+      spatz_req.id                  = decoder_req_i.id;
     end // Instruction valid
   end : decoder
 
   // Check if rsp valid and assign spatz_req
-  assign decoder_rsp_o.spatz_req = spatz_req;
+  assign decoder_rsp_o.spatz_req     = spatz_req;
   assign decoder_rsp_o.instr_illegal = decoder_req_valid_i & illegal_instr;
-  assign decoder_rsp_valid_o = decoder_req_valid_i;
+  assign decoder_rsp_valid_o         = decoder_req_valid_i;
 
 endmodule : spatz_decoder
