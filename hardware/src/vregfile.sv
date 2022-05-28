@@ -6,34 +6,24 @@
 //
 // Generic vector register file that makes use of latches to store data.
 
-module vregfile #(
-  parameter int unsigned NrReadPorts  = 0,
-  parameter int unsigned NrWritePorts = 0,
-  parameter int unsigned NrRegs       = 32,
-  parameter logic        EnableWBE    = 1,
-  parameter int unsigned RegWidth     = 32,
-  parameter int unsigned ElemWidth    = 32,
-  parameter int unsigned VAddrWidth   = 5
-) (
-  input  logic clk_i,
-  input  logic rst_ni,
-  // Write ports
-  input  logic [NrWritePorts-1:0][VAddrWidth-1:0]  waddr_i,
-  input  logic [NrWritePorts-1:0][ElemWidth-1:0]   wdata_i,
-  input  logic [NrWritePorts-1:0]                  we_i,
-  input  logic [NrWritePorts-1:0][ElemWidth/8-1:0] wbe_i,
-  // Read ports
-  input  logic [NrReadPorts-1:0][VAddrWidth-1:0]   raddr_i,
-  output logic [NrReadPorts-1:0][ElemWidth-1:0]    rdata_o
-);
-
-  /////////////////
-  // Localparams //
-  /////////////////
-
-  localparam int unsigned NumElemPerReg       = RegWidth/ElemWidth;
-  localparam int unsigned NumBytesPerElem     = EnableWBE ? ElemWidth/8 : 1;
-  localparam int unsigned NumBytesPerElemSize = EnableWBE ? 8 : ElemWidth;
+module vregfile import spatz_pkg::*; #(
+    parameter int  unsigned NrReadPorts = 0,
+    // Derived parameters.  Do not change!
+    parameter type          addr_t      = logic[$clog2(NRVREG)-1:0],
+    parameter type          data_t      = logic [VRFWordWidth-1:0],
+    parameter type          strb_t      = logic [VRFWordWidth/8-1:0]
+  ) (
+    input  logic                    clk_i,
+    input  logic                    rst_ni,
+    // Write ports
+    input  addr_t                   waddr_i,
+    input  data_t                   wdata_i,
+    input  logic                    we_i,
+    input  strb_t                   wbe_i,
+    // Read ports
+    input  addr_t [NrReadPorts-1:0] raddr_i,
+    output data_t [NrReadPorts-1:0] rdata_o
+  );
 
   /////////////
   // Signals //
@@ -43,11 +33,11 @@ module vregfile #(
   logic clk;
 
   // Register file memory
-  logic [NrRegs-1:0][NumElemPerReg-1:0][NumBytesPerElem-1:0][NumBytesPerElemSize-1:0] mem;
+  logic [NRVREG-1:0][VRFWordWidth/8-1:0][7:0] mem;
 
   // Write data sampling
-  logic [NrWritePorts-1:0][NumBytesPerElem-1:0][NumBytesPerElemSize-1:0]       wdata_q;
-  logic [NrRegs-1:0][NumElemPerReg-1:0][NumBytesPerElem-1:0][NrWritePorts-1:0] waddr_onehot;
+  data_t                                  wdata_q;
+  logic  [NRVREG-1:0][VRFWordWidth/8-1:0] waddr_onehot;
 
   ///////////////////
   // Register File //
@@ -57,68 +47,47 @@ module vregfile #(
   tc_clk_gating i_regfile_cg (
     .clk_i    (clk_i),
     .en_i     (|we_i),
-    .test_en_i(1'b0),
-    .clk_o    (clk)
+    .test_en_i(1'b0 ),
+    .clk_o    (clk  )
   );
 
   // Sample Input Data
-  for (genvar i = 0; i < NrWritePorts; i++) begin
-    always_ff @(posedge clk) begin
-      wdata_q[i] <= wdata_i[i];
-    end
-  end
+  always_ff @(posedge clk) begin: proc_wdata_q
+    wdata_q <= wdata_i;
+  end: proc_wdata_q
 
-  // Create latch clock signal
-  for (genvar i = 0; i < NrWritePorts; i++) begin
-    // Select which destination bytes to write into
-    for (genvar j = 0; j < NrRegs; j++) begin
-      for (genvar k = 0; k < NumElemPerReg; k++) begin
-        for (genvar l = 0; l < NumBytesPerElem; l++) begin
-          if (NumElemPerReg == 'd1) begin
-            assign waddr_onehot[j][k][l][i] = (we_i[i] & ((wbe_i[i][l] & EnableWBE) | ~EnableWBE)
-                                                       & waddr_i[i][VAddrWidth-1:0] == j);
-          end else begin
-            assign waddr_onehot[j][k][l][i] = (we_i[i] & ((wbe_i[i][l] & EnableWBE) | ~EnableWBE)
-                                                       & waddr_i[i][VAddrWidth-1:$clog2(NumElemPerReg)] == j
-                                                       & waddr_i[i][$clog2(NumElemPerReg)-1:0] == k);
-          end
-        end
-      end
+  // Select which destination bytes to write into
+  for (genvar vreg = 0; vreg < NRVREG; vreg++) begin: gen_waddr_onehot
+    // Create latch clock signal
+    for (genvar b = 0; b < VRFWordWidth/8; b++) begin
+      assign waddr_onehot[vreg][b] = we_i && wbe_i[b] && waddr_i == vreg;
     end
-  end
+  end: gen_waddr_onehot
 
   // Store new data to memory
-  for (genvar i = 0; i < NrRegs; i++) begin
-    for (genvar j = 0; j < NumElemPerReg; j++) begin
-      for (genvar k = 0; k < NumBytesPerElem; k++) begin
-        logic clk_latch;
+  for (genvar vreg = 0; vreg < NRVREG; vreg++) begin: gen_write_mem
+    for (genvar b = 0; b < VRFWordBWidth; b++) begin
+      logic clk_latch;
 
-        tc_clk_gating i_regfile_cg (
-          .clk_i    (clk),
-          .en_i     (|waddr_onehot[i][j][k]),
-          .test_en_i(1'b0),
-          .clk_o    (clk_latch)
-        );
+      tc_clk_gating i_regfile_cg (
+        .clk_i    (clk                  ),
+        .en_i     (waddr_onehot[vreg][b]),
+        .test_en_i(1'b0                 ),
+        .clk_o    (clk_latch            )
+      );
 
-        /* verilator lint_off NOLATCH */
-        always_latch begin
-          // TODO: Generalize for more than one write port
-          if (clk_latch) begin
-            mem[i][j][k] <= wdata_q[0][k];
-          end
-        end
-        /* verilator lint_on NOLATCH */
+      /* verilator lint_off NOLATCH */
+      always_latch begin
+        if (clk_latch)
+          mem[vreg][b] <= wdata_q[b*8 +: 8];
       end
+    /* verilator lint_on NOLATCH */
     end
-  end
+  end: gen_write_mem
 
   // Read data from memory
-  for (genvar i = 0; i < NrReadPorts; i++) begin
-    if (NumElemPerReg == 'd1) begin
-      assign rdata_o[i] = mem[raddr_i[i]];
-    end else begin
-      assign rdata_o[i] = mem[raddr_i[i][VAddrWidth-1:$clog2(NumElemPerReg)]][raddr_i[i][$clog2(NumElemPerReg)-1:0]];
-    end
-  end
+  for (genvar port = 0; port < NrReadPorts; port++) begin: gen_read_mem
+    assign rdata_o[port] = mem[raddr_i[port]];
+  end: gen_read_mem
 
 endmodule : vregfile

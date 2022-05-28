@@ -13,23 +13,30 @@ package spatz_pkg;
   //////////////////
 
   // Number of IPUs in VFU (between 2 and 8)
-  localparam int unsigned N_IPU = `ifdef N_IPU `N_IPU `else 2 `endif;
+  localparam int unsigned N_IPU  = `ifdef N_IPU `N_IPU `else 2 `endif;
   // Maximum size of a single vector element in bits
-  localparam int unsigned ELEN = 32;
+  localparam int unsigned ELEN   = 32;
   // Maximum size of a single vector element in bytes
-  localparam int unsigned ELENB = ELEN / 8;
+  localparam int unsigned ELENB  = ELEN / 8;
   // Number of bits in a vector register
-  localparam int unsigned VLEN = `ifdef VLEN `VLEN `else 256 `endif;
+  localparam int unsigned VLEN   = `ifdef VLEN `VLEN `else 256 `endif;
   // Number of bytes in a vector register
-  localparam int unsigned VLENB = VLEN / 8;
+  localparam int unsigned VLENB  = VLEN / 8;
   // Maximum vector length in elements
-  localparam int unsigned MAXVL = VLEN;
+  localparam int unsigned MAXVL  = VLEN;
   // Number of vector registers
   localparam int unsigned NRVREG = 32;
-  // Number of addressable elements in a vector register
-  localparam int unsigned VELE = VLEN/(N_IPU*ELEN);
-  // Number of bytes in a vector register element
-  localparam int unsigned VELEB = N_IPU*ELENB;
+
+  // Width of a VRF word
+  localparam int unsigned VRFWordWidth     = N_IPU * ELEN;
+  // Width of a VRF word (bytes)
+  localparam int unsigned VRFWordBWidth    = N_IPU * ELENB;
+  // Number of addressable words in a vector register
+  localparam int unsigned NrWordsPerVector = VLEN/VRFWordWidth;
+  // Number of VRF banks
+  localparam int unsigned NrVRFBanks       = NrWordsPerVector; // In order to fix 1 word per bank
+  // Number of elements per VRF Bank
+  localparam int unsigned NrWordsPerBank   = NrWordsPerVector / NrVRFBanks;
 
   //////////////////////
   // Type Definitions //
@@ -37,16 +44,19 @@ package spatz_pkg;
 
   // Vector length register
   typedef logic [$clog2(MAXVL+1)-1:0] vlen_t;
-  // Operand register
-  typedef logic [$clog2(NRVREG)-1:0] opreg_t;
+  // Vector register
+  typedef logic [$clog2(NRVREG)-1:0] vreg_t;
 
   // Element of length type
   typedef logic [ELEN-1:0] elen_t;
 
   // VREG address, byte enable, and data type
-  typedef logic [$clog2(NRVREG)+$clog2(VELE)-1:0] vreg_addr_t;
-  typedef logic [N_IPU*ELENB-1:0]                 vreg_be_t;
-  typedef logic [N_IPU*ELEN-1:0]                  vreg_data_t;
+  typedef struct packed {
+    logic [$clog2(NRVREG)-1:0] vreg;
+    logic [$clog2(NrVRFBanks)-1:0] bank;
+  } vreg_addr_t;
+  typedef logic [N_IPU*ELENB-1:0] vreg_be_t;
+  typedef logic [N_IPU*ELEN-1:0] vreg_data_t;
 
   // Instruction ID
   typedef logic [4:0] instr_id_t;
@@ -133,39 +143,33 @@ package spatz_pkg;
   typedef struct packed {
     // Instruction ID
     instr_id_t id;
-
     // Used vector registers
-    opreg_t     vs1;
-    logic       use_vs1;
-    opreg_t     vs2;
-    logic       use_vs2;
-    opreg_t     vd;
-    logic       use_vd;
-    logic       vd_is_src;
-
+    vreg_t vs1;
+    logic use_vs1;
+    vreg_t vs2;
+    logic use_vs2;
+    vreg_t vd;
+    logic use_vd;
+    logic vd_is_src;
     // Scalar input values
-    elen_t      rs1;
-    elen_t      rs2;
-
+    elen_t rs1;
+    elen_t rs2;
     // Destination register
     logic [4:0] rd;
-    logic       use_rd;
-
+    logic use_rd;
     // Instruction operation
-    op_e        op;
-    ex_unit_e   ex_unit;
-
+    op_e op;
+    ex_unit_e ex_unit;
     // Operation specific details
-    op_cfg_t    op_cgf;
-    op_csr_t    op_csr;
-    op_arith_t  op_arith;
-    op_mem_t    op_mem;
-    op_sld_t    op_sld;
-
+    op_cfg_t op_cgf;
+    op_csr_t op_csr;
+    op_arith_t op_arith;
+    op_mem_t op_mem;
+    op_sld_t op_sld;
     // Spatz config details
-    vtype_t     vtype;
-    vlen_t      vl;
-    vlen_t      vstart;
+    vtype_t vtype;
+    vlen_t vl;
+    vlen_t vstart;
   } spatz_req_t;
 
   //////////////////////////////////
@@ -175,15 +179,13 @@ package spatz_pkg;
   typedef struct packed {
     // Request id
     instr_id_t id;
-
     // Instruction
     riscv_pkg::instr_t instr;
-
     // Rs values
     elen_t rs1;
-    logic  rs1_valid;
+    logic rs1_valid;
     elen_t rs2;
-    logic  rs2_valid;
+    logic rs2_valid;
   } decoder_req_t;
 
   typedef struct packed {
@@ -199,17 +201,17 @@ package spatz_pkg;
 
   typedef struct packed {
     // Instruction ID
-    instr_id_t  id;
+    instr_id_t id;
 
     // Retiring registers
-    opreg_t vs2;
-    opreg_t vs1;
-    opreg_t vd;
+    vreg_t vs2;
+    vreg_t vs1;
+    vreg_t vd;
 
     // WB
-    logic       wb;
+    logic wb;
     logic [4:0] rd;
-    elen_t      result;
+    elen_t result;
   } vfu_rsp_t;
 
   ///////////////////
@@ -218,11 +220,9 @@ package spatz_pkg;
 
   typedef struct packed {
     // Instruction ID
-    instr_id_t  id;
-
+    instr_id_t id;
     // Retiring registers
-    opreg_t vd;
-
+    vreg_t vd;
     // Did the memory request trigger an exception
     logic exc;
   } vlsu_rsp_t;
@@ -233,11 +233,10 @@ package spatz_pkg;
 
   typedef struct packed {
     // Instruction ID
-    instr_id_t  id;
-
+    instr_id_t id;
     // Retiring registers
-    opreg_t vd;
-    opreg_t vs2;
+    vreg_t vd;
+    vreg_t vs2;
   } vsldu_rsp_t;
 
   //////////////////
@@ -269,4 +268,4 @@ package spatz_pkg;
     SB_VSLDU_VD_WD
   } sb_port_e;
 
- endpackage : spatz_pkg
+endpackage : spatz_pkg
