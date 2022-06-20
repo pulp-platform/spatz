@@ -60,7 +60,7 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
 
   // Number of elements in one VRF word
   logic [$clog2(N_IPU*4):0] nr_elem_word;
-  assign nr_elem_word = N_IPU * (EW_32 - spatz_req_q.vtype.vsew);
+  assign nr_elem_word = N_IPU * (1 << (EW_32 - spatz_req_q.vtype.vsew));
 
   // Did we reach the last elements of the instruction?
   logic last_word;
@@ -202,7 +202,7 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
       .clk_i            (clk_i                     ),
       .rst_ni           (rst_ni                    ),
       .operation_i      (spatz_req_q.op            ),
-      .operation_valid_i(!vfu_is_ready             ), // If the VFU is not ready, it is executing something
+      .operation_valid_i(!vl_is_zero               ), // If the VFU is not ready, it is executing something
       .op_s1_i          (operand1[ipu*ELEN +: ELEN]),
       .op_s2_i          (operand2[ipu*ELEN +: ELEN]),
       .op_d_i           (operand3[ipu*ELEN +: ELEN]),
