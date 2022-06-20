@@ -37,8 +37,16 @@ module spatz_simd_lane import spatz_pkg::*; import rvv_pkg::vew_e; #(
   data_t               mult_op2;
 
   // Multiplier
-  assign is_mult     = operation_valid_i && (operation_i inside {VMACC, VNMSAC, VMADD, VNMSUB, VMUL, VMULH, VMULHU, VMULHSU});
-  assign mult_result = is_mult ? $signed({mult_op1[Width-1] & is_signed_i & ~(operation_i == VMULHSU), mult_op1}) * $signed({mult_op2[Width-1] & is_signed_i, mult_op2}) : 'x;
+  always_comb begin: mult
+    is_mult = operation_valid_i && (operation_i inside {VMACC, VNMSAC, VMADD, VNMSUB, VMUL, VMULH, VMULHU, VMULHSU});
+
+    // Mute the multiplier
+    mult_result = 'x;
+    if (is_mult)
+      mult_result =
+        $signed({mult_op1[Width-1] & is_signed_i & ~(operation_i == VMULHSU), mult_op1}) *
+        $signed({mult_op2[Width-1] & is_signed_i, mult_op2});
+  end: mult
 
   // Select multiplier operands
   always_comb begin : mult_operands
