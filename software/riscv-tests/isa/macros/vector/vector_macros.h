@@ -12,7 +12,6 @@
 #include "rvv_debug_macros.h"
 #include "encoding.h"
 #include "float_conversion.h"
-
 #ifdef __SPIKE__
 #include <stdio.h>
 
@@ -61,9 +60,18 @@ int test_case;
 
 // Zero-initialized variables can be problematic on bare-metal.
 // Therefore, initialize them during runtime.
-#define INIT_CHECK()  \
-  num_failed = 0;     \
-  test_case  = 0;     \
+#ifdef __SPIKE__
+#define INIT_CHECK()                        \
+  num_failed = 0;                           \
+  test_case  = 0;
+#else
+#include "runtime.h"
+
+#define INIT_CHECK()                  \
+  while (mempool_get_core_id() != 0); \
+  num_failed = 0;                     \
+  test_case  = 0;
+#endif
 
 // Check at the final of the execution whether all the tests passed or not.
 // Returns the number of failed tests.
