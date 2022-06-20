@@ -75,7 +75,7 @@ module spatz_controller
   `FF(vtype_q, vtype_d, '{vill: 1'b1, vsew: EW_8, vlmul: LMUL_1, default: '0})
 
   always_comb begin : proc_vcsr
-    automatic logic [MAXVL-1:0] vlmax = 0;
+    automatic logic [$clog2(MAXVL)-1:0] vlmax = 0;
 
     vstart_d = vstart_q;
     vl_d     = vl_q;
@@ -124,7 +124,7 @@ module spatz_controller
               default: vlmax = vlmax;
             endcase
 
-            vl_d = (spatz_req.rs1 == '1) ? MAXVL : (vlmax < spatz_req.rs1) ? vlmax : spatz_req.rs1;
+            vl_d = (spatz_req.rs1 == '1) ? MAXVL : (int'(vlmax) < spatz_req.rs1) ? vlmax : spatz_req.rs1;
           end else begin
             // Keep vl mode
 

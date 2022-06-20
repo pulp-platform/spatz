@@ -45,7 +45,7 @@ module spatz_decoder
     // We have a new instruction that need to be decoded
     if (decoder_req_valid_i) begin
       // Retrieve the opcode
-      automatic int unsigned opcode = decoder_req_i.instr[6:0];
+      automatic logic [6:0] opcode = decoder_req_i.instr[6:0];
 
       unique case (opcode)
         // Load and store instruction

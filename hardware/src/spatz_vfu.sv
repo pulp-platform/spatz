@@ -64,7 +64,7 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
 
   // Did we reach the last elements of the instruction?
   logic last_word;
-  assign last_word = spatz_req_q.vl <= nr_elem_word;
+  assign last_word = spatz_req_q.vl <= vlen_t'(nr_elem_word);
   // Did we commit a word to the VRF?
   logic word_committed;
   assign word_committed = operands_ready && result_written;

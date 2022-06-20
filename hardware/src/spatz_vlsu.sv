@@ -421,7 +421,7 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
               unique case (spatz_req_q.vtype.vsew)
                 rvv_pkg::EW_8 : mask = 4'b0001;
                 rvv_pkg::EW_16: mask = 4'b0011;
-                rvv_pkg::EW_32: mask = 4'b1111;
+                default:        mask = 4'b1111;
               endcase
               vrf_wbe_o[ELENB*port +: ELENB] = mask << shift;
             end else begin
@@ -499,7 +499,7 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
             unique case (spatz_req_q.vtype.vsew)
               rvv_pkg::EW_8 : mask = 4'b0001;
               rvv_pkg::EW_16: mask = 4'b0011;
-              rvv_pkg::EW_32: mask = 4'b1111;
+              default:        mask = 4'b1111;
             endcase
 
             mem_req_strb[port] = mask << shift;
