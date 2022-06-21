@@ -487,7 +487,7 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
           if (vreg_counter_en[port])
             buffer_wdata[port] = vrf_rdata_i[ELEN*port +: ELEN];
           buffer_wid[port]    = buffer_id[port];
-          buffer_req_id[port] = vrf_rvalid_i && vreg_counter_en[port];
+          buffer_req_id[port] = vrf_rvalid_i;
           buffer_push[port]   = buffer_req_id[port];
         end
       end
