@@ -112,19 +112,17 @@ module spatz_vsldu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
   logic     vrf_req_valid_d, vrf_req_ready_d;
   logic     vrf_req_valid_q, vrf_req_ready_q;
 
-  stream_register #(
+  spill_register #(
     .T(vrf_req_t)
   ) i_vrf_req_register (
-    .clk_i     (clk_i          ),
-    .rst_ni    (rst_ni         ),
-    .testmode_i(1'b0           ),
-    .clr_i     (1'b0           ),
-    .data_i    (vrf_req_d      ),
-    .valid_i   (vrf_req_valid_d),
-    .ready_o   (vrf_req_ready_d),
-    .data_o    (vrf_req_q      ),
-    .valid_o   (vrf_req_valid_q),
-    .ready_i   (vrf_req_ready_q)
+    .clk_i  (clk_i          ),
+    .rst_ni (rst_ni         ),
+    .data_i (vrf_req_d      ),
+    .valid_i(vrf_req_valid_d),
+    .ready_o(vrf_req_ready_d),
+    .data_o (vrf_req_q      ),
+    .valid_o(vrf_req_valid_q),
+    .ready_i(vrf_req_ready_q)
   );
 
   assign vrf_waddr_o     = vrf_req_q.waddr;
@@ -165,10 +163,9 @@ module spatz_vsldu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
 
       prefetch_d = spatz_req_i.op == VSLIDEUP ? spatz_req_d.vstart >= VRFWordBWidth : 1'b1;
     end else if (!is_vl_zero && vsldu_is_ready && !new_vsldu_request &&
-      !vrf_req_valid_d && (!vrf_req_valid_q || (vrf_req_valid_q && vrf_req_ready_q))) begin
+        !vrf_req_valid_d && (!vrf_req_valid_q || (vrf_req_valid_q && vrf_req_ready_q))) begin
       // If we are ready for a new instruction but there is none, clear req register
       spatz_req_d    = '0;
-      slide_amount_d = '0;
     end
 
     if (prefetch_q && vrf_re_o && vrf_rvalid_i) prefetch_d = 1'b0;

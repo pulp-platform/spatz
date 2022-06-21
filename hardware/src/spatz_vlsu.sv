@@ -79,7 +79,6 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
 
   // For each memory port we count how many elements we have already loaded/stored.
   // Multiple counters are needed all memory ports can work independent of each other.
-  logic  [NrMemPorts-1:0] mem_counter_clear;
   logic  [NrMemPorts-1:0] mem_counter_en;
   logic  [NrMemPorts-1:0] mem_counter_load;
   vlen_t [NrMemPorts-1:0] mem_counter_delta;
@@ -92,7 +91,7 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
     ) i_delta_counter_mem (
       .clk_i     (clk_i                       ),
       .rst_ni    (rst_ni                      ),
-      .clear_i   (mem_counter_clear[port]     ),
+      .clear_i   (1'b0                        ),
       .en_i      (mem_counter_en[port]        ),
       .load_i    (mem_counter_load[port]      ),
       .down_i    (1'b0                        ), // We always count up
@@ -112,7 +111,6 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
   // Multiple counters are necessary for the case where not every signle IPU will
   // receive the same number of elements to work through.
   vlen_t [N_IPU-1:0] vreg_counter_max;
-  logic  [N_IPU-1:0] vreg_counter_clear;
   logic  [N_IPU-1:0] vreg_counter_en;
   logic  [N_IPU-1:0] vreg_counter_load;
   vlen_t [N_IPU-1:0] vreg_counter_delta;
@@ -125,7 +123,7 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
     ) i_delta_counter_vreg (
       .clk_i     (clk_i                       ),
       .rst_ni    (rst_ni                      ),
-      .clear_i   (vreg_counter_clear[ipu]     ),
+      .clear_i   (1'b0                        ),
       .en_i      (vreg_counter_en[ipu]        ),
       .load_i    (vreg_counter_load[ipu]      ),
       .down_i    (1'b0                        ), // We always count up
@@ -194,7 +192,7 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
     reorder_buffer #(
       .DataWidth  (ELEN              ),
       .NumWords   (NrOutstandingLoads),
-      .FallThrough(1'b0              )
+      .FallThrough(1'b1              )
     ) i_reorder_buffer (
       .clk_i    (clk_i              ),
       .rst_ni   (rst_ni             ),
@@ -215,6 +213,39 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
   // Current element id and byte id that are being accessed at the register file
   vreg_elem_t                     vreg_elem_id;
   logic       [$clog2(ELENB)-1:0] vreg_byte_id;
+
+  ///////////////////////
+  //  Output Register  //
+  ///////////////////////
+
+  typedef struct packed {
+    vreg_addr_t waddr;
+    vreg_data_t wdata;
+    vreg_be_t wbe;
+  } vrf_req_t;
+
+  vrf_req_t vrf_req_d, vrf_req_q;
+  logic     vrf_req_valid_d, vrf_req_ready_d;
+  logic     vrf_req_valid_q, vrf_req_ready_q;
+
+  spill_register #(
+    .T(vrf_req_t)
+  ) i_vrf_req_register (
+    .clk_i  (clk_i          ),
+    .rst_ni (rst_ni         ),
+    .data_i (vrf_req_d      ),
+    .valid_i(vrf_req_valid_d),
+    .ready_o(vrf_req_ready_d),
+    .data_o (vrf_req_q      ),
+    .valid_o(vrf_req_valid_q),
+    .ready_i(vrf_req_ready_q)
+  );
+
+  assign vrf_waddr_o     = vrf_req_q.waddr;
+  assign vrf_wdata_o     = vrf_req_q.wdata;
+  assign vrf_wbe_o       = vrf_req_q.wbe;
+  assign vrf_we_o        = vrf_req_valid_q;
+  assign vrf_req_ready_q = vrf_wvalid_i;
 
   ///////////////////
   // State Handler //
@@ -242,7 +273,8 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
           spatz_req_d.vstart = spatz_req_i.vstart << 2;
         end
       endcase
-    end else if (!is_vl_zero && vlsu_is_ready && !new_vlsu_request) begin
+    end else if (!is_vl_zero && vlsu_is_ready && !new_vlsu_request &&
+        !vrf_req_valid_d && (!vrf_req_valid_q || (vrf_req_valid_q && vrf_req_ready_q))) begin
       // If we are ready for a new instruction but there is none, clear the register
       spatz_req_d = '0;
     end
@@ -254,7 +286,7 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
     vlsu_rsp_o       = '0;
 
     // Write back accessed register file vector to clear scoreboard entry
-    if (vlsu_is_ready && !is_vl_zero) begin
+    if (vlsu_is_ready && !is_vl_zero && !vrf_req_valid_d && (!vrf_req_valid_q || (vrf_req_valid_q && vrf_req_ready_q))) begin
       vlsu_rsp_o.id    = spatz_req_q.id;
       vlsu_rsp_o.vd    = spatz_req_q.vd;
       vlsu_rsp_valid_o = 1'b1;
@@ -263,7 +295,7 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
 
   // Signal when we are finished with with accessing the memory (necessary
   // for the case with more than one memory port)
-  assign x_mem_finished_o = vlsu_is_ready && (!is_vl_zero || (new_vlsu_request && spatz_req_i.vl == 'd0));
+  assign x_mem_finished_o = vlsu_is_ready && (!is_vl_zero || (new_vlsu_request && spatz_req_i.vl == 'd0)) && !vrf_req_valid_d;
 
   ////////////////////////
   // Address Generation //
@@ -318,10 +350,9 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
       vreg_counter_load_value[ipu]  = ((spatz_req_d.vstart >> ($clog2(N_IPU*ELENB))) << $clog2(ELENB)) + (spatz_req_d.vstart[idx_width(N_IPU*ELENB)-1:$clog2(ELENB)] > ipu ? ELENB : (spatz_req_d.vstart[idx_width(N_IPU*ELENB)-1:$clog2(ELENB)] == ipu ? spatz_req_d.vstart[$clog2(ELENB)-1:0] : 'd0));
       vreg_operation_valid[ipu]     = (delta != 'd0) & ~is_vl_zero & (catchup[ipu] | ~catchup[ipu] & ~|catchup);
       vreg_operation_last[ipu]      = vreg_operation_valid[ipu] && (delta <= (is_single_element_operation ? single_element_size : ELENB));
-      vreg_counter_clear[ipu]       = 1'b0;
       vreg_counter_delta[ipu]       = !vreg_operation_valid[ipu] ? 'd0 : is_single_element_operation ? single_element_size : vreg_operation_last[ipu] ? delta : ELENB;
-      vreg_counter_en[ipu]          = vreg_operation_valid[ipu] && (is_load && vrf_wvalid_i && vrf_we_o) || (!is_load && vrf_rvalid_i && vrf_re_o);
-      vreg_operations_finished[ipu] = (delta == 0 || is_vl_zero) || (vreg_operation_last[ipu] && vreg_counter_en[ipu]);
+      vreg_counter_en[ipu]          = vreg_operation_valid[ipu] && (is_load && vrf_req_valid_d && vrf_req_ready_d) || (!is_load && vrf_rvalid_i && vrf_re_o);
+      vreg_operations_finished[ipu] = (delta == 0 || is_vl_zero) || (vreg_operation_last[ipu] && vreg_counter_en[ipu]) && !vrf_req_valid_d && (!vrf_req_valid_q || (vrf_req_valid_q && vrf_req_ready_q));
       vreg_counter_max[ipu]         = max;
     end
   end
@@ -340,7 +371,6 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
       mem_operation_last[port]      = mem_operation_valid[port] & (delta <= (is_single_element_operation ? single_element_size : 'd4));
       mem_counter_load[port]        = new_vlsu_request;
       mem_counter_load_value[port]  = NrMemPorts == 'd1 ? spatz_req_d.vstart : ((spatz_req_d.vstart >> ($clog2(NrMemPorts) + $clog2(MemDataWidthB))) << $clog2(MemDataWidthB)) + (spatz_req_d.vstart[idx_width(NrMemPorts)+$clog2(MemDataWidthB)-1:$clog2(MemDataWidthB)] > port ? MemDataWidthB : spatz_req_d.vstart[idx_width(NrMemPorts)+$clog2(MemDataWidthB)-1:$clog2(MemDataWidthB)] == port ? spatz_req_d.vstart[$clog2(MemDataWidthB)-1:0] : 'd0);
-      mem_counter_clear[port]       = 1'b0;
       mem_counter_delta[port]       = !mem_operation_valid[port] ? 'd0 : is_single_element_operation ? single_element_size : mem_operation_last[port] ? delta : 'd4;
       mem_counter_en[port]          = x_mem_ready_i[port] & x_mem_valid_o[port];
       mem_operations_finished[port] = ~mem_operation_valid[port]; // | (mem_operation_last[i] & mem_counter_en[i]);
@@ -361,12 +391,10 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
 
   // verilator lint_off LATCH
   always_comb begin
-    vrf_raddr_o = '0;
-    vrf_re_o    = 1'b0;
-    vrf_waddr_o = '0;
-    vrf_wdata_o = 'x;
-    vrf_we_o    = 1'b0;
-    vrf_wbe_o   = '0;
+    vrf_raddr_o     = '0;
+    vrf_re_o        = 1'b0;
+    vrf_req_d       = '0;
+    vrf_req_valid_d = 1'b0;
 
     buffer_wdata  = '0;
     buffer_wid    = '0;
@@ -385,8 +413,8 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
       // If we have a valid element in the buffer, store it back to the register file
       if (|vreg_operation_valid) begin
         // Enable write back to the VRF if we have a valid element in all buffers that still have to write something back.
-        vrf_waddr_o = vreg_addr;
-        vrf_we_o    = &buffer_rvalid || (&(buffer_rvalid | buffer_empty) && ~(|mem_operation_valid));
+        vrf_req_d.waddr = vreg_addr;
+        vrf_req_valid_d = &buffer_rvalid || (&(buffer_rvalid | buffer_empty) && ~(|mem_operation_valid));
 
         for (int unsigned port = 0; port < NrMemPorts; port++) begin
           automatic elen_t data = buffer_rdata[port];
@@ -400,7 +428,7 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
           endcase
 
           // Pop stored element and free space in buffer
-          buffer_pop[port] = buffer_rvalid[port] & vrf_wvalid_i & vreg_counter_en[port];
+          buffer_pop[port] = buffer_rvalid[port] & vrf_req_valid_d & vrf_req_ready_d & vreg_counter_en[port];
 
           // Shift data to correct position if we have a strided memory access
           if (is_strided) begin
@@ -411,7 +439,7 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
               2'b11: data = {data[7:0], data[31:8]};
             endcase
           end
-          vrf_wdata_o[ELEN*port +: ELEN] = data;
+          vrf_req_d.wdata[ELEN*port +: ELEN] = data;
 
           // Create write byte enable mask for register file
           if (vreg_counter_en[port]) begin
@@ -423,10 +451,10 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
                 rvv_pkg::EW_16: mask = 4'b0011;
                 default:        mask = 4'b1111;
               endcase
-              vrf_wbe_o[ELENB*port +: ELENB] = mask << shift;
+              vrf_req_d.wbe[ELENB*port +: ELENB] = mask << shift;
             end else begin
               for (int unsigned k = 0; k < ELENB; k++)
-                vrf_wbe_o[ELENB*port+k] = k < vreg_counter_delta[port];
+                vrf_req_d.wbe[ELENB*port+k] = k < vreg_counter_delta[port];
             end
           end
         end
