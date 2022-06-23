@@ -23,11 +23,11 @@
 void matmul(int32_t *c, const int32_t *a, const int32_t *b,
             const unsigned int M, const unsigned int N, const unsigned int P) {
   if (M <= 4) {
-    matmul_2xVL(c, a, b, M, 0, M, N, P, 0, P, P);
+    matmul_2xVL(c, a, b, 0, M, N, P, 0, P, P);
   } else if (M <= 8) {
-    matmul_4xVL(c, a, b, M, 0, M, N, P, 0, P, P);
+    matmul_4xVL(c, a, b, 0, M, N, P, 0, P, P);
   } else {
-    matmul_8xVL(c, a, b, M, 0, M, N, P, 0, P, P);
+    matmul_8xVL(c, a, b, 0, M, N, P, 0, P, P);
   }
 }
 
@@ -252,15 +252,15 @@ void matmul_4xVL(int32_t *c, const int32_t *a, const int32_t *b,
   asm volatile("vsetvli zero, %0, e32, m4, ta, ma" ::"r"(vl));
 
   for (unsigned int p = p_start; p < p_end; p += vl) {
-    int32_t *b_ = b + p;
+    const int32_t *b_ = b + p;
     int32_t *c_ = c + p;
 
     for (unsigned int m = m_start; m < m_end; m += 4) {
-      int32_t *a_ = a + m * N;
-      int32_t *a__ = a_;
+      const int32_t *a_ = a + m * N;
+      const int32_t *a__ = a_;
 
       asm volatile("vle32.v v16, (%0);" ::"r"(b_));
-      int32_t *b__ = b_ + P;
+      const int32_t *b__ = b_ + P;
 
       int32_t *c__ = c_ + m * P;
 
@@ -337,15 +337,15 @@ void matmul_8xVL(int32_t *c, const int32_t *a, const int32_t *b,
   asm volatile("vsetvli zero, %0, e32, m2, ta, ma" ::"r"(vl));
 
   for (unsigned int p = p_start; p < p_end; p += vl) {
-    int32_t *b_ = b + p;
+    const int32_t *b_ = b + p;
     int32_t *c_ = c + p;
 
     for (unsigned int m = m_start; m < m_end; m += 8) {
-      int32_t *a_ = a + m * N;
-      int32_t *a__ = a_;
+      const int32_t *a_ = a + m * N;
+      const int32_t *a__ = a_;
 
       asm volatile("vle32.v v18, (%0);" ::"r"(b_));
-      int32_t *b__ = b_ + P;
+      const int32_t *b__ = b_ + P;
 
       int32_t *c__ = c_ + m * P;
 

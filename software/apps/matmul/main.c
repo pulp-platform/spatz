@@ -73,20 +73,22 @@ void init_matrix(int32_t *matrix, uint32_t rows_start, uint32_t rows_end,
 }
 
 // Verify the matrices
-int verify_matrix(int32_t *matrix, int32_t row_start, int32_t row_end,
-                  int32_t n, int32_t p, int32_t aa, int32_t ab, int32_t ac,
+int verify_matrix(int32_t *matrix, uint32_t row_start, uint32_t row_end,
+                  uint32_t n, uint32_t p, int32_t aa, int32_t ab, int32_t ac,
                   int32_t ba, int32_t bb, int32_t bc) {
-  for (int32_t i = row_start; i < row_end; i++) {
-    for (int32_t j = 0; j < p; j++) {
-      int32_t lin = (aa * bb * i * j + aa * bc * i + ac * bb * j + ac * bc) * n;
-      int32_t qua =
-          ((aa * ba * i + ab * bb * j + ab * bc + ba * ac) * (n * (n - 1))) / 2;
-      int32_t cub = ((ab * ba) * (n * (n - 1) * (2 * n - 1))) / 6;
+  for (int32_t i = (int32_t)row_start; i < (int32_t)row_end; i++) {
+    for (int32_t j = 0; j < (int32_t)p; j++) {
+      int32_t lin =
+          (aa * bb * i * j + aa * bc * i + ac * bb * j + ac * bc) * (int32_t)n;
+      int32_t qua = ((aa * ba * i + ab * bb * j + ab * bc + ba * ac) *
+                     (int32_t)(n * (n - 1))) /
+                    2;
+      int32_t cub = ((ab * ba) * (int32_t)(n * (n - 1) * (2 * n - 1))) / 6;
       int32_t golden = lin + qua + cub;
-      if (matrix[i * p + j] != golden) {
-        return (i + j) == 0 ? -1 : i * p + j;
+      if (matrix[i * (int32_t)p + j] != golden) {
+        return (i + j) == 0 ? -1 : i * (int32_t)p + j;
       }
-      matrix[i * p + j] = 0;
+      matrix[i * (int32_t)p + j] = 0;
     }
   }
   return 0;
@@ -190,11 +192,11 @@ int main() {
 
     // Calculate matmul
     if (kernel_size == 2) {
-      matmul_2xVL(c, a, b, dim, m_start, m_end, dim, dim, p_start, p_end, vl);
+      matmul_2xVL(c, a, b, m_start, m_end, dim, dim, p_start, p_end, vl);
     } else if (kernel_size == 4) {
-      matmul_4xVL(c, a, b, dim, m_start, m_end, dim, dim, p_start, p_end, vl);
+      matmul_4xVL(c, a, b, m_start, m_end, dim, dim, p_start, p_end, vl);
     } else if (kernel_size == 8) {
-      matmul_8xVL(c, a, b, dim, m_start, m_end, dim, dim, p_start, p_end, vl);
+      matmul_8xVL(c, a, b, m_start, m_end, dim, dim, p_start, p_end, vl);
     } else {
       return -2;
     }
