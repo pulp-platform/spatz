@@ -113,8 +113,9 @@ module spatz import spatz_pkg::*; import rvv_pkg::*;#(
   ////////////////
 
   // Scoreboard read enable and write enable input signals
-  logic [NrReadPorts-1:0]  sb_re;
-  logic [NrWritePorts-1:0] sb_we;
+  logic      [NrReadPorts-1:0]              sb_re;
+  logic      [NrWritePorts-1:0]             sb_we;
+  spatz_id_t [NrReadPorts+NrWritePorts-1:0] sb_id;
 
   spatz_controller #(
     .NrVregfilePorts(NrReadPorts+NrWritePorts),
@@ -122,35 +123,35 @@ module spatz import spatz_pkg::*; import rvv_pkg::*;#(
     .x_issue_resp_t (x_issue_resp_t          ),
     .x_result_t     (x_result_t              )
   ) i_controller (
-    .clk_i            (clk_i                 ),
-    .rst_ni           (rst_ni                ),
+    .clk_i            (clk_i           ),
+    .rst_ni           (rst_ni          ),
     // X-intf
-    .x_issue_valid_i  (x_issue_valid_i       ),
-    .x_issue_ready_o  (x_issue_ready_o       ),
-    .x_issue_req_i    (x_issue_req_i         ),
-    .x_issue_resp_o   (x_issue_resp_o        ),
-    .x_result_valid_o (x_result_valid_o      ),
-    .x_result_ready_i (x_result_ready_i      ),
-    .x_result_o       (x_result_o            ),
+    .x_issue_valid_i  (x_issue_valid_i ),
+    .x_issue_ready_o  (x_issue_ready_o ),
+    .x_issue_req_i    (x_issue_req_i   ),
+    .x_issue_resp_o   (x_issue_resp_o  ),
+    .x_result_valid_o (x_result_valid_o),
+    .x_result_ready_i (x_result_ready_i),
+    .x_result_o       (x_result_o      ),
     // Spatz req
-    .spatz_req_valid_o(spatz_req_valid       ),
-    .spatz_req_o      (spatz_req             ),
+    .spatz_req_valid_o(spatz_req_valid ),
+    .spatz_req_o      (spatz_req       ),
     // VFU
-    .vfu_req_ready_i  (vfu_req_ready         ),
-    .vfu_rsp_valid_i  (vfu_rsp_valid         ),
-    .vfu_rsp_i        (vfu_rsp               ),
+    .vfu_req_ready_i  (vfu_req_ready   ),
+    .vfu_rsp_valid_i  (vfu_rsp_valid   ),
+    .vfu_rsp_i        (vfu_rsp         ),
     // VFU
-    .vlsu_req_ready_i (vlsu_req_ready        ),
-    .vlsu_rsp_valid_i (vlsu_rsp_valid        ),
-    .vlsu_rsp_i       (vlsu_rsp              ),
+    .vlsu_req_ready_i (vlsu_req_ready  ),
+    .vlsu_rsp_valid_i (vlsu_rsp_valid  ),
+    .vlsu_rsp_i       (vlsu_rsp        ),
     // VLSD
-    .vsldu_req_ready_i(vsldu_req_ready       ),
-    .vsldu_rsp_valid_i(vsldu_rsp_valid       ),
-    .vsldu_rsp_i      (vsldu_rsp             ),
+    .vsldu_req_ready_i(vsldu_req_ready ),
+    .vsldu_rsp_valid_i(vsldu_rsp_valid ),
+    .vsldu_rsp_i      (vsldu_rsp       ),
     // Scoreboard check
-    .sb_addr_i        ({vrf_waddr, vrf_raddr}),
-    .sb_enable_i      ({sb_we, sb_re}        ),
-    .sb_enable_o      ({vrf_we, vrf_re}      )
+    .sb_id_i          (sb_id           ),
+    .sb_enable_i      ({sb_we, sb_re}  ),
+    .sb_enable_o      ({vrf_we, vrf_re})
   );
 
   /////////
@@ -158,25 +159,26 @@ module spatz import spatz_pkg::*; import rvv_pkg::*;#(
   /////////
 
   spatz_vfu i_vfu (
-    .clk_i            (clk_i                           ),
-    .rst_ni           (rst_ni                          ),
+    .clk_i            (clk_i                                                   ),
+    .rst_ni           (rst_ni                                                  ),
     // Request
-    .spatz_req_i      (spatz_req                       ),
-    .spatz_req_valid_i(spatz_req_valid                 ),
-    .spatz_req_ready_o(vfu_req_ready                   ),
+    .spatz_req_i      (spatz_req                                               ),
+    .spatz_req_valid_i(spatz_req_valid                                         ),
+    .spatz_req_ready_o(vfu_req_ready                                           ),
     // Response
-    .vfu_rsp_valid_o  (vfu_rsp_valid                   ),
-    .vfu_rsp_o        (vfu_rsp                         ),
+    .vfu_rsp_valid_o  (vfu_rsp_valid                                           ),
+    .vfu_rsp_o        (vfu_rsp                                                 ),
     // VRF
-    .vrf_waddr_o      (vrf_waddr[VFU_VD_WD]            ),
-    .vrf_wdata_o      (vrf_wdata[VFU_VD_WD]            ),
-    .vrf_we_o         (sb_we[VFU_VD_WD]                ),
-    .vrf_wbe_o        (vrf_wbe[VFU_VD_WD]              ),
-    .vrf_wvalid_i     (vrf_wvalid[VFU_VD_WD]           ),
-    .vrf_raddr_o      (vrf_raddr[VFU_VD_RD:VFU_VS2_RD] ),
-    .vrf_re_o         (sb_re[VFU_VD_RD:VFU_VS2_RD]     ),
-    .vrf_rdata_i      (vrf_rdata[VFU_VD_RD:VFU_VS2_RD] ),
-    .vrf_rvalid_i     (vrf_rvalid[VFU_VD_RD:VFU_VS2_RD])
+    .vrf_waddr_o      (vrf_waddr[VFU_VD_WD]                                    ),
+    .vrf_wdata_o      (vrf_wdata[VFU_VD_WD]                                    ),
+    .vrf_we_o         (sb_we[VFU_VD_WD]                                        ),
+    .vrf_wbe_o        (vrf_wbe[VFU_VD_WD]                                      ),
+    .vrf_wvalid_i     (vrf_wvalid[VFU_VD_WD]                                   ),
+    .vrf_raddr_o      (vrf_raddr[VFU_VD_RD:VFU_VS2_RD]                         ),
+    .vrf_re_o         (sb_re[VFU_VD_RD:VFU_VS2_RD]                             ),
+    .vrf_rdata_i      (vrf_rdata[VFU_VD_RD:VFU_VS2_RD]                         ),
+    .vrf_rvalid_i     (vrf_rvalid[VFU_VD_RD:VFU_VS2_RD]                        ),
+    .vrf_id_o         ({sb_id[SB_VFU_VD_WD], sb_id[SB_VFU_VD_RD:SB_VFU_VS2_RD]})
   );
 
   //////////
@@ -189,33 +191,34 @@ module spatz import spatz_pkg::*; import rvv_pkg::*;#(
     .x_mem_resp_t  (x_mem_resp_t  ),
     .x_mem_result_t(x_mem_result_t)
   ) i_vlsu (
-    .clk_i               (clk_i                 ),
-    .rst_ni              (rst_ni                ),
+    .clk_i               (clk_i                                       ),
+    .rst_ni              (rst_ni                                      ),
     // Request
-    .spatz_req_i         (spatz_req             ),
-    .spatz_req_valid_i   (spatz_req_valid       ),
-    .spatz_req_ready_o   (vlsu_req_ready        ),
+    .spatz_req_i         (spatz_req                                   ),
+    .spatz_req_valid_i   (spatz_req_valid                             ),
+    .spatz_req_ready_o   (vlsu_req_ready                              ),
     // Response
-    .vlsu_rsp_valid_o    (vlsu_rsp_valid        ),
-    .vlsu_rsp_o          (vlsu_rsp              ),
+    .vlsu_rsp_valid_o    (vlsu_rsp_valid                              ),
+    .vlsu_rsp_o          (vlsu_rsp                                    ),
     // VRF
-    .vrf_waddr_o         (vrf_waddr[VLSU_VD_WD] ),
-    .vrf_wdata_o         (vrf_wdata[VLSU_VD_WD] ),
-    .vrf_we_o            (sb_we[VLSU_VD_WD]     ),
-    .vrf_wbe_o           (vrf_wbe[VLSU_VD_WD]   ),
-    .vrf_wvalid_i        (vrf_wvalid[VLSU_VD_WD]),
-    .vrf_raddr_o         (vrf_raddr[VLSU_VD_RD] ),
-    .vrf_re_o            (sb_re[VLSU_VD_RD]     ),
-    .vrf_rdata_i         (vrf_rdata[VLSU_VD_RD] ),
-    .vrf_rvalid_i        (vrf_rvalid[VLSU_VD_RD]),
+    .vrf_waddr_o         (vrf_waddr[VLSU_VD_WD]                       ),
+    .vrf_wdata_o         (vrf_wdata[VLSU_VD_WD]                       ),
+    .vrf_we_o            (sb_we[VLSU_VD_WD]                           ),
+    .vrf_wbe_o           (vrf_wbe[VLSU_VD_WD]                         ),
+    .vrf_wvalid_i        (vrf_wvalid[VLSU_VD_WD]                      ),
+    .vrf_raddr_o         (vrf_raddr[VLSU_VD_RD]                       ),
+    .vrf_re_o            (sb_re[VLSU_VD_RD]                           ),
+    .vrf_rdata_i         (vrf_rdata[VLSU_VD_RD]                       ),
+    .vrf_rvalid_i        (vrf_rvalid[VLSU_VD_RD]                      ),
+    .vrf_id_o            ({sb_id[SB_VLSU_VD_WD], sb_id[SB_VLSU_VD_RD]}),
     // X-Interface Memory
-    .x_mem_valid_o       (x_mem_valid_o         ),
-    .x_mem_ready_i       (x_mem_ready_i         ),
-    .x_mem_req_o         (x_mem_req_o           ),
-    .x_mem_resp_i        (x_mem_resp_i          ),
-    .x_mem_result_valid_i(x_mem_result_valid_i  ),
-    .x_mem_result_i      (x_mem_result_i        ),
-    .x_mem_finished_o    (x_mem_finished_o      )
+    .x_mem_valid_o       (x_mem_valid_o                               ),
+    .x_mem_ready_i       (x_mem_ready_i                               ),
+    .x_mem_req_o         (x_mem_req_o                                 ),
+    .x_mem_resp_i        (x_mem_resp_i                                ),
+    .x_mem_result_valid_i(x_mem_result_valid_i                        ),
+    .x_mem_result_i      (x_mem_result_i                              ),
+    .x_mem_finished_o    (x_mem_finished_o                            )
   );
 
   ///////////
@@ -223,25 +226,26 @@ module spatz import spatz_pkg::*; import rvv_pkg::*;#(
   ///////////
 
   spatz_vsldu i_vsldu (
-    .clk_i            (clk_i                   ),
-    .rst_ni           (rst_ni                  ),
+    .clk_i            (clk_i                                          ),
+    .rst_ni           (rst_ni                                         ),
     // Request
-    .spatz_req_i      (spatz_req               ),
-    .spatz_req_valid_i(spatz_req_valid         ),
-    .spatz_req_ready_o(vsldu_req_ready         ),
+    .spatz_req_i      (spatz_req                                      ),
+    .spatz_req_valid_i(spatz_req_valid                                ),
+    .spatz_req_ready_o(vsldu_req_ready                                ),
     // Response
-    .vsldu_rsp_valid_o(vsldu_rsp_valid         ),
-    .vsldu_rsp_o      (vsldu_rsp               ),
+    .vsldu_rsp_valid_o(vsldu_rsp_valid                                ),
+    .vsldu_rsp_o      (vsldu_rsp                                      ),
     // VRF
-    .vrf_waddr_o      (vrf_waddr[VSLDU_VD_WD]  ),
-    .vrf_wdata_o      (vrf_wdata[VSLDU_VD_WD]  ),
-    .vrf_we_o         (sb_we[VSLDU_VD_WD]      ),
-    .vrf_wbe_o        (vrf_wbe[VSLDU_VD_WD]    ),
-    .vrf_wvalid_i     (vrf_wvalid[VSLDU_VD_WD] ),
-    .vrf_raddr_o      (vrf_raddr[VSLDU_VS2_RD] ),
-    .vrf_re_o         (sb_re[VSLDU_VS2_RD]     ),
-    .vrf_rdata_i      (vrf_rdata[VSLDU_VS2_RD] ),
-    .vrf_rvalid_i     (vrf_rvalid[VSLDU_VS2_RD])
+    .vrf_waddr_o      (vrf_waddr[VSLDU_VD_WD]                         ),
+    .vrf_wdata_o      (vrf_wdata[VSLDU_VD_WD]                         ),
+    .vrf_we_o         (sb_we[VSLDU_VD_WD]                             ),
+    .vrf_wbe_o        (vrf_wbe[VSLDU_VD_WD]                           ),
+    .vrf_wvalid_i     (vrf_wvalid[VSLDU_VD_WD]                        ),
+    .vrf_raddr_o      (vrf_raddr[VSLDU_VS2_RD]                        ),
+    .vrf_re_o         (sb_re[VSLDU_VS2_RD]                            ),
+    .vrf_rdata_i      (vrf_rdata[VSLDU_VS2_RD]                        ),
+    .vrf_rvalid_i     (vrf_rvalid[VSLDU_VS2_RD]                       ),
+    .vrf_id_o         ({sb_id[SB_VSLDU_VD_WD], sb_id[SB_VSLDU_VS2_RD]})
   );
 
   ////////////////

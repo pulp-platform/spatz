@@ -24,6 +24,7 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
     output logic             vrf_we_o,
     output vreg_be_t         vrf_wbe_o,
     input  logic             vrf_wvalid_i,
+    output spatz_id_t  [3:0] vrf_id_o,
     output vreg_addr_t [2:0] vrf_raddr_o,
     output logic       [2:0] vrf_re_o,
     input  vreg_data_t [2:0] vrf_rdata_i,
@@ -113,6 +114,7 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
     if (spatz_req_valid && vl_d >= spatz_req.vl) begin
       spatz_req_ready = spatz_req_valid;
       busy_d          = 1'b0;
+      vl_d            = '0;
 
       vfu_rsp_o.id    = spatz_req.id;
       vfu_rsp_o.vs2   = spatz_req.vs2;
@@ -141,9 +143,9 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
     else begin
       // Replicate scalar operands
       unique case (spatz_req.vtype.vsew)
-        EW_8 : operand1 = {4*N_IPU{spatz_req.rs1[7:0]}};
-        EW_16: operand1 = {2*N_IPU{spatz_req.rs1[15:0]}};
-        EW_32: operand1 = {1*N_IPU{spatz_req.rs1}};
+        EW_8 :   operand1 = {4*N_IPU{spatz_req.rs1[7:0]}};
+        EW_16:   operand1 = {2*N_IPU{spatz_req.rs1[15:0]}};
+        default: operand1 = {1*N_IPU{spatz_req.rs1}};
       endcase
     end
     operand2 = vrf_rdata_i[0];
@@ -167,9 +169,9 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
     vreg_addr_d = vreg_addr_q;
 
     if (spatz_req_valid && !busy_q) begin
-      vreg_addr_d[0] = (spatz_req_i.vs2 + vstart) << $clog2(NrWordsPerVector);
-      vreg_addr_d[1] = (spatz_req_i.vs1 + vstart) << $clog2(NrWordsPerVector);
-      vreg_addr_d[2] = (spatz_req_i.vd + vstart) << $clog2(NrWordsPerVector);
+      vreg_addr_d[0] = (spatz_req.vs2 + vstart) << $clog2(NrWordsPerVector);
+      vreg_addr_d[1] = (spatz_req.vs1 + vstart) << $clog2(NrWordsPerVector);
+      vreg_addr_d[2] = (spatz_req.vd + vstart) << $clog2(NrWordsPerVector);
     end else if (spatz_req_valid && vl_q < spatz_req.vl && word_committed) begin
       vreg_addr_d[0] = vreg_addr_q[0] + 1;
       vreg_addr_d[1] = vreg_addr_q[1] + 1;
@@ -184,7 +186,7 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
     vreg_we    = '0;
     vreg_wbe   = '0;
 
-    if (vl_q < spatz_req.vl) begin
+    if (spatz_req_valid && vl_q < spatz_req.vl) begin
       // Request operands
       vreg_r_req = {spatz_req.vd_is_src, spatz_req.use_vs1, spatz_req.use_vs2};
 
@@ -197,16 +199,16 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
         // create the byte enable (be) mask for write back to register file.
         if (spatz_req.vstart != '0 && busy_q == 1'b0)
           unique case (spatz_req.vtype.vsew)
-            EW_8 : vreg_wbe = ~(vreg_be_t'('1) >> (nr_elem_word - spatz_req.vstart[idx_width(N_IPU * 4)-1:0]));
-            EW_16: vreg_wbe = ~(vreg_be_t'('1) >> (nr_elem_word - spatz_req.vstart[idx_width(N_IPU * 2)-1:0]));
-            EW_32: vreg_wbe = ~(vreg_be_t'('1) >> (nr_elem_word - spatz_req.vstart[idx_width(N_IPU * 1)-1:0]));
+            EW_8 :   vreg_wbe = ~(vreg_be_t'('1) >> (nr_elem_word - spatz_req.vstart[idx_width(N_IPU * 4)-1:0]));
+            EW_16:   vreg_wbe = ~(vreg_be_t'('1) >> (nr_elem_word - spatz_req.vstart[idx_width(N_IPU * 2)-1:0]));
+            default: vreg_wbe = ~(vreg_be_t'('1) >> (nr_elem_word - spatz_req.vstart[idx_width(N_IPU * 1)-1:0]));
           endcase
         else
           if (last_word)
             unique case (spatz_req.vtype.vsew)
-              EW_8 : vreg_wbe = vreg_be_t'('1) >> vl_q[idx_width(N_IPU * 4):0];
-              EW_16: vreg_wbe = vreg_be_t'('1) >> vl_q[idx_width(N_IPU * 2):0];
-              EW_32: vreg_wbe = vreg_be_t'('1) >> vl_q[idx_width(N_IPU * 1):0];
+              EW_8 :   vreg_wbe = vreg_be_t'('1) >> vl_q[idx_width(N_IPU * 4):0];
+              EW_16:   vreg_wbe = vreg_be_t'('1) >> vl_q[idx_width(N_IPU * 2):0];
+              default: vreg_wbe = vreg_be_t'('1) >> vl_q[idx_width(N_IPU * 1):0];
             endcase
       end
     end
@@ -219,6 +221,7 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
   assign vrf_wbe_o   = vreg_wbe;
   assign vrf_waddr_o = vreg_addr_q[2];
   assign vrf_wdata_o = result;
+  assign vrf_id_o    = {4{spatz_req.id}};
 
   //////////
   // IPUs //
@@ -226,17 +229,17 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
 
   for (genvar ipu = 0; unsigned'(ipu) < N_IPU; ipu++) begin : gen_ipus
     spatz_ipu i_ipu (
-      .clk_i            (clk_i                     ),
-      .rst_ni           (rst_ni                    ),
-      .operation_i      (spatz_req.op              ),
-      .operation_valid_i(!vl_is_zero               ), // If the VFU is not ready, it is executing something
-      .op_s1_i          (operand1[ipu*ELEN +: ELEN]),
-      .op_s2_i          (operand2[ipu*ELEN +: ELEN]),
-      .op_d_i           (operand3[ipu*ELEN +: ELEN]),
-      .carry_i          ('0                        ),
-      .sew_i            (spatz_req.vtype.vsew      ),
-      .be_o             (/* Unused */              ),
-      .result_o         (result[ipu*ELEN +: ELEN]  )
+      .clk_i            (clk_i                            ),
+      .rst_ni           (rst_ni                           ),
+      .operation_i      (spatz_req.op                     ),
+      .operation_valid_i(spatz_req_valid && operands_ready), // If the VFU is not ready, it is executing something
+      .op_s1_i          (operand1[ipu*ELEN +: ELEN]       ),
+      .op_s2_i          (operand2[ipu*ELEN +: ELEN]       ),
+      .op_d_i           (operand3[ipu*ELEN +: ELEN]       ),
+      .carry_i          ('0                               ),
+      .sew_i            (spatz_req.vtype.vsew             ),
+      .be_o             (/* Unused */                     ),
+      .result_o         (result[ipu*ELEN +: ELEN]         )
     );
   end : gen_ipus
 

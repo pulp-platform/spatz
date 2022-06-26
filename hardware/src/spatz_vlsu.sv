@@ -31,6 +31,7 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
     output logic                           vrf_we_o,
     output vreg_be_t                       vrf_wbe_o,
     input  logic                           vrf_wvalid_i,
+    output spatz_id_t     [1:0]            vrf_id_o,
     output vreg_addr_t                     vrf_raddr_o,
     output logic                           vrf_re_o,
     input  vreg_data_t                     vrf_rdata_i,
@@ -158,6 +159,7 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
 
   // For each memory port we count how many elements we have already loaded/stored.
   // Multiple counters are needed all memory ports can work independent of each other.
+  vlen_t [N_IPU-1:0]      mem_counter_max;
   logic  [NrMemPorts-1:0] mem_counter_en;
   logic  [NrMemPorts-1:0] mem_counter_load;
   vlen_t [NrMemPorts-1:0] mem_counter_delta;
@@ -181,7 +183,7 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
       .overflow_o(/* Unused */           )
     );
 
-    assign mem_finished[port] = spatz_req_valid && mem_counter_q[port] >= (spatz_req.vl/NrMemPorts) + (port < spatz_req.vl[idx_width(NrMemPorts)-1:0]);
+    assign mem_finished[port] = spatz_req_valid && (mem_counter_q[port] == mem_counter_max[port]);
   end: gen_mem_counters
 
   // For each IPU that we have, count how many elements we have already loaded/stored.
@@ -211,7 +213,7 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
       .overflow_o(/* Unused */           )
     );
 
-    assign vreg_finished[ipu] = spatz_req_valid && vreg_counter_q[ipu] >= (spatz_req.vl/N_IPU) + (ipu < spatz_req.vl[idx_width(N_IPU)-1:0]);
+    assign vreg_finished[ipu] = spatz_req_valid && (vreg_counter_q[ipu] == vreg_counter_max[ipu]);
   end: gen_vreg_counters
 
   ////////////////////////
@@ -345,6 +347,7 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
   assign vrf_wdata_o     = vrf_req_q.wdata;
   assign vrf_wbe_o       = vrf_req_q.wbe;
   assign vrf_we_o        = vrf_req_valid_q;
+  assign vrf_id_o        = {2{spatz_req.id}};
   assign vrf_req_ready_q = vrf_wvalid_i;
 
   //////////////
@@ -367,20 +370,23 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
     vlen_t max_elements;
     always_comb begin
       // Default value
-      max_elements = '0;
+      max_elements = (spatz_req.vl >> $clog2(N_IPU*ELENB)) << $clog2(ELENB);
 
       // Full transfer
-      if (((spatz_req.vl >> $clog2(N_IPU*ELENB)) << $clog2(ELENB)) + spatz_req.vl[$clog2(ELENB) +: $clog2(N_IPU)] > ipu)
-        max_elements = ELENB;
-      else
-        if (spatz_req.vl[$clog2(ELENB) +: $clog2(N_IPU)] == ipu)
-          max_elements = spatz_req.vl[$clog2(ELENB)-1:0];
+      if (spatz_req.vl[$clog2(ELENB) +: $clog2(N_IPU)] > ipu)
+        max_elements += ELENB;
+      else if (spatz_req.vl[$clog2(N_IPU*ELENB)-1:$clog2(ELENB)] == ipu)
+        max_elements += spatz_req.vl[$clog2(ELENB)-1:0];
 
-      vreg_counter_load[ipu]    = new_vlsu_request;
-      vreg_counter_d[ipu]       = ((spatz_req_d.vstart >> ($clog2(N_IPU*ELENB))) << $clog2(ELENB)) + (spatz_req_d.vstart[idx_width(N_IPU*ELENB)-1:$clog2(ELENB)] > ipu ? ELENB : (spatz_req_d.vstart[idx_width(N_IPU*ELENB)-1:$clog2(ELENB)] == ipu ? spatz_req_d.vstart[$clog2(ELENB)-1:0] : 'd0));
+      vreg_counter_load[ipu] = new_vlsu_request;
+      vreg_counter_d[ipu]    = (spatz_req.vstart >> $clog2(N_IPU*ELENB)) << $clog2(ELENB);
+      if (spatz_req.vstart[$clog2(N_IPU*ELENB)-1:$clog2(ELENB)] > ipu)
+        vreg_counter_d[ipu] += ELENB;
+      else if (spatz_req.vstart[idx_width(N_IPU*ELENB)-1:$clog2(ELENB)] == ipu)
+        vreg_counter_d[ipu] += spatz_req.vstart[$clog2(ELENB)-1:0];
       vreg_operation_valid[ipu] = spatz_req_valid && (vreg_counter_q[ipu] != max_elements) && (catchup[ipu] || (!catchup[ipu] && ~|catchup));
-      vreg_operation_last[ipu]  = vreg_operation_valid[ipu] && ((vreg_counter_q[ipu] - max_elements) <= (is_single_element_operation ? single_element_size : ELENB));
-      vreg_counter_delta[ipu]   = !vreg_operation_valid[ipu] ? 'd0 : is_single_element_operation ? single_element_size : vreg_operation_last[ipu] ? (vreg_counter_q[ipu] - max_elements) : ELENB;
+      vreg_operation_last[ipu]  = vreg_operation_valid[ipu] && ((max_elements - vreg_counter_q[ipu]) <= (is_single_element_operation ? single_element_size : ELENB));
+      vreg_counter_delta[ipu]   = !vreg_operation_valid[ipu] ? 'd0 : is_single_element_operation ? single_element_size : vreg_operation_last[ipu] ? (max_elements - vreg_counter_q[ipu]) : ELENB;
       vreg_counter_en[ipu]      = vreg_operation_valid[ipu] && (is_load && vrf_req_valid_d && vrf_req_ready_d) || (!is_load && vrf_rvalid_i && vrf_re_o);
       vreg_counter_max[ipu]     = max_elements;
     end
@@ -395,22 +401,30 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
 
     always_comb begin
       // Default value
-      max_elements = '0;
+      max_elements = (spatz_req.vl >> $clog2(NrMemPorts*MemDataWidthB)) << $clog2(MemDataWidthB);
 
       if (NrMemPorts == 1)
         max_elements = spatz_req.vl;
       else
-        if ((spatz_req.vl >> $clog2(NrMemPorts*MemDataWidthB)) << $clog2(MemDataWidthB) + spatz_req.vl[$clog2(MemDataWidthB) +: $clog2(NrMemPorts)] > port)
-          max_elements = MemDataWidthB;
+        if (spatz_req.vl[$clog2(MemDataWidthB) +: $clog2(NrMemPorts)] > port)
+          max_elements += MemDataWidthB;
         else if (spatz_req.vl[$clog2(MemDataWidthB) +: $clog2(NrMemPorts)] == port)
-          max_elements = spatz_req.vl[$clog2(MemDataWidthB)-1:0];
+          max_elements += spatz_req.vl[$clog2(MemDataWidthB)-1:0];
 
       mem_operation_valid[port] = spatz_req_valid && (max_elements != mem_counter_q[port]);
       mem_operation_last[port]  = mem_operation_valid[port] && ((max_elements - mem_counter_q[port]) <= (is_single_element_operation ? single_element_size : 'd4));
       mem_counter_load[port]    = new_vlsu_request;
-      mem_counter_d[port]       = NrMemPorts == 'd1 ? spatz_req_d.vstart : ((spatz_req_d.vstart >> $clog2(NrMemPorts*MemDataWidthB)) << $clog2(MemDataWidthB)) + (spatz_req_d.vstart[$clog2(MemDataWidthB) +: $clog2(NrMemPorts)] > port ? MemDataWidthB : spatz_req_d.vstart[$clog2(MemDataWidthB) +: $clog2(NrMemPorts)] == port ? spatz_req_d.vstart[$clog2(MemDataWidthB)-1:0] : 'd0);
-      mem_counter_delta[port]   = !mem_operation_valid[port] ? 'd0       : is_single_element_operation ? single_element_size : mem_operation_last[port] ? (max_elements - mem_counter_q[port]) : 'd4;
-      mem_counter_en[port]      = x_mem_ready_i[port] && x_mem_valid_o[port];
+      mem_counter_d[port]       = (spatz_req.vstart >> $clog2(NrMemPorts*MemDataWidthB)) << $clog2(MemDataWidthB);
+      if (NrMemPorts == 1)
+        mem_counter_d[port] = spatz_req.vstart;
+      else
+        if (spatz_req.vstart[$clog2(MemDataWidthB) +: $clog2(NrMemPorts)] > port)
+          mem_counter_d[port] += MemDataWidthB;
+        else if (spatz_req.vstart[$clog2(MemDataWidthB) +: $clog2(NrMemPorts)] == port)
+          mem_counter_d[port] += spatz_req.vstart[$clog2(MemDataWidthB)-1:0];
+      mem_counter_delta[port] = !mem_operation_valid[port] ? 'd0 : is_single_element_operation ? single_element_size : mem_operation_last[port] ? (max_elements - mem_counter_q[port]) : 'd4;
+      mem_counter_en[port]    = x_mem_ready_i[port] && x_mem_valid_o[port];
+      mem_counter_max[port]   = max_elements;
     end
   end
 
@@ -458,10 +472,10 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
 
           // Shift data to correct position if we have an unaligned memory request
           unique case (is_strided ? vreg_addr_offset : spatz_req.rs1[1:0])
+            2'b00: data = data;
             2'b01: data = {data[7:0], data[31:8]};
             2'b10: data = {data[15:0], data[31:16]};
             2'b11: data = {data[23:0], data[31:24]};
-            default:; // Do nothing
           endcase
 
           // Pop stored element and free space in buffer
@@ -470,10 +484,10 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
           // Shift data to correct position if we have a strided memory access
           if (is_strided)
             unique case (vreg_counter_q[port][1:0])
+              2'b00: data = data;
               2'b01: data = {data[23:0], data[31:24]};
               2'b10: data = {data[15:0], data[31:16]};
               2'b11: data = {data[7:0], data[31:8]};
-              default:; // Do nothing
             endcase
           vrf_req_d.wdata[ELEN*port +: ELEN] = data;
 
@@ -559,7 +573,7 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
             unique case (spatz_req.vtype.vsew)
               rvv_pkg::EW_8 : mask = 4'b0001;
               rvv_pkg::EW_16: mask = 4'b0011;
-              default:; // Do thing
+              default:; // Do nothing
             endcase
 
             mem_req_strb[port] = mask << shift;

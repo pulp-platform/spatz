@@ -20,15 +20,16 @@ module spatz_vsldu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
     output vsldu_rsp_t vsldu_rsp_o,
 
     // VRF
-    output vreg_addr_t vrf_waddr_o,
-    output vreg_data_t vrf_wdata_o,
-    output logic       vrf_we_o,
-    output vreg_be_t   vrf_wbe_o,
-    input  logic       vrf_wvalid_i,
-    output vreg_addr_t vrf_raddr_o,
-    output logic       vrf_re_o,
-    input  vreg_data_t vrf_rdata_i,
-    input  logic       vrf_rvalid_i
+    output vreg_addr_t       vrf_waddr_o,
+    output vreg_data_t       vrf_wdata_o,
+    output logic             vrf_we_o,
+    output vreg_be_t         vrf_wbe_o,
+    input  logic             vrf_wvalid_i,
+    output spatz_id_t  [1:0] vrf_id_o,
+    output vreg_addr_t       vrf_raddr_o,
+    output logic             vrf_re_o,
+    input  vreg_data_t       vrf_rdata_i,
+    input  logic             vrf_rvalid_i
   );
 
 // Include FF
@@ -129,6 +130,7 @@ module spatz_vsldu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
   assign vrf_wdata_o     = vrf_req_q.wdata;
   assign vrf_wbe_o       = vrf_req_q.wbe;
   assign vrf_we_o        = vrf_req_valid_q;
+  assign vrf_id_o        = {2{spatz_req_q.id}};
   assign vrf_req_ready_q = vrf_wvalid_i;
 
   ///////////////////
@@ -165,7 +167,7 @@ module spatz_vsldu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
     end else if (!is_vl_zero && vsldu_is_ready && !new_vsldu_request &&
         !vrf_req_valid_d && (!vrf_req_valid_q || (vrf_req_valid_q && vrf_req_ready_q))) begin
       // If we are ready for a new instruction but there is none, clear req register
-      spatz_req_d    = '0;
+      spatz_req_d = '0;
     end
 
     if (prefetch_q && vrf_re_o && vrf_rvalid_i) prefetch_d = 1'b0;

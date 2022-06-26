@@ -38,6 +38,9 @@ package spatz_pkg;
   // Number of elements per VRF Bank
   localparam int unsigned NrWordsPerBank   = NrWordsPerVector / NrVRFBanks;
 
+  // Number of parallel vector instructions
+  localparam int unsigned NrParallelInstructions = 4;
+
   //////////////////////
   // Type Definitions //
   //////////////////////
@@ -60,7 +63,7 @@ package spatz_pkg;
   typedef logic [N_IPU*ELEN-1:0] vreg_data_t;
 
   // Instruction ID
-  typedef logic [4:0] instr_id_t;
+  typedef logic [$clog2(NrParallelInstructions)-1:0] spatz_id_t;
 
   /////////////////////
   // Operation Types //
@@ -143,34 +146,40 @@ package spatz_pkg;
   // Result from decoder
   typedef struct packed {
     // Instruction ID
-    instr_id_t id;
+    spatz_id_t  id;
+    logic [4:0] xintf_id;
+
     // Used vector registers
     vreg_t vs1;
-    logic use_vs1;
+    logic  use_vs1;
     vreg_t vs2;
-    logic use_vs2;
+    logic  use_vs2;
     vreg_t vd;
-    logic use_vd;
-    logic vd_is_src;
+    logic  use_vd;
+    logic  vd_is_src;
+
     // Scalar input values
     elen_t rs1;
     elen_t rs2;
     // Destination register
     logic [4:0] rd;
-    logic use_rd;
+    logic       use_rd;
+
     // Instruction operation
-    op_e op;
+    op_e      op;
     ex_unit_e ex_unit;
+
     // Operation specific details
-    op_cfg_t op_cgf;
-    op_csr_t op_csr;
+    op_cfg_t   op_cgf;
+    op_csr_t   op_csr;
     op_arith_t op_arith;
-    op_mem_t op_mem;
-    op_sld_t op_sld;
+    op_mem_t   op_mem;
+    op_sld_t   op_sld;
+
     // Spatz config details
     vtype_t vtype;
-    vlen_t vl;
-    vlen_t vstart;
+    vlen_t  vl;
+    vlen_t  vstart;
   } spatz_req_t;
 
   //////////////////////////////////
@@ -179,14 +188,16 @@ package spatz_pkg;
 
   typedef struct packed {
     // Request id
-    instr_id_t id;
+    logic [4:0] xintf_id;
+
     // Instruction
     riscv_pkg::instr_t instr;
-    // Rs values
+
+    // Scalar values
     elen_t rs1;
-    logic rs1_valid;
+    logic  rs1_valid;
     elen_t rs2;
-    logic rs2_valid;
+    logic  rs2_valid;
   } decoder_req_t;
 
   typedef struct packed {
@@ -202,7 +213,7 @@ package spatz_pkg;
 
   typedef struct packed {
     // Instruction ID
-    instr_id_t id;
+    spatz_id_t id;
 
     // Retiring registers
     vreg_t vs2;
@@ -210,9 +221,9 @@ package spatz_pkg;
     vreg_t vd;
 
     // WB
-    logic wb;
+    elen_t      result;
     logic [4:0] rd;
-    elen_t result;
+    logic       wb;
   } vfu_rsp_t;
 
   ///////////////////
@@ -221,7 +232,7 @@ package spatz_pkg;
 
   typedef struct packed {
     // Instruction ID
-    instr_id_t id;
+    spatz_id_t id;
     // Retiring registers
     vreg_t vd;
     // Did the memory request trigger an exception
@@ -234,7 +245,7 @@ package spatz_pkg;
 
   typedef struct packed {
     // Instruction ID
-    instr_id_t id;
+    spatz_id_t id;
     // Retiring registers
     vreg_t vd;
     vreg_t vs2;
