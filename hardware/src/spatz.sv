@@ -42,7 +42,8 @@ module spatz import spatz_pkg::*; import rvv_pkg::*;#(
     input  logic          [NrMemPorts-1:0] x_mem_result_valid_i,
     input  x_mem_result_t [NrMemPorts-1:0] x_mem_result_i,
     // X-Interface Memory Finished
-    output logic                           x_mem_finished_o
+    output logic                           x_mem_finished_o,
+    output logic                           x_mem_str_finished_o
   );
 
   ////////////////
@@ -218,7 +219,8 @@ module spatz import spatz_pkg::*; import rvv_pkg::*;#(
     .x_mem_resp_i        (x_mem_resp_i                                ),
     .x_mem_result_valid_i(x_mem_result_valid_i                        ),
     .x_mem_result_i      (x_mem_result_i                              ),
-    .x_mem_finished_o    (x_mem_finished_o                            )
+    .x_mem_finished_o    (x_mem_finished_o                            ),
+    .x_mem_str_finished_o(x_mem_str_finished_o                        )
   );
 
   ///////////
