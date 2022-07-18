@@ -215,11 +215,6 @@ package spatz_pkg;
     // Instruction ID
     spatz_id_t id;
 
-    // Retiring registers
-    vreg_t vs2;
-    vreg_t vs1;
-    vreg_t vd;
-
     // WB
     elen_t      result;
     logic [4:0] rd;
@@ -233,8 +228,7 @@ package spatz_pkg;
   typedef struct packed {
     // Instruction ID
     spatz_id_t id;
-    // Retiring registers
-    vreg_t vd;
+
     // Did the memory request trigger an exception
     logic exc;
   } vlsu_rsp_t;
@@ -246,9 +240,6 @@ package spatz_pkg;
   typedef struct packed {
     // Instruction ID
     spatz_id_t id;
-    // Retiring registers
-    vreg_t vd;
-    vreg_t vs2;
   } vsldu_rsp_t;
 
   //////////////////

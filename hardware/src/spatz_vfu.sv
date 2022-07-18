@@ -117,9 +117,6 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
       vl_d            = '0;
 
       vfu_rsp_o.id    = spatz_req.id;
-      vfu_rsp_o.vs2   = spatz_req.vs2;
-      vfu_rsp_o.vs1   = spatz_req.vs1;
-      vfu_rsp_o.vd    = spatz_req.vd;
       vfu_rsp_valid_o = 1'b1;
     end
     // Do we have a new instruction?
@@ -176,8 +173,10 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
       vreg_addr_d[0] = vreg_addr_q[0] + 1;
       vreg_addr_d[1] = vreg_addr_q[1] + 1;
       vreg_addr_d[2] = vreg_addr_q[2] + 1;
-    end else if (vl_q >= spatz_req.vl || (last_word && word_committed)) begin
-      vreg_addr_d = '0;
+    end else if (!busy_d) begin
+      vreg_addr_d[0] = '0;
+      vreg_addr_d[1] = '0;
+      vreg_addr_d[2] = '0;
     end
   end: vreg_addr_proc
 

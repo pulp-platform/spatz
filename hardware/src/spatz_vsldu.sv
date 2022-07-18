@@ -77,26 +77,25 @@ module spatz_vsldu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
   assign spatz_req_ready_o = vsldu_is_ready;
 
   // Vector register file counter signals
-  logic  vreg_counter_clear;
   logic  vreg_counter_en;
   logic  vreg_counter_load;
   vlen_t vreg_counter_delta;
-  vlen_t vreg_counter_load_value;
-  vlen_t vreg_counter_value;
+  vlen_t vreg_counter_d;
+  vlen_t vreg_counter_q;
 
   delta_counter #(
     .WIDTH($bits(vlen_t))
   ) i_delta_counter_vreg (
-    .clk_i     (clk_i                  ),
-    .rst_ni    (rst_ni                 ),
-    .clear_i   (vreg_counter_clear     ),
-    .en_i      (vreg_counter_en        ),
-    .load_i    (vreg_counter_load      ),
-    .down_i    (1'b0                   ), // We always count up
-    .delta_i   (vreg_counter_delta     ),
-    .d_i       (vreg_counter_load_value),
-    .q_o       (vreg_counter_value     ),
-    .overflow_o(/* Unused */           )
+    .clk_i     (clk_i             ),
+    .rst_ni    (rst_ni            ),
+    .clear_i   (1'b0              ),
+    .en_i      (vreg_counter_en   ),
+    .load_i    (vreg_counter_load ),
+    .down_i    (1'b0              ), // We always count up
+    .delta_i   (vreg_counter_delta),
+    .d_i       (vreg_counter_d    ),
+    .q_o       (vreg_counter_q    ),
+    .overflow_o(/* Unused */      )
   );
 
   ///////////////////////
@@ -174,38 +173,41 @@ module spatz_vsldu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
   end
 
   // Respond to controller if we are finished executing
+  logic op_finished_q;
+  `FF(op_finished_q, (!is_vl_zero && |vreg_operations_finished && !vrf_req_valid_d && (!vrf_we_o || vrf_wvalid_i)), 1'b0)
+
+  spatz_id_t op_id_q;
+  `FF(op_id_q, spatz_req_q.id, '0)
+
   always_comb begin : vsldu_rsp
     vsldu_rsp_valid_o = 1'b0;
     vsldu_rsp_o       = '0;
 
     // Write back accessed register file vector to clear scoreboard entry
-    if (vsldu_is_ready && ~is_vl_zero && !vrf_req_valid_d && (!vrf_req_valid_q || (vrf_req_valid_q && vrf_req_ready_q))) begin
-      vsldu_rsp_o.id    = spatz_req_q.id;
-      vsldu_rsp_o.vd    = spatz_req_q.vd;
-      vsldu_rsp_o.vs2   = spatz_req_q.vs2;
+    if (op_finished_q) begin
+      vsldu_rsp_o.id    = op_id_q;
       vsldu_rsp_valid_o = 1'b1;
     end
   end
 
   always_comb begin
     // How many elements are left to do
-    automatic int unsigned delta = spatz_req_q.vl - vreg_counter_value;
+    automatic int unsigned delta = spatz_req_q.vl - vreg_counter_q;
 
-    vreg_counter_load_value = spatz_req_d.vstart;
+    vreg_counter_d = spatz_req_d.vstart;
     if (!spatz_req_d.op_sld.insert && spatz_req_d.vstart < slide_amount_d && spatz_req_i.op == VSLIDEUP && new_vsldu_request) begin
-      vreg_counter_load_value = slide_amount_d;
+      vreg_counter_d = slide_amount_d;
     end else if (!spatz_req_q.op_sld.insert && spatz_req_q.vstart < slide_amount_q && is_slide_up && ~new_vsldu_request) begin
-      vreg_counter_load_value = slide_amount_q;
+      vreg_counter_d = slide_amount_q;
     end else if (~new_vsldu_request) begin
-      vreg_counter_load_value = spatz_req_q.vstart;
+      vreg_counter_d = spatz_req_q.vstart;
     end
     vreg_counter_load = new_vsldu_request;
 
     vreg_operation_valid     = (delta != 'd0) & ~is_vl_zero;
-    vreg_operation_first     = vreg_operation_valid & ~prefetch_q & vreg_counter_value == vreg_counter_load_value;
-    vreg_operation_last      = vreg_operation_valid & ~prefetch_q & (delta <= (VRFWordBWidth - vreg_counter_value[$clog2(VRFWordBWidth)-1:0]));
-    vreg_counter_clear       = 1'b0;
-    vreg_counter_delta       = ~vreg_operation_valid ? 'd0 : vreg_operation_last ? delta : vreg_operation_first ? VRFWordBWidth - vreg_counter_load_value[$clog2(VRFWordBWidth)-1:0] : VRFWordBWidth;
+    vreg_operation_first     = vreg_operation_valid & ~prefetch_q & vreg_counter_q == vreg_counter_d;
+    vreg_operation_last      = vreg_operation_valid & ~prefetch_q & (delta <= (VRFWordBWidth - vreg_counter_q[$clog2(VRFWordBWidth)-1:0]));
+    vreg_counter_delta       = ~vreg_operation_valid ? 'd0 : vreg_operation_last ? delta : vreg_operation_first ? VRFWordBWidth - vreg_counter_d[$clog2(VRFWordBWidth)-1:0] : VRFWordBWidth;
     vreg_counter_en          = ((spatz_req_q.use_vs2 & vrf_re_o & vrf_rvalid_i) | ~spatz_req_q.use_vs2) & ((spatz_req_q.use_vd & vrf_req_valid_d & vrf_req_ready_d) | ~spatz_req_q.use_vd);
     vreg_operations_finished = ~vreg_operation_valid | (vreg_operation_last & vreg_counter_en);
   end
@@ -218,8 +220,8 @@ module spatz_vsldu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
 
   always_comb begin
     sld_offset_rd   = is_slide_up ? (prefetch_q ? -slide_amount_q[$bits(vlen_t)-1:$clog2(VRFWordBWidth)] - 1 : -slide_amount_q[$bits(vlen_t)-1:$clog2(VRFWordBWidth)]) : prefetch_q ? slide_amount_q[$bits(vlen_t)-1:$clog2(VRFWordBWidth)] : slide_amount_q[$bits(vlen_t)-1:$clog2(VRFWordBWidth)] + 1;
-    vrf_raddr_o     = {spatz_req_q.vs2, $clog2(NrWordsPerVector)'(1'b0)} + vreg_counter_value[$bits(vlen_t)-1:$clog2(VRFWordBWidth)] + sld_offset_rd;
-    vrf_req_d.waddr = {spatz_req_q.vd, $clog2(NrWordsPerVector)'(1'b0)} + vreg_counter_value[$bits(vlen_t)-1:$clog2(VRFWordBWidth)];
+    vrf_raddr_o     = {spatz_req_q.vs2, $clog2(NrWordsPerVector)'(1'b0)} + vreg_counter_q[$bits(vlen_t)-1:$clog2(VRFWordBWidth)] + sld_offset_rd;
+    vrf_req_d.waddr = {spatz_req_q.vd, $clog2(NrWordsPerVector)'(1'b0)} + vreg_counter_q[$bits(vlen_t)-1:$clog2(VRFWordBWidth)];
   end
 
   ////////////
@@ -263,7 +265,7 @@ module spatz_vsldu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
         data_in = vrf_rdata_i;
 
         // If we are already over the MAXVL, all continuing elements are zero
-        if ((vreg_counter_value >= MAXVL - slide_amount_q) || (vreg_operation_last && spatz_req_q.op_sld.insert))
+        if ((vreg_counter_q >= MAXVL - slide_amount_q) || (vreg_operation_last && spatz_req_q.op_sld.insert))
           data_in = '0;
       end
 
@@ -294,9 +296,9 @@ module spatz_vsldu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
         // Insert rs1 element at the last position
         if (spatz_req_q.op_sld.insert && vreg_operation_last) begin
           for (int b = 0; b < VRFWordBWidth; b++)
-            if (b >= (vreg_counter_value[$clog2(VRFWordBWidth)-1:0] + vreg_counter_delta - (3'b001<<spatz_req_q.vtype.vsew)))
+            if (b >= (vreg_counter_q[$clog2(VRFWordBWidth)-1:0] + vreg_counter_delta - (3'b001<<spatz_req_q.vtype.vsew)))
               data_out[b*8 +: 8] = data_low[b*8 +: 8];
-          data_out = data_out | (vreg_data_t'(spatz_req_q.rs1) << 8*(vreg_counter_value[$clog2(VRFWordBWidth)-1:0]+vreg_counter_delta-(3'b001<<spatz_req_q.vtype.vsew)));
+          data_out = data_out | (vreg_data_t'(spatz_req_q.rs1) << 8*(vreg_counter_q[$clog2(VRFWordBWidth)-1:0]+vreg_counter_delta-(3'b001<<spatz_req_q.vtype.vsew)));
         end
       end
 
@@ -319,7 +321,7 @@ module spatz_vsldu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
       // Special byte enable mask case when we are operating on the first register element.
       if (vreg_operation_first)
         for (int i = 0; i < VRFWordBWidth; i++)
-          vrf_req_d.wbe[i] = (i >= vreg_counter_value[$clog2(VRFWordBWidth)-1:0]) & (i < (vreg_counter_value[$clog2(VRFWordBWidth)-1:0] + vreg_counter_delta));
+          vrf_req_d.wbe[i] = (i >= vreg_counter_q[$clog2(VRFWordBWidth)-1:0]) & (i < (vreg_counter_q[$clog2(VRFWordBWidth)-1:0] + vreg_counter_delta));
     end
 
     // Reset overflow register when finished

@@ -13,6 +13,7 @@ module spatz_controller
   import rvv_pkg::*;
   #(
     parameter int  unsigned NrVregfilePorts = 1,
+    parameter int  unsigned NrWritePorts    = 1,
     parameter type          x_issue_req_t   = logic,
     parameter type          x_issue_resp_t  = logic,
     parameter type          x_result_t      = logic
@@ -45,6 +46,7 @@ module spatz_controller
     input  vsldu_rsp_t                          vsldu_rsp_i,
     // VRF Scoreboard
     input  logic          [NrVregfilePorts-1:0] sb_enable_i,
+    input  logic          [NrWritePorts-1:0]    sb_wrote_result_i,
     output logic          [NrVregfilePorts-1:0] sb_enable_o,
     input  spatz_id_t     [NrVregfilePorts-1:0] sb_id_i
   );
@@ -244,11 +246,11 @@ module spatz_controller
 
     // Store the decisions
     if (sb_enable_o[SB_VFU_VD_WD])
-      wrote_result_d[sb_id_i[SB_VFU_VD_WD]] = 1'b1;
+      wrote_result_d[sb_id_i[SB_VFU_VD_WD]] = sb_wrote_result_i[SB_VFU_VD_WD - SB_VFU_VD_WD];
     if (sb_enable_o[SB_VLSU_VD_WD])
-      wrote_result_d[sb_id_i[SB_VLSU_VD_WD]] = 1'b1;
+      wrote_result_d[sb_id_i[SB_VLSU_VD_WD]] = sb_wrote_result_i[SB_VLSU_VD_WD - SB_VFU_VD_WD];
     if (sb_enable_o[SB_VSLDU_VD_WD])
-      wrote_result_d[sb_id_i[SB_VSLDU_VD_WD]] = 1'b1;
+      wrote_result_d[sb_id_i[SB_VSLDU_VD_WD]] = sb_wrote_result_i[SB_VSLDU_VD_WD - SB_VFU_VD_WD];
 
     // A unit has finished its VRF access. Reset the scoreboard. For each instruction, check
     // if a dependency existed. If so, invalidate it.

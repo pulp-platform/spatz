@@ -277,7 +277,6 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
       busy_d          = 1'b0;
 
       vlsu_rsp_o.id    = spatz_req.id;
-      vlsu_rsp_o.vd    = spatz_req.vd;
       vlsu_rsp_valid_o = 1'b1;
     end
     // Do we have a new instruction?

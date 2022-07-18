@@ -120,6 +120,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*;#(
 
   spatz_controller #(
     .NrVregfilePorts(NrReadPorts+NrWritePorts),
+    .NrWritePorts   (NrWritePorts            ),
     .x_issue_req_t  (x_issue_req_t           ),
     .x_issue_resp_t (x_issue_resp_t          ),
     .x_result_t     (x_result_t              )
@@ -151,6 +152,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*;#(
     .vsldu_rsp_i      (vsldu_rsp       ),
     // Scoreboard check
     .sb_id_i          (sb_id           ),
+    .sb_wrote_result_i(vrf_wvalid      ),
     .sb_enable_i      ({sb_we, sb_re}  ),
     .sb_enable_o      ({vrf_we, vrf_re})
   );
