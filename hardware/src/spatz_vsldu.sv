@@ -173,22 +173,48 @@ module spatz_vsldu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
   end
 
   // Respond to controller if we are finished executing
-  logic op_finished_q;
-  `FF(op_finished_q, (!is_vl_zero && |vreg_operations_finished && !vrf_req_valid_d && (!vrf_we_o || vrf_wvalid_i)), 1'b0)
+  enum logic {
+    VSLDU_RUNNING,    // Running an instruction
+    VSLDU_WAIT_WVALID // Waiting for the last wvalid to acknowledge the instruction
+  } state_q, state_d;
+  `FF(state_q, state_d, VSLDU_RUNNING)
 
-  spatz_id_t op_id_q;
-  `FF(op_id_q, spatz_req_q.id, '0)
+  spatz_id_t op_id_q, op_id_d;
+  `FF(op_id_q, op_id_d, '0)
 
-  always_comb begin : vsldu_rsp
+  always_comb begin: vsldu_rsp
+    // Maintain state
+    state_d = state_q;
+    op_id_d = op_id_q;
+
+    // Do not acknowledge anything
     vsldu_rsp_valid_o = 1'b0;
     vsldu_rsp_o       = '0;
 
-    // Write back accessed register file vector to clear scoreboard entry
-    if (op_finished_q) begin
-      vsldu_rsp_o.id    = op_id_q;
-      vsldu_rsp_valid_o = 1'b1;
-    end
-  end
+    case (state_q)
+      VSLDU_RUNNING: begin
+        // Did we finish the execution of an instruction?
+        if (!is_vl_zero && |vreg_operations_finished && vreg_operation_valid) begin
+          op_id_d = spatz_req_q.id;
+          state_d = VSLDU_WAIT_WVALID;
+        end
+      end
+
+      VSLDU_WAIT_WVALID: begin
+        if (vrf_wvalid_i) begin
+          vsldu_rsp_valid_o = 1'b1;
+          vsldu_rsp_o.id    = op_id_q;
+          state_d           = VSLDU_RUNNING;
+
+          // Did we finish *another* instruction?
+          if (!is_vl_zero && |vreg_operations_finished && vreg_operation_valid) begin
+            op_id_d = spatz_req_q.id;
+            state_d = VSLDU_WAIT_WVALID;
+          end
+        end
+      end
+    endcase
+  end: vsldu_rsp
 
   always_comb begin
     // How many elements are left to do
