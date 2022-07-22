@@ -224,9 +224,9 @@ int main() {
            performance, utilization);
   }
 
-  if (do_init_verify) {
-    int32_t error = verify_matrix(c, row_start, row_end, dim, dim, A_a, A_b,
-                                  A_c, B_a, B_b, B_c);
+  if (do_init_verify && core_id == 0) {
+    int32_t error =
+        verify_matrix(c, 0, dim, dim, dim, A_a, A_b, A_c, B_a, B_b, B_c);
 
     if (error != 0) {
       printf("Error core %d: c[%d]=%d\n", core_id, error, c[error]);
