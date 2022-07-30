@@ -14,13 +14,11 @@ workspace:
 sources:
   files:
     # Headers
-    - hardware/include/riscv_pkg.sv
     - hardware/include/rvv_pkg.sv
     #- hardware/include/core_v_xif_pkg.sv
     - hardware/include/spatz_pkg.sv
 
     # Sources
-    - hardware/src/riscv_instr.sv
     - hardware/src/reorder_buffer.sv
     - hardware/src/vregfile.sv
     - hardware/src/spatz_simd_lane.sv

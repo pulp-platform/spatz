@@ -6,8 +6,6 @@
 
 package rvv_pkg;
 
-  import riscv_pkg::*;
-
   ///////////////////
   //  Definitions  //
   ///////////////////

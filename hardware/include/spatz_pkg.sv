@@ -191,7 +191,7 @@ package spatz_pkg;
     logic [4:0] xintf_id;
 
     // Instruction
-    riscv_pkg::instr_t instr;
+    logic [31:0] instr;
 
     // Scalar values
     elen_t rs1;
