@@ -35,6 +35,7 @@ module spatz_controller
     // VFU
     input  logic                                vfu_req_ready_i,
     input  logic                                vfu_rsp_valid_i,
+    output logic                                vfu_rsp_ready_o,
     input  vfu_rsp_t                            vfu_rsp_i,
     // VLSU
     input  logic                                vlsu_req_ready_i,
@@ -366,24 +367,39 @@ module spatz_controller
 
     // We have a new instruction and there is no stall.
     if (spatz_req_valid) begin
-      if (spatz_req.ex_unit == VFU) begin
-        // Overwrite all csrs in request
-        spatz_req.vtype  = vtype_q;
-        spatz_req.vl     = vl_q;
-        spatz_req.vstart = vstart_q;
-      end if (spatz_req.ex_unit == LSU) begin
-        // Overwrite vl and vstart in request (preserve vtype with vsew)
-        spatz_req.vl     = vl_q;
-        spatz_req.vstart = vstart_q;
-      end if (spatz_req.ex_unit == SLD) begin
-        // Overwrite all csrs in request
-        spatz_req.vtype  = vtype_q;
-        spatz_req.vl     = vl_q;
-        spatz_req.vstart = vstart_q;
-      end else begin
-        // Do not overwrite csrs, but retire new csr information
-        retire_csr = 1'b1;
-      end
+      case (spatz_req.ex_unit)
+        VFU: begin
+          // Overwrite all csrs in request
+          spatz_req.vtype  = vtype_q;
+          spatz_req.vl     = vl_q;
+          spatz_req.vstart = vstart_q;
+
+          // Is this a scalar request?
+          if (spatz_req.op_arith.is_scalar) begin
+            spatz_req.vtype.vsew = EW_32;
+            spatz_req.vl         = 1 << EW_32;
+            spatz_req.vstart     = '0;
+          end
+        end
+
+        LSU: begin
+          // Overwrite vl and vstart in request (preserve vtype with vsew)
+          spatz_req.vl     = vl_q;
+          spatz_req.vstart = vstart_q;
+        end
+
+        SLD: begin
+          // Overwrite all csrs in request
+          spatz_req.vtype  = vtype_q;
+          spatz_req.vl     = vl_q;
+          spatz_req.vstart = vstart_q;
+        end
+
+        default: begin
+          // Do not overwrite csrs, but retire new csr information
+          retire_csr = 1'b1;
+        end
+      endcase
     end
   end // ex_issue
 
@@ -448,11 +464,32 @@ module spatz_controller
   // Retiring //
   //////////////
 
+  vfu_rsp_t vfu_rsp;
+  logic     vfu_rsp_valid;
+  logic     vfu_rsp_ready;
+
+  stream_register #(
+    .T(vfu_rsp_t)
+  ) i_vfu_scalar_response (
+    .clk_i     (clk_i                          ),
+    .rst_ni    (rst_ni                         ),
+    .clr_i     (1'b0                           ),
+    .testmode_i(1'b0                           ),
+    .data_i    (vfu_rsp_i                      ),
+    .valid_i   (vfu_rsp_valid_i && vfu_rsp_i.wb),
+    .ready_o   (vfu_rsp_ready_o                ),
+    .data_o    (vfu_rsp                        ),
+    .valid_o   (vfu_rsp_valid                  ),
+    .ready_i   (vfu_rsp_ready                  )
+  );
+
   // Retire an operation/instruction and write back result to core
   // if necessary.
   always_comb begin : retire
     x_result_o       = '0;
     x_result_valid_o = '0;
+
+    vfu_rsp_ready = 1'b0;
 
     if (retire_csr) begin
       // Read CSR and write back to cpu
@@ -481,6 +518,13 @@ module spatz_controller
         x_result_o.we    = 1'b1;
         x_result_valid_o = 1'b1;
       end
+    end else if (vfu_rsp_valid) begin
+      x_result_o.id    = vfu_rsp.id;
+      x_result_o.rd    = vfu_rsp.rd;
+      x_result_o.data  = vfu_rsp.result;
+      x_result_o.we    = 1'b1;
+      x_result_valid_o = 1'b1;
+      vfu_rsp_ready    = 1'b1;
     end
   end // retire
 

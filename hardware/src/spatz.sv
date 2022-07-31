@@ -63,6 +63,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*;#(
   logic       spatz_req_valid;
 
   logic     vfu_req_ready;
+  logic     vfu_rsp_ready;
   logic     vfu_rsp_valid;
   vfu_rsp_t vfu_rsp;
 
@@ -141,6 +142,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*;#(
     // VFU
     .vfu_req_ready_i  (vfu_req_ready   ),
     .vfu_rsp_valid_i  (vfu_rsp_valid   ),
+    .vfu_rsp_ready_o  (vfu_rsp_ready   ),
     .vfu_rsp_i        (vfu_rsp         ),
     // VFU
     .vlsu_req_ready_i (vlsu_req_ready  ),
@@ -170,6 +172,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*;#(
     .spatz_req_ready_o(vfu_req_ready                                           ),
     // Response
     .vfu_rsp_valid_o  (vfu_rsp_valid                                           ),
+    .vfu_rsp_ready_i  (vfu_rsp_ready                                           ),
     .vfu_rsp_o        (vfu_rsp                                                 ),
     // VRF
     .vrf_waddr_o      (vrf_waddr[VFU_VD_WD]                                    ),

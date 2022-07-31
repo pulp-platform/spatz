@@ -15,8 +15,9 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
     input  spatz_req_t       spatz_req_i,
     input  logic             spatz_req_valid_i,
     output logic             spatz_req_ready_o,
-    // VFU rsp
+    // VFU response
     output logic             vfu_rsp_valid_o,
+    input  logic             vfu_rsp_ready_i,
     output vfu_rsp_t         vfu_rsp_o,
     // VRF
     output vreg_addr_t       vrf_waddr_o,
@@ -76,7 +77,7 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
   assign op1_is_ready   = spatz_req_valid && (!spatz_req.use_vs1 || vrf_rvalid_i[1]);
   assign op2_is_ready   = spatz_req_valid && (!spatz_req.use_vs2 || vrf_rvalid_i[0]);
   assign op3_is_ready   = spatz_req_valid && (!spatz_req.vd_is_src || vrf_rvalid_i[2]);
-  assign operands_ready = op1_is_ready && op2_is_ready && op3_is_ready;
+  assign operands_ready = op1_is_ready && op2_is_ready && op3_is_ready && (!spatz_req.op_arith.is_scalar || vfu_rsp_ready_i);
 
   // Did we write a result back to the VRF?
   logic result_written;
@@ -97,6 +98,8 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
   // Currently running instructions
   logic [NrParallelInstructions-1:0] running_d, running_q;
   `FF(running_q, running_d, '0)
+
+  elen_t scalar_result;
 
   always_comb begin: control_proc
     // Maintain state
@@ -122,8 +125,11 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
       vl_d                    = '0;
       running_d[spatz_req.id] = 1'b0;
 
-      vfu_rsp_o.id    = spatz_req.id;
-      vfu_rsp_valid_o = 1'b1;
+      vfu_rsp_o.id     = spatz_req.id;
+      vfu_rsp_o.rd     = spatz_req.xintf_id;
+      vfu_rsp_o.wb     = spatz_req.op_arith.is_scalar;
+      vfu_rsp_o.result = scalar_result;
+      vfu_rsp_valid_o  = 1'b1;
     end
     // Do we have a new instruction?
     else if (spatz_req_valid && !running_d[spatz_req.id]) begin
@@ -146,7 +152,9 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
   logic [N_IPU*ELEN-1:0] operand1, operand2, operand3;
   logic [N_IPU*ELEN-1:0] result;
   always_comb begin: operand_proc
-    if (spatz_req.use_vs1)
+    if (spatz_req.op_arith.is_scalar)
+      operand1 = {1*N_IPU{spatz_req.rs1}};
+    else if (spatz_req.use_vs1)
       operand1 = vrf_rdata_i[1];
     else begin
       // Replicate scalar operands
@@ -156,9 +164,11 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
         default: operand1 = {1*N_IPU{spatz_req.rs1}};
       endcase
     end
-    operand2 = vrf_rdata_i[0];
+    operand2 = spatz_req.op_arith.is_scalar ? {1*N_IPU{spatz_req.rs2}} : vrf_rdata_i[0];
     operand3 = vrf_rdata_i[2];
   end: operand_proc
+
+  assign scalar_result = spatz_req.op_arith.is_scalar ? result[ELEN-1:0] : '0;
 
   ///////////////////////
   // Operand Requester //
@@ -247,17 +257,18 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
 
   for (genvar ipu = 0; unsigned'(ipu) < N_IPU; ipu++) begin : gen_ipus
     spatz_ipu i_ipu (
-      .clk_i            (clk_i                            ),
-      .rst_ni           (rst_ni                           ),
-      .operation_i      (spatz_req.op                     ),
-      .operation_valid_i(spatz_req_valid && operands_ready), // If the VFU is not ready, it is executing something
-      .op_s1_i          (operand1[ipu*ELEN +: ELEN]       ),
-      .op_s2_i          (operand2[ipu*ELEN +: ELEN]       ),
-      .op_d_i           (operand3[ipu*ELEN +: ELEN]       ),
-      .carry_i          ('0                               ),
-      .sew_i            (spatz_req.vtype.vsew             ),
-      .be_o             (/* Unused */                     ),
-      .result_o         (result[ipu*ELEN +: ELEN]         )
+      .clk_i            (clk_i                                                                           ),
+      .rst_ni           (rst_ni                                                                          ),
+      .operation_i      (spatz_req.op                                                                    ),
+      // Only the IPU0 executes scalar instructions
+      .operation_valid_i(spatz_req_valid && operands_ready && (!spatz_req.op_arith.is_scalar || ipu == 0)),
+      .op_s1_i          (operand1[ipu*ELEN +: ELEN]                                                      ),
+      .op_s2_i          (operand2[ipu*ELEN +: ELEN]                                                      ),
+      .op_d_i           (operand3[ipu*ELEN +: ELEN]                                                      ),
+      .carry_i          ('0                                                                              ),
+      .sew_i            (spatz_req.vtype.vsew                                                            ),
+      .be_o             (/* Unused */                                                                    ),
+      .result_o         (result[ipu*ELEN +: ELEN]                                                        )
     );
   end : gen_ipus
 

@@ -130,6 +130,7 @@ package spatz_pkg;
   typedef struct packed {
     logic vm;
     logic use_carry_borrow_in;
+    logic is_scalar;
   } op_arith_t;
 
   typedef struct packed {
