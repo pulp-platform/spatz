@@ -20,7 +20,9 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; (
     input  vew_e   sew_i,
     // Result Output
     output elenb_t be_o,
-    output elen_t  result_o
+    output elen_t  result_o,
+    output elenb_t result_valid_o,
+    input  logic   result_ready_i
   );
 
   /////////////
@@ -29,7 +31,7 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; (
 
   // Is the operation signed
   logic is_signed;
-  assign is_signed = operation_i inside {VMIN, VMAX, VMULH, VMULHSU};
+  assign is_signed = operation_i inside {VMIN, VMAX, VMULH, VMULHSU, VDIV, VREM};
 
   struct packed {
     // Input operands
@@ -55,6 +57,12 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; (
     logic [15:0] ew16_res;
     logic [31:0] ew32_res;
   } lane_signal_res;
+
+  struct packed {
+    logic [1:0] ew8_valid;
+    logic ew16_valid;
+    logic ew32_valid;
+  } lane_signal_res_valid;
 
   /////////////////
   // Distributor //
@@ -132,9 +140,18 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; (
   // Collect results from the SIMD lanes
   always_comb begin : collector
     unique case (sew_i)
-      rvv_pkg::EW_8 : result_o = {lane_signal_res.ew32_res[7:0], lane_signal_res.ew16_res[7:0], lane_signal_res.ew8_res[1], lane_signal_res.ew8_res[0]};
-      rvv_pkg::EW_16: result_o = {lane_signal_res.ew32_res[15:0], lane_signal_res.ew16_res};
-      default: result_o        = lane_signal_res.ew32_res;
+      rvv_pkg::EW_8 : begin
+        result_o       = {lane_signal_res.ew32_res[7:0], lane_signal_res.ew16_res[7:0], lane_signal_res.ew8_res[1], lane_signal_res.ew8_res[0]};
+        result_valid_o = {lane_signal_res_valid.ew32_valid, lane_signal_res_valid.ew16_valid, lane_signal_res_valid.ew8_valid};
+      end
+      rvv_pkg::EW_16: begin
+        result_o       = {lane_signal_res.ew32_res[15:0], lane_signal_res.ew16_res};
+        result_valid_o = {{2{lane_signal_res_valid.ew32_valid}}, {2{lane_signal_res_valid.ew16_valid}}};
+      end
+      default: begin
+        result_o       = lane_signal_res.ew32_res;
+        result_valid_o = {4{lane_signal_res_valid.ew32_valid}};
+      end
     endcase
   end
 
@@ -148,65 +165,73 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; (
   spatz_simd_lane #(
     .Width (8)
   ) i_simd_lane_8b_0 (
-    .clk_i            (clk_i                        ),
-    .rst_ni           (rst_ni                       ),
-    .operation_i      (operation_i                  ),
-    .operation_valid_i(lane_signal_inp.ew8_valid[0] ),
-    .op_s1_i          (lane_signal_inp.ops[0].ew8[0]),
-    .op_s2_i          (lane_signal_inp.ops[1].ew8[0]),
-    .op_d_i           (lane_signal_inp.ops[2].ew8[0]),
-    .is_signed_i      (is_signed                    ),
-    .carry_i          (lane_signal_inp.ew8_carry[0] ),
-    .sew_i            (sew_i                        ),
-    .result_o         (lane_signal_res.ew8_res[0]   )
+    .clk_i            (clk_i                             ),
+    .rst_ni           (rst_ni                            ),
+    .operation_i      (operation_i                       ),
+    .operation_valid_i(lane_signal_inp.ew8_valid[0]      ),
+    .op_s1_i          (lane_signal_inp.ops[0].ew8[0]     ),
+    .op_s2_i          (lane_signal_inp.ops[1].ew8[0]     ),
+    .op_d_i           (lane_signal_inp.ops[2].ew8[0]     ),
+    .is_signed_i      (is_signed                         ),
+    .carry_i          (lane_signal_inp.ew8_carry[0]      ),
+    .sew_i            (sew_i                             ),
+    .result_o         (lane_signal_res.ew8_res[0]        ),
+    .result_valid_o   (lane_signal_res_valid.ew8_valid[0]),
+    .result_ready_i   (result_ready_i                    )
   );
 
   spatz_simd_lane #(
     .Width (8)
   ) i_simd_lane_8b_1 (
-    .clk_i            (clk_i                        ),
-    .rst_ni           (rst_ni                       ),
-    .operation_i      (operation_i                  ),
-    .operation_valid_i(lane_signal_inp.ew8_valid[1] ),
-    .op_s1_i          (lane_signal_inp.ops[0].ew8[1]),
-    .op_s2_i          (lane_signal_inp.ops[1].ew8[1]),
-    .op_d_i           (lane_signal_inp.ops[2].ew8[1]),
-    .is_signed_i      (is_signed                    ),
-    .carry_i          (lane_signal_inp.ew8_carry[1] ),
-    .sew_i            (sew_i                        ),
-    .result_o         (lane_signal_res.ew8_res[1]   )
+    .clk_i            (clk_i                             ),
+    .rst_ni           (rst_ni                            ),
+    .operation_i      (operation_i                       ),
+    .operation_valid_i(lane_signal_inp.ew8_valid[1]      ),
+    .op_s1_i          (lane_signal_inp.ops[0].ew8[1]     ),
+    .op_s2_i          (lane_signal_inp.ops[1].ew8[1]     ),
+    .op_d_i           (lane_signal_inp.ops[2].ew8[1]     ),
+    .is_signed_i      (is_signed                         ),
+    .carry_i          (lane_signal_inp.ew8_carry[1]      ),
+    .sew_i            (sew_i                             ),
+    .result_o         (lane_signal_res.ew8_res[1]        ),
+    .result_valid_o   (lane_signal_res_valid.ew8_valid[1]),
+    .result_ready_i   (result_ready_i                    )
   );
 
   spatz_simd_lane #(
     .Width (16)
   ) i_simd_lane_16b_0 (
-    .clk_i            (clk_i                      ),
-    .rst_ni           (rst_ni                     ),
-    .operation_i      (operation_i                ),
-    .operation_valid_i(lane_signal_inp.ew16_valid ),
-    .op_s1_i          (lane_signal_inp.ops[0].ew16),
-    .op_s2_i          (lane_signal_inp.ops[1].ew16),
-    .op_d_i           (lane_signal_inp.ops[2].ew16),
-    .is_signed_i      (is_signed                  ),
-    .carry_i          (lane_signal_inp.ew16_carry ),
-    .sew_i            (sew_i                      ),
-    .result_o         (lane_signal_res.ew16_res   )
+    .clk_i            (clk_i                           ),
+    .rst_ni           (rst_ni                          ),
+    .operation_i      (operation_i                     ),
+    .operation_valid_i(lane_signal_inp.ew16_valid      ),
+    .op_s1_i          (lane_signal_inp.ops[0].ew16     ),
+    .op_s2_i          (lane_signal_inp.ops[1].ew16     ),
+    .op_d_i           (lane_signal_inp.ops[2].ew16     ),
+    .is_signed_i      (is_signed                       ),
+    .carry_i          (lane_signal_inp.ew16_carry      ),
+    .sew_i            (sew_i                           ),
+    .result_o         (lane_signal_res.ew16_res        ),
+    .result_valid_o   (lane_signal_res_valid.ew16_valid),
+    .result_ready_i   (result_ready_i                  )
   );
 
   spatz_simd_lane #(
     .Width (32)
   ) i_simd_lane_32b_0 (
-    .clk_i            (clk_i                      ),
-    .rst_ni           (rst_ni                     ),
-    .operation_i      (operation_i                ),
-    .operation_valid_i(lane_signal_inp.ew32_valid ),
-    .op_s1_i          (lane_signal_inp.ops[0].ew32),
-    .op_s2_i          (lane_signal_inp.ops[1].ew32),
-    .op_d_i           (lane_signal_inp.ops[2].ew32),
-    .is_signed_i      (is_signed                  ),
-    .carry_i          (lane_signal_inp.ew32_carry ),
-    .sew_i            (sew_i                      ),
-    .result_o         (lane_signal_res.ew32_res   )
+    .clk_i            (clk_i                           ),
+    .rst_ni           (rst_ni                          ),
+    .operation_i      (operation_i                     ),
+    .operation_valid_i(lane_signal_inp.ew32_valid      ),
+    .op_s1_i          (lane_signal_inp.ops[0].ew32     ),
+    .op_s2_i          (lane_signal_inp.ops[1].ew32     ),
+    .op_d_i           (lane_signal_inp.ops[2].ew32     ),
+    .is_signed_i      (is_signed                       ),
+    .carry_i          (lane_signal_inp.ew32_carry      ),
+    .sew_i            (sew_i                           ),
+    .result_o         (lane_signal_res.ew32_res        ),
+    .result_valid_o   (lane_signal_res_valid.ew32_valid),
+    .result_ready_i   (result_ready_i                  )
   );
 
 endmodule : spatz_ipu

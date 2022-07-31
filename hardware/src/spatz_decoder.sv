@@ -567,15 +567,11 @@ module spatz_decoder
           endcase // Arithmetic Instruction Type
         end
 
-        // Scalar multiplication and division
+        // Scalar multiplication
         riscv_instr::MUL,
         riscv_instr::MULH,
         riscv_instr::MULHU,
-        riscv_instr::MULHSU,
-        riscv_instr::DIV,
-        riscv_instr::DIVU,
-        riscv_instr::REM,
-        riscv_instr::REMU: begin
+        riscv_instr::MULHSU: begin
           spatz_req.ex_unit            = VFU;
           spatz_req.rd                 = decoder_req_i.instr[11:7];
           spatz_req.use_rd             = 1'b1;
@@ -588,6 +584,23 @@ module spatz_decoder
             riscv_instr::MULH  : spatz_req.op = VMULH;
             riscv_instr::MULHU : spatz_req.op = VMULHU;
             riscv_instr::MULHSU: spatz_req.op = VMULHSU;
+          endcase
+        end
+
+        // Scalar division
+        riscv_instr::DIV,
+        riscv_instr::DIVU,
+        riscv_instr::REM,
+        riscv_instr::REMU: begin
+          spatz_req.ex_unit            = VFU;
+          spatz_req.rd                 = decoder_req_i.instr[11:7];
+          spatz_req.use_rd             = 1'b1;
+          // Switch rs2 and rs1
+          spatz_req.rs1                = decoder_req_i.rs2;
+          spatz_req.rs2                = decoder_req_i.rs1;
+          spatz_req.op_arith.is_scalar = 1'b1;
+
+          unique casez (decoder_req_i.instr)
             riscv_instr::DIV   : spatz_req.op = VDIV;
             riscv_instr::DIVU  : spatz_req.op = VDIVU;
             riscv_instr::REM   : spatz_req.op = VREM;

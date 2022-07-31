@@ -79,13 +79,12 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
   assign op3_is_ready   = spatz_req_valid && (!spatz_req.vd_is_src || vrf_rvalid_i[2]);
   assign operands_ready = op1_is_ready && op2_is_ready && op3_is_ready && (!spatz_req.op_arith.is_scalar || vfu_rsp_ready_i);
 
-  // Did we write a result back to the VRF?
-  logic result_written;
-  assign result_written = spatz_req_valid && (!spatz_req.use_vd || vrf_wvalid_i);
+  // Pending results
+  logic [N_IPU*ELENB-1:0] pending_results;
+  assign pending_results = spatz_req.op_arith.is_scalar ? 4'hf : '1;
 
   // Did we commit a word to the VRF?
   logic word_committed;
-  assign word_committed = result_written;
 
   // Number of elements in one VRF word
   logic [$clog2(N_IPU*4):0] nr_elem_word;
@@ -149,8 +148,10 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
   //////////////
 
   // IPU operands and result signals
-  logic [N_IPU*ELEN-1:0] operand1, operand2, operand3;
-  logic [N_IPU*ELEN-1:0] result;
+  logic [N_IPU*ELEN-1:0]  operand1, operand2, operand3;
+  logic [N_IPU*ELEN-1:0]  result;
+  logic [N_IPU*ELENB-1:0] result_valid;
+  logic                   result_ready;
   always_comb begin: operand_proc
     if (spatz_req.op_arith.is_scalar)
       operand1 = {1*N_IPU{spatz_req.rs1}};
@@ -169,6 +170,10 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
   end: operand_proc
 
   assign scalar_result = spatz_req.op_arith.is_scalar ? result[ELEN-1:0] : '0;
+  assign result_ready  = word_committed;
+
+  // Did we commit a word to the VRF?
+  assign word_committed = spatz_req_valid && (!spatz_req.use_vd || vrf_wvalid_i) && &(result_valid | ~pending_results);
 
   ///////////////////////
   // Operand Requester //
@@ -222,7 +227,7 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
 
       // Distribute operands and write result back to register file
       if (operands_ready) begin
-        vreg_we  = spatz_req.use_vd;
+        vreg_we  = spatz_req.use_vd && &(result_valid | ~pending_results);
         vreg_wbe = '1;
 
         // If we are in the last group or at the start and vstart is nonzero,
@@ -268,7 +273,9 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
       .carry_i          ('0                                                                              ),
       .sew_i            (spatz_req.vtype.vsew                                                            ),
       .be_o             (/* Unused */                                                                    ),
-      .result_o         (result[ipu*ELEN +: ELEN]                                                        )
+      .result_o         (result[ipu*ELEN +: ELEN]                                                        ),
+      .result_valid_o   (result_valid[ipu*ELENB +: ELENB]                                                ),
+      .result_ready_i   (result_ready                                                                    )
     );
   end : gen_ipus
 

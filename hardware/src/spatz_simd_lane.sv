@@ -24,7 +24,9 @@ module spatz_simd_lane import spatz_pkg::*; import rvv_pkg::vew_e; #(
     input  logic  carry_i,
     input  vew_e  sew_i,
     // Result Output
-    output data_t result_o
+    output data_t result_o,
+    output logic  result_valid_o,
+    input  logic  result_ready_i
   );
 
   ////////////////
@@ -43,9 +45,7 @@ module spatz_simd_lane import spatz_pkg::*; import rvv_pkg::vew_e; #(
     // Mute the multiplier
     mult_result = 'x;
     if (is_mult)
-      mult_result =
-        $signed({mult_op1[Width-1] & is_signed_i & ~(operation_i == VMULHSU), mult_op1}) *
-        $signed({mult_op2[Width-1] & is_signed_i, mult_op2});
+      mult_result = $signed({mult_op1[Width-1] & is_signed_i & ~(operation_i == VMULHSU), mult_op1}) * $signed({mult_op2[Width-1] & is_signed_i, mult_op2});
   end: mult
 
   // Select multiplier operands
@@ -141,14 +141,56 @@ module spatz_simd_lane import spatz_pkg::*; import rvv_pkg::vew_e; #(
     end
   end
 
+  /////////////
+  // Divider //
+  /////////////
+
+  logic         div_in_valid;
+  logic         div_out_valid;
+  logic  [31:0] div_op;
+  data_t        div_result;
+
+  always_comb begin: div_proc
+    div_in_valid = operation_valid_i && (operation_i inside {VDIV, VDIVU, VREM, VREMU});
+
+    unique case (operation_i)
+      VDIV : div_op   = riscv_instr::DIV;
+      VDIVU: div_op   = riscv_instr::DIVU;
+      VREM : div_op   = riscv_instr::REM;
+      default: div_op = riscv_instr::REMU;
+    endcase
+  end: div_proc
+
+  serdiv #(
+    .WIDTH  (Width),
+    .IdWidth(1    )
+  ) i_divider (
+    .clk_i     (clk_i         ),
+    .rst_ni    (rst_ni        ),
+    .id_i      ('0            ),
+    .op_a_i    (op_s2_i       ),
+    .op_b_i    (op_s1_i       ),
+    .operator_i(div_op        ),
+    .in_vld_i  (div_in_valid  ),
+    .in_rdy_o  (/* Unused */  ),
+    .out_vld_o (div_out_valid ),
+    .out_rdy_i (result_ready_i),
+    .id_o      (/* Unused */  ),
+    .res_o     (div_result    )
+  );
+
   ////////////
   // Result //
   ////////////
 
   // Calculate arithmetic and logics and select correct result
   always_comb begin : simd
-    simd_result = 'x;
-    if (operation_valid_i)
+    simd_result    = 'x;
+    result_valid_o = 1'b0;
+    if (operation_valid_i) begin
+      // Valid result
+      result_valid_o = 1'b1;
+
       unique case (operation_i)
         VADD, VMACC, VMADD, VADC         : simd_result = adder_result[Width-1:0];
         VSUB, VRSUB, VNMSAC, VNMSUB, VSBC: simd_result = subtractor_result[Width-1:0];
@@ -164,16 +206,19 @@ module spatz_simd_lane import spatz_pkg::*; import rvv_pkg::vew_e; #(
         VMUL                             : simd_result = mult_result[Width-1:0];
         VMULH, VMULHU, VMULHSU           : begin
           simd_result = mult_result[2*Width-1:Width];
-          for (int i = 0; i < $clog2(Width/8); i++) begin
-            if (sew_i == rvv_pkg::vew_e'(i)) begin
+          for (int i = 0; i < $clog2(Width/8); i++)
+            if (sew_i == rvv_pkg::vew_e'(i))
               simd_result = mult_result[8*(2**i) +: Width];
-            end
-          end
         end
-        VMADC: simd_result = Width'(adder_result[Width]);
-        VMSBC: simd_result = Width'(subtractor_result[Width]);
+        VMADC                   : simd_result = Width'(adder_result[Width]);
+        VMSBC                   : simd_result = Width'(subtractor_result[Width]);
+        VDIV, VDIVU, VREM, VREMU: begin
+          simd_result    = div_result;
+          result_valid_o = div_out_valid;
+        end
         default simd_result = 'x;
       endcase // operation_i
+    end
   end // simd
 
   assign result_o = simd_result;
