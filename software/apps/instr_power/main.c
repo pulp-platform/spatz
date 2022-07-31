@@ -24,12 +24,10 @@
 #define SIZE 32
 #define REPEAT 40
 
-uint32_t block;
-
 int main() {
   uint32_t core_id = mempool_get_core_id();
 
-  if (core_id != 0) {
+  if (core_id >= NUM_CORES_PER_TILE) {
     mempool_wfi();
   }
 
@@ -47,18 +45,12 @@ int main() {
   if (vector_size != SIZE)
     return SIZE - vector_size;
 
-  for (int i = 0; i < REPEAT; i++)
-    asm volatile("vle32.v v0, (%[vector])" ::[vector] "r"(vector));
-
-  for (int i = 0; i < SIZE; i++)
-    asm volatile("nop");
-
-  block = 1;
-
-  uint32_t insert = vector[0];
-
-  for (int i = 0; i < REPEAT; i++)
-    asm volatile("vslide1down.vx v8, v0, %0" ::"r"(insert));
+  for (int i = 0; i < REPEAT/4; i++) {
+    asm volatile("vle32.v v0,  (%[vector])" ::[vector] "r"(vector));
+    asm volatile("vle32.v v8,  (%[vector])" ::[vector] "r"(vector));
+    asm volatile("vle32.v v16, (%[vector])" ::[vector] "r"(vector));
+    asm volatile("vle32.v v24, (%[vector])" ::[vector] "r"(vector));
+  }
 
   for (int i = 0; i < SIZE; i++)
     asm volatile("nop");
