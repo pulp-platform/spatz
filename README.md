@@ -96,10 +96,10 @@ The goal of Spatz is to implement all instructions belonging to the Zve32x vecto
 | vmulh.{vv, vx}                    |    ✅   |
 | vmulhu.{vv, vx}                   |    ✅   |
 | vmulhsu.{vv, vx}                  |    ✅   |
-| vdivu.{vv, vx}                    |    ❌   |
-| vdiv.{vv, vx}                     |    ❌   |
-| vremu.{vv, vx}                    |    ❌   |
-| vrem.{vv, vx}                     |    ❌   |
+| vdivu.{vv, vx}                    |    ✅   |
+| vdiv.{vv, vx}                     |    ✅   |
+| vremu.{vv, vx}                    |    ✅   |
+| vrem.{vv, vx}                     |    ✅   |
 | vwmul.{vv, vx}                    |    ❌   |
 | vwmulu.{vv, vx}                   |    ❌   |
 | vwmulsu.{vv, vx}                  |    ❌   |
