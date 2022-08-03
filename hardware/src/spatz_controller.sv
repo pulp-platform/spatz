@@ -338,9 +338,6 @@ module spatz_controller
   assign vlsu_stall  = ~vlsu_req_ready_i & (spatz_req.ex_unit == LSU);
   assign vsldu_stall = ~vsldu_req_ready_i & (spatz_req.ex_unit == SLD);
 
-  // Pop the buffer if we do not have a unit stall
-  assign req_buffer_pop = ~stall & req_buffer_valid;
-
   // Running instructions
   logic      [NrParallelInstructions-1:0] running_insn_d, running_insn_q;
   spatz_id_t                              next_insn_id;
@@ -354,6 +351,9 @@ module spatz_controller
     .first_one_o(next_insn_id     ),
     .no_ones_o  (running_insn_full)
   );
+
+  // Pop the buffer if we do not have a unit stall
+  assign req_buffer_pop = ~stall & req_buffer_valid && !running_insn_full;
 
   // Issue new operation to execution units
   always_comb begin : ex_issue

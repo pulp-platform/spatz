@@ -432,7 +432,7 @@ module spatz_vsldu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
 
   // VRF signals
   assign vrf_re_o        = spatz_req.use_vs2 && (spatz_req_valid || prefetch_q);
-  assign vrf_req_valid_d = spatz_req.use_vd && vrf_re_o && vrf_rvalid_i && !prefetch_q;
+  assign vrf_req_valid_d = spatz_req_valid && spatz_req.use_vd && (vrf_re_o || !spatz_req.use_vs2) && (vrf_rvalid_i || !spatz_req.use_vs2) && !prefetch_q;
 
   ////////////////////////
   // Address Generation //
