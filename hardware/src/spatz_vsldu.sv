@@ -41,21 +41,23 @@ module spatz_vsldu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
 
   spatz_req_t spatz_req_d;
 
-  spatz_req_t spatz_req;
-  logic       spatz_req_valid;
+  spatz_req_t spatz_req, spatz_req_queue;
+  logic       spatz_req_valid, spatz_req_queue_valid;
   logic       spatz_req_ready;
 
-  spill_register #(
+  glass_spill_register #(
     .T(spatz_req_t)
   ) i_operation_queue (
-    .clk_i  (clk_i                                          ),
-    .rst_ni (rst_ni                                         ),
-    .data_i (spatz_req_d                                    ),
-    .valid_i(spatz_req_valid_i && spatz_req_i.ex_unit == SLD),
-    .ready_o(spatz_req_ready_o                              ),
-    .data_o (spatz_req                                      ),
-    .valid_o(spatz_req_valid                                ),
-    .ready_i(spatz_req_ready                                )
+    .clk_i        (clk_i                                          ),
+    .rst_ni       (rst_ni                                         ),
+    .data_i       (spatz_req_d                                    ),
+    .valid_i      (spatz_req_valid_i && spatz_req_i.ex_unit == SLD),
+    .ready_o      (spatz_req_ready_o                              ),
+    .data_queue_o (spatz_req_queue                                ),
+    .data_o       (spatz_req                                      ),
+    .valid_o      (spatz_req_valid                                ),
+    .valid_queue_o(spatz_req_queue_valid                          ),
+    .ready_i      (spatz_req_ready                                )
   );
 
   // Convert the vl to number of bytes for all element widths
@@ -152,8 +154,14 @@ module spatz_vsldu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
   `FF(running_q, running_d, '0)
 
   // New instruction
-  logic new_vsldu_request;
-  assign new_vsldu_request = spatz_req_valid && !running_q[spatz_req.id];
+  // Initialize the internal state one cycle in advance
+  logic new_vsldu_request, new_vsldu_request_q;
+  assign new_vsldu_request = ((spatz_req_valid_i && spatz_req_i.ex_unit == SLD) || spatz_req_queue_valid) && spatz_req_ready;
+
+  `FF(new_vsldu_request_q, new_vsldu_request, '0)
+
+  // Next-cycle request (either from the spill reg, or from the interface
+  spatz_req_t spatz_init_req;
 
   // Accept a new operation or clear req register if we are finished
   always_comb begin
@@ -161,26 +169,30 @@ module spatz_vsldu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
     prefetch_d     = prefetch_q;
     running_d      = running_q;
 
-    // We are handling an instruction
-    spatz_req_ready = 1'b0;
+    // If the spill reg is empty, take from the input request
+    spatz_init_req = !spatz_req_valid ? spatz_req_i : spatz_req_queue;
+
+    // Spatz SLDU ready when empty
+    spatz_req_ready = !spatz_req_valid;
+
+    // New request?
+    if (new_vsldu_request) begin
+      // Mark the instruction as running
+      running_d[spatz_init_req.id] = 1'b1;
+
+      slide_amount_d = spatz_init_req.op_sld.insert ? (spatz_init_req.op_sld.vmv ? 'd0 : 'd1) : spatz_init_req.rs1;
+      slide_amount_d <<= spatz_init_req.vtype.vsew;
+
+      prefetch_d = spatz_init_req.op == VSLIDEUP ? spatz_init_req.vstart >= VRFWordBWidth : 1'b1;
+    end
 
     // Finished an instruction
     if (vreg_operations_finished) begin
-      // Ready for the next operation
+      // We are handling an instruction
       spatz_req_ready = 1'b1;
 
       // No longer running this instruction
       running_d[spatz_req.id] = 1'b0;
-    end
-    // New request?
-    else if (new_vsldu_request) begin
-      // Mark the instruction as running
-      running_d[spatz_req.id] = 1'b1;
-
-      slide_amount_d = spatz_req.op_sld.insert ? (spatz_req.op_sld.vmv ? 'd0 : 'd1) : spatz_req.rs1;
-      slide_amount_d <<= spatz_req.vtype.vsew;
-
-      prefetch_d = spatz_req.op == VSLIDEUP ? spatz_req.vstart >= VRFWordBWidth : 1'b1;
     end
 
     // Clear the prefetch register
@@ -223,11 +235,11 @@ module spatz_vsldu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
     // Do we have a new request?
     if (new_vsldu_request) begin
       // Load vstart into the counter
-      vreg_counter_d = spatz_req.vstart;
-      if (!spatz_req.op_sld.insert && spatz_req.vstart < slide_amount_d && is_slide_up)
+      vreg_counter_d = spatz_init_req.vstart;
+      if (!spatz_init_req.op_sld.insert && spatz_init_req.vstart < slide_amount_d && is_slide_up)
         vreg_counter_d = slide_amount_d;
     end else begin
-      if (!spatz_req.op_sld.insert && spatz_req.vstart < slide_amount_q && is_slide_up)
+      if (!spatz_init_req.op_sld.insert && spatz_init_req.vstart < slide_amount_q && is_slide_up)
         vreg_counter_d = slide_amount_q;
 
       // Did we finish executing something?
@@ -239,7 +251,7 @@ module spatz_vsldu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
     case (vreg_operation_first_q)
       VREG_IDLE: begin
         // Wait until our first write operation
-        vreg_operation_first = spatz_req_valid && !prefetch_q && !running_q[spatz_req.id];
+        vreg_operation_first = spatz_req_valid && !prefetch_q && new_vsldu_request_q;
         if (spatz_req_valid)
           vreg_operation_first_d = VREG_WAIT_FIRST_WRITE;
 
@@ -276,7 +288,7 @@ module spatz_vsldu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
     end
 
     // Did we finish?
-    vreg_operations_finished = !spatz_req_valid || (vreg_operation_last && vreg_counter_en);
+    vreg_operations_finished = vreg_operation_last && vreg_counter_en;
   end: vsldu_vreg_counter_proc
 
   // Respond to controller if we are finished executing
@@ -301,7 +313,7 @@ module spatz_vsldu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
     case (state_q)
       VSLDU_RUNNING: begin
         // Did we finish the execution of an instruction?
-        if (!is_vl_zero && |vreg_operations_finished && spatz_req_valid) begin
+        if (!is_vl_zero && vreg_operations_finished && spatz_req_valid) begin
           op_id_d = spatz_req.id;
           state_d = VSLDU_WAIT_WVALID;
         end
@@ -316,7 +328,7 @@ module spatz_vsldu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
           state_d           = VSLDU_RUNNING;
 
           // Did we finish *another* instruction?
-          if (!is_vl_zero && |vreg_operations_finished && spatz_req_valid) begin
+          if (!is_vl_zero && vreg_operations_finished && spatz_req_valid) begin
             op_id_d = spatz_req.id;
             state_d = VSLDU_WAIT_WVALID;
           end
