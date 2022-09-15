@@ -13,23 +13,24 @@ workspace:
 
 sources:
   files:
-    # Headers
-    - hardware/include/rvv_pkg.sv
-    #- hardware/include/core_v_xif_pkg.sv
-    - hardware/include/spatz_pkg.sv
+    - target: spatz
+      files:
+        # Headers
+        - hardware/include/rvv_pkg.sv
+        - hardware/include/spatz_pkg.sv
 
-    # Sources
-    - hardware/src/reorder_buffer.sv
-    - hardware/src/vregfile.sv
-    - hardware/src/spatz_simd_lane.sv
-    - hardware/src/spatz_ipu.sv
-    - hardware/src/spatz_vfu.sv
-    - hardware/src/spatz_vrf.sv
-    - hardware/src/spatz_vlsu.sv
-    - hardware/src/spatz_vsldu.sv
-    - hardware/src/spatz_decoder.sv
-    - hardware/src/spatz_controller.sv
-    - hardware/src/spatz.sv
+        # Sources
+        - hardware/src/reorder_buffer.sv
+        - hardware/src/vregfile.sv
+        - hardware/src/spatz_simd_lane.sv
+        - hardware/src/spatz_ipu.sv
+        - hardware/src/spatz_vfu.sv
+        - hardware/src/spatz_vrf.sv
+        - hardware/src/spatz_vlsu.sv
+        - hardware/src/spatz_vsldu.sv
+        - hardware/src/spatz_decoder.sv
+        - hardware/src/spatz_controller.sv
+        - hardware/src/spatz.sv
 
     - target: spatz_test
       files:
