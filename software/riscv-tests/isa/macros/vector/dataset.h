@@ -33,9 +33,9 @@ static volatile uint64_t Rf64[SIZE] __attribute__ ((aligned (128)));
 static volatile uint32_t Rf32[SIZE] __attribute__ ((aligned (128)));
 static volatile uint16_t Rf16[SIZE] __attribute__ ((aligned (128)));
 
-static volatile uint64_t Xf64[1]__attribute__ ((aligned (128)));
-static volatile uint32_t Xf32[1]__attribute__ ((aligned (128)));
-static volatile uint16_t Xf16[1]__attribute__ ((aligned (128)));
+static volatile uint64_t Xf64[1] __attribute__ ((aligned (128)));
+static volatile uint32_t Xf32[1] __attribute__ ((aligned (128)));
+static volatile uint16_t Xf16[1] __attribute__ ((aligned (128)));
 
 #undef SIZE
 
