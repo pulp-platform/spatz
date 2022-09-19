@@ -154,10 +154,10 @@ module spatz_simd_lane import spatz_pkg::*; import rvv_pkg::vew_e; #(
     div_in_valid = operation_valid_i && (operation_i inside {VDIV, VDIVU, VREM, VREMU});
 
     unique case (operation_i)
-      VDIV : div_op   = riscv_instr::DIV;
-      VDIVU: div_op   = riscv_instr::DIVU;
-      VREM : div_op   = riscv_instr::REM;
-      default: div_op = riscv_instr::REMU;
+      VDIV : div_op   = 32'b00000010000000000100000000110011;
+      VDIVU: div_op   = 32'b00000010000000000101000000110011;
+      VREM : div_op   = 32'b00000010000000000110000000110011;
+      default: div_op = 32'b00000010000000000111000000110011;
     endcase
   end: div_proc
 
