@@ -238,13 +238,6 @@ module spatz_vsldu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
       vreg_counter_d = spatz_init_req.vstart;
       if (!spatz_init_req.op_sld.insert && spatz_init_req.vstart < slide_amount_d && is_slide_up)
         vreg_counter_d = slide_amount_d;
-    end else begin
-      if (!spatz_init_req.op_sld.insert && spatz_init_req.vstart < slide_amount_q && is_slide_up)
-        vreg_counter_d = slide_amount_q;
-
-      // Did we finish executing something?
-      if (vsldu_rsp_valid_o)
-        vreg_counter_d = '0;
     end
 
     // Is this the first/last operation?
