@@ -576,15 +576,18 @@ module spatz_decoder
           spatz_req.ex_unit            = VFU;
           spatz_req.rd                 = decoder_req_i.instr[11:7];
           spatz_req.use_rd             = 1'b1;
-          spatz_req.rs1                = decoder_req_i.rs1;
-          spatz_req.rs2                = decoder_req_i.rs2;
+          // Switch rs2 and rs1
+          spatz_req.rs1                = decoder_req_i.rs2;
+          spatz_req.rs2                = decoder_req_i.rs1;
           spatz_req.op_arith.is_scalar = 1'b1;
 
           unique casez (decoder_req_i.instr)
             riscv_instr::MUL   : spatz_req.op = VMUL;
             riscv_instr::MULH  : spatz_req.op = VMULH;
             riscv_instr::MULHU : spatz_req.op = VMULHU;
-            riscv_instr::MULHSU: spatz_req.op = VMULHSU;
+            riscv_instr::MULHSU: begin
+              spatz_req.op = VMULHSU;
+            end
           endcase
         end
 
