@@ -5,7 +5,7 @@
 # Author: Matheus Cavalcante <matheusd@iis.ee.ethz.ch>
 #         Basile Bougenot <bbougenot@student.ethz.ch>
 
-rv32uiv_sc_tests = vadd \
+rv32uv_sc_tests = vadd \
                    vsub \
                    vrsub \
                    vwaddu \
@@ -80,8 +80,8 @@ rv32uiv_sc_tests = vadd \
                    vsetivli
 
 # vwmacc \ vmadd \
-#rv32uiv_sc_tests = vaadd vaaddu vadc vasub vasubu vcompress vfirst vid viota vl vlff vl_nocheck vlx vmsbf vmsif vmsof vpopc_m vrgather vsadd vsaddu vsetvl vsetivli vsetvli vsmul vssra vssrl vssub vssubu vsux vsx vse1
+#rv32uv_sc_tests = vaadd vaaddu vadc vasub vasubu vcompress vfirst vid viota vl vlff vl_nocheck vlx vmsbf vmsif vmsof vpopc_m vrgather vsadd vsaddu vsetvl vsetivli vsetvli vsmul vssra vssrl vssub vssubu vsux vsx vse1
 
-rv32uiv_p_tests = $(addprefix rv32uiv-p-, $(rv32uiv_sc_tests))
+rv32uv_p_tests = $(addprefix rv32uv-p-, $(rv32uv_sc_tests))
 
-spike_ctests += $(rv32uiv_p_tests)
+spike_ctests += $(rv32uv_p_tests)
