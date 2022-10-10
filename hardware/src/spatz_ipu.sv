@@ -7,7 +7,9 @@
 // The IPU distributes the operands to the four SIMD lanes and afterwards
 // collects the results.
 
-module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; (
+module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
+    parameter type tag_t = logic
+  ) (
     input  logic   clk_i,
     input  logic   rst_ni,
     // Operation Signals
@@ -16,13 +18,15 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; (
     input  elen_t  op_s1_i,
     input  elen_t  op_s2_i,
     input  elen_t  op_d_i,
+    input  tag_t   tag_i,
     input  elenb_t carry_i,
     input  vew_e   sew_i,
     // Result Output
     output elenb_t be_o,
     output elen_t  result_o,
     output elenb_t result_valid_o,
-    input  logic   result_ready_i
+    input  logic   result_ready_i,
+    output tag_t   tag_o
   );
 
   /////////////
@@ -32,6 +36,9 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; (
   // Is the operation signed
   logic is_signed;
   assign is_signed = operation_i inside {VMIN, VMAX, VMULH, VMULHSU, VDIV, VREM};
+
+  // Forward the tag
+  assign tag_o = tag_i;
 
   struct packed {
     // Input operands

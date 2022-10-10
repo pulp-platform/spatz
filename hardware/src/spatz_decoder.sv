@@ -633,11 +633,20 @@ module spatz_decoder
             spatz_req.use_rd             = 1'b1;
             spatz_req.rs1                = decoder_req_i.rs1;
             spatz_req.rs2                = decoder_req_i.rs2;
+            spatz_req.rsd                = decoder_req_i.rsd;
             spatz_req.op_arith.is_scalar = 1'b1;
 
             unique casez (decoder_req_i.instr)
-              riscv_instr::FADD_S  : spatz_req.op = VFADD;
-              riscv_instr::FSUB_S  : spatz_req.op = VFSUB;
+              riscv_instr::FADD_S : begin
+                spatz_req.op  = VFADD;
+                spatz_req.rs2 = decoder_req_i.rs1;
+                spatz_req.rsd = decoder_req_i.rs2;
+              end
+              riscv_instr::FSUB_S : begin
+                spatz_req.op  = VFSUB;
+                spatz_req.rs2 = decoder_req_i.rs1;
+                spatz_req.rsd = decoder_req_i.rs2;
+              end
               riscv_instr::FMUL_S  : spatz_req.op = VFMUL;
               riscv_instr::FDIV_S  : spatz_req.op = VFDIV;
               riscv_instr::FSQRT_S : spatz_req.op = VFSQRT;
@@ -752,7 +761,7 @@ module spatz_decoder
 
       // Add correct reset_vstart value
       spatz_req.op_cgf.reset_vstart = illegal_instr ? 1'b0 : reset_vstart;
-      spatz_req.xintf_id            = decoder_req_i.xintf_id;
+      spatz_req.rd                  = decoder_req_i.rd;
     end // Instruction valid
   end : decoder
 
