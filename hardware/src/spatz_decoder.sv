@@ -605,11 +605,54 @@ module spatz_decoder
           spatz_req.op_arith.is_scalar = 1'b1;
 
           unique casez (decoder_req_i.instr)
-            riscv_instr::DIV   : spatz_req.op = VDIV;
-            riscv_instr::DIVU  : spatz_req.op = VDIVU;
-            riscv_instr::REM   : spatz_req.op = VREM;
-            riscv_instr::REMU  : spatz_req.op = VREMU;
+            riscv_instr::DIV : spatz_req.op = VDIV;
+            riscv_instr::DIVU: spatz_req.op = VDIVU;
+            riscv_instr::REM : spatz_req.op = VREM;
+            riscv_instr::REMU: spatz_req.op = VREMU;
           endcase
+        end
+
+        // Scalar floating point instructions
+        riscv_instr::FADD_S,
+        riscv_instr::FSUB_S,
+        riscv_instr::FMUL_S,
+        riscv_instr::FDIV_S,
+        riscv_instr::FSQRT_S,
+        riscv_instr::FSGNJ_S,
+        riscv_instr::FSGNJN_S,
+        riscv_instr::FSGNJX_S,
+        riscv_instr::FMIN_S,
+        riscv_instr::FMAX_S,
+        riscv_instr::FMADD_S,
+        riscv_instr::FMSUB_S,
+        riscv_instr::FNMSUB_S,
+        riscv_instr::FNMADD_S: begin
+          if (spatz_pkg::FPU_EN) begin
+            spatz_req.ex_unit            = VFU;
+            spatz_req.rd                 = decoder_req_i.instr[11:7];
+            spatz_req.use_rd             = 1'b1;
+            spatz_req.rs1                = decoder_req_i.rs1;
+            spatz_req.rs2                = decoder_req_i.rs2;
+            spatz_req.op_arith.is_scalar = 1'b1;
+
+            unique casez (decoder_req_i.instr)
+              riscv_instr::FADD_S  : spatz_req.op = VFADD;
+              riscv_instr::FSUB_S  : spatz_req.op = VFSUB;
+              riscv_instr::FMUL_S  : spatz_req.op = VFMUL;
+              riscv_instr::FDIV_S  : spatz_req.op = VFDIV;
+              riscv_instr::FSQRT_S : spatz_req.op = VFSQRT;
+              riscv_instr::FSGNJ_S : spatz_req.op = VFSGNJ;
+              riscv_instr::FSGNJN_S: spatz_req.op = VFSGNJN;
+              riscv_instr::FSGNJX_S: spatz_req.op = VFSGNJX;
+              riscv_instr::FMIN_S  : spatz_req.op = VFMIN;
+              riscv_instr::FMAX_S  : spatz_req.op = VFMAX;
+              riscv_instr::FMADD_S : spatz_req.op = VFMADD;
+              riscv_instr::FMSUB_S : spatz_req.op = VFMSUB;
+              riscv_instr::FNMADD_S: spatz_req.op = VFNMADD;
+              riscv_instr::FNMSUB_S: spatz_req.op = VFNMSUB;
+            endcase
+          end else
+            illegal_instr = 1'b1;
         end
 
         // CSR instruction
