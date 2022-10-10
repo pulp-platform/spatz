@@ -13,7 +13,7 @@
 // back again. Finally, the Vector Register File (VRF) is the main register file
 // that stores all of the currently used vectors close to the execution units.
 
-module spatz import spatz_pkg::*; import rvv_pkg::*;#(
+module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     parameter int  unsigned NrMemPorts     = 1,
     parameter type          x_issue_req_t  = logic,
     parameter type          x_issue_resp_t = logic,
@@ -43,7 +43,10 @@ module spatz import spatz_pkg::*; import rvv_pkg::*;#(
     input  x_mem_result_t [NrMemPorts-1:0] x_mem_result_i,
     // X-Interface Memory Finished
     output logic                           x_mem_finished_o,
-    output logic                           x_mem_str_finished_o
+    output logic                           x_mem_str_finished_o,
+    // FPU side channel
+    input  roundmode_e                     fpu_rnd_mode_i,
+    output status_t                        fpu_status_o
   );
 
   ////////////////
@@ -184,7 +187,10 @@ module spatz import spatz_pkg::*; import rvv_pkg::*;#(
     .vrf_re_o         (sb_re[VFU_VD_RD:VFU_VS2_RD]                             ),
     .vrf_rdata_i      (vrf_rdata[VFU_VD_RD:VFU_VS2_RD]                         ),
     .vrf_rvalid_i     (vrf_rvalid[VFU_VD_RD:VFU_VS2_RD]                        ),
-    .vrf_id_o         ({sb_id[SB_VFU_VD_WD], sb_id[SB_VFU_VD_RD:SB_VFU_VS2_RD]})
+    .vrf_id_o         ({sb_id[SB_VFU_VD_WD], sb_id[SB_VFU_VD_RD:SB_VFU_VS2_RD]}),
+    // FPU side-channel
+    .fpu_rnd_mode_i   (fpu_rnd_mode_i                                          ),
+    .fpu_status_o     (fpu_status_o                                            )
   );
 
   //////////

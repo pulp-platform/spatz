@@ -176,7 +176,9 @@ module spatz_controller
       decoder_req.rs1_valid = x_issue_req_i.rs_valid[0];
       decoder_req.rs2       = x_issue_req_i.rs[1];
       decoder_req.rs2_valid = x_issue_req_i.rs_valid[1];
-      decoder_req.xintf_id  = x_issue_req_i.id;
+      decoder_req.rsd       = x_issue_req_i.rs[2];
+      decoder_req.rsd_valid = x_issue_req_i.rs_valid[2];
+      decoder_req.rd        = x_issue_req_i.id;
       decoder_req_valid     = 1'b1;
     end
   end // proc_decode
@@ -506,21 +508,18 @@ module spatz_controller
             default: x_result_o.data                 = '0;
           endcase
         end
-        x_result_o.id    = spatz_req.xintf_id;
-        x_result_o.rd    = spatz_req.rd;
+        x_result_o.id    = spatz_req.rd;
         x_result_o.we    = 1'b1;
         x_result_valid_o = 1'b1;
       end else begin
         // Change configuration and send back vl
-        x_result_o.id    = spatz_req.xintf_id;
-        x_result_o.rd    = spatz_req.rd;
+        x_result_o.id    = spatz_req.rd;
         x_result_o.data  = elen_t'(vl_d);
         x_result_o.we    = 1'b1;
         x_result_valid_o = 1'b1;
       end
     end else if (vfu_rsp_valid) begin
-      x_result_o.id    = vfu_rsp.id;
-      x_result_o.rd    = vfu_rsp.rd;
+      x_result_o.id    = vfu_rsp.rd;
       x_result_o.data  = vfu_rsp.result;
       x_result_o.we    = 1'b1;
       x_result_valid_o = 1'b1;
