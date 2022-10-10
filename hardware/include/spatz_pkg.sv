@@ -38,6 +38,10 @@ package spatz_pkg;
   // Number of elements per VRF Bank
   localparam int unsigned NrWordsPerBank   = NrWordsPerVector / NrVRFBanks;
 
+  // Width of scalar register file adresses
+  // Depends on whether we have a FP regfile or not
+  localparam int GPRWidth = `ifndef FPU 5 `else (5 + `FPU) `endif;
+
   // Number of parallel vector instructions
   localparam int unsigned NrParallelInstructions = 4;
 
@@ -96,7 +100,10 @@ package spatz_pkg;
     // Config instruction
     VCFG,
     // VCSR
-    VCSR
+    VCSR,
+    // Floating point instructions
+    VFADD, VFSUB, VFMIN, VFMAX, VFSGNJ, VFSGNJN, VFSGNJX,
+    VFMUL, VFDIV, VFSQRT, VFMADD, VFMSUB, VFNMSUB, VFNMADD
   } op_e;
 
   // Execution units
@@ -147,40 +154,40 @@ package spatz_pkg;
   // Result from decoder
   typedef struct packed {
     // Instruction ID
-    spatz_id_t  id;
-    logic [4:0] xintf_id;
+    spatz_id_t id;
 
     // Used vector registers
     vreg_t vs1;
-    logic  use_vs1;
+    logic use_vs1;
     vreg_t vs2;
-    logic  use_vs2;
+    logic use_vs2;
     vreg_t vd;
-    logic  use_vd;
-    logic  vd_is_src;
+    logic use_vd;
+    logic vd_is_src;
 
     // Scalar input values
     elen_t rs1;
     elen_t rs2;
+    elen_t rsd;
     // Destination register
-    logic [4:0] rd;
-    logic       use_rd;
+    logic [GPRWidth-1:0] rd;
+    logic use_rd;
 
     // Instruction operation
-    op_e      op;
+    op_e op;
     ex_unit_e ex_unit;
 
     // Operation specific details
-    op_cfg_t   op_cgf;
-    op_csr_t   op_csr;
+    op_cfg_t op_cgf;
+    op_csr_t op_csr;
     op_arith_t op_arith;
-    op_mem_t   op_mem;
-    op_sld_t   op_sld;
+    op_mem_t op_mem;
+    op_sld_t op_sld;
 
     // Spatz config details
     vtype_t vtype;
-    vlen_t  vl;
-    vlen_t  vstart;
+    vlen_t vl;
+    vlen_t vstart;
   } spatz_req_t;
 
   //////////////////////////////////
@@ -189,16 +196,18 @@ package spatz_pkg;
 
   typedef struct packed {
     // Request id
-    logic [4:0] xintf_id;
+    logic [GPRWidth-1:0] rd;
 
     // Instruction
     logic [31:0] instr;
 
     // Scalar values
     elen_t rs1;
-    logic  rs1_valid;
+    logic rs1_valid;
     elen_t rs2;
-    logic  rs2_valid;
+    logic rs2_valid;
+    elen_t rsd;
+    logic rsd_valid;
   } decoder_req_t;
 
   typedef struct packed {
@@ -217,9 +226,9 @@ package spatz_pkg;
     spatz_id_t id;
 
     // WB
-    elen_t      result;
-    logic [4:0] rd;
-    logic       wb;
+    elen_t result;
+    logic [GPRWidth-1:0] rd;
+    logic wb;
   } vfu_rsp_t;
 
   ///////////////////
@@ -271,5 +280,57 @@ package spatz_pkg;
     SB_VLSU_VD_WD,
     SB_VSLDU_VD_WD
   } sb_port_e;
+
+  /////////////////////////
+  //  FPU Configuration  //
+  /////////////////////////
+
+  localparam bit FPU_EN = `ifdef FPU `FPU `else 0 `endif;
+
+  localparam fpnew_pkg::fpu_implementation_t FPUImplementation = '{
+    PipeRegs: '{
+      // FMA Block
+      '{
+        3, // FP32
+        4, // FP64
+        2, // FP16
+        1, // FP8
+        1  // FP16alt
+      },
+      // DIVSQRT
+      '{1, 1, 1, 1, 1},
+      // NONCOMP
+      '{1, 1, 1, 1, 1},
+      // CONV
+      '{2, 2, 2, 2, 2}
+    },
+    UnitTypes: '{
+      '{
+        fpnew_pkg::MERGED, fpnew_pkg::MERGED, fpnew_pkg::MERGED,
+        fpnew_pkg::MERGED, fpnew_pkg::MERGED
+      }, // FMA
+      '{
+        fpnew_pkg::DISABLED, fpnew_pkg::DISABLED, fpnew_pkg::DISABLED,
+        fpnew_pkg::DISABLED, fpnew_pkg::DISABLED
+      }, // DIVSQRT
+      '{
+        fpnew_pkg::PARALLEL, fpnew_pkg::PARALLEL, fpnew_pkg::PARALLEL,
+        fpnew_pkg::PARALLEL, fpnew_pkg::PARALLEL
+      }, // NONCOMP
+      '{
+        fpnew_pkg::MERGED, fpnew_pkg::MERGED, fpnew_pkg::MERGED,
+        fpnew_pkg::MERGED, fpnew_pkg::MERGED
+      } // CONV
+    },
+    PipeConfig: fpnew_pkg::BEFORE
+  };
+
+  localparam fpnew_pkg::fpu_features_t FPUFeatures = '{
+    Width        : ELEN,
+    EnableVectors: 1'b1,
+    EnableNanBox : 1'b1,
+    FpFmtMask    : {(ELEN >= 32), (ELEN >= 64), 1'b0, 1'b0, 1'b0},
+    IntFmtMask   : {1'b0, 1'b0, 1'b1, 1'b0}
+  };
 
 endpackage : spatz_pkg
