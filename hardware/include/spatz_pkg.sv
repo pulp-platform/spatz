@@ -103,7 +103,7 @@ package spatz_pkg;
     VCSR,
     // Floating point instructions
     VFADD, VFSUB, VFMIN, VFMAX, VFSGNJ, VFSGNJN, VFSGNJX,
-    VFMUL, VFDIV, VFSQRT, VFMADD, VFMSUB, VFNMSUB, VFNMADD
+    VFMUL, VFDIV, VFSQRT, VFCLASS, VFMADD, VFMSUB, VFNMSUB, VFNMADD
   } op_e;
 
   // Execution units

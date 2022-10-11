@@ -198,7 +198,7 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
       endcase
 
     // Finished the execution!
-    if (spatz_req_valid && vl_d >= spatz_req.vl && |result_valid) begin
+    if (spatz_req_valid && vl_d >= spatz_req.vl) begin
       spatz_req_ready         = spatz_req_valid;
       busy_d                  = 1'b0;
       vl_d                    = '0;
@@ -455,8 +455,9 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
           fpu_op       = fpnew_pkg::SGNJ;
           fpu_rnd_mode = fpnew_pkg::RDN;
         end
-        VFMADD: fpu_op = fpnew_pkg::FMADD;
-        VFMSUB: begin
+        VFCLASS: fpu_op = fpnew_pkg::CLASSIFY;
+        VFMADD : fpu_op = fpnew_pkg::FMADD;
+        VFMSUB : begin
           fpu_op      = fpnew_pkg::FMADD;
           fpu_op_mode = 1'b1;
         end
