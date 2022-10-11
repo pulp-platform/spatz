@@ -444,9 +444,6 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
           fpu_op_mode = 1'b1;
         end
 
-        VFDIV : fpu_op = fpnew_pkg::DIV;
-        VFSQRT: fpu_op = fpnew_pkg::SQRT;
-
         VFMIN: begin
           fpu_op       = fpnew_pkg::MINMAX;
           fpu_rnd_mode = fpnew_pkg::RNE;
@@ -492,14 +489,10 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
           fpu_op_mode  = 1'b1;
           fpu_rnd_mode = spatz_req.rm;
         end
-        VI2F: begin
-          fpu_op       = fpnew_pkg::I2F;
-          fpu_rnd_mode = spatz_req.rm;
-        end
+        VI2F: fpu_op = fpnew_pkg::I2F;
         VU2F: begin
-          fpu_op       = fpnew_pkg::I2F;
-          fpu_op_mode  = 1'b1;
-          fpu_rnd_mode = spatz_req.rm;
+          fpu_op      = fpnew_pkg::I2F;
+          fpu_op_mode = 1'b1;
         end
 
         default:;

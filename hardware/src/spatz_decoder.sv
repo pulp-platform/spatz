@@ -616,8 +616,6 @@ module spatz_decoder
         riscv_instr::FADD_S,
         riscv_instr::FSUB_S,
         riscv_instr::FMUL_S,
-        riscv_instr::FDIV_S,
-        riscv_instr::FSQRT_S,
         riscv_instr::FSGNJ_S,
         riscv_instr::FSGNJN_S,
         riscv_instr::FSGNJX_S,
@@ -657,8 +655,6 @@ module spatz_decoder
                 spatz_req.rsd = decoder_req_i.rs2;
               end
               riscv_instr::FMUL_S   : spatz_req.op = VFMUL;
-              riscv_instr::FDIV_S   : spatz_req.op = VFDIV;
-              riscv_instr::FSQRT_S  : spatz_req.op = VFSQRT;
               riscv_instr::FSGNJ_S  : spatz_req.op = VFSGNJ;
               riscv_instr::FSGNJN_S : spatz_req.op = VFSGNJN;
               riscv_instr::FSGNJX_S : spatz_req.op = VFSGNJX;
