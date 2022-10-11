@@ -136,8 +136,11 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
   logic [N_IPU*ELENB-1:0] pending_results;
   assign pending_results = tag.wb ? 4'hf : '1;
 
-  // Did we commit a word to the VRF?
+  // Did we issue a microoperation?
   logic word_issued;
+
+  // Did we commit a word to the VRF?
+  logic word_committed;
 
   // Currently running instructions
   logic [NrParallelInstructions-1:0] running_d, running_q;
@@ -174,7 +177,7 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
     vfu_rsp_o       = '0;
 
     // Change number of remaining elements
-    if (word_issued)
+    if (word_issued && word_committed)
       vl_d = vl_q + nr_elem_word;
 
     // Current state of the VFU
@@ -205,7 +208,7 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
       running_d[spatz_req.id] = 1'b0;
 
       // Is this an IPU instruction? If so, acknowledge directly
-      if (!FPU_EN || state_q == VFU_RunningIPU) begin
+      if (!FPU_EN || (state_q == VFU_RunningIPU && word_committed)) begin
         vfu_rsp_o.id     = spatz_req.id;
         vfu_rsp_o.rd     = spatz_req.rd;
         vfu_rsp_o.wb     = spatz_req.op_arith.is_scalar;
@@ -221,7 +224,7 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
       running_d[spatz_req.id] = 1'b1;
 
       // Change number of remaining elements
-      if (word_issued)
+      if (word_issued && word_committed)
         vl_d = vl_q + nr_elem_word;
     end
 
@@ -281,6 +284,9 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
   // Did we issue a word to the IPUs?
   assign word_issued = spatz_req_valid && &(in_ready | ~valid_operations) && !stall;
 
+  // Did the IPUs answer? (Only used in the IPU mode)
+  assign word_committed = spatz_req_valid && (&(result_valid | ~pending_results) || state_q == VFU_RunningFPU);
+
   ///////////////////////
   // Operand Requester //
   ///////////////////////
@@ -310,12 +316,12 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
       vrf_waddr_o = vreg_addr_d[2];
 
       // Did we commit a word already?
-      if (word_issued) begin
+      if (word_issued && word_committed) begin
         vreg_addr_d[0] = vreg_addr_d[0] + 1;
         vreg_addr_d[1] = vreg_addr_d[1] + 1;
         vreg_addr_d[2] = vreg_addr_d[2] + 1;
       end
-    end else if (spatz_req_valid && vl_q < spatz_req.vl && word_issued) begin
+    end else if (spatz_req_valid && vl_q < spatz_req.vl && word_issued && word_committed) begin
       vreg_addr_d[0] = vreg_addr_q[0] + 1;
       vreg_addr_d[1] = vreg_addr_q[1] + 1;
       vreg_addr_d[2] = vreg_addr_q[2] + 1;
