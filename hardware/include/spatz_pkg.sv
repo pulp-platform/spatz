@@ -104,6 +104,7 @@ package spatz_pkg;
     // Floating point instructions
     VFADD, VFSUB, VFMIN, VFMAX, VFSGNJ, VFSGNJN, VFSGNJX,
     VFMUL, VFDIV, VFSQRT, VFCLASS, VFLE, VFLT, VFEQ,
+    VF2I, VF2U, VI2F, VU2F,
     VFMADD, VFMSUB, VFNMSUB, VFNMADD
   } op_e;
 
@@ -170,9 +171,13 @@ package spatz_pkg;
     elen_t rs1;
     elen_t rs2;
     elen_t rsd;
+
     // Destination register
     logic [GPRWidth-1:0] rd;
     logic use_rd;
+
+    // Rounding mode
+    fpnew_pkg::roundmode_e rm;
 
     // Instruction operation
     op_e op;

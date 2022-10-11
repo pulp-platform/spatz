@@ -415,7 +415,7 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
     fpu_op           = fpnew_pkg::FMADD;
     fpu_src_fmt      = fpnew_pkg::FP32;
     fpu_dst_fmt      = fpnew_pkg::FP32;
-    fpu_int_fmt      = fpnew_pkg::INT8;
+    fpu_int_fmt      = fpnew_pkg::INT32;
     fpu_rnd_mode     = fpu_rnd_mode_i;
     fpu_op_mode      = 1'b0;
     fpu_vectorial_op = 1'b0;
@@ -432,8 +432,21 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
           fpu_op      = fpnew_pkg::ADD;
           fpu_op_mode = 1'b1;
         end
-        VFMUL: fpu_op = fpnew_pkg::MUL;
-        VFDIV: fpu_op = fpnew_pkg::DIV;
+        VFMUL  : fpu_op = fpnew_pkg::MUL;
+        VFMADD : fpu_op = fpnew_pkg::FMADD;
+        VFMSUB : begin
+          fpu_op      = fpnew_pkg::FMADD;
+          fpu_op_mode = 1'b1;
+        end
+        VFNMSUB: fpu_op = fpnew_pkg::FNMSUB;
+        VFNMADD: begin
+          fpu_op      = fpnew_pkg::FNMSUB;
+          fpu_op_mode = 1'b1;
+        end
+
+        VFDIV : fpu_op = fpnew_pkg::DIV;
+        VFSQRT: fpu_op = fpnew_pkg::SQRT;
+
         VFMIN: begin
           fpu_op       = fpnew_pkg::MINMAX;
           fpu_rnd_mode = fpnew_pkg::RNE;
@@ -442,7 +455,7 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
           fpu_op       = fpnew_pkg::MINMAX;
           fpu_rnd_mode = fpnew_pkg::RTZ;
         end
-        VFSQRT: fpu_op = fpnew_pkg::SQRT;
+
         VFSGNJ: begin
           fpu_op       = fpnew_pkg::SGNJ;
           fpu_rnd_mode = fpnew_pkg::RNE;
@@ -455,29 +468,40 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
           fpu_op       = fpnew_pkg::SGNJ;
           fpu_rnd_mode = fpnew_pkg::RDN;
         end
+
         VFCLASS: fpu_op = fpnew_pkg::CLASSIFY;
         VFLE   : begin
           fpu_op       = fpnew_pkg::CMP;
           fpu_rnd_mode = fpnew_pkg::RNE;
         end
-        VFLT   : begin
+        VFLT : begin
           fpu_op       = fpnew_pkg::CMP;
           fpu_rnd_mode = fpnew_pkg::RTZ;
         end
-        VFEQ   : begin
+        VFEQ : begin
           fpu_op       = fpnew_pkg::CMP;
           fpu_rnd_mode = fpnew_pkg::RDN;
         end
-        VFMADD : fpu_op = fpnew_pkg::FMADD;
-        VFMSUB : begin
-          fpu_op      = fpnew_pkg::FMADD;
-          fpu_op_mode = 1'b1;
+
+        VF2I: begin
+          fpu_op       = fpnew_pkg::F2I;
+          fpu_rnd_mode = spatz_req.rm;
         end
-        VFNMSUB: fpu_op = fpnew_pkg::FNMSUB;
-        VFNMADD: begin
-          fpu_op      = fpnew_pkg::FNMSUB;
-          fpu_op_mode = 1'b1;
+        VF2U: begin
+          fpu_op       = fpnew_pkg::F2I;
+          fpu_op_mode  = 1'b1;
+          fpu_rnd_mode = spatz_req.rm;
         end
+        VI2F: begin
+          fpu_op       = fpnew_pkg::I2F;
+          fpu_rnd_mode = spatz_req.rm;
+        end
+        VU2F: begin
+          fpu_op       = fpnew_pkg::I2F;
+          fpu_op_mode  = 1'b1;
+          fpu_rnd_mode = spatz_req.rm;
+        end
+
         default:;
       endcase
     end
