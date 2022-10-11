@@ -426,6 +426,9 @@ module spatz_controller
   always_comb begin : x_issue_resp
     x_issue_resp_o = '0;
 
+    // Is there something running on Spatz? If so, prevent Snitch from reading the fcsr register
+    x_issue_resp_o.float = |running_insn_q;
+
     // We have a new valid instruction
     if (decoder_rsp_valid && !decoder_rsp.instr_illegal) begin
       // Accept the new instruction
