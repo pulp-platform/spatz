@@ -624,6 +624,9 @@ module spatz_decoder
         riscv_instr::FMIN_S,
         riscv_instr::FMAX_S,
         riscv_instr::FCLASS_S,
+        riscv_instr::FLE_S,
+        riscv_instr::FLT_S,
+        riscv_instr::FEQ_S,
         riscv_instr::FMADD_S,
         riscv_instr::FMSUB_S,
         riscv_instr::FNMSUB_S,
@@ -657,6 +660,9 @@ module spatz_decoder
               riscv_instr::FMIN_S  : spatz_req.op = VFMIN;
               riscv_instr::FMAX_S  : spatz_req.op = VFMAX;
               riscv_instr::FCLASS_S: spatz_req.op = VFCLASS;
+              riscv_instr::FLE_S   : spatz_req.op = VFLE;
+              riscv_instr::FLT_S   : spatz_req.op = VFLT;
+              riscv_instr::FEQ_S   : spatz_req.op = VFEQ;
               riscv_instr::FMADD_S : spatz_req.op = VFMADD;
               riscv_instr::FMSUB_S : spatz_req.op = VFMSUB;
               riscv_instr::FNMADD_S: spatz_req.op = VFNMADD;

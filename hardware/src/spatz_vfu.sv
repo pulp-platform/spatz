@@ -456,6 +456,18 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
           fpu_rnd_mode = fpnew_pkg::RDN;
         end
         VFCLASS: fpu_op = fpnew_pkg::CLASSIFY;
+        VFLE   : begin
+          fpu_op       = fpnew_pkg::CMP;
+          fpu_rnd_mode = fpnew_pkg::RNE;
+        end
+        VFLT   : begin
+          fpu_op       = fpnew_pkg::CMP;
+          fpu_rnd_mode = fpnew_pkg::RTZ;
+        end
+        VFEQ   : begin
+          fpu_op       = fpnew_pkg::CMP;
+          fpu_rnd_mode = fpnew_pkg::RDN;
+        end
         VFMADD : fpu_op = fpnew_pkg::FMADD;
         VFMSUB : begin
           fpu_op      = fpnew_pkg::FMADD;
