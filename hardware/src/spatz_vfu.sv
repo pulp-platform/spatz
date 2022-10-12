@@ -47,7 +47,8 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
     vlen_t vstart;
     logic [idx_width(N_IPU*4):0] vl;
 
-    logic [GPRWidth-1:0] rd;
+    // Encodes both the scalar RD and the VD address in the VRF
+    vreg_addr_t vd_addr;
     logic wb;
     logic last;
   } vfu_tag_t;
@@ -89,10 +90,6 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
   logic [$clog2(N_IPU*4):0] nr_elem_word;
   assign nr_elem_word = N_IPU * (1 << (EW_32 - spatz_req.vtype.vsew));
 
-  // Did we reach the last elements of the instruction?
-  logic last_word;
-  assign last_word = spatz_req.vl <= vlen_t'(nr_elem_word);
-
   // Are we running integer or floating-point instructions?
   enum logic {
     VFU_RunningIPU, VFU_RunningFPU
@@ -100,23 +97,14 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
   `FF(state_q, state_d, VFU_RunningIPU)
 
   // Propagate the tags through the functional units
-  vfu_tag_t ipu_tag, fpu_tag, tag;
-  vfu_tag_t op_tag;
+  vfu_tag_t ipu_result_tag, fpu_result_tag, result_tag;
+  vfu_tag_t input_tag;
 
-  assign tag    = state_q == VFU_RunningIPU ? ipu_tag : fpu_tag;
-  assign op_tag = '{
-    id    : spatz_req.id,
-    rd    : spatz_req.rd,
-    wb    : spatz_req.op_arith.is_scalar,
-    last  : last_word,
-    vsew  : spatz_req.vtype.vsew,
-    vstart: spatz_req.vstart,
-    vl    : vl_q[idx_width(N_IPU*4):0]
-  };
+  assign result_tag = state_q == VFU_RunningIPU ? ipu_result_tag : fpu_result_tag;
 
   // Number of words advanced by vstart
   vlen_t vstart;
-  assign vstart = ((tag.vstart / N_IPU) >> (EW_32 - tag.vsew)) << (EW_32 - tag.vsew);
+  assign vstart = ((result_tag.vstart / N_IPU) >> (EW_32 - result_tag.vsew)) << (EW_32 - result_tag.vsew);
 
   // Should we stall?
   logic stall;
@@ -134,7 +122,7 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
 
   // Pending results
   logic [N_IPU*ELENB-1:0] pending_results;
-  assign pending_results = tag.wb ? 4'hf : '1;
+  assign pending_results = result_tag.wb ? 4'hf : '1;
 
   // Did we issue a microoperation?
   logic word_issued;
@@ -156,6 +144,9 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
   // Scalar results (sent back to Snitch)
   elen_t scalar_result;
 
+  // Is this the last request?
+  logic last_request;
+
   // Are any results valid?
   logic [N_IPU*ELENB-1:0] result_valid;
 
@@ -168,6 +159,9 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
 
     // We are not stalling
     stall = 1'b0;
+
+    // This is not the last request
+    last_request = 1'b0;
 
     // We are handling an instruction
     spatz_req_ready = 1'b0;
@@ -205,6 +199,7 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
       spatz_req_ready         = spatz_req_valid;
       busy_d                  = 1'b0;
       vl_d                    = '0;
+      last_request            = 1'b1;
       running_d[spatz_req.id] = 1'b0;
 
       // Is this an IPU instruction? If so, acknowledge directly
@@ -229,10 +224,10 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
     end
 
     // An FPU instruction finished execution
-    if (FPU_EN && state_q == VFU_RunningFPU && tag.last) begin
-      vfu_rsp_o.id     = tag.id;
-      vfu_rsp_o.rd     = tag.rd;
-      vfu_rsp_o.wb     = tag.wb;
+    if (FPU_EN && state_q == VFU_RunningFPU && result_tag.last) begin
+      vfu_rsp_o.id     = result_tag.id;
+      vfu_rsp_o.rd     = result_tag.vd_addr[GPRWidth-1:0];
+      vfu_rsp_o.wb     = result_tag.wb;
       vfu_rsp_o.result = scalar_result;
       vfu_rsp_valid_o  = 1'b1;
     end
@@ -304,7 +299,18 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
     vreg_addr_d = vreg_addr_q;
 
     vrf_raddr_o = vreg_addr_d;
-    vrf_waddr_o = vreg_addr_d[2];
+    vrf_waddr_o = result_tag.vd_addr;
+
+    // Tag (propagated with the operations)
+    input_tag = '{
+      id     : spatz_req.id,
+      vsew   : spatz_req.vtype.vsew,
+      vstart : spatz_req.vstart,
+      vl     : vl_q[idx_width(N_IPU*4):0],
+      vd_addr: spatz_req.op_arith.is_scalar ? vreg_addr_t'(spatz_req.rd) : vreg_addr_q[2],
+      wb     : spatz_req.op_arith.is_scalar,
+      last   : last_request
+    };
 
     if (spatz_req_valid && vl_q == '0) begin
       vreg_addr_d[0] = (spatz_req.vs2 + vstart) << $clog2(NrWordsPerVector);
@@ -314,6 +320,8 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
       // Direct feedthrough
       vrf_raddr_o = vreg_addr_d;
       vrf_waddr_o = vreg_addr_d[2];
+      if (!spatz_req.op_arith.is_scalar)
+        input_tag.vd_addr = vreg_addr_d[2];
 
       // Did we commit a word already?
       if (word_issued && word_committed) begin
@@ -339,24 +347,17 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
 
     // Got a new result
     if (&(result_valid | ~pending_results)) begin
-      vreg_we  = !tag.wb;
+      vreg_we  = !result_tag.wb;
       vreg_wbe = '1;
 
       // If we are in the last group or at the start and vstart is nonzero,
       // create the byte enable (be) mask for write back to register file.
       if (spatz_req.vstart != '0 && busy_q == 1'b0)
         unique case (spatz_req.vtype.vsew)
-          EW_8 : vreg_wbe   = ~(vreg_be_t'('1) >> ((N_IPU * (1 << (EW_32 - tag.vsew))) - tag.vstart[idx_width(N_IPU * 4)-1:0]));
-          EW_16: vreg_wbe   = ~(vreg_be_t'('1) >> ((N_IPU * (1 << (EW_32 - tag.vsew))) - tag.vstart[idx_width(N_IPU * 2)-1:0]));
-          default: vreg_wbe = ~(vreg_be_t'('1) >> ((N_IPU * (1 << (EW_32 - tag.vsew))) - tag.vstart[idx_width(N_IPU * 1)-1:0]));
+          EW_8 : vreg_wbe   = ~(vreg_be_t'('1) >> ((N_IPU * (1 << (EW_32 - result_tag.vsew))) - result_tag.vstart[idx_width(N_IPU * 4)-1:0]));
+          EW_16: vreg_wbe   = ~(vreg_be_t'('1) >> ((N_IPU * (1 << (EW_32 - result_tag.vsew))) - result_tag.vstart[idx_width(N_IPU * 2)-1:0]));
+          default: vreg_wbe = ~(vreg_be_t'('1) >> ((N_IPU * (1 << (EW_32 - result_tag.vsew))) - result_tag.vstart[idx_width(N_IPU * 1)-1:0]));
         endcase
-      else
-        if (last_word)
-          unique case (tag.vsew)
-            EW_8 : vreg_wbe   = vreg_be_t'('1) >> tag.vl[idx_width(N_IPU * 4):0];
-            EW_16: vreg_wbe   = vreg_be_t'('1) >> tag.vl[idx_width(N_IPU * 2):0];
-            default: vreg_wbe = vreg_be_t'('1) >> tag.vl[idx_width(N_IPU * 1):0];
-          endcase
     end
   end : operand_req_proc
 
@@ -385,7 +386,7 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
       .op_s1_i          (operand1[ipu*ELEN +: ELEN]                                                                      ),
       .op_s2_i          (operand2[ipu*ELEN +: ELEN]                                                                      ),
       .op_d_i           (operand3[ipu*ELEN +: ELEN]                                                                      ),
-      .tag_i            (op_tag                                                                                          ),
+      .tag_i            (input_tag                                                                                       ),
       .carry_i          ('0                                                                                              ),
       .sew_i            (spatz_req.vtype.vsew                                                                            ),
       .be_o             (/* Unused */                                                                                    ),
@@ -397,7 +398,7 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
 
     assign ipu_in_ready[ipu*ELENB +: ELENB] = '1;
     if (ipu == 0) begin: gen_ipu_tag
-      assign ipu_tag = int_ipu_tag;
+      assign ipu_result_tag = int_ipu_tag;
     end: gen_ipu_tag
   end : gen_ipus
 
@@ -419,19 +420,34 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
 
   always_comb begin: gen_fpu_decoder
     fpu_op           = fpnew_pkg::FMADD;
-    fpu_src_fmt      = fpnew_pkg::FP32;
-    fpu_dst_fmt      = fpnew_pkg::FP32;
-    fpu_int_fmt      = fpnew_pkg::INT32;
     fpu_rnd_mode     = fpu_rnd_mode_i;
     fpu_op_mode      = 1'b0;
     fpu_vectorial_op = 1'b0;
     is_fpu_busy      = |fpu_busy_q;
+    fpu_src_fmt      = fpnew_pkg::FP32;
+    fpu_dst_fmt      = fpnew_pkg::FP32;
+    fpu_int_fmt      = fpnew_pkg::INT32;
 
     fpu_status_o = '0;
     for (int fpu = 0; fpu < N_IPU; fpu++)
-      fpu_status_o |= fpu_status;
+      fpu_status_o |= fpu_status[fpu];
 
     if (FPU_EN) begin
+      unique case (spatz_req.vtype.vsew)
+        EW_32: begin
+          fpu_src_fmt = fpnew_pkg::FP32;
+          fpu_dst_fmt = fpnew_pkg::FP32;
+          fpu_int_fmt = fpnew_pkg::INT32;
+        end
+        EW_16: begin
+          fpu_src_fmt      = fpnew_pkg::FP16;
+          fpu_dst_fmt      = fpnew_pkg::FP16;
+          fpu_int_fmt      = fpnew_pkg::INT16;
+          fpu_vectorial_op = 1'b1;
+        end
+        default:;
+      endcase
+
       unique case (spatz_req.op)
         VFADD: fpu_op = fpnew_pkg::ADD;
         VFSUB: begin
@@ -510,10 +526,15 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
     if (FPU_EN) begin: gen_fpu
       logic int_fpu_result_valid;
       logic int_fpu_in_ready;
-      vfu_tag_t int_fpu_tag;
+      vfu_tag_t tag;
 
       assign fpu_in_ready[fpu*ELENB +: ELENB]     = {ELENB{int_fpu_in_ready}};
       assign fpu_result_valid[fpu*ELENB +: ELENB] = {ELENB{int_fpu_result_valid}};
+
+      elen_t fpu_operand1, fpu_operand2, fpu_operand3;
+      assign fpu_operand1 = operand1[fpu*ELEN +: ELEN];
+      assign fpu_operand2 = (fpu_op == fpnew_pkg::ADD) ? operand1[fpu*ELEN +: ELEN] : operand2[fpu*ELEN +: ELEN];
+      assign fpu_operand3 = (fpu_op == fpnew_pkg::ADD) ? operand2[fpu*ELEN +: ELEN] : operand3[fpu*ELEN +: ELEN];
 
       fpnew_top #(
         .Features      (FPUFeatures      ),
@@ -524,7 +545,7 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
         .rst_ni        (rst_ni                                                                                         ),
         .flush_i       (1'b0                                                                                           ),
         .busy_o        (fpu_busy_d[fpu]                                                                                ),
-        .operands_i    ({operand3[fpu*ELEN +: ELEN], operand2[fpu*ELEN +: ELEN], operand1[fpu*ELEN +: ELEN]}           ),
+        .operands_i    ({fpu_operand3, fpu_operand2, fpu_operand1}                                                     ),
         // Only the FPU0 executes scalar instructions
         .in_valid_i    (spatz_req_valid && operands_ready && (!spatz_req.op_arith.is_scalar || fpu == 0) && is_fpu_insn),
         .in_ready_o    (int_fpu_in_ready                                                                               ),
@@ -534,17 +555,17 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
         .int_fmt_i     (fpu_int_fmt                                                                                    ),
         .vectorial_op_i(fpu_vectorial_op                                                                               ),
         .op_mod_i      (fpu_op_mode                                                                                    ),
-        .tag_i         (op_tag                                                                                         ),
+        .tag_i         (input_tag                                                                                      ),
         .rnd_mode_i    (fpu_rnd_mode                                                                                   ),
         .result_o      (fpu_result[fpu*ELEN +: ELEN]                                                                   ),
         .out_valid_o   (int_fpu_result_valid                                                                           ),
         .out_ready_i   (result_ready                                                                                   ),
         .status_o      (fpu_status[fpu]                                                                                ),
-        .tag_o         (int_fpu_tag                                                                                    )
+        .tag_o         (tag                                                                                            )
       );
 
       if (fpu == 0) begin: gen_fpu_tag
-        assign fpu_tag = int_fpu_tag;
+        assign fpu_result_tag = tag;
       end: gen_fpu_tag
     end: gen_fpu else begin: gen_no_fpu
       assign fpu_status[fpu]                      = '0;
@@ -553,9 +574,9 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
       assign fpu_result[fpu*ELEN +: ELEN]         = '0;
       assign fpu_result_valid[fpu*ELENB +: ELENB] = '0;
       if (fpu == 0) begin: gen_fpu_tag
-        assign fpu_tag = '0;
-      end: gen_fpu_tag
-    end: gen_no_fpu
+        assign fpu_result_tag = '0;
+      end : gen_fpu_tag
+    end : gen_no_fpu
   end : gen_fpus
 
 endmodule : spatz_vfu

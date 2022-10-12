@@ -568,6 +568,98 @@ module spatz_decoder
           endcase // Arithmetic Instruction Type
         end
 
+        // Vector floating-point instructions
+        riscv_instr::VFADD_VV,
+        riscv_instr::VFADD_VF,
+        riscv_instr::VFRSUB_VF,
+        riscv_instr::VFMIN_VV,
+        riscv_instr::VFMIN_VF,
+        riscv_instr::VFMAX_VV,
+        riscv_instr::VFMAX_VF,
+        riscv_instr::VFSGNJ_VV,
+        riscv_instr::VFSGNJ_VF,
+        riscv_instr::VFSGNJN_VV,
+        riscv_instr::VFSGNJN_VF,
+        riscv_instr::VFSGNJX_VV,
+        riscv_instr::VFSGNJX_VF,
+        riscv_instr::VMFEQ_VV,
+        riscv_instr::VMFEQ_VF,
+        riscv_instr::VMFLE_VV,
+        riscv_instr::VMFLE_VF,
+        riscv_instr::VMFLT_VV,
+        riscv_instr::VMFLT_VF,
+        riscv_instr::VMFNE_VV,
+        riscv_instr::VMFNE_VF,
+        riscv_instr::VMFGT_VF,
+        riscv_instr::VMFGE_VF,
+        riscv_instr::VFMUL_VV,
+        riscv_instr::VFMUL_VF,
+        riscv_instr::VFMADD_VV,
+        riscv_instr::VFMADD_VF,
+        riscv_instr::VFNMADD_VV,
+        riscv_instr::VFNMADD_VF,
+        riscv_instr::VFMSUB_VV,
+        riscv_instr::VFMSUB_VF,
+        riscv_instr::VFNMSUB_VV,
+        riscv_instr::VFNMSUB_VF,
+        riscv_instr::VFMACC_VV,
+        riscv_instr::VFMACC_VF,
+        riscv_instr::VFNMACC_VV,
+        riscv_instr::VFNMACC_VF,
+        riscv_instr::VFMSAC_VV,
+        riscv_instr::VFMSAC_VF,
+        riscv_instr::VFNMSAC_VV,
+        riscv_instr::VFNMSAC_VF,
+        riscv_instr::VFCVT_F_X_V,
+        riscv_instr::VFCVT_F_XU_V,
+        riscv_instr::VFCVT_X_F_V,
+        riscv_instr::VFCVT_XU_F_V,
+        riscv_instr::VFCVT_RTZ_X_F_V,
+        riscv_instr::VFCVT_RTZ_XU_F_V,
+        riscv_instr::VFCLASS_V,
+        riscv_instr::VFMV_V_F: begin
+          if (spatz_pkg::FPU_EN) begin
+            automatic opcodev_func3_e func3 = opcodev_func3_e'(decoder_req_i.instr[14:12]);
+            automatic vreg_t arith_s1       = decoder_req_i.instr[19:15];
+            automatic vreg_t arith_s2       = decoder_req_i.instr[24:20];
+            automatic vreg_t arith_d        = decoder_req_i.instr[11:7];
+            automatic logic arith_vm        = decoder_req_i.instr[25];
+
+            spatz_req.op_arith.vm = arith_vm;
+            spatz_req.op_sld.vm   = arith_vm;
+            spatz_req.use_vs2     = 1'b1;
+            spatz_req.vs2         = arith_s2;
+            spatz_req.use_vd      = 1'b1;
+            spatz_req.vd          = arith_d;
+            spatz_req.ex_unit     = VFU;
+            spatz_req.rm          = fpnew_pkg::roundmode_e'(decoder_req_i.instr[14:12]);
+
+            // Decide which operands to use (vs1 or rs1 or imm)
+            unique case (func3)
+              OPFVV: begin
+                spatz_req.use_vs1 = 1'b1;
+                spatz_req.vs1     = arith_s1;
+              end
+              OPFVF: begin
+                spatz_req.rs1 = decoder_req_i.rs1;
+                illegal_instr = ~decoder_req_i.rs1_valid;
+              end
+              default: illegal_instr = 1'b1;
+            endcase
+
+            unique casez (decoder_req_i.instr)
+              riscv_instr::VFADD_VV,
+              riscv_instr::VFADD_VF: spatz_req.op = VFADD;
+              riscv_instr::VFSUB_VV,
+              riscv_instr::VFSUB_VF: spatz_req.op = VFSUB;
+              riscv_instr::VFMIN_VV,
+              riscv_instr::VFMIN_VF: spatz_req.op = VFMIN;
+              riscv_instr::VFMAX_VV,
+              riscv_instr::VFMAX_VF: spatz_req.op = VFMAX;
+            endcase
+          end
+        end
+
         // Scalar multiplication
         riscv_instr::MUL,
         riscv_instr::MULH,
@@ -644,16 +736,8 @@ module spatz_decoder
             spatz_req.rm                 = fpnew_pkg::roundmode_e'(decoder_req_i.instr[14:12]);
 
             unique casez (decoder_req_i.instr)
-              riscv_instr::FADD_S : begin
-                spatz_req.op  = VFADD;
-                spatz_req.rs2 = decoder_req_i.rs1;
-                spatz_req.rsd = decoder_req_i.rs2;
-              end
-              riscv_instr::FSUB_S : begin
-                spatz_req.op  = VFSUB;
-                spatz_req.rs2 = decoder_req_i.rs1;
-                spatz_req.rsd = decoder_req_i.rs2;
-              end
+              riscv_instr::FADD_S   : spatz_req.op = VFADD;
+              riscv_instr::FSUB_S   : spatz_req.op = VFSUB;
               riscv_instr::FMUL_S   : spatz_req.op = VFMUL;
               riscv_instr::FSGNJ_S  : spatz_req.op = VFSGNJ;
               riscv_instr::FSGNJN_S : spatz_req.op = VFSGNJN;

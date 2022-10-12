@@ -297,9 +297,9 @@ package spatz_pkg;
     PipeRegs: '{
       // FMA Block
       '{
-        3, // FP32
+        1, // FP32
         4, // FP64
-        2, // FP16
+        1, // FP16
         1, // FP8
         1  // FP16alt
       },
@@ -335,7 +335,7 @@ package spatz_pkg;
     Width        : ELEN,
     EnableVectors: 1'b1,
     EnableNanBox : 1'b1,
-    FpFmtMask    : {(ELEN >= 32), (ELEN >= 64), 1'b0, 1'b0, 1'b0},
+    FpFmtMask    : {(ELEN >= 32), (ELEN >= 64), 1'b1, 1'b0, 1'b0},
     IntFmtMask   : {1'b0, 1'b0, 1'b1, 1'b0}
   };
 
