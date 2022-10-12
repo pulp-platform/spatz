@@ -10,6 +10,7 @@
 module spatz_decoder
   import spatz_pkg::*;
   import rvv_pkg::*;
+  import fpnew_pkg::roundmode_e;
   (
     input  logic         clk_i,
     input  logic         rst_ni,
@@ -18,7 +19,9 @@ module spatz_decoder
     input  logic         decoder_req_valid_i,
     // Response
     output decoder_rsp_t decoder_rsp_o,
-    output logic         decoder_rsp_valid_o
+    output logic         decoder_rsp_valid_o,
+    // FPU untimed sidechannel
+    input  roundmode_e   fpu_rnd_mode_i
   );
 
   /////////////
@@ -632,7 +635,7 @@ module spatz_decoder
             spatz_req.use_vd      = 1'b1;
             spatz_req.vd          = arith_d;
             spatz_req.ex_unit     = VFU;
-            spatz_req.rm          = fpnew_pkg::roundmode_e'(decoder_req_i.instr[14:12]);
+            spatz_req.rm          = fpu_rnd_mode_i;
 
             // Decide which operands to use (vs1 or rs1 or imm)
             unique case (func3)
@@ -653,9 +656,15 @@ module spatz_decoder
               riscv_instr::VFSUB_VV,
               riscv_instr::VFSUB_VF: spatz_req.op = VFSUB;
               riscv_instr::VFMIN_VV,
-              riscv_instr::VFMIN_VF: spatz_req.op = VFMIN;
+              riscv_instr::VFMIN_VF: begin
+                spatz_req.op = VFMINMAX;
+                spatz_req.rm = fpnew_pkg::RNE;
+              end
               riscv_instr::VFMAX_VV,
-              riscv_instr::VFMAX_VF: spatz_req.op = VFMAX;
+              riscv_instr::VFMAX_VF: begin
+                spatz_req.op = VFMINMAX;
+                spatz_req.rm = fpnew_pkg::RTZ;
+              end
             endcase
           end
         end
@@ -733,25 +742,55 @@ module spatz_decoder
             spatz_req.rs2                = decoder_req_i.rs2;
             spatz_req.rsd                = decoder_req_i.rsd;
             spatz_req.op_arith.is_scalar = 1'b1;
-            spatz_req.rm                 = fpnew_pkg::roundmode_e'(decoder_req_i.instr[14:12]);
+            spatz_req.rm                 = fpu_rnd_mode_i;
 
             unique casez (decoder_req_i.instr)
-              riscv_instr::FADD_S   : spatz_req.op = VFADD;
-              riscv_instr::FSUB_S   : spatz_req.op = VFSUB;
-              riscv_instr::FMUL_S   : spatz_req.op = VFMUL;
-              riscv_instr::FSGNJ_S  : spatz_req.op = VFSGNJ;
-              riscv_instr::FSGNJN_S : spatz_req.op = VFSGNJN;
-              riscv_instr::FSGNJX_S : spatz_req.op = VFSGNJX;
-              riscv_instr::FMIN_S   : spatz_req.op = VFMIN;
-              riscv_instr::FMAX_S   : spatz_req.op = VFMAX;
+              riscv_instr::FADD_S  : spatz_req.op = VFADD;
+              riscv_instr::FSUB_S  : spatz_req.op = VFSUB;
+              riscv_instr::FMUL_S  : spatz_req.op = VFMUL;
+              riscv_instr::FSGNJ_S : begin
+                spatz_req.op = VFSGNJ;
+                spatz_req.rm = fpnew_pkg::RNE;
+              end
+              riscv_instr::FSGNJN_S : begin
+                spatz_req.op = VFSGNJ;
+                spatz_req.rm = fpnew_pkg::RTZ;
+              end
+              riscv_instr::FSGNJX_S : begin
+                spatz_req.op = VFSGNJ;
+                spatz_req.rm = fpnew_pkg::RDN;
+              end
+              riscv_instr::FMIN_S : begin
+                spatz_req.op = VFMINMAX;
+                spatz_req.rm = fpnew_pkg::RNE;
+              end
+              riscv_instr::FMAX_S : begin
+                spatz_req.op = VFMINMAX;
+                spatz_req.rm = fpnew_pkg::RTZ;
+              end
               riscv_instr::FCLASS_S : spatz_req.op = VFCLASS;
-              riscv_instr::FLE_S    : spatz_req.op = VFLE;
-              riscv_instr::FLT_S    : spatz_req.op = VFLT;
-              riscv_instr::FEQ_S    : spatz_req.op = VFEQ;
+              riscv_instr::FLE_S    : begin
+                spatz_req.op = VFCMP;
+                spatz_req.rm = fpnew_pkg::RNE;
+              end
+              riscv_instr::FLT_S : begin
+                spatz_req.op = VFCMP;
+                spatz_req.rm = fpnew_pkg::RTZ;
+              end
+              riscv_instr::FEQ_S : begin
+                spatz_req.op = VFCMP;
+                spatz_req.rm = fpnew_pkg::RDN;
+              end
               riscv_instr::FCVT_S_W : spatz_req.op = VI2F;
               riscv_instr::FCVT_S_WU: spatz_req.op = VU2F;
-              riscv_instr::FCVT_W_S : spatz_req.op = VF2I;
-              riscv_instr::FCVT_WU_S: spatz_req.op = VF2U;
+              riscv_instr::FCVT_W_S : begin
+                spatz_req.op = VF2I;
+                spatz_req.rm = fpnew_pkg::roundmode_e'(decoder_req_i.instr[14:12]);
+              end
+              riscv_instr::FCVT_WU_S: begin
+                spatz_req.op = VF2U;
+                spatz_req.rm = fpnew_pkg::roundmode_e'(decoder_req_i.instr[14:12]);
+              end
               riscv_instr::FMADD_S  : spatz_req.op = VFMADD;
               riscv_instr::FMSUB_S  : spatz_req.op = VFMSUB;
               riscv_instr::FNMADD_S : spatz_req.op = VFNMADD;

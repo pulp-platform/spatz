@@ -32,7 +32,6 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
     input  vreg_data_t [2:0] vrf_rdata_i,
     input  logic       [2:0] vrf_rvalid_i,
     // FPU side channel
-    input  roundmode_e       fpu_rnd_mode_i,
     output status_t          fpu_status_o
   );
 
@@ -409,7 +408,6 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
   fpnew_pkg::operation_e fpu_op;
   fpnew_pkg::fp_format_e fpu_src_fmt, fpu_dst_fmt;
   fpnew_pkg::int_format_e fpu_int_fmt;
-  fpnew_pkg::roundmode_e fpu_rnd_mode;
   logic fpu_op_mode;
   logic fpu_vectorial_op;
 
@@ -420,7 +418,6 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
 
   always_comb begin: gen_fpu_decoder
     fpu_op           = fpnew_pkg::FMADD;
-    fpu_rnd_mode     = fpu_rnd_mode_i;
     fpu_op_mode      = 1'b0;
     fpu_vectorial_op = 1'b0;
     is_fpu_busy      = |fpu_busy_q;
@@ -466,50 +463,17 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
           fpu_op_mode = 1'b1;
         end
 
-        VFMIN: begin
-          fpu_op       = fpnew_pkg::MINMAX;
-          fpu_rnd_mode = fpnew_pkg::RNE;
-        end
-        VFMAX: begin
-          fpu_op       = fpnew_pkg::MINMAX;
-          fpu_rnd_mode = fpnew_pkg::RTZ;
-        end
+        VFMINMAX: fpu_op = fpnew_pkg::MINMAX;
 
-        VFSGNJ: begin
-          fpu_op       = fpnew_pkg::SGNJ;
-          fpu_rnd_mode = fpnew_pkg::RNE;
-        end
-        VFSGNJN: begin
-          fpu_op       = fpnew_pkg::SGNJ;
-          fpu_rnd_mode = fpnew_pkg::RTZ;
-        end
-        VFSGNJX: begin
-          fpu_op       = fpnew_pkg::SGNJ;
-          fpu_rnd_mode = fpnew_pkg::RDN;
-        end
 
+        VFSGNJ : fpu_op = fpnew_pkg::SGNJ;
         VFCLASS: fpu_op = fpnew_pkg::CLASSIFY;
-        VFLE   : begin
-          fpu_op       = fpnew_pkg::CMP;
-          fpu_rnd_mode = fpnew_pkg::RNE;
-        end
-        VFLT : begin
-          fpu_op       = fpnew_pkg::CMP;
-          fpu_rnd_mode = fpnew_pkg::RTZ;
-        end
-        VFEQ : begin
-          fpu_op       = fpnew_pkg::CMP;
-          fpu_rnd_mode = fpnew_pkg::RDN;
-        end
+        VFCMP  : fpu_op = fpnew_pkg::CMP;
 
-        VF2I: begin
-          fpu_op       = fpnew_pkg::F2I;
-          fpu_rnd_mode = spatz_req.rm;
-        end
+        VF2I: fpu_op = fpnew_pkg::F2I;
         VF2U: begin
-          fpu_op       = fpnew_pkg::F2I;
-          fpu_op_mode  = 1'b1;
-          fpu_rnd_mode = spatz_req.rm;
+          fpu_op      = fpnew_pkg::F2I;
+          fpu_op_mode = 1'b1;
         end
         VI2F: fpu_op = fpnew_pkg::I2F;
         VU2F: begin
@@ -556,7 +520,7 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
         .vectorial_op_i(fpu_vectorial_op                                                                               ),
         .op_mod_i      (fpu_op_mode                                                                                    ),
         .tag_i         (input_tag                                                                                      ),
-        .rnd_mode_i    (fpu_rnd_mode                                                                                   ),
+        .rnd_mode_i    (spatz_req.rm                                                                                   ),
         .result_o      (fpu_result[fpu*ELEN +: ELEN]                                                                   ),
         .out_valid_o   (int_fpu_result_valid                                                                           ),
         .out_ready_i   (result_ready                                                                                   ),
