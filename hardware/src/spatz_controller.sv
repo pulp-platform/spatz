@@ -379,7 +379,7 @@ module spatz_controller
           // Is this a scalar request?
           if (spatz_req.op_arith.is_scalar) begin
             spatz_req.vtype.vsew = EW_32;
-            spatz_req.vl         = 1 << EW_32;
+            spatz_req.vl         = N_IPU * (1 << (EW_32 - spatz_req.vtype.vsew));
             spatz_req.vstart     = '0;
           end
         end
