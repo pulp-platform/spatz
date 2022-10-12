@@ -665,6 +665,7 @@ module spatz_decoder
                 spatz_req.op = VFMINMAX;
                 spatz_req.rm = fpnew_pkg::RTZ;
               end
+              default;
             endcase
           end
         end
@@ -686,9 +687,8 @@ module spatz_decoder
             riscv_instr::MUL   : spatz_req.op = VMUL;
             riscv_instr::MULH  : spatz_req.op = VMULH;
             riscv_instr::MULHU : spatz_req.op = VMULHU;
-            riscv_instr::MULHSU: begin
-              spatz_req.op = VMULHSU;
-            end
+            riscv_instr::MULHSU: spatz_req.op = VMULHSU;
+            default;
           endcase
         end
 
@@ -710,6 +710,7 @@ module spatz_decoder
             riscv_instr::DIVU: spatz_req.op = VDIVU;
             riscv_instr::REM : spatz_req.op = VREM;
             riscv_instr::REMU: spatz_req.op = VREMU;
+            default;
           endcase
         end
 
@@ -795,6 +796,7 @@ module spatz_decoder
               riscv_instr::FMSUB_S  : spatz_req.op = VFMSUB;
               riscv_instr::FNMADD_S : spatz_req.op = VFNMADD;
               riscv_instr::FNMSUB_S : spatz_req.op = VFNMSUB;
+              default;
             endcase
           end else
             illegal_instr = 1'b1;
