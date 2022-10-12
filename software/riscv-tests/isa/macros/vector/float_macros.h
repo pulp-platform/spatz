@@ -60,6 +60,11 @@
 #define RM_RUP 0x3
 #define RM_RMM 0x4
 
+typedef union float_hex {
+  float       f;
+  uint32_t ui32;
+} float_hex;
+
 typedef union double_hex {
   double      d;
   uint64_t ui64;
@@ -68,8 +73,8 @@ typedef union double_hex {
 // Check fcsr.fflags against an expected FFLAGS value
 #define CHECK_FFLAGS(FFLAGS)                                                                             \
   do {                                                                                                   \
-    uint64_t gold_ff = FFLAGS;                                                                           \
-    uint64_t      ff;                                                                                    \
+    const unsigned int gold_ff = FFLAGS;                                                                 \
+    unsigned int ff;                                                                                     \
     asm volatile ("frflags %0" : "=r" (ff));                                                             \
     if (ff != gold_ff) {                                                                                 \
       printf("fflags check FAILED. Current fflags is 0x%02lx, while expecting 0x%02lx.\n", ff, gold_ff); \
@@ -81,7 +86,8 @@ typedef union double_hex {
 // Change rounding-mode
 #define CHANGE_RM(NEW_RM)                                                                              \
   do {                                                                                                 \
-    asm volatile ("fsrm %0" :: "r" (NEW_RM));                                                          \
+    const unsigned int rm = NEW_RM;                                                                    \
+    asm volatile ("fsrm %0" :: "r" (rm));                                                              \
   } while(0)
 
 // Check fcsr.fflags against an expected FFLAGS value
@@ -119,6 +125,20 @@ typedef union double_hex {
       num_failed++;                                                                                                                               \
       return;                                                                                                                                     \
     }                                                                                                                                             \
+  } while(0)
+
+// NaN-Box a 16-bit IEEE 754 half float in a 32-bit float
+#define BOX_HALF_IN_FLOAT(VAR_NAME, VAL_16B)                      \
+  do {                                                            \
+    float_hex nan_boxed_val;                                      \
+    nan_boxed_val.ui32 = ((uint32_t) 0xffff << 16) | VAL_16B;     \
+    VAR_NAME = nan_boxed_val.f;                                   \
+  } while(0)
+#define BOX_FLOAT_IN_FLOAT(VAR_NAME, VAL_32B) \
+  do {                                        \
+    float_hex nan_boxed_val;                  \
+    nan_boxed_val.ui32 = VAL_32B;             \
+    VAR_NAME = nan_boxed_val.f;               \
   } while(0)
 
 // NaN-Box a 16-bit IEEE 754 half float in a 64-bit double
