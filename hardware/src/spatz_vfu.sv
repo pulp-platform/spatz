@@ -283,7 +283,7 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
   assign result_valid = state_q == VFU_RunningIPU ? ipu_result_valid : fpu_result_valid;
 
   assign scalar_result = spatz_req.op_arith.is_scalar ? result[ELEN-1:0] : '0;
-  assign result_ready  = &(result_valid | ~pending_results) && (result_tag.wb || vrf_wvalid_i);
+  assign result_ready  = &(result_valid | ~pending_results) && ((result_tag.wb && vfu_rsp_ready_i) || vrf_wvalid_i);
 
   // Did we issue a word to the IPUs?
   assign word_issued = spatz_req_valid && &(in_ready | ~valid_operations) && !stall;
@@ -328,7 +328,6 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
 
       // Direct feedthrough
       vrf_raddr_o = vreg_addr_d;
-      vrf_waddr_o = vreg_addr_d[2];
       if (!spatz_req.op_arith.is_scalar)
         input_tag.vd_addr = vreg_addr_d[2];
 
@@ -375,7 +374,7 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
   assign vrf_we_o    = vreg_we;
   assign vrf_wbe_o   = vreg_wbe;
   assign vrf_wdata_o = result;
-  assign vrf_id_o    = {4{spatz_req.id}};
+  assign vrf_id_o    = {result_tag.id, {3{spatz_req.id}}};
 
   //////////
   // IPUs //
