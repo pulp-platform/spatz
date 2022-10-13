@@ -283,7 +283,7 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
   assign result_valid = state_q == VFU_RunningIPU ? ipu_result_valid : fpu_result_valid;
 
   assign scalar_result = spatz_req.op_arith.is_scalar ? result[ELEN-1:0] : '0;
-  assign result_ready  = &(result_valid | ~pending_results);
+  assign result_ready  = &(result_valid | ~pending_results) && (result_tag.wb || vrf_wvalid_i);
 
   // Did we issue a word to the IPUs?
   assign word_issued = spatz_req_valid && &(in_ready | ~valid_operations) && !stall;
@@ -506,9 +506,9 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
       assign fpu_result_valid[fpu*ELENB +: ELENB] = {ELENB{int_fpu_result_valid}};
 
       elen_t fpu_operand1, fpu_operand2, fpu_operand3;
-      assign fpu_operand1 = operand1[fpu*ELEN +: ELEN];
+      assign fpu_operand1 = spatz_req.op_arith.switch_rs1_rd ? operand3[fpu*ELEN +: ELEN] : operand1[fpu*ELEN +: ELEN];
       assign fpu_operand2 = operand2[fpu*ELEN +: ELEN];
-      assign fpu_operand3 = (fpu_op == fpnew_pkg::ADD) ? operand1[fpu*ELEN +: ELEN] : operand3[fpu*ELEN +: ELEN];
+      assign fpu_operand3 = (fpu_op == fpnew_pkg::ADD || spatz_req.op_arith.switch_rs1_rd) ? operand1[fpu*ELEN +: ELEN] : operand3[fpu*ELEN +: ELEN];
 
       fpnew_top #(
         .Features      (FPUFeatures      ),

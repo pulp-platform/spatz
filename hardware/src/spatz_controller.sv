@@ -130,7 +130,7 @@ module spatz_controller
               default: vlmax = vlmax;
             endcase
 
-            vl_d = (spatz_req.rs1 == '1) ? MAXVL : (int'(vlmax) < spatz_req.rs1) ? vlmax : spatz_req.rs1;
+            vl_d = (spatz_req.rs1 == '1) ? (MAXVL >> spatz_req.vtype.vsew) : (int'(vlmax) < spatz_req.rs1) ? vlmax : spatz_req.rs1;
           end else begin
             // Keep vl mode
 

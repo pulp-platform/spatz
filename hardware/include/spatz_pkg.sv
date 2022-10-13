@@ -140,6 +140,7 @@ package spatz_pkg;
     logic vm;
     logic use_carry_borrow_in;
     logic is_scalar;
+    logic switch_rs1_rd;
   } op_arith_t;
 
   typedef struct packed {
@@ -336,7 +337,7 @@ package spatz_pkg;
     EnableVectors: 1'b1,
     EnableNanBox : 1'b1,
     FpFmtMask    : {(ELEN >= 32), (ELEN >= 64), 1'b1, 1'b0, 1'b0},
-    IntFmtMask   : {1'b0, 1'b0, 1'b1, 1'b0}
+    IntFmtMask   : {1'b0, 1'b1, 1'b1, 1'b0}
   };
 
 endpackage : spatz_pkg
