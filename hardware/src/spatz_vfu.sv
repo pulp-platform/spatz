@@ -264,7 +264,17 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
         default: operand1 = {1*N_IPU{spatz_req.rs1}};
       endcase
     end
-    operand2 = spatz_req.op_arith.is_scalar ? {1*N_IPU{spatz_req.rs2}} : vrf_rdata_i[0];
+
+    if (!spatz_req.op_arith.is_scalar && spatz_req.use_vs2)
+      operand2 = vrf_rdata_i[0];
+    else
+      // Replicate scalar operands
+      unique case (spatz_req.vtype.vsew)
+        EW_8 : operand2   = {4*N_IPU{spatz_req.rs2[7:0]}};
+        EW_16: operand2   = {2*N_IPU{spatz_req.rs2[15:0]}};
+        default: operand2 = {1*N_IPU{spatz_req.rs2}};
+      endcase
+
     operand3 = spatz_req.op_arith.is_scalar ? {1*N_IPU{spatz_req.rsd}} : vrf_rdata_i[2];
   end: operand_proc
 
@@ -497,8 +507,8 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
 
       elen_t fpu_operand1, fpu_operand2, fpu_operand3;
       assign fpu_operand1 = operand1[fpu*ELEN +: ELEN];
-      assign fpu_operand2 = (fpu_op == fpnew_pkg::ADD) ? operand1[fpu*ELEN +: ELEN] : operand2[fpu*ELEN +: ELEN];
-      assign fpu_operand3 = (fpu_op == fpnew_pkg::ADD) ? operand2[fpu*ELEN +: ELEN] : operand3[fpu*ELEN +: ELEN];
+      assign fpu_operand2 = operand2[fpu*ELEN +: ELEN];
+      assign fpu_operand3 = (fpu_op == fpnew_pkg::ADD) ? operand1[fpu*ELEN +: ELEN] : operand3[fpu*ELEN +: ELEN];
 
       fpnew_top #(
         .Features      (FPUFeatures      ),

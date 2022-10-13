@@ -574,6 +574,8 @@ module spatz_decoder
         // Vector floating-point instructions
         riscv_instr::VFADD_VV,
         riscv_instr::VFADD_VF,
+        riscv_instr::VFSUB_VV,
+        riscv_instr::VFSUB_VF,
         riscv_instr::VFRSUB_VF,
         riscv_instr::VFMIN_VV,
         riscv_instr::VFMIN_VF,
@@ -654,7 +656,15 @@ module spatz_decoder
               riscv_instr::VFADD_VV,
               riscv_instr::VFADD_VF: spatz_req.op = VFADD;
               riscv_instr::VFSUB_VV,
-              riscv_instr::VFSUB_VF: spatz_req.op = VFSUB;
+              riscv_instr::VFSUB_VF : spatz_req.op = VFSUB;
+              riscv_instr::VFRSUB_VF: begin
+                spatz_req.op      = VFSUB;
+                spatz_req.vs1     = arith_s2;
+                spatz_req.use_vs1 = 1'b1;
+                spatz_req.rs2     = decoder_req_i.rs1;
+                spatz_req.use_vs2 = 1'b0;
+              end
+
               riscv_instr::VFMIN_VV,
               riscv_instr::VFMIN_VF: begin
                 spatz_req.op = VFMINMAX;
@@ -664,6 +674,29 @@ module spatz_decoder
               riscv_instr::VFMAX_VF: begin
                 spatz_req.op = VFMINMAX;
                 spatz_req.rm = fpnew_pkg::RTZ;
+              end
+
+              riscv_instr::VFMUL_VV,
+              riscv_instr::VFMUL_VF: spatz_req.op = VFMUL;
+              riscv_instr::VFMACC_VV,
+              riscv_instr::VFMACC_VF: begin
+                spatz_req.op        = VFMADD;
+                spatz_req.vd_is_src = 1'b1;
+              end
+              riscv_instr::VFNMACC_VV,
+              riscv_instr::VFNMACC_VF: begin
+                spatz_req.op        = VFNMADD;
+                spatz_req.vd_is_src = 1'b1;
+              end
+              riscv_instr::VFMSAC_VV,
+              riscv_instr::VFMSAC_VF: begin
+                spatz_req.op        = VFMSUB;
+                spatz_req.vd_is_src = 1'b1;
+              end
+              riscv_instr::VFNMSAC_VV,
+              riscv_instr::VFNMSAC_VF: begin
+                spatz_req.op        = VFNMSUB;
+                spatz_req.vd_is_src = 1'b1;
               end
               default;
             endcase
@@ -746,8 +779,12 @@ module spatz_decoder
             spatz_req.rm                 = fpu_rnd_mode_i;
 
             unique casez (decoder_req_i.instr)
-              riscv_instr::FADD_S  : spatz_req.op = VFADD;
-              riscv_instr::FSUB_S  : spatz_req.op = VFSUB;
+              riscv_instr::FADD_S : spatz_req.op = VFADD;
+              riscv_instr::FSUB_S : begin
+                spatz_req.op  = VFSUB;
+                spatz_req.rs1 = decoder_req_i.rs2;
+                spatz_req.rs2 = decoder_req_i.rs1;
+              end
               riscv_instr::FMUL_S  : spatz_req.op = VFMUL;
               riscv_instr::FSGNJ_S : begin
                 spatz_req.op = VFSGNJ;
