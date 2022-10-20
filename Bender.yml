@@ -14,12 +14,13 @@ workspace:
 
 sources:
   files:
+    # Headers
+    - hardware/include/rvv_pkg.sv
+    - hardware/include/spatz_pkg.sv
+
+    # Compiled only if Spatz is active
     - target: spatz
       files:
-        # Headers
-        - hardware/include/rvv_pkg.sv
-        - hardware/include/spatz_pkg.sv
-
         # Sources
         - hardware/src/reorder_buffer.sv
         - hardware/src/glass_spill_register.sv

@@ -36,10 +36,11 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
     // Memory Request
     output spatz_mem_req_t  [NrMemPorts-1:0] spatz_mem_req_o,
     output logic            [NrMemPorts-1:0] spatz_mem_req_valid_o,
-    input  logic            [NrMemPorts-1:0] spatz_mem_ready_i,
+    input  logic            [NrMemPorts-1:0] spatz_mem_req_ready_i,
     //  Memory Response
     input  spatz_mem_resp_t [NrMemPorts-1:0] spatz_mem_resp_i,
     input  logic            [NrMemPorts-1:0] spatz_mem_resp_valid_i,
+    output logic            [NrMemPorts-1:0] spatz_mem_resp_ready_o,
     // Memory Finished
     output logic                             x_mem_finished_o,
     output logic                             x_mem_str_finished_o
@@ -420,7 +421,7 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
         else if (spatz_req.vstart[$clog2(MemDataWidthB) +: $clog2(NrMemPorts)] == port)
           mem_counter_d[port] += spatz_req.vstart[$clog2(MemDataWidthB)-1:0];
       mem_counter_delta[port] = !mem_operation_valid[port] ? 'd0 : is_single_element_operation ? single_element_size : mem_operation_last[port] ? (max_elements - mem_counter_q[port]) : 'd4;
-      mem_counter_en[port]    = spatz_mem_ready_i[port] && spatz_mem_req_valid_o[port];
+      mem_counter_en[port]    = spatz_mem_req_ready_i[port] && spatz_mem_req_valid_o[port];
       mem_counter_max[port]   = max_elements;
     end
   end
@@ -456,6 +457,9 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
     mem_req_svalid = '0;
     mem_req_lvalid = '0;
     mem_req_last   = '0;
+
+    // Always ready
+    spatz_mem_resp_ready_o = '1;
 
     if (is_load) begin
       // If we have a valid element in the buffer, store it back to the register file
@@ -513,7 +517,7 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
 
         // Request a new id and and execute memory request
         if (!buffer_full[port] && mem_operation_valid[port]) begin
-          buffer_req_id[port]  = spatz_mem_ready_i[port] & spatz_mem_req_valid_o[port];
+          buffer_req_id[port]  = spatz_mem_req_ready_i[port] & spatz_mem_req_valid_o[port];
           mem_req_lvalid[port] = 1'b1;
           mem_req_id[port]     = buffer_id[port];
           mem_req_last[port]   = mem_operation_last[port];
@@ -561,7 +565,7 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
           mem_req_svalid[port] = buffer_rvalid[port];
           mem_req_id[port]     = buffer_rid[port];
           mem_req_last[port]   = mem_operation_last[port];
-          buffer_pop[port]     = spatz_mem_ready_i[port] && spatz_mem_req_valid_o[port];
+          buffer_pop[port]     = spatz_mem_req_ready_i[port] && spatz_mem_req_valid_o[port];
 
           // Create byte enable signal for memory request
           if (is_single_element_operation) begin

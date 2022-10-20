@@ -14,53 +14,46 @@ module spatz_fpu_sequencer import spatz_pkg::*; import rvv_pkg::*; import fpnew_
     parameter int unsigned NumOutstandingLoads = 1,
 
     // Dependent parameters. DO NOT CHANGE.
-    localparam int unsigned IdWidth   = cf_math_pkg::idx_width(NumOutstandingLoads),
-    localparam int unsigned StrbWidth = DataWidth/8,
-    localparam type addr_t            = logic [AddrWidth-1:0],
-    localparam type data_t            = logic [DataWidth-1:0],
-    localparam type strb_t            = logic [StrbWidth-1:0]
+    localparam int  unsigned IdWidth   = cf_math_pkg::idx_width(NumOutstandingLoads),
+    localparam int  unsigned StrbWidth = DataWidth/8,
+    localparam type          addr_t    = logic [AddrWidth-1:0],
+    localparam type          data_t    = logic [DataWidth-1:0],
+    localparam type          strb_t    = logic [StrbWidth-1:0]
   ) (
-    input  logic          clk_i,
-    input  logic          rst_ni,
+    input  logic            clk_i,
+    input  logic            rst_ni,
     // Snitch interface
     // X-Interface request
-    input  logic          x_issue_valid_i,
-    output logic          x_issue_ready_o,
-    input  x_issue_req_t  x_issue_req_i,
-    output x_issue_resp_t x_issue_resp_o,
+    input  x_issue_req_t    x_issue_req_i,
+    input  logic            x_issue_valid_i,
+    output logic            x_issue_ready_o,
+    output x_issue_resp_t   x_issue_resp_o,
     // X-Interface result
-    output logic          x_result_valid_o,
-    input  logic          x_result_ready_i,
-    output x_result_t     x_result_o,
+    output x_result_t       x_result_o,
+    output logic            x_result_valid_o,
+    input  logic            x_result_ready_i,
     // Spatz interface
     // X-Interface request
-    output logic          x_issue_valid_o,
-    input  logic          x_issue_ready_i,
-    output x_issue_req_t  x_issue_req_o,
-    input  x_issue_resp_t x_issue_resp_i,
+    output x_issue_req_t    x_issue_req_o,
+    output logic            x_issue_valid_o,
+    input  logic            x_issue_ready_i,
+    input  x_issue_resp_t   x_issue_resp_i,
     // X-Interface result
-    input  logic          x_result_valid_i,
-    output logic          x_result_ready_o,
-    input  x_result_t     x_result_i,
+    input  x_result_t       x_result_i,
+    input  logic            x_result_valid_i,
+    output logic            x_result_ready_o,
     // Memory interface
-    output addr_t              data_qaddr_o,
-    output logic               data_qwrite_o,
-    output logic [3:0]         data_qamo_o,
-    output data_t              data_qdata_o,
-    output strb_t              data_qstrb_o,
-    output logic [IdWidth-1:0] data_qid_o,
-    output logic               data_qvalid_o,
-    input  logic               data_qready_i,
-    input  data_t              data_pdata_i,
-    input  logic               data_perror_i,
-    input  logic [IdWidth-1:0] data_pid_i,
-    input  logic               data_pvalid_i,
-    output logic               data_pready_o
+    output spatz_mem_req_t  fp_lsu_mem_req_o,
+    output logic            fp_lsu_mem_req_valid_o,
+    input  logic            fp_lsu_mem_req_ready_i,
+    input  spatz_mem_resp_t fp_lsu_mem_resp_i,
+    input  logic            fp_lsu_mem_resp_valid_i,
+    output logic            fp_lsu_mem_resp_ready_o
   );
 
-  `include "common_cells/registers.svh"
+`include "common_cells/registers.svh"
 
-  if (!FPU) begin: gen_no_fpu
+  if (!FPU) begin: gen_no_fpr
     // Spatz configured without an FPU. Just forward the requests to Spatz.
     assign x_issue_req_o   = x_issue_req_i;
     assign x_issue_valid_o = x_issue_valid_i;
@@ -72,15 +65,10 @@ module spatz_fpu_sequencer import spatz_pkg::*; import rvv_pkg::*; import fpnew_
     assign x_result_ready_o = x_result_ready_i;
 
     // Tie the memory interface to zero
-    assign data_qaddr_o  = '0;
-    assign data_qwrite_o = 1'b0;
-    assign data_qamo_o   = '0;
-    assign data_qdata_o  = '0;
-    assign data_qstrb_o  = '0;
-    assign data_qid_o    = 1'b0;
-    assign data_qvalid_o = 1'b0;
-    assign data_pready_o = 1'b0;
-  end: gen_no_fpu else begin: gen_fpr
+    assign fp_lsu_mem_req_o        = '0;
+    assign fp_lsu_mem_req_valid_o  = 1'b0;
+    assign fp_lsu_mem_resp_ready_o = 1'b0;
+  end: gen_no_fpr else begin: gen_fpr
     // Capture requests that read and write to the scalar floating-point register file
 
     /////////////////
@@ -96,12 +84,15 @@ module spatz_fpu_sequencer import spatz_pkg::*; import rvv_pkg::*; import fpnew_
     assign fs2 = x_issue_req_i.instr[20 + FPRRegWidth - 1:20];
     assign fs3 = x_issue_req_i.instr[27 + FPRRegWidth - 1:27];
 
+    logic [31:0] iimmediate;
+    assign iimmediate = $signed({x_issue_req_i.instr[31:20]});
+
     /////////////////////
     //  Register File  //
     /////////////////////
 
     localparam int unsigned NrReadPorts  = 3;
-    localparam int unsigned NrWritePorts = 1;
+    localparam int unsigned NrWritePorts = 2;
 
     logic [NrReadPorts-1:0][FPRRegWidth-1:0] fpr_raddr;
     logic [NrReadPorts-1:0][FLEN-1:0] fpr_rdata;
@@ -117,7 +108,7 @@ module spatz_fpu_sequencer import spatz_pkg::*; import rvv_pkg::*; import fpnew_
       .NR_READ_PORTS (NrReadPorts ),
       .NR_WRITE_PORTS(NrWritePorts),
       .ZERO_REG_ZERO (0           )
-    ) i_fp_regfile (
+    ) i_fpr (
       .clk_i  (clk_i    ),
       .raddr_i(fpr_raddr),
       .rdata_o(fpr_rdata),
@@ -137,24 +128,37 @@ module spatz_fpu_sequencer import spatz_pkg::*; import rvv_pkg::*; import fpnew_
     // Are we using the registers?
     logic use_fs1, use_fs2, use_fs3, use_fd;
 
+    // Does this instruction write back to the scalar regfile?
+    logic use_rd;
+
+    // Are the operands available?
+    logic operands_available;
+    assign operands_available = !((use_fs1 && sb_q[fs1]) || (use_fs2 && sb_q[fs2]) || (use_fs3 && sb_q[fs3]) || (use_fd && sb_q[fd]));
+
     // Stalling?
     logic stall;
     logic lsu_stall;
-    assign stall = lsu_stall || (use_fs1 && sb_q[fs1]) || (use_fs2 && sb_q[fs2]) || (use_fs3 && sb_q[fs3]);
+    logic move_stall;
+    assign stall = lsu_stall || move_stall || !operands_available;
 
     // Illegal instruction
     logic illegal_inst;
 
     // Are we retiring something?
-    logic retire;
+    logic [1:0] retire;
+
+    // Is this a move instruction between GPR and FPR?
+    logic is_move;
 
     always_comb begin
       // Maintain state
-      sb_q = sb_d;
-      if (use_fd && !stall)
+      sb_d = sb_q;
+      if (use_fd && !stall && !is_move)
         sb_d[fd] = 1'b1;
-      if (retire)
+      if (retire[0])
         sb_d[fpr_waddr[0]] = 1'b0;
+      if (retire[1])
+        sb_d[fpr_waddr[1]] = 1'b0;
     end
 
     ///////////////////////////
@@ -171,17 +175,20 @@ module spatz_fpu_sequencer import spatz_pkg::*; import rvv_pkg::*; import fpnew_
     logic is_load;
     logic is_store;
 
+
     always_comb begin: decoder
       // We are not reading any operands
       use_fs1 = 1'b0;
       use_fs2 = 1'b0;
       use_fs3 = 1'b0;
       use_fd  = 1'b0;
+      use_rd  = 1'b0;
 
       // Default element size
       ls_size  = Word;
       is_load  = 1'b0;
       is_store = 1'b0;
+      is_move  = 1'b0;
 
       // Not an illegal instruction
       illegal_inst = 1'b0;
@@ -213,9 +220,26 @@ module spatz_fpu_sequencer import spatz_pkg::*; import rvv_pkg::*; import fpnew_
           riscv_instr::FNMADD_S: begin
             if (RVF && (!(x_issue_req_i.instr inside {riscv_instr::FDIV_S, riscv_instr::FSQRT_S}) || FDivSqrt)) begin
               use_fs1 = !(x_issue_req_i.instr inside {riscv_instr::FCVT_S_W, riscv_instr::FCVT_S_WU});
-              use_fs2 = 1'b1;
+              use_fs2 = !(x_issue_req_i.instr inside {riscv_instr::FCLASS_S});
               use_fs3 = x_issue_req_i.instr inside {riscv_instr::FMADD_S, riscv_instr::FMSUB_S, riscv_instr::FNMSUB_S, riscv_instr::FNMADD_S};
               use_fd  = !(x_issue_req_i.instr inside {riscv_instr::FCLASS_S, riscv_instr::FLE_S, riscv_instr::FLT_S, riscv_instr::FEQ_S, riscv_instr::FCVT_W_S, riscv_instr::FCVT_WU_S});
+            end else begin
+              illegal_inst = 1'b1;
+            end
+          end
+          riscv_instr::FMV_X_S: begin
+            if (RVF) begin
+              use_rd  = 1'b1;
+              use_fs1 = 1'b1;
+              is_move = 1'b1;
+            end else begin
+              illegal_inst = 1'b1;
+            end
+          end
+          riscv_instr::FMV_S_X: begin
+            if (RVF) begin
+              use_fd  = 1'b1;
+              is_move = 1'b1;
             end else begin
               illegal_inst = 1'b1;
             end
@@ -267,7 +291,7 @@ module spatz_fpu_sequencer import spatz_pkg::*; import rvv_pkg::*; import fpnew_
           end
           riscv_instr::FSW: begin
             if (RVF) begin
-              use_fs1  = 1'b1;
+              use_fs2  = 1'b1;
               ls_size  = Word;
               is_store = 1'b1;
             end else begin
@@ -286,7 +310,7 @@ module spatz_fpu_sequencer import spatz_pkg::*; import rvv_pkg::*; import fpnew_
           end
           riscv_instr::FSD: begin
             if (RVD) begin
-              use_fs1  = 1'b1;
+              use_fs2  = 1'b1;
               ls_size  = Double;
               is_store = 1'b1;
             end else begin
@@ -331,9 +355,8 @@ module spatz_fpu_sequencer import spatz_pkg::*; import rvv_pkg::*; import fpnew_
     always_comb begin: dispatcher
       // By default, forward instructions to Spatz
       x_issue_req_o   = x_issue_req_i;
-      x_issue_valid_o = x_issue_valid_i && !stall;
-      x_issue_ready_o = x_issue_ready_i && !stall;
-      x_issue_resp_o  = x_issue_resp_i;
+      x_issue_valid_o = x_issue_valid_i && !stall && !is_move; // Move instructions execute here
+      x_issue_ready_o = (is_move && !stall) || (!is_move && x_issue_ready_i && !stall);
 
       // Replace integer operands with FP operands, if needed
       if (use_fs1)
@@ -342,6 +365,19 @@ module spatz_fpu_sequencer import spatz_pkg::*; import rvv_pkg::*; import fpnew_
         x_issue_req_o.rs[1] = fpr_rdata[1];
       if (use_fs3)
         x_issue_req_o.rs[2] = fpr_rdata[2];
+
+      // Does this instruction write to the FPR?
+      x_issue_req_o.id[5] = use_fd;
+
+      // Forward the response back to Snitch
+      if (!is_move)
+        x_issue_resp_o = x_issue_resp_i;
+      else
+        x_issue_resp_o = '{
+          accept   : use_rd,
+          writeback: use_rd,
+          default  : '0
+        };
     end: dispatcher
 
     ///////////
@@ -363,43 +399,53 @@ module spatz_fpu_sequencer import spatz_pkg::*; import rvv_pkg::*; import fpnew_
     logic                 fp_lsu_pvalid;
     logic                 fp_lsu_pready;
 
+    addr_t              mem_qaddr;
+    logic               mem_qwrite;
+    logic [3:0]         mem_qamo;
+    data_t              mem_qdata;
+    strb_t              mem_qstrb;
+    logic [IdWidth-1:0] mem_qid;
+    data_t              mem_pdata;
+    logic               mem_perror;
+    logic [IdWidth-1:0] mem_pid;
+
     snitch_lsu #(
       .DataWidth          (FLEN               ),
       .NaNBox             (1                  ),
       .NumOutstandingLoads(NumOutstandingLoads)
     ) i_fp_lsu (
-      .clk_i        (clk_i         ),
-      .rst_i        (~rst_ni       ),
+      .clk_i        (clk_i                  ),
+      .rst_i        (~rst_ni                ),
       // Request interface
-      .lsu_qtag_i   (fp_lsu_qtag   ),
-      .lsu_qwrite   (fp_lsu_qwrite ),
-      .lsu_qsigned  (fp_lsu_qsigned),
-      .lsu_qaddr_i  (fp_lsu_qaddr  ),
-      .lsu_qdata_i  (fp_lsu_qdata  ),
-      .lsu_qsize_i  (fp_lsu_qsize  ),
-      .lsu_qamo_i   (fp_lsu_qamo   ),
-      .lsu_qvalid_i (fp_lsu_qvalid ),
-      .lsu_qready_o (fp_lsu_qready ),
+      .lsu_qtag_i   (fp_lsu_qtag            ),
+      .lsu_qwrite   (fp_lsu_qwrite          ),
+      .lsu_qsigned  (fp_lsu_qsigned         ),
+      .lsu_qaddr_i  (fp_lsu_qaddr           ),
+      .lsu_qdata_i  (fp_lsu_qdata           ),
+      .lsu_qsize_i  (fp_lsu_qsize           ),
+      .lsu_qamo_i   (fp_lsu_qamo            ),
+      .lsu_qvalid_i (fp_lsu_qvalid          ),
+      .lsu_qready_o (fp_lsu_qready          ),
       // Response interface
-      .lsu_pdata_o  (fp_lsu_pdata  ),
-      .lsu_ptag_o   (fp_lsu_ptag   ),
-      .lsu_perror_o (/* Unused */  ),
-      .lsu_pvalid_o (fp_lsu_pvalid ),
-      .lsu_pready_i (fp_lsu_pready ),
+      .lsu_pdata_o  (fp_lsu_pdata           ),
+      .lsu_ptag_o   (fp_lsu_ptag            ),
+      .lsu_perror_o (/* Unused */           ),
+      .lsu_pvalid_o (fp_lsu_pvalid          ),
+      .lsu_pready_i (fp_lsu_pready          ),
       // Memory interface
-      .data_qaddr_o (data_qaddr_o  ),
-      .data_qwrite_o(data_qwrite_o ),
-      .data_qamo_o  (data_qamo_o   ),
-      .data_qdata_o (data_qdata_o  ),
-      .data_qstrb_o (data_qstrb_o  ),
-      .data_qid_o   (data_qid_o    ),
-      .data_qvalid_o(data_qvalid_o ),
-      .data_qready_i(data_qready_i ),
-      .data_pdata_i (data_pdata_i  ),
-      .data_perror_i(data_perror_i ),
-      .data_pid_i   (data_pid_i    ),
-      .data_pvalid_i(data_pvalid_i ),
-      .data_pready_o(data_pready_o )
+      .data_qaddr_o (mem_qaddr              ),
+      .data_qwrite_o(mem_qwrite             ),
+      .data_qamo_o  (mem_qamo               ),
+      .data_qdata_o (mem_qdata              ),
+      .data_qstrb_o (mem_qstrb              ),
+      .data_qid_o   (mem_qid                ),
+      .data_qvalid_o(fp_lsu_mem_req_valid_o ),
+      .data_qready_i(fp_lsu_mem_req_ready_i ),
+      .data_pdata_i (mem_pdata              ),
+      .data_perror_i(mem_perror             ),
+      .data_pid_i   (mem_pid                ),
+      .data_pvalid_i(fp_lsu_mem_resp_valid_i),
+      .data_pready_o(fp_lsu_mem_resp_ready_o)
     );
 
     always_comb begin: lsu_dispatch
@@ -407,14 +453,30 @@ module spatz_fpu_sequencer import spatz_pkg::*; import rvv_pkg::*; import fpnew_
       fp_lsu_qtag    = fd;
       fp_lsu_qwrite  = is_store;
       fp_lsu_qsigned = 1'b0;
-      fp_lsu_qaddr   = x_issue_req_i.rs[0];
-      fp_lsu_qdata   = x_issue_req_i.rs[1];
+      fp_lsu_qaddr   = x_issue_req_i.rs[0] + iimmediate;
+      fp_lsu_qdata   = fpr_rdata[1];
       fp_lsu_qsize   = ls_size;
       fp_lsu_qamo    = '0;
-      fp_lsu_qvalid  = (is_load || is_store);
+      fp_lsu_qvalid  = (is_load || is_store) && operands_available;
 
       // Is the LSU stalling?
       lsu_stall = fp_lsu_qvalid && !fp_lsu_qready;
+
+      // Assign TCDM data interface
+      fp_lsu_mem_req_o = '{
+        id: mem_qid,
+        addr: mem_qaddr,
+        size: '1,
+        we: mem_qwrite,
+        strb: mem_qstrb,
+        wdata: mem_qdata,
+        last: 1'b1,
+        default: '0
+      };
+
+      mem_pdata  = fp_lsu_mem_resp_i.rdata;
+      mem_perror = '0;
+      mem_pid    = fp_lsu_mem_resp_i.id;
     end: lsu_dispatch
 
     //////////////
@@ -423,12 +485,14 @@ module spatz_fpu_sequencer import spatz_pkg::*; import rvv_pkg::*; import fpnew_
 
     always_comb begin: retire_proc
       // We are not retiring anything, by default
-      retire        = 1'b0;
+      retire        = '0;
       fp_lsu_pready = 1'b0;
 
       fpr_wdata = '0;
       fpr_we    = '0;
       fpr_waddr = '0;
+
+      move_stall = 1'b0;
 
       // Do not forward results to Snitch
       x_result_o       = '0;
@@ -440,24 +504,50 @@ module spatz_fpu_sequencer import spatz_pkg::*; import rvv_pkg::*; import fpnew_
         x_result_o       = x_result_i;
         x_result_valid_o = x_result_valid_i;
         x_result_ready_o = x_result_ready_i;
+
+        // Is there a move happening in this cycle?
+        move_stall = is_move && use_rd;
       end
       // Commit a Spatz result to the FPR
       else if (x_result_valid_i && x_result_i.id[5]) begin
         x_result_ready_o = 1'b1;
-        retire           = 1'b1;
+        retire[0]        = 1'b1;
 
         fpr_wdata[0] = x_result_i.data;
         fpr_waddr[0] = x_result_i.id[4:0];
         fpr_we[0]    = 1'b1;
-      end else
+
+        // Is there a move happening in this cycle?
+        move_stall = is_move && use_rd;
+      end
+      // Commit a move result
+      else if (is_move && use_rd) begin
+        x_result_o = '{
+          id     : x_issue_req_i.id,
+          data   : fpr_rdata[0],
+          we     : '1,
+          default: '0
+        };
+        x_result_valid_o = 1'b1;
+        move_stall       = !x_result_ready_i;
+      end
+
       // Commit a FP LSU response
       if (fp_lsu_pvalid) begin
         fp_lsu_pready = 1'b1;
-        retire        = 1'b1;
+        retire[1]     = 1'b1;
 
-        fpr_wdata[0] = fp_lsu_pdata;
-        fpr_waddr[0] = fp_lsu_ptag;
-        fpr_we[0]    = 1'b1;
+        fpr_wdata[1] = fp_lsu_pdata;
+        fpr_waddr[1] = fp_lsu_ptag;
+        fpr_we[1]    = 1'b1;
+
+        move_stall   = is_move && use_fd;
+      end
+      // Commit moves to the RF
+      else if (is_move && use_fd && !stall) begin
+        fpr_wdata[1] = x_issue_req_i.rs[0];
+        fpr_waddr[1] = fd;
+        fpr_we[1]    = 1'b1;
       end
     end: retire_proc
 
