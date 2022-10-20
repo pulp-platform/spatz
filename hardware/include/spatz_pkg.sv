@@ -12,10 +12,17 @@ package spatz_pkg;
   //  Parameters  //
   //////////////////
 
+  // FPU support
+  localparam bit FPU = `ifdef FPU `FPU `else 0 `endif;
+  // Single-precision floating point support
+  localparam bit RVF = `ifdef RVF `RVF `else 0 `endif;
+  // Double-precision floating-point support
+  localparam bit RVD = `ifdef RVD `RVD `else 0 `endif;
+
   // Number of IPUs in VFU (between 2 and 8)
   localparam int unsigned N_IPU  = `ifdef N_IPU `N_IPU `else 2 `endif;
   // Maximum size of a single vector element in bits
-  localparam int unsigned ELEN   = 32;
+  localparam int unsigned ELEN   = FPU && RVD ? 64 : 32;
   // Maximum size of a single vector element in bytes
   localparam int unsigned ELENB  = ELEN / 8;
   // Number of bits in a vector register
@@ -40,7 +47,7 @@ package spatz_pkg;
 
   // Width of scalar register file adresses
   // Depends on whether we have a FP regfile or not
-  localparam int GPRWidth = `ifndef FPU 5 `else (5 + `FPU) `endif;
+  localparam int GPRWidth = FPU ? 6 : 5;
 
   // Number of parallel vector instructions
   localparam int unsigned NrParallelInstructions = 4;
@@ -250,6 +257,24 @@ package spatz_pkg;
     logic exc;
   } vlsu_rsp_t;
 
+  typedef struct packed {
+    logic [$clog2(NRVREG):0] id;
+    logic [31:0] addr;
+    logic [1:0] mode;
+    logic [1:0] size;
+    logic we;
+    logic [ELEN/8-1:0] strb;
+    logic [ELEN-1:0] wdata;
+    logic last;
+    logic spec;
+  } spatz_mem_req_t;
+
+  typedef struct packed {
+    logic [$clog2(NRVREG)-1:0] id;
+    logic [ELEN-1:0] rdata;
+    logic err;
+  } spatz_mem_resp_t;
+
   ////////////////////
   // VSLDU Response //
   ////////////////////
@@ -292,7 +317,10 @@ package spatz_pkg;
   //  FPU Configuration  //
   /////////////////////////
 
-  localparam bit FPU_EN = `ifdef FPU `FPU `else 0 `endif;
+  // No support for floating-point division and square-root for now
+  localparam bit FDivSqrt = 1'b0;
+
+  localparam int unsigned FLEN = FPU && RVD ? 64 : 32;
 
   localparam fpnew_pkg::fpu_implementation_t FPUImplementation = '{
     PipeRegs: '{
@@ -336,7 +364,7 @@ package spatz_pkg;
     Width        : ELEN,
     EnableVectors: 1'b1,
     EnableNanBox : 1'b1,
-    FpFmtMask    : {(ELEN >= 32), (ELEN >= 64), 1'b1, 1'b0, 1'b0},
+    FpFmtMask    : {RVF, RVD, 1'b1, 1'b0, 1'b0},
     IntFmtMask   : {1'b0, 1'b1, 1'b1, 1'b0}
   };
 

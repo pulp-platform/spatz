@@ -32,6 +32,7 @@ sources:
         - hardware/src/spatz_vsldu.sv
         - hardware/src/spatz_decoder.sv
         - hardware/src/spatz_controller.sv
+        - hardware/src/spatz_fpu_sequencer.sv
         - hardware/src/spatz.sv
 
     - target: spatz_test

@@ -612,7 +612,7 @@ module spatz_decoder
         riscv_instr::VFCVT_RTZ_X_F_V,
         riscv_instr::VFCVT_RTZ_XU_F_V,
         riscv_instr::VFMV_V_F: begin
-          if (spatz_pkg::FPU_EN) begin
+          if (spatz_pkg::FPU) begin
             automatic opcodev_func3_e func3 = opcodev_func3_e'(decoder_req_i.instr[14:12]);
             automatic vreg_t arith_s1       = decoder_req_i.instr[19:15];
             automatic vreg_t arith_s2       = decoder_req_i.instr[24:20];
@@ -814,7 +814,7 @@ module spatz_decoder
         riscv_instr::FMSUB_S,
         riscv_instr::FNMSUB_S,
         riscv_instr::FNMADD_S: begin
-          if (spatz_pkg::FPU_EN) begin
+          if (spatz_pkg::FPU) begin
             spatz_req.ex_unit            = VFU;
             spatz_req.rd                 = decoder_req_i.instr[11:7];
             spatz_req.use_rd             = 1'b1;

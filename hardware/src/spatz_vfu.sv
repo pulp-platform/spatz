@@ -135,7 +135,7 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
 
   // Is this a FPU instruction
   logic is_fpu_insn;
-  assign is_fpu_insn = FPU_EN && spatz_req.op inside {[VFADD:VFNMADD]};
+  assign is_fpu_insn = FPU && spatz_req.op inside {[VFADD:VFNMADD]};
 
   // Is the FPU busy?
   logic is_fpu_busy;
@@ -202,7 +202,7 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
       running_d[spatz_req.id] = 1'b0;
 
       // Is this an IPU instruction? If so, acknowledge directly
-      if (!FPU_EN || (state_q == VFU_RunningIPU && word_committed)) begin
+      if (!FPU || (state_q == VFU_RunningIPU && word_committed)) begin
         vfu_rsp_o.id     = spatz_req.id;
         vfu_rsp_o.rd     = spatz_req.rd;
         vfu_rsp_o.wb     = spatz_req.op_arith.is_scalar;
@@ -223,7 +223,7 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
     end
 
     // An FPU instruction finished execution
-    if (FPU_EN && state_q == VFU_RunningFPU && result_tag.last) begin
+    if (FPU && state_q == VFU_RunningFPU && result_tag.last) begin
       vfu_rsp_o.id     = result_tag.id;
       vfu_rsp_o.rd     = result_tag.vd_addr[GPRWidth-1:0];
       vfu_rsp_o.wb     = result_tag.wb;
@@ -438,7 +438,7 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
     for (int fpu = 0; fpu < N_IPU; fpu++)
       fpu_status_o |= fpu_status[fpu];
 
-    if (FPU_EN) begin
+    if (FPU) begin
       unique case (spatz_req.vtype.vsew)
         EW_32: begin
           fpu_src_fmt = fpnew_pkg::FP32;
@@ -496,7 +496,7 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
   end: gen_fpu_decoder
 
   for (genvar fpu = 0; unsigned'(fpu) < N_IPU; fpu++) begin : gen_fpus
-    if (FPU_EN) begin: gen_fpu
+    if (FPU) begin: gen_fpu
       logic int_fpu_result_valid;
       logic int_fpu_in_ready;
       vfu_tag_t tag;

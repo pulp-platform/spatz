@@ -8,45 +8,41 @@
 // and to the vector register file and store them back again.
 
 module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx_width; #(
-    parameter                NrMemPorts         = 1,
-    parameter                NrOutstandingLoads = 8,
-    parameter  type          x_mem_req_t        = logic,
-    parameter  type          x_mem_resp_t       = logic,
-    parameter  type          x_mem_result_t     = logic,
+    parameter               NrMemPorts         = 1,
+    parameter               NrOutstandingLoads = 8,
     // Dependant parameters. DO NOT CHANGE!
-    localparam int  unsigned IdWidth            = idx_width(NrOutstandingLoads)
+    localparam int unsigned IdWidth            = idx_width(NrOutstandingLoads)
   ) (
-    input  logic                           clk_i,
-    input  logic                           rst_ni,
+    input  logic                             clk_i,
+    input  logic                             rst_ni,
     // Spatz request
-    input  spatz_req_t                     spatz_req_i,
-    input  logic                           spatz_req_valid_i,
-    output logic                           spatz_req_ready_o,
+    input  spatz_req_t                       spatz_req_i,
+    input  logic                             spatz_req_valid_i,
+    output logic                             spatz_req_ready_o,
     // VLSU response
-    output logic                           vlsu_rsp_valid_o,
-    output vlsu_rsp_t                      vlsu_rsp_o,
+    output logic                             vlsu_rsp_valid_o,
+    output vlsu_rsp_t                        vlsu_rsp_o,
     // Interface with the VRF
-    output vreg_addr_t                     vrf_waddr_o,
-    output vreg_data_t                     vrf_wdata_o,
-    output logic                           vrf_we_o,
-    output vreg_be_t                       vrf_wbe_o,
-    input  logic                           vrf_wvalid_i,
-    output spatz_id_t     [1:0]            vrf_id_o,
-    output vreg_addr_t                     vrf_raddr_o,
-    output logic                           vrf_re_o,
-    input  vreg_data_t                     vrf_rdata_i,
-    input  logic                           vrf_rvalid_i,
-    // X-Interface Memory Request
-    output logic          [NrMemPorts-1:0] x_mem_valid_o,
-    input  logic          [NrMemPorts-1:0] x_mem_ready_i,
-    output x_mem_req_t    [NrMemPorts-1:0] x_mem_req_o,
-    input  x_mem_resp_t   [NrMemPorts-1:0] x_mem_resp_i,
-    // X-Interface Memory Result
-    input  logic          [NrMemPorts-1:0] x_mem_result_valid_i,
-    input  x_mem_result_t [NrMemPorts-1:0] x_mem_result_i,
-    // X-Interface Memory Finished
-    output logic                           x_mem_finished_o,
-    output logic                           x_mem_str_finished_o
+    output vreg_addr_t                       vrf_waddr_o,
+    output vreg_data_t                       vrf_wdata_o,
+    output logic                             vrf_we_o,
+    output vreg_be_t                         vrf_wbe_o,
+    input  logic                             vrf_wvalid_i,
+    output spatz_id_t       [1:0]            vrf_id_o,
+    output vreg_addr_t                       vrf_raddr_o,
+    output logic                             vrf_re_o,
+    input  vreg_data_t                       vrf_rdata_i,
+    input  logic                             vrf_rvalid_i,
+    // Memory Request
+    output spatz_mem_req_t  [NrMemPorts-1:0] spatz_mem_req_o,
+    output logic            [NrMemPorts-1:0] spatz_mem_req_valid_o,
+    input  logic            [NrMemPorts-1:0] spatz_mem_ready_i,
+    //  Memory Response
+    input  spatz_mem_resp_t [NrMemPorts-1:0] spatz_mem_resp_i,
+    input  logic            [NrMemPorts-1:0] spatz_mem_resp_valid_i,
+    // Memory Finished
+    output logic                             x_mem_finished_o,
+    output logic                             x_mem_str_finished_o
   );
 
 // Include FF
@@ -57,7 +53,7 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
   // Parameters //
   ////////////////
 
-  localparam int unsigned MemDataWidth  = $bits(x_mem_req_o[0].wdata);
+  localparam int unsigned MemDataWidth  = $bits(spatz_mem_req_o[0].wdata);
   localparam int unsigned MemDataWidthB = MemDataWidth/8;
 
   //////////////
@@ -424,7 +420,7 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
         else if (spatz_req.vstart[$clog2(MemDataWidthB) +: $clog2(NrMemPorts)] == port)
           mem_counter_d[port] += spatz_req.vstart[$clog2(MemDataWidthB)-1:0];
       mem_counter_delta[port] = !mem_operation_valid[port] ? 'd0 : is_single_element_operation ? single_element_size : mem_operation_last[port] ? (max_elements - mem_counter_q[port]) : 'd4;
-      mem_counter_en[port]    = x_mem_ready_i[port] && x_mem_valid_o[port];
+      mem_counter_en[port]    = spatz_mem_ready_i[port] && spatz_mem_req_valid_o[port];
       mem_counter_max[port]   = max_elements;
     end
   end
@@ -511,13 +507,13 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
 
       for (int unsigned port = 0; port < NrMemPorts; port++) begin
         // Write the load result to the buffer
-        buffer_wdata[port] = x_mem_result_i[port].rdata;
-        buffer_wid[port]   = x_mem_result_i[port].id;
-        buffer_push[port]  = x_mem_result_valid_i[port];
+        buffer_wdata[port] = spatz_mem_resp_i[port].rdata;
+        buffer_wid[port]   = spatz_mem_resp_i[port].id;
+        buffer_push[port]  = spatz_mem_resp_valid_i[port];
 
         // Request a new id and and execute memory request
         if (!buffer_full[port] && mem_operation_valid[port]) begin
-          buffer_req_id[port]  = x_mem_ready_i[port] & x_mem_valid_o[port];
+          buffer_req_id[port]  = spatz_mem_ready_i[port] & spatz_mem_req_valid_o[port];
           mem_req_lvalid[port] = 1'b1;
           mem_req_id[port]     = buffer_id[port];
           mem_req_last[port]   = mem_operation_last[port];
@@ -565,7 +561,7 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
           mem_req_svalid[port] = buffer_rvalid[port];
           mem_req_id[port]     = buffer_rid[port];
           mem_req_last[port]   = mem_operation_last[port];
-          buffer_pop[port]     = x_mem_ready_i[port] && x_mem_valid_o[port];
+          buffer_pop[port]     = spatz_mem_ready_i[port] && spatz_mem_req_valid_o[port];
 
           // Create byte enable signal for memory request
           if (is_single_element_operation) begin
@@ -593,16 +589,16 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
 
   // Create memory requests
   for (genvar port = 0; port < NrMemPorts; port++) begin : gen_mem_req
-    assign x_mem_req_o[port].id    = mem_req_id[port];
-    assign x_mem_req_o[port].addr  = mem_req_addr[port];
-    assign x_mem_req_o[port].mode  = '0; // Request always uses user privilege level
-    assign x_mem_req_o[port].size  = spatz_req.vtype.vsew[1:0];
-    assign x_mem_req_o[port].we    = !is_load;
-    assign x_mem_req_o[port].strb  = mem_req_strb[port];
-    assign x_mem_req_o[port].wdata = mem_req_data[port];
-    assign x_mem_req_o[port].last  = mem_req_last[port];
-    assign x_mem_req_o[port].spec  = 1'b0; // Request is never speculative
-    assign x_mem_valid_o[port]     = mem_req_svalid[port] || mem_req_lvalid[port];
+    assign spatz_mem_req_o[port].id    = mem_req_id[port];
+    assign spatz_mem_req_o[port].addr  = mem_req_addr[port];
+    assign spatz_mem_req_o[port].mode  = '0; // Request always uses user privilege level
+    assign spatz_mem_req_o[port].size  = spatz_req.vtype.vsew[1:0];
+    assign spatz_mem_req_o[port].we    = !is_load;
+    assign spatz_mem_req_o[port].strb  = mem_req_strb[port];
+    assign spatz_mem_req_o[port].wdata = mem_req_data[port];
+    assign spatz_mem_req_o[port].last  = mem_req_last[port];
+    assign spatz_mem_req_o[port].spec  = 1'b0; // Request is never speculative
+    assign spatz_mem_req_valid_o[port] = mem_req_svalid[port] || mem_req_lvalid[port];
   end
 
   ////////////////
