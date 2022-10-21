@@ -42,8 +42,8 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
     input  logic            [NrMemPorts-1:0] spatz_mem_resp_valid_i,
     output logic            [NrMemPorts-1:0] spatz_mem_resp_ready_o,
     // Memory Finished
-    output logic                             x_mem_finished_o,
-    output logic                             x_mem_str_finished_o
+    output logic                             spatz_mem_finished_o,
+    output logic                             spatz_mem_str_finished_o
   );
 
 // Include FF
@@ -295,8 +295,8 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
 
   // Signal when we are finished with with accessing the memory (necessary
   // for the case with more than one memory port)
-  assign x_mem_finished_o     = spatz_req_valid && &vreg_finished && &mem_finished;
-  assign x_mem_str_finished_o = spatz_req_valid && &vreg_finished && &mem_finished && !is_load;
+  assign spatz_mem_finished_o     = spatz_req_valid && &vreg_finished && &mem_finished;
+  assign spatz_mem_str_finished_o = spatz_req_valid && &vreg_finished && &mem_finished && !is_load;
 
   // Do we start at the very fist element
   logic is_vstart_zero;

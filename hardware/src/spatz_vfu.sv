@@ -383,6 +383,11 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
   for (genvar ipu = 0; unsigned'(ipu) < N_IPU; ipu++) begin : gen_ipus
     vfu_tag_t int_ipu_tag;
 
+    elen_t ipu_operand1, ipu_operand2, ipu_operand3;
+    assign ipu_operand1 = !is_fpu_insn ? operand1[ipu*ELEN +: ELEN] : '0;
+    assign ipu_operand2 = !is_fpu_insn ? operand2[ipu*ELEN +: ELEN] : '0;
+    assign ipu_operand3 = !is_fpu_insn ? operand3[ipu*ELEN +: ELEN] : '0;
+
     spatz_ipu #(
       .tag_t(vfu_tag_t)
     ) i_ipu (
@@ -391,9 +396,9 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
       .operation_i      (spatz_req.op                                                                                    ),
       // Only the IPU0 executes scalar instructions
       .operation_valid_i(spatz_req_valid && operands_ready && (!spatz_req.op_arith.is_scalar || ipu == 0) && !is_fpu_insn),
-      .op_s1_i          (operand1[ipu*ELEN +: ELEN]                                                                      ),
-      .op_s2_i          (operand2[ipu*ELEN +: ELEN]                                                                      ),
-      .op_d_i           (operand3[ipu*ELEN +: ELEN]                                                                      ),
+      .op_s1_i          (ipu_operand1                                                                                    ),
+      .op_s2_i          (ipu_operand2                                                                                    ),
+      .op_d_i           (ipu_operand3                                                                                    ),
       .tag_i            (input_tag                                                                                       ),
       .carry_i          ('0                                                                                              ),
       .sew_i            (spatz_req.vtype.vsew                                                                            ),

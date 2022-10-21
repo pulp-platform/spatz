@@ -40,8 +40,8 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     input  logic            [NrMemPorts-1:0] spatz_mem_resp_valid_i,
     output logic            [NrMemPorts-1:0] spatz_mem_resp_ready_o,
     // Memory Finished
-    output logic                             spatz_mem_finished_o,
-    output logic                             spatz_mem_str_finished_o,
+    output logic            [1:0]            spatz_mem_finished_o,
+    output logic            [1:0]            spatz_mem_str_finished_o,
     // FPU memory interface interface
     output spatz_mem_req_t                   fp_lsu_mem_req_o,
     output logic                             fp_lsu_mem_req_valid_o,
@@ -88,46 +88,78 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   /////////////////////
 
   // X Interface
+  x_issue_req_t  x_issue_req;
   logic          x_issue_valid;
   logic          x_issue_ready;
-  x_issue_req_t  x_issue_req;
   x_issue_resp_t x_issue_resp;
+  x_result_t     x_result;
   logic          x_result_valid;
   logic          x_result_ready;
-  x_result_t     x_result;
 
-  spatz_fpu_sequencer #(
-    .x_issue_req_t      (x_issue_req_t      ),
-    .x_issue_resp_t     (x_issue_resp_t     ),
-    .x_result_t         (x_result_t         ),
-    .NumOutstandingLoads(NumOutstandingLoads)
-  ) i_fpu_sequencer (
-    .clk_i                  (clk_i                  ),
-    .rst_ni                 (rst_ni                 ),
-    // Snitch interface
-    .x_issue_valid_i        (x_issue_valid_i        ),
-    .x_issue_ready_o        (x_issue_ready_o        ),
-    .x_issue_req_i          (x_issue_req_i          ),
-    .x_issue_resp_o         (x_issue_resp_o         ),
-    .x_result_valid_o       (x_result_valid_o       ),
-    .x_result_ready_i       (x_result_ready_i       ),
-    .x_result_o             (x_result_o             ),
-    // Spatz interface
-    .x_issue_valid_o        (x_issue_valid          ),
-    .x_issue_ready_i        (x_issue_ready          ),
-    .x_issue_req_o          (x_issue_req            ),
-    .x_issue_resp_i         (x_issue_resp           ),
-    .x_result_valid_i       (x_result_valid         ),
-    .x_result_ready_o       (x_result_ready         ),
-    .x_result_i             (x_result               ),
-    // Memory interface
-    .fp_lsu_mem_req_o       (fp_lsu_mem_req_o       ),
-    .fp_lsu_mem_req_valid_o (fp_lsu_mem_req_valid_o ),
-    .fp_lsu_mem_req_ready_i (fp_lsu_mem_req_ready_i ),
-    .fp_lsu_mem_resp_i      (fp_lsu_mem_resp_i      ),
-    .fp_lsu_mem_resp_valid_i(fp_lsu_mem_resp_valid_i),
-    .fp_lsu_mem_resp_ready_o(fp_lsu_mem_resp_ready_o)
-  );
+  // Did we finish a memory request?
+  logic fp_lsu_mem_finished;
+  logic fp_lsu_mem_str_finished;
+  logic spatz_mem_finished;
+  logic spatz_mem_str_finished;
+  assign spatz_mem_finished_o     = {spatz_mem_finished, fp_lsu_mem_finished};
+  assign spatz_mem_str_finished_o = {spatz_mem_str_finished, fp_lsu_mem_str_finished};
+
+  if (!FPU) begin: gen_no_fpu_sequencer
+    // Spatz configured without an FPU. Just forward the requests to Spatz.
+    assign x_issue_req     = x_issue_req_i;
+    assign x_issue_valid   = x_issue_valid_i;
+    assign x_issue_ready_o = x_issue_ready;
+    assign x_issue_resp_o  = x_issue_resp;
+
+    assign x_result_o       = x_result;
+    assign x_result_valid_o = x_result_valid;
+    assign x_result_ready   = x_result_ready_i;
+
+    // Tie the memory interface to zero
+    assign fp_lsu_mem_req_o        = '0;
+    assign fp_lsu_mem_req_valid_o  = 1'b0;
+    assign fp_lsu_mem_resp_ready_o = 1'b0;
+    assign fp_lsu_mem_finished     = 1'b0;
+    assign fp_lsu_mem_str_finished = 1'b0;
+  end: gen_no_fpu_sequencer else begin: gen_fpu_sequencer
+    spatz_fpu_sequencer #(
+      .x_issue_req_t      (x_issue_req_t      ),
+      .x_issue_resp_t     (x_issue_resp_t     ),
+      .x_result_t         (x_result_t         ),
+      .NumOutstandingLoads(NumOutstandingLoads)
+    ) i_fpu_sequencer (
+      .clk_i                    (clk_i                  ),
+      .rst_ni                   (rst_ni                 ),
+      // Snitch interface
+      .x_issue_req_i            (x_issue_req_i          ),
+      .x_issue_valid_i          (x_issue_valid_i        ),
+      .x_issue_ready_o          (x_issue_ready_o        ),
+      .x_issue_resp_o           (x_issue_resp_o         ),
+      .x_result_o               (x_result_o             ),
+      .x_result_valid_o         (x_result_valid_o       ),
+      .x_result_ready_i         (x_result_ready_i       ),
+      // Spatz interface
+      .x_issue_req_o            (x_issue_req            ),
+      .x_issue_valid_o          (x_issue_valid          ),
+      .x_issue_ready_i          (x_issue_ready          ),
+      .x_issue_resp_i           (x_issue_resp           ),
+      .x_result_i               (x_result               ),
+      .x_result_valid_i         (x_result_valid         ),
+      .x_result_ready_o         (x_result_ready         ),
+      // Memory interface
+      .fp_lsu_mem_req_o         (fp_lsu_mem_req_o       ),
+      .fp_lsu_mem_req_valid_o   (fp_lsu_mem_req_valid_o ),
+      .fp_lsu_mem_req_ready_i   (fp_lsu_mem_req_ready_i ),
+      .fp_lsu_mem_resp_i        (fp_lsu_mem_resp_i      ),
+      .fp_lsu_mem_resp_valid_i  (fp_lsu_mem_resp_valid_i),
+      .fp_lsu_mem_resp_ready_o  (fp_lsu_mem_resp_ready_o),
+      .fp_lsu_mem_finished_o    (fp_lsu_mem_finished    ),
+      .fp_lsu_mem_str_finished_o(fp_lsu_mem_str_finished),
+      // Spatz VLSU side channel
+      .spatz_mem_finished_i     (spatz_mem_finished     ),
+      .spatz_mem_str_finished_i (spatz_mem_str_finished )
+    );
+  end: gen_fpu_sequencer
 
   /////////
   // VRF //
@@ -252,35 +284,35 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   spatz_vlsu #(
     .NrMemPorts (NrMemPorts )
   ) i_vlsu (
-    .clk_i                 (clk_i                                       ),
-    .rst_ni                (rst_ni                                      ),
+    .clk_i                   (clk_i                                       ),
+    .rst_ni                  (rst_ni                                      ),
     // Request
-    .spatz_req_i           (spatz_req                                   ),
-    .spatz_req_valid_i     (spatz_req_valid                             ),
-    .spatz_req_ready_o     (vlsu_req_ready                              ),
+    .spatz_req_i             (spatz_req                                   ),
+    .spatz_req_valid_i       (spatz_req_valid                             ),
+    .spatz_req_ready_o       (vlsu_req_ready                              ),
     // Response
-    .vlsu_rsp_valid_o      (vlsu_rsp_valid                              ),
-    .vlsu_rsp_o            (vlsu_rsp                                    ),
+    .vlsu_rsp_valid_o        (vlsu_rsp_valid                              ),
+    .vlsu_rsp_o              (vlsu_rsp                                    ),
     // VRF
-    .vrf_waddr_o           (vrf_waddr[VLSU_VD_WD]                       ),
-    .vrf_wdata_o           (vrf_wdata[VLSU_VD_WD]                       ),
-    .vrf_we_o              (sb_we[VLSU_VD_WD]                           ),
-    .vrf_wbe_o             (vrf_wbe[VLSU_VD_WD]                         ),
-    .vrf_wvalid_i          (vrf_wvalid[VLSU_VD_WD]                      ),
-    .vrf_raddr_o           (vrf_raddr[VLSU_VD_RD]                       ),
-    .vrf_re_o              (sb_re[VLSU_VD_RD]                           ),
-    .vrf_rdata_i           (vrf_rdata[VLSU_VD_RD]                       ),
-    .vrf_rvalid_i          (vrf_rvalid[VLSU_VD_RD]                      ),
-    .vrf_id_o              ({sb_id[SB_VLSU_VD_WD], sb_id[SB_VLSU_VD_RD]}),
+    .vrf_waddr_o             (vrf_waddr[VLSU_VD_WD]                       ),
+    .vrf_wdata_o             (vrf_wdata[VLSU_VD_WD]                       ),
+    .vrf_we_o                (sb_we[VLSU_VD_WD]                           ),
+    .vrf_wbe_o               (vrf_wbe[VLSU_VD_WD]                         ),
+    .vrf_wvalid_i            (vrf_wvalid[VLSU_VD_WD]                      ),
+    .vrf_raddr_o             (vrf_raddr[VLSU_VD_RD]                       ),
+    .vrf_re_o                (sb_re[VLSU_VD_RD]                           ),
+    .vrf_rdata_i             (vrf_rdata[VLSU_VD_RD]                       ),
+    .vrf_rvalid_i            (vrf_rvalid[VLSU_VD_RD]                      ),
+    .vrf_id_o                ({sb_id[SB_VLSU_VD_WD], sb_id[SB_VLSU_VD_RD]}),
     // X-Interface Memory
-    .spatz_mem_req_o       (spatz_mem_req_o                             ),
-    .spatz_mem_req_valid_o (spatz_mem_req_valid_o                       ),
-    .spatz_mem_req_ready_i (spatz_mem_req_ready_i                       ),
-    .spatz_mem_resp_i      (spatz_mem_resp_i                            ),
-    .spatz_mem_resp_valid_i(spatz_mem_resp_valid_i                      ),
-    .spatz_mem_resp_ready_o(spatz_mem_resp_ready_o                      ),
-    .x_mem_finished_o      (spatz_mem_finished_o                        ),
-    .x_mem_str_finished_o  (spatz_mem_str_finished_o                    )
+    .spatz_mem_req_o         (spatz_mem_req_o                             ),
+    .spatz_mem_req_valid_o   (spatz_mem_req_valid_o                       ),
+    .spatz_mem_req_ready_i   (spatz_mem_req_ready_i                       ),
+    .spatz_mem_resp_i        (spatz_mem_resp_i                            ),
+    .spatz_mem_resp_valid_i  (spatz_mem_resp_valid_i                      ),
+    .spatz_mem_resp_ready_o  (spatz_mem_resp_ready_o                      ),
+    .spatz_mem_finished_o    (spatz_mem_finished                          ),
+    .spatz_mem_str_finished_o(spatz_mem_str_finished                      )
   );
 
   ///////////
