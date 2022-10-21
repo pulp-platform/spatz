@@ -406,6 +406,7 @@ module spatz_fpu_sequencer import spatz_pkg::*; import rvv_pkg::*; import fpnew_
 
   snitch_lsu #(
     .DataWidth          (FLEN               ),
+    .AxiDataWidth       (FLEN               ),
     .NaNBox             (1                  ),
     .NumOutstandingLoads(NumOutstandingLoads)
   ) i_fp_lsu (
