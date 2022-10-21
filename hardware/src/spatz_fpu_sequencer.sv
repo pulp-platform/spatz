@@ -144,7 +144,7 @@ module spatz_fpu_sequencer import spatz_pkg::*; import rvv_pkg::*; import fpnew_
   always_comb begin
     // Maintain state
     sb_d = sb_q;
-    if (use_fd && !stall && !is_move)
+    if (use_fd && !is_move && !stall)
       sb_d[fd] = 1'b1;
     if (retire[0])
       sb_d[fpr_waddr[0]] = 1'b0;
@@ -504,6 +504,33 @@ module spatz_fpu_sequencer import spatz_pkg::*; import rvv_pkg::*; import fpnew_
       acc_mem_str_cnt_d -= 1;
   end: lsu_dispatch
 
+  ////////////
+  //  Move  //
+  ////////////
+
+  x_result_t fp_move_result_i;
+  logic      fp_move_result_valid_i;
+  logic      fp_move_result_ready_o;
+
+  x_result_t fp_move_result_o;
+  logic      fp_move_result_valid_o;
+  logic      fp_move_result_ready_i;
+
+  stream_register #(
+    .T(x_result_t)
+  ) i_fp_move_register (
+    .clk_i     (clk_i                 ),
+    .rst_ni    (rst_ni                ),
+    .clr_i     (1'b0                  ),
+    .testmode_i(1'b0                  ),
+    .data_i    (fp_move_result_i      ),
+    .valid_i   (fp_move_result_valid_i),
+    .ready_o   (fp_move_result_ready_o),
+    .data_o    (fp_move_result_o      ),
+    .valid_o   (fp_move_result_valid_o),
+    .ready_i   (fp_move_result_ready_i)
+  );
+
   //////////////
   //  Retire  //
   //////////////
@@ -517,7 +544,10 @@ module spatz_fpu_sequencer import spatz_pkg::*; import rvv_pkg::*; import fpnew_
     fpr_we    = '0;
     fpr_waddr = '0;
 
-    move_stall = 1'b0;
+    move_stall             = 1'b0;
+    fp_move_result_i       = '0;
+    fp_move_result_valid_i = 1'b0;
+    fp_move_result_ready_i = 1'b0;
 
     // Do not forward results to Snitch
     x_result_o       = '0;
@@ -528,14 +558,23 @@ module spatz_fpu_sequencer import spatz_pkg::*; import rvv_pkg::*; import fpnew_
     fp_lsu_mem_finished_o     = fp_lsu_qwrite && fp_lsu_qvalid && fp_lsu_qready;
     fp_lsu_mem_str_finished_o = fp_lsu_qwrite && fp_lsu_qvalid && fp_lsu_qready;
 
+    // Is there a move tring to commit during this cycle?
+    move_stall = is_move && use_rd && !fp_move_result_ready_o;
+    if (is_move && use_rd && operands_available) begin
+      fp_move_result_i = '{
+        id     : x_issue_req_i.id,
+        data   : fpr_rdata[0],
+        we     : '1,
+        default: '0
+      };
+      fp_move_result_valid_i = 1'b1;
+    end
+
     // Commit a Spatz result to Snitch
     if (x_result_valid_i && !x_result_i.id[5]) begin
       x_result_o       = x_result_i;
       x_result_valid_o = x_result_valid_i;
       x_result_ready_o = x_result_ready_i;
-
-      // Is there a move happening in this cycle?
-      move_stall = is_move && use_rd;
     end
     // Commit a Spatz result to the FPR
     else if (x_result_valid_i && x_result_i.id[5]) begin
@@ -545,20 +584,12 @@ module spatz_fpu_sequencer import spatz_pkg::*; import rvv_pkg::*; import fpnew_
       fpr_wdata[0] = x_result_i.data;
       fpr_waddr[0] = x_result_i.id[4:0];
       fpr_we[0]    = 1'b1;
-
-      // Is there a move happening in this cycle?
-      move_stall = is_move && use_rd;
     end
     // Commit a move result
-    else if (is_move && use_rd) begin
-      x_result_o = '{
-        id     : x_issue_req_i.id,
-        data   : fpr_rdata[0],
-        we     : '1,
-        default: '0
-      };
-      x_result_valid_o = 1'b1;
-      move_stall       = !x_result_ready_i;
+    else if (fp_move_result_valid_o) begin
+      x_result_o             = fp_move_result_o;
+      x_result_valid_o       = 1'b1;
+      fp_move_result_ready_i = 1'b1;
     end
 
     // Commit a FP LSU response
@@ -589,9 +620,9 @@ module spatz_fpu_sequencer import spatz_pkg::*; import rvv_pkg::*; import fpnew_
   //////////////////
 
   `ASSERT(MemoryOperationCounterRollover,
-      acc_mem_cnt_q == '0 |=> acc_mem_cnt_q != '1, clk_i, !rst_ni)
+    acc_mem_cnt_q == '0 |=> acc_mem_cnt_q != '1, clk_i, !rst_ni)
 
   `ASSERT(MemoryStoreOperationCounterRollover,
-      acc_mem_str_cnt_q == '0 |=> acc_mem_str_cnt_q != '1, clk_i, !rst_ni)
+    acc_mem_str_cnt_q == '0 |=> acc_mem_str_cnt_q != '1, clk_i, !rst_ni)
 
 endmodule: spatz_fpu_sequencer
