@@ -74,9 +74,6 @@ module spatz_fpu_sequencer import spatz_pkg::*; import rvv_pkg::*; import fpnew_
   assign fs2 = x_issue_req_i.instr[20 + FPRRegWidth - 1:20];
   assign fs3 = x_issue_req_i.instr[27 + FPRRegWidth - 1:27];
 
-  logic [31:0] iimmediate;
-  assign iimmediate = $signed({x_issue_req_i.instr[31:20]});
-
   /////////////////////
   //  Register File  //
   /////////////////////
@@ -466,7 +463,7 @@ module spatz_fpu_sequencer import spatz_pkg::*; import rvv_pkg::*; import fpnew_
     fp_lsu_qtag    = fd;
     fp_lsu_qwrite  = is_store;
     fp_lsu_qsigned = 1'b0;
-    fp_lsu_qaddr   = x_issue_req_i.rs[0] + iimmediate;
+    fp_lsu_qaddr   = x_issue_req_i.rs[1];
     fp_lsu_qdata   = fpr_rdata[1];
     fp_lsu_qsize   = ls_size;
     fp_lsu_qamo    = '0;
