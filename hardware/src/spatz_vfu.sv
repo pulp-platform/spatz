@@ -392,7 +392,8 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
     assign ipu_operand3 = !is_fpu_insn ? operand3[ipu*ELEN +: ELEN] : '0;
 
     spatz_ipu #(
-      .tag_t(vfu_tag_t)
+      .tag_t        (vfu_tag_t         ),
+      .HasMultiplier(SpatzHasMultiplier)
     ) i_ipu (
       .clk_i            (clk_i                                                                                           ),
       .rst_ni           (rst_ni                                                                                          ),

@@ -55,6 +55,9 @@ package spatz_pkg;
   // Largest element width that Spatz supports
   localparam vew_e MAXEW = RVD ? EW_64 : EW_32;
 
+  // Implement Spatz multiplers
+  localparam bit SpatzHasMultiplier = `ifdef MULT `MULT `else 1 `endif;
+
   //////////////////////
   // Type Definitions //
   //////////////////////
