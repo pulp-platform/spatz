@@ -428,8 +428,8 @@ module spatz_fpu_sequencer import spatz_pkg::*; import rvv_pkg::*; import fpnew_
   // Is the current instruction a vector store?
   logic is_vector_store;
   assign is_vector_store = x_issue_req_i.instr inside
-    {riscv_instr::VSE8_V, riscv_instr::VSE16_V, riscv_instr::VSE32_V,
-    riscv_instr::VSSE8_V, riscv_instr::VSSE16_V, riscv_instr::VSSE32_V};
+    {riscv_instr::VSE8_V, riscv_instr::VSE16_V, riscv_instr::VSE32_V, riscv_instr::VSE64_V,
+    riscv_instr::VSSE8_V, riscv_instr::VSSE16_V, riscv_instr::VSSE32_V, riscv_instr::VSSE64_V};
 
   // Do we need to delay is load/store because of the VLSU?
   assign vlsu_stall = (store && (acc_mem_cnt_q != '0)) || (load && (acc_mem_str_cnt_q != '0)) || acc_mem_cnt_q == '1;

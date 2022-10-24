@@ -13,7 +13,8 @@ package rvv_pkg;
   typedef enum logic [2:0] {
     EW_8  = 3'b000,
     EW_16 = 3'b001,
-    EW_32 = 3'b010
+    EW_32 = 3'b010,
+    EW_64 = 3'b011
   } vew_e;
 
   typedef enum logic [2:0] {

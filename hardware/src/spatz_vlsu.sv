@@ -54,7 +54,7 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
   // Parameters //
   ////////////////
 
-  localparam int unsigned MemDataWidth  = $bits(spatz_mem_req_o[0].wdata);
+  localparam int unsigned MemDataWidth  = ELEN;
   localparam int unsigned MemDataWidthB = MemDataWidth/8;
 
   //////////////
@@ -100,9 +100,13 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
         spatz_req_d.vl     = spatz_req_i.vl << 1;
         spatz_req_d.vstart = spatz_req_i.vstart << 1;
       end
-      default: begin
+      EW_32: begin
         spatz_req_d.vl     = spatz_req_i.vl << 2;
         spatz_req_d.vstart = spatz_req_i.vstart << 2;
+      end
+      default: begin
+        spatz_req_d.vl     = spatz_req_i.vl << MAXEW;
+        spatz_req_d.vstart = spatz_req_i.vstart << MAXEW;
       end
     endcase
   end: proc_spatz_req
@@ -221,8 +225,8 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
   elen_t [NrMemPorts-1:0]      mem_req_addr;
   logic  [NrMemPorts-1:0][1:0] mem_req_addr_offset;
 
-  vreg_addr_t       vreg_addr;
-  logic       [1:0] vreg_addr_offset;
+  vreg_addr_t                   vreg_addr;
+  logic       [int'(MAXEW)-1:0] vreg_addr_offset;
 
   // Current element index and byte index that are being accessed at the register file
   vreg_elem_t                     vreg_elem_id;
@@ -236,10 +240,10 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
   always_comb begin : gen_mem_req_addr
     for (int unsigned port = 0; port < NrMemPorts; port++) begin
       automatic logic [31:0] stride = is_strided ? spatz_req.rs2 >> spatz_req.vtype.vsew : 'd1;
-      automatic logic [31:0] addr   = spatz_req.rs1 + ({mem_counter_q[port][$bits(vlen_t)-1:2] << $clog2(NrMemPorts), mem_counter_q[port][1:0]} + (port << 2)) * stride;
+      automatic logic [31:0] addr   = spatz_req.rs1 + ({mem_counter_q[port][$bits(vlen_t)-1:MAXEW] << $clog2(NrMemPorts), mem_counter_q[port][int'(MAXEW)-1:0]} + (port << MAXEW)) * stride;
 
-      mem_req_addr[port]        = {addr[31:2], 2'b00};
-      mem_req_addr_offset[port] = addr[1:0];
+      mem_req_addr[port]        = (addr >> MAXEW) << MAXEW;
+      mem_req_addr_offset[port] = addr[int'(MAXEW)-1:0];
     end
   end
 
@@ -304,14 +308,14 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
 
   // Is the memory address unaligned
   logic is_addr_unaligned;
-  assign is_addr_unaligned = spatz_req.rs1[1:0] != 2'b00;
+  assign is_addr_unaligned = spatz_req.rs1[int'(MAXEW)-1:0] != '0;
 
   // Do we have to access every single element on its own
   logic is_single_element_operation;
   assign is_single_element_operation = is_addr_unaligned || is_strided || !is_vstart_zero;
 
   // How large is a single element (in bytes)
-  logic [2:0] single_element_size;
+  logic [3:0] single_element_size;
   assign single_element_size = 1'b1 << spatz_req.vtype.vsew;
 
   ///////////////////////
@@ -410,7 +414,7 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
           max_elements += spatz_req.vl[$clog2(MemDataWidthB)-1:0];
 
       mem_operation_valid[port] = spatz_req_valid && (max_elements != mem_counter_q[port]);
-      mem_operation_last[port]  = mem_operation_valid[port] && ((max_elements - mem_counter_q[port]) <= (is_single_element_operation ? single_element_size : 'd4));
+      mem_operation_last[port]  = mem_operation_valid[port] && ((max_elements - mem_counter_q[port]) <= (is_single_element_operation ? single_element_size : MemDataWidthB));
       mem_counter_load[port]    = new_vlsu_request;
       mem_counter_d[port]       = (spatz_req.vstart >> $clog2(NrMemPorts*MemDataWidthB)) << $clog2(MemDataWidthB);
       if (NrMemPorts == 1)
@@ -420,7 +424,7 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
           mem_counter_d[port] += MemDataWidthB;
         else if (spatz_req.vstart[$clog2(MemDataWidthB) +: $clog2(NrMemPorts)] == port)
           mem_counter_d[port] += spatz_req.vstart[$clog2(MemDataWidthB)-1:0];
-      mem_counter_delta[port] = !mem_operation_valid[port] ? 'd0 : is_single_element_operation ? single_element_size : mem_operation_last[port] ? (max_elements - mem_counter_q[port]) : 'd4;
+      mem_counter_delta[port] = !mem_operation_valid[port] ? 'd0 : is_single_element_operation ? single_element_size : mem_operation_last[port] ? (max_elements - mem_counter_q[port]) : MemDataWidthB;
       mem_counter_en[port]    = spatz_mem_req_ready_i[port] && spatz_mem_req_valid_o[port];
       mem_counter_max[port]   = max_elements;
     end
@@ -472,24 +476,48 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
           automatic elen_t data = buffer_rdata[port];
 
           // Shift data to correct position if we have an unaligned memory request
-          unique case (is_strided ? vreg_addr_offset : spatz_req.rs1[1:0])
-            2'b00: data = data;
-            2'b01: data = {data[7:0], data[31:8]};
-            2'b10: data = {data[15:0], data[31:16]};
-            2'b11: data = {data[23:0], data[31:24]};
-          endcase
+          if (MAXEW == EW_32)
+            unique case (is_strided ? vreg_addr_offset : spatz_req.rs1[1:0])
+              2'b00: data = data;
+              2'b01: data = {data[7:0], data[31:8]};
+              2'b10: data = {data[15:0], data[31:16]};
+              2'b11: data = {data[23:0], data[31:24]};
+            endcase
+          else
+            unique case (is_strided ? vreg_addr_offset : spatz_req.rs1[2:0])
+              3'b000: data = data;
+              3'b001: data = {data[7:0], data[63:8]};
+              3'b010: data = {data[15:0], data[63:16]};
+              3'b011: data = {data[23:0], data[63:24]};
+              3'b100: data = {data[31:0], data[63:32]};
+              3'b101: data = {data[39:0], data[63:40]};
+              3'b110: data = {data[47:0], data[63:48]};
+              3'b111: data = {data[55:0], data[63:56]};
+            endcase
 
           // Pop stored element and free space in buffer
           buffer_pop[port] = buffer_rvalid[port] && vrf_req_valid_d && vrf_req_ready_d && vreg_counter_en[port];
 
           // Shift data to correct position if we have a strided memory access
           if (is_strided)
-            unique case (vreg_counter_q[port][1:0])
-              2'b00: data = data;
-              2'b01: data = {data[23:0], data[31:24]};
-              2'b10: data = {data[15:0], data[31:16]};
-              2'b11: data = {data[7:0], data[31:8]};
-            endcase
+            if (MAXEW == EW_32)
+              unique case (vreg_counter_q[port][1:0])
+                2'b00: data = data;
+                2'b01: data = {data[23:0], data[31:24]};
+                2'b10: data = {data[15:0], data[31:16]};
+                2'b11: data = {data[7:0], data[31:8]};
+              endcase
+            else
+              unique case (vreg_counter_q[port][2:0])
+                3'b000: data = data;
+                3'b001: data = {data[7:0], data[63:8]};
+                3'b010: data = {data[15:0], data[63:16]};
+                3'b011: data = {data[23:0], data[63:24]};
+                3'b100: data = {data[31:0], data[63:32]};
+                3'b101: data = {data[39:0], data[63:40]};
+                3'b110: data = {data[47:0], data[63:48]};
+                3'b111: data = {data[55:0], data[63:56]};
+              endcase
           vrf_req_d.wdata[ELEN*port +: ELEN] = data;
 
           // Create write byte enable mask for register file
@@ -497,10 +525,10 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
             if (is_single_element_operation) begin
               automatic logic [$clog2(ELENB)-1:0] shift = vreg_counter_q[port][$clog2(ELENB)-1:0];
               automatic logic [ELENB-1:0] mask          = '1;
-              unique case (spatz_req.vtype.vsew)
-                rvv_pkg::EW_8 : mask = 4'b0001;
-                rvv_pkg::EW_16: mask = 4'b0011;
-                default:; // Do nothing
+              case (spatz_req.vtype.vsew)
+                EW_8 : mask = 1;
+                EW_16: mask = 3;
+                EW_32: mask = 15;
               endcase
               vrf_req_d.wbe[ELENB*port +: ELENB] = mask << shift;
             end else
@@ -547,20 +575,44 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
 
           // Shift data to lsb if we have a strided memory access
           if (is_strided)
-            unique case (mem_counter_q[port][1:0])
-              2'b01: data = {data[7:0], data[31:8]};
-              2'b10: data = {data[15:0], data[31:16]};
-              2'b11: data = {data[23:0], data[31:24]};
-              default:; // Do nothing
-            endcase
+            if (MAXEW == EW_32)
+              unique case (mem_counter_q[port][1:0])
+                2'b01: data = {data[7:0], data[31:8]};
+                2'b10: data = {data[15:0], data[31:16]};
+                2'b11: data = {data[23:0], data[31:24]};
+                default:; // Do nothing
+              endcase
+            else
+              unique case (vreg_counter_q[port][2:0])
+                3'b001: data = {data[7:0], data[63:8]};
+                3'b010: data = {data[15:0], data[63:16]};
+                3'b011: data = {data[23:0], data[63:24]};
+                3'b100: data = {data[31:0], data[63:32]};
+                3'b101: data = {data[39:0], data[63:40]};
+                3'b110: data = {data[47:0], data[63:48]};
+                3'b111: data = {data[55:0], data[63:56]};
+                default:; // Do nothing
+              endcase
 
           // Shift data to correct position if we have an unaligned memory request
-          unique case (is_strided ? mem_req_addr_offset[port] : spatz_req.rs1[1:0])
-            2'b00: mem_req_data[port] = data;
-            2'b01: mem_req_data[port] = {data[23:0], data[31:24]};
-            2'b10: mem_req_data[port] = {data[15:0], data[31:16]};
-            2'b11: mem_req_data[port] = {data[7:0], data[31:8]};
-          endcase
+          if (MAXEW == EW_32)
+            unique case (is_strided ? mem_req_addr_offset[port] : spatz_req.rs1[1:0])
+              2'b00: mem_req_data[port] = data;
+              2'b01: mem_req_data[port] = {data[23:0], data[31:24]};
+              2'b10: mem_req_data[port] = {data[15:0], data[31:16]};
+              2'b11: mem_req_data[port] = {data[7:0], data[31:8]};
+            endcase
+          else
+            unique case (is_strided ? vreg_addr_offset : spatz_req.rs1[2:0])
+              3'b000: mem_req_data[port] = data;
+              3'b001: mem_req_data[port] = {data[7:0], data[63:8]};
+              3'b010: mem_req_data[port] = {data[15:0], data[63:16]};
+              3'b011: mem_req_data[port] = {data[23:0], data[63:24]};
+              3'b100: mem_req_data[port] = {data[31:0], data[63:32]};
+              3'b101: mem_req_data[port] = {data[39:0], data[63:40]};
+              3'b110: mem_req_data[port] = {data[47:0], data[63:48]};
+              3'b111: mem_req_data[port] = {data[55:0], data[63:56]};
+            endcase
 
           mem_req_svalid[port] = buffer_rvalid[port];
           mem_req_id[port]     = buffer_rid[port];
@@ -569,14 +621,13 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
 
           // Create byte enable signal for memory request
           if (is_single_element_operation) begin
-            automatic logic [$clog2(ELENB)-1:0] shift = is_strided ? mem_req_addr_offset[port] : mem_counter_q[port][$clog2(ELENB)-1:0] + spatz_req.rs1[1:0];
+            automatic logic [$clog2(ELENB)-1:0] shift = is_strided ? mem_req_addr_offset[port] : mem_counter_q[port][$clog2(ELENB)-1:0] + spatz_req.rs1[int'(MAXEW)-1:0];
             automatic logic [MemDataWidthB-1:0] mask  = '1;
-            unique case (spatz_req.vtype.vsew)
-              rvv_pkg::EW_8 : mask = 4'b0001;
-              rvv_pkg::EW_16: mask = 4'b0011;
-              default:; // Do nothing
+            case (spatz_req.vtype.vsew)
+              EW_8 : mask = 1;
+              EW_16: mask = 3;
+              EW_32: mask = 15;
             endcase
-
             mem_req_strb[port] = mask << shift;
           end else
             for (int unsigned k = 0; k < ELENB; k++)

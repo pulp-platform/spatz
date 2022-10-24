@@ -44,7 +44,6 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
 
     vew_e vsew;
     vlen_t vstart;
-    logic [idx_width(N_IPU*4):0] vl;
 
     // Encodes both the scalar RD and the VD address in the VRF
     vreg_addr_t vd_addr;
@@ -86,8 +85,8 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
   `FF(busy_q, busy_d, 1'b0)
 
   // Number of elements in one VRF word
-  logic [$clog2(N_IPU*4):0] nr_elem_word;
-  assign nr_elem_word = N_IPU * (1 << (EW_32 - spatz_req.vtype.vsew));
+  logic [$clog2(N_IPU*(ELEN/8)):0] nr_elem_word;
+  assign nr_elem_word = N_IPU * (1 << (MAXEW - spatz_req.vtype.vsew));
 
   // Are we running integer or floating-point instructions?
   enum logic {
@@ -103,7 +102,7 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
 
   // Number of words advanced by vstart
   vlen_t vstart;
-  assign vstart = ((result_tag.vstart / N_IPU) >> (EW_32 - result_tag.vsew)) << (EW_32 - result_tag.vsew);
+  assign vstart = ((result_tag.vstart / N_IPU) >> (MAXEW - result_tag.vsew)) << (MAXEW - result_tag.vsew);
 
   // Should we stall?
   logic stall;
@@ -117,11 +116,11 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
 
   // Valid operations
   logic [N_IPU*ELENB-1:0] valid_operations;
-  assign valid_operations = spatz_req.op_arith.is_scalar ? 4'hf : '1;
+  assign valid_operations = spatz_req.op_arith.is_scalar ? (spatz_req.vtype.vsew == EW_32 ? 4'hf : 8'hff) : '1;
 
   // Pending results
   logic [N_IPU*ELENB-1:0] pending_results;
-  assign pending_results = result_tag.wb ? 4'hf : '1;
+  assign pending_results = result_tag.wb ? (spatz_req.vtype.vsew == EW_32 ? 4'hf : 8'hff) : '1;
 
   // Did we issue a microoperation?
   logic word_issued;
@@ -259,8 +258,9 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
     else begin
       // Replicate scalar operands
       unique case (spatz_req.vtype.vsew)
-        EW_8 : operand1   = {4*N_IPU{spatz_req.rs1[7:0]}};
-        EW_16: operand1   = {2*N_IPU{spatz_req.rs1[15:0]}};
+        EW_8 : operand1   = MAXEW == EW_32 ? {4*N_IPU{spatz_req.rs1[7:0]}}  : {8*N_IPU{spatz_req.rs1[7:0]}};
+        EW_16: operand1   = MAXEW == EW_32 ? {2*N_IPU{spatz_req.rs1[15:0]}} : {4*N_IPU{spatz_req.rs1[15:0]}};
+        EW_32: operand1   = MAXEW == EW_32 ? {1*N_IPU{spatz_req.rs1[31:0]}} : {2*N_IPU{spatz_req.rs1[31:0]}};
         default: operand1 = {1*N_IPU{spatz_req.rs1}};
       endcase
     end
@@ -270,8 +270,9 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
     else
       // Replicate scalar operands
       unique case (spatz_req.vtype.vsew)
-        EW_8 : operand2   = {4*N_IPU{spatz_req.rs2[7:0]}};
-        EW_16: operand2   = {2*N_IPU{spatz_req.rs2[15:0]}};
+        EW_8 : operand2   = MAXEW == EW_32 ? {4*N_IPU{spatz_req.rs2[7:0]}}  : {8*N_IPU{spatz_req.rs2[7:0]}};
+        EW_16: operand2   = MAXEW == EW_32 ? {2*N_IPU{spatz_req.rs2[15:0]}} : {4*N_IPU{spatz_req.rs2[15:0]}};
+        EW_32: operand2   = MAXEW == EW_32 ? {1*N_IPU{spatz_req.rs2[31:0]}} : {2*N_IPU{spatz_req.rs2[31:0]}};
         default: operand2 = {1*N_IPU{spatz_req.rs2}};
       endcase
 
@@ -315,7 +316,6 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
       id     : spatz_req.id,
       vsew   : spatz_req.vtype.vsew,
       vstart : spatz_req.vstart,
-      vl     : vl_q[idx_width(N_IPU*4):0],
       vd_addr: spatz_req.op_arith.is_scalar ? vreg_addr_t'(spatz_req.rd) : vreg_addr_q[2],
       wb     : spatz_req.op_arith.is_scalar,
       last   : last_request
@@ -361,10 +361,13 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
       // If we are in the last group or at the start and vstart is nonzero,
       // create the byte enable (be) mask for write back to register file.
       if (spatz_req.vstart != '0 && busy_q == 1'b0)
-        unique case (spatz_req.vtype.vsew)
-          EW_8 : vreg_wbe   = ~(vreg_be_t'('1) >> ((N_IPU * (1 << (EW_32 - result_tag.vsew))) - result_tag.vstart[idx_width(N_IPU * 4)-1:0]));
-          EW_16: vreg_wbe   = ~(vreg_be_t'('1) >> ((N_IPU * (1 << (EW_32 - result_tag.vsew))) - result_tag.vstart[idx_width(N_IPU * 2)-1:0]));
-          default: vreg_wbe = ~(vreg_be_t'('1) >> ((N_IPU * (1 << (EW_32 - result_tag.vsew))) - result_tag.vstart[idx_width(N_IPU * 1)-1:0]));
+        unique case (result_tag.vsew)
+          EW_8 : vreg_wbe = ~(vreg_be_t'('1) >> ((N_IPU * (1 << (MAXEW - EW_8))) - result_tag.vstart[idx_width(N_IPU) + (MAXEW - EW_8) - 1:0]));
+          EW_16: vreg_wbe = ~(vreg_be_t'('1) >> ((N_IPU * (1 << (MAXEW - EW_16))) - result_tag.vstart[idx_width(N_IPU) + (MAXEW - EW_16) - 1:0]));
+          EW_32: vreg_wbe = ~(vreg_be_t'('1) >> ((N_IPU * (1 << (MAXEW - EW_32))) - result_tag.vstart[idx_width(N_IPU) + (MAXEW - EW_32) - 1:0]));
+          EW_64:
+            if (MAXEW >= EW_64)
+              vreg_wbe = ~(vreg_be_t'('1) >> ((N_IPU * (1 << (MAXEW - EW_64))) - result_tag.vstart[idx_width(N_IPU) + (MAXEW - EW_64) - 1:0]));
         endcase
     end
   end : operand_req_proc
@@ -445,10 +448,18 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
 
     if (FPU) begin
       unique case (spatz_req.vtype.vsew)
+        EW_64: begin
+          if (RVD) begin
+            fpu_src_fmt = fpnew_pkg::FP64;
+            fpu_dst_fmt = fpnew_pkg::FP64;
+            fpu_int_fmt = fpnew_pkg::INT64;
+          end
+        end
         EW_32: begin
-          fpu_src_fmt = fpnew_pkg::FP32;
-          fpu_dst_fmt = fpnew_pkg::FP32;
-          fpu_int_fmt = fpnew_pkg::INT32;
+          fpu_src_fmt      = fpnew_pkg::FP32;
+          fpu_dst_fmt      = fpnew_pkg::FP32;
+          fpu_int_fmt      = fpnew_pkg::INT32;
+          fpu_vectorial_op = FLEN > 32;
         end
         EW_16: begin
           fpu_src_fmt      = fpnew_pkg::FP16;

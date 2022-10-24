@@ -69,17 +69,25 @@ module spatz_vsldu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
         spatz_req_d.vl     = spatz_req_i.vl;
         spatz_req_d.vstart = spatz_req_i.vstart;
         if (spatz_req_i.op_sld.vmv && spatz_req_i.op_sld.insert)
-          spatz_req_d.rs1 = {4{spatz_req_i.rs1[7:0]}};
+          spatz_req_d.rs1 = MAXEW == EW_32 ? {4{spatz_req_i.rs1[7:0]}} : {8{spatz_req_i.rs1[7:0]}};
       end
       EW_16: begin
         spatz_req_d.vl     = spatz_req_i.vl << 1;
         spatz_req_d.vstart = spatz_req_i.vstart << 1;
         if (spatz_req_i.op_sld.vmv && spatz_req_i.op_sld.insert)
-          spatz_req_d.rs1 = {2{spatz_req_i.rs1[15:0]}};
+          spatz_req_d.rs1 = MAXEW == EW_32 ? {2{spatz_req_i.rs1[15:0]}} : {4{spatz_req_i.rs1[15:0]}};
       end
-      default: begin
+      EW_32: begin
         spatz_req_d.vl     = spatz_req_i.vl << 2;
         spatz_req_d.vstart = spatz_req_i.vstart << 2;
+        if (spatz_req_i.op_sld.vmv && spatz_req_i.op_sld.insert)
+          spatz_req_d.rs1 = MAXEW == EW_32 ? {1{spatz_req_i.rs1[31:0]}} : {2{spatz_req_i.rs1[31:0]}};
+      end
+      default: begin
+        spatz_req_d.vl     = spatz_req_i.vl << MAXEW;
+        spatz_req_d.vstart = spatz_req_i.vstart << MAXEW;
+        if (spatz_req_i.op_sld.vmv && spatz_req_i.op_sld.insert)
+          spatz_req_d.rs1 = spatz_req_i.rs1;
       end
     endcase
   end: proc_spatz_req
@@ -402,9 +410,9 @@ module spatz_vsldu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
         // Insert rs1 element at the last position
         if (spatz_req.op_sld.insert && vreg_operation_last) begin
           for (int b = 0; b < VRFWordBWidth; b++)
-            if (b >= (vreg_counter_q[$clog2(VRFWordBWidth)-1:0] + vreg_counter_delta - (3'b001<<spatz_req.vtype.vsew)))
+            if (b >= (vreg_counter_q[$clog2(VRFWordBWidth)-1:0] + vreg_counter_delta - (4'b0001<<spatz_req.vtype.vsew)))
               data_out[b*8 +: 8] = data_low[b*8 +: 8];
-          data_out = data_out | (vreg_data_t'(spatz_req.rs1) << 8*(vreg_counter_q[$clog2(VRFWordBWidth)-1:0]+vreg_counter_delta-(3'b001<<spatz_req.vtype.vsew)));
+          data_out = data_out | (vreg_data_t'(spatz_req.rs1) << 8*(vreg_counter_q[$clog2(VRFWordBWidth)-1:0]+vreg_counter_delta-(4'b0001<<spatz_req.vtype.vsew)));
         end
       end
 

@@ -107,7 +107,7 @@ module spatz_controller
       // Change vtype and vl if we have a config instruction
       if (spatz_req.op == VCFG) begin
         // Check if vtype is valid
-        if ((spatz_req.vtype.vsew > EW_32) || (spatz_req.vtype.vlmul inside {LMUL_RES, LMUL_F8}) || (signed'(spatz_req.vtype.vlmul) + signed'($clog2(ELEN)) < signed'(spatz_req.vtype.vsew))) begin
+        if ((spatz_req.vtype.vsew > MAXEW) || (spatz_req.vtype.vlmul inside {LMUL_RES, LMUL_F8}) || (signed'(spatz_req.vtype.vlmul) + signed'($clog2(ELEN)) < signed'(spatz_req.vtype.vsew))) begin
           // Invalid
           vtype_d = '{vill: 1'b1, vsew: EW_8, vlmul: LMUL_1, default: '0};
           vl_d    = '0;
@@ -383,9 +383,9 @@ module spatz_controller
 
           // Is this a scalar request?
           if (spatz_req.op_arith.is_scalar) begin
-            spatz_req.vtype.vsew = EW_32;
-            spatz_req.vl         = N_IPU * (1 << (EW_32 - spatz_req.vtype.vsew));
-            spatz_req.vstart     = '0;
+            spatz_req.vtype  = buffer_spatz_req.vtype;
+            spatz_req.vl     = 1;
+            spatz_req.vstart = '0;
           end
         end
 

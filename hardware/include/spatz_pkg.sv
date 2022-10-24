@@ -52,6 +52,9 @@ package spatz_pkg;
   // Number of parallel vector instructions
   localparam int unsigned NrParallelInstructions = 4;
 
+  // Largest element width that Spatz supports
+  localparam vew_e MAXEW = RVD ? EW_64 : EW_32;
+
   //////////////////////
   // Type Definitions //
   //////////////////////
@@ -322,7 +325,30 @@ package spatz_pkg;
 
   localparam int unsigned FLEN = FPU && RVD ? 64 : 32;
 
-  localparam fpnew_pkg::fpu_implementation_t FPUImplementation = '{
+  localparam fpnew_pkg::fpu_implementation_t FPUImplementation = RVD ?
+  // Double Precision Configuration
+  '{
+    PipeRegs: '{
+      '{2, // FP32
+        3, // FP64
+        1, // FP16
+        1, // FP8
+        1  // FP16alt
+      },                // FMA Block
+      '{1, 1, 1, 1, 1}, // DIVSQRT
+      '{1, 1, 1, 1, 1}, // NONCOMP
+      '{2, 2, 2, 2, 2}  // CONV
+    },
+    UnitTypes: '{
+      '{fpnew_pkg::MERGED, fpnew_pkg::MERGED, fpnew_pkg::MERGED, fpnew_pkg::MERGED, fpnew_pkg::MERGED},           // FMA
+      '{fpnew_pkg::DISABLED, fpnew_pkg::DISABLED, fpnew_pkg::DISABLED, fpnew_pkg::DISABLED, fpnew_pkg::DISABLED}, // DIVSQRT
+      '{fpnew_pkg::PARALLEL, fpnew_pkg::PARALLEL, fpnew_pkg::PARALLEL, fpnew_pkg::PARALLEL, fpnew_pkg::PARALLEL}, // NONCOMP
+      '{fpnew_pkg::MERGED, fpnew_pkg::MERGED, fpnew_pkg::MERGED, fpnew_pkg::MERGED, fpnew_pkg::MERGED}            // CONV
+    },
+    PipeConfig: fpnew_pkg::BEFORE
+  } :
+  // Single Precision FPU
+  '{
     PipeRegs: '{
       // FMA Block
       '{
@@ -332,39 +358,34 @@ package spatz_pkg;
         1, // FP8
         1  // FP16alt
       },
-      // DIVSQRT
-      '{1, 1, 1, 1, 1},
-      // NONCOMP
-      '{1, 1, 1, 1, 1},
-      // CONV
-      '{2, 2, 2, 2, 2}
+      '{1, 1, 1, 1, 1}, // DIVSQRT
+      '{1, 1, 1, 1, 1}, // NONCOMP
+      '{2, 2, 2, 2, 2}  // CONV
     },
     UnitTypes: '{
-      '{
-        fpnew_pkg::MERGED, fpnew_pkg::MERGED, fpnew_pkg::MERGED,
-        fpnew_pkg::MERGED, fpnew_pkg::MERGED
-      }, // FMA
-      '{
-        fpnew_pkg::DISABLED, fpnew_pkg::DISABLED, fpnew_pkg::DISABLED,
-        fpnew_pkg::DISABLED, fpnew_pkg::DISABLED
-      }, // DIVSQRT
-      '{
-        fpnew_pkg::PARALLEL, fpnew_pkg::PARALLEL, fpnew_pkg::PARALLEL,
-        fpnew_pkg::PARALLEL, fpnew_pkg::PARALLEL
-      }, // NONCOMP
-      '{
-        fpnew_pkg::MERGED, fpnew_pkg::MERGED, fpnew_pkg::MERGED,
-        fpnew_pkg::MERGED, fpnew_pkg::MERGED
-      } // CONV
+      '{fpnew_pkg::MERGED, fpnew_pkg::MERGED, fpnew_pkg::MERGED, fpnew_pkg::MERGED, fpnew_pkg::MERGED},           // FMA
+      '{fpnew_pkg::DISABLED, fpnew_pkg::DISABLED, fpnew_pkg::DISABLED, fpnew_pkg::DISABLED, fpnew_pkg::DISABLED}, // DIVSQRT
+      '{fpnew_pkg::PARALLEL, fpnew_pkg::PARALLEL, fpnew_pkg::PARALLEL, fpnew_pkg::PARALLEL, fpnew_pkg::PARALLEL}, // NONCOMP
+      '{ fpnew_pkg::MERGED, fpnew_pkg::MERGED, fpnew_pkg::MERGED, fpnew_pkg::MERGED, fpnew_pkg::MERGED}           // CONV
     },
     PipeConfig: fpnew_pkg::BEFORE
   };
 
-  localparam fpnew_pkg::fpu_features_t FPUFeatures = '{
+  localparam fpnew_pkg::fpu_features_t FPUFeatures = RVD ?
+  // Double Precision FPU
+  '{
     Width        : ELEN,
     EnableVectors: 1'b1,
     EnableNanBox : 1'b1,
-    FpFmtMask    : {RVF, RVD, 1'b1, 1'b0, 1'b0},
+    FpFmtMask    : {1'b1, 1'b1, 1'b1, 1'b1, 1'b1},
+    IntFmtMask   : {1'b1, 1'b1, 1'b1, 1'b1}
+  } :
+  // Single Precision FPU
+  '{
+    Width        : ELEN,
+    EnableVectors: 1'b1,
+    EnableNanBox : 1'b1,
+    FpFmtMask    : {RVF, 1'b0, 1'b1, 1'b0, 1'b0},
     IntFmtMask   : {1'b0, 1'b1, 1'b1, 1'b0}
   };
 
