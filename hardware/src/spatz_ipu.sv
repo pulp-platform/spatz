@@ -590,7 +590,7 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
     );
 
   end: gen_64b_ipu else begin: gen_error
-    $error(1, "[spatz_ipu] Spatz' IPU only supports 32b and 64b modes.");
+    $error("[spatz_ipu] Spatz' IPU only supports 32b and 64b modes.");
   end: gen_error
 
 endmodule : spatz_ipu

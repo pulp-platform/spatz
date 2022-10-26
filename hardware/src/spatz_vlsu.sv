@@ -131,9 +131,8 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
   // All elements from one side to the other go through it.
   for (genvar port = 0; port < NrMemPorts; port++) begin : gen_reorder_buffer
     reorder_buffer #(
-      .DataWidth  (ELEN              ),
-      .NumWords   (NrOutstandingLoads),
-      .FallThrough(1'b1              )
+      .DataWidth(ELEN              ),
+      .NumWords (NrOutstandingLoads)
     ) i_reorder_buffer (
       .clk_i    (clk_i              ),
       .rst_ni   (rst_ni             ),
@@ -167,7 +166,8 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
   vlen_t [NrMemPorts-1:0] mem_counter_delta;
   vlen_t [NrMemPorts-1:0] mem_counter_d;
   vlen_t [NrMemPorts-1:0] mem_counter_q;
-  logic  [NrMemPorts-1:0] mem_finished;
+  logic  [NrMemPorts-1:0] mem_finished_q;
+  logic  [NrMemPorts-1:0] mem_finished_d;
 
   for (genvar port = 0; port < NrMemPorts; port++) begin: gen_mem_counters
     delta_counter #(
@@ -185,7 +185,8 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
       .overflow_o(/* Unused */           )
     );
 
-    assign mem_finished[port] = spatz_req_valid && (mem_counter_q[port] == mem_counter_max[port]);
+    assign mem_finished_q[port] = spatz_req_valid && (mem_counter_q[port] == mem_counter_max[port]);
+    assign mem_finished_d[port] = spatz_req_valid && ((mem_counter_q[port] + mem_counter_delta[port]) == mem_counter_max[port]);
   end: gen_mem_counters
 
   // For each IPU that we have, count how many elements we have already loaded/stored.
@@ -197,7 +198,8 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
   vlen_t [N_IPU-1:0]      vreg_counter_delta;
   vlen_t [N_IPU-1:0]      vreg_counter_d;
   vlen_t [N_IPU-1:0]      vreg_counter_q;
-  logic  [NrMemPorts-1:0] vreg_finished;
+  logic  [NrMemPorts-1:0] vreg_finished_q;
+  logic  [NrMemPorts-1:0] vreg_finished_d;
 
   for (genvar ipu = 0; ipu < N_IPU; ipu++) begin: gen_vreg_counters
     delta_counter #(
@@ -215,7 +217,8 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
       .overflow_o(/* Unused */           )
     );
 
-    assign vreg_finished[ipu] = spatz_req_valid && (vreg_counter_q[ipu] == vreg_counter_max[ipu]);
+    assign vreg_finished_q[ipu] = spatz_req_valid && (vreg_counter_q[ipu] == vreg_counter_max[ipu]);
+    assign vreg_finished_d[ipu] = spatz_req_valid && ((vreg_counter_q[ipu] + vreg_counter_delta[ipu]) == vreg_counter_max[ipu]);
   end: gen_vreg_counters
 
   ////////////////////////
@@ -261,6 +264,9 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
   logic busy_q, busy_d;
   `FF(busy_q, busy_d, 1'b0)
 
+  // Did we finish an instruction?
+  logic vlsu_finished_req;
+
   always_comb begin: control_proc
     // Maintain state
     busy_d = busy_q;
@@ -269,16 +275,15 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
     spatz_req_ready = 1'b0;
 
     // Do not ack anything
-    vlsu_rsp_valid_o = 1'b0;
-    vlsu_rsp_o       = '0;
+    vlsu_finished_req = 1'b0;
 
     // Finished the execution!
-    if (spatz_req_valid && &vreg_finished && &mem_finished) begin
+    if (spatz_req_valid && &vreg_finished_q && &mem_finished_q) begin
       spatz_req_ready = spatz_req_valid;
       busy_d          = 1'b0;
 
-      vlsu_rsp_o.id    = spatz_req.id;
-      vlsu_rsp_valid_o = 1'b1;
+      // Acknowledge response when the last load commits to the VRF, or when the store finishes
+      vlsu_finished_req = 1'b1;
     end
     // Do we have a new instruction?
     else if (spatz_req_valid && !busy_d)
@@ -299,8 +304,8 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
 
   // Signal when we are finished with with accessing the memory (necessary
   // for the case with more than one memory port)
-  assign spatz_mem_finished_o     = spatz_req_valid && &vreg_finished && &mem_finished;
-  assign spatz_mem_str_finished_o = spatz_req_valid && &vreg_finished && &mem_finished && !is_load;
+  assign spatz_mem_finished_o     = spatz_req_valid && &vreg_finished_q && &mem_finished_q;
+  assign spatz_mem_str_finished_o = spatz_req_valid && &vreg_finished_q && &mem_finished_q && !is_load;
 
   // Do we start at the very fist element
   logic is_vstart_zero;
@@ -326,6 +331,9 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
     vreg_addr_t waddr;
     vreg_data_t wdata;
     vreg_be_t wbe;
+
+    vlsu_rsp_t rsp;
+    logic rsp_valid;
   } vrf_req_t;
 
   vrf_req_t vrf_req_d, vrf_req_q;
@@ -349,8 +357,12 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
   assign vrf_wdata_o     = vrf_req_q.wdata;
   assign vrf_wbe_o       = vrf_req_q.wbe;
   assign vrf_we_o        = vrf_req_valid_q;
-  assign vrf_id_o        = {2{spatz_req.id}};
+  assign vrf_id_o        = {vrf_req_q.rsp.id, spatz_req.id};
   assign vrf_req_ready_q = vrf_wvalid_i;
+
+  // Ack when the vector store finishes, or when the vector load commits to the VRF
+  assign vlsu_rsp_o       = vrf_req_q.rsp_valid && vrf_req_valid_q ? vrf_req_q.rsp   : '{id: spatz_req.id, default: '0};
+  assign vlsu_rsp_valid_o = vrf_req_q.rsp_valid && vrf_req_valid_q ? vrf_req_ready_q : vlsu_finished_req && !is_load;
 
   //////////////
   // Counters //
@@ -464,6 +476,10 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
 
     // Always ready
     spatz_mem_resp_ready_o = '1;
+
+    // Propagate request ID
+    vrf_req_d.rsp.id    = spatz_req.id;
+    vrf_req_d.rsp_valid = spatz_req_valid && &vreg_finished_d && &mem_finished_d;
 
     if (is_load) begin
       // If we have a valid element in the buffer, store it back to the register file
