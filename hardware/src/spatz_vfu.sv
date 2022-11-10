@@ -92,7 +92,7 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
   enum logic {
     VFU_RunningIPU, VFU_RunningFPU
   } state_d, state_q;
-  `FF(state_q, state_d, VFU_RunningIPU)
+  `FF(state_q, state_d, VFU_RunningFPU)
 
   // Propagate the tags through the functional units
   vfu_tag_t ipu_result_tag, fpu_result_tag, result_tag;
@@ -188,7 +188,8 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
             if (is_fpu_busy)
               stall = 1'b1;
             else
-              state_d = VFU_RunningIPU;
+              if (SpatzHasIntegerALU) // Do we even have an IPU?
+                state_d = VFU_RunningIPU;
         end
       endcase
 
@@ -391,27 +392,33 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
     assign ipu_operand2 = !is_fpu_insn ? operand2[ipu*ELEN +: ELEN] : '0;
     assign ipu_operand3 = !is_fpu_insn ? operand3[ipu*ELEN +: ELEN] : '0;
 
-    spatz_ipu #(
-      .tag_t        (vfu_tag_t         ),
-      .HasMultiplier(SpatzHasMultiplier)
-    ) i_ipu (
-      .clk_i            (clk_i                                                                                           ),
-      .rst_ni           (rst_ni                                                                                          ),
-      .operation_i      (spatz_req.op                                                                                    ),
-      // Only the IPU0 executes scalar instructions
-      .operation_valid_i(spatz_req_valid && operands_ready && (!spatz_req.op_arith.is_scalar || ipu == 0) && !is_fpu_insn),
-      .op_s1_i          (ipu_operand1                                                                                    ),
-      .op_s2_i          (ipu_operand2                                                                                    ),
-      .op_d_i           (ipu_operand3                                                                                    ),
-      .tag_i            (input_tag                                                                                       ),
-      .carry_i          ('0                                                                                              ),
-      .sew_i            (spatz_req.vtype.vsew                                                                            ),
-      .be_o             (/* Unused */                                                                                    ),
-      .result_o         (ipu_result[ipu*ELEN +: ELEN]                                                                    ),
-      .result_valid_o   (ipu_result_valid[ipu*ELENB +: ELENB]                                                            ),
-      .result_ready_i   (result_ready                                                                                    ),
-      .tag_o            (int_ipu_tag                                                                                     )
-    );
+    if (SpatzHasIntegerALU) begin: gen_ipu
+      spatz_ipu #(
+        .tag_t        (vfu_tag_t         ),
+        .HasMultiplier(SpatzHasMultiplier)
+      ) i_ipu (
+        .clk_i            (clk_i                                                                                           ),
+        .rst_ni           (rst_ni                                                                                          ),
+        .operation_i      (spatz_req.op                                                                                    ),
+        // Only the IPU0 executes scalar instructions
+        .operation_valid_i(spatz_req_valid && operands_ready && (!spatz_req.op_arith.is_scalar || ipu == 0) && !is_fpu_insn),
+        .op_s1_i          (ipu_operand1                                                                                    ),
+        .op_s2_i          (ipu_operand2                                                                                    ),
+        .op_d_i           (ipu_operand3                                                                                    ),
+        .tag_i            (input_tag                                                                                       ),
+        .carry_i          ('0                                                                                              ),
+        .sew_i            (spatz_req.vtype.vsew                                                                            ),
+        .be_o             (/* Unused */                                                                                    ),
+        .result_o         (ipu_result[ipu*ELEN +: ELEN]                                                                    ),
+        .result_valid_o   (ipu_result_valid[ipu*ELENB +: ELENB]                                                            ),
+        .result_ready_i   (result_ready                                                                                    ),
+        .tag_o            (int_ipu_tag                                                                                     )
+      );
+    end else begin
+      assign ipu_result[ipu*ELEN +: ELEN]         = '0;
+      assign ipu_result_valid[ipu*ELENB +: ELENB] = '0;
+      assign int_ipu_tag                          = '0;
+    end
 
     assign ipu_in_ready[ipu*ELENB +: ELENB] = '1;
     if (ipu == 0) begin: gen_ipu_tag
