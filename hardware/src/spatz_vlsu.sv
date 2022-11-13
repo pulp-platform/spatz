@@ -9,7 +9,7 @@
 
 module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx_width; #(
     parameter               NrMemPorts         = 1,
-    parameter               NrOutstandingLoads = 8,
+    parameter               NrOutstandingLoads = 4,
     // Dependant parameters. DO NOT CHANGE!
     localparam int unsigned IdWidth            = idx_width(NrOutstandingLoads)
   ) (
@@ -266,6 +266,11 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
 
   // Did we finish an instruction?
   logic vlsu_finished_req;
+
+  // Memory requests
+  spatz_mem_req_t [NrMemPorts-1:0] spatz_mem_req;
+  logic           [NrMemPorts-1:0] spatz_mem_req_valid;
+  logic           [NrMemPorts-1:0] spatz_mem_req_ready;
 
   always_comb begin: control_proc
     // Maintain state
@@ -561,7 +566,7 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
 
         // Request a new id and and execute memory request
         if (!buffer_full[port] && mem_operation_valid[port]) begin
-          buffer_req_id[port]  = spatz_mem_req_ready_i[port] & spatz_mem_req_valid_o[port];
+          buffer_req_id[port]  = spatz_mem_req_ready[port] & spatz_mem_req_valid[port];
           mem_req_lvalid[port] = 1'b1;
           mem_req_id[port]     = buffer_id[port];
           mem_req_last[port]   = mem_operation_last[port];
@@ -633,7 +638,7 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
           mem_req_svalid[port] = buffer_rvalid[port];
           mem_req_id[port]     = buffer_rid[port];
           mem_req_last[port]   = mem_operation_last[port];
-          buffer_pop[port]     = spatz_mem_req_ready_i[port] && spatz_mem_req_valid_o[port];
+          buffer_pop[port]     = spatz_mem_req_ready[port] && spatz_mem_req_valid[port];
 
           // Create byte enable signal for memory request
           if (is_single_element_operation) begin
@@ -660,16 +665,31 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
 
   // Create memory requests
   for (genvar port = 0; port < NrMemPorts; port++) begin : gen_mem_req
-    assign spatz_mem_req_o[port].id    = mem_req_id[port];
-    assign spatz_mem_req_o[port].addr  = mem_req_addr[port];
-    assign spatz_mem_req_o[port].mode  = '0; // Request always uses user privilege level
-    assign spatz_mem_req_o[port].size  = spatz_req.vtype.vsew[1:0];
-    assign spatz_mem_req_o[port].we    = !is_load;
-    assign spatz_mem_req_o[port].strb  = mem_req_strb[port];
-    assign spatz_mem_req_o[port].wdata = mem_req_data[port];
-    assign spatz_mem_req_o[port].last  = mem_req_last[port];
-    assign spatz_mem_req_o[port].spec  = 1'b0; // Request is never speculative
-    assign spatz_mem_req_valid_o[port] = mem_req_svalid[port] || mem_req_lvalid[port];
+    stream_register #(
+      .T(spatz_mem_req_t)
+    ) i_spatz_mem_req_register (
+      .clk_i     (clk_i                      ),
+      .rst_ni    (rst_ni                     ),
+      .clr_i     (1'b0                       ),
+      .testmode_i(1'b0                       ),
+      .data_i    (spatz_mem_req[port]        ),
+      .valid_i   (spatz_mem_req_valid[port]  ),
+      .ready_o   (spatz_mem_req_ready[port]  ),
+      .data_o    (spatz_mem_req_o[port]      ),
+      .valid_o   (spatz_mem_req_valid_o[port]),
+      .ready_i   (spatz_mem_req_ready_i[port])
+    );
+
+    assign spatz_mem_req[port].id    = mem_req_id[port];
+    assign spatz_mem_req[port].addr  = mem_req_addr[port];
+    assign spatz_mem_req[port].mode  = '0; // Request always uses user privilege level
+    assign spatz_mem_req[port].size  = spatz_req.vtype.vsew[1:0];
+    assign spatz_mem_req[port].we    = !is_load;
+    assign spatz_mem_req[port].strb  = mem_req_strb[port];
+    assign spatz_mem_req[port].wdata = mem_req_data[port];
+    assign spatz_mem_req[port].last  = mem_req_last[port];
+    assign spatz_mem_req[port].spec  = 1'b0; // Request is never speculative
+    assign spatz_mem_req_valid[port] = mem_req_svalid[port] || mem_req_lvalid[port];
   end
 
   ////////////////
