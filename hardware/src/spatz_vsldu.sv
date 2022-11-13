@@ -253,15 +253,15 @@ module spatz_vsldu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
       VREG_IDLE: begin
         // Wait until our first write operation
         vreg_operation_first = spatz_req_valid && !prefetch_q && new_vsldu_request_q;
-        if (spatz_req_valid)
+        if (spatz_req_valid && vreg_counter_q <= slide_amount_q)
           vreg_operation_first_d = VREG_WAIT_FIRST_WRITE;
 
-        if (vrf_req_valid_d)
+        if (vrf_req_valid_d && vrf_req_ready_d)
           vreg_operation_first_d = VREG_IDLE;
       end
       VREG_WAIT_FIRST_WRITE: begin
         vreg_operation_first = spatz_req_valid && !prefetch_q;
-        if (vrf_req_valid_d)
+        if (vrf_req_valid_d && vrf_req_ready_d)
           vreg_operation_first_d = VREG_IDLE;
       end
     endcase
