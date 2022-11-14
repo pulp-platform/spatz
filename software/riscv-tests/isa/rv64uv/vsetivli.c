@@ -14,7 +14,7 @@ void TEST_CASE1(void) {
   uint64_t vma = 1;
   uint64_t golden_vtype;
   vtype(golden_vtype, vlmul, vsew, vta, vma);
-  asm volatile("vsetivli %[AVL], 16, e8, m1, ta, ma" : [AVL] "=r"(avl));
+  asm volatile("vsetivli %[AVL], 16, e8, m2, ta, ma" : [AVL] "=r"(avl));
   read_vtype(vtype);
   read_vl(vl);
   check_vtype_vl(1, vtype, golden_vtype, avl, vl);
@@ -28,7 +28,7 @@ void TEST_CASE2(void) {
   uint64_t vma = 1;
   uint64_t golden_vtype;
   vtype(golden_vtype, vlmul, vsew, vta, vma);
-  asm volatile("vsetivli %[AVL], 31, e32, m4, tu, ma" : [AVL] "=r"(avl));
+  asm volatile("vsetivli %[AVL], 31, e32, m2, tu, ma" : [AVL] "=r"(avl));
   read_vtype(vtype);
   read_vl(vl);
   check_vtype_vl(2, vtype, golden_vtype, avl, vl);

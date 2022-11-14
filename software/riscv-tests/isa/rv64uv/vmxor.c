@@ -8,50 +8,50 @@
 #include "vector_macros.h"
 
 void TEST_CASE1() {
-  VSET(16, e8, m1);
-  VLOAD_8(v2, 0xCD, 0xEF);
-  VLOAD_8(v3, 0x84, 0x21);
-  asm volatile("vmxor.mm v1, v2, v3");
-  VSET(2, e8, m1);
-  VCMP_U8(1, v1, 0x49, 0xCE);
+  VSET(16, e8, m2);
+  VLOAD_8(v4, 0xCD, 0xEF);
+  VLOAD_8(v6, 0x84, 0x21);
+  asm volatile("vmxor.mm v2, v4, v6");
+  VSET(2, e8, m2);
+  VCMP_U8(1, v2, 0x49, 0xCE);
 }
 
 void TEST_CASE2() {
-  VSET(16, e8, m1);
-  VLOAD_8(v2, 0xCD, 0xEF);
-  VLOAD_8(v3, 0xFF, 0xFF);
-  asm volatile("vmxor.mm v1, v2, v3");
-  VSET(2, e8, m1);
-  VCMP_U8(2, v1, 0x32, 0x10);
+  VSET(16, e8, m2);
+  VLOAD_8(v4, 0xCD, 0xEF);
+  VLOAD_8(v6, 0xFF, 0xFF);
+  asm volatile("vmxor.mm v2, v4, v6");
+  VSET(2, e8, m2);
+  VCMP_U8(2, v2, 0x32, 0x10);
 }
 
 void TEST_CASE3() {
-  VSET(16, e8, m1);
-  VLOAD_8(v2, 0xCD, 0xEF);
-  VLOAD_8(v3, 0x00, 0x00);
-  asm volatile("vmxor.mm v1, v2, v3");
-  VSET(2, e8, m1);
-  VCMP_U8(3, v1, 0xCD, 0xEF);
+  VSET(16, e8, m2);
+  VLOAD_8(v4, 0xCD, 0xEF);
+  VLOAD_8(v6, 0x00, 0x00);
+  asm volatile("vmxor.mm v2, v4, v6");
+  VSET(2, e8, m2);
+  VCMP_U8(3, v2, 0xCD, 0xEF);
 }
 
 void TEST_CASE4() {
-  VSET(16, e8, m1);
-  VLOAD_8(v2, 0xCD, 0xEF);
-  VLOAD_8(v3, 0x0F, 0xF0);
-  asm volatile("vmxor.mm v1, v2, v3");
-  VSET(2, e8, m1);
-  VCMP_U8(4, v1, 0xC2, 0x1F);
+  VSET(16, e8, m2);
+  VLOAD_8(v4, 0xCD, 0xEF);
+  VLOAD_8(v6, 0x0F, 0xF0);
+  asm volatile("vmxor.mm v2, v4, v6");
+  VSET(2, e8, m2);
+  VCMP_U8(4, v2, 0xC2, 0x1F);
 }
 
 void TEST_CASE5() {
-  VSET(16, e8, m1);
-  VLOAD_8(v1, 0xFF, 0xFF);
-  VLOAD_8(v2, 0xCD, 0xEF);
-  VLOAD_8(v3, 0x84, 0x21);
-  VSET(13, e8, m1);
-  asm volatile("vmxor.mm v1, v2, v3");
-  VSET(2, e8, m1);
-  VCMP_U8(5, v1, 0x49, 0xEE);
+  VSET(16, e8, m2);
+  VLOAD_8(v2, 0xFF, 0xFF);
+  VLOAD_8(v4, 0xCD, 0xEF);
+  VLOAD_8(v6, 0x84, 0x21);
+  VSET(13, e8, m2);
+  asm volatile("vmxor.mm v2, v4, v6");
+  VSET(2, e8, m2);
+  VCMP_U8(5, v2, 0x49, 0xEE);
 }
 
 int main(void) {

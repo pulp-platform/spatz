@@ -8,23 +8,23 @@
 #include "vector_macros.h"
 
 void TEST_CASE1() {
-  VSET(4, e32, m1);
-  VLOAD_F32(v2, _f(9.812321).i, _f(3.14159265).i, _f(-6.432423).i,
+  VSET(4, e32, m2);
+  VLOAD_F32(v4, _f(9.812321).i, _f(3.14159265).i, _f(-6.432423).i,
             _f(-190.53).i);
   FLOAD32(f10, _f(7.34253).i);
-  __asm__ volatile("vfrdiv.vf v1, v2, f10");
-  VEC_CMP_F32(1, v1, _f(0.748296976).i, _f(2.33719969).i, _f(-1.14148736).i,
+  __asm__ volatile("vfrdiv.vf v2, v4, f10");
+  VEC_CMP_F32(1, v2, _f(0.748296976).i, _f(2.33719969).i, _f(-1.14148736).i,
               _f(-0.0385373943).i);
 }
 
 // void TEST_CASE2() {
-//   VSET(4,e32,m1);
-//   VLOAD_F32(v2,_f(9.812321).i,_f(3.14159265).i,_f(-6.432423).i,_f(-190.53).i);
+//   VSET(4,e32,m2);
+//   VLOAD_F32(v4,_f(9.812321).i,_f(3.14159265).i,_f(-6.432423).i,_f(-190.53).i);
 //   VLOAD_U32(v0,13,0,0,0);
 //   FLOAD32(f10,_f(7.34253).i);
-//   CLEAR(v1);
-//   __asm__ volatile ("vfrdiv.vf v1, v2, f10, v0.t");
-//   VEC_CMP_F32(2,v1,_f(0.748296976).i,_f(0).i,_f(-1.14148736).i,_f(-0.0385373943).i);
+//   CLEAR(v2);
+//   __asm__ volatile ("vfrdiv.vf v2, v4, f10, v0.t");
+//   VEC_CMP_F32(2,v2,_f(0.748296976).i,_f(0).i,_f(-1.14148736).i,_f(-0.0385373943).i);
 // }
 
 int main(void) {

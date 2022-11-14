@@ -10,55 +10,58 @@
 #include "vector_macros.h"
 
 void TEST_CASE1(void) {
-  VSET(16, e16, m1);
-  double dscalar_16;
+  VSET(16, e16, m2);
+  float fscalar_16;
   //                            -0.9380
-  BOX_HALF_IN_DOUBLE(dscalar_16, 0xbb81);
-  VCLEAR(v1);
-  asm volatile("vfmv.v.f v1, %[A]" ::[A] "f"(dscalar_16));
+  BOX_HALF_IN_FLOAT(fscalar_16, 0xbb81);
+  VCLEAR(v2);
+  asm volatile("vfmv.v.f v2, %[A]" ::[A] "f"(fscalar_16));
   //              -0.9380, -0.9380, -0.9380, -0.9380, -0.9380, -0.9380, -0.9380,
   //              -0.9380, -0.9380, -0.9380, -0.9380, -0.9380, -0.9380, -0.9380,
   //              -0.9380, -0.9380
-  VCMP_U16(1, v1, 0xbb81, 0xbb81, 0xbb81, 0xbb81, 0xbb81, 0xbb81, 0xbb81,
+  VCMP_U16(1, v2, 0xbb81, 0xbb81, 0xbb81, 0xbb81, 0xbb81, 0xbb81, 0xbb81,
            0xbb81, 0xbb81, 0xbb81, 0xbb81, 0xbb81, 0xbb81, 0xbb81, 0xbb81,
            0xbb81);
 
-  VSET(16, e32, m1);
-  double dscalar_32;
+  VSET(16, e32, m2);
+  float fscalar_32;
   //                             -0.96056187
-  BOX_FLOAT_IN_DOUBLE(dscalar_32, 0xbf75e762);
-  VCLEAR(v1);
-  asm volatile("vfmv.v.f v1, %[A]" ::[A] "f"(dscalar_32));
+  BOX_FLOAT_IN_FLOAT(fscalar_32, 0xbf75e762);
+  VCLEAR(v2);
+  asm volatile("vfmv.v.f v2, %[A]" ::[A] "f"(fscalar_32));
   //               -0.96056187, -0.96056187, -0.96056187, -0.96056187,
   //               -0.96056187, -0.96056187, -0.96056187, -0.96056187,
   //               -0.96056187, -0.96056187, -0.96056187, -0.96056187,
   //               -0.96056187, -0.96056187, -0.96056187, -0.96056187
-  VCMP_U32(2, v1, 0xbf75e762, 0xbf75e762, 0xbf75e762, 0xbf75e762, 0xbf75e762,
+  VCMP_U32(2, v2, 0xbf75e762, 0xbf75e762, 0xbf75e762, 0xbf75e762, 0xbf75e762,
            0xbf75e762, 0xbf75e762, 0xbf75e762, 0xbf75e762, 0xbf75e762,
            0xbf75e762, 0xbf75e762, 0xbf75e762, 0xbf75e762, 0xbf75e762,
            0xbf75e762);
 
-  VSET(16, e64, m1);
+#if ELEN == 64
+  VSET(16, e64, m2);
   double dscalar_64;
   //                               0.9108707261227378
   BOX_DOUBLE_IN_DOUBLE(dscalar_64, 0x3fed25da5d7296fe);
-  VCLEAR(v1);
-  asm volatile("vfmv.v.f v1, %[A]" ::[A] "f"(dscalar_64));
+  VCLEAR(v2);
+  asm volatile("vfmv.v.f v2, %[A]" ::[A] "f"(dscalar_64));
   //                0.9108707261227378,  0.9108707261227378, 0.9108707261227378,
   //                0.9108707261227378,  0.9108707261227378, 0.9108707261227378,
   //                0.9108707261227378,  0.9108707261227378, 0.9108707261227378,
   //                0.9108707261227378,  0.9108707261227378, 0.9108707261227378,
   //                0.9108707261227378,  0.9108707261227378, 0.9108707261227378,
   //                0.9108707261227378
-  VCMP_U64(3, v1, 0x3fed25da5d7296fe, 0x3fed25da5d7296fe, 0x3fed25da5d7296fe,
+  VCMP_U64(3, v2, 0x3fed25da5d7296fe, 0x3fed25da5d7296fe, 0x3fed25da5d7296fe,
            0x3fed25da5d7296fe, 0x3fed25da5d7296fe, 0x3fed25da5d7296fe,
            0x3fed25da5d7296fe, 0x3fed25da5d7296fe, 0x3fed25da5d7296fe,
            0x3fed25da5d7296fe, 0x3fed25da5d7296fe, 0x3fed25da5d7296fe,
            0x3fed25da5d7296fe, 0x3fed25da5d7296fe, 0x3fed25da5d7296fe,
            0x3fed25da5d7296fe);
+#endif
 };
 
 int main(void) {
+  INIT_CHECK();
   enable_vec();
   enable_fp();
 

@@ -8,19 +8,19 @@
 #include "vector_macros.h"
 
 void TEST_CASE1() {
-  VSET(8, e8, m1);
-  VLOAD_U8(v3, 8, 0, 0, 0, 0, 0, 0, 0);
-  __asm__ volatile("vmsif.m v2, v3");
-  VEC_CMP_U8(1, v2, 15, 0, 0, 0, 0, 0, 0, 0);
+  VSET(8, e8, m2);
+  VLOAD_U8(v6, 8, 0, 0, 0, 0, 0, 0, 0);
+  __asm__ volatile("vmsif.m v4, v6");
+  VEC_CMP_U8(1, v4, 15, 0, 0, 0, 0, 0, 0, 0);
 }
 
 void TEST_CASE2() {
-  VSET(8, e8, m1);
-  VLOAD_U8(v3, 8, 0, 0, 0, 0, 0, 0, 0);
+  VSET(8, e8, m2);
+  VLOAD_U8(v6, 8, 0, 0, 0, 0, 0, 0, 0);
   VLOAD_U8(v0, 11, 0, 0, 0, 0, 0, 0, 0);
-  CLEAR(v2);
-  __asm__ volatile("vmsif.m v2, v3, v0.t");
-  VEC_CMP_U8(2, v2, 11, 0, 0, 0, 0, 0, 0, 0);
+  CLEAR(v4);
+  __asm__ volatile("vmsif.m v4, v6, v0.t");
+  VEC_CMP_U8(2, v4, 11, 0, 0, 0, 0, 0, 0, 0);
 }
 
 int main(void) {

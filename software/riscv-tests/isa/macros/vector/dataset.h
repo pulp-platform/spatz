@@ -7,7 +7,7 @@
 #ifndef   __DATASET_H__
 #define   __DATASET_H__
 
-#define SIZE 16
+#define SIZE 32
 
 static volatile uint64_t Au64[SIZE] __attribute__ ((aligned (128)));
 static volatile uint32_t Au32[SIZE] __attribute__ ((aligned (128)));

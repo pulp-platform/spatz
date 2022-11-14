@@ -44,16 +44,16 @@ void TEST_CASE1(void) {
   // Set vl and vtype to super short values
   VSET(1, e64, m2);
   // Initialize register + neighbours to pattern value
-  VCLEAR(v16);
+  VCLEAR(v26);
   // Load a buffer from memory - whole register load
-  asm volatile("vl1re8.v v16, (%0)" ::"r"(gold_vec_8b));
+  asm volatile("vl1re8.v v26, (%0)" ::"r"(gold_vec_8b));
   // Change vtype and vl to match the whole register
-  VSET(VLEN / 8, e8, m1);
+  VSET(VLEN / 8, e8, m2);
   // Check that the whole register was loaded
-  VSTORE(uint8_t, e8, v16, buf_vec_8b);
+  VSTORE(uint8_t, e8, v26, buf_vec_8b);
   VMCMP(uint8_t, % hhu, 0, buf_vec_8b, gold_vec_8b, VLEN / 8);
   // Check that the neighbour registers are okay
-  VSTORE(uint8_t, e8, v17, buf_vec_8b);
+  VSTORE(uint8_t, e8, v27, buf_vec_8b);
   VMCMP(uint8_t, % hhu, 0, buf_vec_8b, zero_vec_8b, VLEN / 8);
 
   // Initialize a golden vector
@@ -65,16 +65,16 @@ void TEST_CASE1(void) {
   // Set vl and vtype to super short values
   VSET(1, e64, m2);
   // Initialize register + neighbours to pattern value
-  VCLEAR(v16);
+  VCLEAR(v26);
   // Load a buffer from memory - whole register load
-  asm volatile("vl1re16.v v16, (%0)" ::"r"(gold_vec_16b));
+  asm volatile("vl1re16.v v26, (%0)" ::"r"(gold_vec_16b));
   // Change vtype and vl to match the whole register
-  VSET(VLEN / 16, e16, m1);
+  VSET(VLEN / 16, e16, m2);
   // Check that the whole register was loaded
-  VSTORE(uint16_t, e16, v16, buf_vec_16b);
+  VSTORE(uint16_t, e16, v26, buf_vec_16b);
   VMCMP(uint16_t, % hu, 1, buf_vec_16b, gold_vec_16b, VLEN / 16);
   // Check that the neighbour registers are okay
-  VSTORE(uint16_t, e16, v17, buf_vec_16b);
+  VSTORE(uint16_t, e16, v27, buf_vec_16b);
   VMCMP(uint16_t, % hu, 1, buf_vec_16b, zero_vec_16b, VLEN / 16);
 
   // Initialize a golden vector
@@ -86,16 +86,16 @@ void TEST_CASE1(void) {
   // Set vl and vtype to super short values
   VSET(1, e64, m2);
   // Initialize register + neighbours to pattern value
-  VCLEAR(v16);
+  VCLEAR(v26);
   // Load a buffer from memory - whole register load
-  asm volatile("vl1re32.v v16, (%0)" ::"r"(gold_vec_32b));
+  asm volatile("vl1re32.v v26, (%0)" ::"r"(gold_vec_32b));
   // Change vtype and vl to match the whole register
-  VSET(VLEN / 32, e32, m1);
+  VSET(VLEN / 32, e32, m2);
   // Check that the whole register was loaded
-  VSTORE(uint32_t, e32, v16, buf_vec_32b);
+  VSTORE(uint32_t, e32, v26, buf_vec_32b);
   VMCMP(uint32_t, % u, 2, buf_vec_32b, gold_vec_32b, VLEN / 32);
   // Check that the neighbour registers are okay
-  VSTORE(uint32_t, e32, v17, buf_vec_32b);
+  VSTORE(uint32_t, e32, v27, buf_vec_32b);
   VMCMP(uint32_t, % u, 2, buf_vec_32b, zero_vec_32b, VLEN / 32);
 
   // Initialize a golden vector
@@ -107,16 +107,16 @@ void TEST_CASE1(void) {
   // Set vl and vtype to super short values
   VSET(1, e64, m2);
   // Initialize register + neighbours to pattern value
-  VCLEAR(v16);
+  VCLEAR(v26);
   // Load a buffer from memory - whole register load
-  asm volatile("vl1re64.v v16, (%0)" ::"r"(gold_vec_64b));
+  asm volatile("vl1re64.v v26, (%0)" ::"r"(gold_vec_64b));
   // Change vtype and vl to match the whole register
-  VSET(VLEN / 64, e64, m1);
+  VSET(VLEN / 64, e64, m2);
   // Check that the whole register was loaded3
-  VSTORE(uint64_t, e64, v16, buf_vec_64b);
+  VSTORE(uint64_t, e64, v26, buf_vec_64b);
   VMCMP(uint64_t, % lu, 3, buf_vec_64b, gold_vec_64b, VLEN / 64);
   // Check that the neighbour registers are okay
-  VSTORE(uint64_t, e64, v17, buf_vec_64b);
+  VSTORE(uint64_t, e64, v27, buf_vec_64b);
   VMCMP(uint64_t, % lu, 3, buf_vec_64b, zero_vec_64b, VLEN / 64);
 }
 
@@ -133,18 +133,18 @@ void TEST_CASE2(void) {
   // Reserve space for a buffer in memory
   INIT_MEM_ZEROES(buf_vec_8b, VLEN / 4);
   // Set vl and vtype to super short values
-  VSET(1, e64, m4);
+  VSET(1, e64, m2);
   // Initialize register + neighbours to pattern value
-  VCLEAR(v16);
+  VCLEAR(v26);
   // Load a buffer from memory - whole register load
-  asm volatile("vl2re8.v v16, (%0)" ::"r"(gold_vec_8b));
+  asm volatile("vl2re8.v v26, (%0)" ::"r"(gold_vec_8b));
   // Change vtype and vl to match the whole register
   VSET(VLEN / 4, e8, m2);
   // Check that the whole register was loaded
-  VSTORE(uint8_t, e8, v16, buf_vec_8b);
+  VSTORE(uint8_t, e8, v26, buf_vec_8b);
   VMCMP(uint8_t, % hhu, 4, buf_vec_8b, gold_vec_8b, VLEN / 4);
   // Check that the neighbour registers are okay
-  VSTORE(uint8_t, e8, v18, buf_vec_8b);
+  VSTORE(uint8_t, e8, v28, buf_vec_8b);
   VMCMP(uint8_t, % hhu, 4, buf_vec_8b, zero_vec_8b, VLEN / 4);
 
   // Initialize a golden vector
@@ -154,18 +154,18 @@ void TEST_CASE2(void) {
   // Reserve space for a buffer in memory
   INIT_MEM_ZEROES(buf_vec_16b, VLEN / 8);
   // Set vl and vtype to super short values
-  VSET(1, e64, m4);
+  VSET(1, e64, m2);
   // Initialize register + neighbours to pattern value
-  VCLEAR(v16);
+  VCLEAR(v26);
   // Load a buffer from memory - whole register load
-  asm volatile("vl2re16.v v16, (%0)" ::"r"(gold_vec_16b));
+  asm volatile("vl2re16.v v26, (%0)" ::"r"(gold_vec_16b));
   // Change vtype and vl to match the whole register
   VSET(VLEN / 8, e16, m2);
   // Check that the whole register was loaded
-  VSTORE(uint16_t, e16, v16, buf_vec_16b);
+  VSTORE(uint16_t, e16, v26, buf_vec_16b);
   VMCMP(uint16_t, % hu, 5, buf_vec_16b, gold_vec_16b, VLEN / 8);
   // Check that the neighbour registers are okay
-  VSTORE(uint16_t, e16, v18, buf_vec_16b);
+  VSTORE(uint16_t, e16, v28, buf_vec_16b);
   VMCMP(uint16_t, % hu, 5, buf_vec_16b, zero_vec_16b, VLEN / 8);
 
   // Initialize a golden vector
@@ -175,18 +175,18 @@ void TEST_CASE2(void) {
   // Reserve space for a buffer in memory
   INIT_MEM_ZEROES(buf_vec_32b, VLEN / 16);
   // Set vl and vtype to super short values
-  VSET(1, e64, m4);
+  VSET(1, e64, m2);
   // Initialize register + neighbours to pattern value
-  VCLEAR(v16);
+  VCLEAR(v26);
   // Load a buffer from memory - whole register load
-  asm volatile("vl2re32.v v16, (%0)" ::"r"(gold_vec_32b));
+  asm volatile("vl2re32.v v26, (%0)" ::"r"(gold_vec_32b));
   // Change vtype and vl to match the whole register
   VSET(VLEN / 16, e32, m2);
   // Check that the whole register was loaded
-  VSTORE(uint32_t, e32, v16, buf_vec_32b);
+  VSTORE(uint32_t, e32, v26, buf_vec_32b);
   VMCMP(uint32_t, % u, 6, buf_vec_32b, gold_vec_32b, VLEN / 16);
   // Check that the neighbour registers are okay
-  VSTORE(uint32_t, e32, v18, buf_vec_32b);
+  VSTORE(uint32_t, e32, v28, buf_vec_32b);
   VMCMP(uint32_t, % u, 6, buf_vec_32b, zero_vec_32b, VLEN / 16);
 
   // Initialize a golden vector
@@ -196,18 +196,18 @@ void TEST_CASE2(void) {
   // Reserve space for a buffer in memory
   INIT_MEM_ZEROES(buf_vec_64b, VLEN / 32);
   // Set vl and vtype to super short values
-  VSET(1, e64, m4);
+  VSET(1, e64, m2);
   // Initialize register + neighbours to pattern value
-  VCLEAR(v16);
+  VCLEAR(v26);
   // Load a buffer from memory - whole register load
-  asm volatile("vl2re64.v v16, (%0)" ::"r"(gold_vec_64b));
+  asm volatile("vl2re64.v v26, (%0)" ::"r"(gold_vec_64b));
   // Change vtype and vl to match the whole register
   VSET(VLEN / 32, e64, m2);
   // Check that the whole register was loaded3
-  VSTORE(uint64_t, e64, v16, buf_vec_64b);
+  VSTORE(uint64_t, e64, v26, buf_vec_64b);
   VMCMP(uint64_t, % lu, 7, buf_vec_64b, gold_vec_64b, VLEN / 32);
   // Check that the neighbour registers are okay
-  VSTORE(uint64_t, e64, v18, buf_vec_64b);
+  VSTORE(uint64_t, e64, v28, buf_vec_64b);
   VMCMP(uint64_t, % lu, 7, buf_vec_64b, zero_vec_64b, VLEN / 32);
 }
 
@@ -226,16 +226,16 @@ void TEST_CASE3(void) {
   // Set vl and vtype to super short values
   VSET(1, e64, m8);
   // Initialize register + neighbours to pattern value
-  VCLEAR(v16);
+  VCLEAR(v26);
   // Load a buffer from memory - whole register load
-  asm volatile("vl4re8.v v16, (%0)" ::"r"(gold_vec_8b));
+  asm volatile("vl4re8.v v26, (%0)" ::"r"(gold_vec_8b));
   // Change vtype and vl to match the whole register
-  VSET(VLEN / 2, e8, m4);
+  VSET(VLEN / 2, e8, m2);
   // Check that the whole register was loaded
-  VSTORE(uint8_t, e8, v16, buf_vec_8b);
+  VSTORE(uint8_t, e8, v26, buf_vec_8b);
   VMCMP(uint8_t, % hhu, 8, buf_vec_8b, gold_vec_8b, VLEN / 2);
   // Check that the neighbour registers are okay
-  VSTORE(uint8_t, e8, v20, buf_vec_8b);
+  VSTORE(uint8_t, e8, v40, buf_vec_8b);
   VMCMP(uint8_t, % hhu, 8, buf_vec_8b, zero_vec_8b, VLEN / 2);
 
   // Initialize a golden vector
@@ -247,16 +247,16 @@ void TEST_CASE3(void) {
   // Set vl and vtype to super short values
   VSET(1, e64, m8);
   // Initialize register + neighbours to pattern value
-  VCLEAR(v16);
+  VCLEAR(v26);
   // Load a buffer from memory - whole register load
-  asm volatile("vl4re16.v v16, (%0)" ::"r"(gold_vec_16b));
+  asm volatile("vl4re16.v v26, (%0)" ::"r"(gold_vec_16b));
   // Change vtype and vl to match the whole register
-  VSET(VLEN / 4, e16, m4);
+  VSET(VLEN / 4, e16, m2);
   // Check that the whole register was loaded
-  VSTORE(uint16_t, e16, v16, buf_vec_16b);
+  VSTORE(uint16_t, e16, v26, buf_vec_16b);
   VMCMP(uint16_t, % hu, 9, buf_vec_16b, gold_vec_16b, VLEN / 4);
   // Check that the neighbour registers are okay
-  VSTORE(uint16_t, e16, v20, buf_vec_16b);
+  VSTORE(uint16_t, e16, v40, buf_vec_16b);
   VMCMP(uint16_t, % hu, 9, buf_vec_16b, zero_vec_16b, VLEN / 4);
 
   // Initialize a golden vector
@@ -268,16 +268,16 @@ void TEST_CASE3(void) {
   // Set vl and vtype to super short values
   VSET(1, e64, m8);
   // Initialize register + neighbours to pattern value
-  VCLEAR(v16);
+  VCLEAR(v26);
   // Load a buffer from memory - whole register load
-  asm volatile("vl4re32.v v16, (%0)" ::"r"(gold_vec_32b));
+  asm volatile("vl4re32.v v26, (%0)" ::"r"(gold_vec_32b));
   // Change vtype and vl to match the whole register
-  VSET(VLEN / 8, e32, m4);
+  VSET(VLEN / 8, e32, m2);
   // Check that the whole register was loaded
-  VSTORE(uint32_t, e32, v16, buf_vec_32b);
+  VSTORE(uint32_t, e32, v26, buf_vec_32b);
   VMCMP(uint32_t, % u, 10, buf_vec_32b, gold_vec_32b, VLEN / 8);
   // Check that the neighbour registers are okay
-  VSTORE(uint32_t, e32, v20, buf_vec_32b);
+  VSTORE(uint32_t, e32, v40, buf_vec_32b);
   VMCMP(uint32_t, % u, 10, buf_vec_32b, zero_vec_32b, VLEN / 8);
 
   // Initialize a golden vector
@@ -289,16 +289,16 @@ void TEST_CASE3(void) {
   // Set vl and vtype to super short values
   VSET(1, e64, m8);
   // Initialize register + neighbours to pattern value
-  VCLEAR(v16);
+  VCLEAR(v26);
   // Load a buffer from memory - whole register load
-  asm volatile("vl4re64.v v16, (%0)" ::"r"(gold_vec_64b));
+  asm volatile("vl4re64.v v26, (%0)" ::"r"(gold_vec_64b));
   // Change vtype and vl to match the whole register
-  VSET(VLEN / 16, e64, m4);
+  VSET(VLEN / 16, e64, m2);
   // Check that the whole register was loaded
-  VSTORE(uint64_t, e64, v16, buf_vec_64b);
+  VSTORE(uint64_t, e64, v26, buf_vec_64b);
   VMCMP(uint64_t, % lu, 11, buf_vec_64b, gold_vec_64b, VLEN / 16);
   // Check that the neighbour registers are okay
-  VSTORE(uint64_t, e64, v20, buf_vec_64b);
+  VSTORE(uint64_t, e64, v40, buf_vec_64b);
   VMCMP(uint64_t, % lu, 11, buf_vec_64b, zero_vec_64b, VLEN / 16);
 }
 
@@ -317,17 +317,17 @@ void TEST_CASE4(void) {
   // Set vl and vtype to super short values
   VSET(1, e64, m8);
   // Initialize register + neighbours to pattern value
-  VCLEAR(v16);
-  VCLEAR(v24);
+  VCLEAR(v26);
+  VCLEAR(v44);
   // Load a buffer from memory - whole register load
-  asm volatile("vl8re8.v v16, (%0)" ::"r"(gold_vec_8b));
+  asm volatile("vl8re8.v v26, (%0)" ::"r"(gold_vec_8b));
   // Change vtype and vl to match the whole register
   VSET(VLEN, e8, m8);
   // Check that the whole register was loaded
-  VSTORE(uint8_t, e8, v16, buf_vec_8b);
+  VSTORE(uint8_t, e8, v26, buf_vec_8b);
   VMCMP(uint8_t, % hhu, 12, buf_vec_8b, gold_vec_8b, VLEN);
   // Check that the neighbour registers are okay
-  VSTORE(uint8_t, e8, v24, buf_vec_8b);
+  VSTORE(uint8_t, e8, v44, buf_vec_8b);
   VMCMP(uint8_t, % hhu, 12, buf_vec_8b, zero_vec_8b, VLEN);
 
   // Initialize a golden vector
@@ -339,17 +339,17 @@ void TEST_CASE4(void) {
   // Set vl and vtype to super short values
   VSET(1, e64, m8);
   // Initialize register + neighbours to pattern value
-  VCLEAR(v16);
-  VCLEAR(v24);
+  VCLEAR(v26);
+  VCLEAR(v44);
   // Load a buffer from memory - whole register load
-  asm volatile("vl8re16.v v16, (%0)" ::"r"(gold_vec_16b));
+  asm volatile("vl8re16.v v26, (%0)" ::"r"(gold_vec_16b));
   // Change vtype and vl to match the whole register
   VSET(VLEN / 2, e16, m8);
   // Check that the whole register was loaded
-  VSTORE(uint16_t, e16, v16, buf_vec_16b);
+  VSTORE(uint16_t, e16, v26, buf_vec_16b);
   VMCMP(uint16_t, % hu, 13, buf_vec_16b, gold_vec_16b, VLEN / 2);
   // Check that the neighbour registers are okay
-  VSTORE(uint16_t, e16, v24, buf_vec_16b);
+  VSTORE(uint16_t, e16, v44, buf_vec_16b);
   VMCMP(uint16_t, % hu, 13, buf_vec_16b, zero_vec_16b, VLEN / 2);
 
   // Initialize a golden vector
@@ -361,17 +361,17 @@ void TEST_CASE4(void) {
   // Set vl and vtype to super short values
   VSET(1, e64, m8);
   // Initialize register + neighbours to pattern value
-  VCLEAR(v16);
-  VCLEAR(v24);
+  VCLEAR(v26);
+  VCLEAR(v44);
   // Load a buffer from memory - whole register load
-  asm volatile("vl8re32.v v16, (%0)" ::"r"(gold_vec_32b));
+  asm volatile("vl8re32.v v26, (%0)" ::"r"(gold_vec_32b));
   // Change vtype and vl to match the whole register
   VSET(VLEN / 4, e32, m8);
   // Check that the whole register was loaded
-  VSTORE(uint32_t, e32, v16, buf_vec_32b);
+  VSTORE(uint32_t, e32, v26, buf_vec_32b);
   VMCMP(uint32_t, % u, 14, buf_vec_32b, gold_vec_32b, VLEN / 4);
   // Check that the neighbour registers are okay
-  VSTORE(uint32_t, e32, v24, buf_vec_32b);
+  VSTORE(uint32_t, e32, v44, buf_vec_32b);
   VMCMP(uint32_t, % u, 14, buf_vec_32b, zero_vec_32b, VLEN / 4);
 
   // Initialize a golden vector
@@ -383,17 +383,17 @@ void TEST_CASE4(void) {
   // Set vl and vtype to super short values
   VSET(1, e64, m8);
   // Initialize register + neighbours to pattern value
-  VCLEAR(v16);
-  VCLEAR(v24);
+  VCLEAR(v26);
+  VCLEAR(v44);
   // Load a buffer from memory - whole register load
-  asm volatile("vl8re64.v v16, (%0)" ::"r"(gold_vec_64b));
+  asm volatile("vl8re64.v v26, (%0)" ::"r"(gold_vec_64b));
   // Change vtype and vl to match the whole register
   VSET(VLEN / 8, e64, m8);
   // Check that the whole register was loaded3
-  VSTORE(uint64_t, e64, v16, buf_vec_64b);
+  VSTORE(uint64_t, e64, v26, buf_vec_64b);
   VMCMP(uint64_t, % lu, 15, buf_vec_64b, gold_vec_64b, VLEN / 8);
   // Check that the neighbour registers are okay
-  VSTORE(uint64_t, e64, v24, buf_vec_64b);
+  VSTORE(uint64_t, e64, v44, buf_vec_64b);
   VMCMP(uint64_t, % lu, 15, buf_vec_64b, zero_vec_64b, VLEN / 8);
 }
 
@@ -412,16 +412,16 @@ void TEST_CASE5(void) {
   // Set vl and vtype to super short values
   VSET(0, e64, m2);
   // Initialize register + neighbours to pattern value
-  VCLEAR(v16);
+  VCLEAR(v26);
   // Load a buffer from memory - whole register load
-  asm volatile("vl1re8.v v16, (%0)" ::"r"(gold_vec_8b));
+  asm volatile("vl1re8.v v26, (%0)" ::"r"(gold_vec_8b));
   // Change vtype and vl to match the whole register
-  VSET(VLEN / 8, e8, m1);
+  VSET(VLEN / 8, e8, m2);
   // Check that the whole register was loaded
-  VSTORE(uint8_t, e8, v16, buf_vec_8b);
+  VSTORE(uint8_t, e8, v26, buf_vec_8b);
   VMCMP(uint8_t, % hhu, 16, buf_vec_8b, gold_vec_8b, VLEN / 8);
   // Check that the neighbour registers are okay
-  VSTORE(uint8_t, e8, v17, buf_vec_8b);
+  VSTORE(uint8_t, e8, v27, buf_vec_8b);
   VMCMP(uint8_t, % hhu, 16, buf_vec_8b, zero_vec_8b, VLEN / 8);
 }
 

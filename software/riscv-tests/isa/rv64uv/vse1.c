@@ -21,17 +21,17 @@ static volatile uint8_t ALIGNED_I8_BUF[16]
                                             0x00, 0x00, 0x00, 0x0};
 
 void TEST_CASE1(void) {
-  VSET(32, e8, m1);
+  VSET(32, e8, m2);
   asm volatile("vle1.v v0, (%0)" ::"r"(ALIGNED_I8_GOLD));
   asm volatile("vse1.v v0, (%0)" ::"r"(ALIGNED_I8_BUF));
   VMCMP(uint8_t, % hhu, 1, ALIGNED_I8_BUF, ALIGNED_I8_GOLD, 4);
 
-  VSET(29, e8, m1);
+  VSET(29, e8, m2);
   asm volatile("vle1.v v0, (%0)" ::"r"(ALIGNED_I8_GOLD));
   asm volatile("vse1.v v0, (%0)" ::"r"(ALIGNED_I8_BUF));
   VMCMP(uint8_t, % hhu, 2, ALIGNED_I8_BUF, ALIGNED_I8_GOLD, 4);
 
-  VSET(29, e64, m1);
+  VSET(29, e64, m2);
   asm volatile("vle1.v v0, (%0)" ::"r"(ALIGNED_I8_GOLD));
   asm volatile("vse1.v v0, (%0)" ::"r"(ALIGNED_I8_BUF));
   VMCMP(uint8_t, % hhu, 3, ALIGNED_I8_BUF, ALIGNED_I8_GOLD, 4);
@@ -42,8 +42,8 @@ void TEST_CASE1(void) {
   VMCMP(uint8_t, % hhu, 4, ALIGNED_I8_BUF, ALIGNED_I8_GOLD, 4);
 
   VSET(29, e64, m8);
-  asm volatile("vle1.v v1, (%0)" ::"r"(ALIGNED_I8_GOLD));
-  asm volatile("vse1.v v1, (%0)" ::"r"(ALIGNED_I8_BUF));
+  asm volatile("vle1.v v2, (%0)" ::"r"(ALIGNED_I8_GOLD));
+  asm volatile("vse1.v v2, (%0)" ::"r"(ALIGNED_I8_BUF));
   VMCMP(uint8_t, % hhu, 5, ALIGNED_I8_BUF, ALIGNED_I8_GOLD, 4);
 }
 

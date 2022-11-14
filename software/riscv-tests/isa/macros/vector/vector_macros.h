@@ -136,21 +136,23 @@ int test_case;
   } while(0)
 
 // Macros to set vector length, type and multiplier
-#define VSET(VLEN,VTYPE,LMUL)                                                          \
-  do {                                                                                 \
-  asm volatile ("vsetvli t0, %[A]," #VTYPE "," #LMUL ", ta, ma \n" :: [A] "r" (VLEN)); \
+#define VSET(VLEN,VTYPE,LMUL)                                                                               \
+  do {                                                                                                      \
+    unsigned int vl;                                                                                        \
+    asm volatile ("vsetvli %[vl], %[A]," #VTYPE "," #LMUL ", ta, ma \n" : [vl] "+r" (vl) : [A] "r" (VLEN)); \
   } while(0)
 
-#define VSETMAX(VTYPE,LMUL)                                                            \
-  do {                                                                                 \
-  int64_t scalar = -1;                                                                 \
-  asm volatile ("vsetvli t1, %[A]," #VTYPE "," #LMUL", ta, ma \n":: [A] "r" (scalar)); \
+#define VSETMAX(VTYPE,LMUL)                                                                                  \
+  do {                                                                                                       \
+    unsigned int vl;                                                                                         \
+    int64_t scalar = -1;                                                                                     \
+    asm volatile ("vsetvli %[vl], %[A]," #VTYPE "," #LMUL", ta, ma \n" : [vl] "+r" (vl) : [A] "r" (scalar)); \
   } while(0)
 
 // Macro to load a vector register with data from the stack
 #define VLOAD(datatype,loadtype,vreg,vec...)                                \
   do {                                                                      \
-    volatile datatype V ##vreg[] = {vec};                                   \
+    volatile datatype V ##vreg[] __attribute__((aligned(32))) = {vec};      \
     MEMORY_BARRIER;                                                         \
     asm volatile ("vl"#loadtype".v "#vreg", (%0)  \n":: [V] "r"(V ##vreg)); \
   } while(0)
