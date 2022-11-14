@@ -229,6 +229,7 @@ module spatz_controller
   // Port scoreboard. Keeps track of the dependencies of this instruction with other instructions
   typedef struct packed {
     logic [NrParallelInstructions-1:0] deps;
+    logic                              prevent_chaining; // Prevent chaining with some "risky" instructions
   } scoreboard_metadata_t;
 
   scoreboard_metadata_t [NrParallelInstructions-1:0] scoreboard_q, scoreboard_d;
@@ -250,7 +251,7 @@ module spatz_controller
 
     for (int unsigned port = 0; port < NrVregfilePorts; port++)
       // Enable the VRF port if the dependant instructions wrote in the previous cycle
-      sb_enable_o[port] = sb_enable_i[port] && &(~scoreboard_q[sb_id_i[port]].deps | wrote_result_q);
+      sb_enable_o[port] = sb_enable_i[port] && &(~scoreboard_q[sb_id_i[port]].deps | wrote_result_q) && (!(|scoreboard_q[sb_id_i[port]].deps) || !scoreboard_q[sb_id_i[port]].prevent_chaining);
 
     // Store the decisions
     if (sb_enable_o[SB_VFU_VD_WD])
@@ -321,6 +322,10 @@ module spatz_controller
         scoreboard_d[spatz_req.id].deps[read_table_d[spatz_req.vd].id] |= read_table_d[spatz_req.vd].valid;
         write_table_d[spatz_req.vd] = {spatz_req.id, 1'b1};
       end
+
+      // Is this a risky instruction which should not chain?
+      if (spatz_req.op == VSLIDEUP)
+        scoreboard_d[spatz_req.id].prevent_chaining = 1'b1;
     end
 
     // An instruction never depends on itself
