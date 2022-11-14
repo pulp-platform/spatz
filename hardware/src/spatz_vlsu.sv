@@ -253,7 +253,7 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
   // Calculate the register file address
   always_comb begin : gen_vreg_addr
     vreg_addr        = (spatz_req.vd << $clog2(NrWordsPerVector)) + $unsigned(vreg_elem_id);
-    vreg_addr_offset = vreg_byte_id * spatz_req.rs2 + spatz_req.rs1;
+    vreg_addr_offset = (vreg_byte_id >> int'(spatz_req.vtype.vsew)) * spatz_req.rs2[31:0] + spatz_req.rs1[31:0];
   end
 
   ///////////////
@@ -459,6 +459,27 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
   logic [NrMemPorts-1:0]                   mem_req_lvalid;
   logic [NrMemPorts-1:0]                   mem_req_last;
 
+  // Number of pending requests
+  id_t  [NrMemPorts-1:0]                   mem_pending_d, mem_pending_q;
+  logic [NrMemPorts-1:0]                   mem_pending;
+  `FF(mem_pending_q, mem_pending_d, '{default: '0})
+  always_comb begin
+    // Maintain state
+    mem_pending_d  = mem_pending_q;
+
+    for (int port = 0; port < NrMemPorts; port++) begin
+      mem_pending[port] = mem_pending_q[port] != '0;
+
+      // New request sent
+      if (is_load && spatz_mem_req_valid[port] && spatz_mem_req_ready[port])
+        mem_pending_d[port]++;
+
+      // Response used
+      if (buffer_rvalid[port] && buffer_pop[port] && mem_pending_q[port] != '0)
+        mem_pending_d[port]--;
+    end
+  end
+
   // verilator lint_off LATCH
   always_comb begin
     vrf_raddr_o     = '0;
@@ -491,7 +512,7 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
       if (|vreg_operation_valid) begin
         // Enable write back to the VRF if we have a valid element in all buffers that still have to write something back.
         vrf_req_d.waddr = vreg_addr;
-        vrf_req_valid_d = &buffer_rvalid || (&(buffer_rvalid | buffer_empty) && !(|mem_operation_valid));
+        vrf_req_valid_d = &(buffer_rvalid | ~mem_pending) && |mem_pending;
 
         for (int unsigned port = 0; port < NrMemPorts; port++) begin
           automatic elen_t data = buffer_rdata[port];
@@ -531,13 +552,13 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
             else
               unique case (vreg_counter_q[port][2:0])
                 3'b000: data = data;
-                3'b001: data = {data[7:0], data[63:8]};
-                3'b010: data = {data[15:0], data[63:16]};
-                3'b011: data = {data[23:0], data[63:24]};
+                3'b001: data = {data[55:0], data[63:56]};
+                3'b010: data = {data[47:0], data[63:48]};
+                3'b011: data = {data[39:0], data[63:40]};
                 3'b100: data = {data[31:0], data[63:32]};
-                3'b101: data = {data[39:0], data[63:40]};
-                3'b110: data = {data[47:0], data[63:48]};
-                3'b111: data = {data[55:0], data[63:56]};
+                3'b101: data = {data[23:0], data[63:24]};
+                3'b110: data = {data[15:0], data[63:16]};
+                3'b111: data = {data[7:0], data[63:8]};
               endcase
           vrf_req_d.wdata[ELEN*port +: ELEN] = data;
 
@@ -626,13 +647,13 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
           else
             unique case (is_strided ? vreg_addr_offset : spatz_req.rs1[2:0])
               3'b000: mem_req_data[port] = data;
-              3'b001: mem_req_data[port] = {data[7:0], data[63:8]};
-              3'b010: mem_req_data[port] = {data[15:0], data[63:16]};
-              3'b011: mem_req_data[port] = {data[23:0], data[63:24]};
+              3'b001: mem_req_data[port] = {data[55:0], data[63:56]};
+              3'b010: mem_req_data[port] = {data[47:0], data[63:48]};
+              3'b011: mem_req_data[port] = {data[39:0], data[63:40]};
               3'b100: mem_req_data[port] = {data[31:0], data[63:32]};
-              3'b101: mem_req_data[port] = {data[39:0], data[63:40]};
-              3'b110: mem_req_data[port] = {data[47:0], data[63:48]};
-              3'b111: mem_req_data[port] = {data[55:0], data[63:56]};
+              3'b101: mem_req_data[port] = {data[23:0], data[63:24]};
+              3'b110: mem_req_data[port] = {data[15:0], data[63:16]};
+              3'b111: mem_req_data[port] = {data[7:0], data[63:8]};
             endcase
 
           mem_req_svalid[port] = buffer_rvalid[port];
