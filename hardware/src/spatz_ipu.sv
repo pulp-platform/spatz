@@ -388,10 +388,10 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
         end
 
         default: begin
-          lane_signal_inp.ops[0].ew32 = op_s1_i;
-          lane_signal_inp.ops[1].ew32 = op_s2_i;
-          lane_signal_inp.ops[2].ew32 = op_d_i;
-          lane_signal_inp.ew32_carry  = carry_i[0];
+          lane_signal_inp.ops[0].ew64 = op_s1_i;
+          lane_signal_inp.ops[1].ew64 = op_s2_i;
+          lane_signal_inp.ops[2].ew64 = op_d_i;
+          lane_signal_inp.ew64_carry  = carry_i[0];
 
           // Activate the 32b lane
           lane_signal_inp.ew64_valid = operation_valid_i;
@@ -410,7 +410,7 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
     always_comb begin : collector
       unique case (sew_i)
         rvv_pkg::EW_8 : begin
-          result_o = {lane_signal_res.ew64_res[7:0], lane_signal_res.ew32_res[7:0], lane_signal_res.ew16_res[1], lane_signal_res.ew16_res[0],
+          result_o = {lane_signal_res.ew64_res[7:0], lane_signal_res.ew32_res[7:0], lane_signal_res.ew16_res[1][7:0], lane_signal_res.ew16_res[0][7:0],
             lane_signal_res.ew8_res[3], lane_signal_res.ew8_res[2], lane_signal_res.ew8_res[1], lane_signal_res.ew8_res[0]};
           result_valid_o = {lane_signal_res_valid.ew64_valid, lane_signal_res_valid.ew32_valid, lane_signal_res_valid.ew16_valid[1], lane_signal_res_valid.ew16_valid[0],
             lane_signal_res_valid.ew8_valid[3], lane_signal_res_valid.ew8_valid[2], lane_signal_res_valid.ew8_valid[1], lane_signal_res_valid.ew8_valid[0]};

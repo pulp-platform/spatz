@@ -225,8 +225,8 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
   // Address Generation //
   ////////////////////////
 
-  elen_t [NrMemPorts-1:0]      mem_req_addr;
-  logic  [NrMemPorts-1:0][1:0] mem_req_addr_offset;
+  elen_t [NrMemPorts-1:0]                  mem_req_addr;
+  logic  [NrMemPorts-1:0][int'(MAXEW)-1:0] mem_req_addr_offset;
 
   vreg_addr_t                   vreg_addr;
   logic       [int'(MAXEW)-1:0] vreg_addr_offset;
@@ -625,7 +625,7 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
                 default:; // Do nothing
               endcase
             else
-              unique case (vreg_counter_q[port][2:0])
+              unique case (mem_counter_q[port][2:0])
                 3'b001: data = {data[7:0], data[63:8]};
                 3'b010: data = {data[15:0], data[63:16]};
                 3'b011: data = {data[23:0], data[63:24]};
@@ -645,7 +645,7 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
               2'b11: mem_req_data[port] = {data[7:0], data[31:8]};
             endcase
           else
-            unique case (is_strided ? vreg_addr_offset : spatz_req.rs1[2:0])
+            unique case (is_strided ? mem_req_addr_offset[port] : spatz_req.rs1[2:0])
               3'b000: mem_req_data[port] = data;
               3'b001: mem_req_data[port] = {data[55:0], data[63:56]};
               3'b010: mem_req_data[port] = {data[47:0], data[63:48]};
