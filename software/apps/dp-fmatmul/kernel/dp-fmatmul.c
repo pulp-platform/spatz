@@ -34,9 +34,6 @@ void matmul(double *c, const double *a, const double *b, const unsigned int M,
 void matmul_single_unrolled(double *c, const double *a, const double *b,
                             const unsigned int N, const unsigned int P,
                             unsigned int vl) {
-  // Zero constant
-  const double zero = 0.0;
-
   // Set VL
   asm volatile("vsetvli zero, %0, e64, m2, ta, ma" ::"r"(vl));
 
@@ -65,16 +62,16 @@ void matmul_single_unrolled(double *c, const double *a, const double *b,
 
   asm volatile("vle64.v v16, (%0);" ::"r"(b_));
   b_ += P;
-  asm volatile("vfmv.v.f v0, %0" ::"f"(zero));
+  asm volatile("vmv.v.x v0, zero");
   asm volatile("vfmacc.vf v0, %0, v16" ::"f"(t0));
   t0 = *a__, a__ += N;
-  asm volatile("vfmv.v.f v2, %0" ::"f"(zero));
+  asm volatile("vmv.v.x v2, zero");
   asm volatile("vfmacc.vf v2, %0, v16" ::"f"(t1));
   t1 = *a__, a__ += N;
-  asm volatile("vfmv.v.f v4, %0" ::"f"(zero));
+  asm volatile("vmv.v.x v4, zero");
   asm volatile("vfmacc.vf v4, %0, v16" ::"f"(t2));
   t2 = *a__, a__ += N;
-  asm volatile("vfmv.v.f v6, %0" ::"f"(zero));
+  asm volatile("vmv.v.x v6, zero");
   asm volatile("vfmacc.vf v6, %0, v16" ::"f"(t3));
   t3 = *a__, a__ += N;
 
@@ -82,16 +79,16 @@ void matmul_single_unrolled(double *c, const double *a, const double *b,
   asm volatile("vle64.v v18, (%0);" ::"r"(b_));
   b_ += P;
 
-  asm volatile("vfmv.v.f v8, %0" ::"f"(zero));
+  asm volatile("vmv.v.x v8, zero");
   asm volatile("vfmacc.vf v8, %0, v16" ::"f"(t4));
   t4 = *a__, a__ += N;
-  asm volatile("vfmv.v.f v10, %0" ::"f"(zero));
+  asm volatile("vmv.v.x v10, zero");
   asm volatile("vfmacc.vf v10, %0, v16" ::"f"(t5));
   t5 = *a__, a__ += N;
-  asm volatile("vfmv.v.f v12, %0" ::"f"(zero));
+  asm volatile("vmv.v.x v12, zero");
   asm volatile("vfmacc.vf v12, %0, v16" ::"f"(t6));
   t6 = *a__, a__ += N;
-  asm volatile("vfmv.v.f v14, %0" ::"f"(zero));
+  asm volatile("vmv.v.x v14, zero");
   asm volatile("vfmacc.vf v14, %0, v16" ::"f"(t7));
   t7 = *a__;
 
@@ -184,9 +181,6 @@ void matmul_2xVL(double *c, const double *a, const double *b,
                  const unsigned int p_start, const unsigned int p_end,
                  const unsigned int vl) {
 
-  // Zero constant
-  const double zero = 0.0;
-
   asm volatile("vsetvli zero, %0, e64, m8, ta, ma" ::"r"(vl));
 
   for (unsigned int p = p_start; p < p_end; p += vl) {
@@ -204,9 +198,9 @@ void matmul_2xVL(double *c, const double *a, const double *b,
 
       double t0, t1;
 
-      asm volatile("vfmv.v.f v0, %0" ::"f"(zero));
+      asm volatile("vmv.v.x v0, zero");
       t0 = *a__, a__ += N;
-      asm volatile("vfmv.v.f v8, %0" ::"f"(zero));
+      asm volatile("vmv.v.x v8, zero");
       t1 = *a__;
 
       unsigned int n = 0;
@@ -255,9 +249,6 @@ void matmul_4xVL(double *c, const double *a, const double *b,
                  const unsigned int p_start, const unsigned int p_end,
                  const unsigned int vl) {
 
-  // Zero constant
-  const double zero = 0.0;
-
   asm volatile("vsetvli zero, %0, e64, m4, ta, ma" ::"r"(vl));
 
   for (unsigned int p = p_start; p < p_end; p += vl) {
@@ -275,13 +266,13 @@ void matmul_4xVL(double *c, const double *a, const double *b,
 
       double t0, t1, t2, t3;
 
-      asm volatile("vfmv.v.f v0, %0" ::"f"(zero));
+      asm volatile("vmv.v.x v0, zero");
       t0 = *a__, a__ += N;
-      asm volatile("vfmv.v.f v4, %0" ::"f"(zero));
+      asm volatile("vmv.v.x v4, zero");
       t1 = *a__, a__ += N;
-      asm volatile("vfmv.v.f v8, %0" ::"f"(zero));
+      asm volatile("vmv.v.x v8, zero");
       t2 = *a__, a__ += N;
-      asm volatile("vfmv.v.f v12, %0" ::"f"(zero));
+      asm volatile("vmv.v.x v12, zero");
       t3 = *a__;
 
       unsigned int n = 0;
@@ -344,9 +335,6 @@ void matmul_8xVL(double *c, const double *a, const double *b,
                  const unsigned int p_start, const unsigned int p_end,
                  const unsigned int vl) {
 
-  // Zero constant
-  const double zero = 0.0;
-
   asm volatile("vsetvli zero, %0, e64, m2, ta, ma" ::"r"(vl));
 
   for (unsigned int p = p_start; p < p_end; p += vl) {
@@ -364,21 +352,21 @@ void matmul_8xVL(double *c, const double *a, const double *b,
 
       double t0, t1, t2, t3, t4, t5, t6, t7;
 
-      asm volatile("vfmv.v.f v0, %0" ::"f"(zero));
+      asm volatile("vmv.v.x v0, zero");
       t0 = *a__, a__ += N;
-      asm volatile("vfmv.v.f v2, %0" ::"f"(zero));
+      asm volatile("vmv.v.x v2, zero");
       t1 = *a__, a__ += N;
-      asm volatile("vfmv.v.f v4, %0" ::"f"(zero));
+      asm volatile("vmv.v.x v4, zero");
       t2 = *a__, a__ += N;
-      asm volatile("vfmv.v.f v6, %0" ::"f"(zero));
+      asm volatile("vmv.v.x v6, zero");
       t3 = *a__, a__ += N;
-      asm volatile("vfmv.v.f v8, %0" ::"f"(zero));
+      asm volatile("vmv.v.x v8, zero");
       t4 = *a__, a__ += N;
-      asm volatile("vfmv.v.f v10, %0" ::"f"(zero));
+      asm volatile("vmv.v.x v10, zero");
       t5 = *a__, a__ += N;
-      asm volatile("vfmv.v.f v12, %0" ::"f"(zero));
+      asm volatile("vmv.v.x v12, zero");
       t6 = *a__, a__ += N;
-      asm volatile("vfmv.v.f v14, %0" ::"f"(zero));
+      asm volatile("vmv.v.x v14, zero");
       t7 = *a__;
 
       unsigned int n = 0;
