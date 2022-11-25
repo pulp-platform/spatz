@@ -375,10 +375,7 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
 
   // Do we need to catch up to reach element idx parity? (Because of non-zero vstart)
   vlen_t vreg_start_0;
-  assign vreg_start_0 = ((spatz_req.vstart >> ($clog2(N_IPU*ELENB))) << $clog2(ELENB)) +
-                        (spatz_req.vstart[idx_width(N_IPU*ELENB)-1:$clog2(ELENB)] > 'd0 ?
-                            ELENB :
-                            (spatz_req.vstart[idx_width(N_IPU*ELENB)-1:$clog2(ELENB)] == 'd0 ? spatz_req.vstart[$clog2(ELENB)-1:0] : 'd0));
+  assign vreg_start_0 = spatz_req.vstart[$clog2(ELENB)-1:0];
   logic [N_IPU-1:0] catchup;
   for (genvar i = 0; i < N_IPU; i++) begin: gen_catchup
     assign catchup[i] = (vreg_counter_q[i] < vreg_start_0) & (vreg_counter_max[i] != vreg_counter_q[i]);
