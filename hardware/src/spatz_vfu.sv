@@ -440,6 +440,8 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
   `FF(fpu_busy_q, fpu_busy_d, '0)
 
   status_t [N_IPU-1:0] fpu_status;
+  status_t             fpu_status_d;
+  `FF(fpu_status_o, fpu_status_d, '0)
 
   always_comb begin: gen_fpu_decoder
     fpu_op           = fpnew_pkg::FMADD;
@@ -450,9 +452,9 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
     fpu_dst_fmt      = fpnew_pkg::FP32;
     fpu_int_fmt      = fpnew_pkg::INT32;
 
-    fpu_status_o = '0;
+    fpu_status_d = '0;
     for (int fpu = 0; fpu < N_IPU; fpu++)
-      fpu_status_o |= fpu_status[fpu];
+      fpu_status_d |= fpu_status[fpu];
 
     if (FPU) begin
       unique case (spatz_req.vtype.vsew)
