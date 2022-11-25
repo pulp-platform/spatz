@@ -482,7 +482,7 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
 
   // verilator lint_off LATCH
   always_comb begin
-    vrf_raddr_o     = '0;
+    vrf_raddr_o     = vreg_addr;
     vrf_re_o        = 1'b0;
     vrf_req_d       = '0;
     vrf_req_valid_d = 1'b0;
@@ -597,8 +597,7 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
     end else begin
       // Read new element from the register file and store it to the buffer
       if (!(|buffer_full) && |vreg_operation_valid) begin
-        vrf_raddr_o = vreg_addr;
-        vrf_re_o    = 1'b1;
+        vrf_re_o = 1'b1;
 
         // Push element to buffer if read from vregfile
         for (int unsigned port = 0; port < NrMemPorts; port++) begin

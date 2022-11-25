@@ -62,6 +62,13 @@ module spatz_vrf
   // Write Mapping //
   ///////////////////
 
+  logic [NrVRFBanks-1:0][NrWritePorts-1:0] write_request;
+  for (genvar bank = 0; bank < NrVRFBanks; bank++) begin: gen_write_request
+    for (genvar port = 0; port < NrWritePorts; port++) begin
+      assign write_request[bank][port] = we_i[port] && waddr_i[port].bank == bank;
+    end
+  end: gen_write_request
+
   always_comb begin : proc_write
     waddr    = '0;
     wdata    = '0;
@@ -73,19 +80,19 @@ module spatz_vrf
     // second priority has the LSU, and third priority has the slide unit.
     for (int unsigned bank = 0; bank < NrVRFBanks; bank++) begin
       // Bank write port 0 - Priority: vd (0) -> lsu (1) -> sld (2)
-      if (we_i[VFU_VD_WD] && waddr_i[VFU_VD_WD].bank == bank) begin
+      if (write_request[bank][VFU_VD_WD]) begin
         waddr[bank]         = waddr_i[VFU_VD_WD].vreg;
         wdata[bank]         = wdata_i[VFU_VD_WD];
         we[bank]            = 1'b1;
         wbe[bank]           = wbe_i[VFU_VD_WD];
         wvalid_o[VFU_VD_WD] = 1'b1;
-      end else if (we_i[VLSU_VD_WD] && waddr_i[VLSU_VD_WD].bank == bank) begin
+      end else if (write_request[bank][VLSU_VD_WD]) begin
         waddr[bank]          = waddr_i[VLSU_VD_WD].vreg;
         wdata[bank]          = wdata_i[VLSU_VD_WD];
         we[bank]             = 1'b1;
         wbe[bank]            = wbe_i[VLSU_VD_WD];
         wvalid_o[VLSU_VD_WD] = 1'b1;
-      end else if (we_i[VSLDU_VD_WD] && waddr_i[VSLDU_VD_WD].bank == bank) begin
+      end else if (write_request[bank][VSLDU_VD_WD]) begin
         waddr[bank]           = waddr_i[VSLDU_VD_WD].vreg;
         wdata[bank]           = wdata_i[VSLDU_VD_WD];
         we[bank]              = 1'b1;
@@ -99,6 +106,13 @@ module spatz_vrf
   // Read Mapping //
   //////////////////
 
+  logic [NrVRFBanks-1:0][NrReadPorts-1:0] read_request;
+  for (genvar bank = 0; bank < NrVRFBanks; bank++) begin: gen_read_request
+    for (genvar port = 0; port < NrReadPorts; port++) begin
+      assign read_request[bank][port] = re_i[port] && raddr_i[port].bank == bank;
+    end
+  end: gen_read_request
+
   always_comb begin : proc_read
     raddr    = '0;
     re       = '0;
@@ -111,7 +125,7 @@ module spatz_vrf
     // VFU (vd), then by the LSU.
     for (int unsigned bank = 0; bank < NrVRFBanks; bank++) begin
       // Bank read port 0 - Priority: VFU (2)
-      if (re_i[VFU_VS2_RD] && raddr_i[VFU_VS2_RD].bank == bank) begin
+      if (read_request[bank][VFU_VS2_RD]) begin
         raddr[bank][0]       = raddr_i[VFU_VS2_RD].vreg;
         re[bank][0]          = 1'b1;
         rdata_o[VFU_VS2_RD]  = rdata[bank][0];
@@ -119,12 +133,12 @@ module spatz_vrf
       end
 
       // Bank read port 1 - Priority: VFU (1) -> VSLDU
-      if (re_i[VFU_VS1_RD] && raddr_i[VFU_VS1_RD].bank == bank) begin
+      if (read_request[bank][VFU_VS1_RD]) begin
         raddr[bank][1]       = raddr_i[VFU_VS1_RD].vreg;
         re[bank][1]          = 1'b1;
         rdata_o[VFU_VS1_RD]  = rdata[bank][1];
         rvalid_o[VFU_VS1_RD] = 1'b1;
-      end else if (re_i[VSLDU_VS2_RD] && raddr_i[VSLDU_VS2_RD].bank == bank) begin
+      end else if (read_request[bank][VSLDU_VS2_RD]) begin
         raddr[bank][1]         = raddr_i[VSLDU_VS2_RD].vreg;
         re[bank][1]            = 1'b1;
         rdata_o[VSLDU_VS2_RD]  = rdata[bank][1];
@@ -132,12 +146,12 @@ module spatz_vrf
       end
 
       // Bank read port 2 - Priority: VFU (D) -> VLSU
-      if (re_i[VFU_VD_RD] && raddr_i[VFU_VD_RD].bank == bank) begin
+      if (read_request[bank][VFU_VD_RD]) begin
         raddr[bank][2]      = raddr_i[VFU_VD_RD].vreg;
         re[bank][2]         = 1'b1;
         rdata_o[VFU_VD_RD]  = rdata[bank][2];
         rvalid_o[VFU_VD_RD] = 1'b1;
-      end else if (re_i[VLSU_VD_RD] && raddr_i[VLSU_VD_RD].bank == bank) begin
+      end else if (read_request[bank][VLSU_VD_RD]) begin
         raddr[bank][2]       = raddr_i[VLSU_VD_RD].vreg;
         re[bank][2]          = 1'b1;
         rdata_o[VLSU_VD_RD]  = rdata[bank][2];
