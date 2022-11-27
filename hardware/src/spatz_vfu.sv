@@ -102,7 +102,7 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
 
   // Number of words advanced by vstart
   vlen_t vstart;
-  assign vstart = ((result_tag.vstart / N_IPU) >> (MAXEW - result_tag.vsew)) << (MAXEW - result_tag.vsew);
+  assign vstart = ((spatz_req.vstart / N_IPU) >> (MAXEW - spatz_req.vtype.vsew)) << (MAXEW - spatz_req.vtype.vsew);
 
   // Should we stall?
   logic stall;
@@ -358,18 +358,6 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
     if (&(result_valid | ~pending_results)) begin
       vreg_we  = !result_tag.wb;
       vreg_wbe = '1;
-
-      // If we are in the last group or at the start and vstart is nonzero,
-      // create the byte enable (be) mask for write back to register file.
-      if (spatz_req.vstart != '0 && busy_q == 1'b0)
-        unique case (result_tag.vsew)
-          EW_8 : vreg_wbe = ~(vreg_be_t'('1) >> ((N_IPU * (1 << (MAXEW - EW_8))) - result_tag.vstart[idx_width(N_IPU) + (MAXEW - EW_8) - 1:0]));
-          EW_16: vreg_wbe = ~(vreg_be_t'('1) >> ((N_IPU * (1 << (MAXEW - EW_16))) - result_tag.vstart[idx_width(N_IPU) + (MAXEW - EW_16) - 1:0]));
-          EW_32: vreg_wbe = ~(vreg_be_t'('1) >> ((N_IPU * (1 << (MAXEW - EW_32))) - result_tag.vstart[idx_width(N_IPU) + (MAXEW - EW_32) - 1:0]));
-          EW_64:
-            if (MAXEW >= EW_64)
-              vreg_wbe = ~(vreg_be_t'('1) >> ((N_IPU * (1 << (MAXEW - EW_64))) - result_tag.vstart[idx_width(N_IPU) + (MAXEW - EW_64) - 1:0]));
-        endcase
     end
   end : operand_req_proc
 
@@ -439,9 +427,8 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
   logic [N_IPU-1:0] fpu_busy_d, fpu_busy_q;
   `FF(fpu_busy_q, fpu_busy_d, '0)
 
-  status_t [N_IPU-1:0] fpu_status;
-  status_t             fpu_status_d;
-  `FF(fpu_status_o, fpu_status_d, '0)
+  status_t [N_IPU-1:0] fpu_status_d, fpu_status_q;
+  `FF(fpu_status_q, fpu_status_d, '0)
 
   always_comb begin: gen_fpu_decoder
     fpu_op           = fpnew_pkg::FMADD;
@@ -452,9 +439,9 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
     fpu_dst_fmt      = fpnew_pkg::FP32;
     fpu_int_fmt      = fpnew_pkg::INT32;
 
-    fpu_status_d = '0;
+    fpu_status_o = '0;
     for (int fpu = 0; fpu < N_IPU; fpu++)
-      fpu_status_d |= fpu_status[fpu];
+      fpu_status_o |= fpu_status_q[fpu];
 
     if (FPU) begin
       unique case (spatz_req.vtype.vsew)
@@ -559,7 +546,7 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
         .result_o      (fpu_result[fpu*ELEN +: ELEN]                                                                   ),
         .out_valid_o   (int_fpu_result_valid                                                                           ),
         .out_ready_i   (result_ready                                                                                   ),
-        .status_o      (fpu_status[fpu]                                                                                ),
+        .status_o      (fpu_status_d[fpu]                                                                              ),
         .tag_o         (tag                                                                                            )
       );
 
@@ -567,7 +554,7 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
         assign fpu_result_tag = tag;
       end: gen_fpu_tag
     end: gen_fpu else begin: gen_no_fpu
-      assign fpu_status[fpu]                      = '0;
+      assign fpu_status_d[fpu]                    = '0;
       assign fpu_busy_d[fpu]                      = 1'b0;
       assign fpu_in_ready[fpu*ELENB +: ELENB]     = '0;
       assign fpu_result[fpu*ELEN +: ELEN]         = '0;
