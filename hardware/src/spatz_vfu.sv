@@ -125,9 +125,6 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
   // Did we issue a microoperation?
   logic word_issued;
 
-  // Did we commit a word to the VRF?
-  logic word_committed;
-
   // Currently running instructions
   logic [NrParallelInstructions-1:0] running_d, running_q;
   `FF(running_q, running_d, '0)
@@ -169,7 +166,7 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
     vfu_rsp_o       = '0;
 
     // Change number of remaining elements
-    if (word_issued && word_committed)
+    if (word_issued)
       vl_d = vl_q + nr_elem_word;
 
     // Current state of the VFU
@@ -200,15 +197,6 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
       vl_d                    = '0;
       last_request            = 1'b1;
       running_d[spatz_req.id] = 1'b0;
-
-      // Is this an IPU instruction? If so, acknowledge directly
-      if (!FPU || (state_q == VFU_RunningIPU && word_committed)) begin
-        vfu_rsp_o.id     = spatz_req.id;
-        vfu_rsp_o.rd     = spatz_req.rd;
-        vfu_rsp_o.wb     = spatz_req.op_arith.is_scalar;
-        vfu_rsp_o.result = scalar_result;
-        vfu_rsp_valid_o  = 1'b1;
-      end
     end
     // Do we have a new instruction?
     else if (spatz_req_valid && !running_d[spatz_req.id]) begin
@@ -218,12 +206,12 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
       running_d[spatz_req.id] = 1'b1;
 
       // Change number of remaining elements
-      if (word_issued && word_committed)
+      if (word_issued)
         vl_d = vl_q + nr_elem_word;
     end
 
-    // An FPU instruction finished execution
-    if (FPU && state_q == VFU_RunningFPU && result_tag.last) begin
+    // An instruction finished execution
+    if (result_tag.last && &(result_valid | ~pending_results)) begin
       vfu_rsp_o.id     = result_tag.id;
       vfu_rsp_o.rd     = result_tag.vd_addr[GPRWidth-1:0];
       vfu_rsp_o.wb     = result_tag.wb;
@@ -280,18 +268,15 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
     operand3 = spatz_req.op_arith.is_scalar ? {1*N_IPU{spatz_req.rsd}} : vrf_rdata_i[2];
   end: operand_proc
 
-  assign in_ready     = state_q == VFU_RunningIPU ? ipu_in_ready     : fpu_in_ready;
-  assign result       = state_q == VFU_RunningIPU ? ipu_result       : fpu_result;
-  assign result_valid = state_q == VFU_RunningIPU ? ipu_result_valid : fpu_result_valid;
+  assign in_ready     = state_d == VFU_RunningIPU ? ipu_in_ready     : fpu_in_ready;
+  assign result       = state_d == VFU_RunningIPU ? ipu_result       : fpu_result;
+  assign result_valid = state_d == VFU_RunningIPU ? ipu_result_valid : fpu_result_valid;
 
   assign scalar_result = spatz_req.op_arith.is_scalar ? result[ELEN-1:0] : '0;
   assign result_ready  = &(result_valid | ~pending_results) && ((result_tag.wb && vfu_rsp_ready_i) || vrf_wvalid_i);
 
   // Did we issue a word to the IPUs?
-  assign word_issued = spatz_req_valid && &(in_ready | ~valid_operations) && !stall;
-
-  // Did the IPUs answer? (Only used in the IPU mode)
-  assign word_committed = spatz_req_valid && (&(result_valid | ~pending_results) || state_q == VFU_RunningFPU);
+  assign word_issued = spatz_req_valid && &(in_ready | ~valid_operations) && operands_ready && !stall;
 
   ///////////////////////
   // Operand Requester //
@@ -333,12 +318,12 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
         input_tag.vd_addr = vreg_addr_d[2];
 
       // Did we commit a word already?
-      if (word_issued && word_committed) begin
+      if (word_issued) begin
         vreg_addr_d[0] = vreg_addr_d[0] + 1;
         vreg_addr_d[1] = vreg_addr_d[1] + 1;
         vreg_addr_d[2] = vreg_addr_d[2] + 1;
       end
-    end else if (spatz_req_valid && vl_q < spatz_req.vl && word_issued && word_committed) begin
+    end else if (spatz_req_valid && vl_q < spatz_req.vl && word_issued) begin
       vreg_addr_d[0] = vreg_addr_q[0] + 1;
       vreg_addr_d[1] = vreg_addr_q[1] + 1;
       vreg_addr_d[2] = vreg_addr_q[2] + 1;
@@ -380,6 +365,9 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
     assign ipu_operand2 = !is_fpu_insn ? operand2[ipu*ELEN +: ELEN] : '0;
     assign ipu_operand3 = !is_fpu_insn ? operand3[ipu*ELEN +: ELEN] : '0;
 
+    logic ipu_ready;
+    assign ipu_in_ready[ipu*ELENB +: ELENB] = {ELENB{ipu_ready}};
+
     if (SpatzHasIntegerALU) begin: gen_ipu
       spatz_ipu #(
         .tag_t        (vfu_tag_t         ),
@@ -390,6 +378,7 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
         .operation_i      (spatz_req.op                                                                                    ),
         // Only the IPU0 executes scalar instructions
         .operation_valid_i(spatz_req_valid && operands_ready && (!spatz_req.op_arith.is_scalar || ipu == 0) && !is_fpu_insn),
+        .operation_ready_o(ipu_ready                                                                                       ),
         .op_s1_i          (ipu_operand1                                                                                    ),
         .op_s2_i          (ipu_operand2                                                                                    ),
         .op_d_i           (ipu_operand3                                                                                    ),
@@ -408,7 +397,6 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
       assign int_ipu_tag                          = '0;
     end
 
-    assign ipu_in_ready[ipu*ELENB +: ELENB] = '1;
     if (ipu == 0) begin: gen_ipu_tag
       assign ipu_result_tag = int_ipu_tag;
     end: gen_ipu_tag
