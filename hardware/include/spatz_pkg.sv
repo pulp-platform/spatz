@@ -339,17 +339,20 @@ package spatz_pkg;
         3, // FP64
         1, // FP16
         1, // FP8
-        1  // FP16alt
-      },                // FMA Block
-      '{1, 1, 1, 1, 1}, // DIVSQRT
-      '{1, 1, 1, 1, 1}, // NONCOMP
-      '{2, 2, 2, 2, 2}  // CONV
+        1, // FP16alt
+        1  // FP8alt
+      },                   // FMA Block
+      '{1, 1, 1, 1, 1, 1}, // DIVSQRT
+      '{1, 1, 1, 1, 1, 1}, // NONCOMP
+      '{2, 2, 2, 2, 2, 2}, // CONV
+      '{3, 3, 3, 3, 3, 3}  // DOTP
     },
     UnitTypes: '{
-      '{fpnew_pkg::MERGED, fpnew_pkg::MERGED, fpnew_pkg::MERGED, fpnew_pkg::MERGED, fpnew_pkg::MERGED},           // FMA
-      '{fpnew_pkg::DISABLED, fpnew_pkg::DISABLED, fpnew_pkg::DISABLED, fpnew_pkg::DISABLED, fpnew_pkg::DISABLED}, // DIVSQRT
-      '{fpnew_pkg::PARALLEL, fpnew_pkg::PARALLEL, fpnew_pkg::PARALLEL, fpnew_pkg::PARALLEL, fpnew_pkg::PARALLEL}, // NONCOMP
-      '{fpnew_pkg::MERGED, fpnew_pkg::MERGED, fpnew_pkg::MERGED, fpnew_pkg::MERGED, fpnew_pkg::MERGED}            // CONV
+      '{fpnew_pkg::MERGED, fpnew_pkg::MERGED, fpnew_pkg::MERGED, fpnew_pkg::MERGED, fpnew_pkg::MERGED, fpnew_pkg::MERGED},             // FMA
+      '{fpnew_pkg::DISABLED, fpnew_pkg::DISABLED, fpnew_pkg::DISABLED, fpnew_pkg::DISABLED, fpnew_pkg::DISABLED, fpnew_pkg::DISABLED}, // DIVSQRT
+      '{fpnew_pkg::PARALLEL, fpnew_pkg::PARALLEL, fpnew_pkg::PARALLEL, fpnew_pkg::PARALLEL, fpnew_pkg::PARALLEL, fpnew_pkg::PARALLEL}, // NONCOMP
+      '{fpnew_pkg::MERGED, fpnew_pkg::MERGED, fpnew_pkg::MERGED, fpnew_pkg::MERGED, fpnew_pkg::MERGED, fpnew_pkg::MERGED},             // CONV
+      '{fpnew_pkg::MERGED, fpnew_pkg::MERGED, fpnew_pkg::MERGED, fpnew_pkg::MERGED, fpnew_pkg::MERGED, fpnew_pkg::MERGED}              // DOTP
     },
     PipeConfig: fpnew_pkg::BEFORE
   } :
@@ -362,17 +365,20 @@ package spatz_pkg;
         4, // FP64
         1, // FP16
         1, // FP8
-        1  // FP16alt
+        1, // FP16alt
+        1  // FP8alt
       },
-      '{1, 1, 1, 1, 1}, // DIVSQRT
-      '{1, 1, 1, 1, 1}, // NONCOMP
-      '{2, 2, 2, 2, 2}  // CONV
+      '{1, 1, 1, 1, 1, 1}, // DIVSQRT
+      '{1, 1, 1, 1, 1, 1}, // NONCOMP
+      '{2, 2, 2, 2, 2, 2}, // CONV
+      '{3, 3, 3, 3, 3, 3}  // DOTP
     },
     UnitTypes: '{
-      '{fpnew_pkg::MERGED, fpnew_pkg::MERGED, fpnew_pkg::MERGED, fpnew_pkg::MERGED, fpnew_pkg::MERGED},           // FMA
-      '{fpnew_pkg::DISABLED, fpnew_pkg::DISABLED, fpnew_pkg::DISABLED, fpnew_pkg::DISABLED, fpnew_pkg::DISABLED}, // DIVSQRT
-      '{fpnew_pkg::PARALLEL, fpnew_pkg::PARALLEL, fpnew_pkg::PARALLEL, fpnew_pkg::PARALLEL, fpnew_pkg::PARALLEL}, // NONCOMP
-      '{ fpnew_pkg::MERGED, fpnew_pkg::MERGED, fpnew_pkg::MERGED, fpnew_pkg::MERGED, fpnew_pkg::MERGED}           // CONV
+      '{fpnew_pkg::MERGED, fpnew_pkg::MERGED, fpnew_pkg::MERGED, fpnew_pkg::MERGED, fpnew_pkg::MERGED, fpnew_pkg::MERGED},             // FMA
+      '{fpnew_pkg::DISABLED, fpnew_pkg::DISABLED, fpnew_pkg::DISABLED, fpnew_pkg::DISABLED, fpnew_pkg::DISABLED, fpnew_pkg::DISABLED}, // DIVSQRT
+      '{fpnew_pkg::PARALLEL, fpnew_pkg::PARALLEL, fpnew_pkg::PARALLEL, fpnew_pkg::PARALLEL, fpnew_pkg::PARALLEL, fpnew_pkg::PARALLEL}, // NONCOMP
+      '{fpnew_pkg::MERGED, fpnew_pkg::MERGED, fpnew_pkg::MERGED, fpnew_pkg::MERGED, fpnew_pkg::MERGED, fpnew_pkg::MERGED},             // CONV
+      '{fpnew_pkg::DISABLED, fpnew_pkg::DISABLED, fpnew_pkg::DISABLED, fpnew_pkg::DISABLED, fpnew_pkg::DISABLED, fpnew_pkg::DISABLED}  // DOTP
     },
     PipeConfig: fpnew_pkg::BEFORE
   };
@@ -383,7 +389,7 @@ package spatz_pkg;
     Width        : ELEN,
     EnableVectors: 1'b1,
     EnableNanBox : 1'b1,
-    FpFmtMask    : {1'b1, 1'b1, 1'b1, 1'b1, 1'b1},
+    FpFmtMask    : {1'b1, 1'b1, 1'b1, 1'b1, 1'b1, 1'b1},
     IntFmtMask   : {1'b1, 1'b1, 1'b1, 1'b1}
   } :
   // Single Precision FPU
@@ -391,7 +397,7 @@ package spatz_pkg;
     Width        : ELEN,
     EnableVectors: 1'b1,
     EnableNanBox : 1'b1,
-    FpFmtMask    : {RVF, 1'b0, 1'b1, 1'b0, 1'b0},
+    FpFmtMask    : {RVF, 1'b0, 1'b1, 1'b0, 1'b0, 1'b0},
     IntFmtMask   : {1'b0, 1'b1, 1'b1, 1'b0}
   };
 
