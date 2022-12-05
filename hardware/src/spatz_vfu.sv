@@ -452,6 +452,12 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
           fpu_int_fmt      = fpnew_pkg::INT16;
           fpu_vectorial_op = 1'b1;
         end
+        EW_8: begin
+          fpu_src_fmt      = fpnew_pkg::FP8;
+          fpu_dst_fmt      = fpnew_pkg::FP8;
+          fpu_int_fmt      = fpnew_pkg::INT8;
+          fpu_vectorial_op = 1'b1;
+        end
         default:;
       endcase
 
