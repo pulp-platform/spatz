@@ -186,6 +186,106 @@ module spatz_fpu_sequencer import spatz_pkg::*; import rvv_pkg::*; import fpnew_
 
     if (x_issue_valid_i)
       unique casez (x_issue_req_i.instr)
+        // Byte Precision Floating-Point
+        riscv_instr::FADD_B,
+        riscv_instr::FSUB_B,
+        riscv_instr::FMUL_B,
+        riscv_instr::FDIV_B,
+        riscv_instr::FSQRT_B,
+        riscv_instr::FSGNJ_B,
+        riscv_instr::FSGNJN_B,
+        riscv_instr::FSGNJX_B,
+        riscv_instr::FMIN_B,
+        riscv_instr::FMAX_B,
+        riscv_instr::FCLASS_B,
+        riscv_instr::FLE_B,
+        riscv_instr::FLT_B,
+        riscv_instr::FEQ_B,
+        riscv_instr::FCVT_B_W,
+        riscv_instr::FCVT_B_WU,
+        riscv_instr::FCVT_W_B,
+        riscv_instr::FCVT_WU_B,
+        riscv_instr::FMADD_B,
+        riscv_instr::FMSUB_B,
+        riscv_instr::FNMSUB_B,
+        riscv_instr::FNMADD_B: begin
+          if (RVF && (!(x_issue_req_i.instr inside {riscv_instr::FDIV_B, riscv_instr::FSQRT_B}) || FDivSqrt)) begin
+            use_fs1 = !(x_issue_req_i.instr inside {riscv_instr::FCVT_B_W, riscv_instr::FCVT_B_WU});
+            use_fs2 = !(x_issue_req_i.instr inside {riscv_instr::FCLASS_B});
+            use_fs3 = x_issue_req_i.instr inside {riscv_instr::FMADD_B, riscv_instr::FMSUB_B, riscv_instr::FNMSUB_B, riscv_instr::FNMADD_B};
+            use_fd  = !(x_issue_req_i.instr inside {riscv_instr::FCLASS_B, riscv_instr::FLE_B, riscv_instr::FLT_B, riscv_instr::FEQ_B, riscv_instr::FCVT_W_B, riscv_instr::FCVT_WU_B});
+          end else begin
+            illegal_inst = 1'b1;
+          end
+        end
+        riscv_instr::FMV_X_B: begin
+          if (RVF) begin
+            use_rd  = 1'b1;
+            use_fs1 = 1'b1;
+            is_move = 1'b1;
+          end else begin
+            illegal_inst = 1'b1;
+          end
+        end
+        riscv_instr::FMV_B_X: begin
+          if (RVF) begin
+            use_fd  = 1'b1;
+            is_move = 1'b1;
+          end else begin
+            illegal_inst = 1'b1;
+          end
+        end
+
+        // Half Precision Floating-Point
+        riscv_instr::FADD_H,
+        riscv_instr::FSUB_H,
+        riscv_instr::FMUL_H,
+        riscv_instr::FDIV_H,
+        riscv_instr::FSQRT_H,
+        riscv_instr::FSGNJ_H,
+        riscv_instr::FSGNJN_H,
+        riscv_instr::FSGNJX_H,
+        riscv_instr::FMIN_H,
+        riscv_instr::FMAX_H,
+        riscv_instr::FCLASS_H,
+        riscv_instr::FLE_H,
+        riscv_instr::FLT_H,
+        riscv_instr::FEQ_H,
+        riscv_instr::FCVT_H_W,
+        riscv_instr::FCVT_H_WU,
+        riscv_instr::FCVT_W_H,
+        riscv_instr::FCVT_WU_H,
+        riscv_instr::FMADD_H,
+        riscv_instr::FMSUB_H,
+        riscv_instr::FNMSUB_H,
+        riscv_instr::FNMADD_H: begin
+          if (RVF && (!(x_issue_req_i.instr inside {riscv_instr::FDIV_H, riscv_instr::FSQRT_H}) || FDivSqrt)) begin
+            use_fs1 = !(x_issue_req_i.instr inside {riscv_instr::FCVT_H_W, riscv_instr::FCVT_H_WU});
+            use_fs2 = !(x_issue_req_i.instr inside {riscv_instr::FCLASS_H});
+            use_fs3 = x_issue_req_i.instr inside {riscv_instr::FMADD_H, riscv_instr::FMSUB_H, riscv_instr::FNMSUB_H, riscv_instr::FNMADD_H};
+            use_fd  = !(x_issue_req_i.instr inside {riscv_instr::FCLASS_H, riscv_instr::FLE_H, riscv_instr::FLT_H, riscv_instr::FEQ_H, riscv_instr::FCVT_W_H, riscv_instr::FCVT_WU_H});
+          end else begin
+            illegal_inst = 1'b1;
+          end
+        end
+        riscv_instr::FMV_X_H: begin
+          if (RVF) begin
+            use_rd  = 1'b1;
+            use_fs1 = 1'b1;
+            is_move = 1'b1;
+          end else begin
+            illegal_inst = 1'b1;
+          end
+        end
+        riscv_instr::FMV_H_X: begin
+          if (RVF) begin
+            use_fd  = 1'b1;
+            is_move = 1'b1;
+          end else begin
+            illegal_inst = 1'b1;
+          end
+        end
+
         // Single Precision Floating-Point
         riscv_instr::FADD_S,
         riscv_instr::FSUB_S,
@@ -270,17 +370,31 @@ module spatz_fpu_sequencer import spatz_pkg::*; import rvv_pkg::*; import fpnew_
         end
 
         // Floating-Point Load/Store
+        riscv_instr::FLB,
+        riscv_instr::FLH,
         riscv_instr::FLW,
         riscv_instr::FLD: begin
           use_fd       = 1'b1;
-          ls_size      = x_issue_req_i.instr inside {riscv_instr::FLD} ? Double : Word;
+          unique casez (x_issue_req_i.instr)
+            riscv_instr::FLB: ls_size = Byte;
+            riscv_instr::FLH: ls_size = HalfWord;
+            riscv_instr::FLW: ls_size = Word;
+            riscv_instr::FLD: if (RVD) ls_size = Double;
+          endcase
           load         = 1'b1;
           illegal_inst = !RVD && x_issue_req_i.instr inside {riscv_instr::FLD};
         end
+        riscv_instr::FSB,
+        riscv_instr::FSH,
         riscv_instr::FSW,
         riscv_instr::FSD: begin
           use_fs2      = 1'b1;
-          ls_size      = x_issue_req_i.instr inside {riscv_instr::FSD} ? Double : Word;
+          unique casez (x_issue_req_i.instr)
+            riscv_instr::FSB: ls_size = Byte;
+            riscv_instr::FSH: ls_size = HalfWord;
+            riscv_instr::FSW: ls_size = Word;
+            riscv_instr::FSD: if (RVD) ls_size = Double;
+          endcase
           store        = 1'b1;
           illegal_inst = !RVD && x_issue_req_i.instr inside {riscv_instr::FSD};
         end

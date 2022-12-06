@@ -804,7 +804,193 @@ module spatz_decoder
           endcase
         end
 
-        // Scalar floating point instructions
+        // Scalar byte-precision floating-point instructions
+        riscv_instr::FADD_B,
+        riscv_instr::FSUB_B,
+        riscv_instr::FMUL_B,
+        riscv_instr::FSGNJ_B,
+        riscv_instr::FSGNJN_B,
+        riscv_instr::FSGNJX_B,
+        riscv_instr::FMIN_B,
+        riscv_instr::FMAX_B,
+        riscv_instr::FCLASS_B,
+        riscv_instr::FLE_B,
+        riscv_instr::FLT_B,
+        riscv_instr::FEQ_B,
+        riscv_instr::FCVT_B_W,
+        riscv_instr::FCVT_B_WU,
+        riscv_instr::FCVT_W_B,
+        riscv_instr::FCVT_WU_B,
+        riscv_instr::FMADD_B,
+        riscv_instr::FMSUB_B,
+        riscv_instr::FNMSUB_B,
+        riscv_instr::FNMADD_B: begin
+          if (spatz_pkg::FPU && spatz_pkg::RVF) begin
+            spatz_req.ex_unit            = VFU;
+            spatz_req.rd                 = decoder_req_i.instr[11:7];
+            spatz_req.use_rd             = 1'b1;
+            spatz_req.rs1                = decoder_req_i.rs1;
+            spatz_req.rs2                = decoder_req_i.rs2;
+            spatz_req.rsd                = decoder_req_i.rsd;
+            spatz_req.op_arith.is_scalar = 1'b1;
+            spatz_req.rm                 = fpu_rnd_mode_i;
+            spatz_req.vtype.vsew         = EW_8;
+
+            unique casez (decoder_req_i.instr)
+              riscv_instr::FADD_B : spatz_req.op = VFADD;
+              riscv_instr::FSUB_B : begin
+                spatz_req.op  = VFSUB;
+                spatz_req.rs1 = decoder_req_i.rs2;
+                spatz_req.rs2 = decoder_req_i.rs1;
+              end
+              riscv_instr::FMUL_B  : spatz_req.op = VFMUL;
+              riscv_instr::FSGNJ_B : begin
+                spatz_req.op = VFSGNJ;
+                spatz_req.rm = fpnew_pkg::RNE;
+              end
+              riscv_instr::FSGNJN_B : begin
+                spatz_req.op = VFSGNJ;
+                spatz_req.rm = fpnew_pkg::RTZ;
+              end
+              riscv_instr::FSGNJX_B : begin
+                spatz_req.op = VFSGNJ;
+                spatz_req.rm = fpnew_pkg::RDN;
+              end
+              riscv_instr::FMIN_B : begin
+                spatz_req.op = VFMINMAX;
+                spatz_req.rm = fpnew_pkg::RNE;
+              end
+              riscv_instr::FMAX_B : begin
+                spatz_req.op = VFMINMAX;
+                spatz_req.rm = fpnew_pkg::RTZ;
+              end
+              riscv_instr::FCLASS_B : spatz_req.op = VFCLASS;
+              riscv_instr::FLE_B    : begin
+                spatz_req.op = VFCMP;
+                spatz_req.rm = fpnew_pkg::RNE;
+              end
+              riscv_instr::FLT_B : begin
+                spatz_req.op = VFCMP;
+                spatz_req.rm = fpnew_pkg::RTZ;
+              end
+              riscv_instr::FEQ_B : begin
+                spatz_req.op = VFCMP;
+                spatz_req.rm = fpnew_pkg::RDN;
+              end
+              riscv_instr::FCVT_B_W : spatz_req.op = VI2F;
+              riscv_instr::FCVT_B_WU: spatz_req.op = VU2F;
+              riscv_instr::FCVT_W_B : begin
+                spatz_req.op = VF2I;
+                spatz_req.rm = fpnew_pkg::roundmode_e'(decoder_req_i.instr[14:12]);
+              end
+              riscv_instr::FCVT_WU_B: begin
+                spatz_req.op = VF2U;
+                spatz_req.rm = fpnew_pkg::roundmode_e'(decoder_req_i.instr[14:12]);
+              end
+              riscv_instr::FMADD_B  : spatz_req.op = VFMADD;
+              riscv_instr::FMSUB_B  : spatz_req.op = VFMSUB;
+              riscv_instr::FNMADD_B : spatz_req.op = VFNMADD;
+              riscv_instr::FNMSUB_B : spatz_req.op = VFNMSUB;
+              default;
+            endcase
+          end else
+            illegal_instr = 1'b1;
+        end
+
+        // Scalar half-precision floating-point instructions
+        riscv_instr::FADD_H,
+        riscv_instr::FSUB_H,
+        riscv_instr::FMUL_H,
+        riscv_instr::FSGNJ_H,
+        riscv_instr::FSGNJN_H,
+        riscv_instr::FSGNJX_H,
+        riscv_instr::FMIN_H,
+        riscv_instr::FMAX_H,
+        riscv_instr::FCLASS_H,
+        riscv_instr::FLE_H,
+        riscv_instr::FLT_H,
+        riscv_instr::FEQ_H,
+        riscv_instr::FCVT_H_W,
+        riscv_instr::FCVT_H_WU,
+        riscv_instr::FCVT_W_H,
+        riscv_instr::FCVT_WU_H,
+        riscv_instr::FMADD_H,
+        riscv_instr::FMSUB_H,
+        riscv_instr::FNMSUB_H,
+        riscv_instr::FNMADD_H: begin
+          if (spatz_pkg::FPU && spatz_pkg::RVF) begin
+            spatz_req.ex_unit            = VFU;
+            spatz_req.rd                 = decoder_req_i.instr[11:7];
+            spatz_req.use_rd             = 1'b1;
+            spatz_req.rs1                = decoder_req_i.rs1;
+            spatz_req.rs2                = decoder_req_i.rs2;
+            spatz_req.rsd                = decoder_req_i.rsd;
+            spatz_req.op_arith.is_scalar = 1'b1;
+            spatz_req.rm                 = fpu_rnd_mode_i;
+            spatz_req.vtype.vsew         = EW_16;
+
+            unique casez (decoder_req_i.instr)
+              riscv_instr::FADD_H : spatz_req.op = VFADD;
+              riscv_instr::FSUB_H : begin
+                spatz_req.op  = VFSUB;
+                spatz_req.rs1 = decoder_req_i.rs2;
+                spatz_req.rs2 = decoder_req_i.rs1;
+              end
+              riscv_instr::FMUL_H  : spatz_req.op = VFMUL;
+              riscv_instr::FSGNJ_H : begin
+                spatz_req.op = VFSGNJ;
+                spatz_req.rm = fpnew_pkg::RNE;
+              end
+              riscv_instr::FSGNJN_H : begin
+                spatz_req.op = VFSGNJ;
+                spatz_req.rm = fpnew_pkg::RTZ;
+              end
+              riscv_instr::FSGNJX_H : begin
+                spatz_req.op = VFSGNJ;
+                spatz_req.rm = fpnew_pkg::RDN;
+              end
+              riscv_instr::FMIN_H : begin
+                spatz_req.op = VFMINMAX;
+                spatz_req.rm = fpnew_pkg::RNE;
+              end
+              riscv_instr::FMAX_H : begin
+                spatz_req.op = VFMINMAX;
+                spatz_req.rm = fpnew_pkg::RTZ;
+              end
+              riscv_instr::FCLASS_H : spatz_req.op = VFCLASS;
+              riscv_instr::FLE_H    : begin
+                spatz_req.op = VFCMP;
+                spatz_req.rm = fpnew_pkg::RNE;
+              end
+              riscv_instr::FLT_H : begin
+                spatz_req.op = VFCMP;
+                spatz_req.rm = fpnew_pkg::RTZ;
+              end
+              riscv_instr::FEQ_H : begin
+                spatz_req.op = VFCMP;
+                spatz_req.rm = fpnew_pkg::RDN;
+              end
+              riscv_instr::FCVT_H_W : spatz_req.op = VI2F;
+              riscv_instr::FCVT_H_WU: spatz_req.op = VU2F;
+              riscv_instr::FCVT_W_H : begin
+                spatz_req.op = VF2I;
+                spatz_req.rm = fpnew_pkg::roundmode_e'(decoder_req_i.instr[14:12]);
+              end
+              riscv_instr::FCVT_WU_H: begin
+                spatz_req.op = VF2U;
+                spatz_req.rm = fpnew_pkg::roundmode_e'(decoder_req_i.instr[14:12]);
+              end
+              riscv_instr::FMADD_H  : spatz_req.op = VFMADD;
+              riscv_instr::FMSUB_H  : spatz_req.op = VFMSUB;
+              riscv_instr::FNMADD_H : spatz_req.op = VFNMADD;
+              riscv_instr::FNMSUB_H : spatz_req.op = VFNMSUB;
+              default;
+            endcase
+          end else
+            illegal_instr = 1'b1;
+        end
+
+        // Scalar single-precision floating-point instructions
         riscv_instr::FADD_S,
         riscv_instr::FSUB_S,
         riscv_instr::FMUL_S,
