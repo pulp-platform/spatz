@@ -49,6 +49,10 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
     vreg_addr_t vd_addr;
     logic wb;
     logic last;
+
+    // Is this a narrowing instruction?
+    logic narrowing;
+    logic narrowing_upper;
   } vfu_tag_t;
 
   ///////////////////////
@@ -86,7 +90,7 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
 
   // Number of elements in one VRF word
   logic [$clog2(N_IPU*(ELEN/8)):0] nr_elem_word;
-  assign nr_elem_word = N_IPU * (1 << (MAXEW - spatz_req.vtype.vsew));
+  assign nr_elem_word = (N_IPU * (1 << (MAXEW - spatz_req.vtype.vsew))) >> spatz_req.op_arith.is_narrowing;
 
   // Are we running integer or floating-point instructions?
   enum logic {
@@ -142,15 +146,20 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
   // Is this the last request?
   logic last_request;
 
+  // Are we producing the upper or lower part of the results of a narrowing instruction?
+  logic narrowing_upper_d, narrowing_upper_q;
+  `FF(narrowing_upper_q, narrowing_upper_d, 1'b0)
+
   // Are any results valid?
   logic [N_IPU*ELENB-1:0] result_valid;
 
   always_comb begin: control_proc
     // Maintain state
-    vl_d      = vl_q;
-    busy_d    = busy_q;
-    running_d = running_q;
-    state_d   = state_q;
+    vl_d              = vl_q;
+    busy_d            = busy_q;
+    running_d         = running_q;
+    state_d           = state_q;
+    narrowing_upper_d = narrowing_upper_q;
 
     // We are not stalling
     stall = 1'b0;
@@ -166,8 +175,11 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
     vfu_rsp_o       = '0;
 
     // Change number of remaining elements
-    if (word_issued)
-      vl_d = vl_q + nr_elem_word;
+    if (word_issued) begin
+      vl_d              = vl_q + nr_elem_word;
+      // Update narrowing information
+      narrowing_upper_d = narrowing_upper_q ^ spatz_req.op_arith.is_narrowing;
+    end
 
     // Current state of the VFU
     if (spatz_req_valid)
@@ -212,11 +224,13 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
 
     // An instruction finished execution
     if (result_tag.last && &(result_valid | ~pending_results)) begin
-      vfu_rsp_o.id     = result_tag.id;
-      vfu_rsp_o.rd     = result_tag.vd_addr[GPRWidth-1:0];
-      vfu_rsp_o.wb     = result_tag.wb;
-      vfu_rsp_o.result = scalar_result;
-      vfu_rsp_valid_o  = 1'b1;
+      vfu_rsp_o.id      = result_tag.id;
+      vfu_rsp_o.rd      = result_tag.vd_addr[GPRWidth-1:0];
+      vfu_rsp_o.wb      = result_tag.wb;
+      vfu_rsp_o.result  = scalar_result;
+      vfu_rsp_valid_o   = 1'b1;
+      // Reset the narrowing information
+      narrowing_upper_d = 1'b0;
     end
   end: control_proc
 
@@ -299,12 +313,14 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
 
     // Tag (propagated with the operations)
     input_tag = '{
-      id     : spatz_req.id,
-      vsew   : spatz_req.vtype.vsew,
-      vstart : spatz_req.vstart,
-      vd_addr: spatz_req.op_arith.is_scalar ? vreg_addr_t'(spatz_req.rd) : vreg_addr_q[2],
-      wb     : spatz_req.op_arith.is_scalar,
-      last   : last_request
+      id             : spatz_req.id,
+      vsew           : spatz_req.vtype.vsew,
+      vstart         : spatz_req.vstart,
+      vd_addr        : spatz_req.op_arith.is_scalar ? vreg_addr_t'(spatz_req.rd) : vreg_addr_q[2],
+      wb             : spatz_req.op_arith.is_scalar,
+      last           : last_request,
+      narrowing      : spatz_req.op_arith.is_narrowing,
+      narrowing_upper: narrowing_upper_q
     };
 
     if (spatz_req_valid && vl_q == '0) begin
@@ -321,12 +337,12 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
       if (word_issued) begin
         vreg_addr_d[0] = vreg_addr_d[0] + 1;
         vreg_addr_d[1] = vreg_addr_d[1] + 1;
-        vreg_addr_d[2] = vreg_addr_d[2] + 1;
+        vreg_addr_d[2] = vreg_addr_d[2] + (!spatz_req.op_arith.is_narrowing || narrowing_upper_q);
       end
     end else if (spatz_req_valid && vl_q < spatz_req.vl && word_issued) begin
       vreg_addr_d[0] = vreg_addr_q[0] + 1;
       vreg_addr_d[1] = vreg_addr_q[1] + 1;
-      vreg_addr_d[2] = vreg_addr_q[2] + 1;
+      vreg_addr_d[2] = vreg_addr_q[2] + (!spatz_req.op_arith.is_narrowing || narrowing_upper_q);
     end
   end: vreg_addr_proc
 
@@ -343,14 +359,40 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
     if (&(result_valid | ~pending_results)) begin
       vreg_we  = !result_tag.wb;
       vreg_wbe = '1;
+
+      if (result_tag.narrowing) begin
+        // Only write half of the elements
+        vreg_wbe = result_tag.narrowing_upper ? {{(N_IPU*ELENB/2){1'b1}}, {(N_IPU*ELENB/2){1'b0}}} : {{(N_IPU*ELENB/2){1'b0}}, {(N_IPU*ELENB/2){1'b1}}};
+      end
     end
   end : operand_req_proc
+
+  logic [N_IPU*ELEN-1:0] vreg_wdata;
+  always_comb begin: align_result
+    if (!result_tag.narrowing)
+      vreg_wdata = result;
+    // Realign results
+    else if (result_tag.narrowing) begin
+      unique case (MAXEW)
+        EW_64: begin
+          if (RVD)
+            for (int element = 0; element < N_IPU; element++)
+              vreg_wdata[32*element + (N_IPU * ELEN * result_tag.narrowing_upper / 2) +: 32] = result[64*element +: 32];
+        end
+        EW_32: begin
+          for (int element = 0; element < N_IPU*2; element++)
+            vreg_wdata[16*element + (N_IPU * ELEN * result_tag.narrowing_upper / 2) +: 16] = result[32*element +: 16];
+        end
+        default:;
+      endcase
+    end
+  end
 
   // Register file signals
   assign vrf_re_o    = vreg_r_req;
   assign vrf_we_o    = vreg_we;
   assign vrf_wbe_o   = vreg_wbe;
-  assign vrf_wdata_o = result;
+  assign vrf_wdata_o = vreg_wdata;
   assign vrf_id_o    = {result_tag.id, {3{spatz_req.id}}};
 
   //////////
@@ -441,21 +483,21 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
           end
         end
         EW_32: begin
-          fpu_src_fmt      = fpnew_pkg::FP32;
+          fpu_src_fmt      = spatz_req.op_arith.is_narrowing ? fpnew_pkg::FP64 : fpnew_pkg::FP32;
           fpu_dst_fmt      = fpnew_pkg::FP32;
-          fpu_int_fmt      = fpnew_pkg::INT32;
+          fpu_int_fmt      = spatz_req.op_arith.is_narrowing && spatz_req.op inside {VI2F, VU2F} ? fpnew_pkg::INT64 : fpnew_pkg::INT32;
           fpu_vectorial_op = FLEN > 32;
         end
         EW_16: begin
-          fpu_src_fmt      = fpnew_pkg::FP16;
+          fpu_src_fmt      = spatz_req.op_arith.is_narrowing ? fpnew_pkg::FP32 :fpnew_pkg::FP16;
           fpu_dst_fmt      = fpnew_pkg::FP16;
-          fpu_int_fmt      = fpnew_pkg::INT16;
+          fpu_int_fmt      = spatz_req.op_arith.is_narrowing && spatz_req.op inside {VI2F, VU2F} ? fpnew_pkg::INT32 : fpnew_pkg::INT16;
           fpu_vectorial_op = 1'b1;
         end
         EW_8: begin
-          fpu_src_fmt      = fpnew_pkg::FP8;
+          fpu_src_fmt      = spatz_req.op_arith.is_narrowing ? fpnew_pkg::FP16 :fpnew_pkg::FP8;
           fpu_dst_fmt      = fpnew_pkg::FP8;
-          fpu_int_fmt      = fpnew_pkg::INT8;
+          fpu_int_fmt      = spatz_req.op_arith.is_narrowing && spatz_req.op inside {VI2F, VU2F} ? fpnew_pkg::INT16 : fpnew_pkg::INT8;
           fpu_vectorial_op = 1'b1;
         end
         default:;
@@ -486,6 +528,7 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
         VFCLASS: fpu_op = fpnew_pkg::CLASSIFY;
         VFCMP  : fpu_op = fpnew_pkg::CMP;
 
+        VF2F: fpu_op = fpnew_pkg::F2F;
         VF2I: fpu_op = fpnew_pkg::F2I;
         VF2U: begin
           fpu_op      = fpnew_pkg::F2I;

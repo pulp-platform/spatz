@@ -620,6 +620,13 @@ module spatz_decoder
         riscv_instr::VFCVT_XU_F_V,
         riscv_instr::VFCVT_RTZ_X_F_V,
         riscv_instr::VFCVT_RTZ_XU_F_V,
+        riscv_instr::VFNCVT_XU_F_W,
+        riscv_instr::VFNCVT_X_F_W,
+        riscv_instr::VFNCVT_RTZ_XU_F_W,
+        riscv_instr::VFNCVT_RTZ_X_F_W,
+        riscv_instr::VFNCVT_F_XU_W,
+        riscv_instr::VFNCVT_F_X_W,
+        riscv_instr::VFNCVT_F_F_W,
         riscv_instr::VFMV_V_F: begin
           if (spatz_pkg::FPU) begin
             automatic opcodev_func3_e func3 = opcodev_func3_e'(decoder_req_i.instr[14:12]);
@@ -740,6 +747,37 @@ module spatz_decoder
               riscv_instr::VFCVT_RTZ_XU_F_V : begin
                 spatz_req.op = VF2U;
                 spatz_req.rm = fpnew_pkg::RTZ;
+              end
+
+              riscv_instr::VFNCVT_F_X_W: begin
+                spatz_req.op                    = VI2F;
+                spatz_req.op_arith.is_narrowing = 1'b1;
+              end
+              riscv_instr::VFNCVT_F_XU_W: begin
+                spatz_req.op                    = VU2F;
+                spatz_req.op_arith.is_narrowing = 1'b1;
+              end
+              riscv_instr::VFNCVT_X_F_W: begin
+                spatz_req.op                    = VF2I;
+                spatz_req.op_arith.is_narrowing = 1'b1;
+              end
+              riscv_instr::VFNCVT_RTZ_X_F_W: begin
+                spatz_req.op                    = VF2I;
+                spatz_req.op_arith.is_narrowing = 1'b1;
+                spatz_req.rm                    = fpnew_pkg::RTZ;
+              end
+              riscv_instr::VFNCVT_XU_F_W: begin
+                spatz_req.op                    = VF2U;
+                spatz_req.op_arith.is_narrowing = 1'b1;
+              end
+              riscv_instr::VFNCVT_RTZ_XU_F_W: begin
+                spatz_req.op                    = VF2U;
+                spatz_req.op_arith.is_narrowing = 1'b1;
+                spatz_req.rm                    = fpnew_pkg::RTZ;
+              end
+              riscv_instr::VFNCVT_F_F_W: begin
+                spatz_req.op                    = VF2F;
+                spatz_req.op_arith.is_narrowing = 1'b1;
               end
 
               riscv_instr::VFMV_V_F: begin

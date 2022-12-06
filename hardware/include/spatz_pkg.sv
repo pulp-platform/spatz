@@ -120,7 +120,7 @@ package spatz_pkg;
     // Floating point instructions
     VFADD, VFSUB, VFMUL,
     VFMINMAX, VFSGNJ, VFCMP, VFCLASS,
-    VF2I, VF2U, VI2F, VU2F,
+    VF2I, VF2U, VI2F, VU2F, VF2F,
     VFMADD, VFMSUB, VFNMSUB, VFNMADD
   } op_e;
 
@@ -156,6 +156,7 @@ package spatz_pkg;
     logic vm;
     logic use_carry_borrow_in;
     logic is_scalar;
+    logic is_narrowing;
     logic switch_rs1_rd;
   } op_arith_t;
 

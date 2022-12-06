@@ -239,11 +239,21 @@ module spatz_controller
   logic [NrParallelInstructions-1:0] wrote_result_q, wrote_result_d;
   `FF(wrote_result_q, wrote_result_d, '0)
 
+  // Is this instruction a narrowing instruction?
+  logic [NrParallelInstructions-1:0] narrowing_q, narrowing_d;
+  `FF(narrowing_q, narrowing_d, '0)
+
+  // Did this narrowing instruction write to the VRF in the previous cycle?
+  logic [NrParallelInstructions-1:0] wrote_result_narrowing_q, wrote_result_narrowing_d;
+  `FF(wrote_result_narrowing_q, wrote_result_narrowing_d, '0)
+
   always_comb begin : scoreboard
     // Maintain stated
-    read_table_d  = read_table_q;
-    write_table_d = write_table_q;
-    scoreboard_d  = scoreboard_q;
+    read_table_d             = read_table_q;
+    write_table_d            = write_table_q;
+    scoreboard_d             = scoreboard_q;
+    narrowing_d              = narrowing_q;
+    wrote_result_narrowing_d = wrote_result_narrowing_q;
 
     // Nobody wrote to the VRF yet
     wrote_result_d = '0;
@@ -254,12 +264,18 @@ module spatz_controller
       sb_enable_o[port] = sb_enable_i[port] && &(~scoreboard_q[sb_id_i[port]].deps | wrote_result_q) && (!(|scoreboard_q[sb_id_i[port]].deps) || !scoreboard_q[sb_id_i[port]].prevent_chaining);
 
     // Store the decisions
-    if (sb_enable_o[SB_VFU_VD_WD])
-      wrote_result_d[sb_id_i[SB_VFU_VD_WD]] = sb_wrote_result_i[SB_VFU_VD_WD - SB_VFU_VD_WD];
-    if (sb_enable_o[SB_VLSU_VD_WD])
-      wrote_result_d[sb_id_i[SB_VLSU_VD_WD]] = sb_wrote_result_i[SB_VLSU_VD_WD - SB_VFU_VD_WD];
-    if (sb_enable_o[SB_VSLDU_VD_WD])
-      wrote_result_d[sb_id_i[SB_VSLDU_VD_WD]] = sb_wrote_result_i[SB_VSLDU_VD_WD - SB_VFU_VD_WD];
+    if (sb_enable_o[SB_VFU_VD_WD]) begin
+      wrote_result_narrowing_d[sb_id_i[SB_VFU_VD_WD]] = sb_wrote_result_i[SB_VFU_VD_WD - SB_VFU_VD_WD] ^ narrowing_q[sb_id_i[SB_VFU_VD_WD]];
+      wrote_result_d[sb_id_i[SB_VFU_VD_WD]]           = sb_wrote_result_i[SB_VFU_VD_WD - SB_VFU_VD_WD] && (!narrowing_q[sb_id_i[SB_VFU_VD_WD] || wrote_result_narrowing_q[sb_id_i[SB_VFU_VD_WD]]]);
+    end
+    if (sb_enable_o[SB_VLSU_VD_WD]) begin
+      wrote_result_narrowing_d[sb_id_i[SB_VLSU_VD_WD]] = sb_wrote_result_i[SB_VLSU_VD_WD - SB_VFU_VD_WD] ^ narrowing_q[sb_id_i[SB_VLSU_VD_WD]];
+      wrote_result_d[sb_id_i[SB_VLSU_VD_WD]]           = sb_wrote_result_i[SB_VLSU_VD_WD - SB_VFU_VD_WD] && (!narrowing_q[sb_id_i[SB_VLSU_VD_WD] || wrote_result_narrowing_q[sb_id_i[SB_VLSU_VD_WD]]]);
+    end
+    if (sb_enable_o[SB_VSLDU_VD_WD]) begin
+      wrote_result_narrowing_d[sb_id_i[SB_VSLDU_VD_WD]] = sb_wrote_result_i[SB_VSLDU_VD_WD - SB_VFU_VD_WD] ^ narrowing_q[sb_id_i[SB_VSLDU_VD_WD]];
+      wrote_result_d[sb_id_i[SB_VSLDU_VD_WD]]           = sb_wrote_result_i[SB_VSLDU_VD_WD - SB_VFU_VD_WD] && (!narrowing_q[sb_id_i[SB_VSLDU_VD_WD] || wrote_result_narrowing_q[sb_id_i[SB_VSLDU_VD_WD]]]);
+    end
 
     // A unit has finished its VRF access. Reset the scoreboard. For each instruction, check
     // if a dependency existed. If so, invalidate it.
@@ -271,7 +287,9 @@ module spatz_controller
           write_table_d[vreg] = '0;
       end
 
-      scoreboard_d[vfu_rsp_i.id] = '0;
+      scoreboard_d[vfu_rsp_i.id]             = '0;
+      narrowing_d[vfu_rsp_i.id]              = 1'b0;
+      wrote_result_narrowing_d[vfu_rsp_i.id] = 1'b0;
       for (int unsigned insn = 0; insn < NrParallelInstructions; insn++)
         scoreboard_d[insn].deps[vfu_rsp_i.id] = 1'b0;
     end
@@ -283,7 +301,9 @@ module spatz_controller
           write_table_d[vreg] = '0;
       end
 
-      scoreboard_d[vlsu_rsp_i.id] = '0;
+      scoreboard_d[vlsu_rsp_i.id]             = '0;
+      narrowing_d[vlsu_rsp_i.id]              = 1'b0;
+      wrote_result_narrowing_d[vlsu_rsp_i.id] = 1'b0;
       for (int unsigned insn = 0; insn < NrParallelInstructions; insn++)
         scoreboard_d[insn].deps[vlsu_rsp_i.id] = 1'b0;
     end
@@ -295,7 +315,9 @@ module spatz_controller
           write_table_d[vreg] = '0;
       end
 
-      scoreboard_d[vsldu_rsp_i.id] = '0;
+      scoreboard_d[vsldu_rsp_i.id]             = '0;
+      narrowing_d[vsldu_rsp_i.id]              = 1'b0;
+      wrote_result_narrowing_d[vsldu_rsp_i.id] = 1'b0;
       for (int unsigned insn = 0; insn < NrParallelInstructions; insn++)
         scoreboard_d[insn].deps[vsldu_rsp_i.id] = 1'b0;
     end
@@ -326,6 +348,10 @@ module spatz_controller
       // Is this a risky instruction which should not chain?
       if (spatz_req.op == VSLIDEUP)
         scoreboard_d[spatz_req.id].prevent_chaining = 1'b1;
+
+      // Is this a narrowing instruction?
+      if (spatz_req.op_arith.is_narrowing)
+        narrowing_d[spatz_req.id] = 1'b1;
     end
 
     // An instruction never depends on itself
