@@ -627,7 +627,25 @@ module spatz_decoder
         riscv_instr::VFNCVT_F_XU_W,
         riscv_instr::VFNCVT_F_X_W,
         riscv_instr::VFNCVT_F_F_W,
-        riscv_instr::VFMV_V_F: begin
+        riscv_instr::VFMV_V_F,
+        riscv_instr::VFWADD_VV,
+        riscv_instr::VFWADD_WV,
+        riscv_instr::VFWADD_VF,
+        riscv_instr::VFWADD_WF,
+        riscv_instr::VFWSUB_VV,
+        riscv_instr::VFWSUB_WV,
+        riscv_instr::VFWSUB_VF,
+        riscv_instr::VFWSUB_WF,
+        riscv_instr::VFWMUL_VV,
+        riscv_instr::VFWMUL_VF,
+        riscv_instr::VFWMACC_VV,
+        riscv_instr::VFWMACC_VF,
+        riscv_instr::VFWNMACC_VV,
+        riscv_instr::VFWNMACC_VF,
+        riscv_instr::VFWMSAC_VV,
+        riscv_instr::VFWMSAC_VF,
+        riscv_instr::VFWNMSAC_VV,
+        riscv_instr::VFWNMSAC_VF: begin
           if (spatz_pkg::FPU) begin
             automatic opcodev_func3_e func3 = opcodev_func3_e'(decoder_req_i.instr[14:12]);
             automatic vreg_t arith_s1       = decoder_req_i.instr[19:15];
@@ -791,6 +809,69 @@ module spatz_decoder
                 spatz_req.vs2           = spatz_req.vs1;
                 spatz_req.use_vs2       = 1'b0;
               end
+
+              riscv_instr::VFWADD_VV,
+              riscv_instr::VFWADD_WV,
+              riscv_instr::VFWADD_VF,
+              riscv_instr::VFWADD_WF: begin
+                spatz_req.op                 = VFADD;
+                spatz_req.op_arith.widen_vs1 = !(decoder_req_i.instr inside {riscv_instr::VFWADD_WV, riscv_instr::VFWADD_WF});
+                spatz_req.op_arith.widen_vs2 = 1'b1;
+              end
+              riscv_instr::VFWSUB_VV,
+              riscv_instr::VFWSUB_WV: begin
+                spatz_req.op                 = VFSUB;
+                spatz_req.vs1                = arith_s1;
+                spatz_req.vs2                = arith_s2;
+                spatz_req.op_arith.widen_vs2 = !(decoder_req_i.instr inside {riscv_instr::VFWSUB_WV, riscv_instr::VFWSUB_WF});
+                spatz_req.op_arith.widen_vs1 = 1'b1;
+              end
+              riscv_instr::VFWSUB_VF,
+              riscv_instr::VFWSUB_WF: begin
+                spatz_req.op                 = VFSUB;
+                spatz_req.vs2                = arith_s2;
+                spatz_req.use_vs2            = 1'b1;
+                spatz_req.rs1                = decoder_req_i.rs1;
+                spatz_req.use_vs1            = 1'b0;
+                spatz_req.op_arith.widen_vs1 = 1'b1;
+                spatz_req.op_arith.widen_vs2 = !(decoder_req_i.instr inside {riscv_instr::VFWSUB_WV, riscv_instr::VFWSUB_WF});
+              end
+              riscv_instr::VFWMUL_VV,
+              riscv_instr::VFWMUL_VF: begin
+                spatz_req.op                 = VFMUL;
+                spatz_req.op_arith.widen_vs1 = 1'b1;
+                spatz_req.op_arith.widen_vs2 = 1'b1;
+              end
+
+              riscv_instr::VFWMACC_VV,
+              riscv_instr::VFWMACC_VF: begin
+                spatz_req.op                 = VFMADD;
+                spatz_req.vd_is_src          = 1'b1;
+                spatz_req.op_arith.widen_vs1 = 1'b1;
+                spatz_req.op_arith.widen_vs2 = 1'b1;
+              end
+              riscv_instr::VFWNMACC_VV,
+              riscv_instr::VFWNMACC_VF: begin
+                spatz_req.op                 = VFNMADD;
+                spatz_req.vd_is_src          = 1'b1;
+                spatz_req.op_arith.widen_vs1 = 1'b1;
+                spatz_req.op_arith.widen_vs2 = 1'b1;
+              end
+              riscv_instr::VFWMSAC_VV,
+              riscv_instr::VFWMSAC_VF: begin
+                spatz_req.op                 = VFMSUB;
+                spatz_req.vd_is_src          = 1'b1;
+                spatz_req.op_arith.widen_vs1 = 1'b1;
+                spatz_req.op_arith.widen_vs2 = 1'b1;
+              end
+              riscv_instr::VFWNMSAC_VV,
+              riscv_instr::VFWNMSAC_VF: begin
+                spatz_req.op                 = VFNMSUB;
+                spatz_req.vd_is_src          = 1'b1;
+                spatz_req.op_arith.widen_vs1 = 1'b1;
+                spatz_req.op_arith.widen_vs2 = 1'b1;
+              end
+
               default;
             endcase
           end

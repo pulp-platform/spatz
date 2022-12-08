@@ -150,6 +150,10 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
   logic narrowing_upper_d, narrowing_upper_q;
   `FF(narrowing_upper_q, narrowing_upper_d, 1'b0)
 
+  // Are we reading the upper or lower part of the operands of a widening instruction?
+  logic widening_upper_d, widening_upper_q;
+  `FF(widening_upper_q, widening_upper_d, 1'b0)
+
   // Are any results valid?
   logic [N_IPU*ELENB-1:0] result_valid;
 
@@ -160,6 +164,7 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
     running_d         = running_q;
     state_d           = state_q;
     narrowing_upper_d = narrowing_upper_q;
+    widening_upper_d  = widening_upper_q;
 
     // We are not stalling
     stall = 1'b0;
@@ -179,6 +184,7 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
       vl_d              = vl_q + nr_elem_word;
       // Update narrowing information
       narrowing_upper_d = narrowing_upper_q ^ spatz_req.op_arith.is_narrowing;
+      widening_upper_d  = widening_upper_q ^ (spatz_req.op_arith.widen_vs1 || spatz_req.op_arith.widen_vs2);
     end
 
     // Current state of the VFU
@@ -209,6 +215,7 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
       vl_d                    = '0;
       last_request            = 1'b1;
       running_d[spatz_req.id] = 1'b0;
+      widening_upper_d        = 1'b0;
     end
     // Do we have a new instruction?
     else if (spatz_req_valid && !running_d[spatz_req.id]) begin
@@ -335,13 +342,13 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
 
       // Did we commit a word already?
       if (word_issued) begin
-        vreg_addr_d[0] = vreg_addr_d[0] + 1;
-        vreg_addr_d[1] = vreg_addr_d[1] + 1;
+        vreg_addr_d[0] = vreg_addr_d[0] + (!spatz_req.op_arith.widen_vs2 || widening_upper_q);
+        vreg_addr_d[1] = vreg_addr_d[1] + (!spatz_req.op_arith.widen_vs1 || widening_upper_q);
         vreg_addr_d[2] = vreg_addr_d[2] + (!spatz_req.op_arith.is_narrowing || narrowing_upper_q);
       end
     end else if (spatz_req_valid && vl_q < spatz_req.vl && word_issued) begin
-      vreg_addr_d[0] = vreg_addr_q[0] + 1;
-      vreg_addr_d[1] = vreg_addr_q[1] + 1;
+      vreg_addr_d[0] = vreg_addr_q[0] + (!spatz_req.op_arith.widen_vs2 || widening_upper_q);
+      vreg_addr_d[1] = vreg_addr_q[1] + (!spatz_req.op_arith.widen_vs1 || widening_upper_q);
       vreg_addr_d[2] = vreg_addr_q[2] + (!spatz_req.op_arith.is_narrowing || narrowing_upper_q);
     end
   end: vreg_addr_proc
@@ -483,21 +490,21 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
           end
         end
         EW_32: begin
-          fpu_src_fmt      = spatz_req.op_arith.is_narrowing ? fpnew_pkg::FP64 : fpnew_pkg::FP32;
-          fpu_dst_fmt      = fpnew_pkg::FP32;
-          fpu_int_fmt      = spatz_req.op_arith.is_narrowing && spatz_req.op inside {VI2F, VU2F} ? fpnew_pkg::INT64 : fpnew_pkg::INT32;
+          fpu_src_fmt      = spatz_req.op_arith.is_narrowing || spatz_req.op_arith.widen_vs1 || spatz_req.op_arith.widen_vs2 ? fpnew_pkg::FP64 : fpnew_pkg::FP32;
+          fpu_dst_fmt      = spatz_req.op_arith.widen_vs1 || spatz_req.op_arith.widen_vs2 ? fpnew_pkg::FP64                                    : fpnew_pkg::FP32;
+          fpu_int_fmt      = spatz_req.op_arith.is_narrowing && spatz_req.op inside {VI2F, VU2F} ? fpnew_pkg::INT64                            : fpnew_pkg::INT32;
           fpu_vectorial_op = FLEN > 32;
         end
         EW_16: begin
-          fpu_src_fmt      = spatz_req.op_arith.is_narrowing ? fpnew_pkg::FP32 :fpnew_pkg::FP16;
-          fpu_dst_fmt      = fpnew_pkg::FP16;
-          fpu_int_fmt      = spatz_req.op_arith.is_narrowing && spatz_req.op inside {VI2F, VU2F} ? fpnew_pkg::INT32 : fpnew_pkg::INT16;
+          fpu_src_fmt      = spatz_req.op_arith.is_narrowing || spatz_req.op_arith.widen_vs1 || spatz_req.op_arith.widen_vs2 ? fpnew_pkg::FP32 : fpnew_pkg::FP16;
+          fpu_dst_fmt      = spatz_req.op_arith.widen_vs1 || spatz_req.op_arith.widen_vs2 ? fpnew_pkg::FP32                                    : fpnew_pkg::FP16;
+          fpu_int_fmt      = spatz_req.op_arith.is_narrowing && spatz_req.op inside {VI2F, VU2F} ? fpnew_pkg::INT32                            : fpnew_pkg::INT16;
           fpu_vectorial_op = 1'b1;
         end
         EW_8: begin
-          fpu_src_fmt      = spatz_req.op_arith.is_narrowing ? fpnew_pkg::FP16 :fpnew_pkg::FP8;
-          fpu_dst_fmt      = fpnew_pkg::FP8;
-          fpu_int_fmt      = spatz_req.op_arith.is_narrowing && spatz_req.op inside {VI2F, VU2F} ? fpnew_pkg::INT16 : fpnew_pkg::INT8;
+          fpu_src_fmt      = spatz_req.op_arith.is_narrowing || spatz_req.op_arith.widen_vs1 || spatz_req.op_arith.widen_vs2 ? fpnew_pkg::FP16 : fpnew_pkg::FP8;
+          fpu_dst_fmt      = spatz_req.op_arith.widen_vs1 || spatz_req.op_arith.widen_vs2 ? fpnew_pkg::FP16                                    : fpnew_pkg::FP8;
+          fpu_int_fmt      = spatz_req.op_arith.is_narrowing && spatz_req.op inside {VI2F, VU2F} ? fpnew_pkg::INT16                            : fpnew_pkg::INT8;
           fpu_vectorial_op = 1'b1;
         end
         default:;
@@ -545,6 +552,61 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
     end
   end: gen_fpu_decoder
 
+  logic [N_IPU*ELEN-1:0] wide_operand1, wide_operand2, wide_operand3;
+  always_comb begin: widen_operands
+    wide_operand1 = operand1;
+    wide_operand2 = operand2;
+    wide_operand3 = operand3;
+
+    case (spatz_req.vtype.vsew)
+      EW_32: begin
+        for (int el = 0; el < N_IPU; el++) begin
+          if (spatz_req.op_arith.widen_vs1 && MAXEW == EW_64) begin
+            wide_operand1[63 + 64*el]       = operand1[31 + 32*el + ((N_IPU*ELEN)/2)*widening_upper_q];
+            wide_operand1[62 + 64*el -: 11] = operand1[30 + 32*el + ((N_IPU*ELEN)/2)*widening_upper_q -: 8] - 127 + 1023;
+            wide_operand1[51 + 64*el -: 52] = {operand1[22 + 32*el + ((N_IPU*ELEN)/2)*widening_upper_q -: 23], 29'b0};
+          end
+
+          if (spatz_req.op_arith.widen_vs2 && MAXEW == EW_64) begin
+            wide_operand2[63 + 64*el]       = operand2[31 + 32*el + ((N_IPU*ELEN)/2)*widening_upper_q];
+            wide_operand2[62 + 64*el -: 11] = operand2[30 + 32*el + ((N_IPU*ELEN)/2)*widening_upper_q -: 8] - 127 + 1023;
+            wide_operand2[51 + 64*el -: 52] = {operand2[22 + 32*el + ((N_IPU*ELEN)/2)*widening_upper_q -: 23], 29'b0};
+          end
+        end
+      end
+      EW_16: begin
+        for (int el = 0; el < 2*N_IPU; el++) begin
+          if (spatz_req.op_arith.widen_vs1) begin
+            wide_operand1[31 + 32*el]       = operand1[15 + 16*el + ((N_IPU*ELEN)/2)*widening_upper_q];
+            wide_operand1[30 + 32*el -: 8]  = operand1[14 + 16*el + ((N_IPU*ELEN)/2)*widening_upper_q -: 5] - 15 + 127;
+            wide_operand1[22 + 32*el -: 23] = {operand1[9 + 16*el + ((N_IPU*ELEN)/2)*widening_upper_q -: 10], 13'b0};
+          end
+
+          if (spatz_req.op_arith.widen_vs2) begin
+            wide_operand2[31 + 32*el]       = operand2[15 + 16*el + ((N_IPU*ELEN)/2)*widening_upper_q];
+            wide_operand2[30 + 32*el -: 8]  = operand2[14 + 16*el + ((N_IPU*ELEN)/2)*widening_upper_q -: 5] - 15 + 127;
+            wide_operand2[22 + 32*el -: 23] = {operand2[9 + 16*el + ((N_IPU*ELEN)/2)*widening_upper_q -: 10], 13'b0};
+          end
+        end
+      end
+      EW_8: begin
+        for (int el = 0; el < 4*N_IPU; el++) begin
+          if (spatz_req.op_arith.widen_vs1) begin
+            wide_operand1[15 + 16*el]      = operand1[7 + 8*el + ((N_IPU*ELEN)/2)*widening_upper_q];
+            wide_operand1[14 + 16*el -: 5] = operand1[6 + 8*el + ((N_IPU*ELEN)/2)*widening_upper_q -: 5];
+            wide_operand1[9 + 16*el -: 10] = {operand1[1 + 8*el + ((N_IPU*ELEN)/2)*widening_upper_q -: 2], 8'b0};
+          end
+
+          if (spatz_req.op_arith.widen_vs2) begin
+            wide_operand2[15 + 16*el]      = operand2[7 + 8*el + ((N_IPU*ELEN)/2)*widening_upper_q];
+            wide_operand2[14 + 16*el -: 5] = operand2[6 + 8*el + ((N_IPU*ELEN)/2)*widening_upper_q -: 5];
+            wide_operand2[9 + 16*el -: 10] = {operand2[1 + 8*el + ((N_IPU*ELEN)/2)*widening_upper_q -: 2], 8'b0};
+          end
+        end
+      end
+    endcase
+  end: widen_operands
+
   for (genvar fpu = 0; unsigned'(fpu) < N_IPU; fpu++) begin : gen_fpus
     if (FPU) begin: gen_fpu
       logic int_fpu_result_valid;
@@ -555,9 +617,9 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
       assign fpu_result_valid[fpu*ELENB +: ELENB] = {ELENB{int_fpu_result_valid}};
 
       elen_t fpu_operand1, fpu_operand2, fpu_operand3;
-      assign fpu_operand1 = spatz_req.op_arith.switch_rs1_rd ? operand3[fpu*ELEN +: ELEN] : operand1[fpu*ELEN +: ELEN];
-      assign fpu_operand2 = operand2[fpu*ELEN +: ELEN];
-      assign fpu_operand3 = (fpu_op == fpnew_pkg::ADD || spatz_req.op_arith.switch_rs1_rd) ? operand1[fpu*ELEN +: ELEN] : operand3[fpu*ELEN +: ELEN];
+      assign fpu_operand1 = spatz_req.op_arith.switch_rs1_rd ? wide_operand3[fpu*ELEN +: ELEN] : wide_operand1[fpu*ELEN +: ELEN];
+      assign fpu_operand2 = wide_operand2[fpu*ELEN +: ELEN];
+      assign fpu_operand3 = (fpu_op == fpnew_pkg::ADD || spatz_req.op_arith.switch_rs1_rd) ? wide_operand1[fpu*ELEN +: ELEN] : wide_operand3[fpu*ELEN +: ELEN];
 
       fpnew_top #(
         .Features      (FPUFeatures      ),

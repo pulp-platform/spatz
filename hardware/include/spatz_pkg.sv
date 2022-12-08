@@ -158,6 +158,9 @@ package spatz_pkg;
     logic is_scalar;
     logic is_narrowing;
     logic switch_rs1_rd;
+
+    logic widen_vs1;
+    logic widen_vs2;
   } op_arith_t;
 
   typedef struct packed {

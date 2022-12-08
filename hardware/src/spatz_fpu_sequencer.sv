@@ -374,7 +374,7 @@ module spatz_fpu_sequencer import spatz_pkg::*; import rvv_pkg::*; import fpnew_
         riscv_instr::FLH,
         riscv_instr::FLW,
         riscv_instr::FLD: begin
-          use_fd       = 1'b1;
+          use_fd = 1'b1;
           unique casez (x_issue_req_i.instr)
             riscv_instr::FLB: ls_size = Byte;
             riscv_instr::FLH: ls_size = HalfWord;
@@ -388,7 +388,7 @@ module spatz_fpu_sequencer import spatz_pkg::*; import rvv_pkg::*; import fpnew_
         riscv_instr::FSH,
         riscv_instr::FSW,
         riscv_instr::FSD: begin
-          use_fs2      = 1'b1;
+          use_fs2 = 1'b1;
           unique casez (x_issue_req_i.instr)
             riscv_instr::FSB: ls_size = Byte;
             riscv_instr::FSH: ls_size = HalfWord;
@@ -417,7 +417,16 @@ module spatz_fpu_sequencer import spatz_pkg::*; import rvv_pkg::*; import fpnew_
         riscv_instr::VFMACC_VF,
         riscv_instr::VFNMACC_VF,
         riscv_instr::VFMSAC_VF,
-        riscv_instr::VFNMSAC_VF: begin
+        riscv_instr::VFNMSAC_VF,
+        riscv_instr::VFWADD_VF,
+        riscv_instr::VFWADD_WF,
+        riscv_instr::VFWSUB_VF,
+        riscv_instr::VFWSUB_WF,
+        riscv_instr::VFWMUL_VF,
+        riscv_instr::VFWMACC_VF,
+        riscv_instr::VFWNMACC_VF,
+        riscv_instr::VFWMSAC_VF,
+        riscv_instr::VFWNMSAC_VF: begin
           if (RVF) begin
             use_fs1 = 1'b1;
           end else begin
