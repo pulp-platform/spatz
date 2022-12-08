@@ -121,7 +121,7 @@ package spatz_pkg;
     VFADD, VFSUB, VFMUL,
     VFMINMAX, VFSGNJ, VFCMP, VFCLASS,
     VF2I, VF2U, VI2F, VU2F, VF2F,
-    VFMADD, VFMSUB, VFNMSUB, VFNMADD
+    VFMADD, VFMSUB, VFNMSUB, VFNMADD, VSDOTP
   } op_e;
 
   // Execution units

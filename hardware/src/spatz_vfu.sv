@@ -135,7 +135,7 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
 
   // Is this a FPU instruction
   logic is_fpu_insn;
-  assign is_fpu_insn = FPU && spatz_req.op inside {[VFADD:VFNMADD]};
+  assign is_fpu_insn = FPU && spatz_req.op inside {[VFADD:VSDOTP]};
 
   // Is the FPU busy?
   logic is_fpu_busy;
@@ -267,7 +267,7 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
       operand1 = vrf_rdata_i[1];
     else begin
       // Replicate scalar operands
-      unique case (spatz_req.vtype.vsew)
+      unique case (spatz_req.op == VSDOTP ? vew_e'(spatz_req.vtype.vsew + 1) : spatz_req.vtype.vsew)
         EW_8 : operand1   = MAXEW == EW_32 ? {4*N_IPU{spatz_req.rs1[7:0]}}  : {8*N_IPU{spatz_req.rs1[7:0]}};
         EW_16: operand1   = MAXEW == EW_32 ? {2*N_IPU{spatz_req.rs1[15:0]}} : {4*N_IPU{spatz_req.rs1[15:0]}};
         EW_32: operand1   = MAXEW == EW_32 ? {1*N_IPU{spatz_req.rs1[31:0]}} : {2*N_IPU{spatz_req.rs1[31:0]}};
@@ -279,7 +279,7 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
       operand2 = vrf_rdata_i[0];
     else
       // Replicate scalar operands
-      unique case (spatz_req.vtype.vsew)
+      unique case (spatz_req.op == VSDOTP ? vew_e'(spatz_req.vtype.vsew + 1) : spatz_req.vtype.vsew)
         EW_8 : operand2   = MAXEW == EW_32 ? {4*N_IPU{spatz_req.rs2[7:0]}}  : {8*N_IPU{spatz_req.rs2[7:0]}};
         EW_16: operand2   = MAXEW == EW_32 ? {2*N_IPU{spatz_req.rs2[15:0]}} : {4*N_IPU{spatz_req.rs2[15:0]}};
         EW_32: operand2   = MAXEW == EW_32 ? {1*N_IPU{spatz_req.rs2[31:0]}} : {2*N_IPU{spatz_req.rs2[31:0]}};
@@ -491,19 +491,19 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
         end
         EW_32: begin
           fpu_src_fmt      = spatz_req.op_arith.is_narrowing || spatz_req.op_arith.widen_vs1 || spatz_req.op_arith.widen_vs2 ? fpnew_pkg::FP64 : fpnew_pkg::FP32;
-          fpu_dst_fmt      = spatz_req.op_arith.widen_vs1 || spatz_req.op_arith.widen_vs2 ? fpnew_pkg::FP64                                    : fpnew_pkg::FP32;
+          fpu_dst_fmt      = spatz_req.op_arith.widen_vs1 || spatz_req.op_arith.widen_vs2 || spatz_req.op == VSDOTP ? fpnew_pkg::FP64          : fpnew_pkg::FP32;
           fpu_int_fmt      = spatz_req.op_arith.is_narrowing && spatz_req.op inside {VI2F, VU2F} ? fpnew_pkg::INT64                            : fpnew_pkg::INT32;
           fpu_vectorial_op = FLEN > 32;
         end
         EW_16: begin
           fpu_src_fmt      = spatz_req.op_arith.is_narrowing || spatz_req.op_arith.widen_vs1 || spatz_req.op_arith.widen_vs2 ? fpnew_pkg::FP32 : fpnew_pkg::FP16;
-          fpu_dst_fmt      = spatz_req.op_arith.widen_vs1 || spatz_req.op_arith.widen_vs2 ? fpnew_pkg::FP32                                    : fpnew_pkg::FP16;
+          fpu_dst_fmt      = spatz_req.op_arith.widen_vs1 || spatz_req.op_arith.widen_vs2 || spatz_req.op == VSDOTP ? fpnew_pkg::FP32          : fpnew_pkg::FP16;
           fpu_int_fmt      = spatz_req.op_arith.is_narrowing && spatz_req.op inside {VI2F, VU2F} ? fpnew_pkg::INT32                            : fpnew_pkg::INT16;
           fpu_vectorial_op = 1'b1;
         end
         EW_8: begin
           fpu_src_fmt      = spatz_req.op_arith.is_narrowing || spatz_req.op_arith.widen_vs1 || spatz_req.op_arith.widen_vs2 ? fpnew_pkg::FP16 : fpnew_pkg::FP8;
-          fpu_dst_fmt      = spatz_req.op_arith.widen_vs1 || spatz_req.op_arith.widen_vs2 ? fpnew_pkg::FP16                                    : fpnew_pkg::FP8;
+          fpu_dst_fmt      = spatz_req.op_arith.widen_vs1 || spatz_req.op_arith.widen_vs2 || spatz_req.op == VSDOTP ? fpnew_pkg::FP16          : fpnew_pkg::FP8;
           fpu_int_fmt      = spatz_req.op_arith.is_narrowing && spatz_req.op inside {VI2F, VU2F} ? fpnew_pkg::INT16                            : fpnew_pkg::INT8;
           fpu_vectorial_op = 1'b1;
         end
@@ -546,6 +546,8 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
           fpu_op      = fpnew_pkg::I2F;
           fpu_op_mode = 1'b1;
         end
+
+        VSDOTP: fpu_op = fpnew_pkg::SDOTP;
 
         default:;
       endcase
