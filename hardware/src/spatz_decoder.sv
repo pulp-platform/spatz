@@ -943,7 +943,9 @@ module spatz_decoder
         riscv_instr::FMADD_B,
         riscv_instr::FMSUB_B,
         riscv_instr::FNMSUB_B,
-        riscv_instr::FNMADD_B: begin
+        riscv_instr::FNMADD_B,
+        riscv_instr::FCVT_B_H,
+        riscv_instr::FCVT_H_B: begin
           if (spatz_pkg::FPU && spatz_pkg::RVF) begin
             spatz_req.ex_unit            = VFU;
             spatz_req.rd                 = decoder_req_i.instr[11:7];
@@ -1006,6 +1008,14 @@ module spatz_decoder
                 spatz_req.op = VF2U;
                 spatz_req.rm = fpnew_pkg::roundmode_e'(decoder_req_i.instr[14:12]);
               end
+              riscv_instr::FCVT_B_H : begin
+                spatz_req.op                 = VF2F;
+                spatz_req.op_arith.widen_vs1 = 1'b1;
+              end
+              riscv_instr::FCVT_H_B : begin
+                spatz_req.op                    = VF2F;
+                spatz_req.op_arith.is_narrowing = 1'b1;
+              end
               riscv_instr::FMADD_B  : spatz_req.op = VFMADD;
               riscv_instr::FMSUB_B  : spatz_req.op = VFMSUB;
               riscv_instr::FNMADD_B : spatz_req.op = VFNMADD;
@@ -1036,7 +1046,9 @@ module spatz_decoder
         riscv_instr::FMADD_H,
         riscv_instr::FMSUB_H,
         riscv_instr::FNMSUB_H,
-        riscv_instr::FNMADD_H: begin
+        riscv_instr::FNMADD_H,
+        riscv_instr::FCVT_H_S,
+        riscv_instr::FCVT_S_H: begin
           if (spatz_pkg::FPU && spatz_pkg::RVF) begin
             spatz_req.ex_unit            = VFU;
             spatz_req.rd                 = decoder_req_i.instr[11:7];
@@ -1099,6 +1111,15 @@ module spatz_decoder
                 spatz_req.op = VF2U;
                 spatz_req.rm = fpnew_pkg::roundmode_e'(decoder_req_i.instr[14:12]);
               end
+              riscv_instr::FCVT_H_S : begin
+                spatz_req.op                 = VF2F;
+                spatz_req.op_arith.widen_vs1 = 1'b1;
+              end
+              riscv_instr::FCVT_S_H : begin
+                spatz_req.op                    = VF2F;
+                spatz_req.op_arith.is_narrowing = 1'b1;
+              end
+
               riscv_instr::FMADD_H  : spatz_req.op = VFMADD;
               riscv_instr::FMSUB_H  : spatz_req.op = VFMSUB;
               riscv_instr::FNMADD_H : spatz_req.op = VFNMADD;
@@ -1129,7 +1150,9 @@ module spatz_decoder
         riscv_instr::FMADD_S,
         riscv_instr::FMSUB_S,
         riscv_instr::FNMSUB_S,
-        riscv_instr::FNMADD_S: begin
+        riscv_instr::FNMADD_S,
+        riscv_instr::FCVT_S_D,
+        riscv_instr::FCVT_D_S: begin
           if (spatz_pkg::FPU && spatz_pkg::RVF) begin
             spatz_req.ex_unit            = VFU;
             spatz_req.rd                 = decoder_req_i.instr[11:7];
@@ -1192,6 +1215,15 @@ module spatz_decoder
                 spatz_req.op = VF2U;
                 spatz_req.rm = fpnew_pkg::roundmode_e'(decoder_req_i.instr[14:12]);
               end
+              riscv_instr::FCVT_S_D: begin
+                spatz_req.op                 = VF2F;
+                spatz_req.op_arith.widen_vs1 = 1'b1;
+              end
+              riscv_instr::FCVT_D_S: begin
+                spatz_req.op                    = VF2F;
+                spatz_req.op_arith.is_narrowing = 1'b1;
+              end
+
               riscv_instr::FMADD_S  : spatz_req.op = VFMADD;
               riscv_instr::FMSUB_S  : spatz_req.op = VFMSUB;
               riscv_instr::FNMADD_S : spatz_req.op = VFNMADD;

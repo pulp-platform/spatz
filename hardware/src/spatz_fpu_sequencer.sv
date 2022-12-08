@@ -208,7 +208,9 @@ module spatz_fpu_sequencer import spatz_pkg::*; import rvv_pkg::*; import fpnew_
         riscv_instr::FMADD_B,
         riscv_instr::FMSUB_B,
         riscv_instr::FNMSUB_B,
-        riscv_instr::FNMADD_B: begin
+        riscv_instr::FNMADD_B,
+        riscv_instr::FCVT_B_H,
+        riscv_instr::FCVT_H_B: begin
           if (RVF && (!(x_issue_req_i.instr inside {riscv_instr::FDIV_B, riscv_instr::FSQRT_B}) || FDivSqrt)) begin
             use_fs1 = !(x_issue_req_i.instr inside {riscv_instr::FCVT_B_W, riscv_instr::FCVT_B_WU});
             use_fs2 = !(x_issue_req_i.instr inside {riscv_instr::FCLASS_B});
@@ -258,7 +260,9 @@ module spatz_fpu_sequencer import spatz_pkg::*; import rvv_pkg::*; import fpnew_
         riscv_instr::FMADD_H,
         riscv_instr::FMSUB_H,
         riscv_instr::FNMSUB_H,
-        riscv_instr::FNMADD_H: begin
+        riscv_instr::FNMADD_H,
+        riscv_instr::FCVT_H_S,
+        riscv_instr::FCVT_S_H: begin
           if (RVF && (!(x_issue_req_i.instr inside {riscv_instr::FDIV_H, riscv_instr::FSQRT_H}) || FDivSqrt)) begin
             use_fs1 = !(x_issue_req_i.instr inside {riscv_instr::FCVT_H_W, riscv_instr::FCVT_H_WU});
             use_fs2 = !(x_issue_req_i.instr inside {riscv_instr::FCLASS_H});
@@ -308,7 +312,9 @@ module spatz_fpu_sequencer import spatz_pkg::*; import rvv_pkg::*; import fpnew_
         riscv_instr::FMADD_S,
         riscv_instr::FMSUB_S,
         riscv_instr::FNMSUB_S,
-        riscv_instr::FNMADD_S: begin
+        riscv_instr::FNMADD_S,
+        riscv_instr::FCVT_S_D,
+        riscv_instr::FCVT_D_S: begin
           if (RVF && (!(x_issue_req_i.instr inside {riscv_instr::FDIV_S, riscv_instr::FSQRT_S}) || FDivSqrt)) begin
             use_fs1 = !(x_issue_req_i.instr inside {riscv_instr::FCVT_S_W, riscv_instr::FCVT_S_WU});
             use_fs2 = !(x_issue_req_i.instr inside {riscv_instr::FCLASS_S});
