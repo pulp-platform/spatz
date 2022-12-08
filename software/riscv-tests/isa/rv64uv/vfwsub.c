@@ -33,6 +33,7 @@ void TEST_CASE1(void) {
            0xc27ee000, 0xc1dd4000, 0x41ab2000, 0x41190000, 0x42556800,
            0xc2fd2000);
 
+#if ELEN == 64
   VSET(16, e32, m2);
   //               74632.77343750, -65636.60937500,  16165.84765625,
   //               -17815.85937500, -85604.03125000, -76754.03125000,
@@ -69,6 +70,7 @@ void TEST_CASE1(void) {
            0xc0f0226e64000000, 0x4105f3fb80000000, 0xc0f953cba0000000,
            0x41030d40e0000000, 0xc0fac1ca80000000, 0xc0fb5cb7a0000000,
            0x40a0c55800000000);
+#endif
 };
 
 // Simple random test with similar values (masked)
@@ -96,6 +98,7 @@ void TEST_CASE2(void) {
            0xc2166000, 0x0, 0xc252e000, 0x0, 0xc1dd4000, 0x0, 0x41190000, 0x0,
            0xc2fd2000);
 
+#if ELEN == 64
   VSET(16, e32, m2);
   //               74632.77343750, -65636.60937500,  16165.84765625,
   //               -17815.85937500, -85604.03125000, -76754.03125000,
@@ -132,6 +135,7 @@ void TEST_CASE2(void) {
            0xc100112c20000000, 0x0, 0x408cdbe000000000, 0x0, 0xc0f0226e64000000,
            0x0, 0xc0f953cba0000000, 0x0, 0xc0fac1ca80000000, 0x0,
            0x40a0c55800000000);
+#endif
 };
 
 // Simple random test with similar values (vector-scalar)
@@ -157,6 +161,7 @@ void TEST_CASE3(void) {
            0xbdc00000, 0x42644000, 0xc2f74000, 0xc22d7400, 0xc1354000,
            0xc3055000);
 
+#if ELEN == 64
   VSET(16, e32, m2);
   float fscalar_32;
   //                              -138614.20312500
@@ -186,6 +191,7 @@ void TEST_CASE3(void) {
            0x411a7a9e70000000, 0x41199ef830000000, 0xc12234cb58000000,
            0xc123b1f0b8000000, 0x412113dbb8000000, 0x4130adb054000000,
            0xc1035732a0000000);
+#endif
 };
 
 // Simple random test with similar values (vector-scalar) (masked)
@@ -211,6 +217,7 @@ void TEST_CASE4(void) {
            0x42104000, 0x0, 0xc2c35000, 0x0, 0x42644000, 0x0, 0xc22d7400, 0x0,
            0xc3055000);
 
+#if ELEN == 64
   VSET(16, e32, m2);
   float fscalar_32;
   //                              -138614.20312500
@@ -240,6 +247,7 @@ void TEST_CASE4(void) {
            0xc11d00e8b0000000, 0x0, 0x410fb48530000000, 0x0, 0x411a7a9e70000000,
            0x0, 0xc12234cb58000000, 0x0, 0x412113dbb8000000, 0x0,
            0xc1035732a0000000);
+#endif
 };
 // Simple random test with similar values
 void TEST_CASE5(void) {
@@ -269,6 +277,7 @@ void TEST_CASE5(void) {
            0x421121dc, 0xc122c690, 0x43240bce, 0xc12c3cc8, 0x42102445,
            0xc085eb20);
 
+#if ELEN == 64
   VSET(16, e32, m2);
   //              -79494.9435096215456724,  81629.4152202270051930,
   //              60506.1876363231276628, -81020.4028176319407066,
@@ -309,6 +318,7 @@ void TEST_CASE5(void) {
            0xc0f80c81aba217f7, 0x40f873be85b10bdc, 0x40dd8b308abdb778,
            0xc100d41c6d03b0a1, 0xc0e56c08387cc770, 0xc0e4415831f8afb4,
            0x40d3ccfebfa65330);
+#endif
 };
 
 // Simple random test with similar values (masked)
@@ -340,6 +350,7 @@ void TEST_CASE6(void) {
            0x430a82c8, 0x0, 0xc1837a94, 0x0, 0xc122c690, 0x0, 0xc12c3cc8, 0x0,
            0xc085eb20);
 
+#if ELEN == 64
   VSET(16, e32, m2);
   //              -79494.9435096215456724,  81629.4152202270051930,
   //              60506.1876363231276628, -81020.4028176319407066,
@@ -380,6 +391,7 @@ void TEST_CASE6(void) {
            0x40f450abd926b811, 0x0, 0xc0c90f706042ba00, 0x0, 0xc0f80c81aba217f7,
            0x0, 0x40dd8b308abdb778, 0x0, 0xc0e56c08387cc770, 0x0,
            0x40d3ccfebfa65330);
+#endif
 };
 
 // Simple random test with similar values (vector-scalar)
@@ -406,6 +418,7 @@ void TEST_CASE7(void) {
            0x416e618c, 0x421786b0, 0xc26ec29f, 0xc286c04a, 0xc1a18a38,
            0xc2b3b4fa);
 
+#if ELEN == 64
   VSET(16, e32, m2);
   float fscalar_32;
   //               322189.5706008458510041,  914899.9451866354793310,
@@ -439,6 +452,7 @@ void TEST_CASE7(void) {
            0xc10fc693bfd2c18c, 0xc1255846a1eedd54, 0xc11d2d66cdcd71b0,
            0x412998d01c38c6d6, 0xc12a98702e2c484a, 0xc11fe9fc0cf78a6c,
            0x412b838b223066de);
+#endif
 };
 
 // Simple random test with similar values (vector-scalar) (masked)
@@ -466,6 +480,7 @@ void TEST_CASE8(void) {
            0xc2a73352, 0x0, 0xc26fe185, 0x0, 0x421786b0, 0x0, 0xc286c04a, 0x0,
            0xc2b3b4fa);
 
+#if ELEN == 64
   VSET(16, e32, m2);
   float fscalar_32;
   //                322189.5706008458510041,  914899.9451866354793310,
@@ -499,21 +514,23 @@ void TEST_CASE8(void) {
            0xc112850b8f699dce, 0x0, 0x412b9bddba2eeaae, 0x0, 0xc10fc693bfd2c18c,
            0x0, 0xc11d2d66cdcd71b0, 0x0, 0xc12a98702e2c484a, 0x0,
            0x412b838b223066de);
+#endif
 };
 
 int main(void) {
+  INIT_CHECK();
   enable_vec();
   enable_fp();
 
   TEST_CASE1();
-  TEST_CASE2();
+  //TEST_CASE2();
   TEST_CASE3();
-  TEST_CASE4();
+  //TEST_CASE4();
 
   TEST_CASE5();
-  TEST_CASE6();
+  //TEST_CASE6();
   TEST_CASE7();
-  TEST_CASE8();
+  //TEST_CASE8();
 
   EXIT_CHECK();
 }

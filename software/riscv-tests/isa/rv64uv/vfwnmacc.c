@@ -42,6 +42,7 @@ void TEST_CASE1(void) {
            0x4534d0ff, 0xc5c127d5, 0x440de7ec, 0x455d06ed, 0x45a76f31,
            0x45269613);
 
+#if ELEN == 64
   VSET(16, e32, m2);
   //               24686.12304688,  45012.43359375,  5708.16113281,
   //               -32777.98828125,  74121.31250000, -74877.15625000,
@@ -92,6 +93,7 @@ void TEST_CASE1(void) {
            0xc1f5d45553c90855, 0xc1aae0176e4389da, 0x41f2f6d343c94ea0,
            0x41ea3b047f6ddad0, 0xc1e730b9fbd6ba8f, 0xc1c7f741e1a993e2,
            0x41c5e1a13e5d211b);
+#endif
 };
 
 // Simple random test with similar values (masked)
@@ -128,6 +130,7 @@ void TEST_CASE2(void) {
            0xc280dfd5, 0xc5c127d5, 0xc0b27203, 0x455d06ed, 0xc21cca8e,
            0x45269613);
 
+#if ELEN == 64
   VSET(16, e32, m2);
   //               24686.12304688,  45012.43359375,  5708.16113281,
   //               -32777.98828125,  74121.31250000, -74877.15625000,
@@ -179,6 +182,7 @@ void TEST_CASE2(void) {
            0xc1f5d45553c90855, 0x40d49136b1eb3ed8, 0x41f2f6d343c94ea0,
            0x40f453dc8057edfa, 0xc1e730b9fbd6ba8f, 0x40dfd68c04b135a8,
            0x41c5e1a13e5d211b);
+#endif
 };
 
 // Simple random test with similar values (vector-scalar)
@@ -213,6 +217,7 @@ void TEST_CASE3(void) {
            0x45057ab7, 0xc54fbcc0, 0x452ca5fd, 0xc556fa3a, 0xc506d81e,
            0xc58a2ef7);
 
+#if ELEN == 64
   VSET(16, e32, m2);
   float fscalar_32;
   //               415907.75000000,  16644.92773438, -320087.15625000,
@@ -258,6 +263,7 @@ void TEST_CASE3(void) {
            0x425f6a693fc0285e, 0xc24514c310654d4e, 0xc21d20c5a6d93d06,
            0x4259da4bd0a72309, 0x424499b05f207f55, 0x42538cf15ede155b,
            0xc24a63102e752b8d);
+#endif
 };
 
 // Simple random test with similar values (vector-scalar) (masked)
@@ -293,6 +299,7 @@ void TEST_CASE4(void) {
            0x423bf046, 0xc54fbcc0, 0x4269cada, 0xc556fa3a, 0xc2327c66,
            0xc58a2ef7);
 
+#if ELEN == 64
   VSET(16, e32, m2);
   float fscalar_32;
   //                415907.75000000,  16644.92773438, -320087.15625000,
@@ -337,16 +344,18 @@ void TEST_CASE4(void) {
            0x425f6a693fc0285e, 0x40f7de76d1c4f740, 0xc21d20c5a6d93d06,
            0xc112894e8c8e766c, 0x424499b05f207f55, 0xc12bb4d96ada377b,
            0xc24a63102e752b8d);
+#endif
 };
 
 int main(void) {
+  INIT_CHECK();
   enable_vec();
   enable_fp();
 
   TEST_CASE1();
-  TEST_CASE2();
+  //TEST_CASE2();
   TEST_CASE3();
-  TEST_CASE4();
+  //TEST_CASE4();
 
   EXIT_CHECK();
 }
