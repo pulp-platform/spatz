@@ -27,6 +27,8 @@ module spatz_vrf
     output logic       [NrReadPorts-1:0]  rvalid_o
   );
 
+`include "common_cells/registers.svh"
+
   ////////////////
   // Parameters //
   ////////////////
@@ -189,7 +191,7 @@ module spatz_vrf
   if (NrElemPerBank == 0)
     $error("[spatz_vrf] The number of elements per bank can not be zero.");
 
-  if (NrVRFBanks < NrWordsPerVector)
+  if (NrVRFBanks > NrWordsPerVector)
     $error("[spatz_vrf] The number of banks must be at most the number of words per vector.");
 
   if (RegWidth < ElemWidth)

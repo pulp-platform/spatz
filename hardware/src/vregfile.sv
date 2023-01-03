@@ -38,15 +38,14 @@ module vregfile import spatz_pkg::*; #(
   logic [NrWords-1:0][WordWidth/8-1:0][7:0] mem;
 
   // Write data sampling
-  data_t                                wdata_q;
-  logic  [NrWords-1:0][WordWidth/8-1:0] waddr_onehot;
+  data_t wdata_q;
 
   ///////////////////
   // Register File //
   ///////////////////
 
-  // Main vregfile clock gate
-  tc_clk_gating i_regfile_cg (
+  // First-level clock gate
+  tc_clk_gating i_first_level_cg (
     .clk_i    (clk_i),
     .en_i     (|we_i),
     .test_en_i(1'b0 ),
@@ -54,38 +53,57 @@ module vregfile import spatz_pkg::*; #(
   );
 
   // Sample Input Data
-  always_ff @(posedge clk) begin: proc_wdata_q
+  always_ff @(posedge clk) begin
     wdata_q <= wdata_i;
-  end: proc_wdata_q
+  end
+
+  // Row decoder. Create a clock for each SCM row
+  logic [NrWords-1:0] row_clk;
+  for (genvar row = 0; row < NrWords; row++) begin: gen_row_decoder
+    // Create latch clock signal
+    logic row_onehot;
+    assign row_onehot = (waddr_i == row);
+
+    // Create a clock for each SCM row
+    tc_clk_gating i_waddr_cg (
+      .clk_i    (clk         ),
+      .en_i     (row_onehot  ),
+      .test_en_i(1'b0        ),
+      .clk_o    (row_clk[row])
+    );
+  end: gen_row_decoder
+
+  // Column decoder. Create a clock for each SCM column
+  logic [WordWidth/8-1:0] col_clk;
+  for (genvar b = 0; b < WordWidth/8; b++) begin: gen_col_decoder
+    tc_clk_gating i_wbe_cg (
+      .clk_i    (clk       ),
+      .en_i     (wbe_i[b]  ),
+      .test_en_i(1'b0      ),
+      .clk_o    (col_clk[b])
+    );
+  end: gen_col_decoder
 
   // Select which destination bytes to write into
-  for (genvar vreg = 0; vreg < NrWords; vreg++) begin: gen_waddr_onehot
-    // Create latch clock signal
-    for (genvar b = 0; b < WordWidth/8; b++) begin
-      assign waddr_onehot[vreg][b] = we_i && wbe_i[b] && waddr_i == vreg;
-    end
-  end: gen_waddr_onehot
 
   // Store new data to memory
+  /* verilator lint_off NOLATCH */
   for (genvar vreg = 0; vreg < NrWords; vreg++) begin: gen_write_mem
     for (genvar b = 0; b < WordWidth/8; b++) begin
       logic clk_latch;
-
-      tc_clk_gating i_regfile_cg (
-        .clk_i    (clk                  ),
-        .en_i     (waddr_onehot[vreg][b]),
-        .test_en_i(1'b0                 ),
-        .clk_o    (clk_latch            )
+      tc_clk_and2 i_clk_and (
+        .clk0_i(row_clk[vreg]),
+        .clk1_i(col_clk[b]   ),
+        .clk_o (clk_latch    )
       );
 
-      /* verilator lint_off NOLATCH */
       always_latch begin
         if (clk_latch)
           mem[vreg][b] <= wdata_q[b*8 +: 8];
       end
-      /* verilator lint_on NOLATCH */
     end
   end: gen_write_mem
+  /* verilator lint_on NOLATCH */
 
   // Read data from memory
   for (genvar port = 0; port < NrReadPorts; port++) begin: gen_read_mem
