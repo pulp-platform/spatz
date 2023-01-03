@@ -41,7 +41,7 @@ package spatz_pkg;
   // Number of addressable words in a vector register
   localparam int unsigned NrWordsPerVector = VLEN/VRFWordWidth;
   // Number of VRF banks
-  localparam int unsigned NrVRFBanks       = NrWordsPerVector; // In order to fix 1 word per bank
+  localparam int unsigned NrVRFBanks       = 4;
   // Number of elements per VRF Bank
   localparam int unsigned NrWordsPerBank   = NrWordsPerVector / NrVRFBanks;
 
@@ -76,7 +76,7 @@ package spatz_pkg;
 
   // VREG address, byte enable, and data type
   typedef struct packed {
-    logic [$clog2(NRVREG)-1:0] vreg;
+    logic [$clog2(NRVREG*NrWordsPerBank)-1:0] vreg;
     logic [$clog2(NrVRFBanks)-1:0] bank;
   } vreg_addr_t;
   typedef logic [N_IPU*ELENB-1:0] vreg_be_t;
