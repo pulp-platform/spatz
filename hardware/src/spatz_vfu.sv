@@ -555,59 +555,50 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
   end: gen_fpu_decoder
 
   logic [N_IPU*ELEN-1:0] wide_operand1, wide_operand2, wide_operand3;
-  always_comb begin: widen_operands
-    wide_operand1 = operand1;
-    wide_operand2 = operand2;
-    wide_operand3 = operand3;
+  if (FPU) begin: gen_fpu_widening
+    always_comb begin
+      automatic logic [N_IPU*ELEN/2-1:0] shift_operand1 = !widening_upper_q ? operand1[N_IPU*ELEN/2-1:0] : operand1[N_IPU*ELEN-1:N_IPU*ELEN/2];
+      automatic logic [N_IPU*ELEN/2-1:0] shift_operand2 = !widening_upper_q ? operand2[N_IPU*ELEN/2-1:0] : operand2[N_IPU*ELEN-1:N_IPU*ELEN/2];
 
-    case (spatz_req.vtype.vsew)
-      EW_32: begin
-        for (int el = 0; el < N_IPU; el++) begin
-          if (spatz_req.op_arith.widen_vs1 && MAXEW == EW_64) begin
-            wide_operand1[63 + 64*el]       = operand1[31 + 32*el + ((N_IPU*ELEN)/2)*widening_upper_q];
-            wide_operand1[62 + 64*el -: 11] = operand1[30 + 32*el + ((N_IPU*ELEN)/2)*widening_upper_q -: 8] - 127 + 1023;
-            wide_operand1[51 + 64*el -: 52] = {operand1[22 + 32*el + ((N_IPU*ELEN)/2)*widening_upper_q -: 23], 29'b0};
-          end
+      wide_operand1 = operand1;
+      wide_operand2 = operand2;
+      wide_operand3 = operand3;
 
-          if (spatz_req.op_arith.widen_vs2 && MAXEW == EW_64) begin
-            wide_operand2[63 + 64*el]       = operand2[31 + 32*el + ((N_IPU*ELEN)/2)*widening_upper_q];
-            wide_operand2[62 + 64*el -: 11] = operand2[30 + 32*el + ((N_IPU*ELEN)/2)*widening_upper_q -: 8] - 127 + 1023;
-            wide_operand2[51 + 64*el -: 52] = {operand2[22 + 32*el + ((N_IPU*ELEN)/2)*widening_upper_q -: 23], 29'b0};
+      case (spatz_req.vtype.vsew)
+        EW_32: begin
+          for (int el = 0; el < N_IPU; el++) begin
+            if (spatz_req.op_arith.widen_vs1 && MAXEW == EW_64)
+              wide_operand1[64*el +: 64] = widen_fp32_to_fp64(shift_operand1[32*el +: 32]);
+
+            if (spatz_req.op_arith.widen_vs2 && MAXEW == EW_64)
+              wide_operand2[64*el +: 64] = widen_fp32_to_fp64(shift_operand2[32*el +: 32]);
           end
         end
-      end
-      EW_16: begin
-        for (int el = 0; el < 2*N_IPU; el++) begin
-          if (spatz_req.op_arith.widen_vs1) begin
-            wide_operand1[31 + 32*el]       = operand1[15 + 16*el + ((N_IPU*ELEN)/2)*widening_upper_q];
-            wide_operand1[30 + 32*el -: 8]  = operand1[14 + 16*el + ((N_IPU*ELEN)/2)*widening_upper_q -: 5] - 15 + 127;
-            wide_operand1[22 + 32*el -: 23] = {operand1[9 + 16*el + ((N_IPU*ELEN)/2)*widening_upper_q -: 10], 13'b0};
-          end
+        EW_16: begin
+          for (int el = 0; el < 2*N_IPU; el++) begin
+            if (spatz_req.op_arith.widen_vs1)
+              wide_operand1[32*el +: 32] = widen_fp16_to_fp32(shift_operand1[16*el +: 16]);
 
-          if (spatz_req.op_arith.widen_vs2) begin
-            wide_operand2[31 + 32*el]       = operand2[15 + 16*el + ((N_IPU*ELEN)/2)*widening_upper_q];
-            wide_operand2[30 + 32*el -: 8]  = operand2[14 + 16*el + ((N_IPU*ELEN)/2)*widening_upper_q -: 5] - 15 + 127;
-            wide_operand2[22 + 32*el -: 23] = {operand2[9 + 16*el + ((N_IPU*ELEN)/2)*widening_upper_q -: 10], 13'b0};
+            if (spatz_req.op_arith.widen_vs2)
+              wide_operand2[32*el +: 32] = widen_fp16_to_fp32(shift_operand2[16*el +: 16]);
           end
         end
-      end
-      EW_8: begin
-        for (int el = 0; el < 4*N_IPU; el++) begin
-          if (spatz_req.op_arith.widen_vs1) begin
-            wide_operand1[15 + 16*el]      = operand1[7 + 8*el + ((N_IPU*ELEN)/2)*widening_upper_q];
-            wide_operand1[14 + 16*el -: 5] = operand1[6 + 8*el + ((N_IPU*ELEN)/2)*widening_upper_q -: 5];
-            wide_operand1[9 + 16*el -: 10] = {operand1[1 + 8*el + ((N_IPU*ELEN)/2)*widening_upper_q -: 2], 8'b0};
-          end
+        EW_8: begin
+          for (int el = 0; el < 4*N_IPU; el++) begin
+            if (spatz_req.op_arith.widen_vs1)
+              wide_operand1[16*el +: 16] = widen_fp8_to_fp16(shift_operand1[8*el +: 8]);
 
-          if (spatz_req.op_arith.widen_vs2) begin
-            wide_operand2[15 + 16*el]      = operand2[7 + 8*el + ((N_IPU*ELEN)/2)*widening_upper_q];
-            wide_operand2[14 + 16*el -: 5] = operand2[6 + 8*el + ((N_IPU*ELEN)/2)*widening_upper_q -: 5];
-            wide_operand2[9 + 16*el -: 10] = {operand2[1 + 8*el + ((N_IPU*ELEN)/2)*widening_upper_q -: 2], 8'b0};
+            if (spatz_req.op_arith.widen_vs2)
+              wide_operand2[16*el +: 16] = widen_fp8_to_fp16(shift_operand2[8*el +: 8]);
           end
         end
-      end
-    endcase
-  end: widen_operands
+      endcase
+    end
+  end: gen_fpu_widening else begin: gen_fpu_widening
+    assign wide_operand1 = '0;
+    assign wide_operand2 = '0;
+    assign wide_operand3 = '0;
+  end
 
   for (genvar fpu = 0; unsigned'(fpu) < N_IPU; fpu++) begin : gen_fpus
     if (FPU) begin: gen_fpu

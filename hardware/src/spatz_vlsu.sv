@@ -512,7 +512,7 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
         vrf_req_valid_d = &(buffer_rvalid | ~mem_pending) && |mem_pending;
 
         for (int unsigned port = 0; port < NrMemPorts; port++) begin
-          automatic elen_t data = buffer_rdata[port];
+          automatic logic [63:0] data = buffer_rdata[port];
 
           // Shift data to correct position if we have an unaligned memory request
           if (MAXEW == EW_32)
@@ -609,7 +609,7 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
       for (int unsigned port = 0; port < NrMemPorts; port++) begin
         // Read element from buffer and execute memory request
         if (mem_operation_valid[port]) begin
-          automatic logic [MemDataWidth-1:0] data = buffer_rdata[port];
+          automatic logic [63:0] data = buffer_rdata[port];
 
           // Shift data to lsb if we have a strided memory access
           if (is_strided)

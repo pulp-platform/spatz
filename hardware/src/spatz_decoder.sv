@@ -852,12 +852,12 @@ module spatz_decoder
               end
               riscv_instr::VFWNMACC_VV,
               riscv_instr::VFWNMACC_VF: begin
-                spatz_req.op        = VSDOTP;
-                spatz_req.vd_is_src = 1'b1;
-              /*spatz_req.op                 = VFNMADD;
-               spatz_req.vd_is_src          = 1'b1;
-               spatz_req.op_arith.widen_vs1 = 1'b1;
-               spatz_req.op_arith.widen_vs2 = 1'b1;*/
+                //spatz_req.op        = VSDOTP;
+                //spatz_req.vd_is_src = 1'b1;
+                spatz_req.op                 = VFNMADD;
+                spatz_req.vd_is_src          = 1'b1;
+                spatz_req.op_arith.widen_vs1 = 1'b1;
+                spatz_req.op_arith.widen_vs2 = 1'b1;
               end
               riscv_instr::VFWMSAC_VV,
               riscv_instr::VFWMSAC_VF: begin
