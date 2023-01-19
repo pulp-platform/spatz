@@ -12,17 +12,21 @@ package spatz_pkg;
   //  Parameters  //
   //////////////////
 
+  // Number of IPUs in each VFU (between 1 and 8)
+  localparam int unsigned N_IPU = `ifdef N_IPU `N_IPU `else 2 `endif;
+  // Number of FPUs in each VFU (between 1 and 8)
+  localparam int unsigned N_FPU = `ifdef N_FPU `N_FPU `else 2 `endif;
+  // Number of FUs in each VFU
+  localparam int unsigned N_FU  = N_IPU > N_FPU ? N_IPU : N_FPU;
   // FPU support
-  localparam bit FPU = `ifdef FPU `FPU `else 0 `endif;
+  localparam bit FPU            = N_FPU != 0;
   // Single-precision floating point support
-  localparam bit RVF = `ifdef RVF `RVF `else 0 `endif;
+  localparam bit RVF            = `ifdef RVF `RVF `else 0 `endif;
   // Double-precision floating-point support
-  localparam bit RVD = `ifdef RVD `RVD `else 0 `endif;
+  localparam bit RVD            = `ifdef RVD `RVD `else 0 `endif;
 
-  // Number of IPUs in VFU (between 2 and 8)
-  localparam int unsigned N_IPU  = `ifdef N_IPU `N_IPU `else 2 `endif;
   // Maximum size of a single vector element in bits
-  localparam int unsigned ELEN   = FPU && RVD ? 64 : 32;
+  localparam int unsigned ELEN   = RVD ? 64 : 32;
   // Maximum size of a single vector element in bytes
   localparam int unsigned ELENB  = ELEN / 8;
   // Number of bits in a vector register
@@ -34,10 +38,11 @@ package spatz_pkg;
   // Number of vector registers
   localparam int unsigned NRVREG = 32;
 
+
   // Width of a VRF word
-  localparam int unsigned VRFWordWidth     = N_IPU * ELEN;
+  localparam int unsigned VRFWordWidth     = N_FU * ELEN;
   // Width of a VRF word (bytes)
-  localparam int unsigned VRFWordBWidth    = N_IPU * ELENB;
+  localparam int unsigned VRFWordBWidth    = N_FU * ELENB;
   // Number of addressable words in a vector register
   localparam int unsigned NrWordsPerVector = VLEN/VRFWordWidth;
   // Number of VRF banks
@@ -54,12 +59,6 @@ package spatz_pkg;
 
   // Largest element width that Spatz supports
   localparam vew_e MAXEW = RVD ? EW_64 : EW_32;
-
-  // Implement Spatz integer ALU
-  localparam bit SpatzHasIntegerALU = `ifdef ALU `ALU `else 1 `endif;
-
-  // Implement Spatz multiplers
-  localparam bit SpatzHasMultiplier = SpatzHasIntegerALU && (`ifdef MULT `MULT `else 1 `endif);
 
   //////////////////////
   // Type Definitions //
@@ -79,8 +78,8 @@ package spatz_pkg;
     logic [$clog2(NRVREG*NrWordsPerBank)-1:0] vreg;
     logic [$clog2(NrVRFBanks)-1:0] bank;
   } vreg_addr_t;
-  typedef logic [N_IPU*ELENB-1:0] vreg_be_t;
-  typedef logic [N_IPU*ELEN-1:0] vreg_data_t;
+  typedef logic [N_FU*ELENB-1:0] vreg_be_t;
+  typedef logic [N_FU*ELEN-1:0] vreg_data_t;
 
   // Instruction ID
   typedef logic [$clog2(NrParallelInstructions)-1:0] spatz_id_t;
@@ -333,7 +332,7 @@ package spatz_pkg;
   // No support for floating-point division and square-root for now
   localparam bit FDivSqrt = 1'b0;
 
-  localparam int unsigned FLEN = FPU && RVD ? 64 : 32;
+  localparam int unsigned FLEN = RVD ? 64 : 32;
 
   localparam fpnew_pkg::fpu_implementation_t FPUImplementation = RVD ?
   // Double Precision Configuration

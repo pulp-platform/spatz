@@ -8,9 +8,8 @@
 // collects the results.
 
 module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
-    parameter type tag_t         = logic,
-    parameter bit  HasMultiplier = 1,
-    parameter bit  Pipeline      = 1
+    parameter type tag_t    = logic,
+    parameter bit  Pipeline = 1
   ) (
     input  logic   clk_i,
     input  logic   rst_ni,
@@ -48,10 +47,6 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
   // Is the operation signed
   logic is_signed;
   assign is_signed = operation inside {VMIN, VMAX, VMULH, VMULHSU, VDIV, VREM};
-
-  // Is this a division operation?
-  logic is_div;
-  assign is_div = operation inside {VDIV, VDIVU, VREM, VREMU};
 
   // Forward the tag
   if (Pipeline) begin: gen_pipeline
@@ -210,8 +205,7 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
     ////////////////
 
     spatz_simd_lane #(
-      .Width        (8            ),
-      .HasMultiplier(HasMultiplier)
+      .Width(8)
     ) i_simd_lane_8b_0 (
       .clk_i            (clk_i                             ),
       .rst_ni           (rst_ni                            ),
@@ -229,8 +223,7 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
     );
 
     spatz_simd_lane #(
-      .Width        (8            ),
-      .HasMultiplier(HasMultiplier)
+      .Width(8)
     ) i_simd_lane_8b_1 (
       .clk_i            (clk_i                             ),
       .rst_ni           (rst_ni                            ),
@@ -248,8 +241,7 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
     );
 
     spatz_simd_lane #(
-      .Width        (16           ),
-      .HasMultiplier(HasMultiplier)
+      .Width(16)
     ) i_simd_lane_16b_0 (
       .clk_i            (clk_i                           ),
       .rst_ni           (rst_ni                          ),
@@ -267,8 +259,7 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
     );
 
     spatz_simd_lane #(
-      .Width        (32           ),
-      .HasMultiplier(HasMultiplier)
+      .Width(32)
     ) i_simd_lane_32b_0 (
       .clk_i            (clk_i                           ),
       .rst_ni           (rst_ni                          ),
@@ -475,8 +466,7 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
     ////////////////
 
     spatz_simd_lane #(
-      .Width        (8            ),
-      .HasMultiplier(HasMultiplier)
+      .Width(8)
     ) i_simd_lane_8b_0 (
       .clk_i            (clk_i                             ),
       .rst_ni           (rst_ni                            ),
@@ -494,8 +484,7 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
     );
 
     spatz_simd_lane #(
-      .Width        (8            ),
-      .HasMultiplier(HasMultiplier)
+      .Width(8)
     ) i_simd_lane_8b_1 (
       .clk_i            (clk_i                             ),
       .rst_ni           (rst_ni                            ),
@@ -513,8 +502,7 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
     );
 
     spatz_simd_lane #(
-      .Width        (8            ),
-      .HasMultiplier(HasMultiplier)
+      .Width(8)
     ) i_simd_lane_8b_2 (
       .clk_i            (clk_i                             ),
       .rst_ni           (rst_ni                            ),
@@ -532,8 +520,7 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
     );
 
     spatz_simd_lane #(
-      .Width        (8            ),
-      .HasMultiplier(HasMultiplier)
+      .Width(8)
     ) i_simd_lane_8b_3 (
       .clk_i            (clk_i                             ),
       .rst_ni           (rst_ni                            ),
@@ -551,8 +538,7 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
     );
 
     spatz_simd_lane #(
-      .Width        (16           ),
-      .HasMultiplier(HasMultiplier)
+      .Width(16)
     ) i_simd_lane_16b_0 (
       .clk_i            (clk_i                              ),
       .rst_ni           (rst_ni                             ),
@@ -570,8 +556,7 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
     );
 
     spatz_simd_lane #(
-      .Width        (16           ),
-      .HasMultiplier(HasMultiplier)
+      .Width(16)
     ) i_simd_lane_16b_1 (
       .clk_i            (clk_i                              ),
       .rst_ni           (rst_ni                             ),
@@ -589,8 +574,7 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
     );
 
     spatz_simd_lane #(
-      .Width        (32           ),
-      .HasMultiplier(HasMultiplier)
+      .Width(32)
     ) i_simd_lane_32b_0 (
       .clk_i            (clk_i                           ),
       .rst_ni           (rst_ni                          ),
@@ -608,8 +592,7 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
     );
 
     spatz_simd_lane #(
-      .Width        (64           ),
-      .HasMultiplier(HasMultiplier)
+      .Width(64)
     ) i_simd_lane_64b_0 (
       .clk_i            (clk_i                           ),
       .rst_ni           (rst_ni                          ),

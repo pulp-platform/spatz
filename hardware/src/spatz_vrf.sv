@@ -36,7 +36,7 @@ module spatz_vrf
   localparam int unsigned NrReadPortsPerBank = 3;
 
   localparam int unsigned RegWidth      = VLEN/NrVRFBanks;
-  localparam int unsigned ElemWidth     = N_IPU*ELEN;
+  localparam int unsigned ElemWidth     = N_FU*ELEN;
   localparam int unsigned NrElemPerBank = RegWidth/ElemWidth;
 
   //////////////
@@ -197,7 +197,7 @@ module spatz_vrf
   if (RegWidth < ElemWidth)
     $error("[spatz_vrf] The register width has to be bigger than the element width.");
 
-  if (spatz_pkg::N_IPU * spatz_pkg::ELEN * NrVRFBanks > spatz_pkg::VLEN)
-    $error("[spatz_vrf] The vector register length has to be equal to or larger than N_IPU*ELEN*NrVRegBanks.");
+  if (spatz_pkg::N_FU * spatz_pkg::ELEN * NrVRFBanks > spatz_pkg::VLEN)
+    $error("[spatz_vrf] The vector register length has to be equal to or larger than N_FU*ELEN*NrVRegBanks.");
 
 endmodule : spatz_vrf

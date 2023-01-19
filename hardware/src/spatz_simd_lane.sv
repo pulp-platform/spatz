@@ -8,10 +8,9 @@
 // element width.
 
 module spatz_simd_lane import spatz_pkg::*; import rvv_pkg::vew_e; #(
-    parameter int  unsigned Width         = 8,
-    parameter bit           HasMultiplier = 1,
+    parameter int  unsigned Width  = 8,
     // Derived parameters. Do not change!
-    parameter type          data_t        = logic [Width-1:0]
+    parameter type          data_t = logic [Width-1:0]
   ) (
     input  logic  clk_i,
     input  logic  rst_ni,
@@ -45,7 +44,7 @@ module spatz_simd_lane import spatz_pkg::*; import rvv_pkg::vew_e; #(
 
     // Mute the multiplier
     mult_result = 'x;
-    if (is_mult && HasMultiplier)
+    if (is_mult)
       mult_result = $signed({mult_op1[Width-1] & is_signed_i & ~(operation_i == VMULHSU), mult_op1}) * $signed({mult_op2[Width-1] & is_signed_i, mult_op2});
   end: mult
 
@@ -186,28 +185,23 @@ module spatz_simd_lane import spatz_pkg::*; import rvv_pkg::vew_e; #(
     endcase
   end: div_proc
 
-  if (HasMultiplier) begin: gen_serdiv
-    serdiv #(
-      .WIDTH  (Width),
-      .IdWidth(1    )
-    ) i_divider (
-      .clk_i     (clk_i         ),
-      .rst_ni    (rst_ni        ),
-      .id_i      ('0            ),
-      .op_a_i    (op_s2_i       ),
-      .op_b_i    (op_s1_i       ),
-      .operator_i(div_op        ),
-      .in_vld_i  (div_in_valid  ),
-      .in_rdy_o  (/* Unused */  ),
-      .out_vld_o (div_out_valid ),
-      .out_rdy_i (result_ready_i),
-      .id_o      (/* Unused */  ),
-      .res_o     (div_result    )
-    );
-  end else begin
-    assign div_out_valid = 1'b0;
-    assign div_result    = '0;
-  end
+  serdiv #(
+    .WIDTH  (Width),
+    .IdWidth(1    )
+  ) i_divider (
+    .clk_i     (clk_i         ),
+    .rst_ni    (rst_ni        ),
+    .id_i      ('0            ),
+    .op_a_i    (op_s2_i       ),
+    .op_b_i    (op_s1_i       ),
+    .operator_i(div_op        ),
+    .in_vld_i  (div_in_valid  ),
+    .in_rdy_o  (/* Unused */  ),
+    .out_vld_o (div_out_valid ),
+    .out_rdy_i (result_ready_i),
+    .id_o      (/* Unused */  ),
+    .res_o     (div_result    )
+  );
 
   ////////////
   // Result //
@@ -233,22 +227,18 @@ module spatz_simd_lane import spatz_pkg::*; import rvv_pkg::vew_e; #(
         VSRL                             : simd_result = shift_operand >> shift_amount;
         VSRA                             : simd_result = $signed(shift_operand) >>> shift_amount;
         // TODO: Change selection when SEW does not equal Width
-        VMUL                             : if (HasMultiplier) simd_result = mult_result[Width-1:0];
+        VMUL                             : simd_result = mult_result[Width-1:0];
         VMULH, VMULHU, VMULHSU           : begin
-          if (HasMultiplier) begin
-            simd_result = mult_result[2*Width-1:Width];
-            for (int i = 0; i < $clog2(Width/8); i++)
-              if (sew_i == rvv_pkg::vew_e'(i))
-                simd_result = mult_result[8*(2**i) +: Width];
-          end
+          simd_result = mult_result[2*Width-1:Width];
+          for (int i = 0; i < $clog2(Width/8); i++)
+            if (sew_i == rvv_pkg::vew_e'(i))
+              simd_result = mult_result[8*(2**i) +: Width];
         end
         VMADC                   : simd_result = Width'(adder_result[Width]);
         VMSBC                   : simd_result = Width'(subtractor_result[Width]);
         VDIV, VDIVU, VREM, VREMU: begin
-          if (HasMultiplier) begin
-            simd_result    = div_result;
-            result_valid_o = div_out_valid;
-          end
+          simd_result    = div_result;
+          result_valid_o = div_out_valid;
         end
         default simd_result = 'x;
       endcase // operation_i

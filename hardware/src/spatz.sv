@@ -346,14 +346,17 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   // Assertions //
   ////////////////
 
-  if (spatz_pkg::N_IPU != 2**$clog2(spatz_pkg::N_IPU))
-    $error("[spatz] The number of IPUs needs to be a power of two");
+  if (spatz_pkg::N_IPU == 0)
+    $error("[spatz] Each Spatz needs at least one IPU");
+
+  if (spatz_pkg::N_FU != 2**$clog2(spatz_pkg::N_FU))
+    $error("[spatz] The number of FUs needs to be a power of two");
 
   if (spatz_pkg::VLEN != 2**$clog2(spatz_pkg::VLEN))
     $error("[spatz] The vector length needs to be a power of two");
 
-  if (spatz_pkg::ELEN*spatz_pkg::N_IPU > spatz_pkg::VLEN)
-    $error("[spatz] VLEN needs a min size of N_IPU*%d.", spatz_pkg::ELEN);
+  if (spatz_pkg::ELEN*spatz_pkg::N_FU > spatz_pkg::VLEN)
+    $error("[spatz] VLEN needs a min size of N_FU*%d.", spatz_pkg::ELEN);
 
   if (NrMemPorts == 0)
     $error("[spatz] Spatz requires at least one memory port.");

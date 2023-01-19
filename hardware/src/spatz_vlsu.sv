@@ -160,7 +160,7 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
 
   // For each memory port we count how many elements we have already loaded/stored.
   // Multiple counters are needed all memory ports can work independent of each other.
-  vlen_t [N_IPU-1:0]      mem_counter_max;
+  vlen_t [N_FU-1:0]       mem_counter_max;
   logic  [NrMemPorts-1:0] mem_counter_en;
   logic  [NrMemPorts-1:0] mem_counter_load;
   vlen_t [NrMemPorts-1:0] mem_counter_delta;
@@ -192,16 +192,16 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
   // For each IPU that we have, count how many elements we have already loaded/stored.
   // Multiple counters are necessary for the case where not every single IPU will
   // receive the same number of elements to work through.
-  vlen_t [N_IPU-1:0]      vreg_counter_max;
-  logic  [N_IPU-1:0]      vreg_counter_en;
-  logic  [N_IPU-1:0]      vreg_counter_load;
-  vlen_t [N_IPU-1:0]      vreg_counter_delta;
-  vlen_t [N_IPU-1:0]      vreg_counter_d;
-  vlen_t [N_IPU-1:0]      vreg_counter_q;
+  vlen_t [N_FU-1:0]       vreg_counter_max;
+  logic  [N_FU-1:0]       vreg_counter_en;
+  logic  [N_FU-1:0]       vreg_counter_load;
+  vlen_t [N_FU-1:0]       vreg_counter_delta;
+  vlen_t [N_FU-1:0]       vreg_counter_d;
+  vlen_t [N_FU-1:0]       vreg_counter_q;
   logic  [NrMemPorts-1:0] vreg_finished_q;
   logic  [NrMemPorts-1:0] vreg_finished_d;
 
-  for (genvar ipu = 0; ipu < N_IPU; ipu++) begin: gen_vreg_counters
+  for (genvar ipu = 0; ipu < N_FU; ipu++) begin: gen_vreg_counters
     delta_counter #(
       .WIDTH($bits(vlen_t))
     ) i_delta_counter_vreg (
@@ -296,8 +296,8 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
   end: control_proc
 
   // Is the VRF operation valid and are we at the last one?
-  logic [N_IPU-1:0] vreg_operation_valid;
-  logic [N_IPU-1:0] vreg_operation_last;
+  logic [N_FU-1:0] vreg_operation_valid;
+  logic [N_FU-1:0] vreg_operation_last;
 
   // Did a new VLSU request arrive?
   logic new_vlsu_request;
@@ -376,29 +376,29 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
   // Do we need to catch up to reach element idx parity? (Because of non-zero vstart)
   vlen_t vreg_start_0;
   assign vreg_start_0 = spatz_req.vstart[$clog2(ELENB)-1:0];
-  logic [N_IPU-1:0] catchup;
-  for (genvar i = 0; i < N_IPU; i++) begin: gen_catchup
+  logic [N_FU-1:0] catchup;
+  for (genvar i = 0; i < N_FU; i++) begin: gen_catchup
     assign catchup[i] = (vreg_counter_q[i] < vreg_start_0) & (vreg_counter_max[i] != vreg_counter_q[i]);
   end: gen_catchup
 
-  for (genvar ipu = 0; ipu < N_IPU; ipu++) begin: gen_vreg_counter_proc
+  for (genvar ipu = 0; ipu < N_FU; ipu++) begin: gen_vreg_counter_proc
     // The total amount of elements we have to work through
     vlen_t max_elements;
     always_comb begin
       // Default value
-      max_elements = (spatz_req.vl >> $clog2(N_IPU*ELENB)) << $clog2(ELENB);
+      max_elements = (spatz_req.vl >> $clog2(N_FU*ELENB)) << $clog2(ELENB);
 
       // Full transfer
-      if (spatz_req.vl[$clog2(ELENB) +: $clog2(N_IPU)] > ipu)
+      if (spatz_req.vl[$clog2(ELENB) +: $clog2(N_FU)] > ipu)
         max_elements += ELENB;
-      else if (spatz_req.vl[$clog2(N_IPU*ELENB)-1:$clog2(ELENB)] == ipu)
+      else if (spatz_req.vl[$clog2(N_FU*ELENB)-1:$clog2(ELENB)] == ipu)
         max_elements += spatz_req.vl[$clog2(ELENB)-1:0];
 
       vreg_counter_load[ipu] = new_vlsu_request;
-      vreg_counter_d[ipu]    = (spatz_req.vstart >> $clog2(N_IPU*ELENB)) << $clog2(ELENB);
-      if (spatz_req.vstart[$clog2(N_IPU*ELENB)-1:$clog2(ELENB)] > ipu)
+      vreg_counter_d[ipu]    = (spatz_req.vstart >> $clog2(N_FU*ELENB)) << $clog2(ELENB);
+      if (spatz_req.vstart[$clog2(N_FU*ELENB)-1:$clog2(ELENB)] > ipu)
         vreg_counter_d[ipu] += ELENB;
-      else if (spatz_req.vstart[idx_width(N_IPU*ELENB)-1:$clog2(ELENB)] == ipu)
+      else if (spatz_req.vstart[idx_width(N_FU*ELENB)-1:$clog2(ELENB)] == ipu)
         vreg_counter_d[ipu] += spatz_req.vstart[$clog2(ELENB)-1:0];
       vreg_operation_valid[ipu] = spatz_req_valid && (vreg_counter_q[ipu] != max_elements) && (catchup[ipu] || (!catchup[ipu] && ~|catchup));
       vreg_operation_last[ipu]  = vreg_operation_valid[ipu] && ((max_elements - vreg_counter_q[ipu]) <= (is_single_element_operation ? single_element_size : ELENB));
@@ -408,8 +408,8 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
     end
   end
 
-  assign vreg_elem_id = (vreg_counter_q[0] > vreg_start_0) ? vreg_counter_q[0] >> $clog2(ELENB)   : vreg_counter_q[N_IPU-1] >> $clog2(ELENB);
-  assign vreg_byte_id = (vreg_counter_q[0] > vreg_start_0) ? vreg_counter_q[0][$clog2(ELENB)-1:0] : vreg_counter_q[N_IPU-1][$clog2(ELENB)-1:0];
+  assign vreg_elem_id = (vreg_counter_q[0] > vreg_start_0) ? vreg_counter_q[0] >> $clog2(ELENB)   : vreg_counter_q[N_FU-1] >> $clog2(ELENB);
+  assign vreg_byte_id = (vreg_counter_q[0] > vreg_start_0) ? vreg_counter_q[0][$clog2(ELENB)-1:0] : vreg_counter_q[N_FU-1][$clog2(ELENB)-1:0];
 
   for (genvar port = 0; port < NrMemPorts; port++) begin: gen_mem_counter_proc
     // The total amount of elements we have to work through
@@ -457,12 +457,12 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
   logic [NrMemPorts-1:0]                   mem_req_last;
 
   // Number of pending requests
-  id_t  [NrMemPorts-1:0]                   mem_pending_d, mem_pending_q;
-  logic [NrMemPorts-1:0]                   mem_pending;
+  id_t  [NrMemPorts-1:0] mem_pending_d, mem_pending_q;
+  logic [NrMemPorts-1:0] mem_pending;
   `FF(mem_pending_q, mem_pending_d, '{default: '0})
   always_comb begin
     // Maintain state
-    mem_pending_d  = mem_pending_q;
+    mem_pending_d = mem_pending_q;
 
     for (int port = 0; port < NrMemPorts; port++) begin
       mem_pending[port] = mem_pending_q[port] != '0;
@@ -716,8 +716,8 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
   if (MemDataWidth != ELEN)
     $error("[spatz_vlsu] The memory data width needs to be equal to %d.", ELEN);
 
-  if (NrMemPorts != N_IPU)
-    $error("[spatz_vlsu] The number of memory ports needs to be equal to the number of IPUs.");
+  if (NrMemPorts != N_FU)
+    $error("[spatz_vlsu] The number of memory ports needs to be equal to the number of FUs.");
 
   if (NrMemPorts != 2**$clog2(NrMemPorts))
     $error("[spatz_vlsu] The NrMemPorts parameter needs to be a power of two");
