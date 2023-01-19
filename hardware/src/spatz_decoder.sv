@@ -60,6 +60,14 @@ module spatz_decoder
         riscv_instr::VLSE16_V,
         riscv_instr::VLSE32_V,
         riscv_instr::VLSE64_V,
+        riscv_instr::VLUXEI8_V,
+        riscv_instr::VLUXEI16_V,
+        riscv_instr::VLUXEI32_V,
+        riscv_instr::VLUXEI64_V,
+        riscv_instr::VLOXEI8_V,
+        riscv_instr::VLOXEI16_V,
+        riscv_instr::VLOXEI32_V,
+        riscv_instr::VLOXEI64_V,
         riscv_instr::VSE8_V,
         riscv_instr::VSE16_V,
         riscv_instr::VSE32_V,
@@ -67,7 +75,15 @@ module spatz_decoder
         riscv_instr::VSSE8_V,
         riscv_instr::VSSE16_V,
         riscv_instr::VSSE32_V,
-        riscv_instr::VSSE64_V: begin
+        riscv_instr::VSSE64_V,
+        riscv_instr::VSUXEI8_V,
+        riscv_instr::VSUXEI16_V,
+        riscv_instr::VSUXEI32_V,
+        riscv_instr::VSUXEI64_V,
+        riscv_instr::VSOXEI8_V,
+        riscv_instr::VSOXEI16_V,
+        riscv_instr::VSOXEI32_V,
+        riscv_instr::VSOXEI64_V: begin
           automatic vreg_t ls_vd         = decoder_req_i.instr[11:7];
           automatic vreg_t ls_rs1        = decoder_req_i.instr[19:15];
           automatic vreg_t ls_s2         = decoder_req_i.instr[24:20];
@@ -88,6 +104,10 @@ module spatz_decoder
 
           spatz_req.op_mem.vm = ls_vm;
           spatz_req.ex_unit   = LSU;
+
+          // Illegal width?
+          if (spatz_req.vtype.vsew == EW_64 && MAXEW != EW_64)
+            illegal_instr = 1'b1;
 
           // Check which type of load or store operation is requested
           unique casez (decoder_req_i.instr)
@@ -116,6 +136,24 @@ module spatz_decoder
               illegal_instr            = ~decoder_req_i.rs1_valid | ~decoder_req_i.rs2_valid;
             end
 
+            riscv_instr::VLUXEI8_V,
+            riscv_instr::VLUXEI16_V,
+            riscv_instr::VLUXEI32_V,
+            riscv_instr::VLUXEI64_V,
+            riscv_instr::VLOXEI8_V,
+            riscv_instr::VLOXEI16_V,
+            riscv_instr::VLOXEI32_V,
+            riscv_instr::VLOXEI64_V: begin
+              spatz_req.op             = VLXE;
+              spatz_req.op_mem.is_load = 1'b1;
+              spatz_req.vd             = ls_vd;
+              spatz_req.use_vd         = 1'b1;
+              spatz_req.rs1            = decoder_req_i.rs1;
+              spatz_req.vs2            = ls_s2;
+              spatz_req.use_vs2        = 1'b1;
+              illegal_instr            = ~decoder_req_i.rs1_valid;
+            end
+
             riscv_instr::VSE8_V,
             riscv_instr::VSE16_V,
             riscv_instr::VSE32_V,
@@ -141,6 +179,25 @@ module spatz_decoder
               spatz_req.rs1            = decoder_req_i.rs1;
               spatz_req.rs2            = decoder_req_i.rs2;
               illegal_instr            = ~decoder_req_i.rs1_valid | ~decoder_req_i.rs2_valid;
+            end
+
+            riscv_instr::VSUXEI8_V,
+            riscv_instr::VSUXEI16_V,
+            riscv_instr::VSUXEI32_V,
+            riscv_instr::VSUXEI64_V,
+            riscv_instr::VSOXEI8_V,
+            riscv_instr::VSOXEI16_V,
+            riscv_instr::VSOXEI32_V,
+            riscv_instr::VSOXEI64_V: begin
+              spatz_req.op             = VSXE;
+              spatz_req.op_mem.is_load = 1'b0;
+              spatz_req.vd             = ls_vd;
+              spatz_req.use_vd         = 1'b1;
+              spatz_req.vd_is_src      = 1'b1;
+              spatz_req.rs1            = decoder_req_i.rs1;
+              spatz_req.vs2            = ls_s2;
+              spatz_req.use_vs2        = 1'b1;
+              illegal_instr            = ~decoder_req_i.rs1_valid;
             end
 
             default:

@@ -28,11 +28,11 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
     output logic                             vrf_we_o,
     output vreg_be_t                         vrf_wbe_o,
     input  logic                             vrf_wvalid_i,
-    output spatz_id_t       [1:0]            vrf_id_o,
-    output vreg_addr_t                       vrf_raddr_o,
-    output logic                             vrf_re_o,
-    input  vreg_data_t                       vrf_rdata_i,
-    input  logic                             vrf_rvalid_i,
+    output spatz_id_t       [2:0]            vrf_id_o,
+    output vreg_addr_t      [1:0]            vrf_raddr_o,
+    output logic            [1:0]            vrf_re_o,
+    input  vreg_data_t      [1:0]            vrf_rdata_i,
+    input  logic            [1:0]            vrf_rvalid_i,
     // Memory Request
     output spatz_mem_req_t  [NrMemPorts-1:0] spatz_mem_req_o,
     output logic            [NrMemPorts-1:0] spatz_mem_req_valid_o,
@@ -114,6 +114,8 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
   //////////////////////
   //  Reorder Buffer  //
   //////////////////////
+
+  typedef logic [int'(MAXEW)-1:0] addr_offset_t;
 
   elen_t [NrMemPorts-1:0] buffer_wdata;
   id_t   [NrMemPorts-1:0] buffer_wid;
@@ -225,35 +227,60 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
   // Address Generation //
   ////////////////////////
 
-  elen_t [NrMemPorts-1:0]                  mem_req_addr;
-  logic  [NrMemPorts-1:0][int'(MAXEW)-1:0] mem_req_addr_offset;
+  elen_t [NrMemPorts-1:0] mem_req_addr;
 
-  vreg_addr_t                   vreg_addr;
-  logic       [int'(MAXEW)-1:0] vreg_addr_offset;
+  vreg_addr_t vd_vreg_addr;
+  vreg_addr_t vs2_vreg_addr;
 
   // Current element index and byte index that are being accessed at the register file
-  vreg_elem_t                     vreg_elem_id;
-  logic       [$clog2(ELENB)-1:0] vreg_byte_id;
+  vreg_elem_t vd_elem_id;
+  vreg_elem_t vs2_elem_id_d, vs2_elem_id_q;
+  `FF(vs2_elem_id_q, vs2_elem_id_d, '0)
 
   // Do we have a strided memory access
   logic is_strided;
   assign is_strided = (spatz_req.op == VLSE) || (spatz_req.op == VSSE);
 
-  // Calculate the memory address for each memory port
-  always_comb begin : gen_mem_req_addr
-    for (int unsigned port = 0; port < NrMemPorts; port++) begin
-      automatic logic [31:0] stride = is_strided ? spatz_req.rs2 >> spatz_req.vtype.vsew : 'd1;
-      automatic logic [31:0] addr   = spatz_req.rs1 + ({mem_counter_q[port][$bits(vlen_t)-1:MAXEW] << $clog2(NrMemPorts), mem_counter_q[port][int'(MAXEW)-1:0]} + (port << MAXEW)) * stride;
+  // Do we have an indexed memory access
+  logic is_indexed;
+  assign is_indexed = (spatz_req.op == VLXE) || (spatz_req.op == VSXE);
 
+  // Pending indexes
+  logic [NrMemPorts-1:0] pending_index;
+
+  // Calculate the memory address for each memory port
+  addr_offset_t [NrMemPorts-1:0] mem_req_addr_offset;
+  for (genvar port = 0; port < NrMemPorts; port++) begin: gen_mem_req_addr
+    logic [31:0] addr;
+    logic [31:0] stride;
+    logic [31:0] offset;
+
+    always_comb begin
+      stride = is_strided ? spatz_req.rs2 >> spatz_req.vtype.vsew : 'd1;
+      if (is_indexed) begin
+        automatic logic [idx_width(N_FU*ELENB)-1:0] word_index = mem_counter_q[port][int'(MAXEW)-1:0] + (port << MAXEW);
+
+        unique case (spatz_req.vtype.vsew)
+          EW_8 : offset   = $signed(vrf_rdata_i[1][8 * word_index +: 8]) << EW_8;
+          EW_16: offset   = $signed(vrf_rdata_i[1][8 * word_index +: 16]) << EW_16;
+          default: offset = $signed(vrf_rdata_i[1][8 * word_index +: 32]) << EW_32;
+        endcase
+      end else begin
+        offset = ({mem_counter_q[port][$bits(vlen_t)-1:MAXEW] << $clog2(NrMemPorts), mem_counter_q[port][int'(MAXEW)-1:0]} + (port << MAXEW)) * stride;
+      end
+
+      addr                      = spatz_req.rs1 + offset;
       mem_req_addr[port]        = (addr >> MAXEW) << MAXEW;
       mem_req_addr_offset[port] = addr[int'(MAXEW)-1:0];
+
+      pending_index[port] = (mem_counter_q[port][$clog2(NrWordsPerVector*ELENB)-1:0] >> MAXEW) != vs2_vreg_addr[$clog2(NrWordsPerVector)-1:0];
     end
-  end
+  end: gen_mem_req_addr
 
   // Calculate the register file address
   always_comb begin : gen_vreg_addr
-    vreg_addr        = (spatz_req.vd << $clog2(NrWordsPerVector)) + $unsigned(vreg_elem_id);
-    vreg_addr_offset = (vreg_byte_id >> int'(spatz_req.vtype.vsew)) * spatz_req.rs2[31:0] + spatz_req.rs1[31:0];
+    vd_vreg_addr  = (spatz_req.vd << $clog2(NrWordsPerVector)) + $unsigned(vd_elem_id);
+    vs2_vreg_addr = (spatz_req.vs2 << $clog2(NrWordsPerVector)) + $unsigned(vs2_elem_id_q);
   end
 
   ///////////////
@@ -322,11 +349,36 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
 
   // Do we have to access every single element on its own
   logic is_single_element_operation;
-  assign is_single_element_operation = is_addr_unaligned || is_strided || !is_vstart_zero;
+  assign is_single_element_operation = is_addr_unaligned || is_strided || is_indexed || !is_vstart_zero;
 
   // How large is a single element (in bytes)
   logic [3:0] single_element_size;
   assign single_element_size = 1'b1 << spatz_req.vtype.vsew;
+
+  ////////////////////
+  //  Offset Queue  //
+  ////////////////////
+
+  // Store the offsets of all loads, for realigning
+  addr_offset_t [NrMemPorts-1:0] vreg_addr_offset;
+  for (genvar port = 0; port < NrMemPorts; port++) begin : gen_offset_queue
+    fifo_v3 #(
+      .DATA_WIDTH(int'(MAXEW)       ),
+      .DEPTH     (NrOutstandingLoads)
+    ) i_offset_queue (
+      .clk_i     (clk_i                                                            ),
+      .rst_ni    (rst_ni                                                           ),
+      .flush_i   (1'b0                                                             ),
+      .testmode_i(1'b0                                                             ),
+      .empty_o   (/* Unused */                                                     ),
+      .full_o    (/* Unused */                                                     ),
+      .push_i    (spatz_mem_req_valid[port] && spatz_mem_req_ready[port] && is_load),
+      .data_i    (mem_req_addr_offset[port]                                        ),
+      .data_o    (vreg_addr_offset[port]                                           ),
+      .pop_i     (buffer_pop[port] && is_load                                      ),
+      .usage_o   (/* Unused */                                                     )
+    );
+  end: gen_offset_queue
 
   ///////////////////////
   //  Output Register  //
@@ -362,7 +414,7 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
   assign vrf_wdata_o     = vrf_req_q.wdata;
   assign vrf_wbe_o       = vrf_req_q.wbe;
   assign vrf_we_o        = vrf_req_valid_q;
-  assign vrf_id_o        = {vrf_req_q.rsp.id, spatz_req.id};
+  assign vrf_id_o        = {vrf_req_q.rsp.id, {2{spatz_req.id}}};
   assign vrf_req_ready_q = vrf_wvalid_i;
 
   // Ack when the vector store finishes, or when the vector load commits to the VRF
@@ -403,13 +455,12 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
       vreg_operation_valid[ipu] = spatz_req_valid && (vreg_counter_q[ipu] != max_elements) && (catchup[ipu] || (!catchup[ipu] && ~|catchup));
       vreg_operation_last[ipu]  = vreg_operation_valid[ipu] && ((max_elements - vreg_counter_q[ipu]) <= (is_single_element_operation ? single_element_size : ELENB));
       vreg_counter_delta[ipu]   = !vreg_operation_valid[ipu] ? 'd0 : is_single_element_operation ? single_element_size : vreg_operation_last[ipu] ? (max_elements - vreg_counter_q[ipu]) : ELENB;
-      vreg_counter_en[ipu]      = vreg_operation_valid[ipu] && (is_load && vrf_req_valid_d && vrf_req_ready_d) || (!is_load && vrf_rvalid_i && vrf_re_o);
+      vreg_counter_en[ipu]      = vreg_operation_valid[ipu] && (is_load && vrf_req_valid_d && vrf_req_ready_d) || (!is_load && vrf_rvalid_i[0] && vrf_re_o[0]);
       vreg_counter_max[ipu]     = max_elements;
     end
   end
 
-  assign vreg_elem_id = (vreg_counter_q[0] > vreg_start_0) ? vreg_counter_q[0] >> $clog2(ELENB)   : vreg_counter_q[N_FU-1] >> $clog2(ELENB);
-  assign vreg_byte_id = (vreg_counter_q[0] > vreg_start_0) ? vreg_counter_q[0][$clog2(ELENB)-1:0] : vreg_counter_q[N_FU-1][$clog2(ELENB)-1:0];
+  assign vd_elem_id = (vreg_counter_q[0] > vreg_start_0) ? vreg_counter_q[0] >> $clog2(ELENB) : vreg_counter_q[N_FU-1] >> $clog2(ELENB);
 
   for (genvar port = 0; port < NrMemPorts; port++) begin: gen_mem_counter_proc
     // The total amount of elements we have to work through
@@ -479,8 +530,8 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
 
   // verilator lint_off LATCH
   always_comb begin
-    vrf_raddr_o     = vreg_addr;
-    vrf_re_o        = 1'b0;
+    vrf_raddr_o     = {vs2_vreg_addr, vd_vreg_addr};
+    vrf_re_o        = '0;
     vrf_req_d       = '0;
     vrf_req_valid_d = 1'b0;
 
@@ -504,11 +555,21 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
     vrf_req_d.rsp.id    = spatz_req.id;
     vrf_req_d.rsp_valid = spatz_req_valid && &vreg_finished_d && &mem_finished_d;
 
+    // Request indexes
+    vrf_re_o[1] = is_indexed;
+
+    // Count which vs2 element we should load (indexed loads)
+    vs2_elem_id_d = vs2_elem_id_q;
+    if (&(pending_index ^ ~mem_operation_valid) && is_indexed)
+      vs2_elem_id_d = vs2_elem_id_q + 1;
+    if (spatz_req_ready)
+      vs2_elem_id_d = '0;
+
     if (is_load) begin
       // If we have a valid element in the buffer, store it back to the register file
       if (|vreg_operation_valid) begin
         // Enable write back to the VRF if we have a valid element in all buffers that still have to write something back.
-        vrf_req_d.waddr = vreg_addr;
+        vrf_req_d.waddr = vd_vreg_addr;
         vrf_req_valid_d = &(buffer_rvalid | ~mem_pending) && |mem_pending;
 
         for (int unsigned port = 0; port < NrMemPorts; port++) begin
@@ -516,46 +577,46 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
 
           // Shift data to correct position if we have an unaligned memory request
           if (MAXEW == EW_32)
-            unique case (is_strided ? vreg_addr_offset : spatz_req.rs1[1:0])
-              2'b00: data = data;
-              2'b01: data = {data[7:0], data[31:8]};
-              2'b10: data = {data[15:0], data[31:16]};
-              2'b11: data = {data[23:0], data[31:24]};
+            unique case ((is_strided || is_indexed) ? vreg_addr_offset[port] : spatz_req.rs1[1:0])
+              2'b01: data   = {data[7:0], data[31:8]};
+              2'b10: data   = {data[15:0], data[31:16]};
+              2'b11: data   = {data[23:0], data[31:24]};
+              default: data = data;
             endcase
           else
-            unique case (is_strided ? vreg_addr_offset : spatz_req.rs1[2:0])
-              3'b000: data = data;
-              3'b001: data = {data[7:0], data[63:8]};
-              3'b010: data = {data[15:0], data[63:16]};
-              3'b011: data = {data[23:0], data[63:24]};
-              3'b100: data = {data[31:0], data[63:32]};
-              3'b101: data = {data[39:0], data[63:40]};
-              3'b110: data = {data[47:0], data[63:48]};
-              3'b111: data = {data[55:0], data[63:56]};
+            unique case ((is_strided || is_indexed) ? vreg_addr_offset[port] : spatz_req.rs1[2:0])
+              3'b001: data  = {data[7:0], data[63:8]};
+              3'b010: data  = {data[15:0], data[63:16]};
+              3'b011: data  = {data[23:0], data[63:24]};
+              3'b100: data  = {data[31:0], data[63:32]};
+              3'b101: data  = {data[39:0], data[63:40]};
+              3'b110: data  = {data[47:0], data[63:48]};
+              3'b111: data  = {data[55:0], data[63:56]};
+              default: data = data;
             endcase
 
           // Pop stored element and free space in buffer
           buffer_pop[port] = buffer_rvalid[port] && vrf_req_valid_d && vrf_req_ready_d && vreg_counter_en[port];
 
           // Shift data to correct position if we have a strided memory access
-          if (is_strided)
+          if (is_strided || is_indexed)
             if (MAXEW == EW_32)
               unique case (vreg_counter_q[port][1:0])
-                2'b00: data = data;
-                2'b01: data = {data[23:0], data[31:24]};
-                2'b10: data = {data[15:0], data[31:16]};
-                2'b11: data = {data[7:0], data[31:8]};
+                2'b01: data   = {data[23:0], data[31:24]};
+                2'b10: data   = {data[15:0], data[31:16]};
+                2'b11: data   = {data[7:0], data[31:8]};
+                default: data = data;
               endcase
             else
               unique case (vreg_counter_q[port][2:0])
-                3'b000: data = data;
-                3'b001: data = {data[55:0], data[63:56]};
-                3'b010: data = {data[47:0], data[63:48]};
-                3'b011: data = {data[39:0], data[63:40]};
-                3'b100: data = {data[31:0], data[63:32]};
-                3'b101: data = {data[23:0], data[63:24]};
-                3'b110: data = {data[15:0], data[63:16]};
-                3'b111: data = {data[7:0], data[63:8]};
+                3'b001: data  = {data[55:0], data[63:56]};
+                3'b010: data  = {data[47:0], data[63:48]};
+                3'b011: data  = {data[39:0], data[63:40]};
+                3'b100: data  = {data[31:0], data[63:32]};
+                3'b101: data  = {data[23:0], data[63:24]};
+                3'b110: data  = {data[15:0], data[63:16]};
+                3'b111: data  = {data[7:0], data[63:8]};
+                default: data = data;
               endcase
           vrf_req_d.wdata[ELEN*port +: ELEN] = data;
 
@@ -585,7 +646,7 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
         // Request a new id and and execute memory request
         if (!buffer_full[port] && mem_operation_valid[port]) begin
           buffer_req_id[port]  = spatz_mem_req_ready[port] & spatz_mem_req_valid[port];
-          mem_req_lvalid[port] = 1'b1;
+          mem_req_lvalid[port] = !is_indexed || (vrf_rvalid_i[1] && !pending_index[port]);
           mem_req_id[port]     = buffer_id[port];
           mem_req_last[port]   = mem_operation_last[port];
         end
@@ -594,14 +655,14 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
     end else begin
       // Read new element from the register file and store it to the buffer
       if (!(|buffer_full) && |vreg_operation_valid) begin
-        vrf_re_o = 1'b1;
+        vrf_re_o[0] = 1'b1;
 
         // Push element to buffer if read from vregfile
         for (int unsigned port = 0; port < NrMemPorts; port++) begin
           if (vreg_counter_en[port])
-            buffer_wdata[port] = vrf_rdata_i[ELEN*port +: ELEN];
+            buffer_wdata[port] = vrf_rdata_i[0][ELEN*port +: ELEN];
           buffer_wid[port]    = buffer_id[port];
-          buffer_req_id[port] = vrf_rvalid_i;
+          buffer_req_id[port] = vrf_rvalid_i[0] && (!is_indexed || vrf_rvalid_i[1]);
           buffer_push[port]   = buffer_req_id[port];
         end
       end
@@ -611,8 +672,8 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
         if (mem_operation_valid[port]) begin
           automatic logic [63:0] data = buffer_rdata[port];
 
-          // Shift data to lsb if we have a strided memory access
-          if (is_strided)
+          // Shift data to lsb if we have a strided or indexed memory access
+          if (is_strided || is_indexed)
             if (MAXEW == EW_32)
               unique case (mem_counter_q[port][1:0])
                 2'b01: data = {data[7:0], data[31:8]};
@@ -634,32 +695,32 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
 
           // Shift data to correct position if we have an unaligned memory request
           if (MAXEW == EW_32)
-            unique case (is_strided ? mem_req_addr_offset[port] : spatz_req.rs1[1:0])
-              2'b00: mem_req_data[port] = data;
-              2'b01: mem_req_data[port] = {data[23:0], data[31:24]};
-              2'b10: mem_req_data[port] = {data[15:0], data[31:16]};
-              2'b11: mem_req_data[port] = {data[7:0], data[31:8]};
+            unique case ((is_strided || is_indexed) ? mem_req_addr_offset[port] : spatz_req.rs1[1:0])
+              2'b01: mem_req_data[port]   = {data[23:0], data[31:24]};
+              2'b10: mem_req_data[port]   = {data[15:0], data[31:16]};
+              2'b11: mem_req_data[port]   = {data[7:0], data[31:8]};
+              default: mem_req_data[port] = data;
             endcase
           else
-            unique case (is_strided ? mem_req_addr_offset[port] : spatz_req.rs1[2:0])
-              3'b000: mem_req_data[port] = data;
-              3'b001: mem_req_data[port] = {data[55:0], data[63:56]};
-              3'b010: mem_req_data[port] = {data[47:0], data[63:48]};
-              3'b011: mem_req_data[port] = {data[39:0], data[63:40]};
-              3'b100: mem_req_data[port] = {data[31:0], data[63:32]};
-              3'b101: mem_req_data[port] = {data[23:0], data[63:24]};
-              3'b110: mem_req_data[port] = {data[15:0], data[63:16]};
-              3'b111: mem_req_data[port] = {data[7:0], data[63:8]};
+            unique case ((is_strided || is_indexed) ? mem_req_addr_offset[port] : spatz_req.rs1[2:0])
+              3'b001: mem_req_data[port]  = {data[55:0], data[63:56]};
+              3'b010: mem_req_data[port]  = {data[47:0], data[63:48]};
+              3'b011: mem_req_data[port]  = {data[39:0], data[63:40]};
+              3'b100: mem_req_data[port]  = {data[31:0], data[63:32]};
+              3'b101: mem_req_data[port]  = {data[23:0], data[63:24]};
+              3'b110: mem_req_data[port]  = {data[15:0], data[63:16]};
+              3'b111: mem_req_data[port]  = {data[7:0], data[63:8]};
+              default: mem_req_data[port] = data;
             endcase
 
-          mem_req_svalid[port] = buffer_rvalid[port];
+          mem_req_svalid[port] = buffer_rvalid[port] && (!is_indexed || (vrf_rvalid_i[1] && !pending_index[port]));
           mem_req_id[port]     = buffer_rid[port];
           mem_req_last[port]   = mem_operation_last[port];
           buffer_pop[port]     = spatz_mem_req_ready[port] && spatz_mem_req_valid[port];
 
           // Create byte enable signal for memory request
           if (is_single_element_operation) begin
-            automatic logic [$clog2(ELENB)-1:0] shift = is_strided ? mem_req_addr_offset[port] : mem_counter_q[port][$clog2(ELENB)-1:0] + spatz_req.rs1[int'(MAXEW)-1:0];
+            automatic logic [$clog2(ELENB)-1:0] shift = (is_strided || is_indexed) ? mem_req_addr_offset[port] : mem_counter_q[port][$clog2(ELENB)-1:0] + spatz_req.rs1[int'(MAXEW)-1:0];
             automatic logic [MemDataWidthB-1:0] mask  = '1;
             case (spatz_req.vtype.vsew)
               EW_8 : mask = 1;

@@ -124,11 +124,15 @@ module spatz_vrf
     // the VFU (vs1) and then by the slide unit. Port two can be accessed first by the
     // VFU (vd), then by the LSU.
     for (int unsigned bank = 0; bank < NrVRFBanks; bank++) begin
-      // Bank read port 0 - Priority: VFU (2)
+      // Bank read port 0 - Priority: VFU (2) -> VLSU
       if (read_request[bank][VFU_VS2_RD]) begin
         raddr[bank][0]       = raddr_i[VFU_VS2_RD].vreg;
         rdata_o[VFU_VS2_RD]  = rdata[bank][0];
         rvalid_o[VFU_VS2_RD] = 1'b1;
+      end else if (read_request[bank][VLSU_VS2_RD]) begin
+        raddr[bank][0]        = raddr_i[VLSU_VS2_RD].vreg;
+        rdata_o[VLSU_VS2_RD]  = rdata[bank][0];
+        rvalid_o[VLSU_VS2_RD] = 1'b1;
       end
 
       // Bank read port 1 - Priority: VFU (1) -> VSLDU
