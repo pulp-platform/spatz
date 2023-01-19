@@ -37,9 +37,9 @@ void TEST_CASE3(void) {
 void TEST_CASE4(void) {
 #if ELEN == 64
   VSET(4, e64, m2);
-  volatile uint64_t INP1[] __attribute__((aligned(32))) =
-    {0x9fe419208f2e05e0, 0xf9aa71f0c394bbd3,
-     0xa11a9384a7163840, 0x99991348a9f38cd1};
+  volatile uint64_t INP1[]
+      __attribute__((aligned(32))) = {0x9fe419208f2e05e0, 0xf9aa71f0c394bbd3,
+                                      0xa11a9384a7163840, 0x99991348a9f38cd1};
   uint64_t stride = 8;
   asm volatile("vlse64.v v2, (%0), %1" ::"r"(INP1), "r"(stride));
   VCMP_U64(4, v2, 0x9fe419208f2e05e0, 0xf9aa71f0c394bbd3, 0xa11a9384a7163840,
@@ -71,8 +71,7 @@ void TEST_CASE6(void) {
 void TEST_CASE7(void) {
 #if ELEN == 64
   VSET(8, e64, m2);
-  volatile uint64_t INP1[] __attribute__((aligned(32))) =
-    {0x9fa831c7a11a9384};
+  volatile uint64_t INP1[] __attribute__((aligned(32))) = {0x9fa831c7a11a9384};
   asm volatile("vlse64.v v4, (%0), x0" ::"r"(INP1));
   VCMP_U64(7, v4, 0x9fa831c7a11a9384, 0x9fa831c7a11a9384, 0x9fa831c7a11a9384,
            0x9fa831c7a11a9384, 0x9fa831c7a11a9384, 0x9fa831c7a11a9384,
@@ -95,10 +94,9 @@ void TEST_CASE8(void) {
 void TEST_CASE9(void) {
 #if ELEN == 64
   VSET(2, e64, m2);
-  volatile uint64_t INP1[] __attribute__((aligned(32))) =
-    {0x99991348a9f38cd1, 0x9fa831c7a11a9384,
-     0x9fa831c7a11a9384, 0x9fa831c7a11a9384,
-     0x9fa831c7a11a9384, 0x01015ac1309bb678};
+  volatile uint64_t INP1[] __attribute__((aligned(32))) = {
+      0x99991348a9f38cd1, 0x9fa831c7a11a9384, 0x9fa831c7a11a9384,
+      0x9fa831c7a11a9384, 0x9fa831c7a11a9384, 0x01015ac1309bb678};
   uint64_t stride = 40;
   asm volatile("vlse64.v v2, (%0), %1" ::"r"(INP1), "r"(stride));
   VCMP_U64(9, v2, 0x99991348a9f38cd1, 0x01015ac1309bb678);
@@ -193,10 +191,10 @@ int main(void) {
   TEST_CASE9();
   TEST_CASE10();
 
-  //TEST_CASE11();
-  //TEST_CASE12();
-  //TEST_CASE13();
-  //TEST_CASE14();
+  // TEST_CASE11();
+  // TEST_CASE12();
+  // TEST_CASE13();
+  // TEST_CASE14();
 
   EXIT_CHECK();
 }

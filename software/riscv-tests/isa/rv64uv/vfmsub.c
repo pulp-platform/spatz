@@ -449,13 +449,14 @@ void TEST_CASE4(void) {
 };
 
 int main(void) {
-  INIT_CHECK();enable_vec();
+  INIT_CHECK();
+  enable_vec();
   enable_fp();
 
   TEST_CASE1();
-  //TEST_CASE2();
+  // TEST_CASE2();
   TEST_CASE3();
-  //TEST_CASE4();
+  // TEST_CASE4();
 
   EXIT_CHECK();
 }

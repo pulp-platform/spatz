@@ -779,25 +779,25 @@ int main(void) {
   enable_fp();
 
   TEST_CASE1();
-  //TEST_CASE2();
+  // TEST_CASE2();
 
   TEST_CASE3();
-  //TEST_CASE4();
+  // TEST_CASE4();
 
   TEST_CASE5();
-  //TEST_CASE6();
+  // TEST_CASE6();
 
   TEST_CASE7();
-  //TEST_CASE8();
+  // TEST_CASE8();
 
   TEST_CASE9();
-  //TEST_CASE10();
+  // TEST_CASE10();
 
   TEST_CASE11();
-  //TEST_CASE12();
+  // TEST_CASE12();
 
   TEST_CASE13();
-  //TEST_CASE14();
+  // TEST_CASE14();
 
   /*
   vfncvt.rod.f.f is not supported yet
