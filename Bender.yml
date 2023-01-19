@@ -35,7 +35,3 @@ sources:
         - hardware/src/spatz_controller.sv
         - hardware/src/spatz_fpu_sequencer.sv
         - hardware/src/spatz.sv
-
-    - target: spatz_test
-      files:
-        - hardware/tb/spatz_tb.sv
