@@ -333,19 +333,19 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
           lane_signal_inp.ops[0].ew8[1]  = op_s1[15:8];
           lane_signal_inp.ops[0].ew8[0]  = op_s1[7:0];
 
-          lane_signal_inp.ops[1].ew64    = is_signed && operation != VMULHSU ? 64'($signed(op_s2[63:56])) : 64'(op_s2[63:56]);
-          lane_signal_inp.ops[1].ew32    = is_signed && operation != VMULHSU ? 32'($signed(op_s2[55:48])) : 32'(op_s2[55:48]);
-          lane_signal_inp.ops[1].ew16[1] = is_signed && operation != VMULHSU ? 16'($signed(op_s2[47:40])) : 16'(op_s2[47:40]);
-          lane_signal_inp.ops[1].ew16[0] = is_signed && operation != VMULHSU ? 16'($signed(op_s2[39:32])) : 16'(op_s2[39:32]);
+          lane_signal_inp.ops[1].ew64    = is_signed ? 64'($signed(op_s2[63:56])) : 64'(op_s2[63:56]);
+          lane_signal_inp.ops[1].ew32    = is_signed ? 32'($signed(op_s2[55:48])) : 32'(op_s2[55:48]);
+          lane_signal_inp.ops[1].ew16[1] = is_signed ? 16'($signed(op_s2[47:40])) : 16'(op_s2[47:40]);
+          lane_signal_inp.ops[1].ew16[0] = is_signed ? 16'($signed(op_s2[39:32])) : 16'(op_s2[39:32]);
           lane_signal_inp.ops[1].ew8[3]  = op_s2[31:24];
           lane_signal_inp.ops[1].ew8[2]  = op_s2[23:16];
           lane_signal_inp.ops[1].ew8[1]  = op_s2[15:8];
           lane_signal_inp.ops[1].ew8[0]  = op_s2[7:0];
 
-          lane_signal_inp.ops[2].ew64    = is_signed && operation != VMULHSU ? 64'($signed(op_d[63:56])) : 64'(op_d[63:56]);
-          lane_signal_inp.ops[2].ew32    = is_signed && operation != VMULHSU ? 32'($signed(op_d[55:48])) : 32'(op_d[55:48]);
-          lane_signal_inp.ops[2].ew16[1] = is_signed && operation != VMULHSU ? 16'($signed(op_d[47:40])) : 16'(op_d[47:40]);
-          lane_signal_inp.ops[2].ew16[0] = is_signed && operation != VMULHSU ? 16'($signed(op_d[39:32])) : 16'(op_d[39:32]);
+          lane_signal_inp.ops[2].ew64    = is_signed ? 64'($signed(op_d[63:56])) : 64'(op_d[63:56]);
+          lane_signal_inp.ops[2].ew32    = is_signed ? 32'($signed(op_d[55:48])) : 32'(op_d[55:48]);
+          lane_signal_inp.ops[2].ew16[1] = is_signed ? 16'($signed(op_d[47:40])) : 16'(op_d[47:40]);
+          lane_signal_inp.ops[2].ew16[0] = is_signed ? 16'($signed(op_d[39:32])) : 16'(op_d[39:32]);
           lane_signal_inp.ops[2].ew8[3]  = op_d[31:24];
           lane_signal_inp.ops[2].ew8[2]  = op_d[23:16];
           lane_signal_inp.ops[2].ew8[1]  = op_d[15:8];
@@ -373,13 +373,13 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
           lane_signal_inp.ops[0].ew16[1] = op_s1[31:16];
           lane_signal_inp.ops[0].ew16[0] = op_s1[15:0];
 
-          lane_signal_inp.ops[1].ew64    = is_signed && operation != VMULHSU ? 64'($signed(op_s2[63:48])) : 64'(op_s2[63:48]);
-          lane_signal_inp.ops[1].ew32    = is_signed && operation != VMULHSU ? 32'($signed(op_s2[47:32])) : 32'(op_s2[47:32]);
+          lane_signal_inp.ops[1].ew64    = is_signed ? 64'($signed(op_s2[63:48])) : 64'(op_s2[63:48]);
+          lane_signal_inp.ops[1].ew32    = is_signed ? 32'($signed(op_s2[47:32])) : 32'(op_s2[47:32]);
           lane_signal_inp.ops[1].ew16[1] = op_s2[31:16];
           lane_signal_inp.ops[1].ew16[0] = op_s2[15:0];
 
-          lane_signal_inp.ops[2].ew64    = is_signed && operation != VMULHSU ? 64'($signed(op_d[63:48])) : 64'(op_d[63:48]);
-          lane_signal_inp.ops[2].ew32    = is_signed && operation != VMULHSU ? 32'($signed(op_d[47:32])) : 32'(op_d[47:32]);
+          lane_signal_inp.ops[2].ew64    = is_signed ? 64'($signed(op_d[63:48])) : 64'(op_d[63:48]);
+          lane_signal_inp.ops[2].ew32    = is_signed ? 32'($signed(op_d[47:32])) : 32'(op_d[47:32]);
           lane_signal_inp.ops[2].ew16[1] = op_d[31:16];
           lane_signal_inp.ops[2].ew16[0] = op_d[15:0];
 
@@ -399,10 +399,10 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
           lane_signal_inp.ops[0].ew64 = is_signed && operation != VMULHSU ? 64'($signed(op_s1[63:32])) : 64'(op_s1[63:32]);
           lane_signal_inp.ops[0].ew32 = op_s1[31:0];
 
-          lane_signal_inp.ops[1].ew64 = is_signed && operation != VMULHSU ? 64'($signed(op_s2[63:32])) : 64'(op_s2[63:32]);
+          lane_signal_inp.ops[1].ew64 = is_signed ? 64'($signed(op_s2[63:32])) : 64'(op_s2[63:32]);
           lane_signal_inp.ops[1].ew32 = op_s2[31:0];
 
-          lane_signal_inp.ops[2].ew64 = is_signed && operation != VMULHSU ? 64'($signed(op_d[63:32])) : 64'(op_d[63:32]);
+          lane_signal_inp.ops[2].ew64 = is_signed ? 64'($signed(op_d[63:32])) : 64'(op_d[63:32]);
           lane_signal_inp.ops[2].ew32 = op_d[31:0];
 
           lane_signal_inp.ew32_carry = carry[0];

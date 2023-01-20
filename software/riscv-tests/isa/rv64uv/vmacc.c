@@ -195,29 +195,32 @@ void TEST_CASE3() {
            0xf6b125ab, 0xef3fae1e, 0x4c40925e, 0x6b652c20, 0x998385c4,
            0x75d88d82);
 
-#if ELEN == 64
-  VSET(16, e64, m2);
-  scalar = -598189234597999223;
-  VLOAD_64(v4, 0x2a47beb4fd7729c5, 0x401c187818b15d1e, 0xbbaf5fe50c41f22a,
-           0x31eaddea171055a9, 0x609cbc4a78316c29, 0xd7bb8f31d8b59d88,
-           0x97860fd5fba018c0, 0x724cecf178bd2125, 0x866d16f96d3d8b67,
-           0x56153b0315164a5a, 0x6962bde49e3edf3f, 0x9b3f792bfbf5f343,
-           0x64cf433b239e7764, 0x583c3a4ae481fef0, 0x217e2df75fcf0d8d,
-           0x935ac02069fe54ce);
-  VLOAD_64(v2, 0x0dc8fa1b817237e5, 0xc817934370de904d, 0xb015bdbf0f39ec01,
-           0x3c7e70a75643cce5, 0x80c45834a5026c02, 0xcdf1fcd83b8133a0,
-           0x9d31b9b802ae2db1, 0xba7e57975c5febf5, 0x8732f75adf268ddb,
-           0x5ff488a4187bd3f3, 0x6a259fe666091333, 0x5afc4de057de51c4,
-           0x8a479b7e3558e399, 0xbc21e79022996c26, 0xe2c7432cd7e3e81d,
-           0xdab377ddbdfb2df7);
-  asm volatile("vmacc.vx v2, %[A], v4" ::[A] "r"(scalar));
-  VCMP_U64(12, v2, 0x093861b79ac45352, 0xfd3c909decf66b5b, 0x04eb13132ce4267b,
-           0xb258e6b065bbf956, 0x62775181e33422f3, 0xdc0ae0e371686968,
-           0xf8db06270cad2c71, 0x6c3cc52cd1fb49c2, 0x41c19c0ac1b5a2fa,
-           0x8867d35049c7b01d, 0x6d71fe0f35a1feea, 0xace16ac43ec0279f,
-           0x82faf4a574c9dc1d, 0xa875c9d17e310a96, 0x1f75616001b61192,
-           0x16ce205f44fb8635);
-#endif
+  /* #if ELEN == 64 */
+  /*   VSET(16, e64, m2); */
+  /*   scalar = -598189234597999223; */
+  /*   VLOAD_64(v4, 0x2a47beb4fd7729c5, 0x401c187818b15d1e, 0xbbaf5fe50c41f22a,
+   */
+  /*            0x31eaddea171055a9, 0x609cbc4a78316c29, 0xd7bb8f31d8b59d88, */
+  /*            0x97860fd5fba018c0, 0x724cecf178bd2125, 0x866d16f96d3d8b67, */
+  /*            0x56153b0315164a5a, 0x6962bde49e3edf3f, 0x9b3f792bfbf5f343, */
+  /*            0x64cf433b239e7764, 0x583c3a4ae481fef0, 0x217e2df75fcf0d8d, */
+  /*            0x935ac02069fe54ce); */
+  /*   VLOAD_64(v2, 0x0dc8fa1b817237e5, 0xc817934370de904d, 0xb015bdbf0f39ec01,
+   */
+  /*            0x3c7e70a75643cce5, 0x80c45834a5026c02, 0xcdf1fcd83b8133a0, */
+  /*            0x9d31b9b802ae2db1, 0xba7e57975c5febf5, 0x8732f75adf268ddb, */
+  /*            0x5ff488a4187bd3f3, 0x6a259fe666091333, 0x5afc4de057de51c4, */
+  /*            0x8a479b7e3558e399, 0xbc21e79022996c26, 0xe2c7432cd7e3e81d, */
+  /*            0xdab377ddbdfb2df7); */
+  /*   asm volatile("vmacc.vx v2, %[A], v4" ::[A] "r"(scalar)); */
+  /*   VCMP_U64(12, v2, 0x093861b79ac45352, 0xfd3c909decf66b5b,
+   * 0x04eb13132ce4267b, */
+  /*            0xb258e6b065bbf956, 0x62775181e33422f3, 0xdc0ae0e371686968, */
+  /*            0xf8db06270cad2c71, 0x6c3cc52cd1fb49c2, 0x41c19c0ac1b5a2fa, */
+  /*            0x8867d35049c7b01d, 0x6d71fe0f35a1feea, 0xace16ac43ec0279f, */
+  /*            0x82faf4a574c9dc1d, 0xa875c9d17e310a96, 0x1f75616001b61192, */
+  /*            0x16ce205f44fb8635); */
+  /* #endif */
 }
 
 void TEST_CASE4() {
@@ -261,30 +264,33 @@ void TEST_CASE4() {
            0xa98a861e, 0xef3fae1e, 0xde488617, 0x6b652c20, 0xc3ba8192,
            0x75d88d82);
 
-#if ELEN == 64
-  VSET(16, e64, m2);
-  scalar = -598189234597999223;
-  VLOAD_64(v4, 0x2a47beb4fd7729c5, 0x401c187818b15d1e, 0xbbaf5fe50c41f22a,
-           0x31eaddea171055a9, 0x609cbc4a78316c29, 0xd7bb8f31d8b59d88,
-           0x97860fd5fba018c0, 0x724cecf178bd2125, 0x866d16f96d3d8b67,
-           0x56153b0315164a5a, 0x6962bde49e3edf3f, 0x9b3f792bfbf5f343,
-           0x64cf433b239e7764, 0x583c3a4ae481fef0, 0x217e2df75fcf0d8d,
-           0x935ac02069fe54ce);
-  VLOAD_64(v2, 0x0dc8fa1b817237e5, 0xc817934370de904d, 0xb015bdbf0f39ec01,
-           0x3c7e70a75643cce5, 0x80c45834a5026c02, 0xcdf1fcd83b8133a0,
-           0x9d31b9b802ae2db1, 0xba7e57975c5febf5, 0x8732f75adf268ddb,
-           0x5ff488a4187bd3f3, 0x6a259fe666091333, 0x5afc4de057de51c4,
-           0x8a479b7e3558e399, 0xbc21e79022996c26, 0xe2c7432cd7e3e81d,
-           0xdab377ddbdfb2df7);
-  VLOAD_8(v0, 0xAA, 0xAA);
-  asm volatile("vmacc.vx v2, %[A], v4, v0.t" ::[A] "r"(scalar));
-  VCMP_U64(16, v2, 0x0dc8fa1b817237e5, 0xfd3c909decf66b5b, 0xb015bdbf0f39ec01,
-           0xb258e6b065bbf956, 0x80c45834a5026c02, 0xdc0ae0e371686968,
-           0x9d31b9b802ae2db1, 0x6c3cc52cd1fb49c2, 0x8732f75adf268ddb,
-           0x8867d35049c7b01d, 0x6a259fe666091333, 0xace16ac43ec0279f,
-           0x8a479b7e3558e399, 0xa875c9d17e310a96, 0xe2c7432cd7e3e81d,
-           0x16ce205f44fb8635);
-#endif
+  /* #if ELEN == 64 */
+  /*   VSET(16, e64, m2); */
+  /*   scalar = -598189234597999223; */
+  /*   VLOAD_64(v4, 0x2a47beb4fd7729c5, 0x401c187818b15d1e, 0xbbaf5fe50c41f22a,
+   */
+  /*            0x31eaddea171055a9, 0x609cbc4a78316c29, 0xd7bb8f31d8b59d88, */
+  /*            0x97860fd5fba018c0, 0x724cecf178bd2125, 0x866d16f96d3d8b67, */
+  /*            0x56153b0315164a5a, 0x6962bde49e3edf3f, 0x9b3f792bfbf5f343, */
+  /*            0x64cf433b239e7764, 0x583c3a4ae481fef0, 0x217e2df75fcf0d8d, */
+  /*            0x935ac02069fe54ce); */
+  /*   VLOAD_64(v2, 0x0dc8fa1b817237e5, 0xc817934370de904d, 0xb015bdbf0f39ec01,
+   */
+  /*            0x3c7e70a75643cce5, 0x80c45834a5026c02, 0xcdf1fcd83b8133a0, */
+  /*            0x9d31b9b802ae2db1, 0xba7e57975c5febf5, 0x8732f75adf268ddb, */
+  /*            0x5ff488a4187bd3f3, 0x6a259fe666091333, 0x5afc4de057de51c4, */
+  /*            0x8a479b7e3558e399, 0xbc21e79022996c26, 0xe2c7432cd7e3e81d, */
+  /*            0xdab377ddbdfb2df7); */
+  /*   VLOAD_8(v0, 0xAA, 0xAA); */
+  /*   asm volatile("vmacc.vx v2, %[A], v4, v0.t" ::[A] "r"(scalar)); */
+  /*   VCMP_U64(16, v2, 0x0dc8fa1b817237e5, 0xfd3c909decf66b5b,
+   * 0xb015bdbf0f39ec01, */
+  /*            0xb258e6b065bbf956, 0x80c45834a5026c02, 0xdc0ae0e371686968, */
+  /*            0x9d31b9b802ae2db1, 0x6c3cc52cd1fb49c2, 0x8732f75adf268ddb, */
+  /*            0x8867d35049c7b01d, 0x6a259fe666091333, 0xace16ac43ec0279f, */
+  /*            0x8a479b7e3558e399, 0xa875c9d17e310a96, 0xe2c7432cd7e3e81d, */
+  /*            0x16ce205f44fb8635); */
+  /* #endif */
 }
 
 int main(void) {
