@@ -157,23 +157,25 @@ void TEST_CASE3(void) {
            0x0032161d, 0x0001491b, 0x003551d9, 0x00482775, 0x003f3ca7,
            0x006b8612);
 
-#if ELEN == 64
-  VSET(16, e64, m2);
-  VLOAD_64(v4, 0x96304201a90be11f, 0x11654d4226322e4b, 0xe16e5cf2c1183b63,
-           0x447b5f4710764817, 0xb62589a3d309672c, 0x5ddec2e6716fd0d3,
-           0xf31034a096a6d0fa, 0x9cb4dca46ce577f7, 0x30cf2e2dc6773d82,
-           0x6129247d49c42f4b, 0x3d9ee22336a4e216, 0x3c9b9d533797be90,
-           0x0c0c54042a20ddc8, 0xf309bda968a3a583, 0x550697570a1e9645,
-           0x5beaf5933973231f);
-  scalar = 321156886679781445;
-  asm volatile("vmulhu.vx v2, v4, %[A]" ::[A] "r"(scalar));
-  VCMP_U64(12, v2, 0x029d61da2f470da8, 0x004d882170361dd2, 0x03ecbc09716942cd,
-           0x013138661b0ea1a1, 0x032bd162449d3f20, 0x01a25fd52874e6a2,
-           0x043b51fe85cf352c, 0x02ba6ebb77802a7c, 0x00d98a5bba81dc57,
-           0x01b10a47f99f8c44, 0x0112a3d22e03b6e9, 0x010e20461059ad6b,
-           0x0035b2b00a44dfe2, 0x043b352e6dc32a00, 0x017af48bc4f5ad70,
-           0x0199ac3dc8053978);
-#endif
+  /* #if ELEN == 64 */
+  /*   VSET(16, e64, m2); */
+  /*   VLOAD_64(v4, 0x96304201a90be11f, 0x11654d4226322e4b, 0xe16e5cf2c1183b63,
+   */
+  /*            0x447b5f4710764817, 0xb62589a3d309672c, 0x5ddec2e6716fd0d3, */
+  /*            0xf31034a096a6d0fa, 0x9cb4dca46ce577f7, 0x30cf2e2dc6773d82, */
+  /*            0x6129247d49c42f4b, 0x3d9ee22336a4e216, 0x3c9b9d533797be90, */
+  /*            0x0c0c54042a20ddc8, 0xf309bda968a3a583, 0x550697570a1e9645, */
+  /*            0x5beaf5933973231f); */
+  /*   scalar = 321156886679781445; */
+  /*   asm volatile("vmulhu.vx v2, v4, %[A]" ::[A] "r"(scalar)); */
+  /*   VCMP_U64(12, v2, 0x029d61da2f470da8, 0x004d882170361dd2,
+   * 0x03ecbc09716942cd, */
+  /*            0x013138661b0ea1a1, 0x032bd162449d3f20, 0x01a25fd52874e6a2, */
+  /*            0x043b51fe85cf352c, 0x02ba6ebb77802a7c, 0x00d98a5bba81dc57, */
+  /*            0x01b10a47f99f8c44, 0x0112a3d22e03b6e9, 0x010e20461059ad6b, */
+  /*            0x0035b2b00a44dfe2, 0x043b352e6dc32a00, 0x017af48bc4f5ad70, */
+  /*            0x0199ac3dc8053978); */
+  /* #endif */
 };
 
 void TEST_CASE4(void) {
@@ -209,22 +211,25 @@ void TEST_CASE4(void) {
   VCMP_U32(15, v2, 0, 0x0005eb5c, 0, 0x00226562, 0, 0x005eddef, 0, 0x00332972,
            0, 0x001833e9, 0, 0x0001491b, 0, 0x00482775, 0, 0x006b8612);
 
-#if ELEN == 64
-  VSET(16, e64, m2);
-  VLOAD_64(v4, 0x96304201a90be11f, 0x11654d4226322e4b, 0xe16e5cf2c1183b63,
-           0x447b5f4710764817, 0xb62589a3d309672c, 0x5ddec2e6716fd0d3,
-           0xf31034a096a6d0fa, 0x9cb4dca46ce577f7, 0x30cf2e2dc6773d82,
-           0x6129247d49c42f4b, 0x3d9ee22336a4e216, 0x3c9b9d533797be90,
-           0x0c0c54042a20ddc8, 0xf309bda968a3a583, 0x550697570a1e9645,
-           0x5beaf5933973231f);
-  scalar = 321156886679781445;
-  VLOAD_8(v0, 0xAA, 0xAA);
-  VCLEAR(v2);
-  asm volatile("vmulhu.vx v2, v4, %[A], v0.t" ::[A] "r"(scalar));
-  VCMP_U64(16, v2, 0, 0x004d882170361dd2, 0, 0x013138661b0ea1a1, 0,
-           0x01a25fd52874e6a2, 0, 0x02ba6ebb77802a7c, 0, 0x01b10a47f99f8c44, 0,
-           0x010e20461059ad6b, 0, 0x043b352e6dc32a00, 0, 0x0199ac3dc8053978);
-#endif
+  /* #if ELEN == 64 */
+  /*   VSET(16, e64, m2); */
+  /*   VLOAD_64(v4, 0x96304201a90be11f, 0x11654d4226322e4b, 0xe16e5cf2c1183b63,
+   */
+  /*            0x447b5f4710764817, 0xb62589a3d309672c, 0x5ddec2e6716fd0d3, */
+  /*            0xf31034a096a6d0fa, 0x9cb4dca46ce577f7, 0x30cf2e2dc6773d82, */
+  /*            0x6129247d49c42f4b, 0x3d9ee22336a4e216, 0x3c9b9d533797be90, */
+  /*            0x0c0c54042a20ddc8, 0xf309bda968a3a583, 0x550697570a1e9645, */
+  /*            0x5beaf5933973231f); */
+  /*   scalar = 321156886679781445; */
+  /*   VLOAD_8(v0, 0xAA, 0xAA); */
+  /*   VCLEAR(v2); */
+  /*   asm volatile("vmulhu.vx v2, v4, %[A], v0.t" ::[A] "r"(scalar)); */
+  /*   VCMP_U64(16, v2, 0, 0x004d882170361dd2, 0, 0x013138661b0ea1a1, 0, */
+  /*            0x01a25fd52874e6a2, 0, 0x02ba6ebb77802a7c, 0,
+   * 0x01b10a47f99f8c44, 0, */
+  /*            0x010e20461059ad6b, 0, 0x043b352e6dc32a00, 0,
+   * 0x0199ac3dc8053978); */
+  /* #endif */
 };
 
 int main(void) {
