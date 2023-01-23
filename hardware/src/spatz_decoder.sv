@@ -254,6 +254,14 @@ module spatz_decoder
         riscv_instr::VMAX_VX,
         riscv_instr::VMAXU_VV,
         riscv_instr::VMAXU_VX,
+        riscv_instr::VREDSUM_VS,
+        riscv_instr::VREDAND_VS,
+        riscv_instr::VREDOR_VS,
+        riscv_instr::VREDXOR_VS,
+        riscv_instr::VREDMIN_VS,
+        riscv_instr::VREDMINU_VS,
+        riscv_instr::VREDMAX_VS,
+        riscv_instr::VREDMAXU_VS,
         riscv_instr::VMSEQ_VV,
         riscv_instr::VMSEQ_VX,
         riscv_instr::VMSEQ_VI,
@@ -414,6 +422,47 @@ module spatz_decoder
             riscv_instr::VMSBC_VXM: begin
               spatz_req.op                           = VMSBC;
               spatz_req.op_arith.use_carry_borrow_in = 1'b1;
+            end
+
+            // Reductions
+            riscv_instr::VREDSUM_VS: begin
+              spatz_req.op                    = VADD;
+              spatz_req.op_arith.is_reduction = 1'b1;
+            end
+
+            riscv_instr::VREDAND_VS: begin
+              spatz_req.op                    = VAND;
+              spatz_req.op_arith.is_reduction = 1'b1;
+            end
+
+            riscv_instr::VREDOR_VS: begin
+              spatz_req.op                    = VOR;
+              spatz_req.op_arith.is_reduction = 1'b1;
+            end
+
+            riscv_instr::VREDXOR_VS: begin
+              spatz_req.op                    = VXOR;
+              spatz_req.op_arith.is_reduction = 1'b1;
+            end
+
+            riscv_instr::VREDMIN_VS: begin
+              spatz_req.op                    = VMIN;
+              spatz_req.op_arith.is_reduction = 1'b1;
+            end
+
+            riscv_instr::VREDMINU_VS: begin
+              spatz_req.op                    = VMINU;
+              spatz_req.op_arith.is_reduction = 1'b1;
+            end
+
+            riscv_instr::VREDMAX_VS: begin
+              spatz_req.op                    = VMAX;
+              spatz_req.op_arith.is_reduction = 1'b1;
+            end
+
+            riscv_instr::VREDMAXU_VS: begin
+              spatz_req.op                    = VMAXU;
+              spatz_req.op_arith.is_reduction = 1'b1;
             end
 
             // Vector Shift
@@ -671,6 +720,10 @@ module spatz_decoder
         riscv_instr::VFMSAC_VF,
         riscv_instr::VFNMSAC_VV,
         riscv_instr::VFNMSAC_VF,
+        riscv_instr::VFREDOSUM_VS,
+        riscv_instr::VFREDUSUM_VS,
+        riscv_instr::VFREDMAX_VS,
+        riscv_instr::VFREDMIN_VS,
         riscv_instr::VFCVT_F_X_V,
         riscv_instr::VFCVT_F_XU_V,
         riscv_instr::VFCVT_X_F_V,
@@ -794,6 +847,25 @@ module spatz_decoder
                 spatz_req.op                     = VFNMSUB;
                 spatz_req.vd_is_src              = 1'b1;
                 spatz_req.op_arith.switch_rs1_rd = decoder_req_i.instr inside {riscv_instr::VFNMSUB_VV, riscv_instr::VFNMSUB_VF};
+              end
+
+              // Reductions
+              riscv_instr::VFREDUSUM_VS,
+              riscv_instr::VFREDOSUM_VS: begin
+                spatz_req.op                    = VFADD;
+                spatz_req.op_arith.is_reduction = 1'b1;
+              end
+
+              riscv_instr::VFREDMIN_VS: begin
+                spatz_req.op                    = VFMINMAX;
+                spatz_req.rm                    = fpnew_pkg::RNE;
+                spatz_req.op_arith.is_reduction = 1'b1;
+              end
+
+              riscv_instr::VFREDMAX_VS: begin
+                spatz_req.op                    = VFMINMAX;
+                spatz_req.rm                    = fpnew_pkg::RTZ;
+                spatz_req.op_arith.is_reduction = 1'b1;
               end
 
               riscv_instr::VFSGNJ_VV,

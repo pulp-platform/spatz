@@ -156,6 +156,7 @@ package spatz_pkg;
     logic use_carry_borrow_in;
     logic is_scalar;
     logic is_narrowing;
+    logic is_reduction;
     logic switch_rs1_rd;
 
     logic widen_vs1;
