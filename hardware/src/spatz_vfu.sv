@@ -615,7 +615,7 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
       int_ipu_operand1 = operand1[ipu_operand_pnt_q*ELEN*N_IPU +: ELEN*N_IPU];
       int_ipu_operand2 = operand2[ipu_operand_pnt_q*ELEN*N_IPU +: ELEN*N_IPU];
       int_ipu_operand3 = operand3[ipu_operand_pnt_q*ELEN*N_IPU +: ELEN*N_IPU];
-      if (spatz_req_valid && operands_ready && !is_fpu_insn) begin
+      if (spatz_req_valid && operands_ready && &int_ipu_in_ready && !is_fpu_insn) begin
         ipu_operand_pnt_d = ipu_operand_pnt_q + 1;
         if (ipu_operand_pnt_d == '0 || !(&valid_operations[ipu_operand_pnt_d*ELENB*N_IPU +: ELENB*N_IPU]))
           ipu_operand_pnt_d = '0;
