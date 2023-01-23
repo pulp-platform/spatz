@@ -45,12 +45,12 @@
 #define N MATRIX_DIM
 #define P MATRIX_DIM
 
-__fp16 *a;
-__fp16 *b;
-__fp16 *c;
+double *a;
+double *b;
+double *c;
 
 // Initialize the matrices
-void init_matrix(__fp16 *matrix, const __fp16 *src,
+void init_matrix(double *matrix, const double *src,
                  const unsigned int rows_start, const unsigned int rows_end,
                  const unsigned int num_columns) {
   for (unsigned int i = rows_start; i < rows_end; ++i) {
@@ -61,7 +61,7 @@ void init_matrix(__fp16 *matrix, const __fp16 *src,
 }
 
 // Verify the matrices
-int verify_matrix(__fp16 *matrix, const __fp16 *checksum,
+int verify_matrix(double *matrix, const double *checksum,
                   const unsigned int num_rows, const unsigned int num_columns) {
   for (unsigned int i = 0; i < num_rows; ++i) {
     float sum = 0;
@@ -79,7 +79,7 @@ int verify_matrix(__fp16 *matrix, const __fp16 *checksum,
   return 0;
 }
 
-void print_matrix(__fp16 const *matrix, unsigned int num_rows,
+void print_matrix(double const *matrix, unsigned int num_rows,
                   unsigned int num_columns) {
   printf("0x%8X\n", (unsigned int)matrix);
   for (unsigned int i = 0; i < num_rows; ++i) {
@@ -120,9 +120,9 @@ int main() {
 
   // Allocate the matrices in the local tile
   if (cid == 0) {
-    a = (__fp16 *)domain_malloc(get_alloc_tile(0), M * N * sizeof(__fp16));
-    b = (__fp16 *)domain_malloc(get_alloc_tile(0), N * P * sizeof(__fp16));
-    c = (__fp16 *)domain_malloc(get_alloc_tile(0), M * P * sizeof(__fp16));
+    a = (double *)domain_malloc(get_alloc_tile(0), M * N * sizeof(double));
+    b = (double *)domain_malloc(get_alloc_tile(0), N * P * sizeof(double));
+    c = (double *)domain_malloc(get_alloc_tile(0), M * P * sizeof(double));
 
     printf("A is %0X, B is %0X, C is %0X\n", a, b, c);
   }
@@ -226,7 +226,7 @@ int main() {
   }
 
   if (cid == 0) {
-    int error = verify_matrix(c, (const __fp16 *)gemm_checksum, dim, dim);
+    int error = verify_matrix(c, (const double *)gemm_checksum, dim, dim);
 
     if (error != 0) {
       printf("Error core %d: c[%d]=%u\n", cid, error, (int)c[error]);

@@ -19,24 +19,24 @@
 #ifndef DPFMATMUL_H
 #define DPFMATMUL_H
 
-void matmul(__fp16 *c, const __fp16 *a, const __fp16 *b, const unsigned int M,
+void matmul(double *c, const double *a, const double *b, const unsigned int M,
             const unsigned int N, const unsigned int P);
 
-inline void matmul_single_unrolled(__fp16 *c, const __fp16 *a, const __fp16 *b,
+inline void matmul_single_unrolled(double *c, const double *a, const double *b,
                                    const unsigned int N, const unsigned int P,
                                    unsigned int vl)
     __attribute__((always_inline));
-inline void matmul_2xVL(__fp16 *c, const __fp16 *a, const __fp16 *b,
+inline void matmul_2xVL(double *c, const double *a, const double *b,
                         const unsigned int m_start, const unsigned int m_end,
                         const unsigned int N, const unsigned int P,
                         const unsigned int p_start, const unsigned int p_end,
                         const unsigned int vl) __attribute__((always_inline));
-inline void matmul_4xVL(__fp16 *c, const __fp16 *a, const __fp16 *b,
+inline void matmul_4xVL(double *c, const double *a, const double *b,
                         const unsigned int m_start, const unsigned int m_end,
                         const unsigned int N, const unsigned int P,
                         const unsigned int p_start, const unsigned int p_end,
                         const unsigned int vl) __attribute__((always_inline));
-inline void matmul_8xVL(__fp16 *c, const __fp16 *a, const __fp16 *b,
+inline void matmul_8xVL(double *c, const double *a, const double *b,
                         const unsigned int m_start, const unsigned int m_end,
                         const unsigned int N, const unsigned int P,
                         const unsigned int p_start, const unsigned int p_end,
