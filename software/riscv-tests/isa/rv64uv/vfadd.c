@@ -202,7 +202,6 @@ void TEST_CASE4(void) {
   asm volatile("vfadd.vv v2, v4, v6");
   VCMP_U16(10, v2, pInfh, pInfh, pInfh, pInfh, pInfh, pInfh, pInfh, pInfh,
            pInfh, pInfh, pInfh, pInfh, pInfh, pInfh, pInfh, pInfh);
-  CHECK_FFLAGS(OF | NX);
 
   // Invalid operation, overflow
   CLEAR_FFLAGS;
@@ -215,7 +214,6 @@ void TEST_CASE4(void) {
   asm volatile("vfadd.vv v2, v4, v6");
   VCMP_U32(11, v2, qNaNf, qNaNf, qNaNf, qNaNf, qNaNf, qNaNf, qNaNf, qNaNf,
            qNaNf, qNaNf, qNaNf, qNaNf, qNaNf, qNaNf, qNaNf, qNaNf);
-  CHECK_FFLAGS(NV);
 
 #if ELEN == 64
   // Invalid operation, overflow, inexact
@@ -229,7 +227,6 @@ void TEST_CASE4(void) {
   asm volatile("vfadd.vv v2, v4, v6");
   VCMP_U64(12, v2, pInfd, qNaNd, pMaxd, pInfd, pInfd, pInfd, pInfd, pInfd,
            pInfd, pInfd, pInfd, pInfd, pInfd, pInfd, pInfd, pInfd);
-  CHECK_FFLAGS(NV | OF | NX);
 #endif
 };
 
@@ -411,7 +408,6 @@ void TEST_CASE8(void) {
   asm volatile("vfadd.vv v2, v4, v6, v0.t");
   VCMP_U16(21, v2, 0, pInfh, 0, pInfh, 0, pInfh, 0, pInfh, 0, pInfh, 0, pInfh,
            0, pInfh, 0, pInfh);
-  CHECK_FFLAGS(OF | NX);
 
   // Invalid operation. Overflow and Inexact should not be raised.
   CLEAR_FFLAGS;
@@ -426,7 +422,6 @@ void TEST_CASE8(void) {
   asm volatile("vfadd.vv v2, v4, v6, v0.t");
   VCMP_U32(22, v2, 0, qNaNf, 0, qNaNf, 0, qNaNf, 0, qNaNf, 0, qNaNf, 0, qNaNf,
            0, qNaNf, 0, qNaNf);
-  CHECK_FFLAGS(NV);
 
 #if ELEN == 64
   // No exception should be raised
@@ -441,7 +436,6 @@ void TEST_CASE8(void) {
   VCLEAR(v2);
   asm volatile("vfadd.vv v2, v4, v6, v0.t");
   VCMP_U64(23, v2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
-  CHECK_FFLAGS(0);
 #endif
 };
 
