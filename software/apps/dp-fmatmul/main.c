@@ -104,7 +104,6 @@ int main() {
   const unsigned int measure_iterations = 1;
 
   unsigned int timer_start, timer_end, timer;
-  unsigned int row_start, row_end;
 
   unsigned int m_start, m_end;
   unsigned int p_start, p_end;
@@ -166,15 +165,6 @@ int main() {
   mempool_barrier(num_cores);
 
   // Initialize matrices
-  const unsigned int cores_per_row = active_cores / dim;
-  if (dim < active_cores) {
-    row_start = cid / cores_per_row;
-    row_end = cid / cores_per_row + 1;
-  } else {
-    row_start = dim / num_cores * cid;
-    row_end = dim / num_cores * (cid + 1);
-  }
-
   if (cid == 0) {
     init_matrix(a, gemm_A_dram, 0, dim, dim);
     init_matrix(b, gemm_B_dram, 0, dim, dim);
