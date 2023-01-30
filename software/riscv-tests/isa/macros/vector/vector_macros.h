@@ -109,9 +109,9 @@ int test_case;
 // Check the results against a vector of golden values
 #define VCMP(T,str,casenum,vexp,act...)                                                 \
   do {                                                                                  \
-    T vact[] = {act};                                                                   \
+    volatile T vact[] = {act};                                                          \
     MEMORY_BARRIER;                                                                     \
-    for (unsigned int i = 1; i < sizeof(vact)/sizeof(T); i++) {                         \
+    for (unsigned int i = 0; i < sizeof(vact)/sizeof(T); i++) {                         \
       if (vexp[i] != vact[i]) {                                                         \
         printf("[TC %d] Index %d FAILED. Got "#str", expected "#str".\n", casenum, i, vexp[i], vact[i]); \
         num_failed++;                                                                   \
