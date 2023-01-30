@@ -180,6 +180,10 @@ int main() {
       // Start timer
       timer_start = mempool_get_timer();
 
+      // Start dump
+      if (cid == 0)
+        start_kernel();
+
       if (kernel_size == 2) {
         matmul_2xVL(c, a, b, m_start, m_end, dim, dim, p_start, p_end, vl);
       } else if (kernel_size == 4) {
@@ -193,6 +197,10 @@ int main() {
 
     // Wait for all cores to finish matmul
     mempool_barrier(num_cores);
+
+    // End dump
+    if (cid == 0)
+      stop_kernel();
 
     // End timer and check if new best runtime
     timer_end = mempool_get_timer();
