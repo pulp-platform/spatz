@@ -52,14 +52,14 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
   if (Pipeline) begin: gen_pipeline
     assign operation_ready_o = !operation_valid || operation_valid && result_ready_i;
 
-    `FFL(operation, operation_i, operation_ready_o, VMIN)
+    `FFL(operation, operation_i, operation_valid_i && operation_ready_o, VMIN)
     `FFL(operation_valid, operation_valid_i, operation_ready_o, 1'b0)
-    `FFL(op_s1, op_s1_i, operation_ready_o, '0)
-    `FFL(op_s2, op_s2_i, operation_ready_o, '0)
-    `FFL(op_d, op_d_i, operation_ready_o, '0)
-    `FFL(carry, carry_i, operation_ready_o, '0)
-    `FFL(sew, sew_i, operation_ready_o, rvv_pkg::EW_32)
-    `FFL(tag_o, tag_i, operation_ready_o, '0)
+    `FFL(op_s1, op_s1_i, operation_valid_i && operation_ready_o, '0)
+    `FFL(op_s2, op_s2_i, operation_valid_i && operation_ready_o, '0)
+    `FFL(op_d, op_d_i, operation_valid_i && operation_ready_o, '0)
+    `FFL(carry, carry_i, operation_valid_i && operation_ready_o, '0)
+    `FFL(sew, sew_i, operation_valid_i && operation_ready_o, rvv_pkg::EW_32)
+    `FFL(tag_o, tag_i, operation_valid_i && operation_ready_o, '0)
   end: gen_pipeline else begin: gen_pipeline
     assign operation         = operation_i;
     assign operation_valid   = operation_valid_i;
