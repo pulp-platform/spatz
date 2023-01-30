@@ -341,17 +341,17 @@ package spatz_pkg;
   // Double Precision Configuration
   '{
     PipeRegs: '{
-      '{2, // FP32
-        3, // FP64
-        1, // FP16
-        1, // FP8
-        1, // FP16alt
-        1  // FP8alt
+      '{1, // FP32
+        2, // FP64
+        0, // FP16
+        0, // FP8
+        0, // FP16alt
+        0  // FP8alt
       },                   // FMA Block
       '{1, 1, 1, 1, 1, 1}, // DIVSQRT
-      '{1, 1, 1, 1, 1, 1}, // NONCOMP
-      '{2, 2, 2, 2, 2, 2}, // CONV
-      '{3, 3, 3, 3, 3, 3}  // DOTP
+      '{0, 0, 0, 0, 0, 0}, // NONCOMP
+      '{1, 1, 1, 1, 1, 1}, // CONV
+      '{2, 2, 2, 2, 2, 2}  // DOTP
     },
     UnitTypes: '{
       '{fpnew_pkg::MERGED, fpnew_pkg::MERGED, fpnew_pkg::MERGED, fpnew_pkg::MERGED, fpnew_pkg::MERGED, fpnew_pkg::MERGED},             // FMA
@@ -367,17 +367,17 @@ package spatz_pkg;
     PipeRegs: '{
       // FMA Block
       '{
-        1, // FP32
-        4, // FP64
-        1, // FP16
-        1, // FP8
-        1, // FP16alt
-        1  // FP8alt
+        0, // FP32
+        3, // FP64
+        0, // FP16
+        0, // FP8
+        0, // FP16alt
+        0  // FP8alt
       },
       '{1, 1, 1, 1, 1, 1}, // DIVSQRT
-      '{1, 1, 1, 1, 1, 1}, // NONCOMP
-      '{2, 2, 2, 2, 2, 2}, // CONV
-      '{3, 3, 3, 3, 3, 3}  // DOTP
+      '{0, 0, 0, 0, 0, 0}, // NONCOMP
+      '{1, 1, 1, 1, 1, 1}, // CONV
+      '{2, 2, 2, 2, 2, 2}  // DOTP
     },
     UnitTypes: '{
       '{fpnew_pkg::MERGED, fpnew_pkg::MERGED, fpnew_pkg::MERGED, fpnew_pkg::MERGED, fpnew_pkg::MERGED, fpnew_pkg::MERGED},             // FMA

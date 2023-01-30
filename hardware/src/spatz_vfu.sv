@@ -9,7 +9,8 @@
 // of IPUs that work in parallel.
 
 module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx_width;
-  import fpnew_pkg::roundmode_e; import fpnew_pkg::status_t; (
+  import fpnew_pkg::roundmode_e; import fpnew_pkg::status_t; import fpnew_pkg::operation_e;
+  import fpnew_pkg::int_format_e; import fpnew_pkg::fp_format_e; (
     input  logic             clk_i,
     input  logic             rst_ni,
     // Spatz req
@@ -695,9 +696,9 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
   ////////////
 
   if (FPU) begin: gen_fpu
-    fpnew_pkg::operation_e fpu_op;
-    fpnew_pkg::fp_format_e fpu_src_fmt, fpu_dst_fmt;
-    fpnew_pkg::int_format_e fpu_int_fmt;
+    operation_e fpu_op;
+    fp_format_e fpu_src_fmt, fpu_dst_fmt;
+    int_format_e fpu_int_fmt;
     logic fpu_op_mode;
     logic fpu_vectorial_op;
 
@@ -847,32 +848,61 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
       assign fpu_operand2 = wide_operand2[fpu*ELEN +: ELEN];
       assign fpu_operand3 = (fpu_op == fpnew_pkg::ADD || spatz_req.op_arith.switch_rs1_rd) ? wide_operand1[fpu*ELEN +: ELEN] : wide_operand3[fpu*ELEN +: ELEN];
 
+      logic int_fpu_in_valid;
+      assign int_fpu_in_valid = spatz_req_valid && operands_ready && (!spatz_req.op_arith.is_scalar || fpu == 0) && is_fpu_insn;
+
+      // Generate an FPU pipeline
+      elen_t fpu_operand1_q, fpu_operand2_q, fpu_operand3_q;
+      operation_e fpu_op_q;
+      fp_format_e fpu_src_fmt_q, fpu_dst_fmt_q;
+      int_format_e fpu_int_fmt_q;
+      logic fpu_op_mode_q;
+      logic fpu_vectorial_op_q;
+      fpnew_pkg::roundmode_e rm_q;
+      vfu_tag_t input_tag_q;
+      logic fpu_in_valid_q;
+      logic fpu_in_ready_d;
+
+      `FFL(fpu_operand1_q, fpu_operand1, int_fpu_in_valid && int_fpu_in_ready, '0)
+      `FFL(fpu_operand2_q, fpu_operand2, int_fpu_in_valid && int_fpu_in_ready, '0)
+      `FFL(fpu_operand3_q, fpu_operand3, int_fpu_in_valid && int_fpu_in_ready, '0)
+      `FFL(fpu_op_q, fpu_op, int_fpu_in_valid && int_fpu_in_ready, fpnew_pkg::FMADD)
+      `FFL(fpu_src_fmt_q, fpu_src_fmt, int_fpu_in_valid && int_fpu_in_ready, fpnew_pkg::FP32)
+      `FFL(fpu_dst_fmt_q, fpu_dst_fmt, int_fpu_in_valid && int_fpu_in_ready, fpnew_pkg::FP32)
+      `FFL(fpu_int_fmt_q, fpu_int_fmt, int_fpu_in_valid && int_fpu_in_ready, fpnew_pkg::INT8)
+      `FFL(fpu_op_mode_q, fpu_op_mode, int_fpu_in_valid && int_fpu_in_ready, 1'b0)
+      `FFL(fpu_vectorial_op_q, fpu_vectorial_op, int_fpu_in_valid && int_fpu_in_ready, 1'b0)
+      `FFL(rm_q, spatz_req.rm, int_fpu_in_valid && int_fpu_in_ready, fpnew_pkg::RNE)
+      `FFL(input_tag_q, input_tag, int_fpu_in_valid && int_fpu_in_ready, '{default: '0})
+      `FFL(fpu_in_valid_q, int_fpu_in_valid, int_fpu_in_ready, 1'b0)
+      assign int_fpu_in_ready = !fpu_in_valid_q || fpu_in_valid_q && fpu_in_ready_d;
+
       fpnew_top #(
         .Features      (FPUFeatures      ),
         .Implementation(FPUImplementation),
         .TagType       (vfu_tag_t        )
       ) i_fpu (
-        .clk_i         (clk_i                                                                                          ),
-        .rst_ni        (rst_ni                                                                                         ),
-        .flush_i       (1'b0                                                                                           ),
-        .busy_o        (fpu_busy_d[fpu]                                                                                ),
-        .operands_i    ({fpu_operand3, fpu_operand2, fpu_operand1}                                                     ),
+        .clk_i         (clk_i                                           ),
+        .rst_ni        (rst_ni                                          ),
+        .flush_i       (1'b0                                            ),
+        .busy_o        (fpu_busy_d[fpu]                                 ),
+        .operands_i    ({fpu_operand3_q, fpu_operand2_q, fpu_operand1_q}),
         // Only the FPU0 executes scalar instructions
-        .in_valid_i    (spatz_req_valid && operands_ready && (!spatz_req.op_arith.is_scalar || fpu == 0) && is_fpu_insn),
-        .in_ready_o    (int_fpu_in_ready                                                                               ),
-        .op_i          (fpu_op                                                                                         ),
-        .src_fmt_i     (fpu_src_fmt                                                                                    ),
-        .dst_fmt_i     (fpu_dst_fmt                                                                                    ),
-        .int_fmt_i     (fpu_int_fmt                                                                                    ),
-        .vectorial_op_i(fpu_vectorial_op                                                                               ),
-        .op_mod_i      (fpu_op_mode                                                                                    ),
-        .tag_i         (input_tag                                                                                      ),
-        .rnd_mode_i    (spatz_req.rm                                                                                   ),
-        .result_o      (fpu_result[fpu*ELEN +: ELEN]                                                                   ),
-        .out_valid_o   (int_fpu_result_valid                                                                           ),
-        .out_ready_i   (result_ready                                                                                   ),
-        .status_o      (fpu_status_d[fpu]                                                                              ),
-        .tag_o         (tag                                                                                            )
+        .in_valid_i    (fpu_in_valid_q                                  ),
+        .in_ready_o    (fpu_in_ready_d                                  ),
+        .op_i          (fpu_op_q                                        ),
+        .src_fmt_i     (fpu_src_fmt_q                                   ),
+        .dst_fmt_i     (fpu_dst_fmt_q                                   ),
+        .int_fmt_i     (fpu_int_fmt_q                                   ),
+        .vectorial_op_i(fpu_vectorial_op_q                              ),
+        .op_mod_i      (fpu_op_mode_q                                   ),
+        .tag_i         (input_tag_q                                     ),
+        .rnd_mode_i    (rm_q                                            ),
+        .result_o      (fpu_result[fpu*ELEN +: ELEN]                    ),
+        .out_valid_o   (int_fpu_result_valid                            ),
+        .out_ready_i   (result_ready                                    ),
+        .status_o      (fpu_status_d[fpu]                               ),
+        .tag_o         (tag                                             )
       );
 
       if (fpu == 0) begin: gen_fpu_tag
