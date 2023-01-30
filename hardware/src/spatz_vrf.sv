@@ -164,19 +164,28 @@ module spatz_vrf
   ////////////////
 
   for (genvar bank = 0; bank < NrVRFBanks; bank++) begin : gen_reg_banks
-    vregfile #(
-      .NrReadPorts(NrReadPortsPerBank   ),
-      .NrWords    (NRVREG*NrWordsPerBank)
-    ) i_vregfile (
-      .clk_i  (clk_i      ),
-      .rst_ni (rst_ni     ),
-      .waddr_i(waddr[bank]),
-      .wdata_i(wdata[bank]),
-      .we_i   (we[bank]   ),
-      .wbe_i  (wbe[bank]  ),
-      .raddr_i(raddr[bank]),
-      .rdata_o(rdata[bank])
-    );
+    for (genvar cut = 0; cut < N_FU; cut++) begin: gen_vrf_slice
+      elen_t [NrReadPortsPerBank-1:0] rdata_int;
+
+      for (genvar port = 0; port < NrReadPortsPerBank; port++) begin: gen_rdata_assignment
+        assign rdata[bank][port][ELEN*cut +: ELEN] = rdata_int[port];
+      end
+
+      vregfile #(
+        .NrReadPorts(NrReadPortsPerBank   ),
+        .NrWords    (NRVREG*NrWordsPerBank),
+        .WordWidth  (ELEN                 )
+      ) i_vregfile (
+        .clk_i  (clk_i                        ),
+        .rst_ni (rst_ni                       ),
+        .waddr_i(waddr[bank]                  ),
+        .wdata_i(wdata[bank][ELEN*cut +: ELEN]),
+        .we_i   (we[bank]                     ),
+        .wbe_i  (wbe[bank][ELENB*cut +: ELENB]),
+        .raddr_i(raddr[bank]                  ),
+        .rdata_o(rdata_int                    )
+      );
+    end
   end
 
   ////////////////
