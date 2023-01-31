@@ -51,7 +51,7 @@ void matmul_2xVL(__fp16 *c, const __fp16 *a, const __fp16 *b,
       const __fp16 *a_ = a + m * N;
       const __fp16 *a__ = a_;
 
-      asm volatile("vle32.v v16, (%0);" ::"r"(b_));
+      asm volatile("vle16.v v16, (%0);" ::"r"(b_));
       const __fp16 *b__ = b_ + P;
 
       __fp16 *c__ = c_ + m * P;
@@ -73,10 +73,10 @@ void matmul_2xVL(__fp16 *c, const __fp16 *a, const __fp16 *b,
         asm volatile("vle16.v v24, (%0);" ::"r"(b__));
         b__ += P;
 
-        asm volatile("vfwnmacc.vf v0, %0, v16" ::"f"(t0));
+        asm volatile("vfwdotp.vf v0, %0, v16" ::"f"(t0));
         asm volatile("flw %[t], 0(%[a])" : [t] "=f" (t0) : [a] "r" (a__));
         a__ += N;
-        asm volatile("vfwnmacc.vf v8, %0, v16" ::"f"(t1));
+        asm volatile("vfwdotp.vf v8, %0, v16" ::"f"(t1));
         asm volatile("flw %[t], 0(%[a])" : [t] "=f" (t1) : [a] "r" (a__));
 
         n += 2;
@@ -88,15 +88,15 @@ void matmul_2xVL(__fp16 *c, const __fp16 *a, const __fp16 *b,
         asm volatile("vle16.v v16, (%0);" ::"r"(b__));
         b__ += P;
 
-        asm volatile("vfwnmacc.vf v0, %0, v24" ::"f"(t0));
+        asm volatile("vfwdotp.vf v0, %0, v24" ::"f"(t0));
         asm volatile("flw %[t], 0(%[a])" : [t] "=f" (t0) : [a] "r" (a__));
         a__ += N;
-        asm volatile("vfwnmacc.vf v8, %0, v24" ::"f"(t1));
+        asm volatile("vfwdotp.vf v8, %0, v24" ::"f"(t1));
         asm volatile("flw %[t], 0(%[a])" : [t] "=f" (t1) : [a] "r" (a__));
       }
 
-      asm volatile("vfwnmacc.vf v0, %0, v24" ::"f"(t0));
-      asm volatile("vfwnmacc.vf v8, %0, v24" ::"f"(t1));
+      asm volatile("vfwdotp.vf v0, %0, v24" ::"f"(t0));
+      asm volatile("vfwdotp.vf v8, %0, v24" ::"f"(t1));
 
       asm volatile("vsetvli zero, %0, e16, m8, ta, ma" ::"r"(vl));
 
@@ -157,16 +157,16 @@ void matmul_4xVL(__fp16 *c, const __fp16 *a, const __fp16 *b,
         asm volatile("vle16.v v20, (%0);" ::"r"(b__));
         b__ += P;
 
-        asm volatile("vfwnmacc.vf v0, %0, v16" ::"f"(t0));
+        asm volatile("vfwdotp.vf v0, %0, v16" ::"f"(t0));
         asm volatile("flw %[t], 0(%[a])" : [t] "=f" (t0) : [a] "r" (a__));
         a__ += N;
-        asm volatile("vfwnmacc.vf v4, %0, v16" ::"f"(t1));
+        asm volatile("vfwdotp.vf v4, %0, v16" ::"f"(t1));
         asm volatile("flw %[t], 0(%[a])" : [t] "=f" (t1) : [a] "r" (a__));
         a__ += N;
-        asm volatile("vfwnmacc.vf v8, %0, v16" ::"f"(t2));
+        asm volatile("vfwdotp.vf v8, %0, v16" ::"f"(t2));
         asm volatile("flw %[t], 0(%[a])" : [t] "=f" (t2) : [a] "r" (a__));
         a__ += N;
-        asm volatile("vfwnmacc.vf v12, %0, v16" ::"f"(t3));
+        asm volatile("vfwdotp.vf v12, %0, v16" ::"f"(t3));
         asm volatile("flw %[t], 0(%[a])" : [t] "=f" (t3) : [a] "r" (a__));
 
         n += 2;
@@ -178,23 +178,23 @@ void matmul_4xVL(__fp16 *c, const __fp16 *a, const __fp16 *b,
         asm volatile("vle16.v v16, (%0);" ::"r"(b__));
         b__ += P;
 
-        asm volatile("vfwnmacc.vf v0, %0, v20" ::"f"(t0));
+        asm volatile("vfwdotp.vf v0, %0, v20" ::"f"(t0));
         asm volatile("flw %[t], 0(%[a])" : [t] "=f" (t0) : [a] "r" (a__));
         a__ += N;
-        asm volatile("vfwnmacc.vf v4, %0, v20" ::"f"(t1));
+        asm volatile("vfwdotp.vf v4, %0, v20" ::"f"(t1));
         asm volatile("flw %[t], 0(%[a])" : [t] "=f" (t1) : [a] "r" (a__));
         a__ += N;
-        asm volatile("vfwnmacc.vf v8, %0, v20" ::"f"(t2));
+        asm volatile("vfwdotp.vf v8, %0, v20" ::"f"(t2));
         asm volatile("flw %[t], 0(%[a])" : [t] "=f" (t2) : [a] "r" (a__));
         a__ += N;
-        asm volatile("vfwnmacc.vf v12, %0, v20" ::"f"(t3));
+        asm volatile("vfwdotp.vf v12, %0, v20" ::"f"(t3));
         asm volatile("flw %[t], 0(%[a])" : [t] "=f" (t3) : [a] "r" (a__));
       }
 
-      asm volatile("vfwnmacc.vf v0, %0, v20" ::"f"(t0));
-      asm volatile("vfwnmacc.vf v4, %0, v20" ::"f"(t1));
-      asm volatile("vfwnmacc.vf v8, %0, v20" ::"f"(t2));
-      asm volatile("vfwnmacc.vf v12, %0, v20" ::"f"(t3));
+      asm volatile("vfwdotp.vf v0, %0, v20" ::"f"(t0));
+      asm volatile("vfwdotp.vf v4, %0, v20" ::"f"(t1));
+      asm volatile("vfwdotp.vf v8, %0, v20" ::"f"(t2));
+      asm volatile("vfwdotp.vf v12, %0, v20" ::"f"(t3));
 
       asm volatile("vsetvli zero, %0, e16, m4, ta, ma" ::"r"(vl));
 
@@ -273,28 +273,28 @@ void matmul_8xVL(__fp16 *c, const __fp16 *a, const __fp16 *b,
         asm volatile("vle16.v v20, (%0);" ::"r"(b__));
         b__ += P;
 
-        asm volatile("vfwnmacc.vf v0, %0, v18" ::"f"(t0));
+        asm volatile("vfwdotp.vf v0, %0, v18" ::"f"(t0));
         asm volatile("flw %[t], 0(%[a])" : [t] "=f" (t0) : [a] "r" (a__));
         a__ += N;
-        asm volatile("vfwnmacc.vf v2, %0, v18" ::"f"(t1));
+        asm volatile("vfwdotp.vf v2, %0, v18" ::"f"(t1));
         asm volatile("flw %[t], 0(%[a])" : [t] "=f" (t1) : [a] "r" (a__));
         a__ += N;
-        asm volatile("vfwnmacc.vf v4, %0, v18" ::"f"(t2));
+        asm volatile("vfwdotp.vf v4, %0, v18" ::"f"(t2));
         asm volatile("flw %[t], 0(%[a])" : [t] "=f" (t2) : [a] "r" (a__));
         a__ += N;
-        asm volatile("vfwnmacc.vf v6, %0, v18" ::"f"(t3));
+        asm volatile("vfwdotp.vf v6, %0, v18" ::"f"(t3));
         asm volatile("flw %[t], 0(%[a])" : [t] "=f" (t3) : [a] "r" (a__));
         a__ += N;
-        asm volatile("vfwnmacc.vf v8, %0, v18" ::"f"(t4));
+        asm volatile("vfwdotp.vf v8, %0, v18" ::"f"(t4));
         asm volatile("flw %[t], 0(%[a])" : [t] "=f" (t4) : [a] "r" (a__));
         a__ += N;
-        asm volatile("vfwnmacc.vf v10, %0, v18" ::"f"(t5));
+        asm volatile("vfwdotp.vf v10, %0, v18" ::"f"(t5));
         asm volatile("flw %[t], 0(%[a])" : [t] "=f" (t5) : [a] "r" (a__));
         a__ += N;
-        asm volatile("vfwnmacc.vf v12, %0, v18" ::"f"(t6));
+        asm volatile("vfwdotp.vf v12, %0, v18" ::"f"(t6));
         asm volatile("flw %[t], 0(%[a])" : [t] "=f" (t6) : [a] "r" (a__));
         a__ += N;
-        asm volatile("vfwnmacc.vf v14, %0, v18" ::"f"(t7));
+        asm volatile("vfwdotp.vf v14, %0, v18" ::"f"(t7));
         asm volatile("flw %[t], 0(%[a])" : [t] "=f" (t7) : [a] "r" (a__));
 
         n += 2;
@@ -306,39 +306,39 @@ void matmul_8xVL(__fp16 *c, const __fp16 *a, const __fp16 *b,
         asm volatile("vle16.v v18, (%0);" ::"r"(b__));
         b__ += P;
 
-        asm volatile("vfwnmacc.vf v0, %0, v20" ::"f"(t0));
+        asm volatile("vfwdotp.vf v0, %0, v20" ::"f"(t0));
         asm volatile("flw %[t], 0(%[a])" : [t] "=f" (t0) : [a] "r" (a__));
         a__ += N;
-        asm volatile("vfwnmacc.vf v2, %0, v20" ::"f"(t1));
+        asm volatile("vfwdotp.vf v2, %0, v20" ::"f"(t1));
         asm volatile("flw %[t], 0(%[a])" : [t] "=f" (t1) : [a] "r" (a__));
         a__ += N;
-        asm volatile("vfwnmacc.vf v4, %0, v20" ::"f"(t2));
+        asm volatile("vfwdotp.vf v4, %0, v20" ::"f"(t2));
         asm volatile("flw %[t], 0(%[a])" : [t] "=f" (t2) : [a] "r" (a__));
         a__ += N;
-        asm volatile("vfwnmacc.vf v6, %0, v20" ::"f"(t3));
+        asm volatile("vfwdotp.vf v6, %0, v20" ::"f"(t3));
         asm volatile("flw %[t], 0(%[a])" : [t] "=f" (t3) : [a] "r" (a__));
         a__ += N;
-        asm volatile("vfwnmacc.vf v8, %0, v20" ::"f"(t4));
+        asm volatile("vfwdotp.vf v8, %0, v20" ::"f"(t4));
         asm volatile("flw %[t], 0(%[a])" : [t] "=f" (t4) : [a] "r" (a__));
         a__ += N;
-        asm volatile("vfwnmacc.vf v10, %0, v20" ::"f"(t5));
+        asm volatile("vfwdotp.vf v10, %0, v20" ::"f"(t5));
         asm volatile("flw %[t], 0(%[a])" : [t] "=f" (t5) : [a] "r" (a__));
         a__ += N;
-        asm volatile("vfwnmacc.vf v12, %0, v20" ::"f"(t6));
+        asm volatile("vfwdotp.vf v12, %0, v20" ::"f"(t6));
         asm volatile("flw %[t], 0(%[a])" : [t] "=f" (t6) : [a] "r" (a__));
         a__ += N;
-        asm volatile("vfwnmacc.vf v14, %0, v20" ::"f"(t7));
+        asm volatile("vfwdotp.vf v14, %0, v20" ::"f"(t7));
         asm volatile("flw %[t], 0(%[a])" : [t] "=f" (t7) : [a] "r" (a__));
       }
 
-      asm volatile("vfwnmacc.vf v0, %0, v20" ::"f"(t0));
-      asm volatile("vfwnmacc.vf v2, %0, v20" ::"f"(t1));
-      asm volatile("vfwnmacc.vf v4, %0, v20" ::"f"(t2));
-      asm volatile("vfwnmacc.vf v6, %0, v20" ::"f"(t3));
-      asm volatile("vfwnmacc.vf v8, %0, v20" ::"f"(t4));
-      asm volatile("vfwnmacc.vf v10, %0, v20" ::"f"(t5));
-      asm volatile("vfwnmacc.vf v12, %0, v20" ::"f"(t6));
-      asm volatile("vfwnmacc.vf v14, %0, v20" ::"f"(t7));
+      asm volatile("vfwdotp.vf v0, %0, v20" ::"f"(t0));
+      asm volatile("vfwdotp.vf v2, %0, v20" ::"f"(t1));
+      asm volatile("vfwdotp.vf v4, %0, v20" ::"f"(t2));
+      asm volatile("vfwdotp.vf v6, %0, v20" ::"f"(t3));
+      asm volatile("vfwdotp.vf v8, %0, v20" ::"f"(t4));
+      asm volatile("vfwdotp.vf v10, %0, v20" ::"f"(t5));
+      asm volatile("vfwdotp.vf v12, %0, v20" ::"f"(t6));
+      asm volatile("vfwdotp.vf v14, %0, v20" ::"f"(t7));
 
       asm volatile("vsetvli zero, %0, e16, m2, ta, ma" ::"r"(vl));
 

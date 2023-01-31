@@ -103,7 +103,6 @@ int main() {
   const unsigned int measure_iterations = 1;
 
   unsigned int timer_start, timer_end, timer;
-  unsigned int row_start, row_end;
 
   unsigned int m_start, m_end;
   unsigned int p_start, p_end;
@@ -163,15 +162,6 @@ int main() {
   mempool_barrier(num_cores);
 
   // Initialize matrices
-  const unsigned int cores_per_row = active_cores / dim;
-  if (dim < active_cores) {
-    row_start = cid / cores_per_row;
-    row_end = cid / cores_per_row + 1;
-  } else {
-    row_start = dim / num_cores * cid;
-    row_end = dim / num_cores * (cid + 1);
-  }
-
   if (cid == 0) {
     init_matrix((__fp16*)a, (const __fp16*)gemm_A_dram, dim, dim);
     init_matrix((__fp16*)b, (const __fp16*)gemm_B_dram, dim, dim);
@@ -187,6 +177,10 @@ int main() {
       // Start timer
       timer_start = mempool_get_timer();
 
+      // Start dump
+      if (cid == 0)
+        start_kernel();
+
       if (kernel_size == 2) {
         matmul_2xVL(c, a, b, m_start, m_end, dim, dim, p_start, p_end, vl);
       } else if (kernel_size == 4) {
@@ -201,6 +195,10 @@ int main() {
     // Wait for all cores to finish matmul
     mempool_barrier(num_cores);
 
+    // End dump
+    if (cid == 0)
+      stop_kernel();
+
     // End timer and check if new best runtime
     timer_end = mempool_get_timer();
     unsigned int timer_temp = timer_end - timer_start;
@@ -214,7 +212,7 @@ int main() {
   // Check and display results
   if (cid == 0) {
     unsigned int performance = 1000 * 2 * dim * dim * dim / timer;
-    unsigned int utilization = performance / (2 * active_cores * 4 * N_IPU);
+    unsigned int utilization = performance / (2 * active_cores * 4 * N_FU);
 
     printf("\n----- (%dx%d) sdotp fmatmul -----\n", dim, dim);
     printf("The execution took %u cycles.\n", timer);
