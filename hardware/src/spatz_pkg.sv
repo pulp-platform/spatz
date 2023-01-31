@@ -349,8 +349,8 @@ package spatz_pkg;
         0  // FP8alt
       },                   // FMA Block
       '{1, 1, 1, 1, 1, 1}, // DIVSQRT
-      '{0, 0, 0, 0, 0, 0}, // NONCOMP
-      '{1, 1, 1, 1, 1, 1}, // CONV
+      '{1, 1, 1, 1, 1, 1}, // NONCOMP
+      '{2, 2, 2, 2, 2, 2}, // CONV
       '{2, 2, 2, 2, 2, 2}  // DOTP
     },
     UnitTypes: '{
@@ -375,7 +375,7 @@ package spatz_pkg;
         0  // FP8alt
       },
       '{1, 1, 1, 1, 1, 1}, // DIVSQRT
-      '{0, 0, 0, 0, 0, 0}, // NONCOMP
+      '{1, 1, 1, 1, 1, 1}, // NONCOMP
       '{1, 1, 1, 1, 1, 1}, // CONV
       '{2, 2, 2, 2, 2, 2}  // DOTP
     },

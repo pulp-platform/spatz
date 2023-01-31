@@ -435,7 +435,7 @@ module spatz_vsldu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
       // Special byte enable mask case when we are operating on the first register element.
       if (vreg_operation_first && is_slide_up)
         for (int i = 0; i < VRFWordBWidth; i++)
-          vrf_req_d.wbe[i] = (i >= slide_amount_d[$clog2(VRFWordBWidth)-1:0]) & (i < (vreg_counter_q[$clog2(VRFWordBWidth)-1:0] + vreg_counter_delta));
+          vrf_req_d.wbe[i] = (spatz_req.op_sld.insert || (i >= slide_amount_d[$clog2(VRFWordBWidth)-1:0])) & (i < (vreg_counter_q[$clog2(VRFWordBWidth)-1:0] + vreg_counter_delta));
     end
 
     // Reset overflow register when finished
