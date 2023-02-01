@@ -122,8 +122,6 @@ int main() {
     a = (double *)domain_malloc(get_alloc_tile(0), M * N * sizeof(double));
     b = (double *)domain_malloc(get_alloc_tile(0), N * P * sizeof(double));
     c = (double *)domain_malloc(get_alloc_tile(0), M * P * sizeof(double));
-
-    printf("A is %0X, B is %0X, C is %0X\n", a, b, c);
   }
 
   // Reset timer
@@ -215,7 +213,7 @@ int main() {
   // Check and display results
   if (cid == 0) {
     unsigned int performance = 1000 * 2 * dim * dim * dim / timer;
-    unsigned int utilization = performance / (2 * active_cores * 4 * N_IPU);
+    unsigned int utilization = performance / (2 * active_cores * N_FPU);
 
     printf("\n----- (%dx%d) dp fmatmul -----\n", dim, dim);
     printf("The execution took %u cycles.\n", timer);

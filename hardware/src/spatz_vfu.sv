@@ -462,11 +462,14 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
             pnt = reduction_pointer_d << int'(spatz_req.vtype.vsew);
             if (!(|pnt))
               word_issued = 1'b1;
-
-            // Are we done?
-            if (reduction_pointer_d == spatz_req.vl)
-              reduction_state_d = Reduction_WriteBack;
           end
+        end
+
+        // Are we done?
+        if (reduction_pointer_q == spatz_req.vl) begin
+          reduction_state_d       = Reduction_WriteBack;
+          result_ready            = 1'b0;
+          reduction_operand_ready = 1'b0;
         end
       end
 
