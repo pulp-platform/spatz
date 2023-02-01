@@ -12,10 +12,14 @@ dependencies:
 workspace:
   checkout_dir: "hardware/deps"
 
+export_include_dirs:
+  - hardware/include
+
 sources:
   files:
     # Headers
     - hardware/src/rvv_pkg.sv
+    - hardware/src/spatz_xif_pkg.sv
     - hardware/src/spatz_pkg.sv
 
     # Compiled only if Spatz is active
@@ -35,3 +39,4 @@ sources:
         - hardware/src/spatz_controller.sv
         - hardware/src/spatz_fpu_sequencer.sv
         - hardware/src/spatz.sv
+        - hardware/src/spatz_cc.sv
