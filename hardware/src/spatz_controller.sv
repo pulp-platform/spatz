@@ -431,6 +431,12 @@ module spatz_controller
           spatz_req.vtype  = vtype_q;
           spatz_req.vl     = vl_q;
           spatz_req.vstart = vstart_q;
+
+          // Is this a scalar request?
+          if (spatz_req.op_arith.is_scalar) begin
+            spatz_req.vl     = 1;
+            spatz_req.vstart = '0;
+          end
         end
 
         default: begin

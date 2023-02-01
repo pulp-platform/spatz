@@ -312,6 +312,7 @@ module spatz_decoder
         riscv_instr::VMV_V_V,
         riscv_instr::VMV_V_X,
         riscv_instr::VMV_V_I,
+        riscv_instr::VMV_S_X,
         riscv_instr::VSLIDEUP_VX,
         riscv_instr::VSLIDEUP_VI,
         riscv_instr::VSLIDE1UP_VX,
@@ -635,14 +636,16 @@ module spatz_decoder
 
             riscv_instr::VMV_V_V,
             riscv_instr::VMV_V_X,
+            riscv_instr::VMV_S_X,
             riscv_instr::VMV_V_I: begin
               // vmv is the same as a zero slide
-              spatz_req.op            = VSLIDEUP;
-              spatz_req.ex_unit       = SLD;
-              spatz_req.op_sld.insert = (func3 == OPIVI || func3 == OPIVX);
-              spatz_req.op_sld.vmv    = 1'b1;
-              spatz_req.vs2           = spatz_req.vs1;
-              spatz_req.use_vs2       = func3 != OPIVI;
+              spatz_req.op                 = VSLIDEUP;
+              spatz_req.ex_unit            = SLD;
+              spatz_req.op_sld.insert      = (func3 == OPIVI || func3 == OPIVX);
+              spatz_req.op_sld.vmv         = 1'b1;
+              spatz_req.vs2                = spatz_req.vs1;
+              spatz_req.use_vs2            = func3 != OPIVI || decoder_req_i.instr inside {riscv_instr::VMV_S_X};
+              spatz_req.op_arith.is_scalar = decoder_req_i.instr inside {riscv_instr::VMV_S_X};
             end
 
             // Vector Slide
@@ -684,6 +687,20 @@ module spatz_decoder
 
             default: illegal_instr = 1'b1;
           endcase // Arithmetic Instruction Type
+        end
+
+        // Move to the scalar RF
+        riscv_instr::VMV_X_S: begin
+          automatic vreg_t arith_s2 = decoder_req_i.instr[24:20];
+          automatic vreg_t arith_d  = decoder_req_i.instr[11:7];
+
+          spatz_req.op                 = VADD;
+          spatz_req.ex_unit            = VFU;
+          spatz_req.rd                 = arith_d;
+          spatz_req.use_rd             = 1'b1;
+          spatz_req.vs2                = arith_s2;
+          spatz_req.use_vs2            = 1'b1;
+          spatz_req.op_arith.is_scalar = 1'b1;
         end
 
         // Vector floating-point instructions
@@ -738,6 +755,7 @@ module spatz_decoder
         riscv_instr::VFNCVT_F_X_W,
         riscv_instr::VFNCVT_F_F_W,
         riscv_instr::VFMV_V_F,
+        riscv_instr::VFMV_S_F,
         riscv_instr::VFWADD_VV,
         riscv_instr::VFWADD_WV,
         riscv_instr::VFWADD_VF,
@@ -929,16 +947,18 @@ module spatz_decoder
                 spatz_req.op_arith.is_narrowing = 1'b1;
               end
 
-              riscv_instr::VFMV_V_F: begin
+              riscv_instr::VFMV_V_F,
+              riscv_instr::VFMV_S_F: begin
                 // vmv is the same as a zero slide
-                spatz_req.op            = VSLIDEUP;
-                spatz_req.ex_unit       = SLD;
-                spatz_req.op_sld.insert = 1'b1;
-                spatz_req.op_sld.vmv    = 1'b1;
-                spatz_req.rs1           = decoder_req_i.rs1;
-                spatz_req.use_vs1       = 1'b0;
-                spatz_req.vs2           = spatz_req.vs1;
-                spatz_req.use_vs2       = 1'b0;
+                spatz_req.op                 = VSLIDEUP;
+                spatz_req.ex_unit            = SLD;
+                spatz_req.op_sld.insert      = 1'b1;
+                spatz_req.op_sld.vmv         = 1'b1;
+                spatz_req.rs1                = decoder_req_i.rs1;
+                spatz_req.use_vs1            = 1'b0;
+                spatz_req.vs2                = spatz_req.vs1;
+                spatz_req.use_vs2            = decoder_req_i.instr inside {riscv_instr::VFMV_S_F};
+                spatz_req.op_arith.is_scalar = decoder_req_i.instr inside {riscv_instr::VFMV_S_F};
               end
 
               riscv_instr::VFWADD_VV,
@@ -1010,6 +1030,22 @@ module spatz_decoder
 
               default;
             endcase
+          end
+        end
+
+        // Move to the scalar FP RF
+        riscv_instr::VFMV_F_S: begin
+          if (spatz_pkg::FPU) begin
+            automatic vreg_t arith_s2 = decoder_req_i.instr[24:20];
+            automatic vreg_t arith_d  = decoder_req_i.instr[11:7];
+
+            spatz_req.op                 = VADD;
+            spatz_req.ex_unit            = VFU;
+            spatz_req.rd                 = arith_d;
+            spatz_req.use_rd             = 1'b1;
+            spatz_req.vs2                = arith_s2;
+            spatz_req.use_vs2            = 1'b1;
+            spatz_req.op_arith.is_scalar = 1'b1;
           end
         end
 

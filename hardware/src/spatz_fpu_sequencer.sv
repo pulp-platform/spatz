@@ -414,6 +414,7 @@ module spatz_fpu_sequencer import spatz_pkg::*; import rvv_pkg::*; import fpnew_
         riscv_instr::VFSGNJN_VF,
         riscv_instr::VFSGNJX_VF,
         riscv_instr::VFMV_V_F,
+        riscv_instr::VFMV_S_F,
         riscv_instr::VFMUL_VF,
         riscv_instr::VFRSUB_VF,
         riscv_instr::VFMADD_VF,
@@ -438,6 +439,11 @@ module spatz_fpu_sequencer import spatz_pkg::*; import rvv_pkg::*; import fpnew_
           end else begin
             illegal_inst = 1'b1;
           end
+        end
+
+        // Move to the FPR
+        riscv_instr::VFMV_F_S: begin
+          use_fd = 1'b1;
         end
 
         default:; // Do nothing

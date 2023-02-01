@@ -54,6 +54,9 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
     // Is this a narrowing instruction?
     logic narrowing;
     logic narrowing_upper;
+
+    // Is this a reduction?
+    logic reduction;
   } vfu_tag_t;
 
   ///////////////////////
@@ -151,8 +154,9 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
   logic last_request;
 
   // Reduction state
-  enum logic [1:0] {
+  enum logic [2:0] {
     Reduction_NormalExecution,
+    Reduction_Wait,
     Reduction_Init,
     Reduction_Reduce,
     Reduction_WriteBack
@@ -226,7 +230,7 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
       endcase
 
     // Finished the execution!
-    if (spatz_req_valid && (vl_d >= spatz_req.vl || reduction_done)) begin
+    if (spatz_req_valid && ((vl_d >= spatz_req.vl && !spatz_req.op_arith.is_reduction) || reduction_done)) begin
       spatz_req_ready         = spatz_req_valid;
       busy_d                  = 1'b0;
       vl_d                    = '0;
@@ -247,7 +251,7 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
     end
 
     // An instruction finished execution
-    if ((result_tag.last && &(result_valid | ~pending_results) && reduction_state_q == Reduction_NormalExecution) || reduction_done) begin
+    if ((result_tag.last && &(result_valid | ~pending_results) && reduction_state_q inside {Reduction_NormalExecution, Reduction_Wait}) || reduction_done) begin
       vfu_rsp_o.id      = result_tag.id;
       vfu_rsp_o.rd      = result_tag.vd_addr[GPRWidth-1:0];
       vfu_rsp_o.wb      = result_tag.wb;
@@ -293,7 +297,7 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
       endcase
     end
 
-    if (!spatz_req.op_arith.is_scalar && spatz_req.use_vs2)
+    if ((!spatz_req.op_arith.is_scalar || spatz_req.op == VADD) && spatz_req.use_vs2)
       operand2 = spatz_req.op_arith.is_reduction ? $unsigned(reduction[0]) : vrf_rdata_i[0];
     else
       // Replicate scalar operands
@@ -359,6 +363,14 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
 
         // Do we have a new reduction instruction?
         if (spatz_req_valid && !running_q[spatz_req.id] && spatz_req.op_arith.is_reduction)
+          reduction_state_d = is_fpu_busy ? Reduction_Wait : Reduction_Init;
+      end
+
+      Reduction_Wait: begin
+        // Are we ready to accept a result?
+        result_ready = &(result_valid | ~pending_results) && ((result_tag.wb && vfu_rsp_ready_i) || vrf_wvalid_i);
+
+        if (!is_fpu_busy)
           reduction_state_d = Reduction_Init;
       end
 
@@ -424,51 +436,51 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
 
         // Got a result!
         if (result_valid[0]) begin
-          if (reduction_pointer_q == spatz_req.vl)
+          // Did we get an operand?
+          if (vrf_rvalid_i[1]) begin
+            automatic logic [idx_width(N_FU*ELENB)-1:0] pnt;
+
+            // Bump pointer
+            reduction_pointer_d = reduction_pointer_q + 1;
+
+            // Acknowledge result
+            result_ready = 1'b1;
+
+            // Trigger a request
+            reduction_operand_ready = 1'b1;
+
+            // verilator lint_off SELRANGE
+            unique case (spatz_req.vtype.vsew)
+              EW_8 : reduction[1] = $unsigned(vrf_rdata_i[1][8*reduction_pointer_q[idx_width(N_FU*ELENB)-1:0] +: 8]);
+              EW_16: reduction[1] = $unsigned(vrf_rdata_i[1][16*reduction_pointer_q[idx_width(N_FU*ELENB)-2:0] +: 16]);
+              EW_32: reduction[1] = $unsigned(vrf_rdata_i[1][32*reduction_pointer_q[idx_width(N_FU*ELENB)-3:0] +: 32]);
+              default: if (MAXEW == EW_64) reduction[1] = $unsigned(vrf_rdata_i[1][64*reduction_pointer_q[idx_width(N_FU*ELENB)-4:0] +: 64]);
+            endcase
+            // verilator lint_on SELRANGE
+
+            // Request next word
+            pnt = reduction_pointer_d << int'(spatz_req.vtype.vsew);
+            if (!(|pnt))
+              word_issued = 1'b1;
+
             // Are we done?
-            reduction_state_d = Reduction_WriteBack;
-          else begin
-            // Did we get an operand?
-            if (vrf_rvalid_i[1]) begin
-              automatic logic [idx_width(N_FU*ELENB)-1:0] pnt;
-
-              reduction_state_d   = Reduction_Reduce;
-              reduction_pointer_d = reduction_pointer_q + 1;
-
-              // Acknowledge result
-              result_ready = 1'b1;
-
-              // Trigger a request
-              reduction_operand_ready = 1'b1;
-
-              // verilator lint_off SELRANGE
-              unique case (spatz_req.vtype.vsew)
-                EW_8 : reduction[1] = $unsigned(vrf_rdata_i[1][8*reduction_pointer_q[idx_width(N_FU*ELENB)-1:0] +: 8]);
-                EW_16: reduction[1] = $unsigned(vrf_rdata_i[1][16*reduction_pointer_q[idx_width(N_FU*ELENB)-2:0] +: 16]);
-                EW_32: reduction[1] = $unsigned(vrf_rdata_i[1][32*reduction_pointer_q[idx_width(N_FU*ELENB)-3:0] +: 32]);
-                default: if (MAXEW == EW_64) reduction[1] = $unsigned(vrf_rdata_i[1][64*reduction_pointer_q[idx_width(N_FU*ELENB)-4:0] +: 64]);
-              endcase
-              // verilator lint_on SELRANGE
-
-              // Request next word
-              pnt = reduction_pointer_d << int'(spatz_req.vtype.vsew);
-              if (!(|pnt))
-                word_issued = 1'b1;
-            end
+            if (reduction_pointer_d == spatz_req.vl)
+              reduction_state_d = Reduction_WriteBack;
           end
         end
       end
 
       Reduction_WriteBack: begin
-        // We are done with the reduction
-        reduction_state_d = Reduction_NormalExecution;
-
         // Acknowledge result
-        if (vrf_wvalid_i)
+        if (vrf_wvalid_i) begin
           result_ready = 1'b1;
 
-        // Finish the reduction
-        reduction_done = 1'b1;
+          // We are done with the reduction
+          reduction_state_d = Reduction_NormalExecution;
+
+          // Finish the reduction
+          reduction_done = 1'b1;
+        end
       end
     endcase
   end: proc_reduction
@@ -501,7 +513,8 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
       wb             : spatz_req.op_arith.is_scalar,
       last           : last_request,
       narrowing      : spatz_req.op_arith.is_narrowing,
-      narrowing_upper: narrowing_upper_q
+      narrowing_upper: narrowing_upper_q,
+      reduction      : spatz_req.op_arith.is_reduction
     };
 
     if (spatz_req_valid && vl_q == '0) begin
@@ -537,7 +550,7 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
       vreg_r_req = {spatz_req.vd_is_src, spatz_req.use_vs1 && reduction_operand_request[1], spatz_req.use_vs2 && reduction_operand_request[0]};
 
     // Got a new result
-    if (&(result_valid | ~pending_results) && !spatz_req.op_arith.is_reduction) begin
+    if (&(result_valid | ~pending_results) && !result_tag.reduction) begin
       vreg_we  = !result_tag.wb;
       vreg_wbe = '1;
 
@@ -548,7 +561,7 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
     end
 
     // Reduction finished execution
-    if (reduction_state_q == Reduction_WriteBack) begin
+    if (reduction_state_q == Reduction_WriteBack && result_valid[0]) begin
       vreg_we = 1'b1;
       unique case (spatz_req.vtype.vsew)
         EW_8 : vreg_wbe = 1'h1;
