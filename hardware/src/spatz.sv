@@ -13,45 +13,45 @@
 // back again. Finally, the Vector Register File (VRF) is the main register file
 // that stores all of the currently used vectors close to the execution units.
 
-module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
-    parameter  int  unsigned NrMemPorts          = 1,
-    parameter  type          x_issue_req_t       = logic,
-    parameter  type          x_issue_resp_t      = logic,
-    parameter  type          x_result_t          = logic,
+`include "spatz/spatz.svh"
+
+/* verilator lint_off DECLFILENAME */
+module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; import spatz_xif_pkg::*; #(
+    parameter  int unsigned NrMemPorts          = 1,
     // Derived parameters. DO NOT CHANGE!
-    localparam int  unsigned NumOutstandingLoads = snitch_pkg::NumIntOutstandingLoads
+    localparam int unsigned NumOutstandingLoads = snitch_pkg::NumIntOutstandingLoads
   ) (
-    input  logic                             clk_i,
-    input  logic                             rst_ni,
+    input  logic clk_i,
+    input  logic rst_ni,
     // X-Interface Issue
-    input  logic                             x_issue_valid_i,
-    output logic                             x_issue_ready_o,
-    input  x_issue_req_t                     x_issue_req_i,
-    output x_issue_resp_t                    x_issue_resp_o,
+    input  logic x_issue_valid_i,
+    output logic x_issue_ready_o,
+    input `STRUCT_PORT(spatz_x_issue_req_t) x_issue_req_i,
+    output `STRUCT_PORT(spatz_x_issue_resp_t) x_issue_resp_o,
     // X-Interface Result
-    output logic                             x_result_valid_o,
-    input  logic                             x_result_ready_i,
-    output x_result_t                        x_result_o,
+    output logic x_result_valid_o,
+    input  logic x_result_ready_i,
+    output `STRUCT_PORT(spatz_x_result_t) x_result_o,
     // Memory Request
-    output spatz_mem_req_t  [NrMemPorts-1:0] spatz_mem_req_o,
-    output logic            [NrMemPorts-1:0] spatz_mem_req_valid_o,
-    input  logic            [NrMemPorts-1:0] spatz_mem_req_ready_i,
-    input  spatz_mem_resp_t [NrMemPorts-1:0] spatz_mem_resp_i,
-    input  logic            [NrMemPorts-1:0] spatz_mem_resp_valid_i,
-    output logic            [NrMemPorts-1:0] spatz_mem_resp_ready_o,
+    output `STRUCT_VECT(spatz_mem_req_t, [NrMemPorts-1:0]) spatz_mem_req_o,
+    output logic [NrMemPorts-1:0] spatz_mem_req_valid_o,
+    input  logic [NrMemPorts-1:0] spatz_mem_req_ready_i,
+    input `STRUCT_VECT(spatz_mem_resp_t, [NrMemPorts-1:0]) spatz_mem_resp_i,
+    input  logic [NrMemPorts-1:0] spatz_mem_resp_valid_i,
+    output logic [NrMemPorts-1:0] spatz_mem_resp_ready_o,
     // Memory Finished
-    output logic            [1:0]            spatz_mem_finished_o,
-    output logic            [1:0]            spatz_mem_str_finished_o,
+    output logic [1:0]            spatz_mem_finished_o,
+    output logic [1:0]            spatz_mem_str_finished_o,
     // FPU memory interface interface
-    output spatz_mem_req_t                   fp_lsu_mem_req_o,
-    output logic                             fp_lsu_mem_req_valid_o,
-    input  logic                             fp_lsu_mem_req_ready_i,
-    input  spatz_mem_resp_t                  fp_lsu_mem_resp_i,
-    input  logic                             fp_lsu_mem_resp_valid_i,
-    output logic                             fp_lsu_mem_resp_ready_o,
+    output `STRUCT_PORT(spatz_mem_req_t) fp_lsu_mem_req_o,
+    output logic fp_lsu_mem_req_valid_o,
+    input  logic fp_lsu_mem_req_ready_i,
+    input `STRUCT_PORT(spatz_mem_resp_t) fp_lsu_mem_resp_i,
+    input  logic fp_lsu_mem_resp_valid_i,
+    output logic fp_lsu_mem_resp_ready_o,
     // FPU side channel
-    input  roundmode_e                       fpu_rnd_mode_i,
-    output status_t                          fpu_status_o
+    input `STRUCT_PORT(roundmode_e) fpu_rnd_mode_i,
+    output `STRUCT_PORT(status_t) fpu_status_o
   );
 
   ////////////////
@@ -88,13 +88,13 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   /////////////////////
 
   // X Interface
-  x_issue_req_t  x_issue_req;
-  logic          x_issue_valid;
-  logic          x_issue_ready;
-  x_issue_resp_t x_issue_resp;
-  x_result_t     x_result;
-  logic          x_result_valid;
-  logic          x_result_ready;
+  spatz_x_issue_req_t  x_issue_req;
+  logic                x_issue_valid;
+  logic                x_issue_ready;
+  spatz_x_issue_resp_t x_issue_resp;
+  spatz_x_result_t     x_result;
+  logic                x_result_valid;
+  logic                x_result_ready;
 
   // Did we finish a memory request?
   logic fp_lsu_mem_finished;
@@ -123,10 +123,10 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     assign fp_lsu_mem_str_finished = 1'b0;
   end: gen_no_fpu_sequencer else begin: gen_fpu_sequencer
     spatz_fpu_sequencer #(
-      .x_issue_req_t      (x_issue_req_t      ),
-      .x_issue_resp_t     (x_issue_resp_t     ),
-      .x_result_t         (x_result_t         ),
-      .NumOutstandingLoads(NumOutstandingLoads)
+      .x_issue_req_t      (spatz_x_issue_req_t ),
+      .x_issue_resp_t     (spatz_x_issue_resp_t),
+      .x_result_t         (spatz_x_result_t    ),
+      .NumOutstandingLoads(NumOutstandingLoads )
     ) i_fpu_sequencer (
       .clk_i                    (clk_i                  ),
       .rst_ni                   (rst_ni                 ),
@@ -208,9 +208,9 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   spatz_controller #(
     .NrVregfilePorts(NrReadPorts+NrWritePorts),
     .NrWritePorts   (NrWritePorts            ),
-    .x_issue_req_t  (x_issue_req_t           ),
-    .x_issue_resp_t (x_issue_resp_t          ),
-    .x_result_t     (x_result_t              )
+    .x_issue_req_t  (spatz_x_issue_req_t     ),
+    .x_issue_resp_t (spatz_x_issue_resp_t    ),
+    .x_result_t     (spatz_x_result_t        )
   ) i_controller (
     .clk_i            (clk_i           ),
     .rst_ni           (rst_ni          ),
@@ -362,3 +362,4 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     $error("[spatz] Spatz requires at least one memory port.");
 
 endmodule : spatz
+/* verilator lint_on DECLFILENAME */

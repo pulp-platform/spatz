@@ -2,9 +2,6 @@
 // Solderpad Hardware License, Version 0.51, see LICENSE for details.
 // SPDX-License-Identifier: SHL-0.51
 
-`include "spatz/spatz.svh"
-
-/* verilator lint_off DECLFILENAME */
 module spatz_cc
   import fpnew_pkg::roundmode_e;
   import fpnew_pkg::status_t;
@@ -29,31 +26,31 @@ module spatz_cc
     parameter int   unsigned        NumDataPortsPerCore = 0,
     parameter int   unsigned        NumMemPortsPerSpatz = 0
   ) (
-    input  logic                                 clk_i,
-    input  logic                                 rst_i,
-    input  logic [31:0]                          hart_id_i,
+    input  logic                                    clk_i,
+    input  logic                                    rst_i,
+    input  logic    [31:0]                          hart_id_i,
     // Instruction Port
-    output logic [31:0]                          inst_addr_o,
-    input  logic [31:0]                          inst_data_i,
-    output logic                                 inst_valid_o,
-    input  logic                                 inst_ready_i,
+    output logic    [31:0]                          inst_addr_o,
+    input  logic    [31:0]                          inst_data_i,
+    output logic                                    inst_valid_o,
+    input  logic                                    inst_ready_i,
     // TCDM Ports
-    output logic [NumDataPortsPerCore-1:0][31:0] data_qaddr_o,
-    output logic [NumDataPortsPerCore-1:0]       data_qwrite_o,
-    output logic [NumDataPortsPerCore-1:0][3:0]  data_qamo_o,
-    output `STRUCT_VECT(data_t, [NumDataPortsPerCore-1:0]) data_qdata_o,
-    output `STRUCT_VECT(strb_t, [NumDataPortsPerCore-1:0]) data_qstrb_o,
-    output `STRUCT_VECT(meta_id_t, [NumDataPortsPerCore-1:0]) data_qid_o,
-    output logic [NumDataPortsPerCore-1:0] data_qvalid_o,
-    input  logic [NumDataPortsPerCore-1:0] data_qready_i,
-    input `STRUCT_VECT(data_t, [NumDataPortsPerCore-1:0]) data_pdata_i,
-    input logic [NumDataPortsPerCore-1:0] data_perror_i,
-    input `STRUCT_VECT(meta_id_t, [NumDataPortsPerCore-1:0]) data_pid_i,
-    input  logic [NumDataPortsPerCore-1:0] data_pvalid_i,
-    output logic [NumDataPortsPerCore-1:0] data_pready_o,
-    input  logic                           wake_up_sync_i,
+    output logic    [NumDataPortsPerCore-1:0][31:0] data_qaddr_o,
+    output logic    [NumDataPortsPerCore-1:0]       data_qwrite_o,
+    output logic    [NumDataPortsPerCore-1:0][3:0]  data_qamo_o,
+    output data_t   [NumDataPortsPerCore-1:0]       data_qdata_o,
+    output strb_t   [NumDataPortsPerCore-1:0]       data_qstrb_o,
+    output meta_id_t[NumDataPortsPerCore-1:0]       data_qid_o,
+    output logic    [NumDataPortsPerCore-1:0]       data_qvalid_o,
+    input  logic    [NumDataPortsPerCore-1:0]       data_qready_i,
+    input  data_t   [NumDataPortsPerCore-1:0]       data_pdata_i,
+    input  logic    [NumDataPortsPerCore-1:0]       data_perror_i,
+    input  meta_id_t[NumDataPortsPerCore-1:0]       data_pid_i,
+    input  logic    [NumDataPortsPerCore-1:0]       data_pvalid_i,
+    output logic    [NumDataPortsPerCore-1:0]       data_pready_o,
+    input  logic                                    wake_up_sync_i,
     // Core event strobes
-    output `STRUCT_PORT(snitch_pkg::core_events_t) core_events_o
+    output snitch_pkg::core_events_t core_events_o
   );
 
 // Include FF
@@ -164,10 +161,7 @@ module spatz_cc
   logic            fp_lsu_mem_resp_ready;
 
   spatz #(
-    .NrMemPorts    ( NumMemPortsPerSpatz  ),
-    .x_issue_req_t ( spatz_x_issue_req_t  ),
-    .x_issue_resp_t( spatz_x_issue_resp_t ),
-    .x_result_t    ( spatz_x_result_t     )
+    .NrMemPorts(NumMemPortsPerSpatz)
   ) i_spatz (
     .clk_i                   ( clk_i                  ),
     .rst_ni                  ( ~rst_i                 ),
@@ -434,5 +428,3 @@ module spatz_cc
 // pragma translate_on
 
 endmodule
-/* verilator lint_on DECLFILENAME */
-
