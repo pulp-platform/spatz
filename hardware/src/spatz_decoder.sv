@@ -775,7 +775,9 @@ module spatz_decoder
         riscv_instr::VFWMSAC_VV,
         riscv_instr::VFWMSAC_VF,
         riscv_instr::VFWNMSAC_VV,
-        riscv_instr::VFWNMSAC_VF: begin
+        riscv_instr::VFWNMSAC_VF,
+        riscv_instr::VFSLIDE1UP_VF,
+        riscv_instr::VFSLIDE1DOWN_VF: begin
           if (spatz_pkg::FPU) begin
             automatic opcodev_func3_e func3 = opcodev_func3_e'(decoder_req_i.instr[14:12]);
             automatic vreg_t arith_s1       = decoder_req_i.instr[19:15];
@@ -1026,6 +1028,27 @@ module spatz_decoder
                 spatz_req.vd_is_src          = 1'b1;
                 spatz_req.op_arith.widen_vs1 = 1'b1;
                 spatz_req.op_arith.widen_vs2 = 1'b1;
+              end
+
+              // Slides
+              riscv_instr::VFSLIDE1UP_VF: begin
+                spatz_req.op            = VSLIDEUP;
+                spatz_req.op_sld.insert = 1'b1;
+                spatz_req.ex_unit       = SLD;
+
+                spatz_req.use_vs1 = 1'b0;
+                spatz_req.use_vs2 = 1'b1;
+                spatz_req.vs2     = arith_s2;
+              end
+
+              riscv_instr::VFSLIDE1DOWN_VF: begin
+                spatz_req.op            = VSLIDEDOWN;
+                spatz_req.op_sld.insert = 1'b1;
+                spatz_req.ex_unit       = SLD;
+
+                spatz_req.use_vs1 = 1'b0;
+                spatz_req.use_vs2 = 1'b1;
+                spatz_req.vs2     = arith_s2;
               end
 
               default;

@@ -485,6 +485,8 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
           reduction_done = 1'b1;
         end
       end
+
+      default;
     endcase
   end: proc_reduction
 

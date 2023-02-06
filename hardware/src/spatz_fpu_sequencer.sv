@@ -413,6 +413,8 @@ module spatz_fpu_sequencer import spatz_pkg::*; import rvv_pkg::*; import fpnew_
         riscv_instr::VFSGNJ_VF,
         riscv_instr::VFSGNJN_VF,
         riscv_instr::VFSGNJX_VF,
+        riscv_instr::VFSLIDE1UP_VF,
+        riscv_instr::VFSLIDE1DOWN_VF,
         riscv_instr::VFMV_V_F,
         riscv_instr::VFMV_S_F,
         riscv_instr::VFMUL_VF,
