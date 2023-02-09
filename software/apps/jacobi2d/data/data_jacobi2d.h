@@ -7,7 +7,8 @@
 jacobi2d_layer jacobi2d_l = {
 	.R = 32,
 	.C = 32,
-	.c_dim_core = 16,
+	.r_dim_core = 16,
+	.c_dim_core = 32,
 	.dtype = FP64,
 };
 

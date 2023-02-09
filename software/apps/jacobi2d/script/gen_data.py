@@ -53,6 +53,7 @@ def emit_jacobi2d_layer(name='jacobi2d', **kwargs):
 
     r = kwargs['R']
     c = kwargs['C']
+    r_dim_core = kwargs['r_dim_core']
     c_dim_core = kwargs['c_dim_core']
 
     layer_str = ''
@@ -60,6 +61,7 @@ def emit_jacobi2d_layer(name='jacobi2d', **kwargs):
     layer_str += f'jacobi2d_layer {name}_l = {{\n'
     layer_str += f'\t.R = {r},\n'
     layer_str += f'\t.C = {c},\n'
+    layer_str += f'\t.r_dim_core = {r_dim_core},\n'
     layer_str += f'\t.c_dim_core = {c_dim_core},\n'
     layer_str += f'\t.dtype = FP{kwargs["prec"]},\n'
     layer_str += '};\n\n\n'
@@ -173,6 +175,7 @@ def main():
       'result': result,
       'R': param['R'],
       'C': param['C'],
+      'r_dim_core': param['r_dim_core'],
       'c_dim_core': param['c_dim_core'],
       'prec': param['prec'],
       'expand': param['expand'],

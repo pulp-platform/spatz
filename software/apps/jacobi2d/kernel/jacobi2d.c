@@ -79,18 +79,20 @@ WITH ACCESS OR USE OF THE SOFTWARE.
 // 1) Preload the coefficients, before each vstore
 // 2) Eliminate WAW and WAR hazards
 // 3) Unroll the loop and use multiple buffers
-void jacobi2d(double *a, double *b, uint32_t start_y, uint32_t start_x, uint32_t size_y, uint32_t size_x, uint32_t C) {
+void jacobi2d(double *a, double *b, const unsigned int start_y,
+              const unsigned int start_x, const unsigned int size_y,
+              const unsigned int size_x, const unsigned int C) {
   double izq_0, izq_1, izq_2;
   double der_0, der_1, der_2;
 
   // Avoid division. 1/5 == 0.2
-  double five_ = 0.2;
+  const double five_ = 0.2;
 
   size_t gvl;
 
   asm volatile("vsetvli %0, %1, e64, m4, ta, ma" : "=r"(gvl) : "r"(size_x));
 
-  for (uint32_t j = start_x; j < size_x + start_x; j = j + gvl) {
+  for (unsigned int j = start_x; j < size_x + start_x; j = j + gvl) {
     asm volatile("vsetvli %0, %1, e64, m4, ta, ma"
                  : "=r"(gvl)
                  : "r"(size_x - j + start_x));
@@ -103,7 +105,7 @@ void jacobi2d(double *a, double *b, uint32_t start_y, uint32_t start_x, uint32_t
     izq_0 = a[1 * C + j - 1];
     der_0 = a[1 * C + j + gvl];
 
-    for (uint32_t i = start_y; i <= size_y; i += 3) {
+    for (unsigned int i = start_y; i <= size_y; i += 3) {
       asm volatile("vfslide1up.vf v24, v4, %0" ::"f"(izq_0));
       asm volatile("vfslide1down.vf v28, v4, %0" ::"f"(der_0));
       asm volatile("vfadd.vv v12, v4, v0");   // middle - top

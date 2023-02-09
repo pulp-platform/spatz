@@ -19,6 +19,9 @@
 #ifndef _JACOBI2D_H_
 #define _JACOBI2D_H_
 
-inline void jacobi2d(double *a, double *b, uint32_t start_y, uint32_t start_x, uint32_t size_y, uint32_t size_x, uint32_t C) __attribute__((always_inline));
+inline void jacobi2d(double *a, double *b, const unsigned int start_y,
+                     const unsigned int start_x, const unsigned int size_y,
+                     const unsigned int size_x, const unsigned int C)
+    __attribute__((always_inline));
 
 #endif
