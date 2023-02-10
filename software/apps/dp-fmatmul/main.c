@@ -29,22 +29,6 @@
 #include "synchronization.h"
 #endif
 
-// Define Matrix dimensions:
-// C = AB with A=[MxN], B=[NxP], C=[MxP]
-#ifndef MATRIX_DIM
-#define MATRIX_DIM 256
-#endif
-#ifndef KERNEL_M
-#define KERNEL_M 2
-#endif
-#ifndef KERNEL_P
-#define KERNEL_P 2
-#endif
-
-#define M MATRIX_DIM
-#define N MATRIX_DIM
-#define P MATRIX_DIM
-
 double *a;
 double *b;
 double *c;
@@ -119,18 +103,21 @@ int main() {
 
   // Allocate the matrices in the local tile
   if (cid == 0) {
-    a = (double *)domain_malloc(get_alloc_tile(0), M * N * sizeof(double));
-    b = (double *)domain_malloc(get_alloc_tile(0), N * P * sizeof(double));
-    c = (double *)domain_malloc(get_alloc_tile(0), M * P * sizeof(double));
+    a = (double *)domain_malloc(get_alloc_tile(0),
+                                gemm_l.M * gemm_l.N * sizeof(double));
+    b = (double *)domain_malloc(get_alloc_tile(0),
+                                gemm_l.N * gemm_l.K * sizeof(double));
+    c = (double *)domain_malloc(get_alloc_tile(0),
+                                gemm_l.M * gemm_l.K * sizeof(double));
   }
 
   // Reset timer
   timer = (unsigned int)-1;
 
   // Set matrix dimension
-  dim = MATRIX_DIM;
-  kernel_size = KERNEL_M;
-  vl = KERNEL_P;
+  dim = gemm_l.N;
+  kernel_size = 4;
+  vl = gemm_l.N / active_cores;
 
   // Can every core execute its desired kernel?
   if ((dim * dim) / (kernel_size * vl) < active_cores)
@@ -163,10 +150,10 @@ int main() {
   mempool_barrier(num_cores);
 
   // Initialize matrices
-  if (cid == 0) {
-    init_matrix(a, gemm_A_dram, 0, dim, dim);
-    init_matrix(b, gemm_B_dram, 0, dim, dim);
-    init_matrix(c, gemm_C_dram, 0, dim, dim);
+  if (is_core_active) {
+    init_matrix(a, gemm_A_dram, cid * (gemm_l.M / active_cores), (cid + 1) * (gemm_l.M / active_cores), dim);
+    init_matrix(b, gemm_B_dram, cid * (gemm_l.M / active_cores), (cid + 1) * (gemm_l.M / active_cores), dim);
+    init_matrix(c, gemm_C_dram, cid * (gemm_l.M / active_cores), (cid + 1) * (gemm_l.M / active_cores), dim);
   }
 
   // Wait for all cores to finish

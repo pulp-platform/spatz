@@ -4,7 +4,7 @@
 
 #include "layer.h"
 
-gemm_layer gemm_l = {
+const gemm_layer gemm_l = {
 	.M = 64,
 	.N = 64,
 	.K = 64,

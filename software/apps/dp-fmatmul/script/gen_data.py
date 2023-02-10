@@ -110,7 +110,7 @@ def emit_GEMM_layer(name='gemm', **kwargs):
 
     layer_str = ''
     layer_str += '#include "layer.h"\n\n'
-    layer_str += f'gemm_layer {name}_l = {{\n'
+    layer_str += f'const gemm_layer {name}_l = {{\n'
     layer_str += f'\t.M = {m},\n'
     layer_str += f'\t.N = {n},\n'
     layer_str += f'\t.K = {k},\n'
