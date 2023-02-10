@@ -290,6 +290,12 @@ module spatz_decoder
         riscv_instr::VMULHU_VX,
         riscv_instr::VMULHSU_VV,
         riscv_instr::VMULHSU_VX,
+        riscv_instr::VWMUL_VV,
+        riscv_instr::VWMUL_VX,
+        riscv_instr::VWMULU_VV,
+        riscv_instr::VWMULU_VX,
+        riscv_instr::VWMULSU_VV,
+        riscv_instr::VWMULSU_VX,
         riscv_instr::VDIVU_VV,
         riscv_instr::VDIVU_VX,
         riscv_instr::VDIV_VV,
@@ -306,6 +312,13 @@ module spatz_decoder
         riscv_instr::VMADD_VX,
         riscv_instr::VNMSUB_VV,
         riscv_instr::VNMSUB_VX,
+        riscv_instr::VWMACC_VV,
+        riscv_instr::VWMACC_VX,
+        riscv_instr::VWMACCU_VV,
+        riscv_instr::VWMACCU_VX,
+        riscv_instr::VWMACCSU_VV,
+        riscv_instr::VWMACCSU_VX,
+        riscv_instr::VWMACCUS_VX,
         riscv_instr::VMERGE_VVM,
         riscv_instr::VMERGE_VXM,
         riscv_instr::VMERGE_VIM,
@@ -581,6 +594,31 @@ module spatz_decoder
               spatz_req.op = VMULHSU;
             end
 
+            // Vector Widening Multiply
+            riscv_instr::VWMUL_VV,
+            riscv_instr::VWMUL_VX: begin
+              spatz_req.op                  = VMUL;
+              spatz_req.op_arith.widen_vs1  = 1'b1;
+              spatz_req.op_arith.signed_vs1 = 1'b1;
+              spatz_req.op_arith.widen_vs2  = 1'b1;
+              spatz_req.op_arith.signed_vs2 = 1'b1;
+            end
+
+            riscv_instr::VWMULU_VV,
+            riscv_instr::VWMULU_VX: begin
+              spatz_req.op                 = VMUL;
+              spatz_req.op_arith.widen_vs1 = 1'b1;
+              spatz_req.op_arith.widen_vs2 = 1'b1;
+            end
+
+            riscv_instr::VWMULSU_VV,
+            riscv_instr::VWMULSU_VX: begin
+              spatz_req.op                  = VMUL;
+              spatz_req.op_arith.widen_vs1  = 1'b1;
+              spatz_req.op_arith.widen_vs2  = 1'b1;
+              spatz_req.op_arith.signed_vs2 = 1'b1;
+            end
+
             // Vector Division
             riscv_instr::VDIVU_VV,
             riscv_instr::VDIVU_VX: begin
@@ -625,6 +663,42 @@ module spatz_decoder
             riscv_instr::VNMSUB_VX: begin
               spatz_req.op        = VNMSUB;
               spatz_req.vd_is_src = 1'b1;
+            end
+
+            // Vector Widening Multiply-Add
+            riscv_instr::VWMACC_VV,
+            riscv_instr::VWMACC_VX: begin
+              spatz_req.op                  = VMACC;
+              spatz_req.vd_is_src           = 1'b1;
+              spatz_req.op_arith.widen_vs1  = 1'b1;
+              spatz_req.op_arith.signed_vs1 = 1'b1;
+              spatz_req.op_arith.widen_vs2  = 1'b1;
+              spatz_req.op_arith.signed_vs2 = 1'b1;
+            end
+
+            riscv_instr::VWMACCU_VV,
+            riscv_instr::VWMACCU_VX: begin
+              spatz_req.op                 = VMACC;
+              spatz_req.vd_is_src          = 1'b1;
+              spatz_req.op_arith.widen_vs1 = 1'b1;
+              spatz_req.op_arith.widen_vs2 = 1'b1;
+            end
+
+            riscv_instr::VWMACCSU_VV,
+            riscv_instr::VWMACCSU_VX: begin
+              spatz_req.op                  = VMACC;
+              spatz_req.vd_is_src           = 1'b1;
+              spatz_req.op_arith.widen_vs1  = 1'b1;
+              spatz_req.op_arith.signed_vs1 = 1'b1;
+              spatz_req.op_arith.widen_vs2  = 1'b1;
+            end
+
+            riscv_instr::VWMACCUS_VX: begin
+              spatz_req.op                  = VMACC;
+              spatz_req.vd_is_src           = 1'b1;
+              spatz_req.op_arith.widen_vs1  = 1'b1;
+              spatz_req.op_arith.widen_vs2  = 1'b1;
+              spatz_req.op_arith.signed_vs2 = 1'b1;
             end
 
             // Vector Merge

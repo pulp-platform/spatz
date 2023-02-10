@@ -161,6 +161,9 @@ package spatz_pkg;
 
     logic widen_vs1;
     logic widen_vs2;
+
+    logic signed_vs1;
+    logic signed_vs2;
   } op_arith_t;
 
   typedef struct packed {

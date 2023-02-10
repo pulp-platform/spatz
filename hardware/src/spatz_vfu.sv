@@ -631,6 +631,46 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
 
   assign is_ipu_busy = |int_ipu_busy;
 
+  logic [N_FU*ELEN-1:0] ipu_wide_operand1, ipu_wide_operand2, ipu_wide_operand3;
+  always_comb begin: gen_ipu_widening
+    automatic logic [N_FU*ELEN/2-1:0] shift_operand1 = !widening_upper_q ? operand1[N_FU*ELEN/2-1:0] : operand1[N_FU*ELEN-1:N_FU*ELEN/2];
+    automatic logic [N_FU*ELEN/2-1:0] shift_operand2 = !widening_upper_q ? operand2[N_FU*ELEN/2-1:0] : operand2[N_FU*ELEN-1:N_FU*ELEN/2];
+
+    ipu_wide_operand1 = operand1;
+    ipu_wide_operand2 = operand2;
+    ipu_wide_operand3 = operand3;
+
+    case (spatz_req.vtype.vsew)
+      EW_32: begin
+        for (int el = 0; el < N_FU; el++) begin
+          if (spatz_req.op_arith.widen_vs1 && MAXEW == EW_64)
+            ipu_wide_operand1[64*el +: 64] = spatz_req.op_arith.signed_vs1 ? {{32{shift_operand1[32*el+31]}}, shift_operand1[32*el +: 32]} : {32'b0, shift_operand1[32*el +: 32]};
+
+          if (spatz_req.op_arith.widen_vs2 && MAXEW == EW_64)
+            ipu_wide_operand2[64*el +: 64] = spatz_req.op_arith.signed_vs2 ? {{32{shift_operand2[32*el+31]}}, shift_operand2[32*el +: 32]} : {32'b0, shift_operand2[32*el +: 32]};
+        end
+      end
+      EW_16: begin
+        for (int el = 0; el < (MAXEW == EW_64 ? 2*N_FU : N_FU); el++) begin
+          if (spatz_req.op_arith.widen_vs1)
+            ipu_wide_operand1[32*el +: 32] = spatz_req.op_arith.signed_vs1 ? {{16{shift_operand1[16*el+15]}}, shift_operand1[16*el +: 16]} : {16'b0, shift_operand1[16*el +: 16]};
+
+          if (spatz_req.op_arith.widen_vs2)
+            ipu_wide_operand2[32*el +: 32] = spatz_req.op_arith.signed_vs2 ? {{16{shift_operand2[16*el+15]}}, shift_operand2[16*el +: 16]} : {16'b0, shift_operand2[16*el +: 16]};
+        end
+      end
+      EW_8: begin
+        for (int el = 0; el < (MAXEW == EW_64 ? 4*N_FU : 2*N_FU); el++) begin
+          if (spatz_req.op_arith.widen_vs1)
+            ipu_wide_operand1[16*el +: 16] = spatz_req.op_arith.signed_vs1 ? {{8{shift_operand1[8*el+7]}}, shift_operand1[8*el +: 8]} : {8'b0, shift_operand1[8*el +: 8]};
+
+          if (spatz_req.op_arith.widen_vs2)
+            ipu_wide_operand2[16*el +: 16] = spatz_req.op_arith.signed_vs2 ? {{8{shift_operand2[8*el+7]}}, shift_operand2[8*el +: 8]} : {8'b0, shift_operand2[8*el +: 8]};
+        end
+      end
+    endcase
+  end: gen_ipu_widening
+
   if (N_IPU < N_FU) begin: gen_pipeline_ipu
     logic [N_FU*ELEN-1:0] ipu_result_d, ipu_result_q;
     logic [N_FU*ELENB-1:0] ipu_result_valid_q, ipu_result_valid_d;
@@ -654,9 +694,9 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
 
       // Send operands
       ipu_in_ready     = 1'b0;
-      int_ipu_operand1 = operand1[ipu_operand_pnt_q*ELEN*N_IPU +: ELEN*N_IPU];
-      int_ipu_operand2 = operand2[ipu_operand_pnt_q*ELEN*N_IPU +: ELEN*N_IPU];
-      int_ipu_operand3 = operand3[ipu_operand_pnt_q*ELEN*N_IPU +: ELEN*N_IPU];
+      int_ipu_operand1 = ipu_wide_operand1[ipu_operand_pnt_q*ELEN*N_IPU +: ELEN*N_IPU];
+      int_ipu_operand2 = ipu_wide_operand2[ipu_operand_pnt_q*ELEN*N_IPU +: ELEN*N_IPU];
+      int_ipu_operand3 = ipu_wide_operand3[ipu_operand_pnt_q*ELEN*N_IPU +: ELEN*N_IPU];
       if (spatz_req_valid && operands_ready && &int_ipu_in_ready && !is_fpu_insn) begin
         ipu_operand_pnt_d = ipu_operand_pnt_q + 1;
         if (ipu_operand_pnt_d == '0 || !(&valid_operations[ipu_operand_pnt_d*ELENB*N_IPU +: ELENB*N_IPU]))
@@ -695,9 +735,9 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
     assign ipu_result_tag   = ipu_result_tag_q;
   end: gen_pipeline_ipu else begin
     assign ipu_in_ready         = int_ipu_in_ready;
-    assign int_ipu_operand1     = operand1;
-    assign int_ipu_operand2     = operand2;
-    assign int_ipu_operand3     = operand3;
+    assign int_ipu_operand1     = ipu_wide_operand1;
+    assign int_ipu_operand2     = ipu_wide_operand2;
+    assign int_ipu_operand3     = ipu_wide_operand3;
     assign ipu_result           = int_ipu_result;
     assign ipu_result_valid     = int_ipu_result_valid;
     assign int_ipu_result_ready = result_ready;
@@ -707,6 +747,12 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
   for (genvar ipu = 0; unsigned'(ipu) < N_IPU; ipu++) begin : gen_ipus
     logic ipu_ready;
     assign int_ipu_in_ready[ipu*ELENB +: ELENB] = {ELENB{ipu_ready}};
+
+    logic is_widening;
+    assign is_widening = spatz_req.op_arith.widen_vs1 || spatz_req.op_arith.widen_vs2;
+
+    vew_e sew;
+    assign sew = vew_e'(int'(spatz_req.vtype.vsew) + is_widening);
 
     spatz_ipu #(
       .tag_t(vfu_tag_t)
@@ -722,7 +768,7 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
       .op_d_i           (int_ipu_operand3[ipu*ELEN +: ELEN]                                                              ),
       .tag_i            (input_tag                                                                                       ),
       .carry_i          ('0                                                                                              ),
-      .sew_i            (spatz_req.vtype.vsew                                                                            ),
+      .sew_i            (sew                                                                                             ),
       .be_o             (/* Unused */                                                                                    ),
       .result_o         (int_ipu_result[ipu*ELEN +: ELEN]                                                                ),
       .result_valid_o   (int_ipu_result_valid[ipu*ELENB +: ELENB]                                                        ),
@@ -899,7 +945,7 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
       int_format_e fpu_int_fmt_q;
       logic fpu_op_mode_q;
       logic fpu_vectorial_op_q;
-      fpnew_pkg::roundmode_e rm_q;
+      roundmode_e rm_q;
       vfu_tag_t input_tag_q;
       logic fpu_in_valid_q;
       logic fpu_in_ready_d;
