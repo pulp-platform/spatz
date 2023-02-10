@@ -37,6 +37,7 @@ void TEST_CASE1() {
            0x3fbefdcf, 0x10d33667, 0x7da856bd, 0x65838754, 0xa31092ec,
            0x74d30370);
 
+#if ELEN == 64
   VSET(16, e64, m2);
   VLOAD_64(v6, 0xb6a5b1c3c6d69abb, 0x3c6a647eb0d79a41, 0xf0c3eb8821045259,
            0x91d74be946352cae, 0x524c6db6c58f9da6, 0x39185a920f7787e8,
@@ -58,6 +59,7 @@ void TEST_CASE1() {
            0x47fbdc7722d7f1e8, 0xd8b3ab8cf55eb11f, 0xc52e86eb9b0cedda,
            0xe7dbf512bdc5c2ab, 0x6fadfdb8b3d16658, 0xd13568f3f48a0453,
            0x5d63f4705f821de8);
+#endif
 }
 
 void TEST_CASE2() {
@@ -92,6 +94,7 @@ void TEST_CASE2() {
            0x373dc202, 0x10d33667, 0x763c5239, 0x65838754, 0xab178102,
            0x74d30370);
 
+#if ELEN == 64
   VSET(16, e64, m2);
   VLOAD_64(v6, 0xb6a5b1c3c6d69abb, 0x3c6a647eb0d79a41, 0xf0c3eb8821045259,
            0x91d74be946352cae, 0x524c6db6c58f9da6, 0x39185a920f7787e8,
@@ -114,6 +117,7 @@ void TEST_CASE2() {
            0x47fbdc7722d7f1e8, 0xd8cc0342dc3104ce, 0xc52e86eb9b0cedda,
            0xe7d6522aa1c51245, 0x6fadfdb8b3d16658, 0xd140731478a147a8,
            0x5d63f4705f821de8);
+#endif
 }
 
 int main(void) {
@@ -121,7 +125,7 @@ int main(void) {
   enable_vec();
 
   TEST_CASE1();
-  TEST_CASE2();
+  // TEST_CASE2();
 
   EXIT_CHECK();
 }

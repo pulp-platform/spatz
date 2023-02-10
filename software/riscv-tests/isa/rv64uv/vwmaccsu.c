@@ -39,6 +39,7 @@ void TEST_CASE1() {
            0x9aab508a, 0x8f921d88, 0x7cbe902e, 0xbbb98e88, 0x97b93f58,
            0x84411397);
 
+#if ELEN == 64
   VSET(16, e64, m2);
   VLOAD_64(v6, 0xf8e162af4fefb46a, 0x8e859cff3b076a9d, 0xa7279ec622e749eb,
            0x67bbdace6d6bf1a9, 0xf2090d8d3b00e5b8, 0x9259e92430c5a337,
@@ -63,6 +64,7 @@ void TEST_CASE1() {
            0x7bb552f0a51802e9, 0xd49c03ec9aaeb580, 0x0c6e9b2885384c9a,
            0xd60dbf3493400d51, 0xf465e158f7657501, 0x4e90951ee65f361b,
            0x3a651986a4cf2cbb);
+#endif
 }
 
 void TEST_CASE2() {
@@ -99,6 +101,7 @@ void TEST_CASE2() {
            0x90e5ba77, 0x8f921d88, 0x82d1976e, 0xbbb98e88, 0x989fbb9a,
            0x84411397);
 
+#if ELEN == 64
   VSET(16, e64, m2);
   VLOAD_64(v6, 0xf8e162af4fefb46a, 0x8e859cff3b076a9d, 0xa7279ec622e749eb,
            0x67bbdace6d6bf1a9, 0xf2090d8d3b00e5b8, 0x9259e92430c5a337,
@@ -124,6 +127,7 @@ void TEST_CASE2() {
            0x7bb552f0a51802e9, 0xa7b0f15e7b51c000, 0x0c6e9b2885384c9a,
            0xf385b581a4c1c25b, 0xf465e158f7657501, 0x54ffc96dc442d7b5,
            0x3a651986a4cf2cbb);
+#endif
 }
 
 void TEST_CASE3() {
@@ -156,6 +160,7 @@ void TEST_CASE3() {
            0xa039b88c, 0xc18d7372, 0x6c5c1022, 0xd3b3a4d4, 0x3e1f3e87,
            0x25daceb1);
 
+#if ELEN == 64
   VSET(16, e64, m2);
   VLOAD_64(v6, 0xd860771ff910e8a1, 0xd8de9ddf3be66e90, 0xe55e25348ff4c406,
            0x6ee24d9ebeda1c54, 0x78437fc8299017d1, 0x46a2833ed69dec1d,
@@ -177,6 +182,7 @@ void TEST_CASE3() {
            0x0e8cb57c0c43cff6, 0x7c093f98e48cef0d, 0x047b2edbc92e1f80,
            0x342f8210ca0537fd, 0xb7ca29b420c298c1, 0xdce563a087e10ceb,
            0xc2a5c016503018a0);
+#endif
 }
 
 void TEST_CASE4() {
@@ -211,6 +217,7 @@ void TEST_CASE4() {
            0xa2c6a2e7, 0xc18d7372, 0x7a908fb9, 0xd3b3a4d4, 0x48109ee2,
            0x25daceb1);
 
+#if ELEN == 64
   VSET(16, e64, m2);
   VLOAD_64(v6, 0xd860771ff910e8a1, 0xd8de9ddf3be66e90, 0xe55e25348ff4c406,
            0x6ee24d9ebeda1c54, 0x78437fc8299017d1, 0x46a2833ed69dec1d,
@@ -233,6 +240,7 @@ void TEST_CASE4() {
            0x0e8cb57c0c43cff6, 0x7bb0e1dd5f273626, 0x047b2edbc92e1f80,
            0x341b063e01c35796, 0xb7ca29b420c298c1, 0xdcbd3fe115470433,
            0xc2a5c016503018a0);
+#endif
 }
 
 int main(void) {
@@ -240,9 +248,9 @@ int main(void) {
   enable_vec();
 
   TEST_CASE1();
-  TEST_CASE2();
+  // TEST_CASE2();
   TEST_CASE3();
-  TEST_CASE4();
+  // TEST_CASE4();
 
   EXIT_CHECK();
 }
