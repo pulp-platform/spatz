@@ -515,19 +515,17 @@ module spatz_controller
   logic     vfu_rsp_valid;
   logic     vfu_rsp_ready;
 
-  stream_register #(
+  spill_register #(
     .T(vfu_rsp_t)
   ) i_vfu_scalar_response (
-    .clk_i     (clk_i                          ),
-    .rst_ni    (rst_ni                         ),
-    .clr_i     (1'b0                           ),
-    .testmode_i(1'b0                           ),
-    .data_i    (vfu_rsp_i                      ),
-    .valid_i   (vfu_rsp_valid_i && vfu_rsp_i.wb),
-    .ready_o   (vfu_rsp_ready_o                ),
-    .data_o    (vfu_rsp                        ),
-    .valid_o   (vfu_rsp_valid                  ),
-    .ready_i   (vfu_rsp_ready                  )
+    .clk_i  (clk_i                          ),
+    .rst_ni (rst_ni                         ),
+    .data_i (vfu_rsp_i                      ),
+    .valid_i(vfu_rsp_valid_i && vfu_rsp_i.wb),
+    .ready_o(vfu_rsp_ready_o                ),
+    .data_o (vfu_rsp                        ),
+    .valid_o(vfu_rsp_valid                  ),
+    .ready_i(vfu_rsp_ready                  )
   );
 
   // Retire an operation/instruction and write back result to core

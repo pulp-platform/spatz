@@ -147,6 +147,9 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
   // Is the FPU busy?
   logic is_fpu_busy;
 
+  // Is the IPU busy?
+  logic is_ipu_busy;
+
   // Scalar results (sent back to Snitch)
   elen_t scalar_result;
 
@@ -213,19 +216,25 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
     if (spatz_req_valid)
       unique case (state_q)
         VFU_RunningIPU: begin
-          // Go to the FPU state directly
+          // Only go to the FPU state once the IPUs are no longer busy
           if (is_fpu_insn) begin
-            state_d = VFU_RunningFPU;
-            stall   = 1'b1;
+            if (is_ipu_busy)
+              stall = 1'b1;
+            else begin
+              state_d = VFU_RunningFPU;
+              stall   = 1'b1;
+            end
           end
         end
         VFU_RunningFPU: begin
-          // Only go back to the FPU state once the FPUs are no longer busy
+          // Only go back to the IPU state once the FPUs are no longer busy
           if (!is_fpu_insn)
             if (is_fpu_busy)
               stall = 1'b1;
-            else
+            else begin
               state_d = VFU_RunningIPU;
+              stall   = 1'b1;
+            end
         end
       endcase
 
@@ -311,9 +320,9 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
     operand3 = spatz_req.op_arith.is_scalar ? {1*N_FU{spatz_req.rsd}} : vrf_rdata_i[2];
   end: operand_proc
 
-  assign in_ready     = state_d == VFU_RunningIPU ? ipu_in_ready     : fpu_in_ready;
-  assign result       = state_d == VFU_RunningIPU ? ipu_result       : fpu_result;
-  assign result_valid = state_d == VFU_RunningIPU ? ipu_result_valid : fpu_result_valid;
+  assign in_ready     = state_q == VFU_RunningIPU ? ipu_in_ready     : fpu_in_ready;
+  assign result       = state_q == VFU_RunningIPU ? ipu_result       : fpu_result;
+  assign result_valid = state_q == VFU_RunningIPU ? ipu_result_valid : fpu_result_valid;
 
   assign scalar_result = spatz_req.op_arith.is_scalar ? result[ELEN-1:0] : '0;
 
@@ -618,6 +627,9 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
   vfu_tag_t [N_IPU-1:0]       int_ipu_result_tag;
   logic     [N_IPU*ELENB-1:0] int_ipu_result_valid;
   logic                       int_ipu_result_ready;
+  logic     [N_IPU-1:0]       int_ipu_busy;
+
+  assign is_ipu_busy = |int_ipu_busy;
 
   if (N_IPU < N_FU) begin: gen_pipeline_ipu
     logic [N_FU*ELEN-1:0] ipu_result_d, ipu_result_q;
@@ -692,7 +704,6 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
     assign ipu_result_tag       = int_ipu_result_tag[0];
   end
 
-
   for (genvar ipu = 0; unsigned'(ipu) < N_IPU; ipu++) begin : gen_ipus
     logic ipu_ready;
     assign int_ipu_in_ready[ipu*ELENB +: ELENB] = {ELENB{ipu_ready}};
@@ -716,7 +727,8 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
       .result_o         (int_ipu_result[ipu*ELEN +: ELEN]                                                                ),
       .result_valid_o   (int_ipu_result_valid[ipu*ELENB +: ELENB]                                                        ),
       .result_ready_i   (int_ipu_result_ready                                                                            ),
-      .tag_o            (int_ipu_result_tag[ipu]                                                                         )
+      .tag_o            (int_ipu_result_tag[ipu]                                                                         ),
+      .busy_o           (int_ipu_busy[ipu]                                                                               )
     );
   end : gen_ipus
 

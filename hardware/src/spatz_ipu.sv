@@ -28,7 +28,8 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
     output elen_t  result_o,
     output elenb_t result_valid_o,
     input  logic   result_ready_i,
-    output tag_t   tag_o
+    output tag_t   tag_o,
+    output logic   busy_o
   );
 
 // Include FF
@@ -47,6 +48,20 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
   // Is the operation signed
   logic is_signed;
   assign is_signed = operation inside {VMIN, VMAX, VMULH, VMULHSU, VDIV, VREM};
+
+  logic [1:0] op_count_q, op_count_d;
+  `FF(op_count_q, op_count_d, '0)
+  always_comb begin: proc_busy
+    // Maintain state
+    op_count_d = op_count_q;
+
+    if (operation_valid_i && operation_ready_o)
+      op_count_d += 1;
+    if (result_valid_o && result_ready_i)
+      op_count_d -= 1;
+
+    busy_o = (op_count_q != '0);
+  end: proc_busy
 
   // Forward the tag
   if (Pipeline) begin: gen_pipeline
