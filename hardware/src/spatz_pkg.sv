@@ -46,7 +46,7 @@ package spatz_pkg;
   // Number of addressable words in a vector register
   localparam int unsigned NrWordsPerVector = VLEN/VRFWordWidth;
   // Number of VRF banks
-  localparam int unsigned NrVRFBanks       = 4;
+  localparam int unsigned NrVRFBanks       = 2;
   // Number of elements per VRF Bank
   localparam int unsigned NrWordsPerBank   = NrWordsPerVector / NrVRFBanks;
 
