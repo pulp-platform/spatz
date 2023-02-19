@@ -9,7 +9,7 @@
 
 module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx_width; #(
     parameter               NrMemPorts         = 1,
-    parameter               NrOutstandingLoads = 4,
+    parameter               NrOutstandingLoads = 8,
     // Dependant parameters. DO NOT CHANGE!
     localparam int unsigned IdWidth            = idx_width(NrOutstandingLoads)
   ) (
@@ -490,7 +490,7 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
         else if (spatz_req.vstart[$clog2(MemDataWidthB) +: $clog2(NrMemPorts)] == port)
           mem_counter_d[port] += spatz_req.vstart[$clog2(MemDataWidthB)-1:0];
       mem_counter_delta[port] = !mem_operation_valid[port] ? 'd0 : is_single_element_operation ? single_element_size : mem_operation_last[port] ? (max_elements - mem_counter_q[port]) : MemDataWidthB;
-      mem_counter_en[port]    = spatz_mem_req_ready_i[port] && spatz_mem_req_valid_o[port];
+      mem_counter_en[port]    = spatz_mem_req_ready[port] && spatz_mem_req_valid[port];
       mem_counter_max[port]   = max_elements;
     end
   end
@@ -743,13 +743,11 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
 
   // Create memory requests
   for (genvar port = 0; port < NrMemPorts; port++) begin : gen_mem_req
-    stream_register #(
+    spill_register #(
       .T(spatz_mem_req_t)
     ) i_spatz_mem_req_register (
       .clk_i     (clk_i                      ),
       .rst_ni    (rst_ni                     ),
-      .clr_i     (1'b0                       ),
-      .testmode_i(1'b0                       ),
       .data_i    (spatz_mem_req[port]        ),
       .valid_i   (spatz_mem_req_valid[port]  ),
       .ready_o   (spatz_mem_req_ready[port]  ),
