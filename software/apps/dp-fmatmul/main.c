@@ -117,7 +117,7 @@ int main() {
   // Set matrix dimension
   dim = gemm_l.N;
   kernel_size = 4;
-  vl = gemm_l.N / active_cores;
+  vl = gemm_l.N;
 
   // Can every core execute its desired kernel?
   if ((dim * dim) / (kernel_size * vl) < active_cores)
@@ -136,6 +136,7 @@ int main() {
     const unsigned int split_p_count = cores_per_group / split_m_count;
     p_start = dim / split_p_count * (core_gid % split_p_count);
     p_end = dim / split_p_count * ((core_gid % split_p_count) + 1);
+    vl = p_end - p_start;
     m_start = dim_group * gid + kernel_size * (core_gid / split_p_count);
     m_end = dim_group * gid + kernel_size * (core_gid / split_p_count + 1);
   } else {
@@ -151,9 +152,12 @@ int main() {
 
   // Initialize matrices
   if (is_core_active) {
-    init_matrix(a, gemm_A_dram, cid * (gemm_l.M / active_cores), (cid + 1) * (gemm_l.M / active_cores), dim);
-    init_matrix(b, gemm_B_dram, cid * (gemm_l.M / active_cores), (cid + 1) * (gemm_l.M / active_cores), dim);
-    init_matrix(c, gemm_C_dram, cid * (gemm_l.M / active_cores), (cid + 1) * (gemm_l.M / active_cores), dim);
+    init_matrix(a, gemm_A_dram, cid * (gemm_l.M / active_cores),
+                (cid + 1) * (gemm_l.M / active_cores), dim);
+    init_matrix(b, gemm_B_dram, cid * (gemm_l.M / active_cores),
+                (cid + 1) * (gemm_l.M / active_cores), dim);
+    init_matrix(c, gemm_C_dram, cid * (gemm_l.M / active_cores),
+                (cid + 1) * (gemm_l.M / active_cores), dim);
   }
 
   // Wait for all cores to finish
@@ -170,11 +174,11 @@ int main() {
         start_kernel();
 
       if (kernel_size == 2) {
-        matmul_2xVL(c, a, b, m_start, m_end, dim, dim, p_start, p_end, vl);
+        matmul_2xVL(c, a, b, m_start, m_end, dim, dim, p_start, p_end);
       } else if (kernel_size == 4) {
-        matmul_4xVL(c, a, b, m_start, m_end, dim, dim, p_start, p_end, vl);
+        matmul_4xVL(c, a, b, m_start, m_end, dim, dim, p_start, p_end);
       } else if (kernel_size == 8) {
-        matmul_8xVL(c, a, b, m_start, m_end, dim, dim, p_start, p_end, vl);
+        matmul_8xVL(c, a, b, m_start, m_end, dim, dim, p_start, p_end);
       } else {
         return -2;
       }
