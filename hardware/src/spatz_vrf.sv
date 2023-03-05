@@ -12,19 +12,19 @@ module spatz_vrf
     parameter int unsigned NrReadPorts  = 5,
     parameter int unsigned NrWritePorts = 3
   ) (
-    input  logic                          clk_i,
-    input  logic                          rst_ni,
+    input  logic                         clk_i,
+    input  logic                         rst_ni,
     // Write ports
-    input  vreg_addr_t [NrWritePorts-1:0] waddr_i,
-    input  vreg_data_t [NrWritePorts-1:0] wdata_i,
-    input  logic       [NrWritePorts-1:0] we_i,
-    input  vreg_be_t   [NrWritePorts-1:0] wbe_i,
-    output logic       [NrWritePorts-1:0] wvalid_o,
+    input  vrf_addr_t [NrWritePorts-1:0] waddr_i,
+    input  vrf_data_t [NrWritePorts-1:0] wdata_i,
+    input  logic      [NrWritePorts-1:0] we_i,
+    input  vrf_be_t   [NrWritePorts-1:0] wbe_i,
+    output logic      [NrWritePorts-1:0] wvalid_o,
     // Read ports
-    input  vreg_addr_t [NrReadPorts-1:0]  raddr_i,
-    input  logic       [NrReadPorts-1:0]  re_i,
-    output vreg_data_t [NrReadPorts-1:0]  rdata_o,
-    output logic       [NrReadPorts-1:0]  rvalid_o
+    input  vrf_addr_t [NrReadPorts-1:0]  raddr_i,
+    input  logic      [NrReadPorts-1:0]  re_i,
+    output vrf_data_t [NrReadPorts-1:0]  rdata_o,
+    output logic      [NrReadPorts-1:0]  rvalid_o
   );
 
 `include "common_cells/registers.svh"
@@ -35,15 +35,23 @@ module spatz_vrf
 
   localparam int unsigned NrReadPortsPerBank = 3;
 
-  localparam int unsigned RegWidth      = VLEN/NrVRFBanks;
-  localparam int unsigned ElemWidth     = N_FU*ELEN;
-  localparam int unsigned NrElemPerBank = RegWidth/ElemWidth;
-
   //////////////
   // Typedefs //
   //////////////
 
-  typedef logic [$bits(vreg_addr_t)-$clog2(NrVRFBanks)-1:0] vregfile_addr_t;
+  typedef logic [$bits(vrf_addr_t)-$clog2(NrVRFBanks)-1:0] vregfile_addr_t;
+
+  function automatic logic [$clog2(NrWordsPerBank)-1:0] f_vreg(vrf_addr_t addr);
+    f_vreg = addr[$clog2(NrVRFWords)-1:$clog2(NrVRFBanks)];
+  endfunction: f_vreg
+
+  function automatic logic [$clog2(NrVRFBanks)-1:0] f_bank(vrf_addr_t addr);
+    // Is this vreg divisible by eight?
+    automatic logic [1:0] vreg8 = addr[$clog2(8*NrWordsPerVector) +: 2];
+
+    // Barber's pole. Advance the starting bank of each vector by one every eight vector registers.
+    f_bank = addr[$clog2(NrVRFBanks)-1:0] + vreg8;
+  endfunction: f_bank
 
   /////////////
   // Signals //
@@ -51,22 +59,24 @@ module spatz_vrf
 
   // Write signals
   vregfile_addr_t [NrVRFBanks-1:0] waddr;
-  vreg_data_t     [NrVRFBanks-1:0] wdata;
+  vrf_data_t      [NrVRFBanks-1:0] wdata;
   logic           [NrVRFBanks-1:0] we;
-  vreg_be_t       [NrVRFBanks-1:0] wbe;
+  vrf_be_t        [NrVRFBanks-1:0] wbe;
 
   // Read signals
   vregfile_addr_t [NrVRFBanks-1:0][NrReadPortsPerBank-1:0] raddr;
-  vreg_data_t     [NrVRFBanks-1:0][NrReadPortsPerBank-1:0] rdata;
+  vrf_data_t      [NrVRFBanks-1:0][NrReadPortsPerBank-1:0] rdata;
 
   ///////////////////
   // Write Mapping //
   ///////////////////
 
   logic [NrVRFBanks-1:0][NrWritePorts-1:0] write_request;
-  for (genvar bank = 0; bank < NrVRFBanks; bank++) begin: gen_write_request
-    for (genvar port = 0; port < NrWritePorts; port++) begin
-      assign write_request[bank][port] = we_i[port] && waddr_i[port].bank == bank;
+  always_comb begin: gen_write_request
+    for (int bank = 0; bank < NrVRFBanks; bank++) begin
+      for (int port = 0; port < NrWritePorts; port++) begin
+        write_request[bank][port] = we_i[port] && f_bank(waddr_i[port]) == bank;
+      end
     end
   end: gen_write_request
 
@@ -82,19 +92,19 @@ module spatz_vrf
     for (int unsigned bank = 0; bank < NrVRFBanks; bank++) begin
       // Bank write port 0 - Priority: vd (0) -> lsu (round-robin) <-> sld (round-robin)
       if (write_request[bank][VFU_VD_WD]) begin
-        waddr[bank]         = waddr_i[VFU_VD_WD].vreg;
+        waddr[bank]         = f_vreg(waddr_i[VFU_VD_WD]);
         wdata[bank]         = wdata_i[VFU_VD_WD];
         we[bank]            = 1'b1;
         wbe[bank]           = wbe_i[VFU_VD_WD];
         wvalid_o[VFU_VD_WD] = 1'b1;
       end else if (write_request[bank][VLSU_VD_WD]) begin
-        waddr[bank]          = waddr_i[VLSU_VD_WD].vreg;
+        waddr[bank]          = f_vreg(waddr_i[VLSU_VD_WD]);
         wdata[bank]          = wdata_i[VLSU_VD_WD];
         we[bank]             = 1'b1;
         wbe[bank]            = wbe_i[VLSU_VD_WD];
         wvalid_o[VLSU_VD_WD] = 1'b1;
       end else if (write_request[bank][VSLDU_VD_WD]) begin
-        waddr[bank]           = waddr_i[VSLDU_VD_WD].vreg;
+        waddr[bank]           = f_vreg(waddr_i[VSLDU_VD_WD]);
         wdata[bank]           = wdata_i[VSLDU_VD_WD];
         we[bank]              = 1'b1;
         wbe[bank]             = wbe_i[VSLDU_VD_WD];
@@ -108,9 +118,11 @@ module spatz_vrf
   //////////////////
 
   logic [NrVRFBanks-1:0][NrReadPorts-1:0] read_request;
-  for (genvar bank = 0; bank < NrVRFBanks; bank++) begin: gen_read_request
-    for (genvar port = 0; port < NrReadPorts; port++) begin
-      assign read_request[bank][port] = re_i[port] && raddr_i[port].bank == bank;
+  always_comb begin: gen_read_request
+    for (int bank = 0; bank < NrVRFBanks; bank++) begin
+      for (int port = 0; port < NrReadPorts; port++) begin
+        read_request[bank][port] = re_i[port] && f_bank(raddr_i[port]) == bank;
+      end
     end
   end: gen_read_request
 
@@ -126,33 +138,33 @@ module spatz_vrf
     for (int unsigned bank = 0; bank < NrVRFBanks; bank++) begin
       // Bank read port 0 - Priority: VFU (2) -> VLSU
       if (read_request[bank][VFU_VS2_RD]) begin
-        raddr[bank][0]       = raddr_i[VFU_VS2_RD].vreg;
+        raddr[bank][0]       = f_vreg(raddr_i[VFU_VS2_RD]);
         rdata_o[VFU_VS2_RD]  = rdata[bank][0];
         rvalid_o[VFU_VS2_RD] = 1'b1;
       end else if (read_request[bank][VLSU_VS2_RD]) begin
-        raddr[bank][0]        = raddr_i[VLSU_VS2_RD].vreg;
+        raddr[bank][0]        = f_vreg(raddr_i[VLSU_VS2_RD]);
         rdata_o[VLSU_VS2_RD]  = rdata[bank][0];
         rvalid_o[VLSU_VS2_RD] = 1'b1;
       end
 
       // Bank read port 1 - Priority: VFU (1) -> VSLDU
       if (read_request[bank][VFU_VS1_RD]) begin
-        raddr[bank][1]       = raddr_i[VFU_VS1_RD].vreg;
+        raddr[bank][1]       = f_vreg(raddr_i[VFU_VS1_RD]);
         rdata_o[VFU_VS1_RD]  = rdata[bank][1];
         rvalid_o[VFU_VS1_RD] = 1'b1;
       end else if (read_request[bank][VSLDU_VS2_RD]) begin
-        raddr[bank][1]         = raddr_i[VSLDU_VS2_RD].vreg;
+        raddr[bank][1]         = f_vreg(raddr_i[VSLDU_VS2_RD]);
         rdata_o[VSLDU_VS2_RD]  = rdata[bank][1];
         rvalid_o[VSLDU_VS2_RD] = 1'b1;
       end
 
       // Bank read port 2 - Priority: VFU (D) -> VLSU
       if (read_request[bank][VFU_VD_RD]) begin
-        raddr[bank][2]      = raddr_i[VFU_VD_RD].vreg;
+        raddr[bank][2]      = f_vreg(raddr_i[VFU_VD_RD]);
         rdata_o[VFU_VD_RD]  = rdata[bank][2];
         rvalid_o[VFU_VD_RD] = 1'b1;
       end else if (read_request[bank][VLSU_VD_RD]) begin
-        raddr[bank][2]       = raddr_i[VLSU_VD_RD].vreg;
+        raddr[bank][2]       = f_vreg(raddr_i[VLSU_VD_RD]);
         rdata_o[VLSU_VD_RD]  = rdata[bank][2];
         rvalid_o[VLSU_VD_RD] = 1'b1;
       end
@@ -172,9 +184,9 @@ module spatz_vrf
       end
 
       vregfile #(
-        .NrReadPorts(NrReadPortsPerBank   ),
-        .NrWords    (NRVREG*NrWordsPerBank),
-        .WordWidth  (ELEN                 )
+        .NrReadPorts(NrReadPortsPerBank),
+        .NrWords    (NrWordsPerBank    ),
+        .WordWidth  (ELEN              )
       ) i_vregfile (
         .clk_i  (clk_i                        ),
         .rst_ni (rst_ni                       ),
@@ -200,17 +212,5 @@ module spatz_vrf
 
   if (NrReadPorts / NrReadPortsPerBank > NrVRFBanks)
     $error("[spatz_vrf] The number of vregfile banks needs to be increased to handle the number of read ports.");
-
-  if (NrElemPerBank == 0)
-    $error("[spatz_vrf] The number of elements per bank can not be zero.");
-
-  if (NrVRFBanks > NrWordsPerVector)
-    $error("[spatz_vrf] The number of banks must be at most the number of words per vector.");
-
-  if (RegWidth < ElemWidth)
-    $error("[spatz_vrf] The register width has to be bigger than the element width.");
-
-  if (spatz_pkg::N_FU * spatz_pkg::ELEN * NrVRFBanks > spatz_pkg::VLEN)
-    $error("[spatz_vrf] The vector register length has to be equal to or larger than N_FU*ELEN*NrVRegBanks.");
 
 endmodule : spatz_vrf

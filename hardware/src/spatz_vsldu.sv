@@ -20,16 +20,16 @@ module spatz_vsldu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
     output vsldu_rsp_t vsldu_rsp_o,
 
     // VRF
-    output vreg_addr_t       vrf_waddr_o,
-    output vreg_data_t       vrf_wdata_o,
-    output logic             vrf_we_o,
-    output vreg_be_t         vrf_wbe_o,
-    input  logic             vrf_wvalid_i,
-    output spatz_id_t  [1:0] vrf_id_o,
-    output vreg_addr_t       vrf_raddr_o,
-    output logic             vrf_re_o,
-    input  vreg_data_t       vrf_rdata_i,
-    input  logic             vrf_rvalid_i
+    output vrf_addr_t       vrf_waddr_o,
+    output vrf_data_t       vrf_wdata_o,
+    output logic            vrf_we_o,
+    output vrf_be_t         vrf_wbe_o,
+    input  logic            vrf_wvalid_i,
+    output spatz_id_t [1:0] vrf_id_o,
+    output vrf_addr_t       vrf_raddr_o,
+    output logic            vrf_re_o,
+    input  vrf_data_t       vrf_rdata_i,
+    input  logic            vrf_rvalid_i
   );
 
 // Include FF
@@ -97,9 +97,9 @@ module spatz_vsldu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
   ///////////////////////
 
   typedef struct packed {
-    vreg_addr_t waddr;
-    vreg_data_t wdata;
-    vreg_be_t wbe;
+    vrf_addr_t waddr;
+    vrf_data_t wdata;
+    vrf_be_t wbe;
   } vrf_req_t;
 
   vrf_req_t vrf_req_d, vrf_req_q;
@@ -343,7 +343,7 @@ module spatz_vsldu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
   ////////////
 
   // Shift overflow register
-  vreg_data_t shift_overflow_q, shift_overflow_d;
+  vrf_data_t shift_overflow_q, shift_overflow_d;
   `FF(shift_overflow_q, shift_overflow_d, '0)
 
   // Number of bytes we have to shift the elements around
@@ -353,7 +353,7 @@ module spatz_vsldu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
   assign in_elem_flipped_offset = VRFWordBWidth - in_elem_offset;
 
   // Data signals for different stages of the shift
-  vreg_data_t data_in, data_out, data_low, data_high;
+  vrf_data_t data_in, data_out, data_low, data_high;
 
   always_comb begin
     shift_overflow_d = shift_overflow_q;
@@ -412,7 +412,7 @@ module spatz_vsldu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
           for (int b = 0; b < VRFWordBWidth; b++)
             if (b >= (vreg_counter_q[$clog2(VRFWordBWidth)-1:0] + vreg_counter_delta - (4'b0001<<spatz_req.vtype.vsew)))
               data_out[b*8 +: 8] = data_low[b*8 +: 8];
-          data_out = data_out | (vreg_data_t'(spatz_req.rs1) << 8*(vreg_counter_q[$clog2(VRFWordBWidth)-1:0]+vreg_counter_delta-(4'b0001<<spatz_req.vtype.vsew)));
+          data_out = data_out | (vrf_data_t'(spatz_req.rs1) << 8*(vreg_counter_q[$clog2(VRFWordBWidth)-1:0]+vreg_counter_delta-(4'b0001<<spatz_req.vtype.vsew)));
         end
       end
 
@@ -423,7 +423,7 @@ module spatz_vsldu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
 
         // Insert rs1 element at the first position
         if (spatz_req.op_sld.insert && !spatz_req.op_sld.vmv && vreg_operation_first && spatz_req.vstart == 'd0)
-          vrf_req_d.wdata = vrf_req_d.wdata | vreg_data_t'(spatz_req.rs1);
+          vrf_req_d.wdata = vrf_req_d.wdata | vrf_data_t'(spatz_req.rs1);
       end else begin
         vrf_req_d.wdata = data_out;
       end

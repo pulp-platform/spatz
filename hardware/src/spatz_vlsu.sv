@@ -23,15 +23,15 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
     output logic                             vlsu_rsp_valid_o,
     output vlsu_rsp_t                        vlsu_rsp_o,
     // Interface with the VRF
-    output vreg_addr_t                       vrf_waddr_o,
-    output vreg_data_t                       vrf_wdata_o,
+    output vrf_addr_t                        vrf_waddr_o,
+    output vrf_data_t                        vrf_wdata_o,
     output logic                             vrf_we_o,
-    output vreg_be_t                         vrf_wbe_o,
+    output vrf_be_t                          vrf_wbe_o,
     input  logic                             vrf_wvalid_i,
     output spatz_id_t       [2:0]            vrf_id_o,
-    output vreg_addr_t      [1:0]            vrf_raddr_o,
+    output vrf_addr_t       [1:0]            vrf_raddr_o,
     output logic            [1:0]            vrf_re_o,
-    input  vreg_data_t      [1:0]            vrf_rdata_i,
+    input  vrf_data_t       [1:0]            vrf_rdata_i,
     input  logic            [1:0]            vrf_rvalid_i,
     // Memory Request
     output spatz_mem_req_t  [NrMemPorts-1:0] spatz_mem_req_o,
@@ -229,8 +229,8 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
 
   elen_t [NrMemPorts-1:0] mem_req_addr;
 
-  vreg_addr_t vd_vreg_addr;
-  vreg_addr_t vs2_vreg_addr;
+  vrf_addr_t vd_vreg_addr;
+  vrf_addr_t vs2_vreg_addr;
 
   // Current element index and byte index that are being accessed at the register file
   vreg_elem_t vd_elem_id;
@@ -385,9 +385,9 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
   ///////////////////////
 
   typedef struct packed {
-    vreg_addr_t waddr;
-    vreg_data_t wdata;
-    vreg_be_t wbe;
+    vrf_addr_t waddr;
+    vrf_data_t wdata;
+    vrf_be_t wbe;
 
     vlsu_rsp_t rsp;
     logic rsp_valid;
@@ -746,14 +746,14 @@ module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::id
     spill_register #(
       .T(spatz_mem_req_t)
     ) i_spatz_mem_req_register (
-      .clk_i     (clk_i                      ),
-      .rst_ni    (rst_ni                     ),
-      .data_i    (spatz_mem_req[port]        ),
-      .valid_i   (spatz_mem_req_valid[port]  ),
-      .ready_o   (spatz_mem_req_ready[port]  ),
-      .data_o    (spatz_mem_req_o[port]      ),
-      .valid_o   (spatz_mem_req_valid_o[port]),
-      .ready_i   (spatz_mem_req_ready_i[port])
+      .clk_i   (clk_i                      ),
+      .rst_ni  (rst_ni                     ),
+      .data_i  (spatz_mem_req[port]        ),
+      .valid_i (spatz_mem_req_valid[port]  ),
+      .ready_o (spatz_mem_req_ready[port]  ),
+      .data_o  (spatz_mem_req_o[port]      ),
+      .valid_o (spatz_mem_req_valid_o[port]),
+      .ready_i (spatz_mem_req_ready_i[port])
     );
 
     assign spatz_mem_req[port].id    = mem_req_id[port];

@@ -166,16 +166,16 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; import
   /////////
 
   // Write ports
-  vreg_addr_t [NrWritePorts-1:0] vrf_waddr;
-  vreg_data_t [NrWritePorts-1:0] vrf_wdata;
-  logic       [NrWritePorts-1:0] vrf_we;
-  vreg_be_t   [NrWritePorts-1:0] vrf_wbe;
-  logic       [NrWritePorts-1:0] vrf_wvalid;
+  vrf_addr_t [NrWritePorts-1:0] vrf_waddr;
+  vrf_data_t [NrWritePorts-1:0] vrf_wdata;
+  logic      [NrWritePorts-1:0] vrf_we;
+  vrf_be_t   [NrWritePorts-1:0] vrf_wbe;
+  logic      [NrWritePorts-1:0] vrf_wvalid;
   // Read ports
-  vreg_addr_t [NrReadPorts-1:0]  vrf_raddr;
-  logic       [NrReadPorts-1:0]  vrf_re;
-  vreg_data_t [NrReadPorts-1:0]  vrf_rdata;
-  logic       [NrReadPorts-1:0]  vrf_rvalid;
+  vrf_addr_t [NrReadPorts-1:0]  vrf_raddr;
+  logic      [NrReadPorts-1:0]  vrf_re;
+  vrf_data_t [NrReadPorts-1:0]  vrf_rdata;
+  logic      [NrReadPorts-1:0]  vrf_rvalid;
 
   spatz_vrf #(
     .NrReadPorts (NrReadPorts ),

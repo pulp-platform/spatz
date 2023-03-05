@@ -22,15 +22,15 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
     input  logic             vfu_rsp_ready_i,
     output vfu_rsp_t         vfu_rsp_o,
     // VRF
-    output vreg_addr_t       vrf_waddr_o,
-    output vreg_data_t       vrf_wdata_o,
+    output vrf_addr_t        vrf_waddr_o,
+    output vrf_data_t        vrf_wdata_o,
     output logic             vrf_we_o,
-    output vreg_be_t         vrf_wbe_o,
+    output vrf_be_t          vrf_wbe_o,
     input  logic             vrf_wvalid_i,
     output spatz_id_t  [3:0] vrf_id_o,
-    output vreg_addr_t [2:0] vrf_raddr_o,
+    output vrf_addr_t  [2:0] vrf_raddr_o,
     output logic       [2:0] vrf_re_o,
-    input  vreg_data_t [2:0] vrf_rdata_i,
+    input  vrf_data_t  [2:0] vrf_rdata_i,
     input  logic       [2:0] vrf_rvalid_i,
     // FPU side channel
     output status_t          fpu_status_o
@@ -47,7 +47,7 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
     vlen_t vstart;
 
     // Encodes both the scalar RD and the VD address in the VRF
-    vreg_addr_t vd_addr;
+    vrf_addr_t vd_addr;
     logic wb;
     logic last;
 
@@ -498,12 +498,12 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
   // Operand Requester //
   ///////////////////////
 
-  vreg_be_t       vreg_wbe;
-  logic           vreg_we;
-  logic     [2:0] vreg_r_req;
+  vrf_be_t       vreg_wbe;
+  logic          vreg_we;
+  logic    [2:0] vreg_r_req;
 
   // Address register
-  vreg_addr_t [2:0] vreg_addr_q, vreg_addr_d;
+  vrf_addr_t [2:0] vreg_addr_q, vreg_addr_d;
   `FF(vreg_addr_q, vreg_addr_d, '0)
 
   // Calculate new vector register address
@@ -518,7 +518,7 @@ module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx
       id             : spatz_req.id,
       vsew           : spatz_req.vtype.vsew,
       vstart         : spatz_req.vstart,
-      vd_addr        : spatz_req.op_arith.is_scalar ? vreg_addr_t'(spatz_req.rd) : vreg_addr_q[2],
+      vd_addr        : spatz_req.op_arith.is_scalar ? vrf_addr_t'(spatz_req.rd) : vreg_addr_q[2],
       wb             : spatz_req.op_arith.is_scalar,
       last           : last_request,
       narrowing      : spatz_req.op_arith.is_narrowing,
