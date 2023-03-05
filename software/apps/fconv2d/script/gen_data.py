@@ -14,6 +14,7 @@ import numpy as np
 import scipy
 import hjson
 from functools import reduce
+from scipy import signal
 
 np.random.seed(42)
 torch.manual_seed(42)

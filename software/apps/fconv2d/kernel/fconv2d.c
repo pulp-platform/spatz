@@ -1,4 +1,4 @@
-// Nopyright 2020 ETH Zurich and University of Bologna.
+// Copyright 2020 ETH Zurich and University of Bologna.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -53,17 +53,17 @@
 #define C 1
 #define F 7
 
-void conv3d_CHx7x7(double *o, double *i, double *f) {
+void conv3d_CHx7x7(double *o, double *i, double *f, unsigned int num_rows) {
 
-  uint32_t block_size_n;
+  unsigned int block_size_n;
 
   // Set the vector configuration
   asm volatile("vsetvli %0, %1, e64, m2, ta, ma" : "=r"(block_size_n) : "r"(N));
 
   // Slice the matrix into a manageable number of columns n_
-  for (uint32_t n = 0; n < N; n += block_size_n) {
+  for (unsigned int n = 0; n < N; n += block_size_n) {
     // Set the vector length
-    uint32_t n_ = MIN(N - n, block_size_n);
+    unsigned int n_ = MIN(N - n, block_size_n);
 
     // Find pointers to the submatrices
     double *i_ = i + n;
@@ -71,20 +71,21 @@ void conv3d_CHx7x7(double *o, double *i, double *f) {
 
     asm volatile("vsetvli zero, %0, e64, m2, ta, ma" ::"r"(n_));
 
-    conv3d_CHx7x7_block(o_, i_, M, f, n_);
+    conv3d_CHx7x7_block(o_, i_, num_rows, f, n_);
   }
 }
 
-void conv3d_CHx7x7_block(double *o, double *i, uint32_t num_rows, double *f, uint32_t n_) {
+void conv3d_CHx7x7_block(double *o, double *i, unsigned int num_rows, double *f,
+                         unsigned int n_) {
 
   // Helper variables
-  int32_t lwo = N << 3;
-  int32_t lwi = N + F - 1;
-  int32_t lwi_pad = (N + F - 1) << 3;
+  const int lwo = N << 3;
+  const int lwi = N + F - 1;
+  const int lwi_pad = (N + F - 1) << 3;
 
   // Number of elements that separates two adjacent channels
-  int32_t ich_len = (M + F - 1) * (N + F - 1);
-  int32_t fch_len = F * F;
+  const int ich_len = (M + F - 1) * (N + F - 1);
+  const int fch_len = F * F;
 
   double *i_ = i;
   double *i__ = i;
@@ -98,10 +99,8 @@ void conv3d_CHx7x7_block(double *o, double *i, uint32_t num_rows, double *f, uin
   double *i_slide_ptr_3;
 
   // Preload two input rows belonging to channel 0
-  asm volatile("vle64.v v0, (%0); add %0, %0, %1"
-               : "+&r"(i__)
-               : "r"(lwi_pad));
-  asm volatile("vle64.v v4, (%0)" :: "r"(i__));
+  asm volatile("vle64.v v0, (%0); add %0, %0, %1" : "+&r"(i__) : "r"(lwi_pad));
+  asm volatile("vle64.v v4, (%0)" ::"r"(i__));
 
   // Buffer some of the filter coefficients not to lose efficiency
   f0_buf = f[0];
@@ -131,19 +130,19 @@ void conv3d_CHx7x7_block(double *o, double *i, uint32_t num_rows, double *f, uin
     asm volatile("vle64.v v8, (%0); add %0, %0, %1"
                  : "+&r"(i__)
                  : "r"(lwi_pad));
-    asm volatile("vle64.v v12, (%0)" :: "r"(i__));
+    asm volatile("vle64.v v12, (%0)" ::"r"(i__));
 
     // Main kernel, unrolled by 2
-    // Unrolled because of int32_t buffering
+    // Unrolled because of int buffering
     // With HW renaming, this unroll is not needed
-    for (int32_t k = 0; k < F / 2; ++k) {
+    for (int k = 0; k < F / 2; ++k) {
       // Two base indexes because of the unrolling
       // Point to the first element of the current column (k) of the current
       // channel (ch) of the filter (f)
-      int32_t base_idx_0 = (2 * k + 2) + (fch_len * ch);
+      int base_idx_0 = (2 * k + 2) + (fch_len * ch);
       // Point to the first element of the current column (k+1) of the current
       // channel (ch) of the filter (f)
-      int32_t base_idx_1 = (2 * k + 1) + (fch_len * ch);
+      int base_idx_1 = (2 * k + 1) + (fch_len * ch);
 
       double sld_elem = *i_slide_ptr_0++;
 
@@ -206,7 +205,7 @@ void conv3d_CHx7x7_block(double *o, double *i, uint32_t num_rows, double *f, uin
     }
 
     if (ch != C - 1) {
-      int32_t base_idx_0 = fch_len * (ch + 1);
+      int base_idx_0 = fch_len * (ch + 1);
       i__ = i_ + ich_len * (ch + 1);
 
       // Don't slide during the last iteration but preload the
@@ -218,7 +217,7 @@ void conv3d_CHx7x7_block(double *o, double *i, uint32_t num_rows, double *f, uin
       asm volatile("vfmacc.vf v18, %0, v4" ::"f"(f0_buf));
       asm volatile("vfmacc.vf v22, %0, v12" ::"f"(f0_buf));
       asm volatile("vfmacc.vf v16, %0, v4" ::"f"(f1_buf));
-      asm volatile("vle64.v v4, (%0)" :: "f"(i__));
+      asm volatile("vle64.v v4, (%0)" ::"f"(i__));
       asm volatile("vfmacc.vf v18, %0, v8" ::"f"(f1_buf));
       asm volatile("vfmacc.vf v20, %0, v8" ::"f"(f0_buf));
       f0_buf = f[0 + base_idx_0];
@@ -239,9 +238,7 @@ void conv3d_CHx7x7_block(double *o, double *i, uint32_t num_rows, double *f, uin
   i_ += 4 * (N + F - 1);
 
   i__ = i_;
-  asm volatile("vle64.v v2, (%0); add %0, %0, %1"
-               : "+&r"(i__)
-               : "r"(lwi_pad));
+  asm volatile("vle64.v v2, (%0); add %0, %0, %1" : "+&r"(i__) : "r"(lwi_pad));
 
   asm volatile("vfmacc.vf v18, %0, v4" ::"f"(f0_buf));
   asm volatile("vfmacc.vf v22, %0, v12" ::"f"(f0_buf));
@@ -250,7 +247,7 @@ void conv3d_CHx7x7_block(double *o, double *i, uint32_t num_rows, double *f, uin
   asm volatile("vfmacc.vf v18, %0, v8" ::"f"(f1_buf));
   f4_buf = f[28];
 
-  asm volatile("vle64.v v6, (%0)" :: "r"(i__));
+  asm volatile("vle64.v v6, (%0)" ::"r"(i__));
 
   asm volatile("vfmacc.vf v20, %0, v8" ::"f"(f0_buf));
   asm volatile("vfmacc.vf v16, %0, v8" ::"f"(f2_buf));
@@ -261,7 +258,6 @@ void conv3d_CHx7x7_block(double *o, double *i, uint32_t num_rows, double *f, uin
   f1_buf = f[7];
   asm volatile("vfmacc.vf v16, %0, v12" ::"f"(f3_buf));
   f3_buf = f[21];
-
 
   ////////////////
   // Row 4 -> 6 //
@@ -280,17 +276,17 @@ void conv3d_CHx7x7_block(double *o, double *i, uint32_t num_rows, double *f, uin
 
     i__ += lwi * 2;
 
-    asm volatile("vle64.v v10, (%0)" :: "r"(i__));
+    asm volatile("vle64.v v10, (%0)" ::"r"(i__));
 
     // Main kernel, unrolled by 2
     for (int k = 0; k < F / 2; ++k) {
       // Two base indexes because of the unrolling
       // Point to the first element of the current column (k) of the current
       // channel (ch) of the filter (f)
-      int32_t base_idx_0 = (2 * k + 2) + (fch_len * ch);
+      const int base_idx_0 = (2 * k + 2) + (fch_len * ch);
       // Point to the first element of the current column (k+1) of the current
       // channel (ch) of the filter (f)
-      int32_t base_idx_1 = (2 * k + 1) + (fch_len * ch);
+      const int base_idx_1 = (2 * k + 1) + (fch_len * ch);
 
       double sld_elem = *i_slide_ptr_0++;
 
@@ -371,7 +367,7 @@ void conv3d_CHx7x7_block(double *o, double *i, uint32_t num_rows, double *f, uin
       asm volatile("vfmacc.vf v24, %0, v0" ::"f"(f0_buf));
       asm volatile("vfmacc.vf v24, %0, v4" ::"f"(f1_buf));
       asm volatile("vfmacc.vf v24, %0, v8" ::"f"(f2_buf));
-      f2_buf  = f[14 + base_idx_0];
+      f2_buf = f[14 + base_idx_0];
 
       asm volatile("vfmacc.vf v26, %0, v4" ::"f"(f0_buf));
       asm volatile("vfmacc.vf v26, %0, v8" ::"f"(f1_buf));
@@ -386,7 +382,7 @@ void conv3d_CHx7x7_block(double *o, double *i, uint32_t num_rows, double *f, uin
     if (ch != C - 1) {
       // Point to the first element of the current column (k) of the current
       // channel (ch) of the filter (f)
-      int32_t base_idx_0 = fch_len * (ch + 1);
+      const int base_idx_0 = fch_len * (ch + 1);
       i__ = i_ + ich_len * (ch + 1);
 
       // Don't slide the elements here
@@ -424,7 +420,7 @@ void conv3d_CHx7x7_block(double *o, double *i, uint32_t num_rows, double *f, uin
       asm volatile("vfmacc.vf v26, %0, v6" ::"f"(f0_buf));
 
       // Preload next input row of channel ch+1
-      asm volatile("vle64.v v6, (%0)" :: "r"(i__));
+      asm volatile("vle64.v v6, (%0)" ::"r"(i__));
 
       asm volatile("vfmacc.vf v26, %0, v10" ::"f"(f1_buf));
       f1_buf = f[7 + base_idx_0];
@@ -460,11 +456,10 @@ void conv3d_CHx7x7_block(double *o, double *i, uint32_t num_rows, double *f, uin
   f3_buf = f[21];
   asm volatile("vmv.v.v v20, v22");
 
-
   // Bump the input ptr
   i_ += 3 * (N + F - 1);
   // Preload next input row
-  asm volatile("vle64.v v0, (%0)" :: "r"(i_));
+  asm volatile("vle64.v v0, (%0)" ::"r"(i_));
   i_slide_ptr_0 = i_ + n_;
 
   asm volatile("vfmacc.vf v24, %0, v2" ::"f"(f0_buf));
@@ -482,7 +477,6 @@ void conv3d_CHx7x7_block(double *o, double *i, uint32_t num_rows, double *f, uin
   f0_buf = f[0];
   asm volatile("vmv.v.v v26, v28");
 
-
   ////////////
   // REGIME //
   ////////////
@@ -495,7 +489,7 @@ void conv3d_CHx7x7_block(double *o, double *i, uint32_t num_rows, double *f, uin
   // outside of this loop) (We keep F rows outside because of the unrolling by
   // 2, just for easeness)
   // limit: ((M + F - 1) - 2 * F) / 2
-  for (uint32_t j = 0; j < (num_rows - F - 1) / 2; ++j) {
+  for (unsigned int j = 0; j < (num_rows - F - 1) / 2; ++j) {
     // Work on F output rows
 
     // Loop on the channels
@@ -506,7 +500,7 @@ void conv3d_CHx7x7_block(double *o, double *i, uint32_t num_rows, double *f, uin
       //////////////
 
       // Main loop
-      // Use int32_t buffering on the filter coefficients for 16-lanes config
+      // Use int buffering on the filter coefficients for 16-lanes config
       // The computation is too fast, and every coefficient belongs to a
       // different $line At every fld, CVA6 misses, and until it does not get
       // the new coefficient, it cannot dispatch the next V instruction
@@ -514,10 +508,10 @@ void conv3d_CHx7x7_block(double *o, double *i, uint32_t num_rows, double *f, uin
         // Two base indexes because of the unrolling
         // Look ahead to the first element of the current column (k+2) of the
         // current channel (ch) of the filter (f)
-        int32_t base_idx_0 = (2 * k + 2) + (fch_len * ch);
+        const int base_idx_0 = (2 * k + 2) + (fch_len * ch);
         // Point to the first element of the current column (k+1) of the current
         // channel (ch) of the filter (f)
-        int32_t base_idx_1 = (2 * k + 1) + (fch_len * ch);
+        const int base_idx_1 = (2 * k + 1) + (fch_len * ch);
 
         double sld_elem = *i_slide_ptr_0++;
 
@@ -563,7 +557,7 @@ void conv3d_CHx7x7_block(double *o, double *i, uint32_t num_rows, double *f, uin
       }
 
       if (ch != C - 1) {
-        int32_t base_idx_0 = fch_len * (ch + 1);
+        const int base_idx_0 = fch_len * (ch + 1);
 
         asm volatile("vfmacc.vf v16, %0, v0" ::"f"(f6_buf));
         f6_buf = f[42 + base_idx_0];
@@ -572,7 +566,7 @@ void conv3d_CHx7x7_block(double *o, double *i, uint32_t num_rows, double *f, uin
         // Point to the first element of the channel ch
         i__ = i_ + ich_len * (ch + 1);
         // Preload next input row
-        asm volatile("vle64.v v30, (%0)" :: "r"(i__));
+        asm volatile("vle64.v v30, (%0)" ::"r"(i__));
         i_slide_ptr_0 = i__ + n_;
 
         asm volatile("vfmacc.vf v20, %0, v0" ::"f"(f4_buf));
@@ -602,7 +596,7 @@ void conv3d_CHx7x7_block(double *o, double *i, uint32_t num_rows, double *f, uin
     // Bump the input ptr
     i_ += N + F - 1;
     // Preload next input row of channel 0
-    asm volatile("vle64.v v2, (%0)" :: "r"(i_));
+    asm volatile("vle64.v v2, (%0)" ::"r"(i_));
     i_slide_ptr_1 = i_ + n_;
 
     asm volatile("vmv.v.v v20, v22");
@@ -629,10 +623,10 @@ void conv3d_CHx7x7_block(double *o, double *i, uint32_t num_rows, double *f, uin
         // Two base indexes because of the unrolling
         // Point to the first element of the current column (k) of the current
         // channel (ch) of the filter (f)
-        int32_t base_idx_0 = (2 * k + 2) + (fch_len * ch);
+        const int base_idx_0 = (2 * k + 2) + (fch_len * ch);
         // Point to the first element of the current column (k+1) of the current
         // channel (ch) of the filter (f)
-        int32_t base_idx_1 = (2 * k + 1) + (fch_len * ch);
+        const int base_idx_1 = (2 * k + 1) + (fch_len * ch);
 
         double sld_elem = *i_slide_ptr_1++;
 
@@ -675,13 +669,13 @@ void conv3d_CHx7x7_block(double *o, double *i, uint32_t num_rows, double *f, uin
 
       if (ch != C - 1) {
         // Calculate next base idx
-        int32_t base_idx_0 = fch_len * (ch + 1);
+        const int base_idx_0 = fch_len * (ch + 1);
 
         asm volatile("vfmacc.vf v16, %0, v2" ::"f"(f6_buf));
 
         // Point to the first element of the channel ch+1
         i__ = i_ + ich_len * (ch + 1);
-        asm volatile("vle64.v v30, (%0)" :: "r"(i__));
+        asm volatile("vle64.v v30, (%0)" ::"r"(i__));
         i_slide_ptr_1 = i__ + n_;
 
         asm volatile("vfmacc.vf v18, %0, v2" ::"f"(f5_buf));
@@ -721,7 +715,7 @@ void conv3d_CHx7x7_block(double *o, double *i, uint32_t num_rows, double *f, uin
     // Bump the input ptr
     i_ += N + F - 1;
     // Preload next input row
-    asm volatile("vle64.v v0, (%0)" :: "r"(i_));
+    asm volatile("vle64.v v0, (%0)" ::"r"(i_));
     i_slide_ptr_0 = i_ + n_;
 
     asm volatile("vmv.v.v v22, v24");
@@ -735,15 +729,15 @@ void conv3d_CHx7x7_block(double *o, double *i, uint32_t num_rows, double *f, uin
   }
 
   i__ = i_ + lwi;
-  asm volatile("vle64.v v4, (%0)" :: "r"(i__));
+  asm volatile("vle64.v v4, (%0)" ::"r"(i__));
   i__ += lwi;
-  asm volatile("vle64.v v8, (%0)" :: "r"(i__));
+  asm volatile("vle64.v v8, (%0)" ::"r"(i__));
 
   ////////////////////////
   // Row I-F -> (I-1)-3 //
   ////////////////////////
 
-  for (int32_t ch = 0; ch < C; ++ch) {
+  for (int ch = 0; ch < C; ++ch) {
 
     // Point to the first element of the channel ch
     i__ = i_ + ich_len * ch;
@@ -757,7 +751,7 @@ void conv3d_CHx7x7_block(double *o, double *i, uint32_t num_rows, double *f, uin
 
     i__ += lwi * 3;
 
-    asm volatile("vle64.v v12, (%0)" :: "r"(i__));
+    asm volatile("vle64.v v12, (%0)" ::"r"(i__));
 
     // Main kernel, unrolled by 2
     // Process 4 input rows
@@ -766,10 +760,10 @@ void conv3d_CHx7x7_block(double *o, double *i, uint32_t num_rows, double *f, uin
       // Two base indexes because of the unrolling
       // Point to the first element of the current column (k) of the current
       // channel (ch) of the filter (f)
-      int32_t base_idx_0 = (2 * k + 2) + (fch_len * ch);
+      const int base_idx_0 = (2 * k + 2) + (fch_len * ch);
       // Point to the first element of the current column (k+1) of the current
       // channel (ch) of the filter (f)
-      int32_t base_idx_1 = (2 * k + 1) + (fch_len * ch);
+      const int base_idx_1 = (2 * k + 1) + (fch_len * ch);
 
       asm volatile("vfslide1down.vf v2, v0, %0" ::"f"(sld_elem));
       asm volatile("vfmacc.vf v16, %0, v0" ::"f"(f6_buf));
@@ -851,7 +845,7 @@ void conv3d_CHx7x7_block(double *o, double *i, uint32_t num_rows, double *f, uin
     }
 
     if (ch != C - 1) {
-      int32_t base_idx_0 = fch_len * (ch + 1);
+      const int base_idx_0 = fch_len * (ch + 1);
 
       asm volatile("vfmacc.vf v16, %0, v0" ::"f"(f6_buf));
       asm volatile("vfmacc.vf v18, %0, v0" ::"f"(f5_buf));
@@ -885,7 +879,7 @@ void conv3d_CHx7x7_block(double *o, double *i, uint32_t num_rows, double *f, uin
       asm volatile("vfmacc.vf v26, %0, v8" ::"f"(f3_buf));
       asm volatile("vfmacc.vf v28, %0, v8" ::"f"(f2_buf));
 
-      asm volatile("vle64.v v8, (%0)" :: "r"(i__));
+      asm volatile("vle64.v v8, (%0)" ::"r"(i__));
 
       asm volatile("vfmacc.vf v22, %0, v12" ::"f"(f6_buf));
       f2_buf = f[14 + base_idx_0];
@@ -902,9 +896,7 @@ void conv3d_CHx7x7_block(double *o, double *i, uint32_t num_rows, double *f, uin
   // Bump the input ptr
   i_ += 4 * (N + F - 1);
   i__ = i_;
-  asm volatile("vle64.v v2, (%0); add %0, %0, %1"
-               : "+&r"(i__)
-               : "r"(lwi_pad));
+  asm volatile("vle64.v v2, (%0); add %0, %0, %1" : "+&r"(i__) : "r"(lwi_pad));
 
   asm volatile("vfmacc.vf v16, %0, v0" ::"f"(f6_buf));
   asm volatile("vfmacc.vf v18, %0, v0" ::"f"(f5_buf));
@@ -914,7 +906,7 @@ void conv3d_CHx7x7_block(double *o, double *i, uint32_t num_rows, double *f, uin
   asm volatile("vfmacc.vf v24, %0, v0" ::"f"(f2_buf));
   asm volatile("vfmacc.vf v26, %0, v0" ::"f"(f1_buf));
 
-  asm volatile("vle64.v v6, (%0)" :: "r"(i__));
+  asm volatile("vle64.v v6, (%0)" ::"r"(i__));
 
   asm volatile("vfmacc.vf v28, %0, v0" ::"f"(f0_buf));
   f0_buf = f[0];
@@ -947,7 +939,7 @@ void conv3d_CHx7x7_block(double *o, double *i, uint32_t num_rows, double *f, uin
   // Row (I-1)-3 -> (I-1) //
   //////////////////////////
 
-  for (int32_t ch = 0; ch < C; ++ch) {
+  for (int ch = 0; ch < C; ++ch) {
 
     // Point to the first element of the channel ch
     i__ = i_ + ich_len * ch;
@@ -959,7 +951,7 @@ void conv3d_CHx7x7_block(double *o, double *i, uint32_t num_rows, double *f, uin
 
     i__ += lwi * 2;
 
-    asm volatile("vle64.v v10, (%0)" :: "r"(i__));
+    asm volatile("vle64.v v10, (%0)" ::"r"(i__));
 
     // Main kernel, unrolled by 2
     for (int k = 0; k < F / 2; ++k) {
@@ -967,10 +959,10 @@ void conv3d_CHx7x7_block(double *o, double *i, uint32_t num_rows, double *f, uin
       // Two base indexes because of the unrolling
       // Point to the first element of the current column (k) of the current
       // channel (ch) of the filter (f)
-      int32_t base_idx_0 = (2 * k + 2) + (fch_len * ch);
+      const int base_idx_0 = (2 * k + 2) + (fch_len * ch);
       // Point to the first element of the current column (k+1) of the current
       // channel (ch) of the filter (f)
-      int32_t base_idx_1 = (2 * k + 1) + (fch_len * ch);
+      const int base_idx_1 = (2 * k + 1) + (fch_len * ch);
 
       asm volatile("vfslide1down.vf v0, v2, %0" ::"f"(sld_elem));
       asm volatile("vfmacc.vf v24, %0, v2" ::"f"(f6_buf));
@@ -1005,7 +997,7 @@ void conv3d_CHx7x7_block(double *o, double *i, uint32_t num_rows, double *f, uin
     }
 
     if (ch != C - 1) {
-      int32_t base_idx_0 = fch_len * (ch + 1);
+      const int base_idx_0 = fch_len * (ch + 1);
 
       asm volatile("vfmacc.vf v24, %0, v2" ::"f"(f6_buf));
       asm volatile("vfmacc.vf v26, %0, v2" ::"f"(f5_buf));
@@ -1017,7 +1009,7 @@ void conv3d_CHx7x7_block(double *o, double *i, uint32_t num_rows, double *f, uin
       f4_buf = f[28 + base_idx_0];
       asm volatile("vfmacc.vf v26, %0, v6" ::"f"(f6_buf));
       asm volatile("vfmacc.vf v28, %0, v6" ::"f"(f5_buf));
-      asm volatile("vle64.v v6, (%0)" :: "r"(i__));
+      asm volatile("vle64.v v6, (%0)" ::"r"(i__));
       f5_buf = f[35 + base_idx_0];
       asm volatile("vfmacc.vf v28, %0, v10" ::"f"(f6_buf));
       f6_buf = f[42 + base_idx_0];
@@ -1032,7 +1024,7 @@ void conv3d_CHx7x7_block(double *o, double *i, uint32_t num_rows, double *f, uin
   asm volatile("vse64.v  v26, (%0); add %0, %0, %1" : "+&r"(o) : "r"(lwo));
   asm volatile("vfmacc.vf v28, %0, v6" ::"f"(f5_buf));
   asm volatile("vfmacc.vf v28, %0, v10" ::"f"(f6_buf));
-  asm volatile("vse64.v  v28, (%0)" :: "r"(o));
+  asm volatile("vse64.v  v28, (%0)" ::"r"(o));
 }
 
 /*
