@@ -122,21 +122,29 @@ module spatz_fpu_sequencer import spatz_pkg::*; import rvv_pkg::*; import fpnew_
   logic operands_available;
   assign operands_available = !((use_fs1 && sb_q[fs1]) || (use_fs2 && sb_q[fs2]) || (use_fs3 && sb_q[fs3]) || (use_fd && sb_q[fd]));
 
+  // Is this a move instruction between GPR and FPR?
+  logic is_move;
+
+  // Is this a load or a store?
+  logic is_load;
+  logic is_store;
+
+  // Is this an instruction that executes in this sequencer?
+  logic is_local;
+  assign is_local = is_move || is_load || is_store;
+
   // Stalling?
   logic stall;
   logic lsu_stall;
   logic vlsu_stall;
   logic move_stall;
-  assign stall = lsu_stall || vlsu_stall || move_stall || !operands_available;
+  assign stall = lsu_stall || vlsu_stall || move_stall || !operands_available || (!is_local && !x_issue_ready_i);
 
   // Illegal instruction
   logic illegal_inst;
 
   // Are we retiring something?
   logic [1:0] retire;
-
-  // Is this a move instruction between GPR and FPR?
-  logic is_move;
 
   always_comb begin
     // Maintain state
@@ -160,13 +168,6 @@ module spatz_fpu_sequencer import spatz_pkg::*; import rvv_pkg::*; import fpnew_
     Double   = 2'b11
   } ls_size;
 
-  logic load;
-  logic store;
-
-  // Is this an instruction that executes in this sequencer?
-  logic is_local;
-  assign is_local = is_move || load || store;
-
   always_comb begin
     // We are not reading any operands
     use_fs1 = 1'b0;
@@ -176,10 +177,10 @@ module spatz_fpu_sequencer import spatz_pkg::*; import rvv_pkg::*; import fpnew_
     use_rd  = 1'b0;
 
     // Default element size
-    ls_size = Word;
-    load    = 1'b0;
-    store   = 1'b0;
-    is_move = 1'b0;
+    ls_size  = Word;
+    is_load  = 1'b0;
+    is_store = 1'b0;
+    is_move  = 1'b0;
 
     // Not an illegal instruction
     illegal_inst = 1'b0;
@@ -387,7 +388,7 @@ module spatz_fpu_sequencer import spatz_pkg::*; import rvv_pkg::*; import fpnew_
             riscv_instr::FLW: ls_size = Word;
             riscv_instr::FLD: if (RVD) ls_size = Double;
           endcase
-          load         = 1'b1;
+          is_load      = 1'b1;
           illegal_inst = !RVD && x_issue_req_i.instr inside {riscv_instr::FLD};
         end
         riscv_instr::FSB,
@@ -401,7 +402,7 @@ module spatz_fpu_sequencer import spatz_pkg::*; import rvv_pkg::*; import fpnew_
             riscv_instr::FSW: ls_size = Word;
             riscv_instr::FSD: if (RVD) ls_size = Double;
           endcase
-          store        = 1'b1;
+          is_store     = 1'b1;
           illegal_inst = !RVD && x_issue_req_i.instr inside {riscv_instr::FSD};
         end
 
@@ -480,7 +481,7 @@ module spatz_fpu_sequencer import spatz_pkg::*; import rvv_pkg::*; import fpnew_
       x_issue_resp_o = '{
         accept   : use_rd,
         writeback: use_rd,
-        loadstore: load | store,
+        loadstore: is_load | is_store,
         exc      : illegal_inst,
         default  : '0
       };
@@ -571,18 +572,18 @@ module spatz_fpu_sequencer import spatz_pkg::*; import rvv_pkg::*; import fpnew_
     riscv_instr::VSUXEI8_V, riscv_instr::VSUXEI16_V, riscv_instr::VSUXEI32_V, riscv_instr::VSUXEI64_V};
 
   // Do we need to delay is load/store because of the VLSU?
-  assign vlsu_stall = (store && acc_mem_cnt_q != '0) || (load && acc_mem_str_cnt_q != '0) || acc_mem_cnt_q == '1;
+  assign vlsu_stall = (is_store && acc_mem_cnt_q != '0) || (is_load && acc_mem_str_cnt_q != '0) || acc_mem_cnt_q == '1;
 
   always_comb begin
     // Default values
     fp_lsu_qtag    = fd;
-    fp_lsu_qwrite  = store;
+    fp_lsu_qwrite  = is_store;
     fp_lsu_qsigned = 1'b0;
     fp_lsu_qaddr   = x_issue_req_i.rs[1];
     fp_lsu_qdata   = fpr_rdata[1];
     fp_lsu_qsize   = ls_size;
     fp_lsu_qamo    = '0;
-    fp_lsu_qvalid  = (load || store) && operands_available && !vlsu_stall;
+    fp_lsu_qvalid  = (is_load || is_store) && operands_available && !vlsu_stall;
 
     acc_mem_cnt_d     = acc_mem_cnt_q;
     acc_mem_str_cnt_d = acc_mem_str_cnt_q;
