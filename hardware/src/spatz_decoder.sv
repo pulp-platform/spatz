@@ -1110,9 +1110,10 @@ module spatz_decoder
                 spatz_req.op_sld.insert = 1'b1;
                 spatz_req.ex_unit       = SLD;
 
+                spatz_req.rs1     = decoder_req_i.rs1;
                 spatz_req.use_vs1 = 1'b0;
-                spatz_req.use_vs2 = 1'b1;
                 spatz_req.vs2     = arith_s2;
+                spatz_req.use_vs2 = 1'b1;
               end
 
               riscv_instr::VFSLIDE1DOWN_VF: begin
@@ -1120,9 +1121,10 @@ module spatz_decoder
                 spatz_req.op_sld.insert = 1'b1;
                 spatz_req.ex_unit       = SLD;
 
+                spatz_req.rs1     = decoder_req_i.rs1;
                 spatz_req.use_vs1 = 1'b0;
-                spatz_req.use_vs2 = 1'b1;
                 spatz_req.vs2     = arith_s2;
+                spatz_req.use_vs2 = 1'b1;
               end
 
               default;

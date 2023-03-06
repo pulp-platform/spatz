@@ -22,10 +22,11 @@
 #include <stdint.h>
 #include <stdio.h>
 
-void conv3d_CHx7x7(double *o, double *i, double *f, unsigned int num_rows)
+void conv3d_CHx7x7(double *o, const double *i, const double *f,
+                   const unsigned int num_rows) __attribute__((always_inline));
+void conv3d_CHx7x7_block(double *o, const double *i, unsigned int num_rows,
+                         const double *f, const unsigned int n_)
     __attribute__((always_inline));
-void conv3d_CHx7x7_block(double *o, double *i, unsigned int num_rows, double *f,
-                         unsigned int n_) __attribute__((always_inline));
 
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 

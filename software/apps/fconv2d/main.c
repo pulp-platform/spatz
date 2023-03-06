@@ -16,10 +16,6 @@
 
 // Author: Matteo Perotti <mperotti@iis.ee.ethz.ch>
 
-#include <stdbool.h>
-#include <stdint.h>
-#include <string.h>
-
 #include "data/data_fconv2d.h"
 #include "kernel/fconv2d.c"
 #include "printf.h"
@@ -38,11 +34,13 @@
 #define THRESHOLD 0.000000001
 
 // Macro to check similarity between two fp-values, wrt a threshold
-#define fp_check(a, b, threshold) ((((a - b) < 0) ? b - a : a - b) < threshold)
+#define fp_check(a, b, threshold)                                              \
+  ((((a) < (b)) ? (b) - (a) : (a) - (b)) < (threshold))
 
 // Matrices
 double *imtx;
 double *omtx;
+double *fmtx;
 
 // Initialize the matrices
 void init_matrix(double *matrix, const double *src, const unsigned int len) {
@@ -65,7 +63,6 @@ int main() {
   const unsigned int c = fconv2d_l.C;
   const unsigned int f = fconv2d_l.F;
   const unsigned int ch = fconv2d_l.CH;
-  const uint32_t c_dim_core = fconv2d_l.c_dim_core;
 
   unsigned int timer_start, timer_end, timer;
 
@@ -80,11 +77,6 @@ int main() {
     imtx = (double *)domain_malloc(get_alloc_tile(0),
                                    (r + f - 1) * (c + f - 1) * sizeof(double));
     omtx = (double *)domain_malloc(get_alloc_tile(0), r * c * sizeof(double));
-  }
-
-  // Allocate the filter matrices
-  double *fmtx;
-  if (is_core_active) {
     fmtx =
         (double *)domain_malloc(get_alloc_tile(0), f * f * ch * sizeof(double));
   }
@@ -96,30 +88,13 @@ int main() {
   if (r != c)
     return -9;
 
-  // Can every core execute its desired kernel?
-  if ((r * c) / c_dim_core < num_cores)
-    return -2;
-  // Does the c_dim_core fit inside the dim
-  if (c_dim_core > c)
-    return -3;
+  unsigned int num_rows = r / active_cores;
 
-  uint32_t column_split = c / c_dim_core;
-  uint32_t column_id = cid % column_split;
+  // Wait for all cores to finish
+  mempool_barrier(num_cores);
 
-  if (active_cores < column_split)
-    return -4;
-
-  uint32_t num_rows = r * column_split / active_cores;
-
-  if (num_rows < (f + 1))
-    return -5;
-
-  uint32_t row_offset = (r + f - 1) * num_rows * (cid / column_split);
-  uint32_t column_offset = column_id * c_dim_core;
-  double *i_start = imtx + row_offset + column_offset;
-
-  uint32_t row_offset_o = r * num_rows * (cid / column_split);
-  double *o_start = omtx + row_offset_o + column_offset;
+  double *i = imtx + (r + f - 1) * num_rows * cid;
+  double *o = omtx + r * num_rows * cid;
 
   // Wait for all cores to finish
   mempool_barrier(num_cores);
@@ -128,10 +103,8 @@ int main() {
   if (cid == 0) {
     init_matrix(imtx, fconv2d_I_dram, (r + f - 1) * (c + f - 1));
     init_matrix(omtx, fconv2d_R_dram, r * c);
+    init_matrix(fmtx, fconv2d_F_dram, f * f * ch);
   }
-
-  // Copy the filter
-  init_matrix(fmtx, fconv2d_F_dram, f * f * ch);
 
   // Wait for all cores to finish
   mempool_barrier(num_cores);
@@ -150,7 +123,7 @@ int main() {
 
   // Calculate the result
   if (is_core_active)
-    conv3d_CHx7x7(o_start, i_start, fmtx, num_rows);
+    conv3d_CHx7x7(o, i, fmtx, num_rows);
 
   // Wait for all cores to finish
   mempool_barrier(num_cores);
@@ -180,8 +153,9 @@ int main() {
   if (cid == 0)
     for (unsigned int k = 0; k < ch * r * c; ++k) {
       if (!fp_check(fconv2d_GR_dram[k], omtx[k], THRESHOLD)) {
-        printf("Error index %d: result = %x, golden = %x\n", k,
-               *((uint64_t *)&omtx[k]), *((uint64_t *)&fconv2d_GR_dram[k]));
+        printf("Error index %d: result = %x (@ %x), golden = %x\n", k,
+               *((unsigned int *)&omtx[k]), omtx + k,
+               *((unsigned int *)&fconv2d_GR_dram[k]));
         return -1;
       }
     }
@@ -191,10 +165,8 @@ int main() {
   if (cid == 0) {
     domain_free(get_alloc_tile(0), imtx);
     domain_free(get_alloc_tile(0), omtx);
-  }
-
-  if (is_core_active)
     domain_free(get_alloc_tile(0), fmtx);
+  }
 
   // Wait for core 0 to finish displaying results
   mempool_barrier(num_cores);
