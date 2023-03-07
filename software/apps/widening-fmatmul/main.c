@@ -29,30 +29,18 @@
 #include "synchronization.h"
 #endif
 
-// Define Matrix dimensions:
-// C = AB with A=[MxN], B=[NxP], C=[MxP]
-#ifndef MATRIX_DIM
-#define MATRIX_DIM 256
-#endif
-#ifndef KERNEL_M
-#define KERNEL_M 2
-#endif
-#ifndef KERNEL_P
-#define KERNEL_P 2
-#endif
-
-#define M MATRIX_DIM
-#define N MATRIX_DIM
-#define P MATRIX_DIM
-
 __fp16 *a;
 __fp16 *b;
 __fp16 *c;
 
 // Initialize the matrices
-void init_matrix(double *dst, const double *src, const unsigned int len) {
-  for (unsigned int i = 0; i < len; ++i) {
-    dst[i] = src[i];
+void init_matrix(double *matrix, const double *src,
+                 const unsigned int rows_start, const unsigned int rows_end,
+                 const unsigned int num_columns) {
+  for (unsigned int i = rows_start; i < rows_end; ++i) {
+    for (unsigned int j = 0; j < num_columns; ++j) {
+      matrix[i * num_columns + j] = src[i * num_columns + j];
+    }
   }
 }
 
@@ -100,7 +88,6 @@ int main() {
   const unsigned int measure_iterations = 1;
 
   unsigned int timer_start, timer_end, timer;
-  unsigned int row_start, row_end;
 
   unsigned int m_start, m_end;
   unsigned int p_start, p_end;
@@ -116,18 +103,21 @@ int main() {
 
   // Allocate the matrices in the local tile
   if (cid == 0) {
-    a = (__fp16 *)domain_malloc(get_alloc_tile(0), M * N * sizeof(__fp16));
-    b = (__fp16 *)domain_malloc(get_alloc_tile(0), N * P * sizeof(__fp16));
-    c = (__fp16 *)domain_malloc(get_alloc_tile(0), M * P * sizeof(__fp16));
+    a = (__fp16 *)domain_malloc(get_alloc_tile(0),
+                                gemm_l.M * gemm_l.N * sizeof(__fp16));
+    b = (__fp16 *)domain_malloc(get_alloc_tile(0),
+                                gemm_l.N * gemm_l.K * sizeof(__fp16));
+    c = (__fp16 *)domain_malloc(get_alloc_tile(0),
+                                gemm_l.M * gemm_l.K * sizeof(__fp16));
   }
 
   // Reset timer
   timer = (unsigned int)-1;
 
   // Set matrix dimension
-  dim = MATRIX_DIM;
-  kernel_size = KERNEL_M;
-  vl = KERNEL_P;
+  dim = gemm_l.N;
+  kernel_size = 4;
+  vl = gemm_l.N;
 
   // Can every core execute its desired kernel?
   if ((dim * dim) / (kernel_size * vl) < active_cores)
@@ -146,6 +136,7 @@ int main() {
     const unsigned int split_p_count = cores_per_group / split_m_count;
     p_start = dim / split_p_count * (core_gid % split_p_count);
     p_end = dim / split_p_count * ((core_gid % split_p_count) + 1);
+    vl = p_end - p_start;
     m_start = dim_group * gid + kernel_size * (core_gid / split_p_count);
     m_end = dim_group * gid + kernel_size * (core_gid / split_p_count + 1);
   } else {
@@ -160,19 +151,19 @@ int main() {
   mempool_barrier(num_cores);
 
   // Initialize matrices
-  const unsigned int cores_per_row = active_cores / dim;
-  if (dim < active_cores) {
-    row_start = cid / cores_per_row;
-    row_end = cid / cores_per_row + 1;
-  } else {
-    row_start = dim / num_cores * cid;
-    row_end = dim / num_cores * (cid + 1);
-  }
-
-  if (cid == 0) {
-    init_matrix((double*)a, (const double*)gemm_A_dram, dim * dim * sizeof(__fp16)/ sizeof(double));
-    init_matrix((double*)b, (const double*)gemm_B_dram, dim * dim * sizeof(__fp16)/ sizeof(double));
-    init_matrix((double*)c, (const double*)gemm_C_dram, dim * dim * sizeof(__fp16)/ sizeof(double));
+  if (is_core_active) {
+    init_matrix((double *)a, (double *)gemm_A_dram,
+                cid * (gemm_l.M / active_cores),
+                (cid + 1) * (gemm_l.M / active_cores),
+                dim * sizeof(__fp16) / sizeof(double));
+    init_matrix((double *)b, (double *)gemm_B_dram,
+                cid * (gemm_l.M / active_cores),
+                (cid + 1) * (gemm_l.M / active_cores),
+                dim * sizeof(__fp16) / sizeof(double));
+    init_matrix((double *)c, (double *)gemm_C_dram,
+                cid * (gemm_l.M / active_cores),
+                (cid + 1) * (gemm_l.M / active_cores),
+                dim * sizeof(__fp16) / sizeof(double));
   }
 
   // Wait for all cores to finish
@@ -185,11 +176,11 @@ int main() {
       timer_start = mempool_get_timer();
 
       if (kernel_size == 2) {
-        matmul_2xVL(c, a, b, m_start, m_end, dim, dim, p_start, p_end, vl);
+        matmul_2xVL(c, a, b, m_start, m_end, dim, dim, p_start, p_end);
       } else if (kernel_size == 4) {
-        matmul_4xVL(c, a, b, m_start, m_end, dim, dim, p_start, p_end, vl);
+        matmul_4xVL(c, a, b, m_start, m_end, dim, dim, p_start, p_end);
       } else if (kernel_size == 8) {
-        matmul_8xVL(c, a, b, m_start, m_end, dim, dim, p_start, p_end, vl);
+        matmul_8xVL(c, a, b, m_start, m_end, dim, dim, p_start, p_end);
       } else {
         return -2;
       }
@@ -211,9 +202,9 @@ int main() {
   // Check and display results
   if (cid == 0) {
     unsigned int performance = 1000 * 2 * dim * dim * dim / timer;
-    unsigned int utilization = performance / (2 * active_cores * 2 * N_IPU);
+    unsigned int utilization = performance / (2 * active_cores * 2 * N_FU);
 
-    printf("\n----- (%dx%d) sdotp fmatmul -----\n", dim, dim);
+    printf("\n----- (%dx%d) widening fmatmul -----\n", dim, dim);
     printf("The execution took %u cycles.\n", timer);
     printf("The performance is %u OP/1000cycle (%u%%o utilization).\n",
            performance, utilization);

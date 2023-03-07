@@ -41,7 +41,7 @@
 #define CHECK 1
 
 // Macro to check similarity between two fp-values, wrt a threshold
-#define fp_check(a, b, threshold) ((((a - b) < 0) ? b - a : a - b) < threshold)
+#define fp_check(a, b, threshold) ((((a) < (b)) ? (b) - (a) : (a) - (b)) < (threshold))
 
 double *a;
 double *b;
@@ -155,7 +155,7 @@ int main() {
 
   if (cid == 0) {
     if (!fp_check(result[0], dotp_result, THRESHOLD_64b)) {
-      printf("Error core %d: result=%d, golden=%d\n", cid, (int32_t)result[0], (int32_t)dotp_result);
+      printf("Error core %d: result = %x, golden = %x\n", cid, *((unsigned int*)result), *((unsigned int*)&dotp_result));
       return -1;
     }
   }
