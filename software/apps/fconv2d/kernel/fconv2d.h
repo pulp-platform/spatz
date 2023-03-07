@@ -20,7 +20,6 @@
 #define _FCONV2D_H_
 
 #include <stdint.h>
-#include <stdio.h>
 
 void conv3d_CHx7x7(double *o, const double *i, const double *f,
                    const unsigned int num_rows) __attribute__((always_inline));
