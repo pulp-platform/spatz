@@ -103,6 +103,7 @@ int main() {
   mempool_barrier(num_cores);
 
   // Calculate dotp
+  double acc;
   if (is_core_active) {
     // Start timer
     if (cid == 0)
@@ -113,7 +114,9 @@ int main() {
       start_kernel();
 
     // Calculate the result
-    result[cid] = fdotp_v64b(a_int, b_int, dim_core);
+    acc = fdotp_v64b(a_int, b_int, dim_core);
+    if (cid != 0)
+      result[cid] = acc;
   }
 
   // Wait for all cores to finish
@@ -121,18 +124,17 @@ int main() {
 
   // Final reduction
   if (cid == 0) {
-    double acc = result[0];
     for (unsigned int i = 1; i < active_cores; ++i)
       acc += result[i];
     result[0] = acc;
   }
 
+  // Wait for all cores to finish
+  mempool_barrier(num_cores);
+
   // End dump
   if (cid == 0)
     stop_kernel();
-
-  // Wait for all cores to finish
-  mempool_barrier(num_cores);
 
   // End timer
   if (cid == 0) {
