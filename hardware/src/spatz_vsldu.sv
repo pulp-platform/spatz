@@ -41,23 +41,21 @@ module spatz_vsldu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
 
   spatz_req_t spatz_req_d;
 
-  spatz_req_t spatz_req, spatz_req_queue;
-  logic       spatz_req_valid, spatz_req_queue_valid;
+  spatz_req_t spatz_req;
+  logic       spatz_req_valid;
   logic       spatz_req_ready;
 
-  glass_spill_register #(
+  spill_register #(
     .T(spatz_req_t)
   ) i_operation_queue (
-    .clk_i        (clk_i                                          ),
-    .rst_ni       (rst_ni                                         ),
-    .data_i       (spatz_req_d                                    ),
-    .valid_i      (spatz_req_valid_i && spatz_req_i.ex_unit == SLD),
-    .ready_o      (spatz_req_ready_o                              ),
-    .data_queue_o (spatz_req_queue                                ),
-    .data_o       (spatz_req                                      ),
-    .valid_o      (spatz_req_valid                                ),
-    .valid_queue_o(spatz_req_queue_valid                          ),
-    .ready_i      (spatz_req_ready                                )
+    .clk_i  (clk_i                                          ),
+    .rst_ni (rst_ni                                         ),
+    .data_i (spatz_req_d                                    ),
+    .valid_i(spatz_req_valid_i && spatz_req_i.ex_unit == SLD),
+    .ready_o(spatz_req_ready_o                              ),
+    .data_o (spatz_req                                      ),
+    .valid_o(spatz_req_valid                                ),
+    .ready_i(spatz_req_ready                                )
   );
 
   // Convert the vl to number of bytes for all element widths
@@ -161,15 +159,19 @@ module spatz_vsldu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
   logic [NrParallelInstructions-1:0] running_d, running_q;
   `FF(running_q, running_d, '0)
 
+  // Respond to controller if we are finished executing
+  enum logic {
+    VSLDU_RUNNING,    // Running an instruction
+    VSLDU_WAIT_WVALID // Waiting for the last wvalid to acknowledge the instruction
+  } state_q, state_d;
+  `FF(state_q, state_d, VSLDU_RUNNING)
+
   // New instruction
   // Initialize the internal state one cycle in advance
   logic new_vsldu_request, new_vsldu_request_q;
-  assign new_vsldu_request = ((spatz_req_valid_i && spatz_req_i.ex_unit == SLD) || spatz_req_queue_valid) && spatz_req_ready;
+  assign new_vsldu_request = spatz_req_valid && !running_q[spatz_req.id];
 
   `FF(new_vsldu_request_q, new_vsldu_request, '0)
-
-  // Next-cycle request (either from the spill reg, or from the interface
-  spatz_req_t spatz_init_req;
 
   // Accept a new operation or clear req register if we are finished
   always_comb begin
@@ -177,21 +179,18 @@ module spatz_vsldu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
     prefetch_d     = prefetch_q;
     running_d      = running_q;
 
-    // If the spill reg is empty, take from the input request
-    spatz_init_req = !spatz_req_valid ? spatz_req_i : spatz_req_queue;
-
     // Spatz SLDU ready when empty
     spatz_req_ready = !spatz_req_valid;
 
     // New request?
     if (new_vsldu_request) begin
       // Mark the instruction as running
-      running_d[spatz_init_req.id] = 1'b1;
+      running_d[spatz_req.id] = 1'b1;
 
-      slide_amount_d = spatz_init_req.op_sld.insert ? (spatz_init_req.op_sld.vmv ? 'd0 : 'd1) : spatz_init_req.rs1;
-      slide_amount_d <<= spatz_init_req.vtype.vsew;
+      slide_amount_d = spatz_req.op_sld.insert ? (spatz_req.op_sld.vmv ? 'd0 : 'd1) : spatz_req.rs1;
+      slide_amount_d <<= spatz_req.vtype.vsew;
 
-      prefetch_d = spatz_init_req.op == VSLIDEUP ? spatz_init_req.vstart >= VRFWordBWidth : 1'b1;
+      prefetch_d = spatz_req.op == VSLIDEUP ? spatz_req.vstart >= VRFWordBWidth : 1'b1;
     end
 
     // Finished an instruction
@@ -243,8 +242,8 @@ module spatz_vsldu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
     // Do we have a new request?
     if (new_vsldu_request) begin
       // Load vstart into the counter
-      vreg_counter_d = spatz_init_req.vstart;
-      if (!spatz_init_req.op_sld.insert && spatz_init_req.vstart < slide_amount_d && is_slide_up)
+      vreg_counter_d = spatz_req.vstart;
+      if (!spatz_req.op_sld.insert && spatz_req.vstart < slide_amount_d && is_slide_up)
         vreg_counter_d = slide_amount_d;
     end
 
@@ -291,13 +290,6 @@ module spatz_vsldu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
     // Did we finish?
     vreg_operations_finished = vreg_operation_last && vreg_counter_en;
   end: vsldu_vreg_counter_proc
-
-  // Respond to controller if we are finished executing
-  enum logic {
-    VSLDU_RUNNING,    // Running an instruction
-    VSLDU_WAIT_WVALID // Waiting for the last wvalid to acknowledge the instruction
-  } state_q, state_d;
-  `FF(state_q, state_d, VSLDU_RUNNING)
 
   always_comb begin: vsldu_rsp
     // Maintain state
@@ -444,7 +436,7 @@ module spatz_vsldu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
   end
 
   // VRF signals
-  assign vrf_re_o        = spatz_req.use_vs2 && (spatz_req_valid || prefetch_q);
+  assign vrf_re_o        = spatz_req.use_vs2 && (spatz_req_valid || prefetch_q) && running_q[spatz_req.id];
   assign vrf_req_valid_d = spatz_req_valid && spatz_req.use_vd && (vrf_re_o || !spatz_req.use_vs2) && (vrf_rvalid_i || !spatz_req.use_vs2) && !prefetch_q;
 
   ////////////////////////

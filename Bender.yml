@@ -27,7 +27,6 @@ sources:
       files:
         # Sources
         - hardware/src/reorder_buffer.sv
-        - hardware/src/glass_spill_register.sv
         - hardware/src/vregfile.sv
         - hardware/src/spatz_simd_lane.sv
         - hardware/src/spatz_ipu.sv
