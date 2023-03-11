@@ -86,16 +86,16 @@ void conv3d_CHx7x7_block(double *o, const double *i, unsigned int num_rows, cons
   const int ich_len = (M + F - 1) * (N + F - 1);
   const int fch_len = F * F;
 
-  double *i_ = i;
-  double *i__ = i;
+  const double *i_ = i;
+  const double *i__ = i;
 
   // Buffers for coefficients preloading
   double f0_buf, f1_buf, f2_buf, f3_buf, f4_buf, f5_buf, f6_buf;
 
-  double *i_slide_ptr_0;
-  double *i_slide_ptr_1;
-  double *i_slide_ptr_2;
-  double *i_slide_ptr_3;
+  const double *i_slide_ptr_0;
+  const double *i_slide_ptr_1;
+  const double *i_slide_ptr_2;
+  const double *i_slide_ptr_3;
 
   // Preload two input rows belonging to channel 0
   asm volatile("vle64.v v0, (%0); add %0, %0, %1" : "+&r"(i__) : "r"(lwi_pad));
