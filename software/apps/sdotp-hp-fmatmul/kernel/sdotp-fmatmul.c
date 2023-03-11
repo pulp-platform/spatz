@@ -23,11 +23,11 @@
 void matmul(__fp16 *c, const __fp16 *a, const __fp16 *b, const unsigned int M,
             const unsigned int N, const unsigned int P) {
   if (M <= 4) {
-    matmul_2xVL(c, a, b, 0, M, N, P, 0, P, P);
+    matmul_2xVL(c, a, b, 0, M, N, P, 0, P);
   } else if (M <= 8) {
-    matmul_4xVL(c, a, b, 0, M, N, P, 0, P, P);
+    matmul_4xVL(c, a, b, 0, M, N, P, 0, P);
   } else {
-    matmul_8xVL(c, a, b, 0, M, N, P, 0, P, P);
+    matmul_8xVL(c, a, b, 0, M, N, P, 0, P);
   }
 }
 
@@ -38,15 +38,24 @@ void matmul(__fp16 *c, const __fp16 *a, const __fp16 *b, const unsigned int M,
 void matmul_2xVL(__fp16 *c, const __fp16 *a, const __fp16 *b,
                  const unsigned int m_start, const unsigned int m_end,
                  const unsigned int N, const unsigned int P,
-                 const unsigned int p_start, const unsigned int p_end,
-                 const unsigned int vl) {
+                 const unsigned int p_start, const unsigned int p_end) {
 
-  for (unsigned int p = p_start; p < p_end; p += vl) {
+  unsigned int p = p_start;
+  while (p < p_end) {
+    // Calculate the vl
+    size_t gvl;
+    asm volatile("vsetvli %[gvl], %[vl], e16, m8, ta, ma"
+                 : [gvl] "=r"(gvl)
+                 : [vl] "r"(2 * (p_end - p)));
+
     const __fp16 *b_ = b + p;
     __fp16 *c_ = c + p;
 
+    // Account for the used operands
+    p += gvl / 2;
+
     for (unsigned int m = m_start; m < m_end; m += 2) {
-      asm volatile("vsetvli zero, %0, e16, m8, ta, ma" ::"r"(2*vl));
+      asm volatile("vsetvli zero, %0, e16, m8, ta, ma" ::"r"(gvl));
 
       const __fp16 *a_ = a + m * N;
       const __fp16 *a__ = a_;
@@ -59,10 +68,10 @@ void matmul_2xVL(__fp16 *c, const __fp16 *a, const __fp16 *b,
       double t0, t1;
 
       asm volatile("vmv.v.x v0, zero");
-      asm volatile("flw %[t], 0(%[a])" : [t] "=f" (t0) : [a] "r" (a__));
+      asm volatile("flw %[t], 0(%[a])" : [t] "=f"(t0) : [a] "r"(a__));
       a__ += N;
       asm volatile("vmv.v.x v8, zero");
-      asm volatile("flw %[t], 0(%[a])" : [t] "=f" (t1) : [a] "r" (a__));
+      asm volatile("flw %[t], 0(%[a])" : [t] "=f"(t1) : [a] "r"(a__));
 
       unsigned int n = 0;
 
@@ -74,10 +83,10 @@ void matmul_2xVL(__fp16 *c, const __fp16 *a, const __fp16 *b,
         b__ += P;
 
         asm volatile("vfwdotp.vf v0, %0, v16" ::"f"(t0));
-        asm volatile("flw %[t], 0(%[a])" : [t] "=f" (t0) : [a] "r" (a__));
+        asm volatile("flw %[t], 0(%[a])" : [t] "=f"(t0) : [a] "r"(a__));
         a__ += N;
         asm volatile("vfwdotp.vf v8, %0, v16" ::"f"(t1));
-        asm volatile("flw %[t], 0(%[a])" : [t] "=f" (t1) : [a] "r" (a__));
+        asm volatile("flw %[t], 0(%[a])" : [t] "=f"(t1) : [a] "r"(a__));
 
         n += 2;
         a__ = a_ + n;
@@ -89,16 +98,16 @@ void matmul_2xVL(__fp16 *c, const __fp16 *a, const __fp16 *b,
         b__ += P;
 
         asm volatile("vfwdotp.vf v0, %0, v24" ::"f"(t0));
-        asm volatile("flw %[t], 0(%[a])" : [t] "=f" (t0) : [a] "r" (a__));
+        asm volatile("flw %[t], 0(%[a])" : [t] "=f"(t0) : [a] "r"(a__));
         a__ += N;
         asm volatile("vfwdotp.vf v8, %0, v24" ::"f"(t1));
-        asm volatile("flw %[t], 0(%[a])" : [t] "=f" (t1) : [a] "r" (a__));
+        asm volatile("flw %[t], 0(%[a])" : [t] "=f"(t1) : [a] "r"(a__));
       }
 
       asm volatile("vfwdotp.vf v0, %0, v24" ::"f"(t0));
       asm volatile("vfwdotp.vf v8, %0, v24" ::"f"(t1));
 
-      asm volatile("vsetvli zero, %0, e16, m8, ta, ma" ::"r"(vl));
+      asm volatile("vsetvli zero, %0, e16, m8, ta, ma" ::"r"(gvl / 2));
 
       asm volatile("vfncvt.f.f.w v0, v0");
       asm volatile("vse16.v v0, (%0);" ::"r"(c__));
@@ -116,15 +125,24 @@ void matmul_2xVL(__fp16 *c, const __fp16 *a, const __fp16 *b,
 void matmul_4xVL(__fp16 *c, const __fp16 *a, const __fp16 *b,
                  const unsigned int m_start, const unsigned int m_end,
                  const unsigned int N, const unsigned int P,
-                 const unsigned int p_start, const unsigned int p_end,
-                 const unsigned int vl) {
+                 const unsigned int p_start, const unsigned int p_end) {
 
-  for (unsigned int p = p_start; p < p_end; p += vl) {
+  unsigned int p = p_start;
+  while (p < p_end) {
+    // Calculate the vl
+    size_t gvl;
+    asm volatile("vsetvli %[gvl], %[vl], e16, m4, ta, ma"
+                 : [gvl] "=r"(gvl)
+                 : [vl] "r"(2 * (p_end - p)));
+
     const __fp16 *b_ = b + p;
     __fp16 *c_ = c + p;
 
+    // Account for the used operands
+    p += gvl / 2;
+
     for (unsigned int m = m_start; m < m_end; m += 4) {
-      asm volatile("vsetvli zero, %0, e16, m4, ta, ma" ::"r"(2*vl));
+      asm volatile("vsetvli zero, %0, e16, m4, ta, ma" ::"r"(gvl));
 
       const __fp16 *a_ = a + m * N;
       const __fp16 *a__ = a_;
@@ -137,16 +155,16 @@ void matmul_4xVL(__fp16 *c, const __fp16 *a, const __fp16 *b,
       double t0, t1, t2, t3;
 
       asm volatile("vmv.v.x v0, zero");
-      asm volatile("flw %[t], 0(%[a])" : [t] "=f" (t0) : [a] "r" (a__));
+      asm volatile("flw %[t], 0(%[a])" : [t] "=f"(t0) : [a] "r"(a__));
       a__ += N;
       asm volatile("vmv.v.x v4, zero");
-      asm volatile("flw %[t], 0(%[a])" : [t] "=f" (t1) : [a] "r" (a__));
+      asm volatile("flw %[t], 0(%[a])" : [t] "=f"(t1) : [a] "r"(a__));
       a__ += N;
       asm volatile("vmv.v.x v8, zero");
-      asm volatile("flw %[t], 0(%[a])" : [t] "=f" (t2) : [a] "r" (a__));
+      asm volatile("flw %[t], 0(%[a])" : [t] "=f"(t2) : [a] "r"(a__));
       a__ += N;
       asm volatile("vmv.v.x v12, zero");
-      asm volatile("flw %[t], 0(%[a])" : [t] "=f" (t3) : [a] "r" (a__));
+      asm volatile("flw %[t], 0(%[a])" : [t] "=f"(t3) : [a] "r"(a__));
 
       unsigned int n = 0;
 
@@ -158,16 +176,16 @@ void matmul_4xVL(__fp16 *c, const __fp16 *a, const __fp16 *b,
         b__ += P;
 
         asm volatile("vfwdotp.vf v0, %0, v16" ::"f"(t0));
-        asm volatile("flw %[t], 0(%[a])" : [t] "=f" (t0) : [a] "r" (a__));
+        asm volatile("flw %[t], 0(%[a])" : [t] "=f"(t0) : [a] "r"(a__));
         a__ += N;
         asm volatile("vfwdotp.vf v4, %0, v16" ::"f"(t1));
-        asm volatile("flw %[t], 0(%[a])" : [t] "=f" (t1) : [a] "r" (a__));
+        asm volatile("flw %[t], 0(%[a])" : [t] "=f"(t1) : [a] "r"(a__));
         a__ += N;
         asm volatile("vfwdotp.vf v8, %0, v16" ::"f"(t2));
-        asm volatile("flw %[t], 0(%[a])" : [t] "=f" (t2) : [a] "r" (a__));
+        asm volatile("flw %[t], 0(%[a])" : [t] "=f"(t2) : [a] "r"(a__));
         a__ += N;
         asm volatile("vfwdotp.vf v12, %0, v16" ::"f"(t3));
-        asm volatile("flw %[t], 0(%[a])" : [t] "=f" (t3) : [a] "r" (a__));
+        asm volatile("flw %[t], 0(%[a])" : [t] "=f"(t3) : [a] "r"(a__));
 
         n += 2;
         a__ = a_ + n;
@@ -179,16 +197,16 @@ void matmul_4xVL(__fp16 *c, const __fp16 *a, const __fp16 *b,
         b__ += P;
 
         asm volatile("vfwdotp.vf v0, %0, v20" ::"f"(t0));
-        asm volatile("flw %[t], 0(%[a])" : [t] "=f" (t0) : [a] "r" (a__));
+        asm volatile("flw %[t], 0(%[a])" : [t] "=f"(t0) : [a] "r"(a__));
         a__ += N;
         asm volatile("vfwdotp.vf v4, %0, v20" ::"f"(t1));
-        asm volatile("flw %[t], 0(%[a])" : [t] "=f" (t1) : [a] "r" (a__));
+        asm volatile("flw %[t], 0(%[a])" : [t] "=f"(t1) : [a] "r"(a__));
         a__ += N;
         asm volatile("vfwdotp.vf v8, %0, v20" ::"f"(t2));
-        asm volatile("flw %[t], 0(%[a])" : [t] "=f" (t2) : [a] "r" (a__));
+        asm volatile("flw %[t], 0(%[a])" : [t] "=f"(t2) : [a] "r"(a__));
         a__ += N;
         asm volatile("vfwdotp.vf v12, %0, v20" ::"f"(t3));
-        asm volatile("flw %[t], 0(%[a])" : [t] "=f" (t3) : [a] "r" (a__));
+        asm volatile("flw %[t], 0(%[a])" : [t] "=f"(t3) : [a] "r"(a__));
       }
 
       asm volatile("vfwdotp.vf v0, %0, v20" ::"f"(t0));
@@ -196,7 +214,7 @@ void matmul_4xVL(__fp16 *c, const __fp16 *a, const __fp16 *b,
       asm volatile("vfwdotp.vf v8, %0, v20" ::"f"(t2));
       asm volatile("vfwdotp.vf v12, %0, v20" ::"f"(t3));
 
-      asm volatile("vsetvli zero, %0, e16, m4, ta, ma" ::"r"(vl));
+      asm volatile("vsetvli zero, %0, e16, m4, ta, ma" ::"r"(gvl / 2));
 
       asm volatile("vfncvt.f.f.w v0, v0");
       asm volatile("vse16.v v0, (%0);" ::"r"(c__));
@@ -220,15 +238,24 @@ void matmul_4xVL(__fp16 *c, const __fp16 *a, const __fp16 *b,
 void matmul_8xVL(__fp16 *c, const __fp16 *a, const __fp16 *b,
                  const unsigned int m_start, const unsigned int m_end,
                  const unsigned int N, const unsigned int P,
-                 const unsigned int p_start, const unsigned int p_end,
-                 const unsigned int vl) {
+                 const unsigned int p_start, const unsigned int p_end) {
 
-  for (unsigned int p = p_start; p < p_end; p += vl) {
+  unsigned int p = p_start;
+  while (p < p_end) {
+    // Calculate the vl
+    size_t gvl;
+    asm volatile("vsetvli %[gvl], %[vl], e16, m2, ta, ma"
+                 : [gvl] "=r"(gvl)
+                 : [vl] "r"(2 * (p_end - p)));
+
     const __fp16 *b_ = b + p;
     __fp16 *c_ = c + p;
 
+    // Account for the used operands
+    p += gvl / 2;
+
     for (unsigned int m = m_start; m < m_end; m += 8) {
-      asm volatile("vsetvli zero, %0, e16, m2, ta, ma" ::"r"(2*vl));
+      asm volatile("vsetvli zero, %0, e16, m2, ta, ma" ::"r"(gvl));
 
       const __fp16 *a_ = a + m * N;
       const __fp16 *a__ = a_;
@@ -241,28 +268,28 @@ void matmul_8xVL(__fp16 *c, const __fp16 *a, const __fp16 *b,
       double t0, t1, t2, t3, t4, t5, t6, t7;
 
       asm volatile("vmv.v.x v0, zero");
-      asm volatile("flw %[t], 0(%[a])" : [t] "=f" (t0) : [a] "r" (a__));
+      asm volatile("flw %[t], 0(%[a])" : [t] "=f"(t0) : [a] "r"(a__));
       a__ += N;
       asm volatile("vmv.v.x v2, zero");
-      asm volatile("flw %[t], 0(%[a])" : [t] "=f" (t1) : [a] "r" (a__));
+      asm volatile("flw %[t], 0(%[a])" : [t] "=f"(t1) : [a] "r"(a__));
       a__ += N;
       asm volatile("vmv.v.x v4, zero");
-      asm volatile("flw %[t], 0(%[a])" : [t] "=f" (t2) : [a] "r" (a__));
+      asm volatile("flw %[t], 0(%[a])" : [t] "=f"(t2) : [a] "r"(a__));
       a__ += N;
       asm volatile("vmv.v.x v6, zero");
-      asm volatile("flw %[t], 0(%[a])" : [t] "=f" (t3) : [a] "r" (a__));
+      asm volatile("flw %[t], 0(%[a])" : [t] "=f"(t3) : [a] "r"(a__));
       a__ += N;
       asm volatile("vmv.v.x v8, zero");
-      asm volatile("flw %[t], 0(%[a])" : [t] "=f" (t4) : [a] "r" (a__));
+      asm volatile("flw %[t], 0(%[a])" : [t] "=f"(t4) : [a] "r"(a__));
       a__ += N;
       asm volatile("vmv.v.x v10, zero");
-      asm volatile("flw %[t], 0(%[a])" : [t] "=f" (t5) : [a] "r" (a__));
+      asm volatile("flw %[t], 0(%[a])" : [t] "=f"(t5) : [a] "r"(a__));
       a__ += N;
       asm volatile("vmv.v.x v12, zero");
-      asm volatile("flw %[t], 0(%[a])" : [t] "=f" (t6) : [a] "r" (a__));
+      asm volatile("flw %[t], 0(%[a])" : [t] "=f"(t6) : [a] "r"(a__));
       a__ += N;
       asm volatile("vmv.v.x v14, zero");
-      asm volatile("flw %[t], 0(%[a])" : [t] "=f" (t7) : [a] "r" (a__));
+      asm volatile("flw %[t], 0(%[a])" : [t] "=f"(t7) : [a] "r"(a__));
 
       unsigned int n = 0;
 
@@ -274,28 +301,28 @@ void matmul_8xVL(__fp16 *c, const __fp16 *a, const __fp16 *b,
         b__ += P;
 
         asm volatile("vfwdotp.vf v0, %0, v18" ::"f"(t0));
-        asm volatile("flw %[t], 0(%[a])" : [t] "=f" (t0) : [a] "r" (a__));
+        asm volatile("flw %[t], 0(%[a])" : [t] "=f"(t0) : [a] "r"(a__));
         a__ += N;
         asm volatile("vfwdotp.vf v2, %0, v18" ::"f"(t1));
-        asm volatile("flw %[t], 0(%[a])" : [t] "=f" (t1) : [a] "r" (a__));
+        asm volatile("flw %[t], 0(%[a])" : [t] "=f"(t1) : [a] "r"(a__));
         a__ += N;
         asm volatile("vfwdotp.vf v4, %0, v18" ::"f"(t2));
-        asm volatile("flw %[t], 0(%[a])" : [t] "=f" (t2) : [a] "r" (a__));
+        asm volatile("flw %[t], 0(%[a])" : [t] "=f"(t2) : [a] "r"(a__));
         a__ += N;
         asm volatile("vfwdotp.vf v6, %0, v18" ::"f"(t3));
-        asm volatile("flw %[t], 0(%[a])" : [t] "=f" (t3) : [a] "r" (a__));
+        asm volatile("flw %[t], 0(%[a])" : [t] "=f"(t3) : [a] "r"(a__));
         a__ += N;
         asm volatile("vfwdotp.vf v8, %0, v18" ::"f"(t4));
-        asm volatile("flw %[t], 0(%[a])" : [t] "=f" (t4) : [a] "r" (a__));
+        asm volatile("flw %[t], 0(%[a])" : [t] "=f"(t4) : [a] "r"(a__));
         a__ += N;
         asm volatile("vfwdotp.vf v10, %0, v18" ::"f"(t5));
-        asm volatile("flw %[t], 0(%[a])" : [t] "=f" (t5) : [a] "r" (a__));
+        asm volatile("flw %[t], 0(%[a])" : [t] "=f"(t5) : [a] "r"(a__));
         a__ += N;
         asm volatile("vfwdotp.vf v12, %0, v18" ::"f"(t6));
-        asm volatile("flw %[t], 0(%[a])" : [t] "=f" (t6) : [a] "r" (a__));
+        asm volatile("flw %[t], 0(%[a])" : [t] "=f"(t6) : [a] "r"(a__));
         a__ += N;
         asm volatile("vfwdotp.vf v14, %0, v18" ::"f"(t7));
-        asm volatile("flw %[t], 0(%[a])" : [t] "=f" (t7) : [a] "r" (a__));
+        asm volatile("flw %[t], 0(%[a])" : [t] "=f"(t7) : [a] "r"(a__));
 
         n += 2;
         a__ = a_ + n;
@@ -307,28 +334,28 @@ void matmul_8xVL(__fp16 *c, const __fp16 *a, const __fp16 *b,
         b__ += P;
 
         asm volatile("vfwdotp.vf v0, %0, v20" ::"f"(t0));
-        asm volatile("flw %[t], 0(%[a])" : [t] "=f" (t0) : [a] "r" (a__));
+        asm volatile("flw %[t], 0(%[a])" : [t] "=f"(t0) : [a] "r"(a__));
         a__ += N;
         asm volatile("vfwdotp.vf v2, %0, v20" ::"f"(t1));
-        asm volatile("flw %[t], 0(%[a])" : [t] "=f" (t1) : [a] "r" (a__));
+        asm volatile("flw %[t], 0(%[a])" : [t] "=f"(t1) : [a] "r"(a__));
         a__ += N;
         asm volatile("vfwdotp.vf v4, %0, v20" ::"f"(t2));
-        asm volatile("flw %[t], 0(%[a])" : [t] "=f" (t2) : [a] "r" (a__));
+        asm volatile("flw %[t], 0(%[a])" : [t] "=f"(t2) : [a] "r"(a__));
         a__ += N;
         asm volatile("vfwdotp.vf v6, %0, v20" ::"f"(t3));
-        asm volatile("flw %[t], 0(%[a])" : [t] "=f" (t3) : [a] "r" (a__));
+        asm volatile("flw %[t], 0(%[a])" : [t] "=f"(t3) : [a] "r"(a__));
         a__ += N;
         asm volatile("vfwdotp.vf v8, %0, v20" ::"f"(t4));
-        asm volatile("flw %[t], 0(%[a])" : [t] "=f" (t4) : [a] "r" (a__));
+        asm volatile("flw %[t], 0(%[a])" : [t] "=f"(t4) : [a] "r"(a__));
         a__ += N;
         asm volatile("vfwdotp.vf v10, %0, v20" ::"f"(t5));
-        asm volatile("flw %[t], 0(%[a])" : [t] "=f" (t5) : [a] "r" (a__));
+        asm volatile("flw %[t], 0(%[a])" : [t] "=f"(t5) : [a] "r"(a__));
         a__ += N;
         asm volatile("vfwdotp.vf v12, %0, v20" ::"f"(t6));
-        asm volatile("flw %[t], 0(%[a])" : [t] "=f" (t6) : [a] "r" (a__));
+        asm volatile("flw %[t], 0(%[a])" : [t] "=f"(t6) : [a] "r"(a__));
         a__ += N;
         asm volatile("vfwdotp.vf v14, %0, v20" ::"f"(t7));
-        asm volatile("flw %[t], 0(%[a])" : [t] "=f" (t7) : [a] "r" (a__));
+        asm volatile("flw %[t], 0(%[a])" : [t] "=f"(t7) : [a] "r"(a__));
       }
 
       asm volatile("vfwdotp.vf v0, %0, v20" ::"f"(t0));
@@ -340,7 +367,7 @@ void matmul_8xVL(__fp16 *c, const __fp16 *a, const __fp16 *b,
       asm volatile("vfwdotp.vf v12, %0, v20" ::"f"(t6));
       asm volatile("vfwdotp.vf v14, %0, v20" ::"f"(t7));
 
-      asm volatile("vsetvli zero, %0, e16, m2, ta, ma" ::"r"(vl));
+      asm volatile("vsetvli zero, %0, e16, m2, ta, ma" ::"r"(gvl / 2));
 
       asm volatile("vfncvt.f.f.w v0, v0");
       asm volatile("vse16.v v0, (%0);" ::"r"(c__));

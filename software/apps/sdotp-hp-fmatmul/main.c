@@ -29,32 +29,17 @@
 #include "synchronization.h"
 #endif
 
-// Define Matrix dimensions:
-// C = AB with A=[MxN], B=[NxP], C=[MxP]
-#ifndef MATRIX_DIM
-#define MATRIX_DIM 256
-#endif
-#ifndef KERNEL_M
-#define KERNEL_M 2
-#endif
-#ifndef KERNEL_P
-#define KERNEL_P 2
-#endif
-
-#define M MATRIX_DIM
-#define N MATRIX_DIM
-#define P MATRIX_DIM
-
 __fp16 *a;
 __fp16 *b;
 __fp16 *c;
 
 // Initialize the matrices
-void init_matrix(__fp16 *dst, const __fp16 *src, const unsigned int row, const unsigned int col) {
-  for (unsigned int r = 0; r < row; r += 2) {
-    for (unsigned int c = 0; c < col; c++) {
-      dst[r * col + 2 * c]     = src[r * col + c];
-      dst[r * col + 2 * c + 1] = src[(r + 1) * col + c];
+void init_matrix(__fp16 *dst, const __fp16 *src, const unsigned int rows_start,
+                 const unsigned int rows_end, const unsigned int num_columns) {
+  for (unsigned int r = rows_start; r < rows_end; r += 2) {
+    for (unsigned int c = 0; c < num_columns; ++c) {
+      dst[r * num_columns + 2 * c] = src[r * num_columns + c];
+      dst[r * num_columns + 2 * c + 1] = src[(r + 1) * num_columns + c];
     }
   }
 }
@@ -118,18 +103,21 @@ int main() {
 
   // Allocate the matrices in the local tile
   if (cid == 0) {
-    a = (__fp16 *)domain_malloc(get_alloc_tile(0), M * N * sizeof(__fp16));
-    b = (__fp16 *)domain_malloc(get_alloc_tile(0), N * P * sizeof(__fp16));
-    c = (__fp16 *)domain_malloc(get_alloc_tile(0), M * P * sizeof(__fp16));
+    a = (__fp16 *)domain_malloc(get_alloc_tile(0),
+                                gemm_l.M * gemm_l.N * sizeof(__fp16));
+    b = (__fp16 *)domain_malloc(get_alloc_tile(0),
+                                gemm_l.N * gemm_l.K * sizeof(__fp16));
+    c = (__fp16 *)domain_malloc(get_alloc_tile(0),
+                                gemm_l.M * gemm_l.K * sizeof(__fp16));
   }
 
   // Reset timer
   timer = (unsigned int)-1;
 
   // Set matrix dimension
-  dim = MATRIX_DIM;
-  kernel_size = KERNEL_M;
-  vl = KERNEL_P;
+  dim = gemm_l.N;
+  kernel_size = 4;
+  vl = gemm_l.N;
 
   // Can every core execute its desired kernel?
   if ((dim * dim) / (kernel_size * vl) < active_cores)
@@ -148,6 +136,7 @@ int main() {
     const unsigned int split_p_count = cores_per_group / split_m_count;
     p_start = dim / split_p_count * (core_gid % split_p_count);
     p_end = dim / split_p_count * ((core_gid % split_p_count) + 1);
+    vl = p_end - p_start;
     m_start = dim_group * gid + kernel_size * (core_gid / split_p_count);
     m_end = dim_group * gid + kernel_size * (core_gid / split_p_count + 1);
   } else {
@@ -162,10 +151,13 @@ int main() {
   mempool_barrier(num_cores);
 
   // Initialize matrices
-  if (cid == 0) {
-    init_matrix((__fp16*)a, (const __fp16*)gemm_A_dram, dim, dim);
-    init_matrix((__fp16*)b, (const __fp16*)gemm_B_dram, dim, dim);
-    init_matrix((__fp16*)c, (const __fp16*)gemm_C_dram, dim, dim);
+  if (is_core_active) {
+    init_matrix(a, gemm_A_dram, cid * (gemm_l.M / active_cores),
+                (cid + 1) * (gemm_l.M / active_cores), dim);
+    init_matrix(b, gemm_B_dram, cid * (gemm_l.M / active_cores),
+                (cid + 1) * (gemm_l.M / active_cores), dim);
+    init_matrix(c, gemm_C_dram, cid * (gemm_l.M / active_cores),
+                (cid + 1) * (gemm_l.M / active_cores), dim);
   }
 
   // Wait for all cores to finish
@@ -182,11 +174,11 @@ int main() {
         start_kernel();
 
       if (kernel_size == 2) {
-        matmul_2xVL(c, a, b, m_start, m_end, dim, dim, p_start, p_end, vl);
+        matmul_2xVL(c, a, b, m_start, m_end, dim, dim, p_start, p_end);
       } else if (kernel_size == 4) {
-        matmul_4xVL(c, a, b, m_start, m_end, dim, dim, p_start, p_end, vl);
+        matmul_4xVL(c, a, b, m_start, m_end, dim, dim, p_start, p_end);
       } else if (kernel_size == 8) {
-        matmul_8xVL(c, a, b, m_start, m_end, dim, dim, p_start, p_end, vl);
+        matmul_8xVL(c, a, b, m_start, m_end, dim, dim, p_start, p_end);
       } else {
         return -2;
       }
@@ -212,7 +204,7 @@ int main() {
   // Check and display results
   if (cid == 0) {
     unsigned int performance = 1000 * 2 * dim * dim * dim / timer;
-    unsigned int utilization = performance / (2 * active_cores * 4 * N_FU);
+    unsigned int utilization = performance / (2 * active_cores * 4 * N_FPU);
 
     printf("\n----- (%dx%d) sdotp fmatmul -----\n", dim, dim);
     printf("The execution took %u cycles.\n", timer);
