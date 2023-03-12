@@ -7,7 +7,7 @@
 {
     kernel: "GEMM"
     M: 64,
-    N: 128,
+    N: 64,
     K: 64,
     alpha: 0,
     transpose_A: false,

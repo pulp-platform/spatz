@@ -34,8 +34,9 @@ char *b;
 char *c;
 
 // Initialize the matrices
-void init_matrix(char *matrix, const char *src, const unsigned int rows_start,
-                 const unsigned int rows_end, const unsigned int num_columns) {
+void init_matrix(double *matrix, const double *src,
+                 const unsigned int rows_start, const unsigned int rows_end,
+                 const unsigned int num_columns) {
   for (unsigned int i = rows_start; i < rows_end; ++i) {
     for (unsigned int j = 0; j < num_columns; ++j) {
       matrix[i * num_columns + j] = src[i * num_columns + j];
@@ -82,11 +83,11 @@ int main() {
   // Allocate the matrices in the local tile
   if (cid == 0) {
     a = (char *)domain_malloc(get_alloc_tile(0),
-                              gemm_l.M * gemm_l.N * sizeof(char));
+                                gemm_l.M * gemm_l.K * sizeof(char));
     b = (char *)domain_malloc(get_alloc_tile(0),
-                              gemm_l.N * gemm_l.K * sizeof(char));
+                                gemm_l.K * gemm_l.N * sizeof(char));
     c = (char *)domain_malloc(get_alloc_tile(0),
-                              gemm_l.M * gemm_l.K * sizeof(char));
+                                gemm_l.M * gemm_l.N * sizeof(char));
   }
 
   // Reset timer
@@ -120,12 +121,15 @@ int main() {
 
   // Initialize matrices
   if (is_core_active) {
-    init_matrix(a, gemm_A_dram, cid * (gemm_l.M / active_cores),
-                (cid + 1) * (gemm_l.M / active_cores), gemm_l.N);
-    init_matrix(b, gemm_B_dram, cid * (gemm_l.M / active_cores),
-                (cid + 1) * (gemm_l.M / active_cores), gemm_l.N);
-    init_matrix(c, gemm_C_dram, cid * (gemm_l.M / active_cores),
-                (cid + 1) * (gemm_l.M / active_cores), gemm_l.N);
+    init_matrix((double *)a, (const double *)gemm_A_dram,
+                cid * (gemm_l.M / active_cores),
+                (cid + 1) * (gemm_l.M / active_cores), gemm_l.K / 8);
+    init_matrix((double *)b, (const double *)gemm_B_dram,
+                cid * (gemm_l.K / active_cores),
+                (cid + 1) * (gemm_l.K / active_cores), gemm_l.N / 8);
+    init_matrix((double *)c, (const double *)gemm_C_dram,
+                cid * (gemm_l.M / active_cores),
+                (cid + 1) * (gemm_l.M / active_cores), gemm_l.N / 8);
   }
 
   // Wait for all cores to finish
@@ -142,13 +146,13 @@ int main() {
         start_kernel();
 
       if (kernel_size == 2) {
-        matmul_2xVL(c, a, b, m_start, m_end, gemm_l.N, gemm_l.K, p_start,
+        matmul_2xVL(c, a, b, m_start, m_end, gemm_l.K, gemm_l.N, p_start,
                     p_end);
       } else if (kernel_size == 4) {
-        matmul_4xVL(c, a, b, m_start, m_end, gemm_l.N, gemm_l.K, p_start,
+        matmul_4xVL(c, a, b, m_start, m_end, gemm_l.K, gemm_l.N, p_start,
                     p_end);
       } else if (kernel_size == 8) {
-        matmul_8xVL(c, a, b, m_start, m_end, gemm_l.N, gemm_l.K, p_start,
+        matmul_8xVL(c, a, b, m_start, m_end, gemm_l.K, gemm_l.N, p_start,
                     p_end);
       } else {
         return -2;
@@ -178,7 +182,7 @@ int main() {
         1000 * 2 * gemm_l.M * gemm_l.N * gemm_l.K / timer;
     unsigned int utilization = performance / (2 * active_cores * 4 * N_FPU);
 
-    printf("\n----- (%dx%d) widening bp fmatmul -----\n", gemm_l.N, gemm_l.K);
+    printf("\n----- (%dx%d) widening bp fmatmul -----\n", gemm_l.M, gemm_l.N);
     printf("The execution took %u cycles.\n", timer);
     printf("The performance is %u OP/1000cycle (%u%%o utilization).\n",
            performance, utilization);

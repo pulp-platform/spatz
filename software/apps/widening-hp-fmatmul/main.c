@@ -34,7 +34,7 @@ __fp16 *b;
 __fp16 *c;
 
 // Initialize the matrices
-void init_matrix(__fp16 *matrix, const __fp16 *src,
+void init_matrix(double *matrix, const double *src,
                  const unsigned int rows_start, const unsigned int rows_end,
                  const unsigned int num_columns) {
   for (unsigned int i = rows_start; i < rows_end; ++i) {
@@ -102,11 +102,11 @@ int main() {
   // Allocate the matrices in the local tile
   if (cid == 0) {
     a = (__fp16 *)domain_malloc(get_alloc_tile(0),
-                                gemm_l.M * gemm_l.N * sizeof(__fp16));
-    b = (__fp16 *)domain_malloc(get_alloc_tile(0),
-                                gemm_l.N * gemm_l.K * sizeof(__fp16));
-    c = (__fp16 *)domain_malloc(get_alloc_tile(0),
                                 gemm_l.M * gemm_l.K * sizeof(__fp16));
+    b = (__fp16 *)domain_malloc(get_alloc_tile(0),
+                                gemm_l.K * gemm_l.N * sizeof(__fp16));
+    c = (__fp16 *)domain_malloc(get_alloc_tile(0),
+                                gemm_l.M * gemm_l.N * sizeof(__fp16));
   }
 
   // Reset timer
@@ -123,14 +123,14 @@ int main() {
   if (split_m_count < cores_per_group) {
     // Split P dimension up
     const unsigned int split_p_count = cores_per_group / split_m_count;
-    p_start = gemm_l.K / split_p_count * (core_gid % split_p_count);
-    p_end = gemm_l.K / split_p_count * ((core_gid % split_p_count) + 1);
+    p_start = gemm_l.N / split_p_count * (core_gid % split_p_count);
+    p_end = gemm_l.N / split_p_count * ((core_gid % split_p_count) + 1);
     m_start = dim_group * gid + kernel_size * (core_gid / split_p_count);
     m_end = dim_group * gid + kernel_size * (core_gid / split_p_count + 1);
   } else {
     // Work over complete P dimension
     p_start = 0;
-    p_end = gemm_l.K;
+    p_end = gemm_l.N;
     m_start = dim_group * gid + (dim_group / cores_per_group) * core_gid;
     m_end = dim_group * gid + (dim_group / cores_per_group) * (core_gid + 1);
   }
@@ -140,12 +140,15 @@ int main() {
 
   // Initialize matrices
   if (is_core_active) {
-    init_matrix(a, gemm_A_dram, cid * (gemm_l.M / active_cores),
-                (cid + 1) * (gemm_l.M / active_cores), gemm_l.N);
-    init_matrix(b, gemm_B_dram, cid * (gemm_l.M / active_cores),
-                (cid + 1) * (gemm_l.M / active_cores), gemm_l.N);
-    init_matrix(c, gemm_C_dram, cid * (gemm_l.M / active_cores),
-                (cid + 1) * (gemm_l.M / active_cores), gemm_l.N);
+    init_matrix((double *)a, (const double *)gemm_A_dram,
+                cid * (gemm_l.M / active_cores),
+                (cid + 1) * (gemm_l.M / active_cores), gemm_l.K / 4);
+    init_matrix((double *)b, (const double *)gemm_B_dram,
+                cid * (gemm_l.K / active_cores),
+                (cid + 1) * (gemm_l.K / active_cores), gemm_l.N / 4);
+    init_matrix((double *)c, (const double *)gemm_C_dram,
+                cid * (gemm_l.M / active_cores),
+                (cid + 1) * (gemm_l.M / active_cores), gemm_l.N / 4);
   }
 
   // Wait for all cores to finish
@@ -162,13 +165,13 @@ int main() {
         start_kernel();
 
       if (kernel_size == 2) {
-        matmul_2xVL(c, a, b, m_start, m_end, gemm_l.N, gemm_l.K, p_start,
+        matmul_2xVL(c, a, b, m_start, m_end, gemm_l.K, gemm_l.N, p_start,
                     p_end);
       } else if (kernel_size == 4) {
-        matmul_4xVL(c, a, b, m_start, m_end, gemm_l.N, gemm_l.K, p_start,
+        matmul_4xVL(c, a, b, m_start, m_end, gemm_l.K, gemm_l.N, p_start,
                     p_end);
       } else if (kernel_size == 8) {
-        matmul_8xVL(c, a, b, m_start, m_end, gemm_l.N, gemm_l.K, p_start,
+        matmul_8xVL(c, a, b, m_start, m_end, gemm_l.K, gemm_l.N, p_start,
                     p_end);
       } else {
         return -2;
@@ -198,7 +201,7 @@ int main() {
         1000 * 2 * gemm_l.M * gemm_l.N * gemm_l.K / timer;
     unsigned int utilization = performance / (2 * active_cores * 2 * N_FPU);
 
-    printf("\n----- (%dx%d) widening hp fmatmul -----\n", gemm_l.N, gemm_l.K);
+    printf("\n----- (%dx%d) widening hp fmatmul -----\n", gemm_l.M, gemm_l.N);
     printf("The execution took %u cycles.\n", timer);
     printf("The performance is %u OP/1000cycle (%u%%o utilization).\n",
            performance, utilization);
@@ -206,7 +209,7 @@ int main() {
 
   if (cid == 0) {
     int error =
-        verify_matrix(c, (const __fp16 *)gemm_checksum, gemm_l.N, gemm_l.K);
+        verify_matrix(c, (const __fp16 *)gemm_checksum, gemm_l.M, gemm_l.N);
 
     if (error != 0) {
       printf("Error core %d: c[%d]=%u\n", cid, error, (int)c[error]);

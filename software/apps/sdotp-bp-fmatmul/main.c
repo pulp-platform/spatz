@@ -122,9 +122,9 @@ int main() {
   // Initialize matrices
   if (is_core_active) {
     init_matrix(a, gemm_A_dram, cid * (gemm_l.M / active_cores),
-                (cid + 1) * (gemm_l.M / active_cores), gemm_l.N);
-    init_matrix(b, gemm_B_dram, cid * (gemm_l.M / active_cores),
-                (cid + 1) * (gemm_l.M / active_cores), gemm_l.N);
+                (cid + 1) * (gemm_l.M / active_cores), gemm_l.K);
+    init_matrix(b, gemm_B_dram, cid * (gemm_l.K / active_cores),
+                (cid + 1) * (gemm_l.K / active_cores), gemm_l.N);
     init_matrix(c, gemm_C_dram, cid * (gemm_l.M / active_cores),
                 (cid + 1) * (gemm_l.M / active_cores), gemm_l.N);
   }
@@ -179,7 +179,7 @@ int main() {
         1000 * 2 * gemm_l.M * gemm_l.N * gemm_l.K / timer;
     unsigned int utilization = performance / (2 * active_cores * 8 * N_FPU);
 
-    printf("\n----- (%dx%d) sdotp bp fmatmul -----\n", gemm_l.N, gemm_l.K);
+    printf("\n----- (%dx%d) sdotp bp fmatmul -----\n", gemm_l.M, gemm_l.N);
     printf("The execution took %u cycles.\n", timer);
     printf("The performance is %u OP/1000cycle (%u%%o utilization).\n",
            performance, utilization);
