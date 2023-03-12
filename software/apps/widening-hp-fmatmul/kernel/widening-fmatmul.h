@@ -16,8 +16,8 @@
 
 // Author: Domenic Wüthrich, ETH Zurich
 
-#ifndef SDOTPFMATMUL_H
-#define SDOTPFMATMUL_H
+#ifndef WIDENINGFMATMUL_H
+#define WIDENINGFMATMUL_H
 
 void matmul(__fp16 *c, const __fp16 *a, const __fp16 *b, const unsigned int M,
             const unsigned int N, const unsigned int P);
@@ -25,14 +25,17 @@ void matmul(__fp16 *c, const __fp16 *a, const __fp16 *b, const unsigned int M,
 inline void matmul_2xVL(__fp16 *c, const __fp16 *a, const __fp16 *b,
                         const unsigned int m_start, const unsigned int m_end,
                         const unsigned int N, const unsigned int P,
-                        const unsigned int p_start, const unsigned int p_end) __attribute__((always_inline));
+                        const unsigned int p_start, const unsigned int p_end)
+    __attribute__((always_inline));
 inline void matmul_4xVL(__fp16 *c, const __fp16 *a, const __fp16 *b,
                         const unsigned int m_start, const unsigned int m_end,
                         const unsigned int N, const unsigned int P,
-                        const unsigned int p_start, const unsigned int p_end) __attribute__((always_inline));
+                        const unsigned int p_start, const unsigned int p_end)
+    __attribute__((always_inline));
 inline void matmul_8xVL(__fp16 *c, const __fp16 *a, const __fp16 *b,
                         const unsigned int m_start, const unsigned int m_end,
                         const unsigned int N, const unsigned int P,
-                        const unsigned int p_start, const unsigned int p_end) __attribute__((always_inline));
+                        const unsigned int p_start, const unsigned int p_end)
+    __attribute__((always_inline));
 
 #endif

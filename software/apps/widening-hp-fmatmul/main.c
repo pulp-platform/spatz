@@ -34,7 +34,7 @@ __fp16 *b;
 __fp16 *c;
 
 // Initialize the matrices
-void init_matrix(double *matrix, const double *src,
+void init_matrix(__fp16 *matrix, const __fp16 *src,
                  const unsigned int rows_start, const unsigned int rows_end,
                  const unsigned int num_columns) {
   for (unsigned int i = rows_start; i < rows_end; ++i) {
@@ -91,8 +91,6 @@ int main() {
 
   unsigned int m_start, m_end;
   unsigned int p_start, p_end;
-  unsigned int vl;
-  unsigned int dim;
   unsigned int kernel_size;
 
   // Initialize MemPool
@@ -115,34 +113,24 @@ int main() {
   timer = (unsigned int)-1;
 
   // Set matrix dimension
-  dim = gemm_l.N;
-  kernel_size = 4;
-  vl = gemm_l.N;
-
-  // Can every core execute its desired kernel?
-  if ((dim * dim) / (kernel_size * vl) < active_cores)
-    return -1;
-  // Does the vl fit inside the dim
-  if (vl > dim)
-    return -2;
+  kernel_size = 8;
 
   // Block dimension of group
-  const unsigned int dim_group = dim / active_groups;
+  const unsigned int dim_group = gemm_l.M / active_groups;
   // Number of parallel cores in m direction
   const unsigned int split_m_count = dim_group / kernel_size;
 
   if (split_m_count < cores_per_group) {
     // Split P dimension up
     const unsigned int split_p_count = cores_per_group / split_m_count;
-    p_start = dim / split_p_count * (core_gid % split_p_count);
-    p_end = dim / split_p_count * ((core_gid % split_p_count) + 1);
-    vl = p_end - p_start;
+    p_start = gemm_l.K / split_p_count * (core_gid % split_p_count);
+    p_end = gemm_l.K / split_p_count * ((core_gid % split_p_count) + 1);
     m_start = dim_group * gid + kernel_size * (core_gid / split_p_count);
     m_end = dim_group * gid + kernel_size * (core_gid / split_p_count + 1);
   } else {
     // Work over complete P dimension
     p_start = 0;
-    p_end = dim;
+    p_end = gemm_l.K;
     m_start = dim_group * gid + (dim_group / cores_per_group) * core_gid;
     m_end = dim_group * gid + (dim_group / cores_per_group) * (core_gid + 1);
   }
@@ -152,18 +140,12 @@ int main() {
 
   // Initialize matrices
   if (is_core_active) {
-    init_matrix((double *)a, (double *)gemm_A_dram,
-                cid * (gemm_l.M / active_cores),
-                (cid + 1) * (gemm_l.M / active_cores),
-                dim * sizeof(__fp16) / sizeof(double));
-    init_matrix((double *)b, (double *)gemm_B_dram,
-                cid * (gemm_l.M / active_cores),
-                (cid + 1) * (gemm_l.M / active_cores),
-                dim * sizeof(__fp16) / sizeof(double));
-    init_matrix((double *)c, (double *)gemm_C_dram,
-                cid * (gemm_l.M / active_cores),
-                (cid + 1) * (gemm_l.M / active_cores),
-                dim * sizeof(__fp16) / sizeof(double));
+    init_matrix(a, gemm_A_dram, cid * (gemm_l.M / active_cores),
+                (cid + 1) * (gemm_l.M / active_cores), gemm_l.N);
+    init_matrix(b, gemm_B_dram, cid * (gemm_l.M / active_cores),
+                (cid + 1) * (gemm_l.M / active_cores), gemm_l.N);
+    init_matrix(c, gemm_C_dram, cid * (gemm_l.M / active_cores),
+                (cid + 1) * (gemm_l.M / active_cores), gemm_l.N);
   }
 
   // Wait for all cores to finish
@@ -175,12 +157,19 @@ int main() {
       // Start timer
       timer_start = mempool_get_timer();
 
+      // Start dump
+      if (cid == 0)
+        start_kernel();
+
       if (kernel_size == 2) {
-        matmul_2xVL(c, a, b, m_start, m_end, dim, dim, p_start, p_end);
+        matmul_2xVL(c, a, b, m_start, m_end, gemm_l.N, gemm_l.K, p_start,
+                    p_end);
       } else if (kernel_size == 4) {
-        matmul_4xVL(c, a, b, m_start, m_end, dim, dim, p_start, p_end);
+        matmul_4xVL(c, a, b, m_start, m_end, gemm_l.N, gemm_l.K, p_start,
+                    p_end);
       } else if (kernel_size == 8) {
-        matmul_8xVL(c, a, b, m_start, m_end, dim, dim, p_start, p_end);
+        matmul_8xVL(c, a, b, m_start, m_end, gemm_l.N, gemm_l.K, p_start,
+                    p_end);
       } else {
         return -2;
       }
@@ -188,6 +177,10 @@ int main() {
 
     // Wait for all cores to finish matmul
     mempool_barrier(num_cores);
+
+    // End dump
+    if (cid == 0)
+      stop_kernel();
 
     // End timer and check if new best runtime
     timer_end = mempool_get_timer();
@@ -201,17 +194,19 @@ int main() {
 
   // Check and display results
   if (cid == 0) {
-    unsigned int performance = 1000 * 2 * dim * dim * dim / timer;
-    unsigned int utilization = performance / (2 * active_cores * 2 * N_FU);
+    unsigned int performance =
+        1000 * 2 * gemm_l.M * gemm_l.N * gemm_l.K / timer;
+    unsigned int utilization = performance / (2 * active_cores * 2 * N_FPU);
 
-    printf("\n----- (%dx%d) widening fmatmul -----\n", dim, dim);
+    printf("\n----- (%dx%d) widening hp fmatmul -----\n", gemm_l.N, gemm_l.K);
     printf("The execution took %u cycles.\n", timer);
     printf("The performance is %u OP/1000cycle (%u%%o utilization).\n",
            performance, utilization);
   }
 
   if (cid == 0) {
-    int error = verify_matrix(c, (const __fp16 *)gemm_checksum, dim, dim);
+    int error =
+        verify_matrix(c, (const __fp16 *)gemm_checksum, gemm_l.N, gemm_l.K);
 
     if (error != 0) {
       printf("Error core %d: c[%d]=%u\n", cid, error, (int)c[error]);
