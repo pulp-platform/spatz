@@ -104,14 +104,14 @@ int main() {
   if (split_m_count < cores_per_group) {
     // Split P dimension up
     const unsigned int split_p_count = cores_per_group / split_m_count;
-    p_start = gemm_l.K / split_p_count * (core_gid % split_p_count);
-    p_end = gemm_l.K / split_p_count * ((core_gid % split_p_count) + 1);
+    p_start = gemm_l.N / split_p_count * (core_gid % split_p_count);
+    p_end = gemm_l.N / split_p_count * ((core_gid % split_p_count) + 1);
     m_start = dim_group * gid + kernel_size * (core_gid / split_p_count);
     m_end = dim_group * gid + kernel_size * (core_gid / split_p_count + 1);
   } else {
     // Work over complete P dimension
     p_start = 0;
-    p_end = gemm_l.K;
+    p_end = gemm_l.N;
     m_start = dim_group * gid + (dim_group / cores_per_group) * core_gid;
     m_end = dim_group * gid + (dim_group / cores_per_group) * (core_gid + 1);
   }

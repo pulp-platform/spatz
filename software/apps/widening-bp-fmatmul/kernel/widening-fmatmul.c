@@ -62,7 +62,7 @@ void matmul_2xVL(char *c, const char *a, const char *b,
 
       double t0, t1;
 
-      asm volatile("vsetvli zero, %0, e16, m4, ta, ma" ::"r"(gvl));
+      asm volatile("vsetvli zero, %0, e16, m8, ta, ma" ::"r"(gvl));
 
       asm volatile("vmv.v.x v0, zero");
       asm volatile("flh %[t], 0(%[a])" : [t] "=f"(t0) : [a] "r"(a__));
@@ -145,7 +145,7 @@ void matmul_4xVL(char *c, const char *a, const char *b,
 
       double t0, t1, t2, t3;
 
-      asm volatile("vsetvli zero, %0, e16, m2, ta, ma" ::"r"(gvl));
+      asm volatile("vsetvli zero, %0, e16, m4, ta, ma" ::"r"(gvl));
 
       asm volatile("vmv.v.x v0, zero");
       asm volatile("flh %[t], 0(%[a])" : [t] "=f"(t0) : [a] "r"(a__));
@@ -254,7 +254,7 @@ void matmul_8xVL(char *c, const char *a, const char *b,
 
       double t0, t1, t2, t3, t4, t5, t6, t7;
 
-      asm volatile("vsetvli zero, %0, e16, m1, ta, ma" ::"r"(gvl));
+      asm volatile("vsetvli zero, %0, e16, m2, ta, ma" ::"r"(gvl));
 
       asm volatile("vmv.v.x v0, zero");
       asm volatile("flh %[t], 0(%[a])" : [t] "=f"(t0) : [a] "r"(a__));

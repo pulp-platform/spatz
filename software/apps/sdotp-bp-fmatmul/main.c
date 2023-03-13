@@ -83,11 +83,11 @@ int main() {
   // Allocate the matrices in the local tile
   if (cid == 0) {
     a = (char *)domain_malloc(get_alloc_tile(0),
-                              gemm_l.M * gemm_l.N * sizeof(char));
-    b = (char *)domain_malloc(get_alloc_tile(0),
-                              gemm_l.N * gemm_l.K * sizeof(char));
-    c = (char *)domain_malloc(get_alloc_tile(0),
                               gemm_l.M * gemm_l.K * sizeof(char));
+    b = (char *)domain_malloc(get_alloc_tile(0),
+                              gemm_l.K * gemm_l.N * sizeof(char));
+    c = (char *)domain_malloc(get_alloc_tile(0),
+                              gemm_l.M * gemm_l.N * sizeof(char));
   }
 
   // Reset timer
@@ -104,14 +104,14 @@ int main() {
   if (split_m_count < cores_per_group) {
     // Split P dimension up
     const unsigned int split_p_count = cores_per_group / split_m_count;
-    p_start = gemm_l.K / split_p_count * (core_gid % split_p_count);
-    p_end = gemm_l.K / split_p_count * ((core_gid % split_p_count) + 1);
+    p_start = gemm_l.N / split_p_count * (core_gid % split_p_count);
+    p_end = gemm_l.N / split_p_count * ((core_gid % split_p_count) + 1);
     m_start = dim_group * gid + kernel_size * (core_gid / split_p_count);
     m_end = dim_group * gid + kernel_size * (core_gid / split_p_count + 1);
   } else {
     // Work over complete P dimension
     p_start = 0;
-    p_end = gemm_l.K;
+    p_end = gemm_l.N;
     m_start = dim_group * gid + (dim_group / cores_per_group) * core_gid;
     m_end = dim_group * gid + (dim_group / cores_per_group) * (core_gid + 1);
   }
@@ -143,13 +143,13 @@ int main() {
         start_kernel();
 
       if (kernel_size == 2) {
-        matmul_2xVL(c, a, b, m_start, m_end, gemm_l.N, gemm_l.K, p_start,
+        matmul_2xVL(c, a, b, m_start, m_end, gemm_l.K, gemm_l.N, p_start,
                     p_end);
       } else if (kernel_size == 4) {
-        matmul_4xVL(c, a, b, m_start, m_end, gemm_l.N, gemm_l.K, p_start,
+        matmul_4xVL(c, a, b, m_start, m_end, gemm_l.K, gemm_l.N, p_start,
                     p_end);
       } else if (kernel_size == 8) {
-        matmul_8xVL(c, a, b, m_start, m_end, gemm_l.N, gemm_l.K, p_start,
+        matmul_8xVL(c, a, b, m_start, m_end, gemm_l.K, gemm_l.N, p_start,
                     p_end);
       } else {
         return -2;

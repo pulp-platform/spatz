@@ -135,11 +135,11 @@ def emit_GEMM_layer(name='gemm', **kwargs):
         layer_str += f'static {dtype} {name}_C_dram [{m}*{n}] __attribute__((section(".data"))) = ' + array_to_cstr(mat_C) + ';\n\n\n'
         layer_str += f'static const {dtype} {name}_checksum[{m}] = ' + array_to_cstr(torch.sum(result, dim=-1)) + ';\n\n\n'
     else:
-        layer_str += f'static {dtype} {name}_A_dram [{m}*{k}] = ' + \
+        layer_str += f'static {dtype} {name}_A_dram [{m}*{k}] __attribute__((section(".data"))) = ' + \
             array_to_cstr(kwargs['bits_A'], fmt='char') + ';\n\n\n'
-        layer_str += f'static {dtype} {name}_B_dram [{k}*{n}] = ' + \
+        layer_str += f'static {dtype} {name}_B_dram [{k}*{n}] __attribute__((section(".data"))) = ' + \
             array_to_cstr(kwargs['bits_B'], fmt='char') + ';\n\n\n'
-        layer_str += f'static {dtype} {name}_C_dram [{m}*{n}] = ' + \
+        layer_str += f'static {dtype} {name}_C_dram [{m}*{n}] __attribute__((section(".data"))) = ' + \
             array_to_cstr(kwargs['bits_C'], fmt='char') + ';\n\n\n'
 
     return layer_str
