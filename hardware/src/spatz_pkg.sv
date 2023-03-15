@@ -369,7 +369,7 @@ package spatz_pkg;
     PipeRegs: '{
       // FMA Block
       '{
-        0, // FP32
+        1, // FP32
         3, // FP64
         0, // FP16
         0, // FP8
@@ -378,7 +378,7 @@ package spatz_pkg;
       },
       '{1, 1, 1, 1, 1, 1}, // DIVSQRT
       '{1, 1, 1, 1, 1, 1}, // NONCOMP
-      '{1, 1, 1, 1, 1, 1}, // CONV
+      '{2, 2, 2, 2, 2, 2}, // CONV
       '{2, 2, 2, 2, 2, 2}  // DOTP
     },
     UnitTypes: '{
