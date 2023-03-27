@@ -10,3 +10,6 @@
 [submodule "sw/toolchain/riscv-gnu-toolchain"]
 	path = sw/toolchain/riscv-gnu-toolchain
 	url = https://github.com/pulp-platform/pulp-riscv-gnu-toolchain.git
+[submodule "sw/toolchain/riscv-isa-sim"]
+	path = sw/toolchain/riscv-isa-sim
+	url = https://github.com/riscv-software-src/riscv-isa-sim.git
