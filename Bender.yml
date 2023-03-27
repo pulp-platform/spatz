@@ -4,8 +4,8 @@ package:
     - "Matheus Cavalcante <matheusd@iis.ee.ethz.ch>"
 
 dependencies:
-  spatz_cc:      { path: "hw/ip/spatz_cc"      }
-  spatz_cluster: { path: "hw/ip/spatz_cluster" }
+  spatz_cc:      { path: "hw/spatz_cc"      }
+  spatz_cluster: { path: "hw/spatz_cluster" }
 
 workspace:
   checkout_dir: "hw/vendor"
