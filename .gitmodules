@@ -1,3 +1,6 @@
 [submodule "sw/toolchain/verilator"]
 	path = sw/toolchain/verilator
 	url = https://github.com/verilator/verilator.git
+[submodule "sw/toolchain/riscv-opcodes"]
+	path = sw/toolchain/riscv-opcodes
+	url = https://github.com/pulp-platform/riscv-opcodes.git
