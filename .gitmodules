@@ -7,3 +7,6 @@
 [submodule "sw/toolchain/llvm-project"]
 	path = sw/toolchain/llvm-project
 	url = git@github.com:pulp-platform/llvm-project.git
+[submodule "sw/toolchain/riscv-gnu-toolchain"]
+	path = sw/toolchain/riscv-gnu-toolchain
+	url = https://github.com/pulp-platform/pulp-riscv-gnu-toolchain.git
