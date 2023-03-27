@@ -13,9 +13,6 @@
 // back again. Finally, the Vector Register File (VRF) is the main register file
 // that stores all of the currently used vectors close to the execution units.
 
-`include "spatz/spatz.svh"
-
-/* verilator lint_off DECLFILENAME */
 module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; import spatz_xif_pkg::*; #(
     parameter  int unsigned NrMemPorts          = 1,
     // Derived parameters. DO NOT CHANGE!
@@ -50,7 +47,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; import
     input logic                             fp_lsu_mem_resp_valid_i,
     output logic                            fp_lsu_mem_resp_ready_o,
     // FPU side channel
-    input                                   roundmode_e fpu_rnd_mode_i,
+    input roundmode_e                       fpu_rnd_mode_i,
     output status_t                         fpu_status_o
   );
 
@@ -362,4 +359,3 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; import
     $error("[spatz] Spatz requires at least one memory port.");
 
 endmodule : spatz
-/* verilator lint_on DECLFILENAME */
