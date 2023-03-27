@@ -4,3 +4,6 @@
 [submodule "sw/toolchain/riscv-opcodes"]
 	path = sw/toolchain/riscv-opcodes
 	url = https://github.com/pulp-platform/riscv-opcodes.git
+[submodule "sw/toolchain/llvm-project"]
+	path = sw/toolchain/llvm-project
+	url = git@github.com:pulp-platform/llvm-project.git
