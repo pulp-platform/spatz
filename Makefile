@@ -45,11 +45,11 @@ else
   CLANG_LDFLAGS  := ""
 endif
 
-# Do not include the xpulp opcodes, since they conflict with the RVV opcodes!
-OPCODES := "opcodes-rvv opcodes-smallfloat"
+# Do not include minifloat opcodes, since they conflict with the RVV opcodes!
+OPCODES := "opcodes-rvv opcodes-rv32b_CUSTOM opcodes-ipu_CUSTOM opcodes-frep_CUSTOM opcodes-dma_CUSTOM opcodes-ssr_CUSTOM opcodes-smallfloat"
 
 # Default target
-all: bender verilator toolchain
+all: bender verilator toolchain update_opcodes
 
 # Toolchain
 toolchain: tc-riscv-gcc tc-llvm
@@ -100,3 +100,8 @@ $(VERILATOR_INSTALL_DIR)/bin/verilator: sw/toolchain/verilator Makefile
 	cd $<; unset VERILATOR_ROOT; \
 	autoconf && CC=$(CLANG_CC) CXX=$(CLANG_CXX) CXXFLAGS=$(CLANG_CXXFLAGS) LDFLAGS=$(CLANG_LDFLAGS) ./configure --prefix=$(VERILATOR_INSTALL_DIR) $(VERILATOR_CI) && \
 	make -j4 && make install
+
+update_opcodes: hw/snitch/src/riscv_instr.sv
+hw/snitch/src/riscv_instr.sv: sw/toolchain/riscv-opcodes/*
+	MY_OPCODES=$(OPCODES) make -C sw/toolchain/riscv-opcodes inst.sverilog
+	mv sw/toolchain/riscv-opcodes/inst.sverilog $@

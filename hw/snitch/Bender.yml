@@ -8,7 +8,7 @@ package:
   - Fabian Schuiki <fschuiki@iis.ee.ethz.ch>
 
 dependencies:
-  reqrsp_interface: {path: ../reqrsp_interface}
+  reqrsp_interface: {path: ../reqrsp_interface                                        }
   riscv-dbg:        {git: "git@github.com:pulp-platform/riscv-dbg.git", version: 0.7.0}
 
 export_include_dirs:
