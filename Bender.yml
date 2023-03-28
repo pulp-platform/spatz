@@ -4,6 +4,7 @@ package:
     - "Matheus Cavalcante <matheusd@iis.ee.ethz.ch>"
 
 dependencies:
+  snitch:        { path: "hw/snitch"        }
   spatz_cc:      { path: "hw/spatz_cc"      }
   spatz_cluster: { path: "hw/spatz_cluster" }
 
