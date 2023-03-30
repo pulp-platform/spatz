@@ -11,20 +11,24 @@ dependencies:
 
 sources:
   files:
-    # Headers
-    - src/rvv_pkg.sv
-    - src/spatz_xif_pkg.sv
-    - src/spatz_pkg.sv
-    # Sources
+    # Level 0
     - src/reorder_buffer.sv
-    - src/vregfile.sv
+    - src/riscv_instr.sv
+    - src/rvv_pkg.sv
+    # Level 1
+    - src/spatz_pkg.sv
+    # Level 2
+    - src/spatz_decoder.sv
     - src/spatz_simd_lane.sv
+    - src/vregfile.sv
+    # Level 3
+    - src/spatz_fpu_sequencer.sv
     - src/spatz_ipu.sv
     - src/spatz_vfu.sv
-    - src/spatz_vrf.sv
     - src/spatz_vlsu.sv
+    - src/spatz_vrf.sv
     - src/spatz_vsldu.sv
-    - src/spatz_decoder.sv
+    # Level 4
     - src/spatz_controller.sv
-    - src/spatz_fpu_sequencer.sv
+    # Level 5
     - src/spatz.sv

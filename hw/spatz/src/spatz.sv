@@ -14,41 +14,44 @@
 // that stores all of the currently used vectors close to the execution units.
 
 module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; import spatz_xif_pkg::*; #(
-    parameter  int unsigned NrMemPorts          = 1,
+    parameter  int  unsigned NrMemPorts          = 1,
+    // Memory request
+    parameter  type          spatz_mem_req_t     = logic,
+    parameter  type          spatz_mem_resp_t    = logic,
     // Derived parameters. DO NOT CHANGE!
-    localparam int unsigned NumOutstandingLoads = 8
+    localparam int  unsigned NumOutstandingLoads = 8
   ) (
-    input logic                             clk_i,
-    input logic                             rst_ni,
+    input  logic                                 clk_i,
+    input  logic                                 rst_ni,
     // X-Interface Issue
-    input logic                             x_issue_valid_i,
-    output logic                            x_issue_ready_o,
-    input spatz_x_issue_req_t               x_issue_req_i,
-    output spatz_x_issue_resp_t             x_issue_resp_o,
+    input  logic                                 x_issue_valid_i,
+    output logic                                 x_issue_ready_o,
+    input  spatz_x_issue_req_t                   x_issue_req_i,
+    output spatz_x_issue_resp_t                  x_issue_resp_o,
     // X-Interface Result
-    output logic                            x_result_valid_o,
-    input logic                             x_result_ready_i,
-    output spatz_x_result_t                 x_result_o,
+    output logic                                 x_result_valid_o,
+    input  logic                                 x_result_ready_i,
+    output spatz_x_result_t                      x_result_o,
     // Memory Request
-    output spatz_mem_req_t [NrMemPorts-1:0] spatz_mem_req_o,
-    output logic [NrMemPorts-1:0]           spatz_mem_req_valid_o,
-    input logic [NrMemPorts-1:0]            spatz_mem_req_ready_i,
-    input spatz_mem_resp_t [NrMemPorts-1:0] spatz_mem_resp_i,
-    input logic [NrMemPorts-1:0]            spatz_mem_resp_valid_i,
-    output logic [NrMemPorts-1:0]           spatz_mem_resp_ready_o,
+    output spatz_mem_req_t      [NrMemPorts-1:0] spatz_mem_req_o,
+    output logic                [NrMemPorts-1:0] spatz_mem_req_valid_o,
+    input  logic                [NrMemPorts-1:0] spatz_mem_req_ready_i,
+    input  spatz_mem_resp_t     [NrMemPorts-1:0] spatz_mem_resp_i,
+    input  logic                [NrMemPorts-1:0] spatz_mem_resp_valid_i,
+    output logic                [NrMemPorts-1:0] spatz_mem_resp_ready_o,
     // Memory Finished
-    output logic [1:0]                      spatz_mem_finished_o,
-    output logic [1:0]                      spatz_mem_str_finished_o,
+    output logic                [1:0]            spatz_mem_finished_o,
+    output logic                [1:0]            spatz_mem_str_finished_o,
     // FPU memory interface interface
-    output spatz_mem_req_t                  fp_lsu_mem_req_o,
-    output logic                            fp_lsu_mem_req_valid_o,
-    input logic                             fp_lsu_mem_req_ready_i,
-    input spatz_mem_resp_t                  fp_lsu_mem_resp_i,
-    input logic                             fp_lsu_mem_resp_valid_i,
-    output logic                            fp_lsu_mem_resp_ready_o,
+    output spatz_mem_req_t                       fp_lsu_mem_req_o,
+    output logic                                 fp_lsu_mem_req_valid_o,
+    input  logic                                 fp_lsu_mem_req_ready_i,
+    input  spatz_mem_resp_t                      fp_lsu_mem_resp_i,
+    input  logic                                 fp_lsu_mem_resp_valid_i,
+    output logic                                 fp_lsu_mem_resp_ready_o,
     // FPU side channel
-    input roundmode_e                       fpu_rnd_mode_i,
-    output status_t                         fpu_status_o
+    input  roundmode_e                           fpu_rnd_mode_i,
+    output status_t                              fpu_status_o
   );
 
   ////////////////

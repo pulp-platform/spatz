@@ -272,24 +272,6 @@ package spatz_pkg;
     logic exc;
   } vlsu_rsp_t;
 
-  typedef struct packed {
-    logic [$clog2(NRVREG):0] id;
-    logic [31:0] addr;
-    logic [1:0] mode;
-    logic [1:0] size;
-    logic we;
-    logic [ELEN/8-1:0] strb;
-    logic [ELEN-1:0] wdata;
-    logic last;
-    logic spec;
-  } spatz_mem_req_t;
-
-  typedef struct packed {
-    logic [$clog2(NRVREG)-1:0] id;
-    logic [ELEN-1:0] rdata;
-    logic err;
-  } spatz_mem_resp_t;
-
   ////////////////////
   // VSLDU Response //
   ////////////////////
