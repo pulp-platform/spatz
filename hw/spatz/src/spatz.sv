@@ -16,7 +16,7 @@
 module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; import spatz_xif_pkg::*; #(
     parameter  int unsigned NrMemPorts          = 1,
     // Derived parameters. DO NOT CHANGE!
-    localparam int unsigned NumOutstandingLoads = snitch_pkg::NumIntOutstandingLoads
+    localparam int unsigned NumOutstandingLoads = 8
   ) (
     input logic                             clk_i,
     input logic                             rst_ni,

@@ -1,12 +1,12 @@
 package:
-  name: spatz
+  name: spatz_cluster
   authors:
     - "Matheus Cavalcante <matheusd@iis.ee.ethz.ch>"
 
 dependencies:
-  snitch:        { path: "hw/snitch"        }
-  spatz_cc:      { path: "hw/spatz_cc"      }
-  spatz_cluster: { path: "hw/spatz_cluster" }
+  snitch:        { path: "hw/snitch"   }
+  spatz:         { path: "hw/spatz"    }
+  spatz_cc:      { path: "hw/spatz_cc" }
 
 workspace:
   checkout_dir: "hw/vendor"
