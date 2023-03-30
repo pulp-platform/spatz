@@ -526,7 +526,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
     ls_amo = reqrsp_pkg::AMONone;
 
     acc_qvalid_o = 1'b0;
-    acc_qreq_o.addr = FP_SS;
+    acc_qreq_o.addr = SPATZ;
     acc_register_rd = 1'b0;
 
     debug_d = (!debug_q && (
@@ -1116,7 +1116,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
         opa_select = Reg;
         opb_select = Reg;
       end
-      // Off-load to shared multiplier
+      // Off-load to Spatz
       MUL,
       MULH,
       MULHSU,
@@ -1136,79 +1136,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
         opa_select = Reg;
         opb_select = Reg;
         acc_register_rd = 1'b1;
-        acc_qreq_o.addr = SHARED_MULDIV;
-      end
-      // Off-loaded to IPU
-      ANDN, ORN, XNOR, SLO, SRO, ROL, ROR, SBCLR, SBSET, SBINV, SBEXT,
-      GORC, GREV, CLZ, CTZ, PCNT, SEXT_B,
-      SEXT_H, CRC32_B, CRC32_H, CRC32_W, CRC32C_B, CRC32C_H, CRC32C_W,
-      CLMUL, CLMULR, CLMULH, MIN, MAX, MINU, MAXU, SHFL, UNSHFL, BEXT,
-      BDEP, PACK, PACKU, PACKH, BFP: begin
-        write_rd = 1'b0;
-        uses_rd = 1'b1;
-        acc_qvalid_o = valid_instr;
-        opa_select = Reg;
-        opb_select = Reg;
-        acc_register_rd = 1'b1;
-        acc_qreq_o.addr = INT_SS;
-      end
-      SLOI, SROI, RORI, SBCLRI, SBSETI, SBINVI, SBEXTI, GORCI,
-      GREVI, SHFLI, UNSHFLI: begin
-        write_rd = 1'b0;
-        uses_rd = 1'b1;
-        acc_qvalid_o = valid_instr;
-        opa_select = Reg;
-        opb_select = IImmediate;
-        acc_register_rd = 1'b1;
-        acc_qreq_o.addr = INT_SS;
-      end
-      IADDI, ISLLI, ISLTI, ISLTIU, IXORI, ISRLI, ISRAI, IORI, IANDI, IADD,
-      ISUB, ISLL, ISLT, ISLTU, IXOR, ISRL, ISRA, IOR, IAND,
-      IAND, IMADD, IMSUB, INMSUB, INMADD, IMUL, IMULH, IMULHSU, IMULHU,
-      IANDN, IORN, IXNOR, ISLO, ISRO, IROL, IROR, ISBCLR, ISBSET, ISBINV,
-      ISBEXT, IGORC, IGREV, ISLOI, ISROI, IRORI, ISBCLRI, ISBSETI, ISBINVI,
-      ISBEXTI, IGORCI, IGREVI, ICLZ, ICTZ, IPCNT, ISEXT_B, ISEXT_H, ICRC32_B,
-      ICRC32_H, ICRC32_W, ICRC32C_B, ICRC32C_H, ICRC32C_W, ICLMUL, ICLMULR,
-      ICLMULH, IMIN, IMAX, IMINU, IMAXU, ISHFL, IUNSHFL, IBEXT, IBDEP, IPACK,
-      IPACKU, IPACKH, IBFP: begin
-        if (Xipu) begin
-          acc_qreq_o.addr = INT_SS;
-          write_rd = 1'b0;
-          acc_qvalid_o = valid_instr;
-        end else begin
-          illegal_inst = 1'b1;
-        end
-      end
-      IMV_X_W: begin
-        if (Xipu) begin
-          acc_qreq_o.addr = INT_SS;
-          write_rd = 1'b0;
-          uses_rd = 1'b1;
-          acc_qvalid_o = valid_instr;
-          acc_register_rd = 1'b1; // No RS in GPR but RD in GPR, register in int scoreboard
-        end else begin
-          illegal_inst = 1'b1;
-        end
-      end
-      IMV_W_X: begin
-        if (Xipu) begin
-          acc_qreq_o.addr = INT_SS;
-          opa_select = Reg;
-          write_rd = 1'b0;
-          acc_qvalid_o = valid_instr;
-        end else begin
-          illegal_inst = 1'b1;
-        end
-      end
-      IREP: begin
-        if (Xipu) begin
-          acc_qreq_o.addr = INT_SS;
-          opa_select = Reg;
-          write_rd = 1'b0;
-          acc_qvalid_o = valid_instr;
-        end else begin
-          illegal_inst = 1'b1;
-        end
+        acc_qreq_o.addr = SPATZ;
       end
       // Offload FP-FP Instructions - fire and forget
       // TODO (smach): Check legal rounding modes and issue illegal isn if needed
@@ -2314,42 +2242,6 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
         end else begin
           illegal_inst = 1'b1;
         end
-      end
-      SCFGRI: begin
-        if (Xssr) begin
-          write_rd = 1'b0;
-          uses_rd = 1'b1;
-          acc_qreq_o.addr = SSR_CFG;
-          acc_qvalid_o = valid_instr;
-          acc_register_rd = 1'b1; // No RS in GPR but RD in GPR, register in int scoreboard
-        end else illegal_inst = 1'b1;
-      end
-      SCFGWI: begin
-        if (Xssr) begin
-          acc_qreq_o.addr = SSR_CFG;
-          opa_select = Reg;
-          acc_qvalid_o = valid_instr;
-          write_rd = 1'b0;
-        end else illegal_inst = 1'b1;
-      end
-      SCFGR: begin
-        if (Xssr) begin
-          write_rd = 1'b0;
-          uses_rd = 1'b1;
-          acc_qreq_o.addr = SSR_CFG;
-          opb_select = Reg;
-          acc_qvalid_o = valid_instr;
-          acc_register_rd = 1'b1;
-        end else illegal_inst = 1'b1;
-      end
-      SCFGW: begin
-        if (Xssr) begin
-          acc_qreq_o.addr = SSR_CFG;
-          opa_select = Reg;
-          opb_select = Reg;
-          acc_qvalid_o = valid_instr;
-          write_rd = 1'b0;
-        end else illegal_inst = 1'b1;
       end
 
 /* RVV extension */

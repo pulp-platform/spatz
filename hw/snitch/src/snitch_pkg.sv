@@ -31,11 +31,8 @@ package snitch_pkg;
   } interrupts_t;
 
   typedef enum logic [31:0] {
-    FP_SS = 0,
-    SHARED_MULDIV = 1,
-    DMA_SS = 2,
-    INT_SS = 3,
-    SSR_CFG = 4
+    SPATZ = 0,
+    DMA_SS = 1
   } acc_addr_e;
 
   typedef enum logic [1:0] {
