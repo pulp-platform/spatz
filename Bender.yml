@@ -4,9 +4,9 @@ package:
     - "Matheus Cavalcante <matheusd@iis.ee.ethz.ch>"
 
 dependencies:
-  snitch:        { path: "hw/snitch"   }
-  spatz:         { path: "hw/spatz"    }
-  spatz_cc:      { path: "hw/spatz_cc" }
+  snitch:        { path: "hw/ip/snitch"   }
+  spatz:         { path: "hw/ip/spatz"    }
+  spatz_cc:      { path: "hw/ip/spatz_cc" }
 
   idma:          { git: "git@github.com:pulp-platform/iDMA.git", version: 0.4.2 }
 
