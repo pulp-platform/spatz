@@ -8,10 +8,13 @@
 // and to the vector register file and store them back again.
 
 module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx_width; #(
-    parameter               NrMemPorts         = 1,
-    parameter               NrOutstandingLoads = 8,
+    parameter                NrMemPorts         = 1,
+    parameter                NrOutstandingLoads = 8,
+    // Memory request
+    parameter  type          spatz_mem_req_t    = logic,
+    parameter  type          spatz_mem_resp_t   = logic,
     // Dependant parameters. DO NOT CHANGE!
-    localparam int unsigned IdWidth            = idx_width(NrOutstandingLoads)
+    localparam int  unsigned IdWidth            = idx_width(NrOutstandingLoads)
   ) (
     input  logic                             clk_i,
     input  logic                             rst_ni,

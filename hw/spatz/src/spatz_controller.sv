@@ -13,46 +13,45 @@ module spatz_controller
   import rvv_pkg::*;
   import fpnew_pkg::roundmode_e;
   #(
-    parameter int  unsigned NrVregfilePorts = 1,
-    parameter int  unsigned NrWritePorts    = 1,
-    parameter type          x_issue_req_t   = logic,
-    parameter type          x_issue_resp_t  = logic,
-    parameter type          x_result_t      = logic
+    parameter int  unsigned NrVregfilePorts   = 1,
+    parameter int  unsigned NrWritePorts      = 1,
+    parameter type          spatz_issue_req_t = logic,
+    parameter type          spatz_issue_rsp_t = logic,
+    parameter type          spatz_rsp_t       = logic
   ) (
-    input  logic                                clk_i,
-    input  logic                                rst_ni,
-    // X-Interface Issue
-    input  logic                                x_issue_valid_i,
-    output logic                                x_issue_ready_o,
-    input  x_issue_req_t                        x_issue_req_i,
-    output x_issue_resp_t                       x_issue_resp_o,
-    // X-Interface Result
-    output logic                                x_result_valid_o,
-    input  logic                                x_result_ready_i,
-    output x_result_t                           x_result_o,
+    input  logic                                   clk_i,
+    input  logic                                   rst_ni,
+    // Snitch Issue
+    input  logic                                   issue_valid_i,
+    output logic                                   issue_ready_o,
+    input  spatz_issue_req_t                       issue_req_i,
+    output spatz_issue_rsp_t                       issue_rsp_o,
+    output logic                                   rsp_valid_o,
+    input  logic                                   rsp_ready_i,
+    output spatz_rsp_t                             rsp_o,
     // FPU untimed sidechannel
-    input  roundmode_e                          fpu_rnd_mode_i,
+    input  roundmode_e                             fpu_rnd_mode_i,
     // Spatz request
-    output logic                                spatz_req_valid_o,
-    output spatz_req_t                          spatz_req_o,
+    output logic                                   spatz_req_valid_o,
+    output spatz_issue_req_t                       spatz_req_o,
     // VFU
-    input  logic                                vfu_req_ready_i,
-    input  logic                                vfu_rsp_valid_i,
-    output logic                                vfu_rsp_ready_o,
-    input  vfu_rsp_t                            vfu_rsp_i,
+    input  logic                                   vfu_req_ready_i,
+    input  logic                                   vfu_rsp_valid_i,
+    output logic                                   vfu_rsp_ready_o,
+    input  vfu_rsp_t                               vfu_rsp_i,
     // VLSU
-    input  logic                                vlsu_req_ready_i,
-    input  logic                                vlsu_rsp_valid_i,
-    input  vlsu_rsp_t                           vlsu_rsp_i,
+    input  logic                                   vlsu_req_ready_i,
+    input  logic                                   vlsu_rsp_valid_i,
+    input  vlsu_rsp_t                              vlsu_rsp_i,
     // VSLDU
-    input  logic                                vsldu_req_ready_i,
-    input  logic                                vsldu_rsp_valid_i,
-    input  vsldu_rsp_t                          vsldu_rsp_i,
+    input  logic                                   vsldu_req_ready_i,
+    input  logic                                   vsldu_rsp_valid_i,
+    input  vsldu_rsp_t                             vsldu_rsp_i,
     // VRF Scoreboard
-    input  logic          [NrVregfilePorts-1:0] sb_enable_i,
-    input  logic          [NrWritePorts-1:0]    sb_wrote_result_i,
-    output logic          [NrVregfilePorts-1:0] sb_enable_o,
-    input  spatz_id_t     [NrVregfilePorts-1:0] sb_id_i
+    input  logic             [NrVregfilePorts-1:0] sb_enable_i,
+    input  logic             [NrWritePorts-1:0]    sb_wrote_result_i,
+    output logic             [NrVregfilePorts-1:0] sb_enable_o,
+    input  spatz_id_t        [NrVregfilePorts-1:0] sb_id_i
   );
 
 // Include FF
@@ -63,9 +62,9 @@ module spatz_controller
   /////////////
 
   // Spatz request
-  spatz_req_t spatz_req;
-  logic       spatz_req_valid;
-  logic       spatz_req_illegal;
+  spatz_issue_req_t spatz_req;
+  logic             spatz_req_valid;
+  logic             spatz_req_illegal;
 
   //////////
   // CSRs //
@@ -175,15 +174,15 @@ module spatz_controller
     decoder_req_valid = 1'b0;
 
     // Decode new instruction if one is received and spatz is ready
-    if (x_issue_valid_i && x_issue_ready_o) begin
-      decoder_req.instr     = x_issue_req_i.instr;
-      decoder_req.rs1       = x_issue_req_i.rs[0];
-      decoder_req.rs1_valid = x_issue_req_i.rs_valid[0];
-      decoder_req.rs2       = x_issue_req_i.rs[1];
-      decoder_req.rs2_valid = x_issue_req_i.rs_valid[1];
-      decoder_req.rsd       = x_issue_req_i.rs[2];
-      decoder_req.rsd_valid = x_issue_req_i.rs_valid[2];
-      decoder_req.rd        = x_issue_req_i.id;
+    if (issue_valid_i && issue_ready_o) begin
+      decoder_req.instr     = issue_req_i.instr;
+      decoder_req.rs1       = issue_req_i.rs[0];
+      decoder_req.rs1_valid = issue_req_i.rs_valid[0];
+      decoder_req.rs2       = issue_req_i.rs[1];
+      decoder_req.rs2_valid = issue_req_i.rs_valid[1];
+      decoder_req.rsd       = issue_req_i.rs[2];
+      decoder_req.rsd_valid = issue_req_i.rs_valid[2];
+      decoder_req.rd        = issue_req_i.id;
       decoder_req_valid     = 1'b1;
     end
   end // proc_decode
@@ -193,13 +192,13 @@ module spatz_controller
   ////////////////////
 
   // Spatz request
-  spatz_req_t buffer_spatz_req;
+  spatz_issue_req_t buffer_spatz_req;
   // Buffer state signals
-  logic       req_buffer_ready, req_buffer_valid, req_buffer_pop;
+  logic             req_buffer_ready, req_buffer_valid, req_buffer_pop;
 
   // One element wide instruction buffer
   fall_through_register #(
-    .T(spatz_req_t)
+    .T(spatz_issue_req_t)
   ) i_req_buffer (
     .clk_i     (clk_i                ),
     .rst_ni    (rst_ni               ),
@@ -466,44 +465,44 @@ module spatz_controller
 
   // Respond to core about the decoded instruction.
   always_comb begin : x_issue_resp
-    x_issue_resp_o = '0;
+    issue_rsp_o = '0;
 
     // Is there something running on Spatz? If so, prevent Snitch from reading the fcsr register
-    x_issue_resp_o.float = |running_insn_q;
+    issue_rsp_o.float = |running_insn_q;
 
     // We have a new valid instruction
     if (decoder_rsp_valid && !decoder_rsp.instr_illegal) begin
       // Accept the new instruction
-      x_issue_resp_o.accept = 1'b1;
+      issue_rsp_o.accept = 1'b1;
 
       case (decoder_rsp.spatz_req.ex_unit)
         CON: begin
-          x_issue_resp_o.writeback = spatz_req.use_rd;
+          issue_rsp_o.writeback = spatz_req.use_rd;
         end // CON
         VFU: begin
           // vtype is illegal -> illegal instruction
           if (vtype_q.vill) begin
-            x_issue_resp_o.accept = 1'b0;
+            issue_rsp_o.accept = 1'b0;
           end
         end // VFU
         LSU: begin
-          x_issue_resp_o.loadstore = 1'b1;
+          issue_rsp_o.loadstore = 1'b1;
           // vtype is illegal -> illegal instruction
           if (vtype_q.vill) begin
-            x_issue_resp_o.accept = 1'b0;
+            issue_rsp_o.accept = 1'b0;
           end
         end // LSU
         SLD: begin
           // vtype is illegal -> illegal instruction
           if (vtype_q.vill) begin
-            x_issue_resp_o.accept = 1'b0;
+            issue_rsp_o.accept = 1'b0;
           end
         end // SLD
       endcase // Operation type
     // The decoding resulted in an illegal instruction
     end else if (decoder_rsp_valid && decoder_rsp.instr_illegal) begin
       // Do not accept it
-      x_issue_resp_o.accept = 1'b0;
+      issue_rsp_o.accept = 1'b0;
     end
   end // x_issue_resp
 
@@ -531,8 +530,8 @@ module spatz_controller
   // Retire an operation/instruction and write back result to core
   // if necessary.
   always_comb begin : retire
-    x_result_o       = '0;
-    x_result_valid_o = '0;
+    rsp_o       = '0;
+    rsp_valid_o = '0;
 
     vfu_rsp_ready = 1'b0;
 
@@ -541,37 +540,37 @@ module spatz_controller
       if (spatz_req.op == VCSR) begin
         if (spatz_req.use_rd) begin
           unique case (spatz_req.op_csr.addr)
-            riscv_instr::CSR_VSTART: x_result_o.data = elen_t'(vstart_q);
-            riscv_instr::CSR_VL    : x_result_o.data = elen_t'(vl_q);
-            riscv_instr::CSR_VTYPE : x_result_o.data = elen_t'(vtype_q);
-            riscv_instr::CSR_VLENB : x_result_o.data = elen_t'(VLENB);
-            riscv_instr::CSR_VXSAT : x_result_o.data = '0;
-            riscv_instr::CSR_VXRM  : x_result_o.data = '0;
-            riscv_instr::CSR_VCSR  : x_result_o.data = '0;
-            default: x_result_o.data                 = '0;
+            riscv_instr::CSR_VSTART: rsp_o.data = elen_t'(vstart_q);
+            riscv_instr::CSR_VL    : rsp_o.data = elen_t'(vl_q);
+            riscv_instr::CSR_VTYPE : rsp_o.data = elen_t'(vtype_q);
+            riscv_instr::CSR_VLENB : rsp_o.data = elen_t'(VLENB);
+            riscv_instr::CSR_VXSAT : rsp_o.data = '0;
+            riscv_instr::CSR_VXRM  : rsp_o.data = '0;
+            riscv_instr::CSR_VCSR  : rsp_o.data = '0;
+            default: rsp_o.data                 = '0;
           endcase
         end
-        x_result_o.id    = spatz_req.rd;
-        x_result_o.we    = 1'b1;
-        x_result_valid_o = 1'b1;
+        rsp_o.id    = spatz_req.rd;
+        rsp_o.we    = 1'b1;
+        rsp_valid_o = 1'b1;
       end else begin
         // Change configuration and send back vl
-        x_result_o.id    = spatz_req.rd;
-        x_result_o.data  = elen_t'(vl_d);
-        x_result_o.we    = 1'b1;
-        x_result_valid_o = 1'b1;
+        rsp_o.id    = spatz_req.rd;
+        rsp_o.data  = elen_t'(vl_d);
+        rsp_o.we    = 1'b1;
+        rsp_valid_o = 1'b1;
       end
     end else if (vfu_rsp_valid) begin
-      x_result_o.id    = vfu_rsp.rd;
-      x_result_o.data  = vfu_rsp.result;
-      x_result_o.we    = 1'b1;
-      x_result_valid_o = 1'b1;
-      vfu_rsp_ready    = 1'b1;
+      rsp_o.id      = vfu_rsp.rd;
+      rsp_o.data    = vfu_rsp.result;
+      rsp_o.we      = 1'b1;
+      rsp_valid_o   = 1'b1;
+      vfu_rsp_ready = 1'b1;
     end
   end // retire
 
   // Signal to core that Spatz is ready for a new instruction
-  assign x_issue_ready_o = req_buffer_ready;
+  assign issue_ready_o = req_buffer_ready;
 
   // Send request off to execution units
   assign spatz_req_o       = spatz_req;
