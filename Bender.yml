@@ -8,5 +8,7 @@ dependencies:
   spatz:         { path: "hw/spatz"    }
   spatz_cc:      { path: "hw/spatz_cc" }
 
+  idma:          { git: "git@github.com:pulp-platform/iDMA.git", version: 0.4.2 }
+
 workspace:
   checkout_dir: "hw/vendor"
