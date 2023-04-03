@@ -8,6 +8,10 @@ SHELL = /usr/bin/env bash
 ROOT_DIR := $(patsubst %/,%, $(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
 SPATZ_DIR := $(shell git rev-parse --show-toplevel 2>/dev/null || echo $$SPATZ_DIR)
 
+# Include configuration
+config_mk = $(abspath $(ROOT_DIR)/cfg/config.mk)
+include $(config_mk)
+
 INSTALL_PREFIX        ?= install
 INSTALL_DIR           ?= ${ROOT_DIR}/${INSTALL_PREFIX}
 GCC_INSTALL_DIR       ?= ${INSTALL_DIR}/riscv-gcc
