@@ -1,12 +1,13 @@
 package:
-  name: spatz_cluster
+  name: spatz
   authors:
     - "Matheus Cavalcante <matheusd@iis.ee.ethz.ch>"
 
 dependencies:
-  snitch:        { path: "hw/ip/snitch"   }
-  spatz:         { path: "hw/ip/spatz"    }
-  spatz_cc:      { path: "hw/ip/spatz_cc" }
+  snitch:        { path: "hw/ip/snitch"            }
+  spatz_core:    { path: "hw/ip/spatz"             }
+  spatz_cc:      { path: "hw/ip/spatz_cc"          }
+  spatz_cluster: { path: "hw/system/spatz_cluster" }
 
   idma:          { git: "git@github.com:pulp-platform/iDMA.git", version: 0.4.2 }
 

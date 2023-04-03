@@ -9,4 +9,7 @@ dependencies:
 
 sources:
   files:
+    # Level 0
     - src/spatz_cc.sv
+    # Level 1
+    - src/spatz_cluster.sv

@@ -1,5 +1,5 @@
 package:
-  name: spatz
+  name: spatz_core
   authors:
     - "Matheus Cavalcante <matheusd@iis.ee.ethz.ch>"
     - "Domenic Wuethrich <domenicw@ethz.ch>"
