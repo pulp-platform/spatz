@@ -4,12 +4,13 @@ package:
     - "Matheus Cavalcante <matheusd@iis.ee.ethz.ch>"
 
 dependencies:
-  spatz: { path: "../spatz"                                                 }
-  axi:   { git: "https://github.com/pulp-platform/axi.git", version: 0.38.0 }
+  snitch:       { path: "../snitch"                                                        }
+  spatz_core:   { path: "../spatz"                                                         }
+  axi:          { git: "https://github.com/pulp-platform/axi.git",          version: 0.38.0}
+  idma:         { git: "git@github.com:pulp-platform/iDMA.git",             version: 0.4.2 }
+  common_cells: { git: "https://github.com/pulp-platform/common_cells.git", version: 1.28.0}
 
 sources:
   files:
     # Level 0
     - src/spatz_cc.sv
-    # Level 1
-    - src/spatz_cluster.sv
