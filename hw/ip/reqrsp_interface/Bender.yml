@@ -7,6 +7,10 @@ package:
   - Fabian Schuiki <fschuiki@iis.ee.ethz.ch>
   - Florian Zaruba <zarubaf@iis.ee.ethz.ch>
 
+dependencies:
+  axi:          { git: "https://github.com/pulp-platform/axi.git", version: 0.38.0 }
+  common_cells: { git: "https://github.com/pulp-platform/common_cells.git", version: 1.28.0}
+
 export_include_dirs:
 - include
 
