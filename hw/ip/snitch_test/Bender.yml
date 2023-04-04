@@ -1,0 +1,28 @@
+# Copyright 2020 ETH Zurich and University of Bologna.
+# Solderpad Hardware License, Version 0.51, see LICENSE for details.
+# SPDX-License-Identifier: SHL-0.51
+package:
+  name: snitch_test
+  authors:
+  - Florian Zaruba <zarubaf@iis.ee.ethz.ch>
+  - Fabian Schuiki <fschuiki@iis.ee.ethz.ch>
+
+dependencies:
+  reqrsp_interface:   { path: ../reqrsp_interface}
+
+  axi:                { git: https://github.com/pulp-platform/axi.git,                version: 0.38.0}
+  common_cells:       { git: https://github.com/pulp-platform/common_cells.git,       version: 1.28.0}
+  axi_riscv_atomics:  { git: https://github.com/pulp-platform/axi_riscv_atomics.git,  version: 0.6.0 }
+  register_interface: { git: https://github.com/pulp-platform/register_interface.git, version: 0.3.3 }
+
+sources:
+# Level 1:
+- target: any(simulation, verilator)
+  files:
+  - src/tb_memory_regbus.sv
+  # Level 2
+  - src/tb_memory_axi.sv
+# Level 3:
+- target: snitch_test
+  files:
+  - src/tb_bin.sv
