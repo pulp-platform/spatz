@@ -38,6 +38,10 @@ package spatz_pkg;
   // Number of vector registers
   localparam int unsigned NRVREG = 32;
 
+  // Spatz' data width
+  localparam int unsigned DataWidth = ELEN;
+  // Spatz' strobe width
+  localparam int unsigned StrbWidth = ELENB;
 
   // Width of a VRF word
   localparam int unsigned VRFWordWidth     = N_FU * ELEN;

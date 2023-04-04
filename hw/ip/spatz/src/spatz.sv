@@ -13,45 +13,44 @@
 // back again. Finally, the Vector Register File (VRF) is the main register file
 // that stores all of the currently used vectors close to the execution units.
 
-module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; import spatz_xif_pkg::*; #(
-    parameter  int  unsigned NrMemPorts          = 1,
+module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
+    parameter int  unsigned NrMemPorts          = 1,
     // Memory request
-    parameter  type          spatz_mem_req_t     = logic,
-    parameter  type          spatz_mem_resp_t    = logic,
+    parameter type          spatz_mem_req_t     = logic,
+    parameter type          spatz_mem_resp_t    = logic,
+    // Snitch interface
+    parameter type          spatz_issue_req_t   = logic,
+    parameter type          spatz_issue_rsp_t   = logic,
+    parameter type          spatz_rsp_t         = logic,
     // Derived parameters. DO NOT CHANGE!
-    localparam int  unsigned NumOutstandingLoads = 8
+    parameter int  unsigned NumOutstandingLoads = 8
   ) (
-    input  logic                                 clk_i,
-    input  logic                                 rst_ni,
-    // X-Interface Issue
-    input  logic                                 x_issue_valid_i,
-    output logic                                 x_issue_ready_o,
-    input  spatz_x_issue_req_t                   x_issue_req_i,
-    output spatz_x_issue_resp_t                  x_issue_resp_o,
-    // X-Interface Result
-    output logic                                 x_result_valid_o,
-    input  logic                                 x_result_ready_i,
-    output spatz_x_result_t                      x_result_o,
+    input  logic                              clk_i,
+    input  logic                              rst_ni,
+    // Snitch Interface
+    input  logic                              issue_valid_i,
+    output logic                              issue_ready_o,
+    input  spatz_issue_req_t                  issue_req_i,
+    output spatz_issue_rsp_t                  issue_rsp_o,
+    output logic                              rsp_valid_o,
+    input  logic                              rsp_ready_i,
+    output spatz_rsp_t                        rsp_o,
     // Memory Request
-    output spatz_mem_req_t      [NrMemPorts-1:0] spatz_mem_req_o,
-    output logic                [NrMemPorts-1:0] spatz_mem_req_valid_o,
-    input  logic                [NrMemPorts-1:0] spatz_mem_req_ready_i,
-    input  spatz_mem_resp_t     [NrMemPorts-1:0] spatz_mem_resp_i,
-    input  logic                [NrMemPorts-1:0] spatz_mem_resp_valid_i,
-    output logic                [NrMemPorts-1:0] spatz_mem_resp_ready_o,
+    output spatz_mem_req_t   [NrMemPorts-1:0] spatz_mem_req_o,
+    output logic             [NrMemPorts-1:0] spatz_mem_req_valid_o,
+    input  logic             [NrMemPorts-1:0] spatz_mem_req_ready_i,
+    input  spatz_mem_resp_t  [NrMemPorts-1:0] spatz_mem_resp_i,
+    input  logic             [NrMemPorts-1:0] spatz_mem_resp_valid_i,
+    output logic             [NrMemPorts-1:0] spatz_mem_resp_ready_o,
     // Memory Finished
-    output logic                [1:0]            spatz_mem_finished_o,
-    output logic                [1:0]            spatz_mem_str_finished_o,
+    output logic             [1:0]            spatz_mem_finished_o,
+    output logic             [1:0]            spatz_mem_str_finished_o,
     // FPU memory interface interface
-    output spatz_mem_req_t                       fp_lsu_mem_req_o,
-    output logic                                 fp_lsu_mem_req_valid_o,
-    input  logic                                 fp_lsu_mem_req_ready_i,
-    input  spatz_mem_resp_t                      fp_lsu_mem_resp_i,
-    input  logic                                 fp_lsu_mem_resp_valid_i,
-    output logic                                 fp_lsu_mem_resp_ready_o,
+    output spatz_mem_req_t                    fp_lsu_mem_req_o,
+    input  spatz_mem_resp_t                   fp_lsu_mem_resp_i,
     // FPU side channel
-    input  roundmode_e                           fpu_rnd_mode_i,
-    output status_t                              fpu_status_o
+    input  roundmode_e                        fpu_rnd_mode_i,
+    output status_t                           fpu_status_o
   );
 
   ////////////////
@@ -67,8 +66,8 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; import
   /////////////
 
   // Spatz request
-  spatz_req_t spatz_req;
-  logic       spatz_req_valid;
+  spatz_issue_req_t spatz_req;
+  logic             spatz_req_valid;
 
   logic     vfu_req_ready;
   logic     vfu_rsp_ready;
@@ -88,13 +87,13 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; import
   /////////////////////
 
   // X Interface
-  spatz_x_issue_req_t  x_issue_req;
-  logic                x_issue_valid;
-  logic                x_issue_ready;
-  spatz_x_issue_resp_t x_issue_resp;
-  spatz_x_result_t     x_result;
-  logic                x_result_valid;
-  logic                x_result_ready;
+  spatz_issue_req_t issue_req;
+  logic             issue_valid;
+  logic             issue_ready;
+  spatz_issue_rsp_t issue_rsp;
+  spatz_rsp_t       resp;
+  logic             resp_valid;
+  logic             resp_ready;
 
   // Did we finish a memory request?
   logic fp_lsu_mem_finished;
@@ -106,14 +105,13 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; import
 
   if (!FPU) begin: gen_no_fpu_sequencer
     // Spatz configured without an FPU. Just forward the requests to Spatz.
-    assign x_issue_req     = x_issue_req_i;
-    assign x_issue_valid   = x_issue_valid_i;
-    assign x_issue_ready_o = x_issue_ready;
-    assign x_issue_resp_o  = x_issue_resp;
+    assign issue_req     = issue_req_i;
+    assign issue_valid   = issue_valid_i;
+    assign issue_ready_o = issue_ready;
 
-    assign x_result_o       = x_result;
-    assign x_result_valid_o = x_result_valid;
-    assign x_result_ready   = x_result_ready_i;
+    assign rsp_o       = resp;
+    assign rsp_valid_o = resp_valid;
+    assign resp_ready  = rsp_ready_i;
 
     // Tie the memory interface to zero
     assign fp_lsu_mem_req_o        = '0;
@@ -123,36 +121,34 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; import
     assign fp_lsu_mem_str_finished = 1'b0;
   end: gen_no_fpu_sequencer else begin: gen_fpu_sequencer
     spatz_fpu_sequencer #(
-      .x_issue_req_t      (spatz_x_issue_req_t ),
-      .x_issue_resp_t     (spatz_x_issue_resp_t),
-      .x_result_t         (spatz_x_result_t    ),
+      .spatz_mem_req_t    (spatz_mem_req_t     ),
+      .spatz_mem_resp_t   (spatz_mem_resp_t    ),
+      .spatz_issue_req_t  (spatz_issue_req_t   ),
+      .spatz_issue_rsp_t  (spatz_issue_rsp_t   ),
+      .spatz_rsp_t        (spatz_rsp_t         ),
       .NumOutstandingLoads(NumOutstandingLoads )
     ) i_fpu_sequencer (
       .clk_i                    (clk_i                  ),
       .rst_ni                   (rst_ni                 ),
       // Snitch interface
-      .x_issue_req_i            (x_issue_req_i          ),
-      .x_issue_valid_i          (x_issue_valid_i        ),
-      .x_issue_ready_o          (x_issue_ready_o        ),
-      .x_issue_resp_o           (x_issue_resp_o         ),
-      .x_result_o               (x_result_o             ),
-      .x_result_valid_o         (x_result_valid_o       ),
-      .x_result_ready_i         (x_result_ready_i       ),
+      .issue_req_i              (issue_req_i            ),
+      .issue_valid_i            (issue_valid_i          ),
+      .issue_ready_o            (issue_ready_o          ),
+      .issue_rsp_o              (issue_rsp_o            ),
+      .resp_o                   (rsp_o                  ),
+      .resp_valid_o             (rsp_valid_o            ),
+      .resp_ready_i             (rsp_ready_i            ),
       // Spatz interface
-      .x_issue_req_o            (x_issue_req            ),
-      .x_issue_valid_o          (x_issue_valid          ),
-      .x_issue_ready_i          (x_issue_ready          ),
-      .x_issue_resp_i           (x_issue_resp           ),
-      .x_result_i               (x_result               ),
-      .x_result_valid_i         (x_result_valid         ),
-      .x_result_ready_o         (x_result_ready         ),
+      .issue_req_o              (issue_req              ),
+      .issue_valid_o            (issue_valid            ),
+      .issue_ready_i            (issue_ready            ),
+      .issue_rsp_i              (issue_rsp              ),
+      .resp_i                   (resp                   ),
+      .resp_valid_i             (resp_valid             ),
+      .resp_ready_o             (resp_ready             ),
       // Memory interface
       .fp_lsu_mem_req_o         (fp_lsu_mem_req_o       ),
-      .fp_lsu_mem_req_valid_o   (fp_lsu_mem_req_valid_o ),
-      .fp_lsu_mem_req_ready_i   (fp_lsu_mem_req_ready_i ),
       .fp_lsu_mem_resp_i        (fp_lsu_mem_resp_i      ),
-      .fp_lsu_mem_resp_valid_i  (fp_lsu_mem_resp_valid_i),
-      .fp_lsu_mem_resp_ready_o  (fp_lsu_mem_resp_ready_o),
       .fp_lsu_mem_finished_o    (fp_lsu_mem_finished    ),
       .fp_lsu_mem_str_finished_o(fp_lsu_mem_str_finished),
       // Spatz VLSU side channel
@@ -206,22 +202,22 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; import
   spatz_id_t [NrReadPorts+NrWritePorts-1:0] sb_id;
 
   spatz_controller #(
-    .NrVregfilePorts(NrReadPorts+NrWritePorts),
-    .NrWritePorts   (NrWritePorts            ),
-    .x_issue_req_t  (spatz_x_issue_req_t     ),
-    .x_issue_resp_t (spatz_x_issue_resp_t    ),
-    .x_result_t     (spatz_x_result_t        )
+    .NrVregfilePorts   (NrReadPorts+NrWritePorts),
+    .NrWritePorts      (NrWritePorts            ),
+    .spatz_issue_req_t (spatz_issue_req_t       ),
+    .spatz_issue_rsp_t (spatz_issue_rsp_t       ),
+    .spatz_rsp_t       (spatz_rsp_t             )
   ) i_controller (
     .clk_i            (clk_i           ),
     .rst_ni           (rst_ni          ),
     // X-intf
-    .x_issue_valid_i  (x_issue_valid   ),
-    .x_issue_ready_o  (x_issue_ready   ),
-    .x_issue_req_i    (x_issue_req     ),
-    .x_issue_resp_o   (x_issue_resp    ),
-    .x_result_valid_o (x_result_valid  ),
-    .x_result_ready_i (x_result_ready  ),
-    .x_result_o       (x_result        ),
+    .issue_valid_i    (issue_valid     ),
+    .issue_ready_o    (issue_ready     ),
+    .issue_req_i      (issue_req       ),
+    .issue_rsp_o      (issue_rsp       ),
+    .rsp_valid_o      (resp_valid      ),
+    .rsp_ready_i      (resp_ready      ),
+    .rsp_o            (resp            ),
     // FPU side channel
     .fpu_rnd_mode_i   (fpu_rnd_mode_i  ),
     // Spatz req
@@ -282,7 +278,9 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; import
   //////////
 
   spatz_vlsu #(
-    .NrMemPorts (NrMemPorts )
+    .NrMemPorts      (NrMemPorts      ),
+    .spatz_mem_req_t (spatz_mem_req_t ),
+    .spatz_mem_resp_t(spatz_mem_resp_t)
   ) i_vlsu (
     .clk_i                   (clk_i                                                ),
     .rst_ni                  (rst_ni                                               ),
