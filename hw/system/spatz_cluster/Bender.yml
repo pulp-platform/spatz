@@ -1,0 +1,25 @@
+# Copyright 2023 ETH Zurich and University of Bologna.
+# Solderpad Hardware License, Version 0.51, see LICENSE for details.
+# SPDX-License-Identifier: SHL-0.51
+
+package:
+  name: spatz_cluster
+  authors:
+  - Matheus Cavalcante <matheusd@iis.ee.ethz.ch>
+
+dependencies:
+  spatz_cc:    { path: ../../ip/spatz_cc    }
+  snitch_test: { path: ../../ip/snitch_test }
+
+sources:
+  # Level 0
+  - src/spatz_cluster_pkg.sv
+  # Level 1
+  - src/spatz_cluster.sv
+
+  - target: spatz_test
+    files:
+      # Level 1
+      - tb/axi_uart.sv
+      # Level 2
+      - tb/testharness.sv
