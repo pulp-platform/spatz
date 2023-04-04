@@ -111,7 +111,7 @@ $(buildpath)/$(library):
 .PHONY: compile
 compile: lib $(buildpath) $(buildpath)/compile.tcl
 $(buildpath)/compile.tcl: $(bender) $(config_mk) Makefile $(SPATZ_DIR)/Bender.yml $(shell find {src,tb} -type f)
-	$(bender) script vsim --vlog-arg="$(vlog_args)" $(vlog_defs) -t rtl -t snitch_test -t spatz_test $(bender_defs) > $(buildpath)/compile.tcl
+	$(bender) script vsim --vlog-arg="$(vlog_args)" $(vlog_defs) -t rtl -t snitch_test -t spatz_test -t spatz $(bender_defs) > $(buildpath)/compile.tcl
 	echo "exit" >> $(buildpath)/compile.tcl
 	cd $(buildpath) && $(questa_cmd) vsim -work $(library) -c -do compile.tcl
 
