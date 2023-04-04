@@ -16,6 +16,8 @@ sources:
   - src/spatz_cluster_pkg.sv
   # Level 1
   - src/spatz_cluster.sv
+  # Level 2
+  - src/spatz_cluster_cluster.sv
 
   - target: spatz_test
     files:

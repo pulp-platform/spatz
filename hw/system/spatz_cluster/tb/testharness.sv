@@ -7,7 +7,7 @@ import "DPI-C" function byte get_section (output longint address, output longint
 import "DPI-C" context function byte read_section(input longint address, inout byte buffer[]);
 
 `define wait_for(signal) \
-  do @(posedge clk); while (!signal);
+  do @(posedge clk_i); while (!signal);
 
 `include "axi/assign.svh"
 
@@ -20,7 +20,7 @@ module testharness (
   import axi_pkg::xbar_cfg_t;
   import axi_pkg::xbar_rule_32_t;
 
-  localparam BootAddr    = `ifdef BOOT_ADDR `BOOT_ADDR `else 0 `endif;
+  localparam BootAddr = `ifdef BOOT_ADDR `BOOT_ADDR `else 0 `endif;
 
   /*********
    *  AXI  *
@@ -32,20 +32,20 @@ module testharness (
 
   localparam AxiTBIdWidth = $clog2(NumAXIMasters) + AxiIdWidth;
   typedef logic [AxiTBIdWidth-1:0] axi_tb_id_t;
-  `AXI_TYPEDEF_ALL(spatz_tb, axi_addr_t, axi_id_t, axi_data_t, axi_strb_t, axi_user_t)
+  `AXI_TYPEDEF_ALL(spatz_axi_tb, axi_addr_t, axi_id_t, axi_data_t, axi_strb_t, axi_user_t)
 
   typedef enum logic [$clog2(NumAXISlaves)-1:0] {
     UART,
     L2
   } axi_slave_target;
 
-  spatz_req_t  [NumAXIMasters-1:0] axi_mst_req;
-  spatz_resp_t [NumAXIMasters-1:0] axi_mst_resp;
-  spatz_req_t                      to_cluster_req;
-  spatz_resp_t                     to_cluster_resp;
+  spatz_axi_req_t  [NumAXIMasters-1:0] axi_mst_req;
+  spatz_axi_resp_t [NumAXIMasters-1:0] axi_mst_resp;
+  spatz_axi_req_t                      to_cluster_req;
+  spatz_axi_resp_t                     to_cluster_resp;
 
-  spatz_tb_req_t  [NumAXISlaves-1:0] axi_mem_req;
-  spatz_tb_resp_t [NumAXISlaves-1:0] axi_mem_resp;
+  spatz_axi_tb_req_t  [NumAXISlaves-1:0] axi_mem_req;
+  spatz_axi_tb_resp_t [NumAXISlaves-1:0] axi_mem_resp;
 
   localparam xbar_cfg_t XBarCfg = '{
     NoSlvPorts        : NumAXIMasters,
@@ -66,24 +66,26 @@ module testharness (
    *  DUT  *
    *********/
 
-  logic fetch_en;
-  logic eoc_valid;
-  logic kernel_probe;
+  logic cluster_probe;
+  logic eoc;
 
-  spatz_cluster #(
-    .TCDMBaseAddr(32'h0   ),
-    .BootAddr    (BootAddr)
+  spatz_cluster_wrapper #(
+    .BootAddr (BootAddr)
   ) dut (
-    .clk_i          (clk            ),
-    .rst_ni         (rst_n          ),
-    .fetch_en_i     (fetch_en       ),
-    .eoc_valid_o    (eoc_valid      ),
-    .busy_o         (/*Unused*/     ),
-    .mst_req_o      (axi_mst_req    ),
-    .mst_resp_i     (axi_mst_resp   ),
-    .slv_req_i      (to_cluster_req ),
-    .slv_resp_o     (to_cluster_resp),
-    .kernel_probe_o (kernel_probe   )
+    .clk_i              (clk_i          ),
+    .rst_ni             (rst_ni         ),
+    .meip_i             ('0             ),
+    .msip_i             ('0             ),
+    .mtip_i             ('0             ),
+    .debug_req_i        ('0             ),
+    .hart_base_id_i     ('0             ),
+    .cluster_base_addr_i('0             ),
+    .axi_out_req_o      (axi_mst_req    ),
+    .axi_out_resp_i     (axi_mst_resp   ),
+    .axi_in_req_i       (to_cluster_req ),
+    .axi_in_resp_o      (to_cluster_resp),
+    .cluster_probe_o    (cluster_probe  ),
+    .eoc_o              (eoc            )
   );
 
 /**************
@@ -93,11 +95,11 @@ module testharness (
 `ifdef VCD_DUMP
   initial begin: vcd_dump
     // Wait for the reset
-    wait (rst_n);
+    wait (rst_ni);
 
     // Wait until the probe is high
-    while (!kernel_probe)
-      @(posedge clk);
+    while (!cluster_probe)
+      @(posedge clk_i);
 
     // Dump signals of group 0
     $dumpfile(`VCD_DUMP_FILE);
@@ -105,8 +107,8 @@ module testharness (
     $dumpon;
 
     // Wait until the probe is low
-    while (kernel_probe)
-      @(posedge clk);
+    while (cluster_probe)
+      @(posedge clk_i);
 
     $dumpoff;
 
@@ -127,24 +129,24 @@ module testharness (
   };
 
   axi_xbar #(
-    .Cfg          (XBarCfg            ),
-    .slv_aw_chan_t(spatz_aw_chan_t    ),
-    .mst_aw_chan_t(spatz_tb_aw_chan_t ),
-    .w_chan_t     (spatz_w_chan_t     ),
-    .slv_b_chan_t (spatz_b_chan_t     ),
-    .mst_b_chan_t (spatz_tb_b_chan_t  ),
-    .slv_ar_chan_t(spatz_ar_chan_t    ),
-    .mst_ar_chan_t(spatz_tb_ar_chan_t ),
-    .slv_r_chan_t (spatz_r_chan_t     ),
-    .mst_r_chan_t (spatz_tb_r_chan_t  ),
-    .slv_req_t    (spatz_req_t        ),
-    .slv_resp_t   (spatz_resp_t       ),
-    .mst_req_t    (spatz_tb_req_t     ),
-    .mst_resp_t   (spatz_tb_resp_t    ),
-    .rule_t       (xbar_rule_32_t     )
+    .Cfg          (XBarCfg                ),
+    .slv_aw_chan_t(spatz_axi_aw_chan_t    ),
+    .mst_aw_chan_t(spatz_axi_tb_aw_chan_t ),
+    .w_chan_t     (spatz_axi_w_chan_t     ),
+    .slv_b_chan_t (spatz_axi_b_chan_t     ),
+    .mst_b_chan_t (spatz_axi_tb_b_chan_t  ),
+    .slv_ar_chan_t(spatz_axi_ar_chan_t    ),
+    .mst_ar_chan_t(spatz_axi_tb_ar_chan_t ),
+    .slv_r_chan_t (spatz_axi_r_chan_t     ),
+    .mst_r_chan_t (spatz_axi_tb_r_chan_t  ),
+    .slv_req_t    (spatz_axi_req_t        ),
+    .slv_resp_t   (spatz_axi_resp_t       ),
+    .mst_req_t    (spatz_axi_tb_req_t     ),
+    .mst_resp_t   (spatz_axi_tb_resp_t    ),
+    .rule_t       (xbar_rule_32_t         )
   ) i_testbench_xbar (
-    .clk_i                (clk                ),
-    .rst_ni               (rst_n              ),
+    .clk_i                (clk_i              ),
+    .rst_ni               (rst_ni             ),
     .test_i               (1'b0               ),
     .slv_ports_req_i      (axi_mst_req        ),
     .slv_ports_resp_o     (axi_mst_resp       ),
@@ -160,11 +162,11 @@ module testharness (
    **********/
 
   axi_uart #(
-    .axi_req_t (spatz_tb_req_t ),
-    .axi_resp_t(spatz_tb_resp_t)
+    .axi_req_t (spatz_axi_tb_req_t ),
+    .axi_resp_t(spatz_axi_tb_resp_t)
   ) i_axi_uart (
-    .clk_i     (clk               ),
-    .rst_ni    (rst_n             ),
+    .clk_i     (clk_i             ),
+    .rst_ni    (rst_ni            ),
     .testmode_i(1'b0              ),
     .axi_req_i (axi_mem_req[UART] ),
     .axi_resp_o(axi_mem_resp[UART])
@@ -224,15 +226,15 @@ module testharness (
     axi_addr_t first, last, phys_addr;
     axi_data_t rdata;
     axi_pkg::resp_t resp;
-    fetch_en                = 1'b0;
+
     to_cluster_req          = '{default: '0};
     to_cluster_req.aw.burst = axi_pkg::BURST_INCR;
     to_cluster_req.ar.burst = axi_pkg::BURST_INCR;
     to_cluster_req.aw.cache = axi_pkg::CACHE_MODIFIABLE;
     to_cluster_req.ar.cache = axi_pkg::CACHE_MODIFIABLE;
     // Wait for reset.
-    wait (rst_n);
-    @(posedge clk);
+    wait (rst_ni);
+    @(posedge clk_i);
 
     // Give the cores time to execute the bootrom's program
     #10ns;
@@ -242,15 +244,13 @@ module testharness (
     assert(resp == axi_pkg::RESP_OKAY);
 
     // Wait for the interrupt
-    wait (eoc_valid);
+    wait (eoc);
     read_from_cluster(ctrl_virt_addr, rdata, resp);
     assert(resp == axi_pkg::RESP_OKAY);
 
     $timeformat(-9, 2, " ns", 0);
     $display("[EOC] Simulation ended at %t (retval = %0d).", $time, rdata >> 1);
     $finish(0);
-    // Start MemPool
-    fetch_en = 1'b1;
   end
 
   /********
@@ -259,12 +259,12 @@ module testharness (
 
   // Wide port into simulation memory.
   tb_memory_axi #(
-    .AxiAddrWidth (AxiAddrWidth   ),
-    .AxiDataWidth (AxiDataWidth   ),
-    .AxiIdWidth   (AxiIdWidth     ),
-    .AxiUserWidth (AxiUserWidth   ),
-    .req_t        (spatz_tb_req_t ),
-    .rsp_t        (spatz_tb_resp_t)
+    .AxiAddrWidth (AxiAddrWidth       ),
+    .AxiDataWidth (AxiDataWidth       ),
+    .AxiIdWidth   (AxiIdWidth         ),
+    .AxiUserWidth (AxiUserWidth       ),
+    .req_t        (spatz_axi_tb_req_t ),
+    .rsp_t        (spatz_axi_tb_resp_t)
   ) i_dma (
     .clk_i (clk_i           ),
     .rst_ni(rst_ni          ),

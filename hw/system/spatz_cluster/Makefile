@@ -85,6 +85,7 @@ vlog_defs += -DVLEN=$(vlen)
 vlog_defs += -DN_IPU=$(n_ipu) -DN_FPU=$(n_fpu)
 vlog_defs += -DN_FU=$(shell awk 'BEGIN{print ($(n_ipu) > $(n_fpu)) ? $(n_ipu) : $(n_fpu)}')
 vlog_defs += -DRVF=$(rvf) -DRVD=$(rvd)
+vlog_defs += -DTCDM_BANK_DEPTH=$(tcdm_bank_depth)
 
 .DEFAULT_GOAL := compile
 

@@ -33,6 +33,9 @@ axi_uw ?= 1
 # Deactivate the FPU
 n_fpu ?= 0
 
+# Number of words in each TCDM bank
+tcdm_bank_depth ?= 2048
+
 # Deactivate single-precision (rvf) and double-precision (rvd) floating-point
 rvf ?= 0
 rvd ?= 0
