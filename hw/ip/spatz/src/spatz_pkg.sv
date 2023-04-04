@@ -325,58 +325,6 @@ package spatz_pkg;
 
   localparam int unsigned FLEN = RVD ? 64 : 32;
 
-  localparam fpnew_pkg::fpu_implementation_t FPUImplementation = RVD ?
-  // Double Precision Configuration
-  '{
-    PipeRegs: '{
-      '{1, // FP32
-        2, // FP64
-        0, // FP16
-        0, // FP8
-        0, // FP16alt
-        0  // FP8alt
-      },                   // FMA Block
-      '{1, 1, 1, 1, 1, 1}, // DIVSQRT
-      '{1, 1, 1, 1, 1, 1}, // NONCOMP
-      '{2, 2, 2, 2, 2, 2}, // CONV
-      '{2, 2, 2, 2, 2, 2}  // DOTP
-    },
-    UnitTypes: '{
-      '{fpnew_pkg::MERGED, fpnew_pkg::MERGED, fpnew_pkg::MERGED, fpnew_pkg::MERGED, fpnew_pkg::MERGED, fpnew_pkg::MERGED},             // FMA
-      '{fpnew_pkg::DISABLED, fpnew_pkg::DISABLED, fpnew_pkg::DISABLED, fpnew_pkg::DISABLED, fpnew_pkg::DISABLED, fpnew_pkg::DISABLED}, // DIVSQRT
-      '{fpnew_pkg::PARALLEL, fpnew_pkg::PARALLEL, fpnew_pkg::PARALLEL, fpnew_pkg::PARALLEL, fpnew_pkg::PARALLEL, fpnew_pkg::PARALLEL}, // NONCOMP
-      '{fpnew_pkg::MERGED, fpnew_pkg::MERGED, fpnew_pkg::MERGED, fpnew_pkg::MERGED, fpnew_pkg::MERGED, fpnew_pkg::MERGED},             // CONV
-      '{fpnew_pkg::MERGED, fpnew_pkg::MERGED, fpnew_pkg::MERGED, fpnew_pkg::MERGED, fpnew_pkg::MERGED, fpnew_pkg::MERGED}              // DOTP
-    },
-    PipeConfig: fpnew_pkg::BEFORE
-  } :
-  // Single Precision FPU
-  '{
-    PipeRegs: '{
-      // FMA Block
-      '{
-        1, // FP32
-        3, // FP64
-        0, // FP16
-        0, // FP8
-        0, // FP16alt
-        0  // FP8alt
-      },
-      '{1, 1, 1, 1, 1, 1}, // DIVSQRT
-      '{1, 1, 1, 1, 1, 1}, // NONCOMP
-      '{2, 2, 2, 2, 2, 2}, // CONV
-      '{2, 2, 2, 2, 2, 2}  // DOTP
-    },
-    UnitTypes: '{
-      '{fpnew_pkg::MERGED, fpnew_pkg::MERGED, fpnew_pkg::MERGED, fpnew_pkg::MERGED, fpnew_pkg::MERGED, fpnew_pkg::MERGED},             // FMA
-      '{fpnew_pkg::DISABLED, fpnew_pkg::DISABLED, fpnew_pkg::DISABLED, fpnew_pkg::DISABLED, fpnew_pkg::DISABLED, fpnew_pkg::DISABLED}, // DIVSQRT
-      '{fpnew_pkg::PARALLEL, fpnew_pkg::PARALLEL, fpnew_pkg::PARALLEL, fpnew_pkg::PARALLEL, fpnew_pkg::PARALLEL, fpnew_pkg::PARALLEL}, // NONCOMP
-      '{fpnew_pkg::MERGED, fpnew_pkg::MERGED, fpnew_pkg::MERGED, fpnew_pkg::MERGED, fpnew_pkg::MERGED, fpnew_pkg::MERGED},             // CONV
-      '{fpnew_pkg::DISABLED, fpnew_pkg::DISABLED, fpnew_pkg::DISABLED, fpnew_pkg::DISABLED, fpnew_pkg::DISABLED, fpnew_pkg::DISABLED}  // DOTP
-    },
-    PipeConfig: fpnew_pkg::BEFORE
-  };
-
   localparam fpnew_pkg::fpu_features_t FPUFeatures = RVD ?
   // Double Precision FPU
   '{

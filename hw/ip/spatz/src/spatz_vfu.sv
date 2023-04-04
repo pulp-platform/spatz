@@ -10,7 +10,10 @@
 
 module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx_width;
   import fpnew_pkg::roundmode_e; import fpnew_pkg::status_t; import fpnew_pkg::operation_e;
-  import fpnew_pkg::int_format_e; import fpnew_pkg::fp_format_e; (
+  import fpnew_pkg::int_format_e; import fpnew_pkg::fp_format_e; import fpnew_pkg::fpu_implementation_t; #(
+    /// FPU configuration.
+    parameter fpu_implementation_t FPUImplementation = fpu_implementation_t'(0)
+  ) (
     input  logic             clk_i,
     input  logic             rst_ni,
     // Spatz req

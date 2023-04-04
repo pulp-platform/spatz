@@ -14,16 +14,18 @@
 // that stores all of the currently used vectors close to the execution units.
 
 module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
-    parameter int  unsigned NrMemPorts          = 1,
+    parameter int                  unsigned NrMemPorts          = 1,
     // Memory request
-    parameter type          spatz_mem_req_t     = logic,
-    parameter type          spatz_mem_resp_t    = logic,
+    parameter type                          spatz_mem_req_t     = logic,
+    parameter type                          spatz_mem_resp_t    = logic,
     // Snitch interface
-    parameter type          spatz_issue_req_t   = logic,
-    parameter type          spatz_issue_rsp_t   = logic,
-    parameter type          spatz_rsp_t         = logic,
+    parameter type                          spatz_issue_req_t   = logic,
+    parameter type                          spatz_issue_rsp_t   = logic,
+    parameter type                          spatz_rsp_t         = logic,
+    /// FPU configuration.
+    parameter fpu_implementation_t          FPUImplementation   = fpu_implementation_t'(0),
     // Derived parameters. DO NOT CHANGE!
-    parameter int  unsigned NumOutstandingLoads = 8
+    parameter int                  unsigned NumOutstandingLoads = 8
   ) (
     input  logic                              clk_i,
     input  logic                              rst_ni,
@@ -247,7 +249,9 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   // VFU //
   /////////
 
-  spatz_vfu i_vfu (
+  spatz_vfu #(
+    .FPUImplementation(FPUImplementation)
+  ) i_vfu (
     .clk_i            (clk_i                                                   ),
     .rst_ni           (rst_ni                                                  ),
     // Request
