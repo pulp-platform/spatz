@@ -64,7 +64,8 @@ endif
 ifdef preload
 	questa_args += +PRELOAD=$(preload)
 endif
-questa_args += -sv_lib $(dpi_library)/spatz_dpi -work $(library)
+#questa_args += -sv_lib $(dpi_library)/spatz_dpi
+questa_args += -work $(library)
 questa_args += -suppress vsim-12070
 
 # VCS options
@@ -86,6 +87,7 @@ vlog_defs += -DN_IPU=$(n_ipu) -DN_FPU=$(n_fpu)
 vlog_defs += -DN_FU=$(shell awk 'BEGIN{print ($(n_ipu) > $(n_fpu)) ? $(n_ipu) : $(n_fpu)}')
 vlog_defs += -DRVF=$(rvf) -DRVD=$(rvd)
 vlog_defs += -DTCDM_BANK_DEPTH=$(tcdm_bank_depth)
+vlog_defs += -DSPATZ_AXI_DW=$(axi_dw) -DSPATZ_AXI_AW=$(axi_aw) -DSPATZ_AXI_IW=$(axi_iw) -DSPATZ_AXI_UW=$(axi_uw)
 
 .DEFAULT_GOAL := compile
 
@@ -110,7 +112,7 @@ $(buildpath)/$(library):
 # Compilation
 .PHONY: compile
 compile: lib $(buildpath) $(buildpath)/compile.tcl
-$(buildpath)/compile.tcl: $(bender) $(config_mk) Makefile $(SPATZ_DIR)/Bender.yml $(shell find {src,tb} -type f)
+$(buildpath)/compile.tcl: $(bender) $(config_mk) Makefile $(SPATZ_DIR)/Bender.yml Bender.yml $(shell find {src,tb} -type f)
 	$(bender) script vsim --vlog-arg="$(vlog_args)" $(vlog_defs) -t rtl -t snitch_test -t spatz_test -t spatz $(bender_defs) > $(buildpath)/compile.tcl
 	echo "exit" >> $(buildpath)/compile.tcl
 	cd $(buildpath) && $(questa_cmd) vsim -work $(library) -c -do compile.tcl

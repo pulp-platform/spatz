@@ -8,13 +8,17 @@ package:
   - Matheus Cavalcante <matheusd@iis.ee.ethz.ch>
 
 dependencies:
-  axi:            { git: "https://github.com/pulp-platform/axi.git",          version: 0.38.0}
-  common_cells:   { git: "https://github.com/pulp-platform/common_cells.git", version: 1.28.0}
-  spatz_cc:       { path: ../../ip/spatz_cc       }
-  snitch_test:    { path: ../../ip/snitch_test    }
-  mem_interface:  { path: ../../ip/mem_interface  }
-  tcdm_interface: { path: ../../ip/tcdm_interface }
-  snitch_icache:  { path: ../../ip/snitch_icache  }
+  axi:                { git: "https://github.com/pulp-platform/axi.git",                version: 0.38.0}
+  common_cells:       { git: "https://github.com/pulp-platform/common_cells.git",       version: 1.28.0}
+  register_interface: { git: "https://github.com/pulp-platform/register_interface.git", version: 0.3.1 }
+
+  spatz_cc:         { path: ../../ip/spatz_cc         }
+  snitch:           { path: ../../ip/snitch           }
+  snitch_test:      { path: ../../ip/snitch_test      }
+  mem_interface:    { path: ../../ip/mem_interface    }
+  reqrsp_interface: { path: ../../ip/reqrsp_interface }
+  tcdm_interface:   { path: ../../ip/tcdm_interface   }
+  snitch_icache:    { path: ../../ip/snitch_icache    }
 
 workspace:
   checkout_dir: "../../vendor"
@@ -22,10 +26,18 @@ workspace:
 sources:
   # Level 0
   - src/axi_zero_mem.sv
+  - src/spatz_amo_shim.sv
+  - src/spatz_cluster_peripheral/spatz_cluster_peripheral_reg_pkg.sv
   - src/spatz_cluster_pkg.sv
+  - src/spatz_tcdm_interconnect.sv
   # Level 1
-  - src/spatz_cluster.sv
+  - src/spatz_barrier.sv
+  - src/spatz_cluster_peripheral/spatz_cluster_peripheral_reg_top.sv
   # Level 2
+  - src/spatz_cluster_peripheral/spatz_cluster_peripheral.sv
+  # Level 3
+  - src/spatz_cluster.sv
+  # Level 4
   - src/spatz_cluster_wrapper.sv
 
   - target: spatz_test
