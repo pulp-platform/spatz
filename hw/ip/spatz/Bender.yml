@@ -16,6 +16,7 @@ sources:
     - src/riscv_instr.sv
     - src/rvv_pkg.sv
     # Level 1
+    - src/serdiv.sv
     - src/spatz_pkg.sv
     # Level 2
     - src/spatz_decoder.sv
