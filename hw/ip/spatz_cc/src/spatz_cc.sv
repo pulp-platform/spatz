@@ -15,76 +15,76 @@ module spatz_cc
   import snitch_pkg::core_events_t;
   import fpnew_pkg::fpu_implementation_t; #(
     /// Address width of the buses
-    parameter int                  unsigned        AddrWidth              = 0,
+    parameter int                          unsigned        AddrWidth              = 0,
     /// Data width of the buses.
-    parameter int                  unsigned        DataWidth              = 0,
+    parameter int                          unsigned        DataWidth              = 0,
     /// Data width of the AXI DMA buses.
-    parameter int                  unsigned        DMADataWidth           = 0,
+    parameter int                          unsigned        DMADataWidth           = 0,
     /// Id width of the AXI DMA bus.
-    parameter int                  unsigned        DMAIdWidth             = 0,
-    parameter int                  unsigned        DMAAxiReqFifoDepth     = 0,
-    parameter int                  unsigned        DMAReqFifoDepth        = 0,
+    parameter int                          unsigned        DMAIdWidth             = 0,
+    parameter int                          unsigned        DMAAxiReqFifoDepth     = 0,
+    parameter int                          unsigned        DMAReqFifoDepth        = 0,
     /// Data port request type.
-    parameter type                                 dreq_t                 = logic,
+    parameter type                                         dreq_t                 = logic,
     /// Data port response type.
-    parameter type                                 drsp_t                 = logic,
+    parameter type                                         drsp_t                 = logic,
     /// TCDM Address Width
-    parameter int                  unsigned        TCDMAddrWidth          = 0,
+    parameter int                          unsigned        TCDMAddrWidth          = 0,
     /// Data port request type.
-    parameter type                                 tcdm_req_t             = logic,
+    parameter type                                         tcdm_req_t             = logic,
     /// Data port response type.
-    parameter type                                 tcdm_rsp_t             = logic,
+    parameter type                                         tcdm_rsp_t             = logic,
     /// TCDM User Payload
-    parameter type                                 axi_req_t              = logic,
-    parameter type                                 axi_rsp_t              = logic,
-    parameter type                                 hive_req_t             = logic,
-    parameter type                                 hive_rsp_t             = logic,
-    parameter type                                 acc_req_t              = logic,
-    parameter type                                 acc_resp_t             = logic,
-    parameter type                                 dma_events_t           = logic,
-    parameter type                                 dma_perf_t             = logic,
+    parameter type                                         axi_req_t              = logic,
+    parameter type                                         axi_rsp_t              = logic,
+    parameter type                                         hive_req_t             = logic,
+    parameter type                                         hive_rsp_t             = logic,
+    parameter type                                         acc_req_t              = logic,
+    parameter type                                         acc_resp_t             = logic,
+    parameter type                                         dma_events_t           = logic,
+    parameter type                                         dma_perf_t             = logic,
     /// FPU configuration.
-    parameter fpu_implementation_t                 FPUImplementation      = fpu_implementation_t'(0),
+    parameter fpu_implementation_t                         FPUImplementation      = fpu_implementation_t'(0),
     /// Boot address of core.
-    parameter logic                         [31:0] BootAddr               = 32'h0000_1000,
+    parameter logic                                 [31:0] BootAddr               = 32'h0000_1000,
     /// Reduced-register extension
-    parameter bit                                  RVE                    = 0,
+    parameter bit                                          RVE                    = 0,
     /// Enable F and D Extension
-    parameter bit                                  RVF                    = 1,
-    parameter bit                                  RVD                    = 1,
-    parameter bit                                  XDivSqrt               = 0,
-    parameter bit                                  XF8                    = 0,
-    parameter bit                                  XF16                   = 0,
+    parameter bit                                          RVF                    = 1,
+    parameter bit                                          RVD                    = 1,
+    parameter bit                                          XDivSqrt               = 0,
+    parameter bit                                          XF8                    = 0,
+    parameter bit                                          XF16                   = 0,
     /// Enable Snitch DMA
-    parameter bit                                  Xdma                   = 0,
-    parameter int                  unsigned        NumIntOutstandingLoads = 0,
-    parameter int                  unsigned        NumIntOutstandingMem   = 0,
-    parameter int                  unsigned        NumFPOutstandingLoads  = 0,
-    parameter int                  unsigned        NumFPOutstandingMem    = 0,
+    parameter bit                                          Xdma                   = 0,
+    parameter int                          unsigned        NumIntOutstandingLoads = 0,
+    parameter int                          unsigned        NumIntOutstandingMem   = 0,
+    parameter int                          unsigned        NumFPOutstandingLoads  = 0,
+    parameter int                          unsigned        NumFPOutstandingMem    = 0,
     // Enable V Extension
-    parameter bit                                  RVV                    = 1,
+    parameter bit                                          RVV                    = 1,
     // Spatz paramaters
-    parameter int                  unsigned        NumSpatzFPUs           = 4,
-    parameter int                  unsigned        NumSpatzIPUs           = 1,
+    parameter int                          unsigned        NumSpatzFPUs           = 4,
+    parameter int                          unsigned        NumSpatzIPUs           = 1,
     /// Add isochronous clock-domain crossings e.g., make it possible to operate
     /// the core in a slower clock domain.
-    parameter bit                                  IsoCrossing            = 0,
+    parameter bit                                          IsoCrossing            = 0,
     /// Timing Parameters
     /// Insert Pipeline registers into off-loading path (request)
-    parameter bit                                  RegisterOffloadReq     = 0,
+    parameter bit                                          RegisterOffloadReq     = 0,
     /// Insert Pipeline registers into off-loading path (response)
-    parameter bit                                  RegisterOffloadRsp     = 0,
+    parameter bit                                          RegisterOffloadRsp     = 0,
     /// Insert Pipeline registers into data memory path (request)
-    parameter bit                                  RegisterCoreReq        = 0,
+    parameter bit                                          RegisterCoreReq        = 0,
     /// Insert Pipeline registers into data memory path (response)
-    parameter bit                                  RegisterCoreRsp        = 0,
-    parameter snitch_pma_pkg::snitch_pma_t SnitchPMACfg = '{default: 0},
+    parameter bit                                          RegisterCoreRsp        = 0,
+    parameter snitch_pma_pkg::snitch_pma_t                 SnitchPMACfg           = '{default: 0},
     /// Derived parameter *Do not override*
-    parameter int  unsigned NumSpatzFUs         = (NumSpatzFPUs > NumSpatzIPUs) ? NumSpatzFPUs : NumSpatzIPUs,
-    parameter int  unsigned NumMemPortsPerSpatz = NumSpatzFUs,
-    parameter int  unsigned TCDMPorts           = RVV ? NumMemPortsPerSpatz + 1 : 1,
-    parameter type          addr_t              = logic [AddrWidth-1:0],
-    parameter type          data_t              = logic [DataWidth-1:0]
+    parameter int                          unsigned        NumSpatzFUs            = (NumSpatzFPUs > NumSpatzIPUs) ? NumSpatzFPUs : NumSpatzIPUs,
+    parameter int                          unsigned        NumMemPortsPerSpatz    = NumSpatzFUs,
+    parameter int                          unsigned        TCDMPorts              = RVV ? NumMemPortsPerSpatz + 1 : 1,
+    parameter type                                         addr_t                 = logic [AddrWidth-1:0],
+    parameter type                                         data_t                 = logic [DataWidth-1:0]
   ) (
     input  logic                         clk_i,
     input  logic                         clk_d2_i,
@@ -181,37 +181,37 @@ module spatz_cc
     .XF8                    (XF8                   ),
     .FLEN                   (FLEN                  )
   ) i_snitch (
-    .clk_i                 ( clk_d2_i                 ), // if necessary operate on half the frequency
-    .rst_i                 ( !rst_ni                  ),
-    .hart_id_i             ( hart_id_i                ),
-    .irq_i                 ( irq_i                    ),
-    .flush_i_valid_o       ( hive_req_o.flush_i_valid ),
-    .flush_i_ready_i       ( hive_rsp_i.flush_i_ready ),
-    .inst_addr_o           ( hive_req_o.inst_addr     ),
-    .inst_cacheable_o      ( hive_req_o.inst_cacheable),
-    .inst_data_i           ( hive_rsp_i.inst_data     ),
-    .inst_valid_o          ( hive_req_o.inst_valid    ),
-    .inst_ready_i          ( hive_rsp_i.inst_ready    ),
-    .acc_qreq_o            ( acc_snitch_demux         ),
-    .acc_qvalid_o          ( acc_snitch_demux_qvalid  ),
-    .acc_qready_i          ( acc_snitch_demux_qready  ),
-    .acc_prsp_i            ( acc_demux_snitch         ),
-    .acc_pvalid_i          ( acc_demux_snitch_valid   ),
-    .acc_pready_o          ( acc_demux_snitch_ready   ),
-    .acc_mem_finished_i    ( spatz_mem_finished       ),
-    .acc_mem_str_finished_i( spatz_mem_str_finished   ),
-    .data_req_o            ( snitch_dreq_d            ),
-    .data_rsp_i            ( snitch_drsp_d            ),
-    .ptw_valid_o           ( hive_req_o.ptw_valid     ),
-    .ptw_ready_i           ( hive_rsp_i.ptw_ready     ),
-    .ptw_va_o              ( hive_req_o.ptw_va        ),
-    .ptw_ppn_o             ( hive_req_o.ptw_ppn       ),
-    .ptw_pte_i             ( hive_rsp_i.ptw_pte       ),
-    .ptw_is_4mega_i        ( hive_rsp_i.ptw_is_4mega  ),
-    .fpu_rnd_mode_o        ( fpu_rnd_mode             ),
-    .fpu_fmt_mode_o        ( fpu_fmt_mode             ),
-    .fpu_status_i          ( fpu_status               ),
-    .core_events_o         ( snitch_events            )
+    .clk_i                 (clk_d2_i                 ), // if necessary operate on half the frequency
+    .rst_i                 (!rst_ni                  ),
+    .hart_id_i             (hart_id_i                ),
+    .irq_i                 (irq_i                    ),
+    .flush_i_valid_o       (hive_req_o.flush_i_valid ),
+    .flush_i_ready_i       (hive_rsp_i.flush_i_ready ),
+    .inst_addr_o           (hive_req_o.inst_addr     ),
+    .inst_cacheable_o      (hive_req_o.inst_cacheable),
+    .inst_data_i           (hive_rsp_i.inst_data     ),
+    .inst_valid_o          (hive_req_o.inst_valid    ),
+    .inst_ready_i          (hive_rsp_i.inst_ready    ),
+    .acc_qreq_o            (acc_snitch_demux         ),
+    .acc_qvalid_o          (acc_snitch_demux_qvalid  ),
+    .acc_qready_i          (acc_snitch_demux_qready  ),
+    .acc_prsp_i            (acc_demux_snitch         ),
+    .acc_pvalid_i          (acc_demux_snitch_valid   ),
+    .acc_pready_o          (acc_demux_snitch_ready   ),
+    .acc_mem_finished_i    (spatz_mem_finished       ),
+    .acc_mem_str_finished_i(spatz_mem_str_finished   ),
+    .data_req_o            (snitch_dreq_d            ),
+    .data_rsp_i            (snitch_drsp_d            ),
+    .ptw_valid_o           (hive_req_o.ptw_valid     ),
+    .ptw_ready_i           (hive_rsp_i.ptw_ready     ),
+    .ptw_va_o              (hive_req_o.ptw_va        ),
+    .ptw_ppn_o             (hive_req_o.ptw_ppn       ),
+    .ptw_pte_i             (hive_rsp_i.ptw_pte       ),
+    .ptw_is_4mega_i        (hive_rsp_i.ptw_is_4mega  ),
+    .fpu_rnd_mode_o        (fpu_rnd_mode             ),
+    .fpu_fmt_mode_o        (fpu_fmt_mode             ),
+    .fpu_status_i          (fpu_status               ),
+    .core_events_o         (snitch_events            )
   );
 
   reqrsp_iso #(
@@ -237,16 +237,16 @@ module spatz_cc
     .T      (acc_req_t                          ),
     .Bypass (!IsoCrossing && !RegisterOffloadReq)
   ) i_spill_register_acc_demux_req (
-    .src_clk_i   ( clk_d2_i                  ),
-    .src_rst_ni  ( rst_ni                    ),
-    .src_valid_i ( acc_snitch_demux_qvalid   ),
-    .src_ready_o ( acc_snitch_demux_qready   ),
-    .src_data_i  ( acc_snitch_demux          ),
-    .dst_clk_i   ( clk_i                     ),
-    .dst_rst_ni  ( rst_ni                    ),
-    .dst_valid_o ( acc_snitch_demux_qvalid_q ),
-    .dst_ready_i ( acc_snitch_demux_qready_q ),
-    .dst_data_o  ( acc_snitch_demux_q        )
+    .src_clk_i   (clk_d2_i                 ),
+    .src_rst_ni  (rst_ni                   ),
+    .src_valid_i (acc_snitch_demux_qvalid  ),
+    .src_ready_o (acc_snitch_demux_qready  ),
+    .src_data_i  (acc_snitch_demux         ),
+    .dst_clk_i   (clk_i                    ),
+    .dst_rst_ni  (rst_ni                   ),
+    .dst_valid_o (acc_snitch_demux_qvalid_q),
+    .dst_ready_i (acc_snitch_demux_qready_q),
+    .dst_data_o  (acc_snitch_demux_q       )
   );
 
   // Cut off-loading response path
@@ -254,27 +254,27 @@ module spatz_cc
     .T      (acc_resp_t                         ),
     .Bypass (!IsoCrossing && !RegisterOffloadRsp)
   ) i_spill_register_acc_demux_resp (
-    .src_clk_i   ( clk_i                    ),
-    .src_rst_ni  ( rst_ni                   ),
-    .src_valid_i ( acc_demux_snitch_valid_q ),
-    .src_ready_o ( acc_demux_snitch_ready_q ),
-    .src_data_i  ( acc_demux_snitch_q       ),
-    .dst_clk_i   ( clk_d2_i                 ),
-    .dst_rst_ni  ( rst_ni                   ),
-    .dst_valid_o ( acc_demux_snitch_valid   ),
-    .dst_ready_i ( acc_demux_snitch_ready   ),
-    .dst_data_o  ( acc_demux_snitch         )
+    .src_clk_i   (clk_i                   ),
+    .src_rst_ni  (rst_ni                  ),
+    .src_valid_i (acc_demux_snitch_valid_q),
+    .src_ready_o (acc_demux_snitch_ready_q),
+    .src_data_i  (acc_demux_snitch_q      ),
+    .dst_clk_i   (clk_d2_i                ),
+    .dst_rst_ni  (rst_ni                  ),
+    .dst_valid_o (acc_demux_snitch_valid  ),
+    .dst_ready_i (acc_demux_snitch_ready  ),
+    .dst_data_o  (acc_demux_snitch        )
   );
 
   // Accelerator Demux Port
   stream_demux #(
     .N_OUP ( 2 )
   ) i_stream_demux_offload (
-    .inp_valid_i ( acc_snitch_demux_qvalid_q              ),
-    .inp_ready_o ( acc_snitch_demux_qready_q              ),
-    .oup_sel_i   ( acc_snitch_demux_q.addr[$clog2(2)-1:0] ),
-    .oup_valid_o ( {dma_qvalid, acc_qvalid}               ),
-    .oup_ready_i ( {dma_qready, acc_qready}               )
+    .inp_valid_i (acc_snitch_demux_qvalid_q             ),
+    .inp_ready_o (acc_snitch_demux_qready_q             ),
+    .oup_sel_i   (acc_snitch_demux_q.addr[$clog2(2)-1:0]),
+    .oup_valid_o ({dma_qvalid, acc_qvalid}              ),
+    .oup_ready_i ({dma_qready, acc_qready}              )
   );
 
   // There is no shared muldiv in this configuration
@@ -307,22 +307,22 @@ module spatz_cc
       .spatz_issue_req_t  (acc_req_t            ),
       .spatz_rsp_t        (acc_resp_t           )
     ) i_spatz (
-      .clk_i                   ( clk_i                  ),
-      .rst_ni                  ( rst_ni                 ),
-      .issue_valid_i           ( acc_qvalid             ),
-      .issue_ready_o           ( acc_qready             ),
-      .issue_req_i             ( acc_snitch_req         ),
-      .rsp_valid_o             ( acc_pvalid             ),
-      .rsp_ready_i             ( acc_pready             ),
-      .rsp_o                   ( x_result_d             ),
-      .spatz_mem_req_o         ( spatz_mem_req          ),
-      .spatz_mem_resp_i        ( spatz_mem_resp         ),
-      .spatz_mem_finished_o    ( spatz_mem_finished     ),
-      .spatz_mem_str_finished_o( spatz_mem_str_finished ),
-      .fp_lsu_mem_req_o        ( fp_lsu_mem_req         ),
-      .fp_lsu_mem_resp_i       ( fp_lsu_mem_resp        ),
-      .fpu_rnd_mode_i          ( fpu_rnd_mode           ),
-      .fpu_status_o            ( fpu_status             )
+      .clk_i                   (clk_i                 ),
+      .rst_ni                  (rst_ni                ),
+      .issue_valid_i           (acc_qvalid            ),
+      .issue_ready_o           (acc_qready            ),
+      .issue_req_i             (acc_snitch_req        ),
+      .rsp_valid_o             (acc_pvalid            ),
+      .rsp_ready_i             (acc_pready            ),
+      .rsp_o                   (acc_resp              ),
+      .spatz_mem_req_o         (spatz_mem_req         ),
+      .spatz_mem_resp_i        (spatz_mem_resp        ),
+      .spatz_mem_finished_o    (spatz_mem_finished    ),
+      .spatz_mem_str_finished_o(spatz_mem_str_finished),
+      .fp_lsu_mem_req_o        (fp_lsu_mem_req        ),
+      .fp_lsu_mem_resp_i       (fp_lsu_mem_resp       ),
+      .fpu_rnd_mode_i          (fpu_rnd_mode          ),
+      .fpu_status_o            (fpu_status            )
     );
   end
 

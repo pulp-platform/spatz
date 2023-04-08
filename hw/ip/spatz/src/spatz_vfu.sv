@@ -8,35 +8,39 @@
 // vector instructions. It can be configured with a parameterizable amount
 // of IPUs that work in parallel.
 
-module spatz_vfu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx_width;
-  import fpnew_pkg::roundmode_e; import fpnew_pkg::status_t; import fpnew_pkg::operation_e;
-  import fpnew_pkg::int_format_e; import fpnew_pkg::fp_format_e; import fpnew_pkg::fpu_implementation_t; #(
+module spatz_vfu
+  import spatz_pkg::*;
+  import rvv_pkg::*;
+  import cf_math_pkg::idx_width;
+  import fpnew_pkg::*; #(
     /// FPU configuration.
-    parameter fpu_implementation_t FPUImplementation = fpu_implementation_t'(0)
+    parameter fpu_implementation_t FPUImplementation = fpu_implementation_t'(0),
+    // Spatz interface
+    parameter type                 spatz_issue_req_t = logic
   ) (
-    input  logic             clk_i,
-    input  logic             rst_ni,
+    input  logic                   clk_i,
+    input  logic                   rst_ni,
     // Spatz req
-    input  spatz_req_t       spatz_req_i,
-    input  logic             spatz_req_valid_i,
-    output logic             spatz_req_ready_o,
+    input  spatz_issue_req_t       spatz_req_i,
+    input  logic                   spatz_req_valid_i,
+    output logic                   spatz_req_ready_o,
     // VFU response
-    output logic             vfu_rsp_valid_o,
-    input  logic             vfu_rsp_ready_i,
-    output vfu_rsp_t         vfu_rsp_o,
+    output logic                   vfu_rsp_valid_o,
+    input  logic                   vfu_rsp_ready_i,
+    output vfu_rsp_t               vfu_rsp_o,
     // VRF
-    output vrf_addr_t        vrf_waddr_o,
-    output vrf_data_t        vrf_wdata_o,
-    output logic             vrf_we_o,
-    output vrf_be_t          vrf_wbe_o,
-    input  logic             vrf_wvalid_i,
-    output spatz_id_t  [3:0] vrf_id_o,
-    output vrf_addr_t  [2:0] vrf_raddr_o,
-    output logic       [2:0] vrf_re_o,
-    input  vrf_data_t  [2:0] vrf_rdata_i,
-    input  logic       [2:0] vrf_rvalid_i,
+    output vrf_addr_t              vrf_waddr_o,
+    output vrf_data_t              vrf_wdata_o,
+    output logic                   vrf_we_o,
+    output vrf_be_t                vrf_wbe_o,
+    input  logic                   vrf_wvalid_i,
+    output spatz_id_t        [3:0] vrf_id_o,
+    output vrf_addr_t        [2:0] vrf_raddr_o,
+    output logic             [2:0] vrf_re_o,
+    input  vrf_data_t        [2:0] vrf_rdata_i,
+    input  logic             [2:0] vrf_rvalid_i,
     // FPU side channel
-    output status_t          fpu_status_o
+    output status_t                fpu_status_o
   );
 
 // Include FF

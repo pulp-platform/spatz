@@ -222,7 +222,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     .rsp_o            (resp            ),
     // FPU side channel
     .fpu_rnd_mode_i   (fpu_rnd_mode_i  ),
-    // Spatz req
+    // Spatz request
     .spatz_req_valid_o(spatz_req_valid ),
     .spatz_req_o      (spatz_req       ),
     // VFU
@@ -250,7 +250,8 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   /////////
 
   spatz_vfu #(
-    .FPUImplementation(FPUImplementation)
+    .FPUImplementation(FPUImplementation),
+    .spatz_issue_req_t(spatz_issue_req_t)
   ) i_vfu (
     .clk_i            (clk_i                                                   ),
     .rst_ni           (rst_ni                                                  ),
@@ -282,9 +283,10 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   //////////
 
   spatz_vlsu #(
-    .NrMemPorts      (NrMemPorts      ),
-    .spatz_mem_req_t (spatz_mem_req_t ),
-    .spatz_mem_resp_t(spatz_mem_resp_t)
+    .NrMemPorts       (NrMemPorts       ),
+    .spatz_issue_req_t(spatz_issue_req_t),
+    .spatz_mem_req_t  (spatz_mem_req_t  ),
+    .spatz_mem_resp_t (spatz_mem_resp_t )
   ) i_vlsu (
     .clk_i                   (clk_i                                                ),
     .rst_ni                  (rst_ni                                               ),
@@ -321,7 +323,9 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   // VSLDU //
   ///////////
 
-  spatz_vsldu i_vsldu (
+  spatz_vsldu #(
+    .spatz_issue_req_t(spatz_issue_req_t)
+  ) i_vsldu (
     .clk_i            (clk_i                                          ),
     .rst_ni           (rst_ni                                         ),
     // Request

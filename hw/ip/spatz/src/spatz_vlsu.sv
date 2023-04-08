@@ -7,46 +7,51 @@
 // The vector load/store unit is used to load vectors from memory
 // and to the vector register file and store them back again.
 
-module spatz_vlsu import spatz_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx_width; #(
+module spatz_vlsu
+  import spatz_pkg::*;
+  import rvv_pkg::*;
+  import cf_math_pkg::idx_width; #(
     parameter                NrMemPorts         = 1,
     parameter                NrOutstandingLoads = 8,
+    // Spatz interface
+    parameter  type          spatz_issue_req_t  = logic,
     // Memory request
     parameter  type          spatz_mem_req_t    = logic,
     parameter  type          spatz_mem_resp_t   = logic,
     // Dependant parameters. DO NOT CHANGE!
     localparam int  unsigned IdWidth            = idx_width(NrOutstandingLoads)
   ) (
-    input  logic                             clk_i,
-    input  logic                             rst_ni,
+    input  logic                              clk_i,
+    input  logic                              rst_ni,
     // Spatz request
-    input  spatz_req_t                       spatz_req_i,
-    input  logic                             spatz_req_valid_i,
-    output logic                             spatz_req_ready_o,
+    input  spatz_issue_req_t                  spatz_req_i,
+    input  logic                              spatz_req_valid_i,
+    output logic                              spatz_req_ready_o,
     // VLSU response
-    output logic                             vlsu_rsp_valid_o,
-    output vlsu_rsp_t                        vlsu_rsp_o,
+    output logic                              vlsu_rsp_valid_o,
+    output vlsu_rsp_t                         vlsu_rsp_o,
     // Interface with the VRF
-    output vrf_addr_t                        vrf_waddr_o,
-    output vrf_data_t                        vrf_wdata_o,
-    output logic                             vrf_we_o,
-    output vrf_be_t                          vrf_wbe_o,
-    input  logic                             vrf_wvalid_i,
-    output spatz_id_t       [2:0]            vrf_id_o,
-    output vrf_addr_t       [1:0]            vrf_raddr_o,
-    output logic            [1:0]            vrf_re_o,
-    input  vrf_data_t       [1:0]            vrf_rdata_i,
-    input  logic            [1:0]            vrf_rvalid_i,
+    output vrf_addr_t                         vrf_waddr_o,
+    output vrf_data_t                         vrf_wdata_o,
+    output logic                              vrf_we_o,
+    output vrf_be_t                           vrf_wbe_o,
+    input  logic                              vrf_wvalid_i,
+    output spatz_id_t        [2:0]            vrf_id_o,
+    output vrf_addr_t        [1:0]            vrf_raddr_o,
+    output logic             [1:0]            vrf_re_o,
+    input  vrf_data_t        [1:0]            vrf_rdata_i,
+    input  logic             [1:0]            vrf_rvalid_i,
     // Memory Request
-    output spatz_mem_req_t  [NrMemPorts-1:0] spatz_mem_req_o,
-    output logic            [NrMemPorts-1:0] spatz_mem_req_valid_o,
-    input  logic            [NrMemPorts-1:0] spatz_mem_req_ready_i,
+    output spatz_mem_req_t   [NrMemPorts-1:0] spatz_mem_req_o,
+    output logic             [NrMemPorts-1:0] spatz_mem_req_valid_o,
+    input  logic             [NrMemPorts-1:0] spatz_mem_req_ready_i,
     //  Memory Response
-    input  spatz_mem_resp_t [NrMemPorts-1:0] spatz_mem_resp_i,
-    input  logic            [NrMemPorts-1:0] spatz_mem_resp_valid_i,
-    output logic            [NrMemPorts-1:0] spatz_mem_resp_ready_o,
+    input  spatz_mem_resp_t  [NrMemPorts-1:0] spatz_mem_resp_i,
+    input  logic             [NrMemPorts-1:0] spatz_mem_resp_valid_i,
+    output logic             [NrMemPorts-1:0] spatz_mem_resp_ready_o,
     // Memory Finished
-    output logic                             spatz_mem_finished_o,
-    output logic                             spatz_mem_str_finished_o
+    output logic                              spatz_mem_finished_o,
+    output logic                              spatz_mem_str_finished_o
   );
 
 // Include FF
