@@ -1,0 +1,200 @@
+# Copyright 2023 ETH Zurich and University of Bologna.
+# Licensed under the Apache License, Version 2.0, see LICENSE for details.
+# SPDX-License-Identifier: Apache-2.0
+
+# Author: Matheus Cavalcante, ETH Zurich
+
+# Root
+SHELL = /usr/bin/env bash
+SPATZ_DIR := $(shell git rev-parse --show-toplevel 2>/dev/null || echo $$SPATZ_DIR)
+ROOT_DIR := ${SPATZ_DIR}
+
+# Include configuration
+config_mk = $(abspath $(SPATZ_DIR)/cfg/config.mk)
+include $(config_mk)
+
+# Binaries
+INSTALL_PREFIX        ?= install
+INSTALL_DIR           ?= ${ROOT_DIR}/${INSTALL_PREFIX}
+LLVM_INSTALL_DIR      ?= ${INSTALL_DIR}/llvm
+GCC_INSTALL_DIR       ?= ${INSTALL_DIR}/riscv-gcc
+BENDER_INSTALL_DIR    ?= ${INSTALL_DIR}/bender
+VERILATOR_INSTALL_DIR ?= ${INSTALL_DIR}/verilator
+
+# Support for local override
+BENDER ?= ${BENDER_INSTALL_DIR}/bender
+DASM   ?= spike-dasm
+VLT    ?= ${VERILATOR_INSTALL_DIR}/bin/verilator
+CMAKE  ?= cmake-3.18.1
+
+MATCH_END := '/+incdir+/ s/$$/\/*\/*/'
+MATCH_BGN := 's/+incdir+//g'
+SED_SRCS  := sed -e ${MATCH_END} -e ${MATCH_BGN}
+TB_SRCS   := $(wildcard ${ROOT}/hw/ip/snitch_test/*.sv)
+TB_DIR    := ${ROOT}/hw/ip/snitch_test/src
+
+VSIM_BENDER   += -t test -t rtl -t simulation -t spatz -t vsim -t spatz_test -t snitch_test
+VSIM_SOURCES  := $(shell ${BENDER} script flist ${VSIM_BENDER} | ${SED_SRCS})
+VSIM_BUILDDIR := work-vsim
+
+# fesvr is being installed here
+FESVR          ?= ${MKFILE_DIR}work
+FESVR_VERSION  ?= 35d50bc40e59ea1d5566fbd3d9226023821b1bb6
+
+VLT_BUILDDIR := work-vlt
+VLT_FESVR     = $(VLT_BUILDDIR)/riscv-isa-sim
+VLT_FLAGS    += -Wno-BLKANDNBLK
+VLT_FLAGS    += -Wno-LITENDIAN
+VLT_FLAGS    += -Wno-CASEINCOMPLETE
+VLT_FLAGS    += -Wno-COMBDLY
+VLT_FLAGS    += -Wno-CMPCONST
+VLT_FLAGS    += -Wno-WIDTH
+VLT_FLAGS    += -Wno-WIDTHCONCAT
+VLT_FLAGS    += -Wno-UNSIGNED
+VLT_FLAGS    += -Wno-UNOPTFLAT
+VLT_FLAGS    += -Wno-MODDUP
+VLT_FLAGS    += -Wno-PINMISSING
+VLT_FLAGS    += -Wno-fatal
+VLT_FLAGS    += --unroll-count 1024
+VLT_FLAGS    += --timing
+VLT_BENDER   += -t rtl -t spatz -t spatz_test -t snitch_test
+VLT_SOURCES  := $(shell ${BENDER} script flist ${VLT_BENDER} | ${SED_SRCS})
+VLT_CFLAGS   += -std=c++14 -pthread
+
+# Defines
+DEFS += -DNUM_CORES=$(num_cores) -DNUM_BANKS=$(num_banks)
+DEFS += -DVLEN=$(vlen)
+DEFS += -DN_IPU=$(n_ipu) -DN_FPU=$(n_fpu)
+DEFS += -DN_FU=$(shell awk 'BEGIN{print ($(n_ipu) > $(n_fpu)) ? $(n_ipu) : $(n_fpu)}')
+DEFS += -DRVF=$(rvf) -DRVD=$(rvd)
+DEFS += -DTCDM_BANK_DEPTH=$(tcdm_bank_depth)
+DEFS += -DBOOT_ADDR=$(boot_addr)
+DEFS += -DSPATZ_AXI_DW=$(axi_dw) -DSPATZ_AXI_AW=$(axi_aw) -DSPATZ_AXI_IW=$(axi_iw) -DSPATZ_AXI_UW=$(axi_uw)
+
+# We need a recent LLVM installation (>11) to compile Verilator.
+# We also need to link the binaries with LLVM's libc++.
+# Define CLANG_PATH to be the path of your Clang installation.
+
+ifneq (${CLANG_PATH},)
+    CLANG_CC       := $(CLANG_PATH)/bin/clang
+    CLANG_CXX      := $(CLANG_PATH)/bin/clang++
+    CLANG_CXXFLAGS := "-nostdinc++ -isystem $(CLANG_PATH)/include/c++/v1"
+    CLANG_LDFLAGS  := "-nostdlib++ -fuse-ld=lld -L $(CLANG_PATH)/lib -Wl,-rpath,$(CLANG_PATH)/lib -lc++"
+else
+    CLANG_CC       ?= clang
+    CLANG_CXX      ?= clang++
+    CLANG_CXXFLAGS := ""
+    CLANG_LDFLAGS  := ""
+endif
+
+# Build verilator with LLVM and add llvm c/ld flags
+CC         = $(CLANG_CC)
+CXX        = $(CLANG_CXX)
+CFLAGS     = $(CLANG_CXXFLAGS)
+CXXFLAGS   = $(CLANG_CXXFLAGS)
+LDFLAGS    = $(CLANG_LDFLAGS)
+VLT_FLAGS += --compiler clang
+VLT_FLAGS += -CFLAGS ${CLANG_CXXFLAGS}
+VLT_FLAGS += -LDFLAGS ${CLANG_LDFLAGS}
+
+VLOGAN_FLAGS := -assert svaext
+VLOGAN_FLAGS += -assert disable_cover
+VLOGAN_FLAGS += -full64
+VLOGAN_FLAGS += -kdb
+VHDLAN_FLAGS := -full64
+VHDLAN_FLAGS += -kdb
+
+# default on target `all`
+all:
+
+#################
+# Prerequisites #
+#################
+# Eventually it could be an option to package this statically using musl libc.
+work/${FESVR_VERSION}_unzip:
+	mkdir -p $(dir $@)
+	wget -O $(dir $@)/${FESVR_VERSION} https://github.com/riscv/riscv-isa-sim/tarball/${FESVR_VERSION}
+	tar xfm $(dir $@)${FESVR_VERSION} --strip-components=1 -C $(dir $@)
+	touch $@
+
+work/lib/libfesvr.a: work/${FESVR_VERSION}_unzip
+	cd $(dir $<)/ && ./configure --prefix `pwd`
+	make -C $(dir $<) install-config-hdrs install-hdrs libfesvr.a
+	mkdir -p $(dir $@)
+	cp $(dir $<)libfesvr.a $@
+
+# Build fesvr seperately for verilator since this might use different compilers
+# and libraries than modelsim/vcs and
+$(VLT_FESVR)/${FESVR_VERSION}_unzip:
+	mkdir -p $(dir $@)
+	wget -O $(dir $@)/${FESVR_VERSION} https://github.com/riscv/riscv-isa-sim/tarball/${FESVR_VERSION}
+	tar xfm $(dir $@)${FESVR_VERSION} --strip-components=1 -C $(dir $@)
+	patch -d $(dir $@) -p1 < ${ROOT}/util/patches/riscv-isa-sim/fesrv.patch
+	touch $@
+
+$(VLT_BUILDDIR)/lib/libfesvr.a: $(VLT_FESVR)/${FESVR_VERSION}_unzip
+	cd $(dir $<)/ && ./configure --prefix `pwd` \
+        CC=${CC} CXX=${CXX} CFLAGS="${CFLAGS}" CXXFLAGS="${CXXFLAGS}" LDFLAGS="${LDFLAGS}"
+	$(MAKE) -C $(dir $<) install-config-hdrs install-hdrs libfesvr.a
+	mkdir -p $(dir $@)
+	cp $(dir $<)libfesvr.a $@
+
+#############
+# Verilator #
+#############
+# Takes the top module name as an argument.
+define VERILATE
+	mkdir -p $(dir $@)
+	$(BENDER) script verilator ${VLT_BENDER} ${DEFS} > $(dir $@)files
+	$(VLT) \
+		--Mdir $(dir $@) -f $(dir $@)files $(VLT_FLAGS) \
+		-j $(shell nproc) --cc --build --top-module $(1)
+	touch $@
+endef
+
+############
+# Modelsim #
+############
+
+define QUESTASIM
+	${VSIM} -c -do "source $<; quit" | tee $(dir $<)vsim.log
+	@! grep -P "Errors: [1-9]*," $(dir $<)vsim.log
+	@mkdir -p bin
+	@echo "#!/bin/bash" > $@
+	@echo 'echo $$1 > logs/.rtlbinary' >> $@
+	@echo '${VSIM} +permissive ${VSIM_FLAGS} -work ${MKFILE_DIR}/${VSIM_BUILDDIR} -c \
+				-ldflags "-Wl,-rpath,${FESVR}/lib -L${FESVR}/lib -lfesvr -lutil" \
+				$1 +permissive-off ++$$1' >> $@
+	@chmod +x $@
+	@echo "#!/bin/bash" > $@.gui
+	@echo 'echo $$1 > logs/.rtlbinary' >> $@
+	@echo '${VSIM} +permissive ${VSIM_FLAGS} -work ${MKFILE_DIR}/${VSIM_BUILDDIR} \
+				-ldflags "-Wl,-rpath,${FESVR}/lib -L${FESVR}/lib -lfesvr -lutil" \
+				$1 +permissive-off ++$$1' >> $@.gui
+	@chmod +x $@.gui
+endef
+
+#######
+# VCS #
+#######
+work-vcs/compile.sh: ${VSIM_SOURCES} ${TB_SRCS}
+	mkdir -p work-vcs
+	${BENDER} script vcs ${VSIM_BENDER} ${DEFS} --vlog-arg="${VLOGAN_FLAGS}" --vcom-arg="${VHDLAN_FLAGS}" > $@
+	chmod +x $@
+	$@ > work-vcs/compile.log
+
+########
+# Util #
+########
+logs/trace_hart_%.txt: logs/trace_hart_%.dasm ${ROOT}/util/gen_trace.py
+	$(DASM) < $< | $(PYTHON) ${ROOT}/util/gen_trace.py > $@
+
+traces: $(shell (ls logs/trace_hart_*.dasm 2>/dev/null | sed 's/\.dasm/\.txt/') || echo "")
+
+# make annotate
+# Generate source-code interleaved traces for all harts. Reads the binary from
+# the logs/.rtlbinary file that is written at start of simulation in the vsim script
+logs/trace_hart_%.s: logs/trace_hart_%.txt ${ROOT}/util/trace/annotate.py
+	$(PYTHON) ${ROOT}/util/trace/annotate.py -q -o $@ $(BINARY) $<
+BINARY ?= $(shell cat logs/.rtlbinary)
+annotate: $(shell (ls logs/trace_hart_*.dasm 2>/dev/null | sed 's/\.dasm/\.s/') || echo "")
