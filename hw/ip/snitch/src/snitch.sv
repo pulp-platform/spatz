@@ -47,11 +47,12 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
   /// Data port request type.
   parameter type         dreq_t    = logic,
   /// Data port response type.
-  parameter type         drsp_t     = logic,
-  parameter type         acc_req_t  = logic,
-  parameter type         acc_resp_t = logic,
-  parameter type         pa_t       = logic,
-  parameter type         l0_pte_t   = logic,
+  parameter type         drsp_t          = logic,
+  parameter type         acc_issue_req_t = logic,
+  parameter type         acc_issue_rsp_t = logic,
+  parameter type         acc_rsp_t       = logic,
+  parameter type         pa_t            = logic,
+  parameter type         l0_pte_t        = logic,
   parameter int unsigned NumIntOutstandingLoads = 0,
   parameter int unsigned NumIntOutstandingMem = 0,
   parameter int unsigned NumDTLBEntries = 0,
@@ -81,12 +82,13 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
   /// Independent channels for transaction request and read completion.
   /// AXI-like handshaking.
   /// Same IDs need to be handled in-order.
-  output acc_req_t      acc_qreq_o,
-  output logic          acc_qvalid_o,
-  input  logic          acc_qready_i,
-  input  acc_resp_t     acc_prsp_i,
-  input  logic          acc_pvalid_i,
-  output logic          acc_pready_o,
+  output acc_issue_req_t acc_qreq_o,
+  input  acc_issue_rsp_t acc_qrsp_i,
+  output logic           acc_qvalid_o,
+  input  logic           acc_qready_i,
+  input  acc_rsp_t       acc_prsp_i,
+  input  logic           acc_pvalid_i,
+  output logic           acc_pready_o,
   // Accelerator finished a memory operation
   input  logic [1:0]    acc_mem_finished_i,
   // Accelerator finished a memory store operation
@@ -305,6 +307,8 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
     fpnew_pkg::status_t    fflags;
   } fcsr_t;
   fcsr_t fcsr_d, fcsr_q;
+  // Current instruction needs fcsr
+  logic read_fcsr;
 
   assign fpu_rnd_mode_o = fcsr_q.frm;
   assign fpu_fmt_mode_o = fcsr_q.fmode;
@@ -440,7 +444,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
                       & dst_ready
                       & ((itlb_valid & itlb_ready) | ~trans_active);
   // the accelerator interface stalled us
-  assign acc_stall = acc_qvalid_o & ~acc_qready_i;
+  assign acc_stall = (acc_qvalid_o & ~acc_qready_i) || (read_fcsr && acc_qrsp_i.isfloat);
   // the LSU Interface didn't accept our request yet
   assign lsu_stall = (lsu_tlb_qvalid & ~lsu_tlb_qready) || acc_mem_stall;
   // Stall the stage if we either didn't get a valid instruction or the LSU/Accelerator is not ready
@@ -2672,6 +2676,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
     fcsr_d.fflags = fcsr_q.fflags | fpu_status_i;
     fcsr_d.fmode.src = fcsr_q.fmode.src;
     fcsr_d.fmode.dst = fcsr_q.fmode.dst;
+    read_fcsr = 1'b0;
     scratch_d = scratch_q;
     epc_d = epc_q;
     cause_d = cause_q;
@@ -2875,24 +2880,28 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           CSR_FFLAGS: begin
             if (FP_EN) begin
               csr_rvalue = {27'b0, fcsr_q.fflags};
+              read_fcsr  = 1'b1;
               if (!exception) fcsr_d.fflags = fpnew_pkg::status_t'(alu_result[4:0]);
             end else illegal_csr = 1'b1;
           end
           CSR_FRM: begin
             if (FP_EN) begin
               csr_rvalue = {29'b0, fcsr_q.frm};
+              read_fcsr  = 1'b1;
               if (!exception) fcsr_d.frm = fpnew_pkg::roundmode_e'(alu_result[2:0]);
             end else illegal_csr = 1'b1;
           end
           CSR_FMODE: begin
             if (FP_EN) begin
               csr_rvalue = {30'b0, fcsr_q.fmode};
+              read_fcsr  = 1'b1;
               if (!exception) fcsr_d.fmode = fpnew_pkg::fmt_mode_t'(alu_result[1:0]);
             end else illegal_csr = 1'b1;
           end
           CSR_FCSR: begin
             if (FP_EN) begin
               csr_rvalue = {22'b0, fcsr_q};
+              read_fcsr  = 1'b1;
               if (!exception) fcsr_d = fcsr_t'(alu_result[9:0]);
             end else illegal_csr = 1'b1;
           end
@@ -3221,14 +3230,14 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
     acc_mem_cnt_d = acc_mem_cnt_q;
     acc_mem_str_cnt_d = acc_mem_str_cnt_q;
 
-    if (acc_prsp_i.loadstore && acc_qready_i && acc_qvalid_o)
+    if (acc_qrsp_i.loadstore && acc_qready_i && acc_qvalid_o)
       acc_mem_cnt_d += 1;
     if (acc_mem_finished_i[0])
       acc_mem_cnt_d -= 1;
     if (acc_mem_finished_i[1])
       acc_mem_cnt_d -= 1;
 
-    if (acc_prsp_i.loadstore && acc_qready_i && acc_qvalid_o && acc_mem_store)
+    if (acc_qrsp_i.loadstore && acc_qready_i && acc_qvalid_o && acc_mem_store)
       acc_mem_str_cnt_d += 1;
     if (acc_mem_finished_i[0] && acc_mem_str_finished_i[0])
       acc_mem_str_cnt_d -= 1;
