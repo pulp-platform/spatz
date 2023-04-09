@@ -186,7 +186,7 @@ module spatz_cluster
   localparam int unsigned NrWideMasters  = 3 + NrHives;
   localparam int unsigned WideIdWidthOut = $clog2(NrWideMasters) + AxiIdWidthIn;
   // DMA X-BAR configuration
-  localparam int unsigned NrWideSlaves   = 4;
+  localparam int unsigned NrWideSlaves   = 3;
 
   // AXI Configuration
   localparam axi_pkg::xbar_cfg_t ClusterXbarCfg = '{
@@ -218,7 +218,7 @@ module spatz_cluster
     UniqueIds         : 1'b0,
     AxiAddrWidth      : AxiAddrWidth,
     AxiDataWidth      : AxiDataWidth,
-    NoAddrRules       : 3,
+    NoAddrRules       : 2,
     default           : '0
   };
 
@@ -469,11 +469,6 @@ module spatz_cluster
       idx       : ZeroMemory,
       start_addr: zero_mem_start_address,
       end_addr  : zero_mem_end_address
-    },
-    '{
-      idx       : BootROM,
-      start_addr: BootAddr,
-      end_addr  : BootAddr + 'h1000
     }
   };
 
@@ -1034,41 +1029,6 @@ module spatz_cluster
     .dma_events_i             (dma_events            ),
     .icache_events_i          (icache_events         )
   );
-
-  // 3. BootROM
-  reg_dma_req_t bootrom_reg_req;
-  reg_dma_rsp_t bootrom_reg_rsp;
-
-  axi_to_reg #(
-    .ADDR_WIDTH         (AxiAddrWidth      ),
-    .DATA_WIDTH         (AxiDataWidth      ),
-    .AXI_MAX_WRITE_TXNS (1                 ),
-    .AXI_MAX_READ_TXNS  (1                 ),
-    .DECOUPLE_W         (0                 ),
-    .ID_WIDTH           (WideIdWidthOut    ),
-    .USER_WIDTH         (AxiUserWidth      ),
-    .axi_req_t          (axi_slv_dma_req_t ),
-    .axi_rsp_t          (axi_slv_dma_resp_t),
-    .reg_req_t          (reg_dma_req_t     ),
-    .reg_rsp_t          (reg_dma_rsp_t     )
-  ) i_bootrom_axi_to_reg (
-    .clk_i      (clk_i                    ),
-    .rst_ni     (rst_ni                   ),
-    .testmode_i (1'b0                     ),
-    .axi_req_i  (wide_axi_slv_req[BootROM]),
-    .axi_rsp_o  (wide_axi_slv_rsp[BootROM]),
-    .reg_req_o  (bootrom_reg_req          ),
-    .reg_rsp_i  (bootrom_reg_rsp          )
-  );
-
-  bootrom #(.AddrWidth(AxiAddrWidth)) i_bootrom (
-    .clk_i  (clk_i                ),
-    .addr_i (bootrom_reg_req.addr ),
-    .req_i  (bootrom_reg_req.valid),
-    .rdata_o(bootrom_reg_rsp.rdata)
-  );
-  assign bootrom_reg_rsp.error = 1'b0;
-  `FF(bootrom_reg_rsp.ready, bootrom_reg_req.valid, 1'b0)
 
   // Upsize the narrow SoC connection
   axi_dw_converter #(

@@ -43,15 +43,11 @@ test/bootrom.elf test/bootrom.dump test/bootrom.bin: test/bootrom.S test/bootrom
 	riscv -riscv64-gcc-9.5.0 riscv64-unknown-elf-objdump -D test/bootrom.elf > test/bootrom.dump
 	riscv -riscv64-gcc-9.5.0 riscv64-unknown-elf-objcopy -O binary test/bootrom.elf test/bootrom.bin
 
-.PHONY: src/bootrom.sv
-src/bootrom.sv: test/bootrom.bin
-	$(ROOT)/util/generate_bootrom.py test/bootrom.bin --sv --datawidth 512 --output src/bootrom
-
 #############
 # Verilator #
 #############
 
-${VLT_BUILDDIR}/verilate: src/bootrom.sv ${VLT_SOURCES} ${TB_SRCS}
+${VLT_BUILDDIR}/verilate: test/bootrom.bin ${VLT_SOURCES} ${TB_SRCS}
 	$(call VERILATE,tb_bin)
 
 # Quick sanity check, not really meant for simulation.
@@ -65,7 +61,7 @@ clean.vlt:
 # Modelsim #
 ############
 
-${VSIM_BUILDDIR}/compile.vsim.tcl: src/bootrom.sv $(VSIM_SOURCES) ${TB_SRCS} ${TB_DIR}/rtl_lib.cc ${TB_DIR}/common_lib.cc test/bootdata.cc test/bootrom.bin
+${VSIM_BUILDDIR}/compile.vsim.tcl: test/bootrom.bin $(VSIM_SOURCES) ${TB_SRCS} ${TB_DIR}/rtl_lib.cc ${TB_DIR}/common_lib.cc test/bootdata.cc test/bootrom.bin
 	vlib $(dir $@)
 	${BENDER} script vsim ${VSIM_BENDER} ${DEFS} --vlog-arg="${VLOG_FLAGS} -work $(dir $@) " > $@
 	echo '${VLOG} -work $(dir $@) ${TB_DIR}/rtl_lib.cc ${TB_DIR}/common_lib.cc test/bootdata.cc -ccflags "-std=c++14 -I${MKFILE_DIR}/test -I${MKFILE_DIR}/work/include -I${TB_DIR}"' >> $@
@@ -83,7 +79,7 @@ clean.vsim:
 #######
 # @IIS: vcs-2020.12 make bin/spatz_cluster.vcs
 ## Build compilation script and compile all sources for VCS simulation
-bin/spatz_cluster.vcs: src/bootrom.sv work-vcs/compile.sh work/lib/libfesvr.a ${TB_DIR}/common_lib.cc test/bootdata.cc test/bootrom.bin test/uartdpi/uartdpi.c
+bin/spatz_cluster.vcs: test/bootrom.bin work-vcs/compile.sh work/lib/libfesvr.a ${TB_DIR}/common_lib.cc test/bootdata.cc test/bootrom.bin test/uartdpi/uartdpi.c
 	mkdir -p bin
 	vcs -Mlib=work-vcs -Mdir=work-vcs -debug_access+all -fgp -kdb +vcs+fsdbon -o bin/spatz_cluster.vcs -cc $(CC) -cpp $(CXX) \
 		-assert disable_cover -override_timescale=1ns/1ps -full64 tb_bin ${TB_DIR}/rtl_lib.cc ${TB_DIR}/common_lib.cc test/bootdata.cc test/uartdpi/uartdpi.c \
