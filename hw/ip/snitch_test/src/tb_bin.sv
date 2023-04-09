@@ -41,7 +41,12 @@ module tb_bin;
   // Start `fesvr`.
   initial begin
     automatic int exit_code;
-    while ((exit_code = fesvr_tick()) == 0) #200ns;
+    do begin
+      exit_code = fesvr_tick();
+
+      if (exit_code == 0)
+        #200ns;
+    end while (1);
     exit_code >>= 1;
     if (exit_code > 0) begin
       $error("[FAILURE] Finished with exit code %2d", exit_code);
