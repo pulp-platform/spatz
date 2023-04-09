@@ -608,19 +608,6 @@ module spatz_cluster import spatz_pkg::*; import fpnew_pkg::fpu_implementation_t
       strb_t mem_be;
       data_t mem_rdata, mem_wdata;
 
-      // Clock gate the SRAM
-      logic mem_clk;
-
-      logic mem_cs_q;
-      `FF(mem_cs_q, mem_cs, 1'b0)
-
-      tc_clk_gating i_ckg (
-        .clk_i    (clk_i             ),
-        .test_en_i(1'b0              ),
-        .en_i     (mem_cs || mem_cs_q),
-        .clk_o    (mem_clk           )
-      );
-
       tc_sram_impl #(
         .NumWords  (TCDMDepth),
         .DataWidth (DataWidth),
@@ -628,7 +615,7 @@ module spatz_cluster import spatz_pkg::*; import fpnew_pkg::fpu_implementation_t
         .NumPorts  (1        ),
         .Latency   (1        )
       ) i_data_mem (
-        .clk_i   (mem_clk     ),
+        .clk_i   (clk_i       ),
         .rst_ni  (rst_ni      ),
         .impl_i  ('0          ),
         .impl_o  (/* Unused */),
