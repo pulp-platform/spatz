@@ -14,33 +14,31 @@ module spatz_vfu
   import cf_math_pkg::idx_width;
   import fpnew_pkg::*; #(
     /// FPU configuration.
-    parameter fpu_implementation_t FPUImplementation = fpu_implementation_t'(0),
-    // Spatz interface
-    parameter type                 spatz_issue_req_t = logic
+    parameter fpu_implementation_t FPUImplementation = fpu_implementation_t'(0)
   ) (
-    input  logic                   clk_i,
-    input  logic                   rst_ni,
+    input  logic             clk_i,
+    input  logic             rst_ni,
     // Spatz req
-    input  spatz_issue_req_t       spatz_req_i,
-    input  logic                   spatz_req_valid_i,
-    output logic                   spatz_req_ready_o,
+    input  spatz_req_t       spatz_req_i,
+    input  logic             spatz_req_valid_i,
+    output logic             spatz_req_ready_o,
     // VFU response
-    output logic                   vfu_rsp_valid_o,
-    input  logic                   vfu_rsp_ready_i,
-    output vfu_rsp_t               vfu_rsp_o,
+    output logic             vfu_rsp_valid_o,
+    input  logic             vfu_rsp_ready_i,
+    output vfu_rsp_t         vfu_rsp_o,
     // VRF
-    output vrf_addr_t              vrf_waddr_o,
-    output vrf_data_t              vrf_wdata_o,
-    output logic                   vrf_we_o,
-    output vrf_be_t                vrf_wbe_o,
-    input  logic                   vrf_wvalid_i,
-    output spatz_id_t        [3:0] vrf_id_o,
-    output vrf_addr_t        [2:0] vrf_raddr_o,
-    output logic             [2:0] vrf_re_o,
-    input  vrf_data_t        [2:0] vrf_rdata_i,
-    input  logic             [2:0] vrf_rvalid_i,
+    output vrf_addr_t        vrf_waddr_o,
+    output vrf_data_t        vrf_wdata_o,
+    output logic             vrf_we_o,
+    output vrf_be_t          vrf_wbe_o,
+    input  logic             vrf_wvalid_i,
+    output spatz_id_t  [3:0] vrf_id_o,
+    output vrf_addr_t  [2:0] vrf_raddr_o,
+    output logic       [2:0] vrf_re_o,
+    input  vrf_data_t  [2:0] vrf_rdata_i,
+    input  logic       [2:0] vrf_rvalid_i,
     // FPU side channel
-    output status_t                fpu_status_o
+    output status_t          fpu_status_o
   );
 
 // Include FF
@@ -962,7 +960,7 @@ module spatz_vfu
       `FFL(fpu_op_mode_q, fpu_op_mode, int_fpu_in_valid && int_fpu_in_ready, 1'b0)
       `FFL(fpu_vectorial_op_q, fpu_vectorial_op, int_fpu_in_valid && int_fpu_in_ready, 1'b0)
       `FFL(rm_q, spatz_req.rm, int_fpu_in_valid && int_fpu_in_ready, fpnew_pkg::RNE)
-      `FFL(input_tag_q, input_tag, int_fpu_in_valid && int_fpu_in_ready, '{default: '0})
+      `FFL(input_tag_q, input_tag, int_fpu_in_valid && int_fpu_in_ready, '{vsew: EW_8, default: '0})
       `FFL(fpu_in_valid_q, int_fpu_in_valid, int_fpu_in_ready, 1'b0)
       assign int_fpu_in_ready = !fpu_in_valid_q || fpu_in_valid_q && fpu_in_ready_d;
 

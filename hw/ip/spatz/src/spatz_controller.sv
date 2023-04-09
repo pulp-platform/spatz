@@ -33,7 +33,7 @@ module spatz_controller
     input  roundmode_e                             fpu_rnd_mode_i,
     // Spatz request
     output logic                                   spatz_req_valid_o,
-    output spatz_issue_req_t                       spatz_req_o,
+    output spatz_req_t                             spatz_req_o,
     // VFU
     input  logic                                   vfu_req_ready_i,
     input  logic                                   vfu_rsp_valid_i,
@@ -62,9 +62,9 @@ module spatz_controller
   /////////////
 
   // Spatz request
-  spatz_issue_req_t spatz_req;
-  logic             spatz_req_valid;
-  logic             spatz_req_illegal;
+  spatz_req_t spatz_req;
+  logic       spatz_req_valid;
+  logic       spatz_req_illegal;
 
   //////////
   // CSRs //
@@ -88,17 +88,17 @@ module spatz_controller
 
     if (spatz_req_valid) begin
       // Reset vstart to zero if we have a new non CSR operation
-      if (spatz_req.op_cgf.reset_vstart)
+      if (spatz_req.op_cfg.reset_vstart)
         vstart_d = '0;
 
       // Set new vstart if we have a VCSR instruction
       // that accesses the vstart register.
       if (spatz_req.op == VCSR) begin
-        if (spatz_req.op_cgf.write_vstart) begin
+        if (spatz_req.op_cfg.write_vstart) begin
           vstart_d = vlen_t'(spatz_req.rs1);
-        end else if (spatz_req.op_cgf.set_vstart) begin
+        end else if (spatz_req.op_cfg.set_vstart) begin
           vstart_d = vstart_q | vlen_t'(spatz_req.rs1);
-        end else if (spatz_req.op_cgf.clear_vstart) begin
+        end else if (spatz_req.op_cfg.clear_vstart) begin
           vstart_d = vstart_q & ~vlen_t'(spatz_req.rs1);
         end
       end
@@ -115,7 +115,7 @@ module spatz_controller
 
           // Set new vtype
           vtype_d = spatz_req.vtype;
-          if (!spatz_req.op_cgf.keep_vl) begin
+          if (!spatz_req.op_cfg.keep_vl) begin
             // Normal stripmining mode or set to MAXVL
             vlmax = VLENB >> spatz_req.vtype.vsew;
 
@@ -175,13 +175,10 @@ module spatz_controller
 
     // Decode new instruction if one is received and spatz is ready
     if (issue_valid_i && issue_ready_o) begin
-      decoder_req.instr     = issue_req_i.instr;
-      decoder_req.rs1       = issue_req_i.rs[0];
-      decoder_req.rs1_valid = issue_req_i.rs_valid[0];
-      decoder_req.rs2       = issue_req_i.rs[1];
-      decoder_req.rs2_valid = issue_req_i.rs_valid[1];
-      decoder_req.rsd       = issue_req_i.rs[2];
-      decoder_req.rsd_valid = issue_req_i.rs_valid[2];
+      decoder_req.instr     = issue_req_i.data_op;
+      decoder_req.rs1       = issue_req_i.data_arga;
+      decoder_req.rs2       = issue_req_i.data_argb;
+      decoder_req.rsd       = issue_req_i.data_argc;
       decoder_req.rd        = issue_req_i.id;
       decoder_req_valid     = 1'b1;
     end
@@ -192,13 +189,13 @@ module spatz_controller
   ////////////////////
 
   // Spatz request
-  spatz_issue_req_t buffer_spatz_req;
+  spatz_req_t buffer_spatz_req;
   // Buffer state signals
-  logic             req_buffer_ready, req_buffer_valid, req_buffer_pop;
+  logic       req_buffer_ready, req_buffer_valid, req_buffer_pop;
 
   // One element wide instruction buffer
   fall_through_register #(
-    .T(spatz_issue_req_t)
+    .T(spatz_req_t)
   ) i_req_buffer (
     .clk_i     (clk_i                ),
     .rst_ni    (rst_ni               ),
@@ -468,7 +465,7 @@ module spatz_controller
     issue_rsp_o = '0;
 
     // Is there something running on Spatz? If so, prevent Snitch from reading the fcsr register
-    issue_rsp_o.float = |running_insn_q;
+    issue_rsp_o.isfloat = |running_insn_q;
 
     // We have a new valid instruction
     if (decoder_rsp_valid && !decoder_rsp.instr_illegal) begin
@@ -551,19 +548,16 @@ module spatz_controller
           endcase
         end
         rsp_o.id    = spatz_req.rd;
-        rsp_o.we    = 1'b1;
         rsp_valid_o = 1'b1;
       end else begin
         // Change configuration and send back vl
         rsp_o.id    = spatz_req.rd;
         rsp_o.data  = elen_t'(vl_d);
-        rsp_o.we    = 1'b1;
         rsp_valid_o = 1'b1;
       end
     end else if (vfu_rsp_valid) begin
       rsp_o.id      = vfu_rsp.rd;
       rsp_o.data    = vfu_rsp.result;
-      rsp_o.we      = 1'b1;
       rsp_valid_o   = 1'b1;
       vfu_rsp_ready = 1'b1;
     end

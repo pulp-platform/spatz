@@ -1,1 +1,0 @@
-../../snitch/src/riscv_instr.sv

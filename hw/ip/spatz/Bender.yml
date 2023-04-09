@@ -9,15 +9,17 @@ dependencies:
   tech_cells_generic: { git: "https://github.com/pulp-platform/tech_cells_generic.git", version: 0.2.11                }
   FPnew:              { git: "https://github.com/openhwgroup/cvfpu.git",                rev:     feature/expanding_dotp}
 
+  snitch:           { path: ../snitch           }
+  reqrsp_interface: { path: ../reqrsp_interface }
+
 sources:
   files:
     # Level 0
     - src/reorder_buffer.sv
-    - src/riscv_instr.sv
     - src/rvv_pkg.sv
     # Level 1
-    - src/serdiv.sv
     - src/spatz_pkg.sv
+    - src/serdiv.sv
     # Level 2
     - src/spatz_decoder.sv
     - src/spatz_simd_lane.sv

@@ -9,30 +9,27 @@
 module spatz_vsldu
   import spatz_pkg::*;
   import rvv_pkg::*;
-  import cf_math_pkg::idx_width; #(
-    // Spatz interface
-    parameter type spatz_issue_req_t = logic
-  ) (
-    input  logic                   clk_i,
-    input  logic                   rst_ni,
+  import cf_math_pkg::idx_width; (
+    input  logic             clk_i,
+    input  logic             rst_ni,
     // Spatz request
-    input  spatz_issue_req_t       spatz_req_i,
-    input  logic                   spatz_req_valid_i,
-    output logic                   spatz_req_ready_o,
+    input  spatz_req_t       spatz_req_i,
+    input  logic             spatz_req_valid_i,
+    output logic             spatz_req_ready_o,
     // VSLDU response
-    output logic                   vsldu_rsp_valid_o,
-    output vsldu_rsp_t             vsldu_rsp_o,
+    output logic             vsldu_rsp_valid_o,
+    output vsldu_rsp_t       vsldu_rsp_o,
     // VRF interface
-    output vrf_addr_t              vrf_waddr_o,
-    output vrf_data_t              vrf_wdata_o,
-    output logic                   vrf_we_o,
-    output vrf_be_t                vrf_wbe_o,
-    input  logic                   vrf_wvalid_i,
-    output spatz_id_t        [1:0] vrf_id_o,
-    output vrf_addr_t              vrf_raddr_o,
-    output logic                   vrf_re_o,
-    input  vrf_data_t              vrf_rdata_i,
-    input  logic                   vrf_rvalid_i
+    output vrf_addr_t        vrf_waddr_o,
+    output vrf_data_t        vrf_wdata_o,
+    output logic             vrf_we_o,
+    output vrf_be_t          vrf_wbe_o,
+    input  logic             vrf_wvalid_i,
+    output spatz_id_t  [1:0] vrf_id_o,
+    output vrf_addr_t        vrf_raddr_o,
+    output logic             vrf_re_o,
+    input  vrf_data_t        vrf_rdata_i,
+    input  logic             vrf_rvalid_i
   );
 
 // Include FF

@@ -213,7 +213,7 @@ package spatz_pkg;
     ex_unit_e ex_unit;
 
     // Operation specific details
-    op_cfg_t op_cgf;
+    op_cfg_t op_cfg;
     op_csr_t op_csr;
     op_arith_t op_arith;
     op_mem_t op_mem;

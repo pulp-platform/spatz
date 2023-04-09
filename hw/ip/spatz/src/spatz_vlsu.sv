@@ -13,45 +13,42 @@ module spatz_vlsu
   import cf_math_pkg::idx_width; #(
     parameter                NrMemPorts         = 1,
     parameter                NrOutstandingLoads = 8,
-    // Spatz interface
-    parameter  type          spatz_issue_req_t  = logic,
     // Memory request
     parameter  type          spatz_mem_req_t    = logic,
-    parameter  type          spatz_mem_resp_t   = logic,
+    parameter  type          spatz_mem_rsp_t    = logic,
     // Dependant parameters. DO NOT CHANGE!
     localparam int  unsigned IdWidth            = idx_width(NrOutstandingLoads)
   ) (
-    input  logic                              clk_i,
-    input  logic                              rst_ni,
+    input  logic                            clk_i,
+    input  logic                            rst_ni,
     // Spatz request
-    input  spatz_issue_req_t                  spatz_req_i,
-    input  logic                              spatz_req_valid_i,
-    output logic                              spatz_req_ready_o,
+    input  spatz_req_t                      spatz_req_i,
+    input  logic                            spatz_req_valid_i,
+    output logic                            spatz_req_ready_o,
     // VLSU response
-    output logic                              vlsu_rsp_valid_o,
-    output vlsu_rsp_t                         vlsu_rsp_o,
+    output logic                            vlsu_rsp_valid_o,
+    output vlsu_rsp_t                       vlsu_rsp_o,
     // Interface with the VRF
-    output vrf_addr_t                         vrf_waddr_o,
-    output vrf_data_t                         vrf_wdata_o,
-    output logic                              vrf_we_o,
-    output vrf_be_t                           vrf_wbe_o,
-    input  logic                              vrf_wvalid_i,
-    output spatz_id_t        [2:0]            vrf_id_o,
-    output vrf_addr_t        [1:0]            vrf_raddr_o,
-    output logic             [1:0]            vrf_re_o,
-    input  vrf_data_t        [1:0]            vrf_rdata_i,
-    input  logic             [1:0]            vrf_rvalid_i,
+    output vrf_addr_t                       vrf_waddr_o,
+    output vrf_data_t                       vrf_wdata_o,
+    output logic                            vrf_we_o,
+    output vrf_be_t                         vrf_wbe_o,
+    input  logic                            vrf_wvalid_i,
+    output spatz_id_t      [2:0]            vrf_id_o,
+    output vrf_addr_t      [1:0]            vrf_raddr_o,
+    output logic           [1:0]            vrf_re_o,
+    input  vrf_data_t      [1:0]            vrf_rdata_i,
+    input  logic           [1:0]            vrf_rvalid_i,
     // Memory Request
-    output spatz_mem_req_t   [NrMemPorts-1:0] spatz_mem_req_o,
-    output logic             [NrMemPorts-1:0] spatz_mem_req_valid_o,
-    input  logic             [NrMemPorts-1:0] spatz_mem_req_ready_i,
+    output spatz_mem_req_t [NrMemPorts-1:0] spatz_mem_req_o,
+    output logic           [NrMemPorts-1:0] spatz_mem_req_valid_o,
+    input  logic           [NrMemPorts-1:0] spatz_mem_req_ready_i,
     //  Memory Response
-    input  spatz_mem_resp_t  [NrMemPorts-1:0] spatz_mem_resp_i,
-    input  logic             [NrMemPorts-1:0] spatz_mem_resp_valid_i,
-    output logic             [NrMemPorts-1:0] spatz_mem_resp_ready_o,
+    input  spatz_mem_rsp_t [NrMemPorts-1:0] spatz_mem_rsp_i,
+    input  logic           [NrMemPorts-1:0] spatz_mem_rsp_valid_i,
     // Memory Finished
-    output logic                              spatz_mem_finished_o,
-    output logic                              spatz_mem_str_finished_o
+    output logic                            spatz_mem_finished_o,
+    output logic                            spatz_mem_str_finished_o
   );
 
 // Include FF
@@ -143,38 +140,34 @@ module spatz_vlsu
   typedef logic [int'(MAXEW)-1:0] addr_offset_t;
 
   elen_t [NrMemPorts-1:0] rob_wdata;
-  id_t   [NrMemPorts-1:0] rob_wid;
   logic  [NrMemPorts-1:0] rob_push;
   logic  [NrMemPorts-1:0] rob_rvalid;
   elen_t [NrMemPorts-1:0] rob_rdata;
   logic  [NrMemPorts-1:0] rob_pop;
-  id_t   [NrMemPorts-1:0] rob_rid;
-  logic  [NrMemPorts-1:0] rob_req_id;
-  id_t   [NrMemPorts-1:0] rob_id;
   logic  [NrMemPorts-1:0] rob_full;
   logic  [NrMemPorts-1:0] rob_empty;
 
   // The reorder buffer decouples the memory side from the register file side.
   // All elements from one side to the other go through it.
   for (genvar port = 0; port < NrMemPorts; port++) begin : gen_rob
-    reorder_buffer #(
-      .DataWidth(ELEN              ),
-      .NumWords (NrOutstandingLoads)
+    fifo_v3 #(
+      .DATA_WIDTH(ELEN              ),
+      .DEPTH     (NrOutstandingLoads)
     ) i_reorder_buffer (
-      .clk_i    (clk_i           ),
-      .rst_ni   (rst_ni          ),
-      .data_i   (rob_wdata[port] ),
-      .id_i     (rob_wid[port]   ),
-      .push_i   (rob_push[port]  ),
-      .data_o   (rob_rdata[port] ),
-      .valid_o  (rob_rvalid[port]),
-      .id_read_o(rob_rid[port]   ),
-      .pop_i    (rob_pop[port]   ),
-      .id_req_i (rob_req_id[port]),
-      .id_o     (rob_id[port]    ),
-      .full_o   (rob_full[port]  ),
-      .empty_o  (rob_empty[port] )
+      .clk_i     (clk_i           ),
+      .rst_ni    (rst_ni          ),
+      .flush_i   (1'b0            ),
+      .testmode_i(1'b0            ),
+      .data_i    (rob_wdata[port] ),
+      .push_i    (rob_push[port]  ),
+      .data_o    (rob_rdata[port] ),
+      .pop_i     (rob_pop[port]   ),
+      .full_o    (rob_full[port]  ),
+      .empty_o   (rob_empty[port] ),
+      .usage_o   (/* Unused */    )
     );
+
+    assign rob_rvalid[port] = !rob_empty[port];
   end: gen_rob
 
   //////////////////////
@@ -544,7 +537,7 @@ module spatz_vlsu
 
   // Do we need to catch up to reach element idx parity? (Because of non-zero vstart)
   vlen_t vreg_start_0;
-  assign vreg_start_0 = commit_insn_q.vstart[$clog2(ELENB)-1:0];
+  assign vreg_start_0 = vlen_t'(commit_insn_q.vstart[$clog2(ELENB)-1:0]);
   logic [N_FU-1:0] catchup;
   for (genvar i = 0; i < N_FU; i++) begin: gen_catchup
     assign catchup[i] = (commit_counter_q[i] < vreg_start_0) & (commit_counter_max[i] != commit_counter_q[i]);
@@ -572,7 +565,7 @@ module spatz_vlsu
         commit_counter_d[fu] += commit_insn_q.vstart[$clog2(ELENB)-1:0];
       commit_operation_valid[fu] = commit_insn_valid && (commit_counter_q[fu] != max_elements) && (catchup[fu] || (!catchup[fu] && ~|catchup));
       commit_operation_last[fu]  = commit_operation_valid[fu] && ((max_elements - commit_counter_q[fu]) <= (commit_is_single_element_operation ? commit_single_element_size : ELENB));
-      commit_counter_delta[fu]   = !commit_operation_valid[fu] ? 'd0 : commit_is_single_element_operation ? commit_single_element_size : commit_operation_last[fu] ? (max_elements - commit_counter_q[fu]) : ELENB;
+      commit_counter_delta[fu]   = !commit_operation_valid[fu] ? vlen_t'('d0) : commit_is_single_element_operation ? vlen_t'(commit_single_element_size) : commit_operation_last[fu] ? (max_elements - commit_counter_q[fu]) : vlen_t'(ELENB);
       commit_counter_en[fu]      = commit_operation_valid[fu] && (commit_insn_q.is_load && vrf_req_valid_d && vrf_req_ready_d) || (!commit_insn_q.is_load && vrf_rvalid_i[0] && vrf_re_o[0]);
       commit_counter_max[fu]     = max_elements;
     end
@@ -648,7 +641,6 @@ module spatz_vlsu
   logic [NrMemPorts-1:0]                   mem_req_svalid;
   logic [NrMemPorts-1:0][ELEN/8-1:0]       mem_req_strb;
   logic [NrMemPorts-1:0]                   mem_req_lvalid;
-  logic [NrMemPorts-1:0]                   mem_req_last;
 
   // Number of pending requests
   id_t  [NrMemPorts-1:0] mem_pending_d, mem_pending_q;
@@ -678,21 +670,15 @@ module spatz_vlsu
     vrf_req_d       = '0;
     vrf_req_valid_d = 1'b0;
 
-    rob_wdata  = '0;
-    rob_wid    = '0;
-    rob_push   = '0;
-    rob_pop    = '0;
-    rob_req_id = '0;
+    rob_wdata = '0;
+    rob_push  = '0;
+    rob_pop   = '0;
 
     mem_req_id     = '0;
     mem_req_data   = '0;
     mem_req_strb   = '0;
     mem_req_svalid = '0;
     mem_req_lvalid = '0;
-    mem_req_last   = '0;
-
-    // Always ready
-    spatz_mem_resp_ready_o = '1;
 
     // Propagate request ID
     vrf_req_d.rsp.id    = commit_insn_q.id;
@@ -782,16 +768,11 @@ module spatz_vlsu
 
       for (int unsigned port = 0; port < NrMemPorts; port++) begin
         // Write the load result to the buffer
-        rob_wdata[port] = spatz_mem_resp_i[port].rdata;
-        rob_wid[port]   = spatz_mem_resp_i[port].id;
-        rob_push[port]  = spatz_mem_resp_valid_i[port];
+        rob_wdata[port] = spatz_mem_rsp_i[port].data;
+        rob_push[port]  = spatz_mem_rsp_valid_i[port];
 
-        if (!rob_full[port] && mem_operation_valid[port]) begin
-          rob_req_id[port]     = spatz_mem_req_ready[port] & spatz_mem_req_valid[port];
+        if (!rob_full[port] && mem_operation_valid[port])
           mem_req_lvalid[port] = (!mem_is_indexed || (vrf_rvalid_i[1] && !pending_index[port])) && mem_spatz_req.op_mem.is_load;
-          mem_req_id[port]     = rob_id[port];
-          mem_req_last[port]   = mem_operation_last[port];
-        end
       end
     // Store operation
     end else begin
@@ -800,10 +781,8 @@ module spatz_vlsu
         vrf_re_o[0] = 1'b1;
 
         for (int unsigned port = 0; port < NrMemPorts; port++) begin
-          rob_wdata[port]  = vrf_rdata_i[0][ELEN*port +: ELEN];
-          rob_wid[port]    = rob_id[port];
-          rob_req_id[port] = vrf_rvalid_i[0] && (!mem_is_indexed || vrf_rvalid_i[1]);
-          rob_push[port]   = rob_req_id[port];
+          rob_wdata[port] = vrf_rdata_i[0][ELEN*port +: ELEN];
+          rob_push[port]  = vrf_rvalid_i[0] && (!mem_is_indexed || vrf_rvalid_i[1]);
         end
       end
 
@@ -854,9 +833,7 @@ module spatz_vlsu
             endcase
 
           mem_req_svalid[port] = rob_rvalid[port] && (!mem_is_indexed || (vrf_rvalid_i[1] && !pending_index[port])) && !mem_spatz_req.op_mem.is_load;
-          mem_req_id[port]     = rob_rid[port];
-          mem_req_last[port]   = mem_operation_last[port];
-          rob_pop[port]        = spatz_mem_req_ready[port] && spatz_mem_req_valid[port];
+          rob_pop[port]        = spatz_mem_req_valid_o[port] && spatz_mem_req_ready_i[port];
 
           // Create byte enable signal for memory request
           if (mem_is_single_element_operation) begin
@@ -896,15 +873,12 @@ module spatz_vlsu
       .ready_i (spatz_mem_req_ready_i[port])
     );
 
-    assign spatz_mem_req[port].id    = mem_req_id[port];
     assign spatz_mem_req[port].addr  = mem_req_addr[port];
-    assign spatz_mem_req[port].mode  = '0; // Request always uses user privilege level
-    assign spatz_mem_req[port].size  = mem_spatz_req.vtype.vsew[1:0];
-    assign spatz_mem_req[port].we    = !mem_is_load;
+    assign spatz_mem_req[port].write = !mem_is_load;
+    assign spatz_mem_req[port].amo   = reqrsp_pkg::AMONone;
+    assign spatz_mem_req[port].data  = mem_req_data[port];
     assign spatz_mem_req[port].strb  = mem_req_strb[port];
-    assign spatz_mem_req[port].wdata = mem_req_data[port];
-    assign spatz_mem_req[port].last  = mem_req_last[port];
-    assign spatz_mem_req[port].spec  = 1'b0; // Request is never speculative
+    assign spatz_mem_req[port].user  = '0;
     assign spatz_mem_req_valid[port] = mem_req_svalid[port] || mem_req_lvalid[port];
   end
 

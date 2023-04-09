@@ -11,7 +11,7 @@ module spatz_fpu_sequencer
   import reqrsp_pkg::*; #(
     // Memory request
     parameter type spatz_mem_req_t   = logic,
-    parameter type spatz_mem_resp_t  = logic,
+    parameter type spatz_mem_rsp_t   = logic,
     // Snitch interface
     parameter type spatz_issue_req_t = logic,
     parameter type spatz_issue_rsp_t = logic,
@@ -41,7 +41,10 @@ module spatz_fpu_sequencer
     output logic             resp_ready_o,
     // Memory interface
     output spatz_mem_req_t   fp_lsu_mem_req_o,
-    input  spatz_mem_resp_t  fp_lsu_mem_resp_i,
+    output logic             fp_lsu_mem_req_valid_o,
+    input  logic             fp_lsu_mem_req_ready_i,
+    input  spatz_mem_rsp_t   fp_lsu_mem_rsp_i,
+    input  logic             fp_lsu_mem_rsp_valid_i,
     output logic             fp_lsu_mem_finished_o,
     output logic             fp_lsu_mem_str_finished_o,
     // Spatz VLSU side channel
@@ -51,6 +54,7 @@ module spatz_fpu_sequencer
 
 `include "common_cells/registers.svh"
 `include "common_cells/assertions.svh"
+`include "reqrsp_interface/typedef.svh"
 
   // Capture requests that read and write to the scalar floating-point register file
 
@@ -62,10 +66,10 @@ module spatz_fpu_sequencer
   localparam int unsigned FPRRegWidth = cf_math_pkg::idx_width(NrFPReg);
 
   logic [FPRRegWidth-1:0] fd, fs1, fs2, fs3;
-  assign fd  = issue_req_i.instr[7 + FPRRegWidth - 1:7];
-  assign fs1 = issue_req_i.instr[15 + FPRRegWidth - 1:15];
-  assign fs2 = issue_req_i.instr[20 + FPRRegWidth - 1:20];
-  assign fs3 = issue_req_i.instr[27 + FPRRegWidth - 1:27];
+  assign fd  = issue_req_i.data_op[7 + FPRRegWidth - 1:7];
+  assign fs1 = issue_req_i.data_op[15 + FPRRegWidth - 1:15];
+  assign fs2 = issue_req_i.data_op[20 + FPRRegWidth - 1:20];
+  assign fs3 = issue_req_i.data_op[27 + FPRRegWidth - 1:27];
 
   /////////////////////
   //  Register File  //
@@ -179,7 +183,7 @@ module spatz_fpu_sequencer
     illegal_inst = 1'b0;
 
     if (issue_valid_i)
-      unique casez (issue_req_i.instr)
+      unique casez (issue_req_i.data_op)
         // Byte Precision Floating-Point
         riscv_instr::FADD_B,
         riscv_instr::FSUB_B,
@@ -205,11 +209,11 @@ module spatz_fpu_sequencer
         riscv_instr::FNMADD_B,
         riscv_instr::FCVT_B_H,
         riscv_instr::FCVT_H_B: begin
-          if (RVF && (!(issue_req_i.instr inside {riscv_instr::FDIV_B, riscv_instr::FSQRT_B}) || FDivSqrt)) begin
-            use_fs1 = !(issue_req_i.instr inside {riscv_instr::FCVT_B_W, riscv_instr::FCVT_B_WU});
-            use_fs2 = !(issue_req_i.instr inside {riscv_instr::FCLASS_B});
-            use_fs3 = issue_req_i.instr inside {riscv_instr::FMADD_B, riscv_instr::FMSUB_B, riscv_instr::FNMSUB_B, riscv_instr::FNMADD_B};
-            use_fd  = !(issue_req_i.instr inside {riscv_instr::FCLASS_B, riscv_instr::FLE_B, riscv_instr::FLT_B, riscv_instr::FEQ_B, riscv_instr::FCVT_W_B, riscv_instr::FCVT_WU_B});
+          if (RVF && (!(issue_req_i.data_op inside {riscv_instr::FDIV_B, riscv_instr::FSQRT_B}) || FDivSqrt)) begin
+            use_fs1 = !(issue_req_i.data_op inside {riscv_instr::FCVT_B_W, riscv_instr::FCVT_B_WU});
+            use_fs2 = !(issue_req_i.data_op inside {riscv_instr::FCLASS_B});
+            use_fs3 = issue_req_i.data_op inside {riscv_instr::FMADD_B, riscv_instr::FMSUB_B, riscv_instr::FNMSUB_B, riscv_instr::FNMADD_B};
+            use_fd  = !(issue_req_i.data_op inside {riscv_instr::FCLASS_B, riscv_instr::FLE_B, riscv_instr::FLT_B, riscv_instr::FEQ_B, riscv_instr::FCVT_W_B, riscv_instr::FCVT_WU_B});
           end else begin
             illegal_inst = 1'b1;
           end
@@ -257,11 +261,11 @@ module spatz_fpu_sequencer
         riscv_instr::FNMADD_H,
         riscv_instr::FCVT_H_S,
         riscv_instr::FCVT_S_H: begin
-          if (RVF && (!(issue_req_i.instr inside {riscv_instr::FDIV_H, riscv_instr::FSQRT_H}) || FDivSqrt)) begin
-            use_fs1 = !(issue_req_i.instr inside {riscv_instr::FCVT_H_W, riscv_instr::FCVT_H_WU});
-            use_fs2 = !(issue_req_i.instr inside {riscv_instr::FCLASS_H});
-            use_fs3 = issue_req_i.instr inside {riscv_instr::FMADD_H, riscv_instr::FMSUB_H, riscv_instr::FNMSUB_H, riscv_instr::FNMADD_H};
-            use_fd  = !(issue_req_i.instr inside {riscv_instr::FCLASS_H, riscv_instr::FLE_H, riscv_instr::FLT_H, riscv_instr::FEQ_H, riscv_instr::FCVT_W_H, riscv_instr::FCVT_WU_H});
+          if (RVF && (!(issue_req_i.data_op inside {riscv_instr::FDIV_H, riscv_instr::FSQRT_H}) || FDivSqrt)) begin
+            use_fs1 = !(issue_req_i.data_op inside {riscv_instr::FCVT_H_W, riscv_instr::FCVT_H_WU});
+            use_fs2 = !(issue_req_i.data_op inside {riscv_instr::FCLASS_H});
+            use_fs3 = issue_req_i.data_op inside {riscv_instr::FMADD_H, riscv_instr::FMSUB_H, riscv_instr::FNMSUB_H, riscv_instr::FNMADD_H};
+            use_fd  = !(issue_req_i.data_op inside {riscv_instr::FCLASS_H, riscv_instr::FLE_H, riscv_instr::FLT_H, riscv_instr::FEQ_H, riscv_instr::FCVT_W_H, riscv_instr::FCVT_WU_H});
           end else begin
             illegal_inst = 1'b1;
           end
@@ -309,11 +313,11 @@ module spatz_fpu_sequencer
         riscv_instr::FNMADD_S,
         riscv_instr::FCVT_S_D,
         riscv_instr::FCVT_D_S: begin
-          if (RVF && (!(issue_req_i.instr inside {riscv_instr::FDIV_S, riscv_instr::FSQRT_S}) || FDivSqrt)) begin
-            use_fs1 = !(issue_req_i.instr inside {riscv_instr::FCVT_S_W, riscv_instr::FCVT_S_WU});
-            use_fs2 = !(issue_req_i.instr inside {riscv_instr::FCLASS_S});
-            use_fs3 = issue_req_i.instr inside {riscv_instr::FMADD_S, riscv_instr::FMSUB_S, riscv_instr::FNMSUB_S, riscv_instr::FNMADD_S};
-            use_fd  = !(issue_req_i.instr inside {riscv_instr::FCLASS_S, riscv_instr::FLE_S, riscv_instr::FLT_S, riscv_instr::FEQ_S, riscv_instr::FCVT_W_S, riscv_instr::FCVT_WU_S});
+          if (RVF && (!(issue_req_i.data_op inside {riscv_instr::FDIV_S, riscv_instr::FSQRT_S}) || FDivSqrt)) begin
+            use_fs1 = !(issue_req_i.data_op inside {riscv_instr::FCVT_S_W, riscv_instr::FCVT_S_WU});
+            use_fs2 = !(issue_req_i.data_op inside {riscv_instr::FCLASS_S});
+            use_fs3 = issue_req_i.data_op inside {riscv_instr::FMADD_S, riscv_instr::FMSUB_S, riscv_instr::FNMSUB_S, riscv_instr::FNMADD_S};
+            use_fd  = !(issue_req_i.data_op inside {riscv_instr::FCLASS_S, riscv_instr::FLE_S, riscv_instr::FLT_S, riscv_instr::FEQ_S, riscv_instr::FCVT_W_S, riscv_instr::FCVT_WU_S});
           end else begin
             illegal_inst = 1'b1;
           end
@@ -359,11 +363,11 @@ module spatz_fpu_sequencer
         riscv_instr::FMSUB_D,
         riscv_instr::FNMSUB_D,
         riscv_instr::FNMADD_D: begin
-          if (RVD && (!(issue_req_i.instr inside {riscv_instr::FDIV_D, riscv_instr::FSQRT_D}) || FDivSqrt)) begin
-            use_fs1 = !(issue_req_i.instr inside {riscv_instr::FCVT_D_W, riscv_instr::FCVT_D_WU});
+          if (RVD && (!(issue_req_i.data_op inside {riscv_instr::FDIV_D, riscv_instr::FSQRT_D}) || FDivSqrt)) begin
+            use_fs1 = !(issue_req_i.data_op inside {riscv_instr::FCVT_D_W, riscv_instr::FCVT_D_WU});
             use_fs2 = 1'b1;
-            use_fs3 = issue_req_i.instr inside {riscv_instr::FMADD_D, riscv_instr::FMSUB_D, riscv_instr::FNMSUB_D, riscv_instr::FNMADD_D};
-            use_fd  = !(issue_req_i.instr inside {riscv_instr::FCLASS_D, riscv_instr::FLE_D, riscv_instr::FLT_D, riscv_instr::FEQ_D, riscv_instr::FCVT_W_D, riscv_instr::FCVT_WU_D});
+            use_fs3 = issue_req_i.data_op inside {riscv_instr::FMADD_D, riscv_instr::FMSUB_D, riscv_instr::FNMSUB_D, riscv_instr::FNMADD_D};
+            use_fd  = !(issue_req_i.data_op inside {riscv_instr::FCLASS_D, riscv_instr::FLE_D, riscv_instr::FLT_D, riscv_instr::FEQ_D, riscv_instr::FCVT_W_D, riscv_instr::FCVT_WU_D});
           end else begin
             illegal_inst = 1'b1;
           end
@@ -375,28 +379,28 @@ module spatz_fpu_sequencer
         riscv_instr::FLW,
         riscv_instr::FLD: begin
           use_fd = 1'b1;
-          unique casez (issue_req_i.instr)
+          unique casez (issue_req_i.data_op)
             riscv_instr::FLB: ls_size = Byte;
             riscv_instr::FLH: ls_size = HalfWord;
             riscv_instr::FLW: ls_size = Word;
             riscv_instr::FLD: if (RVD) ls_size = Double;
           endcase
           is_load      = 1'b1;
-          illegal_inst = !RVD && issue_req_i.instr inside {riscv_instr::FLD};
+          illegal_inst = !RVD && issue_req_i.data_op inside {riscv_instr::FLD};
         end
         riscv_instr::FSB,
         riscv_instr::FSH,
         riscv_instr::FSW,
         riscv_instr::FSD: begin
           use_fs2 = 1'b1;
-          unique casez (issue_req_i.instr)
+          unique casez (issue_req_i.data_op)
             riscv_instr::FSB: ls_size = Byte;
             riscv_instr::FSH: ls_size = HalfWord;
             riscv_instr::FSW: ls_size = Word;
             riscv_instr::FSD: if (RVD) ls_size = Double;
           endcase
           is_store     = 1'b1;
-          illegal_inst = !RVD && issue_req_i.instr inside {riscv_instr::FSD};
+          illegal_inst = !RVD && issue_req_i.data_op inside {riscv_instr::FSD};
         end
 
         // Vector instructions with FP scalar operand
@@ -458,11 +462,11 @@ module spatz_fpu_sequencer
 
     // Replace integer operands with FP operands, if needed
     if (use_fs1)
-      issue_req_o.rs[0] = fpr_rdata[0];
+      issue_req_o.data_arga = fpr_rdata[0];
     if (use_fs2)
-      issue_req_o.rs[1] = fpr_rdata[1];
+      issue_req_o.data_argb = fpr_rdata[1];
     if (use_fs3)
-      issue_req_o.rs[2] = fpr_rdata[2];
+      issue_req_o.data_argc = fpr_rdata[2];
 
     // Does this instruction write to the FPR?
     issue_req_o.id[5] = use_fd;
@@ -471,11 +475,11 @@ module spatz_fpu_sequencer
     if (!is_local)
       issue_rsp_o = issue_rsp_i;
     else
-      issue_rsp_o = '{
+      issue_rsp_o = spatz_issue_rsp_t'{
         accept   : use_rd,
         writeback: use_rd,
         loadstore: is_load | is_store,
-        exc      : illegal_inst,
+        exception: illegal_inst,
         default  : '0
       };
   end
@@ -499,35 +503,78 @@ module spatz_fpu_sequencer
   logic                 fp_lsu_pvalid;
   logic                 fp_lsu_pready;
 
+  typedef struct packed {
+    spatz_mem_req_t q;
+    logic q_valid;
+  } tcdm_req_t;
+
+  typedef struct packed {
+    spatz_mem_rsp_t p;
+    logic p_valid;
+    logic q_ready;
+  } tcdm_rsp_t;
+
+  `REQRSP_TYPEDEF_ALL(reqrsp, logic [AddrWidth-1:0], logic [DataWidth-1:0], logic [DataWidth/8-1:0])
+  reqrsp_req_t fp_lsu_mem_req;
+  reqrsp_rsp_t fp_lsu_mem_rsp;
+
   snitch_lsu #(
     .DataWidth          (FLEN               ),
     .NaNBox             (1                  ),
     .NumOutstandingLoads(NumOutstandingLoads),
-    .dreq_t             (spatz_mem_req_t    ),
-    .drsp_t             (spatz_mem_resp_t   )
+    .dreq_t             (reqrsp_req_t       ),
+    .drsp_t             (reqrsp_rsp_t       )
   ) i_fp_lsu (
-    .clk_i        (clk_i            ),
-    .rst_i        (~rst_ni          ),
+    .clk_i        (clk_i          ),
+    .rst_i        (~rst_ni        ),
     // Request interface
-    .lsu_qtag_i   (fp_lsu_qtag      ),
-    .lsu_qwrite_i (fp_lsu_qwrite    ),
-    .lsu_qsigned_i(fp_lsu_qsigned   ),
-    .lsu_qaddr_i  (fp_lsu_qaddr     ),
-    .lsu_qdata_i  (fp_lsu_qdata     ),
-    .lsu_qsize_i  (fp_lsu_qsize     ),
-    .lsu_qamo_i   (fp_lsu_qamo      ),
-    .lsu_qvalid_i (fp_lsu_qvalid    ),
-    .lsu_qready_o (fp_lsu_qready    ),
-    .lsu_empty_o  (/* Unused */     ),
+    .lsu_qtag_i   (fp_lsu_qtag    ),
+    .lsu_qwrite_i (fp_lsu_qwrite  ),
+    .lsu_qsigned_i(fp_lsu_qsigned ),
+    .lsu_qaddr_i  (fp_lsu_qaddr   ),
+    .lsu_qdata_i  (fp_lsu_qdata   ),
+    .lsu_qsize_i  (fp_lsu_qsize   ),
+    .lsu_qamo_i   (fp_lsu_qamo    ),
+    .lsu_qvalid_i (fp_lsu_qvalid  ),
+    .lsu_qready_o (fp_lsu_qready  ),
+    .lsu_empty_o  (/* Unused */   ),
     // Response interface
-    .lsu_pdata_o  (fp_lsu_pdata     ),
-    .lsu_ptag_o   (fp_lsu_ptag      ),
-    .lsu_perror_o (/* Unused */     ),
-    .lsu_pvalid_o (fp_lsu_pvalid    ),
-    .lsu_pready_i (fp_lsu_pready    ),
+    .lsu_pdata_o  (fp_lsu_pdata   ),
+    .lsu_ptag_o   (fp_lsu_ptag    ),
+    .lsu_perror_o (/* Unused */   ),
+    .lsu_pvalid_o (fp_lsu_pvalid  ),
+    .lsu_pready_i (fp_lsu_pready  ),
     // Memory interface
-    .data_req_o   (fp_lsu_mem_req_o ),
-    .data_rsp_i   (fp_lsu_mem_resp_i)
+    .data_req_o   (fp_lsu_mem_req ),
+    .data_rsp_i   (fp_lsu_mem_rsp )
+  );
+
+  tcdm_req_t fp_lsu_mem_req_int;
+  tcdm_rsp_t fp_lsu_mem_rsp_int;
+
+  assign fp_lsu_mem_req_o       = fp_lsu_mem_req_int.q;
+  assign fp_lsu_mem_req_valid_o = fp_lsu_mem_req_int.q_valid;
+  assign fp_lsu_mem_rsp_int     = '{
+    p      : fp_lsu_mem_rsp_i,
+    p_valid: fp_lsu_mem_rsp_valid_i,
+    q_ready: fp_lsu_mem_req_ready_i
+  };
+
+  reqrsp_to_tcdm #(
+    .AddrWidth    (AddrWidth   ),
+    .DataWidth    (DataWidth   ),
+    .BufDepth     (0           ),
+    .reqrsp_req_t (reqrsp_req_t),
+    .reqrsp_rsp_t (reqrsp_rsp_t),
+    .tcdm_req_t   (tcdm_req_t  ),
+    .tcdm_rsp_t   (tcdm_rsp_t  )
+  ) i_reqrsp_to_tcdm (
+    .clk_i        (clk_i             ),
+    .rst_ni       (rst_ni            ),
+    .reqrsp_req_i (fp_lsu_mem_req    ),
+    .reqrsp_rsp_o (fp_lsu_mem_rsp    ),
+    .tcdm_req_o   (fp_lsu_mem_req_int),
+    .tcdm_rsp_i   (fp_lsu_mem_rsp_int)
   );
 
   // Number of memory operations in the accelerator
@@ -540,7 +587,7 @@ module spatz_fpu_sequencer
 
   // Is the current instruction a vector store?
   logic is_vector_store;
-  assign is_vector_store = issue_req_i.instr inside
+  assign is_vector_store = issue_req_i.data_op inside
     {riscv_instr::VSE8_V, riscv_instr::VSE16_V, riscv_instr::VSE32_V, riscv_instr::VSE64_V,
     riscv_instr::VSSE8_V, riscv_instr::VSSE16_V, riscv_instr::VSSE32_V, riscv_instr::VSSE64_V,
     riscv_instr::VSOXEI8_V, riscv_instr::VSOXEI16_V, riscv_instr::VSOXEI32_V, riscv_instr::VSOXEI64_V,
@@ -554,7 +601,7 @@ module spatz_fpu_sequencer
     fp_lsu_qtag    = fd;
     fp_lsu_qwrite  = is_store;
     fp_lsu_qsigned = 1'b0;
-    fp_lsu_qaddr   = issue_req_i.rs[1];
+    fp_lsu_qaddr   = issue_req_i.data_argb;
     fp_lsu_qdata   = fpr_rdata[1];
     fp_lsu_qsize   = ls_size;
     fp_lsu_qamo    = AMONone;
@@ -642,10 +689,9 @@ module spatz_fpu_sequencer
     // Is there a move trying to commit during this cycle?
     move_stall = is_move && use_rd && !fp_move_result_ready_o;
     if (is_move && use_rd && operands_available) begin
-      fp_move_result_i = '{
+      fp_move_result_i = spatz_rsp_t'{
         id     : issue_req_i.id,
         data   : fpr_rdata[0],
-        we     : '1,
         default: '0
       };
       fp_move_result_valid_i = 1'b1;
@@ -693,7 +739,7 @@ module spatz_fpu_sequencer
     end
     // Commit moves to the RF
     else if (is_move && use_fd && !stall) begin
-      fpr_wdata[1] = issue_req_i.rs[0];
+      fpr_wdata[1] = issue_req_i.data_arga;
       fpr_waddr[1] = fd;
       fpr_we[1]    = 1'b1;
     end

@@ -17,7 +17,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     parameter int                  unsigned NrMemPorts          = 1,
     // Memory request
     parameter type                          spatz_mem_req_t     = logic,
-    parameter type                          spatz_mem_resp_t    = logic,
+    parameter type                          spatz_mem_rsp_t     = logic,
     // Snitch interface
     parameter type                          spatz_issue_req_t   = logic,
     parameter type                          spatz_issue_rsp_t   = logic,
@@ -41,15 +41,17 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     output spatz_mem_req_t   [NrMemPorts-1:0] spatz_mem_req_o,
     output logic             [NrMemPorts-1:0] spatz_mem_req_valid_o,
     input  logic             [NrMemPorts-1:0] spatz_mem_req_ready_i,
-    input  spatz_mem_resp_t  [NrMemPorts-1:0] spatz_mem_resp_i,
-    input  logic             [NrMemPorts-1:0] spatz_mem_resp_valid_i,
-    output logic             [NrMemPorts-1:0] spatz_mem_resp_ready_o,
+    input  spatz_mem_rsp_t   [NrMemPorts-1:0] spatz_mem_rsp_i,
+    input  logic             [NrMemPorts-1:0] spatz_mem_rsp_valid_i,
     // Memory Finished
     output logic             [1:0]            spatz_mem_finished_o,
     output logic             [1:0]            spatz_mem_str_finished_o,
     // FPU memory interface interface
     output spatz_mem_req_t                    fp_lsu_mem_req_o,
-    input  spatz_mem_resp_t                   fp_lsu_mem_resp_i,
+    output logic                              fp_lsu_mem_req_valid_o,
+    input  logic                              fp_lsu_mem_req_ready_i,
+    input  spatz_mem_rsp_t                    fp_lsu_mem_rsp_i,
+    input  logic                              fp_lsu_mem_rsp_valid_i,
     // FPU side channel
     input  roundmode_e                        fpu_rnd_mode_i,
     output status_t                           fpu_status_o
@@ -68,8 +70,8 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   /////////////
 
   // Spatz request
-  spatz_issue_req_t spatz_req;
-  logic             spatz_req_valid;
+  spatz_req_t spatz_req;
+  logic       spatz_req_valid;
 
   logic     vfu_req_ready;
   logic     vfu_rsp_ready;
@@ -117,14 +119,13 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
 
     // Tie the memory interface to zero
     assign fp_lsu_mem_req_o        = '0;
-    assign fp_lsu_mem_req_valid_o  = 1'b0;
-    assign fp_lsu_mem_resp_ready_o = 1'b0;
+    assign fp_lsu_mem_req_valid_o  = '0;
     assign fp_lsu_mem_finished     = 1'b0;
     assign fp_lsu_mem_str_finished = 1'b0;
   end: gen_no_fpu_sequencer else begin: gen_fpu_sequencer
     spatz_fpu_sequencer #(
       .spatz_mem_req_t    (spatz_mem_req_t     ),
-      .spatz_mem_resp_t   (spatz_mem_resp_t    ),
+      .spatz_mem_rsp_t    (spatz_mem_rsp_t     ),
       .spatz_issue_req_t  (spatz_issue_req_t   ),
       .spatz_issue_rsp_t  (spatz_issue_rsp_t   ),
       .spatz_rsp_t        (spatz_rsp_t         ),
@@ -150,7 +151,10 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
       .resp_ready_o             (resp_ready             ),
       // Memory interface
       .fp_lsu_mem_req_o         (fp_lsu_mem_req_o       ),
-      .fp_lsu_mem_resp_i        (fp_lsu_mem_resp_i      ),
+      .fp_lsu_mem_req_valid_o   (fp_lsu_mem_req_valid_o ),
+      .fp_lsu_mem_req_ready_i   (fp_lsu_mem_req_ready_i ),
+      .fp_lsu_mem_rsp_i         (fp_lsu_mem_rsp_i       ),
+      .fp_lsu_mem_rsp_valid_i   (fp_lsu_mem_rsp_valid_i ),
       .fp_lsu_mem_finished_o    (fp_lsu_mem_finished    ),
       .fp_lsu_mem_str_finished_o(fp_lsu_mem_str_finished),
       // Spatz VLSU side channel
@@ -250,8 +254,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   /////////
 
   spatz_vfu #(
-    .FPUImplementation(FPUImplementation),
-    .spatz_issue_req_t(spatz_issue_req_t)
+    .FPUImplementation(FPUImplementation)
   ) i_vfu (
     .clk_i            (clk_i                                                   ),
     .rst_ni           (rst_ni                                                  ),
@@ -283,10 +286,9 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   //////////
 
   spatz_vlsu #(
-    .NrMemPorts       (NrMemPorts       ),
-    .spatz_issue_req_t(spatz_issue_req_t),
-    .spatz_mem_req_t  (spatz_mem_req_t  ),
-    .spatz_mem_resp_t (spatz_mem_resp_t )
+    .NrMemPorts      (NrMemPorts      ),
+    .spatz_mem_req_t (spatz_mem_req_t ),
+    .spatz_mem_rsp_t (spatz_mem_rsp_t )
   ) i_vlsu (
     .clk_i                   (clk_i                                                ),
     .rst_ni                  (rst_ni                                               ),
@@ -308,13 +310,12 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     .vrf_rdata_i             (vrf_rdata[VLSU_VD_RD:VLSU_VS2_RD]                    ),
     .vrf_rvalid_i            (vrf_rvalid[VLSU_VD_RD:VLSU_VS2_RD]                   ),
     .vrf_id_o                ({sb_id[SB_VLSU_VD_WD], sb_id[VLSU_VD_RD:VLSU_VS2_RD]}),
-    // X-Interface Memory
+    // Interface Memory
     .spatz_mem_req_o         (spatz_mem_req_o                                      ),
     .spatz_mem_req_valid_o   (spatz_mem_req_valid_o                                ),
     .spatz_mem_req_ready_i   (spatz_mem_req_ready_i                                ),
-    .spatz_mem_resp_i        (spatz_mem_resp_i                                     ),
-    .spatz_mem_resp_valid_i  (spatz_mem_resp_valid_i                               ),
-    .spatz_mem_resp_ready_o  (spatz_mem_resp_ready_o                               ),
+    .spatz_mem_rsp_i         (spatz_mem_rsp_i                                      ),
+    .spatz_mem_rsp_valid_i   (spatz_mem_rsp_valid_i                                ),
     .spatz_mem_finished_o    (spatz_mem_finished                                   ),
     .spatz_mem_str_finished_o(spatz_mem_str_finished                               )
   );
@@ -323,9 +324,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   // VSLDU //
   ///////////
 
-  spatz_vsldu #(
-    .spatz_issue_req_t(spatz_issue_req_t)
-  ) i_vsldu (
+  spatz_vsldu i_vsldu (
     .clk_i            (clk_i                                          ),
     .rst_ni           (rst_ni                                         ),
     // Request

@@ -1638,18 +1638,18 @@ module spatz_decoder
             riscv_instr::CSRRWI:
               if (csr_addr == riscv_instr::CSR_VSTART) begin
                 spatz_req.use_rd              = csr_rd != '0;
-                spatz_req.op_cgf.write_vstart = 1'b1;
+                spatz_req.op_cfg.write_vstart = 1'b1;
               end
 
             riscv_instr::CSRRS,
             riscv_instr::CSRRSI:
               if (csr_addr == riscv_instr::CSR_VSTART)
-                spatz_req.op_cgf.set_vstart = csr_rs1 != '0;
+                spatz_req.op_cfg.set_vstart = csr_rs1 != '0;
 
             riscv_instr::CSRRC,
             riscv_instr::CSRRCI:
               if (csr_addr == riscv_instr::CSR_VSTART)
-                spatz_req.op_cgf.clear_vstart = csr_rs1 != '0;
+                spatz_req.op_cfg.clear_vstart = csr_rs1 != '0;
 
             default:
               illegal_instr = 1'b1;
@@ -1687,14 +1687,14 @@ module spatz_decoder
           // Set to maxvl or new desired value
           spatz_req.rs1            = (setvl_rs1 == 0 && setvl_rd != 0) ? '1 : spatz_req.rs1;
           // Keep vl
-          spatz_req.op_cgf.keep_vl = setvl_rs1 == '0 && setvl_rd == '0;
+          spatz_req.op_cfg.keep_vl = setvl_rs1 == '0 && setvl_rd == '0;
         end
 
         default: illegal_instr = 1'b1;
       endcase // Opcodes
 
       // Add correct reset_vstart value
-      spatz_req.op_cgf.reset_vstart = illegal_instr ? 1'b0 : reset_vstart;
+      spatz_req.op_cfg.reset_vstart = illegal_instr ? 1'b0 : reset_vstart;
       spatz_req.rd                  = decoder_req_i.rd;
     end // Instruction valid
   end : decoder
