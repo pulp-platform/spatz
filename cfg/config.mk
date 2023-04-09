@@ -36,6 +36,9 @@ n_fpu ?= 0
 # Number of words in each TCDM bank
 tcdm_bank_depth ?= 2048
 
+# Boot address (in dec)
+boot_addr ?= 4096
+
 # Deactivate single-precision (rvf) and double-precision (rvd) floating-point
 rvf ?= 0
 rvd ?= 0
