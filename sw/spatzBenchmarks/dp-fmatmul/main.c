@@ -72,31 +72,29 @@ int main() {
   // Set matrix dimension
   kernel_size = 4;
 
-  // Block dimension of group
-  const unsigned int dim_group = gemm_l.M / active_groups;
   // Number of parallel cores in m direction
-  const unsigned int split_m_count = dim_group / kernel_size;
+  const unsigned int split_m_count = gemm_l.M / kernel_size;
 
-  if (split_m_count < cores_per_group) {
+  if (split_m_count < num_cores) {
     // Split P dimension up
-    const unsigned int split_p_count = cores_per_group / split_m_count;
-    p_start = gemm_l.N / split_p_count * (core_gid % split_p_count);
-    p_end = gemm_l.N / split_p_count * ((core_gid % split_p_count) + 1);
-    m_start = dim_group * gid + kernel_size * (core_gid / split_p_count);
-    m_end = dim_group * gid + kernel_size * (core_gid / split_p_count + 1);
+    const unsigned int split_p_count = num_cores / split_m_count;
+    p_start = gemm_l.N / split_p_count * (cid % split_p_count);
+    p_end = gemm_l.N / split_p_count * ((cid % split_p_count) + 1);
+    m_start = kernel_size * (cid / split_p_count);
+    m_end = kernel_size * (cid / split_p_count + 1);
   } else {
     // Work over complete P dimension
     p_start = 0;
     p_end = gemm_l.N;
-    m_start = dim_group * gid + (dim_group / cores_per_group) * core_gid;
-    m_end = dim_group * gid + (dim_group / cores_per_group) * (core_gid + 1);
+    m_start = (gemm_l.M / num_cores) * cid;
+    m_end = (gemm_l.M / num_cores) * (cid + 1);
   }
 
   // Wait for all cores to finish
   snrt_cluster_hw_barrier();
 
   // Initialize matrices
-  if (is_core_active) {
+  if (cid == 0) {
     snrt_dma_start_1d(a, gemm_A_dram, gemm_l.M * gemm_l.K);
     snrt_dma_start_1d(b, gemm_B_dram, gemm_l.K * gemm_l.N);
     snrt_dma_start_1d(c, gemm_C_dram, gemm_l.M * gemm_l.N);
@@ -108,7 +106,7 @@ int main() {
   // Calculate matmul
   for (unsigned int i = 0; i < measure_iterations; ++i) {
     // Start timer
-    timer_start = mempool_get_timer();
+    timer_start = benchmark_get_cycle();
 
     // Start dump
     if (cid == 0)
@@ -135,7 +133,7 @@ int main() {
       stop_kernel();
 
     // End timer and check if new best runtime
-    timer_end = mempool_get_timer();
+    timer_end = benchmark_get_cycle();
     unsigned int timer_temp = timer_end - timer_start;
     if (cid == 0) {
       if (timer_temp < timer) {
@@ -148,7 +146,7 @@ int main() {
   if (cid == 0) {
     unsigned int performance =
         1000 * 2 * gemm_l.M * gemm_l.N * gemm_l.K / timer;
-    unsigned int utilization = performance / (2 * active_cores * N_FPU);
+    unsigned int utilization = performance / (2 * num_cores * N_FPU);
 
     printf("\n----- (%dx%d) dp fmatmul -----\n", gemm_l.M, gemm_l.N);
     printf("The execution took %u cycles.\n", timer);
