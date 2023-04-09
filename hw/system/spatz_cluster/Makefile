@@ -4,139 +4,145 @@
 
 # Author: Matheus Cavalcante, ETH Zurich
 
-SHELL = /usr/bin/env bash
-ROOT_DIR := $(patsubst %/,%, $(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
 SPATZ_DIR := $(shell git rev-parse --show-toplevel 2>/dev/null || echo $$SPATZ_DIR)
-INSTALL_DIR := $(abspath $(SPATZ_DIR)/install)
+ROOT := ${SPATZ_DIR}
 
-# Include configuration
-config_mk = $(abspath $(SPATZ_DIR)/cfg/config.mk)
-include $(config_mk)
+MKFILE_PATH := $(abspath $(lastword $(MAKEFILE_LIST)))
+MKFILE_DIR  := $(dir $(MKFILE_PATH))
 
-# build path
-buildpath       ?= build
-resultpath      ?= results
-# questa library
-library         ?= work
-# dpi library
-dpi_library     ?= work-dpi
-# Top level module to compile
-top_level       ?= testharness
-# QuestaSim Version
-questa_version  ?= 2021.3-kgf
-# QuestaSim command
-questa_cmd      ?= questa-$(questa_version)
-# QuestaSim arguments
-questa_args     ?=
-# VCS Version
-vcs_version     ?= 2020.03-kgf
-# VCS command
-vcs_cmd         ?= vcs-$(vcs_version)
-# Path to the binaries
-app_path        ?= $(abspath $(ROOT_DIR)/../software/bin)
-# Bender
-bender          ?= $(INSTALL_DIR)/bender/bender
-# Verilator
-verilator       ?= $(INSTALL_DIR)/verilator/bin/verilator
-verilator_build ?= $(ROOT_DIR)/verilator_build
-verilator_files ?= $(verilator_build)/files
-verilator_top   ?= testharness
-# Python
-python          ?= python3
-# Enable tracing
-snitch_trace    ?= 0
-# Enable spatz (automatically set when using spatz configuration)
-spatz           ?= 0
+# Include Makefrag
+include $(ROOT)/util/Makefrag
 
-# Check if the specified QuestaSim version exists
-ifeq (, $(shell which $(questa_cmd)))
-  # Spaces are needed for indentation here!
-  $(warning "Specified QuestaSim version ($(questa_cmd)) not found in PATH $(PATH)")
-  questa_cmd =
-endif
+# QuestaSim
+VSIM      = questa-2021.3-kgf vsim
+VLOG      = questa-2021.3-kgf vlog
+VSIM_HOME = /usr/pack/questa--2021.3-kgf/questasim
 
-QUESTASIM_HOME ?= /usr/pack/questa-$(questa_version)/questasim
-VCS_HOME       ?= /usr/pack/vcs-$(vcs_version)
+VSIM_FLAGS += -t 1ps
+VSIM_FLAGS += -voptargs=+acc
+VSIM_FLAGS += -do "log -r /*; source ../script/vsim/wave.tcl; run -a"
 
-ifdef app
-	preload ?= "$(app_path)/$(app)"
-endif
-ifdef preload
-	questa_args += +PRELOAD=$(preload)
-endif
-#questa_args += -sv_lib $(dpi_library)/spatz_dpi
-questa_args += -work $(library)
-questa_args += -suppress vsim-12070
+VLOG_FLAGS += -svinputport=compat
+VLOG_FLAGS += -override_timescale 1ns/1ps
+VLOG_FLAGS += -suppress 2583
+VLOG_FLAGS += -suppress 13314
+VLOG_FLAGS += -64
 
-# VCS options
-vlogan_args += -assert svaext +v2k -override_timescale=1ns/1ps -kdb
-ifdef preload
-	vcs_args += +PRELOAD=$(preload)
-endif
+all:
 
-# DPI source files
-dpi     := $(patsubst tb/dpi/%.cpp,$(buildpath)/$(dpi_library)/%.o,$(wildcard tb/dpi/*.cpp))
-dpi_vcs := $(patsubst tb/dpi/%.cpp,$(buildpath)/$(dpi_library)/%_vcs.o,$(wildcard tb/dpi/*.cpp))
+test: ${VSIM_SOURCES} ${TB_SRCS}
+	echo ${VSIM_SOURCES}
+	touch test
 
-vlog_args += -suppress vlog-2583 -suppress vlog-13314 -suppress vlog-13233
-vlog_args += -work $(library)
-# Defines
-vlog_defs += -DNUM_CORES=$(num_cores) -DNUM_BANKS=$(num_banks)
-vlog_defs += -DVLEN=$(vlen)
-vlog_defs += -DN_IPU=$(n_ipu) -DN_FPU=$(n_fpu)
-vlog_defs += -DN_FU=$(shell awk 'BEGIN{print ($(n_ipu) > $(n_fpu)) ? $(n_ipu) : $(n_fpu)}')
-vlog_defs += -DRVF=$(rvf) -DRVD=$(rvd)
-vlog_defs += -DTCDM_BANK_DEPTH=$(tcdm_bank_depth)
-vlog_defs += -DSPATZ_AXI_DW=$(axi_dw) -DSPATZ_AXI_AW=$(axi_aw) -DSPATZ_AXI_IW=$(axi_iw) -DSPATZ_AXI_UW=$(axi_uw)
+#################
+# Prerequisites #
+#################
 
-.DEFAULT_GOAL := compile
+test/bootrom.elf test/bootrom.dump test/bootrom.bin: test/bootrom.S test/bootrom.ld Makefile
+	riscv -riscv64-gcc-9.5.0 riscv64-unknown-elf-gcc -mabi=ilp32d -march=rv32imafd -static -nostartfiles -Ttest/bootrom.ld $< -o test/bootrom.elf
+	riscv -riscv64-gcc-9.5.0 riscv64-unknown-elf-objdump -D test/bootrom.elf > test/bootrom.dump
+	riscv -riscv64-gcc-9.5.0 riscv64-unknown-elf-objcopy -O binary test/bootrom.elf test/bootrom.bin
 
-# Build path
-$(buildpath):
-	mkdir -p $(buildpath)
+.PHONY: src/bootrom.sv
+src/bootrom.sv: test/bootrom.bin
+	$(ROOT)/util/generate_bootrom.py test/bootrom.bin --sv --datawidth $(axi_dw) --output src/bootrom
 
-# Bender
-$(bender):
-	make -C $(SPATZ_DIR) bender
+#############
+# Verilator #
+#############
 
-################
-# Modelsim     #
-################
+${VLT_BUILDDIR}/verilate: src/bootrom.sv ${VLT_SOURCES} ${TB_SRCS}
+	$(call VERILATE,tb_bin)
 
-# Library
-.PHONY: lib
-lib: $(buildpath) $(buildpath)/$(library)
-$(buildpath)/$(library):
-	cd $(buildpath) && $(questa_cmd) vlib $(library) && chmod +w modelsim.ini; $(questa_cmd) vmap $(library) $(library)
+# Quick sanity check, not really meant for simulation.
+verilate: ${VLT_BUILDDIR}/verilate
 
-# Compilation
-.PHONY: compile
-compile: lib $(buildpath) $(buildpath)/compile.tcl
-$(buildpath)/compile.tcl: $(bender) $(config_mk) Makefile $(SPATZ_DIR)/Bender.yml Bender.yml $(shell find {src,tb} -type f)
-	$(bender) script vsim --vlog-arg="$(vlog_args)" $(vlog_defs) -t rtl -t snitch_test -t spatz_test -t spatz $(bender_defs) > $(buildpath)/compile.tcl
-	echo "exit" >> $(buildpath)/compile.tcl
-	cd $(buildpath) && $(questa_cmd) vsim -work $(library) -c -do compile.tcl
+## Clean all build directories and temporary files for Verilator simulation
+clean.vlt:
+	rm -rf ${VLT_BUILDDIR} work
 
-# Simulation
-.PHONY: sim
-sim: compile
-	cd $(buildpath) && \
-	$(questa_cmd) vsim -voptargs=+acc $(questa_args) $(library).$(top_level) -do ../scripts/questa/run.tcl
-	./scripts/return_status.sh $(buildpath)/transcript
+############
+# Modelsim #
+############
 
-.PHONY: simc
-simc: compile
-	cd $(buildpath) && \
-	$(questa_cmd) vsim -c $(questa_args) $(library).$(top_level) -do "run -a"
-	./scripts/return_status.sh $(buildpath)/transcript
+${VSIM_BUILDDIR}/compile.vsim.tcl: src/bootrom.sv $(VSIM_SOURCES) ${TB_SRCS} ${TB_DIR}/rtl_lib.cc ${TB_DIR}/common_lib.cc test/bootdata.cc test/bootrom.bin
+	vlib $(dir $@)
+	${BENDER} script vsim ${VSIM_BENDER} ${DEFS} --vlog-arg="${VLOG_FLAGS} -work $(dir $@) " > $@
+	echo '${VLOG} -work $(dir $@) ${TB_DIR}/rtl_lib.cc ${TB_DIR}/common_lib.cc test/bootdata.cc -ccflags "-std=c++14 -I${MKFILE_DIR}/test -I${MKFILE_DIR}/work/include -I${TB_DIR}"' >> $@
+	echo '${VLOG} -work $(dir $@) test/uartdpi/uartdpi.c -ccflags "-Itest/uartdpi"' >> $@
+	echo 'return 0' >> $@
 
-################
-# Helper       #
-################
+bin/spatz_cluster.vsim: ${VSIM_BUILDDIR}/compile.vsim.tcl work/lib/libfesvr.a
+	$(call QUESTASIM,tb_bin)
 
-# Clean targets
-.PHONY: clean
+clean.vsim:
+	rm -rf bin/spatz_cluster.vsim bin/spatz_cluster.vsim.gui work-vsim work vsim.wlf
 
-clean:
-	@rm -rf $(buildpath)
-	@rm -rf $(verilator_build)
+#######
+# VCS #
+#######
+# @IIS: vcs-2020.12 make bin/spatz_cluster.vcs
+## Build compilation script and compile all sources for VCS simulation
+bin/spatz_cluster.vcs: src/bootrom.sv work-vcs/compile.sh work/lib/libfesvr.a ${TB_DIR}/common_lib.cc test/bootdata.cc test/bootrom.bin test/uartdpi/uartdpi.c
+	mkdir -p bin
+	vcs -Mlib=work-vcs -Mdir=work-vcs -debug_access+all -fgp -kdb +vcs+fsdbon -o bin/spatz_cluster.vcs -cc $(CC) -cpp $(CXX) \
+		-assert disable_cover -override_timescale=1ns/1ps -full64 tb_bin ${TB_DIR}/rtl_lib.cc ${TB_DIR}/common_lib.cc test/bootdata.cc test/uartdpi/uartdpi.c \
+		-CFLAGS "-std=c++14 -I${MKFILE_DIR} -I${MKFILE_DIR}/test -I${FESVR}/include -I${TB_DIR} -Itest/uartdpi" -LDFLAGS "-L${FESVR}/lib" -lfesvr -lutil
+
+## Clean all build directories and temporary files for VCS simulation
+clean.vcs:
+	rm -rf bin/spatz_cluster.vcs work-vcs work
+
+######
+# SW #
+######
+
+## Build SW into sw/build with the LLVM toolchain
+sw: clean.sw
+	mkdir -p sw/build
+	cd sw/build && ${CMAKE} -DCMAKE_TOOLCHAIN_FILE=toolchain-llvm .. -DLLVM_DIR=${LLVM_INSTALL_DIR} && make
+
+# VSIM
+## Build SW into sw/build with the LLVM toolchain (including tests) for Questasim simulator
+sw.vsim: clean.sw bin/spatz_cluster.vsim
+	mkdir -p sw/build
+	cd sw/build && ${CMAKE} -DCMAKE_TOOLCHAIN_FILE=toolchain-llvm -DLLVM_DIR=${LLVM_INSTALL_DIR} -DSNITCH_SIMULATOR=../../../../../hw/system/spatz_cluster/bin/spatz_cluster.vsim -DBUILD_TESTS=ON .. && make
+
+## Build SW and run all tests with Questasim simulator
+sw.test.vsim: sw.vsim
+	cd sw/build && make test
+
+# VCS
+## Build SW into sw/build with the LLVM toolchain (including tests) for VCS simulator
+sw.vcs: clean.sw bin/spatz_cluster.vcs
+	mkdir -p sw/build
+	cd sw/build && ${CMAKE} -DCMAKE_TOOLCHAIN_FILE=toolchain-llvm -DLLVM_DIR=${LLVM_INSTALL_DIR} -DSNITCH_SIMULATOR=../../../../../hw/system/spatz_cluster/bin/spatz_cluster.vcs -DBUILD_TESTS=ON .. && make
+
+## Build SW and run all tests with VCS simulator
+sw.test.vcs: sw.vcs
+	cd sw/build && make test
+
+# VLT
+## Build SW into sw/build with the LLVM toolchain (including tests) for Verilator simulator
+sw.vlt: clean.sw bin/spatz_cluster.vlt
+	mkdir -p sw/build
+	cd sw/build && ${CMAKE} -DCMAKE_TOOLCHAIN_FILE=toolchain-llvm -DLLVM_DIR=${LLVM_INSTALL_DIR} -DSNITCH_SIMULATOR=../../../../../hw/system/spatz_cluster/bin/spatz_cluster.vlt -DBUILD_TESTS=ON .. && make
+
+## Build SW and run all tests with Verilator simulator
+sw.test.vlt: sw.vlt
+	cd sw/build && make test
+
+## Delete sw/build
+clean.sw:
+	rm -rf sw/build
+
+########
+# Util #
+########
+
+## Clean everything except logs
+clean: clean.vcs clean.vlt clean.vsim clean.sw
+	rm -rf Bender.lock .bender/ work/
+
+clean.logs:
+	rm -rf logs/

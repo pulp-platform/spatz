@@ -19,16 +19,21 @@ package spatz_cluster_pkg;
   // AXI Address Width
   localparam int unsigned AxiAddrWidth = `ifdef SPATZ_AXI_AW `SPATZ_AXI_AW `else 0 `endif;
   // AXI ID Width
-  localparam int unsigned AxiIdWidth   = `ifdef SPATZ_AXI_IW `SPATZ_AXI_IW `else 0 `endif;
+  localparam int unsigned AxiIdInWidth = `ifdef SPATZ_AXI_IW `SPATZ_AXI_IW `else 0 `endif;
   // AXI User Width
   localparam int unsigned AxiUserWidth = `ifdef SPATZ_AXI_UW `SPATZ_AXI_UW `else 0 `endif;
 
   typedef logic [AxiDataWidth-1:0] axi_data_t;
   typedef logic [AxiStrbWidth-1:0] axi_strb_t;
   typedef logic [AxiAddrWidth-1:0] axi_addr_t;
-  typedef logic [AxiIdWidth-1:0] axi_id_t;
+  typedef logic [AxiIdInWidth-1:0] axi_id_in_t;
   typedef logic [AxiUserWidth-1:0] axi_user_t;
-  `AXI_TYPEDEF_ALL(spatz_axi, axi_addr_t, axi_id_t, axi_data_t, axi_strb_t, axi_user_t)
+  `AXI_TYPEDEF_ALL(spatz_axi_in, axi_addr_t, axi_id_in_t, axi_data_t, axi_strb_t, axi_user_t)
+
+  localparam int unsigned AxiClusterNumMasters = 3;
+  localparam int unsigned AxiIdOutWidth = AxiIdInWidth + $clog2(AxiClusterNumMasters);
+  typedef logic [AxiIdOutWidth-1:0] axi_id_out_t;
+  `AXI_TYPEDEF_ALL(spatz_axi_out, axi_addr_t, axi_id_out_t, axi_data_t, axi_strb_t, axi_user_t)
 
   ////////////////////
   //  Spatz Cluster //

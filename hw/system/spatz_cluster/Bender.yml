@@ -26,6 +26,7 @@ workspace:
 sources:
   # Level 0
   - src/axi_zero_mem.sv
+  - src/bootrom.sv
   - src/spatz_amo_shim.sv
   - src/spatz_cluster_peripheral/spatz_cluster_peripheral_reg_pkg.sv
   - src/spatz_cluster_pkg.sv

@@ -1,1 +1,8 @@
 Bender.lock
+work
+work-vsim
+work-vcs
+work-vlt
+*elf
+*bin
+*dump
