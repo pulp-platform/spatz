@@ -199,7 +199,8 @@ module spatz_cluster import spatz_pkg::*; import fpnew_pkg::fpu_implementation_t
     UniqueIds         : 1'b0,
     AxiAddrWidth      : AxiAddrWidth,
     AxiDataWidth      : NarrowDataWidth,
-    NoAddrRules       : NrNarrowRules
+    NoAddrRules       : NrNarrowRules,
+    default           : '0
   };
 
   // DMA configuration struct
@@ -215,7 +216,8 @@ module spatz_cluster import spatz_pkg::*; import fpnew_pkg::fpu_implementation_t
     UniqueIds         : 1'b0,
     AxiAddrWidth      : AxiAddrWidth,
     AxiDataWidth      : AxiDataWidth,
-    NoAddrRules       : 3
+    NoAddrRules       : 3,
+    default           : '0
   };
 
   // --------
@@ -942,7 +944,9 @@ module spatz_cluster import spatz_pkg::*; import fpnew_pkg::fpu_implementation_t
     }
   };
 
-  localparam bit [ClusterXbarCfg.NoSlvPorts-1:0] ClusterEnableDefaultMstPort = '1;
+  localparam bit   [ClusterXbarCfg.NoSlvPorts-1:0]                                                        ClusterEnableDefaultMstPort = '1;
+  localparam logic [ClusterXbarCfg.NoSlvPorts-1:0][cf_math_pkg::idx_width(ClusterXbarCfg.NoMstPorts)-1:0] ClusterXbarDefaultPort      = '{default: SoC};
+
   axi_xbar #(
     .Cfg           (ClusterXbarCfg   ),
     .slv_aw_chan_t (axi_mst_aw_chan_t),
@@ -969,7 +973,7 @@ module spatz_cluster import spatz_pkg::*; import fpnew_pkg::fpu_implementation_t
     .mst_ports_resp_i      (narrow_axi_slv_rsp         ),
     .addr_map_i            (cluster_xbar_rules         ),
     .en_default_mst_port_i (ClusterEnableDefaultMstPort),
-    .default_mst_port_i    ('{default: SoC}            )
+    .default_mst_port_i    (ClusterXbarDefaultPort     )
   );
 
   // ---------

@@ -34,7 +34,7 @@ axi_uw ?= 1
 n_fpu ?= 0
 
 # Number of words in each TCDM bank
-tcdm_bank_depth ?= 2048
+tcdm_bank_depth ?= 1024
 
 # Boot address (in dec)
 boot_addr ?= 4096
