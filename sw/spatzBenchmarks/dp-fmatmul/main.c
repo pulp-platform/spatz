@@ -1,4 +1,4 @@
-// Copyright 2021 ETH Zurich and University of Bologna.
+// Copyright 2023 ETH Zurich and University of Bologna.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -14,35 +14,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Author: Domenic Wüthrich, ETH Zurich
+// Author: Matheus Cavalcante, ETH Zurich
 
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
+#include <snrt.h>
 
 #include "data/data_gemm.h"
 #include "kernel/dp-fmatmul.c"
-#include "printf.h"
-#ifdef MEMPOOL
-#include "alloc.h"
-#include "runtime.h"
-#include "synchronization.h"
-#endif
 
 double *a;
 double *b;
 double *c;
-
-// Initialize the matrices
-void init_matrix(double *matrix, const double *src,
-                 const unsigned int rows_start, const unsigned int rows_end,
-                 const unsigned int num_columns) {
-  for (unsigned int i = rows_start; i < rows_end; ++i) {
-    for (unsigned int j = 0; j < num_columns; ++j) {
-      matrix[i * num_columns + j] = src[i * num_columns + j];
-    }
-  }
-}
 
 // Verify the matrices
 int verify_matrix(double *matrix, const double *checksum,
@@ -63,27 +47,9 @@ int verify_matrix(double *matrix, const double *checksum,
   return 0;
 }
 
-void print_matrix(double const *matrix, unsigned int num_rows,
-                  unsigned int num_columns) {
-  printf("0x%8X\n", (unsigned int)matrix);
-  for (unsigned int i = 0; i < num_rows; ++i) {
-    for (unsigned int j = 0; j < num_columns; ++j) {
-      printf("%5u ", (unsigned int)matrix[i * num_columns + j]);
-    }
-    printf("\n");
-  }
-}
-
 int main() {
-  const unsigned int num_cores = mempool_get_core_count();
-  const unsigned int cores_per_group = num_cores / NUM_GROUPS;
-  const unsigned int cid = mempool_get_core_id();
-  const unsigned int core_gid = cid % cores_per_group;
-  const unsigned int gid = cid / cores_per_group;
-
-  const unsigned int active_groups = 1;
-  const unsigned int active_cores = cores_per_group * active_groups;
-  const unsigned int is_core_active = cid < active_cores;
+  const unsigned int num_cores = sntr_cluster_core_num();
+  const unsigned int cid = sntr_cluster_core_idx();
 
   const unsigned int measure_iterations = 1;
 
@@ -93,20 +59,11 @@ int main() {
   unsigned int p_start, p_end;
   unsigned int kernel_size;
 
-  // Initialize MemPool
-  mempool_init(cid, num_cores);
-
-  // Initialize multicore barrier
-  mempool_barrier_init(cid);
-
   // Allocate the matrices in the local tile
   if (cid == 0) {
-    a = (double *)domain_malloc(get_alloc_tile(0),
-                                gemm_l.M * gemm_l.K * sizeof(double));
-    b = (double *)domain_malloc(get_alloc_tile(0),
-                                gemm_l.K * gemm_l.N * sizeof(double));
-    c = (double *)domain_malloc(get_alloc_tile(0),
-                                gemm_l.M * gemm_l.N * sizeof(double));
+    a = (double *)snrt_l1alloc(gemm_l.M * gemm_l.K * sizeof(double));
+    b = (double *)snrt_l1alloc(gemm_l.K * gemm_l.N * sizeof(double));
+    c = (double *)snrt_l1alloc(gemm_l.M * gemm_l.N * sizeof(double));
   }
 
   // Reset timer
@@ -136,47 +93,42 @@ int main() {
   }
 
   // Wait for all cores to finish
-  mempool_barrier(num_cores);
+  snrt_cluster_hw_barrier();
 
   // Initialize matrices
   if (is_core_active) {
-    init_matrix(a, gemm_A_dram, cid * (gemm_l.M / active_cores),
-                (cid + 1) * (gemm_l.M / active_cores), gemm_l.K);
-    init_matrix(b, gemm_B_dram, cid * (gemm_l.K / active_cores),
-                (cid + 1) * (gemm_l.K / active_cores), gemm_l.N);
-    init_matrix(c, gemm_C_dram, cid * (gemm_l.M / active_cores),
-                (cid + 1) * (gemm_l.M / active_cores), gemm_l.N);
+    snrt_dma_start_1d(a, gemm_A_dram, gemm_l.M * gemm_l.K);
+    snrt_dma_start_1d(b, gemm_B_dram, gemm_l.K * gemm_l.N);
+    snrt_dma_start_1d(c, gemm_C_dram, gemm_l.M * gemm_l.N);
   }
 
   // Wait for all cores to finish
-  mempool_barrier(num_cores);
+  snrt_cluster_hw_barrier();
 
+  // Calculate matmul
   for (unsigned int i = 0; i < measure_iterations; ++i) {
-    // Calculate matmul
-    if (is_core_active) {
-      // Start timer
-      timer_start = mempool_get_timer();
+    // Start timer
+    timer_start = mempool_get_timer();
 
-      // Start dump
-      if (cid == 0)
-        start_kernel();
+    // Start dump
+    if (cid == 0)
+      start_kernel();
 
-      if (kernel_size == 2) {
-        matmul_2xVL(c, a, b, m_start, m_end, gemm_l.K, gemm_l.N, p_start,
-                    p_end);
-      } else if (kernel_size == 4) {
-        matmul_4xVL(c, a, b, m_start, m_end, gemm_l.K, gemm_l.N, p_start,
-                    p_end);
-      } else if (kernel_size == 8) {
-        matmul_8xVL(c, a, b, m_start, m_end, gemm_l.K, gemm_l.N, p_start,
-                    p_end);
-      } else {
-        return -2;
-      }
+    if (kernel_size == 2) {
+      matmul_2xVL(c, a, b, m_start, m_end, gemm_l.K, gemm_l.N, p_start,
+                  p_end);
+    } else if (kernel_size == 4) {
+      matmul_4xVL(c, a, b, m_start, m_end, gemm_l.K, gemm_l.N, p_start,
+                  p_end);
+    } else if (kernel_size == 8) {
+      matmul_8xVL(c, a, b, m_start, m_end, gemm_l.K, gemm_l.N, p_start,
+                  p_end);
+    } else {
+      return -2;
     }
 
-    // Wait for all cores to finish matmul
-    mempool_barrier(num_cores);
+    // Wait for all cores to finish
+    snrt_cluster_hw_barrier();
 
     // End dump
     if (cid == 0)
@@ -214,15 +166,8 @@ int main() {
     }
   }
 
-  // Free the matrices
-  if (cid == 0) {
-    domain_free(get_alloc_tile(0), a);
-    domain_free(get_alloc_tile(0), b);
-    domain_free(get_alloc_tile(0), c);
-  }
-
-  // Wait for core 0 to finish displaying results
-  mempool_barrier(num_cores);
+  // Wait for all cores to finish
+  snrt_cluster_hw_barrier();
 
   return 0;
 }
