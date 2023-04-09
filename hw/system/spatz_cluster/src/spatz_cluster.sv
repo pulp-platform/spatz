@@ -20,82 +20,84 @@
 
 /// Spatz many-core cluster with improved TCDM interconnect.
 /// Spatz Cluster Top-Level.
-module spatz_cluster import spatz_pkg::*; import fpnew_pkg::fpu_implementation_t; #(
-    // @formatter:off
+module spatz_cluster
+  import spatz_pkg::*;
+  import fpnew_pkg::fpu_implementation_t;
+  import snitch_pma_pkg::snitch_pma_t;
+  #(
     /// Width of physical address.
-    parameter int   unsigned        AxiAddrWidth       = 48,
+    parameter int                     unsigned        AxiAddrWidth                       = 48,
     /// Width of AXI port.
-    parameter int   unsigned        AxiDataWidth       = 512,
+    parameter int                     unsigned        AxiDataWidth                       = 512,
     /// AXI: id width in.
-    parameter int   unsigned        AxiIdWidthIn       = 2,
+    parameter int                     unsigned        AxiIdWidthIn                       = 2,
     /// AXI: user width.
-    parameter int   unsigned        AxiUserWidth       = 1,
+    parameter int                     unsigned        AxiUserWidth                       = 1,
     /// Address from which to fetch the first instructions.
-    parameter logic          [31:0] BootAddr           = 32'h0,
+    parameter logic                            [31:0] BootAddr                           = 32'h0,
     /// The total amount of cores.
-    parameter int   unsigned        NrCores            = 8,
+    parameter int                     unsigned        NrCores                            = 8,
     /// Data/TCDM memory depth per cut (in words).
-    parameter int   unsigned        TCDMDepth          = 1024,
+    parameter int                     unsigned        TCDMDepth                          = 1024,
     /// Zero memory address region size (in kB).
-    parameter int   unsigned        ZeroMemorySize     = 64,
+    parameter int                     unsigned        ZeroMemorySize                     = 64,
     /// Cluster peripheral address region size (in kB).
-    parameter int   unsigned        ClusterPeriphSize  = 64,
+    parameter int                     unsigned        ClusterPeriphSize                  = 64,
     /// Number of TCDM Banks.
-    parameter int   unsigned        NrBanks            = 2 * NrCores,
+    parameter int                     unsigned        NrBanks                            = 2 * NrCores,
     /// Size of DMA AXI buffer.
-    parameter int   unsigned        DMAAxiReqFifoDepth = 3,
+    parameter int                     unsigned        DMAAxiReqFifoDepth                 = 3,
     /// Size of DMA request fifo.
-    parameter int   unsigned        DMAReqFifoDepth    = 3,
+    parameter int                     unsigned        DMAReqFifoDepth                    = 3,
     /// Width of a single icache line.
-    parameter       unsigned        ICacheLineWidth    = 0,
+    parameter                         unsigned        ICacheLineWidth                    = 0,
     /// Number of icache lines per set.
-    parameter int   unsigned        ICacheLineCount    = 0,
+    parameter int                     unsigned        ICacheLineCount                    = 0,
     /// Number of icache sets.
-    parameter int   unsigned        ICacheSets         = 0,
+    parameter int                     unsigned        ICacheSets                         = 0,
     // PMA Configuration
-    parameter snitch_pma_pkg::snitch_pma_t SnitchPMACfg = '{default: 0},
+    parameter snitch_pma_t                            SnitchPMACfg                       = '{default: 0},
     /// # Core-global parameters
     /// FPU configuration.
-    parameter fpu_implementation_t FPUImplementation   = '{default: fpu_implementation_t'(0)},
+    parameter fpu_implementation_t                    FPUImplementation        [NrCores] = '{default: fpu_implementation_t'(0)},
     /// Per-core enabling of the custom `Xdma` ISA extensions.
-    parameter bit [NrCores-1:0] Xdma          = '0,
+    parameter bit                                     Xdma                     [NrCores] = '{default: '0},
     /// # Per-core parameters
     /// Per-core integer outstanding loads
-    parameter int unsigned NumIntOutstandingLoads           = 0,
+    parameter int                     unsigned        NumIntOutstandingLoads   [NrCores] = '{default: '0},
     /// Per-core integer outstanding memory operations (load and stores)
-    parameter int unsigned NumIntOutstandingMem             = 0,
+    parameter int                     unsigned        NumIntOutstandingMem     [NrCores] = '{default: '0},
     /// Per-core Spatz outstanding loads
-    parameter int unsigned NumSpatzOutstandingLoads         = 0,
+    parameter int                     unsigned        NumSpatzOutstandingLoads [NrCores] = '{default: '0},
     /// ## Timing Tuning Parameters
     /// Insert Pipeline registers into off-loading path (request)
-    parameter bit          RegisterOffloadReq               = 1'b0,
+    parameter bit                                     RegisterOffloadReq                 = 1'b0,
     /// Insert Pipeline registers into off-loading path (response)
-    parameter bit          RegisterOffloadRsp               = 1'b0,
+    parameter bit                                     RegisterOffloadRsp                 = 1'b0,
     /// Insert Pipeline registers into data memory path (request)
-    parameter bit          RegisterCoreReq                  = 1'b0,
+    parameter bit                                     RegisterCoreReq                    = 1'b0,
     /// Insert Pipeline registers into data memory path (response)
-    parameter bit          RegisterCoreRsp                  = 1'b0,
+    parameter bit                                     RegisterCoreRsp                    = 1'b0,
     /// Insert Pipeline registers after each memory cut
-    parameter bit          RegisterTCDMCuts                 = 1'b0,
+    parameter bit                                     RegisterTCDMCuts                   = 1'b0,
     /// Decouple external AXI plug
-    parameter bit          RegisterExt                      = 1'b0,
-    parameter axi_pkg::xbar_latency_e XbarLatency = axi_pkg::CUT_ALL_PORTS,
+    parameter bit                                     RegisterExt                        = 1'b0,
+    parameter axi_pkg::xbar_latency_e                 XbarLatency                        = axi_pkg::CUT_ALL_PORTS,
     /// Outstanding transactions on the AXI network
-    parameter int  unsigned MaxMstTrans        = 4,
-    parameter int  unsigned MaxSlvTrans        = 4,
+    parameter int                     unsigned        MaxMstTrans                        = 4,
+    parameter int                     unsigned        MaxSlvTrans                        = 4,
     /// # Interface
     /// AXI Ports
-    parameter type          axi_in_req_t        = logic,
-    parameter type          axi_in_resp_t       = logic,
-    parameter type          axi_out_req_t       = logic,
-    parameter type          axi_out_resp_t      = logic,
+    parameter type                                    axi_in_req_t                       = logic,
+    parameter type                                    axi_in_resp_t                      = logic,
+    parameter type                                    axi_out_req_t                      = logic,
+    parameter type                                    axi_out_resp_t                     = logic,
     // Memory latency parameter. Most of the memories have a read latency of 1. In
     // case you have memory macros which are pipelined you want to adjust this
     // value here. This only applies to the TCDM. The instruction cache macros will break!
     // In case you are using the `RegisterTCDMCuts` feature this adds an
     // additional cycle latency, which is taken into account here.
-    parameter int  unsigned MemoryMacroLatency = 1 + RegisterTCDMCuts
-  // @formatter:on
+    parameter int                     unsigned        MemoryMacroLatency                 = 1 + RegisterTCDMCuts
   ) (
     /// System clock.
     input  logic                             clk_i,
@@ -241,7 +243,7 @@ module spatz_cluster import spatz_pkg::*; import fpnew_pkg::fpu_implementation_t
   typedef struct packed {
     logic [CoreIDWidth-1:0] core_id;
     logic is_core;
-    logic [$clog2(NumSpatzOutstandingLoads)-1:0] req_id;
+    logic [$clog2(NumSpatzOutstandingLoads[0])-1:0] req_id;
   } tcdm_user_t;
 
   // Regbus peripherals.
@@ -717,47 +719,47 @@ module spatz_cluster import spatz_pkg::*; import fpnew_pkg::fpu_implementation_t
     tcdm_rsp_t [TcdmPorts-1:0] tcdm_rsp;
 
     spatz_cc #(
-      .BootAddr                (BootAddr                 ),
-      .RVE                     (1'b0                     ),
-      .RVF                     (RVF                      ),
-      .RVD                     (RVD                      ),
-      .RVV                     (RVV                      ),
-      .Xdma                    (Xdma[i]                  ),
-      .AddrWidth               (AxiAddrWidth             ),
-      .DataWidth               (NarrowDataWidth          ),
-      .DMADataWidth            (AxiDataWidth             ),
-      .DMAIdWidth              (AxiIdWidthIn             ),
-      .SnitchPMACfg            (SnitchPMACfg             ),
-      .DMAAxiReqFifoDepth      (DMAAxiReqFifoDepth       ),
-      .DMAReqFifoDepth         (DMAReqFifoDepth          ),
-      .dreq_t                  (reqrsp_req_t             ),
-      .drsp_t                  (reqrsp_rsp_t             ),
-      .tcdm_req_t              (tcdm_req_t               ),
-      .tcdm_req_chan_t         (tcdm_req_chan_t          ),
-      .tcdm_user_t             (tcdm_user_t              ),
-      .tcdm_rsp_t              (tcdm_rsp_t               ),
-      .tcdm_rsp_chan_t         (tcdm_rsp_chan_t          ),
-      .axi_req_t               (axi_mst_dma_req_t        ),
-      .axi_rsp_t               (axi_mst_dma_resp_t       ),
-      .hive_req_t              (hive_req_t               ),
-      .hive_rsp_t              (hive_rsp_t               ),
-      .acc_issue_req_t         (acc_issue_req_t          ),
-      .acc_issue_rsp_t         (acc_issue_rsp_t          ),
-      .acc_rsp_t               (acc_rsp_t                ),
-      .dma_events_t            (dma_events_t             ),
-      .XDivSqrt                (1'b0                     ),
-      .XF16                    (1'b1                     ),
-      .XF8                     (1'b1                     ),
-      .IsoCrossing             (1'b0                     ),
-      .NumIntOutstandingLoads  (NumIntOutstandingLoads   ),
-      .NumIntOutstandingMem    (NumIntOutstandingMem     ),
-      .NumSpatzOutstandingLoads(NumSpatzOutstandingLoads ),
-      .FPUImplementation       (FPUImplementation        ),
-      .RegisterOffloadReq      (RegisterOffloadReq       ),
-      .RegisterOffloadRsp      (RegisterOffloadRsp       ),
-      .RegisterCoreReq         (RegisterCoreReq          ),
-      .RegisterCoreRsp         (RegisterCoreRsp          ),
-      .TCDMAddrWidth           (TCDMAddrWidth            )
+      .BootAddr                (BootAddr                   ),
+      .RVE                     (1'b0                       ),
+      .RVF                     (RVF                        ),
+      .RVD                     (RVD                        ),
+      .RVV                     (RVV                        ),
+      .Xdma                    (Xdma[i]                    ),
+      .AddrWidth               (AxiAddrWidth               ),
+      .DataWidth               (NarrowDataWidth            ),
+      .DMADataWidth            (AxiDataWidth               ),
+      .DMAIdWidth              (AxiIdWidthIn               ),
+      .SnitchPMACfg            (SnitchPMACfg               ),
+      .DMAAxiReqFifoDepth      (DMAAxiReqFifoDepth         ),
+      .DMAReqFifoDepth         (DMAReqFifoDepth            ),
+      .dreq_t                  (reqrsp_req_t               ),
+      .drsp_t                  (reqrsp_rsp_t               ),
+      .tcdm_req_t              (tcdm_req_t                 ),
+      .tcdm_req_chan_t         (tcdm_req_chan_t            ),
+      .tcdm_user_t             (tcdm_user_t                ),
+      .tcdm_rsp_t              (tcdm_rsp_t                 ),
+      .tcdm_rsp_chan_t         (tcdm_rsp_chan_t            ),
+      .axi_req_t               (axi_mst_dma_req_t          ),
+      .axi_rsp_t               (axi_mst_dma_resp_t         ),
+      .hive_req_t              (hive_req_t                 ),
+      .hive_rsp_t              (hive_rsp_t                 ),
+      .acc_issue_req_t         (acc_issue_req_t            ),
+      .acc_issue_rsp_t         (acc_issue_rsp_t            ),
+      .acc_rsp_t               (acc_rsp_t                  ),
+      .dma_events_t            (dma_events_t               ),
+      .XDivSqrt                (1'b0                       ),
+      .XF16                    (1'b1                       ),
+      .XF8                     (1'b1                       ),
+      .IsoCrossing             (1'b0                       ),
+      .NumIntOutstandingLoads  (NumIntOutstandingLoads[i]  ),
+      .NumIntOutstandingMem    (NumIntOutstandingMem[i]    ),
+      .NumSpatzOutstandingLoads(NumSpatzOutstandingLoads[i]),
+      .FPUImplementation       (FPUImplementation[i]       ),
+      .RegisterOffloadReq      (RegisterOffloadReq         ),
+      .RegisterOffloadRsp      (RegisterOffloadRsp         ),
+      .RegisterCoreReq         (RegisterCoreReq            ),
+      .RegisterCoreRsp         (RegisterCoreRsp            ),
+      .TCDMAddrWidth           (TCDMAddrWidth              )
     ) i_spatz_cc (
       .clk_i            (clk_i             ),
       .clk_d2_i         (clk_i             ),

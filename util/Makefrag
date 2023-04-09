@@ -9,10 +9,6 @@ SHELL = /usr/bin/env bash
 SPATZ_DIR := $(shell git rev-parse --show-toplevel 2>/dev/null || echo $$SPATZ_DIR)
 ROOT_DIR := ${SPATZ_DIR}
 
-# Include configuration
-config_mk = $(abspath $(SPATZ_DIR)/cfg/config.mk)
-include $(config_mk)
-
 # Binaries
 INSTALL_PREFIX        ?= install
 INSTALL_DIR           ?= ${ROOT_DIR}/${INSTALL_PREFIX}
@@ -60,16 +56,6 @@ VLT_FLAGS    += --timing
 VLT_BENDER   += -t rtl -t spatz -t spatz_test -t snitch_test
 VLT_SOURCES  := $(shell ${BENDER} script flist ${VLT_BENDER} | ${SED_SRCS})
 VLT_CFLAGS   += -std=c++14 -pthread
-
-# Defines
-DEFS += -DNUM_CORES=$(num_cores) -DNUM_BANKS=$(num_banks)
-DEFS += -DVLEN=$(vlen)
-DEFS += -DN_IPU=$(n_ipu) -DN_FPU=$(n_fpu)
-DEFS += -DN_FU=$(shell awk 'BEGIN{print ($(n_ipu) > $(n_fpu)) ? $(n_ipu) : $(n_fpu)}')
-DEFS += -DRVF=$(rvf) -DRVD=$(rvd)
-DEFS += -DTCDM_BANK_DEPTH=$(tcdm_bank_depth)
-DEFS += -DBOOT_ADDR=$(boot_addr)
-DEFS += -DSPATZ_AXI_DW=$(axi_dw) -DSPATZ_AXI_AW=$(axi_aw) -DSPATZ_AXI_IW=$(axi_iw) -DSPATZ_AXI_UW=$(axi_uw)
 
 # We need a recent LLVM installation (>11) to compile Verilator.
 # We also need to link the binaries with LLVM's libc++.

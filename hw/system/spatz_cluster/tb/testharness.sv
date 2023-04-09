@@ -69,17 +69,13 @@ module testharness (
   logic cluster_probe;
   logic eoc;
 
-  spatz_cluster_wrapper #(
-    .BootAddr (BootAddr)
-  ) i_cluster_wrapper (
+  spatz_cluster_wrapper i_cluster_wrapper (
     .clk_i              (clk_i                     ),
     .rst_ni             (rst_ni                    ),
     .meip_i             ('0                        ),
     .msip_i             ('0                        ),
     .mtip_i             ('0                        ),
     .debug_req_i        ('0                        ),
-    .hart_base_id_i     ('0                        ),
-    .cluster_base_addr_i(axi_addr_t'(32'h0004_0000)),
     .axi_out_req_o      (axi_mst_req               ),
     .axi_out_resp_i     (axi_mst_resp              ),
     .axi_in_req_i       (to_cluster_req            ),

@@ -18,7 +18,7 @@ sources:
     - src/reorder_buffer.sv
     - src/rvv_pkg.sv
     # Level 1
-    - src/spatz_pkg.sv
+    - src/generated/spatz_pkg.sv
     - src/serdiv.sv
     # Level 2
     - src/spatz_decoder.sv

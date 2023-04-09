@@ -13,17 +13,24 @@ package spatz_pkg;
   //////////////////
 
   // Number of IPUs in each VFU (between 1 and 8)
-  localparam int unsigned N_IPU = `ifdef N_IPU `N_IPU `else 2 `endif;
+  localparam int unsigned N_IPU = ${cfg['n_ipu']};
   // Number of FPUs in each VFU (between 1 and 8)
-  localparam int unsigned N_FPU = `ifdef N_FPU `N_FPU `else 2 `endif;
+  localparam int unsigned N_FPU = ${cfg['n_fpu']};
   // Number of FUs in each VFU
   localparam int unsigned N_FU  = N_IPU > N_FPU ? N_IPU : N_FPU;
   // FPU support
   localparam bit FPU            = N_FPU != 0;
+% if cfg['spatz_fpu']:
   // Single-precision floating point support
-  localparam bit RVF            = `ifdef RVF `RVF `else 0 `endif;
+  localparam bit RVF            = 1;
   // Double-precision floating-point support
-  localparam bit RVD            = `ifdef RVD `RVD `else 0 `endif;
+  localparam bit RVD            = 1;
+% else :
+  // Single-precision floating point support
+  localparam bit RVF            = 0;
+  // Double-precision floating-point support
+  localparam bit RVD            = 0;
+% endif
   // Vector support
   localparam bit RVV            = 1;
 
@@ -32,7 +39,7 @@ package spatz_pkg;
   // Maximum size of a single vector element in bytes
   localparam int unsigned ELENB  = ELEN / 8;
   // Number of bits in a vector register
-  localparam int unsigned VLEN   = `ifdef VLEN `VLEN `else 256 `endif;
+  localparam int unsigned VLEN   = ${cfg['vlen']};
   // Number of bytes in a vector register
   localparam int unsigned VLENB  = VLEN / 8;
   // Maximum vector length in elements

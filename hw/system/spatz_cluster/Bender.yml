@@ -29,7 +29,6 @@ sources:
   - src/bootrom.sv
   - src/spatz_amo_shim.sv
   - src/spatz_cluster_peripheral/spatz_cluster_peripheral_reg_pkg.sv
-  - src/spatz_cluster_pkg.sv
   - src/spatz_tcdm_interconnect.sv
   # Level 1
   - src/spatz_barrier.sv
@@ -39,7 +38,7 @@ sources:
   # Level 3
   - src/spatz_cluster.sv
   # Level 4
-  - src/spatz_cluster_wrapper.sv
+  - src/generated/spatz_cluster_wrapper.sv
 
   - target: spatz_test
     files:

@@ -45,7 +45,7 @@ test/bootrom.elf test/bootrom.dump test/bootrom.bin: test/bootrom.S test/bootrom
 
 .PHONY: src/bootrom.sv
 src/bootrom.sv: test/bootrom.bin
-	$(ROOT)/util/generate_bootrom.py test/bootrom.bin --sv --datawidth $(axi_dw) --output src/bootrom
+	$(ROOT)/util/generate_bootrom.py test/bootrom.bin --sv --datawidth 512 --output src/bootrom
 
 #############
 # Verilator #
