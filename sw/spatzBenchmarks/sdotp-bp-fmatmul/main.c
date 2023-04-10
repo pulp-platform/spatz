@@ -125,7 +125,7 @@ int main() {
   // Check and display results
   if (cid == 0) {
     long unsigned int performance = 1000 * 2 * gemm_l.M * gemm_l.N * gemm_l.K / timer;
-    long unsigned int utilization = performance / (2 * num_cores * 64);
+    long unsigned int utilization = performance / (2 * num_cores * 32);
 
     printf("\n----- (%dx%d) sdotp bp fmatmul -----\n", gemm_l.M, gemm_l.N);
     printf("The execution took %u cycles.\n", timer);
