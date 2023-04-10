@@ -17,6 +17,7 @@
 // Author: Domenic Wüthrich, ETH Zurich
 
 #include "sdotp-fmatmul.h"
+#include <stddef.h>
 
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 
