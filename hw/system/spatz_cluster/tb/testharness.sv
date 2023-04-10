@@ -42,7 +42,6 @@ module testharness (
    *********/
 
   logic                cluster_probe;
-  logic                eoc;
   logic [NumCores-1:0] debug_req;
 
   spatz_cluster_wrapper i_cluster_wrapper (
@@ -56,8 +55,7 @@ module testharness (
     .axi_out_resp_i  (axi_from_cluster_resp),
     .axi_in_req_i    (axi_to_cluster_req   ),
     .axi_in_resp_o   (axi_to_cluster_resp  ),
-    .cluster_probe_o (cluster_probe        ),
-    .eoc_o           (eoc                  )
+    .cluster_probe_o (cluster_probe        )
   );
 
 /**************

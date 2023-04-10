@@ -140,12 +140,7 @@ package spatz_cluster_peripheral_reg_pkg;
   } spatz_cluster_peripheral_reg2hw_icache_prefetch_enable_reg_t;
 
   typedef struct packed {
-    struct packed {
-      logic        q;
-    } spatz_eoc;
-    struct packed {
-      logic        q;
-    } spatz_cluster_probe;
+    logic        q;
   } spatz_cluster_peripheral_reg2hw_spatz_status_reg_t;
 
   typedef struct packed {
@@ -167,14 +162,14 @@ package spatz_cluster_peripheral_reg_pkg;
 
   // Register -> HW type
   typedef struct packed {
-    spatz_cluster_peripheral_reg2hw_perf_counter_enable_mreg_t [1:0] perf_counter_enable; // [312:251]
-    spatz_cluster_peripheral_reg2hw_hart_select_mreg_t [1:0] hart_select; // [250:231]
-    spatz_cluster_peripheral_reg2hw_perf_counter_mreg_t [1:0] perf_counter; // [230:133]
-    spatz_cluster_peripheral_reg2hw_cl_clint_set_reg_t cl_clint_set; // [132:100]
-    spatz_cluster_peripheral_reg2hw_cl_clint_clear_reg_t cl_clint_clear; // [99:67]
-    spatz_cluster_peripheral_reg2hw_hw_barrier_reg_t hw_barrier; // [66:35]
-    spatz_cluster_peripheral_reg2hw_icache_prefetch_enable_reg_t icache_prefetch_enable; // [34:34]
-    spatz_cluster_peripheral_reg2hw_spatz_status_reg_t spatz_status; // [33:32]
+    spatz_cluster_peripheral_reg2hw_perf_counter_enable_mreg_t [1:0] perf_counter_enable; // [311:250]
+    spatz_cluster_peripheral_reg2hw_hart_select_mreg_t [1:0] hart_select; // [249:230]
+    spatz_cluster_peripheral_reg2hw_perf_counter_mreg_t [1:0] perf_counter; // [229:132]
+    spatz_cluster_peripheral_reg2hw_cl_clint_set_reg_t cl_clint_set; // [131:99]
+    spatz_cluster_peripheral_reg2hw_cl_clint_clear_reg_t cl_clint_clear; // [98:66]
+    spatz_cluster_peripheral_reg2hw_hw_barrier_reg_t hw_barrier; // [65:34]
+    spatz_cluster_peripheral_reg2hw_icache_prefetch_enable_reg_t icache_prefetch_enable; // [33:33]
+    spatz_cluster_peripheral_reg2hw_spatz_status_reg_t spatz_status; // [32:32]
     spatz_cluster_peripheral_reg2hw_cluster_boot_control_reg_t cluster_boot_control; // [31:0]
   } spatz_cluster_peripheral_reg2hw_t;
 

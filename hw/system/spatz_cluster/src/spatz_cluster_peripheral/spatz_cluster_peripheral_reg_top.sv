@@ -276,10 +276,8 @@ module spatz_cluster_peripheral_reg_top #(
   logic hw_barrier_re;
   logic icache_prefetch_enable_wd;
   logic icache_prefetch_enable_we;
-  logic spatz_status_spatz_eoc_wd;
-  logic spatz_status_spatz_eoc_we;
-  logic spatz_status_spatz_cluster_probe_wd;
-  logic spatz_status_spatz_cluster_probe_we;
+  logic spatz_status_wd;
+  logic spatz_status_we;
   logic [31:0] cluster_boot_control_qs;
   logic [31:0] cluster_boot_control_wd;
   logic cluster_boot_control_we;
@@ -2071,18 +2069,17 @@ module spatz_cluster_peripheral_reg_top #(
 
   // R[spatz_status]: V(False)
 
-  //   F[spatz_eoc]: 0:0
   prim_subreg #(
     .DW      (1),
     .SWACCESS("WO"),
     .RESVAL  (1'h0)
-  ) u_spatz_status_spatz_eoc (
+  ) u_spatz_status (
     .clk_i   (clk_i    ),
     .rst_ni  (rst_ni  ),
 
     // from register interface
-    .we     (spatz_status_spatz_eoc_we),
-    .wd     (spatz_status_spatz_eoc_wd),
+    .we     (spatz_status_we),
+    .wd     (spatz_status_wd),
 
     // from internal hardware
     .de     (1'b0),
@@ -2090,32 +2087,7 @@ module spatz_cluster_peripheral_reg_top #(
 
     // to internal hardware
     .qe     (),
-    .q      (reg2hw.spatz_status.spatz_eoc.q ),
-
-    .qs     ()
-  );
-
-
-  //   F[spatz_cluster_probe]: 1:1
-  prim_subreg #(
-    .DW      (1),
-    .SWACCESS("WO"),
-    .RESVAL  (1'h0)
-  ) u_spatz_status_spatz_cluster_probe (
-    .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
-
-    // from register interface
-    .we     (spatz_status_spatz_cluster_probe_we),
-    .wd     (spatz_status_spatz_cluster_probe_wd),
-
-    // from internal hardware
-    .de     (1'b0),
-    .d      ('0  ),
-
-    // to internal hardware
-    .qe     (),
-    .q      (reg2hw.spatz_status.spatz_cluster_probe.q ),
+    .q      (reg2hw.spatz_status.q ),
 
     .qs     ()
   );
@@ -2397,11 +2369,8 @@ module spatz_cluster_peripheral_reg_top #(
   assign icache_prefetch_enable_we = addr_hit[9] & reg_we & !reg_error;
   assign icache_prefetch_enable_wd = reg_wdata[0];
 
-  assign spatz_status_spatz_eoc_we = addr_hit[10] & reg_we & !reg_error;
-  assign spatz_status_spatz_eoc_wd = reg_wdata[0];
-
-  assign spatz_status_spatz_cluster_probe_we = addr_hit[10] & reg_we & !reg_error;
-  assign spatz_status_spatz_cluster_probe_wd = reg_wdata[1];
+  assign spatz_status_we = addr_hit[10] & reg_we & !reg_error;
+  assign spatz_status_wd = reg_wdata[0];
 
   assign cluster_boot_control_we = addr_hit[11] & reg_we & !reg_error;
   assign cluster_boot_control_wd = reg_wdata[31:0];
@@ -2512,7 +2481,6 @@ module spatz_cluster_peripheral_reg_top #(
 
       addr_hit[10]: begin
         reg_rdata_next[0] = '0;
-        reg_rdata_next[1] = '0;
       end
 
       addr_hit[11]: begin

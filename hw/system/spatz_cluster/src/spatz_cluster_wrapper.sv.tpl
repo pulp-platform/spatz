@@ -183,7 +183,6 @@ module ${cfg['name']}_wrapper (
   input  logic [${cfg['addr_width']-1}:0]                            cluster_base_addr_i,
 % endif
   output logic                                    cluster_probe_o,
-  output logic                                    eoc_o,
   input  ${cfg['pkg_name']}::spatz_axi_in_req_t   axi_in_req_i,
   output ${cfg['pkg_name']}::spatz_axi_in_resp_t  axi_in_resp_o,
   output ${cfg['pkg_name']}::spatz_axi_out_req_t  axi_out_req_o,
@@ -248,7 +247,6 @@ module ${cfg['name']}_wrapper (
     .cluster_base_addr_i,
 % endif
     .cluster_probe_o,
-    .eoc_o,
     .axi_in_req_i,
     .axi_in_resp_o,
     .axi_out_req_o,
