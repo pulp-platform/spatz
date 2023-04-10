@@ -41,7 +41,11 @@ add_library(benchmark benchmark/benchmark.c)
 
 # Kernels
 add_library(dp-fmatmul dp-fmatmul/kernel/dp-fmatmul.c)
+add_library(sp-fmatmul sp-fmatmul/kernel/sp-fmatmul.c)
 
 # Tests
 enable_testing()
-add_spatz_test_threeParam(dp-fmatmul dp-fmatmul/main.c 64 64 64 matmul)
+add_spatz_test_threeParam(dp-fmatmul dp-fmatmul/main.c 64  64  64  matmul)
+
+add_spatz_test_threeParam(sp-fmatmul sp-fmatmul/main.c 64  64  64  matmul)
+add_spatz_test_threeParam(sp-fmatmul sp-fmatmul/main.c 64  128 64  matmul)
