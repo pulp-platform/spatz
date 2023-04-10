@@ -13,7 +13,7 @@
         data_width: 64,
         tcdm: {
             size: 128,
-            banks: 32,
+            banks: 16,
         },
         cluster_periph_size: 64, // kB
         zero_mem_size: 64,       // kB
@@ -49,7 +49,7 @@
             { $ref: "#/dma_core_template" },
         ],
         icache: {
-            size: 8, // total instruction cache size in kByte
+            size: 4, // total instruction cache size in kByte
             sets: 2, // number of ways
             cacheline: 256 // word size in bits
         }
