@@ -19,7 +19,7 @@ VERILATOR_INSTALL_DIR ?= ${INSTALL_DIR}/verilator
 
 # Support for local override
 BENDER ?= ${BENDER_INSTALL_DIR}/bender
-DASM   ?= spike-dasm
+DASM   ?= riscv -riscv64-gcc-8.5.0 spike-dasm
 VLT    ?= ${VERILATOR_INSTALL_DIR}/bin/verilator
 CMAKE  ?= cmake-3.18.1
 
@@ -29,7 +29,7 @@ SED_SRCS  := sed -e ${MATCH_END} -e ${MATCH_BGN}
 TB_SRCS   := $(wildcard ${ROOT}/hw/ip/snitch_test/*.sv)
 TB_DIR    := ${ROOT}/hw/ip/snitch_test/src
 
-VSIM_BENDER   += -t test -t rtl -t simulation -t spatz -t vsim -t spatz_test -t snitch_test
+VSIM_BENDER   += -t test -t rtl -t simulation -t spatz -t vsim -t spatz_test -t snitch_test -t disable_pmcs
 VSIM_SOURCES  := $(shell ${BENDER} script flist ${VSIM_BENDER} | ${SED_SRCS})
 VSIM_BUILDDIR := work-vsim
 
