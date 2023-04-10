@@ -6,7 +6,7 @@
 set(CMAKE_C_COMPILER ${LLVM_DIR}/bin/clang)
 set(CMAKE_CXX_COMPILER ${LLVM_DIR}/bin/clang++)
 set(CMAKE_OBJCOPY ${LLVM_DIR}/bin/llvm-objcopy)
-set(CMAKE_OBJDUMP ${LLVM_DIR}/bin/llvm-objdump --mcpu=snitch)
+set(CMAKE_OBJDUMP ${LLVM_DIR}/bin/llvm-objdump --mcpu=snitch --mattr=a --mattr=v --mattr=m --mattr=zfh)
 set(CMAKE_AR ${LLVM_DIR}/bin/llvm-ar)
 set(CMAKE_STRIP ${LLVM_DIR}/bin/llvm-strip)
 set(CMAKE_RANLIB ${LLVM_DIR}/bin/llvm-ranlib)

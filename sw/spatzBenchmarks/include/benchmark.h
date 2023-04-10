@@ -8,3 +8,6 @@
 #include "printf.h"
 
 size_t benchmark_get_cycle();
+
+void start_kernel();
+void stop_kernel();

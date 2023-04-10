@@ -16,10 +16,9 @@
 
 // Author: Matheus Cavalcante, ETH Zurich
 
-#include <stdbool.h>
-#include <stdint.h>
-#include <string.h>
 #include <snrt.h>
+#include <stdio.h>
+#include <benchmark.h>
 
 #include "data/data_gemm.h"
 #include "kernel/dp-fmatmul.c"
@@ -48,8 +47,8 @@ int verify_matrix(double *matrix, const double *checksum,
 }
 
 int main() {
-  const unsigned int num_cores = sntr_cluster_core_num();
-  const unsigned int cid = sntr_cluster_core_idx();
+  const unsigned int num_cores = snrt_cluster_core_num();
+  const unsigned int cid = snrt_cluster_core_idx();
 
   const unsigned int measure_iterations = 1;
 
@@ -144,13 +143,12 @@ int main() {
 
   // Check and display results
   if (cid == 0) {
-    unsigned int performance =
-        1000 * 2 * gemm_l.M * gemm_l.N * gemm_l.K / timer;
-    unsigned int utilization = performance / (2 * num_cores * N_FPU);
+    float performance = 2 * gemm_l.M * gemm_l.N * gemm_l.K / timer;
+    float utilization = performance / (2 * num_cores * 4);
 
     printf("\n----- (%dx%d) dp fmatmul -----\n", gemm_l.M, gemm_l.N);
     printf("The execution took %u cycles.\n", timer);
-    printf("The performance is %u OP/1000cycle (%u%%o utilization).\n",
+    printf("The performance is %f OP/cycle (%f%% utilization).\n",
            performance, utilization);
   }
 
