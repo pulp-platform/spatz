@@ -341,7 +341,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
   assign core_events_o = '0;
   `endif
 
-  logic [AddrWidth-32-1:0] mseg_q, mseg_d;
+  logic [AddrWidth > 32 ? (AddrWidth-32-1) : 0:0] mseg_q, mseg_d;
   `FFAR(mseg_q, mseg_d, '0, clk_i, rst_i)
 
   // accelerator offloading interface

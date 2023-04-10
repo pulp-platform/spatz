@@ -19,11 +19,7 @@ module testharness (
   import axi_pkg::xbar_cfg_t;
   import axi_pkg::xbar_rule_32_t;
 
-`ifdef VERILATOR
-  import "DPI-C" function void get_entry_point(output logic [31:0] entry_point);
-`else
-  import "DPI-C" function automatic void get_entry_point(output logic [31:0] entry_point);
-`endif
+  import "DPI-C" function int get_entry_point();
 
   /*********
    *  AXI  *
@@ -122,7 +118,7 @@ module testharness (
     @(negedge rst_ni);
 
     // Load the entry point
-    get_entry_point(entry_point);
+    entry_point = get_entry_point();
     $display("Loading entry point: %0x", entry_point);
 
     // Wait for a while
@@ -147,6 +143,10 @@ module testharness (
     `wait_for(to_cluster_rsp.p_valid);
     to_cluster_req = '{
       p_ready: 1'b1,
+      q      : '{
+        amo    : reqrsp_pkg::AMONone,
+        default: '0
+      },
       default: '0
     };
     @(negedge clk_i);

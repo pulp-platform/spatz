@@ -91,11 +91,11 @@ bin/spatz_cluster.vcs: test/bootrom.bin work-vcs/compile.sh work/lib/libfesvr.a 
 	mkdir -p bin
 	vcs -Mlib=work-vcs -Mdir=work-vcs -debug_access+all -fgp -kdb +vcs+fsdbon -o bin/spatz_cluster.vcs -cc $(CC) -cpp $(CXX) \
 		-assert disable_cover -override_timescale=1ns/1ps -full64 tb_bin ${TB_DIR}/rtl_lib.cc ${TB_DIR}/common_lib.cc test/bootdata.cc test/uartdpi/uartdpi.c \
-		-CFLAGS "-std=c++14 -I${MKFILE_DIR} -I${MKFILE_DIR}/test -I${FESVR}/include -I${TB_DIR} -Itest/uartdpi" -LDFLAGS "-L${FESVR}/lib" -lfesvr -lutil
+		-CFLAGS "-I${MKFILE_DIR} -I${MKFILE_DIR}/test -I${FESVR}/include -I${TB_DIR} -Itest/uartdpi" -LDFLAGS "-L${FESVR}/lib" -lfesvr -lutil
 
 ## Clean all build directories and temporary files for VCS simulation
 clean.vcs:
-	rm -rf bin/spatz_cluster.vcs work-vcs work
+	rm -rf bin/spatz_cluster.vcs work-vcs work-lib++ AN.DB work
 
 ######
 # SW #
@@ -128,7 +128,7 @@ sw.test.vcs: sw.vcs
 
 # VLT
 ## Build SW into sw/build with the LLVM toolchain (including tests) for Verilator simulator
-sw.vlt: clean.sw bin/spatz_cluster.vlt
+sw.vlt: clean.sw verilate
 	mkdir -p sw/build
 	cd sw/build && ${CMAKE} -DCMAKE_TOOLCHAIN_FILE=toolchain-llvm -DLLVM_DIR=${LLVM_INSTALL_DIR} -DSNITCH_SIMULATOR=../../../../../hw/system/spatz_cluster/bin/spatz_cluster.vlt -DBUILD_TESTS=ON .. && make
 

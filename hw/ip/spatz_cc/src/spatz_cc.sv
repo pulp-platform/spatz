@@ -508,7 +508,8 @@ module spatz_cc
   // pragma translate_off
   int           f;
   string        fn;
-  logic  [63:0] cycle = 0;
+  logic  [63:0] cycle;
+
   initial begin
     // We need to schedule the assignment into a safe region, otherwise
     // `hart_id_i` won't have a value assigned at the beginning of the first

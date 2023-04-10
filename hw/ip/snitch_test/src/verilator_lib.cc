@@ -101,6 +101,6 @@ void tb_memory_write(long long addr, int len, const svOpenArrayHandle data,
                    (const uint8_t *)strb_ptr);
 }
 
-void get_entry_point(int *entry_point) {
-  *entry_point = s->entry_point();
+int get_entry_point() {
+  return s->entry_point();
 }

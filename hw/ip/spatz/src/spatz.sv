@@ -119,7 +119,6 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
 
     // Tie the memory interface to zero
     assign fp_lsu_mem_req_o        = '0;
-    assign fp_lsu_mem_req_valid_o  = '0;
     assign fp_lsu_mem_finished     = 1'b0;
     assign fp_lsu_mem_str_finished = 1'b0;
   end: gen_no_fpu_sequencer else begin: gen_fpu_sequencer
