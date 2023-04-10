@@ -120,7 +120,6 @@ module spatz_decoder
               spatz_req.vd             = ls_vd;
               spatz_req.use_vd         = 1'b1;
               spatz_req.rs1            = decoder_req_i.rs1;
-              illegal_instr            = ~decoder_req_i.rs1_valid;
             end
 
             riscv_instr::VLSE8_V,
@@ -133,7 +132,6 @@ module spatz_decoder
               spatz_req.use_vd         = 1'b1;
               spatz_req.rs1            = decoder_req_i.rs1;
               spatz_req.rs2            = decoder_req_i.rs2;
-              illegal_instr            = ~decoder_req_i.rs1_valid | ~decoder_req_i.rs2_valid;
             end
 
             riscv_instr::VLUXEI8_V,
@@ -151,7 +149,6 @@ module spatz_decoder
               spatz_req.rs1            = decoder_req_i.rs1;
               spatz_req.vs2            = ls_s2;
               spatz_req.use_vs2        = 1'b1;
-              illegal_instr            = ~decoder_req_i.rs1_valid;
             end
 
             riscv_instr::VSE8_V,
@@ -164,7 +161,6 @@ module spatz_decoder
               spatz_req.use_vd         = 1'b1;
               spatz_req.vd_is_src      = 1'b1;
               spatz_req.rs1            = decoder_req_i.rs1;
-              illegal_instr            = ~decoder_req_i.rs1_valid;
             end
 
             riscv_instr::VSSE8_V,
@@ -178,7 +174,6 @@ module spatz_decoder
               spatz_req.vd_is_src      = 1'b1;
               spatz_req.rs1            = decoder_req_i.rs1;
               spatz_req.rs2            = decoder_req_i.rs2;
-              illegal_instr            = ~decoder_req_i.rs1_valid | ~decoder_req_i.rs2_valid;
             end
 
             riscv_instr::VSUXEI8_V,
@@ -197,7 +192,6 @@ module spatz_decoder
               spatz_req.rs1            = decoder_req_i.rs1;
               spatz_req.vs2            = ls_s2;
               spatz_req.use_vs2        = 1'b1;
-              illegal_instr            = ~decoder_req_i.rs1_valid;
             end
 
             default:
@@ -359,7 +353,6 @@ module spatz_decoder
             OPIVX,
             OPMVX: begin
               spatz_req.rs1 = decoder_req_i.rs1;
-              illegal_instr = ~decoder_req_i.rs1_valid;
             end
             default: illegal_instr = 1'b1;
           endcase
@@ -876,7 +869,6 @@ module spatz_decoder
               end
               OPFVF: begin
                 spatz_req.rs2 = decoder_req_i.rs1;
-                illegal_instr = ~decoder_req_i.rs1_valid;
               end
               default: illegal_instr = 1'b1;
             endcase
@@ -1615,7 +1607,6 @@ module spatz_decoder
           spatz_req.rd      = csr_rd;
           spatz_req.use_rd  = 1'b1;
           spatz_req.rs1     = csr_is_imm ? 32'(csr_rs1) : decoder_req_i.rs1;
-          illegal_instr     = csr_is_imm ? 1'b0         : ~decoder_req_i.rs1_valid;
           reset_vstart      = 1'b0;
 
           // Check if CSR access is really destined for Spatz
@@ -1672,14 +1663,12 @@ module spatz_decoder
           if (decoder_req_i.instr[31] == 1'b0) begin
             spatz_req.vtype = {1'b0, decoder_req_i.instr[27:20]};
             spatz_req.rs1   = decoder_req_i.rs1;
-            illegal_instr   = ~decoder_req_i.rs1_valid;
           end else if (decoder_req_i.instr[31:30] == 2'b11) begin
             spatz_req.vtype = {1'b0, decoder_req_i.instr[27:20]};
             spatz_req.rs1   = elen_t'(setvl_rs1);
           end else if (decoder_req_i.instr[31:25] == 7'b1000000) begin
             spatz_req.vtype = {1'b0, decoder_req_i.rs2[7:0]};
             spatz_req.rs1   = decoder_req_i.rs1;
-            illegal_instr   = ~decoder_req_i.rs1_valid || ~decoder_req_i.rs2_valid;
           end else begin
             illegal_instr = 1'b1;
           end

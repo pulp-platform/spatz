@@ -3238,7 +3238,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
     if (acc_mem_finished_i[1])
       acc_mem_cnt_d -= 1;
 
-    if (acc_qrsp_i.loadstore && acc_qready_i && acc_qvalid_o && acc_mem_store)
+    if (acc_qrsp_i.loadstore && acc_qready_i && acc_qvalid_o && (acc_mem_store || is_fp_store))
       acc_mem_str_cnt_d += 1;
     if (acc_mem_finished_i[0] && acc_mem_str_finished_i[0])
       acc_mem_str_cnt_d -= 1;
