@@ -280,6 +280,9 @@ module spatz_cluster_peripheral_reg_top #(
   logic spatz_status_spatz_eoc_we;
   logic spatz_status_spatz_cluster_probe_wd;
   logic spatz_status_spatz_cluster_probe_we;
+  logic [31:0] cluster_boot_control_qs;
+  logic [31:0] cluster_boot_control_wd;
+  logic cluster_boot_control_we;
 
   // Register instances
 
@@ -2072,7 +2075,7 @@ module spatz_cluster_peripheral_reg_top #(
   prim_subreg #(
     .DW      (1),
     .SWACCESS("WO"),
-    .RESVAL  (1'h1)
+    .RESVAL  (1'h0)
   ) u_spatz_status_spatz_eoc (
     .clk_i   (clk_i    ),
     .rst_ni  (rst_ni  ),
@@ -2118,9 +2121,36 @@ module spatz_cluster_peripheral_reg_top #(
   );
 
 
+  // R[cluster_boot_control]: V(False)
+
+  prim_subreg #(
+    .DW      (32),
+    .SWACCESS("RW"),
+    .RESVAL  (32'h0)
+  ) u_cluster_boot_control (
+    .clk_i   (clk_i    ),
+    .rst_ni  (rst_ni  ),
+
+    // from register interface
+    .we     (cluster_boot_control_we),
+    .wd     (cluster_boot_control_wd),
+
+    // from internal hardware
+    .de     (hw2reg.cluster_boot_control.de),
+    .d      (hw2reg.cluster_boot_control.d ),
+
+    // to internal hardware
+    .qe     (),
+    .q      (reg2hw.cluster_boot_control.q ),
+
+    // to register interface (read)
+    .qs     (cluster_boot_control_qs)
+  );
 
 
-  logic [10:0] addr_hit;
+
+
+  logic [11:0] addr_hit;
   always_comb begin
     addr_hit = '0;
     addr_hit[ 0] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_PERF_COUNTER_ENABLE_0_OFFSET);
@@ -2134,6 +2164,7 @@ module spatz_cluster_peripheral_reg_top #(
     addr_hit[ 8] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_HW_BARRIER_OFFSET);
     addr_hit[ 9] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_ICACHE_PREFETCH_ENABLE_OFFSET);
     addr_hit[10] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_SPATZ_STATUS_OFFSET);
+    addr_hit[11] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_CLUSTER_BOOT_CONTROL_OFFSET);
   end
 
   assign addrmiss = (reg_re || reg_we) ? ~|addr_hit : 1'b0 ;
@@ -2151,7 +2182,8 @@ module spatz_cluster_peripheral_reg_top #(
                (addr_hit[ 7] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 7] & ~reg_be))) |
                (addr_hit[ 8] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 8] & ~reg_be))) |
                (addr_hit[ 9] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 9] & ~reg_be))) |
-               (addr_hit[10] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[10] & ~reg_be)))));
+               (addr_hit[10] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[10] & ~reg_be))) |
+               (addr_hit[11] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[11] & ~reg_be)))));
   end
 
   assign perf_counter_enable_0_cycle_0_we = addr_hit[0] & reg_we & !reg_error;
@@ -2371,6 +2403,9 @@ module spatz_cluster_peripheral_reg_top #(
   assign spatz_status_spatz_cluster_probe_we = addr_hit[10] & reg_we & !reg_error;
   assign spatz_status_spatz_cluster_probe_wd = reg_wdata[1];
 
+  assign cluster_boot_control_we = addr_hit[11] & reg_we & !reg_error;
+  assign cluster_boot_control_wd = reg_wdata[31:0];
+
   // Read data return
   always_comb begin
     reg_rdata_next = '0;
@@ -2478,6 +2513,10 @@ module spatz_cluster_peripheral_reg_top #(
       addr_hit[10]: begin
         reg_rdata_next[0] = '0;
         reg_rdata_next[1] = '0;
+      end
+
+      addr_hit[11]: begin
+        reg_rdata_next[31:0] = cluster_boot_control_qs;
       end
 
       default: begin

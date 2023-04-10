@@ -420,5 +420,18 @@
             name: "SPATZ_CLUSTER_PROBE",
             desc: "Indicates the cluster is computing a kernel."
         }]
-    }]
+    },
+    {
+        name: "CLUSTER_BOOT_CONTROL",
+        desc: '''Controls the cluster boot process.'''
+        swaccess: "rw",
+        hwaccess: "hrw",
+        resval: "0",
+        fields: [{
+            bits: "31:0",
+            name: "ENTRY_POINT",
+            desc: "Post-bootstrapping entry point."
+        }]
+    }
+  ]
 }
