@@ -636,7 +636,6 @@ module spatz_vlsu
   //////////////////////////
 
   // Memory request signals
-  id_t  [NrMemPorts-1:0]                   mem_req_id;
   logic [NrMemPorts-1:0][MemDataWidth-1:0] mem_req_data;
   logic [NrMemPorts-1:0]                   mem_req_svalid;
   logic [NrMemPorts-1:0][ELEN/8-1:0]       mem_req_strb;
@@ -674,7 +673,6 @@ module spatz_vlsu
     rob_push  = '0;
     rob_pop   = '0;
 
-    mem_req_id     = '0;
     mem_req_data   = '0;
     mem_req_strb   = '0;
     mem_req_svalid = '0;
@@ -833,7 +831,7 @@ module spatz_vlsu
             endcase
 
           mem_req_svalid[port] = rob_rvalid[port] && (!mem_is_indexed || (vrf_rvalid_i[1] && !pending_index[port])) && !mem_spatz_req.op_mem.is_load;
-          rob_pop[port]        = spatz_mem_req_valid_o[port] && spatz_mem_req_ready_i[port];
+          rob_pop[port]        = spatz_mem_req_valid[port] && spatz_mem_req_ready[port];
 
           // Create byte enable signal for memory request
           if (mem_is_single_element_operation) begin
