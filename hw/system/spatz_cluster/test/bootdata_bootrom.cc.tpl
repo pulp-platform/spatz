@@ -2,11 +2,21 @@
 // Solderpad Hardware License, Version 0.51, see LICENSE for details.
 // SPDX-License-Identifier: SHL-0.51
 
-#include <tb_lib.hh>
+#include <stdint.h>
 
-namespace sim {
+// The boot data generated along with the system RTL.
+struct BootData {
+    uint32_t boot_addr;
+    uint32_t core_count;
+    uint32_t hartid_base;
+    uint32_t tcdm_start;
+    uint32_t tcdm_size;
+    uint32_t tcdm_offset;
+    uint64_t global_mem_start;
+    uint64_t global_mem_end;
+};
 
-const BootData BOOTDATA = {.boot_addr = ${hex(cfg['cluster']['boot_addr'])},
+extern "C" const BootData BOOTDATA = {.boot_addr = ${hex(cfg['cluster']['boot_addr'])},
                            .core_count = ${cfg['cluster']['nr_cores']},
                            .hartid_base = ${cfg['cluster']['cluster_base_hartid']},
                            .tcdm_start = ${hex(cfg['cluster']['cluster_base_addr'])},
@@ -14,5 +24,3 @@ const BootData BOOTDATA = {.boot_addr = ${hex(cfg['cluster']['boot_addr'])},
                            .tcdm_offset = ${hex(cfg['cluster']['cluster_base_offset'])},
                            .global_mem_start = ${hex(cfg['dram']['address'])},
                            .global_mem_end = ${hex(cfg['dram']['address'] + cfg['dram']['length'])}};
-
-}  // namespace sim
