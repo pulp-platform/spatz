@@ -6,9 +6,9 @@
 
 {
     kernel: "GEMM"
-    M: 64,
-    N: 64,
-    K: 64,
+    M: PARAM1,
+    N: PARAM2,
+    K: PARAM3,
     alpha: 0,
     transpose_A: false,
     transpose_B: false,
