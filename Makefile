@@ -7,10 +7,6 @@
 # Include Makefrag
 include util/Makefrag
 
-# Include configuration
-config_mk = $(abspath $(ROOT_DIR)/cfg/config.mk)
-include $(config_mk)
-
 # Bender version
 BENDER_VERSION = 0.27.1
 
