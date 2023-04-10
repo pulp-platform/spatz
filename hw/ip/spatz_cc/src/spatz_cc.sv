@@ -479,13 +479,13 @@ module spatz_cc
   );
 
   tcdm_mux #(
-    .NrPorts    (2                     ),
-    .AddrWidth  (TCDMAddrWidth         ),
-    .DataWidth  (DataWidth             ),
-    .RespDepth  (NumIntOutstandingLoads),
-    .tcdm_req_t (tcdm_req_t            ),
-    .tcdm_rsp_t (tcdm_rsp_t            ),
-    .user_t     (tcdm_user_t           )
+    .NrPorts    (2                                                ),
+    .AddrWidth  (TCDMAddrWidth                                    ),
+    .DataWidth  (DataWidth                                        ),
+    .RespDepth  (NumIntOutstandingLoads + NumSpatzOutstandingLoads),
+    .tcdm_req_t (tcdm_req_t                                       ),
+    .tcdm_rsp_t (tcdm_rsp_t                                       ),
+    .user_t     (tcdm_user_t                                      )
   ) i_tcdm_mux (
     .clk_i    (clk_i                          ),
     .rst_ni   (rst_ni                         ),
@@ -496,10 +496,13 @@ module spatz_cc
   );
 
   // Core events for performance counters
-  assign core_events_o.retired_instr = snitch_events.retired_instr;
-  assign core_events_o.retired_load  = snitch_events.retired_load;
-  assign core_events_o.retired_i     = snitch_events.retired_i;
-  assign core_events_o.retired_acc   = snitch_events.retired_acc;
+  assign core_events_o.retired_instr     = snitch_events.retired_instr;
+  assign core_events_o.retired_load      = snitch_events.retired_load;
+  assign core_events_o.retired_i         = snitch_events.retired_i;
+  assign core_events_o.retired_acc       = snitch_events.retired_acc;
+  assign core_events_o.issue_fpu         = '0;
+  assign core_events_o.issue_core_to_fpu = '0;
+  assign core_events_o.issue_fpu_seq     = '0;
 
   // --------------------------
   // Tracer
