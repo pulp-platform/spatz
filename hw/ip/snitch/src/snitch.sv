@@ -356,8 +356,8 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
   assign acc_qreq_o.data_op = inst_data_i;
   assign acc_qreq_o.data_arga = {{32{opa[31]}}, opa};
   assign acc_qreq_o.data_argb = {{32{opb[31]}}, opb};
-  // operand C is currently unused
-  assign acc_qreq_o.data_argc = '0;
+  // operand C is currently only used for load/store instructions
+  assign acc_qreq_o.data_argc = ls_paddr;
 
   // ---------
   // L0 ITLB

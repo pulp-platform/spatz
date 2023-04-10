@@ -116,48 +116,48 @@ add wave -noupdate -group core[$1] -group Snitch /tb_bin/i_dut/i_cluster_wrapper
 add wave -noupdate -group core[$1] -group Snitch -group Internal -group RF /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/i_snitch/i_snitch_regfile/*
 add wave -noupdate -group core[$1] -group Snitch -group Internal /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/i_snitch/*
 
-add wave -noupdate -group core[$1] -group Spatz /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/gen_spatz/i_spatz/issue_valid_i
-add wave -noupdate -group core[$1] -group Spatz /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/gen_spatz/i_spatz/issue_ready_o
-add wave -noupdate -group core[$1] -group Spatz /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/gen_spatz/i_spatz/issue_req_i
-add wave -noupdate -group core[$1] -group Spatz /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/gen_spatz/i_spatz/issue_rsp_o
-add wave -noupdate -group core[$1] -group Spatz /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/gen_spatz/i_spatz/rsp_valid_o
-add wave -noupdate -group core[$1] -group Spatz /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/gen_spatz/i_spatz/rsp_ready_i
-add wave -noupdate -group core[$1] -group Spatz /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/gen_spatz/i_spatz/rsp_o
-add wave -noupdate -group core[$1] -group Spatz /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/gen_spatz/i_spatz/spatz_mem_req_o
-add wave -noupdate -group core[$1] -group Spatz /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/gen_spatz/i_spatz/spatz_mem_req_valid_o
-add wave -noupdate -group core[$1] -group Spatz /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/gen_spatz/i_spatz/spatz_mem_req_ready_i
-add wave -noupdate -group core[$1] -group Spatz /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/gen_spatz/i_spatz/spatz_mem_rsp_i
-add wave -noupdate -group core[$1] -group Spatz /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/gen_spatz/i_spatz/spatz_mem_rsp_valid_i
+add wave -noupdate -group core[$1] -group Spatz /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/i_spatz/issue_valid_i
+add wave -noupdate -group core[$1] -group Spatz /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/i_spatz/issue_ready_o
+add wave -noupdate -group core[$1] -group Spatz /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/i_spatz/issue_req_i
+add wave -noupdate -group core[$1] -group Spatz /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/i_spatz/issue_rsp_o
+add wave -noupdate -group core[$1] -group Spatz /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/i_spatz/rsp_valid_o
+add wave -noupdate -group core[$1] -group Spatz /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/i_spatz/rsp_ready_i
+add wave -noupdate -group core[$1] -group Spatz /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/i_spatz/rsp_o
+add wave -noupdate -group core[$1] -group Spatz /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/i_spatz/spatz_mem_req_o
+add wave -noupdate -group core[$1] -group Spatz /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/i_spatz/spatz_mem_req_valid_o
+add wave -noupdate -group core[$1] -group Spatz /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/i_spatz/spatz_mem_req_ready_i
+add wave -noupdate -group core[$1] -group Spatz /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/i_spatz/spatz_mem_rsp_i
+add wave -noupdate -group core[$1] -group Spatz /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/i_spatz/spatz_mem_rsp_valid_i
 
-add wave -noupdate -group core[$1] -group Spatz -group "FPU Sequencer" /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/gen_spatz/i_spatz/gen_fpu_sequencer/i_fpu_sequencer/*
-add wave -noupdate -group core[$1] -group Spatz -group "FPU Sequencer" -group FPR /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/gen_spatz/i_spatz/gen_fpu_sequencer/i_fpu_sequencer/i_fpr/*
-add wave -noupdate -group core[$1] -group Spatz -group "FPU Sequencer" -group LSU /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/gen_spatz/i_spatz/gen_fpu_sequencer/i_fpu_sequencer/i_fp_lsu/*
+add wave -noupdate -group core[$1] -group Spatz -group "FPU Sequencer" /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/i_spatz/gen_fpu_sequencer/i_fpu_sequencer/*
+add wave -noupdate -group core[$1] -group Spatz -group "FPU Sequencer" -group FPR /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/i_spatz/gen_fpu_sequencer/i_fpu_sequencer/i_fpr/*
+add wave -noupdate -group core[$1] -group Spatz -group "FPU Sequencer" -group LSU /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/i_spatz/gen_fpu_sequencer/i_fpu_sequencer/i_fp_lsu/*
 
-add wave -noupdate -group core[$1] -group Spatz -group Controller /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/gen_spatz/i_spatz/i_controller/*
+add wave -noupdate -group core[$1] -group Spatz -group Controller /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/i_spatz/i_controller/*
 
 add wave -noupdate -group core[$1] -group Spatz -group VRF -divider RegisterWrite
-add wave -noupdate -group core[$1] -group Spatz -group VRF /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/gen_spatz/i_spatz/i_vrf/waddr_i
-add wave -noupdate -group core[$1] -group Spatz -group VRF /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/gen_spatz/i_spatz/i_vrf/wdata_i
-add wave -noupdate -group core[$1] -group Spatz -group VRF /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/gen_spatz/i_spatz/i_vrf/we_i
-add wave -noupdate -group core[$1] -group Spatz -group VRF /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/gen_spatz/i_spatz/i_vrf/wbe_i
-add wave -noupdate -group core[$1] -group Spatz -group VRF /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/gen_spatz/i_spatz/i_vrf/wvalid_o
+add wave -noupdate -group core[$1] -group Spatz -group VRF /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/i_spatz/i_vrf/waddr_i
+add wave -noupdate -group core[$1] -group Spatz -group VRF /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/i_spatz/i_vrf/wdata_i
+add wave -noupdate -group core[$1] -group Spatz -group VRF /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/i_spatz/i_vrf/we_i
+add wave -noupdate -group core[$1] -group Spatz -group VRF /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/i_spatz/i_vrf/wbe_i
+add wave -noupdate -group core[$1] -group Spatz -group VRF /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/i_spatz/i_vrf/wvalid_o
 add wave -noupdate -group core[$1] -group Spatz -group VRF -divider RegisterRead
-add wave -noupdate -group core[$1] -group Spatz -group VRF /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/gen_spatz/i_spatz/i_vrf/raddr_i
-add wave -noupdate -group core[$1] -group Spatz -group VRF /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/gen_spatz/i_spatz/i_vrf/rdata_o
-add wave -noupdate -group core[$1] -group Spatz -group VRF /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/gen_spatz/i_spatz/i_vrf/re_i
-add wave -noupdate -group core[$1] -group Spatz -group VRF /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/gen_spatz/i_spatz/i_vrf/rvalid_o
+add wave -noupdate -group core[$1] -group Spatz -group VRF /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/i_spatz/i_vrf/raddr_i
+add wave -noupdate -group core[$1] -group Spatz -group VRF /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/i_spatz/i_vrf/rdata_o
+add wave -noupdate -group core[$1] -group Spatz -group VRF /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/i_spatz/i_vrf/re_i
+add wave -noupdate -group core[$1] -group Spatz -group VRF /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/i_spatz/i_vrf/rvalid_o
 add wave -noupdate -group core[$1] -group Spatz -group VRF -divider Internal
-add wave -noupdate -group core[$1] -group Spatz -group VRF /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/gen_spatz/i_spatz/i_vrf/waddr
-add wave -noupdate -group core[$1] -group Spatz -group VRF /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/gen_spatz/i_spatz/i_vrf/wdata
-add wave -noupdate -group core[$1] -group Spatz -group VRF /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/gen_spatz/i_spatz/i_vrf/we
-add wave -noupdate -group core[$1] -group Spatz -group VRF /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/gen_spatz/i_spatz/i_vrf/wbe
-add wave -noupdate -group core[$1] -group Spatz -group VRF /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/gen_spatz/i_spatz/i_vrf/raddr
-add wave -noupdate -group core[$1] -group Spatz -group VRF /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/gen_spatz/i_spatz/i_vrf/rdata
+add wave -noupdate -group core[$1] -group Spatz -group VRF /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/i_spatz/i_vrf/waddr
+add wave -noupdate -group core[$1] -group Spatz -group VRF /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/i_spatz/i_vrf/wdata
+add wave -noupdate -group core[$1] -group Spatz -group VRF /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/i_spatz/i_vrf/we
+add wave -noupdate -group core[$1] -group Spatz -group VRF /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/i_spatz/i_vrf/wbe
+add wave -noupdate -group core[$1] -group Spatz -group VRF /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/i_spatz/i_vrf/raddr
+add wave -noupdate -group core[$1] -group Spatz -group VRF /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/i_spatz/i_vrf/rdata
 
-add wave -noupdate -group core[$1] -group Spatz -group VLSU /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/gen_spatz/i_spatz/i_vlsu/*
+add wave -noupdate -group core[$1] -group Spatz -group VLSU /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/i_spatz/i_vlsu/*
 
-add wave -noupdate -group core[$1] -group Spatz -group VSLDU /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/gen_spatz/i_spatz/i_vsldu/*
+add wave -noupdate -group core[$1] -group Spatz -group VSLDU /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/i_spatz/i_vsldu/*
 
-add wave -noupdate -group core[$1] -group Spatz -group VFU /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/gen_spatz/i_spatz/i_vfu/*
+add wave -noupdate -group core[$1] -group Spatz -group VFU /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/i_spatz/i_vfu/*
 
 add wave -noupdate -group core[$1] -group Internal /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/*

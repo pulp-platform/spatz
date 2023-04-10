@@ -33,7 +33,6 @@ module spatz_cc
     // TCDM port types
     parameter type                                         tcdm_req_t               = logic,
     parameter type                                         tcdm_req_chan_t          = logic,
-    parameter type                                         tcdm_user_t              = logic,
     parameter type                                         tcdm_rsp_t               = logic,
     parameter type                                         tcdm_rsp_chan_t          = logic,
     /// TCDM Address Width
@@ -151,8 +150,8 @@ module spatz_cc
   core_events_t snitch_events;
 
   // Snitch Integer Core
-  dreq_t snitch_dreq_d, snitch_dreq_q;
-  drsp_t snitch_drsp_d, snitch_drsp_q;
+  dreq_t snitch_dreq_d, snitch_dreq_q, merged_dreq;
+  drsp_t snitch_drsp_d, snitch_drsp_q, merged_drsp;
 
   // Spatz Memory consistency signals
   logic [1:0] spatz_mem_finished;
@@ -303,65 +302,78 @@ module spatz_cc
     .oup_ready_i ( acc_demux_snitch_ready_q  )
   );
 
-  tcdm_req_t fp_lsu_mem_req;
-  tcdm_rsp_t fp_lsu_mem_rsp;
+  dreq_t fp_lsu_mem_req;
+  drsp_t fp_lsu_mem_rsp;
 
-  if (RVV) begin : gen_spatz
-    tcdm_req_chan_t [NumMemPortsPerSpatz-1:0] spatz_mem_req;
-    logic [NumMemPortsPerSpatz-1:0] spatz_mem_req_valid;
-    logic [NumMemPortsPerSpatz-1:0] spatz_mem_req_ready;
-    tcdm_rsp_chan_t [NumMemPortsPerSpatz-1:0] spatz_mem_rsp;
-    logic [NumMemPortsPerSpatz-1:0] spatz_mem_rsp_valid;
+  tcdm_req_chan_t [NumMemPortsPerSpatz-1:0] spatz_mem_req;
+  logic           [NumMemPortsPerSpatz-1:0] spatz_mem_req_valid;
+  logic           [NumMemPortsPerSpatz-1:0] spatz_mem_req_ready;
+  tcdm_rsp_chan_t [NumMemPortsPerSpatz-1:0] spatz_mem_rsp;
+  logic           [NumMemPortsPerSpatz-1:0] spatz_mem_rsp_valid;
 
-    spatz #(
-      .NrMemPorts         (NumMemPortsPerSpatz     ),
-      .NumOutstandingLoads(NumSpatzOutstandingLoads),
-      .FPUImplementation  (FPUImplementation       ),
-      .spatz_mem_req_t    (tcdm_req_chan_t         ),
-      .spatz_mem_rsp_t    (tcdm_rsp_chan_t         ),
-      .spatz_issue_req_t  (acc_issue_req_t         ),
-      .spatz_issue_rsp_t  (acc_issue_rsp_t         ),
-      .spatz_rsp_t        (acc_rsp_t               )
-    ) i_spatz (
-      .clk_i                   (clk_i                 ),
-      .rst_ni                  (rst_ni                ),
-      .issue_valid_i           (acc_qvalid            ),
-      .issue_ready_o           (acc_qready            ),
-      .issue_req_i             (acc_snitch_req        ),
-      .issue_rsp_o             (acc_snitch_resp       ),
-      .rsp_valid_o             (acc_pvalid            ),
-      .rsp_ready_i             (acc_pready            ),
-      .rsp_o                   (acc_resp              ),
-      .spatz_mem_req_o         (spatz_mem_req         ),
-      .spatz_mem_req_valid_o   (spatz_mem_req_valid   ),
-      .spatz_mem_req_ready_i   (spatz_mem_req_ready   ),
-      .spatz_mem_rsp_i         (spatz_mem_rsp         ),
-      .spatz_mem_rsp_valid_i   (spatz_mem_rsp_valid   ),
-      .spatz_mem_finished_o    (spatz_mem_finished    ),
-      .spatz_mem_str_finished_o(spatz_mem_str_finished),
-      .fp_lsu_mem_req_o        (fp_lsu_mem_req.q      ),
-      .fp_lsu_mem_req_valid_o  (fp_lsu_mem_req.q_valid),
-      .fp_lsu_mem_req_ready_i  (fp_lsu_mem_rsp.q_ready),
-      .fp_lsu_mem_rsp_i        (fp_lsu_mem_rsp.p      ),
-      .fp_lsu_mem_rsp_valid_i  (fp_lsu_mem_rsp.p_valid),
-      .fpu_rnd_mode_i          (fpu_rnd_mode          ),
-      .fpu_status_o            (fpu_status            )
-    );
+  spatz #(
+    .NrMemPorts         (NumMemPortsPerSpatz     ),
+    .NumOutstandingLoads(NumSpatzOutstandingLoads),
+    .FPUImplementation  (FPUImplementation       ),
+    .dreq_t             (dreq_t                  ),
+    .drsp_t             (drsp_t                  ),
+    .spatz_mem_req_t    (tcdm_req_chan_t         ),
+    .spatz_mem_rsp_t    (tcdm_rsp_chan_t         ),
+    .spatz_issue_req_t  (acc_issue_req_t         ),
+    .spatz_issue_rsp_t  (acc_issue_rsp_t         ),
+    .spatz_rsp_t        (acc_rsp_t               )
+  ) i_spatz (
+    .clk_i                   (clk_i                 ),
+    .rst_ni                  (rst_ni                ),
+    .issue_valid_i           (acc_qvalid            ),
+    .issue_ready_o           (acc_qready            ),
+    .issue_req_i             (acc_snitch_req        ),
+    .issue_rsp_o             (acc_snitch_resp       ),
+    .rsp_valid_o             (acc_pvalid            ),
+    .rsp_ready_i             (acc_pready            ),
+    .rsp_o                   (acc_resp              ),
+    .spatz_mem_req_o         (spatz_mem_req         ),
+    .spatz_mem_req_valid_o   (spatz_mem_req_valid   ),
+    .spatz_mem_req_ready_i   (spatz_mem_req_ready   ),
+    .spatz_mem_rsp_i         (spatz_mem_rsp         ),
+    .spatz_mem_rsp_valid_i   (spatz_mem_rsp_valid   ),
+    .spatz_mem_finished_o    (spatz_mem_finished    ),
+    .spatz_mem_str_finished_o(spatz_mem_str_finished),
+    .fp_lsu_mem_req_o        (fp_lsu_mem_req        ),
+    .fp_lsu_mem_rsp_i        (fp_lsu_mem_rsp        ),
+    .fpu_rnd_mode_i          (fpu_rnd_mode          ),
+    .fpu_status_o            (fpu_status            )
+  );
 
-    for (genvar p = 0; p < NumMemPortsPerSpatz; p++) begin
-      assign tcdm_req_o[p] = '{
+  for (genvar p = 0; p < NumMemPortsPerSpatz; p++) begin
+    assign tcdm_req_o[p] = '{
          q      : spatz_mem_req[p],
          q_valid: spatz_mem_req_valid[p]
        };
-      assign spatz_mem_req_ready[p] = tcdm_rsp_i[p].q_ready;
+    assign spatz_mem_req_ready[p] = tcdm_rsp_i[p].q_ready;
 
-      assign spatz_mem_rsp[p]       = tcdm_rsp_i[p].p;
-      assign spatz_mem_rsp_valid[p] = tcdm_rsp_i[p].p_valid;
-    end
-
-  end else begin
-    assign fp_lsu_mem_req = '0;
+    assign spatz_mem_rsp[p]       = tcdm_rsp_i[p].p;
+    assign spatz_mem_rsp_valid[p] = tcdm_rsp_i[p].p_valid;
   end
+
+  reqrsp_mux #(
+    .NrPorts     (2           ),
+    .AddrWidth   (AddrWidth   ),
+    .DataWidth   (DataWidth   ),
+    .req_t       (dreq_t      ),
+    .rsp_t       (drsp_t      ),
+    // TODO(zarubaf): Wire-up to top-level.
+    .RespDepth   (4           ),
+    .RegisterReq ({1'b1, 1'b0})
+  ) i_reqrsp_mux (
+    .clk_i     (clk_i                          ),
+    .rst_ni    (rst_ni                         ),
+    .slv_req_i ({fp_lsu_mem_req, snitch_dreq_q}),
+    .slv_rsp_o ({fp_lsu_mem_rsp, snitch_drsp_q}),
+    .mst_req_o (merged_dreq                    ),
+    .mst_rsp_i (merged_drsp                    ),
+    .idx_o     (/*not connected*/              )
+  );
 
   if (Xdma) begin : gen_dma
     axi_dma_tc_snitch_fe #(
@@ -425,14 +437,13 @@ module spatz_cc
     .NrPorts   (2     ),
     .req_t     (dreq_t),
     .rsp_t     (drsp_t),
-    // TODO(zarubaf): Make a parameter.
     .RespDepth (4     )
   ) i_reqrsp_demux (
     .clk_i        (clk_i                      ),
     .rst_ni       (rst_ni                     ),
     .slv_select_i (slave_select               ),
-    .slv_req_i    (snitch_dreq_q              ),
-    .slv_rsp_o    (snitch_drsp_q              ),
+    .slv_req_i    (merged_dreq                ),
+    .slv_rsp_o    (merged_drsp                ),
     .mst_req_o    ({data_tcdm_req, data_req_o}),
     .mst_rsp_i    ({data_tcdm_rsp, data_rsp_i})
   );
@@ -456,51 +467,30 @@ module spatz_cc
     .addr_t    (logic [AddrWidth-1:0]),
     .rule_t    (reqrsp_rule_t        )
   ) i_addr_decode_napot (
-    .addr_i           (snitch_dreq_q.q.addr),
-    .addr_map_i       (addr_map            ),
-    .idx_o            (slave_select        ),
-    .dec_valid_o      (/* Unused */        ),
-    .dec_error_o      (/* Unused */        ),
-    .en_default_idx_i (1'b1                ),
-    .default_idx_i    ('0                  )
+    .addr_i           (merged_dreq.q.addr),
+    .addr_map_i       (addr_map          ),
+    .idx_o            (slave_select      ),
+    .dec_valid_o      (/* Unused */      ),
+    .dec_error_o      (/* Unused */      ),
+    .en_default_idx_i (1'b1              ),
+    .default_idx_i    ('0                )
   );
-
-  tcdm_req_t core_tcdm_req;
-  tcdm_rsp_t core_tcdm_rsp;
 
   reqrsp_to_tcdm #(
     .AddrWidth    (AddrWidth ),
     .DataWidth    (DataWidth ),
-    // TODO(zarubaf): Make a parameter.
     .BufDepth     (4         ),
     .reqrsp_req_t (dreq_t    ),
     .reqrsp_rsp_t (drsp_t    ),
     .tcdm_req_t   (tcdm_req_t),
     .tcdm_rsp_t   (tcdm_rsp_t)
   ) i_reqrsp_to_tcdm (
-    .clk_i        (clk_i        ),
-    .rst_ni       (rst_ni       ),
-    .reqrsp_req_i (data_tcdm_req),
-    .reqrsp_rsp_o (data_tcdm_rsp),
-    .tcdm_req_o   (core_tcdm_req),
-    .tcdm_rsp_i   (core_tcdm_rsp)
-  );
-
-  tcdm_mux #(
-    .NrPorts    (2                                                ),
-    .AddrWidth  (TCDMAddrWidth                                    ),
-    .DataWidth  (DataWidth                                        ),
-    .RespDepth  (NumIntOutstandingLoads + NumSpatzOutstandingLoads),
-    .tcdm_req_t (tcdm_req_t                                       ),
-    .tcdm_rsp_t (tcdm_rsp_t                                       ),
-    .user_t     (tcdm_user_t                                      )
-  ) i_tcdm_mux (
-    .clk_i    (clk_i                          ),
-    .rst_ni   (rst_ni                         ),
-    .slv_req_i({core_tcdm_req, fp_lsu_mem_req}),
-    .slv_rsp_o({core_tcdm_rsp, fp_lsu_mem_rsp}),
-    .mst_req_o(tcdm_req_o[NumMemPortsPerSpatz]),
-    .mst_rsp_i(tcdm_rsp_i[NumMemPortsPerSpatz])
+    .clk_i        (clk_i                          ),
+    .rst_ni       (rst_ni                         ),
+    .reqrsp_req_i (data_tcdm_req                  ),
+    .reqrsp_rsp_o (data_tcdm_rsp                  ),
+    .tcdm_req_o   (tcdm_req_o[NumMemPortsPerSpatz]),
+    .tcdm_rsp_i   (tcdm_rsp_i[NumMemPortsPerSpatz])
   );
 
   // Core events for performance counters

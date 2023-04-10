@@ -15,9 +15,12 @@
 
 module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     parameter int                  unsigned NrMemPorts          = 1,
-    // Memory request
+    // Memory request (VLSU)
     parameter type                          spatz_mem_req_t     = logic,
     parameter type                          spatz_mem_rsp_t     = logic,
+    // Memory request (FP Sequencer)
+    parameter type                          dreq_t              = logic,
+    parameter type                          drsp_t              = logic,
     // Snitch interface
     parameter type                          spatz_issue_req_t   = logic,
     parameter type                          spatz_issue_rsp_t   = logic,
@@ -47,11 +50,8 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     output logic             [1:0]            spatz_mem_finished_o,
     output logic             [1:0]            spatz_mem_str_finished_o,
     // FPU memory interface interface
-    output spatz_mem_req_t                    fp_lsu_mem_req_o,
-    output logic                              fp_lsu_mem_req_valid_o,
-    input  logic                              fp_lsu_mem_req_ready_i,
-    input  spatz_mem_rsp_t                    fp_lsu_mem_rsp_i,
-    input  logic                              fp_lsu_mem_rsp_valid_i,
+    output dreq_t                             fp_lsu_mem_req_o,
+    input  drsp_t                             fp_lsu_mem_rsp_i,
     // FPU side channel
     input  roundmode_e                        fpu_rnd_mode_i,
     output status_t                           fpu_status_o
@@ -124,8 +124,8 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     assign fp_lsu_mem_str_finished = 1'b0;
   end: gen_no_fpu_sequencer else begin: gen_fpu_sequencer
     spatz_fpu_sequencer #(
-      .spatz_mem_req_t    (spatz_mem_req_t     ),
-      .spatz_mem_rsp_t    (spatz_mem_rsp_t     ),
+      .dreq_t             (dreq_t              ),
+      .drsp_t             (drsp_t              ),
       .spatz_issue_req_t  (spatz_issue_req_t   ),
       .spatz_issue_rsp_t  (spatz_issue_rsp_t   ),
       .spatz_rsp_t        (spatz_rsp_t         ),
@@ -151,10 +151,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
       .resp_ready_o             (resp_ready             ),
       // Memory interface
       .fp_lsu_mem_req_o         (fp_lsu_mem_req_o       ),
-      .fp_lsu_mem_req_valid_o   (fp_lsu_mem_req_valid_o ),
-      .fp_lsu_mem_req_ready_i   (fp_lsu_mem_req_ready_i ),
       .fp_lsu_mem_rsp_i         (fp_lsu_mem_rsp_i       ),
-      .fp_lsu_mem_rsp_valid_i   (fp_lsu_mem_rsp_valid_i ),
       .fp_lsu_mem_finished_o    (fp_lsu_mem_finished    ),
       .fp_lsu_mem_str_finished_o(fp_lsu_mem_str_finished),
       // Spatz VLSU side channel

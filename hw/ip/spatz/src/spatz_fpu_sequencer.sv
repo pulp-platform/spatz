@@ -10,8 +10,8 @@ module spatz_fpu_sequencer
   import fpnew_pkg::*;
   import reqrsp_pkg::*; #(
     // Memory request
-    parameter type spatz_mem_req_t   = logic,
-    parameter type spatz_mem_rsp_t   = logic,
+    parameter type dreq_t            = logic,
+    parameter type drsp_t            = logic,
     // Snitch interface
     parameter type spatz_issue_req_t = logic,
     parameter type spatz_issue_rsp_t = logic,
@@ -40,11 +40,8 @@ module spatz_fpu_sequencer
     input  logic             resp_valid_i,
     output logic             resp_ready_o,
     // Memory interface
-    output spatz_mem_req_t   fp_lsu_mem_req_o,
-    output logic             fp_lsu_mem_req_valid_o,
-    input  logic             fp_lsu_mem_req_ready_i,
-    input  spatz_mem_rsp_t   fp_lsu_mem_rsp_i,
-    input  logic             fp_lsu_mem_rsp_valid_i,
+    output dreq_t            fp_lsu_mem_req_o,
+    input  drsp_t            fp_lsu_mem_rsp_i,
     output logic             fp_lsu_mem_finished_o,
     output logic             fp_lsu_mem_str_finished_o,
     // Spatz VLSU side channel
@@ -503,78 +500,35 @@ module spatz_fpu_sequencer
   logic                 fp_lsu_pvalid;
   logic                 fp_lsu_pready;
 
-  typedef struct packed {
-    spatz_mem_req_t q;
-    logic q_valid;
-  } tcdm_req_t;
-
-  typedef struct packed {
-    spatz_mem_rsp_t p;
-    logic p_valid;
-    logic q_ready;
-  } tcdm_rsp_t;
-
-  `REQRSP_TYPEDEF_ALL(reqrsp, logic [AddrWidth-1:0], logic [DataWidth-1:0], logic [DataWidth/8-1:0])
-  reqrsp_req_t fp_lsu_mem_req;
-  reqrsp_rsp_t fp_lsu_mem_rsp;
-
   snitch_lsu #(
     .DataWidth          (FLEN               ),
     .NaNBox             (1                  ),
     .NumOutstandingLoads(NumOutstandingLoads),
-    .dreq_t             (reqrsp_req_t       ),
-    .drsp_t             (reqrsp_rsp_t       )
+    .dreq_t             (dreq_t             ),
+    .drsp_t             (drsp_t             )
   ) i_fp_lsu (
-    .clk_i        (clk_i          ),
-    .rst_i        (~rst_ni        ),
+    .clk_i        (clk_i           ),
+    .rst_i        (~rst_ni         ),
     // Request interface
-    .lsu_qtag_i   (fp_lsu_qtag    ),
-    .lsu_qwrite_i (fp_lsu_qwrite  ),
-    .lsu_qsigned_i(fp_lsu_qsigned ),
-    .lsu_qaddr_i  (fp_lsu_qaddr   ),
-    .lsu_qdata_i  (fp_lsu_qdata   ),
-    .lsu_qsize_i  (fp_lsu_qsize   ),
-    .lsu_qamo_i   (fp_lsu_qamo    ),
-    .lsu_qvalid_i (fp_lsu_qvalid  ),
-    .lsu_qready_o (fp_lsu_qready  ),
-    .lsu_empty_o  (/* Unused */   ),
+    .lsu_qtag_i   (fp_lsu_qtag     ),
+    .lsu_qwrite_i (fp_lsu_qwrite   ),
+    .lsu_qsigned_i(fp_lsu_qsigned  ),
+    .lsu_qaddr_i  (fp_lsu_qaddr    ),
+    .lsu_qdata_i  (fp_lsu_qdata    ),
+    .lsu_qsize_i  (fp_lsu_qsize    ),
+    .lsu_qamo_i   (fp_lsu_qamo     ),
+    .lsu_qvalid_i (fp_lsu_qvalid   ),
+    .lsu_qready_o (fp_lsu_qready   ),
+    .lsu_empty_o  (/* Unused */    ),
     // Response interface
-    .lsu_pdata_o  (fp_lsu_pdata   ),
-    .lsu_ptag_o   (fp_lsu_ptag    ),
-    .lsu_perror_o (/* Unused */   ),
-    .lsu_pvalid_o (fp_lsu_pvalid  ),
-    .lsu_pready_i (fp_lsu_pready  ),
+    .lsu_pdata_o  (fp_lsu_pdata    ),
+    .lsu_ptag_o   (fp_lsu_ptag     ),
+    .lsu_perror_o (/* Unused */    ),
+    .lsu_pvalid_o (fp_lsu_pvalid   ),
+    .lsu_pready_i (fp_lsu_pready   ),
     // Memory interface
-    .data_req_o   (fp_lsu_mem_req ),
-    .data_rsp_i   (fp_lsu_mem_rsp )
-  );
-
-  tcdm_req_t fp_lsu_mem_req_int;
-  tcdm_rsp_t fp_lsu_mem_rsp_int;
-
-  assign fp_lsu_mem_req_o       = fp_lsu_mem_req_int.q;
-  assign fp_lsu_mem_req_valid_o = fp_lsu_mem_req_int.q_valid;
-  assign fp_lsu_mem_rsp_int     = '{
-    p      : fp_lsu_mem_rsp_i,
-    p_valid: fp_lsu_mem_rsp_valid_i,
-    q_ready: fp_lsu_mem_req_ready_i
-  };
-
-  reqrsp_to_tcdm #(
-    .AddrWidth    (AddrWidth          ),
-    .DataWidth    (DataWidth          ),
-    .BufDepth     (NumOutstandingLoads),
-    .reqrsp_req_t (reqrsp_req_t       ),
-    .reqrsp_rsp_t (reqrsp_rsp_t       ),
-    .tcdm_req_t   (tcdm_req_t         ),
-    .tcdm_rsp_t   (tcdm_rsp_t         )
-  ) i_reqrsp_to_tcdm (
-    .clk_i        (clk_i             ),
-    .rst_ni       (rst_ni            ),
-    .reqrsp_req_i (fp_lsu_mem_req    ),
-    .reqrsp_rsp_o (fp_lsu_mem_rsp    ),
-    .tcdm_req_o   (fp_lsu_mem_req_int),
-    .tcdm_rsp_i   (fp_lsu_mem_rsp_int)
+    .data_req_o   (fp_lsu_mem_req_o),
+    .data_rsp_i   (fp_lsu_mem_rsp_i)
   );
 
   // Number of memory operations in the accelerator
@@ -609,7 +563,7 @@ module spatz_fpu_sequencer
     fp_lsu_qtag    = fd;
     fp_lsu_qwrite  = is_store;
     fp_lsu_qsigned = 1'b0;
-    fp_lsu_qaddr   = issue_req_i.data_argb;
+    fp_lsu_qaddr   = issue_req_i.data_argc;
     fp_lsu_qdata   = fpr_rdata[1];
     fp_lsu_qsize   = ls_size;
     fp_lsu_qamo    = AMONone;

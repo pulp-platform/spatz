@@ -736,7 +736,6 @@ module spatz_cluster
       .drsp_t                  (reqrsp_rsp_t               ),
       .tcdm_req_t              (tcdm_req_t                 ),
       .tcdm_req_chan_t         (tcdm_req_chan_t            ),
-      .tcdm_user_t             (tcdm_user_t                ),
       .tcdm_rsp_t              (tcdm_rsp_t                 ),
       .tcdm_rsp_chan_t         (tcdm_rsp_chan_t            ),
       .axi_req_t               (axi_mst_dma_req_t          ),
