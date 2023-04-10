@@ -36,7 +36,7 @@ module axi_dma_tc_snitch_fe #(
     output logic            dma_busy_o,
     // accelerator interface
     input  logic     [31:0] acc_qaddr_i,
-    input  logic     [ 4:0] acc_qid_i,
+    input  logic     [ 5:0] acc_qid_i,
     input  logic     [31:0] acc_qdata_op_i,
     input  data_t           acc_qdata_arga_i,
     input  data_t           acc_qdata_argb_i,
@@ -45,7 +45,7 @@ module axi_dma_tc_snitch_fe #(
     output logic            acc_qready_o,
 
     output data_t        acc_pdata_o,
-    output logic  [ 4:0] acc_pid_o,
+    output logic  [ 5:0] acc_pid_o,
     output logic         acc_perror_o,
     output logic         acc_pvalid_o,
     input  logic         acc_pready_i,

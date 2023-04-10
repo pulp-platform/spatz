@@ -123,8 +123,7 @@ package snitch_pkg;
   typedef enum integer {
     TCDM               = 0,
     ClusterPeripherals = 1,
-    BootROM            = 2,
-    SoC                = 3
+    SoC                = 2
   } cluster_slave_e;
 
   typedef enum integer {
@@ -136,13 +135,14 @@ package snitch_pkg;
   typedef enum int unsigned {
     TCDMDMA    = 0,
     SoCDMAOut  = 1,
-    ZeroMemory = 2
+    ZeroMemory = 2,
+    BootROM    = 3
   } cluster_slave_dma_e;
 
   typedef enum int unsigned {
-    CoreReqWide = 32'd0,
-    SDMAMst     = 32'd1,
-    ICache      = 32'd2
+    CoreReqWide = 0,
+    SDMAMst     = 1,
+    ICache      = 2
   } cluster_master_dma_e;
 
   /// Possible interconnect implementations.

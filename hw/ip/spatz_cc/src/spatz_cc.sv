@@ -180,6 +180,7 @@ module spatz_cc
     .Xdma                   (Xdma                  ),
     .RVF                    (RVF                   ),
     .RVD                    (RVD                   ),
+    .RVV                    (RVV                   ),
     .XDivSqrt               (XDivSqrt              ),
     .XF16                   (XF16                  ),
     .XF8                    (XF8                   ),

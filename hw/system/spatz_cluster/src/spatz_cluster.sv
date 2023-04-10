@@ -174,15 +174,15 @@ module spatz_cluster
   localparam int unsigned NarrowDataWidth  = 64;
   localparam int unsigned NarrowUserWidth  = AxiUserWidth;
 
-  // TCDM, Peripherals, BootROM, SoC Request
-  localparam int unsigned NrNarrowSlaves = 4;
+  // TCDM, Peripherals, SoC Request
+  localparam int unsigned NrNarrowSlaves = 3;
   localparam int unsigned NrNarrowRules  = NrNarrowSlaves - 1;
 
   // Core Request, DMA, Instruction cache
   localparam int unsigned NrWideMasters  = 3;
   localparam int unsigned WideIdWidthOut = $clog2(NrWideMasters) + AxiIdWidthIn;
   // DMA X-BAR configuration
-  localparam int unsigned NrWideSlaves   = 3;
+  localparam int unsigned NrWideSlaves   = 4;
 
   // AXI Configuration
   localparam axi_pkg::xbar_cfg_t ClusterXbarCfg = '{
@@ -214,7 +214,7 @@ module spatz_cluster
     UniqueIds         : 1'b0,
     AxiAddrWidth      : AxiAddrWidth,
     AxiDataWidth      : AxiDataWidth,
-    NoAddrRules       : 2,
+    NoAddrRules       : 3,
     default           : '0
   };
 
@@ -408,8 +408,8 @@ module spatz_cluster
   reg_rsp_t reg_rsp;
 
   // 6. BootROM
-  reg_req_t bootrom_reg_req;
-  reg_rsp_t bootrom_reg_rsp;
+  reg_dma_req_t bootrom_reg_req;
+  reg_dma_rsp_t bootrom_reg_rsp;
 
   // 7. Misc. Wires.
   logic               icache_prefetch_enable;
@@ -469,6 +469,11 @@ module spatz_cluster
       idx       : ZeroMemory,
       start_addr: zero_mem_start_address,
       end_addr  : zero_mem_end_address
+    },
+    '{
+      idx       : BootROM,
+      start_addr: BootAddr,
+      end_addr  : BootAddr + 'h1000
     }
   };
 
@@ -744,6 +749,7 @@ module spatz_cluster
       .acc_issue_rsp_t         (acc_issue_rsp_t            ),
       .acc_rsp_t               (acc_rsp_t                  ),
       .dma_events_t            (dma_events_t               ),
+      .dma_perf_t              (axi_dma_pkg::dma_perf_t    ),
       .XDivSqrt                (1'b0                       ),
       .XF16                    (1'b1                       ),
       .XF8                     (1'b1                       ),
@@ -925,11 +931,6 @@ module spatz_cluster
       idx       : ClusterPeripherals,
       start_addr: cluster_periph_start_address,
       end_addr  : cluster_periph_end_address
-    },
-    '{
-      idx       : BootROM,
-      start_addr: BootAddr,
-      end_addr  : BootAddr + 'h1000
     }
   };
 
@@ -1038,25 +1039,25 @@ module spatz_cluster
 
   // 3. BootROM
   axi_to_reg #(
-    .ADDR_WIDTH         (AxiAddrWidth     ),
-    .DATA_WIDTH         (NarrowDataWidth  ),
-    .AXI_MAX_WRITE_TXNS (1                ),
-    .AXI_MAX_READ_TXNS  (1                ),
-    .DECOUPLE_W         (0                ),
-    .ID_WIDTH           (NarrowIdWidthOut ),
-    .USER_WIDTH         (NarrowUserWidth  ),
-    .axi_req_t          (axi_slv_req_t    ),
-    .axi_rsp_t          (axi_slv_resp_t   ),
-    .reg_req_t          (reg_req_t        ),
-    .reg_rsp_t          (reg_rsp_t        )
+    .ADDR_WIDTH         (AxiAddrWidth      ),
+    .DATA_WIDTH         (AxiDataWidth      ),
+    .AXI_MAX_WRITE_TXNS (1                 ),
+    .AXI_MAX_READ_TXNS  (1                 ),
+    .DECOUPLE_W         (0                 ),
+    .ID_WIDTH           (WideIdWidthOut    ),
+    .USER_WIDTH         (AxiUserWidth      ),
+    .axi_req_t          (axi_slv_dma_req_t ),
+    .axi_rsp_t          (axi_slv_dma_resp_t),
+    .reg_req_t          (reg_dma_req_t     ),
+    .reg_rsp_t          (reg_dma_rsp_t     )
   ) i_axi_to_reg_bootrom (
-    .clk_i      (clk_i                      ),
-    .rst_ni     (rst_ni                     ),
-    .testmode_i (1'b0                       ),
-    .axi_req_i  (narrow_axi_slv_req[BootROM]),
-    .axi_rsp_o  (narrow_axi_slv_rsp[BootROM]),
-    .reg_req_o  (bootrom_reg_req            ),
-    .reg_rsp_i  (bootrom_reg_rsp            )
+    .clk_i      (clk_i                    ),
+    .rst_ni     (rst_ni                   ),
+    .testmode_i (1'b0                     ),
+    .axi_req_i  (wide_axi_slv_req[BootROM]),
+    .axi_rsp_o  (wide_axi_slv_rsp[BootROM]),
+    .reg_req_o  (bootrom_reg_req          ),
+    .reg_rsp_i  (bootrom_reg_rsp          )
   );
 
   bootrom i_bootrom (

@@ -561,13 +561,13 @@ module spatz_fpu_sequencer
   };
 
   reqrsp_to_tcdm #(
-    .AddrWidth    (AddrWidth   ),
-    .DataWidth    (DataWidth   ),
-    .BufDepth     (0           ),
-    .reqrsp_req_t (reqrsp_req_t),
-    .reqrsp_rsp_t (reqrsp_rsp_t),
-    .tcdm_req_t   (tcdm_req_t  ),
-    .tcdm_rsp_t   (tcdm_rsp_t  )
+    .AddrWidth    (AddrWidth          ),
+    .DataWidth    (DataWidth          ),
+    .BufDepth     (NumOutstandingLoads),
+    .reqrsp_req_t (reqrsp_req_t       ),
+    .reqrsp_rsp_t (reqrsp_rsp_t       ),
+    .tcdm_req_t   (tcdm_req_t         ),
+    .tcdm_rsp_t   (tcdm_rsp_t         )
   ) i_reqrsp_to_tcdm (
     .clk_i        (clk_i             ),
     .rst_ni       (rst_ni            ),
