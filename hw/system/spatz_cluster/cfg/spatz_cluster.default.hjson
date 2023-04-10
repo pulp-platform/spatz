@@ -45,8 +45,8 @@
             register_offload_rsp: true
         },
         cores: [
-            { $ref: "#/compute_core_template" },
             { $ref: "#/dma_core_template" },
+            { $ref: "#/compute_core_template" },
         ],
         icache: {
             size: 4, // total instruction cache size in kByte
@@ -71,6 +71,7 @@
         xf16: true,
         xf8: true,
         xfdotp: true,
+        xdma: false,
         num_int_outstanding_loads: 1,
         num_int_outstanding_mem: 4,
         num_spatz_outstanding_loads: 4,

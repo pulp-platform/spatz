@@ -219,6 +219,7 @@ module ${cfg['name']}_wrapper (
     .axi_in_resp_t (${cfg['pkg_name']}::spatz_axi_in_resp_t),
     .axi_out_req_t (${cfg['pkg_name']}::spatz_axi_out_req_t),
     .axi_out_resp_t (${cfg['pkg_name']}::spatz_axi_out_resp_t),
+    .Xdma (${core_cfg_flat('xdma')}),
     .DMAAxiReqFifoDepth (${cfg['dma_axi_req_fifo_depth']}),
     .DMAReqFifoDepth (${cfg['dma_req_fifo_depth']}),
     .RegisterOffloadReq (${int(cfg['timing']['register_offload_req'])}),

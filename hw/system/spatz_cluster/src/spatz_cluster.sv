@@ -26,78 +26,78 @@ module spatz_cluster
   import snitch_pma_pkg::snitch_pma_t;
   #(
     /// Width of physical address.
-    parameter int                     unsigned        AxiAddrWidth                       = 48,
+    parameter int                     unsigned               AxiAddrWidth                       = 48,
     /// Width of AXI port.
-    parameter int                     unsigned        AxiDataWidth                       = 512,
+    parameter int                     unsigned               AxiDataWidth                       = 512,
     /// AXI: id width in.
-    parameter int                     unsigned        AxiIdWidthIn                       = 2,
+    parameter int                     unsigned               AxiIdWidthIn                       = 2,
     /// AXI: user width.
-    parameter int                     unsigned        AxiUserWidth                       = 1,
+    parameter int                     unsigned               AxiUserWidth                       = 1,
     /// Address from which to fetch the first instructions.
-    parameter logic                            [31:0] BootAddr                           = 32'h0,
+    parameter logic                            [31:0]        BootAddr                           = 32'h0,
     /// The total amount of cores.
-    parameter int                     unsigned        NrCores                            = 8,
+    parameter int                     unsigned               NrCores                            = 8,
     /// Data/TCDM memory depth per cut (in words).
-    parameter int                     unsigned        TCDMDepth                          = 1024,
+    parameter int                     unsigned               TCDMDepth                          = 1024,
     /// Zero memory address region size (in kB).
-    parameter int                     unsigned        ZeroMemorySize                     = 64,
+    parameter int                     unsigned               ZeroMemorySize                     = 64,
     /// Cluster peripheral address region size (in kB).
-    parameter int                     unsigned        ClusterPeriphSize                  = 64,
+    parameter int                     unsigned               ClusterPeriphSize                  = 64,
     /// Number of TCDM Banks.
-    parameter int                     unsigned        NrBanks                            = 2 * NrCores,
+    parameter int                     unsigned               NrBanks                            = 2 * NrCores,
     /// Size of DMA AXI buffer.
-    parameter int                     unsigned        DMAAxiReqFifoDepth                 = 3,
+    parameter int                     unsigned               DMAAxiReqFifoDepth                 = 3,
     /// Size of DMA request fifo.
-    parameter int                     unsigned        DMAReqFifoDepth                    = 3,
+    parameter int                     unsigned               DMAReqFifoDepth                    = 3,
     /// Width of a single icache line.
-    parameter                         unsigned        ICacheLineWidth                    = 0,
+    parameter                         unsigned               ICacheLineWidth                    = 0,
     /// Number of icache lines per set.
-    parameter int                     unsigned        ICacheLineCount                    = 0,
+    parameter int                     unsigned               ICacheLineCount                    = 0,
     /// Number of icache sets.
-    parameter int                     unsigned        ICacheSets                         = 0,
+    parameter int                     unsigned               ICacheSets                         = 0,
     // PMA Configuration
-    parameter snitch_pma_t                            SnitchPMACfg                       = '{default: 0},
+    parameter snitch_pma_t                                   SnitchPMACfg                       = '{default: 0},
     /// # Core-global parameters
     /// FPU configuration.
-    parameter fpu_implementation_t                    FPUImplementation        [NrCores] = '{default: fpu_implementation_t'(0)},
+    parameter fpu_implementation_t                           FPUImplementation        [NrCores] = '{default: fpu_implementation_t'(0)},
     /// Per-core enabling of the custom `Xdma` ISA extensions.
-    parameter bit                                     Xdma                     [NrCores] = '{default: '0},
+    parameter bit                              [NrCores-1:0] Xdma                               = '{default: '0},
     /// # Per-core parameters
     /// Per-core integer outstanding loads
-    parameter int                     unsigned        NumIntOutstandingLoads   [NrCores] = '{default: '0},
+    parameter int                     unsigned               NumIntOutstandingLoads   [NrCores] = '{default: '0},
     /// Per-core integer outstanding memory operations (load and stores)
-    parameter int                     unsigned        NumIntOutstandingMem     [NrCores] = '{default: '0},
+    parameter int                     unsigned               NumIntOutstandingMem     [NrCores] = '{default: '0},
     /// Per-core Spatz outstanding loads
-    parameter int                     unsigned        NumSpatzOutstandingLoads [NrCores] = '{default: '0},
+    parameter int                     unsigned               NumSpatzOutstandingLoads [NrCores] = '{default: '0},
     /// ## Timing Tuning Parameters
     /// Insert Pipeline registers into off-loading path (request)
-    parameter bit                                     RegisterOffloadReq                 = 1'b0,
+    parameter bit                                            RegisterOffloadReq                 = 1'b0,
     /// Insert Pipeline registers into off-loading path (response)
-    parameter bit                                     RegisterOffloadRsp                 = 1'b0,
+    parameter bit                                            RegisterOffloadRsp                 = 1'b0,
     /// Insert Pipeline registers into data memory path (request)
-    parameter bit                                     RegisterCoreReq                    = 1'b0,
+    parameter bit                                            RegisterCoreReq                    = 1'b0,
     /// Insert Pipeline registers into data memory path (response)
-    parameter bit                                     RegisterCoreRsp                    = 1'b0,
+    parameter bit                                            RegisterCoreRsp                    = 1'b0,
     /// Insert Pipeline registers after each memory cut
-    parameter bit                                     RegisterTCDMCuts                   = 1'b0,
+    parameter bit                                            RegisterTCDMCuts                   = 1'b0,
     /// Decouple external AXI plug
-    parameter bit                                     RegisterExt                        = 1'b0,
-    parameter axi_pkg::xbar_latency_e                 XbarLatency                        = axi_pkg::CUT_ALL_PORTS,
+    parameter bit                                            RegisterExt                        = 1'b0,
+    parameter axi_pkg::xbar_latency_e                        XbarLatency                        = axi_pkg::CUT_ALL_PORTS,
     /// Outstanding transactions on the AXI network
-    parameter int                     unsigned        MaxMstTrans                        = 4,
-    parameter int                     unsigned        MaxSlvTrans                        = 4,
+    parameter int                     unsigned               MaxMstTrans                        = 4,
+    parameter int                     unsigned               MaxSlvTrans                        = 4,
     /// # Interface
     /// AXI Ports
-    parameter type                                    axi_in_req_t                       = logic,
-    parameter type                                    axi_in_resp_t                      = logic,
-    parameter type                                    axi_out_req_t                      = logic,
-    parameter type                                    axi_out_resp_t                     = logic,
+    parameter type                                           axi_in_req_t                       = logic,
+    parameter type                                           axi_in_resp_t                      = logic,
+    parameter type                                           axi_out_req_t                      = logic,
+    parameter type                                           axi_out_resp_t                     = logic,
     // Memory latency parameter. Most of the memories have a read latency of 1. In
     // case you have memory macros which are pipelined you want to adjust this
     // value here. This only applies to the TCDM. The instruction cache macros will break!
     // In case you are using the `RegisterTCDMCuts` feature this adds an
     // additional cycle latency, which is taken into account here.
-    parameter int                     unsigned        MemoryMacroLatency                 = 1 + RegisterTCDMCuts
+    parameter int                     unsigned               MemoryMacroLatency                 = 1 + RegisterTCDMCuts
   ) (
     /// System clock.
     input  logic                             clk_i,
@@ -721,6 +721,7 @@ module spatz_cluster
       .Xdma                    (Xdma[i]                    ),
       .AddrWidth               (AxiAddrWidth               ),
       .DataWidth               (NarrowDataWidth            ),
+      .UserWidth               (AxiUserWidth               ),
       .DMADataWidth            (AxiDataWidth               ),
       .DMAIdWidth              (AxiIdWidthIn               ),
       .SnitchPMACfg            (SnitchPMACfg               ),
@@ -734,6 +735,8 @@ module spatz_cluster
       .tcdm_rsp_t              (tcdm_rsp_t                 ),
       .tcdm_rsp_chan_t         (tcdm_rsp_chan_t            ),
       .axi_req_t               (axi_mst_dma_req_t          ),
+      .axi_ar_chan_t           (axi_mst_dma_ar_chan_t      ),
+      .axi_aw_chan_t           (axi_mst_dma_aw_chan_t      ),
       .axi_rsp_t               (axi_mst_dma_resp_t         ),
       .hive_req_t              (hive_req_t                 ),
       .hive_rsp_t              (hive_rsp_t                 ),
@@ -786,11 +789,6 @@ module spatz_cluster
       assign wide_axi_mst_req[SDMAMst] = axi_dma_req;
       assign axi_dma_res               = wide_axi_mst_rsp[SDMAMst];
       assign dma_events                = dma_core_events;
-    end else if (!Xdma[i] && i == 0) begin
-      // Tie the DMA connection to zero
-      assign wide_axi_mst_req[SDMAMst] = '0;
-      assign axi_dma_res               = '0;
-      assign dma_events                = '0;
     end
   end
 
