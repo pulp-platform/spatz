@@ -113,6 +113,7 @@ add wave -noupdate -group core[$1] -group Snitch /tb_bin/i_dut/i_cluster_wrapper
 add wave -noupdate -group core[$1] -group Snitch /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/i_snitch/acc_mem_str_cnt_q
 add wave -noupdate -group core[$1] -group Snitch /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/i_snitch/core_events_o
 
+add wave -noupdate -group core[$1] -group Snitch -group Internal -group RF /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/i_snitch/i_snitch_regfile/*
 add wave -noupdate -group core[$1] -group Snitch -group Internal /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/i_snitch/*
 
 add wave -noupdate -group core[$1] -group Spatz /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/gen_spatz/i_spatz/issue_valid_i

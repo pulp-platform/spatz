@@ -585,6 +585,14 @@ module spatz_fpu_sequencer
   logic [2:0] acc_mem_str_cnt_q, acc_mem_str_cnt_d;
   `FFARN(acc_mem_str_cnt_q, acc_mem_str_cnt_d, '0, clk_i, rst_ni)
 
+  // Is the current instruction a vector load?
+  logic is_vector_load;
+  assign is_vector_load = issue_req_i.data_op inside
+    {riscv_instr::VLE8_V, riscv_instr::VLE16_V, riscv_instr::VLE32_V, riscv_instr::VLE64_V,
+    riscv_instr::VLSE8_V, riscv_instr::VLSE16_V, riscv_instr::VLSE32_V, riscv_instr::VLSE64_V,
+    riscv_instr::VLOXEI8_V, riscv_instr::VLOXEI16_V, riscv_instr::VLOXEI32_V, riscv_instr::VLOXEI64_V,
+    riscv_instr::VLUXEI8_V, riscv_instr::VLUXEI16_V, riscv_instr::VLUXEI32_V, riscv_instr::VLUXEI64_V};
+
   // Is the current instruction a vector store?
   logic is_vector_store;
   assign is_vector_store = issue_req_i.data_op inside
@@ -613,12 +621,12 @@ module spatz_fpu_sequencer
     // Is the LSU stalling?
     lsu_stall = fp_lsu_qvalid && !fp_lsu_qready;
 
-    if (((is_load || is_store) && is_local) && issue_ready_i && issue_valid_o)
+    if ((is_vector_load || is_vector_store) && issue_ready_i && issue_valid_o)
       acc_mem_cnt_d += 1;
     if (spatz_mem_finished_i)
       acc_mem_cnt_d -= 1;
 
-    if (((is_load || is_store) && is_local) && issue_ready_i && issue_valid_o && is_vector_store)
+    if (is_vector_store && issue_ready_i && issue_valid_o)
       acc_mem_str_cnt_d += 1;
     if (spatz_mem_finished_i && spatz_mem_str_finished_i)
       acc_mem_str_cnt_d -= 1;

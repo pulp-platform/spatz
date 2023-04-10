@@ -12,3 +12,6 @@ add wave /tb_bin/i_dut/cluster_probe
 for {set core 0}  {$core < [examine -radix dec spatz_cluster_pkg::NumCores]} {incr core} {
     do ../script/vsim/wave_core.tcl $core
 }
+
+# Add cluster waves
+add wave -noupdate -group Cluster /tb_bin/i_dut/i_cluster_wrapper/i_cluster/*

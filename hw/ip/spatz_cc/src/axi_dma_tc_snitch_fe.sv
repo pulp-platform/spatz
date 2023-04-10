@@ -154,7 +154,7 @@ module axi_dma_tc_snitch_fe #(
   assign oned_trans_complete = idma_rsp_valid;
 
   idma_backend #(
-    .DataWidth           ( DataWidth                   ),
+    .DataWidth           ( DMADataWidth                ),
     .AddrWidth           ( AddrWidth                   ),
     .UserWidth           ( UserWidth                   ),
     .AxiIdWidth          ( IdWidth                     ),
