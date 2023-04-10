@@ -18,6 +18,8 @@ module spatz_cc
     parameter int                          unsigned        AddrWidth                = 0,
     /// Data width of the buses.
     parameter int                          unsigned        DataWidth                = 0,
+    /// User width of the buses.
+    parameter int                          unsigned        UserWidth                = 0,
     /// Data width of the AXI DMA buses.
     parameter int                          unsigned        DMADataWidth             = 0,
     /// Id width of the AXI DMA bus.
@@ -38,6 +40,8 @@ module spatz_cc
     parameter int                          unsigned        TCDMAddrWidth            = 0,
     /// TCDM User Payload
     parameter type                                         axi_req_t                = logic,
+    parameter type                                         axi_ar_chan_t            = logic,
+    parameter type                                         axi_aw_chan_t            = logic,
     parameter type                                         axi_rsp_t                = logic,
     parameter type                                         hive_req_t               = logic,
     parameter type                                         hive_rsp_t               = logic,
@@ -364,11 +368,14 @@ module spatz_cc
       .DataWidth          (DataWidth         ),
       .DMADataWidth       (DMADataWidth      ),
       .IdWidth            (DMAIdWidth        ),
+      .UserWidth          (UserWidth         ),
       .DMAAxiReqFifoDepth (DMAAxiReqFifoDepth),
       .DMAReqFifoDepth    (DMAReqFifoDepth   ),
       .axi_req_t          (axi_req_t         ),
+      .axi_ar_chan_t      (axi_ar_chan_t     ),
+      .axi_aw_chan_t      (axi_aw_chan_t     ),
       .axi_res_t          (axi_rsp_t         ),
-      .acc_resp_t         (acc_issue_rsp_t   ),
+      .acc_resp_t         (acc_rsp_t         ),
       .dma_events_t       (dma_events_t      )
     ) i_axi_dma_tc_snitch_fe (
       .clk_i            ( clk_i                    ),

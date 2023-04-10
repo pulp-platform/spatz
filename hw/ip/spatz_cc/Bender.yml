@@ -13,4 +13,11 @@ dependencies:
 sources:
   files:
     # Level 0
+    - src/axi_dma_pkg.sv
+    # Level 1
+    - src/axi_dma_perf_counters.sv
+    - src/axi_dma_twod_ext.sv
+    # Level 2
+    - src/axi_dma_tc_snitch_fe.sv
+    # Level 3
     - src/spatz_cc.sv
