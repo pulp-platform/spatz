@@ -15,8 +15,9 @@ import hjson
 np.random.seed(42)
 torch.manual_seed(42)
 
-global verbose
+device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
+global verbose
 
 def array_to_cstr(a, fmt=float):
     out = '{'
@@ -24,7 +25,7 @@ def array_to_cstr(a, fmt=float):
         if isinstance(a, np.ndarray):
             a = a.flat
         if isinstance(a, torch.Tensor):
-            a = a.numpy().flat
+            a = a.cpu().numpy().flat
         for el in a:
             out += '{}, '.format(el)
     else:
@@ -289,7 +290,7 @@ def rand_data_generator(shape, prec, alt=False):
         if alt:
             return torch.randn(shape, requires_grad=False, dtype=torch.bfloat16), {}
         else:
-            return torch.randn(shape, requires_grad=False, dtype=torch.float16), {}
+            return torch.randn(shape, requires_grad=False, dtype=torch.float16, device=device), {}
     elif prec == 8:
         sign = torch.randint(0, 2, shape, requires_grad=False, dtype=torch.uint8)  # -1 or 1
         exponent = torch.randint(0, 16, shape, requires_grad=False, dtype=torch.uint8)  # < 0b01111
@@ -452,7 +453,7 @@ def main():
         mat_B, bits_B = rand_data_generator((param['K'], param['N']), param['prec'])
         mat_C, bits_C = rand_data_generator((param['M'], param['N']), param['prec'])
 
-        result = param['alpha'] * mat_C + torch.matmul(mat_A, mat_B)
+        result = torch.matmul(mat_A, mat_B)
 
         if param['transpose_A']:
             mat_A = mat_A.T
