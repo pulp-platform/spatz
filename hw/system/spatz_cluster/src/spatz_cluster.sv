@@ -711,7 +711,6 @@ module spatz_cluster
     assign irq.mcip = cl_interrupt[i];
 
     tcdm_req_t [TcdmPorts-1:0] tcdm_req_wo_user;
-    tcdm_rsp_t [TcdmPorts-1:0] tcdm_rsp;
 
     spatz_cc #(
       .BootAddr                (BootAddr                   ),
@@ -756,24 +755,24 @@ module spatz_cluster
       .RegisterCoreRsp         (RegisterCoreRsp            ),
       .TCDMAddrWidth           (TCDMAddrWidth              )
     ) i_spatz_cc (
-      .clk_i            (clk_i             ),
-      .clk_d2_i         (clk_i             ),
-      .rst_ni           (rst_ni            ),
-      .hart_id_i        (hart_base_id_i + i),
-      .hive_req_o       (hive_req[i]       ),
-      .hive_rsp_i       (hive_rsp[i]       ),
-      .irq_i            (irq               ),
-      .data_req_o       (core_req[i]       ),
-      .data_rsp_i       (core_rsp[i]       ),
-      .tcdm_req_o       (tcdm_req_wo_user  ),
-      .tcdm_rsp_i       (tcdm_rsp          ),
-      .axi_dma_req_o    (axi_dma_req       ),
-      .axi_dma_res_i    (axi_dma_res       ),
-      .axi_dma_busy_o   (/* Unused */      ),
-      .axi_dma_perf_o   (/* Unused */      ),
-      .axi_dma_events_o (dma_core_events   ),
-      .core_events_o    (core_events[i]    ),
-      .tcdm_addr_base_i (tcdm_start_address)
+      .clk_i            (clk_i                               ),
+      .clk_d2_i         (clk_i                               ),
+      .rst_ni           (rst_ni                              ),
+      .hart_id_i        (hart_base_id_i + i                  ),
+      .hive_req_o       (hive_req[i]                         ),
+      .hive_rsp_i       (hive_rsp[i]                         ),
+      .irq_i            (irq                                 ),
+      .data_req_o       (core_req[i]                         ),
+      .data_rsp_i       (core_rsp[i]                         ),
+      .tcdm_req_o       (tcdm_req_wo_user                    ),
+      .tcdm_rsp_i       (tcdm_rsp[TcdmPortsOffs +: TcdmPorts]),
+      .axi_dma_req_o    (axi_dma_req                         ),
+      .axi_dma_res_i    (axi_dma_res                         ),
+      .axi_dma_busy_o   (/* Unused */                        ),
+      .axi_dma_perf_o   (/* Unused */                        ),
+      .axi_dma_events_o (dma_core_events                     ),
+      .core_events_o    (core_events[i]                      ),
+      .tcdm_addr_base_i (tcdm_start_address                  )
     );
     for (genvar j = 0; j < TcdmPorts; j++) begin : gen_tcdm_user
       always_comb begin
@@ -809,14 +808,17 @@ module spatz_cluster
   logic  [NrCores-1:0]       flush_ready;
 
   for (genvar i = 0; i < NrCores; i++) begin : gen_unpack_icache
-    assign inst_addr[i]              = hive_req[i].inst_addr;
-    assign inst_cacheable[i]         = hive_req[i].inst_cacheable;
-    assign inst_valid[i]             = hive_req[i].inst_valid;
-    assign flush_valid[i]            = hive_req[i].flush_i_valid;
-    assign hive_rsp[i].inst_data     = inst_data[i];
-    assign hive_rsp[i].inst_ready    = inst_ready[i];
-    assign hive_rsp[i].inst_error    = inst_error[i];
-    assign hive_rsp[i].flush_i_ready = flush_ready[i];
+    assign inst_addr[i]      = hive_req[i].inst_addr;
+    assign inst_cacheable[i] = hive_req[i].inst_cacheable;
+    assign inst_valid[i]     = hive_req[i].inst_valid;
+    assign flush_valid[i]    = hive_req[i].flush_i_valid;
+    assign hive_rsp[i]       = '{
+      inst_data    : inst_data[i],
+      inst_ready   : inst_ready[i],
+      inst_error   : inst_error[i],
+      flush_i_ready: flush_ready[i],
+      default      : '0
+    };
   end
 
   snitch_icache #(
@@ -1027,7 +1029,9 @@ module spatz_cluster
     .core_events_i            (core_events           ),
     .tcdm_events_i            (tcdm_events           ),
     .dma_events_i             (dma_events            ),
-    .icache_events_i          (icache_events         )
+    .icache_events_i          (icache_events         ),
+    .eoc_o                    (eoc_o                 ),
+    .cluster_probe_o          (cluster_probe_o       )
   );
 
   // Upsize the narrow SoC connection

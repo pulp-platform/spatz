@@ -408,14 +408,15 @@
         desc: '''Sets the status of the Spatz cluster.'''
         swaccess: "wo",
         hwaccess: "hro",
-        resval: "0",
         fields: [{
             bits: "0:0",
+            resval: "0",
             name: "SPATZ_EOC",
             desc: "Indicates the end of the computation."
         },
         {
             bits: "1:1",
+            resval: "0",
             name: "SPATZ_CLUSTER_PROBE",
             desc: "Indicates the cluster is computing a kernel."
         }]
