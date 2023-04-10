@@ -42,6 +42,4 @@ sources:
   - target: spatz_test
     files:
       # Level 1
-      - tb/axi_uart.sv
-      # Level 2
       - tb/testharness.sv

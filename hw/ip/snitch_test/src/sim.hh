@@ -42,6 +42,8 @@ struct Sim : htif_t {
 
     void reset() {}
 
+    int entry_point() { return get_entry_point(); }
+
    private:
     context_t *host;
     context_t target;

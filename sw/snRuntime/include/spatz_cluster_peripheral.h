@@ -182,6 +182,17 @@ extern "C" {
 #define SPATZ_CLUSTER_PERIPHERAL_SPATZ_STATUS_SPATZ_EOC_BIT 0
 #define SPATZ_CLUSTER_PERIPHERAL_SPATZ_STATUS_SPATZ_CLUSTER_PROBE_BIT 1
 
+// Controls the cluster boot process.
+#define SPATZ_CLUSTER_PERIPHERAL_CLUSTER_BOOT_CONTROL_REG_OFFSET 0x58
+#define SPATZ_CLUSTER_PERIPHERAL_CLUSTER_BOOT_CONTROL_ENTRY_POINT_MASK         \
+  0xffffffff
+#define SPATZ_CLUSTER_PERIPHERAL_CLUSTER_BOOT_CONTROL_ENTRY_POINT_OFFSET 0
+#define SPATZ_CLUSTER_PERIPHERAL_CLUSTER_BOOT_CONTROL_ENTRY_POINT_FIELD        \
+  ((bitfield_field32_t){                                                       \
+      .mask = SPATZ_CLUSTER_PERIPHERAL_CLUSTER_BOOT_CONTROL_ENTRY_POINT_MASK,  \
+      .index =                                                                 \
+          SPATZ_CLUSTER_PERIPHERAL_CLUSTER_BOOT_CONTROL_ENTRY_POINT_OFFSET})
+
 #ifdef __cplusplus
 } // extern "C"
 #endif
