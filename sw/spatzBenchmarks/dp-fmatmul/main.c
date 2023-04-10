@@ -71,32 +71,21 @@ int main() {
   // Set matrix dimension
   kernel_size = 4;
 
-  // Number of parallel cores in m direction
-  const unsigned int split_m_count = gemm_l.M / kernel_size;
-
-  if (split_m_count < num_cores) {
-    // Split P dimension up
-    const unsigned int split_p_count = num_cores / split_m_count;
-    p_start = gemm_l.N / split_p_count * (cid % split_p_count);
-    p_end = gemm_l.N / split_p_count * ((cid % split_p_count) + 1);
-    m_start = kernel_size * (cid / split_p_count);
-    m_end = kernel_size * (cid / split_p_count + 1);
-  } else {
-    // Work over complete P dimension
-    p_start = 0;
-    p_end = gemm_l.N;
-    m_start = (gemm_l.M / num_cores) * cid;
-    m_end = (gemm_l.M / num_cores) * (cid + 1);
-  }
+  // Work over complete P dimension
+  p_start = 0;
+  p_end = gemm_l.N;
+  m_start = (gemm_l.M / num_cores) * cid;
+  m_end = (gemm_l.M / num_cores) * (cid + 1);
 
   // Wait for all cores to finish
   snrt_cluster_hw_barrier();
 
   // Initialize matrices
   if (cid == 0) {
-    snrt_dma_start_1d(a, gemm_A_dram, gemm_l.M * gemm_l.K);
-    snrt_dma_start_1d(b, gemm_B_dram, gemm_l.K * gemm_l.N);
-    snrt_dma_start_1d(c, gemm_C_dram, gemm_l.M * gemm_l.N);
+    snrt_dma_start_1d(a, gemm_A_dram, gemm_l.M * gemm_l.K * sizeof(double));
+    snrt_dma_start_1d(b, gemm_B_dram, gemm_l.K * gemm_l.N * sizeof(double));
+    snrt_dma_start_1d(c, gemm_C_dram, gemm_l.M * gemm_l.N * sizeof(double));
+    snrt_dma_wait_all();
   }
 
   // Wait for all cores to finish
@@ -112,14 +101,11 @@ int main() {
       start_kernel();
 
     if (kernel_size == 2) {
-      matmul_2xVL(c, a, b, m_start, m_end, gemm_l.K, gemm_l.N, p_start,
-                  p_end);
+      matmul_2xVL(c, a, b, m_start, m_end, gemm_l.K, gemm_l.N, p_start, p_end);
     } else if (kernel_size == 4) {
-      matmul_4xVL(c, a, b, m_start, m_end, gemm_l.K, gemm_l.N, p_start,
-                  p_end);
+      matmul_4xVL(c, a, b, m_start, m_end, gemm_l.K, gemm_l.N, p_start, p_end);
     } else if (kernel_size == 8) {
-      matmul_8xVL(c, a, b, m_start, m_end, gemm_l.K, gemm_l.N, p_start,
-                  p_end);
+      matmul_8xVL(c, a, b, m_start, m_end, gemm_l.K, gemm_l.N, p_start, p_end);
     } else {
       return -2;
     }
@@ -143,12 +129,12 @@ int main() {
 
   // Check and display results
   if (cid == 0) {
-    float performance = 2 * gemm_l.M * gemm_l.N * gemm_l.K / timer;
-    float utilization = performance / (2 * num_cores * 4);
+    long unsigned int performance = 1000 * 2 * gemm_l.M * gemm_l.N * gemm_l.K / timer;
+    long unsigned int utilization = performance / (2 * num_cores * 4);
 
     printf("\n----- (%dx%d) dp fmatmul -----\n", gemm_l.M, gemm_l.N);
     printf("The execution took %u cycles.\n", timer);
-    printf("The performance is %f OP/cycle (%f%% utilization).\n",
+    printf("The performance is %ld OP/1000cycle (%ld%%o utilization).\n",
            performance, utilization);
   }
 

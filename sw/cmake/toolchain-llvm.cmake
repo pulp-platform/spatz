@@ -14,10 +14,10 @@ set(CMAKE_RANLIB ${LLVM_DIR}/bin/llvm-ranlib)
 ##
 ## Compile options
 ##
-add_compile_options(-mcmodel=small -ffast-math -fno-builtin-printf -fno-common)
+add_compile_options(-mcpu=snitch -mcmodel=small -ffast-math -fno-builtin-printf -fno-common -falign-loops=32)
 add_compile_options(-ffunction-sections)
 add_compile_options(-Wextra)
-#add_compile_options(-static)
+add_compile_options(-static)
 add_compile_options(-mllvm -misched-topdown)
 # For smallfloat we need experimental extensions enabled (Zfh)
 add_compile_options(-menable-experimental-extensions)
@@ -31,7 +31,7 @@ add_compile_options(--gcc-toolchain=/scratch/matheusd/spatz-cluster/install/risc
 ##
 ## Link options
 ##
-add_link_options(-static -mcmodel=small -fuse-ld=lld -nostdlib)
+add_link_options(-mcpu=snitch -static -mcmodel=small -fuse-ld=lld -nostdlib)
 add_link_options(-nostartfiles)
 add_link_options(-march=rv32imafdvzfh_xdma -mabi=ilp32d)
 add_link_options(-ffast-math -fno-common -fno-builtin-printf)
@@ -43,5 +43,7 @@ link_libraries(-lgcc)
 add_link_options(--gcc-toolchain=/scratch/matheusd/spatz-cluster/install/riscv-gcc)
 
 # LLD defaults to -z relro which we don't want in a static ELF
+add_link_options(-Wl,-z,norelro)
 add_link_options(-Wl,--gc-sections)
+add_link_options(-Wl,--no-relax)
 #add_link_options(-Wl,--verbose)
