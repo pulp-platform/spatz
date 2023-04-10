@@ -48,11 +48,12 @@ package ${cfg['pkg_name']};
   typedef logic [AxiAddrWidth-1:0] axi_addr_t;
   typedef logic [AxiIdInWidth-1:0] axi_id_in_t;
   typedef logic [AxiUserWidth-1:0] axi_user_t;
-  `AXI_TYPEDEF_ALL(spatz_axi_in, axi_addr_t, axi_id_in_t, axi_data_t, axi_strb_t, axi_user_t)
 
   localparam int unsigned AxiClusterNumMasters = 3;
   localparam int unsigned AxiIdOutWidth = AxiIdInWidth + $clog2(AxiClusterNumMasters);
   typedef logic [AxiIdOutWidth-1:0] axi_id_out_t;
+
+  `AXI_TYPEDEF_ALL(spatz_axi_in, axi_addr_t, axi_id_in_t, logic [63:0], logic [7:0], axi_user_t)
   `AXI_TYPEDEF_ALL(spatz_axi_out, axi_addr_t, axi_id_out_t, axi_data_t, axi_strb_t, axi_user_t)
 
   ////////////////////
@@ -68,6 +69,11 @@ package ${cfg['pkg_name']};
   localparam int unsigned ICacheLineWidth = ${cfg['icache']['cacheline']};
   localparam int unsigned ICacheLineCount = ${cfg['icache']['depth']};
   localparam int unsigned ICacheSets = ${cfg['icache']['sets']};
+
+  localparam int unsigned TCDMStartAddr = ${to_sv_hex(cfg['cluster_base_addr'], cfg['addr_width'])};
+  localparam int unsigned TCDMSize      = ${to_sv_hex(cfg['tcdm']['size'] * 1024, cfg['addr_width'])};
+
+  localparam int unsigned PeriStartAddr = TCDMStartAddr + TCDMSize;
 
   function automatic snitch_pma_pkg::rule_t [snitch_pma_pkg::NrMaxRules-1:0] get_cached_regions();
     automatic snitch_pma_pkg::rule_t [snitch_pma_pkg::NrMaxRules-1:0] cached_regions;

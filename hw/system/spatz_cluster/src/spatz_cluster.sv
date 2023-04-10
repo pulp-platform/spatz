@@ -167,23 +167,20 @@ module spatz_cluster
   localparam int   unsigned                    NumTCDMIn        = NrTCDMPortsCores + 1;
   localparam logic          [AxiAddrWidth-1:0] TCDMMask         = ~(TCDMSize-1);
 
-  // We have a single hive
-  localparam int unsigned NrHives = 1;
-
-  // Core Requests.
-  localparam int unsigned NrNarrowMasters  = 1;
-  localparam int unsigned NarrowIdWidthOut = AxiIdWidthIn;
+  // Core Request, SoC Request
+  localparam int unsigned NrNarrowMasters = 2;
 
   // Narrow AXI network parameters
-  localparam int unsigned NarrowDataWidth = 64;
-  localparam int unsigned NarrowIdWidthIn = NarrowIdWidthOut - $clog2(NrNarrowMasters);
-  localparam int unsigned NarrowUserWidth = AxiUserWidth;
+  localparam int unsigned NarrowIdWidthIn  = AxiIdWidthIn;
+  localparam int unsigned NarrowIdWidthOut = NarrowIdWidthIn + $clog2(NrNarrowMasters);
+  localparam int unsigned NarrowDataWidth  = 64;
+  localparam int unsigned NarrowUserWidth  = AxiUserWidth;
 
   localparam int unsigned NrNarrowSlaves = 3;
   localparam int unsigned NrNarrowRules  = NrNarrowSlaves - 1;
 
-  // DMA, SoC Request, `n` instruction caches.
-  localparam int unsigned NrWideMasters  = 3 + NrHives;
+  // Core Request, DMA, Instruction cache
+  localparam int unsigned NrWideMasters  = 3;
   localparam int unsigned WideIdWidthOut = $clog2(NrWideMasters) + AxiIdWidthIn;
   // DMA X-BAR configuration
   localparam int unsigned NrWideSlaves   = 3;
@@ -438,21 +435,21 @@ module spatz_cluster
   );
 
   axi_cut #(
-    .Bypass     (!RegisterExt         ),
-    .aw_chan_t  (axi_mst_dma_aw_chan_t),
-    .w_chan_t   (axi_mst_dma_w_chan_t ),
-    .b_chan_t   (axi_mst_dma_b_chan_t ),
-    .ar_chan_t  (axi_mst_dma_ar_chan_t),
-    .r_chan_t   (axi_mst_dma_r_chan_t ),
-    .axi_req_t  (axi_mst_dma_req_t    ),
-    .axi_resp_t (axi_mst_dma_resp_t   )
-  ) i_cut_ext_wide_in (
-    .clk_i      (clk_i                     ),
-    .rst_ni     (rst_ni                    ),
-    .slv_req_i  (axi_in_req_i              ),
-    .slv_resp_o (axi_in_resp_o             ),
-    .mst_req_o  (wide_axi_mst_req[SoCDMAIn]),
-    .mst_resp_i (wide_axi_mst_rsp[SoCDMAIn])
+    .Bypass     (!RegisterExt     ),
+    .aw_chan_t  (axi_mst_aw_chan_t),
+    .w_chan_t   (axi_mst_w_chan_t ),
+    .b_chan_t   (axi_mst_b_chan_t ),
+    .ar_chan_t  (axi_mst_ar_chan_t),
+    .r_chan_t   (axi_mst_r_chan_t ),
+    .axi_req_t  (axi_mst_req_t    ),
+    .axi_resp_t (axi_mst_resp_t   )
+  ) i_cut_ext_narrow_in (
+    .clk_i      (clk_i                       ),
+    .rst_ni     (rst_ni                      ),
+    .slv_req_i  (axi_in_req_i                ),
+    .slv_resp_o (axi_in_resp_o               ),
+    .mst_req_o  (narrow_axi_mst_req[SoCDMAIn]),
+    .mst_resp_i (narrow_axi_mst_rsp[SoCDMAIn])
   );
 
   logic       [DmaXbarCfg.NoSlvPorts-1:0][$clog2(DmaXbarCfg.NoMstPorts)-1:0] dma_xbar_default_port;
@@ -950,8 +947,8 @@ module spatz_cluster
     .mst_resp_t    (axi_slv_resp_t   ),
     .rule_t        (xbar_rule_t      )
   ) i_cluster_xbar (
-    .clk_i,
-    .rst_ni,
+    .clk_i                 (clk_i                      ),
+    .rst_ni                (rst_ni                     ),
     .test_i                (1'b0                       ),
     .slv_ports_req_i       (narrow_axi_mst_req         ),
     .slv_ports_resp_o      (narrow_axi_mst_rsp         ),
@@ -1035,28 +1032,56 @@ module spatz_cluster
   );
 
   // Upsize the narrow SoC connection
+  `AXI_TYPEDEF_ALL(axi_mst_dma_narrow, addr_t, id_dma_mst_t, data_t, strb_t, user_t)
+  axi_mst_dma_narrow_req_t  narrow_axi_slv_req_soc;
+  axi_mst_dma_narrow_resp_t narrow_axi_slv_resp_soc;
+
+  axi_iw_converter #(
+    .AxiAddrWidth          (AxiAddrWidth             ),
+    .AxiDataWidth          (NarrowDataWidth          ),
+    .AxiUserWidth          (AxiUserWidth             ),
+    .AxiSlvPortIdWidth     (NarrowIdWidthOut         ),
+    .AxiSlvPortMaxUniqIds  (1                        ),
+    .AxiSlvPortMaxTxnsPerId(1                        ),
+    .AxiSlvPortMaxTxns     (1                        ),
+    .AxiMstPortIdWidth     (AxiIdWidthIn             ),
+    .AxiMstPortMaxUniqIds  (1                        ),
+    .AxiMstPortMaxTxnsPerId(1                        ),
+    .slv_req_t             (axi_slv_req_t            ),
+    .slv_resp_t            (axi_slv_resp_t           ),
+    .mst_req_t             (axi_mst_dma_narrow_req_t ),
+    .mst_resp_t            (axi_mst_dma_narrow_resp_t)
+  ) i_soc_port_iw_downsize (
+    .clk_i      (clk_i                   ),
+    .rst_ni     (rst_ni                  ),
+    .slv_req_i  (narrow_axi_slv_req[SoC] ),
+    .slv_resp_o (narrow_axi_slv_rsp[SoC] ),
+    .mst_req_o  (narrow_axi_slv_req_soc  ),
+    .mst_resp_i (narrow_axi_slv_resp_soc )
+  );
+
   axi_dw_converter #(
-    .AxiAddrWidth       (AxiAddrWidth        ),
-    .AxiIdWidth         (NarrowIdWidthOut    ),
-    .AxiMaxReads        (2                   ),
-    .AxiSlvPortDataWidth(NarrowDataWidth     ),
-    .AxiMstPortDataWidth(AxiDataWidth        ),
-    .ar_chan_t          (axi_slv_ar_chan_t   ),
-    .aw_chan_t          (axi_slv_aw_chan_t   ),
-    .b_chan_t           (axi_slv_b_chan_t    ),
-    .slv_r_chan_t       (axi_slv_r_chan_t    ),
-    .slv_w_chan_t       (axi_slv_b_chan_t    ),
-    .axi_slv_req_t      (axi_slv_req_t       ),
-    .axi_slv_resp_t     (axi_slv_resp_t      ),
-    .mst_r_chan_t       (axi_mst_dma_r_chan_t),
-    .mst_w_chan_t       (axi_mst_dma_w_chan_t),
-    .axi_mst_req_t      (axi_mst_dma_req_t   ),
-    .axi_mst_resp_t     (axi_mst_dma_resp_t  )
-  ) i_soc_port_upsize (
+    .AxiAddrWidth       (AxiAddrWidth               ),
+    .AxiIdWidth         (AxiIdWidthIn               ),
+    .AxiMaxReads        (2                          ),
+    .AxiSlvPortDataWidth(NarrowDataWidth            ),
+    .AxiMstPortDataWidth(AxiDataWidth               ),
+    .ar_chan_t          (axi_mst_dma_ar_chan_t      ),
+    .aw_chan_t          (axi_mst_dma_aw_chan_t      ),
+    .b_chan_t           (axi_mst_dma_b_chan_t       ),
+    .slv_r_chan_t       (axi_mst_dma_narrow_r_chan_t),
+    .slv_w_chan_t       (axi_mst_dma_narrow_b_chan_t),
+    .axi_slv_req_t      (axi_mst_dma_narrow_req_t   ),
+    .axi_slv_resp_t     (axi_mst_dma_narrow_resp_t  ),
+    .mst_r_chan_t       (axi_mst_dma_r_chan_t       ),
+    .mst_w_chan_t       (axi_mst_dma_w_chan_t       ),
+    .axi_mst_req_t      (axi_mst_dma_req_t          ),
+    .axi_mst_resp_t     (axi_mst_dma_resp_t         )
+  ) i_soc_port_dw_upsize (
     .clk_i      (clk_i                        ),
     .rst_ni     (rst_ni                       ),
-    .slv_req_i  (narrow_axi_slv_req[SoC]      ),
-    .slv_resp_o (narrow_axi_slv_rsp[SoC]      ),
+    .slv_req_i  (narrow_axi_slv_req_soc       ),
+    .slv_resp_o (narrow_axi_slv_resp_soc      ),
     .mst_req_o  (wide_axi_mst_req[CoreReqWide]),
     .mst_resp_i (wide_axi_mst_rsp[CoreReqWide])
   );
