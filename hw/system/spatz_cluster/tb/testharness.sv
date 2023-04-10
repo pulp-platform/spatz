@@ -17,11 +17,9 @@ module testharness (
   import axi_pkg::xbar_cfg_t;
   import axi_pkg::xbar_rule_32_t;
 
-`ifdef BOOT_ADDR
-  localparam BootAddr = `BOOT_ADDR;
-`else
-  localparam BootAddr = 0;
-`endif
+  import "DPI-C" function void clint_tick(
+    output byte msip[]
+  );
 
   /*********
    *  AXI  *
@@ -66,22 +64,23 @@ module testharness (
    *  DUT  *
    *********/
 
-  logic cluster_probe;
-  logic eoc;
+  logic                                   cluster_probe;
+  logic                                   eoc;
+  logic [spatz_cluster_pkg::NumCores-1:0] msip;
 
   spatz_cluster_wrapper i_cluster_wrapper (
-    .clk_i              (clk_i                     ),
-    .rst_ni             (rst_ni                    ),
-    .meip_i             ('0                        ),
-    .msip_i             ('0                        ),
-    .mtip_i             ('0                        ),
-    .debug_req_i        ('0                        ),
-    .axi_out_req_o      (axi_mst_req               ),
-    .axi_out_resp_i     (axi_mst_resp              ),
-    .axi_in_req_i       (to_cluster_req            ),
-    .axi_in_resp_o      (to_cluster_resp           ),
-    .cluster_probe_o    (cluster_probe             ),
-    .eoc_o              (eoc                       )
+    .clk_i           (clk_i           ),
+    .rst_ni          (rst_ni          ),
+    .meip_i          ('0              ),
+    .msip_i          (msip            ),
+    .mtip_i          ('0              ),
+    .debug_req_i     ('0              ),
+    .axi_out_req_o   (axi_mst_req     ),
+    .axi_out_resp_i  (axi_mst_resp    ),
+    .axi_in_req_i    (to_cluster_req  ),
+    .axi_in_resp_o   (to_cluster_resp ),
+    .cluster_probe_o (cluster_probe   ),
+    .eoc_o           (eoc             )
   );
 
 /**************
@@ -169,70 +168,24 @@ module testharness (
   );
 
   /************************
-   *  Write/Read via AXI  *
+   *  Simulation control  *
    ************************/
 
-  task write_to_cluster(input axi_addr_t addr, input axi_data_t data, output axi_pkg::resp_t resp);
-    to_cluster_req.aw.id    = '0;
-    to_cluster_req.aw.addr  = addr;
-    to_cluster_req.aw.size  = 'h2;
-    to_cluster_req.aw.burst = axi_pkg::BURST_INCR;
-    to_cluster_req.aw_valid = 1'b1;
-    `wait_for(to_cluster_resp.aw_ready)
+  assign to_cluster_req  = '0;
 
-    to_cluster_req.aw_valid = 1'b0;
-    to_cluster_req.w.data   = data << addr[ByteOffset +: $clog2(AxiDataWidth/DataWidth)] * DataWidth;
-    to_cluster_req.w.strb   = {AxiStrbWidth{1'b1}} << addr[ByteOffset +: $clog2(AxiDataWidth/DataWidth)] * BeWidth;
-    to_cluster_req.w.last   = 1'b1;
-    to_cluster_req.w.user   = '0;
-    to_cluster_req.w_valid  = 1'b1;
-    `wait_for(to_cluster_resp.w_ready)
-
-    to_cluster_req.w_valid = 1'b0;
-    to_cluster_req.b_ready = 1'b1;
-    `wait_for(to_cluster_resp.b_valid)
-
-    resp                   = to_cluster_resp.b.resp;
-    to_cluster_req.b_ready = 1'b0;
-  endtask
-
-  task read_from_cluster(input axi_addr_t addr, output axi_data_t data, output axi_pkg::resp_t resp);
-    to_cluster_req.ar.id    = '0;
-    to_cluster_req.ar.addr  = addr;
-    to_cluster_req.ar.size  = 'h2;
-    to_cluster_req.ar.burst = axi_pkg::BURST_INCR;
-    to_cluster_req.ar_valid = 1'b1;
-    `wait_for(to_cluster_resp.ar_ready)
-
-    to_cluster_req.ar_valid = 1'b0;
-    to_cluster_req.r_ready  = 1'b1;
-    `wait_for(to_cluster_resp.r_valid)
-
-    data                   = to_cluster_resp.r.data >> addr[ByteOffset +: $clog2(AxiDataWidth/DataWidth)] * DataWidth;
-    resp                   = to_cluster_resp.r.resp;
-    to_cluster_req.r_ready = 1'b0;
-    $display("[TB] Read %08x from %08x at %t (resp=%d).", data, addr, $time, resp);
-  endtask
-
-  // Simulation control
-  initial begin
-    // Do not request anything from the cluster
-    to_cluster_req = '0;
-
-    // Wait for reset.
-    @(negedge rst_ni);
-    @(posedge clk_i);
-
-    // Give the cores time to execute the bootrom's program
-    #10ns;
-
-    // Wait for the interrupt
-    @(posedge eoc);
-
-    $timeformat(-9, 2, " ns", 0);
-    $display("[EOC] Simulation ended at %t (retval = %0d).", $time, 0);
-    $finish(0);
+  // CLINT
+  // verilog_lint: waive-start always-ff-non-blocking
+  localparam int NumCores = spatz_cluster_pkg::NumCores;
+  always_ff @(posedge clk_i) begin
+    automatic byte msip_ret[NumCores];
+    if (rst_ni) begin
+      clint_tick(msip_ret);
+      for (int i = 0; i < NumCores; i++) begin
+        msip[i] = msip_ret[i];
+      end
+    end
   end
+  // verilog_lint: waive-stop always-ff-non-blocking
 
   /********
    *  L2  *

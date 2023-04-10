@@ -38,10 +38,15 @@ test: ${VSIM_SOURCES} ${TB_SRCS}
 # Prerequisites #
 #################
 
-test/bootrom.elf test/bootrom.dump test/bootrom.bin: test/bootrom.S test/bootrom.ld Makefile
-	riscv -riscv64-gcc-9.5.0 riscv64-unknown-elf-gcc -mabi=ilp32d -march=rv32imafd -static -nostartfiles -Ttest/bootrom.ld $< -o test/bootrom.elf
+test/bootrom.elf test/bootrom.dump test/bootrom.bin: test/bootrom.S test/bootrom.ld Makefile generate
+	riscv -riscv64-gcc-9.5.0 riscv64-unknown-elf-gcc -mabi=ilp32 -march=rv32imaf -static -nostartfiles -Ttest/bootrom.ld $< test/bootdata_bootrom.cc -I../../ip/snitch_test/src -Itest/ -o test/bootrom.elf
 	riscv -riscv64-gcc-9.5.0 riscv64-unknown-elf-objdump -D test/bootrom.elf > test/bootrom.dump
 	riscv -riscv64-gcc-9.5.0 riscv64-unknown-elf-objcopy -O binary test/bootrom.elf test/bootrom.bin
+
+.PHONY: generate
+generate: src/generated/spatz_cluster_wrapper.sv
+src/generated/spatz_cluster_wrapper.sv: cfg/spatz_cluster.default.hjson $(find test/*tpl -f)
+	${SPATZ_DIR}/util/clustergen.py  -c cfg/spatz_cluster.default.hjson -o src/
 
 #############
 # Verilator #
