@@ -50,7 +50,6 @@ typedef struct snrt_slice {
 
 /// Peripherals to the Snitch SoC
 struct snrt_peripherals {
-    volatile uint32_t *clint;
     volatile uint32_t *wakeup;
     uint32_t *perf_counters;
     /**

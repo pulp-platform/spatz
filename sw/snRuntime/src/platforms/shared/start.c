@@ -23,7 +23,6 @@ struct snrt_cluster_bootdata {
     uint32_t tcdm_offset;
     uint64_t global_mem_start;
     uint64_t global_mem_end;
-    uint32_t clint_base;
 };
 
 // Rudimentary string buffer for putc calls.
@@ -79,7 +78,6 @@ void _snrt_init_team(uint32_t cluster_core_id, uint32_t cluster_core_num,
     putc_buffer[snrt_hartid()].hdr.size = 0;
 
     // init peripherals
-    team->peripherals.clint = (uint32_t *)bootdata->clint_base;
     team->peripherals.perf_counters =
         (uint32_t
              *)(spm_start + bootdata->tcdm_size +

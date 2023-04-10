@@ -41,15 +41,6 @@ void Sim::start() {
     MEM.write(ep, 4, reinterpret_cast<const uint8_t *>(&e), nullptr);
     std::cerr << "Wrote entry point 0x" << std::hex << e
               << " to bootloader slot 0x" << ep << "\n";
-
-    // Write the boot data to the end of the bootloader. This address will be
-    // passed to the binary in register a1.
-    size_t bdlen = sizeof(BootData);
-    size_t bdp = BOOTDATA.boot_addr + bllen;
-    MEM.write(bdp, bdlen, reinterpret_cast<const uint8_t *>(&BOOTDATA),
-              nullptr);
-    std::cerr << "Wrote " << bdlen << " bytes of bootdata to 0x" << std::hex
-              << bdp << "\n";
 }
 
 void Sim::read_chunk(addr_t taddr, size_t len, void *dst) {

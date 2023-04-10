@@ -12,15 +12,14 @@
 
 /// The cluster-local clint is in the cluster peripheral system which has 64 bit
 /// register width
-#define cl_clint_set(x) *(cl_clint_p + 0) = (x)
-#define cl_clint_clr(x) *(cl_clint_p + 2) = (x)
+#define cl_clint_set(x) *(clint_p + 0) = (x)
+#define cl_clint_clr(x) *(clint_p + 2) = (x)
 
 //================================================================================
 // Data
 //================================================================================
 static volatile uint32_t clint_mutex = 0;
 static __thread volatile uint32_t *clint_p;
-static __thread volatile uint32_t *cl_clint_p;
 
 //================================================================================
 // ISR definitions
@@ -37,8 +36,7 @@ void irq_m_cluster(uint32_t core_idx);
 
 void snrt_int_init(struct snrt_team_root *team) {
     // Put the clint address in tls for faster access
-    clint_p = team->peripherals.clint;
-    cl_clint_p = team->peripherals.cl_clint;
+    clint_p = team->peripherals.cl_clint;
 }
 
 /**
