@@ -7,7 +7,6 @@
 
 extern const uint32_t _snrt_cluster_cluster_core_num;
 extern const uint32_t _snrt_cluster_cluster_base_hartid;
-extern const uint32_t _snrt_cluster_cluster_num;
 extern const uint32_t _snrt_cluster_cluster_id;
 void *const _snrt_cluster_global_offset = (void *)0x10000000;
 
@@ -24,8 +23,6 @@ struct snrt_cluster_bootdata {
     uint32_t tcdm_offset;
     uint64_t global_mem_start;
     uint64_t global_mem_end;
-    uint32_t cluster_count;
-    uint32_t s1_quadrant_count;
     uint32_t clint_base;
 };
 
@@ -49,11 +46,10 @@ void _snrt_init_team(uint32_t cluster_core_id, uint32_t cluster_core_num,
     team->base.root = team;
     team->bootdata = (void *)bootdata;
     team->global_core_base_hartid = bootdata->hartid_base;
-    team->global_core_num = bootdata->core_count * bootdata->cluster_count *
-                            bootdata->s1_quadrant_count;
+    team->global_core_num = bootdata->core_count;
     team->cluster_idx =
         (snrt_hartid() - bootdata->hartid_base) / bootdata->core_count;
-    team->cluster_num = bootdata->cluster_count * bootdata->s1_quadrant_count;
+    team->cluster_num = 0;
     team->cluster_core_base_hartid = bootdata->hartid_base;
     team->cluster_core_num = cluster_core_num;
     team->global_mem.start =

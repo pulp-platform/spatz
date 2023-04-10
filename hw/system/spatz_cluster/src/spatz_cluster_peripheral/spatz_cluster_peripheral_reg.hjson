@@ -7,7 +7,7 @@
         { name: "NumPerfCounters",
         desc: "Number of performance counters",
         type: "int",
-        default: "16"
+        default: "2"
         },
     ],
     name: "spatz_cluster_peripheral",
@@ -402,6 +402,22 @@
             name: "ICACHE_PREFETCH_ENABLE",
             desc: "Hardware barrier register."
         }]
-    }
-    ]
+    },
+    {
+        name: "SPATZ_STATUS",
+        desc: '''Sets the status of the Spatz cluster.'''
+        swaccess: "wo",
+        hwaccess: "hro",
+        resval: "0",
+        fields: [{
+            bits: "0:0",
+            name: "SPATZ_EOC",
+            desc: "Indicates the end of the computation."
+        },
+        {
+            bits: "1:1",
+            name: "SPATZ_CLUSTER_PROBE",
+            desc: "Indicates the cluster is computing a kernel."
+        }]
+    }]
 }

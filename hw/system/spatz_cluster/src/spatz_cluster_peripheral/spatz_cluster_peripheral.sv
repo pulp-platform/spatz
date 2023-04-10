@@ -31,6 +31,8 @@ module spatz_cluster_peripheral
   input  addr_t                      tcdm_end_address_i,
   output logic                       icache_prefetch_enable_o,
   output logic [NrCores-1:0]         cl_clint_o,
+  output logic                       eoc_o,
+  output logic                       cluster_probe_o,
   input  logic [9:0]                 cluster_hart_base_id_i,
   input  core_events_t [NrCores-1:0] core_events_i,
   input  tcdm_events_t               tcdm_events_i,
@@ -80,6 +82,10 @@ module spatz_cluster_peripheral
 
   // Enable icache prefetch
   assign icache_prefetch_enable_o = reg2hw.icache_prefetch_enable.q;
+
+  // EOC
+  assign eoc_o = reg2hw.spatz_status.spatz_eoc.q;
+  assign cluster_probe_o = reg2hw.spatz_status.spatz_cluster_probe.q;
 
   // Continuously assign the perf values.
   for (genvar i = 0; i < NumPerfCounters; i++) begin : gen_perf_assign
