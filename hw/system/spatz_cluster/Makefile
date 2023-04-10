@@ -38,14 +38,17 @@ test: ${VSIM_SOURCES} ${TB_SRCS}
 # Prerequisites #
 #################
 
-test/bootrom.elf test/bootrom.dump test/bootrom.bin: test/bootrom.S test/bootrom.ld Makefile generate
+test/bootrom.elf test/bootrom.dump test/bootrom.bin: test/bootrom.S test/bootrom.ld Makefile
 	riscv -riscv64-gcc-9.5.0 riscv64-unknown-elf-gcc -mabi=ilp32 -march=rv32imaf -static -nostartfiles -Ttest/bootrom.ld $< test/bootdata_bootrom.cc -I../../ip/snitch_test/src -I../../../sw/snRuntime/include -o test/bootrom.elf
 	riscv -riscv64-gcc-9.5.0 riscv64-unknown-elf-objdump -D test/bootrom.elf > test/bootrom.dump
 	riscv -riscv64-gcc-9.5.0 riscv64-unknown-elf-objcopy -O binary test/bootrom.elf test/bootrom.bin
 
+src/generated/bootrom.sv: test/bootrom.bin
+	$(SPATZ_DIR)/util/generate_bootrom.py test/bootrom.bin --sv --datawidth 64 --output src/generated/bootrom
+
 .PHONY: generate
-generate: src/generated/spatz_cluster_wrapper.sv
-src/generated/spatz_cluster_wrapper.sv: cfg/spatz_cluster.default.hjson $(find test/*tpl -f)
+generate: src/generated/spatz_cluster_wrapper.sv src/generated/bootrom.sv
+src/generated/spatz_cluster_wrapper.sv: cfg/spatz_cluster.default.hjson $(find src/*tpl) $(find test/*tpl)
 	${SPATZ_DIR}/util/clustergen.py  -c cfg/spatz_cluster.default.hjson -o src/
 
 #############

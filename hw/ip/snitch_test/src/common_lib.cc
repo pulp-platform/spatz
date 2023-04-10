@@ -27,12 +27,6 @@ GlobalMemory MEM;
 // symbol.
 void Sim::start() {
     htif_t::start();
-
-    // Write the bootloader into memory.
-    size_t bllen = (&tb_bootrom_end - &tb_bootrom_start);
-    MEM.write(BOOTDATA.boot_addr, bllen, &tb_bootrom_start, nullptr);
-    std::cerr << "Wrote " << bllen << " bytes of bootrom to 0x" << std::hex
-              << BOOTDATA.boot_addr << "\n";
 }
 
 void Sim::read_chunk(addr_t taddr, size_t len, void *dst) {

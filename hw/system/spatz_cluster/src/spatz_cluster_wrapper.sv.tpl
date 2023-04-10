@@ -75,6 +75,8 @@ package ${cfg['pkg_name']};
 
   localparam int unsigned PeriStartAddr = TCDMStartAddr + TCDMSize;
 
+  localparam int unsigned BootAddr      = ${to_sv_hex(cfg['boot_addr'], cfg['addr_width'])};
+
   function automatic snitch_pma_pkg::rule_t [snitch_pma_pkg::NrMaxRules-1:0] get_cached_regions();
     automatic snitch_pma_pkg::rule_t [snitch_pma_pkg::NrMaxRules-1:0] cached_regions;
     cached_regions = '{default: '0};

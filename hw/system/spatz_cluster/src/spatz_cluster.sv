@@ -127,8 +127,6 @@ module spatz_cluster
     /// Per-cluster probe on the cluster status. Can be written by the cores to indicate
     /// to the overall system that the cluster is executing something.
     output logic                             cluster_probe_o,
-    /// Per-cluster probe on the EOC status. Indicates the end of the execution.
-    output logic                             eoc_o,
     /// AXI Core cluster in-port.
     input  axi_in_req_t                      axi_in_req_i,
     output axi_in_resp_t                     axi_in_resp_o,
@@ -176,7 +174,8 @@ module spatz_cluster
   localparam int unsigned NarrowDataWidth  = 64;
   localparam int unsigned NarrowUserWidth  = AxiUserWidth;
 
-  localparam int unsigned NrNarrowSlaves = 3;
+  // TCDM, Peripherals, BootROM, SoC Request
+  localparam int unsigned NrNarrowSlaves = 4;
   localparam int unsigned NrNarrowRules  = NrNarrowSlaves - 1;
 
   // Core Request, DMA, Instruction cache
@@ -408,7 +407,11 @@ module spatz_cluster
   reg_req_t reg_req;
   reg_rsp_t reg_rsp;
 
-  // 5. Misc. Wires.
+  // 6. BootROM
+  reg_req_t bootrom_reg_req;
+  reg_rsp_t bootrom_reg_rsp;
+
+  // 7. Misc. Wires.
   logic               icache_prefetch_enable;
   logic [NrCores-1:0] cl_interrupt;
 
@@ -924,6 +927,11 @@ module spatz_cluster
       idx       : ClusterPeripherals,
       start_addr: cluster_periph_start_address,
       end_addr  : cluster_periph_end_address
+    },
+    '{
+      idx       : BootROM,
+      start_addr: BootAddr,
+      end_addr  : BootAddr + 'h1000
     }
   };
 
@@ -1027,9 +1035,40 @@ module spatz_cluster
     .tcdm_events_i            (tcdm_events           ),
     .dma_events_i             (dma_events            ),
     .icache_events_i          (icache_events         ),
-    .eoc_o                    (eoc_o                 ),
     .cluster_probe_o          (cluster_probe_o       )
   );
+
+  // 3. BootROM
+  axi_to_reg #(
+    .ADDR_WIDTH         (AxiAddrWidth     ),
+    .DATA_WIDTH         (NarrowDataWidth  ),
+    .AXI_MAX_WRITE_TXNS (1                ),
+    .AXI_MAX_READ_TXNS  (1                ),
+    .DECOUPLE_W         (0                ),
+    .ID_WIDTH           (NarrowIdWidthOut ),
+    .USER_WIDTH         (NarrowUserWidth  ),
+    .axi_req_t          (axi_slv_req_t    ),
+    .axi_rsp_t          (axi_slv_resp_t   ),
+    .reg_req_t          (reg_req_t        ),
+    .reg_rsp_t          (reg_rsp_t        )
+  ) i_axi_to_reg_bootrom (
+    .clk_i      (clk_i                      ),
+    .rst_ni     (rst_ni                     ),
+    .testmode_i (1'b0                       ),
+    .axi_req_i  (narrow_axi_slv_req[BootROM]),
+    .axi_rsp_o  (narrow_axi_slv_rsp[BootROM]),
+    .reg_req_o  (bootrom_reg_req            ),
+    .reg_rsp_i  (bootrom_reg_rsp            )
+  );
+
+  bootrom i_bootrom (
+    .clk_i  (clk_i                        ),
+    .req_i  (bootrom_reg_req.valid        ),
+    .addr_i (addr_t'(bootrom_reg_req.addr)),
+    .rdata_o(bootrom_reg_rsp.rdata        )
+  );
+  `FF(bootrom_reg_rsp.ready, bootrom_reg_req.valid, 1'b0)
+  assign bootrom_reg_rsp.error = 1'b0;
 
   // Upsize the narrow SoC connection
   `AXI_TYPEDEF_ALL(axi_mst_dma_narrow, addr_t, id_dma_mst_t, data_t, strb_t, user_t)
