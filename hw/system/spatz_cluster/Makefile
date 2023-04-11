@@ -80,7 +80,7 @@ bin/spatz_cluster.vsim: ${VSIM_BUILDDIR}/compile.vsim.tcl work/lib/libfesvr.a
 	$(call QUESTASIM,tb_bin)
 
 clean.vsim:
-	rm -rf bin/spatz_cluster.vsim bin/spatz_cluster.vsim.gui work-vsim work vsim.wlf
+	rm -rf bin/spatz_cluster.vsim bin/spatz_cluster.vsim.gui work-vsim work vsim.wlf vish_stacktrace.vstf transcript
 
 #######
 # VCS #
@@ -95,7 +95,21 @@ bin/spatz_cluster.vcs: test/bootrom.bin work-vcs/compile.sh work/lib/libfesvr.a 
 
 ## Clean all build directories and temporary files for VCS simulation
 clean.vcs:
-	rm -rf bin/spatz_cluster.vcs work-vcs work-lib++ AN.DB work
+	rm -rf bin/spatz_cluster.vcs work-vcs work.lib++ AN.DB work vc_hdrs.h
+
+############
+# SPYGLASS #
+############
+
+SNPS_SG ?= spyglass-2022.06
+
+.PHONY: lint lint/tmp/files
+lint: generate lint/tmp/files lint/sdc/func.sdc lint/script/lint.tcl
+	cd lint && $(SNPS_SG) sg_shell -tcl script/lint.tcl
+
+lint/tmp/files: ${BENDER}
+	mkdir -p lint/tmp
+	${BENDER} script verilator -t rtl -t spatz > lint/tmp/files
 
 ######
 # SW #
