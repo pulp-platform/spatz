@@ -3,13 +3,13 @@
 # SPDX-License-Identifier: SHL-0.51
 
 # Look for the precompiled binaries
-set(CMAKE_C_COMPILER ${LLVM_DIR}/bin/clang)
-set(CMAKE_CXX_COMPILER ${LLVM_DIR}/bin/clang++)
-set(CMAKE_OBJCOPY ${LLVM_DIR}/bin/llvm-objcopy)
-set(CMAKE_OBJDUMP ${LLVM_DIR}/bin/llvm-objdump --mcpu=snitch --mattr=a --mattr=v --mattr=m --mattr=zfh)
-set(CMAKE_AR ${LLVM_DIR}/bin/llvm-ar)
-set(CMAKE_STRIP ${LLVM_DIR}/bin/llvm-strip)
-set(CMAKE_RANLIB ${LLVM_DIR}/bin/llvm-ranlib)
+set(CMAKE_C_COMPILER ${LLVM_PATH}/bin/clang)
+set(CMAKE_CXX_COMPILER ${LLVM_PATH}/bin/clang++)
+set(CMAKE_OBJCOPY ${LLVM_PATH}/bin/llvm-objcopy)
+set(CMAKE_OBJDUMP ${LLVM_PATH}/bin/llvm-objdump --mcpu=snitch --mattr=a --mattr=v --mattr=m --mattr=zfh)
+set(CMAKE_AR ${LLVM_PATH}/bin/llvm-ar)
+set(CMAKE_STRIP ${LLVM_PATH}/bin/llvm-strip)
+set(CMAKE_RANLIB ${LLVM_PATH}/bin/llvm-ranlib)
 
 ##
 ## Compile options
@@ -25,8 +25,8 @@ add_compile_options(-menable-experimental-extensions)
 add_compile_options(-mno-relax)
 # Set the ISA and ABI
 add_compile_options(-march=rv32imafdvzfh_xdma -mabi=ilp32d)
-# GCC path
-add_compile_options(--gcc-toolchain=/scratch/matheusd/spatz-cluster/install/riscv-gcc)
+# Set the GCC path
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} --gcc-toolchain=${GCC_PATH}")
 
 ##
 ## Link options
@@ -38,9 +38,6 @@ add_link_options(-ffast-math -fno-common -fno-builtin-printf)
 
 link_libraries(-lm)
 link_libraries(-lgcc)
-
-# GCC path
-add_link_options(--gcc-toolchain=/scratch/matheusd/spatz-cluster/install/riscv-gcc)
 
 # LLD defaults to -z relro which we don't want in a static ELF
 add_link_options(-Wl,-z,norelro)

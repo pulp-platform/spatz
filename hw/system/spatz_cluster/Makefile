@@ -118,13 +118,13 @@ lint/tmp/files: ${BENDER}
 ## Build SW into sw/build with the LLVM toolchain
 sw: clean.sw
 	mkdir -p sw/build
-	cd sw/build && ${CMAKE} -DCMAKE_TOOLCHAIN_FILE=toolchain-llvm .. -DLLVM_DIR=${LLVM_INSTALL_DIR} && make
+	cd sw/build && ${CMAKE} -DCMAKE_TOOLCHAIN_FILE=toolchain-llvm -DLLVM_PATH=${LLVM_INSTALL_DIR} -DGCC_PATH=${GCC_INSTALL_DIR} .. && make
 
 # VSIM
 ## Build SW into sw/build with the LLVM toolchain (including tests) for Questasim simulator
 sw.vsim: clean.sw bin/spatz_cluster.vsim
 	mkdir -p sw/build
-	cd sw/build && ${CMAKE} -DCMAKE_TOOLCHAIN_FILE=toolchain-llvm -DLLVM_DIR=${LLVM_INSTALL_DIR} -DSNITCH_SIMULATOR=../../../../../hw/system/spatz_cluster/bin/spatz_cluster.vsim -DBUILD_TESTS=ON .. && make
+	cd sw/build && ${CMAKE} -DCMAKE_TOOLCHAIN_FILE=toolchain-llvm -DLLVM_PATH=${LLVM_INSTALL_DIR} -DGCC_PATH=${GCC_INSTALL_DIR} -DSNITCH_SIMULATOR=../../../../../hw/system/spatz_cluster/bin/spatz_cluster.vsim -DBUILD_TESTS=ON .. && make
 
 ## Build SW and run all tests with Questasim simulator
 sw.test.vsim: sw.vsim
@@ -134,7 +134,7 @@ sw.test.vsim: sw.vsim
 ## Build SW into sw/build with the LLVM toolchain (including tests) for VCS simulator
 sw.vcs: clean.sw bin/spatz_cluster.vcs
 	mkdir -p sw/build
-	cd sw/build && ${CMAKE} -DCMAKE_TOOLCHAIN_FILE=toolchain-llvm -DLLVM_DIR=${LLVM_INSTALL_DIR} -DSNITCH_SIMULATOR=../../../../../hw/system/spatz_cluster/bin/spatz_cluster.vcs -DBUILD_TESTS=ON .. && make
+	cd sw/build && ${CMAKE} -DCMAKE_TOOLCHAIN_FILE=toolchain-llvm -DLLVM_PATH=${LLVM_INSTALL_DIR} -DGCC_PATH=${GCC_INSTALL_DIR} -DSNITCH_SIMULATOR=../../../../../hw/system/spatz_cluster/bin/spatz_cluster.vcs -DBUILD_TESTS=ON .. && make
 
 ## Build SW and run all tests with VCS simulator
 sw.test.vcs: sw.vcs
@@ -144,7 +144,7 @@ sw.test.vcs: sw.vcs
 ## Build SW into sw/build with the LLVM toolchain (including tests) for Verilator simulator
 sw.vlt: clean.sw verilate
 	mkdir -p sw/build
-	cd sw/build && ${CMAKE} -DCMAKE_TOOLCHAIN_FILE=toolchain-llvm -DLLVM_DIR=${LLVM_INSTALL_DIR} -DSNITCH_SIMULATOR=../../../../../hw/system/spatz_cluster/bin/spatz_cluster.vlt -DBUILD_TESTS=ON .. && make
+	cd sw/build && ${CMAKE} -DCMAKE_TOOLCHAIN_FILE=toolchain-llvm -DLLVM_PATH=${LLVM_INSTALL_DIR} -DGCC_PATH=${GCC_INSTALL_DIR} -DSNITCH_SIMULATOR=../../../../../hw/system/spatz_cluster/bin/spatz_cluster.vlt -DBUILD_TESTS=ON .. && make
 
 ## Build SW and run all tests with Verilator simulator
 sw.test.vlt: sw.vlt
@@ -164,3 +164,38 @@ clean: clean.vcs clean.vlt clean.vsim clean.sw
 
 clean.logs:
 	rm -rf logs/
+
+## Help command
+.DEFAULT_GOAL := help
+Blue=\033[1;34m
+Black=\033[0m
+help:
+	@echo -e "${Blue}Makefile Targets${Black} for the ${Blue}Spatz Cluster${Black}"
+	@echo -e "Use 'make <target>' where <target> is one of:"
+	@echo -e ""
+	@echo -e "${Blue}help           ${Black}Show an overview of all Makefile targets."
+	@echo -e ""
+	@echo -e "${Blue}bin/spatz_cluster.vcs  ${Black}Build compilation script and compile all sources for VCS simulation. @IIS: vcs-2022.06 make bin/spatz_cluster.vcs"
+	@echo -e "${Blue}bin/spatz_cluster.vlt  ${Black}Build compilation script and compile all sources for Verilator simulation."
+	@echo -e "${Blue}bin/spatz_cluster.vsim ${Black}Build compilation script and compile all sources for Questasim simulation."
+	@echo -e ""
+	@echo -e "${Blue}all            ${Black}Update all SW and HW related sources (by, e.g., re-generating the RegGen registers and their c-header files)."
+	@echo -e ""
+	@echo -e "${Blue}clean          ${Black}Clean everything except traces in logs directory."
+	@echo -e "${Blue}clean.sw       ${Black}Delete sw/build."
+	@echo -e "${Blue}clean.logs     ${Black}Delete all traces in logs directory."
+	@echo -e "${Blue}clean.vcs      ${Black}Clean all build directories and temporary files for VCS simulation."
+	@echo -e "${Blue}clean.vlt      ${Black}Clean all build directories and temporary files for Verilator simulation."
+	@echo -e "${Blue}clean.vsim     ${Black}Clean all build directories and temporary files for Questasim simulation."
+	@echo -e ""
+	@echo -e "${Blue}sw             ${Black}Build SW into sw/build with the LLVM."
+	@echo -e "${Blue}sw.vcs         ${Black}Build SW into sw/build with the LLVM (incl. tests) for VCS simulator."
+	@echo -e "${Blue}sw.vlt         ${Black}Build SW into sw/build with the LLVM (incl. tests) for Verilator simulator."
+	@echo -e "${Blue}sw.vsim        ${Black}Build SW into sw/build with the LLVM (incl. tests) for Questasim simulator."
+	@echo -e ""
+	@echo -e "${Blue}sw.test.vcs    ${Black}Build SW and run all tests with VCS simulator."
+	@echo -e "${Blue}sw.test.vlt    ${Black}Build SW and run all tests with Verilator simulator."
+	@echo -e "${Blue}sw.test.vsim   ${Black}Build SW and run all tests with Questasim simulator."
+	@echo -e ""
+	@echo -e "Additional useful targets from the included Makefrag:"
+	@echo -e "${Blue}traces         ${Black}Generate the better readable traces in .logs/trace_hart_<hart_id>.txt with spike-dasm."
