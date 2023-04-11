@@ -5,6 +5,9 @@
 # build folder
 bin/
 
+# toolchain folder
+toolchain/
+
 # intermediate files
 *.bin
 *.img
