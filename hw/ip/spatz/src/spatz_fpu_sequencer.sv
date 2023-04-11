@@ -598,13 +598,11 @@ module spatz_fpu_sequencer
   logic       fp_move_result_valid_o;
   logic       fp_move_result_ready_i;
 
-  stream_register #(
+  spill_register #(
     .T(spatz_rsp_t)
   ) i_fp_move_register (
     .clk_i     (clk_i                 ),
     .rst_ni    (rst_ni                ),
-    .clr_i     (1'b0                  ),
-    .testmode_i(1'b0                  ),
     .data_i    (fp_move_result_i      ),
     .valid_i   (fp_move_result_valid_i),
     .ready_o   (fp_move_result_ready_o),
