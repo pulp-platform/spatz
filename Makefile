@@ -14,13 +14,51 @@ BENDER_VERSION = 0.27.1
 OPCODES := "opcodes-rvv opcodes-rv32b_CUSTOM opcodes-ipu_CUSTOM opcodes-frep_CUSTOM opcodes-dma_CUSTOM opcodes-ssr_CUSTOM opcodes-smallfloat"
 
 # Default target
-all: bender verilator toolchain update_opcodes
+all: bender toolchain update_opcodes
 
 ###############
 #  Toolchain  #
 ###############
 
-toolchain: tc-llvm tc-riscv-gcc
+toolchain: download tc-llvm tc-riscv-gcc verilator
+
+.PHONY: download
+download: $(CURDIR)/sw/toolchain/riscv-gnu-toolchain $(CURDIR)/sw/toolchain/llvm-project $(CURDIR)/sw/toolchain/riscv-opcodes $(CURDIR)/sw/toolchain/verilator $(CURDIR)/sw/toolchain/riscv-isa-sim
+
+$(CURDIR)/sw/toolchain/riscv-gnu-toolchain:
+	mkdir -p $(CURDIR)/sw/toolchain
+	cd $(CURDIR)/sw/toolchain && git clone https://github.com/pulp-platform/pulp-riscv-gnu-toolchain.git riscv-gnu-toolchain
+	cd $(CURDIR)/sw/toolchain/riscv-gnu-toolchain &&           \
+		git checkout 70acebe256fc49114b5f068fa79f03eb9affed09 && \
+		git submodule update --init --recursive --jobs=8 .
+
+$(CURDIR)/sw/toolchain/llvm-project:
+	mkdir -p $(CURDIR)/sw/toolchain
+	cd $(CURDIR)/sw/toolchain && git clone git@github.com:pulp-platform/llvm-project.git
+	cd $(CURDIR)/sw/toolchain/llvm-project &&                  \
+		git checkout fe1298fc0c84a23dde8c5e22d3cc84defad724d0 && \
+		git submodule update --init --recursive --jobs=8 .
+
+$(CURDIR)/sw/toolchain/riscv-opcodes:
+	mkdir -p $(CURDIR)/sw/toolchain
+	cd $(CURDIR)/sw/toolchain && git clone https://github.com/pulp-platform/riscv-opcodes.git
+	cd $(CURDIR)/sw/toolchain/riscv-opcodes &&                 \
+		git checkout e46a55a13117db225749a6064f9308eae9ae541d && \
+		git submodule update --init --recursive --jobs=8 .
+
+$(CURDIR)/sw/toolchain/verilator:
+	mkdir -p $(CURDIR)/sw/toolchain
+	cd $(CURDIR)/sw/toolchain && git clone https://github.com/verilator/verilator.git
+	cd $(CURDIR)/sw/toolchain/verilator &&                     \
+		git checkout fff0eb5d88c851496f05e6368e164dfbc9c2f5ed && \
+		git submodule update --init --recursive --jobs=8 .
+
+$(CURDIR)/sw/toolchain/riscv-isa-sim:
+	mkdir -p $(CURDIR)/sw/toolchain
+	cd $(CURDIR)/sw/toolchain && git clone https://github.com/riscv-software-src/riscv-isa-sim.git
+	cd $(CURDIR)/sw/toolchain/riscv-isa-sim &&                 \
+		git checkout a0972c82d022f6f7c337b06b27c89a60af52202a && \
+		git submodule update --init --recursive --jobs=8 .
 
 tc-riscv-gcc:
 	mkdir -p $(GCC_INSTALL_DIR)
