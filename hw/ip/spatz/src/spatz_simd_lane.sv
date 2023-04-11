@@ -43,7 +43,7 @@ module spatz_simd_lane import spatz_pkg::*; import rvv_pkg::vew_e; #(
     is_mult = operation_valid_i && (operation_i inside {VMACC, VNMSAC, VMADD, VNMSUB, VMUL, VMULH, VMULHU, VMULHSU});
 
     // Mute the multiplier
-    mult_result = 'x;
+    mult_result = '0;
     if (is_mult)
       mult_result = $signed({mult_op1[Width-1] & is_signed_i & ~(operation_i == VMULHSU), mult_op1}) * $signed({mult_op2[Width-1] & is_signed_i, mult_op2});
   end: mult
@@ -92,8 +92,8 @@ module spatz_simd_lane import spatz_pkg::*; import rvv_pkg::vew_e; #(
     endcase // operation_i
   end       // arith_operands
 
-  assign adder_result      = operation_valid_i ? $signed(arith_op2) + $signed(arith_op1) + carry_i : 'x;
-  assign subtractor_result = operation_valid_i ? $signed(arith_op2) - $signed(arith_op1) - carry_i : 'x;
+  assign adder_result      = operation_valid_i ? $signed(arith_op2) + $signed(arith_op1) + carry_i : '0;
+  assign subtractor_result = operation_valid_i ? $signed(arith_op2) - $signed(arith_op1) - carry_i : '0;
 
   /////////////
   // Shifter //
@@ -209,7 +209,7 @@ module spatz_simd_lane import spatz_pkg::*; import rvv_pkg::vew_e; #(
 
   // Calculate arithmetic and logics and select correct result
   always_comb begin : simd
-    simd_result    = 'x;
+    simd_result    = '0;
     result_valid_o = 1'b0;
     if (operation_valid_i) begin
       // Valid result
@@ -240,7 +240,7 @@ module spatz_simd_lane import spatz_pkg::*; import rvv_pkg::vew_e; #(
           simd_result    = div_result;
           result_valid_o = div_out_valid;
         end
-        default simd_result = 'x;
+        default: simd_result = '0;
       endcase // operation_i
     end
   end // simd

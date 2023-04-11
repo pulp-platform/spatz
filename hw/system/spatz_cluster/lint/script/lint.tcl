@@ -26,6 +26,36 @@ sdc_data -file sdc/func.sdc
 # Link Design
 compile_design
 
+#
+# Waivers
+#
+
+# Input [] declared but not read.
+waive -rule "W240"
+# Input [] not connected.
+waive -rule "W287b"
+# Variable [] set but not read.
+waive -rule "W528"
+# Signal [] is being assigned multiple times in the same block.
+waive -rule "W415a"
+# Bit-width mismatch between function call argument [] and function input [].
+waive -rule "STARC05-2.1.3.1"
+# Initial assignment for [] is ignored by synthesis.
+waive -rule "SYNTH_89"
+# Based number [] contains a dont care.
+waive -rule "W467"
+# Rhs width with shift is less than lhs width.
+waive -rule "W486"
+# For operator [] left expression width should match right expression width.
+waive -rule "W116"
+waive -rule "W362"
+# Unsigned element [] passed to the $unsigned() function call.
+waive -rule "WRN_1024"
+# Enable pin EN on Flop [] (master RTL_FDCE) is always disabled (tied low)
+waive -rule "FlopEConst"
+# Return type width is less than return value width.
+waive -rule "W416"
+
 # Set lint_rtl goal and run
 current_goal lint/lint_rtl
 run_goal

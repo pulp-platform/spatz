@@ -155,11 +155,6 @@ package spatz_cluster_peripheral_reg_pkg;
     logic [31:0] d;
   } spatz_cluster_peripheral_hw2reg_hw_barrier_reg_t;
 
-  typedef struct packed {
-    logic [31:0] d;
-    logic        de;
-  } spatz_cluster_peripheral_hw2reg_cluster_boot_control_reg_t;
-
   // Register -> HW type
   typedef struct packed {
     spatz_cluster_peripheral_reg2hw_perf_counter_enable_mreg_t [1:0] perf_counter_enable; // [311:250]
@@ -175,9 +170,8 @@ package spatz_cluster_peripheral_reg_pkg;
 
   // HW -> register type
   typedef struct packed {
-    spatz_cluster_peripheral_hw2reg_perf_counter_mreg_t [1:0] perf_counter; // [160:65]
-    spatz_cluster_peripheral_hw2reg_hw_barrier_reg_t hw_barrier; // [64:33]
-    spatz_cluster_peripheral_hw2reg_cluster_boot_control_reg_t cluster_boot_control; // [32:0]
+    spatz_cluster_peripheral_hw2reg_perf_counter_mreg_t [1:0] perf_counter; // [127:32]
+    spatz_cluster_peripheral_hw2reg_hw_barrier_reg_t hw_barrier; // [31:0]
   } spatz_cluster_peripheral_hw2reg_t;
 
   // Register offsets

@@ -170,7 +170,7 @@ module spatz_controller
 
   // Decode new instruction if new request arrives
   always_comb begin : proc_decode
-    decoder_req       = '0;
+    decoder_req       = '{default: '0};
     decoder_req_valid = 1'b0;
 
     // Decode new instruction if one is received and spatz is ready
@@ -262,15 +262,15 @@ module spatz_controller
     // Store the decisions
     if (sb_enable_o[SB_VFU_VD_WD]) begin
       wrote_result_narrowing_d[sb_id_i[SB_VFU_VD_WD]] = sb_wrote_result_i[SB_VFU_VD_WD - SB_VFU_VD_WD] ^ narrow_wide_q[sb_id_i[SB_VFU_VD_WD]];
-      wrote_result_d[sb_id_i[SB_VFU_VD_WD]]           = sb_wrote_result_i[SB_VFU_VD_WD - SB_VFU_VD_WD] && (!narrow_wide_q[sb_id_i[SB_VFU_VD_WD] || wrote_result_narrowing_q[sb_id_i[SB_VFU_VD_WD]]]);
+      wrote_result_d[sb_id_i[SB_VFU_VD_WD]]           = sb_wrote_result_i[SB_VFU_VD_WD - SB_VFU_VD_WD] && (!narrow_wide_q[sb_id_i[SB_VFU_VD_WD]] || wrote_result_narrowing_q[sb_id_i[SB_VFU_VD_WD]]);
     end
     if (sb_enable_o[SB_VLSU_VD_WD]) begin
       wrote_result_narrowing_d[sb_id_i[SB_VLSU_VD_WD]] = sb_wrote_result_i[SB_VLSU_VD_WD - SB_VFU_VD_WD] ^ narrow_wide_q[sb_id_i[SB_VLSU_VD_WD]];
-      wrote_result_d[sb_id_i[SB_VLSU_VD_WD]]           = sb_wrote_result_i[SB_VLSU_VD_WD - SB_VFU_VD_WD] && (!narrow_wide_q[sb_id_i[SB_VLSU_VD_WD] || wrote_result_narrowing_q[sb_id_i[SB_VLSU_VD_WD]]]);
+      wrote_result_d[sb_id_i[SB_VLSU_VD_WD]]           = sb_wrote_result_i[SB_VLSU_VD_WD - SB_VFU_VD_WD] && (!narrow_wide_q[sb_id_i[SB_VLSU_VD_WD]] || wrote_result_narrowing_q[sb_id_i[SB_VLSU_VD_WD]]);
     end
     if (sb_enable_o[SB_VSLDU_VD_WD]) begin
       wrote_result_narrowing_d[sb_id_i[SB_VSLDU_VD_WD]] = sb_wrote_result_i[SB_VSLDU_VD_WD - SB_VFU_VD_WD] ^ narrow_wide_q[sb_id_i[SB_VSLDU_VD_WD]];
-      wrote_result_d[sb_id_i[SB_VSLDU_VD_WD]]           = sb_wrote_result_i[SB_VSLDU_VD_WD - SB_VFU_VD_WD] && (!narrow_wide_q[sb_id_i[SB_VSLDU_VD_WD] || wrote_result_narrowing_q[sb_id_i[SB_VSLDU_VD_WD]]]);
+      wrote_result_d[sb_id_i[SB_VSLDU_VD_WD]]           = sb_wrote_result_i[SB_VSLDU_VD_WD - SB_VFU_VD_WD] && (!narrow_wide_q[sb_id_i[SB_VSLDU_VD_WD]] || wrote_result_narrowing_q[sb_id_i[SB_VSLDU_VD_WD]]);
     end
 
     // A unit has finished its VRF access. Reset the scoreboard. For each instruction, check

@@ -376,7 +376,7 @@ module spatz_fpu_sequencer
         riscv_instr::FLW,
         riscv_instr::FLD: begin
           use_fd = 1'b1;
-          unique casez (issue_req_i.data_op)
+          casez (issue_req_i.data_op)
             riscv_instr::FLB: ls_size = Byte;
             riscv_instr::FLH: ls_size = HalfWord;
             riscv_instr::FLW: ls_size = Word;
@@ -390,7 +390,7 @@ module spatz_fpu_sequencer
         riscv_instr::FSW,
         riscv_instr::FSD: begin
           use_fs2 = 1'b1;
-          unique casez (issue_req_i.data_op)
+          casez (issue_req_i.data_op)
             riscv_instr::FSB: ls_size = Byte;
             riscv_instr::FSH: ls_size = HalfWord;
             riscv_instr::FSW: ls_size = Word;

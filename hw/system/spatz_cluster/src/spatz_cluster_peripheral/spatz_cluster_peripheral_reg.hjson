@@ -419,7 +419,7 @@
         name: "CLUSTER_BOOT_CONTROL",
         desc: '''Controls the cluster boot process.'''
         swaccess: "rw",
-        hwaccess: "hrw",
+        hwaccess: "hro",
         resval: "0",
         fields: [{
             bits: "31:0",

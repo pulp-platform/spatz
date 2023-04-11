@@ -717,6 +717,9 @@ module spatz_cluster
 
     tcdm_req_t [TcdmPorts-1:0] tcdm_req_wo_user;
 
+    logic [31:0]               hart_id;
+    assign hart_id = hart_base_id_i + i;
+
     spatz_cc #(
       .BootAddr                (BootAddr                   ),
       .RVE                     (1'b0                       ),
@@ -766,7 +769,7 @@ module spatz_cluster
       .clk_i            (clk_i                               ),
       .clk_d2_i         (clk_i                               ),
       .rst_ni           (rst_ni                              ),
-      .hart_id_i        (hart_base_id_i + i                  ),
+      .hart_id_i        (hart_id                             ),
       .hive_req_o       (hive_req[i]                         ),
       .hive_rsp_i       (hive_rsp[i]                         ),
       .irq_i            (irq                                 ),

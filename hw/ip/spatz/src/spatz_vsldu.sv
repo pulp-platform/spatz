@@ -355,8 +355,8 @@ module spatz_vsldu
     data_high = '0;
     data_low  = '0;
 
-    vrf_req_d.wbe   = 'x;
-    vrf_req_d.wdata = 'x;
+    vrf_req_d.wbe   = '0;
+    vrf_req_d.wdata = '0;
 
     // Is there a vector instruction executing now?
     if (!is_vl_zero) begin

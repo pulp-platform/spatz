@@ -756,6 +756,7 @@ module spatz_vlsu
                 EW_8 : mask = 1;
                 EW_16: mask = 3;
                 EW_32: mask = 15;
+                default: mask = '1;
               endcase
               vrf_req_d.wbe[ELENB*port +: ELENB] = mask << shift;
             end else
@@ -841,6 +842,7 @@ module spatz_vlsu
               EW_8 : mask = 1;
               EW_16: mask = 3;
               EW_32: mask = 15;
+              default: mask = '1;
             endcase
             mem_req_strb[port] = mask << shift;
           end else

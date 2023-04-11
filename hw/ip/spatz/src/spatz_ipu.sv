@@ -57,7 +57,7 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
 
     if (operation_valid_i && operation_ready_o)
       op_count_d += 1;
-    if (result_valid_o && result_ready_i)
+    if (result_valid_o[0] && result_ready_i)
       op_count_d -= 1;
 
     busy_o = (op_count_q != '0);
@@ -127,7 +127,7 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
 
     // Distribute operands to the SIMD lanes
     always_comb begin : distributor
-      lane_signal_inp = 'x;
+      lane_signal_inp = '0;
 
       unique case (sew)
         rvv_pkg::EW_8: begin
@@ -335,7 +335,7 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
 
     // Distribute operands to the SIMD lanes
     always_comb begin : distributor
-      lane_signal_inp = 'x;
+      lane_signal_inp = '0;
 
       unique case (sew)
         rvv_pkg::EW_8: begin
