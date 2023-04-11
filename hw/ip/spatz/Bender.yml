@@ -19,7 +19,7 @@ sources:
     - src/rvv_pkg.sv
     # Level 1
     - src/generated/spatz_pkg.sv
-    - src/serdiv.sv
+    - src/spatz_serdiv.sv
     # Level 2
     - src/spatz_decoder.sv
     - src/spatz_simd_lane.sv

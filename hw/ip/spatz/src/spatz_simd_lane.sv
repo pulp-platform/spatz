@@ -185,7 +185,7 @@ module spatz_simd_lane import spatz_pkg::*; import rvv_pkg::vew_e; #(
     endcase
   end: div_proc
 
-  serdiv #(
+  spatz_serdiv #(
     .WIDTH  (Width),
     .IdWidth(1    )
   ) i_divider (

@@ -7,7 +7,7 @@
 /// Author: Michael Schaffner,  <schaffner@iis.ee.ethz.ch>
 /// Author: Florian Zaruba , <zarubaf@iis.ee.ethz.ch>
 
-module serdiv #(
+module spatz_serdiv #(
     parameter              WIDTH   = 64,
     parameter int unsigned IdWidth = 5
   ) (
