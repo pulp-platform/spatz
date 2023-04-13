@@ -10,6 +10,9 @@ ROOT := ${SPATZ_DIR}
 MKFILE_PATH := $(abspath $(lastword $(MAKEFILE_LIST)))
 MKFILE_DIR  := $(dir $(MKFILE_PATH))
 
+# Configuration file
+SPATZ_CLUSTER_CFG ?= spatz_cluster.default.hjson
+
 # Include Makefrag
 include $(ROOT)/util/Makefrag
 
@@ -48,8 +51,8 @@ src/generated/bootrom.sv: test/bootrom.bin
 
 .PHONY: generate
 generate: src/generated/spatz_cluster_wrapper.sv src/generated/bootrom.sv
-src/generated/spatz_cluster_wrapper.sv: cfg/spatz_cluster.default.hjson $(find src/*tpl) $(find test/*tpl)
-	${SPATZ_DIR}/util/clustergen.py  -c cfg/spatz_cluster.default.hjson -o src/
+src/generated/spatz_cluster_wrapper.sv: cfg/${SPATZ_CLUSTER_CFG} $(find src/*tpl) $(find test/*tpl)
+	${SPATZ_DIR}/util/clustergen.py  -c cfg/${SPATZ_CLUSTER_CFG} -o src/
 
 #############
 # Verilator #
