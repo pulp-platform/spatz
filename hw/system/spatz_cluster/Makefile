@@ -47,7 +47,7 @@ test/bootrom.elf test/bootrom.dump test/bootrom.bin: test/bootrom.S test/bootrom
 	riscv -riscv64-gcc-9.5.0 riscv64-unknown-elf-objcopy -O binary test/bootrom.elf test/bootrom.bin
 
 src/generated/bootrom.sv: test/bootrom.bin
-	$(SPATZ_DIR)/util/generate_bootrom.py test/bootrom.bin --sv --datawidth 512 --output src/generated/bootrom
+	$(SPATZ_DIR)/util/generate_bootrom.py test/bootrom.bin -c cfg/${SPATZ_CLUSTER_CFG} --output src/generated/bootrom.sv
 
 .PHONY: generate
 generate: src/generated/spatz_cluster_wrapper.sv src/generated/bootrom.sv

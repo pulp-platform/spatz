@@ -9,8 +9,11 @@
 from string import Template
 from math import log2
 import argparse
+import hjson
 import os.path
 import sys
+
+from jsonref import JsonRef
 
 parser = argparse.ArgumentParser(
     description='Convert binary file to verilog rom')
@@ -23,32 +26,15 @@ parser.add_argument(
     "--output",
     nargs="?",
     metavar='file',
-    help="Name of output file (without extension)",
+    help="Name of output file",
     default=None)
 parser.add_argument(
-    "--datawidth",
-    nargs="?",
-    metavar='int',
-    help="Bootram's data width (default: 128)",
-    default=128)
-parser.add_argument(
-    "--addrwidth",
-    nargs="?",
-    metavar='int',
-    help="Bootram's address width (default: 32)",
-    default=32)
-parser.add_argument(
-    '--sv',
-    dest='systemverilog',
-    action='store_true',
-    help="Generate SystemVerilog file")
-parser.set_defaults(systemverilog=False)
-parser.add_argument(
-    '--header',
-    dest='header',
-    action='store_true',
-    help="Generate C header file")
-parser.set_defaults(header=False)
+    "--clustercfg",
+    "-c",
+    metavar="file",
+    type=argparse.FileType('r'),
+    required=True,
+    help="A cluster configuration file")
 
 args = parser.parse_args()
 file = args.filename[0]
@@ -56,25 +42,33 @@ file = args.filename[0]
 # check that file exists
 if not os.path.isfile(file):
     sys.exit("File {} does not exist.".format(file))
-
 filename = os.path.splitext(file)[0]
 
 output = args.output
 if output is None:
     output = filename
 
-DataWidth = int(args.datawidth)
+# Read HJSON description
+cfg = []
+with args.clustercfg as file:
+    try:
+        srcfull = file.read()
+        cfg = hjson.loads(srcfull, use_decimal=True)
+        cfg = JsonRef.replace_refs(cfg)
+    except ValueError:
+        raise SystemExit(sys.exc_info()[1])
+
+DataWidth = int(cfg['cluster']['dma_data_width'])
+DataOffset = int(log2(DataWidth / 8))
 if DataWidth < 32:
     sys.exit('DataWidth must be larger than 32')
 if DataWidth % 32:
     sys.exit('DataWidth must be multiple of 32')
 
-DataOffset = int(log2(DataWidth / 8))
-
-AddrWidth = int(args.addrwidth)
+AddrWidth = int(cfg['cluster']['addr_width'])
 
 license = """\
-// Copyright 2021 ETH Zurich and University of Bologna.
+// Copyright 2023 ETH Zurich and University of Bologna.
 // Solderpad Hardware License, Version 0.51, see LICENSE for details.
 // SPDX-License-Identifier: SHL-0.51
 //
@@ -140,39 +134,23 @@ def read_bin():
 
 rom = read_bin()
 
-""" Generate C header file for simulator
-"""
-if args.header:
-    with open(output + ".h", "w") as f:
-        rom_str = ""
-        # process in junks of 32 bit (4 byte)
-        for i in range(0, int(len(rom) / 4)):
-            rom_str += "    0x" + "".join(rom[i * 4:i * 4 + 4][::-1]) + ",\n"
-        # remove the trailing comma
-        rom_str = rom_str[:-2]
-        s = Template(c_var)
-        f.write(s.substitute(filename=os.path.basename(
-            filename), size=int(len(rom) / 4), content=rom_str))
-        f.close()
-
 """ Generate SystemVerilog bootcode for FPGA and ASIC
 """
-if args.systemverilog:
-    with open(output + ".sv", "w") as f:
-        rom_str = ""
-        ByteWidth = int(DataWidth / 8)
-        # process in junks of DataWidth bit (DataWidth/8 byte)
-        for i in reversed(range(int(len(rom) / ByteWidth))):
-            rom_str += "    {}'h".format(DataWidth)
-            for b in reversed(range(int(ByteWidth / 4))):
-                rom_str += "".join(rom[i * ByteWidth + b * 4:i *
-                                       ByteWidth + b * 4 + 4][::-1]) + "_"
+with open(output, "w") as f:
+    rom_str = ""
+    ByteWidth = int(DataWidth / 8)
+    # process in junks of DataWidth bit (DataWidth/8 byte)
+    for i in reversed(range(int(len(rom) / ByteWidth))):
+        rom_str += "    {}'h".format(DataWidth)
+        for b in reversed(range(int(ByteWidth / 4))):
+            rom_str += "".join(rom[i * ByteWidth + b * 4:i *
+                                   ByteWidth + b * 4 + 4][::-1]) + "_"
             rom_str = rom_str[:-1]
-            rom_str += ",\n"
-        # remove the trailing comma
-        rom_str = rom_str[:-2]
-        f.write(license)
-        s = Template(module)
-        f.write(s.substitute(filename=os.path.basename(filename), size=int(
-            len(rom) / ByteWidth), content=rom_str, DataWidth=DataWidth,
-                             DataOffset=DataOffset, AddrWidth=AddrWidth))
+        rom_str += ",\n"
+    # remove the trailing comma
+    rom_str = rom_str[:-2]
+    f.write(license)
+    s = Template(module)
+    f.write(s.substitute(filename=os.path.basename(filename), size=int(
+        len(rom) / ByteWidth), content=rom_str, DataWidth=DataWidth,
+                         DataOffset=DataOffset, AddrWidth=AddrWidth))
