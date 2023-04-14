@@ -71,8 +71,8 @@ tc-llvm:
 	cd $(CURDIR)/sw/toolchain/llvm-project && mkdir -p build && cd build; \
 	$(CMAKE) \
 		-DCMAKE_INSTALL_PREFIX=$(LLVM_INSTALL_DIR) \
-		-DCMAKE_CXX_COMPILER=clang++ \
-		-DCMAKE_C_COMPILER=clang \
+		-DCMAKE_CXX_COMPILER=g++-8.2.0 \
+		-DCMAKE_C_COMPILER=gcc-8.2.0 \
 		-DLLVM_OPTIMIZED_TABLEGEN=True \
 		-DLLVM_ENABLE_PROJECTS="clang;lld" \
 		-DLLVM_TARGETS_TO_BUILD="RISCV" \
