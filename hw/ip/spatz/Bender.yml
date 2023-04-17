@@ -1,0 +1,37 @@
+package:
+  name: spatz_core
+  authors:
+    - "Matheus Cavalcante <matheusd@iis.ee.ethz.ch>"
+    - "Domenic Wuethrich <domenicw@ethz.ch>"
+
+dependencies:
+  common_cells:       { git: "https://github.com/pulp-platform/common_cells.git",       version: 1.28.0                }
+  tech_cells_generic: { git: "https://github.com/pulp-platform/tech_cells_generic.git", version: 0.2.11                }
+  FPnew:              { git: "https://github.com/openhwgroup/cvfpu.git",                rev:     feature/expanding_dotp}
+
+  snitch:           { path: ../snitch           }
+  reqrsp_interface: { path: ../reqrsp_interface }
+
+sources:
+  files:
+    # Level 0
+    - src/reorder_buffer.sv
+    - src/rvv_pkg.sv
+    # Level 1
+    - src/generated/spatz_pkg.sv
+    - src/spatz_serdiv.sv
+    # Level 2
+    - src/spatz_decoder.sv
+    - src/spatz_simd_lane.sv
+    - src/vregfile.sv
+    # Level 3
+    - src/spatz_fpu_sequencer.sv
+    - src/spatz_ipu.sv
+    - src/spatz_vfu.sv
+    - src/spatz_vlsu.sv
+    - src/spatz_vrf.sv
+    - src/spatz_vsldu.sv
+    # Level 4
+    - src/spatz_controller.sv
+    # Level 5
+    - src/spatz.sv

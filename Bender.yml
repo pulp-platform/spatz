@@ -1,41 +1,13 @@
 package:
   name: spatz
   authors:
-    - "Domenic Wuthrich <domenicw@ethz.ch>"
+    - "Matheus Cavalcante <matheusd@iis.ee.ethz.ch>"
 
 dependencies:
-  axi:                { git: "https://github.com/pulp-platform/axi.git",                version: 0.29.1 }
-  common_cells:       { git: "https://github.com/pulp-platform/common_cells.git",       version: 1.22.1 }
-  tech_cells_generic: { git: "https://github.com/pulp-platform/tech_cells_generic.git", version: 0.2.1  }
-  cvfpu:              { git: "git@github.com:openhwgroup/cvfpu.git",                    rev: e5c91fe    }
+  snitch:        { path: "hw/ip/snitch"            }
+  spatz_core:    { path: "hw/ip/spatz"             }
+  spatz_cc:      { path: "hw/ip/spatz_cc"          }
+  spatz_cluster: { path: "hw/system/spatz_cluster" }
 
 workspace:
-  checkout_dir: "hardware/deps"
-
-export_include_dirs:
-  - hardware/include
-
-sources:
-  files:
-    # Headers
-    - hardware/src/rvv_pkg.sv
-    - hardware/src/spatz_xif_pkg.sv
-    - hardware/src/spatz_pkg.sv
-
-    # Compiled only if Spatz is active
-    - target: spatz
-      files:
-        # Sources
-        - hardware/src/reorder_buffer.sv
-        - hardware/src/vregfile.sv
-        - hardware/src/spatz_simd_lane.sv
-        - hardware/src/spatz_ipu.sv
-        - hardware/src/spatz_vfu.sv
-        - hardware/src/spatz_vrf.sv
-        - hardware/src/spatz_vlsu.sv
-        - hardware/src/spatz_vsldu.sv
-        - hardware/src/spatz_decoder.sv
-        - hardware/src/spatz_controller.sv
-        - hardware/src/spatz_fpu_sequencer.sv
-        - hardware/src/spatz.sv
-        - hardware/src/spatz_cc.sv
+  checkout_dir: "hw/vendor"

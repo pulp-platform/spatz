@@ -24,4 +24,5 @@ mems
 .settings
 *.o
 install
-.project
+.projectBender.lock
+Bender.lock

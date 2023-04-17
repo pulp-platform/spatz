@@ -1,0 +1,11 @@
+Bender.lock
+work
+work-vsim
+work-vcs
+work-vlt
+*elf
+*bin
+*dump
+AN.DB
+work.lib++
+vc_hdrs.h
