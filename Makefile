@@ -23,52 +23,52 @@ all: bender toolchain update_opcodes
 toolchain: download tc-llvm tc-riscv-gcc verilator
 
 .PHONY: download
-download: $(CURDIR)/sw/toolchain/riscv-gnu-toolchain $(CURDIR)/sw/toolchain/llvm-project $(CURDIR)/sw/toolchain/riscv-opcodes $(CURDIR)/sw/toolchain/verilator $(CURDIR)/sw/toolchain/riscv-isa-sim
+download: sw/toolchain/riscv-gnu-toolchain sw/toolchain/llvm-project sw/toolchain/riscv-opcodes sw/toolchain/verilator sw/toolchain/riscv-isa-sim
 
-$(CURDIR)/sw/toolchain/riscv-gnu-toolchain:
-	mkdir -p $(CURDIR)/sw/toolchain
-	cd $(CURDIR)/sw/toolchain && git clone https://github.com/pulp-platform/pulp-riscv-gnu-toolchain.git riscv-gnu-toolchain
-	cd $(CURDIR)/sw/toolchain/riscv-gnu-toolchain &&           \
+sw/toolchain/riscv-gnu-toolchain:
+	mkdir -p sw/toolchain
+	cd sw/toolchain && git clone https://github.com/pulp-platform/pulp-riscv-gnu-toolchain.git riscv-gnu-toolchain
+	cd sw/toolchain/riscv-gnu-toolchain &&           \
 		git checkout 70acebe256fc49114b5f068fa79f03eb9affed09 && \
 		git submodule update --init --recursive --jobs=8 .
 
-$(CURDIR)/sw/toolchain/llvm-project:
-	mkdir -p $(CURDIR)/sw/toolchain
-	cd $(CURDIR)/sw/toolchain && git clone git@github.com:pulp-platform/llvm-project.git
-	cd $(CURDIR)/sw/toolchain/llvm-project &&                  \
+sw/toolchain/llvm-project:
+	mkdir -p sw/toolchain
+	cd sw/toolchain && git clone git@github.com:pulp-platform/llvm-project.git
+	cd sw/toolchain/llvm-project &&                  \
 		git checkout fe1298fc0c84a23dde8c5e22d3cc84defad724d0 && \
 		git submodule update --init --recursive --jobs=8 .
 
-$(CURDIR)/sw/toolchain/riscv-opcodes:
-	mkdir -p $(CURDIR)/sw/toolchain
-	cd $(CURDIR)/sw/toolchain && git clone https://github.com/pulp-platform/riscv-opcodes.git
-	cd $(CURDIR)/sw/toolchain/riscv-opcodes &&                 \
+sw/toolchain/riscv-opcodes:
+	mkdir -p sw/toolchain
+	cd sw/toolchain && git clone https://github.com/pulp-platform/riscv-opcodes.git
+	cd sw/toolchain/riscv-opcodes &&                 \
 		git checkout e46a55a13117db225749a6064f9308eae9ae541d && \
 		git submodule update --init --recursive --jobs=8 .
 
-$(CURDIR)/sw/toolchain/verilator:
-	mkdir -p $(CURDIR)/sw/toolchain
-	cd $(CURDIR)/sw/toolchain && git clone https://github.com/verilator/verilator.git
-	cd $(CURDIR)/sw/toolchain/verilator &&                     \
-		git checkout fff0eb5d88c851496f05e6368e164dfbc9c2f5ed && \
+sw/toolchain/verilator:
+	mkdir -p sw/toolchain
+	cd sw/toolchain && git clone https://github.com/verilator/verilator.git
+	cd sw/toolchain/verilator &&                     \
+		git checkout v5.004 && \
 		git submodule update --init --recursive --jobs=8 .
 
-$(CURDIR)/sw/toolchain/riscv-isa-sim:
-	mkdir -p $(CURDIR)/sw/toolchain
-	cd $(CURDIR)/sw/toolchain && git clone https://github.com/riscv-software-src/riscv-isa-sim.git
-	cd $(CURDIR)/sw/toolchain/riscv-isa-sim &&                 \
+sw/toolchain/riscv-isa-sim:
+	mkdir -p sw/toolchain
+	cd sw/toolchain && git clone https://github.com/riscv-software-src/riscv-isa-sim.git
+	cd sw/toolchain/riscv-isa-sim &&                 \
 		git checkout a0972c82d022f6f7c337b06b27c89a60af52202a && \
 		git submodule update --init --recursive --jobs=8 .
 
 tc-riscv-gcc:
 	mkdir -p $(GCC_INSTALL_DIR)
-	cd $(CURDIR)/sw/toolchain/riscv-gnu-toolchain && rm -rf build && mkdir -p build && cd build && \
+	cd sw/toolchain/riscv-gnu-toolchain && rm -rf build && mkdir -p build && cd build && \
 	../configure --prefix=$(GCC_INSTALL_DIR) --with-arch=rv32imafd --with-abi=ilp32d --with-cmodel=medlow --enable-multilib && \
 	$(MAKE) MAKEINFO=true -j4
 
 tc-llvm:
 	mkdir -p $(LLVM_INSTALL_DIR)
-	cd $(CURDIR)/sw/toolchain/llvm-project && mkdir -p build && cd build; \
+	cd sw/toolchain/llvm-project && mkdir -p build && cd build; \
 	$(CMAKE) \
 		-DCMAKE_INSTALL_PREFIX=$(LLVM_INSTALL_DIR) \
 		-DCMAKE_CXX_COMPILER=g++-8.2.0 \
