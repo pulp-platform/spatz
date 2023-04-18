@@ -7,8 +7,8 @@
 #include "printf.h"
 #include "snrt.h"
 
-// #define tprintf(...) printf(__VA_ARGS__)
-#define tprintf(...) while (0)
+#define tprintf(...) printf(__VA_ARGS__)
+//#define tprintf(...) while (0)
 
 volatile static uint32_t sum = 0;
 

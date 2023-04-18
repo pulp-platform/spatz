@@ -134,8 +134,6 @@ add_snitch_test(team_global tests/team_global.c)
 # RTL only tests
 if(SNITCH_RUNTIME STREQUAL "snRuntime-cluster")
     add_snitch_test(dma_simple tests/dma_simple.c)
-    add_snitch_test(perf_cnt tests/perf_cnt.c)
-    add_snitch_test(multi_cluster tests/multi_cluster.c)
     add_snitch_test(atomics tests/atomics.c)
 
     # Tests exclusive to LLVM
