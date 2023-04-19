@@ -50,7 +50,7 @@ sw/toolchain/verilator:
 	mkdir -p sw/toolchain
 	cd sw/toolchain && git clone https://github.com/verilator/verilator.git
 	cd sw/toolchain/verilator &&                     \
-		git checkout v5.004 && \
+		git checkout v5.008 && \
 		git submodule update --init --recursive --jobs=8 .
 
 sw/toolchain/riscv-isa-sim:

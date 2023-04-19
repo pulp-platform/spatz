@@ -61,8 +61,8 @@ src/generated/spatz_cluster_wrapper.sv: cfg/${SPATZ_CLUSTER_CFG} $(find src/*tpl
 ${VLT_BUILDDIR}/verilate: test/bootrom.bin ${VLT_SOURCES} ${TB_SRCS}
 	$(call VERILATE,tb_bin)
 
-# Quick sanity check, not really meant for simulation.
-verilate: ${VLT_BUILDDIR}/verilate
+# Verilate the Spatz cluster
+bin/spatz_cluster.vlt: ${VLT_BUILDDIR}/verilate
 
 ## Clean all build directories and temporary files for Verilator simulation
 clean.vlt:
