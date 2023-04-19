@@ -60,6 +60,11 @@ sw/toolchain/riscv-isa-sim:
 		git checkout a0972c82d022f6f7c337b06b27c89a60af52202a && \
 		git submodule update --init --recursive --jobs=8 .
 
+sw/toolchain/help2man:
+	mkdir -p sw/toolchain/help2man
+	cd sw/toolchain/help2man && wget -c https://ftp.gnu.org/gnu/help2man/help2man-1.49.3.tar.xz
+	cd sw/toolchain/help2man && tar xf help2man-1.49.3.tar.xz
+
 tc-riscv-gcc:
 	mkdir -p $(GCC_INSTALL_DIR)
 	cd sw/toolchain/riscv-gnu-toolchain && rm -rf build && mkdir -p build && cd build && \
@@ -108,9 +113,10 @@ $(BENDER_INSTALL_DIR)/bender:
 ###############
 
 verilator: $(VERILATOR_INSTALL_DIR)/bin/verilator
-$(VERILATOR_INSTALL_DIR)/bin/verilator: sw/toolchain/verilator Makefile
+$(VERILATOR_INSTALL_DIR)/bin/verilator: sw/toolchain/verilator sw/toolchain/help2man Makefile
+	cd sw/toolchain/help2man/help2man-1.49.3 && ./configure --prefix=$(VERILATOR_INSTALL_DIR) && make && make install
 	cd $<; unset VERILATOR_ROOT; \
-	autoconf && CC=$(CLANG_CC) CXX=$(CLANG_CXX) CXXFLAGS=$(CLANG_CXXFLAGS) LDFLAGS=$(CLANG_LDFLAGS) ./configure --prefix=$(VERILATOR_INSTALL_DIR) $(VERILATOR_CI) && \
+	PATH=$(PATH):$(VERILATOR_INSTALL_DIR)/bin	autoconf && CC=$(CLANG_CC) CXX=$(CLANG_CXX) CXXFLAGS=$(CLANG_CXXFLAGS) LDFLAGS=$(CLANG_LDFLAGS) ./configure --prefix=$(VERILATOR_INSTALL_DIR) $(VERILATOR_CI) && \
 	make -j4 && make install
 
 #############
