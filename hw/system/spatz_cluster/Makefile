@@ -58,6 +58,9 @@ src/generated/spatz_cluster_wrapper.sv: cfg/${SPATZ_CLUSTER_CFG} $(find src/*tpl
 # Verilator #
 #############
 
+.PHONY: verilate
+verilate: ${VLT_BUILDDIR}/verilate
+
 ${VLT_BUILDDIR}/verilate: test/bootrom.bin ${VLT_SOURCES} ${TB_SRCS}
 	$(call VERILATE,tb_bin)
 
