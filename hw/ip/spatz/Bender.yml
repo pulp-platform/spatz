@@ -5,9 +5,9 @@ package:
     - "Domenic Wuethrich <domenicw@ethz.ch>"
 
 dependencies:
-  common_cells:       { git: "https://github.com/pulp-platform/common_cells.git",       version: 1.28.0                }
-  tech_cells_generic: { git: "https://github.com/pulp-platform/tech_cells_generic.git", version: 0.2.11                }
-  FPnew:              { git: "https://github.com/openhwgroup/cvfpu.git",                rev:     feature/expanding_dotp}
+  common_cells:       { git: "https://github.com/pulp-platform/common_cells.git",       version: 1.28.0  }
+  tech_cells_generic: { git: "https://github.com/pulp-platform/tech_cells_generic.git", version: 0.2.11  }
+  FPnew:              { git: "https://github.com/openhwgroup/cvfpu.git",                rev:     1202ca3a}
 
   snitch:           { path: ../snitch           }
   reqrsp_interface: { path: ../reqrsp_interface }
