@@ -124,7 +124,7 @@ $(VERILATOR_INSTALL_DIR)/bin/verilator: sw/toolchain/verilator sw/toolchain/help
 #############
 
 update_opcodes: sw/snRuntime/vendor/riscv-opcodes/encoding.h hw/ip/snitch/src/riscv_instr.sv
-hw/ip/snitch/src/riscv_instr.sv: sw/toolchain/riscv-opcodes/*
+hw/ip/snitch/src/riscv_instr.sv: sw/toolchain/riscv-opcodes
 	MY_OPCODES=$(OPCODES) make -C sw/toolchain/riscv-opcodes inst.sverilog
 	mv sw/toolchain/riscv-opcodes/inst.sverilog $@
 
