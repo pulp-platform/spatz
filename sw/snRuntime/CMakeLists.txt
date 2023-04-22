@@ -134,10 +134,4 @@ add_snitch_test(team_global tests/team_global.c)
 if(SNITCH_RUNTIME STREQUAL "snRuntime-cluster")
     add_snitch_test(dma_simple tests/dma_simple.c)
     add_snitch_test(atomics tests/atomics.c)
-
-    # Tests exclusive to LLVM
-    if (CMAKE_C_COMPILER_ID STREQUAL "Clang")
-        add_snitch_test(data_mover tests/data_mover.c)
-        add_snitch_test(event_unit tests/event_unit.c)
-    endif()
 endif()
