@@ -19,7 +19,7 @@ include $(ROOT)/util/Makefrag
 # QuestaSim
 VSIM      = questa-2021.3-kgf vsim
 VLOG      = questa-2021.3-kgf vlog
-VSIM_HOME = /usr/pack/questa--2021.3-kgf/questasim
+VSIM_HOME = /usr/pack/questa-2021.3-kgf/questasim
 
 VSIM_FLAGS += -t 1ps
 VSIM_FLAGS += -voptargs=+acc
@@ -83,6 +83,7 @@ ${VSIM_BUILDDIR}/compile.vsim.tcl: test/bootrom.bin $(VSIM_SOURCES) ${TB_SRCS} $
 	echo 'return 0' >> $@
 
 bin/spatz_cluster.vsim: ${VSIM_BUILDDIR}/compile.vsim.tcl work/lib/libfesvr.a
+	mkdir -p bin/logs
 	$(call QUESTASIM,tb_bin)
 
 clean.vsim:

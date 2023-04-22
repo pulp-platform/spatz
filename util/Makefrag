@@ -104,7 +104,7 @@ work/${FESVR_VERSION}_unzip:
 	touch $@
 
 work/lib/libfesvr.a: work/${FESVR_VERSION}_unzip
-	cd $(dir $<)/ && ./configure --prefix `pwd`
+	cd $(dir $<)/ && CC=${VSIM_HOME}/gcc-5.3.0-linux_x86_64/bin/gcc CXX=${VSIM_HOME}/gcc-5.3.0-linux_x86_64/bin/g++ ./configure --prefix `pwd`
 	make -C $(dir $<) install-config-hdrs install-hdrs libfesvr.a
 	mkdir -p $(dir $@)
 	cp $(dir $<)libfesvr.a $@
@@ -119,8 +119,7 @@ $(VLT_FESVR)/${FESVR_VERSION}_unzip:
 	touch $@
 
 $(VLT_BUILDDIR)/lib/libfesvr.a: $(VLT_FESVR)/${FESVR_VERSION}_unzip
-	cd $(dir $<)/ && ./configure --prefix `pwd` \
-        CC=${CC} CXX=${CXX} CFLAGS="${CFLAGS}" CXXFLAGS="${CXXFLAGS}" LDFLAGS="${LDFLAGS}"
+	cd $(dir $<)/ && CC=${CC} CXX=${CXX} ./configure --prefix `pwd`
 	$(MAKE) -C $(dir $<) install-config-hdrs install-hdrs libfesvr.a
 	mkdir -p $(dir $@)
 	cp $(dir $<)libfesvr.a $@
