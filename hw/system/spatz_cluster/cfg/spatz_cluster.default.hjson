@@ -16,7 +16,6 @@
             banks: 16,
         },
         cluster_periph_size: 64, // kB
-        zero_mem_size: 64,       // kB
         dma_data_width: 512,
         dma_axi_req_fifo_depth: 3,
         dma_req_fifo_depth: 3,

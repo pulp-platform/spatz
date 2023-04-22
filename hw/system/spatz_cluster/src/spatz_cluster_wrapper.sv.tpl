@@ -202,7 +202,6 @@ module ${cfg['name']}_wrapper (
     .AxiIdWidthIn (${cfg['pkg_name']}::AxiIdInWidth),
     .AxiUserWidth (${cfg['pkg_name']}::AxiUserWidth),
     .BootAddr (${to_sv_hex(cfg['boot_addr'], 32)}),
-    .ZeroMemorySize (${cfg['zero_mem_size']}),
     .ClusterPeriphSize (${cfg['cluster_periph_size']}),
     .NrCores (${cfg['nr_cores']}),
     .TCDMDepth (${cfg['tcdm']['depth']}),

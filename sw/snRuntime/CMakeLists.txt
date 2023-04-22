@@ -128,7 +128,6 @@ add_snitch_test(interrupt tests/interrupt.c)
 add_snitch_test(interrupt-local tests/interrupt-local.c)
 add_snitch_test(printf_fmtint tests/printf_fmtint.c)
 add_snitch_test(printf_simple tests/printf_simple.c)
-add_snitch_test(zero_mem tests/zero_mem.c)
 add_snitch_test(team_global tests/team_global.c)
 
 # RTL only tests

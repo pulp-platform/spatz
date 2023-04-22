@@ -39,8 +39,6 @@ module spatz_cluster
     parameter int                     unsigned               NrCores                            = 8,
     /// Data/TCDM memory depth per cut (in words).
     parameter int                     unsigned               TCDMDepth                          = 1024,
-    /// Zero memory address region size (in kB).
-    parameter int                     unsigned               ZeroMemorySize                     = 64,
     /// Cluster peripheral address region size (in kB).
     parameter int                     unsigned               ClusterPeriphSize                  = 64,
     /// Number of TCDM Banks.
@@ -182,7 +180,7 @@ module spatz_cluster
   localparam int unsigned NrWideMasters  = 3;
   localparam int unsigned WideIdWidthOut = $clog2(NrWideMasters) + AxiIdWidthIn;
   // DMA X-BAR configuration
-  localparam int unsigned NrWideSlaves   = 4;
+  localparam int unsigned NrWideSlaves   = 3;
 
   // AXI Configuration
   localparam axi_pkg::xbar_cfg_t ClusterXbarCfg = '{
@@ -214,7 +212,7 @@ module spatz_cluster
     UniqueIds         : 1'b0,
     AxiAddrWidth      : AxiAddrWidth,
     AxiDataWidth      : AxiDataWidth,
-    NoAddrRules       : 3,
+    NoAddrRules       : 2,
     default           : '0
   };
 
@@ -357,10 +355,6 @@ module spatz_cluster
   assign cluster_periph_start_address = tcdm_end_address;
   assign cluster_periph_end_address   = tcdm_end_address + ClusterPeriphSize * 1024;
 
-  addr_t zero_mem_start_address, zero_mem_end_address;
-  assign zero_mem_start_address = cluster_periph_end_address;
-  assign zero_mem_end_address   = cluster_periph_end_address + ZeroMemorySize * 1024;
-
   // ----------------
   // Wire Definitions
   // ----------------
@@ -466,11 +460,6 @@ module spatz_cluster
       end_addr  : tcdm_end_address
     },
     '{
-      idx       : ZeroMemory,
-      start_addr: zero_mem_start_address,
-      end_addr  : zero_mem_end_address
-    },
-    '{
       idx       : BootROM,
       start_addr: BootAddr,
       end_addr  : BootAddr + 'h1000
@@ -506,22 +495,6 @@ module spatz_cluster
     .addr_map_i            (dma_xbar_rule          ),
     .en_default_mst_port_i (DMAEnableDefaultMstPort),
     .default_mst_port_i    (dma_xbar_default_port  )
-  );
-
-  axi_zero_mem #(
-    .axi_req_t  (axi_slv_dma_req_t ),
-    .axi_resp_t (axi_slv_dma_resp_t),
-    .AddrWidth  (AxiAddrWidth      ),
-    .DataWidth  (AxiDataWidth      ),
-    .IdWidth    (WideIdWidthOut    ),
-    .NumBanks   (1                 ),
-    .BufDepth   (1                 )
-  ) i_axi_zeromem (
-    .clk_i      (clk_i                       ),
-    .rst_ni     (rst_ni                      ),
-    .busy_o     (/* Unused */                ),
-    .axi_req_i  (wide_axi_slv_req[ZeroMemory]),
-    .axi_resp_o (wide_axi_slv_rsp[ZeroMemory])
   );
 
   addr_t ext_dma_req_q_addr_nontrunc;

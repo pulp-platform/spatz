@@ -102,8 +102,6 @@ extern uint32_t _snrt_barrier_reg_ptr();
 extern snrt_slice_t snrt_global_memory();
 /// get start address of the cluster's tcdm memory
 extern snrt_slice_t snrt_cluster_memory();
-/// get start address of the cluster's zero memory
-extern snrt_slice_t snrt_zero_memory();
 
 extern void snrt_bcast_send(void *data, size_t len);
 extern void snrt_bcast_recv(void *data, size_t len);
