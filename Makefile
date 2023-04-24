@@ -25,39 +25,39 @@ toolchain: download tc-llvm tc-riscv-gcc verilator
 .PHONY: download
 download: sw/toolchain/riscv-gnu-toolchain sw/toolchain/llvm-project sw/toolchain/riscv-opcodes sw/toolchain/verilator sw/toolchain/riscv-isa-sim
 
-sw/toolchain/riscv-gnu-toolchain:
+sw/toolchain/riscv-gnu-toolchain: sw/toolchain/riscv-gnu-toolchain.version
 	mkdir -p sw/toolchain
 	cd sw/toolchain && git clone https://github.com/pulp-platform/pulp-riscv-gnu-toolchain.git riscv-gnu-toolchain
 	cd sw/toolchain/riscv-gnu-toolchain &&           \
-		git checkout 70acebe256fc49114b5f068fa79f03eb9affed09 && \
+		git checkout `cat ../riscv-gnu-toolchain.version` && \
 		git submodule update --init --recursive --jobs=8 .
 
-sw/toolchain/llvm-project:
+sw/toolchain/llvm-project: sw/toolchain/llvm-project.version
 	mkdir -p sw/toolchain
 	cd sw/toolchain && git clone git@github.com:pulp-platform/llvm-project.git
 	cd sw/toolchain/llvm-project &&                  \
-		git checkout fe1298fc0c84a23dde8c5e22d3cc84defad724d0 && \
+		git checkout `cat ../llvm-project.version` && \
 		git submodule update --init --recursive --jobs=8 .
 
-sw/toolchain/riscv-opcodes:
+sw/toolchain/riscv-opcodes: sw/toolchain/riscv-opcodes.version
 	mkdir -p sw/toolchain
 	cd sw/toolchain && git clone https://github.com/pulp-platform/riscv-opcodes.git
 	cd sw/toolchain/riscv-opcodes &&                 \
-		git checkout e46a55a13117db225749a6064f9308eae9ae541d && \
+		git checkout `cat ../riscv-opcodes.version` && \
 		git submodule update --init --recursive --jobs=8 .
 
-sw/toolchain/verilator:
+sw/toolchain/verilator: sw/toolchain/verilator.version
 	mkdir -p sw/toolchain
 	cd sw/toolchain && git clone https://github.com/verilator/verilator.git
 	cd sw/toolchain/verilator &&                     \
-		git checkout v5.008 && \
+		git checkout `cat ../verilator.version` && \
 		git submodule update --init --recursive --jobs=8 .
 
-sw/toolchain/riscv-isa-sim:
+sw/toolchain/riscv-isa-sim: sw/toolchain/riscv-isa-sim.version
 	mkdir -p sw/toolchain
 	cd sw/toolchain && git clone https://github.com/riscv-software-src/riscv-isa-sim.git
 	cd sw/toolchain/riscv-isa-sim &&                 \
-		git checkout a0972c82d022f6f7c337b06b27c89a60af52202a && \
+		git checkout `cat ../riscv-isa-sim.version` && \
 		git submodule update --init --recursive --jobs=8 .
 
 sw/toolchain/help2man:
@@ -65,13 +65,13 @@ sw/toolchain/help2man:
 	cd sw/toolchain/help2man && wget -c https://ftp.gnu.org/gnu/help2man/help2man-1.49.3.tar.xz
 	cd sw/toolchain/help2man && tar xf help2man-1.49.3.tar.xz
 
-tc-riscv-gcc:
+tc-riscv-gcc: sw/toolchain/riscv-gnu-toolchain
 	mkdir -p $(GCC_INSTALL_DIR)
 	cd sw/toolchain/riscv-gnu-toolchain && rm -rf build && mkdir -p build && cd build && \
 	../configure --prefix=$(GCC_INSTALL_DIR) --with-arch=rv32imafd --with-abi=ilp32d --with-cmodel=medlow --enable-multilib && \
 	$(MAKE) MAKEINFO=true -j4
 
-tc-llvm:
+tc-llvm: sw/toolchain/llvm-project
 	mkdir -p $(LLVM_INSTALL_DIR)
 	cd sw/toolchain/llvm-project && mkdir -p build && cd build; \
 	$(CMAKE) \
