@@ -12,7 +12,7 @@ dependencies:
   axi:                { git: https://github.com/pulp-platform/axi.git,                version: 0.38.0}
   common_cells:       { git: https://github.com/pulp-platform/common_cells.git,       version: 1.28.0}
   axi_riscv_atomics:  { git: https://github.com/pulp-platform/axi_riscv_atomics.git,  version: 0.7.0 }
-  register_interface: { git: https://github.com/pulp-platform/register_interface.git, version: 0.3.3 }
+  register_interface: { git: https://github.com/pulp-platform/register_interface.git, version: 0.3.8 }
 
 sources:
 # Level 1:
