@@ -46,6 +46,8 @@ test/bootrom.elf test/bootrom.dump test/bootrom.bin: src/generated/spatz_cluster
 	riscv -riscv64-gcc-9.5.0 riscv64-unknown-elf-objdump -D test/bootrom.elf > test/bootrom.dump
 	riscv -riscv64-gcc-9.5.0 riscv64-unknown-elf-objcopy -O binary test/bootrom.elf test/bootrom.bin
 
+.PHONY: bootrom
+bootrom: $(CURDIR)/src/generated/bootrom.sv
 $(CURDIR)/src/generated/bootrom.sv: test/bootrom.bin
 	$(SPATZ_DIR)/util/generate_bootrom.py test/bootrom.bin -c cfg/${SPATZ_CLUSTER_CFG} --output src/generated/bootrom.sv
 
