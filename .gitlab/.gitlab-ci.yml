@@ -1,0 +1,62 @@
+# Copyright 2021 ETH Zurich and University of Bologna.
+# Licensed under the Apache License, Version 2.0, see LICENSE for details.
+# SPDX-License-Identifier: Apache-2.0
+
+# Author: Matheus Cavalcante, ETH Zurich
+
+variables:
+  GIT_SUBMODULE_STRATEGY: none
+  ROOT_DIR: '$CI_PROJECT_DIR'
+  APPS: "tests"
+  RUST_LOG: 'memora=debug'
+  VERILATOR_ROOT: '$CI_PROJECT_DIR/install/verilator'
+  CLANG_PATH: '/usr/pack/llvm-10.0.1-af'
+  PATH: '/home/gitlabci/.cargo/bin:/usr/local/bin:/usr/bin:/usr/sbin:/sbin:/usr/local/condor/bin:/usr/sepp/bin:$VERILATOR_ROOT/bin:/home/gitlabci/.local/bin'
+  OBJCACHE: ''
+  RISCV_WARNINGS: '-Werror'
+  CC: 'gcc-8.2.0'
+  CXX: 'g++-8.2.0'
+  CMAKE: 'cmake-3.18.1'
+  python: 'python3.6'
+
+workflow:
+  rules:
+    - if: $CI_MERGE_REQUEST_ID
+    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_REF_NAME
+
+before_script:
+  - env
+
+stages:
+  - tools
+  - build
+  - test
+
+tc-gcc:
+  stage: tools
+  script:
+    - |
+      if ! $CI_PROJECT_DIR/util/memora_retry.sh lookup tc-riscv-gcc; then
+        make sw/toolchain/riscv-gnu-toolchain tc-riscv-gcc
+        $CI_PROJECT_DIR/util/memora_retry.sh insert tc-riscv-gcc
+      fi
+
+tc-llvm:
+  stage: tools
+  script:
+    - |
+      if ! $CI_PROJECT_DIR/util/memora_retry.sh lookup tc-llvm; then
+        make sw/toolchain/llvm-project tc-llvm
+        $CI_PROJECT_DIR/util/memora_retry.sh insert tc-llvm
+      fi
+
+verilator:
+  stage: tools
+  script:
+    - |
+      if ! $CI_PROJECT_DIR/util/memora_retry.sh lookup verilator; then
+        export VERILATOR_CI="--disable-defenv"
+        make sw/toolchain/verilator verilator
+        $CI_PROJECT_DIR/util/memora_retry.sh insert verilator
+      fi

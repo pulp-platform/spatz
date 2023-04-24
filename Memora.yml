@@ -1,0 +1,35 @@
+# Copyright 2021 ETH Zurich and University of Bologna.
+# Licensed under the Apache License, Version 2.0, see LICENSE for details.
+# SPDX-License-Identifier: Apache-2.0
+
+cache_root_dir: /usr/scratch2/dolent1/gitlabci/buildcache/mempool
+
+artifacts:
+  tc-riscv-gcc:
+    inputs:
+      - Makefile
+      - sw/toolchain/riscv-gnu-toolchain.version
+    outputs:
+      - install/riscv-gcc
+
+  tc-llvm:
+    inputs:
+      - Makefile
+      - sw/toolchain/llvm-project.version
+    outputs:
+      - install/llvm
+
+  riscv-isa-sim:
+    inputs:
+      - Makefile
+      - sw/toolchain/riscv-isa-sim.version
+      - sw/toolchain/riscv-opcodes.version
+    outputs:
+      - install/riscv-isa-sim
+
+  verilator:
+    inputs:
+      - Makefile
+      - sw/toolchain/verilator.version
+    outputs:
+      - install/verilator
