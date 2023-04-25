@@ -73,12 +73,7 @@ else
     CLANG_LDFLAGS  := ""
 endif
 
-# Build verilator with LLVM and add llvm c/ld flags
-CC         = $(CLANG_CC)
-CXX        = $(CLANG_CXX)
-CFLAGS     = $(CLANG_CXXFLAGS)
-CXXFLAGS   = $(CLANG_CXXFLAGS)
-LDFLAGS    = $(CLANG_LDFLAGS)
+# Verilator flags
 VLT_FLAGS += --compiler clang
 VLT_FLAGS += -CFLAGS ${CLANG_CXXFLAGS}
 VLT_FLAGS += -LDFLAGS ${CLANG_LDFLAGS}
