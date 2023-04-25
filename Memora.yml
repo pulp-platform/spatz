@@ -2,7 +2,7 @@
 # Licensed under the Apache License, Version 2.0, see LICENSE for details.
 # SPDX-License-Identifier: Apache-2.0
 
-cache_root_dir: /usr/scratch2/dolent1/gitlabci/buildcache/mempool
+cache_root_dir: /usr/scratch2/dolent1/gitlabci/buildcache/spatz
 
 artifacts:
   tc-riscv-gcc:
