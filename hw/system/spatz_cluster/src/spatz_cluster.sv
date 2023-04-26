@@ -528,7 +528,7 @@ module spatz_cluster
   assign ext_dma_req.q.amo  = reqrsp_pkg::AMONone;
   assign ext_dma_req.q.user = '0;
 
-  tcdm_interconnect #(
+  spatz_tcdm_interconnect #(
     .NumInp                (1                 ),
     .NumOut                (NrSuperBanks      ),
     .tcdm_req_t            (tcdm_dma_req_t    ),
@@ -646,7 +646,7 @@ module spatz_cluster
     end
   end
 
-  tcdm_interconnect #(
+  spatz_tcdm_interconnect #(
     .NumInp                (NumTCDMIn           ),
     .NumOut                (NrBanks             ),
     .tcdm_req_t            (tcdm_req_t          ),

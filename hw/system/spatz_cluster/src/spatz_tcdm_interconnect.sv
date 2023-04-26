@@ -9,7 +9,7 @@
 
 /// Lightweight wrapper for a fixed response latency interconnect, i.e.,
 /// something that can be used to interconnect memories.
-module tcdm_interconnect #(
+module spatz_tcdm_interconnect #(
   /// Number of inputs into the interconnect (`> 0`).
   parameter int unsigned NumInp                = 32'd0,
   /// Number of outputs from the interconnect (`> 0`).
