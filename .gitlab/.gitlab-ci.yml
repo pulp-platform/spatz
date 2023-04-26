@@ -57,6 +57,8 @@ verilator:
     - |
       if ! $CI_PROJECT_DIR/util/memora_retry.sh lookup verilator; then
         export VERILATOR_CI="--disable-defenv"
+        # Verilator requires a more recent version of python than the default one.
+        export PYTHON3=$(which python3-3.6.5)
         make sw/toolchain/verilator verilator
         $CI_PROJECT_DIR/util/memora_retry.sh insert verilator
       fi
