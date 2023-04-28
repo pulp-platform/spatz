@@ -31,6 +31,8 @@ module spatz_cluster
     parameter int                     unsigned               AxiDataWidth                       = 512,
     /// AXI: id width in.
     parameter int                     unsigned               AxiIdWidthIn                       = 2,
+    /// AXI: id width out.
+    parameter int                     unsigned               AxiIdWidthOut                      = 2,
     /// AXI: user width.
     parameter int                     unsigned               AxiUserWidth                       = 1,
     /// Address from which to fetch the first instructions.
@@ -178,7 +180,8 @@ module spatz_cluster
 
   // Core Request, DMA, Instruction cache
   localparam int unsigned NrWideMasters  = 3;
-  localparam int unsigned WideIdWidthOut = $clog2(NrWideMasters) + AxiIdWidthIn;
+  localparam int unsigned WideIdWidthOut = AxiIdWidthOut;
+  localparam int unsigned WideIdWidthIn  = WideIdWidthOut - $clog2(NrWideMasters);
   // DMA X-BAR configuration
   localparam int unsigned NrWideSlaves   = 3;
 
@@ -207,8 +210,8 @@ module spatz_cluster
     MaxSlvTrans       : MaxSlvTrans,
     FallThrough       : 1'b0,
     LatencyMode       : XbarLatency,
-    AxiIdWidthSlvPorts: AxiIdWidthIn,
-    AxiIdUsedSlvPorts : AxiIdWidthIn,
+    AxiIdWidthSlvPorts: WideIdWidthIn,
+    AxiIdUsedSlvPorts : WideIdWidthIn,
     UniqueIds         : 1'b0,
     AxiAddrWidth      : AxiAddrWidth,
     AxiDataWidth      : AxiDataWidth,
@@ -226,7 +229,7 @@ module spatz_cluster
   typedef logic [AxiDataWidth/8-1:0] strb_dma_t;
   typedef logic [NarrowIdWidthIn-1:0] id_mst_t;
   typedef logic [NarrowIdWidthOut-1:0] id_slv_t;
-  typedef logic [AxiIdWidthIn-1:0] id_dma_mst_t;
+  typedef logic [WideIdWidthIn-1:0] id_dma_mst_t;
   typedef logic [WideIdWidthOut-1:0] id_dma_slv_t;
   typedef logic [NarrowUserWidth-1:0] user_t;
   typedef logic [AxiUserWidth-1:0] user_dma_t;
@@ -1057,14 +1060,14 @@ module spatz_cluster
     .AxiSlvPortMaxUniqIds  (1                        ),
     .AxiSlvPortMaxTxnsPerId(1                        ),
     .AxiSlvPortMaxTxns     (1                        ),
-    .AxiMstPortIdWidth     (AxiIdWidthIn             ),
+    .AxiMstPortIdWidth     (WideIdWidthIn            ),
     .AxiMstPortMaxUniqIds  (1                        ),
     .AxiMstPortMaxTxnsPerId(1                        ),
     .slv_req_t             (axi_slv_req_t            ),
     .slv_resp_t            (axi_slv_resp_t           ),
     .mst_req_t             (axi_mst_dma_narrow_req_t ),
     .mst_resp_t            (axi_mst_dma_narrow_resp_t)
-  ) i_soc_port_iw_downsize (
+  ) i_soc_port_iw_convert (
     .clk_i      (clk_i                   ),
     .rst_ni     (rst_ni                  ),
     .slv_req_i  (narrow_axi_slv_req[SoC] ),
@@ -1075,7 +1078,7 @@ module spatz_cluster
 
   axi_dw_converter #(
     .AxiAddrWidth       (AxiAddrWidth               ),
-    .AxiIdWidth         (AxiIdWidthIn               ),
+    .AxiIdWidth         (WideIdWidthIn              ),
     .AxiMaxReads        (2                          ),
     .AxiSlvPortDataWidth(NarrowDataWidth            ),
     .AxiMstPortDataWidth(AxiDataWidth               ),

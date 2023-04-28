@@ -90,6 +90,11 @@
             "description": "Id width of the AXI plug into the cluster.",
             "default": 2
         },
+        "id_width_out": {
+            "type": "number",
+            "description": "Id width of the AXI plug out of the cluster.",
+            "default": 2
+        },
         "user_width": {
             "type": "number",
             "description": "User width of the AXI plug into the cluster.",

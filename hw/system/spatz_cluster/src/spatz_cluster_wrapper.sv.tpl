@@ -40,6 +40,7 @@ package ${cfg['pkg_name']};
   localparam int unsigned AxiAddrWidth = ${cfg['addr_width']};
   // AXI ID Width
   localparam int unsigned AxiIdInWidth = ${cfg['id_width_in']};
+  localparam int unsigned AxiIdOutWidth = ${cfg['id_width_out']};
   // AXI User Width
   localparam int unsigned AxiUserWidth = ${cfg['user_width']};
 
@@ -47,11 +48,8 @@ package ${cfg['pkg_name']};
   typedef logic [AxiStrbWidth-1:0] axi_strb_t;
   typedef logic [AxiAddrWidth-1:0] axi_addr_t;
   typedef logic [AxiIdInWidth-1:0] axi_id_in_t;
-  typedef logic [AxiUserWidth-1:0] axi_user_t;
-
-  localparam int unsigned AxiClusterNumMasters = 3;
-  localparam int unsigned AxiIdOutWidth = AxiIdInWidth + $clog2(AxiClusterNumMasters);
   typedef logic [AxiIdOutWidth-1:0] axi_id_out_t;
+  typedef logic [AxiUserWidth-1:0] axi_user_t;
 
   `AXI_TYPEDEF_ALL(spatz_axi_in, axi_addr_t, axi_id_in_t, logic [63:0], logic [7:0], axi_user_t)
   `AXI_TYPEDEF_ALL(spatz_axi_out, axi_addr_t, axi_id_out_t, axi_data_t, axi_strb_t, axi_user_t)
@@ -200,6 +198,7 @@ module ${cfg['name']}_wrapper (
     .AxiAddrWidth (${cfg['addr_width']}),
     .AxiDataWidth (${cfg['dma_data_width']}),
     .AxiIdWidthIn (${cfg['pkg_name']}::AxiIdInWidth),
+    .AxiIdWidthOut (${cfg['pkg_name']}::AxiIdOutWidth),
     .AxiUserWidth (${cfg['pkg_name']}::AxiUserWidth),
     .BootAddr (${to_sv_hex(cfg['boot_addr'], 32)}),
     .ClusterPeriphSize (${cfg['cluster_periph_size']}),
