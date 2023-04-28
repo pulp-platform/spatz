@@ -381,78 +381,6 @@ def flt_lit(num: int, fmt: int, width: int = 7) -> str:
     return flt_fmt(flt_decode(num, fmt), width)
 
 
-# -------------------- FPU Sequencer --------------------
-
-
-def dasm_seq(extras: dict, ) -> str:
-    return '{:<8}'.format('frep') + ', '.join(
-        [str(extras['max_rpt'] +
-             1), str(extras['max_inst'] + 1)] +
-        ([bin(extras['stg_mask']
-              ), str(extras['stg_max'] + 1)] if extras['stg_mask'] else []))
-
-
-def emul_seq(fseq_info: dict,
-             permissive: bool = False) -> (str, int, str, tuple):
-    fseq_annot = None
-    # We are only called on FPSS issues, not on FSEQ issues -> we must consume FReps in same call
-    cfg = fseq_info['curr_cfg']
-    if cfg is None:
-        is_frep = fseq_info['fpss_pcs'][-1][2] if len(
-            fseq_info['fpss_pcs']) else False
-        # Is an FRep incoming?
-        if is_frep:
-            fseq_info['fpss_pcs'].pop()
-            cfg = fseq_info['cfg_buf'].pop()
-            cfg['inst_iter'] = 0
-            cfg['fpss_buf'] = deque()
-            cfg['outer_buf'] = deque()
-            fseq_info['curr_cfg'] = cfg
-    # Are we working on an FRep ...
-    if cfg is not None:
-        # If we are still filling our loop buffer: add to it and replicate
-        if cfg['inst_iter'] <= cfg['max_inst']:
-            pc_str, curr_sec, is_frep = fseq_info['fpss_pcs'].pop()
-            if is_frep:
-                msg_type = 'WARNING' if permissive else 'FATAL'
-                sys.stderr.write(
-                    '{}: FRep at {} contains another nested FRep'.format(
-                        msg_type, cfg['fseq_pc']))
-                if not permissive:
-                    sys.exit(1)
-            # Outer loops: first consume loop body, then replicate buffer
-            if cfg['is_outer']:
-                buf_entry = (pc_str, curr_sec, (0, cfg['inst_iter']))
-                cfg['fpss_buf'].appendleft(buf_entry)
-                cfg['outer_buf'].appendleft(buf_entry)
-                # Once all loop instructions received: replicate buffer in outer-loop order
-                if cfg['inst_iter'] == cfg['max_inst']:
-                    for curr_rep in range(1, cfg['max_rpt'] + 1):
-                        ob_rev = reversed(cfg['outer_buf'])
-                        for inst_idx, inst in enumerate(ob_rev):
-                            pc_str, curr_sec, _ = inst
-                            fseq_annot = (curr_rep, inst_idx)
-                            cfg['fpss_buf'].appendleft(
-                                (pc_str, curr_sec, fseq_annot))
-            # Inner loops: replicate instructions during loop body consumption
-            else:
-                for curr_rep in range(0, cfg['max_rpt'] + 1):
-                    fseq_annot = (curr_rep, cfg['inst_iter'])
-                    cfg['fpss_buf'].appendleft((pc_str, curr_sec, fseq_annot))
-            # Iterate loop body instruction consumed
-            cfg['inst_iter'] += 1
-        # Pull our instruction from the loop buffer
-        pc_str, curr_sec, fseq_annot = cfg['fpss_buf'].pop()
-        # If we reached last iteration: terminate this FRep
-        if fseq_annot[0] == cfg['max_rpt'] and fseq_annot[1] == cfg['max_inst']:
-            fseq_info['curr_cfg'] = None
-    # ... or is this a regular pass-through?
-    else:
-        pc_str, curr_sec, _ = fseq_info['fpss_pcs'].pop()
-    fseq_pc_str = None if cfg is None else cfg['fseq_pc']
-    return pc_str, curr_sec, fseq_pc_str, fseq_annot
-
-
 # -------------------- Annotation --------------------
 
 
@@ -531,7 +459,7 @@ def annotate_snitch(extras: dict,
             msg_type = 'WARNING' if permissive else 'FATAL'
             sys.stderr.write(
                 '{}: In cycle {}, LSU attempts writeback to {}, but none in flight.\n'
-                .format(msg_type, cycle, REG_ABI_NAMES_F[extras['fpr_waddr']]))
+                .format(msg_type, cycle, REG_ABI_NAMES_I[extras['lsu_rd']]))
             if not permissive:
                 sys.exit(1)
         ret.append('(lsu) {:<3} <-- {}'.format(
@@ -545,76 +473,6 @@ def annotate_snitch(extras: dict,
     if not extras['stall'] and extras['pc_d'] != pc + 4:
         ret.append('goto {}'.format(int_lit(extras['pc_d'])))
     # Return comma-delimited list
-    return ', '.join(ret)
-
-
-def annotate_fpu(
-        extras: dict,
-        cycle: int,
-        fpr_wb_info: dict,
-        perf_metrics: list,
-        # Everything FPU does may have been issued in a previous section
-        curr_sec: int = -1,
-        force_hex_addr: bool = True,
-        permissive: bool = False) -> str:
-    ret = []
-    # On issuing of instruction
-    if extras['acc_q_hs']:
-        # If computation initiated: remember FPU destination format
-        if extras['use_fpu'] and not extras['fpu_in_acc']:
-            fpr_wb_info[extras['fpu_in_rd']].appendleft(
-                (extras['dst_fmt'], cycle))
-        # Operands: omit on store
-        if not extras['is_store']:
-            for i_op in range(3):
-                oper_name, val = flt_oper(extras, i_op)
-                if oper_name != 'NONE':
-                    ret.append('{:<4} = {}'.format(oper_name, val))
-        # Load / Store requests
-        if extras['lsu_q_hs']:
-            s = extras['ls_size']
-            if extras['is_load']:
-                perf_metrics[curr_sec]['fpss_loads'] += 1
-                # Load initiated: remember LSU destination format
-                fpr_wb_info[extras['rd']].appendleft((LS_TO_FLOAT[s], cycle))
-                ret.append('{:<4} <~~ {}[{}]'.format(
-                    REG_ABI_NAMES_F[extras['rd']], LS_SIZES[s],
-                    int_lit(extras['lsu_qaddr'], force_hex=force_hex_addr)))
-            if extras['is_store']:
-                perf_metrics[curr_sec]['fpss_stores'] += 1
-                _, val = flt_oper(extras, 1)
-                ret.append('{} ~~> {}[{}]'.format(
-                    val, LS_SIZES[s],
-                    int_lit(extras['lsu_qaddr'], force_hex=force_hex_addr)))
-    # On FLOP completion
-    if extras['fpu_out_hs']:
-        perf_metrics[-1]['fpss_fpu_issues'] += 1
-    # Register writeback
-    if extras['fpr_we']:
-        writer = 'acc' if extras['acc_q_hs'] and extras['acc_wb_ready'] else (
-            'fpu'
-            if extras['fpu_out_hs'] and not extras['fpu_out_acc'] else 'lsu')
-        fmt = 0  # accelerator bus format is 0 for regular float32
-        if writer == 'fpu' or writer == 'lsu':
-            try:
-                fmt, start_time = fpr_wb_info[extras['fpr_waddr']].pop()
-                if writer == 'lsu':
-                    perf_metrics[curr_sec][
-                        'fpss_load_latency'] += cycle - start_time
-                else:
-                    perf_metrics[curr_sec][
-                        'fpss_fpu_latency'] += cycle - start_time
-            except IndexError:
-                msg_type = 'WARNING' if permissive else 'FATAL'
-                sys.stderr.write(
-                    '{}: In cycle {}, {} attempts writeback to {}, but none in flight.\n'
-                    .format(msg_type, cycle, writer.upper(),
-                            REG_ABI_NAMES_F[extras['fpr_waddr']]))
-                if not permissive:
-                    sys.exit(1)
-        ret.append('(f:{}) {:<4} <-- {}'.format(
-            writer, REG_ABI_NAMES_F[extras['fpr_waddr']],
-            flt_lit(extras['fpr_wdata'], fmt)))
     return ', '.join(ret)
 
 
@@ -664,40 +522,6 @@ def annotate_insn(
                 insn, pc_str = ('', '')
             else:
                 perf_metrics[-1]['snitch_issues'] += 1
-        # Annotate sequencer
-        elif extras['source'] == TRACE_SRCES['sequencer']:
-            if extras['cbuf_push']:
-                fseq_info['cfg_buf'].appendleft(extras)
-                frep_pc_str = fseq_info['fseq_pcs'].pop()
-                insn, pc_str = (dasm_seq(extras), frep_pc_str)
-                extras['fseq_pc'] = frep_pc_str
-                annot = ', '.join([
-                    'outer' if extras['is_outer'] else 'inner',
-                    '{} issues'.format(
-                        (extras['max_inst'] + 1) * (extras['max_rpt'] + 1))
-                ])
-            else:
-                insn, pc_str, annot = ('', '', '')
-        # Annotate FPSS
-        elif extras['source'] == TRACE_SRCES['fpu']:
-            annot_list = []
-            if not extras['acc_q_hs']:
-                insn, pc_str = ('', '')
-            else:
-                pc_str, curr_sec, fseq_pc_str, fseq_annot = emul_seq(
-                    fseq_info, permissive)
-                fseq_info['curr_sec'] = curr_sec
-                perf_metrics[curr_sec]['end_fpss'] = time_info[
-                    1]  # Record cycle in case this was last insn in section
-                perf_metrics[curr_sec]['fpss_issues'] += 1
-                if fseq_annot is not None:
-                    annot_list.append('[{} {}:{}]'.format(
-                        fseq_pc_str[-4:], *fseq_annot))
-            annot_list.append(
-                annotate_fpu(extras, time_info[1], fpr_wb_info, perf_metrics,
-                             fseq_info['curr_sec'], force_hex_addr,
-                             permissive))
-            annot = ', '.join(annot_list)
         else:
             raise ValueError('Unknown trace source: {}'.format(
                 extras['source']))
@@ -725,12 +549,7 @@ def safe_div(dividend, divisor, zero_div=0):
 
 def eval_perf_metrics(perf_metrics: list):
     for seg in perf_metrics:
-        fpss_latency = max(seg['end_fpss'] - seg['end'], 0)
-        end = seg[
-            'end'] + fpss_latency  # This can be argued over, but it's the most conservatice choice
         cycles = end - seg['start'] + 1
-        fpss_fpu_rel_issues = safe_div(seg['fpss_fpu_issues'],
-                                       seg['fpss_issues'])
         seg.update({
             # Snitch
             'snitch_avg_load_latency':
@@ -739,30 +558,10 @@ def eval_perf_metrics(perf_metrics: list):
             safe_div(seg['snitch_issues'], cycles),
             'snitch_fseq_rel_offloads':
             safe_div(seg['snitch_fseq_offloads'],
-                     seg['snitch_issues'] + seg['snitch_fseq_offloads']),
-            # FSeq
-            'fseq_yield':
-            safe_div(seg['fpss_issues'], seg['snitch_fseq_offloads']),
-            'fseq_fpu_yield':
-            safe_div(
-                safe_div(seg['fpss_fpu_issues'], seg['snitch_fseq_offloads']),
-                fpss_fpu_rel_issues),
-            # FPSS
-            'fpss_section_latency':
-            fpss_latency,
-            'fpss_avg_fpu_latency':
-            safe_div(seg['fpss_fpu_latency'], seg['fpss_fpu_issues']),
-            'fpss_avg_load_latency':
-            safe_div(seg['fpss_load_latency'], seg['fpss_loads']),
-            'fpss_occupancy':
-            safe_div(seg['fpss_issues'], cycles),
-            'fpss_fpu_occupancy':
-            safe_div(seg['fpss_fpu_issues'], cycles),
-            'fpss_fpu_rel_occupancy':
-            fpss_fpu_rel_issues
+                     seg['snitch_issues'] + seg['snitch_fseq_offloads'])
         })
         seg['cycles'] = cycles
-        seg['total_ipc'] = seg['fpss_occupancy'] + seg['snitch_occupancy']
+        seg['total_ipc'] = seg['snitch_occupancy']
 
 
 def fmt_perf_metrics(perf_metrics: list, idx: int, omit_keys: bool = True):
