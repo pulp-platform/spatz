@@ -43,6 +43,10 @@ module testharness (
   spatz_cluster_wrapper i_cluster_wrapper (
     .clk_i           (clk_i                ),
     .rst_ni          (rst_ni               ),
+    .testmode_i      (1'b0                 ),
+    .scan_enable_i   (1'b0                 ),
+    .scan_data_i     (1'b0                 ),
+    .scan_data_o     (/* Unused */         ),
     .meip_i          ('0                   ),
     .msip_i          ('0                   ),
     .mtip_i          ('0                   ),

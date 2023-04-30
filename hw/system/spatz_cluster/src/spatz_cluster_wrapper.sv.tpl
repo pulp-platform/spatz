@@ -172,6 +172,10 @@ endpackage
 module ${cfg['name']}_wrapper (
   input  logic                                    clk_i,
   input  logic                                    rst_ni,
+  input  logic                                    testmode_i,
+  input  logic                                    scan_enable_i,
+  input  logic                                    scan_data_i,
+  output logic                                    scan_data_o,
 % if cfg['enable_debug']:
   input  logic [${cfg['pkg_name']}::NumCores-1:0] debug_req_i,
 % endif
