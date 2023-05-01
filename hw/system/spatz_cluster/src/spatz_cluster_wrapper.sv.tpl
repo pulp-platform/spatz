@@ -34,22 +34,22 @@ package ${cfg['pkg_name']};
   ///////////
 
   // AXI Data Width
-  localparam int unsigned AxiDataWidth = ${cfg['dma_data_width']};
-  localparam int unsigned AxiStrbWidth = AxiDataWidth / 8;
+  localparam int unsigned SpatzAxiDataWidth = ${cfg['dma_data_width']};
+  localparam int unsigned SpatzAxiStrbWidth = SpatzAxiDataWidth / 8;
   // AXI Address Width
-  localparam int unsigned AxiAddrWidth = ${cfg['addr_width']};
+  localparam int unsigned SpatzAxiAddrWidth = ${cfg['addr_width']};
   // AXI ID Width
-  localparam int unsigned AxiIdInWidth = ${cfg['id_width_in']};
-  localparam int unsigned AxiIdOutWidth = ${cfg['id_width_out']};
+  localparam int unsigned SpatzAxiIdInWidth = ${cfg['id_width_in']};
+  localparam int unsigned SpatzAxiIdOutWidth = ${cfg['id_width_out']};
   // AXI User Width
-  localparam int unsigned AxiUserWidth = ${cfg['user_width']};
+  localparam int unsigned SpatzAxiUserWidth = ${cfg['user_width']};
 
-  typedef logic [AxiDataWidth-1:0] axi_data_t;
-  typedef logic [AxiStrbWidth-1:0] axi_strb_t;
-  typedef logic [AxiAddrWidth-1:0] axi_addr_t;
-  typedef logic [AxiIdInWidth-1:0] axi_id_in_t;
-  typedef logic [AxiIdOutWidth-1:0] axi_id_out_t;
-  typedef logic [AxiUserWidth-1:0] axi_user_t;
+  typedef logic [SpatzAxiDataWidth-1:0] axi_data_t;
+  typedef logic [SpatzAxiStrbWidth-1:0] axi_strb_t;
+  typedef logic [SpatzAxiAddrWidth-1:0] axi_addr_t;
+  typedef logic [SpatzAxiIdInWidth-1:0] axi_id_in_t;
+  typedef logic [SpatzAxiIdOutWidth-1:0] axi_id_out_t;
+  typedef logic [SpatzAxiUserWidth-1:0] axi_user_t;
 
   `AXI_TYPEDEF_ALL(spatz_axi_in, axi_addr_t, axi_id_in_t, logic [63:0], logic [7:0], axi_user_t)
   `AXI_TYPEDEF_ALL(spatz_axi_out, axi_addr_t, axi_id_out_t, axi_data_t, axi_strb_t, axi_user_t)
@@ -90,7 +90,7 @@ package ${cfg['pkg_name']};
       default: 0
   };
 
-  localparam fpnew_pkg::fpu_implementation_t FPUImplementation [${cfg['nr_cores']}] = '{
+  localparam fpnew_pkg::fpu_implementation_t FPUImplementation [NumCores] = '{
   % for c in cfg['cores']:
     '{
         PipeRegs: // FMA Block
@@ -169,41 +169,58 @@ package ${cfg['pkg_name']};
 endpackage
 // verilog_lint: waive-stop package-filename
 
-module ${cfg['name']}_wrapper (
-  input  logic                                    clk_i,
-  input  logic                                    rst_ni,
-  input  logic                                    testmode_i,
-  input  logic                                    scan_enable_i,
-  input  logic                                    scan_data_i,
-  output logic                                    scan_data_o,
+module ${cfg['name']}_wrapper
+ import ${cfg['pkg_name']}::*;
+ import fpnew_pkg::fpu_implementation_t;
+ import snitch_pma_pkg::snitch_pma_t;
+ #(
+  parameter int unsigned AxiAddrWidth  = ${cfg['pkg_name']}::SpatzAxiAddrWidth,
+  parameter int unsigned AxiDataWidth  = ${cfg['pkg_name']}::SpatzAxiDataWidth,
+  parameter int unsigned AxiUserWidth  = ${cfg['pkg_name']}::SpatzAxiUserWidth,
+  parameter int unsigned AxiInIdWidth  = ${cfg['pkg_name']}::SpatzAxiIdInWidth,
+  parameter int unsigned AxiOutIdWidth = ${cfg['pkg_name']}::SpatzAxiIdOutWidth,
+
+  parameter type axi_in_resp_t = spatz_axi_in_resp_t,
+  parameter type axi_in_req_t  = spatz_axi_in_req_t,
+
+  parameter type axi_out_resp_t = spatz_axi_out_resp_t,
+  parameter type axi_out_req_t  = spatz_axi_out_req_t
+
+)(
+  input  logic                clk_i,
+  input  logic                rst_ni,
+  input  logic                testmode_i,
+  input  logic                scan_enable_i,
+  input  logic                scan_data_i,
+  output logic                scan_data_o,
 % if cfg['enable_debug']:
-  input  logic [${cfg['pkg_name']}::NumCores-1:0] debug_req_i,
+  input  logic [NumCores-1:0] debug_req_i,
 % endif
-  input  logic [${cfg['pkg_name']}::NumCores-1:0] meip_i,
-  input  logic [${cfg['pkg_name']}::NumCores-1:0] mtip_i,
-  input  logic [${cfg['pkg_name']}::NumCores-1:0] msip_i,
+  input  logic [NumCores-1:0] meip_i,
+  input  logic [NumCores-1:0] mtip_i,
+  input  logic [NumCores-1:0] msip_i,
 % if not cfg['tie_ports']:
-  input  logic [9:0]                             hart_base_id_i,
-  input  logic [${cfg['addr_width']-1}:0]                            cluster_base_addr_i,
+  input  logic [9:0]              hart_base_id_i,
+  input  logic [AxiAddrWidth-1:0] cluster_base_addr_i,
 % endif
-  output logic                                    cluster_probe_o,
-  input  ${cfg['pkg_name']}::spatz_axi_in_req_t   axi_in_req_i,
-  output ${cfg['pkg_name']}::spatz_axi_in_resp_t  axi_in_resp_o,
-  output ${cfg['pkg_name']}::spatz_axi_out_req_t  axi_out_req_o,
-  input  ${cfg['pkg_name']}::spatz_axi_out_resp_t axi_out_resp_i
+  output logic                cluster_probe_o,
+  input  axi_in_req_t         axi_in_req_i,
+  output axi_in_resp_t        axi_in_resp_o,
+  output axi_out_req_t        axi_out_req_o,
+  input  axi_out_resp_t       axi_out_resp_i
 );
 
-  localparam int unsigned NumIntOutstandingLoads [${cfg['nr_cores']}] = '{${core_cfg('num_int_outstanding_loads')}};
-  localparam int unsigned NumIntOutstandingMem [${cfg['nr_cores']}] = '{${core_cfg('num_int_outstanding_mem')}};
-  localparam int unsigned NumSpatzOutstandingLoads [${cfg['nr_cores']}] = '{${core_cfg('num_spatz_outstanding_loads')}};
+  localparam int unsigned NumIntOutstandingLoads   [NumCores] = '{${core_cfg('num_int_outstanding_loads')}};
+  localparam int unsigned NumIntOutstandingMem     [NumCores] = '{${core_cfg('num_int_outstanding_mem')}};
+  localparam int unsigned NumSpatzOutstandingLoads [NumCores] = '{${core_cfg('num_spatz_outstanding_loads')}};
 
   // Spatz cluster under test.
   spatz_cluster #(
-    .AxiAddrWidth (${cfg['addr_width']}),
-    .AxiDataWidth (${cfg['dma_data_width']}),
-    .AxiIdWidthIn (${cfg['pkg_name']}::AxiIdInWidth),
-    .AxiIdWidthOut (${cfg['pkg_name']}::AxiIdOutWidth),
-    .AxiUserWidth (${cfg['pkg_name']}::AxiUserWidth),
+    .AxiAddrWidth (AxiAddrWidth),
+    .AxiDataWidth (AxiDataWidth),
+    .AxiIdWidthIn (AxiInIdWidth),
+    .AxiIdWidthOut (AxiOutIdWidth),
+    .AxiUserWidth (AxiUserWidth),
     .BootAddr (${to_sv_hex(cfg['boot_addr'], 32)}),
     .ClusterPeriphSize (${cfg['cluster_periph_size']}),
     .NrCores (${cfg['nr_cores']}),
@@ -257,4 +274,21 @@ module ${cfg['name']}_wrapper (
     .axi_out_req_o,
     .axi_out_resp_i
   );
+
+  // Assertions
+
+  if (AxiAddrWidth != ${cfg['pkg_name']}::SpatzAxiAddrWidth)
+    $error("[spatz_cluster_wrapper] AXI Address Width does not match the configuration.");
+
+  if (AxiDataWidth != ${cfg['pkg_name']}::SpatzAxiDataWidth)
+    $error("[spatz_cluster_wrapper] AXI Data Width does not match the configuration.");
+
+  if (AxiUserWidth != ${cfg['pkg_name']}::SpatzAxiUserWidth)
+    $error("[spatz_cluster_wrapper] AXI User Width does not match the configuration.");
+
+  if (AxiIdInWidth != ${cfg['pkg_name']}::SpatzAxiIdInWidth)
+    $error("[spatz_cluster_wrapper] AXI Id Width (In) does not match the configuration.");
+
+  if (AxiIdOutWidth != ${cfg['pkg_name']}::SpatzAxiIdOutWidth)
+    $error("[spatz_cluster_wrapper] AXI Id Width (Out) does not match the configuration.");
 endmodule

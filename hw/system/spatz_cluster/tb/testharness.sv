@@ -97,7 +97,7 @@ module testharness (
 
   reqrsp_to_axi #(
     .DataWidth   (DataWidth              ),
-    .UserWidth   (AxiUserWidth           ),
+    .UserWidth   (SpatzAxiUserWidth      ),
     .axi_req_t   (spatz_axi_in_req_t     ),
     .axi_rsp_t   (spatz_axi_in_resp_t    ),
     .reqrsp_req_t(reqrsp_cluster_in_req_t),
@@ -169,10 +169,10 @@ module testharness (
 
   // Wide port into simulation memory.
   tb_memory_axi #(
-    .AxiAddrWidth (AxiAddrWidth        ),
-    .AxiDataWidth (AxiDataWidth        ),
-    .AxiIdWidth   (AxiIdOutWidth       ),
-    .AxiUserWidth (AxiUserWidth        ),
+    .AxiAddrWidth (SpatzAxiAddrWidth   ),
+    .AxiDataWidth (SpatzAxiDataWidth   ),
+    .AxiIdWidth   (SpatzAxiIdOutWidth  ),
+    .AxiUserWidth (SpatzAxiUserWidth   ),
     .req_t        (spatz_axi_out_req_t ),
     .rsp_t        (spatz_axi_out_resp_t)
   ) i_dma (
