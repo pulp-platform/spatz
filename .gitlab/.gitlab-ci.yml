@@ -17,6 +17,7 @@ variables:
   CC: 'gcc-8.2.0'
   CXX: 'g++-8.2.0'
   CMAKE: 'cmake-3.18.1'
+  CTEST: 'ctest-3.18.1'
   python: 'python3.6'
 
 workflow:
@@ -30,8 +31,12 @@ before_script:
 
 stages:
   - tools
-  - build
   - test
+  - lint
+
+###########
+#  Tools  #
+###########
 
 tc-gcc:
   stage: tools
@@ -62,3 +67,21 @@ verilator:
         make sw/toolchain/verilator verilator
         $CI_PROJECT_DIR/util/memora_retry.sh insert verilator
       fi
+
+##########
+#  Lint  #
+##########
+
+# Code style test
+code-style:
+  stage: lint
+  script:
+    # Download LLVM
+    - $CI_PROJECT_DIR/util/memora_retry.sh get tc-llvm
+    - ./util/lint.sh
+  needs: ["tc-llvm"]
+  rules:
+    - if: '$CI_MERGE_REQUEST_ID'
+      allow_failure: false
+    - if: '$CI_MERGE_REQUEST_ID == null'
+      allow_failure: true
