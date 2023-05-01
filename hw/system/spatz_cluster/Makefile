@@ -6,7 +6,7 @@
 
 SPATZ_DIR := $(shell git rev-parse --show-toplevel 2>/dev/null || echo $$SPATZ_DIR)
 ROOT := ${SPATZ_DIR}
-
+SPATZ_CLUSTER_DIR := ${SPATZ_DIR}/hw/system/spatz_cluster
 MKFILE_PATH := $(abspath $(lastword $(MAKEFILE_LIST)))
 MKFILE_DIR  := $(dir $(MKFILE_PATH))
 
@@ -23,7 +23,7 @@ VSIM_HOME = /usr/pack/questa-2021.3-kgf/questasim
 
 VSIM_FLAGS += -t 1ps
 VSIM_FLAGS += -voptargs=+acc
-VSIM_FLAGS += -do "log -r /*; source ../script/vsim/wave.tcl; run -a"
+VSIM_FLAGS += -do "log -r /*; source ${SPATZ_CLUSTER_DIR}/script/vsim/wave.tcl; run -a"
 
 VLOG_FLAGS += -svinputport=compat
 VLOG_FLAGS += -override_timescale 1ns/1ps

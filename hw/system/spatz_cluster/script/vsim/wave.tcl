@@ -5,12 +5,20 @@
 onerror {resume}
 quietly WaveActivateNextPane {} 0
 
+proc getScriptDirectory {} {
+    set dispScriptFile [file normalize [info script]]
+    set scriptFolder [file dirname $dispScriptFile]
+    return $scriptFolder
+}
+
+set scriptDir [getScriptDirectory]
+
 # Add the cluster probe
 add wave /tb_bin/i_dut/cluster_probe
 
 # Add all cores
 for {set core 0}  {$core < [examine -radix dec spatz_cluster_pkg::NumCores]} {incr core} {
-    do ../script/vsim/wave_core.tcl $core
+    do ${scriptDir}/wave_core.tcl $core
 }
 
 # Add cluster waves
