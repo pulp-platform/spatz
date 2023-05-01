@@ -74,8 +74,8 @@ void conv3d_CHx7x7(double *o, const double *i, const double *f,
   };
 }
 
-void conv3d_CHx7x7_block(double *o, const double *i, unsigned int num_rows, const double *f,
-                         const unsigned int n_) {
+void conv3d_CHx7x7_block(double *o, const double *i, unsigned int num_rows,
+                         const double *f, const unsigned int n_) {
 
   // Helper variables
   const int lwo = N << 3;

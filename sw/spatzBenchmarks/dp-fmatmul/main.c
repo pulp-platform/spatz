@@ -16,9 +16,9 @@
 
 // Author: Matheus Cavalcante, ETH Zurich
 
+#include <benchmark.h>
 #include <snrt.h>
 #include <stdio.h>
-#include <benchmark.h>
 
 #include "data/data_gemm.h"
 #include "kernel/dp-fmatmul.c"
@@ -129,7 +129,8 @@ int main() {
 
   // Check and display results
   if (cid == 0) {
-    long unsigned int performance = 1000 * 2 * gemm_l.M * gemm_l.N * gemm_l.K / timer;
+    long unsigned int performance =
+        1000 * 2 * gemm_l.M * gemm_l.N * gemm_l.K / timer;
     long unsigned int utilization = performance / (2 * num_cores * 4);
 
     printf("\n----- (%dx%d) dp fmatmul -----\n", gemm_l.M, gemm_l.N);

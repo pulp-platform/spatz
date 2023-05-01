@@ -142,7 +142,7 @@ int main() {
   for (unsigned int t = 0; t < TSTEPS; t++) {
     if (is_core_active)
       jacobi2d(a_ptr, b_ptr, start_y, start_x, size_y, size_x, c);
-     mempool_barrier(num_cores);
+    mempool_barrier(num_cores);
     if (is_core_active)
       jacobi2d(b_ptr, a_ptr, start_y, start_x, size_y, size_x, c);
     mempool_barrier(num_cores);
@@ -177,8 +177,7 @@ int main() {
     for (unsigned int i = 0; i < dim; ++i)
       if (!fp_check(jacobi2d_result[i], a[i], THRESHOLD)) {
         printf("Error core %d, index %d: result=%lx, golden=%lx\n", cid, i,
-               *((uint64_t *)&a[i]),
-               *((uint64_t *)&jacobi2d_result[i]));
+               *((uint64_t *)&a[i]), *((uint64_t *)&jacobi2d_result[i]));
         return -1;
       }
   }

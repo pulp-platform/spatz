@@ -16,9 +16,9 @@
 
 // Author: Domenic Wüthrich, ETH Zurich
 
+#include <benchmark.h>
 #include <snrt.h>
 #include <stdio.h>
-#include <benchmark.h>
 
 #include "data/data_gemm.h"
 #include "kernel/sp-fmatmul.c"
@@ -129,7 +129,8 @@ int main() {
 
   // Check and display results
   if (cid == 0) {
-    long unsigned int performance = 1000 * 2 * gemm_l.M * gemm_l.N * gemm_l.K / timer;
+    long unsigned int performance =
+        1000 * 2 * gemm_l.M * gemm_l.N * gemm_l.K / timer;
     long unsigned int utilization = performance / (2 * num_cores * 8);
 
     printf("\n----- (%dx%d) sp fmatmul -----\n", gemm_l.M, gemm_l.N);
@@ -140,7 +141,7 @@ int main() {
 
   if (cid == 0) {
     int error =
-      verify_matrix(c, (const float *)gemm_checksum, gemm_l.M, gemm_l.N);
+        verify_matrix(c, (const float *)gemm_checksum, gemm_l.M, gemm_l.N);
 
     if (error != 0) {
       printf("Error core %d: c[%d]=%u\n", cid, error, (int)c[error]);
