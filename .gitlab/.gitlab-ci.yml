@@ -18,7 +18,9 @@ variables:
   CXX: 'g++-8.2.0'
   CMAKE: 'cmake-3.18.1'
   CTEST: 'ctest-3.18.1'
+  VCS: 'vcs-2022.06'
   python: 'python3.6'
+  python3: 'python3.6'
 
 workflow:
   rules:
@@ -63,7 +65,7 @@ verilator:
       if ! $CI_PROJECT_DIR/util/memora_retry.sh lookup verilator; then
         export VERILATOR_CI="--disable-defenv"
         # Verilator requires a more recent version of python than the default one.
-        export PYTHON3=$(which python3-3.6.5)
+        export PYTHON3=$(which python3.6)
         make sw/toolchain/verilator verilator
         $CI_PROJECT_DIR/util/memora_retry.sh insert verilator
       fi
@@ -85,3 +87,59 @@ code-style:
       allow_failure: false
     - if: '$CI_MERGE_REQUEST_ID == null'
       allow_failure: true
+
+
+###########
+#  Build  #
+###########
+
+# Runtime tests
+snRuntime-test-vsim:
+  stage: test
+  script:
+    # Download LLVM and GCC
+    - $CI_PROJECT_DIR/util/memora_retry.sh get tc-llvm
+    - $CI_PROJECT_DIR/util/memora_retry.sh get tc-riscv-gcc
+    # Download bender
+    - make bender
+    # Download python dependencies
+    - export PYTHON3=$(which python3.6)
+    - ${PYTHON3} -m pip install --user jsonref
+    - ${PYTHON3} -m pip install --user jsonschema
+    - ${PYTHON3} -m pip install --user dataclasses
+    - ${PYTHON3} -m pip install --user mako
+    # Compile the binaries
+    - cd hw/system/spatz_cluster
+    - make sw.vsim SPATZ_CLUSTER_CFG=${cfg}.hjson
+    # Run the test
+    - cd sw/build/snRuntime
+    - ${CTEST} --verbose
+  needs: ["tc-llvm", "tc-gcc"]
+  parallel:
+    matrix:
+      - cfg: [spatz_cluster.default, carfield]
+
+snRuntime-test-vcs:
+  stage: test
+  script:
+    # Download LLVM and GCC
+    - $CI_PROJECT_DIR/util/memora_retry.sh get tc-llvm
+    - $CI_PROJECT_DIR/util/memora_retry.sh get tc-riscv-gcc
+    # Download bender
+    - make bender
+    # Download python dependencies
+    - export PYTHON3=$(which python3.6)
+    - ${PYTHON3} -m pip install --user jsonref
+    - ${PYTHON3} -m pip install --user jsonschema
+    - ${PYTHON3} -m pip install --user dataclasses
+    - ${PYTHON3} -m pip install --user mako
+    # Compile the binaries
+    - cd hw/system/spatz_cluster
+    - ${VCS} make sw.vcs SPATZ_CLUSTER_CFG=${cfg}.hjson
+    # Run the test
+    - cd sw/build/snRuntime
+    - ${CTEST} --verbose
+  needs: ["tc-llvm", "tc-gcc"]
+  parallel:
+    matrix:
+      - cfg: [spatz_cluster.default, carfield]
