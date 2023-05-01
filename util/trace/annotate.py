@@ -27,56 +27,54 @@ import argparse
 from termcolor import colored
 
 # Argument parsing
-parser = argparse.ArgumentParser('annotate', allow_abbrev=True)
+parser = argparse.ArgumentParser("annotate", allow_abbrev=True)
 parser.add_argument(
-    'elf',
-    metavar='<elf>',
-    help='The binary executed to generate the annotation',
+    "elf",
+    metavar="<elf>",
+    help="The binary executed to generate the annotation",
+)
+parser.add_argument("trace", metavar="<trace>", help="The trace file to annotate")
+parser.add_argument(
+    "-o",
+    "--output",
+    metavar="<annotated>",
+    nargs="?",
+    default="annotated.s",
+    help="Output annotated trace",
 )
 parser.add_argument(
-    'trace',
-    metavar='<trace>',
-    help='The trace file to annotate')
+    "--addr2line",
+    metavar="<path>",
+    nargs="?",
+    default="llvm-addr2line",
+    help="`addr2line` binary to use for parsing",
+)
 parser.add_argument(
-    '-o',
-    '--output',
-    metavar='<annotated>',
-    nargs='?',
-    default='annotated.s',
-    help='Output annotated trace')
-parser.add_argument(
-    '--addr2line',
-    metavar='<path>',
-    nargs='?',
-    default='llvm-addr2line',
-    help='`addr2line` binary to use for parsing')
-parser.add_argument(
-    '-d',
-    '--diff',
-    action='store_true',
+    "-d",
+    "--diff",
+    action="store_true",
     default=False,
-    help='When true outputs a diff file instead of the annotated trace')
+    help="When true outputs a diff file instead of the annotated trace",
+)
 parser.add_argument(
-    '-s',
-    '--start',
-    metavar='<line>',
-    nargs='?',
+    "-s",
+    "--start",
+    metavar="<line>",
+    nargs="?",
     type=int,
     default=0,
-    help='First line to parse')
+    help="First line to parse",
+)
 parser.add_argument(
-    '-e',
-    '--end',
-    metavar='<line>',
-    nargs='?',
+    "-e",
+    "--end",
+    metavar="<line>",
+    nargs="?",
     type=int,
     default=-1,
-    help='Last line to parse')
-parser.add_argument(
-    '-q',
-    '--quiet',
-    action='store_true',
-    help='Quiet output')
+    help="Last line to parse",
+)
+parser.add_argument("-q", "--quiet", action="store_true", help="Quiet output")
 
 args = parser.parse_args()
 
@@ -88,16 +86,16 @@ addr2line = args.addr2line
 quiet = args.quiet
 
 if not quiet:
-    print('elf:', elf, file=sys.stderr)
-    print('trace:', trace, file=sys.stderr)
-    print('output:', output, file=sys.stderr)
-    print('diff:', diff, file=sys.stderr)
-    print('addr2line:', addr2line, file=sys.stderr)
+    print("elf:", elf, file=sys.stderr)
+    print("trace:", trace, file=sys.stderr)
+    print("output:", output, file=sys.stderr)
+    print("diff:", diff, file=sys.stderr)
+    print("addr2line:", addr2line, file=sys.stderr)
 
-of = open(output, 'w')
+of = open(output, "w")
 
 if not quiet:
-    print(f' annotating: {output}    ', end='')
+    print(f" annotating: {output}    ", end="")
 
 # buffer source files
 src_files = {}
@@ -106,29 +104,29 @@ trace_start_col = -1
 
 @lru_cache(maxsize=1024)
 def adr2line(addr):
-    cmd = f'{addr2line} -e {elf} -f -i {addr:x}'
-    return os.popen(cmd).read().split('\n')
+    cmd = f"{addr2line} -e {elf} -f -i {addr:x}"
+    return os.popen(cmd).read().split("\n")
 
 
 # helper functions to parse addr2line output
 def a2l_file_path(a2l_file_str):
-    return a2l_file_str.split(':')[0]
+    return a2l_file_str.split(":")[0]
 
 
 def a2l_file_name(a2l_file_str):
-    return a2l_file_str.split('/')[-1].split(':')[0]
+    return a2l_file_str.split("/")[-1].split(":")[0]
 
 
 def a2l_file_line(a2l_file_str):
-    if a2l_file_str == '':
+    if a2l_file_str == "":
         return 0
     else:
-        return int(a2l_file_str.split(':')[-1].split(' ')[0])
+        return int(a2l_file_str.split(":")[-1].split(" ")[0])
 
 
 def format_a2l_funcname(a2l_func_name):
-    if a2l_func_name == '??':
-        return 'unknown function'
+    if a2l_func_name == "??":
+        return "unknown function"
     return a2l_func_name
 
 
@@ -136,18 +134,22 @@ def format_a2l_funcname(a2l_func_name):
 def format_call(level, call):
     funcname = format_a2l_funcname(call[0])
     if level == 0:
-        return f'{funcname} ({call[1]})\n'
+        return f"{funcname} ({call[1]})\n"
     else:
-        indentation = '  ' * (level - 1)
-        return f'{indentation}{call[4]}: inlined call to {funcname} ({call[1]})\n'
+        indentation = "  " * (level - 1)
+        return f"{indentation}{call[4]}: inlined call to {funcname} ({call[1]})\n"
 
 
 def assemble_call_stack(funs, file_paths, file_lines):
-    call_stack = list(zip(funs,                       # func name
-                          file_paths,                 # func path
-                          file_lines,                 # func line
-                          [*(file_paths[1:]), '??'],  # caller path
-                          [*(file_lines[1:]), 0]))    # call line
+    call_stack = list(
+        zip(
+            funs,  # func name
+            file_paths,  # func path
+            file_lines,  # func line
+            [*(file_paths[1:]), "??"],  # caller path
+            [*(file_lines[1:]), 0],
+        )
+    )  # call line
     call_stack.reverse()
     return call_stack
 
@@ -156,11 +158,13 @@ def matching_call_stack_levels(cstack1, cstack2):
     matching_levels = 0
     for i, call in enumerate(cstack1):
         # Compare each call: i.e. called function, caller file and call line
-        if i < len(cstack2) and \
-                call[0] == cstack2[i][0] and \
-                call[1] == cstack2[i][1] and \
-                call[3] == cstack2[i][3] and \
-                call[4] == cstack2[i][4]:
+        if (
+            i < len(cstack2)
+            and call[0] == cstack2[i][0]
+            and call[1] == cstack2[i][1]
+            and call[3] == cstack2[i][3]
+            and call[4] == cstack2[i][4]
+        ):
             matching_levels += 1
         else:
             return matching_levels
@@ -175,33 +179,35 @@ def matching_source_line(cstack1, cstack2):
         matched_src_line = cstack1[-1][2] == cstack2[-1][2]
     except IndexError:
         matched_src_line = False
-    matched_call_stack = matching_call_stack_levels(cstack1, cstack2) == len(next_call_stack)
+    matched_call_stack = matching_call_stack_levels(cstack1, cstack2) == len(
+        next_call_stack
+    )
     return matched_src_line and matched_call_stack
 
 
 def dump_hunk(hunk_tstart, hunk_sstart, hunk_trace, hunk_source):
     hunk_tlen = len(hunk_trace.splitlines())
     hunk_slen = len(hunk_source.splitlines())
-    hunk_header = f'@@ -{hunk_tstart},{hunk_tlen} +{hunk_sstart},{hunk_slen} @@\n'
-    of.write(f'{hunk_header}{hunk_trace}{hunk_source}')
+    hunk_header = f"@@ -{hunk_tstart},{hunk_tlen} +{hunk_sstart},{hunk_slen} @@\n"
+    of.write(f"{hunk_header}{hunk_trace}{hunk_source}")
 
 
 # core functionality
-with open(trace, 'r') as f:
+with open(trace, "r") as f:
 
     # get modified timestamp of trace to compare with source files
     trace_timestamp = os.path.getmtime(trace)
 
-    last = ''
+    last = ""
     if diff:
-        of.write('--- trace\n+++ source\n')
+        of.write("--- trace\n+++ source\n")
         call_stack = []
-        hunk_trace = ''
-        hunk_source = ''
+        hunk_trace = ""
+        hunk_source = ""
         hunk_tstart = 1
         hunk_sstart = 1
 
-    trace_lines = f.readlines()[args.start:args.end]
+    trace_lines = f.readlines()[args.start : args.end]
     tot_lines = len(trace_lines)
     last_prog = 0
     for lino, line in enumerate(trace_lines):
@@ -214,12 +220,12 @@ with open(trace, 'r') as f:
                 trace_start_col = line.find(addr_str)
         except (ValueError, IndexError):
             if diff:
-                hunk_trace += f'-{line[trace_start_col:]}'
+                hunk_trace += f"-{line[trace_start_col:]}"
             else:
-                of.write(f'      {line[trace_start_col:]}')
+                of.write(f"      {line[trace_start_col:]}")
             continue
 
-        addr_hex = f'{addr:x}'
+        addr_hex = f"{addr:x}"
         ret = adr2line(addr)
 
         funs = ret[::2]
@@ -228,9 +234,11 @@ with open(trace, 'r') as f:
         file_lines = [a2l_file_line(x) for x in ret[1::2]]
         # Assemble annotation string
         if len(funs):
-            annot = f'#; {funs[0]} ({file_names[0]}:{file_lines[0]})'
-            for fun, file_name, file_line in zip(funs[1:], file_names[1:], file_lines[1:]):
-                annot = f'{annot}\n#;  in {fun} ({file_name}:{file_line})'
+            annot = f"#; {funs[0]} ({file_names[0]}:{file_lines[0]})"
+            for fun, file_name, file_line in zip(
+                funs[1:], file_names[1:], file_lines[1:]
+            ):
+                annot = f"{annot}\n#;  in {fun} ({file_name}:{file_line})"
 
         # Get source of last file and print the line
         src_fname = file_paths[0]
@@ -239,21 +247,26 @@ with open(trace, 'r') as f:
                 # Issue warning if source was modified after trace
                 src_timestamp = os.path.getmtime(src_fname)
                 if src_timestamp >= trace_timestamp:
-                    print(colored('Warning:', 'yellow'), f'{src_fname} has been edited since the trace was generated')
+                    print(
+                        colored("Warning:", "yellow"),
+                        f"{src_fname} has been edited since the trace was generated",
+                    )
 
-                with open(src_fname, 'r') as src_f:
+                with open(src_fname, "r") as src_f:
                     src_files[src_fname] = [x.strip() for x in src_f.readlines()]
             except OSError:
                 src_files[src_fname] = None
         if src_files[src_fname] is not None:
-            src_line = src_files[src_fname][file_lines[0]-1]
-            annot = f'{annot}\n#;  {src_line}'
+            src_line = src_files[src_fname][file_lines[0] - 1]
+            annot = f"{annot}\n#;  {src_line}"
 
         # Print diff
         if diff:
             # Compare current and previous call stacks
             next_call_stack = assemble_call_stack(funs, file_paths, file_lines)
-            matching_cstack_levels = matching_call_stack_levels(next_call_stack, call_stack)
+            matching_cstack_levels = matching_call_stack_levels(
+                next_call_stack, call_stack
+            )
             matching_src_line = matching_source_line(next_call_stack, call_stack)
 
             # If this instruction does not map to the same evaluation of the source line
@@ -263,8 +276,8 @@ with open(trace, 'r') as f:
                 # Initialize next hunk
                 hunk_tstart += len(hunk_trace.splitlines())
                 hunk_sstart += len(hunk_source.splitlines())
-                hunk_trace = ''
-                hunk_source = ''
+                hunk_trace = ""
+                hunk_source = ""
 
             # Update state for next iteration
             call_stack = next_call_stack
@@ -273,19 +286,19 @@ with open(trace, 'r') as f:
             if len(funs) and src_files[src_fname]:
                 for i, call in enumerate(call_stack):
                     if i >= matching_cstack_levels:
-                        hunk_source += f'+{format_call(i, call)}'
+                        hunk_source += f"+{format_call(i, call)}"
                 if not matching_src_line:
-                    indentation = '  ' * (len(call_stack) - 1)
-                    hunk_source += f'+{indentation}{file_lines[0]}: {src_line}\n'
+                    indentation = "  " * (len(call_stack) - 1)
+                    hunk_source += f"+{indentation}{file_lines[0]}: {src_line}\n"
 
             # Assemble trace part of hunk
-            hunk_trace += f'-{line[trace_start_col:]}'
+            hunk_trace += f"-{line[trace_start_col:]}"
 
         # Default: print trace interleaved with source annotations
         else:
             if len(annot) and annot != last:
-                of.write(annot+'\n')
-            of.write(f'      {line[trace_start_col:]}')
+                of.write(annot + "\n")
+            of.write(f"      {line[trace_start_col:]}")
             last = annot
 
         # very simple progress
@@ -293,7 +306,7 @@ with open(trace, 'r') as f:
             prog = int(100.0 / tot_lines * lino)
             if prog > last_prog:
                 last_prog = prog
-                sys.stdout.write(f'\b\b\b\b{prog:3d}%')
+                sys.stdout.write(f"\b\b\b\b{prog:3d}%")
                 sys.stdout.flush()
 
     # Dump last hunk
@@ -301,5 +314,5 @@ with open(trace, 'r') as f:
         dump_hunk(hunk_tstart, hunk_sstart, hunk_trace, hunk_source)
 
 if not quiet:
-    print(' done')
+    print(" done")
     print(adr2line.cache_info())

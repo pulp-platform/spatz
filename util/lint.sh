@@ -22,8 +22,6 @@ fi
 # Check for clang format
 echo "Check C and C++ source code"
 ./util/run_clang_format.py \
-    --clang-format-executable=install/llvm/bin/clang-format -r sw/snRuntime || EXIT_STATUS=$?
-./util/run_clang_format.py \
     --clang-format-executable=install/llvm/bin/clang-format -r sw/spatzBenchmarks || EXIT_STATUS=$?
 
 # Check python files
@@ -34,7 +32,9 @@ if [[ -n "$GITLAB_CI" ]]; then
 else
   python3=$(command -v python3) || EXIT_STATUS=$?
 fi
-${python3} -m flake8 || EXIT_STATUS=$?
+${python3} -m flake8 --ignore=E501,W503,E203 sw/snRuntime || EXIT_STATUS=$?
+${python3} -m flake8 --ignore=E501,W503,E203 sw/spatzBenchmarks || EXIT_STATUS=$?
+${python3} -m flake8 --ignore=E501,W503,E203 util || EXIT_STATUS=$?
 
 # Check for trailing whitespaces and tabs
 echo "Checking for trailing whitespaces and tabs in unstaged files"

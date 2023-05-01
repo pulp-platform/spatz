@@ -15,17 +15,17 @@ from clustergen.cluster import SnitchClusterTB
 def main():
     """Generate a Spatz cluster TB and all corresponding configuration files."""
     parser = argparse.ArgumentParser(prog="clustergen")
-    parser.add_argument("--clustercfg",
-                        "-c",
-                        metavar="file",
-                        type=argparse.FileType('r'),
-                        required=True,
-                        help="A cluster configuration file")
-    parser.add_argument("--outdir",
-                        "-o",
-                        type=pathlib.Path,
-                        required=True,
-                        help="Target directory.")
+    parser.add_argument(
+        "--clustercfg",
+        "-c",
+        metavar="file",
+        type=argparse.FileType("r"),
+        required=True,
+        help="A cluster configuration file",
+    )
+    parser.add_argument(
+        "--outdir", "-o", type=pathlib.Path, required=True, help="Target directory."
+    )
 
     args = parser.parse_args()
 
@@ -65,6 +65,7 @@ def main():
 
     with open(outdir / "memories.json", "w") as f:
         f.write(cluster_tb.cluster.memory_cfg())
+
 
 if __name__ == "__main__":
     main()
