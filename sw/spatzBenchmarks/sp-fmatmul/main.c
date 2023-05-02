@@ -20,7 +20,7 @@
 #include <snrt.h>
 #include <stdio.h>
 
-#include "data/data_gemm.h"
+#include DATAHEADER
 #include "kernel/sp-fmatmul.c"
 
 float *a;

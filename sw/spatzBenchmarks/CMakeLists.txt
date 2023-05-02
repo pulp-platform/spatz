@@ -24,17 +24,9 @@ include_directories(${SNRUNTIME_INCLUDE_DIRS})
 # Macro to regenerate the golden values and compile a module
 macro(add_spatz_test_threeParam name file param1 param2 param3 json)
   set(target_name ${name}_M${param1}_N${param2}_K${param3})
-  add_custom_target(gen_${target_name})
-  add_custom_command(
-    TARGET gen_${target_name}
-    POST_BUILD
-    COMMAND sed s/PARAM1/${param1}/g ${CMAKE_CURRENT_SOURCE_DIR}/${name}/script/${json}.json | sed s/PARAM2/${param2}/g | sed s/PARAM3/${param3}/g > ${json}_${param1}_${param2}_${param3}.json
-    COMMAND ${PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/${name}/script/gen_data.py -c ${json}_${param1}_${param2}_${param3}.json)
-
   add_snitch_test(${target_name} ${file})
   target_link_libraries(test-${SNITCH_TEST_PREFIX}${target_name} benchmark ${SNITCH_RUNTIME})
-
-  add_dependencies(test-${SNITCH_TEST_PREFIX}${target_name} gen_${target_name})
+  target_compile_definitions(test-${SNITCH_TEST_PREFIX}${target_name} PUBLIC DATAHEADER="data/data_${param1}_${param2}_${param3}.h")
 endmacro()
 
 # Benchmark library

@@ -52,7 +52,7 @@ def emit_header_file(layer_type: str, **kwargs):
         file = file_path / "data_conv2d.h"
         emit_str += emit_conv2d_layer(**kwargs)
     elif layer_type == "GEMM":
-        file = file_path / "data_gemm.h"
+        file = file_path / ("data_" + str(kwargs["M"]) + "_" + str(kwargs["N"]) + "_" + str(kwargs["K"]) + ".h")
         emit_str += emit_GEMM_layer(**kwargs)
     elif layer_type == "BatchNorm":
         file = file_path / "data_batchnorm.h"
