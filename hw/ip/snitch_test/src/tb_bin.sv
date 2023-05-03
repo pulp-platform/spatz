@@ -54,7 +54,7 @@ module tb_bin;
     end else begin
       $info("[SUCCESS] Program finished successfully");
     end
-    $finish(exit_code);
+    $finish;
   end
 
 endmodule
