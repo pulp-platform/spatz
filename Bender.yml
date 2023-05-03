@@ -4,14 +4,14 @@ package:
     - "Matheus Cavalcante <matheusd@iis.ee.ethz.ch>"
 
 dependencies:
-  axi:                { git: "https://github.com/pulp-platform/axi.git",                version: 0.38.0      }
-  axi_riscv_atomics:  { git: "https://github.com/pulp-platform/axi_riscv_atomics.git",  version: 0.7.0       }
-  common_cells:       { git: "https://github.com/pulp-platform/common_cells.git",       version: 1.28.0      }
-  FPnew:              { git: "https://github.com/pulp-platform/cvfpu.git",              rev:     pulp-v0.1.1 }
-  idma:               { git: "https://github.com/pulp-platform/iDMA.git",               version: 0.4.2       }
-  register_interface: { git: "https://github.com/pulp-platform/register_interface.git", version: 0.3.8       }
-  riscv-dbg:          { git: "https://github.com/pulp-platform/riscv-dbg.git",          version: 0.7.0       }
-  tech_cells_generic: { git: "https://github.com/pulp-platform/tech_cells_generic.git", version: 0.2.11      }
+  axi:                { git: "https://github.com/pulp-platform/axi.git",                version: =0.39.0-beta.4 }
+  axi_riscv_atomics:  { git: "https://github.com/pulp-platform/axi_riscv_atomics.git",  version: 0.7.0          }
+  common_cells:       { git: "https://github.com/pulp-platform/common_cells.git",       version: 1.28.0         }
+  FPnew:              { git: "https://github.com/pulp-platform/cvfpu.git",              rev:     pulp-v0.1.1    }
+  idma:               { git: "https://github.com/pulp-platform/iDMA.git",               version: 0.4.2          }
+  register_interface: { git: "https://github.com/pulp-platform/register_interface.git", version: 0.3.8          }
+  riscv-dbg:          { git: "https://github.com/pulp-platform/riscv-dbg.git",          version: 0.7.0          }
+  tech_cells_generic: { git: "https://github.com/pulp-platform/tech_cells_generic.git", version: 0.2.11         }
 
 export_include_dirs:
   - hw/ip/mem_interface/include
