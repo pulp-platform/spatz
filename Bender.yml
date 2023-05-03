@@ -190,3 +190,8 @@ sources:
     files:
       # Level 1
       - hw/system/spatz_cluster/tb/testharness.sv
+
+  - target: spatz_test_cdc
+    files:
+      # Level 1
+      - hw/system/spatz_cluster/tb/testharness_cdc.sv

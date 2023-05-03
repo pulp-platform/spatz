@@ -30,7 +30,9 @@ SED_SRCS  := sed -e ${MATCH_END} -e ${MATCH_BGN}
 TB_SRCS   := $(wildcard ${ROOT}/hw/ip/snitch_test/*.sv)
 TB_DIR    := ${ROOT}/hw/ip/snitch_test/src
 
-VSIM_BENDER   += -t test -t rtl -t simulation -t spatz -t spatz_test -t snitch_test
+TEST_TARGET ?= spatz_test
+
+VSIM_BENDER   += -t test -t rtl -t simulation -t spatz -t ${TEST_TARGET} -t snitch_test
 VSIM_SOURCES  := $(shell ${BENDER} script flist ${VSIM_BENDER} | ${SED_SRCS})
 VSIM_BUILDDIR := work-vsim
 

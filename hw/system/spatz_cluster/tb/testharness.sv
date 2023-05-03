@@ -43,10 +43,6 @@ module testharness (
   spatz_cluster_wrapper i_cluster_wrapper (
     .clk_i           (clk_i                ),
     .rst_ni          (rst_ni               ),
-    .testmode_i      (1'b0                 ),
-    .scan_enable_i   (1'b0                 ),
-    .scan_data_i     (1'b0                 ),
-    .scan_data_o     (/* Unused */         ),
     .meip_i          ('0                   ),
     .msip_i          ('0                   ),
     .mtip_i          ('0                   ),
@@ -97,7 +93,7 @@ module testharness (
 
   reqrsp_to_axi #(
     .DataWidth   (DataWidth              ),
-    .UserWidth   (SpatzAxiUserWidth      ),
+    .UserWidth   (SpatzAxiUserWidth           ),
     .axi_req_t   (spatz_axi_in_req_t     ),
     .axi_rsp_t   (spatz_axi_in_resp_t    ),
     .reqrsp_req_t(reqrsp_cluster_in_req_t),
