@@ -57,6 +57,7 @@ macro(add_snitch_raw_test_rtl test_name target_name)
   set_property(TEST ${SNITCH_TEST_PREFIX}rtl-${test_name}
     PROPERTY LABELS ${SNITCH_TEST_PREFIX})
   set_tests_properties(${SNITCH_TEST_PREFIX}rtl-${test_name} PROPERTIES TIMEOUT ${SIMULATOR_TIMEOUT})
+  set_tests_properties(${SNITCH_TEST_PREFIX}rtl-${test_name} PROPERTIES PASS_REGULAR_EXPRESSION "SUCCESS;PASS")
   set_tests_properties(${SNITCH_TEST_PREFIX}rtl-${test_name} PROPERTIES FAIL_REGULAR_EXPRESSION "FAILED;FAILURE")
 endmacro()
 
