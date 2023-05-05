@@ -325,6 +325,7 @@ module spatz_cc
   ) i_spatz (
     .clk_i                   (clk_i                 ),
     .rst_ni                  (rst_ni                ),
+    .hart_id_i               (hart_id_i             ),
     .issue_valid_i           (acc_qvalid            ),
     .issue_ready_o           (acc_qready            ),
     .issue_req_i             (acc_snitch_req        ),

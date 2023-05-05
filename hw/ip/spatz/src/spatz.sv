@@ -32,6 +32,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   ) (
     input  logic                              clk_i,
     input  logic                              rst_ni,
+    input  logic             [31:0]           hart_id_i,
     // Snitch Interface
     input  logic                              issue_valid_i,
     output logic                              issue_ready_o,
@@ -254,6 +255,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   ) i_vfu (
     .clk_i            (clk_i                                                   ),
     .rst_ni           (rst_ni                                                  ),
+    .hart_id_i        (hart_id_i                                               ),
     // Request
     .spatz_req_i      (spatz_req                                               ),
     .spatz_req_valid_i(spatz_req_valid                                         ),
