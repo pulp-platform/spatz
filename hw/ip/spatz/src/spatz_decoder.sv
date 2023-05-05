@@ -1271,11 +1271,11 @@ module spatz_decoder
                 spatz_req.op = VF2U;
                 spatz_req.rm = fpnew_pkg::roundmode_e'(decoder_req_i.instr[14:12]);
               end
-              riscv_instr::FCVT_B_H : begin
+              riscv_instr::FCVT_H_B : begin
                 spatz_req.op                 = VF2F;
                 spatz_req.op_arith.widen_vs1 = 1'b1;
               end
-              riscv_instr::FCVT_H_B : begin
+              riscv_instr::FCVT_B_H : begin
                 spatz_req.op                    = VF2F;
                 spatz_req.op_arith.is_narrowing = 1'b1;
               end
@@ -1374,11 +1374,11 @@ module spatz_decoder
                 spatz_req.op = VF2U;
                 spatz_req.rm = fpnew_pkg::roundmode_e'(decoder_req_i.instr[14:12]);
               end
-              riscv_instr::FCVT_H_S : begin
+              riscv_instr::FCVT_S_H : begin
                 spatz_req.op                 = VF2F;
                 spatz_req.op_arith.widen_vs1 = 1'b1;
               end
-              riscv_instr::FCVT_S_H : begin
+              riscv_instr::FCVT_H_S : begin
                 spatz_req.op                    = VF2F;
                 spatz_req.op_arith.is_narrowing = 1'b1;
               end
@@ -1478,11 +1478,11 @@ module spatz_decoder
                 spatz_req.op = VF2U;
                 spatz_req.rm = fpnew_pkg::roundmode_e'(decoder_req_i.instr[14:12]);
               end
-              riscv_instr::FCVT_S_D: begin
+              riscv_instr::FCVT_D_S: begin
                 spatz_req.op                 = VF2F;
                 spatz_req.op_arith.widen_vs1 = 1'b1;
               end
-              riscv_instr::FCVT_D_S: begin
+              riscv_instr::FCVT_S_D: begin
                 spatz_req.op                    = VF2F;
                 spatz_req.op_arith.is_narrowing = 1'b1;
               end
