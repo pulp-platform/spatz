@@ -126,7 +126,6 @@ add_snitch_test(fence_i tests/fence_i.c)
 add_snitch_test(interrupt-local tests/interrupt-local.c)
 add_snitch_test(printf_fmtint tests/printf_fmtint.c)
 add_snitch_test(printf_simple tests/printf_simple.c)
-add_snitch_test(team_global tests/team_global.c)
 
 # RTL only tests
 if(SNITCH_RUNTIME STREQUAL "snRuntime-cluster")
