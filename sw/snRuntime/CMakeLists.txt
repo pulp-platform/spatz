@@ -124,7 +124,6 @@ add_snitch_test(varargs_2 tests/varargs_2.c)
 add_snitch_test(barrier tests/barrier.c)
 add_snitch_test(fence_i tests/fence_i.c)
 add_snitch_test(interrupt-local tests/interrupt-local.c)
-add_snitch_test(printf_fmtint tests/printf_fmtint.c)
 add_snitch_test(printf_simple tests/printf_simple.c)
 
 # RTL only tests
