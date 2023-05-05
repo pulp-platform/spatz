@@ -45,6 +45,8 @@ add_library(sdotp-bp-fmatmul sdotp-bp-fmatmul/kernel/sdotp-fmatmul.c)
 
 # Tests
 enable_testing()
+set(SNITCH_TEST_PREFIX spatzBenchmarks-)
+
 add_spatz_test_threeParam(dp-fmatmul dp-fmatmul/main.c 64  64  64  matmul)
 
 add_spatz_test_threeParam(sp-fmatmul sp-fmatmul/main.c 64  64  64  matmul)
