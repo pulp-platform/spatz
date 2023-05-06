@@ -375,7 +375,7 @@ module snitch_icache_l0 import snitch_icache_pkg::*; #(
   assign prefetch_valid = prefetch_req_vld_q;
 
   `FF(prefetch_req_vld_q, prefetch_req_vld_d, '0)
-  `FFNR(prefetch_req_addr_q, prefetch_req_addr_d, clk_i)
+  `FF(prefetch_req_addr_q, prefetch_req_addr_d, '0)
 
   // ------------------
   // Performance Events

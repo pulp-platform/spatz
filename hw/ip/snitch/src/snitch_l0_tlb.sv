@@ -66,8 +66,8 @@ module snitch_l0_tlb import snitch_pkg::*; #(
   l0_pte_t pte;
 
   `FFAR(tag_valid_q, tag_valid_d, '0, clk_i, rst_i)
-  `FFNR(tag_q, tag_d, clk_i)
-  `FFNR(pte_q, pte_d, clk_i)
+  `FFAR(tag_q, tag_d, '0, clk_i, rst_i)
+  `FFAR(pte_q, pte_d, '0, clk_i, rst_i)
 
   logic [NrEntries-1:0] hit;
   logic miss_d, miss_q; // we got a miss
