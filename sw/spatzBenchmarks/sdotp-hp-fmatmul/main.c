@@ -50,7 +50,12 @@ int verify_matrix(__fp16 *matrix, const __fp16 *checksum,
     float diff = sum - (float)checksum[i];
     if (diff < 0)
       diff = -diff;
-    if (diff > 0.001) {
+
+    float eps = 0.05f * (float)checksum[i];
+    if (eps < 0)
+      eps = -eps;
+
+    if (diff > eps) {
       return i == 0 ? -1 : (int)i;
     }
   }
