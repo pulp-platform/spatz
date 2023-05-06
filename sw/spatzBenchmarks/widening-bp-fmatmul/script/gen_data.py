@@ -171,17 +171,17 @@ def emit_GEMM_layer(name="gemm", **kwargs):
         )
     else:
         layer_str += (
-            f"static {dtype} {name}_A_dram [{m}][{k}] = "
+            f"static {dtype} {name}_A_dram [{m}*{k}] = "
             + array_to_cstr(kwargs["bits_A"], fmt="char")
             + ";\n\n\n"
         )
         layer_str += (
-            f"static {dtype} {name}_B_dram [{k}][{n}] = "
+            f"static {dtype} {name}_B_dram [{k}*{n}] = "
             + array_to_cstr(kwargs["bits_B"], fmt="char")
             + ";\n\n\n"
         )
         layer_str += (
-            f"static {dtype} {name}_C_dram [{m}][{n}] = "
+            f"static {dtype} {name}_C_dram [{m}*{n}] = "
             + array_to_cstr(kwargs["bits_C"], fmt="char")
             + ";\n\n\n"
         )
