@@ -113,7 +113,7 @@ snRuntime-test-vsim:
     - make sw.vsim SPATZ_CLUSTER_CFG=${cfg}.hjson
     # Run the test
     - cd sw/build/snRuntime
-    - ${CTEST} --verbose
+    - ${CTEST} --output-on-failure
   needs: ["tc-llvm", "tc-gcc"]
   parallel:
     matrix:
@@ -138,7 +138,7 @@ snRuntime-test-vcs:
     - ${VCS} make sw.vcs SPATZ_CLUSTER_CFG=${cfg}.hjson
     # Run the test
     - cd sw/build/snRuntime
-    - ${CTEST} --verbose
+    - ${CTEST} --output-on-failure
   needs: ["tc-llvm", "tc-gcc"]
   parallel:
     matrix:
