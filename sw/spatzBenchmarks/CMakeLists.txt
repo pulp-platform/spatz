@@ -12,14 +12,14 @@ if (CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     project(Benchmarks LANGUAGES C ASM)
     include(SnitchUtilities)
 
-    add_compile_options(-O3 -g -ffunction-sections)
-
     # Build the runtime.
     add_subdirectory(../snRuntime snRuntime)
 endif()
 
 include_directories(include)
 include_directories(${SNRUNTIME_INCLUDE_DIRS})
+
+add_compile_options(-O3 -g -ffunction-sections)
 
 # Macro to regenerate the golden values and compile a module
 macro(add_spatz_test_threeParam name file param1 param2 param3)

@@ -14,7 +14,7 @@ set(CMAKE_RANLIB ${LLVM_PATH}/bin/llvm-ranlib)
 ##
 ## Compile options
 ##
-add_compile_options(-mcmodel=small -ffast-math -fno-builtin-printf -fno-common -falign-loops=32)
+add_compile_options(-mcpu=snitch -mcmodel=small -ffast-math -fno-builtin-printf -fno-common -falign-loops=32)
 add_compile_options(-ffunction-sections)
 add_compile_options(-Wextra)
 add_compile_options(-static)
@@ -31,7 +31,7 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} --gcc-toolchain=${GCC_PATH}")
 ##
 ## Link options
 ##
-add_link_options(-static -mcmodel=small -fuse-ld=lld -nostdlib)
+add_link_options(-mcpu=snitch -static -mcmodel=small -fuse-ld=lld -nostdlib)
 add_link_options(-nostartfiles)
 add_link_options(-march=rv32imafdvzfh_xdma -mabi=ilp32d)
 add_link_options(-ffast-math -fno-common -fno-builtin-printf)
