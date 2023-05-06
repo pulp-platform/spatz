@@ -31,7 +31,7 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} --gcc-toolchain=${GCC_PATH}")
 ##
 ## Link options
 ##
-add_link_options(-mcpu=snitch -static -mcmodel=small -fuse-ld=lld -nostdlib)
+add_link_options(-mcpu=snitch -static -mcmodel=small -fuse-ld=lld)
 add_link_options(-nostartfiles)
 add_link_options(-march=rv32imafdvzfh_xdma -mabi=ilp32d)
 add_link_options(-ffast-math -fno-common -fno-builtin-printf)

@@ -12,6 +12,7 @@
 #include "rvv_debug_macros.h"
 #include "encoding.h"
 #include "float_conversion.h"
+
 #ifdef __SPIKE__
 #include <stdio.h>
 
@@ -20,6 +21,7 @@
 #define enable_fp()  do { asm volatile ("csrs mstatus, %[bits];" :: [bits] "r" (MSTATUS_FS & (MSTATUS_FS >> 1))); } while (0);
 #else
 #include <printf.h>
+#include <snrt.h>
 
 // The FP and V extensions are activated in the crt0 script
 #define enable_vec()
@@ -65,11 +67,9 @@ int test_case;
   num_failed = 0;                           \
   test_case  = 0;
 #else
-#include "runtime.h"
-
-#define INIT_CHECK()                  \
-  while (mempool_get_core_id() != 0); \
-  num_failed = 0;                     \
+#define INIT_CHECK()                    \
+  while (snrt_cluster_core_idx() != 0); \
+  num_failed = 0;                       \
   test_case  = 0;
 #endif
 
