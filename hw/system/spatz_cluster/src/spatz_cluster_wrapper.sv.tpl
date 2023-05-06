@@ -41,6 +41,10 @@ package ${cfg['pkg_name']};
   // AXI ID Width
   localparam int unsigned SpatzAxiIdInWidth = ${cfg['id_width_in']};
   localparam int unsigned SpatzAxiIdOutWidth = ${cfg['id_width_out']};
+
+  // FIXED AxiIdOutWidth
+  localparam int unsigned IwcAxiIdOutWidth = 3;
+
   // AXI User Width
   localparam int unsigned SpatzAxiUserWidth = ${cfg['user_width']};
 
@@ -57,6 +61,10 @@ package ${cfg['pkg_name']};
 
   `AXI_TYPEDEF_ALL(spatz_axi_in, axi_addr_t, axi_id_in_t, logic [63:0], logic [7:0], axi_user_t)
   `AXI_TYPEDEF_ALL(spatz_axi_out, axi_addr_t, axi_id_out_t, axi_data_t, axi_strb_t, axi_user_t)
+
+  typedef logic [IwcAxiIdOutWidth-1:0] axi_id_out_iwc_t;
+
+  `AXI_TYPEDEF_ALL(spatz_axi_iwc_out, axi_addr_t, axi_id_out_iwc_t, axi_data_t, axi_strb_t, axi_user_t)
 
   ////////////////////
   //  Spatz Cluster //
@@ -288,13 +296,15 @@ module ${cfg['name']}_wrapper
   localparam int unsigned NumIntOutstandingMem     [NumCores] = '{${core_cfg('num_int_outstanding_mem')}};
   localparam int unsigned NumSpatzOutstandingLoads [NumCores] = '{${core_cfg('num_spatz_outstanding_loads')}};
 
+  spatz_cluster_pkg::spatz_axi_iwc_out_req_t axi_from_cluster_iwc_req;
+  spatz_cluster_pkg::spatz_axi_iwc_out_resp_t axi_from_cluster_iwc_resp;
 
 % if cfg['cdc_enable']:
   // From CDC to Cluster
   axi_in_req_t   axi_to_cluster_req;
   axi_in_resp_t  axi_to_cluster_resp;
 
-  // From Cluster to CDC
+  // From IWC to CDC
   axi_out_req_t  axi_from_cluster_req;
   axi_out_resp_t axi_from_cluster_resp;
 
@@ -365,12 +375,41 @@ module ${cfg['name']}_wrapper
   );
 % endif
 
+  axi_iw_converter #(
+    .AxiSlvPortIdWidth ( spatz_cluster_pkg::IwcAxiIdOutWidth ),
+    .AxiMstPortIdWidth ( AxiOutIdWidth ),
+    .AxiSlvPortMaxUniqIds ( 2 ),
+    .AxiSlvPortMaxTxnsPerId (2),
+    .AxiSlvPortMaxTxns (2),
+    .AxiMstPortMaxUniqIds (2),
+    .AxiMstPortMaxTxnsPerId (2),
+    .AxiAddrWidth ( AxiAddrWidth ),
+    .AxiDataWidth ( AxiDataWidth ),
+    .AxiUserWidth ( AxiUserWidth ),
+    .slv_req_t  (spatz_cluster_pkg::spatz_axi_iwc_out_req_t),
+    .slv_resp_t (spatz_cluster_pkg::spatz_axi_iwc_out_resp_t),
+    .mst_req_t  ( axi_out_req_t),
+    .mst_resp_t ( axi_out_resp_t)
+  ) iw_converter(
+    .clk_i      ( clk_i  ),
+    .rst_ni     ( rst_ni ),
+    .slv_req_i  ( axi_from_cluster_iwc_req  ),
+    .slv_resp_o ( axi_from_cluster_iwc_resp ),
+% if cfg['cdc_enable']:
+    .mst_req_o  ( axi_from_cluster_req  ),
+    .mst_resp_i ( axi_from_cluster_resp )
+% else:
+    .mst_req_o  ( axi_out_req_o  ),
+    .mst_resp_i ( axi_out_resp_i )
+% endif
+   );
+
   // Spatz cluster under test.
   spatz_cluster #(
     .AxiAddrWidth (AxiAddrWidth),
     .AxiDataWidth (AxiDataWidth),
     .AxiIdWidthIn (AxiInIdWidth),
-    .AxiIdWidthOut (AxiOutIdWidth),
+    .AxiIdWidthOut (spatz_cluster_pkg::IwcAxiIdOutWidth),
     .AxiUserWidth (AxiUserWidth),
     .BootAddr (${to_sv_hex(cfg['boot_addr'], 32)}),
     .ClusterPeriphSize (${cfg['cluster_periph_size']}),
@@ -387,8 +426,8 @@ module ${cfg['name']}_wrapper
     .NumSpatzOutstandingLoads (NumSpatzOutstandingLoads),
     .axi_in_req_t (axi_in_req_t),
     .axi_in_resp_t (axi_in_resp_t),
-    .axi_out_req_t (axi_out_req_t),
-    .axi_out_resp_t (axi_out_resp_t),
+    .axi_out_req_t (spatz_cluster_pkg::spatz_axi_iwc_out_req_t),
+    .axi_out_resp_t (spatz_cluster_pkg::spatz_axi_iwc_out_resp_t),
     .Xdma (${core_cfg_flat('xdma')}),
     .DMAAxiReqFifoDepth (${cfg['dma_axi_req_fifo_depth']}),
     .DMAReqFifoDepth (${cfg['dma_req_fifo_depth']}),
@@ -421,18 +460,16 @@ module ${cfg['name']}_wrapper
 % endif
     .cluster_probe_o,
 % if cfg['cdc_enable']:
-    //AXI Slave Port
-    .axi_in_req_i (axi_to_cluster_req),
-    .axi_in_resp_o (axi_to_cluster_resp),
-    //AXI Master Port
-    .axi_out_req_o (axi_from_cluster_req),
-    .axi_out_resp_i (axi_from_cluster_resp)
+    // AXI Slave Port
+    .axi_in_req_i   ( axi_to_cluster_req  ),
+    .axi_in_resp_o  ( axi_to_cluster_resp ),
 % else:
     .axi_in_req_i,
     .axi_in_resp_o,
-    .axi_out_req_o,
-    .axi_out_resp_i
 % endif
+    // AXI Master Port
+    .axi_out_req_o  ( axi_from_cluster_iwc_req ),
+    .axi_out_resp_i ( axi_from_cluster_iwc_resp )
   );
 
   // Assertions
