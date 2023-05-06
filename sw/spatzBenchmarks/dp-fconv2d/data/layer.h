@@ -193,8 +193,5 @@ typedef struct fconv2d_layer_struct {
   uint32_t C;
   uint32_t F;
 
-  uint32_t r_dim_core;
-  uint32_t c_dim_core;
-
   precision_t dtype;
 } fconv2d_layer;

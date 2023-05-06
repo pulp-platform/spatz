@@ -10,12 +10,10 @@
 
 {
     kernel: "FCONV2D"
-    R: 32,
-    C: 32,
+    R: 64,
+    C: 64,
     CH: 1,
     F: 7,
-    r_dim_core: 16,
-    c_dim_core: 32,
     prec: 64,
     expand: 0
 }

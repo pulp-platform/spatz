@@ -48,7 +48,7 @@ def emit_header_file(layer_type: str, **kwargs):
         + "// SPDX-License-Identifier: Apache-2.0\n\n"
     )
 
-    file = file_path / "data_fconv2d.h"
+    file = file_path / ("data_" + str(kwargs["R"]) + "_" + str(kwargs["C"]) + "_" + str(kwargs["F"]) + ".h")
     emit_str += emit_fconv2d_layer(**kwargs)
     with file.open("w") as f:
         f.write(emit_str)
@@ -64,8 +64,6 @@ def emit_fconv2d_layer(name="fconv2d", **kwargs):
     r = kwargs["R"]
     c = kwargs["C"]
     f = kwargs["F"]
-    r_dim_core = kwargs["r_dim_core"]
-    c_dim_core = kwargs["c_dim_core"]
 
     layer_str = ""
     layer_str += '#include "layer.h"\n\n'
@@ -74,8 +72,6 @@ def emit_fconv2d_layer(name="fconv2d", **kwargs):
     layer_str += f"\t.R  = {r},\n"
     layer_str += f"\t.C  = {c},\n"
     layer_str += f"\t.F  = {f},\n"
-    layer_str += f"\t.r_dim_core = {r_dim_core},\n"
-    layer_str += f"\t.c_dim_core = {c_dim_core},\n"
     layer_str += f'\t.dtype = FP{kwargs["prec"]},\n'
     layer_str += "};\n\n\n"
 
@@ -259,8 +255,6 @@ def main():
         "R": param["R"],
         "C": param["C"],
         "F": param["F"],
-        "r_dim_core": param["r_dim_core"],
-        "c_dim_core": param["c_dim_core"],
         "prec": param["prec"],
         "expand": param["expand"],
         "bits_I": bits_I,

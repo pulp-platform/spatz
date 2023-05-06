@@ -45,16 +45,9 @@
 
 #include "fconv2d.h"
 
-#ifndef MATRIX_DIM
-#define MATRIX_DIM 32
-#endif
-#define M MATRIX_DIM
-#define N MATRIX_DIM
-#define C 1
-#define F 7
-
 void conv3d_CHx7x7(double *o, const double *i, const double *f,
-                   const unsigned int num_rows) {
+                   const unsigned int num_rows, const unsigned int M,
+                   const unsigned int N, const unsigned int F) {
 
   unsigned int n = 0;
   while (n < N) {
@@ -67,7 +60,7 @@ void conv3d_CHx7x7(double *o, const double *i, const double *f,
     double *o_ = o + n;
 
     // Convolve
-    conv3d_CHx7x7_block(o_, i_, num_rows, f, n_);
+    conv3d_CHx7x7_block(o_, i_, num_rows, f, n_, M, N, F, 1);
 
     // Account for the used elements
     n += n_;
@@ -75,7 +68,9 @@ void conv3d_CHx7x7(double *o, const double *i, const double *f,
 }
 
 void conv3d_CHx7x7_block(double *o, const double *i, unsigned int num_rows,
-                         const double *f, const unsigned int n_) {
+                         const double *f, const unsigned int n_,
+                         const unsigned int M, const unsigned int N,
+                         const unsigned int F, const unsigned int C) {
 
   // Helper variables
   const int lwo = N << 3;
@@ -112,7 +107,7 @@ void conv3d_CHx7x7_block(double *o, const double *i, unsigned int num_rows,
   ////////////////
 
   // Loop on the channels
-  for (int ch = 0; ch < C; ++ch) {
+  for (unsigned int ch = 0; ch < C; ++ch) {
 
     // Point to the first element of the channel ch
     i__ = i_ + ich_len * ch;
@@ -134,7 +129,7 @@ void conv3d_CHx7x7_block(double *o, const double *i, unsigned int num_rows,
     // Main kernel, unrolled by 2
     // Unrolled because of int buffering
     // With HW renaming, this unroll is not needed
-    for (int k = 0; k < F / 2; ++k) {
+    for (unsigned int k = 0; k < F / 2; ++k) {
       // Two base indexes because of the unrolling
       // Point to the first element of the current column (k) of the current
       // channel (ch) of the filter (f)
@@ -216,7 +211,7 @@ void conv3d_CHx7x7_block(double *o, const double *i, unsigned int num_rows,
       asm volatile("vfmacc.vf v18, %0, v4" ::"f"(f0_buf));
       asm volatile("vfmacc.vf v22, %0, v12" ::"f"(f0_buf));
       asm volatile("vfmacc.vf v16, %0, v4" ::"f"(f1_buf));
-      asm volatile("vle64.v v4, (%0)" ::"f"(i__));
+      asm volatile("vle64.v v4, (%0)" ::"r"(i__));
       asm volatile("vfmacc.vf v18, %0, v8" ::"f"(f1_buf));
       asm volatile("vfmacc.vf v20, %0, v8" ::"f"(f0_buf));
       f0_buf = f[0 + base_idx_0];
@@ -263,7 +258,7 @@ void conv3d_CHx7x7_block(double *o, const double *i, unsigned int num_rows,
   ////////////////
 
   // Loop on the channels
-  for (int ch = 0; ch < C; ++ch) {
+  for (unsigned int ch = 0; ch < C; ++ch) {
 
     // Point to the first element of the channel ch
     i__ = i_ + ich_len * ch;
@@ -278,7 +273,7 @@ void conv3d_CHx7x7_block(double *o, const double *i, unsigned int num_rows,
     asm volatile("vle64.v v10, (%0)" ::"r"(i__));
 
     // Main kernel, unrolled by 2
-    for (int k = 0; k < F / 2; ++k) {
+    for (unsigned int k = 0; k < F / 2; ++k) {
       // Two base indexes because of the unrolling
       // Point to the first element of the current column (k) of the current
       // channel (ch) of the filter (f)
@@ -492,7 +487,7 @@ void conv3d_CHx7x7_block(double *o, const double *i, unsigned int num_rows,
     // Work on F output rows
 
     // Loop on the channels
-    for (int ch = 0; ch < C; ++ch) {
+    for (unsigned int ch = 0; ch < C; ++ch) {
 
       //////////////
       // UNROLL 0 //
@@ -503,7 +498,7 @@ void conv3d_CHx7x7_block(double *o, const double *i, unsigned int num_rows,
       // The computation is too fast, and every coefficient belongs to a
       // different $line At every fld, CVA6 misses, and until it does not get
       // the new coefficient, it cannot dispatch the next V instruction
-      for (int k = 0; k < F / 2; ++k) {
+      for (unsigned int k = 0; k < F / 2; ++k) {
         // Two base indexes because of the unrolling
         // Look ahead to the first element of the current column (k+2) of the
         // current channel (ch) of the filter (f)
@@ -617,8 +612,8 @@ void conv3d_CHx7x7_block(double *o, const double *i, unsigned int num_rows,
     //////////////
 
     // Loop on the channels
-    for (int ch = 0; ch < C; ++ch) {
-      for (int k = 0; k < F / 2; ++k) {
+    for (unsigned int ch = 0; ch < C; ++ch) {
+      for (unsigned int k = 0; k < F / 2; ++k) {
         // Two base indexes because of the unrolling
         // Point to the first element of the current column (k) of the current
         // channel (ch) of the filter (f)
@@ -736,7 +731,7 @@ void conv3d_CHx7x7_block(double *o, const double *i, unsigned int num_rows,
   // Row I-F -> (I-1)-3 //
   ////////////////////////
 
-  for (int ch = 0; ch < C; ++ch) {
+  for (unsigned int ch = 0; ch < C; ++ch) {
 
     // Point to the first element of the channel ch
     i__ = i_ + ich_len * ch;
@@ -754,7 +749,7 @@ void conv3d_CHx7x7_block(double *o, const double *i, unsigned int num_rows,
 
     // Main kernel, unrolled by 2
     // Process 4 input rows
-    for (int k = 0; k < F / 2; ++k) {
+    for (unsigned int k = 0; k < F / 2; ++k) {
       double sld_elem = *i_slide_ptr_0++;
       // Two base indexes because of the unrolling
       // Point to the first element of the current column (k) of the current
@@ -938,7 +933,7 @@ void conv3d_CHx7x7_block(double *o, const double *i, unsigned int num_rows,
   // Row (I-1)-3 -> (I-1) //
   //////////////////////////
 
-  for (int ch = 0; ch < C; ++ch) {
+  for (unsigned int ch = 0; ch < C; ++ch) {
 
     // Point to the first element of the channel ch
     i__ = i_ + ich_len * ch;
@@ -953,7 +948,7 @@ void conv3d_CHx7x7_block(double *o, const double *i, unsigned int num_rows,
     asm volatile("vle64.v v10, (%0)" ::"r"(i__));
 
     // Main kernel, unrolled by 2
-    for (int k = 0; k < F / 2; ++k) {
+    for (unsigned int k = 0; k < F / 2; ++k) {
       double sld_elem = *i_slide_ptr_0++;
       // Two base indexes because of the unrolling
       // Point to the first element of the current column (k) of the current
@@ -1059,8 +1054,3 @@ void conv3d_CHx7x7_block(double *o, const double *i, unsigned int num_rows,
   v18, v20"); asm volatile("vmv.v.v v20, v22"); asm volatile("vmv.v.v v22,
   v24"); asm volatile("vmv.v.v v24, v26"); asm volatile("vmv.v.v v26, v28");
 */
-
-#undef M
-#undef N
-#undef C
-#undef F
