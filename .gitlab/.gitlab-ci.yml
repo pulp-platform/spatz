@@ -144,6 +144,32 @@ snRuntime-test-vcs:
     matrix:
       - cfg: [spatz_cluster.default, carfield]
 
+# RISC-V unit tests
+riscvTests-test-vcs:
+  stage: test
+  script:
+    # Download LLVM and GCC
+    - $CI_PROJECT_DIR/util/memora_retry.sh get tc-llvm
+    - $CI_PROJECT_DIR/util/memora_retry.sh get tc-riscv-gcc
+    # Download bender
+    - make bender
+    # Download python dependencies
+    - export PYTHON3=$(which python3.6)
+    - ${PYTHON3} -m pip install --user jsonref
+    - ${PYTHON3} -m pip install --user jsonschema
+    - ${PYTHON3} -m pip install --user dataclasses
+    - ${PYTHON3} -m pip install --user mako
+    # Compile the binaries
+    - cd hw/system/spatz_cluster
+    - ${VCS} make sw.vcs SPATZ_CLUSTER_CFG=${cfg}.hjson
+    # Run the test
+    - cd sw/build/riscvTest
+    - ${CTEST} --output-on-failure
+  needs: ["tc-llvm", "tc-gcc"]
+  parallel:
+    matrix:
+      - cfg: [spatz_cluster.default, carfield]
+
 # Spatz tests
 spatzBenchmarks-test-vcs:
   stage: test
