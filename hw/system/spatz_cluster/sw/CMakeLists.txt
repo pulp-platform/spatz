@@ -13,8 +13,6 @@ set(SNITCH_SIMULATOR ${CMAKE_CURRENT_SOURCE_DIR}/../bin/spatz_cluster.vlt CACHE 
 project(snitch_cluster LANGUAGES C ASM)
 include(SnitchUtilities)
 
-add_compile_options(-O3 -g -ffunction-sections)
-
 enable_testing()
 add_subdirectory(${SNITCH_SOFTWARE_DIR}/snRuntime snRuntime)
 add_subdirectory(${SNITCH_SOFTWARE_DIR}/riscvTests riscvTests)

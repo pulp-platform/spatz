@@ -4,39 +4,37 @@
 //
 // Author: Matheus Cavalcante <matheusd@iis.ee.ethz.ch>
 
-#ifndef   __DATASET_H__
-#define   __DATASET_H__
+#ifndef __DATASET_H__
+#define __DATASET_H__
 
-#define SIZE 32
+#include <stdint.h>
 
-static volatile uint64_t Au64[SIZE] __attribute__ ((aligned (128)));
-static volatile uint32_t Au32[SIZE] __attribute__ ((aligned (128)));
-static volatile uint16_t Au16[SIZE] __attribute__ ((aligned (128)));
-static volatile uint8_t  Au8 [SIZE] __attribute__ ((aligned (128)));
-static volatile int64_t  Ai64[SIZE] __attribute__ ((aligned (128)));
-static volatile int32_t  Ai32[SIZE] __attribute__ ((aligned (128)));
-static volatile int16_t  Ai16[SIZE] __attribute__ ((aligned (128)));
-static volatile int8_t   Ai8 [SIZE] __attribute__ ((aligned (128)));
-static volatile uint64_t Af64[SIZE] __attribute__ ((aligned (128)));
-static volatile uint32_t Af32[SIZE] __attribute__ ((aligned (128)));
-static volatile uint16_t Af16[SIZE] __attribute__ ((aligned (128)));
+uint64_t *Au64;
+uint32_t *Au32;
+uint16_t *Au16;
+uint8_t *Au8;
+int64_t *Ai64;
+int32_t *Ai32;
+int16_t *Ai16;
+int8_t *Ai8;
+uint64_t *Af64;
+uint32_t *Af32;
+uint16_t *Af16;
 
-static volatile uint64_t Ru64[SIZE] __attribute__ ((aligned (128)));
-static volatile uint32_t Ru32[SIZE] __attribute__ ((aligned (128)));
-static volatile uint16_t Ru16[SIZE] __attribute__ ((aligned (128)));
-static volatile uint8_t  Ru8 [SIZE] __attribute__ ((aligned (128)));
-static volatile int64_t  Ri64[SIZE] __attribute__ ((aligned (128)));
-static volatile int32_t  Ri32[SIZE] __attribute__ ((aligned (128)));
-static volatile int16_t  Ri16[SIZE] __attribute__ ((aligned (128)));
-static volatile int8_t   Ri8 [SIZE] __attribute__ ((aligned (128)));
-static volatile uint64_t Rf64[SIZE] __attribute__ ((aligned (128)));
-static volatile uint32_t Rf32[SIZE] __attribute__ ((aligned (128)));
-static volatile uint16_t Rf16[SIZE] __attribute__ ((aligned (128)));
+uint64_t *Ru64;
+uint32_t *Ru32;
+uint16_t *Ru16;
+uint8_t *Ru8;
+int64_t *Ri64;
+int32_t *Ri32;
+int16_t *Ri16;
+int8_t *Ri8;
+uint64_t *Rf64;
+uint32_t *Rf32;
+uint16_t *Rf16;
 
-static volatile uint64_t Xf64[1] __attribute__ ((aligned (128)));
-static volatile uint32_t Xf32[1] __attribute__ ((aligned (128)));
-static volatile uint16_t Xf16[1] __attribute__ ((aligned (128)));
-
-#undef SIZE
+uint64_t Xf64;
+uint32_t Xf32;
+uint16_t Xf16;
 
 #endif // __DATASET__H__

@@ -163,7 +163,7 @@ riscvTests-test-vcs:
     - cd hw/system/spatz_cluster
     - ${VCS} make sw.vcs SPATZ_CLUSTER_CFG=${cfg}.hjson
     # Run the test
-    - cd sw/build/riscvTest
+    - cd sw/build/riscvTests
     - ${CTEST} --output-on-failure
   needs: ["tc-llvm", "tc-gcc"]
   parallel:

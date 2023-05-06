@@ -11,33 +11,33 @@
 #include <stdint.h>
 
 // Zero encoding is common to all the formats
-#define pZero  0x0
+#define pZero 0x0
 
 // 16-bit IEEE 754 floats
-#define qNaNh  0x7e00
-#define sNaNh  0x7c01
-#define pInfh  0x7c00
-#define mInfh  0xfc00
-#define pMaxh  0x7bff
-#define mMaxh  0xfbff
+#define qNaNh 0x7e00
+#define sNaNh 0x7c01
+#define pInfh 0x7c00
+#define mInfh 0xfc00
+#define pMaxh 0x7bff
+#define mMaxh 0xfbff
 #define mZeroh 0x8000
 
 // 32-bit IEEE 754 floats
-#define qNaNf  0x7fc00000
-#define sNaNf  0x7f800001
-#define pInff  0x7f800000
-#define mInff  0xff800000
-#define pMaxf  0x7f7fffff
-#define mMaxf  0xff7fffff
+#define qNaNf 0x7fc00000
+#define sNaNf 0x7f800001
+#define pInff 0x7f800000
+#define mInff 0xff800000
+#define pMaxf 0x7f7fffff
+#define mMaxf 0xff7fffff
 #define mZerof 0x80000000
 
 // 64-bit IEEE 754 floats
-#define qNaNd  0x7ff8000000000000
-#define sNaNd  0x7ff0000000000001
-#define pInfd  0x7ff0000000000000
-#define mInfd  0xfff0000000000000
-#define pMaxd  0x7fefffffffffffff
-#define mMaxd  0xffefffffffffffff
+#define qNaNd 0x7ff8000000000000
+#define sNaNd 0x7ff0000000000001
+#define pInfd 0x7ff0000000000000
+#define mInfd 0xfff0000000000000
+#define pMaxd 0x7fefffffffffffff
+#define mMaxd 0xffefffffffffffff
 #define mZerod 0x8000000000000000
 
 // Fflags
@@ -48,8 +48,8 @@
 #define NX 0b00001 // Inexact           (e.g. 2/3)
 
 // MSTATUS.FS helpers
-#define MSTATUS_FS_MASK  0x6000
-#define MSTATUS_FS_INIT  0x2000
+#define MSTATUS_FS_MASK 0x6000
+#define MSTATUS_FS_INIT 0x2000
 #define MSTATUS_FS_CLEAN 0x4000
 #define MSTATUS_FS_DIRTY 0x6000
 
@@ -61,107 +61,114 @@
 #define RM_RMM 0x4
 
 typedef union float_hex {
-  float       f;
+  float f;
   uint32_t ui32;
 } float_hex;
 
 typedef union double_hex {
-  double      d;
+  double d;
   uint64_t ui64;
 } double_hex;
 
 // Check fcsr.fflags against an expected FFLAGS value
-#define CHECK_FFLAGS(FFLAGS)                                                                             \
-  do {                                                                                                   \
-    const unsigned int gold_ff = FFLAGS;                                                                 \
-    unsigned int ff;                                                                                     \
-    asm volatile ("frflags %0" : "=r" (ff));                                                             \
-    if (ff != gold_ff) {                                                                                 \
-      printf("fflags check FAILED. Current fflags is 0x%02lx, while expecting 0x%02lx.\n", ff, gold_ff); \
-      num_failed++;                                                                                      \
-      return;                                                                                            \
-    }                                                                                                    \
-  } while(0)
+#define CHECK_FFLAGS(FFLAGS)                                                   \
+  do {                                                                         \
+    const unsigned int gold_ff = FFLAGS;                                       \
+    unsigned int ff;                                                           \
+    asm volatile("frflags %0" : "=r"(ff));                                     \
+    if (ff != gold_ff) {                                                       \
+      printf("fflags check FAILED. Current fflags is 0x%02lx, while "          \
+             "expecting 0x%02lx.\n",                                           \
+             ff, gold_ff);                                                     \
+      num_failed++;                                                            \
+      return;                                                                  \
+    }                                                                          \
+  } while (0)
 
 // Change rounding-mode
-#define CHANGE_RM(NEW_RM)                                                                              \
-  do {                                                                                                 \
-    const unsigned int rm = NEW_RM;                                                                    \
-    asm volatile ("fsrm %0" :: "r" (rm));                                                              \
-  } while(0)
+#define CHANGE_RM(NEW_RM)                                                      \
+  do {                                                                         \
+    const unsigned int rm = NEW_RM;                                            \
+    asm volatile("fsrm %0" ::"r"(rm));                                         \
+  } while (0)
 
 // Check fcsr.fflags against an expected FFLAGS value
-#define CLEAR_FFLAGS asm volatile ("fsflags %0" :: "r" (0))
+#define CLEAR_FFLAGS asm volatile("fsflags %0" ::"r"(0))
 
 // !!!!! mstatus is not accessible in user-mode !!!!!
 // Make mstatus.FS Clean
-#define CLEAR_FS                                                                                                                                  \
-  do {                                                                                                                                            \
-    uint64_t old_mstatus;                                                                                                                         \
-    uint64_t new_mstatus;                                                                                                                         \
-    asm volatile ("csrrs %0, mstatus, x0" : "=r"  (old_mstatus));                                                                                 \
-    new_mstatus = old_mstatus & ~((uint64_t) MSTATUS_FS_MASK);                                                                                    \
-    new_mstatus |= MSTATUS_FS_CLEAN;                                                                                                              \
-    asm volatile ("csrrw x0, mstatus, %0" :: "r" (new_mstatus));                                                                                  \
-  } while(0)
+#define CLEAR_FS                                                               \
+  do {                                                                         \
+    uint64_t old_mstatus;                                                      \
+    uint64_t new_mstatus;                                                      \
+    asm volatile("csrrs %0, mstatus, x0" : "=r"(old_mstatus));                 \
+    new_mstatus = old_mstatus & ~((uint64_t)MSTATUS_FS_MASK);                  \
+    new_mstatus |= MSTATUS_FS_CLEAN;                                           \
+    asm volatile("csrrw x0, mstatus, %0" ::"r"(new_mstatus));                  \
+  } while (0)
 // Check if mstatus.FS is Clean
-#define CHECK_FS_CLEAN                                                                                                                            \
-  do {                                                                                                                                            \
-    uint64_t fs;                                                                                                                                  \
-    asm volatile ("csrrs %0, mstatus, x0" : "=r" (fs));                                                                                           \
-    if ((fs & MSTATUS_FS_MASK) != MSTATUS_FS_CLEAN) {                                                                                             \
-      printf("mstatus.FS check FAILED. Current mstatus.FS is 0x%02x, while expecting 0x%02x (Clean).\n", fs & MSTATUS_FS_MASK, MSTATUS_FS_CLEAN); \
-      num_failed++;                                                                                                                               \
-      return;                                                                                                                                     \
-    }                                                                                                                                             \
-  } while(0)
+#define CHECK_FS_CLEAN                                                         \
+  do {                                                                         \
+    uint64_t fs;                                                               \
+    asm volatile("csrrs %0, mstatus, x0" : "=r"(fs));                          \
+    if ((fs & MSTATUS_FS_MASK) != MSTATUS_FS_CLEAN) {                          \
+      printf("mstatus.FS check FAILED. Current mstatus.FS is 0x%02x, while "   \
+             "expecting 0x%02x (Clean).\n",                                    \
+             fs &MSTATUS_FS_MASK, MSTATUS_FS_CLEAN);                           \
+      num_failed++;                                                            \
+      return;                                                                  \
+    }                                                                          \
+  } while (0)
 // Check if mstatus.FS is Dirty
-#define CHECK_FS_DIRTY                                                                                                                            \
-  do {                                                                                                                                            \
-    uint64_t fs;                                                                                                                                  \
-    asm volatile ("csrrs %0, mstatus, x0" : "=r" (fs));                                                                                           \
-    if ((fs & MSTATUS_FS_MASK) != MSTATUS_FS_DIRTY) {                                                                                             \
-      printf("mstatus.FS check FAILED. Current mstatus.FS is 0x%02x, while expecting 0x%02x (Dirty).\n", fs & MSTATUS_FS_MASK, MSTATUS_FS_DIRTY); \
-      num_failed++;                                                                                                                               \
-      return;                                                                                                                                     \
-    }                                                                                                                                             \
-  } while(0)
+#define CHECK_FS_DIRTY                                                         \
+  do {                                                                         \
+    uint64_t fs;                                                               \
+    asm volatile("csrrs %0, mstatus, x0" : "=r"(fs));                          \
+    if ((fs & MSTATUS_FS_MASK) != MSTATUS_FS_DIRTY) {                          \
+      printf("mstatus.FS check FAILED. Current mstatus.FS is 0x%02x, while "   \
+             "expecting 0x%02x (Dirty).\n",                                    \
+             fs &MSTATUS_FS_MASK, MSTATUS_FS_DIRTY);                           \
+      num_failed++;                                                            \
+      return;                                                                  \
+    }                                                                          \
+  } while (0)
 
 // NaN-Box a 16-bit IEEE 754 half float in a 32-bit float
-#define BOX_HALF_IN_FLOAT(VAR_NAME, VAL_16B)                      \
-  do {                                                            \
-    float_hex nan_boxed_val;                                      \
-    nan_boxed_val.ui32 = ((uint32_t) 0xffff << 16) | VAL_16B;     \
-    VAR_NAME = nan_boxed_val.f;                                   \
-  } while(0)
-#define BOX_FLOAT_IN_FLOAT(VAR_NAME, VAL_32B) \
-  do {                                        \
-    float_hex nan_boxed_val;                  \
-    nan_boxed_val.ui32 = VAL_32B;             \
-    VAR_NAME = nan_boxed_val.f;               \
-  } while(0)
+#define BOX_HALF_IN_FLOAT(VAR_NAME, VAL_16B)                                   \
+  do {                                                                         \
+    float_hex nan_boxed_val;                                                   \
+    nan_boxed_val.ui32 = ((uint32_t)0xffff << 16) | VAL_16B;                   \
+    VAR_NAME = nan_boxed_val.f;                                                \
+  } while (0)
+#define BOX_FLOAT_IN_FLOAT(VAR_NAME, VAL_32B)                                  \
+  do {                                                                         \
+    float_hex nan_boxed_val;                                                   \
+    nan_boxed_val.ui32 = VAL_32B;                                              \
+    VAR_NAME = nan_boxed_val.f;                                                \
+  } while (0)
 
 // NaN-Box a 16-bit IEEE 754 half float in a 64-bit double
-// This is useful if we want to specify the IEEE 754 encoding of a floating-point variable
-#define BOX_HALF_IN_DOUBLE(VAR_NAME, VAL_16B)                             \
-  do {                                                                    \
-    double_hex nan_boxed_val;                                             \
-    nan_boxed_val.ui64 = ((uint64_t) 0xffffffffffff << 16) | VAL_16B;     \
-    VAR_NAME = nan_boxed_val.d;                                           \
-  } while(0)
+// This is useful if we want to specify the IEEE 754 encoding of a
+// floating-point variable
+#define BOX_HALF_IN_DOUBLE(VAR_NAME, VAL_16B)                                  \
+  do {                                                                         \
+    double_hex nan_boxed_val;                                                  \
+    nan_boxed_val.ui64 = ((uint64_t)0xffffffffffff << 16) | VAL_16B;           \
+    VAR_NAME = nan_boxed_val.d;                                                \
+  } while (0)
 
-#define BOX_FLOAT_IN_DOUBLE(VAR_NAME, VAL_32B)                        \
-  do {                                                                \
-    double_hex nan_boxed_val;                                         \
-    nan_boxed_val.ui64 = ((uint64_t) 0xffffffff << 32) | VAL_32B;     \
-    VAR_NAME = nan_boxed_val.d;                                       \
-  } while(0)
+#define BOX_FLOAT_IN_DOUBLE(VAR_NAME, VAL_32B)                                 \
+  do {                                                                         \
+    double_hex nan_boxed_val;                                                  \
+    nan_boxed_val.ui64 = ((uint64_t)0xffffffff << 32) | VAL_32B;               \
+    VAR_NAME = nan_boxed_val.d;                                                \
+  } while (0)
 
-#define BOX_DOUBLE_IN_DOUBLE(VAR_NAME, VAL_64B) \
-  do {                                          \
-    double_hex nan_boxed_val;                   \
-    nan_boxed_val.ui64 = VAL_64B;               \
-    VAR_NAME = nan_boxed_val.d;                 \
-  } while(0)
+#define BOX_DOUBLE_IN_DOUBLE(VAR_NAME, VAL_64B)                                \
+  do {                                                                         \
+    double_hex nan_boxed_val;                                                  \
+    nan_boxed_val.ui64 = VAL_64B;                                              \
+    VAR_NAME = nan_boxed_val.d;                                                \
+  } while (0)
 
 #endif // __FLOAT_MACROS_H__

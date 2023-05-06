@@ -7,14 +7,14 @@
 typedef union {
   uint64_t i;
   uint16_t h;
-  float    f;
-  double   d;
+  float f;
+  double d;
 } v_fconv;
 
 static inline v_fconv _i(uint64_t i) {
   v_fconv r;
-  r.i   = i;
-  return  r;
+  r.i = i;
+  return r;
 }
 
 static inline v_fconv _h(float f) {
@@ -49,7 +49,8 @@ static inline v_fconv _h(float f) {
     (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
     OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.*/
 
-  // Source: https://github.com/numpy/numpy/blob/master/numpy/core/src/npymath/halffloat.c
+  // Source:
+  // https://github.com/numpy/numpy/blob/master/numpy/core/src/npymath/halffloat.c
 
   v_fconv r;
   r.f = f;
@@ -57,30 +58,30 @@ static inline v_fconv _h(float f) {
   uint32_t f_exp, f_sig;
   uint16_t h_sgn, h_exp, h_sig;
 
-  h_sgn = (uint16_t) ((r.i&0x80000000u) >> 16);
-  f_exp = (r.i&0x7f800000u);
+  h_sgn = (uint16_t)((r.i & 0x80000000u) >> 16);
+  f_exp = (r.i & 0x7f800000u);
 
   /* Exponent overflow/NaN converts to signed inf/NaN */
   if (f_exp >= 0x47800000u) {
     if (f_exp == 0x7f800000u) {
       /* Inf or NaN */
-      f_sig = (r.i&0x007fffffu);
+      f_sig = (r.i & 0x007fffffu);
       if (f_sig != 0) {
         /* NaN - propagate the flag in the significand... */
-        uint16_t ret = (uint16_t) (0x7c00u + (f_sig >> 13));
+        uint16_t ret = (uint16_t)(0x7c00u + (f_sig >> 13));
         /* ...but make sure it stays a NaN */
         if (ret == 0x7c00u) {
           ret++;
         }
-        r.i = (uint16_t) h_sgn + ret;
+        r.i = (uint16_t)h_sgn + ret;
         return r;
       } else {
         /* signed inf */
-        r.i = (uint16_t) (h_sgn + 0x7c00u);
+        r.i = (uint16_t)(h_sgn + 0x7c00u);
         return r;
       }
     } else {
-      r.i = (uint16_t) (h_sgn + 0x7c00u);
+      r.i = (uint16_t)(h_sgn + 0x7c00u);
       return r;
     }
   }
@@ -97,37 +98,37 @@ static inline v_fconv _h(float f) {
     }
     /* Make the subnormal significand */
     f_exp >>= 23;
-    f_sig = (0x00800000u + (r.i&0x007fffffu));
+    f_sig = (0x00800000u + (r.i & 0x007fffffu));
     f_sig >>= (113 - f_exp);
     f_sig += 0x00001000u;
-    h_sig = (uint16_t) (f_sig >> 13);
+    h_sig = (uint16_t)(f_sig >> 13);
     /*
      * If the rounding causes a bit to spill into h_exp, it will
      * increment h_exp from zero to one and h_sig will be zero.
      * This is the correct result.
      */
-    r.i = (uint16_t) (h_sgn + h_sig);
+    r.i = (uint16_t)(h_sgn + h_sig);
     return r;
   }
 
   /* Regular case with no overflow or underflow */
-  h_exp = (uint16_t) ((f_exp - 0x38000000u) >> 13);
+  h_exp = (uint16_t)((f_exp - 0x38000000u) >> 13);
   /* Handle rounding by adding 1 to the bit beyond half precision */
-  f_sig = (r.i&0x007fffffu);
+  f_sig = (r.i & 0x007fffffu);
   f_sig += 0x00001000u;
-  h_sig = (uint16_t) (f_sig >> 13);
-  r.i = (uint16_t) h_sgn + h_exp + h_sig;
-  return  r;
+  h_sig = (uint16_t)(f_sig >> 13);
+  r.i = (uint16_t)h_sgn + h_exp + h_sig;
+  return r;
 }
 
 static inline v_fconv _f(float f) {
   v_fconv r;
-  r.f   = f;
-  return  r;
+  r.f = f;
+  return r;
 }
 
 static inline v_fconv _d(double d) {
   v_fconv r;
-  r.d   = d;
-  return  r;
+  r.d = d;
+  return r;
 }
