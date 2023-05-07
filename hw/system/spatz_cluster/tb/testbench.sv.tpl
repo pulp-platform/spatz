@@ -249,6 +249,11 @@ module testharness (
     .axi_in_req_i    (axi_to_cluster_req   ),
     .axi_in_resp_o   (axi_to_cluster_resp  ),
 % endif
+% if cfg['axi_isolate_enable']:
+    //AXI Isolate
+    .axi_isolate_i   ( 1'b0  ),
+    .axi_isolated_o  (       ),
+% endif
     .cluster_probe_o (cluster_probe        )
   );
 /**************

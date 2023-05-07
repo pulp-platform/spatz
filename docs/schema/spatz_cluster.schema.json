@@ -105,6 +105,11 @@
             "description": "Place asynchronous CDCs on the cluster AXI interfaces.",
             "default": false
         },
+        "axi_isolate_enable": {
+            "type": "boolean",
+            "description": "Instantiate an AXI isolation module at the top level.",
+            "default": false
+        },
         "hart_base_id": {
             "type": "number",
             "description": "Base hart id of the cluster. All cores get the respective cluster id plus their cluster position as the final `hart_id`.",

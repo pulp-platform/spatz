@@ -48,6 +48,10 @@ package ${cfg['pkg_name']};
   // AXI User Width
   localparam int unsigned SpatzAxiUserWidth = ${cfg['user_width']};
 
+% if cfg['axi_isolate_enable']:
+  parameter int unsigned SpatzAxiMaxOutTrans   = ${cfg['trans']};
+% endif
+
   typedef logic [SpatzAxiDataWidth-1:0] axi_data_t;
   typedef logic [SpatzAxiStrbWidth-1:0] axi_strb_t;
   typedef logic [SpatzAxiAddrWidth-1:0] axi_addr_t;
@@ -250,6 +254,10 @@ module ${cfg['name']}_wrapper
   input  logic [AxiAddrWidth-1:0]              cluster_base_addr_i,
 % endif
   output logic                                 cluster_probe_o,
+% if cfg['axi_isolate_enable']:
+  input  logic axi_isolate_i,
+  output logic axi_isolated_o,
+% endif
 % if cfg['cdc_enable']:
   // AXI Master port
   output logic [AsyncAxiOutAwWidth-1:0] async_axi_out_aw_data_o,
@@ -299,14 +307,49 @@ module ${cfg['name']}_wrapper
   spatz_cluster_pkg::spatz_axi_iwc_out_req_t axi_from_cluster_iwc_req;
   spatz_cluster_pkg::spatz_axi_iwc_out_resp_t axi_from_cluster_iwc_resp;
 
+% if cfg['axi_isolate_enable'] or cfg['cdc_enable']:
+  axi_out_req_t  axi_from_cluster_req;
+  axi_out_resp_t axi_from_cluster_resp;
+% endif
+
+% if cfg['axi_isolate_enable']:
+  % if cfg['cdc_enable']:
+  // From AXI Isolate to CDC
+  axi_out_req_t  axi_from_cluster_iso_req;
+  axi_out_resp_t axi_from_cluster_iso_resp;
+  % endif
+
+  axi_isolate #(
+    .NumPending           ( ${cfg['pkg_name']}::SpatzAxiMaxOutTrans ),
+    .TerminateTransaction ( 1              ),
+    .AtopSupport          ( 1              ),
+    .AxiAddrWidth         ( AxiAddrWidth   ),
+    .AxiDataWidth         ( AxiDataWidth   ),
+    .AxiIdWidth           ( AxiOutIdWidth  ),
+    .AxiUserWidth         ( AxiUserWidth   ),
+    .axi_req_t            ( axi_out_req_t  ),
+    .axi_resp_t           ( axi_out_resp_t )
+  ) i_axi_out_isolate     (
+    .clk_i                ( clk_i                 ),
+    .rst_ni               ( rst_ni                ),
+    .slv_req_i            ( axi_from_cluster_req  ),
+    .slv_resp_o           ( axi_from_cluster_resp ),
+% if cfg['cdc_enable']:
+    .mst_req_o            ( axi_from_cluster_iso_req   ),
+    .mst_resp_i           ( axi_from_cluster_iso_resp  ),
+% else:
+    .mst_req_o            ( axi_out_req_o              ),
+    .mst_resp_i           ( axi_out_resp_i             ),
+% endif
+    .isolate_i            ( axi_isolate_i              ),
+    .isolated_o           ( axi_isolated_o             )
+  ) ;
+% endif
+
 % if cfg['cdc_enable']:
   // From CDC to Cluster
   axi_in_req_t   axi_to_cluster_req;
   axi_in_resp_t  axi_to_cluster_resp;
-
-  // From IWC to CDC
-  axi_out_req_t  axi_from_cluster_req;
-  axi_out_resp_t axi_from_cluster_resp;
 
   axi_cdc_dst #(
     .LogDepth   ( LogDepth          ),
@@ -368,10 +411,15 @@ module ${cfg['name']}_wrapper
     .async_data_master_r_wptr_i ( async_axi_out_r_wptr_i  ),
     .async_data_master_r_rptr_o ( async_axi_out_r_rptr_o  ),
     // Synchronous slave port
-    .src_clk_i                  ( clk_i                   ),
-    .src_rst_ni                 ( rst_ni                  ),
-    .src_req_i                  ( axi_from_cluster_req    ),
-    .src_resp_o                 ( axi_from_cluster_resp   )
+    .src_clk_i                  ( clk_i                    ),
+    .src_rst_ni                 ( rst_ni                   ),
+% if cfg['axi_isolate_enable']:
+    .src_req_i                  ( axi_from_cluster_iso_req ),
+    .src_resp_o                 ( axi_from_cluster_iso_resp)
+% else:
+    .src_req_i                  ( axi_from_cluster_req     ),
+    .src_resp_o                 ( axi_from_cluster_resp    )
+% endif
   );
 % endif
 
@@ -380,9 +428,9 @@ module ${cfg['name']}_wrapper
     .AxiMstPortIdWidth ( AxiOutIdWidth ),
     .AxiSlvPortMaxUniqIds ( 2 ),
     .AxiSlvPortMaxTxnsPerId (2),
-    .AxiSlvPortMaxTxns (2),
+    .AxiSlvPortMaxTxns (${cfg['trans']}),
     .AxiMstPortMaxUniqIds (2),
-    .AxiMstPortMaxTxnsPerId (2),
+    .AxiMstPortMaxTxnsPerId (${cfg['trans']}),
     .AxiAddrWidth ( AxiAddrWidth ),
     .AxiDataWidth ( AxiDataWidth ),
     .AxiUserWidth ( AxiUserWidth ),
@@ -395,7 +443,7 @@ module ${cfg['name']}_wrapper
     .rst_ni     ( rst_ni ),
     .slv_req_i  ( axi_from_cluster_iwc_req  ),
     .slv_resp_o ( axi_from_cluster_iwc_resp ),
-% if cfg['cdc_enable']:
+% if cfg['cdc_enable'] or cfg['axi_isolate_enable']:
     .mst_req_o  ( axi_from_cluster_req  ),
     .mst_resp_i ( axi_from_cluster_resp )
 % else:
