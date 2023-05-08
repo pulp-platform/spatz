@@ -3171,7 +3171,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           (~{(PPNSize){trans_active}} & {mseg_q, alu_result[31:PAGE_SHIFT]});
   assign ls_paddr[PAGE_SHIFT-1:0] = alu_result[PAGE_SHIFT-1:0];
 
-  assign lsu_qvalid = lsu_tlb_qvalid & trans_ready;
+  assign lsu_qvalid = lsu_tlb_qvalid & trans_ready & ~acc_mem_stall;
   assign lsu_tlb_qready = lsu_qready & trans_ready;
 
   // --------------------
