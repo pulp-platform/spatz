@@ -59,7 +59,7 @@ package ${cfg['pkg_name']};
   typedef logic [SpatzAxiIdOutWidth-1:0] axi_id_out_t;
   typedef logic [SpatzAxiUserWidth-1:0] axi_user_t;
 
-% if cfg['cdc_enable']:
+% if cfg['axi_cdc_enable']:
   localparam int unsigned SpatzLogDepth = 3;
 % endif
 
@@ -195,13 +195,13 @@ module ${cfg['name']}_wrapper
   parameter int unsigned AxiUserWidth  = ${cfg['pkg_name']}::SpatzAxiUserWidth,
   parameter int unsigned AxiInIdWidth  = ${cfg['pkg_name']}::SpatzAxiIdInWidth,
   parameter int unsigned AxiOutIdWidth = ${cfg['pkg_name']}::SpatzAxiIdOutWidth,
-% if cfg['cdc_enable']:
+% if cfg['axi_cdc_enable']:
   parameter int unsigned LogDepth      = ${cfg['pkg_name']}::SpatzLogDepth,
 % endif
 
   parameter type axi_in_resp_t = spatz_axi_in_resp_t,
   parameter type axi_in_req_t  = spatz_axi_in_req_t,
-% if cfg['cdc_enable']:
+% if cfg['axi_cdc_enable']:
   parameter type axi_in_aw_chan_t = spatz_axi_in_aw_chan_t,
   parameter type axi_in_w_chan_t  = spatz_axi_in_w_chan_t,
   parameter type axi_in_b_chan_t  = spatz_axi_in_b_chan_t,
@@ -210,7 +210,7 @@ module ${cfg['name']}_wrapper
 % endif
 
   parameter type axi_out_resp_t = spatz_axi_out_resp_t,
-% if cfg['cdc_enable']:
+% if cfg['axi_cdc_enable']:
   parameter type axi_out_req_t  = spatz_axi_out_req_t,
 
   parameter type axi_out_aw_chan_t = spatz_axi_out_aw_chan_t,
@@ -258,7 +258,7 @@ module ${cfg['name']}_wrapper
   input  logic axi_isolate_i,
   output logic axi_isolated_o,
 % endif
-% if cfg['cdc_enable']:
+% if cfg['axi_cdc_enable']:
   // AXI Master port
   output logic [AsyncAxiOutAwWidth-1:0] async_axi_out_aw_data_o,
   output logic [LogDepth:0]             async_axi_out_aw_wptr_o,
@@ -307,13 +307,13 @@ module ${cfg['name']}_wrapper
   spatz_cluster_pkg::spatz_axi_iwc_out_req_t axi_from_cluster_iwc_req;
   spatz_cluster_pkg::spatz_axi_iwc_out_resp_t axi_from_cluster_iwc_resp;
 
-% if cfg['axi_isolate_enable'] or cfg['cdc_enable']:
+% if cfg['axi_isolate_enable'] or cfg['axi_cdc_enable']:
   axi_out_req_t  axi_from_cluster_req;
   axi_out_resp_t axi_from_cluster_resp;
 % endif
 
 % if cfg['axi_isolate_enable']:
-  % if cfg['cdc_enable']:
+  % if cfg['axi_cdc_enable']:
   // From AXI Isolate to CDC
   axi_out_req_t  axi_from_cluster_iso_req;
   axi_out_resp_t axi_from_cluster_iso_resp;
@@ -334,7 +334,7 @@ module ${cfg['name']}_wrapper
     .rst_ni               ( rst_ni                ),
     .slv_req_i            ( axi_from_cluster_req  ),
     .slv_resp_o           ( axi_from_cluster_resp ),
-% if cfg['cdc_enable']:
+% if cfg['axi_cdc_enable']:
     .mst_req_o            ( axi_from_cluster_iso_req   ),
     .mst_resp_i           ( axi_from_cluster_iso_resp  ),
 % else:
@@ -346,7 +346,7 @@ module ${cfg['name']}_wrapper
   ) ;
 % endif
 
-% if cfg['cdc_enable']:
+% if cfg['axi_cdc_enable']:
   // From CDC to Cluster
   axi_in_req_t   axi_to_cluster_req;
   axi_in_resp_t  axi_to_cluster_resp;
@@ -443,7 +443,7 @@ module ${cfg['name']}_wrapper
     .rst_ni     ( rst_ni ),
     .slv_req_i  ( axi_from_cluster_iwc_req  ),
     .slv_resp_o ( axi_from_cluster_iwc_resp ),
-% if cfg['cdc_enable'] or cfg['axi_isolate_enable']:
+% if cfg['axi_cdc_enable'] or cfg['axi_isolate_enable']:
     .mst_req_o  ( axi_from_cluster_req  ),
     .mst_resp_i ( axi_from_cluster_resp )
 % else:
@@ -507,7 +507,7 @@ module ${cfg['name']}_wrapper
     .cluster_base_addr_i,
 % endif
     .cluster_probe_o,
-% if cfg['cdc_enable']:
+% if cfg['axi_cdc_enable']:
     // AXI Slave Port
     .axi_in_req_i   ( axi_to_cluster_req  ),
     .axi_in_resp_o  ( axi_to_cluster_resp ),
@@ -531,12 +531,14 @@ module ${cfg['name']}_wrapper
   if (AxiUserWidth != ${cfg['pkg_name']}::SpatzAxiUserWidth)
     $error("[spatz_cluster_wrapper] AXI User Width does not match the configuration.");
 
-  if (AxiIdInWidth != ${cfg['pkg_name']}::SpatzAxiIdInWidth)
+  if (AxiInIdWidth != ${cfg['pkg_name']}::SpatzAxiIdInWidth)
     $error("[spatz_cluster_wrapper] AXI Id Width (In) does not match the configuration.");
 
-  if (AxiIdOutWidth != ${cfg['pkg_name']}::SpatzAxiIdOutWidth)
+  if (AxiOutIdWidth != ${cfg['pkg_name']}::SpatzAxiIdOutWidth)
     $error("[spatz_cluster_wrapper] AXI Id Width (Out) does not match the configuration.");
 
+% if cfg['axi_cdc_enable']:
   if (LogDepth != ${cfg['pkg_name']}::SpatzLogDepth)
     $error("[spatz_cluster_wrapper] AXI Log Depth does not match the configuration.");
+% endif
 endmodule

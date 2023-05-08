@@ -33,7 +33,7 @@ module testharness (
   spatz_axi_in_req_t   axi_to_cluster_req;
   spatz_axi_in_resp_t  axi_to_cluster_resp;
 
-% if cfg['cdc_enable']:
+% if cfg['axi_cdc_enable']:
   // AXI CDC parameters
   localparam int unsigned AsyncAxiOutAwWidth = (2**SpatzLogDepth) * axi_pkg::aw_width ( SpatzAxiAddrWidth,  SpatzAxiIdOutWidth, SpatzAxiUserWidth );
   localparam int unsigned AsyncAxiOutWWidth  = (2**SpatzLogDepth) * axi_pkg::w_width  ( SpatzAxiDataWidth,  SpatzAxiUserWidth );
@@ -164,13 +164,13 @@ module testharness (
     .AxiUserWidth             ( SpatzAxiUserWidth  ),
     .AxiInIdWidth             ( SpatzAxiIdInWidth  ),
     .AxiOutIdWidth            ( SpatzAxiIdOutWidth ),
-% if cfg['cdc_enable']:
+% if cfg['axi_cdc_enable']:
     .LogDepth                 ( SpatzLogDepth      ),
 % endif
 
     .axi_in_resp_t            ( spatz_axi_in_resp_t    ),
     .axi_in_req_t             ( spatz_axi_in_req_t     ),
-% if cfg['cdc_enable']:
+% if cfg['axi_cdc_enable']:
     .axi_in_aw_chan_t         ( spatz_axi_in_aw_chan_t ),
     .axi_in_w_chan_t          ( spatz_axi_in_w_chan_t  ),
     .axi_in_b_chan_t          ( spatz_axi_in_b_chan_t  ),
@@ -179,7 +179,7 @@ module testharness (
 % endif
 
     .axi_out_resp_t           ( spatz_axi_out_resp_t   ),
-% if cfg['cdc_enable']:
+% if cfg['axi_cdc_enable']:
     .axi_out_req_t            ( spatz_axi_out_req_t    ),
 
     .axi_out_aw_chan_t        ( spatz_axi_out_aw_chan_t ),
@@ -211,7 +211,7 @@ module testharness (
     .mtip_i          ('0                   ),
     .debug_req_i     (debug_req            ),
 
-% if cfg['cdc_enable']:
+% if cfg['axi_cdc_enable']:
     .async_axi_in_aw_data_i (  async_axi_in_aw_data_i ),
     .async_axi_in_aw_wptr_i (  async_axi_in_aw_wptr_i ),
     .async_axi_in_aw_rptr_o (  async_axi_in_aw_rptr_o ),

@@ -100,7 +100,7 @@
             "description": "User width of the AXI plug into the cluster.",
             "default": 1
         },
-        "cdc_enable": {
+        "axi_cdc_enable": {
             "type": "boolean",
             "description": "Place asynchronous CDCs on the cluster AXI interfaces.",
             "default": false
