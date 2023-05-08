@@ -12,11 +12,12 @@ if (CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     project(Benchmarks LANGUAGES C ASM)
     include(SnitchUtilities)
 
-    add_compile_options(-O3 -g -ffunction-sections)
-
     # Build the runtime.
     add_subdirectory(../snRuntime snRuntime)
 endif()
+
+add_compile_options(-O3 -g -ffunction-sections)
+add_compile_options(-DELEN=64)
 
 include_directories(include)
 include_directories(${SNRUNTIME_INCLUDE_DIRS})

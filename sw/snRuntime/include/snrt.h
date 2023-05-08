@@ -37,11 +37,6 @@ inline static void *snrt_memset(void *ptr, int value, size_t num) {
     return ptr;
 }
 
-/// Alias to snrt_memset
-inline void *memset(void *ptr, int value, size_t num) {
-    return snrt_memset(ptr, value, num);
-}
-
 /// A slice of memory.
 typedef struct snrt_slice {
     uint64_t start;

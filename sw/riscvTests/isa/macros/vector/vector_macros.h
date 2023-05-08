@@ -12,6 +12,7 @@
 #include "float_conversion.h"
 #include "rvv_debug_macros.h"
 #include <stdint.h>
+#include <string.h>
 
 #ifdef __SPIKE__
 #include <stdio.h>
@@ -71,11 +72,6 @@ int test_case;
     return;                                                                    \
   }                                                                            \
   printf("PASSED.\n");
-
-// In order to avoid that scalar loads run ahead of vector stores,
-// we use an instruction to ensure that all vector stores have been
-// committed before continuing with scalar memory operations.
-#define MEMORY_BARRIER // asm volatile ("fence");
 
 // Zero-initialized variables can be problematic on bare-metal.
 // Therefore, initialize them during runtime.
@@ -147,7 +143,6 @@ int test_case;
 #define VCMP(T, str, casenum, vexp, act...)                                    \
   do {                                                                         \
     const T vact[] = {act};                                                    \
-    MEMORY_BARRIER;                                                            \
     for (unsigned int i = 0; i < sizeof(vact) / sizeof(T); i++) {              \
       if (vexp[i] != vact[i]) {                                                \
         printf("[TC %d] Index %d FAILED. Got " #str ", expected " #str ".\n",  \
@@ -162,7 +157,6 @@ int test_case;
 // Check the results against an in-memory vector of golden values
 #define VMCMP(T, str, casenum, vexp, vgold, size)                              \
   do {                                                                         \
-    MEMORY_BARRIER;                                                            \
     for (unsigned int i = 0; i < size; i++) {                                  \
       if (vexp[i] != vgold[i]) {                                               \
         printf("[TC %d] Index %d FAILED. Got " #str ", expected " #str ".\n",  \
@@ -195,23 +189,22 @@ int test_case;
 // Macro to load a vector register with data from the stack
 #define VLOAD(datatype, loadtype, vreg, vec...)                                \
   do {                                                                         \
-    volatile datatype V##vreg[] __attribute__((aligned(32))) = {vec};          \
-    MEMORY_BARRIER;                                                            \
+    datatype tmpV##vreg[] = {vec};                                             \
+    size_t len = sizeof(tmpV##vreg) / sizeof(datatype);                        \
+    datatype *V##vreg = (datatype *)snrt_l1alloc(len * sizeof(datatype));      \
+    memcpy(V##vreg, tmpV##vreg, len * sizeof(datatype));                       \
     asm volatile("vl" #loadtype ".v " #vreg ", (%0)  \n" ::[V] "r"(V##vreg));  \
   } while (0)
 
 // Macro to store a vector register into the pointer vec
 #define VSTORE(T, storetype, vreg, vec)                                        \
   do {                                                                         \
-    T *vec##_t = (T *)vec;                                                     \
-    asm volatile("vs" #storetype ".v " #vreg ", (%0)\n" : "+r"(vec##_t));      \
-    MEMORY_BARRIER;                                                            \
+    asm volatile("vs" #storetype ".v " #vreg ", (%0)\n" : "+r"(vec));          \
   } while (0)
 
 // Macro to reset the whole register back to zero
 #define VCLEAR(register)                                                       \
   do {                                                                         \
-    MEMORY_BARRIER;                                                            \
     uint64_t vtype;                                                            \
     uint64_t vl;                                                               \
     uint64_t vlmax;                                                            \
@@ -249,63 +242,63 @@ int test_case;
 #define VCMP_U64(casenum, vect, act...)                                        \
   {                                                                            \
     VSTORE_U64(vect);                                                          \
-    VCMP(uint64_t, % lu, casenum, Ru64, act);                                  \
+    VCMP(uint64_t, "%lu", casenum, Ru64, act);                                 \
   }
 #define VCMP_U32(casenum, vect, act...)                                        \
   {                                                                            \
     VSTORE_U32(vect);                                                          \
-    VCMP(uint32_t, % u, casenum, Ru32, act);                                   \
+    VCMP(uint32_t, "%u", casenum, Ru32, act);                                  \
   }
 #define VCMP_U16(casenum, vect, act...)                                        \
   {                                                                            \
     VSTORE_U16(vect);                                                          \
-    VCMP(uint16_t, % hu, casenum, Ru16, act);                                  \
+    VCMP(uint16_t, "%hu", casenum, Ru16, act);                                 \
   }
 #define VCMP_U8(casenum, vect, act...)                                         \
   {                                                                            \
     VSTORE_U8(vect);                                                           \
-    VCMP(uint8_t, % hhu, casenum, Ru8, act);                                   \
+    VCMP(uint8_t, "%hhu", casenum, Ru8, act);                                  \
   }
 
 #define VVCMP_U64(casenum, ptr64, act...)                                      \
-  { VCMP(uint64_t, % lu, casenum, ptr64, act); }
+  { VCMP(uint64_t, "%lu", casenum, ptr64, act); }
 #define VVCMP_U32(casenum, ptr32, act...)                                      \
-  { VCMP(uint32_t, % u, casenum, ptr32, act); }
+  { VCMP(uint32_t, "%u", casenum, ptr32, act); }
 #define VVCMP_U16(casenum, ptr16, act...)                                      \
-  { VCMP(uint16_t, % hu, casenum, ptr16, act); }
+  { VCMP(uint16_t, "%hu", casenum, ptr16, act); }
 #define VVCMP_U8(casenum, ptr8, act...)                                        \
-  { VCMP(uint8_t, % hhu, casenum, ptr8, act); }
+  { VCMP(uint8_t, "%hhu", casenum, ptr8, act); }
 
 #define VCMP_I64(casenum, vect, act...)                                        \
   {                                                                            \
     VSTORE_I64(vect);                                                          \
-    VCMP(int64_t, % ld, casenum, Ri64, act);                                   \
+    VCMP(int64_t, "%ld", casenum, Ri64, act);                                  \
   }
 #define VCMP_I32(casenum, vect, act...)                                        \
   {                                                                            \
     VSTORE_I32(vect);                                                          \
-    VCMP(int32_t, % d, casenum, Ri32, act);                                    \
+    VCMP(int32_t, "%d", casenum, Ri32, act);                                   \
   }
 #define VCMP_I16(casenum, vect, act...)                                        \
   {                                                                            \
     VSTORE_I16(vect);                                                          \
-    VCMP(int16_t, % hd, casenum, Ri16, act);                                   \
+    VCMP(int16_t, "%hd", casenum, Ri16, act);                                  \
   }
 #define VCMP_I8(casenum, vect, act...)                                         \
   {                                                                            \
     VSTORE_I8(vect);                                                           \
-    VCMP(int8_t, % hhd, casenum, Ri8, act);                                    \
+    VCMP(int8_t, "%hhd", casenum, Ri8, act);                                   \
   }
 
 #define VCMP_F64(casenum, vect, act...)                                        \
   {                                                                            \
     VSTORE_F64(vect);                                                          \
-    VCMP(double, % lf, casenum, Rf64, act);                                    \
+    VCMP(double, "%lf", casenum, Rf64, act);                                   \
   }
 #define VCMP_F32(casenum, vect, act...)                                        \
   {                                                                            \
     VSTORE_F32(vect);                                                          \
-    VCMP(float, % f, casenum, Rf32, act);                                      \
+    VCMP(float, "%f", casenum, Rf32, act);                                     \
   }
 
 // Vector load
