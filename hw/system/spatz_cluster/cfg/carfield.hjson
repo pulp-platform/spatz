@@ -11,8 +11,11 @@
         cluster_base_hartid: 0,
         addr_width: 48,
         data_width: 64,
-        id_width_in: 2,
-        id_width_out: 5,
+        id_width_in: 5,
+        id_width_out: 2,
+        user_width: 2,
+        axi_cdc_enable: true,
+        axi_isolate_enable: true,
         tcdm: {
             size: 128,
             banks: 16,

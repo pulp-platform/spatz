@@ -157,6 +157,7 @@ class SnitchCluster(Generator):
     files = {
         "spatzpkg": "src/spatz_pkg.sv.tpl",
         "wrapper": "src/spatz_cluster_wrapper.sv.tpl",
+        "testbench": "tb/testbench.sv.tpl",
     }
 
     def __init__(self, cfg, pma_cfg):
@@ -193,6 +194,13 @@ class SnitchCluster(Generator):
     def render_spatzpkg(self):
         """Render the Spatz PKG"""
         cfg_template = self.templates.get_template(self.files["spatzpkg"])
+        return cfg_template.render_unicode(
+            cfg=self.cfg, to_sv_hex=to_sv_hex, disclaimer=self.DISCLAIMER
+        )
+
+    def render_testbench(self):
+        """Render the cluster testbench"""
+        cfg_template = self.templates.get_template(self.files["testbench"])
         return cfg_template.render_unicode(
             cfg=self.cfg, to_sv_hex=to_sv_hex, disclaimer=self.DISCLAIMER
         )
@@ -393,6 +401,9 @@ class SnitchClusterTB(Generator):
 
     def render_spatzpkg(self):
         return self.cluster.render_spatzpkg()
+
+    def render_testbench(self):
+        return self.cluster.render_testbench()
 
     def render_linker_script(self):
         """Generate a linker script for the cluster testbench"""

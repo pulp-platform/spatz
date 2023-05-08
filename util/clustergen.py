@@ -66,6 +66,9 @@ def main():
     with open(outdir / "memories.json", "w") as f:
         f.write(cluster_tb.cluster.memory_cfg())
 
+    with open(outdir / "testharness.sv", "w") as f:
+        f.write(cluster_tb.render_testbench())
+
 
 if __name__ == "__main__":
     main()

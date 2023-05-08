@@ -34,25 +34,41 @@ package ${cfg['pkg_name']};
   ///////////
 
   // AXI Data Width
-  localparam int unsigned AxiDataWidth = ${cfg['dma_data_width']};
-  localparam int unsigned AxiStrbWidth = AxiDataWidth / 8;
+  localparam int unsigned SpatzAxiDataWidth = ${cfg['dma_data_width']};
+  localparam int unsigned SpatzAxiStrbWidth = SpatzAxiDataWidth / 8;
   // AXI Address Width
-  localparam int unsigned AxiAddrWidth = ${cfg['addr_width']};
+  localparam int unsigned SpatzAxiAddrWidth = ${cfg['addr_width']};
   // AXI ID Width
-  localparam int unsigned AxiIdInWidth = ${cfg['id_width_in']};
-  localparam int unsigned AxiIdOutWidth = ${cfg['id_width_out']};
-  // AXI User Width
-  localparam int unsigned AxiUserWidth = ${cfg['user_width']};
+  localparam int unsigned SpatzAxiIdInWidth = ${cfg['id_width_in']};
+  localparam int unsigned SpatzAxiIdOutWidth = ${cfg['id_width_out']};
 
-  typedef logic [AxiDataWidth-1:0] axi_data_t;
-  typedef logic [AxiStrbWidth-1:0] axi_strb_t;
-  typedef logic [AxiAddrWidth-1:0] axi_addr_t;
-  typedef logic [AxiIdInWidth-1:0] axi_id_in_t;
-  typedef logic [AxiIdOutWidth-1:0] axi_id_out_t;
-  typedef logic [AxiUserWidth-1:0] axi_user_t;
+  // FIXED AxiIdOutWidth
+  localparam int unsigned IwcAxiIdOutWidth = 3;
+
+  // AXI User Width
+  localparam int unsigned SpatzAxiUserWidth = ${cfg['user_width']};
+
+% if cfg['axi_isolate_enable']:
+  parameter int unsigned SpatzAxiMaxOutTrans   = ${cfg['trans']};
+% endif
+
+  typedef logic [SpatzAxiDataWidth-1:0] axi_data_t;
+  typedef logic [SpatzAxiStrbWidth-1:0] axi_strb_t;
+  typedef logic [SpatzAxiAddrWidth-1:0] axi_addr_t;
+  typedef logic [SpatzAxiIdInWidth-1:0] axi_id_in_t;
+  typedef logic [SpatzAxiIdOutWidth-1:0] axi_id_out_t;
+  typedef logic [SpatzAxiUserWidth-1:0] axi_user_t;
+
+% if cfg['axi_cdc_enable']:
+  localparam int unsigned SpatzLogDepth = 3;
+% endif
 
   `AXI_TYPEDEF_ALL(spatz_axi_in, axi_addr_t, axi_id_in_t, logic [63:0], logic [7:0], axi_user_t)
   `AXI_TYPEDEF_ALL(spatz_axi_out, axi_addr_t, axi_id_out_t, axi_data_t, axi_strb_t, axi_user_t)
+
+  typedef logic [IwcAxiIdOutWidth-1:0] axi_id_out_iwc_t;
+
+  `AXI_TYPEDEF_ALL(spatz_axi_iwc_out, axi_addr_t, axi_id_out_iwc_t, axi_data_t, axi_strb_t, axi_user_t)
 
   ////////////////////
   //  Spatz Cluster //
@@ -90,7 +106,7 @@ package ${cfg['pkg_name']};
       default: 0
   };
 
-  localparam fpnew_pkg::fpu_implementation_t FPUImplementation [${cfg['nr_cores']}] = '{
+  localparam fpnew_pkg::fpu_implementation_t FPUImplementation [NumCores] = '{
   % for c in cfg['cores']:
     '{
         PipeRegs: // FMA Block
@@ -169,41 +185,280 @@ package ${cfg['pkg_name']};
 endpackage
 // verilog_lint: waive-stop package-filename
 
-module ${cfg['name']}_wrapper (
-  input  logic                                    clk_i,
-  input  logic                                    rst_ni,
-  input  logic                                    testmode_i,
-  input  logic                                    scan_enable_i,
-  input  logic                                    scan_data_i,
-  output logic                                    scan_data_o,
+module ${cfg['name']}_wrapper
+ import ${cfg['pkg_name']}::*;
+ import fpnew_pkg::fpu_implementation_t;
+ import snitch_pma_pkg::snitch_pma_t;
+ #(
+  parameter int unsigned AxiAddrWidth  = ${cfg['pkg_name']}::SpatzAxiAddrWidth,
+  parameter int unsigned AxiDataWidth  = ${cfg['pkg_name']}::SpatzAxiDataWidth,
+  parameter int unsigned AxiUserWidth  = ${cfg['pkg_name']}::SpatzAxiUserWidth,
+  parameter int unsigned AxiInIdWidth  = ${cfg['pkg_name']}::SpatzAxiIdInWidth,
+  parameter int unsigned AxiOutIdWidth = ${cfg['pkg_name']}::SpatzAxiIdOutWidth,
+% if cfg['axi_cdc_enable']:
+  parameter int unsigned LogDepth      = ${cfg['pkg_name']}::SpatzLogDepth,
+% endif
+
+  parameter type axi_in_resp_t = spatz_axi_in_resp_t,
+  parameter type axi_in_req_t  = spatz_axi_in_req_t,
+% if cfg['axi_cdc_enable']:
+  parameter type axi_in_aw_chan_t = spatz_axi_in_aw_chan_t,
+  parameter type axi_in_w_chan_t  = spatz_axi_in_w_chan_t,
+  parameter type axi_in_b_chan_t  = spatz_axi_in_b_chan_t,
+  parameter type axi_in_ar_chan_t = spatz_axi_in_ar_chan_t,
+  parameter type axi_in_r_chan_t  = spatz_axi_in_r_chan_t,
+% endif
+
+  parameter type axi_out_resp_t = spatz_axi_out_resp_t,
+% if cfg['axi_cdc_enable']:
+  parameter type axi_out_req_t  = spatz_axi_out_req_t,
+
+  parameter type axi_out_aw_chan_t = spatz_axi_out_aw_chan_t,
+  parameter type axi_out_w_chan_t  = spatz_axi_out_w_chan_t,
+  parameter type axi_out_b_chan_t  = spatz_axi_out_b_chan_t,
+  parameter type axi_out_ar_chan_t = spatz_axi_out_ar_chan_t,
+  parameter type axi_out_r_chan_t  = spatz_axi_out_r_chan_t,
+
+  // AXI Master
+  parameter int unsigned AsyncAxiOutAwWidth = (2**LogDepth) * axi_pkg::aw_width(SpatzAxiAddrWidth,  SpatzAxiIdOutWidth, SpatzAxiUserWidth),
+  parameter int unsigned AsyncAxiOutWWidth  = (2**LogDepth) * axi_pkg::w_width (SpatzAxiDataWidth,  SpatzAxiUserWidth),
+  parameter int unsigned AsyncAxiOutBWidth  = (2**LogDepth) * axi_pkg::b_width (SpatzAxiIdOutWidth, SpatzAxiUserWidth),
+  parameter int unsigned AsyncAxiOutArWidth = (2**LogDepth) * axi_pkg::ar_width(SpatzAxiAddrWidth,  SpatzAxiIdOutWidth, SpatzAxiUserWidth),
+  parameter int unsigned AsyncAxiOutRWidth  = (2**LogDepth) * axi_pkg::r_width (SpatzAxiDataWidth,  SpatzAxiIdOutWidth, SpatzAxiUserWidth),
+
+  // AXI Slave
+  parameter int unsigned AsyncAxiInAwWidth = (2**LogDepth) * axi_pkg::aw_width(SpatzAxiAddrWidth, SpatzAxiIdInWidth, SpatzAxiUserWidth),
+  parameter int unsigned AsyncAxiInWWidth  = (2**LogDepth) * axi_pkg::w_width (SpatzAxiDataWidth, SpatzAxiUserWidth),
+  parameter int unsigned AsyncAxiInBWidth  = (2**LogDepth) * axi_pkg::b_width (SpatzAxiIdInWidth, SpatzAxiUserWidth),
+  parameter int unsigned AsyncAxiInArWidth = (2**LogDepth) * axi_pkg::ar_width(SpatzAxiAddrWidth, SpatzAxiIdInWidth, SpatzAxiUserWidth),
+  parameter int unsigned AsyncAxiInRWidth  = (2**LogDepth) * axi_pkg::r_width (SpatzAxiDataWidth, SpatzAxiIdInWidth, SpatzAxiUserWidth)
+% else:
+  parameter type axi_out_req_t  = spatz_axi_out_req_t
+% endif
+)(
+  input  logic                clk_i,
+  input  logic                rst_ni,
+  input  logic                testmode_i,
+  input  logic                scan_enable_i,
+  input  logic                scan_data_i,
+  output logic                scan_data_o,
 % if cfg['enable_debug']:
-  input  logic [${cfg['pkg_name']}::NumCores-1:0] debug_req_i,
+  input  logic [NumCores-1:0] debug_req_i,
 % endif
-  input  logic [${cfg['pkg_name']}::NumCores-1:0] meip_i,
-  input  logic [${cfg['pkg_name']}::NumCores-1:0] mtip_i,
-  input  logic [${cfg['pkg_name']}::NumCores-1:0] msip_i,
+
+  input  logic [NumCores-1:0] meip_i,
+  input  logic [NumCores-1:0] mtip_i,
+  input  logic [NumCores-1:0] msip_i,
 % if not cfg['tie_ports']:
-  input  logic [9:0]                             hart_base_id_i,
-  input  logic [${cfg['addr_width']-1}:0]                            cluster_base_addr_i,
+  input  logic [9:0]                           hart_base_id_i,
+  input  logic [AxiAddrWidth-1:0]              cluster_base_addr_i,
 % endif
-  output logic                                    cluster_probe_o,
-  input  ${cfg['pkg_name']}::spatz_axi_in_req_t   axi_in_req_i,
-  output ${cfg['pkg_name']}::spatz_axi_in_resp_t  axi_in_resp_o,
-  output ${cfg['pkg_name']}::spatz_axi_out_req_t  axi_out_req_o,
-  input  ${cfg['pkg_name']}::spatz_axi_out_resp_t axi_out_resp_i
+  output logic                                 cluster_probe_o,
+% if cfg['axi_isolate_enable']:
+  input  logic axi_isolate_i,
+  output logic axi_isolated_o,
+% endif
+% if cfg['axi_cdc_enable']:
+  // AXI Master port
+  output logic [AsyncAxiOutAwWidth-1:0] async_axi_out_aw_data_o,
+  output logic [LogDepth:0]             async_axi_out_aw_wptr_o,
+  input  logic [LogDepth:0]             async_axi_out_aw_rptr_i,
+  output logic [AsyncAxiOutWWidth-1:0]  async_axi_out_w_data_o,
+  output logic [LogDepth:0]             async_axi_out_w_wptr_o,
+  input  logic [LogDepth:0]             async_axi_out_w_rptr_i,
+  input  logic [AsyncAxiOutBWidth-1:0]  async_axi_out_b_data_i,
+  input  logic [LogDepth:0]             async_axi_out_b_wptr_i,
+  output logic [LogDepth:0]             async_axi_out_b_rptr_o,
+  output logic [AsyncAxiOutArWidth-1:0] async_axi_out_ar_data_o,
+  output logic [LogDepth:0]             async_axi_out_ar_wptr_o,
+  input  logic [LogDepth:0]             async_axi_out_ar_rptr_i,
+  input  logic [AsyncAxiOutRWidth-1:0]  async_axi_out_r_data_i,
+  input  logic [LogDepth:0]             async_axi_out_r_wptr_i,
+  output logic [LogDepth:0]             async_axi_out_r_rptr_o,
+
+  // AXI Slave port
+  input  logic [AsyncAxiInArWidth-1:0] async_axi_in_ar_data_i,
+  input  logic [LogDepth:0]            async_axi_in_ar_wptr_i,
+  output logic [LogDepth:0]            async_axi_in_ar_rptr_o,
+  input  logic [AsyncAxiInAwWidth-1:0] async_axi_in_aw_data_i,
+  input  logic [LogDepth:0]            async_axi_in_aw_wptr_i,
+  output logic [LogDepth:0]            async_axi_in_aw_rptr_o,
+  output logic [AsyncAxiInBWidth-1:0]  async_axi_in_b_data_o,
+  output logic [LogDepth:0]            async_axi_in_b_wptr_o,
+  input  logic [LogDepth:0]            async_axi_in_b_rptr_i,
+  output logic [AsyncAxiInRWidth-1:0]  async_axi_in_r_data_o,
+  output logic [LogDepth:0]            async_axi_in_r_wptr_o,
+  input  logic [LogDepth:0]            async_axi_in_r_rptr_i,
+  input  logic [AsyncAxiInWWidth-1:0]  async_axi_in_w_data_i,
+  input  logic [LogDepth:0]            async_axi_in_w_wptr_i,
+  output logic [LogDepth:0]            async_axi_in_w_rptr_o
+%else:
+  input  axi_in_req_t   axi_in_req_i,
+  output axi_in_resp_t  axi_in_resp_o,
+  output axi_out_req_t  axi_out_req_o,
+  input  axi_out_resp_t axi_out_resp_i
+% endif
 );
 
-  localparam int unsigned NumIntOutstandingLoads [${cfg['nr_cores']}] = '{${core_cfg('num_int_outstanding_loads')}};
-  localparam int unsigned NumIntOutstandingMem [${cfg['nr_cores']}] = '{${core_cfg('num_int_outstanding_mem')}};
-  localparam int unsigned NumSpatzOutstandingLoads [${cfg['nr_cores']}] = '{${core_cfg('num_spatz_outstanding_loads')}};
+  localparam int unsigned NumIntOutstandingLoads   [NumCores] = '{${core_cfg('num_int_outstanding_loads')}};
+  localparam int unsigned NumIntOutstandingMem     [NumCores] = '{${core_cfg('num_int_outstanding_mem')}};
+  localparam int unsigned NumSpatzOutstandingLoads [NumCores] = '{${core_cfg('num_spatz_outstanding_loads')}};
+
+  spatz_cluster_pkg::spatz_axi_iwc_out_req_t axi_from_cluster_iwc_req;
+  spatz_cluster_pkg::spatz_axi_iwc_out_resp_t axi_from_cluster_iwc_resp;
+
+% if cfg['axi_isolate_enable'] or cfg['axi_cdc_enable']:
+  axi_out_req_t  axi_from_cluster_req;
+  axi_out_resp_t axi_from_cluster_resp;
+% endif
+
+% if cfg['axi_isolate_enable']:
+  % if cfg['axi_cdc_enable']:
+  // From AXI Isolate to CDC
+  axi_out_req_t  axi_from_cluster_iso_req;
+  axi_out_resp_t axi_from_cluster_iso_resp;
+  % endif
+
+  axi_isolate #(
+    .NumPending           ( ${cfg['pkg_name']}::SpatzAxiMaxOutTrans ),
+    .TerminateTransaction ( 1              ),
+    .AtopSupport          ( 1              ),
+    .AxiAddrWidth         ( AxiAddrWidth   ),
+    .AxiDataWidth         ( AxiDataWidth   ),
+    .AxiIdWidth           ( AxiOutIdWidth  ),
+    .AxiUserWidth         ( AxiUserWidth   ),
+    .axi_req_t            ( axi_out_req_t  ),
+    .axi_resp_t           ( axi_out_resp_t )
+  ) i_axi_out_isolate     (
+    .clk_i                ( clk_i                 ),
+    .rst_ni               ( rst_ni                ),
+    .slv_req_i            ( axi_from_cluster_req  ),
+    .slv_resp_o           ( axi_from_cluster_resp ),
+% if cfg['axi_cdc_enable']:
+    .mst_req_o            ( axi_from_cluster_iso_req   ),
+    .mst_resp_i           ( axi_from_cluster_iso_resp  ),
+% else:
+    .mst_req_o            ( axi_out_req_o              ),
+    .mst_resp_i           ( axi_out_resp_i             ),
+% endif
+    .isolate_i            ( axi_isolate_i              ),
+    .isolated_o           ( axi_isolated_o             )
+  ) ;
+% endif
+
+% if cfg['axi_cdc_enable']:
+  // From CDC to Cluster
+  axi_in_req_t   axi_to_cluster_req;
+  axi_in_resp_t  axi_to_cluster_resp;
+
+  axi_cdc_dst #(
+    .LogDepth   ( LogDepth          ),
+    .aw_chan_t  ( axi_in_aw_chan_t  ),
+    .w_chan_t   ( axi_in_w_chan_t   ),
+    .b_chan_t   ( axi_in_b_chan_t   ),
+    .ar_chan_t  ( axi_in_ar_chan_t  ),
+    .r_chan_t   ( axi_in_r_chan_t   ),
+    .axi_req_t  ( axi_in_req_t      ),
+    .axi_resp_t ( axi_in_resp_t     )
+  ) i_spatz_cluster_cdc_dst (
+    // Asynchronous slave port
+    .async_data_slave_aw_data_i ( async_axi_in_aw_data_i ),
+    .async_data_slave_aw_wptr_i ( async_axi_in_aw_wptr_i ),
+    .async_data_slave_aw_rptr_o ( async_axi_in_aw_rptr_o ),
+    .async_data_slave_w_data_i  ( async_axi_in_w_data_i  ),
+    .async_data_slave_w_wptr_i  ( async_axi_in_w_wptr_i  ),
+    .async_data_slave_w_rptr_o  ( async_axi_in_w_rptr_o  ),
+    .async_data_slave_b_data_o  ( async_axi_in_b_data_o  ),
+    .async_data_slave_b_wptr_o  ( async_axi_in_b_wptr_o  ),
+    .async_data_slave_b_rptr_i  ( async_axi_in_b_rptr_i  ),
+    .async_data_slave_ar_data_i ( async_axi_in_ar_data_i ),
+    .async_data_slave_ar_wptr_i ( async_axi_in_ar_wptr_i ),
+    .async_data_slave_ar_rptr_o ( async_axi_in_ar_rptr_o ),
+    .async_data_slave_r_data_o  ( async_axi_in_r_data_o  ),
+    .async_data_slave_r_wptr_o  ( async_axi_in_r_wptr_o  ),
+    .async_data_slave_r_rptr_i  ( async_axi_in_r_rptr_i  ),
+    // Synchronous master port
+    .dst_clk_i                  ( clk_i                  ),
+    .dst_rst_ni                 ( rst_ni                 ),
+    .dst_req_o                  ( axi_to_cluster_req     ),
+    .dst_resp_i                 ( axi_to_cluster_resp    )
+  );
+
+  axi_cdc_src #(
+   .LogDepth   ( LogDepth          ),
+   .aw_chan_t  ( axi_out_aw_chan_t ),
+   .w_chan_t   ( axi_out_w_chan_t  ),
+   .b_chan_t   ( axi_out_b_chan_t  ),
+   .ar_chan_t  ( axi_out_ar_chan_t ),
+   .r_chan_t   ( axi_out_r_chan_t  ),
+   .axi_req_t  ( axi_out_req_t     ),
+   .axi_resp_t ( axi_out_resp_t    )
+  ) i_spatz_cluster_cdc_src (
+    // Asynchronous Master port
+    .async_data_master_aw_data_o( async_axi_out_aw_data_o ),
+    .async_data_master_aw_wptr_o( async_axi_out_aw_wptr_o ),
+    .async_data_master_aw_rptr_i( async_axi_out_aw_rptr_i ),
+    .async_data_master_w_data_o ( async_axi_out_w_data_o  ),
+    .async_data_master_w_wptr_o ( async_axi_out_w_wptr_o  ),
+    .async_data_master_w_rptr_i ( async_axi_out_w_rptr_i  ),
+    .async_data_master_b_data_i ( async_axi_out_b_data_i  ),
+    .async_data_master_b_wptr_i ( async_axi_out_b_wptr_i  ),
+    .async_data_master_b_rptr_o ( async_axi_out_b_rptr_o  ),
+    .async_data_master_ar_data_o( async_axi_out_ar_data_o ),
+    .async_data_master_ar_wptr_o( async_axi_out_ar_wptr_o ),
+    .async_data_master_ar_rptr_i( async_axi_out_ar_rptr_i ),
+    .async_data_master_r_data_i ( async_axi_out_r_data_i  ),
+    .async_data_master_r_wptr_i ( async_axi_out_r_wptr_i  ),
+    .async_data_master_r_rptr_o ( async_axi_out_r_rptr_o  ),
+    // Synchronous slave port
+    .src_clk_i                  ( clk_i                    ),
+    .src_rst_ni                 ( rst_ni                   ),
+% if cfg['axi_isolate_enable']:
+    .src_req_i                  ( axi_from_cluster_iso_req ),
+    .src_resp_o                 ( axi_from_cluster_iso_resp)
+% else:
+    .src_req_i                  ( axi_from_cluster_req     ),
+    .src_resp_o                 ( axi_from_cluster_resp    )
+% endif
+  );
+% endif
+
+  axi_iw_converter #(
+    .AxiSlvPortIdWidth ( spatz_cluster_pkg::IwcAxiIdOutWidth ),
+    .AxiMstPortIdWidth ( AxiOutIdWidth ),
+    .AxiSlvPortMaxUniqIds ( 2 ),
+    .AxiSlvPortMaxTxnsPerId (2),
+    .AxiSlvPortMaxTxns (${cfg['trans']}),
+    .AxiMstPortMaxUniqIds (2),
+    .AxiMstPortMaxTxnsPerId (${cfg['trans']}),
+    .AxiAddrWidth ( AxiAddrWidth ),
+    .AxiDataWidth ( AxiDataWidth ),
+    .AxiUserWidth ( AxiUserWidth ),
+    .slv_req_t  (spatz_cluster_pkg::spatz_axi_iwc_out_req_t),
+    .slv_resp_t (spatz_cluster_pkg::spatz_axi_iwc_out_resp_t),
+    .mst_req_t  ( axi_out_req_t),
+    .mst_resp_t ( axi_out_resp_t)
+  ) iw_converter(
+    .clk_i      ( clk_i  ),
+    .rst_ni     ( rst_ni ),
+    .slv_req_i  ( axi_from_cluster_iwc_req  ),
+    .slv_resp_o ( axi_from_cluster_iwc_resp ),
+% if cfg['axi_cdc_enable'] or cfg['axi_isolate_enable']:
+    .mst_req_o  ( axi_from_cluster_req  ),
+    .mst_resp_i ( axi_from_cluster_resp )
+% else:
+    .mst_req_o  ( axi_out_req_o  ),
+    .mst_resp_i ( axi_out_resp_i )
+% endif
+   );
 
   // Spatz cluster under test.
   spatz_cluster #(
-    .AxiAddrWidth (${cfg['addr_width']}),
-    .AxiDataWidth (${cfg['dma_data_width']}),
-    .AxiIdWidthIn (${cfg['pkg_name']}::AxiIdInWidth),
-    .AxiIdWidthOut (${cfg['pkg_name']}::AxiIdOutWidth),
-    .AxiUserWidth (${cfg['pkg_name']}::AxiUserWidth),
+    .AxiAddrWidth (AxiAddrWidth),
+    .AxiDataWidth (AxiDataWidth),
+    .AxiIdWidthIn (AxiInIdWidth),
+    .AxiIdWidthOut (spatz_cluster_pkg::IwcAxiIdOutWidth),
+    .AxiUserWidth (AxiUserWidth),
     .BootAddr (${to_sv_hex(cfg['boot_addr'], 32)}),
     .ClusterPeriphSize (${cfg['cluster_periph_size']}),
     .NrCores (${cfg['nr_cores']}),
@@ -217,10 +472,10 @@ module ${cfg['name']}_wrapper (
     .NumIntOutstandingLoads (NumIntOutstandingLoads),
     .NumIntOutstandingMem (NumIntOutstandingMem),
     .NumSpatzOutstandingLoads (NumSpatzOutstandingLoads),
-    .axi_in_req_t (${cfg['pkg_name']}::spatz_axi_in_req_t),
-    .axi_in_resp_t (${cfg['pkg_name']}::spatz_axi_in_resp_t),
-    .axi_out_req_t (${cfg['pkg_name']}::spatz_axi_out_req_t),
-    .axi_out_resp_t (${cfg['pkg_name']}::spatz_axi_out_resp_t),
+    .axi_in_req_t (axi_in_req_t),
+    .axi_in_resp_t (axi_in_resp_t),
+    .axi_out_req_t (spatz_cluster_pkg::spatz_axi_iwc_out_req_t),
+    .axi_out_resp_t (spatz_cluster_pkg::spatz_axi_iwc_out_resp_t),
     .Xdma (${core_cfg_flat('xdma')}),
     .DMAAxiReqFifoDepth (${cfg['dma_axi_req_fifo_depth']}),
     .DMAReqFifoDepth (${cfg['dma_req_fifo_depth']}),
@@ -252,9 +507,38 @@ module ${cfg['name']}_wrapper (
     .cluster_base_addr_i,
 % endif
     .cluster_probe_o,
+% if cfg['axi_cdc_enable']:
+    // AXI Slave Port
+    .axi_in_req_i   ( axi_to_cluster_req  ),
+    .axi_in_resp_o  ( axi_to_cluster_resp ),
+% else:
     .axi_in_req_i,
     .axi_in_resp_o,
-    .axi_out_req_o,
-    .axi_out_resp_i
+% endif
+    // AXI Master Port
+    .axi_out_req_o  ( axi_from_cluster_iwc_req ),
+    .axi_out_resp_i ( axi_from_cluster_iwc_resp )
   );
+
+  // Assertions
+
+  if (AxiAddrWidth != ${cfg['pkg_name']}::SpatzAxiAddrWidth)
+    $error("[spatz_cluster_wrapper] AXI Address Width does not match the configuration.");
+
+  if (AxiDataWidth != ${cfg['pkg_name']}::SpatzAxiDataWidth)
+    $error("[spatz_cluster_wrapper] AXI Data Width does not match the configuration.");
+
+  if (AxiUserWidth != ${cfg['pkg_name']}::SpatzAxiUserWidth)
+    $error("[spatz_cluster_wrapper] AXI User Width does not match the configuration.");
+
+  if (AxiInIdWidth != ${cfg['pkg_name']}::SpatzAxiIdInWidth)
+    $error("[spatz_cluster_wrapper] AXI Id Width (In) does not match the configuration.");
+
+  if (AxiOutIdWidth != ${cfg['pkg_name']}::SpatzAxiIdOutWidth)
+    $error("[spatz_cluster_wrapper] AXI Id Width (Out) does not match the configuration.");
+
+% if cfg['axi_cdc_enable']:
+  if (LogDepth != ${cfg['pkg_name']}::SpatzLogDepth)
+    $error("[spatz_cluster_wrapper] AXI Log Depth does not match the configuration.");
+% endif
 endmodule
