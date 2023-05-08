@@ -1,0 +1,19 @@
+// Copyright 2020 ETH Zurich and University of Bologna.
+// Solderpad Hardware License, Version 0.51, see LICENSE for details.
+// SPDX-License-Identifier: SHL-0.51
+
+// Parameters for FCONV2D
+// R: Matrix rows
+// C: Matrix columns
+// c_dim_core: number of columns per core
+// prec: data precision
+
+{
+    kernel: "FCONV2D"
+    R: 64,
+    C: 64,
+    CH: 1,
+    F: 7,
+    prec: 64,
+    expand: 0
+}

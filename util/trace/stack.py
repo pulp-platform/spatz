@@ -17,21 +17,21 @@ first_skip = 6
 
 # Parse
 for fn in files:
-    hartid = int(re.match(r'.*trace_hart_(\d+)\.txt', fn).groups()[0])
+    hartid = int(re.match(r".*trace_hart_(\d+)\.txt", fn).groups()[0])
     sps[hartid] = []
     i = 0
     first_skip_p = first_skip
     with open(fn) as f:
         pre_main = True
         for lino, line in enumerate(f.readlines()):
-            z = re.match(r'.*sp  <-- 0x([a-fA-F0-9]+)', line)
+            z = re.match(r".*sp  <-- 0x([a-fA-F0-9]+)", line)
             if z and first_skip_p != 0:
                 first_skip_p -= 1
             elif z:
                 sp = int(z.groups()[0], base=16)
                 sps[hartid].append(sp)
                 i += 1
-    print(f'hart {hartid} records: {len(sps[hartid])} i: {i}')
+    print(f"hart {hartid} records: {len(sps[hartid])} i: {i}")
 
 # for each hart, calculate sp range
 sp_ranges = []
@@ -52,4 +52,6 @@ def in_any_range(vals, lst):
 
 
 for i, spr in enumerate(sp_ranges):
-    print(f'hartid: {i} sp_min: {spr[0]:08x} sp_max: {spr[1]:08x} collides: {in_any_range(spr,sp_ranges).remove(i)}')
+    print(
+        f"hartid: {i} sp_min: {spr[0]:08x} sp_max: {spr[1]:08x} collides: {in_any_range(spr,sp_ranges).remove(i)}"
+    )

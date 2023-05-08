@@ -16,11 +16,11 @@
 
 // Author: Domenic Wüthrich, ETH Zurich
 
+#include <benchmark.h>
 #include <snrt.h>
 #include <stdio.h>
-#include <benchmark.h>
 
-#include "data/data_gemm.h"
+#include DATAHEADER
 #include "kernel/widening-fmatmul.c"
 
 char *a;
@@ -113,7 +113,8 @@ int main() {
 
   // Check and display results
   if (cid == 0) {
-    long unsigned int performance = 1000 * 2 * gemm_l.M * gemm_l.N * gemm_l.K / timer;
+    long unsigned int performance =
+        1000 * 2 * gemm_l.M * gemm_l.N * gemm_l.K / timer;
     long unsigned int utilization = performance / (2 * num_cores * 16);
 
     printf("\n----- (%dx%d) widening bp fmatmul -----\n", gemm_l.M, gemm_l.N);
@@ -121,7 +122,6 @@ int main() {
     printf("The performance is %ld OP/1000cycle (%ld%%o utilization).\n",
            performance, utilization);
   }
-
 
   // Wait for all cores to finish
   snrt_cluster_hw_barrier();

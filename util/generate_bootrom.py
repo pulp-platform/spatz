@@ -15,26 +15,21 @@ import sys
 
 from jsonref import JsonRef
 
-parser = argparse.ArgumentParser(
-    description='Convert binary file to verilog rom')
+parser = argparse.ArgumentParser(description="Convert binary file to verilog rom")
 parser.add_argument(
-    'filename',
-    metavar='filename.bin',
-    nargs=1,
-    help='filename of input binary')
+    "filename", metavar="filename.bin", nargs=1, help="filename of input binary"
+)
 parser.add_argument(
-    "--output",
-    nargs="?",
-    metavar='file',
-    help="Name of output file",
-    default=None)
+    "--output", nargs="?", metavar="file", help="Name of output file", default=None
+)
 parser.add_argument(
     "--clustercfg",
     "-c",
     metavar="file",
-    type=argparse.FileType('r'),
+    type=argparse.FileType("r"),
     required=True,
-    help="A cluster configuration file")
+    help="A cluster configuration file",
+)
 
 args = parser.parse_args()
 file = args.filename[0]
@@ -58,14 +53,14 @@ with args.clustercfg as file:
     except ValueError:
         raise SystemExit(sys.exc_info()[1])
 
-DataWidth = int(cfg['cluster']['dma_data_width'])
+DataWidth = int(cfg["cluster"]["dma_data_width"])
 DataOffset = int(log2(DataWidth / 8))
 if DataWidth < 32:
-    sys.exit('DataWidth must be larger than 32')
+    sys.exit("DataWidth must be larger than 32")
 if DataWidth % 32:
-    sys.exit('DataWidth must be multiple of 32')
+    sys.exit("DataWidth must be multiple of 32")
 
-AddrWidth = int(cfg['cluster']['addr_width'])
+AddrWidth = int(cfg["cluster"]["addr_width"])
 
 license = """\
 // Copyright 2023 ETH Zurich and University of Bologna.
@@ -122,9 +117,9 @@ $content
 
 
 def read_bin():
-    with open(filename + ".bin", 'rb') as f:
+    with open(filename + ".bin", "rb") as f:
         rom = bytes.hex(f.read())
-        rom = list(map(''.join, zip(rom[::2], rom[1::2])))
+        rom = list(map("".join, zip(rom[::2], rom[1::2])))
     # align to 64 bit
     align = (int((len(rom) + 7) / 8)) * 8
     for i in range(len(rom), align):
@@ -143,14 +138,23 @@ with open(output, "w") as f:
     for i in reversed(range(int(len(rom) / ByteWidth))):
         rom_str += "    {}'h".format(DataWidth)
         for b in reversed(range(int(ByteWidth / 4))):
-            rom_str += "".join(rom[i * ByteWidth + b * 4:i *
-                                   ByteWidth + b * 4 + 4][::-1]) + "_"
+            rom_str += (
+                "".join(rom[i * ByteWidth + b * 4 : i * ByteWidth + b * 4 + 4][::-1])
+                + "_"
+            )
             rom_str = rom_str[:-1]
         rom_str += ",\n"
     # remove the trailing comma
     rom_str = rom_str[:-2]
     f.write(license)
     s = Template(module)
-    f.write(s.substitute(filename=os.path.basename(filename), size=int(
-        len(rom) / ByteWidth), content=rom_str, DataWidth=DataWidth,
-                         DataOffset=DataOffset, AddrWidth=AddrWidth))
+    f.write(
+        s.substitute(
+            filename=os.path.basename(filename),
+            size=int(len(rom) / ByteWidth),
+            content=rom_str,
+            DataWidth=DataWidth,
+            DataOffset=DataOffset,
+            AddrWidth=AddrWidth,
+        )
+    )

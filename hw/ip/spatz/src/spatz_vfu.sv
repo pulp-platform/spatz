@@ -18,6 +18,7 @@ module spatz_vfu
   ) (
     input  logic             clk_i,
     input  logic             rst_ni,
+    input  logic [31:0]      hart_id_i,
     // Spatz req
     input  spatz_req_t       spatz_req_i,
     input  logic             spatz_req_valid_i,
@@ -965,31 +966,34 @@ module spatz_vfu
       assign int_fpu_in_ready = !fpu_in_valid_q || fpu_in_valid_q && fpu_in_ready_d;
 
       fpnew_top #(
-        .Features      (FPUFeatures      ),
-        .Implementation(FPUImplementation),
-        .TagType       (vfu_tag_t        )
+        .Features                   (FPUFeatures           ),
+        .Implementation             (FPUImplementation     ),
+        .TagType                    (vfu_tag_t             ),
+        .StochasticRndImplementation(fpnew_pkg::DEFAULT_RSR)
       ) i_fpu (
-        .clk_i         (clk_i                                           ),
-        .rst_ni        (rst_ni                                          ),
-        .flush_i       (1'b0                                            ),
-        .busy_o        (fpu_busy_d[fpu]                                 ),
-        .operands_i    ({fpu_operand3_q, fpu_operand2_q, fpu_operand1_q}),
+        .clk_i         (clk_i                                                  ),
+        .rst_ni        (rst_ni                                                 ),
+        .hart_id_i     ({hart_id_i[31-$clog2(N_FPU):0], fpu[$clog2(N_FPU)-1:0]}),
+        .flush_i       (1'b0                                                   ),
+        .busy_o        (fpu_busy_d[fpu]                                        ),
+        .operands_i    ({fpu_operand3_q, fpu_operand2_q, fpu_operand1_q}       ),
         // Only the FPU0 executes scalar instructions
-        .in_valid_i    (fpu_in_valid_q                                  ),
-        .in_ready_o    (fpu_in_ready_d                                  ),
-        .op_i          (fpu_op_q                                        ),
-        .src_fmt_i     (fpu_src_fmt_q                                   ),
-        .dst_fmt_i     (fpu_dst_fmt_q                                   ),
-        .int_fmt_i     (fpu_int_fmt_q                                   ),
-        .vectorial_op_i(fpu_vectorial_op_q                              ),
-        .op_mod_i      (fpu_op_mode_q                                   ),
-        .tag_i         (input_tag_q                                     ),
-        .rnd_mode_i    (rm_q                                            ),
-        .result_o      (fpu_result[fpu*ELEN +: ELEN]                    ),
-        .out_valid_o   (int_fpu_result_valid                            ),
-        .out_ready_i   (result_ready                                    ),
-        .status_o      (fpu_status_d[fpu]                               ),
-        .tag_o         (tag                                             )
+        .in_valid_i    (fpu_in_valid_q                                         ),
+        .in_ready_o    (fpu_in_ready_d                                         ),
+        .op_i          (fpu_op_q                                               ),
+        .src_fmt_i     (fpu_src_fmt_q                                          ),
+        .dst_fmt_i     (fpu_dst_fmt_q                                          ),
+        .int_fmt_i     (fpu_int_fmt_q                                          ),
+        .vectorial_op_i(fpu_vectorial_op_q                                     ),
+        .op_mod_i      (fpu_op_mode_q                                          ),
+        .tag_i         (input_tag_q                                            ),
+        .simd_mask_i   ('1                                                     ),
+        .rnd_mode_i    (rm_q                                                   ),
+        .result_o      (fpu_result[fpu*ELEN +: ELEN]                           ),
+        .out_valid_o   (int_fpu_result_valid                                   ),
+        .out_ready_i   (result_ready                                           ),
+        .status_o      (fpu_status_d[fpu]                                      ),
+        .tag_o         (tag                                                    )
       );
 
       if (fpu == 0) begin: gen_fpu_tag

@@ -22,6 +22,7 @@ BENDER ?= ${BENDER_INSTALL_DIR}/bender
 DASM   ?= riscv -riscv64-gcc-8.5.0 spike-dasm
 VLT    ?= ${VERILATOR_INSTALL_DIR}/bin/verilator
 CMAKE  ?= cmake-3.18.1
+PYTHON ?= python3.6
 
 MATCH_END := '/+incdir+/ s/$$/\/*\/*/'
 MATCH_BGN := 's/+incdir+//g'
@@ -73,12 +74,7 @@ else
     CLANG_LDFLAGS  := ""
 endif
 
-# Build verilator with LLVM and add llvm c/ld flags
-CC         = $(CLANG_CC)
-CXX        = $(CLANG_CXX)
-CFLAGS     = $(CLANG_CXXFLAGS)
-CXXFLAGS   = $(CLANG_CXXFLAGS)
-LDFLAGS    = $(CLANG_LDFLAGS)
+# Verilator flags
 VLT_FLAGS += --compiler clang
 VLT_FLAGS += -CFLAGS ${CLANG_CXXFLAGS}
 VLT_FLAGS += -LDFLAGS ${CLANG_LDFLAGS}
@@ -103,8 +99,14 @@ work/${FESVR_VERSION}_unzip:
 	tar xfm $(dir $@)${FESVR_VERSION} --strip-components=1 -C $(dir $@)
 	touch $@
 
-work/lib/libfesvr.a: work/${FESVR_VERSION}_unzip
+work/lib/libfesvr_vsim.a: work/${FESVR_VERSION}_unzip
 	cd $(dir $<)/ && CC=${VSIM_HOME}/gcc-7.4.0-linux_x86_64/bin/gcc CXX=${VSIM_HOME}/gcc-7.4.0-linux_x86_64/bin/g++ ./configure --prefix `pwd`
+	make -C $(dir $<) install-config-hdrs install-hdrs libfesvr.a
+	mkdir -p $(dir $@)
+	cp $(dir $<)libfesvr.a $@
+
+work/lib/libfesvr_vcs.a: work/${FESVR_VERSION}_unzip
+	cd $(dir $<)/ && ./configure --prefix `pwd`
 	make -C $(dir $<) install-config-hdrs install-hdrs libfesvr.a
 	mkdir -p $(dir $@)
 	cp $(dir $<)libfesvr.a $@
@@ -115,7 +117,6 @@ $(VLT_FESVR)/${FESVR_VERSION}_unzip:
 	mkdir -p $(dir $@)
 	wget -O $(dir $@)/${FESVR_VERSION} https://github.com/riscv/riscv-isa-sim/tarball/${FESVR_VERSION}
 	tar xfm $(dir $@)${FESVR_VERSION} --strip-components=1 -C $(dir $@)
-	patch -d $(dir $@) -p1 < ${ROOT}/util/patches/riscv-isa-sim/fesrv.patch
 	touch $@
 
 $(VLT_BUILDDIR)/lib/libfesvr.a: $(VLT_FESVR)/${FESVR_VERSION}_unzip
@@ -148,13 +149,13 @@ define QUESTASIM
 	@echo "#!/bin/bash" > $@
 	@echo 'echo `realpath $$1` > logs/.rtlbinary' >> $@
 	@echo '${VSIM} +permissive ${VSIM_FLAGS} -work ${MKFILE_DIR}/${VSIM_BUILDDIR} -c \
-				-ldflags "-Wl,-rpath,${FESVR}/lib -L${FESVR}/lib -lfesvr -lutil" \
+				-ldflags "-Wl,-rpath,${FESVR}/lib -L${FESVR}/lib -lfesvr_vsim -lutil" \
 				$1 +permissive-off ++$$1' >> $@
 	@chmod +x $@
 	@echo "#!/bin/bash" > $@.gui
 	@echo 'echo `realpath $$1` > logs/.rtlbinary' >> $@
 	@echo '${VSIM} +permissive ${VSIM_FLAGS} -work ${MKFILE_DIR}/${VSIM_BUILDDIR} \
-				-ldflags "-Wl,-rpath,${FESVR}/lib -L${FESVR}/lib -lfesvr -lutil" \
+				-ldflags "-Wl,-rpath,${FESVR}/lib -L${FESVR}/lib -lfesvr_vsim -lutil" \
 				$1 +permissive-off ++$$1' >> $@.gui
 	@chmod +x $@.gui
 endef

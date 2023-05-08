@@ -39,7 +39,7 @@ macro(add_snitch_executable name)
         COMMAND ${CMAKE_OBJDUMP} -dhS $<TARGET_FILE:${name}> > $<TARGET_FILE:${name}>.s)
     # Run target for RTL simulator
     if (SNITCH_SIMULATOR AND SNITCH_RUNTIME STREQUAL "snRuntime-cluster")
-        add_custom_target( run-rtl-${name}
+        add_custom_target(run-rtl-${name}
             COMMAND ${SNITCH_SIMULATOR} $<TARGET_FILE:${name}>
             COMMAND for f in logs/trace_hart_*.dasm\; do ${SPIKE_DASM} < $$f | ${PYTHON} ${SNRUNTIME_SRC_DIR}/../../util/gen_trace.py > $$\(echo $$f | sed 's/\\.dasm/\\.txt/'\)\; done
             DEPENDS $<TARGET_FILE:${name}>)
@@ -57,6 +57,8 @@ macro(add_snitch_raw_test_rtl test_name target_name)
   set_property(TEST ${SNITCH_TEST_PREFIX}rtl-${test_name}
     PROPERTY LABELS ${SNITCH_TEST_PREFIX})
   set_tests_properties(${SNITCH_TEST_PREFIX}rtl-${test_name} PROPERTIES TIMEOUT ${SIMULATOR_TIMEOUT})
+  set_tests_properties(${SNITCH_TEST_PREFIX}rtl-${test_name} PROPERTIES PASS_REGULAR_EXPRESSION "SUCCESS;PASS")
+  set_tests_properties(${SNITCH_TEST_PREFIX}rtl-${test_name} PROPERTIES FAIL_REGULAR_EXPRESSION "FAILURE")
 endmacro()
 
 macro(add_snitch_test_rtl name)

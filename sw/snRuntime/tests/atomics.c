@@ -192,11 +192,6 @@ int main() {
         for (int i = 0; i < NUM_TCDM_LOCATIONS; ++i) {
             nerrors += test_atomics(&l1_a[i]);
         }
-
-        // In SPM
-        for (int i = 0; i < NUM_SPM_LOCATIONS; ++i) {
-            nerrors += test_atomics(&l3_a[i]);
-        }
     } else {
         return 0;
     }

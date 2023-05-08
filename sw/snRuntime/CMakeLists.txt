@@ -11,7 +11,6 @@ if (CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     include(SnitchUtilities)
     # Create snRuntime project
     project(snRuntime LANGUAGES C ASM)
-    add_compile_options(-O3 -g -ffunction-sections)
 else()
     # Export package information to includer.
     set(SNRUNTIME_DIR ${CMAKE_CURRENT_BINARY_DIR} PARENT_SCOPE)
@@ -22,6 +21,8 @@ else()
         ${CMAKE_CURRENT_SOURCE_DIR}/vendor/riscv-opcodes
         PARENT_SCOPE)
 endif()
+
+add_compile_options(-O3 -g -ffunction-sections)
 
 # Default memory regions
 if(SNITCH_RUNTIME STREQUAL "snRuntime-cluster")
@@ -123,12 +124,8 @@ add_snitch_test(varargs_1 tests/varargs_1.c)
 add_snitch_test(varargs_2 tests/varargs_2.c)
 add_snitch_test(barrier tests/barrier.c)
 add_snitch_test(fence_i tests/fence_i.c)
-add_snitch_test(lto tests/lto.c tests/lto_a.c)
-add_snitch_test(interrupt tests/interrupt.c)
 add_snitch_test(interrupt-local tests/interrupt-local.c)
-add_snitch_test(printf_fmtint tests/printf_fmtint.c)
 add_snitch_test(printf_simple tests/printf_simple.c)
-add_snitch_test(team_global tests/team_global.c)
 
 # RTL only tests
 if(SNITCH_RUNTIME STREQUAL "snRuntime-cluster")

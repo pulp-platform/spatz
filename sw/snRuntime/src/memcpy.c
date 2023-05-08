@@ -10,3 +10,14 @@
 void *snrt_memcpy(void *dst, const void *src, size_t n) {
     return memcpy(dst, src, n);
 }
+
+void* memcpy(void *dest, const void *src, size_t n) {
+  const char *csrc = (const char *)src;
+  char *cdest = (char *)dest;
+
+  // Copy contents of src[] to dest[]
+  for (size_t i = 0; i < n; ++i)
+    cdest[i] = csrc[i];
+
+  return dest;
+}

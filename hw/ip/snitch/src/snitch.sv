@@ -275,10 +275,10 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
   logic [31:0] dscratch_d, dscratch_q;
   logic debug_d, debug_q;
 
-  `FFNR(scratch_q, scratch_d, clk_i)
-  `FFNR(tvec_q, tvec_d, clk_i)
-  `FFNR(epc_q, epc_d, clk_i)
-  `FFNR(satp_q, satp_d, clk_i)
+  `FFAR(scratch_q, scratch_d, '0, clk_i, rst_i)
+  `FFAR(tvec_q, tvec_d, '0, clk_i, rst_i)
+  `FFAR(epc_q, epc_d, '0, clk_i, rst_i)
+  `FFAR(satp_q, satp_d, '0, clk_i, rst_i)
   `FFAR(cause_q, cause_d, '0, clk_i, rst_i)
   `FFAR(cause_irq_q, cause_irq_d, '0, clk_i, rst_i)
   `FFAR(priv_lvl_q, priv_lvl_d, snitch_pkg::PrivLvlM, clk_i, rst_i)
@@ -297,8 +297,8 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
   `FFAR(scip_q, scip_d, '0, clk_i, rst_i)
 
   `FFAR(dcsr_q, dcsr_d, '0, clk_i, rst_i)
-  `FFNR(dpc_q, dpc_d, clk_i)
-  `FFNR(dscratch_q, dscratch_d, clk_i)
+  `FFAR(dpc_q, dpc_d, '0, clk_i, rst_i)
+  `FFAR(dscratch_q, dscratch_d, '0, clk_i, rst_i)
   `FFAR(debug_q, debug_d, '0, clk_i, rst_i) // Debug mode
 
   typedef struct packed {
@@ -3171,7 +3171,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           (~{(PPNSize){trans_active}} & {mseg_q, alu_result[31:PAGE_SHIFT]});
   assign ls_paddr[PAGE_SHIFT-1:0] = alu_result[PAGE_SHIFT-1:0];
 
-  assign lsu_qvalid = lsu_tlb_qvalid & trans_ready;
+  assign lsu_qvalid = lsu_tlb_qvalid & trans_ready & ~acc_mem_stall;
   assign lsu_tlb_qready = lsu_qready & trans_ready;
 
   // --------------------

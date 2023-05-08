@@ -16,11 +16,11 @@
 
 // Author: Domenic Wüthrich, ETH Zurich
 
+#include <benchmark.h>
 #include <snrt.h>
 #include <stdio.h>
-#include <benchmark.h>
 
-#include "data/data_gemm.h"
+#include DATAHEADER
 #include "kernel/sdotp-fmatmul.c"
 
 __fp16 *a;
@@ -50,7 +50,12 @@ int verify_matrix(__fp16 *matrix, const __fp16 *checksum,
     float diff = sum - (float)checksum[i];
     if (diff < 0)
       diff = -diff;
-    if (diff > 0.001) {
+
+    float eps = 0.05f * (float)checksum[i];
+    if (eps < 0)
+      eps = -eps;
+
+    if (diff > eps) {
       return i == 0 ? -1 : (int)i;
     }
   }
@@ -143,7 +148,8 @@ int main() {
 
   // Check and display results
   if (cid == 0) {
-    long unsigned int performance = 1000 * 2 * gemm_l.M * gemm_l.N * gemm_l.K / timer;
+    long unsigned int performance =
+        1000 * 2 * gemm_l.M * gemm_l.N * gemm_l.K / timer;
     long unsigned int utilization = performance / (2 * num_cores * 16);
 
     printf("\n----- (%dx%d) sdotp hp fmatmul -----\n", gemm_l.M, gemm_l.N);

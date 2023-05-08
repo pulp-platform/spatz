@@ -24,7 +24,7 @@ try:
     import progressbar
 except ImportError as e:
     # Do not use progressbar
-    print(f'{e} --> No progress bar will be shown.', file=sys.stderr)
+    print(f"{e} --> No progress bar will be shown.", file=sys.stderr)
     has_progressbar = False
 
 
@@ -47,23 +47,23 @@ except ImportError as e:
 # 4 -> instruction
 # 5 -> args (RTL) / empty (banshee)
 # 6 -> comment (RTL) / instruction arguments (banshee)
-RTL_REGEX = r' *(\d+) +(\d+) +([3M1S0U]?) *(0x[0-9a-f]+) ([.\w]+) +(.+)#; (.*)'
-BANSHEE_REGEX = r' *(\d+) (\d+) (\d+) ([0-9a-f]+) *.+ +.+# ([\w\.]*)( +)(.*)'
+RTL_REGEX = r" *(\d+) +(\d+) +([3M1S0U]?) *(0x[0-9a-f]+) ([.\w]+) +(.+)#; (.*)"
+BANSHEE_REGEX = r" *(\d+) (\d+) (\d+) ([0-9a-f]+) *.+ +.+# ([\w\.]*)( +)(.*)"
 
 # regex matches a line of instruction retired by the accelerator
 # 0 -> time
 # 1 -> cycle
 # 2 -> privilege level
 # 3 -> comment
-ACC_LINE_REGEX = r' *(\d+) +(\d+) +([3M1S0U]?) *#; (.*)'
+ACC_LINE_REGEX = r" *(\d+) +(\d+) +([3M1S0U]?) *#; (.*)"
 
 buf = []
 
 
 @lru_cache(maxsize=1024)
 def addr2line_cache(addr):
-    cmd = f'{addr2line} -e {elf} -f -a -i {addr:x}'
-    return os.popen(cmd).read().split('\n')
+    cmd = f"{addr2line} -e {elf} -f -a -i {addr:x}"
+    return os.popen(cmd).read().split("\n")
 
 
 def flush(buf, hartid):
@@ -76,10 +76,13 @@ def flush(buf, hartid):
         for addr in pcs:
             a2ls += addr2line_cache(int(addr, base=16))[:-1]
     else:
-        a2ls = os.popen(
-            f'{addr2line} -e {elf} -f -a -i {" ".join(pcs)}').read().split('\n')[:-1]
+        a2ls = (
+            os.popen(f'{addr2line} -e {elf} -f -a -i {" ".join(pcs)}')
+            .read()
+            .split("\n")[:-1]
+        )
 
-    for i in range(len(buf)-1):
+    for i in range(len(buf) - 1):
         (time, cyc, priv, pc, instr, args, cmt) = buf.pop(0)
 
         if use_time:
@@ -98,9 +101,9 @@ def flush(buf, hartid):
         [pc, func, file] = a2ls.pop(0), a2ls.pop(0), a2ls.pop(0)
 
         # check for more output of a2l
-        inlined = ''
-        while not a2ls[0].startswith('0x'):
-            inlined += '(inlined by) ' + a2ls.pop(0)
+        inlined = ""
+        while not a2ls[0].startswith("0x"):
+            inlined += "(inlined by) " + a2ls.pop(0)
         # print(f'pc "{pc}", func "{func}", file "{file}"')
 
         # assemble values for json
@@ -109,7 +112,7 @@ def flush(buf, hartid):
         name = instr
         # The event categories. This is a comma separated list of categories for the event.
         # The categories can be used to hide events in the Trace Viewer UI.
-        cat = 'instr'
+        cat = "instr"
         # The tracing clock timestamp of the event. The timestamps are provided at microsecond granularity.
         ts = time
         # There is an extra parameter dur to specify the tracing clock duration of complete events in microseconds.
@@ -121,7 +124,7 @@ def flush(buf, hartid):
             # In Banshee, each instruction takes one cycle
             duration = 1
 
-        pid = elf+':hartid'+str(hartid)
+        pid = elf + ":hartid" + str(hartid)
         funcname = func
 
         # args
@@ -132,13 +135,16 @@ def flush(buf, hartid):
         arg_coords = file
         arg_inlined = inlined
 
-        output_file.write((
-            f'{{"name": "{name}", "cat": "{cat}", "ph": "X", '
-            f'"ts": {ts}, "dur": {duration}, "pid": "{pid}", '
-            f'"tid": "{funcname}", "args": {{"pc": "{arg_pc}", '
-            f'"instr": "{arg_instr} {arg_args}", "time": "{arg_cycles}", '
-            f'"Origin": "{arg_coords}", "inline": "{arg_inlined}"'
-            f'}}}},\n'))
+        output_file.write(
+            (
+                f'{{"name": "{name}", "cat": "{cat}", "ph": "X", '
+                f'"ts": {ts}, "dur": {duration}, "pid": "{pid}", '
+                f'"tid": "{funcname}", "args": {{"pc": "{arg_pc}", '
+                f'"instr": "{arg_instr} {arg_args}", "time": "{arg_cycles}", '
+                f'"Origin": "{arg_coords}", "inline": "{arg_inlined}"'
+                f"}}}},\n"
+            )
+        )
 
 
 def parse_line(line, hartid):
@@ -147,7 +153,8 @@ def parse_line(line, hartid):
     match = re_line.match(line)
     if match:
         (time, cyc, priv, pc, instr, args, cmt) = tuple(
-            [match.group(i+1).strip() for i in range(re_line.groups)])
+            [match.group(i + 1).strip() for i in range(re_line.groups)]
+        )
         buf.append((time, cyc, priv, pc, instr, args, cmt))
         last_time, last_cyc = time, cyc
 
@@ -157,62 +164,57 @@ def parse_line(line, hartid):
 
 
 # Argument parsing
-parser = argparse.ArgumentParser('tracevis', allow_abbrev=True)
+parser = argparse.ArgumentParser("tracevis", allow_abbrev=True)
 parser.add_argument(
-    'elf',
-    metavar='<elf>',
-    help='The binary executed to generate the traces',
-
-
+    "elf",
+    metavar="<elf>",
+    help="The binary executed to generate the traces",
 )
 parser.add_argument(
-    'traces',
-    metavar='<trace>',
-    nargs='+',
-    help='Snitch traces to visualize')
+    "traces", metavar="<trace>", nargs="+", help="Snitch traces to visualize"
+)
 parser.add_argument(
-    '-o',
-    '--output',
-    metavar='<json>',
-    nargs='?',
-    default='chrome.json',
-    help='Output JSON file')
+    "-o",
+    "--output",
+    metavar="<json>",
+    nargs="?",
+    default="chrome.json",
+    help="Output JSON file",
+)
 parser.add_argument(
-    '--addr2line',
-    metavar='<path>',
-    nargs='?',
-    default='addr2line',
-    help='`addr2line` binary to use for parsing')
+    "--addr2line",
+    metavar="<path>",
+    nargs="?",
+    default="addr2line",
+    help="`addr2line` binary to use for parsing",
+)
 parser.add_argument(
-    '-t',
-    '--time',
-    action='store_true',
-    help='Use the traces time instead of cycles')
+    "-t", "--time", action="store_true", help="Use the traces time instead of cycles"
+)
+parser.add_argument("-b", "--banshee", action="store_true", help="Parse Banshee traces")
 parser.add_argument(
-    '-b',
-    '--banshee',
-    action='store_true',
-    help='Parse Banshee traces')
+    "--no-cache",
+    action="store_true",
+    help="Disable addr2line caching (slow but might give better traces in some cases)",
+)
 parser.add_argument(
-    '--no-cache',
-    action='store_true',
-    help='Disable addr2line caching (slow but might give better traces in some cases)')
-parser.add_argument(
-    '-s',
-    '--start',
-    metavar='<line>',
-    nargs='?',
+    "-s",
+    "--start",
+    metavar="<line>",
+    nargs="?",
     type=int,
     default=0,
-    help='First line to parse')
+    help="First line to parse",
+)
 parser.add_argument(
-    '-e',
-    '--end',
-    metavar='<line>',
-    nargs='?',
+    "-e",
+    "--end",
+    metavar="<line>",
+    nargs="?",
     type=int,
     default=-1,
-    help='Last line to parse')
+    help="Last line to parse",
+)
 
 args = parser.parse_args()
 
@@ -224,11 +226,11 @@ banshee = args.banshee
 addr2line = args.addr2line
 cache = not args.no_cache
 
-print('elf:', elf, file=sys.stderr)
-print('traces:', traces, file=sys.stderr)
-print('output:', output, file=sys.stderr)
-print('addr2line:', addr2line, file=sys.stderr)
-print('cache:', cache, file=sys.stderr)
+print("elf:", elf, file=sys.stderr)
+print("traces:", traces, file=sys.stderr)
+print("output:", output, file=sys.stderr)
+print("addr2line:", addr2line, file=sys.stderr)
+print("cache:", cache, file=sys.stderr)
 
 # Compile regex
 if banshee:
@@ -244,38 +246,40 @@ def offload_lookahead(lines):
     # accelerator complete
     lah = {}
     searches = []
-    re_load = re.compile(r'([a-z]*[0-9]*|zero) *<~~ Word')
+    re_load = re.compile(r"([a-z]*[0-9]*|zero) *<~~ Word")
 
     for line in lines:
         match = re_line.match(line)
         if match:
             (time, cyc, priv, pc, instr, args, cmt) = tuple(
-                [match.group(i+1).strip() for i in range(re_line.groups)])
+                [match.group(i + 1).strip() for i in range(re_line.groups)]
+            )
             time = int(time) if use_time else int(cyc)
 
             # register searchers
-            if '<~~ Word' in cmt:
+            if "<~~ Word" in cmt:
                 if re_load.search(cmt):
                     dst_reg = re_load.search(cmt).group(1)
-                    pat = f'(lsu) {dst_reg}  <--'
-                    searches.append({'pat': pat, 'start': time})
+                    pat = f"(lsu) {dst_reg}  <--"
+                    searches.append({"pat": pat, "start": time})
                 else:
-                    print(f'unsupported load lah: {cmt}')
+                    print(f"unsupported load lah: {cmt}")
 
         # If this line is an acc-only line, get the data
         if not match:
             match = re_acc_line.match(line)
             if match:
                 (time, cyc, priv, cmt) = tuple(
-                    [match.group(i+1).strip() for i in range(re_acc_line.groups)])
+                    [match.group(i + 1).strip() for i in range(re_acc_line.groups)]
+                )
 
         time = int(time) if use_time else int(cyc)
 
         # Check for any open searches
         removes = []
         for s in searches:
-            if s['pat'] in cmt:
-                lah[s['start']] = time
+            if s["pat"] in cmt:
+                lah[s["start"]] = time
                 removes.append(s)
         [searches.remove(r) for r in removes]
 
@@ -286,38 +290,36 @@ def offload_lookahead(lines):
 
 lah = {}
 
-with open(output, 'w') as output_file:
+with open(output, "w") as output_file:
     # JSON header
     output_file.write('{"traceEvents": [\n')
 
     for filename in traces:
         hartid = 0
-        parsed_nums = re.findall(r'\d+', filename)
-        hartid = int(parsed_nums[-1]) if len(parsed_nums) else hartid+1
+        parsed_nums = re.findall(r"\d+", filename)
+        hartid = int(parsed_nums[-1]) if len(parsed_nums) else hartid + 1
         fails = lines = 0
         last_time = last_cyc = 0
 
-        print(
-            f'parsing hartid {hartid} with trace {filename}', file=sys.stderr)
+        print(f"parsing hartid {hartid} with trace {filename}", file=sys.stderr)
         tot_lines = len(open(filename).readlines())
         with open(filename) as f:
-            all_lines = f.readlines()[args.start:args.end]
+            all_lines = f.readlines()[args.start : args.end]
             # offload lookahead
             if not banshee:
                 lah = offload_lookahead(all_lines)
             if has_progressbar:
                 for lino, line in progressbar.progressbar(
-                        enumerate(all_lines),
-                        max_value=tot_lines):
+                    enumerate(all_lines), max_value=tot_lines
+                ):
                     fails += parse_line(line, hartid)
                     lines += 1
             else:
-                for lino, line in enumerate(
-                        all_lines):
+                for lino, line in enumerate(all_lines):
                     fails += parse_line(line, hartid)
                     lines += 1
             flush(buf, hartid)
-            print(f' parsed {lines-fails} of {lines} lines', file=sys.stderr)
+            print(f" parsed {lines-fails} of {lines} lines", file=sys.stderr)
 
     # JSON footer
-    output_file.write(r'{}]}''\n')
+    output_file.write(r"{}]}" "\n")

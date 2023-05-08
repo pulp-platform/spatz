@@ -45,7 +45,7 @@ int main() {
   if (vector_size != SIZE)
     return SIZE - vector_size;
 
-  for (int i = 0; i < REPEAT/4; i++) {
+  for (int i = 0; i < REPEAT / 4; i++) {
     asm volatile("vle32.v v0,  (%[vector])" ::[vector] "r"(vector));
     asm volatile("vle32.v v8,  (%[vector])" ::[vector] "r"(vector));
     asm volatile("vle32.v v16, (%[vector])" ::[vector] "r"(vector));

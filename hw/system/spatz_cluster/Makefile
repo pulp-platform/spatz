@@ -49,12 +49,12 @@ test/bootrom.elf test/bootrom.dump test/bootrom.bin: src/generated/spatz_cluster
 .PHONY: bootrom
 bootrom: $(CURDIR)/src/generated/bootrom.sv
 $(CURDIR)/src/generated/bootrom.sv: test/bootrom.bin
-	$(SPATZ_DIR)/util/generate_bootrom.py test/bootrom.bin -c cfg/${SPATZ_CLUSTER_CFG} --output src/generated/bootrom.sv
+	${PYTHON} $(SPATZ_DIR)/util/generate_bootrom.py test/bootrom.bin -c cfg/${SPATZ_CLUSTER_CFG} --output src/generated/bootrom.sv
 
 .PHONY: generate
 generate: src/generated/spatz_cluster_wrapper.sv
 src/generated/spatz_cluster_wrapper.sv: cfg/${SPATZ_CLUSTER_CFG} $(find src/*tpl) $(find test/*tpl)
-	${SPATZ_DIR}/util/clustergen.py  -c cfg/${SPATZ_CLUSTER_CFG} -o src/
+	${PYTHON} ${SPATZ_DIR}/util/clustergen.py -c cfg/${SPATZ_CLUSTER_CFG} -o src/
 
 #############
 # Verilator #
@@ -84,7 +84,7 @@ ${VSIM_BUILDDIR}/compile.vsim.tcl: test/bootrom.bin $(VSIM_SOURCES) ${TB_SRCS} $
 	echo '${VLOG} -work $(dir $@) test/uartdpi/uartdpi.c -ccflags "-Itest/uartdpi"' >> $@
 	echo 'return 0' >> $@
 
-bin/spatz_cluster.vsim: ${VSIM_BUILDDIR}/compile.vsim.tcl work/lib/libfesvr.a
+bin/spatz_cluster.vsim: ${VSIM_BUILDDIR}/compile.vsim.tcl work/lib/libfesvr_vsim.a
 	mkdir -p bin/logs
 	$(call QUESTASIM,tb_bin)
 
@@ -96,11 +96,11 @@ clean.vsim:
 #######
 # @IIS: vcs-2020.12 make bin/spatz_cluster.vcs
 ## Build compilation script and compile all sources for VCS simulation
-bin/spatz_cluster.vcs: test/bootrom.bin work-vcs/compile.sh work/lib/libfesvr.a ${TB_DIR}/common_lib.cc test/bootdata.cc test/bootrom.bin test/uartdpi/uartdpi.c
+bin/spatz_cluster.vcs: test/bootrom.bin work-vcs/compile.sh work/lib/libfesvr_vcs.a ${TB_DIR}/common_lib.cc test/bootdata.cc test/bootrom.bin test/uartdpi/uartdpi.c
 	mkdir -p bin
-	vcs -Mlib=work-vcs -Mdir=work-vcs -debug_access+all -fgp -kdb +vcs+fsdbon -o bin/spatz_cluster.vcs -cc $(CC) -cpp $(CXX) \
+	vcs -Mlib=work-vcs -Mdir=work-vcs -debug_access+all -fgp -kdb +vcs+fsdbon -o bin/spatz_cluster.vcs -j4 -cc $(CC) -cpp $(CXX) \
 		-assert disable_cover -override_timescale=1ns/1ps -full64 tb_bin ${TB_DIR}/rtl_lib.cc ${TB_DIR}/common_lib.cc test/bootdata.cc test/uartdpi/uartdpi.c \
-		-CFLAGS "-I${MKFILE_DIR} -I${MKFILE_DIR}/test -I${FESVR}/include -I${TB_DIR} -Itest/uartdpi" -LDFLAGS "-L${FESVR}/lib" -lfesvr -lutil
+		-CFLAGS "-I${MKFILE_DIR} -I${MKFILE_DIR}/test -I${FESVR}/include -I${TB_DIR} -Itest/uartdpi" -LDFLAGS "-L${FESVR}/lib" -lfesvr_vcs -lutil
 
 ## Clean all build directories and temporary files for VCS simulation
 clean.vcs:
@@ -127,13 +127,13 @@ lint/tmp/files: ${BENDER}
 ## Build SW into sw/build with the LLVM toolchain
 sw: clean.sw
 	mkdir -p sw/build
-	cd sw/build && ${CMAKE} -DCMAKE_TOOLCHAIN_FILE=toolchain-llvm -DLLVM_PATH=${LLVM_INSTALL_DIR} -DGCC_PATH=${GCC_INSTALL_DIR} .. && make
+	cd sw/build && ${CMAKE} -DLLVM_PATH=${LLVM_INSTALL_DIR} -DGCC_PATH=${GCC_INSTALL_DIR} -DPYTHON=${PYTHON} .. && make
 
 # VSIM
 ## Build SW into sw/build with the LLVM toolchain (including tests) for Questasim simulator
 sw.vsim: clean.sw bin/spatz_cluster.vsim
 	mkdir -p sw/build
-	cd sw/build && ${CMAKE} -DCMAKE_TOOLCHAIN_FILE=toolchain-llvm -DLLVM_PATH=${LLVM_INSTALL_DIR} -DGCC_PATH=${GCC_INSTALL_DIR} -DSNITCH_SIMULATOR=../../../../../hw/system/spatz_cluster/bin/spatz_cluster.vsim -DBUILD_TESTS=ON .. && make
+	cd sw/build && ${CMAKE} -DLLVM_PATH=${LLVM_INSTALL_DIR} -DGCC_PATH=${GCC_INSTALL_DIR} -DPYTHON=${PYTHON} -DSNITCH_SIMULATOR=../../../../../hw/system/spatz_cluster/bin/spatz_cluster.vsim -DBUILD_TESTS=ON .. && make
 
 ## Build SW and run all tests with Questasim simulator
 sw.test.vsim: sw.vsim
@@ -143,7 +143,7 @@ sw.test.vsim: sw.vsim
 ## Build SW into sw/build with the LLVM toolchain (including tests) for VCS simulator
 sw.vcs: clean.sw bin/spatz_cluster.vcs
 	mkdir -p sw/build
-	cd sw/build && ${CMAKE} -DCMAKE_TOOLCHAIN_FILE=toolchain-llvm -DLLVM_PATH=${LLVM_INSTALL_DIR} -DGCC_PATH=${GCC_INSTALL_DIR} -DSNITCH_SIMULATOR=../../../../../hw/system/spatz_cluster/bin/spatz_cluster.vcs -DBUILD_TESTS=ON .. && make
+	cd sw/build && ${CMAKE} -DLLVM_PATH=${LLVM_INSTALL_DIR} -DGCC_PATH=${GCC_INSTALL_DIR} -DPYTHON=${PYTHON} -DSNITCH_SIMULATOR=../../../../../hw/system/spatz_cluster/bin/spatz_cluster.vcs -DBUILD_TESTS=ON .. && make
 
 ## Build SW and run all tests with VCS simulator
 sw.test.vcs: sw.vcs
@@ -153,7 +153,7 @@ sw.test.vcs: sw.vcs
 ## Build SW into sw/build with the LLVM toolchain (including tests) for Verilator simulator
 sw.vlt: clean.sw verilate
 	mkdir -p sw/build
-	cd sw/build && ${CMAKE} -DCMAKE_TOOLCHAIN_FILE=toolchain-llvm -DLLVM_PATH=${LLVM_INSTALL_DIR} -DGCC_PATH=${GCC_INSTALL_DIR} -DSNITCH_SIMULATOR=../../../../../hw/system/spatz_cluster/bin/spatz_cluster.vlt -DBUILD_TESTS=ON .. && make
+	cd sw/build && ${CMAKE} -DLLVM_PATH=${LLVM_INSTALL_DIR} -DGCC_PATH=${GCC_INSTALL_DIR} -DPYTHON=${PYTHON} -DSNITCH_SIMULATOR=../../../../../hw/system/spatz_cluster/bin/spatz_cluster.vlt -DBUILD_TESTS=ON .. && make
 
 ## Build SW and run all tests with Verilator simulator
 sw.test.vlt: sw.vlt

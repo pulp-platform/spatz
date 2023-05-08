@@ -430,7 +430,8 @@ module spatz_fpu_sequencer
         riscv_instr::VFWMACC_VF,
         riscv_instr::VFWNMACC_VF,
         riscv_instr::VFWMSAC_VF,
-        riscv_instr::VFWNMSAC_VF: begin
+        riscv_instr::VFWNMSAC_VF,
+        riscv_instr::VFWDOTP_VF: begin
           if (RVF) begin
             use_fs1 = 1'b1;
           end else begin

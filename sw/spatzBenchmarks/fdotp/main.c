@@ -41,15 +41,15 @@
 #define CHECK 1
 
 // Macro to check similarity between two fp-values, wrt a threshold
-#define fp_check(a, b, threshold) ((((a) < (b)) ? (b) - (a) : (a) - (b)) < (threshold))
+#define fp_check(a, b, threshold)                                              \
+  ((((a) < (b)) ? (b) - (a) : (a) - (b)) < (threshold))
 
 double *a;
 double *b;
 double *result;
 
 // Initialize the matrices
-void init_matrix(double *matrix, const double *src,
-                 const unsigned int len) {
+void init_matrix(double *matrix, const double *src, const unsigned int len) {
   for (unsigned int i = 0; i < len; ++i) {
     matrix[i] = src[i];
   }
@@ -78,7 +78,8 @@ int main() {
   if (cid == 0) {
     a = (double *)domain_malloc(get_alloc_tile(0), dim * sizeof(double));
     b = (double *)domain_malloc(get_alloc_tile(0), dim * sizeof(double));
-    result = (double *)domain_malloc(get_alloc_tile(0), active_cores * sizeof(double));
+    result = (double *)domain_malloc(get_alloc_tile(0),
+                                     active_cores * sizeof(double));
   }
 
   // Reset timer
@@ -155,7 +156,8 @@ int main() {
 
   if (cid == 0) {
     if (!fp_check(result[0], dotp_result, THRESHOLD_64b)) {
-      printf("Error core %d: result = %x, golden = %x\n", cid, *((unsigned int*)result), *((unsigned int*)&dotp_result));
+      printf("Error core %d: result = %x, golden = %x\n", cid,
+             *((unsigned int *)result), *((unsigned int *)&dotp_result));
       return -1;
     }
   }

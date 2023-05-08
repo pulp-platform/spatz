@@ -40,7 +40,8 @@ class SnitchSim:
     def __sim_active(func):
         def inner(self, *args, **kwargs):
             if self.sim is None:
-                raise RuntimeError(f'Snitch is not running (simulation `{self.sim_bin}`, binary `{self.snitch_bin}`)')
+                raise RuntimeError(
+                    f'Snitch is not running (simulation `{self.sim_bin}`, binary `{self.snitch_bin}`)')
             return func(self, *args, **kwargs)
         return inner
 

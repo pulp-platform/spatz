@@ -435,41 +435,65 @@ module spatz_decoder
             riscv_instr::VREDSUM_VS: begin
               spatz_req.op                    = VADD;
               spatz_req.op_arith.is_reduction = 1'b1;
+              // Switch vs1 and vs2
+              spatz_req.vs1                   = arith_s2;
+              spatz_req.vs2                   = arith_s1;
             end
 
             riscv_instr::VREDAND_VS: begin
               spatz_req.op                    = VAND;
               spatz_req.op_arith.is_reduction = 1'b1;
+              // Switch vs1 and vs2
+              spatz_req.vs1                   = arith_s2;
+              spatz_req.vs2                   = arith_s1;
             end
 
             riscv_instr::VREDOR_VS: begin
               spatz_req.op                    = VOR;
               spatz_req.op_arith.is_reduction = 1'b1;
+              // Switch vs1 and vs2
+              spatz_req.vs1                   = arith_s2;
+              spatz_req.vs2                   = arith_s1;
             end
 
             riscv_instr::VREDXOR_VS: begin
               spatz_req.op                    = VXOR;
               spatz_req.op_arith.is_reduction = 1'b1;
+              // Switch vs1 and vs2
+              spatz_req.vs1                   = arith_s2;
+              spatz_req.vs2                   = arith_s1;
             end
 
             riscv_instr::VREDMIN_VS: begin
               spatz_req.op                    = VMIN;
               spatz_req.op_arith.is_reduction = 1'b1;
+              // Switch vs1 and vs2
+              spatz_req.vs1                   = arith_s2;
+              spatz_req.vs2                   = arith_s1;
             end
 
             riscv_instr::VREDMINU_VS: begin
               spatz_req.op                    = VMINU;
               spatz_req.op_arith.is_reduction = 1'b1;
+              // Switch vs1 and vs2
+              spatz_req.vs1                   = arith_s2;
+              spatz_req.vs2                   = arith_s1;
             end
 
             riscv_instr::VREDMAX_VS: begin
               spatz_req.op                    = VMAX;
               spatz_req.op_arith.is_reduction = 1'b1;
+              // Switch vs1 and vs2
+              spatz_req.vs1                   = arith_s2;
+              spatz_req.vs2                   = arith_s1;
             end
 
             riscv_instr::VREDMAXU_VS: begin
               spatz_req.op                    = VMAXU;
               spatz_req.op_arith.is_reduction = 1'b1;
+              // Switch vs1 and vs2
+              spatz_req.vs1                   = arith_s2;
+              spatz_req.vs2                   = arith_s1;
             end
 
             // Vector Shift
@@ -942,18 +966,27 @@ module spatz_decoder
               riscv_instr::VFREDOSUM_VS: begin
                 spatz_req.op                    = VFADD;
                 spatz_req.op_arith.is_reduction = 1'b1;
+                // Switch vs1 and vs2
+                spatz_req.vs1                   = arith_s2;
+                spatz_req.vs2                   = arith_s1;
               end
 
               riscv_instr::VFREDMIN_VS: begin
                 spatz_req.op                    = VFMINMAX;
                 spatz_req.rm                    = fpnew_pkg::RNE;
                 spatz_req.op_arith.is_reduction = 1'b1;
+                // Switch vs1 and vs2
+                spatz_req.vs1                   = arith_s2;
+                spatz_req.vs2                   = arith_s1;
               end
 
               riscv_instr::VFREDMAX_VS: begin
                 spatz_req.op                    = VFMINMAX;
                 spatz_req.rm                    = fpnew_pkg::RTZ;
                 spatz_req.op_arith.is_reduction = 1'b1;
+                // Switch vs1 and vs2
+                spatz_req.vs1                   = arith_s2;
+                spatz_req.vs2                   = arith_s1;
               end
 
               riscv_instr::VFSGNJ_VV,
@@ -1271,11 +1304,11 @@ module spatz_decoder
                 spatz_req.op = VF2U;
                 spatz_req.rm = fpnew_pkg::roundmode_e'(decoder_req_i.instr[14:12]);
               end
-              riscv_instr::FCVT_B_H : begin
+              riscv_instr::FCVT_H_B : begin
                 spatz_req.op                 = VF2F;
                 spatz_req.op_arith.widen_vs1 = 1'b1;
               end
-              riscv_instr::FCVT_H_B : begin
+              riscv_instr::FCVT_B_H : begin
                 spatz_req.op                    = VF2F;
                 spatz_req.op_arith.is_narrowing = 1'b1;
               end
@@ -1374,11 +1407,11 @@ module spatz_decoder
                 spatz_req.op = VF2U;
                 spatz_req.rm = fpnew_pkg::roundmode_e'(decoder_req_i.instr[14:12]);
               end
-              riscv_instr::FCVT_H_S : begin
+              riscv_instr::FCVT_S_H : begin
                 spatz_req.op                 = VF2F;
                 spatz_req.op_arith.widen_vs1 = 1'b1;
               end
-              riscv_instr::FCVT_S_H : begin
+              riscv_instr::FCVT_H_S : begin
                 spatz_req.op                    = VF2F;
                 spatz_req.op_arith.is_narrowing = 1'b1;
               end
@@ -1478,11 +1511,11 @@ module spatz_decoder
                 spatz_req.op = VF2U;
                 spatz_req.rm = fpnew_pkg::roundmode_e'(decoder_req_i.instr[14:12]);
               end
-              riscv_instr::FCVT_S_D: begin
+              riscv_instr::FCVT_D_S: begin
                 spatz_req.op                 = VF2F;
                 spatz_req.op_arith.widen_vs1 = 1'b1;
               end
-              riscv_instr::FCVT_D_S: begin
+              riscv_instr::FCVT_S_D: begin
                 spatz_req.op                    = VF2F;
                 spatz_req.op_arith.is_narrowing = 1'b1;
               end

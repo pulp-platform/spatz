@@ -189,12 +189,12 @@ module snitch_amo_shim
   assign wdata = $unsigned(wdata_i);
 
   `FF(state_q, state_d, Idle)
-  `FFLNR(amo_op_q, amo_i, load_amo, clk_i)
-  `FFLNR(addr_q, addr_i, load_amo, clk_i)
+  `FFL(amo_op_q, amo_i, load_amo, AMOAdd)
+  `FFL(addr_q, addr_i, load_amo, '0)
   // Which word to pick.
-  `FFLNR(idx_q, idx_d, load_amo, clk_i)
-  `FFLNR(operand_b_q, (wstrb_i[0] ? wdata[31:0]  : wdata[63:32]), load_amo, clk_i)
-  `FFLNR(amo_result_q, amo_result, (state_q == DoAMO), clk_i)
+  `FFL(idx_q, idx_d, load_amo, '0)
+  `FFL(operand_b_q, (wstrb_i[0] ? wdata[31:0]  : wdata[63:32]), load_amo, '0)
+  `FFL(amo_result_q, amo_result, (state_q == DoAMO), '0)
 
   assign idx_d = ((DataWidth == 64) ? wstrb_i[DataWidth/8/2] : 0);
   assign load_amo = valid_i & ready_o &
