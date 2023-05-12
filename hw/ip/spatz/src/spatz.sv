@@ -55,6 +55,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     input  drsp_t                             fp_lsu_mem_rsp_i,
     // FPU side channel
     input  roundmode_e                        fpu_rnd_mode_i,
+    input  fmt_mode_t                         fpu_fmt_mode_i,
     output status_t                           fpu_status_o
   );
 
@@ -223,6 +224,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     .rsp_o            (resp            ),
     // FPU side channel
     .fpu_rnd_mode_i   (fpu_rnd_mode_i  ),
+    .fpu_fmt_mode_i   (fpu_fmt_mode_i  ),
     // Spatz request
     .spatz_req_valid_o(spatz_req_valid ),
     .spatz_req_o      (spatz_req       ),

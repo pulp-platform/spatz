@@ -61,6 +61,8 @@ module spatz_cc
     parameter bit                                          XDivSqrt                 = 0,
     parameter bit                                          XF8                      = 0,
     parameter bit                                          XF16                     = 0,
+    parameter bit                                          XF16ALT                  = 0,
+    parameter bit                                          XF8ALT                   = 0,
     /// Enable Snitch DMA
     parameter bit                                          Xdma                     = 0,
     parameter int                          unsigned        NumIntOutstandingLoads   = 0,
@@ -145,6 +147,7 @@ module spatz_cc
   logic acc_demux_snitch_valid_q, acc_demux_snitch_ready_q;
 
   fpnew_pkg::roundmode_e fpu_rnd_mode;
+  fpnew_pkg::fmt_mode_t  fpu_fmt_mode;
   fpnew_pkg::status_t fpu_status;
 
   core_events_t snitch_events;
@@ -182,7 +185,9 @@ module spatz_cc
     .RVV                    (RVV                   ),
     .XDivSqrt               (XDivSqrt              ),
     .XF16                   (XF16                  ),
+    .XF16ALT                (XF16ALT               ),
     .XF8                    (XF8                   ),
+    .XF8ALT                 (XF8ALT                ),
     .FLEN                   (FLEN                  )
   ) i_snitch (
     .clk_i                 (clk_d2_i                 ), // if necessary operate on half the frequency
@@ -214,7 +219,7 @@ module spatz_cc
     .ptw_pte_i             (hive_rsp_i.ptw_pte       ),
     .ptw_is_4mega_i        (hive_rsp_i.ptw_is_4mega  ),
     .fpu_rnd_mode_o        (fpu_rnd_mode             ),
-    .fpu_fmt_mode_o        (/* Unused */             ),
+    .fpu_fmt_mode_o        (fpu_fmt_mode             ),
     .fpu_status_i          (fpu_status               ),
     .core_events_o         (snitch_events            )
   );
@@ -343,6 +348,7 @@ module spatz_cc
     .fp_lsu_mem_req_o        (fp_lsu_mem_req        ),
     .fp_lsu_mem_rsp_i        (fp_lsu_mem_rsp        ),
     .fpu_rnd_mode_i          (fpu_rnd_mode          ),
+    .fpu_fmt_mode_i          (fpu_fmt_mode          ),
     .fpu_status_o            (fpu_status            )
   );
 

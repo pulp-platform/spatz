@@ -11,6 +11,7 @@ module spatz_decoder
   import spatz_pkg::*;
   import rvv_pkg::*;
   import fpnew_pkg::roundmode_e;
+  import fpnew_pkg::fmt_mode_t;
   (
     input  logic         clk_i,
     input  logic         rst_ni,
@@ -21,7 +22,8 @@ module spatz_decoder
     output decoder_rsp_t decoder_rsp_o,
     output logic         decoder_rsp_valid_o,
     // FPU untimed sidechannel
-    input  roundmode_e   fpu_rnd_mode_i
+    input  roundmode_e   fpu_rnd_mode_i,
+    input  fmt_mode_t    fpu_fmt_mode_i
   );
 
   /////////////
@@ -884,6 +886,7 @@ module spatz_decoder
             spatz_req.vd          = arith_d;
             spatz_req.ex_unit     = VFU;
             spatz_req.rm          = fpu_rnd_mode_i;
+            spatz_req.fm          = fpu_fmt_mode_i;
 
             // Decide which operands to use (vs2 or rs1 or imm)
             unique case (func3)
@@ -1251,6 +1254,7 @@ module spatz_decoder
             spatz_req.rsd                = decoder_req_i.rsd;
             spatz_req.op_arith.is_scalar = 1'b1;
             spatz_req.rm                 = fpu_rnd_mode_i;
+            spatz_req.fm                 = fpu_fmt_mode_i;
             spatz_req.vtype.vsew         = EW_8;
 
             unique casez (decoder_req_i.instr)
@@ -1354,6 +1358,7 @@ module spatz_decoder
             spatz_req.rsd                = decoder_req_i.rsd;
             spatz_req.op_arith.is_scalar = 1'b1;
             spatz_req.rm                 = fpu_rnd_mode_i;
+            spatz_req.fm                 = fpu_fmt_mode_i;
             spatz_req.vtype.vsew         = EW_16;
 
             unique casez (decoder_req_i.instr)
@@ -1458,6 +1463,7 @@ module spatz_decoder
             spatz_req.rsd                = decoder_req_i.rsd;
             spatz_req.op_arith.is_scalar = 1'b1;
             spatz_req.rm                 = fpu_rnd_mode_i;
+            spatz_req.fm                 = fpu_fmt_mode_i;
             spatz_req.vtype.vsew         = EW_32;
 
             unique casez (decoder_req_i.instr)
@@ -1560,6 +1566,7 @@ module spatz_decoder
             spatz_req.rsd                = decoder_req_i.rsd;
             spatz_req.op_arith.is_scalar = 1'b1;
             spatz_req.rm                 = fpu_rnd_mode_i;
+            spatz_req.fm                 = fpu_fmt_mode_i;
             spatz_req.vtype.vsew         = EW_64;
 
             unique casez (decoder_req_i.instr)
