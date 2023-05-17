@@ -339,23 +339,6 @@ module ${cfg['name']}_wrapper
     .serial_i ( axi_isolate_i    ),
     .serial_o ( axi_isolate_sync )
   );
-
-  logic [NumCores-1:0] debug_req_sync_i;
-  for (genvar i = 0; i < NumCores; i++) begin
-    sync #(
-      .STAGES     ( SyncStages ),
-      .ResetValue ( 1'b0       )
-    ) i_debug_req_sync (
-      .clk_i,
-      .rst_ni   ( pwr_on_rst_ni ),
-    % if cfg['enable_debug']:
-      .serial_i ( debug_req_i[i]     ),
-    % else:
-      .serial_i ( 1'b0     ),
-    % endif
-      .serial_o ( debug_req_sync_i[i]  )
-    );
-  end
   % endif
   % endif
 
@@ -543,15 +526,11 @@ module ${cfg['name']}_wrapper
   ) i_cluster (
     .clk_i,
     .rst_ni,
-  % if cfg['axi_cdc_enable'] and cfg['sw_rst_enable']:
-    .debug_req_i (debug_req_sync_i),
-  % else:
-    % if cfg['enable_debug']:
+% if cfg['enable_debug']:
     .debug_req_i,
-    % else:
+% else:
     .debug_req_i ('0),
-    % endif
-  % endif
+% endif
     .meip_i,
     .mtip_i,
     .msip_i,
