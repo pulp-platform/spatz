@@ -15,6 +15,7 @@
         id_width_out: 2,
         user_width: 2,
         axi_cdc_enable: true,
+        sw_rst_enable: true,
         axi_isolate_enable: true,
         tcdm: {
             size: 128,

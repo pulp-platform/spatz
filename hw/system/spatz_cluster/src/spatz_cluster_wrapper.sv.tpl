@@ -61,6 +61,9 @@ package ${cfg['pkg_name']};
 
 % if cfg['axi_cdc_enable']:
   localparam int unsigned SpatzLogDepth = 3;
+  % if cfg['sw_rst_enable']:
+  localparam int unsigned SpatzSyncStages = 3;
+  % endif
 % endif
 
   `AXI_TYPEDEF_ALL(spatz_axi_in, axi_addr_t, axi_id_in_t, logic [63:0], logic [7:0], axi_user_t)
@@ -197,6 +200,9 @@ module ${cfg['name']}_wrapper
   parameter int unsigned AxiOutIdWidth = ${cfg['pkg_name']}::SpatzAxiIdOutWidth,
 % if cfg['axi_cdc_enable']:
   parameter int unsigned LogDepth      = ${cfg['pkg_name']}::SpatzLogDepth,
+  % if cfg['sw_rst_enable']:
+  parameter int unsigned SyncStages    = ${cfg['pkg_name']}::SpatzSyncStages,
+  % endif
 % endif
 
   parameter type axi_in_resp_t = spatz_axi_in_resp_t,
@@ -250,15 +256,19 @@ module ${cfg['name']}_wrapper
   input  logic [NumCores-1:0] mtip_i,
   input  logic [NumCores-1:0] msip_i,
 % if not cfg['tie_ports']:
-  input  logic [9:0]                           hart_base_id_i,
-  input  logic [AxiAddrWidth-1:0]              cluster_base_addr_i,
+  input  logic [9:0]                    hart_base_id_i,
+  input  logic [AxiAddrWidth-1:0]       cluster_base_addr_i,
 % endif
-  output logic                                 cluster_probe_o,
+  output logic                          cluster_probe_o,
 % if cfg['axi_isolate_enable']:
   input  logic axi_isolate_i,
   output logic axi_isolated_o,
 % endif
 % if cfg['axi_cdc_enable']:
+  % if cfg['sw_rst_enable']:
+  input  logic                          pwr_on_rst_ni,
+  % endif
+
   // AXI Master port
   output logic [AsyncAxiOutAwWidth-1:0] async_axi_out_aw_data_o,
   output logic [LogDepth:0]             async_axi_out_aw_wptr_o,
@@ -317,6 +327,36 @@ module ${cfg['name']}_wrapper
   // From AXI Isolate to CDC
   axi_out_req_t  axi_from_cluster_iso_req;
   axi_out_resp_t axi_from_cluster_iso_resp;
+  % if cfg['sw_rst_enable']:
+  logic axi_isolate_sync;
+
+  sync #(
+    .STAGES     ( SyncStages ),
+    .ResetValue ( 1'b1       )
+  ) i_isolate_sync (
+    .clk_i,
+    .rst_ni   ( pwr_on_rst_ni    ),
+    .serial_i ( axi_isolate_i    ),
+    .serial_o ( axi_isolate_sync )
+  );
+
+  logic [NumCores-1:0] debug_req_sync_i;
+  for (genvar i = 0; i < NumCores; i++) begin
+    sync #(
+      .STAGES     ( SyncStages ),
+      .ResetValue ( 1'b0       )
+    ) i_debug_req_sync (
+      .clk_i,
+      .rst_ni   ( pwr_on_rst_ni ),
+    % if cfg['enable_debug']:
+      .serial_i ( debug_req_i[i]     ),
+    % else:
+      .serial_i ( 1'b0     ),
+    % endif
+      .serial_o ( debug_req_sync_i[i]  )
+    );
+  end
+  % endif
   % endif
 
   axi_isolate #(
@@ -334,14 +374,18 @@ module ${cfg['name']}_wrapper
     .rst_ni               ( rst_ni                ),
     .slv_req_i            ( axi_from_cluster_req  ),
     .slv_resp_o           ( axi_from_cluster_resp ),
-% if cfg['axi_cdc_enable']:
+  % if cfg['axi_cdc_enable']:
     .mst_req_o            ( axi_from_cluster_iso_req   ),
     .mst_resp_i           ( axi_from_cluster_iso_resp  ),
-% else:
+  % else:
     .mst_req_o            ( axi_out_req_o              ),
     .mst_resp_i           ( axi_out_resp_i             ),
-% endif
+  % endif
+  % if cfg['axi_cdc_enable'] and cfg['sw_rst_enable']:
+    .isolate_i            ( axi_isolate_sync           ),
+  % else:
     .isolate_i            ( axi_isolate_i              ),
+  % endif
     .isolated_o           ( axi_isolated_o             )
   ) ;
 % endif
@@ -379,7 +423,11 @@ module ${cfg['name']}_wrapper
     .async_data_slave_r_rptr_i  ( async_axi_in_r_rptr_i  ),
     // Synchronous master port
     .dst_clk_i                  ( clk_i                  ),
+  % if cfg['sw_rst_enable']:
+    .dst_rst_ni                 ( pwr_on_rst_ni          ),
+  % else:
     .dst_rst_ni                 ( rst_ni                 ),
+  % endif
     .dst_req_o                  ( axi_to_cluster_req     ),
     .dst_resp_i                 ( axi_to_cluster_resp    )
   );
@@ -412,14 +460,18 @@ module ${cfg['name']}_wrapper
     .async_data_master_r_rptr_o ( async_axi_out_r_rptr_o  ),
     // Synchronous slave port
     .src_clk_i                  ( clk_i                    ),
-    .src_rst_ni                 ( rst_ni                   ),
-% if cfg['axi_isolate_enable']:
+  % if cfg['sw_rst_enable']:
+    .src_rst_ni                 ( pwr_on_rst_ni          ),
+  % else:
+    .src_rst_ni                 ( rst_ni                 ),
+  % endif
+  % if cfg['axi_isolate_enable']:
     .src_req_i                  ( axi_from_cluster_iso_req ),
     .src_resp_o                 ( axi_from_cluster_iso_resp)
-% else:
+  % else:
     .src_req_i                  ( axi_from_cluster_req     ),
     .src_resp_o                 ( axi_from_cluster_resp    )
-% endif
+  % endif
   );
 % endif
 
@@ -491,11 +543,15 @@ module ${cfg['name']}_wrapper
   ) i_cluster (
     .clk_i,
     .rst_ni,
-% if cfg['enable_debug']:
+  % if cfg['axi_cdc_enable'] and cfg['sw_rst_enable']:
+    .debug_req_i (debug_req_sync_i),
+  % else:
+    % if cfg['enable_debug']:
     .debug_req_i,
-% else:
+    % else:
     .debug_req_i ('0),
-% endif
+    % endif
+  % endif
     .meip_i,
     .mtip_i,
     .msip_i,
