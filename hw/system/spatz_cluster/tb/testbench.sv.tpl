@@ -158,48 +158,7 @@ module testharness (
   logic                cluster_probe;
   logic [NumCores-1:0] debug_req;
 
-  spatz_cluster_wrapper #(
-    .AxiAddrWidth             ( SpatzAxiAddrWidth  ),
-    .AxiDataWidth             ( SpatzAxiDataWidth  ),
-    .AxiUserWidth             ( SpatzAxiUserWidth  ),
-    .AxiInIdWidth             ( SpatzAxiIdInWidth  ),
-    .AxiOutIdWidth            ( SpatzAxiIdOutWidth ),
-% if cfg['axi_cdc_enable']:
-    .LogDepth                 ( SpatzLogDepth      ),
-% endif
-
-    .axi_in_resp_t            ( spatz_axi_in_resp_t    ),
-    .axi_in_req_t             ( spatz_axi_in_req_t     ),
-% if cfg['axi_cdc_enable']:
-    .axi_in_aw_chan_t         ( spatz_axi_in_aw_chan_t ),
-    .axi_in_w_chan_t          ( spatz_axi_in_w_chan_t  ),
-    .axi_in_b_chan_t          ( spatz_axi_in_b_chan_t  ),
-    .axi_in_ar_chan_t         ( spatz_axi_in_ar_chan_t ),
-    .axi_in_r_chan_t          ( spatz_axi_in_r_chan_t  ),
-% endif
-
-    .axi_out_resp_t           ( spatz_axi_out_resp_t   ),
-% if cfg['axi_cdc_enable']:
-    .axi_out_req_t            ( spatz_axi_out_req_t    ),
-
-    .axi_out_aw_chan_t        ( spatz_axi_out_aw_chan_t ),
-    .axi_out_w_chan_t         ( spatz_axi_out_w_chan_t  ),
-    .axi_out_b_chan_t         ( spatz_axi_out_b_chan_t  ),
-    .axi_out_ar_chan_t        ( spatz_axi_out_ar_chan_t ),
-    .axi_out_r_chan_t         ( spatz_axi_out_r_chan_t  ),
-    .AsyncAxiInAwWidth        ( AsyncAxiInAwWidth  ),
-    .AsyncAxiInWWidth         ( AsyncAxiInWWidth   ),
-    .AsyncAxiInBWidth         ( AsyncAxiInBWidth   ),
-    .AsyncAxiInArWidth        ( AsyncAxiInArWidth  ),
-    .AsyncAxiInRWidth         ( AsyncAxiInRWidth   ),
-    .AsyncAxiOutAwWidth       ( AsyncAxiOutAwWidth ),
-    .AsyncAxiOutWWidth        ( AsyncAxiOutWWidth  ),
-    .AsyncAxiOutBWidth        ( AsyncAxiOutBWidth  ),
-    .AsyncAxiOutArWidth       ( AsyncAxiOutArWidth )
-% else:
-    .axi_out_req_t            ( spatz_axi_out_req_t    )
-% endif
-  ) i_cluster_wrapper (
+  spatz_cluster_wrapper i_cluster_wrapper (
     .clk_i           (clk_i                ),
     .rst_ni          (rst_ni               ),
     .testmode_i      (1'b0                 ),
