@@ -12,6 +12,7 @@ module spatz_controller
   import spatz_pkg::*;
   import rvv_pkg::*;
   import fpnew_pkg::roundmode_e;
+  import fpnew_pkg::fmt_mode_t;
   #(
     parameter int  unsigned NrVregfilePorts   = 1,
     parameter int  unsigned NrWritePorts      = 1,
@@ -31,6 +32,7 @@ module spatz_controller
     output spatz_rsp_t                             rsp_o,
     // FPU untimed sidechannel
     input  roundmode_e                             fpu_rnd_mode_i,
+    input  fmt_mode_t                              fpu_fmt_mode_i,
     // Spatz request
     output logic                                   spatz_req_valid_o,
     output spatz_req_t                             spatz_req_o,
@@ -165,7 +167,8 @@ module spatz_controller
     .decoder_rsp_o      (decoder_rsp      ),
     .decoder_rsp_valid_o(decoder_rsp_valid),
     // FPU untimed sidechannel
-    .fpu_rnd_mode_i     (fpu_rnd_mode_i   )
+    .fpu_rnd_mode_i     (fpu_rnd_mode_i   ),
+    .fpu_fmt_mode_i     (fpu_fmt_mode_i   )
   );
 
   // Decode new instruction if new request arrives

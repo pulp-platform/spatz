@@ -214,6 +214,8 @@ package spatz_pkg;
 
     // Rounding mode
     fpnew_pkg::roundmode_e rm;
+    // Format mode
+    fpnew_pkg::fmt_mode_t fm;
 
     // Instruction operation
     op_e op;

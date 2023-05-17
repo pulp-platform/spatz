@@ -1263,12 +1263,10 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
             (!(inst_data_i inside {FDIV_H, FSQRT_H}) || XDivSqrt)) begin
           write_rd = 1'b0;
           acc_qvalid_o = valid_instr;
-`ifndef TARGET_SPATZ
         end else if (FP_EN && XF16ALT && fcsr_q.fmode.dst == 1'b1 &&
-            (!(inst_data_i inside {VFDIV_H, VFDIV_R_H, VFSQRT_H}) || XDivSqrt)) begin
+            (!(inst_data_i inside {FDIV_H, FSQRT_H}) || XDivSqrt)) begin
           write_rd = 1'b0;
           acc_qvalid_o = valid_instr;
-`endif
         end else begin
           illegal_inst = 1'b1;
         end

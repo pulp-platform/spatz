@@ -825,14 +825,18 @@ module spatz_vfu
             fpu_vectorial_op = FLEN > 32;
           end
           EW_16: begin
-            fpu_src_fmt      = spatz_req.op_arith.is_narrowing || spatz_req.op_arith.widen_vs1 || spatz_req.op_arith.widen_vs2 ? fpnew_pkg::FP32 : fpnew_pkg::FP16;
-            fpu_dst_fmt      = spatz_req.op_arith.widen_vs1 || spatz_req.op_arith.widen_vs2 || spatz_req.op == VSDOTP ? fpnew_pkg::FP32          : fpnew_pkg::FP16;
+            fpu_src_fmt      = spatz_req.op_arith.is_narrowing || spatz_req.op_arith.widen_vs1 || spatz_req.op_arith.widen_vs2 ? fpnew_pkg::FP32 :
+                                                                                                                                 spatz_req.fm.src ? fpnew_pkg::FP16ALT : fpnew_pkg::FP16;
+            fpu_dst_fmt      = spatz_req.op_arith.widen_vs1 || spatz_req.op_arith.widen_vs2 || spatz_req.op == VSDOTP ? fpnew_pkg::FP32          :
+                                                                                                                                 spatz_req.fm.dst ? fpnew_pkg::FP16ALT : fpnew_pkg::FP16;
             fpu_int_fmt      = spatz_req.op_arith.is_narrowing && spatz_req.op inside {VI2F, VU2F} ? fpnew_pkg::INT32                            : fpnew_pkg::INT16;
             fpu_vectorial_op = 1'b1;
           end
           EW_8: begin
-            fpu_src_fmt      = spatz_req.op_arith.is_narrowing || spatz_req.op_arith.widen_vs1 || spatz_req.op_arith.widen_vs2 ? fpnew_pkg::FP16 : fpnew_pkg::FP8;
-            fpu_dst_fmt      = spatz_req.op_arith.widen_vs1 || spatz_req.op_arith.widen_vs2 || spatz_req.op == VSDOTP ? fpnew_pkg::FP16          : fpnew_pkg::FP8;
+            fpu_src_fmt      = spatz_req.op_arith.is_narrowing || spatz_req.op_arith.widen_vs1 || spatz_req.op_arith.widen_vs2 ? spatz_req.fm.src ? fpnew_pkg::FP16ALT : fpnew_pkg::FP16 :
+                                                                                                                                 spatz_req.fm.src ? fpnew_pkg::FP8ALT : fpnew_pkg::FP8;
+            fpu_dst_fmt      = spatz_req.op_arith.widen_vs1 || spatz_req.op_arith.widen_vs2 || spatz_req.op == VSDOTP ? spatz_req.fm.dst ? fpnew_pkg::FP16ALT : fpnew_pkg::FP16          :
+                                                                                                                                 spatz_req.fm.dst ? fpnew_pkg::FP8ALT : fpnew_pkg::FP8;
             fpu_int_fmt      = spatz_req.op_arith.is_narrowing && spatz_req.op inside {VI2F, VU2F} ? fpnew_pkg::INT16                            : fpnew_pkg::INT8;
             fpu_vectorial_op = 1'b1;
           end
@@ -857,12 +861,24 @@ module spatz_vfu
             fpu_op_mode = 1'b1;
           end
 
-          VFMINMAX: fpu_op = fpnew_pkg::MINMAX;
+          VFMINMAX: begin
+            fpu_op = fpnew_pkg::MINMAX;
+            fpu_dst_fmt = fpu_src_fmt;
+          end
 
 
-          VFSGNJ : fpu_op = fpnew_pkg::SGNJ;
-          VFCLASS: fpu_op = fpnew_pkg::CLASSIFY;
-          VFCMP  : fpu_op = fpnew_pkg::CMP;
+          VFSGNJ : begin
+            fpu_op = fpnew_pkg::SGNJ;
+            fpu_dst_fmt = fpu_src_fmt;
+          end
+          VFCLASS: begin
+            fpu_op = fpnew_pkg::CLASSIFY;
+            fpu_dst_fmt = fpu_src_fmt;
+          end
+          VFCMP  : begin
+            fpu_op = fpnew_pkg::CMP;
+            fpu_dst_fmt = fpu_src_fmt;
+          end
 
           VF2F: fpu_op = fpnew_pkg::F2F;
           VF2I: fpu_op = fpnew_pkg::F2I;
