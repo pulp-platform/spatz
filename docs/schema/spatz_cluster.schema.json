@@ -105,6 +105,11 @@
             "description": "Place asynchronous CDCs on the cluster AXI interfaces.",
             "default": false
         },
+        "sw_rst_enable": {
+            "type": "boolean",
+            "description": "Place dedicated Power-On reset sync for hw/sw reset. It has effect only when axi_cdc_enable=true",
+            "default": false
+        },
         "axi_isolate_enable": {
             "type": "boolean",
             "description": "Instantiate an AXI isolation module at the top level.",
