@@ -13,7 +13,8 @@
 module spatz_cc
   import snitch_pkg::interrupts_t;
   import snitch_pkg::core_events_t;
-  import fpnew_pkg::fpu_implementation_t; #(
+  import fpnew_pkg::fpu_implementation_t;
+  import spatz_pkg::*; #(
     /// Address width of the buses
     parameter int                          unsigned        AddrWidth                = 0,
     /// Data width of the buses.
@@ -114,7 +115,22 @@ module spatz_cc
     output dma_events_t                  axi_dma_events_o,
     // Core event strobes
     output core_events_t                 core_events_o,
-    input  addr_t                        tcdm_addr_base_i
+    input  addr_t                        tcdm_addr_base_i,
+    // Merge-Mode
+    // Data exchange between two core complexes
+    output logic                         cc_m_acc_req_valid_o,
+    input  logic                         cc_m_acc_req_ready_i,
+    input  logic                         cc_m_acc_rsp_valid_i,
+    output acc_issue_req_t               cc_m_acc_req_o,
+    output logic                         cc_m_acc_rsp_ready_o,
+
+    input  logic                         cc_s_acc_req_valid_i,
+    output logic                         cc_s_acc_req_ready_o,
+    output logic                         cc_s_acc_rsp_valid_o,
+    input  acc_issue_req_t               cc_s_acc_req_i,
+    input  logic                         cc_s_acc_rsp_ready_i,
+
+    input  merge_mode_t                  merge_mode_i
   );
 
   // FMA architecture is "merged" -> mulexp and macexp instructions are supported
@@ -130,18 +146,19 @@ module spatz_cc
   acc_issue_req_t acc_snitch_demux;
   acc_issue_req_t acc_snitch_demux_q;
   acc_issue_rsp_t acc_snitch_resp;
+  acc_issue_rsp_t acc_pre_snitch_resp;
 
   acc_rsp_t acc_demux_snitch;
   acc_rsp_t acc_demux_snitch_q;
-  acc_rsp_t acc_resp;
+  acc_rsp_t acc_pre_resp;
   acc_rsp_t dma_resp;
 
   logic acc_snitch_demux_qvalid, acc_snitch_demux_qready;
   logic acc_snitch_demux_qvalid_q, acc_snitch_demux_qready_q;
-  logic acc_qvalid, acc_qready;
+  logic acc_qvalid, acc_pre_qready;
   logic dma_qvalid, dma_qready;
 
-  logic acc_pvalid, acc_pready;
+  logic acc_pre_pvalid, acc_pready;
   logic dma_pvalid, dma_pready;
   logic acc_demux_snitch_valid, acc_demux_snitch_ready;
   logic acc_demux_snitch_valid_q, acc_demux_snitch_ready_q;
@@ -276,6 +293,49 @@ module spatz_cc
     .dst_data_o  (acc_demux_snitch        )
   );
 
+  logic           acc_qready;
+  logic           acc_pre_qvalid;
+  acc_issue_req_t acc_issue_req;
+
+  // Merge-Mode Request Interface
+  always_comb begin
+    // Standard connections between Spatz & Snitch within own CC (non-merge-mode)
+    acc_qready           = acc_pre_qready;
+    acc_qvalid           = acc_pre_qvalid;
+    acc_issue_req        = acc_snitch_req;
+    // Keep CC<->CC connections de-assigned in non-merge-mode
+    cc_m_acc_req_o       = '0;
+    cc_m_acc_req_valid_o = 1'b0;
+    cc_s_acc_req_ready_o = 1'b0;
+
+    // Connections for merge-mode in a slave-CC
+    if (merge_mode_i.is_merge && !merge_mode_i.is_master) begin
+      // Break ties with Snitch in own CC and obey to master-CC
+      acc_qready           = 1'b0;
+      acc_qvalid           = cc_s_acc_req_valid_i;
+      acc_issue_req        = cc_s_acc_req_i;
+      // Forward the req ready signal to the master-CC
+      cc_s_acc_req_ready_o = acc_pre_qready;
+
+    // Connections for merge-mode in a master-CC
+    end else if (merge_mode_i.is_merge && merge_mode_i.is_master) begin
+      // Forward the request and the valid signal to the slave-CC
+      cc_m_acc_req_o = acc_issue_req;
+      cc_m_acc_req_valid_o = acc_qvalid;
+      // Check if master- and slave-CC's req ready are assigned simultaneously before assigning
+      // req ready to Snitch of master-CC 
+      acc_qready = acc_pre_qready && cc_m_acc_req_ready_i;
+    end
+  end
+
+  /*
+  // Merge-Mode
+  assign acc_issue_req = !merge_mode_i.is_merge && !merge_mode_i.is_master ? acc_snitch_req :
+                          cc_s_acc_req_i;
+  assign acc_qready = !merge_mode_i.is_merge && !merge_mode.is_master ? acc_pre_qready : 1'b0;
+  assign acc_qvalid = !merge_mode_i.is_merge && !merge_mode.is_master ? acc_pre_qvalid : 
+                       cc_s_acc_req_valid_i;
+  */
   // Accelerator Demux Port
   stream_demux #(
     .N_OUP ( 2 )
@@ -283,7 +343,7 @@ module spatz_cc
     .inp_valid_i (acc_snitch_demux_qvalid_q             ),
     .inp_ready_o (acc_snitch_demux_qready_q             ),
     .oup_sel_i   (acc_snitch_demux_q.addr[$clog2(2)-1:0]),
-    .oup_valid_o ({dma_qvalid, acc_qvalid}              ),
+    .oup_valid_o ({dma_qvalid, acc_pre_qvalid}          ),
     .oup_ready_i ({dma_qready, acc_qready}              )
   );
 
@@ -293,18 +353,65 @@ module spatz_cc
   assign hive_req_o.acc_req    = '0;
   assign acc_snitch_req        = acc_snitch_demux_q;
 
+  acc_rsp_t acc_resp;
+  logic     acc_pvalid;
+  logic     acc_pre_pready; 
+
+  // Merge-Mode response interface
+  always_comb begin
+    // Standard connections between Spatz & Snitch within own CC (non-merge-mode)
+    acc_resp   = acc_pre_resp;
+    acc_pvalid = acc_pre_pvalid;
+    acc_pready = acc_pre_pready;
+    acc_snitch_resp = acc_pre_snitch_resp;
+    // Keep CC<->CC connections de-assigned in non-merge-mode
+    cc_m_acc_rsp_ready_o = 1'b0;
+    cc_s_acc_rsp_valid_o = 1'b0;
+
+    // Connections for merge-mode in a slave-CC
+    if (merge_mode_i.is_merge && !merge_mode_i.is_master) begin
+      // Break ties with Snitch in own CC and obey to master-CC
+      acc_resp   = '0;
+      acc_pvalid = 1'b0;
+      acc_pready = cc_s_acc_rsp_ready_i;
+      acc_snitch_resp = '0;
+      // Forward rsp ready signal to master-CC 
+      cc_s_acc_rsp_valid_o = acc_pre_pvalid;
+
+    // Connections for merge-mode in a master-CC
+    end else if (merge_mode_i.is_merge && merge_mode_i.is_master) begin
+      // Forward rsp ready signal from Snitch of master-CC to slave-CC
+      cc_m_acc_rsp_ready_o = acc_pre_pready;
+      // Check if master- and slave-CC's rsp valid are assigned simultaneously before assigning
+      // rsp valid to Snitch of master-CC 
+      acc_pvalid = acc_pre_pvalid && cc_m_acc_rsp_valid_i;
+    end
+  end
+
+  /*
+  // Merge-Mode
+  assign acc_snitch_resp = !merge_mode_i.is_merge && !merge_mode.is_master ? acc_pre_snitch_resp :
+                            '0;
+
+  
+  assign acc_resp = !merge_mode_i.is_merge && !merge_mode_i.is_master ? acc_pre_resp : '0; 
+  assign acc_pvalid = !merge_mode_i.is_merge && !merge_mode_i.is_master ? acc_pre_pvalid : 1'b0;
+  assign acc_pready = !merge_mode_i.is_merge && !merge_mode_i.is_master ? acc_pre_pready : 
+                       cc_s_acc_rsp_ready_i;
+  */
+
   stream_arbiter #(
     .DATA_T ( acc_rsp_t ),
     .N_INP  ( 2         )
   ) i_stream_arbiter_offload (
-    .clk_i       ( clk_i                     ),
-    .rst_ni      ( rst_ni                    ),
-    .inp_data_i  ( {dma_resp, acc_resp }     ),
-    .inp_valid_i ( {dma_pvalid, acc_pvalid } ),
-    .inp_ready_o ( {dma_pready, acc_pready } ),
-    .oup_data_o  ( acc_demux_snitch_q        ),
-    .oup_valid_o ( acc_demux_snitch_valid_q  ),
-    .oup_ready_i ( acc_demux_snitch_ready_q  )
+    .clk_i       ( clk_i                         ),
+    .rst_ni      ( rst_ni                        ),
+    .inp_data_i  ( {dma_resp, acc_resp }         ),
+    .inp_valid_i ( {dma_pvalid, acc_pvalid }     ),
+    .inp_ready_o ( {dma_pready, acc_pre_pready } ),
+    .oup_data_o  ( acc_demux_snitch_q            ),
+    .oup_valid_o ( acc_demux_snitch_valid_q      ),
+    .oup_ready_i ( acc_demux_snitch_ready_q      )
   );
 
   dreq_t fp_lsu_mem_req;
@@ -332,12 +439,12 @@ module spatz_cc
     .rst_ni                  (rst_ni                ),
     .hart_id_i               (hart_id_i             ),
     .issue_valid_i           (acc_qvalid            ),
-    .issue_ready_o           (acc_qready            ),
-    .issue_req_i             (acc_snitch_req        ),
-    .issue_rsp_o             (acc_snitch_resp       ),
-    .rsp_valid_o             (acc_pvalid            ),
+    .issue_ready_o           (acc_pre_qready        ),
+    .issue_req_i             (acc_issue_req         ),
+    .issue_rsp_o             (acc_pre_snitch_resp   ),
+    .rsp_valid_o             (acc_pre_pvalid        ),
     .rsp_ready_i             (acc_pready            ),
-    .rsp_o                   (acc_resp              ),
+    .rsp_o                   (acc_pre_resp          ),
     .spatz_mem_req_o         (spatz_mem_req         ),
     .spatz_mem_req_valid_o   (spatz_mem_req_valid   ),
     .spatz_mem_req_ready_i   (spatz_mem_req_ready   ),
