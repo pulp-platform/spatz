@@ -38,7 +38,7 @@ module spatz_cluster
     /// Address from which to fetch the first instructions.
     parameter logic                            [31:0]        BootAddr                           = 32'h0,
     /// The total amount of cores.
-    parameter int                     unsigned               NrCores                            = 8,
+    parameter int                     unsigned               NrCores                            = 2,
     /// Data/TCDM memory depth per cut (in words).
     parameter int                     unsigned               TCDMDepth                          = 1024,
     /// Cluster peripheral address region size (in kB).
@@ -97,7 +97,8 @@ module spatz_cluster
     // value here. This only applies to the TCDM. The instruction cache macros will break!
     // In case you are using the `RegisterTCDMCuts` feature this adds an
     // additional cycle latency, which is taken into account here.
-    parameter int                     unsigned               MemoryMacroLatency                 = 1 + RegisterTCDMCuts
+    parameter int                     unsigned               MemoryMacroLatency                 = 1 + RegisterTCDMCuts,
+    parameter bit                                            merge_active                       = 1'b1 // Preliminary method to activate merge-mode
   ) (
     /// System clock.
     input  logic                             clk_i,
@@ -696,7 +697,11 @@ module spatz_cluster
     logic [31:0]               hart_id;
     assign hart_id = hart_base_id_i + i;
 
-    spatz_cc #(
+    logic acc_req_ready, acc_req_valid, acc_rsp_ready, acc_rsp_valid;
+    acc_issue_req_t spatz_req;
+
+    if (!merge_active) begin
+      spatz_cc #(
       .BootAddr                (BootAddr                   ),
       .RVE                     (1'b0                       ),
       .RVF                     (RVF                        ),
@@ -761,8 +766,183 @@ module spatz_cluster
       .axi_dma_perf_o   (/* Unused */                        ),
       .axi_dma_events_o (dma_core_events                     ),
       .core_events_o    (core_events[i]                      ),
-      .tcdm_addr_base_i (tcdm_start_address                  )
+      .tcdm_addr_base_i (tcdm_start_address                  ),
+      .cc_m_acc_req_valid_o(/* Unused */                     ),
+      .cc_m_acc_req_ready_i(/* Unused */                     ),
+      .cc_m_acc_rsp_valid_i(/* Unused */                     ),
+      .cc_m_acc_req_o      (/* Unused */                     ),
+      .cc_m_acc_rsp_ready_o(/* Unused */                     ),
+      .cc_s_acc_req_valid_i(/* Unused */                     ),
+      .cc_s_acc_req_ready_o(/* Unused */                     ),
+      .cc_s_acc_rsp_valid_o(/* Unused */                     ),
+      .cc_s_acc_req_i      (/* Unused */                     ),
+      .cc_s_acc_rsp_ready_i(/* Unused */                     ),
+      .merge_mode_i        (2'b00                            )
     );
+    end else begin
+      if (i == 0) begin
+        //master_cc
+        spatz_cc #(
+        .BootAddr                (BootAddr                   ),
+        .RVE                     (1'b0                       ),
+        .RVF                     (RVF                        ),
+        .RVD                     (RVD                        ),
+        .RVV                     (RVV                        ),
+        .Xdma                    (Xdma[i]                    ),
+        .AddrWidth               (AxiAddrWidth               ),
+        .DataWidth               (NarrowDataWidth            ),
+        .UserWidth               (AxiUserWidth               ),
+        .DMADataWidth            (AxiDataWidth               ),
+        .DMAIdWidth              (AxiIdWidthIn               ),
+        .SnitchPMACfg            (SnitchPMACfg               ),
+        .DMAAxiReqFifoDepth      (DMAAxiReqFifoDepth         ),
+        .DMAReqFifoDepth         (DMAReqFifoDepth            ),
+        .dreq_t                  (reqrsp_req_t               ),
+        .drsp_t                  (reqrsp_rsp_t               ),
+        .tcdm_req_t              (tcdm_req_t                 ),
+        .tcdm_req_chan_t         (tcdm_req_chan_t            ),
+        .tcdm_rsp_t              (tcdm_rsp_t                 ),
+        .tcdm_rsp_chan_t         (tcdm_rsp_chan_t            ),
+        .axi_req_t               (axi_mst_dma_req_t          ),
+        .axi_ar_chan_t           (axi_mst_dma_ar_chan_t      ),
+        .axi_aw_chan_t           (axi_mst_dma_aw_chan_t      ),
+        .axi_rsp_t               (axi_mst_dma_resp_t         ),
+        .hive_req_t              (hive_req_t                 ),
+        .hive_rsp_t              (hive_rsp_t                 ),
+        .acc_issue_req_t         (acc_issue_req_t            ),
+        .acc_issue_rsp_t         (acc_issue_rsp_t            ),
+        .acc_rsp_t               (acc_rsp_t                  ),
+        .dma_events_t            (dma_events_t               ),
+        .dma_perf_t              (axi_dma_pkg::dma_perf_t    ),
+        .XDivSqrt                (1'b0                       ),
+        .XF16                    (1'b1                       ),
+        .XF16ALT                 (1'b1                       ),
+        .XF8                     (1'b1                       ),
+        .XF8ALT                  (1'b1                       ),
+        .IsoCrossing             (1'b0                       ),
+        .NumIntOutstandingLoads  (NumIntOutstandingLoads[i]  ),
+        .NumIntOutstandingMem    (NumIntOutstandingMem[i]    ),
+        .NumSpatzOutstandingLoads(NumSpatzOutstandingLoads[i]),
+        .FPUImplementation       (FPUImplementation[i]       ),
+        .RegisterOffloadReq      (RegisterOffloadReq         ),
+        .RegisterOffloadRsp      (RegisterOffloadRsp         ),
+        .RegisterCoreReq         (RegisterCoreReq            ),
+        .RegisterCoreRsp         (RegisterCoreRsp            ),
+        .TCDMAddrWidth           (TCDMAddrWidth              )
+      ) i_spatz_cc (
+        .clk_i            (clk_i                               ),
+        .clk_d2_i         (clk_i                               ),
+        .rst_ni           (rst_ni                              ),
+        .hart_id_i        (hart_id                             ),
+        .hive_req_o       (hive_req[i]                         ),
+        .hive_rsp_i       (hive_rsp[i]                         ),
+        .irq_i            (irq                                 ),
+        .data_req_o       (core_req[i]                         ),
+        .data_rsp_i       (core_rsp[i]                         ),
+        .tcdm_req_o       (tcdm_req_wo_user                    ),
+        .tcdm_rsp_i       (tcdm_rsp[TcdmPortsOffs +: TcdmPorts]),
+        .axi_dma_req_o    (axi_dma_req                         ),
+        .axi_dma_res_i    (axi_dma_res                         ),
+        .axi_dma_busy_o   (/* Unused */                        ),
+        .axi_dma_perf_o   (/* Unused */                        ),
+        .axi_dma_events_o (dma_core_events                     ),
+        .core_events_o    (core_events[i]                      ),
+        .tcdm_addr_base_i (tcdm_start_address                  ),
+        .cc_m_acc_req_valid_o(acc_req_valid                    ),
+        .cc_m_acc_req_ready_i(acc_req_ready                    ),
+        .cc_m_acc_rsp_valid_i(acc_rsp_valid                    ),
+        .cc_m_acc_req_o      (spatz_req                        ),
+        .cc_m_acc_rsp_ready_o(acc_rsp_ready                    ),
+        .cc_s_acc_req_valid_i(/* Unused */                     ),
+        .cc_s_acc_req_ready_o(/* Unused */                     ),
+        .cc_s_acc_rsp_valid_o(/* Unused */                     ),
+        .cc_s_acc_req_i      (/* Unused */                     ),
+        .cc_s_acc_rsp_ready_i(/* Unused */                     ),
+        .merge_mode_i        ('{1,1}                           )
+      );
+      end else begin
+        //slave_cc
+        spatz_cc #(
+        .BootAddr                (BootAddr                   ),
+        .RVE                     (1'b0                       ),
+        .RVF                     (RVF                        ),
+        .RVD                     (RVD                        ),
+        .RVV                     (RVV                        ),
+        .Xdma                    (Xdma[i]                    ),
+        .AddrWidth               (AxiAddrWidth               ),
+        .DataWidth               (NarrowDataWidth            ),
+        .UserWidth               (AxiUserWidth               ),
+        .DMADataWidth            (AxiDataWidth               ),
+        .DMAIdWidth              (AxiIdWidthIn               ),
+        .SnitchPMACfg            (SnitchPMACfg               ),
+        .DMAAxiReqFifoDepth      (DMAAxiReqFifoDepth         ),
+        .DMAReqFifoDepth         (DMAReqFifoDepth            ),
+        .dreq_t                  (reqrsp_req_t               ),
+        .drsp_t                  (reqrsp_rsp_t               ),
+        .tcdm_req_t              (tcdm_req_t                 ),
+        .tcdm_req_chan_t         (tcdm_req_chan_t            ),
+        .tcdm_rsp_t              (tcdm_rsp_t                 ),
+        .tcdm_rsp_chan_t         (tcdm_rsp_chan_t            ),
+        .axi_req_t               (axi_mst_dma_req_t          ),
+        .axi_ar_chan_t           (axi_mst_dma_ar_chan_t      ),
+        .axi_aw_chan_t           (axi_mst_dma_aw_chan_t      ),
+        .axi_rsp_t               (axi_mst_dma_resp_t         ),
+        .hive_req_t              (hive_req_t                 ),
+        .hive_rsp_t              (hive_rsp_t                 ),
+        .acc_issue_req_t         (acc_issue_req_t            ),
+        .acc_issue_rsp_t         (acc_issue_rsp_t            ),
+        .acc_rsp_t               (acc_rsp_t                  ),
+        .dma_events_t            (dma_events_t               ),
+        .dma_perf_t              (axi_dma_pkg::dma_perf_t    ),
+        .XDivSqrt                (1'b0                       ),
+        .XF16                    (1'b1                       ),
+        .XF16ALT                 (1'b1                       ),
+        .XF8                     (1'b1                       ),
+        .XF8ALT                  (1'b1                       ),
+        .IsoCrossing             (1'b0                       ),
+        .NumIntOutstandingLoads  (NumIntOutstandingLoads[i]  ),
+        .NumIntOutstandingMem    (NumIntOutstandingMem[i]    ),
+        .NumSpatzOutstandingLoads(NumSpatzOutstandingLoads[i]),
+        .FPUImplementation       (FPUImplementation[i]       ),
+        .RegisterOffloadReq      (RegisterOffloadReq         ),
+        .RegisterOffloadRsp      (RegisterOffloadRsp         ),
+        .RegisterCoreReq         (RegisterCoreReq            ),
+        .RegisterCoreRsp         (RegisterCoreRsp            ),
+        .TCDMAddrWidth           (TCDMAddrWidth              )
+      ) i_spatz_cc (
+        .clk_i            (clk_i                               ),
+        .clk_d2_i         (clk_i                               ),
+        .rst_ni           (rst_ni                              ),
+        .hart_id_i        (hart_id                             ),
+        .hive_req_o       (hive_req[i]                         ),
+        .hive_rsp_i       (hive_rsp[i]                         ),
+        .irq_i            (irq                                 ),
+        .data_req_o       (core_req[i]                         ),
+        .data_rsp_i       (core_rsp[i]                         ),
+        .tcdm_req_o       (tcdm_req_wo_user                    ),
+        .tcdm_rsp_i       (tcdm_rsp[TcdmPortsOffs +: TcdmPorts]),
+        .axi_dma_req_o    (axi_dma_req                         ),
+        .axi_dma_res_i    (axi_dma_res                         ),
+        .axi_dma_busy_o   (/* Unused */                        ),
+        .axi_dma_perf_o   (/* Unused */                        ),
+        .axi_dma_events_o (dma_core_events                     ),
+        .core_events_o    (core_events[i]                      ),
+        .tcdm_addr_base_i (tcdm_start_address                  ),
+        .cc_m_acc_req_valid_o(/* Unused */                     ),
+        .cc_m_acc_req_ready_i(/* Unused */                     ),
+        .cc_m_acc_rsp_valid_i(/* Unused */                     ),
+        .cc_m_acc_req_o      (/* Unused */                     ),
+        .cc_m_acc_rsp_ready_o(/* Unused */                     ),
+        .cc_s_acc_req_valid_i(acc_req_valid                    ),
+        .cc_s_acc_req_ready_o(acc_req_ready                    ),
+        .cc_s_acc_rsp_valid_o(acc_rsp_valid                    ),
+        .cc_s_acc_req_i      (spatz_req                        ),
+        .cc_s_acc_rsp_ready_i(acc_rsp_ready                    ),
+        .merge_mode_i        ('{1,0}                           )
+      );
+      end
+    end
+    
     for (genvar j = 0; j < TcdmPorts; j++) begin : gen_tcdm_user
       always_comb begin
         tcdm_req[TcdmPortsOffs+j].q              = tcdm_req_wo_user[j].q;
@@ -1137,5 +1317,7 @@ module spatz_cluster
   `ASSERT(ClusterBaseAddrAlign, ((TCDMSize - 1) & cluster_base_addr_i) == 0)
   // Make sure we only have one DMA in the system.
   `ASSERT_INIT(NumberDMA, $onehot0(Xdma))
+  // Check that merge mode is only used in combination with 2 cores
+  `ASSERT_INIT(MergeModeCoreNum, merge_active && NrCores <= 2 || !merge_active);
 
 endmodule
