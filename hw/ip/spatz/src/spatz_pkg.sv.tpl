@@ -397,4 +397,9 @@ package spatz_pkg;
     widen_fp8_to_fp16.mantissa = {operand.mantissa, 8'b0};
   endfunction
 
+  typedef struct packed {
+    logic is_merge;
+    logic is_master;
+  } merge_mode_t
+
 endpackage : spatz_pkg
