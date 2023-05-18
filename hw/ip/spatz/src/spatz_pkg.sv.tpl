@@ -400,6 +400,6 @@ package spatz_pkg;
   typedef struct packed {
     logic is_merge;
     logic is_master;
-  } merge_mode_t
+  } merge_mode_t;
 
 endpackage : spatz_pkg
