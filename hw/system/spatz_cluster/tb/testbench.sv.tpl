@@ -279,8 +279,9 @@ module testharness (
     to_cluster_req = '0;
     debug_req      = '0;
 
-    @(posedge clk_i);
-    @(negedge rst_ni);
+    // Wait for a while
+    repeat (10)
+      @(negedge clk_i);
 
     // Load the entry point
     entry_point = get_entry_point();
