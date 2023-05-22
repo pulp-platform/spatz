@@ -321,7 +321,7 @@ module spatz_cc
     end else if (merge_mode_i.is_merge && merge_mode_i.is_master) begin
       // Forward the request and the valid signal to the slave-CC
       cc_m_acc_req_o = acc_issue_req;
-      cc_m_acc_req_valid_o = acc_qvalid;
+      cc_m_acc_req_valid_o = acc_pre_qvalid;
       // Check if master- and slave-CC's req ready are assigned simultaneously before assigning
       // req ready to Snitch of master-CC 
       acc_qready = acc_pre_qready && cc_m_acc_req_ready_i;
@@ -342,7 +342,7 @@ module spatz_cc
   ) i_stream_demux_offload (
     .inp_valid_i (acc_snitch_demux_qvalid_q             ),
     .inp_ready_o (acc_snitch_demux_qready_q             ),
-    .oup_sel_i   (acc_snitch_demux_q.addr[$clog2(2)-1:0]),
+    .oup_sel_i   (acc_snitch_demux_q.addr[$clog2(2)-1:0]), //inital value always spatz
     .oup_valid_o ({dma_qvalid, acc_pre_qvalid}          ),
     .oup_ready_i ({dma_qready, acc_qready}              )
   );
