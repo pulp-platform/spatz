@@ -167,6 +167,7 @@ sources:
   # Level 2
   - hw/ip/spatz_cc/src/axi_dma_tc_snitch_fe.sv
   # Level 3
+  - hw/ip/spatz_cc/src/merge_interface.sv
   - hw/ip/spatz_cc/src/spatz_cc.sv
 
   ## system/spatz_cluster ##
