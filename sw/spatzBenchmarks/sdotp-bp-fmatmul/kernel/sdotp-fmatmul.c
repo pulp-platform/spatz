@@ -49,7 +49,7 @@ void matmul_2xVL(char *c, const char *a, const char *b,
                  : [gvl] "=r"(gvl)
                  : [vl] "r"(2 * (p_end - p)));
 
-    const char *b_ = b + p;
+    const char *b_ = b + 2 * p;
     char *c_ = c + p;
 
     // Account for the used operands
@@ -62,7 +62,7 @@ void matmul_2xVL(char *c, const char *a, const char *b,
       const char *a__ = a_;
 
       asm volatile("vle8.v v16, (%0);" ::"r"(b_));
-      const char *b__ = b_ + P;
+      const char *b__ = b_ + 2 * P;
 
       char *c__ = c_ + m * P;
 
@@ -81,7 +81,7 @@ void matmul_2xVL(char *c, const char *a, const char *b,
         a__ = a_ + n;
 
         asm volatile("vle8.v v24, (%0);" ::"r"(b__));
-        b__ += P;
+        b__ += 2 * P;
 
         asm volatile("vfwdotp.vf v0, %0, v16" ::"f"(t0));
         asm volatile("flh %[t], 0(%[a])" : [t] "=f"(t0) : [a] "r"(a__));
@@ -96,7 +96,7 @@ void matmul_2xVL(char *c, const char *a, const char *b,
           break;
 
         asm volatile("vle8.v v16, (%0);" ::"r"(b__));
-        b__ += P;
+        b__ += 2 * P;
 
         asm volatile("vfwdotp.vf v0, %0, v24" ::"f"(t0));
         asm volatile("flh %[t], 0(%[a])" : [t] "=f"(t0) : [a] "r"(a__));
@@ -136,7 +136,7 @@ void matmul_4xVL(char *c, const char *a, const char *b,
                  : [gvl] "=r"(gvl)
                  : [vl] "r"(2 * (p_end - p)));
 
-    const char *b_ = b + p;
+    const char *b_ = b + 2 * p;
     char *c_ = c + p;
 
     // Account for the used operands
@@ -149,7 +149,7 @@ void matmul_4xVL(char *c, const char *a, const char *b,
       const char *a__ = a_;
 
       asm volatile("vle8.v v16, (%0);" ::"r"(b_));
-      const char *b__ = b_ + P;
+      const char *b__ = b_ + 2 * P;
 
       char *c__ = c_ + m * P;
 
@@ -174,7 +174,7 @@ void matmul_4xVL(char *c, const char *a, const char *b,
         a__ = a_ + n;
 
         asm volatile("vle8.v v20, (%0);" ::"r"(b__));
-        b__ += P;
+        b__ += 2 * P;
 
         asm volatile("vfwdotp.vf v0, %0, v16" ::"f"(t0));
         asm volatile("flh %[t], 0(%[a])" : [t] "=f"(t0) : [a] "r"(a__));
@@ -195,7 +195,7 @@ void matmul_4xVL(char *c, const char *a, const char *b,
           break;
 
         asm volatile("vle8.v v16, (%0);" ::"r"(b__));
-        b__ += P;
+        b__ += 2 * P;
 
         asm volatile("vfwdotp.vf v0, %0, v20" ::"f"(t0));
         asm volatile("flh %[t], 0(%[a])" : [t] "=f"(t0) : [a] "r"(a__));
