@@ -49,7 +49,7 @@ void matmul_2xVL(__fp16 *c, const __fp16 *a, const __fp16 *b,
                  : [gvl] "=r"(gvl)
                  : [vl] "r"(2 * (p_end - p)));
 
-    const __fp16 *b_ = b + p;
+    const __fp16 *b_ = b + 2 * p;
     __fp16 *c_ = c + p;
 
     // Account for the used operands
@@ -62,7 +62,7 @@ void matmul_2xVL(__fp16 *c, const __fp16 *a, const __fp16 *b,
       const __fp16 *a__ = a_;
 
       asm volatile("vle16.v v16, (%0);" ::"r"(b_));
-      const __fp16 *b__ = b_ + P;
+      const __fp16 *b__ = b_ + 2 * P;
 
       __fp16 *c__ = c_ + m * P;
 
@@ -136,7 +136,7 @@ void matmul_4xVL(__fp16 *c, const __fp16 *a, const __fp16 *b,
                  : [gvl] "=r"(gvl)
                  : [vl] "r"(2 * (p_end - p)));
 
-    const __fp16 *b_ = b + p;
+    const __fp16 *b_ = b + 2 * p;
     __fp16 *c_ = c + p;
 
     // Account for the used operands
@@ -149,7 +149,7 @@ void matmul_4xVL(__fp16 *c, const __fp16 *a, const __fp16 *b,
       const __fp16 *a__ = a_;
 
       asm volatile("vle16.v v16, (%0);" ::"r"(b_));
-      const __fp16 *b__ = b_ + P;
+      const __fp16 *b__ = b_ + 2 * P;
 
       __fp16 *c__ = c_ + m * P;
 
@@ -249,7 +249,7 @@ void matmul_8xVL(__fp16 *c, const __fp16 *a, const __fp16 *b,
                  : [gvl] "=r"(gvl)
                  : [vl] "r"(2 * (p_end - p)));
 
-    const __fp16 *b_ = b + p;
+    const __fp16 *b_ = b + 2 * p;
     __fp16 *c_ = c + p;
 
     // Account for the used operands
