@@ -274,8 +274,6 @@ module spatz_vfu
       vfu_rsp_o.wb      = result_tag.wb;
       vfu_rsp_o.result  = scalar_result;
       vfu_rsp_valid_o   = 1'b1;
-      // Reset the narrowing information
-      narrowing_upper_d = 1'b0;
     end
   end: control_proc
 
