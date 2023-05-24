@@ -252,6 +252,7 @@ module spatz_vfu
       last_request            = 1'b1;
       running_d[spatz_req.id] = 1'b0;
       widening_upper_d        = 1'b0;
+      narrowing_upper_d       = 1'b0;
     end
     // Do we have a new instruction?
     else if (spatz_req_valid && !running_d[spatz_req.id]) begin
