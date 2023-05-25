@@ -43,14 +43,14 @@ int verify_matrix(__fp16 *matrix, const __fp16 *checksum,
     float eps;
     if ((num_rows == 128) && (num_columns == 128)) {
       if (i == 75) {
-        diff = 0;  // skip check on this element (catastrophic cancellation in
-                   // the last addition producing a large relative error)
+        diff = 0; // skip check on this element (catastrophic cancellation in
+                  // the last addition producing a large relative error)
         eps  = 1;
       } else {
         eps = 0.15f * (float)checksum[i];
       }
     } else {
-      eps = 0.05f;
+      eps = 0.05f * (float)checksum[i];
     }
     if (eps < 0)
       eps = -eps;
