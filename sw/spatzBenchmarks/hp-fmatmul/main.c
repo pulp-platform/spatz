@@ -45,7 +45,7 @@ int verify_matrix(__fp16 *matrix, const __fp16 *checksum,
       if (i == 75) {
         diff = 0; // skip check on this element (catastrophic cancellation in
                   // the last addition producing a large relative error)
-        eps  = 1;
+        eps = 1;
       } else {
         eps = 0.15f * (float)checksum[i];
       }
