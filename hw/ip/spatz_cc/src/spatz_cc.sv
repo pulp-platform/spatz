@@ -171,7 +171,7 @@ module spatz_cc
 
   roundmode_e cpu_fpu_rnd_mode, acc_fpu_rnd_mode;
   fmt_mode_t  cpu_fpu_fmt_mode, acc_fpu_fmt_mode;
-  status_t cpu_fpu_status, acc_fpu_status;
+  status_t fpu_status;
 
   core_events_t snitch_events;
 
@@ -243,7 +243,7 @@ module spatz_cc
     .ptw_is_4mega_i        (hive_rsp_i.ptw_is_4mega  ),
     .fpu_rnd_mode_o        (cpu_fpu_rnd_mode         ),
     .fpu_fmt_mode_o        (cpu_fpu_fmt_mode         ),
-    .fpu_status_i          (cpu_fpu_status           ),
+    .fpu_status_i          (fpu_status               ),
     .core_events_o         (snitch_events            )
   );
 
@@ -423,7 +423,7 @@ module spatz_cc
     .fp_lsu_mem_rsp_i        (fp_lsu_mem_rsp        ),
     .fpu_rnd_mode_i          (acc_fpu_rnd_mode      ),
     .fpu_fmt_mode_i          (acc_fpu_fmt_mode      ),
-    .fpu_status_o            (acc_fpu_status        )
+    .fpu_status_o            (fpu_status            )
   );
 
   for (genvar p = 0; p < NumMemPortsPerSpatz; p++) begin
