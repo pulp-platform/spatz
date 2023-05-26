@@ -22,7 +22,7 @@
 /// Spatz Cluster Top-Level.
 module spatz_cluster
   import spatz_pkg::*;
-  import fpnew_pkg::fpu_implementation_t;
+  import fpnew_pkg::*;
   import snitch_pma_pkg::snitch_pma_t;
   #(
     /// Width of physical address.
@@ -292,7 +292,7 @@ module spatz_cluster
 
   typedef struct packed {
     acc_addr_e addr;
-    logic [5:0] id;
+    logic [6:0] id;
     logic [31:0] data_op;
     data_t data_arga;
     data_t data_argb;
@@ -308,7 +308,7 @@ module spatz_cluster
   } acc_issue_rsp_t;
 
   typedef struct packed {
-    logic [5:0] id;
+    logic [6:0] id;
     logic error;
     data_t data;
   } acc_rsp_t;
@@ -673,6 +673,12 @@ module spatz_cluster
   hive_req_t [NrCores-1:0] hive_req;
   hive_rsp_t [NrCores-1:0] hive_rsp;
 
+  logic acc_req_ready, acc_req_valid, acc_rsp_ready, acc_rsp_valid;
+  acc_issue_req_t spatz_req;
+
+  roundmode_e fpu_rnd_mode;
+  fmt_mode_t  fpu_fmt_mode;
+
   for (genvar i = 0; i < NrCores; i++) begin : gen_core
     localparam int unsigned TcdmPorts     = get_tcdm_ports(i);
     localparam int unsigned TcdmPortsOffs = get_tcdm_port_offs(i);
@@ -696,9 +702,6 @@ module spatz_cluster
 
     logic [31:0]               hart_id;
     assign hart_id = hart_base_id_i + i;
-
-    logic acc_req_ready, acc_req_valid, acc_rsp_ready, acc_rsp_valid;
-    acc_issue_req_t spatz_req;
 
     if (!merge_active) begin
       spatz_cc #(
@@ -748,7 +751,7 @@ module spatz_cluster
       .RegisterCoreReq         (RegisterCoreReq            ),
       .RegisterCoreRsp         (RegisterCoreRsp            ),
       .TCDMAddrWidth           (TCDMAddrWidth              )
-    ) i_spatz_cc (
+      ) i_spatz_cc (
       .clk_i            (clk_i                               ),
       .clk_d2_i         (clk_i                               ),
       .rst_ni           (rst_ni                              ),
@@ -777,6 +780,10 @@ module spatz_cluster
       .cc_s_acc_rsp_valid_o(/* Unused */                     ),
       .cc_s_acc_req_i      (/* Unused */                     ),
       .cc_s_acc_rsp_ready_i(/* Unused */                     ),
+      .cc_m_acc_fpu_rnd_mode_o(/* Unused */                  ),
+      .cc_m_acc_fpu_fmt_mode_o(/* Unused */                  ),
+      .cc_s_acc_fpu_rnd_mode_i(/* Unused */                  ),
+      .cc_s_acc_fpu_fmt_mode_i(/* Unused */                  ),
       .merge_mode_i        (2'b00                            )
     );
     end else begin
@@ -829,7 +836,7 @@ module spatz_cluster
         .RegisterCoreReq         (RegisterCoreReq            ),
         .RegisterCoreRsp         (RegisterCoreRsp            ),
         .TCDMAddrWidth           (TCDMAddrWidth              )
-      ) i_spatz_cc (
+        ) i_spatz_cc (
         .clk_i            (clk_i                               ),
         .clk_d2_i         (clk_i                               ),
         .rst_ni           (rst_ni                              ),
@@ -858,7 +865,11 @@ module spatz_cluster
         .cc_s_acc_rsp_valid_o(/* Unused */                     ),
         .cc_s_acc_req_i      (/* Unused */                     ),
         .cc_s_acc_rsp_ready_i(/* Unused */                     ),
-        .merge_mode_i        ('{1,1}                           )
+        .cc_m_acc_fpu_rnd_mode_o(fpu_rnd_mode                  ),
+        .cc_m_acc_fpu_fmt_mode_o(fpu_fmt_mode                  ),
+        .cc_s_acc_fpu_rnd_mode_i(/* Unused */                  ),
+        .cc_s_acc_fpu_fmt_mode_i(/* Unused */                  ),
+        .merge_mode_i        ('{1, 1}                          )
       );
       end else begin
         //slave_cc
@@ -909,7 +920,7 @@ module spatz_cluster
         .RegisterCoreReq         (RegisterCoreReq            ),
         .RegisterCoreRsp         (RegisterCoreRsp            ),
         .TCDMAddrWidth           (TCDMAddrWidth              )
-      ) i_spatz_cc (
+        ) i_spatz_cc (
         .clk_i            (clk_i                               ),
         .clk_d2_i         (clk_i                               ),
         .rst_ni           (rst_ni                              ),
@@ -938,7 +949,11 @@ module spatz_cluster
         .cc_s_acc_rsp_valid_o(acc_rsp_valid                    ),
         .cc_s_acc_req_i      (spatz_req                        ),
         .cc_s_acc_rsp_ready_i(acc_rsp_ready                    ),
-        .merge_mode_i        ('{1,0}                           )
+        .cc_m_acc_fpu_rnd_mode_o(/* Unused */                  ),
+        .cc_m_acc_fpu_fmt_mode_o(/* Unused */                  ),
+        .cc_s_acc_fpu_rnd_mode_i(fpu_rnd_mode                  ),
+        .cc_s_acc_fpu_fmt_mode_i(fpu_fmt_mode                  ),
+        .merge_mode_i        ('{1, 0}                          )
       );
       end
     end
