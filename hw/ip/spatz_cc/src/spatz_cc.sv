@@ -13,7 +13,7 @@
 module spatz_cc
   import snitch_pkg::interrupts_t;
   import snitch_pkg::core_events_t;
-  import fpnew_pkg::fpu_implementation_t;
+  import fpnew_pkg::*;
   import spatz_pkg::*; #(
     /// Address width of the buses
     parameter int                          unsigned        AddrWidth                = 0,
@@ -130,6 +130,12 @@ module spatz_cc
     input  acc_issue_req_t               cc_s_acc_req_i,
     input  logic                         cc_s_acc_rsp_ready_i,
 
+    output roundmode_e                   cc_m_acc_fpu_rnd_mode_o,
+    output fmt_mode_t                    cc_m_acc_fpu_fmt_mode_o,
+
+    input  roundmode_e                   cc_s_acc_fpu_rnd_mode_i,
+    input  fmt_mode_t                    cc_s_acc_fpu_fmt_mode_i,
+
     input  merge_mode_t                  merge_mode_i
   );
 
@@ -163,9 +169,9 @@ module spatz_cc
   logic acc_demux_snitch_valid, acc_demux_snitch_ready;
   logic acc_demux_snitch_valid_q, acc_demux_snitch_ready_q;
 
-  fpnew_pkg::roundmode_e fpu_rnd_mode;
-  fpnew_pkg::fmt_mode_t  fpu_fmt_mode;
-  fpnew_pkg::status_t fpu_status;
+  roundmode_e cpu_fpu_rnd_mode, acc_fpu_rnd_mode;
+  fmt_mode_t  cpu_fpu_fmt_mode, acc_fpu_fmt_mode;
+  status_t cpu_fpu_status, acc_fpu_status;
 
   core_events_t snitch_events;
 
@@ -235,9 +241,9 @@ module spatz_cc
     .ptw_ppn_o             (hive_req_o.ptw_ppn       ),
     .ptw_pte_i             (hive_rsp_i.ptw_pte       ),
     .ptw_is_4mega_i        (hive_rsp_i.ptw_is_4mega  ),
-    .fpu_rnd_mode_o        (fpu_rnd_mode             ),
-    .fpu_fmt_mode_o        (fpu_fmt_mode             ),
-    .fpu_status_i          (fpu_status               ),
+    .fpu_rnd_mode_o        (cpu_fpu_rnd_mode         ),
+    .fpu_fmt_mode_o        (cpu_fpu_fmt_mode         ),
+    .fpu_status_i          (cpu_fpu_status           ),
     .core_events_o         (snitch_events            )
   );
 
@@ -297,45 +303,53 @@ module spatz_cc
   logic           acc_pre_qvalid;
   acc_issue_req_t acc_issue_req;
 
-  // Merge-Mode Request Interface
-  always_comb begin
-    // Standard connections between Spatz & Snitch within own CC (non-merge-mode)
-    acc_qready           = acc_pre_qready;
-    acc_qvalid           = acc_pre_qvalid;
-    acc_issue_req        = acc_snitch_req;
-    // Keep CC<->CC connections de-assigned in non-merge-mode
-    cc_m_acc_req_o       = '0;
-    cc_m_acc_req_valid_o = 1'b0;
-    cc_s_acc_req_ready_o = 1'b0;
+  acc_rsp_t acc_resp;
+  logic     acc_pvalid;
+  logic     acc_pre_pready; 
 
-    // Connections for merge-mode in a slave-CC
-    if (merge_mode_i.is_merge && !merge_mode_i.is_master) begin
-      // Break ties with Snitch in own CC and obey to master-CC
-      acc_qready           = 1'b0;
-      acc_qvalid           = cc_s_acc_req_valid_i;
-      acc_issue_req        = cc_s_acc_req_i;
-      // Forward the req ready signal to the master-CC
-      cc_s_acc_req_ready_o = acc_pre_qready;
+  merge_interface #(
+    .acc_issue_req_t(acc_issue_req_t),
+    .acc_issue_rsp_t(acc_issue_rsp_t),
+    .acc_rsp_t(acc_rsp_t)
+  ) i_merge_interface (
+    .clk_i                 (clk_i),
+    .rst_ni                (rst_ni),
+    .acc_intf_qreq_ready_i (acc_pre_qready),
+    .acc_intf_issue_prsp_i (acc_pre_snitch_resp),
+    .acc_intf_qreq_valid_o (acc_qvalid),
+    .acc_intf_qreq_o       (acc_issue_req),
+    .acc_intf_prsp_i       (acc_pre_resp),
+    .acc_intf_prsp_valid_i (acc_pre_pvalid),
+    .acc_intf_prsp_ready_o (acc_pready),
+    .cpu_intf_qreq_i       (acc_snitch_req),
+    .cpu_intf_qreq_valid_i (acc_pre_qvalid),
+    .cpu_intf_qreq_ready_o (acc_qready),
+    .cpu_intf_issue_prsp_o (acc_snitch_resp),
+    .cpu_intf_prsp_o       (acc_resp), 
+    .cpu_intf_prsp_valid_o (acc_pvalid),
+    .cpu_intf_prsp_ready_i (acc_pre_pready), 
+    .s_cc_intf_qreq_i      (cc_s_acc_req_i), 
+    .s_cc_intf_qreq_valid_i(cc_s_acc_req_valid_i),
+    .s_cc_intf_qreq_ready_o(cc_s_acc_req_ready_o),
+    .s_cc_intf_prsp_valid_o(cc_s_acc_rsp_valid_o),
+    .s_cc_intf_prsp_ready_i(cc_s_acc_rsp_ready_i),
+    .m_cc_intf_qreq_o      (cc_m_acc_req_o),
+    .m_cc_intf_qreq_valid_o(cc_m_acc_req_valid_o),
+    .m_cc_intf_qreq_ready_i(cc_m_acc_req_ready_i),
+    .m_cc_intf_prsp_valid_i(cc_m_acc_rsp_valid_i),
+    .m_cc_intf_prsp_ready_o(cc_m_acc_rsp_ready_o),
+    .state_i               (/* Unused */),
+    .merge_mode_i          (merge_mode_i),
+    .cpu_intf_fpu_rnd_mode_i (cpu_fpu_rnd_mode),
+    .cpu_intf_fpu_fmt_mode_i (cpu_fpu_fmt_mode),
+    .acc_intf_fpu_rnd_mode_o (acc_fpu_rnd_mode),
+    .acc_intf_fpu_fmt_mode_o (acc_fpu_fmt_mode),
+    .m_cc_intf_fpu_rnd_mode_o(cc_m_acc_fpu_rnd_mode_o),
+    .m_cc_intf_fpu_fmt_mode_o(cc_m_acc_fpu_fmt_mode_o),
+    .s_cc_intf_fpu_rnd_mode_i(cc_s_acc_fpu_rnd_mode_i),
+    .s_cc_intf_fpu_fmt_mode_i(cc_s_acc_fpu_fmt_mode_i)
+  );
 
-    // Connections for merge-mode in a master-CC
-    end else if (merge_mode_i.is_merge && merge_mode_i.is_master) begin
-      // Forward the request and the valid signal to the slave-CC
-      cc_m_acc_req_o = acc_issue_req;
-      cc_m_acc_req_valid_o = acc_pre_qvalid;
-      // Check if master- and slave-CC's req ready are assigned simultaneously before assigning
-      // req ready to Snitch of master-CC 
-      acc_qready = acc_pre_qready && cc_m_acc_req_ready_i;
-    end
-  end
-
-  /*
-  // Merge-Mode
-  assign acc_issue_req = !merge_mode_i.is_merge && !merge_mode_i.is_master ? acc_snitch_req :
-                          cc_s_acc_req_i;
-  assign acc_qready = !merge_mode_i.is_merge && !merge_mode.is_master ? acc_pre_qready : 1'b0;
-  assign acc_qvalid = !merge_mode_i.is_merge && !merge_mode.is_master ? acc_pre_qvalid : 
-                       cc_s_acc_req_valid_i;
-  */
   // Accelerator Demux Port
   stream_demux #(
     .N_OUP ( 2 )
@@ -352,53 +366,6 @@ module spatz_cc
   assign hive_req_o.acc_pready = 1'b0;
   assign hive_req_o.acc_req    = '0;
   assign acc_snitch_req        = acc_snitch_demux_q;
-
-  acc_rsp_t acc_resp;
-  logic     acc_pvalid;
-  logic     acc_pre_pready; 
-
-  // Merge-Mode response interface
-  always_comb begin
-    // Standard connections between Spatz & Snitch within own CC (non-merge-mode)
-    acc_resp   = acc_pre_resp;
-    acc_pvalid = acc_pre_pvalid;
-    acc_pready = acc_pre_pready;
-    acc_snitch_resp = acc_pre_snitch_resp;
-    // Keep CC<->CC connections de-assigned in non-merge-mode
-    cc_m_acc_rsp_ready_o = 1'b0;
-    cc_s_acc_rsp_valid_o = 1'b0;
-
-    // Connections for merge-mode in a slave-CC
-    if (merge_mode_i.is_merge && !merge_mode_i.is_master) begin
-      // Break ties with Snitch in own CC and obey to master-CC
-      acc_resp   = '0;
-      acc_pvalid = 1'b0;
-      acc_pready = cc_s_acc_rsp_ready_i;
-      acc_snitch_resp = '0;
-      // Forward rsp ready signal to master-CC 
-      cc_s_acc_rsp_valid_o = acc_pre_pvalid;
-
-    // Connections for merge-mode in a master-CC
-    end else if (merge_mode_i.is_merge && merge_mode_i.is_master) begin
-      // Forward rsp ready signal from Snitch of master-CC to slave-CC
-      cc_m_acc_rsp_ready_o = acc_pre_pready;
-      // Check if master- and slave-CC's rsp valid are assigned simultaneously before assigning
-      // rsp valid to Snitch of master-CC 
-      acc_pvalid = acc_pre_pvalid && cc_m_acc_rsp_valid_i;
-    end
-  end
-
-  /*
-  // Merge-Mode
-  assign acc_snitch_resp = !merge_mode_i.is_merge && !merge_mode.is_master ? acc_pre_snitch_resp :
-                            '0;
-
-  
-  assign acc_resp = !merge_mode_i.is_merge && !merge_mode_i.is_master ? acc_pre_resp : '0; 
-  assign acc_pvalid = !merge_mode_i.is_merge && !merge_mode_i.is_master ? acc_pre_pvalid : 1'b0;
-  assign acc_pready = !merge_mode_i.is_merge && !merge_mode_i.is_master ? acc_pre_pready : 
-                       cc_s_acc_rsp_ready_i;
-  */
 
   stream_arbiter #(
     .DATA_T ( acc_rsp_t ),
@@ -454,9 +421,9 @@ module spatz_cc
     .spatz_mem_str_finished_o(spatz_mem_str_finished),
     .fp_lsu_mem_req_o        (fp_lsu_mem_req        ),
     .fp_lsu_mem_rsp_i        (fp_lsu_mem_rsp        ),
-    .fpu_rnd_mode_i          (fpu_rnd_mode          ),
-    .fpu_fmt_mode_i          (fpu_fmt_mode          ),
-    .fpu_status_o            (fpu_status            )
+    .fpu_rnd_mode_i          (acc_fpu_rnd_mode      ),
+    .fpu_fmt_mode_i          (acc_fpu_fmt_mode      ),
+    .fpu_status_o            (acc_fpu_status        )
   );
 
   for (genvar p = 0; p < NumMemPortsPerSpatz; p++) begin
