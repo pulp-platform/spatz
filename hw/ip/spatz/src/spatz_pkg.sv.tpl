@@ -402,4 +402,11 @@ package spatz_pkg;
     logic is_master;
   } merge_mode_t;
 
+  typedef enum logic [1:0] {
+    NON_MERGE,
+    MERGE_MASTER,
+    MERGE_SLAVE,
+    UNMERGE_SLAVE
+  } merge_intf_e;
+
 endpackage : spatz_pkg
