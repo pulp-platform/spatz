@@ -978,6 +978,8 @@ module spatz_cluster
       assign wide_axi_mst_req[SDMAMst] = axi_dma_req;
       assign axi_dma_res               = wide_axi_mst_rsp[SDMAMst];
       assign dma_events                = dma_core_events;
+    end else begin
+      assign axi_dma_res = '0;
     end
   end
 
