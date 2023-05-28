@@ -133,6 +133,29 @@ module spatz_vlsu
   } state_d, state_q;
   `FF(state_q, state_d, VLSU_RunningLoad)
 
+
+  id_t [NrMemPorts-1:0] store_count_q;
+  id_t [NrMemPorts-1:0] store_count_d;
+
+  for (genvar port = 0; port < NrMemPorts; port++) begin: gen_store_count_q
+    `FF(store_count_q[port], store_count_d[port], '0)
+  end: gen_store_count_q
+
+  always_comb begin: proc_store_count
+    // Maintain state
+    store_count_d = store_count_q;
+
+    for (int port = 0; port < NrMemPorts; port++) begin
+      if (spatz_mem_req_o[port].write && spatz_mem_req_valid_o[port] && spatz_mem_req_ready_i[port])
+        // Did we send a store?
+        store_count_d[port]++;
+
+      // Did we get the ack of a store?
+      if (store_count_q[port] != '0 && spatz_mem_rsp_valid_i[port])
+        store_count_d[port]--;
+    end
+  end: proc_store_count
+
   //////////////////////
   //  Reorder Buffer  //
   //////////////////////
@@ -753,9 +776,9 @@ module spatz_vlsu
               automatic logic [$clog2(ELENB)-1:0] shift = commit_counter_q[port][$clog2(ELENB)-1:0];
               automatic logic [ELENB-1:0] mask          = '1;
               case (commit_insn_q.vsew)
-                EW_8 : mask = 1;
-                EW_16: mask = 3;
-                EW_32: mask = 15;
+                EW_8 : mask   = 1;
+                EW_16: mask   = 3;
+                EW_32: mask   = 15;
                 default: mask = '1;
               endcase
               vrf_req_d.wbe[ELENB*port +: ELENB] = mask << shift;
@@ -768,7 +791,7 @@ module spatz_vlsu
       for (int unsigned port = 0; port < NrMemPorts; port++) begin
         // Write the load result to the buffer
         rob_wdata[port] = spatz_mem_rsp_i[port].data;
-        rob_push[port]  = spatz_mem_rsp_valid_i[port] && (state_q == VLSU_RunningLoad);
+        rob_push[port]  = spatz_mem_rsp_valid_i[port] && (state_q == VLSU_RunningLoad) && store_count_q[port] == '0;
 
         if (!rob_full[port] && mem_operation_valid[port])
           mem_req_lvalid[port] = (!mem_is_indexed || (vrf_rvalid_i[1] && !pending_index[port])) && mem_spatz_req.op_mem.is_load;
@@ -839,9 +862,9 @@ module spatz_vlsu
             automatic logic [$clog2(ELENB)-1:0] shift = (mem_is_strided || mem_is_indexed) ? mem_req_addr_offset[port] : mem_counter_q[port][$clog2(ELENB)-1:0] + commit_insn_q.rs1[int'(MAXEW)-1:0];
             automatic logic [MemDataWidthB-1:0] mask  = '1;
             case (mem_spatz_req.vtype.vsew)
-              EW_8 : mask = 1;
-              EW_16: mask = 3;
-              EW_32: mask = 15;
+              EW_8 : mask   = 1;
+              EW_16: mask   = 3;
+              EW_32: mask   = 15;
               default: mask = '1;
             endcase
             mem_req_strb[port] = mask << shift;
