@@ -76,12 +76,13 @@ int main() {
   snrt_cluster_hw_barrier();
 
   // Initialize matrices
-  init_matrix(a, gemm_A_dram, cid * (gemm_l.M / num_cores),
-              (cid + 1) * (gemm_l.M / num_cores), gemm_l.K);
   init_matrix(b, gemm_B_dram, cid * (gemm_l.K / num_cores),
               (cid + 1) * (gemm_l.K / num_cores), gemm_l.N);
-  init_matrix(c, gemm_C_dram, cid * (gemm_l.M / num_cores),
-              (cid + 1) * (gemm_l.M / num_cores), gemm_l.N);
+  if (cid == 0) {
+    snrt_dma_start_1d(a, gemm_A_dram, gemm_l.M * gemm_l.K * sizeof(char));
+    snrt_dma_start_1d(c, gemm_C_dram, gemm_l.M * gemm_l.N * sizeof(char));
+    snrt_dma_wait_all();
+  }
 
   // Wait for all cores to finish
   snrt_cluster_hw_barrier();
