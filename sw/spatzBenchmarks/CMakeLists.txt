@@ -22,6 +22,13 @@ include_directories(${SNRUNTIME_INCLUDE_DIRS})
 add_compile_options(-O3 -g -ffunction-sections)
 
 # Macro to regenerate the golden values and compile a module
+macro(add_spatz_test_twoParam name file param1 param2)
+  set(target_name ${name}_M${param1}_N${param2})
+  add_snitch_test(${target_name} ${file})
+  target_link_libraries(test-${SNITCH_TEST_PREFIX}${target_name} benchmark ${SNITCH_RUNTIME})
+  target_compile_definitions(test-${SNITCH_TEST_PREFIX}${target_name} PUBLIC DATAHEADER="data/data_${param1}_${param2}.h")
+endmacro()
+
 macro(add_spatz_test_threeParam name file param1 param2 param3)
   set(target_name ${name}_M${param1}_N${param2}_K${param3})
   add_snitch_test(${target_name} ${file})
@@ -44,6 +51,8 @@ add_library(sdotp-hp-fmatmul sdotp-hp-fmatmul/kernel/sdotp-fmatmul.c)
 add_library(sdotp-bp-fmatmul sdotp-bp-fmatmul/kernel/sdotp-fmatmul.c)
 
 add_library(dp-fconv2d dp-fconv2d/kernel/fconv2d.c)
+
+add_library(sp-fft sp-fft/kernel/fft.c)
 
 # Tests
 enable_testing()
@@ -78,3 +87,7 @@ add_spatz_test_threeParam(sdotp-bp-fmatmul sdotp-bp-fmatmul/main.c 128 256 128)
 
 add_spatz_test_threeParam(dp-fconv2d dp-fconv2d/main.c 32 32 7)
 add_spatz_test_threeParam(dp-fconv2d dp-fconv2d/main.c 64 64 7)
+
+add_spatz_test_twoParam(sp-fft sp-fft/main.c 8 1 fft)
+add_spatz_test_twoParam(sp-fft sp-fft/main.c 16 1 fft)
+add_spatz_test_twoParam(sp-fft sp-fft/main.c 32 1 fft)
