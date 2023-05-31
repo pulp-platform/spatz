@@ -386,9 +386,9 @@ module spatz_vlsu
         automatic logic [idx_width(N_FU*ELENB)-1:0] word_index = mem_counter_q[port][int'(MAXEW)-1:0] + (port << MAXEW);
 
         unique case (mem_spatz_req.vtype.vsew)
-          EW_8 : offset   = $signed(vrf_rdata_i[1][8 * word_index +: 8]) << EW_8;
-          EW_16: offset   = $signed(vrf_rdata_i[1][8 * word_index +: 16]) << EW_16;
-          default: offset = $signed(vrf_rdata_i[1][8 * word_index +: 32]) << EW_32;
+          EW_8 : offset   = $signed(vrf_rdata_i[1][8 * word_index +: 8]);
+          EW_16: offset   = $signed(vrf_rdata_i[1][8 * word_index +: 16]);
+          default: offset = $signed(vrf_rdata_i[1][8 * word_index +: 32]);
         endcase
       end else begin
         offset = ({mem_counter_q[port][$bits(vlen_t)-1:MAXEW] << $clog2(NrMemPorts), mem_counter_q[port][int'(MAXEW)-1:0]} + (port << MAXEW)) * stride;
