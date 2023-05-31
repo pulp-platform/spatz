@@ -60,7 +60,7 @@ int main() {
     samples = (float *)snrt_l1alloc(2 * NFFT * sizeof(float));
     buffer = (float *)snrt_l1alloc(2 * NFFT * sizeof(float));
     output = (float *)snrt_l1alloc(2 * NFFT * sizeof(float));
-    twiddle = (float *)snrt_l1alloc(2 * (NTWI + NFFT) * sizeof(float));
+    twiddle = (float *)snrt_l1alloc(2 * NTWI * sizeof(float));
     store_idx =
         (uint32_t *)snrt_l1alloc(log2_nfft * (NFFT / 2) * sizeof(uint32_t));
     bitrev = (uint32_t *)snrt_l1alloc(NFFT * sizeof(uint32_t));
@@ -70,8 +70,7 @@ int main() {
   if (cid == 0) {
     snrt_dma_start_1d(samples, samples_dram, 2 * NFFT * sizeof(uint32_t));
     snrt_dma_start_1d(buffer, buffer_dram, 2 * NFFT * sizeof(uint32_t));
-    snrt_dma_start_1d(twiddle, twiddle_dram,
-                      2 * (NTWI + NFFT) * sizeof(uint32_t));
+    snrt_dma_start_1d(twiddle, twiddle_dram, 2 * NTWI * sizeof(uint32_t));
     snrt_dma_start_1d(store_idx, store_idx_dram,
                       log2_nfft * (NFFT / 2) * sizeof(uint32_t));
     snrt_dma_start_1d(bitrev, bitrev_dram, NFFT * sizeof(uint32_t));
@@ -99,13 +98,14 @@ int main() {
     start_kernel();
 
   // First stage
-  fft_2c(samples, twiddle, NFFT, cid);
+  // fft_2c(samples, twiddle, NFFT, cid);
 
   // Wait for all cores to finish the first stage
-  snrt_cluster_hw_barrier();
+  // snrt_cluster_hw_barrier();
 
   // Fall back into the single-core case
-  fft_sc(s_, buf_, twi_, out_, store_idx, bitrev, nfft_);
+  if (cid == 0)
+    fft_sc(samples, buffer, twiddle, output, store_idx, bitrev, NFFT);
 
   // Wait for all cores to finish fft
   snrt_cluster_hw_barrier();
@@ -123,11 +123,19 @@ int main() {
     printf("\n----- fft on %d samples -----\n", NFFT);
     printf("The execution took %u cycles.\n", timer);
 
-    // Verify both real and imaginary parts
-    for (unsigned int i = 0; i < 2 * NFFT; i++) {
-      if (fp_check(output[i], gold_out_dram[i])) {
+    // Verify the real part
+    for (unsigned int i = 0; i < NFFT; i++) {
+      if (fp_check(output[i], gold_out_dram[2 * i])) {
         printf("[ERROR] Index %d -> Result = %f, Expected = %f\n", i, output[i],
-               gold_out_dram[i]);
+               gold_out_dram[2 * i]);
+      }
+    }
+
+    // Verify the imac part
+    for (unsigned int i = 0; i < NFFT; i++) {
+      if (fp_check(output[NFFT + i], gold_out_dram[2 * i + 1])) {
+        printf("[ERROR] Index %d -> Result = %f, Expected = %f\n", i,
+               output[i + NFFT], gold_out_dram[2 * i + 1]);
       }
     }
   }
