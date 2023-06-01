@@ -181,6 +181,7 @@ package spatz_pkg;
   typedef struct packed {
     logic vm;
     logic is_load;
+    vew_e ew;
   } op_mem_t;
 
   typedef struct packed {
@@ -252,6 +253,9 @@ package spatz_pkg;
     logic rs2_valid;
     elen_t rsd;
     logic rsd_valid;
+
+    // Spatz config
+    vtype_t vtype;
   } decoder_req_t;
 
   typedef struct packed {

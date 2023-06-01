@@ -211,6 +211,10 @@ module spatz_vlsu
   vlen_t [NrMemPorts-1:0] mem_counter_q;
   logic  [NrMemPorts-1:0] mem_port_finished_q;
 
+  vlen_t [NrMemPorts-1:0] mem_idx_counter_delta;
+  vlen_t [NrMemPorts-1:0] mem_idx_counter_d;
+  vlen_t [NrMemPorts-1:0] mem_idx_counter_q;
+
   for (genvar port = 0; port < NrMemPorts; port++) begin: gen_mem_counters
     delta_counter #(
       .WIDTH($bits(vlen_t))
@@ -225,6 +229,21 @@ module spatz_vlsu
       .d_i       (mem_counter_d[port]    ),
       .q_o       (mem_counter_q[port]    ),
       .overflow_o(/* Unused */           )
+    );
+
+    delta_counter #(
+      .WIDTH($bits(vlen_t))
+    ) i_delta_counter_mem_idx (
+      .clk_i     (clk_i                      ),
+      .rst_ni    (rst_ni                     ),
+      .clear_i   (1'b0                       ),
+      .en_i      (mem_counter_en[port]       ),
+      .load_i    (mem_counter_load[port]     ),
+      .down_i    (1'b0                       ), // We always count up
+      .delta_i   (mem_idx_counter_delta[port]),
+      .d_i       (mem_idx_counter_d[port]    ),
+      .q_o       (mem_idx_counter_q[port]    ),
+      .overflow_o(/* Unused */               )
     );
 
     assign mem_port_finished_q[port] = mem_spatz_req_valid && (mem_counter_q[port] == mem_counter_max[port]);
@@ -380,12 +399,23 @@ module spatz_vlsu
     logic [31:0] stride;
     logic [31:0] offset;
 
+    // Pre-shuffling index offset
+    typedef logic [int'(MAXEW)-1:0] maxew_t;
+    maxew_t idx_offset;
+    assign idx_offset = mem_idx_counter_q[port];
+
     always_comb begin
       stride = mem_is_strided ? mem_spatz_req.rs2 >> mem_spatz_req.vtype.vsew : 'd1;
-      if (mem_is_indexed) begin
-        automatic logic [idx_width(N_FU*ELENB)-1:0] word_index = mem_counter_q[port][int'(MAXEW)-1:0] + (port << MAXEW);
 
-        unique case (mem_spatz_req.vtype.vsew)
+      if (mem_is_indexed) begin
+        // What is the relationship between data and index width?
+        automatic logic [1:0] data_index_width_diff = int'(mem_spatz_req.vtype.vsew) - int'(mem_spatz_req.op_mem.ew);
+
+        // Pointer to index
+        automatic logic [idx_width(N_FU*ELENB)-1:0] word_index = (port << (MAXEW - data_index_width_diff)) + (maxew_t'(idx_offset << data_index_width_diff) >> data_index_width_diff) + (maxew_t'(idx_offset >> (MAXEW - data_index_width_diff)) << (MAXEW - data_index_width_diff)) * NrMemPorts;
+
+        // Index
+        unique case (mem_spatz_req.op_mem.ew)
           EW_8 : offset   = $signed(vrf_rdata_i[1][8 * word_index +: 8]);
           EW_16: offset   = $signed(vrf_rdata_i[1][8 * word_index +: 16]);
           default: offset = $signed(vrf_rdata_i[1][8 * word_index +: 32]);
@@ -398,7 +428,7 @@ module spatz_vlsu
       mem_req_addr[port]        = (addr >> MAXEW) << MAXEW;
       mem_req_addr_offset[port] = addr[int'(MAXEW)-1:0];
 
-      pending_index[port] = (mem_counter_q[port][$clog2(NrWordsPerVector*ELENB)-1:0] >> MAXEW) != vs2_vreg_addr[$clog2(NrWordsPerVector)-1:0];
+      pending_index[port] = (mem_idx_counter_q[port][$clog2(NrWordsPerVector*ELENB)-1:0] >> MAXEW) != vs2_vreg_addr[$clog2(NrWordsPerVector)-1:0];
     end
   end: gen_mem_req_addr
 
@@ -475,6 +505,10 @@ module spatz_vlsu
   // How large is a single element (in bytes)
   logic [3:0] mem_single_element_size;
   assign mem_single_element_size = 1'b1 << mem_spatz_req.vtype.vsew;
+
+  // How large is an index element (in bytes)
+  logic [3:0] mem_idx_single_element_size;
+  assign mem_idx_single_element_size = 1'b1 << mem_spatz_req.op_mem.ew;
 
   // Is the memory address unaligned
   logic commit_is_addr_unaligned;
@@ -626,6 +660,10 @@ module spatz_vlsu
       mem_counter_delta[port] = !mem_operation_valid[port] ? 'd0 : mem_is_single_element_operation ? mem_single_element_size : mem_operation_last[port] ? (max_elements - mem_counter_q[port]) : MemDataWidthB;
       mem_counter_en[port]    = spatz_mem_req_ready[port] && spatz_mem_req_valid[port];
       mem_counter_max[port]   = max_elements;
+
+      // Index counter
+      mem_idx_counter_d[port]     = mem_counter_d[port];
+      mem_idx_counter_delta[port] = !mem_operation_valid[port] ? 'd0 : mem_idx_single_element_size;
     end
   end
 

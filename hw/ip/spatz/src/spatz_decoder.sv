@@ -151,6 +151,10 @@ module spatz_decoder
               spatz_req.rs1            = decoder_req_i.rs1;
               spatz_req.vs2            = ls_s2;
               spatz_req.use_vs2        = 1'b1;
+
+              // This is an indexed operation
+              spatz_req.op_mem.ew  = spatz_req.vtype.vsew;
+              spatz_req.vtype.vsew = decoder_req_i.vtype.vsew;
             end
 
             riscv_instr::VSE8_V,
@@ -194,6 +198,10 @@ module spatz_decoder
               spatz_req.rs1            = decoder_req_i.rs1;
               spatz_req.vs2            = ls_s2;
               spatz_req.use_vs2        = 1'b1;
+
+              // This is an indexed operation
+              spatz_req.op_mem.ew  = spatz_req.vtype.vsew;
+              spatz_req.vtype.vsew = decoder_req_i.vtype.vsew;
             end
 
             default:
