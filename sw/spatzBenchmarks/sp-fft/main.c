@@ -28,8 +28,8 @@ float *buffer;
 float *output;
 float *twiddle;
 
-uint32_t *store_idx;
-uint32_t *bitrev;
+uint16_t *store_idx;
+uint16_t *bitrev;
 
 static inline int fp_check(const float a, const float b) {
   const float threshold = 0.00001;
@@ -62,18 +62,18 @@ int main() {
     output = (float *)snrt_l1alloc(2 * NFFT * sizeof(float));
     twiddle = (float *)snrt_l1alloc(2 * NTWI * sizeof(float));
     store_idx =
-        (uint32_t *)snrt_l1alloc(log2_nfft * (NFFT / 2) * sizeof(uint32_t));
-    bitrev = (uint32_t *)snrt_l1alloc(NFFT * sizeof(uint32_t));
+        (uint16_t *)snrt_l1alloc(log2_nfft * (NFFT / 2) * sizeof(uint16_t));
+    bitrev = (uint16_t *)snrt_l1alloc(NFFT * sizeof(uint16_t));
   }
 
   // Initialize the matrices
   if (cid == 0) {
-    snrt_dma_start_1d(samples, samples_dram, 2 * NFFT * sizeof(uint32_t));
-    snrt_dma_start_1d(buffer, buffer_dram, 2 * NFFT * sizeof(uint32_t));
-    snrt_dma_start_1d(twiddle, twiddle_dram, 2 * NTWI * sizeof(uint32_t));
+    snrt_dma_start_1d(samples, samples_dram, 2 * NFFT * sizeof(float));
+    snrt_dma_start_1d(buffer, buffer_dram, 2 * NFFT * sizeof(float));
+    snrt_dma_start_1d(twiddle, twiddle_dram, 2 * NTWI * sizeof(float));
     snrt_dma_start_1d(store_idx, store_idx_dram,
-                      log2_nfft * (NFFT / 2) * sizeof(uint32_t));
-    snrt_dma_start_1d(bitrev, bitrev_dram, NFFT * sizeof(uint32_t));
+                      log2_nfft * (NFFT / 2) * sizeof(uint16_t));
+    snrt_dma_start_1d(bitrev, bitrev_dram, NFFT * sizeof(uint16_t));
     snrt_dma_wait_all();
   }
 
@@ -85,7 +85,7 @@ int main() {
   float *buf_ = buffer + cid * NFFT;
   float *out_ = output + cid * NFFT;
   float *twi_ = twiddle + (NFFT >> 1);
-  uint32_t nfft_ = NFFT >> 1;
+  unsigned int nfft_ = NFFT >> 1;
 
   // Wait for all cores to finish
   snrt_cluster_hw_barrier();

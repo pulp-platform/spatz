@@ -297,9 +297,9 @@ def main():
     else:
         emit_str += 'static float twiddle_dram[{}]'.format(2 * (N_TWID_V + NFFT)) + ' __attribute__((section(".data"))) = {' + ', '.join(
             map(str, twiddle_vec_reim.astype(dtype).tolist())) + '};\n'
-    emit_str += 'static uint32_t store_idx_dram[{}]'.format(int(np.log2(NFFT / 2) * NFFT / 2)) + ' __attribute__((section(".data"))) = {' + ', '.join(
+    emit_str += 'static uint16_t store_idx_dram[{}]'.format(int(np.log2(NFFT / 2) * NFFT / 2)) + ' __attribute__((section(".data"))) = {' + ', '.join(
         map(str, np.array(store_delta).astype(idx_dtype).tolist())) + '};\n'
-    emit_str += 'static uint32_t bitrev_dram[{}]'.format(int(
+    emit_str += 'static uint16_t bitrev_dram[{}]'.format(int(
         NFFT)) + ' __attribute__((section(".data"))) = {' + ', '.join(map(str, bitrev)) + '};\n'
     emit_str += 'static float gold_out_dram[{}]'.format(
         2 * NFFT) + ' __attribute__((section(".data"))) = {' + ', '.join(map(str, gold_out_s.astype(dtype).tolist())) + '};\n'

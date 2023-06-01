@@ -22,11 +22,11 @@
 // DIF Cooley-Tukey algorithm
 // At every iteration, we store indexed
 // todo: simplify the last iteration, which do not require twiddle factors
-void fft_sc(float *s, float *buf, float *twi, float *out, uint32_t *seq_idx,
-            uint32_t *rev_idx, const uint32_t nfft) {
+void fft_sc(float *s, float *buf, float *twi, float *out, uint16_t *seq_idx,
+            uint16_t *rev_idx, const unsigned int nfft) {
 
   // log2(nfft). We can also pass it directly as a function argument
-  uint32_t log2_nfft = 31 - __builtin_clz(nfft);
+  unsigned int log2_nfft = 31 - __builtin_clz(nfft);
 
   // Real part of the twiddles
   float *re_t = twi;
@@ -35,7 +35,7 @@ void fft_sc(float *s, float *buf, float *twi, float *out, uint32_t *seq_idx,
   float *im_t = twi + (nfft >> 1) * log2_nfft;
 
   // Bit-reverse indices
-  uint32_t *idx_ = rev_idx;
+  uint16_t *idx_ = rev_idx;
 
   // Keep half of the samples in a vector register
   size_t avl = nfft >> 1;
@@ -106,9 +106,8 @@ void fft_sc(float *s, float *buf, float *twi, float *out, uint32_t *seq_idx,
       // Otherwise, it's the helper index for the permutations (this is a mask
       // vector)
       if (bf == log2_nfft - 1) {
-        // ToDo: optimize me to vle16
         asm volatile(
-            "vle32.v v24, (%0);" ::"r"(idx_)); // v24: bit-reversal indices
+            "vle16.v v24, (%0);" ::"r"(idx_)); // v24: bit-reversal indices
         idx_ += vl;
         re_u_o = o_buf;
         im_u_o = o_buf + nfft;
@@ -116,10 +115,7 @@ void fft_sc(float *s, float *buf, float *twi, float *out, uint32_t *seq_idx,
         im_l_o = im_u_o + (nfft >> 1);
       } else {
         // Load the sequential indices dirctly
-        // ToDo: simplify me:
-        // - To 16 bit (or 8 bit if nfft <= 128)
-        // - Single-core: unit-strided store. Dual-core: two-strided store
-        asm volatile("vle32.v v24, (%0)" ::"r"(seq_idx)); // v24: index vector
+        asm volatile("vle16.v v24, (%0)" ::"r"(seq_idx)); // v24: index vector
         seq_idx += vl;
         re_u_o = o_buf;
         im_u_o = o_buf + nfft;
@@ -127,13 +123,13 @@ void fft_sc(float *s, float *buf, float *twi, float *out, uint32_t *seq_idx,
         im_l_o = im_u_o + (nfft >> 2);
       }
 
-      asm volatile("vsuxei32.v v8, (%0), v24" ::"r"(re_u_o));
+      asm volatile("vsuxei16.v v8, (%0), v24" ::"r"(re_u_o));
       re_u_o += vl;
-      asm volatile("vsuxei32.v v12, (%0), v24" ::"r"(im_u_o));
+      asm volatile("vsuxei16.v v12, (%0), v24" ::"r"(im_u_o));
       im_u_o += vl;
-      asm volatile("vsuxei32.v v20, (%0), v24" ::"r"(re_l_o));
+      asm volatile("vsuxei16.v v20, (%0), v24" ::"r"(re_l_o));
       re_l_o += vl;
-      asm volatile("vsuxei32.v v22, (%0), v24" ::"r"(im_l_o));
+      asm volatile("vsuxei16.v v22, (%0), v24" ::"r"(im_l_o));
       im_l_o += vl;
     }
   }
@@ -143,9 +139,10 @@ void fft_sc(float *s, float *buf, float *twi, float *out, uint32_t *seq_idx,
 // the single-core case Hardcoded two-core implementation of FFT Now, the
 // fall-back is done directly in the main function. Therefore, this function
 // implements just the first butterfly stage of a 2-core implementation.
-void fft_2c(float *s, float *twi, const uint32_t nfft, const uint32_t cid) {
+void fft_2c(float *s, float *twi, const unsigned int nfft,
+            const unsigned int cid) {
   // Log2(nfft). We can also pass it directly as a function argument
-  uint32_t log2_nfft = 31 - __builtin_clz(nfft >> 1);
+  unsigned int log2_nfft = 31 - __builtin_clz(nfft >> 1);
 
   // avl = (nfft/2) / n_cores
   size_t avl = nfft >> 2;

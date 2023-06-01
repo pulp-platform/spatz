@@ -24,11 +24,11 @@
 
 // Single-core
 inline void fft_sc(float *s, float *buf, float *twi, float *out,
-                   uint32_t *seq_idx, uint32_t *rev_idx, const uint32_t nfft)
-    __attribute__((always_inline));
+                   uint16_t *seq_idx, uint16_t *rev_idx,
+                   const unsigned int nfft) __attribute__((always_inline));
 
 // Dual-core
-inline void fft_2c(float *s, float *twi, const uint32_t nfft,
-                   const uint32_t cid) __attribute__((always_inline));
+inline void fft_2c(float *s, float *twi, const unsigned int nfft,
+                   const unsigned int cid) __attribute__((always_inline));
 
 #endif
