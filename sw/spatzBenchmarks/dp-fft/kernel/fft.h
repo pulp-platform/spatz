@@ -28,7 +28,8 @@ inline void fft_sc(double *s, double *buf, const double *twi,
                    const unsigned int nfft) __attribute__((always_inline));
 
 // Dual-core
-inline void fft_2c(double *s, const double *twi, const unsigned int nfft,
-                   const unsigned int cid) __attribute__((always_inline));
+inline void fft_2c(const double *s, double *buf, const double *twi,
+                   const unsigned int nfft, const unsigned int cid)
+    __attribute__((always_inline));
 
 #endif

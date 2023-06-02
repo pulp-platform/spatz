@@ -80,9 +80,9 @@ int main() {
   snrt_cluster_hw_barrier();
 
   // Calculate pointers for the second butterfly onwards
-  double *s_ = samples + cid * (NFFT >> 1);
-  double *buf_ = buffer + cid * (NFFT >> 1);
-  double *twi_ = twiddle + (NFFT >> 2);
+  double *s_ = samples + cid * (NFFT >> 2);
+  double *buf_ = buffer + cid * (NFFT >> 2);
+  double *twi_ = twiddle + (NFFT >> 1);
 
   // Wait for all cores to finish
   snrt_cluster_hw_barrier();
@@ -95,7 +95,7 @@ int main() {
     start_kernel();
 
   // First stage
-  fft_2c(samples, twiddle, NFFT, cid);
+  fft_2c(samples, buffer, twiddle, NFFT, cid);
 
   // Wait for all cores to finish the first stage
   snrt_cluster_hw_barrier();
