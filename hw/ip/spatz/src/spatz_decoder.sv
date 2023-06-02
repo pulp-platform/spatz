@@ -46,6 +46,8 @@ module spatz_decoder
     illegal_instr = 1'b0;
     spatz_req     = '0;
     reset_vstart  = 1'b1;
+    // Keep the Core_ID
+    spatz_req.core_id = decoder_req_i.core_id;
 
     // We have a new instruction that need to be decoded
     if (decoder_req_valid_i) begin
