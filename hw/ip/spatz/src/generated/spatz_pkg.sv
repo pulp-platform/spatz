@@ -184,6 +184,7 @@ package spatz_pkg;
 
   // Result from decoder
   typedef struct packed {
+    logic core_id;
     // Instruction ID
     spatz_id_t id;
 
@@ -232,6 +233,7 @@ package spatz_pkg;
   //////////////////////////////////
 
   typedef struct packed {
+    logic core_id;
     // Request id
     logic [GPRWidth-1:0] rd;
 
@@ -259,6 +261,7 @@ package spatz_pkg;
   //////////////////
 
   typedef struct packed {
+    logic core_id;
     // Instruction ID
     spatz_id_t id;
 
@@ -389,5 +392,17 @@ package spatz_pkg;
     widen_fp8_to_fp16.exponent = operand.exponent;
     widen_fp8_to_fp16.mantissa = {operand.mantissa, 8'b0};
   endfunction
+
+  typedef struct packed {
+    logic is_merge;
+    logic is_master;
+  } merge_mode_t;
+
+  typedef enum logic [1:0] {
+    NON_MERGE,
+    MERGE_MASTER,
+    MERGE_SLAVE,
+    UNMERGE_SLAVE
+  } merge_intf_e;
 
 endpackage : spatz_pkg
