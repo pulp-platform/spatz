@@ -98,7 +98,7 @@ module spatz_cluster
     // In case you are using the `RegisterTCDMCuts` feature this adds an
     // additional cycle latency, which is taken into account here.
     parameter int                     unsigned               MemoryMacroLatency                 = 1 + RegisterTCDMCuts,
-    parameter bit                                            merge_active                       = 1'b1 // Preliminary method to activate merge-mode
+    parameter bit                                            mergeActive                       = 1'b1 // Preliminary method to activate merge-mode
   ) (
     /// System clock.
     input  logic                             clk_i,
@@ -292,7 +292,8 @@ module spatz_cluster
 
   typedef struct packed {
     acc_addr_e addr;
-    logic [6:0] id;
+    logic core_id;
+    logic [5:0] id;
     logic [31:0] data_op;
     data_t data_arga;
     data_t data_argb;
@@ -308,7 +309,8 @@ module spatz_cluster
   } acc_issue_rsp_t;
 
   typedef struct packed {
-    logic [6:0] id;
+    logic core_id;
+    logic [5:0] id;
     logic error;
     data_t data;
   } acc_rsp_t;
@@ -673,7 +675,7 @@ module spatz_cluster
   hive_req_t [NrCores-1:0] hive_req;
   hive_rsp_t [NrCores-1:0] hive_rsp;
 
-  logic acc_req_ready, acc_req_valid, acc_rsp_ready, acc_rsp_valid;
+  logic acc_req_ready, acc_req_valid, acc_rsp_ready, acc_rsp_valid, acc_req_valid_in;
   acc_issue_req_t spatz_req;
 
   roundmode_e fpu_rnd_mode;
@@ -703,7 +705,7 @@ module spatz_cluster
     logic [31:0]               hart_id;
     assign hart_id = hart_base_id_i + i;
 
-    if (!merge_active) begin
+    if (!mergeActive) begin
       spatz_cc #(
       .BootAddr                (BootAddr                   ),
       .RVE                     (1'b0                       ),
@@ -775,11 +777,13 @@ module spatz_cluster
       .cc_m_acc_rsp_valid_i(/* Unused */                     ),
       .cc_m_acc_req_o      (/* Unused */                     ),
       .cc_m_acc_rsp_ready_o(/* Unused */                     ),
+      .cc_m_acc_req_valid_i(/* Unused */                     ),
       .cc_s_acc_req_valid_i(/* Unused */                     ),
       .cc_s_acc_req_ready_o(/* Unused */                     ),
       .cc_s_acc_rsp_valid_o(/* Unused */                     ),
       .cc_s_acc_req_i      (/* Unused */                     ),
       .cc_s_acc_rsp_ready_i(/* Unused */                     ),
+      .cc_s_acc_req_valid_o(/* Unused */                     ),
       .cc_m_acc_fpu_rnd_mode_o(/* Unused */                  ),
       .cc_m_acc_fpu_fmt_mode_o(/* Unused */                  ),
       .cc_s_acc_fpu_rnd_mode_i(/* Unused */                  ),
@@ -860,11 +864,13 @@ module spatz_cluster
         .cc_m_acc_rsp_valid_i(acc_rsp_valid                    ),
         .cc_m_acc_req_o      (spatz_req                        ),
         .cc_m_acc_rsp_ready_o(acc_rsp_ready                    ),
+        .cc_m_acc_req_valid_i(acc_req_valid_in                 ),
         .cc_s_acc_req_valid_i(/* Unused */                     ),
         .cc_s_acc_req_ready_o(/* Unused */                     ),
         .cc_s_acc_rsp_valid_o(/* Unused */                     ),
         .cc_s_acc_req_i      (/* Unused */                     ),
         .cc_s_acc_rsp_ready_i(/* Unused */                     ),
+        .cc_s_acc_req_valid_o(/* Unused */                     ),
         .cc_m_acc_fpu_rnd_mode_o(fpu_rnd_mode                  ),
         .cc_m_acc_fpu_fmt_mode_o(fpu_fmt_mode                  ),
         .cc_s_acc_fpu_rnd_mode_i(/* Unused */                  ),
@@ -944,11 +950,13 @@ module spatz_cluster
         .cc_m_acc_rsp_valid_i(/* Unused */                     ),
         .cc_m_acc_req_o      (/* Unused */                     ),
         .cc_m_acc_rsp_ready_o(/* Unused */                     ),
+        .cc_m_acc_req_valid_i(/* Unused */                     ),
         .cc_s_acc_req_valid_i(acc_req_valid                    ),
         .cc_s_acc_req_ready_o(acc_req_ready                    ),
         .cc_s_acc_rsp_valid_o(acc_rsp_valid                    ),
         .cc_s_acc_req_i      (spatz_req                        ),
         .cc_s_acc_rsp_ready_i(acc_rsp_ready                    ),
+        .cc_s_acc_req_valid_o(acc_req_valid_in                 ),
         .cc_m_acc_fpu_rnd_mode_o(/* Unused */                  ),
         .cc_m_acc_fpu_fmt_mode_o(/* Unused */                  ),
         .cc_s_acc_fpu_rnd_mode_i(fpu_rnd_mode                  ),
@@ -1333,6 +1341,6 @@ module spatz_cluster
   // Make sure we only have one DMA in the system.
   `ASSERT_INIT(NumberDMA, $onehot0(Xdma))
   // Check that merge mode is only used in combination with 2 cores
-  `ASSERT_INIT(MergeModeCoreNum, merge_active && NrCores <= 2 || !merge_active);
+  `ASSERT_INIT(MergeModeCoreNum, mergeActive && NrCores <= 2 || !mergeActive);
 
 endmodule
