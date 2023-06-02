@@ -396,10 +396,6 @@ module spatz_controller
 
   // Pop the buffer if we do not have a unit stall
   assign req_buffer_pop = ~stall & req_buffer_valid && !running_insn_full;
-  // Stall the generation of a new response when there's a retire or vfu response 
-  // waiting for handshake
-  assign rsp_stall      = ((vfu_rsp_valid & spatz_req.ex_unit = CON)|| retire_csr) & ~rsp_ready_i;
-  //vfu_rsp_valid & (spatz_req.ex_unit == CON) || (retire_csr && ~rsp_ready_i);
 
   // Issue new operation to execution units
   always_comb begin : ex_issue
@@ -580,19 +576,6 @@ module spatz_controller
       vfu_rsp_ready = rsp_ready_i;
     end
   end // retire
-
-  spill_register #(
-    .T(spatz_rsp_t)
-  ) i_vfu_scalar_response (
-    .clk_i  (clk_i                          ),
-    .rst_ni (rst_ni                         ),
-    .data_i (vfu_rsp_i                      ),
-    .valid_i(vfu_rsp_valid_i && vfu_rsp_i.wb),
-    .ready_o(vfu_rsp_ready_o                ),
-    .data_o (rsp_o                          ),
-    .valid_o(rsp_valid_o                    ),
-    .ready_i(rsp_ready_i                    )
-  );
 
   // Spatz has a valid response when an instruction is retired or the vfu has a valid response
   assign rsp_valid_o = retire_csr || vfu_rsp_valid;
