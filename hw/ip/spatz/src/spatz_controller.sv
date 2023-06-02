@@ -183,7 +183,10 @@ module spatz_controller
       decoder_req.rs2       = issue_req_i.data_argb;
       decoder_req.rsd       = issue_req_i.data_argc;
       decoder_req.rd        = issue_req_i.id;
+      // Merge-Mode extension
+      decoder_req.core_id   = issue_req_i.core_id;
       decoder_req_valid     = 1'b1;
+      
     end
   end // proc_decode
 
@@ -362,8 +365,10 @@ module spatz_controller
   // Issuing //
   /////////////
 
-  // Retire CSR instruction and write back result to main core.
+  // Retire CSR instruction and write back result to main core.rsp_valid_o
   logic retire_csr;
+  logic rsp_stall;
+  logic vfu_rsp_valid;
 
   // We stall issuing a new instruction if the corresponding execution unit is
   // not ready yet. Or we have a change in LMUL, for which we need to let all the
@@ -391,6 +396,10 @@ module spatz_controller
 
   // Pop the buffer if we do not have a unit stall
   assign req_buffer_pop = ~stall & req_buffer_valid && !running_insn_full;
+  // Stall the generation of a new response when there's a retire or vfu response 
+  // waiting for handshake
+  assign rsp_stall      = ((vfu_rsp_valid & spatz_req.ex_unit = CON)|| retire_csr) & ~rsp_ready_i;
+  //vfu_rsp_valid & (spatz_req.ex_unit == CON) || (retire_csr && ~rsp_ready_i);
 
   // Issue new operation to execution units
   always_comb begin : ex_issue
@@ -511,7 +520,6 @@ module spatz_controller
   //////////////
 
   vfu_rsp_t vfu_rsp;
-  logic     vfu_rsp_valid;
   logic     vfu_rsp_ready;
 
   spill_register #(
@@ -531,9 +539,11 @@ module spatz_controller
   // if necessary.
   always_comb begin : retire
     rsp_o       = '0;
-    rsp_valid_o = '0;
-
     vfu_rsp_ready = 1'b0;
+
+    // We don't want to retire the same time as vfu has a valid response,
+    // need to stall when vfu has valid response as this will otherwise lead to 
+    // rsp_o to be overwritten
 
     if (retire_csr) begin
       // Read CSR and write back to cpu
@@ -550,21 +560,42 @@ module spatz_controller
             default: rsp_o.data                 = '0;
           endcase
         end
+        // Keep the core id
+        rsp_o.core_id = spatz_req.core_id;
         rsp_o.id    = spatz_req.rd;
-        rsp_valid_o = 1'b1;
+        //rsp_valid_o = 1'b1;
       end else begin
         // Change configuration and send back vl
+        // Keep the core id
+        rsp_o.core_id = spatz_req.core_id;
         rsp_o.id    = spatz_req.rd;
         rsp_o.data  = elen_t'(vl_d);
-        rsp_valid_o = 1'b1;
+        //rsp_valid_o = 1'b1;
       end
-    end else if (vfu_rsp_valid) begin
+    end else begin
+      rsp_o.core_id = vfu_rsp.core_id;
       rsp_o.id      = vfu_rsp.rd;
       rsp_o.data    = vfu_rsp.result;
-      rsp_valid_o   = 1'b1;
-      vfu_rsp_ready = 1'b1;
+      //rsp_valid_o   = 1'b1;
+      vfu_rsp_ready = rsp_ready_i;
     end
   end // retire
+
+  spill_register #(
+    .T(spatz_rsp_t)
+  ) i_vfu_scalar_response (
+    .clk_i  (clk_i                          ),
+    .rst_ni (rst_ni                         ),
+    .data_i (vfu_rsp_i                      ),
+    .valid_i(vfu_rsp_valid_i && vfu_rsp_i.wb),
+    .ready_o(vfu_rsp_ready_o                ),
+    .data_o (rsp_o                          ),
+    .valid_o(rsp_valid_o                    ),
+    .ready_i(rsp_ready_i                    )
+  );
+
+  // Spatz has a valid response when an instruction is retired or the vfu has a valid response
+  assign rsp_valid_o = retire_csr || vfu_rsp_valid;
 
   // Signal to core that Spatz is ready for a new instruction
   assign issue_ready_o = req_buffer_ready;
@@ -573,4 +604,4 @@ module spatz_controller
   assign spatz_req_o       = spatz_req;
   assign spatz_req_valid_o = spatz_req_valid;
 
-endmodule : spatz_controller
+endmodule : spatz_controller 
