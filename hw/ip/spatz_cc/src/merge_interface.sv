@@ -38,6 +38,7 @@ module merge_interface
   	input  acc_issue_req_t s_cc_intf_qreq_i,
   	input  logic s_cc_intf_qreq_valid_i,
   	output logic s_cc_intf_qreq_ready_o,
+    output logic s_cc_intf_qreq_valid_o,
   	// Response interface between cc-controller and cc-controller
   	output logic s_cc_intf_prsp_valid_o,
   	input  logic s_cc_intf_prsp_ready_i,
@@ -45,6 +46,7 @@ module merge_interface
     output acc_issue_req_t m_cc_intf_qreq_o,
     output logic m_cc_intf_qreq_valid_o,
     input  logic m_cc_intf_qreq_ready_i,
+    input  logic m_cc_intf_qreq_valid_i,
     // Response interface between cc-controller and cc-controller
     input  logic m_cc_intf_prsp_valid_i,
     output logic m_cc_intf_prsp_ready_o,
@@ -66,6 +68,7 @@ module merge_interface
   );
 
   merge_intf_e state;
+  logic is_ready;
 
   // Temporary combinatinal logic to set the correct state
   always_comb begin
@@ -118,8 +121,6 @@ module merge_interface
                         m_cc_intf_qreq_o       = 'z;
                         m_cc_intf_qreq_valid_o = 1'bz;
                         m_cc_intf_prsp_ready_o = 1'bz;
-                        //m_cc_intf_fpu_rnd_mode_o = ;
-                        //m_cc_intf_fpu_fmt_mode_o = :
                         s_cc_intf_qreq_ready_o = 1'bz;
                         s_cc_intf_prsp_valid_o = 1'bz;
 
@@ -133,16 +134,20 @@ module merge_interface
                         //                                                                        //
                         ////////////////////////////////////////////////////////////////////////////
 
-                        // Directly connect the request interface Master-CC<->Slave-Spatz
-                        acc_intf_qreq_o         = s_cc_intf_qreq_i;
-                        // Tag incoming instructions as coming from Master-CC
+                        // By default Spatz should obey its adopter
+                        acc_intf_qreq_o = s_cc_intf_qreq_i;
+                        // Tag incoming instruction as forwarded from adopter
                         acc_intf_qreq_o.core_id = 1'b1;
                         acc_intf_qreq_valid_o   = s_cc_intf_qreq_valid_i;
                         s_cc_intf_qreq_ready_o  = acc_intf_qreq_ready_i;
 
-                        // Break ties with original owner Snitch
-                        cpu_intf_qreq_ready_o = 1'bz;
-                        cpu_intf_issue_prsp_o = 'z;
+                        // Break ties with "biological" Snitch
+                        cpu_intf_qreq_ready_o = 1'b0;
+                        // Inform adopter that "biological" Snitch is not trying to offload 
+                        s_cc_intf_qreq_valid_o = 1'b0;
+
+                        // For now forward issue response to "biological" Snitch
+                        cpu_intf_issue_prsp_o = acc_intf_issue_prsp_i;
 
                         /////////////////////////
                         //  FPU: Side Channel  //
@@ -151,73 +156,28 @@ module merge_interface
                         acc_intf_fpu_rnd_mode_o = s_cc_intf_fpu_rnd_mode_i;
                         acc_intf_fpu_fmt_mode_o = s_cc_intf_fpu_fmt_mode_i;
 
-                        ////////////////////////////////////////////////////////////////////////////
-                        //                                                                        //
-                        //   Temporary re-establish "biological" relation  [Request & FPU]        //
-                        //                                                                        //
-                        ////////////////////////////////////////////////////////////////////////////
-
-                        // Original owner Snitch wants to offload to adopted Spatz
-                        // Halt adopter Snitch from offloading requests and re-establish connection 
-                        // between Spatz and "biological" Snitch
+                        // Does the "biological" Snitch try to offload an instruction?
                         if (cpu_intf_qreq_valid_i) begin
 
-                          // Inform Adopter that Spatz is unable to take requests
-                          s_cc_intf_qreq_ready_o  = 1'b0;
+                          // Inform adopter that "biological" Snitch is trying to offload
+                          s_cc_intf_qreq_valid_o = 1'b1;
+                          // Notify adopter that Spatz is temporarily unready
+                          s_cc_intf_qreq_ready_o = 1'b0;
 
-                          acc_intf_qreq_o         = cpu_intf_qreq_i;
-                          // Tag instruction as coming from "biological" Snitch
+                          // Re-establish ties with "biological" Snitch
+                          acc_intf_qreq_o = cpu_intf_qreq_i;
+                          // Tag instruction as coming form the "biological" Snitch
                           acc_intf_qreq_o.core_id = 1'b0;
-                          acc_intf_qreq_valid_o   = cpu_intf_qreq_valid_i;
-                          cpu_intf_issue_prsp_o   = acc_intf_issue_prsp_i;
-                          cpu_intf_qreq_ready_o   = acc_intf_qreq_ready_i;
+                          acc_intf_qreq_valid_o = cpu_intf_qreq_valid_i;
+                          cpu_intf_qreq_ready_o = acc_intf_qreq_ready_i;
 
-                          
                           /////////////////////////
                           //  FPU: Side Channel  //
                           /////////////////////////
 
                           acc_intf_fpu_rnd_mode_o = cpu_intf_fpu_rnd_mode_i;
-                          acc_intf_fpu_fmt_mode_o = cpu_intf_fpu_fmt_mode_i; 
-                        end
+                          acc_intf_fpu_fmt_mode_o = cpu_intf_fpu_fmt_mode_i;
 
-                        ////////////////////////////////////////////////////////////////////////////
-                        //                                                                        //
-                        //   Default Master<->Slave relation  [Response]                          //
-                        //                                                                        //
-                        ////////////////////////////////////////////////////////////////////////////
-
-                        // Break ties with "biological" Snitch
-                        cpu_intf_prsp_o        = 'z;
-                        cpu_intf_prsp_valid_o  = 1'bz;
-
-                        // Does Spatz have a valid response? Is it directed towards the adopter?
-                        if (acc_intf_prsp_valid_i && (acc_intf_prsp_i.core_id == 1'b1)) begin
-                          // Forward Spatze's valid signal to adopter
-                          s_cc_intf_prsp_valid_o = acc_intf_prsp_valid_i;
-                          acc_intf_prsp_ready_o  = s_cc_intf_prsp_ready_i;
-                        end
-
-                        ////////////////////////////////////////////////////////////////////////////
-                        //                                                                        //
-                        //   Temporary re-establish "biological" relation  [Response]             //
-                        //                                                                        //
-                        ////////////////////////////////////////////////////////////////////////////
-
-                        // Does Spatz have a valid response? Is it directed towards the "biological"
-                        // Snitch?
-                        if (acc_intf_prsp_valid_i && (acc_intf_prsp_i.core_id == 1'b0)) begin
-
-                          // Forward Spatze's valid signal & response to "biological" Snitch
-                          cpu_intf_prsp_valid_o = acc_intf_prsp_valid_i;
-                          cpu_intf_prsp_o       = acc_intf_prsp_i;
-
-                          // Forward "biological" Snitch's pready to Spatz
-                          acc_intf_prsp_ready_o = cpu_intf_prsp_ready_i;
-
-                          // Do not inform adopter Snitch of valid response if it's not directed 
-                          // towards it
-                          s_cc_intf_prsp_valid_o = 1'b0;
                         end
 
                         ////////////////////
@@ -228,6 +188,40 @@ module merge_interface
                         m_cc_intf_qreq_o       = 'z;
                         m_cc_intf_qreq_valid_o = 1'bz;
                         m_cc_intf_prsp_ready_o = 1'bz;
+
+                        ////////////////////////////////////////////////////////////////////////////
+                        //                                                                        //
+                        //   Default Master<->Slave relation  [Response]                          //
+                        //                                                                        //
+                        ////////////////////////////////////////////////////////////////////////////
+
+                        
+
+                        ////////////////////////////////////////////////////////////////////////////
+                        //                                                                        //
+                        //   Temporary re-establish "biological" relation  [Response]             //
+                        //                                                                        //
+                        ////////////////////////////////////////////////////////////////////////////
+
+                        // If Spatz has a response to an offloaded instruction tagges as internal
+                        // reconfigure the connection to report back to "biological" Snitch
+                        if ((acc_intf_prsp_i.core_id == 1'b0) && acc_intf_prsp_valid_i) begin
+
+                          acc_intf_prsp_ready_o = cpu_intf_prsp_ready_i;
+                          cpu_intf_prsp_valid_o = acc_intf_prsp_valid_i;
+                          cpu_intf_prsp_o       = acc_intf_prsp_i;
+                          // Break ties with adopter
+                          s_cc_intf_prsp_valid_o = 1'b0;
+                          
+                        end else begin
+                          // In merge mode we usually want to directly report to the adopter Snitch
+                          s_cc_intf_prsp_valid_o = acc_intf_prsp_valid_i;
+                          acc_intf_prsp_ready_o  = s_cc_intf_prsp_ready_i;
+
+                          // Break ties with the "biological" Snitch
+                          cpu_intf_prsp_valid_o = 1'b0;
+                          cpu_intf_prsp_o       = '0;  
+                        end               
                       end                   
       MERGE_MASTER :  begin
 
@@ -235,35 +229,29 @@ module merge_interface
                         //  Request  //
                         ///////////////
 
-                        // Directly connect the request interface Spatz<->Snitch
-                        acc_intf_qreq_o       = cpu_intf_qreq_i;
-                        acc_intf_qreq_o.core_id = 1'b0;
-                        acc_intf_qreq_valid_o = cpu_intf_qreq_valid_i && cpu_intf_qreq_ready_o; // Might not be legal
-                        // Forward request interface to adopted Spatz
-                        m_cc_intf_qreq_o       = cpu_intf_qreq_i;
-                        m_cc_intf_qreq_valid_o = cpu_intf_qreq_valid_i; // Might not be legal
-                        // Tag instruction as coming from adopter
-                        m_cc_intf_qreq_o.core_id = 1'b1;
-                        
-                        // Wait for "biological" and adopted Spatz to be ready before assigning
-                        // qready to adopter
-                        cpu_intf_qreq_ready_o = acc_intf_qreq_ready_i && m_cc_intf_qreq_ready_i;
-
-                        ////////////////
-                        //  Response  //
-                        ////////////////
-
-                        // Directly connect the response interface Spatz<->Snitch
-                        cpu_intf_prsp_o       = acc_intf_prsp_i;
                         cpu_intf_issue_prsp_o = acc_intf_issue_prsp_i;
-                        // Wait for "biological" and adopted Spatz to have a valid response
-                        cpu_intf_prsp_valid_o = acc_intf_prsp_valid_i && m_cc_intf_prsp_valid_i;
-                        // Do notify "biological" and adopted Spatz of Snitch being ready until 
-                        // both have a valid response
-                        acc_intf_prsp_ready_o = cpu_intf_prsp_ready_i && cpu_intf_prsp_valid_o;                        
-                        // Forward Snitch's pready signal 
-                        m_cc_intf_prsp_ready_o = acc_intf_prsp_ready_o;
-                        
+                        acc_intf_qreq_o = cpu_intf_qreq_i;
+                        // Tag incoming instruction as coming from "biological" Snitch
+                        acc_intf_qreq_o.core_id = 1'b0;
+                        // Forward the instruction to the adopted Spatz
+                        m_cc_intf_qreq_o = cpu_intf_qreq_i;
+                        // Tag forwarded instruction as coming from adopter Snitch
+                        m_cc_intf_qreq_o.core_id = 1'b1;
+
+                        // Are both Spatzes ready for request and other Snitch does not want to re -
+                        // gain control over Spatz?
+                        is_ready = acc_intf_qreq_ready_i && m_cc_intf_qreq_ready_i && 
+                                   !m_cc_intf_qreq_valid_i;
+
+                        // Forward the valid request of Snitch to "biological" Spatz if we're ready
+                        acc_intf_qreq_valid_o = is_ready ? cpu_intf_qreq_valid_i : 1'b0;
+
+                        // Forward the valid request also to the adopted Spatz
+                        m_cc_intf_qreq_valid_o = acc_intf_qreq_valid_o;
+
+                        // Notify Snitch that both Spatz are ready for the request
+                        cpu_intf_qreq_ready_o = is_ready;
+
                         /////////////////////////
                         //  FPU: Side Channel  //
                         /////////////////////////
@@ -274,6 +262,21 @@ module merge_interface
                         // Forwarded
                         m_cc_intf_fpu_rnd_mode_o = cpu_intf_fpu_rnd_mode_i;
                         m_cc_intf_fpu_fmt_mode_o = cpu_intf_fpu_fmt_mode_i;
+
+                        ////////////////
+                        //  Response  //
+                        ////////////////
+
+                        // Take the response from the "biological" Snitch
+                        cpu_intf_prsp_o = acc_intf_prsp_i;
+                        // Wait for the "biological" and adopted Spatz to generate a valid response
+                        // before assinign valid to adopting Snitch
+                        cpu_intf_prsp_valid_o = acc_intf_prsp_valid_i && m_cc_intf_prsp_valid_i;
+                        // When both Spatz have a valid response forward the ready signal to both
+                        // Spatzes
+                        acc_intf_prsp_ready_o = cpu_intf_prsp_valid_o ? cpu_intf_prsp_ready_i : 
+                                                                        1'b0;
+                        m_cc_intf_prsp_ready_o = acc_intf_prsp_ready_o;
                         
                         ////////////////////
                         //  CC<->CC Intf  //
@@ -282,6 +285,7 @@ module merge_interface
                         // Do not drive the CC<->CC interface
                         s_cc_intf_qreq_ready_o = 1'b0;
                         s_cc_intf_prsp_valid_o = 1'b0;
+
                       end
     endcase
 
