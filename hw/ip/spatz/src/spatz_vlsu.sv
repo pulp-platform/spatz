@@ -528,6 +528,7 @@ module spatz_vlsu
 
   // Store the offsets of all loads, for realigning
   addr_offset_t [NrMemPorts-1:0] vreg_addr_offset;
+  logic [NrMemPorts-1:0] offset_queue_full;
   for (genvar port = 0; port < NrMemPorts; port++) begin : gen_offset_queue
     fifo_v3 #(
       .DATA_WIDTH(int'(MAXEW)       ),
@@ -538,7 +539,7 @@ module spatz_vlsu
       .flush_i   (1'b0                                                                 ),
       .testmode_i(1'b0                                                                 ),
       .empty_o   (/* Unused */                                                         ),
-      .full_o    (/* Unused */                                                         ),
+      .full_o    (offset_queue_full[port]                                              ),
       .push_i    (spatz_mem_req_valid[port] && spatz_mem_req_ready[port] && mem_is_load),
       .data_i    (mem_req_addr_offset[port]                                            ),
       .data_o    (vreg_addr_offset[port]                                               ),
@@ -623,7 +624,7 @@ module spatz_vlsu
       commit_operation_valid[fu] = commit_insn_valid && (commit_counter_q[fu] != max_elements) && (catchup[fu] || (!catchup[fu] && ~|catchup));
       commit_operation_last[fu]  = commit_operation_valid[fu] && ((max_elements - commit_counter_q[fu]) <= (commit_is_single_element_operation ? commit_single_element_size : ELENB));
       commit_counter_delta[fu]   = !commit_operation_valid[fu] ? vlen_t'('d0) : commit_is_single_element_operation ? vlen_t'(commit_single_element_size) : commit_operation_last[fu] ? (max_elements - commit_counter_q[fu]) : vlen_t'(ELENB);
-      commit_counter_en[fu]      = commit_operation_valid[fu] && (commit_insn_q.is_load && vrf_req_valid_d && vrf_req_ready_d) || (!commit_insn_q.is_load && vrf_rvalid_i[0] && vrf_re_o[0]);
+      commit_counter_en[fu]      = commit_operation_valid[fu] && (commit_insn_q.is_load && vrf_req_valid_d && vrf_req_ready_d) || (!commit_insn_q.is_load && vrf_rvalid_i[0] && vrf_re_o[0] && (!mem_is_indexed || vrf_rvalid_i[1]));
       commit_counter_max[fu]     = max_elements;
     end
   end
@@ -703,7 +704,7 @@ module spatz_vlsu
   logic [NrMemPorts-1:0]                   mem_req_lvalid;
 
   // Number of pending requests
-  id_t  [NrMemPorts-1:0] mem_pending_d, mem_pending_q;
+  logic [NrMemPorts-1:0][idx_width(NrOutstandingLoads):0] mem_pending_d, mem_pending_q;
   logic [NrMemPorts-1:0] mem_pending;
   `FF(mem_pending_q, mem_pending_d, '{default: '0})
   always_comb begin
@@ -831,7 +832,7 @@ module spatz_vlsu
         rob_wdata[port] = spatz_mem_rsp_i[port].data;
         rob_push[port]  = spatz_mem_rsp_valid_i[port] && (state_q == VLSU_RunningLoad) && store_count_q[port] == '0;
 
-        if (!rob_full[port] && mem_operation_valid[port])
+        if (!rob_full[port] && !offset_queue_full[port] && mem_operation_valid[port])
           mem_req_lvalid[port] = (!mem_is_indexed || (vrf_rvalid_i[1] && !pending_index[port])) && mem_spatz_req.op_mem.is_load;
       end
     // Store operation
