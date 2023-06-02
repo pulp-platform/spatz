@@ -23,19 +23,19 @@
 #include DATAHEADER
 #include "kernel/fft.c"
 
-float *samples;
-float *buffer;
-float *output;
-float *twiddle;
+double *samples;
+double *buffer;
+double *output;
+double *twiddle;
 
 uint16_t *store_idx;
 uint16_t *bitrev;
 
-static inline int fp_check(const float a, const float b) {
-  const float threshold = 0.00001;
+static inline int fp_check(const double a, const double b) {
+  const double threshold = 0.00001;
 
   // Absolute value
-  float comp = a - b;
+  double comp = a - b;
   if (comp < 0)
     comp = -comp;
 
@@ -57,10 +57,10 @@ int main() {
 
   // Allocate the matrices
   if (cid == 0) {
-    samples = (float *)snrt_l1alloc(2 * NFFT * sizeof(float));
-    buffer = (float *)snrt_l1alloc(2 * NFFT * sizeof(float));
-    output = (float *)snrt_l1alloc(2 * NFFT * sizeof(float));
-    twiddle = (float *)snrt_l1alloc(2 * NTWI * sizeof(float));
+    samples = (double *)snrt_l1alloc(2 * NFFT * sizeof(double));
+    buffer = (double *)snrt_l1alloc(2 * NFFT * sizeof(double));
+    output = (double *)snrt_l1alloc(2 * NFFT * sizeof(double));
+    twiddle = (double *)snrt_l1alloc(2 * NTWI * sizeof(double));
     store_idx =
         (uint16_t *)snrt_l1alloc(log2_nfft * (NFFT / 2) * sizeof(uint16_t));
     bitrev = (uint16_t *)snrt_l1alloc(NFFT * sizeof(uint16_t));
@@ -68,9 +68,9 @@ int main() {
 
   // Initialize the matrices
   if (cid == 0) {
-    snrt_dma_start_1d(samples, samples_dram, 2 * NFFT * sizeof(float));
-    snrt_dma_start_1d(buffer, buffer_dram, 2 * NFFT * sizeof(float));
-    snrt_dma_start_1d(twiddle, twiddle_dram, 2 * NTWI * sizeof(float));
+    snrt_dma_start_1d(samples, samples_dram, 2 * NFFT * sizeof(double));
+    snrt_dma_start_1d(buffer, buffer_dram, 2 * NFFT * sizeof(double));
+    snrt_dma_start_1d(twiddle, twiddle_dram, 2 * NTWI * sizeof(double));
     snrt_dma_start_1d(store_idx, store_idx_dram,
                       log2_nfft * (NFFT / 2) * sizeof(uint16_t));
     snrt_dma_start_1d(bitrev, bitrev_dram, NFFT * sizeof(uint16_t));
@@ -81,10 +81,10 @@ int main() {
   snrt_cluster_hw_barrier();
 
   // Calculate pointers for the second butterfly onwards
-  float *s_ = samples + cid * NFFT;
-  float *buf_ = buffer + cid * NFFT;
-  float *out_ = output + cid * NFFT;
-  float *twi_ = twiddle + (NFFT >> 1);
+  double *s_ = samples + cid * NFFT;
+  double *buf_ = buffer + cid * NFFT;
+  double *out_ = output + cid * NFFT;
+  double *twi_ = twiddle + (NFFT >> 1);
   unsigned int nfft_ = NFFT >> 1;
 
   // Wait for all cores to finish
@@ -126,16 +126,16 @@ int main() {
     // Verify the real part
     for (unsigned int i = 0; i < NFFT; i++) {
       if (fp_check(output[i], gold_out_dram[2 * i])) {
-        printf("[ERROR] Index %d -> Result = %f, Expected = %f\n", i, output[i],
-               gold_out_dram[2 * i]);
+        printf("[ERROR] Index %d -> Result = %d, Expected = %d\n", i,
+               (int)output[i], (int)gold_out_dram[2 * i]);
       }
     }
 
     // Verify the imac part
     for (unsigned int i = 0; i < NFFT; i++) {
       if (fp_check(output[NFFT + i], gold_out_dram[2 * i + 1])) {
-        printf("[ERROR] Index %d -> Result = %f, Expected = %f\n", i,
-               output[i + NFFT], gold_out_dram[2 * i + 1]);
+        printf("[ERROR] Index %d -> Result = %d, Expected = %d\n", i,
+               (int)output[i + NFFT], (int)gold_out_dram[2 * i + 1]);
       }
     }
   }

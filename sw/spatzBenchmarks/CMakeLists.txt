@@ -52,7 +52,7 @@ add_library(sdotp-bp-fmatmul sdotp-bp-fmatmul/kernel/sdotp-fmatmul.c)
 
 add_library(dp-fconv2d dp-fconv2d/kernel/fconv2d.c)
 
-add_library(sp-fft sp-fft/kernel/fft.c)
+add_library(dp-fft dp-fft/kernel/fft.c)
 
 # Tests
 enable_testing()
@@ -88,8 +88,4 @@ add_spatz_test_threeParam(sdotp-bp-fmatmul sdotp-bp-fmatmul/main.c 128 256 128)
 add_spatz_test_threeParam(dp-fconv2d dp-fconv2d/main.c 32 32 7)
 add_spatz_test_threeParam(dp-fconv2d dp-fconv2d/main.c 64 64 7)
 
-add_spatz_test_twoParam(sp-fft sp-fft/main.c 16 2 fft)
-add_spatz_test_twoParam(sp-fft sp-fft/main.c 32 2 fft)
-add_spatz_test_twoParam(sp-fft sp-fft/main.c 64 2 fft)
-add_spatz_test_twoParam(sp-fft sp-fft/main.c 128 1 fft)
-add_spatz_test_twoParam(sp-fft sp-fft/main.c 128 2 fft)
+add_spatz_test_twoParam(dp-fft dp-fft/main.c 128 1 fft)

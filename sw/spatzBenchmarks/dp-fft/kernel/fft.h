@@ -23,12 +23,12 @@
 #define _FFT_H_
 
 // Single-core
-inline void fft_sc(float *s, float *buf, float *twi, float *out,
+inline void fft_sc(double *s, double *buf, double *twi, double *out,
                    uint16_t *seq_idx, uint16_t *rev_idx,
                    const unsigned int nfft) __attribute__((always_inline));
 
 // Dual-core
-inline void fft_2c(float *s, float *twi, const unsigned int nfft,
+inline void fft_2c(double *s, double *twi, const unsigned int nfft,
                    const unsigned int cid) __attribute__((always_inline));
 
 #endif

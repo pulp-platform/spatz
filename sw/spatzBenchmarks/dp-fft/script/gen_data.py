@@ -195,8 +195,8 @@ def main():
     CORES = param['ncores']
     N_TWID_V = int(np.log2(NFFT) * NFFT / 2)
 
-    dtype = np.float32
-    idx_dtype = np.uint32
+    dtype = np.float64
+    idx_dtype = np.uint64
     # Complex data type with int16 for real and img parts
     dtype_cplx = np.dtype([('re', dtype), ('im', dtype)])
 
@@ -287,21 +287,21 @@ def main():
     emit_str += 'static uint32_t NFFT = {};\n'.format(NFFT)
     emit_str += 'static uint32_t NTWI = {};\n\n'.format(N_TWID_V)
 
-    emit_str += 'static float samples_dram[{}]'.format(2 * NFFT) + ' __attribute__((section(".data"))) = {' + ', '.join(
+    emit_str += 'static double samples_dram[{}]'.format(2 * NFFT) + ' __attribute__((section(".data"))) = {' + ', '.join(
         map(str, samples_reim.astype(dtype).tolist())) + '};\n'
-    emit_str += 'static float buffer_dram[{}]'.format(2 * NFFT) + ' __attribute__((section(".data"))) = {' + ', '.join(
+    emit_str += 'static double buffer_dram[{}]'.format(2 * NFFT) + ' __attribute__((section(".data"))) = {' + ', '.join(
         map(str, buffer_dram.astype(dtype).tolist())) + '};\n'
     if CORES == 1:
-        emit_str += 'static float twiddle_dram[{}]'.format(2 * N_TWID_V) + ' __attribute__((section(".data"))) = {' + ', '.join(
+        emit_str += 'static double twiddle_dram[{}]'.format(2 * N_TWID_V) + ' __attribute__((section(".data"))) = {' + ', '.join(
             map(str, twiddle_vec_reim.astype(dtype).tolist())) + '};\n'
     else:
-        emit_str += 'static float twiddle_dram[{}]'.format(2 * (N_TWID_V + NFFT)) + ' __attribute__((section(".data"))) = {' + ', '.join(
+        emit_str += 'static double twiddle_dram[{}]'.format(2 * (N_TWID_V + NFFT)) + ' __attribute__((section(".data"))) = {' + ', '.join(
             map(str, twiddle_vec_reim.astype(dtype).tolist())) + '};\n'
     emit_str += 'static uint16_t store_idx_dram[{}]'.format(int(np.log2(NFFT / 2) * NFFT / 2)) + ' __attribute__((section(".data"))) = {' + ', '.join(
         map(str, np.array(store_delta).astype(idx_dtype).tolist())) + '};\n'
     emit_str += 'static uint16_t bitrev_dram[{}]'.format(int(
         NFFT)) + ' __attribute__((section(".data"))) = {' + ', '.join(map(str, bitrev)) + '};\n'
-    emit_str += 'static float gold_out_dram[{}]'.format(
+    emit_str += 'static double gold_out_dram[{}]'.format(
         2 * NFFT) + ' __attribute__((section(".data"))) = {' + ', '.join(map(str, gold_out_s.astype(dtype).tolist())) + '};\n'
 
     file_path = pathlib.Path(__file__).parent.parent / 'data'

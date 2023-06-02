@@ -22,17 +22,17 @@
 // DIF Cooley-Tukey algorithm
 // At every iteration, we store indexed
 // todo: simplify the last iteration, which do not require twiddle factors
-void fft_sc(float *s, float *buf, float *twi, float *out, uint16_t *seq_idx,
+void fft_sc(double *s, double *buf, double *twi, double *out, uint16_t *seq_idx,
             uint16_t *rev_idx, const unsigned int nfft) {
 
   // log2(nfft). We can also pass it directly as a function argument
   unsigned int log2_nfft = 31 - __builtin_clz(nfft);
 
   // Real part of the twiddles
-  float *re_t = twi;
+  double *re_t = twi;
   // Img part of the twiddles
   // If the multiplication is slow, pass via func args directly
-  float *im_t = twi + (nfft >> 1) * log2_nfft;
+  double *im_t = twi + (nfft >> 1) * log2_nfft;
 
   // Bit-reverse indices
   uint16_t *idx_ = rev_idx;
@@ -46,36 +46,36 @@ void fft_sc(float *s, float *buf, float *twi, float *out, uint16_t *seq_idx,
   for (unsigned int bf = 0; bf < log2_nfft; ++bf) {
     // Keep half of the samples in a vector register
     avl = nfft >> 1;
-    asm volatile("vsetvli %0, %1, e32, m2, ta, ma" : "=r"(vl) : "r"(avl));
+    asm volatile("vsetvli %0, %1, e64, m2, ta, ma" : "=r"(vl) : "r"(avl));
 
     // Swap between the two buffers
-    float *i_buf = (bf & 1) ? buf : s;
-    float *o_buf = (bf & 1) ? s : buf;
+    double *i_buf = (bf & 1) ? buf : s;
+    double *o_buf = (bf & 1) ? s : buf;
 
     // Last iteration
     if (bf == log2_nfft - 1)
       o_buf = out;
 
     // Update pointers
-    float *re_u_i = i_buf;
-    float *im_u_i = i_buf + nfft;
-    float *re_l_i = re_u_i + (nfft >> 1);
-    float *im_l_i = im_u_i + (nfft >> 1);
-    float *re_u_o = o_buf;
-    float *im_u_o = o_buf + nfft;
-    float *re_l_o = re_u_o + (nfft >> 1);
-    float *im_l_o = im_u_o + (nfft >> 1);
+    double *re_u_i = i_buf;
+    double *im_u_i = i_buf + nfft;
+    double *re_l_i = re_u_i + (nfft >> 1);
+    double *im_l_i = im_u_i + (nfft >> 1);
+    double *re_u_o = o_buf;
+    double *im_u_o = o_buf + nfft;
+    double *re_l_o = re_u_o + (nfft >> 1);
+    double *im_l_o = im_u_o + (nfft >> 1);
 
     // Stripmine the whole vector for this butterfly stage
     for (; avl > 0; avl -= vl) {
       // Load a portion of the vector
-      asm volatile("vle32.v v0, (%0);" ::"r"(re_u_i)); // v0: Re upper wing
+      asm volatile("vle64.v v0, (%0);" ::"r"(re_u_i)); // v0: Re upper wing
       re_u_i += vl;
-      asm volatile("vle32.v v2, (%0);" ::"r"(re_l_i)); // v2: Re lower wing
+      asm volatile("vle64.v v2, (%0);" ::"r"(re_l_i)); // v2: Re lower wing
       re_l_i += vl;
-      asm volatile("vle32.v v4, (%0);" ::"r"(im_u_i)); // v4: Im upper wing
+      asm volatile("vle64.v v4, (%0);" ::"r"(im_u_i)); // v4: Im upper wing
       im_u_i += vl;
-      asm volatile("vle32.v v6, (%0);" ::"r"(im_l_i)); // v6: Im lower wing
+      asm volatile("vle64.v v6, (%0);" ::"r"(im_l_i)); // v6: Im lower wing
       im_l_i += vl;
 
       // Butterfly upper wing
@@ -89,9 +89,9 @@ void fft_sc(float *s, float *buf, float *twi, float *out, uint16_t *seq_idx,
           "vfsub.vv v14, v4, v6"); // v14: Im butterfly output upper wing
 
       // Load the twiddle vector
-      asm volatile("vle32.v v16, (%0);" ::"r"(re_t)); // v16: Re twi
+      asm volatile("vle64.v v16, (%0);" ::"r"(re_t)); // v16: Re twi
       re_t += vl;
-      asm volatile("vle32.v v18, (%0);" ::"r"(im_t)); // v18: Im twi
+      asm volatile("vle64.v v18, (%0);" ::"r"(im_t)); // v18: Im twi
       im_t += vl;
 
       // Twiddle the lower wing
@@ -139,7 +139,7 @@ void fft_sc(float *s, float *buf, float *twi, float *out, uint16_t *seq_idx,
 // the single-core case Hardcoded two-core implementation of FFT Now, the
 // fall-back is done directly in the main function. Therefore, this function
 // implements just the first butterfly stage of a 2-core implementation.
-void fft_2c(float *s, float *twi, const unsigned int nfft,
+void fft_2c(double *s, double *twi, const unsigned int nfft,
             const unsigned int cid) {
   // Log2(nfft). We can also pass it directly as a function argument
   unsigned int log2_nfft = 31 - __builtin_clz(nfft >> 1);
@@ -149,39 +149,39 @@ void fft_2c(float *s, float *twi, const unsigned int nfft,
   size_t vl;
 
   // Real part of the twiddles
-  float *re_t = cid ? twi + (nfft >> 2) : twi;
+  double *re_t = cid ? twi + (nfft >> 2) : twi;
   // Img part of the twiddles
   // If the multiplication is slow, pass via func args directly
-  float *im_t = cid ? twi + (nfft >> 2) * (log2_nfft + 3)
-                    : twi + (nfft >> 2) * (log2_nfft + 2);
+  double *im_t = cid ? twi + (nfft >> 2) * (log2_nfft + 3)
+                     : twi + (nfft >> 2) * (log2_nfft + 2);
 
-  asm volatile("vsetvli %0, %1, e32, m2, ta, ma" : "=r"(vl) : "r"(avl));
+  asm volatile("vsetvli %0, %1, e64, m2, ta, ma" : "=r"(vl) : "r"(avl));
 
   // Overwrite the buffers
-  float *i_buf = s + cid * (nfft >> 2);
-  float *o_buf = s + cid * (nfft >> 2);
+  double *i_buf = s + cid * (nfft >> 2);
+  double *o_buf = s + cid * (nfft >> 2);
 
   // Update pointers
-  float *re_u_i = i_buf;
-  float *im_u_i = i_buf + nfft;
-  float *re_l_i = re_u_i + (nfft >> 1);
-  float *im_l_i = im_u_i + (nfft >> 1);
-  float *re_u_o = re_u_i;
-  float *im_u_o = im_u_i;
-  float *re_l_o = re_l_i;
-  float *im_l_o = im_l_i;
+  double *re_u_i = i_buf;
+  double *im_u_i = i_buf + nfft;
+  double *re_l_i = re_u_i + (nfft >> 1);
+  double *im_l_i = im_u_i + (nfft >> 1);
+  double *re_u_o = re_u_i;
+  double *im_u_o = im_u_i;
+  double *re_l_o = re_l_i;
+  double *im_l_o = im_l_i;
 
   // Stripmine the whole vector for this butterfly stage
   for (; avl > 0; avl -= vl) {
-    asm volatile("vsetvli %0, %1, e32, m2, ta, ma" : "=r"(vl) : "r"(avl));
+    asm volatile("vsetvli %0, %1, e64, m2, ta, ma" : "=r"(vl) : "r"(avl));
     // Load a portion of the vector
-    asm volatile("vle32.v v0, (%0);" ::"r"(re_u_i)); // v0: Re upper wing
+    asm volatile("vle64.v v0, (%0);" ::"r"(re_u_i)); // v0: Re upper wing
     re_u_i += vl;
-    asm volatile("vle32.v v2, (%0);" ::"r"(re_l_i)); // v2: Re lower wing
+    asm volatile("vle64.v v2, (%0);" ::"r"(re_l_i)); // v2: Re lower wing
     re_l_i += vl;
-    asm volatile("vle32.v v4, (%0);" ::"r"(im_u_i)); // v4: Im upper wing
+    asm volatile("vle64.v v4, (%0);" ::"r"(im_u_i)); // v4: Im upper wing
     im_u_i += vl;
-    asm volatile("vle32.v v6, (%0);" ::"r"(im_l_i)); // v6: Im lower wing
+    asm volatile("vle64.v v6, (%0);" ::"r"(im_l_i)); // v6: Im lower wing
     im_l_i += vl;
 
     // Butterfly upper wing
@@ -192,9 +192,9 @@ void fft_2c(float *s, float *twi, const unsigned int nfft,
     asm volatile("vfsub.vv v14, v4, v6"); // v14: Im butterfly output upper wing
 
     // Load the twiddle vector
-    asm volatile("vle32.v v16, (%0);" ::"r"(re_t)); // v16: Re twi
+    asm volatile("vle64.v v16, (%0);" ::"r"(re_t)); // v16: Re twi
     re_t += vl;
-    asm volatile("vle32.v v18, (%0);" ::"r"(im_t)); // v18: Im twi
+    asm volatile("vle64.v v18, (%0);" ::"r"(im_t)); // v18: Im twi
     im_t += vl;
 
     // Twiddle the lower wing
@@ -206,13 +206,13 @@ void fft_2c(float *s, float *twi, const unsigned int nfft,
                                              // twiddled lower wing
 
     // Store 1:1 the output result
-    asm volatile("vse32.v v8, (%0)" ::"r"(re_u_o));
+    asm volatile("vse64.v v8, (%0)" ::"r"(re_u_o));
     re_u_o += vl;
-    asm volatile("vse32.v v12, (%0)" ::"r"(im_u_o));
+    asm volatile("vse64.v v12, (%0)" ::"r"(im_u_o));
     im_u_o += vl;
-    asm volatile("vse32.v v20, (%0)" ::"r"(re_l_o));
+    asm volatile("vse64.v v20, (%0)" ::"r"(re_l_o));
     re_l_o += vl;
-    asm volatile("vse32.v v22, (%0)" ::"r"(im_l_o));
+    asm volatile("vse64.v v22, (%0)" ::"r"(im_l_o));
     im_l_o += vl;
   }
 }
