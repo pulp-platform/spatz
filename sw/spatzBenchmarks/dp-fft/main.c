@@ -25,7 +25,6 @@
 
 double *samples;
 double *buffer;
-double *output;
 double *twiddle;
 
 uint16_t *store_idx;
@@ -59,10 +58,9 @@ int main() {
   if (cid == 0) {
     samples = (double *)snrt_l1alloc(2 * NFFT * sizeof(double));
     buffer = (double *)snrt_l1alloc(2 * NFFT * sizeof(double));
-    output = (double *)snrt_l1alloc(2 * NFFT * sizeof(double));
-    twiddle = (double *)snrt_l1alloc(2 * NTWI * sizeof(double));
+    twiddle = (double *)snrt_l1alloc((2 * NTWI + NFFT) * sizeof(double));
     store_idx =
-        (uint16_t *)snrt_l1alloc(log2_nfft * (NFFT / 2) * sizeof(uint16_t));
+        (uint16_t *)snrt_l1alloc(log2_nfft * (NFFT / 4) * sizeof(uint16_t));
     bitrev = (uint16_t *)snrt_l1alloc(NFFT * sizeof(uint16_t));
   }
 
@@ -70,9 +68,10 @@ int main() {
   if (cid == 0) {
     snrt_dma_start_1d(samples, samples_dram, 2 * NFFT * sizeof(double));
     snrt_dma_start_1d(buffer, buffer_dram, 2 * NFFT * sizeof(double));
-    snrt_dma_start_1d(twiddle, twiddle_dram, 2 * NTWI * sizeof(double));
+    snrt_dma_start_1d(twiddle, twiddle_dram,
+                      (2 * NTWI + NFFT) * sizeof(double));
     snrt_dma_start_1d(store_idx, store_idx_dram,
-                      log2_nfft * (NFFT / 2) * sizeof(uint16_t));
+                      log2_nfft * (NFFT / 4) * sizeof(uint16_t));
     snrt_dma_start_1d(bitrev, bitrev_dram, NFFT * sizeof(uint16_t));
     snrt_dma_wait_all();
   }
@@ -81,11 +80,9 @@ int main() {
   snrt_cluster_hw_barrier();
 
   // Calculate pointers for the second butterfly onwards
-  double *s_ = samples + cid * NFFT;
-  double *buf_ = buffer + cid * NFFT;
-  double *out_ = output + cid * NFFT;
-  double *twi_ = twiddle + (NFFT >> 1);
-  unsigned int nfft_ = NFFT >> 1;
+  double *s_ = samples + cid * (NFFT >> 1);
+  double *buf_ = buffer + cid * (NFFT >> 1);
+  double *twi_ = twiddle + (NFFT >> 2);
 
   // Wait for all cores to finish
   snrt_cluster_hw_barrier();
@@ -98,14 +95,13 @@ int main() {
     start_kernel();
 
   // First stage
-  // fft_2c(samples, twiddle, NFFT, cid);
+  fft_2c(samples, twiddle, NFFT, cid);
 
   // Wait for all cores to finish the first stage
-  // snrt_cluster_hw_barrier();
+  snrt_cluster_hw_barrier();
 
   // Fall back into the single-core case
-  if (cid == 0)
-    fft_sc(samples, buffer, twiddle, output, store_idx, bitrev, NFFT);
+  fft_sc(s_, buf_, twi_, store_idx, bitrev, NFFT / 2);
 
   // Wait for all cores to finish fft
   snrt_cluster_hw_barrier();
@@ -120,22 +116,28 @@ int main() {
 
   // Display runtime
   if (cid == 0) {
+    long unsigned int performance =
+        1000 * 10 * NFFT * log2_nfft * 6 / 5 / timer;
+    long unsigned int utilization = performance / (2 * num_cores * 4);
+
     printf("\n----- fft on %d samples -----\n", NFFT);
     printf("The execution took %u cycles.\n", timer);
+    printf("The performance is %ld OP/1000cycle (%ld%%o utilization).\n",
+           performance, utilization);
 
     // Verify the real part
-    for (unsigned int i = 0; i < NFFT; i++) {
-      if (fp_check(output[i], gold_out_dram[2 * i])) {
-        printf("[ERROR] Index %d -> Result = %d, Expected = %d\n", i,
-               (int)output[i], (int)gold_out_dram[2 * i]);
+    for (unsigned int i = 0; i < NFFT * 2; i++) {
+      if (fp_check(buffer[i], gold_out_dram[2 * i])) {
+        printf("[ERROR] Index %d -> Result = %f, Expected = %f\n", i,
+               (float)buffer[i], (float)gold_out_dram[2 * i]);
       }
     }
 
     // Verify the imac part
-    for (unsigned int i = 0; i < NFFT; i++) {
-      if (fp_check(output[NFFT + i], gold_out_dram[2 * i + 1])) {
-        printf("[ERROR] Index %d -> Result = %d, Expected = %d\n", i,
-               (int)output[i + NFFT], (int)gold_out_dram[2 * i + 1]);
+    for (unsigned int i = 0; i < NFFT * 2; i++) {
+      if (fp_check(buffer[NFFT * 2 + i], gold_out_dram[2 * i + 1])) {
+        printf("[ERROR] Index %d -> Result = %f, Expected = %f\n", i,
+               (float)buffer[i + NFFT * 2], (float)gold_out_dram[2 * i + 1]);
       }
     }
   }

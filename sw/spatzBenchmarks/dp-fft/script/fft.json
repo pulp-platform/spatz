@@ -6,6 +6,6 @@
 
 {
     npoints: 128,
-    ncores: 1,
+    ncores: 2,
     prec: 64
 }

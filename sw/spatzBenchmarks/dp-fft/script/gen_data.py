@@ -63,25 +63,6 @@ def setupTwiddlesLUT(Twiddles_vec, Nfft):
             twi[...]['re'] = np.cos(Phi)
             twi[...]['im'] = np.sin(Phi)
 
-# def setupTwiddlesLUT(Twiddles, Nfft):
-#  Theta = (2 * np.pi) / Nfft;
-#  with np.nditer(Twiddles, op_flags=['readwrite']) as it:
-#    for idx, twi in enumerate(it):
-#      # Even idx
-#      if not (idx % 2):
-#        Phi = Theta * idx;
-#        twi[...] = np.cos(Phi) * ((1 << FFT_TWIDDLE_DYN) - 1)
-#      # Odd idx
-#      else:
-#        Phi = Theta * (idx - 1);
-#        twi[...] = np.sin(Phi) * ((1 << FFT_TWIDDLE_DYN) - 1)
-#  # Cast to short
-#  Twiddles.astype(np.int16)
-
-# For this first trial, let's suppose to have in memory all the
-# Twiddle factors, for each stage, already ordered, in contiguous
-# memory space
-
 
 def setupTwiddlesLUT_dif_vec(Twiddles_vec, Nfft):
     # Nfft power of 2
@@ -141,25 +122,6 @@ def gen_store_idx(nfft):
     delta_list = sum(dbuf, [])
     return [idx_list, delta_list]
 
-# def gen_store_idx(nfft):
-#  buf = []
-#  a = [*range(nfft)]
-#  b = np.zeros(nfft)
-#  old_b = a
-#  nffth = nfft >> 1
-#  for bf in range(int(np.log2(nffth))):
-#    stride = nffth >> (bf + 1)
-#    for h in range(2):
-#      for i in range(int(nffth/(stride << 1))):
-#        for j in range(stride):
-#          b[h*(nffth >> 1) + i*stride + j        ] = a[h*nffth + j + 2*i*stride         ]
-#          b[h*(nffth >> 1) + i*stride + j + nffth] = a[h*nffth + j + 2*i*stride + stride]
-#    delta = [old_b.index(n) for n in b]
-#    buf += [delta]
-#    old_b = [n for n in copy.deepcopy(b)]
-#    b = np.zeros(nfft)
-#  retlist = sum(buf, [])
-#  return retlist
 
 ##########
 # SCRIPT #
@@ -193,7 +155,8 @@ def main():
 
     NFFT = param['npoints']
     CORES = param['ncores']
-    N_TWID_V = int(np.log2(NFFT) * NFFT / 2)
+    NFFTh = NFFT // CORES
+    N_TWID_V = int(np.log2(NFFTh) * NFFTh / 2)
 
     dtype = np.float64
     idx_dtype = np.uint64
@@ -202,13 +165,13 @@ def main():
 
     # Vector of samples
     samples = np.empty(NFFT, dtype=dtype_cplx)
-    twiddle = np.empty(NFFT, dtype=dtype_cplx)
+    twiddle = np.empty(NFFTh, dtype=dtype_cplx)
     twiddle_v = np.empty(N_TWID_V, dtype=dtype_cplx)
     gold_out = np.empty(NFFT, dtype=dtype_cplx)
 
     # Initialize the twiddle factors
-    setupTwiddlesLUT(twiddle, NFFT)
-    twiddle_v = setupTwiddlesLUT_dif_vec(twiddle_v, NFFT)
+    setupTwiddlesLUT(twiddle, NFFTh)
+    twiddle_v = setupTwiddlesLUT_dif_vec(twiddle_v, NFFTh)
 
     # Initialize the input samples
     setupInput(samples, NFFT, FFT2_SAMPLE_DYN)
@@ -236,19 +199,19 @@ def main():
     twiddle_vec_reim[N_TWID_V:2 * N_TWID_V] = twiddle_v_s[1::2]
 
     # Generate indices for intermediate stores (if masks are not supported)
-    [store_idx, store_delta] = gen_store_idx(NFFT)
+    [store_idx, store_delta] = gen_store_idx(NFFTh)
     # Get the last store index vector
-    last_si = store_idx[-NFFT:]
+    last_si = store_idx[-NFFTh:]
     # Convert to byte array
     store_delta = [n * np.dtype(idx_dtype).itemsize for n in store_delta]
     # We need only half of this vector
     buf = []
-    for i in range(len(store_delta) // NFFT):
-        buf += store_delta[i * NFFT:i * NFFT + NFFT // 2]
+    for i in range(len(store_delta) // NFFTh):
+        buf += store_delta[i * NFFTh:i * NFFTh + NFFTh // 2]
     store_delta = buf
 
     # Generate the bitrev pattern
-    buf = gen_bitrev_idx(NFFT)
+    buf = gen_bitrev_idx(NFFTh)
     bitrev = [[i for i in buf].index(n) for n in last_si]
     bitrev = np.array([n * np.dtype(idx_dtype).itemsize for n in bitrev])
     # We need only half of this vector
@@ -260,11 +223,11 @@ def main():
         bitrev[0::2] = buf[:len(bitrev) // 2]
         bitrev[1::2] = buf[len(bitrev) // 2:]
         # Twi
-        N_T_BUF = int(np.log2(NFFT * 2) * NFFT)
-        twiddle = np.empty(NFFT * 2, dtype=dtype_cplx)
+        N_T_BUF = int(np.log2(NFFTh * 2) * NFFTh)
+        twiddle = np.empty(NFFTh * 2, dtype=dtype_cplx)
         twiddle_v = np.empty(N_T_BUF, dtype=dtype_cplx)
-        setupTwiddlesLUT(twiddle, 2 * NFFT)
-        twiddle_v = setupTwiddlesLUT_dif_vec(twiddle_v, 2 * NFFT)
+        setupTwiddlesLUT(twiddle, 2 * NFFTh)
+        twiddle_v = setupTwiddlesLUT_dif_vec(twiddle_v, 2 * NFFTh)
         twiddle_v_s = serialize_cmplx(
             twiddle_v['re'] + 1j * twiddle_v['im'], N_T_BUF, dtype)
         tbuf = np.empty(2 * N_T_BUF, dtype=dtype)
@@ -274,7 +237,7 @@ def main():
         twiddle_vec_reim = np.concatenate(
             (twiddle_vec_reim[:N_TWID_V], tbuf[N_T_BUF:N_T_BUF + NFFT // 2], twiddle_vec_reim[N_TWID_V:]))
         # Attach 1bf real part
-        twiddle_vec_reim = np.concatenate((tbuf[:NFFT // 2], twiddle_vec_reim))
+        twiddle_vec_reim = np.concatenate((tbuf[:NFFTh // 2], twiddle_vec_reim))
 
     # Generate buffer for intermediate butterflies
     buffer_dram = np.zeros(2 * NFFT)
@@ -295,9 +258,9 @@ def main():
         emit_str += 'static double twiddle_dram[{}]'.format(2 * N_TWID_V) + ' __attribute__((section(".data"))) = {' + ', '.join(
             map(str, twiddle_vec_reim.astype(dtype).tolist())) + '};\n'
     else:
-        emit_str += 'static double twiddle_dram[{}]'.format(2 * (N_TWID_V + NFFT)) + ' __attribute__((section(".data"))) = {' + ', '.join(
+        emit_str += 'static double twiddle_dram[{}]'.format(2 * (N_TWID_V + NFFTh)) + ' __attribute__((section(".data"))) = {' + ', '.join(
             map(str, twiddle_vec_reim.astype(dtype).tolist())) + '};\n'
-    emit_str += 'static uint16_t store_idx_dram[{}]'.format(int(np.log2(NFFT / 2) * NFFT / 2)) + ' __attribute__((section(".data"))) = {' + ', '.join(
+    emit_str += 'static uint16_t store_idx_dram[{}]'.format(int(np.log2(NFFTh / 2) * NFFTh / 2)) + ' __attribute__((section(".data"))) = {' + ', '.join(
         map(str, np.array(store_delta).astype(idx_dtype).tolist())) + '};\n'
     emit_str += 'static uint16_t bitrev_dram[{}]'.format(int(
         NFFT)) + ' __attribute__((section(".data"))) = {' + ', '.join(map(str, bitrev)) + '};\n'
