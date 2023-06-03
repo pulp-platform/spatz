@@ -126,7 +126,7 @@ int main() {
            performance, utilization);
 
     // Verify the real part
-    for (unsigned int i = 0; i < NFFT * 2; i++) {
+    for (unsigned int i = 0; i < NFFT; i++) {
       if (fp_check(buffer[i], gold_out_dram[2 * i])) {
         printf("[ERROR] Index %d -> Result = %f, Expected = %f\n", i,
                (float)buffer[i], (float)gold_out_dram[2 * i]);
@@ -134,10 +134,10 @@ int main() {
     }
 
     // Verify the imac part
-    for (unsigned int i = 0; i < NFFT * 2; i++) {
-      if (fp_check(buffer[NFFT * 2 + i], gold_out_dram[2 * i + 1])) {
-        printf("[ERROR] Index %d -> Result = %f, Expected = %f\n", i,
-               (float)buffer[i + NFFT * 2], (float)gold_out_dram[2 * i + 1]);
+    for (unsigned int i = 0; i < NFFT; i++) {
+      if (fp_check(buffer[i + NFFT], gold_out_dram[2 * i + 1])) {
+        printf("[ERROR] Index %d -> Result = %f, Expected = %f\n", i + NFFT,
+               (float)buffer[i + NFFT], (float)gold_out_dram[2 * i + 1]);
       }
     }
   }
