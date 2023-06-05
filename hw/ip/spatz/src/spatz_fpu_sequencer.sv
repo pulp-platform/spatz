@@ -651,7 +651,6 @@ module spatz_fpu_sequencer
     move_stall = is_move && use_rd && !fp_move_result_ready_o;
     if (is_move && use_rd && operands_available) begin
       fp_move_result_i = spatz_rsp_t'{
-        core_id : issue_req_i.core_id,
         id     : issue_req_i.id,
         data   : fpr_rdata[0],
         default: '0
@@ -674,13 +673,11 @@ module spatz_fpu_sequencer
       fpr_waddr[0] = resp_i.id[4:0];
       fpr_we[0]    = 1'b1;
     end
-
-    // Commit a move result make sure that Spatz is not actively trying to commit to Snitch
-    // happens in case where Snitch is not ready for response.
-    else if (!resp_valid_i & fp_move_result_valid_o) begin
+    // Commit a move result
+    else if (fp_move_result_valid_o) begin
       resp_o                 = fp_move_result_o;
       resp_valid_o           = 1'b1;
-      fp_move_result_ready_i = resp_ready_i;
+      fp_move_result_ready_i = 1'b1;
     end
 
     // Commit a FP LSU response
