@@ -195,8 +195,23 @@ module merge_interface
                         //                                                                        //
                         ////////////////////////////////////////////////////////////////////////////
 
+                        s_cc_intf_prsp_valid_o = 1'b0;
+                        acc_intf_prsp_ready_o  = 1'b0;
                         
+                        // Break ties with the "biological" Snitch
+                        cpu_intf_prsp_valid_o = 1'b0;
+                        cpu_intf_prsp_o       = '0; 
 
+                        if ((acc_intf_prsp_i.core_id == 1'b1) && acc_intf_prsp_valid_i) begin
+                          // In merge mode we usually want to directly report to the adopter Snitch
+                          s_cc_intf_prsp_valid_o = acc_intf_prsp_valid_i;
+                          acc_intf_prsp_ready_o  = s_cc_intf_prsp_ready_i;
+                          
+                          // Break ties with the "biological" Snitch
+                          cpu_intf_prsp_valid_o = 1'b0;
+                          cpu_intf_prsp_o       = '0;
+                        end
+                        
                         ////////////////////////////////////////////////////////////////////////////
                         //                                                                        //
                         //   Temporary re-establish "biological" relation  [Response]             //
@@ -205,7 +220,7 @@ module merge_interface
 
                         // If Spatz has a response to an offloaded instruction tagges as internal
                         // reconfigure the connection to report back to "biological" Snitch
-                        if ((acc_intf_prsp_i.core_id == 1'b0) && acc_intf_prsp_valid_i) begin
+                        else if ((acc_intf_prsp_i.core_id == 1'b0) && acc_intf_prsp_valid_i) begin
 
                           acc_intf_prsp_ready_o = cpu_intf_prsp_ready_i;
                           cpu_intf_prsp_valid_o = acc_intf_prsp_valid_i;
@@ -213,15 +228,7 @@ module merge_interface
                           // Break ties with adopter
                           s_cc_intf_prsp_valid_o = 1'b0;
                           
-                        end else begin
-                          // In merge mode we usually want to directly report to the adopter Snitch
-                          s_cc_intf_prsp_valid_o = acc_intf_prsp_valid_i;
-                          acc_intf_prsp_ready_o  = s_cc_intf_prsp_ready_i;
-
-                          // Break ties with the "biological" Snitch
-                          cpu_intf_prsp_valid_o = 1'b0;
-                          cpu_intf_prsp_o       = '0;  
-                        end               
+                        end          
                       end                   
       MERGE_MASTER :  begin
 
