@@ -53,7 +53,9 @@ module spatz_controller
     input  logic             [NrVregfilePorts-1:0] sb_enable_i,
     input  logic             [NrWritePorts-1:0]    sb_wrote_result_i,
     output logic             [NrVregfilePorts-1:0] sb_enable_o,
-    input  spatz_id_t        [NrVregfilePorts-1:0] sb_id_i
+    input  spatz_id_t        [NrVregfilePorts-1:0] sb_id_i,
+
+    input  merge_mode_t                            merge_mode_i
   );
 
 // Include FF
@@ -77,6 +79,9 @@ module spatz_controller
   vlen_t  vl_d, vl_q;
   vtype_t vtype_d, vtype_q;
 
+  // VL of slave
+  vlen_t vl_slave;
+
   `FF(vstart_q, vstart_d, '0)
   `FF(vl_q, vl_d, '0)
   `FF(vtype_q, vtype_d, '{vill: 1'b1, vsew: EW_8, vlmul: LMUL_1, default: '0})
@@ -87,6 +92,7 @@ module spatz_controller
     vstart_d = vstart_q;
     vl_d     = vl_q;
     vtype_d  = vtype_q;
+    vl_slave = '0;
 
     if (spatz_req_valid) begin
       // Reset vstart to zero if we have a new non CSR operation
@@ -131,8 +137,39 @@ module spatz_controller
               default: vlmax = vlmax;
             endcase
 
-            vl_d = (spatz_req.rs1 == '1) ? (MAXVL >> spatz_req.vtype.vsew) : (int'(vlmax) < spatz_req.rs1) ? vlmax : spatz_req.rs1;
-          end else begin
+            if (!merge_mode_i.is_merge) begin
+              vl_d = (spatz_req.rs1 == '1) ? (MAXVL >> spatz_req.vtype.vsew) : (int'(vlmax) < spatz_req.rs1) ? vlmax : spatz_req.rs1;
+            end else begin
+              // Spatz is in merge mode and belongs to master-CC
+              if (merge_mode_i.is_master) begin
+                
+                // Is the constraint avl > maxvl for merge-mode met?
+                vl_d = (spatz_req.rs1 == '1) ? (MAXVL >> spatz_req.vtype.vsew) : (int'(vlmax) < spatz_req.rs1) ? vlmax : '0;
+
+                // Calculate what vl the slave will set
+                vl_slave = (spatz_req.rs1 == '1) ? 
+                           (MAXVL >> spatz_req.vtype.vsew) : !(int'(vlmax) < spatz_req.rs1) ? 
+                           '0 : ((int'(vlmax) << 1) < spatz_req.rs1) ?
+                           vlmax : (spatz_req.rs1 - vlmax);
+              
+              // Spatz is in merge mode and belongs to slave-CC
+              end else begin
+
+                // Is the constraint avl > maxvl for merge-mode met?
+                // Is avl >= 2*maxvl ?
+                vl_d = (spatz_req.rs1 == '1) ? 
+                       (MAXVL >> spatz_req.vtype.vsew) : !(int'(vlmax) < spatz_req.rs1) ? 
+                       '0 : ((int'(vlmax) << 1) < spatz_req.rs1) ?
+                       vlmax : (spatz_req.rs1 - vlmax);
+        
+              end
+            end
+
+            // When the constraint is not met mark as illegal
+            if (!(&vl_d)) begin
+                  vtype_d = '{vill: 1'b1, vsew: EW_8, vlmul: LMUL_1, default: '0};
+                end
+
             // Keep vl mode
 
             // If new vtype changes ration, mark as illegal
@@ -573,8 +610,14 @@ module spatz_controller
         // Keep the core id
         rsp_o.core_id = spatz_req.core_id;
         rsp_o.id    = spatz_req.rd;
-        rsp_o.data  = elen_t'(vl_d);
-        //rsp_valid_o = 1'b1;
+
+        if (!merge_mode_i.is_merge) begin
+          // respond with the actual vector length of the CSR
+          rsp_o.data  = elen_t'(vl_d);
+        end else begin
+          // respond with spoofed vector length
+          rsp_o.data  = elen_t'(vl_d + vl_slave);
+        end
       end
     end else if (vfu_rsp_valid) begin
       rsp_o.core_id = vfu_rsp.core_id;
