@@ -71,6 +71,40 @@ module merge_interface
   logic is_ready;
 
   // Temporary combinatinal logic to set the correct state
+
+  logic spill_internal_ready, spill_internal_valid;
+  logic spill_forwarded_ready, spill_forwarded_valid;
+  acc_issue_req_t master_req;
+  logic master_req_valid, master_req_ready;
+  logic slave_req_valid, slave_req_ready;
+  acc_issue_req_t master_req_o, slave_req_o;
+
+  spill_register #(
+    .T(acc_issue_req_t)
+  ) i_insn_internal (
+    .clk_i     (clk_i                 ),
+    .rst_ni    (rst_ni                ),
+    .data_i    (master_req            ),
+    .valid_i   (spill_internal_valid  ),
+    .ready_o   (spill_internal_ready  ),
+    .data_o    (master_req_o          ),
+    .valid_o   (master_req_valid      ),
+    .ready_i   (master_req_ready      )
+  );
+
+  spill_register #(
+    .T(acc_issue_req_t)
+  ) i_insn_forward (
+    .clk_i     (clk_i                 ),
+    .rst_ni    (rst_ni                ),
+    .data_i    (master_req            ),
+    .valid_i   (spill_forwarded_valid ),
+    .ready_o   (spill_forwarded_ready ),
+    .data_o    (slave_req_o           ),
+    .valid_o   (slave_req_valid       ),
+    .ready_i   (slave_req_ready       )
+  );
+
   always_comb begin
 
     if (!merge_mode_i.is_merge) begin
@@ -123,6 +157,8 @@ module merge_interface
                         m_cc_intf_prsp_ready_o = 1'bz;
                         s_cc_intf_qreq_ready_o = 1'bz;
                         s_cc_intf_prsp_valid_o = 1'bz;
+
+                        // Bypass the two spill registers in this mode
 
 
                       end
@@ -228,14 +264,76 @@ module merge_interface
                           // Break ties with adopter
                           s_cc_intf_prsp_valid_o = 1'b0;
                           
-                        end          
+                        end
+
+                        // bypass the spill register in this mode           
                       end                   
       MERGE_MASTER :  begin
+
+                        // Connect both spill registers to the cpu-interface (Snitch)
+                        master_req = cpu_intf_qreq_i;
+                        spill_internal_valid = cpu_intf_qreq_valid_i;
+                        spill_forwarded_valid = cpu_intf_qreq_valid_i;
+                        // Tell Snitch that the offload is only accepted if both spill registers are ready to receive data
+                        cpu_intf_qreq_ready_o = spill_internal_ready && spill_forwarded_ready;
+
+                        // Connect the internal spill register to the Spatz of the master
+                        acc_intf_qreq_o = master_req_o;
+                        acc_intf_qreq_o.core_id = 1'b0;
+                        acc_intf_qreq_valid_o = master_req_valid;
+                        master_req_ready = acc_intf_qreq_ready_i;
+
+                        // Connect the forward spill register to the interface connecting to Spatz of the slave
+                        m_cc_intf_qreq_o = slave_req_o;
+                        m_cc_intf_qreq_o.core_id = 1'b1;
+                        m_cc_intf_qreq_valid_o = slave_req_valid;
+                        slave_req_ready = m_cc_intf_qreq_ready_i;
+
+                        // TODO: Needs a spill register as well
+                        cpu_intf_issue_prsp_o = acc_intf_issue_prsp_i;
+
+                        /////////////////////////
+                        //  FPU: Side Channel  //
+                        /////////////////////////
+
+                        // Needs a spill register as well
+
+                        // Internal
+                        acc_intf_fpu_rnd_mode_o = cpu_intf_fpu_rnd_mode_i;
+                        acc_intf_fpu_fmt_mode_o = cpu_intf_fpu_fmt_mode_i;
+                        // Forwarded
+                        m_cc_intf_fpu_rnd_mode_o = cpu_intf_fpu_rnd_mode_i;
+                        m_cc_intf_fpu_fmt_mode_o = cpu_intf_fpu_fmt_mode_i;
+
+                        ////////////////
+                        //  Response  //
+                        ////////////////
+
+                        // Take the response from the "biological" Snitch
+                        cpu_intf_prsp_o = acc_intf_prsp_i;
+                        // Wait for the "biological" and adopted Spatz to generate a valid response
+                        // before assinign valid to adopting Snitch
+                        cpu_intf_prsp_valid_o = acc_intf_prsp_valid_i && m_cc_intf_prsp_valid_i;
+                        // When both Spatz have a valid response forward the ready signal to both
+                        // Spatzes
+                        acc_intf_prsp_ready_o = cpu_intf_prsp_valid_o ? cpu_intf_prsp_ready_i : 
+                                                                        1'b0;
+                        m_cc_intf_prsp_ready_o = acc_intf_prsp_ready_o;
+                        
+                        ////////////////////
+                        //  CC<->CC Intf  //
+                        ////////////////////
+
+                        // Do not drive the CC<->CC interface
+                        s_cc_intf_qreq_ready_o = 1'b0;
+                        s_cc_intf_prsp_valid_o = 1'b0;
+
 
                         ///////////////
                         //  Request  //
                         ///////////////
 
+                        /*
                         cpu_intf_issue_prsp_o = acc_intf_issue_prsp_i;
                         acc_intf_qreq_o = cpu_intf_qreq_i;
                         // Tag incoming instruction as coming from "biological" Snitch
@@ -292,6 +390,7 @@ module merge_interface
                         // Do not drive the CC<->CC interface
                         s_cc_intf_qreq_ready_o = 1'b0;
                         s_cc_intf_prsp_valid_o = 1'b0;
+                        */
 
                       end
     endcase
