@@ -235,9 +235,9 @@ def main():
         tbuf[N_T_BUF:2 * N_T_BUF] = twiddle_v_s[1::2]
         # Attach 1bf img part
         twiddle_vec_reim = np.concatenate(
-            (twiddle_vec_reim[:N_TWID_V], tbuf[N_T_BUF:N_T_BUF + NFFTh // 2], twiddle_vec_reim[N_TWID_V:]))
+            (twiddle_vec_reim[:N_TWID_V], tbuf[N_T_BUF:N_T_BUF + NFFTh], twiddle_vec_reim[N_TWID_V:]))
         # Attach 1bf real part
-        twiddle_vec_reim = np.concatenate((tbuf[:NFFTh // 2], twiddle_vec_reim))
+        twiddle_vec_reim = np.concatenate((tbuf[:NFFTh], twiddle_vec_reim))
 
     # Generate buffer for intermediate butterflies
     buffer_dram = np.zeros(2 * NFFT)

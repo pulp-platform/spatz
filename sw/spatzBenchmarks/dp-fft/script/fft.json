@@ -5,7 +5,7 @@
 // Parameters for an FFT
 
 {
-    npoints: 128,
+    npoints: 8,
     ncores: 2,
     prec: 64
 }

@@ -80,9 +80,15 @@ int main() {
   snrt_cluster_hw_barrier();
 
   // Calculate pointers for the second butterfly onwards
-  double *s_ = samples + cid * (NFFT >> 2);
-  double *buf_ = buffer + cid * (NFFT >> 2);
-  double *twi_ = twiddle + (NFFT >> 1);
+  double *s_ = samples + cid * (NFFT >> 1);
+  double *buf_ = buffer + cid * (NFFT >> 1);
+  double *twi_ = twiddle + NFFT;
+
+  if (cid == 0) {
+    printf("Input samples:\n");
+    for (int i = 0; i < NFFT; ++i)
+      printf("i[%d] = %f + j%f\n", i, samples[i], samples[i+NFFT]);
+  }
 
   // Wait for all cores to finish
   snrt_cluster_hw_barrier();
@@ -100,8 +106,17 @@ int main() {
   // Wait for all cores to finish the first stage
   snrt_cluster_hw_barrier();
 
+  if (cid == 0) {
+    printf("Output of the first butterfly:\n");
+    for (int i = 0; i < NFFT; ++i)
+      printf("o[%d] = %f + j%f\n", i, buffer[i], buffer[i+NFFT]);
+  }
+
+  // Wait for all cores to finish the first stage
+  snrt_cluster_hw_barrier();
+
   // Fall back into the single-core case
-  fft_sc(s_, buf_, twi_, store_idx, bitrev, NFFT / 2);
+  fft_sc(s_, buf_, twi_, store_idx, bitrev, NFFT >> 1, 1);
 
   // Wait for all cores to finish fft
   snrt_cluster_hw_barrier();
@@ -124,6 +139,24 @@ int main() {
     printf("The execution took %u cycles.\n", timer);
     printf("The performance is %ld OP/1000cycle (%ld%%o utilization).\n",
            performance, utilization);
+
+    if (cid == 0) {
+      printf("Output of the second BF:\n");
+      for (int i = 0; i < NFFT; ++i)
+        printf("o[%d] = %f + j%f\n", i, samples[i], samples[i+NFFT]);
+    }
+
+    if (cid == 0) {
+      printf("Output:\n");
+      for (int i = 0; i < NFFT; ++i)
+        printf("o[%d] = %f + j%f\n", i, buffer[i], buffer[i+NFFT]);
+    }
+
+    if (cid == 0) {
+      printf("Twiddles of the first butterfly:\n");
+      for (int i = 0; i < NFFT >> 1; ++i)
+        printf("t[%d] = %f + j%f\n", i, twiddle[i], twiddle[i + (NFFT >> 1) * log2_nfft]);
+    }
 
     // Verify the real part
     for (unsigned int i = 0; i < NFFT; i++) {

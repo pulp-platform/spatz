@@ -23,7 +23,7 @@
 // At every iteration, we store indexed
 // todo: simplify the last iteration, which do not require twiddle factors
 void fft_sc(double *s, double *buf, const double *twi, const uint16_t *seq_idx,
-            const uint16_t *rev_idx, const unsigned int nfft) {
+            const uint16_t *rev_idx, const unsigned int nfft, const uint8_t dc) {
 
   // log2(nfft). We can also pass it directly as a function argument
   const unsigned int log2_nfft = 31 - __builtin_clz(nfft);
@@ -49,8 +49,16 @@ void fft_sc(double *s, double *buf, const double *twi, const uint16_t *seq_idx,
     asm volatile("vsetvli %0, %1, e64, m4, ta, ma" : "=r"(vl) : "r"(avl));
 
     // Swap between the two buffers
-    const double *i_buf = (bf & 1) ? buf : s;
-    double *o_buf = (bf & 1) ? s : buf;
+    // If this comes from a DC butterfly, invert the assignment
+    const double *i_buf;
+    double *o_buf;
+    if (dc) {
+      i_buf = !(bf & 1) ? buf : s;
+      o_buf = !(bf & 1) ? s : buf;
+    else {
+      i_buf = (bf & 1) ? buf : s;
+      o_buf = (bf & 1) ? s : buf;
+    }
 
     // Last iteration
     if (bf == log2_nfft - 1)
@@ -153,8 +161,13 @@ void fft_2c(const double *s, double *buf, const double *twi,
   const double *re_t = cid ? twi + (nfft >> 2) : twi;
   // Img part of the twiddles
   // If the multiplication is slow, pass via func args directly
-  const double *im_t = cid ? twi + (nfft >> 2) * (log2_nfft + 3)
-                           : twi + (nfft >> 2) * (log2_nfft + 2);
+  // This works if Im(Twi) is immediately after all the real parts
+//  const double *im_t = cid ? twi + 8 + (nfft >> 2)
+//                           : twi + 8;
+  // This works if the first twiddle data is at the forefront of the rest
+  // of the twiddles
+  const double *im_t = cid ? twi + (nfft >> 1) + (nfft >> 2)
+                           : twi + (nfft >> 1);
 
   asm volatile("vsetvli %0, %1, e64, m4, ta, ma" : "=r"(vl) : "r"(avl));
 

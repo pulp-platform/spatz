@@ -25,7 +25,7 @@
 // Single-core
 inline void fft_sc(double *s, double *buf, const double *twi,
                    const uint16_t *seq_idx, const uint16_t *rev_idx,
-                   const unsigned int nfft) __attribute__((always_inline));
+                   const unsigned int nfft, const uint8_t dc) __attribute__((always_inline));
 
 // Dual-core
 inline void fft_2c(const double *s, double *buf, const double *twi,
