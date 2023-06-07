@@ -55,7 +55,7 @@ void fft_sc(double *s, double *buf, const double *twi, const uint16_t *seq_idx,
     if (dc) {
       i_buf = !(bf & 1) ? buf : s;
       o_buf = !(bf & 1) ? s : buf;
-    else {
+    } else {
       i_buf = (bf & 1) ? buf : s;
       o_buf = (bf & 1) ? s : buf;
     }
@@ -66,11 +66,11 @@ void fft_sc(double *s, double *buf, const double *twi, const uint16_t *seq_idx,
 
     // Update pointers
     const double *re_u_i = i_buf;
-    const double *im_u_i = i_buf + nfft;
+    const double *im_u_i = dc ? i_buf + 2*nfft : i_buf + nfft;
     const double *re_l_i = re_u_i + (nfft >> 1);
     const double *im_l_i = im_u_i + (nfft >> 1);
     double *re_u_o = o_buf;
-    double *im_u_o = o_buf + nfft;
+    double *im_u_o = dc ? o_buf + 2*nfft : o_buf + nfft;
     double *re_l_o = re_u_o + (nfft >> 1);
     double *im_l_o = im_u_o + (nfft >> 1);
 
@@ -123,7 +123,7 @@ void fft_sc(double *s, double *buf, const double *twi, const uint16_t *seq_idx,
             "vle16.v v24, (%0);" ::"r"(idx_)); // v24: bit-reversal indices
         idx_ += vl;
         re_u_o = o_buf;
-        im_u_o = o_buf + nfft;
+        im_u_o = dc ? o_buf + 2*nfft : o_buf + nfft;
         re_l_o = re_u_o + (nfft >> 1);
         im_l_o = im_u_o + (nfft >> 1);
       } else {
@@ -131,7 +131,7 @@ void fft_sc(double *s, double *buf, const double *twi, const uint16_t *seq_idx,
         asm volatile("vle16.v v24, (%0)" ::"r"(seq_idx)); // v24: index vector
         seq_idx += vl;
         re_u_o = o_buf;
-        im_u_o = o_buf + nfft;
+        im_u_o = dc ? o_buf + 2*nfft : o_buf + nfft;
         re_l_o = re_u_o + (nfft >> 2);
         im_l_o = im_u_o + (nfft >> 2);
       }
