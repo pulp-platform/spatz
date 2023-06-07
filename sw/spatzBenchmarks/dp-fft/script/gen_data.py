@@ -235,7 +235,7 @@ def main():
         tbuf[N_T_BUF:2 * N_T_BUF] = twiddle_v_s[1::2]
         # Attach 1bf img part
         twiddle_vec_reim = np.concatenate(
-            (twiddle_vec_reim[:N_TWID_V], tbuf[N_T_BUF:N_T_BUF + NFFTh], twiddle_vec_reim[N_TWID_V:]))
+            (tbuf[N_T_BUF:N_T_BUF + NFFTh], twiddle_vec_reim))
         # Attach 1bf real part
         twiddle_vec_reim = np.concatenate((tbuf[:NFFTh], twiddle_vec_reim))
 
