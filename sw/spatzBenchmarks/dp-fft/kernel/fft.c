@@ -23,7 +23,7 @@
 // At every iteration, we store indexed
 // todo: simplify the last iteration, which do not require twiddle factors
 void fft_sc(double *s, double *buf, const double *twi, const uint16_t *seq_idx,
-            const uint16_t *rev_idx, const unsigned int nfft, const uint8_t dc) {
+            const uint16_t *rev_idx, const unsigned int nfft, const uint8_t dc, const uint32_t cid) {
 
   // log2(nfft). We can also pass it directly as a function argument
   const unsigned int log2_nfft = 31 - __builtin_clz(nfft);
@@ -122,10 +122,22 @@ void fft_sc(double *s, double *buf, const double *twi, const uint16_t *seq_idx,
         asm volatile(
             "vle16.v v24, (%0);" ::"r"(idx_)); // v24: bit-reversal indices
         idx_ += vl;
-        re_u_o = o_buf;
-        im_u_o = dc ? o_buf + 2*nfft : o_buf + nfft;
-        re_l_o = re_u_o + (nfft >> 1);
-        im_l_o = im_u_o + (nfft >> 1);
+        if (dc && !cid) {
+          re_u_o = o_buf;
+          im_u_o = dc ? o_buf + 2*nfft : o_buf + nfft;
+          re_l_o = re_u_o + (nfft);
+          im_l_o = im_u_o + (nfft);
+        } else if (dc) {
+          re_u_o = o_buf - 3;
+          im_u_o = dc ? o_buf + 2*nfft - 3 : o_buf + nfft;
+          re_l_o = re_u_o + nfft;
+          im_l_o = im_u_o + nfft;
+        } else {
+          re_u_o = o_buf;
+          im_u_o = dc ? o_buf + 2*nfft : o_buf + nfft;
+          re_l_o = re_u_o + (nfft >> 1);
+          im_l_o = im_u_o + (nfft >> 1);
+        }
       } else {
         // Load the sequential indices dirctly
         asm volatile("vle16.v v24, (%0)" ::"r"(seq_idx)); // v24: index vector
