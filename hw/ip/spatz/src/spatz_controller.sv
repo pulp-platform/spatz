@@ -166,10 +166,11 @@ module spatz_controller
             end
 
             // When the constraint is not met mark as illegal
-            if (!(&vl_d)) begin
+            if (!(|vl_d)) begin
                   vtype_d = '{vill: 1'b1, vsew: EW_8, vlmul: LMUL_1, default: '0};
                 end
 
+          end else begin
             // Keep vl mode
 
             // If new vtype changes ration, mark as illegal
@@ -428,23 +429,26 @@ module spatz_controller
     .no_ones_o  (running_insn_full)
   );
 
-  logic retire_csr_d, retire_csr_q;
-  `FF(retire_csr_q, retire_csr_d, 1'b0)
-
   // Pop the buffer if we do not have a unit stall
-  assign req_buffer_pop = ~stall & req_buffer_valid && !running_insn_full & !retire_csr_q;
+  assign req_buffer_pop = ~stall & req_buffer_valid && !running_insn_full;
+
+  logic is_strided;
+  logic is_indexed;
+  logic [31:0] stride;
 
   // Issue new operation to execution units
   always_comb begin : ex_issue
     // Initial values
     retire_csr = 1'b0;
-    retire_csr_d = retire_csr_q;
 
     // Define new spatz request
     spatz_req         = buffer_spatz_req;
     spatz_req.id      = next_insn_id;
     spatz_req_illegal = decoder_rsp_valid ? decoder_rsp.instr_illegal : 1'b0;
     spatz_req_valid   = req_buffer_pop && !spatz_req_illegal && !running_insn_full;
+
+    is_strided = 1'b0;
+    is_indexed = 1'b0;
 
     // We have a new instruction and there is no stall.
     if (spatz_req_valid) begin
@@ -464,9 +468,25 @@ module spatz_controller
         end
 
         LSU: begin
+
+          // Check if the LS is strided or indexed
+          is_strided = spatz_req.op == VLSE || spatz_req.op == VSSE;
+          is_indexed = spatz_req.op == VLXE || spatz_req.op == VSXE;
+
           // Overwrite vl and vstart in request (preserve vtype with vsew)
-          spatz_req.vl     = vl_q;
-          spatz_req.vstart = vstart_q;
+          spatz_req.vl       = vl_q;
+          spatz_req.vstart   = vstart_q;
+          // Check if the base address has to be modified before sending the instruction off
+          if (merge_mode_i.is_merge && !merge_mode_i.is_master) begin
+            if (!is_strided && !is_indexed) begin
+              spatz_req.rs1 = spatz_req.rs1 + (vlmax_q >> vtype_q.vsew);
+            end else if (is_strided) begin
+              stride = spatz_req.rs2 >> vtype_q.vsew;
+              spatz_req.rs1 = spatz_req.rs1 + (vlmax_q >> vtype_q.vsew) * stride;
+            end else if (is_indexed) begin
+              //placeholder for future indexed support
+            end
+          end
         end
 
         SLD: begin
@@ -487,13 +507,6 @@ module spatz_controller
           retire_csr = 1'b1;
         end
       endcase
-
-      retire_csr_d = retire_csr;
-
-      if (retire_csr_q & rsp_ready_i) begin
-        retire_csr_d = retire_csr;
-      end
-
     end
   end // ex_issue
 
@@ -581,12 +594,11 @@ module spatz_controller
   // Retire an operation/instruction and write back result to core
   // if necessary.
   always_comb begin : retire
-    rsp_o       = '0;
-    //rsp_valid_o = '0;
 
+    rsp_o       = '0;
     vfu_rsp_ready = 1'b0;
 
-    if (retire_csr_q) begin
+    if (retire_csr) begin
       // Read CSR and write back to cpu
       if (spatz_req.op == VCSR) begin
         if (spatz_req.use_rd) begin
@@ -603,34 +615,27 @@ module spatz_controller
         end
         // Keep the core id
         rsp_o.core_id = spatz_req.core_id;
-        rsp_o.id    = spatz_req.rd;
+        rsp_o.id      = spatz_req.rd;
         //rsp_valid_o = 1'b1;
       end else begin
         // Change configuration and send back vl
         // Keep the core id
         rsp_o.core_id = spatz_req.core_id;
-        rsp_o.id    = spatz_req.rd;
-
-        if (!merge_mode_i.is_merge) begin
-          // respond with the actual vector length of the CSR
-          rsp_o.data  = elen_t'(vl_d);
-        end else begin
-          // respond with spoofed vector length
-          rsp_o.data  = elen_t'(vl_d + vl_slave);
-        end
+        rsp_o.id      = spatz_req.rd;
+        // When in merge mode return spoofed vl to scalar core
+        rsp_o.data    = !merge_mode_i.is_merge ? elen_t'(vl_d) : elen_t'(vl_d + vl_slave);
       end
     end else if (vfu_rsp_valid) begin
       rsp_o.core_id = vfu_rsp.core_id;
       rsp_o.id      = vfu_rsp.rd;
       rsp_o.data    = vfu_rsp.result;
-      //rsp_valid_o   = 1'b1;
       vfu_rsp_ready = rsp_ready_i;
     end
   end // retire
 
   // Signal to core that Spatz is ready for a new instruction
   assign issue_ready_o = req_buffer_ready;
-  assign rsp_valid_o = retire_csr_q || vfu_rsp_valid;
+  assign rsp_valid_o = retire_csr || vfu_rsp_valid;
 
   // Send request off to execution units
   assign spatz_req_o       = spatz_req;
