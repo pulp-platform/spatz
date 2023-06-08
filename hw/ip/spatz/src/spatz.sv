@@ -56,7 +56,9 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     // FPU side channel
     input  roundmode_e                        fpu_rnd_mode_i,
     input  fmt_mode_t                         fpu_fmt_mode_i,
-    output status_t                           fpu_status_o
+    output status_t                           fpu_status_o,
+    // Merge Mode Extension
+    input  merge_mode_t                       merge_mode_i
   );
 
   ////////////////
@@ -245,7 +247,9 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     .sb_id_i          (sb_id           ),
     .sb_wrote_result_i(vrf_wvalid      ),
     .sb_enable_i      ({sb_we, sb_re}  ),
-    .sb_enable_o      ({vrf_we, vrf_re})
+    .sb_enable_o      ({vrf_we, vrf_re}),
+    // Merge Mode Extension
+    .merge_mode_i     (merge_mode_i    )
   );
 
   /////////
