@@ -427,7 +427,8 @@ module spatz_cc
     .fp_lsu_mem_rsp_i        (fp_lsu_mem_rsp        ),
     .fpu_rnd_mode_i          (acc_fpu_rnd_mode      ),
     .fpu_fmt_mode_i          (acc_fpu_fmt_mode      ),
-    .fpu_status_o            (fpu_status            )
+    .fpu_status_o            (fpu_status            ),
+    .merge_mode_i            (merge_mode_i          )
   );
 
   for (genvar p = 0; p < NumMemPortsPerSpatz; p++) begin
