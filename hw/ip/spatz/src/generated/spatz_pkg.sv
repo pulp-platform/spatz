@@ -184,7 +184,7 @@ package spatz_pkg;
 
   // Result from decoder
   typedef struct packed {
-    logic core_id;
+    logic is_collab;
     // Instruction ID
     spatz_id_t id;
 
@@ -233,7 +233,7 @@ package spatz_pkg;
   //////////////////////////////////
 
   typedef struct packed {
-    logic core_id;
+    logic is_collab;
     // Request id
     logic [GPRWidth-1:0] rd;
 
@@ -261,7 +261,7 @@ package spatz_pkg;
   //////////////////
 
   typedef struct packed {
-    logic core_id;
+    logic is_collab;
     // Instruction ID
     spatz_id_t id;
 
