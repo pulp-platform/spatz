@@ -135,8 +135,9 @@ module merge_interface
                         acc_intf_qreq_valid_o  = s_cc_intf_qreq_valid_i;
                         s_cc_intf_qreq_ready_o = acc_intf_qreq_ready_i;
 
-                        // Break ties with "biological" Snitch
-                        cpu_intf_issue_prsp_o = '0;
+                        // Break ties with "biological" Snitch but still keep sending request responses
+                        // (needed for load/store)
+                        cpu_intf_issue_prsp_o = acc_intf_issue_prsp_i;
                         cpu_intf_qreq_ready_o = 1'b0;
 
                         // Inform adopter that "biological" Snitch is not trying to offload 
