@@ -47,7 +47,7 @@ module spatz_decoder
     spatz_req     = '0;
     reset_vstart  = 1'b1;
     // Keep the Core_ID
-    spatz_req.core_id = decoder_req_i.core_id;
+    spatz_req.is_collab    = decoder_req_i.is_collab;
 
     // We have a new instruction that need to be decoded
     if (decoder_req_valid_i) begin
