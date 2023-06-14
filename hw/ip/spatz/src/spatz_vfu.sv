@@ -47,7 +47,7 @@ module spatz_vfu
 
   // Instruction tag (propagated together with the operands through the pipelines)
   typedef struct packed {
-    logic core_id;
+    logic is_collab;
     spatz_id_t id;
 
     vew_e vsew;
@@ -269,7 +269,7 @@ module spatz_vfu
 
     // An instruction finished execution
     if ((result_tag.last && &(result_valid | ~pending_results) && reduction_state_q inside {Reduction_NormalExecution, Reduction_Wait}) || reduction_done) begin
-      vfu_rsp_o.core_id = result_tag.core_id;
+      vfu_rsp_o.is_collab  = result_tag.is_collab;
       vfu_rsp_o.id      = result_tag.id;
       vfu_rsp_o.rd      = result_tag.vd_addr[GPRWidth-1:0];
       vfu_rsp_o.wb      = result_tag.wb;
@@ -522,7 +522,7 @@ module spatz_vfu
 
     // Tag (propagated with the operations)
     input_tag = '{
-      core_id        : spatz_req.core_id,
+      is_collab         : spatz_req.is_collab,
       id             : spatz_req.id,
       vsew           : spatz_req.vtype.vsew,
       vstart         : spatz_req.vstart,
