@@ -476,7 +476,8 @@ module spatz_fpu_sequencer
       issue_rsp_o = spatz_issue_rsp_t'{
         accept   : use_rd,
         writeback: use_rd,
-        loadstore: is_load | is_store,
+        isstore  : is_store,
+        isload   : is_load,
         exception: illegal_inst,
         default  : '0
       };
@@ -576,12 +577,12 @@ module spatz_fpu_sequencer
     // Is the LSU stalling?
     lsu_stall = fp_lsu_qvalid && !fp_lsu_qready;
 
-    if ((is_vector_load || is_vector_store) && issue_ready_i && issue_valid_o)
+    if ((issue_rsp_i.isload || issue_rsp_i.isstore) && issue_ready_i && issue_valid_o)
       acc_mem_cnt_d += 1;
     if (spatz_mem_finished_i)
       acc_mem_cnt_d -= 1;
 
-    if (is_vector_store && issue_ready_i && issue_valid_o)
+    if (issue_rsp_i.isstore && issue_ready_i && issue_valid_o)
       acc_mem_str_cnt_d += 1;
     if (spatz_mem_finished_i && spatz_mem_str_finished_i)
       acc_mem_str_cnt_d -= 1;
