@@ -79,20 +79,26 @@ module spatz_controller
   vlen_t  vl_d, vl_q;
   vtype_t vtype_d, vtype_q;
 
+  // Collaboration register
+  logic collab_d, collab_q;
+
   // VL of slave
   vlen_t vl_slave;
 
   `FF(vstart_q, vstart_d, '0)
   `FF(vl_q, vl_d, '0)
   `FF(vtype_q, vtype_d, '{vill: 1'b1, vsew: EW_8, vlmul: LMUL_1, default: '0})
+  `FF(collab_q, collab_d, 1'b0);
 
   always_comb begin : proc_vcsr
     automatic logic [$clog2(MAXVL):0] vlmax = 0;
 
-    vstart_d = vstart_q;
-    vl_d     = vl_q;
-    vtype_d  = vtype_q;
-    vl_slave = '0;
+    vstart_d  = vstart_q;
+    vl_d      = vl_q;
+    vtype_d   = vtype_q;
+
+    collab_d  = collab_q;
+    vl_slave  = '0;
 
     if (spatz_req_valid) begin
       // Reset vstart to zero if we have a new non CSR operation
@@ -137,38 +143,34 @@ module spatz_controller
               default: vlmax = vlmax;
             endcase
 
-            if (!merge_mode_i.is_merge) begin
-              vl_d = (spatz_req.rs1 == '1) ? (MAXVL >> spatz_req.vtype.vsew) : (int'(vlmax) < spatz_req.rs1) ? vlmax : spatz_req.rs1;
-            end else begin
-              // Spatz is in merge mode and belongs to master-CC
-              if (merge_mode_i.is_master) begin
-                
-                // Is the constraint avl > maxvl for merge-mode met?
-                vl_d = (spatz_req.rs1 == '1) ? (MAXVL >> spatz_req.vtype.vsew) : (int'(vlmax) < spatz_req.rs1) ? vlmax : '0;
+            vl_d = (spatz_req.rs1 == '1) ? (MAXVL >> spatz_req.vtype.vsew) : (int'(vlmax) < spatz_req.rs1) ? vlmax : spatz_req.rs1;
 
-                // Calculate what vl the slave will set
-                vl_slave = (spatz_req.rs1 == '1) ? 
-                           (MAXVL >> spatz_req.vtype.vsew) : !(int'(vlmax) < spatz_req.rs1) ? 
-                           '0 : ((int'(vlmax) << 1) < spatz_req.rs1) ?
-                           vlmax : (spatz_req.rs1 - vlmax);
-              
-              // Spatz is in merge mode and belongs to slave-CC
-              end else begin
+            // Are we in merge mode and are we the master?
+            if (merge_mode_i.is_master) begin
 
-                // Is the constraint avl > maxvl for merge-mode met?
-                // Is avl >= 2*maxvl ?
-                vl_d = (spatz_req.rs1 == '1) ? 
-                       (MAXVL >> spatz_req.vtype.vsew) : !(int'(vlmax) < spatz_req.rs1) ? 
-                       '0 : ((int'(vlmax) << 1) < spatz_req.rs1) ?
-                       vlmax : (spatz_req.rs1 - vlmax);
-        
-              end
+              // Calculate vector length that slave will set (required for response)
+              vl_slave = (spatz_req.rs1 == '1) ? 
+                         (MAXVL >> spatz_req.vtype.vsew) : !(int'(vlmax) < spatz_req.rs1) ? 
+                         '0 : ((int'(vlmax) << 1) < spatz_req.rs1) ?
+                         vlmax : (spatz_req.rs1 - vlmax);
+  
+              // Can the vector length not be accomodated by a single Spatz?
+              collab_d = |vl_slave;
+
             end
+            // Are we in merge mode and act as the slave?
+            else if (merge_mode_i.is_merge && !merge_mode_i.is_master) begin
 
-            // When the constraint is not met mark as illegal
-            if (!(|vl_d)) begin
-                  vtype_d = '{vill: 1'b1, vsew: EW_8, vlmul: LMUL_1, default: '0};
-                end
+              // Calculate vector length of slave
+              vl_d = (spatz_req.rs1 == '1) ? 
+                     (MAXVL >> spatz_req.vtype.vsew) : !(int'(vlmax) < spatz_req.rs1) ? 
+                     '0 : ((int'(vlmax) << 1) < spatz_req.rs1) ?
+                     vlmax : (spatz_req.rs1 - vlmax);
+
+              // Should we collaborate for this config?
+              collab_d = |vl_d;
+
+            end
 
           end else begin
             // Keep vl mode
@@ -209,6 +211,29 @@ module spatz_controller
     .fpu_fmt_mode_i     (fpu_fmt_mode_i   )
   );
 
+  logic drop_insn;
+
+  // Determine if vector instruction should be dropped 
+  always_comb begin : proc_drop_inst
+
+    drop_insn = 1'b0;
+
+    // Is Spatz operating as slave in merge mode
+    if (merge_mode_i.is_merge && !merge_mode_i.is_master) begin
+
+      // Do not drop the instruction if the configured application vector length could not be accommodated
+      // by a single Spatz, there's a scalar request or there's a new config incoming
+      if ((|vl_q || decoder_rsp.spatz_req.ex_unit == CON || !decoder_rsp.spatz_req.is_collab) && decoder_rsp_valid) begin
+        drop_insn = 1'b0;
+      end else begin
+        drop_insn = 1'b1;
+      end
+
+    end
+    
+  end // proc_drop_insn
+  
+
   // Decode new instruction if new request arrives
   always_comb begin : proc_decode
     decoder_req       = '{default: '0};
@@ -223,7 +248,7 @@ module spatz_controller
       decoder_req.rd        = issue_req_i.id;
       decoder_req_valid     = 1'b1;
       // Merge-Mode extension
-      decoder_req.core_id   = issue_req_i.core_id;
+      decoder_req.is_collab = issue_req_i.is_collab;
     end
   end // proc_decode
 
@@ -247,7 +272,7 @@ module spatz_controller
     .ready_o   (req_buffer_ready     ),
     .valid_o   (req_buffer_valid     ),
     .data_i    (decoder_rsp.spatz_req),
-    .valid_i   (decoder_rsp_valid    ),
+    .valid_i   (decoder_rsp_valid && !drop_insn),
     .data_o    (buffer_spatz_req     ),
     .ready_i   (req_buffer_pop       )
   );
@@ -434,7 +459,8 @@ module spatz_controller
 
   logic is_strided;
   logic is_indexed;
-  logic [31:0] stride;
+  elen_t stride;
+  elen_t offset;
 
   // Issue new operation to execution units
   always_comb begin : ex_issue
@@ -449,9 +475,17 @@ module spatz_controller
 
     is_strided = 1'b0;
     is_indexed = 1'b0;
+    offset     = '0;
 
     // We have a new instruction and there is no stall.
     if (spatz_req_valid) begin
+
+      // Modify instruction tag if application vector can be accommodated by single Spatz
+      // Will not be assigned for scalar instructions
+      if (spatz_req.is_collab) begin
+        spatz_req.is_collab = collab_q;
+      end
+
       case (spatz_req.ex_unit)
         VFU: begin
           // Overwrite all csrs in request
@@ -469,20 +503,34 @@ module spatz_controller
 
         LSU: begin
 
-          // Check if the LS is strided or indexed
-          is_strided = spatz_req.op == VLSE || spatz_req.op == VSSE;
-          is_indexed = spatz_req.op == VLXE || spatz_req.op == VSXE;
-
           // Overwrite vl and vstart in request (preserve vtype with vsew)
           spatz_req.vl       = vl_q;
           spatz_req.vstart   = vstart_q;
-          // Check if the base address has to be modified before sending the instruction off
-          if (merge_mode_i.is_merge && !merge_mode_i.is_master) begin
+
+          // Do we act as the slave in merge mode and collaborate on the load/store
+          if (merge_mode_i.is_merge && !merge_mode_i.is_master && collab_q) begin
+            // Check if the LS is strided or indexed
+            is_strided = spatz_req.op == VLSE || spatz_req.op == VSSE;
+            is_indexed = spatz_req.op == VLXE || spatz_req.op == VSXE;
+
+            // Calculate the stride offset that the slave must add to rs1
+            offset = VLENB >> vtype_q.vsew;
+
+            unique case (vtype_q.vlmul)
+              LMUL_F2: offset >>= 1;
+              LMUL_F4: offset >>= 2;
+              LMUL_1 : offset <<= 0;
+              LMUL_2 : offset <<= 1;
+              LMUL_4 : offset <<= 2;
+              LMUL_8 : offset <<= 3;
+              default: offset = offset;
+            endcase
+
             if (!is_strided && !is_indexed) begin
-              spatz_req.rs1 = spatz_req.rs1 + (vlmax_q >> vtype_q.vsew);
+              spatz_req.rs1 = spatz_req.rs1 + offset;
             end else if (is_strided) begin
               stride = spatz_req.rs2 >> vtype_q.vsew;
-              spatz_req.rs1 = spatz_req.rs1 + (vlmax_q >> vtype_q.vsew) * stride;
+              spatz_req.rs1 = spatz_req.rs1 + offset * stride;
             end else if (is_indexed) begin
               //placeholder for future indexed support
             end
@@ -534,8 +582,8 @@ module spatz_controller
     // Is there something running on Spatz? If so, prevent Snitch from reading the fcsr register
     issue_rsp_o.isfloat = |running_insn_q;
 
-    // We have a new valid instruction
-    if (decoder_rsp_valid && !decoder_rsp.instr_illegal) begin
+    // We have a new valid instruction and we don't drop it
+    if (decoder_rsp_valid && !decoder_rsp.instr_illegal && !drop_insn) begin
       // Accept the new instruction
       issue_rsp_o.accept = 1'b1;
 
@@ -550,7 +598,11 @@ module spatz_controller
           end
         end // VFU
         LSU: begin
-          issue_rsp_o.loadstore = 1'b1;
+          if (decoder_rsp.spatz_req.op_mem.is_load) begin
+            issue_rsp_o.isload = 1'b1;
+          end else begin
+            issue_rsp_o.isstore = 1'b1;
+          end
           // vtype is illegal -> illegal instruction
           if (vtype_q.vill) begin
             issue_rsp_o.accept = 1'b0;
@@ -564,7 +616,7 @@ module spatz_controller
         end // SLD
       endcase // Operation type
     // The decoding resulted in an illegal instruction
-    end else if (decoder_rsp_valid && decoder_rsp.instr_illegal) begin
+    end else if (decoder_rsp_valid && decoder_rsp.instr_illegal && !drop_insn) begin
       // Do not accept it
       issue_rsp_o.accept = 1'b0;
     end
@@ -614,19 +666,24 @@ module spatz_controller
           endcase
         end
         // Keep the core id
-        rsp_o.core_id = spatz_req.core_id;
+        rsp_o.is_collab  = spatz_req.is_collab;
         rsp_o.id      = spatz_req.rd;
         //rsp_valid_o = 1'b1;
       end else begin
         // Change configuration and send back vl
         // Keep the core id
-        rsp_o.core_id = spatz_req.core_id;
+        rsp_o.is_collab  = spatz_req.is_collab;
         rsp_o.id      = spatz_req.rd;
         // When in merge mode return spoofed vl to scalar core
-        rsp_o.data    = !merge_mode_i.is_merge ? elen_t'(vl_d) : elen_t'(vl_d + vl_slave);
+        if (merge_mode_i.is_merge) begin
+          rsp_o.data = &spatz_req.rs1 ? MAXVL << 1 : elen_t'(vl_d + vl_slave);
+        end else begin
+          rsp_o.data = elen_t'(vl_d);
+        end
+        
       end
     end else if (vfu_rsp_valid) begin
-      rsp_o.core_id = vfu_rsp.core_id;
+      rsp_o.is_collab  = vfu_rsp.is_collab;
       rsp_o.id      = vfu_rsp.rd;
       rsp_o.data    = vfu_rsp.result;
       vfu_rsp_ready = rsp_ready_i;
