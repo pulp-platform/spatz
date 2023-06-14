@@ -292,7 +292,7 @@ module spatz_cluster
 
   typedef struct packed {
     acc_addr_e addr;
-    logic core_id;
+    logic is_collab;
     logic [5:0] id;
     logic [31:0] data_op;
     data_t data_arga;
@@ -303,13 +303,14 @@ module spatz_cluster
   typedef struct packed {
     logic accept;
     logic writeback;
-    logic loadstore;
+    logic isstore;
+    logic isload;
     logic exception;
     logic isfloat;
   } acc_issue_rsp_t;
 
   typedef struct packed {
-    logic core_id;
+    logic is_collab;
     logic [5:0] id;
     logic error;
     data_t data;
