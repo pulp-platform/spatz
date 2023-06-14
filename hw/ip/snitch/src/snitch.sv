@@ -351,6 +351,8 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
   logic acc_mem_stall;
   // Offloaded mem operation is a store operation
   logic acc_mem_store;
+  // Marks offloaded instruction if it should be forwarded in merge mode
+  logic is_collab;
 
   assign acc_qreq_o.id = rd;
   assign acc_qreq_o.data_op = inst_data_i;
@@ -358,6 +360,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
   assign acc_qreq_o.data_argb = {{32{opb[31]}}, opb};
   // operand C is currently only used for load/store instructions
   assign acc_qreq_o.data_argc = ls_paddr;
+  assign acc_qreq_o.is_collab = is_collab;
 
   // ---------
   // L0 ITLB
@@ -520,6 +523,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
     rd_bypass = '0;
     zero_lsb = 1'b0;
     is_branch = 1'b0;
+    is_collab = 1'b1;
     // LSU interface
     is_load = 1'b0;
     is_store = 1'b0;
@@ -1136,6 +1140,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
       REMW,
       REMUW: begin
         write_rd = 1'b0;
+        is_collab = 1'b0;
         uses_rd = 1'b1;
         acc_qvalid_o = valid_instr;
         opa_select = Reg;
@@ -1164,6 +1169,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           && (!(inst_data_i inside {FDIV_S, FSQRT_S}) || XDivSqrt)) begin
           write_rd = 1'b0;
           acc_qvalid_o = valid_instr;
+          is_collab = 1'b0;
         end else begin
           illegal_inst = 1'b1;
         end
@@ -1231,6 +1237,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
         if (FP_EN && RVD && (!(inst_data_i inside {FDIV_D, FSQRT_D}) || XDivSqrt)) begin
           write_rd = 1'b0;
           acc_qvalid_o = valid_instr;
+          is_collab = 1'b0;
         end else begin
           illegal_inst = 1'b1;
         end
@@ -1240,6 +1247,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
         if (FP_EN && RVF && RVD) begin
           write_rd = 1'b0;
           acc_qvalid_o = valid_instr;
+          is_collab = 1'b0;
         end else begin
           illegal_inst = 1'b1;
         end
@@ -1263,10 +1271,12 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
             (!(inst_data_i inside {FDIV_H, FSQRT_H}) || XDivSqrt)) begin
           write_rd = 1'b0;
           acc_qvalid_o = valid_instr;
+          is_collab = 1'b0;
         end else if (FP_EN && XF16ALT && fcsr_q.fmode.dst == 1'b1 &&
             (!(inst_data_i inside {FDIV_H, FSQRT_H}) || XDivSqrt)) begin
           write_rd = 1'b0;
           acc_qvalid_o = valid_instr;
+          is_collab = 1'b0;
         end else begin
           illegal_inst = 1'b1;
         end
@@ -1286,9 +1296,11 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
         if (FP_EN && RVF && XF16 && fcsr_q.fmode.src == 1'b0) begin
           write_rd = 1'b0;
           acc_qvalid_o = valid_instr;
+          is_collab = 1'b0;
         end else if (FP_EN && RVF && XF16ALT && fcsr_q.fmode.src == 1'b1) begin
           write_rd = 1'b0;
           acc_qvalid_o = valid_instr;
+          is_collab = 1'b0;
         end else begin
           illegal_inst = 1'b1;
         end
@@ -1297,9 +1309,11 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
         if (FP_EN && RVF && XF16 && fcsr_q.fmode.dst == 1'b0) begin
           write_rd = 1'b0;
           acc_qvalid_o = valid_instr;
+          is_collab = 1'b0;
         end else if (FP_EN && RVF && XF16ALT && fcsr_q.fmode.dst == 1'b1) begin
           write_rd = 1'b0;
           acc_qvalid_o = valid_instr;
+          is_collab = 1'b0;
         end else begin
           illegal_inst = 1'b1;
         end
@@ -1308,9 +1322,11 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
         if (FP_EN && RVD && XF16 && fcsr_q.fmode.src == 1'b0) begin
           write_rd = 1'b0;
           acc_qvalid_o = valid_instr;
+          is_collab = 1'b0;
         end else if (FP_EN && RVD && XF16ALT && fcsr_q.fmode.src == 1'b1) begin
           write_rd = 1'b0;
           acc_qvalid_o = valid_instr;
+          is_collab = 1'b0;
         end else begin
           illegal_inst = 1'b1;
         end
@@ -1319,9 +1335,11 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
         if (FP_EN && RVD && XF16 && fcsr_q.fmode.dst == 1'b0) begin
           write_rd = 1'b0;
           acc_qvalid_o = valid_instr;
+          is_collab = 1'b0;
         end else if (FP_EN && RVD && XF16ALT && fcsr_q.fmode.dst == 1'b1) begin
           write_rd = 1'b0;
           acc_qvalid_o = valid_instr;
+          is_collab = 1'b0;
         end else begin
           illegal_inst = 1'b1;
         end
@@ -1491,9 +1509,11 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
         if (FP_EN && XF8 && fcsr_q.fmode.dst == 1'b0) begin
           write_rd = 1'b0;
           acc_qvalid_o = valid_instr;
+          is_collab = 1'b0;
         end else if (FP_EN && XF8ALT && fcsr_q.fmode.dst == 1'b1) begin
           write_rd = 1'b0;
           acc_qvalid_o = valid_instr;
+          is_collab = 1'b0;
         end else begin
           illegal_inst = 1'b1;
         end
@@ -1513,9 +1533,11 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
         if (FP_EN && RVF && XF8 && fcsr_q.fmode.src == 1'b0) begin
           write_rd = 1'b0;
           acc_qvalid_o = valid_instr;
+          is_collab = 1'b0;
         end else if (FP_EN && RVF && XF8ALT && fcsr_q.fmode.src == 1'b1) begin
           write_rd = 1'b0;
           acc_qvalid_o = valid_instr;
+          is_collab = 1'b0;
         end else begin
           illegal_inst = 1'b1;
         end
@@ -1524,9 +1546,11 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
         if (FP_EN && RVF && XF8 && fcsr_q.fmode.dst == 1'b0) begin
           write_rd = 1'b0;
           acc_qvalid_o = valid_instr;
+          is_collab = 1'b0;
         end else if (FP_EN && RVF && XF8ALT && fcsr_q.fmode.dst == 1'b1) begin
           write_rd = 1'b0;
           acc_qvalid_o = valid_instr;
+          is_collab = 1'b0;
         end else begin
           illegal_inst = 1'b1;
         end
@@ -1535,9 +1559,11 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
         if (FP_EN && RVD && XF8 && fcsr_q.fmode.src == 1'b0) begin
           write_rd = 1'b0;
           acc_qvalid_o = valid_instr;
+          is_collab = 1'b0;
         end else if (FP_EN && RVD && XF8ALT && fcsr_q.fmode.src == 1'b1) begin
           write_rd = 1'b0;
           acc_qvalid_o = valid_instr;
+          is_collab = 1'b0;
         end else begin
           illegal_inst = 1'b1;
         end
@@ -1546,9 +1572,11 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
         if (FP_EN && RVD && XF8 && fcsr_q.fmode.dst == 1'b0) begin
           write_rd = 1'b0;
           acc_qvalid_o = valid_instr;
+          is_collab = 1'b0;
         end else if (FP_EN && RVF && XF8ALT && fcsr_q.fmode.dst == 1'b1) begin
           write_rd = 1'b0;
           acc_qvalid_o = valid_instr;
+          is_collab = 1'b0;
         end else begin
           illegal_inst = 1'b1;
         end
@@ -1561,6 +1589,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
                (XF16ALT && fcsr_q.fmode.dst == 1'b1)) begin
               write_rd = 1'b0;
               acc_qvalid_o = valid_instr;
+              is_collab = 1'b0;
             end else begin
               illegal_inst = 1'b1;
             end
@@ -1579,6 +1608,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
                (XF8ALT && fcsr_q.fmode.dst == 1'b1)) begin
               write_rd = 1'b0;
               acc_qvalid_o = valid_instr;
+              is_collab = 1'b0;
             end else begin
               illegal_inst = 1'b1;
             end
@@ -1777,6 +1807,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           write_rd = 1'b0;
           uses_rd = 1'b1;
           acc_qvalid_o = valid_instr;
+          is_collab = 1'b0;
           acc_register_rd = 1'b1; // No RS in GPR but RD in GPR, register in int scoreboard
         end else begin
           illegal_inst = 1'b1;
@@ -1794,6 +1825,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           write_rd = 1'b0;
           uses_rd = 1'b1;
           acc_qvalid_o = valid_instr;
+          is_collab = 1'b0;
           acc_register_rd = 1'b1; // No RS in GPR but RD in GPR, register in int scoreboard
         end else begin
           illegal_inst = 1'b1;
@@ -1836,11 +1868,13 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           write_rd = 1'b0;
           uses_rd = 1'b1;
           acc_qvalid_o = valid_instr;
+          is_collab = 1'b0;
           acc_register_rd = 1'b1; // No RS in GPR but RD in GPR, register in int scoreboard
         end else if (FP_EN && XF16ALT && fcsr_q.fmode.src == 1'b1) begin
           write_rd = 1'b0;
           uses_rd = 1'b1;
           acc_qvalid_o = valid_instr;
+          is_collab = 1'b0;
           acc_register_rd = 1'b1; // No RS in GPR but RD in GPR, register in int scoreboard
         end else begin
           illegal_inst = 1'b1;
@@ -1909,11 +1943,13 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           write_rd = 1'b0;
           uses_rd = 1'b1;
           acc_qvalid_o = valid_instr;
+          is_collab = 1'b0;
           acc_register_rd = 1'b1; // No RS in GPR but RD in GPR, register in int scoreboard
         end else if (FP_EN && XF8ALT && fcsr_q.fmode.src == 1'b1) begin
           write_rd = 1'b0;
           uses_rd = 1'b1;
           acc_qvalid_o = valid_instr;
+          is_collab = 1'b0;
           acc_register_rd = 1'b1; // No RS in GPR but RD in GPR, register in int scoreboard
         end else begin
           illegal_inst = 1'b1;
@@ -1978,6 +2014,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           opa_select = Reg;
           write_rd = 1'b0;
           acc_qvalid_o = valid_instr;
+          is_collab = 1'b0;
         end else begin
           illegal_inst = 1'b1;
         end
@@ -1990,6 +2027,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           opa_select = Reg;
           write_rd = 1'b0;
           acc_qvalid_o = valid_instr;
+          is_collab = 1'b0;
         end else begin
           illegal_inst = 1'b1;
         end
@@ -2002,10 +2040,12 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           opa_select = Reg;
           write_rd = 1'b0;
           acc_qvalid_o = valid_instr;
+          is_collab = 1'b0;
         end else if (FP_EN && XF16ALT && (fcsr_q.fmode.dst == 1'b1)) begin
           opa_select = Reg;
           write_rd = 1'b0;
           acc_qvalid_o = valid_instr;
+          is_collab = 1'b0;
         end else begin
           illegal_inst = 1'b1;
         end
@@ -2036,10 +2076,12 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           opa_select = Reg;
           write_rd = 1'b0;
           acc_qvalid_o = valid_instr;
+          is_collab = 1'b0;
         end else if (FP_EN && XF8ALT && fcsr_q.fmode.dst == 1'b1) begin
           opa_select = Reg;
           write_rd = 1'b0;
           acc_qvalid_o = valid_instr;
+          is_collab = 1'b0;
         end else begin
           illegal_inst = 1'b1;
         end
@@ -2069,6 +2111,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           opa_select = Reg;
           write_rd = 1'b0;
           acc_qvalid_o = valid_instr;
+          is_collab = 1'b0;
         end else begin
           illegal_inst = 1'b1;
         end
@@ -2081,6 +2124,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           opb_select = IImmediate;
           write_rd = 1'b0;
           acc_qvalid_o = valid_instr & trans_ready;
+          is_collab = 1'b0;
           ls_size = Word;
           is_fp_load = 1'b1;
         end else begin
@@ -2093,6 +2137,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           opb_select = SFImmediate;
           write_rd = 1'b0;
           acc_qvalid_o = valid_instr & trans_ready;
+          is_collab = 1'b0;
           ls_size = Word;
           is_fp_store = 1'b1;
         end else begin
@@ -2106,6 +2151,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           opb_select = IImmediate;
           write_rd = 1'b0;
           acc_qvalid_o = valid_instr & trans_ready;
+          is_collab = 1'b0;
           ls_size = Double;
           is_fp_load = 1'b1;
         end else begin
@@ -2118,6 +2164,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           opb_select = SFImmediate;
           write_rd = 1'b0;
           acc_qvalid_o = valid_instr & trans_ready;
+          is_collab = 1'b0;
           ls_size = Double;
           is_fp_store = 1'b1;
         end else begin
@@ -2131,6 +2178,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           opb_select = IImmediate;
           write_rd = 1'b0;
           acc_qvalid_o = valid_instr & trans_ready;
+          is_collab = 1'b0;
           ls_size = HalfWord;
           is_fp_load = 1'b1;
         end else begin
@@ -2143,6 +2191,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           opb_select = SFImmediate;
           write_rd = 1'b0;
           acc_qvalid_o = valid_instr & trans_ready;
+          is_collab = 1'b0;
           ls_size = HalfWord;
           is_fp_store = 1'b1;
         end else begin
@@ -2156,6 +2205,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           opb_select = IImmediate;
           write_rd = 1'b0;
           acc_qvalid_o = valid_instr & trans_ready;
+          is_collab = 1'b0;
           ls_size = Byte;
           is_fp_load = 1'b1;
         end else begin
@@ -2168,6 +2218,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           opb_select = SFImmediate;
           write_rd = 1'b0;
           acc_qvalid_o = valid_instr & trans_ready;
+          is_collab = 1'b0;
           ls_size = Byte;
           is_fp_store = 1'b1;
         end else begin
@@ -3229,14 +3280,14 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
     acc_mem_cnt_d = acc_mem_cnt_q;
     acc_mem_str_cnt_d = acc_mem_str_cnt_q;
 
-    if (acc_qrsp_i.loadstore && acc_qready_i && acc_qvalid_o)
+    if (acc_qrsp_i.isload || acc_qrsp_i.isstore) // && acc_qready_i && acc_qvalid_o
       acc_mem_cnt_d += 1;
     if (acc_mem_finished_i[0])
       acc_mem_cnt_d -= 1;
     if (acc_mem_finished_i[1])
       acc_mem_cnt_d -= 1;
 
-    if (acc_qrsp_i.loadstore && acc_qready_i && acc_qvalid_o && (acc_mem_store || is_fp_store))
+    if (acc_qrsp_i.isstore) // && acc_qready_i && acc_qvalid_o && (acc_mem_store || is_fp_store)
       acc_mem_str_cnt_d += 1;
     if (acc_mem_finished_i[0] && acc_mem_str_finished_i[0])
       acc_mem_str_cnt_d -= 1;
