@@ -7,6 +7,10 @@
 #ifndef __VECTOR_MACROS_H__
 #define __VECTOR_MACROS_H__
 
+#ifndef MERGE_MODE
+  #define MERGE_MODE
+#endif
+
 #include "dataset.h"
 #include "encoding.h"
 #include "float_conversion.h"
@@ -98,9 +102,9 @@ int test_case;
   Af32 = (uint32_t *)snrt_l1alloc(32 * sizeof(uint32_t));                      \
   Af16 = (uint16_t *)snrt_l1alloc(32 * sizeof(uint16_t));                      \
   Ru64 = (uint64_t *)snrt_l1alloc(32 * sizeof(uint64_t));                      \
-  Ru32 = (uint32_t *)snrt_l1alloc(32 * sizeof(uint32_t));                      \
-  Ru16 = (uint16_t *)snrt_l1alloc(32 * sizeof(uint16_t));                      \
-  Ru8 = (uint8_t *)snrt_l1alloc(32 * sizeof(uint8_t));                         \
+  Ru32 = (uint32_t *)snrt_l1alloc(64 * sizeof(uint32_t));                      \
+  Ru16 = (uint16_t *)snrt_l1alloc(128 * sizeof(uint16_t));                     \
+  Ru8 = (uint8_t *)snrt_l1alloc(256 * sizeof(uint8_t));                        \
   Ri64 = (int64_t *)snrt_l1alloc(32 * sizeof(int64_t));                        \
   Ri32 = (int32_t *)snrt_l1alloc(32 * sizeof(int32_t));                        \
   Ri16 = (int16_t *)snrt_l1alloc(32 * sizeof(int16_t));                        \
@@ -151,7 +155,7 @@ int test_case;
         return;                                                                \
       }                                                                        \
     }                                                                          \
-    printf("PASSED.\n");                                                       \
+    printf("[TC %d] PASSED.\n", casenum);                                      \
   } while (0)
 
 // Check the results against an in-memory vector of golden values
