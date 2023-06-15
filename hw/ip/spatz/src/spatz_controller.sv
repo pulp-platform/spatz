@@ -514,7 +514,7 @@ module spatz_controller
             is_indexed = spatz_req.op == VLXE || spatz_req.op == VSXE;
 
             // Calculate the stride offset that the slave must add to rs1
-            offset = VLENB >> vtype_q.vsew;
+            offset = VLENB;
 
             unique case (vtype_q.vlmul)
               LMUL_F2: offset >>= 1;
