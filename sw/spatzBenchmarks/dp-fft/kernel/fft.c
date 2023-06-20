@@ -23,20 +23,15 @@
 // At every iteration, we store indexed
 // todo: simplify the last iteration, which do not require twiddle factors
 void fft_sc(double *s, double *buf, const double *twi, const uint16_t *seq_idx,
-            const uint16_t *rev_idx, const unsigned int nfft, const uint8_t dc,
+            const uint16_t *rev_idx, const unsigned int nfft,
+            const unsigned int log2_nfft, const uint8_t dc,
             const uint32_t cid) {
-
-  // log2(nfft). We can also pass it directly as a function argument
-  const unsigned int log2_nfft = 31 - __builtin_clz(nfft);
 
   // Real part of the twiddles
   const double *re_t = twi;
   // Img part of the twiddles
   // If the multiplication is slow, pass via func args directly
   const double *im_t = twi + (nfft >> 1) * log2_nfft;
-
-  // Bit-reverse indices
-  const uint16_t *idx_ = rev_idx;
 
   // Keep half of the samples in a vector register
   size_t avl;
@@ -121,18 +116,20 @@ void fft_sc(double *s, double *buf, const double *twi, const uint16_t *seq_idx,
       // vector)
       if (bf == log2_nfft - 1) {
         asm volatile(
-            "vle16.v v24, (%0);" ::"r"(idx_)); // v24: bit-reversal indices
-        idx_ += vl;
-        if (dc && !cid) {
-          re_u_o = o_buf;
-          im_u_o = o_buf + 2 * nfft;
-          re_l_o = re_u_o + nfft;
-          im_l_o = im_u_o + nfft;
-        } else if (dc) {
-          re_u_o = o_buf - nfft + 1;
-          im_u_o = o_buf + nfft + 1;
-          re_l_o = re_u_o + nfft;
-          im_l_o = im_u_o + nfft;
+            "vle16.v v24, (%0);" ::"r"(rev_idx)); // v24: bit-reversal indices
+        rev_idx += vl;
+        if (dc) {
+          if (!cid) {
+            re_u_o = o_buf;
+            im_u_o = o_buf + 2 * nfft;
+            re_l_o = re_u_o + nfft;
+            im_l_o = im_u_o + nfft;
+          } else {
+            re_u_o = o_buf - nfft + 1;
+            im_u_o = o_buf + nfft + 1;
+            re_l_o = re_u_o + nfft;
+            im_l_o = im_u_o + nfft;
+          }
         } else {
           re_u_o = o_buf;
           im_u_o = o_buf + nfft;
@@ -163,9 +160,6 @@ void fft_sc(double *s, double *buf, const double *twi, const uint16_t *seq_idx,
 // implements just the first butterfly stage of a 2-core implementation.
 void fft_2c(const double *s, double *buf, const double *twi,
             const unsigned int nfft, const unsigned int cid) {
-  // Log2(nfft). We can also pass it directly as a function argument
-  unsigned int log2_nfft = 31 - __builtin_clz(nfft >> 1);
-
   // avl = (nfft/2) / n_cores
   size_t avl = nfft >> 2;
   size_t vl;

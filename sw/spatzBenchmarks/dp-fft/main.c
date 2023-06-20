@@ -45,14 +45,11 @@ int main() {
   const unsigned int num_cores = snrt_cluster_core_num();
   const unsigned int cid = snrt_cluster_core_idx();
 
-  unsigned int timer;
-  unsigned int log2_nfft;
+  // log2(nfft).
+  const unsigned int log2_nfft = 31 - __builtin_clz(NFFT >> 1);
 
   // Reset timer
-  timer = (unsigned int)-1;
-
-  // log2(nfft).
-  log2_nfft = 31 - __builtin_clz(NFFT >> 1);
+  unsigned int timer = (unsigned int)-1;
 
   // Allocate the matrices
   if (cid == 0) {
@@ -84,14 +81,6 @@ int main() {
   double *buf_ = buffer + cid * (NFFT >> 1);
   double *twi_ = twiddle + NFFT;
 
-  /*
-    if (cid == 0) {
-      printf("Input samples:\n");
-      for (int i = 0; i < NFFT; ++i)
-        printf("i[%d] = %f + j%f\n", i, samples[i], samples[i+NFFT]);
-    }
-  */
-
   // Wait for all cores to finish
   snrt_cluster_hw_barrier();
 
@@ -108,11 +97,8 @@ int main() {
   // Wait for all cores to finish the first stage
   snrt_cluster_hw_barrier();
 
-  // Wait for all cores to finish the first stage
-  snrt_cluster_hw_barrier();
-
   // Fall back into the single-core case
-  fft_sc(s_, buf_, twi_, store_idx, bitrev, NFFT >> 1, 1, cid);
+  fft_sc(s_, buf_, twi_, store_idx, bitrev, NFFT >> 1, log2_nfft, 1, cid);
 
   // Wait for all cores to finish fft
   snrt_cluster_hw_barrier();
