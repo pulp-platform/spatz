@@ -220,8 +220,7 @@ def main():
     if CORES == 2:
         # Bitrev
         buf = copy.deepcopy(bitrev)
-        bitrev[0::2] = buf[:len(bitrev) // 2]
-        bitrev[1::2] = buf[len(bitrev) // 2:]
+        bitrev = [2 * i for i in buf]
         # Twi
         N_T_BUF = int(np.log2(NFFTh * 2) * NFFTh)
         twiddle = np.empty(NFFTh * 2, dtype=dtype_cplx)
@@ -263,7 +262,7 @@ def main():
     emit_str += 'static uint16_t store_idx_dram[{}]'.format(int(np.log2(NFFTh / 2) * NFFTh / 2)) + ' __attribute__((section(".data"))) = {' + ', '.join(
         map(str, np.array(store_delta).astype(idx_dtype).tolist())) + '};\n'
     emit_str += 'static uint16_t bitrev_dram[{}]'.format(int(
-        NFFT)) + ' __attribute__((section(".data"))) = {' + ', '.join(map(str, bitrev)) + '};\n'
+        NFFTh / 2)) + ' __attribute__((section(".data"))) = {' + ', '.join(map(str, bitrev)) + '};\n'
     emit_str += 'static double gold_out_dram[{}]'.format(
         2 * NFFT) + ' __attribute__((section(".data"))) = {' + ', '.join(map(str, gold_out_s.astype(dtype).tolist())) + '};\n'
 

@@ -88,4 +88,4 @@ add_spatz_test_threeParam(sdotp-bp-fmatmul sdotp-bp-fmatmul/main.c 128 256 128)
 add_spatz_test_threeParam(dp-fconv2d dp-fconv2d/main.c 32 32 7)
 add_spatz_test_threeParam(dp-fconv2d dp-fconv2d/main.c 64 64 7)
 
-add_spatz_test_twoParam(dp-fft dp-fft/main.c 8 2 fft)
+add_spatz_test_twoParam(dp-fft dp-fft/main.c 128 2 fft)

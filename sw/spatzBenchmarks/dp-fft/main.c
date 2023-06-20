@@ -61,7 +61,7 @@ int main() {
     twiddle = (double *)snrt_l1alloc((2 * NTWI + NFFT) * sizeof(double));
     store_idx =
         (uint16_t *)snrt_l1alloc(log2_nfft * (NFFT / 4) * sizeof(uint16_t));
-    bitrev = (uint16_t *)snrt_l1alloc(NFFT * sizeof(uint16_t));
+    bitrev = (uint16_t *)snrt_l1alloc((NFFT / 4) * sizeof(uint16_t));
   }
 
   // Initialize the matrices
@@ -72,7 +72,7 @@ int main() {
                       (2 * NTWI + NFFT) * sizeof(double));
     snrt_dma_start_1d(store_idx, store_idx_dram,
                       log2_nfft * (NFFT / 4) * sizeof(uint16_t));
-    snrt_dma_start_1d(bitrev, bitrev_dram, NFFT * sizeof(uint16_t));
+    snrt_dma_start_1d(bitrev, bitrev_dram, (NFFT / 4) * sizeof(uint16_t));
     snrt_dma_wait_all();
   }
 
@@ -84,13 +84,13 @@ int main() {
   double *buf_ = buffer + cid * (NFFT >> 1);
   double *twi_ = twiddle + NFFT;
 
-/*
-  if (cid == 0) {
-    printf("Input samples:\n");
-    for (int i = 0; i < NFFT; ++i)
-      printf("i[%d] = %f + j%f\n", i, samples[i], samples[i+NFFT]);
-  }
-*/
+  /*
+    if (cid == 0) {
+      printf("Input samples:\n");
+      for (int i = 0; i < NFFT; ++i)
+        printf("i[%d] = %f + j%f\n", i, samples[i], samples[i+NFFT]);
+    }
+  */
 
   // Wait for all cores to finish
   snrt_cluster_hw_barrier();
@@ -107,14 +107,6 @@ int main() {
 
   // Wait for all cores to finish the first stage
   snrt_cluster_hw_barrier();
-
-/*
-  if (cid == 0) {
-    printf("Output of the first butterfly:\n");
-    for (int i = 0; i < NFFT; ++i)
-      printf("o[%d] = %f + j%f\n", i, buffer[i], buffer[i+NFFT]);
-  }
-*/
 
   // Wait for all cores to finish the first stage
   snrt_cluster_hw_barrier();
@@ -143,29 +135,11 @@ int main() {
     printf("The execution took %u cycles.\n", timer);
     printf("The performance is %ld OP/1000cycle (%ld%%o utilization).\n",
            performance, utilization);
-/*
-    if (cid == 0) {
-      printf("Output of the second BF:\n");
-      for (int i = 0; i < NFFT; ++i)
-        printf("o[%d] = %f + j%f\n", i, samples[i], samples[i+NFFT]);
-    }
 
-    if (cid == 0) {
-      printf("Output:\n");
-      for (int i = 0; i < NFFT; ++i)
-        printf("o[%d] = %f + j%f\n", i, buffer[i], buffer[i+NFFT]);
-    }
-
-    if (cid == 0) {
-      printf("Twiddles of the first butterfly:\n");
-      for (int i = 0; i < NFFT >> 1; ++i)
-        printf("t[%d] = %f + j%f\n", i, twiddle[i], twiddle[i + (NFFT >> 1) * log2_nfft]);
-    }
-*/
     // Verify the real part
     for (unsigned int i = 0; i < NFFT; i++) {
       if (fp_check(buffer[i], gold_out_dram[2 * i])) {
-        printf("[ERROR] Index %d -> Result = %f, Expected = %f\n", i,
+        printf("Error: Index %d -> Result = %f, Expected = %f\n", i,
                (float)buffer[i], (float)gold_out_dram[2 * i]);
       }
     }
@@ -173,7 +147,7 @@ int main() {
     // Verify the imac part
     for (unsigned int i = 0; i < NFFT; i++) {
       if (fp_check(buffer[i + NFFT], gold_out_dram[2 * i + 1])) {
-        printf("[ERROR] Index %d -> Result = %f, Expected = %f\n", i + NFFT,
+        printf("Error: Index %d -> Result = %f, Expected = %f\n", i + NFFT,
                (float)buffer[i + NFFT], (float)gold_out_dram[2 * i + 1]);
       }
     }
