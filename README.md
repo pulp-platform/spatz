@@ -196,16 +196,16 @@ The goal of Spatz is to implement all instructions belonging to the Zve32x vecto
 
 ### Vector Loads and Stores
 
-| Instruction       | Status |
-|-------------------|:------:|
-| vle{8, 16, 32}    |    ✅   |
-| vluxei{8, 16, 32} |    ❌   |
-| vlse{8, 16, 32}   |    ✅   |
-| vloxei{8, 16, 32} |    ❌   |
-| vse{8, 16, 32}    |    ✅   |
-| vsuxei{8, 16, 32} |    ❌   |
-| vsse{8, 16, 32}   |    ✅   |
-| vsoxei{8, 16, 32} |    ❌   |
+| Instruction          | Status |
+|-------------------   |:------:|
+| vle{8, 16, 32, 64}   |    ✅   |
+| vluxei{8, 16, 32, 64}|    🔍   |
+| vlse{8, 16, 32, 64}  |    ✅   |
+| vloxei{8, 16, 32, 64}|    🔍   |
+| vse{8, 16, 32, 64}   |    ✅   |
+| vsuxei{8, 16, 32, 64}|    🔍   |
+| vsse{8, 16, 32, 64}  |    ✅   |
+| vsoxei{8, 16, 32, 64}|    🔍   |
 
 ### Vector Integer Arithmetic
 
@@ -224,10 +224,10 @@ The goal of Spatz is to implement all instructions belonging to the Zve32x vecto
 | vwsub.{wv, wx}                    |    ❌   |
 | vzext.{vf2, vf4, vf8}             |    ❌   |
 | vsext.{vf2, vf4, vf8}             |    ❌   |
-| vadc.{vvm, vxm, vim}              |    ❌   |
-| vmadc.{vvm, vxm, vim, vv, vx, vi} |    ❌   |
-| vsbc.{vvm, vxm}                   |    ❌   |
-| vmsbc.{vvm, vxm, vv, vx}          |    ❌   |
+| vadc.{vvm, vxm, vim}              |    🔍   |
+| vmadc.{vvm, vxm, vim, vv, vx, vi} |    🔍   |
+| vsbc.{vvm, vxm}                   |    🔍   |
+| vmsbc.{vvm, vxm, vv, vx}          |    🔍   |
 | vand.{vv, vx, vi}                 |    ✅   |
 | vor.{vv, vx, vi}                  |    ✅   |
 | vxor.{vv, vx, vi}                 |    ✅   |
@@ -236,14 +236,14 @@ The goal of Spatz is to implement all instructions belonging to the Zve32x vecto
 | vsra.{vv, vx, vi}                 |    ✅   |
 | vnsrl.{wv, wx, wi}                |    ❌   |
 | vnsra.{wv, wx, wi}                |    ❌   |
-| vmseq.{vv, vx, vi}                |    ❌   |
-| vmsne.{vv, vx, vi}                |    ❌   |
-| vmsltu.{vv, vx}                   |    ❌   |
-| vmslt.{vv, vx}                    |    ❌   |
-| vmsleu.{vv, vx, vi}               |    ❌   |
-| vmsle.{vv, vx, vi}                |    ❌   |
-| vmsgtu.{vx, vi}                   |    ❌   |
-| vmsgt.{vx, vi}                    |    ❌   |
+| vmseq.{vv, vx, vi}                |    🔍   |
+| vmsne.{vv, vx, vi}                |    🔍   |
+| vmsltu.{vv, vx}                   |    🔍   |
+| vmslt.{vv, vx}                    |    🔍   |
+| vmsleu.{vv, vx, vi}               |    🔍   |
+| vmsle.{vv, vx, vi}                |    🔍   |
+| vmsgtu.{vx, vi}                   |    🔍   |
+| vmsgt.{vx, vi}                    |    🔍   |
 | vminu.{vv. vx}                    |    ✅   |
 | vmin.{vv, vx}                     |    ✅   |
 | vmaxu.{vv, vx}                    |    ✅   |
@@ -256,18 +256,18 @@ The goal of Spatz is to implement all instructions belonging to the Zve32x vecto
 | vdiv.{vv, vx}                     |    ✅   |
 | vremu.{vv, vx}                    |    ✅   |
 | vrem.{vv, vx}                     |    ✅   |
-| vwmul.{vv, vx}                    |    ❌   |
-| vwmulu.{vv, vx}                   |    ❌   |
-| vwmulsu.{vv, vx}                  |    ❌   |
+| vwmul.{vv, vx}                    |    🔍   |
+| vwmulu.{vv, vx}                   |    🔍   |
+| vwmulsu.{vv, vx}                  |    🔍   |
 | vmacc.{vv, vx}                    |    ✅   |
 | vnmsac.{vv, vx}                   |    ✅   |
 | vmadd.{vv, vx}                    |    ✅   |
 | vnmsub.{vv, vx}                   |    ✅   |
-| vwmaccu.{vv, vx}                  |    ❌   |
-| vwmacc.{vv, vx}                   |    ❌   |
-| vwmaccsu.{vv, vx}                 |    ❌   |
-| vwmaccus.vx                       |    ❌   |
-| vmerge.{vvm, vxm, vim}            |    ❌   |
+| vwmaccu.{vv, vx}                  |    🔍   |
+| vwmacc.{vv, vx}                   |    🔍   |
+| vwmaccsu.{vv, vx}                 |    🔍   |
+| vwmaccus.vx                       |    🔍   |
+| vmerge.{vvm, vxm, vim}            |    🔍   |
 | vmv.v.{v, x, i}                   |    ✅   |
 
 ### Vector Fixed-Point Arithmetic
@@ -330,7 +330,7 @@ The goal of Spatz is to implement all instructions belonging to the Zve32x vecto
 
 | Instruction           | Status |
 |-----------------------|:------:|
-| vmv.{x.s, s.x}        |    ❌   |
+| vmv.{x.s, s.x}        |    ⚠️   |
 | vslideup.{vx, vi}     |    ⚠️   |
 | vslidedown.{vx, vi}   |    ⚠️   |
 | vslide1up.vx          |    ⚠️   |
