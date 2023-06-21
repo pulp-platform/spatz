@@ -106,9 +106,9 @@ int test_case;
   Ru16 = (uint16_t *)snrt_l1alloc(128 * sizeof(uint16_t));                     \
   Ru8 = (uint8_t *)snrt_l1alloc(256 * sizeof(uint8_t));                        \
   Ri64 = (int64_t *)snrt_l1alloc(32 * sizeof(int64_t));                        \
-  Ri32 = (int32_t *)snrt_l1alloc(32 * sizeof(int32_t));                        \
-  Ri16 = (int16_t *)snrt_l1alloc(32 * sizeof(int16_t));                        \
-  Ri8 = (int8_t *)snrt_l1alloc(32 * sizeof(int8_t));                           \
+  Ri32 = (int32_t *)snrt_l1alloc(64 * sizeof(int32_t));                        \
+  Ri16 = (int16_t *)snrt_l1alloc(128 * sizeof(int16_t));                       \
+  Ri8 = (int8_t *)snrt_l1alloc(256 * sizeof(int8_t));                          \
   Rf64 = (uint64_t *)snrt_l1alloc(32 * sizeof(uint64_t));                      \
   Rf32 = (uint32_t *)snrt_l1alloc(32 * sizeof(uint32_t));                      \
   Rf16 = (uint16_t *)snrt_l1alloc(32 * sizeof(uint16_t));

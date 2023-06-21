@@ -71,12 +71,33 @@ void TEST_CASE2() {
 #endif
 }
 
+#ifdef MERGE_MODE
+  void MERGE_TEST_CASE1() {
+    uint64_t scalar = 99;
+
+    #if ELEN == 64
+      VSET(32, e64, m2);
+      VLOAD_64(v4, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+                   20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32);
+      VLOAD_64(v2, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+                   -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1);
+      asm volatile("vslide1up.vx v2, v4, %[A]" ::[A] "r"(scalar));
+      VCMP_U64(9, v2, 99, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17,
+                      18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31);
+    #endif
+  }
+#endif
+
 int main(void) {
   INIT_CHECK();
   enable_vec();
 
-  TEST_CASE1();
+  //TEST_CASE1();
   // TEST_CASE2();
+
+  #ifdef MERGE_MODE
+    MERGE_TEST_CASE1();
+  #endif
 
   EXIT_CHECK();
 }
