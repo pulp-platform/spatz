@@ -682,6 +682,14 @@ module spatz_cluster
   roundmode_e fpu_rnd_mode;
   fmt_mode_t  fpu_fmt_mode;
 
+  logic sld_ack;
+  logic [$clog2(NRVREG)-1:0] vrf_reg_nr;
+
+  vrf_addr_t vrf_raddr;
+  vrf_data_t vrf_rdata;
+  logic      vrf_re;
+  logic      vrf_rvalid;
+
   for (genvar i = 0; i < NrCores; i++) begin : gen_core
     localparam int unsigned TcdmPorts     = get_tcdm_ports(i);
     localparam int unsigned TcdmPortsOffs = get_tcdm_port_offs(i);
@@ -789,7 +797,19 @@ module spatz_cluster
       .cc_m_acc_fpu_fmt_mode_o(/* Unused */                  ),
       .cc_s_acc_fpu_rnd_mode_i(/* Unused */                  ),
       .cc_s_acc_fpu_fmt_mode_i(/* Unused */                  ),
-      .merge_mode_i        (2'b00                            )
+      .merge_mode_i        (2'b00                            ),
+      .m_vrf_reg_i            (/* Unused */                  ),
+      .s_vrf_reg_o            (/* Unused */                  ),
+      .m_slave_ack_o          (/* Unused */                  ),
+      .s_master_ack_i         (/* Unused */                  ),
+      .m_vrf_re_i             (/* Unused */                  ),
+      .s_vrf_re_o             (/* Unused */                  ),
+      .m_vrf_raddr_i          (/* Unused */                  ),
+      .m_vrf_rdata_o          (/* Unused */                  ),
+      .s_vrf_raddr_o          (/* Unused */                  ),
+      .s_vrf_rdata_i          (/* Unused */                  ),
+      .m_vrf_rvalid_o         (/* Unused */                  ),
+      .s_vrf_rvalid_i         (/* Unused */                  )
     );
     end else begin
       if (i == 0) begin
@@ -876,7 +896,19 @@ module spatz_cluster
         .cc_m_acc_fpu_fmt_mode_o(fpu_fmt_mode                  ),
         .cc_s_acc_fpu_rnd_mode_i(/* Unused */                  ),
         .cc_s_acc_fpu_fmt_mode_i(/* Unused */                  ),
-        .merge_mode_i        ('{1, 1}                          )
+        .merge_mode_i        ('{1, 1}                          ),
+        .m_vrf_reg_i            (vrf_reg_nr                    ),
+        .s_vrf_reg_o            (/* Unused */                  ),
+        .m_slave_ack_o          (sld_ack                       ),
+        .s_master_ack_i         (/* Unused */                  ),
+        .m_vrf_re_i             (vrf_re                        ),
+        .s_vrf_re_o             (/* Unused */                  ),
+        .m_vrf_raddr_i          (vrf_raddr                     ),
+        .m_vrf_rdata_o          (vrf_rdata                     ),
+        .s_vrf_raddr_o          (/* Unused */                  ),
+        .s_vrf_rdata_i          (/* Unused */                  ),
+        .m_vrf_rvalid_o         (vrf_rvalid                    ),
+        .s_vrf_rvalid_i         (/* Unused */                  )
       );
       end else begin
         //slave_cc
@@ -962,7 +994,19 @@ module spatz_cluster
         .cc_m_acc_fpu_fmt_mode_o(/* Unused */                  ),
         .cc_s_acc_fpu_rnd_mode_i(fpu_rnd_mode                  ),
         .cc_s_acc_fpu_fmt_mode_i(fpu_fmt_mode                  ),
-        .merge_mode_i        ('{1, 0}                          )
+        .merge_mode_i        ('{1, 0}                          ),
+        .m_vrf_reg_i            (/* Unused */                  ),
+        .s_vrf_reg_o            (vrf_reg_nr                    ),
+        .m_slave_ack_o          (/* Unused */                  ),
+        .s_master_ack_i         (sld_ack                       ),
+        .m_vrf_re_i             (/* Unused */                  ),
+        .s_vrf_re_o             (vrf_re                        ),
+        .m_vrf_raddr_i          (/* Unused */                  ),
+        .m_vrf_rdata_o          (/* Unused */                  ),
+        .s_vrf_raddr_o          (vrf_raddr                     ),
+        .s_vrf_rdata_i          (vrf_rdata                     ),
+        .m_vrf_rvalid_o         (/* Unused */                  ),
+        .s_vrf_rvalid_i         (vrf_rvalid                    )
       );
       end
     end
