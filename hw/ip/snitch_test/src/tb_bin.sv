@@ -9,7 +9,7 @@ module tb_bin;
   // This can't have a unit otherwise the simulation will not advance, for
   // whatever reason.
   // verilog_lint: waive explicit-parameter-storage-type
-  localparam TCK = 1ns;
+  localparam TCK = `ifdef CLKPERIOD `CLKPERIOD `else 1ns `endif;
 
   logic rst_ni, clk_i;
 
