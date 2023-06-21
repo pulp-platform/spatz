@@ -1,6 +1,3 @@
-#define FFT_SAMPLES 128
-#include "support_data.h"
-
 static uint32_t NFFT = 128;
 static uint32_t NTWI = 192;
 

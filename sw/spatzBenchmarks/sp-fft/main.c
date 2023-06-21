@@ -23,18 +23,18 @@
 #include DATAHEADER
 #include "kernel/fft.c"
 
-double *samples;
-double *buffer;
-double *twiddle;
+float *samples;
+float *buffer;
+float *twiddle;
 
 uint16_t *store_idx;
 uint16_t *bitrev;
 
-static inline int fp_check(const double a, const double b) {
-  const double threshold = 0.00001;
+static inline int fp_check(const float a, const float b) {
+  const float threshold = 0.00001;
 
   // Absolute value
-  double comp = a - b;
+  float comp = a - b;
   if (comp < 0)
     comp = -comp;
 
@@ -53,9 +53,9 @@ int main() {
 
   // Allocate the matrices
   if (cid == 0) {
-    samples = (double *)snrt_l1alloc(2 * NFFT * sizeof(double));
-    buffer = (double *)snrt_l1alloc(2 * NFFT * sizeof(double));
-    twiddle = (double *)snrt_l1alloc((2 * NTWI + NFFT) * sizeof(double));
+    samples = (float *)snrt_l1alloc(2 * NFFT * sizeof(float));
+    buffer = (float *)snrt_l1alloc(2 * NFFT * sizeof(float));
+    twiddle = (float *)snrt_l1alloc((2 * NTWI + NFFT) * sizeof(float));
     store_idx =
         (uint16_t *)snrt_l1alloc(log2_nfft * (NFFT / 4) * sizeof(uint16_t));
     bitrev = (uint16_t *)snrt_l1alloc((NFFT / 4) * sizeof(uint16_t));
@@ -63,10 +63,9 @@ int main() {
 
   // Initialize the matrices
   if (cid == 0) {
-    snrt_dma_start_1d(samples, samples_dram, 2 * NFFT * sizeof(double));
-    snrt_dma_start_1d(buffer, buffer_dram, 2 * NFFT * sizeof(double));
-    snrt_dma_start_1d(twiddle, twiddle_dram,
-                      (2 * NTWI + NFFT) * sizeof(double));
+    snrt_dma_start_1d(samples, samples_dram, 2 * NFFT * sizeof(float));
+    snrt_dma_start_1d(buffer, buffer_dram, 2 * NFFT * sizeof(float));
+    snrt_dma_start_1d(twiddle, twiddle_dram, (2 * NTWI + NFFT) * sizeof(float));
     snrt_dma_start_1d(store_idx, store_idx_dram,
                       log2_nfft * (NFFT / 4) * sizeof(uint16_t));
     snrt_dma_start_1d(bitrev, bitrev_dram, (NFFT / 4) * sizeof(uint16_t));
@@ -77,9 +76,9 @@ int main() {
   snrt_cluster_hw_barrier();
 
   // Calculate pointers for the second butterfly onwards
-  double *s_ = samples + cid * (NFFT >> 1);
-  double *buf_ = buffer + cid * (NFFT >> 1);
-  double *twi_ = twiddle + NFFT;
+  float *s_ = samples + cid * (NFFT >> 1);
+  float *buf_ = buffer + cid * (NFFT >> 1);
+  float *twi_ = twiddle + NFFT;
 
   // Wait for all cores to finish
   snrt_cluster_hw_barrier();
@@ -115,7 +114,7 @@ int main() {
   if (cid == 0) {
     long unsigned int performance =
         1000 * 10 * NFFT * log2_nfft * 6 / 5 / timer;
-    long unsigned int utilization = performance / (2 * num_cores * 4);
+    long unsigned int utilization = performance / (2 * num_cores * 8);
 
     printf("\n----- fft on %d samples -----\n", NFFT);
     printf("The execution took %u cycles.\n", timer);

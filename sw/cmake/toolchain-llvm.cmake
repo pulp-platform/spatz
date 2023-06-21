@@ -14,7 +14,7 @@ set(CMAKE_RANLIB ${LLVM_PATH}/bin/llvm-ranlib)
 ##
 ## Compile options
 ##
-add_compile_options(-mcpu=snitch -mcmodel=small -ffast-math -fno-builtin-printf -fno-common -falign-loops=32)
+add_compile_options(-mcpu=snitch -mcmodel=small -ffast-math -fno-builtin-printf -fno-common -falign-loops=16)
 add_compile_options(-ffunction-sections)
 add_compile_options(-Wextra)
 add_compile_options(-static)
