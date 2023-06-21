@@ -276,7 +276,6 @@ package spatz_pkg;
   ///////////////////
 
   typedef struct packed {
-    logic core_id;
     // Instruction ID
     spatz_id_t id;
 
@@ -289,7 +288,7 @@ package spatz_pkg;
   ////////////////////
 
   typedef struct packed {
-    logic core_id;
+    logic is_collab;
     // Instruction ID
     spatz_id_t id;
   } vsldu_rsp_t;
