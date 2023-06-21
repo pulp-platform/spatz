@@ -211,6 +211,10 @@ module spatz_vlsu
   vlen_t [NrMemPorts-1:0] mem_counter_q;
   logic  [NrMemPorts-1:0] mem_port_finished_q;
 
+  vlen_t [NrMemPorts-1:0] mem_idx_counter_delta;
+  vlen_t [NrMemPorts-1:0] mem_idx_counter_d;
+  vlen_t [NrMemPorts-1:0] mem_idx_counter_q;
+
   for (genvar port = 0; port < NrMemPorts; port++) begin: gen_mem_counters
     delta_counter #(
       .WIDTH($bits(vlen_t))
@@ -225,6 +229,21 @@ module spatz_vlsu
       .d_i       (mem_counter_d[port]    ),
       .q_o       (mem_counter_q[port]    ),
       .overflow_o(/* Unused */           )
+    );
+
+    delta_counter #(
+      .WIDTH($bits(vlen_t))
+    ) i_delta_counter_mem_idx (
+      .clk_i     (clk_i                      ),
+      .rst_ni    (rst_ni                     ),
+      .clear_i   (1'b0                       ),
+      .en_i      (mem_counter_en[port]       ),
+      .load_i    (mem_counter_load[port]     ),
+      .down_i    (1'b0                       ), // We always count up
+      .delta_i   (mem_idx_counter_delta[port]),
+      .d_i       (mem_idx_counter_d[port]    ),
+      .q_o       (mem_idx_counter_q[port]    ),
+      .overflow_o(/* Unused */               )
     );
 
     assign mem_port_finished_q[port] = mem_spatz_req_valid && (mem_counter_q[port] == mem_counter_max[port]);
@@ -380,15 +399,26 @@ module spatz_vlsu
     logic [31:0] stride;
     logic [31:0] offset;
 
+    // Pre-shuffling index offset
+    typedef logic [int'(MAXEW)-1:0] maxew_t;
+    maxew_t idx_offset;
+    assign idx_offset = mem_idx_counter_q[port];
+
     always_comb begin
       stride = mem_is_strided ? mem_spatz_req.rs2 >> mem_spatz_req.vtype.vsew : 'd1;
-      if (mem_is_indexed) begin
-        automatic logic [idx_width(N_FU*ELENB)-1:0] word_index = mem_counter_q[port][int'(MAXEW)-1:0] + (port << MAXEW);
 
-        unique case (mem_spatz_req.vtype.vsew)
-          EW_8 : offset   = $signed(vrf_rdata_i[1][8 * word_index +: 8]) << EW_8;
-          EW_16: offset   = $signed(vrf_rdata_i[1][8 * word_index +: 16]) << EW_16;
-          default: offset = $signed(vrf_rdata_i[1][8 * word_index +: 32]) << EW_32;
+      if (mem_is_indexed) begin
+        // What is the relationship between data and index width?
+        automatic logic [1:0] data_index_width_diff = int'(mem_spatz_req.vtype.vsew) - int'(mem_spatz_req.op_mem.ew);
+
+        // Pointer to index
+        automatic logic [idx_width(N_FU*ELENB)-1:0] word_index = (port << (MAXEW - data_index_width_diff)) + (maxew_t'(idx_offset << data_index_width_diff) >> data_index_width_diff) + (maxew_t'(idx_offset >> (MAXEW - data_index_width_diff)) << (MAXEW - data_index_width_diff)) * NrMemPorts;
+
+        // Index
+        unique case (mem_spatz_req.op_mem.ew)
+          EW_8 : offset   = $signed(vrf_rdata_i[1][8 * word_index +: 8]);
+          EW_16: offset   = $signed(vrf_rdata_i[1][8 * word_index +: 16]);
+          default: offset = $signed(vrf_rdata_i[1][8 * word_index +: 32]);
         endcase
       end else begin
         offset = ({mem_counter_q[port][$bits(vlen_t)-1:MAXEW] << $clog2(NrMemPorts), mem_counter_q[port][int'(MAXEW)-1:0]} + (port << MAXEW)) * stride;
@@ -398,7 +428,7 @@ module spatz_vlsu
       mem_req_addr[port]        = (addr >> MAXEW) << MAXEW;
       mem_req_addr_offset[port] = addr[int'(MAXEW)-1:0];
 
-      pending_index[port] = (mem_counter_q[port][$clog2(NrWordsPerVector*ELENB)-1:0] >> MAXEW) != vs2_vreg_addr[$clog2(NrWordsPerVector)-1:0];
+      pending_index[port] = (mem_idx_counter_q[port][$clog2(NrWordsPerVector*ELENB)-1:0] >> MAXEW) != vs2_vreg_addr[$clog2(NrWordsPerVector)-1:0];
     end
   end: gen_mem_req_addr
 
@@ -476,6 +506,10 @@ module spatz_vlsu
   logic [3:0] mem_single_element_size;
   assign mem_single_element_size = 1'b1 << mem_spatz_req.vtype.vsew;
 
+  // How large is an index element (in bytes)
+  logic [3:0] mem_idx_single_element_size;
+  assign mem_idx_single_element_size = 1'b1 << mem_spatz_req.op_mem.ew;
+
   // Is the memory address unaligned
   logic commit_is_addr_unaligned;
   assign commit_is_addr_unaligned = commit_insn_q.rs1[int'(MAXEW)-1:0] != '0;
@@ -494,6 +528,7 @@ module spatz_vlsu
 
   // Store the offsets of all loads, for realigning
   addr_offset_t [NrMemPorts-1:0] vreg_addr_offset;
+  logic [NrMemPorts-1:0] offset_queue_full;
   for (genvar port = 0; port < NrMemPorts; port++) begin : gen_offset_queue
     fifo_v3 #(
       .DATA_WIDTH(int'(MAXEW)       ),
@@ -504,7 +539,7 @@ module spatz_vlsu
       .flush_i   (1'b0                                                                 ),
       .testmode_i(1'b0                                                                 ),
       .empty_o   (/* Unused */                                                         ),
-      .full_o    (/* Unused */                                                         ),
+      .full_o    (offset_queue_full[port]                                              ),
       .push_i    (spatz_mem_req_valid[port] && spatz_mem_req_ready[port] && mem_is_load),
       .data_i    (mem_req_addr_offset[port]                                            ),
       .data_o    (vreg_addr_offset[port]                                               ),
@@ -589,7 +624,7 @@ module spatz_vlsu
       commit_operation_valid[fu] = commit_insn_valid && (commit_counter_q[fu] != max_elements) && (catchup[fu] || (!catchup[fu] && ~|catchup));
       commit_operation_last[fu]  = commit_operation_valid[fu] && ((max_elements - commit_counter_q[fu]) <= (commit_is_single_element_operation ? commit_single_element_size : ELENB));
       commit_counter_delta[fu]   = !commit_operation_valid[fu] ? vlen_t'('d0) : commit_is_single_element_operation ? vlen_t'(commit_single_element_size) : commit_operation_last[fu] ? (max_elements - commit_counter_q[fu]) : vlen_t'(ELENB);
-      commit_counter_en[fu]      = commit_operation_valid[fu] && (commit_insn_q.is_load && vrf_req_valid_d && vrf_req_ready_d) || (!commit_insn_q.is_load && vrf_rvalid_i[0] && vrf_re_o[0]);
+      commit_counter_en[fu]      = commit_operation_valid[fu] && (commit_insn_q.is_load && vrf_req_valid_d && vrf_req_ready_d) || (!commit_insn_q.is_load && vrf_rvalid_i[0] && vrf_re_o[0] && (!mem_is_indexed || vrf_rvalid_i[1]));
       commit_counter_max[fu]     = max_elements;
     end
   end
@@ -626,6 +661,10 @@ module spatz_vlsu
       mem_counter_delta[port] = !mem_operation_valid[port] ? 'd0 : mem_is_single_element_operation ? mem_single_element_size : mem_operation_last[port] ? (max_elements - mem_counter_q[port]) : MemDataWidthB;
       mem_counter_en[port]    = spatz_mem_req_ready[port] && spatz_mem_req_valid[port];
       mem_counter_max[port]   = max_elements;
+
+      // Index counter
+      mem_idx_counter_d[port]     = mem_counter_d[port];
+      mem_idx_counter_delta[port] = !mem_operation_valid[port] ? 'd0 : mem_idx_single_element_size;
     end
   end
 
@@ -665,7 +704,7 @@ module spatz_vlsu
   logic [NrMemPorts-1:0]                   mem_req_lvalid;
 
   // Number of pending requests
-  id_t  [NrMemPorts-1:0] mem_pending_d, mem_pending_q;
+  logic [NrMemPorts-1:0][idx_width(NrOutstandingLoads):0] mem_pending_d, mem_pending_q;
   logic [NrMemPorts-1:0] mem_pending;
   `FF(mem_pending_q, mem_pending_d, '{default: '0})
   always_comb begin
@@ -793,7 +832,7 @@ module spatz_vlsu
         rob_wdata[port] = spatz_mem_rsp_i[port].data;
         rob_push[port]  = spatz_mem_rsp_valid_i[port] && (state_q == VLSU_RunningLoad) && store_count_q[port] == '0;
 
-        if (!rob_full[port] && mem_operation_valid[port])
+        if (!rob_full[port] && !offset_queue_full[port] && mem_operation_valid[port])
           mem_req_lvalid[port] = (!mem_is_indexed || (vrf_rvalid_i[1] && !pending_index[port])) && mem_spatz_req.op_mem.is_load;
       end
     // Store operation

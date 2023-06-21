@@ -183,6 +183,7 @@ module spatz_controller
       decoder_req.rs2       = issue_req_i.data_argb;
       decoder_req.rsd       = issue_req_i.data_argc;
       decoder_req.rd        = issue_req_i.id;
+      decoder_req.vtype     = vtype_q;
       decoder_req_valid     = 1'b1;
     end
   end // proc_decode

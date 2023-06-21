@@ -9,3 +9,6 @@ work-vlt
 AN.DB
 work.lib++
 vc_hdrs.h
+*fsdb
+*key
+logs

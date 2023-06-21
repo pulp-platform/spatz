@@ -20,16 +20,14 @@ module tb_bin;
 
   initial begin
     rst_ni = 0;
-    #10ns;
-    rst_ni = 1;
-    #10ns;
-    rst_ni = 0;
-    #10ns;
+    #20ns;
     rst_ni = 1;
   end
 
   // Generate reset and clock.
   initial begin
+    clk_i = 0;
+    #100ns;
     forever begin
       clk_i = 1;
       #(TCK/2);
