@@ -158,6 +158,20 @@ int test_case;
     printf("[TC %d] PASSED.\n", casenum);                                      \
   } while (0)
 
+#define VCMP_STRIDED(T, str, casenum, stride, vexp, act...)                    \
+  do {                                                                         \
+    const T vact[] = {act};                                                    \
+    for (unsigned int i = 0; i < sizeof(vact) / sizeof(T); i++) {              \
+      if (vexp[i*stride] != vact[i]) {                                         \
+        printf("[TC %d] Index %d FAILED. Got " #str ", expected " #str ".\n",  \
+               casenum, i, vexp[i], vact[i]);                                  \
+        num_failed++;                                                          \
+        return;                                                                \
+      }                                                                        \
+    }                                                                          \
+    printf("[TC %d] PASSED.\n", casenum);                                      \
+  } while (0)
+
 // Check the results against an in-memory vector of golden values
 #define VMCMP(T, str, casenum, vexp, vgold, size)                              \
   do {                                                                         \
@@ -200,11 +214,29 @@ int test_case;
     asm volatile("vl" #loadtype ".v " #vreg ", (%0)  \n" ::[V] "r"(V##vreg));  \
   } while (0)
 
+#define VLOAD_STRIDED(datatype, loadtype, stride, vreg, vec...)                \
+  do {                                                                         \
+    datatype tmpV##vreg[] = {vec};                                             \
+    size_t len = sizeof(tmpV##vreg) / sizeof(datatype);                        \
+    datatype *V##vreg = (datatype *)snrt_l1alloc(len * sizeof(datatype));      \
+    memcpy(V##vreg, tmpV##vreg, len * sizeof(datatype));                       \
+    asm volatile("vls" #loadtype ".v " #vreg ", (%0), %[A] \n"                 \
+                  : "+r"(V##vreg)                                              \
+                  : [A] "r"(stride));                                          \
+  } while (0)
+
 // Macro to store a vector register into the pointer vec
 #define VSTORE(T, storetype, vreg, vec)                                        \
   do {                                                                         \
     asm volatile("vs" #storetype ".v " #vreg ", (%0)\n" : "+r"(vec));          \
   } while (0)
+
+#define VSTORE_STRIDED(T, storetype, stride, vreg, vec)                        \
+  do {                                                                         \
+    asm volatile("vss" #storetype ".v " #vreg ", (%0), %[A] \n"                \
+                  : "+r"(vec)                                                  \
+                  : [A] "r"(stride));                                          \
+  } while (0);
 
 // Macro to reset the whole register back to zero
 #define VCLEAR(register)                                                       \
@@ -264,6 +296,27 @@ int test_case;
     VCMP(uint8_t, "%hhu", casenum, Ru8, act);                                  \
   }
 
+#define VCMP_U64_STRIDED(casenum, vect, stride, act...)                        \
+  {                                                                            \
+    VSTORE_U64_STRIDED(vect, stride);                                          \
+    VCMP_STRIDED(uint64_t, "%lu", casenum, stride, Ru64, act);                 \
+  }
+#define VCMP_U32_STRIDED(casenum, vect, stride, act...)                        \
+  {                                                                            \
+    VSTORE_U32_STRIDED(vect, stride);                                          \
+    VCMP_STRIDED(uint32_t, "%u", casenum, stride, Ru32, act);                  \
+  }
+#define VCMP_U16_STRIDED(casenum, vect, stride, act...)                        \
+  {                                                                            \
+    VSTORE_U16_STRIDED(vect, stride);                                          \
+    VCMP_STRIDED(uint16_t, "%hu", casenum, stride, Ru16, act);                 \
+  }
+#define VCMP_U8_STRIDED(casenum, vect, stride, act...)                         \
+  {                                                                            \
+    VSTORE_U8_STRIDED(vect, stride);                                           \
+    VCMP_STRIDED(uint8_t, "%hhu", casenum, stride, Ru8, act);                  \
+  }
+
 #define VVCMP_U64(casenum, ptr64, act...)                                      \
   { VCMP(uint64_t, "%lu", casenum, ptr64, act); }
 #define VVCMP_U32(casenum, ptr32, act...)                                      \
@@ -311,11 +364,21 @@ int test_case;
 #define VLOAD_16(vreg, vec...) VLOAD(int16_t, e16, vreg, vec)
 #define VLOAD_8(vreg, vec...) VLOAD(int8_t, e8, vreg, vec)
 
+#define VLOAD_U64_STRIDED(vreg, stride, vec...) VLOAD_STRIDED(uint64_t, e64, stride, vreg, vec)
+#define VLOAD_U32_STRIDED(vreg, stride, vec...) VLOAD_STRIDED(uint32_t, e32, stride, vreg, vec)
+#define VLOAD_U16_STRIDED(vreg, stride, vec...) VLOAD_STRIDED(uint16_t, e16, stride, vreg, vec)
+#define VLOAD_U8_STRIDED(vreg, stride, vec...) VLOAD_STRIDED(uint8_t, e8, stride, vreg, vec)
+
 // Vector store
 #define VSTORE_U64(vreg) VSTORE(uint64_t, e64, vreg, Ru64)
 #define VSTORE_U32(vreg) VSTORE(uint32_t, e32, vreg, Ru32)
 #define VSTORE_U16(vreg) VSTORE(uint16_t, e16, vreg, Ru16)
 #define VSTORE_U8(vreg) VSTORE(uint8_t, e8, vreg, Ru8)
+
+#define VSTORE_U64_STRIDED(vreg, stride) VSTORE_STRIDED(uint64_t, e64, stride, vreg, Ru64)
+#define VSTORE_U32_STRIDED(vreg, stride) VSTORE_STRIDED(uint32_t, e32, stride, vreg, Ru32)
+#define VSTORE_U16_STRIDED(vreg, stride) VSTORE_STRIDED(uint16_t, e16, stride, vreg, Ru16)
+#define VSTORE_U8_STRIDED(vreg, stride) VSTORE_STRIDED(uint8_t, e8, stride, vreg, Ru8)
 
 #define VSTORE_I64(vreg) VSTORE(int64_t, e64, vreg, Ri64)
 #define VSTORE_I32(vreg) VSTORE(int32_t, e32, vreg, Ri32)

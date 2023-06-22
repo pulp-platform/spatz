@@ -27,6 +27,9 @@ include_directories(isa/macros/vector)
 enable_testing()
 set(SNITCH_TEST_PREFIX riscvTests-)
 
+add_snitch_test(vls isa/rv64uv/vls.c)
+add_snitch_test(vss isa/rv64uv/vss.c)
+
 add_snitch_test(vadd  isa/rv64uv/vadd.c)
 add_snitch_test(vsub  isa/rv64uv/vsub.c)
 add_snitch_test(vrsub isa/rv64uv/vrsub.c)
@@ -38,6 +41,8 @@ add_snitch_test(vxor isa/rv64uv/vxor.c)
 add_snitch_test(vsll isa/rv64uv/vsll.c)
 add_snitch_test(vsrl isa/rv64uv/vsrl.c)
 add_snitch_test(vsra isa/rv64uv/vsra.c)
+
+add_snitch_test(vadc isa/rv64uv/vadc.c)
 
 add_snitch_test(vmin  isa/rv64uv/vmin.c)
 add_snitch_test(vminu isa/rv64uv/vminu.c)
