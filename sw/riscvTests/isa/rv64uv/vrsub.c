@@ -207,7 +207,7 @@ void TEST_CASE4(void) {
                      5, 0, -5, -10, -15, -20, -25, -30, 5, 0, -5, -10, -15, -20, -25, -30);
   #endif
 }
-#endif MERGE_MODE
+#endif
 
 int main(void) {
   INIT_CHECK();
