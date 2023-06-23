@@ -30,6 +30,7 @@ make bender
 
 The goal of Spatz is to implement all instructions belonging to the Zve32x vector extension for embedded processors. The following lists contains all of the instructions belonging to Zve32x and an indication if they are already implemented or not. Spatz does not yet understand vector masking or vector widening/narrowing. Most of the unsupported instructions fall into these two categories.
 
+
 ### Vector Configuration-Setting
 
 | Instruction | Status |
@@ -186,6 +187,20 @@ The goal of Spatz is to implement all instructions belonging to the Zve32x vecto
 
 ## Supported Instructions: Merge-Mode
 
+### LEGEND
+
+| Sign | Description           |
+|:----:|-----------------------|
+|  ⚠️  |  Not Supported (Merge)|
+|  ❌  |  Not Supported (Split)|
+|  ✅  |  Verified             |
+|  🔍  |  Pending Verification |
+|  🪳  |  Bugged               |
+|  🚧  |  Under Construction   |
+
+Instructions that are not supported in split mode are also not supported in merge mode. 
+
+
 ### Vector Configuration-Setting
 
 | Instruction | Status |
@@ -194,18 +209,33 @@ The goal of Spatz is to implement all instructions belonging to the Zve32x vecto
 | vsetivli    |    ✅   |
 | vsetvl      |    ✅   |
 
+| Instruction | Status |
+|-------------|:------:|
+| csrr        |    ⚠️   |
+
+Using the csrr-instruction to read the vector length register will only return the vl 
+of the master Spatz. To be able to read the vl-register, both Spatzes should be returned 
+into split-mode and only then a csrr-instruction should be offloaded.
+
+
 ### Vector Loads and Stores
 
 | Instruction          | Status |
 |-------------------   |:------:|
 | vle{8, 16, 32, 64}   |    ✅   |
-| vluxei{8, 16, 32, 64}|    🔍   |
+| vluxei{8, 16, 32, 64}|    ✅🔍 |
 | vlse{8, 16, 32, 64}  |    ✅   |
-| vloxei{8, 16, 32, 64}|    🔍   |
+| vloxei{8, 16, 32, 64}|    ✅🔍 |
 | vse{8, 16, 32, 64}   |    ✅   |
-| vsuxei{8, 16, 32, 64}|    🔍   |
+| vsuxei{8, 16, 32, 64}|    🪳   |
 | vsse{8, 16, 32, 64}  |    ✅   |
-| vsoxei{8, 16, 32, 64}|    🔍   |
+| vsoxei{8, 16, 32, 64}|    🪳   |
+
+vlse{16, 32, 64} don't seem to be working correctly for either split-mode nor merge-mode. 
+
+vluxei{64} unverified
+vloxei{64} unverified
+vsuxei Discuss how stores are done
 
 ### Vector Integer Arithmetic
 
@@ -224,10 +254,10 @@ The goal of Spatz is to implement all instructions belonging to the Zve32x vecto
 | vwsub.{wv, wx}                    |    ❌   |
 | vzext.{vf2, vf4, vf8}             |    ❌   |
 | vsext.{vf2, vf4, vf8}             |    ❌   |
-| vadc.{vvm, vxm, vim}              |    🔍   |
-| vmadc.{vvm, vxm, vim, vv, vx, vi} |    🔍   |
-| vsbc.{vvm, vxm}                   |    🔍   |
-| vmsbc.{vvm, vxm, vv, vx}          |    🔍   |
+| vadc.{vvm, vxm, vim}              |    ❌   |
+| vmadc.{vvm, vxm, vim, vv, vx, vi} |    ❌   |
+| vsbc.{vvm, vxm}                   |    ❌   |
+| vmsbc.{vvm, vxm, vv, vx}          |    ❌   |
 | vand.{vv, vx, vi}                 |    ✅   |
 | vor.{vv, vx, vi}                  |    ✅   |
 | vxor.{vv, vx, vi}                 |    ✅   |
@@ -236,14 +266,14 @@ The goal of Spatz is to implement all instructions belonging to the Zve32x vecto
 | vsra.{vv, vx, vi}                 |    ✅   |
 | vnsrl.{wv, wx, wi}                |    ❌   |
 | vnsra.{wv, wx, wi}                |    ❌   |
-| vmseq.{vv, vx, vi}                |    🔍   |
-| vmsne.{vv, vx, vi}                |    🔍   |
-| vmsltu.{vv, vx}                   |    🔍   |
-| vmslt.{vv, vx}                    |    🔍   |
-| vmsleu.{vv, vx, vi}               |    🔍   |
-| vmsle.{vv, vx, vi}                |    🔍   |
-| vmsgtu.{vx, vi}                   |    🔍   |
-| vmsgt.{vx, vi}                    |    🔍   |
+| vmseq.{vv, vx, vi}                |    ❌   |
+| vmsne.{vv, vx, vi}                |    ❌   |
+| vmsltu.{vv, vx}                   |    ❌   |
+| vmslt.{vv, vx}                    |    ❌   |
+| vmsleu.{vv, vx, vi}               |    ❌   |
+| vmsle.{vv, vx, vi}                |    ❌   |
+| vmsgtu.{vx, vi}                   |    ❌   |
+| vmsgt.{vx, vi}                    |    ❌   |
 | vminu.{vv. vx}                    |    ✅   |
 | vmin.{vv, vx}                     |    ✅   |
 | vmaxu.{vv, vx}                    |    ✅   |
@@ -256,18 +286,18 @@ The goal of Spatz is to implement all instructions belonging to the Zve32x vecto
 | vdiv.{vv, vx}                     |    ✅   |
 | vremu.{vv, vx}                    |    ✅   |
 | vrem.{vv, vx}                     |    ✅   |
-| vwmul.{vv, vx}                    |    🔍   |
-| vwmulu.{vv, vx}                   |    🔍   |
-| vwmulsu.{vv, vx}                  |    🔍   |
+| vwmul.{vv, vx}                    |    ⚠️   |
+| vwmulu.{vv, vx}                   |    ⚠️   |
+| vwmulsu.{vv, vx}                  |    ⚠️   |
 | vmacc.{vv, vx}                    |    ✅   |
 | vnmsac.{vv, vx}                   |    ✅   |
 | vmadd.{vv, vx}                    |    ✅   |
 | vnmsub.{vv, vx}                   |    ✅   |
-| vwmaccu.{vv, vx}                  |    🔍   |
-| vwmacc.{vv, vx}                   |    🔍   |
-| vwmaccsu.{vv, vx}                 |    🔍   |
-| vwmaccus.vx                       |    🔍   |
-| vmerge.{vvm, vxm, vim}            |    🔍   |
+| vwmaccu.{vv, vx}                  |    ⚠️   |
+| vwmacc.{vv, vx}                   |    ⚠️   |
+| vwmaccsu.{vv, vx}                 |    ⚠️   |
+| vwmaccus.vx                       |    ⚠️   |
+| vmerge.{vvm, vxm, vim}            |    ❌   |
 | vmv.v.{v, x, i}                   |    ✅   |
 
 ### Vector Fixed-Point Arithmetic
@@ -292,16 +322,18 @@ The goal of Spatz is to implement all instructions belonging to the Zve32x vecto
 
 | Instruction  | Status |
 |--------------|:------:|
-| vredsum.vs   |    ❌   |
-| vredmaxu.vs  |    ❌   |
-| vredmax.vs   |    ❌   |
-| vredminu.vs  |    ❌   |
-| vredmin.vs   |    ❌   |
-| vredand.vs   |    ❌   |
-| vredor.vs    |    ❌   |
-| vredxor.vs   |    ❌   |
+| vredsum.vs   |    ⚠️   |
+| vredmaxu.vs  |    ⚠️   |
+| vredmax.vs   |    ⚠️   |
+| vredminu.vs  |    ⚠️   |
+| vredmin.vs   |    ⚠️   |
+| vredand.vs   |    ⚠️   |
+| vredor.vs    |    ⚠️   |
+| vredxor.vs   |    ⚠️   |
 | vwredsumu.vs |    ❌   |
 | vwredsum.vs  |    ❌   |
+
+vred can be 
 
 ### Vector Mask
 
@@ -330,11 +362,11 @@ The goal of Spatz is to implement all instructions belonging to the Zve32x vecto
 
 | Instruction           | Status |
 |-----------------------|:------:|
-| vmv.{x.s, s.x}        |    ⚠️   |
-| vslideup.{vx, vi}     |    ⚠️   |
-| vslidedown.{vx, vi}   |    ⚠️   |
-| vslide1up.vx          |    ⚠️   |
-| vslide1down.vx        |    ⚠️   |
+| vmv.{x.s, s.x}        |    🚧   |
+| vslideup.{vx, vi}     |    🚧   |
+| vslidedown.{vx, vi}   |    🚧   |
+| vslide1up.vx          |    🚧   |
+| vslide1down.vx        |    🚧   |
 | vrgather.{vv, vx, vi} |    ❌   |
 | vrgatherei16.vv       |    ❌   |
 | vcompress.vm          |    ❌   |
@@ -365,4 +397,4 @@ The goal of Spatz is to implement all instructions belonging to the Zve32x vecto
 
 ### Floating Point 
 
-Verification pending ...
+Listing pending ...
