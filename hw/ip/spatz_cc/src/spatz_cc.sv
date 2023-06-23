@@ -138,21 +138,7 @@ module spatz_cc
     input  roundmode_e                   cc_s_acc_fpu_rnd_mode_i,
     input  fmt_mode_t                    cc_s_acc_fpu_fmt_mode_i,
 
-    input  merge_mode_t                  merge_mode_i,
-    input  logic         [$clog2(NRVREG)-1:0] m_vrf_reg_i,
-    output logic         [$clog2(NRVREG)-1:0] s_vrf_reg_o,
-    input  logic                              s_master_ack_i,
-    output logic                              m_slave_ack_o,
-    
-    input  vrf_addr_t                         m_vrf_raddr_i,
-    input  logic                              m_vrf_re_i,
-    output vrf_data_t                         m_vrf_rdata_o,
-    output logic                              m_vrf_rvalid_o,
-
-    output vrf_addr_t                         s_vrf_raddr_o,
-    output logic                              s_vrf_re_o,
-    input  vrf_data_t                         s_vrf_rdata_i,
-    input  logic                              s_vrf_rvalid_i
+    input  merge_mode_t                  merge_mode_i
   );
 
   // FMA architecture is "merged" -> mulexp and macexp instructions are supported
@@ -442,19 +428,7 @@ module spatz_cc
     .fpu_rnd_mode_i          (acc_fpu_rnd_mode      ),
     .fpu_fmt_mode_i          (acc_fpu_fmt_mode      ),
     .fpu_status_o            (fpu_status            ),
-    .merge_mode_i            (merge_mode_i          ),
-    .m_vrf_reg_i             (m_vrf_reg_i           ),
-    .s_master_ack_i          (s_master_ack_i        ),
-    .s_vrf_reg_o             (s_vrf_reg_o           ),
-    .m_slave_ack_o           (m_slave_ack_o         ),
-    .m_vrf_raddr_i           (m_vrf_raddr_i         ),
-    .m_vrf_re_i              (m_vrf_re_i            ),
-    .m_vrf_rdata_o           (m_vrf_rdata_o         ),
-    .m_vrf_rvalid_o          (m_vrf_rvalid_o        ),
-    .s_vrf_raddr_o           (s_vrf_raddr_o         ),
-    .s_vrf_re_o              (s_vrf_re_o            ),
-    .s_vrf_rdata_i           (s_vrf_rdata_i         ),
-    .s_vrf_rvalid_i          (s_vrf_rvalid_i        )
+    .merge_mode_i            (merge_mode_i          )
   );
 
   for (genvar p = 0; p < NumMemPortsPerSpatz; p++) begin

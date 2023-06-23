@@ -49,19 +49,13 @@ module spatz_controller
     input  logic                                   vsldu_req_ready_i,
     input  logic                                   vsldu_rsp_valid_i,
     input  vsldu_rsp_t                             vsldu_rsp_i,
-    output logic                                   vsldu_rsp_ready_o,
     // VRF Scoreboard
     input  logic             [NrVregfilePorts-1:0] sb_enable_i,
     input  logic             [NrWritePorts-1:0]    sb_wrote_result_i,
     output logic             [NrVregfilePorts-1:0] sb_enable_o,
     input  spatz_id_t        [NrVregfilePorts-1:0] sb_id_i,
 
-    input  merge_mode_t                            merge_mode_i,
-    // 
-    input  logic             [$clog2(NRVREG)-1:0]  m_vrf_reg_i,
-    output logic             [$clog2(NRVREG)-1:0]  s_vrf_reg_o,
-    input  logic                                   s_master_ack_i,
-    output logic                                   m_slave_ack_o
+    input  merge_mode_t                            merge_mode_i
   );
 
 // Include FF
@@ -317,9 +311,6 @@ module spatz_controller
   logic [NrParallelInstructions-1:0] wrote_result_narrowing_q, wrote_result_narrowing_d;
   `FF(wrote_result_narrowing_q, wrote_result_narrowing_d, '0)
 
-  logic [$clog2(NRVREG)-1:0] curr_vreg;
-  logic clear;
-
   always_comb begin : scoreboard
     // Maintain stated
     read_table_d             = read_table_q;
@@ -327,13 +318,6 @@ module spatz_controller
     scoreboard_d             = scoreboard_q;
     narrow_wide_d            = narrow_wide_q;
     wrote_result_narrowing_d = wrote_result_narrowing_q;
-
-    // Default
-    vsldu_rsp_ready_o = 1'b0;
-    // Might run into problems when v0 is the read register
-    s_vrf_reg_o       = '0;
-    m_slave_ack_o     = 1'b0;
-    clear             = 1'b0;
 
     // Nobody wrote to the VRF yet
     wrote_result_d = '0;
@@ -373,7 +357,6 @@ module spatz_controller
       for (int unsigned insn = 0; insn < NrParallelInstructions; insn++)
         scoreboard_d[insn].deps[vfu_rsp_i.id] = 1'b0;
     end
-
     if (vlsu_rsp_valid_i) begin
       for (int unsigned vreg = 0; vreg < NRVREG; vreg++) begin
         if (read_table_q[vreg].id == vlsu_rsp_i.id && read_table_q[vreg].valid)
@@ -388,51 +371,19 @@ module spatz_controller
       for (int unsigned insn = 0; insn < NrParallelInstructions; insn++)
         scoreboard_d[insn].deps[vlsu_rsp_i.id] = 1'b0;
     end
-
     if (vsldu_rsp_valid_i) begin
       for (int unsigned vreg = 0; vreg < NRVREG; vreg++) begin
-        if (read_table_q[vreg].id == vsldu_rsp_i.id && read_table_q[vreg].valid) begin
-          if (!vsldu_rsp_i.is_collab) begin
-            read_table_d[vreg] = '0;
-          end else begin
-            // We're master
-            if (merge_mode_i.is_master) begin
-
-              // Clear the entry in the read table when both Spatz have finished access to the same register
-              if (vreg == m_vrf_reg_i) begin
-                read_table_d[vreg] = '0;
-                vsldu_rsp_ready_o  = 1'b1;
-                clear = 1'b1;
-                // Notify slave that master has removed the read table entry
-                m_slave_ack_o      = 1'b1;
-              end
-            // We're slave
-            end else begin
-              // Communicate to master which read table entry the slave is ready to remove
-              s_vrf_reg_o = vreg;
-              // Wait for master to acknowledge the table entry, which is the case when it wants to 
-              // remove the entry for the same vector register
-              if (s_master_ack_i) begin
-                read_table_d[vreg] = '0;
-                // Inform VSLDU that we've accepted the response
-                vsldu_rsp_ready_o  = 1'b1;
-                clear = 1'b1;
-              end
-              
-            end
-          end
-        end
+        if (read_table_q[vreg].id == vsldu_rsp_i.id && read_table_q[vreg].valid)
+          read_table_d[vreg] = '0;
         if (write_table_q[vreg].id == vsldu_rsp_i.id && write_table_q[vreg].valid)
           write_table_d[vreg] = '0;
       end
-      if (clear) begin
-        scoreboard_d[vsldu_rsp_i.id]             = '0;
-        narrow_wide_d[vsldu_rsp_i.id]            = 1'b0;
-        wrote_result_narrowing_d[vsldu_rsp_i.id] = 1'b0;
-        for (int unsigned insn = 0; insn < NrParallelInstructions; insn++)
-          scoreboard_d[insn].deps[vsldu_rsp_i.id] = 1'b0;
-      end
-      
+
+      scoreboard_d[vsldu_rsp_i.id]             = '0;
+      narrow_wide_d[vsldu_rsp_i.id]            = 1'b0;
+      wrote_result_narrowing_d[vsldu_rsp_i.id] = 1'b0;
+      for (int unsigned insn = 0; insn < NrParallelInstructions; insn++)
+        scoreboard_d[insn].deps[vsldu_rsp_i.id] = 1'b0;
     end
 
     // Initialize the scoreboard metadata if we have a new instruction issued.

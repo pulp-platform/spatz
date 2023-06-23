@@ -58,25 +58,8 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     input  fmt_mode_t                         fpu_fmt_mode_i,
     output status_t                           fpu_status_o,
     // Merge Mode Extension
-    input  merge_mode_t                       merge_mode_i,
-    input  logic         [$clog2(NRVREG)-1:0] m_vrf_reg_i,
-    output logic         [$clog2(NRVREG)-1:0] s_vrf_reg_o,
-    input  logic                              s_master_ack_i,
-    output logic                              m_slave_ack_o,
-
-    input  vrf_addr_t                         m_vrf_raddr_i,
-    input  logic                              m_vrf_re_i,
-    output vrf_data_t                         m_vrf_rdata_o,
-    output logic                              m_vrf_rvalid_o,
-
-    output vrf_addr_t                         s_vrf_raddr_o,
-    output logic                              s_vrf_re_o,
-    input  vrf_data_t                         s_vrf_rdata_i,
-    input  logic                              s_vrf_rvalid_i
+    input  merge_mode_t                       merge_mode_i
   );
-
-  // Include FF
-  `include "common_cells/registers.svh"
 
   ////////////////
   // Parameters //
@@ -106,7 +89,6 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   logic       vsldu_req_ready;
   logic       vsldu_rsp_valid;
   vsldu_rsp_t vsldu_rsp;
-  logic       input_from_sb;
 
   /////////////////////
   //  FPU sequencer  //
@@ -194,7 +176,6 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   // Read ports
   vrf_addr_t [NrReadPorts-1:0]  vrf_raddr;
   logic      [NrReadPorts-1:0]  vrf_re;
-  logic      [NrReadPorts-1:0]  vrf_reo;
   vrf_data_t [NrReadPorts-1:0]  vrf_rdata;
   logic      [NrReadPorts-1:0]  vrf_rvalid;
 
@@ -212,7 +193,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     .wvalid_o(vrf_wvalid),
     // Read Ports
     .raddr_i (vrf_raddr ),
-    .re_i    (vrf_reo   ),
+    .re_i    (vrf_re    ),
     .rdata_o (vrf_rdata ),
     .rvalid_o(vrf_rvalid)
   );
@@ -262,18 +243,13 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     .vsldu_req_ready_i(vsldu_req_ready ),
     .vsldu_rsp_valid_i(vsldu_rsp_valid ),
     .vsldu_rsp_i      (vsldu_rsp       ),
-    .vsldu_rsp_ready_o(input_from_sb   ),
     // Scoreboard check
     .sb_id_i          (sb_id           ),
     .sb_wrote_result_i(vrf_wvalid      ),
     .sb_enable_i      ({sb_we, sb_re}  ),
     .sb_enable_o      ({vrf_we, vrf_re}),
     // Merge Mode Extension
-    .merge_mode_i     (merge_mode_i    ),
-    .m_vrf_reg_i      (m_vrf_reg_i),
-    .s_vrf_reg_o      (s_vrf_reg_o),
-    .s_master_ack_i   (s_master_ack_i),
-    .m_slave_ack_o    (m_slave_ack_o)
+    .merge_mode_i     (merge_mode_i    )
   );
 
   /////////
@@ -352,10 +328,6 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   // VSLDU //
   ///////////
 
-  vrf_data_t vsldu_vrf_rdata;
-  vrf_addr_t vsldu_vrf_raddr;
-  logic vsldu_vrf_rvalid;
-
   spatz_vsldu i_vsldu (
     .clk_i            (clk_i                                          ),
     .rst_ni           (rst_ni                                         ),
@@ -366,125 +338,18 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     // Response
     .vsldu_rsp_valid_o(vsldu_rsp_valid                                ),
     .vsldu_rsp_o      (vsldu_rsp                                      ),
-    .input_from_sb_i  (input_from_sb                                  ),
     // VRF
     .vrf_waddr_o      (vrf_waddr[VSLDU_VD_WD]                         ),
     .vrf_wdata_o      (vrf_wdata[VSLDU_VD_WD]                         ),
     .vrf_we_o         (sb_we[VSLDU_VD_WD]                             ),
     .vrf_wbe_o        (vrf_wbe[VSLDU_VD_WD]                           ),
     .vrf_wvalid_i     (vrf_wvalid[VSLDU_VD_WD]                        ),
-    .vrf_raddr_o      (vsldu_vrf_raddr                                ),
+    .vrf_raddr_o      (vrf_raddr[VSLDU_VS2_RD]                        ),
     .vrf_re_o         (sb_re[VSLDU_VS2_RD]                            ),
-    .vrf_rdata_i      (vsldu_vrf_rdata                                ),
-    .vrf_rvalid_i     (vsldu_vrf_rvalid                               ),
-    .vrf_id_o         ({sb_id[SB_VSLDU_VD_WD], sb_id[SB_VSLDU_VS2_RD]}),
-    .merge_mode_i     (merge_mode_i)
+    .vrf_rdata_i      (vrf_rdata[VSLDU_VS2_RD]                        ),
+    .vrf_rvalid_i     (vrf_rvalid[VSLDU_VS2_RD]                       ),
+    .vrf_id_o         ({sb_id[SB_VSLDU_VD_WD], sb_id[SB_VSLDU_VS2_RD]})
   );
-
-  // Marks the read request to VRF as coming from internally or externally
-  // from another Spatz
-  logic is_external_d, is_external_q;
-  `FF(is_external_q, is_external_d, 1'b0)
-
-  always_comb begin : proc_read_vrf
-
-    is_external_d = is_external_q;
-
-    // Directly connect read-enable of VRF to scoreboard output
-    vrf_reo = vrf_re;
-
-    // By default the VRF should only be accessed internally
-    vrf_raddr[VSLDU_VS2_RD] = vsldu_vrf_raddr;
-    vrf_reo[VSLDU_VS2_RD]   = vrf_re[VSLDU_VS2_RD];
-
-    // Do not drive the slave and master outputs
-    m_vrf_rvalid_o = 1'bz;
-    m_vrf_rdata_o  = 'z;
-    s_vrf_re_o     = 1'bz;
-    s_vrf_raddr_o  = 'z;
-
-    // Do not supply read response to VSLDU
-    vsldu_vrf_rvalid = 1'b0;
-    vsldu_vrf_rdata  = '0;  
-
-
-    // Master configuration
-    // Is the slave trying to read the VRF of the master?
-    if (m_vrf_re_i) begin
-
-      // Forward the read address and read enable signal of the slave to the
-      // VRF of the master
-      vrf_raddr[VSLDU_VS2_RD] = m_vrf_raddr_i;
-      vrf_reo[VSLDU_VS2_RD] = m_vrf_re_i;
-
-      // Mark the VRF read as coming from external
-      is_external_d = 1'b1;
-    end else begin
-
-      // When slave is not trying to read VRF, keep connection such that
-      // master can read from its own VRF
-      vrf_raddr[VSLDU_VS2_RD] = vsldu_vrf_raddr;
-      vrf_reo[VSLDU_VS2_RD] = vrf_re[VSLDU_VS2_RD];
-
-      // Update the external flag to internal when master has a valid read request
-      if (vrf_re[VSLDU_VS2_RD]) begin
-        is_external_d = 1'b0;
-        s_vrf_re_o = vrf_re[VSLDU_VS2_RD];
-        s_vrf_raddr_o = vsldu_vrf_raddr;
-      end
-    end
-
-    /*
-    // Slave configuration
-    // Does the slave want to read from the VRF?
-    if (vrf_re[VSLDU_VS2_RD]) begin
-      // Is it an internal or external VRF access?
-      if (1) begin //vsldu_vrf_raddr.is_external
-        // Forward read enable and read address to master VRF
-        s_vrf_re_o = vrf_re[VSLDU_VS2_RD];
-        s_vrf_raddr_o = vsldu_vrf_raddr;
-      end else begin
-        // Forward read enable and read address to internal VRF
-        vrf_reo[VSLDU_VS2_RD] = vrf_re[VSLDU_VS2_RD];
-        vrf_raddr[VSLDU_VS2_RD] = vsldu_vrf_raddr;
-      end
-    end
-    */
-
-    // Has the master VRF completed a read request?
-    if (s_vrf_rvalid_i) begin
-      vsldu_vrf_rvalid = s_vrf_rvalid_i;
-      vsldu_vrf_rdata  = s_vrf_rdata_i;
-    end else begin
-      if (is_external_q) begin
-        // Forward the valid signal and the data to the slave
-        m_vrf_rvalid_o = vrf_rvalid[VSLDU_VS2_RD];
-        m_vrf_rdata_o  = vrf_rdata[VSLDU_VS2_RD];
-      end else begin
-        // Directly send valid signal and data to the VSLDU of the master
-        vsldu_vrf_rvalid = vrf_rvalid[VSLDU_VS2_RD];
-        vsldu_vrf_rdata  = vrf_rdata[VSLDU_VS2_RD];
-      end
-    end
-
-    /* LEGACY
-    // Slave configuration
-
-    if (!merge_mode_i.is_master) begin
-      // For now forward all VRF read request to the master
-      vrf_reo[VSLDU_VS2_RD] = 1'b0;
-      vrf_raddr[VSLDU_VS2_RD] = '0;
-
-      s_vrf_re_o = vrf_re[VSLDU_VS2_RD];
-      s_vrf_raddr_o = vsldu_vrf_raddr;
-
-      // For now only accept read-responses from the master VRF
-      vsldu_vrf_rvalid = s_vrf_rvalid_i;
-      vsldu_vrf_rdata  = s_vrf_rdata_i;
-    end
-    */
-      
-  end
 
   ////////////////
   // Assertions //

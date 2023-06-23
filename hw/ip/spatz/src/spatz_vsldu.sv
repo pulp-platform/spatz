@@ -19,7 +19,6 @@ module spatz_vsldu
     // VSLDU response
     output logic             vsldu_rsp_valid_o,
     output vsldu_rsp_t       vsldu_rsp_o,
-    input  logic             input_from_sb_i,
     // VRF interface
     output vrf_addr_t        vrf_waddr_o,
     output vrf_data_t        vrf_wdata_o,
@@ -30,9 +29,7 @@ module spatz_vsldu
     output vrf_addr_t        vrf_raddr_o,
     output logic             vrf_re_o,
     input  vrf_data_t        vrf_rdata_i,
-    input  logic             vrf_rvalid_i,
-
-    input  merge_mode_t      merge_mode_i
+    input  logic             vrf_rvalid_i
   );
 
 // Include FF
@@ -142,10 +139,6 @@ module spatz_vsldu
   logic is_slide_up;
   assign is_slide_up = spatz_req.op == VSLIDEUP;
 
-  vsldu_rsp_t output_spill_register_data_in;
-  logic output_spill_register_valid;
-  logic output_spill_register_ready;
-
   // Instruction currently committing results
   spatz_id_t op_id_q, op_id_d;
   `FF(op_id_q, op_id_d, '0)
@@ -173,14 +166,10 @@ module spatz_vsldu
   } state_q, state_d;
   `FF(state_q, state_d, VSLDU_RUNNING)
 
-  // Stall when new instruction is collaborative and output spill register cannot take any new responses
-  logic stall;
-  assign stall = spatz_req_valid && spatz_req.is_collab && !output_spill_register_ready;
-
   // New instruction
   // Initialize the internal state one cycle in advance
   logic new_vsldu_request, new_vsldu_request_q;
-  assign new_vsldu_request = spatz_req_valid && !running_q[spatz_req.id] && !stall;
+  assign new_vsldu_request = spatz_req_valid && !running_q[spatz_req.id];
 
   `FF(new_vsldu_request_q, new_vsldu_request, '0)
 
@@ -193,7 +182,7 @@ module spatz_vsldu
     // Spatz SLDU ready when empty
     spatz_req_ready = !spatz_req_valid;
 
-    // New request? In case of being a collaboration instruction, is the output spill register ready to receive data?
+    // New request?
     if (new_vsldu_request) begin
       // Mark the instruction as running
       running_d[spatz_req.id] = 1'b1;
@@ -232,7 +221,6 @@ module spatz_vsldu
   // Are we on the first/last VRF operation?
   logic vreg_operation_first;
   logic vreg_operation_last;
-  logic vreg_operation_second;
 
   // FSM to decide whether we are on the first operation or not
   enum logic {
@@ -303,28 +291,14 @@ module spatz_vsldu
     vreg_operations_finished = vreg_operation_last && vreg_counter_en;
   end: vsldu_vreg_counter_proc
 
-  logic collab_d, collab_q;
-  `FF(collab_q, collab_d, 1'b0);
-
-  vsldu_rsp_t pre_vsldu_rsp_o;
-  logic pre_vsldu_rsp_valid;
-  vsldu_rsp_t output_spill_register_data_out;
-  logic output_spill_register_valid_o;
-  logic output_spill_register_ready_i;
-
   always_comb begin: vsldu_rsp
     // Maintain state
     state_d = state_q;
     op_id_d = op_id_q;
-    collab_d = collab_q;
 
     // Do not acknowledge anything
     vsldu_rsp_valid_o = 1'b0;
     vsldu_rsp_o       = '0;
-    pre_vsldu_rsp_valid = 1'b0;
-    pre_vsldu_rsp_o       = '0;
-    output_spill_register_valid = 1'b0;
-    output_spill_register_ready_i = 1'b0;
 
     // ID of the instruction currently writing elements
     vrf_id_o[1] = spatz_req.id;
@@ -334,7 +308,6 @@ module spatz_vsldu
         // Did we finish the execution of an instruction?
         if (!is_vl_zero && vreg_operations_finished && spatz_req_valid) begin
           op_id_d = spatz_req.id;
-          collab_d = spatz_req.is_collab;
           state_d = VSLDU_WAIT_WVALID;
         end
       end
@@ -343,51 +316,19 @@ module spatz_vsldu
         vrf_id_o[1] = op_id_q; // ID of the instruction currently writing to the VRF
 
         if (vrf_wvalid_i) begin
-          if (!collab_q) begin
-            pre_vsldu_rsp_valid = 1'b1;
-            pre_vsldu_rsp_o.is_collab = collab_q;
-            pre_vsldu_rsp_o.id  = op_id_q;
-          end else begin
-            // There's valid data for the output spill register if the completed instruction was collaborative
-            output_spill_register_valid   = 1'b1;
-            output_spill_register_data_in = {collab_q, op_id_q};
-          end
-          state_d = VSLDU_RUNNING;
+          vsldu_rsp_valid_o = 1'b1;
+          vsldu_rsp_o.id    = op_id_q;
+          state_d           = VSLDU_RUNNING;
 
           // Did we finish *another* instruction?
           if (!is_vl_zero && vreg_operations_finished && spatz_req_valid) begin
             op_id_d = spatz_req.id;
-            collab_d = collab_q;
             state_d = VSLDU_WAIT_WVALID;
           end
         end
       end
     endcase
-
-    // If the finished instruction is non-collaborative directly forward response to controller which clears sb-entries
-    if (pre_vsldu_rsp_valid) begin
-      vsldu_rsp_valid_o = 1'b1;
-      vsldu_rsp_o       = pre_vsldu_rsp_o;
-    // Else check if there are previously finished collaborative instructions which wait 
-    end else if (output_spill_register_valid_o) begin
-      vsldu_rsp_valid_o = 1'b1;
-      vsldu_rsp_o       = output_spill_register_data_out;
-      output_spill_register_ready_i = input_from_sb_i;
-    end
   end: vsldu_rsp
-
-    spill_register #(
-    .T(vsldu_rsp_t)
-  ) i_vfu_scalar_response (
-    .clk_i  (clk_i                          ),
-    .rst_ni (rst_ni                         ),
-    .data_i (output_spill_register_data_in  ),
-    .valid_i(output_spill_register_valid    ),
-    .ready_o(output_spill_register_ready    ),
-    .data_o (output_spill_register_data_out ),
-    .valid_o(output_spill_register_valid_o  ),
-    .ready_i(output_spill_register_ready_i  )
-  );
 
   ////////////
   // Slider //
@@ -507,9 +448,6 @@ module spatz_vsldu
   always_comb begin
     sld_offset_rd   = is_slide_up ? (prefetch_q ? -slide_amount_q[$bits(vlen_t)-1:$clog2(VRFWordBWidth)] - 1 : -slide_amount_q[$bits(vlen_t)-1:$clog2(VRFWordBWidth)]) : prefetch_q ? slide_amount_q[$bits(vlen_t)-1:$clog2(VRFWordBWidth)] : slide_amount_q[$bits(vlen_t)-1:$clog2(VRFWordBWidth)] + 1;
     vrf_raddr_o     = {spatz_req.vs2, $clog2(NrWordsPerVector)'(1'b0)} + vreg_counter_q[$bits(vlen_t)-1:$clog2(VRFWordBWidth)] + sld_offset_rd;
-    if (!merge_mode_i.is_master && vreg_operation_first) begin
-      vrf_raddr_o     = {spatz_req.vs2, $clog2(NrWordsPerVector)'(1'b0)} + vreg_counter_q[$bits(vlen_t)-1:$clog2(VRFWordBWidth)] + spatz_req.vl - VRFWordBWidth;
-    end
     vrf_req_d.waddr = {spatz_req.vd, $clog2(NrWordsPerVector)'(1'b0)} + vreg_counter_q[$bits(vlen_t)-1:$clog2(VRFWordBWidth)];
   end
 
