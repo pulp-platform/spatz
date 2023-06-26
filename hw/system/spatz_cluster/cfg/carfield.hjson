@@ -8,7 +8,7 @@
         boot_addr: 4096,               // 0x1000
         cluster_base_addr: 1358954496, // 0x51000000
         cluster_base_offset: 0,        // 0x0
-        cluster_base_hartid: 0,
+        cluster_base_hartid: 16,
         addr_width: 48,
         data_width: 64,
         id_width_in: 6,
