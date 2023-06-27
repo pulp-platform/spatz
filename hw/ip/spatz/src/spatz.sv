@@ -32,6 +32,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   ) (
     input  logic                              clk_i,
     input  logic                              rst_ni,
+    input  logic                              testmode_i,
     input  logic             [31:0]           hart_id_i,
     // Snitch Interface
     input  logic                              issue_valid_i,
@@ -181,19 +182,20 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     .NrReadPorts (NrReadPorts ),
     .NrWritePorts(NrWritePorts)
   ) i_vrf (
-    .clk_i   (clk_i     ),
-    .rst_ni  (rst_ni    ),
+    .clk_i     (clk_i     ),
+    .rst_ni    (rst_ni    ),
+    .testmode_i(testmode_i),
     // Write Ports
-    .waddr_i (vrf_waddr ),
-    .wdata_i (vrf_wdata ),
-    .we_i    (vrf_we    ),
-    .wbe_i   (vrf_wbe   ),
-    .wvalid_o(vrf_wvalid),
+    .waddr_i   (vrf_waddr ),
+    .wdata_i   (vrf_wdata ),
+    .we_i      (vrf_we    ),
+    .wbe_i     (vrf_wbe   ),
+    .wvalid_o  (vrf_wvalid),
     // Read Ports
-    .raddr_i (vrf_raddr ),
-    .re_i    (vrf_re    ),
-    .rdata_o (vrf_rdata ),
-    .rvalid_o(vrf_rvalid)
+    .raddr_i   (vrf_raddr ),
+    .re_i      (vrf_re    ),
+    .rdata_o   (vrf_rdata ),
+    .rvalid_o  (vrf_rvalid)
   );
 
   ////////////////

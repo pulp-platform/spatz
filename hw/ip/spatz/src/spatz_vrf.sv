@@ -14,6 +14,7 @@ module spatz_vrf
   ) (
     input  logic                         clk_i,
     input  logic                         rst_ni,
+    input  logic                         testmode_i,
     // Write ports
     input  vrf_addr_t [NrWritePorts-1:0] waddr_i,
     input  vrf_data_t [NrWritePorts-1:0] wdata_i,
@@ -188,14 +189,15 @@ module spatz_vrf
         .NrWords    (NrWordsPerBank    ),
         .WordWidth  (ELEN              )
       ) i_vregfile (
-        .clk_i  (clk_i                        ),
-        .rst_ni (rst_ni                       ),
-        .waddr_i(waddr[bank]                  ),
-        .wdata_i(wdata[bank][ELEN*cut +: ELEN]),
-        .we_i   (we[bank]                     ),
-        .wbe_i  (wbe[bank][ELENB*cut +: ELENB]),
-        .raddr_i(raddr[bank]                  ),
-        .rdata_o(rdata_int                    )
+        .clk_i     (clk_i                        ),
+        .rst_ni    (rst_ni                       ),
+        .testmode_i(testmode_i                   ),
+        .waddr_i   (waddr[bank]                  ),
+        .wdata_i   (wdata[bank][ELEN*cut +: ELEN]),
+        .we_i      (we[bank]                     ),
+        .wbe_i     (wbe[bank][ELENB*cut +: ELENB]),
+        .raddr_i   (raddr[bank]                  ),
+        .rdata_o   (rdata_int                    )
       );
     end
   end

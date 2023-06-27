@@ -17,6 +17,7 @@ module vregfile import spatz_pkg::*; #(
   ) (
     input  logic                    clk_i,
     input  logic                    rst_ni,
+    input  logic                    testmode_i,
     // Write ports
     input  addr_t                   waddr_i,
     input  data_t                   wdata_i,
@@ -46,10 +47,10 @@ module vregfile import spatz_pkg::*; #(
 
   // First-level clock gate
   tc_clk_gating i_first_level_cg (
-    .clk_i    (clk_i),
-    .en_i     (|we_i),
-    .test_en_i(1'b0 ),
-    .clk_o    (clk  )
+    .clk_i    (clk_i     ),
+    .en_i     (|we_i     ),
+    .test_en_i(testmode_i),
+    .clk_o    (clk       )
   );
 
   // Sample Input Data
@@ -68,7 +69,7 @@ module vregfile import spatz_pkg::*; #(
     tc_clk_gating i_waddr_cg (
       .clk_i    (clk         ),
       .en_i     (row_onehot  ),
-      .test_en_i(1'b0        ),
+      .test_en_i(testmode_i  ),
       .clk_o    (row_clk[row])
     );
   end: gen_row_decoder
@@ -79,7 +80,7 @@ module vregfile import spatz_pkg::*; #(
     tc_clk_gating i_wbe_cg (
       .clk_i    (clk       ),
       .en_i     (wbe_i[b]  ),
-      .test_en_i(1'b0      ),
+      .test_en_i(testmode_i),
       .clk_o    (col_clk[b])
     );
   end: gen_col_decoder

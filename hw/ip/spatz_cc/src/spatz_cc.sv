@@ -95,6 +95,7 @@ module spatz_cc
     input  logic                         clk_i,
     input  logic                         clk_d2_i,
     input  logic                         rst_ni,
+    input  logic                         testmode_i,
     input  logic         [31:0]          hart_id_i,
     input  interrupts_t                  irq_i,
     output hive_req_t                    hive_req_o,
@@ -147,7 +148,7 @@ module spatz_cc
   logic acc_demux_snitch_valid_q, acc_demux_snitch_ready_q;
 
   fpnew_pkg::roundmode_e fpu_rnd_mode;
-  fpnew_pkg::fmt_mode_t  fpu_fmt_mode;
+  fpnew_pkg::fmt_mode_t fpu_fmt_mode;
   fpnew_pkg::status_t fpu_status;
 
   core_events_t snitch_events;
@@ -330,6 +331,7 @@ module spatz_cc
   ) i_spatz (
     .clk_i                   (clk_i                 ),
     .rst_ni                  (rst_ni                ),
+    .testmode_i              (testmode_i            ),
     .hart_id_i               (hart_id_i             ),
     .issue_valid_i           (acc_qvalid            ),
     .issue_ready_o           (acc_qready            ),
