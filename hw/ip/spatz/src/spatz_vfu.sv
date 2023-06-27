@@ -27,6 +27,14 @@ module spatz_vfu
     output logic             vfu_rsp_valid_o,
     input  logic             vfu_rsp_ready_i,
     output vfu_rsp_t         vfu_rsp_o,
+    // Data Exchange with Main / Secondary Spatz
+    output logic                 m_ready_o,
+    input  logic                 m_valid_i,
+    input  logic                 s_ready_i,
+    output logic                 s_valid_o,
+    input  logic [N_FU*ELEN-1:0] m_red_data_i,
+    output logic [N_FU*ELEN-1:0] s_red_data_o,
+
     // VRF
     output vrf_addr_t        vrf_waddr_o,
     output vrf_data_t        vrf_wdata_o,
@@ -39,7 +47,8 @@ module spatz_vfu
     input  vrf_data_t  [2:0] vrf_rdata_i,
     input  logic       [2:0] vrf_rvalid_i,
     // FPU side channel
-    output status_t          fpu_status_o
+    output status_t          fpu_status_o,
+    input  merge_mode_t      merge_mode_i
   );
 
 // Include FF
@@ -167,6 +176,8 @@ module spatz_vfu
   enum logic [2:0] {
     Reduction_NormalExecution,
     Reduction_Wait,
+    Reduction_WaitForPrimary,
+    Reduction_WaitForSecondary,
     Reduction_Init,
     Reduction_Reduce,
     Reduction_WriteBack
@@ -357,6 +368,11 @@ module spatz_vfu
     reduction_d               = reduction_q;
     reduction_operand_ready_d = 1'b0;
 
+    // No one has valid data or is ready
+    s_valid_o = 1'b0;
+    s_red_data_o = '0;
+    m_ready_o = 1'b0;
+
     // Did we issue a word to the FUs?
     word_issued = 1'b0;
 
@@ -379,7 +395,7 @@ module spatz_vfu
         result_ready = &(result_valid | ~pending_results) && ((result_tag.wb && vfu_rsp_ready_i) || vrf_wvalid_i);
 
         // Initialize the pointers
-        reduction_pointer_d = '0;
+        reduction_pointer_d = spatz_req.is_collab && !merge_mode_i.is_master ? 'd1 : '0;
 
         // Do we have a new reduction instruction?
         if (spatz_req_valid && !running_q[spatz_req.id] && spatz_req.op_arith.is_reduction)
@@ -454,8 +470,8 @@ module spatz_vfu
         endcase
         // verilator lint_on SELRANGE
 
-        // Got a result!
-        if (result_valid[0]) begin
+        // Got a result and it's not the result of the final reduction!
+        if (result_valid[0] && !(reduction_pointer_q == spatz_req.vl)) begin
           // Did we get an operand?
           if (vrf_rvalid_i[1]) begin
             automatic logic [idx_width(N_FU*ELENB)-1:0] pnt;
@@ -478,15 +494,84 @@ module spatz_vfu
 
         // Are we done?
         if (reduction_pointer_q == spatz_req.vl) begin
-          reduction_state_d         = Reduction_WriteBack;
-          result_ready              = 1'b0;
-          reduction_operand_ready_d = 1'b0;
+            result_ready              = 1'b0;
+            reduction_operand_ready_d = 1'b0;
+          // Directly jump to writeback state when instruction is a non-collaborative one
+          if (!spatz_req.is_collab) begin
+            reduction_state_d         = Reduction_WriteBack;
+          end else begin
+            // Wait for final reduction to take place before switching state
+            if (result_valid[0]) begin
+              // Do not yet acknowledge the result, because we need to exchange it
+              result_ready = 1'b0;
+              // Are we the primary or secondary Spatz?
+              if (merge_mode_i.is_master) begin
+                reduction_state_d       = Reduction_WaitForSecondary;
+              end else begin
+                reduction_state_d       = Reduction_WaitForPrimary;
+              end
+            end
+          end
         end
+      end
+
+      Reduction_WaitForSecondary: begin
+
+        // Tell Secondary Spatz that we're ready to receive the data
+        m_ready_o = 1'b1;
+
+        // Secondary Spatz has valid data for us
+        if (m_valid_i) begin
+
+          // Use the two results of the primary and secondary Spatz for final reduction
+          unique case (spatz_req.vtype.vsew)
+            EW_8 : begin
+              reduction_d[0] = $unsigned(result[7:0]);
+              reduction_d[1] = $unsigned(m_red_data_i[7:0]);
+            end
+            EW_16: begin
+              reduction_d[0] = $unsigned(result[15:0]);
+              reduction_d[1] = $unsigned(m_red_data_i[15:0]);
+            end
+            EW_32: begin
+              reduction_d[0] = $unsigned(result[31:0]);
+              reduction_d[1] = $unsigned(m_red_data_i[31:0]);
+            end
+            default: begin
+              if (MAXEW == EW_64) reduction_d[0] = $unsigned(result[63:0]);
+              if (MAXEW == EW_64) reduction_d[1] = $unsigned(m_red_data_i[63:0]);
+            end
+          endcase
+          // The operands from the primary and secondary Spatz are available
+          // Trigger a request
+          reduction_operand_ready_d = 1'b1;
+          reduction_state_d         = Reduction_WriteBack;
+        end
+
+        if (m_valid_i && m_ready_o) begin
+          // Acknowledge the last result received in the Reduction_Reduce state
+          result_ready = 1'b1;
+        end
+
+      end
+
+      Reduction_WaitForPrimary: begin
+        // Transmit the data of the reduction to master
+        s_red_data_o = result; // TODO: Parametrize
+        // Tell Primary that we have valid data
+        s_valid_o = 1'b1;
+
+        // Is Primary ready to receive data?
+        if (s_ready_i) begin
+          // We're done waiting
+          reduction_state_d = Reduction_WriteBack;
+        end
+        
       end
 
       Reduction_WriteBack: begin
         // Acknowledge result
-        if (vrf_wvalid_i) begin
+        if (vrf_wvalid_i || (spatz_req.is_collab && !merge_mode_i.is_master)) begin
           result_ready = 1'b1;
 
           // We are done with the reduction
@@ -535,7 +620,10 @@ module spatz_vfu
     };
 
     if (spatz_req_valid && vl_q == '0) begin
-      vreg_addr_d[0] = (spatz_req.vs2 + vstart) << $clog2(NrWordsPerVector);
+      // In case of a reduction the secondary Spatz should read from the same vector register as the 0-element is stored within the VRF of
+      // the primary Spatz
+      vreg_addr_d[0] = spatz_req.op_arith.is_reduction && spatz_req.is_collab && !merge_mode_i.is_master ? 
+                       (spatz_req.vs1 + vstart) << $clog2(NrWordsPerVector) : (spatz_req.vs2 + vstart) << $clog2(NrWordsPerVector);
       vreg_addr_d[1] = (spatz_req.vs1 + vstart) << $clog2(NrWordsPerVector);
       vreg_addr_d[2] = (spatz_req.vd + vstart) << $clog2(NrWordsPerVector);
 
@@ -579,7 +667,12 @@ module spatz_vfu
 
     // Reduction finished execution
     if (reduction_state_q == Reduction_WriteBack && result_valid[0]) begin
-      vreg_we = 1'b1;
+
+      // Only the primary Spatz needs to write to the 0-Element in its vector register
+      if (merge_mode_i.is_master) begin
+        vreg_we = 1'b1;
+      end;
+      
       unique case (spatz_req.vtype.vsew)
         EW_8 : vreg_wbe = 1'h1;
         EW_16: vreg_wbe = 2'h3;

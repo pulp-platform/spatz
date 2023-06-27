@@ -41,6 +41,13 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     output logic                              rsp_valid_o,
     input  logic                              rsp_ready_i,
     output spatz_rsp_t                        rsp_o,
+    // Spatz-Spatz VFU Data Exchange
+    output logic                              m_ready_o,
+    input  logic                              m_valid_i,
+    input  logic                              s_ready_i,
+    output logic                              s_valid_o,
+    input  logic [N_FU*ELEN-1:0]              m_red_data_i,
+    output logic [N_FU*ELEN-1:0]              s_red_data_o,
     // Memory Request
     output spatz_mem_req_t   [NrMemPorts-1:0] spatz_mem_req_o,
     output logic             [NrMemPorts-1:0] spatz_mem_req_valid_o,
@@ -270,6 +277,13 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     .vfu_rsp_valid_o  (vfu_rsp_valid                                           ),
     .vfu_rsp_ready_i  (vfu_rsp_ready                                           ),
     .vfu_rsp_o        (vfu_rsp                                                 ),
+    // Spatz-Spatz Data Exchange
+    .m_ready_o        (m_ready_o                                               ),
+    .m_valid_i        (m_valid_i                                               ),
+    .s_ready_i        (s_ready_i                                               ),
+    .s_valid_o        (s_valid_o                                               ),
+    .m_red_data_i     (m_red_data_i                                            ),
+    .s_red_data_o     (s_red_data_o                                            ),
     // VRF
     .vrf_waddr_o      (vrf_waddr[VFU_VD_WD]                                    ),
     .vrf_wdata_o      (vrf_wdata[VFU_VD_WD]                                    ),
@@ -282,7 +296,8 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     .vrf_rvalid_i     (vrf_rvalid[VFU_VD_RD:VFU_VS2_RD]                        ),
     .vrf_id_o         ({sb_id[SB_VFU_VD_WD], sb_id[SB_VFU_VD_RD:SB_VFU_VS2_RD]}),
     // FPU side-channel
-    .fpu_status_o     (fpu_status_o                                            )
+    .fpu_status_o     (fpu_status_o                                            ),
+    .merge_mode_i     (merge_mode_i                                            )
   );
 
   //////////

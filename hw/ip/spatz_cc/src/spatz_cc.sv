@@ -132,6 +132,14 @@ module spatz_cc
     input  logic                         cc_s_acc_rsp_ready_i,
     output logic                         cc_s_acc_req_valid_o,
 
+    // Spatz-Spatz VFU Data Exchange
+    output logic                         m_ready_o,
+    input  logic                         m_valid_i,
+    input  logic                         s_ready_i,
+    output logic                         s_valid_o,
+    input  logic [N_FU*ELEN-1:0]         m_red_data_i,
+    output logic [N_FU*ELEN-1:0]         s_red_data_o,
+
     output roundmode_e                   cc_m_acc_fpu_rnd_mode_o,
     output fmt_mode_t                    cc_m_acc_fpu_fmt_mode_o,
 
@@ -416,6 +424,12 @@ module spatz_cc
     .rsp_valid_o             (acc_pre_pvalid        ),
     .rsp_ready_i             (acc_pready            ),
     .rsp_o                   (acc_pre_resp          ),
+    .m_ready_o               (m_ready_o             ),
+    .m_valid_i               (m_valid_i             ),
+    .s_ready_i               (s_ready_i             ),
+    .s_valid_o               (s_valid_o             ),
+    .m_red_data_i            (m_red_data_i          ),
+    .s_red_data_o            (s_red_data_o          ),
     .spatz_mem_req_o         (spatz_mem_req         ),
     .spatz_mem_req_valid_o   (spatz_mem_req_valid   ),
     .spatz_mem_req_ready_i   (spatz_mem_req_ready   ),

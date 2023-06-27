@@ -322,14 +322,14 @@ vsuxei Discuss how stores are done
 
 | Instruction  | Status |
 |--------------|:------:|
-| vredsum.vs   |    ⚠️   |
-| vredmaxu.vs  |    ⚠️   |
-| vredmax.vs   |    ⚠️   |
-| vredminu.vs  |    ⚠️   |
-| vredmin.vs   |    ⚠️   |
-| vredand.vs   |    ⚠️   |
-| vredor.vs    |    ⚠️   |
-| vredxor.vs   |    ⚠️   |
+| vredsum.vs   |    ✅   |
+| vredmaxu.vs  |    ✅   |
+| vredmax.vs   |    ✅   |
+| vredminu.vs  |    ✅   |
+| vredmin.vs   |    ✅   |
+| vredand.vs   |    ✅   |
+| vredor.vs    |    ✅   |
+| vredxor.vs   |    ✅   |
 | vwredsumu.vs |    ❌   |
 | vwredsum.vs  |    ❌   |
 

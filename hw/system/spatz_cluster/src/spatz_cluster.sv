@@ -682,6 +682,9 @@ module spatz_cluster
   roundmode_e fpu_rnd_mode;
   fmt_mode_t  fpu_fmt_mode;
 
+  logic vfu_ready, vfu_valid;
+  logic [N_FU*ELEN-1:0] vfu_data; // TODO: Parametrize
+
   for (genvar i = 0; i < NrCores; i++) begin : gen_core
     localparam int unsigned TcdmPorts     = get_tcdm_ports(i);
     localparam int unsigned TcdmPortsOffs = get_tcdm_port_offs(i);
@@ -789,6 +792,12 @@ module spatz_cluster
       .cc_m_acc_fpu_fmt_mode_o(/* Unused */                  ),
       .cc_s_acc_fpu_rnd_mode_i(/* Unused */                  ),
       .cc_s_acc_fpu_fmt_mode_i(/* Unused */                  ),
+      .m_ready_o              (/* Unused */                  ),
+      .m_valid_i              (/* Unused */                  ),
+      .s_ready_i              (/* Unused */                  ),
+      .s_valid_o              (/* Unused */                  ),
+      .m_red_data_i           (/* Unused */                  ),
+      .s_red_data_o           (/* Unused */                  ),
       .merge_mode_i        (2'b00                            )
     );
     end else begin
@@ -876,6 +885,12 @@ module spatz_cluster
         .cc_m_acc_fpu_fmt_mode_o(fpu_fmt_mode                  ),
         .cc_s_acc_fpu_rnd_mode_i(/* Unused */                  ),
         .cc_s_acc_fpu_fmt_mode_i(/* Unused */                  ),
+        .m_ready_o              (vfu_ready                     ),
+        .m_valid_i              (vfu_valid                     ),
+        .s_ready_i              (/* Unused */                  ),
+        .s_valid_o              (/* Unused */                  ),
+        .m_red_data_i           (vfu_data                      ),
+        .s_red_data_o           (/* Unused */                  ),
         .merge_mode_i        ('{1, 1}                          )
       );
       end else begin
@@ -962,6 +977,12 @@ module spatz_cluster
         .cc_m_acc_fpu_fmt_mode_o(/* Unused */                  ),
         .cc_s_acc_fpu_rnd_mode_i(fpu_rnd_mode                  ),
         .cc_s_acc_fpu_fmt_mode_i(fpu_fmt_mode                  ),
+        .m_ready_o              (/* Unused */                  ),
+        .m_valid_i              (/* Unused */                  ),
+        .s_ready_i              (vfu_ready                     ),
+        .s_valid_o              (vfu_valid                     ),
+        .m_red_data_i           (/* Unused */                  ),
+        .s_red_data_o           (vfu_data                      ),
         .merge_mode_i        ('{1, 0}                          )
       );
       end
