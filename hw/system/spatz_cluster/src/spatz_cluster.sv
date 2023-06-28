@@ -70,8 +70,6 @@ module spatz_cluster
     /// Per-core Spatz outstanding loads
     parameter int                     unsigned               NumSpatzOutstandingLoads [NrCores] = '{default: '0},
     /// ## Timing Tuning Parameters
-    /// Insert Pipeline registers into off-loading path (request)
-    parameter bit                                            RegisterOffloadReq                 = 1'b0,
     /// Insert Pipeline registers into off-loading path (response)
     parameter bit                                            RegisterOffloadRsp                 = 1'b0,
     /// Insert Pipeline registers into data memory path (request)
@@ -740,7 +738,6 @@ module spatz_cluster
       .NumIntOutstandingMem    (NumIntOutstandingMem[i]    ),
       .NumSpatzOutstandingLoads(NumSpatzOutstandingLoads[i]),
       .FPUImplementation       (FPUImplementation[i]       ),
-      .RegisterOffloadReq      (RegisterOffloadReq         ),
       .RegisterOffloadRsp      (RegisterOffloadRsp         ),
       .RegisterCoreReq         (RegisterCoreReq            ),
       .RegisterCoreRsp         (RegisterCoreRsp            ),

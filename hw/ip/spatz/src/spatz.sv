@@ -15,6 +15,7 @@
 
 module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     parameter int                  unsigned NrMemPorts          = 1,
+    parameter bit                           RegisterRsp         = 0,
     // Memory request (VLSU)
     parameter type                          spatz_mem_req_t     = logic,
     parameter type                          spatz_mem_rsp_t     = logic,
@@ -208,11 +209,12 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   spatz_id_t [NrReadPorts+NrWritePorts-1:0] sb_id;
 
   spatz_controller #(
-    .NrVregfilePorts   (NrReadPorts+NrWritePorts),
-    .NrWritePorts      (NrWritePorts            ),
-    .spatz_issue_req_t (spatz_issue_req_t       ),
-    .spatz_issue_rsp_t (spatz_issue_rsp_t       ),
-    .spatz_rsp_t       (spatz_rsp_t             )
+    .NrVregfilePorts  (NrReadPorts+NrWritePorts),
+    .NrWritePorts     (NrWritePorts            ),
+    .RegisterRsp  (RegisterRsp             ),
+    .spatz_issue_req_t(spatz_issue_req_t       ),
+    .spatz_issue_rsp_t(spatz_issue_rsp_t       ),
+    .spatz_rsp_t      (spatz_rsp_t             )
   ) i_controller (
     .clk_i            (clk_i           ),
     .rst_ni           (rst_ni          ),

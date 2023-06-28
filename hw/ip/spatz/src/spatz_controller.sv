@@ -16,6 +16,7 @@ module spatz_controller
   #(
     parameter int  unsigned NrVregfilePorts   = 1,
     parameter int  unsigned NrWritePorts      = 1,
+    parameter bit           RegisterRsp       = 0,
     parameter type          spatz_issue_req_t = logic,
     parameter type          spatz_issue_rsp_t = logic,
     parameter type          spatz_rsp_t       = logic
@@ -178,13 +179,13 @@ module spatz_controller
 
     // Decode new instruction if one is received and spatz is ready
     if (issue_valid_i && issue_ready_o) begin
-      decoder_req.instr     = issue_req_i.data_op;
-      decoder_req.rs1       = issue_req_i.data_arga;
-      decoder_req.rs2       = issue_req_i.data_argb;
-      decoder_req.rsd       = issue_req_i.data_argc;
-      decoder_req.rd        = issue_req_i.id;
-      decoder_req.vtype     = vtype_q;
-      decoder_req_valid     = 1'b1;
+      decoder_req.instr = issue_req_i.data_op;
+      decoder_req.rs1   = issue_req_i.data_arga;
+      decoder_req.rs2   = issue_req_i.data_argb;
+      decoder_req.rsd   = issue_req_i.data_argc;
+      decoder_req.rd    = issue_req_i.id;
+      decoder_req.vtype = vtype_q;
+      decoder_req_valid = 1'b1;
     end
   end // proc_decode
 
@@ -528,11 +529,27 @@ module spatz_controller
     .ready_i(vfu_rsp_ready                  )
   );
 
+  logic       rsp_valid_d;
+  spatz_rsp_t rsp_d;
+  spill_register #(
+    .T     (spatz_rsp_t ),
+    .Bypass(!RegisterRsp)
+  ) i_spatz_rsp_register (
+    .clk_i  (clk_i       ),
+    .rst_ni (rst_ni      ),
+    .data_i (rsp_d       ),
+    .valid_i(rsp_valid_d ),
+    .ready_o(/* Unused */),
+    .data_o (rsp_o       ),
+    .valid_o(rsp_valid_o ),
+    .ready_i(rsp_ready_i )
+  );
+
   // Retire an operation/instruction and write back result to core
   // if necessary.
   always_comb begin : retire
-    rsp_o       = '0;
-    rsp_valid_o = '0;
+    rsp_d       = '0;
+    rsp_valid_d = '0;
 
     vfu_rsp_ready = 1'b0;
 
@@ -541,28 +558,28 @@ module spatz_controller
       if (spatz_req.op == VCSR) begin
         if (spatz_req.use_rd) begin
           unique case (spatz_req.op_csr.addr)
-            riscv_instr::CSR_VSTART: rsp_o.data = elen_t'(vstart_q);
-            riscv_instr::CSR_VL    : rsp_o.data = elen_t'(vl_q);
-            riscv_instr::CSR_VTYPE : rsp_o.data = elen_t'(vtype_q);
-            riscv_instr::CSR_VLENB : rsp_o.data = elen_t'(VLENB);
-            riscv_instr::CSR_VXSAT : rsp_o.data = '0;
-            riscv_instr::CSR_VXRM  : rsp_o.data = '0;
-            riscv_instr::CSR_VCSR  : rsp_o.data = '0;
-            default: rsp_o.data                 = '0;
+            riscv_instr::CSR_VSTART: rsp_d.data = elen_t'(vstart_q);
+            riscv_instr::CSR_VL    : rsp_d.data = elen_t'(vl_q);
+            riscv_instr::CSR_VTYPE : rsp_d.data = elen_t'(vtype_q);
+            riscv_instr::CSR_VLENB : rsp_d.data = elen_t'(VLENB);
+            riscv_instr::CSR_VXSAT : rsp_d.data = '0;
+            riscv_instr::CSR_VXRM  : rsp_d.data = '0;
+            riscv_instr::CSR_VCSR  : rsp_d.data = '0;
+            default: rsp_d.data                 = '0;
           endcase
         end
-        rsp_o.id    = spatz_req.rd;
-        rsp_valid_o = 1'b1;
+        rsp_d.id    = spatz_req.rd;
+        rsp_valid_d = 1'b1;
       end else begin
         // Change configuration and send back vl
-        rsp_o.id    = spatz_req.rd;
-        rsp_o.data  = elen_t'(vl_d);
-        rsp_valid_o = 1'b1;
+        rsp_d.id    = spatz_req.rd;
+        rsp_d.data  = elen_t'(vl_d);
+        rsp_valid_d = 1'b1;
       end
     end else if (vfu_rsp_valid) begin
-      rsp_o.id      = vfu_rsp.rd;
-      rsp_o.data    = vfu_rsp.result;
-      rsp_valid_o   = 1'b1;
+      rsp_d.id      = vfu_rsp.rd;
+      rsp_d.data    = vfu_rsp.result;
+      rsp_valid_d   = 1'b1;
       vfu_rsp_ready = 1'b1;
     end
   end // retire

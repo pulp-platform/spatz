@@ -77,8 +77,6 @@ module spatz_cc
     /// the core in a slower clock domain.
     parameter bit                                          IsoCrossing              = 0,
     /// Timing Parameters
-    /// Insert Pipeline registers into off-loading path (request)
-    parameter bit                                          RegisterOffloadReq       = 0,
     /// Insert Pipeline registers into off-loading path (response)
     parameter bit                                          RegisterOffloadRsp       = 0,
     /// Insert Pipeline registers into data memory path (request)
@@ -129,23 +127,19 @@ module spatz_cc
 
   acc_issue_req_t acc_snitch_req;
   acc_issue_req_t acc_snitch_demux;
-  acc_issue_req_t acc_snitch_demux_q;
   acc_issue_rsp_t acc_snitch_resp;
 
   acc_rsp_t acc_demux_snitch;
-  acc_rsp_t acc_demux_snitch_q;
   acc_rsp_t acc_resp;
   acc_rsp_t dma_resp;
 
   logic acc_snitch_demux_qvalid, acc_snitch_demux_qready;
-  logic acc_snitch_demux_qvalid_q, acc_snitch_demux_qready_q;
   logic acc_qvalid, acc_qready;
   logic dma_qvalid, dma_qready;
 
   logic acc_pvalid, acc_pready;
   logic dma_pvalid, dma_pready;
   logic acc_demux_snitch_valid, acc_demux_snitch_ready;
-  logic acc_demux_snitch_valid_q, acc_demux_snitch_ready_q;
 
   fpnew_pkg::roundmode_e fpu_rnd_mode;
   fpnew_pkg::fmt_mode_t fpu_fmt_mode;
@@ -243,56 +237,22 @@ module spatz_cc
     .dst_rsp_i  (snitch_drsp_q)
   );
 
-  // Cut off-loading request path
-  isochronous_spill_register #(
-    .T      (acc_issue_req_t                    ),
-    .Bypass (!IsoCrossing && !RegisterOffloadReq)
-  ) i_spill_register_acc_demux_req (
-    .src_clk_i   (clk_d2_i                 ),
-    .src_rst_ni  (rst_ni                   ),
-    .src_valid_i (acc_snitch_demux_qvalid  ),
-    .src_ready_o (acc_snitch_demux_qready  ),
-    .src_data_i  (acc_snitch_demux         ),
-    .dst_clk_i   (clk_i                    ),
-    .dst_rst_ni  (rst_ni                   ),
-    .dst_valid_o (acc_snitch_demux_qvalid_q),
-    .dst_ready_i (acc_snitch_demux_qready_q),
-    .dst_data_o  (acc_snitch_demux_q       )
-  );
-
-  // Cut off-loading response path
-  isochronous_spill_register #(
-    .T      (acc_rsp_t                          ),
-    .Bypass (!IsoCrossing && !RegisterOffloadRsp)
-  ) i_spill_register_acc_demux_resp (
-    .src_clk_i   (clk_i                   ),
-    .src_rst_ni  (rst_ni                  ),
-    .src_valid_i (acc_demux_snitch_valid_q),
-    .src_ready_o (acc_demux_snitch_ready_q),
-    .src_data_i  (acc_demux_snitch_q      ),
-    .dst_clk_i   (clk_d2_i                ),
-    .dst_rst_ni  (rst_ni                  ),
-    .dst_valid_o (acc_demux_snitch_valid  ),
-    .dst_ready_i (acc_demux_snitch_ready  ),
-    .dst_data_o  (acc_demux_snitch        )
-  );
-
   // Accelerator Demux Port
   stream_demux #(
     .N_OUP ( 2 )
   ) i_stream_demux_offload (
-    .inp_valid_i (acc_snitch_demux_qvalid_q             ),
-    .inp_ready_o (acc_snitch_demux_qready_q             ),
-    .oup_sel_i   (acc_snitch_demux_q.addr[$clog2(2)-1:0]),
-    .oup_valid_o ({dma_qvalid, acc_qvalid}              ),
-    .oup_ready_i ({dma_qready, acc_qready}              )
+    .inp_valid_i (acc_snitch_demux_qvalid             ),
+    .inp_ready_o (acc_snitch_demux_qready             ),
+    .oup_sel_i   (acc_snitch_demux.addr[$clog2(2)-1:0]),
+    .oup_valid_o ({dma_qvalid, acc_qvalid}            ),
+    .oup_ready_i ({dma_qready, acc_qready}            )
   );
 
   // There is no shared muldiv in this configuration
   assign hive_req_o.acc_qvalid = 1'b0;
   assign hive_req_o.acc_pready = 1'b0;
   assign hive_req_o.acc_req    = '0;
-  assign acc_snitch_req        = acc_snitch_demux_q;
+  assign acc_snitch_req        = acc_snitch_demux;
 
   stream_arbiter #(
     .DATA_T ( acc_rsp_t ),
@@ -303,9 +263,9 @@ module spatz_cc
     .inp_data_i  ( {dma_resp, acc_resp }     ),
     .inp_valid_i ( {dma_pvalid, acc_pvalid } ),
     .inp_ready_o ( {dma_pready, acc_pready } ),
-    .oup_data_o  ( acc_demux_snitch_q        ),
-    .oup_valid_o ( acc_demux_snitch_valid_q  ),
-    .oup_ready_i ( acc_demux_snitch_ready_q  )
+    .oup_data_o  ( acc_demux_snitch          ),
+    .oup_valid_o ( acc_demux_snitch_valid    ),
+    .oup_ready_i ( acc_demux_snitch_ready    )
   );
 
   dreq_t fp_lsu_mem_req;
@@ -321,6 +281,7 @@ module spatz_cc
     .NrMemPorts         (NumMemPortsPerSpatz     ),
     .NumOutstandingLoads(NumSpatzOutstandingLoads),
     .FPUImplementation  (FPUImplementation       ),
+    .RegisterRsp        (RegisterOffloadRsp      ),
     .dreq_t             (dreq_t                  ),
     .drsp_t             (drsp_t                  ),
     .spatz_mem_req_t    (tcdm_req_chan_t         ),
