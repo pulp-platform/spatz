@@ -514,7 +514,6 @@ module ${cfg['name']}_wrapper
     .Xdma (${core_cfg_flat('xdma')}),
     .DMAAxiReqFifoDepth (${cfg['dma_axi_req_fifo_depth']}),
     .DMAReqFifoDepth (${cfg['dma_req_fifo_depth']}),
-    .RegisterOffloadReq (${int(cfg['timing']['register_offload_req'])}),
     .RegisterOffloadRsp (${int(cfg['timing']['register_offload_rsp'])}),
     .RegisterCoreReq (${int(cfg['timing']['register_core_req'])}),
     .RegisterCoreRsp (${int(cfg['timing']['register_core_rsp'])}),
