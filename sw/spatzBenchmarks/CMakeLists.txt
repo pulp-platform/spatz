@@ -57,6 +57,8 @@ add_library(widening-bp-fmatmul widening-bp-fmatmul/kernel/widening-fmatmul.c)
 add_library(sdotp-hp-fmatmul sdotp-hp-fmatmul/kernel/sdotp-fmatmul.c)
 add_library(sdotp-bp-fmatmul sdotp-bp-fmatmul/kernel/sdotp-fmatmul.c)
 
+add_library(dp-faxpy dp-faxpy/kernel/faxpy.c)
+
 add_library(dp-fdotp dp-fdotp/kernel/fdotp.c)
 
 add_library(dp-fconv2d dp-fconv2d/kernel/fconv2d.c)
@@ -94,6 +96,9 @@ add_spatz_test_threeParam(sdotp-bp-fmatmul sdotp-bp-fmatmul/main.c 64  64  64 )
 add_spatz_test_threeParam(sdotp-bp-fmatmul sdotp-bp-fmatmul/main.c 64  128 64 )
 add_spatz_test_threeParam(sdotp-bp-fmatmul sdotp-bp-fmatmul/main.c 128 128 128)
 add_spatz_test_threeParam(sdotp-bp-fmatmul sdotp-bp-fmatmul/main.c 128 256 128)
+
+add_spatz_test_oneParam(dp-faxpy dp-faxpy/main.c 256)
+add_spatz_test_oneParam(dp-faxpy dp-faxpy/main.c 1024)
 
 add_spatz_test_oneParam(dp-fdotp dp-fdotp/main.c 128)
 add_spatz_test_oneParam(dp-fdotp dp-fdotp/main.c 4096)

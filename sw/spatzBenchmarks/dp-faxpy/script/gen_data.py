@@ -49,7 +49,7 @@ def emit_header_file(layer_type: str, **kwargs):
     )
 
     if layer_type == "AXPY":
-        file = file_path / "data_axpy.h"
+        file = file_path / ("data_" + str(kwargs["M"]) + ".h")
         emit_str += emit_axpy_layer(**kwargs)
     if layer_type == "Conv2d":
         file = file_path / "data_conv2d.h"

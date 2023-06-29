@@ -6,6 +6,6 @@
 
 {
     kernel: "AXPY"
-    M: 4096,
+    M: 1024,
     prec: 64
 }
