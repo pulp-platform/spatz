@@ -48,7 +48,7 @@ def emit_header_file(layer_type: str, **kwargs):
         + "// SPDX-License-Identifier: Apache-2.0\n\n"
     )
 
-    file = file_path / "data_dotp.h"
+    file = file_path / ("data_" + str(kwargs["M"]) + ".h")
     emit_str += emit_dotp_layer(**kwargs)
     with file.open("w") as f:
         f.write(emit_str)
