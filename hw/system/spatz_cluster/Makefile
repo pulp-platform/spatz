@@ -53,7 +53,7 @@ $(CURDIR)/src/generated/bootrom.sv: test/bootrom.bin
 
 .PHONY: generate
 generate: src/generated/spatz_cluster_wrapper.sv
-src/generated/spatz_cluster_wrapper.sv: ${SPATZ_CLUSTER_CFG} $(find src/tpl) $(find test/*tpl)
+src/generated/spatz_cluster_wrapper.sv: $(find src/tpl) $(find test/*tpl)
 	${PYTHON} ${SPATZ_DIR}/util/clustergen.py -c ${SPATZ_CLUSTER_CFG} -o src/
 
 #############
