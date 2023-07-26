@@ -101,8 +101,6 @@ module spatz_cluster
     input  logic                             clk_i,
     /// Asynchronous active high reset. This signal is assumed to be _async_.
     input  logic                             rst_ni,
-    /// Test mode
-    input  logic                             testmode_i,
     /// Per-core debug request signal. Asserting this signals puts the
     /// corresponding core into debug mode. This signal is assumed to be _async_.
     input  logic          [NrCores-1:0]      debug_req_i,
@@ -490,7 +488,7 @@ module spatz_cluster
   ) i_axi_dma_xbar (
     .clk_i                 (clk_i                  ),
     .rst_ni                (rst_ni                 ),
-    .test_i                (testmode_i             ),
+    .test_i                (1'b0                   ),
     .slv_ports_req_i       (wide_axi_mst_req       ),
     .slv_ports_resp_o      (wide_axi_mst_rsp       ),
     .mst_ports_req_o       (wide_axi_slv_req       ),
@@ -746,7 +744,7 @@ module spatz_cluster
       .clk_i            (clk_i                               ),
       .clk_d2_i         (clk_i                               ),
       .rst_ni           (rst_ni                              ),
-      .testmode_i       (testmode_i                          ),
+      .testmode_i       (1'b0                                ),
       .hart_id_i        (hart_id                             ),
       .hive_req_o       (hive_req[i]                         ),
       .hive_rsp_i       (hive_rsp[i]                         ),
@@ -938,7 +936,7 @@ module spatz_cluster
   ) i_cluster_xbar (
     .clk_i                 (clk_i                      ),
     .rst_ni                (rst_ni                     ),
-    .test_i                (testmode_i                 ),
+    .test_i                (1'b0                       ),
     .slv_ports_req_i       (narrow_axi_mst_req         ),
     .slv_ports_resp_o      (narrow_axi_mst_rsp         ),
     .mst_ports_req_o       (narrow_axi_slv_req         ),
@@ -987,7 +985,7 @@ module spatz_cluster
   ) i_axi_to_reg (
     .clk_i      (clk_i                                 ),
     .rst_ni     (rst_ni                                ),
-    .testmode_i (testmode_i                            ),
+    .testmode_i (1'b0                                  ),
     .axi_req_i  (narrow_axi_slv_req[ClusterPeripherals]),
     .axi_rsp_o  (narrow_axi_slv_rsp[ClusterPeripherals]),
     .reg_req_o  (reg_req                               ),
@@ -1035,7 +1033,7 @@ module spatz_cluster
   ) i_axi_to_reg_bootrom (
     .clk_i      (clk_i                    ),
     .rst_ni     (rst_ni                   ),
-    .testmode_i (testmode_i               ),
+    .testmode_i (1'b0                     ),
     .axi_req_i  (wide_axi_slv_req[BootROM]),
     .axi_rsp_o  (wide_axi_slv_rsp[BootROM]),
     .reg_req_o  (bootrom_reg_req          ),
