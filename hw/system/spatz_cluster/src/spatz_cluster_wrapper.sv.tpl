@@ -61,6 +61,7 @@ package ${cfg['pkg_name']};
 
 % if cfg['axi_cdc_enable']:
   localparam int unsigned SpatzLogDepth = 3;
+  localparam int unsigned SpatzCdcSyncStages = 2;
   % if cfg['sw_rst_enable']:
   localparam int unsigned SpatzSyncStages = 3;
   % endif
@@ -200,6 +201,7 @@ module ${cfg['name']}_wrapper
   parameter int unsigned AxiOutIdWidth = ${cfg['pkg_name']}::SpatzAxiIdOutWidth,
 % if cfg['axi_cdc_enable']:
   parameter int unsigned LogDepth      = ${cfg['pkg_name']}::SpatzLogDepth,
+  parameter int unsigned CdcSyncStages = ${cfg['pkg_name']}::SpatzCdcSyncStages,
   % if cfg['sw_rst_enable']:
   parameter int unsigned SyncStages    = ${cfg['pkg_name']}::SpatzSyncStages,
   % endif
@@ -376,6 +378,7 @@ module ${cfg['name']}_wrapper
 
   axi_cdc_dst #(
     .LogDepth   ( LogDepth          ),
+    .SyncStages ( CdcSyncStages     ),
     .aw_chan_t  ( axi_in_aw_chan_t  ),
     .w_chan_t   ( axi_in_w_chan_t   ),
     .b_chan_t   ( axi_in_b_chan_t   ),
@@ -413,6 +416,7 @@ module ${cfg['name']}_wrapper
 
   axi_cdc_src #(
    .LogDepth   ( LogDepth          ),
+   .SyncStages ( CdcSyncStages     ),
    .aw_chan_t  ( axi_out_aw_chan_t ),
    .w_chan_t   ( axi_out_w_chan_t  ),
    .b_chan_t   ( axi_out_b_chan_t  ),
