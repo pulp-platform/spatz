@@ -4,7 +4,7 @@ package:
     - "Matheus Cavalcante <matheusd@iis.ee.ethz.ch>"
 
 dependencies:
-  axi:                { git: "https://github.com/pulp-platform/axi.git",                version: =0.39.0-beta.4 }
+  axi:                { git: "https://github.com/pulp-platform/axi.git",                version: =0.39.1-beta   }
   axi_riscv_atomics:  { git: "https://github.com/pulp-platform/axi_riscv_atomics.git",  version: 0.7.0          }
   common_cells:       { git: "https://github.com/pulp-platform/common_cells.git",       version: 1.28.0         }
   FPnew:              { git: "https://github.com/pulp-platform/cvfpu.git",              rev:     pulp-v0.1.3    }
