@@ -45,28 +45,28 @@ int main() {
   // Reset timer
   unsigned int timer = (unsigned int)-1;
 
-  const unsigned int dim = dotp_l.M;
-  const unsigned int dim_core = dim / num_cores;
+  const unsigned int dim = dotp_l.M / num_cores;
 
   // Allocate the matrices
   if (cid == 0) {
-    a = (double *)snrt_l1alloc(dim * sizeof(double));
-    b = (double *)snrt_l1alloc(dim * sizeof(double));
+    a = (double *)snrt_l1alloc(dotp_l.M * sizeof(double));
+    b = (double *)snrt_l1alloc(dotp_l.M * sizeof(double));
     result = (double *)snrt_l1alloc(num_cores * sizeof(double));
   }
 
   // Initialize the matrices
   if (cid == 0) {
-    snrt_dma_start_1d(a, dotp_A_dram, dim * sizeof(double));
-    snrt_dma_start_1d(b, dotp_B_dram, dim * sizeof(double));
+    snrt_dma_start_1d(a, dotp_A_dram, dotp_l.M * sizeof(double));
+    snrt_dma_start_1d(b, dotp_B_dram, dotp_l.M * sizeof(double));
+    snrt_dma_wait_all();
   }
 
   // Wait for all cores to finish
   snrt_cluster_hw_barrier();
 
   // Calculate internal pointers
-  double *a_int = a + dim_core * cid;
-  double *b_int = b + dim_core * cid;
+  double *a_int = a + dim * cid;
+  double *b_int = b + dim * cid;
 
   // Wait for all cores to finish
   snrt_cluster_hw_barrier();
@@ -81,7 +81,7 @@ int main() {
 
   // Calculate dotp
   double acc;
-  acc = fdotp_v64b(a_int, b_int, dim_core);
+  acc = fdotp_v64b(a_int, b_int, dim);
   result[cid] = acc;
 
   // Wait for all cores to finish
@@ -107,10 +107,10 @@ int main() {
 
   // Check and display results
   if (cid == 0) {
-    long unsigned int performance = 1000 * 2 * dim / timer;
+    long unsigned int performance = 1000 * 2 * dotp_l.M / timer;
     long unsigned int utilization = performance / (2 * num_cores * 4);
 
-    printf("\n----- (%d) dp fdotp -----\n", dim);
+    printf("\n----- (%d) dp fdotp -----\n", dotp_l.M);
     printf("The execution took %u cycles.\n", timer);
     printf("The performance is %ld OP/1000cycle (%ld%%o utilization).\n",
            performance, utilization);
