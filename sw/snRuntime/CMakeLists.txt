@@ -26,14 +26,45 @@ add_compile_options(-O3 -g -ffunction-sections)
 
 # Default memory regions
 if(SNITCH_RUNTIME STREQUAL "snRuntime-cluster")
-    set(MEM_DRAM_ORIGIN "0x80000000" CACHE STRING "Base address of external memory")
-    set(MEM_DRAM_SIZE "0x80000000" CACHE STRING "Size of external memory")
+    if(${SPATZ_CFG_FILENAME} STREQUAL spatz_cluster.default.hjson)
+        set(MEM_DRAM_ORIGIN "0x80000000" CACHE STRING "Base address of external memory")
+        set(MEM_DRAM_SIZE "0x80000000" CACHE STRING "Size of external memory")
+
+        set(MEM_TCDM_ORIGIN "0x100000" CACHE STRING "Base address of TCDM memory")
+        set(MEM_TCDM_SIZE "0x20000" CACHE STRING "Size of TCDM memory")
+
+    else(${SPATZ_CFG_FILENAME} STREQUAL carfield.hjson)
+        set(MEM_DRAM_ORIGIN "0x78000000" CACHE STRING "Base address of external memory")
+        set(MEM_DRAM_SIZE "0x400000" CACHE STRING "Size of external memory")
+
+        set(MEM_TCDM_ORIGIN "0x51000000" CACHE STRING "Base address of TCDM memory")
+        set(MEM_TCDM_SIZE "0x20000" CACHE STRING "Size of TCDM memory")
+    endif()
 else()
-    set(MEM_DRAM_ORIGIN "0x80000000" CACHE STRING "Base address of external memory")
-    set(MEM_DRAM_SIZE "256M" CACHE STRING "Size of external memory")
+    if(${SPATZ_CFG_FILENAME} STREQUAL spatz_cluster.default.hjson)
+        set(MEM_DRAM_ORIGIN "0x80000000" CACHE STRING "Base address of external memory")
+        set(MEM_DRAM_SIZE "256M" CACHE STRING "Size of external memory")
+    else(${SPATZ_CFG_FILENAME} STREQUAL carfield.hjson)
+        set(MEM_DRAM_ORIGIN "0x78000000" CACHE STRING "Base address of external memory")
+        set(MEM_DRAM_SIZE "128M" CACHE STRING "Size of external memory")
+    endif()
+
 endif()
+
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/link/common.ld.in common.ld @ONLY)
 set(LINKER_SCRIPT ${CMAKE_CURRENT_BINARY_DIR}/common.ld CACHE PATH "")
+
+# Start Snitch
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/src/platforms/rtl/start_snitch.S.in ${CMAKE_CURRENT_SOURCE_DIR}/src/platforms/rtl/start_snitch.S @ONLY)
+set(START_SNITCH ${CMAKE_CURRENT_BINARY_DIR}/src/platforms/rtl/start_snitch.S CACHE PATH "")
+
+# Patch putchar
+if(${HTIF_SERVER} STREQUAL "YES")
+    set(HTIF_SERVER "1")
+else()
+    set(HTIF_SERVER "0")
+endif()
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/src/platforms/rtl/putchar.c.in ${CMAKE_CURRENT_SOURCE_DIR}/src/platforms/rtl/putchar.c @ONLY)
 
 # provide linker script
 # set(LINKER_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/link/common.ld" CACHE PATH "")

@@ -8,10 +8,14 @@
   .global BOOTDATA
 
 _start:
-  la      t1, exception
+  la      t1, __snrt_isr
   csrw    mtvec, t1
   csrr    a0, mhartid
   la      a1, BOOTDATA
+  // Enable MSIP interrupt
+  csrr    a2, mie
+  ori     a2, a2, 0x8
+  csrw    mie, a2
   // Wait for the wakeup interrupt
   wfi
 
@@ -32,10 +36,13 @@ _start:
   // Jump to the entry point
   jr      t2
 
-exception:
-  wfi
-  j     exception
+#exception:
+#  wfi
+#  j     exception
+
+__snrt_isr:
+  j __snrt_isr
 
 .pushsection .boot_section,"aw",@progbits;
 entry_addr:
-  .word exception
+  .word __snrt_isr

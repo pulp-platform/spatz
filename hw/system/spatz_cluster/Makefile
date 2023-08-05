@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: SHL-0.51
 
 # Author: Matheus Cavalcante, ETH Zurich
+# Author: Mattia Sinigaglia, University of Bologna
 
 SPATZ_DIR := $(shell git rev-parse --show-toplevel 2>/dev/null || echo $$SPATZ_DIR)
 ROOT := ${SPATZ_DIR}
@@ -12,6 +13,15 @@ MKFILE_DIR  := $(dir $(MKFILE_PATH))
 
 # Configuration file
 SPATZ_CLUSTER_CFG ?= $(SPATZ_CLUSTER_DIR)/cfg/spatz_cluster.default.hjson
+SPATZ_CFG_NAME_SPLIT :=  $(subst /, ,$(SPATZ_CLUSTER_CFG))
+SPATZ_CFG_FILENAME:= $(word $(words $(SPATZ_CFG_NAME_SPLIT)), $(SPATZ_CFG_NAME_SPLIT))
+
+# Putchar utilization
+# The Standalone cluster uses the Host-Target Interface HTIF for printing messages
+# When the spatz cluster is integrated within an SoC, the HTIF could not be available and the regression test get stuck on the putchar function because of the missing comunication between the clients
+# When the HTIF is not available, set the following param to "NO"
+
+HTIF_SERVER ?= YES
 
 # Include Makefrag
 include $(ROOT)/util/Makefrag
@@ -129,7 +139,7 @@ bin/spatz_cluster.vsim: ${VSIM_BUILDDIR}/compile.vsim.tcl work/lib/libfesvr_vsim
 	$(call QUESTASIM,tb_bin)
 
 clean.vsim:
-	rm -rf bin/spatz_cluster.vsim bin/spatz_cluster.vsim.gui work-vsim work vsim.wlf vish_stacktrace.vstf transcript
+	rm -rf bin/spatz_cluster.vsim bin/spatz_cluster.vsim.gui work-vsim work vsim.wlf vish_stacktrace.vstf transcript src/generated/
 
 #######
 # VCS #
@@ -167,13 +177,14 @@ lint/tmp/files: ${BENDER}
 ## Build SW into sw/build with the LLVM toolchain
 sw: clean.sw
 	mkdir -p sw/build
-	cd sw/build && ${CMAKE} -DLLVM_PATH=${LLVM_INSTALL_DIR} -DGCC_PATH=${GCC_INSTALL_DIR} -DPYTHON=${PYTHON} .. && make
+	cd sw/build && ${CMAKE} -DLLVM_PATH=${LLVM_INSTALL_DIR} -DGCC_PATH=${GCC_INSTALL_DIR} -DHTIF_SERVER=${HTIF_SERVER}-DSPATZ_CFG_FILENAME=${SPATZ_CFG_FILENAME} -DPYTHON=${PYTHON} .. && make
 
 # VSIM
 ## Build SW into sw/build with the LLVM toolchain (including tests) for Questasim simulator
 sw.vsim: clean.sw bin/spatz_cluster.vsim
 	mkdir -p sw/build
-	cd sw/build && ${CMAKE} -DLLVM_PATH=${LLVM_INSTALL_DIR} -DGCC_PATH=${GCC_INSTALL_DIR} -DPYTHON=${PYTHON} -DSNITCH_SIMULATOR=../../../../../hw/system/spatz_cluster/bin/spatz_cluster.vsim -DBUILD_TESTS=ON .. && make -j8
+	cd sw/build && ${CMAKE} -DLLVM_PATH=${LLVM_INSTALL_DIR} -DGCC_PATH=${GCC_INSTALL_DIR} -DHTIF_SERVER=${HTIF_SERVER} -DSPATZ_CFG_FILENAME=${SPATZ_CFG_FILENAME} -DPYTHON=${PYTHON} -DSNITCH_SIMULATOR=../../../../../hw/system/spatz_cluster/bin/spatz_cluster.vsim -DBUILD_TESTS=ON .. && make -j8
+	echo -e "\033[31m ***IMPORTANT*** SW compilation has done for the following config file: "$(SPATZ_CFG_FILENAME)
 
 ## Build SW and run all tests with Questasim simulator
 sw.test.vsim: sw.vsim
@@ -183,7 +194,8 @@ sw.test.vsim: sw.vsim
 ## Build SW into sw/build with the LLVM toolchain (including tests) for VCS simulator
 sw.vcs: clean.sw bin/spatz_cluster.vcs
 	mkdir -p sw/build
-	cd sw/build && ${CMAKE} -DLLVM_PATH=${LLVM_INSTALL_DIR} -DGCC_PATH=${GCC_INSTALL_DIR} -DPYTHON=${PYTHON} -DSNITCH_SIMULATOR=../../../../../hw/system/spatz_cluster/bin/spatz_cluster.vcs -DBUILD_TESTS=ON .. && make -j8
+	cd sw/build && ${CMAKE} -DLLVM_PATH=${LLVM_INSTALL_DIR} -DGCC_PATH=${GCC_INSTALL_DIR} -DHTIF_SERVER=${HTIF_SERVER} -DSPATZ_CFG_FILENAME=${SPATZ_CFG_FILENAME} -DPYTHON=${PYTHON} -DSNITCH_SIMULATOR=../../../../../hw/system/spatz_cluster/bin/spatz_cluster.vcs -DBUILD_TESTS=ON .. && make -j8
+	echo -e "\033[31m ***IMPORTANT*** SW compilation has done for the following config file: "$(SPATZ_CFG_FILENAME)
 
 ## Build SW and run all tests with VCS simulator
 sw.test.vcs: sw.vcs
@@ -193,7 +205,8 @@ sw.test.vcs: sw.vcs
 ## Build SW into sw/build with the LLVM toolchain (including tests) for Verilator simulator
 sw.vlt: clean.sw bin/spatz_cluster.vlt
 	mkdir -p sw/build
-	cd sw/build && ${CMAKE} -DLLVM_PATH=${LLVM_INSTALL_DIR} -DGCC_PATH=${GCC_INSTALL_DIR} -DPYTHON=${PYTHON} -DSNITCH_SIMULATOR=../../../../../hw/system/spatz_cluster/bin/spatz_cluster.vlt -DBUILD_TESTS=ON .. && make -j8
+	cd sw/build && ${CMAKE} -DLLVM_PATH=${LLVM_INSTALL_DIR} -DGCC_PATH=${GCC_INSTALL_DIR} -DHTIF_SERVER=${HTIF_SERVER} -DSPATZ_CFG_FILENAME=${SPATZ_CFG_FILENAME} -DPYTHON=${PYTHON} -DSNITCH_SIMULATOR=../../../../../hw/system/spatz_cluster/bin/spatz_cluster.vlt -DBUILD_TESTS=ON .. && make -j8
+	echo -e "\033[31m ***IMPORTANT*** SW compilation has done for the following config file: "$(SPATZ_CFG_FILENAME)
 
 ## Build SW and run all tests with Verilator simulator
 sw.test.vlt: sw.vlt

@@ -4,6 +4,10 @@
 
 #include "../shared/start_snitch.S"
 
+#include <spatz_cluster_peripheral.h>
+
+//.global BOOTDATA
+
 # Function to terminate execution.
 #
 # Expecting:
@@ -27,6 +31,21 @@ _snrt_exit:
     bnez      a0, 1f
     slli      t0, t0, 1
     ori       t0, t0, 1
+
+    # Load the start address and size of the TCDM
+    li         t1, @MEM_TCDM_ORIGIN@
+    li         t2, @MEM_TCDM_SIZE@
+
+    # Final address of the TCDM
+    add     t1, t1, t2
+
+    # Address of the EOC register
+    addi     t1, t1, SPATZ_CLUSTER_PERIPHERAL_CLUSTER_EOC_EXIT_REG_OFFSET
+
+    # Return to EOC register
+    sw         t0, 0(t1)
+
+    # Return to HTIF
     la        t1, tohost
     sw        t0, 0(t1)
 1:  ret

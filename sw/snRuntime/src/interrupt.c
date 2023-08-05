@@ -66,6 +66,7 @@ void __snrt_isr(void) {
                 irq_m_cluster(core_idx);
                 break;
         }
+        // enable interrupts
     } else {
         // exceptions not handled, halt
         while (1)

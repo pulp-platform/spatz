@@ -162,10 +162,10 @@ module testharness (
     .clk_i           (clk_i                ),
     .rst_ni          (rst_ni               ),
     .meip_i          ('0                   ),
-    .msip_i          ('0                   ),
+    .msip_i          ( debug_req                   ),
     .mtip_i          ('0                   ),
   % if cfg['enable_debug']:
-    .debug_req_i     ( debug_req           ),
+    .debug_req_i     ( '0           ),
   % endif
   % if cfg['axi_cdc_enable']:
     % if cfg['sw_rst_enable']:
