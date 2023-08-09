@@ -12,6 +12,7 @@ module spatz_mxu
   input  logic             rst_ni,
   input  vrf_data_t  [2:0] operands_i,
   input  logic             enable_mx_i,
+  input  logic             enable_fpu_i,
   input  logic             result_valid_i,
   input  logic       [2:0] operands_ready_i,
   input  logic             vrf_wvalid_i,
@@ -29,7 +30,6 @@ module spatz_mxu
   output logic             result_ready_o,
   output vlen_t            offset_o
 );
-
 
   `include "common_cells/registers.svh"
 
@@ -58,7 +58,6 @@ module spatz_mxu
   vrf_data_t [NrACCBanks-1:0] accu_result_q;
   vrf_data_t wdata_q;
   logic [NrACCBanks-1:0] waddr_onehot;
-
 
   logic             load_vd;
   logic             ipu_en;
@@ -104,10 +103,8 @@ module spatz_mxu
             accu_result_q[accreg] <= wdata_q;
         end
         /* verilator lint_on NOLATCH */
-
+        
     end: gen_write_mem
-
-
 
   always_comb begin
     load_vd = 0;
@@ -180,7 +177,6 @@ module spatz_mxu
     end
   end
 
-
   always_comb begin : rw_enable_proc
     mx_read_enable = '0;
     mx_write_enable_d = '0;
@@ -193,12 +189,11 @@ module spatz_mxu
 
   //Enable when reaching first element of row and operands ready.
   //If in the first word also wait for vd ready.
-
   assign ipu_en          = enable_mx_i ? load_vd || |mx_read_enable ? |operands_ready_i : result_valid_i : '0;
   assign word_commited_o = enable_mx_i ? ipu_en && (part_col == 3 || (num_cols == 4 && part_col == 7) || part_col == 15) : '0;
   assign read_enable_o   = enable_mx_i ? mx_read_enable : '0;
   assign operand_o       = enable_mx_i ? {operand3, operand_row, operand2} : 'x;
-  assign write_enable_o  = enable_mx_i ? mx_write_enable_q[1] : '0;
+  assign write_enable_o  = enable_mx_i ? (enable_fpu_i ? mx_write_enable_q[1] : mx_write_enable_q[0]) : '0;
   assign ipu_en_o        = enable_mx_i ? ipu_en : '0;
   assign offset_o        = enable_mx_i ? mx_write_enable_q[0] ? part_col : part_col : '0;
   assign result_ready_o  = enable_mx_i ? (|mx_read_enable ? |operands_ready_i : '1) || vrf_wvalid_i : '0;
