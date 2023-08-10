@@ -109,6 +109,8 @@ package spatz_pkg;
     VMSEQ, VMSNE, VMSLTU, VMSLT, VMSLEU, VMSLE, VMSGTU, VMSGT,
     // Integer add-with-carry and subtract-with-borrow carry-out instructions
     VMADC, VMSBC,
+    // MXU Matrix multiplication and dot product instructions
+    MXMACC, MXFMACC,
     // Mask operations
     VMANDNOT, VMAND, VMOR, VMXOR, VMORNOT, VMNAND, VMNOR, VMXNOR,
     // Slide instructions
@@ -119,6 +121,8 @@ package spatz_pkg;
     VSE, VSSE, VSXE,
     // Config instruction
     VCFG,
+    // MXU Config instruction
+    MCFG,
     // VCSR
     VCSR,
     // Floating point instructions
@@ -150,6 +154,8 @@ package spatz_pkg;
     logic set_vstart;
     logic clear_vstart;
     logic reset_vstart;
+    // MXU
+    tile_dim_e dimTile;
   } op_cfg_t;
 
   typedef struct packed {
@@ -160,6 +166,10 @@ package spatz_pkg;
     logic vm;
     logic use_carry_borrow_in;
     logic is_scalar;
+
+    // MXU
+    logic is_mx;
+
     logic is_narrowing;
     logic is_reduction;
     logic switch_rs1_rd;
@@ -226,6 +236,12 @@ package spatz_pkg;
     vtype_t vtype;
     vlen_t vl;
     vlen_t vstart;
+
+    // MXU
+    tile_e matrix;
+    elen_t tile_M;
+    elen_t tile_N;
+    elen_t tile_K;
   } spatz_req_t;
 
   //////////////////////////////////

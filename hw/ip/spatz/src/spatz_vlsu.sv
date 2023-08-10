@@ -108,6 +108,15 @@ module spatz_vlsu
       EW_32: begin
         spatz_req_d.vl     = spatz_req_i.vl << 2;
         spatz_req_d.vstart = spatz_req_i.vstart << 2;
+        // MXU
+        if (spatz_req_i.op_arith.is_mx) begin
+          unique case(spatz_req_i.matrix)
+            TILE_A: spatz_req_d.vl = spatz_req_i.vl << 2;
+            TILE_B: spatz_req_d.vl = spatz_req_i.vl << (spatz_req_i.tile_M == 8 && spatz_req_i.tile_N == 4 ? 1 : 2);
+            TILE_C: spatz_req_d.vl = spatz_req_i.vl << (spatz_req_i.tile_M == 8 && spatz_req_i.tile_N == 4 ? 1 : 2);
+            default: spatz_req_d.vl = spatz_req_i.vl << 2;
+          endcase
+        end
       end
       default: begin
         spatz_req_d.vl     = spatz_req_i.vl << MAXEW;
@@ -384,6 +393,10 @@ module spatz_vlsu
   vrf_addr_t vd_vreg_addr;
   vrf_addr_t vs2_vreg_addr;
 
+  // MXU
+  elen_t [NrMemPorts-1:0] mx_offset_addr_d, mx_offset_addr_q;
+  `FF(mx_offset_addr_q, mx_offset_addr_d, '0)
+
   // Current element index and byte index that are being accessed at the register file
   vreg_elem_t vd_elem_id;
   vreg_elem_t vs2_elem_id_d, vs2_elem_id_q;
@@ -392,12 +405,27 @@ module spatz_vlsu
   // Pending indexes
   logic [NrMemPorts-1:0] pending_index;
 
+  // MXU
+  elen_t tile_offset;
+  always_comb begin : tile_select
+    unique case(mem_spatz_req.matrix)
+      TILE_A: tile_offset = mem_spatz_req.tile_M;
+      TILE_B: tile_offset = mem_spatz_req.tile_N;
+      TILE_C: tile_offset = mem_spatz_req.tile_N;
+      default: tile_offset = mem_spatz_req.tile_M;
+    endcase
+  end
+
   // Calculate the memory address for each memory port
   addr_offset_t [NrMemPorts-1:0] mem_req_addr_offset;
   for (genvar port = 0; port < NrMemPorts; port++) begin: gen_mem_req_addr
     logic [31:0] addr;
     logic [31:0] stride;
     logic [31:0] offset;
+    // MXU
+    logic [31:0] mx_offset_load;
+    logic [31:0] mx_offset_store;
+    logic [31:0] mx_offset;
 
     // Pre-shuffling index offset
     typedef logic [int'(MAXEW)-1:0] maxew_t;
@@ -420,6 +448,11 @@ module spatz_vlsu
           EW_16: offset   = $signed(vrf_rdata_i[1][8 * word_index +: 16]);
           default: offset = $signed(vrf_rdata_i[1][8 * word_index +: 32]);
         endcase
+      // MXU
+      end else if(mem_spatz_req.op_arith.is_mx) begin
+        mx_offset_load = ((mem_counter_q[port] % tile_offset + port << 2)) * mem_spatz_req.rs2 + (mem_counter_q[port] / tile_offset << 2);
+        mx_offset_store = (mem_counter_q[port][4:0]) * mem_spatz_req.rs2 + (port << 2) + (mem_counter_q[port][$bits(vlen_t)-1:5] << 4);
+        offset = commit_insn_q.is_load ? mx_offset_load : mx_offset_store;
       end else begin
         offset = ({mem_counter_q[port][$bits(vlen_t)-1:MAXEW] << $clog2(NrMemPorts), mem_counter_q[port][int'(MAXEW)-1:0]} + (port << MAXEW)) * stride;
       end
@@ -427,6 +460,8 @@ module spatz_vlsu
       addr                      = mem_spatz_req.rs1 + offset;
       mem_req_addr[port]        = (addr >> MAXEW) << MAXEW;
       mem_req_addr_offset[port] = addr[int'(MAXEW)-1:0];
+      // MXU
+      mx_offset_addr_d[port]    = offset;
 
       pending_index[port] = (mem_idx_counter_q[port][$clog2(NrWordsPerVector*ELENB)-1:0] >> MAXEW) != vs2_vreg_addr[$clog2(NrWordsPerVector)-1:0];
     end

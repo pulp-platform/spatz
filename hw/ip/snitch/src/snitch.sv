@@ -2262,6 +2262,9 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
         end
       end
       // 1 source register (rs1) and 1 destination register (rd)
+      riscv_instr::MSETTILEM,
+      riscv_instr::MSETTILEK,
+      riscv_instr::MSETTILEN,
       riscv_instr::VSETVLI: begin
         if (RVV) begin
           write_rd        = 1'b0;
@@ -2352,6 +2355,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
       riscv_instr::VMULHU_VV,
       riscv_instr::VMULHSU_VV,
       riscv_instr::VMACC_VV,
+      riscv_instr::MXMACC_VV,
       riscv_instr::VNMSAC_VV,
       riscv_instr::VMADD_VV,
       riscv_instr::VNMSUB_VV,
@@ -2388,6 +2392,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
       riscv_instr::VFSGNJX_VV,
       riscv_instr::VFMUL_VV,
       riscv_instr::VFMADD_VV,
+      riscv_instr::MXFMACC_VV,
       riscv_instr::VFNMADD_VV,
       riscv_instr::VFMSUB_VV,
       riscv_instr::VFNMSUB_VV,
@@ -2464,6 +2469,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
       riscv_instr::VMULHU_VX,
       riscv_instr::VMULHSU_VX,
       riscv_instr::VMACC_VX,
+      riscv_instr::MXMACC_VX,
       riscv_instr::VNMSAC_VX,
       riscv_instr::VMADD_VX,
       riscv_instr::VNMSUB_VX,
@@ -2512,6 +2518,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
       riscv_instr::VFMSUB_VF,
       riscv_instr::VFNMSUB_VF,
       riscv_instr::VFMACC_VF,
+      riscv_instr::MXFMACC_VF,
       riscv_instr::VFNMACC_VF,
       riscv_instr::VFMSAC_VF,
       riscv_instr::VFNMSAC_VF,
@@ -2581,6 +2588,15 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
         end
       end
       // 2 source registers (rs1, rs2)
+      riscv_instr::MLE8_V_A,
+      riscv_instr::MLE8_V_B,
+      riscv_instr::MLE8_V_C,
+      riscv_instr::MLE16_V_A,
+      riscv_instr::MLE16_V_B,
+      riscv_instr::MLE16_V_C,
+      riscv_instr::MLE32_V_A,
+      riscv_instr::MLE32_V_B,
+      riscv_instr::MLE32_V_C,
       riscv_instr::VLSE8_V,
       riscv_instr::VLSE16_V,
       riscv_instr::VLSE32_V,
@@ -2597,6 +2613,15 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
         end
       end
       // 2 source registers (rs1, rs2) and memory store opeeration
+      riscv_instr::MSE8_V_A,
+      riscv_instr::MSE8_V_B,
+      riscv_instr::MSE8_V_C,
+      riscv_instr::MSE16_V_A,
+      riscv_instr::MSE16_V_B,
+      riscv_instr::MSE16_V_C,
+      riscv_instr::MSE32_V_A,
+      riscv_instr::MSE32_V_B,
+      riscv_instr::MSE32_V_C,
       riscv_instr::VSSE8_V,
       riscv_instr::VSSE16_V,
       riscv_instr::VSSE32_V,

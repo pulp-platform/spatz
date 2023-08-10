@@ -40,7 +40,7 @@ module spatz_simd_lane import spatz_pkg::*; import rvv_pkg::vew_e; #(
 
   // Multiplier
   always_comb begin: mult
-    is_mult = operation_valid_i && (operation_i inside {VMACC, VNMSAC, VMADD, VNMSUB, VMUL, VMULH, VMULHU, VMULHSU});
+    is_mult = operation_valid_i && (operation_i inside {VMACC, VNMSAC, VMADD, VNMSUB, VMUL, VMULH, VMULHU, VMULHSU, MXMACC});
 
     // Mute the multiplier
     mult_result = '0;
@@ -72,7 +72,9 @@ module spatz_simd_lane import spatz_pkg::*; import rvv_pkg::vew_e; #(
   always_comb begin : arith_operands
     unique case (operation_i)
       VMACC,
-      VNMSAC: begin
+      VNMSAC,
+      // MXU
+      MXMACC: begin
         arith_op1 = mult_result[Width-1:0];
         arith_op2 = op_d_i;
       end
@@ -216,7 +218,7 @@ module spatz_simd_lane import spatz_pkg::*; import rvv_pkg::vew_e; #(
       result_valid_o = 1'b1;
 
       unique case (operation_i)
-        VADD, VMACC, VMADD, VADC         : simd_result = adder_result[Width-1:0];
+        VADD, VMACC, VMADD, VADC, MXMACC : simd_result = adder_result[Width-1:0];
         VSUB, VRSUB, VNMSAC, VNMSUB, VSBC: simd_result = subtractor_result[Width-1:0];
         VMIN, VMINU                      : simd_result = $signed({op_s1_i[Width-1] & is_signed_i, op_s1_i}) <= $signed({op_s2_i[Width-1] & is_signed_i, op_s2_i}) ? op_s1_i : op_s2_i;
         VMAX, VMAXU                      : simd_result = $signed({op_s1_i[Width-1] & is_signed_i, op_s1_i}) > $signed({op_s2_i[Width-1] & is_signed_i, op_s2_i}) ? op_s1_i : op_s2_i;
