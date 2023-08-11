@@ -160,9 +160,9 @@ module spatz_controller
       end // spatz_req.op == VCFG
       // MXU
       if (spatz_req.op == MCFG) begin
-        tilem_d = spatz_req.op_cgf.dimTile == DIM_M ? spatz_req.rs1 : tilem_q;
-        tilen_d = spatz_req.op_cgf.dimTile == DIM_N ? spatz_req.rs1 : tilen_q;
-        tilek_d = spatz_req.op_cgf.dimTile == DIM_K ? spatz_req.rs1 : tilek_q;
+        tilem_d = spatz_req.op_cfg.dimTile == DIM_M ? spatz_req.rs1 : tilem_q;
+        tilen_d = spatz_req.op_cfg.dimTile == DIM_N ? spatz_req.rs1 : tilen_q;
+        tilek_d = spatz_req.op_cfg.dimTile == DIM_K ? spatz_req.rs1 : tilek_q;
       end
     end // spatz_req_valid
   end

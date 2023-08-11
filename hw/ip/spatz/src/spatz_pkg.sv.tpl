@@ -76,7 +76,7 @@ package spatz_pkg;
   localparam vew_e MAXEW = RVD ? EW_64 : EW_32;
 
   //Number of Accumulator Banks
-  localparam int unsigned NrACCBanks       = `ifdef N_ACC `N_ACC `else 16 `endif;
+  localparam int unsigned NrACCBanks = `ifdef N_ACC `N_ACC `else 16 `endif;
 
   //////////////////////
   // Type Definitions //

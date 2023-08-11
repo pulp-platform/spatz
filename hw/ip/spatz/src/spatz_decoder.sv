@@ -1863,13 +1863,13 @@ module spatz_decoder
 
           unique casez (decoder_req_i.instr)
             riscv_instr::MSETTILEM: begin
-              spatz_req.op_cgf.dimTile = DIM_M;
+              spatz_req.op_cfg.dimTile = DIM_M;
             end
             riscv_instr::MSETTILEK: begin
-              spatz_req.op_cgf.dimTile = DIM_K;
+              spatz_req.op_cfg.dimTile = DIM_K;
             end
             riscv_instr::MSETTILEN: begin
-              spatz_req.op_cgf.dimTile = DIM_N;
+              spatz_req.op_cfg.dimTile = DIM_N;
             end
             default: illegal_instr = 1'b1;
           endcase
