@@ -110,3 +110,5 @@ add_spatz_test_twoParam(dp-fft dp-fft/main.c 128 2)
 
 add_spatz_test_twoParam(sp-fft sp-fft/main.c 256 2)
 add_spatz_test_twoParam(sp-fft sp-fft/main.c 512 2)
+
+add_spatz_test_threeParam(mxu-toy mxu-toy/main.c 8 8 4)
