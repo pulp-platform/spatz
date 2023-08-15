@@ -271,7 +271,6 @@ module spatz_decoder
               spatz_req.use_vd         = 1'b1;
               spatz_req.rs1            = decoder_req_i.rs1;
               spatz_req.rs2            = decoder_req_i.rs2;
-              illegal_instr            = ~decoder_req_i.rs1_valid | ~decoder_req_i.rs2_valid;
             end
 
             riscv_instr::MSE8_V_A ,
@@ -290,7 +289,6 @@ module spatz_decoder
               spatz_req.vd_is_src      = 1'b1;
               spatz_req.rs1            = decoder_req_i.rs1;
               spatz_req.rs2            = decoder_req_i.rs2;
-              illegal_instr            = ~decoder_req_i.rs1_valid | ~decoder_req_i.rs2_valid;
             end
 
             default:
@@ -1859,7 +1857,6 @@ module spatz_decoder
           spatz_req.op      = MCFG;
           spatz_req.ex_unit = CON;
           spatz_req.op_arith.is_mx = 1'b1;
-          illegal_instr   = ~decoder_req_i.rs1_valid;
 
           unique casez (decoder_req_i.instr)
             riscv_instr::MSETTILEM: begin
