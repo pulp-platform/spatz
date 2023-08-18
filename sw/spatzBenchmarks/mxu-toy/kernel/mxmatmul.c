@@ -24,14 +24,14 @@
 
 
 #define TILE_LD_A
-#define TILE_LD_B
-#define MXMACC_TEST
+//#define TILE_LD_B
+//#define MXMACC_TEST
 
-void matmul_tiled_load_store_test(uint32_t *c, const uint32_t *a, const uint32_t *b,
+void matmul_tiled_load_store_test(double *c, const double *a, const double *b,
                  const unsigned int dim) {
 
   /* Vector Length Setting*/
-  asm volatile("vsetvli zero, %0, e32, m4, ta, ma" ::"r"(16));
+  asm volatile("vsetvli zero, %0, e64, m4, ta, ma" ::"r"(16));
 
   /* Tile Load Settings*/
   //asm volatile("msettilem t1, %0" ::"r" (8));
@@ -42,8 +42,8 @@ void matmul_tiled_load_store_test(uint32_t *c, const uint32_t *a, const uint32_t
   asm volatile("vmv.v.i v0, 0");
 
   /* Input and Output address*/
-  const uint32_t *a_ = a;
-  const uint32_t *c_ = c;
+  const double *a_ = a;
+  const double *c_ = c;
 
   /* Load and Store Testing*/
   // Load test (Tile load + Vector store)
@@ -55,14 +55,14 @@ void matmul_tiled_load_store_test(uint32_t *c, const uint32_t *a, const uint32_t
   asm volatile("mse32.v.c v0, (%0), %1;" ::"r"(c_), "r"(8));
 }
 
-void matmul_tiled_mxmacc_test(uint32_t *c, const uint32_t *a, const uint32_t *b,
+void matmul_tiled_mxmacc_test(double *c, const double *a, const double *b,
                  const unsigned int dim) {
 
   /* Vector Length Setting*/
-  asm volatile("vsetvli zero, %0, e32, m4, ta, ma" ::"r"(32));
-  const uint32_t *a_ = a;
-  const uint32_t *b_ = b;
-  const uint32_t *c_ = c;
+  asm volatile("vsetvli zero, %0, e64, m4, ta, ma" ::"r"(32));
+  const double *a_ = a;
+  const double *b_ = b;
+  const double *c_ = c;
 
 
   /* Tile Load A*/
@@ -71,7 +71,7 @@ void matmul_tiled_mxmacc_test(uint32_t *c, const uint32_t *a, const uint32_t *b,
   asm volatile("msettilen t2, %0" ::"r" (4));
   asm volatile("vmv.v.i v0, 0");
   asm volatile("mle32.v.a v0, (%0), %1;" ::"r"(a_), "r"(4));
-  //asm volatile("vse32.v v0, (%0);" ::"r"(c_)); // Optional Print
+  asm volatile("vse32.v v0, (%0);" ::"r"(c_)); // Optional Print
 #endif
 
   /* Tile Load B*/

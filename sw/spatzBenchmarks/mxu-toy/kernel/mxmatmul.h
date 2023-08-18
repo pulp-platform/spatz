@@ -20,8 +20,8 @@
 #define MXMATMUL_H
 
 #include <stdint.h>
-void matmul_tiled_load_store_test(uint32_t *c, const uint32_t *a, const uint32_t *b,
+void matmul_tiled_load_store_test(double *c, const double *a, const double *b,
                  const unsigned int dim) __attribute__((always_inline));
-void matmul_tiled_mxmacc_test(uint32_t *c, const uint32_t *a, const uint32_t *b,
-                 const unsigned int dim) __attribute__((always_inline));                            
+void matmul_tiled_mxmacc_test(double *c, const double *a, const double *b,
+                 const unsigned int dim) __attribute__((always_inline));
 #endif

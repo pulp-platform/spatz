@@ -20,7 +20,7 @@
 #include <snrt.h>
 #include <stdio.h>
 
-#include "data/data_gemm.h"
+#include "data/data_8_8_4.h"
 #include "kernel/mxmatmul.c"
 
 // Define Matrix dimensions:
@@ -35,7 +35,7 @@
 #define KERNEL_K 8
 #endif
 // Initialize the matrices
-void init_matrix(uint32_t *matrix, const uint32_t *src,
+void init_matrix(double *matrix, const double *src,
                  const unsigned int rows_start, const unsigned int rows_end,
                  const unsigned int num_columns) {
   for (unsigned int i = rows_start; i < rows_end; ++i) {
@@ -47,13 +47,13 @@ void init_matrix(uint32_t *matrix, const uint32_t *src,
 
 
 // Verify the matrices
-int verify_matrix(uint32_t *matrix, const uint32_t *checksum,
+int verify_matrix(double *matrix, const double *checksum,
                   const unsigned int num_rows, const unsigned int num_columns) {
   for (unsigned int i = 0; i < num_rows; ++i) {
-    uint32_t sum = 0;
+    double sum = 0;
     for (unsigned int j = 0; j < num_columns; ++j) {
       //printf("The matrix result at row %d column %d is %d. \n", i, j, matrix[i * num_columns + j] );
-      sum += (uint32_t)matrix[i * num_columns + j];
+      sum += (double)matrix[i * num_columns + j];
     }
     printf("%d times sum checking. \n", i);
     printf("The golden is %d. \n", checksum[i]);
@@ -66,7 +66,7 @@ int verify_matrix(uint32_t *matrix, const uint32_t *checksum,
 }
 
 
-void print_matrix(int32_t const *matrix, unsigned int num_rows,
+void print_matrix(double const *matrix, unsigned int num_rows,
                   unsigned int num_columns) {
   printf("0x%8X\n", (unsigned int)matrix);
   for (unsigned int i = 0; i < num_rows; ++i) {
@@ -77,9 +77,9 @@ void print_matrix(int32_t const *matrix, unsigned int num_rows,
   }
 }
 
-uint32_t *a;
-uint32_t *b;
-uint32_t *c;
+double *a;
+double *b;
+double *c;
 
 int main() {
   const unsigned int num_cores = snrt_cluster_core_num();
@@ -92,9 +92,9 @@ int main() {
 
   // Allocate the matrices in the local tile
   if (cid == 0) {
-    a = (uint32_t *)snrt_l1alloc(gemm_l.M * gemm_l.K * sizeof(uint32_t));
-    b = (uint32_t *)snrt_l1alloc(gemm_l.K * gemm_l.N * sizeof(uint32_t));
-    c = (uint32_t *)snrt_l1alloc(gemm_l.M * gemm_l.N * sizeof(uint32_t));
+    a = (double *)snrt_l1alloc(gemm_l.M * gemm_l.K * sizeof(double));
+    b = (double *)snrt_l1alloc(gemm_l.K * gemm_l.N * sizeof(double));
+    c = (double *)snrt_l1alloc(gemm_l.M * gemm_l.N * sizeof(double));
   }
 
   // Wait for all cores to finish
@@ -102,9 +102,9 @@ int main() {
 
   // Initialize matrices
   if (cid == 0) {
-    snrt_dma_start_1d(a, gemm_A_dram, gemm_l.M * gemm_l.K * sizeof(uint32_t));
-    snrt_dma_start_1d(b, gemm_B_dram, gemm_l.K * gemm_l.N * sizeof(uint32_t));
-    snrt_dma_start_1d(c, gemm_C_dram, gemm_l.M * gemm_l.N * sizeof(uint32_t));
+    snrt_dma_start_1d(a, gemm_A_dram, gemm_l.M * gemm_l.K * sizeof(double));
+    snrt_dma_start_1d(b, gemm_B_dram, gemm_l.K * gemm_l.N * sizeof(double));
+    snrt_dma_start_1d(c, gemm_C_dram, gemm_l.M * gemm_l.N * sizeof(double));
     snrt_dma_wait_all();
   }
 
@@ -126,7 +126,7 @@ int main() {
   // End dump
   if (cid == 0) {
     for (unsigned int i = 0; i < 32; i++) {
-      printf("The martix c[%d]=%x, \n", i, c[i]);
+      printf("The martix c[%d]=%f, \n", i, c[i]);
     }
   }
 

@@ -5,13 +5,13 @@
 // Parameters for a GEMM
 
 {
-  kernel: "GEMM"
-  M: 8,
-  N: 8,
-  K: 4,
-  alpha: 0,
-  transpose_A: false,
-  transpose_B: true,
-  prec: 32,
-  expand: 0
+    kernel: "GEMM"
+    M: 8,
+    N: 8,
+    K: 4,
+    alpha: 0,
+    transpose_A: false,
+    transpose_B: true,
+    prec: 64,
+    expand: 0
 }
