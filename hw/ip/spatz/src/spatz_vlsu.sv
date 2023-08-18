@@ -121,6 +121,15 @@ module spatz_vlsu
       default: begin
         spatz_req_d.vl     = spatz_req_i.vl << MAXEW;
         spatz_req_d.vstart = spatz_req_i.vstart << MAXEW;
+        // MXU
+        if (spatz_req_i.op_arith.is_mx) begin
+          unique case(spatz_req_i.matrix)
+            TILE_A: spatz_req_d.vl = spatz_req_i.vl << MAXEW;
+            TILE_B: spatz_req_d.vl = spatz_req_i.vl << (spatz_req_i.tile_M == 8 && spatz_req_i.tile_N == 4 ? 2 : MAXEW);
+            TILE_C: spatz_req_d.vl = spatz_req_i.vl << (spatz_req_i.tile_M == 8 && spatz_req_i.tile_N == 4 ? 2 : MAXEW);
+            default: spatz_req_d.vl = spatz_req_i.vl << MAXEW;
+          endcase
+        end
       end
     endcase
   end: proc_spatz_req
