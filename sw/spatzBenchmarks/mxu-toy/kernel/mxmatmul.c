@@ -24,7 +24,7 @@
 
 
 #define TILE_LD_A
-//#define TILE_LD_B
+#define TILE_LD_B
 //#define MXMACC_TEST
 
 void matmul_tiled_load_store_test(double *c, const double *a, const double *b,
@@ -71,7 +71,7 @@ void matmul_tiled_mxmacc_test(double *c, const double *a, const double *b,
   asm volatile("msettilen t2, %0" ::"r" (4):"t2");
   asm volatile("vmv.v.i v0, 0");
   asm volatile("mle64.v.a v0, (%0), %1;" ::"r"(a_), "r"(4));
-  asm volatile("vse64.v v0, (%0);" ::"r"(c_)); // Optional Print
+//  asm volatile("vse64.v v0, (%0);" ::"r"(c_)); // Optional Print
 #endif
 
   /* Tile Load B*/
