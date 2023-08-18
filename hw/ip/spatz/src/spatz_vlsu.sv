@@ -450,7 +450,9 @@ module spatz_vlsu
         endcase
       // MXU
       end else if(mem_spatz_req.op_arith.is_mx) begin
-        mx_offset_load = ((mem_counter_q[port] % tile_offset + port << 3)) * mem_spatz_req.rs2 + (mem_counter_q[port] / tile_offset << 3);
+        mx_offset_load =
+          (((mem_counter_q[port] << $clog2(NrMemPorts)) >> $clog2(MemDataWidthB)) % tile_offset + port << 3) * mem_spatz_req.rs2 +
+          (((mem_counter_q[port] << $clog2(NrMemPorts)) >> $clog2(MemDataWidthB)) / tile_offset        << 3);
         mx_offset_store = (mem_counter_q[port][4:0]) * mem_spatz_req.rs2 + (port << 2) + (mem_counter_q[port][$bits(vlen_t)-1:5] << 4);
         offset = commit_insn_q.is_load ? mx_offset_load : mx_offset_store;
       end else begin
