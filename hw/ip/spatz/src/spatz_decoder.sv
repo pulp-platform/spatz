@@ -219,6 +219,9 @@ module spatz_decoder
         riscv_instr::MLE32_V_A,
         riscv_instr::MLE32_V_B,
         riscv_instr::MLE32_V_C,
+        riscv_instr::MLE64_V_A,
+        riscv_instr::MLE64_V_B,
+        riscv_instr::MLE64_V_C,
         riscv_instr::MSE8_V_A ,
         riscv_instr::MSE8_V_B ,
         riscv_instr::MSE8_V_C ,
@@ -227,7 +230,10 @@ module spatz_decoder
         riscv_instr::MSE16_V_C,
         riscv_instr::MSE32_V_A,
         riscv_instr::MSE32_V_B,
-        riscv_instr::MSE32_V_C: begin
+        riscv_instr::MSE32_V_C,
+        riscv_instr::MSE64_V_A,
+        riscv_instr::MSE64_V_B,
+        riscv_instr::MSE64_V_C: begin
           automatic vreg_t ls_vd         = decoder_req_i.instr[11:7];
           automatic vreg_t ls_rs1        = decoder_req_i.instr[19:15];
           automatic vreg_t ls_rs2        = decoder_req_i.instr[24:20];
@@ -241,6 +247,7 @@ module spatz_decoder
             3'b000: spatz_req.vtype.vsew = EW_8;
             3'b101: spatz_req.vtype.vsew = EW_16;
             3'b110: spatz_req.vtype.vsew = EW_32;
+            3'b111: spatz_req.vtype.vsew = EW_64;
             default: illegal_instr       = 1'b1;
           endcase
 
@@ -264,7 +271,10 @@ module spatz_decoder
             riscv_instr::MLE16_V_C,
             riscv_instr::MLE32_V_A,
             riscv_instr::MLE32_V_B,
-            riscv_instr::MLE32_V_C: begin
+            riscv_instr::MLE32_V_C,
+            riscv_instr::MLE64_V_A,
+            riscv_instr::MLE64_V_B,
+            riscv_instr::MLE64_V_C: begin
               spatz_req.op             = VLE;
               spatz_req.op_mem.is_load = 1'b1;
               spatz_req.vd             = ls_vd;
@@ -281,7 +291,10 @@ module spatz_decoder
             riscv_instr::MSE16_V_C,
             riscv_instr::MSE32_V_A,
             riscv_instr::MSE32_V_B,
-            riscv_instr::MSE32_V_C: begin
+            riscv_instr::MSE32_V_C,
+            riscv_instr::MSE64_V_A,
+            riscv_instr::MSE64_V_B,
+            riscv_instr::MSE64_V_C: begin
               spatz_req.op             = VSE;
               spatz_req.op_mem.is_load = 1'b0;
               spatz_req.vd             = ls_vd;
