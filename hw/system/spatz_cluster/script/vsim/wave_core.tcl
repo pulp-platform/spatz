@@ -160,4 +160,8 @@ add wave -noupdate -group core[$1] -group Spatz -group VSLDU /tb_bin/i_dut/i_clu
 
 add wave -noupdate -group core[$1] -group Spatz -group VFU /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/i_spatz/i_vfu/*
 
+add wave -noupdate -group core[$1] -group Spatz -group MXU /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/i_spatz/i_vfu/i_mxu/*
+
+add wave -noupdate -group core[$1] -group Spatz -group FPU /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[0]/i_spatz_cc/i_spatz/i_vfu/gen_fpu/*
+
 add wave -noupdate -group core[$1] -group Internal /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/*
