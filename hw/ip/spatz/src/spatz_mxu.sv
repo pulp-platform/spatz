@@ -67,17 +67,23 @@ module spatz_mxu
   vrf_data_t  [1:0] previous_operands_q;
   vrf_data_t  [1:0] previous_operands_d;
 
+  // Manage FSM
   `FF(block_q, block_d, first)
+  // mx_write_en_d, _q, _qq (last write to VRF)
   `FFL(mx_write_enable_q[0], mx_write_enable_d, enable_mx_i, '0)
   `FFL(mx_write_enable_q[1], mx_write_enable_q[0], enable_mx_i, '0)
   `FFL(mx_write_enable_q[2], mx_write_enable_q[1], enable_mx_i, '0)
   // Row input FPU operation counter
   `FF(col_counter, enable_mx_i ? ipu_en ? col_counter + 1 : col_counter : 0, '0)
+  // Row output FPU latch/vrf accumulator counter
   `FF(acc_counter, enable_mx_i ? result_valid_i && result_ready_o ? acc_counter + 1 : acc_counter : 0, '0)
+  // Save operands_i as current operands every time we get new operands
   `FFL(current_operands_q[1:0], current_operands_d[1:0], enable_mx_i && &operands_ready_i[1:0], '0)
+  // Save operands_i as previous operands every time we get new operands and we are starting a new col
   `FFL(previous_operands_q, previous_operands_d[1:0], enable_mx_i && &operands_ready_i[1:0] && part_col == 0, '0)
 
   always_ff @(posedge clk_i) begin: proc_wdata_q
+      // Save the FPU result in a FF before going into the latch
       wdata_q <= result_i;
     end: proc_wdata_q
 
@@ -104,7 +110,7 @@ module spatz_mxu
             accu_result_q[accreg] <= wdata_q;
         end
         /* verilator lint_on NOLATCH */
-        
+
     end: gen_write_mem
 
   always_comb begin
@@ -117,8 +123,12 @@ module spatz_mxu
     if(enable_mx_i) begin
         num_cols = tile_dimN;
         num_rows = tile_dimM;
-        load_vd = num_rows == 4 ? vl_i <= 0 : vl_i <= 4;
+        // Todo: parametrize me
+        // Load as many vd as (M / OperandsPerVRFFetch)
+        load_vd  = num_rows == 4 ? vl_i <= 0 : vl_i <= 4;
+        // mtx_A row counter from 0 to M
         part_col = num_cols == 4 ? num_rows == 4 ? col_counter[1:0] : col_counter[2:0] : col_counter;
+        // Accumulator counter from 0 to M
         part_acc = num_cols == 4 ? num_rows == 4 ? acc_counter[1:0] : acc_counter[2:0] : acc_counter;
     end
   end
@@ -134,31 +144,33 @@ module spatz_mxu
     next_block              = '0;
 
     if(enable_mx_i) begin
-      current_operands_d[1:0] = &operands_ready_i[1:0]?operands_i[1:0] : current_operands_q[1:0];
+      // operadns_ready_i is asserted only for one cycle
+      current_operands_d[1:0] = &operands_ready_i[1:0] ? operands_i[1:0] : current_operands_q[1:0];
       previous_operands_d     = &operands_ready_i[1:0] && part_col == 0 ? operands_i[1:0] : previous_operands_q[1:0];
+      // Sending the current A quadword for the last time to the FPU
+      // Proceed to the next A quadword
       next_block              = &part_col[1:0] && ipu_en;
-      //Operands FSM
+      // Operands FSM
       case (block_q)
         first : begin
           operand1       = previous_operands_d[1];
           operand2       = previous_operands_d[0];
-          block_d        = next_block && num_rows != 4 ? second : block_d;
-          fetch_operands = part_col == 0 || part_col == 4;
+          block_d        = next_block && num_rows != 4 ? second : block_q;
         end
         second : begin
           operand1 = current_operands_d[1];
           operand2 = previous_operands_d[0];
-          block_d  = next_block ? num_cols == 4 ? first : third : block_d;
+          block_d  = next_block ? num_cols == 4 ? first : third : block_q;
         end
         third : begin
           operand1 = previous_operands_d[1];
           operand2 = current_operands_d[0];
-          block_d  = next_block ? forth : block_d;
+          block_d  = next_block ? forth : block_q;
         end
         forth : begin
           operand1 = current_operands_d[1];
           operand2 = current_operands_d[0];
-          block_d  = next_block ? first : block_d;
+          block_d  = next_block ? first : block_q;
         end
         default : begin
           operand1 = previous_operands_d[1];
@@ -181,20 +193,68 @@ module spatz_mxu
     mx_read_enable = '0;
     mx_write_enable_d = '0;
     if (enable_mx_i) begin
+      // Enable a read if we need an operand
       mx_read_enable[1:0] = {2{part_col == 0 || part_col == 4}};
       mx_read_enable[2]   = load_vd;
+      // Write back into the VRF if we have processed all the words
+      // and we got a valid result
       mx_write_enable_d   = vl_i >= last_word_i && result_valid_i;
     end
   end
 
   //Enable when reaching first element of row and operands ready.
   //If in the first word also wait for vd ready.
-  assign ipu_en          = enable_mx_i ? load_vd || |mx_read_enable ? |operands_ready_i : result_valid_i : '0;
-  assign word_commited_o = enable_mx_i ? ipu_en && (part_col == 3 || (num_cols == 4 && part_col == 7) || part_col == 15) : '0;
+
+  ////////////////
+  // MXU -> VRF //
+  ////////////////
+
+  // Request an operand from the VRF
   assign read_enable_o   = enable_mx_i ? mx_read_enable : '0;
-  assign operand_o       = enable_mx_i ? {operand3, operand_row, operand2} : 'x;
+  // We have consumed one A quadword
+  assign word_commited_o = enable_mx_i ? ipu_en && (part_col == 3 || (num_cols == 4 && part_col == 7) || part_col == 15) : '0;
+
+  ////////////////
+  // VRF -> MXU //
+  ////////////////
+
+  // Get an operand from the VRF
+  // operands_ready_i : vrf_rdata_valid_o
+  // operands_i       : vrf_rdata_o
+
+  ////////////////
+  // MXU -> FPU //
+  ////////////////
+
+  // Feed the functional units
+  // ipu_en    : fpu_valid_i
+  // operand_o : fpu_operands_i
+  assign ipu_en          = enable_mx_i ? |mx_read_enable ? |operands_ready_i : result_valid_i : '0;
   assign ipu_en_o        = enable_mx_i ? ipu_en : '0;
-  assign offset_o        = enable_mx_i ? mx_write_enable_q[0] ? part_col : part_col : '0;
+  assign operand_o       = enable_mx_i ? {operand3, operand_row, operand2} : 'x;
+
+  ////////////////
+  // FPU -> MXU //
+  ////////////////
+
+  // Receive a result from the FPUs
+  // result_i       : fpu_result_o
+  // result_valid_i : fpu_valid_o
+  // result_ready_o : fpu_ready_i
   assign result_ready_o  = enable_mx_i ? (|mx_read_enable ? |operands_ready_i : '1) || vrf_wvalid_i : '0;
+
+  ////////////////
+  // MXU -> VRF //
+  ////////////////
+
+  // write_enable_o : vrf_wreq_i
   assign write_enable_o  = enable_mx_i ? (enable_fpu_i ? mx_write_enable_q[2] : mx_write_enable_q[0]) : '0;
+
+  ////////////////////
+  // VRF addressing //
+  ////////////////////
+
+  // offset_o offsets the vrf_addr_i
+  assign offset_o        = enable_mx_i ? mx_write_enable_q[0] ? part_col : part_col : '0;
+
 endmodule
