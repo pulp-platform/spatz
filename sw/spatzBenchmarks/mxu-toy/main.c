@@ -20,7 +20,7 @@
 #include <snrt.h>
 #include <stdio.h>
 
-#include "data/data_8_8_4.h"
+#include "data/data_8_4_4.h"
 #include "kernel/mxmatmul.c"
 
 // Define Matrix dimensions:
@@ -32,7 +32,7 @@
 #define KERNEL_N 4
 #endif
 #ifndef KERNEL_K
-#define KERNEL_K 8
+#define KERNEL_K 4
 #endif
 // Initialize the matrices
 void init_matrix(double *matrix, const double *src,
@@ -124,9 +124,20 @@ int main() {
   snrt_cluster_hw_barrier();
 
   // End dump
+  double checksum = 0;
   if (cid == 0) {
+    // Print first 32 elements of matrix C
     for (unsigned int i = 0; i < 32; i++) {
       printf("The martix c[%d]=%f, \n", i, c[i]);
+    }
+
+    // Calculate and print checksums
+    for (unsigned int i = 0; i < gemm_l.M; i++) {
+      checksum = 0;
+      for (unsigned int j = 0; j < gemm_l.N; j++) {
+        checksum += c[i * gemm_l.N + j];
+      }
+      printf("Checksum[%d]=%f\n", i, checksum);
     }
   }
 
