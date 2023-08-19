@@ -46,8 +46,7 @@ module spatz_mxu
 
   logic [2:0] mx_read_enable;
   logic       mx_write_enable_d;
-  logic [1:0] mx_write_enable_q;
-  logic       fetch_operands;
+  logic [2:0] mx_write_enable_q;
 
   vrf_data_t operand1;
   vrf_data_t operand2;
@@ -71,6 +70,8 @@ module spatz_mxu
   `FF(block_q, block_d, first)
   `FFL(mx_write_enable_q[0], mx_write_enable_d, enable_mx_i, '0)
   `FFL(mx_write_enable_q[1], mx_write_enable_q[0], enable_mx_i, '0)
+  `FFL(mx_write_enable_q[2], mx_write_enable_q[1], enable_mx_i, '0)
+  // Row input FPU operation counter
   `FF(col_counter, enable_mx_i ? ipu_en ? col_counter + 1 : col_counter : 0, '0)
   `FF(acc_counter, enable_mx_i ? result_valid_i && result_ready_o ? acc_counter + 1 : acc_counter : 0, '0)
   `FFL(current_operands_q[1:0], current_operands_d[1:0], enable_mx_i && &operands_ready_i[1:0], '0)
@@ -124,7 +125,6 @@ module spatz_mxu
 
   always_comb begin : operand_proc
     block_d                 = block_q;
-    fetch_operands          = '0;
     operand_row             = '0;
     operand1                = '0;
     operand2                = '0;
@@ -173,7 +173,7 @@ module spatz_mxu
       end
 
       //Replicate one element to apply on whole vreg_data
-      operand_row = {1*N_IPU{operand1[part_col[1:0]*ELEN +: ELEN]}};
+      operand_row = {1*N_FPU{operand1[part_col[1:0]*ELEN +: ELEN]}};
     end
   end
 
@@ -193,8 +193,8 @@ module spatz_mxu
   assign word_commited_o = enable_mx_i ? ipu_en && (part_col == 3 || (num_cols == 4 && part_col == 7) || part_col == 15) : '0;
   assign read_enable_o   = enable_mx_i ? mx_read_enable : '0;
   assign operand_o       = enable_mx_i ? {operand3, operand_row, operand2} : 'x;
-  assign write_enable_o  = enable_mx_i ? (enable_fpu_i ? mx_write_enable_q[1] : mx_write_enable_q[0]) : '0;
   assign ipu_en_o        = enable_mx_i ? ipu_en : '0;
   assign offset_o        = enable_mx_i ? mx_write_enable_q[0] ? part_col : part_col : '0;
   assign result_ready_o  = enable_mx_i ? (|mx_read_enable ? |operands_ready_i : '1) || vrf_wvalid_i : '0;
+  assign write_enable_o  = enable_mx_i ? (enable_fpu_i ? mx_write_enable_q[2] : mx_write_enable_q[0]) : '0;
 endmodule

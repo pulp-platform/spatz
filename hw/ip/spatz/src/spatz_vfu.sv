@@ -160,8 +160,8 @@ module spatz_vfu
 
   // Is this a FPU instruction
   logic is_fpu_insn;
-  // MXU todo: check this, it's not contemplating MXFMACC
-  assign is_fpu_insn = FPU && spatz_req.op inside {[VFADD:VSDOTP]};
+  // MXU
+  assign is_fpu_insn = FPU && spatz_req.op inside {[VFADD:VSDOTP], MXFMACC};
 
   // Is the FPU busy?
   logic is_fpu_busy;
@@ -389,10 +389,10 @@ module spatz_vfu
     unique case (reduction_state_q)
       Reduction_NormalExecution: begin
         // Did we issue a word to the FUs?
-        word_issued = spatz_req_valid && &(in_ready | ~valid_operations) && operands_ready && !stall;
+        word_issued = op_is_mx ? mx_word_commited : spatz_req_valid && &(in_ready | ~valid_operations) && operands_ready && !stall;
 
         // Are we ready to accept a result?
-        result_ready = &(result_valid | ~pending_results) && ((result_tag.wb && vfu_rsp_ready_i) || vrf_wvalid_i);
+        result_ready = op_is_mx ? mx_result_ready : &(result_valid | ~pending_results) && ((result_tag.wb && vfu_rsp_ready_i) || vrf_wvalid_i);
 
         // Initialize the pointers
         reduction_pointer_d = '0;
@@ -554,6 +554,7 @@ module spatz_vfu
     };
 
     if (spatz_req_valid && vl_q == '0) begin
+      // MXU
       vreg_addr_d[0] = (spatz_req.vs2 + vstart) << $clog2(NrWordsPerVector);
       vreg_addr_d[1] = (spatz_req.vs1 + vstart) << $clog2(NrWordsPerVector);
       vreg_addr_d[2] = vd_start_addr + mx_offset;
