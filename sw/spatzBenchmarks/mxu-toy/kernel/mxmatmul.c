@@ -87,7 +87,7 @@ void matmul_tiled_mxmacc_test(double *c, const double *a, const double *b,
 #ifdef MXMACC_TEST
   asm volatile("vmv.v.i v8, 0");
   asm volatile("mxfmacc.vv v8, v0, v4");
-  //asm volatile("mse64.v.c v8, (%0), %1;" ::"r"(c_), "r"(8));
-  asm volatile("vse64.v v8, (%0);" ::"r"(c_)); // Optional Print
+  asm volatile("mse64.v.c v8, (%0), %1;" ::"r"(c_), "r"(4));
+  //asm volatile("vse64.v v8, (%0);" ::"r"(c_)); // Optional Print
 #endif
 }
