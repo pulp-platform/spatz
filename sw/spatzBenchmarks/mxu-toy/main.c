@@ -23,6 +23,8 @@
 #include "data/data_8_4_4.h"
 #include "kernel/mxmatmul.c"
 
+#define CHECK
+
 // Define Matrix dimensions:
 // C = AB with A=[MxK], B=[KxN], C=[MxN]
 #ifndef KERNEL_M
@@ -130,7 +132,7 @@ int main() {
     for (unsigned int i = 0; i < 32; i++) {
       printf("The martix c[%d]=%f, \n", i, c[i]);
     }
-
+#ifdef CHECK
     // Calculate and print checksums
     for (unsigned int i = 0; i < gemm_l.M; i++) {
       checksum = 0;
@@ -138,7 +140,14 @@ int main() {
         checksum += c[i * gemm_l.N + j];
       }
       printf("Checksum[%d]=%f\n", i, checksum);
+      double diff = checksum - (double)gemm_checksum[i];
+      if (diff < 0)
+        diff = -diff;
+      if (diff > 0.001) {
+        return i == 0 ? -1 : (int)i;
+      }
     }
+#endif
   }
 
   // Wait for all cores to finish
