@@ -23,19 +23,9 @@
 #include "data/data_8_4_4.h"
 #include "kernel/mxmatmul.c"
 
+// Enable result check
 #define CHECK
 
-// Define Matrix dimensions:
-// C = AB with A=[MxK], B=[KxN], C=[MxN]
-#ifndef KERNEL_M
-#define KERNEL_M 8
-#endif
-#ifndef KERNEL_N
-#define KERNEL_N 4
-#endif
-#ifndef KERNEL_K
-#define KERNEL_K 4
-#endif
 // Initialize the matrices
 void init_matrix(double *matrix, const double *src,
                  const unsigned int rows_start, const unsigned int rows_end,
