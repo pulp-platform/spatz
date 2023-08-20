@@ -126,7 +126,7 @@ module spatz_vlsu
           unique case(spatz_req_i.matrix)
             TILE_A: spatz_req_d.vl = spatz_req_i.vl << MAXEW;
             TILE_B: spatz_req_d.vl = spatz_req_i.vl << (spatz_req_i.tile_M == 8 && spatz_req_i.tile_N == 4 ? 2 : MAXEW);
-            TILE_C: spatz_req_d.vl = spatz_req_i.vl << (spatz_req_i.tile_M == 8 && spatz_req_i.tile_N == 4 ? 2 : MAXEW);
+            TILE_C: spatz_req_d.vl = spatz_req_i.vl << (spatz_req_i.tile_M == 8 && spatz_req_i.tile_N == 4 ? MAXEW : MAXEW);
             default: spatz_req_d.vl = spatz_req_i.vl << MAXEW;
           endcase
         end
@@ -233,6 +233,20 @@ module spatz_vlsu
   vlen_t [NrMemPorts-1:0] mem_idx_counter_d;
   vlen_t [NrMemPorts-1:0] mem_idx_counter_q;
 
+  // MXU
+  // The impact of this code is 2*NrPorts counters with $clog2(MAX_TILE) bits
+  localparam int unsigned MAX_TILE_M = 8;
+  localparam int unsigned MAX_TILE_N = 8;
+  // Counters to parametrically handle memory loads/stores
+  logic [NrMemPorts-1:0] [$clog2(MAX_TILE_M)-1:0] mx_cnt_m_d, mx_cnt_m_q;
+  logic [NrMemPorts-1:0] [$clog2(MAX_TILE_N)-1:0] mx_cnt_n_d, mx_cnt_n_q;
+  logic [NrMemPorts-1:0] mx_cnt_en_m, mx_cnt_en_n;
+  logic [NrMemPorts-1:0] mx_cnt_clr_m, mx_cnt_clr_n;
+  logic [$clog2(MAX_TILE_N)-1:0] mx_cnt_max_m, mx_cnt_max_n;
+  // Max counter for m and n counters
+  assign mx_cnt_max_m = (mem_spatz_req.tile_M[$clog2(MAX_TILE_M)-1:0] - 3'b1) >> ( commit_insn_q.is_load ? $clog2(NrMemPorts) : 0);
+  assign mx_cnt_max_n = (mem_spatz_req.tile_N[$clog2(MAX_TILE_M)-1:0] - 3'b1) >> (!commit_insn_q.is_load ? $clog2(NrMemPorts) : 0);
+
   for (genvar port = 0; port < NrMemPorts; port++) begin: gen_mem_counters
     delta_counter #(
       .WIDTH($bits(vlen_t))
@@ -265,6 +279,48 @@ module spatz_vlsu
     );
 
     assign mem_port_finished_q[port] = mem_spatz_req_valid && (mem_counter_q[port] == mem_counter_max[port]);
+
+    ////////////////////
+    //  MXU counters  //
+    ////////////////////
+
+    // We store row-wise
+    // Go to a new row when we finished the previous one
+    // Load instructions: we load  column-wise (sequence of non-unit-strided loads)
+    // Store instructions: we store row-wise (sequence of unit-strided stores)
+    assign mx_cnt_en_m[port] = mem_spatz_req.op_arith.is_mx & mem_counter_en[port] & (mx_cnt_clr_n[port] |  commit_insn_q.is_load);
+    assign mx_cnt_en_n[port] = mem_spatz_req.op_arith.is_mx & mem_counter_en[port] & (mx_cnt_clr_m[port] | ~commit_insn_q.is_load);
+    // Count up to (tile_size - 1), and tile_size is power of 2
+    assign mx_cnt_clr_m[port] = mx_cnt_m_q[port] == mx_cnt_max_m;
+    assign mx_cnt_clr_n[port] = mx_cnt_n_q[port] == mx_cnt_max_n;
+
+    counter #(
+      .WIDTH($clog2(MAX_TILE_M))
+    ) i_mx_cnt_m (
+      .clk_i     (clk_i             ),
+      .rst_ni    (rst_ni            ),
+      .clear_i   (mx_cnt_clr_m[port]),
+      .en_i      (mx_cnt_en_m[port] ),
+      .load_i    (/* Unused */      ),
+      .down_i    (1'b0              ), // We always count up
+      .d_i       ('0                ),
+      .q_o       (mx_cnt_m_q[port]  ),
+      .overflow_o(/* Unused */      )
+    );
+
+    counter #(
+      .WIDTH($clog2(MAX_TILE_N))
+    ) i_mx_cnt_n (
+      .clk_i     (clk_i             ),
+      .rst_ni    (rst_ni            ),
+      .clear_i   (mx_cnt_clr_n[port]),
+      .en_i      (mx_cnt_en_n[port] ),
+      .load_i    (/* Unused */      ),
+      .down_i    (1'b0              ), // We always count up
+      .d_i       ('0                ),
+      .q_o       (mx_cnt_n_q[port]  ),
+      .overflow_o(/* Unused */      )
+    );
   end: gen_mem_counters
 
   // Did the current instruction finished the memory requests?
@@ -462,7 +518,9 @@ module spatz_vlsu
         mx_offset_load =
           (((mem_counter_q[port] << $clog2(NrMemPorts)) >> $clog2(MemDataWidthB)) % tile_offset + port << 3) * mem_spatz_req.rs2 +
           (((mem_counter_q[port] << $clog2(NrMemPorts)) >> $clog2(MemDataWidthB)) / tile_offset        << 3);
-        mx_offset_store = (mem_counter_q[port][4:0]) * mem_spatz_req.rs2 + (port << 2) + (mem_counter_q[port][$bits(vlen_t)-1:5] << 4);
+        // Ports finish storing one matrix row before passing to a new one
+        // If mem_spatz_req.rs2 is a power of 2, this can be further optimized
+        mx_offset_store = (port << 3) + (mx_cnt_m_q[port] * (mem_spatz_req.rs2 << $clog2(MemDataWidthB))) + (mx_cnt_n_q[port] << ($clog2(NrMemPorts * MemDataWidthB)));
         offset = commit_insn_q.is_load ? mx_offset_load : mx_offset_store;
       end else begin
         offset = ({mem_counter_q[port][$bits(vlen_t)-1:MAXEW] << $clog2(NrMemPorts), mem_counter_q[port][int'(MAXEW)-1:0]} + (port << MAXEW)) * stride;
