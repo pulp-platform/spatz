@@ -1,13 +1,13 @@
-// Copyright 2021 ETH Zurich and University of Bologna.
+// Copyright 2023 ETH Zurich and University of Bologna.
 // Licensed under the Apache License, Version 2.0, see LICENSE for details.
 // SPDX-License-Identifier: Apache-2.0
 //
-// Author: Domenic Wüthrich, ETH Zurich
+// Author: Matheus Cavalcante, ETH Zurich
 //
-// This is the toplevel module of Spatz. It contains all other SPatz modules.
+// This is the toplevel module of Spatz. It contains all other Spatz modules.
 // This includes the Controller, which interfaces with the main core and handles
 // instruction decoding, operation issuing to the other units, and result write
-// back to the core. The Vector Function Unit (VFU) is the high high throughput
+// back to the core. The Vector Functional Unit (VFU) is the high throughput
 // unit that executes all arithmetic and logical operations. The Load/Store Unit
 // (LSU) is used to load vectors from memory to the register file and store them
 // back again. Finally, the Vector Register File (VRF) is the main register file
