@@ -125,8 +125,16 @@ int main() {
   // Work over complete P dimension with one core only
   p_start = 0;
   p_end = gemm_l.N;
-  m_start = 0;
-  m_end = gemm_l.M;
+  m_start = (gemm_l.M / num_cores) * cid;
+  m_end = (gemm_l.M / num_cores) * (cid + 1);
+
+  // Parallelization partition control
+  uint32_t nrelem_a       = KERNEL_M * gemm_l.K;
+  uint32_t nrelem_b       = KERNEL_N * gemm_l.K;
+  uint32_t nrelem_c       = KERNEL_M * gemm_l.N;
+
+  // Work over complete K dimension
+  unsigned int inner_loops = gemm_l.K / KERNEL_K;
 
   // Wait for all cores to finish
   snrt_cluster_hw_barrier();
@@ -142,46 +150,43 @@ int main() {
   // Wait for all cores to finish
   snrt_cluster_hw_barrier();
 
-  // Parallelization partition control
-  uint32_t nrelem_a       = KERNEL_M * gemm_l.K;
-  uint32_t nrelem_b       = KERNEL_N * gemm_l.K;
-  uint32_t nrelem_c       = KERNEL_M * gemm_l.N;
+  // Calculate matmul
+  for (unsigned int i = 0; i < measure_iterations; ++i) {
+    // Start timer
+    timer_start = benchmark_get_cycle();
 
-  // Work over complete K dimension
-  unsigned int inner_loops = gemm_l.K / KERNEL_K;
-
-  if (cid == 0) {
-    // Calculate matmul
-    for (unsigned int i = 0; i < measure_iterations; ++i) {
-      // Start timer
-      timer_start = benchmark_get_cycle();
-
-      // Start dump
+    // Start dump
+    if (cid == 0)
       start_kernel();
 
-      matmul_tiled_Bx4(c, a, b, KERNEL_M, KERNEL_N, KERNEL_K, gemm_l.N, gemm_l.K,
-        inner_loops, m_end, p_end, vl, nrelem_a, nrelem_b, nrelem_c);
+    matmul_tiled_Bx2(c, a, b, KERNEL_M, KERNEL_N, KERNEL_K, gemm_l.N, gemm_l.K,
+      inner_loops, m_start, m_end, p_end, vl, nrelem_a, nrelem_b, nrelem_c);
 
-      // Wait for all cores to finish
-      snrt_cluster_hw_barrier();
+    // Wait for all cores to finish
+    snrt_cluster_hw_barrier();
 
-      // End dump
+    // End dump
+    if (cid == 0)
       stop_kernel();
 
-      // End timer and check if new best runtime
-      timer_end = benchmark_get_cycle();
-      unsigned int timer_temp = timer_end - timer_start;
-        if (timer_temp < timer) {
-          timer = timer_temp;
+    // End timer and check if new best runtime
+    timer_end = benchmark_get_cycle();
+    unsigned int timer_temp = timer_end - timer_start;
+    if (cid == 0) {
+      if (timer_temp < timer) {
+        timer = timer_temp;
       }
     }
   }
+
+  // Wait for all cores finish
+  snrt_cluster_hw_barrier();
 
   // Check and display results
   if (cid == 0) {
     long unsigned int performance =
         1000 * 2 * gemm_l.M * gemm_l.N * gemm_l.K / timer;
-    long unsigned int utilization = performance / (2 * 4);
+    long unsigned int utilization = performance / (2 * 2 * 4);
 
     printf("\n----- (%dx%d) dp fmatmul -----\n", gemm_l.M, gemm_l.N);
     printf("The execution took %u cycles.\n", timer);
@@ -189,9 +194,7 @@ int main() {
            performance, utilization);
   }
 
-
   if (cid == 0) {
-
 #ifdef PRINT_RESULT
     // Print results one by one.
     for (unsigned int i = 0; i < gemm_l.M; ++i) {
