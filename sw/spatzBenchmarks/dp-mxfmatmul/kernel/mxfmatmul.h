@@ -31,13 +31,13 @@ void matmul_tiled_Bx2(double *c, const double *a, const double *b,
 void matmul_tiled_Bx4(double *c, const double *a, const double *b,
                  const unsigned int kernel_m, const unsigned int kernel_n, const unsigned int kernel_k,
                  const unsigned int N, const unsigned int K, const unsigned int inner_loops,
-                 const unsigned int m_start, const unsigned int n_start, const unsigned int vl,
+                 const unsigned int m_end, const unsigned int n_end, const unsigned int vl,
                  const unsigned int nrelem_a, const unsigned int nrelem_b, const unsigned int nrelem_c) __attribute__((always_inline));
 
 void matmul_tiled_Bx8(double *c, const double *a, const double *b,
                  const unsigned int kernel_m, const unsigned int kernel_n, const unsigned int kernel_k,
                  const unsigned int N, const unsigned int K, const unsigned int inner_loops,
-                 const unsigned int m_start, const unsigned int n_start, const unsigned int vl,
+                 const unsigned int m_end, const unsigned int n_end, const unsigned int vl,
                  const unsigned int nrelem_a, const unsigned int nrelem_b, const unsigned int nrelem_c) __attribute__((always_inline));
 
 #endif

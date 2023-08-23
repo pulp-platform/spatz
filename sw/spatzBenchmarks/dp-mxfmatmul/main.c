@@ -159,7 +159,7 @@ int main() {
       // Start dump
       start_kernel();
 
-      matmul_tiled_Bx2(c, a, b, KERNEL_M, KERNEL_N, KERNEL_K, gemm_l.N, gemm_l.K,
+      matmul_tiled_Bx4(c, a, b, KERNEL_M, KERNEL_N, KERNEL_K, gemm_l.N, gemm_l.K,
         inner_loops, m_end, p_end, vl, nrelem_a, nrelem_b, nrelem_c);
 
       // Wait for all cores to finish
