@@ -91,6 +91,7 @@ double *c;
 // -------------------------------------------------//
 
 #define CHECK
+#define PRINT_RESULT
 
 int main() {
   const unsigned int num_cores = snrt_cluster_core_num();
@@ -149,31 +150,29 @@ int main() {
   // Work over complete K dimension
   unsigned int inner_loops = gemm_l.K / KERNEL_K;
 
-  // Calculate matmul
-  for (unsigned int i = 0; i < measure_iterations; ++i) {
-    // Start timer
-    timer_start = benchmark_get_cycle();
+  if (cid == 0) {
+    // Calculate matmul
+    for (unsigned int i = 0; i < measure_iterations; ++i) {
+      // Start timer
+      timer_start = benchmark_get_cycle();
 
-    // Start dump
-    if (cid == 0)
+      // Start dump
       start_kernel();
 
-    matmul_tiled_Bx2_conflict_shift(c, a, b, KERNEL_M, KERNEL_N, KERNEL_K, gemm_l.N, gemm_l.K,
-      inner_loops, m_start, p_start, vl, nrelem_a, nrelem_b, nrelem_c);
+      matmul_tiled_Bx2(c, a, b, KERNEL_M, KERNEL_N, KERNEL_K, gemm_l.N, gemm_l.K,
+        inner_loops, m_end, p_end, vl, nrelem_a, nrelem_b, nrelem_c);
 
-    // Wait for all cores to finish
-    snrt_cluster_hw_barrier();
+      // Wait for all cores to finish
+      snrt_cluster_hw_barrier();
 
-    // End dump
-    if (cid == 0)
+      // End dump
       stop_kernel();
 
-    // End timer and check if new best runtime
-    timer_end = benchmark_get_cycle();
-    unsigned int timer_temp = timer_end - timer_start;
-    if (cid == 0) {
-      if (timer_temp < timer) {
-        timer = timer_temp;
+      // End timer and check if new best runtime
+      timer_end = benchmark_get_cycle();
+      unsigned int timer_temp = timer_end - timer_start;
+        if (timer_temp < timer) {
+          timer = timer_temp;
       }
     }
   }
@@ -192,6 +191,15 @@ int main() {
 
 
   if (cid == 0) {
+
+#ifdef PRINT_RESULT
+    // Print results one by one.
+    for (unsigned int i = 0; i < gemm_l.M; ++i) {
+      for (unsigned int j = 0; j < gemm_l.N; ++j) {
+        printf("C[%d][%d] = %f\n", i, j, c[i * gemm_l.N + j]);
+      }
+    }
+#endif
 #ifdef CHECK
     // Calculate and print checksums
     for (unsigned int i = 0; i < gemm_l.M; i++) {
@@ -208,13 +216,6 @@ int main() {
       }
     }
 #endif
-
-    // Print results one by one.
-    for (unsigned int i = 0; i < gemm_l.M; ++i) {
-      for (unsigned int j = 0; j < gemm_l.N; ++j) {
-        printf("C[%d][%d] = %f\n", i, j, c[i * gemm_l.N + j]);
-      }
-    }
   }
 
   // Wait for all cores finish

@@ -157,7 +157,7 @@ def emit_GEMM_layer(name='gemm', **kwargs):
 def emit_Print_layer(mat):
     result_str = "// Results Print:\n"
     for row in mat:
-        line = " ".join(str(struct.unpack('i', struct.pack('f', x))[0]) for x in row)
+        line = " ".join(str(struct.unpack('f', struct.pack('f', x))[0]) for x in row)
         result_str += "// " + line + "\n"
     return result_str
 
