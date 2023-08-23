@@ -134,9 +134,6 @@ def emit_GEMM_layer(name='gemm', **kwargs):
 
     dtype = ctypes[str(kwargs['prec'])]
 
-    layer_str += f'{dtype} a[{m}*{k}]  __attribute__((section(".l1")));\n'
-    layer_str += f'{dtype} b[{k}*{n}]  __attribute__((section(".l1")));\n'
-    layer_str += f'{dtype} c[{m}*{n}]  __attribute__((section(".l1")));\n'
     layer_str += f'{dtype} r[{m}]  __attribute__((section(".l1")));\n\n'
 
     if dtype != 'char':
