@@ -91,7 +91,7 @@ double *c;
 // -------------------------------------------------//
 
 #define CHECK
-#define PRINT_RESULT
+//#define PRINT_RESULT
 
 int main() {
   const unsigned int num_cores = snrt_cluster_core_num();

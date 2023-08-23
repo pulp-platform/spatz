@@ -28,17 +28,22 @@ void matmul_tiled_Bx2(double *c, const double *a, const double *b,
                  const unsigned int nrelem_a, const unsigned int nrelem_b, const unsigned int nrelem_c) {
 
   // Setup pointers
-  const double *a_ = a;
-  double *c_ = c;
+  const double *a_;
+  double *c_;
 
   // Iterate over the output rows
   for (unsigned int m = 0; m < m_end; m += kernel_m) {
-    // Reset B Mtx pointers
-    const double *b_  = b;
-    const double *b__ = b_ + nrelem_b;
+    // Update the C Mtx pointer
+    c_ = c + m * N;
     // Iterate over the output columns
     // We need 2* on the n dimension since this is a Bx2 kernel
     for (unsigned int n = 0; n < n_end; n += (kernel_n << 1)) {
+      // Update the A Mtx pointer
+      a_ = a + m * K;
+      // Update B Mtx pointers
+      const double *b_  = b + n * K;
+      const double *b__ = b_ + nrelem_b;
+
       asm volatile("msettilem t1, %0" ::"r" (kernel_m):"t1");
       asm volatile("msettilen t2, %0" ::"r" (kernel_n):"t2");
       asm volatile("msettilek t3, %0" ::"r" (kernel_k):"t3");
@@ -93,7 +98,6 @@ void matmul_tiled_Bx2(double *c, const double *a, const double *b,
 
       asm volatile("mxfmacc.vv v16, v12, v4");
       asm volatile("mle64.v.b v8, (%0), %1;" ::"r"(b__), "r"(K));
-      a_ += kernel_k;
       asm volatile("mxfmacc.vv v24, v12, v8");
       asm volatile("mse64.v.c v16, (%0), %1;" ::"r"(c_), "r"(N));
       c_ += kernel_n;  // Question: If give the abs value 4 to here, then the performance is better. Why?
