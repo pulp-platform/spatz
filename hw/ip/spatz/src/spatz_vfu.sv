@@ -96,11 +96,13 @@ module spatz_vfu
   logic             mx_write_enable ;
   logic             mx_word_commited;
   logic             op_is_mx        ;
+  logic             clear_mxu_state ;
   logic             mx_ipu_en       ;
   vlen_t            mx_offset       ;
   logic             mx_result_ready ;
 
   assign op_is_mx = spatz_req.op_arith.is_mx && spatz_req_valid;
+  assign clear_mxu_state = spatz_req_valid & spatz_req_ready;
 
   // Vector length counter
   vlen_t vl_q, vl_d;
@@ -657,27 +659,28 @@ module spatz_vfu
   ////////////
 
   spatz_mxu i_mxu (
-    .clk_i           (clk_i                                     ),
-    .rst_ni          (rst_ni                                    ),
-    .operands_i      (vrf_rdata_i                               ),
-    .enable_mx_i     (op_is_mx                                  ),
-    .enable_fpu_i    (is_fpu_insn                               ),
-    .result_valid_i  (&result_valid[3:0]                        ),
-    .operands_ready_i({op3_is_ready, op2_is_ready, op1_is_ready}),
-    .vrf_wvalid_i    (vrf_wvalid_i                              ),
-    .vl_i            (vl_q                                      ),
-    .result_i        (result                                    ),
-    .last_word_i     (spatz_req.vl-vlen_t'(spatz_req.tile_M)    ),
-    .tile_dimK       (spatz_req.tile_K                          ),
-    .tile_dimN       (spatz_req.tile_N                          ),
-    .tile_dimM       (spatz_req.tile_M                          ),
-    .operand_o       (mx_operand                                ),
-    .read_enable_o   (mx_read_enable                            ),
-    .write_enable_o  (mx_write_enable                           ),
-    .word_commited_o (mx_word_commited                          ),
-    .ipu_en_o        (mx_ipu_en                                 ),
-    .result_ready_o  (mx_result_ready                           ),
-    .offset_o        (mx_offset                                 )
+    .clk_i            (clk_i                                     ),
+    .rst_ni           (rst_ni                                    ),
+    .clear_mxu_state_i(clear_mxu_state                           ),
+    .operands_i       (vrf_rdata_i                               ),
+    .enable_mx_i      (op_is_mx                                  ),
+    .enable_fpu_i     (is_fpu_insn                               ),
+    .result_valid_i   (&result_valid[3:0]                        ),
+    .operands_ready_i ({op3_is_ready, op2_is_ready, op1_is_ready}),
+    .vrf_wvalid_i     (vrf_wvalid_i                              ),
+    .vl_i             (vl_q                                      ),
+    .result_i         (result                                    ),
+    .last_word_i      (spatz_req.vl-vlen_t'(spatz_req.tile_M)    ),
+    .tile_dimK        (spatz_req.tile_K                          ),
+    .tile_dimN        (spatz_req.tile_N                          ),
+    .tile_dimM        (spatz_req.tile_M                          ),
+    .operand_o        (mx_operand                                ),
+    .read_enable_o    (mx_read_enable                            ),
+    .write_enable_o   (mx_write_enable                           ),
+    .word_commited_o  (mx_word_commited                          ),
+    .ipu_en_o         (mx_ipu_en                                 ),
+    .result_ready_o   (mx_result_ready                           ),
+    .offset_o         (mx_offset                                 )
   );
 
   //////////

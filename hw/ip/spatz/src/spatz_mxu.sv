@@ -10,6 +10,7 @@ module spatz_mxu
 (
   input  logic             clk_i,
   input  logic             rst_ni,
+  input  logic             clear_mxu_state_i,
   input  vrf_data_t  [2:0] operands_i,
   input  logic             enable_mx_i,
   input  logic             enable_fpu_i,
@@ -67,12 +68,49 @@ module spatz_mxu
   vrf_data_t  [1:0] previous_operands_q;
   vrf_data_t  [1:0] previous_operands_d;
 
+  // Hack to get correct results during fmatmul
+  // Delay the internal state clear by some cycles when the instruction changes
+  localparam int unsigned CLEAR_MXU_STATE_DELAY = 3;
+  logic [$clog2(CLEAR_MXU_STATE_DELAY)-1:0] mxu_cnt_q, mxu_cnt_d;
+  logic mxu_cnt_en_q, mxu_cnt_en_d;
+  // Delayed clear of the internal state
+  logic clear_mxu_state_del;
+
+  always_comb begin
+    mxu_cnt_d             = mxu_cnt_q;
+    mxu_cnt_en_d          = mxu_cnt_en_q;
+    clear_mxu_state_del   = 1'b0;
+
+    if (mxu_cnt_en_q) begin
+      mxu_cnt_d = mxu_cnt_q + 1;
+      if (mxu_cnt_q == (CLEAR_MXU_STATE_DELAY - 1)) begin
+        mxu_cnt_d           = '0;
+        mxu_cnt_en_d        = 1'b0;
+        clear_mxu_state_del = 1'b1;
+      end
+    end
+
+    if (clear_mxu_state_i)
+      mxu_cnt_en_d = 1'b1;
+  end
+
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (!rst_ni) begin
+      mxu_cnt_en_q <= '0;
+      mxu_cnt_q    <= '0;
+    end else begin
+      mxu_cnt_en_q <= mxu_cnt_en_d;
+      mxu_cnt_q    <= mxu_cnt_d;
+    end
+  end
+
   // Manage FSM
   `FF(block_q, block_d, first)
   // mx_write_en_d, _q, _qq (last write to VRF)
-  `FFL(mx_write_enable_q[0], mx_write_enable_d, enable_mx_i, '0)
-  `FFL(mx_write_enable_q[1], mx_write_enable_q[0], enable_mx_i, '0)
-  `FFL(mx_write_enable_q[2], mx_write_enable_q[1], enable_mx_i, '0)
+  // Clear the internal state upon a new instruction
+  `FFLARNC(mx_write_enable_q[0], mx_write_enable_d   , enable_mx_i, clear_mxu_state_del, '0, clk_i, rst_ni)
+  `FFLARNC(mx_write_enable_q[1], mx_write_enable_q[0], enable_mx_i, clear_mxu_state_del, '0, clk_i, rst_ni)
+  `FFLARNC(mx_write_enable_q[2], mx_write_enable_q[1], enable_mx_i, clear_mxu_state_del, '0, clk_i, rst_ni)
   // Row input FPU operation counter
   `FF(col_counter, enable_mx_i ? ipu_en ? col_counter + 1 : col_counter : 0, '0)
   // Row output FPU latch/vrf accumulator counter
