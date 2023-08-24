@@ -10,12 +10,11 @@ variables:
   APPS: "tests"
   RUST_LOG: 'memora=debug'
   VERILATOR_ROOT: '$CI_PROJECT_DIR/install/verilator'
-  CLANG_PATH: '/usr/pack/llvm-10.0.1-af'
   PATH: '/home/gitlabci/.cargo/bin:/usr/local/bin:/usr/bin:/usr/sbin:/sbin:/usr/local/condor/bin:/usr/sepp/bin:$VERILATOR_ROOT/bin:/home/gitlabci/.local/bin'
   OBJCACHE: ''
   RISCV_WARNINGS: '-Werror'
-  CC: 'gcc-8.2.0'
-  CXX: 'g++-8.2.0'
+  CC: 'gcc-11.2.0'
+  CXX: 'g++-11.2.0'
   CMAKE: 'cmake-3.18.1'
   CTEST: 'ctest-3.18.1'
   VCS: 'vcs-2022.06'
@@ -140,6 +139,32 @@ snRuntime-test-vcs:
     - cd sw/build/snRuntime
     - ${CTEST} --output-on-failure
   needs: ["tc-llvm", "tc-gcc"]
+  parallel:
+    matrix:
+      - cfg: [spatz_cluster.default, carfield]
+
+snRuntime-test-vlt:
+  stage: test
+  script:
+    # Download LLVM and GCC
+    - $CI_PROJECT_DIR/util/memora_retry.sh get tc-llvm
+    - $CI_PROJECT_DIR/util/memora_retry.sh get tc-riscv-gcc
+    - $CI_PROJECT_DIR/util/memora_retry.sh get verilator
+    # Download bender
+    - make bender
+    # Download python dependencies
+    - export PYTHON3=$(which python3.6)
+    - ${PYTHON3} -m pip install --user jsonref
+    - ${PYTHON3} -m pip install --user jsonschema
+    - ${PYTHON3} -m pip install --user dataclasses
+    - ${PYTHON3} -m pip install --user mako
+    # Compile the binaries
+    - cd hw/system/spatz_cluster
+    - make sw.vlt SPATZ_CLUSTER_CFG=cfg/${cfg}.hjson
+    # Run the test
+    - cd sw/build/snRuntime
+    - ${CTEST} --output-on-failure
+  needs: ["tc-llvm", "tc-gcc", "verilator"]
   parallel:
     matrix:
       - cfg: [spatz_cluster.default, carfield]
