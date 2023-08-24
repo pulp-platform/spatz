@@ -20,10 +20,10 @@ all: bender toolchain update_opcodes
 #  Toolchain  #
 ###############
 
-toolchain: download tc-llvm tc-riscv-gcc verilator
+toolchain: download tc-llvm tc-riscv-gcc tc-riscv-isa-sim verilator
 
 .PHONY: download
-download: sw/toolchain/riscv-gnu-toolchain sw/toolchain/llvm-project sw/toolchain/riscv-opcodes sw/toolchain/verilator sw/toolchain/riscv-isa-sim
+download: sw/toolchain/riscv-gnu-toolchain sw/toolchain/llvm-project sw/toolchain/riscv-opcodes sw/toolchain/verilator sw/toolchain/riscv-isa-sim sw/toolchain/dtc
 
 sw/toolchain/riscv-gnu-toolchain: sw/toolchain/riscv-gnu-toolchain.version
 	mkdir -p sw/toolchain
@@ -65,6 +65,11 @@ sw/toolchain/help2man:
 	cd sw/toolchain/help2man && wget -c https://ftp.gnu.org/gnu/help2man/help2man-1.49.3.tar.xz
 	cd sw/toolchain/help2man && tar xf help2man-1.49.3.tar.xz
 
+sw/toolchain/dtc:
+	mkdir -p sw/toolchain/dtc
+	cd sw/toolchain/dtc && wget -c https://git.kernel.org/pub/scm/utils/dtc/dtc.git/snapshot/dtc-1.7.0.tar.gz
+	cd sw/toolchain/dtc && tar xf dtc-1.7.0.tar.gz
+
 tc-riscv-gcc: sw/toolchain/riscv-gnu-toolchain
 	mkdir -p $(GCC_INSTALL_DIR)
 	cd sw/toolchain/riscv-gnu-toolchain && rm -rf build && mkdir -p build && cd build && \
@@ -88,6 +93,13 @@ tc-llvm: sw/toolchain/llvm-project
 		../llvm && \
 	make -j8 all && \
 	make install
+
+tc-riscv-isa-sim: sw/toolchain/riscv-isa-sim sw/toolchain/dtc
+	mkdir -p $(SPIKE_INSTALL_DIR)
+	cd sw/toolchain/dtc/dtc-1.7.0 && make install PREFIX=$(SPIKE_INSTALL_DIR)
+	cd sw/toolchain/riscv-isa-sim && rm -rf build && mkdir -p build && cd build && \
+	PATH=$(SPIKE_INSTALL_DIR)/bin:$(PATH) ../configure --prefix=$(SPIKE_INSTALL_DIR) && \
+	$(MAKE) MAKEINFO=true -j4 install
 
 ############
 #  Bender  #
