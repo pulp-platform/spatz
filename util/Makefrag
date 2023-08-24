@@ -39,7 +39,7 @@ VSIM_BUILDDIR := work-vsim
 
 # fesvr is being installed here
 FESVR          ?= ${MKFILE_DIR}work
-FESVR_VERSION  ?= db20475248147ffe2c25fdfccc3284de4cae45fa
+FESVR_VERSION  ?= c663ea20a53f4316db8cb4d591b1c8e437f4a0c4
 
 VLT_BUILDDIR := work-vlt
 VLT_FESVR     = $(VLT_BUILDDIR)/riscv-isa-sim
