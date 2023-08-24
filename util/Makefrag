@@ -19,7 +19,8 @@ VERILATOR_INSTALL_DIR ?= ${INSTALL_DIR}/verilator
 
 # Support for local override
 BENDER ?= ${BENDER_INSTALL_DIR}/bender
-DASM   ?= riscv -riscv64-gcc-8.5.0 spike-dasm
+RISCV  ?= riscv -riscv64-gcc-9.5.0
+DASM   ?= ${RISCV} spike-dasm
 VLT    ?= ${VERILATOR_INSTALL_DIR}/bin/verilator_bin
 CMAKE  ?= cmake-3.18.1
 PYTHON ?= python3.6
