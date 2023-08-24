@@ -82,7 +82,7 @@ src/generated/spatz_cluster_wrapper.sv: ${SPATZ_CLUSTER_CFG} $(find src/tpl) $(f
 #############
 
 ${VLT_AR}: ${VLT_SOURCES} ${TB_SRCS}
-	$(call VERILATE,tb_bin)
+	$(call VERILATE,testharness)
 
 # Quick sanity check, not really meant for simulation.
 verilate: ${VLT_AR}
@@ -90,7 +90,7 @@ verilate: ${VLT_AR}
 # Build targets for verilator TB
 $(VLT_BUILDDIR)/tb/%.o: $(TB_DIR)/%.cc $(VLT_AR) ${VLT_BUILDDIR}/lib/libfesvr.a
 	mkdir -p $(dir $@)
-	$(CXX) $(CXXFLAGS) $(VLT_CFLAGS) -c $< -o $@
+	${CXX} $(CXXFLAGS) $(VLT_CFLAGS) -c $< -o $@
 $(VLT_BUILDDIR)/vlt/%.o: $(VLT_ROOT)/include/%.cpp
 	mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) $(VLT_CFLAGS) -c $< -o $@

@@ -30,7 +30,13 @@ void Sim::idle() { target.switch_to(); }
 int Sim::run() {
     host = context_t::current();
     target.init(sim_thread_main, this);
-    return htif_t::run();
+
+    int exit_code = htif_t::run();
+    if (exit_code > 0)
+      fprintf(stderr, "[FAILURE] Finished with exit code %2d", exit_code);
+    else
+      fprintf(stderr, "[SUCCESS] Program finished successfully");
+    return exit_code;
 }
 
 void Sim::main() {
