@@ -9,8 +9,8 @@ variables:
   ROOT_DIR: '$CI_PROJECT_DIR'
   APPS: "tests"
   RUST_LOG: 'memora=debug'
-  VERILATOR_ROOT: '$CI_PROJECT_DIR/install/verilator'
-  PATH: '/home/gitlabci/.cargo/bin:/usr/local/bin:/usr/bin:/usr/sbin:/sbin:/usr/local/condor/bin:/usr/sepp/bin:$VERILATOR_ROOT/bin:/home/gitlabci/.local/bin'
+  VERILATOR_ROOT: '$CI_PROJECT_DIR/install/verilator/share/verilator'
+  PATH: '/home/gitlabci/.cargo/bin:/usr/local/bin:/usr/bin:/usr/sbin:/sbin:/usr/local/condor/bin:/usr/sepp/bin:$CI_PROJECT_DIR/install/verilator/bin:/home/gitlabci/.local/bin'
   OBJCACHE: ''
   RISCV_WARNINGS: '-Werror'
   CC: 'gcc-11.2.0'
@@ -170,12 +170,13 @@ snRuntime-test-vlt:
       - cfg: [spatz_cluster.default, carfield]
 
 # RISC-V unit tests
-riscvTests-test-vcs:
+riscvTests-test-vlt:
   stage: test
   script:
     # Download LLVM and GCC
     - $CI_PROJECT_DIR/util/memora_retry.sh get tc-llvm
     - $CI_PROJECT_DIR/util/memora_retry.sh get tc-riscv-gcc
+    - $CI_PROJECT_DIR/util/memora_retry.sh get verilator
     # Download bender
     - make bender
     # Download python dependencies
@@ -186,22 +187,23 @@ riscvTests-test-vcs:
     - ${PYTHON3} -m pip install --user mako
     # Compile the binaries
     - cd hw/system/spatz_cluster
-    - ${VCS} make sw.vcs SPATZ_CLUSTER_CFG=cfg/${cfg}.hjson
+    - ${VCS} make sw.vlt SPATZ_CLUSTER_CFG=cfg/${cfg}.hjson
     # Run the test
     - cd sw/build/riscvTests
     - ${CTEST} --output-on-failure -j4
-  needs: ["tc-llvm", "tc-gcc"]
+  needs: ["tc-llvm", "tc-gcc", "verilator"]
   parallel:
     matrix:
       - cfg: [spatz_cluster.default, carfield]
 
 # Spatz tests
-spatzBenchmarks-test-vcs:
+spatzBenchmarks-test-vlt:
   stage: test
   script:
     # Download LLVM and GCC
     - $CI_PROJECT_DIR/util/memora_retry.sh get tc-llvm
     - $CI_PROJECT_DIR/util/memora_retry.sh get tc-riscv-gcc
+    - $CI_PROJECT_DIR/util/memora_retry.sh get verilator
     # Download bender
     - make bender
     # Download python dependencies
@@ -212,11 +214,11 @@ spatzBenchmarks-test-vcs:
     - ${PYTHON3} -m pip install --user mako
     # Compile the binaries
     - cd hw/system/spatz_cluster
-    - ${VCS} make sw.vcs SPATZ_CLUSTER_CFG=cfg/${cfg}.hjson
+    - ${VCS} make sw.vlt SPATZ_CLUSTER_CFG=cfg/${cfg}.hjson
     # Run the test
     - cd sw/build/spatzBenchmarks
     - ${CTEST} --verbose
-  needs: ["tc-llvm", "tc-gcc"]
+  needs: ["tc-llvm", "tc-gcc", "verilator"]
   parallel:
     matrix:
       - cfg: [spatz_cluster.default, carfield]
