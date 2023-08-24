@@ -33,9 +33,9 @@ int Sim::run() {
 
     int exit_code = htif_t::run();
     if (exit_code > 0)
-      fprintf(stderr, "[FAILURE] Finished with exit code %2d", exit_code);
+      fprintf(stderr, "[FAILURE] Finished with exit code %2d\n", exit_code);
     else
-      fprintf(stderr, "[SUCCESS] Program finished successfully");
+      fprintf(stderr, "[SUCCESS] Program finished successfully\n");
     return exit_code;
 }
 
