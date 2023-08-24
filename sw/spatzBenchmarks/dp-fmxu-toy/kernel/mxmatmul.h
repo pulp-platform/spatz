@@ -21,7 +21,9 @@
 
 #include <stdint.h>
 void matmul_tiled_load_store_test(double *c, const double *a, const double *b,
-                 const unsigned int dim) __attribute__((always_inline));
+                                  const unsigned int dim)
+    __attribute__((always_inline));
 void matmul_tiled_mxmacc_test(double *c, const double *a, const double *b,
-                 const unsigned int dim) __attribute__((always_inline));
+                              const unsigned int dim)
+    __attribute__((always_inline));
 #endif

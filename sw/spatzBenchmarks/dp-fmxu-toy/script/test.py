@@ -1,6 +1,5 @@
 import numpy as np
 import torch
-import torch.nn as nn
 
 dtype = torch.int32
 
@@ -13,7 +12,7 @@ gemm_A_dram = gemm_A_dram.reshape((8, 4))
 gemm_B_dram = gemm_B_dram.reshape((4, 8))
 
 # Perform the matrix multiplication with original B
-#result = np.matmul(gemm_A_dram, gemm_B_dram)
+# result = np.matmul(gemm_A_dram, gemm_B_dram)
 
 
 # Convert numpy arrays to PyTorch tensors
@@ -33,5 +32,3 @@ for row in gemm_B_dram_torch:
 print("Result with GEMM:")
 for row in result:
     print([hex(x) for x in row])
-
-

@@ -129,9 +129,9 @@ int main() {
   m_end = (gemm_l.M / num_cores) * (cid + 1);
 
   // Parallelization partition control
-  uint32_t nrelem_a       = KERNEL_M * gemm_l.K;
-  uint32_t nrelem_b       = KERNEL_N * gemm_l.K;
-  uint32_t nrelem_c       = KERNEL_M * gemm_l.N;
+  uint32_t nrelem_a = KERNEL_M * gemm_l.K;
+  uint32_t nrelem_b = KERNEL_N * gemm_l.K;
+  uint32_t nrelem_c = KERNEL_M * gemm_l.N;
 
   // Work over complete K dimension
   unsigned int inner_loops = gemm_l.K / KERNEL_K;
@@ -160,7 +160,8 @@ int main() {
       start_kernel();
 
     matmul_tiled_Bx4(c, a, b, KERNEL_M, KERNEL_N, KERNEL_K, gemm_l.N, gemm_l.K,
-      inner_loops, m_start, m_end, p_end, vl, nrelem_a, nrelem_b, nrelem_c);
+                     inner_loops, m_start, m_end, p_end, vl, nrelem_a, nrelem_b,
+                     nrelem_c);
 
     // Wait for all cores to finish
     snrt_cluster_hw_barrier();

@@ -19,13 +19,16 @@
 
 #include "mxfmatmul.h"
 
-// This first implementation works only with perfect tiling, i.e., with M and N that perfectly
-// divide kernel_m and 2*kernel_n, respectively
+// This first implementation works only with perfect tiling, i.e., with M and N
+// that perfectly divide kernel_m and 2*kernel_n, respectively
 void matmul_tiled_Bx2(double *c, const double *a, const double *b,
-                 const unsigned int kernel_m, const unsigned int kernel_n, const unsigned int kernel_k,
-                 const unsigned int N, const unsigned int K, const unsigned int inner_loops,
-                 const unsigned int m_start, const unsigned int m_end, const unsigned int n_end, const unsigned int vl,
-                 const unsigned int nrelem_a, const unsigned int nrelem_b, const unsigned int nrelem_c) {
+                      const unsigned int kernel_m, const unsigned int kernel_n,
+                      const unsigned int kernel_k, const unsigned int N,
+                      const unsigned int K, const unsigned int inner_loops,
+                      const unsigned int m_start, const unsigned int m_end,
+                      const unsigned int n_end, const unsigned int vl,
+                      const unsigned int nrelem_a, const unsigned int nrelem_b,
+                      const unsigned int nrelem_c) {
 
   // Setup pointers
   const double *a_;
@@ -41,12 +44,12 @@ void matmul_tiled_Bx2(double *c, const double *a, const double *b,
       // Update the A Mtx pointer
       a_ = a + m * K;
       // Update B Mtx pointers
-      const double *b_  = b + n * K;
+      const double *b_ = b + n * K;
       const double *b__ = b_ + nrelem_b;
 
-      asm volatile("msettilem t1, %0" ::"r" (kernel_m):"t1");
-      asm volatile("msettilen t2, %0" ::"r" (kernel_n):"t2");
-      asm volatile("msettilek t3, %0" ::"r" (kernel_k):"t3");
+      asm volatile("msettilem t1, %0" ::"r"(kernel_m) : "t1");
+      asm volatile("msettilen t2, %0" ::"r"(kernel_n) : "t2");
+      asm volatile("msettilek t3, %0" ::"r"(kernel_k) : "t3");
       asm volatile("vsetvli zero, %0, e64, m4, ta, ma" ::"r"(vl));
 
       // Reset the result registers
@@ -78,7 +81,8 @@ void matmul_tiled_Bx2(double *c, const double *a, const double *b,
         asm volatile("mle64.v.b v4, (%0), %1;" ::"r"(b_), "r"(K));
         b__ = b_ + nrelem_b;
 
-        if (k == inner_loops - 1) break; // Kernel must be broken at here
+        if (k == inner_loops - 1)
+          break; // Kernel must be broken at here
 
         // ------------------------------------------//
         // ------------Loop Unrolling 2 ------------ //
@@ -92,7 +96,9 @@ void matmul_tiled_Bx2(double *c, const double *a, const double *b,
         k++;
 
         asm volatile("mle64.v.b v4, (%0), %1;" ::"r"(b_), "r"(K));
-        asm volatile("mle64.v.a v0, (%0), %1;" ::"r"(a_), "r"(K)); // Question: Move this one line upper, then does not work. Why?
+        asm volatile("mle64.v.a v0, (%0), %1;" ::"r"(a_),
+                     "r"(K)); // Question: Move this one line upper, then does
+                              // not work. Why?
         b__ = b_ + nrelem_b;
       }
 
@@ -100,20 +106,24 @@ void matmul_tiled_Bx2(double *c, const double *a, const double *b,
       asm volatile("mle64.v.b v8, (%0), %1;" ::"r"(b__), "r"(K));
       asm volatile("mxfmacc.vv v24, v12, v8");
       asm volatile("mse64.v.c v16, (%0), %1;" ::"r"(c_), "r"(N));
-      c_ += kernel_n;  // Question: If give the abs value 4 to here, then the performance is better. Why?
+      c_ += kernel_n; // Question: If give the abs value 4 to here, then the
+                      // performance is better. Why?
       asm volatile("mse64.v.c v24, (%0), %1;" ::"r"(c_), "r"(N));
       c_ += kernel_n;
     }
   }
 }
 
-// This first implementation works only with perfect tiling, i.e., with M and N that perfectly
-// divide kernel_m and 4*kernel_n, respectively
+// This first implementation works only with perfect tiling, i.e., with M and N
+// that perfectly divide kernel_m and 4*kernel_n, respectively
 void matmul_tiled_Bx4(double *c, const double *a, const double *b,
-                 const unsigned int kernel_m, const unsigned int kernel_n, const unsigned int kernel_k,
-                 const unsigned int N, const unsigned int K, const unsigned int inner_loops,
-                 const unsigned int m_start, const unsigned int m_end, const unsigned int n_end, const unsigned int vl,
-                 const unsigned int nrelem_a, const unsigned int nrelem_b, const unsigned int nrelem_c) {
+                      const unsigned int kernel_m, const unsigned int kernel_n,
+                      const unsigned int kernel_k, const unsigned int N,
+                      const unsigned int K, const unsigned int inner_loops,
+                      const unsigned int m_start, const unsigned int m_end,
+                      const unsigned int n_end, const unsigned int vl,
+                      const unsigned int nrelem_a, const unsigned int nrelem_b,
+                      const unsigned int nrelem_c) {
 
   // Setup pointers
   const double *a_;
@@ -129,12 +139,12 @@ void matmul_tiled_Bx4(double *c, const double *a, const double *b,
       // Update the A Mtx pointer
       a_ = a + m * K;
       // Update B Mtx pointers
-      const double *b_  = b + n * K;
+      const double *b_ = b + n * K;
       const double *b__ = b_ + nrelem_b;
 
-      asm volatile("msettilem t1, %0" ::"r" (kernel_m):"t1");
-      asm volatile("msettilen t2, %0" ::"r" (kernel_n):"t2");
-      asm volatile("msettilek t3, %0" ::"r" (kernel_k):"t3");
+      asm volatile("msettilem t1, %0" ::"r"(kernel_m) : "t1");
+      asm volatile("msettilen t2, %0" ::"r"(kernel_n) : "t2");
+      asm volatile("msettilek t3, %0" ::"r"(kernel_k) : "t3");
       asm volatile("vsetvli zero, %0, e64, m4, ta, ma" ::"r"(vl));
 
       // Reset the result registers
@@ -177,7 +187,8 @@ void matmul_tiled_Bx4(double *c, const double *a, const double *b,
         asm volatile("mle64.v.b v4, (%0), %1;" ::"r"(b_), "r"(K));
         b__ = b_ + nrelem_b;
 
-        if (k == inner_loops - 1) break; // Kernel must be broken at here
+        if (k == inner_loops - 1)
+          break; // Kernel must be broken at here
 
         // ------------------------------------------//
         // ------------Loop Unrolling 2 ------------ //
@@ -199,7 +210,9 @@ void matmul_tiled_Bx4(double *c, const double *a, const double *b,
         k++;
 
         asm volatile("mle64.v.b v4, (%0), %1;" ::"r"(b_), "r"(K));
-        asm volatile("mle64.v.a v0, (%0), %1;" ::"r"(a_), "r"(K)); // Question: Move this one line upper, then does not work. Why?
+        asm volatile("mle64.v.a v0, (%0), %1;" ::"r"(a_),
+                     "r"(K)); // Question: Move this one line upper, then does
+                              // not work. Why?
         b__ = b_ + nrelem_b;
       }
 
@@ -228,13 +241,16 @@ void matmul_tiled_Bx4(double *c, const double *a, const double *b,
   }
 }
 
-// This first implementation works only with perfect tiling, i.e., with M and N that perfectly
-// divide kernel_m and 8*kernel_n, respectively
+// This first implementation works only with perfect tiling, i.e., with M and N
+// that perfectly divide kernel_m and 8*kernel_n, respectively
 void matmul_tiled_Bx8(double *c, const double *a, const double *b,
-                 const unsigned int kernel_m, const unsigned int kernel_n, const unsigned int kernel_k,
-                 const unsigned int N, const unsigned int K, const unsigned int inner_loops,
-                 const unsigned int m_start, const unsigned int m_end, const unsigned int n_end, const unsigned int vl,
-                 const unsigned int nrelem_a, const unsigned int nrelem_b, const unsigned int nrelem_c) {
+                      const unsigned int kernel_m, const unsigned int kernel_n,
+                      const unsigned int kernel_k, const unsigned int N,
+                      const unsigned int K, const unsigned int inner_loops,
+                      const unsigned int m_start, const unsigned int m_end,
+                      const unsigned int n_end, const unsigned int vl,
+                      const unsigned int nrelem_a, const unsigned int nrelem_b,
+                      const unsigned int nrelem_c) {
 
   // Setup pointers
   const double *a_;
@@ -250,12 +266,12 @@ void matmul_tiled_Bx8(double *c, const double *a, const double *b,
       // Update the A Mtx pointer
       a_ = a + m * K;
       // Update B Mtx pointers
-      const double *b_  = b + n * K;
+      const double *b_ = b + n * K;
       const double *b__ = b_ + nrelem_b;
 
-      asm volatile("msettilem t1, %0" ::"r" (kernel_m):"t1");
-      asm volatile("msettilen t2, %0" ::"r" (kernel_n):"t2");
-      asm volatile("msettilek t3, %0" ::"r" (kernel_k):"t3");
+      asm volatile("msettilem t1, %0" ::"r"(kernel_m) : "t1");
+      asm volatile("msettilen t2, %0" ::"r"(kernel_n) : "t2");
+      asm volatile("msettilek t3, %0" ::"r"(kernel_k) : "t3");
       asm volatile("vsetvli zero, %0, e64, m4, ta, ma" ::"r"(vl));
 
       // Reset the result registers
@@ -318,7 +334,8 @@ void matmul_tiled_Bx8(double *c, const double *a, const double *b,
         asm volatile("mle64.v.b v4, (%0), %1;" ::"r"(b_), "r"(K));
         b__ = b_ + nrelem_b;
 
-        if (k == inner_loops - 1) break; // Kernel must be broken at here
+        if (k == inner_loops - 1)
+          break; // Kernel must be broken at here
 
         // ------------------------------------------//
         // ------------Loop Unrolling 2 ------------ //
@@ -356,7 +373,9 @@ void matmul_tiled_Bx8(double *c, const double *a, const double *b,
         k++;
 
         asm volatile("mle64.v.b v4, (%0), %1;" ::"r"(b_), "r"(K));
-        asm volatile("mle64.v.a v0, (%0), %1;" ::"r"(a_), "r"(K)); // Question: Move this one line upper, then does not work. Why?
+        asm volatile("mle64.v.a v0, (%0), %1;" ::"r"(a_),
+                     "r"(K)); // Question: Move this one line upper, then does
+                              // not work. Why?
         b__ = b_ + nrelem_b;
       }
 

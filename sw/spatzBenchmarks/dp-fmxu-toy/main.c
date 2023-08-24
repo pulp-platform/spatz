@@ -37,14 +37,14 @@ void init_matrix(double *matrix, const double *src,
   }
 }
 
-
 // Verify the matrices
 int verify_matrix(double *matrix, const double *checksum,
                   const unsigned int num_rows, const unsigned int num_columns) {
   for (unsigned int i = 0; i < num_rows; ++i) {
     double sum = 0;
     for (unsigned int j = 0; j < num_columns; ++j) {
-      //printf("The matrix result at row %d column %d is %d. \n", i, j, matrix[i * num_columns + j] );
+      // printf("The matrix result at row %d column %d is %d. \n", i, j,
+      // matrix[i * num_columns + j] );
       sum += (double)matrix[i * num_columns + j];
     }
     printf("%d times sum checking. \n", i);
@@ -56,7 +56,6 @@ int verify_matrix(double *matrix, const double *checksum,
   }
   return 0;
 }
-
 
 void print_matrix(double const *matrix, unsigned int num_rows,
                   unsigned int num_columns) {
@@ -105,10 +104,10 @@ int main() {
 
   if (cid == 0) {
     for (unsigned int i = 0; i < 32; i++) {
-      c[i]=0;
-      //printf("The martix a[%d]=%x, c[%d]=%x, \n", i, a[i], i, c[i]);
+      c[i] = 0;
+      // printf("The martix a[%d]=%x, c[%d]=%x, \n", i, a[i], i, c[i]);
     }
-    //matmul_tiled_load_store_test(c, a, b, dim);
+    // matmul_tiled_load_store_test(c, a, b, dim);
     matmul_tiled_mxmacc_test(c, a, b, dim);
   }
 
