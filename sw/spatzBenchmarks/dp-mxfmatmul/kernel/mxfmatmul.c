@@ -147,17 +147,17 @@ void matmul_tiled_Bx4(double *c, const double *a, const double *b,
       asm volatile("msettilek t3, %0" ::"r"(kernel_k) : "t3");
       asm volatile("vsetvli zero, %0, e64, m4, ta, ma" ::"r"(vl));
 
-      // Reset the result registers
-      asm volatile("vmv.v.i v16, 0");
-      asm volatile("vmv.v.i v20, 0");
-      asm volatile("vmv.v.i v24, 0");
-      asm volatile("vmv.v.i v28, 0");
-
       // Load Matrix A and B with shifting for avoiding the conflicts.
       // Double-buffering on matrix B.
       // Set the store C address
       asm volatile("mle64.v.a v0, (%0), %1;" ::"r"(a_), "r"(K));
       asm volatile("mle64.v.b v4, (%0), %1;" ::"r"(b_), "r"(K));
+
+      // Reset the result registers
+      asm volatile("vmv.v.i v16, 0");
+      asm volatile("vmv.v.i v20, 0");
+      asm volatile("vmv.v.i v24, 0");
+      asm volatile("vmv.v.i v28, 0");
 
       // Reset the loop control variable.
       unsigned int k = 0;
