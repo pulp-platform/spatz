@@ -33,6 +33,11 @@
 // C = AB with A=[MxK], B=[KxN], C=[MxN];
 // Martix B is transposed in the memory: B_Trans=[NxK]
 // Note: Accumulator size = (KERNEL_M x KERNEL_N)/4;
+// We enforce KERNEL_M * KERNEL_K == vl
+// We enforce KERNEL_N * KERNEL_K <= vl, i.e., KERNEL_N <= KERNEL_M
+// We enforce KERNEL_M * KERNEL_N <= vl, i.e., KERNEL_N <= KERNEL_K
+// We enforce KERNEL_M, KERNEL_N, and KERNEL_K to be either 4 or 8
+// Mind that KERNEL_M * KERNEL_K <= maxvl for the used LMUL
 // -------------------------------------------------//
 #ifndef KERNEL_M
 #define KERNEL_M 8
@@ -42,6 +47,10 @@
 #endif
 #ifndef KERNEL_K
 #define KERNEL_K 4
+#endif
+
+#if (KERNEL_N > KERNEL_K) || (KERNEL_N > KERNEL_M)
+#error "KERNEL_N should be lower than KERNEL_K and KERNEL_M"
 #endif
 
 // --------------  RUNTIME PARAMETERS  -------------//
