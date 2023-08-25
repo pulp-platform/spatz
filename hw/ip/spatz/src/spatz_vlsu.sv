@@ -254,14 +254,12 @@ module spatz_vlsu
   logic [$clog2(MAX_TILE_N)-1:0] mx_max_col;
   // Rows on the M dimension for mtx A load and mtx C store, otherwise on the N dimension
   assign mx_max_row = commit_insn_q.is_load && mem_spatz_req.matrix == TILE_B
-                    ? mem_spatz_req.tile_N[$clog2(MAX_TILE_N)-1:0] - 3'b1
-                    : mem_spatz_req.tile_M[$clog2(MAX_TILE_M)-1:0] - 3'b1;
+                    ? mem_spatz_req.tile_N[$clog2(MAX_TILE_N)-1:0] - 1
+                    : mem_spatz_req.tile_M[$clog2(MAX_TILE_M)-1:0] - 1;
   // Columns on the N dimension for mtx C store, otherwise on the K dimension
   assign mx_max_col = commit_insn_q.is_load
-                    ? mem_spatz_req.matrix == TILE_A
-                      ? mem_spatz_req.tile_M == 8 ? 3 : 7
-                      : mem_spatz_req.tile_M == 8 ? 3 : 7
-                    : (mem_spatz_req.tile_N[$clog2(MAX_TILE_N)-1:0] - 3'b1); // Todo: parametrize on k
+                    ? mem_spatz_req.tile_K[$clog2(MAX_TILE_K)-1:0] - 1
+                    : mem_spatz_req.tile_N[$clog2(MAX_TILE_N)-1:0] - 1;
   assign mx_cnt_max_row = mx_max_row >> ( commit_insn_q.is_load ? $clog2(NrMemPorts) : 0);
   assign mx_cnt_max_col = mx_max_col >> (!commit_insn_q.is_load ? $clog2(NrMemPorts) : 0);
 
