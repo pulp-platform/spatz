@@ -71,6 +71,14 @@ package spatz_pkg;
   //Number of Accumulator Banks
   localparam int unsigned NrACCBanks = `ifdef N_ACC `N_ACC `else 16 `endif;
 
+  // MXU
+  localparam int unsigned MAX_TILE_M = 8;
+  localparam int unsigned MAX_TILE_N = 8;
+  // The col counter in the VLSU is parametrized on MAX_TILE_N only
+  // If you change this parameter, better parametrize the col counter
+  // in the VLSU as well
+  localparam int unsigned MAX_TILE_K = MAX_TILE_N;
+
   //////////////////////
   // Type Definitions //
   //////////////////////
@@ -91,6 +99,11 @@ package spatz_pkg;
 
   // Instruction ID
   typedef logic [$clog2(NrParallelInstructions)-1:0] spatz_id_t;
+
+  // MXU
+  typedef logic [$clog2(MAX_TILE_M):0] tile_m_t;
+  typedef logic [$clog2(MAX_TILE_N):0] tile_n_t;
+  typedef logic [$clog2(MAX_TILE_K):0] tile_k_t;
 
   /////////////////////
   // Operation Types //
@@ -242,9 +255,9 @@ package spatz_pkg;
 
     // MXU
     tile_e matrix;
-    elen_t tile_M;
-    elen_t tile_N;
-    elen_t tile_K;
+    tile_m_t tile_M;
+    tile_n_t tile_N;
+    tile_k_t tile_K;
   } spatz_req_t;
 
   //////////////////////////////////

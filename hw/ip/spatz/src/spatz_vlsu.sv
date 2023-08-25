@@ -108,12 +108,23 @@ module spatz_vlsu
       EW_32: begin
         spatz_req_d.vl     = spatz_req_i.vl << 2;
         spatz_req_d.vstart = spatz_req_i.vstart << 2;
-        // MXU
+        // MXU (32 bit)
         if (spatz_req_i.op_arith.is_mx) begin
+          // The following code works if M, N, K are either 4 or 8, m*k = vl
           unique case(spatz_req_i.matrix)
+            // Tile A is m*k, but since k = vl/m, then m*k == vl
             TILE_A: spatz_req_d.vl = spatz_req_i.vl << 2;
-            TILE_B: spatz_req_d.vl = spatz_req_i.vl << (spatz_req_i.tile_M == 8 && spatz_req_i.tile_N == 4 ? 1 : 2);
-            TILE_C: spatz_req_d.vl = spatz_req_i.vl << 2;
+            // Tile B is k*n, and k = vl/m. Therefore, tile B size is vl * n/m
+            TILE_B: spatz_req_d.vl = spatz_req_i.vl << (
+              spatz_req_i.tile_M == spatz_req_i.tile_N
+              ? 2
+              : spatz_req_i.tile_M == 4
+                ? 3
+                : 1);
+            // Tile C is m*n. Since vl = m*k and m*n should fit a vreg,
+            // n <= k
+            TILE_C: spatz_req_d.vl = spatz_req_i.vl << (
+              spatz_req_i.tile_N == 4 && spatz_req_i.tile_K == 8 ? 1 : 2);
             default: spatz_req_d.vl = spatz_req_i.vl << 2;
           endcase
         end
@@ -121,12 +132,18 @@ module spatz_vlsu
       default: begin
         spatz_req_d.vl     = spatz_req_i.vl << MAXEW;
         spatz_req_d.vstart = spatz_req_i.vstart << MAXEW;
-        // MXU
+        // MXU (64 bit)
         if (spatz_req_i.op_arith.is_mx) begin
           unique case(spatz_req_i.matrix)
             TILE_A: spatz_req_d.vl = spatz_req_i.vl << MAXEW;
-            TILE_B: spatz_req_d.vl = spatz_req_i.vl << (spatz_req_i.tile_M == 8 && spatz_req_i.tile_N == 4 ? MAXEW - 1 : MAXEW);
-            TILE_C: spatz_req_d.vl = spatz_req_i.vl << MAXEW;
+            TILE_B: spatz_req_d.vl = spatz_req_i.vl << (
+              spatz_req_i.tile_M == spatz_req_i.tile_N
+              ? MAXEW
+              : spatz_req_i.tile_M == 4
+                ? MAXEW + 1
+                : MAXEW - 1);
+            TILE_C: spatz_req_d.vl = spatz_req_i.vl << (
+              spatz_req_i.tile_N == 4 && spatz_req_i.tile_K == 8 ? MAXEW - 1 : MAXEW);
             default: spatz_req_d.vl = spatz_req_i.vl << MAXEW;
           endcase
         end
@@ -238,9 +255,6 @@ module spatz_vlsu
   // When loading, the column dimension is k (in memory, A mtx is transposed)
   // The impact of this code is 2*NrPorts counters with $clog2(MAX_TILE) bits
   // This hardware works for TILE_M, TILE_N, TILE_K > NrMemPorts
-  localparam int unsigned MAX_TILE_M = 8;
-  localparam int unsigned MAX_TILE_N = 8;
-  localparam int unsigned MAX_TILE_K = MAX_TILE_N; // Since the col counter is parametrized on MAX_TILE_N only
   localparam int unsigned MAX_TILE_ROW = MAX_TILE_M;
   localparam int unsigned MAX_TILE_COL = MAX_TILE_N;
   // Counters to parametrically handle memory loads/stores

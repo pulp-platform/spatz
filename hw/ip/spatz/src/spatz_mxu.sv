@@ -20,9 +20,9 @@ module spatz_mxu
   input  vlen_t            vl_i,
   input  vrf_data_t        result_i,
   input  vlen_t            last_word_i,
-  input  elen_t            tile_dimK,
-  input  elen_t            tile_dimN,
-  input  elen_t            tile_dimM,
+  input  tile_k_t          tile_dimK,
+  input  tile_n_t          tile_dimN,
+  input  tile_m_t          tile_dimM,
   output vrf_data_t  [2:0] operand_o,
   output logic       [2:0] read_enable_o,
   output logic             write_enable_o,
@@ -38,8 +38,8 @@ module spatz_mxu
     first, second, third, forth
   } operand_fsm_t;
 
-  elen_t num_cols;
-  elen_t num_rows;
+  tile_m_t num_rows;
+  tile_n_t num_cols;
 
   operand_fsm_t block_q;
   operand_fsm_t block_d;
