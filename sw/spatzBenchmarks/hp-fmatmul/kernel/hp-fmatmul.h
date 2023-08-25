@@ -1,4 +1,4 @@
-// Copyright 2021 ETH Zurich and University of Bologna.
+// Copyright 2023 ETH Zurich and University of Bologna.
 //
 // HPDX-License-Identifier: Apache-2.0
 //
@@ -14,7 +14,7 @@
 // See the License for the hpecific language governing permissions and
 // limitations under the License.
 
-// Author: Domenic Wüthrich, ETH Zurich
+// Author: Matheus Cavalcante, ETH Zurich
 
 #ifndef HPFMATMUL_H
 #define HPFMATMUL_H

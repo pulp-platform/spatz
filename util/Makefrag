@@ -14,15 +14,18 @@ INSTALL_PREFIX        ?= install
 INSTALL_DIR           ?= ${ROOT_DIR}/${INSTALL_PREFIX}
 LLVM_INSTALL_DIR      ?= ${INSTALL_DIR}/llvm
 GCC_INSTALL_DIR       ?= ${INSTALL_DIR}/riscv-gcc
+SPIKE_INSTALL_DIR     ?= ${INSTALL_DIR}/riscv-isa-sim
 BENDER_INSTALL_DIR    ?= ${INSTALL_DIR}/bender
 VERILATOR_INSTALL_DIR ?= ${INSTALL_DIR}/verilator
 
 # Support for local override
 BENDER ?= ${BENDER_INSTALL_DIR}/bender
-DASM   ?= riscv -riscv64-gcc-8.5.0 spike-dasm
-VLT    ?= ${VERILATOR_INSTALL_DIR}/bin/verilator
+DASM   ?= ${SPIKE_INSTALL_DIR}/bin/spike-dasm
+VLT    ?= ${VERILATOR_INSTALL_DIR}/bin/verilator_bin
 CMAKE  ?= cmake-3.18.1
 PYTHON ?= python3.6
+CC     ?= gcc-11.2.0
+CXX    ?= g++-11.2.0
 
 MATCH_END := '/+incdir+/ s/$$/\/*\/*/'
 MATCH_BGN := 's/+incdir+//g'
@@ -36,7 +39,7 @@ VSIM_BUILDDIR := work-vsim
 
 # fesvr is being installed here
 FESVR          ?= ${MKFILE_DIR}work
-FESVR_VERSION  ?= 35d50bc40e59ea1d5566fbd3d9226023821b1bb6
+FESVR_VERSION  ?= c663ea20a53f4316db8cb4d591b1c8e437f4a0c4
 
 VLT_BUILDDIR := work-vlt
 VLT_FESVR     = $(VLT_BUILDDIR)/riscv-isa-sim
@@ -56,28 +59,8 @@ VLT_FLAGS    += --unroll-count 1024
 VLT_FLAGS    += --timing
 VLT_BENDER   += -t rtl -t spatz -t spatz_test -t snitch_test
 VLT_SOURCES  := $(shell ${BENDER} script flist ${VLT_BENDER} | ${SED_SRCS})
-VLT_CFLAGS   += -std=c++14 -pthread
-
-# We need a recent LLVM installation (>11) to compile Verilator.
-# We also need to link the binaries with LLVM's libc++.
-# Define CLANG_PATH to be the path of your Clang installation.
-
-ifneq (${CLANG_PATH},)
-    CLANG_CC       := $(CLANG_PATH)/bin/clang
-    CLANG_CXX      := $(CLANG_PATH)/bin/clang++
-    CLANG_CXXFLAGS := "-nostdinc++ -isystem $(CLANG_PATH)/include/c++/v1"
-    CLANG_LDFLAGS  := "-nostdlib++ -fuse-ld=lld -L $(CLANG_PATH)/lib -Wl,-rpath,$(CLANG_PATH)/lib -lc++"
-else
-    CLANG_CC       ?= clang
-    CLANG_CXX      ?= clang++
-    CLANG_CXXFLAGS := ""
-    CLANG_LDFLAGS  := ""
-endif
-
-# Verilator flags
-VLT_FLAGS += --compiler clang
-VLT_FLAGS += -CFLAGS ${CLANG_CXXFLAGS}
-VLT_FLAGS += -LDFLAGS ${CLANG_LDFLAGS}
+VLT_CFLAGS   += -std=c++17 -fcoroutines
+VLT_CFLAGS   += -I${VLT_BUILDDIR}/riscv-isa-sim -I${VLT_BUILDDIR} -I${VERILATOR_INSTALL_DIR}/share/verilator/include -I${VERILATOR_INSTALL_DIR}/share/verilator/include/vltstd -I${ROOT}/hw/ip/snitch_test/src
 
 VLOGAN_FLAGS := -assert svaext
 VLOGAN_FLAGS += -assert disable_cover
@@ -100,13 +83,13 @@ work/${FESVR_VERSION}_unzip:
 	touch $@
 
 work/lib/libfesvr_vsim.a: work/${FESVR_VERSION}_unzip
-	cd $(dir $<)/ && CC=${VSIM_HOME}/gcc-7.4.0-linux_x86_64/bin/gcc CXX=${VSIM_HOME}/gcc-7.4.0-linux_x86_64/bin/g++ ./configure --prefix `pwd`
+	cd $(dir $<)/ && PATH=${SPIKE_INSTALL_DIR}/bin:${PATH} CC=${VSIM_HOME}/gcc-7.4.0-linux_x86_64/bin/gcc CXX=${VSIM_HOME}/gcc-7.4.0-linux_x86_64/bin/g++ ./configure --prefix `pwd`
 	make -C $(dir $<) install-config-hdrs install-hdrs libfesvr.a
 	mkdir -p $(dir $@)
 	cp $(dir $<)libfesvr.a $@
 
 work/lib/libfesvr_vcs.a: work/${FESVR_VERSION}_unzip
-	cd $(dir $<)/ && ./configure --prefix `pwd`
+	cd $(dir $<)/ && PATH=${SPIKE_INSTALL_DIR}/bin:${PATH} ./configure --prefix `pwd`
 	make -C $(dir $<) install-config-hdrs install-hdrs libfesvr.a
 	mkdir -p $(dir $@)
 	cp $(dir $<)libfesvr.a $@
@@ -120,7 +103,7 @@ $(VLT_FESVR)/${FESVR_VERSION}_unzip:
 	touch $@
 
 $(VLT_BUILDDIR)/lib/libfesvr.a: $(VLT_FESVR)/${FESVR_VERSION}_unzip
-	cd $(dir $<)/ && CC=${CC} CXX=${CXX} ./configure --prefix `pwd`
+	cd $(dir $<)/ && PATH=${SPIKE_INSTALL_DIR}/bin:${PATH} ./configure --prefix `pwd`
 	$(MAKE) -C $(dir $<) install-config-hdrs install-hdrs libfesvr.a
 	mkdir -p $(dir $@)
 	cp $(dir $<)libfesvr.a $@

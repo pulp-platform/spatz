@@ -1,11 +1,11 @@
-// Copyright 2021 ETH Zurich and University of Bologna.
+// Copyright 2023 ETH Zurich and University of Bologna.
 // Licensed under the Apache License, Version 2.0, see LICENSE for details.
 // SPDX-License-Identifier: Apache-2.0
 //
-// Author: Domenic Wüthrich, ETH Zurich
+// Author: Matheus Cavalcante, ETH Zurich
 //
-// The deocder takes in a new instruction that is offloaded to Spatz
-// and analyzes and decodes it.
+// The decoder takes in a new instruction that is offloaded to Spatz
+// and decodes it.
 
 module spatz_decoder
   import spatz_pkg::*;

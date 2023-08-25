@@ -9,8 +9,9 @@
 #include "sim.hh"
 #include "tb_lib.hh"
 #include "verilated.h"
-#include "verilated_vcd_c.h"
 namespace sim {
+
+Sim* s;
 
 // Number of cycles between HTIF checks.
 const int HTIFTimeInterval = 200;
@@ -20,13 +21,6 @@ void sim_thread_main(void *arg) { ((Sim *)arg)->main(); }
 int TIME = 0;
 
 Sim::Sim(int argc, char **argv) : htif_t(argc, argv) {
-    // Search arguments for `--vcd` flag and enable waves if requested
-    for (auto i = 1; i < argc; ++i) {
-        if (strcmp(argv[i], "--vcd") == 0) {
-            printf("VCD wave generation enabled\n");
-            vlt_vcd = true;
-        }
-    }
     Verilated::commandArgs(argc, argv);
 }
 
@@ -36,25 +30,26 @@ void Sim::idle() { target.switch_to(); }
 int Sim::run() {
     host = context_t::current();
     target.init(sim_thread_main, this);
-    return htif_t::run();
+
+    int exit_code = htif_t::run();
+    if (exit_code > 0)
+      fprintf(stderr, "[FAILURE] Finished with exit code %2d\n", exit_code);
+    else
+      fprintf(stderr, "[SUCCESS] Program finished successfully\n");
+    return exit_code;
 }
 
 void Sim::main() {
     // Initialize verilator environment.
     Verilated::traceEverOn(true);
-    // Allocate the simulation state and VCD trace.
+
+    // Create a pointer to ourselves
+    s = this;
+
+    // Allocate the simulation state.
     auto top = std::make_unique<Vtestharness>();
-    auto vcd = std::make_unique<VerilatedVcdC>();
 
     bool clk_i = 0, rst_ni = 0;
-
-    // Trace 8 levels of hierarchy.
-    if (vlt_vcd) {
-        top->trace(vcd.get(), 8);
-        vcd->open("sim.vcd");
-        vcd->dump(TIME);
-    }
-    TIME += 2;
 
     while (!Verilated::gotFinish()) {
         clk_i = !clk_i;
@@ -63,7 +58,6 @@ void Sim::main() {
         top->rst_ni = rst_ni;
         // Evaluate the DUT.
         top->eval();
-        if (vlt_vcd) vcd->dump(TIME);
         // Increase global time.
         TIME++;
         // Switch to the HTIF interface in regular intervals.
@@ -71,9 +65,6 @@ void Sim::main() {
             host->switch_to();
         }
     }
-
-    // Clean up.
-    if (vlt_vcd) vcd->close();
 }
 }  // namespace sim
 
@@ -102,5 +93,5 @@ void tb_memory_write(long long addr, int len, const svOpenArrayHandle data,
 }
 
 int get_entry_point() {
-  return s->entry_point();
+  return sim::s->entry_point();
 }

@@ -1,185 +1,115 @@
+![CI](https://github.com/pulp-platform/spatz/actions/workflows/ci.yml/badge.svg)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+
 # Spatz
 
-Spatz is a vector coprocessor based on the [RISC-V vector extension spec v1.0](https://github.com/riscv/riscv-v-spec/releases/tag/v1.0).
+Spatz is a compact vector processor based on [RISC-V's Vector Extension (RVV) v1.0](https://github.com/riscv/riscv-v-spec/releases/tag/v1.0).
+Spatz acts as a coprocessor of [Snitch](https://github.com/pulp-platform/snitch), a tiny 64-bit scalar core.
 
-For an example on how is integrated into a system and connected to a scalar core, please refere to the [MemPool project](https://iis-git.ee.ethz.ch/mempool/mempool.git).
+## Getting started
 
-## Get Started
-
-Make sure you clone this repository recursively to get all the necessary submodules:
-
-```bash
-git submodule update --init --recursive
-```
-
-If the repository path of any submodule changes, run the following command to change your submodule's pointer to the remote repository:
+Make sure you download all necessary dependencies:
 
 ```bash
-git submodule sync --recursive
+make all
 ```
 
-## Dependencies
+The Makefile target will automatically download and compile tested versions of LLVM, GCC, Spike, and Verilator. It might take a while. If you have issues cloning the GitHub modules, you might need to remove the folders in `sw/toolchain`.
 
-When simulatig RTL code, an installation of Bender is required to generate simulation scripts:
+The Spatz cluster system (hw/system/spatz_cluster) is a fundamental system around a Snitch core and a Spatz coprocessor. The cluster can be configured using a config file. The configuration parameters are documented using JSON schema, and documentation is generated for the schema. The cluster testbench simulates an infinite memory. The RISC-V ELF file is preloaded using RISC-V's Front-end Server (`fesvr`).
+
+### Simulating the system
+
+In `hw/system/spatz_cluster`:
+
+- Compile the software and the binaries:
+  - Verilator:
+```bash
+    make sw.vlt
+```
+  - QuestaSim:
+```bash
+    make sw.vsim
+```
+  - VCS:
+```bash
+    make sw.vcs
+```
+- Run a binary on the simulator:
+  - Verilator:
+```bash
+bin/spatz_cluster.vlt path/to/riscv/binary
+```
+  - QuestaSim:
+```bash
+# Headless
+bin/spatz_cluster.vsim path/to/riscv/binary
+# GUI
+bin/spatz_cluster.vsim.gui path/to/riscv/binary
+```
+  - VCS
+```bash
+bin/spatz_cluster.vcs path/to/riscv/binary
+```
+- Build the traces in `.logs/trace_hart_X.txt` with the help of `spike-dasm`:
+```bash
+make traces
+```
+- Annotate the traces in `.logs/trace_hart_X.s` with the source code related to the retired instructions:
+```bash
+make annotate
+```
+- Get an overview of all Makefile targets:
+```bash
+make help
+```
+
+### Configure the Cluster
+
+To configure the cluster with a different configuration, either edit the configuration files in the `cfg` folder or create a new configuration file and pass it to the Makefile:
 
 ```bash
-make bender
+make bin/spatz_cluster.vlt CFG=cfg/spatz_cluster.default.hjson
 ```
 
-## Supported Instructions
+The default config is in `cfg/spatz_cluster.default.hjson`. Alternatively, you can also set your `CFG` environment variable, the Makefile will pick it up and override the standard config.
 
-The goal of Spatz is to implement all instructions belonging to the Zve32x vector extension for embedded processors. The following lists contains all of the instructions belonging to Zve32x and an indication if they are already implemented or not. Spatz does not yet understand vector masking or vector widening/narrowing. Most of the unsupported instructions fall into these two categories.
+## Architecture
 
-### Vector Configuration-Setting
+### Spatz cluster
 
-| Instruction | Status |
-|-------------|:------:|
-| vsetvli     |    ✅   |
-| vsetivli    |    ✅   |
-| vsetvl      |    ✅   |
+Spatz was _not_ designed for full compliance with RVV. Check [Ara](https://github.com/pulp-platform/ara) for an open-source vector processor fully compliant with RVV (and by the same authors!). Instead, Spatz implements some instructions of the vector extension, enough to build a compact and highly efficient embedded vector processor. Thanks to its small size, Spatz is highly scalable, and we rely on multi-core vector processing to scale up the system.
 
-### Vector Loads and Stores
+![Spatz cluster](./docs/fig/spatz_cluster.png)
 
-| Instruction       | Status |
-|-------------------|:------:|
-| vle{8, 16, 32}    |    ✅   |
-| vluxei{8, 16, 32} |    ❌   |
-| vlse{8, 16, 32}   |    ✅   |
-| vloxei{8, 16, 32} |    ❌   |
-| vse{8, 16, 32}    |    ✅   |
-| vsuxei{8, 16, 32} |    ❌   |
-| vsse{8, 16, 32}   |    ✅   |
-| vsoxei{8, 16, 32} |    ❌   |
+The default Spatz cluster has two Snitch-Spatz core complexes (CCs), each with 2 KiB of latch-based VRF. Each CC has four [trans-precision FPUs](https://github.com/openhwgroup/cvfpu) with support for Spatz-specific SDOTP extensions for low-precision computing. The two Spatz-based CCs share access to 128 KiB of L1 scratchpad memory, divided into 16 SRAM banks.
 
-### Vector Integer Arithmetic
+### Spatz core
 
-| Instruction                       | Status |
-|-----------------------------------|:------:|
-| vadd.{vv, vx, vi}                 |    ✅   |
-| vsub.{vv, vx}                     |    ✅   |
-| vrsub.{vx, vi}                    |    ✅   |
-| vwaddu.{vv, vx}                   |    ❌   |
-| vwsubu.{vv, vx}                   |    ❌   |
-| vwadd.{vv, vx}                    |    ❌   |
-| vwsub.{vv, vx}                    |    ❌   |
-| vwaddu.{wv, wx}                   |    ❌   |
-| vwsubu.{wv, wx}                   |    ❌   |
-| vwadd.{wv, wx}                    |    ❌   |
-| vwsub.{wv, wx}                    |    ❌   |
-| vzext.{vf2, vf4, vf8}             |    ❌   |
-| vsext.{vf2, vf4, vf8}             |    ❌   |
-| vadc.{vvm, vxm, vim}              |    ❌   |
-| vmadc.{vvm, vxm, vim, vv, vx, vi} |    ❌   |
-| vsbc.{vvm, vxm}                   |    ❌   |
-| vmsbc.{vvm, vxm, vv, vx}          |    ❌   |
-| vand.{vv, vx, vi}                 |    ✅   |
-| vor.{vv, vx, vi}                  |    ✅   |
-| vxor.{vv, vx, vi}                 |    ✅   |
-| vssl.{vv, vx, vi}                 |    ✅   |
-| vsrl.{vv, vx, vi}                 |    ✅   |
-| vsra.{vv, vx, vi}                 |    ✅   |
-| vnsrl.{wv, wx, wi}                |    ❌   |
-| vnsra.{wv, wx, wi}                |    ❌   |
-| vmseq.{vv, vx, vi}                |    ❌   |
-| vmsne.{vv, vx, vi}                |    ❌   |
-| vmsltu.{vv, vx}                   |    ❌   |
-| vmslt.{vv, vx}                    |    ❌   |
-| vmsleu.{vv, vx, vi}               |    ❌   |
-| vmsle.{vv, vx, vi}                |    ❌   |
-| vmsgtu.{vx, vi}                   |    ❌   |
-| vmsgt.{vx, vi}                    |    ❌   |
-| vminu.{vv. vx}                    |    ✅   |
-| vmin.{vv, vx}                     |    ✅   |
-| vmaxu.{vv, vx}                    |    ✅   |
-| vmax.{vv, vx}                     |    ✅   |
-| vmul.{vv, vx}                     |    ✅   |
-| vmulh.{vv, vx}                    |    ✅   |
-| vmulhu.{vv, vx}                   |    ✅   |
-| vmulhsu.{vv, vx}                  |    ✅   |
-| vdivu.{vv, vx}                    |    ✅   |
-| vdiv.{vv, vx}                     |    ✅   |
-| vremu.{vv, vx}                    |    ✅   |
-| vrem.{vv, vx}                     |    ✅   |
-| vwmul.{vv, vx}                    |    ❌   |
-| vwmulu.{vv, vx}                   |    ❌   |
-| vwmulsu.{vv, vx}                  |    ❌   |
-| vmacc.{vv, vx}                    |    ✅   |
-| vnmsac.{vv, vx}                   |    ✅   |
-| vmadd.{vv, vx}                    |    ✅   |
-| vnmsub.{vv, vx}                   |    ✅   |
-| vwmaccu.{vv, vx}                  |    ❌   |
-| vwmacc.{vv, vx}                   |    ❌   |
-| vwmaccsu.{vv, vx}                 |    ❌   |
-| vwmaccus.vx                       |    ❌   |
-| vmerge.{vvm, vxm, vim}            |    ❌   |
-| vmv.v.{v, x, i}                   |    ✅   |
+Each Spatz has three functional units:
+- The Vector Arithmetic Unit (VAU), hosting `F` trans-precision FPUs and an integer computation unit. Each FPU supports fp8, fp16, fp32, and fp64 computation. Each IPU supports 8, 16, 32, and 64-bit computation. All units maintain a throughput of 64 bit/cycle regardless of the current Selected Element Width. The VAU also supports integer and floating-point reductions.
+- The Vector Load/Store Unit (VLSU), with support for unit-strided, constant-strided, and indexed memory accesses. The VLSU supports a parametric number of 64-bit-wide memory interfaces. Thanks to the multiple narrow interfaces, Spatz can accelerate memory operations. By default, the number of 64-bit memory interfaces matches the number of FPUs in the design. **Important**, Spatz' VLSU cannot access the cluster's L2 memory. Ensure that all vector memory requests go to the local L1 memory (we provide the `snrt_l1alloc` and `snrt_dma_start_1d` functions for L1 initialization).
+- The Vector Slide Unit (VSLDU) executes vector permutation instructions. As of now, we support vector slide up/down and vector moves.
 
-### Vector Fixed-Point Arithmetic
+![Spatz' architecture](./docs/fig/spatz_arch.png)
 
-| Instruction          | Status |
-|----------------------|:------:|
-| vsaddu.{vv, vx, vi}  |    ❌   |
-| vsadd.{vv, vx, vi}   |    ❌   |
-| vssubu.{vv, vx}      |    ❌   |
-| vssub.{vv.vx}        |    ❌   |
-| vaaddu.{vv, vx}      |    ❌   |
-| vaadd.{vv, vx}       |    ❌   |
-| vasubu.{vv, vx}      |    ❌   |
-| vasub.{vv, vx}       |    ❌   |
-| vsmul.{vv, vx}       |    ❌   |
-| vssrl.{vv, vx, vi}   |    ❌   |
-| vssra.{vv, vx, vi}   |    ❌   |
-| vnclipu.{wv, wx, wi} |    ❌   |
-| vnclip.{wv, wx, wi}  |    ❌   |
+### Supported instructions
 
-### Vector Reduction
+The most up-to-date list of supported vector instructions can be found in `sw/riscvTests/CMakeLists.txt`. Spatz does not yet understand vector masking (although this is a work in progress), or fixed-point computation. It also does not understand many of the shuffling and permutation instructions of RVV (e.g., `vrgather`), and users are asked to shuffle data in memory through indexed memory operations. We very much welcome contributions that expand Spatz' capabilities as a vector coprocessor!
 
-| Instruction  | Status |
-|--------------|:------:|
-| vredsum.vs   |    ❌   |
-| vredmaxu.vs  |    ❌   |
-| vredmax.vs   |    ❌   |
-| vredminu.vs  |    ❌   |
-| vredmin.vs   |    ❌   |
-| vredand.vs   |    ❌   |
-| vredor.vs    |    ❌   |
-| vredxor.vs   |    ❌   |
-| vwredsumu.vs |    ❌   |
-| vwredsum.vs  |    ❌   |
+## License
 
-### Vector Mask
+Spatz is being made available under permissive open-source licenses.
 
-| Instruction | Status |
-|-------------|:------:|
-| vmand.mm    |    ❌   |
-| vmnand.mm   |    ❌   |
-| vmandn.mm   |    ❌   |
-| vmxor.mm    |    ❌   |
-| vmor.mm     |    ❌   |
-| vmorn.mm    |    ❌   |
-| vmxnor.mm   |    ❌   |
-| vmmv.m      |    ❌   |
-| vmclr.m     |    ❌   |
-| vmset.m     |    ❌   |
-| vmnot.m     |    ❌   |
-| vcpop.m     |    ❌   |
-| vfirst.m    |    ❌   |
-| vmsbf.m     |    ❌   |
-| vmsif.m     |    ❌   |
-| vmsof.m     |    ❌   |
-| viota.m     |    ❌   |
-| vid.v       |    ❌   |
+The following files are released under Apache License 2.0 (`Apache-2.0`) see `LICENSE`:
 
-### Vector Permutation
+- `sw/`
+- `util/`
 
-| Instruction           | Status |
-|-----------------------|:------:|
-| vmv.{x.s, s.x}        |    ❌   |
-| vslideup.{vx, vi}     |    ✅   |
-| vslidedown.{vx, vi}   |    ✅   |
-| vslide1up.vx          |    ✅   |
-| vslide1down.vx        |    ✅   |
-| vrgather.{vv, vx, vi} |    ❌   |
-| vrgatherei16.vv       |    ❌   |
-| vcompress.vm          |    ❌   |
-| vmv{1, 2, 4, 8}r.v    |    ❌   |
+The following files are released under Solderpad v0.51 (`SHL-0.51`) see `hw/LICENSE`:
+
+- `hw/`
+
+The `sw/toolchain` directory contains third-party sources that come with their licenses. See the respective folder for the licenses used.
+
+- `sw/toolchain/`

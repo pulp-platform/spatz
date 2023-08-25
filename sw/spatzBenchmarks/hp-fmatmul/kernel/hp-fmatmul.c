@@ -1,4 +1,4 @@
-// Copyright 2021 ETH Zurich and University of Bologna.
+// Copyright 2023 ETH Zurich and University of Bologna.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -14,7 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Author: Domenic Wüthrich, ETH Zurich
+// Author: Matheus Cavalcante, ETH Zurich
 
 #include "hp-fmatmul.h"
 #include <stddef.h>

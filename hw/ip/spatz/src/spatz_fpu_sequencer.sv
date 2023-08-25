@@ -1,8 +1,11 @@
-// Copyright 2022 ETH Zurich and University of Bologna.
+// Copyright 2023 ETH Zurich and University of Bologna.
 // Licensed under the Apache License, Version 2.0, see LICENSE for details.
 // SPDX-License-Identifier: Apache-2.0
 //
 // Author: Matheus Cavalcante, ETH Zurich
+//
+// The FPU sequencer gives basic FPU capabilities to Spatz. It manages the
+// floating-point scalar register file, and floating point memory requests.
 
 module spatz_fpu_sequencer
   import spatz_pkg::*;

@@ -31,11 +31,32 @@ VLOG_FLAGS += -suppress 2583
 VLOG_FLAGS += -suppress 13314
 VLOG_FLAGS += -64
 
+# Verilated and compiled Spatz system
+VLT_ROOT = ${VERILATOR_INSTALL_DIR}/share/verilator
+VLT_AR   = ${VLT_BUILDDIR}/Vtestharness__ALL.a
+
 all:
 
 test: ${VSIM_SOURCES} ${TB_SRCS}
 	echo ${VSIM_SOURCES}
 	touch test
+
+###############
+# C testbench #
+###############
+
+# Required C sources for the verilator TB that are linked against the verilated model
+VLT_COBJ  = $(VLT_BUILDDIR)/tb/common_lib.o
+VLT_COBJ += $(VLT_BUILDDIR)/tb/verilator_lib.o
+VLT_COBJ += $(VLT_BUILDDIR)/tb/tb_bin.o
+VLT_COBJ += $(VLT_BUILDDIR)/test/uartdpi/uartdpi.o
+VLT_COBJ += $(VLT_BUILDDIR)/test/bootdata.o
+# Sources from verilator root
+VLT_COBJ += $(VLT_BUILDDIR)/vlt/verilated.o
+VLT_COBJ += $(VLT_BUILDDIR)/vlt/verilated_timing.o
+VLT_COBJ += $(VLT_BUILDDIR)/vlt/verilated_threads.o
+VLT_COBJ += $(VLT_BUILDDIR)/vlt/verilated_dpi.o
+VLT_COBJ += $(VLT_BUILDDIR)/vlt/verilated_vcd_c.o
 
 #################
 # Prerequisites #
@@ -60,18 +81,37 @@ src/generated/spatz_cluster_wrapper.sv: ${SPATZ_CLUSTER_CFG} $(find src/tpl) $(f
 # Verilator #
 #############
 
-.PHONY: verilate
-verilate: ${VLT_BUILDDIR}/verilate
+${VLT_AR}: ${VLT_SOURCES} ${TB_SRCS}
+	$(call VERILATE,testharness)
 
-${VLT_BUILDDIR}/verilate: test/bootrom.bin ${VLT_SOURCES} ${TB_SRCS}
-	$(call VERILATE,tb_bin)
+# Quick sanity check, not really meant for simulation.
+verilate: ${VLT_AR}
 
-# Verilate the Spatz cluster
-bin/spatz_cluster.vlt: ${VLT_BUILDDIR}/verilate
+# Build targets for verilator TB
+$(VLT_BUILDDIR)/tb/%.o: $(TB_DIR)/%.cc $(VLT_AR) ${VLT_BUILDDIR}/lib/libfesvr.a
+	mkdir -p $(dir $@)
+	${CXX} $(CXXFLAGS) $(VLT_CFLAGS) -c $< -o $@
+$(VLT_BUILDDIR)/vlt/%.o: $(VLT_ROOT)/include/%.cpp
+	mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) $(VLT_CFLAGS) -c $< -o $@
+$(VLT_BUILDDIR)/test/%.o: test/%.cc ${VLT_BUILDDIR}/lib/libfesvr.a
+	mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) $(VLT_CFLAGS) -c $< -o $@
 
-## Clean all build directories and temporary files for Verilator simulation
+$(VLT_BUILDDIR)/test/uartdpi/uartdpi.o: test/uartdpi/uartdpi.c
+	mkdir -p $(dir $@)
+	$(CC) $(CXXFLAGS) $(VLT_CFLAGS) -c $< -o $@
+
+# Link verilated archive wich $(VLT_COBJ)
+bin/spatz_cluster.vlt: $(VLT_AR) $(VLT_COBJ) ${VLT_BUILDDIR}/lib/libfesvr.a
+	mkdir -p $(dir $@)
+	$(CXX) $(LDFLAGS) -L ${VLT_BUILDDIR}/lib -o $@ $(VLT_COBJ) $(VLT_AR) -lpthread -lfesvr -lutil -latomic
+
+# Clean all build directories and temporary files for Verilator simulation
+.PHONY: clean.vlt
 clean.vlt:
-	rm -rf ${VLT_BUILDDIR} work
+	rm -rf work-vlt
+	rm -f bin/spatz_cluster.vlt
 
 ############
 # Modelsim #
@@ -80,7 +120,7 @@ clean.vlt:
 ${VSIM_BUILDDIR}/compile.vsim.tcl: test/bootrom.bin $(VSIM_SOURCES) ${TB_SRCS} ${TB_DIR}/rtl_lib.cc ${TB_DIR}/common_lib.cc test/bootdata.cc test/bootrom.bin
 	vlib $(dir $@)
 	${BENDER} script vsim ${VSIM_BENDER} ${DEFS} --vlog-arg="${VLOG_FLAGS} -work $(dir $@) " > $@
-	echo '${VLOG} -work $(dir $@) ${TB_DIR}/rtl_lib.cc ${TB_DIR}/common_lib.cc test/bootdata.cc -ccflags "-std=c++14 -I${MKFILE_DIR}/test -I${MKFILE_DIR}/work/include -I${TB_DIR}"' >> $@
+	echo '${VLOG} -work $(dir $@) ${TB_DIR}/rtl_lib.cc ${TB_DIR}/common_lib.cc test/bootdata.cc -ccflags "-std=c++17 -I${MKFILE_DIR}/test -I${MKFILE_DIR}/work/include -I${TB_DIR}"' >> $@
 	echo '${VLOG} -work $(dir $@) test/uartdpi/uartdpi.c -ccflags "-Itest/uartdpi"' >> $@
 	echo 'return 0' >> $@
 
@@ -151,7 +191,7 @@ sw.test.vcs: sw.vcs
 
 # VLT
 ## Build SW into sw/build with the LLVM toolchain (including tests) for Verilator simulator
-sw.vlt: clean.sw verilate
+sw.vlt: clean.sw bin/spatz_cluster.vlt
 	mkdir -p sw/build
 	cd sw/build && ${CMAKE} -DLLVM_PATH=${LLVM_INSTALL_DIR} -DGCC_PATH=${GCC_INSTALL_DIR} -DPYTHON=${PYTHON} -DSNITCH_SIMULATOR=../../../../../hw/system/spatz_cluster/bin/spatz_cluster.vlt -DBUILD_TESTS=ON .. && make -j8
 

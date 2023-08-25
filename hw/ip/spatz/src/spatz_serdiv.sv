@@ -1,11 +1,13 @@
-// Copyright 2020 ETH Zurich and University of Bologna.
-// Solderpad Hardware License, Version 0.51, see LICENSE for details.
-// SPDX-License-Identifier: SHL-0.51
-
-/// Shared Multiply/Divide a.k.a M Extension
-/// Based on Ariane Multiply Divide
-/// Author: Michael Schaffner,  <schaffner@iis.ee.ethz.ch>
-/// Author: Florian Zaruba , <zarubaf@iis.ee.ethz.ch>
+// Copyright 2023 ETH Zurich and University of Bologna.
+// Licensed under the Apache License, Version 2.0, see LICENSE for details.
+// SPDX-License-Identifier: Apache-2.0
+//
+// Author: Michael Schaffner,  <schaffner@iis.ee.ethz.ch>
+// Author: Florian Zaruba, <zarubaf@iis.ee.ethz.ch>
+// Author: Matheus Cavalcante, <matheusd@iis.ee.ethz.ch>
+//
+// Shared Multiply/Divide a.k.a M Extension
+// Based on Ariane Multiply Divide
 
 module spatz_serdiv #(
     parameter              WIDTH   = 64,

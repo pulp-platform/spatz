@@ -63,7 +63,7 @@ class IpcIface {
             switch (op.opcode) {
                 case Read:
                     // Read full blocks until one full block or less left
-                    printf("[IPC] Read from 0x%x len %d ...\n", op.addr,
+                    printf("[IPC] Read from 0x%lx len %lu ...\n", op.addr,
                            op.len);
                     for (uint64_t i = op.len; i > IPC_BUF_SIZE;
                          i -= IPC_BUF_SIZE) {
@@ -76,7 +76,7 @@ class IpcIface {
                     break;
                 case Write:
                     // Write full blocks until one full block or less left
-                    printf("[IPC] Write to 0x%x len %d ...\n", op.addr, op.len);
+                    printf("[IPC] Write to 0x%lx len %lu ...\n", op.addr, op.len);
                     for (uint64_t i = op.len; i > IPC_BUF_SIZE;
                          i -= IPC_BUF_SIZE) {
                         fread(buf_data, IPC_BUF_SIZE, 1, tx);
@@ -90,7 +90,7 @@ class IpcIface {
                     // Unpack 32b checking mask and expected value from length
                     uint32_t mask = op.len & 0xFFFFFFFF;
                     uint32_t expected = (op.len >> 32) & 0xFFFFFFFF;
-                    printf("[IPC] Poll on 0x%x mask 0x%x expected 0x%x ...\n",
+                    printf("[IPC] Poll on 0x%lx mask 0x%x expected 0x%x ...\n",
                            op.addr, mask, expected);
                     uint32_t read;
                     do {
@@ -99,7 +99,7 @@ class IpcIface {
                         nanosleep(
                             (const struct timespec[]){{0, IPC_POLL_PERIOD_NS}},
                             NULL);
-                    } while (read & mask == expected & mask);
+                    } while ((read & mask) == (expected & mask));
                     // Send back read 32b word
                     fwrite(&read, sizeof(uint32_t), 1, rx);
                     fflush(rx);
