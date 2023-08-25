@@ -67,6 +67,7 @@ void matmul_tiled_mxmacc_test(double *c, const double *a, const double *b,
 #ifdef TILE_LD_A
   asm volatile("msettilem t1, %0" ::"r"(8) : "t1");
   asm volatile("msettilen t2, %0" ::"r"(4) : "t2");
+  asm volatile("msettilek t3, %0" ::"r"(4) : "t3");
   asm volatile("vmv.v.i v0, 0");
   asm volatile("mle64.v.a v0, (%0), %1;" ::"r"(a_), "r"(4));
 //  asm volatile("vse64.v v0, (%0);" ::"r"(c_)); // Optional Print
@@ -76,6 +77,7 @@ void matmul_tiled_mxmacc_test(double *c, const double *a, const double *b,
 #ifdef TILE_LD_B
   asm volatile("msettilem t1, %0" ::"r"(8) : "t1");
   asm volatile("msettilen t2, %0" ::"r"(4) : "t2");
+  asm volatile("msettilek t3, %0" ::"r"(4) : "t3");
   asm volatile("vmv.v.i v4, 0");
   asm volatile("mle64.v.b v4, (%0), %1;" ::"r"(b_), "r"(4));
 //  asm volatile("vse64.v v4, (%0);" ::"r"(c_)); // Optional Print
