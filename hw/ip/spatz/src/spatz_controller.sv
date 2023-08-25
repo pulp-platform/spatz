@@ -387,6 +387,9 @@ module spatz_controller
   // Retire CSR instruction and write back result to main core.
   logic retire_csr;
 
+  // Response to the scalar core
+  logic rsp_ready_q;
+
   // We stall issuing a new instruction if the corresponding execution unit is
   // not ready yet. Or we have a change in LMUL, for which we need to let all the
   // units finish first before scheduling a new operation (to avoid running into
@@ -412,7 +415,8 @@ module spatz_controller
   );
 
   // Pop the buffer if we do not have a unit stall
-  assign req_buffer_pop = ~stall & req_buffer_valid && !running_insn_full;
+  // Configuration instructions should wait until the core is ready to accept back the answer
+  assign req_buffer_pop = ~stall & (rsp_ready_q | (spatz_req.ex_unit != CON)) & req_buffer_valid && !running_insn_full;
 
   // Issue new operation to execution units
   always_comb begin : ex_issue
@@ -568,7 +572,7 @@ module spatz_controller
     .ready_i(vfu_rsp_ready                  )
   );
 
-  logic       rsp_valid_d;
+  logic rsp_valid_d;
   spatz_rsp_t rsp_d;
   spill_register #(
     .T     (spatz_rsp_t ),
@@ -578,7 +582,7 @@ module spatz_controller
     .rst_ni (rst_ni      ),
     .data_i (rsp_d       ),
     .valid_i(rsp_valid_d ),
-    .ready_o(/* Unused */),
+    .ready_o(rsp_ready_q ),
     .data_o (rsp_o       ),
     .valid_o(rsp_valid_o ),
     .ready_i(rsp_ready_i )
