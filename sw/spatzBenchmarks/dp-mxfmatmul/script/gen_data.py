@@ -151,12 +151,14 @@ def emit_GEMM_layer(name='gemm', **kwargs):
 
     return layer_str
 
+
 def emit_Print_layer(mat):
     result_str = "// Results Print:\n"
     for row in mat:
         line = " ".join(str(struct.unpack('f', struct.pack('f', x))[0]) for x in row)
         result_str += "// " + line + "\n"
     return result_str
+
 
 def emit_batchnorm_layer(name='batchnorm', **kwargs):
 
@@ -309,14 +311,14 @@ def rand_data_generator(shape, prec, alt=False):
         mantissa = torch.randint(0, 4, shape, requires_grad=False, dtype=torch.uint8)  # can be arbitrary
         bits = {'sign': sign, 'exponent': exponent, 'mantissa': mantissa}
         # TODO: not actually correct
-        return ((-1.0)**sign.double())*(2.0**(exponent.double()-15.0))*(1.0 + mantissa.double() / (2**2)), bits
+        return ((-1.0)**sign.double()) * (2.0**(exponent.double() - 15.0)) * (1.0 + mantissa.double() / (2**2)), bits
 
 
 def conv2d(ifmap, weights, padding=1, stride=1):
     n, ci, ih, iw = ifmap.shape
     co, _, fh, fw = weights.shape
 
-    conv2d = nn.Conv2d(ci, co, (fh, fw), padding=((fh-1)//2, (fw-1)//2))
+    conv2d = nn.Conv2d(ci, co, (fh, fw), padding=((fh - 1) // 2, (fw - 1) // 2))
     conv2d.weight = nn.Parameter(weights, requires_grad=False)
     conv2d.bias = nn.Parameter(torch.zeros_like(conv2d.bias, dtype=weights.dtype), requires_grad=False)
     ofmap = conv2d(ifmap)
@@ -355,12 +357,12 @@ def fused_conv(ifmap, weights, bn_k, bn_l, padding, stride, bn, relu, accumulate
         fh, fw, co = weights.shape
         ci = co
 
-    ifmap_padded = torch.zeros(ih + padding['padding_y_top'] + padding['padding_y_bottom'], iw +
-                               padding['padding_x_left'] + padding['padding_x_right'],
+    ifmap_padded = torch.zeros(ih + padding['padding_y_top'] + padding['padding_y_bottom'],
+                               iw + padding['padding_x_left'] + padding['padding_x_right'],
                                ci,
                                requires_grad=False, dtype=ifmap.dtype)
-    ifmap_padded[padding['padding_y_top']:ih+padding['padding_y_top'],
-                 padding['padding_x_left']:iw+padding['padding_x_left']] = ifmap
+    ifmap_padded[padding['padding_y_top']:ih + padding['padding_y_top'],
+                 padding['padding_x_left']:iw + padding['padding_x_left']] = ifmap
 
     # Don't cover undefined behaviour when there are steps without a complete kernel window
     if (ifmap_padded.shape[0] - (fh - 1) - 1) % stride['stride_y'] != 0:
@@ -383,15 +385,15 @@ def fused_conv(ifmap, weights, bn_k, bn_l, padding, stride, bn, relu, accumulate
         for h in range(0, ifmap_padded.shape[0] - (fh - 1), stride['stride_y']):
             for w in range(0, ifmap_padded.shape[1] - (fw - 1), stride['stride_x']):
                 for c in range(co):
-                    ofmap[h//stride['stride_y'], w//stride['stride_x'],
-                          c] = torch.dot(ifmap_padded[h:h+fh, w:w+fw, c].flatten(), weights[:, :, c].flatten())
+                    ofmap[h // stride['stride_y'], w // stride['stride_x'],
+                          c] = torch.dot(ifmap_padded[h:h + fh, w:w + fw, c].flatten(), weights[:, :, c].flatten())
     else:
         # Conv2d
         for h in range(0, ifmap_padded.shape[0] - (fh - 1), stride['stride_y']):
             for w in range(0, ifmap_padded.shape[1] - (fw - 1), stride['stride_x']):
                 for c in range(co):
-                    ofmap[h//stride['stride_y'], w//stride['stride_x'],
-                          c] = torch.dot(ifmap_padded[h:h+fh, w:w+fw].flatten(), weights[c].flatten())
+                    ofmap[h // stride['stride_y'], w // stride['stride_x'],
+                          c] = torch.dot(ifmap_padded[h:h + fh, w:w + fw].flatten(), weights[c].flatten())
 
     ofmap += ofmap_before
 
