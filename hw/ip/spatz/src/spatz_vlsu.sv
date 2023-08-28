@@ -318,11 +318,11 @@ module spatz_vlsu
     // Go to a new row when we finished the previous one
     // Load instructions: we load column-wise (sequence of non-unit-strided loads)
     // Store instructions: we store row-wise (sequence of unit-strided stores)
-    assign mx_cnt_en_row[port] = mem_spatz_req.op_arith.is_mx & mem_counter_en[port] & (mx_cnt_clr_col[port] |  commit_insn_q.is_load);
-    assign mx_cnt_en_col[port] = mem_spatz_req.op_arith.is_mx & mem_counter_en[port] & (mx_cnt_clr_row[port] | ~commit_insn_q.is_load);
+    assign mx_cnt_en_row[port] = mem_spatz_req.op_arith.is_mx & mem_counter_en[port] & ((mx_cnt_col_q[port] == mx_cnt_max_col) |  commit_insn_q.is_load);
+    assign mx_cnt_en_col[port] = mem_spatz_req.op_arith.is_mx & mem_counter_en[port] & ((mx_cnt_row_q[port] == mx_cnt_max_row) | ~commit_insn_q.is_load);
     // Count up to (tile_size - 1), and tile_size is power of 2
-    assign mx_cnt_clr_row[port] = mx_cnt_en_row[port] & mx_cnt_row_q[port] == mx_cnt_max_row;
-    assign mx_cnt_clr_col[port] = mx_cnt_en_col[port] & mx_cnt_col_q[port] == mx_cnt_max_col;
+    assign mx_cnt_clr_row[port] = mx_cnt_en_row[port] & (mx_cnt_row_q[port] == mx_cnt_max_row);
+    assign mx_cnt_clr_col[port] = mx_cnt_en_col[port] & (mx_cnt_col_q[port] == mx_cnt_max_col);
 
     counter #(
       .WIDTH($clog2(MAX_TILE_ROW))
@@ -331,7 +331,7 @@ module spatz_vlsu
       .rst_ni    (rst_ni              ),
       .clear_i   (mx_cnt_clr_row[port]),
       .en_i      (mx_cnt_en_row[port] ),
-      .load_i    (/* Unused */        ),
+      .load_i    ('0                  ),
       .down_i    (1'b0                ), // We always count up
       .d_i       ('0                  ),
       .q_o       (mx_cnt_row_q[port]  ),
@@ -345,7 +345,7 @@ module spatz_vlsu
       .rst_ni    (rst_ni              ),
       .clear_i   (mx_cnt_clr_col[port]),
       .en_i      (mx_cnt_en_col[port] ),
-      .load_i    (/* Unused */        ),
+      .load_i    ('0                  ),
       .down_i    (1'b0                ), // We always count up
       .d_i       ('0                  ),
       .q_o       (mx_cnt_col_q[port]  ),
