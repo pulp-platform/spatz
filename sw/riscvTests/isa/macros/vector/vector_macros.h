@@ -9,8 +9,6 @@
 
 #include "dataset.h"
 #include "encoding.h"
-#include "float_conversion.h"
-#include "rvv_debug_macros.h"
 #include <stdint.h>
 #include <string.h>
 
