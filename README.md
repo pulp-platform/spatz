@@ -110,6 +110,7 @@ The following files are released under Solderpad v0.51 (`SHL-0.51`) see `hw/LICE
 
 - `hw/`
 
-The `sw/toolchain` directory contains third-party sources that come with their licenses. See the respective folder for the licenses used.
+The following directories contains third-party sources that come with their licenses. See the respective folder for the licenses used.
 
+- `sw/snRuntime/vendor`
 - `sw/toolchain/`
