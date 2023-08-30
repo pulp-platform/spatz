@@ -114,3 +114,4 @@ The following directories contains third-party sources that come with their lice
 
 - `sw/snRuntime/vendor`
 - `sw/toolchain/`
+- `util/vendor`
