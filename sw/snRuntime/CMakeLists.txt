@@ -18,7 +18,7 @@ else()
     set(SNRUNTIME_INCLUDE_DIRS
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_SOURCE_DIR}/vendor
-        ${CMAKE_CURRENT_SOURCE_DIR}/vendor/riscv-opcodes
+        ${CMAKE_CURRENT_SOURCE_DIR}/../toolchain/riscv-opcodes
         PARENT_SCOPE)
 endif()
 
@@ -50,7 +50,7 @@ endif()
 include_directories(
     include
     vendor
-    vendor/riscv-opcodes
+    ../toolchain/riscv-opcodes
 )
 
 # Common sources

@@ -101,6 +101,8 @@ snRuntime-test-vsim:
     - $CI_PROJECT_DIR/util/memora_retry.sh get tc-riscv-gcc
     # Download bender
     - make bender
+    # Update opcodes
+    - make update_opcodes
     # Download python dependencies
     - export PYTHON3=$(which python3.6)
     - ${PYTHON3} -m pip install --user jsonref
@@ -126,6 +128,8 @@ snRuntime-test-vcs:
     - $CI_PROJECT_DIR/util/memora_retry.sh get tc-riscv-gcc
     # Download bender
     - make bender
+    # Update opcodes
+    - make update_opcodes
     # Download python dependencies
     - export PYTHON3=$(which python3.6)
     - ${PYTHON3} -m pip install --user jsonref
@@ -152,6 +156,8 @@ snRuntime-test-vlt:
     - $CI_PROJECT_DIR/util/memora_retry.sh get verilator
     # Download bender
     - make bender
+    # Update opcodes
+    - make update_opcodes
     # Download python dependencies
     - export PYTHON3=$(which python3.6)
     - ${PYTHON3} -m pip install --user jsonref
@@ -179,6 +185,8 @@ riscvTests-test-vlt:
     - $CI_PROJECT_DIR/util/memora_retry.sh get verilator
     # Download bender
     - make bender
+    # Update opcodes
+    - make update_opcodes
     # Download python dependencies
     - export PYTHON3=$(which python3.6)
     - ${PYTHON3} -m pip install --user jsonref
@@ -206,6 +214,8 @@ spatzBenchmarks-test-vlt:
     - $CI_PROJECT_DIR/util/memora_retry.sh get verilator
     # Download bender
     - make bender
+    # Update opcodes
+    - make update_opcodes
     # Download python dependencies
     - export PYTHON3=$(which python3.6)
     - ${PYTHON3} -m pip install --user jsonref
