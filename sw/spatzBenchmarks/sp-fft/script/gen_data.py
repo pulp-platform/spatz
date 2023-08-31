@@ -241,10 +241,18 @@ def main():
     # Generate buffer for intermediate butterflies
     buffer_dram = np.zeros(2 * NFFT)
 
+    # License
+    emit_str = (
+        "// Copyright 2023 ETH Zurich and University of Bologna.\n"
+        + "// Licensed under the Apache License, Version 2.0, see LICENSE for details.\n"
+        + "// SPDX-License-Identifier: Apache-2.0\n\n"
+        + "// This file was generated automatically.\n\n"
+    )
+
     # store_delta = [0, 2, 4, 6, 8, 10, 12, 14]
     # bitrev = [0, 4, 2, 6, 1, 5, 3, 7]
     # Create the file
-    emit_str = 'static uint32_t NFFT = {};\n'.format(NFFT)
+    emit_str += 'static uint32_t NFFT = {};\n'.format(NFFT)
     emit_str += 'static uint32_t NTWI = {};\n\n'.format(N_TWID_V)
 
     emit_str += 'static float samples_dram[{}]'.format(2 * NFFT) + ' __attribute__((section(".data"))) = {' + ', '.join(

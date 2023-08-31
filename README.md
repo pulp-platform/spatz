@@ -105,11 +105,18 @@ The following files are released under Apache License 2.0 (`Apache-2.0`) see `LI
 
 - `sw/`
 - `util/`
+- `docs/schema`
 
 The following files are released under Solderpad v0.51 (`SHL-0.51`) see `hw/LICENSE`:
 
 - `hw/`
 
-The `sw/toolchain` directory contains third-party sources that come with their licenses. See the respective folder for the licenses used.
+The following files are released under Creative Commons BY 4.0 (`CC-BY-4.0`) see `docs/fig/LICENSE`:
 
+- `docs/fig`
+
+The following directories contains third-party sources that come with their licenses. See the respective folder for the licenses used.
+
+- `sw/snRuntime/vendor`
 - `sw/toolchain/`
+- `util/vendor`

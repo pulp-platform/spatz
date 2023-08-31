@@ -18,7 +18,7 @@ else()
     set(SNRUNTIME_INCLUDE_DIRS
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_SOURCE_DIR}/vendor
-        ${CMAKE_CURRENT_SOURCE_DIR}/vendor/riscv-opcodes
+        ${CMAKE_CURRENT_SOURCE_DIR}/../toolchain/riscv-opcodes
         PARENT_SCOPE)
 endif()
 
@@ -50,7 +50,7 @@ endif()
 include_directories(
     include
     vendor
-    vendor/riscv-opcodes
+    ../toolchain/riscv-opcodes
 )
 
 # Common sources
@@ -66,9 +66,9 @@ set(sources
 )
 
 # platform specific sources
-set(rtl_snitch_sources
-    src/platforms/rtl/start_snitch.S
-    src/platforms/rtl/putchar.c
+set(standalone_snitch_sources
+    src/platforms/standalone/start_snitch.S
+    src/platforms/standalone/putchar.c
 )
 
 # Sources only compatible with the LLVM toolchain
@@ -97,7 +97,7 @@ if (CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     add_snitch_library(snRuntime src/start.S ${sources})
 
     # Bare Runtimes (with startup code)
-    add_snitch_library(snRuntime-cluster src/platforms/shared/start.c ${rtl_snitch_sources} ${sources})
+    add_snitch_library(snRuntime-cluster src/platforms/shared/start.c ${standalone_snitch_sources} ${sources})
 
 
 else()
@@ -107,7 +107,7 @@ else()
         add_snitch_library(snRuntime src/platforms/shared/start.c src/start.S ${sources})
     # Bare Runtimes (with startup code)
     elseif(SNITCH_RUNTIME STREQUAL "snRuntime-cluster")
-        add_snitch_library(snRuntime-cluster src/platforms/shared/start.c ${rtl_snitch_sources} ${sources})
+        add_snitch_library(snRuntime-cluster src/platforms/shared/start.c ${standalone_snitch_sources} ${sources})
     else()
         message(FATAL_ERROR "Requested runtime not implemented: ${SNITCH_RUNTIME}")
     endif()

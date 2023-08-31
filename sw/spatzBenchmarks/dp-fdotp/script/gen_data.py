@@ -43,9 +43,10 @@ def emit_header_file(layer_type: str, **kwargs):
 
     file_path = pathlib.Path(__file__).parent.parent / "data"
     emit_str = (
-        "// Copyright 2022 ETH Zurich and University of Bologna.\n"
+        "// Copyright 2023 ETH Zurich and University of Bologna.\n"
         + "// Licensed under the Apache License, Version 2.0, see LICENSE for details.\n"
         + "// SPDX-License-Identifier: Apache-2.0\n\n"
+        + "// This file was generated automatically.\n\n"
     )
 
     file = file_path / ("data_" + str(kwargs["M"]) + ".h")
