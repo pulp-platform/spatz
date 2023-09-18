@@ -536,9 +536,11 @@ module ${cfg['name']}_wrapper
 % if cfg['tie_ports']:
     .hart_base_id_i (${to_sv_hex(cfg['cluster_base_hartid'], 10)}),
     .cluster_base_addr_i (${to_sv_hex(cfg['cluster_base_addr'], cfg['addr_width'])}),
+    .axi_core_default_user_i (${to_sv_hex(cfg['cluster_default_axi_user'], cfg['user_width'])}),
 % else:
     .hart_base_id_i,
     .cluster_base_addr_i,
+    .axi_core_default_user_i,
 % endif
     .cluster_probe_o,
 % if cfg['axi_cdc_enable']:

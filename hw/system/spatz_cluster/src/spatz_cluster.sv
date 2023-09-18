@@ -122,6 +122,9 @@ module spatz_cluster
     /// Base address of cluster. TCDM and cluster peripheral location are derived from
     /// it. This signal is pseudo-static.
     input  logic          [AxiAddrWidth-1:0] cluster_base_addr_i,
+    /// Default AXI User Signal for the Cluster Cores
+    /// General use: Atomic ID, needs to be unique ID of cluster
+    input  logic          [AxiUserWidth-1:0] axi_core_default_user_i,
     /// Per-cluster probe on the cluster status. Can be written by the cores to indicate
     /// to the overall system that the cluster is executing something.
     output logic                             cluster_probe_o,
@@ -861,9 +864,8 @@ module spatz_cluster
   reqrsp_req_t core_to_axi_req;
   reqrsp_rsp_t core_to_axi_rsp;
   user_t       cluster_user;
-  // Atomic ID, needs to be unique ID of cluster
-  // cluster_id + HartIdOffset + 1 (because 0 is for non-atomic masters)
-  assign cluster_user = (hart_base_id_i / NrCores) + (hart_base_id_i % NrCores) + 1'b1;
+
+  assign cluster_user = axi_core_default_user_i;
 
   reqrsp_mux #(
     .NrPorts   (NrCores         ),

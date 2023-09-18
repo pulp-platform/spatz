@@ -14,6 +14,7 @@
         id_width_in: 6,
         id_width_out: 2,
         user_width: 10,
+        cluster_default_axi_user: 7,
         axi_cdc_enable: true,
         sw_rst_enable: true,
         axi_isolate_enable: true,
