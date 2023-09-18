@@ -66,8 +66,8 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   ////////////////
 
   // Number of ports of the vector register file
-  localparam NrWritePorts = 3;
-  localparam NrReadPorts  = 6;
+  localparam int unsigned NrWritePorts = 3;
+  localparam int unsigned NrReadPorts  = 6;
 
   /////////////
   // Signals //

@@ -158,12 +158,13 @@ module spatz_fpu_sequencer
   //  Instruction decoder  //
   ///////////////////////////
 
-  enum logic [1:0] {
+  typedef enum logic [1:0] {
     Byte     = 2'b00,
     HalfWord = 2'b01,
     Word     = 2'b10,
     Double   = 2'b11
-  } ls_size;
+  } ls_size_t;
+  ls_size_t  ls_size;
 
   always_comb begin
     // We are not reading any operands
@@ -380,10 +381,11 @@ module spatz_fpu_sequencer
         riscv_instr::FLD: begin
           use_fd = 1'b1;
           casez (issue_req_i.data_op)
-            riscv_instr::FLB: ls_size = Byte;
-            riscv_instr::FLH: ls_size = HalfWord;
-            riscv_instr::FLW: ls_size = Word;
+            riscv_instr::FLB: ls_size          = Byte;
+            riscv_instr::FLH: ls_size          = HalfWord;
+            riscv_instr::FLW: ls_size          = Word;
             riscv_instr::FLD: if (RVD) ls_size = Double;
+            default:;
           endcase
           is_load      = 1'b1;
           illegal_inst = !RVD && issue_req_i.data_op inside {riscv_instr::FLD};
@@ -394,10 +396,11 @@ module spatz_fpu_sequencer
         riscv_instr::FSD: begin
           use_fs2 = 1'b1;
           casez (issue_req_i.data_op)
-            riscv_instr::FSB: ls_size = Byte;
-            riscv_instr::FSH: ls_size = HalfWord;
-            riscv_instr::FSW: ls_size = Word;
+            riscv_instr::FSB: ls_size          = Byte;
+            riscv_instr::FSH: ls_size          = HalfWord;
+            riscv_instr::FSW: ls_size          = Word;
             riscv_instr::FSD: if (RVD) ls_size = Double;
+            default:;
           endcase
           is_store     = 1'b1;
           illegal_inst = !RVD && issue_req_i.data_op inside {riscv_instr::FSD};

@@ -90,7 +90,7 @@ module vregfile import spatz_pkg::*; #(
   // Store new data to memory
   /* verilator lint_off NOLATCH */
   for (genvar vreg = 0; vreg < NrWords; vreg++) begin: gen_write_mem
-    for (genvar b = 0; b < WordWidth/8; b++) begin
+    for (genvar b = 0; b < WordWidth/8; b++) begin: gen_word
       logic clk_latch;
       tc_clk_and2 i_clk_and (
         .clk0_i(row_clk[vreg]),
@@ -107,7 +107,7 @@ module vregfile import spatz_pkg::*; #(
           if (clk_latch)
             mem[vreg][b] <= wdata_q[b*8 +: 8];
       end
-    end
+    end: gen_word
   end: gen_write_mem
   /* verilator lint_on NOLATCH */
 

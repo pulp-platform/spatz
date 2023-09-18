@@ -606,7 +606,7 @@ module spatz_cluster
       data_t amo_rdata_local;
 
       // TODO(zarubaf): Share atomic units between mutltiple cuts
-      snitch_amo_shim #(
+      spatz_amo_shim #(
         .AddrMemWidth ( TCDMMemAddrWidth ),
         .DataWidth    ( DataWidth        ),
         .CoreIDWidth  ( CoreIDWidth      )
@@ -773,7 +773,7 @@ module spatz_cluster
       assign wide_axi_mst_req[SDMAMst] = axi_dma_req;
       assign axi_dma_res               = wide_axi_mst_rsp[SDMAMst];
       assign dma_events                = dma_core_events;
-    end else begin
+    end else begin:  gen_no_dma_connection
       assign axi_dma_res = '0;
     end
   end

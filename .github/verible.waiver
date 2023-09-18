@@ -2,5 +2,16 @@
 # Licensed under the Apache License, Version 2.0, see LICENSE for details.
 # SPDX-License-Identifier: Apache-2.0
 
+# Auto-generated configuration registers are waived
+waive --rule=typedef-structs-unions --location="hw/system/spatz_cluster/src/spatz_cluster_peripheral/*"
+waive --rule=line-length --location="hw/system/spatz_cluster/src/spatz_cluster_peripheral/*"
+waive --rule=no-trailing-spaces --location="hw/system/spatz_cluster/src/spatz_cluster_peripheral/*"
+waive --rule=parameter-name-style --location="hw/system/spatz_cluster/src/spatz_cluster_peripheral/*"
+# Our parameters are not CamelCase
+waive --rule=parameter-name-style --location="hw/ip/snitch/src/snitch_pkg.sv"
+waive --rule=parameter-name-style --location="hw/ip/spatz/src/generated/spatz_pkg.sv"
+# Our interfaces do not follow the interface conventions
+waive --rule=interface-name-style --location="hw/ip/reqrsp_interface/src/reqrsp_intf.sv"
+waive --rule=interface-name-style --location="hw/ip/tcdm_interface/src/tcdm_interface.sv"
 # We have some long lines
 waive --rule=line-length --location="hw/*"
