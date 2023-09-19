@@ -3,8 +3,7 @@
 
 # Spatz
 
-Spatz is a compact vector processor based on [RISC-V's Vector Extension (RVV) v1.0](https://github.com/riscv/riscv-v-spec/releases/tag/v1.0).
-Spatz acts as a coprocessor of [Snitch](https://github.com/pulp-platform/snitch), a tiny 64-bit scalar core.
+Spatz is a compact vector processor based on [RISC-V's Vector Extension (RVV) v1.0](https://github.com/riscv/riscv-v-spec/releases/tag/v1.0). Spatz acts as a coprocessor of [Snitch](https://github.com/pulp-platform/snitch), a tiny 64-bit scalar core. It is developed as part of the PULP project, a joint effort between ETH Zurich and the University of Bologna.
 
 ## Getting started
 
@@ -120,3 +119,19 @@ The following directories contains third-party sources that come with their lice
 - `sw/snRuntime/vendor`
 - `sw/toolchain/`
 - `util/vendor`
+
+## Publications
+
+If you want to use Spatz, you can cite us:
+
+```bibtex
+@Article{Spatz2023,
+  title         = {Spatz: Clustering Compact RISC-V-Based Vector Units to Maximize Computing Efficiency},
+  author        = {Matheus Cavalcante and Matteo Perotti and Samuel Riedel and Luca Benini},
+  year          = {2023},
+  month         = sep,
+  eprint        = {2309.5116558},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.AR}
+}
+```
