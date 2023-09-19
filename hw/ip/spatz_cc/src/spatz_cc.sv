@@ -315,7 +315,7 @@ module spatz_cc
     .fpu_status_o            (fpu_status            )
   );
 
-  for (genvar p = 0; p < NumMemPortsPerSpatz; p++) begin
+  for (genvar p = 0; p < NumMemPortsPerSpatz; p++) begin: gen_tcdm_assignment
     assign tcdm_req_o[p] = '{
          q      : spatz_mem_req[p],
          q_valid: spatz_mem_req_valid[p]

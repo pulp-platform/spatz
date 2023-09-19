@@ -11,8 +11,8 @@ module spatz_vlsu
   import spatz_pkg::*;
   import rvv_pkg::*;
   import cf_math_pkg::idx_width; #(
-    parameter                NrMemPorts         = 1,
-    parameter                NrOutstandingLoads = 8,
+    parameter int unsigned   NrMemPorts         = 1,
+    parameter int unsigned   NrOutstandingLoads = 8,
     // Memory request
     parameter  type          spatz_mem_req_t    = logic,
     parameter  type          spatz_mem_rsp_t    = logic,
@@ -128,9 +128,10 @@ module spatz_vlsu
   //  State  //
   /////////////
 
-  enum logic {
+  typedef enum logic {
     VLSU_RunningLoad, VLSU_RunningStore
-  } state_d, state_q;
+  } state_t;
+  state_t state_d, state_q;
   `FF(state_q, state_d, VLSU_RunningLoad)
 
 

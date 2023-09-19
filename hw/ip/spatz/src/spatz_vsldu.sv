@@ -160,10 +160,11 @@ module spatz_vsldu
   `FF(running_q, running_d, '0)
 
   // Respond to controller if we are finished executing
-  enum logic {
+  typedef enum logic {
     VSLDU_RUNNING,    // Running an instruction
     VSLDU_WAIT_WVALID // Waiting for the last wvalid to acknowledge the instruction
-  } state_q, state_d;
+   } state_t;
+   state_t state_q, state_d;
   `FF(state_q, state_d, VSLDU_RUNNING)
 
   // New instruction
@@ -223,10 +224,11 @@ module spatz_vsldu
   logic vreg_operation_last;
 
   // FSM to decide whether we are on the first operation or not
-  enum logic {
+  typedef enum logic {
     VREG_IDLE,
     VREG_WAIT_FIRST_WRITE
-  } vreg_operation_first_q, vreg_operation_first_d;
+  } vreg_operation_first_t;
+  vreg_operation_first_t vreg_operation_first_q, vreg_operation_first_d;
   `FF(vreg_operation_first_q, vreg_operation_first_d, VREG_IDLE)
 
   always_comb begin: vsldu_vreg_counter_proc
@@ -263,6 +265,7 @@ module spatz_vsldu
         if (vrf_req_valid_d && vrf_req_ready_d)
           vreg_operation_first_d = VREG_IDLE;
       end
+      default:;
     endcase
     vreg_operation_last = spatz_req_valid && !prefetch_q && (delta <= (VRFWordBWidth - vreg_counter_q[idx_width(VRFWordBWidth)-1:0]));
 
@@ -326,7 +329,9 @@ module spatz_vsldu
             state_d = VSLDU_WAIT_WVALID;
           end
         end
-      end
+      end // case: VSLDU_WAIT_WVALID
+
+      default:;
     endcase
   end: vsldu_rsp
 

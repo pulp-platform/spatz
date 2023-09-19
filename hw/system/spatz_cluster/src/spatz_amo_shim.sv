@@ -14,7 +14,7 @@
 /// indicate a fault to the programmer.
 
 /// LR/SC reservations are happening on `DataWidth` granularity.
-module snitch_amo_shim
+module spatz_amo_shim
   import snitch_pkg::*;
   import reqrsp_pkg::*;
 #(
@@ -235,12 +235,49 @@ module snitch_amo_shim
     endcase
   end
 
-  snitch_amo_alu i_amo_alu (
-    .amo_op_i (amo_op_q),
-    .operand_a_i (operand_a),
-    .operand_b_i (operand_b_q),
-    .result_o (amo_result)
-  );
+   // ----------------
+   // AMO ALU
+   // ----------------
+
+  logic [33:0] adder_sum;
+  logic [32:0] adder_operand_a, adder_operand_b;
+
+   assign adder_sum = adder_operand_a + adder_operand_b;
+   /* verilator lint_off WIDTH */
+   always_comb begin : amo_alu
+     adder_operand_a = $signed(operand_a);
+     adder_operand_b = $signed(operand_b_q);
+
+     amo_result = operand_b_q;
+
+     unique case (amo_op_q)
+       // the default is to output operand_b
+       AMOSwap:;
+       AMOAdd: amo_result = adder_sum[31:0];
+       AMOAnd: amo_result = operand_a & operand_b_q;
+       AMOOr:  amo_result = operand_a | operand_b_q;
+       AMOXor: amo_result = operand_a ^ operand_b_q;
+       AMOMax: begin
+         adder_operand_b = -$signed(operand_b_q);
+         amo_result = adder_sum[32] ? operand_b_q : operand_a;
+       end
+       AMOMin: begin
+         adder_operand_b = -$signed(operand_b_q);
+         amo_result = adder_sum[32] ? operand_a : operand_b_q;
+       end
+       AMOMaxu: begin
+         adder_operand_a = $unsigned(operand_a);
+         adder_operand_b = -$unsigned(operand_b_q);
+         amo_result = adder_sum[32] ? operand_b_q : operand_a;
+       end
+       AMOMinu: begin
+         adder_operand_a = $unsigned(operand_a);
+         adder_operand_b = -$unsigned(operand_b_q);
+         amo_result = adder_sum[32] ? operand_a : operand_b_q;
+       end
+       default: amo_result = '0;
+     endcase
+   end
 
   // ----------
   // Assertions
@@ -255,56 +292,4 @@ module snitch_amo_shim
   // Byte enable mask is correct
   `ASSERT(ByteMaskCorrect, valid_i && !amo_i inside {AMONone} |-> wstrb_i[4*idx_d+:4] == '1)
 
-endmodule
-
-/// Simple ALU supporting atomic memory operations.
-module snitch_amo_alu import reqrsp_pkg::*; (
-  input  amo_op_e amo_op_i,
-  input  logic [31:0]         operand_a_i,
-  input  logic [31:0]         operand_b_i,
-  output logic [31:0]         result_o
-);
-    // ----------------
-    // AMO ALU
-    // ----------------
-    logic [33:0] adder_sum;
-    logic [32:0] adder_operand_a, adder_operand_b;
-
-    assign adder_sum = adder_operand_a + adder_operand_b;
-    /* verilator lint_off WIDTH */
-    always_comb begin : amo_alu
-
-        adder_operand_a = $signed(operand_a_i);
-        adder_operand_b = $signed(operand_b_i);
-
-        result_o = operand_b_i;
-
-        unique case (amo_op_i)
-            // the default is to output operand_b
-            AMOSwap:;
-            AMOAdd: result_o = adder_sum[31:0];
-            AMOAnd: result_o = operand_a_i & operand_b_i;
-            AMOOr:  result_o = operand_a_i | operand_b_i;
-            AMOXor: result_o = operand_a_i ^ operand_b_i;
-            AMOMax: begin
-                adder_operand_b = -$signed(operand_b_i);
-                result_o = adder_sum[32] ? operand_b_i : operand_a_i;
-            end
-            AMOMin: begin
-                adder_operand_b = -$signed(operand_b_i);
-                result_o = adder_sum[32] ? operand_a_i : operand_b_i;
-            end
-            AMOMaxu: begin
-                adder_operand_a = $unsigned(operand_a_i);
-                adder_operand_b = -$unsigned(operand_b_i);
-                result_o = adder_sum[32] ? operand_b_i : operand_a_i;
-            end
-            AMOMinu: begin
-                adder_operand_a = $unsigned(operand_a_i);
-                adder_operand_b = -$unsigned(operand_b_i);
-                result_o = adder_sum[32] ? operand_a_i : operand_b_i;
-            end
-            default: result_o = '0;
-        endcase
-    end
 endmodule

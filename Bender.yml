@@ -53,14 +53,6 @@ sources:
   ## hw/ip/mem_interface ##
 
   - hw/ip/mem_interface/src/mem_wide_narrow_mux.sv
-  - hw/ip/mem_interface/src/mem_interface.sv
-  - target: simulation
-    files:
-      - hw/ip/mem_interface/src/mem_test.sv
-  - target: test
-    files:
-      # Level 0
-      - hw/ip/mem_interface/test/mem_wide_narrow_mux_tb.sv
 
   ## hw/ip/tcdm_interface ##
 
