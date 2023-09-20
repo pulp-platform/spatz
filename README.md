@@ -130,7 +130,7 @@ If you want to use Spatz, you can cite us:
   author        = {Matheus Cavalcante and Matteo Perotti and Samuel Riedel and Luca Benini},
   year          = {2023},
   month         = sep,
-  eprint        = {2309.5116558},
+  eprint        = {2309.10137},
   archivePrefix = {arXiv},
   primaryClass  = {cs.AR}
 }
