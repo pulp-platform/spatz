@@ -13,6 +13,8 @@
         data_width: 64,
         id_width_in: 2,
         id_width_out: 4,
+        user_width: 2,
+        cluster_default_axi_user: 1,
         axi_cdc_enable: false,
         tcdm: {
             size: 128,
