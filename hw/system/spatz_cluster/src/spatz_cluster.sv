@@ -69,6 +69,9 @@ module spatz_cluster
     parameter int                     unsigned               NumIntOutstandingMem     [NrCores] = '{default: '0},
     /// Per-core Spatz outstanding loads
     parameter int                     unsigned               NumSpatzOutstandingLoads [NrCores] = '{default: '0},
+    // Spatz parameters
+    parameter int                     unsigned               NumSpatzFPUs             [NrCores] = '{default: '0},
+    parameter int                     unsigned               NumSpatzIPUs             [NrCores] = '{default: '0},
     /// ## Timing Tuning Parameters
     /// Insert Pipeline registers into off-loading path (response)
     parameter bit                                            RegisterOffloadRsp                 = 1'b0,
@@ -736,6 +739,8 @@ module spatz_cluster
       .XF8                     (1'b1                       ),
       .XF8ALT                  (1'b1                       ),
       .IsoCrossing             (1'b0                       ),
+      .NumSpatzFPUs            (NumSpatzFPUs[i]            ),
+      .NumSpatzIPUs            (NumSpatzIPUs[i]            ),
       .NumIntOutstandingLoads  (NumIntOutstandingLoads[i]  ),
       .NumIntOutstandingMem    (NumIntOutstandingMem[i]    ),
       .NumSpatzOutstandingLoads(NumSpatzOutstandingLoads[i]),
@@ -777,7 +782,7 @@ module spatz_cluster
       assign wide_axi_mst_req[SDMAMst] = axi_dma_req;
       assign axi_dma_res               = wide_axi_mst_rsp[SDMAMst];
       assign dma_events                = dma_core_events;
-    end else begin:  gen_no_dma_connection
+    end else begin: gen_no_dma_connection
       assign axi_dma_res = '0;
     end
   end

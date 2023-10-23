@@ -6,8 +6,8 @@
 
 # Root
 SHELL = /usr/bin/env bash
-SPATZ_DIR := $(shell git rev-parse --show-toplevel 2>/dev/null || echo $$SPATZ_DIR)
-ROOT_DIR := ${SPATZ_DIR}
+SPATZ_DIR ?= $(shell git rev-parse --show-toplevel 2>/dev/null || echo $$SPATZ_DIR)
+ROOT_DIR  ?= ${SPATZ_DIR}
 
 # Binaries
 INSTALL_PREFIX        ?= install
