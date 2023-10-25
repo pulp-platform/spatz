@@ -25,13 +25,8 @@ endif()
 add_compile_options(-O3 -g -ffunction-sections)
 
 # Default memory regions
-if(SNITCH_RUNTIME STREQUAL "snRuntime-cluster")
-    set(MEM_DRAM_ORIGIN "0x80000000" CACHE STRING "Base address of external memory")
-    set(MEM_DRAM_SIZE "0x80000000" CACHE STRING "Size of external memory")
-else()
-    set(MEM_DRAM_ORIGIN "0x80000000" CACHE STRING "Base address of external memory")
-    set(MEM_DRAM_SIZE "256M" CACHE STRING "Size of external memory")
-endif()
+set(MEM_DRAM_ORIGIN "0x80000000" CACHE STRING "Base address of external memory")
+set(MEM_DRAM_SIZE "0x80000000" CACHE STRING "Size of external memory")
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/link/common.ld.in common.ld @ONLY)
 set(LINKER_SCRIPT ${CMAKE_CURRENT_BINARY_DIR}/common.ld CACHE PATH "")
 

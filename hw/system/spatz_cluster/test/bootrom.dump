@@ -6,115 +6,103 @@ Disassembly of section .text:
 
 00001000 <_start>:
     1000:	00000317          	auipc	t1,0x0
-    1004:	07032303          	lw	t1,112(t1) # 1070 <_GLOBAL_OFFSET_TABLE_+0x4>
+    1004:	04430313          	addi	t1,t1,68 # 1044 <exception>
     1008:	30531073          	csrw	mtvec,t1
     100c:	f1402573          	csrr	a0,mhartid
     1010:	00000597          	auipc	a1,0x0
-    1014:	0645a583          	lw	a1,100(a1) # 1074 <_GLOBAL_OFFSET_TABLE_+0x8>
-    1018:	10500073          	wfi
-    101c:	00c5a383          	lw	t2,12(a1)
-    1020:	0105ae03          	lw	t3,16(a1)
-    1024:	01c383b3          	add	t2,t2,t3
-    1028:	05838393          	addi	t2,t2,88
-    102c:	00038393          	mv	t2,t2
-    1030:	0003a383          	lw	t2,0(t2)
-    1034:	00038067          	jr	t2
+    1014:	04058593          	addi	a1,a1,64 # 1050 <BOOTDATA>
+    1018:	00001337          	lui	t1,0x1
+    101c:	80030313          	addi	t1,t1,-2048 # 800 <_start-0x800>
+    1020:	30431073          	csrw	0x304,t1
+    1024:	10500073          	wfi
+    1028:	0185a383          	lw	t2,24(a1)
+    102c:	0205ae03          	lw	t3,32(a1)
+    1030:	01c383b3          	add	t2,t2,t3
+    1034:	05838393          	addi	t2,t2,88
+    1038:	00038393          	mv	t2,t2
+    103c:	0003a383          	lw	t2,0(t2)
+    1040:	00038067          	jr	t2
 
-00001038 <exception>:
-    1038:	10500073          	wfi
-    103c:	ffdff06f          	j	1038 <exception>
+00001044 <exception>:
+    1044:	10500073          	wfi
+    1048:	ffdff06f          	j	1044 <exception>
 
 Disassembly of section .rodata:
 
-00001040 <BOOTDATA>:
-    1040:	1000                	.2byte	0x1000
-    1042:	0000                	.2byte	0x0
-    1044:	0002                	.2byte	0x2
+00001050 <BOOTDATA>:
+    1050:	1000                	addi	s0,sp,32
+    1052:	0000                	unimp
+    1054:	0000                	unimp
+    1056:	0000                	unimp
+    1058:	0001                	nop
 	...
-    104e:	0010                	.2byte	0x10
-    1050:	0000                	.2byte	0x0
-    1052:	0002                	.2byte	0x2
-    1054:	0000                	.2byte	0x0
-    1056:	0000                	.2byte	0x0
-    1058:	0000                	.2byte	0x0
-    105a:	8000                	.2byte	0x8000
+    106a:	0010                	addi	a2,sp,0
+    106c:	0000                	unimp
+    106e:	0000                	unimp
+    1070:	0000                	unimp
+    1072:	0002                	0x2
 	...
-    1064:	0001                	.2byte	0x1
+    1080:	0000                	unimp
+    1082:	2000                	fld	fs0,0(s0)
+    1084:	0000                	unimp
+    1086:	0000                	unimp
+    1088:	0000                	unimp
+    108a:	2004                	fld	fs1,0(s0)
+    108c:	0000                	unimp
 	...
 
 Disassembly of section .boot_section:
 
-00001068 <entry_addr>:
-    1068:	1038                	.2byte	0x1038
+00001090 <entry_addr>:
+    1090:	1044                	addi	s1,sp,36
 	...
 
-Disassembly of section .got:
+Disassembly of section .Pulp_Chip.Info:
 
-0000106c <_GLOBAL_OFFSET_TABLE_>:
-    106c:	0000                	.2byte	0x0
-    106e:	0000                	.2byte	0x0
-    1070:	1038                	.2byte	0x1038
-    1072:	0000                	.2byte	0x0
-    1074:	1040                	.2byte	0x1040
+00000000 <.Pulp_Chip.Info>:
+   0:	000a                	0xa
+   2:	0000                	unimp
+   4:	0038                	addi	a4,sp,8
+   6:	0000                	unimp
+   8:	0001                	nop
+   a:	0000                	unimp
+   c:	7550                	flw	fa2,44(a0)
+   e:	706c                	flw	fa1,100(s0)
+  10:	495f 666e 006f      	0x6f666e495f
+  16:	70696863          	bltu	s2,t1,726 <_start-0x8da>
+  1a:	6e3d                	lui	t3,0xf
+  1c:	20656e6f          	jal	t3,56222 <entry_addr+0x55192>
+  20:	3d757063          	bleu	s7,a0,3e0 <_start-0xc20>
+  24:	6f6e                	flw	ft10,216(sp)
+  26:	656e                	flw	fa0,216(sp)
+  28:	7020                	flw	fs0,96(s0)
+  2a:	3d65                	jal	fffffee2 <pulp__FC+0xfffffee3>
+  2c:	312d                	jal	fffffc56 <pulp__FC+0xfffffc57>
+  2e:	6620                	flw	fs0,72(a2)
+  30:	312d3d63          	p.bneimm	s10,-14,34a <_start-0xcb6>
+  34:	6c20                	flw	fs0,88(s0)
+  36:	3d32                	fld	fs10,296(sp)
+  38:	312d                	jal	fffffc62 <pulp__FC+0xfffffc63>
+  3a:	6c20                	flw	fs0,88(s0)
+  3c:	6331                	lui	t1,0xc
+  3e:	3d6c                	fld	fa1,248(a0)
+  40:	312d                	jal	fffffc6a <pulp__FC+0xfffffc6b>
+  42:	6c20                	flw	fs0,88(s0)
+  44:	6631                	lui	a2,0xc
+  46:	312d3d63          	p.bneimm	s10,-14,360 <_start-0xca0>
+  4a:	0000                	unimp
 	...
-
-Disassembly of section .got.plt:
-
-00001078 <.got.plt>:
-    1078:	ffff                	.2byte	0xffff
-    107a:	ffff                	.2byte	0xffff
-    107c:	0000                	.2byte	0x0
-	...
-
-Disassembly of section .riscv.attributes:
-
-00000000 <.riscv.attributes>:
-   0:	4341                	.2byte	0x4341
-   2:	0000                	.2byte	0x0
-   4:	7200                	.2byte	0x7200
-   6:	7369                	.2byte	0x7369
-   8:	01007663          	bgeu	zero,a6,14 <_start-0xfec>
-   c:	0039                	.2byte	0x39
-   e:	0000                	.2byte	0x0
-  10:	1004                	.2byte	0x1004
-  12:	7205                	.2byte	0x7205
-  14:	3376                	.2byte	0x3376
-  16:	6932                	.2byte	0x6932
-  18:	7032                	.2byte	0x7032
-  1a:	5f31                	.2byte	0x5f31
-  1c:	326d                	.2byte	0x326d
-  1e:	3070                	.2byte	0x3070
-  20:	615f 7032 5f31      	.byte	0x5f, 0x61, 0x32, 0x70, 0x31, 0x5f
-  26:	3266                	.2byte	0x3266
-  28:	3270                	.2byte	0x3270
-  2a:	7a5f 6369 7273      	.byte	0x5f, 0x7a, 0x69, 0x63, 0x73, 0x72
-  30:	7032                	.2byte	0x7032
-  32:	5f30                	.2byte	0x5f30
-  34:	697a                	.2byte	0x697a
-  36:	6566                	.2byte	0x6566
-  38:	636e                	.2byte	0x636e
-  3a:	6965                	.2byte	0x6965
-  3c:	7032                	.2byte	0x7032
-  3e:	0030                	.2byte	0x30
-  40:	0108                	.2byte	0x108
-  42:	0b0a                	.2byte	0xb0a
 
 Disassembly of section .comment:
 
 00000000 <.comment>:
-   0:	3a434347          	.4byte	0x3a434347
-   4:	2820                	.2byte	0x2820
-   6:	736f7263          	bgeu	t5,s6,72a <_start-0x8d6>
-   a:	6f6f7473          	csrrci	s0,0x6f6,30
-   e:	2d6c                	.2byte	0x2d6c
-  10:	474e                	.2byte	0x474e
-  12:	3120                	.2byte	0x3120
-  14:	322e                	.2byte	0x322e
-  16:	2e35                	.2byte	0x2e35
-  18:	2e30                	.2byte	0x2e30
-  1a:	3538                	.2byte	0x3538
-  1c:	365f 6331 6334      	.byte	0x5f, 0x36, 0x31, 0x63, 0x34, 0x63
-  22:	20296163          	bltu	s2,sp,224 <_start-0xddc>
-  26:	2e39                	.2byte	0x2e39
-  28:	2e35                	.2byte	0x2e35
-  2a:	0030                	.2byte	0x30
+   0:	3a434347          	fmsub.d	ft6,ft6,ft4,ft7,rmm
+   4:	2820                	fld	fs0,80(s0)
+   6:	29554e47          	fmsub.s	ft8,fa0,fs5,ft5,rmm
+   a:	3720                	fld	fs0,104(a4)
+   c:	312e                	fld	ft2,232(sp)
+   e:	312e                	fld	ft2,232(sp)
+  10:	3220                	fld	fs0,96(a2)
+  12:	3130                	fld	fa2,96(a0)
+  14:	30353037          	lui	zero,0x30353
+  18:	0039                	c.addi	zero,14

@@ -14,11 +14,11 @@
 _snrt_init_core_info:
     .globl _snrt_init_core_info
     mv        a4, a1
-    lw        a1, 4(a4)  # load the number of cores per cluster
-    lw        t0, 8(a4)  # load cluster's hartid offset
-    lw        a2, 12(a4) # start address of the TCDM
-    lw        t1, 16(a4) # size of TCDM address space
-    lw        t2, 20(a4) # offset between cluster TCDMs
+    lw        a1, 8(a4)  # load the number of cores per cluster
+    lw        t0, 16(a4) # load cluster's hartid offset
+    lw        a2, 24(a4) # start address of the TCDM
+    lw        t1, 32(a4) # size of TCDM address space
+    lw        t2, 40(a4) # offset between cluster TCDMs
     sub       a0, a0, t0
     div       t3, a0, a1 # calculate cluster index
     mul       t4, t3, t2 # calculate cluster TCDM offset
@@ -45,5 +45,5 @@ _snrt_cluster_barrier:
 # a0 = bootdata->hartid_base
 _snrt_get_base_hartid:
     .globl _snrt_get_base_hartid
-    lw        a0, 8(a0)  # load cluster's hartid offset
+    lw        a0, 16(a0)  # load cluster's hartid offset
     ret

@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: SHL-0.51
 
 #include <spatz_cluster_peripheral.h>
+#include <encoding.h>
 
   .global _start
   .global BOOTDATA
@@ -12,13 +13,18 @@ _start:
   csrw    mtvec, t1
   csrr    a0, mhartid
   la      a1, BOOTDATA
+
+  // Activate MEIP
+  li t1, MIP_MEIP
+  csrw mie, t1
+
   // Wait for the wakeup interrupt
   wfi
 
   // Load the start address of the TCDM
-  lw      t2, 12(a1)
+  lw      t2, 24(a1)
   // Load the size of the TCDM
-  lw      t3, 16(a1)
+  lw      t3, 32(a1)
   // Final address of the TCDM
   add     t2, t2, t3
 
