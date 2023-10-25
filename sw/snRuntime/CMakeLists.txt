@@ -24,6 +24,9 @@ endif()
 
 add_compile_options(-O3 -g -ffunction-sections)
 
+# Platform sources
+set(PLATFORM_SOURCE_FOLDER "src/platforms/standalone" CACHE STRING "Path to the platform-specific sources")
+
 # Default memory regions
 set(MEM_DRAM_ORIGIN "0x80000000" CACHE STRING "Base address of external memory")
 set(MEM_DRAM_SIZE "0x80000000" CACHE STRING "Size of external memory")
@@ -62,8 +65,8 @@ set(sources
 
 # platform specific sources
 set(standalone_snitch_sources
-    src/platforms/standalone/start_snitch.S
-    src/platforms/standalone/putchar.c
+    ${PLATFORM_SOURCE_FOLDER}/start_snitch.S
+    ${PLATFORM_SOURCE_FOLDER}/putchar.c
 )
 
 # Sources only compatible with the LLVM toolchain
