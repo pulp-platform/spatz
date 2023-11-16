@@ -271,10 +271,31 @@ module spatz_cc
   dreq_t fp_lsu_mem_req;
   drsp_t fp_lsu_mem_rsp;
 
-  tcdm_req_chan_t [NumMemPortsPerSpatz-1:0] spatz_mem_req;
+  // TODO: NRVREG
+  typedef struct packed {
+    logic [$clog2(spatz_pkg::NRVREG):0] id;
+    logic [TCDMAddrWidth-1:0] addr;
+    logic [1:0] mode;
+    logic [1:0] size;
+    logic write;
+    logic [DataWidth/8-1:0] strb;
+    // logic [spatz_pkg::ELEN-1:0] data;
+    logic [DataWidth-1:0] data;
+    logic last;
+    logic spec;
+  } spatz_mem_req_t;
+
+  typedef struct packed {
+    logic [$clog2(spatz_pkg::NRVREG)-1:0] id;
+    // logic [spatz_pkg::ELEN-1:0] data;
+    logic [63:0] data;
+    logic err;
+  } spatz_mem_rsp_t;
+
+  spatz_mem_req_t [NumMemPortsPerSpatz-1:0] spatz_mem_req;
   logic           [NumMemPortsPerSpatz-1:0] spatz_mem_req_valid;
   logic           [NumMemPortsPerSpatz-1:0] spatz_mem_req_ready;
-  tcdm_rsp_chan_t [NumMemPortsPerSpatz-1:0] spatz_mem_rsp;
+  spatz_mem_rsp_t [NumMemPortsPerSpatz-1:0] spatz_mem_rsp;
   logic           [NumMemPortsPerSpatz-1:0] spatz_mem_rsp_valid;
 
   spatz #(
@@ -284,8 +305,8 @@ module spatz_cc
     .RegisterRsp        (RegisterOffloadRsp      ),
     .dreq_t             (dreq_t                  ),
     .drsp_t             (drsp_t                  ),
-    .spatz_mem_req_t    (tcdm_req_chan_t         ),
-    .spatz_mem_rsp_t    (tcdm_rsp_chan_t         ),
+    .spatz_mem_req_t    (spatz_mem_req_t         ),
+    .spatz_mem_rsp_t    (spatz_mem_rsp_t         ),
     .spatz_issue_req_t  (acc_issue_req_t         ),
     .spatz_issue_rsp_t  (acc_issue_rsp_t         ),
     .spatz_rsp_t        (acc_rsp_t               )
@@ -316,14 +337,31 @@ module spatz_cc
   );
 
   for (genvar p = 0; p < NumMemPortsPerSpatz; p++) begin
-    assign tcdm_req_o[p] = '{
-         q      : spatz_mem_req[p],
-         q_valid: spatz_mem_req_valid[p]
-       };
+    // assign tcdm_req_o[p] = '{
+    //      q      : spatz_mem_req[p],
+    //      q_valid: spatz_mem_req_valid[p]
+    //    };
+    // assign spatz_mem_req_ready[p] = tcdm_rsp_i[p].q_ready;
+
+    // assign spatz_mem_rsp[p]       = tcdm_rsp_i[p].p;
+    // assign spatz_mem_rsp_valid[p] = tcdm_rsp_i[p].p_valid;
+
+
+    assign spatz_mem_rsp[p].id       = '0;
+    assign spatz_mem_rsp[p].data     = tcdm_rsp_i[p].p.data;
+    assign spatz_mem_rsp[p].err      = '0;
+    assign spatz_mem_rsp_valid[p]    = tcdm_rsp_i[p].p_valid;
+
+    assign tcdm_req_o[p].q.addr      = spatz_mem_req[p].addr;
+    assign tcdm_req_o[p].q.write     = spatz_mem_req[p].write;
+    assign tcdm_req_o[p].q.amo       = reqrsp_pkg::AMONone;
+    assign tcdm_req_o[p].q.data      = spatz_mem_req[p].data;
+    assign tcdm_req_o[p].q.strb      = spatz_mem_req[p].strb;
+    assign tcdm_req_o[p].q.user      = '0;
+
+    assign tcdm_req_o[p].q_valid     = spatz_mem_req_valid[p];
     assign spatz_mem_req_ready[p] = tcdm_rsp_i[p].q_ready;
 
-    assign spatz_mem_rsp[p]       = tcdm_rsp_i[p].p;
-    assign spatz_mem_rsp_valid[p] = tcdm_rsp_i[p].p_valid;
   end
 
   reqrsp_mux #(

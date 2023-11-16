@@ -163,16 +163,40 @@ module spatz_vlsu
   typedef logic [int'(MAXEW)-1:0] addr_offset_t;
 
   elen_t [NrMemPorts-1:0] rob_wdata;
+  id_t   [NrMemPorts-1:0] rob_wid;
   logic  [NrMemPorts-1:0] rob_push;
   logic  [NrMemPorts-1:0] rob_rvalid;
   elen_t [NrMemPorts-1:0] rob_rdata;
   logic  [NrMemPorts-1:0] rob_pop;
+  id_t   [NrMemPorts-1:0] rob_rid;
+  logic  [NrMemPorts-1:0] rob_req_id;
+  id_t   [NrMemPorts-1:0] rob_id;
   logic  [NrMemPorts-1:0] rob_full;
   logic  [NrMemPorts-1:0] rob_empty;
 
   // The reorder buffer decouples the memory side from the register file side.
   // All elements from one side to the other go through it.
   for (genvar port = 0; port < NrMemPorts; port++) begin : gen_rob
+`ifdef MEMPOOL
+    reorder_buffer #(
+      .DataWidth(ELEN              ),
+      .NumWords (NrOutstandingLoads)
+    ) i_reorder_buffer (
+      .clk_i    (clk_i           ),
+      .rst_ni   (rst_ni          ),
+      .data_i   (rob_wdata[port] ),
+      .id_i     (rob_wid[port]   ),
+      .push_i   (rob_push[port]  ),
+      .data_o   (rob_rdata[port] ),
+      .valid_o  (rob_rvalid[port]),
+      .id_read_o(rob_rid[port]   ),
+      .pop_i    (rob_pop[port]   ),
+      .id_req_i (rob_req_id[port]),
+      .id_o     (rob_id[port]    ),
+      .full_o   (rob_full[port]  ),
+      .empty_o  (rob_empty[port] )
+    );
+`else
     fifo_v3 #(
       .DATA_WIDTH(ELEN              ),
       .DEPTH     (NrOutstandingLoads)
@@ -189,8 +213,8 @@ module spatz_vlsu
       .empty_o   (rob_empty[port] ),
       .usage_o   (/* Unused */    )
     );
-
     assign rob_rvalid[port] = !rob_empty[port];
+`endif
   end: gen_rob
 
   //////////////////////
@@ -698,10 +722,12 @@ module spatz_vlsu
   //////////////////////////
 
   // Memory request signals
+  id_t  [NrMemPorts-1:0]                   mem_req_id;
   logic [NrMemPorts-1:0][MemDataWidth-1:0] mem_req_data;
   logic [NrMemPorts-1:0]                   mem_req_svalid;
   logic [NrMemPorts-1:0][ELEN/8-1:0]       mem_req_strb;
   logic [NrMemPorts-1:0]                   mem_req_lvalid;
+  logic [NrMemPorts-1:0]                   mem_req_last;
 
   // Number of pending requests
   logic [NrMemPorts-1:0][idx_width(NrOutstandingLoads):0] mem_pending_d, mem_pending_q;
@@ -732,13 +758,17 @@ module spatz_vlsu
     vrf_req_valid_d = 1'b0;
 
     rob_wdata = '0;
+    rob_wid   = '0;
     rob_push  = '0;
     rob_pop   = '0;
+    rob_req_id = '0;
 
+    mem_req_id     = '0;
     mem_req_data   = '0;
     mem_req_strb   = '0;
     mem_req_svalid = '0;
     mem_req_lvalid = '0;
+    mem_req_last   = '0;
 
     // Propagate request ID
     vrf_req_d.rsp.id    = commit_insn_q.id;
@@ -831,9 +861,14 @@ module spatz_vlsu
         // Write the load result to the buffer
         rob_wdata[port] = spatz_mem_rsp_i[port].data;
         rob_push[port]  = spatz_mem_rsp_valid_i[port] && (state_q == VLSU_RunningLoad) && store_count_q[port] == '0;
+        rob_wid[port]   = spatz_mem_rsp_i[port].id;
 
-        if (!rob_full[port] && !offset_queue_full[port] && mem_operation_valid[port])
+        if (!rob_full[port] && !offset_queue_full[port] && mem_operation_valid[port]) begin
+          rob_req_id[port]     = spatz_mem_req_ready[port] & spatz_mem_req_valid[port];
           mem_req_lvalid[port] = (!mem_is_indexed || (vrf_rvalid_i[1] && !pending_index[port])) && mem_spatz_req.op_mem.is_load;
+          mem_req_id[port]     = rob_id[port];
+          mem_req_last[port]   = mem_operation_last[port];
+        end
       end
     // Store operation
     end else begin
@@ -842,8 +877,10 @@ module spatz_vlsu
         vrf_re_o[0] = 1'b1;
 
         for (int unsigned port = 0; port < NrMemPorts; port++) begin
-          rob_wdata[port] = vrf_rdata_i[0][ELEN*port +: ELEN];
-          rob_push[port]  = vrf_rvalid_i[0] && (!mem_is_indexed || vrf_rvalid_i[1]);
+          rob_wdata[port]  = vrf_rdata_i[0][ELEN*port +: ELEN];
+          rob_wid[port]    = rob_id[port];
+          rob_req_id[port] = vrf_rvalid_i[0] && (!mem_is_indexed || vrf_rvalid_i[1]);
+          rob_push[port]   = rob_req_id[port];
         end
       end
 
@@ -894,6 +931,8 @@ module spatz_vlsu
             endcase
 
           mem_req_svalid[port] = rob_rvalid[port] && (!mem_is_indexed || (vrf_rvalid_i[1] && !pending_index[port])) && !mem_spatz_req.op_mem.is_load;
+          mem_req_id[port]     = rob_rid[port];
+          mem_req_last[port]   = mem_operation_last[port];
           rob_pop[port]        = spatz_mem_req_valid[port] && spatz_mem_req_ready[port];
 
           // Create byte enable signal for memory request
@@ -935,13 +974,25 @@ module spatz_vlsu
       .ready_i (spatz_mem_req_ready_i[port])
     );
 
+    // ID is required in Mempool-Spatz
+    assign spatz_mem_req[port].id    = mem_req_id[port];
     assign spatz_mem_req[port].addr  = mem_req_addr[port];
+    assign spatz_mem_req[port].mode  = '0; // Request always uses user privilege level
+    assign spatz_mem_req[port].size  = mem_spatz_req.vtype.vsew[1:0];
     assign spatz_mem_req[port].write = !mem_is_load;
-    assign spatz_mem_req[port].amo   = reqrsp_pkg::AMONone;
-    assign spatz_mem_req[port].data  = mem_req_data[port];
     assign spatz_mem_req[port].strb  = mem_req_strb[port];
-    assign spatz_mem_req[port].user  = '0;
+    assign spatz_mem_req[port].data  = mem_req_data[port];
+    assign spatz_mem_req[port].last  = mem_req_last[port];
+    assign spatz_mem_req[port].spec  = 1'b0; // Request is never speculative
     assign spatz_mem_req_valid[port] = mem_req_svalid[port] || mem_req_lvalid[port];
+
+    // assign spatz_mem_req[port].addr  = mem_req_addr[port];
+    // assign spatz_mem_req[port].write = !mem_is_load;
+    // assign spatz_mem_req[port].amo   = reqrsp_pkg::AMONone;
+    // assign spatz_mem_req[port].data  = mem_req_data[port];
+    // assign spatz_mem_req[port].strb  = mem_req_strb[port];
+    // assign spatz_mem_req[port].user  = '0;
+    // assign spatz_mem_req_valid[port] = mem_req_svalid[port] || mem_req_lvalid[port];
   end
 
   ////////////////
