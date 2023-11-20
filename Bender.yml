@@ -79,63 +79,64 @@ sources:
       - hw/ip/tcdm_interface/test/reqrsp_to_tcdm_tb.sv
       - hw/ip/tcdm_interface/test/tcdm_mux_tb.sv
 
-  ## hw/ip/snitch ##
+  # Use Mempool snitch
+  # ## hw/ip/snitch ##
 
-  # Level 0:
-  - hw/ip/snitch/src/snitch_pma_pkg.sv
-  - hw/ip/snitch/src/riscv_instr.sv
-  # Level 1:
-  - hw/ip/snitch/src/snitch_pkg.sv
-  # Level 2:
-  - hw/ip/snitch/src/snitch_regfile_ff.sv
-  # - hw/ip/snitch/src/snitch_regfile_fpga.sv
-  # - hw/ip/snitch/src/snitch_regfile_latch.sv
-  - hw/ip/snitch/src/snitch_lsu.sv
-  - hw/ip/snitch/src/snitch_l0_tlb.sv
-  # Level 1:
-  - target: not(disable_pmcs)
-    defines:
-      SNITCH_ENABLE_PERF:
-    files:
-      - hw/ip/snitch/src/snitch.sv
-  # Disable the performance monitoring counters to save area.
-  - target: disable_pmcs
-    files:
-      - hw/ip/snitch/src/snitch.sv
+  # # Level 0:
+  # - hw/ip/snitch/src/snitch_pma_pkg.sv
+  # - hw/ip/snitch/src/riscv_instr.sv
+  # # Level 1:
+  # - hw/ip/snitch/src/snitch_pkg.sv
+  # # Level 2:
+  # - hw/ip/snitch/src/snitch_regfile_ff.sv
+  # # - hw/ip/snitch/src/snitch_regfile_fpga.sv
+  # # - hw/ip/snitch/src/snitch_regfile_latch.sv
+  # - hw/ip/snitch/src/snitch_lsu.sv
+  # - hw/ip/snitch/src/snitch_l0_tlb.sv
+  # # Level 1:
+  # - target: not(disable_pmcs)
+  #   defines:
+  #     SNITCH_ENABLE_PERF:
+  #   files:
+  #     - hw/ip/snitch/src/snitch.sv
+  # # Disable the performance monitoring counters to save area.
+  # - target: disable_pmcs
+  #   files:
+  #     - hw/ip/snitch/src/snitch.sv
 
-  - target: test
-    files:
-      - hw/ip/snitch/test/snitch_l0_tlb_tb.sv
+  # - target: test
+  #   files:
+  #     - hw/ip/snitch/test/snitch_l0_tlb_tb.sv
 
-  ## hw/ip/snitch_icache ##
+  # ## hw/ip/snitch_icache ##
 
-  # Level 0:
-  - hw/ip/snitch_icache/src/snitch_icache_pkg.sv
-  # Level 1:
-  - hw/ip/snitch_icache/src/snitch_icache_l0.sv
-  - hw/ip/snitch_icache/src/snitch_icache_refill.sv
-  - hw/ip/snitch_icache/src/snitch_icache_lfsr.sv
-  - hw/ip/snitch_icache/src/snitch_icache_lookup.sv
-  # Level 2:
-  - hw/ip/snitch_icache/src/snitch_icache_handler.sv
-  # Level 3:
-  - hw/ip/snitch_icache/src/snitch_icache.sv
-  - target: test
-    files:
-      - hw/ip/snitch_icache/test/snitch_icache_l0_tb.sv
+  # # Level 0:
+  # - hw/ip/snitch_icache/src/snitch_icache_pkg.sv
+  # # Level 1:
+  # - hw/ip/snitch_icache/src/snitch_icache_l0.sv
+  # - hw/ip/snitch_icache/src/snitch_icache_refill.sv
+  # - hw/ip/snitch_icache/src/snitch_icache_lfsr.sv
+  # - hw/ip/snitch_icache/src/snitch_icache_lookup.sv
+  # # Level 2:
+  # - hw/ip/snitch_icache/src/snitch_icache_handler.sv
+  # # Level 3:
+  # - hw/ip/snitch_icache/src/snitch_icache.sv
+  # - target: test
+  #   files:
+  #     - hw/ip/snitch_icache/test/snitch_icache_l0_tb.sv
 
-  ## hw/ip/snitch_test ##
+  # ## hw/ip/snitch_test ##
 
-  # Level 1:
-  - target: any(simulation, verilator)
-    files:
-      - hw/ip/snitch_test/src/tb_memory_regbus.sv
-      # Level 2
-      - hw/ip/snitch_test/src/tb_memory_axi.sv
-  # Level 3:
-  - target: snitch_test
-    files:
-      - hw/ip/snitch_test/src/tb_bin.sv
+  # # Level 1:
+  # - target: any(simulation, verilator)
+  #   files:
+  #     - hw/ip/snitch_test/src/tb_memory_regbus.sv
+  #     # Level 2
+  #     - hw/ip/snitch_test/src/tb_memory_axi.sv
+  # # Level 3:
+  # - target: snitch_test
+  #   files:
+  #     - hw/ip/snitch_test/src/tb_bin.sv
 
   ## hw/ip/spatz ##
 
@@ -160,37 +161,39 @@ sources:
   - hw/ip/spatz/src/spatz_controller.sv
   # Level 5
   - hw/ip/spatz/src/spatz.sv
+  # Level 6
+  - hw/ip/spatz_cc/spatz_mempool_cc.sv
 
   ## hw/ip/spatz_cc ##
 
-  # Level 0
-  - hw/ip/spatz_cc/src/axi_dma_pkg.sv
-  # Level 1
-  - hw/ip/spatz_cc/src/axi_dma_perf_counters.sv
-  - hw/ip/spatz_cc/src/axi_dma_twod_ext.sv
-  # Level 2
-  - hw/ip/spatz_cc/src/axi_dma_tc_snitch_fe.sv
-  # Level 3
-  - hw/ip/spatz_cc/src/spatz_cc.sv
+  # # Level 0
+  # - hw/ip/spatz_cc/src/axi_dma_pkg.sv
+  # # Level 1
+  # - hw/ip/spatz_cc/src/axi_dma_perf_counters.sv
+  # - hw/ip/spatz_cc/src/axi_dma_twod_ext.sv
+  # # Level 2
+  # - hw/ip/spatz_cc/src/axi_dma_tc_snitch_fe.sv
+  # # Level 3
+  # - hw/ip/spatz_cc/src/spatz_cc.sv
 
-  ## system/spatz_cluster ##
+  # ## system/spatz_cluster ##
 
-  # Level 0
-  - hw/system/spatz_cluster/src/generated/bootrom.sv
-  - hw/system/spatz_cluster/src/spatz_amo_shim.sv
-  - hw/system/spatz_cluster/src/spatz_cluster_peripheral/spatz_cluster_peripheral_reg_pkg.sv
-  - hw/system/spatz_cluster/src/spatz_tcdm_interconnect.sv
-  # Level 1
-  - hw/system/spatz_cluster/src/spatz_barrier.sv
-  - hw/system/spatz_cluster/src/spatz_cluster_peripheral/spatz_cluster_peripheral_reg_top.sv
-  # Level 2
-  - hw/system/spatz_cluster/src/spatz_cluster_peripheral/spatz_cluster_peripheral.sv
-  # Level 3
-  - hw/system/spatz_cluster/src/spatz_cluster.sv
-  # Level 4
-  - hw/system/spatz_cluster/src/generated/spatz_cluster_wrapper.sv
+  # # Level 0
+  # - hw/system/spatz_cluster/src/generated/bootrom.sv
+  # - hw/system/spatz_cluster/src/spatz_amo_shim.sv
+  # - hw/system/spatz_cluster/src/spatz_cluster_peripheral/spatz_cluster_peripheral_reg_pkg.sv
+  # - hw/system/spatz_cluster/src/spatz_tcdm_interconnect.sv
+  # # Level 1
+  # - hw/system/spatz_cluster/src/spatz_barrier.sv
+  # - hw/system/spatz_cluster/src/spatz_cluster_peripheral/spatz_cluster_peripheral_reg_top.sv
+  # # Level 2
+  # - hw/system/spatz_cluster/src/spatz_cluster_peripheral/spatz_cluster_peripheral.sv
+  # # Level 3
+  # - hw/system/spatz_cluster/src/spatz_cluster.sv
+  # # Level 4
+  # - hw/system/spatz_cluster/src/generated/spatz_cluster_wrapper.sv
 
-  - target: spatz_test
-    files:
-      # Level 1
-      - hw/system/spatz_cluster/tb/testharness.sv
+  # - target: spatz_test
+  #   files:
+  #     # Level 1
+  #     - hw/system/spatz_cluster/tb/testharness.sv

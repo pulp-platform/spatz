@@ -80,7 +80,7 @@ package ${cfg['pkg_name']};
 
   localparam int unsigned NumCores = ${cfg['nr_cores']};
 
-  localparam int unsigned DataWidth  = 64;
+  localparam int unsigned DataWidth  = ${cfg['data_width']};
   localparam int unsigned BeWidth    = DataWidth / 8;
   localparam int unsigned ByteOffset = $clog2(BeWidth);
 

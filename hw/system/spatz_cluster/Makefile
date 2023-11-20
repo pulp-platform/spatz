@@ -12,6 +12,7 @@ MKFILE_DIR  := $(dir $(MKFILE_PATH))
 
 # Configuration file
 SPATZ_CLUSTER_CFG ?= $(SPATZ_CLUSTER_DIR)/cfg/spatz_cluster.default.hjson
+# SPATZ_CLUSTER_CFG ?= $(SPATZ_CLUSTER_DIR)/cfg/mempool.hjson
 
 # Include Makefrag
 include $(ROOT)/util/Makefrag
