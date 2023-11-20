@@ -175,7 +175,7 @@ module spatz_cluster
   // Narrow AXI network parameters
   localparam int unsigned NarrowIdWidthIn  = AxiIdWidthIn;
   localparam int unsigned NarrowIdWidthOut = NarrowIdWidthIn + $clog2(NrNarrowMasters);
-  localparam int unsigned NarrowDataWidth  = 64;
+  localparam int unsigned NarrowDataWidth  = spatz_pkg::ELEN;
   localparam int unsigned NarrowUserWidth  = AxiUserWidth;
 
   // TCDM, Peripherals, SoC Request

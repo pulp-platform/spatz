@@ -288,7 +288,7 @@ module spatz_cc
   typedef struct packed {
     logic [$clog2(spatz_pkg::NRVREG)-1:0] id;
     // logic [spatz_pkg::ELEN-1:0] data;
-    logic [63:0] data;
+    logic [DataWidth-1:0] data;
     logic err;
   } spatz_mem_rsp_t;
 
