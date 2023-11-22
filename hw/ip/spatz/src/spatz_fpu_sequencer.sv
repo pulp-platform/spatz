@@ -11,7 +11,8 @@ module spatz_fpu_sequencer
   import spatz_pkg::*;
   import rvv_pkg::*;
   import fpnew_pkg::*;
-  import reqrsp_pkg::*; #(
+  import reqrsp_pkg::*; 
+  import cf_math_pkg::idx_width; #(
     // Memory request
     parameter type dreq_t            = logic,
     parameter type drsp_t            = logic,
@@ -22,7 +23,8 @@ module spatz_fpu_sequencer
 
     parameter int unsigned AddrWidth           = 32,
     parameter int unsigned DataWidth           = FLEN,
-    parameter int unsigned NumOutstandingLoads = 1
+    parameter int unsigned NumOutstandingLoads = 1,
+    localparam int unsigned IdWidth = cf_math_pkg::idx_width(NumOutstandingLoads)
   ) (
     input  logic             clk_i,
     input  logic             rst_ni,
@@ -44,7 +46,11 @@ module spatz_fpu_sequencer
     output logic             resp_ready_o,
     // Memory interface
     output dreq_t            fp_lsu_mem_req_o,
+    output logic             fp_lsu_mem_req_valid_o,
+    input  logic             fp_lsu_mem_req_ready_i,
     input  drsp_t            fp_lsu_mem_rsp_i,
+    input  logic             fp_lsu_mem_rsp_valid_i,
+    output logic             fp_lsu_mem_rsp_ready_o,
     output logic             fp_lsu_mem_finished_o,
     output logic             fp_lsu_mem_str_finished_o,
     // Spatz VLSU side channel
@@ -495,7 +501,7 @@ module spatz_fpu_sequencer
   logic [AddrWidth-1:0] fp_lsu_qaddr;
   logic [DataWidth-1:0] fp_lsu_qdata;
   logic [1:0]           fp_lsu_qsize;
-  reqrsp_pkg::amo_op_e fp_lsu_qamo;
+  reqrsp_pkg::amo_op_e  fp_lsu_qamo;
   logic fp_lsu_qvalid;
   logic fp_lsu_qready;
 
@@ -504,26 +510,32 @@ module spatz_fpu_sequencer
   logic                 fp_lsu_pvalid;
   logic                 fp_lsu_pready;
 
+  // TODO: remove hardcoding
+  logic [AddrWidth-1:0] mem_qaddr;
+  logic                 mem_qwrite;
+  logic [DataWidth-1:0] mem_qdata;
+  logic [StrbWidth-1:0] mem_qstrb;
+  logic [IdWidth-1:0]   mem_qid;
+  logic [DataWidth-1:0] mem_pdata;
+  logic                 mem_perror;
+  logic [IdWidth-1:0]   mem_pid;
+
   snitch_lsu #(
-    .DataWidth          (FLEN               ),
     .NaNBox             (1                  ),
-    .NumOutstandingLoads(NumOutstandingLoads),
-    .dreq_t             (dreq_t             ),
-    .drsp_t             (drsp_t             )
+    .NumOutstandingLoads(NumOutstandingLoads)
   ) i_fp_lsu (
     .clk_i        (clk_i           ),
     .rst_i        (~rst_ni         ),
     // Request interface
     .lsu_qtag_i   (fp_lsu_qtag     ),
-    .lsu_qwrite_i (fp_lsu_qwrite   ),
-    .lsu_qsigned_i(fp_lsu_qsigned  ),
+    .lsu_qwrite   (fp_lsu_qwrite   ),
+    .lsu_qsigned  (fp_lsu_qsigned  ),
     .lsu_qaddr_i  (fp_lsu_qaddr    ),
     .lsu_qdata_i  (fp_lsu_qdata    ),
     .lsu_qsize_i  (fp_lsu_qsize    ),
     .lsu_qamo_i   (fp_lsu_qamo     ),
     .lsu_qvalid_i (fp_lsu_qvalid   ),
     .lsu_qready_o (fp_lsu_qready   ),
-    .lsu_empty_o  (/* Unused */    ),
     // Response interface
     .lsu_pdata_o  (fp_lsu_pdata    ),
     .lsu_ptag_o   (fp_lsu_ptag     ),
@@ -531,8 +543,19 @@ module spatz_fpu_sequencer
     .lsu_pvalid_o (fp_lsu_pvalid   ),
     .lsu_pready_i (fp_lsu_pready   ),
     // Memory interface
-    .data_req_o   (fp_lsu_mem_req_o),
-    .data_rsp_i   (fp_lsu_mem_rsp_i)
+    .data_qaddr_o (mem_qaddr              ),
+    .data_qwrite_o(mem_qwrite             ),
+    .data_qamo_o  (/* Unused */           ),
+    .data_qdata_o (mem_qdata              ),
+    .data_qstrb_o (mem_qstrb              ),
+    .data_qid_o   (mem_qid                ),
+    .data_qvalid_o(fp_lsu_mem_req_valid_o ),
+    .data_qready_i(fp_lsu_mem_req_ready_i ),
+    .data_pdata_i (mem_pdata              ),
+    .data_perror_i(mem_perror             ),
+    .data_pid_i   (mem_pid                ),
+    .data_pvalid_i(fp_lsu_mem_rsp_valid_i ),
+    .data_pready_o(fp_lsu_mem_rsp_ready_o )
   );
 
   // Number of memory operations in the accelerator
@@ -578,6 +601,22 @@ module spatz_fpu_sequencer
 
     // Is the LSU stalling?
     lsu_stall = fp_lsu_qvalid && !fp_lsu_qready;
+
+    // Assign TCDM data interface
+    fp_lsu_mem_req_o = '{
+      id     : mem_qid,
+      addr   : mem_qaddr,
+      size   : '1,
+      write  : mem_qwrite,
+      strb   : mem_qstrb,
+      data   : mem_qdata,
+      last   : 1'b1,
+      default: '0
+    };
+
+    mem_pdata  = fp_lsu_mem_rsp_i.data;
+    mem_perror = '0;
+    mem_pid    = fp_lsu_mem_rsp_i.id;
 
     if ((is_vector_load || is_vector_store) && issue_ready_i && issue_valid_o)
       acc_mem_cnt_d += 1;

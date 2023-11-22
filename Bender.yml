@@ -16,12 +16,14 @@ dependencies:
   register_interface: { git: "https://github.com/pulp-platform/register_interface.git", version: 0.3.8          }
   riscv-dbg:          { git: "https://github.com/pulp-platform/riscv-dbg.git",          version: 0.7.0          }
   tech_cells_generic: { git: "https://github.com/pulp-platform/tech_cells_generic.git", version: 0.2.11         }
+  reqrsp_interface:   { path: "hw/ip/reqrsp_interface"}
 
 export_include_dirs:
-  - hw/ip/mem_interface/include
-  - hw/ip/snitch/include
   - hw/ip/reqrsp_interface/include
-  - hw/ip/tcdm_interface/include
+#   # - hw/ip/mem_interface/include
+#   # - hw/ip/snitch/include
+  
+#   - hw/ip/tcdm_interface/include
 
 sources:
 
@@ -50,34 +52,34 @@ sources:
       - hw/ip/reqrsp_interface/test/reqrsp_mux_tb.sv
       - hw/ip/reqrsp_interface/test/reqrsp_to_axi_tb.sv
 
-  ## hw/ip/mem_interface ##
+  # ## hw/ip/mem_interface ##
 
-  - hw/ip/mem_interface/src/mem_wide_narrow_mux.sv
-  - hw/ip/mem_interface/src/mem_interface.sv
-  - target: simulation
-    files:
-      - hw/ip/mem_interface/src/mem_test.sv
-  - target: test
-    files:
-      # Level 0
-      - hw/ip/mem_interface/test/mem_wide_narrow_mux_tb.sv
+  # - hw/ip/mem_interface/src/mem_wide_narrow_mux.sv
+  # - hw/ip/mem_interface/src/mem_interface.sv
+  # - target: simulation
+  #   files:
+  #     - hw/ip/mem_interface/src/mem_test.sv
+  # - target: test
+  #   files:
+  #     # Level 0
+  #     - hw/ip/mem_interface/test/mem_wide_narrow_mux_tb.sv
 
   ## hw/ip/tcdm_interface ##
 
-  # Level 0
-  - hw/ip/tcdm_interface/src/tcdm_interface.sv
-  # Level 1
-  - hw/ip/tcdm_interface/src/axi_to_tcdm.sv
-  - hw/ip/tcdm_interface/src/reqrsp_to_tcdm.sv
-  - hw/ip/tcdm_interface/src/tcdm_mux.sv
-  - target: simulation
-    files:
-      - hw/ip/tcdm_interface/src/tcdm_test.sv
-  - target: test
-    files:
-      # Level 0
-      - hw/ip/tcdm_interface/test/reqrsp_to_tcdm_tb.sv
-      - hw/ip/tcdm_interface/test/tcdm_mux_tb.sv
+  # # Level 0
+  # - hw/ip/tcdm_interface/src/tcdm_interface.sv
+  # # Level 1
+  # - hw/ip/tcdm_interface/src/axi_to_tcdm.sv
+  # - hw/ip/tcdm_interface/src/reqrsp_to_tcdm.sv
+  # - hw/ip/tcdm_interface/src/tcdm_mux.sv
+  # - target: simulation
+  #   files:
+  #     - hw/ip/tcdm_interface/src/tcdm_test.sv
+  # - target: test
+  #   files:
+  #     # Level 0
+  #     - hw/ip/tcdm_interface/test/reqrsp_to_tcdm_tb.sv
+  #     - hw/ip/tcdm_interface/test/tcdm_mux_tb.sv
 
   # Use Mempool snitch
   # ## hw/ip/snitch ##
@@ -139,30 +141,31 @@ sources:
   #     - hw/ip/snitch_test/src/tb_bin.sv
 
   ## hw/ip/spatz ##
-
-  # Level 0
-  - hw/ip/spatz/src/reorder_buffer.sv
-  - hw/ip/spatz/src/rvv_pkg.sv
-  # Level 1
-  - hw/ip/spatz/src/generated/spatz_pkg.sv
-  - hw/ip/spatz/src/spatz_serdiv.sv
-  # Level 2
-  - hw/ip/spatz/src/spatz_decoder.sv
-  - hw/ip/spatz/src/spatz_simd_lane.sv
-  - hw/ip/spatz/src/vregfile.sv
-  # Level 3
-  - hw/ip/spatz/src/spatz_fpu_sequencer.sv
-  - hw/ip/spatz/src/spatz_ipu.sv
-  - hw/ip/spatz/src/spatz_vfu.sv
-  - hw/ip/spatz/src/spatz_vlsu.sv
-  - hw/ip/spatz/src/spatz_vrf.sv
-  - hw/ip/spatz/src/spatz_vsldu.sv
-  # Level 4
-  - hw/ip/spatz/src/spatz_controller.sv
-  # Level 5
-  - hw/ip/spatz/src/spatz.sv
-  # Level 6
-  - hw/ip/spatz_cc/spatz_mempool_cc.sv
+  - target: spatz
+    files:
+    # Level 0
+    - hw/ip/spatz/src/reorder_buffer.sv
+    - hw/ip/spatz/src/rvv_pkg.sv
+    # Level 1
+    - hw/ip/spatz/src/spatz_pkg.sv
+    - hw/ip/spatz/src/spatz_serdiv.sv
+    # Level 2
+    - hw/ip/spatz/src/spatz_decoder.sv
+    - hw/ip/spatz/src/spatz_simd_lane.sv
+    - hw/ip/spatz/src/vregfile.sv
+    # Level 3
+    - hw/ip/spatz/src/spatz_fpu_sequencer.sv
+    - hw/ip/spatz/src/spatz_ipu.sv
+    - hw/ip/spatz/src/spatz_vfu.sv
+    - hw/ip/spatz/src/spatz_vlsu.sv
+    - hw/ip/spatz/src/spatz_vrf.sv
+    - hw/ip/spatz/src/spatz_vsldu.sv
+    # Level 4
+    - hw/ip/spatz/src/spatz_controller.sv
+    # Level 5
+    - hw/ip/spatz/src/spatz.sv
+    # Level 6
+    - hw/ip/spatz_cc/src/spatz_mempool_cc.sv
 
   ## hw/ip/spatz_cc ##
 

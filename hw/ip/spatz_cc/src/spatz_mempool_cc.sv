@@ -16,8 +16,7 @@ module spatz_mempool_cc
 
   // TODO: change to constant param from pkg or tile level?
   parameter int unsigned        TCDMPorts              = 1,
-  parameter int unsigned        NumMemPortsPerSpatz    = 1,
-  
+  parameter int unsigned        NumMemPortsPerSpatz    = 1
 ) (
   input  logic                                        clk_i,
   input  logic                                        rst_i,
@@ -50,7 +49,8 @@ module spatz_mempool_cc
   // --------
   // Typedefs
   // --------
-  import spatz_pkg::*
+  import spatz_pkg::*;
+  `include "reqrsp_interface/typedef.svh"
   
   // TODO Diyou: dreq_t and drsp_t are not consistent in spatz, mempool and here
 
@@ -68,26 +68,7 @@ module spatz_mempool_cc
 
   `REQRSP_TYPEDEF_ALL(reqrsp, addr_t, data_t, strb_t)
 
-  `TCDM_TYPEDEF_ALL(tcdm, tcdm_addr_t, data_t, strb_t, tcdm_user_t)
-
-  // TODO: NRVREG
-  typedef struct packed {
-    logic [$clog2(NRVREG):0] id;
-    logic [31:0] addr;
-    logic [1:0] mode;
-    logic [1:0] size;
-    logic write;
-    logic [DataWidth/8-1:0] strb;
-    logic [DataWidth-1:0] data;
-    logic last;
-    logic spec;
-  } spatz_mem_req_t;
-
-  typedef struct packed {
-    logic [$clog2(NRVREG)-1:0] id;
-    logic [DataWidth-1:0] data;
-    logic err;
-  } spatz_mem_rsp_t;
+  // `TCDM_TYPEDEF_ALL(tcdm, tcdm_addr_t, data_t, strb_t, tcdm_user_t)
 
 
   // ----------------
@@ -122,8 +103,8 @@ module spatz_mempool_cc
   acc_issue_rsp_t acc_req_rsp;
 
   // Spatz floating point mem signals
-  reqrsp_req_t fp_lsu_mem_req;
-  reqrsp_rsp_t fp_lsu_mem_rsp;
+  // reqrsp_req_t fp_lsu_mem_req;
+  // reqrsp_rsp_t fp_lsu_mem_rsp;
 
   // Spatz TCDM mem ports
   spatz_mem_req_t [NumMemPortsPerSpatz-1:0] spatz_mem_req;
@@ -132,6 +113,13 @@ module spatz_mempool_cc
   spatz_mem_rsp_t [NumMemPortsPerSpatz-1:0] spatz_mem_rsp;
   logic           [NumMemPortsPerSpatz-1:0] spatz_mem_rsp_valid;
 
+  spatz_mem_req_t  fp_lsu_mem_req;
+  logic            fp_lsu_mem_req_ready;
+  logic            fp_lsu_mem_req_valid;
+  spatz_mem_rsp_t  fp_lsu_mem_rsp;
+  logic            fp_lsu_mem_rsp_ready;
+  logic            fp_lsu_mem_rsp_valid;
+
   // Snitch Integer Core
   // TODO: where to put these eleboration parameters: spatz_pkg or top level?
   snitch_md #(
@@ -139,15 +127,15 @@ module spatz_mempool_cc
     .MTVEC      ( MTVEC     ),
     .RVE        ( RVE       ),
     .RVM        ( RVM       ),
-    .XFVEC      ( XFVEC     ),
-    .XFDOTP     ( XFDOTP    ),
-    .XFAUX      ( XFAUX     ),
-    .RVF        ( RVF       ),
-    .RVD        ( RVD       ),
-    .XF16       ( XF16      ),
-    .XF16ALT    ( XF16ALT   ),
-    .XF8        ( XF8       ),
-    .XF8ALT     ( XF8ALT    ),
+    .XFVEC      ( 0     ),
+    .XFDOTP     ( 0    ),
+    .XFAUX      ( 0     ),
+    .RVF        ( 0       ),
+    .RVD        ( 0       ),
+    .XF16       ( 0      ),
+    .XF16ALT    ( 0   ),
+    .XF8        ( 0       ),
+    .XF8ALT     ( 0    ),
     .acc_issue_rsp_t  ( acc_issue_rsp_t )
   ) i_snitch (
     .clk_i                  ( clk_i                  ), // checked
@@ -249,17 +237,15 @@ module spatz_mempool_cc
   
 
   spatz #(
-    .NrMemPorts         ( NumMemPortsPerSpatz     ),
-    .NumOutstandingLoads( NumSpatzOutstandingLoads),
-    .FPUImplementation  ( FPUImplementation       ),
-    .RegisterRsp        ( RegisterOffloadRsp      ),
-    .dreq_t             ( reqrsp_req_t            ),  // checked
-    .drsp_t             ( reqrsp_rsp_t            ),  // checked
+    .NrMemPorts         ( NumMemPortsPerSpatz     ),  // checked
+    .NumOutstandingLoads( snitch_pkg::NumIntOutstandingLoads ),
+    .FPUImplementation  ( 1                       ),  // keep fpu
+    .RegisterRsp        ( 1'b1                    ),  // true?
     .spatz_mem_req_t    ( spatz_mem_req_t         ),  // checked
     .spatz_mem_rsp_t    ( spatz_mem_rsp_t         ),  // checked
     .spatz_issue_req_t  ( snitch_pkg::acc_req_t   ),  // checked, bad naming
     .spatz_issue_rsp_t  ( acc_issue_rsp_t         ),  // checked
-    .spatz_rsp_t        ( snitch_pkg::acc_rsp_t   )   // checked, bad naming
+    .spatz_rsp_t        ( snitch_pkg::acc_resp_t  )   // checked, bad naming
   ) i_spatz (
     .clk_i                   ( clk_i                 ), // checked
     .rst_ni                  ( ~rst_i                ), // checked
@@ -279,8 +265,12 @@ module spatz_mempool_cc
     .spatz_mem_rsp_valid_i   ( spatz_mem_rsp_valid   ), // checked, ***notice no ready signal here***
     .spatz_mem_finished_o    ( spatz_mem_finished    ), // checked
     .spatz_mem_str_finished_o( spatz_mem_str_finished), // checked
-    .fp_lsu_mem_req_o        ( fp_lsu_mem_req        ), // checked
-    .fp_lsu_mem_rsp_i        ( fp_lsu_mem_rsp        ), // checked
+    .fp_lsu_mem_req_o        ( fp_lsu_mem_req        ),
+    .fp_lsu_mem_req_valid_o  ( fp_lsu_mem_req_valid  ),
+    .fp_lsu_mem_req_ready_i  ( fp_lsu_mem_req_ready  ),
+    .fp_lsu_mem_rsp_i        ( fp_lsu_mem_rsp        ),
+    .fp_lsu_mem_rsp_valid_i  ( fp_lsu_mem_rsp_valid  ),
+    .fp_lsu_mem_rsp_ready_o  ( fp_lsu_mem_rsp_ready  ),
     .fpu_rnd_mode_i          ( fpu_rnd_mode          ), // checked
     .fpu_fmt_mode_i          ( fpu_fmt_mode          ), // checked
     .fpu_status_o            ( fpu_status            )  // checked
