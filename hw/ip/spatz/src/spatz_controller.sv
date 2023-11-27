@@ -468,7 +468,7 @@ module spatz_controller
   end: proc_next_insn_id
 
   // Respond to core about the decoded instruction.
-  always_comb begin : x_issue_resp
+  always_comb begin : acc_issue_resp
     issue_rsp_o = '0;
 
     // Is there something running on Spatz? If so, prevent Snitch from reading the fcsr register
@@ -509,7 +509,7 @@ module spatz_controller
       // Do not accept it
       issue_rsp_o.accept = 1'b0;
     end
-  end // x_issue_resp
+  end // acc_issue_resp
 
   //////////////
   // Retiring //

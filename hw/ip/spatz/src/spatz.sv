@@ -117,6 +117,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     assign issue_req     = issue_req_i;
     assign issue_valid   = issue_valid_i;
     assign issue_ready_o = issue_ready;
+    assign issue_rsp_o   = issue_rsp;
 
     assign rsp_o       = resp;
     assign rsp_valid_o = resp_valid;
