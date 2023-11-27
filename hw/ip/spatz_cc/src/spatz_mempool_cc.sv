@@ -76,8 +76,8 @@ module spatz_mempool_cc
   // ----------------
 
   // Data port signals
-  snitch_pkg::dreq_t  data_req_d, data_req_q, snitch_req;
-  snitch_pkg::dresp_t data_resp_d, data_resp_q, snitch_resp;
+  snitch_pkg::dreq_t  data_req_d, data_req_q, snitch_req, fp_lsu_req;
+  snitch_pkg::dresp_t data_resp_d, data_resp_q, snitch_resp, fp_lsu_rsp;
 
   logic data_req_d_valid, data_req_d_ready, data_resp_d_valid, data_resp_d_ready;
   logic data_req_q_valid, data_req_q_ready, data_resp_q_valid, data_resp_q_ready;
@@ -181,6 +181,9 @@ module spatz_mempool_cc
     .core_events_o          ( core_events_o          )  // checked
   );
 
+
+
+`ifndef TARGET_SPATZ
   // Cut off-loading request path
   spill_register #(
     .T      ( snitch_pkg::acc_req_t ),
@@ -195,6 +198,12 @@ module spatz_mempool_cc
     .ready_i ( acc_req_q_ready ),
     .data_o  ( acc_req_q       )
   );
+`else
+  assign acc_req_q = acc_req_d;
+  assign acc_req_q_valid = acc_req_d_valid;
+  assign acc_req_d_ready = acc_req_q_ready;
+`endif
+
 
   // Cut off-loading response path
   spill_register #(
@@ -211,35 +220,32 @@ module spatz_mempool_cc
     .data_o  ( acc_resp_q       )
   );
 
+`ifndef TARGET_SPATZ
   // Snitch IPU accelerator
-  // Replace with Spatz
-
-  // snitch_ipu #(
-  //   .IdWidth ( 5 )
-  // ) i_snitch_ipu (
-  //   .clk_i                                   ,
-  //   .rst_i                                   ,
-  //   .acc_qaddr_i      ( acc_req_q.addr      ),
-  //   .acc_qid_i        ( acc_req_q.id        ),
-  //   .acc_qdata_op_i   ( acc_req_q.data_op   ),
-  //   .acc_qdata_arga_i ( acc_req_q.data_arga ),
-  //   .acc_qdata_argb_i ( acc_req_q.data_argb ),
-  //   .acc_qdata_argc_i ( acc_req_q.data_argc ),
-  //   .acc_qvalid_i     ( acc_req_q_valid     ),
-  //   .acc_qready_o     ( acc_req_q_ready     ),
-  //   .acc_pdata_o      ( acc_resp_d.data     ),
-  //   .acc_pid_o        ( acc_resp_d.id       ),
-  //   .acc_perror_o     ( acc_resp_d.error    ),
-  //   .acc_pvalid_o     ( acc_resp_d_valid    ),
-  //   .acc_pready_i     ( acc_resp_d_ready    )
-  // );
-
-  
-
+  snitch_ipu #(
+    .IdWidth ( 5 )
+  ) i_snitch_ipu (
+    .clk_i                                   ,
+    .rst_i                                   ,
+    .acc_qaddr_i      ( acc_req_q.addr      ),
+    .acc_qid_i        ( acc_req_q.id        ),
+    .acc_qdata_op_i   ( acc_req_q.data_op   ),
+    .acc_qdata_arga_i ( acc_req_q.data_arga ),
+    .acc_qdata_argb_i ( acc_req_q.data_argb ),
+    .acc_qdata_argc_i ( acc_req_q.data_argc ),
+    .acc_qvalid_i     ( acc_req_q_valid     ),
+    .acc_qready_o     ( acc_req_q_ready     ),
+    .acc_pdata_o      ( acc_resp_d.data     ),
+    .acc_pid_o        ( acc_resp_d.id       ),
+    .acc_perror_o     ( acc_resp_d.error    ),
+    .acc_pvalid_o     ( acc_resp_d_valid    ),
+    .acc_pready_i     ( acc_resp_d_ready    )
+  );
+`else
   spatz #(
     .NrMemPorts         ( NumMemPortsPerSpatz     ),  // checked
     .NumOutstandingLoads( snitch_pkg::NumIntOutstandingLoads ),
-    .FPUImplementation  ( 1                       ),  // keep fpu
+    .FPUImplementation  ( 1'b0                       ),  // TODO: parameterize
     .RegisterRsp        ( 1'b1                    ),  // true?
     .spatz_mem_req_t    ( spatz_mem_req_t         ),  // checked
     .spatz_mem_rsp_t    ( spatz_mem_rsp_t         ),  // checked
@@ -275,6 +281,40 @@ module spatz_mempool_cc
     .fpu_fmt_mode_i          ( fpu_fmt_mode          ), // checked
     .fpu_status_o            ( fpu_status            )  // checked
   );
+`endif
+
+  // TODO: Perhaps put it into a module
+  // Assign TCDM data interface
+  for (genvar i = 0; i < NumMemPortsPerSpatz; i++) begin
+    assign data_qaddr_o[i+1]       = spatz_mem_req[i].addr;   // checked
+    assign data_qwrite_o[i+1]      = spatz_mem_req[i].write;  // checked
+    assign data_qamo_o[i+1]        = '0;                      // checked
+    assign data_qdata_o[i+1]       = spatz_mem_req[i].data;   // checked
+    assign data_qstrb_o[i+1]       = spatz_mem_req[i].strb;   // checked
+    assign data_qid_o[i+1]         = spatz_mem_req[i].id;     // checked
+    assign data_qvalid_o[i+1]      = spatz_mem_req_valid[i];  // checked
+    assign spatz_mem_req_ready[i]  = data_qready_i[i+1];      // checked
+    assign spatz_mem_rsp[i].data   = data_pdata_i[i+1];       // checked
+    assign spatz_mem_rsp[i].id     = data_pid_i[i+1];         // checked
+    assign spatz_mem_rsp[i].err    = data_perror_i[i+1];      // checked
+    assign spatz_mem_rsp_valid[i]  = data_pvalid_i[i+1];      // checked
+    assign data_pready_o[i+1]      = '1;                      // *** no ready signal for spatz here, tie to 1 ***
+  end
+
+  assign fp_lsu_req = '{
+    addr   : fp_lsu_mem_req.addr,
+    id     : fp_lsu_mem_req.id,
+    write  : fp_lsu_mem_req.write,
+    data   : fp_lsu_mem_req.data,
+    strb   : fp_lsu_mem_req.strb,
+    default: '0 
+  };
+
+  assign fp_lsu_mem_rsp = '{ 
+    id  : fp_lsu_rsp.id,
+    data: fp_lsu_rsp.data,
+    err : fp_lsu_rsp.error
+  };
 
 
   if (RVF || RVD) begin: gen_id_remapper
@@ -284,12 +324,12 @@ module spatz_mempool_cc
     ) i_id_remapper (
       .clk_i       (clk_i                                     ),
       .rst_ni      (~rst_i                                    ),
-      .req_i       ({fp_lsu_mem_req, snitch_req}              ),
+      .req_i       ({fp_lsu_req, snitch_req}                  ),
       .req_valid_i ({fp_lsu_mem_req_valid, snitch_req_valid}  ),
       .req_ready_o ({fp_lsu_mem_req_ready, snitch_req_ready}  ),
-      .resp_o      ({fp_lsu_mem_rsp, snitch_resp}             ),
-      .resp_valid_o({fp_lsu_mem_resp_valid, snitch_resp_valid}),
-      .resp_ready_i({fp_lsu_mem_resp_ready, snitch_resp_ready}),
+      .resp_o      ({fp_lsu_rsp, snitch_resp}                 ),
+      .resp_valid_o({fp_lsu_mem_rsp_valid, snitch_resp_valid} ),
+      .resp_ready_i({fp_lsu_mem_rsp_ready, snitch_resp_ready} ),
       .req_o       (data_req_d                                ),
       .req_valid_o (data_req_d_valid                          ),
       .req_ready_i (data_req_d_ready                          ),
@@ -307,9 +347,9 @@ module spatz_mempool_cc
     assign snitch_resp_valid = data_resp_q_valid;
     assign data_resp_q_ready = snitch_resp_ready;
 
-    assign fp_lsu_resp           = '0;
-    assign fp_lsu_mem_resp_valid = 1'b0;
-    assign fp_lsu_mem_req_ready  = 1'b0;
+    assign fp_lsu_rsp           = '0;
+    assign fp_lsu_mem_rsp_valid = 1'b0;
+    assign fp_lsu_mem_req_ready = 1'b0;
   end: gen_id_remapper_bypass
 
 
@@ -342,24 +382,6 @@ module spatz_mempool_cc
     .ready_i ( data_resp_q_ready ),
     .data_o  ( data_resp_q       )
   );
-
-  // TODO: Perhaps put it into a module
-  // Assign TCDM data interface
-  for (genvar i = 0; i < NumMemPortsPerSpatz; i++) begin
-    assign data_qaddr_o[i+1]       = spatz_mem_req[i].addr;   // checked
-    assign data_qwrite_o[i+1]      = spatz_mem_req[i].write;  // checked
-    assign data_qamo_o[i+1]        = '0;                      // checked
-    assign data_qdata_o[i+1]       = spatz_mem_req[i].data;   // checked
-    assign data_qstrb_o[i+1]       = spatz_mem_req[i].strb;   // checked
-    assign data_qid_o[i+1]         = spatz_mem_req[i].id;     // checked
-    assign data_qvalid_o[i+1]      = spatz_mem_req_valid[i];  // checked
-    assign spatz_mem_req_ready[i]  = data_qready_i[i+1];      // checked
-    assign spatz_mem_rsp[i].data   = data_pdata_i[i+1];       // checked
-    assign spatz_mem_rsp[i].id     = data_pid_i[i+1];         // checked
-    assign spatz_mem_rsp[i].err    = data_perror_i[i+1];      // checked
-    assign spatz_mem_rsp_valid[i]  = data_pvalid_i[i+1];      // checked
-    assign data_pready_o[i+1]      = '1;                      // *** no ready signal for spatz here, tie to 1 ***
-  end
 
   // Assign TCDM data interface
   assign data_qaddr_o[0]      = data_req_q.addr;

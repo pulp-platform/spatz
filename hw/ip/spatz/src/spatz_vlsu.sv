@@ -177,7 +177,7 @@ module spatz_vlsu
   // The reorder buffer decouples the memory side from the register file side.
   // All elements from one side to the other go through it.
   for (genvar port = 0; port < NrMemPorts; port++) begin : gen_rob
-`ifdef MEMPOOL
+`ifndef SPATZ_CLUSTER
     reorder_buffer #(
       .DataWidth(ELEN              ),
       .NumWords (NrOutstandingLoads)

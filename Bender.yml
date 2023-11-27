@@ -16,10 +16,12 @@ dependencies:
   register_interface: { git: "https://github.com/pulp-platform/register_interface.git", version: 0.3.8          }
   riscv-dbg:          { git: "https://github.com/pulp-platform/riscv-dbg.git",          version: 0.7.0          }
   tech_cells_generic: { git: "https://github.com/pulp-platform/tech_cells_generic.git", version: 0.2.11         }
-  reqrsp_interface:   { path: "hw/ip/reqrsp_interface"}
+  # reqrsp_interface:   { path: "hw/ip/reqrsp_interface"}
+  reqrsp_interface:   { path: "../reqrsp_interface"}
 
 export_include_dirs:
-  - hw/ip/reqrsp_interface/include
+  - ../reqrsp_interface/include
+  # - hw/ip/reqrsp_interface/include
 #   # - hw/ip/mem_interface/include
 #   # - hw/ip/snitch/include
   
@@ -29,28 +31,28 @@ sources:
 
   ## hw/ip/reqrsp_interface ##
 
-  # Level 0:
-  - hw/ip/reqrsp_interface/src/reqrsp_pkg.sv
-  # Level 1:
-  - hw/ip/reqrsp_interface/src/reqrsp_intf.sv
-  # Level 2:
-  - hw/ip/reqrsp_interface/src/axi_to_reqrsp.sv
-  - hw/ip/reqrsp_interface/src/reqrsp_cut.sv
-  - hw/ip/reqrsp_interface/src/reqrsp_demux.sv
-  - hw/ip/reqrsp_interface/src/reqrsp_iso.sv
-  - hw/ip/reqrsp_interface/src/reqrsp_mux.sv
-  - hw/ip/reqrsp_interface/src/reqrsp_to_axi.sv
-  - target: simulation
-    files:
-      - hw/ip/reqrsp_interface/src/reqrsp_test.sv
-  - target: test
-    files:
-      # Level 0
-      - hw/ip/reqrsp_interface/test/axi_to_reqrsp_tb.sv
-      - hw/ip/reqrsp_interface/test/reqrsp_demux_tb.sv
-      - hw/ip/reqrsp_interface/test/reqrsp_idempotent_tb.sv
-      - hw/ip/reqrsp_interface/test/reqrsp_mux_tb.sv
-      - hw/ip/reqrsp_interface/test/reqrsp_to_axi_tb.sv
+  # # Level 0:
+  # - hw/ip/reqrsp_interface/src/reqrsp_pkg.sv
+  # # Level 1:
+  # - hw/ip/reqrsp_interface/src/reqrsp_intf.sv
+  # # Level 2:
+  # - hw/ip/reqrsp_interface/src/axi_to_reqrsp.sv
+  # - hw/ip/reqrsp_interface/src/reqrsp_cut.sv
+  # - hw/ip/reqrsp_interface/src/reqrsp_demux.sv
+  # - hw/ip/reqrsp_interface/src/reqrsp_iso.sv
+  # - hw/ip/reqrsp_interface/src/reqrsp_mux.sv
+  # - hw/ip/reqrsp_interface/src/reqrsp_to_axi.sv
+  # - target: simulation
+  #   files:
+  #     - hw/ip/reqrsp_interface/src/reqrsp_test.sv
+  # - target: test
+  #   files:
+  #     # Level 0
+  #     - hw/ip/reqrsp_interface/test/axi_to_reqrsp_tb.sv
+  #     - hw/ip/reqrsp_interface/test/reqrsp_demux_tb.sv
+  #     - hw/ip/reqrsp_interface/test/reqrsp_idempotent_tb.sv
+  #     - hw/ip/reqrsp_interface/test/reqrsp_mux_tb.sv
+  #     - hw/ip/reqrsp_interface/test/reqrsp_to_axi_tb.sv
 
   # ## hw/ip/mem_interface ##
 
