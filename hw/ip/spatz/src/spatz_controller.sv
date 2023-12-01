@@ -31,6 +31,7 @@ module spatz_controller
     output logic                                   rsp_valid_o,
     input  logic                                   rsp_ready_i,
     output spatz_rsp_t                             rsp_o,
+    output logic                                   rsp_we,
     // FPU untimed sidechannel
     input  roundmode_e                             fpu_rnd_mode_i,
     input  fmt_mode_t                              fpu_fmt_mode_i,
@@ -572,16 +573,19 @@ module spatz_controller
           endcase
         end
         rsp_d.id    = spatz_req.rd;
+        rsp_d.write = 1'b1;
         rsp_valid_d = 1'b1;
       end else begin
         // Change configuration and send back vl
         rsp_d.id    = spatz_req.rd;
         rsp_d.data  = elen_t'(vl_d);
+        rsp_d.write = 1'b1;
         rsp_valid_d = 1'b1;
       end
     end else if (vfu_rsp_valid) begin
       rsp_d.id      = vfu_rsp.rd;
       rsp_d.data    = vfu_rsp.result;
+      rsp_d.write   = 1'b1;
       rsp_valid_d   = 1'b1;
       vfu_rsp_ready = 1'b1;
     end

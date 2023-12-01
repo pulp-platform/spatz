@@ -593,7 +593,8 @@ module spatz_fpu_sequencer
     fp_lsu_qtag    = fd;
     fp_lsu_qwrite  = is_store;
     fp_lsu_qsigned = 1'b0;
-    fp_lsu_qaddr   = issue_req_i.data_argc;
+    // fp_lsu_qaddr   = issue_req_i.data_argc;
+    fp_lsu_qaddr   = issue_req_i.data_argb;
     fp_lsu_qdata   = fpr_rdata[1];
     fp_lsu_qsize   = ls_size;
     fp_lsu_qamo    = AMONone;

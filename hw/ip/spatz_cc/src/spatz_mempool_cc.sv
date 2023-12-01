@@ -128,13 +128,13 @@ module spatz_mempool_cc
     .RVE        ( RVE       ),
     .RVM        ( RVM       ),
     .XFVEC      ( 0     ),
-    .XFDOTP     ( 0    ),
+    .XFDOTP     ( 1    ),
     .XFAUX      ( 0     ),
-    .RVF        ( 0       ),
-    .RVD        ( 0       ),
-    .XF16       ( 0      ),
+    .RVF        ( RVF       ),
+    .RVD        ( RVD       ),
+    .XF16       ( 1      ),
     .XF16ALT    ( 0   ),
-    .XF8        ( 0       ),
+    .XF8        ( 1       ),
     .XF8ALT     ( 0    ),
     .acc_issue_rsp_t  ( acc_issue_rsp_t )
   ) i_snitch (
@@ -155,6 +155,7 @@ module spatz_mempool_cc
     .acc_qready_i           ( acc_req_d_ready        ), // checked
     .acc_pdata_i            ( acc_resp_q.data        ), // checked, 32 bits, HW
     .acc_pid_i              ( acc_resp_q.id          ), // checked, 4:0 currently TODO: 6 bits?
+    .acc_pwrite_i           ( acc_resp_q.write       ),
     .acc_perror_i           ( acc_resp_q.error       ), // checked
     .acc_pvalid_i           ( acc_resp_q_valid       ), // checked
     .acc_pready_o           ( acc_resp_q_ready       ), // checked
@@ -245,7 +246,7 @@ module spatz_mempool_cc
   spatz #(
     .NrMemPorts         ( NumMemPortsPerSpatz     ),  // checked
     .NumOutstandingLoads( snitch_pkg::NumIntOutstandingLoads ),
-    .FPUImplementation  ( 1'b0                       ),  // TODO: parameterize
+    .FPUImplementation  ( RVF || RVD              ),  // TODO: parameterize
     .RegisterRsp        ( 1'b1                    ),  // true?
     .spatz_mem_req_t    ( spatz_mem_req_t         ),  // checked
     .spatz_mem_rsp_t    ( spatz_mem_rsp_t         ),  // checked
@@ -316,7 +317,7 @@ module spatz_mempool_cc
     err : fp_lsu_rsp.error
   };
 
-
+  // if (RVD) begin: gen_id_remapper
   if (RVF || RVD) begin: gen_id_remapper
     // Merge Snitch and FP Subsequencer memory interfaces
     tcdm_id_remapper #(
