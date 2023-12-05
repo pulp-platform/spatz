@@ -139,7 +139,8 @@ int main() {
   if (cid == 0) {
     long unsigned int performance =
         1000 * 2 * gemm_l.M * gemm_l.N * gemm_l.K / timer;
-    long unsigned int utilization = performance / (2 * num_cores * SNRT_NFPU_PER_CORE * 2);
+    long unsigned int utilization =
+        performance / (2 * num_cores * SNRT_NFPU_PER_CORE * 2);
 
     printf("\n----- (%dx%d) widening hp fmatmul -----\n", gemm_l.M, gemm_l.N);
     printf("The execution took %u cycles.\n", timer);
