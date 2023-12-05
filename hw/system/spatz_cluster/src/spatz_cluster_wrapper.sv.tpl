@@ -311,8 +311,8 @@ module ${cfg['name']}_wrapper
   localparam int unsigned NumIntOutstandingLoads   [NumCores] = '{${core_cfg('num_int_outstanding_loads')}};
   localparam int unsigned NumIntOutstandingMem     [NumCores] = '{${core_cfg('num_int_outstanding_mem')}};
   localparam int unsigned NumSpatzOutstandingLoads [NumCores] = '{${core_cfg('num_spatz_outstanding_loads')}};
-  localparam int unsigned NumSpatzFPUs             [NumCores] = '{${cfg['n_fpu']}};
-  localparam int unsigned NumSpatzIPUs             [NumCores] = '{${cfg['n_ipu']}};
+  localparam int unsigned NumSpatzFPUs             [NumCores] = '{default: ${cfg['n_fpu']}};
+  localparam int unsigned NumSpatzIPUs             [NumCores] = '{default: ${cfg['n_ipu']}};
 
   spatz_cluster_pkg::spatz_axi_iwc_out_req_t axi_from_cluster_iwc_req;
   spatz_cluster_pkg::spatz_axi_iwc_out_resp_t axi_from_cluster_iwc_resp;
