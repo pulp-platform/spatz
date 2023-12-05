@@ -126,6 +126,30 @@ snrt.crt0.init_tls:
     addi      sp, sp, -4
     andi      sp, sp, ~0x7
 
+    # Copy __tdata_start to __tdata_end.
+    la        t0, __tdata_start
+    la        t1, __tdata_end
+    la        t2, __tbss_start
+    la        t3, __tbss_end
+    mv        t4, tp
+    bge       t0, t1, 2f
+1:  lw        t5, 0(t0)
+    sw        t5, 0(t4)
+    addi      t0, t0, 4
+    addi      t4, t4, 4
+    blt       t0, t1, 1b
+2:
+
+    # Clear from _tdata_end to _tbss_end.
+    la        t0, __tbss_start
+    la        t1, __tbss_end
+    bge       t0, t1, 2f
+1:  sw        zero, 0(t4)
+    addi      t0, t0, 4
+    addi      t4, t4, 4
+    blt       t0, t2, 1b
+2:
+
     # Prepare interrupts
 snrt.crt0.init_interrupt:
     la t0, __snrt_crt0_interrupt_handler
