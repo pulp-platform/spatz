@@ -2,30 +2,9 @@
 # Licensed under the Apache License, Version 2.0, see LICENSE for details.
 # SPDX-License-Identifier: Apache-2.0
 
-#include "../../start.S"
-
 # Function to determine the initial cluster layout to setup the initial stack.
 # See `hw/system/snitch_cluster/test/tb_lib.hh` for details of the bootdata
 # layout.
-#
-# Expecting:
-# - a0: mhartid
-# - a1: device tree ptr ("bootdata" in `tb_lib.hh`)
-_snrt_init_core_info:
-    .globl _snrt_init_core_info
-    mv        a4, a1
-    lw        a1, 8(a4)  # load the number of cores per cluster
-    lw        t0, 16(a4) # load cluster's hartid offset
-    lw        a2, 24(a4) # start address of the TCDM
-    lw        t1, 32(a4) # size of TCDM address space
-    lw        t2, 40(a4) # offset between cluster TCDMs
-    sub       a0, a0, t0
-    div       t3, a0, a1 # calculate cluster index
-    mul       t4, t3, t2 # calculate cluster TCDM offset
-    add       a2, a2, t4 # start address of current cluster TCDM
-    add       a3, a2, t1 # end address of current cluster TCDM
-    remu      a0, a0, a1 # calculate cluster-local core id
-    ret
 
 # Must leave a0 untouched.
 _snrt_cluster_barrier:

@@ -5,7 +5,6 @@
 # This file defines the `_start` symbol and initializes the global pointer. This
 # is common among all bare runtimes.
 
-
 # Expected from bootloader:
 # - a0: mhartid
 # - a1: device tree ptr
@@ -13,51 +12,12 @@
 _start:
     .globl _start
 
-    # Initialize global pointer
-snrt.crt0.init_global_pointer:
-    .option push
-    .option norelax
-1:  auipc     gp, %pcrel_hi(__global_pointer$)
-    addi      gp, gp, %pcrel_lo(1b)
-    .option pop
-
-snrt.crt0.init_core_info:
-    # Information passed into the call:
-    # - a0: mhartid (from bootloader)
-    # - a1: device tree ptr (from bootloader)
-    call      _snrt_init_core_info
-    # Information needed after the call:
-    # - a0: cluster-local core id
-    # - a1: cluster-local core count
-    # - a2: TCDM start ptr
-    # - a3: TCDM end ptr
-    # - a4: device tree ptr
-
-    # Clear the bss segment.
-snrt.crt0.init_bss:
-    # Takes device tree ptr as argument and returns the hart base ID
-    mv        s0, a0 # store a0 in s0 since we dont have a stack yet
-    mv        a0, a4
-    call      _snrt_get_base_hartid
-    mv        t0, a0
-    mv        a0, s0
-    # only core 0. t0: return value base hartid
-    csrr      t1, mhartid
-    sub       t0, t1, t0
-    bnez      t0, 2f
-    la        t0, _edata
-    la        t1, _end
-    bge       t0, t1, 2f
-1:  sw        zero, 0(t0)
-    addi      t0, t0, 4
-    blt       t0, t1, 1b
-2:
-
-snrt.crt0.init_registers:
-    # Clear FP registers
+snrt.crt0.init_fp_registers:
+    # Check if core has FP registers otherwise skip
     csrr    t0, misa
     andi    t0, t0, (1 << 3) | (1 << 5) # D/F - single/double precision float extension
     beqz    t0, 3f
+    # Clear FP registers
     fcvt.d.w f0, zero
     fcvt.d.w f1, zero
     fcvt.d.w f2, zero
@@ -92,18 +52,47 @@ snrt.crt0.init_registers:
     fcvt.d.w f31, zero
 3:
 
-    # Read hartid and number of cores in the cluster.
-snrt.crt0.init_stack:
+snrt.crt0.init_global_pointer:
+    # Initialize global pointer
+    .option push
+    .option norelax
+1:  auipc   gp, %pcrel_hi(__global_pointer$)
+    addi    gp, gp, %pcrel_lo(1b)
+    .option pop
 
-    # Set 8 bytes aside for the main return value and clear that to zero.
-    addi      a3, a3, -8
-    sw        zero, 0(a3)
+snrt.crt0.init_core_info:
+    # Initialize information needed by the following routines
+
+    # Bootdata
+    mv a4, a1
+
+    # Calculate cluster idx
+    csrr a0, mhartid
+    li   t0, @SNRT_BASE_HARTID@
+    sub  a0, a0, t0
+    li   a1, @SNRT_CLUSTER_CORE_NUM@
+    div  t0, a0, a1
+
+    # Calculate cluster-local core ID
+    remu a0, a0, a1
+
+    # Calculate cluster's TCDM start address
+    li   a2, @SNRT_TCDM_START_ADDR@
+    li   t1, @SNRT_CLUSTER_OFFSET@
+    mul  t0, t1, t0
+    add  a2, a2, t0
+
+    # Calculate cluster's TCDM end address
+    li   t0, @SNRT_TCDM_SIZE@
+    add  a3, a2, t0
 
     # Set space aside for the root team structure.
     lw        t0, _snrt_team_size
     sub       a3, a3, t0
     mv        a5, a3
 
+    # Read hartid and number of cores in the cluster.
+snrt.crt0.init_stack:
     # Compute the stack top for this hart, and the cluster-wide stack bottom.
     lw        t2, snrt_stack_size  # load stack size (overridable by binary)
 
@@ -121,37 +110,26 @@ snrt.crt0.init_stack:
     # Allocate thread-local storage at the top of the stack and set tp
     # to the base of the tls
 snrt.crt0.init_tls:
-    la        t0, __tdata_start
-    la        t1, __tdata_end
-    la        t2, __tbss_start
-    la        t3, __tbss_end
-    add       sp, sp, t0   # subtract sp to make room for TLS and align
-    sub       sp, sp, t1
-    add       sp, sp, t2
-    sub       sp, sp, t3
+    la        t0, __tdata_end
+    la        t1, __tdata_start
+    sub       t0, t0, t1
+    sub       sp, sp, t0
+    la        t0, __tbss_end
+    la        t1, __tbss_start
+    sub       t0, t0, t1
+    sub       sp, sp, t0
+
+    # Place tp at top of TLS
+    mv        tp, sp
+
+    # Align stack to 8B
+    addi      sp, sp, -4
     andi      sp, sp, ~0x7
-    mv        tp, sp       # palce tp at start of TLS
-    andi      sp, sp, ~0x7 # align stack to 8B
 
-    # Copy __tdata_start to __tdata_end.
-    mv        t4, tp
-    bge       t0, t1, 2f
-1:  lw        t5, 0(t0)
-    sw        t5, 0(t4)
-    addi      t0, t0, 4
-    addi      t4, t4, 4
-    blt       t0, t1, 1b
-2:
-
-    # Clear from _tdata_end to _tbss_end.
-    la        t0, __tbss_start
-    la        t1, __tbss_end
-    bge       t0, t1, 2f
-1:  sw        zero, 0(t4)
-    addi      t0, t0, 4
-    addi      t4, t4, 4
-    blt       t0, t2, 1b
-2:
+    # Prepare interrupts
+snrt.crt0.init_interrupt:
+    la t0, __snrt_crt0_interrupt_handler
+    csrw   mtvec, t0
 
     # Initialize the root team.
 snrt.crt0.init_team:
@@ -168,11 +146,6 @@ snrt.crt0.init_team:
     lw        a3, 12(sp)
     lw        a4, 16(sp)
     addi      sp, sp, 20
-
-    # Prepare interrupts
-snrt.crt0.init_interrupt:
-    la t0, __snrt_crt0_interrupt_handler
-    csrw   mtvec, t0
 
     # Synchronize cores.
 snrt.crt0.pre_barrier:
@@ -258,7 +231,7 @@ __snrt_crt0_interrupt_handler:
     fsd     f30, 8(sp)
     fsd     f31, 0(sp)
     # state is stored, can now handle the interrupt
-1:  
+1:
     call    __snrt_isr
     # restore fp context
     csrr    t0, misa

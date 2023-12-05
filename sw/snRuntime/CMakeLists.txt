@@ -30,7 +30,13 @@ set(PLATFORM_SOURCE_FOLDER "src/platforms/standalone" CACHE STRING "Path to the 
 # Default memory regions
 set(MEM_DRAM_ORIGIN "0x80000000" CACHE STRING "Base address of external memory")
 set(MEM_DRAM_SIZE "0x80000000" CACHE STRING "Size of external memory")
+set(SNRT_BASE_HARTID "0" CACHE STRING "Base hart id of this cluster")
+set(SNRT_CLUSTER_CORE_NUM "0" CACHE STRING "Number of cores in this cluster")
+set(SNRT_TCDM_START_ADDR "0" CACHE STRING "Start address of the TCDM region")
+set(SNRT_TCDM_SIZE "0" CACHE STRING "Length of the TCDM region")
+set(SNRT_CLUSTER_OFFSET "0" CACHE STRING "Address offset of this cluster's TCDM region")
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/link/common.ld.in common.ld @ONLY)
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/src/start.S.in start.S @ONLY)
 set(LINKER_SCRIPT ${CMAKE_CURRENT_BINARY_DIR}/common.ld CACHE PATH "")
 
 # provide linker script
@@ -39,6 +45,7 @@ message(STATUS "Using common linker script: ${LINKER_SCRIPT}")
 
 # OpenMP
 set(OMPSTATIC_NUMTHREADS "0" CACHE STRING "If set to a non-zero value the OpenMP runtime is optimized to the number of cores")
+
 
 if(RUNTIME_TRACE)
     # Enable runtime tracing
@@ -92,20 +99,20 @@ if (CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     # Build all runtimes
 
     # Generic Runtime (requiring bootloader/OS)
-    add_snitch_library(snRuntime src/start.S ${sources})
+    add_snitch_library(snRuntime ${CMAKE_CURRENT_BINARY_DIR}/start.S ${sources})
 
     # Bare Runtimes (with startup code)
-    add_snitch_library(snRuntime-cluster src/platforms/shared/start.c ${standalone_snitch_sources} ${sources})
+    add_snitch_library(snRuntime-cluster ${CMAKE_CURRENT_BINARY_DIR}/start.S src/platforms/shared/start.c ${standalone_snitch_sources} ${sources})
 
 
 else()
     # snRuntime is added externally, only build required runtime
     if(SNITCH_RUNTIME STREQUAL "snRuntime")
         # Generic Runtime (requiring bootloader/OS)
-        add_snitch_library(snRuntime src/platforms/shared/start.c src/start.S ${sources})
+        add_snitch_library(snRuntime ${CMAKE_CURRENT_BINARY_DIR}/start.S src/platforms/shared/start.c ${sources})
     # Bare Runtimes (with startup code)
     elseif(SNITCH_RUNTIME STREQUAL "snRuntime-cluster")
-        add_snitch_library(snRuntime-cluster src/platforms/shared/start.c ${standalone_snitch_sources} ${sources})
+        add_snitch_library(snRuntime-cluster ${CMAKE_CURRENT_BINARY_DIR}/start.S src/platforms/shared/start.c ${standalone_snitch_sources} ${sources})
     else()
         message(FATAL_ERROR "Requested runtime not implemented: ${SNITCH_RUNTIME}")
     endif()
