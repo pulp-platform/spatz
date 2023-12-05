@@ -98,7 +98,8 @@ int main() {
   // Check and display results
   if (cid == 0) {
     long unsigned int performance = 1000 * 2 * dim / timer;
-    long unsigned int utilization = performance / (2 * num_cores * SNRT_NFPU_PER_CORE);
+    long unsigned int utilization =
+        performance / (2 * num_cores * SNRT_NFPU_PER_CORE);
 
     printf("\n----- (%d) axpy -----\n", dim);
     printf("The execution took %u cycles.\n", timer);
