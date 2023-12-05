@@ -107,18 +107,18 @@ tc-riscv-isa-sim: sw/toolchain/riscv-isa-sim sw/toolchain/dtc
 
 bender: check-bender
 check-bender:
-	@if [ -x $(BENDER_INSTALL_DIR)/bender ]; then \
+	@if [ -x $(BENDER_INSTALL_DIR)/bin/bender ]; then \
 		req="bender $(BENDER_VERSION)"; \
-		current="$$($(BENDER_INSTALL_DIR)/bender --version)"; \
+		current="$$($(BENDER_INSTALL_DIR)/bin/bender --version)"; \
 		if [ "$$(printf '%s\n' "$${req}" "$${current}" | sort -V | head -n1)" != "$${req}" ]; then \
 			rm -rf $(BENDER_INSTALL_DIR); \
 		fi \
 	fi
-	@$(MAKE) -C $(ROOT_DIR) $(BENDER_INSTALL_DIR)/bender
+	@$(MAKE) -C $(ROOT_DIR) $(BENDER_INSTALL_DIR)/bin/bender
 
-$(BENDER_INSTALL_DIR)/bender:
+$(BENDER_INSTALL_DIR)/bin/bender:
 	mkdir -p $(BENDER_INSTALL_DIR) && cd $(BENDER_INSTALL_DIR) && \
-	curl --proto '=https' --tlsv1.2 https://pulp-platform.github.io/bender/init -sSf | sh -s -- $(BENDER_VERSION)
+	cargo install bender --version $(BENDER_VERSION) --root $(BENDER_INSTALL_DIR) --locked
 
 ###############
 #  Verilator  #

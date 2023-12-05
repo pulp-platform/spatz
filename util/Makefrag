@@ -19,7 +19,7 @@ BENDER_INSTALL_DIR    ?= ${INSTALL_DIR}/bender
 VERILATOR_INSTALL_DIR ?= ${INSTALL_DIR}/verilator
 
 # Support for local override
-BENDER ?= ${BENDER_INSTALL_DIR}/bender
+BENDER ?= ${BENDER_INSTALL_DIR}/bin/bender
 DASM   ?= ${SPIKE_INSTALL_DIR}/bin/spike-dasm
 VLT    ?= ${VERILATOR_INSTALL_DIR}/bin/verilator_bin
 CMAKE  ?= cmake-3.18.1
