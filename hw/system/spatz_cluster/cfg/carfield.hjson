@@ -51,20 +51,6 @@
             "register_offload_rsp": true
         },
         "cores": [
-            // Compute core
-            {
-                "isa": "rv32imafd",
-                "xf16": true,
-                "xf8": true,
-                "xfdotp": true,
-                "xdma": false,
-                "num_int_outstanding_loads": 1,
-                "num_int_outstanding_mem": 4,
-                "num_spatz_outstanding_loads": 4,
-                "num_dtlb_entries": 1,
-                "num_itlb_entries": 1
-            },
-
             // DMA core
             {
                 "isa": "rv32imafd",
@@ -72,6 +58,20 @@
                 "xf16": true,
                 "xf8": true,
                 "xfdotp": true,
+                "num_int_outstanding_loads": 1,
+                "num_int_outstanding_mem": 4,
+                "num_spatz_outstanding_loads": 4,
+                "num_dtlb_entries": 1,
+                "num_itlb_entries": 1
+            },
+
+            // Compute core
+            {
+                "isa": "rv32imafd",
+                "xf16": true,
+                "xf8": true,
+                "xfdotp": true,
+                "xdma": false,
                 "num_int_outstanding_loads": 1,
                 "num_int_outstanding_mem": 4,
                 "num_spatz_outstanding_loads": 4,
