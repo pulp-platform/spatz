@@ -108,7 +108,7 @@ int main() {
   // Check and display results
   if (cid == 0) {
     long unsigned int performance = 1000 * 2 * dotp_l.M / timer;
-    long unsigned int utilization = performance / (2 * num_cores * 4);
+    long unsigned int utilization = performance / (2 * num_cores * SNRT_NFPU_PER_CORE);
 
     printf("\n----- (%d) dp fdotp -----\n", dotp_l.M);
     printf("The execution took %u cycles.\n", timer);

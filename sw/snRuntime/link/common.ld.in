@@ -16,11 +16,10 @@ SECTIONS
   .text :
   {
     . = ALIGN(4);
-    *(.text.init)
+    *(.init)
     *(.text.startup)
     *(.text)
     *(.text*)
-    *(.text)
     . = ALIGN(4);
     _etext = .;
   } >DRAM

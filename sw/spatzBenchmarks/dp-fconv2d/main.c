@@ -122,7 +122,7 @@ int main() {
   // Check and display results
   if (cid == 0) {
     long unsigned int performance = 1000 * 2 * f * f * r * c / timer;
-    long unsigned int utilization = performance / (2 * num_cores * 4);
+    long unsigned int utilization = performance / (2 * num_cores * SNRT_NFPU_PER_CORE);
 
     printf("\n----- (%dx%d) dp fconv2d -----\n", r, c);
     printf("The execution took %u cycles.\n", timer);

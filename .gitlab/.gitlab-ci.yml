@@ -107,6 +107,7 @@ snRuntime-test-vsim:
     - export PYTHON3=$(which python3.6)
     - ${PYTHON3} -m pip install --user jsonref
     - ${PYTHON3} -m pip install --user jsonschema
+    - ${PYTHON3} -m pip install --user jstyleson
     - ${PYTHON3} -m pip install --user dataclasses
     - ${PYTHON3} -m pip install --user mako
     # Compile the binaries
@@ -134,6 +135,7 @@ snRuntime-test-vcs:
     - export PYTHON3=$(which python3.6)
     - ${PYTHON3} -m pip install --user jsonref
     - ${PYTHON3} -m pip install --user jsonschema
+    - ${PYTHON3} -m pip install --user jstyleson
     - ${PYTHON3} -m pip install --user dataclasses
     - ${PYTHON3} -m pip install --user mako
     # Compile the binaries
@@ -162,6 +164,7 @@ snRuntime-test-vlt:
     - export PYTHON3=$(which python3.6)
     - ${PYTHON3} -m pip install --user jsonref
     - ${PYTHON3} -m pip install --user jsonschema
+    - ${PYTHON3} -m pip install --user jstyleson
     - ${PYTHON3} -m pip install --user dataclasses
     - ${PYTHON3} -m pip install --user mako
     # Compile the binaries
@@ -191,6 +194,7 @@ riscvTests-test-vlt:
     - export PYTHON3=$(which python3.6)
     - ${PYTHON3} -m pip install --user jsonref
     - ${PYTHON3} -m pip install --user jsonschema
+    - ${PYTHON3} -m pip install --user jstyleson
     - ${PYTHON3} -m pip install --user dataclasses
     - ${PYTHON3} -m pip install --user mako
     # Compile the binaries
@@ -220,6 +224,7 @@ spatzBenchmarks-test-vlt:
     - export PYTHON3=$(which python3.6)
     - ${PYTHON3} -m pip install --user jsonref
     - ${PYTHON3} -m pip install --user jsonschema
+    - ${PYTHON3} -m pip install --user jstyleson
     - ${PYTHON3} -m pip install --user dataclasses
     - ${PYTHON3} -m pip install --user mako
     # Compile the binaries

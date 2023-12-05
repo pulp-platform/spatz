@@ -115,7 +115,7 @@ int main() {
   if (cid == 0) {
     long unsigned int performance =
         1000 * 10 * NFFT * log2_nfft * 6 / 5 / timer;
-    long unsigned int utilization = performance / (2 * num_cores * 4);
+    long unsigned int utilization = performance / (2 * num_cores * SNRT_NFPU_PER_CORE);
 
     printf("\n----- fft on %d samples -----\n", NFFT);
     printf("The execution took %u cycles.\n", timer);

@@ -6,12 +6,12 @@
 
 // The boot data generated along with the system RTL.
 struct BootData {
-    uint32_t boot_addr;
-    uint32_t core_count;
-    uint32_t hartid_base;
-    uint32_t tcdm_start;
-    uint32_t tcdm_size;
-    uint32_t tcdm_offset;
+    uint64_t boot_addr;
+    uint64_t core_count;
+    uint64_t hartid_base;
+    uint64_t tcdm_start;
+    uint64_t tcdm_size;
+    uint64_t tcdm_offset;
     uint64_t global_mem_start;
     uint64_t global_mem_end;
 };
