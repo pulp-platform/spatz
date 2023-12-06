@@ -14,7 +14,6 @@ module spatz_mempool_cc
   parameter bit RegisterTCDMReq     = 0,
   parameter bit RegisterTCDMResp    = 0,
 
-  // TODO: change to constant param from pkg or tile level?
   parameter int unsigned        TCDMPorts              = 1,
   parameter int unsigned        NumMemPortsPerSpatz    = 1
 ) (
@@ -50,7 +49,6 @@ module spatz_mempool_cc
   // Typedefs
   // --------
   import spatz_pkg::*;
-  `include "reqrsp_interface/typedef.svh"
   
   // TODO Diyou: dreq_t and drsp_t are not consistent in spatz, mempool and here
 
@@ -66,9 +64,7 @@ module spatz_mempool_cc
   typedef logic [31:0] data_t;
   typedef logic [3:0]  strb_t;
 
-  `REQRSP_TYPEDEF_ALL(reqrsp, addr_t, data_t, strb_t)
-
-  // `TCDM_TYPEDEF_ALL(tcdm, tcdm_addr_t, data_t, strb_t, tcdm_user_t)
+  localparam fpnew_pkg::fpu_implementation_t FPUImplementation = spatz_pkg::MemPoolFPUImpl;
 
 
   // ----------------
@@ -121,7 +117,6 @@ module spatz_mempool_cc
   logic            fp_lsu_mem_rsp_valid;
 
   // Snitch Integer Core
-  // TODO: where to put these eleboration parameters: spatz_pkg or top level?
   snitch_md #(
     .BootAddr   ( BootAddr  ),
     .MTVEC      ( MTVEC     ),
@@ -154,7 +149,7 @@ module spatz_mempool_cc
     .acc_qvalid_o           ( acc_req_d_valid        ), // checked
     .acc_qready_i           ( acc_req_d_ready        ), // checked
     .acc_pdata_i            ( acc_resp_q.data        ), // checked, 32 bits, HW
-    .acc_pid_i              ( acc_resp_q.id          ), // checked, 4:0 currently TODO: 6 bits?
+    .acc_pid_i              ( acc_resp_q.id          ), // checked
     .acc_pwrite_i           ( acc_resp_q.write       ),
     .acc_perror_i           ( acc_resp_q.error       ), // checked
     .acc_pvalid_i           ( acc_resp_q_valid       ), // checked
@@ -246,7 +241,7 @@ module spatz_mempool_cc
   spatz #(
     .NrMemPorts         ( NumMemPortsPerSpatz     ),  // checked
     .NumOutstandingLoads( snitch_pkg::NumIntOutstandingLoads ),
-    .FPUImplementation  ( RVF || RVD              ),  // TODO: parameterize
+    .FPUImplementation  ( FPUImplementation       ), 
     .RegisterRsp        ( 1'b1                    ),  // true?
     .spatz_mem_req_t    ( spatz_mem_req_t         ),  // checked
     .spatz_mem_rsp_t    ( spatz_mem_rsp_t         ),  // checked
@@ -395,7 +390,7 @@ module spatz_mempool_cc
   assign data_req_q_ready     = data_qready_i[0];
   assign data_resp_d.data     = data_pdata_i[0];
   assign data_resp_d.id       = data_pid_i[0];
-  assign data_resp_d.write    = 'x; // Don't care here
+  assign data_resp_d.write    = '0; // Don't care here
   assign data_resp_d.error    = data_perror_i[0];
   assign data_resp_d_valid    = data_pvalid_i[0];
   assign data_pready_o[0]     = data_resp_d_ready;
@@ -464,7 +459,7 @@ module spatz_mempool_cc
           extras_str = $sformatf("%s'%s': 0x%8x, ", extras_str, "writeback",   i_snitch.alu_writeback);
           // Load/Store
           extras_str = $sformatf("%s'%s': 0x%8x, ", extras_str, "gpr_rdata_1", i_snitch.gpr_rdata[1]);
-          extras_str = $sformatf("%s'%s': 0x%8x, ", extras_str, "gpr_rdata_2", i_snitch.gpr_rdata[2]);
+          // extras_str = $sformatf("%s'%s': 0x%8x, ", extras_str, "gpr_rdata_2", i_snitch.gpr_rdata[2]);
           extras_str = $sformatf("%s'%s': 0x%1x, ", extras_str, "ls_size",     i_snitch.ls_size);
           extras_str = $sformatf("%s'%s': 0x%8x, ", extras_str, "ld_result_32",i_snitch.ld_result[31:0]);
           extras_str = $sformatf("%s'%s': 0x%2x, ", extras_str, "lsu_rd",      i_snitch.lsu_rd);
