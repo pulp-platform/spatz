@@ -357,7 +357,9 @@ package spatz_pkg;
     Width        : ELEN,
     EnableVectors: 1'b1,
     EnableNanBox : 1'b1,
+    //              FP32  FP64  FP16  FP8   FP16a FP8a
     FpFmtMask    : {1'b1, 1'b1, 1'b1, 1'b1, 1'b1, 1'b1},
+    //              INT8  INT16 INT32 INT64
     IntFmtMask   : {1'b1, 1'b1, 1'b1, 1'b1}
   } :
   // Single Precision FPU
@@ -365,8 +367,26 @@ package spatz_pkg;
     Width        : ELEN,
     EnableVectors: 1'b1,
     EnableNanBox : 1'b1,
-    FpFmtMask    : {RVF, 1'b0, 1'b1, 1'b0, 1'b0, 1'b0},
-    IntFmtMask   : {1'b0, 1'b1, 1'b1, 1'b0}
+    //              FP32  FP64  FP16  FP8   FP16a FP8a
+    FpFmtMask    : {RVF,  1'b0, 1'b1, 1'b1, 1'b0, 1'b0},
+    //              INT8  INT16 INT32 INT64
+    IntFmtMask   : {1'b1, 1'b1, 1'b1, 1'b0}
+  };
+
+  localparam fpnew_pkg::fpu_implementation_t MemPoolFPUImpl =
+  '{
+      //              FP32 FP64 FP16 FP8 FP16a FP8a
+      PipeRegs: '{'{  1,   2,   1,   1,   0,   0},    // ADDMUL
+                  '{  1,   1,   1,   1,   1,   1},    // DIVSQRT  
+                  '{  1,   1,   1,   1,   1,   1},    // NONCOMP
+                  '{  2,   2,   2,   2,   2,   2},    // CONV
+                  '{  2,   2,   2,   2,   2,   2}},   // DOTP
+      UnitTypes:'{'{  default: fpnew_pkg::MERGED},    // ADDMUL
+                  '{  default: fpnew_pkg::DISABLED},  // DIVSQRT
+                  '{  default: fpnew_pkg::PARALLEL},  // NONCOMP
+                  '{  default: fpnew_pkg::MERGED},    // CONV
+                  '{  default: fpnew_pkg::MERGED}},   // DOTP
+      PipeConfig: fpnew_pkg::BEFORE
   };
 
   // FP format conversion

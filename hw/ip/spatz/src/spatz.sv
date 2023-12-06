@@ -245,7 +245,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     .vfu_rsp_valid_i  (vfu_rsp_valid   ),
     .vfu_rsp_ready_o  (vfu_rsp_ready   ),
     .vfu_rsp_i        (vfu_rsp         ),
-    // VFU
+    // VLSU
     .vlsu_req_ready_i (vlsu_req_ready  ),
     .vlsu_rsp_valid_i (vlsu_rsp_valid  ),
     .vlsu_rsp_i       (vlsu_rsp        ),
