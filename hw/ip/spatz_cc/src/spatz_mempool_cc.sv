@@ -133,48 +133,48 @@ module spatz_mempool_cc
     .XF8ALT     ( 0    ),
     .acc_issue_rsp_t  ( acc_issue_rsp_t )
   ) i_snitch (
-    .clk_i                  ( clk_i                  ), // checked
-    .rst_i                  ( rst_i                  ), // checked
-    .hart_id_i              ( hart_id_i              ), // checked
-    .inst_addr_o            ( inst_addr_o            ), // checked
-    .inst_data_i            ( inst_data_i            ), // checked
-    .inst_valid_o           ( inst_valid_o           ), // checked
-    .inst_ready_i           ( inst_ready_i           ), // checked
-    .acc_qaddr_o            ( acc_req_d.addr         ), // checked
-    .acc_qid_o              ( acc_req_d.id           ), // checked, 4:0 currently
-    .acc_qdata_op_o         ( acc_req_d.data_op      ), // checked, 32 bits, HW
-    .acc_qdata_arga_o       ( acc_req_d.data_arga    ), // checked, 32 bits, HW
-    .acc_qdata_argb_o       ( acc_req_d.data_argb    ), // checked, 32 bits, HW
-    .acc_qdata_argc_o       ( acc_req_d.data_argc    ), // checked, 32 bits, HW
-    .acc_qvalid_o           ( acc_req_d_valid        ), // checked
-    .acc_qready_i           ( acc_req_d_ready        ), // checked
-    .acc_pdata_i            ( acc_resp_q.data        ), // checked, 32 bits, HW
-    .acc_pid_i              ( acc_resp_q.id          ), // checked
+    .clk_i                  ( clk_i                  ), 
+    .rst_i                  ( rst_i                  ), 
+    .hart_id_i              ( hart_id_i              ), 
+    .inst_addr_o            ( inst_addr_o            ), 
+    .inst_data_i            ( inst_data_i            ), 
+    .inst_valid_o           ( inst_valid_o           ), 
+    .inst_ready_i           ( inst_ready_i           ), 
+    .acc_qaddr_o            ( acc_req_d.addr         ), 
+    .acc_qid_o              ( acc_req_d.id           ),
+    .acc_qdata_op_o         ( acc_req_d.data_op      ), 
+    .acc_qdata_arga_o       ( acc_req_d.data_arga    ), 
+    .acc_qdata_argb_o       ( acc_req_d.data_argb    ), 
+    .acc_qdata_argc_o       ( acc_req_d.data_argc    ), 
+    .acc_qvalid_o           ( acc_req_d_valid        ), 
+    .acc_qready_i           ( acc_req_d_ready        ), 
+    .acc_pdata_i            ( acc_resp_q.data        ), 
+    .acc_pid_i              ( acc_resp_q.id          ), 
     .acc_pwrite_i           ( acc_resp_q.write       ),
-    .acc_perror_i           ( acc_resp_q.error       ), // checked
-    .acc_pvalid_i           ( acc_resp_q_valid       ), // checked
-    .acc_pready_o           ( acc_resp_q_ready       ), // checked
-    .acc_qdata_rsp_i        ( acc_req_rsp            ), // used by spatz decoder
-    .acc_mem_finished_i     ( spatz_mem_finished     ), // used by spatz mem
-    .acc_mem_str_finished_i ( spatz_mem_str_finished ), // used by spatz mem
-    .data_qaddr_o           ( snitch_req.addr        ), // checked, 32 bits, HW
-    .data_qwrite_o          ( snitch_req.write       ), // checked
-    .data_qamo_o            ( snitch_req.amo         ), // checked
-    .data_qdata_o           ( snitch_req.data        ), // checked, 32 bits, HW
-    .data_qstrb_o           ( snitch_req.strb        ), // checked
-    .data_qid_o             ( snitch_req.id          ), // MetaIdWidth
-    .data_qvalid_o          ( snitch_req_valid       ), // checked
-    .data_qready_i          ( snitch_req_ready       ), // checked
-    .data_pdata_i           ( snitch_resp.data       ), // checked, 32 bits, HW 
-    .data_perror_i          ( snitch_resp.error      ), // chekced
-    .data_pid_i             ( snitch_resp.id         ), // MetaIdWidth
-    .data_pvalid_i          ( snitch_resp_valid      ), // checked
-    .data_pready_o          ( snitch_resp_ready      ), // checked
-    .wake_up_sync_i         ( wake_up_sync_i         ), // checked
-    .fpu_fmt_mode_o         ( fpu_fmt_mode           ), // checked
-    .fpu_rnd_mode_o         ( fpu_rnd_mode           ), // used by spatz, FPU
-    .fpu_status_i           ( fpu_status             ), // used by spatz, FPU
-    .core_events_o          ( core_events_o          )  // checked
+    .acc_perror_i           ( acc_resp_q.error       ), 
+    .acc_pvalid_i           ( acc_resp_q_valid       ), 
+    .acc_pready_o           ( acc_resp_q_ready       ), 
+    .acc_qdata_rsp_i        ( acc_req_rsp            ),
+    .acc_mem_finished_i     ( spatz_mem_finished     ),
+    .acc_mem_str_finished_i ( spatz_mem_str_finished ),
+    .data_qaddr_o           ( snitch_req.addr        ), 
+    .data_qwrite_o          ( snitch_req.write       ), 
+    .data_qamo_o            ( snitch_req.amo         ), 
+    .data_qdata_o           ( snitch_req.data        ), 
+    .data_qstrb_o           ( snitch_req.strb        ), 
+    .data_qid_o             ( snitch_req.id          ),
+    .data_qvalid_o          ( snitch_req_valid       ), 
+    .data_qready_i          ( snitch_req_ready       ), 
+    .data_pdata_i           ( snitch_resp.data       ),  
+    .data_perror_i          ( snitch_resp.error      ),
+    .data_pid_i             ( snitch_resp.id         ),
+    .data_pvalid_i          ( snitch_resp_valid      ), 
+    .data_pready_o          ( snitch_resp_ready      ), 
+    .wake_up_sync_i         ( wake_up_sync_i         ), 
+    .fpu_fmt_mode_o         ( fpu_fmt_mode           ), 
+    .fpu_rnd_mode_o         ( fpu_rnd_mode           ),
+    .fpu_status_i           ( fpu_status             ),
+    .core_events_o          ( core_events_o          )  
   );
 
 
@@ -239,61 +239,63 @@ module spatz_mempool_cc
   );
 `else
   spatz #(
-    .NrMemPorts         ( NumMemPortsPerSpatz     ),  // checked
+    .NrMemPorts         ( NumMemPortsPerSpatz     ),  
     .NumOutstandingLoads( snitch_pkg::NumIntOutstandingLoads ),
-    .FPUImplementation  ( FPUImplementation       ), 
-    .RegisterRsp        ( 1'b1                    ),  // true?
-    .spatz_mem_req_t    ( spatz_mem_req_t         ),  // checked
-    .spatz_mem_rsp_t    ( spatz_mem_rsp_t         ),  // checked
-    .spatz_issue_req_t  ( snitch_pkg::acc_req_t   ),  // checked, bad naming
-    .spatz_issue_rsp_t  ( acc_issue_rsp_t         ),  // checked
-    .spatz_rsp_t        ( snitch_pkg::acc_resp_t  )   // checked, bad naming
+    .FPUImplementation  ( FPUImplementation       ),
+    .RegisterRsp        ( 1'b1                    ),
+    .spatz_mem_req_t    ( spatz_mem_req_t         ),
+    .spatz_mem_rsp_t    ( spatz_mem_rsp_t         ),
+    .dreq_t             ( spatz_mem_req_t         ),
+    .drsp_t             ( spatz_mem_rsp_t         ),
+    .spatz_issue_req_t  ( snitch_pkg::acc_req_t   ),
+    .spatz_issue_rsp_t  ( acc_issue_rsp_t         ),
+    .spatz_rsp_t        ( snitch_pkg::acc_resp_t  )
   ) i_spatz (
-    .clk_i                   ( clk_i                 ), // checked
-    .rst_ni                  ( ~rst_i                ), // checked
-    .testmode_i              ( testmode_i            ), // checked
-    .hart_id_i               ( hart_id_i             ), // checked
-    .issue_valid_i           ( acc_req_q_valid       ), // checked
-    .issue_ready_o           ( acc_req_q_ready       ), // checked
-    .issue_req_i             ( acc_req_q             ), // checked
-    .issue_rsp_o             ( acc_req_rsp           ), // checked
-    .rsp_valid_o             ( acc_resp_d_valid      ), // checked
-    .rsp_ready_i             ( acc_resp_d_ready      ), // checked
-    .rsp_o                   ( acc_resp_d            ), // checked, super bad naming
-    .spatz_mem_req_o         ( spatz_mem_req         ), // checked
-    .spatz_mem_req_valid_o   ( spatz_mem_req_valid   ), // checked
-    .spatz_mem_req_ready_i   ( spatz_mem_req_ready   ), // checked
-    .spatz_mem_rsp_i         ( spatz_mem_rsp         ), // checked
-    .spatz_mem_rsp_valid_i   ( spatz_mem_rsp_valid   ), // checked, ***notice no ready signal here***
-    .spatz_mem_finished_o    ( spatz_mem_finished    ), // checked
-    .spatz_mem_str_finished_o( spatz_mem_str_finished), // checked
+    .clk_i                   ( clk_i                 ), 
+    .rst_ni                  ( ~rst_i                ), 
+    .testmode_i              ( 1'b0                  ), 
+    .hart_id_i               ( hart_id_i             ), 
+    .issue_valid_i           ( acc_req_q_valid       ), 
+    .issue_ready_o           ( acc_req_q_ready       ), 
+    .issue_req_i             ( acc_req_q             ), 
+    .issue_rsp_o             ( acc_req_rsp           ), 
+    .rsp_valid_o             ( acc_resp_d_valid      ), 
+    .rsp_ready_i             ( acc_resp_d_ready      ), 
+    .rsp_o                   ( acc_resp_d            ),
+    .spatz_mem_req_o         ( spatz_mem_req         ), 
+    .spatz_mem_req_valid_o   ( spatz_mem_req_valid   ), 
+    .spatz_mem_req_ready_i   ( spatz_mem_req_ready   ), 
+    .spatz_mem_rsp_i         ( spatz_mem_rsp         ), 
+    .spatz_mem_rsp_valid_i   ( spatz_mem_rsp_valid   ), // ***notice no ready signal here***
+    .spatz_mem_finished_o    ( spatz_mem_finished    ), 
+    .spatz_mem_str_finished_o( spatz_mem_str_finished), 
     .fp_lsu_mem_req_o        ( fp_lsu_mem_req        ),
     .fp_lsu_mem_req_valid_o  ( fp_lsu_mem_req_valid  ),
     .fp_lsu_mem_req_ready_i  ( fp_lsu_mem_req_ready  ),
     .fp_lsu_mem_rsp_i        ( fp_lsu_mem_rsp        ),
     .fp_lsu_mem_rsp_valid_i  ( fp_lsu_mem_rsp_valid  ),
     .fp_lsu_mem_rsp_ready_o  ( fp_lsu_mem_rsp_ready  ),
-    .fpu_rnd_mode_i          ( fpu_rnd_mode          ), // checked
-    .fpu_fmt_mode_i          ( fpu_fmt_mode          ), // checked
-    .fpu_status_o            ( fpu_status            )  // checked
+    .fpu_rnd_mode_i          ( fpu_rnd_mode          ), 
+    .fpu_fmt_mode_i          ( fpu_fmt_mode          ), 
+    .fpu_status_o            ( fpu_status            )  
   );
 `endif
 
   // TODO: Perhaps put it into a module
   // Assign TCDM data interface
   for (genvar i = 0; i < NumMemPortsPerSpatz; i++) begin
-    assign data_qaddr_o[i+1]       = spatz_mem_req[i].addr;   // checked
-    assign data_qwrite_o[i+1]      = spatz_mem_req[i].write;  // checked
-    assign data_qamo_o[i+1]        = '0;                      // checked
-    assign data_qdata_o[i+1]       = spatz_mem_req[i].data;   // checked
-    assign data_qstrb_o[i+1]       = spatz_mem_req[i].strb;   // checked
-    assign data_qid_o[i+1]         = spatz_mem_req[i].id;     // checked
-    assign data_qvalid_o[i+1]      = spatz_mem_req_valid[i];  // checked
-    assign spatz_mem_req_ready[i]  = data_qready_i[i+1];      // checked
-    assign spatz_mem_rsp[i].data   = data_pdata_i[i+1];       // checked
-    assign spatz_mem_rsp[i].id     = data_pid_i[i+1];         // checked
-    assign spatz_mem_rsp[i].err    = data_perror_i[i+1];      // checked
-    assign spatz_mem_rsp_valid[i]  = data_pvalid_i[i+1];      // checked
+    assign data_qaddr_o[i+1]       = spatz_mem_req[i].addr;   
+    assign data_qwrite_o[i+1]      = spatz_mem_req[i].write;  
+    assign data_qamo_o[i+1]        = '0;                      
+    assign data_qdata_o[i+1]       = spatz_mem_req[i].data;   
+    assign data_qstrb_o[i+1]       = spatz_mem_req[i].strb;   
+    assign data_qid_o[i+1]         = spatz_mem_req[i].id;     
+    assign data_qvalid_o[i+1]      = spatz_mem_req_valid[i];  
+    assign spatz_mem_req_ready[i]  = data_qready_i[i+1];      
+    assign spatz_mem_rsp[i].data   = data_pdata_i[i+1];       
+    assign spatz_mem_rsp[i].id     = data_pid_i[i+1];         
+    assign spatz_mem_rsp[i].err    = data_perror_i[i+1];      
+    assign spatz_mem_rsp_valid[i]  = data_pvalid_i[i+1];      
     assign data_pready_o[i+1]      = '1;                      // *** no ready signal for spatz here, tie to 1 ***
   end
 
