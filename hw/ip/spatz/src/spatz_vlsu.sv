@@ -177,7 +177,7 @@ module spatz_vlsu
   // The reorder buffer decouples the memory side from the register file side.
   // All elements from one side to the other go through it.
   for (genvar port = 0; port < NrMemPorts; port++) begin : gen_rob
-`ifdef TARGET_SPATZ
+`ifdef MEMPOOL_SPATZ
     reorder_buffer #(
       .DataWidth(ELEN              ),
       .NumWords (NrOutstandingLoads)
@@ -973,7 +973,7 @@ module spatz_vlsu
       .valid_o (spatz_mem_req_valid_o[port]),
       .ready_i (spatz_mem_req_ready_i[port])
     );
-
+`ifdef MEMPOOL_SPATZ
     // ID is required in Mempool-Spatz
     assign spatz_mem_req[port].id    = mem_req_id[port];
     assign spatz_mem_req[port].addr  = mem_req_addr[port];
@@ -985,14 +985,15 @@ module spatz_vlsu
     assign spatz_mem_req[port].last  = mem_req_last[port];
     assign spatz_mem_req[port].spec  = 1'b0; // Request is never speculative
     assign spatz_mem_req_valid[port] = mem_req_svalid[port] || mem_req_lvalid[port];
-
-    // assign spatz_mem_req[port].addr  = mem_req_addr[port];
-    // assign spatz_mem_req[port].write = !mem_is_load;
-    // assign spatz_mem_req[port].amo   = reqrsp_pkg::AMONone;
-    // assign spatz_mem_req[port].data  = mem_req_data[port];
-    // assign spatz_mem_req[port].strb  = mem_req_strb[port];
-    // assign spatz_mem_req[port].user  = '0;
-    // assign spatz_mem_req_valid[port] = mem_req_svalid[port] || mem_req_lvalid[port];
+`else
+    assign spatz_mem_req[port].addr  = mem_req_addr[port];
+    assign spatz_mem_req[port].write = !mem_is_load;
+    assign spatz_mem_req[port].amo   = reqrsp_pkg::AMONone;
+    assign spatz_mem_req[port].data  = mem_req_data[port];
+    assign spatz_mem_req[port].strb  = mem_req_strb[port];
+    assign spatz_mem_req[port].user  = '0;
+    assign spatz_mem_req_valid[port] = mem_req_svalid[port] || mem_req_lvalid[port];
+`endif
   end
 
   ////////////////

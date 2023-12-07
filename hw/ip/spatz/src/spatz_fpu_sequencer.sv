@@ -24,7 +24,7 @@ module spatz_fpu_sequencer
     parameter int unsigned AddrWidth           = 32,
     parameter int unsigned DataWidth           = FLEN,
     parameter int unsigned NumOutstandingLoads = 1,
-    localparam int unsigned IdWidth = cf_math_pkg::idx_width(NumOutstandingLoads)
+    localparam int unsigned IdWidth = cf_math_pkg::idx_width(NumOutstandingLoads)       
   ) (
     input  logic             clk_i,
     input  logic             rst_ni,
@@ -45,12 +45,14 @@ module spatz_fpu_sequencer
     input  logic             resp_valid_i,
     output logic             resp_ready_o,
     // Memory interface
-    output dreq_t            fp_lsu_mem_req_o,
+`ifdef MEMPOOL_SPATZ
     output logic             fp_lsu_mem_req_valid_o,
     input  logic             fp_lsu_mem_req_ready_i,
-    input  drsp_t            fp_lsu_mem_rsp_i,
     input  logic             fp_lsu_mem_rsp_valid_i,
     output logic             fp_lsu_mem_rsp_ready_o,
+`endif
+    output dreq_t            fp_lsu_mem_req_o,
+    input  drsp_t            fp_lsu_mem_rsp_i,    
     output logic             fp_lsu_mem_finished_o,
     output logic             fp_lsu_mem_str_finished_o,
     // Spatz VLSU side channel
@@ -522,14 +524,16 @@ module spatz_fpu_sequencer
 
   snitch_lsu #(
     .NaNBox             (1                  ),
+    .dreq_t             (dreq_t             ),
+    .drsp_t             (drsp_t             ),
     .NumOutstandingLoads(NumOutstandingLoads)
   ) i_fp_lsu (
     .clk_i        (clk_i           ),
     .rst_i        (~rst_ni         ),
     // Request interface
     .lsu_qtag_i   (fp_lsu_qtag     ),
-    .lsu_qwrite   (fp_lsu_qwrite   ),
-    .lsu_qsigned  (fp_lsu_qsigned  ),
+    .lsu_qwrite_i (fp_lsu_qwrite   ),
+    .lsu_qsigned_i(fp_lsu_qsigned  ),
     .lsu_qaddr_i  (fp_lsu_qaddr    ),
     .lsu_qdata_i  (fp_lsu_qdata    ),
     .lsu_qsize_i  (fp_lsu_qsize    ),
@@ -543,6 +547,7 @@ module spatz_fpu_sequencer
     .lsu_pvalid_o (fp_lsu_pvalid   ),
     .lsu_pready_i (fp_lsu_pready   ),
     // Memory interface
+`ifdef MEMPOOL_SPATZ
     .data_qaddr_o (mem_qaddr              ),
     .data_qwrite_o(mem_qwrite             ),
     .data_qamo_o  (/* Unused */           ),
@@ -556,6 +561,10 @@ module spatz_fpu_sequencer
     .data_pid_i   (mem_pid                ),
     .data_pvalid_i(fp_lsu_mem_rsp_valid_i ),
     .data_pready_o(fp_lsu_mem_rsp_ready_o )
+`else
+    .data_req_o   (fp_lsu_mem_req_o),
+    .data_rsp_i   (fp_lsu_mem_rsp_i)
+`endif
   );
 
   // Number of memory operations in the accelerator
@@ -590,8 +599,13 @@ module spatz_fpu_sequencer
     fp_lsu_qtag    = fd;
     fp_lsu_qwrite  = is_store;
     fp_lsu_qsigned = 1'b0;
-    // fp_lsu_qaddr   = issue_req_i.data_argc;
+    // lsu in mempool-snitch will write to argb
+`ifdef MEMPOOL_SPATZ
     fp_lsu_qaddr   = issue_req_i.data_argb;
+`else
+    fp_lsu_qaddr   = issue_req_i.data_argc;
+`endif
+    
     fp_lsu_qdata   = fpr_rdata[1];
     fp_lsu_qsize   = ls_size;
     fp_lsu_qamo    = AMONone;
@@ -602,7 +616,8 @@ module spatz_fpu_sequencer
 
     // Is the LSU stalling?
     lsu_stall = fp_lsu_qvalid && !fp_lsu_qready;
-
+    
+`ifdef MEMPOOL_SPATZ
     // Assign TCDM data interface
     fp_lsu_mem_req_o = '{
       id     : mem_qid,
@@ -618,6 +633,7 @@ module spatz_fpu_sequencer
     mem_pdata  = fp_lsu_mem_rsp_i.data;
     mem_perror = '0;
     mem_pid    = fp_lsu_mem_rsp_i.id;
+`endif
 
     if ((is_vector_load || is_vector_store) && issue_ready_i && issue_valid_o)
       acc_mem_cnt_d += 1;
