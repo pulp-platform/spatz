@@ -31,7 +31,6 @@ module spatz_controller
     output logic                                   rsp_valid_o,
     input  logic                                   rsp_ready_i,
     output spatz_rsp_t                             rsp_o,
-    output logic                                   rsp_we,
     // FPU untimed sidechannel
     input  roundmode_e                             fpu_rnd_mode_i,
     input  fmt_mode_t                              fpu_fmt_mode_i,
