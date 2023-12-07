@@ -16,20 +16,54 @@ dependencies:
   register_interface: { git: "https://github.com/pulp-platform/register_interface.git", version: 0.3.8          }
   riscv-dbg:          { git: "https://github.com/pulp-platform/riscv-dbg.git",          version: 0.7.0          }
   tech_cells_generic: { git: "https://github.com/pulp-platform/tech_cells_generic.git", version: 0.2.11         }
-  reqrsp_interface:   { path: "hw/ip/reqrsp_interface"}
-  # reqrsp_interface:   { path: "../reqrsp_interface"}
 
 export_include_dirs:
-  # - ../reqrsp_interface/include
   - hw/ip/reqrsp_interface/include
-#   # - hw/ip/mem_interface/include
-#   # - hw/ip/snitch/include
-  
-#   - hw/ip/tcdm_interface/include
+  - hw/ip/mem_interface/include
+  - hw/ip/snitch/include
+  - hw/ip/tcdm_interface/include
 
 sources:
 
   ## hw/ip/reqrsp_interface ##
+  - target: not(mempool)
+    files:
+    # Level 0:
+    - hw/ip/reqrsp_interface/src/reqrsp_pkg.sv
+    # Level 1:
+    - hw/ip/reqrsp_interface/src/reqrsp_intf.sv
+    # Level 2:
+    - hw/ip/reqrsp_interface/src/axi_to_reqrsp.sv
+    - hw/ip/reqrsp_interface/src/reqrsp_cut.sv
+    - hw/ip/reqrsp_interface/src/reqrsp_demux.sv
+    - hw/ip/reqrsp_interface/src/reqrsp_iso.sv
+    - hw/ip/reqrsp_interface/src/reqrsp_mux.sv
+    - hw/ip/reqrsp_interface/src/reqrsp_to_axi.sv
+    - target: simulation
+      files:
+        - hw/ip/reqrsp_interface/src/reqrsp_test.sv
+    - target: test
+      files:
+        # Level 0
+        - hw/ip/reqrsp_interface/test/axi_to_reqrsp_tb.sv
+        - hw/ip/reqrsp_interface/test/reqrsp_demux_tb.sv
+        - hw/ip/reqrsp_interface/test/reqrsp_idempotent_tb.sv
+        - hw/ip/reqrsp_interface/test/reqrsp_mux_tb.sv
+        - hw/ip/reqrsp_interface/test/reqrsp_to_axi_tb.sv
+
+    ## hw/ip/mem_interface ##
+
+    - hw/ip/mem_interface/src/mem_wide_narrow_mux.sv
+    - hw/ip/mem_interface/src/mem_interface.sv
+    - target: simulation
+      files:
+        - hw/ip/mem_interface/src/mem_test.sv
+    - target: test
+      files:
+        # Level 0
+        - hw/ip/mem_interface/test/mem_wide_narrow_mux_tb.sv
+
+    ## hw/ip/tcdm_interface ##
 
   # # Level 0:
   # - hw/ip/reqrsp_interface/src/reqrsp_pkg.sv
@@ -141,7 +175,13 @@ sources:
     - hw/ip/spatz/src/reorder_buffer.sv
     - hw/ip/spatz/src/rvv_pkg.sv
     # Level 1
-    - hw/ip/spatz/src/spatz_pkg.sv
+    - target: mempool
+      files:
+      - hw/ip/spatz/src/spatz_pkg.sv
+    - target: not(mempool)
+      files:
+      - hw/ip/spatz/src/generated/spatz_pkg.sv
+
     - hw/ip/spatz/src/spatz_serdiv.sv
     # Level 2
     - hw/ip/spatz/src/spatz_decoder.sv
@@ -159,38 +199,41 @@ sources:
     # Level 5
     - hw/ip/spatz/src/spatz.sv
     # Level 6
-    - hw/ip/spatz_cc/src/spatz_mempool_cc.sv
+    - target: mempool
+      files:
+      - hw/ip/spatz_cc/src/spatz_mempool_cc.sv
 
   ## hw/ip/spatz_cc ##
+    - target: not(mempool)
+      files:
+      # Level 0
+      - hw/ip/spatz_cc/src/axi_dma_pkg.sv
+      # Level 1
+      - hw/ip/spatz_cc/src/axi_dma_perf_counters.sv
+      - hw/ip/spatz_cc/src/axi_dma_twod_ext.sv
+      # Level 2
+      - hw/ip/spatz_cc/src/axi_dma_tc_snitch_fe.sv
+      # Level 3
+      - hw/ip/spatz_cc/src/spatz_cc.sv
 
-  # # Level 0
-  # - hw/ip/spatz_cc/src/axi_dma_pkg.sv
-  # # Level 1
-  # - hw/ip/spatz_cc/src/axi_dma_perf_counters.sv
-  # - hw/ip/spatz_cc/src/axi_dma_twod_ext.sv
-  # # Level 2
-  # - hw/ip/spatz_cc/src/axi_dma_tc_snitch_fe.sv
-  # # Level 3
-  # - hw/ip/spatz_cc/src/spatz_cc.sv
+      ## system/spatz_cluster ##
 
-  # ## system/spatz_cluster ##
+      # Level 0
+      - hw/system/spatz_cluster/src/generated/bootrom.sv
+      - hw/system/spatz_cluster/src/spatz_amo_shim.sv
+      - hw/system/spatz_cluster/src/spatz_cluster_peripheral/spatz_cluster_peripheral_reg_pkg.sv
+      - hw/system/spatz_cluster/src/spatz_tcdm_interconnect.sv
+      # Level 1
+      - hw/system/spatz_cluster/src/spatz_barrier.sv
+      - hw/system/spatz_cluster/src/spatz_cluster_peripheral/spatz_cluster_peripheral_reg_top.sv
+      # Level 2
+      - hw/system/spatz_cluster/src/spatz_cluster_peripheral/spatz_cluster_peripheral.sv
+      # Level 3
+      - hw/system/spatz_cluster/src/spatz_cluster.sv
+      # Level 4
+      - hw/system/spatz_cluster/src/generated/spatz_cluster_wrapper.sv
 
-  # # Level 0
-  # - hw/system/spatz_cluster/src/generated/bootrom.sv
-  # - hw/system/spatz_cluster/src/spatz_amo_shim.sv
-  # - hw/system/spatz_cluster/src/spatz_cluster_peripheral/spatz_cluster_peripheral_reg_pkg.sv
-  # - hw/system/spatz_cluster/src/spatz_tcdm_interconnect.sv
-  # # Level 1
-  # - hw/system/spatz_cluster/src/spatz_barrier.sv
-  # - hw/system/spatz_cluster/src/spatz_cluster_peripheral/spatz_cluster_peripheral_reg_top.sv
-  # # Level 2
-  # - hw/system/spatz_cluster/src/spatz_cluster_peripheral/spatz_cluster_peripheral.sv
-  # # Level 3
-  # - hw/system/spatz_cluster/src/spatz_cluster.sv
-  # # Level 4
-  # - hw/system/spatz_cluster/src/generated/spatz_cluster_wrapper.sv
-
-  # - target: spatz_test
-  #   files:
-  #     # Level 1
-  #     - hw/system/spatz_cluster/tb/testharness.sv
+      - target: spatz_test
+        files:
+          # Level 1
+          - hw/system/spatz_cluster/tb/testharness.sv
