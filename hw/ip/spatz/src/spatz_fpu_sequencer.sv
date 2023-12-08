@@ -526,6 +526,7 @@ module spatz_fpu_sequencer
     .NaNBox             (1                  ),
     .dreq_t             (dreq_t             ),
     .drsp_t             (drsp_t             ),
+    .DataWidth          (FLEN               ),
     .NumOutstandingLoads(NumOutstandingLoads)
   ) i_fp_lsu (
     .clk_i        (clk_i           ),
