@@ -375,12 +375,16 @@ package spatz_pkg;
 
   localparam fpnew_pkg::fpu_implementation_t MemPoolFPUImpl =
   '{
+      // Pipeline stages
       //              FP32 FP64 FP16 FP8 FP16a FP8a
       PipeRegs: '{'{  1,   2,   1,   1,   0,   0},    // ADDMUL
-                  '{  1,   1,   1,   1,   1,   1},    // DIVSQRT  
+                  '{  1,   1,   1,   1,   1,   1},    // DIVSQRT
                   '{  1,   1,   1,   1,   1,   1},    // NONCOMP
                   '{  2,   2,   2,   2,   2,   2},    // CONV
                   '{  2,   2,   2,   2,   2,   2}},   // DOTP
+      // MERGED: share one functional unit for all types
+      // PARALLEL: multiple functional units
+      // DISABLED: turn off
       UnitTypes:'{'{  default: fpnew_pkg::MERGED},    // ADDMUL
                   '{  default: fpnew_pkg::DISABLED},  // DIVSQRT
                   '{  default: fpnew_pkg::PARALLEL},  // NONCOMP
