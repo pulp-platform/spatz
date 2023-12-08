@@ -9,6 +9,20 @@ module spatz_mempool_cc
   parameter logic [31:0] MTVEC      = BootAddr,
   parameter bit          RVE        = 0,  // Reduced-register extension
   parameter bit          RVM        = 1,  // Enable IntegerMmultiplication & Division Extension
+  parameter bit          RVV        = 0,  // Enable Vector Extension
+  parameter bit          XFVEC      = 0,
+  parameter bit          XFDOTP     = 0,
+  parameter bit          XFAUX      = 0,
+  /// Enable F Extension.
+  parameter bit          RVF        = 0,
+  /// Enable D Extension.
+  parameter bit          RVD        = 0,
+  parameter bit          XF16       = 0,
+  parameter bit          XF16ALT    = 0,
+  parameter bit          XF8        = 0,
+  parameter bit          XF8ALT     = 0,
+  /// Enable div/sqrt unit (buggy - use with caution)
+  parameter bit          XDivSqrt   = 0,
   parameter bit RegisterOffloadReq  = 1,
   parameter bit RegisterOffloadResp = 1,
   parameter bit RegisterTCDMReq     = 0,
@@ -49,7 +63,7 @@ module spatz_mempool_cc
   // Typedefs
   // --------
   import spatz_pkg::*;
-  
+
   // TODO Diyou: dreq_t and drsp_t are not consistent in spatz, mempool and here
 
   typedef struct packed {
@@ -117,89 +131,71 @@ module spatz_mempool_cc
   logic            fp_lsu_mem_rsp_valid;
 
   // Snitch Integer Core
-  snitch_md #(
+  snitch #(
     .BootAddr   ( BootAddr  ),
     .MTVEC      ( MTVEC     ),
     .RVE        ( RVE       ),
     .RVM        ( RVM       ),
-    .XFVEC      ( 0     ),
-    .XFDOTP     ( 1    ),
-    .XFAUX      ( 0     ),
+    .RVV        ( RVV       ),
+    .XFVEC      ( XFVEC     ),
+    .XFDOTP     ( XFDOTP    ),
+    .XFAUX      ( XFAUX     ),
     .RVF        ( RVF       ),
     .RVD        ( RVD       ),
-    .XF16       ( 1      ),
-    .XF16ALT    ( 0   ),
-    .XF8        ( 1       ),
-    .XF8ALT     ( 0    ),
+    .XF16       ( XF16      ),
+    .XF16ALT    ( XF16ALT   ),
+    .XF8        ( XF8       ),
+    .XF8ALT     ( XF8ALT    ),
+    .XDivSqrt   ( XDivSqrt  ),
     .acc_issue_rsp_t  ( acc_issue_rsp_t )
   ) i_snitch (
-    .clk_i                  ( clk_i                  ), 
-    .rst_i                  ( rst_i                  ), 
-    .hart_id_i              ( hart_id_i              ), 
-    .inst_addr_o            ( inst_addr_o            ), 
-    .inst_data_i            ( inst_data_i            ), 
-    .inst_valid_o           ( inst_valid_o           ), 
-    .inst_ready_i           ( inst_ready_i           ), 
-    .acc_qaddr_o            ( acc_req_d.addr         ), 
+    .clk_i                  ( clk_i                  ),
+    .rst_i                  ( rst_i                  ),
+    .hart_id_i              ( hart_id_i              ),
+    .inst_addr_o            ( inst_addr_o            ),
+    .inst_data_i            ( inst_data_i            ),
+    .inst_valid_o           ( inst_valid_o           ),
+    .inst_ready_i           ( inst_ready_i           ),
+    .acc_qaddr_o            ( acc_req_d.addr         ),
     .acc_qid_o              ( acc_req_d.id           ),
-    .acc_qdata_op_o         ( acc_req_d.data_op      ), 
-    .acc_qdata_arga_o       ( acc_req_d.data_arga    ), 
-    .acc_qdata_argb_o       ( acc_req_d.data_argb    ), 
-    .acc_qdata_argc_o       ( acc_req_d.data_argc    ), 
-    .acc_qvalid_o           ( acc_req_d_valid        ), 
-    .acc_qready_i           ( acc_req_d_ready        ), 
-    .acc_pdata_i            ( acc_resp_q.data        ), 
-    .acc_pid_i              ( acc_resp_q.id          ), 
+    .acc_qdata_op_o         ( acc_req_d.data_op      ),
+    .acc_qdata_arga_o       ( acc_req_d.data_arga    ),
+    .acc_qdata_argb_o       ( acc_req_d.data_argb    ),
+    .acc_qdata_argc_o       ( acc_req_d.data_argc    ),
+    .acc_qvalid_o           ( acc_req_d_valid        ),
+    .acc_qready_i           ( acc_req_d_ready        ),
+    .acc_pdata_i            ( acc_resp_q.data        ),
+    .acc_pid_i              ( acc_resp_q.id          ),
     .acc_pwrite_i           ( acc_resp_q.write       ),
-    .acc_perror_i           ( acc_resp_q.error       ), 
-    .acc_pvalid_i           ( acc_resp_q_valid       ), 
-    .acc_pready_o           ( acc_resp_q_ready       ), 
+    .acc_perror_i           ( acc_resp_q.error       ),
+    .acc_pvalid_i           ( acc_resp_q_valid       ),
+    .acc_pready_o           ( acc_resp_q_ready       ),
     .acc_qdata_rsp_i        ( acc_req_rsp            ),
     .acc_mem_finished_i     ( spatz_mem_finished     ),
     .acc_mem_str_finished_i ( spatz_mem_str_finished ),
-    .data_qaddr_o           ( snitch_req.addr        ), 
-    .data_qwrite_o          ( snitch_req.write       ), 
-    .data_qamo_o            ( snitch_req.amo         ), 
-    .data_qdata_o           ( snitch_req.data        ), 
-    .data_qstrb_o           ( snitch_req.strb        ), 
+    .data_qaddr_o           ( snitch_req.addr        ),
+    .data_qwrite_o          ( snitch_req.write       ),
+    .data_qamo_o            ( snitch_req.amo         ),
+    .data_qdata_o           ( snitch_req.data        ),
+    .data_qstrb_o           ( snitch_req.strb        ),
     .data_qid_o             ( snitch_req.id          ),
-    .data_qvalid_o          ( snitch_req_valid       ), 
-    .data_qready_i          ( snitch_req_ready       ), 
-    .data_pdata_i           ( snitch_resp.data       ),  
+    .data_qvalid_o          ( snitch_req_valid       ),
+    .data_qready_i          ( snitch_req_ready       ),
+    .data_pdata_i           ( snitch_resp.data       ),
     .data_perror_i          ( snitch_resp.error      ),
     .data_pid_i             ( snitch_resp.id         ),
-    .data_pvalid_i          ( snitch_resp_valid      ), 
-    .data_pready_o          ( snitch_resp_ready      ), 
-    .wake_up_sync_i         ( wake_up_sync_i         ), 
-    .fpu_fmt_mode_o         ( fpu_fmt_mode           ), 
+    .data_pvalid_i          ( snitch_resp_valid      ),
+    .data_pready_o          ( snitch_resp_ready      ),
+    .wake_up_sync_i         ( wake_up_sync_i         ),
+    .fpu_fmt_mode_o         ( fpu_fmt_mode           ),
     .fpu_rnd_mode_o         ( fpu_rnd_mode           ),
     .fpu_status_i           ( fpu_status             ),
-    .core_events_o          ( core_events_o          )  
+    .core_events_o          ( core_events_o          )
   );
 
-
-
-`ifndef TARGET_SPATZ
-  // Cut off-loading request path
-  spill_register #(
-    .T      ( snitch_pkg::acc_req_t ),
-    .Bypass ( !RegisterOffloadReq   )
-  ) i_spill_register_acc_req (
-    .clk_i   ,
-    .rst_ni  ( ~rst_i          ),
-    .valid_i ( acc_req_d_valid ),
-    .ready_o ( acc_req_d_ready ),
-    .data_i  ( acc_req_d       ),
-    .valid_o ( acc_req_q_valid ),
-    .ready_i ( acc_req_q_ready ),
-    .data_o  ( acc_req_q       )
-  );
-`else
   assign acc_req_q = acc_req_d;
   assign acc_req_q_valid = acc_req_d_valid;
   assign acc_req_d_ready = acc_req_q_ready;
-`endif
-
 
   // Cut off-loading response path
   spill_register #(
@@ -216,30 +212,8 @@ module spatz_mempool_cc
     .data_o  ( acc_resp_q       )
   );
 
-`ifndef TARGET_SPATZ
-  // Snitch IPU accelerator
-  snitch_ipu #(
-    .IdWidth ( 5 )
-  ) i_snitch_ipu (
-    .clk_i                                   ,
-    .rst_i                                   ,
-    .acc_qaddr_i      ( acc_req_q.addr      ),
-    .acc_qid_i        ( acc_req_q.id        ),
-    .acc_qdata_op_i   ( acc_req_q.data_op   ),
-    .acc_qdata_arga_i ( acc_req_q.data_arga ),
-    .acc_qdata_argb_i ( acc_req_q.data_argb ),
-    .acc_qdata_argc_i ( acc_req_q.data_argc ),
-    .acc_qvalid_i     ( acc_req_q_valid     ),
-    .acc_qready_o     ( acc_req_q_ready     ),
-    .acc_pdata_o      ( acc_resp_d.data     ),
-    .acc_pid_o        ( acc_resp_d.id       ),
-    .acc_perror_o     ( acc_resp_d.error    ),
-    .acc_pvalid_o     ( acc_resp_d_valid    ),
-    .acc_pready_i     ( acc_resp_d_ready    )
-  );
-`else
   spatz #(
-    .NrMemPorts         ( NumMemPortsPerSpatz     ),  
+    .NrMemPorts         ( NumMemPortsPerSpatz     ),
     .NumOutstandingLoads( snitch_pkg::NumIntOutstandingLoads ),
     .FPUImplementation  ( FPUImplementation       ),
     .RegisterRsp        ( 1'b1                    ),
@@ -251,52 +225,52 @@ module spatz_mempool_cc
     .spatz_issue_rsp_t  ( acc_issue_rsp_t         ),
     .spatz_rsp_t        ( snitch_pkg::acc_resp_t  )
   ) i_spatz (
-    .clk_i                   ( clk_i                 ), 
-    .rst_ni                  ( ~rst_i                ), 
-    .testmode_i              ( 1'b0                  ), 
-    .hart_id_i               ( hart_id_i             ), 
-    .issue_valid_i           ( acc_req_q_valid       ), 
-    .issue_ready_o           ( acc_req_q_ready       ), 
-    .issue_req_i             ( acc_req_q             ), 
-    .issue_rsp_o             ( acc_req_rsp           ), 
-    .rsp_valid_o             ( acc_resp_d_valid      ), 
-    .rsp_ready_i             ( acc_resp_d_ready      ), 
+    .clk_i                   ( clk_i                 ),
+    .rst_ni                  ( ~rst_i                ),
+    .testmode_i              ( 1'b0                  ),
+    .hart_id_i               ( hart_id_i             ),
+    .issue_valid_i           ( acc_req_q_valid       ),
+    .issue_ready_o           ( acc_req_q_ready       ),
+    .issue_req_i             ( acc_req_q             ),
+    .issue_rsp_o             ( acc_req_rsp           ),
+    .rsp_valid_o             ( acc_resp_d_valid      ),
+    .rsp_ready_i             ( acc_resp_d_ready      ),
     .rsp_o                   ( acc_resp_d            ),
-    .spatz_mem_req_o         ( spatz_mem_req         ), 
-    .spatz_mem_req_valid_o   ( spatz_mem_req_valid   ), 
-    .spatz_mem_req_ready_i   ( spatz_mem_req_ready   ), 
-    .spatz_mem_rsp_i         ( spatz_mem_rsp         ), 
-    .spatz_mem_rsp_valid_i   ( spatz_mem_rsp_valid   ), // ***notice no ready signal here***
-    .spatz_mem_finished_o    ( spatz_mem_finished    ), 
-    .spatz_mem_str_finished_o( spatz_mem_str_finished), 
+    .spatz_mem_req_o         ( spatz_mem_req         ),
+    .spatz_mem_req_valid_o   ( spatz_mem_req_valid   ),
+    .spatz_mem_req_ready_i   ( spatz_mem_req_ready   ),
+    .spatz_mem_rsp_i         ( spatz_mem_rsp         ),
+    .spatz_mem_rsp_valid_i   ( spatz_mem_rsp_valid   ),// ***notice no ready signal here***
+    .spatz_mem_finished_o    ( spatz_mem_finished    ),
+    .spatz_mem_str_finished_o( spatz_mem_str_finished),
     .fp_lsu_mem_req_o        ( fp_lsu_mem_req        ),
     .fp_lsu_mem_req_valid_o  ( fp_lsu_mem_req_valid  ),
     .fp_lsu_mem_req_ready_i  ( fp_lsu_mem_req_ready  ),
     .fp_lsu_mem_rsp_i        ( fp_lsu_mem_rsp        ),
     .fp_lsu_mem_rsp_valid_i  ( fp_lsu_mem_rsp_valid  ),
     .fp_lsu_mem_rsp_ready_o  ( fp_lsu_mem_rsp_ready  ),
-    .fpu_rnd_mode_i          ( fpu_rnd_mode          ), 
-    .fpu_fmt_mode_i          ( fpu_fmt_mode          ), 
-    .fpu_status_o            ( fpu_status            )  
+    .fpu_rnd_mode_i          ( fpu_rnd_mode          ),
+    .fpu_fmt_mode_i          ( fpu_fmt_mode          ),
+    .fpu_status_o            ( fpu_status            )
   );
-`endif
 
   // TODO: Perhaps put it into a module
   // Assign TCDM data interface
   for (genvar i = 0; i < NumMemPortsPerSpatz; i++) begin
-    assign data_qaddr_o[i+1]       = spatz_mem_req[i].addr;   
-    assign data_qwrite_o[i+1]      = spatz_mem_req[i].write;  
-    assign data_qamo_o[i+1]        = '0;                      
-    assign data_qdata_o[i+1]       = spatz_mem_req[i].data;   
-    assign data_qstrb_o[i+1]       = spatz_mem_req[i].strb;   
-    assign data_qid_o[i+1]         = spatz_mem_req[i].id;     
-    assign data_qvalid_o[i+1]      = spatz_mem_req_valid[i];  
-    assign spatz_mem_req_ready[i]  = data_qready_i[i+1];      
-    assign spatz_mem_rsp[i].data   = data_pdata_i[i+1];       
-    assign spatz_mem_rsp[i].id     = data_pid_i[i+1];         
-    assign spatz_mem_rsp[i].err    = data_perror_i[i+1];      
-    assign spatz_mem_rsp_valid[i]  = data_pvalid_i[i+1];      
-    assign data_pready_o[i+1]      = '1;                      // *** no ready signal for spatz here, tie to 1 ***
+    assign data_qaddr_o[i+1]       = spatz_mem_req[i].addr;
+    assign data_qwrite_o[i+1]      = spatz_mem_req[i].write;
+    assign data_qamo_o[i+1]        = '0;
+    assign data_qdata_o[i+1]       = spatz_mem_req[i].data;
+    assign data_qstrb_o[i+1]       = spatz_mem_req[i].strb;
+    assign data_qid_o[i+1]         = spatz_mem_req[i].id;
+    assign data_qvalid_o[i+1]      = spatz_mem_req_valid[i];
+    assign spatz_mem_req_ready[i]  = data_qready_i[i+1];
+    assign spatz_mem_rsp[i].data   = data_pdata_i[i+1];
+    assign spatz_mem_rsp[i].id     = data_pid_i[i+1];
+    assign spatz_mem_rsp[i].err    = data_perror_i[i+1];
+    assign spatz_mem_rsp_valid[i]  = data_pvalid_i[i+1];
+    // *** no ready signal for spatz here, tie to 1 ***
+    assign data_pready_o[i+1]      = '1;
   end
 
   assign fp_lsu_req = '{
@@ -305,16 +279,15 @@ module spatz_mempool_cc
     write  : fp_lsu_mem_req.write,
     data   : fp_lsu_mem_req.data,
     strb   : fp_lsu_mem_req.strb,
-    default: '0 
+    default: '0
   };
 
-  assign fp_lsu_mem_rsp = '{ 
+  assign fp_lsu_mem_rsp = '{
     id  : fp_lsu_rsp.id,
     data: fp_lsu_rsp.data,
     err : fp_lsu_rsp.error
   };
 
-  // if (RVD) begin: gen_id_remapper
   if (RVF || RVD) begin: gen_id_remapper
     // Merge Snitch and FP Subsequencer memory interfaces
     tcdm_id_remapper #(

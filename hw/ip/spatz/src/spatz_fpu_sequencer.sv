@@ -11,7 +11,7 @@ module spatz_fpu_sequencer
   import spatz_pkg::*;
   import rvv_pkg::*;
   import fpnew_pkg::*;
-  import reqrsp_pkg::*; 
+  import reqrsp_pkg::*;
   import cf_math_pkg::idx_width; #(
     // Memory request
     parameter type dreq_t            = logic,
@@ -24,7 +24,7 @@ module spatz_fpu_sequencer
     parameter int unsigned AddrWidth           = 32,
     parameter int unsigned DataWidth           = FLEN,
     parameter int unsigned NumOutstandingLoads = 1,
-    localparam int unsigned IdWidth = cf_math_pkg::idx_width(NumOutstandingLoads)       
+    localparam int unsigned IdWidth = cf_math_pkg::idx_width(NumOutstandingLoads)
   ) (
     input  logic             clk_i,
     input  logic             rst_ni,
@@ -52,7 +52,7 @@ module spatz_fpu_sequencer
     output logic             fp_lsu_mem_rsp_ready_o,
 `endif
     output dreq_t            fp_lsu_mem_req_o,
-    input  drsp_t            fp_lsu_mem_rsp_i,    
+    input  drsp_t            fp_lsu_mem_rsp_i,
     output logic             fp_lsu_mem_finished_o,
     output logic             fp_lsu_mem_str_finished_o,
     // Spatz VLSU side channel
@@ -609,7 +609,6 @@ module spatz_fpu_sequencer
 `else
     fp_lsu_qaddr   = issue_req_i.data_argc;
 `endif
-    
     fp_lsu_qdata   = fpr_rdata[1];
     fp_lsu_qsize   = ls_size;
     fp_lsu_qamo    = AMONone;
@@ -620,7 +619,7 @@ module spatz_fpu_sequencer
 
     // Is the LSU stalling?
     lsu_stall = fp_lsu_qvalid && !fp_lsu_qready;
-    
+
 `ifdef MEMPOOL_SPATZ
     // Assign TCDM data interface
     fp_lsu_mem_req_o = '{
