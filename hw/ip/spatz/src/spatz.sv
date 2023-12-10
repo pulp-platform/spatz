@@ -164,7 +164,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
       .resp_valid_i             ( resp_valid             ),
       .resp_ready_o             ( resp_ready             ),
       // Memory interface
-`ifdef MEMPOOL_SPATZ     
+`ifdef MEMPOOL_SPATZ
       .fp_lsu_mem_req_valid_o   ( fp_lsu_mem_req_valid_o ),
       .fp_lsu_mem_req_ready_i   ( fp_lsu_mem_req_ready_i ),
       .fp_lsu_mem_rsp_valid_i   ( fp_lsu_mem_rsp_valid_i ),
