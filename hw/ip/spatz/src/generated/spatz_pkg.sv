@@ -339,7 +339,9 @@ package spatz_pkg;
     Width        : ELEN,
     EnableVectors: 1'b1,
     EnableNanBox : 1'b1,
+    //              FP32  FP64  FP16  FP8   FP16a FP8a
     FpFmtMask    : {1'b1, 1'b1, 1'b1, 1'b1, 1'b1, 1'b1},
+    //              INT8  INT16 INT32 INT64
     IntFmtMask   : {1'b1, 1'b1, 1'b1, 1'b1}
   } :
   // Single Precision FPU
@@ -347,8 +349,10 @@ package spatz_pkg;
     Width        : ELEN,
     EnableVectors: 1'b1,
     EnableNanBox : 1'b1,
-    FpFmtMask    : {RVF, 1'b0, 1'b1, 1'b0, 1'b0, 1'b0},
-    IntFmtMask   : {1'b0, 1'b1, 1'b1, 1'b0}
+    //              FP32  FP64  FP16  FP8   FP16a FP8a
+    FpFmtMask    : {RVF,  1'b0, 1'b1, 1'b1, 1'b0, 1'b0},
+    //              INT8  INT16 INT32 INT64
+    IntFmtMask   : {1'b1, 1'b1, 1'b1, 1'b0}
   };
 
   // FP format conversion
