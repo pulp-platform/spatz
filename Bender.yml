@@ -175,12 +175,7 @@ sources:
     - hw/ip/spatz/src/reorder_buffer.sv
     - hw/ip/spatz/src/rvv_pkg.sv
     # Level 1
-    - target: mempool
-      files:
-      - hw/ip/spatz/src/spatz_pkg.sv
-    - target: not(mempool)
-      files:
-      - hw/ip/spatz/src/generated/spatz_pkg.sv
+    - hw/ip/spatz/src/generated/spatz_pkg.sv
 
     - hw/ip/spatz/src/spatz_serdiv.sv
     # Level 2

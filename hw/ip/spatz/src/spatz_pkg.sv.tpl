@@ -12,15 +12,27 @@ package spatz_pkg;
   //  Parameters  //
   //////////////////
 
+% if cfg['mempool']:
+  // Number of IPUs in each VFU (between 1 and 8)
+  localparam int unsigned N_IPU = `ifdef N_IPU `N_IPU `else 4 `endif;
+  // Number of FPUs in each VFU (between 1 and 8)
+  localparam int unsigned N_FPU = `ifdef N_FPU `N_FPU `else 4 `endif;
+% else :
   // Number of IPUs in each VFU (between 1 and 8)
   localparam int unsigned N_IPU = ${cfg['n_ipu']};
   // Number of FPUs in each VFU (between 1 and 8)
   localparam int unsigned N_FPU = ${cfg['n_fpu']};
+% endif
   // Number of FUs in each VFU
   localparam int unsigned N_FU  = N_IPU > N_FPU ? N_IPU : N_FPU;
   // FPU support
   localparam bit FPU            = N_FPU != 0;
-% if cfg['spatz_fpu']:
+% if cfg['mempool']:
+  // Single-precision floating point support
+  localparam bit RVF            = `ifdef RVF `RVF `else 0 `endif;
+  // Double-precision floating-point support
+  localparam bit RVD            = `ifdef RVD `RVD `else 0 `endif;
+% elif cfg['spatz_fpu']:
   // Single-precision floating point support
   localparam bit RVF            = 1;
   // Double-precision floating-point support
@@ -291,6 +303,26 @@ package spatz_pkg;
     logic exc;
   } vlsu_rsp_t;
 
+% if cfg['mempool']:
+  typedef struct packed {
+    logic [$clog2(NRVREG):0] id;
+    logic [31:0] addr;
+    logic [1:0] mode;
+    logic [1:0] size;
+    logic write;
+    logic [DataWidth/8-1:0] strb;
+    logic [DataWidth-1:0] data;
+    logic last;
+    logic spec;
+  } spatz_mem_req_t;
+
+  typedef struct packed {
+    logic [$clog2(NRVREG)-1:0] id;
+    logic [DataWidth-1:0] data;
+    logic err;
+  } spatz_mem_rsp_t;
+
+%endif
   ////////////////////
   // VSLDU Response //
   ////////////////////
@@ -346,7 +378,9 @@ package spatz_pkg;
     Width        : ELEN,
     EnableVectors: 1'b1,
     EnableNanBox : 1'b1,
+    //              FP32  FP64  FP16  FP8   FP16a FP8a
     FpFmtMask    : {1'b1, 1'b1, 1'b1, 1'b1, 1'b1, 1'b1},
+    //              INT8  INT16 INT32 INT64
     IntFmtMask   : {1'b1, 1'b1, 1'b1, 1'b1}
   } :
   // Single Precision FPU
@@ -354,10 +388,34 @@ package spatz_pkg;
     Width        : ELEN,
     EnableVectors: 1'b1,
     EnableNanBox : 1'b1,
-    FpFmtMask    : {RVF, 1'b0, 1'b1, 1'b0, 1'b0, 1'b0},
-    IntFmtMask   : {1'b0, 1'b1, 1'b1, 1'b0}
+    //              FP32  FP64  FP16  FP8   FP16a FP8a
+    FpFmtMask    : {RVF,  1'b0, 1'b1, 1'b1, 1'b0, 1'b0},
+    //              INT8  INT16 INT32 INT64
+    IntFmtMask   : {1'b1, 1'b1, 1'b1, 1'b0}
   };
 
+% if cfg['mempool']:
+  localparam fpnew_pkg::fpu_implementation_t MemPoolFPUImpl =
+  '{
+      // Pipeline stages
+      //              FP32 FP64 FP16 FP8 FP16a FP8a
+      PipeRegs: '{'{  1,   2,   1,   1,   0,   0},    // ADDMUL
+                  '{  1,   1,   1,   1,   1,   1},    // DIVSQRT
+                  '{  1,   1,   1,   1,   1,   1},    // NONCOMP
+                  '{  2,   2,   2,   2,   2,   2},    // CONV
+                  '{  2,   2,   2,   2,   2,   2}},   // DOTP
+      // MERGED: share one functional unit for all types
+      // PARALLEL: multiple functional units
+      // DISABLED: turn off
+      UnitTypes:'{'{  default: fpnew_pkg::MERGED},    // ADDMUL
+                  '{  default: fpnew_pkg::DISABLED},  // DIVSQRT
+                  '{  default: fpnew_pkg::PARALLEL},  // NONCOMP
+                  '{  default: fpnew_pkg::MERGED},    // CONV
+                  '{  default: fpnew_pkg::MERGED}},   // DOTP
+      PipeConfig: fpnew_pkg::BEFORE
+  };
+
+% endif
   // FP format conversion
   typedef struct packed {
     logic [63:63] sign;

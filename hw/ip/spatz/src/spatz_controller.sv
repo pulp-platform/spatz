@@ -174,7 +174,6 @@ module spatz_controller
 
   // Decode new instruction if new request arrives
   always_comb begin : proc_decode
-    // decoder_req       = '{default: '0};
     decoder_req       = '0;
     decoder_req_valid = 1'b0;
 

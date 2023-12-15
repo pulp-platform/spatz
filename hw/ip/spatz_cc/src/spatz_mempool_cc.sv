@@ -378,6 +378,8 @@ module spatz_mempool_cc
   string fn;
   logic [63:0] cycle;
   int unsigned stall, stall_ins, stall_raw, stall_lsu, stall_acc;
+  // spatz stall signals
+  int unsigned stall_totacc, stall_vfu, stall_vlsu, stall_vsldu;
 
   always_ff @(posedge rst_i) begin
     if(rst_i) begin
@@ -446,6 +448,12 @@ module spatz_mempool_cc
           extras_str = $sformatf("%s'%s': 0x%1x, ", extras_str, "retire_acc",  i_snitch.retire_acc);
           extras_str = $sformatf("%s'%s': 0x%2x, ", extras_str, "acc_pid",     i_snitch.acc_pid_i);
           extras_str = $sformatf("%s'%s': 0x%8x, ", extras_str, "acc_pdata_32",i_snitch.acc_pdata_i[31:0]);
+          // Spatz Stall
+          extras_str = $sformatf("%s'%s': 0x%1x, ", extras_str, "stall_spatz", i_spatz.i_controller.stall);
+          extras_str = $sformatf("%s'%s': 0x%8x, ", extras_str, "stall_totacc",stall_totacc);
+          extras_str = $sformatf("%s'%s': 0x%8x, ", extras_str, "stall_vfu",   stall_vfu);
+          extras_str = $sformatf("%s'%s': 0x%8x, ", extras_str, "stall_vlsu",  stall_vlsu);
+          extras_str = $sformatf("%s'%s': 0x%8x, ", extras_str, "stall_vsldu", stall_vsldu);
           extras_str = $sformatf("%s}", extras_str);
 
           $timeformat(-9, 0, "", 10);
@@ -479,6 +487,26 @@ module spatz_mempool_cc
             stall_acc <= stall_acc + 1;
           end
         end
+
+        if (!i_spatz.i_controller.stall) begin
+          stall_totacc <= 0;
+          stall_vfu <= 0;
+          stall_vlsu <= 0;
+          stall_vsldu <= 0;
+        end else begin
+          if (i_spatz.i_controller.stall) begin
+            stall_totacc <= stall_totacc + 1;
+          end
+          if (i_spatz.i_controller.vfu_stall) begin
+            stall_vfu <= stall_vfu + 1;
+          end
+          if (i_spatz.i_controller.vlsu_stall) begin
+            stall_vlsu <= stall_vlsu + 1;
+          end
+          if (i_spatz.i_controller.vsldu_stall) begin
+            stall_vsldu <= stall_vsldu + 1;
+          end
+        end
       end else begin
         cycle <= '0;
         stall <= 0;
@@ -486,6 +514,10 @@ module spatz_mempool_cc
         stall_raw <= 0;
         stall_lsu <= 0;
         stall_acc <= 0;
+        stall_totacc <= 0;
+        stall_vfu <= 0;
+        stall_vlsu <= 0;
+        stall_vsldu <= 0;
       end
     end
 
