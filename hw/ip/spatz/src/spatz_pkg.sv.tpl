@@ -51,7 +51,11 @@ package spatz_pkg;
   // Maximum size of a single vector element in bytes
   localparam int unsigned ELENB  = ELEN / 8;
   // Number of bits in a vector register
+% if cfg['mempool']:
+  localparam int unsigned VLEN   = `ifdef VLEN `VLEN `else 256 `endif;
+% else :
   localparam int unsigned VLEN   = ${cfg['vlen']};
+%endif
   // Number of bytes in a vector register
   localparam int unsigned VLENB  = VLEN / 8;
   // Maximum vector length in elements
@@ -320,6 +324,7 @@ package spatz_pkg;
     logic [$clog2(NRVREG)-1:0] id;
     logic [DataWidth-1:0] data;
     logic err;
+    logic write;
   } spatz_mem_rsp_t;
 
 %endif
