@@ -152,8 +152,13 @@ module spatz_vlsu
         store_count_d[port]++;
 
       // Did we get the ack of a store?
+  `ifdef MEMPOOL_SPATZ
+      if (store_count_q[port] != '0 && spatz_mem_rsp_valid_i[port] && spatz_mem_rsp_i[port].write)
+        store_count_d[port]--;
+  `else
       if (store_count_q[port] != '0 && spatz_mem_rsp_valid_i[port])
         store_count_d[port]--;
+  `endif
     end
   end: proc_store_count
 
@@ -861,9 +866,12 @@ module spatz_vlsu
       for (int unsigned port = 0; port < NrMemPorts; port++) begin
         // Write the load result to the buffer
         rob_wdata[port] = spatz_mem_rsp_i[port].data;
-        rob_push[port]  = spatz_mem_rsp_valid_i[port] && (state_q == VLSU_RunningLoad) && store_count_q[port] == '0;
 `ifdef MEMPOOL_SPATZ
         rob_wid[port]   = spatz_mem_rsp_i[port].id;
+        // Need to consider out-of-order memory response
+        rob_push[port]  = spatz_mem_rsp_valid_i[port] && (state_q == VLSU_RunningLoad) && spatz_mem_rsp_i[port].write == '0;
+`else
+        rob_push[port]  = spatz_mem_rsp_valid_i[port] && (state_q == VLSU_RunningLoad) && store_count_q[port] == '0;
 `endif
         if (!rob_full[port] && !offset_queue_full[port] && mem_operation_valid[port]) begin
           rob_req_id[port]     = spatz_mem_req_ready[port] & spatz_mem_req_valid[port];

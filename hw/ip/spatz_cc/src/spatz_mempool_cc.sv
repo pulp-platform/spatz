@@ -49,6 +49,7 @@ module spatz_mempool_cc
   output logic      [TCDMPorts-1:0]         data_qvalid_o,
   input  logic      [TCDMPorts-1:0]         data_qready_i,
   input  logic      [TCDMPorts-1:0][31:0]   data_pdata_i,
+  input  logic      [TCDMPorts-1:0]         data_pwrite_i,
   input  logic      [TCDMPorts-1:0]         data_perror_i,
   input  meta_id_t  [TCDMPorts-1:0]         data_pid_i,
   input  logic      [TCDMPorts-1:0]         data_pvalid_i,
@@ -266,6 +267,7 @@ module spatz_mempool_cc
     assign data_qvalid_o[i+1]      = spatz_mem_req_valid[i];
     assign spatz_mem_req_ready[i]  = data_qready_i[i+1];
     assign spatz_mem_rsp[i].data   = data_pdata_i[i+1];
+    assign spatz_mem_rsp[i].write  = data_pwrite_i[i+1];
     assign spatz_mem_rsp[i].id     = data_pid_i[i+1];
     assign spatz_mem_rsp[i].err    = data_perror_i[i+1];
     assign spatz_mem_rsp_valid[i]  = data_pvalid_i[i+1];
@@ -285,7 +287,8 @@ module spatz_mempool_cc
   assign fp_lsu_mem_rsp = '{
     id  : fp_lsu_rsp.id,
     data: fp_lsu_rsp.data,
-    err : fp_lsu_rsp.error
+    err : fp_lsu_rsp.error,
+    write: fp_lsu_rsp.write
   };
 
   if (RVF || RVD) begin: gen_id_remapper
@@ -376,7 +379,7 @@ module spatz_mempool_cc
   // pragma translate_off
   int f;
   string fn;
-  logic [63:0] cycle;
+  logic [63:0] cycle, spatz_running;
   int unsigned stall, stall_ins, stall_raw, stall_lsu, stall_acc;
   // spatz stall signals
   int unsigned stall_totacc, stall_vfu, stall_vlsu, stall_vsldu;
@@ -404,7 +407,8 @@ module spatz_mempool_cc
         // Tracing enabled by CSR register
         // we are not stalled <==> we have issued and processed an instruction (including offloads)
         // OR we are retiring (issuing a writeback from) a load or accelerator instruction
-        if ((i_snitch.csr_trace_q || SnitchTrace) && (!i_snitch.stall || i_snitch.retire_load || i_snitch.retire_acc)) begin
+        if ((i_snitch.csr_trace_q || SnitchTrace) && (!i_snitch.stall || i_snitch.retire_load || i_snitch.retire_acc ||
+            !i_spatz.i_controller.stall)) begin
           // Manual loop unrolling for Verilator
           // Data type keys for arrays are currently not supported in Verilator
           extras_str = "{";
@@ -454,6 +458,7 @@ module spatz_mempool_cc
           extras_str = $sformatf("%s'%s': 0x%8x, ", extras_str, "stall_vfu",   stall_vfu);
           extras_str = $sformatf("%s'%s': 0x%8x, ", extras_str, "stall_vlsu",  stall_vlsu);
           extras_str = $sformatf("%s'%s': 0x%8x, ", extras_str, "stall_vsldu", stall_vsldu);
+          extras_str = $sformatf("%s'%s': 0x%8x  ", extras_str, "spatz_active",spatz_running);
           extras_str = $sformatf("%s}", extras_str);
 
           $timeformat(-9, 0, "", 10);
@@ -507,8 +512,12 @@ module spatz_mempool_cc
             stall_vsldu <= stall_vsldu + 1;
           end
         end
+        if (acc_req_rsp.isfloat) begin
+          spatz_running <= spatz_running + 1;
+        end
       end else begin
         cycle <= '0;
+        spatz_running <= '0;
         stall <= 0;
         stall_ins <= 0;
         stall_raw <= 0;
