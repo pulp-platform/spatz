@@ -2,7 +2,8 @@
 # Licensed under the Apache License, Version 2.0, see LICENSE for details.
 # SPDX-License-Identifier: Apache-2.0
 
-# Author: Matheus Cavalcante, ETH Zurich
+# Authors: Matheus Cavalcante, ETH Zurich
+#          Mattia Sinigaglia, Universisty of Bologna
 
 # Include Makefrag
 include util/Makefrag
@@ -13,8 +14,12 @@ BENDER_VERSION = 0.27.1
 # Do not include minifloat opcodes, since they conflict with the RVV opcodes!
 OPCODES := "opcodes-rvv opcodes-rv32b_CUSTOM opcodes-ipu_CUSTOM opcodes-frep_CUSTOM opcodes-dma_CUSTOM opcodes-ssr_CUSTOM opcodes-smallfloat"
 
+
 # Default target
 all: bender toolchain update_opcodes
+
+# Target for IIS users
+init: bender update_opcodes
 
 ###############
 #  Toolchain  #
@@ -107,18 +112,18 @@ tc-riscv-isa-sim: sw/toolchain/riscv-isa-sim sw/toolchain/dtc
 
 bender: check-bender
 check-bender:
-	@if [ -x $(BENDER_INSTALL_DIR)/bin/bender ]; then \
+	@if [ -x $(BENDER_INSTALL_DIR)/bender ]; then \
 		req="bender $(BENDER_VERSION)"; \
-		current="$$($(BENDER_INSTALL_DIR)/bin/bender --version)"; \
+		current="$$($(BENDER_INSTALL_DIR)/bender --version)"; \
 		if [ "$$(printf '%s\n' "$${req}" "$${current}" | sort -V | head -n1)" != "$${req}" ]; then \
 			rm -rf $(BENDER_INSTALL_DIR); \
 		fi \
 	fi
-	@$(MAKE) -C $(ROOT_DIR) $(BENDER_INSTALL_DIR)/bin/bender
+	@$(MAKE) -C $(ROOT_DIR) $(BENDER_INSTALL_DIR)/bender
 
-$(BENDER_INSTALL_DIR)/bin/bender:
+$(BENDER_INSTALL_DIR)/bender:
 	mkdir -p $(BENDER_INSTALL_DIR) && cd $(BENDER_INSTALL_DIR) && \
-	cargo install bender --version $(BENDER_VERSION) --root $(BENDER_INSTALL_DIR) --locked
+	curl --proto '=https' --tlsv1.2 https://pulp-platform.github.io/bender/init -sSf | sh -s -- $(BENDER_VERSION)
 
 ###############
 #  Verilator  #

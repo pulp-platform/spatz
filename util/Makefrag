@@ -2,7 +2,8 @@
 # Licensed under the Apache License, Version 2.0, see LICENSE for details.
 # SPDX-License-Identifier: Apache-2.0
 
-# Author: Matheus Cavalcante, ETH Zurich
+# Authors: Matheus Cavalcante, ETH Zurich
+# 		   Mattia Sinigaglia, Universisty of Bologna
 
 # Root
 SHELL = /usr/bin/env bash
@@ -19,7 +20,7 @@ BENDER_INSTALL_DIR    ?= ${INSTALL_DIR}/bender
 VERILATOR_INSTALL_DIR ?= ${INSTALL_DIR}/verilator
 
 # Support for local override
-BENDER ?= ${BENDER_INSTALL_DIR}/bin/bender
+BENDER ?= ${BENDER_INSTALL_DIR}/bender
 DASM   ?= ${SPIKE_INSTALL_DIR}/bin/spike-dasm
 VLT    ?= ${VERILATOR_INSTALL_DIR}/bin/verilator_bin
 CMAKE  ?= cmake-3.18.1
