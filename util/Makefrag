@@ -2,8 +2,9 @@
 # Licensed under the Apache License, Version 2.0, see LICENSE for details.
 # SPDX-License-Identifier: Apache-2.0
 
-# Authors: Matheus Cavalcante, ETH Zurich
-# 		   Mattia Sinigaglia, Universisty of Bologna
+# Authors:
+# Matheus Cavalcante, ETH Zurich
+# Mattia Sinigaglia, University of Bologna
 
 # Root
 SHELL = /usr/bin/env bash

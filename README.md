@@ -15,6 +15,15 @@ make all
 
 The Makefile target will automatically download and compile tested versions of LLVM, GCC, Spike, and Verilator. It might take a while. If you have issues cloning the GitHub modules, you might need to remove the folders in `sw/toolchain`.
 
+ETH users can source the toolchains and initialize the environment by doing:
+
+```bash
+
+source util/iis-env.sh
+
+make init
+```
+
 The Spatz cluster system (hw/system/spatz_cluster) is a fundamental system around a Snitch core and a Spatz coprocessor. The cluster can be configured using a config file. The configuration parameters are documented using JSON schema, and documentation is generated for the schema. The cluster testbench simulates an infinite memory. The RISC-V ELF file is preloaded using RISC-V's Front-end Server (`fesvr`).
 
 ### Simulating the system
