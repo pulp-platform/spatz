@@ -379,10 +379,8 @@ module spatz_mempool_cc
   // pragma translate_off
   int f;
   string fn;
-  logic [63:0] cycle, spatz_running;
+  logic [63:0] cycle;
   int unsigned stall, stall_ins, stall_raw, stall_lsu, stall_acc;
-  // spatz stall signals
-  int unsigned stall_totacc, stall_vfu, stall_vlsu, stall_vsldu;
 
   always_ff @(posedge rst_i) begin
     if(rst_i) begin
@@ -407,8 +405,7 @@ module spatz_mempool_cc
         // Tracing enabled by CSR register
         // we are not stalled <==> we have issued and processed an instruction (including offloads)
         // OR we are retiring (issuing a writeback from) a load or accelerator instruction
-        if ((i_snitch.csr_trace_q || SnitchTrace) && (!i_snitch.stall || i_snitch.retire_load || i_snitch.retire_acc ||
-            !i_spatz.i_controller.stall)) begin
+        if ((i_snitch.csr_trace_q || SnitchTrace) && (!i_snitch.stall || i_snitch.retire_load || i_snitch.retire_acc)) begin
           // Manual loop unrolling for Verilator
           // Data type keys for arrays are currently not supported in Verilator
           extras_str = "{";
@@ -440,7 +437,6 @@ module spatz_mempool_cc
           extras_str = $sformatf("%s'%s': 0x%8x, ", extras_str, "writeback",   i_snitch.alu_writeback);
           // Load/Store
           extras_str = $sformatf("%s'%s': 0x%8x, ", extras_str, "gpr_rdata_1", i_snitch.gpr_rdata[1]);
-          // extras_str = $sformatf("%s'%s': 0x%8x, ", extras_str, "gpr_rdata_2", i_snitch.gpr_rdata[2]);
           extras_str = $sformatf("%s'%s': 0x%1x, ", extras_str, "ls_size",     i_snitch.ls_size);
           extras_str = $sformatf("%s'%s': 0x%8x, ", extras_str, "ld_result_32",i_snitch.ld_result[31:0]);
           extras_str = $sformatf("%s'%s': 0x%2x, ", extras_str, "lsu_rd",      i_snitch.lsu_rd);
@@ -452,13 +448,6 @@ module spatz_mempool_cc
           extras_str = $sformatf("%s'%s': 0x%1x, ", extras_str, "retire_acc",  i_snitch.retire_acc);
           extras_str = $sformatf("%s'%s': 0x%2x, ", extras_str, "acc_pid",     i_snitch.acc_pid_i);
           extras_str = $sformatf("%s'%s': 0x%8x, ", extras_str, "acc_pdata_32",i_snitch.acc_pdata_i[31:0]);
-          // Spatz Stall
-          extras_str = $sformatf("%s'%s': 0x%1x, ", extras_str, "stall_spatz", i_spatz.i_controller.stall);
-          extras_str = $sformatf("%s'%s': 0x%8x, ", extras_str, "stall_totacc",stall_totacc);
-          extras_str = $sformatf("%s'%s': 0x%8x, ", extras_str, "stall_vfu",   stall_vfu);
-          extras_str = $sformatf("%s'%s': 0x%8x, ", extras_str, "stall_vlsu",  stall_vlsu);
-          extras_str = $sformatf("%s'%s': 0x%8x, ", extras_str, "stall_vsldu", stall_vsldu);
-          extras_str = $sformatf("%s'%s': 0x%8x  ", extras_str, "spatz_active",spatz_running);
           extras_str = $sformatf("%s}", extras_str);
 
           $timeformat(-9, 0, "", 10);
@@ -492,41 +481,13 @@ module spatz_mempool_cc
             stall_acc <= stall_acc + 1;
           end
         end
-
-        if (!i_spatz.i_controller.stall) begin
-          stall_totacc <= 0;
-          stall_vfu <= 0;
-          stall_vlsu <= 0;
-          stall_vsldu <= 0;
-        end else begin
-          if (i_spatz.i_controller.stall) begin
-            stall_totacc <= stall_totacc + 1;
-          end
-          if (i_spatz.i_controller.vfu_stall) begin
-            stall_vfu <= stall_vfu + 1;
-          end
-          if (i_spatz.i_controller.vlsu_stall) begin
-            stall_vlsu <= stall_vlsu + 1;
-          end
-          if (i_spatz.i_controller.vsldu_stall) begin
-            stall_vsldu <= stall_vsldu + 1;
-          end
-        end
-        if (acc_req_rsp.isfloat) begin
-          spatz_running <= spatz_running + 1;
-        end
       end else begin
         cycle <= '0;
-        spatz_running <= '0;
         stall <= 0;
         stall_ins <= 0;
         stall_raw <= 0;
         stall_lsu <= 0;
         stall_acc <= 0;
-        stall_totacc <= 0;
-        stall_vfu <= 0;
-        stall_vlsu <= 0;
-        stall_vsldu <= 0;
       end
     end
 
