@@ -174,7 +174,7 @@ module spatz_controller
 
   // Decode new instruction if new request arrives
   always_comb begin : proc_decode
-    decoder_req       = '{default: '0};
+    decoder_req       = '0;
     decoder_req_valid = 1'b0;
 
     // Decode new instruction if one is received and spatz is ready
@@ -466,7 +466,7 @@ module spatz_controller
   end: proc_next_insn_id
 
   // Respond to core about the decoded instruction.
-  always_comb begin : x_issue_resp
+  always_comb begin : acc_issue_resp
     issue_rsp_o = '0;
 
     // Is there something running on Spatz? If so, prevent Snitch from reading the fcsr register
@@ -506,7 +506,7 @@ module spatz_controller
       // Do not accept it
       issue_rsp_o.accept = 1'b0;
     end
-  end // x_issue_resp
+  end // acc_issue_resp
 
   //////////////
   // Retiring //
@@ -554,6 +554,9 @@ module spatz_controller
     vfu_rsp_ready = 1'b0;
 
     if (retire_csr) begin
+`ifdef MEMPOOL_SPATZ
+      rsp_d.write = 1'b1;
+`endif
       // Read CSR and write back to cpu
       if (spatz_req.op == VCSR) begin
         if (spatz_req.use_rd) begin
@@ -579,6 +582,9 @@ module spatz_controller
     end else if (vfu_rsp_valid) begin
       rsp_d.id      = vfu_rsp.rd;
       rsp_d.data    = vfu_rsp.result;
+`ifdef MEMPOOL_SPATZ
+      rsp_d.write   = 1'b1;
+`endif
       rsp_valid_d   = 1'b1;
       vfu_rsp_ready = 1'b1;
     end

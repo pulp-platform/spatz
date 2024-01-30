@@ -5,7 +5,7 @@
 // Cluster configuration for a simple system.
 {
     cluster: {
-        mempool: 0,
+        mempool: 1,
         boot_addr: 4096,            // 0x1000
         cluster_base_addr: 1048576, // 0x100000
         cluster_base_offset: 0,     // 0x0
