@@ -257,7 +257,7 @@ module spatz_mempool_cc
 
   // TODO: Perhaps put it into a module
   // Assign TCDM data interface
-  for (genvar i = 0; i < NumMemPortsPerSpatz; i++) begin
+  for (genvar i = 0; i < NumMemPortsPerSpatz; i++) begin : gen_tcdm_assignment
     assign data_qaddr_o[i+1]       = spatz_mem_req[i].addr;
     assign data_qwrite_o[i+1]      = spatz_mem_req[i].write;
     assign data_qamo_o[i+1]        = '0;
@@ -382,6 +382,7 @@ module spatz_mempool_cc
   logic [63:0] cycle;
   int unsigned stall, stall_ins, stall_raw, stall_lsu, stall_acc;
 
+  // verilog_lint: waive-start always-ff-non-blocking
   always_ff @(posedge rst_i) begin
     if(rst_i) begin
       // Format in hex because vcs and vsim treat decimal differently
@@ -391,10 +392,12 @@ module spatz_mempool_cc
       $display("[Tracer] Logging Hart %d to %s", hart_id_i, fn);
     end
   end
+  // verilog_lint: waive-stop always-ff-non-blocking
 
   typedef enum logic [1:0] {SrcSnitch =  0, SrcFpu = 1, SrcFpuSeq = 2} trace_src_e;
   localparam int SnitchTrace = `ifdef SNITCH_TRACE `SNITCH_TRACE `else 0 `endif;
 
+  // verilog_lint: waive-start always-ff-non-blocking
   always_ff @(posedge clk_i or posedge rst_i) begin
       automatic string trace_entry;
       automatic string extras_str;
@@ -494,6 +497,7 @@ module spatz_mempool_cc
   final begin
     $fclose(f);
   end
+  // verilog_lint: waive-stop always-ff-non-blocking
   // pragma translate_on
 
 endmodule
