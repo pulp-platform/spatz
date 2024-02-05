@@ -626,6 +626,10 @@ module spatz_vlsu
   vlen_t vreg_start_0;
   assign vreg_start_0 = vlen_t'(commit_insn_q.vstart[$clog2(ELENB)-1:0]);
   logic [N_FU-1:0] catchup;
+  logic [3:0] commit_size;
+  // commit load and store handshaking check
+  logic commit_load_hs, commit_store_hs;
+  assign commit_size = commit_is_single_element_operation ? commit_single_element_size : ELENB;
   for (genvar i = 0; i < N_FU; i++) begin: gen_catchup
     assign catchup[i] = (commit_counter_q[i] < vreg_start_0) & (commit_counter_max[i] != commit_counter_q[i]);
   end: gen_catchup
@@ -650,15 +654,32 @@ module spatz_vlsu
         commit_counter_d[fu] += ELENB;
       else if (commit_insn_q.vstart[idx_width(N_FU*ELENB)-1:$clog2(ELENB)] == fu)
         commit_counter_d[fu] += commit_insn_q.vstart[$clog2(ELENB)-1:0];
+      // valid when: 1. insn is valid; 2. not commit last elem; 3. I am catching up, or no one is catching up
       commit_operation_valid[fu] = commit_insn_valid && (commit_counter_q[fu] != max_elements) && (catchup[fu] || (!catchup[fu] && ~|catchup));
-      commit_operation_last[fu]  = commit_operation_valid[fu] && ((max_elements - commit_counter_q[fu]) <= (commit_is_single_element_operation ? commit_single_element_size : ELENB));
-      commit_counter_delta[fu]   = !commit_operation_valid[fu] ? vlen_t'('d0) : commit_is_single_element_operation ? vlen_t'(commit_single_element_size) : commit_operation_last[fu] ? (max_elements - commit_counter_q[fu]) : vlen_t'(ELENB);
-      commit_counter_en[fu]      = commit_operation_valid[fu] && (commit_insn_q.is_load && vrf_req_valid_d && vrf_req_ready_d) || (!commit_insn_q.is_load && vrf_rvalid_i[0] && vrf_re_o[0] && (!mem_is_indexed || vrf_rvalid_i[1]));
+      commit_operation_last[fu]  = commit_operation_valid[fu] && ((max_elements - commit_counter_q[fu]) <= commit_size);
+      // default to 0
+      commit_counter_delta[fu]  = '0;
+      if (commit_operation_valid[fu]) begin
+        if (commit_is_single_element_operation) begin
+          commit_counter_delta[fu] = vlen_t'(commit_single_element_size);
+        end else begin
+          // check if last
+          commit_counter_delta[fu] = commit_operation_last[fu] ? (max_elements - commit_counter_q[fu]) : vlen_t'(ELENB);
+        end
+      end
+      // If load, check vrf req handshaking
+      commit_load_hs  = commit_insn_q.is_load && vrf_req_valid_d && vrf_req_ready_d;
+      // If store, check vrf read handshaking
+      commit_store_hs = !commit_insn_q.is_load && vrf_rvalid_i[0] && vrf_re_o[0] && (!mem_is_indexed || vrf_rvalid_i[1])
+      // enable when valid and (load hs/store hs)
+      commit_counter_en[fu]      = commit_operation_valid[fu] && (commit_load_hs || commit_store_hs);
       commit_counter_max[fu]     = max_elements;
     end
   end
 
   assign vd_elem_id = (commit_counter_q[0] > vreg_start_0) ? commit_counter_q[0] >> $clog2(ELENB) : commit_counter_q[N_FU-1] >> $clog2(ELENB);
+  logic [3:0] mem_size;
+  assign mem_size = mem_is_single_element_operation ? mem_single_element_size : MemDataWidthB;
 
   for (genvar port = 0; port < NrMemPorts; port++) begin: gen_mem_counter_proc
     // The total amount of elements we have to work through
@@ -677,9 +698,10 @@ module spatz_vlsu
           max_elements += mem_spatz_req.vl[$clog2(MemDataWidthB)-1:0];
 
       mem_operation_valid[port] = mem_spatz_req_valid && (max_elements != mem_counter_q[port]);
-      mem_operation_last[port]  = mem_operation_valid[port] && ((max_elements - mem_counter_q[port]) <= (mem_is_single_element_operation ? mem_single_element_size : MemDataWidthB));
+      mem_operation_last[port]  = mem_operation_valid[port] && ((max_elements - mem_counter_q[port]) <= mem_size);
       mem_counter_load[port]    = mem_spatz_req_ready;
       mem_counter_d[port]       = (mem_spatz_req.vstart >> $clog2(NrMemPorts*MemDataWidthB)) << $clog2(MemDataWidthB);
+
       if (NrMemPorts == 1)
         mem_counter_d[port] = mem_spatz_req.vstart;
       else
@@ -687,7 +709,18 @@ module spatz_vlsu
           mem_counter_d[port] += MemDataWidthB;
         else if (mem_spatz_req.vstart[$clog2(MemDataWidthB) +: $clog2(NrMemPorts)] == port)
           mem_counter_d[port] += mem_spatz_req.vstart[$clog2(MemDataWidthB)-1:0];
-      mem_counter_delta[port] = !mem_operation_valid[port] ? 'd0 : mem_is_single_element_operation ? mem_single_element_size : mem_operation_last[port] ? (max_elements - mem_counter_q[port]) : MemDataWidthB;
+
+      // default to 0
+      mem_counter_delta[port] = 'd0;
+      if (mem_operation_valid[port]) begin
+        if (mem_is_single_element_operation) begin
+          mem_counter_delta[port] = mem_single_element_size;
+        end else begin
+          // if last, take remaining elements
+          mem_counter_delta[port] = mem_operation_last[port] ? (max_elements - mem_counter_q[port]) : MemDataWidthB;
+        end
+      end
+
       mem_counter_en[port]    = spatz_mem_req_ready[port] && spatz_mem_req_valid[port];
       mem_counter_max[port]   = max_elements;
 
