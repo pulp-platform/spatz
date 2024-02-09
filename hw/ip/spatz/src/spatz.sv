@@ -53,6 +53,12 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     output logic             [1:0]            spatz_mem_finished_o,
     output logic             [1:0]            spatz_mem_str_finished_o,
     // FPU memory interface interface
+`ifdef MEMPOOL_SPATZ
+    output logic                              fp_lsu_mem_req_valid_o,
+    input  logic                              fp_lsu_mem_req_ready_i,
+    input  logic                              fp_lsu_mem_rsp_valid_i,
+    output logic                              fp_lsu_mem_rsp_ready_o,
+`endif
     output dreq_t                             fp_lsu_mem_req_o,
     input  drsp_t                             fp_lsu_mem_rsp_i,
     // FPU side channel
@@ -116,6 +122,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     assign issue_req     = issue_req_i;
     assign issue_valid   = issue_valid_i;
     assign issue_ready_o = issue_ready;
+    assign issue_rsp_o   = issue_rsp;
 
     assign rsp_o       = resp;
     assign rsp_valid_o = resp_valid;
@@ -123,6 +130,10 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
 
     // Tie the memory interface to zero
     assign fp_lsu_mem_req_o        = '0;
+`ifdef MEMPOOL_SPATZ
+    assign fp_lsu_mem_req_valid_o  = 1'b0;
+    assign fp_lsu_mem_rsp_ready_o  = 1'b0;
+`endif
     assign fp_lsu_mem_finished     = 1'b0;
     assign fp_lsu_mem_str_finished = 1'b0;
   end: gen_no_fpu_sequencer else begin: gen_fpu_sequencer
@@ -134,32 +145,38 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
       .spatz_rsp_t        (spatz_rsp_t         ),
       .NumOutstandingLoads(NumOutstandingLoads )
     ) i_fpu_sequencer (
-      .clk_i                    (clk_i                  ),
-      .rst_ni                   (rst_ni                 ),
+      .clk_i                    ( clk_i                  ),
+      .rst_ni                   ( rst_ni                 ),
       // Snitch interface
-      .issue_req_i              (issue_req_i            ),
-      .issue_valid_i            (issue_valid_i          ),
-      .issue_ready_o            (issue_ready_o          ),
-      .issue_rsp_o              (issue_rsp_o            ),
-      .resp_o                   (rsp_o                  ),
-      .resp_valid_o             (rsp_valid_o            ),
-      .resp_ready_i             (rsp_ready_i            ),
+      .issue_req_i              ( issue_req_i            ),
+      .issue_valid_i            ( issue_valid_i          ),
+      .issue_ready_o            ( issue_ready_o          ),
+      .issue_rsp_o              ( issue_rsp_o            ),
+      .resp_o                   ( rsp_o                  ),
+      .resp_valid_o             ( rsp_valid_o            ),
+      .resp_ready_i             ( rsp_ready_i            ),
       // Spatz interface
-      .issue_req_o              (issue_req              ),
-      .issue_valid_o            (issue_valid            ),
-      .issue_ready_i            (issue_ready            ),
-      .issue_rsp_i              (issue_rsp              ),
-      .resp_i                   (resp                   ),
-      .resp_valid_i             (resp_valid             ),
-      .resp_ready_o             (resp_ready             ),
+      .issue_req_o              ( issue_req              ),
+      .issue_valid_o            ( issue_valid            ),
+      .issue_ready_i            ( issue_ready            ),
+      .issue_rsp_i              ( issue_rsp              ),
+      .resp_i                   ( resp                   ),
+      .resp_valid_i             ( resp_valid             ),
+      .resp_ready_o             ( resp_ready             ),
       // Memory interface
-      .fp_lsu_mem_req_o         (fp_lsu_mem_req_o       ),
-      .fp_lsu_mem_rsp_i         (fp_lsu_mem_rsp_i       ),
-      .fp_lsu_mem_finished_o    (fp_lsu_mem_finished    ),
-      .fp_lsu_mem_str_finished_o(fp_lsu_mem_str_finished),
+`ifdef MEMPOOL_SPATZ
+      .fp_lsu_mem_req_valid_o   ( fp_lsu_mem_req_valid_o ),
+      .fp_lsu_mem_req_ready_i   ( fp_lsu_mem_req_ready_i ),
+      .fp_lsu_mem_rsp_valid_i   ( fp_lsu_mem_rsp_valid_i ),
+      .fp_lsu_mem_rsp_ready_o   ( fp_lsu_mem_rsp_ready_o ),
+`endif
+      .fp_lsu_mem_req_o         ( fp_lsu_mem_req_o       ),
+      .fp_lsu_mem_rsp_i         ( fp_lsu_mem_rsp_i       ),
+      .fp_lsu_mem_finished_o    ( fp_lsu_mem_finished    ),
+      .fp_lsu_mem_str_finished_o( fp_lsu_mem_str_finished),
       // Spatz VLSU side channel
-      .spatz_mem_finished_i     (spatz_mem_finished     ),
-      .spatz_mem_str_finished_i (spatz_mem_str_finished )
+      .spatz_mem_finished_i     ( spatz_mem_finished     ),
+      .spatz_mem_str_finished_i ( spatz_mem_str_finished )
     );
   end: gen_fpu_sequencer
 
@@ -211,7 +228,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   spatz_controller #(
     .NrVregfilePorts  (NrReadPorts+NrWritePorts),
     .NrWritePorts     (NrWritePorts            ),
-    .RegisterRsp  (RegisterRsp             ),
+    .RegisterRsp      (RegisterRsp             ),
     .spatz_issue_req_t(spatz_issue_req_t       ),
     .spatz_issue_rsp_t(spatz_issue_rsp_t       ),
     .spatz_rsp_t      (spatz_rsp_t             )
@@ -237,7 +254,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     .vfu_rsp_valid_i  (vfu_rsp_valid   ),
     .vfu_rsp_ready_o  (vfu_rsp_ready   ),
     .vfu_rsp_i        (vfu_rsp         ),
-    // VFU
+    // VLSU
     .vlsu_req_ready_i (vlsu_req_ready  ),
     .vlsu_rsp_valid_i (vlsu_rsp_valid  ),
     .vlsu_rsp_i       (vlsu_rsp        ),

@@ -412,8 +412,14 @@ module spatz_vfu
             reduction_d[1] = $unsigned(vrf_rdata_i[1][32*reduction_pointer_q[idx_width(N_FU*ELENB)-3:0] +: 32]);
           end
           default: begin
-            if (MAXEW == EW_64) reduction_d[0] = $unsigned(vrf_rdata_i[0][63:0]);
-            if (MAXEW == EW_64) reduction_d[1] = $unsigned(vrf_rdata_i[1][64*reduction_pointer_q[idx_width(N_FU*ELENB)-4:0] +: 64]);
+          `ifdef MEMPOOL_SPATZ
+            reduction_d = '0;
+          `else
+            if (MAXEW == EW_64) begin
+              reduction_d[0] = $unsigned(vrf_rdata_i[0][63:0]);
+              reduction_d[1] = $unsigned(vrf_rdata_i[1][64*reduction_pointer_q[idx_width(N_FU*ELENB)-4:0] +: 64]);
+            end
+          `endif
           end
         endcase
         // verilator lint_on SELRANGE
@@ -449,8 +455,14 @@ module spatz_vfu
             reduction_d[1] = $unsigned(vrf_rdata_i[1][32*reduction_pointer_q[idx_width(N_FU*ELENB)-3:0] +: 32]);
           end
           default: begin
-            if (MAXEW == EW_64) reduction_d[0] = $unsigned(result[63:0]);
-            if (MAXEW == EW_64) reduction_d[1] = $unsigned(vrf_rdata_i[1][64*reduction_pointer_q[idx_width(N_FU*ELENB)-4:0] +: 64]);
+          `ifdef MEMPOOL_SPATZ
+            reduction_d = '0;
+          `else
+            if (MAXEW == EW_64) begin
+              reduction_d[0] = $unsigned(result[63:0]);
+              reduction_d[1] = $unsigned(vrf_rdata_i[1][64*reduction_pointer_q[idx_width(N_FU*ELENB)-4:0] +: 64]);
+            end
+          `endif
           end
         endcase
         // verilator lint_on SELRANGE
