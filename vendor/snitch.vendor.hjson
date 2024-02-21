@@ -1,0 +1,30 @@
+// Copyright 2020 ETH Zurich and University of Bologna.
+// Licensed under the Apache License, Version 2.0, see LICENSE for details.
+// SPDX-License-Identifier: Apache-2.0
+{
+  "name": "snitch",
+  "target_dir": "snitch",
+  "upstream": {
+    "url": "https://github.com/pulp-platform/snitch_cluster.git",
+    "rev": "main"
+  },
+  "patch_dir": "",
+  "exclude_from_upstream": [
+    ".github",
+    "docs",
+    "hw",
+    "util",
+    "sw/apps",
+    "sw/blas",
+    "sw/dnn",
+    "sw/examples",
+    "util",
+    ".*",
+    "apt-requirements.txt",
+    "Bender.*",
+    "*.md",
+    "iis-setup.sh",
+    "mkdocs.yml",
+    "python-requirements.txt",
+  ]
+}

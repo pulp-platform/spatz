@@ -16,6 +16,9 @@ OPCODES := "opcodes-rvv opcodes-rv32b_CUSTOM opcodes-ipu_CUSTOM opcodes-frep_CUS
 # Default target
 all: bender toolchain update_opcodes
 
+vendor/snitch:
+	./util/vendor.py vendor/snitch.vendor.hjson
+
 ###############
 #  Toolchain  #
 ###############
