@@ -1,0 +1,73 @@
+From 109c1590ae7dc6533fcbd3ed6f2b7d3019b7c7bb Mon Sep 17 00:00:00 2001
+From: Luca Colagrande <luca.colagrande3@gmail.com>
+Date: Thu, 16 Nov 2023 10:22:48 +0100
+Subject: [PATCH] math: Add safe `asuint64` and `asdouble` functions
+
+---
+ src/internal/libm.h | 36 ++++++++++++++++++++----------------
+ 1 file changed, 20 insertions(+), 16 deletions(-)
+
+diff --git a/src/internal/libm.h b/src/internal/libm.h
+index c96c0ece..66e8ee2f 100644
+--- a/src/internal/libm.h
++++ b/src/internal/libm.h
+@@ -124,6 +124,26 @@ static inline void safe_inject_into_upper_32b_double(uint32_t x, double *f) {
+ 	 : : [x]"r"(x), [ptr]"r"(f): "ft3", "memory");
+ }
+ 
++/* Synch-secure double to uint64 conversion functions. */
++static inline uint64_t asuint64(double f) {
++    uint64_t *ptr;
++	asm volatile("fsd %[f], 0(%[ptr]) \n"
++	             "fld ft3, 0(%[ptr]) \n"
++				 "fmv.x.w t0, ft3 \n"
++				 "mv      t0, t0 \n"
++	 : : [f]"f"(f), [ptr]"r"(ptr): "ft3", "t0", "memory");
++	return *result;
++}
++
++/* Synch-secure uint64 to double conversion functions. */
++static inline double asdouble(uint64_t i) {
++	double result;
++	uint64_t *ptr = &i;
++	asm volatile("fmv.w.x ft3, t0 \n"
++		         "fld %[result], 0(%[ptr]) \n"
++	 : [result]"=r"(result) : [ptr]"r"(ptr): "ft3", "memory");
++}
++
+ /* TODO: the following functions are not really safe, compare previous two
+    functions */
+ 
+@@ -136,14 +156,6 @@ inline void snrt_fpu_fence() {
+         : "+r"(tmp)::"memory");
+ }
+ 
+-/* Synch-secure double to uint64 conversion functions. */
+-static inline uint64_t asuint64(double f) {
+-    uint64_t result;
+-    snrt_fpu_fence();
+-    result = *(uint64_t *)&f;
+-    return result;
+-}
+-
+ /* Synch-secure float to uint conversion functions. */
+ static inline uint64_t asuint(float f) {
+     uint32_t result;
+@@ -152,14 +164,6 @@ static inline uint64_t asuint(float f) {
+     return result;
+ }
+ 
+-/* Synch-secure uint64 to double conversion functions. */
+-static inline double asdouble(uint64_t i) {
+-    double result;
+-    snrt_fpu_fence();
+-    result = *(double *)&i;
+-    return result;
+-}
+-
+ /* Synch-secure uint to float conversion functions. */
+ static inline float asfloat(uint32_t i) {
+ 	float result;
+-- 
+2.31.1
+

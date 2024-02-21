@@ -1,0 +1,5 @@
+# Snitch math library
+
+The sources in this library are heavily based on the musl libc implementation. We implement only a subset of the math library functionality provided thereof. Refer to the `Bender.yml` file for the location of our patches and of the original sources.
+
+The original sources comply with the license specified in the `COPYRIGHT` file. All other sources, including our modifications, are released under the licensing rules of this repository.

@@ -1,0 +1,13 @@
+# Copyright 2024 ETH Zurich and University of Bologna.
+# Licensed under the Apache License, Version 2.0, see LICENSE for details.
+# SPDX-License-Identifier: Apache-2.0
+
+runs:
+  - elf: apps/dnn/softmax/build/softmax.elf
+    cmd: [../../../sw/dnn/softmax/verify.py, "${sim_bin}", "${elf}"]
+  - elf: apps/dnn/layernorm/build/layernorm.elf
+    cmd: [../../../sw/dnn/layernorm/verify.py, "${sim_bin}", "${elf}"]
+  - elf: apps/dnn/gelu/build/gelu.elf
+    cmd: [../../../sw/dnn/gelu/verify.py, "${sim_bin}", "${elf}"]
+  - elf: apps/dnn/flashattention_2/build/flashattention_2.elf
+    cmd: [../../../sw/dnn/flashattention_2/verify.py, "${sim_bin}", "${elf}"]
