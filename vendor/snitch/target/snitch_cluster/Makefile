@@ -27,6 +27,8 @@ MKFILE_DIR  := $(dir $(MKFILE_PATH))
 ROOT        := ${MKFILE_DIR}../..
 SNITCH_ROOT := $(ROOT)
 
+TARGET = snitch_cluster
+
 include $(ROOT)/target/common/common.mk
 
 ############
@@ -42,6 +44,7 @@ CLUSTER_GEN_SRC ?= $(wildcard $(ROOT)/util/clustergen/*.py)
 #########################
 
 SW_DIR             = sw
+BIN_DIR           ?= bin
 TARGET_C_HDRS_DIR ?= $(SW_DIR)/runtime/common
 GENERATED_DIR     ?= $(MKFILE_DIR)generated
 
@@ -203,9 +206,9 @@ $(GENERATED_DIR)/bootdata.cc: ${CFG} ${CLUSTER_GEN_PREREQ} | $(GENERATED_DIR)
 
 .PHONY: clean-vlt
 
-# Clean all build directories and temporary files for Questasim simulation
+# Clean all build directories and temporary files for Verilator simulation
 clean-vlt: clean-work
-	rm -rf bin/snitch_cluster.vlt $(VLT_BUILDDIR)
+	rm -rf $(BIN_DIR)/$(TARGET).vlt $(VLT_BUILDDIR)
 
 $(VLT_AR): ${VLT_SOURCES} ${TB_SRCS}
 	$(call VERILATE,testharness)
@@ -224,37 +227,15 @@ $(VLT_BUILDDIR)/generated/%.o: $(GENERATED_DIR)/%.cc ${VLT_BUILDDIR}/lib/libfesv
 
 # Build compilation script and compile all sources for Verilator simulation
 # Link verilated archive with $(VLT_COBJ)
-bin/.snitch_cluster.vlt.elf: $(VLT_AR) $(VLT_COBJ) ${VLT_BUILDDIR}/lib/libfesvr.a
+$(BIN_DIR)/$(TARGET).vlt: $(VLT_AR) $(VLT_COBJ) ${VLT_BUILDDIR}/lib/libfesvr.a
 	mkdir -p $(dir $@)
 	$(CXX) $(LDFLAGS) -std=c++14 -L ${VLT_BUILDDIR}/lib -o $@ $(VLT_COBJ) $(VLT_AR) -lfesvr -lpthread
-
-# Build wrapper around Verilator binary, needed to create .rtlbinary 
-bin/snitch_cluster.vlt: bin/.snitch_cluster.vlt.elf
-	@echo "#!/bin/bash" > $@
-	@echo 'binary=$$(realpath $$1)' >> $@
-	@echo 'echo $$binary > .rtlbinary' >> $@
-	@echo '$(abspath $<) $$binary $$2' >> $@
-	@chmod +x $@
 
 ############
 # Modelsim #
 ############
 
-.PHONY: clean-vsim
-
-# Clean all build directories and temporary files for Questasim simulation
-clean-vsim: clean-work
-	rm -rf bin/snitch_cluster.vsim bin/snitch_cluster.vsim.gui $(VSIM_BUILDDIR) vsim.wlf
-
-${VSIM_BUILDDIR}/compile.vsim.tcl:
-	$(VLIB) $(dir $@)
-	${BENDER} script vsim ${VSIM_BENDER} --vlog-arg="${VLOG_FLAGS} -work $(dir $@) " > $@
-	echo '${VLOG} -work $(dir $@) ${TB_CC_SOURCES} ${TB_ASM_SOURCES} -vv -ccflags "$(TB_CC_FLAGS)"' >> $@
-	echo 'return 0' >> $@
-
-# Build compilation script and compile all sources for Questasim simulation
-bin/snitch_cluster.vsim: ${VSIM_BUILDDIR}/compile.vsim.tcl $(VSIM_SOURCES) ${TB_SRCS} ${TB_CC_SOURCES} ${TB_ASM_SOURCES} work/lib/libfesvr.a
-	$(call QUESTASIM,tb_bin)
+include $(ROOT)/target/common/vsim.mk
 
 #######
 # VCS #
@@ -264,13 +245,13 @@ bin/snitch_cluster.vsim: ${VSIM_BUILDDIR}/compile.vsim.tcl $(VSIM_SOURCES) ${TB_
 
 # Clean all build directories and temporary files for VCS simulation
 clean-vcs: clean-work
-	rm -rf bin/snitch_cluster.vcs $(VCS_BUILDDIR) vc_hdrs.h
+	rm -rf $(BIN_DIR)/$(TARGET).vcs $(VCS_BUILDDIR) vc_hdrs.h
 
 # Build compilation script and compile all sources for VCS simulation
-bin/snitch_cluster.vcs: ${VCS_SOURCES} ${TB_SRCS} $(TB_CC_SOURCES) $(TB_ASM_SOURCES) $(VCS_BUILDDIR)/compile.sh work/lib/libfesvr.a
-	mkdir -p bin
-	$(VCS) -Mlib=$(VCS_BUILDDIR) -Mdir=$(VCS_BUILDDIR) -o bin/snitch_cluster.vcs -cc $(CC) -cpp $(CXX) \
-		-assert disable_cover -override_timescale=1ns/1ps -full64 tb_bin $(TB_CC_SOURCES) $(TB_ASM_SOURCES) \
+$(BIN_DIR)/$(TARGET).vcs: ${VCS_SOURCES} ${TB_SRCS} $(TB_CC_SOURCES) $(VCS_BUILDDIR)/compile.sh work/lib/libfesvr.a
+	mkdir -p $(BIN_DIR)
+	$(VCS) -Mlib=$(VCS_BUILDDIR) -Mdir=$(VCS_BUILDDIR) -o $(BIN_DIR)/$(TARGET).vcs -cc $(CC) -cpp $(CXX) \
+		-assert disable_cover -override_timescale=1ns/1ps -full64 tb_bin $(TB_CC_SOURCES) \
 		-CFLAGS "$(TB_CC_FLAGS)" -LDFLAGS "-L${FESVR}/lib" -lfesvr
 
 ########
@@ -300,9 +281,9 @@ help:
 	@echo -e ""
 	@echo -e "${Blue}help           ${Black}Show an overview of all Makefile targets."
 	@echo -e ""
-	@echo -e "${Blue}bin/snitch_cluster.vcs  ${Black}Build compilation script and compile all sources for VCS simulation."
-	@echo -e "${Blue}bin/snitch_cluster.vlt  ${Black}Build compilation script and compile all sources for Verilator simulation."
-	@echo -e "${Blue}bin/snitch_cluster.vsim ${Black}Build compilation script and compile all sources for Questasim simulation."
+	@echo -e "${Blue}$(BIN_DIR)/$(TARGET).vcs  ${Black}Build compilation script and compile all sources for VCS simulation."
+	@echo -e "${Blue}$(BIN_DIR)/$(TARGET).vlt  ${Black}Build compilation script and compile all sources for Verilator simulation."
+	@echo -e "${Blue}$(BIN_DIR)/$(TARGET).vsim ${Black}Build compilation script and compile all sources for Questasim simulation."
 	@echo -e ""
 	@echo -e "${Blue}sw               ${Black}Build all software."
 	@echo -e ""

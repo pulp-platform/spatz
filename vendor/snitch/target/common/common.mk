@@ -11,6 +11,9 @@ TB_DIR   ?= $(SNITCH_ROOT)/target/common/test
 UTIL_DIR ?= $(SNITCH_ROOT)/util
 LOGS_DIR  = $(SIM_DIR)/logs
 
+# Files
+BENDER_LOCK ?= $(ROOT)/Bender.lock
+
 # SEPP packages
 QUESTA_SEPP    ?=
 VCS_SEPP       ?=
@@ -165,38 +168,6 @@ define VERILATE
 		--Mdir $(dir $@) -f $(dir $@)files $(VLT_FLAGS) \
 		-j $(shell nproc) --cc --build --top-module $(1)
 	touch $@
-endef
-
-############
-# Modelsim #
-############
-
-$(VSIM_BUILDDIR):
-	mkdir -p $@
-
-# Expects vlog/vcom script in $< (e.g. as output by bender)
-# Expects the top module name in $1
-# Produces a binary used to run the simulation at the path specified by $@
-define QUESTASIM
-	${VSIM} -c -do "source $<; quit" | tee $(dir $<)vlog.log
-	@! grep -P "Errors: [1-9]*," $(dir $<)vlog.log
-	$(VOPT) $(VOPT_FLAGS) -work $(VSIM_BUILDDIR) $1 -o $(1)_opt | tee $(dir $<)vopt.log
-	@! grep -P "Errors: [1-9]*," $(dir $<)vopt.log
-	@mkdir -p $(dir $@)
-	@echo "#!/bin/bash" > $@
-	@echo 'binary=$$(realpath $$1)' >> $@
-	@echo 'echo $$binary > .rtlbinary' >> $@
-	@echo '${VSIM} +permissive ${VSIM_FLAGS} $$3 -work ${MKFILE_DIR}/${VSIM_BUILDDIR} -c \
-				-ldflags "-Wl,-rpath,${FESVR}/lib -L${FESVR}/lib -lfesvr -lutil" \
-				$(1)_opt +permissive-off ++$$binary ++$$2' >> $@
-	@chmod +x $@
-	@echo "#!/bin/bash" > $@.gui
-	@echo 'binary=$$(realpath $$1)' >> $@.gui
-	@echo 'echo $$binary > .rtlbinary' >> $@.gui
-	@echo '${VSIM} +permissive ${VSIM_FLAGS} -work ${MKFILE_DIR}/${VSIM_BUILDDIR} \
-				-ldflags "-Wl,-rpath,${FESVR}/lib -L${FESVR}/lib -lfesvr -lutil" \
-				$(1)_opt +permissive-off ++$$binary ++$$2' >> $@.gui
-	@chmod +x $@.gui
 endef
 
 #######

@@ -7,15 +7,14 @@
 #include "sim.hh"
 
 int main(int argc, char **argv, char **env) {
-    // Write binary path to logs/binary for the `make annotate` target
+    // Write binary path to .rtlbinary for the `make annotate` target
     FILE *fd;
-    fd = fopen("logs/.rtlbinary", "w");
+    fd = fopen(".rtlbinary", "w");
     if (fd != NULL && argc >= 2) {
         fprintf(fd, "%s\n", argv[1]);
         fclose(fd);
     } else {
-        fprintf(stderr,
-                "Warning: Failed to write binary name to logs/.rtlbinary\n");
+        fprintf(stderr, "Warning: Failed to write binary name to .rtlbinary\n");
     }
 
     auto sim = std::make_unique<sim::Sim>(argc, argv);
