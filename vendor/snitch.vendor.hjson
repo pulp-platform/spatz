@@ -8,7 +8,7 @@
     "url": "https://github.com/pulp-platform/snitch_cluster.git",
     "rev": "main"
   },
-  "patch_dir": "",
+  "patch_dir": "patches/snitch",
   "exclude_from_upstream": [
     ".github",
     "docs",

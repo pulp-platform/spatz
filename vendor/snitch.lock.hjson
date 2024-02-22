@@ -9,6 +9,6 @@
   upstream:
   {
     url: https://github.com/pulp-platform/snitch_cluster.git
-    rev: 6e72f08eaa56959637aa3450b8ac84d1ef84710c
+    rev: 4b3f76e5ad6bdde7af15559401c47d3a64262db9
   }
 }

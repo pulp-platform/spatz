@@ -1,0 +1,31 @@
+diff --git a/sw/snRuntime/src/sync.c b/sw/snRuntime/src/sync.c
+index 10d6bd6..79bf9e2 100644
+--- a/sw/snRuntime/src/sync.c
++++ b/sw/snRuntime/src/sync.c
+@@ -28,5 +28,7 @@ extern void snrt_global_barrier();
+ 
+ extern void snrt_partial_barrier(snrt_barrier_t *barr, uint32_t n);
+ 
++/*
+ extern void snrt_global_reduction_dma(double *dst_buffer, double *src_buffer,
+                                       size_t len);
++*/
+\ No newline at end of file
+diff --git a/sw/snRuntime/src/sync.h b/sw/snRuntime/src/sync.h
+index 433289b..4019931 100644
+--- a/sw/snRuntime/src/sync.h
++++ b/sw/snRuntime/src/sync.h
+@@ -122,6 +122,7 @@ inline void snrt_partial_barrier(snrt_barrier_t *barr, uint32_t n) {
+ 
+ // Assumes the dst and src buffers are at the same offset in the TCDM of every
+ // cluster
++/*
+ inline void snrt_global_reduction_dma(double *dst_buffer, double *src_buffer,
+                                       size_t len) {
+     // If we have a single cluster the reduction degenerates to a memcpy
+@@ -176,3 +177,4 @@ inline void snrt_global_reduction_dma(double *dst_buffer, double *src_buffer,
+         }
+     }
+ }
++*/
+\ No newline at end of file

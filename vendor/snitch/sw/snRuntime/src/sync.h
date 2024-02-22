@@ -122,6 +122,7 @@ inline void snrt_partial_barrier(snrt_barrier_t *barr, uint32_t n) {
 
 // Assumes the dst and src buffers are at the same offset in the TCDM of every
 // cluster
+/*
 inline void snrt_global_reduction_dma(double *dst_buffer, double *src_buffer,
                                       size_t len) {
     // If we have a single cluster the reduction degenerates to a memcpy
@@ -176,3 +177,4 @@ inline void snrt_global_reduction_dma(double *dst_buffer, double *src_buffer,
         }
     }
 }
+*/
