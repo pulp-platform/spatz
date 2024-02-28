@@ -19,7 +19,7 @@ SNITCH_ROOT = $(ROOT)/vendor/snitch
 APPSDIR     = $(abspath $(MK_DIR))
 RUNTIME_DIR = $(ROOT)/sw/hero/device/runtime
 SNRT_DIR    := $(SNITCH_ROOT)/sw/snRuntime
-SW_DIR      = $(ROOT)/target/sim/sw/
+SW_DIR      = $(ROOT)/sw/hero
 MATH_DIR    = $(ROOT)/target/sim/sw/device/math
 
 # Paths relative to the app including this Makefile

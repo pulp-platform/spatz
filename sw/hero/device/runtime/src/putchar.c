@@ -3,4 +3,4 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // Provide an implementation for putchar.
-void _putchar(char character) {}
+void __attribute__((weak)) _putchar(char character) {}

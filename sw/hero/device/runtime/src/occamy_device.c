@@ -9,6 +9,8 @@ __thread volatile uint32_t ct_barrier_cnt __attribute__((aligned(8)));
 
 extern void post_wakeup_cl();
 
+extern comm_buffer_t* get_communication_buffer();
+
 extern uint32_t elect_director(uint32_t num_participants);
 
 extern void return_to_cva6(sync_t sync);

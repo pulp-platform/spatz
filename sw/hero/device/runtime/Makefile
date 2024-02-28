@@ -70,7 +70,7 @@ $(LIB): $(OBJS) | $(BUILDDIR)
 	$(RISCV_AR) $(RISCV_ARFLAGS) $@ $^
 
 $(DUMP): $(LIB) | $(BUILDDIR)
-	$(RISCV_OBJDUMP) -D $< > $@
+	$(RISCV_OBJDUMP) --arch=rv32imafdc -S $< > $@
 
 ifneq ($(MAKECMDGOALS),clean)
 -include $(DEPS)

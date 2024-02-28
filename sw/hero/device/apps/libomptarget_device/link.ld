@@ -1,181 +1,130 @@
-OUTPUT_ARCH(riscv)
-ENTRY( _start )
+/* Copyright 2020 ETH Zurich and University of Bologna. */
+/* Solderpad Hardware License, Version 0.51, see LICENSE for details. */
+/* SPDX-License-Identifier: SHL-0.51 */
+
+OUTPUT_ARCH( "riscv" )
+ENTRY(_start)
+
+/* Memory section should be provided in a separate, platform-specific */
+/* file. It should define at least the L1 and L3 memory blocks. */
 MEMORY
 {
-  LOCAL        : ORIGIN = 0x70010000, LENGTH = 0x70000
-  L2           : ORIGIN = 0x80000000, LENGTH = 0x0fffffff
+  L3           : ORIGIN = 0xC0000000, LENGTH = 0x800000
 }
-
-
 
 SECTIONS
 {
-  .init :
-  {
-    . = ALIGN(4);
-    KEEP( *(.init) )
-  } > LOCAL
 
-
-  .fini :
-  {
-    . = ALIGN(4);
-    KEEP( *(.fini) )
-  } > LOCAL
-
-  .preinit_array : {
-    . = ALIGN(4);
-    PROVIDE_HIDDEN (__preinit_array_start = .);
-    KEEP (*(.preinit_array))
-    PROVIDE_HIDDEN (__preinit_array_end = .);
-  } > LOCAL
-
-  .init_array : {
-    . = ALIGN(4);
-    PROVIDE_HIDDEN (__init_array_start = .);
-    __CTOR_LIST__ = .;
-    LONG((__CTOR_END__ - __CTOR_LIST__) / 4 - 2)
-    KEEP(*(.ctors.start))
-    KEEP(*(.ctors))
-    KEEP (*(SORT(.init_array.*)))
-    KEEP (*(.init_array ))
-    LONG(0)
-    __CTOR_END__ = .;
-    PROVIDE_HIDDEN (__init_array_end = .);
-  } > LOCAL
-
-  .fini_array : {
-    . = ALIGN(4);
-    PROVIDE_HIDDEN (__fini_array_start = .);
-    __DTOR_LIST__ = .;
-    LONG((__DTOR_END__ - __DTOR_LIST__) / 4 - 2)
-    KEEP(*(.dtors.start))
-    KEEP(*(.dtors))
-    LONG(0)
-    __DTOR_END__ = .;
-    KEEP (*(SORT(.fini_array.*)))
-    KEEP (*(.fini_array ))
-    PROVIDE_HIDDEN (__fini_array_end = .);
-  } > LOCAL
-
-  .boot : {
-    . = ALIGN(4);
-    *(.boot)
-    *(.boot.data)
-  } > LOCAL
-
-  .rodata : {
-    . = ALIGN(4);
-    *(.rodata);
-    *(.rodata.*)
-    *(.srodata);
-    *(.srodata.*)
-    *(.eh_frame*)
-  } > LOCAL
-
-  .shbss : {
-    . = ALIGN(4);
-    *(.shbss)
-  } > LOCAL
-
-  .talias : {
-  } > LOCAL
-
-  .gnu.offload_funcs : {
-    . = ALIGN(4);
-    KEEP(*(.gnu.offload_funcs))
-  } > LOCAL
-
-  .gnu.offload_vars : {
-    . = ALIGN(4);
-    KEEP(*(.gnu.offload_vars))
-  } > LOCAL
-
-  .stack : {
-    . = ALIGN(4);
-    . = ALIGN(16);
-    stack_start = .;
-    . = . + 0x1000;
-    stack = .;
-  } > LOCAL
-
-  .data : {
-    . = ALIGN(4);
-    sdata  =  .;
-    _sdata  =  .;
-    *(.data_fc)
-    *(.data_fc.*)
-    *(.data);
-    *(.data.*)
-    *(.sdata);
-    *(.sdata.*)
-    *(.heapl2ram)
-    *(.fcTcdm)
-    *(.fcTcdm.*)
-    *(.fcTcdm_g)
-    *(.fcTcdm_g.*)
-    . = ALIGN(4);
-    edata  =  .;
-    _edata  =  .;
-  } > LOCAL
-
-  .bss : {
-    . = ALIGN(8);
-    _bss_start = .;
-    *(.bss)
-    *(.bss.*)
-    *(.sbss)
-    *(.sbss.*)
-    *(COMMON)
-    . = ALIGN(4);
-    _bss_end = .;
-  } > LOCAL
-
-  __l2_priv0_end = ALIGN(4);
-
-  /*
-   * LOCAL PRIVATE BANK1
-   *
-   * Contains FC code
-   */
-
-  .vectors MAX(0x60010000,ALIGN(256)) :
-  {
-    __irq_vector_base = .;
-    KEEP(*(.vectors))
-  } > LOCAL
-
+  /* Program code goes into L3 */
   .text :
   {
     . = ALIGN(4);
-    _stext = .;
+    *(.init)
+    *(.text.init)
+    *(.text.startup)
     *(.text)
-    *(.text.*)
-    _etext  =  .;
-    *(.lit)
-    *(.shdata)
-    _endtext = .;
+    *(.text*)
+    *(.text)
     . = ALIGN(4);
-  } > LOCAL
+    _etext = .;
+  } >L3
 
-  __l2_priv1_end = ALIGN(4);
-
-  /*
-   * L2 SHARED BANKS
-   *
-   * Contains other data such as peripheral data and cluster code and data
-   */
-
-  .l2_data :
+  /* By default, constant data goes into L3, right after code section */
+  .rodata :
   {
     . = ALIGN(4);
-    *(.l2_data)
-    *(.l2_data.*)
-    *(.data_fc_shared)
-    *(.data_fc_shared.*)
+    *(.rodata)
+    *(.rodata*)
     . = ALIGN(4);
-  } > L2
+  } >L3
 
-  __l2_shared_end = ALIGN(4);
+  /* HTIF section for FESVR */
+  .htif         : { } >L3
 
+  /* Thread Local Storage sections */
+  .tdata    :
+  {
+    __tdata_start = .;
+    *(.tdata .tdata.* .gnu.linkonce.td.*)
+    __tdata_end = .;
+  } >L3
+  .tbss :
+  {
+    __tbss_start = .;
+    *(.tbss .tbss.* .gnu.linkonce.tb.*)
+    *(.tcommon)
+    __tbss_end = .;
+  } >L3
+
+  /* Cluster Local Storage sections */
+  .cdata    :
+  {
+    __cdata_start = .;
+    *(.cdata .cdata.*)
+    __cdata_end = .;
+  } >L3
+  .cbss :
+  {
+    __cbss_start = .;
+    *(.cbss .cbss.*)
+    __cbss_end = .;
+  } >L3
+
+  /* used by the startup to initialize data */
+  _sidata = LOADADDR(.data);
+
+  /* small data section that can be addressed through the global pointer */
+  .sdata          :
+  {
+    __SDATA_BEGIN__ = .;
+    __global_pointer$ = . + 0x7f0;
+    *(.srodata.cst16) *(.srodata.cst8) *(.srodata.cst4) *(.srodata.cst2) *(.srodata .srodata.*)
+    *(.sdata .sdata.* .gnu.linkonce.s.*)
+  } >L3
+
+  /* Initialized data sections goes into L3 */
+  .data :
+  {
+    __DATA_BEGIN__ = .;
+    *(.data .data.* .gnu.linkonce.d.*)
+    SORT(CONSTRUCTORS)
+  } >L3
+  _edata = .; PROVIDE (edata = .);
+
+  /* small bss section */
+  . = .;
+  __bss_start = .;
+  .sbss           :
+  {
+    *(.dynsbss)
+    *(.sbss .sbss.* .gnu.linkonce.sb.*)
+    *(.scommon)
+  } >L3
+
+  /* Uninitialized data section */
+  .bss            :
+  {
+   *(.dynbss)
+   *(.bss .bss.* .gnu.linkonce.b.*)
+   *(COMMON)
+   /* Align here to ensure that the .bss section occupies space up to
+      _end.  Align after .bss to ensure correct alignment even if the
+      .bss section disappears because there are no input sections. */
+   . = ALIGN(. != 0 ? 32 / 8 : 1);
+  } >L3
+  . = ALIGN(32 / 8);
+  . = SEGMENT_START("ldata-segment", .);
+  . = ALIGN(32 / 8);
+  __BSS_END__ = .;
+  __bss_end = .;
+  _end = .; PROVIDE (end = .);
+
+  /* Uninitialized data section in L3 */
+  .dram :
+  {
+    *(.dram)
+    _edram = .;
+  } >L3
+
+  __uart = 0x2002000;
 }
