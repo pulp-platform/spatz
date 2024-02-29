@@ -10,6 +10,7 @@ ROOT := ${SPATZ_DIR}
 SPATZ_CLUSTER_DIR := ${SPATZ_DIR}/hw/system/spatz_cluster
 MKFILE_PATH := $(abspath $(lastword $(MAKEFILE_LIST)))
 MKFILE_DIR  := $(dir $(MKFILE_PATH))
+SPATZD_RISCV ?= ${GCC_INSTALL_DIR}/bin/riscv32-unknown-elf
 
 # Configuration file
 SPATZ_CLUSTER_CFG ?= $(SPATZ_CLUSTER_DIR)/cfg/spatz_cluster.default.hjson
@@ -73,9 +74,9 @@ VLT_COBJ += $(VLT_BUILDDIR)/vlt/verilated_vcd_c.o
 #################
 
 test/bootrom.elf test/bootrom.dump test/bootrom.bin: src/generated/spatz_cluster_wrapper.sv test/bootrom.S test/bootrom.ld Makefile
-	riscv -riscv64-gcc-9.5.0 riscv64-unknown-elf-gcc -mabi=ilp32 -march=rv32imaf -static -nostartfiles -Ttest/bootrom.ld test/bootrom.S test/bootdata_bootrom.cc -I../../ip/snitch_test/src -I../../../sw/snRuntime/include -o test/bootrom.elf
-	riscv -riscv64-gcc-9.5.0 riscv64-unknown-elf-objdump -D test/bootrom.elf > test/bootrom.dump
-	riscv -riscv64-gcc-9.5.0 riscv64-unknown-elf-objcopy -O binary test/bootrom.elf test/bootrom.bin
+	$(SPATZD_RISCV)-gcc -mabi=ilp32 -march=rv32imaf -static -nostartfiles -Ttest/bootrom.ld test/bootrom.S test/bootdata_bootrom.cc -I../../ip/snitch_test/src -I../../../sw/snRuntime/include -o test/bootrom.elf
+	$(SPATZD_RISCV)-objdump -D test/bootrom.elf > test/bootrom.dump
+	$(SPATZD_RISCV)-objcopy -O binary test/bootrom.elf test/bootrom.bin
 
 .PHONY: bootrom
 bootrom: $(CURDIR)/src/generated/bootrom.sv
