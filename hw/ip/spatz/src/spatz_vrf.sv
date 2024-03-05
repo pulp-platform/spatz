@@ -130,7 +130,7 @@ module spatz_vrf
   always_comb begin : proc_read
     raddr    = '0;
     rvalid_o = '0;
-    rdata_o  = 'x;
+    rdata_o  = '0;
 
     // For each port or each bank we have a priority based access scheme.
     // Port zero can only be accessed by the VFU (vs2). Port one can be accessed by

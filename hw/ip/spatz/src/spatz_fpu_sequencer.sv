@@ -563,6 +563,7 @@ module spatz_fpu_sequencer
     .data_pvalid_i(fp_lsu_mem_rsp_valid_i ),
     .data_pready_o(fp_lsu_mem_rsp_ready_o )
 `else
+    .lsu_empty_o  (/* unused */    ),
     .data_req_o   (fp_lsu_mem_req_o),
     .data_rsp_i   (fp_lsu_mem_rsp_i)
 `endif

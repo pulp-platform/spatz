@@ -142,6 +142,9 @@ sources:
   - target: spatz
     files:
     # Level 0
+    - target: mempool
+      files:
+      - hw/ip/spatz_cc/src/reorder_buffer_v2.sv
     - hw/ip/spatz/src/reorder_buffer.sv
     - hw/ip/spatz/src/rvv_pkg.sv
     # Level 1

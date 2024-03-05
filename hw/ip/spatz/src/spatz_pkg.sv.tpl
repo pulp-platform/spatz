@@ -7,6 +7,10 @@
 package spatz_pkg;
 
   import rvv_pkg::*;
+% if cfg['mempool']:
+  // package defines TCDM burst signals
+  import tcdm_burst_pkg::*;
+% endif
 
   //////////////////
   //  Parameters  //
@@ -53,6 +57,8 @@ package spatz_pkg;
   // Number of bits in a vector register
 % if cfg['mempool']:
   localparam int unsigned VLEN   = `ifdef VLEN `VLEN `else 256 `endif;
+  // used to change reorder buffer depth in VLSU
+  localparam int unsigned RobDepth  = 32;
 % else :
   localparam int unsigned VLEN   = ${cfg['vlen']};
 %endif
@@ -111,6 +117,11 @@ package spatz_pkg;
 
   // Instruction ID
   typedef logic [$clog2(NrParallelInstructions)-1:0] spatz_id_t;
+
+% if cfg['mempool']:
+  // VLSU req/rsp ID
+  typedef logic [$clog2(RobDepth):0] spatz_mem_id_t;
+% endif
 
   /////////////////////
   // Operation Types //
@@ -309,7 +320,7 @@ package spatz_pkg;
 
 % if cfg['mempool']:
   typedef struct packed {
-    logic [$clog2(NRVREG):0] id;
+    spatz_mem_id_t id;
     logic [31:0] addr;
     logic [1:0] mode;
     logic [1:0] size;
@@ -318,13 +329,15 @@ package spatz_pkg;
     logic [DataWidth-1:0] data;
     logic last;
     logic spec;
+    tcdm_breq_t rburst;
   } spatz_mem_req_t;
 
   typedef struct packed {
-    logic [$clog2(NRVREG)-1:0] id;
+    spatz_mem_id_t id;
     logic [DataWidth-1:0] data;
     logic err;
     logic write;
+    tcdm_gre_t gdata;
   } spatz_mem_rsp_t;
 
 %endif
