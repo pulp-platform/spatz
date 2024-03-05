@@ -76,7 +76,7 @@ module spatz_vlsu
   localparam int unsigned BurstLen      = 1;
   localparam int unsigned RspGF         = 1;
   localparam bit          UseBurst      = 0;
-`endif    
+`endif
 
   //////////////
   // Typedefs //
@@ -208,7 +208,7 @@ module spatz_vlsu
   logic  [NrMemPorts-1:0] rob_gpush;
   logic  [NrMemPorts-1:0] rob_rvalid;
   logic  [NrMemPorts-1:0] rob_gvalid;
-  
+
   logic  [NrMemPorts-1:0] rob_pop;
   // Grouped pop sinal for GRE
   logic  [NrMemPorts-1:0] rob_gpop;

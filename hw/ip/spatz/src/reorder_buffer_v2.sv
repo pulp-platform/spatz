@@ -7,8 +7,12 @@
 // This generic module provides an interface through which responses can
 // be read in order, despite being written out of order. The responses
 // must be indexed with an ID that identifies it within the ROB.
+//
+// v2 Modifications:
+// 1. Add id valid check for ensuring the id will not be freed before retired
+// 2. Add functionality support for multiple data push and pop
 
-module reorder_buffer3
+module reorder_buffer_v2
   import cf_math_pkg::idx_width;
 #(
   parameter int unsigned DataWidth = 0,
@@ -50,32 +54,28 @@ module reorder_buffer3
   /*************
    *  Signals  *
    *************/
-
   id_t              read_pointer_d, read_pointer_q;
   id_t              write_pointer_d, write_pointer_q;
   // pointing to next write element, so that it will roll back
   id_t              write_next_ptr;
 
-
   // Used to see which ID is available
   logic [NumWords-1:0] id_valid_d, id_valid_q;
   // Keep track of the ROB utilization
-  logic [IdWidth:0] status_cnt_d, status_cnt_q;
-
-
+  logic [IdWidth:0]    status_cnt_d, status_cnt_q;
   // How many elements read per cycle?
-  logic [RspGF:0]       read_elem;
+  logic [RspGF:0]      read_elem;
 
   // Memory
-  data_t [NumWords-1:0] mem_d, mem_q;
+  data_t [NumWords-1:0] mem_d,   mem_q;
   logic  [NumWords-1:0] valid_d, valid_q;
   // masks and rotated-to-left masks
   // id mask
-  logic  [NumWords-1:0] id_mask, id_mask_rl;
+  logic  [NumWords-1:0] id_mask,  id_mask_rl;
   // burst mask
   logic  [NumWords-1:0] bid_mask, bid_mask_rl;
   // group valid mask
-  logic  [NumWords-1:0] gv_mask, gv_mask_rl;
+  logic  [NumWords-1:0] gv_mask,  gv_mask_rl;
 
   id_t req_len;
 
@@ -102,8 +102,8 @@ module reorder_buffer3
 
   // For the rob, several functions need to be taken care of
   // 1) requst ID
-  // 2) push in data
-  // 3) pop out data
+  // 2) pop in data
+  // 3) push out data
   id_t  [RspGF-1:0] out_temp_ptr, push_temp_ptr, pop_temp_ptr;
   // Read and Write logic
   always_comb begin: read_write_comb
@@ -265,4 +265,4 @@ module reorder_buffer3
   // pragma translate_on
   `endif
 
-endmodule: reorder_buffer3
+endmodule: reorder_buffer_v2
