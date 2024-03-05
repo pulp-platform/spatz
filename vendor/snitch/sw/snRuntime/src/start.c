@@ -26,7 +26,7 @@ static inline void snrt_init_tls() {
     // To avoid contentions in main memory, and take advantage of the
     // bandwidth of the DMA, the DM core initializes the TLS section
     // for every core in a cluster.
-    if (snrt_is_dm_core()) {
+    if (snrt_cluster_idx() == 0 && snrt_is_dm_core()) {
         size = (size_t)(&__tdata_end) - (size_t)(&__tdata_start);
 
         // First initialize the DM core's .tdata section from main memory
@@ -84,7 +84,7 @@ static inline void snrt_init_cls() {
     _cls_ptr = (cls_t*)snrt_cls_base_addr();
 
     // Only one core per cluster has to do this
-    if (snrt_is_dm_core()) {
+    if (snrt_cluster_idx() == 0 && snrt_is_dm_core()) {
         void* ptr = (void*)snrt_cls_base_addr();
         size_t size;
 
@@ -148,7 +148,7 @@ void snrt_main() {
 
 #if defined(SNRT_INIT_BSS) || defined(SNRT_INIT_CLS)
     // Single DMA wait call for both snrt_init_bss() and snrt_init_cls()
-    if (snrt_is_dm_core()) snrt_dma_wait_all();
+    if (snrt_cluster_idx() == 0 && snrt_is_dm_core()) snrt_dma_wait_all();
 #endif
 
 #ifdef SNRT_CRT0_CALLBACK3

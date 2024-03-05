@@ -11,7 +11,6 @@
 // Occamy specific definitions
 #include "occamy_defs.h"
 #include "occamy_memory_map.h"
-#include "sys_dma.h"
 
 // Forward declarations
 #include "alloc_decls.h"

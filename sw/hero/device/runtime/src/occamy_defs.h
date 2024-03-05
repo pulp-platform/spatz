@@ -7,10 +7,10 @@
 #include "spatz_cluster_peripheral.h"
 
 // Hardware parameters
-#define SNRT_BASE_HARTID 1
+#define SNRT_BASE_HARTID 16
 #define SNRT_CLUSTER_CORE_NUM N_CORES_PER_CLUSTER
 #define SNRT_CLUSTER_NUM (N_QUADS * N_CLUSTERS_PER_QUAD)
-#define SNRT_CLUSTER_DM_CORE_NUM 1
+#define SNRT_CLUSTER_DM_CORE_NUM 2
 #define SNRT_TCDM_START_ADDR QUADRANT_0_CLUSTER_0_TCDM_BASE_ADDR
 #define SNRT_TCDM_SIZE                       \
     (QUADRANT_0_CLUSTER_0_PERIPH_BASE_ADDR - \

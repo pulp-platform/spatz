@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 #define SNRT_INIT_INT_REGS
-#define SNRT_INIT_FP_REGS
+//#define SNRT_INIT_FP_REGS
 #define SNRT_INIT_GP
 #define SNRT_INIT_CORE_INFO
 #define SNRT_INIT_CLS

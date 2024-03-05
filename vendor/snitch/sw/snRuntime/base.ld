@@ -6,13 +6,17 @@ OUTPUT_ARCH( "riscv" )
 ENTRY(_start)
 
 /* Memory section should be provided in a separate, platform-specific */
-/* file. It should define at least the L1 and L3 memory blocks. */
-INCLUDE memory.ld
+/* file. It should define at least the L1 and L2 memory blocks. */
+MEMORY
+{
+  L2           : ORIGIN = 0x78000000, LENGTH = 0x800000
+  LOCAL        : ORIGIN = 0x51000000, LENGTH = 0x20000
+}
 
 SECTIONS
 {
 
-  /* Program code goes into L3 */
+  /* Program code goes into L2 */
   .text :
   {
     . = ALIGN(4);
@@ -24,19 +28,19 @@ SECTIONS
     *(.text)
     . = ALIGN(4);
     _etext = .;
-  } >L3
+  } >L2
 
-  /* By default, constant data goes into L3, right after code section */
+  /* By default, constant data goes into L2, right after code section */
   .rodata :
   {
     . = ALIGN(4);
     *(.rodata)
     *(.rodata*)
     . = ALIGN(4);
-  } >L3
+  } >L2
 
   /* HTIF section for FESVR */
-  .htif         : { } >L3
+  .htif         : { } >L2
 
   /* Thread Local Storage sections */
   .tdata    :
@@ -44,17 +48,14 @@ SECTIONS
     __tdata_start = .;
     *(.tdata .tdata.* .gnu.linkonce.td.*)
     __tdata_end = .;
-  } >L3
+  } >L2
   .tbss :
   {
     __tbss_start = .;
     *(.tbss .tbss.* .gnu.linkonce.tb.*)
     *(.tcommon)
     __tbss_end = .;
-  } >L3
-  /* add a section after .tbss to put the __tbss_end symbol into for
-     the LLD linker */
-  .tbssend : { __tbss_end2 = .; }
+  } >L2
 
   /* Cluster Local Storage sections */
   .cdata    :
@@ -62,13 +63,13 @@ SECTIONS
     __cdata_start = .;
     *(.cdata .cdata.*)
     __cdata_end = .;
-  } >L3
+  } >LOCAL
   .cbss :
   {
     __cbss_start = .;
     *(.cbss .cbss.*)
     __cbss_end = .;
-  } >L3
+  } >LOCAL
 
   /* used by the startup to initialize data */
   _sidata = LOADADDR(.data);
@@ -80,15 +81,15 @@ SECTIONS
     __global_pointer$ = . + 0x7f0;
     *(.srodata.cst16) *(.srodata.cst8) *(.srodata.cst4) *(.srodata.cst2) *(.srodata .srodata.*)
     *(.sdata .sdata.* .gnu.linkonce.s.*)
-  } >L3
+  } >L2
 
-  /* Initialized data sections goes into L3 */
+  /* Initialized data sections goes into L2 */
   .data :
   {
     __DATA_BEGIN__ = .;
     *(.data .data.* .gnu.linkonce.d.*)
     SORT(CONSTRUCTORS)
-  } >L3
+  } >L2
   _edata = .; PROVIDE (edata = .);
 
   /* small bss section */
@@ -99,7 +100,7 @@ SECTIONS
     *(.dynsbss)
     *(.sbss .sbss.* .gnu.linkonce.sb.*)
     *(.scommon)
-  } >L3
+  } >L2
 
   /* Uninitialized data section */
   .bss            :
@@ -111,7 +112,7 @@ SECTIONS
       _end.  Align after .bss to ensure correct alignment even if the
       .bss section disappears because there are no input sections. */
    . = ALIGN(. != 0 ? 32 / 8 : 1);
-  } >L3
+  } >L2
   . = ALIGN(32 / 8);
   . = SEGMENT_START("ldata-segment", .);
   . = ALIGN(32 / 8);
@@ -119,10 +120,11 @@ SECTIONS
   __bss_end = .;
   _end = .; PROVIDE (end = .);
 
-  /* Uninitialized data section in L3 */
+  /* Uninitialized data section in L2 */
   .dram :
   {
     *(.dram)
     _edram = .;
-  } >L3
+  } >L2
+
 }

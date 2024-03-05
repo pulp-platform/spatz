@@ -19,5 +19,4 @@
 #include "printf.c"
 #include "putchar.c"
 #include "sync.c"
-#include "sys_dma.c"
 #include "team.c"

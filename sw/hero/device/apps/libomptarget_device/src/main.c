@@ -5,6 +5,36 @@
 
 #include "sw_mailbox.h"
 #include "snrt.h"
+#include "io.h"
+
+__attribute__((optimize("O0"))) void csleep(uint32_t cycles) {
+    uint32_t start = snrt_mcycle();
+    while ((snrt_mcycle() - start) < cycles) {}
+}
+
+void snrt_putchar(char c) {
+    writew(c, (uintptr_t) 0x3002000);
+    csleep(100000);
+}
+
+void snrt_puthalfbyte(uint8_t halfbyte) {
+    uint32_t ascii[16] = {48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 65, 66, 67, 68, 69, 70};
+    snrt_putchar(ascii[halfbyte]);
+}
+
+void snrt_putbyte(uint8_t byte) {
+    snrt_puthalfbyte((byte >> 4) & 0xf);
+    snrt_puthalfbyte(byte & 0xf);
+}
+
+void snrt_putword(uint32_t word) {
+    for(int i = 3; i >= 0; i--)
+      snrt_putbyte((word >> 8 * i) & 0xff);
+    snrt_putchar(10);
+    snrt_putchar(13);
+}
+
+//void _putchar(char character) {snrt_putchar(character);}
 
 //================================================================================
 // MACROS AND SETTINGS
@@ -59,7 +89,6 @@ typedef struct rab_miss_t {
 static volatile uint32_t g_printf_mutex = 0;
 
 static volatile uint32_t *soc_scratch = (uint32_t *)(0x02000014);
-struct l3_layout l3l;
 
 const uint32_t snrt_stack_size __attribute__((weak, section(".rodata"))) = 12;
 
@@ -106,6 +135,7 @@ void _snrt_hier_wakeup(void) {
  * @brief A re-entrant wrapper to printf
  *
  */
+
 void snrt_printf(const char *format, ...) {
   va_list args;
 
@@ -288,20 +318,20 @@ int main(int argc, char *argv[]) {
   unsigned core_idx = snrt_cluster_core_idx();
   unsigned core_num = snrt_cluster_core_num();
 
+
   /**
    * One core initializes the global data structures
    */
-  if (snrt_is_dm_core()) {
+  if (core_idx == 0) {
     // read memory layout from scratch2
-    memcpy(&l3l, (void *)soc_scratch[2], sizeof(struct l3_layout));
-    g_a2h_rb = (struct ring_buf *)l3l.a2h_rb;
-    g_a2h_mbox = (struct ring_buf *)l3l.a2h_mbox;
-    g_h2a_mbox = (struct ring_buf *)l3l.h2a_mbox;
+    g_a2h_rb = NULL;
+    g_h2a_mbox = (struct ring_buf *)readw(0x3000000);
+    g_a2h_mbox = (struct ring_buf *)readw(0x3000004);
   }
 
-  snrt_cluster_hw_barrier();
+  //snrt_cluster_hw_barrier();
 
-  __snrt_omp_bootstrap(core_idx);
+  //__snrt_omp_bootstrap(core_idx);
 
   //snrt_trace("omp_bootstrap complete, core_idx: %d core_num: %d\n", core_idx, core_num);
 

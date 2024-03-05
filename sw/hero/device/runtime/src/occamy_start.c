@@ -5,6 +5,8 @@
 #define SNRT_INIT_TLS
 #define SNRT_INIT_BSS
 #define SNRT_INIT_CLS
+#define SNRT_CRT0_CALLBACK1
+#define SNRT_CRT0_CALLBACK2
 #define SNRT_CRT0_CALLBACK3
 #define SNRT_INIT_LIBS
 #define SNRT_CRT0_PRE_BARRIER
@@ -15,8 +17,14 @@
 static inline void snrt_exit(int exit_code) {
 }
 
+static inline void snrt_crt0_callback1() {
+}
+
+static inline void snrt_crt0_callback2() {
+}
+
 static inline void snrt_crt0_callback3() {
-    _snrt_cluster_hw_barrier = cluster_hw_barrier_addr(snrt_cluster_idx());
+    //_snrt_cluster_hw_barrier = cluster_hw_barrier_addr(snrt_cluster_idx());
 }
 
 static inline void snrt_crt0_callback7() { return_to_cva6(SYNC_CLUSTERS); }

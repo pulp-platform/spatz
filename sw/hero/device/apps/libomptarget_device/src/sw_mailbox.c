@@ -4,6 +4,7 @@
 
 #include "sw_mailbox.h"
 #include "snrt.h" // snrt_mcycle
+#include "io.h"
 
 /***********************************************************************************
  * MACROS
@@ -25,10 +26,6 @@ volatile struct ring_buf *g_h2a_mbox;
 /***********************************************************************************
  * FUNCTIONS
  ***********************************************************************************/
-__attribute__((optimize("O0"))) void csleep(uint32_t cycles) {
-    uint32_t start = snrt_mcycle();
-    while ((snrt_mcycle() - start) < cycles) {}
-}
 
 int syscall(uint64_t which, uint64_t arg0, uint64_t arg1, uint64_t arg2,
             uint64_t arg3, uint64_t arg4) {
@@ -49,16 +46,10 @@ int syscall(uint64_t which, uint64_t arg0, uint64_t arg1, uint64_t arg2,
         ret = rb_device_put(rb, (void *)magic_mem);
         if (ret) {
             ++retries;
-            csleep(1000000);
+            csleep(100);
         }
     } while (ret != 0);
     return retries;
-}
-
-void snrt_putchar(char c) {
-    *(volatile uint32_t *)0x2002000 = c;
-    csleep(10000);
-    //syscall(SYS_write, 1, c, 1, 0, 0);
 }
 
 void snrt_hero_exit(int code) { syscall(SYS_exit, code, 0, 0, 0, 0); }
@@ -76,7 +67,7 @@ int mailbox_read(uint32_t *buffer, size_t n_words) {
         do {
             ret = rb_device_get(g_h2a_mbox, &buffer[n_words]);
             if (ret) {
-                csleep(1000000);
+                csleep(100);
             }
         } while (ret);
     }
@@ -87,7 +78,7 @@ int mailbox_write(uint32_t word) {
     do {
         ret = rb_device_put(g_a2h_mbox, &word);
         if (ret) {
-            csleep(10000);
+            csleep(100);
         }
     } while (ret);
     return ret;
