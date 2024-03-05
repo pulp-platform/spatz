@@ -4,6 +4,7 @@
 
 module spatz_mempool_cc
   import snitch_pkg::meta_id_t;
+  import tcdm_burst_pkg::*;
 #(
   parameter logic [31:0] BootAddr   = 32'h0000_1000,
   parameter logic [31:0] MTVEC      = BootAddr,
@@ -28,6 +29,9 @@ module spatz_mempool_cc
   parameter bit RegisterTCDMReq     = 0,
   parameter bit RegisterTCDMResp    = 0,
 
+  // parameter type tcdm_breq_t        = logic,
+  // parameter type tcdm_gre_t         = logic,
+  parameter int unsigned        RspGF                  = 1,
   parameter int unsigned        TCDMPorts              = 1,
   parameter int unsigned        NumMemPortsPerSpatz    = 1
 ) (
@@ -40,24 +44,26 @@ module spatz_mempool_cc
   output logic                                        inst_valid_o,
   input  logic                                        inst_ready_i,
   // TCDM Ports
-  output logic      [TCDMPorts-1:0][31:0]   data_qaddr_o,
-  output logic      [TCDMPorts-1:0]         data_qwrite_o,
-  output logic      [TCDMPorts-1:0][3:0]    data_qamo_o,
-  output logic      [TCDMPorts-1:0][31:0]   data_qdata_o,
-  output logic      [TCDMPorts-1:0][3:0]    data_qstrb_o,
-  output meta_id_t  [TCDMPorts-1:0]         data_qid_o,
-  output logic      [TCDMPorts-1:0]         data_qvalid_o,
-  input  logic      [TCDMPorts-1:0]         data_qready_i,
-  input  logic      [TCDMPorts-1:0][31:0]   data_pdata_i,
-  input  logic      [TCDMPorts-1:0]         data_pwrite_i,
-  input  logic      [TCDMPorts-1:0]         data_perror_i,
-  input  meta_id_t  [TCDMPorts-1:0]         data_pid_i,
-  input  logic      [TCDMPorts-1:0]         data_pvalid_i,
-  output logic      [TCDMPorts-1:0]         data_pready_o,
+  output logic       [TCDMPorts-1:0][31:0]   data_qaddr_o,
+  output logic       [TCDMPorts-1:0]         data_qwrite_o,
+  output logic       [TCDMPorts-1:0][3:0]    data_qamo_o,
+  output logic       [TCDMPorts-1:0][31:0]   data_qdata_o,
+  output logic       [TCDMPorts-1:0][3:0]    data_qstrb_o,
+  output meta_id_t   [TCDMPorts-1:0]         data_qid_o,
+  output logic       [TCDMPorts-1:0]         data_qvalid_o,
+  output tcdm_breq_t [TCDMPorts-1:0]         data_qburst_o,
+  input  logic       [TCDMPorts-1:0]         data_qready_i,
+  input  logic       [TCDMPorts-1:0][31:0]   data_pdata_i,
+  input  logic       [TCDMPorts-1:0]         data_pwrite_i,
+  input  logic       [TCDMPorts-1:0]         data_perror_i,
+  input  meta_id_t   [TCDMPorts-1:0]         data_pid_i,
+  input  tcdm_gre_t  [TCDMPorts-1:0]         data_pgre_i,
+  input  logic       [TCDMPorts-1:0]         data_pvalid_i,
+  output logic       [TCDMPorts-1:0]         data_pready_o,
 
-  input  logic                              wake_up_sync_i,
+  input  logic                               wake_up_sync_i,
   // Core event strobes
-  output snitch_pkg::core_events_t          core_events_o
+  output snitch_pkg::core_events_t           core_events_o
 );
 
   // --------
@@ -193,6 +199,7 @@ module spatz_mempool_cc
     .fpu_status_i           ( fpu_status             ),
     .core_events_o          ( core_events_o          )
   );
+  assign snitch_req.rburst = '0;
 
   assign acc_req_q = acc_req_d;
   assign acc_req_q_valid = acc_req_d_valid;
@@ -257,11 +264,16 @@ module spatz_mempool_cc
 
   // TODO: Perhaps put it into a module
   // Assign TCDM data interface
-  for (genvar i = 0; i < NumMemPortsPerSpatz; i++) begin
+  for (genvar i = 0; i < NumMemPortsPerSpatz; i++) begin : gen_tcdm_assignment
     assign data_qaddr_o[i+1]       = spatz_mem_req[i].addr;
     assign data_qwrite_o[i+1]      = spatz_mem_req[i].write;
     assign data_qamo_o[i+1]        = '0;
     assign data_qdata_o[i+1]       = spatz_mem_req[i].data;
+    assign data_qburst_o[i+1]      = '{
+      burst  : spatz_mem_req[i].rburst.burst,
+      blen   : spatz_mem_req[i].rburst.blen,
+      default: '0
+    };
     assign data_qstrb_o[i+1]       = spatz_mem_req[i].strb;
     assign data_qid_o[i+1]         = spatz_mem_req[i].id;
     assign data_qvalid_o[i+1]      = spatz_mem_req_valid[i];
@@ -271,6 +283,7 @@ module spatz_mempool_cc
     assign spatz_mem_rsp[i].id     = data_pid_i[i+1];
     assign spatz_mem_rsp[i].err    = data_perror_i[i+1];
     assign spatz_mem_rsp_valid[i]  = data_pvalid_i[i+1];
+    assign spatz_mem_rsp[i].gdata  = data_pgre_i[i+1];
     // *** no ready signal for spatz here, tie to 1 ***
     assign data_pready_o[i+1]      = '1;
   end
@@ -285,10 +298,11 @@ module spatz_mempool_cc
   };
 
   assign fp_lsu_mem_rsp = '{
-    id  : fp_lsu_rsp.id,
-    data: fp_lsu_rsp.data,
-    err : fp_lsu_rsp.error,
-    write: fp_lsu_rsp.write
+    id  :  fp_lsu_rsp.id,
+    data:  fp_lsu_rsp.data,
+    err :  fp_lsu_rsp.error,
+    write: fp_lsu_rsp.write,
+    default: '0
   };
 
   if (RVF || RVD) begin: gen_id_remapper
@@ -362,6 +376,7 @@ module spatz_mempool_cc
   assign data_qwrite_o[0]     = data_req_q.write;
   assign data_qamo_o[0]       = data_req_q.amo;
   assign data_qdata_o[0]      = data_req_q.data;
+  assign data_qburst_o[0]     = '0;
   assign data_qstrb_o[0]      = data_req_q.strb;
   assign data_qid_o[0]        = data_req_q.id;
   assign data_qvalid_o[0]     = data_req_q_valid;
@@ -369,6 +384,8 @@ module spatz_mempool_cc
   assign data_resp_d.data     = data_pdata_i[0];
   assign data_resp_d.id       = data_pid_i[0];
   assign data_resp_d.write    = '0; // Don't care here
+  // grouped responses will only be sent for vector load
+  assign data_resp_d.gdata    = '0;
   assign data_resp_d.error    = data_perror_i[0];
   assign data_resp_d_valid    = data_pvalid_i[0];
   assign data_pready_o[0]     = data_resp_d_ready;
@@ -382,6 +399,7 @@ module spatz_mempool_cc
   logic [63:0] cycle;
   int unsigned stall, stall_ins, stall_raw, stall_lsu, stall_acc;
 
+  // verilog_lint: waive-start always-ff-non-blocking
   always_ff @(posedge rst_i) begin
     if(rst_i) begin
       // Format in hex because vcs and vsim treat decimal differently
@@ -391,10 +409,12 @@ module spatz_mempool_cc
       $display("[Tracer] Logging Hart %d to %s", hart_id_i, fn);
     end
   end
+  // verilog_lint: waive-stop always-ff-non-blocking
 
   typedef enum logic [1:0] {SrcSnitch =  0, SrcFpu = 1, SrcFpuSeq = 2} trace_src_e;
   localparam int SnitchTrace = `ifdef SNITCH_TRACE `SNITCH_TRACE `else 0 `endif;
 
+  // verilog_lint: waive-start always-ff-non-blocking
   always_ff @(posedge clk_i or posedge rst_i) begin
       automatic string trace_entry;
       automatic string extras_str;
@@ -494,6 +514,7 @@ module spatz_mempool_cc
   final begin
     $fclose(f);
   end
+  // verilog_lint: waive-stop always-ff-non-blocking
   // pragma translate_on
 
 endmodule
