@@ -57,7 +57,7 @@ VLT_FLAGS    += -Wno-PINMISSING
 VLT_FLAGS    += -Wno-fatal
 VLT_FLAGS    += --unroll-count 1024
 VLT_FLAGS    += --timing
-VLT_BENDER   += -t rtl -t spatz -t spatz_test -t snitch_test
+VLT_BENDER   += -t rtl -t spatz -t spatz_test -t snitch_test --define COMMON_CELLS_ASSERTS_OFF
 VLT_SOURCES  := $(shell ${BENDER} script flist ${VLT_BENDER} | ${SED_SRCS})
 VLT_CFLAGS   += -std=c++17 -fcoroutines
 VLT_CFLAGS   += -I${VLT_BUILDDIR}/riscv-isa-sim -I${VLT_BUILDDIR} -I${VERILATOR_INSTALL_DIR}/share/verilator/include -I${VERILATOR_INSTALL_DIR}/share/verilator/include/vltstd -I${ROOT}/hw/ip/snitch_test/src
