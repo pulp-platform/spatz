@@ -409,7 +409,7 @@ module spatz_vfu
             reduction_d[1] = $unsigned(vrf_rdata_i[1][32*reduction_pointer_q[idx_width(N_FU*ELENB)-3:0] +: 32]);
           end
           default: begin
-          `ifdef MEMPOOL_SPATZ
+          `ifdef TARGET_MEMPOOL
             reduction_d = '0;
           `else
             if (MAXEW == EW_64) begin
@@ -452,7 +452,7 @@ module spatz_vfu
             reduction_d[1] = $unsigned(vrf_rdata_i[1][32*reduction_pointer_q[idx_width(N_FU*ELENB)-3:0] +: 32]);
           end
           default: begin
-          `ifdef MEMPOOL_SPATZ
+          `ifdef TARGET_MEMPOOL
             reduction_d = '0;
           `else
             if (MAXEW == EW_64) begin
