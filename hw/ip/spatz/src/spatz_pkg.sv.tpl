@@ -407,9 +407,9 @@ package spatz_pkg;
     EnableVectors: 1'b1,
     EnableNanBox : 1'b1,
     //              FP32  FP64  FP16  FP8   FP16a FP8a
-    FpFmtMask    : {RVF,  1'b0, 1'b1, 1'b1, 1'b0, 1'b0},
+    FpFmtMask    : {RVF,  1'b0, 1'b1, 1'b0, 1'b0, 1'b0},
     //              INT8  INT16 INT32 INT64
-    IntFmtMask   : {1'b1, 1'b1, 1'b1, 1'b0}
+    IntFmtMask   : {1'b0, 1'b1, 1'b1, 1'b0}
   };
 
 % if cfg['mempool']:
@@ -429,7 +429,7 @@ package spatz_pkg;
                   '{  default: fpnew_pkg::DISABLED},  // DIVSQRT
                   '{  default: fpnew_pkg::PARALLEL},  // NONCOMP
                   '{  default: fpnew_pkg::MERGED},    // CONV
-                  '{  default: fpnew_pkg::MERGED}},   // DOTP
+                  '{  default: fpnew_pkg::DISABLED}}, // SDOTP
       PipeConfig: fpnew_pkg::BEFORE
   };
 

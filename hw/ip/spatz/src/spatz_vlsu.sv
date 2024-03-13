@@ -11,15 +11,19 @@
 module spatz_vlsu
   import spatz_pkg::*;
   import rvv_pkg::*;
-`ifdef MEMPOOL_SPATZ
+`ifdef TARGET_MEMPOOL
   import tcdm_burst_pkg::*;
 `endif
   import cf_math_pkg::idx_width; #(
     parameter int unsigned   NrMemPorts         = 1,
-`ifdef MEMPOOL_SPATZ
+`ifdef TARGET_MEMPOOL
     parameter int unsigned   NrOutstandingLoads = RobDepth,
+    parameter int unsigned   BankOffset         = 0,
+    parameter int unsigned   TileLen            = 0,
+    parameter int unsigned   NumCoresPerTile    = 0,
+    parameter int unsigned   NumBanks           = 0,
 `else
-    parameter int unsigned   NrOutstandingLoads = 16,
+    parameter int unsigned   NrOutstandingLoads = 8,
 `endif
     // Memory request
     parameter  type          spatz_mem_req_t    = logic,
@@ -29,6 +33,7 @@ module spatz_vlsu
   ) (
     input  logic                            clk_i,
     input  logic                            rst_ni,
+    input  logic          [31:0]            hart_id_i,
     // Spatz request
     input  spatz_req_t                      spatz_req_i,
     input  logic                            spatz_req_valid_i,
@@ -69,7 +74,7 @@ module spatz_vlsu
 
   localparam int unsigned MemDataWidth  = ELEN;
   localparam int unsigned MemDataWidthB = MemDataWidth/8;
-`ifdef MEMPOOL_SPATZ
+`ifdef TARGET_MEMPOOL
   localparam int unsigned BurstLen      = MaxBurstLen;
 `else
   // default values to disable the functionalities
@@ -94,6 +99,18 @@ module spatz_vlsu
   spatz_req_t mem_spatz_req;
   logic       mem_spatz_req_valid;
   logic       mem_spatz_req_ready;
+
+`ifdef TARGET_MEMPOOL
+  logic [31:0] tile_id;
+  always_comb begin
+    // Calculate the tile ID
+    tile_id = '0;
+    if (NumCoresPerTile == 1)
+      tile_id = hart_id_i;
+    else
+      tile_id = hart_id_i[31:idx_width(NumCoresPerTile)];
+  end
+`endif
 
   spill_register #(
     .T(spatz_req_t)
@@ -132,6 +149,70 @@ module spatz_vlsu
     endcase
   end: proc_spatz_req
 
+  ///////////////
+  // VLE LOCAL //
+  ///////////////
+
+`ifdef TARGET_MEMPOOL
+  // Currently only cut if it visits the entire local region
+  // Notice in VLSU vlen is in bytes instead of elements
+  logic                             vle_start_local, vle_end_local, vle_is_local;
+  // What are the start and end address of a vle visit?
+  logic     [BankOffset+TileLen:0]  base_addr, last_addr;
+  // temporary address for calculation, make sure no overflow happens
+  elen_t                            temp_addr;
+  logic     [2:0]                   byte_per_elem;
+
+  always_comb begin
+    unique case (mem_spatz_req.vtype.vsew)
+      EW_8: begin
+        byte_per_elem = 1;
+      end
+      EW_16: begin
+        byte_per_elem = 2;
+      end
+      EW_32: begin
+        byte_per_elem = 4;
+      end
+      default: begin
+        byte_per_elem = MAXEW;
+      end
+    endcase
+  end
+
+  always_comb begin
+    vle_start_local       = 1'b0;
+    vle_end_local         = 1'b0;
+    base_addr             = '0;
+    last_addr             = '0;
+    temp_addr             = '0;
+    vle_is_local          = 1'b0;
+
+    if ((mem_spatz_req.op == VLE) & mem_spatz_req_valid & UseBurst) begin
+      // We have a valid VLE insn
+      if (mem_spatz_req.vl < (NumBanks << 2)) begin
+        // Make sure the insn does not occupies mutiple lines in memory
+        base_addr       = mem_spatz_req.rs1[BankOffset+TileLen:0];
+        temp_addr       = base_addr + mem_spatz_req.vl;
+        last_addr       = temp_addr - byte_per_elem;
+        // Check if it crosses the remote and local
+        vle_start_local = (base_addr[BankOffset+:TileLen] == tile_id);
+        // last load address
+        vle_end_local   = (last_addr[BankOffset+:TileLen] == tile_id);
+
+        if (vle_start_local & vle_end_local)  begin
+          // the request is purely in local
+          vle_is_local = 1'b1;
+        end
+      end
+    end
+  end
+`endif
+
+  ////////////
+  // Status //
+  ////////////
+
   // Do we have a strided memory access
   logic mem_is_strided;
   assign mem_is_strided = (mem_spatz_req.op == VLSE) || (mem_spatz_req.op == VSSE);
@@ -140,9 +221,17 @@ module spatz_vlsu
   logic mem_is_indexed;
   assign mem_is_indexed = (mem_spatz_req.op == VLXE) || (mem_spatz_req.op == VSXE);
 
-  // Do we have an burst load? tag current insn as burst
+  // Do we have an burst load?
   logic mem_is_burst;
-  assign mem_is_burst = UseBurst ? mem_spatz_req.op == VLE : 1'b0;
+  always_comb begin
+    mem_is_burst  = 1'b0;
+  `ifdef TARGET_MEMPOOL
+    if ((mem_spatz_req.op == VLE) & UseBurst) begin
+      // If it is a local vle request, do not send burst
+      mem_is_burst = !vle_is_local;
+    end
+  `endif
+  end
 
   logic  [$clog2(NrMemPorts)-1:0] burst_pointer_d, burst_pointer_q; // point to which LSU should take next burst
   `FF(burst_pointer_q, burst_pointer_d, '0)
@@ -178,7 +267,7 @@ module spatz_vlsu
         store_count_d[port]++;
 
       // Did we get the ack of a store?
-  `ifdef MEMPOOL_SPATZ
+  `ifdef TARGET_MEMPOOL
       if (store_count_q[port] != '0 && spatz_mem_rsp_valid_i[port] && spatz_mem_rsp_i[port].write)
         store_count_d[port]--;
   `else
@@ -194,7 +283,7 @@ module spatz_vlsu
 
   typedef logic [int'(MAXEW)-1:0] addr_offset_t;
 
-`ifdef MEMPOOL_SPATZ
+`ifdef TARGET_MEMPOOL
   // The reorder buffer v2 has ability to output mutiple data
   elen_t [NrMemPorts-1:0][RspGF-1:0] rob_wdata;
   elen_t [NrMemPorts-1:0][RspGF-1:0] rob_rdata;
@@ -226,7 +315,7 @@ module spatz_vlsu
   // The reorder buffer decouples the memory side from the register file side.
   // All elements from one side to the other go through it.
   for (genvar port = 0; port < NrMemPorts; port++) begin : gen_rob
-`ifdef MEMPOOL_SPATZ
+`ifdef TARGET_MEMPOOL
     reorder_buffer_v2 #(
       .DataWidth(ELEN              ),
       .UseBurst (UseBurst          ),
@@ -267,10 +356,6 @@ module spatz_vlsu
       end
     end
 `else
-    // assign rob_gvalid = '0;
-    // assign rob_rid    = '0;
-    // assign rob_id     = '0;
-    // assign rob_bvalid = '0;
     fifo_v3 #(
       .DATA_WIDTH(ELEN              ),
       .DEPTH     (NrOutstandingLoads)
@@ -912,7 +997,7 @@ module spatz_vlsu
   logic [NrMemPorts-1:0]                   mem_req_lvalid;
   logic [NrMemPorts-1:0]                   mem_req_last;
 
-`ifdef MEMPOOL_SPATZ
+`ifdef TARGET_MEMPOOL
   // type defined in tcdm_burst_pkg
   tcdm_breq_t [NrMemPorts-1:0]             mem_req_rburst;
 `else
@@ -1034,7 +1119,7 @@ module spatz_vlsu
         end
 
         for (int unsigned port = 0; port < NrMemPorts; port++) begin
-        `ifdef MEMPOOL_SPATZ
+        `ifdef TARGET_MEMPOOL
           automatic logic [63:0] data = rob_rdata[port][0];
         `else
           automatic logic [63:0] data = rob_rdata[port];
@@ -1176,7 +1261,7 @@ module spatz_vlsu
           rob_blen[port] = 1'b1;
         end
 
-`ifdef MEMPOOL_SPATZ
+`ifdef TARGET_MEMPOOL
         // Write the load result to the buffer
         rob_wdata[port][0] = spatz_mem_rsp_i[port].data;
         rob_wid[port]   = spatz_mem_rsp_i[port].id;
@@ -1220,7 +1305,7 @@ module spatz_vlsu
         vrf_re_o[0] = 1'b1;
 
         for (int unsigned port = 0; port < NrMemPorts; port++) begin
-        `ifdef MEMPOOL_SPATZ
+        `ifdef TARGET_MEMPOOL
           rob_wdata[port][0]  = vrf_rvalid_i[0] ? vrf_rdata_i[0][ELEN*port +: ELEN] : '0;
         `else
           rob_wdata[port]  = vrf_rvalid_i[0] ? vrf_rdata_i[0][ELEN*port +: ELEN] : '0;
@@ -1323,7 +1408,7 @@ module spatz_vlsu
       .valid_o (spatz_mem_req_valid_o[port]),
       .ready_i (spatz_mem_req_ready_i[port])
     );
-`ifdef MEMPOOL_SPATZ
+`ifdef TARGET_MEMPOOL
     // ID is required in Mempool-Spatz
     assign spatz_mem_req[port].id    = mem_req_id[port];
     assign spatz_mem_req[port].addr  = mem_req_addr[port];

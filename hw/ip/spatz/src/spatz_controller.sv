@@ -554,7 +554,7 @@ module spatz_controller
     vfu_rsp_ready = 1'b0;
 
     if (retire_csr) begin
-`ifdef MEMPOOL_SPATZ
+`ifdef TARGET_MEMPOOL
       rsp_d.write = 1'b1;
 `endif
       // Read CSR and write back to cpu
@@ -582,7 +582,7 @@ module spatz_controller
     end else if (vfu_rsp_valid) begin
       rsp_d.id      = vfu_rsp.rd;
       rsp_d.data    = vfu_rsp.result;
-`ifdef MEMPOOL_SPATZ
+`ifdef TARGET_MEMPOOL
       rsp_d.write   = 1'b1;
 `endif
       rsp_valid_d   = 1'b1;

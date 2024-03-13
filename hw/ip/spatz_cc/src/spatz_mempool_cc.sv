@@ -7,6 +7,7 @@ module spatz_mempool_cc
   import tcdm_burst_pkg::*;
 #(
   parameter logic [31:0] BootAddr   = 32'h0000_1000,
+
   parameter logic [31:0] MTVEC      = BootAddr,
   parameter bit          RVE        = 0,  // Reduced-register extension
   parameter bit          RVM        = 1,  // Enable IntegerMmultiplication & Division Extension
@@ -28,12 +29,13 @@ module spatz_mempool_cc
   parameter bit RegisterOffloadResp = 1,
   parameter bit RegisterTCDMReq     = 0,
   parameter bit RegisterTCDMResp    = 0,
-
-  // parameter type tcdm_breq_t        = logic,
-  // parameter type tcdm_gre_t         = logic,
   parameter int unsigned        RspGF                  = 1,
   parameter int unsigned        TCDMPorts              = 1,
-  parameter int unsigned        NumMemPortsPerSpatz    = 1
+  parameter int unsigned        NumMemPortsPerSpatz    = 1,
+  parameter int unsigned        BankOffset             = 0,
+  parameter int unsigned        NumCoresPerTile        = 0,
+  parameter int unsigned        TileLen                = 0,
+  parameter int unsigned        NumBanks               = 0
 ) (
   input  logic                                        clk_i,
   input  logic                                        rst_i,
@@ -223,6 +225,10 @@ module spatz_mempool_cc
   spatz #(
     .NrMemPorts         ( NumMemPortsPerSpatz     ),
     .NumOutstandingLoads( snitch_pkg::NumIntOutstandingLoads ),
+    .BankOffset         ( BankOffset              ),
+    .NumCoresPerTile    ( NumCoresPerTile         ),
+    .TileLen            ( TileLen                 ),
+    .NumBanks           ( NumBanks                ),
     .FPUImplementation  ( FPUImplementation       ),
     .RegisterRsp        ( 1'b1                    ),
     .spatz_mem_req_t    ( spatz_mem_req_t         ),
@@ -275,7 +281,8 @@ module spatz_mempool_cc
       default: '0
     };
     assign data_qstrb_o[i+1]       = spatz_mem_req[i].strb;
-    assign data_qid_o[i+1]         = spatz_mem_req[i].id;
+    // fill the not used fields by 0
+    assign data_qid_o[i+1]         = ('0 | spatz_mem_req[i].id);
     assign data_qvalid_o[i+1]      = spatz_mem_req_valid[i];
     assign spatz_mem_req_ready[i]  = data_qready_i[i+1];
     assign spatz_mem_rsp[i].data   = data_pdata_i[i+1];
