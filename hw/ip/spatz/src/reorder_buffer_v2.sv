@@ -208,13 +208,7 @@ module reorder_buffer_v2
 
     // Keep the overall counter stable if we request new ID and pop at the same time
     if ((id_req_i && !full_o) && (pop_i && valid_o)) begin
-      if (req_len == 1'b1) begin
-        status_cnt_d = status_cnt_q;
-      end else begin
-        if (bvalid_o) begin
-          status_cnt_d = status_cnt_q + req_len - read_elem;
-        end
-      end
+      status_cnt_d = status_cnt_q + req_len - read_elem;
     end
   end: read_write_comb
 
