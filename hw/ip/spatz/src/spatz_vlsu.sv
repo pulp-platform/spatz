@@ -314,8 +314,11 @@ module spatz_vlsu
 
   // The reorder buffer decouples the memory side from the register file side.
   // All elements from one side to the other go through it.
-  for (genvar port = 0; port < NrMemPorts; port++) begin : gen_rob
+  // For port 0 and 1, give them larger size and ability to pop out multiple data
+  // which is required by TCDM burst and Grouped RSP
 `ifdef TARGET_MEMPOOL
+  for (genvar port = 0; port < BurstRob; port++) begin : gen_gre_rob
+    // Only give 2 ports burst available
     reorder_buffer_v2 #(
       .DataWidth(ELEN              ),
       .UseBurst (UseBurst          ),
@@ -347,7 +350,6 @@ module spatz_vlsu
       .full_o      (rob_full[port]    ),
       .empty_o     (rob_empty[port]   )
     );
-
     always_comb begin
       if (mem_is_burst) begin
         rob_navail[port] = !(rob_bvalid[port] & rob_id_valid[port]);
@@ -355,7 +357,41 @@ module spatz_vlsu
         rob_navail[port] = rob_full[port];
       end
     end
+  end
+
+  for (genvar port = BurstRob; port < NrMemPorts; port++) begin : gen_rob
+    reorder_buffer #(
+      .DataWidth(ELEN              ),
+      .NumWords (8                 )
+    ) i_reorder_buffer (
+      .clk_i      (clk_i              ),
+      .rst_ni     (rst_ni             ),
+      .data_i     (rob_wdata[port][0] ),
+      .id_i       (rob_wid[port][2:0] ),
+      .push_i     (rob_push[port]     ),
+      .data_o     (rob_rdata[port][0] ),
+      .valid_o    (rob_rvalid[port]   ),
+      .id_read_o  (rob_rid[port][2:0] ),
+      .pop_i      (rob_pop[port]      ),
+      .id_req_i   (rob_req_id[port]   ),
+      .id_o       (rob_id[port][2:0]  ),
+      .id_valid_o (rob_id_valid[port] ),
+      .full_o     (rob_full[port]     ),
+      .empty_o    (rob_empty[port]    )
+    );
+    assign rob_navail[port] = rob_full[port];
+    assign rob_gvalid[port] = 1'b0;
+    assign rob_bvalid[port] = 1'b0;
+    if (NrOutstandingLoads > 8) begin
+      assign rob_id [port][IdWidth-1:3] = '0;
+      assign rob_rid[port][IdWidth-1:3] = '0;
+    end
+    if (RspGF > 1) begin
+      assign rob_rdata[port][RspGF-1:1] = '0;
+    end
+  end
 `else
+  for (genvar port = 0; port < NrMemPorts; port++) begin : gen_rob
     fifo_v3 #(
       .DATA_WIDTH(ELEN              ),
       .DEPTH     (NrOutstandingLoads)
@@ -374,8 +410,8 @@ module spatz_vlsu
     );
     assign rob_rvalid[port] = !rob_empty[port];
     assign rob_navail[port] = rob_full[port];
-`endif
   end: gen_rob
+`endif
 
   //////////////////////
   //  Memory request  //
@@ -1267,7 +1303,7 @@ module spatz_vlsu
         rob_wid[port]   = spatz_mem_rsp_i[port].id;
         // Need to consider out-of-order memory response
         rob_push[port]  = spatz_mem_rsp_valid_i[port] && (state_q == VLSU_RunningLoad) && spatz_mem_rsp_i[port].write == '0;
-      `ifdef RSP_GF
+      `ifdef GROUP_RSP
         if (RspGF > 1) begin
           rob_wdata[port][RspGF-1:1] = spatz_mem_rsp_i[port].gdata.data;
           rob_gpush[port]            = rob_push[port] & spatz_mem_rsp_i[port].gdata.valid;

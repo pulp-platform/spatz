@@ -59,6 +59,8 @@ package spatz_pkg;
   localparam int unsigned VLEN   = `ifdef VLEN `VLEN `else 256 `endif;
   // used to change reorder buffer depth in VLSU
   localparam int unsigned RobDepth  = 32;
+  // how many ROBs are burst enabled? (Parallel input/output, more depth)
+  localparam int unsigned BurstRob  = 2;
 % else :
   localparam int unsigned VLEN   = ${cfg['vlen']};
 %endif

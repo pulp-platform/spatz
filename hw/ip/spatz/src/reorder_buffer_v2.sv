@@ -104,7 +104,8 @@ module reorder_buffer_v2
   // 1) requst ID
   // 2) pop in data
   // 3) push out data
-  id_t  [RspGF-1:0] out_temp_ptr, push_temp_ptr, pop_temp_ptr;
+  id_t  [RspGF-1:0] out_temp_ptr;
+  id_t  push_temp_ptr, pop_temp_ptr;
   // Read and Write logic
   always_comb begin: read_write_comb
     // Maintain state
