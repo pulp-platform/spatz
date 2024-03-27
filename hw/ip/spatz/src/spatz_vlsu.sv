@@ -233,7 +233,7 @@ module spatz_vlsu
 
   // For each memory port we count how many elements we have already loaded/stored.
   // Multiple counters are needed all memory ports can work independent of each other.
-  vlen_t [N_FU-1:0]       mem_counter_max;
+  vlen_t [NrMemPorts-1:0] mem_counter_max;
   logic  [NrMemPorts-1:0] mem_counter_en;
   logic  [NrMemPorts-1:0] mem_counter_load;
   vlen_t [NrMemPorts-1:0] mem_counter_delta;
@@ -1012,9 +1012,6 @@ module spatz_vlsu
 
   if (MemDataWidth != ELEN)
     $error("[spatz_vlsu] The memory data width needs to be equal to %d.", ELEN);
-
-  if (NrMemPorts != N_FU)
-    $error("[spatz_vlsu] The number of memory ports needs to be equal to the number of FUs.");
 
   if (NrMemPorts != 2**$clog2(NrMemPorts))
     $error("[spatz_vlsu] The NrMemPorts parameter needs to be a power of two");
