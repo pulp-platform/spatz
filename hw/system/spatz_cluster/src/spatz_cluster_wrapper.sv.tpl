@@ -313,6 +313,7 @@ module ${cfg['name']}_wrapper
   localparam int unsigned NumSpatzOutstandingLoads [NumCores] = '{${core_cfg('num_spatz_outstanding_loads')}};
   localparam int unsigned NumSpatzFPUs             [NumCores] = '{default: ${cfg['n_fpu']}};
   localparam int unsigned NumSpatzIPUs             [NumCores] = '{default: ${cfg['n_ipu']}};
+  localparam int unsigned NumSpatzTCDMPorts        [NumCores] = '{default: ${cfg['spatz_nports']}};
 
   spatz_cluster_pkg::spatz_axi_iwc_out_req_t axi_from_cluster_iwc_req;
   spatz_cluster_pkg::spatz_axi_iwc_out_resp_t axi_from_cluster_iwc_resp;
@@ -511,6 +512,7 @@ module ${cfg['name']}_wrapper
     .NumSpatzOutstandingLoads (NumSpatzOutstandingLoads),
     .NumSpatzFPUs (NumSpatzFPUs),
     .NumSpatzIPUs (NumSpatzIPUs),
+    .NumSpatzTCDMPorts (NumSpatzTCDMPorts),
     .axi_in_req_t (axi_in_req_t),
     .axi_in_resp_t (axi_in_resp_t),
     .axi_out_req_t (spatz_cluster_pkg::spatz_axi_iwc_out_req_t),

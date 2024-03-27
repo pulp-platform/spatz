@@ -72,6 +72,7 @@ module spatz_cluster
     // Spatz parameters
     parameter int                     unsigned               NumSpatzFPUs             [NrCores] = '{default: '0},
     parameter int                     unsigned               NumSpatzIPUs             [NrCores] = '{default: '0},
+    parameter int                     unsigned               NumSpatzTCDMPorts        [NrCores] = '{default: '0},
     /// ## Timing Tuning Parameters
     /// Insert Pipeline registers into off-loading path (response)
     parameter bit                                            RegisterOffloadRsp                 = 1'b0,
@@ -156,7 +157,7 @@ module spatz_cluster
   localparam int unsigned NrSuperBanks      = NrBanks / BanksPerSuperBank;
 
   function automatic int unsigned get_tcdm_ports(int unsigned core);
-    return spatz_pkg::N_FU + 1;
+    return NumSpatzTCDMPorts[core] + 1;
   endfunction
 
   function automatic int unsigned get_tcdm_port_offs(int unsigned core_idx);
@@ -741,6 +742,7 @@ module spatz_cluster
       .IsoCrossing             (1'b0                       ),
       .NumSpatzFPUs            (NumSpatzFPUs[i]            ),
       .NumSpatzIPUs            (NumSpatzIPUs[i]            ),
+      .NumMemPortsPerSpatz     (NumSpatzTCDMPorts[i]       ),
       .NumIntOutstandingLoads  (NumIntOutstandingLoads[i]  ),
       .NumIntOutstandingMem    (NumIntOutstandingMem[i]    ),
       .NumSpatzOutstandingLoads(NumSpatzOutstandingLoads[i]),
