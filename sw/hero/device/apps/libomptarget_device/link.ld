@@ -48,14 +48,14 @@ SECTIONS
     __tdata_start = .;
     *(.tdata .tdata.* .gnu.linkonce.td.*)
     __tdata_end = .;
-  } >L2
+  } >LOCAL
   .tbss :
   {
     __tbss_start = .;
     *(.tbss .tbss.* .gnu.linkonce.tb.*)
     *(.tcommon)
     __tbss_end = .;
-  } >L2
+  } >LOCAL
 
   /* Cluster Local Storage sections */
   .cdata    :
@@ -81,7 +81,7 @@ SECTIONS
     __global_pointer$ = . + 0x7f0;
     *(.srodata.cst16) *(.srodata.cst8) *(.srodata.cst4) *(.srodata.cst2) *(.srodata .srodata.*)
     *(.sdata .sdata.* .gnu.linkonce.s.*)
-  } >L2
+  } >LOCAL
 
   /* Initialized data sections goes into L2 */
   .data :
@@ -100,7 +100,7 @@ SECTIONS
     *(.dynsbss)
     *(.sbss .sbss.* .gnu.linkonce.sb.*)
     *(.scommon)
-  } >L2
+  } >LOCAL
 
   /* Uninitialized data section */
   .bss            :

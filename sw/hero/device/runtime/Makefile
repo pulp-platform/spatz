@@ -6,6 +6,8 @@
 
 MK_DIR := $(dir $(realpath $(lastword $(MAKEFILE_LIST))))
 
+DEBUG = ON
+
 include ../toolchain.mk
 
 ###################

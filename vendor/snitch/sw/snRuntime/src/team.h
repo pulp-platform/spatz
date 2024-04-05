@@ -54,9 +54,9 @@ inline uint32_t __attribute__((const)) snrt_cluster_compute_core_num() {
 }
 
 inline int __attribute__((const)) snrt_is_compute_core() {
-    return snrt_cluster_core_idx() < snrt_cluster_compute_core_num();
+    return !snrt_is_dm_core();
 }
 
 inline int __attribute__((const)) snrt_is_dm_core() {
-    return !snrt_is_compute_core();
+    return snrt_cluster_core_idx() < snrt_cluster_dm_core_num();
 }
