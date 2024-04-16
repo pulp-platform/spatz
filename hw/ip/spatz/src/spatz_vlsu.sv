@@ -17,6 +17,7 @@ module spatz_vlsu
     parameter  type          spatz_mem_req_t    = logic,
     parameter  type          spatz_mem_rsp_t    = logic,
     // Dependant parameters. DO NOT CHANGE!
+    localparam int  unsigned NrInterfaces       = NrMemPorts / spatz_pkg::N_FU,
     localparam int  unsigned IdWidth            = idx_width(NrOutstandingLoads)
   ) (
     input  logic                            clk_i,
@@ -29,11 +30,11 @@ module spatz_vlsu
     output logic                            vlsu_rsp_valid_o,
     output vlsu_rsp_t                       vlsu_rsp_o,
     // Interface with the VRF
-    output vrf_addr_t                       vrf_waddr_o,
-    output vrf_data_t                       vrf_wdata_o,
-    output logic                            vrf_we_o,
-    output vrf_be_t                         vrf_wbe_o,
-    input  logic                            vrf_wvalid_i,
+    output vrf_addr_t      [NrInterfaces-1:0]                 vrf_waddr_o,
+    output vrf_data_t      [NrInterfaces-1:0]                 vrf_wdata_o,
+    output logic           [NrInterfaces-1:0]                 vrf_we_o,
+    output vrf_be_t        [NrInterfaces-1:0]                 vrf_wbe_o,
+    input  logic           [NrInterfaces-1:0]                 vrf_wvalid_i,
     output spatz_id_t      [2:0]            vrf_id_o,
     output vrf_addr_t      [1:0]            vrf_raddr_o,
     output logic           [1:0]            vrf_re_o,

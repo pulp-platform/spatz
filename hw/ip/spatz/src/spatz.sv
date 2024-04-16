@@ -72,8 +72,8 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   ////////////////
 
   // Number of ports of the vector register file
-  localparam int unsigned NrWritePorts = 3;
-  localparam int unsigned NrReadPorts  = 6;
+  localparam int unsigned NrWritePorts = 4;
+  localparam int unsigned NrReadPorts  = 8;
 
   /////////////
   // Signals //
@@ -321,16 +321,16 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     .vlsu_rsp_valid_o        (vlsu_rsp_valid                                       ),
     .vlsu_rsp_o              (vlsu_rsp                                             ),
     // VRF
-    .vrf_waddr_o             (vrf_waddr[VLSU_VD_WD]                                ),
-    .vrf_wdata_o             (vrf_wdata[VLSU_VD_WD]                                ),
-    .vrf_we_o                (sb_we[VLSU_VD_WD]                                    ),
-    .vrf_wbe_o               (vrf_wbe[VLSU_VD_WD]                                  ),
-    .vrf_wvalid_i            (vrf_wvalid[VLSU_VD_WD]                               ),
-    .vrf_raddr_o             (vrf_raddr[VLSU_VD_RD:VLSU_VS2_RD]                    ),
-    .vrf_re_o                (sb_re[VLSU_VD_RD:VLSU_VS2_RD]                        ),
-    .vrf_rdata_i             (vrf_rdata[VLSU_VD_RD:VLSU_VS2_RD]                    ),
-    .vrf_rvalid_i            (vrf_rvalid[VLSU_VD_RD:VLSU_VS2_RD]                   ),
-    .vrf_id_o                ({sb_id[SB_VLSU_VD_WD], sb_id[VLSU_VD_RD:VLSU_VS2_RD]}),
+    .vrf_waddr_o             (vrf_waddr[VLSU_VD_WD1:VLSU_VD_WD0]                   ),
+    .vrf_wdata_o             (vrf_wdata[VLSU_VD_WD1:VLSU_VD_WD0]                   ),
+    .vrf_we_o                (sb_we[VLSU_VD_WD1:VLSU_VD_WD0]                       ),
+    .vrf_wbe_o               (vrf_wbe[VLSU_VD_WD1:VLSU_VD_WD0]                     ),
+    .vrf_wvalid_i            (vrf_wvalid[VLSU_VD_WD1:VLSU_VD_WD0]                  ),
+    .vrf_raddr_o             (vrf_raddr[VLSU_VD_RD1:VLSU_VS2_RD0]                  ),
+    .vrf_re_o                (sb_re[VLSU_VD_RD1:VLSU_VS2_RD0]                      ),
+    .vrf_rdata_i             (vrf_rdata[VLSU_VD_RD1:VLSU_VS2_RD0]                  ),
+    .vrf_rvalid_i            (vrf_rvalid[VLSU_VD_RD1:VLSU_VS2_RD0]                 ),
+    .vrf_id_o                ({sb_id[SB_VLSU_VD_WD1:SB_VLSU_VD_WD0], sb_id[VLSU_VD_RD1:VLSU_VS2_RD0]}),
     // Interface Memory
     .spatz_mem_req_o         (spatz_mem_req_o                                      ),
     .spatz_mem_req_valid_o   (spatz_mem_req_valid_o                                ),
