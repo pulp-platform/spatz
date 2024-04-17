@@ -327,13 +327,13 @@ int main(int argc, char *argv[]) {
     g_a2h_rb = NULL;
     g_h2a_mbox = (struct ring_buf *)readw(0x3000000);
     g_a2h_mbox = (struct ring_buf *)readw(0x3000004);
+    writew(0x1, 0x40000248);
+    writew(0x1, 0x40000208);
+    writew(0x1, 0x40000348);
+    writew(0x1, 0x40000308);
   }
 
-  //snrt_cluster_hw_barrier();
-
-  //__snrt_omp_bootstrap(core_idx);
-
-  //snrt_trace("omp_bootstrap complete, core_idx: %d core_num: %d\n", core_idx, core_num);
+  __snrt_omp_bootstrap(core_idx);
 
   gomp_offload_manager();
 

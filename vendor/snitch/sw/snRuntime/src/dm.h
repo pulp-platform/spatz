@@ -159,11 +159,11 @@ inline void dm_init(void) {
 #endif
         dm_p = (dm_t *)snrt_l1alloc(sizeof(dm_t));
         snrt_memset((void *)dm_p, 0, sizeof(dm_t));
-        dm_p_global = dm_p;
+        __atomic_store_n(&dm_p_global, dm_p, __ATOMIC_RELAXED);
+        snrt_cluster_hw_barrier();
     } else {
-        while (!dm_p_global)
-            ;
-        dm_p = dm_p_global;
+        snrt_cluster_hw_barrier();
+        dm_p = __atomic_load_n(&dm_p_global, __ATOMIC_RELAXED);
     }
 }
 

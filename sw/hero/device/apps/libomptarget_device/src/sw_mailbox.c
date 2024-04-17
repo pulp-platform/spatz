@@ -67,7 +67,7 @@ int mailbox_read(uint32_t *buffer, size_t n_words) {
         do {
             ret = rb_device_get(g_h2a_mbox, &buffer[n_words]);
             if (ret) {
-                csleep(100);
+                csleep(10);
             }
         } while (ret);
     }
@@ -78,7 +78,7 @@ int mailbox_write(uint32_t word) {
     do {
         ret = rb_device_put(g_a2h_mbox, &word);
         if (ret) {
-            csleep(100);
+            csleep(10);
         }
     } while (ret);
     return ret;

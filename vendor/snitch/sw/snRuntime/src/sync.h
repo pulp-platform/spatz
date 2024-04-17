@@ -61,7 +61,16 @@ inline void snrt_mutex_release(volatile uint32_t *pmtx) {
 
 /// Synchronize cores in a cluster with a hardware barrier
 inline void snrt_cluster_hw_barrier() {
-    asm volatile("csrr x0, 0x7C2" ::: "memory");
+    asm volatile(
+        "fence\n"
+        "addi      sp, sp, -4\n"
+        "sw        ra, 0(sp)\n"
+        "call      snrt_cluster_hw_barrier_addr\n"
+        "lw        a0, 0(a0)\n"
+        "mv        zero, a0\n"
+        "lw        ra, 0(sp)\n"
+        "addi      sp, sp, 4\n"
+        "fence\n");
 }
 
 /// Synchronize clusters globally with a global software barrier

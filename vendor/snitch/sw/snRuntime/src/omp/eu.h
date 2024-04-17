@@ -168,11 +168,11 @@ inline void eu_init(void) {
         eu_p = snrt_l1alloc(sizeof(eu_t));
         snrt_memset((void *)eu_p, 0, sizeof(eu_t));
         // store copy of eu_p on shared memory
-        eu_p_global = eu_p;
+        __atomic_store_n(&eu_p_global, eu_p, __ATOMIC_RELAXED);
+        snrt_cluster_hw_barrier();
     } else {
-        while (!eu_p_global)
-            ;
-        eu_p = eu_p_global;
+        snrt_cluster_hw_barrier();
+        eu_p = __atomic_load_n(&eu_p_global, __ATOMIC_RELAXED);
     }
 }
 
@@ -217,7 +217,7 @@ inline void eu_event_loop(uint32_t cluster_core_idx) {
             snrt_interrupt_disable(IRQ_M_SOFT);
 #else
             // TODO colluca: should this be "disable"?
-            snrt_interrupt_enable(IRQ_M_CLUSTER);
+            snrt_interrupt_disable(IRQ_M_CLUSTER);
 #endif
             return;
         }

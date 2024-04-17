@@ -26,36 +26,21 @@ static inline void snrt_init_tls() {
     // To avoid contentions in main memory, and take advantage of the
     // bandwidth of the DMA, the DM core initializes the TLS section
     // for every core in a cluster.
-    if (snrt_cluster_idx() == 0 && snrt_is_dm_core()) {
-        size = (size_t)(&__tdata_end) - (size_t)(&__tdata_start);
+    size = (size_t)(&__tdata_end) - (size_t)(&__tdata_start);
 
-        // First initialize the DM core's .tdata section from main memory
-        asm volatile("mv %0, tp" : "=r"(tls_ptr) : :);
-        snrt_dma_start_1d((void*)tls_ptr, (void*)(&__tdata_start), size);
-
-        // Then initialize all other cores' .tdata sections from the DM
-        // core's. The offset between the TLS section of successive cores
-        // is defined in start.S
-        size_t tls_offset = (1 << SNRT_LOG2_STACK_SIZE) + 8;
-        for (int i = 1; i < snrt_cluster_core_num(); i++) {
-            snrt_dma_start_1d((void*)(tls_ptr + i * tls_offset), (void*)tls_ptr,
-                              size);
-        }
-
-        // Initialize all cores' .tbss sections
-        tls_ptr += size;
-        size = (size_t)(&__tbss_end) - (size_t)(&__tbss_start);
-        for (int i = 0; i < snrt_cluster_core_num(); i++) {
-            if(snrt_zero_memory_ptr())
-                snrt_dma_start_1d((void*)(tls_ptr + i * tls_offset),
-                                  (void*)(snrt_zero_memory_ptr()), size);
-            else
-                for(int j = 0; j < size; j++)
-                    *((uint8_t*) tls_ptr + i * tls_offset + j) = 0x0;
-        }
+    // First initialize the DM core's .tdata section from main memory
+    asm volatile("mv %0, tp" : "=r"(tls_ptr) : :);
+    for(int i = 0; i < size; i ++) {
+        ((uint8_t*)tls_ptr)[i] = ((uint8_t*)&__tdata_start)[i];
     }
 
-    snrt_cluster_hw_barrier();
+    // Initialize all cores' .tbss sections
+    tls_ptr += size;
+    //snrt_putword(tls_ptr);
+    size = (size_t)(&__tbss_end) - (size_t)(&__tbss_start);
+    for(int i = 0; i < size; i ++) {
+        ((uint8_t*)tls_ptr)[i] = 0;
+    }
 }
 #endif
 

@@ -132,7 +132,6 @@ typedef struct {
 // internal buffer output
 static inline void _out_buffer(char character, void* buffer, size_t idx, size_t maxlen)
 {
-  _putchar(68); //D
   if (idx < maxlen) {
     ((char*)buffer)[idx] = character;
   }
@@ -150,7 +149,6 @@ static inline void _out_null(char character, void* buffer, size_t idx, size_t ma
 static inline void _out_char(char character, void* buffer, size_t idx, size_t maxlen)
 {
   (void)buffer; (void)idx; (void)maxlen;
-  _putchar(69); //E
   if (character) {
     _putchar(character);
   }
@@ -574,16 +572,6 @@ static size_t _etoa(out_fct_type out, char* buffer, size_t idx, size_t maxlen, d
 #endif  // PRINTF_SUPPORT_EXPONENTIAL
 #endif  // PRINTF_SUPPORT_FLOAT
 
-static inline uint32_t readw(const uintptr_t addr)
-{
-	uint32_t val;
-
-	asm volatile("lw %0, 0(%1)"
-		     : "=r"(val)
-		     : "r"((const volatile uint32_t *)addr)
-		     : "memory");
-	return val;
-}
 
 // internal vsnprintf
 static int _vsnprintf(out_fct_type out, char* buffer, const size_t maxlen, const char* format, va_list va)
@@ -855,16 +843,11 @@ static int _vsnprintf(out_fct_type out, char* buffer, const size_t maxlen, const
         break;
 
       default :
-        _putchar(67); //C
-        _putchar(71); //G
         out(*format, buffer, idx++, maxlen);
         format++;
         break;
     }
   }
-
-  _putchar(67); //C
-  _putchar(80); //P
 
   // termination
   out((char)0, buffer, idx < maxlen ? idx : maxlen - 1U, maxlen);

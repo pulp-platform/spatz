@@ -27,7 +27,7 @@ RISCV_DWARFDUMP ?= $(LLVM_BINROOT)/llvm-dwarfdump
 
 # Compiler flags
 RISCV_CFLAGS += $(addprefix -I,$(INCDIRS))
-RISCV_CFLAGS += -mcpu=snitch
+RISCV_CFLAGS += -mcpu=snitch -march=rv32imafdvzfh_xdma
 RISCV_CFLAGS += -menable-experimental-extensions
 RISCV_CFLAGS += -mabi=ilp32d
 RISCV_CFLAGS += -mcmodel=medany
