@@ -12,6 +12,10 @@ MEMORY
 
 SECTIONS
 {
+  .init :
+  {
+    . = ALIGN(4);
+  }
   /* The program code and other data goes into DRAM */
   .text :
   {
