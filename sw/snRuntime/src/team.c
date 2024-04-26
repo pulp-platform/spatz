@@ -53,12 +53,12 @@ uint32_t snrt_cluster_compute_core_idx() {
 
 uint32_t snrt_cluster_compute_core_num() {
     // TODO: Actually derive this from the device tree!
-    return snrt_cluster_core_num() - 1;
+    return snrt_cluster_core_num();
 }
 
 uint32_t snrt_cluster_dm_core_idx() {
     // TODO: Actually derive this from the device tree!
-    return snrt_cluster_core_num() - 1;
+    return 0;
 }
 
 uint32_t snrt_cluster_dm_core_num() {
@@ -68,12 +68,12 @@ uint32_t snrt_cluster_dm_core_num() {
 
 int snrt_is_compute_core() {
     // TODO: Actually derive this from the device tree!
-    return snrt_cluster_core_idx() < snrt_cluster_core_num() - 1;
+    return 1;
 }
 
 int snrt_is_dm_core() {
     // TODO: Actually derive this from the device tree!
-    return !snrt_is_compute_core();
+    return snrt_cluster_core_idx() == snrt_cluster_dm_core_idx();
 }
 
 uint32_t _snrt_barrier_reg_ptr() {

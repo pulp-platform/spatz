@@ -23,24 +23,30 @@ add_compile_options(-O3 -g -ffunction-sections)
 
 # Macro to regenerate the golden values and compile a module
 macro(add_spatz_test_oneParam name file param1)
-  set(target_name ${name}_M${param1})
-  add_snitch_test(${target_name} ${file})
-  target_link_libraries(test-${SNITCH_TEST_PREFIX}${target_name} benchmark ${SNITCH_RUNTIME})
-  target_compile_definitions(test-${SNITCH_TEST_PREFIX}${target_name} PUBLIC DATAHEADER="data/data_${param1}.h")
+  if (BUILD_TESTS)
+    set(target_name ${name}_M${param1})
+    add_snitch_test(${target_name} ${file})
+    target_link_libraries(test-${SNITCH_TEST_PREFIX}${target_name} benchmark ${SNITCH_RUNTIME})
+    target_compile_definitions(test-${SNITCH_TEST_PREFIX}${target_name} PUBLIC DATAHEADER="data/data_${param1}.h")
+  endif()
 endmacro()
 
 macro(add_spatz_test_twoParam name file param1 param2)
+if (BUILD_TESTS)
   set(target_name ${name}_M${param1}_N${param2})
   add_snitch_test(${target_name} ${file})
   target_link_libraries(test-${SNITCH_TEST_PREFIX}${target_name} benchmark ${SNITCH_RUNTIME})
   target_compile_definitions(test-${SNITCH_TEST_PREFIX}${target_name} PUBLIC DATAHEADER="data/data_${param1}_${param2}.h")
+endif()
 endmacro()
 
 macro(add_spatz_test_threeParam name file param1 param2 param3)
+if (BUILD_TESTS)
   set(target_name ${name}_M${param1}_N${param2}_K${param3})
   add_snitch_test(${target_name} ${file})
   target_link_libraries(test-${SNITCH_TEST_PREFIX}${target_name} benchmark ${SNITCH_RUNTIME})
   target_compile_definitions(test-${SNITCH_TEST_PREFIX}${target_name} PUBLIC DATAHEADER="data/data_${param1}_${param2}_${param3}.h")
+  endif()
 endmacro()
 
 # Benchmark library
@@ -54,8 +60,8 @@ add_library(hp-fmatmul hp-fmatmul/kernel/hp-fmatmul.c)
 add_library(widening-hp-fmatmul widening-hp-fmatmul/kernel/widening-fmatmul.c)
 add_library(widening-bp-fmatmul widening-bp-fmatmul/kernel/widening-fmatmul.c)
 
-add_library(sdotp-hp-fmatmul sdotp-hp-fmatmul/kernel/sdotp-fmatmul.c)
-add_library(sdotp-bp-fmatmul sdotp-bp-fmatmul/kernel/sdotp-fmatmul.c)
+# add_library(sdotp-hp-fmatmul sdotp-hp-fmatmul/kernel/sdotp-fmatmul.c)
+# add_library(sdotp-bp-fmatmul sdotp-bp-fmatmul/kernel/sdotp-fmatmul.c)
 
 add_library(dp-faxpy dp-faxpy/kernel/faxpy.c)
 
@@ -88,14 +94,16 @@ add_spatz_test_threeParam(widening-bp-fmatmul widening-bp-fmatmul/main.c 64  128
 add_spatz_test_threeParam(widening-bp-fmatmul widening-bp-fmatmul/main.c 128 128 128)
 add_spatz_test_threeParam(widening-bp-fmatmul widening-bp-fmatmul/main.c 128 256 128)
 
-add_spatz_test_threeParam(sdotp-hp-fmatmul sdotp-hp-fmatmul/main.c 64  64  64 )
-add_spatz_test_threeParam(sdotp-hp-fmatmul sdotp-hp-fmatmul/main.c 64  128 64 )
-add_spatz_test_threeParam(sdotp-hp-fmatmul sdotp-hp-fmatmul/main.c 128 128 128)
+# Hero toolchain doew not support sftop at the moment
 
-add_spatz_test_threeParam(sdotp-bp-fmatmul sdotp-bp-fmatmul/main.c 64  64  64 )
-add_spatz_test_threeParam(sdotp-bp-fmatmul sdotp-bp-fmatmul/main.c 64  128 64 )
-add_spatz_test_threeParam(sdotp-bp-fmatmul sdotp-bp-fmatmul/main.c 128 128 128)
-add_spatz_test_threeParam(sdotp-bp-fmatmul sdotp-bp-fmatmul/main.c 128 256 128)
+# add_spatz_test_threeParam(sdotp-hp-fmatmul sdotp-hp-fmatmul/main.c 64  64  64 )
+# add_spatz_test_threeParam(sdotp-hp-fmatmul sdotp-hp-fmatmul/main.c 64  128 64 )
+# add_spatz_test_threeParam(sdotp-hp-fmatmul sdotp-hp-fmatmul/main.c 128 128 128)
+
+# add_spatz_test_threeParam(sdotp-bp-fmatmul sdotp-bp-fmatmul/main.c 64  64  64 )
+# add_spatz_test_threeParam(sdotp-bp-fmatmul sdotp-bp-fmatmul/main.c 64  128 64 )
+# add_spatz_test_threeParam(sdotp-bp-fmatmul sdotp-bp-fmatmul/main.c 128 128 128)
+# add_spatz_test_threeParam(sdotp-bp-fmatmul sdotp-bp-fmatmul/main.c 128 256 128)
 
 add_spatz_test_oneParam(dp-faxpy dp-faxpy/main.c 256)
 add_spatz_test_oneParam(dp-faxpy dp-faxpy/main.c 1024)
@@ -110,3 +118,5 @@ add_spatz_test_twoParam(dp-fft dp-fft/main.c 128 2)
 
 add_spatz_test_twoParam(sp-fft sp-fft/main.c 256 2)
 add_spatz_test_twoParam(sp-fft sp-fft/main.c 512 2)
+
+add_library(omptarget omptarget/main.c omptarget/sw_mailbox.c)
