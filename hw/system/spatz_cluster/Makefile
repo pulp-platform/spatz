@@ -177,7 +177,7 @@ lint/tmp/files: ${BENDER}
 ## Build SW into sw/build with the LLVM toolchain
 sw: clean.sw
 	mkdir -p sw/build
-	cd sw/build && ${CMAKE} -DLLVM_PATH=${LLVM_INSTALL_DIR} -DGCC_PATH=${GCC_INSTALL_DIR} -DHTIF_SERVER=${HTIF_SERVER}-DSPATZ_CFG_FILENAME=${SPATZ_CFG_FILENAME} -DPYTHON=${PYTHON} .. && make
+	cd sw/build && ${CMAKE} -DLLVM_PATH=${LLVM_INSTALL_DIR} -DGCC_PATH=${GCC_INSTALL_DIR} -DHTIF_SERVER=${HTIF_SERVER} -DSPATZ_CFG_FILENAME=${SPATZ_CFG_FILENAME} -DPYTHON=${PYTHON} .. && make
 
 # VSIM
 ## Build SW into sw/build with the LLVM toolchain (including tests) for Questasim simulator
