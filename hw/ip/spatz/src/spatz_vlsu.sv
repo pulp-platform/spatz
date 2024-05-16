@@ -30,11 +30,12 @@ module spatz_vlsu
     output logic                            vlsu_rsp_valid_o,
     output vlsu_rsp_t                       vlsu_rsp_o,
     // Interface with the VRF
-    output vrf_addr_t      [NrInterfaces-1:0]                 vrf_waddr_o,
-    output vrf_data_t      [NrInterfaces-1:0]                 vrf_wdata_o,
-    output logic           [NrInterfaces-1:0]                 vrf_we_o,
-    output vrf_be_t        [NrInterfaces-1:0]                 vrf_wbe_o,
-    input  logic           [NrInterfaces-1:0]                 vrf_wvalid_i,
+    output vrf_addr_t      [NrInterfaces-1:0] vrf_waddr_o,
+    output vrf_data_t      [NrInterfaces-1:0] vrf_wdata_o,
+    output logic           [NrInterfaces-1:0] vrf_we_o,
+    output vrf_be_t        [NrInterfaces-1:0] vrf_wbe_o,
+    input  logic           [NrInterfaces-1:0] vrf_wvalid_i,
+    
     output spatz_id_t      [2:0]            vrf_id_o,
     output vrf_addr_t      [1:0]            vrf_raddr_o,
     output logic           [1:0]            vrf_re_o,
@@ -377,33 +378,33 @@ module spatz_vlsu
   // For each FU that we have, count how many elements we have already loaded/stored.
   // Multiple counters are necessary for the case where not every single FU will
   // receive the same number of elements to work through.
-  vlen_t [N_FU-1:0]       commit_counter_max;
-  logic  [N_FU-1:0]       commit_counter_en;
-  logic  [N_FU-1:0]       commit_counter_load;
-  vlen_t [N_FU-1:0]       commit_counter_delta;
-  vlen_t [N_FU-1:0]       commit_counter_d;
-  vlen_t [N_FU-1:0]       commit_counter_q;
-  logic  [NrMemPorts-1:0] commit_finished_q;
-  logic  [NrMemPorts-1:0] commit_finished_d;
+  vlen_t [N_FU*NrMemPorts-1:0] commit_counter_max;
+  logic  [N_FU*NrMemPorts-1:0] commit_counter_en;
+  logic  [N_FU*NrMemPorts-1:0] commit_counter_load;
+  vlen_t [N_FU*NrMemPorts-1:0] commit_counter_delta;
+  vlen_t [N_FU*NrMemPorts-1:0] commit_counter_d;
+  vlen_t [N_FU*NrMemPorts-1:0] commit_counter_q;
+  logic  [N_FU*NrMemPorts-1:0] commit_finished_q;
+  logic  [N_FU*NrMemPorts-1:0] commit_finished_d;
 
-  for (genvar fu = 0; fu < N_FU; fu++) begin: gen_vreg_counters
+  for (genvar port = 0; port < N_FU*NrMemPorts; port++) begin: gen_vreg_counters
     delta_counter #(
       .WIDTH($bits(vlen_t))
     ) i_delta_counter_vreg (
-      .clk_i     (clk_i                   ),
-      .rst_ni    (rst_ni                  ),
-      .clear_i   (1'b0                    ),
-      .en_i      (commit_counter_en[fu]   ),
-      .load_i    (commit_counter_load[fu] ),
-      .down_i    (1'b0                    ), // We always count up
-      .delta_i   (commit_counter_delta[fu]),
-      .d_i       (commit_counter_d[fu]    ),
-      .q_o       (commit_counter_q[fu]    ),
-      .overflow_o(/* Unused */            )
+      .clk_i     (clk_i                     ),
+      .rst_ni    (rst_ni                    ),
+      .clear_i   (1'b0                      ),
+      .en_i      (commit_counter_en[port]   ),
+      .load_i    (commit_counter_load[port] ),
+      .down_i    (1'b0                      ), // We always count up
+      .delta_i   (commit_counter_delta[port]),
+      .d_i       (commit_counter_d[port]    ),
+      .q_o       (commit_counter_q[port]    ),
+      .overflow_o(/* Unused */              )
     );
 
-    assign commit_finished_q[fu] = commit_insn_valid && (commit_counter_q[fu] == commit_counter_max[fu]);
-    assign commit_finished_d[fu] = commit_insn_valid && ((commit_counter_q[fu] + commit_counter_delta[fu]) == commit_counter_max[fu]);
+    assign commit_finished_q[port] = commit_insn_valid && (commit_counter_q[port] == commit_counter_max[port]);
+    assign commit_finished_d[port] = commit_insn_valid && ((commit_counter_q[port] + commit_counter_delta[port]) == commit_counter_max[port]);
   end: gen_vreg_counters
 
   ////////////////////////
@@ -443,7 +444,7 @@ module spatz_vlsu
         automatic logic [1:0] data_index_width_diff = int'(mem_spatz_req.vtype.vsew) - int'(mem_spatz_req.op_mem.ew);
 
         // Pointer to index
-        automatic logic [idx_width(N_FU*ELENB)-1:0] word_index = (port << (MAXEW - data_index_width_diff)) + (maxew_t'(idx_offset << data_index_width_diff) >> data_index_width_diff) + (maxew_t'(idx_offset >> (MAXEW - data_index_width_diff)) << (MAXEW - data_index_width_diff)) * NrMemPorts;
+        automatic logic [idx_width(N_FU*NrMemPorts*ELENB)-1:0] word_index = (port << (MAXEW - data_index_width_diff)) + (maxew_t'(idx_offset << data_index_width_diff) >> data_index_width_diff) + (maxew_t'(idx_offset >> (MAXEW - data_index_width_diff)) << (MAXEW - data_index_width_diff)) * NrMemPorts;
 
         // Index
         unique case (mem_spatz_req.op_mem.ew)
@@ -509,8 +510,8 @@ module spatz_vlsu
   end: control_proc
 
   // Is the VRF operation valid and are we at the last one?
-  logic [N_FU-1:0] commit_operation_valid;
-  logic [N_FU-1:0] commit_operation_last;
+  logic [N_FU*NrMemPorts-1:0] commit_operation_valid;
+  logic [N_FU*NrMemPorts-1:0] commit_operation_last;
 
   // Is instruction a load?
   logic mem_is_load;
@@ -558,9 +559,9 @@ module spatz_vlsu
   ////////////////////
 
   // Store the offsets of all loads, for realigning
-  addr_offset_t [NrMemPorts-1:0] vreg_addr_offset;
-  logic [NrMemPorts-1:0] offset_queue_full;
-  for (genvar port = 0; port < NrMemPorts; port++) begin : gen_offset_queue
+  addr_offset_t [N_FU*rMemPorts-1:0] vreg_addr_offset;
+  logic [N_FU*NrMemPorts-1:0] offset_queue_full;
+  for (genvar port = 0; port < N_FU*NrMemPorts; port++) begin : gen_offset_queue
     fifo_v3 #(
       .DATA_WIDTH(int'(MAXEW)       ),
       .DEPTH     (NrOutstandingLoads)
@@ -627,40 +628,40 @@ module spatz_vlsu
   // Do we need to catch up to reach element idx parity? (Because of non-zero vstart)
   vlen_t vreg_start_0;
   assign vreg_start_0 = vlen_t'(commit_insn_q.vstart[$clog2(ELENB)-1:0]);
-  logic [N_FU-1:0] catchup;
-  for (genvar i = 0; i < N_FU; i++) begin: gen_catchup
+  logic [N_FU*NrMemPorts-1:0] catchup;
+  for (genvar i = 0; i < N_FU*NrMemPorts; i++) begin: gen_catchup
     assign catchup[i] = (commit_counter_q[i] < vreg_start_0) & (commit_counter_max[i] != commit_counter_q[i]);
   end: gen_catchup
 
-  for (genvar fu = 0; fu < N_FU; fu++) begin: gen_vreg_counter_proc
+  for (genvar fu = 0; fu < N_FU*NrMemPorts; fu++) begin: gen_vreg_counter_proc
     // The total amount of elements we have to work through
     vlen_t max_elements;
 
     always_comb begin
       // Default value
-      max_elements = (commit_insn_q.vl >> $clog2(N_FU*ELENB)) << $clog2(ELENB);
+      max_elements = (commit_insn_q.vl >> $clog2(N_FU*NrMemPorts*ELENB)) << $clog2(ELENB);
 
       // Full transfer
-      if (commit_insn_q.vl[$clog2(ELENB) +: $clog2(N_FU)] > fu)
+      if (commit_insn_q.vl[$clog2(ELENB) +: $clog2(N_FU*NrMemPorts)] > fu)
         max_elements += ELENB;
-      else if (commit_insn_q.vl[$clog2(N_FU*ELENB)-1:$clog2(ELENB)] == fu)
+      else if (commit_insn_q.vl[$clog2(N_FU*NrMemPorts*ELENB)-1:$clog2(ELENB)] == fu)
         max_elements += commit_insn_q.vl[$clog2(ELENB)-1:0];
 
-      commit_counter_load[fu] = commit_insn_pop;
-      commit_counter_d[fu]    = (commit_insn_q.vstart >> $clog2(N_FU*ELENB)) << $clog2(ELENB);
-      if (commit_insn_q.vstart[$clog2(N_FU*ELENB)-1:$clog2(ELENB)] > fu)
-        commit_counter_d[fu] += ELENB;
-      else if (commit_insn_q.vstart[idx_width(N_FU*ELENB)-1:$clog2(ELENB)] == fu)
-        commit_counter_d[fu] += commit_insn_q.vstart[$clog2(ELENB)-1:0];
-      commit_operation_valid[fu] = commit_insn_valid && (commit_counter_q[fu] != max_elements) && (catchup[fu] || (!catchup[fu] && ~|catchup));
-      commit_operation_last[fu]  = commit_operation_valid[fu] && ((max_elements - commit_counter_q[fu]) <= (commit_is_single_element_operation ? commit_single_element_size : ELENB));
-      commit_counter_delta[fu]   = !commit_operation_valid[fu] ? vlen_t'('d0) : commit_is_single_element_operation ? vlen_t'(commit_single_element_size) : commit_operation_last[fu] ? (max_elements - commit_counter_q[fu]) : vlen_t'(ELENB);
-      commit_counter_en[fu]      = commit_operation_valid[fu] && (commit_insn_q.is_load && vrf_req_valid_d && vrf_req_ready_d) || (!commit_insn_q.is_load && vrf_rvalid_i[0] && vrf_re_o[0] && (!mem_is_indexed || vrf_rvalid_i[1]));
-      commit_counter_max[fu]     = max_elements;
+      commit_counter_load[port] = commit_insn_pop;
+      commit_counter_d[port]    = (commit_insn_q.vstart >> $clog2(N_FU*NrMemPorts*ELENB)) << $clog2(ELENB);
+      if (commit_insn_q.vstart[$clog2(N_FU*NrMemPorts*ELENB)-1:$clog2(ELENB)] > fu)
+        commit_counter_d[port] += ELENB;
+      else if (commit_insn_q.vstart[idx_width(N_FU*NrMemPorts*ELENB)-1:$clog2(ELENB)] == fu)
+        commit_counter_d[port] += commit_insn_q.vstart[$clog2(ELENB)-1:0];
+      commit_operation_valid[port] = commit_insn_valid && (commit_counter_q[port] != max_elements) && (catchup[port] || (!catchup[port] && ~|catchup));
+      commit_operation_last[port]  = commit_operation_valid[port] && ((max_elements - commit_counter_q[port]) <= (commit_is_single_element_operation ? commit_single_element_size : ELENB));
+      commit_counter_delta[port]   = !commit_operation_valid[port] ? vlen_t'('d0) : commit_is_single_element_operation ? vlen_t'(commit_single_element_size) : commit_operation_last[port] ? (max_elements - commit_counter_q[port]) : vlen_t'(ELENB);
+      commit_counter_en[port]      = commit_operation_valid[port] && (commit_insn_q.is_load && vrf_req_valid_d && vrf_req_ready_d) || (!commit_insn_q.is_load && vrf_rvalid_i[0] && vrf_re_o[0] && (!mem_is_indexed || vrf_rvalid_i[1]));
+      commit_counter_max[port]     = max_elements;
     end
   end
 
-  assign vd_elem_id = (commit_counter_q[0] > vreg_start_0) ? commit_counter_q[0] >> $clog2(ELENB) : commit_counter_q[N_FU-1] >> $clog2(ELENB);
+  assign vd_elem_id = (commit_counter_q[0] > vreg_start_0) ? commit_counter_q[0] >> $clog2(ELENB) : commit_counter_q[N_FU*NrMemPorts-1] >> $clog2(ELENB);
 
   for (genvar port = 0; port < NrMemPorts; port++) begin: gen_mem_counter_proc
     // The total amount of elements we have to work through
