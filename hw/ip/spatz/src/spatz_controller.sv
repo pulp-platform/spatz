@@ -14,12 +14,15 @@ module spatz_controller
   import fpnew_pkg::roundmode_e;
   import fpnew_pkg::fmt_mode_t;
   #(
+    parameter int  unsigned NrMemPorts        = 1,
     parameter int  unsigned NrVregfilePorts   = 1,
     parameter int  unsigned NrWritePorts      = 1,
     parameter bit           RegisterRsp       = 0,
     parameter type          spatz_issue_req_t = logic,
     parameter type          spatz_issue_rsp_t = logic,
-    parameter type          spatz_rsp_t       = logic
+    parameter type          spatz_rsp_t       = logic,
+    // Dependant parameters. DO NOT CHANGE!
+    localparam int  unsigned NrInterfaces     = NrMemPorts / spatz_pkg::N_FU
   ) (
     input  logic                                   clk_i,
     input  logic                                   rst_ni,
@@ -238,8 +241,14 @@ module spatz_controller
   `FF(scoreboard_q, scoreboard_d, '0)
 
   // Did the instruction write to the VRF in the previous cycle?
-  logic [NrParallelInstructions-1:0] wrote_result_q, wrote_result_d;
+  logic [NrInterfaces-1:0] [NrParallelInstructions-1:0] wrote_result_q, wrote_result_d;
+  // Did the instruction write to the VRF in the previous cycle with all its interfaces?
+  logic [NrParallelInstructions-1:0] wrote_result_all_intf_q;
   `FF(wrote_result_q, wrote_result_d, '0)
+
+  // Did the instruction write twice to the VRF in the previous two cycles?
+  logic [NrParallelInstructions-1:0] wrote_result_twice_d, wrote_result_twice_q;
+  `FF(wrote_result_twice_q, wrote_result_twice_d, '0)
 
   // Is this instruction a narrowing or widening instruction?
   logic [NrParallelInstructions-1:0] narrow_wide_q, narrow_wide_d;
@@ -258,29 +267,44 @@ module spatz_controller
     wrote_result_narrowing_d = wrote_result_narrowing_q;
 
     // Nobody wrote to the VRF yet
-    wrote_result_d = '0;
-    sb_enable_o    = '0;
+    wrote_result_twice_d = '0;
+    wrote_result_d       = '0;
+    sb_enable_o          = '0;
 
-    for (int unsigned port = 0; port < NrVregfilePorts; port++)
+    wrote_result_all_intf_q = '1;
+    for (int unsigned intf = 0; intf < NrInterfaces; intf++)
+      wrote_result_all_intf_q &= wrote_result_q[intf];
+
+    for (int unsigned port = 0; port < NrVregfilePorts; port++) begin
       // Enable the VRF port if the dependant instructions wrote in the previous cycle
-      sb_enable_o[port] = sb_enable_i[port] && &(~scoreboard_q[sb_id_i[port]].deps | wrote_result_q) && (!(|scoreboard_q[sb_id_i[port]].deps) || !scoreboard_q[sb_id_i[port]].prevent_chaining);
+      sb_enable_o[port] = sb_enable_i[port] && &(~scoreboard_q[sb_id_i[port]].deps | wrote_result_all_intf_q) && (!(|scoreboard_q[sb_id_i[port]].deps) || !scoreboard_q[sb_id_i[port]].prevent_chaining);
+
+      // Handle WAW, RAW when the second instruction has more interfaces than the first one.
+      // Mask VRF request of the multi-intf instruction unless the first instruction has written twice.
+      if (port inside {[SB_VLSU_VD_WD0:SB_VLSU_VD_WD1]} || port inside {[SB_VLSU_VS2_RD0:SB_VLSU_VD_RD1]})
+        sb_enable_o[port] &= &(~scoreboard_q[sb_id_i[port]].deps | wrote_result_twice_q);
+    end
 
     // Store the decisions
     if (sb_enable_o[SB_VFU_VD_WD]) begin
+      wrote_result_twice_d[sb_id_i[SB_VFU_VD_WD]]     = wrote_result_all_intf_q[sb_id_i[SB_VFU_VD_WD]] && sb_wrote_result_i[SB_VFU_VD_WD - SB_VFU_VD_WD] && !wrote_result_twice_q[sb_id_i[SB_VFU_VD_WD]];
       wrote_result_narrowing_d[sb_id_i[SB_VFU_VD_WD]] = sb_wrote_result_i[SB_VFU_VD_WD - SB_VFU_VD_WD] ^ narrow_wide_q[sb_id_i[SB_VFU_VD_WD]];
-      wrote_result_d[sb_id_i[SB_VFU_VD_WD]]           = sb_wrote_result_i[SB_VFU_VD_WD - SB_VFU_VD_WD] && (!narrow_wide_q[sb_id_i[SB_VFU_VD_WD]] || wrote_result_narrowing_q[sb_id_i[SB_VFU_VD_WD]]);
+      wrote_result_d[sb_id_i[SB_VFU_VD_WD]]           = {2{sb_wrote_result_i[SB_VFU_VD_WD - SB_VFU_VD_WD] && (!narrow_wide_q[sb_id_i[SB_VFU_VD_WD]] || wrote_result_narrowing_q[sb_id_i[SB_VFU_VD_WD]])}};
     end
     if (sb_enable_o[SB_VLSU_VD_WD0]) begin
       wrote_result_narrowing_d[sb_id_i[SB_VLSU_VD_WD0]] = sb_wrote_result_i[SB_VLSU_VD_WD0 - SB_VFU_VD_WD] ^ narrow_wide_q[sb_id_i[SB_VLSU_VD_WD0]];
-      wrote_result_d[sb_id_i[SB_VLSU_VD_WD0]]           = sb_wrote_result_i[SB_VLSU_VD_WD0 - SB_VFU_VD_WD] && (!narrow_wide_q[sb_id_i[SB_VLSU_VD_WD0]] || wrote_result_narrowing_q[sb_id_i[SB_VLSU_VD_WD0]]);
+      wrote_result_d[0][sb_id_i[SB_VLSU_VD_WD0]]        = sb_wrote_result_i[SB_VLSU_VD_WD0 - SB_VFU_VD_WD] && (!narrow_wide_q[sb_id_i[SB_VLSU_VD_WD0]] || wrote_result_narrowing_q[sb_id_i[SB_VLSU_VD_WD0]]);
     end
     if (sb_enable_o[SB_VLSU_VD_WD1]) begin
       wrote_result_narrowing_d[sb_id_i[SB_VLSU_VD_WD1]] = sb_wrote_result_i[SB_VLSU_VD_WD1 - SB_VFU_VD_WD] ^ narrow_wide_q[sb_id_i[SB_VLSU_VD_WD1]];
-      wrote_result_d[sb_id_i[SB_VLSU_VD_WD1]]           = sb_wrote_result_i[SB_VLSU_VD_WD1 - SB_VFU_VD_WD] && (!narrow_wide_q[sb_id_i[SB_VLSU_VD_WD1]] || wrote_result_narrowing_q[sb_id_i[SB_VLSU_VD_WD1]]);
+      wrote_result_d[1][sb_id_i[SB_VLSU_VD_WD1]]        = sb_wrote_result_i[SB_VLSU_VD_WD1 - SB_VFU_VD_WD] && (!narrow_wide_q[sb_id_i[SB_VLSU_VD_WD1]] || wrote_result_narrowing_q[sb_id_i[SB_VLSU_VD_WD1]]);
+      // A multi-intf instruction writes back twice when both the interfaces have written back
+      wrote_result_twice_d[sb_id_i[SB_VLSU_VD_WD1]]     = wrote_result_d[0][sb_id_i[SB_VLSU_VD_WD0]] && wrote_result_d[1][sb_id_i[SB_VLSU_VD_WD1]];
     end
     if (sb_enable_o[SB_VSLDU_VD_WD]) begin
+      wrote_result_twice_d[sb_id_i[SB_VSLDU_VD_WD]]     = wrote_result_all_intf_q[sb_id_i[SB_VSLDU_VD_WD]] && sb_wrote_result_i[SB_VSLDU_VD_WD - SB_VFU_VD_WD] && !wrote_result_twice_q[sb_id_i[SB_VSLDU_VD_WD]];
       wrote_result_narrowing_d[sb_id_i[SB_VSLDU_VD_WD]] = sb_wrote_result_i[SB_VSLDU_VD_WD - SB_VFU_VD_WD] ^ narrow_wide_q[sb_id_i[SB_VSLDU_VD_WD]];
-      wrote_result_d[sb_id_i[SB_VSLDU_VD_WD]]           = sb_wrote_result_i[SB_VSLDU_VD_WD - SB_VFU_VD_WD] && (!narrow_wide_q[sb_id_i[SB_VSLDU_VD_WD]] || wrote_result_narrowing_q[sb_id_i[SB_VSLDU_VD_WD]]);
+      wrote_result_d[sb_id_i[SB_VSLDU_VD_WD]]           = {2{sb_wrote_result_i[SB_VSLDU_VD_WD - SB_VFU_VD_WD] && (!narrow_wide_q[sb_id_i[SB_VSLDU_VD_WD]] || wrote_result_narrowing_q[sb_id_i[SB_VSLDU_VD_WD]])}};
     end
 
     // A unit has finished its VRF access. Reset the scoreboard. For each instruction, check
