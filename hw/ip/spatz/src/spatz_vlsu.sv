@@ -12,7 +12,7 @@ module spatz_vlsu
   import rvv_pkg::*;
   import cf_math_pkg::idx_width; #(
     parameter int unsigned   NrMemPorts         = 1,
-    parameter int unsigned   NrOutstandingLoads = 8,
+    parameter int unsigned   NrOutstandingLoads = 16,
     // Memory request
     parameter  type          spatz_mem_req_t    = logic,
     parameter  type          spatz_mem_rsp_t    = logic,
