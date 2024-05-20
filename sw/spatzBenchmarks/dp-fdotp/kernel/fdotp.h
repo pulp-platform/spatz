@@ -19,11 +19,13 @@
 #ifndef _FDOTPROD_H_
 #define _FDOTPROD_H_
 
-inline double fdotp_v64b(const double *a, const double *b, unsigned int avl)
+inline double fdotp_v64b_m8(const double *a, const double *b, unsigned int avl)
     __attribute__((always_inline));
-inline float fdotp_v32b(const float *a, const float *b, unsigned int avl)
+inline double fdotp_v64b_m8_unrl(const double *a, const double *b, unsigned int avl)
     __attribute__((always_inline));
-inline _Float16 fdotp_v16b(const _Float16 *a, const _Float16 *b,
+inline float fdotp_v32b_m8(const float *a, const float *b, unsigned int avl)
+    __attribute__((always_inline));
+inline _Float16 fdotp_v16b_m8(const _Float16 *a, const _Float16 *b,
                            unsigned int avl) __attribute__((always_inline));
 
 #endif
