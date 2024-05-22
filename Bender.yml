@@ -140,7 +140,12 @@ sources:
   # Level 2
   - hw/ip/spatz/src/spatz_decoder.sv
   - hw/ip/spatz/src/spatz_simd_lane.sv
-  - hw/ip/spatz/src/vregfile.sv
+  - target: fpga
+    files:
+      - hw/ip/spatz/src/vregfile_fpga.sv
+  - target: not(fpga)
+    files:
+      - hw/ip/spatz/src/vregfile.sv
   # Level 3
   - hw/ip/spatz/src/spatz_fpu_sequencer.sv
   - hw/ip/spatz/src/spatz_ipu.sv
