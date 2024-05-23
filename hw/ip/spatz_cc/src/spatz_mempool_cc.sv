@@ -37,15 +37,16 @@ module spatz_mempool_cc
   parameter int unsigned        TileLen                = 0,
   parameter int unsigned        NumBanks               = 0
 ) (
-  input  logic                                        clk_i,
-  input  logic                                        rst_i,
-  input  logic [31:0]                                 hart_id_i,
-  // Instruction Port
-  output logic [31:0]                                 inst_addr_o,
-  input  logic [31:0]                                 inst_data_i,
-  output logic                                        inst_valid_o,
-  input  logic                                        inst_ready_i,
-  // TCDM Ports
+  input  logic                               clk_i,
+  input  logic                               rst_i,
+  input  logic [31:0]                        hart_id_i,
+  /// Instruction Port
+  output logic [31:0]                        inst_addr_o,
+  input  logic [31:0]                        inst_data_i,
+  output logic                               inst_valid_o,
+  input  logic                               inst_ready_i,
+  /// TCDM Ports
+  //  Request Side
   output logic       [TCDMPorts-1:0][31:0]   data_qaddr_o,
   output logic       [TCDMPorts-1:0]         data_qwrite_o,
   output logic       [TCDMPorts-1:0][3:0]    data_qamo_o,
@@ -55,6 +56,7 @@ module spatz_mempool_cc
   output logic       [TCDMPorts-1:0]         data_qvalid_o,
   output tcdm_breq_t [TCDMPorts-1:0]         data_qburst_o,
   input  logic       [TCDMPorts-1:0]         data_qready_i,
+  //  Response Side
   input  logic       [TCDMPorts-1:0][31:0]   data_pdata_i,
   input  logic       [TCDMPorts-1:0]         data_pwrite_i,
   input  logic       [TCDMPorts-1:0]         data_perror_i,
@@ -73,8 +75,6 @@ module spatz_mempool_cc
   // --------
   import spatz_pkg::*;
 
-  // TODO Diyou: dreq_t and drsp_t are not consistent in spatz, mempool and here
-
   typedef struct packed {
     logic accept;
     logic writeback;
@@ -87,6 +87,7 @@ module spatz_mempool_cc
   typedef logic [31:0] data_t;
   typedef logic [3:0]  strb_t;
 
+  // fpnew setups
   localparam fpnew_pkg::fpu_implementation_t FPUImplementation = spatz_pkg::MemPoolFPUImpl;
 
 
@@ -95,7 +96,7 @@ module spatz_mempool_cc
   // ----------------
 
   // Data port signals
-  snitch_pkg::dreq_t  data_req_d, data_req_q, snitch_req, fp_lsu_req;
+  snitch_pkg::dreq_t  data_req_d,  data_req_q,  snitch_req,  fp_lsu_req;
   snitch_pkg::dresp_t data_resp_d, data_resp_q, snitch_resp, fp_lsu_rsp;
 
   logic data_req_d_valid, data_req_d_ready, data_resp_d_valid, data_resp_d_ready;
@@ -103,27 +104,21 @@ module spatz_mempool_cc
   logic snitch_req_valid, snitch_req_ready, snitch_resp_valid, snitch_resp_ready;
 
   // Accelerator signals
-  // TODO Diyou: do we need to change name to acc_issue_req_t to keep the same convention as in spatz?
   snitch_pkg::acc_req_t  acc_req_d,  acc_req_q;
   snitch_pkg::acc_resp_t acc_resp_d, acc_resp_q;
 
   logic acc_req_d_valid, acc_req_d_ready, acc_resp_d_valid, acc_resp_d_ready;
   logic acc_req_q_valid, acc_req_q_ready, acc_resp_q_valid, acc_resp_q_ready;
 
-
-  // Spatz Memory consistency signals
+  // Spatz memory consistency signals
   logic [1:0] spatz_mem_finished;
   logic [1:0] spatz_mem_str_finished;
 
   // Spatz floating point signals
   fpnew_pkg::roundmode_e fpu_rnd_mode;
-  fpnew_pkg::fmt_mode_t fpu_fmt_mode;
-  fpnew_pkg::status_t fpu_status;
-  acc_issue_rsp_t acc_req_rsp;
-
-  // Spatz floating point mem signals
-  // reqrsp_req_t fp_lsu_mem_req;
-  // reqrsp_rsp_t fp_lsu_mem_rsp;
+  fpnew_pkg::fmt_mode_t  fpu_fmt_mode;
+  fpnew_pkg::status_t    fpu_status;
+  acc_issue_rsp_t        acc_req_rsp;
 
   // Spatz TCDM mem ports
   spatz_mem_req_t [NumMemPortsPerSpatz-1:0] spatz_mem_req;
@@ -161,10 +156,12 @@ module spatz_mempool_cc
     .clk_i                  ( clk_i                  ),
     .rst_i                  ( rst_i                  ),
     .hart_id_i              ( hart_id_i              ),
+    /// Instruction
     .inst_addr_o            ( inst_addr_o            ),
     .inst_data_i            ( inst_data_i            ),
     .inst_valid_o           ( inst_valid_o           ),
     .inst_ready_i           ( inst_ready_i           ),
+    /// Spatz
     .acc_qaddr_o            ( acc_req_d.addr         ),
     .acc_qid_o              ( acc_req_d.id           ),
     .acc_qdata_op_o         ( acc_req_d.data_op      ),
@@ -182,6 +179,7 @@ module spatz_mempool_cc
     .acc_qdata_rsp_i        ( acc_req_rsp            ),
     .acc_mem_finished_i     ( spatz_mem_finished     ),
     .acc_mem_str_finished_i ( spatz_mem_str_finished ),
+    /// TCDM
     .data_qaddr_o           ( snitch_req.addr        ),
     .data_qwrite_o          ( snitch_req.write       ),
     .data_qamo_o            ( snitch_req.amo         ),
@@ -201,9 +199,10 @@ module spatz_mempool_cc
     .fpu_status_i           ( fpu_status             ),
     .core_events_o          ( core_events_o          )
   );
+  // Snitch does not have ability to send burst request
   assign snitch_req.rburst = '0;
 
-  assign acc_req_q = acc_req_d;
+  assign acc_req_q       = acc_req_d;
   assign acc_req_q_valid = acc_req_d_valid;
   assign acc_req_d_ready = acc_req_q_ready;
 
@@ -243,6 +242,7 @@ module spatz_mempool_cc
     .rst_ni                  ( ~rst_i                ),
     .testmode_i              ( 1'b0                  ),
     .hart_id_i               ( hart_id_i             ),
+    /// instruction
     .issue_valid_i           ( acc_req_q_valid       ),
     .issue_ready_o           ( acc_req_q_ready       ),
     .issue_req_i             ( acc_req_q             ),
@@ -250,13 +250,15 @@ module spatz_mempool_cc
     .rsp_valid_o             ( acc_resp_d_valid      ),
     .rsp_ready_i             ( acc_resp_d_ready      ),
     .rsp_o                   ( acc_resp_d            ),
+    /// VLSU
     .spatz_mem_req_o         ( spatz_mem_req         ),
     .spatz_mem_req_valid_o   ( spatz_mem_req_valid   ),
     .spatz_mem_req_ready_i   ( spatz_mem_req_ready   ),
     .spatz_mem_rsp_i         ( spatz_mem_rsp         ),
-    .spatz_mem_rsp_valid_i   ( spatz_mem_rsp_valid   ),// ***notice no ready signal here***
+    .spatz_mem_rsp_valid_i   ( spatz_mem_rsp_valid   ),
     .spatz_mem_finished_o    ( spatz_mem_finished    ),
     .spatz_mem_str_finished_o( spatz_mem_str_finished),
+    /// FP Sequencer
     .fp_lsu_mem_req_o        ( fp_lsu_mem_req        ),
     .fp_lsu_mem_req_valid_o  ( fp_lsu_mem_req_valid  ),
     .fp_lsu_mem_req_ready_i  ( fp_lsu_mem_req_ready  ),
@@ -268,33 +270,36 @@ module spatz_mempool_cc
     .fpu_status_o            ( fpu_status            )
   );
 
-  // TODO: Perhaps put it into a module
-  // Assign TCDM data interface
+  // Spatz VLSU to TCDM
   for (genvar i = 0; i < NumMemPortsPerSpatz; i++) begin : gen_tcdm_assignment
-    assign data_qaddr_o[i+1]       = spatz_mem_req[i].addr;
+    // request
+    assign data_qaddr_o [i+1]      = spatz_mem_req[i].addr;
     assign data_qwrite_o[i+1]      = spatz_mem_req[i].write;
-    assign data_qamo_o[i+1]        = '0;
-    assign data_qdata_o[i+1]       = spatz_mem_req[i].data;
+    assign data_qamo_o  [i+1]      = '0;
+    assign data_qdata_o [i+1]      = spatz_mem_req[i].data;
     assign data_qburst_o[i+1]      = '{
       burst  : spatz_mem_req[i].rburst.burst,
       blen   : spatz_mem_req[i].rburst.blen,
       default: '0
     };
     assign data_qstrb_o[i+1]       = spatz_mem_req[i].strb;
-    // fill the not used fields by 0
-    assign data_qid_o[i+1]         = ('0 | spatz_mem_req[i].id);
+    assign data_qid_o[i+1]         = spatz_mem_req[i].id;
+    // req handshaking
     assign data_qvalid_o[i+1]      = spatz_mem_req_valid[i];
     assign spatz_mem_req_ready[i]  = data_qready_i[i+1];
+
+    // response
     assign spatz_mem_rsp[i].data   = data_pdata_i[i+1];
     assign spatz_mem_rsp[i].write  = data_pwrite_i[i+1];
     assign spatz_mem_rsp[i].id     = data_pid_i[i+1];
     assign spatz_mem_rsp[i].err    = data_perror_i[i+1];
-    assign spatz_mem_rsp_valid[i]  = data_pvalid_i[i+1];
     assign spatz_mem_rsp[i].gdata  = data_pgre_i[i+1];
-    // *** no ready signal for spatz here, tie to 1 ***
+    // rsp handshaking
+    assign spatz_mem_rsp_valid[i]  = data_pvalid_i[i+1];
     assign data_pready_o[i+1]      = '1;
   end
 
+  // Spatz FP Sequencer to TCDM
   assign fp_lsu_req = '{
     addr   : fp_lsu_mem_req.addr,
     id     : fp_lsu_mem_req.id,
@@ -305,24 +310,25 @@ module spatz_mempool_cc
   };
 
   assign fp_lsu_mem_rsp = '{
-    id  :  fp_lsu_rsp.id,
-    data:  fp_lsu_rsp.data,
-    err :  fp_lsu_rsp.error,
-    write: fp_lsu_rsp.write,
+    id     : fp_lsu_rsp.id,
+    data   : fp_lsu_rsp.data,
+    err    : fp_lsu_rsp.error,
+    write  : fp_lsu_rsp.write,
     default: '0
   };
 
+  // Arbitrate Snitch and Spatz FP Sequencer
   if (RVF || RVD) begin: gen_id_remapper
-    // Merge Snitch and FP Subsequencer memory interfaces
+    // Merge Snitch and FP Sequencer memory interfaces
     tcdm_id_remapper #(
       .NumIn(2)
     ) i_id_remapper (
       .clk_i       (clk_i                                     ),
       .rst_ni      (~rst_i                                    ),
-      .req_i       ({fp_lsu_req, snitch_req}                  ),
+      .req_i       ({fp_lsu_req,           snitch_req}        ),
       .req_valid_i ({fp_lsu_mem_req_valid, snitch_req_valid}  ),
       .req_ready_o ({fp_lsu_mem_req_ready, snitch_req_ready}  ),
-      .resp_o      ({fp_lsu_rsp, snitch_resp}                 ),
+      .resp_o      ({fp_lsu_rsp,           snitch_resp}       ),
       .resp_valid_o({fp_lsu_mem_rsp_valid, snitch_resp_valid} ),
       .resp_ready_i({fp_lsu_mem_rsp_ready, snitch_resp_ready} ),
       .req_o       (data_req_d                                ),
@@ -334,13 +340,13 @@ module spatz_mempool_cc
     );
   end: gen_id_remapper else begin: gen_id_remapper_bypass
     // Bypass the remapper
-    assign data_req_d       = snitch_req;
-    assign data_req_d_valid = snitch_req_valid;
-    assign snitch_req_ready = data_req_d_ready;
+    assign data_req_d           = snitch_req;
+    assign data_req_d_valid     = snitch_req_valid;
+    assign snitch_req_ready     = data_req_d_ready;
 
-    assign snitch_resp       = data_resp_q;
-    assign snitch_resp_valid = data_resp_q_valid;
-    assign data_resp_q_ready = snitch_resp_ready;
+    assign snitch_resp          = data_resp_q;
+    assign snitch_resp_valid    = data_resp_q_valid;
+    assign data_resp_q_ready    = snitch_resp_ready;
 
     assign fp_lsu_rsp           = '0;
     assign fp_lsu_mem_rsp_valid = 1'b0;
@@ -353,7 +359,7 @@ module spatz_mempool_cc
     .T      ( snitch_pkg::dreq_t ),
     .Bypass ( !RegisterTCDMReq   )
   ) i_spill_register_tcdm_req (
-    .clk_i                       ,
+    .clk_i   ( clk_i            ),
     .rst_ni  ( ~rst_i           ),
     .valid_i ( data_req_d_valid ),
     .ready_o ( data_req_d_ready ),
@@ -368,8 +374,8 @@ module spatz_mempool_cc
     .T      ( snitch_pkg::dresp_t ),
     .Bypass ( !RegisterTCDMResp   )
   ) i_spill_register_tcdm_resp (
-    .clk_i                       ,
-    .rst_ni  ( ~rst_i           ),
+    .clk_i   ( clk_i             ),
+    .rst_ni  ( ~rst_i            ),
     .valid_i ( data_resp_d_valid ),
     .ready_o ( data_resp_d_ready ),
     .data_i  ( data_resp_d       ),
@@ -379,18 +385,18 @@ module spatz_mempool_cc
   );
 
   // Assign TCDM data interface
-  assign data_qaddr_o[0]      = data_req_q.addr;
+  assign data_qaddr_o [0]     = data_req_q.addr;
   assign data_qwrite_o[0]     = data_req_q.write;
-  assign data_qamo_o[0]       = data_req_q.amo;
-  assign data_qdata_o[0]      = data_req_q.data;
+  assign data_qamo_o  [0]     = data_req_q.amo;
+  assign data_qdata_o [0]     = data_req_q.data;
   assign data_qburst_o[0]     = '0;
-  assign data_qstrb_o[0]      = data_req_q.strb;
-  assign data_qid_o[0]        = data_req_q.id;
+  assign data_qstrb_o [0]     = data_req_q.strb;
+  assign data_qid_o   [0]     = data_req_q.id;
   assign data_qvalid_o[0]     = data_req_q_valid;
   assign data_req_q_ready     = data_qready_i[0];
-  assign data_resp_d.data     = data_pdata_i[0];
-  assign data_resp_d.id       = data_pid_i[0];
-  assign data_resp_d.write    = '0; // Don't care here
+  assign data_resp_d.data     = data_pdata_i [0];
+  assign data_resp_d.id       = data_pid_i   [0];
+  assign data_resp_d.write    = '0;
   // grouped responses will only be sent for vector load
   assign data_resp_d.gdata    = '0;
   assign data_resp_d.error    = data_perror_i[0];

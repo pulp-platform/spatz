@@ -327,8 +327,8 @@ package spatz_pkg;
     logic [1:0] mode;
     logic [1:0] size;
     logic write;
-    logic [DataWidth/8-1:0] strb;
-    logic [DataWidth-1:0] data;
+    logic [3:0] strb;
+    logic [31:0] data;
     logic last;
     logic spec;
     tcdm_breq_t rburst;
@@ -336,7 +336,7 @@ package spatz_pkg;
 
   typedef struct packed {
     spatz_mem_id_t id;
-    logic [DataWidth-1:0] data;
+    logic [31:0] data;
     logic err;
     logic write;
     tcdm_gre_t gdata;
