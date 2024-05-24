@@ -802,6 +802,7 @@ module spatz_decoder
           spatz_req.vs2                = arith_s2;
           spatz_req.use_vs2            = 1'b1;
           spatz_req.op_arith.is_scalar = 1'b1;
+          spatz_req.vtype.vsew         = decoder_req_i.vtype.vsew;
         end
 
         // Vector floating-point instructions
@@ -1181,8 +1182,7 @@ module spatz_decoder
             spatz_req.vs2                = arith_s2;
             spatz_req.use_vs2            = 1'b1;
             spatz_req.op_arith.is_scalar = 1'b1;
-            // Keep default value (EW_8) if max element length is not 32 bit
-            spatz_req.vtype.vsew         = (ELEN == 32) ? EW_32 : EW_8;
+            spatz_req.vtype.vsew         = decoder_req_i.vtype.vsew;
           end
         end
 
