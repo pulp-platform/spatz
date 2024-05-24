@@ -1080,16 +1080,16 @@ module spatz_vlsu
     vrf_req_d       = '0;
     vrf_req_valid_d = 1'b0;
 
-    rob_wdata = '0;
-    rob_wid   = '0;
-    rob_push  = '0;
-    rob_pop   = '0;
+    rob_wdata  = '0;
+    rob_wid    = '0;
+    rob_push   = '0;
+    rob_pop    = '0;
     rob_req_id = '0;
-    rob_blen  = '0;
+    rob_blen   = '0;
     // grouped data push
-    rob_gpush = '0;
+    rob_gpush  = '0;
     // grouped data pop
-    rob_gpop  = '0;
+    rob_gpop   = '0;
 
     mem_req_id     = '0;
     mem_req_data   = '0;
@@ -1099,10 +1099,12 @@ module spatz_vlsu
     mem_req_last   = '0;
     mem_req_rburst = '0;
 
+    group_vrf_be   = '0;
+
     burst_vrf_field_d = burst_vrf_field_q;
     burst_vrf_valid_d = burst_vrf_valid_q;
     burst_vrf_be_d    = burst_vrf_be_q;
-    burst_vrf_data_d = burst_vrf_data_q;
+    burst_vrf_data_d  = burst_vrf_data_q;
 
     // Propagate request ID
     vrf_req_d.rsp.id    = commit_insn_q.id;
@@ -1193,7 +1195,7 @@ module spatz_vlsu
                 if (burst_vrf_field_q == '0) begin
                   // a new round begin, resetting
                   burst_vrf_data_d = '0;
-                  burst_vrf_be_d = '0;
+                  burst_vrf_be_d   = '0;
                 end
               end else begin
                 // Otherwise for burst, pop the data on the assigend port
@@ -1202,7 +1204,7 @@ module spatz_vlsu
                 if (burst_vrf_field_q == '0) begin
                   // a new round begin, resetting
                   burst_vrf_data_d = '0;
-                  burst_vrf_be_d = '0;
+                  burst_vrf_be_d   = '0;
                 end
               end
             end
@@ -1214,20 +1216,20 @@ module spatz_vlsu
           if (commit_insn_q.is_strided || commit_insn_q.is_indexed) begin
             if (MAXEW == EW_32) begin
               unique case (commit_counter_q[port][1:0])
-                2'b01: data   = {data[23:0], data[31:24]};
-                2'b10: data   = {data[15:0], data[31:16]};
-                2'b11: data   = {data[7:0],  data[31:8 ]};
+                2'b01:   data = {data[23:0], data[31:24]};
+                2'b10:   data = {data[15:0], data[31:16]};
+                2'b11:   data = {data[7:0],  data[31:8 ]};
                 default: data = data;
               endcase
             end else begin
               unique case (commit_counter_q[port][2:0])
-                3'b001: data  = {data[55:0], data[63:56]};
-                3'b010: data  = {data[47:0], data[63:48]};
-                3'b011: data  = {data[39:0], data[63:40]};
-                3'b100: data  = {data[31:0], data[63:32]};
-                3'b101: data  = {data[23:0], data[63:24]};
-                3'b110: data  = {data[15:0], data[63:16]};
-                3'b111: data  = {data[7:0],  data[63: 8]};
+                3'b001:  data = {data[55:0], data[63:56]};
+                3'b010:  data = {data[47:0], data[63:48]};
+                3'b011:  data = {data[39:0], data[63:40]};
+                3'b100:  data = {data[31:0], data[63:32]};
+                3'b101:  data = {data[23:0], data[63:24]};
+                3'b110:  data = {data[15:0], data[63:16]};
+                3'b111:  data = {data[7:0],  data[63: 8]};
                 default: data = data;
               endcase
             end
@@ -1237,11 +1239,11 @@ module spatz_vlsu
           if (commit_counter_en[port] && ~commit_insn_q.is_burst)
             if (commit_is_single_element_operation) begin
               automatic logic [$clog2(ELENB)-1:0] shift = commit_counter_q[port][$clog2(ELENB)-1:0];
-              automatic logic [ELENB-1:0] mask          = '1;
+              automatic logic [ELENB-1:0] mask = '1;
               case (commit_insn_q.vsew)
-                EW_8 : mask   = 1;
-                EW_16: mask   = 3;
-                EW_32: mask   = 15;
+                EW_8 :   mask = 1;
+                EW_16:   mask = 3;
+                EW_32:   mask = 15;
                 default: mask = '1;
               endcase
               vrf_req_d.wbe[ELENB*port +: ELENB] = mask << shift;
@@ -1268,7 +1270,7 @@ module spatz_vlsu
                   burst_vrf_be_d[ELENB*k+:ELENB] = group_vrf_be;
                 end
 
-                vrf_req_d.wbe = burst_vrf_be_d;
+                vrf_req_d.wbe   = burst_vrf_be_d;
                 vrf_req_d.wdata = burst_vrf_data_d;
               end else begin
                 for (int unsigned k = 0; k < ELENB; k++) begin
@@ -1277,7 +1279,7 @@ module spatz_vlsu
                 // for burst, data will be taken out from the same ROB always
                 // use a counter to shift it to correct vrffield
                 burst_vrf_data_d[ELEN*burst_vrf_field_q+:ELEN] = data[ELEN-1:0];
-                vrf_req_d.wbe = burst_vrf_be_d;
+                vrf_req_d.wbe   = burst_vrf_be_d;
                 vrf_req_d.wdata = burst_vrf_data_d;
               end
             end

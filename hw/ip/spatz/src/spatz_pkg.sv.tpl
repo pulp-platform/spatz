@@ -57,10 +57,11 @@ package spatz_pkg;
   // Number of bits in a vector register
 % if cfg['mempool']:
   localparam int unsigned VLEN   = `ifdef VLEN `VLEN `else 256 `endif;
-  // used to change reorder buffer depth in VLSU
+  // used to change reorder buffer depth in VLSU, only affect the burst-enabled ROB
   localparam int unsigned RobDepth  = 32;
   // how many ROBs are burst enabled? (Parallel input/output, more depth)
-  localparam int unsigned BurstRob  = 2;
+  // 1 for burst is enough, 2 for dual-load
+  localparam int unsigned BurstRob  = 1;
 % else :
   localparam int unsigned VLEN   = ${cfg['vlen']};
 %endif
