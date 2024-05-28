@@ -101,14 +101,12 @@ module spatz_vlsu
   logic       mem_spatz_req_ready;
 
 `ifdef TARGET_MEMPOOL
-  logic [31:0] tile_id;
+  logic [TileLen-1:0] tile_id;
+
   always_comb begin
     // Calculate the tile ID
     tile_id = '0;
-    if (NumCoresPerTile == 1)
-      tile_id = hart_id_i;
-    else
-      tile_id = hart_id_i[31:idx_width(NumCoresPerTile)];
+    tile_id[TileLen-1:$clog2(NumCoresPerTile)] = hart_id_i[TileLen-1:$clog2(NumCoresPerTile)];
   end
 `endif
 
@@ -1458,7 +1456,7 @@ module spatz_vlsu
     assign spatz_mem_req[port].last  = mem_req_last[port];
     assign spatz_mem_req[port].spec  = 1'b0; // Request is never speculative
     assign spatz_mem_req_valid[port] = mem_req_svalid[port] || mem_req_lvalid[port];
-    assign spatz_mem_req[port].rburst = UseBurst ? mem_req_rburst[port] : '0; // WIP
+    assign spatz_mem_req[port].rburst = UseBurst ? mem_req_rburst[port] : '0;
 `else
     assign spatz_mem_req[port].addr  = mem_req_addr[port];
     assign spatz_mem_req[port].write = !mem_is_load;

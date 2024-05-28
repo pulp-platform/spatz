@@ -29,7 +29,6 @@ module spatz_mempool_cc
   parameter bit RegisterOffloadResp = 1,
   parameter bit RegisterTCDMReq     = 0,
   parameter bit RegisterTCDMResp    = 0,
-  parameter int unsigned        RspGF                  = 1,
   parameter int unsigned        TCDMPorts              = 1,
   parameter int unsigned        NumMemPortsPerSpatz    = 1,
   parameter int unsigned        BankOffset             = 0,
