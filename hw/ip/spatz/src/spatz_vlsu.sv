@@ -82,6 +82,8 @@ module spatz_vlsu
   localparam int unsigned RspGF         = 1;
   localparam bit          UseBurst      = 0;
 `endif
+  // Use port 0 to send normal burst requests
+  localparam int unsigned BurstPort     = 0;
 
   //////////////
   // Typedefs //
@@ -230,12 +232,6 @@ module spatz_vlsu
     end
   `endif
   end
-
-  logic  [$clog2(NrMemPorts)-1:0] burst_pointer_d, burst_pointer_q; // point to which LSU should take next burst
-  `FF(burst_pointer_q, burst_pointer_d, '0)
-  // Indicate which port is handling burst
-  logic [NrMemPorts-1:0] port_is_burst;
-  assign port_is_burst = mem_is_burst ? (1'b1 << (burst_pointer_q)) : '0;
 
   /////////////
   //  State  //
@@ -496,8 +492,6 @@ module spatz_vlsu
     logic is_burst;
     // is the result read as group?
     logic is_group;
-    // is the port used for burst?
-    logic [NrMemPorts-1:0] burst_port;
   } commit_metadata_t;
 
   commit_metadata_t commit_insn_d;
@@ -537,8 +531,7 @@ module spatz_vlsu
       is_strided: mem_is_strided,
       is_indexed: mem_is_indexed,
       is_burst  : mem_is_burst,
-      is_group  : (RspGF > 1) ? mem_is_burst : 1'b0,
-      burst_port: port_is_burst
+      is_group  : (RspGF > 1) ? mem_is_burst : 1'b0
   };
 
   always_comb begin: queue_control
@@ -870,7 +863,7 @@ module spatz_vlsu
       // Overwrite if burst
       if (commit_insn_q.is_burst) begin
         // assign entire vector to one unit if burst
-        commit_max_elem[fu] = commit_insn_q.burst_port[fu] ? commit_insn_q.vl : '0;
+        commit_max_elem[fu] = (fu == BurstPort)? commit_insn_q.vl : '0;
       end
 
       commit_counter_load[fu] = commit_insn_pop;
@@ -880,7 +873,7 @@ module spatz_vlsu
       end else if (commit_insn_q.vstart[idx_width(N_FU*ELENB)-1:$clog2(ELENB)] == fu) begin
         commit_counter_d[fu] += commit_insn_q.vstart[$clog2(ELENB)-1:0];
       end else if (commit_insn_q.is_burst) begin
-        commit_counter_d[fu] = port_is_burst[fu] ? commit_insn_q.vstart : '0;
+        commit_counter_d[fu] = (fu == BurstPort) ? commit_insn_q.vstart : '0;
       end
 
       // valid when: 1. insn is valid; 2. not commit last elem; 3. I am catching up, or no one is catching up
@@ -912,7 +905,7 @@ module spatz_vlsu
     if (commit_insn_q.is_burst) begin
       for (int unsigned port = 0; port < NrMemPorts; port ++) begin
         // for burst insn, only one port will be used
-        if (commit_insn_q.burst_port[port]) begin
+        if (port == BurstPort) begin
           vd_elem_id = (commit_counter_q[port] >> $clog2(ELENB)) >> $clog2(N_FU);
         end
       end
@@ -932,9 +925,6 @@ module spatz_vlsu
 
   vlen_t [NrMemPorts-1:0] mem_max_elem;
 
-  // Currently, only use port 0 to send burst
-  assign burst_pointer_d = burst_pointer_q;
-
   for (genvar port = 0; port < NrMemPorts; port++) begin : gen_mem_counter_loop
     always_comb begin : gen_mem_counter_comb
       mem_max_elem[port] = (mem_spatz_req.vl >> $clog2(NrMemPorts*MemDataWidthB)) << $clog2(MemDataWidthB);
@@ -952,7 +942,7 @@ module spatz_vlsu
       if (mem_is_burst) begin
         // burst request handling, assign the entire burst to a single cnt, then pointing to next cnt
         mem_max_elem[port] = 'd0;
-        if (port == burst_pointer_q) begin
+        if (port == BurstPort) begin
           // only the burst port needs to have non-zero length
           mem_max_elem[port] = mem_spatz_req.vl;
         end
@@ -973,7 +963,7 @@ module spatz_vlsu
         end
       end
 
-      if (mem_is_burst && (port == burst_pointer_q)) begin
+      if (mem_is_burst && (port == BurstPort)) begin
         mem_counter_d[port] = mem_spatz_req.vstart;
       end
 
@@ -1127,7 +1117,7 @@ module spatz_vlsu
           // GF is larger than 1, group pop is valid
           if (RspGF > 1 & commit_insn_q.is_group) begin
             // Check if it is able to read grouped data
-            if (|(rob_gvalid & commit_insn_q.burst_port)) begin
+            if (rob_gvalid[BurstPort]) begin
               // A grouped pop will take RspGF data into VRF
               if (vrf_req_ready_d) begin
                 // we can pop data into VRF in this cycle, add valid counter
@@ -1141,11 +1131,11 @@ module spatz_vlsu
             end
           end else begin
             if (vrf_req_ready_d) begin
-              burst_vrf_valid_d = burst_vrf_valid_q + |(rob_rvalid & commit_insn_q.burst_port);
+              burst_vrf_valid_d = burst_vrf_valid_q + rob_rvalid[BurstPort];
             end
             // only valid when complete one round of vrf filling
-            vrf_req_valid_d = (&burst_vrf_valid_q) & (|(rob_rvalid & commit_insn_q.burst_port));
-            if (vrf_req_valid_d & (|(rob_rvalid & commit_insn_q.burst_port))) begin
+            vrf_req_valid_d = (&burst_vrf_valid_q) & rob_rvalid[BurstPort];
+            if (vrf_req_valid_d & rob_rvalid[BurstPort]) begin
               // we have finish commit a vector word
               burst_vrf_valid_d = '0;
             end
@@ -1184,7 +1174,7 @@ module spatz_vlsu
 
           // Pop stored element and free space in buffer
           if (commit_insn_q.is_burst) begin
-            if (commit_insn_q.burst_port[port]) begin
+            if (port == BurstPort) begin
               if (commit_insn_q.is_group) begin
                 // For GRE, read grouped data out if possible
                 rob_pop[port] = rob_gvalid[port] && vrf_req_ready_d;
@@ -1252,7 +1242,7 @@ module spatz_vlsu
             end
 
           if (commit_insn_q.is_burst) begin
-            if (commit_insn_q.burst_port[port]) begin
+            if (port == BurstPort) begin
               if (commit_insn_q.is_group) begin
                 // read the entire rob data out
                 // Only VLE is supported insn for grouped read and burst, no need to shift
@@ -1290,7 +1280,7 @@ module spatz_vlsu
       // send out requests, should follow commit_insn_d
       // previous request may not finish committing yet, _q may not be updated
       for (int unsigned port = 0; port < NrMemPorts; port++) begin
-        if (commit_insn_d.burst_port[port] & commit_insn_d.is_burst) begin
+        if ((port == BurstPort) & commit_insn_d.is_burst) begin
           // burst length might not be BurstLen if last request
           rob_blen[port] = (mem_burst_element_size >> 2);
         end else begin
@@ -1309,7 +1299,7 @@ module spatz_vlsu
           rob_gpush[port]            = rob_push[port] & spatz_mem_rsp_i[port].gdata.valid;
         end
       `endif
-        if (commit_insn_d.burst_port[port] & commit_insn_d.is_burst) begin
+        if ((port == BurstPort) & commit_insn_d.is_burst) begin
           mem_req_rburst[port] = '{
             burst: 1'b1,            // is burst?
             blen:  rob_blen[port]   // burst length
