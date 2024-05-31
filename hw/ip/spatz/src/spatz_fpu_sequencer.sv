@@ -552,6 +552,7 @@ module spatz_fpu_sequencer
     .lsu_perror_o (/* Unused */    ),
     .lsu_pvalid_o (fp_lsu_pvalid   ),
     .lsu_pready_i (fp_lsu_pready   ),
+    .lsu_empty_o  (/* unused */    ),
     // Memory interface
 `ifdef TARGET_MEMPOOL
     .data_qaddr_o (mem_qaddr              ),
@@ -568,7 +569,6 @@ module spatz_fpu_sequencer
     .data_pvalid_i(fp_lsu_mem_rsp_valid_i ),
     .data_pready_o(fp_lsu_mem_rsp_ready_o )
 `else
-    .lsu_empty_o  (/* unused */    ),
     .data_req_o   (fp_lsu_mem_req_o),
     .data_rsp_i   (fp_lsu_mem_rsp_i)
 `endif
