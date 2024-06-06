@@ -61,7 +61,7 @@ package spatz_pkg;
   localparam int unsigned RobDepth  = 32;
   // how many ROBs are burst enabled? (Parallel input/output, more depth)
   // 1 for burst is enough, 2 for dual-load
-  localparam int unsigned BurstRob  = 1;
+  localparam int unsigned BurstRob  = GroupRsp ? 1 : 0;
 % else :
   localparam int unsigned VLEN   = ${cfg['vlen']};
 %endif
