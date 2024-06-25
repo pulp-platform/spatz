@@ -474,6 +474,10 @@ module spatz_vlsu
           offset = ({mem_counter_q[intf][fu][$bits(vlen_t)-1:MAXEW] << $clog2(NrMemPorts), mem_counter_q[intf][fu][int'(MAXEW)-1:0]} + (port << MAXEW)) * stride;
         end
 
+        // The second interface starts from half of the vector to straighten the write-back VRF access pattern
+        // HARDCODED implementation just for explorative purposes! This does not generalize, don't use this!!!!!
+        if (!mem_is_indexed && !mem_is_strided && intf == 1) offset += mem_spatz_req.vl / (2 * N_FU * ELENB);
+
         addr                      = mem_spatz_req.rs1 + offset;
         mem_req_addr[intf][fu]        = (addr >> MAXEW) << MAXEW;
         mem_req_addr_offset[intf][fu] = addr[int'(MAXEW)-1:0];
@@ -486,8 +490,12 @@ module spatz_vlsu
   // Calculate the register file addresses
   always_comb begin : gen_vreg_addr
     for (int intf = 0; intf < NrInterfaces; intf++) begin : gen_vreg_addr_intf
-      vd_vreg_addr[intf]  = (commit_insn_q.vd << $clog2(NrWordsPerVector)) + ($unsigned(vd_elem_id[intf]) << 1) + intf;
-      vs2_vreg_addr[intf] = (mem_spatz_req.vs2 << $clog2(NrWordsPerVector)) + ($unsigned(vs2_elem_id_q[intf]) << 1) + intf;
+      vd_vreg_addr[intf]  = (commit_insn_q.vd << $clog2(NrWordsPerVector)) + $unsigned(vd_elem_id[intf]);
+      vs2_vreg_addr[intf] = (mem_spatz_req.vs2 << $clog2(NrWordsPerVector)) + $unsigned(vs2_elem_id_q[intf]);
+
+      // The second interface starts from half of the vector to straighten the write-back VRF access pattern
+      // HARDCODED implementation just for explorative purposes! This does not generalize, don't use this!!!!!
+      if (!mem_is_indexed && !mem_is_strided && intf == 1) vd_vreg_addr[intf] += commit_insn_q.vl / (2 * N_FU * ELENB);
     end
   end
 
