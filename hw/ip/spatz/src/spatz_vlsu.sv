@@ -250,7 +250,7 @@ module spatz_vlsu
   vlen_t [NrInterfaces-1:0] [N_FU-1:0] mem_counter_delta;
   vlen_t [NrInterfaces-1:0] [N_FU-1:0] mem_counter_d;
   vlen_t [NrInterfaces-1:0] [N_FU-1:0] mem_counter_q;
-  logic  [NrInterfaces-1:0] [N_FU-1:0] mem_port_finished_q;
+  logic  [NrInterfaces-1:0] [N_FU-1:0] mem_port_finished_d, mem_port_finished_q;
 
   vlen_t [NrInterfaces-1:0] [N_FU-1:0] mem_idx_counter_delta;
   vlen_t [NrInterfaces-1:0] [N_FU-1:0] mem_idx_counter_d;
@@ -288,6 +288,7 @@ module spatz_vlsu
         .overflow_o(/* Unused */               )
       );
 
+      assign mem_port_finished_d[intf][fu] = mem_spatz_req_valid && (mem_counter_q[intf][fu] == mem_counter_max[intf][fu] - mem_counter_delta[intf][fu]);
       assign mem_port_finished_q[intf][fu] = mem_spatz_req_valid && (mem_counter_q[intf][fu] == mem_counter_max[intf][fu]);
     end: gen_mem_counters_intf_fu
   end: gen_mem_counters_intf
@@ -375,7 +376,7 @@ module spatz_vlsu
     end
 
     // Did an instruction finished its requests?
-    if (&mem_port_finished_q) begin
+    if (&(mem_port_finished_q | (mem_port_finished_d & mem_counter_en))) begin
       mem_insn_finished_d[mem_spatz_req.id] = 1'b1;
       mem_spatz_req_ready                   = 1'b1;
     end
@@ -517,7 +518,7 @@ module spatz_vlsu
     vlsu_finished_req = 1'b0;
 
     // Finished the execution!
-    if (commit_insn_valid && &commit_finished_q && mem_insn_finished_q[commit_insn_q.id]) begin
+    if (commit_insn_valid && &(commit_finished_q | (commit_finished_d & commit_counter_en)) && mem_insn_finished_q[commit_insn_q.id]) begin
       commit_insn_pop = 1'b1;
       busy_d          = 1'b0;
 
@@ -539,8 +540,8 @@ module spatz_vlsu
 
   // Signal when we are finished with with accessing the memory (necessary
   // for the case with more than one memory port)
-  assign spatz_mem_finished_o     = commit_insn_valid && &commit_finished_q && mem_insn_finished_q[commit_insn_q.id];
-  assign spatz_mem_str_finished_o = commit_insn_valid && &commit_finished_q && mem_insn_finished_q[commit_insn_q.id] && !commit_insn_q.is_load;
+  assign spatz_mem_finished_o     = commit_insn_valid && &(commit_finished_q | (commit_finished_d & commit_counter_en)) && mem_insn_finished_q[commit_insn_q.id];
+  assign spatz_mem_str_finished_o = commit_insn_valid && &(commit_finished_q | (commit_finished_d & commit_counter_en)) && mem_insn_finished_q[commit_insn_q.id] && !commit_insn_q.is_load;
 
   // Do we start at the very fist element
   logic mem_is_vstart_zero;
