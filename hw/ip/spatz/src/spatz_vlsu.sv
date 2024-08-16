@@ -152,7 +152,7 @@ module spatz_vlsu
         store_count_d[port]++;
 
       // Did we get the ack of a store?
-  `ifdef MEMPOOL_SPATZ
+  `ifdef TARGET_MEMPOOL
       if (store_count_q[port] != '0 && spatz_mem_rsp_valid_i[port] && spatz_mem_rsp_i[port].write)
         store_count_d[port]--;
   `else
@@ -183,7 +183,7 @@ module spatz_vlsu
   // The reorder buffer decouples the memory side from the register file side.
   // All elements from one side to the other go through it.
   for (genvar port = 0; port < NrMemPorts; port++) begin : gen_rob
-`ifdef MEMPOOL_SPATZ
+`ifdef TARGET_MEMPOOL
     reorder_buffer #(
       .DataWidth(ELEN              ),
       .NumWords (NrOutstandingLoads)
@@ -866,7 +866,7 @@ module spatz_vlsu
       for (int unsigned port = 0; port < NrMemPorts; port++) begin
         // Write the load result to the buffer
         rob_wdata[port] = spatz_mem_rsp_i[port].data;
-`ifdef MEMPOOL_SPATZ
+`ifdef TARGET_MEMPOOL
         rob_wid[port]   = spatz_mem_rsp_i[port].id;
         // Need to consider out-of-order memory response
         rob_push[port]  = spatz_mem_rsp_valid_i[port] && (state_q == VLSU_RunningLoad) && spatz_mem_rsp_i[port].write == '0;
@@ -983,7 +983,7 @@ module spatz_vlsu
       .valid_o (spatz_mem_req_valid_o[port]),
       .ready_i (spatz_mem_req_ready_i[port])
     );
-`ifdef MEMPOOL_SPATZ
+`ifdef TARGET_MEMPOOL
     // ID is required in Mempool-Spatz
     assign spatz_mem_req[port].id    = mem_req_id[port];
     assign spatz_mem_req[port].addr  = mem_req_addr[port];
