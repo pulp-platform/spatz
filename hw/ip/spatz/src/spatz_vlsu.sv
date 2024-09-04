@@ -471,12 +471,12 @@ module spatz_vlsu
             default: offset = $signed(vrf_rdata_i[intf][1][8 * word_index +: 32]);
           endcase
         end else begin
-          offset = ({mem_counter_q[intf][fu][$bits(vlen_t)-1:MAXEW] << $clog2(NrMemPorts), mem_counter_q[intf][fu][int'(MAXEW)-1:0]} + (port << MAXEW)) * stride;
+          offset = ({mem_counter_q[intf][fu][$bits(vlen_t)-1:MAXEW] << $clog2(N_FU), mem_counter_q[intf][fu][int'(MAXEW)-1:0]} + (fu << MAXEW)) * stride;
         end
 
         // The second interface starts from half of the vector to straighten the write-back VRF access pattern
         // HARDCODED implementation just for explorative purposes! This does not generalize, don't use this!!!!!
-        if (!mem_is_indexed && !mem_is_strided && intf == 1) offset += mem_spatz_req.vl / (2 * N_FU * ELENB);
+        if (!mem_is_indexed && !mem_is_strided && intf == 1) offset += mem_spatz_req.vl / 2;
 
         addr                      = mem_spatz_req.rs1 + offset;
         mem_req_addr[intf][fu]        = (addr >> MAXEW) << MAXEW;
