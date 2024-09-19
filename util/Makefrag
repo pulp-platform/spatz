@@ -159,15 +159,15 @@ work-vcs/compile.sh: ${VSIM_SOURCES} ${TB_SRCS}
 ########
 
 .PHONY: traces
-traces: $(shell (ls bin/logs/trace_hart_*.dasm 2>/dev/null | sed 's/\.dasm/\.txt/') || echo "")
+traces: $(shell (ls logs/trace_hart_*.dasm 2>/dev/null | sed 's/\.dasm/\.txt/') || echo "")
 
-bin/logs/trace_hart_%.txt: bin/logs/trace_hart_%.dasm ${ROOT}/util/gen_trace.py
+logs/trace_hart_%.txt: logs/trace_hart_%.dasm ${ROOT}/util/gen_trace.py
 	$(DASM) < $< | $(PYTHON) ${ROOT}/util/gen_trace.py > $@
 
 # make annotate
 # Generate source-code interleaved traces for all harts. Reads the binary from
-# the bin/logs/.rtlbinary file that is written at start of simulation in the vsim script
-bin/logs/trace_hart_%.s: bin/logs/trace_hart_%.txt ${ROOT}/util/trace/annotate.py
+# the logs/.rtlbinary file that is written at start of simulation in the vsim script
+logs/trace_hart_%.s: logs/trace_hart_%.txt ${ROOT}/util/trace/annotate.py
 	$(PYTHON) ${ROOT}/util/trace/annotate.py -q -o $@ $(BINARY) $<
-BINARY ?= $(shell cat bin/logs/.rtlbinary)
-annotate: $(shell (ls bin/logs/trace_hart_*.dasm 2>/dev/null | sed 's/\.dasm/\.s/') || echo "")
+BINARY ?= $(shell cat logs/.rtlbinary)
+annotate: $(shell (ls logs/trace_hart_*.dasm 2>/dev/null | sed 's/\.dasm/\.s/') || echo "")
