@@ -246,6 +246,9 @@ module spatz_controller
   logic [NrParallelInstructions-1:0] wrote_result_all_intf_q;
   `FF(wrote_result_q, wrote_result_d, '0)
 
+  logic [NrInterfaces-1:0] [NrParallelInstructions-1:0] done_result_q, done_result_d;
+  `FF(done_result_q, done_result_d, '0)
+
   // Counter to track the vlen completed for each instruction
   vlen_t [NrParallelInstructions-1:0] vl_cnt_d, vl_cnt_q, vl_max;
   `FF(vl_cnt_q, vl_cnt_d, '0)
@@ -273,6 +276,7 @@ module spatz_controller
     // Nobody wrote to the VRF yet
     wrote_result_twice_d = '0;
     wrote_result_d       = '0;
+    done_result_d        = done_result_q;
     sb_enable_o          = '0;
     vl_cnt_d             = vl_cnt_q;
     
@@ -291,7 +295,7 @@ module spatz_controller
       end
       
       // Enable the VRF port if the dependant instructions wrote in the previous cycle
-      sb_enable_o[port] = sb_enable_i[port] && &(~scoreboard_q[sb_id_i[port]].deps | wrote_result_q[intID]) && (!(|scoreboard_q[sb_id_i[port]].deps) || !scoreboard_q[sb_id_i[port]].prevent_chaining);
+      sb_enable_o[port] = sb_enable_i[port] && &(~scoreboard_q[sb_id_i[port]].deps | wrote_result_q[intID] | done_result_q[intID]) && (!(|scoreboard_q[sb_id_i[port]].deps) || !scoreboard_q[sb_id_i[port]].prevent_chaining);
     end
 
     // Store the decisions
@@ -299,6 +303,9 @@ module spatz_controller
       // Calculate the load-store interface id to use here for chaining
       automatic logic intID = (vl_cnt_q[sb_id_i[SB_VFU_VD_WD]] < vl_max[sb_id_i[SB_VFU_VD_WD]]) ? 0 : 1;
       vl_cnt_d[sb_id_i[SB_VFU_VD_WD]] += VRFWordBWidth;
+      if (vl_cnt_q[sb_id_i[SB_VFU_VD_WD]] >= (vl_max[sb_id_i[SB_VFU_VD_WD]]-VRFWordBWidth)) begin
+        done_result_d[intID][sb_id_i[SB_VFU_VD_WD]] = 1'b1;
+      end
 
       wrote_result_narrowing_d[sb_id_i[SB_VFU_VD_WD]] = sb_wrote_result_i[SB_VFU_VD_WD - SB_VFU_VD_WD] ^ narrow_wide_q[sb_id_i[SB_VFU_VD_WD]];
       wrote_result_d[intID][sb_id_i[SB_VFU_VD_WD]]    = sb_wrote_result_i[SB_VFU_VD_WD - SB_VFU_VD_WD] && (!narrow_wide_q[sb_id_i[SB_VFU_VD_WD]] || wrote_result_narrowing_q[sb_id_i[SB_VFU_VD_WD]]);
@@ -336,6 +343,8 @@ module spatz_controller
       wrote_result_narrowing_d[vfu_rsp_i.id] = 1'b0;
       wrote_result_d[0][vfu_rsp_i.id]        = 1'b0;
       wrote_result_d[1][vfu_rsp_i.id]        = 1'b0;
+      done_result_d[0][vfu_rsp_i.id]         = 1'b0;
+      done_result_d[1][vfu_rsp_i.id]         = 1'b0;
       vl_cnt_d[vfu_rsp_i.id]                 = '0;
       for (int unsigned insn = 0; insn < NrParallelInstructions; insn++)
         scoreboard_d[insn].deps[vfu_rsp_i.id] = 1'b0;
@@ -351,9 +360,11 @@ module spatz_controller
       scoreboard_d[vlsu_rsp_i.id]             = '0;
       narrow_wide_d[vlsu_rsp_i.id]            = 1'b0;
       wrote_result_narrowing_d[vlsu_rsp_i.id] = 1'b0;
-      wrote_result_d[0][vfu_rsp_i.id]         = 1'b0;
-      wrote_result_d[1][vfu_rsp_i.id]         = 1'b0;
-      vl_cnt_d[vfu_rsp_i.id]                  = '0;
+      wrote_result_d[0][vlsu_rsp_i.id]        = 1'b0;
+      wrote_result_d[1][vlsu_rsp_i.id]        = 1'b0;
+      done_result_d[0][vlsu_rsp_i.id]         = 1'b0;
+      done_result_d[1][vlsu_rsp_i.id]         = 1'b0;
+      vl_cnt_d[vlsu_rsp_i.id]                 = '0;
       for (int unsigned insn = 0; insn < NrParallelInstructions; insn++)
         scoreboard_d[insn].deps[vlsu_rsp_i.id] = 1'b0;
     end
@@ -368,9 +379,11 @@ module spatz_controller
       scoreboard_d[vsldu_rsp_i.id]             = '0;
       narrow_wide_d[vsldu_rsp_i.id]            = 1'b0;
       wrote_result_narrowing_d[vsldu_rsp_i.id] = 1'b0;
-      wrote_result_d[0][vfu_rsp_i.id]          = 1'b0;
-      wrote_result_d[1][vfu_rsp_i.id]          = 1'b0;
-      vl_cnt_d[vfu_rsp_i.id]                   = '0;
+      wrote_result_d[0][vsldu_rsp_i.id]        = 1'b0;
+      wrote_result_d[1][vsldu_rsp_i.id]        = 1'b0;
+      done_result_d[0][vsldu_rsp_i.id]         = 1'b0;
+      done_result_d[1][vsldu_rsp_i.id]         = 1'b0;
+      vl_cnt_d[vsldu_rsp_i.id]                 = '0;
       for (int unsigned insn = 0; insn < NrParallelInstructions; insn++)
         scoreboard_d[insn].deps[vsldu_rsp_i.id] = 1'b0;
     end
@@ -408,7 +421,7 @@ module spatz_controller
       
       // Track request vl for vector chaining
       // TODO: split the vector length here properly based on number of FPUs, EW, vstart, etc...
-      vl_max[spatz_req.id] = spatz_req.vl << spatz_req.vtype.vsew;
+      vl_max[spatz_req.id] = (spatz_req.vl >> 1) << spatz_req.vtype.vsew;
     end
 
     // An instruction never depends on itself
