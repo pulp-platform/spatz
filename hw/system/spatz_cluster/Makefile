@@ -11,7 +11,8 @@ MKFILE_PATH := $(abspath $(lastword $(MAKEFILE_LIST)))
 MKFILE_DIR  := $(dir $(MKFILE_PATH))
 
 # Configuration file
-SPATZ_CLUSTER_CFG ?= $(SPATZ_CLUSTER_DIR)/cfg/spatz_cluster.default.hjson
+CFG ?= flamingo
+SPATZ_CLUSTER_CFG ?= $(SPATZ_CLUSTER_DIR)/cfg/$(CFG).hjson
 
 # Include Makefrag
 include $(ROOT)/util/Makefrag

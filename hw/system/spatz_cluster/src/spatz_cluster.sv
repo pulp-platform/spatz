@@ -235,10 +235,12 @@ module spatz_cluster
   typedef logic [TCDMMemAddrWidth-1:0] tcdm_mem_addr_t;
   typedef logic [TCDMAddrWidth-1:0] tcdm_addr_t;
 
+  typedef logic [$clog2(NumSpatzOutstandingLoads[0])-1:0] reqid_t;
+
   typedef struct packed {
     logic [CoreIDWidth-1:0] core_id;
     logic is_core;
-    logic [$clog2(NumSpatzOutstandingLoads[0])-1:0] req_id;
+    reqid_t req_id;
   } tcdm_user_t;
 
   // Regbus peripherals.
@@ -577,12 +579,14 @@ module spatz_cluster
     );
 
     // generate banks of the superbank
+    // TODO: append the metadata (req_id) to the response => push into amo and wait one cycle to rsp
     for (genvar j = 0; j < BanksPerSuperBank; j++) begin : gen_tcdm_bank
 
       logic mem_cs, mem_wen;
       tcdm_mem_addr_t mem_add;
       strb_t mem_be;
       data_t mem_rdata, mem_wdata;
+      reqid_t mem_req_id;
 
       tc_sram_impl #(
         .NumWords  (TCDMDepth),
@@ -644,6 +648,31 @@ module spatz_cluster
         .d_i   (amo_rdata_local  ),
         .d_o   (amo_rsp[j].p.data)
       );
+
+      // delay the req_id two cycles: 1 for bank access, 1 for reg
+      shift_reg #(
+        .dtype(reqid_t           ),
+        .Depth(int'(RegisterTCDMCuts))
+      ) i_reqid_pipe1 (
+        .clk_i (clk_i            ),
+        .rst_ni(rst_ni           ),
+        .d_i   (amo_req[j].q.user.req_id ),
+        .d_o   (mem_req_id )
+      );
+      shift_reg #(
+        .dtype(reqid_t           ),
+        .Depth(int'(RegisterTCDMCuts))
+      ) i_reqid_pipe2 (
+        .clk_i (clk_i            ),
+        .rst_ni(rst_ni           ),
+        .d_i   (mem_req_id       ),
+        .d_o   (amo_rsp[j].p.user.req_id)
+      );
+
+      // tie unused field to 0
+      // TODO: remove these fields
+      assign amo_rsp[j].p.user.core_id = '0;
+      assign amo_rsp[j].p.user.is_core = '0;
     end
   end
 

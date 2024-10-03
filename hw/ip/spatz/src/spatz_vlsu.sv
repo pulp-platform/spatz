@@ -12,7 +12,7 @@ module spatz_vlsu
   import rvv_pkg::*;
   import cf_math_pkg::idx_width; #(
     parameter                NrMemPorts         = 1,
-    parameter                NrOutstandingLoads = 8,
+    parameter                NrOutstandingLoads = 4,
     // Memory request
     parameter  type          spatz_mem_req_t    = logic,
     parameter  type          spatz_mem_rsp_t    = logic,
@@ -182,7 +182,6 @@ module spatz_vlsu
   // The reorder buffer decouples the memory side from the register file side.
   // All elements from one side to the other go through it.
   for (genvar port = 0; port < NrMemPorts; port++) begin : gen_rob
-`ifdef MEMPOOL_SPATZ
     reorder_buffer #(
       .DataWidth(ELEN              ),
       .NumWords (NrOutstandingLoads)
@@ -201,25 +200,45 @@ module spatz_vlsu
       .full_o   (rob_full[port]  ),
       .empty_o  (rob_empty[port] )
     );
-`else
-    fifo_v3 #(
-      .DATA_WIDTH(ELEN              ),
-      .DEPTH     (NrOutstandingLoads)
-    ) i_reorder_buffer (
-      .clk_i     (clk_i           ),
-      .rst_ni    (rst_ni          ),
-      .flush_i   (1'b0            ),
-      .testmode_i(1'b0            ),
-      .data_i    (rob_wdata[port] ),
-      .push_i    (rob_push[port]  ),
-      .data_o    (rob_rdata[port] ),
-      .pop_i     (rob_pop[port]   ),
-      .full_o    (rob_full[port]  ),
-      .empty_o   (rob_empty[port] ),
-      .usage_o   (/* Unused */    )
-    );
-    assign rob_rvalid[port] = !rob_empty[port];
-`endif
+// `ifdef MEMPOOL_SPATZ
+//     reorder_buffer #(
+//       .DataWidth(ELEN              ),
+//       .NumWords (NrOutstandingLoads)
+//     ) i_reorder_buffer (
+//       .clk_i    (clk_i           ),
+//       .rst_ni   (rst_ni          ),
+//       .data_i   (rob_wdata[port] ),
+//       .id_i     (rob_wid[port]   ),
+//       .push_i   (rob_push[port]  ),
+//       .data_o   (rob_rdata[port] ),
+//       .valid_o  (rob_rvalid[port]),
+//       .id_read_o(rob_rid[port]   ),
+//       .pop_i    (rob_pop[port]   ),
+//       .id_req_i (rob_req_id[port]),
+//       .id_o     (rob_id[port]    ),
+//       .full_o   (rob_full[port]  ),
+//       .empty_o  (rob_empty[port] )
+//     );
+// `else
+//     fifo_v3 #(
+//       .DATA_WIDTH(ELEN              ),
+//       .DEPTH     (NrOutstandingLoads)
+//     ) i_reorder_buffer (
+//       .clk_i     (clk_i           ),
+//       .rst_ni    (rst_ni          ),
+//       .flush_i   (1'b0            ),
+//       .testmode_i(1'b0            ),
+//       .data_i    (rob_wdata[port] ),
+//       .push_i    (rob_push[port]  ),
+//       .data_o    (rob_rdata[port] ),
+//       .pop_i     (rob_pop[port]   ),
+//       .full_o    (rob_full[port]  ),
+//       .empty_o   (rob_empty[port] ),
+//       .usage_o   (/* Unused */    )
+//     );
+//     assign rob_rvalid[port] = !rob_empty[port];
+//     assign rob_rid[port]    = '0;
+// `endif
   end: gen_rob
 
   //////////////////////
@@ -870,6 +889,7 @@ module spatz_vlsu
         // Need to consider out-of-order memory response
         rob_push[port]  = spatz_mem_rsp_valid_i[port] && (state_q == VLSU_RunningLoad) && spatz_mem_rsp_i[port].write == '0;
 `else
+        rob_wid[port]   = spatz_mem_rsp_i[port].user.req_id;
         rob_push[port]  = spatz_mem_rsp_valid_i[port] && (state_q == VLSU_RunningLoad) && store_count_q[port] == '0;
 `endif
         if (!rob_full[port] && !offset_queue_full[port] && mem_operation_valid[port]) begin
@@ -1000,7 +1020,10 @@ module spatz_vlsu
     assign spatz_mem_req[port].amo   = reqrsp_pkg::AMONone;
     assign spatz_mem_req[port].data  = mem_req_data[port];
     assign spatz_mem_req[port].strb  = mem_req_strb[port];
-    assign spatz_mem_req[port].user  = '0;
+    // assign spatz_mem_req[port].user  = '0;
+    assign spatz_mem_req[port].user.req_id   = mem_req_id[port];
+    assign spatz_mem_req[port].user.core_id  = '0;
+    assign spatz_mem_req[port].user.is_core  = '0;
     assign spatz_mem_req_valid[port] = mem_req_svalid[port] || mem_req_lvalid[port];
 `endif
   end
