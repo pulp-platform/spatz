@@ -3206,39 +3206,9 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
     .lsu_pvalid_o  (lsu_pvalid  ),
     .lsu_pready_i  (lsu_pready  ),
     .lsu_empty_o   (lsu_empty   ),
-    .data_req_o    (data_req_o  ), 
+    .data_req_o    (data_req_o  ),
     .data_rsp_i    (data_rsp_i  )
   );
-
-  // snitch_lsu_reorder #(
-  //   .AddrWidth           (AddrWidth),
-  //   .DataWidth           (DataWidth),
-  //   .dreq_t              (dreq_t),
-  //   .drsp_t              (drsp_t),
-  //   .tag_t               (logic[RegWidth-1:0]),
-  //   .NumOutstandingMem   (NumIntOutstandingMem),
-  //   .NumOutstandingLoads (NumIntOutstandingLoads)
-  // ) i_snitch_lsu (
-  //   .clk_i (clk_i),
-  //   .rst_i (rst_i),
-  //   .lsu_qtag_i (rd),
-  //   .lsu_qwrite_i  (is_store    ),
-  //   .lsu_qsigned_i (is_signed   ),
-  //   .lsu_qaddr_i   (ls_paddr    ),
-  //   .lsu_qdata_i   (lsu_qdata   ),
-  //   .lsu_qsize_i   (ls_size     ),
-  //   .lsu_qamo_i    (ls_amo      ),
-  //   .lsu_qvalid_i  (lsu_qvalid  ),
-  //   .lsu_qready_o  (lsu_qready  ),
-  //   .lsu_pdata_o   (ld_result   ),
-  //   .lsu_ptag_o    (lsu_rd      ),
-  //   .lsu_perror_o  (/* ignored for the moment */),
-  //   .lsu_pvalid_o  (lsu_pvalid  ),
-  //   .lsu_pready_i  (lsu_pready  ),
-  //   .lsu_empty_o   (lsu_empty   ),
-  //   .data_req_o    (data_req_o  ), 
-  //   .data_rsp_i    (data_rsp_i  )
-  // );
 
   assign lsu_tlb_qvalid = valid_instr & (is_load | is_store)
                                       & ~(ld_addr_misaligned | st_addr_misaligned);
