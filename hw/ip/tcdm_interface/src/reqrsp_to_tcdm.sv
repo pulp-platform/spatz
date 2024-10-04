@@ -52,19 +52,23 @@ module reqrsp_to_tcdm #(
     .mem_resp_valid_i (tcdm_rsp_i.p_valid)
   );
 
-  assign tcdm_req_o.q = '{
-    addr: req.addr,
-    write: req.write,
-    amo: req.amo,
-    data: req.data,
-    strb: req.strb,
-    user: '0
-  };
+  always_comb begin
+    tcdm_req_o.q = '{
+      addr: req.addr,
+      write: req.write,
+      amo:  req.amo,
+      data: req.data,
+      strb: req.strb,
+      user: '0
+    };
+    tcdm_req_o.q.user.req_id = req.id;
 
-  assign rsp = '{
-    data: tcdm_rsp_i.p.data,
-    error: 1'b0
-  };
+    rsp = '{
+      data : tcdm_rsp_i.p.data,
+      error: 1'b0,
+      id   : tcdm_rsp_i.p.user.req_id
+    };
+  end
 
 endmodule
 

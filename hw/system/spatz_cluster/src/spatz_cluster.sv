@@ -514,6 +514,7 @@ module spatz_cluster
     .clk_i        (clk_i                                 ),
     .rst_ni       (rst_ni                                ),
     .busy_o       (/* Unused */                          ),
+    .test_i       (1'b0                                  ),
     .axi_req_i    (wide_axi_slv_req[TCDMDMA]             ),
     .axi_resp_o   (wide_axi_slv_rsp[TCDMDMA]             ),
     .mem_req_o    (ext_dma_req.q_valid                   ),

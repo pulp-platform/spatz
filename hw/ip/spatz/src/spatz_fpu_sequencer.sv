@@ -513,6 +513,7 @@ module spatz_fpu_sequencer
   logic                 fp_lsu_pready;
 
   // TODO: remove hardcoding
+  `ifdef MEMPOOL_SPATZ
   logic [AddrWidth-1:0] mem_qaddr;
   logic                 mem_qwrite;
   logic [DataWidth-1:0] mem_qdata;
@@ -521,8 +522,9 @@ module spatz_fpu_sequencer
   logic [DataWidth-1:0] mem_pdata;
   logic                 mem_perror;
   logic [IdWidth-1:0]   mem_pid;
+  `endif
 
-  snitch_lsu #(
+  snitch_lsu2 #(
     .NaNBox             (1                  ),
     .dreq_t             (dreq_t             ),
     .drsp_t             (drsp_t             ),
@@ -547,6 +549,7 @@ module spatz_fpu_sequencer
     .lsu_perror_o (/* Unused */    ),
     .lsu_pvalid_o (fp_lsu_pvalid   ),
     .lsu_pready_i (fp_lsu_pready   ),
+    .lsu_empty_o  (/* Unused */    ),
     // Memory interface
 `ifdef MEMPOOL_SPATZ
     .data_qaddr_o (mem_qaddr              ),

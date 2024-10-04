@@ -92,6 +92,7 @@ sources:
     # - hw/ip/snitch/src/snitch_regfile_fpga.sv
     # - hw/ip/snitch/src/snitch_regfile_latch.sv
     - hw/ip/snitch/src/snitch_lsu.sv
+    - hw/ip/snitch/src/snitch_lsu2.sv
     - hw/ip/snitch/src/snitch_l0_tlb.sv
     # Level 1:
     - target: not(disable_pmcs)

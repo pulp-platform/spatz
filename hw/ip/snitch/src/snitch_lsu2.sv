@@ -8,7 +8,9 @@
 /// `NumOutstandingMem` requests in total) and optionally NaNBox if used in a
 /// floating-point setting. It expects its memory sub-system to keep order (as if
 /// issued with a single ID).
-module snitch_lsu #(
+module snitch_lsu2
+  import cf_math_pkg::idx_width;
+#(
   parameter int unsigned AddrWidth           = 32,
   parameter int unsigned DataWidth           = 32,
   /// Tag passed from input to output. All transactions are in-order.
@@ -22,6 +24,7 @@ module snitch_lsu #(
   parameter type         dreq_t              = logic,
   parameter type         drsp_t              = logic,
   /// Derived parameter *Do not override*
+  localparam int unsigned IdWidth = idx_width(NumOutstandingLoads),
   parameter type addr_t = logic [AddrWidth-1:0],
   parameter type data_t = logic [DataWidth-1:0]
 ) (
@@ -55,78 +58,93 @@ module snitch_lsu #(
   logic [63:0] lsu_qdata, data_qdata;
 
   typedef struct packed {
+    logic                  write;
     tag_t                  tag;
     logic                  sign_ext;
-    logic [DataAlign-1:0] offset;
+    logic [DataAlign-1:0]  offset;
     logic [1:0]            size;
   } laq_t;
 
+  typedef logic [IdWidth-1:0] id_t;
+
+  // ID Table
+  logic   [NumOutstandingLoads-1:0] id_available_d, id_available_q;
+  laq_t   [NumOutstandingLoads-1:0] laq_d,          laq_q;
+  laq_t                             req_laq,        rsp_laq;
+  id_t                              req_id,         rsp_id;
+  id_t                              req_id_d,       req_id_q;
+  logic                             hs_pending_d,   hs_pending_q;
+  logic                             id_table_push,  id_table_pop;
+  logic                             id_table_full;
+
   // Load Address Queue (LAQ)
-  laq_t laq_in, laq_out;
-  logic mem_out;
-  logic laq_full, mem_full;
-  logic laq_push;
+  always_comb begin
+    id_available_d = id_available_q;
+    laq_d          = laq_q;
 
-  fifo_v3 #(
-    .FALL_THROUGH ( 1'b0                ),
-    .DEPTH        ( NumOutstandingLoads ),
-    .dtype        ( laq_t               )
-  ) i_fifo_laq (
-    .clk_i,
-    .rst_ni (~rst_i),
-    .flush_i (1'b0),
-    .testmode_i(1'b0),
-    .full_o (laq_full),
-    .empty_o (/* open */),
-    .usage_o (/* open */),
-    .data_i (laq_in),
-    .push_i (laq_push),
-    .data_o (laq_out),
-    .pop_i (data_rsp_i.p_valid & data_req_o.p_ready & ~mem_out)
-  );
+    // new req, store laq for this id
+    if (id_table_push) begin
+      id_available_d[req_id] = 1'b0;
+      laq_d[req_id]          = req_laq;
+    end
 
-  // For each memory transaction save whether this was a load or a store. We
-  // need this information to suppress stores.
-  fifo_v3 #(
-    .FALL_THROUGH (1'b0),
-    .DEPTH (NumOutstandingMem),
-    .DATA_WIDTH (1)
-  ) i_fifo_mem (
-    .clk_i,
-    .rst_ni (~rst_i),
-    .flush_i (1'b0),
-    .testmode_i (1'b0),
-    .full_o (mem_full),
-    .empty_o (lsu_empty_o),
-    .usage_o ( /* open */ ),
-    .data_i (lsu_qwrite_i),
-    .push_i (data_req_o.q_valid & data_rsp_i.q_ready),
-    .data_o (mem_out),
-    .pop_i (data_rsp_i.p_valid & data_req_o.p_ready)
-  );
+    // free id and take out data
+    if (id_table_pop) begin
+      id_available_d[rsp_id] = 1'b1;
+    end
+  end
 
-  assign laq_in = '{
+  assign req_laq = '{
+    write:    lsu_qwrite_i,
     tag:      lsu_qtag_i,
     sign_ext: lsu_qsigned_i,
     offset:   lsu_qaddr_i[DataAlign-1:0],
     size:     lsu_qsize_i
   };
 
+  assign rsp_laq = laq_q[rsp_id];
+
+  // No pending requests if all IDs are available
+  assign lsu_empty_o = &id_available_q;
+
+  // Pop if response accepted
+  assign id_table_pop = data_rsp_i.p_valid & data_req_o.p_ready;
+
+  // Push if load requested even if downstream is not ready yet, to keep the interface stable.
+  assign id_table_push = data_req_o.q_valid && !hs_pending_q;
+
+  // Buffer whether we are pushing an ID but still waiting for the ready
+  always_comb begin
+    req_id_d = req_id_q;
+    if (id_table_push && !data_rsp_i.q_ready) begin
+      req_id_d = req_id;
+    end
+  end
+
+  // Search available ID for request
+  lzc #(
+    .WIDTH ( NumOutstandingLoads )
+  ) i_req_id (
+    .in_i   ( id_available_q ),
+    .cnt_o  ( req_id         ),
+    .empty_o( id_table_full  )
+  );
+
   // Only make a request when we got a valid request and if it is a load also
   // check that we can actually store the necessary information to process it in
   // the upcoming cycle(s).
-  assign data_req_o.q_valid = lsu_qvalid_i & (lsu_qwrite_i | ~laq_full) & ~mem_full;
+  assign data_req_o.q_valid = lsu_qvalid_i & (lsu_qwrite_i | ~id_table_full | hs_pending_q);
   assign data_req_o.q.write = lsu_qwrite_i;
   assign data_req_o.q.addr = lsu_qaddr_i;
   assign data_req_o.q.amo  = lsu_qamo_i;
   assign data_req_o.q.size = lsu_qsize_i;
-  assign data_req_o.q.id   = '0;
+  assign data_req_o.q.id   = hs_pending_q ? req_id_q : req_id;
 
   // Generate byte enable mask.
   always_comb begin
     unique case (lsu_qsize_i)
-      2'b00: data_req_o.q.strb = ('b1 << lsu_qaddr_i[DataAlign-1:0]);
-      2'b01: data_req_o.q.strb = ('b11 << lsu_qaddr_i[DataAlign-1:0]);
+      2'b00: data_req_o.q.strb = ('b1    << lsu_qaddr_i[DataAlign-1:0]);
+      2'b01: data_req_o.q.strb = ('b11   << lsu_qaddr_i[DataAlign-1:0]);
       2'b10: data_req_o.q.strb = ('b1111 << lsu_qaddr_i[DataAlign-1:0]);
       2'b11: data_req_o.q.strb = '1;
       default: data_req_o.q.strb = '0;
@@ -153,30 +171,47 @@ module snitch_lsu #(
   /* verilator lint_on WIDTH */
 
   // The interface didn't accept our request yet
-  assign lsu_qready_o = ~(data_req_o.q_valid & ~data_rsp_i.q_ready)
-                      & (lsu_qwrite_i | ~laq_full) & ~mem_full;
-  assign laq_push = ~lsu_qwrite_i & data_rsp_i.q_ready & data_req_o.q_valid & ~laq_full;
+  assign hs_pending_d = data_req_o.q_valid & ~data_rsp_i.q_ready;
+  // assign lsu_qready_o = ~hs_pending_d & (lsu_qwrite_i | ~id_table_full);
+  assign lsu_qready_o = ~hs_pending_d & (hs_pending_q || ~id_table_full || lsu_qwrite_i);
+  // assign laq_push = ~lsu_qwrite_i & data_rsp_i.q_ready & data_req_o.q_valid & ~id_table_full;
 
   // Return Path
   // shift the load data back
   logic [63:0] shifted_data;
-  assign shifted_data = data_rsp_i.p.data >> {laq_out.offset, 3'b000};
+  assign shifted_data = data_rsp_i.p.data >> {rsp_laq.offset, 3'b000};
   always_comb begin
-    unique case (laq_out.size)
-      2'b00: ld_result = {{56{(shifted_data[7] | NaNBox) & laq_out.sign_ext}}, shifted_data[7:0]};
-      2'b01: ld_result = {{48{(shifted_data[15] | NaNBox) & laq_out.sign_ext}}, shifted_data[15:0]};
-      2'b10: ld_result = {{32{(shifted_data[31] | NaNBox) & laq_out.sign_ext}}, shifted_data[31:0]};
+    unique case (rsp_laq.size)
+      2'b00: ld_result = {{56{(shifted_data[7]  | NaNBox) & rsp_laq.sign_ext}}, shifted_data[7:0]};
+      2'b01: ld_result = {{48{(shifted_data[15] | NaNBox) & rsp_laq.sign_ext}}, shifted_data[15:0]};
+      2'b10: ld_result = {{32{(shifted_data[31] | NaNBox) & rsp_laq.sign_ext}}, shifted_data[31:0]};
       2'b11: ld_result = shifted_data;
       default: ld_result = shifted_data;
     endcase
   end
 
+  assign rsp_id = data_rsp_i.p.id;
+
   assign lsu_perror_o = data_rsp_i.p.error;
-  assign lsu_pdata_o = ld_result[DataWidth-1:0];
-  assign lsu_ptag_o = laq_out.tag;
+  assign lsu_pdata_o  = ld_result[DataWidth-1:0];
+  assign lsu_ptag_o   = rsp_laq.tag;
   // In case of a write, don't signal a valid transaction. Stores are always
   // without ans answer to the core.
-  assign lsu_pvalid_o = data_rsp_i.p_valid & ~mem_out;
-  assign data_req_o.p_ready = lsu_pready_i | mem_out;
+  assign lsu_pvalid_o = data_rsp_i.p_valid & ~rsp_laq.write;
+  assign data_req_o.p_ready = lsu_pready_i | rsp_laq.write;
+
+  always_ff @(posedge clk_i or posedge rst_i) begin
+    if (rst_i) begin
+      id_available_q    <= '1;
+      laq_q             <= '0;
+      req_id_q          <= '0;
+      hs_pending_q      <= '0;
+    end else begin
+      id_available_q    <= id_available_d;
+      laq_q             <= laq_d;
+      req_id_q          <= req_id_d;
+      hs_pending_q      <= hs_pending_d;
+    end
+  end  
 
 endmodule

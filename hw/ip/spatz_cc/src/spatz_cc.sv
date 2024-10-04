@@ -88,7 +88,8 @@ module spatz_cc
     parameter int                          unsigned        NumSpatzFUs              = (NumSpatzFPUs > NumSpatzIPUs) ? NumSpatzFPUs : NumSpatzIPUs,
     parameter int                          unsigned        NumMemPortsPerSpatz      = NumSpatzFUs,
     parameter int                          unsigned        TCDMPorts                = RVV ? NumMemPortsPerSpatz + 1 : 1,
-    parameter type                                         addr_t                   = logic [AddrWidth-1:0]
+    parameter type                                         addr_t                   = logic [AddrWidth-1:0],
+    parameter type                                         req_id_t                 = logic [$clog2(NumSpatzOutstandingLoads)-1:0]
   ) (
     input  logic                         clk_i,
     input  logic                         clk_d2_i,
@@ -167,6 +168,7 @@ module spatz_cc
     .drsp_t                 (drsp_t                ),
     .pa_t                   (pa_t                  ),
     .l0_pte_t               (l0_pte_t              ),
+    .id_t                   (req_id_t              ),
     .BootAddr               (BootAddr              ),
     .SnitchPMACfg           (SnitchPMACfg          ),
     .NumIntOutstandingLoads (NumIntOutstandingLoads),
@@ -400,6 +402,12 @@ module spatz_cc
   // Decide whether to go to SoC or TCDM
   dreq_t                  data_tcdm_req;
   drsp_t                  data_tcdm_rsp;
+  dreq_t                  data_soc_req;
+  drsp_t                  data_soc_rsp;
+  logic [2:0]             data_soc_req_id, data_soc_rsp_id;
+  logic                   data_soc_push, data_soc_pop;
+  logic                   data_soc_full, data_soc_empty;
+
   localparam int unsigned SelectWidth   = cf_math_pkg::idx_width(2);
   typedef logic [SelectWidth-1:0] select_t;
   select_t slave_select;
@@ -414,9 +422,51 @@ module spatz_cc
     .slv_select_i (slave_select               ),
     .slv_req_i    (merged_dreq                ),
     .slv_rsp_o    (merged_drsp                ),
-    .mst_req_o    ({data_tcdm_req, data_req_o}),
-    .mst_rsp_i    ({data_tcdm_rsp, data_rsp_i})
+    .mst_req_o    ({data_tcdm_req, data_soc_req}),
+    .mst_rsp_i    ({data_tcdm_rsp, data_soc_rsp})
   );
+
+  // Add a fifo here to store id information for non-tcdm request (in-order)
+
+  fifo_v3 #(
+    .DATA_WIDTH(3               ),
+    .DEPTH     (NumIntOutstandingMem)
+  ) i_id_fifo (
+    .clk_i     (clk_i           ),
+    .rst_ni    (rst_ni          ),
+    .flush_i   (1'b0            ),
+    .testmode_i(1'b0            ),
+    .data_i    (data_soc_req_id ),
+    .push_i    (data_soc_push   ),
+    .data_o    (data_soc_rsp_id ),
+    .pop_i     (data_soc_pop    ),
+    .full_o    (data_soc_full   ),
+    .empty_o   (data_soc_empty  ),
+    .usage_o   (/* Unused */    )
+  );
+
+  always_comb begin : id_fifo_comb
+    // pass input response
+    data_soc_rsp      = data_rsp_i;
+    data_req_o        = data_soc_req;
+
+    // push in id when
+    // 1. req is read
+    // 2. req HS
+    data_soc_push     = data_soc_req.q_valid & data_soc_rsp.q_ready;
+    data_soc_req_id   = data_soc_req.q.id;
+
+    // pop out id when
+    // 1. rsp from read
+    // 2. rsp HS
+    data_soc_pop      = data_soc_req.p_ready & data_soc_rsp.p_valid;
+    data_soc_rsp.p.id = data_soc_rsp_id;
+
+    // if FIFO is empty, stop taking in response
+    data_req_o.p_ready &= (!data_soc_empty);
+    // if FIFO is full, stop taking in request
+    data_soc_rsp.q_ready &= (!data_soc_full);
+  end
 
   typedef struct packed {
     int unsigned idx;
