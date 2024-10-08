@@ -222,10 +222,11 @@ module spatz_cluster
 
   // L1 Cache
   localparam int unsigned L1AddrWidth     = 32;
-  localparam int unsigned L1NumEntry      = 4096;
+  localparam int unsigned L1NumEntry      = 512;
   localparam int unsigned L1LineWidth     = 512;
-  localparam int unsigned L1Associativity = 8;
+  localparam int unsigned L1Associativity = 4;
   localparam int unsigned L1BankFactor    = 2;
+  localparam int unsigned L1CoalFactor    = 2;
 
 
   // --------
@@ -245,7 +246,7 @@ module spatz_cluster
 
   typedef logic [TCDMMemAddrWidth-1:0] tcdm_mem_addr_t;
   typedef logic [TCDMAddrWidth-1:0] tcdm_addr_t;
-  // typedef logic [SPMAddrWidth-1:0] spm_addr_t;
+  typedef logic [SPMAddrWidth-1:0] spm_addr_t;
 
   typedef logic [$clog2(NumSpatzOutstandingLoads[0])-1:0] reqid_t;
 
@@ -268,6 +269,7 @@ module spatz_cluster
 
   `TCDM_TYPEDEF_ALL(tcdm, tcdm_addr_t, data_t, strb_t, tcdm_user_t)
   `TCDM_TYPEDEF_ALL(tcdm_dma, tcdm_addr_t, data_dma_t, strb_dma_t, logic)
+  `TCDM_TYPEDEF_ALL(spm, spm_addr_t, data_t, strb_t, tcdm_user_t)
 
   `REG_BUS_TYPEDEF_ALL(reg, addr_t, data_t, strb_t)
   `REG_BUS_TYPEDEF_ALL(reg_dma, addr_t, data_dma_t, strb_dma_t)
@@ -397,17 +399,11 @@ module spatz_cluster
   tcdm_dma_rsp_t ext_dma_rsp;
 
   // AXI Ports into TCDM (from SoC).
-  tcdm_req_t axi_soc_req;
-  tcdm_rsp_t axi_soc_rsp;
+  spm_req_t axi_soc_req;
+  spm_rsp_t axi_soc_rsp;
 
   tcdm_req_t [NrTCDMPortsCores-1:0] tcdm_req;
   tcdm_rsp_t [NrTCDMPortsCores-1:0] tcdm_rsp;
-
-  tcdm_req_t [NrTCDMPortsCores-1:0] spm_req;
-  tcdm_rsp_t [NrTCDMPortsCores-1:0] spm_rsp;
-
-  tcdm_req_t [NrTCDMPortsCores-1:0] cache_req;
-  tcdm_rsp_t [NrTCDMPortsCores-1:0] cache_rsp;
 
   core_events_t [NrCores-1:0] core_events;
   tcdm_events_t               tcdm_events;
@@ -429,6 +425,27 @@ module spatz_cluster
   // 7. Misc. Wires.
   logic               icache_prefetch_enable;
   logic [NrCores-1:0] cl_interrupt;
+
+  // 8. L1 D$
+  spm_req_t   [NrTCDMPortsCores-1:0] spm_req;
+  spm_rsp_t   [NrTCDMPortsCores-1:0] spm_rsp;
+
+  tcdm_req_t  [NrTCDMPortsCores-1:0] cache_req;
+  tcdm_rsp_t  [NrTCDMPortsCores-1:0] cache_rsp;
+
+  logic       [NrTCDMPortsCores-1:0] cache_req_valid;
+  logic       [NrTCDMPortsCores-1:0] cache_req_ready;
+  tcdm_addr_t [NrTCDMPortsCores-1:0] cache_req_addr;
+  tcdm_user_t [NrTCDMPortsCores-1:0] cache_req_meta;
+  logic       [NrTCDMPortsCores-1:0] cache_req_write;
+  data_t      [NrTCDMPortsCores-1:0] cache_req_data;
+
+  logic       [NrTCDMPortsCores-1:0] cache_rsp_valid;
+  logic       [NrTCDMPortsCores-1:0] cache_rsp_ready;
+  logic       [NrTCDMPortsCores-1:0] cache_rsp_write;
+  data_t      [NrTCDMPortsCores-1:0] cache_rsp_data;
+  tcdm_user_t [NrTCDMPortsCores-1:0] cache_rsp_meta;
+
 
   // -------------
   // DMA Subsystem
@@ -695,95 +712,117 @@ module spatz_cluster
     end
   end
 
+  // TODO: take from CSR/inputs
+  logic [L1AddrWidth-1:0] tcdm_start_addr, tcdm_end_addr, spm_size;
+  assign tcdm_start_addr = 32'h5100_0000;
+  assign tcdm_end_addr   = 32'h5200_0000;
+  assign spm_size        = 32'h0010_0000;
+
   // split the requests for spm or cache from core side
   spatz_addr_mapper #(
-    .NumIO (NrTCDMPortsCores),
-    .AddrWidth (32),
-    .SPMAddrWidth (32),
-    .DataWidth (64),
-    .mem_req_t (tcdm_req_t),
-    .mem_rsp_t (tcdm_rsp_t),
-    .spm_req_t (tcdm_req_t),
-    .spm_rsp_t (tcdm_rsp_t)
+    .NumIO          (NrTCDMPortsCores ),
+    .AddrWidth      (L1AddrWidth      ),
+    .SPMAddrWidth   (SPMAddrWidth     ),
+    .DataWidth      (DataWidth        ),
+    .mem_req_t      (tcdm_req_t       ),
+    .mem_rsp_t      (tcdm_rsp_t       ),
+    .spm_req_t      (spm_req_t        ),
+    .spm_rsp_t      (spm_rsp_t        )
   ) i_tcdm_mapper (
-    .clk_i     (clk_i),
-    .rst_ni    (rst_ni),
+    .clk_i                (clk_i           ),
+    .rst_ni               (rst_ni          ),
     // Input
-    .mem_req_i (tcdm_req),
-    .mem_rsp_o (tcdm_rsp),
-    .error_o   (),
+    .mem_req_i            (tcdm_req        ),
+    .mem_rsp_o            (tcdm_rsp        ),
+    .error_o              (/* todo: connect to CSR */),
     // Address
-    .tcdm_start_address_i (32'h5100_0000),
-    .tcdm_end_address_i   (32'h5200_0000),
-    .spm_size_i           (32'h0010_0000),
+    .tcdm_start_address_i (tcdm_start_addr ),
+    .tcdm_end_address_i   (tcdm_end_addr   ),
+    .spm_size_i           (spm_size        ),
     // Output
-    .spm_req_o (spm_req),
-    .spm_rsp_i (spm_rsp),
-    .cache_req_o (),
-    .cache_rsp_i ('0)
+    .spm_req_o            (spm_req         ),
+    .spm_rsp_i            (spm_rsp         ),
+    .cache_req_o          (cache_req       ),
+    .cache_rsp_i          (cache_rsp       )
   );
+
+  for (genvar j = 0; j < NrTCDMPortsCores; j++) begin
+    assign cache_req_valid[j] = cache_req[j].q_valid;
+    assign cache_rsp_ready[j] = 1'b1;
+    assign cache_req_addr[j]  = cache_req[j].q.addr;
+    assign cache_req_meta[j]  = cache_req[j].q.user;
+    assign cache_req_write[j] = cache_req[j].q.write;
+    assign cache_req_data[j]  = cache_req[j].q.data;
+
+    assign cache_rsp[j].p_valid = cache_rsp_valid[j];
+    assign cache_rsp[j].q_ready = cache_req_ready[j];
+    assign cache_rsp[j].p.data  = cache_rsp_data[j];
+    assign cache_rsp[j].p.user  = cache_rsp_meta[j];
+
+    // assign cache_rsp[j].p.write = cache_rsp_write[j];
+  end
 
   // flamingo_spatz_cache_ctrl #(
   //   // Core
-  //   .NumPorts         (NrTCDMPortsCores),
-  //   .CoalExtFactor    (1),
-  //   .AddrWidth        (L1AddrWidth),
-  //   .WordWidth        (DataWidth),
+  //   .NumPorts         (NrTCDMPortsCores  ),
+  //   .CoalExtFactor    (L1CoalFactor      ),
+  //   .AddrWidth        (L1AddrWidth       ),
+  //   .WordWidth        (DataWidth         ),
   //   // Cache
-  //   .NumCacheEntry    (L1NumEntry),
-  //   .CacheLineWidth   (L1LineWidth),
-  //   .SetAssociativity (L1Associativity),
-  //   .BankFactor       (L1BankFactor),
+  //   .NumCacheEntry    (L1NumEntry        ),
+  //   .CacheLineWidth   (L1LineWidth       ),
+  //   .SetAssociativity (L1Associativity   ),
+  //   .BankFactor       (L1BankFactor      ),
   //   // Type
-  //   .core_meta_t      (tcdm_user_t),
-  //   .axi_req_t        (axi_mst_dma_req_t),
+  //   .core_meta_t      (tcdm_user_t       ),
+  //   .axi_req_t        (axi_mst_dma_req_t ),
   //   .axi_resp_t       (axi_mst_dma_resp_t)
   // ) i_l1_controller (
-  //   .clk_i                 (clk_i),
-  //   .rst_ni                (rst_ni),
+  //   .clk_i                 (clk_i            ),
+  //   .rst_ni                (rst_ni           ),
   //   // Sync Control
-  //   .cache_sync_valid_i    (cache_sync_valid_i),
-  //   .cache_sync_ready_o    (cache_sync_ready_o),
-  //   .cache_sync_insn_i     (cache_sync_insn_i),
+  //   .cache_sync_valid_i    ('0),
+  //   .cache_sync_ready_o    (/*todo: connect to CSR*/),
+  //   .cache_sync_insn_i     ('0),
   //   // SPM Size
-  //   .bank_depth_for_SPM_i  (bank_depth_for_SPM_i),
+  //   .bank_depth_for_SPM_i  ('0),
   //   // Request
-  //   .core_req_valid_i      (),
-  //   .core_req_ready_o      (),
-  //   .core_req_addr_i       (),
-  //   .core_req_meta_i       (),
-  //   .core_req_write_i      (),
-  //   .core_req_wdata_i      (),
+  //   .core_req_valid_i      (cache_req_valid ),
+  //   .core_req_ready_o      (cache_req_ready ),
+  //   .core_req_addr_i       (cache_req_addr  ),
+  //   .core_req_meta_i       (cache_req_meta  ),
+  //   .core_req_write_i      (cache_req_write ),
+  //   .core_req_wdata_i      (cache_req_data  ),
   //   // Response
-  //   .core_resp_valid_o     (),
-  //   .core_resp_ready_i     (),
-  //   .core_resp_write_o     (),
-  //   .core_resp_data_o      (),
-  //   .core_resp_meta_o      (),
+  //   .core_resp_valid_o     (cache_rsp_valid ),
+  //   .core_resp_ready_i     (cache_rsp_ready ),
+  //   .core_resp_write_o     (cache_rsp_write ),
+  //   .core_resp_data_o      (cache_rsp_data  ),
+  //   .core_resp_meta_o      (cache_rsp_meta  ),
   //   // AXI refill
-  //   .axi_req_o             (),
-  //   .axi_resp_i            (),
+  //   .axi_req_o             (/*todo: connect to wide xbar*/),
+  //   .axi_resp_i            ('0),
   //   // Tag Banks
-  //   .tcdm_tag_bank_req_o   (),
+  //   .tcdm_tag_bank_req_o   (/*todo: connect to banks*/),
   //   .tcdm_tag_bank_we_o    (),
   //   .tcdm_tag_bank_addr_o  (),
   //   .tcdm_tag_bank_wdata_o (),
   //   .tcdm_tag_bank_be_o    (),
-  //   .tcdm_tag_bank_rdata_i (),
+  //   .tcdm_tag_bank_rdata_i ('0),
   //   // Data Banks
   //   .tcdm_data_bank_req_o  (),
   //   .tcdm_data_bank_we_o   (),
   //   .tcdm_data_bank_addr_o (),
   //   .tcdm_data_bank_wdata_o(),
   //   .tcdm_data_bank_be_o   (),
-  //   .tcdm_data_bank_rdata_i()
+  //   .tcdm_data_bank_rdata_i('0)
   // );
 
   spatz_tcdm_interconnect #(
     .NumInp                (NumTCDMIn           ),
     .NumOut                (NrBanks             ),
-    .tcdm_req_t            (tcdm_req_t          ),
-    .tcdm_rsp_t            (tcdm_rsp_t          ),
+    .tcdm_req_t            (spm_req_t           ),
+    .tcdm_rsp_t            (spm_rsp_t           ),
     .mem_req_t             (mem_req_t           ),
     .mem_rsp_t             (mem_rsp_t           ),
     .MemAddrWidth          (TCDMMemAddrWidth    ),
@@ -1086,8 +1125,8 @@ module spatz_cluster
   axi_to_tcdm #(
     .axi_req_t  (axi_slv_req_t         ),
     .axi_rsp_t  (axi_slv_resp_t        ),
-    .tcdm_req_t (tcdm_req_t            ),
-    .tcdm_rsp_t (tcdm_rsp_t            ),
+    .tcdm_req_t (spm_req_t             ),
+    .tcdm_rsp_t (spm_rsp_t             ),
     .AddrWidth  (AxiAddrWidth          ),
     .DataWidth  (NarrowDataWidth       ),
     .IdWidth    (NarrowIdWidthOut      ),

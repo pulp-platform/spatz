@@ -9,6 +9,7 @@ ROOT := ${SPATZ_DIR}
 SPATZ_CLUSTER_DIR := ${SPATZ_DIR}/hw/system/spatz_cluster
 MKFILE_PATH := $(abspath $(lastword $(MAKEFILE_LIST)))
 MKFILE_DIR  := $(dir $(MKFILE_PATH))
+CACHE_PATH  := $(shell bender path insitu-cache)
 
 # Configuration file
 CFG ?= flamingo
@@ -77,6 +78,10 @@ $(CURDIR)/src/generated/bootrom.sv: test/bootrom.bin
 generate: src/generated/spatz_cluster_wrapper.sv
 src/generated/spatz_cluster_wrapper.sv: ${SPATZ_CLUSTER_CFG} $(find src/tpl) $(find test/*tpl)
 	${PYTHON} ${SPATZ_DIR}/util/clustergen.py -c ${SPATZ_CLUSTER_CFG} -o src/
+
+.PHONY: cache-init
+cache-init:
+	cd ${CACHE_PATH} && source sourceme.sh
 
 #############
 # Verilator #
