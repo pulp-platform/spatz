@@ -303,7 +303,7 @@ module axi_to_reqrsp #(
     // Silence those channels in case of a read.
     data: data & {DataWidth{meta.write}},
     strb: axi_req_i.w.strb & {StrbWidth{meta.write}},
-    id: '0;
+    id: '0,
     size: meta.size
   };
 

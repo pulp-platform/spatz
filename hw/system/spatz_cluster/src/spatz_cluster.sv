@@ -145,7 +145,10 @@ module spatz_cluster
   localparam int unsigned CoreIDWidth       = cf_math_pkg::idx_width(NrCores);
   localparam int unsigned TCDMMemAddrWidth  = $clog2(TCDMDepth);
   localparam int unsigned TCDMSize          = NrBanks * TCDMDepth * (DataWidth/8);
-  localparam int unsigned TCDMAddrWidth     = $clog2(TCDMSize);
+  // The short address for SPM
+  localparam int unsigned SPMAddrWidth      = $clog2(TCDMSize);
+  // Enlarge the address width for Spatz due to cache
+  localparam int unsigned TCDMAddrWidth     = 32;
   localparam int unsigned BanksPerSuperBank = AxiDataWidth / DataWidth;
   localparam int unsigned NrSuperBanks      = NrBanks / BanksPerSuperBank;
 
@@ -217,6 +220,14 @@ module spatz_cluster
     default           : '0
   };
 
+  // L1 Cache
+  localparam int unsigned L1AddrWidth     = 32;
+  localparam int unsigned L1NumEntry      = 4096;
+  localparam int unsigned L1LineWidth     = 512;
+  localparam int unsigned L1Associativity = 8;
+  localparam int unsigned L1BankFactor    = 2;
+
+
   // --------
   // Typedefs
   // --------
@@ -234,6 +245,7 @@ module spatz_cluster
 
   typedef logic [TCDMMemAddrWidth-1:0] tcdm_mem_addr_t;
   typedef logic [TCDMAddrWidth-1:0] tcdm_addr_t;
+  // typedef logic [SPMAddrWidth-1:0] spm_addr_t;
 
   typedef logic [$clog2(NumSpatzOutstandingLoads[0])-1:0] reqid_t;
 
@@ -390,6 +402,12 @@ module spatz_cluster
 
   tcdm_req_t [NrTCDMPortsCores-1:0] tcdm_req;
   tcdm_rsp_t [NrTCDMPortsCores-1:0] tcdm_rsp;
+
+  tcdm_req_t [NrTCDMPortsCores-1:0] spm_req;
+  tcdm_rsp_t [NrTCDMPortsCores-1:0] spm_rsp;
+
+  tcdm_req_t [NrTCDMPortsCores-1:0] cache_req;
+  tcdm_rsp_t [NrTCDMPortsCores-1:0] cache_rsp;
 
   core_events_t [NrCores-1:0] core_events;
   tcdm_events_t               tcdm_events;
@@ -677,6 +695,90 @@ module spatz_cluster
     end
   end
 
+  // split the requests for spm or cache from core side
+  spatz_addr_mapper #(
+    .NumIO (NrTCDMPortsCores),
+    .AddrWidth (32),
+    .SPMAddrWidth (32),
+    .DataWidth (64),
+    .mem_req_t (tcdm_req_t),
+    .mem_rsp_t (tcdm_rsp_t),
+    .spm_req_t (tcdm_req_t),
+    .spm_rsp_t (tcdm_rsp_t)
+  ) i_tcdm_mapper (
+    .clk_i     (clk_i),
+    .rst_ni    (rst_ni),
+    // Input
+    .mem_req_i (tcdm_req),
+    .mem_rsp_o (tcdm_rsp),
+    .error_o   (),
+    // Address
+    .tcdm_start_address_i (32'h5100_0000),
+    .tcdm_end_address_i   (32'h5200_0000),
+    .spm_size_i           (32'h0010_0000),
+    // Output
+    .spm_req_o (spm_req),
+    .spm_rsp_i (spm_rsp),
+    .cache_req_o (),
+    .cache_rsp_i ('0)
+  );
+
+  // flamingo_spatz_cache_ctrl #(
+  //   // Core
+  //   .NumPorts         (NrTCDMPortsCores),
+  //   .CoalExtFactor    (1),
+  //   .AddrWidth        (L1AddrWidth),
+  //   .WordWidth        (DataWidth),
+  //   // Cache
+  //   .NumCacheEntry    (L1NumEntry),
+  //   .CacheLineWidth   (L1LineWidth),
+  //   .SetAssociativity (L1Associativity),
+  //   .BankFactor       (L1BankFactor),
+  //   // Type
+  //   .core_meta_t      (tcdm_user_t),
+  //   .axi_req_t        (axi_mst_dma_req_t),
+  //   .axi_resp_t       (axi_mst_dma_resp_t)
+  // ) i_l1_controller (
+  //   .clk_i                 (clk_i),
+  //   .rst_ni                (rst_ni),
+  //   // Sync Control
+  //   .cache_sync_valid_i    (cache_sync_valid_i),
+  //   .cache_sync_ready_o    (cache_sync_ready_o),
+  //   .cache_sync_insn_i     (cache_sync_insn_i),
+  //   // SPM Size
+  //   .bank_depth_for_SPM_i  (bank_depth_for_SPM_i),
+  //   // Request
+  //   .core_req_valid_i      (),
+  //   .core_req_ready_o      (),
+  //   .core_req_addr_i       (),
+  //   .core_req_meta_i       (),
+  //   .core_req_write_i      (),
+  //   .core_req_wdata_i      (),
+  //   // Response
+  //   .core_resp_valid_o     (),
+  //   .core_resp_ready_i     (),
+  //   .core_resp_write_o     (),
+  //   .core_resp_data_o      (),
+  //   .core_resp_meta_o      (),
+  //   // AXI refill
+  //   .axi_req_o             (),
+  //   .axi_resp_i            (),
+  //   // Tag Banks
+  //   .tcdm_tag_bank_req_o   (),
+  //   .tcdm_tag_bank_we_o    (),
+  //   .tcdm_tag_bank_addr_o  (),
+  //   .tcdm_tag_bank_wdata_o (),
+  //   .tcdm_tag_bank_be_o    (),
+  //   .tcdm_tag_bank_rdata_i (),
+  //   // Data Banks
+  //   .tcdm_data_bank_req_o  (),
+  //   .tcdm_data_bank_we_o   (),
+  //   .tcdm_data_bank_addr_o (),
+  //   .tcdm_data_bank_wdata_o(),
+  //   .tcdm_data_bank_be_o   (),
+  //   .tcdm_data_bank_rdata_i()
+  // );
+
   spatz_tcdm_interconnect #(
     .NumInp                (NumTCDMIn           ),
     .NumOut                (NrBanks             ),
@@ -691,8 +793,8 @@ module spatz_cluster
   ) i_tcdm_interconnect (
     .clk_i     (clk_i                  ),
     .rst_ni    (rst_ni                 ),
-    .req_i     ({axi_soc_req, tcdm_req}),
-    .rsp_o     ({axi_soc_rsp, tcdm_rsp}),
+    .req_i     ({axi_soc_req, spm_req} ),
+    .rsp_o     ({axi_soc_rsp, spm_rsp} ),
     .mem_req_o (ic_req                 ),
     .mem_rsp_i (ic_rsp                 )
   );
@@ -769,7 +871,7 @@ module spatz_cluster
       .RegisterOffloadRsp      (RegisterOffloadRsp         ),
       .RegisterCoreReq         (RegisterCoreReq            ),
       .RegisterCoreRsp         (RegisterCoreRsp            ),
-      .TCDMAddrWidth           (TCDMAddrWidth              )
+      .TCDMAddrWidth           (SPMAddrWidth              )
     ) i_spatz_cc (
       .clk_i            (clk_i                               ),
       .clk_d2_i         (clk_i                               ),
