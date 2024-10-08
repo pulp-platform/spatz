@@ -229,6 +229,9 @@ module spatz_cluster
   localparam int unsigned L1BankFactor    = 2;
   localparam int unsigned L1CoalFactor    = 2;
   localparam int unsigned L1BankPerWay    = L1BankFactor * (L1LineWidth/DataWidth);
+  localparam int unsigned L1CacheWayEntry = L1NumEntry / L1Associativity;
+  localparam int unsigned L1NumTagBank    = L1BankFactor;
+  localparam int unsigned L1NumDataBank   = L1BankFactor * (L1LineWidth/DataWidth);
 
 
   // --------
@@ -252,7 +255,7 @@ module spatz_cluster
 
   typedef logic [$clog2(NumSpatzOutstandingLoads[0])-1:0] reqid_t;
 
-  typedef logic [$clog2(L1NumEntry/L1Associativity)-$clog2(L1BankFactor)-1:0] tcdm_bank_addr_t;
+  typedef logic [$clog2(L1CacheWayEntry)-$clog2(L1BankFactor)-1:0] tcdm_bank_addr_t;
 
   typedef struct packed {
     logic [CoreIDWidth-1:0] core_id;
@@ -803,6 +806,7 @@ module spatz_cluster
     .cache_sync_ready_o    (/*todo: connect to CSR*/),
     .cache_sync_insn_i     ('0),
     // SPM Size
+    // todo: full cache for testing
     .bank_depth_for_SPM_i  ('0),
     // Request
     .core_req_valid_i      (cache_req_valid          ),
@@ -835,6 +839,52 @@ module spatz_cluster
     .tcdm_data_bank_be_o   (l1_data_bank_be          ),
     .tcdm_data_bank_rdata_i(l1_data_bank_rdata       )
   );
+
+  // TODO: Test only, add physical banks for cache
+  for (genvar i = 0; i < L1Associativity; i++) begin : gen_meta_banks
+    for (genvar j = 0; j < L1NumTagBank; j++) begin: gen_l1_tag_banks
+      tc_sram #(
+        .NumWords  (L1CacheWayEntry/L1BankFactor),
+        .DataWidth ($bits(data_t)),
+        .ByteWidth ($bits(data_t)),
+        .NumPorts  (1),
+        .Latency   (1),
+        .SimInit   ("zeros")
+      ) i_meta_bank (
+        .clk_i  (clk_i                  ),
+        .rst_ni (rst_ni                 ),
+        .req_i  (l1_tag_bank_req  [i][j]),
+        .we_i   (l1_tag_bank_we   [i][j]),
+        .addr_i (l1_tag_bank_addr [i][j]),
+        .wdata_i(l1_tag_bank_wdata[i][j]),
+        .be_i   (l1_tag_bank_be   [i][j]),
+        .rdata_o(l1_tag_bank_rdata[i][j])
+      );
+    end
+  end
+
+  for (genvar i = 0; i < L1Associativity; i++) begin : gen_data_banks
+    for (genvar j = 0; j < L1NumDataBank; j++) begin: gen_l1_data_banks
+      tc_sram #(
+        .NumWords  (L1CacheWayEntry/L1BankFactor),
+        .DataWidth ($bits(data_t)),
+        .ByteWidth ($bits(data_t)),
+        .NumPorts  (1),
+        .Latency   (1),
+        .SimInit   ("zeros")
+      ) i_data_bank (
+        .clk_i  (clk_i                   ),
+        .rst_ni (rst_ni                  ),
+        .req_i  (l1_data_bank_req  [i][j]),
+        .we_i   (l1_data_bank_we   [i][j]),
+        .addr_i (l1_data_bank_addr [i][j]),
+        .wdata_i(l1_data_bank_wdata[i][j]),
+        .be_i   (l1_data_bank_be   [i][j]),
+        .rdata_o(l1_data_bank_rdata[i][j])
+      );
+    end
+  end
+
 
   spatz_tcdm_interconnect #(
     .NumInp                (NumTCDMIn           ),
