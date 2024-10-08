@@ -180,7 +180,8 @@ module spatz_cluster
   localparam int unsigned NrNarrowRules  = NrNarrowSlaves - 1;
 
   // Core Request, DMA, Instruction cache
-  localparam int unsigned NrWideMasters  = 3;
+  /// Additional one for L1 DCache
+  localparam int unsigned NrWideMasters  = 3 + 1;
   localparam int unsigned WideIdWidthOut = AxiIdWidthOut;
   localparam int unsigned WideIdWidthIn  = WideIdWidthOut - $clog2(NrWideMasters);
   // DMA X-BAR configuration
@@ -227,6 +228,7 @@ module spatz_cluster
   localparam int unsigned L1Associativity = 4;
   localparam int unsigned L1BankFactor    = 2;
   localparam int unsigned L1CoalFactor    = 2;
+  localparam int unsigned L1BankPerWay    = L1BankFactor * (L1LineWidth/DataWidth);
 
 
   // --------
@@ -249,6 +251,8 @@ module spatz_cluster
   typedef logic [SPMAddrWidth-1:0] spm_addr_t;
 
   typedef logic [$clog2(NumSpatzOutstandingLoads[0])-1:0] reqid_t;
+
+  typedef logic [$clog2(L1NumEntry/L1Associativity)-$clog2(L1BankFactor)-1:0] tcdm_bank_addr_t;
 
   typedef struct packed {
     logic [CoreIDWidth-1:0] core_id;
@@ -445,6 +449,20 @@ module spatz_cluster
   logic       [NrTCDMPortsCores-1:0] cache_rsp_write;
   data_t      [NrTCDMPortsCores-1:0] cache_rsp_data;
   tcdm_user_t [NrTCDMPortsCores-1:0] cache_rsp_meta;
+
+  logic            [L1Associativity-1:0][L1BankFactor-1:0] l1_tag_bank_req;
+  logic            [L1Associativity-1:0][L1BankFactor-1:0] l1_tag_bank_we;
+  tcdm_bank_addr_t [L1Associativity-1:0][L1BankFactor-1:0] l1_tag_bank_addr;
+  data_t           [L1Associativity-1:0][L1BankFactor-1:0] l1_tag_bank_wdata;
+  logic            [L1Associativity-1:0][L1BankFactor-1:0] l1_tag_bank_be;
+  data_t           [L1Associativity-1:0][L1BankFactor-1:0] l1_tag_bank_rdata;
+
+  logic            [L1Associativity-1:0][L1BankPerWay-1:0] l1_data_bank_req;
+  logic            [L1Associativity-1:0][L1BankPerWay-1:0] l1_data_bank_we;
+  tcdm_bank_addr_t [L1Associativity-1:0][L1BankPerWay-1:0] l1_data_bank_addr;
+  data_t           [L1Associativity-1:0][L1BankPerWay-1:0] l1_data_bank_wdata;
+  logic            [L1Associativity-1:0][L1BankPerWay-1:0] l1_data_bank_be;
+  data_t           [L1Associativity-1:0][L1BankPerWay-1:0] l1_data_bank_rdata;
 
 
   // -------------
@@ -762,61 +780,61 @@ module spatz_cluster
     // assign cache_rsp[j].p.write = cache_rsp_write[j];
   end
 
-  // flamingo_spatz_cache_ctrl #(
-  //   // Core
-  //   .NumPorts         (NrTCDMPortsCores  ),
-  //   .CoalExtFactor    (L1CoalFactor      ),
-  //   .AddrWidth        (L1AddrWidth       ),
-  //   .WordWidth        (DataWidth         ),
-  //   // Cache
-  //   .NumCacheEntry    (L1NumEntry        ),
-  //   .CacheLineWidth   (L1LineWidth       ),
-  //   .SetAssociativity (L1Associativity   ),
-  //   .BankFactor       (L1BankFactor      ),
-  //   // Type
-  //   .core_meta_t      (tcdm_user_t       ),
-  //   .axi_req_t        (axi_mst_dma_req_t ),
-  //   .axi_resp_t       (axi_mst_dma_resp_t)
-  // ) i_l1_controller (
-  //   .clk_i                 (clk_i            ),
-  //   .rst_ni                (rst_ni           ),
-  //   // Sync Control
-  //   .cache_sync_valid_i    ('0),
-  //   .cache_sync_ready_o    (/*todo: connect to CSR*/),
-  //   .cache_sync_insn_i     ('0),
-  //   // SPM Size
-  //   .bank_depth_for_SPM_i  ('0),
-  //   // Request
-  //   .core_req_valid_i      (cache_req_valid ),
-  //   .core_req_ready_o      (cache_req_ready ),
-  //   .core_req_addr_i       (cache_req_addr  ),
-  //   .core_req_meta_i       (cache_req_meta  ),
-  //   .core_req_write_i      (cache_req_write ),
-  //   .core_req_wdata_i      (cache_req_data  ),
-  //   // Response
-  //   .core_resp_valid_o     (cache_rsp_valid ),
-  //   .core_resp_ready_i     (cache_rsp_ready ),
-  //   .core_resp_write_o     (cache_rsp_write ),
-  //   .core_resp_data_o      (cache_rsp_data  ),
-  //   .core_resp_meta_o      (cache_rsp_meta  ),
-  //   // AXI refill
-  //   .axi_req_o             (/*todo: connect to wide xbar*/),
-  //   .axi_resp_i            ('0),
-  //   // Tag Banks
-  //   .tcdm_tag_bank_req_o   (/*todo: connect to banks*/),
-  //   .tcdm_tag_bank_we_o    (),
-  //   .tcdm_tag_bank_addr_o  (),
-  //   .tcdm_tag_bank_wdata_o (),
-  //   .tcdm_tag_bank_be_o    (),
-  //   .tcdm_tag_bank_rdata_i ('0),
-  //   // Data Banks
-  //   .tcdm_data_bank_req_o  (),
-  //   .tcdm_data_bank_we_o   (),
-  //   .tcdm_data_bank_addr_o (),
-  //   .tcdm_data_bank_wdata_o(),
-  //   .tcdm_data_bank_be_o   (),
-  //   .tcdm_data_bank_rdata_i('0)
-  // );
+  flamingo_spatz_cache_ctrl #(
+    // Core
+    .NumPorts         (NrTCDMPortsCores  ),
+    .CoalExtFactor    (L1CoalFactor      ),
+    .AddrWidth        (L1AddrWidth       ),
+    .WordWidth        (DataWidth         ),
+    // Cache
+    .NumCacheEntry    (L1NumEntry        ),
+    .CacheLineWidth   (L1LineWidth       ),
+    .SetAssociativity (L1Associativity   ),
+    .BankFactor       (L1BankFactor      ),
+    // Type
+    .core_meta_t      (tcdm_user_t       ),
+    .axi_req_t        (axi_mst_dma_req_t ),
+    .axi_resp_t       (axi_mst_dma_resp_t)
+  ) i_l1_controller (
+    .clk_i                 (clk_i            ),
+    .rst_ni                (rst_ni           ),
+    // Sync Control
+    .cache_sync_valid_i    ('0),
+    .cache_sync_ready_o    (/*todo: connect to CSR*/),
+    .cache_sync_insn_i     ('0),
+    // SPM Size
+    .bank_depth_for_SPM_i  ('0),
+    // Request
+    .core_req_valid_i      (cache_req_valid          ),
+    .core_req_ready_o      (cache_req_ready          ),
+    .core_req_addr_i       (cache_req_addr           ),
+    .core_req_meta_i       (cache_req_meta           ),
+    .core_req_write_i      (cache_req_write          ),
+    .core_req_wdata_i      (cache_req_data           ),
+    // Response
+    .core_resp_valid_o     (cache_rsp_valid          ),
+    .core_resp_ready_i     (cache_rsp_ready          ),
+    .core_resp_write_o     (cache_rsp_write          ),
+    .core_resp_data_o      (cache_rsp_data           ),
+    .core_resp_meta_o      (cache_rsp_meta           ),
+    // AXI refill
+    .axi_req_o             (wide_axi_mst_req[DCache] ),
+    .axi_resp_i            (wide_axi_mst_rsp[DCache] ),
+    // Tag Banks
+    .tcdm_tag_bank_req_o   (l1_tag_bank_req          ),
+    .tcdm_tag_bank_we_o    (l1_tag_bank_we           ),
+    .tcdm_tag_bank_addr_o  (l1_tag_bank_addr         ),
+    .tcdm_tag_bank_wdata_o (l1_tag_bank_wdata        ),
+    .tcdm_tag_bank_be_o    (l1_tag_bank_be           ),
+    .tcdm_tag_bank_rdata_i (l1_tag_bank_rdata        ),
+    // Data Banks
+    .tcdm_data_bank_req_o  (l1_data_bank_req         ),
+    .tcdm_data_bank_we_o   (l1_data_bank_we          ),
+    .tcdm_data_bank_addr_o (l1_data_bank_addr        ),
+    .tcdm_data_bank_wdata_o(l1_data_bank_wdata       ),
+    .tcdm_data_bank_be_o   (l1_data_bank_be          ),
+    .tcdm_data_bank_rdata_i(l1_data_bank_rdata       )
+  );
 
   spatz_tcdm_interconnect #(
     .NumInp                (NumTCDMIn           ),
@@ -910,7 +928,7 @@ module spatz_cluster
       .RegisterOffloadRsp      (RegisterOffloadRsp         ),
       .RegisterCoreReq         (RegisterCoreReq            ),
       .RegisterCoreRsp         (RegisterCoreRsp            ),
-      .TCDMAddrWidth           (SPMAddrWidth              )
+      .TCDMAddrWidth           (SPMAddrWidth               )
     ) i_spatz_cc (
       .clk_i            (clk_i                               ),
       .clk_d2_i         (clk_i                               ),

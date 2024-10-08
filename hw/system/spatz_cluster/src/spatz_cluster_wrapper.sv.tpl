@@ -36,6 +36,7 @@ package ${cfg['pkg_name']};
   // AXI Data Width
   localparam int unsigned SpatzAxiDataWidth = ${cfg['dma_data_width']};
   localparam int unsigned SpatzAxiStrbWidth = SpatzAxiDataWidth / 8;
+  localparam int unsigned SpatzAxiNarrowDataWidth = ${cfg['data_width']};
   // AXI Address Width
   localparam int unsigned SpatzAxiAddrWidth = ${cfg['addr_width']};
   // AXI ID Width
@@ -236,10 +237,10 @@ module ${cfg['name']}_wrapper
 
   // AXI Slave
   parameter int unsigned AsyncAxiInAwWidth = (2**LogDepth) * axi_pkg::aw_width(SpatzAxiAddrWidth, SpatzAxiIdInWidth, SpatzAxiUserWidth),
-  parameter int unsigned AsyncAxiInWWidth  = (2**LogDepth) * axi_pkg::w_width (SpatzAxiDataWidth, SpatzAxiUserWidth),
+  parameter int unsigned AsyncAxiInWWidth  = (2**LogDepth) * axi_pkg::w_width (SpatzAxiNarrowDataWidth, SpatzAxiUserWidth),
   parameter int unsigned AsyncAxiInBWidth  = (2**LogDepth) * axi_pkg::b_width (SpatzAxiIdInWidth, SpatzAxiUserWidth),
   parameter int unsigned AsyncAxiInArWidth = (2**LogDepth) * axi_pkg::ar_width(SpatzAxiAddrWidth, SpatzAxiIdInWidth, SpatzAxiUserWidth),
-  parameter int unsigned AsyncAxiInRWidth  = (2**LogDepth) * axi_pkg::r_width (SpatzAxiDataWidth, SpatzAxiIdInWidth, SpatzAxiUserWidth)
+  parameter int unsigned AsyncAxiInRWidth  = (2**LogDepth) * axi_pkg::r_width (SpatzAxiNarrowDataWidth, SpatzAxiIdInWidth, SpatzAxiUserWidth)
 % else:
   parameter type axi_out_req_t  = spatz_axi_out_req_t
 % endif

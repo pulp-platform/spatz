@@ -141,7 +141,8 @@ package snitch_pkg;
   typedef enum int unsigned {
     CoreReqWide = 0,
     SDMAMst     = 1,
-    ICache      = 2
+    ICache      = 2,
+    DCache      = 3
   } cluster_master_dma_e;
 
   /// Possible interconnect implementations.

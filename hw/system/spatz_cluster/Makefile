@@ -25,6 +25,7 @@ VSIM_HOME = /usr/pack/questa-2021.3-kgf/questasim
 
 VSIM_FLAGS += -t 1ps
 VSIM_FLAGS += -voptargs=+acc
+VSIM_FLAGS += -suppress vsim-3999
 VSIM_FLAGS += -do "log -r /*; source ${SPATZ_CLUSTER_DIR}/script/vsim/wave.tcl; run -a"
 
 VLOG_FLAGS += -svinputport=compat
@@ -32,6 +33,7 @@ VLOG_FLAGS += -override_timescale 1ns/1ps
 VLOG_FLAGS += -suppress 2583
 VLOG_FLAGS += -suppress 13314
 VLOG_FLAGS += -64
+
 
 # Verilated and compiled Spatz system
 VLT_ROOT = ${VERILATOR_INSTALL_DIR}/share/verilator
