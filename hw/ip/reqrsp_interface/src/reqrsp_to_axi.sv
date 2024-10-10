@@ -255,6 +255,7 @@ module reqrsp_to_axi import reqrsp_pkg::*; #(
   always_comb begin
     reqrsp_rsp_o.p.data = '0;
     reqrsp_rsp_o.p.id   = '0;
+    reqrsp_rsp_o.p.write = '0;
     // Normal case.
     if (r_valid) reqrsp_rsp_o.p.data = axi_rsp_i.r.data;
     // In case we got a B response and this wasn't an atomic, let's check

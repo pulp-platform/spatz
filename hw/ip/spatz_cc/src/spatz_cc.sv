@@ -404,7 +404,7 @@ module spatz_cc
   drsp_t                  data_tcdm_rsp;
   dreq_t                  data_soc_req;
   drsp_t                  data_soc_rsp;
-  logic [2:0]             data_soc_req_id, data_soc_rsp_id;
+  logic [3:0]             data_soc_req_id, data_soc_rsp_id;
   logic                   data_soc_push, data_soc_pop;
   logic                   data_soc_full, data_soc_empty;
 
@@ -429,7 +429,7 @@ module spatz_cc
   // Add a fifo here to store id information for non-tcdm request (in-order)
 
   fifo_v3 #(
-    .DATA_WIDTH(3               ),
+    .DATA_WIDTH(4               ),
     .DEPTH     (NumIntOutstandingMem)
   ) i_id_fifo (
     .clk_i     (clk_i           ),
@@ -454,13 +454,13 @@ module spatz_cc
     // 1. req is read
     // 2. req HS
     data_soc_push     = data_soc_req.q_valid & data_soc_rsp.q_ready;
-    data_soc_req_id   = data_soc_req.q.id;
+    data_soc_req_id   = {data_soc_req.q.id, data_soc_req.q.write};
 
     // pop out id when
     // 1. rsp from read
     // 2. rsp HS
     data_soc_pop      = data_soc_req.p_ready & data_soc_rsp.p_valid;
-    data_soc_rsp.p.id = data_soc_rsp_id;
+    {data_soc_rsp.p.id, data_soc_rsp.p.write} = data_soc_rsp_id;
 
     // if FIFO is empty, stop taking in response
     data_req_o.p_ready &= (!data_soc_empty);

@@ -21,7 +21,8 @@
 `define MEM_TYPEDEF_RSP_CHAN_T(__rsp_chan_t, __data_t, __user_t) \
   typedef struct packed { \
     __data_t data;        \
-    __user_t user;      \
+    __user_t user;        \
+    logic    write;       \
   } __rsp_chan_t;
 
 `define MEM_TYPEDEF_REQ_T(__req_t, __req_chan_t) \

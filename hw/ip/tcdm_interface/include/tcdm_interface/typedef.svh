@@ -22,6 +22,7 @@
   typedef struct packed { \
     __data_t data;        \
     __user_t user;        \
+    logic    write;       \
   } __rsp_chan_t;
 
 `define TCDM_TYPEDEF_REQ_T(__req_t, __req_chan_t) \

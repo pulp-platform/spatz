@@ -33,6 +33,7 @@ module reorder_buffer
   // ID request
   input  logic  id_req_i,
   output id_t   id_o,
+  output logic  id_valid_o,  // is the next id valid?
   output logic  full_o,
   output logic  empty_o
 );
@@ -41,29 +42,35 @@ module reorder_buffer
    *  Signals  *
    *************/
 
-  id_t              read_pointer_n, read_pointer_q;
-  id_t              write_pointer_n, write_pointer_q;
+  id_t              read_pointer_d, read_pointer_q;
+  id_t              write_pointer_d, write_pointer_q, write_next_ptr;
+
+  // Used to see which ID is available
+  logic [NumWords-1:0] id_valid_d, id_valid_q;
   // Keep track of the ROB utilization
-  logic [IdWidth:0] status_cnt_n, status_cnt_q;
+  logic [IdWidth:0] status_cnt_d, status_cnt_q;
 
   // Memory
-  data_t [NumWords-1:0] mem_n, mem_q;
-  logic  [NumWords-1:0] valid_n, valid_q;
+  data_t [NumWords-1:0] mem_d, mem_q;
+  logic  [NumWords-1:0] valid_d, valid_q;
 
   // Status flags
   assign full_o    = (status_cnt_q == NumWords-1);
   assign empty_o   = (status_cnt_q == 'd0);
   assign id_o      = write_pointer_q;
   assign id_read_o = read_pointer_q;
+  assign write_next_ptr = write_pointer_q + 1;
+  assign id_valid_o     = id_valid_q[write_pointer_q] & id_valid_q[write_next_ptr];
 
   // Read and Write logic
   always_comb begin: read_write_comb
     // Maintain state
-    read_pointer_n  = read_pointer_q;
-    write_pointer_n = write_pointer_q;
-    status_cnt_n    = status_cnt_q;
-    mem_n           = mem_q;
-    valid_n         = valid_q;
+    read_pointer_d  = read_pointer_q;
+    write_pointer_d = write_pointer_q;
+    status_cnt_d    = status_cnt_q;
+    mem_d           = mem_q;
+    valid_d         = valid_q;
+    id_valid_d      = id_valid_q;
 
     // Output data
     data_o  = mem_q[read_pointer_q];
@@ -72,18 +79,20 @@ module reorder_buffer
     // Request an ID.
     if (id_req_i && !full_o) begin
       // Increment the write pointer
-      if (write_pointer_q == NumWords-1)
-        write_pointer_n = 0;
-      else
-        write_pointer_n = write_pointer_q + 1;
+      if (write_pointer_q == NumWords-1) begin
+        write_pointer_d = 0;
+      end else begin
+        write_pointer_d = write_pointer_q + 1;
+      end
+      id_valid_d[write_pointer_q] = 1'b0;
       // Increment the overall counter
-      status_cnt_n = status_cnt_q + 1;
+      status_cnt_d = status_cnt_q + 1;
     end
 
     // Push data
     if (push_i) begin
-      mem_n[id_i]   = data_i;
-      valid_n[id_i] = 1'b1;
+      mem_d[id_i]   = data_i;
+      valid_d[id_i] = 1'b1;
     end
 
     // ROB is in fall-through mode -> do not change the pointers
@@ -91,27 +100,29 @@ module reorder_buffer
       data_o  = data_i;
       valid_o = 1'b1;
       if (pop_i) begin
-        valid_n[id_i] = 1'b0;
+        valid_d[id_i] = 1'b0;
       end
     end
 
     // Pop data
     if (pop_i && valid_o) begin
       // Word was consumed
-      valid_n[read_pointer_q] = 1'b0;
+      valid_d[read_pointer_q] = 1'b0;
+      // Mark ID as available
+      id_valid_d[read_pointer_q] = 1'b1;
 
       // Increment the read pointer
       if (read_pointer_q == NumWords-1)
-        read_pointer_n = '0;
+        read_pointer_d = '0;
       else
-        read_pointer_n = read_pointer_q + 1;
+        read_pointer_d = read_pointer_q + 1;
       // Decrement the overall counter
-      status_cnt_n = status_cnt_q - 1;
+      status_cnt_d = status_cnt_q - 1;
     end
 
     // Keep the overall counter stable if we request new ID and pop at the same time
     if ((id_req_i && !full_o) && (pop_i && valid_o)) begin
-      status_cnt_n = status_cnt_q;
+      status_cnt_d = status_cnt_q;
     end
   end: read_write_comb
 
@@ -122,12 +133,15 @@ module reorder_buffer
       status_cnt_q    <= '0;
       mem_q           <= '0;
       valid_q         <= '0;
+      // By default, all IDs are available
+      id_valid_q      <= '1;
     end else begin
-      read_pointer_q  <= read_pointer_n;
-      write_pointer_q <= write_pointer_n;
-      status_cnt_q    <= status_cnt_n;
-      mem_q           <= mem_n;
-      valid_q         <= valid_n;
+      read_pointer_q  <= read_pointer_d;
+      write_pointer_q <= write_pointer_d;
+      status_cnt_q    <= status_cnt_d;
+      mem_q           <= mem_d;
+      valid_q         <= valid_d;
+      id_valid_q      <= id_valid_d;
     end
   end
 

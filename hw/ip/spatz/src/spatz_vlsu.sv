@@ -151,13 +151,8 @@ module spatz_vlsu
         store_count_d[port]++;
 
       // Did we get the ack of a store?
-  `ifdef MEMPOOL_SPATZ
       if (store_count_q[port] != '0 && spatz_mem_rsp_valid_i[port] && spatz_mem_rsp_i[port].write)
         store_count_d[port]--;
-  `else
-      if (store_count_q[port] != '0 && spatz_mem_rsp_valid_i[port])
-        store_count_d[port]--;
-  `endif
     end
   end: proc_store_count
 
@@ -183,62 +178,24 @@ module spatz_vlsu
   // All elements from one side to the other go through it.
   for (genvar port = 0; port < NrMemPorts; port++) begin : gen_rob
     reorder_buffer #(
-      .DataWidth(ELEN              ),
-      .NumWords (NrOutstandingLoads)
+      .DataWidth  (ELEN              ),
+      .NumWords   (NrOutstandingLoads)
     ) i_reorder_buffer (
-      .clk_i    (clk_i           ),
-      .rst_ni   (rst_ni          ),
-      .data_i   (rob_wdata[port] ),
-      .id_i     (rob_wid[port]   ),
-      .push_i   (rob_push[port]  ),
-      .data_o   (rob_rdata[port] ),
-      .valid_o  (rob_rvalid[port]),
-      .id_read_o(rob_rid[port]   ),
-      .pop_i    (rob_pop[port]   ),
-      .id_req_i (rob_req_id[port]),
-      .id_o     (rob_id[port]    ),
-      .full_o   (rob_full[port]  ),
-      .empty_o  (rob_empty[port] )
+      .clk_i      (clk_i             ),
+      .rst_ni     (rst_ni            ),
+      .data_i     (rob_wdata[port]   ),
+      .id_i       (rob_wid[port]     ),
+      .push_i     (rob_push[port]    ),
+      .data_o     (rob_rdata[port]   ),
+      .valid_o    (rob_rvalid[port]  ),
+      .id_read_o  (rob_rid[port]     ),
+      .pop_i      (rob_pop[port]     ),
+      .id_req_i   (rob_req_id[port]  ),
+      .id_o       (rob_id[port]      ),
+      .id_valid_o (/* not used */    ),
+      .full_o     (rob_full[port]    ),
+      .empty_o    (rob_empty[port]   )
     );
-// `ifdef MEMPOOL_SPATZ
-//     reorder_buffer #(
-//       .DataWidth(ELEN              ),
-//       .NumWords (NrOutstandingLoads)
-//     ) i_reorder_buffer (
-//       .clk_i    (clk_i           ),
-//       .rst_ni   (rst_ni          ),
-//       .data_i   (rob_wdata[port] ),
-//       .id_i     (rob_wid[port]   ),
-//       .push_i   (rob_push[port]  ),
-//       .data_o   (rob_rdata[port] ),
-//       .valid_o  (rob_rvalid[port]),
-//       .id_read_o(rob_rid[port]   ),
-//       .pop_i    (rob_pop[port]   ),
-//       .id_req_i (rob_req_id[port]),
-//       .id_o     (rob_id[port]    ),
-//       .full_o   (rob_full[port]  ),
-//       .empty_o  (rob_empty[port] )
-//     );
-// `else
-//     fifo_v3 #(
-//       .DATA_WIDTH(ELEN              ),
-//       .DEPTH     (NrOutstandingLoads)
-//     ) i_reorder_buffer (
-//       .clk_i     (clk_i           ),
-//       .rst_ni    (rst_ni          ),
-//       .flush_i   (1'b0            ),
-//       .testmode_i(1'b0            ),
-//       .data_i    (rob_wdata[port] ),
-//       .push_i    (rob_push[port]  ),
-//       .data_o    (rob_rdata[port] ),
-//       .pop_i     (rob_pop[port]   ),
-//       .full_o    (rob_full[port]  ),
-//       .empty_o   (rob_empty[port] ),
-//       .usage_o   (/* Unused */    )
-//     );
-//     assign rob_rvalid[port] = !rob_empty[port];
-//     assign rob_rid[port]    = '0;
-// `endif
   end: gen_rob
 
   //////////////////////

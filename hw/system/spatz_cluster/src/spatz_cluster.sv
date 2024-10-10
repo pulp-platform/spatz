@@ -254,6 +254,7 @@ module spatz_cluster
   typedef logic [SPMAddrWidth-1:0] spm_addr_t;
 
   typedef logic [$clog2(NumSpatzOutstandingLoads[0])-1:0] reqid_t;
+  typedef logic [$clog2(NumSpatzOutstandingLoads[0]):0]   tcdm_meta_t;
 
   typedef logic [$clog2(L1CacheWayEntry)-$clog2(L1BankFactor)-1:0] tcdm_bank_addr_t;
 
@@ -643,7 +644,7 @@ module spatz_cluster
       tcdm_mem_addr_t mem_add;
       strb_t mem_be;
       data_t mem_rdata, mem_wdata;
-      reqid_t mem_req_id;
+      tcdm_meta_t mem_req_meta;
 
       tc_sram_impl #(
         .NumWords  (TCDMDepth),
@@ -708,22 +709,22 @@ module spatz_cluster
 
       // delay the req_id two cycles: 1 for bank access, 1 for reg
       shift_reg #(
-        .dtype(reqid_t           ),
+        .dtype(tcdm_meta_t           ),
         .Depth(int'(RegisterTCDMCuts))
       ) i_reqid_pipe1 (
         .clk_i (clk_i            ),
         .rst_ni(rst_ni           ),
-        .d_i   (amo_req[j].q.user.req_id ),
-        .d_o   (mem_req_id )
+        .d_i   ({amo_req[j].q.user.req_id, amo_req[j].q.write}),
+        .d_o   (mem_req_meta     )
       );
       shift_reg #(
-        .dtype(reqid_t           ),
+        .dtype(tcdm_meta_t           ),
         .Depth(int'(RegisterTCDMCuts))
       ) i_reqid_pipe2 (
         .clk_i (clk_i            ),
         .rst_ni(rst_ni           ),
-        .d_i   (mem_req_id       ),
-        .d_o   (amo_rsp[j].p.user.req_id)
+        .d_i   (mem_req_meta     ),
+        .d_o   ({amo_rsp[j].p.user.req_id, amo_rsp[j].p.write})
       );
 
       // tie unused field to 0
@@ -747,6 +748,7 @@ module spatz_cluster
     .DataWidth      (DataWidth        ),
     .mem_req_t      (tcdm_req_t       ),
     .mem_rsp_t      (tcdm_rsp_t       ),
+    .mem_rsp_chan_t (tcdm_rsp_chan_t  ),
     .spm_req_t      (spm_req_t        ),
     .spm_rsp_t      (spm_rsp_t        )
   ) i_tcdm_mapper (
@@ -780,7 +782,7 @@ module spatz_cluster
     assign cache_rsp[j].p.data  = cache_rsp_data[j];
     assign cache_rsp[j].p.user  = cache_rsp_meta[j];
 
-    // assign cache_rsp[j].p.write = cache_rsp_write[j];
+    assign cache_rsp[j].p.write = cache_rsp_write[j];
   end
 
   flamingo_spatz_cache_ctrl #(

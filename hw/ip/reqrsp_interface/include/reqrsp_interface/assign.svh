@@ -41,7 +41,9 @@
   __opt_as dst.q``__sep_dst``size  = src.q``__sep_src``size;
 `define REQRSP_ASSIGN_P_CHAN(__opt_as, dst, src, __sep_dst, __sep_src) \
   __opt_as dst.p``__sep_dst``data   = src.p``__sep_src``data;          \
-  __opt_as dst.p``__sep_dst``error   = src.p``__sep_src``error;
+  __opt_as dst.p``__sep_dst``error  = src.p``__sep_src``error;         \
+  __opt_as dst.p``__sep_dst``id     = src.p``__sep_src``id;            \
+  __opt_as dst.p``__sep_dst``write  = src.p``__sep_src``write;
 `define REQRSP_ASSIGN(slv, mst)                 \
   `REQRSP_ASSIGN_Q_CHAN(assign, slv, mst, _, _) \
   `REQRSP_ASSIGN_HANDSHAKE(assign, slv, mst, q) \

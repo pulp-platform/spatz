@@ -9,35 +9,36 @@
 `include "common_cells/registers.svh"
 
 module spatz_addr_mapper #(
-	// Number of input and one-side output ports
-  parameter int unsigned NumIO            		= 0,
+  // Number of input and one-side output ports
+  parameter int unsigned NumIO                = 0,
   // Full address length
-  parameter int unsigned AddrWidth						= 32,
+  parameter int unsigned AddrWidth            = 32,
   // SPM address length
   parameter int unsigned SPMAddrWidth         = 16,
   // Data width
-  parameter int unsigned DataWidth						= 32,
+  parameter int unsigned DataWidth            = 32,
   // FIFO depth for the response channel
-  parameter int unsigned FifoDepth 						= 2,
+  parameter int unsigned FifoDepth             = 2,
   // signal types for core and cache
-  parameter type         mem_req_t          	= logic,
-  parameter type         mem_rsp_t          	= logic,
+  parameter type         mem_req_t            = logic,
+  parameter type         mem_rsp_t            = logic,
+  parameter type         mem_rsp_chan_t       = logic,
   // signal types for spm (shorter addr)
-  parameter type         spm_req_t          	= logic,
-  parameter type         spm_rsp_t          	= logic,
+  parameter type         spm_req_t            = logic,
+  parameter type         spm_rsp_t            = logic,
 
   // Derived parameter *Do not override*
-  parameter type         addr_t             	= logic [AddrWidth-1:0],
+  parameter type         addr_t               = logic [AddrWidth-1:0],
   parameter type         spm_addr_t           = logic [SPMAddrWidth-1:0],
-  parameter type         data_t             	= logic [DataWidth-1:0]
+  parameter type         data_t               = logic [DataWidth-1:0]
 ) (
-  input  logic            					clk_i,
-  input  logic            					rst_ni,
+  input  logic                      clk_i,
+  input  logic                      rst_ni,
 
   // CSR Side (Mapping Info)
 
   // Input Side
-  input  mem_req_t	[NumIO-1:0] 		mem_req_i,
+  input  mem_req_t  [NumIO-1:0]     mem_req_i,
   output mem_rsp_t  [NumIO-1:0]     mem_rsp_o,
   output logic      [NumIO-1:0]     error_o,
 
@@ -50,39 +51,48 @@ module spatz_addr_mapper #(
   // We may need to expand the signals here to correctly wire them
   // Output Side
   /// SPM Side
-  output spm_req_t 	[NumIO-1:0]			spm_req_o,
-  input  spm_rsp_t  [NumIO-1:0]  		spm_rsp_i,
+  output spm_req_t  [NumIO-1:0]      spm_req_o,
+  input  spm_rsp_t  [NumIO-1:0]      spm_rsp_i,
   /// Cache Side
-  output mem_req_t 	[NumIO-1:0]			cache_req_o,
-  input  mem_rsp_t  [NumIO-1:0]  		cache_rsp_i
+  output mem_req_t  [NumIO-1:0]      cache_req_o,
+  input  mem_rsp_t  [NumIO-1:0]      cache_rsp_i
 );
 
-	// ---------------------------
-	// Signal & Parameter Defines
-	// ---------------------------
-  addr_t spm_end_addr;
+  // ---------------------------
+  // Signal & Parameter Defines
+  // ---------------------------
+  typedef logic select_t;
+
+  addr_t    spm_end_addr;
+  select_t  [NumIO-1:0] target_select;
+  logic     [NumIO-1:0] mem_q_ready;
+
+  localparam int unsigned SPM   = 1;
+  localparam int unsigned CACHE = 0;
+
   assign spm_end_addr = tcdm_start_address_i + spm_size_i;
 
   // -------------
   // Request Side
   // -------------
-	// Two methods of assigning:
-	// 1. forward requests directly, control valid signals
-	// 2. check both valid and request
-	
+  // Two methods of assigning:
+  // 1. forward requests directly, control valid signals
+  // 2. check both valid and request
+  
   always_comb begin
     for (int j = 0; unsigned'(j) < NumIO; j++) begin : gen_req
       // Initial values
       spm_req_o[j]   = '0;
       cache_req_o[j] = '0;
       error_o[j]     = '0;
-			if ((mem_req_i[j].q.addr >= tcdm_start_address_i) & (mem_req_i[j].q.addr < tcdm_end_address_i)) begin
-				if (mem_req_i[j].q.addr > spm_end_addr) begin
-					// TODO: set CSR for error handling
+      if ((mem_req_i[j].q.addr >= tcdm_start_address_i) & (mem_req_i[j].q.addr < tcdm_end_address_i)) begin
+        target_select[j] = SPM;
+        if (mem_req_i[j].q.addr > spm_end_addr) begin
+          // TODO: set CSR for error handling
           error_o[j] = 1'b1;
-				end else begin
-					// Wire to SPM outputs
-					// Cut unused addr for spm_req_t
+        end else begin
+          // Wire to SPM outputs
+          // Cut unused addr for spm_req_t
           spm_req_o[j].q = '{
             addr:    mem_req_i[j].q.addr[SPMAddrWidth-1:0],
             write:   mem_req_i[j].q.write,
@@ -93,62 +103,60 @@ module spatz_addr_mapper #(
             default: '0
           };
           spm_req_o[j].q_valid = mem_req_i[j].q_valid;
-				end
-			end else begin
-				// Wire to Cache outputs
+        end
+      end else begin
+        // Wire to Cache outputs
         cache_req_o[j] = mem_req_i[j];
-			end
-		end
-	end
+        target_select[j] = CACHE;
+      end
+    end
+  end
 
   // -------------
   // Response Side
   // -------------
-	// Simutanueous responses from both Cache and SPM is possible but not common
-	// An 2-1 arbiter/mux is needed to pick from it (round-robin?)
-	// FIFO may not be necessary in this case as I don't expect this kind of conflict is common
+  // Simutanueous responses from both Cache and SPM is possible but not common
+  // An 2-1 arbiter/mux is needed to pick from it (round-robin?)
+  // Note there is no p_ready signal, we may need a FIFO to protect the rsp
 
-  // Test Only, directly wire rsp
-  assign mem_rsp_o = spm_rsp_i;
+  for (genvar j = 0; unsigned'(j) < NumIO; j++) begin : gen_rsp
+    logic postarb_valid;
+    logic postarb_ready;
+    logic [1:0] arb_select;
 
-	// for (genvar j = 0; unsigned'(j) < NumIO; j++) begin : gen_rsp   
-	// 	rr_arb_tree #(
-  //     .NumIn     ( 2    		  ),
-  //     .DataType  ( mem_rsp_t ),
-  //     .ExtPrio   ( 1'b0    		),
-  //     .AxiVldRdy ( 1'b1  			),
-  //     .LockIn    ( 1'b1     	)
-  //   ) i_rsp_arb (
-  //     .clk_i,
-  //     .rst_ni,
-  //     .flush_i,
-  //     .rr_i    ( '0     			),
-  //     .req_i   ( out_valid[j] ),
-  //     .gnt_o   ( out_ready[j] ),
-  //     .data_i  ( {spm_rsp_i[j].q, cache_rsp_i[j].q} ),
-  //     .req_o   ( arb_valid    ),
-  //     .gnt_i   ( arb_ready    ),
-  //     .data_o  ( arb.data     ),
-  //     .idx_o   ( arb.idx      )
-  //   );
+    assign mem_rsp_o[j].p_valid = postarb_valid;
+    assign postarb_ready = 1'b1;
+    always_comb begin
+      // The q_ready HS signal should follow the request select, not response
+      mem_rsp_o[j].q_ready = cache_rsp_i[j].q_ready;
+      if (target_select[j] == SPM) begin
+        mem_rsp_o[j].q_ready = spm_rsp_i[j].q_ready;
+      end
+    end
 
-  //   // A small FIFO to keep some responses
-  //   fifo_v3 # 		(
-  //   	.DEPTH			( FifoDepth 				),
-  //   	.DATA_WIDTH ( $bits(mem_rsp_t)	)
-  //   ) i_rsp_fifo (
-  //   	.clk_i,
-  //     .rst_ni,
-  //     .flush_i,
-  //     .full_o  		(),
-  //     .empty_o 		(),
-  //     .usage_o 		( /*unused*/ ),
-  //     .data_i 		(),
-  //     .push_i 		(),
-  //     .data_o 		(),
-  //     .pop_i 			()
-  //   );
-  // end
+    rr_arb_tree #(
+      .NumIn     ( 2              ),
+      .DataType  ( mem_rsp_chan_t ),
+      .ExtPrio   ( 1'b0            ),
+      .AxiVldRdy ( 1'b1            ),
+      .LockIn    ( 1'b1           )
+    ) i_rsp_arb (
+      .clk_i   ( clk_i                                          ),
+      .rst_ni  ( rst_ni                                         ),
+      .flush_i ( '0                                             ),
+      .rr_i    ( '0                                             ),
+      .req_i   ( {spm_rsp_i[j].p_valid, cache_rsp_i[j].p_valid} ),
+      .gnt_o   ( arb_select                                     ),
+      .data_i  ( {spm_rsp_i[j].p,       cache_rsp_i[j].p}       ),
+      .req_o   ( postarb_valid                                  ),
+      .gnt_i   ( postarb_ready                                  ),
+      .data_o  ( mem_rsp_o[j].p                                 ),
+      .idx_o   ( /* not used */                                 )
+    );
+
+    // TODO: add a FIFO; should we make it fallthrough?
+
+  end
 
 
 endmodule

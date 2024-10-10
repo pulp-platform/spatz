@@ -66,7 +66,8 @@ module reqrsp_to_tcdm #(
     rsp = '{
       data : tcdm_rsp_i.p.data,
       error: 1'b0,
-      id   : tcdm_rsp_i.p.user.req_id
+      id   : tcdm_rsp_i.p.user.req_id,
+      write: tcdm_rsp_i.p.write
     };
   end
 

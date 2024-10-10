@@ -24,6 +24,7 @@
     __data_t    data;     \
     logic       error;    \
     logic [2:0] id;       \
+    logic       write;    \
   } __rsp_chan_t;
 
 `define REQRSP_TYPEDEF_REQ_T(__req_t, __req_chan_t) \
