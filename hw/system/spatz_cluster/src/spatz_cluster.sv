@@ -230,6 +230,7 @@ module spatz_cluster
   localparam int unsigned L1CoalFactor    = 2;
   localparam int unsigned L1BankPerWay    = L1BankFactor * (L1LineWidth/DataWidth);
   localparam int unsigned L1CacheWayEntry = L1NumEntry / L1Associativity;
+  localparam int unsigned L1NumSet        = L1CacheWayEntry / L1BankFactor;
   localparam int unsigned L1NumTagBank    = L1BankFactor;
   localparam int unsigned L1NumDataBank   = L1BankFactor * (L1LineWidth/DataWidth);
 
@@ -256,7 +257,7 @@ module spatz_cluster
   typedef logic [$clog2(NumSpatzOutstandingLoads[0])-1:0] reqid_t;
   typedef logic [$clog2(NumSpatzOutstandingLoads[0]):0]   tcdm_meta_t;
 
-  typedef logic [$clog2(L1CacheWayEntry)-$clog2(L1BankFactor)-1:0] tcdm_bank_addr_t;
+  typedef logic [$clog2(L1NumSet)-1:0] tcdm_bank_addr_t;
 
   typedef struct packed {
     logic [CoreIDWidth-1:0] core_id;
@@ -471,7 +472,7 @@ module spatz_cluster
   logic                   l1d_insn_valid, l1d_insn_ready;
   logic [1:0]             l1d_insn;
   logic [L1AddrWidth-1:0] tcdm_start_addr, tcdm_end_addr;
-  logic [5:0]             cfg_spm_size;
+  tcdm_bank_addr_t        cfg_spm_size;
 
 
   // -------------
@@ -850,7 +851,7 @@ module spatz_cluster
   );
 
   // TODO: Test only, add physical banks for cache
-  for (genvar i = 0; i < L1Associativity; i++) begin : gen_meta_banks
+  for (genvar i = 0; i < L1Associativity; i++) begin : gen_l1_banks
     for (genvar j = 0; j < L1NumTagBank; j++) begin: gen_l1_tag_banks
       tc_sram #(
         .NumWords  (L1CacheWayEntry/L1BankFactor),
@@ -870,9 +871,7 @@ module spatz_cluster
         .rdata_o(l1_tag_bank_rdata[i][j])
       );
     end
-  end
 
-  for (genvar i = 0; i < L1Associativity; i++) begin : gen_data_banks
     for (genvar j = 0; j < L1NumDataBank; j++) begin: gen_l1_data_banks
       tc_sram #(
         .NumWords  (L1CacheWayEntry/L1BankFactor),
@@ -1241,12 +1240,13 @@ module spatz_cluster
   );
 
   spatz_cluster_peripheral #(
-    .AddrWidth     (AxiAddrWidth  ),
-    .reg_req_t     (reg_req_t     ),
-    .reg_rsp_t     (reg_rsp_t     ),
-    .tcdm_events_t (tcdm_events_t ),
-    .dma_events_t  (dma_events_t  ),
-    .NrCores       (NrCores       )
+    .AddrWidth     (AxiAddrWidth    ),
+    .SPMWidth      ($clog2(L1NumSet)),
+    .reg_req_t     (reg_req_t       ),
+    .reg_rsp_t     (reg_rsp_t       ),
+    .tcdm_events_t (tcdm_events_t   ),
+    .dma_events_t  (dma_events_t    ),
+    .NrCores       (NrCores         )
   ) i_snitch_cluster_peripheral (
     .clk_i                    (clk_i                 ),
     .rst_ni                   (rst_ni                ),

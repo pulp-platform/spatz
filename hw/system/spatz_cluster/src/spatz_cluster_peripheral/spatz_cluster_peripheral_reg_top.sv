@@ -281,8 +281,8 @@ module spatz_cluster_peripheral_reg_top #(
   logic [31:0] cluster_boot_control_qs;
   logic [31:0] cluster_boot_control_wd;
   logic cluster_boot_control_we;
-  logic [31:0] cfg_l1d_spm_qs;
-  logic [31:0] cfg_l1d_spm_wd;
+  logic [9:0] cfg_l1d_spm_qs;
+  logic [9:0] cfg_l1d_spm_wd;
   logic cfg_l1d_spm_we;
   logic [1:0] cfg_l1d_insn_qs;
   logic [1:0] cfg_l1d_insn_wd;
@@ -2137,9 +2137,9 @@ module spatz_cluster_peripheral_reg_top #(
   // R[cfg_l1d_spm]: V(False)
 
   prim_subreg #(
-    .DW      (32),
+    .DW      (10),
     .SWACCESS("RW"),
-    .RESVAL  (32'h0)
+    .RESVAL  (10'h0)
   ) u_cfg_l1d_spm (
     .clk_i   (clk_i    ),
     .rst_ni  (rst_ni  ),
@@ -2524,7 +2524,7 @@ module spatz_cluster_peripheral_reg_top #(
   assign cluster_boot_control_wd = reg_wdata[31:0];
 
   assign cfg_l1d_spm_we = addr_hit[12] & reg_we & !reg_error;
-  assign cfg_l1d_spm_wd = reg_wdata[31:0];
+  assign cfg_l1d_spm_wd = reg_wdata[9:0];
 
   assign cfg_l1d_insn_we = addr_hit[13] & reg_we & !reg_error;
   assign cfg_l1d_insn_wd = reg_wdata[1:0];
@@ -2650,7 +2650,7 @@ module spatz_cluster_peripheral_reg_top #(
       end
 
       addr_hit[12]: begin
-        reg_rdata_next[31:0] = cfg_l1d_spm_qs;
+        reg_rdata_next[9:0] = cfg_l1d_spm_qs;
       end
 
       addr_hit[13]: begin

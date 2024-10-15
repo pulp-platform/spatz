@@ -15,3 +15,4 @@ void l1d_commit();
 void l1d_init();
 void l1d_flush();
 void l1d_wait();
+void l1d_spm_config (uint32_t size);

@@ -194,7 +194,7 @@ extern "C" {
 
 // Controls the configurations of L1 DCache SPM size.
 #define SPATZ_CLUSTER_PERIPHERAL_CFG_L1D_SPM_REG_OFFSET 0x60
-#define SPATZ_CLUSTER_PERIPHERAL_CFG_L1D_SPM_SPM_SIZE_MASK 0xffffffff
+#define SPATZ_CLUSTER_PERIPHERAL_CFG_L1D_SPM_SPM_SIZE_MASK 0x3ff
 #define SPATZ_CLUSTER_PERIPHERAL_CFG_L1D_SPM_SPM_SIZE_OFFSET 0
 #define SPATZ_CLUSTER_PERIPHERAL_CFG_L1D_SPM_SPM_SIZE_FIELD                    \
   ((bitfield_field32_t){                                                       \

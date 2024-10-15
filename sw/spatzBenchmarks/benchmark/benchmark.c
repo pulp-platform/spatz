@@ -49,18 +49,27 @@ void l1d_flush() {
 }
 
 void l1d_wait() {
-  // uint32_t *busy =
-  //     (uint32_t *)(_snrt_team_current->root->cluster_mem.end +
-  //                  SPATZ_CLUSTER_PERIPHERAL_CFG_L1D_COMMIT_REG_OFFSET);
-  // // wait until flush finished
-  // while (*busy) {
-  //   *busy =
-  //     (uint32_t *)(_snrt_team_current->root->cluster_mem.end +
-  //                  SPATZ_CLUSTER_PERIPHERAL_CFG_L1D_COMMIT_REG_OFFSET);
-  // }
-                   
-  volatile uint32_t cyc = 100;
-  while (cyc > 0) {
-    cyc --;
+  volatile uint32_t *busy =
+      (uint32_t *)(_snrt_team_current->root->cluster_mem.end +
+                   SPATZ_CLUSTER_PERIPHERAL_L1D_FLUSH_STATUS_REG_OFFSET);
+  // wait until flush finished
+  while (*busy) {
+
   }
+}
+
+void l1d_spm_config (uint32_t size) {
+  // flush the cache before reconfiguration
+  l1d_flush();
+  l1d_wait();
+  // set the pointers
+  volatile uint32_t *cfg_size =
+      (uint32_t *)(_snrt_team_current->root->cluster_mem.end +
+                   SPATZ_CLUSTER_PERIPHERAL_CFG_L1D_SPM_REG_OFFSET);
+  volatile uint32_t *commit =
+      (uint32_t *)(_snrt_team_current->root->cluster_mem.end +
+                   SPATZ_CLUSTER_PERIPHERAL_L1D_SPM_COMMIT_REG_OFFSET);
+  // change size and commit the change
+  *cfg_size = size;
+  *commit   = 1;
 }

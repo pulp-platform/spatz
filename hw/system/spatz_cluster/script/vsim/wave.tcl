@@ -23,3 +23,10 @@ for {set core 0}  {$core < [examine -radix dec spatz_cluster_pkg::NumCores]} {in
 
 # Add cluster waves
 add wave -noupdate -group Cluster /tb_bin/i_dut/i_cluster_wrapper/i_cluster/*
+
+add wave -noupdate -group CSR /tb_bin/i_dut/i_cluster_wrapper/i_cluster/i_snitch_cluster_peripheral/*
+add wave -noupdate -group CSR -group flush_status /tb_bin/i_dut/i_cluster_wrapper/i_cluster/i_snitch_cluster_peripheral/i_spatz_cluster_peripheral_reg_top/u_l1d_flush_status/*
+
+add wave -noupdate -group Mapper /tb_bin/i_dut/i_cluster_wrapper/i_cluster/i_tcdm_mapper/*
+
+add wave -noupdate -group L1D /tb_bin/i_dut/i_cluster_wrapper/i_cluster/i_l1_controller/*

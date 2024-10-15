@@ -148,7 +148,7 @@ package spatz_cluster_peripheral_reg_pkg;
   } spatz_cluster_peripheral_reg2hw_cluster_boot_control_reg_t;
 
   typedef struct packed {
-    logic [31:0] q;
+    logic [9:0] q;
   } spatz_cluster_peripheral_reg2hw_cfg_l1d_spm_reg_t;
 
   typedef struct packed {
@@ -187,16 +187,16 @@ package spatz_cluster_peripheral_reg_pkg;
 
   // Register -> HW type
   typedef struct packed {
-    spatz_cluster_peripheral_reg2hw_perf_counter_enable_mreg_t [1:0] perf_counter_enable; // [347:286]
-    spatz_cluster_peripheral_reg2hw_hart_select_mreg_t [1:0] hart_select; // [285:266]
-    spatz_cluster_peripheral_reg2hw_perf_counter_mreg_t [1:0] perf_counter; // [265:168]
-    spatz_cluster_peripheral_reg2hw_cl_clint_set_reg_t cl_clint_set; // [167:135]
-    spatz_cluster_peripheral_reg2hw_cl_clint_clear_reg_t cl_clint_clear; // [134:102]
-    spatz_cluster_peripheral_reg2hw_hw_barrier_reg_t hw_barrier; // [101:70]
-    spatz_cluster_peripheral_reg2hw_icache_prefetch_enable_reg_t icache_prefetch_enable; // [69:69]
-    spatz_cluster_peripheral_reg2hw_spatz_status_reg_t spatz_status; // [68:68]
-    spatz_cluster_peripheral_reg2hw_cluster_boot_control_reg_t cluster_boot_control; // [67:36]
-    spatz_cluster_peripheral_reg2hw_cfg_l1d_spm_reg_t cfg_l1d_spm; // [35:4]
+    spatz_cluster_peripheral_reg2hw_perf_counter_enable_mreg_t [1:0] perf_counter_enable; // [325:264]
+    spatz_cluster_peripheral_reg2hw_hart_select_mreg_t [1:0] hart_select; // [263:244]
+    spatz_cluster_peripheral_reg2hw_perf_counter_mreg_t [1:0] perf_counter; // [243:146]
+    spatz_cluster_peripheral_reg2hw_cl_clint_set_reg_t cl_clint_set; // [145:113]
+    spatz_cluster_peripheral_reg2hw_cl_clint_clear_reg_t cl_clint_clear; // [112:80]
+    spatz_cluster_peripheral_reg2hw_hw_barrier_reg_t hw_barrier; // [79:48]
+    spatz_cluster_peripheral_reg2hw_icache_prefetch_enable_reg_t icache_prefetch_enable; // [47:47]
+    spatz_cluster_peripheral_reg2hw_spatz_status_reg_t spatz_status; // [46:46]
+    spatz_cluster_peripheral_reg2hw_cluster_boot_control_reg_t cluster_boot_control; // [45:14]
+    spatz_cluster_peripheral_reg2hw_cfg_l1d_spm_reg_t cfg_l1d_spm; // [13:4]
     spatz_cluster_peripheral_reg2hw_cfg_l1d_insn_reg_t cfg_l1d_insn; // [3:2]
     spatz_cluster_peripheral_reg2hw_l1d_spm_commit_reg_t l1d_spm_commit; // [1:1]
     spatz_cluster_peripheral_reg2hw_l1d_insn_commit_reg_t l1d_insn_commit; // [0:0]
@@ -274,7 +274,7 @@ package spatz_cluster_peripheral_reg_pkg;
     4'b 0001, // index[ 9] SPATZ_CLUSTER_PERIPHERAL_ICACHE_PREFETCH_ENABLE
     4'b 0001, // index[10] SPATZ_CLUSTER_PERIPHERAL_SPATZ_STATUS
     4'b 1111, // index[11] SPATZ_CLUSTER_PERIPHERAL_CLUSTER_BOOT_CONTROL
-    4'b 1111, // index[12] SPATZ_CLUSTER_PERIPHERAL_CFG_L1D_SPM
+    4'b 0011, // index[12] SPATZ_CLUSTER_PERIPHERAL_CFG_L1D_SPM
     4'b 0001, // index[13] SPATZ_CLUSTER_PERIPHERAL_CFG_L1D_INSN
     4'b 0001, // index[14] SPATZ_CLUSTER_PERIPHERAL_L1D_SPM_COMMIT
     4'b 0001, // index[15] SPATZ_CLUSTER_PERIPHERAL_L1D_INSN_COMMIT

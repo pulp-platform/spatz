@@ -436,11 +436,10 @@
         hwaccess: "hro",
         resval: "0",
         fields: [{
-            bits: "31:0",
+            bits: "9:0",
             resval: "0",
             name: "SPM_SIZE",
-            desc: '''Size of SPM region (addr format). 
-                    Needs to be a power of 2 and a multiple for cacheline (512b).'''
+            desc: '''Size of SPM region (cache line format).'''
         }]
     },
     {

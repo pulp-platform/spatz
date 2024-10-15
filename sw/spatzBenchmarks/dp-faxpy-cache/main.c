@@ -50,6 +50,12 @@ int main() {
   // Wait for all cores to finish
   snrt_cluster_hw_barrier();
 
+  if (cid == 0) {
+    // configure the cache
+    uint32_t spm_size = 16;
+    l1d_spm_config(spm_size);
+  }
+
   // Reset timer
   unsigned int timer = (unsigned int)-1;
 
@@ -104,7 +110,7 @@ int main() {
     stop_kernel();
 
   if (cid == 0) {
-    // Init the cache
+    // Flush the cache
     l1d_flush();
     l1d_wait();
   }
