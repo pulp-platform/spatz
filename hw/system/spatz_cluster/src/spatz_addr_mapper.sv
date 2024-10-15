@@ -55,6 +55,7 @@ module spatz_addr_mapper #(
   input  spm_rsp_t  [NumIO-1:0]      spm_rsp_i,
   /// Cache Side
   output mem_req_t  [NumIO-1:0]      cache_req_o,
+  output logic      [NumIO-1:0]      cache_pready_o,
   input  mem_rsp_t  [NumIO-1:0]      cache_rsp_i
 );
 
@@ -65,7 +66,7 @@ module spatz_addr_mapper #(
 
   addr_t    spm_end_addr;
   select_t  [NumIO-1:0] target_select;
-  logic     [NumIO-1:0] mem_q_ready;
+  // logic     [NumIO-1:0] mem_q_ready;
 
   localparam int unsigned SPM   = 1;
   localparam int unsigned CACHE = 0;
@@ -122,31 +123,47 @@ module spatz_addr_mapper #(
   for (genvar j = 0; unsigned'(j) < NumIO; j++) begin : gen_rsp
     logic postarb_valid;
     logic postarb_ready;
-    logic [1:0] arb_select;
+    logic arb_select;
 
     assign mem_rsp_o[j].p_valid = postarb_valid;
     assign postarb_ready = 1'b1;
-    always_comb begin
+    always_comb begin : hs_comb
       // The q_ready HS signal should follow the request select, not response
       mem_rsp_o[j].q_ready = cache_rsp_i[j].q_ready;
+      // Use spm by default
+      arb_select           = 1'b1;
+      cache_pready_o[j]    = 1'b0;
+
       if (target_select[j] == SPM) begin
         mem_rsp_o[j].q_ready = spm_rsp_i[j].q_ready;
+      end
+
+      if (spm_rsp_i[j].p_valid) begin
+        // SPM always has priority
+        // stop cache response if spm is responding
+        arb_select        = 1'b1;
+        cache_pready_o[j] = 1'b0;
+      end else begin
+        if (cache_rsp_i[j].p_valid) begin
+          arb_select      = 1'b0;
+        end
+        cache_pready_o[j] = 1'b1;
       end
     end
 
     rr_arb_tree #(
       .NumIn     ( 2              ),
       .DataType  ( mem_rsp_chan_t ),
-      .ExtPrio   ( 1'b0            ),
-      .AxiVldRdy ( 1'b1            ),
-      .LockIn    ( 1'b1           )
+      .ExtPrio   ( 1'b1           ),
+      .AxiVldRdy ( 1'b1           ),
+      .LockIn    ( 1'b0           )
     ) i_rsp_arb (
       .clk_i   ( clk_i                                          ),
       .rst_ni  ( rst_ni                                         ),
       .flush_i ( '0                                             ),
-      .rr_i    ( '0                                             ),
+      .rr_i    ( arb_select                                     ),
       .req_i   ( {spm_rsp_i[j].p_valid, cache_rsp_i[j].p_valid} ),
-      .gnt_o   ( arb_select                                     ),
+      .gnt_o   (                                                ),
       .data_i  ( {spm_rsp_i[j].p,       cache_rsp_i[j].p}       ),
       .req_o   ( postarb_valid                                  ),
       .gnt_i   ( postarb_ready                                  ),

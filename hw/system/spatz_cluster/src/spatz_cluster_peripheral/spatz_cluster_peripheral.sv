@@ -36,7 +36,11 @@ module spatz_cluster_peripheral
   input  core_events_t [NrCores-1:0] core_events_i,
   input  tcdm_events_t               tcdm_events_i,
   input  dma_events_t                dma_events_i,
-  input  snitch_icache_pkg::icache_events_t [NrCores-1:0] icache_events_i
+  input  snitch_icache_pkg::icache_events_t [NrCores-1:0] icache_events_i,
+  output logic [5:0]                 l1d_spm_size_o,
+  output logic [1:0]                 l1d_insn_o,
+  output logic                       l1d_insn_valid_o,
+  input  logic                       l1d_insn_ready_i
 );
 
   // Pipeline register to ease timing.
@@ -65,6 +69,71 @@ module spatz_cluster_peripheral
 
   logic [NumPerfCounters-1:0][47:0] perf_counter_d, perf_counter_q;
   logic [31:0] cl_clint_d, cl_clint_q;
+  logic [31:0] l1d_spm_size_d, l1d_spm_size_q;
+  // logic [1:0]  l1d_insn_d, l1d_insn_q;
+  // L1 is running flush/invalidation
+  logic        l1d_lock_d, l1d_lock_q;
+  logic        l1d_spm_commit, l1d_insn_commit;
+
+  // L1D Cache
+  // For committing the cfg, if the cfg is taken, it will be pulled to 0;
+  // Otherwise, it will be kept at 1 until taken.
+  assign       l1d_spm_commit  = reg2hw.l1d_spm_commit.q;
+  assign       l1d_insn_commit = reg2hw.l1d_insn_commit.q;
+
+  // TODO: Change it to power of 2 to save space
+  // SPM Size
+  always_comb begin : l1d_spm_cfg
+    l1d_spm_size_d   = l1d_spm_size_q;
+    
+    hw2reg.l1d_spm_commit.d  = 1'b0;
+    hw2reg.l1d_spm_commit.de = 1'b0;
+
+    if (l1d_spm_commit) begin
+      l1d_spm_size_d = reg2hw.cfg_l1d_spm.q;
+      // Clear the commit
+      hw2reg.l1d_spm_commit.d  = 1'b0;
+      hw2reg.l1d_spm_commit.de = 1'b1;
+    end
+  end
+
+  `FF(l1d_spm_size_q, l1d_spm_size_d, '0, clk_i, rst_ni)
+  assign l1d_spm_size_o = l1d_spm_size_q[5:0];
+
+  // Cache Flush
+  always_comb begin : l1d_insn_cfg
+    // Flush takes time, we cannot take next insn while flushing
+    l1d_insn_o       = '0;
+    l1d_insn_valid_o = '0;
+    l1d_lock_d       = l1d_lock_q;
+
+    hw2reg.l1d_insn_commit.d  = 1'b0;
+    hw2reg.l1d_insn_commit.de = 1'b0;
+
+    if (l1d_insn_commit) begin
+      // User issues a flush/invalidation
+      if (!l1d_lock_q) begin
+        // We are ready to accept a flush
+        l1d_insn_o        = reg2hw.cfg_l1d_insn.q;
+        l1d_insn_valid_o  = 1'b1;
+        // Cache busy now!
+        l1d_lock_d        = 1'b1;
+        // Clear the commit
+        hw2reg.l1d_insn_commit.d  = 1'b0;
+        hw2reg.l1d_insn_commit.de = 1'b1;
+      end
+    end
+
+    // unlock
+    if (l1d_insn_ready_i) begin
+      // Cache finishes previous insn, remove lock!
+      l1d_lock_d          = 1'b0;
+    end
+  end
+
+  `FF(l1d_lock_q, l1d_lock_d, '0, clk_i, rst_ni)
+  // To show if the current flush/invalidation is complete
+  assign hw2reg.l1d_flush_status.d = l1d_lock_q;
 
   // Wake-up logic: Bits in cl_clint_q can be set/cleared with writes to
   // cl_clint_set/cl_clint_clear

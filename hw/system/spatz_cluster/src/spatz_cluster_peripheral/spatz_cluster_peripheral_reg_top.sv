@@ -10,7 +10,7 @@
 module spatz_cluster_peripheral_reg_top #(
   parameter type reg_req_t = logic,
   parameter type reg_rsp_t = logic,
-  parameter int AW = 7
+  parameter int AW = 8
 ) (
   input logic clk_i,
   input logic rst_ni,
@@ -281,6 +281,20 @@ module spatz_cluster_peripheral_reg_top #(
   logic [31:0] cluster_boot_control_qs;
   logic [31:0] cluster_boot_control_wd;
   logic cluster_boot_control_we;
+  logic [31:0] cfg_l1d_spm_qs;
+  logic [31:0] cfg_l1d_spm_wd;
+  logic cfg_l1d_spm_we;
+  logic [1:0] cfg_l1d_insn_qs;
+  logic [1:0] cfg_l1d_insn_wd;
+  logic cfg_l1d_insn_we;
+  logic l1d_spm_commit_qs;
+  logic l1d_spm_commit_wd;
+  logic l1d_spm_commit_we;
+  logic l1d_insn_commit_qs;
+  logic l1d_insn_commit_wd;
+  logic l1d_insn_commit_we;
+  logic l1d_flush_status_qs;
+  logic l1d_flush_status_re;
 
   // Register instances
 
@@ -2120,9 +2134,133 @@ module spatz_cluster_peripheral_reg_top #(
   );
 
 
+  // R[cfg_l1d_spm]: V(False)
+
+  prim_subreg #(
+    .DW      (32),
+    .SWACCESS("RW"),
+    .RESVAL  (32'h0)
+  ) u_cfg_l1d_spm (
+    .clk_i   (clk_i    ),
+    .rst_ni  (rst_ni  ),
+
+    // from register interface
+    .we     (cfg_l1d_spm_we),
+    .wd     (cfg_l1d_spm_wd),
+
+    // from internal hardware
+    .de     (1'b0),
+    .d      ('0  ),
+
+    // to internal hardware
+    .qe     (),
+    .q      (reg2hw.cfg_l1d_spm.q ),
+
+    // to register interface (read)
+    .qs     (cfg_l1d_spm_qs)
+  );
 
 
-  logic [11:0] addr_hit;
+  // R[cfg_l1d_insn]: V(False)
+
+  prim_subreg #(
+    .DW      (2),
+    .SWACCESS("RW"),
+    .RESVAL  (2'h0)
+  ) u_cfg_l1d_insn (
+    .clk_i   (clk_i    ),
+    .rst_ni  (rst_ni  ),
+
+    // from register interface
+    .we     (cfg_l1d_insn_we),
+    .wd     (cfg_l1d_insn_wd),
+
+    // from internal hardware
+    .de     (1'b0),
+    .d      ('0  ),
+
+    // to internal hardware
+    .qe     (),
+    .q      (reg2hw.cfg_l1d_insn.q ),
+
+    // to register interface (read)
+    .qs     (cfg_l1d_insn_qs)
+  );
+
+
+  // R[l1d_spm_commit]: V(False)
+
+  prim_subreg #(
+    .DW      (1),
+    .SWACCESS("RW"),
+    .RESVAL  (1'h0)
+  ) u_l1d_spm_commit (
+    .clk_i   (clk_i    ),
+    .rst_ni  (rst_ni  ),
+
+    // from register interface
+    .we     (l1d_spm_commit_we),
+    .wd     (l1d_spm_commit_wd),
+
+    // from internal hardware
+    .de     (hw2reg.l1d_spm_commit.de),
+    .d      (hw2reg.l1d_spm_commit.d ),
+
+    // to internal hardware
+    .qe     (),
+    .q      (reg2hw.l1d_spm_commit.q ),
+
+    // to register interface (read)
+    .qs     (l1d_spm_commit_qs)
+  );
+
+
+  // R[l1d_insn_commit]: V(False)
+
+  prim_subreg #(
+    .DW      (1),
+    .SWACCESS("RW"),
+    .RESVAL  (1'h0)
+  ) u_l1d_insn_commit (
+    .clk_i   (clk_i    ),
+    .rst_ni  (rst_ni  ),
+
+    // from register interface
+    .we     (l1d_insn_commit_we),
+    .wd     (l1d_insn_commit_wd),
+
+    // from internal hardware
+    .de     (hw2reg.l1d_insn_commit.de),
+    .d      (hw2reg.l1d_insn_commit.d ),
+
+    // to internal hardware
+    .qe     (),
+    .q      (reg2hw.l1d_insn_commit.q ),
+
+    // to register interface (read)
+    .qs     (l1d_insn_commit_qs)
+  );
+
+
+  // R[l1d_flush_status]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (1)
+  ) u_l1d_flush_status (
+    .re     (l1d_flush_status_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.l1d_flush_status.d),
+    .qre    (),
+    .qe     (),
+    .q      (),
+    .qs     (l1d_flush_status_qs)
+  );
+
+
+
+
+  logic [16:0] addr_hit;
   always_comb begin
     addr_hit = '0;
     addr_hit[ 0] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_PERF_COUNTER_ENABLE_0_OFFSET);
@@ -2137,6 +2275,11 @@ module spatz_cluster_peripheral_reg_top #(
     addr_hit[ 9] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_ICACHE_PREFETCH_ENABLE_OFFSET);
     addr_hit[10] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_SPATZ_STATUS_OFFSET);
     addr_hit[11] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_CLUSTER_BOOT_CONTROL_OFFSET);
+    addr_hit[12] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_CFG_L1D_SPM_OFFSET);
+    addr_hit[13] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_CFG_L1D_INSN_OFFSET);
+    addr_hit[14] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_L1D_SPM_COMMIT_OFFSET);
+    addr_hit[15] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_L1D_INSN_COMMIT_OFFSET);
+    addr_hit[16] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_L1D_FLUSH_STATUS_OFFSET);
   end
 
   assign addrmiss = (reg_re || reg_we) ? ~|addr_hit : 1'b0 ;
@@ -2155,7 +2298,12 @@ module spatz_cluster_peripheral_reg_top #(
                (addr_hit[ 8] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 8] & ~reg_be))) |
                (addr_hit[ 9] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 9] & ~reg_be))) |
                (addr_hit[10] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[10] & ~reg_be))) |
-               (addr_hit[11] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[11] & ~reg_be)))));
+               (addr_hit[11] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[11] & ~reg_be))) |
+               (addr_hit[12] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[12] & ~reg_be))) |
+               (addr_hit[13] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[13] & ~reg_be))) |
+               (addr_hit[14] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[14] & ~reg_be))) |
+               (addr_hit[15] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[15] & ~reg_be))) |
+               (addr_hit[16] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[16] & ~reg_be)))));
   end
 
   assign perf_counter_enable_0_cycle_0_we = addr_hit[0] & reg_we & !reg_error;
@@ -2375,6 +2523,20 @@ module spatz_cluster_peripheral_reg_top #(
   assign cluster_boot_control_we = addr_hit[11] & reg_we & !reg_error;
   assign cluster_boot_control_wd = reg_wdata[31:0];
 
+  assign cfg_l1d_spm_we = addr_hit[12] & reg_we & !reg_error;
+  assign cfg_l1d_spm_wd = reg_wdata[31:0];
+
+  assign cfg_l1d_insn_we = addr_hit[13] & reg_we & !reg_error;
+  assign cfg_l1d_insn_wd = reg_wdata[1:0];
+
+  assign l1d_spm_commit_we = addr_hit[14] & reg_we & !reg_error;
+  assign l1d_spm_commit_wd = reg_wdata[0];
+
+  assign l1d_insn_commit_we = addr_hit[15] & reg_we & !reg_error;
+  assign l1d_insn_commit_wd = reg_wdata[0];
+
+  assign l1d_flush_status_re = addr_hit[16] & reg_re & !reg_error;
+
   // Read data return
   always_comb begin
     reg_rdata_next = '0;
@@ -2487,6 +2649,26 @@ module spatz_cluster_peripheral_reg_top #(
         reg_rdata_next[31:0] = cluster_boot_control_qs;
       end
 
+      addr_hit[12]: begin
+        reg_rdata_next[31:0] = cfg_l1d_spm_qs;
+      end
+
+      addr_hit[13]: begin
+        reg_rdata_next[1:0] = cfg_l1d_insn_qs;
+      end
+
+      addr_hit[14]: begin
+        reg_rdata_next[0] = l1d_spm_commit_qs;
+      end
+
+      addr_hit[15]: begin
+        reg_rdata_next[0] = l1d_insn_commit_qs;
+      end
+
+      addr_hit[16]: begin
+        reg_rdata_next[0] = l1d_flush_status_qs;
+      end
+
       default: begin
         reg_rdata_next = '1;
       end
@@ -2509,7 +2691,7 @@ endmodule
 
 module spatz_cluster_peripheral_reg_top_intf
 #(
-  parameter int AW = 7,
+  parameter int AW = 8,
   localparam int DW = 64
 ) (
   input logic clk_i,

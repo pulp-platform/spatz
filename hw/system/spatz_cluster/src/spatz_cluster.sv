@@ -468,6 +468,11 @@ module spatz_cluster
   logic            [L1Associativity-1:0][L1BankPerWay-1:0] l1_data_bank_be;
   data_t           [L1Associativity-1:0][L1BankPerWay-1:0] l1_data_bank_rdata;
 
+  logic                   l1d_insn_valid, l1d_insn_ready;
+  logic [1:0]             l1d_insn;
+  logic [L1AddrWidth-1:0] tcdm_start_addr, tcdm_end_addr;
+  logic [5:0]             cfg_spm_size;
+
 
   // -------------
   // DMA Subsystem
@@ -735,10 +740,11 @@ module spatz_cluster
   end
 
   // TODO: take from CSR/inputs
-  logic [L1AddrWidth-1:0] tcdm_start_addr, tcdm_end_addr, spm_size;
+  // logic [L1AddrWidth-1:0] tcdm_start_addr, tcdm_end_addr, spm_size;
   assign tcdm_start_addr = 32'h5100_0000;
   assign tcdm_end_addr   = 32'h5200_0000;
-  assign spm_size        = 32'h0010_0000;
+  logic  [NrTCDMPortsCores-1:0] cache_pready;
+  // assign spm_size        = 32'h0010_0000;
 
   // split the requests for spm or cache from core side
   spatz_addr_mapper #(
@@ -761,17 +767,18 @@ module spatz_cluster
     // Address
     .tcdm_start_address_i (tcdm_start_addr ),
     .tcdm_end_address_i   (tcdm_end_addr   ),
-    .spm_size_i           (spm_size        ),
+    .spm_size_i           (32'h0010_0000   ), // hardcode since partitioning is not set correctly now
     // Output
     .spm_req_o            (spm_req         ),
     .spm_rsp_i            (spm_rsp         ),
     .cache_req_o          (cache_req       ),
+    .cache_pready_o       (cache_pready    ),
     .cache_rsp_i          (cache_rsp       )
   );
 
   for (genvar j = 0; j < NrTCDMPortsCores; j++) begin
     assign cache_req_valid[j] = cache_req[j].q_valid;
-    assign cache_rsp_ready[j] = 1'b1;
+    assign cache_rsp_ready[j] = cache_pready[j];
     assign cache_req_addr[j]  = cache_req[j].q.addr;
     assign cache_req_meta[j]  = cache_req[j].q.user;
     assign cache_req_write[j] = cache_req[j].q.write;
@@ -804,12 +811,12 @@ module spatz_cluster
     .clk_i                 (clk_i            ),
     .rst_ni                (rst_ni           ),
     // Sync Control
-    .cache_sync_valid_i    ('0),
-    .cache_sync_ready_o    (/*todo: connect to CSR*/),
-    .cache_sync_insn_i     ('0),
+    .cache_sync_valid_i    (l1d_insn_valid   ),
+    .cache_sync_ready_o    (l1d_insn_ready   ),
+    .cache_sync_insn_i     (l1d_insn         ),
     // SPM Size
     // todo: full cache for testing
-    .bank_depth_for_SPM_i  ('0),
+    .bank_depth_for_SPM_i  (cfg_spm_size     ),
     // Request
     .core_req_valid_i      (cache_req_valid          ),
     .core_req_ready_o      (cache_req_ready          ),
@@ -1255,7 +1262,11 @@ module spatz_cluster
     .tcdm_events_i            (tcdm_events           ),
     .dma_events_i             (dma_events            ),
     .icache_events_i          (icache_events         ),
-    .cluster_probe_o          (cluster_probe_o       )
+    .cluster_probe_o          (cluster_probe_o       ),
+    .l1d_spm_size_o           (cfg_spm_size          ),
+    .l1d_insn_o               (l1d_insn              ),
+    .l1d_insn_valid_o         (l1d_insn_valid        ),
+    .l1d_insn_ready_i         (l1d_insn_ready        )
   );
 
   // 3. BootROM

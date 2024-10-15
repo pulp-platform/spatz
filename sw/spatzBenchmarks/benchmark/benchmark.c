@@ -24,3 +24,43 @@ void stop_kernel() {
                    SPATZ_CLUSTER_PERIPHERAL_SPATZ_STATUS_REG_OFFSET);
   *bench = 0;
 }
+
+void l1d_commit() {
+  uint32_t *commit =
+      (uint32_t *)(_snrt_team_current->root->cluster_mem.end +
+                   SPATZ_CLUSTER_PERIPHERAL_L1D_INSN_COMMIT_REG_OFFSET);
+  *commit = 1;
+}
+
+void l1d_init() {
+  uint32_t *insn =
+      (uint32_t *)(_snrt_team_current->root->cluster_mem.end +
+                   SPATZ_CLUSTER_PERIPHERAL_CFG_L1D_INSN_REG_OFFSET);
+  *insn = 3;
+  l1d_commit();
+}
+
+void l1d_flush() {
+  uint32_t *insn =
+      (uint32_t *)(_snrt_team_current->root->cluster_mem.end +
+                   SPATZ_CLUSTER_PERIPHERAL_CFG_L1D_INSN_REG_OFFSET);
+  *insn = 0;
+  l1d_commit();
+}
+
+void l1d_wait() {
+  // uint32_t *busy =
+  //     (uint32_t *)(_snrt_team_current->root->cluster_mem.end +
+  //                  SPATZ_CLUSTER_PERIPHERAL_CFG_L1D_COMMIT_REG_OFFSET);
+  // // wait until flush finished
+  // while (*busy) {
+  //   *busy =
+  //     (uint32_t *)(_snrt_team_current->root->cluster_mem.end +
+  //                  SPATZ_CLUSTER_PERIPHERAL_CFG_L1D_COMMIT_REG_OFFSET);
+  // }
+                   
+  volatile uint32_t cyc = 100;
+  while (cyc > 0) {
+    cyc --;
+  }
+}

@@ -328,25 +328,6 @@ module spatz_cc
     assign spatz_mem_rsp_valid[p] = tcdm_rsp_i[p].p_valid;
   end
 
-  reqrsp_mux #(
-    .NrPorts     (2           ),
-    .AddrWidth   (AddrWidth   ),
-    .DataWidth   (DataWidth   ),
-    .req_t       (dreq_t      ),
-    .rsp_t       (drsp_t      ),
-    // TODO(zarubaf): Wire-up to top-level.
-    .RespDepth   (4           ),
-    .RegisterReq ({1'b1, 1'b0})
-  ) i_reqrsp_mux (
-    .clk_i     (clk_i                          ),
-    .rst_ni    (rst_ni                         ),
-    .slv_req_i ({fp_lsu_mem_req, snitch_dreq_q}),
-    .slv_rsp_o ({fp_lsu_mem_rsp, snitch_drsp_q}),
-    .mst_req_o (merged_dreq                    ),
-    .mst_rsp_i (merged_drsp                    ),
-    .idx_o     (/*not connected*/              )
-  );
-
   if (Xdma) begin : gen_dma
     axi_dma_tc_snitch_fe #(
       .AddrWidth          (AddrWidth         ),
@@ -402,8 +383,12 @@ module spatz_cc
   // Decide whether to go to SoC or TCDM
   dreq_t                  data_tcdm_req;
   drsp_t                  data_tcdm_rsp;
+  dreq_t                  data_spm_req;
+  drsp_t                  data_spm_rsp;
   dreq_t                  data_soc_req;
   drsp_t                  data_soc_rsp;
+  dreq_t                  data_l1_req;
+  drsp_t                  data_l1_rsp;
   logic [3:0]             data_soc_req_id, data_soc_rsp_id;
   logic                   data_soc_push, data_soc_pop;
   logic                   data_soc_full, data_soc_empty;
@@ -411,6 +396,10 @@ module spatz_cc
   localparam int unsigned SelectWidth   = cf_math_pkg::idx_width(2);
   typedef logic [SelectWidth-1:0] select_t;
   select_t slave_select;
+
+  // Since we are now using cache, the fpu_sequencer should not
+  // bypass the L1D cache.
+
   reqrsp_demux #(
     .NrPorts   (2     ),
     .req_t     (dreq_t),
@@ -420,10 +409,29 @@ module spatz_cc
     .clk_i        (clk_i                      ),
     .rst_ni       (rst_ni                     ),
     .slv_select_i (slave_select               ),
-    .slv_req_i    (merged_dreq                ),
-    .slv_rsp_o    (merged_drsp                ),
+    .slv_req_i    (snitch_dreq_q              ),
+    .slv_rsp_o    (snitch_drsp_q              ),
     .mst_req_o    ({data_tcdm_req, data_soc_req}),
     .mst_rsp_i    ({data_tcdm_rsp, data_soc_rsp})
+  );
+
+  reqrsp_mux #(
+    .NrPorts     (2           ),
+    .AddrWidth   (AddrWidth   ),
+    .DataWidth   (DataWidth   ),
+    .req_t       (dreq_t      ),
+    .rsp_t       (drsp_t      ),
+    // TODO(zarubaf): Wire-up to top-level.
+    .RespDepth   (4           ),
+    .RegisterReq ({1'b1, 1'b0})
+  ) i_reqrsp_mux (
+    .clk_i     (clk_i                          ),
+    .rst_ni    (rst_ni                         ),
+    .slv_req_i ({fp_lsu_mem_req, data_tcdm_req}),
+    .slv_rsp_o ({fp_lsu_mem_rsp, data_tcdm_rsp}),
+    .mst_req_o (merged_dreq                    ),
+    .mst_rsp_i (merged_drsp                    ),
+    .idx_o     (/*not connected*/              )
   );
 
   // Add a fifo here to store id information for non-tcdm request (in-order)
@@ -475,6 +483,9 @@ module spatz_cc
   } reqrsp_rule_t;
 
   reqrsp_rule_t addr_map;
+  logic [AddrWidth-1:0] l2_addr_start, l2_addr_end;
+  assign l2_addr_start = 48'h0000_8000_0000;
+  assign l2_addr_end   = 48'h0000_1000_0000;
   assign addr_map = '{
     idx : 1,
     base: tcdm_addr_base_i,
@@ -487,7 +498,7 @@ module spatz_cc
     .addr_t    (logic [AddrWidth-1:0]),
     .rule_t    (reqrsp_rule_t        )
   ) i_addr_decode_napot (
-    .addr_i           (merged_dreq.q.addr),
+    .addr_i           (snitch_dreq_q.q.addr),
     .addr_map_i       (addr_map          ),
     .idx_o            (slave_select      ),
     .dec_valid_o      (/* Unused */      ),
@@ -507,8 +518,8 @@ module spatz_cc
   ) i_reqrsp_to_tcdm (
     .clk_i        (clk_i                          ),
     .rst_ni       (rst_ni                         ),
-    .reqrsp_req_i (data_tcdm_req                  ),
-    .reqrsp_rsp_o (data_tcdm_rsp                  ),
+    .reqrsp_req_i (merged_dreq                    ),
+    .reqrsp_rsp_o (merged_drsp                    ),
     .tcdm_req_o   (tcdm_req_o[NumMemPortsPerSpatz]),
     .tcdm_rsp_i   (tcdm_rsp_i[NumMemPortsPerSpatz])
   );
