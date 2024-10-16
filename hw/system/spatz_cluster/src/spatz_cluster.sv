@@ -468,6 +468,7 @@ module spatz_cluster
   data_t           [L1Associativity-1:0][L1BankPerWay-1:0] l1_data_bank_wdata;
   logic            [L1Associativity-1:0][L1BankPerWay-1:0] l1_data_bank_be;
   data_t           [L1Associativity-1:0][L1BankPerWay-1:0] l1_data_bank_rdata;
+  logic            [L1Associativity-1:0][L1BankPerWay-1:0] l1_data_bank_gnt;
 
   logic                   l1d_insn_valid, l1d_insn_ready;
   logic [1:0]             l1d_insn;
@@ -847,7 +848,8 @@ module spatz_cluster
     .tcdm_data_bank_addr_o (l1_data_bank_addr        ),
     .tcdm_data_bank_wdata_o(l1_data_bank_wdata       ),
     .tcdm_data_bank_be_o   (l1_data_bank_be          ),
-    .tcdm_data_bank_rdata_i(l1_data_bank_rdata       )
+    .tcdm_data_bank_rdata_i(l1_data_bank_rdata       ),
+    .tcdm_data_bank_gnt_i  (l1_data_bank_gnt         )
   );
 
   // TODO: Test only, add physical banks for cache
@@ -873,6 +875,7 @@ module spatz_cluster
     end
 
     for (genvar j = 0; j < L1NumDataBank; j++) begin: gen_l1_data_banks
+      assign l1_data_bank_gnt[i][j] = 1'b1;
       tc_sram #(
         .NumWords  (L1CacheWayEntry/L1BankFactor),
         .DataWidth ($bits(data_t)),
