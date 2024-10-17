@@ -19,8 +19,8 @@
         sw_rst_enable: true,
         axi_isolate_enable: true,
         tcdm: {
-            size: 128,
-            banks: 16,
+            size: 64,
+            banks: 8,
         },
         cluster_periph_size: 64, // kB
         dma_data_width: 512,

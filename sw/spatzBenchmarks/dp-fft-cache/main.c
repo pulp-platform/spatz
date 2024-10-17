@@ -85,8 +85,8 @@ int main() {
   snrt_cluster_hw_barrier();
 
   // Calculate pointers for the second butterfly onwards
-  double *s_ = samples + cid * (NFFT >> 1);
-  double *buf_ = buffer + cid * (NFFT >> 1);
+  double *s_ = samples_dram + cid * (NFFT >> 1);
+  double *buf_ = buffer_dram + cid * (NFFT >> 1);
   // double *twi_ = twiddle + NFFT;
   double *twi_ = twiddle_dram + NFFT;
 
@@ -101,7 +101,7 @@ int main() {
     start_kernel();
 
   // First stage
-  fft_2c(samples, buffer, twiddle_dram, NFFT, cid);
+  fft_2c(samples_dram, buffer_dram, twiddle_dram, NFFT, cid);
 
   // Wait for all cores to finish the first stage
   snrt_cluster_hw_barrier();
@@ -141,17 +141,17 @@ int main() {
 
     // Verify the real part
     for (unsigned int i = 0; i < NFFT; i++) {
-      if (fp_check(buffer[i], gold_out_dram[2 * i])) {
+      if (fp_check(buffer_dram[i], gold_out_dram[2 * i])) {
         printf("Error: Index %d -> Result = %f, Expected = %f\n", i,
-               (float)buffer[i], (float)gold_out_dram[2 * i]);
+               (float)buffer_dram[i], (float)gold_out_dram[2 * i]);
       }
     }
 
     // Verify the imac part
     for (unsigned int i = 0; i < NFFT; i++) {
-      if (fp_check(buffer[i + NFFT], gold_out_dram[2 * i + 1])) {
+      if (fp_check(buffer_dram[i + NFFT], gold_out_dram[2 * i + 1])) {
         printf("Error: Index %d -> Result = %f, Expected = %f\n", i + NFFT,
-               (float)buffer[i + NFFT], (float)gold_out_dram[2 * i + 1]);
+               (float)buffer_dram[i + NFFT], (float)gold_out_dram[2 * i + 1]);
       }
     }
   }

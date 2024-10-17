@@ -85,17 +85,32 @@ module spatz_tcdm_interconnect #(
   logic [NumOut-1:0] mem_q_valid_flat, mem_q_ready_flat;
 
   // The usual struct packing unpacking.
-  for (genvar i = 0; i < NumInp; i++) begin : gen_flat_inp
-    assign req_q_valid_flat[i] = req_i[i].q_valid;
-    assign rsp_o[i].q_ready = rsp_q_ready_flat[i];
-    assign in_req[i] = '{
-      addr: req_i[i].q.addr[ByteOffset+SelWidth+:MemAddrWidth],
-      write: req_i[i].q.write,
-      amo: req_i[i].q.amo,
-      data: req_i[i].q.data,
-      strb: req_i[i].q.strb,
-      user: req_i[i].q.user
-    };
+  if (NumInp == 1 && NumOut == 1) begin : gen_no_sel
+    for (genvar i = 0; i < NumInp; i++) begin : gen_flat_inp
+      assign req_q_valid_flat[i] = req_i[i].q_valid;
+      assign rsp_o[i].q_ready = rsp_q_ready_flat[i];
+      assign in_req[i] = '{
+        addr: req_i[i].q.addr[ByteOffset+:MemAddrWidth],
+        write: req_i[i].q.write,
+        amo: req_i[i].q.amo,
+        data: req_i[i].q.data,
+        strb: req_i[i].q.strb,
+        user: req_i[i].q.user
+      };
+    end
+  end else begin : gen_sel
+    for (genvar i = 0; i < NumInp; i++) begin : gen_flat_inp
+      assign req_q_valid_flat[i] = req_i[i].q_valid;
+      assign rsp_o[i].q_ready = rsp_q_ready_flat[i];
+      assign in_req[i] = '{
+        addr: req_i[i].q.addr[ByteOffset+SelWidth+:MemAddrWidth],
+        write: req_i[i].q.write,
+        amo: req_i[i].q.amo,
+        data: req_i[i].q.data,
+        strb: req_i[i].q.strb,
+        user: req_i[i].q.user
+      };
+    end
   end
 
   for (genvar i = 0; i < NumOut; i++) begin : gen_flat_oup
@@ -109,7 +124,11 @@ module spatz_tcdm_interconnect #(
   // ------------
   // We need to arbitrate the requests coming from the input side and resolve
   // potential bank conflicts. Therefore a full arbitration tree is needed.
-  if (Topology == snitch_pkg::LogarithmicInterconnect) begin : gen_xbar
+  if (NumInp == 1 && NumOut == 1) begin : gen_no_xbar
+    assign out_req = in_req;
+    assign mem_q_valid_flat = req_q_valid_flat;
+    assign rsp_q_ready_flat = mem_q_ready_flat;
+  end else if (Topology == snitch_pkg::LogarithmicInterconnect) begin : gen_xbar
     stream_xbar #(
       .NumInp      ( NumInp    ),
       .NumOut      ( NumOut    ),
@@ -132,7 +151,7 @@ module spatz_tcdm_interconnect #(
       .valid_o ( mem_q_valid_flat ),
       .ready_i ( mem_q_ready_flat )
     );
-  end else if (Topology == snitch_pkg::OmegaNet) begin : gen_omega_net
+  end else begin : gen_omega_net
     stream_omega_net #(
       .NumInp      ( NumInp        ),
       .NumOut      ( NumOut        ),
@@ -162,11 +181,11 @@ module spatz_tcdm_interconnect #(
   // Response Side
   // -------------
   // A simple multiplexer is sufficient here.
-  for (genvar i = 0; i < NumInp; i++) begin : gen_rsp_mux
+  if (NumInp == 1 && NumOut == 1) begin : gen_no_rsp_xbar
     rsp_t out_rsp_mux, in_rsp_mux;
     assign in_rsp_mux = '{
-      bank_select: bank_select[i],
-      valid: req_i[i].q_valid & rsp_o[i].q_ready
+      bank_select: bank_select[0],
+      valid: req_i[0].q_valid & rsp_o[0].q_ready
     };
     // A this is a fixed latency interconnect a simple shift register is
     // sufficient to track the arbitration decisions.
@@ -179,8 +198,29 @@ module spatz_tcdm_interconnect #(
       .d_i ( in_rsp_mux ),
       .d_o ( out_rsp_mux )
     );
-    assign rsp_o[i].p = mem_rsp_i[out_rsp_mux.bank_select].p;
-    assign rsp_o[i].p_valid = out_rsp_mux.valid;
+    assign rsp_o[0].p = mem_rsp_i[0].p;
+    assign rsp_o[0].p_valid = out_rsp_mux.valid;
+  end else begin : gen_rsp_xbar
+    for (genvar i = 0; i < NumInp; i++) begin : gen_rsp_mux
+      rsp_t out_rsp_mux, in_rsp_mux;
+      assign in_rsp_mux = '{
+        bank_select: bank_select[i],
+        valid: req_i[i].q_valid & rsp_o[i].q_ready
+      };
+      // A this is a fixed latency interconnect a simple shift register is
+      // sufficient to track the arbitration decisions.
+      shift_reg #(
+        .dtype ( rsp_t ),
+        .Depth ( MemoryResponseLatency )
+      ) i_shift_reg (
+        .clk_i,
+        .rst_ni,
+        .d_i ( in_rsp_mux ),
+        .d_o ( out_rsp_mux )
+      );
+      assign rsp_o[i].p = mem_rsp_i[out_rsp_mux.bank_select].p;
+      assign rsp_o[i].p_valid = out_rsp_mux.valid;
+    end
   end
 
 

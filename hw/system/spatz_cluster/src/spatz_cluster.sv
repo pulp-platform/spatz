@@ -228,11 +228,13 @@ module spatz_cluster
   localparam int unsigned L1Associativity = 4;
   localparam int unsigned L1BankFactor    = 2;
   localparam int unsigned L1CoalFactor    = 2;
-  localparam int unsigned L1BankPerWay    = L1BankFactor * (L1LineWidth/DataWidth);
+  localparam int unsigned L1NumBankWP     = L1LineWidth / DataWidth;
+  localparam int unsigned L1BankPerWP     = L1BankFactor * L1Associativity;
+  localparam int unsigned L1BankPerWay    = L1BankFactor * L1NumBankWP;
   localparam int unsigned L1CacheWayEntry = L1NumEntry / L1Associativity;
   localparam int unsigned L1NumSet        = L1CacheWayEntry / L1BankFactor;
   localparam int unsigned L1NumTagBank    = L1BankFactor;
-  localparam int unsigned L1NumDataBank   = L1BankFactor * (L1LineWidth/DataWidth);
+  localparam int unsigned L1NumDataBank   = L1BankFactor * L1NumBankWP;
 
 
   // --------
@@ -470,10 +472,18 @@ module spatz_cluster
   data_t           [L1Associativity-1:0][L1BankPerWay-1:0] l1_data_bank_rdata;
   logic            [L1Associativity-1:0][L1BankPerWay-1:0] l1_data_bank_gnt;
 
+  logic            [L1NumBankWP-1:0][L1BankPerWP-1:0]      l1_cache_wp_req;
+  logic            [L1NumBankWP-1:0][L1BankPerWP-1:0]      l1_cache_wp_we;
+  tcdm_bank_addr_t [L1NumBankWP-1:0][L1BankPerWP-1:0]      l1_cache_wp_addr;
+  data_t           [L1NumBankWP-1:0][L1BankPerWP-1:0]      l1_cache_wp_wdata;
+  logic            [L1NumBankWP-1:0][L1BankPerWP-1:0]      l1_cache_wp_be;
+  data_t           [L1NumBankWP-1:0][L1BankPerWP-1:0]      l1_cache_wp_rdata;
+  logic            [L1NumBankWP-1:0][L1BankPerWP-1:0]      l1_cache_wp_gnt;
+
   logic                   l1d_insn_valid, l1d_insn_ready;
   logic [1:0]             l1d_insn;
-  logic [L1AddrWidth-1:0] tcdm_start_addr, tcdm_end_addr;
   tcdm_bank_addr_t        cfg_spm_size;
+  tcdm_addr_t             spm_size;
 
 
   // -------------
@@ -743,10 +753,8 @@ module spatz_cluster
 
   // TODO: take from CSR/inputs
   // logic [L1AddrWidth-1:0] tcdm_start_addr, tcdm_end_addr, spm_size;
-  assign tcdm_start_addr = 32'h5100_0000;
-  assign tcdm_end_addr   = 32'h5200_0000;
   logic  [NrTCDMPortsCores-1:0] cache_pready;
-  // assign spm_size        = 32'h0010_0000;
+  assign spm_size        = cfg_spm_size * L1Associativity * L1LineWidth;
 
   // split the requests for spm or cache from core side
   spatz_addr_mapper #(
@@ -767,9 +775,10 @@ module spatz_cluster
     .mem_rsp_o            (tcdm_rsp        ),
     .error_o              (/* todo: connect to CSR */),
     // Address
-    .tcdm_start_address_i (tcdm_start_addr ),
-    .tcdm_end_address_i   (tcdm_end_addr   ),
-    .spm_size_i           (32'h0010_0000   ), // hardcode since partitioning is not set correctly now
+    .tcdm_start_address_i (tcdm_start_address[L1AddrWidth-1:0] ),
+    .tcdm_end_address_i   (tcdm_end_address[L1AddrWidth-1:0]   ),
+    .spm_size_i           (spm_size        ),
+    // .spm_size_i           (32'h0020_0000   ),
     // Output
     .spm_req_o            (spm_req         ),
     .spm_rsp_i            (spm_rsp         ),
@@ -895,7 +904,6 @@ module spatz_cluster
       );
     end
   end
-
 
   spatz_tcdm_interconnect #(
     .NumInp                (NumTCDMIn           ),
