@@ -26,16 +26,17 @@ add wave -noupdate -group Cluster /tb_bin/i_dut/i_cluster_wrapper/i_cluster/*
 
 add wave -noupdate -group CSR /tb_bin/i_dut/i_cluster_wrapper/i_cluster/i_snitch_cluster_peripheral/*
 add wave -noupdate -group CSR -group flush_status /tb_bin/i_dut/i_cluster_wrapper/i_cluster/i_snitch_cluster_peripheral/i_spatz_cluster_peripheral_reg_top/u_l1d_flush_status/*
+add wave -noupdate -group CSR -group spm_size /tb_bin/i_dut/i_cluster_wrapper/i_cluster/i_snitch_cluster_peripheral/i_spatz_cluster_peripheral_reg_top/u_cfg_l1d_spm/*
 
 add wave -noupdate -group Mapper /tb_bin/i_dut/i_cluster_wrapper/i_cluster/i_tcdm_mapper/*
 
 add wave -noupdate -group L1D /tb_bin/i_dut/i_cluster_wrapper/i_cluster/i_l1_controller/*
 
 
-add wave -noupdate -group Cluster -group amo {sim:/tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_tcdm_super_bank[1]/gen_tcdm_bank[7]/i_amo_shim/*}
-add wave -noupdate -group Cluster -group reqid_pipe {sim:/tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_tcdm_super_bank[1]/gen_tcdm_bank[7]/i_reqid_pipe2/*}
-add wave -noupdate -group Cluster -group sram_pipe {sim:/tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_tcdm_super_bank[1]/gen_tcdm_bank[7]/i_sram_pipe/*}
-add wave -noupdate -group Cluster -group sram {sim:/tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_tcdm_super_bank[1]/gen_tcdm_bank[7]/i_data_mem/*}
+# add wave -noupdate -group Cluster -group amo {sim:/tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_tcdm_super_bank[1]/gen_tcdm_bank[7]/i_amo_shim/*}
+# add wave -noupdate -group Cluster -group reqid_pipe {sim:/tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_tcdm_super_bank[1]/gen_tcdm_bank[7]/i_reqid_pipe2/*}
+# add wave -noupdate -group Cluster -group sram_pipe {sim:/tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_tcdm_super_bank[1]/gen_tcdm_bank[7]/i_sram_pipe/*}
+# add wave -noupdate -group Cluster -group sram {sim:/tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_tcdm_super_bank[1]/gen_tcdm_bank[7]/i_data_mem/*}
 
 add wave -noupdate -group Cluster -group core_xbar {sim:/tb_bin/i_dut/i_cluster_wrapper/i_cluster/i_tcdm_interconnect/*}
 add wave -noupdate -group Cluster -group core_xbar -group req {sim:/tb_bin/i_dut/i_cluster_wrapper/i_cluster/i_tcdm_interconnect/gen_xbar/i_stream_xbar/*}

@@ -131,7 +131,7 @@ module spatz_addr_mapper #(
       // The q_ready HS signal should follow the request select, not response
       mem_rsp_o[j].q_ready = cache_rsp_i[j].q_ready;
       // Use spm by default
-      arb_select           = 1'b1;
+      arb_select           = SPM;
       cache_pready_o[j]    = 1'b0;
 
       if (target_select[j] == SPM) begin
@@ -141,11 +141,11 @@ module spatz_addr_mapper #(
       if (spm_rsp_i[j].p_valid) begin
         // SPM always has priority
         // stop cache response if spm is responding
-        arb_select        = 1'b1;
+        arb_select        = SPM;
         cache_pready_o[j] = 1'b0;
       end else begin
         if (cache_rsp_i[j].p_valid) begin
-          arb_select      = 1'b0;
+          arb_select      = CACHE;
         end
         cache_pready_o[j] = 1'b1;
       end

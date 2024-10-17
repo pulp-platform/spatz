@@ -2139,7 +2139,7 @@ module spatz_cluster_peripheral_reg_top #(
   prim_subreg #(
     .DW      (10),
     .SWACCESS("RW"),
-    .RESVAL  (10'h0)
+    .RESVAL  (10'h20)
   ) u_cfg_l1d_spm (
     .clk_i   (clk_i    ),
     .rst_ni  (rst_ni  ),
@@ -2193,7 +2193,7 @@ module spatz_cluster_peripheral_reg_top #(
   prim_subreg #(
     .DW      (1),
     .SWACCESS("RW"),
-    .RESVAL  (1'h0)
+    .RESVAL  (1'h1)
   ) u_l1d_spm_commit (
     .clk_i   (clk_i    ),
     .rst_ni  (rst_ni  ),

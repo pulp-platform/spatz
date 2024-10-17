@@ -52,7 +52,7 @@ int main() {
 
   if (cid == 0) {
     // configure the cache
-    uint32_t spm_size = 16;
+    uint32_t spm_size = 32;
     l1d_spm_config(spm_size);
   }
 
@@ -65,16 +65,16 @@ int main() {
   // Allocate the matrices
   if (cid == 0) {
     a = (double *)snrt_l1alloc(sizeof(double));
-    x = (double *)snrt_l1alloc(dim * sizeof(double));
-    y = (double *)snrt_l1alloc(dim * sizeof(double));
+    // x = (double *)snrt_l1alloc(dim * sizeof(double));
+    // y = (double *)snrt_l1alloc(dim * sizeof(double));
   }
 
   // Initialize the matrices
   if (cid == 0) {
     *a = axpy_alpha_dram;
 
-    snrt_dma_start_1d(x, axpy_X_dram, dim * sizeof(double));
-    snrt_dma_start_1d(y, axpy_Y_dram, dim * sizeof(double));
+    // snrt_dma_start_1d(x, axpy_X_dram, dim * sizeof(double));
+    // snrt_dma_start_1d(y, axpy_Y_dram, dim * sizeof(double));
   }
 
   // Wait for all cores to finish

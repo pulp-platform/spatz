@@ -434,10 +434,9 @@
         // hwqe: "true",
         swaccess: "rw",
         hwaccess: "hro",
-        resval: "0",
+        resval: "32",
         fields: [{
             bits: "9:0",
-            resval: "0",
             name: "SPM_SIZE",
             desc: '''Size of SPM region (cache line format).'''
         }]
@@ -463,7 +462,7 @@
         // hwqe: "true",
         swaccess: "rw",
         hwaccess: "hrw",
-        resval: "0",
+        resval: "1",
         fields: [{
             bits: "0",
             name: "COMMIT",
