@@ -79,7 +79,7 @@ module spatz_addr_mapper #(
   // Two methods of assigning:
   // 1. forward requests directly, control valid signals
   // 2. check both valid and request
-  
+
   always_comb begin
     for (int j = 0; unsigned'(j) < NumIO; j++) begin : gen_req
       // Initial values

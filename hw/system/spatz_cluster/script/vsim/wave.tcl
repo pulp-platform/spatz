@@ -41,3 +41,12 @@ add wave -noupdate -group L1D /tb_bin/i_dut/i_cluster_wrapper/i_cluster/i_l1_con
 add wave -noupdate -group Cluster -group core_xbar {sim:/tb_bin/i_dut/i_cluster_wrapper/i_cluster/i_tcdm_interconnect/*}
 add wave -noupdate -group Cluster -group core_xbar -group req {sim:/tb_bin/i_dut/i_cluster_wrapper/i_cluster/i_tcdm_interconnect/gen_xbar/i_stream_xbar/*}
 add wave -noupdate -group Cluster -group dma_xbar {sim:/tb_bin/i_dut/i_cluster_wrapper/i_cluster/i_dma_interconnect/*}
+
+add wave -noupdate -group Cluster -group superbank0 -group mux /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_tcdm_super_bank[0]/i_tcdm_mux/*
+add wave -noupdate -group Cluster -group superbank0 -group bank0 /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_tcdm_super_bank[0]/gen_tcdm_bank[0]/i_data_mem/*
+add wave -noupdate -group Cluster -group superbank0 -group bank0 -group mux /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_tcdm_super_bank[0]/gen_tcdm_bank[0]/i_data_mem/gen_banks[0]/i_spm_cache_mux/*
+add wave -noupdate -group Cluster -group superbank0 -group bank0 -group bank /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_tcdm_super_bank[0]/gen_tcdm_bank[0]/i_data_mem/gen_banks[0]/i_data_bank/*
+
+add wave -noupdate -group Cluster -group superbank0 -group bank7 /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_tcdm_super_bank[0]/gen_tcdm_bank[7]/i_data_mem/*
+add wave -noupdate -group Cluster -group superbank0 -group bank7 -group mux /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_tcdm_super_bank[0]/gen_tcdm_bank[7]/i_data_mem/gen_banks[0]/i_spm_cache_mux/*
+add wave -noupdate -group Cluster -group superbank0 -group bank7 -group bank /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_tcdm_super_bank[0]/gen_tcdm_bank[7]/i_data_mem/gen_banks[0]/i_data_bank/*

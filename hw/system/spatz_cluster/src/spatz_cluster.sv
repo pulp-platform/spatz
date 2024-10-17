@@ -663,24 +663,50 @@ module spatz_cluster
       data_t mem_rdata, mem_wdata;
       tcdm_meta_t mem_req_meta;
 
-      tc_sram_impl #(
-        .NumWords  (TCDMDepth),
-        .DataWidth (DataWidth),
-        .ByteWidth (8        ),
-        .NumPorts  (1        ),
-        .Latency   (1        )
+      spatz_sram_wrapper #(
+        .NumWay                (L1Associativity ),
+        .BankFactor            (L1BankFactor    ),
+        .NumWords              (TCDMDepth       ),
+        .ByteWidth             (8               ),
+        .DataWidth             (DataWidth       ),
+        .MemoryResponseLatency (1               )
       ) i_data_mem (
-        .clk_i   (clk_i       ),
-        .rst_ni  (rst_ni      ),
-        .impl_i  ('0          ),
-        .impl_o  (/* Unused */),
-        .req_i   (mem_cs      ),
-        .we_i    (mem_wen     ),
-        .addr_i  (mem_add     ),
-        .wdata_i (mem_wdata   ),
-        .be_i    (mem_be      ),
-        .rdata_o (mem_rdata   )
+        .clk_i        (clk_i),
+        .rst_ni       (rst_ni),
+        /// Cache Side TODO: Connect cache
+        .cache_req_i  ('0),
+        .cache_we_i   ('0),
+        .cache_addr_i ('0),
+        .cache_wdata_i('0),
+        .cache_be_i   ('0),
+        .cache_rdata_o(  ),
+        /// SPM Side
+        .spm_req_i    (mem_cs    ),
+        .spm_we_i     (mem_wen   ),
+        .spm_addr_i   (mem_add   ),
+        .spm_wdata_i  (mem_wdata ),
+        .spm_be_i     (mem_be    ),
+        .spm_rdata_o  (mem_rdata )
       );
+
+      // tc_sram_impl #(
+      //   .NumWords  (TCDMDepth),
+      //   .DataWidth (DataWidth),
+      //   .ByteWidth (8        ),
+      //   .NumPorts  (1        ),
+      //   .Latency   (1        )
+      // ) i_data_mem (
+      //   .clk_i   (clk_i       ),
+      //   .rst_ni  (rst_ni      ),
+      //   .impl_i  ('0          ),
+      //   .impl_o  (/* Unused */),
+      //   .req_i   (mem_cs      ),
+      //   .we_i    (mem_wen     ),
+      //   .addr_i  (mem_add     ),
+      //   .wdata_i (mem_wdata   ),
+      //   .be_i    (mem_be      ),
+      //   .rdata_o (mem_rdata   )
+      // );
 
       data_t amo_rdata_local;
 
@@ -905,9 +931,10 @@ module spatz_cluster
     end
   end
 
+  // We have multiple banks form a pesudo bank (BankWP)
   spatz_tcdm_interconnect #(
     .NumInp                (NumTCDMIn           ),
-    .NumOut                (NrBanks             ),
+    .NumOut                (L1NumBankWP         ),
     .tcdm_req_t            (spm_req_t           ),
     .tcdm_rsp_t            (spm_rsp_t           ),
     .mem_req_t             (mem_req_t           ),
