@@ -49,6 +49,11 @@ test: ${VSIM_SOURCES} ${TB_SRCS}
 	echo ${VSIM_SOURCES}
 	touch test
 
+# C Compiler
+RV32_CC      ?= ${GCC_INSTALL_DIR}/bin/riscv32-unknown-elf-gcc
+RV32_OBJDUMP ?= ${GCC_INSTALL_DIR}/bin/riscv32-unknown-elf-objdump
+RV32_OBJCOPY ?= ${GCC_INSTALL_DIR}/bin/riscv32-unknown-elf-objcopy
+
 ###############
 # C testbench #
 ###############
@@ -71,9 +76,9 @@ VLT_COBJ += $(VLT_BUILDDIR)/vlt/verilated_vcd_c.o
 #################
 
 test/bootrom.elf test/bootrom.dump test/bootrom.bin: src/generated/spatz_cluster_wrapper.sv test/bootrom.S test/bootrom.ld test/bootdata_bootrom.cc Makefile
-	${GCC_INSTALL_DIR}/bin/riscv32-unknown-elf-gcc -mabi=ilp32 -march=rv32imaf -static -nostartfiles -Ttest/bootrom.ld test/bootrom.S test/bootdata_bootrom.cc -I../../ip/snitch_test/src -I../../../sw/snRuntime/include -I../../../sw/toolchain/riscv-opcodes/ -o test/bootrom.elf
-	${GCC_INSTALL_DIR}/bin/riscv32-unknown-elf-objdump -D test/bootrom.elf > test/bootrom.dump
-	${GCC_INSTALL_DIR}/bin/riscv32-unknown-elf-objcopy -O binary test/bootrom.elf test/bootrom.bin
+	${RV32_CC} -mabi=ilp32 -march=rv32imaf -static -nostartfiles -Ttest/bootrom.ld test/bootrom.S test/bootdata_bootrom.cc -I../../ip/snitch_test/src -I../../../sw/snRuntime/include -I../../../sw/toolchain/riscv-opcodes/ -o test/bootrom.elf
+	${RV32_OBJDUMP} -D test/bootrom.elf > test/bootrom.dump
+	${RV32_OBJCOPY} -O binary test/bootrom.elf test/bootrom.bin
 
 .PHONY: bootrom
 bootrom: $(CURDIR)/src/generated/bootrom.sv
