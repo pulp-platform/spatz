@@ -19,7 +19,7 @@
         sw_rst_enable: true,
         axi_isolate_enable: true,
         tcdm: {
-            size: 64,
+            size: 32,
             banks: 8,
         },
         cluster_periph_size: 64, // kB

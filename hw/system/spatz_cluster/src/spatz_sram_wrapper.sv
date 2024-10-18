@@ -8,10 +8,8 @@
 
 /// tc_sram wrapper for hybrid cache/spm access
 module spatz_sram_wrapper #(
-  /// Number of Cache Ways (SetAssociativity) (`> 0`).
-  parameter int unsigned NumWay                = 32'd0,
-  /// Banking Factor of Cache (`> 0`).
-  parameter int unsigned BankFactor            = 32'd0,
+  /// Number of Banks in a Wrapper.
+  parameter int unsigned NumBanks              = 32'd0,
   /// Number of Words for a Cache Slice
   parameter int unsigned NumWords              = 32'd0,
   /// Byte Width of a Word
@@ -24,8 +22,6 @@ module spatz_sram_wrapper #(
 
   // Dependent parameters, do not overwrite
   parameter int unsigned MemAddrWidth          = (NumWords > 32'd1) ? $clog2(NumWords) : 32'd1,
-  /// The number of banks in a slice
-  parameter int unsigned NumBanks              = NumWay * BankFactor,
   /// Address width of each bank
   parameter int unsigned BankAddrWidth         = MemAddrWidth - $clog2(NumBanks),
   /// Address type of input (wrapper bank)
@@ -43,6 +39,8 @@ module spatz_sram_wrapper #(
   input  logic                                 clk_i,
   /// Reset, active low.
   input  logic                                 rst_ni,
+  /// SPM Size, used to saperate SPM and Cache in the bank
+  input  bank_addr_t                           spm_size_i,
   /// Cache Ports
   input  logic                [NumBanks-1:0]   cache_req_i,
   input  logic                [NumBanks-1:0]   cache_we_i,
@@ -61,7 +59,7 @@ module spatz_sram_wrapper #(
 );
   typedef struct packed {
     logic       we;
-    bank_addr_t addr;
+    logic [BankAddrWidth:0] addr;
     data_t      data;
     be_t        be;
   } bank_req_t;
@@ -70,13 +68,12 @@ module spatz_sram_wrapper #(
   localparam int unsigned CACHE = 0;
 
   bank_req_t  [NumBanks-1:0] spm_bank_req,   cache_bank_req,   bank_req;
-  data_t      [NumBanks-1:0] spm_bank_rdata, cache_bank_rdata, bank_rdata;
   logic       [NumBanks-1:0] spm_bank_valid, cache_bank_valid, bank_valid;
+  data_t      [NumBanks-1:0] bank_rdata;
 
-  select_t    bank_select, bank_select_d, bank_select_q;
-  // SPM: 1, Cache: 0
   // We also need to store the selection for one cycle for rdata forwarding
   logic       [NumBanks-1:0] arb_select, arb_select_d, arb_select_q;
+  select_t    bank_select, bank_select_d, bank_select_q;
 
   // Determine the bank spm requests will be sent to
   assign      bank_select = spm_addr_i[$clog2(NumBanks)-1:0];
@@ -90,32 +87,34 @@ module spatz_sram_wrapper #(
     spm_bank_valid[bank_select]    = spm_req_i;
 
     spm_bank_req[bank_select].we   = spm_we_i;
-    spm_bank_req[bank_select].addr = spm_addr_i[MemAddrWidth-1:$clog2(NumBanks)];
+    spm_bank_req[bank_select].addr = {1'b0,spm_addr_i[MemAddrWidth-1:$clog2(NumBanks)]};
     spm_bank_req[bank_select].data = spm_wdata_i;
     spm_bank_req[bank_select].be   = spm_be_i;
 
     // spm_rdata_o = spm_bank_rdata[bank_select];
 
     for (int i = 0; i < NumBanks; i++) begin
-      cache_bank_valid       = cache_req_i[i];
+      cache_bank_valid[i]    = cache_req_i[i];
 
       cache_bank_req[i].we   = cache_we_i[i];
-      cache_bank_req[i].addr = cache_addr_i[i];
+      // Add address offset to cache requests
+      // cache_bank_req[i].addr = cache_addr_i[i] + spm_size_i;
+      cache_bank_req[i].addr = {1'b1, cache_addr_i[i]};
       cache_bank_req[i].data = cache_wdata_i[i];
       cache_bank_req[i].be   = cache_be_i[i];
-
-      // cache_rdata_o[i] = cache_bank_rdata[i];
     end
   end
 
   for (genvar i = 0; i < NumBanks; i ++) begin : gen_banks
-    // SPM always has higher priority
     always_comb begin
       arb_select[i]      = SPM;
-      cache_ready_o[i]   = '0;
+      cache_ready_o[i]   = 1'b1;
 
       if (spm_bank_valid[i]) begin
+        // SPM always has priority because it assumes a fixed latency access
+        // CACHE can stall and wait based on HS
         arb_select[i]    = SPM;
+        cache_ready_o[i] = 1'b0;
       end else if (cache_bank_valid[i]) begin
         arb_select[i]    = CACHE;
         cache_ready_o[i] = 1'b1;
@@ -124,6 +123,7 @@ module spatz_sram_wrapper #(
       arb_select_d[i] = arb_select[i];
     end
 
+    // Select between SPM and Cache
     rr_arb_tree #(
       .NumIn     ( 2              ),
       .DataType  ( bank_req_t     ),
@@ -144,8 +144,9 @@ module spatz_sram_wrapper #(
       .idx_o   ( /* not used */                           )
     );
 
+    // Forward to bank
     tc_sram #(
-      .NumWords  (NumWords/NumBanks),
+      .NumWords  (2*NumWords/NumBanks),
       .DataWidth (DataWidth        ),
       .ByteWidth (ByteWidth        ),
       .NumPorts  (1                ),
@@ -165,8 +166,8 @@ module spatz_sram_wrapper #(
 
   // Store ARB info for one cycle to wire response
   shift_reg #(
-    .dtype ( logic[NumBanks-1:0] ),
-    .Depth ( MemoryResponseLatency     )
+    .dtype ( logic[NumBanks-1:0]   ),
+    .Depth ( MemoryResponseLatency )
   ) i_arb_reg (
     .clk_i,
     .rst_ni,
@@ -175,8 +176,8 @@ module spatz_sram_wrapper #(
   );
 
   shift_reg #(
-    .dtype ( select_t ),
-    .Depth ( MemoryResponseLatency     )
+    .dtype ( select_t              ),
+    .Depth ( MemoryResponseLatency )
   ) i_sel_reg (
     .clk_i,
     .rst_ni,

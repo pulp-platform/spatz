@@ -228,13 +228,13 @@ module spatz_cluster
   localparam int unsigned L1Associativity = 4;
   localparam int unsigned L1BankFactor    = 2;
   localparam int unsigned L1CoalFactor    = 2;
-  localparam int unsigned L1NumBankWP     = L1LineWidth / DataWidth;
+  localparam int unsigned L1NumWrapper    = L1LineWidth / DataWidth;
   localparam int unsigned L1BankPerWP     = L1BankFactor * L1Associativity;
-  localparam int unsigned L1BankPerWay    = L1BankFactor * L1NumBankWP;
+  localparam int unsigned L1BankPerWay    = L1BankFactor * L1NumWrapper;
   localparam int unsigned L1CacheWayEntry = L1NumEntry / L1Associativity;
   localparam int unsigned L1NumSet        = L1CacheWayEntry / L1BankFactor;
-  localparam int unsigned L1NumTagBank    = L1BankFactor;
-  localparam int unsigned L1NumDataBank   = L1BankFactor * L1NumBankWP;
+  localparam int unsigned L1NumTagBank    = L1BankFactor * L1Associativity;
+  localparam int unsigned L1NumDataBank   = L1BankFactor * L1NumWrapper * L1Associativity;
 
 
   // --------
@@ -457,28 +457,28 @@ module spatz_cluster
   data_t      [NrTCDMPortsCores-1:0] cache_rsp_data;
   tcdm_user_t [NrTCDMPortsCores-1:0] cache_rsp_meta;
 
-  logic            [L1Associativity-1:0][L1BankFactor-1:0] l1_tag_bank_req;
-  logic            [L1Associativity-1:0][L1BankFactor-1:0] l1_tag_bank_we;
-  tcdm_bank_addr_t [L1Associativity-1:0][L1BankFactor-1:0] l1_tag_bank_addr;
-  data_t           [L1Associativity-1:0][L1BankFactor-1:0] l1_tag_bank_wdata;
-  logic            [L1Associativity-1:0][L1BankFactor-1:0] l1_tag_bank_be;
-  data_t           [L1Associativity-1:0][L1BankFactor-1:0] l1_tag_bank_rdata;
+  logic            [L1NumTagBank-1:0] l1_tag_bank_req;
+  logic            [L1NumTagBank-1:0] l1_tag_bank_we;
+  tcdm_bank_addr_t [L1NumTagBank-1:0] l1_tag_bank_addr;
+  data_t           [L1NumTagBank-1:0] l1_tag_bank_wdata;
+  logic            [L1NumTagBank-1:0] l1_tag_bank_be;
+  data_t           [L1NumTagBank-1:0] l1_tag_bank_rdata;
 
-  logic            [L1Associativity-1:0][L1BankPerWay-1:0] l1_data_bank_req;
-  logic            [L1Associativity-1:0][L1BankPerWay-1:0] l1_data_bank_we;
-  tcdm_bank_addr_t [L1Associativity-1:0][L1BankPerWay-1:0] l1_data_bank_addr;
-  data_t           [L1Associativity-1:0][L1BankPerWay-1:0] l1_data_bank_wdata;
-  logic            [L1Associativity-1:0][L1BankPerWay-1:0] l1_data_bank_be;
-  data_t           [L1Associativity-1:0][L1BankPerWay-1:0] l1_data_bank_rdata;
-  logic            [L1Associativity-1:0][L1BankPerWay-1:0] l1_data_bank_gnt;
+  logic            [L1NumDataBank-1:0] l1_data_bank_req;
+  logic            [L1NumDataBank-1:0] l1_data_bank_we;
+  tcdm_bank_addr_t [L1NumDataBank-1:0] l1_data_bank_addr;
+  data_t           [L1NumDataBank-1:0] l1_data_bank_wdata;
+  logic            [L1NumDataBank-1:0] l1_data_bank_be;
+  data_t           [L1NumDataBank-1:0] l1_data_bank_rdata;
+  logic            [L1NumDataBank-1:0] l1_data_bank_gnt;
 
-  logic            [L1NumBankWP-1:0][L1BankPerWP-1:0]      l1_cache_wp_req;
-  logic            [L1NumBankWP-1:0][L1BankPerWP-1:0]      l1_cache_wp_we;
-  tcdm_bank_addr_t [L1NumBankWP-1:0][L1BankPerWP-1:0]      l1_cache_wp_addr;
-  data_t           [L1NumBankWP-1:0][L1BankPerWP-1:0]      l1_cache_wp_wdata;
-  logic            [L1NumBankWP-1:0][L1BankPerWP-1:0]      l1_cache_wp_be;
-  data_t           [L1NumBankWP-1:0][L1BankPerWP-1:0]      l1_cache_wp_rdata;
-  logic            [L1NumBankWP-1:0][L1BankPerWP-1:0]      l1_cache_wp_gnt;
+  logic            [L1NumWrapper-1:0][L1BankPerWP-1:0]      l1_cache_wp_req;
+  logic            [L1NumWrapper-1:0][L1BankPerWP-1:0]      l1_cache_wp_we;
+  tcdm_bank_addr_t [L1NumWrapper-1:0][L1BankPerWP-1:0]      l1_cache_wp_addr;
+  data_t           [L1NumWrapper-1:0][L1BankPerWP-1:0]      l1_cache_wp_wdata;
+  strb_t           [L1NumWrapper-1:0][L1BankPerWP-1:0]      l1_cache_wp_be;
+  data_t           [L1NumWrapper-1:0][L1BankPerWP-1:0]      l1_cache_wp_rdata;
+  logic            [L1NumWrapper-1:0][L1BankPerWP-1:0]      l1_cache_wp_gnt;
 
   logic                   l1d_insn_valid, l1d_insn_ready;
   logic [1:0]             l1d_insn;
@@ -664,22 +664,23 @@ module spatz_cluster
       tcdm_meta_t mem_req_meta;
 
       spatz_sram_wrapper #(
-        .NumWay                (L1Associativity ),
-        .BankFactor            (L1BankFactor    ),
+        .NumBanks              (L1BankPerWP     ),
         .NumWords              (TCDMDepth       ),
         .ByteWidth             (8               ),
         .DataWidth             (DataWidth       ),
         .MemoryResponseLatency (1               )
       ) i_data_mem (
-        .clk_i        (clk_i),
-        .rst_ni       (rst_ni),
+        .clk_i        (clk_i               ),
+        .rst_ni       (rst_ni              ),
+        .spm_size_i   (cfg_spm_size        ),
         /// Cache Side TODO: Connect cache
-        .cache_req_i  ('0),
-        .cache_we_i   ('0),
-        .cache_addr_i ('0),
-        .cache_wdata_i('0),
-        .cache_be_i   ('0),
-        .cache_rdata_o(  ),
+        .cache_req_i  (l1_cache_wp_req  [j]),
+        .cache_we_i   (l1_cache_wp_we   [j]),
+        .cache_addr_i (l1_cache_wp_addr [j]),
+        .cache_wdata_i(l1_cache_wp_wdata[j]),
+        .cache_be_i   (l1_cache_wp_be   [j]),
+        .cache_rdata_o(l1_cache_wp_rdata[j]),
+        .cache_ready_o(l1_cache_wp_gnt  [j]),
         /// SPM Side
         .spm_req_i    (mem_cs    ),
         .spm_we_i     (mem_wen   ),
@@ -887,54 +888,65 @@ module spatz_cluster
     .tcdm_data_bank_gnt_i  (l1_data_bank_gnt         )
   );
 
-  // TODO: Test only, add physical banks for cache
-  for (genvar i = 0; i < L1Associativity; i++) begin : gen_l1_banks
-    for (genvar j = 0; j < L1NumTagBank; j++) begin: gen_l1_tag_banks
-      tc_sram #(
-        .NumWords  (L1CacheWayEntry/L1BankFactor),
-        .DataWidth ($bits(data_t)),
-        .ByteWidth ($bits(data_t)),
-        .NumPorts  (1),
-        .Latency   (1),
-        .SimInit   ("zeros")
-      ) i_meta_bank (
-        .clk_i  (clk_i                  ),
-        .rst_ni (rst_ni                 ),
-        .req_i  (l1_tag_bank_req  [i][j]),
-        .we_i   (l1_tag_bank_we   [i][j]),
-        .addr_i (l1_tag_bank_addr [i][j]),
-        .wdata_i(l1_tag_bank_wdata[i][j]),
-        .be_i   (l1_tag_bank_be   [i][j]),
-        .rdata_o(l1_tag_bank_rdata[i][j])
-      );
-    end
+  for (genvar j = 0; j < L1NumTagBank; j++) begin: gen_l1_tag_banks
+    tc_sram #(
+      .NumWords  (L1CacheWayEntry/L1BankFactor),
+      .DataWidth ($bits(data_t)               ),
+      .ByteWidth ($bits(data_t)               ),
+      .NumPorts  (1                           ),
+      .Latency   (1                           ),
+      .SimInit   ("zeros"                     )
+    ) i_meta_bank (
+      .clk_i  (clk_i               ),
+      .rst_ni (rst_ni              ),
+      .req_i  (l1_tag_bank_req  [j]),
+      .we_i   (l1_tag_bank_we   [j]),
+      .addr_i (l1_tag_bank_addr [j]),
+      .wdata_i(l1_tag_bank_wdata[j]),
+      .be_i   (l1_tag_bank_be   [j]),
+      .rdata_o(l1_tag_bank_rdata[j])
+    );
+  end
 
-    for (genvar j = 0; j < L1NumDataBank; j++) begin: gen_l1_data_banks
-      assign l1_data_bank_gnt[i][j] = 1'b1;
-      tc_sram #(
-        .NumWords  (L1CacheWayEntry/L1BankFactor),
-        .DataWidth ($bits(data_t)),
-        .ByteWidth ($bits(data_t)),
-        .NumPorts  (1),
-        .Latency   (1),
-        .SimInit   ("zeros")
-      ) i_data_bank (
-        .clk_i  (clk_i                   ),
-        .rst_ni (rst_ni                  ),
-        .req_i  (l1_data_bank_req  [i][j]),
-        .we_i   (l1_data_bank_we   [i][j]),
-        .addr_i (l1_data_bank_addr [i][j]),
-        .wdata_i(l1_data_bank_wdata[i][j]),
-        .be_i   (l1_data_bank_be   [i][j]),
-        .rdata_o(l1_data_bank_rdata[i][j])
-      );
+  for (genvar i = 0; i < L1NumWrapper; i++) begin
+    for (genvar j = 0; j < L1Associativity*L1BankFactor; j++) begin
+      assign l1_cache_wp_req  [i][j] = l1_data_bank_req  [i + j*L1NumWrapper];
+      assign l1_cache_wp_we   [i][j] = l1_data_bank_we   [i + j*L1NumWrapper];
+      assign l1_cache_wp_addr [i][j] = l1_data_bank_addr [i + j*L1NumWrapper];
+      assign l1_cache_wp_wdata[i][j] = l1_data_bank_wdata[i + j*L1NumWrapper];
+      assign l1_cache_wp_be   [i][j] = (l1_data_bank_be  [i + j*L1NumWrapper]) ? {(NarrowDataWidth/8){1'b1}} : '0;
+
+      assign l1_data_bank_rdata[i + j*L1NumWrapper] = l1_cache_wp_rdata[i][j];
+      assign l1_data_bank_gnt  [i + j*L1NumWrapper] = l1_cache_wp_gnt  [i][j];
     end
   end
+
+
+  // for (genvar j = 0; j < L1NumDataBank; j++) begin: gen_l1_data_banks
+  //   assign l1_data_bank_gnt[j] = 1'b1;
+  //   tc_sram #(
+  //     .NumWords  (L1CacheWayEntry/L1BankFactor),
+  //     .DataWidth ($bits(data_t)),
+  //     .ByteWidth ($bits(data_t)),
+  //     .NumPorts  (1),
+  //     .Latency   (1),
+  //     .SimInit   ("zeros")
+  //   ) i_data_bank (
+  //     .clk_i  (clk_i                   ),
+  //     .rst_ni (rst_ni                  ),
+  //     .req_i  (l1_data_bank_req  [j]),
+  //     .we_i   (l1_data_bank_we   [j]),
+  //     .addr_i (l1_data_bank_addr [j] + cfg_spm_size),
+  //     .wdata_i(l1_data_bank_wdata[j]),
+  //     .be_i   (l1_data_bank_be   [j]),
+  //     .rdata_o(l1_data_bank_rdata[j])
+  //   );
+  // end
 
   // We have multiple banks form a pesudo bank (BankWP)
   spatz_tcdm_interconnect #(
     .NumInp                (NumTCDMIn           ),
-    .NumOut                (L1NumBankWP         ),
+    .NumOut                (L1NumWrapper        ),
     .tcdm_req_t            (spm_req_t           ),
     .tcdm_rsp_t            (spm_rsp_t           ),
     .mem_req_t             (mem_req_t           ),
