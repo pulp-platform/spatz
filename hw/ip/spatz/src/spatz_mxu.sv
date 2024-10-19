@@ -56,6 +56,7 @@ module spatz_mxu
 
   //Accumulator signal
   vrf_data_t [NrACCBanks-1:0] accu_result_q;
+  logic [NrACCBanks-1:0] accu_result_valid, accu_result_valid_d, accu_result_valid_q;
   vrf_data_t wdata_q;
   logic [NrACCBanks-1:0] waddr_onehot;
 
@@ -75,6 +76,11 @@ module spatz_mxu
   logic mxu_cnt_en_q, mxu_cnt_en_d;
   // Delayed clear of the internal state
   logic clear_mxu_state_del;
+
+  // Counters to track writes to vrf
+  logic mx_to_write_vrf_d, mx_to_write_vrf_q;
+  logic [3:0] write_cnt_d, write_cnt_q, write_limit;
+  assign write_limit = 4 * (tile_dimN/4) * (tile_dimM/4);
 
   always_comb begin
     mxu_cnt_d             = mxu_cnt_q;
@@ -98,9 +104,15 @@ module spatz_mxu
     if (!rst_ni) begin
       mxu_cnt_en_q <= '0;
       mxu_cnt_q    <= '0;
+      accu_result_valid_q <= '0;
+      mx_to_write_vrf_q <= 1'b0;
+      write_cnt_q <= '0;
     end else begin
       mxu_cnt_en_q <= mxu_cnt_en_d;
       mxu_cnt_q    <= mxu_cnt_d;
+      accu_result_valid_q <= accu_result_valid_d;
+      mx_to_write_vrf_q <= mx_to_write_vrf_d;
+      write_cnt_q <= write_cnt_d;
     end
   end
 
@@ -229,14 +241,40 @@ module spatz_mxu
 
   always_comb begin : rw_enable_proc
     mx_read_enable = '0;
-    mx_write_enable_d = '0;
+    mx_write_enable_d = 1'b0;
+    mx_to_write_vrf_d = mx_to_write_vrf_q;
+    write_cnt_d = write_cnt_q;
+    
+    // If the result from FPU is not to be written to the VRF, then store it in the accumulators
+    for (int accreg=0; accreg < NrACCBanks; accreg++) begin
+      accu_result_valid_d[accreg] = accu_result_valid_q[accreg] ? 1'b1 : ~mx_write_enable_d & waddr_onehot[accreg];
+    end
+
     if (enable_mx_i) begin
       // Enable a read if we need an operand
-      mx_read_enable[1:0] = {2{part_col == 0 || part_col == 4}};
+      // If the accumulators are to be used i.e. load_vd=1'b0 then also check that the accumulators have a valid result
+      mx_read_enable[1:0] = (load_vd | (~load_vd & accu_result_valid_q[part_col])) ? {2{part_col == 0 || part_col == 4}} : 2'b0;
+      if ((~load_vd & accu_result_valid_q[part_col]))
+        accu_result_valid_d[part_col] = 1'b0;
       mx_read_enable[2]   = load_vd;
-      // Write back into the VRF if we have processed all the words
-      // and we got a valid result
-      mx_write_enable_d   = vl_i >= last_word_i && result_valid_i;
+    end 
+
+    // Write back into the VRF if we have processed all the words
+    // and we got a valid result
+    
+    // Start writes to VRF once we have send the last operands to the VFU
+    mx_to_write_vrf_d = mx_to_write_vrf_q ? 1'b1 : (vl_i >= last_word_i) & word_commited_o;
+    if (mx_to_write_vrf_d) begin
+      // Start writing to VRF once we have the part_acc pointing to 0
+      automatic logic write_en = (write_cnt_q == 0) ? (part_acc == 0) : 1'b1;
+      mx_write_enable_d = result_valid_i & write_en;
+      if (mx_write_enable_d) begin
+        write_cnt_d = write_cnt_q + 1;
+        if (write_cnt_q == (write_limit-1)) begin
+          write_cnt_d = '0;
+          mx_to_write_vrf_d = 1'b0;
+        end
+      end
     end
   end
 
@@ -267,7 +305,7 @@ module spatz_mxu
   // Feed the functional units
   // ipu_en    : fpu_valid_i
   // operand_o : fpu_operands_i
-  assign ipu_en          = enable_mx_i ? |mx_read_enable ? |operands_ready_i : result_valid_i : '0;
+  assign ipu_en          = enable_mx_i ? (|mx_read_enable ? |operands_ready_i :  accu_result_valid_q[part_col]) : '0;
   assign ipu_en_o        = enable_mx_i ? ipu_en : '0;
   assign operand_o       = enable_mx_i ? {operand3, operand_row, operand2} : 'x;
 
@@ -286,7 +324,7 @@ module spatz_mxu
   ////////////////
 
   // write_enable_o : vrf_wreq_i
-  assign write_enable_o  = enable_mx_i ? (enable_fpu_i ? mx_write_enable_q[2] : mx_write_enable_q[0]) : '0;
+  assign write_enable_o = mx_write_enable_d;
 
   ////////////////////
   // VRF addressing //
