@@ -91,6 +91,17 @@ package spatz_pkg;
   // Largest element width that Spatz supports
   localparam vew_e MAXEW = RVD ? EW_64 : EW_32;
 
+  //Number of Accumulator Banks
+  localparam int unsigned NrACCBanks = `ifdef N_ACC `N_ACC `else 16 `endif;
+
+  // MXU
+  localparam int unsigned MAX_TILE_M = 8;
+  localparam int unsigned MAX_TILE_N = 8;
+  // The col counter in the VLSU is parametrized on MAX_TILE_N only
+  // If you change this parameter, better parametrize the col counter
+  // in the VLSU as well
+  localparam int unsigned MAX_TILE_K = MAX_TILE_N;
+
   //////////////////////
   // Type Definitions //
   //////////////////////
@@ -112,6 +123,11 @@ package spatz_pkg;
   // Instruction ID
   typedef logic [$clog2(NrParallelInstructions)-1:0] spatz_id_t;
 
+  // MXU
+  typedef logic [$clog2(MAX_TILE_M):0] tile_m_t;
+  typedef logic [$clog2(MAX_TILE_N):0] tile_n_t;
+  typedef logic [$clog2(MAX_TILE_K):0] tile_k_t;
+
   /////////////////////
   // Operation Types //
   /////////////////////
@@ -132,6 +148,8 @@ package spatz_pkg;
     VMSEQ, VMSNE, VMSLTU, VMSLT, VMSLEU, VMSLE, VMSGTU, VMSGT,
     // Integer add-with-carry and subtract-with-borrow carry-out instructions
     VMADC, VMSBC,
+    // MXU Matrix multiplication and dot product instructions
+    MXMACC, MXFMACC,
     // Mask operations
     VMANDNOT, VMAND, VMOR, VMXOR, VMORNOT, VMNAND, VMNOR, VMXNOR,
     // Slide instructions
@@ -142,6 +160,8 @@ package spatz_pkg;
     VSE, VSSE, VSXE,
     // Config instruction
     VCFG,
+    // MXU Config instruction
+    MCFG,
     // VCSR
     VCSR,
     // Floating point instructions
@@ -173,6 +193,8 @@ package spatz_pkg;
     logic set_vstart;
     logic clear_vstart;
     logic reset_vstart;
+    // MXU
+    tile_dim_e dimTile;
   } op_cfg_t;
 
   typedef struct packed {
@@ -183,6 +205,10 @@ package spatz_pkg;
     logic vm;
     logic use_carry_borrow_in;
     logic is_scalar;
+
+    // MXU
+    logic is_mx;
+
     logic is_narrowing;
     logic is_reduction;
     logic switch_rs1_rd;
@@ -249,6 +275,12 @@ package spatz_pkg;
     vtype_t vtype;
     vlen_t vl;
     vlen_t vstart;
+
+    // MXU
+    tile_e matrix;
+    tile_m_t tile_M;
+    tile_n_t tile_N;
+    tile_k_t tile_K;
   } spatz_req_t;
 
   //////////////////////////////////

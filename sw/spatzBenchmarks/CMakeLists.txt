@@ -118,3 +118,33 @@ add_spatz_test_twoParam(dp-fft-cache dp-fft-cache/main.c 128 2)
 
 add_spatz_test_twoParam(sp-fft sp-fft/main.c 256 2)
 add_spatz_test_twoParam(sp-fft sp-fft/main.c 512 2)
+
+add_spatz_test_threeParam(dp-mxfmatmul dp-mxfmatmul/main.c 64 64 64)
+
+# Tests for DATE
+# Vanilla fmatmul
+add_spatz_test_threeParam(dp-fmatmul-8x2vl dp-fmatmul-8x2vl/main.c 64 64 64)
+add_spatz_test_threeParam(dp-fmatmul-8x2vl dp-fmatmul-8x2vl/main.c 32 32 32)
+add_spatz_test_threeParam(dp-fmatmul-8x2vl dp-fmatmul-8x2vl/main.c 16 16 16)
+add_spatz_test_threeParam(dp-fmatmul-4x4vl dp-fmatmul-4x4vl/main.c 64 64 64)
+add_spatz_test_threeParam(dp-fmatmul-4x4vl dp-fmatmul-4x4vl/main.c 32 32 32)
+add_spatz_test_threeParam(dp-fmatmul-4x4vl dp-fmatmul-4x4vl/main.c 16 16 16)
+# MXU matmul
+add_spatz_test_threeParam(dp-mxfmatmul-m8n4k4-b4 dp-mxfmatmul-m8n4k4-b4/main.c 64 64 64)
+add_spatz_test_threeParam(dp-mxfmatmul-m8n4k4-b4 dp-mxfmatmul-m8n4k4-b4/main.c 32 32 32)
+add_spatz_test_threeParam(dp-mxfmatmul-m8n4k4-b4 dp-mxfmatmul-m8n4k4-b4/main.c 16 16 16)
+add_spatz_test_threeParam(dp-mxfmatmul-m4n4k4-b4 dp-mxfmatmul-m4n4k4-b4/main.c 64 64 64)
+add_spatz_test_threeParam(dp-mxfmatmul-m4n4k4-b4 dp-mxfmatmul-m4n4k4-b4/main.c 32 32 32)
+add_spatz_test_threeParam(dp-mxfmatmul-m4n4k4-b4 dp-mxfmatmul-m4n4k4-b4/main.c 16 16 16)
+add_spatz_test_threeParam(dp-mxfmatmul-m4n4k8-b4 dp-mxfmatmul-m4n4k8-b4/main.c 64 64 64)
+add_spatz_test_threeParam(dp-mxfmatmul-m4n4k8-b4 dp-mxfmatmul-m4n4k8-b4/main.c 32 32 32)
+add_spatz_test_threeParam(dp-mxfmatmul-m4n4k8-b4 dp-mxfmatmul-m4n4k8-b4/main.c 16 16 16)
+add_spatz_test_threeParam(dp-mxfmatmul-m8n4k4-b2 dp-mxfmatmul-m8n4k4-b2/main.c 64 64 64)
+add_spatz_test_threeParam(dp-mxfmatmul-m8n4k4-b2 dp-mxfmatmul-m8n4k4-b2/main.c 32 32 32)
+add_spatz_test_threeParam(dp-mxfmatmul-m8n4k4-b2 dp-mxfmatmul-m8n4k4-b2/main.c 16 16 16)
+add_spatz_test_threeParam(dp-mxfmatmul-m4n4k4-b2 dp-mxfmatmul-m4n4k4-b2/main.c 64 64 64)
+add_spatz_test_threeParam(dp-mxfmatmul-m4n4k4-b2 dp-mxfmatmul-m4n4k4-b2/main.c 32 32 32)
+add_spatz_test_threeParam(dp-mxfmatmul-m4n4k4-b2 dp-mxfmatmul-m4n4k4-b2/main.c 16 16 16)
+add_spatz_test_threeParam(dp-mxfmatmul-m4n4k8-b2 dp-mxfmatmul-m4n4k8-b2/main.c 64 64 64)
+add_spatz_test_threeParam(dp-mxfmatmul-m4n4k8-b2 dp-mxfmatmul-m4n4k8-b2/main.c 32 32 32)
+add_spatz_test_threeParam(dp-mxfmatmul-m4n4k8-b2 dp-mxfmatmul-m4n4k8-b2/main.c 16 16 16)

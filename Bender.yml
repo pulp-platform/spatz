@@ -148,7 +148,6 @@ sources:
     - hw/ip/spatz/src/rvv_pkg.sv
     # Level 1
     - hw/ip/spatz/src/generated/spatz_pkg.sv
-
     - hw/ip/spatz/src/spatz_serdiv.sv
     # Level 2
     - hw/ip/spatz/src/spatz_decoder.sv
@@ -161,6 +160,7 @@ sources:
     - hw/ip/spatz/src/spatz_vlsu.sv
     - hw/ip/spatz/src/spatz_vrf.sv
     - hw/ip/spatz/src/spatz_vsldu.sv
+    - hw/ip/spatz/src/spatz_mxu.sv
     # Level 4
     - hw/ip/spatz/src/spatz_controller.sv
     # Level 5

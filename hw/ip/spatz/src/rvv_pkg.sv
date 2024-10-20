@@ -36,6 +36,20 @@ package rvv_pkg;
     vlmul_e vlmul;
   } vtype_t;
 
+  // MXU
+  typedef enum logic [2:0] {
+    TILE_A = 3'b000,
+    TILE_B = 3'b001,
+    TILE_C = 3'b010
+  } tile_e;
+
+  // MXU
+  typedef enum logic [2:0] {
+    DIM_M = 3'b000,
+    DIM_N = 3'b001,
+    DIM_K = 3'b010
+  } tile_dim_e;
+
   ///////////////
   //  Opcodes  //
   ///////////////
@@ -50,5 +64,12 @@ package rvv_pkg;
     OPMVX = 3'b110,
     OPCFG = 3'b111
   } opcodev_func3_e;
+
+  // MXU
+  typedef enum logic [5:0] {
+    OPMVA = 6'b001001,
+    OPMVB = 6'b001010,
+    OPMVC = 6'b000000
+  } opcodev_func6_e;
 
  endpackage : rvv_pkg

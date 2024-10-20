@@ -11,7 +11,7 @@ include util/Makefrag
 BENDER_VERSION = 0.27.1
 
 # Do not include minifloat opcodes, since they conflict with the RVV opcodes!
-OPCODES := "opcodes-rvv opcodes-rv32b_CUSTOM opcodes-ipu_CUSTOM opcodes-frep_CUSTOM opcodes-dma_CUSTOM opcodes-ssr_CUSTOM opcodes-smallfloat"
+OPCODES := "opcodes-rvv opcodes-rv32b_CUSTOM opcodes-ipu_CUSTOM opcodes-frep_CUSTOM opcodes-dma_CUSTOM opcodes-ssr_CUSTOM opcodes-smallfloat opcodes-rmm"
 
 # Default target
 all: bender toolchain update_opcodes
@@ -34,14 +34,14 @@ sw/toolchain/riscv-gnu-toolchain: sw/toolchain/riscv-gnu-toolchain.version
 
 sw/toolchain/llvm-project: sw/toolchain/llvm-project.version
 	mkdir -p sw/toolchain
-	cd sw/toolchain && git clone git@github.com:pulp-platform/llvm-project.git
+	cd sw/toolchain && git clone https://github.com/mp-17/llvm-project.git
 	cd sw/toolchain/llvm-project &&                  \
 		git checkout `cat ../llvm-project.version` && \
 		git submodule update --init --recursive --jobs=8 .
 
 sw/toolchain/riscv-opcodes: sw/toolchain/riscv-opcodes.version
 	mkdir -p sw/toolchain
-	cd sw/toolchain && git clone https://github.com/pulp-platform/riscv-opcodes.git
+	cd sw/toolchain && git clone https://github.com/mp-17/riscv-opcodes.git
 	cd sw/toolchain/riscv-opcodes &&                 \
 		git checkout `cat ../riscv-opcodes.version` && \
 		git submodule update --init --recursive --jobs=8 .

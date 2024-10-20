@@ -77,10 +77,20 @@ module spatz_controller
   vlen_t  vstart_d, vstart_q;
   vlen_t  vl_d, vl_q;
   vtype_t vtype_d, vtype_q;
+  // MXU todo: is elen_t what we want?
+  elen_t tilem_d, tilem_q;
+  elen_t tilen_d, tilen_q;
+  elen_t tilek_d, tilek_q;
+
 
   `FF(vstart_q, vstart_d, '0)
   `FF(vl_q, vl_d, '0)
   `FF(vtype_q, vtype_d, '{vill: 1'b1, vsew: EW_8, vlmul: LMUL_1, default: '0})
+
+  // MXU
+  `FF(tilem_q, tilem_d, '0)
+  `FF(tilen_q, tilen_d, '0)
+  `FF(tilek_q, tilek_d, '0)
 
   always_comb begin : proc_vcsr
     automatic logic [$clog2(MAXVL):0] vlmax = 0;
@@ -88,6 +98,10 @@ module spatz_controller
     vstart_d = vstart_q;
     vl_d     = vl_q;
     vtype_d  = vtype_q;
+    // MXU
+    tilem_d  = tilem_q;
+    tilen_d  = tilen_q;
+    tilek_d  = tilek_q;
 
     if (spatz_req_valid) begin
       // Reset vstart to zero if we have a new non CSR operation
@@ -144,6 +158,12 @@ module spatz_controller
           end
         end
       end // spatz_req.op == VCFG
+      // MXU
+      if (spatz_req.op == MCFG) begin
+        tilem_d = spatz_req.op_cfg.dimTile == DIM_M ? spatz_req.rs1 : tilem_q;
+        tilen_d = spatz_req.op_cfg.dimTile == DIM_N ? spatz_req.rs1 : tilen_q;
+        tilek_d = spatz_req.op_cfg.dimTile == DIM_K ? spatz_req.rs1 : tilek_q;
+      end
     end // spatz_req_valid
   end
 
@@ -367,6 +387,9 @@ module spatz_controller
   // Retire CSR instruction and write back result to main core.
   logic retire_csr;
 
+  // Response to the scalar core
+  logic rsp_ready_q;
+
   // We stall issuing a new instruction if the corresponding execution unit is
   // not ready yet. Or we have a change in LMUL, for which we need to let all the
   // units finish first before scheduling a new operation (to avoid running into
@@ -392,7 +415,8 @@ module spatz_controller
   );
 
   // Pop the buffer if we do not have a unit stall
-  assign req_buffer_pop = ~stall & req_buffer_valid && !running_insn_full;
+  // Configuration instructions should wait until the core is ready to accept back the answer
+  assign req_buffer_pop = ~stall & (rsp_ready_q | (spatz_req.ex_unit != CON)) & req_buffer_valid && !running_insn_full;
 
   // Issue new operation to execution units
   always_comb begin : ex_issue
@@ -419,12 +443,25 @@ module spatz_controller
             spatz_req.vl     = 1;
             spatz_req.vstart = '0;
           end
+
+          // MXU
+          if (spatz_req.op_arith.is_mx) begin
+            spatz_req.tile_M = tilem_q;
+            spatz_req.tile_N = tilen_q;
+            spatz_req.tile_K = tilek_q;
+          end
         end
 
         LSU: begin
           // Overwrite vl and vstart in request (preserve vtype with vsew)
           spatz_req.vl     = vl_q;
           spatz_req.vstart = vstart_q;
+          // MXU
+          if (spatz_req.op_arith.is_mx) begin
+            spatz_req.tile_M = tilem_q;
+            spatz_req.tile_N = tilen_q;
+            spatz_req.tile_K = tilek_q;
+          end
         end
 
         SLD: begin
@@ -432,6 +469,12 @@ module spatz_controller
           spatz_req.vtype  = vtype_q;
           spatz_req.vl     = vl_q;
           spatz_req.vstart = vstart_q;
+          // MXU todo: check this, seems useless
+          if (spatz_req.op_arith.is_mx) begin
+            spatz_req.tile_M = tilem_q;
+            spatz_req.tile_N = tilen_q;
+            spatz_req.tile_K = tilek_q;
+          end
 
           // Is this a scalar request?
           if (spatz_req.op_arith.is_scalar) begin
@@ -529,7 +572,7 @@ module spatz_controller
     .ready_i(vfu_rsp_ready                  )
   );
 
-  logic       rsp_valid_d;
+  logic rsp_valid_d;
   spatz_rsp_t rsp_d;
   spill_register #(
     .T     (spatz_rsp_t ),
@@ -539,7 +582,7 @@ module spatz_controller
     .rst_ni (rst_ni      ),
     .data_i (rsp_d       ),
     .valid_i(rsp_valid_d ),
-    .ready_o(/* Unused */),
+    .ready_o(rsp_ready_q ),
     .data_o (rsp_o       ),
     .valid_o(rsp_valid_o ),
     .ready_i(rsp_ready_i )
@@ -568,6 +611,11 @@ module spatz_controller
             riscv_instr::CSR_VXSAT : rsp_d.data = '0;
             riscv_instr::CSR_VXRM  : rsp_d.data = '0;
             riscv_instr::CSR_VCSR  : rsp_d.data = '0;
+            // MXU
+            riscv_instr::CSR_MTYPE : rsp_d.data = '0;
+            riscv_instr::CSR_TILEM : rsp_d.data = elen_t'(tilem_q);
+            riscv_instr::CSR_TILEK : rsp_d.data = elen_t'(tilek_q);
+            riscv_instr::CSR_TILEN : rsp_d.data = elen_t'(tilen_q);
             default: rsp_d.data                 = '0;
           endcase
         end
