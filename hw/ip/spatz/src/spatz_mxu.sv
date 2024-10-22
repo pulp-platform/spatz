@@ -244,20 +244,6 @@ module spatz_mxu
     mx_write_enable_d = 1'b0;
     mx_to_write_vrf_d = mx_to_write_vrf_q;
     write_cnt_d = write_cnt_q;
-    
-    // If the result from FPU is not to be written to the VRF, then store it in the accumulators
-    for (int accreg=0; accreg < NrACCBanks; accreg++) begin
-      accu_result_valid_d[accreg] = accu_result_valid_q[accreg] ? 1'b1 : ~mx_write_enable_d & waddr_onehot[accreg];
-    end
-
-    if (enable_mx_i) begin
-      // Enable a read if we need an operand
-      // If the accumulators are to be used i.e. load_vd=1'b0 then also check that the accumulators have a valid result
-      mx_read_enable[1:0] = (load_vd | (~load_vd & accu_result_valid_q[part_col])) ? {2{part_col == 0 || part_col == 4}} : 2'b0;
-      if ((~load_vd & accu_result_valid_q[part_col]))
-        accu_result_valid_d[part_col] = 1'b0;
-      mx_read_enable[2]   = load_vd;
-    end 
 
     // Write back into the VRF if we have processed all the words
     // and we got a valid result
@@ -276,6 +262,20 @@ module spatz_mxu
         end
       end
     end
+
+    // If the result from FPU is not to be written to the VRF, then store it in the accumulators
+    for (int accreg=0; accreg < NrACCBanks; accreg++) begin
+      accu_result_valid_d[accreg] = accu_result_valid_q[accreg] ? 1'b1 : ~mx_write_enable_d & waddr_onehot[accreg];
+    end
+
+    if (enable_mx_i) begin
+      // Enable a read if we need an operand
+      // If the accumulators are to be used i.e. load_vd=1'b0 then also check that the accumulators have a valid result
+      mx_read_enable[1:0] = (load_vd | (~load_vd & accu_result_valid_q[part_col])) ? {2{part_col == 0 || part_col == 4}} : 2'b0;
+      if ((~load_vd & accu_result_valid_q[part_col]))
+        accu_result_valid_d[part_col] = 1'b0;
+      mx_read_enable[2]   = load_vd;
+    end 
   end
 
   //Enable when reaching first element of row and operands ready.
