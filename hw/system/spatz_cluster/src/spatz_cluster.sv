@@ -128,9 +128,12 @@ module spatz_cluster
     /// AXI Core cluster in-port.
     input  axi_in_req_t                      axi_in_req_i,
     output axi_in_resp_t                     axi_in_resp_o,
-    /// AXI Core cluster out-port.
+    /// AXI Core cluster out-port to core.
     output axi_out_req_t                     axi_out_req_o,
-    input  axi_out_resp_t                    axi_out_resp_i
+    input  axi_out_resp_t                    axi_out_resp_i,
+    /// AXI Core cluster out-port to L2 Mem.
+    output axi_out_req_t                     axi_out_l2_req_o,
+    input  axi_out_resp_t                    axi_out_l2_resp_i
   );
   // ---------
   // Imports
@@ -185,7 +188,7 @@ module spatz_cluster
   localparam int unsigned WideIdWidthOut = AxiIdWidthOut;
   localparam int unsigned WideIdWidthIn  = WideIdWidthOut - $clog2(NrWideMasters);
   // DMA X-BAR configuration
-  localparam int unsigned NrWideSlaves   = 3;
+  localparam int unsigned NrWideSlaves   = 3 + 1; // one prot for L2, one for L3/LLC (virtual)
 
   // AXI Configuration
   localparam axi_pkg::xbar_cfg_t ClusterXbarCfg = '{
@@ -217,7 +220,7 @@ module spatz_cluster
     UniqueIds         : 1'b0,
     AxiAddrWidth      : AxiAddrWidth,
     AxiDataWidth      : AxiDataWidth,
-    NoAddrRules       : 2,
+    NoAddrRules       : NrWideSlaves - 1,
     default           : '0
   };
 
@@ -235,7 +238,6 @@ module spatz_cluster
   localparam int unsigned L1NumSet        = L1CacheWayEntry / L1BankFactor;
   localparam int unsigned L1NumTagBank    = L1BankFactor * L1Associativity;
   localparam int unsigned L1NumDataBank   = L1BankFactor * L1NumWrapper * L1Associativity;
-
 
   // --------
   // Typedefs
@@ -383,6 +385,16 @@ module spatz_cluster
   assign cluster_periph_start_address = tcdm_end_address;
   assign cluster_periph_end_address   = tcdm_end_address + ClusterPeriphSize * 1024;
 
+  localparam int unsigned ClusterReserve = 4096; // 4 MiB
+  localparam int unsigned ClusterL2Size  = 8192; // 8 MiB
+  addr_t cluster_l2_start_address, cluster_l2_end_address;
+  // assign cluster_l2_start_address = cluster_periph_end_address + ClusterReserve * 1024;
+  // assign cluster_l2_end_address   = cluster_l2_start_address   + ClusterL2Size * 1024;
+  // TODO: change to calc base on cluster_base_addr_i
+  assign cluster_l2_start_address = 48'h5180_0000;
+  assign cluster_l2_end_address   = 48'h5200_0000;
+
+
   // ----------------
   // Wire Definitions
   // ----------------
@@ -509,6 +521,24 @@ module spatz_cluster
   );
 
   axi_cut #(
+    .Bypass     (!RegisterExt         ),
+    .aw_chan_t  (axi_slv_dma_aw_chan_t),
+    .w_chan_t   (axi_slv_dma_w_chan_t ),
+    .b_chan_t   (axi_slv_dma_b_chan_t ),
+    .ar_chan_t  (axi_slv_dma_ar_chan_t),
+    .r_chan_t   (axi_slv_dma_r_chan_t ),
+    .axi_req_t  (axi_slv_dma_req_t    ),
+    .axi_resp_t (axi_slv_dma_resp_t   )
+  ) i_cut_ext_l2_wide_out (
+    .clk_i      (clk_i                  ),
+    .rst_ni     (rst_ni                 ),
+    .slv_req_i  (wide_axi_slv_req[L2Mem]),
+    .slv_resp_o (wide_axi_slv_rsp[L2Mem]),
+    .mst_req_o  (axi_out_l2_req_o       ),
+    .mst_resp_i (axi_out_l2_resp_i      )
+  );
+
+  axi_cut #(
     .Bypass     (!RegisterExt     ),
     .aw_chan_t  (axi_mst_aw_chan_t),
     .w_chan_t   (axi_mst_w_chan_t ),
@@ -540,6 +570,11 @@ module spatz_cluster
       idx       : BootROM,
       start_addr: BootAddr,
       end_addr  : BootAddr + 'h1000
+    },
+    '{
+      idx       : L2Mem,
+      start_addr: cluster_l2_start_address,
+      end_addr  : cluster_l2_end_address
     }
   };
 
@@ -920,28 +955,6 @@ module spatz_cluster
       assign l1_data_bank_gnt  [i + j*L1NumWrapper] = l1_cache_wp_gnt  [i][j];
     end
   end
-
-
-  // for (genvar j = 0; j < L1NumDataBank; j++) begin: gen_l1_data_banks
-  //   assign l1_data_bank_gnt[j] = 1'b1;
-  //   tc_sram #(
-  //     .NumWords  (L1CacheWayEntry/L1BankFactor),
-  //     .DataWidth ($bits(data_t)),
-  //     .ByteWidth ($bits(data_t)),
-  //     .NumPorts  (1),
-  //     .Latency   (1),
-  //     .SimInit   ("zeros")
-  //   ) i_data_bank (
-  //     .clk_i  (clk_i                   ),
-  //     .rst_ni (rst_ni                  ),
-  //     .req_i  (l1_data_bank_req  [j]),
-  //     .we_i   (l1_data_bank_we   [j]),
-  //     .addr_i (l1_data_bank_addr [j] + cfg_spm_size),
-  //     .wdata_i(l1_data_bank_wdata[j]),
-  //     .be_i   (l1_data_bank_be   [j]),
-  //     .rdata_o(l1_data_bank_rdata[j])
-  //   );
-  // end
 
   // We have multiple banks form a pesudo bank (BankWP)
   spatz_tcdm_interconnect #(

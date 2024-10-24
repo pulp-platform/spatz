@@ -552,7 +552,9 @@ module ${cfg['name']}_wrapper
 % endif
     // AXI Master Port
     .axi_out_req_o  ( axi_from_cluster_iwc_req ),
-    .axi_out_resp_i ( axi_from_cluster_iwc_resp )
+    .axi_out_resp_i ( axi_from_cluster_iwc_resp ),
+    .axi_out_l2_req_o  ( /* unused now */ ),
+    .axi_out_l2_resp_i ( '0 )
   );
 
   // Assertions
