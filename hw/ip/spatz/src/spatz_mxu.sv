@@ -272,7 +272,7 @@ module spatz_mxu
       // Enable a read if we need an operand
       // If the accumulators are to be used i.e. load_vd=1'b0 then also check that the accumulators have a valid result
       mx_read_enable[1:0] = (load_vd | (~load_vd & accu_result_valid_q[part_col])) ? {2{part_col == 0 || part_col == 4}} : 2'b0;
-      if ((~load_vd & accu_result_valid_q[part_col]))
+      if ((~load_vd & accu_result_valid_q[part_col] & ipu_en))
         accu_result_valid_d[part_col] = 1'b0;
       mx_read_enable[2]   = load_vd;
     end 
