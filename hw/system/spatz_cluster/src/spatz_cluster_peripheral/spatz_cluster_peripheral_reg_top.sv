@@ -281,6 +281,9 @@ module spatz_cluster_peripheral_reg_top #(
   logic [31:0] cluster_boot_control_qs;
   logic [31:0] cluster_boot_control_wd;
   logic cluster_boot_control_we;
+  logic [31:0] cluster_eoc_exit_qs;
+  logic [31:0] cluster_eoc_exit_wd;
+  logic cluster_eoc_exit_we;
 
   // Register instances
 
@@ -2120,9 +2123,36 @@ module spatz_cluster_peripheral_reg_top #(
   );
 
 
+  // R[cluster_eoc_exit]: V(False)
+
+  prim_subreg #(
+    .DW      (32),
+    .SWACCESS("RW"),
+    .RESVAL  (32'h0)
+  ) u_cluster_eoc_exit (
+    .clk_i   (clk_i    ),
+    .rst_ni  (rst_ni  ),
+
+    // from register interface
+    .we     (cluster_eoc_exit_we),
+    .wd     (cluster_eoc_exit_wd),
+
+    // from internal hardware
+    .de     (1'b0),
+    .d      ('0  ),
+
+    // to internal hardware
+    .qe     (),
+    .q      (reg2hw.cluster_eoc_exit.q ),
+
+    // to register interface (read)
+    .qs     (cluster_eoc_exit_qs)
+  );
 
 
-  logic [11:0] addr_hit;
+
+
+  logic [12:0] addr_hit;
   always_comb begin
     addr_hit = '0;
     addr_hit[ 0] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_PERF_COUNTER_ENABLE_0_OFFSET);
@@ -2137,6 +2167,7 @@ module spatz_cluster_peripheral_reg_top #(
     addr_hit[ 9] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_ICACHE_PREFETCH_ENABLE_OFFSET);
     addr_hit[10] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_SPATZ_STATUS_OFFSET);
     addr_hit[11] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_CLUSTER_BOOT_CONTROL_OFFSET);
+    addr_hit[12] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_CLUSTER_EOC_EXIT_OFFSET);
   end
 
   assign addrmiss = (reg_re || reg_we) ? ~|addr_hit : 1'b0 ;
@@ -2155,7 +2186,8 @@ module spatz_cluster_peripheral_reg_top #(
                (addr_hit[ 8] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 8] & ~reg_be))) |
                (addr_hit[ 9] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 9] & ~reg_be))) |
                (addr_hit[10] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[10] & ~reg_be))) |
-               (addr_hit[11] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[11] & ~reg_be)))));
+               (addr_hit[11] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[11] & ~reg_be))) |
+               (addr_hit[12] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[12] & ~reg_be)))));
   end
 
   assign perf_counter_enable_0_cycle_0_we = addr_hit[0] & reg_we & !reg_error;
@@ -2375,6 +2407,9 @@ module spatz_cluster_peripheral_reg_top #(
   assign cluster_boot_control_we = addr_hit[11] & reg_we & !reg_error;
   assign cluster_boot_control_wd = reg_wdata[31:0];
 
+  assign cluster_eoc_exit_we = addr_hit[12] & reg_we & !reg_error;
+  assign cluster_eoc_exit_wd = reg_wdata[31:0];
+
   // Read data return
   always_comb begin
     reg_rdata_next = '0;
@@ -2485,6 +2520,10 @@ module spatz_cluster_peripheral_reg_top #(
 
       addr_hit[11]: begin
         reg_rdata_next[31:0] = cluster_boot_control_qs;
+      end
+
+      addr_hit[12]: begin
+        reg_rdata_next[31:0] = cluster_eoc_exit_qs;
       end
 
       default: begin
