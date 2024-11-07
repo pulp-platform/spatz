@@ -109,11 +109,11 @@ int main() {
   if (cid == 0)
     stop_kernel();
 
-  if (cid == 0) {
-    // Flush the cache
-    l1d_flush();
-    l1d_wait();
-  }
+  // if (cid == 0) {
+  //   // Flush the cache
+  //   l1d_flush();
+  //   l1d_wait();
+  // }
   // Wait for all cores to finish
   snrt_cluster_hw_barrier();
 
