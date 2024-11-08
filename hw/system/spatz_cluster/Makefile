@@ -9,7 +9,7 @@ ROOT := ${SPATZ_DIR}
 SPATZ_CLUSTER_DIR := ${SPATZ_DIR}/hw/system/spatz_cluster
 MKFILE_PATH := $(abspath $(lastword $(MAKEFILE_LIST)))
 MKFILE_DIR  := $(dir $(MKFILE_PATH))
-CACHE_PATH  := $(shell bender path insitu-cache)
+CACHE_PATH  := $(shell $(BENDER) path insitu-cache)
 
 # Configuration file
 CFG ?= flamingo
