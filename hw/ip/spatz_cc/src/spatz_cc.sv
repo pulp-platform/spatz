@@ -276,8 +276,10 @@ module spatz_cc
   tcdm_req_chan_t [NumMemPortsPerSpatz-1:0] spatz_mem_req;
   logic           [NumMemPortsPerSpatz-1:0] spatz_mem_req_valid;
   logic           [NumMemPortsPerSpatz-1:0] spatz_mem_req_ready;
-  tcdm_rsp_chan_t [NumMemPortsPerSpatz-1:0] spatz_mem_rsp;
+  tcdm_rsp_chan_t [NumMemPortsPerSpatz-1:0] spatz_mem_rsp, spatz_mem_fifo;
   logic           [NumMemPortsPerSpatz-1:0] spatz_mem_rsp_valid;
+  logic           [NumMemPortsPerSpatz-1:0] spatz_mem_rsp_ready;
+  logic           [NumMemPortsPerSpatz-1:0] spatz_mem_rsp_empty, spatz_mem_rsp_pop, spatz_mem_rsp_push, spatz_mem_fifo_bypass;
 
   spatz #(
     .NrMemPorts         (NumMemPortsPerSpatz     ),
@@ -308,6 +310,7 @@ module spatz_cc
     .spatz_mem_req_ready_i   (spatz_mem_req_ready   ),
     .spatz_mem_rsp_i         (spatz_mem_rsp         ),
     .spatz_mem_rsp_valid_i   (spatz_mem_rsp_valid   ),
+    .spatz_mem_rsp_ready_o   (spatz_mem_rsp_ready   ),
     .spatz_mem_finished_o    (spatz_mem_finished    ),
     .spatz_mem_str_finished_o(spatz_mem_str_finished),
     .fp_lsu_mem_req_o        (fp_lsu_mem_req        ),
@@ -317,15 +320,49 @@ module spatz_cc
     .fpu_status_o            (fpu_status            )
   );
 
-  for (genvar p = 0; p < NumMemPortsPerSpatz; p++) begin
+  for (genvar p = 0; p < NumMemPortsPerSpatz; p++) begin : gen_spatz_mem_ports
     assign tcdm_req_o[p] = '{
          q      : spatz_mem_req[p],
          q_valid: spatz_mem_req_valid[p]
        };
     assign spatz_mem_req_ready[p] = tcdm_rsp_i[p].q_ready;
 
-    assign spatz_mem_rsp[p]       = tcdm_rsp_i[p].p;
-    assign spatz_mem_rsp_valid[p] = tcdm_rsp_i[p].p_valid;
+    fifo_v3 #(
+      .dtype        (tcdm_rsp_chan_t    ),
+      .DEPTH        (4                  ),
+      .FALL_THROUGH (1                  )
+    ) i_spatz_rsp_fifo (
+      .clk_i     (clk_i                 ),
+      .rst_ni    (rst_ni                ),
+      .flush_i   (1'b0                  ),
+      .testmode_i(1'b0                  ),
+      .data_i    (tcdm_rsp_i[p].p       ),
+      .push_i    (spatz_mem_rsp_push[p] ),
+      .data_o    (spatz_mem_fifo[p]     ),
+      .pop_i     (spatz_mem_rsp_pop[p]  ),
+      .full_o    (         ),
+      .empty_o   (spatz_mem_rsp_empty[p]),
+      .usage_o   (/* Unused */          )
+    );
+    // bypass fifo if response is valid and write
+    assign spatz_mem_fifo_bypass[p] = tcdm_rsp_i[p].p_valid & tcdm_rsp_i[p].p.write;
+
+    always_comb begin
+      spatz_mem_rsp_valid[p] = !spatz_mem_rsp_empty[p];
+      spatz_mem_rsp[p]       = spatz_mem_fifo[p];
+      // if input response is valid, put it into fifo for HS check by default
+      spatz_mem_rsp_push[p]  = tcdm_rsp_i[p].p_valid;
+      spatz_mem_rsp_pop[p]   = spatz_mem_rsp_valid[p] & spatz_mem_rsp_ready[p];
+      
+      // Bypass FIFO if is a write response
+      if (spatz_mem_fifo_bypass[p]) begin
+        // make sure not write this response into fifo
+        spatz_mem_rsp_push[p]  = 1'b0;
+        spatz_mem_rsp_pop[p]   = 1'b0;
+        spatz_mem_rsp_valid[p] = 1'b1;
+        spatz_mem_rsp[p]       = tcdm_rsp_i[p].p;        
+      end
+    end
   end
 
   if (Xdma) begin : gen_dma

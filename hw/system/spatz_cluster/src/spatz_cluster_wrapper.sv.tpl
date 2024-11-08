@@ -305,7 +305,9 @@ module ${cfg['name']}_wrapper
   input  axi_in_req_t   axi_in_req_i,
   output axi_in_resp_t  axi_in_resp_o,
   output axi_out_req_t  axi_out_req_o,
-  input  axi_out_resp_t axi_out_resp_i
+  input  axi_out_resp_t axi_out_resp_i,
+  output axi_out_req_t  axi_out_l2_req_o,
+  input  axi_out_resp_t axi_out_l2_resp_i
 % endif
 );
 
@@ -315,6 +317,8 @@ module ${cfg['name']}_wrapper
 
   spatz_cluster_pkg::spatz_axi_iwc_out_req_t axi_from_cluster_iwc_req;
   spatz_cluster_pkg::spatz_axi_iwc_out_resp_t axi_from_cluster_iwc_resp;
+  spatz_cluster_pkg::spatz_axi_iwc_out_req_t axi_from_cluster_l2_req;
+  spatz_cluster_pkg::spatz_axi_iwc_out_resp_t axi_from_cluster_l2_resp;
 
 % if cfg['axi_isolate_enable'] or cfg['axi_cdc_enable']:
   axi_out_req_t  axi_from_cluster_req;
@@ -485,6 +489,35 @@ module ${cfg['name']}_wrapper
 % else:
     .mst_req_o  ( axi_out_req_o  ),
     .mst_resp_i ( axi_out_resp_i )
+% endif
+   );
+
+  axi_iw_converter #(
+    .AxiSlvPortIdWidth ( spatz_cluster_pkg::IwcAxiIdOutWidth ),
+    .AxiMstPortIdWidth ( AxiOutIdWidth ),
+    .AxiSlvPortMaxUniqIds ( 2 ),
+    .AxiSlvPortMaxTxnsPerId (2),
+    .AxiSlvPortMaxTxns (${cfg['trans']}),
+    .AxiMstPortMaxUniqIds (2),
+    .AxiMstPortMaxTxnsPerId (${cfg['trans']}),
+    .AxiAddrWidth ( AxiAddrWidth ),
+    .AxiDataWidth ( AxiDataWidth ),
+    .AxiUserWidth ( AxiUserWidth ),
+    .slv_req_t  (spatz_cluster_pkg::spatz_axi_iwc_out_req_t),
+    .slv_resp_t (spatz_cluster_pkg::spatz_axi_iwc_out_resp_t),
+    .mst_req_t  ( axi_out_req_t),
+    .mst_resp_t ( axi_out_resp_t)
+  ) iw_converter_l2(
+    .clk_i      ( clk_i  ),
+    .rst_ni     ( rst_ni ),
+    .slv_req_i  ( axi_from_cluster_l2_req  ),
+    .slv_resp_o ( axi_from_cluster_l2_resp ),
+% if cfg['axi_cdc_enable'] or cfg['axi_isolate_enable']:
+    .mst_req_o  (    ),
+    .mst_resp_i ( '0 )
+% else:
+    .mst_req_o  ( axi_out_l2_req_o  ),
+    .mst_resp_i ( axi_out_l2_resp_i )
 % endif
    );
 

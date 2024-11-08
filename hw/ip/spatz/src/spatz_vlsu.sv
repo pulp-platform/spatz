@@ -46,6 +46,7 @@ module spatz_vlsu
     //  Memory Response
     input  spatz_mem_rsp_t [NrMemPorts-1:0] spatz_mem_rsp_i,
     input  logic           [NrMemPorts-1:0] spatz_mem_rsp_valid_i,
+    output logic           [NrMemPorts-1:0] spatz_mem_rsp_ready_o,
     // Memory Finished
     output logic                            spatz_mem_finished_o,
     output logic                            spatz_mem_str_finished_o
@@ -854,6 +855,7 @@ module spatz_vlsu
     end
   end
 
+  logic [NrMemPorts-1:0] load_flag, store_flag, clear_flag;
   // verilator lint_off LATCH
   always_comb begin
     vrf_raddr_o     = {vs2_vreg_addr, vd_vreg_addr};
@@ -873,6 +875,13 @@ module spatz_vlsu
     mem_req_svalid = '0;
     mem_req_lvalid = '0;
     mem_req_last   = '0;
+
+    spatz_mem_rsp_ready_o = {NrMemPorts{1'b1}};
+
+    // Debugging flags
+    load_flag  = '0;
+    store_flag = '0;
+    clear_flag = '0;
 
     // Propagate request ID
     vrf_req_d.rsp.id    = commit_insn_q.id;
@@ -920,6 +929,7 @@ module spatz_vlsu
 
           // Pop stored element and free space in buffer
           rob_pop[port] = rob_rvalid[port] && vrf_req_valid_d && vrf_req_ready_d && commit_counter_en[port];
+          load_flag[port] = 1'b1;
 
           // Shift data to correct position if we have a strided memory access
           if (commit_insn_q.is_strided || commit_insn_q.is_indexed)
@@ -970,7 +980,7 @@ module spatz_vlsu
         rob_push[port]  = spatz_mem_rsp_valid_i[port] && (state_q == VLSU_RunningLoad) && spatz_mem_rsp_i[port].write == '0;
 `else
         rob_wid[port]   = spatz_mem_rsp_i[port].user.req_id;
-        rob_push[port]  = spatz_mem_rsp_valid_i[port] && (state_q == VLSU_RunningLoad) && store_count_q[port] == '0;
+        rob_push[port]  = spatz_mem_rsp_valid_i[port] && (state_q == VLSU_RunningLoad) && spatz_mem_rsp_i[port].write == '0;
 `endif
         if (!rob_full[port] && !offset_queue_full[port] && mem_operation_valid[port]) begin
           rob_req_id[port]     = spatz_mem_req_ready[port] & spatz_mem_req_valid[port];
@@ -1043,6 +1053,7 @@ module spatz_vlsu
           mem_req_id[port]     = rob_rid[port];
           mem_req_last[port]   = mem_operation_last[port];
           rob_pop[port]        = spatz_mem_req_valid[port] && spatz_mem_req_ready[port];
+          store_flag[port] = 1'b1;
 
           // Create byte enable signal for memory request
           if (mem_is_single_element_operation) begin
@@ -1059,9 +1070,14 @@ module spatz_vlsu
             for (int unsigned k = 0; k < ELENB; k++)
               mem_req_strb[port][k] = k < mem_counter_delta[port];
         end else begin
-          // Clear empty buffer id requests
-          if (!rob_empty[port])
-            rob_pop[port] = 1'b1;
+          spatz_mem_rsp_ready_o[port] = 1'b0;
+          clear_flag[port] = 1'b1;
+          
+          // // Clear empty buffer id requests
+          // if (!rob_empty[port]) begin
+          //   rob_pop[port] = 1'b1;
+          //   clear_flag[port] = 1'b1;
+          // end
         end
       end
     end

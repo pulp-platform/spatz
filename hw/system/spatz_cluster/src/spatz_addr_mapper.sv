@@ -46,6 +46,7 @@ module spatz_addr_mapper #(
   input  addr_t                     tcdm_start_address_i,
   input  addr_t                     tcdm_end_address_i,
   input  addr_t                     spm_size_i,
+  input  logic                      flush_i,
 
   // Two output will need different address size: cahce will need full addr, spm only needs log2(TCDMSize) bits
   // We may need to expand the signals here to correctly wire them
@@ -103,11 +104,13 @@ module spatz_addr_mapper #(
             user:    mem_req_i[j].q.user,
             default: '0
           };
-          spm_req_o[j].q_valid = mem_req_i[j].q_valid;
+          // During flushing, stop sending out requests
+          spm_req_o[j].q_valid = mem_req_i[j].q_valid && (!flush_i);
         end
       end else begin
         // Wire to Cache outputs
-        cache_req_o[j] = mem_req_i[j];
+        cache_req_o[j].q = mem_req_i[j].q;
+        cache_req_o[j].q_valid = mem_req_i[j].q_valid && (!flush_i);
         target_select[j] = CACHE;
       end
     end
@@ -128,14 +131,14 @@ module spatz_addr_mapper #(
     assign mem_rsp_o[j].p_valid = postarb_valid;
     assign postarb_ready = 1'b1;
     always_comb begin : hs_comb
-      // The q_ready HS signal should follow the request select, not response
-      mem_rsp_o[j].q_ready = cache_rsp_i[j].q_ready;
+      // Do not accept any req when cache is flushing
+      mem_rsp_o[j].q_ready = cache_rsp_i[j].q_ready && !(flush_i);
       // Use spm by default
       arb_select           = SPM;
       cache_pready_o[j]    = 1'b0;
 
       if (target_select[j] == SPM) begin
-        mem_rsp_o[j].q_ready = spm_rsp_i[j].q_ready;
+        mem_rsp_o[j].q_ready = spm_rsp_i[j].q_ready && !(flush_i);
       end
 
       if (spm_rsp_i[j].p_valid) begin

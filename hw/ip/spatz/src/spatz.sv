@@ -49,6 +49,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     input  logic             [NrMemPorts-1:0] spatz_mem_req_ready_i,
     input  spatz_mem_rsp_t   [NrMemPorts-1:0] spatz_mem_rsp_i,
     input  logic             [NrMemPorts-1:0] spatz_mem_rsp_valid_i,
+    output logic             [NrMemPorts-1:0] spatz_mem_rsp_ready_o,
     // Memory Finished
     output logic             [1:0]            spatz_mem_finished_o,
     output logic             [1:0]            spatz_mem_str_finished_o,
@@ -338,6 +339,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     .spatz_mem_req_ready_i   (spatz_mem_req_ready_i                                ),
     .spatz_mem_rsp_i         (spatz_mem_rsp_i                                      ),
     .spatz_mem_rsp_valid_i   (spatz_mem_rsp_valid_i                                ),
+    .spatz_mem_rsp_ready_o   (spatz_mem_rsp_ready_o                                ),
     .spatz_mem_finished_o    (spatz_mem_finished                                   ),
     .spatz_mem_str_finished_o(spatz_mem_str_finished                               )
   );

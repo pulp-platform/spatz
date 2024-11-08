@@ -394,7 +394,6 @@ module spatz_cluster
   assign cluster_l2_start_address = 48'h5180_0000;
   assign cluster_l2_end_address   = 48'h5200_0000;
 
-
   // ----------------
   // Wire Definitions
   // ----------------
@@ -496,6 +495,7 @@ module spatz_cluster
   logic [1:0]             l1d_insn;
   tcdm_bank_addr_t        cfg_spm_size;
   tcdm_addr_t             spm_size;
+  logic                   l1d_busy;
 
 
   // -------------
@@ -840,6 +840,8 @@ module spatz_cluster
     .tcdm_start_address_i (tcdm_start_address[L1AddrWidth-1:0] ),
     .tcdm_end_address_i   (tcdm_end_address[L1AddrWidth-1:0]   ),
     .spm_size_i           (spm_size        ),
+    .flush_i              (l1d_busy        ),
+    // .flush_i              (1'b0            ),
     // .spm_size_i           (32'h0020_0000   ),
     // Output
     .spm_req_o            (spm_req         ),
@@ -1329,7 +1331,8 @@ module spatz_cluster
     .l1d_spm_size_o           (cfg_spm_size          ),
     .l1d_insn_o               (l1d_insn              ),
     .l1d_insn_valid_o         (l1d_insn_valid        ),
-    .l1d_insn_ready_i         (l1d_insn_ready        )
+    .l1d_insn_ready_i         (l1d_insn_ready        ),
+    .l1d_busy_o               (l1d_busy              )
   );
 
   // 3. BootROM

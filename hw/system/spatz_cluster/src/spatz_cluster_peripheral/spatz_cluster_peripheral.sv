@@ -42,7 +42,8 @@ module spatz_cluster_peripheral
   output spm_size_t                  l1d_spm_size_o,
   output logic [1:0]                 l1d_insn_o,
   output logic                       l1d_insn_valid_o,
-  input  logic                       l1d_insn_ready_i
+  input  logic                       l1d_insn_ready_i,
+  output logic                       l1d_busy_o
 );
 
   // Pipeline register to ease timing.
@@ -137,6 +138,7 @@ module spatz_cluster_peripheral
   `FF(l1d_lock_q, l1d_lock_d, '0, clk_i, rst_ni)
   // To show if the current flush/invalidation is complete
   assign hw2reg.l1d_flush_status.d = l1d_lock_q;
+  assign l1d_busy_o = l1d_lock_q;
 
   // Wake-up logic: Bits in cl_clint_q can be set/cleared with writes to
   // cl_clint_set/cl_clint_clear
