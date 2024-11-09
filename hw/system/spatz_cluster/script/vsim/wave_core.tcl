@@ -129,6 +129,8 @@ add wave -noupdate -group core[$1] -group Spatz /tb_bin/i_dut/i_cluster_wrapper/
 add wave -noupdate -group core[$1] -group Spatz /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/i_spatz/spatz_mem_rsp_i
 add wave -noupdate -group core[$1] -group Spatz /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/i_spatz/spatz_mem_rsp_valid_i
 
+add wave -noupdate -group core[$1] -group Spatz -group Buffering /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/i_spatz/i_vfu_buf/*
+
 add wave -noupdate -group core[$1] -group Spatz -group "FPU Sequencer" /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/i_spatz/gen_fpu_sequencer/i_fpu_sequencer/*
 add wave -noupdate -group core[$1] -group Spatz -group "FPU Sequencer" -group FPR /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/i_spatz/gen_fpu_sequencer/i_fpu_sequencer/i_fpr/*
 add wave -noupdate -group core[$1] -group Spatz -group "FPU Sequencer" -group LSU /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/i_spatz/gen_fpu_sequencer/i_fpu_sequencer/i_fp_lsu/*

@@ -96,6 +96,20 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   logic       vsldu_rsp_valid;
   vsldu_rsp_t vsldu_rsp;
 
+  // Signals for buffering of FPU
+  logic vrf_buf_en;
+  logic vrf_vfu_wvalid; 
+  logic vrf_buf_ready; 
+  logic vrf_buf_valid;
+  
+  typedef struct packed {
+    vrf_data_t wdata;
+    vrf_addr_t waddr;
+    vrf_be_t   wbe;
+  } vrf_buf_t;
+
+  vrf_buf_t vrf_buf_data;
+
   /////////////////////
   //  FPU sequencer  //
   /////////////////////
@@ -185,10 +199,10 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   /////////
 
   // Write ports
-  vrf_addr_t [NrWritePorts-1:0] vrf_waddr;
-  vrf_data_t [NrWritePorts-1:0] vrf_wdata;
+  vrf_addr_t [NrWritePorts-1:0] vrf_waddr, vrf_waddr_buf;
+  vrf_data_t [NrWritePorts-1:0] vrf_wdata, vrf_wdata_buf;
   logic      [NrWritePorts-1:0] vrf_we;
-  vrf_be_t   [NrWritePorts-1:0] vrf_wbe;
+  vrf_be_t   [NrWritePorts-1:0] vrf_wbe, vrf_wbe_buf;
   logic      [NrWritePorts-1:0] vrf_wvalid;
   // Read ports
   vrf_addr_t [NrReadPorts-1:0]  vrf_raddr;
@@ -204,10 +218,10 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     .rst_ni    (rst_ni    ),
     .testmode_i(testmode_i),
     // Write Ports
-    .waddr_i   (vrf_waddr ),
-    .wdata_i   (vrf_wdata ),
+    .waddr_i   (vrf_waddr_buf ),
+    .wdata_i   (vrf_wdata_buf ),
     .we_i      (vrf_we    ),
-    .wbe_i     (vrf_wbe   ),
+    .wbe_i     (vrf_wbe_buf   ),
     .wvalid_o  (vrf_wvalid),
     // Read Ports
     .raddr_i   (vrf_raddr ),
@@ -222,7 +236,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
 
   // Scoreboard read enable and write enable input signals
   logic      [NrReadPorts-1:0]              sb_re;
-  logic      [NrWritePorts-1:0]             sb_we;
+  logic      [NrWritePorts-1:0]             sb_we, sb_we_buf;
   spatz_id_t [NrReadPorts+NrWritePorts-1:0] sb_id;
 
   spatz_controller #(
@@ -266,9 +280,23 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     // Scoreboard check
     .sb_id_i          (sb_id           ),
     .sb_wrote_result_i(vrf_wvalid      ),
-    .sb_enable_i      ({sb_we, sb_re}  ),
+    .sb_enable_i      ({sb_we_buf, sb_re}  ),
     .sb_enable_o      ({vrf_we, vrf_re})
   );
+
+  always_comb begin
+    sb_we_buf = sb_we;
+    vrf_wdata_buf = vrf_wdata;
+    vrf_waddr_buf = vrf_waddr;
+    vrf_wbe_buf = vrf_wbe;
+    if (vrf_buf_valid) begin
+      sb_we_buf    [VFU_VD_WD] = 1'b1;
+      vrf_wdata_buf[VFU_VD_WD] = vrf_buf_data.wdata; 
+      vrf_waddr_buf[VFU_VD_WD] = vrf_buf_data.waddr;
+      vrf_wbe_buf  [VFU_VD_WD] = vrf_buf_data.wbe;
+    end
+  end
+
 
   /////////
   // VFU //
@@ -293,7 +321,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     .vrf_wdata_o      (vrf_wdata[VFU_VD_WD]                                    ),
     .vrf_we_o         (sb_we[VFU_VD_WD]                                        ),
     .vrf_wbe_o        (vrf_wbe[VFU_VD_WD]                                      ),
-    .vrf_wvalid_i     (vrf_wvalid[VFU_VD_WD]                                   ),
+    .vrf_wvalid_i     (vrf_vfu_wvalid                                           ),
     .vrf_raddr_o      (vrf_raddr[VFU_VD_RD:VFU_VS2_RD]                         ),
     .vrf_re_o         (sb_re[VFU_VD_RD:VFU_VS2_RD]                             ),
     .vrf_rdata_i      (vrf_rdata[VFU_VD_RD:VFU_VS2_RD]                         ),
@@ -302,6 +330,25 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     // FPU side-channel
     .fpu_status_o     (fpu_status_o                                            )
   );
+
+  // To add one cycle latency of buffering to ensure that conflicts that arise
+  // with the VLSU interfaces can be hidden
+  assign vrf_buf_en =  sb_we[VFU_VD_WD] && (!vrf_wvalid[VFU_VD_WD] || (vrf_wvalid[VFU_VD_WD] && vrf_buf_valid));
+  spill_register #(
+    .T (vrf_buf_t)
+  ) i_vfu_buf (
+    .clk_i (clk_i),
+    .rst_ni (rst_ni),
+    
+    .valid_i (vrf_buf_en    ),
+    .ready_o (vrf_buf_ready                                                   ),
+    .data_i  ({vrf_wdata[VFU_VD_WD], vrf_waddr[VFU_VD_WD], vrf_wbe[VFU_VD_WD]}),
+
+    .valid_o (vrf_buf_valid                                  ),
+    .ready_i (vrf_wvalid[VFU_VD_WD]                          ),
+    .data_o  (vrf_buf_data                                   )
+  );
+  assign vrf_vfu_wvalid = sb_we[VFU_VD_WD] && vrf_buf_ready;
 
   //////////
   // VLSU //
@@ -342,6 +389,8 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     .spatz_mem_finished_o    (spatz_mem_finished                                   ),
     .spatz_mem_str_finished_o(spatz_mem_str_finished                               )
   );
+
+
 
   ///////////
   // VSLDU //
