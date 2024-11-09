@@ -18,7 +18,7 @@
         "cluster_default_axi_user": 1,
         "axi_cdc_enable": false,
         "tcdm": {
-            "size": 128,
+            "size": 1024,
             "banks": 32
         },
         "cluster_periph_size": 64, // kB

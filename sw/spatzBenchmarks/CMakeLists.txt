@@ -105,7 +105,10 @@ add_spatz_test_oneParam(dp-faxpy dp-faxpy/main.c 256)
 add_spatz_test_oneParam(dp-faxpy dp-faxpy/main.c 1024)
 
 add_spatz_test_oneParam(dp-fdotp dp-fdotp/main.c 128)
+add_spatz_test_oneParam(dp-fdotp dp-fdotp/main.c 384)
 add_spatz_test_oneParam(dp-fdotp dp-fdotp/main.c 4096)
+add_spatz_test_oneParam(dp-fdotp dp-fdotp/main.c 8192)
+add_spatz_test_oneParam(dp-fdotp dp-fdotp/main.c 16384)
 
 add_spatz_test_threeParam(dp-fconv2d dp-fconv2d/main.c 32 32 7)
 add_spatz_test_threeParam(dp-fconv2d dp-fconv2d/main.c 64 64 7)
