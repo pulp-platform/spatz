@@ -98,8 +98,8 @@ module spatz_sram_wrapper #(
 
       cache_bank_req[i].we   = cache_we_i[i];
       // Add address offset to cache requests
-      // cache_bank_req[i].addr = cache_addr_i[i] + spm_size_i;
-      cache_bank_req[i].addr = {1'b1, cache_addr_i[i]};
+      cache_bank_req[i].addr = cache_addr_i[i] + spm_size_i;
+      // cache_bank_req[i].addr = {1'b1, cache_addr_i[i]};
       cache_bank_req[i].data = cache_wdata_i[i];
       cache_bank_req[i].be   = cache_be_i[i];
     end

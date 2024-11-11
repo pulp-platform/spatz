@@ -694,9 +694,11 @@ module spatz_cluster
 
       logic mem_cs, mem_wen;
       tcdm_mem_addr_t mem_add;
+      tcdm_mem_addr_t mem_add_max;
       strb_t mem_be;
       data_t mem_rdata, mem_wdata;
       tcdm_meta_t mem_req_meta;
+      assign mem_add_max = 0 - 1'b1;
 
       spatz_sram_wrapper #(
         .NumBanks              (L1BankPerWP     ),
@@ -719,7 +721,7 @@ module spatz_cluster
         /// SPM Side
         .spm_req_i    (mem_cs    ),
         .spm_we_i     (mem_wen   ),
-        .spm_addr_i   (mem_add   ),
+        .spm_addr_i   (mem_add_max - mem_add),
         .spm_wdata_i  (mem_wdata ),
         .spm_be_i     (mem_be    ),
         .spm_rdata_o  (mem_rdata )
@@ -816,7 +818,7 @@ module spatz_cluster
   // TODO: take from CSR/inputs
   // logic [L1AddrWidth-1:0] tcdm_start_addr, tcdm_end_addr, spm_size;
   logic  [NrTCDMPortsCores-1:0] cache_pready;
-  assign spm_size        = cfg_spm_size * L1Associativity * L1LineWidth;
+  assign spm_size        = cfg_spm_size * L1Associativity * L1LineWidth / 2;
 
   // split the requests for spm or cache from core side
   spatz_addr_mapper #(

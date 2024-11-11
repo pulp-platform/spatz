@@ -65,7 +65,7 @@ module spatz_addr_mapper #(
   // ---------------------------
   typedef logic select_t;
 
-  addr_t    spm_end_addr;
+  addr_t    spm_start_addr, spm_end_addr;
   select_t  [NumIO-1:0] target_select;
   // logic     [NumIO-1:0] mem_q_ready;
 
@@ -73,6 +73,7 @@ module spatz_addr_mapper #(
   localparam int unsigned CACHE = 0;
 
   assign spm_end_addr = tcdm_start_address_i + spm_size_i;
+  assign spm_start_addr = tcdm_end_address_i - spm_size_i;
 
   // -------------
   // Request Side
@@ -80,6 +81,10 @@ module spatz_addr_mapper #(
   // Two methods of assigning:
   // 1. forward requests directly, control valid signals
   // 2. check both valid and request
+
+  // To make sure stack is always visitable, we use back-side allocation
+  // The available SPM region will ends at the `tcdm_end_address_i` and
+  // start fro, `spm_start_addr`.
 
   always_comb begin
     for (int j = 0; unsigned'(j) < NumIO; j++) begin : gen_req
@@ -89,7 +94,8 @@ module spatz_addr_mapper #(
       error_o[j]     = '0;
       if ((mem_req_i[j].q.addr >= tcdm_start_address_i) & (mem_req_i[j].q.addr < tcdm_end_address_i)) begin
         target_select[j] = SPM;
-        if (mem_req_i[j].q.addr > spm_end_addr) begin
+        // if (mem_req_i[j].q.addr > spm_end_addr) begin
+        if (mem_req_i[j].q.addr < spm_start_addr) begin
           // TODO: set CSR for error handling
           error_o[j] = 1'b1;
         end else begin
