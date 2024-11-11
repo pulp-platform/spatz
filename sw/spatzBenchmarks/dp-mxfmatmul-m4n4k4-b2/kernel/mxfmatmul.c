@@ -23,7 +23,7 @@
 // that perfectly divide kernel_m and 2*kernel_n, respectively
 void matmul_tiled_Bx2(double *c, const double *a, const double *b,
                       const unsigned int kernel_m, const unsigned int kernel_n,
-                      const unsigned int kernel_k, const unsigned int N,
+                      const unsigned int kernel_k, const unsigned int M, const unsigned int N,
                       const unsigned int K, const unsigned int inner_loops,
                       const unsigned int m_start, const unsigned int m_end,
                       const unsigned int n_end, const unsigned int vl,
@@ -42,10 +42,10 @@ void matmul_tiled_Bx2(double *c, const double *a, const double *b,
     // We need 2* on the n dimension since this is a Bx2 kernel
     for (unsigned int n = 0; n < n_end; n += (kernel_n << 1)) {
       // Update the A Mtx pointer
-      a_ = a + m * K;
+      a_ = a + m;
       // Update B Mtx pointers
-      const double *b_ = b + n * K;
-      const double *b__ = b_ + nrelem_b;
+      const double *b_ = b + n;
+      const double *b__ = b_ + kernel_n;
 
       asm volatile("msettilem t1, %0" ::"r"(kernel_m) : "t1");
       asm volatile("msettilen t2, %0" ::"r"(kernel_n) : "t2");
@@ -59,8 +59,8 @@ void matmul_tiled_Bx2(double *c, const double *a, const double *b,
       // Load Matrix A and B with shifting for avoiding the conflicts.
       // Double-buffering on matrix B.
       // Set the store C address
-      asm volatile("mle64.v.a v0, (%0), %1;" ::"r"(a_), "r"(K));
-      asm volatile("mle64.v.b v4, (%0), %1;" ::"r"(b_), "r"(K));
+      asm volatile("mle64.v.a v0, (%0), %1;" ::"r"(a_), "r"(M));
+      asm volatile("mle64.v.b v4, (%0), %1;" ::"r"(b_), "r"(N));
 
       // Reset the loop control variable.
       unsigned int k = 0;
@@ -69,17 +69,17 @@ void matmul_tiled_Bx2(double *c, const double *a, const double *b,
         // ------------------------------------------//
         // ------------Loop Unrolling 1 ------------ //
         // ------------------------------------------//
-        asm volatile("mle64.v.b v8, (%0), %1;" ::"r"(b__), "r"(K));
+        asm volatile("mle64.v.b v8, (%0), %1;" ::"r"(b__), "r"(N));
         asm volatile("mxfmacc.vv v16, v0, v4");
         asm volatile("mxfmacc.vv v24, v0, v8");
 
-        b_ += kernel_k;
-        a_ += kernel_k;
+        b_ += (kernel_k * N);
+        a_ += (kernel_k * M);
         k++;
 
-        asm volatile("mle64.v.a v12, (%0), %1;" ::"r"(a_), "r"(K));
-        asm volatile("mle64.v.b v4, (%0), %1;" ::"r"(b_), "r"(K));
-        b__ = b_ + nrelem_b;
+        asm volatile("mle64.v.a v12, (%0), %1;" ::"r"(a_), "r"(M));
+        asm volatile("mle64.v.b v4, (%0), %1;" ::"r"(b_), "r"(N));
+        b__ = b_ + kernel_n;
 
         if (k == inner_loops - 1)
           break; // Kernel must be broken at here
@@ -87,23 +87,23 @@ void matmul_tiled_Bx2(double *c, const double *a, const double *b,
         // ------------------------------------------//
         // ------------Loop Unrolling 2 ------------ //
         // ------------------------------------------//
-        asm volatile("mle64.v.b v8, (%0), %1;" ::"r"(b__), "r"(K));
+        asm volatile("mle64.v.b v8, (%0), %1;" ::"r"(b__), "r"(N));
         asm volatile("mxfmacc.vv v16, v12, v4");
         asm volatile("mxfmacc.vv v24, v12, v8");
 
-        b_ += kernel_k;
-        a_ += kernel_k;
+        b_ += (kernel_k * N);
+        a_ += (kernel_k * M);
         k++;
 
-        asm volatile("mle64.v.b v4, (%0), %1;" ::"r"(b_), "r"(K));
+        asm volatile("mle64.v.b v4, (%0), %1;" ::"r"(b_), "r"(N));
         asm volatile("mle64.v.a v0, (%0), %1;" ::"r"(a_),
-                     "r"(K)); // Question: Move this one line upper, then does
+                     "r"(M)); // Question: Move this one line upper, then does
                               // not work. Why?
-        b__ = b_ + nrelem_b;
+        b__ = b_ + kernel_n;
       }
 
       asm volatile("mxfmacc.vv v16, v12, v4");
-      asm volatile("mle64.v.b v8, (%0), %1;" ::"r"(b__), "r"(K));
+      asm volatile("mle64.v.b v8, (%0), %1;" ::"r"(b__), "r"(N));
       asm volatile("mxfmacc.vv v24, v12, v8");
       asm volatile("mse64.v.c v16, (%0), %1;" ::"r"(c_), "r"(N));
       c_ += kernel_n; // Question: If give the abs value 4 to here, then the

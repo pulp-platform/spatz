@@ -187,7 +187,7 @@ int main() {
       start_kernel();
 
 #ifdef B2
-    matmul_tiled_Bx2(c, a, b, KERNEL_M, KERNEL_N, KERNEL_K, gemm_l.N, gemm_l.K,
+    matmul_tiled_Bx2(c, a, b, KERNEL_M, KERNEL_N, KERNEL_K, gemm_l.M, gemm_l.N, gemm_l.K,
                      inner_loops, m_start, m_end, p_end, vl, nrelem_a, nrelem_b,
                      nrelem_c);
 #else
