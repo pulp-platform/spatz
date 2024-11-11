@@ -59,7 +59,7 @@ module spatz_sram_wrapper #(
 );
   typedef struct packed {
     logic       we;
-    logic [BankAddrWidth:0] addr;
+    bank_addr_t addr;
     data_t      data;
     be_t        be;
   } bank_req_t;
@@ -73,6 +73,7 @@ module spatz_sram_wrapper #(
 
   // We also need to store the selection for one cycle for rdata forwarding
   logic       [NumBanks-1:0] arb_select, arb_select_d, arb_select_q;
+  logic       [NumBanks-1:0] cache_illegal;
   select_t    bank_select, bank_select_d, bank_select_q;
 
   // Determine the bank spm requests will be sent to
@@ -87,19 +88,23 @@ module spatz_sram_wrapper #(
     spm_bank_valid[bank_select]    = spm_req_i;
 
     spm_bank_req[bank_select].we   = spm_we_i;
-    spm_bank_req[bank_select].addr = {1'b0,spm_addr_i[MemAddrWidth-1:$clog2(NumBanks)]};
+    spm_bank_req[bank_select].addr = spm_addr_i[MemAddrWidth-1:$clog2(NumBanks)];
     spm_bank_req[bank_select].data = spm_wdata_i;
     spm_bank_req[bank_select].be   = spm_be_i;
 
     // spm_rdata_o = spm_bank_rdata[bank_select];
 
     for (int i = 0; i < NumBanks; i++) begin
+      cache_illegal[i]       = 1'b0;
       cache_bank_valid[i]    = cache_req_i[i];
-
       cache_bank_req[i].we   = cache_we_i[i];
+      cache_bank_req[i].addr = cache_addr_i[i];
       // Add address offset to cache requests
-      cache_bank_req[i].addr = cache_addr_i[i] + spm_size_i;
-      // cache_bank_req[i].addr = {1'b1, cache_addr_i[i]};
+      if ((cache_addr_i[i] < spm_size_i) && cache_bank_valid[i]) begin
+        // Illegal visit, make it invalid
+        cache_bank_valid[i]    = 1'b0;
+        cache_illegal[i]       = 1'b1;
+      end
       cache_bank_req[i].data = cache_wdata_i[i];
       cache_bank_req[i].be   = cache_be_i[i];
     end
@@ -146,7 +151,7 @@ module spatz_sram_wrapper #(
 
     // Forward to bank
     tc_sram #(
-      .NumWords  (2*NumWords/NumBanks),
+      .NumWords  (NumWords/NumBanks),
       .DataWidth (DataWidth        ),
       .ByteWidth (ByteWidth        ),
       .NumPorts  (1                ),

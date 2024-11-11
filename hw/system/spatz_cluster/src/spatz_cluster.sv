@@ -226,7 +226,7 @@ module spatz_cluster
 
   // L1 Cache
   localparam int unsigned L1AddrWidth     = 32;
-  localparam int unsigned L1NumEntry      = 512;
+  localparam int unsigned L1NumEntry      = 1024;
   localparam int unsigned L1LineWidth     = 512;
   localparam int unsigned L1Associativity = 4;
   localparam int unsigned L1BankFactor    = 2;
@@ -893,7 +893,7 @@ module spatz_cluster
     .cache_sync_insn_i     (l1d_insn         ),
     // SPM Size
     // todo: full cache for testing
-    .bank_depth_for_SPM_i  (cfg_spm_size     ),
+    .bank_depth_for_SPM_i  (7'h40     ),
     // Request
     .core_req_valid_i      (cache_req_valid          ),
     .core_req_ready_o      (cache_req_ready          ),

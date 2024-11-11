@@ -45,37 +45,16 @@ int main() {
   if (cid == 0) {
     // Init the cache
     l1d_init();
-    l1d_wait();
   }
+
   // Wait for all cores to finish
   snrt_cluster_hw_barrier();
-
-  if (cid == 0) {
-    // configure the cache
-    uint32_t spm_size = 32;
-    l1d_spm_config(spm_size);
-  }
 
   // Reset timer
   unsigned int timer = (unsigned int)-1;
 
   const unsigned int dim = axpy_l.M;
   const unsigned int dim_core = dim / num_cores;
-
-  // Allocate the matrices
-  if (cid == 0) {
-    a = (double *)snrt_l1alloc(sizeof(double));
-    // x = (double *)snrt_l1alloc(dim * sizeof(double));
-    // y = (double *)snrt_l1alloc(dim * sizeof(double));
-  }
-
-  // Initialize the matrices
-  if (cid == 0) {
-    *a = axpy_alpha_dram;
-
-    // snrt_dma_start_1d(x, axpy_X_dram, dim * sizeof(double));
-    // snrt_dma_start_1d(y, axpy_Y_dram, dim * sizeof(double));
-  }
 
   // Wait for all cores to finish
   snrt_cluster_hw_barrier();
@@ -96,7 +75,7 @@ int main() {
     timer = benchmark_get_cycle();
 
   // Call AXPY
-  faxpy_v64b(*a, x_int, y_int, dim_core);
+  faxpy_v64b(axpy_alpha_dram, x_int, y_int, dim_core);
 
   // Wait for all cores to finish
   snrt_cluster_hw_barrier();
@@ -109,11 +88,11 @@ int main() {
   if (cid == 0)
     stop_kernel();
 
-  // if (cid == 0) {
-  //   // Flush the cache
-  //   l1d_flush();
-  //   l1d_wait();
-  // }
+  if (cid == 0) {
+    // Flush the cache
+    l1d_flush();
+    l1d_wait();
+  }
   // Wait for all cores to finish
   snrt_cluster_hw_barrier();
 

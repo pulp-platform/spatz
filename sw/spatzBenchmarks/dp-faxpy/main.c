@@ -42,6 +42,11 @@ int main() {
   const unsigned int num_cores = snrt_cluster_core_num();
   const unsigned int cid = snrt_cluster_core_idx();
 
+  if (cid == 0) {
+    // Init the cache
+    l1d_init();
+  }
+
   // Reset timer
   unsigned int timer = (unsigned int)-1;
 
