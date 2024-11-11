@@ -15,9 +15,9 @@
         id_width_in: 6,
         id_width_out: 2,
         user_width: 10,
-        axi_cdc_enable: true,
+        axi_cdc_enable: false,
         sw_rst_enable: true,
-        axi_isolate_enable: true,
+        axi_isolate_enable: false,
         tcdm: {
             size: 32,
             banks: 8,

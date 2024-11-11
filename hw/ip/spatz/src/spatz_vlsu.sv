@@ -164,14 +164,24 @@ module spatz_vlsu
   //  State  //
   /////////////
 
-  enum logic {
+  typedef enum logic {
     VLSU_RunningLoad, VLSU_RunningStore
-  } state_d, state_q;
+  } state_t;
+  state_t state_d, state_q;
   `FF(state_q, state_d, VLSU_RunningLoad)
 
+  state_t [NrMemPorts-1:0] port_state_d, port_state_q;
+  for (genvar port = 0; port < NrMemPorts; port++) begin: gen_port_state_q
+    `FF(port_state_q[port], port_state_d[port], VLSU_RunningLoad)
+  end: gen_port_state_q
 
   id_t [NrMemPorts-1:0] store_count_q;
   id_t [NrMemPorts-1:0] store_count_d;
+
+  // Memory requests
+  spatz_mem_req_t [NrMemPorts-1:0] spatz_mem_req;
+  logic           [NrMemPorts-1:0] spatz_mem_req_valid;
+  logic           [NrMemPorts-1:0] spatz_mem_req_ready;
 
   for (genvar port = 0; port < NrMemPorts; port++) begin: gen_store_count_q
     `FF(store_count_q[port], store_count_d[port], '0)
@@ -182,7 +192,11 @@ module spatz_vlsu
     store_count_d = store_count_q;
 
     for (int port = 0; port < NrMemPorts; port++) begin
-      if (spatz_mem_req_o[port].write && spatz_mem_req_valid_o[port] && spatz_mem_req_ready_i[port])
+      // if (spatz_mem_req_o[port].write && spatz_mem_req_valid_o[port] && spatz_mem_req_ready_i[port])
+      //   // Did we send a store?
+      //   store_count_d[port]++;
+      // We need to count a store once it is sent to reg for correct handling
+      if (spatz_mem_req[port].write && spatz_mem_req_valid[port] && spatz_mem_req_ready[port])
         // Did we send a store?
         store_count_d[port]++;
 
@@ -578,10 +592,10 @@ module spatz_vlsu
   // Did we finish an instruction?
   logic vlsu_finished_req;
 
-  // Memory requests
-  spatz_mem_req_t [NrMemPorts-1:0] spatz_mem_req;
-  logic           [NrMemPorts-1:0] spatz_mem_req_valid;
-  logic           [NrMemPorts-1:0] spatz_mem_req_ready;
+  // // Memory requests
+  // spatz_mem_req_t [NrMemPorts-1:0] spatz_mem_req;
+  // logic           [NrMemPorts-1:0] spatz_mem_req_valid;
+  // logic           [NrMemPorts-1:0] spatz_mem_req_ready;
 
   always_comb begin: control_proc
     // Maintain state
@@ -753,7 +767,8 @@ module spatz_vlsu
       commit_operation_valid[fu] = commit_insn_valid && (commit_counter_q[fu] != max_elements) && (catchup[fu] || (!catchup[fu] && ~|catchup));
       commit_operation_last[fu]  = commit_operation_valid[fu] && ((max_elements - commit_counter_q[fu]) <= (commit_is_single_element_operation ? commit_single_element_size : ELENB));
       commit_counter_delta[fu]   = !commit_operation_valid[fu] ? vlen_t'('d0) : commit_is_single_element_operation ? vlen_t'(commit_single_element_size) : commit_operation_last[fu] ? (max_elements - commit_counter_q[fu]) : vlen_t'(ELENB);
-      commit_counter_en[fu]      = commit_operation_valid[fu] && (commit_insn_q.is_load && vrf_req_valid_d && vrf_req_ready_d) || (!commit_insn_q.is_load && vrf_rvalid_i[0] && vrf_re_o[0] && (!mem_is_indexed || vrf_rvalid_i[1]));
+      commit_counter_en[fu]      = commit_operation_valid[fu] && (commit_insn_q.is_load && vrf_req_valid_d && vrf_req_ready_d) && (port_state_q == VLSU_RunningLoad)||
+                                   (!commit_insn_q.is_load && vrf_rvalid_i[0] && vrf_re_o[0] && (!mem_is_indexed || vrf_rvalid_i[1]));
       commit_counter_max[fu]     = max_elements;
     end
   end
@@ -804,6 +819,24 @@ module spatz_vlsu
   always_comb begin: p_state
     // Maintain state
     state_d = state_q;
+    for (int port = 0; port < NrMemPorts; port++) begin
+      port_state_d[port] = port_state_q[port];
+      unique case (port_state_q[port])
+        VLSU_RunningLoad: begin
+          if (commit_insn_valid && !commit_insn_q.is_load)
+            if (rob_empty[port])
+              port_state_d[port] = VLSU_RunningStore;
+        end
+
+        // Do not switch mode until all store requests are actually sent
+        VLSU_RunningStore: begin
+          if (spatz_mem_req_valid_o[port])
+            port_state_d[port] = spatz_mem_req_o[port].write ? VLSU_RunningStore : VLSU_RunningLoad;
+        end
+
+        default:;
+      endcase
+    end
 
     unique case (state_q)
       VLSU_RunningLoad: begin
@@ -1052,8 +1085,7 @@ module spatz_vlsu
           mem_req_svalid[port] = rob_rvalid[port] && (!mem_is_indexed || (vrf_rvalid_i[1] && !pending_index[port])) && !mem_spatz_req.op_mem.is_load;
           mem_req_id[port]     = rob_rid[port];
           mem_req_last[port]   = mem_operation_last[port];
-          rob_pop[port]        = spatz_mem_req_valid[port] && spatz_mem_req_ready[port];
-          store_flag[port] = 1'b1;
+          rob_pop[port]        = spatz_mem_req_valid[port] && spatz_mem_req_ready[port];     
 
           // Create byte enable signal for memory request
           if (mem_is_single_element_operation) begin
@@ -1071,7 +1103,7 @@ module spatz_vlsu
               mem_req_strb[port][k] = k < mem_counter_delta[port];
         end else begin
           spatz_mem_rsp_ready_o[port] = 1'b0;
-          clear_flag[port] = 1'b1;
+          // clear_flag[port] = 1'b1;
           
           // // Clear empty buffer id requests
           // if (!rob_empty[port]) begin
