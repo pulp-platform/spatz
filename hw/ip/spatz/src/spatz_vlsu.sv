@@ -286,16 +286,15 @@ module spatz_vlsu
   // Max counter for m and n counters
   logic [$clog2(MAX_TILE_M)-1:0] mx_max_row;
   logic [$clog2(MAX_TILE_N)-1:0] mx_max_col;
-  // Rows on the M dimension for mtx A load and mtx C store, otherwise on the N dimension
-  assign mx_max_row = commit_insn_q.is_load && mem_spatz_req.matrix == TILE_B
-                    ? mem_spatz_req.tile_N[$clog2(MAX_TILE_N)-1:0] - 1
+  assign mx_max_row = commit_insn_q.is_load
+                    ? mem_spatz_req.tile_K[$clog2(MAX_TILE_K)-1:0] - 1
                     : mem_spatz_req.tile_M[$clog2(MAX_TILE_M)-1:0] - 1;
   // Columns on the N dimension for mtx C store, otherwise on the K dimension
-  assign mx_max_col = commit_insn_q.is_load
-                    ? mem_spatz_req.tile_K[$clog2(MAX_TILE_K)-1:0] - 1
+  assign mx_max_col = commit_insn_q.is_load && mem_spatz_req.matrix == TILE_A
+                    ? mem_spatz_req.tile_M[$clog2(MAX_TILE_M)-1:0] - 1
                     : mem_spatz_req.tile_N[$clog2(MAX_TILE_N)-1:0] - 1;
-  assign mx_cnt_max_row = mx_max_row >> ( commit_insn_q.is_load ? $clog2(NrMemPorts) : 0);
-  assign mx_cnt_max_col = mx_max_col >> (!commit_insn_q.is_load ? $clog2(NrMemPorts) : 0);
+  assign mx_cnt_max_row = mx_max_row; // >> ( commit_insn_q.is_load ? $clog2(NrMemPorts) : 0);
+  assign mx_cnt_max_col = mx_max_col >> $clog2(NrMemPorts); //(!commit_insn_q.is_load ? $clog2(NrMemPorts) : 0);
 
   for (genvar port = 0; port < NrMemPorts; port++) begin: gen_mem_counters
     delta_counter #(
@@ -338,8 +337,8 @@ module spatz_vlsu
     // Go to a new row when we finished the previous one
     // Load instructions: we load column-wise (sequence of non-unit-strided loads)
     // Store instructions: we store row-wise (sequence of unit-strided stores)
-    assign mx_cnt_en_row[port] = mem_spatz_req.op_arith.is_mx & mem_counter_en[port] & ((mx_cnt_col_q[port] == mx_cnt_max_col) |  commit_insn_q.is_load);
-    assign mx_cnt_en_col[port] = mem_spatz_req.op_arith.is_mx & mem_counter_en[port] & ((mx_cnt_row_q[port] == mx_cnt_max_row) | ~commit_insn_q.is_load);
+    assign mx_cnt_en_row[port] = mem_spatz_req.op_arith.is_mx & mem_counter_en[port] & (mx_cnt_col_q[port] == mx_cnt_max_col);
+    assign mx_cnt_en_col[port] = mem_spatz_req.op_arith.is_mx & mem_counter_en[port] & (mx_cnt_row_q[port] == mx_cnt_max_row);
     // Count up to (tile_size - 1), and tile_size is power of 2
     assign mx_cnt_clr_row[port] = mx_cnt_en_row[port] & (mx_cnt_row_q[port] == mx_cnt_max_row);
     assign mx_cnt_clr_col[port] = mx_cnt_en_col[port] & (mx_cnt_col_q[port] == mx_cnt_max_col);
@@ -556,7 +555,8 @@ module spatz_vlsu
       end else if(mem_spatz_req.op_arith.is_mx) begin
         // Ports finish storing one matrix column before passing to a new one
         // If mem_spatz_req.rs2 is a power of 2, this can be further optimized
-        mx_offset_load = (mem_spatz_req.rs2 * (port << 3)) + ((mx_cnt_row_q[port] * mem_spatz_req.rs2) << $clog2(NrMemPorts * MemDataWidthB)) + (mx_cnt_col_q[port] << $clog2(MemDataWidthB));
+        // mx_offset_load = (mem_spatz_req.rs2 * (port << 3)) + ((mx_cnt_row_q[port] * mem_spatz_req.rs2) << $clog2(NrMemPorts * MemDataWidthB)) + (mx_cnt_col_q[port] << $clog2(MemDataWidthB));
+        mx_offset_load = (1 * (port << 3)) + ((mx_cnt_col_q[port]) << $clog2(NrMemPorts * MemDataWidthB)) + ((mx_cnt_row_q[port]* mem_spatz_req.rs2) << $clog2(MemDataWidthB));
         // Ports finish storing one matrix row before passing to a new one
         // If mem_spatz_req.rs2 is a power of 2, this can be further optimized
         mx_offset_store = (port << 3) + ((mx_cnt_row_q[port] * mem_spatz_req.rs2) << $clog2(MemDataWidthB)) + (mx_cnt_col_q[port] << ($clog2(NrMemPorts * MemDataWidthB)));
