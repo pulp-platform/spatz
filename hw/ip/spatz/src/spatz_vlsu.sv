@@ -888,7 +888,14 @@ module spatz_vlsu
     end
   end
 
+  // Debug flags
   logic [NrMemPorts-1:0] load_flag, store_flag, clear_flag;
+  // Indicate if each port is in loading or storing mode
+  logic [NrMemPorts-1:0] port_state_load;
+  for (genvar port = 0; port < NrMemPorts; port++) begin
+    assign port_state_load[port] = (port_state_q[port] == VLSU_RunningLoad);
+  end
+
   // verilator lint_off LATCH
   always_comb begin
     vrf_raddr_o     = {vs2_vreg_addr, vd_vreg_addr};
@@ -935,7 +942,8 @@ module spatz_vlsu
       if (state_q == VLSU_RunningLoad && |commit_operation_valid) begin
         // Enable write back to the VRF if we have a valid element in all buffers that still have to write something back.
         vrf_req_d.waddr = vd_vreg_addr;
-        vrf_req_valid_d = &(rob_rvalid | ~mem_pending) && |mem_pending;
+        // Here, we do not enable the writing to ROB unless all ports are in loading mode (avoid racing in ports)
+        vrf_req_valid_d = &(rob_rvalid | (~mem_pending && port_state_load)) && |mem_pending;
 
         for (int unsigned port = 0; port < NrMemPorts; port++) begin
           automatic logic [63:0] data = rob_rdata[port];

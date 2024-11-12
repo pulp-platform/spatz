@@ -24,7 +24,8 @@
 // todo: simplify the last iteration, which do not require twiddle factors
 void fft_sc(double *s, double *buf, const double *twi, const uint16_t *seq_idx,
             const uint16_t *rev_idx, const unsigned int nfft,
-            const unsigned int log2_nfft, const unsigned int cid) {
+            const unsigned int log2_nfft, const unsigned int cid,
+            const double *final_store) {
 
   // Always run in dual-core mode
   const unsigned int dc = 1;
@@ -59,7 +60,7 @@ void fft_sc(double *s, double *buf, const double *twi, const uint16_t *seq_idx,
 
     // Last iteration
     if (bf == log2_nfft - 1)
-      o_buf = buf;
+      o_buf = final_store;
 
     // Update pointers
     const double *re_u_i = i_buf;
