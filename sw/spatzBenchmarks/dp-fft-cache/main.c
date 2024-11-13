@@ -41,8 +41,8 @@ int main() {
   const unsigned int cid = snrt_cluster_core_idx();
 
   if (cid == 0) {
-    // Init the cache
-    l1d_init();
+    // Init the cache with half-half
+    l1d_init(32);
   }
   // Wait for all cores to finish
   snrt_cluster_hw_barrier();
@@ -52,6 +52,12 @@ int main() {
 
   // Reset timer
   unsigned int timer = (unsigned int)-1;
+
+  // Let's reconfigure the SPM size
+  if (cid == 0) {
+    // configure 16 KiB in SPM
+    l1d_spm_config(16);
+  }
 
   // Add a output buffer in SPM for final result store (avoid racing between cores)
   if (cid == 0) {

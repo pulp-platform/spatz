@@ -47,7 +47,7 @@ int main() {
 
   if (cid == 0) {
     // Init the cache
-    l1d_init();
+    l1d_init(32);
   }
 
   // log2(nfft).

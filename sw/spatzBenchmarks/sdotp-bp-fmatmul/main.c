@@ -49,7 +49,15 @@ int main() {
   unsigned int m_start, m_end;
   unsigned int p_start, p_end;
   unsigned int kernel_size;
+  uint32_t spm_size = 32;
+  
+  if (cid == 0) {
+    // Init the cache
+    l1d_init(spm_size);
+  }
 
+  // Wait for all cores to finish
+  snrt_cluster_hw_barrier();
   // Allocate the matrices in the local tile
   if (cid == 0) {
     a = (char *)snrt_l1alloc(gemm_l.M * gemm_l.K * sizeof(char));

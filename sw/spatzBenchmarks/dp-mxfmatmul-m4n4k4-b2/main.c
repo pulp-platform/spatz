@@ -120,25 +120,16 @@ int main() {
   // Todo: we need to clarify the vl
   // It can be M*K, K*N, or M*N
   unsigned int vl = KERNEL_M * KERNEL_K;
+
+  uint32_t spm_size = 32;
   
-#ifdef USE_CACHE
   if (cid == 0) {
     // Init the cache
-    l1d_init();
-    l1d_wait();
+    l1d_init(spm_size);
   }
-#endif
 
   // Wait for all cores to finish
   snrt_cluster_hw_barrier();
-
-#ifdef USE_CACHE
-  if (cid == 0) {
-    // configure the cache
-    uint32_t spm_size = 32;
-    l1d_spm_config(spm_size);
-  }
-#endif
 
 #ifndef USE_CACHE
   // Allocate the matrices in the local tile

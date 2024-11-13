@@ -56,7 +56,15 @@ int main() {
   const unsigned int cid = snrt_cluster_core_idx();
 
   const unsigned int measure_iterations = 1;
+  uint32_t spm_size = 32;
+  
+  if (cid == 0) {
+    // Init the cache
+    l1d_init(spm_size);
+  }
 
+  // Wait for all cores to finish
+  snrt_cluster_hw_barrier();
   unsigned int timer_start, timer_end, timer;
 
   unsigned int m_start, m_end;

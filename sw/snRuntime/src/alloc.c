@@ -36,6 +36,16 @@ void *snrt_l1alloc(size_t size) {
 }
 
 /**
+ * @brief Free all allocated region in L1 memory
+ * @details We'd better free all regions beore reconfiguring
+ */
+void snrt_l1alloc_reset() {
+    struct snrt_allocator_inst *alloc = &snrt_current_team()->allocator.l1;
+    // Reset next pointer to base
+    alloc->next = alloc->base;
+}
+
+/**
  * @brief Allocate a chunk of memory in the L3 memory
  * @details This currently does not support free-ing of memory
  *

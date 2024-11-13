@@ -12,7 +12,7 @@ size_t benchmark_get_cycle();
 void start_kernel();
 void stop_kernel();
 void l1d_commit();
-void l1d_init();
+void l1d_init(uint32_t size);
 void l1d_flush();
 void l1d_wait();
 void l1d_spm_config (uint32_t size);

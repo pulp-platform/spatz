@@ -32,7 +32,7 @@ void l1d_commit() {
   *commit = 1;
 }
 
-void l1d_init() {
+void l1d_init(uint32_t size) {
   uint32_t *insn =
       (uint32_t *)(_snrt_team_current->root->cluster_mem.end +
                    SPATZ_CLUSTER_PERIPHERAL_CFG_L1D_INSN_REG_OFFSET);
@@ -41,7 +41,7 @@ void l1d_init() {
   l1d_wait();
   // Write in the default config immediately after initialization
   // No need to call outside unless need a different config
-  l1d_spm_config(32);
+  l1d_spm_config(size);
 }
 
 void l1d_flush() {
@@ -62,13 +62,12 @@ void l1d_wait() {
   }
 }
 
-// TODO: Add a l1d_spm_free function to remove all allocated region
-// This function needs to be called when change partition scheme
-
 void l1d_spm_config (uint32_t size) {
   // flush the cache before reconfiguration
   l1d_flush();
   l1d_wait();
+  // free all allocated region
+  snrt_l1alloc_reset();
   // set the pointers
   volatile uint32_t *cfg_size =
       (uint32_t *)(_snrt_team_current->root->cluster_mem.end +

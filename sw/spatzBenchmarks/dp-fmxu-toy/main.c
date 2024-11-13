@@ -75,7 +75,15 @@ double *c;
 int main() {
   const unsigned int num_cores = snrt_cluster_core_num();
   const unsigned int cid = snrt_cluster_core_idx();
+  uint32_t spm_size = 32;
+  
+  if (cid == 0) {
+    // Init the cache
+    l1d_init(spm_size);
+  }
 
+  // Wait for all cores to finish
+  snrt_cluster_hw_barrier();
   unsigned int dim = 4;
 
   // Wait for all cores to finish

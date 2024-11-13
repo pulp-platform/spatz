@@ -44,7 +44,15 @@ static inline int fp_check(const float a, const float b) {
 int main() {
   const unsigned int num_cores = snrt_cluster_core_num();
   const unsigned int cid = snrt_cluster_core_idx();
+  uint32_t spm_size = 32;
+  
+  if (cid == 0) {
+    // Init the cache
+    l1d_init(spm_size);
+  }
 
+  // Wait for all cores to finish
+  snrt_cluster_hw_barrier();
   // log2(nfft).
   const unsigned int log2_nfft = 31 - __builtin_clz(NFFT >> 1);
 
@@ -113,8 +121,8 @@ int main() {
   // Display runtime
   if (cid == 0) {
     long unsigned int performance =
-        1000 * 10 * NFFT * log2_nfft * 6 / 5 / timer;
-    long unsigned int utilization = performance / (2 * num_cores * 8);
+        1000 * 5 * NFFT * (log2_nfft+1) / timer;
+    long unsigned int utilization = (1000 * performance) / (1250 * num_cores * 4);
 
     printf("\n----- fft on %d samples -----\n", NFFT);
     printf("The execution took %u cycles.\n", timer);
