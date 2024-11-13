@@ -226,11 +226,12 @@ module spatz_cluster
 
   // L1 Cache
   localparam int unsigned L1AddrWidth     = 32;
-  localparam int unsigned L1NumEntry      = 1024;
   localparam int unsigned L1LineWidth     = 512;
   localparam int unsigned L1Associativity = 4;
   localparam int unsigned L1BankFactor    = 2;
   localparam int unsigned L1CoalFactor    = 2;
+  // 8 * 1024 * 64 / 512 = 1024)
+  localparam int unsigned L1NumEntry      = NrBanks * TCDMDepth * DataWidth / L1LineWidth;
   localparam int unsigned L1NumWrapper    = L1LineWidth / DataWidth;
   localparam int unsigned L1BankPerWP     = L1BankFactor * L1Associativity;
   localparam int unsigned L1BankPerWay    = L1BankFactor * L1NumWrapper;
@@ -689,7 +690,6 @@ module spatz_cluster
     );
 
     // generate banks of the superbank
-    // TODO: append the metadata (req_id) to the response => push into amo and wait one cycle to rsp
     for (genvar j = 0; j < BanksPerSuperBank; j++) begin : gen_tcdm_bank
 
       logic mem_cs, mem_wen;
@@ -726,25 +726,6 @@ module spatz_cluster
         .spm_be_i     (mem_be    ),
         .spm_rdata_o  (mem_rdata )
       );
-
-      // tc_sram_impl #(
-      //   .NumWords  (TCDMDepth),
-      //   .DataWidth (DataWidth),
-      //   .ByteWidth (8        ),
-      //   .NumPorts  (1        ),
-      //   .Latency   (1        )
-      // ) i_data_mem (
-      //   .clk_i   (clk_i       ),
-      //   .rst_ni  (rst_ni      ),
-      //   .impl_i  ('0          ),
-      //   .impl_o  (/* Unused */),
-      //   .req_i   (mem_cs      ),
-      //   .we_i    (mem_wen     ),
-      //   .addr_i  (mem_add     ),
-      //   .wdata_i (mem_wdata   ),
-      //   .be_i    (mem_be      ),
-      //   .rdata_o (mem_rdata   )
-      // );
 
       data_t amo_rdata_local;
 
@@ -815,8 +796,6 @@ module spatz_cluster
     end
   end
 
-  // TODO: take from CSR/inputs
-  // logic [L1AddrWidth-1:0] tcdm_start_addr, tcdm_end_addr, spm_size;
   logic  [NrTCDMPortsCores-1:0] cache_pready;
   assign spm_size        = cfg_spm_size * L1Associativity * L1LineWidth / 2;
 
@@ -843,8 +822,6 @@ module spatz_cluster
     .tcdm_end_address_i   (tcdm_end_address[L1AddrWidth-1:0]   ),
     .spm_size_i           (spm_size        ),
     .flush_i              (l1d_busy        ),
-    // .flush_i              (1'b0            ),
-    // .spm_size_i           (32'h0020_0000   ),
     // Output
     .spm_req_o            (spm_req         ),
     .spm_rsp_i            (spm_rsp         ),
@@ -885,15 +862,16 @@ module spatz_cluster
     .axi_req_t        (axi_mst_dma_req_t ),
     .axi_resp_t       (axi_mst_dma_resp_t)
   ) i_l1_controller (
-    .clk_i                 (clk_i            ),
-    .rst_ni                (rst_ni           ),
+    .clk_i                 (clk_i                    ),
+    .rst_ni                (rst_ni                   ),
     // Sync Control
-    .cache_sync_valid_i    (l1d_insn_valid   ),
-    .cache_sync_ready_o    (l1d_insn_ready   ),
-    .cache_sync_insn_i     (l1d_insn         ),
+    .cache_sync_valid_i    (l1d_insn_valid           ),
+    .cache_sync_ready_o    (l1d_insn_ready           ),
+    .cache_sync_insn_i     (l1d_insn                 ),
     // SPM Size
-    // todo: full cache for testing
-    .bank_depth_for_SPM_i  (7'h40     ),
+    // The calculation of spm region in cache is different
+    // than other modules (needs to times 2)
+    .bank_depth_for_SPM_i  ((cfg_spm_size<<1)        ),
     // Request
     .core_req_valid_i      (cache_req_valid          ),
     .core_req_ready_o      (cache_req_ready          ),
