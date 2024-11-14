@@ -101,7 +101,7 @@ module spatz_vfu
   vlen_t            mx_offset       ;
   logic             mx_result_ready ;
 
-  assign op_is_mx = spatz_req.op_arith.is_mx && spatz_req_valid;
+  assign op_is_mx = (spatz_req.op_arith.is_mx && spatz_req_valid) || mx_write_enable;
   assign clear_mxu_state = spatz_req_valid & spatz_req_ready;
 
   // Vector length counter
