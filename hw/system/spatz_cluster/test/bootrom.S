@@ -12,6 +12,10 @@ _start:
   csrw    mtvec, t1
   csrr    a0, mhartid
   la      a1, BOOTDATA
+  
+  // Enable MSI interrupt 
+  csrw mie, 0xF
+
   // Wait for the wakeup interrupt
   wfi
 
