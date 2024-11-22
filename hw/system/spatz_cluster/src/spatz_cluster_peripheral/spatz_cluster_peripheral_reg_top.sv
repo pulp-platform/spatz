@@ -281,6 +281,9 @@ module spatz_cluster_peripheral_reg_top #(
   logic [31:0] cluster_boot_control_qs;
   logic [31:0] cluster_boot_control_wd;
   logic cluster_boot_control_we;
+  logic [31:0] cluster_eoc_exit_qs;
+  logic [31:0] cluster_eoc_exit_wd;
+  logic cluster_eoc_exit_we;
   logic [9:0] cfg_l1d_spm_qs;
   logic [9:0] cfg_l1d_spm_wd;
   logic cfg_l1d_spm_we;
@@ -2134,6 +2137,33 @@ module spatz_cluster_peripheral_reg_top #(
   );
 
 
+  // R[cluster_eoc_exit]: V(False)
+
+  prim_subreg #(
+    .DW      (32),
+    .SWACCESS("RW"),
+    .RESVAL  (32'h0)
+  ) u_cluster_eoc_exit (
+    .clk_i   (clk_i    ),
+    .rst_ni  (rst_ni  ),
+
+    // from register interface
+    .we     (cluster_eoc_exit_we),
+    .wd     (cluster_eoc_exit_wd),
+
+    // from internal hardware
+    .de     (1'b0),
+    .d      ('0  ),
+
+    // to internal hardware
+    .qe     (),
+    .q      (reg2hw.cluster_eoc_exit.q ),
+
+    // to register interface (read)
+    .qs     (cluster_eoc_exit_qs)
+  );
+
+
   // R[cfg_l1d_spm]: V(False)
 
   prim_subreg #(
@@ -2260,7 +2290,7 @@ module spatz_cluster_peripheral_reg_top #(
 
 
 
-  logic [16:0] addr_hit;
+  logic [17:0] addr_hit;
   always_comb begin
     addr_hit = '0;
     addr_hit[ 0] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_PERF_COUNTER_ENABLE_0_OFFSET);
@@ -2275,11 +2305,12 @@ module spatz_cluster_peripheral_reg_top #(
     addr_hit[ 9] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_ICACHE_PREFETCH_ENABLE_OFFSET);
     addr_hit[10] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_SPATZ_STATUS_OFFSET);
     addr_hit[11] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_CLUSTER_BOOT_CONTROL_OFFSET);
-    addr_hit[12] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_CFG_L1D_SPM_OFFSET);
-    addr_hit[13] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_CFG_L1D_INSN_OFFSET);
-    addr_hit[14] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_L1D_SPM_COMMIT_OFFSET);
-    addr_hit[15] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_L1D_INSN_COMMIT_OFFSET);
-    addr_hit[16] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_L1D_FLUSH_STATUS_OFFSET);
+    addr_hit[12] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_CLUSTER_EOC_EXIT_OFFSET);
+    addr_hit[13] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_CFG_L1D_SPM_OFFSET);
+    addr_hit[14] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_CFG_L1D_INSN_OFFSET);
+    addr_hit[15] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_L1D_SPM_COMMIT_OFFSET);
+    addr_hit[16] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_L1D_INSN_COMMIT_OFFSET);
+    addr_hit[17] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_L1D_FLUSH_STATUS_OFFSET);
   end
 
   assign addrmiss = (reg_re || reg_we) ? ~|addr_hit : 1'b0 ;
@@ -2303,7 +2334,8 @@ module spatz_cluster_peripheral_reg_top #(
                (addr_hit[13] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[13] & ~reg_be))) |
                (addr_hit[14] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[14] & ~reg_be))) |
                (addr_hit[15] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[15] & ~reg_be))) |
-               (addr_hit[16] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[16] & ~reg_be)))));
+               (addr_hit[16] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[16] & ~reg_be))) |
+               (addr_hit[17] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[17] & ~reg_be)))));
   end
 
   assign perf_counter_enable_0_cycle_0_we = addr_hit[0] & reg_we & !reg_error;
@@ -2523,19 +2555,22 @@ module spatz_cluster_peripheral_reg_top #(
   assign cluster_boot_control_we = addr_hit[11] & reg_we & !reg_error;
   assign cluster_boot_control_wd = reg_wdata[31:0];
 
-  assign cfg_l1d_spm_we = addr_hit[12] & reg_we & !reg_error;
+  assign cluster_eoc_exit_we = addr_hit[12] & reg_we & !reg_error;
+  assign cluster_eoc_exit_wd = reg_wdata[31:0];
+
+  assign cfg_l1d_spm_we = addr_hit[13] & reg_we & !reg_error;
   assign cfg_l1d_spm_wd = reg_wdata[9:0];
 
-  assign cfg_l1d_insn_we = addr_hit[13] & reg_we & !reg_error;
+  assign cfg_l1d_insn_we = addr_hit[14] & reg_we & !reg_error;
   assign cfg_l1d_insn_wd = reg_wdata[1:0];
 
-  assign l1d_spm_commit_we = addr_hit[14] & reg_we & !reg_error;
+  assign l1d_spm_commit_we = addr_hit[15] & reg_we & !reg_error;
   assign l1d_spm_commit_wd = reg_wdata[0];
 
-  assign l1d_insn_commit_we = addr_hit[15] & reg_we & !reg_error;
+  assign l1d_insn_commit_we = addr_hit[16] & reg_we & !reg_error;
   assign l1d_insn_commit_wd = reg_wdata[0];
 
-  assign l1d_flush_status_re = addr_hit[16] & reg_re & !reg_error;
+  assign l1d_flush_status_re = addr_hit[17] & reg_re & !reg_error;
 
   // Read data return
   always_comb begin
@@ -2650,22 +2685,26 @@ module spatz_cluster_peripheral_reg_top #(
       end
 
       addr_hit[12]: begin
-        reg_rdata_next[9:0] = cfg_l1d_spm_qs;
+        reg_rdata_next[31:0] = cluster_eoc_exit_qs;
       end
 
       addr_hit[13]: begin
-        reg_rdata_next[1:0] = cfg_l1d_insn_qs;
+        reg_rdata_next[9:0] = cfg_l1d_spm_qs;
       end
 
       addr_hit[14]: begin
-        reg_rdata_next[0] = l1d_spm_commit_qs;
+        reg_rdata_next[1:0] = cfg_l1d_insn_qs;
       end
 
       addr_hit[15]: begin
-        reg_rdata_next[0] = l1d_insn_commit_qs;
+        reg_rdata_next[0] = l1d_spm_commit_qs;
       end
 
       addr_hit[16]: begin
+        reg_rdata_next[0] = l1d_insn_commit_qs;
+      end
+
+      addr_hit[17]: begin
         reg_rdata_next[0] = l1d_flush_status_qs;
       end
 
