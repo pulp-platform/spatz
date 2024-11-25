@@ -537,6 +537,8 @@ module ${cfg['name']}_wrapper
     .ICacheLineCount (${cfg['pkg_name']}::ICacheLineCount),
     .ICacheSets (${cfg['pkg_name']}::ICacheSets),
     .FPUImplementation (${cfg['pkg_name']}::FPUImplementation),
+    .NumSpatzFPUs (${cfg['n_fpu']}),
+    .NumSpatzIPUs (${cfg['n_ipu']}),
     .SnitchPMACfg (${cfg['pkg_name']}::SnitchPMACfg),
     .NumIntOutstandingLoads (NumIntOutstandingLoads),
     .NumIntOutstandingMem (NumIntOutstandingMem),
