@@ -16,7 +16,7 @@ dependencies:
   register_interface: { git: "https://github.com/pulp-platform/register_interface.git", version: 0.3.8          }
   riscv-dbg:          { git: "https://github.com/pulp-platform/riscv-dbg.git",          version: 0.7.0          }
   tech_cells_generic: { git: "https://github.com/pulp-platform/tech_cells_generic.git", version: 0.2.11         }
-  insitu-cache:       { git: "git@iis-git.ee.ethz.ch:flamingo/spatz_cache_wrapper.git", rev:     Diyou/elb-fix  }
+  insitu-cache:       { git: "git@iis-git.ee.ethz.ch:flamingo/spatz_cache_wrapper.git", rev:     main           }
 
 export_include_dirs:
   - hw/ip/reqrsp_interface/include
