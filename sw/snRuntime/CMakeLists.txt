@@ -63,6 +63,7 @@ set(sources
     src/alloc.c
     src/interrupt.c
     src/perf_cnt.c
+    src/l1cache.c
 )
 
 # platform specific sources
