@@ -281,8 +281,8 @@ module spatz_cluster_peripheral_reg_top #(
   logic [31:0] cluster_boot_control_qs;
   logic [31:0] cluster_boot_control_wd;
   logic cluster_boot_control_we;
-  logic [31:0] cluster_eoc_exit_qs;
-  logic [31:0] cluster_eoc_exit_wd;
+  logic cluster_eoc_exit_qs;
+  logic cluster_eoc_exit_wd;
   logic cluster_eoc_exit_we;
   logic [9:0] cfg_l1d_spm_qs;
   logic [9:0] cfg_l1d_spm_wd;
@@ -2140,9 +2140,9 @@ module spatz_cluster_peripheral_reg_top #(
   // R[cluster_eoc_exit]: V(False)
 
   prim_subreg #(
-    .DW      (32),
+    .DW      (1),
     .SWACCESS("RW"),
-    .RESVAL  (32'h0)
+    .RESVAL  (1'h0)
   ) u_cluster_eoc_exit (
     .clk_i   (clk_i    ),
     .rst_ni  (rst_ni  ),
@@ -2556,7 +2556,7 @@ module spatz_cluster_peripheral_reg_top #(
   assign cluster_boot_control_wd = reg_wdata[31:0];
 
   assign cluster_eoc_exit_we = addr_hit[12] & reg_we & !reg_error;
-  assign cluster_eoc_exit_wd = reg_wdata[31:0];
+  assign cluster_eoc_exit_wd = reg_wdata[0];
 
   assign cfg_l1d_spm_we = addr_hit[13] & reg_we & !reg_error;
   assign cfg_l1d_spm_wd = reg_wdata[9:0];
@@ -2685,7 +2685,7 @@ module spatz_cluster_peripheral_reg_top #(
       end
 
       addr_hit[12]: begin
-        reg_rdata_next[31:0] = cluster_eoc_exit_qs;
+        reg_rdata_next[0] = cluster_eoc_exit_qs;
       end
 
       addr_hit[13]: begin

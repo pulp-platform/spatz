@@ -194,12 +194,7 @@ extern "C" {
 
 // End of computation and exit status register
 #define SPATZ_CLUSTER_PERIPHERAL_CLUSTER_EOC_EXIT_REG_OFFSET 0x60
-#define SPATZ_CLUSTER_PERIPHERAL_CLUSTER_EOC_EXIT_EOC_EXIT_MASK 0xffffffff
-#define SPATZ_CLUSTER_PERIPHERAL_CLUSTER_EOC_EXIT_EOC_EXIT_OFFSET 0
-#define SPATZ_CLUSTER_PERIPHERAL_CLUSTER_EOC_EXIT_EOC_EXIT_FIELD               \
-  ((bitfield_field32_t){                                                       \
-      .mask = SPATZ_CLUSTER_PERIPHERAL_CLUSTER_EOC_EXIT_EOC_EXIT_MASK,         \
-      .index = SPATZ_CLUSTER_PERIPHERAL_CLUSTER_EOC_EXIT_EOC_EXIT_OFFSET})
+#define SPATZ_CLUSTER_PERIPHERAL_CLUSTER_EOC_EXIT_EOC_EXIT_BIT 0
 
 // Controls the configurations of L1 DCache SPM size.
 #define SPATZ_CLUSTER_PERIPHERAL_CFG_L1D_SPM_REG_OFFSET 0x68
