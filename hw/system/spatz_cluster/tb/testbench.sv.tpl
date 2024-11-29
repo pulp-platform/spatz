@@ -205,6 +205,8 @@ module testharness (
 % else:
     .axi_out_req_o   (axi_from_cluster_req ),
     .axi_out_resp_i  (axi_from_cluster_resp),
+    .axi_out_l2_req_o  ( ),
+    .axi_out_l2_resp_i  ('0),
     .axi_in_req_i    (axi_to_cluster_req   ),
     .axi_in_resp_o   (axi_to_cluster_resp  ),
 % endif

@@ -561,6 +561,7 @@ module ${cfg['name']}_wrapper
   ) i_cluster (
     .clk_i,
     .rst_ni,
+    .impl_i( '0 ),
 % if cfg['enable_debug']:
     .debug_req_i,
 % else:

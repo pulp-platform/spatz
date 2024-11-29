@@ -93,12 +93,16 @@ module spatz_cluster
     parameter type                                           axi_in_resp_t                      = logic,
     parameter type                                           axi_out_req_t                      = logic,
     parameter type                                           axi_out_resp_t                     = logic,
+    /// SRAM configuration
+    parameter type                                           impl_in_t                          = logic,
     // Memory latency parameter. Most of the memories have a read latency of 1. In
     // case you have memory macros which are pipelined you want to adjust this
     // value here. This only applies to the TCDM. The instruction cache macros will break!
     // In case you are using the `RegisterTCDMCuts` feature this adds an
     // additional cycle latency, which is taken into account here.
-    parameter int                     unsigned               MemoryMacroLatency                 = 1 + RegisterTCDMCuts
+    parameter int                     unsigned               MemoryMacroLatency                 = 1 + RegisterTCDMCuts,
+    /// # SRAM Configuration rules needed: L1D Tag + L1D Data + L1D FIFO + L1I Tag + L1I Data
+    parameter int                     unsigned               NrSramCfg                          = 64 + 8 + 1 + ICacheSets + ICacheSets
   ) (
     /// System clock.
     input  logic                             clk_i,
@@ -136,7 +140,9 @@ module spatz_cluster
     input  axi_out_resp_t                    axi_out_resp_i,
     /// AXI Core cluster out-port to L2 Mem.
     output axi_out_req_t                     axi_out_l2_req_o,
-    input  axi_out_resp_t                    axi_out_l2_resp_i
+    input  axi_out_resp_t                    axi_out_l2_resp_i,
+    /// SRAM Configuration: L1D Data + L1D Tag + L1D FIFO + L1I Data + L1I Tag
+    input  impl_in_t      [NrSramCfg-1:0]    impl_i
   );
   // ---------
   // Imports
@@ -502,6 +508,17 @@ module spatz_cluster
   logic                   l1d_busy;
 
 
+  // 9. SRAM Configuration
+  impl_in_t [L1NumWrapper-1:0][L1BankPerWP-1:0] impl_l1d_data;
+  impl_in_t [L1NumTagBank-1:0]                  impl_l1d_tag;
+  impl_in_t [1:0]                               impl_l1d_fifo;
+
+  impl_in_t [ICacheSets-1:0] impl_l1i_data;
+  impl_in_t [ICacheSets-1:0] impl_l1i_tag;
+
+  assign {impl_l1d_data, impl_l1d_tag, impl_l1d_fifo, impl_l1i_data, impl_l1i_tag} = impl_i;
+
+
   // -------------
   // DMA Subsystem
   // -------------
@@ -708,26 +725,29 @@ module spatz_cluster
         .NumWords              (TCDMDepth       ),
         .ByteWidth             (8               ),
         .DataWidth             (DataWidth       ),
-        .MemoryResponseLatency (1               )
+        .MemoryResponseLatency (1               ),
+        .impl_in_t             (impl_in_t       )
       ) i_data_mem (
-        .clk_i        (clk_i               ),
-        .rst_ni       (rst_ni              ),
-        .spm_size_i   (cfg_spm_size        ),
+        .clk_i        (clk_i                ),
+        .rst_ni       (rst_ni               ),
+        .spm_size_i   (cfg_spm_size         ),
         /// Cache Side TODO: Connect cache
-        .cache_req_i  (l1_cache_wp_req  [j]),
-        .cache_we_i   (l1_cache_wp_we   [j]),
-        .cache_addr_i (l1_cache_wp_addr [j]),
-        .cache_wdata_i(l1_cache_wp_wdata[j]),
-        .cache_be_i   (l1_cache_wp_be   [j]),
-        .cache_rdata_o(l1_cache_wp_rdata[j]),
-        .cache_ready_o(l1_cache_wp_gnt  [j]),
+        .cache_req_i  (l1_cache_wp_req  [j] ),
+        .cache_we_i   (l1_cache_wp_we   [j] ),
+        .cache_addr_i (l1_cache_wp_addr [j] ),
+        .cache_wdata_i(l1_cache_wp_wdata[j] ),
+        .cache_be_i   (l1_cache_wp_be   [j] ),
+        .cache_rdata_o(l1_cache_wp_rdata[j] ),
+        .cache_ready_o(l1_cache_wp_gnt  [j] ),
         /// SPM Side
-        .spm_req_i    (mem_cs    ),
-        .spm_we_i     (mem_wen   ),
+        .spm_req_i    (mem_cs               ),
+        .spm_we_i     (mem_wen              ),
         .spm_addr_i   (mem_add_max - mem_add),
-        .spm_wdata_i  (mem_wdata ),
-        .spm_be_i     (mem_be    ),
-        .spm_rdata_o  (mem_rdata )
+        .spm_wdata_i  (mem_wdata            ),
+        .spm_be_i     (mem_be               ),
+        .spm_rdata_o  (mem_rdata            ),
+        /// SRAM Configuration
+        .impl_i       (impl_l1d_data[j]     )
       );
 
       data_t amo_rdata_local;
@@ -862,11 +882,13 @@ module spatz_cluster
     .BankFactor       (L1BankFactor      ),
     // Type
     .core_meta_t      (tcdm_user_t       ),
+    .impl_in_t        (impl_in_t         ),
     .axi_req_t        (axi_mst_dma_req_t ),
     .axi_resp_t       (axi_mst_dma_resp_t)
   ) i_l1_controller (
     .clk_i                 (clk_i                    ),
     .rst_ni                (rst_ni                   ),
+    .impl_i                (impl_l1d_fifo            ),
     // Sync Control
     .cache_sync_valid_i    (l1d_insn_valid           ),
     .cache_sync_ready_o    (l1d_insn_ready           ),
@@ -909,16 +931,19 @@ module spatz_cluster
   );
 
   for (genvar j = 0; j < L1NumTagBank; j++) begin: gen_l1_tag_banks
-    tc_sram #(
+    tc_sram_impl #(
       .NumWords  (L1CacheWayEntry/L1BankFactor),
       .DataWidth ($bits(data_t)               ),
       .ByteWidth ($bits(data_t)               ),
       .NumPorts  (1                           ),
       .Latency   (1                           ),
-      .SimInit   ("zeros"                     )
+      .SimInit   ("zeros"                     ),
+      .impl_in_t (impl_in_t                   )
     ) i_meta_bank (
       .clk_i  (clk_i               ),
       .rst_ni (rst_ni              ),
+      .impl_i (impl_l1d_tag     [j]),
+      .impl_o (/* unsed */         ),
       .req_i  (l1_tag_bank_req  [j]),
       .we_i   (l1_tag_bank_we   [j]),
       .addr_i (l1_tag_bank_addr [j]),
@@ -1116,7 +1141,9 @@ module spatz_cluster
     .L0_EARLY_TAG_WIDTH ( snitch_pkg::PAGE_SHIFT - $clog2(ICacheLineWidth/8) ),
     .ISO_CROSSING       ( 1'b0                                               ),
     .axi_req_t          ( axi_mst_dma_req_t                                  ),
-    .axi_rsp_t          ( axi_mst_dma_resp_t                                 )
+    .axi_rsp_t          ( axi_mst_dma_resp_t                                 ),
+    .sram_cfg_data_t    ( impl_in_t                                          ),
+    .sram_cfg_tag_t     ( impl_in_t                                          )
   ) i_snitch_icache (
     .clk_i                ( clk_i                    ),
     .clk_d2_i             ( clk_i                    ),
@@ -1131,8 +1158,8 @@ module spatz_cluster
     .inst_valid_i         ( inst_valid               ),
     .inst_ready_o         ( inst_ready               ),
     .inst_error_o         ( inst_error               ),
-    .sram_cfg_tag_i       ( '0                       ),
-    .sram_cfg_data_i      ( '0                       ),
+    .sram_cfg_tag_i       ( impl_l1i_tag             ),
+    .sram_cfg_data_i      ( impl_l1i_data            ),
     .axi_req_o            ( wide_axi_mst_req[ICache] ),
     .axi_rsp_i            ( wide_axi_mst_rsp[ICache] )
   );

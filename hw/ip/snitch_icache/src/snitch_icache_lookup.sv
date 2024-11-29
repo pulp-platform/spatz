@@ -39,8 +39,8 @@ module snitch_icache_lookup #(
     input  logic                        write_valid_i,
     output logic                        write_ready_o,
 
-    input  sram_cfg_data_t  sram_cfg_data_i,
-    input  sram_cfg_tag_t   sram_cfg_tag_i
+    input  sram_cfg_data_t [CFG.SET_COUNT-1:0] sram_cfg_data_i,
+    input  sram_cfg_tag_t  [CFG.SET_COUNT-1:0] sram_cfg_tag_i
 );
 
     `ifndef SYNTHESIS
@@ -155,7 +155,7 @@ module snitch_icache_lookup #(
         ) i_tag (
           .clk_i (clk_i),
           .rst_ni (rst_ni),
-          .impl_i (sram_cfg_tag_i),
+          .impl_i (sram_cfg_tag_i[i]),
           .impl_o (  ),
           .req_i (ram_enable[i]),
           .we_i (ram_write),
@@ -175,7 +175,7 @@ module snitch_icache_lookup #(
         ) i_data (
           .clk_i (clk_i),
           .rst_ni (rst_ni),
-          .impl_i (sram_cfg_data_i),
+          .impl_i (sram_cfg_data_i[i]),
           .impl_o (  ),
           .req_i (ram_enable[i]),
           .we_i (ram_write),

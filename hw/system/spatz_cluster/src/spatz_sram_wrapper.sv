@@ -24,6 +24,8 @@ module spatz_sram_wrapper #(
   parameter int unsigned MemAddrWidth          = (NumWords > 32'd1) ? $clog2(NumWords) : 32'd1,
   /// Address width of each bank
   parameter int unsigned BankAddrWidth         = MemAddrWidth - $clog2(NumBanks),
+  /// SRAM impl input type for configuration
+  parameter type impl_in_t                     = logic,
   /// Address type of input (wrapper bank)
   parameter type mem_addr_t                    = logic [MemAddrWidth-1:0],
   /// Address type of data banks
@@ -55,7 +57,9 @@ module spatz_sram_wrapper #(
   input  mem_addr_t                            spm_addr_i,
   input  data_t                                spm_wdata_i,
   input  be_t                                  spm_be_i,
-  output data_t                                spm_rdata_o
+  output data_t                                spm_rdata_o,
+  /// SRAM Control Signals
+  input  impl_in_t            [NumBanks-1:0]   impl_i
 );
   typedef struct packed {
     logic       we;
@@ -150,16 +154,20 @@ module spatz_sram_wrapper #(
     );
 
     // Forward to bank
-    tc_sram #(
-      .NumWords  (NumWords/NumBanks),
-      .DataWidth (DataWidth        ),
-      .ByteWidth (ByteWidth        ),
-      .NumPorts  (1                ),
-      .Latency   (MemoryResponseLatency ),
-      .SimInit   ("zeros"          )
+    tc_sram_impl #(
+      .NumWords   (NumWords/NumBanks),
+      .DataWidth  (DataWidth        ),
+      .ByteWidth  (ByteWidth        ),
+      .NumPorts   (1                ),
+      .Latency    (MemoryResponseLatency ),
+      .SimInit    ("zeros"          ),
+      .impl_in_t  (impl_in_t        )
     ) i_data_bank (
       .clk_i  (clk_i            ),
       .rst_ni (rst_ni           ),
+      // implementation-related
+      .impl_i (impl_i[i]        ),
+      .impl_o (/* not used */   ),
       .req_i  (bank_valid[i]    ),
       .we_i   (bank_req[i].we   ),
       .addr_i (bank_req[i].addr ),
