@@ -49,7 +49,7 @@ int verify_matrix(double *matrix, const double *checksum,
 int main() {
   const unsigned int num_cores = snrt_cluster_core_num();
   const unsigned int cid = snrt_cluster_core_idx();
-  uint32_t spm_size = 32;
+  uint32_t spm_size = 120;
   
   if (cid == 0) {
     // Init the cache

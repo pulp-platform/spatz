@@ -61,7 +61,7 @@ int main() {
   unsigned int m_start, m_end;
   unsigned int p_start, p_end;
   unsigned int kernel_size;
-  uint32_t spm_size = 32;
+  uint32_t spm_size = 120;
   
   if (cid == 0) {
     // Init the cache
