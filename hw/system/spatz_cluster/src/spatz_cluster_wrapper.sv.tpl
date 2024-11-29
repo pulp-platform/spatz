@@ -562,6 +562,7 @@ module ${cfg['name']}_wrapper
     .clk_i,
     .rst_ni,
     .impl_i( '0 ),
+    .error_o(),
 % if cfg['enable_debug']:
     .debug_req_i,
 % else:

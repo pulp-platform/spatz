@@ -142,7 +142,9 @@ module spatz_cluster
     output axi_out_req_t                     axi_out_l2_req_o,
     input  axi_out_resp_t                    axi_out_l2_resp_i,
     /// SRAM Configuration: L1D Data + L1D Tag + L1D FIFO + L1I Data + L1I Tag
-    input  impl_in_t      [NrSramCfg-1:0]    impl_i
+    input  impl_in_t      [NrSramCfg-1:0]    impl_i,
+    /// Indicate the program execution is error
+    output logic                             error_o
   );
   // ---------
   // Imports
@@ -507,6 +509,9 @@ module spatz_cluster
   tcdm_addr_t             spm_size;
   logic                   l1d_busy;
 
+  // High if a port access an illegal SPM region (mapped to cache)
+  logic [NrTCDMPortsCores-1:0] spm_error;
+
 
   // 9. SRAM Configuration
   impl_in_t [L1NumWrapper-1:0][L1BankPerWP-1:0] impl_l1d_data;
@@ -517,6 +522,7 @@ module spatz_cluster
   impl_in_t [ICacheSets-1:0] impl_l1i_tag;
 
   assign {impl_l1d_data, impl_l1d_tag, impl_l1d_fifo, impl_l1i_data, impl_l1i_tag} = impl_i;
+  assign error_o = |spm_error;
 
 
   // -------------
@@ -839,7 +845,7 @@ module spatz_cluster
     // Input
     .mem_req_i            (tcdm_req        ),
     .mem_rsp_o            (tcdm_rsp        ),
-    .error_o              (/* todo: connect to CSR */),
+    .error_o              (spm_error       ),
     // Address
     .tcdm_start_address_i (tcdm_start_address[L1AddrWidth-1:0] ),
     .tcdm_end_address_i   (tcdm_end_address[L1AddrWidth-1:0]   ),
