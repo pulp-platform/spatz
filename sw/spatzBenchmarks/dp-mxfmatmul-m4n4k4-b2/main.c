@@ -121,8 +121,12 @@ int main() {
   // It can be M*K, K*N, or M*N
   unsigned int vl = KERNEL_M * KERNEL_K;
 
-  uint32_t spm_size = 32;
-  
+#ifndef USE_CACHE
+  uint32_t spm_size = 120; // 120 KB out of 128 KB
+#else
+  uint32_t spm_size = 32; // Reserve small portion for SPM
+#endif
+
   if (cid == 0) {
     // Init the cache
     l1d_init(spm_size);

@@ -121,7 +121,11 @@ int main() {
   // It can be M*K, K*N, or M*N
   unsigned int vl = KERNEL_M * KERNEL_K;
 
-  uint32_t spm_size = 32;
+#ifndef USE_CACHE
+  uint32_t spm_size = 120; // 120 KB out of 128 KB
+#else
+  uint32_t spm_size = 32; // Reserve small portion for SPM
+#endif
   
   if (cid == 0) {
     // Init the cache
@@ -191,7 +195,7 @@ int main() {
                      inner_loops, m_start, m_end, p_end, vl, nrelem_a, nrelem_b,
                      nrelem_c);
 #else
-    matmul_tiled_Bx4(c, a, b, KERNEL_M, KERNEL_N, KERNEL_K, gemm_l.N, gemm_l.K,
+    matmul_tiled_Bx4(c, a, b, KERNEL_M, KERNEL_N, KERNEL_K, gemm_l.M, gemm_l.N, gemm_l.K,
                      inner_loops, m_start, m_end, p_end, vl, nrelem_a, nrelem_b,
                      nrelem_c);
 #endif
