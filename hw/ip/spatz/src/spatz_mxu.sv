@@ -126,7 +126,7 @@ module spatz_mxu
   // Row input FPU operation counter
   `FF(col_counter, enable_mx_i ? ipu_en ? col_counter + 1 : col_counter : 0, '0)
   // Row output FPU latch/vrf accumulator counter
-  `FF(acc_counter, enable_mx_i ? result_valid_i && result_ready_o ? acc_counter + 1 : acc_counter : 0, '0)
+  `FF(acc_counter, result_valid_i && result_ready_o ? acc_counter + 1 : acc_counter, '0)
   // Save operands_i as current operands every time we get new operands
   `FFL(current_operands_q[1:0], current_operands_d[1:0], enable_mx_i && &operands_ready_i[1:0], '0)
   // Save operands_i as previous operands every time we get new operands and we are starting a new col
