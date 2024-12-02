@@ -249,7 +249,12 @@ module spatz_mxu
     // and we got a valid result
     
     // Start writes to VRF once we have send the last operands to the VFU
-    mx_to_write_vrf_d = mx_to_write_vrf_q ? 1'b1 : (vl_i >= last_word_i) & word_commited_o;
+    
+    if (~mx_to_write_vrf_q) begin
+      mx_to_write_vrf_d = (vl_i >= last_word_i) & word_commited_o;
+    end
+    // mx_to_write_vrf_d = mx_to_write_vrf_q ? 1'b1 : (vl_i >= last_word_i) & word_commited_o;
+
     if (mx_to_write_vrf_d) begin
       // Start writing to VRF once we have the part_acc pointing to 0
       automatic logic write_en = (write_cnt_q == 0) ? (part_acc == 0) : 1'b1;
@@ -265,7 +270,12 @@ module spatz_mxu
 
     // If the result from FPU is not to be written to the VRF, then store it in the accumulators
     for (int accreg=0; accreg < NrACCBanks; accreg++) begin
-      accu_result_valid_d[accreg] = accu_result_valid_q[accreg] ? 1'b1 : ~mx_write_enable_d & waddr_onehot[accreg];
+      if (accu_result_valid_q[accreg]) begin
+        accu_result_valid_d[accreg] = 1'b1;
+      end else begin
+        accu_result_valid_d[accreg] =  ~mx_write_enable_d & waddr_onehot[accreg];
+      end
+      // accu_result_valid_d[accreg] = accu_result_valid_q[accreg] ? 1'b1 : ~mx_write_enable_d & waddr_onehot[accreg];
     end
 
     if (enable_mx_i) begin
