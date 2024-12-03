@@ -335,10 +335,14 @@ module spatz_vlsu
 
     // We store row-wise
     // Go to a new row when we finished the previous one
-    // Load instructions: we load column-wise (sequence of non-unit-strided loads)
-    // Store instructions: we store row-wise (sequence of unit-strided stores)
-    assign mx_cnt_en_row[port] = mem_spatz_req.op_arith.is_mx & mem_counter_en[port] & (mx_cnt_col_q[port] == mx_cnt_max_col);
-    assign mx_cnt_en_col[port] = mem_spatz_req.op_arith.is_mx & mem_counter_en[port] & (mx_cnt_row_q[port] == mx_cnt_max_row);
+    // Load instructions: we load column-wise
+    // Store instructions: we store row-wise
+    // Both loads and stores are unit strides to exploit the coalescer of the L1 cache
+    // A is assumed to be Transposed in memory while B is in its original form
+    // For loads, column counter is enabled by default
+    // For stores, row counter is enabled by default
+    assign mx_cnt_en_row[port] = mem_spatz_req.op_arith.is_mx & mem_counter_en[port] & ((mem_spatz_req.op==VSE) | (mx_cnt_col_q[port] == mx_cnt_max_col));
+    assign mx_cnt_en_col[port] = mem_spatz_req.op_arith.is_mx & mem_counter_en[port] & ((mem_spatz_req.op==VLE) | (mx_cnt_row_q[port] == mx_cnt_max_row));
     // Count up to (tile_size - 1), and tile_size is power of 2
     assign mx_cnt_clr_row[port] = mx_cnt_en_row[port] & (mx_cnt_row_q[port] == mx_cnt_max_row);
     assign mx_cnt_clr_col[port] = mx_cnt_en_col[port] & (mx_cnt_col_q[port] == mx_cnt_max_col);
