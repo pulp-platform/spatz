@@ -102,7 +102,7 @@ module spatz_cluster
     // additional cycle latency, which is taken into account here.
     parameter int                     unsigned               MemoryMacroLatency                 = 1 + RegisterTCDMCuts,
     /// # SRAM Configuration rules needed: L1D Tag + L1D Data + L1D FIFO + L1I Tag + L1I Data
-    parameter int                     unsigned               NrSramCfg                          = 64 + 8 + 1 + ICacheSets + ICacheSets
+    parameter int                     unsigned               NrSramCfg                          = 64 + 8 + 2 + ICacheSets + ICacheSets
   ) (
     /// System clock.
     input  logic                             clk_i,
