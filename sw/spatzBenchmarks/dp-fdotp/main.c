@@ -23,6 +23,8 @@
 #include DATAHEADER
 #include "kernel/fdotp.c"
 
+#define USE_CACHE
+
 double *a;
 double *b;
 double *result;
@@ -41,9 +43,14 @@ static inline int fp_check(const double a, const double b) {
 int main() {
   const unsigned int num_cores = snrt_cluster_core_num();
   const unsigned int cid = snrt_cluster_core_idx();
+  const int measure_iter = 1;
 
-  uint32_t spm_size = 32;
-  
+  #ifdef USE_CACHE
+  uint32_t spm_size = 16;
+  #else
+  uint32_t spm_size = 120;
+  #endif
+
   if (cid == 0) {
     // Init the cache
     l1d_init(spm_size);
@@ -54,10 +61,20 @@ int main() {
 
   // Reset timer
   unsigned int timer = (unsigned int)-1;
+  unsigned int timer_tmp = 0;
 
   const unsigned int dim = dotp_l.M / num_cores;
 
   // Allocate the matrices
+  #ifdef USE_CACHE
+  if (cid == 0) {
+    result = (double *)snrt_l1alloc(num_cores * sizeof(double));
+  }
+
+  double *a_int = dotp_A_dram + dim * cid;
+  double *b_int = dotp_B_dram + dim * cid;
+
+  #else
   if (cid == 0) {
     a = (double *)snrt_l1alloc(dotp_l.M * sizeof(double));
     b = (double *)snrt_l1alloc(dotp_l.M * sizeof(double));
@@ -78,42 +95,51 @@ int main() {
   double *a_int = a + dim * cid;
   double *b_int = b + dim * cid;
 
-  // Wait for all cores to finish
-  snrt_cluster_hw_barrier();
+  #endif
 
-  // Start dump
-  if (cid == 0)
-    start_kernel();
-
-  // Start timer
-  if (cid == 0)
-    timer = benchmark_get_cycle();
-
-  // Calculate dotp
-  double acc;
-  acc = fdotp_v64b(a_int, b_int, dim);
-  result[cid] = acc;
 
   // Wait for all cores to finish
   snrt_cluster_hw_barrier();
 
-  // Final reduction
-  if (cid == 0) {
-    for (unsigned int i = 1; i < num_cores; ++i)
-      acc += result[i];
-    result[0] = acc;
+  for (int iter = 0; iter < measure_iter; iter ++) {
+    // Start dump
+    if (cid == 0)
+      start_kernel();
+
+    // Start timer
+    if (cid == 0)
+      timer_tmp = benchmark_get_cycle();
+
+    // Calculate dotp
+    double acc;
+    acc = fdotp_v64b(a_int, b_int, dim);
+    result[cid] = acc;
+
+    // Wait for all cores to finish
+    snrt_cluster_hw_barrier();
+
+    // Final reduction
+    if (cid == 0) {
+      for (unsigned int i = 1; i < num_cores; ++i)
+        acc += result[i];
+      result[0] = acc;
+    }
+
+    // Wait for all cores to finish
+    snrt_cluster_hw_barrier();
+
+    // End dump
+    if (cid == 0)
+      stop_kernel();
+
+    // End timer and check if new best runtime
+    if (cid == 0) {
+      timer_tmp = benchmark_get_cycle() - timer_tmp;
+      timer = (timer < timer_tmp) ? timer : timer_tmp;
+    }
+
+    snrt_cluster_hw_barrier();
   }
-
-  // Wait for all cores to finish
-  snrt_cluster_hw_barrier();
-
-  // End dump
-  if (cid == 0)
-    stop_kernel();
-
-  // End timer and check if new best runtime
-  if (cid == 0)
-    timer = benchmark_get_cycle() - timer;
 
   // Check and display results
   if (cid == 0) {
@@ -127,8 +153,8 @@ int main() {
   }
 
   if (cid == 0)
-    if (fp_check(result[0], dotp_result)) {
-      printf("Error: Result = %f, Golden = %f\n", result[0], dotp_result);
+    if (fp_check(result[0], dotp_result*measure_iter)) {
+      printf("Error: Result = %f, Golden = %f\n", result[0], dotp_result*measure_iter);
       return -1;
     }
 

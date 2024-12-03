@@ -47,7 +47,7 @@ int main() {
 
   if (cid == 0) {
     // Init the cache
-    l1d_init(32);
+    l1d_init(120);
   }
 
   // log2(nfft).
@@ -65,6 +65,9 @@ int main() {
         (uint16_t *)snrt_l1alloc(log2_nfft * (NFFT / 4) * sizeof(uint16_t));
     bitrev = (uint16_t *)snrt_l1alloc((NFFT / 4) * sizeof(uint16_t));
   }
+
+  timer = benchmark_get_cycle();
+
 
   // Initialize the matrices
   if (cid == 0) {
@@ -90,7 +93,7 @@ int main() {
   snrt_cluster_hw_barrier();
 
   // Start timer
-  timer = benchmark_get_cycle();
+  // timer = benchmark_get_cycle();
 
   // Start dump
   if (cid == 0)

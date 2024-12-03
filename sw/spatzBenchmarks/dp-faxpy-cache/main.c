@@ -44,7 +44,7 @@ int main() {
 
   if (cid == 0) {
     // Init the cache
-    l1d_init(32);
+    l1d_init(16);
   }
 
   // Wait for all cores to finish

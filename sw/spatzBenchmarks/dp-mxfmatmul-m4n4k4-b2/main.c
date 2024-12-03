@@ -124,7 +124,7 @@ int main() {
 #ifndef USE_CACHE
   uint32_t spm_size = 120; // 120 KB out of 128 KB
 #else
-  uint32_t spm_size = 32; // Reserve small portion for SPM
+  uint32_t spm_size = 16; // Reserve small portion for stack only
 #endif
 
   if (cid == 0) {
@@ -142,7 +142,7 @@ int main() {
     b = (double *)snrt_l1alloc(gemm_l.K * gemm_l.N * sizeof(double));
     c = (double *)snrt_l1alloc(gemm_l.M * gemm_l.N * sizeof(double));
   }
-#else 
+#else
   a = gemm_A_dram;
   b = gemm_B_dram;
   c = gemm_C_dram;
@@ -176,7 +176,7 @@ int main() {
     snrt_dma_start_1d(c, gemm_C_dram, gemm_l.M * gemm_l.N * sizeof(double));
     snrt_dma_wait_all();
   }
-#endif 
+#endif
 
   // Wait for all cores to finish
   snrt_cluster_hw_barrier();
@@ -251,7 +251,7 @@ int main() {
       for (unsigned int j = 0; j < gemm_l.N; j++) {
         checksum += c[i * gemm_l.N + j];
       }
-      printf("Checksum[%d]=%f\n", i, checksum);
+      // printf("Checksum[%d]=%f\n", i, checksum);
       double diff = checksum - (double)gemm_checksum[i];
       if (diff < 0)
         diff = -diff;
