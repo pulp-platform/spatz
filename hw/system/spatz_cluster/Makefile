@@ -181,7 +181,9 @@ sw: clean.sw
 ## Build SW into sw/build with the LLVM toolchain (including tests) for Questasim simulator
 sw.vsim: clean.sw bin/spatz_cluster.vsim
 	mkdir -p sw/build
-	cd sw/build && ${CMAKE} -DLLVM_PATH=${LLVM_INSTALL_DIR} -DGCC_PATH=${GCC_INSTALL_DIR} -DPYTHON=${PYTHON} -DSNITCH_SIMULATOR=../../../../../hw/system/spatz_cluster/bin/spatz_cluster.vsim -DBUILD_TESTS=ON .. && make -j8
+	cd sw/build && ${CMAKE} \
+	-DPRINT_CHECK=OFF -DENABLE_FLAMINGO_TESTS=OFF -DFLA_ROOT=${FLA_ROOT} \
+	-DLLVM_PATH=${LLVM_INSTALL_DIR} -DGCC_PATH=${GCC_INSTALL_DIR} -DPYTHON=${PYTHON} -DSNITCH_SIMULATOR=../../../../../hw/system/spatz_cluster/bin/spatz_cluster.vsim -DBUILD_TESTS=ON .. && make -j8
 
 ## Build SW and run all tests with Questasim simulator
 sw.test.vsim: sw.vsim

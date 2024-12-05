@@ -100,24 +100,31 @@ int main() {
   if (cid == 0) {
     long unsigned int performance = 1000 * 2 * dim / timer;
     long unsigned int utilization = performance / (2 * num_cores * 4);
-
+#ifdef PRINT_RESULT
     printf("\n----- (%d) axpy -----\n", dim);
     printf("The execution took %u cycles.\n", timer);
     printf("The performance is %ld OP/1000cycle (%ld%%o utilization).\n",
            performance, utilization);
+#endif
   }
 
   if (cid == 0) {
     for (unsigned int i = 0; i < dim; i++) {
       if (fp_check(axpy_Y_dram[i], axpy_GR_dram[i])) {
+#ifdef CHECK
         printf("Error: Index %d -> Result = %f, Expected = %f\n", i,
                (float)axpy_Y_dram[i], (float)axpy_GR_dram[i]);
+#endif
       }
     }
   }
 
   // Wait for core 0 to finish displaying results
   snrt_cluster_hw_barrier();
+
+  if (cid == 0) {
+    set_eoc();
+  }
 
   return 0;
 }
