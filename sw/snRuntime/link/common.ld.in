@@ -7,7 +7,7 @@ ENTRY(_start)
 
 MEMORY
 {
-    DRAM (rwxa)  : ORIGIN = @MEM_DRAM_ORIGIN@, LENGTH = @MEM_DRAM_SIZE@
+    DRAM (rwxa)  : ORIGIN = @L2_ORIGIN@, LENGTH = @L2_SIZE@
 }
 
 SECTIONS
