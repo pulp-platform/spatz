@@ -39,6 +39,7 @@ module spatz_cluster
     parameter logic                            [31:0]        BootAddr                           = 32'h0,
     /// Address to indicate start of L2
     parameter logic                   [AxiAddrWidth-1:0]     L2Addr                             = 48'h0,
+    parameter logic                   [AxiAddrWidth-1:0]     L2Size                             = 48'h0,
     /// The total amount of cores.
     parameter int                     unsigned               NrCores                            = 8,
     /// Data/TCDM memory depth per cut (in words).
@@ -402,11 +403,8 @@ module spatz_cluster
   localparam int unsigned ClusterReserve = 4096; // 4 MiB
   localparam int unsigned ClusterL2Size  = 8192; // 8 MiB
   addr_t cluster_l2_start_address, cluster_l2_end_address;
-  // assign cluster_l2_start_address = cluster_periph_end_address + ClusterReserve * 1024;
-  // assign cluster_l2_end_address   = cluster_l2_start_address   + ClusterL2Size * 1024;
-  // TODO: change to calc base on cluster_base_addr_i
-  assign cluster_l2_start_address = L2Addr; //48'h5180_0000;
-  assign cluster_l2_end_address   = 48'h7880_0000; //48'h5200_0000;
+  assign cluster_l2_start_address = L2Addr;
+  assign cluster_l2_end_address   = L2Addr + L2Size;
 
   // ----------------
   // Wire Definitions
