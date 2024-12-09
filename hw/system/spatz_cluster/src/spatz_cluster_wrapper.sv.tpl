@@ -529,6 +529,7 @@ module ${cfg['name']}_wrapper
     .AxiIdWidthOut (spatz_cluster_pkg::IwcAxiIdOutWidth),
     .AxiUserWidth (AxiUserWidth),
     .BootAddr (${to_sv_hex(cfg['boot_addr'], 32)}),
+    .L2Addr   (48'h78000000),
     .ClusterPeriphSize (${cfg['cluster_periph_size']}),
     .NrCores (${cfg['nr_cores']}),
     .TCDMDepth (${cfg['tcdm']['depth']}),
@@ -590,8 +591,8 @@ module ${cfg['name']}_wrapper
     // AXI Master Port
     .axi_out_req_o  ( axi_from_cluster_iwc_req ),
     .axi_out_resp_i ( axi_from_cluster_iwc_resp ),
-    .axi_out_l2_req_o  ( /* unused now */ ),
-    .axi_out_l2_resp_i ( '0 )
+    .axi_out_l2_req_o  ( axi_from_cluster_l2_req ),
+    .axi_out_l2_resp_i ( axi_from_cluster_l2_resp )
   );
 
   // Assertions

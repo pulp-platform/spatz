@@ -5,15 +5,17 @@
 OUTPUT_ARCH( "riscv" )
 ENTRY(_start)
 <% dram_address = cfg['dram']['address']; %>
+<% l2_address = cfg['l2']['address']; %>
 MEMORY
 {
     DRAM (rwxai)  : ORIGIN = ${dram_address}, LENGTH = ${cfg['dram']['length']}
+    L2 (rwxai)  : ORIGIN = ${cfg['l2']['address']}, LENGTH = ${cfg['l2']['length']}
     L1 (rw) : ORIGIN = ${l1_region[0]}, LENGTH = ${l1_region[1]}K
 }
 
 SECTIONS
 {
-  . = ${dram_address};
+  . = ${l2_address};
   .text.init : { *(.text.init) }
   . = ALIGN(0x1000);
   .tohost : { *(.tohost) }

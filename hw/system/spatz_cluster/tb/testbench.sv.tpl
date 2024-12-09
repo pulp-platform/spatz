@@ -28,8 +28,13 @@ module testharness (
   localparam NumAXISlaves = 2;
   localparam NumRules     = NumAXISlaves-1;
 
+  // Spatz wide port to SoC (currently dram)
   spatz_axi_out_req_t  axi_from_cluster_req;
   spatz_axi_out_resp_t axi_from_cluster_resp;
+  // Spatz wide port to L2
+  spatz_axi_out_req_t  axi_l2_req;
+  spatz_axi_out_resp_t axi_l2_resp;
+  // From SoC to Spatz
   spatz_axi_in_req_t   axi_to_cluster_req;
   spatz_axi_in_resp_t  axi_to_cluster_resp;
 
@@ -205,8 +210,8 @@ module testharness (
 % else:
     .axi_out_req_o   (axi_from_cluster_req ),
     .axi_out_resp_i  (axi_from_cluster_resp),
-    .axi_out_l2_req_o  ( ),
-    .axi_out_l2_resp_i  ('0),
+    .axi_out_l2_req_o   ( axi_l2_req ),
+    .axi_out_l2_resp_i  ( axi_l2_resp ),
     .axi_in_req_i    (axi_to_cluster_req   ),
     .axi_in_resp_o   (axi_to_cluster_resp  ),
 % endif
@@ -340,6 +345,21 @@ module testharness (
     .rst_ni(rst_ni               ),
     .req_i (axi_from_cluster_req ),
     .rsp_o (axi_from_cluster_resp)
+  );
+
+  // Wide port into simulation memory.
+  tb_memory_axi #(
+    .AxiAddrWidth ( SpatzAxiAddrWidth    ),
+    .AxiDataWidth ( SpatzAxiDataWidth    ),
+    .AxiIdWidth   ( SpatzAxiIdOutWidth   ),
+    .AxiUserWidth ( SpatzAxiUserWidth    ),
+    .req_t        ( spatz_axi_out_req_t  ),
+    .rsp_t        ( spatz_axi_out_resp_t )
+  ) i_l2mem (
+    .clk_i (clk_i                ),
+    .rst_ni(rst_ni               ),
+    .req_i (axi_l2_req           ),
+    .rsp_o (axi_l2_resp          )
   );
 
 endmodule : testharness
