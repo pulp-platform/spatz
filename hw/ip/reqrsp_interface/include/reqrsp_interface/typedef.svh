@@ -23,7 +23,7 @@
   typedef struct packed { \
     __data_t    data;     \
     logic       error;    \
-    logic [2:0] id;       \
+    logic [3:0] id;       \
     logic       write;    \
   } __rsp_chan_t;
 
