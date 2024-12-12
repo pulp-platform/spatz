@@ -289,7 +289,7 @@ class SnitchCluster(Generator):
 
     def parse_pma_cfg(self, pma_cfg):
         self.cfg["pmas"] = dict()
-        # print(pma_cfg.regions)
+        print(pma_cfg.regions)
         self.cfg["pmas"]["cached"] = list()
         for pma in pma_cfg.regions:
             if pma[0] == PMA.CACHED:
@@ -390,6 +390,12 @@ class SnitchClusterTB(Generator):
             PMA.CACHED,
             self.cfg["dram"]["address"],
             self.cfg["dram"]["length"],
+            self.cfg["cluster"]["addr_width"],
+        )
+        pma_cfg.add_region_length(
+            PMA.CACHED,
+            self.cfg["l2"]["address"],
+            self.cfg["l2"]["length"],
             self.cfg["cluster"]["addr_width"],
         )
         self.cfg["cluster"]["tie_ports"] = True
