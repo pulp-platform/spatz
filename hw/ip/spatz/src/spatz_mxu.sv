@@ -120,9 +120,9 @@ module spatz_mxu
   // Clear the internal state upon a new instruction
   `FFLARNC(mx_write_enable_q, mx_write_enable_d, enable_mx_i, clear_mxu_state_del, '0, clk_i, rst_ni)
   // Row input FPU operation counter
-  `FF(col_counter_q, enable_mx_i ? ipu_en ? col_counter_d + 1 : col_counter_d : 0, '0)
+  `FF(col_counter_q, col_counter_d, '0)
   // Row output FPU latch/vrf accumulator counter
-  `FF(acc_counter_q, result_valid_i && result_ready_o ? acc_counter_d + 1 : acc_counter_d, '0)
+  `FF(acc_counter_q, acc_counter_d, '0)
   // Save operands_i as current operands every time we get new operands
   `FFL(current_operands_q, current_operands_d, enable_mx_i && &operands_ready_i[1:0], '0)
   // Save operands_i as previous operands every time we get new operands and we are starting a new col
@@ -179,6 +179,16 @@ module spatz_mxu
         // Accumulator counter from 0 to M
         part_acc = num_cols == 4 ? num_rows == 4 ? acc_counter_q[1:0] : acc_counter_q[2:0] : acc_counter_q;
     end
+
+    // Update acc and col counters
+    if (result_valid_i & result_ready_o) begin
+      acc_counter_d = acc_counter_q + 1'b1;
+    end
+
+    if (enable_mx_i & ipu_en) begin
+      col_counter_d = col_counter_q + 1'b1;
+    end
+
   end
 
   always_comb begin : operand_proc
