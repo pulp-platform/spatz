@@ -46,8 +46,7 @@ module spatz_mxu
   logic         next_block;
 
   logic [2:0] mx_read_enable;
-  logic       mx_write_enable_d;
-  logic [2:0] mx_write_enable_q;
+  logic mx_write_enable_d, mx_write_enable_q;
 
   vrf_data_t operand1;
   vrf_data_t operand2;
@@ -62,8 +61,8 @@ module spatz_mxu
 
   logic             load_vd;
   logic             ipu_en;
-  logic       [3:0] col_counter, part_col;
-  logic       [3:0] acc_counter, part_acc;
+  logic       [3:0] col_counter_d, col_counter_q, part_col;
+  logic       [3:0] acc_counter_d, acc_counter_q, part_acc;
   vrf_data_t  [1:0] current_operands_q;
   vrf_data_t  [1:0] current_operands_d;
   vrf_data_t  [1:0] previous_operands_q;
@@ -118,19 +117,16 @@ module spatz_mxu
 
   // Manage FSM
   `FF(block_q, block_d, first)
-  // mx_write_en_d, _q, _qq (last write to VRF)
   // Clear the internal state upon a new instruction
-  `FFLARNC(mx_write_enable_q[0], mx_write_enable_d   , enable_mx_i, clear_mxu_state_del, '0, clk_i, rst_ni)
-  `FFLARNC(mx_write_enable_q[1], mx_write_enable_q[0], enable_mx_i, clear_mxu_state_del, '0, clk_i, rst_ni)
-  `FFLARNC(mx_write_enable_q[2], mx_write_enable_q[1], enable_mx_i, clear_mxu_state_del, '0, clk_i, rst_ni)
+  `FFLARNC(mx_write_enable_q, mx_write_enable_d, enable_mx_i, clear_mxu_state_del, '0, clk_i, rst_ni)
   // Row input FPU operation counter
-  `FF(col_counter, enable_mx_i ? ipu_en ? col_counter + 1 : col_counter : 0, '0)
+  `FF(col_counter_q, enable_mx_i ? ipu_en ? col_counter_d + 1 : col_counter_d : 0, '0)
   // Row output FPU latch/vrf accumulator counter
-  `FF(acc_counter, result_valid_i && result_ready_o ? acc_counter + 1 : acc_counter, '0)
+  `FF(acc_counter_q, result_valid_i && result_ready_o ? acc_counter_d + 1 : acc_counter_d, '0)
   // Save operands_i as current operands every time we get new operands
-  `FFL(current_operands_q[1:0], current_operands_d[1:0], enable_mx_i && &operands_ready_i[1:0], '0)
+  `FFL(current_operands_q, current_operands_d, enable_mx_i && &operands_ready_i[1:0], '0)
   // Save operands_i as previous operands every time we get new operands and we are starting a new col
-  `FFL(previous_operands_q, previous_operands_d[1:0], enable_mx_i && &operands_ready_i[1:0] && part_col == 0, '0)
+  `FFL(previous_operands_q, previous_operands_d, enable_mx_i && &operands_ready_i[1:0] && part_col == 0, '0)
 
   always_ff @(posedge clk_i) begin: proc_wdata_q
       // Save the FPU result in a FF before going into the latch
@@ -169,6 +165,8 @@ module spatz_mxu
     num_rows = 0;
     part_col = 0;
     part_acc = 0;
+    acc_counter_d = acc_counter_q;
+    col_counter_d = col_counter_q;
 
     if(enable_mx_i) begin
         num_cols = tile_dimN;
@@ -177,9 +175,9 @@ module spatz_mxu
         // Load as many vd as (M / OperandsPerVRFFetch)
         load_vd  = num_rows == 4 ? vl_i <= 0 : vl_i <= 4;
         // mtx_A row counter from 0 to M
-        part_col = num_cols == 4 ? num_rows == 4 ? col_counter[1:0] : col_counter[2:0] : col_counter;
+        part_col = num_cols == 4 ? num_rows == 4 ? col_counter_q[1:0] : col_counter_q[2:0] : col_counter_q;
         // Accumulator counter from 0 to M
-        part_acc = num_cols == 4 ? num_rows == 4 ? acc_counter[1:0] : acc_counter[2:0] : acc_counter;
+        part_acc = num_cols == 4 ? num_rows == 4 ? acc_counter_q[1:0] : acc_counter_q[2:0] : acc_counter_q;
     end
   end
 
@@ -194,9 +192,9 @@ module spatz_mxu
     next_block              = '0;
 
     if(enable_mx_i) begin
-      // operadns_ready_i is asserted only for one cycle
-      current_operands_d[1:0] = &operands_ready_i[1:0] ? operands_i[1:0] : current_operands_q[1:0];
-      previous_operands_d     = &operands_ready_i[1:0] && part_col == 0 ? operands_i[1:0] : previous_operands_q[1:0];
+      // operands_ready_i is asserted only for one cycle
+      current_operands_d = &operands_ready_i[1:0] ? operands_i[1:0] : current_operands_q;
+      previous_operands_d = &operands_ready_i[1:0] && part_col == 0 ? operands_i[1:0] : previous_operands_q;
       // Sending the current A quadword for the last time to the FPU
       // Proceed to the next A quadword
       next_block              = &part_col[1:0] && ipu_en;
@@ -247,14 +245,11 @@ module spatz_mxu
 
     // Write back into the VRF if we have processed all the words
     // and we got a valid result
-    
-    // Start writes to VRF once we have send the last operands to the VFU
-    
     if (~mx_to_write_vrf_q) begin
       mx_to_write_vrf_d = (vl_i >= last_word_i) & word_commited_o;
     end
-    // mx_to_write_vrf_d = mx_to_write_vrf_q ? 1'b1 : (vl_i >= last_word_i) & word_commited_o;
 
+    // Start writes to VRF once we have send the last operands to the VFU
     if (mx_to_write_vrf_d) begin
       // Start writing to VRF once we have the part_acc pointing to 0
       automatic logic write_en = (write_cnt_q == 0) ? (part_acc == 0) : 1'b1;
@@ -275,7 +270,6 @@ module spatz_mxu
       end else begin
         accu_result_valid_d[accreg] =  ~mx_write_enable_d & waddr_onehot[accreg];
       end
-      // accu_result_valid_d[accreg] = accu_result_valid_q[accreg] ? 1'b1 : ~mx_write_enable_d & waddr_onehot[accreg];
     end
 
     if (enable_mx_i) begin
@@ -288,9 +282,6 @@ module spatz_mxu
     end 
   end
 
-  //Enable when reaching first element of row and operands ready.
-  //If in the first word also wait for vd ready.
-
   ////////////////
   // MXU -> VRF //
   ////////////////
@@ -299,14 +290,6 @@ module spatz_mxu
   assign read_enable_o   = enable_mx_i ? mx_read_enable : '0;
   // We have consumed one A quadword
   assign word_commited_o = enable_mx_i ? ipu_en && (part_col == 3 || (num_cols == 4 && part_col == 7) || part_col == 15) : '0;
-
-  ////////////////
-  // VRF -> MXU //
-  ////////////////
-
-  // Get an operand from the VRF
-  // operands_ready_i : vrf_rdata_valid_o
-  // operands_i       : vrf_rdata_o
 
   ////////////////
   // MXU -> FPU //
@@ -341,6 +324,6 @@ module spatz_mxu
   ////////////////////
 
   // offset_o offsets the vrf_addr_i
-  assign offset_o        = enable_mx_i ? mx_write_enable_q[0] ? part_col : part_col : '0;
+  assign offset_o        = enable_mx_i ? part_col : '0;
 
 endmodule
