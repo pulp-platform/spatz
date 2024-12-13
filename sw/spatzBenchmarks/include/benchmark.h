@@ -12,3 +12,4 @@ size_t benchmark_get_cycle();
 void start_kernel();
 void stop_kernel();
 size_t get_perf();
+void write_cyc(uint32_t cyc);

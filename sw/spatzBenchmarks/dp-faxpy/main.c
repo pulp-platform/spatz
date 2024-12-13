@@ -61,6 +61,7 @@ int main() {
 
   // Reset timer
   unsigned int timer = (unsigned int)-1;
+  uint32_t timer_start, timer_end;
 
   const unsigned int dim = axpy_l.M;
   const unsigned int dim_core = dim / num_cores;
@@ -99,11 +100,15 @@ int main() {
   if (cid == 0)
     start_kernel();
 
+  timer_start = benchmark_get_cycle();
+
   // Call AXPY
   faxpy_v64b(*a, x_int, y_int, dim_core);
 
   // Wait for all cores to finish
   snrt_cluster_hw_barrier();
+
+  timer_end = benchmark_get_cycle();
 
   // End dump
   if (cid == 0)
@@ -111,7 +116,8 @@ int main() {
 
   // Check and display results
   if (cid == 0) {
-    timer = get_perf();
+    timer = timer_end - timer_start;
+    write_cyc(timer);
     long unsigned int performance = 1000 * 2 * dim / timer;
     long unsigned int utilization = performance / (2 * num_cores * 4);
   #ifdef PRINT_CHECK

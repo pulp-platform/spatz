@@ -145,6 +145,10 @@ package spatz_cluster_peripheral_reg_pkg;
 
   typedef struct packed {
     logic [31:0] q;
+  } spatz_cluster_peripheral_reg2hw_spatz_cycle_reg_t;
+
+  typedef struct packed {
+    logic [31:0] q;
   } spatz_cluster_peripheral_reg2hw_cluster_boot_control_reg_t;
 
   typedef struct packed {
@@ -176,6 +180,11 @@ package spatz_cluster_peripheral_reg_pkg;
   } spatz_cluster_peripheral_hw2reg_hw_barrier_reg_t;
 
   typedef struct packed {
+    logic [31:0] d;
+    logic        de;
+  } spatz_cluster_peripheral_hw2reg_spatz_cycle_reg_t;
+
+  typedef struct packed {
     logic        d;
     logic        de;
   } spatz_cluster_peripheral_hw2reg_l1d_spm_commit_reg_t;
@@ -191,14 +200,15 @@ package spatz_cluster_peripheral_reg_pkg;
 
   // Register -> HW type
   typedef struct packed {
-    spatz_cluster_peripheral_reg2hw_perf_counter_enable_mreg_t [1:0] perf_counter_enable; // [326:265]
-    spatz_cluster_peripheral_reg2hw_hart_select_mreg_t [1:0] hart_select; // [264:245]
-    spatz_cluster_peripheral_reg2hw_perf_counter_mreg_t [1:0] perf_counter; // [244:147]
-    spatz_cluster_peripheral_reg2hw_cl_clint_set_reg_t cl_clint_set; // [146:114]
-    spatz_cluster_peripheral_reg2hw_cl_clint_clear_reg_t cl_clint_clear; // [113:81]
-    spatz_cluster_peripheral_reg2hw_hw_barrier_reg_t hw_barrier; // [80:49]
-    spatz_cluster_peripheral_reg2hw_icache_prefetch_enable_reg_t icache_prefetch_enable; // [48:48]
-    spatz_cluster_peripheral_reg2hw_spatz_status_reg_t spatz_status; // [47:47]
+    spatz_cluster_peripheral_reg2hw_perf_counter_enable_mreg_t [1:0] perf_counter_enable; // [358:297]
+    spatz_cluster_peripheral_reg2hw_hart_select_mreg_t [1:0] hart_select; // [296:277]
+    spatz_cluster_peripheral_reg2hw_perf_counter_mreg_t [1:0] perf_counter; // [276:179]
+    spatz_cluster_peripheral_reg2hw_cl_clint_set_reg_t cl_clint_set; // [178:146]
+    spatz_cluster_peripheral_reg2hw_cl_clint_clear_reg_t cl_clint_clear; // [145:113]
+    spatz_cluster_peripheral_reg2hw_hw_barrier_reg_t hw_barrier; // [112:81]
+    spatz_cluster_peripheral_reg2hw_icache_prefetch_enable_reg_t icache_prefetch_enable; // [80:80]
+    spatz_cluster_peripheral_reg2hw_spatz_status_reg_t spatz_status; // [79:79]
+    spatz_cluster_peripheral_reg2hw_spatz_cycle_reg_t spatz_cycle; // [78:47]
     spatz_cluster_peripheral_reg2hw_cluster_boot_control_reg_t cluster_boot_control; // [46:15]
     spatz_cluster_peripheral_reg2hw_cluster_eoc_exit_reg_t cluster_eoc_exit; // [14:14]
     spatz_cluster_peripheral_reg2hw_cfg_l1d_spm_reg_t cfg_l1d_spm; // [13:4]
@@ -209,8 +219,9 @@ package spatz_cluster_peripheral_reg_pkg;
 
   // HW -> register type
   typedef struct packed {
-    spatz_cluster_peripheral_hw2reg_perf_counter_mreg_t [1:0] perf_counter; // [132:37]
-    spatz_cluster_peripheral_hw2reg_hw_barrier_reg_t hw_barrier; // [36:5]
+    spatz_cluster_peripheral_hw2reg_perf_counter_mreg_t [1:0] perf_counter; // [165:70]
+    spatz_cluster_peripheral_hw2reg_hw_barrier_reg_t hw_barrier; // [69:38]
+    spatz_cluster_peripheral_hw2reg_spatz_cycle_reg_t spatz_cycle; // [37:5]
     spatz_cluster_peripheral_hw2reg_l1d_spm_commit_reg_t l1d_spm_commit; // [4:3]
     spatz_cluster_peripheral_hw2reg_l1d_insn_commit_reg_t l1d_insn_commit; // [2:1]
     spatz_cluster_peripheral_hw2reg_l1d_flush_status_reg_t l1d_flush_status; // [0:0]
@@ -228,13 +239,14 @@ package spatz_cluster_peripheral_reg_pkg;
   parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_HW_BARRIER_OFFSET = 8'h 40;
   parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_ICACHE_PREFETCH_ENABLE_OFFSET = 8'h 48;
   parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_SPATZ_STATUS_OFFSET = 8'h 50;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_CLUSTER_BOOT_CONTROL_OFFSET = 8'h 58;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_CLUSTER_EOC_EXIT_OFFSET = 8'h 60;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_CFG_L1D_SPM_OFFSET = 8'h 68;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_CFG_L1D_INSN_OFFSET = 8'h 70;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_L1D_SPM_COMMIT_OFFSET = 8'h 78;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_L1D_INSN_COMMIT_OFFSET = 8'h 80;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_L1D_FLUSH_STATUS_OFFSET = 8'h 88;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_SPATZ_CYCLE_OFFSET = 8'h 58;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_CLUSTER_BOOT_CONTROL_OFFSET = 8'h 60;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_CLUSTER_EOC_EXIT_OFFSET = 8'h 68;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_CFG_L1D_SPM_OFFSET = 8'h 70;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_CFG_L1D_INSN_OFFSET = 8'h 78;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_L1D_SPM_COMMIT_OFFSET = 8'h 80;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_L1D_INSN_COMMIT_OFFSET = 8'h 88;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_L1D_FLUSH_STATUS_OFFSET = 8'h 90;
 
   // Reset values for hwext registers and their fields
   parameter logic [47:0] SPATZ_CLUSTER_PERIPHERAL_PERF_COUNTER_0_RESVAL = 48'h 0;
@@ -258,6 +270,7 @@ package spatz_cluster_peripheral_reg_pkg;
     SPATZ_CLUSTER_PERIPHERAL_HW_BARRIER,
     SPATZ_CLUSTER_PERIPHERAL_ICACHE_PREFETCH_ENABLE,
     SPATZ_CLUSTER_PERIPHERAL_SPATZ_STATUS,
+    SPATZ_CLUSTER_PERIPHERAL_SPATZ_CYCLE,
     SPATZ_CLUSTER_PERIPHERAL_CLUSTER_BOOT_CONTROL,
     SPATZ_CLUSTER_PERIPHERAL_CLUSTER_EOC_EXIT,
     SPATZ_CLUSTER_PERIPHERAL_CFG_L1D_SPM,
@@ -268,7 +281,7 @@ package spatz_cluster_peripheral_reg_pkg;
   } spatz_cluster_peripheral_id_e;
 
   // Register width information to check illegal writes
-  parameter logic [3:0] SPATZ_CLUSTER_PERIPHERAL_PERMIT [18] = '{
+  parameter logic [3:0] SPATZ_CLUSTER_PERIPHERAL_PERMIT [19] = '{
     4'b 1111, // index[ 0] SPATZ_CLUSTER_PERIPHERAL_PERF_COUNTER_ENABLE_0
     4'b 1111, // index[ 1] SPATZ_CLUSTER_PERIPHERAL_PERF_COUNTER_ENABLE_1
     4'b 0011, // index[ 2] SPATZ_CLUSTER_PERIPHERAL_HART_SELECT_0
@@ -280,13 +293,14 @@ package spatz_cluster_peripheral_reg_pkg;
     4'b 1111, // index[ 8] SPATZ_CLUSTER_PERIPHERAL_HW_BARRIER
     4'b 0001, // index[ 9] SPATZ_CLUSTER_PERIPHERAL_ICACHE_PREFETCH_ENABLE
     4'b 0001, // index[10] SPATZ_CLUSTER_PERIPHERAL_SPATZ_STATUS
-    4'b 1111, // index[11] SPATZ_CLUSTER_PERIPHERAL_CLUSTER_BOOT_CONTROL
-    4'b 0001, // index[12] SPATZ_CLUSTER_PERIPHERAL_CLUSTER_EOC_EXIT
-    4'b 0011, // index[13] SPATZ_CLUSTER_PERIPHERAL_CFG_L1D_SPM
-    4'b 0001, // index[14] SPATZ_CLUSTER_PERIPHERAL_CFG_L1D_INSN
-    4'b 0001, // index[15] SPATZ_CLUSTER_PERIPHERAL_L1D_SPM_COMMIT
-    4'b 0001, // index[16] SPATZ_CLUSTER_PERIPHERAL_L1D_INSN_COMMIT
-    4'b 0001  // index[17] SPATZ_CLUSTER_PERIPHERAL_L1D_FLUSH_STATUS
+    4'b 1111, // index[11] SPATZ_CLUSTER_PERIPHERAL_SPATZ_CYCLE
+    4'b 1111, // index[12] SPATZ_CLUSTER_PERIPHERAL_CLUSTER_BOOT_CONTROL
+    4'b 0001, // index[13] SPATZ_CLUSTER_PERIPHERAL_CLUSTER_EOC_EXIT
+    4'b 0011, // index[14] SPATZ_CLUSTER_PERIPHERAL_CFG_L1D_SPM
+    4'b 0001, // index[15] SPATZ_CLUSTER_PERIPHERAL_CFG_L1D_INSN
+    4'b 0001, // index[16] SPATZ_CLUSTER_PERIPHERAL_L1D_SPM_COMMIT
+    4'b 0001, // index[17] SPATZ_CLUSTER_PERIPHERAL_L1D_INSN_COMMIT
+    4'b 0001  // index[18] SPATZ_CLUSTER_PERIPHERAL_L1D_FLUSH_STATUS
   };
 
 endpackage

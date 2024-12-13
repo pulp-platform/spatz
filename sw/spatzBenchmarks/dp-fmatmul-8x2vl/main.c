@@ -23,7 +23,7 @@
 #include DATAHEADER
 #include "kernel/dp-fmatmul.c"
 
-// #define USE_CACHE
+#define USE_CACHE
 
 #ifndef KERNEL_SIZE
 #define KERNEL_SIZE 8
@@ -149,6 +149,7 @@ int main() {
     if (cid == 0) {
       if (timer_temp < timer) {
         timer = timer_temp;
+        write_cyc(timer);
       }
     }
 
@@ -161,9 +162,9 @@ int main() {
     long unsigned int performance =
         1000 * 2 * gemm_l.M * gemm_l.N * gemm_l.K / timer;
     long unsigned int utilization = performance / (2 * num_cores * 4);
-
+    uint32_t cyc = get_perf();
     printf("\n----- (%dx%d) dp fmatmul -----\n", gemm_l.M, gemm_l.N);
-    printf("The execution took %u cycles.\n", timer);
+    printf("The execution took %u/%u cycles.\n", timer, cyc);
     printf("The performance is %ld OP/1000cycle (%ld%%o utilization).\n",
            performance, utilization);
   }

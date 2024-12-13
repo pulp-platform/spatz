@@ -416,6 +416,18 @@
         }]
     },
     {
+        name: "SPATZ_CYCLE",
+        desc: '''Store cycle counts of kernels'''
+        swaccess: "rw",
+        hwaccess: "hrw",
+        resval: "0",
+        fields: [{
+            bits: "31:0",
+            name: "SPATZ_CYC",
+            desc: "Store cycle counts of kernels."
+        }]
+    },
+    {
         name: "CLUSTER_BOOT_CONTROL",
         desc: '''Controls the cluster boot process.'''
         swaccess: "rw",

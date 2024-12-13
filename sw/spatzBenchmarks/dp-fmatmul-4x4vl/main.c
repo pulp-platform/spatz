@@ -23,7 +23,8 @@
 #include DATAHEADER
 #include "kernel/dp-fmatmul.c"
 
-#define USE_CACHE
+// #define USE_CACHE
+// #define ENABLE_PRINT
 
 #ifndef KERNEL_SIZE
 #define KERNEL_SIZE 4
@@ -162,11 +163,13 @@ int main() {
     long unsigned int performance =
         1000 * 2 * gemm_l.M * gemm_l.N * gemm_l.K / timer;
     long unsigned int utilization = performance / (2 * num_cores * 4);
-
+    write_cyc(timer);
+  #ifdef ENABLE_PRINT
     printf("\n----- (%dx%d) dp fmatmul -----\n", gemm_l.M, gemm_l.N);
     printf("The execution took %u cycles.\n", timer);
     printf("The performance is %ld OP/1000cycle (%ld%%o utilization).\n",
            performance, utilization);
+  #endif
   }
 
   if (cid == 0) {
@@ -174,8 +177,10 @@ int main() {
         verify_matrix(c, (const double *)gemm_checksum, gemm_l.M, gemm_l.N);
 
     if (error != 0) {
+    #ifdef ENABLE_PRINT
       printf("Error core %d: c[%d]=%u\n", cid, error, (int)c[error]);
       return error;
+    #endif
     }
   }
 
