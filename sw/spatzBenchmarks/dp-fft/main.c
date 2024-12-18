@@ -173,6 +173,7 @@ int main() {
 
   // Wait for core 0 to finish displaying results
   snrt_cluster_hw_barrier();
+  set_eoc();
 
   return 0;
 }
