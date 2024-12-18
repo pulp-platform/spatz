@@ -23,7 +23,7 @@
 #include DATAHEADER
 #include "kernel/faxpy.c"
 
-// #define USE_CACHE
+#define USE_CACHE
 #define PRINT_CHECK
 
 double *a;
@@ -66,7 +66,7 @@ int main() {
   const unsigned int dim = axpy_l.M;
   const unsigned int dim_core = dim / num_cores;
 
-  #ifndef USE_CACHE
+#ifndef USE_CACHE
   // Allocate the matrices
   if (cid == 0) {
     a = (double *)snrt_l1alloc(sizeof(double));
@@ -76,7 +76,7 @@ int main() {
 
   // Initialize the matrices
   if (cid == 0) {
-    *a = axpy_alpha_dram;
+    a = (double *) &axpy_alpha_dram;
     snrt_dma_start_1d(x, axpy_X_dram, dim * sizeof(double));
     snrt_dma_start_1d(y, axpy_Y_dram, dim * sizeof(double));
   }
@@ -87,11 +87,11 @@ int main() {
   double *x_int = x + dim_core * cid;
   double *y_int = y + dim_core * cid;
 
-  #else
-  *a = axpy_alpha_dram;
+#else
+  a = (double *) &axpy_alpha_dram;
   double *x_int = axpy_X_dram + dim_core * cid;
   double *y_int = axpy_Y_dram + dim_core * cid;
-  #endif
+#endif
 
   // Wait for all cores to finish
   snrt_cluster_hw_barrier();
