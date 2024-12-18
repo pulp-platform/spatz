@@ -102,10 +102,12 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   logic vrf_buf_ready; 
   logic vrf_buf_valid;
   
+  // Buffer structure to track data information for writes from FPU to VRF
   typedef struct packed {
     vrf_data_t wdata;
     vrf_addr_t waddr;
     vrf_be_t   wbe;
+    spatz_id_t wid;
   } vrf_buf_t;
 
   vrf_buf_t vrf_buf_data;
@@ -237,7 +239,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   // Scoreboard read enable and write enable input signals
   logic      [NrReadPorts-1:0]              sb_re;
   logic      [NrWritePorts-1:0]             sb_we, sb_we_buf;
-  spatz_id_t [NrReadPorts+NrWritePorts-1:0] sb_id;
+  spatz_id_t [NrReadPorts+NrWritePorts-1:0] sb_id, sb_buf_id;
 
   spatz_controller #(
     .NrMemPorts       (NrMemPorts              ),
@@ -278,10 +280,10 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     .vsldu_rsp_valid_i(vsldu_rsp_valid ),
     .vsldu_rsp_i      (vsldu_rsp       ),
     // Scoreboard check
-    .sb_id_i          (sb_id           ),
-    .sb_wrote_result_i(vrf_wvalid      ),
-    .sb_enable_i      ({sb_we_buf, sb_re}  ),
-    .sb_enable_o      ({vrf_we, vrf_re})
+    .sb_id_i          (sb_buf_id         ),
+    .sb_wrote_result_i(vrf_wvalid        ),
+    .sb_enable_i      ({sb_we_buf, sb_re}),
+    .sb_enable_o      ({vrf_we, vrf_re}  )
   );
 
   always_comb begin
@@ -289,11 +291,13 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     vrf_wdata_buf = vrf_wdata;
     vrf_waddr_buf = vrf_waddr;
     vrf_wbe_buf = vrf_wbe;
+    sb_buf_id = sb_id;
     if (vrf_buf_valid) begin
       sb_we_buf    [VFU_VD_WD] = 1'b1;
       vrf_wdata_buf[VFU_VD_WD] = vrf_buf_data.wdata; 
       vrf_waddr_buf[VFU_VD_WD] = vrf_buf_data.waddr;
       vrf_wbe_buf  [VFU_VD_WD] = vrf_buf_data.wbe;
+      sb_buf_id    [SB_VFU_VD_WD] = vrf_buf_data.wid;
     end
   end
 
@@ -342,7 +346,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     
     .valid_i (vrf_buf_en    ),
     .ready_o (vrf_buf_ready                                                   ),
-    .data_i  ({vrf_wdata[VFU_VD_WD], vrf_waddr[VFU_VD_WD], vrf_wbe[VFU_VD_WD]}),
+    .data_i  ({vrf_wdata[VFU_VD_WD], vrf_waddr[VFU_VD_WD], vrf_wbe[VFU_VD_WD], sb_id[SB_VFU_VD_WD]}),
 
     .valid_o (vrf_buf_valid                                  ),
     .ready_i (vrf_wvalid[VFU_VD_WD]                          ),
