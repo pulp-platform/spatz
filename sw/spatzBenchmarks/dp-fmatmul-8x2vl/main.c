@@ -162,7 +162,7 @@ int main() {
     long unsigned int utilization = performance / (2 * num_cores * 4);
     #ifdef PRINT_RESULT
     printf("\n----- (%dx%d) dp fmatmul -----\n", gemm_l.M, gemm_l.N);
-    printf("The execution took %u/%u cycles.\n", timer, cyc);
+    printf("The execution took %u cycles.\n", timer);
     printf("The performance is %ld OP/1000cycle (%ld%%o utilization).\n",
            performance, utilization);
     #endif

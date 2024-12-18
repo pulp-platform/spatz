@@ -41,7 +41,7 @@ static inline int fp_check(const double a, const double b) {
 int main() {
   const unsigned int num_cores = snrt_cluster_core_num();
   const unsigned int cid = snrt_cluster_core_idx();
-  const int measure_iter = 2;
+  const int measure_iter = 3;
 
   #if USE_CACHE == 1
   uint32_t spm_size = 16;
@@ -59,7 +59,7 @@ int main() {
 
   // Reset timer
   unsigned int timer = (unsigned int)-1;
-  unsigned int timer_tmp = 0;
+  unsigned int timer_tmp, timer_iter1;
 
   const unsigned int dim = dotp_l.M / num_cores;
 
@@ -132,9 +132,11 @@ int main() {
       stop_kernel();
 
     // End timer and check if new best runtime
-    if (cid == 0 & iter == 0) {
+    if (cid == 0) {
       timer_tmp = benchmark_get_cycle() - timer_tmp;
       timer = (timer < timer_tmp) ? timer : timer_tmp;
+      if (iter == 0)
+        timer_iter1 = timer;
     }
 
     snrt_cluster_hw_barrier();
@@ -148,7 +150,8 @@ int main() {
   #ifdef PRINT_RESULT
 
     printf("\n----- (%d) dp fdotp -----\n", dotp_l.M);
-    printf("The execution took %u cycles.\n", timer);
+    printf("The first execution took %u cycles.\n", timer_iter1);
+    printf("The best execution took %u cycles.\n", timer);
     printf("The performance is %ld OP/1000cycle (%ld%%o utilization).\n",
            performance, utilization);
   #endif
