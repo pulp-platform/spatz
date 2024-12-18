@@ -103,7 +103,6 @@ double *c;
 
 #define CHECK
 //#define PRINT_RESULT
-#define USE_CACHE
 
 int main() {
   const unsigned int num_cores = snrt_cluster_core_num();
@@ -121,7 +120,7 @@ int main() {
   // It can be M*K, K*N, or M*N
   unsigned int vl = KERNEL_M * KERNEL_K;
 
-#ifndef USE_CACHE
+#if USE_CACHE == 0
   uint32_t spm_size = 120; // 120 KB out of 128 KB
 #else
   uint32_t spm_size = 16; // Reserve small portion for SPM
@@ -135,7 +134,7 @@ int main() {
   // Wait for all cores to finish
   snrt_cluster_hw_barrier();
 
-#ifndef USE_CACHE
+#if USE_CACHE == 0
   // Allocate the matrices in the local tile
   if (cid == 0) {
     a = (double *)snrt_l1alloc(gemm_l.M * gemm_l.K * sizeof(double));
@@ -168,7 +167,7 @@ int main() {
   // Wait for all cores to finish
   snrt_cluster_hw_barrier();
 
-#ifndef USE_CACHE
+#if USE_CACHE == 0
   // Initialize matrices
   if (cid == 0) {
     snrt_dma_start_1d(a, gemm_A_dram, gemm_l.M * gemm_l.K * sizeof(double));

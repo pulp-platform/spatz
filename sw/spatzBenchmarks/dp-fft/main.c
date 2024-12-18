@@ -23,6 +23,7 @@
 #include DATAHEADER
 #include "kernel/fft.c"
 
+
 double *samples;
 double *buffer;
 double *twiddle;
@@ -45,10 +46,19 @@ int main() {
   const unsigned int num_cores = snrt_cluster_core_num();
   const unsigned int cid = snrt_cluster_core_idx();
 
+  #if USE_CACHE == 1
+  uint32_t spm_size = 16;
+  #else
+  uint32_t spm_size = 120;
+  #endif
+
   if (cid == 0) {
     // Init the cache
-    l1d_init(120);
+    l1d_init(spm_size);
   }
+
+  // Wait for all cores to finish
+  snrt_cluster_hw_barrier();
 
   // log2(nfft).
   const unsigned int log2_nfft = 31 - __builtin_clz(NFFT >> 1);
@@ -56,6 +66,7 @@ int main() {
   // Reset timer
   unsigned int timer = (unsigned int)-1;
 
+  #if USE_CACHE == 0
   // Allocate the matrices
   if (cid == 0) {
     samples = (double *)snrt_l1alloc(2 * NFFT * sizeof(double));
@@ -65,9 +76,6 @@ int main() {
         (uint16_t *)snrt_l1alloc(log2_nfft * (NFFT / 4) * sizeof(uint16_t));
     bitrev = (uint16_t *)snrt_l1alloc((NFFT / 4) * sizeof(uint16_t));
   }
-
-  timer = benchmark_get_cycle();
-
 
   // Initialize the matrices
   if (cid == 0) {
@@ -80,6 +88,13 @@ int main() {
     snrt_dma_start_1d(bitrev, bitrev_dram, (NFFT / 4) * sizeof(uint16_t));
     snrt_dma_wait_all();
   }
+  #else
+  samples   = samples_dram;
+  buffer    = buffer_dram;
+  twiddle   = twiddle_dram;
+  store_idx = store_idx_dram;
+  bitrev    = bitrev_dram;
+  #endif
 
   // Wait for all cores to finish
   snrt_cluster_hw_barrier();
@@ -93,7 +108,7 @@ int main() {
   snrt_cluster_hw_barrier();
 
   // Start timer
-  // timer = benchmark_get_cycle();
+  timer = benchmark_get_cycle();
 
   // Start dump
   if (cid == 0)
@@ -121,28 +136,37 @@ int main() {
 
   // Display runtime
   if (cid == 0) {
+    write_cyc(timer);
     long unsigned int performance =
         1000 * 5 * NFFT * (log2_nfft+1) / timer;
     long unsigned int utilization = (1000 * performance) / (1250 * num_cores * 4);
+    #ifdef PRINT_RESULT
 
     printf("\n----- fft on %d samples -----\n", NFFT);
     printf("The execution took %u cycles.\n", timer);
     printf("The performance is %ld OP/1000cycle (%ld%%o utilization).\n",
            performance, utilization);
+    #endif
 
     // Verify the real part
     for (unsigned int i = 0; i < NFFT; i++) {
       if (fp_check(buffer[i], gold_out_dram[2 * i])) {
+        #ifdef PRINT_RESULT
         printf("Error: Index %d -> Result = %f, Expected = %f\n", i,
                (float)buffer[i], (float)gold_out_dram[2 * i]);
+        #endif
+        return 1;
       }
     }
 
     // Verify the imac part
     for (unsigned int i = 0; i < NFFT; i++) {
       if (fp_check(buffer[i + NFFT], gold_out_dram[2 * i + 1])) {
+        #ifdef PRINT_RESULT
         printf("Error: Index %d -> Result = %f, Expected = %f\n", i + NFFT,
                (float)buffer[i + NFFT], (float)gold_out_dram[2 * i + 1]);
+        #endif
+        return 1;
       }
     }
   }

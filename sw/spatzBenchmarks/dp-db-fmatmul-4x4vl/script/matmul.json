@@ -2,10 +2,16 @@
 // Solderpad Hardware License, Version 0.51, see LICENSE for details.
 // SPDX-License-Identifier: SHL-0.51
 
-// Parameters for an FFT
+// Parameters for a GEMM
 
 {
-    npoints: 256,
-    ncores: 2,
-    prec: 64
+    kernel: "GEMM"
+    M: 32,
+    N: 32,
+    K: 32,
+    alpha: 0,
+    transpose_A: false,
+    transpose_B: false,
+    prec: 64,
+    expand: 0
 }

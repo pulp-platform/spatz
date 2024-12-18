@@ -49,7 +49,11 @@ int main() {
   unsigned int m_start, m_end;
   unsigned int p_start, p_end;
   unsigned int kernel_size;
-  uint32_t spm_size = 32;
+  #if USE_CACHE == 1
+  uint32_t spm_size = 16;
+  #else
+  uint32_t spm_size = 120;
+  #endif
   
   if (cid == 0) {
     // Init the cache
@@ -60,9 +64,15 @@ int main() {
   snrt_cluster_hw_barrier();
   // Allocate the matrices in the local tile
   if (cid == 0) {
+  #if USE_CACHE == 1
+    a = gemm_A_dram;
+    b = gemm_B_dram;
+    c = gemm_C_dram;
+  #else
     a = (char *)snrt_l1alloc(gemm_l.M * gemm_l.K * sizeof(char));
     b = (char *)snrt_l1alloc(gemm_l.K * gemm_l.N * sizeof(char));
     c = (char *)snrt_l1alloc(gemm_l.M * gemm_l.N * sizeof(char));
+  #endif
   }
 
   // Reset timer
@@ -83,6 +93,7 @@ int main() {
   // Wait for all cores to finish
   snrt_cluster_hw_barrier();
 
+  #if USE_CACHE == 0
   // Initialize matrices
   init_matrix(b, gemm_B_dram, cid * (gemm_l.K / num_cores),
               (cid + 1) * (gemm_l.K / num_cores), gemm_l.N);
@@ -91,6 +102,7 @@ int main() {
     snrt_dma_start_1d(c, gemm_C_dram, gemm_l.M * gemm_l.N * sizeof(char));
     snrt_dma_wait_all();
   }
+   #endif
 
   // Wait for all cores to finish
   snrt_cluster_hw_barrier();

@@ -23,9 +23,6 @@
 #include DATAHEADER
 #include "kernel/fdotp.c"
 
-// #define USE_CACHE
-// #define ENABLE_PRINT
-
 double *a;
 double *b;
 double *result;
@@ -44,9 +41,9 @@ static inline int fp_check(const double a, const double b) {
 int main() {
   const unsigned int num_cores = snrt_cluster_core_num();
   const unsigned int cid = snrt_cluster_core_idx();
-  const int measure_iter = 1;
+  const int measure_iter = 2;
 
-  #ifdef USE_CACHE
+  #if USE_CACHE == 1
   uint32_t spm_size = 16;
   #else
   uint32_t spm_size = 120;
@@ -67,7 +64,7 @@ int main() {
   const unsigned int dim = dotp_l.M / num_cores;
 
   // Allocate the matrices
-  #ifdef USE_CACHE
+  #if USE_CACHE == 1
   if (cid == 0) {
     result = (double *)snrt_l1alloc(num_cores * sizeof(double));
   }
@@ -103,7 +100,7 @@ int main() {
   snrt_cluster_hw_barrier();
 
   for (int iter = 0; iter < measure_iter; iter ++) {
-    // Start dump
+    // // Start dump
     if (cid == 0)
       start_kernel();
 
@@ -121,6 +118,7 @@ int main() {
 
     // Final reduction
     if (cid == 0) {
+      // timer_tmp = benchmark_get_cycle() - timer_tmp;
       for (unsigned int i = 1; i < num_cores; ++i)
         acc += result[i];
       result[0] = acc;
@@ -134,10 +132,9 @@ int main() {
       stop_kernel();
 
     // End timer and check if new best runtime
-    if (cid == 0) {
+    if (cid == 0 & iter == 0) {
       timer_tmp = benchmark_get_cycle() - timer_tmp;
       timer = (timer < timer_tmp) ? timer : timer_tmp;
-      write_cyc(timer);
     }
 
     snrt_cluster_hw_barrier();
@@ -145,9 +142,11 @@ int main() {
 
   // Check and display results
   if (cid == 0) {
+    write_cyc(timer);
     long unsigned int performance = 1000 * 2 * dotp_l.M / timer;
     long unsigned int utilization = performance / (2 * num_cores * 4);
-  #ifdef ENABLE_PRINT
+  #ifdef PRINT_RESULT
+
     printf("\n----- (%d) dp fdotp -----\n", dotp_l.M);
     printf("The execution took %u cycles.\n", timer);
     printf("The performance is %ld OP/1000cycle (%ld%%o utilization).\n",
@@ -157,7 +156,7 @@ int main() {
 
   if (cid == 0)
     if (fp_check(result[0], dotp_result*measure_iter)) {
-    #ifdef ENABLE_PRINT
+    #ifdef PRINT_RESULT
       printf("Error: Result = %f, Golden = %f\n", result[0], dotp_result*measure_iter);
     #endif
       return -1;

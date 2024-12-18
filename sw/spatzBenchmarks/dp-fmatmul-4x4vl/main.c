@@ -23,8 +23,6 @@
 #include DATAHEADER
 #include "kernel/dp-fmatmul.c"
 
-// #define USE_CACHE
-// #define ENABLE_PRINT
 
 #ifndef KERNEL_SIZE
 #define KERNEL_SIZE 4
@@ -59,13 +57,13 @@ int main() {
 
   const unsigned int measure_iterations = 3;
 
-  unsigned int timer_start, timer_end, timer;
+  unsigned int timer_start, timer_end, timer, timer_iter1;
 
   unsigned int m_start, m_end;
   unsigned int p_start, p_end;
   unsigned int kernel_size;
 
-  #ifdef USE_CACHE
+  #if USE_CACHE == 1
   uint32_t spm_size = 16;
   #else
   uint32_t spm_size = 120;
@@ -80,7 +78,7 @@ int main() {
 
   // Allocate the matrices in the local tile
   if (cid == 0) {
-  #ifdef USE_CACHE
+  #if USE_CACHE == 1
     a = gemm_A_dram;
     b = gemm_B_dram;
     c = gemm_C_dram;
@@ -107,7 +105,7 @@ int main() {
   snrt_cluster_hw_barrier();
 
   // Initialize matrices
-  #ifndef USE_CACHE
+  #if USE_CACHE == 0
   if (cid == 0) {
     snrt_dma_start_1d(a, gemm_A_dram, gemm_l.M * gemm_l.K * sizeof(double));
     snrt_dma_start_1d(b, gemm_B_dram, gemm_l.K * gemm_l.N * sizeof(double));
@@ -121,12 +119,12 @@ int main() {
 
   // Calculate matmul
   for (unsigned int i = 0; i < measure_iterations; ++i) {
+    // Start dump
+    if (cid == 0)
+      start_kernel();
+
     // Start timer
     timer_start = benchmark_get_cycle();
-
-    // Start dump
-    if (cid == 0 && (i == 2))
-      start_kernel();
 
     if (kernel_size == 2) {
       matmul_2xVL(c, a, b, m_start, m_end, gemm_l.K, gemm_l.N, p_start, p_end);
@@ -141,17 +139,16 @@ int main() {
     // Wait for all cores to finish
     snrt_cluster_hw_barrier();
 
-    // End dump
-    if (cid == 0 && (i == 2))
-      stop_kernel();
-
     // End timer and check if new best runtime
     timer_end = benchmark_get_cycle();
     unsigned int timer_temp = timer_end - timer_start;
     if (cid == 0) {
       if (timer_temp < timer) {
         timer = timer_temp;
+        if (i == 0)
+          timer_iter1 = timer;
       }
+      stop_kernel();
     }
 
     // Wait for all cores to finish
@@ -164,8 +161,9 @@ int main() {
         1000 * 2 * gemm_l.M * gemm_l.N * gemm_l.K / timer;
     long unsigned int utilization = performance / (2 * num_cores * 4);
     write_cyc(timer);
-  #ifdef ENABLE_PRINT
+  #ifdef PRINT_RESULT
     printf("\n----- (%dx%d) dp fmatmul -----\n", gemm_l.M, gemm_l.N);
+    printf("First iteration execution took %u cycles.\n", timer_iter1);
     printf("The execution took %u cycles.\n", timer);
     printf("The performance is %ld OP/1000cycle (%ld%%o utilization).\n",
            performance, utilization);
@@ -177,7 +175,7 @@ int main() {
         verify_matrix(c, (const double *)gemm_checksum, gemm_l.M, gemm_l.N);
 
     if (error != 0) {
-    #ifdef ENABLE_PRINT
+    #ifdef PRINT_RESULT
       printf("Error core %d: c[%d]=%u\n", cid, error, (int)c[error]);
       return error;
     #endif

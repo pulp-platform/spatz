@@ -23,7 +23,6 @@
 #include DATAHEADER
 #include "kernel/dp-fmatmul.c"
 
-#define USE_CACHE
 
 double *a;
 double *b;
@@ -52,7 +51,7 @@ int main() {
   const unsigned int num_cores = snrt_cluster_core_num();
   const unsigned int cid = snrt_cluster_core_idx();
 
-  #ifdef USE_CACHE
+  #if USE_CACHE == 1
   uint32_t spm_size = 32;
   #else
   uint32_t spm_size = 120;
@@ -75,7 +74,7 @@ int main() {
 
   // Allocate the matrices in the local tile
   if (cid == 0) {
-  #ifdef USE_CACHE
+  #if USE_CACHE == 1
     a = gemm_A_dram;
     b = gemm_B_dram;
     c = gemm_C_dram;
@@ -102,7 +101,7 @@ int main() {
   snrt_cluster_hw_barrier();
 
   // Initialize matrices
-  #ifndef USE_CACHE
+  #if USE_CACHE == 0
   if (cid == 0) {
     snrt_dma_start_1d(a, gemm_A_dram, gemm_l.M * gemm_l.K * sizeof(double));
     snrt_dma_start_1d(b, gemm_B_dram, gemm_l.K * gemm_l.N * sizeof(double));
@@ -155,11 +154,12 @@ int main() {
     long unsigned int performance =
         1000 * 2 * gemm_l.M * gemm_l.N * gemm_l.K / timer;
     long unsigned int utilization = performance / (2 * num_cores * 4);
-
+    #ifdef PRINT_RESULT
     printf("\n----- (%dx%d) dp fmatmul -----\n", gemm_l.M, gemm_l.N);
     printf("The execution took %u cycles.\n", timer);
     printf("The performance is %ld OP/1000cycle (%ld%%o utilization).\n",
            performance, utilization);
+    #endif
   }
 
   if (cid == 0) {
@@ -167,7 +167,9 @@ int main() {
         verify_matrix(c, (const double *)gemm_checksum, gemm_l.M, gemm_l.N);
 
     if (error != 0) {
+      #ifdef PRINT_RESULT
       printf("Error core %d: c[%d]=%u\n", cid, error, (int)c[error]);
+      #endif
       return error;
     }
   }

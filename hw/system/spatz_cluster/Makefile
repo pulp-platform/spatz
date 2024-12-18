@@ -172,6 +172,9 @@ lint/tmp/files: ${BENDER}
 # SW #
 ######
 
+# Use SPM by default
+USE_CACHE ?= 0
+
 ## Build SW into sw/build with the LLVM toolchain
 sw: clean.sw
 	mkdir -p sw/build
@@ -182,7 +185,7 @@ sw: clean.sw
 sw.vsim: clean.sw bin/spatz_cluster.vsim
 	mkdir -p sw/build
 	cd sw/build && ${CMAKE} \
-	-DPRINT_CHECK=${ENABLE_PRINT} -DENABLE_FLAMINGO_TESTS=${ENABLE_FLA_TESTS} -DFLA_ROOT=${FLA_ROOT} \
+	-DUSE_CACHE=${USE_CACHE} -DPRINT_CHECK=${ENABLE_PRINT} -DENABLE_FLAMINGO_TESTS=${ENABLE_FLA_TESTS} -DFLA_ROOT=${FLA_ROOT} \
 	-DLLVM_PATH=${LLVM_INSTALL_DIR} -DGCC_PATH=${GCC_INSTALL_DIR} -DPYTHON=${PYTHON} -DSNITCH_SIMULATOR=../../../../../hw/system/spatz_cluster/bin/spatz_cluster.vsim -DBUILD_TESTS=ON .. && make -j8
 
 ## Build SW and run all tests with Questasim simulator

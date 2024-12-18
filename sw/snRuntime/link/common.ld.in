@@ -70,6 +70,7 @@ SECTIONS
   /* Initialized data sections goes into DRAM */
   .data :
   {
+    . = ALIGN(1024);
     __DATA_BEGIN__ = .;
     *(.data .data.* .gnu.linkonce.d.*)
     SORT(CONSTRUCTORS)

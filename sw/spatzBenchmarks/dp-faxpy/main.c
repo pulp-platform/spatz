@@ -23,8 +23,7 @@
 #include DATAHEADER
 #include "kernel/faxpy.c"
 
-#define USE_CACHE
-#define PRINT_CHECK
+#define CHECK
 
 double *a;
 double *x;
@@ -42,10 +41,12 @@ static inline int fp_check(const double a, const double b) {
 }
 
 int main() {
+  uint32_t measure_iter = 1;
   const unsigned int num_cores = snrt_cluster_core_num();
   const unsigned int cid = snrt_cluster_core_idx();
 
-  #ifdef USE_CACHE
+  #if USE_CACHE == 1
+
   uint32_t spm_size = 16;
   #else
   uint32_t spm_size = 120;
@@ -61,12 +62,13 @@ int main() {
 
   // Reset timer
   unsigned int timer = (unsigned int)-1;
-  uint32_t timer_start, timer_end;
+  uint32_t timer_tmp, timer_iter1;
 
   const unsigned int dim = axpy_l.M;
   const unsigned int dim_core = dim / num_cores;
 
-#ifndef USE_CACHE
+  #if USE_CACHE == 0
+
   // Allocate the matrices
   if (cid == 0) {
     a = (double *)snrt_l1alloc(sizeof(double));
@@ -87,75 +89,84 @@ int main() {
   double *x_int = x + dim_core * cid;
   double *y_int = y + dim_core * cid;
 
-#else
+  #else
   a = (double *) &axpy_alpha_dram;
   double *x_int = axpy_X_dram + dim_core * cid;
   double *y_int = axpy_Y_dram + dim_core * cid;
-#endif
+  #endif
 
   // Wait for all cores to finish
   snrt_cluster_hw_barrier();
 
-  // Start dump
-  if (cid == 0)
-    start_kernel();
+  for (int iter = 0; iter < measure_iter; iter ++) {
+    // Start dump
+    if (cid == 0)
+      start_kernel();
 
-  timer_start = benchmark_get_cycle();
+    timer_tmp = benchmark_get_cycle();
 
-  // Call AXPY
-  faxpy_v64b(*a, x_int, y_int, dim_core);
+    // Call AXPY
+    faxpy_v64b(*a, x_int, y_int, dim_core);
 
-  // Wait for all cores to finish
-  snrt_cluster_hw_barrier();
+    // Wait for all cores to finish
+    snrt_cluster_hw_barrier();
 
-  timer_end = benchmark_get_cycle();
+    // End timer and check if new best runtime
+    if (cid == 0) {
+      timer_tmp = benchmark_get_cycle() - timer_tmp;
+      timer = (timer < timer_tmp) ? timer : timer_tmp;
+      if (iter == 0)
+        timer_iter1 = timer;
 
-  // End dump
-  if (cid == 0)
-    stop_kernel();
+      stop_kernel();
+    }
+
+    #ifdef CHECK
+    if (cid == 0 & iter == 0) {
+      // since y will be used to store data, we can only check in first iteration
+      for (unsigned int i = 0; i < dim; i++) {
+        #if USE_CACHE == 0
+        if (fp_check(y[i], axpy_GR_dram[i]))
+        #else
+        if (fp_check(axpy_Y_dram[i], axpy_GR_dram[i]))
+        #endif
+        {
+        #ifdef PRINT_RESULT
+          #if USE_CACHE == 0
+          printf("Error: Index %d -> Result = %f, Expected = %f\n", i,
+                 (float)y[i], (float)axpy_GR_dram[i]);
+          #else
+          printf("Error: Index %d -> Result = %f, Expected = %f\n", i,
+                 (float)axpy_Y_dram[i], (float)axpy_GR_dram[i]);
+          #endif
+        #endif
+          return 1;
+        }
+      }
+    }
+    #endif
+
+    snrt_cluster_hw_barrier();
+  }
 
   // Check and display results
   if (cid == 0) {
-    timer = timer_end - timer_start;
+    // timer = timer_end - timer_start;
     write_cyc(timer);
     long unsigned int performance = 1000 * 2 * dim / timer;
     long unsigned int utilization = performance / (2 * num_cores * 4);
-  #ifdef PRINT_CHECK
+  #ifdef PRINT_RESULT
     printf("\n----- (%d) axpy -----\n", dim);
-    printf("The execution took %u cycles.\n", timer);
+    printf("The execution took %u cycles in 1st iter.\n", timer_iter1);
+    printf("The execution took %u cycles for best.\n", timer);
     printf("The performance is %ld OP/1000cycle (%ld%%o utilization).\n",
            performance, utilization);
   #endif
   }
 
-  if (cid == 0) {
-    for (unsigned int i = 0; i < dim; i++) {
-      #ifndef USE_CACHE
-      if (fp_check(y[i], axpy_GR_dram[i]))
-      #else
-      if (fp_check(axpy_Y_dram[i], axpy_GR_dram[i]))
-      #endif
-      {
-      #ifdef PRINT_CHECK
-        #ifndef USE_CACHE
-        printf("Error: Index %d -> Result = %f, Expected = %f\n", i,
-               (float)y[i], (float)axpy_GR_dram[i]);
-        #else
-        printf("Error: Index %d -> Result = %f, Expected = %f\n", i,
-               (float)axpy_Y_dram[i], (float)axpy_GR_dram[i]);
-        #endif
-      #endif
-        return 1;
-      }
-    }
-  }
-
-  if (cid == 0) {
-    set_eoc();
-  }
-
-  // Wait for core 0 to finish displaying results
   snrt_cluster_hw_barrier();
+
+  set_eoc();
 
   return 0;
 }
