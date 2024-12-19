@@ -85,8 +85,8 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
 
   logic     vfu_req_ready;
   logic     vfu_rsp_ready;
-  logic     vfu_rsp_valid;
-  vfu_rsp_t vfu_rsp;
+  logic     vfu_rsp_valid, vfu_rsp_buf_valid;
+  vfu_rsp_t vfu_rsp, vfu_rsp_buf;
 
   logic      vlsu_req_ready;
   logic      vlsu_rsp_valid;
@@ -108,6 +108,8 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     vrf_addr_t waddr;
     vrf_be_t   wbe;
     spatz_id_t wid;
+    vfu_rsp_t rsp;
+    logic rsp_valid;
   } vrf_buf_t;
 
   vrf_buf_t vrf_buf_data;
@@ -268,9 +270,9 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     .spatz_req_o      (spatz_req       ),
     // VFU
     .vfu_req_ready_i  (vfu_req_ready   ),
-    .vfu_rsp_valid_i  (vfu_rsp_valid   ),
+    .vfu_rsp_valid_i  (vfu_rsp_buf_valid   ),
     .vfu_rsp_ready_o  (vfu_rsp_ready   ),
-    .vfu_rsp_i        (vfu_rsp         ),
+    .vfu_rsp_i        (vfu_rsp_buf     ),
     // VLSU
     .vlsu_req_ready_i (vlsu_req_ready  ),
     .vlsu_rsp_valid_i (vlsu_rsp_valid  ),
@@ -292,12 +294,16 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     vrf_waddr_buf = vrf_waddr;
     vrf_wbe_buf = vrf_wbe;
     sb_buf_id = sb_id;
+    vfu_rsp_buf = vfu_rsp;
+    vfu_rsp_buf_valid = vfu_rsp_valid;
     if (vrf_buf_valid) begin
       sb_we_buf    [VFU_VD_WD] = 1'b1;
-      vrf_wdata_buf[VFU_VD_WD] = vrf_buf_data.wdata; 
+      vrf_wdata_buf[VFU_VD_WD] = vrf_buf_data.wdata;
       vrf_waddr_buf[VFU_VD_WD] = vrf_buf_data.waddr;
       vrf_wbe_buf  [VFU_VD_WD] = vrf_buf_data.wbe;
       sb_buf_id    [SB_VFU_VD_WD] = vrf_buf_data.wid;
+      vfu_rsp_buf = vrf_buf_data.rsp;
+      vfu_rsp_buf_valid = vrf_buf_data.rsp_valid;
     end
   end
 
@@ -346,7 +352,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     
     .valid_i (vrf_buf_en    ),
     .ready_o (vrf_buf_ready                                                   ),
-    .data_i  ({vrf_wdata[VFU_VD_WD], vrf_waddr[VFU_VD_WD], vrf_wbe[VFU_VD_WD], sb_id[SB_VFU_VD_WD]}),
+    .data_i  ({vrf_wdata[VFU_VD_WD], vrf_waddr[VFU_VD_WD], vrf_wbe[VFU_VD_WD], sb_id[SB_VFU_VD_WD], vfu_rsp, vfu_rsp_valid}),
 
     .valid_o (vrf_buf_valid                                  ),
     .ready_i (vrf_wvalid[VFU_VD_WD]                          ),

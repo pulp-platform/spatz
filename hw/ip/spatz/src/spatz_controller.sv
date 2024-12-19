@@ -435,6 +435,7 @@ module spatz_controller
       // Track request vl for vector chaining
       // TODO: split the vector length here properly based on number of FPUs, EW, vstart, etc...
       vl_max_d[spatz_req.id] = (spatz_req.vl >> 1) << spatz_req.vtype.vsew;
+      vl_cnt_d[spatz_req.id] = '0;
     end
 
     // An instruction never depends on itself
