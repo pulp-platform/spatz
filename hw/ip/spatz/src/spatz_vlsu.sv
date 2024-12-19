@@ -950,7 +950,7 @@ module spatz_vlsu
       // Store operation
       end else begin
         // Read new element from the register file and store it to the buffer
-        if (state_q == VLSU_RunningStore && !(|rob_full) && |commit_operation_valid) begin
+        if (state_q == VLSU_RunningStore && !(|rob_full) && |commit_operation_valid[intf]) begin
           vrf_re_o[intf][0] = 1'b1;
 
           for (int unsigned fu = 0; fu < N_FU; fu++) begin
