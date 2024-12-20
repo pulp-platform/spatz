@@ -68,10 +68,6 @@ module spatz_vrf
   vregfile_addr_t [NrVRFBanks-1:0][NrReadPortsPerBank-1:0] raddr;
   vrf_data_t      [NrVRFBanks-1:0][NrReadPortsPerBank-1:0] rdata;
 
-  // Priority assignment
-  logic prioritize_vlsu_d, prioritize_vlsu_q;
-  `FF(prioritize_vlsu_q, prioritize_vlsu_d, '0)
-
   ///////////////////
   // Write Mapping //
   ///////////////////
@@ -91,27 +87,19 @@ module spatz_vrf
     we       = '0;
     wbe      = '0;
     wvalid_o = '0;
-    prioritize_vlsu_d = prioritize_vlsu_q;
+
     // For each bank, we have a priority based access scheme. First priority always has the VFU,
     // second priority has the LSU, and third priority has the slide unit.
     for (int unsigned bank = 0; bank < NrVRFBanks; bank++) begin
       // Bank write port 0 - Priority: vd (0) -> lsu (round-robin) <-> sld (round-robin)
-      
-      automatic logic conflict_vlsu_int = write_request[bank][VFU_VD_WD] & (write_request[bank][VLSU_VD_WD0] | write_request[bank][VLSU_VD_WD1]);
-      automatic logic prioritize_vlsu = 1'b0;
-      if (conflict_vlsu_int) begin
-        prioritize_vlsu_d = 1'b1;
-      end
-      
-      // At the moment it is asif the VLSU ports have higher priority than the
-      // FPU.
+`ifdef BUF_FPU      
+      // At the moment it is as if the VLSU ports have higher priority than the FPU.
       if (write_request[bank][VLSU_VD_WD0]) begin
         waddr[bank]          = f_vreg(waddr_i[VLSU_VD_WD0]);
         wdata[bank]          = wdata_i[VLSU_VD_WD0];
         we[bank]             = 1'b1;
         wbe[bank]            = wbe_i[VLSU_VD_WD0];
         wvalid_o[VLSU_VD_WD0] = 1'b1;
-        prioritize_vlsu_d = 1'b0;
       end else if (write_request[bank][VLSU_VD_WD1]) begin
         waddr[bank]          = f_vreg(waddr_i[VLSU_VD_WD1]);
         wdata[bank]          = wdata_i[VLSU_VD_WD1];
@@ -131,8 +119,8 @@ module spatz_vrf
         wbe[bank]             = wbe_i[VSLDU_VD_WD];
         wvalid_o[VSLDU_VD_WD] = 1'b1;
       end
-
-      /*if (write_request[bank][VFU_VD_WD]) begin
+`else
+      if (write_request[bank][VFU_VD_WD]) begin
         waddr[bank]         = f_vreg(waddr_i[VFU_VD_WD]);
         wdata[bank]         = wdata_i[VFU_VD_WD];
         we[bank]            = 1'b1;
@@ -156,7 +144,8 @@ module spatz_vrf
         we[bank]              = 1'b1;
         wbe[bank]             = wbe_i[VSLDU_VD_WD];
         wvalid_o[VSLDU_VD_WD] = 1'b1;
-      end*/
+      end
+`endif
     end
   end
 

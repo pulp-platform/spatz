@@ -288,26 +288,6 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     .sb_enable_o      ({vrf_we, vrf_re}  )
   );
 
-  always_comb begin
-    sb_we_buf = sb_we;
-    vrf_wdata_buf = vrf_wdata;
-    vrf_waddr_buf = vrf_waddr;
-    vrf_wbe_buf = vrf_wbe;
-    sb_buf_id = sb_id;
-    vfu_rsp_buf = vfu_rsp;
-    vfu_rsp_buf_valid = vfu_rsp_valid;
-    if (vrf_buf_valid) begin
-      sb_we_buf    [VFU_VD_WD] = 1'b1;
-      vrf_wdata_buf[VFU_VD_WD] = vrf_buf_data.wdata;
-      vrf_waddr_buf[VFU_VD_WD] = vrf_buf_data.waddr;
-      vrf_wbe_buf  [VFU_VD_WD] = vrf_buf_data.wbe;
-      sb_buf_id    [SB_VFU_VD_WD] = vrf_buf_data.wid;
-      vfu_rsp_buf = vrf_buf_data.rsp;
-      vfu_rsp_buf_valid = vrf_buf_data.rsp_valid;
-    end
-  end
-
-
   /////////
   // VFU //
   /////////
@@ -331,7 +311,11 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     .vrf_wdata_o      (vrf_wdata[VFU_VD_WD]                                    ),
     .vrf_we_o         (sb_we[VFU_VD_WD]                                        ),
     .vrf_wbe_o        (vrf_wbe[VFU_VD_WD]                                      ),
-    .vrf_wvalid_i     (vrf_vfu_wvalid                                           ),
+`ifdef BUF_FPU
+    .vrf_wvalid_i     (vrf_vfu_wvalid                                          ),
+`else
+    .vrf_wvalid_i     (vrf_wvalid[VFU_VD_WD]                                   ),
+`endif
     .vrf_raddr_o      (vrf_raddr[VFU_VD_RD:VFU_VS2_RD]                         ),
     .vrf_re_o         (sb_re[VFU_VD_RD:VFU_VS2_RD]                             ),
     .vrf_rdata_i      (vrf_rdata[VFU_VD_RD:VFU_VS2_RD]                         ),
@@ -341,6 +325,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     .fpu_status_o     (fpu_status_o                                            )
   );
 
+`ifdef BUF_FPU
   // To add one cycle latency of buffering to ensure that conflicts that arise
   // with the VLSU interfaces can be hidden
   assign vrf_buf_en =  sb_we[VFU_VD_WD] && (!vrf_wvalid[VFU_VD_WD] || (vrf_wvalid[VFU_VD_WD] && vrf_buf_valid));
@@ -359,6 +344,30 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     .data_o  (vrf_buf_data                                   )
   );
   assign vrf_vfu_wvalid = sb_we[VFU_VD_WD] && vrf_buf_ready;
+`endif
+
+  always_comb begin
+    // Default assignments
+    sb_we_buf = sb_we;
+    vrf_wdata_buf = vrf_wdata;
+    vrf_waddr_buf = vrf_waddr;
+    vrf_wbe_buf = vrf_wbe;
+    sb_buf_id = sb_id;
+    vfu_rsp_buf = vfu_rsp;
+    vfu_rsp_buf_valid = vfu_rsp_valid;
+    // If buffer is used and has valid data, use the buffered data
+`ifdef BUF_FPU
+    if (vrf_buf_valid) begin
+      sb_we_buf    [VFU_VD_WD] = 1'b1;
+      vrf_wdata_buf[VFU_VD_WD] = vrf_buf_data.wdata;
+      vrf_waddr_buf[VFU_VD_WD] = vrf_buf_data.waddr;
+      vrf_wbe_buf  [VFU_VD_WD] = vrf_buf_data.wbe;
+      sb_buf_id    [SB_VFU_VD_WD] = vrf_buf_data.wid;
+      vfu_rsp_buf = vrf_buf_data.rsp;
+      vfu_rsp_buf_valid = vrf_buf_data.rsp_valid;
+    end
+`endif
+  end
 
   //////////
   // VLSU //
