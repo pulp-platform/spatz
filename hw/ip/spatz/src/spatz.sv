@@ -364,7 +364,12 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
       vrf_wbe_buf  [VFU_VD_WD] = vrf_buf_data.wbe;
       sb_buf_id    [SB_VFU_VD_WD] = vrf_buf_data.wid;
       vfu_rsp_buf = vrf_buf_data.rsp;
-      vfu_rsp_buf_valid = vrf_buf_data.rsp_valid;
+      vfu_rsp_buf_valid = vrf_buf_data.rsp_valid & vrf_wvalid[VFU_VD_WD];
+    end else begin
+      // If the buffer is being enabled in this cycle, don't send the response now
+      if (vrf_buf_en) begin
+        vfu_rsp_buf_valid = 1'b0;
+      end
     end
 `endif
   end
