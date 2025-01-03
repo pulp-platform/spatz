@@ -10,7 +10,8 @@ module spatz_vrf
   import spatz_pkg::*;
   #(
     parameter int unsigned NrReadPorts  = 5,
-    parameter int unsigned NrWritePorts = 3
+    parameter int unsigned NrWritePorts = 3,
+    parameter int unsigned FpuBufDepth  = 4
   ) (
     input  logic                         clk_i,
     input  logic                         rst_ni,
@@ -21,6 +22,7 @@ module spatz_vrf
     input  logic      [NrWritePorts-1:0] we_i,
     input  vrf_be_t   [NrWritePorts-1:0] wbe_i,
     output logic      [NrWritePorts-1:0] wvalid_o,
+    input  logic      [$clog2(FpuBufDepth)-1:0] fpu_buf_usage_i,
     // Read ports
     input  vrf_addr_t [NrReadPorts-1:0]  raddr_i,
     input  logic      [NrReadPorts-1:0]  re_i,
@@ -64,6 +66,10 @@ module spatz_vrf
   logic           [NrVRFBanks-1:0] we;
   vrf_be_t        [NrVRFBanks-1:0] wbe;
 
+  // Signals to handle conflicts between FPU and VLSU interfaces
+  logic           [NrVRFBanks-1:0] w_vlsu_vfu_conflict;
+  logic           [NrVRFBanks-1:0] w_vfu;
+
   // Read signals
   vregfile_addr_t [NrVRFBanks-1:0][NrReadPortsPerBank-1:0] raddr;
   vrf_data_t      [NrVRFBanks-1:0][NrReadPortsPerBank-1:0] rdata;
@@ -92,32 +98,65 @@ module spatz_vrf
     // second priority has the LSU, and third priority has the slide unit.
     for (int unsigned bank = 0; bank < NrVRFBanks; bank++) begin
       // Bank write port 0 - Priority: vd (0) -> lsu (round-robin) <-> sld (round-robin)
-`ifdef BUF_FPU      
-      // At the moment it is as if the VLSU ports have higher priority than the FPU.
-      if (write_request[bank][VLSU_VD_WD0]) begin
-        waddr[bank]          = f_vreg(waddr_i[VLSU_VD_WD0]);
-        wdata[bank]          = wdata_i[VLSU_VD_WD0];
-        we[bank]             = 1'b1;
-        wbe[bank]            = wbe_i[VLSU_VD_WD0];
-        wvalid_o[VLSU_VD_WD0] = 1'b1;
-      end else if (write_request[bank][VLSU_VD_WD1]) begin
-        waddr[bank]          = f_vreg(waddr_i[VLSU_VD_WD1]);
-        wdata[bank]          = wdata_i[VLSU_VD_WD1];
-        we[bank]             = 1'b1;
-        wbe[bank]            = wbe_i[VLSU_VD_WD1];
-        wvalid_o[VLSU_VD_WD1] = 1'b1;
-      end else if (write_request[bank][VFU_VD_WD]) begin
-        waddr[bank]         = f_vreg(waddr_i[VFU_VD_WD]);
-        wdata[bank]         = wdata_i[VFU_VD_WD];
-        we[bank]            = 1'b1;
-        wbe[bank]           = wbe_i[VFU_VD_WD];
-        wvalid_o[VFU_VD_WD] = 1'b1;
-      end else if (write_request[bank][VSLDU_VD_WD]) begin
-        waddr[bank]           = f_vreg(waddr_i[VSLDU_VD_WD]);
-        wdata[bank]           = wdata_i[VSLDU_VD_WD];
-        we[bank]              = 1'b1;
-        wbe[bank]             = wbe_i[VSLDU_VD_WD];
-        wvalid_o[VSLDU_VD_WD] = 1'b1;
+`ifdef BUF_FPU
+      // Check if there is a conflict between FPU and the VLSU interfaces
+      w_vlsu_vfu_conflict[bank] = (write_request[bank][VLSU_VD_WD0] | write_request[bank][VLSU_VD_WD1]) & write_request[bank][VFU_VD_WD];
+      // If 2 conflicts (once with VLSU0 and VLSU1 each) encountered by FPU, then prioritize FPU
+      w_vfu[bank] = w_vlsu_vfu_conflict[bank] && (fpu_buf_usage_i >= 2'b10);
+      if (~w_vfu[bank]) begin
+        // Prioritize VLSU interfaces
+        if (write_request[bank][VLSU_VD_WD0]) begin
+          waddr[bank]          = f_vreg(waddr_i[VLSU_VD_WD0]);
+          wdata[bank]          = wdata_i[VLSU_VD_WD0];
+          we[bank]             = 1'b1;
+          wbe[bank]            = wbe_i[VLSU_VD_WD0];
+          wvalid_o[VLSU_VD_WD0] = 1'b1;
+        end else if (write_request[bank][VLSU_VD_WD1]) begin
+          waddr[bank]          = f_vreg(waddr_i[VLSU_VD_WD1]);
+          wdata[bank]          = wdata_i[VLSU_VD_WD1];
+          we[bank]             = 1'b1;
+          wbe[bank]            = wbe_i[VLSU_VD_WD1];
+          wvalid_o[VLSU_VD_WD1] = 1'b1;
+        end else if (write_request[bank][VFU_VD_WD]) begin
+          waddr[bank]         = f_vreg(waddr_i[VFU_VD_WD]);
+          wdata[bank]         = wdata_i[VFU_VD_WD];
+          we[bank]            = 1'b1;
+          wbe[bank]           = wbe_i[VFU_VD_WD];
+          wvalid_o[VFU_VD_WD] = 1'b1;
+        end else if (write_request[bank][VSLDU_VD_WD]) begin
+          waddr[bank]           = f_vreg(waddr_i[VSLDU_VD_WD]);
+          wdata[bank]           = wdata_i[VSLDU_VD_WD];
+          we[bank]              = 1'b1;
+          wbe[bank]             = wbe_i[VSLDU_VD_WD];
+          wvalid_o[VSLDU_VD_WD] = 1'b1;
+        end
+      end else begin
+        // Prioritize FPU
+        if (write_request[bank][VFU_VD_WD]) begin
+          waddr[bank]         = f_vreg(waddr_i[VFU_VD_WD]);
+          wdata[bank]         = wdata_i[VFU_VD_WD];
+          we[bank]            = 1'b1;
+          wbe[bank]           = wbe_i[VFU_VD_WD];
+          wvalid_o[VFU_VD_WD] = 1'b1;
+        end else if (write_request[bank][VLSU_VD_WD0]) begin
+          waddr[bank]          = f_vreg(waddr_i[VLSU_VD_WD0]);
+          wdata[bank]          = wdata_i[VLSU_VD_WD0];
+          we[bank]             = 1'b1;
+          wbe[bank]            = wbe_i[VLSU_VD_WD0];
+          wvalid_o[VLSU_VD_WD0] = 1'b1;
+        end else if (write_request[bank][VLSU_VD_WD1]) begin
+          waddr[bank]          = f_vreg(waddr_i[VLSU_VD_WD1]);
+          wdata[bank]          = wdata_i[VLSU_VD_WD1];
+          we[bank]             = 1'b1;
+          wbe[bank]            = wbe_i[VLSU_VD_WD1];
+          wvalid_o[VLSU_VD_WD1] = 1'b1;
+        end else if (write_request[bank][VSLDU_VD_WD]) begin
+          waddr[bank]           = f_vreg(waddr_i[VSLDU_VD_WD]);
+          wdata[bank]           = wdata_i[VSLDU_VD_WD];
+          we[bank]              = 1'b1;
+          wbe[bank]             = wbe_i[VSLDU_VD_WD];
+          wvalid_o[VSLDU_VD_WD] = 1'b1;
+        end 
       end
 `else
       if (write_request[bank][VFU_VD_WD]) begin
