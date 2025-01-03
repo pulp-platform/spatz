@@ -83,7 +83,7 @@ int main() {
     timer = benchmark_get_cycle();
 
   // Call AXPY
-  faxpy_v64b(*a, x_int, y_int, dim_core);
+  faxpy_v64b_unrl(*a, x_int, y_int, dim_core);
 
   // Wait for all cores to finish
   snrt_cluster_hw_barrier();
