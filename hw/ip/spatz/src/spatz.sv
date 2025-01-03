@@ -74,6 +74,9 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   // Number of ports of the vector register file
   localparam int unsigned NrWritePorts = 4;
   localparam int unsigned NrReadPorts  = 8;
+  
+  // FPU buffer size (need atleast depth of 2 to hide conflicts)
+  localparam int unsigned FpuBufDepth = 4;
 
   /////////////
   // Signals //
@@ -98,9 +101,10 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
 
   // Signals for buffering of FPU
   logic vrf_buf_en;
-  logic vrf_vfu_wvalid; 
-  logic vrf_buf_ready; 
-  logic vrf_buf_valid;
+  logic vrf_vfu_wvalid;
+
+  logic buf_full, buf_empty;
+  logic [$clog2(FpuBufDepth)-1:0] buf_usage;
   
   // Buffer structure to track data information for writes from FPU to VRF
   typedef struct packed {
@@ -222,11 +226,12 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     .rst_ni    (rst_ni    ),
     .testmode_i(testmode_i),
     // Write Ports
-    .waddr_i   (vrf_waddr_buf ),
-    .wdata_i   (vrf_wdata_buf ),
-    .we_i      (vrf_we    ),
-    .wbe_i     (vrf_wbe_buf   ),
-    .wvalid_o  (vrf_wvalid),
+    .waddr_i   (vrf_waddr_buf  ),
+    .wdata_i   (vrf_wdata_buf  ),
+    .we_i      (vrf_we         ),
+    .wbe_i     (vrf_wbe_buf    ),
+    .wvalid_o  (vrf_wvalid     ),
+    .fpu_buf_usage_i (buf_usage),
     // Read Ports
     .raddr_i   (vrf_raddr ),
     .re_i      (vrf_re    ),
@@ -326,24 +331,30 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   );
 
 `ifdef BUF_FPU
-  // To add one cycle latency of buffering to ensure that conflicts that arise
-  // with the VLSU interfaces can be hidden
-  assign vrf_buf_en =  sb_we[VFU_VD_WD] && (!vrf_wvalid[VFU_VD_WD] || (vrf_wvalid[VFU_VD_WD] && vrf_buf_valid));
-  spill_register #(
-    .T (vrf_buf_t)
+  // Buffering of FPU writes to VRF to hide the conflicts and achieve high FPU utilizations
+  assign vrf_buf_en =  sb_we[VFU_VD_WD] && (!vrf_wvalid[VFU_VD_WD] || (vrf_wvalid[VFU_VD_WD] && !buf_empty));
+  fifo_v3 #(
+    .FALL_THROUGH (1'b1        ),
+    .dtype        (vrf_buf_t   ),
+    .DEPTH        (FpuBufDepth )
   ) i_vfu_buf (
-    .clk_i (clk_i),
-    .rst_ni (rst_ni),
-    
-    .valid_i (vrf_buf_en    ),
-    .ready_o (vrf_buf_ready                                                   ),
-    .data_i  ({vrf_wdata[VFU_VD_WD], vrf_waddr[VFU_VD_WD], vrf_wbe[VFU_VD_WD], sb_id[SB_VFU_VD_WD], vfu_rsp, vfu_rsp_valid}),
+    .clk_i      (clk_i),
+    .rst_ni     (rst_ni),
+    .flush_i    (1'b0), 
+    .testmode_i (1'b0),
 
-    .valid_o (vrf_buf_valid                                  ),
-    .ready_i (vrf_wvalid[VFU_VD_WD]                          ),
-    .data_o  (vrf_buf_data                                   )
+    .full_o     (buf_full),
+    .empty_o    (buf_empty),
+    .usage_o    (buf_usage),
+
+    .data_i     ({vrf_wdata[VFU_VD_WD], vrf_waddr[VFU_VD_WD], vrf_wbe[VFU_VD_WD], sb_id[SB_VFU_VD_WD], vfu_rsp, vfu_rsp_valid}), 
+    .push_i     (vrf_buf_en && !buf_full),
+
+    .data_o     (vrf_buf_data),
+    .pop_i      (vrf_wvalid[VFU_VD_WD] && !buf_empty)
   );
-  assign vrf_vfu_wvalid = sb_we[VFU_VD_WD] && vrf_buf_ready;
+  assign vrf_vfu_wvalid = sb_we[VFU_VD_WD] && !buf_full;
+
 `endif
 
   always_comb begin
@@ -357,7 +368,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     vfu_rsp_buf_valid = vfu_rsp_valid;
     // If buffer is used and has valid data, use the buffered data
 `ifdef BUF_FPU
-    if (vrf_buf_valid) begin
+    if (!buf_empty) begin
       sb_we_buf    [VFU_VD_WD] = 1'b1;
       vrf_wdata_buf[VFU_VD_WD] = vrf_buf_data.wdata;
       vrf_waddr_buf[VFU_VD_WD] = vrf_buf_data.waddr;

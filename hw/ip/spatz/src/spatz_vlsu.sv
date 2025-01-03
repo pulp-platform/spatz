@@ -660,7 +660,9 @@ module spatz_vlsu
   // Ack when the vector store finishes, or when the vector load commits to the VRF.
   // With more than an interface, we need to wait until all the interfaces commit to the VRF.
   assign vlsu_rsp_o       = &vrf_commit_intf_valid && |vrf_req_valid_q ? vrf_req_q[0].rsp   : '{id: commit_insn_q.id, default: '0};
-  assign vlsu_rsp_valid_o = &vrf_commit_intf_valid && |vrf_req_valid_q ? |vrf_req_ready_q : vlsu_finished_req && !commit_insn_q.is_load;
+
+  // TODO : Check if this is the same and fix if required
+  assign vlsu_rsp_valid_o = spatz_mem_finished_o; //&vrf_commit_intf_valid && |vrf_req_valid_q ? |vrf_req_ready_q : vlsu_finished_req && !commit_insn_q.is_load;
 
   //////////////
   // Counters //
