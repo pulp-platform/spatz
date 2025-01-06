@@ -114,6 +114,7 @@ int main() {
 
   // Display runtime
   if (cid == 0) {
+    // See the bottom of the file for additional info on the performance calculation
     long unsigned int performance =
         1000 * 5 * NFFT * log2_nfft / timer;
     long unsigned int utilization =
@@ -146,3 +147,23 @@ int main() {
 
   return 0;
 }
+
+// Comments on performance calculation:
+// Number of mathematical operations: 5 * NFFT * log2(NFFT)
+// Each fp-add, fp-mul, fp-sub, fp-div corresponds to a floating-point operation
+// and can be executed in one cycle by each FPU.
+// Instead, macc-like instructions, i.e. multiply-and-accumulate, correspond to two operations
+// and an FPU can compute one macc instruction per cycle, i.e., two fp-operations per cycle in this case.
+
+// Max perf: 5/4 * #FPUs [DP-FLOP/cycle] -> we replace the 5/4 with the equivalent 1250/1000
+// Why the 5/4 factor?
+// If we had only macc-like instructions in the kernel, the max throughput would be 2 DP-FLOP/(cycle)
+// for each FPU.
+// Instead, if we only had non-macc instructions in the kernel, the max throughput would be 1 DP-FLOP/(cycle)
+// for each FPU.
+// In an intermediate case, the value is between 2 and 1 DP-FLOP/(cycle) for each FPU.
+// The kernel loop is composed of 8 vector FP instructions. Two of them are macc-like and six are not.
+// Thus, in each loop and for a vector length of one element (the vector length gets simplified anyway),
+// we have 10 operations executed in 8 cycles in the best case possible with 100% utilization.
+// Therefore, the maximum performance at 100% utilization is 10/8 DP-FLOP/(cycle) per FPU, i.e.,
+// 5/4  DP-FLOP/(cycle) per FPU
