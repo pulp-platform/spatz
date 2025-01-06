@@ -113,6 +113,7 @@ int main() {
 
   // Display runtime
   if (cid == 0) {
+    // See the bottom of the file dp-fft/main.c for further info on the performance calculation
     long unsigned int performance =
         1000 * 5 * NFFT * log2_nfft / timer;
     long unsigned int utilization =
