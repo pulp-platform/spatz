@@ -46,7 +46,8 @@ int main() {
   const unsigned int cid = snrt_cluster_core_idx();
 
   // log2(nfft).
-  const unsigned int log2_nfft = 31 - __builtin_clz(NFFT >> 1);
+  const unsigned int log2_nfft      = 31 - __builtin_clz(NFFT);
+  const unsigned int log2_half_nfft = 31 - __builtin_clz(NFFT >> 1);
 
   // Reset timer
   unsigned int timer = (unsigned int)-1;
@@ -57,7 +58,7 @@ int main() {
     buffer = (float *)snrt_l1alloc(2 * NFFT * sizeof(float));
     twiddle = (float *)snrt_l1alloc((2 * NTWI + NFFT) * sizeof(float));
     store_idx =
-        (uint16_t *)snrt_l1alloc(log2_nfft * (NFFT / 4) * sizeof(uint16_t));
+        (uint16_t *)snrt_l1alloc(log2_half_nfft * (NFFT / 4) * sizeof(uint16_t));
     bitrev = (uint16_t *)snrt_l1alloc((NFFT / 4) * sizeof(uint16_t));
   }
 
@@ -67,7 +68,7 @@ int main() {
     snrt_dma_start_1d(buffer, buffer_dram, 2 * NFFT * sizeof(float));
     snrt_dma_start_1d(twiddle, twiddle_dram, (2 * NTWI + NFFT) * sizeof(float));
     snrt_dma_start_1d(store_idx, store_idx_dram,
-                      log2_nfft * (NFFT / 4) * sizeof(uint16_t));
+                      log2_half_nfft * (NFFT / 4) * sizeof(uint16_t));
     snrt_dma_start_1d(bitrev, bitrev_dram, (NFFT / 4) * sizeof(uint16_t));
     snrt_dma_wait_all();
   }
@@ -97,7 +98,7 @@ int main() {
   snrt_cluster_hw_barrier();
 
   // Fall back into the single-core case
-  fft_sc(s_, buf_, twi_, store_idx, bitrev, NFFT >> 1, log2_nfft, cid);
+  fft_sc(s_, buf_, twi_, store_idx, bitrev, NFFT >> 1, log2_half_nfft, cid);
 
   // Wait for all cores to finish fft
   snrt_cluster_hw_barrier();
@@ -113,9 +114,9 @@ int main() {
   // Display runtime
   if (cid == 0) {
     long unsigned int performance =
-        1000 * 10 * NFFT * log2_nfft * 6 / 5 / timer;
+        1000 * 5 * NFFT * log2_nfft / timer;
     long unsigned int utilization =
-        performance / (2 * num_cores * SNRT_NFPU_PER_CORE * 2);
+        (1000 * performance) / (1250 * num_cores * SNRT_NFPU_PER_CORE * 2);
 
     printf("\n----- fft on %d samples -----\n", NFFT);
     printf("The execution took %u cycles.\n", timer);
