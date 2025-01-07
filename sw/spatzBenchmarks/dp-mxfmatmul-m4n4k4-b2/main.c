@@ -103,7 +103,7 @@ double *c;
 
 #define CHECK
 //#define PRINT_RESULT
-#define USE_CACHE
+// #define USE_CACHE
 
 int main() {
   const unsigned int num_cores = snrt_cluster_core_num();
