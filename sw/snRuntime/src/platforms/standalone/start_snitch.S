@@ -29,6 +29,7 @@ _snrt_exit:
     ori       t0, t0, 1
     la        t1, tohost
     sw        t0, 0(t1)
+    call      l1d_flush
 1:  ret
 
 # HTIF sections

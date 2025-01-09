@@ -108,6 +108,8 @@ add_library(dp-fconv2d dp-fconv2d/kernel/fconv2d.c)
 add_library(dp-fft dp-fft/kernel/fft.c)
 add_library(sp-fft sp-fft/kernel/fft.c)
 
+add_library(linked-list linked-list/kernel/llist.c)
+
 # Tests
 enable_testing()
 set(SNITCH_TEST_PREFIX spatzBenchmarks-)
@@ -155,6 +157,8 @@ add_spatz_test_twoParam(sp-fft sp-fft/main.c 512 2)
 
 add_spatz_test_threeParam(dp-mxfmatmul dp-mxfmatmul/main.c 64 64 64)
 
+add_spatz_test_oneParam(linked-list linked-list/main.c 64)
+
 # Tests for DATE
 # Vanilla fmatmul
 add_spatz_test_threeParam(dp-fmatmul-8x2vl dp-fmatmul-8x2vl/main.c 64 64 64)
@@ -187,3 +191,4 @@ add_spatz_test_threeParam(dp-mxfmatmul-m4n4k8-b2 dp-mxfmatmul-m4n4k8-b2/main.c 1
 add_spatz_test_threeParam(dp-db-fmatmul-4x4vl dp-db-fmatmul-4x4vl/main.c 128 128 128)
 add_spatz_test_threeParam(dp-db-fmatmul-4x4vl dp-db-fmatmul-4x4vl/main.c 64 64 64)
 add_spatz_test_threeParam(dp-db-fmatmul-4x4vl dp-db-fmatmul-4x4vl/main.c 32 32 32)
+add_spatz_test_threeParam(dp-db-fmatmul-4x4vl dp-db-fmatmul-4x4vl/main.c 16 32 32)
