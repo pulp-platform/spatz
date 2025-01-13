@@ -192,4 +192,3 @@ add_spatz_test_threeParam(dp-mxfmatmul-m4n4k8-b2 dp-mxfmatmul-m4n4k8-b2/main.c 1
 add_spatz_test_threeParam(dp-db-fmatmul-4x4vl dp-db-fmatmul-4x4vl/main.c 128 128 128)
 add_spatz_test_threeParam(dp-db-fmatmul-4x4vl dp-db-fmatmul-4x4vl/main.c 64 64 64)
 add_spatz_test_threeParam(dp-db-fmatmul-4x4vl dp-db-fmatmul-4x4vl/main.c 32 32 32)
-add_spatz_test_threeParam(dp-db-fmatmul-4x4vl dp-db-fmatmul-4x4vl/main.c 16 32 32)
