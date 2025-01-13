@@ -157,7 +157,8 @@ add_spatz_test_twoParam(sp-fft sp-fft/main.c 512 2)
 
 add_spatz_test_threeParam(dp-mxfmatmul dp-mxfmatmul/main.c 64 64 64)
 
-add_spatz_test_oneParam(linked-list linked-list/main.c 64)
+add_spatz_test_twoParam(linked-list linked-list/main.c 64 8)
+add_spatz_test_twoParam(linked-list linked-list/main.c 256 16)
 
 # Tests for DATE
 # Vanilla fmatmul

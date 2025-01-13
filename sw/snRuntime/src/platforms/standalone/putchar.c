@@ -27,6 +27,9 @@ void snrt_putchar(char character) {
         buf->hdr.syscall_mem[2] = (uintptr_t)&buf->data;  // buffer
         buf->hdr.syscall_mem[3] = buf->hdr.size;          // length
 
+        volatile uint32_t *busy = 1000;
+        while (*busy){};
+
         tohost = (uintptr_t)buf->hdr.syscall_mem;
         while (fromhost == 0)
             ;
@@ -34,4 +37,5 @@ void snrt_putchar(char character) {
 
         buf->hdr.size = 0;
     }
+
 }

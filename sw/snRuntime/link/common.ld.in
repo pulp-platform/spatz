@@ -7,8 +7,8 @@ ENTRY(_start)
 
 MEMORY
 {
-    /* DRAM (rwxa)  : ORIGIN = @MEM_DRAM_ORIGIN@, LENGTH = @MEM_DRAM_SIZE@ */
-    DRAM (rwxa)  : ORIGIN = @L2_ORIGIN@, LENGTH = @L2_SIZE@
+    DRAM (rwxa)  : ORIGIN = @MEM_DRAM_ORIGIN@, LENGTH = @MEM_DRAM_SIZE@
+    L2 (rwxa)  : ORIGIN = @L2_ORIGIN@, LENGTH = @L2_SIZE@
 }
 
 SECTIONS
@@ -67,14 +67,14 @@ SECTIONS
     *(.sdata .sdata.* .gnu.linkonce.s.*)
   } >DRAM
 
-  /* Initialized data sections goes into DRAM */
+  /* Initialized data sections goes into L2 */
   .data :
   {
     . = ALIGN(1024);
     __DATA_BEGIN__ = .;
     *(.data .data.* .gnu.linkonce.d.*)
     SORT(CONSTRUCTORS)
-  } >DRAM
+  } >L2
   _edata = .; PROVIDE (edata = .);
 
   /* small bss section */

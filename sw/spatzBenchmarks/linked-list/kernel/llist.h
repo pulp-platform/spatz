@@ -26,3 +26,5 @@ inline int insertNode (node_t** head, node_t* newNode)  __attribute__((always_in
 inline int deleteNode (node_t** head, int id) __attribute__((always_inline));
 
 inline int traverseList (node_t* head) __attribute__((always_inline));
+
+inline int traverseList_vec (node_t* head, uint32_t num_nodes, uint32_t num_lists) __attribute__((always_inline));

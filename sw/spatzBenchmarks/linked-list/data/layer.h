@@ -155,6 +155,6 @@ typedef struct payload_t {
 } payload_t;
 
 typedef struct node_t {
-  payload_t payload;
   struct node_t *next;
+  payload_t payload;
 } node_t;

@@ -122,4 +122,36 @@ int traverseList (node_t* head) {
   while (tempnode != NULL) {
     tempnode = tempnode->next;
   }
+  return 0;
 }
+
+int traverseList_vec (node_t* head, uint32_t num_nodes, uint32_t num_lists) {
+  if (num_lists == 0 || num_nodes == 0) {
+    // No linked lists
+    return 1;
+  }
+
+  int base_addr = 0;
+  uint32_t avl   = num_lists;
+  uint32_t vl;
+
+  for (; avl > 0; avl -= vl) {
+    // Stripmine
+    asm volatile("vsetvli %0, %1, e32, m4, ta, ma" : "=r"(vl) : "r"(avl));
+    // preload the head address in the first iteration
+    asm volatile("vle32.v v8,  (%0)" ::"r"(head));
+
+    for (uint32_t step = 0; step < num_nodes; step = step + 2) {
+      // Indexed Load the next nodes of the linked-list
+      // The base address is zero because the head contains the full address
+      asm volatile("vluxei32.v v16, (%0), v8" ::"r"(base_addr));
+
+      asm volatile("vluxei32.v v8, (%0), v16" ::"r"(base_addr));
+    }
+
+    head += vl;
+  }
+
+  return 0;
+}
+

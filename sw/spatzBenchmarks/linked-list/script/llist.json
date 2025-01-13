@@ -5,6 +5,7 @@
 // Parameters for number of nodes generated for a linked list
 
 {
-    M: 64,
+    N_list: 32,
+    M: 256,
     prec: 64
 }

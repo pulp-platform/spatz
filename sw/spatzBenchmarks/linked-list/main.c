@@ -23,6 +23,8 @@
 #include DATAHEADER
 #include "kernel/llist.c"
 
+// #define VECTOR
+
 int main() {
   const unsigned int num_cores = snrt_cluster_core_num();
   const unsigned int cid = snrt_cluster_core_idx();
@@ -46,26 +48,32 @@ int main() {
   unsigned int timer = (unsigned int)-1;
   unsigned int timer_tmp, timer_iter1;
 
-  // Create linked list and insert nodes, each core will creates its own linked-list
-  node_t * head = NULL;
-  for (int i = 0; i < N; i++) {
-    insertNode(&head, &nodes[i]);
-  }
-
   // Wait for all cores to finish
   snrt_cluster_hw_barrier();
 
-  if (cid == 0) {
-  #ifdef PRINT_RESULT
-    printf("finish inserting nodes\n");
-  #endif
-    // Flush L1 cache to move data into L3
-    l1d_flush();
-    l1d_wait();
+  #ifdef VECTOR
+  for (int iter = 0; iter < measure_iter; iter ++) {
+    if (cid == 0) {
+
+      start_kernel();
+
+      timer_tmp = benchmark_get_cycle();
+
+      // Traverse through the linked list
+      traverseList_vec((node_t *) head, N, N_list);
+
+      stop_kernel();
+
+      timer_tmp = benchmark_get_cycle() - timer_tmp;
+      timer = (timer < timer_tmp) ? timer : timer_tmp;
+      if (iter == 0)
+        timer_iter1 = timer;
+    }
+    snrt_cluster_hw_barrier();
   }
 
-  // Wait for all cores to finish
-  snrt_cluster_hw_barrier();
+  #else
+  node_t * temp_head = head[cid];
 
   for (int iter = 0; iter < measure_iter; iter ++) {
     // Start dump
@@ -77,7 +85,10 @@ int main() {
       timer_tmp = benchmark_get_cycle();
 
     // Traverse through the linked list
-    traverseList(head);
+    for (int i = 0; i < N_list; i = i+2) {
+      traverseList(temp_head);
+      temp_head = head[cid + i];
+    }
 
     // Wait for all cores to finish
     snrt_cluster_hw_barrier();
@@ -96,6 +107,7 @@ int main() {
 
     snrt_cluster_hw_barrier();
   }
+  #endif
 
   // Check and display results
   if (cid == 0) {

@@ -53,6 +53,10 @@ module spatz_cc
     parameter fpu_implementation_t                         FPUImplementation        = fpu_implementation_t'(0),
     /// Boot address of core.
     parameter logic                                 [31:0] BootAddr                 = 32'h0000_1000,
+
+    /// Address to indicate start of L2
+    parameter logic                   [AddrWidth-1:0]      L2Addr                 = 48'h0000_5180_0000,
+    parameter logic                   [AddrWidth-1:0]      L2Size                 = 48'h0000_0080_0000,
     /// Reduced-register extension
     parameter bit                                          RVE                      = 0,
     /// Enable F and D Extension
@@ -420,19 +424,18 @@ module spatz_cc
   // Decide whether to go to SoC or TCDM
   dreq_t                  data_tcdm_req;
   drsp_t                  data_tcdm_rsp;
-  dreq_t                  data_spm_req;
-  drsp_t                  data_spm_rsp;
   dreq_t                  data_soc_req;
   drsp_t                  data_soc_rsp;
-  dreq_t                  data_l1_req;
-  drsp_t                  data_l1_rsp;
   logic [3:0]             data_soc_req_id, data_soc_rsp_id;
   logic                   data_soc_push, data_soc_pop;
   logic                   data_soc_full, data_soc_empty;
 
-  localparam int unsigned SelectWidth   = cf_math_pkg::idx_width(2);
+  localparam int unsigned SelectWidth   = cf_math_pkg::idx_width(3);
   typedef logic [SelectWidth-1:0] select_t;
   select_t slave_select;
+  // Combine if the a request is targetting at SPM or L2
+  logic cache_select;
+  assign cache_select = (slave_select == 0) ? 0 : 1;
 
   // Since we are now using cache, the fpu_sequencer should not
   // bypass the L1D cache.
@@ -445,7 +448,7 @@ module spatz_cc
   ) i_reqrsp_demux (
     .clk_i        (clk_i                      ),
     .rst_ni       (rst_ni                     ),
-    .slv_select_i (slave_select               ),
+    .slv_select_i (cache_select               ),
     .slv_req_i    (snitch_dreq_q              ),
     .slv_rsp_o    (snitch_drsp_q              ),
     .mst_req_o    ({data_tcdm_req, data_soc_req}),
@@ -519,19 +522,25 @@ module spatz_cc
     logic [AddrWidth-1:0] mask;
   } reqrsp_rule_t;
 
-  reqrsp_rule_t addr_map;
-  logic [AddrWidth-1:0] l2_addr_start, l2_addr_end;
-  assign l2_addr_start = 48'h0000_8000_0000;
-  assign l2_addr_end   = 48'h0000_1000_0000;
-  assign addr_map = '{
+  reqrsp_rule_t [1:0] addr_map;
+  logic [AddrWidth-1:0] l2_addr_start, l2_addr_mask;
+  assign l2_addr_start = L2Addr;
+  assign l2_addr_mask  = ~(L2Size-1);
+  assign addr_map[0] = '{
     idx : 1,
     base: tcdm_addr_base_i,
     mask: ({AddrWidth{1'b1}} << TCDMAddrWidth)
   };
 
+  assign addr_map[1] = '{
+    idx : 2,
+    base: l2_addr_start,
+    mask: l2_addr_mask
+  };
+
   addr_decode_napot #(
-    .NoIndices (2                    ),
-    .NoRules   (1                    ),
+    .NoIndices (3                    ),
+    .NoRules   (2                    ),
     .addr_t    (logic [AddrWidth-1:0]),
     .rule_t    (reqrsp_rule_t        )
   ) i_addr_decode_napot (

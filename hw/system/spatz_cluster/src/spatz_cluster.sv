@@ -1022,6 +1022,8 @@ module spatz_cluster
 
     spatz_cc #(
       .BootAddr                (BootAddr                   ),
+      .L2Addr                  (L2Addr                     ),
+      .L2Size                  (L2Size                     ),
       .RVE                     (1'b0                       ),
       .RVF                     (RVF                        ),
       .RVD                     (RVD                        ),

@@ -30,6 +30,7 @@ _snrt_exit:
     la        t1, tohost
     sw        t0, 0(t1)
     call      l1d_flush
+    call      set_eoc
 1:  ret
 
 # HTIF sections

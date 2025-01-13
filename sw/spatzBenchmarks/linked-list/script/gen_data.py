@@ -14,51 +14,99 @@ import hjson
 np.random.seed(42)
 random.seed(42)
 
-def emit_struct(**kwargs):
+
+def generate_single_list(M, prec, index):
+    """
+    Generate a single linked list with random data.
+
+    Args:
+        M (int): Number of nodes in the list.
+        prec (int): Precision of the data (8, 16, 32, or 64 bits).
+        index (int): Index of the linked list (for naming).
+
+    Returns:
+        tuple: A tuple containing the nodes C code and the head pointer.
+    """
     ctypes = {"64": "double", "32": "float", "16": "__fp16", "8": "char"}
-    dtype = ctypes[str(kwargs["prec"])]
+    dtype = ctypes[str(prec)]
 
-    layer_str = (
-        "typedef struct payload_t {\n"
-        "  int id;\n"
-        f"  {dtype} data;\n"
-        "} payload_t;\n\n"
-        "typedef struct node_t {\n"
-        "  payload_t payload;\n"
-        "  struct node_t *next;\n"
-        "} node_t;\n\n"
-    )
-    return layer_str
-
-
-def generate_node_array(**kwargs):
-    ctypes = {"64": "double", "32": "float", "16": "__fp16", "8": "char"}
-    dtype = ctypes[str(kwargs["prec"])]
-    M = kwargs["M"]
-
-    # Generate random IDs and data
+    # Generate sequential IDs and random data
     ids = list(range(M))
-    random.shuffle(ids)
-
     data_values = []
     for _ in range(M):
-        if kwargs["prec"] == 8:
+        if prec == 8:
             data_values.append(random.randint(-128, 127))  # char range
-        elif kwargs["prec"] == 16:
+        elif prec == 16:
             data_values.append(round(random.uniform(-100, 100), 3))  # Simulate __fp16
         else:
             data_values.append(round(random.uniform(-100.0, 100.0), 6))  # float/double
 
-    layer_str = '#include "layer.h"\n\n'
+    # Create nodes in order
+    nodes = [{"id": node_id, "data": data_values[i], "next": None} for i, node_id in enumerate(ids)]
 
-    layer_str += f'int N = {M};\n\n'
+    # Assign .next pointers in order
+    for i in range(M - 1):
+        nodes[i]["next"] = i + 1  # Point to the next node
+    nodes[M - 1]["next"] = None  # Last node points to NULL
 
-    # Create the array of nodes
-    layer_str += f'node_t nodes[{M}] __attribute__((section(".data"))) = {{\n'
-    for i in range(M):
-        layer_str += f"    {{.payload = {{.id = {ids[i]}, .data = ({dtype}){data_values[i]}}}, .next = NULL}},\n"
-    layer_str += "};\n\n"
-    return layer_str
+    # Shuffle the nodes
+    shuffled_indices = list(range(M))
+    random.shuffle(shuffled_indices)
+    shuffled_nodes = [nodes[i] for i in shuffled_indices]
+
+    # Map original indices to shuffled indices for .next pointers
+    index_map = {original: shuffled_indices.index(original) for original in range(M)}
+
+    # Adjust .next pointers to shuffled indices
+    for node in shuffled_nodes:
+        if node["next"] is not None:
+            node["next"] = index_map[node["next"]]
+        else:
+            node["next"] = "NULL"
+
+    # Generate C code for this linked list
+    list_str = f"node_t nodes{index}[] = {{\n"
+    for node in shuffled_nodes:
+        next_pointer = f"&nodes{index}[{node['next']}]" if node["next"] != "NULL" else "NULL"
+        list_str += (
+            f"    {{.next = {next_pointer}, .payload = {{.id = {node['id']}, .data = ({dtype}){node['data']}}}}},\n"
+        )
+    list_str += "};\n\n"
+
+    # Find the index of the node with id = 0 for the head pointer
+    head_index = shuffled_indices.index(0)
+    head_pointer = f"&nodes{index}[{head_index}]"
+    return list_str, head_pointer
+
+def generate_multiple_lists(**kwargs):
+    """
+    Generate multiple linked lists with random data.
+
+    Args:
+        kwargs: Contains M (number of nodes per list), prec (data precision), and N_list (number of lists).
+
+    Returns:
+        str: C code for all linked lists and the head array.
+    """
+    M = kwargs["M"]
+    prec = kwargs["prec"]
+    N_list = kwargs["N_list"]
+
+    list_code = ""
+    head_pointers = []
+
+    for i in range(N_list):
+        single_list_code, head_pointer = generate_single_list(M, prec, i)
+        list_code += single_list_code
+        head_pointers.append(head_pointer)
+
+    # Generate the head array
+    head_array = f"node_t* head[{N_list}] = {{\n"
+    for head_pointer in head_pointers:
+        head_array += f"    {head_pointer},\n"
+    head_array += "};\n\n"
+
+    return list_code + head_array
 
 
 def emit_header_file(**kwargs):
@@ -71,10 +119,20 @@ def emit_header_file(**kwargs):
         "// SPDX-License-Identifier: Apache-2.0\n\n"
         "// This file was generated automatically.\n\n"
     )
-    # header_content += emit_struct(**kwargs)
-    header_content += generate_node_array(**kwargs)
 
-    file = file_path / f"data_{kwargs['M']}.h"
+    header_content += '#include "layer.h"\n\n'
+
+    header_content += f'int N = {kwargs["M"]};\n\n'
+
+    header_content += f'int N_list = {kwargs["N_list"]};\n\n'
+
+    # header_content += emit_struct(**kwargs)
+    # header_content += generate_node_array(**kwargs)
+
+    # for i in range(kwargs["Nlist"]):
+    header_content += generate_multiple_lists(**kwargs)
+
+    file = file_path / f"data_{kwargs['M']}_{kwargs['N_list']}.h"
     with file.open("w") as f:
         f.write(header_content)
 
@@ -101,6 +159,7 @@ def main():
             return
 
     kwargs = {
+        "N_list": param.get("N_list"),
         "M": param.get("M"),
         "prec": param.get("prec"),
     }
