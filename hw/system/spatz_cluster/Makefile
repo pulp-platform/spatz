@@ -261,3 +261,8 @@ help:
 	@echo -e ""
 	@echo -e "Additional useful targets from the included Makefrag:"
 	@echo -e "${Blue}traces         ${Black}Generate the better readable traces in .logs/trace_hart_<hart_id>.txt with spike-dasm."
+	@echo -e ""
+	@echo -e "Options in simulation:"
+	@echo -e "${Blue}USE_CACHE      ${Black}Set to 1 to use L1 cache, otherwise use L1 SPM for software."
+	@echo -e "${Blue}ENABLE_PRINT   ${Black}Set to 1 to use printing functions in software."
+	@echo -e ""
