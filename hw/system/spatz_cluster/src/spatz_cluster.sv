@@ -748,7 +748,7 @@ module spatz_cluster
         /// SPM Side
         .spm_req_i    (mem_cs               ),
         .spm_we_i     (mem_wen              ),
-        .spm_addr_i   (mem_add_max - mem_add),
+        .spm_addr_i   (mem_add_max - mem_add), // swap the position of stack and data
         .spm_wdata_i  (mem_wdata            ),
         .spm_be_i     (mem_be               ),
         .spm_rdata_o  (mem_rdata            ),
