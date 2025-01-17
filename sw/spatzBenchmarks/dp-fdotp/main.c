@@ -94,16 +94,16 @@ int main() {
     result[0] = acc;
   }
 
+  // End timer and check if new best runtime
+  if (cid == 0)
+    timer = benchmark_get_cycle() - timer;
+  
   // Wait for all cores to finish
   snrt_cluster_hw_barrier();
 
   // End dump
   if (cid == 0)
     stop_kernel();
-
-  // End timer and check if new best runtime
-  if (cid == 0)
-    timer = benchmark_get_cycle() - timer;
 
   // Check and display results
   if (cid == 0) {

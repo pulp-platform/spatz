@@ -53,7 +53,7 @@ module spatz_vrf
     automatic logic [1:0] vreg8 = addr[$clog2(8*NrWordsPerVector) +: 2];
 
     // Barber's pole. Advance the starting bank of each vector by one every eight vector registers.
-    f_bank = addr[$clog2(NrVRFBanks)-1:0] + vreg8;
+    f_bank = addr[$clog2(NrVRFBanks)-1:0];
   endfunction: f_bank
 
   /////////////
