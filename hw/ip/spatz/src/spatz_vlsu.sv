@@ -476,7 +476,8 @@ module spatz_vlsu
 
         // The second interface starts from half of the vector to straighten the write-back VRF access pattern
         // HARDCODED implementation just for explorative purposes! This does not generalize, don't use this!!!!!
-        if (!mem_is_indexed && !mem_is_strided && intf == 1) offset += mem_spatz_req.vl / 2;
+        // TODO: 4 << MAXEW to shift by 4 banks at the TCDM, this should be solved later posiibly at the TCDM level using an address scrambler
+        if (!mem_is_indexed && !mem_is_strided && intf == 1) offset += (mem_spatz_req.vl / 2) + (4 << MAXEW);
 
         addr                      = mem_spatz_req.rs1 + offset;
         mem_req_addr[intf][fu]        = (addr >> MAXEW) << MAXEW;
@@ -662,7 +663,7 @@ module spatz_vlsu
   assign vlsu_rsp_o       = &vrf_commit_intf_valid && |vrf_req_valid_q ? vrf_req_q[0].rsp   : '{id: commit_insn_q.id, default: '0};
 
   // TODO : Check if this is the same and fix if required
-  assign vlsu_rsp_valid_o = spatz_mem_finished_o; //&vrf_commit_intf_valid && |vrf_req_valid_q ? |vrf_req_ready_q : vlsu_finished_req && !commit_insn_q.is_load;
+  assign vlsu_rsp_valid_o = &vrf_commit_intf_valid && |vrf_req_valid_q ? |vrf_req_ready_q : vlsu_finished_req && !commit_insn_q.is_load;
 
   //////////////
   // Counters //
