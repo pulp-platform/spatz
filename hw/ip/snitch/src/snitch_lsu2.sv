@@ -8,6 +8,7 @@
 /// `NumOutstandingMem` requests in total) and optionally NaNBox if used in a
 /// floating-point setting. It expects its memory sub-system to keep order (as if
 /// issued with a single ID).
+
 module snitch_lsu2
   import cf_math_pkg::idx_width;
 #(
@@ -133,7 +134,7 @@ module snitch_lsu2
   // Only make a request when we got a valid request and if it is a load also
   // check that we can actually store the necessary information to process it in
   // the upcoming cycle(s).
-  assign data_req_o.q_valid = lsu_qvalid_i & (lsu_qwrite_i | ~id_table_full | hs_pending_q);
+  assign data_req_o.q_valid = lsu_qvalid_i & (~id_table_full | hs_pending_q);
   assign data_req_o.q.write = lsu_qwrite_i;
   assign data_req_o.q.addr = lsu_qaddr_i;
   assign data_req_o.q.amo  = lsu_qamo_i;
@@ -172,9 +173,7 @@ module snitch_lsu2
 
   // The interface didn't accept our request yet
   assign hs_pending_d = data_req_o.q_valid & ~data_rsp_i.q_ready;
-  // assign lsu_qready_o = ~hs_pending_d & (lsu_qwrite_i | ~id_table_full);
-  assign lsu_qready_o = ~hs_pending_d & (hs_pending_q || ~id_table_full || lsu_qwrite_i);
-  // assign laq_push = ~lsu_qwrite_i & data_rsp_i.q_ready & data_req_o.q_valid & ~id_table_full;
+  assign lsu_qready_o = ~hs_pending_d & ~id_table_full;
 
   // Return Path
   // shift the load data back
@@ -212,6 +211,10 @@ module snitch_lsu2
       req_id_q          <= req_id_d;
       hs_pending_q      <= hs_pending_d;
     end
-  end  
+  end
+
+  full_write : assert property(
+      @(posedge clk_i) disable iff (rst_i) (id_table_full |-> !id_table_push))
+  else $fatal (1, "Trying to request an ID although the ROB is full.");
 
 endmodule
