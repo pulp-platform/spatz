@@ -49,7 +49,17 @@ int verify_matrix(float *matrix, const float *checksum,
 int main() {
   const unsigned int num_cores = snrt_cluster_core_num();
   const unsigned int cid = snrt_cluster_core_idx();
-  uint32_t spm_size = 32;
+  #if MEAS_1ITER == 1
+  const int measure_iter = 1;
+  #else
+  const int measure_iter = 2;
+  #endif
+
+  #if USE_CACHE == 1
+  uint32_t spm_size = 16;
+  #else
+  uint32_t spm_size = 120;
+  #endif
   
   if (cid == 0) {
     // Init the cache
@@ -58,14 +68,16 @@ int main() {
 
   // Wait for all cores to finish
   snrt_cluster_hw_barrier();
-  const unsigned int measure_iterations = 1;
 
-  unsigned int timer_start, timer_end, timer;
+  // Reset timer
+  unsigned int timer = (unsigned int)-1;
+  unsigned int timer_tmp, timer_iter1;
 
   unsigned int m_start, m_end;
   unsigned int p_start, p_end;
   unsigned int kernel_size;
 
+  #if USE_CACHE == 0
   // Allocate the matrices in the local tile
   if (cid == 0) {
     a = (float *)snrt_l1alloc(gemm_l.M * gemm_l.K * sizeof(float));
@@ -73,8 +85,21 @@ int main() {
     c = (float *)snrt_l1alloc(gemm_l.M * gemm_l.N * sizeof(float));
   }
 
-  // Reset timer
-  timer = (unsigned int)-1;
+  // Initialize matrices
+  if (cid == 0) {
+    snrt_dma_start_1d(a, gemm_A_dram, gemm_l.M * gemm_l.K * sizeof(float));
+    snrt_dma_start_1d(b, gemm_B_dram, gemm_l.K * gemm_l.N * sizeof(float));
+    snrt_dma_start_1d(c, gemm_C_dram, gemm_l.M * gemm_l.N * sizeof(float));
+    snrt_dma_wait_all();
+  }
+  #else
+  a = gemm_A_dram;
+  b = gemm_B_dram;
+  c = gemm_C_dram;
+  #endif
+
+  // Wait for all cores to finish
+  snrt_cluster_hw_barrier();
 
   // Set matrix dimension
   kernel_size = 4;
@@ -88,21 +113,21 @@ int main() {
   // Wait for all cores to finish
   snrt_cluster_hw_barrier();
 
-  // Initialize matrices
-  if (cid == 0) {
-    snrt_dma_start_1d(a, gemm_A_dram, gemm_l.M * gemm_l.K * sizeof(float));
-    snrt_dma_start_1d(b, gemm_B_dram, gemm_l.K * gemm_l.N * sizeof(float));
-    snrt_dma_start_1d(c, gemm_C_dram, gemm_l.M * gemm_l.N * sizeof(float));
-    snrt_dma_wait_all();
-  }
+  // // Initialize matrices
+  // if (cid == 0) {
+  //   snrt_dma_start_1d(a, gemm_A_dram, gemm_l.M * gemm_l.K * sizeof(float));
+  //   snrt_dma_start_1d(b, gemm_B_dram, gemm_l.K * gemm_l.N * sizeof(float));
+  //   snrt_dma_start_1d(c, gemm_C_dram, gemm_l.M * gemm_l.N * sizeof(float));
+  //   snrt_dma_wait_all();
+  // }
 
-  // Wait for all cores to finish
-  snrt_cluster_hw_barrier();
+  // // Wait for all cores to finish
+  // snrt_cluster_hw_barrier();
 
   // Calculate matmul
-  for (unsigned int i = 0; i < measure_iterations; ++i) {
+  for (unsigned int i = 0; i < measure_iter; ++i) {
     // Start timer
-    timer_start = benchmark_get_cycle();
+    timer_tmp = benchmark_get_cycle();
 
     // Start dump
     if (cid == 0)
@@ -125,40 +150,71 @@ int main() {
     if (cid == 0)
       stop_kernel();
 
+    // // End timer and check if new best runtime
+    // timer_end = benchmark_get_cycle();
+    // unsigned int timer_temp = timer_end - timer_start;
+    // if (cid == 0) {
+    //   if (timer_temp < timer) {
+    //     timer = timer_temp;
+    //   }
+    // }
+
     // End timer and check if new best runtime
-    timer_end = benchmark_get_cycle();
-    unsigned int timer_temp = timer_end - timer_start;
     if (cid == 0) {
-      if (timer_temp < timer) {
-        timer = timer_temp;
+      timer_tmp = benchmark_get_cycle() - timer_tmp;
+      timer = (timer < timer_tmp) ? timer : timer_tmp;
+      if (measure_iter == 0)
+        timer_iter1 = timer;
+      
+      #ifdef PRINT_RESULT
+      printf("Iteration %u: %u cycles\n", measure_iter, timer_tmp);
+      #endif
+    }
+
+    if ((cid == 0) && (measure_iter == 0)) {
+      int error =
+          verify_matrix(c, (const float *)gemm_checksum, gemm_l.M, gemm_l.N);
+
+      if (error != 0) {
+        #ifdef PRINT_RESULT
+        printf("Error core %d: c[%d]=%u\n", cid, error, (int)c[error]);
+        #endif
+        return error;
       }
     }
+
+    // Wait for all cores to finish
+    snrt_cluster_hw_barrier();
   }
 
   // Check and display results
   if (cid == 0) {
+    write_cyc(timer);
     long unsigned int performance =
         1000 * 2 * gemm_l.M * gemm_l.N * gemm_l.K / timer;
     long unsigned int utilization = performance / (2 * num_cores * 8);
-
+    #ifdef PRINT_RESULT
     printf("\n----- (%dx%d) sp fmatmul -----\n", gemm_l.M, gemm_l.N);
+    // printf("The first execution took %u cycles.\n", timer_iter1);
     printf("The execution took %u cycles.\n", timer);
     printf("The performance is %ld OP/1000cycle (%ld%%o utilization).\n",
            performance, utilization);
+    #endif
   }
 
-  if (cid == 0) {
-    int error =
-        verify_matrix(c, (const float *)gemm_checksum, gemm_l.M, gemm_l.N);
+  // if (cid == 0) {
+  //   int error =
+  //       verify_matrix(c, (const float *)gemm_checksum, gemm_l.M, gemm_l.N);
 
-    if (error != 0) {
-      printf("Error core %d: c[%d]=%u\n", cid, error, (int)c[error]);
-      return error;
-    }
-  }
+  //   if (error != 0) {
+  //     printf("Error core %d: c[%d]=%u\n", cid, error, (int)c[error]);
+  //     return error;
+  //   }
+  // }
 
   // Wait for all cores to finish
   snrt_cluster_hw_barrier();
+  set_eoc();
 
   return 0;
 }

@@ -23,7 +23,7 @@
 #include DATAHEADER
 #include "kernel/dp-db-fmatmul.c"
 
-// #define DEBUG
+#define DEBUG
 
 #ifndef KERNEL_SIZE
 #define KERNEL_SIZE 4
@@ -64,7 +64,7 @@ int main() {
   // Adjust the M and N depends on SPM size and matmul size
   const unsigned int matrix_M = 16;
   const unsigned int matrix_K = gemm_l.K;
-  const unsigned int matrix_N = 32;
+  const unsigned int matrix_N = gemm_l.N;
 
   unsigned int timer_start, timer_end, timer;
 

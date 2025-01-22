@@ -41,9 +41,14 @@ static inline int fp_check(const double a, const double b) {
 }
 
 int main() {
-  uint32_t measure_iter = 1;
   const unsigned int num_cores = snrt_cluster_core_num();
   const unsigned int cid = snrt_cluster_core_idx();
+
+  #if MEAS_1ITER== 1
+  uint32_t measure_iter = 1;
+  #else
+  uint32_t measure_iter = 2;
+  #endif
 
   #if USE_CACHE == 1
 
@@ -117,6 +122,10 @@ int main() {
       timer = (timer < timer_tmp) ? timer : timer_tmp;
       if (iter == 0)
         timer_iter1 = timer;
+
+      #ifdef PRINT_RESULT
+      printf("Iteration %u: %u cycles\n", iter, timer_tmp);
+      #endif
 
       stop_kernel();
     }

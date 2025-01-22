@@ -41,7 +41,12 @@ static inline int fp_check(const double a, const double b) {
 int main() {
   const unsigned int num_cores = snrt_cluster_core_num();
   const unsigned int cid = snrt_cluster_core_idx();
-  const int measure_iter = 3;
+  
+  #if MEAS_1ITER == 1
+  const int measure_iter = 1;
+  #else
+  const int measure_iter = 2;
+  #endif
 
   #if USE_CACHE == 1
   uint32_t spm_size = 16;
@@ -116,6 +121,14 @@ int main() {
     // Wait for all cores to finish
     snrt_cluster_hw_barrier();
 
+    // End timer and check if new best runtime
+    if (cid == 0) {
+      timer_tmp = benchmark_get_cycle() - timer_tmp;
+      timer = (timer < timer_tmp) ? timer : timer_tmp;
+      if (iter == 0)
+        timer_iter1 = timer;
+    }
+
     // Final reduction
     if (cid == 0) {
       // timer_tmp = benchmark_get_cycle() - timer_tmp;
@@ -131,13 +144,13 @@ int main() {
     if (cid == 0)
       stop_kernel();
 
-    // End timer and check if new best runtime
-    if (cid == 0) {
-      timer_tmp = benchmark_get_cycle() - timer_tmp;
-      timer = (timer < timer_tmp) ? timer : timer_tmp;
-      if (iter == 0)
-        timer_iter1 = timer;
-    }
+    // // End timer and check if new best runtime
+    // if (cid == 0) {
+    //   timer_tmp = benchmark_get_cycle() - timer_tmp;
+    //   timer = (timer < timer_tmp) ? timer : timer_tmp;
+    //   if (iter == 0)
+    //     timer_iter1 = timer;
+    // }
 
     snrt_cluster_hw_barrier();
   }

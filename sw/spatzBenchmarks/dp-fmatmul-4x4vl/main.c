@@ -55,7 +55,11 @@ int main() {
   const unsigned int num_cores = snrt_cluster_core_num();
   const unsigned int cid = snrt_cluster_core_idx();
 
-  const unsigned int measure_iterations = 3;
+  #if MEAS_1ITER == 1
+  const int measure_iter = 1;
+  #else
+  const int measure_iter = 2;
+  #endif
 
   unsigned int timer_start, timer_end, timer, timer_iter1;
 
@@ -118,7 +122,7 @@ int main() {
   snrt_cluster_hw_barrier();
 
   // Calculate matmul
-  for (unsigned int i = 0; i < measure_iterations; ++i) {
+  for (unsigned int i = 0; i < measure_iter; ++i) {
     // Start dump
     if (cid == 0)
       start_kernel();
@@ -151,6 +155,18 @@ int main() {
       stop_kernel();
     }
 
+    if ((cid == 0) && (i == 0)) {
+      int error =
+          verify_matrix(c, (const double *)gemm_checksum, gemm_l.M, gemm_l.N);
+
+      if (error != 0) {
+      #ifdef PRINT_RESULT
+        printf("Error core %d: c[%d]=%u\n", cid, error, (int)c[error]);
+        return error;
+      #endif
+      }
+    }
+
     // Wait for all cores to finish
     snrt_cluster_hw_barrier();
   }
@@ -170,17 +186,17 @@ int main() {
   #endif
   }
 
-  if (cid == 0) {
-    int error =
-        verify_matrix(c, (const double *)gemm_checksum, gemm_l.M, gemm_l.N);
+  // if (cid == 0) {
+  //   int error =
+  //       verify_matrix(c, (const double *)gemm_checksum, gemm_l.M, gemm_l.N);
 
-    if (error != 0) {
-    #ifdef PRINT_RESULT
-      printf("Error core %d: c[%d]=%u\n", cid, error, (int)c[error]);
-      return error;
-    #endif
-    }
-  }
+  //   if (error != 0) {
+  //   #ifdef PRINT_RESULT
+  //     printf("Error core %d: c[%d]=%u\n", cid, error, (int)c[error]);
+  //     return error;
+  //   #endif
+  //   }
+  // }
 
   // Wait for all cores to finish
   snrt_cluster_hw_barrier();

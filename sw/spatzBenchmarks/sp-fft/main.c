@@ -61,9 +61,9 @@ int main() {
 
   // Allocate the matrices
   if (cid == 0) {
-    samples = (float *)snrt_l1alloc(2 * NFFT * sizeof(float));
-    buffer = (float *)snrt_l1alloc(2 * NFFT * sizeof(float));
-    twiddle = (float *)snrt_l1alloc((2 * NTWI + NFFT) * sizeof(float));
+    // samples = (float *)snrt_l1alloc(2 * NFFT * sizeof(float));
+    // buffer = (float *)snrt_l1alloc(2 * NFFT * sizeof(float));
+    // twiddle = (float *)snrt_l1alloc((2 * NTWI + NFFT) * sizeof(float));
     store_idx =
         (uint16_t *)snrt_l1alloc(log2_nfft * (NFFT / 4) * sizeof(uint16_t));
     bitrev = (uint16_t *)snrt_l1alloc((NFFT / 4) * sizeof(uint16_t));
@@ -71,14 +71,19 @@ int main() {
 
   // Initialize the matrices
   if (cid == 0) {
-    snrt_dma_start_1d(samples, samples_dram, 2 * NFFT * sizeof(float));
-    snrt_dma_start_1d(buffer, buffer_dram, 2 * NFFT * sizeof(float));
-    snrt_dma_start_1d(twiddle, twiddle_dram, (2 * NTWI + NFFT) * sizeof(float));
+    // snrt_dma_start_1d(samples, samples_dram, 2 * NFFT * sizeof(float));
+    // snrt_dma_start_1d(buffer, buffer_dram, 2 * NFFT * sizeof(float));
+    // snrt_dma_start_1d(twiddle, twiddle_dram, (2 * NTWI + NFFT) * sizeof(float));
     snrt_dma_start_1d(store_idx, store_idx_dram,
                       log2_nfft * (NFFT / 4) * sizeof(uint16_t));
     snrt_dma_start_1d(bitrev, bitrev_dram, (NFFT / 4) * sizeof(uint16_t));
     snrt_dma_wait_all();
   }
+  samples = samples_dram;
+  buffer = buffer_dram;
+  twiddle = twiddle_dram;
+  // store_idx = store_idx_dram;
+  // bitrev = bitrev_dram;
 
   // Wait for all cores to finish
   snrt_cluster_hw_barrier();
