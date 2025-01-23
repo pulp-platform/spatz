@@ -475,9 +475,9 @@ module spatz_vlsu
         end
 
         // The second interface starts from half of the vector to straighten the write-back VRF access pattern
-        // HARDCODED implementation just for explorative purposes! This does not generalize, don't use this!!!!!
-        // TODO: 4 << MAXEW to shift by 4 banks at the TCDM, this should be solved later posiibly at the TCDM level using an address scrambler
-        if (!mem_is_indexed && !mem_is_strided && intf == 1) offset += (mem_spatz_req.vl / 2) + (4 << MAXEW);
+        // To ensure that the 2 interfaces do not also conflict at the TCDM, there is HW scrambling of addresses to TCDM
+        // such that they access different superbanks.
+        if (!mem_is_indexed && !mem_is_strided && intf == 1) offset += (mem_spatz_req.vl / 2);
 
         addr                      = mem_spatz_req.rs1 + offset;
         mem_req_addr[intf][fu]        = (addr >> MAXEW) << MAXEW;

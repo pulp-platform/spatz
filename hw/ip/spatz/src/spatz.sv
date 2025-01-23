@@ -89,7 +89,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
 
   logic     vfu_req_ready;
   logic     vfu_rsp_ready;
-  logic     vfu_rsp_valid, vfu_rsp_buf_valid;
+  logic     vfu_rsp_valid, vfu_rsp_buf_valid, vlsu_rsp_buf_en;
   vfu_rsp_t vfu_rsp, vfu_rsp_buf;
 
   logic      vlsu_req_ready;
@@ -370,6 +370,8 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
 
   // Buffering of VLSU1 when conflicting with VLSU0
   assign vlsu_buf_en =  sb_we[VLSU_VD_WD1] && (!vrf_wvalid[VLSU_VD_WD1] || (vrf_wvalid[VLSU_VD_WD1] && !vlsu_buf_empty));
+  // If vlsu0 has a valid write to VRF do not buffer response
+  assign vlsu_rsp_buf_en = vrf_wvalid[VLSU_VD_WD0] ? 1'b0 : vlsu_rsp_valid;
   fifo_v3 #(
     .FALL_THROUGH (1'b1         ),
     .dtype        (vlsu_buf_t   ),
@@ -384,7 +386,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     .empty_o    (vlsu_buf_empty),
     .usage_o    (vlsu_buf_usage),
 
-    .data_i     ({vrf_wdata[VLSU_VD_WD1], vrf_waddr[VLSU_VD_WD1], vrf_wbe[VLSU_VD_WD1], sb_id[SB_VLSU_VD_WD1], vlsu_rsp, vlsu_rsp_valid}), 
+    .data_i     ({vrf_wdata[VLSU_VD_WD1], vrf_waddr[VLSU_VD_WD1], vrf_wbe[VLSU_VD_WD1], sb_id[SB_VLSU_VD_WD1], vlsu_rsp, vlsu_rsp_buf_en}), 
     .push_i     (vlsu_buf_en && !vlsu_buf_full),
 
     .data_o     (vlsu_buf_data),
@@ -430,8 +432,10 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
       vrf_waddr_buf[VLSU_VD_WD1] = vlsu_buf_data.waddr;
       vrf_wbe_buf  [VLSU_VD_WD1] = vlsu_buf_data.wbe;
       sb_buf_id    [SB_VLSU_VD_WD1] = vlsu_buf_data.wid;
-      vlsu_rsp_buf = vlsu_buf_data.rsp;
-      vlsu_rsp_buf_valid = vlsu_buf_data.rsp_valid & vrf_wvalid[VLSU_VD_WD1];
+      if (vlsu_buf_data.rsp_valid) begin
+        vlsu_rsp_buf = vlsu_buf_data.rsp;
+        vlsu_rsp_buf_valid = vrf_wvalid[VLSU_VD_WD1];
+      end
     end else begin
       // If the buffer is being enabled in this cycle, don't send the response now
       if (vlsu_buf_en) begin
