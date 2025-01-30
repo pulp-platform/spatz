@@ -429,7 +429,7 @@ module spatz_vlsu
   elen_t [NrInterfaces-1:0] [N_FU-1:0] mem_req_addr;
 
   vrf_addr_t [NrInterfaces-1:0] vd_vreg_addr;
-  vrf_addr_t [NrInterfaces-1:0] vs2_vreg_addr;
+  vrf_addr_t [NrInterfaces-1:0] vs2_vreg_addr, vs2_vreg_idx_addr;
 
   // Current element index and byte index that are being accessed at the register file
   vreg_elem_t [NrInterfaces-1:0] vd_elem_id;
@@ -462,7 +462,7 @@ module spatz_vlsu
           automatic logic [1:0] data_index_width_diff = int'(mem_spatz_req.vtype.vsew) - int'(mem_spatz_req.op_mem.ew);
 
           // Pointer to index
-          automatic logic [idx_width(NrMemPorts*ELENB)-1:0] word_index = (port << (MAXEW - data_index_width_diff)) + (maxew_t'(idx_offset << data_index_width_diff) >> data_index_width_diff) + (maxew_t'(idx_offset >> (MAXEW - data_index_width_diff)) << (MAXEW - data_index_width_diff)) * NrMemPorts;
+          automatic logic [idx_width(NrMemPorts*ELENB)-1:0] word_index = (fu << int'(mem_spatz_req.op_mem.ew)) + (idx_offset << $clog2(N_FU));
 
           // Index
           unique case (mem_spatz_req.op_mem.ew)
@@ -492,12 +492,18 @@ module spatz_vlsu
   always_comb begin : gen_vreg_addr
     for (int intf = 0; intf < NrInterfaces; intf++) begin : gen_vreg_addr_intf
       vd_vreg_addr[intf]  = (commit_insn_q.vd << $clog2(NrWordsPerVector)) + $unsigned(vd_elem_id[intf]);
+      
+      // For indices for indexed operations
       vs2_vreg_addr[intf] = (mem_spatz_req.vs2 << $clog2(NrWordsPerVector)) + $unsigned(vs2_elem_id_q[intf]);
+      vs2_vreg_idx_addr[intf] = vs2_vreg_addr[intf];
+      
+      // The second interface starts from half of the vector to straighten the write-back VRF access pattern   
+      if (intf == 1) begin
+        vd_vreg_addr[intf] += commit_insn_q.vl / (2 * N_FU * ELENB);
+        vs2_vreg_idx_addr[intf] += ((mem_spatz_req.vl >> (MAXEW - int'(mem_spatz_req.op_mem.ew))) / (2 * N_FU * ELENB));
+      end
 
-      // The second interface starts from half of the vector to straighten the write-back VRF access pattern
-      // HARDCODED implementation just for explorative purposes! This does not generalize, don't use this!!!!!
-      if (!mem_is_indexed && !mem_is_strided && intf == 1) vd_vreg_addr[intf] += commit_insn_q.vl / (2 * N_FU * ELENB);
-    end
+    end    
   end
 
   ///////////////
@@ -665,8 +671,6 @@ module spatz_vlsu
   // Check if interface 1 is the interface trying to commit, if so take resp information from interface 1
   assign resp_intf = vrf_commit_intf_valid_q [1] == 1'b0 ? 1'b1 : 1'b0;
   assign vlsu_rsp_o       = &vrf_commit_intf_valid && |vrf_req_valid_q ? vrf_req_q[resp_intf].rsp   : '{id: commit_insn_q.id, default: '0};
-
-  // TODO : Check if this is the same and fix if required
   assign vlsu_rsp_valid_o = &vrf_commit_intf_valid && |vrf_req_valid_q ? |vrf_req_ready_q : vlsu_finished_req && !commit_insn_q.is_load;
 
   //////////////
@@ -825,7 +829,7 @@ module spatz_vlsu
   // verilator lint_off LATCH
   always_comb begin
     for (int intf = 0; intf < NrInterfaces; intf++) begin
-      vrf_raddr_o[intf] = {vs2_vreg_addr[intf], vd_vreg_addr[intf]};
+      vrf_raddr_o[intf] = {vs2_vreg_idx_addr[intf], vd_vreg_addr[intf]};
       vrf_re_o[intf]        = '0;
       vrf_req_d[intf]       = '0;
       vrf_req_valid_d[intf] = '0;
