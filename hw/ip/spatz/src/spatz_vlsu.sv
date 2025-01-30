@@ -629,7 +629,7 @@ module spatz_vlsu
   logic     [NrInterfaces-1:0] vrf_req_valid_d, vrf_req_ready_d;
   logic     [NrInterfaces-1:0] vrf_req_valid_q, vrf_req_ready_q;
   logic     [NrInterfaces-1:0] vrf_req_q_rsp_valid_q;
-  logic     [NrInterfaces-1:0] vrf_commit_intf_valid;
+  logic     [NrInterfaces-1:0] vrf_commit_intf_valid, vrf_commit_intf_valid_q;
 
   for (genvar intf = 0; intf < NrInterfaces; intf++) begin : gen_vrf_req_register_intf
     spill_register #(
@@ -656,11 +656,15 @@ module spatz_vlsu
     // Clear this notebook once the memory instruction is over.
     `FFLARNC(vrf_req_q_rsp_valid_q[intf], 1'b1, vrf_req_valid_q[intf] && vrf_req_q[intf].rsp_valid, vlsu_rsp_valid_o, '0, clk_i, rst_ni)
     assign vrf_commit_intf_valid[intf] = vrf_req_q[intf].rsp_valid | vrf_req_q_rsp_valid_q[intf];
+    `FF(vrf_commit_intf_valid_q[intf], vrf_commit_intf_valid[intf], 1'b0);
   end
 
   // Ack when the vector store finishes, or when the vector load commits to the VRF.
   // With more than an interface, we need to wait until all the interfaces commit to the VRF.
-  assign vlsu_rsp_o       = &vrf_commit_intf_valid && |vrf_req_valid_q ? vrf_req_q[0].rsp   : '{id: commit_insn_q.id, default: '0};
+
+  // Check if interface 1 is the interface trying to commit, if so take resp information from interface 1
+  assign resp_intf = vrf_commit_intf_valid_q [1] == 1'b0 ? 1'b1 : 1'b0;
+  assign vlsu_rsp_o       = &vrf_commit_intf_valid && |vrf_req_valid_q ? vrf_req_q[resp_intf].rsp   : '{id: commit_insn_q.id, default: '0};
 
   // TODO : Check if this is the same and fix if required
   assign vlsu_rsp_valid_o = &vrf_commit_intf_valid && |vrf_req_valid_q ? |vrf_req_ready_q : vlsu_finished_req && !commit_insn_q.is_load;
