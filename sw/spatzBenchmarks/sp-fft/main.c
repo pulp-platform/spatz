@@ -44,7 +44,17 @@ static inline int fp_check(const float a, const float b) {
 int main() {
   const unsigned int num_cores = snrt_cluster_core_num();
   const unsigned int cid = snrt_cluster_core_idx();
-  uint32_t spm_size = 32;
+  #if MEAS_1ITER == 1
+  const int measure_iter = 1;
+  #else
+  const int measure_iter = 2;
+  #endif
+
+  #if USE_CACHE == 1
+  uint32_t spm_size = 16;
+  #else
+  uint32_t spm_size = 120;
+  #endif
   
   if (cid == 0) {
     // Init the cache
@@ -58,32 +68,35 @@ int main() {
 
   // Reset timer
   unsigned int timer = (unsigned int)-1;
+  unsigned int timer_tmp, timer_iter1;
 
+  #if USE_CACHE == 0
   // Allocate the matrices
   if (cid == 0) {
-    // samples = (float *)snrt_l1alloc(2 * NFFT * sizeof(float));
-    // buffer = (float *)snrt_l1alloc(2 * NFFT * sizeof(float));
-    // twiddle = (float *)snrt_l1alloc((2 * NTWI + NFFT) * sizeof(float));
+    samples = (float *)snrt_l1alloc(2 * NFFT * sizeof(float));
+    buffer = (float *)snrt_l1alloc(2 * NFFT * sizeof(float));
+    twiddle = (float *)snrt_l1alloc((2 * NTWI + NFFT) * sizeof(float));
     store_idx =
         (uint16_t *)snrt_l1alloc(log2_nfft * (NFFT / 4) * sizeof(uint16_t));
     bitrev = (uint16_t *)snrt_l1alloc((NFFT / 4) * sizeof(uint16_t));
   }
-
   // Initialize the matrices
   if (cid == 0) {
-    // snrt_dma_start_1d(samples, samples_dram, 2 * NFFT * sizeof(float));
-    // snrt_dma_start_1d(buffer, buffer_dram, 2 * NFFT * sizeof(float));
-    // snrt_dma_start_1d(twiddle, twiddle_dram, (2 * NTWI + NFFT) * sizeof(float));
+    snrt_dma_start_1d(samples, samples_dram, 2 * NFFT * sizeof(float));
+    snrt_dma_start_1d(buffer, buffer_dram, 2 * NFFT * sizeof(float));
+    snrt_dma_start_1d(twiddle, twiddle_dram, (2 * NTWI + NFFT) * sizeof(float));
     snrt_dma_start_1d(store_idx, store_idx_dram,
                       log2_nfft * (NFFT / 4) * sizeof(uint16_t));
     snrt_dma_start_1d(bitrev, bitrev_dram, (NFFT / 4) * sizeof(uint16_t));
     snrt_dma_wait_all();
   }
+  #else
   samples = samples_dram;
   buffer = buffer_dram;
   twiddle = twiddle_dram;
-  // store_idx = store_idx_dram;
-  // bitrev = bitrev_dram;
+  store_idx = store_idx_dram;
+  bitrev = bitrev_dram;
+  #endif
 
   // Wait for all cores to finish
   snrt_cluster_hw_barrier();
@@ -96,63 +109,89 @@ int main() {
   // Wait for all cores to finish
   snrt_cluster_hw_barrier();
 
-  // Start timer
-  timer = benchmark_get_cycle();
+  for (int iter = 0; iter < measure_iter; iter ++) {
+    // Start timer
+    timer_tmp = benchmark_get_cycle();
 
-  // Start dump
-  if (cid == 0)
-    start_kernel();
+    // Start dump
+    if (cid == 0)
+      start_kernel();
 
-  // First stage
-  fft_2c(samples, buffer, twiddle, NFFT, cid);
+    // First stage
+    fft_2c(samples, buffer, twiddle, NFFT, cid);
 
-  // Wait for all cores to finish the first stage
-  snrt_cluster_hw_barrier();
+    // Wait for all cores to finish the first stage
+    snrt_cluster_hw_barrier();
 
-  // Fall back into the single-core case
-  fft_sc(s_, buf_, twi_, store_idx, bitrev, NFFT >> 1, log2_nfft, cid);
+    // Fall back into the single-core case
+    fft_sc(s_, buf_, twi_, store_idx, bitrev, NFFT >> 1, log2_nfft, cid);
 
-  // Wait for all cores to finish fft
-  snrt_cluster_hw_barrier();
+    // Wait for all cores to finish fft
+    snrt_cluster_hw_barrier();
 
-  // End dump
-  if (cid == 0)
-    stop_kernel();
+    // End dump
+    if (cid == 0)
+      stop_kernel();
 
-  // End timer and check if new best runtime
-  if (cid == 0)
-    timer = benchmark_get_cycle() - timer;
+    printf("First result addr: %p\n", &buffer[0]);
+
+    // End timer and check if new best runtime
+    if (cid == 0) {
+      timer_tmp = benchmark_get_cycle() - timer_tmp;
+      timer = (timer < timer_tmp) ? timer : timer_tmp;
+      if (iter == 0)
+        timer_iter1 = timer;
+
+      #ifdef PRINT_RESULT
+      printf("Iteration %u: %u cycles\n", iter, timer_tmp);
+      #endif
+    }
+
+    if (cid == 0) {
+      if (iter == 0) {
+        // Verify the real part
+        for (unsigned int i = 0; i < NFFT; i++) {
+          if (fp_check(buffer[i], gold_out_dram[2 * i])) {
+            #ifdef PRINT_RESULT
+            printf("Error: Index %d -> Result = %f, Expected = %f, buffer[%d] addr = %p\n", i,
+                   (float)buffer[i], (float)gold_out_dram[2 * i], i + NFFT, &buffer[i]);
+            #endif
+          }
+        }
+
+        // Verify the imac part
+        for (unsigned int i = 0; i < NFFT; i++) {
+          if (fp_check(buffer[i + NFFT], gold_out_dram[2 * i + 1])) {
+            #ifdef PRINT_RESULT
+            printf("Error: Index %d -> Result = %f, Expected = %f, buffer[%d] addr = %p\n", i + NFFT,
+                   (float)buffer[i + NFFT], (float)gold_out_dram[2 * i + 1], i + NFFT, &buffer[i]);
+            #endif
+          }
+        }
+      }
+    }
+
+    snrt_cluster_hw_barrier();
+  }
 
   // Display runtime
   if (cid == 0) {
+    write_cyc(timer);
     long unsigned int performance =
         1000 * 5 * NFFT * (log2_nfft+1) / timer;
     long unsigned int utilization = (1000 * performance) / (1250 * num_cores * 4);
-
+    #ifdef PRINT_RESULT
     printf("\n----- fft on %d samples -----\n", NFFT);
+    printf("The first execution took %u cycles.\n", timer_iter1);
     printf("The execution took %u cycles.\n", timer);
     printf("The performance is %ld OP/1000cycle (%ld%%o utilization).\n",
            performance, utilization);
-
-    // Verify the real part
-    for (unsigned int i = 0; i < NFFT; i++) {
-      if (fp_check(buffer[i], gold_out_dram[2 * i])) {
-        printf("Error: Index %d -> Result = %f, Expected = %f\n", i,
-               (float)buffer[i], (float)gold_out_dram[2 * i]);
-      }
-    }
-
-    // Verify the imac part
-    for (unsigned int i = 0; i < NFFT; i++) {
-      if (fp_check(buffer[i + NFFT], gold_out_dram[2 * i + 1])) {
-        printf("Error: Index %d -> Result = %f, Expected = %f\n", i + NFFT,
-               (float)buffer[i + NFFT], (float)gold_out_dram[2 * i + 1]);
-      }
-    }
+    #endif
   }
 
   // Wait for core 0 to finish displaying results
   snrt_cluster_hw_barrier();
+  set_eoc();
 
   return 0;
 }
