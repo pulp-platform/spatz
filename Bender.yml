@@ -197,6 +197,9 @@ sources:
       # Level 2
       - hw/system/spatz_cluster/src/spatz_cluster_peripheral/spatz_cluster_peripheral.sv
       - hw/system/spatz_cluster/src/spatz_addr_mapper.sv
+      - hw/system/spatz_cluster/src/spatz_strbreq_merge_unit.sv
+      - hw/system/spatz_cluster/src/spatz_strbreq_merge_tree.sv
+      - hw/system/spatz_cluster/src/spatz_strbreq_handler.sv
       # Level 3
       - hw/system/spatz_cluster/src/spatz_cluster.sv
       # Level 4

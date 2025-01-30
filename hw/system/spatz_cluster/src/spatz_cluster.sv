@@ -464,8 +464,8 @@ module spatz_cluster
   spm_req_t   [NrTCDMPortsCores-1:0] spm_req;
   spm_rsp_t   [NrTCDMPortsCores-1:0] spm_rsp;
 
-  tcdm_req_t  [NrTCDMPortsCores-1:0] cache_req;
-  tcdm_rsp_t  [NrTCDMPortsCores-1:0] cache_rsp;
+  tcdm_req_t  [NrTCDMPortsCores-1:0] unmerge_req, strb_hdl_req, cache_req;
+  tcdm_rsp_t  [NrTCDMPortsCores-1:0] unmerge_rsp, strb_hdl_rsp, cache_rsp;
 
   logic       [NrTCDMPortsCores-1:0] cache_req_valid;
   logic       [NrTCDMPortsCores-1:0] cache_req_ready;
@@ -825,7 +825,7 @@ module spatz_cluster
     end
   end
 
-  logic  [NrTCDMPortsCores-1:0] cache_pready;
+  logic  [NrTCDMPortsCores-1:0] unmerge_pready, strb_hdl_pready, cache_pready;
   assign spm_size        = cfg_spm_size * L1Associativity * L1LineWidth / 2;
 
   // split the requests for spm or cache from core side
@@ -854,12 +854,51 @@ module spatz_cluster
     // Output
     .spm_req_o            (spm_req         ),
     .spm_rsp_i            (spm_rsp         ),
-    .cache_req_o          (cache_req       ),
-    .cache_pready_o       (cache_pready    ),
-    .cache_rsp_i          (cache_rsp       )
+    .cache_req_o          (unmerge_req       ),
+    .cache_pready_o       (unmerge_pready    ),
+    .cache_rsp_i          (unmerge_rsp       )
   );
 
-  for (genvar j = 0; j < NrTCDMPortsCores; j++) begin
+  localparam int unsigned NumIOPerCore = get_tcdm_ports(0);
+  logic  [NrTCDMPortsCores-1:0] strb_req_ack;
+
+  spatz_strbreq_merge_tree #(
+    .NumIO              (NrTCDMPortsCores             ),
+    .NumOutstandingMem  (NumSpatzOutstandingLoads[0]  ),
+    .MergeNum           (NrTCDMPortsCores - NrCores   ),
+    .DataWidth          (DataWidth                    ),
+    .mem_req_t          (tcdm_req_t                   ),
+    .mem_rsp_t          (tcdm_rsp_t                   ),
+    .req_id_t           (reqid_t                      ),
+    .tcdm_user_t        (tcdm_user_t                  )
+  ) i_strbreq_merge_tree (
+    .clk_i           (clk_i),
+    .rst_ni          (rst_ni),
+    .unmerge_req_i   (unmerge_req       ),
+    .unmerge_pready_i(unmerge_pready    ),
+    .merge_rsp_i     (strb_hdl_rsp      ),
+    .merge_req_o     (strb_hdl_req      ),
+    .merge_pready_o  (strb_hdl_pready   ),
+    .unmerge_rsp_o   (unmerge_rsp       )
+  );
+
+  for (genvar j = 0; j < NrTCDMPortsCores; j++) begin: gen_strb_hdlr
+    spatz_strbreq_handler #(
+      .DataWidth      (DataWidth    ),
+      .mem_req_t      (tcdm_req_t   ),
+      .mem_rsp_t      (tcdm_rsp_t   ),
+      .reqrsp_user_t  (tcdm_user_t  )
+    ) i_strbreq_handler (
+      .clk_i            (clk_i              ),
+      .rst_ni           (rst_ni             ),
+      .strb_req_i       (strb_hdl_req[j]    ),
+      .strb_rsp_ready_i (strb_hdl_pready[j] ),
+      .strb_rsp_i       (cache_rsp[j]       ),
+      .strb_req_o       (cache_req[j]       ),
+      .strb_rsp_ready_o (cache_pready[j]    ),
+      .strb_rsp_o       (strb_hdl_rsp[j]    )
+    );
+
     assign cache_req_valid[j] = cache_req[j].q_valid;
     assign cache_rsp_ready[j] = cache_pready[j];
     assign cache_req_addr[j]  = cache_req[j].q.addr;
