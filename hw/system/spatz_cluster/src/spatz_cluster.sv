@@ -239,20 +239,33 @@ module spatz_cluster
   };
 
   // L1 Cache
+  // Address width of cache
   localparam int unsigned L1AddrWidth     = 32;
+  // Cache lane width
   localparam int unsigned L1LineWidth     = 512;
+  // Cache ways
   localparam int unsigned L1Associativity = 4;
+  // Pesudo dual bank
   localparam int unsigned L1BankFactor    = 2;
+  // Coalecser window
   localparam int unsigned L1CoalFactor    = 2;
   // 8 * 1024 * 64 / 512 = 1024)
+  // Number of entrys of L1 Cache
   localparam int unsigned L1NumEntry      = NrBanks * TCDMDepth * DataWidth / L1LineWidth;
-  localparam int unsigned L1NumWrapper    = L1LineWidth / DataWidth;
-  localparam int unsigned L1BankPerWP     = L1BankFactor * L1Associativity;
-  localparam int unsigned L1BankPerWay    = L1BankFactor * L1NumWrapper;
+  // Number of bank wraps SPM can see
+  localparam int unsigned L1NumWrapper    = L1LineWidth / DataWidth * L1BankFactor;
+  // Number of banks in each bank wrap
+  localparam int unsigned L1BankPerWP     = L1Associativity;
+  // Number of banks in each cache way
+  localparam int unsigned L1BankPerWay    = L1NumWrapper;
+  // Number of cache entries each cache way has
   localparam int unsigned L1CacheWayEntry = L1NumEntry / L1Associativity;
+  // Number of cache sets each cache way has
   localparam int unsigned L1NumSet        = L1CacheWayEntry / L1BankFactor;
+  // Number of Tag banks
   localparam int unsigned L1NumTagBank    = L1BankFactor * L1Associativity;
-  localparam int unsigned L1NumDataBank   = L1BankFactor * L1NumWrapper * L1Associativity;
+  // Number of Data banks
+  localparam int unsigned L1NumDataBank   = L1NumWrapper * L1Associativity;
 
   // --------
   // Typedefs
@@ -738,13 +751,13 @@ module spatz_cluster
         .rst_ni       (rst_ni               ),
         .spm_size_i   (cfg_spm_size         ),
         /// Cache Side TODO: Connect cache
-        .cache_req_i  (l1_cache_wp_req  [j] ),
-        .cache_we_i   (l1_cache_wp_we   [j] ),
-        .cache_addr_i (l1_cache_wp_addr [j] ),
-        .cache_wdata_i(l1_cache_wp_wdata[j] ),
-        .cache_be_i   (l1_cache_wp_be   [j] ),
-        .cache_rdata_o(l1_cache_wp_rdata[j] ),
-        .cache_ready_o(l1_cache_wp_gnt  [j] ),
+        .cache_req_i  (l1_cache_wp_req  [i*BanksPerSuperBank+j] ),
+        .cache_we_i   (l1_cache_wp_we   [i*BanksPerSuperBank+j] ),
+        .cache_addr_i (l1_cache_wp_addr [i*BanksPerSuperBank+j] ),
+        .cache_wdata_i(l1_cache_wp_wdata[i*BanksPerSuperBank+j] ),
+        .cache_be_i   (l1_cache_wp_be   [i*BanksPerSuperBank+j] ),
+        .cache_rdata_o(l1_cache_wp_rdata[i*BanksPerSuperBank+j] ),
+        .cache_ready_o(l1_cache_wp_gnt  [i*BanksPerSuperBank+j] ),
         /// SPM Side
         .spm_req_i    (mem_cs               ),
         .spm_we_i     (mem_wen              ),
@@ -998,16 +1011,27 @@ module spatz_cluster
     );
   end
 
-  for (genvar i = 0; i < L1NumWrapper; i++) begin
-    for (genvar j = 0; j < L1Associativity*L1BankFactor; j++) begin
-      assign l1_cache_wp_req  [i][j] = l1_data_bank_req  [i + j*L1NumWrapper];
-      assign l1_cache_wp_we   [i][j] = l1_data_bank_we   [i + j*L1NumWrapper];
-      assign l1_cache_wp_addr [i][j] = l1_data_bank_addr [i + j*L1NumWrapper];
-      assign l1_cache_wp_wdata[i][j] = l1_data_bank_wdata[i + j*L1NumWrapper];
-      assign l1_cache_wp_be   [i][j] = (l1_data_bank_be  [i + j*L1NumWrapper]) ? {(NarrowDataWidth/8){1'b1}} : '0;
+  // Connect the cache requests to the banks
+  // Reorganize it to meet the bank arrangement
+  // 2 Superbanks
+  for (genvar i = 0; i < NrSuperBanks; i++) begin
+    // 8 Bank Wraps per SuperBank
+    for (genvar j = 0; j < BanksPerSuperBank; j++) begin
+      // 4 Banks per Bank Wrap
+      for (genvar k = 0; k < L1BankPerWP; k++) begin
+        // [i*8+j][k]         => [0][0], [0][1], [0][2]....
+        // [i*8*4 + j*4 + k]  => [0],    [1]   , [2], ...
+        assign l1_cache_wp_req   [i*BanksPerSuperBank+j][k] = l1_data_bank_req  [i*BanksPerSuperBank*L1BankPerWP+j*L1BankPerWP+k];
+        assign l1_cache_wp_we    [i*BanksPerSuperBank+j][k] = l1_data_bank_we   [i*BanksPerSuperBank*L1BankPerWP+j*L1BankPerWP+k];
+        assign l1_cache_wp_addr  [i*BanksPerSuperBank+j][k] = l1_data_bank_addr [i*BanksPerSuperBank*L1BankPerWP+j*L1BankPerWP+k];
+        assign l1_cache_wp_wdata [i*BanksPerSuperBank+j][k] = l1_data_bank_wdata[i*BanksPerSuperBank*L1BankPerWP+j*L1BankPerWP+k];
+        // L1 Cache has a write granularity of an entire cache line
+        assign l1_cache_wp_be    [i*BanksPerSuperBank+j][k] =
+              (l1_data_bank_be   [i*BanksPerSuperBank*L1BankPerWP+j*L1BankPerWP+k]) ? {(NarrowDataWidth/8){1'b1}} : '0;
 
-      assign l1_data_bank_rdata[i + j*L1NumWrapper] = l1_cache_wp_rdata[i][j];
-      assign l1_data_bank_gnt  [i + j*L1NumWrapper] = l1_cache_wp_gnt  [i][j];
+        assign l1_data_bank_rdata[i*BanksPerSuperBank*L1BankPerWP+j*L1BankPerWP+k] = l1_cache_wp_rdata[i*BanksPerSuperBank+j][k];
+        assign l1_data_bank_gnt  [i*BanksPerSuperBank*L1BankPerWP+j*L1BankPerWP+k] = l1_cache_wp_gnt  [i*BanksPerSuperBank+j][k];
+      end
     end
   end
 
