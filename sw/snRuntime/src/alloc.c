@@ -8,7 +8,7 @@
 #define ALIGN_UP(addr, size) (((addr) + (size)-1) & ~((size)-1))
 #define ALIGN_DOWN(addr, size) ((addr) & ~((size)-1))
 
-#define MIN_CHUNK_SIZE 64
+#define MIN_CHUNK_SIZE 256
 
 /**
  * @brief Allocate a chunk of memory in the L1 memory
