@@ -211,7 +211,7 @@ module spatz_vrf
     // the VFU (vs1) and then by the slide unit. Port two can be accessed first by the
     // VFU (vd), then by the LSU.
     for (int unsigned bank = 0; bank < NrVRFBanks; bank++) begin
-      // Bank read port 0 - Priority: VFU (2) -> VLSU
+      // Bank read port 0 - Priority: VFU (2) -> VLSU int0 data
       if (read_request[bank][VFU_VS2_RD]) begin
         raddr[bank][0]       = f_vreg(raddr_i[VFU_VS2_RD]);
         rdata_o[VFU_VS2_RD]  = rdata[bank][0];
@@ -222,30 +222,30 @@ module spatz_vrf
         rvalid_o[VLSU_VS2_RD0] = 1'b1;
       end
 
-      // Bank read port 1 - Priority: VFU (1) -> VSLDU
+      // Bank read port 1 - Priority: VFU (1) -> VLSU int1 data -> VSLDU
       if (read_request[bank][VFU_VS1_RD]) begin
         raddr[bank][1]       = f_vreg(raddr_i[VFU_VS1_RD]);
         rdata_o[VFU_VS1_RD]  = rdata[bank][1];
         rvalid_o[VFU_VS1_RD] = 1'b1;
-      end else if (read_request[bank][VLSU_VS2_RD1]) begin
-        raddr[bank][0]         = f_vreg(raddr_i[VLSU_VS2_RD1]);
-        rdata_o[VLSU_VS2_RD1]  = rdata[bank][0];
-        rvalid_o[VLSU_VS2_RD1] = 1'b1;
+      end else if (read_request[bank][VLSU_VD_RD0]) begin
+        raddr[bank][1]         = f_vreg(raddr_i[VLSU_VD_RD0]);
+        rdata_o[VLSU_VD_RD0]  = rdata[bank][1];
+        rvalid_o[VLSU_VD_RD0] = 1'b1;
       end else if (read_request[bank][VSLDU_VS2_RD]) begin
         raddr[bank][1]         = f_vreg(raddr_i[VSLDU_VS2_RD]);
         rdata_o[VSLDU_VS2_RD]  = rdata[bank][1];
         rvalid_o[VSLDU_VS2_RD] = 1'b1;
       end
 
-      // Bank read port 2 - Priority: VFU (D) -> VLSU
+      // Bank read port 2 - Priority: VFU (D) -> VLSU int0 indices -> VLSU int1 indices
       if (read_request[bank][VFU_VD_RD]) begin
         raddr[bank][2]      = f_vreg(raddr_i[VFU_VD_RD]);
         rdata_o[VFU_VD_RD]  = rdata[bank][2];
         rvalid_o[VFU_VD_RD] = 1'b1;
-      end else if (read_request[bank][VLSU_VD_RD0]) begin
-        raddr[bank][2]        = f_vreg(raddr_i[VLSU_VD_RD0]);
-        rdata_o[VLSU_VD_RD0]  = rdata[bank][2];
-        rvalid_o[VLSU_VD_RD0] = 1'b1;
+      end else if (read_request[bank][VLSU_VS2_RD1]) begin
+        raddr[bank][2]        = f_vreg(raddr_i[VLSU_VS2_RD1]);
+        rdata_o[VLSU_VS2_RD1]  = rdata[bank][2];
+        rvalid_o[VLSU_VS2_RD1] = 1'b1;
       end else if (read_request[bank][VLSU_VD_RD1]) begin
         raddr[bank][2]        = f_vreg(raddr_i[VLSU_VD_RD1]);
         rdata_o[VLSU_VD_RD1]  = rdata[bank][2];

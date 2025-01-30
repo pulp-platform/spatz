@@ -477,8 +477,8 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     .vrf_re_o                (sb_re[VLSU_VD_RD1:VLSU_VS2_RD0]                      ),
     .vrf_rdata_i             (vrf_rdata[VLSU_VD_RD1:VLSU_VS2_RD0]                  ),
     .vrf_rvalid_i            (vrf_rvalid[VLSU_VD_RD1:VLSU_VS2_RD0]                 ),
-    .vrf_id_o                ({sb_id[SB_VLSU_VD_WD1], sb_id[VLSU_VD_RD1], sb_id[VLSU_VS2_RD1],
-                               sb_id[SB_VLSU_VD_WD0], sb_id[VLSU_VD_RD0], sb_id[VLSU_VS2_RD0]}),
+    .vrf_id_o                ({sb_id[SB_VLSU_VD_WD1], sb_id[VLSU_VD_RD1], sb_id[VLSU_VD_RD0],     // VLSU Interface-1
+                               sb_id[SB_VLSU_VD_WD0], sb_id[VLSU_VS2_RD1], sb_id[VLSU_VS2_RD0]}), // VLSU Interface-0
     // Interface Memory
     .spatz_mem_req_o         (spatz_mem_req_o                                      ),
     .spatz_mem_req_valid_o   (spatz_mem_req_valid_o                                ),
