@@ -634,8 +634,9 @@ module spatz_vlsu
   vrf_req_t [NrInterfaces-1:0] vrf_req_d, vrf_req_q;
   logic     [NrInterfaces-1:0] vrf_req_valid_d, vrf_req_ready_d;
   logic     [NrInterfaces-1:0] vrf_req_valid_q, vrf_req_ready_q;
-  logic     [NrInterfaces-1:0] vrf_req_q_rsp_valid_q;
+  logic     [NrInterfaces-1:0] vrf_valid_rsp_q, vrf_valid_rsp;
   logic     [NrInterfaces-1:0] vrf_commit_intf_valid, vrf_commit_intf_valid_q;
+  logic     [NrInterfaces-1:0] resp_overlap;
 
   for (genvar intf = 0; intf < NrInterfaces; intf++) begin : gen_vrf_req_register_intf
     spill_register #(
@@ -660,17 +661,37 @@ module spatz_vlsu
 
     // Remember if the interfaces finished writing back to the VRF.
     // Clear this notebook once the memory instruction is over.
-    `FFLARNC(vrf_req_q_rsp_valid_q[intf], 1'b1, vrf_req_valid_q[intf] && vrf_req_q[intf].rsp_valid, vlsu_rsp_valid_o, '0, clk_i, rst_ni)
-    assign vrf_commit_intf_valid[intf] = vrf_req_q[intf].rsp_valid | vrf_req_q_rsp_valid_q[intf];
+
+    // To check if one interface is ahead and has another response to be written to the VRF
+    // In this case check if there is a response overlap
+    // If there is a response overlap, do not clear the FF
+    assign vrf_valid_rsp[intf] = vrf_req_valid_q[intf] & vrf_req_q[intf].rsp_valid;
+    assign resp_overlap[intf] = vrf_valid_rsp[intf] & vrf_valid_rsp_q[intf];
+
+    // To track a valid response on an interface until both interfaces finish and can send to the VRF
+    // When this happens the FF is cleared
+    `FFLARNC(vrf_valid_rsp_q[intf], 1'b1, vrf_valid_rsp[intf], vlsu_rsp_valid_o & ~resp_overlap[intf], 1'b0, clk_i, rst_ni)
+
+    // Check if either a previously tracked response or there is a response in the current cycle
+    assign vrf_commit_intf_valid[intf] = vrf_valid_rsp[intf] | vrf_valid_rsp_q[intf];
     `FF(vrf_commit_intf_valid_q[intf], vrf_commit_intf_valid[intf], 1'b0);
   end
+
+  ////////////////////////////
+  // Response to Controller //
+  ////////////////////////////
 
   // Ack when the vector store finishes, or when the vector load commits to the VRF.
   // With more than an interface, we need to wait until all the interfaces commit to the VRF.
 
   // Check if interface 1 is the interface trying to commit, if so take resp information from interface 1
   assign resp_intf = vrf_commit_intf_valid_q [1] == 1'b0 ? 1'b1 : 1'b0;
-  assign vlsu_rsp_o       = &vrf_commit_intf_valid && |vrf_req_valid_q ? vrf_req_q[resp_intf].rsp   : '{id: commit_insn_q.id, default: '0};
+  assign vlsu_rsp_o = &vrf_commit_intf_valid && |vrf_req_valid_q ? vrf_req_q[resp_intf].rsp   : '{id: commit_insn_q.id, default: '0};
+
+  // Send response back to the controller to indicate end of request
+  // Check if both the interfaces have completed request and have a valid response to send
+  // Check if atleast one interface has a valid (interfaces can send responses asynchronously, but they finish the request together)
+  // Set reponse high if one of the interfaces has a ready indicating the response has been written to the VRF
   assign vlsu_rsp_valid_o = &vrf_commit_intf_valid && |vrf_req_valid_q ? |vrf_req_ready_q : vlsu_finished_req && !commit_insn_q.is_load;
 
   //////////////
