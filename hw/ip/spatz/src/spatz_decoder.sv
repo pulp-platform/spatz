@@ -745,7 +745,7 @@ module spatz_decoder
               spatz_req.op_sld.insert      = (func3 == OPIVI || func3 == OPIVX || func3 == OPMVX);
               spatz_req.op_sld.vmv         = 1'b1;
               spatz_req.vs2                = spatz_req.vs1;
-              spatz_req.use_vs2            = func3 != OPIVI && !decoder_req_i.instr inside {riscv_instr::VMV_S_X};
+              spatz_req.use_vs2            = (func3 != OPIVI) && !(decoder_req_i.instr inside {riscv_instr::VMV_S_X});
               spatz_req.op_arith.is_scalar = decoder_req_i.instr inside {riscv_instr::VMV_S_X};
             end
 
