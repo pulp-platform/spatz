@@ -507,8 +507,8 @@ module spatz_fpu_sequencer
   logic [DataWidth-1:0] fp_lsu_qdata;
   logic [1:0]           fp_lsu_qsize;
   reqrsp_pkg::amo_op_e  fp_lsu_qamo;
-  logic fp_lsu_qvalid;
-  logic fp_lsu_qready;
+  logic                 fp_lsu_qvalid;
+  logic                 fp_lsu_qready;
 
   logic [DataWidth-1:0] fp_lsu_pdata;
   logic [4:0]           fp_lsu_ptag;
@@ -610,7 +610,11 @@ module spatz_fpu_sequencer
 `else
     fp_lsu_qaddr   = issue_req_i.data_argc;
 `endif
-    fp_lsu_qdata   = fpr_rdata[1];
+    if (is_store) begin
+      fp_lsu_qdata = fpr_rdata[1];
+    end else begin
+      fp_lsu_qdata = '0;
+    end
     fp_lsu_qsize   = ls_size;
     fp_lsu_qamo    = AMONone;
     fp_lsu_qvalid  = (is_load || is_store) && operands_available && !vlsu_stall;
