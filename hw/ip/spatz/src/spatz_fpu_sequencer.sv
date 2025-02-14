@@ -45,7 +45,7 @@ module spatz_fpu_sequencer
     input  logic             resp_valid_i,
     output logic             resp_ready_o,
     // Memory interface
-`ifdef MEMPOOL_SPATZ
+`ifdef TARGET_MEMPOOL
     output logic             fp_lsu_mem_req_valid_o,
     input  logic             fp_lsu_mem_req_ready_i,
     input  logic             fp_lsu_mem_rsp_valid_i,
@@ -507,8 +507,8 @@ module spatz_fpu_sequencer
   logic [DataWidth-1:0] fp_lsu_qdata;
   logic [1:0]           fp_lsu_qsize;
   reqrsp_pkg::amo_op_e  fp_lsu_qamo;
-  logic fp_lsu_qvalid;
-  logic fp_lsu_qready;
+  logic                 fp_lsu_qvalid;
+  logic                 fp_lsu_qready;
 
   logic [DataWidth-1:0] fp_lsu_pdata;
   logic [4:0]           fp_lsu_ptag;
@@ -550,8 +550,9 @@ module spatz_fpu_sequencer
     .lsu_perror_o (/* Unused */    ),
     .lsu_pvalid_o (fp_lsu_pvalid   ),
     .lsu_pready_i (fp_lsu_pready   ),
+    .lsu_empty_o  (/* unused */    ),
     // Memory interface
-`ifdef MEMPOOL_SPATZ
+`ifdef TARGET_MEMPOOL
     .data_qaddr_o (mem_qaddr              ),
     .data_qwrite_o(mem_qwrite             ),
     .data_qamo_o  (/* Unused */           ),
@@ -604,12 +605,16 @@ module spatz_fpu_sequencer
     fp_lsu_qwrite  = is_store;
     fp_lsu_qsigned = 1'b0;
     // lsu in mempool-snitch will write to argb
-`ifdef MEMPOOL_SPATZ
+`ifdef TARGET_MEMPOOL
     fp_lsu_qaddr   = issue_req_i.data_argb;
 `else
     fp_lsu_qaddr   = issue_req_i.data_argc;
 `endif
-    fp_lsu_qdata   = fpr_rdata[1];
+    if (is_store) begin
+      fp_lsu_qdata = fpr_rdata[1];
+    end else begin
+      fp_lsu_qdata = '0;
+    end
     fp_lsu_qsize   = ls_size;
     fp_lsu_qamo    = AMONone;
     fp_lsu_qvalid  = (is_load || is_store) && operands_available && !vlsu_stall;
@@ -620,7 +625,7 @@ module spatz_fpu_sequencer
     // Is the LSU stalling?
     lsu_stall = fp_lsu_qvalid && !fp_lsu_qready;
 
-`ifdef MEMPOOL_SPATZ
+`ifdef TARGET_MEMPOOL
     // Assign TCDM data interface
     fp_lsu_mem_req_o = '{
       id     : mem_qid,

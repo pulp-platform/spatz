@@ -53,7 +53,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     output logic             [1:0]            spatz_mem_finished_o,
     output logic             [1:0]            spatz_mem_str_finished_o,
     // FPU memory interface interface
-`ifdef MEMPOOL_SPATZ
+`ifdef TARGET_MEMPOOL
     output logic                              fp_lsu_mem_req_valid_o,
     input  logic                              fp_lsu_mem_req_ready_i,
     input  logic                              fp_lsu_mem_rsp_valid_i,
@@ -130,7 +130,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
 
     // Tie the memory interface to zero
     assign fp_lsu_mem_req_o        = '0;
-`ifdef MEMPOOL_SPATZ
+`ifdef TARGET_MEMPOOL
     assign fp_lsu_mem_req_valid_o  = 1'b0;
     assign fp_lsu_mem_rsp_ready_o  = 1'b0;
 `endif
@@ -164,7 +164,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
       .resp_valid_i             ( resp_valid             ),
       .resp_ready_o             ( resp_ready             ),
       // Memory interface
-`ifdef MEMPOOL_SPATZ
+`ifdef TARGET_MEMPOOL
       .fp_lsu_mem_req_valid_o   ( fp_lsu_mem_req_valid_o ),
       .fp_lsu_mem_req_ready_i   ( fp_lsu_mem_req_ready_i ),
       .fp_lsu_mem_rsp_valid_i   ( fp_lsu_mem_rsp_valid_i ),

@@ -153,10 +153,12 @@ module spatz_mempool_cc
     .clk_i                  ( clk_i                  ),
     .rst_i                  ( rst_i                  ),
     .hart_id_i              ( hart_id_i              ),
+    /// Instruction
     .inst_addr_o            ( inst_addr_o            ),
     .inst_data_i            ( inst_data_i            ),
     .inst_valid_o           ( inst_valid_o           ),
     .inst_ready_i           ( inst_ready_i           ),
+    /// Spatz
     .acc_qaddr_o            ( acc_req_d.addr         ),
     .acc_qid_o              ( acc_req_d.id           ),
     .acc_qdata_op_o         ( acc_req_d.data_op      ),
@@ -174,6 +176,7 @@ module spatz_mempool_cc
     .acc_qdata_rsp_i        ( acc_req_rsp            ),
     .acc_mem_finished_i     ( spatz_mem_finished     ),
     .acc_mem_str_finished_i ( spatz_mem_str_finished ),
+    /// TCDM
     .data_qaddr_o           ( snitch_req.addr        ),
     .data_qwrite_o          ( snitch_req.write       ),
     .data_qamo_o            ( snitch_req.amo         ),
