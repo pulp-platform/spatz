@@ -43,7 +43,8 @@ module spatz_strbreq_merge_unit #(
 
 	/// Entry type of the id-user LUT for merged requests
 	typedef struct packed {
-		logic 			valid;
+		logic 			valid0;
+		logic 			valid1;
 		tcdm_user_t user_req1;
 	} id_user_t;
 
@@ -96,26 +97,42 @@ module spatz_strbreq_merge_unit #(
 
 			/// If port 0 is ready to handle merged req, store this req user/id info into LUT
 			if (merge_rsp_i[0].q_ready) begin
-				id_user_lut_d[unmerge_req_i[0].q.user.req_id].valid 	= 1'b1;
+				id_user_lut_d[unmerge_req_i[0].q.user.req_id].valid0 	= 1'b1;
+				id_user_lut_d[unmerge_req_i[0].q.user.req_id].valid1 	= 1'b1;
 				id_user_lut_d[unmerge_req_i[0].q.user.req_id].user_req1 = unmerge_req_i[1].q.user;
 			end
 		end
 
 		/// The merged request receives its response
-		if (merge_rsp_i[0].p_valid && merge_rsp_i[0].p.write && id_user_lut_q[merge_rsp_i[0].p.user.req_id].valid) begin
-			// Since this is a merged request, we need to ensure both port 0 and 1 are ready to receive it
-			if (&unmerge_pready_i) begin
+		if (merge_rsp_i[0].p_valid && merge_rsp_i[0].p.write) begin
+			// If port 2 is not ready to receive it, keep this response to port 2
+			if (id_user_lut_q[merge_rsp_i[0].p.user.req_id].valid1) begin
 				// Link response port 1 to port 0, but keep its own user
 				unmerge_rsp_o[1] 					= merge_rsp_i[0];
 				unmerge_rsp_o[1].q_ready 	= merge_rsp_i[1].q_ready;
 				unmerge_rsp_o[1].p.user 	= id_user_lut_q[merge_rsp_i[0].p.user.req_id].user_req1;
-				// Cut port 2's original response path
-				merge_pready_o[1] 				= 1'b0;
+				// Port2 is ready to receive this response
+				if (unmerge_pready_i[1]) begin
+					// Cut port 2's original response path
+					merge_pready_o[1] 				= 1'b0;
+					// Invalidate corresponding id-user LUT entry
+					id_user_lut_d[merge_rsp_i[0].p.user.req_id].valid1 = 1'b0;
+				end
+			end
+			// If port 1 is ready to receive this response
+			if (id_user_lut_q[merge_rsp_i[0].p.user.req_id].valid0 && unmerge_pready_i[0]) begin
 				// Invalidate corresponding id-user LUT entry
-				id_user_lut_d[merge_rsp_i[0].p.user.req_id].valid = 1'b0;
+				id_user_lut_d[merge_rsp_i[0].p.user.req_id].valid0 = 1'b0;
+			end
+			// This is in case that port 1 has accepted the response while port 2 haven't acepted yet
+			if (id_user_lut_q[merge_rsp_i[0].p.user.req_id].valid0 || id_user_lut_q[merge_rsp_i[0].p.user.req_id].valid1) begin
+				unmerge_rsp_o[0].p_valid 	= id_user_lut_q[merge_rsp_i[0].p.user.req_id].valid0;
+			end
+			// Port 1 can acknowledge this response only when both ports has already accepted the response
+			if (!(id_user_lut_d[merge_rsp_i[0].p.user.req_id].valid0 || id_user_lut_d[merge_rsp_i[0].p.user.req_id].valid1)) begin
+				merge_pready_o[0]	= unmerge_pready_i[0];
 			end else begin
-				// Wait for port 1 to be ready to receive the response
-				merge_pready_o[0] 				= 1'b0;
+				merge_pready_o[0]	= 1'b0;
 			end
 		end
 	end
