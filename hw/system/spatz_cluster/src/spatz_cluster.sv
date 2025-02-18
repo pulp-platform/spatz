@@ -1006,7 +1006,7 @@ module spatz_cluster
   axi_mst_dma_resp_t dcache_mst_rsp_tmp;
 
   axi_dw_converter #(
-    .AxiMaxReads        (128),
+    .AxiMaxReads        (2),
     .AxiSlvPortDataWidth(L1LineWidth),
     .AxiMstPortDataWidth(AxiDataWidth),
     .AxiAddrWidth       (AxiAddrWidth),
