@@ -58,7 +58,7 @@ void l1d_spm_config (uint32_t size) {
   // Make sure dummy region will not be optimized away
   volatile double *dummy;
   // Should be (L1_size - size) * 128
-  int cache_region = (128 - size) * 128;
+  int cache_region = (256 - size) * 128;
   dummy = (volatile double *)snrt_l1alloc(cache_region * sizeof(double));
   // change size and commit the change
   *cfg_size = size;

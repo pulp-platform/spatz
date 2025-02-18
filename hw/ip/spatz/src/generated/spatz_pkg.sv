@@ -15,7 +15,7 @@ package spatz_pkg;
   // Number of IPUs in each VFU (between 1 and 8)
   localparam int unsigned N_IPU = 1;
   // Number of FPUs in each VFU (between 1 and 8)
-  localparam int unsigned N_FPU = 4;
+  localparam int unsigned N_FPU = 8;
   // Number of FUs in each VFU
   localparam int unsigned N_FU  = N_IPU > N_FPU ? N_IPU : N_FPU;
   // FPU support
@@ -32,7 +32,7 @@ package spatz_pkg;
   // Maximum size of a single vector element in bytes
   localparam int unsigned ELENB  = ELEN / 8;
   // Number of bits in a vector register
-  localparam int unsigned VLEN   = 512;
+  localparam int unsigned VLEN   = 1024;
   // Number of bytes in a vector register
   localparam int unsigned VLENB  = VLEN / 8;
   // Maximum vector length in elements

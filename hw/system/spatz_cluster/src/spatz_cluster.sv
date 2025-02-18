@@ -47,7 +47,7 @@ module spatz_cluster
     /// Cluster peripheral address region size (in kB).
     parameter int                     unsigned               ClusterPeriphSize                  = 64,
     /// Number of TCDM Banks.
-    parameter int                     unsigned               NrBanks                            = 2 * NrCores,
+    parameter int                     unsigned               NrBanks                            = 16,
     /// Size of DMA AXI buffer.
     parameter int                     unsigned               DMAAxiReqFifoDepth                 = 3,
     /// Size of DMA request fifo.
@@ -242,30 +242,32 @@ module spatz_cluster
   // Address width of cache
   localparam int unsigned L1AddrWidth     = 32;
   // Cache lane width
-  localparam int unsigned L1LineWidth     = 512;
+  localparam int unsigned L1LineWidth     = 1024;
   // Cache ways
   localparam int unsigned L1Associativity = 4;
   // Pesudo dual bank
   localparam int unsigned L1BankFactor    = 2;
   // Coalecser window
   localparam int unsigned L1CoalFactor    = 2;
+  // Total number of Data banks
+  localparam int unsigned L1NumDataBank   = 128;
+  // SPM view: Number of banks in each bank wrap (Use to mitigate routing complexity of such many banks)
+  localparam int unsigned L1BankPerWP     = L1NumDataBank / NrBanks;
   // 8 * 1024 * 64 / 512 = 1024)
   // Number of entrys of L1 Cache
   localparam int unsigned L1NumEntry      = NrBanks * TCDMDepth * DataWidth / L1LineWidth;
   // Number of bank wraps SPM can see
-  localparam int unsigned L1NumWrapper    = L1LineWidth / DataWidth * L1BankFactor;
-  // Number of banks in each bank wrap
-  localparam int unsigned L1BankPerWP     = L1Associativity;
-  // Number of banks in each cache way
-  localparam int unsigned L1BankPerWay    = L1NumWrapper;
+  localparam int unsigned L1NumWrapper    = L1NumDataBank / L1BankPerWP;
   // Number of cache entries each cache way has
   localparam int unsigned L1CacheWayEntry = L1NumEntry / L1Associativity;
   // Number of cache sets each cache way has
   localparam int unsigned L1NumSet        = L1CacheWayEntry / L1BankFactor;
   // Number of Tag banks
   localparam int unsigned L1NumTagBank    = L1BankFactor * L1Associativity;
-  // Number of Data banks
-  localparam int unsigned L1NumDataBank   = L1NumWrapper * L1Associativity;
+  // Number of lines per bank unit
+  localparam int unsigned DepthPerBank    = TCDMDepth / L1BankPerWP;
+  // Cache total size in KB
+  localparam int unsigned L1Size          = NrBanks * TCDMDepth * DataWidth / 8 / 1024;
 
   // --------
   // Typedefs
@@ -275,6 +277,7 @@ module spatz_cluster
   typedef logic [NarrowDataWidth/8-1:0] strb_t;
   typedef logic [AxiDataWidth-1:0] data_dma_t;
   typedef logic [AxiDataWidth/8-1:0] strb_dma_t;
+  typedef logic [L1LineWidth/8-1:0] strb_l1_t;
   typedef logic [NarrowIdWidthIn-1:0] id_mst_t;
   typedef logic [NarrowIdWidthOut-1:0] id_slv_t;
   typedef logic [WideIdWidthIn-1:0] id_dma_mst_t;
@@ -291,6 +294,8 @@ module spatz_cluster
 
   typedef logic [$clog2(L1NumSet)-1:0] tcdm_bank_addr_t;
 
+  typedef logic [L1LineWidth-1:0] data_l1_t;
+
   typedef struct packed {
     logic [CoreIDWidth-1:0] core_id;
     logic is_core;
@@ -302,6 +307,8 @@ module spatz_cluster
   `AXI_TYPEDEF_ALL(axi_slv, addr_t, id_slv_t, data_t, strb_t, user_t)
   `AXI_TYPEDEF_ALL(axi_mst_dma, addr_t, id_dma_mst_t, data_dma_t, strb_dma_t, user_dma_t)
   `AXI_TYPEDEF_ALL(axi_slv_dma, addr_t, id_dma_slv_t, data_dma_t, strb_dma_t, user_dma_t)
+
+  `AXI_TYPEDEF_ALL(axi_mst_l1, addr_t, id_dma_mst_t, data_l1_t, strb_l1_t, user_dma_t)
 
   `REQRSP_TYPEDEF_ALL(reqrsp, addr_t, data_t, strb_t)
 
@@ -839,7 +846,8 @@ module spatz_cluster
   end
 
   logic  [NrTCDMPortsCores-1:0] unmerge_pready, strb_hdl_pready, cache_pready;
-  assign spm_size        = cfg_spm_size * L1Associativity * L1LineWidth / 2;
+  // assign spm_size        = cfg_spm_size * L1Associativity * L1LineWidth / 2 /2;
+  assign spm_size        = cfg_spm_size * 1024;
 
   // split the requests for spm or cache from core side
   spatz_addr_mapper #(
@@ -927,6 +935,12 @@ module spatz_cluster
     assign cache_rsp[j].p.write = cache_rsp_write[j];
   end
 
+  axi_mst_l1_req_t  l1_axi_mst_req;
+  axi_mst_l1_resp_t l1_axi_mst_rsp;
+
+  tcdm_bank_addr_t num_spm_lines;
+  assign num_spm_lines = cfg_spm_size * (DepthPerBank / L1Size);
+
   flamingo_spatz_cache_ctrl #(
     // Core
     .NumPorts         (NrTCDMPortsCores  ),
@@ -941,8 +955,8 @@ module spatz_cluster
     // Type
     .core_meta_t      (tcdm_user_t       ),
     .impl_in_t        (impl_in_t         ),
-    .axi_req_t        (axi_mst_dma_req_t ),
-    .axi_resp_t       (axi_mst_dma_resp_t)
+    .axi_req_t        (axi_mst_l1_req_t ),
+    .axi_resp_t       (axi_mst_l1_resp_t)
   ) i_l1_controller (
     .clk_i                 (clk_i                    ),
     .rst_ni                (rst_ni                   ),
@@ -954,7 +968,7 @@ module spatz_cluster
     // SPM Size
     // The calculation of spm region in cache is different
     // than other modules (needs to times 2)
-    .bank_depth_for_SPM_i  ((cfg_spm_size<<1)        ),
+    .bank_depth_for_SPM_i  (num_spm_lines            ),
     // Request
     .core_req_valid_i      (cache_req_valid          ),
     .core_req_ready_o      (cache_req_ready          ),
@@ -969,8 +983,8 @@ module spatz_cluster
     .core_resp_data_o      (cache_rsp_data           ),
     .core_resp_meta_o      (cache_rsp_meta           ),
     // AXI refill
-    .axi_req_o             (wide_axi_mst_req[DCache] ),
-    .axi_resp_i            (wide_axi_mst_rsp[DCache] ),
+    .axi_req_o             (l1_axi_mst_req ),
+    .axi_resp_i            (l1_axi_mst_rsp ),
     // Tag Banks
     .tcdm_tag_bank_req_o   (l1_tag_bank_req          ),
     .tcdm_tag_bank_we_o    (l1_tag_bank_we           ),
@@ -987,6 +1001,41 @@ module spatz_cluster
     .tcdm_data_bank_rdata_i(l1_data_bank_rdata       ),
     .tcdm_data_bank_gnt_i  (l1_data_bank_gnt         )
   );
+
+  axi_mst_dma_req_t  dcache_mst_req_tmp;
+  axi_mst_dma_resp_t dcache_mst_rsp_tmp;
+
+  axi_dw_converter #(
+    .AxiMaxReads        (128),
+    .AxiSlvPortDataWidth(L1LineWidth),
+    .AxiMstPortDataWidth(AxiDataWidth),
+    .AxiAddrWidth       (AxiAddrWidth),
+    .AxiIdWidth         (WideIdWidthIn),
+    .aw_chan_t          (axi_mst_l1_aw_chan_t),
+    .mst_w_chan_t       (axi_mst_dma_w_chan_t),
+    .slv_w_chan_t       (axi_mst_l1_w_chan_t),
+    .b_chan_t           (axi_mst_l1_b_chan_t),
+    .ar_chan_t          (axi_mst_l1_ar_chan_t),
+    .mst_r_chan_t       (axi_mst_dma_r_chan_t),
+    .slv_r_chan_t       (axi_mst_l1_r_chan_t),
+    .axi_mst_req_t      (axi_mst_dma_req_t),
+    .axi_mst_resp_t     (axi_mst_dma_resp_t),
+    .axi_slv_req_t      (axi_mst_l1_req_t),
+    .axi_slv_resp_t     (axi_mst_l1_resp_t)
+  ) i_l1_req_split (
+    .clk_i              (clk_i),
+    .rst_ni             (rst_ni),
+    .slv_req_i          (l1_axi_mst_req),
+    .slv_resp_o         (l1_axi_mst_rsp),
+    .mst_req_o          (dcache_mst_req_tmp),
+    .mst_resp_i         (wide_axi_mst_rsp[DCache])
+  );
+
+  always_comb begin
+    wide_axi_mst_req[DCache] = dcache_mst_req_tmp;
+    wide_axi_mst_req[DCache].aw.cache = '1;
+    wide_axi_mst_req[DCache].ar.cache = '1;
+  end
 
   for (genvar j = 0; j < L1NumTagBank; j++) begin: gen_l1_tag_banks
     tc_sram_impl #(
@@ -1017,7 +1066,7 @@ module spatz_cluster
   for (genvar i = 0; i < NrSuperBanks; i++) begin
     // 8 Bank Wraps per SuperBank
     for (genvar j = 0; j < BanksPerSuperBank; j++) begin
-      // 4 Banks per Bank Wrap
+      // 8 Banks per Bank Wrap
       for (genvar k = 0; k < L1BankPerWP; k++) begin
         // [i*8+j][k]         => [0][0], [0][1], [0][2]....
         // [i*8*4 + j*4 + k]  => [0],    [1]   , [2], ...
