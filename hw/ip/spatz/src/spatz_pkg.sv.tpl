@@ -341,6 +341,9 @@ package spatz_pkg;
 
     // Did the memory request trigger an exception
     logic exc;
+
+    // Interface that is committing
+    logic intf_id;
   } vlsu_rsp_t;
 
 % if cfg['mempool']:
