@@ -462,7 +462,9 @@ module spatz_vlsu
           automatic logic [1:0] data_index_width_diff = int'(mem_spatz_req.vtype.vsew) - int'(mem_spatz_req.op_mem.ew);
 
           // Pointer to index
-          automatic logic [idx_width(NrMemPorts*ELENB)-1:0] word_index = (fu << int'(mem_spatz_req.op_mem.ew)) + (idx_offset << $clog2(N_FU));
+          automatic logic [idx_width(N_FU*ELENB)-1:0] word_index = (fu << (MAXEW - data_index_width_diff)) +
+                                                                   (maxew_t'(idx_offset >> (MAXEW - data_index_width_diff)) << (MAXEW - data_index_width_diff)) * N_FU +
+                                                                   (maxew_t'(idx_offset << data_index_width_diff) >> data_index_width_diff);
 
           // Index
           unique case (mem_spatz_req.op_mem.ew)
@@ -500,7 +502,7 @@ module spatz_vlsu
       // The second interface starts from half of the vector to straighten the write-back VRF access pattern   
       if (intf == 1) begin
         vd_vreg_addr[intf] += commit_insn_q.vl / (2 * N_FU * ELENB);
-        vs2_vreg_idx_addr[intf] += ((mem_spatz_req.vl >> (MAXEW - int'(mem_spatz_req.op_mem.ew))) / (2 * N_FU * ELENB));
+        vs2_vreg_idx_addr[intf] += ((mem_spatz_req.vl >> (mem_spatz_req.vtype.vsew - int'(mem_spatz_req.op_mem.ew))) / (2 * N_FU * ELENB));
       end
 
     end    
