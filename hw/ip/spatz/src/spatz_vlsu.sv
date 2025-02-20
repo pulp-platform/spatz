@@ -685,6 +685,7 @@ module spatz_vlsu
   // With more than an interface, we need to wait until all the interfaces commit to the VRF.
 
   // Check if interface 1 is the interface trying to commit, if so take resp information from interface 1
+  // If both interfaces in sync, interface 1 is given priority
   assign resp_intf = vrf_commit_intf_valid_q [1] == 1'b0 ? 1'b1 : 1'b0;
   assign vlsu_rsp_o = &vrf_commit_intf_valid && |vrf_req_valid_q ? vrf_req_q[resp_intf].rsp   : '{id: commit_insn_q.id, default: '0};
 
@@ -870,6 +871,7 @@ module spatz_vlsu
 
       // Propagate request ID
       vrf_req_d[intf].rsp.id    = commit_insn_q.id;
+      vrf_req_d[intf].rsp.intf_id = intf;
       vrf_req_d[intf].rsp_valid = commit_insn_valid && &commit_finished_d[intf] && mem_insn_finished_d[commit_insn_q.id];
 
       // Request indexes
