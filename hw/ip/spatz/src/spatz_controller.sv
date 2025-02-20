@@ -260,7 +260,9 @@ module spatz_controller
 
   // Is this instruction a narrowing or widening instruction?
   logic [NrParallelInstructions-1:0] narrow_wide_q, narrow_wide_d;
+  logic [NrParallelInstructions-1:0] narrow_q, narrow_d;
   `FF(narrow_wide_q, narrow_wide_d, '0)
+  `FF(narrow_q, narrow_d, '0)
 
   // Did this narrowing instruction write to the VRF in the previous cycle?
   logic [NrParallelInstructions-1:0] wrote_result_narrowing_q, wrote_result_narrowing_d;
@@ -272,6 +274,7 @@ module spatz_controller
     write_table_d            = write_table_q;
     scoreboard_d             = scoreboard_q;
     narrow_wide_d            = narrow_wide_q;
+    narrow_d                 = narrow_q;
     wrote_result_narrowing_d = wrote_result_narrowing_q;
 
     // Nobody wrote to the VRF yet
@@ -304,12 +307,13 @@ module spatz_controller
     if (sb_enable_o[SB_VFU_VD_WD]) begin
       // Calculate the load-store interface id to use here for chaining
       automatic logic intID = (vl_cnt_q[sb_id_i[SB_VFU_VD_WD]] < vl_max_d[sb_id_i[SB_VFU_VD_WD]]) ? 0 : 1;
+      automatic int VRFWriteSize = narrow_q[sb_id_i[SB_VFU_VD_WD]] ? VRFWordBWidth >> 1 : VRFWordBWidth;
       
       // Update vl_cnt if actually written into the VRF
       if (sb_wrote_result_i[SB_VFU_VD_WD - SB_VFU_VD_WD])
-        vl_cnt_d[sb_id_i[SB_VFU_VD_WD]] += VRFWordBWidth;
+        vl_cnt_d[sb_id_i[SB_VFU_VD_WD]] += VRFWriteSize;
 
-      if (vl_cnt_q[sb_id_i[SB_VFU_VD_WD]] >= (vl_max_d[sb_id_i[SB_VFU_VD_WD]] * (intID + 1) - VRFWordBWidth)) begin
+      if (vl_cnt_q[sb_id_i[SB_VFU_VD_WD]] >= (vl_max_d[sb_id_i[SB_VFU_VD_WD]] * (intID + 1) - VRFWriteSize)) begin
         done_result_d[intID][sb_id_i[SB_VFU_VD_WD]] = 1'b1;
       end
 
@@ -328,12 +332,13 @@ module spatz_controller
     if (sb_enable_o[SB_VSLDU_VD_WD]) begin
       // Calculate the load-store interface id to use here for chaining
       automatic logic intID = (vl_cnt_q[sb_id_i[SB_VSLDU_VD_WD]] < vl_max_d[sb_id_i[SB_VSLDU_VD_WD]]) ? 0 : 1;
+      automatic int VRFWriteSize = narrow_q[sb_id_i[SB_VSLDU_VD_WD]] ? VRFWordBWidth >> 1 : VRFWordBWidth;
       
       // Update vl_cnt if actually written into the VRF
       if (sb_wrote_result_i[SB_VSLDU_VD_WD - SB_VFU_VD_WD])
-        vl_cnt_d[sb_id_i[SB_VSLDU_VD_WD]] += VRFWordBWidth;
+        vl_cnt_d[sb_id_i[SB_VSLDU_VD_WD]] += VRFWriteSize;
       
-      if (vl_cnt_q[sb_id_i[SB_VSLDU_VD_WD]] >= (vl_max_d[sb_id_i[SB_VSLDU_VD_WD]] * (intID + 1) - VRFWordBWidth)) begin
+      if (vl_cnt_q[sb_id_i[SB_VSLDU_VD_WD]] >= (vl_max_d[sb_id_i[SB_VSLDU_VD_WD]] * (intID + 1) - VRFWriteSize)) begin
         done_result_d[intID][sb_id_i[SB_VSLDU_VD_WD]] = 1'b1;
       end
       
@@ -353,6 +358,7 @@ module spatz_controller
 
       scoreboard_d[vfu_rsp_i.id]             = '0;
       narrow_wide_d[vfu_rsp_i.id]            = 1'b0;
+      narrow_d[vfu_rsp_i.id]                 = 1'b0;
       wrote_result_narrowing_d[vfu_rsp_i.id] = 1'b0;
       wrote_result_d[0][vfu_rsp_i.id]        = 1'b0;
       wrote_result_d[1][vfu_rsp_i.id]        = 1'b0;
@@ -372,6 +378,7 @@ module spatz_controller
 
       scoreboard_d[vlsu_rsp_i.id]             = '0;
       narrow_wide_d[vlsu_rsp_i.id]            = 1'b0;
+      narrow_d[vlsu_rsp_i.id]                 = 1'b0;
       wrote_result_narrowing_d[vlsu_rsp_i.id] = 1'b0;
       wrote_result_d[0][vlsu_rsp_i.id]        = 1'b0;
       wrote_result_d[1][vlsu_rsp_i.id]        = 1'b0;
@@ -391,6 +398,7 @@ module spatz_controller
 
       scoreboard_d[vsldu_rsp_i.id]             = '0;
       narrow_wide_d[vsldu_rsp_i.id]            = 1'b0;
+      narrow_d[vsldu_rsp_i.id]                 = 1'b0;
       wrote_result_narrowing_d[vsldu_rsp_i.id] = 1'b0;
       wrote_result_d[0][vsldu_rsp_i.id]        = 1'b0;
       wrote_result_d[1][vsldu_rsp_i.id]        = 1'b0;
@@ -432,6 +440,8 @@ module spatz_controller
       if (spatz_req.op_arith.is_narrowing || spatz_req.op_arith.widen_vs1 || spatz_req.op_arith.widen_vs2)
         narrow_wide_d[spatz_req.id] = 1'b1;
       
+      narrow_d[spatz_req.id] = spatz_req.op_arith.is_narrowing;
+
       // Track request vl for vector chaining
       // TODO: split the vector length here properly based on number of FPUs, EW, vstart, etc...
       vl_max_d[spatz_req.id] = (spatz_req.vl >> 1) << spatz_req.vtype.vsew;
