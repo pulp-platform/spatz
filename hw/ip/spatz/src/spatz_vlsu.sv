@@ -743,6 +743,9 @@ module spatz_vlsu
 
     vlsu_rsp_t rsp;
     logic rsp_valid;
+
+    // Is this the last vrf write from this interface?
+    logic last;
   } vrf_req_t;
 
   vrf_req_t [NrInterfaces-1:0] vrf_req_d, vrf_req_q;
@@ -757,9 +760,10 @@ module spatz_vlsu
   always_comb begin
     vrf_commit_done_d = vrf_commit_done_q;
 
-    // Record the done flag if the commit is finished
+    // Here, we check if each interface is committing the last vrf
+    // If yes, we record the commit is done for this interface
     for (int intf = 0; intf < NrInterfaces; intf++) begin
-      if (&commit_finished_q[intf]) begin
+      if (vrf_req_q[intf].last & vrf_req_valid_q[intf]) begin
         vrf_commit_done_d[intf] = 1'b1;
       end
     end
@@ -1053,7 +1057,8 @@ module spatz_vlsu
       vrf_req_d[intf].rsp.id    = commit_insn_q.id;
       vrf_req_d[intf].rsp.intf_id = intf;
       vrf_req_d[intf].rsp_valid = commit_insn_valid && &commit_finished_d[intf] && mem_insn_finished_d[commit_insn_q.id];
-
+      // For last commit on the current interface, we do not check mem_insn_finished, because it checks both interface.
+      vrf_req_d[intf].last      = commit_insn_valid && &commit_finished_d[intf];
 
       // Request indexes
       vrf_re_o[intf][1] = mem_is_indexed;
