@@ -14,12 +14,15 @@ module spatz_controller
   import fpnew_pkg::roundmode_e;
   import fpnew_pkg::fmt_mode_t;
   #(
+    parameter int  unsigned NrMemPorts        = 1,
     parameter int  unsigned NrVregfilePorts   = 1,
     parameter int  unsigned NrWritePorts      = 1,
     parameter bit           RegisterRsp       = 0,
     parameter type          spatz_issue_req_t = logic,
     parameter type          spatz_issue_rsp_t = logic,
-    parameter type          spatz_rsp_t       = logic
+    parameter type          spatz_rsp_t       = logic,
+    // Dependant parameters. DO NOT CHANGE!
+    localparam int  unsigned NrInterfaces     = NrMemPorts / spatz_pkg::N_FU
   ) (
     input  logic                                   clk_i,
     input  logic                                   rst_ni,
@@ -239,10 +242,11 @@ module spatz_controller
   ////////////////
 
   // Which instruction is reading and writing to each vector register?
-  struct packed {
+  typedef struct packed {
     spatz_id_t id;
     logic valid;
-  } [NRVREG-1:0] read_table_d, read_table_q, write_table_d, write_table_q;
+  } [NRVREG-1:0] table_t;
+  table_t read_table_d, read_table_q, write_table_d, write_table_q;
 
   `FF(read_table_q, read_table_d, '{default: '0})
   `FF(write_table_q, write_table_d, '{default: '0})
@@ -256,8 +260,22 @@ module spatz_controller
   scoreboard_metadata_t [NrParallelInstructions-1:0] scoreboard_q, scoreboard_d;
   `FF(scoreboard_q, scoreboard_d, '0)
 
+  logic [NrInterfaces-1:0] [NrParallelInstructions-1:0] done_result_q, done_result_d;
+  `FF(done_result_q, done_result_d, '0)
+
+  // Counter to track the vlen completed for each instruction
+  vlen_t [NrParallelInstructions-1:0] vl_cnt_d, vl_cnt_q, vl_max_d, vl_max_q;
+  `FF(vl_cnt_q, vl_cnt_d, '0)
+  `FF(vl_max_q, vl_max_d, '0)
+
+  // Did the instruction write twice to the VRF in the previous two cycles?
+  logic [NrParallelInstructions-1:0] wrote_result_twice_d, wrote_result_twice_q;
+  `FF(wrote_result_twice_q, wrote_result_twice_d, '0)
+
   // Did the instruction write to the VRF in the previous cycle?
-  logic [NrParallelInstructions-1:0] wrote_result_q, wrote_result_d;
+  logic [NrInterfaces-1:0] [NrParallelInstructions-1:0] wrote_result_q, wrote_result_d;
+  // Did the instruction write to the VRF in the previous cycle with all its interfaces?
+  logic [NrParallelInstructions-1:0] wrote_result_all_intf_q;
   `FF(wrote_result_q, wrote_result_d, '0)
 
   // Is this instruction a narrowing or widening instruction?
@@ -277,25 +295,74 @@ module spatz_controller
     wrote_result_narrowing_d = wrote_result_narrowing_q;
 
     // Nobody wrote to the VRF yet
-    wrote_result_d = '0;
-    sb_enable_o    = '0;
+    wrote_result_twice_d = '0;
+    wrote_result_d       = '0;
+    done_result_d        = done_result_q;
+    sb_enable_o          = '0;
 
-    for (int unsigned port = 0; port < NrVregfilePorts; port++)
+    vl_cnt_d             = vl_cnt_q;
+    vl_max_d             = vl_max_q;
+    
+    for (int unsigned port = 0; port < NrVregfilePorts; port++) begin
+      // Calculate the load-store interface id to use here for chaining
+      automatic logic intID; 
+      
+      // For vlsu ports use the write status of the corresponding interface
+      if (port inside {SB_VLSU_VS2_RD0, SB_VLSU_VS2_RD1, SB_VLSU_VD_WD0}) begin
+        intID = 0;
+      end else if (port inside {SB_VLSU_VD_RD0, SB_VLSU_VD_RD1, SB_VLSU_VD_WD1}) begin 
+        intID = 1;
+      // For non vlsu ports, use the vector length to find the interface id for write status checks
+      end else begin
+        intID = (vl_cnt_q[sb_id_i[port]] < vl_max_d[sb_id_i[port]]) ? 0 : 1;
+      end
+      
       // Enable the VRF port if the dependant instructions wrote in the previous cycle
-      sb_enable_o[port] = sb_enable_i[port] && &(~scoreboard_q[sb_id_i[port]].deps | wrote_result_q) && (!(|scoreboard_q[sb_id_i[port]].deps) || !scoreboard_q[sb_id_i[port]].prevent_chaining);
+      sb_enable_o[port] = sb_enable_i[port] && &(~scoreboard_q[sb_id_i[port]].deps | wrote_result_q[intID] | done_result_q[intID]) && (!(|scoreboard_q[sb_id_i[port]].deps) || !scoreboard_q[sb_id_i[port]].prevent_chaining);
+    end
 
     // Store the decisions
     if (sb_enable_o[SB_VFU_VD_WD]) begin
+      // Calculate the load-store interface id to use here for chaining
+      automatic logic intID = (vl_cnt_q[sb_id_i[SB_VFU_VD_WD]] < vl_max_d[sb_id_i[SB_VFU_VD_WD]]) ? 0 : 1;
+      
+      // Update vl_cnt if actually written into the VRF
+      if (sb_wrote_result_i[SB_VFU_VD_WD - SB_VFU_VD_WD])
+        vl_cnt_d[sb_id_i[SB_VFU_VD_WD]] += VRFWordBWidth;
+
+      if (vl_cnt_q[sb_id_i[SB_VFU_VD_WD]] >= (vl_max_d[sb_id_i[SB_VFU_VD_WD]] * (intID + 1) - VRFWordBWidth)) begin
+        done_result_d[intID][sb_id_i[SB_VFU_VD_WD]] = 1'b1;
+      end
+
       wrote_result_narrowing_d[sb_id_i[SB_VFU_VD_WD]] = sb_wrote_result_i[SB_VFU_VD_WD - SB_VFU_VD_WD] ^ narrow_wide_q[sb_id_i[SB_VFU_VD_WD]];
-      wrote_result_d[sb_id_i[SB_VFU_VD_WD]]           = sb_wrote_result_i[SB_VFU_VD_WD - SB_VFU_VD_WD] && (!narrow_wide_q[sb_id_i[SB_VFU_VD_WD]] || wrote_result_narrowing_q[sb_id_i[SB_VFU_VD_WD]]);
+      wrote_result_d[intID][sb_id_i[SB_VFU_VD_WD]]    = sb_wrote_result_i[SB_VFU_VD_WD - SB_VFU_VD_WD] && (!narrow_wide_q[sb_id_i[SB_VFU_VD_WD]] || wrote_result_narrowing_q[sb_id_i[SB_VFU_VD_WD]]);
     end
-    if (sb_enable_o[SB_VLSU_VD_WD]) begin
-      wrote_result_narrowing_d[sb_id_i[SB_VLSU_VD_WD]] = sb_wrote_result_i[SB_VLSU_VD_WD - SB_VFU_VD_WD] ^ narrow_wide_q[sb_id_i[SB_VLSU_VD_WD]];
-      wrote_result_d[sb_id_i[SB_VLSU_VD_WD]]           = sb_wrote_result_i[SB_VLSU_VD_WD - SB_VFU_VD_WD] && (!narrow_wide_q[sb_id_i[SB_VLSU_VD_WD]] || wrote_result_narrowing_q[sb_id_i[SB_VLSU_VD_WD]]);
+
+    if (sb_enable_o[SB_VLSU_VD_WD0]) begin
+      // Calculate the load-store interface id to use here for chaining
+      wrote_result_narrowing_d[sb_id_i[SB_VLSU_VD_WD0]] = sb_wrote_result_i[SB_VLSU_VD_WD0 - SB_VFU_VD_WD] ^ narrow_wide_q[sb_id_i[SB_VLSU_VD_WD0]];
+      wrote_result_d[0][sb_id_i[SB_VLSU_VD_WD0]]        = sb_wrote_result_i[SB_VLSU_VD_WD0 - SB_VFU_VD_WD] && (!narrow_wide_q[sb_id_i[SB_VLSU_VD_WD0]] || wrote_result_narrowing_q[sb_id_i[SB_VLSU_VD_WD0]]);
     end
+
+    if (sb_enable_o[SB_VLSU_VD_WD1]) begin
+      wrote_result_narrowing_d[sb_id_i[SB_VLSU_VD_WD1]] = sb_wrote_result_i[SB_VLSU_VD_WD1 - SB_VFU_VD_WD] ^ narrow_wide_q[sb_id_i[SB_VLSU_VD_WD1]];
+      wrote_result_d[1][sb_id_i[SB_VLSU_VD_WD1]]        = sb_wrote_result_i[SB_VLSU_VD_WD1 - SB_VFU_VD_WD] && (!narrow_wide_q[sb_id_i[SB_VLSU_VD_WD1]] || wrote_result_narrowing_q[sb_id_i[SB_VLSU_VD_WD1]]);
+    end
+
     if (sb_enable_o[SB_VSLDU_VD_WD]) begin
+      // Calculate the load-store interface id to use here for chaining
+      automatic logic intID = (vl_cnt_q[sb_id_i[SB_VSLDU_VD_WD]] < vl_max_d[sb_id_i[SB_VSLDU_VD_WD]]) ? 0 : 1;
+      
+      // Update vl_cnt if actually written into the VRF
+      if (sb_wrote_result_i[SB_VSLDU_VD_WD - SB_VFU_VD_WD])
+        vl_cnt_d[sb_id_i[SB_VSLDU_VD_WD]] += VRFWordBWidth;
+      
+      if (vl_cnt_q[sb_id_i[SB_VSLDU_VD_WD]] >= (vl_max_d[sb_id_i[SB_VSLDU_VD_WD]] * (intID + 1) - VRFWordBWidth)) begin
+        done_result_d[intID][sb_id_i[SB_VSLDU_VD_WD]] = 1'b1;
+      end
+      
       wrote_result_narrowing_d[sb_id_i[SB_VSLDU_VD_WD]] = sb_wrote_result_i[SB_VSLDU_VD_WD - SB_VFU_VD_WD] ^ narrow_wide_q[sb_id_i[SB_VSLDU_VD_WD]];
-      wrote_result_d[sb_id_i[SB_VSLDU_VD_WD]]           = sb_wrote_result_i[SB_VSLDU_VD_WD - SB_VFU_VD_WD] && (!narrow_wide_q[sb_id_i[SB_VSLDU_VD_WD]] || wrote_result_narrowing_q[sb_id_i[SB_VSLDU_VD_WD]]);
+      wrote_result_d[intID][sb_id_i[SB_VSLDU_VD_WD]]    = sb_wrote_result_i[SB_VSLDU_VD_WD - SB_VFU_VD_WD] && (!narrow_wide_q[sb_id_i[SB_VSLDU_VD_WD]] || wrote_result_narrowing_q[sb_id_i[SB_VSLDU_VD_WD]]);
     end
 
     // A unit has finished its VRF access. Reset the scoreboard. For each instruction, check
@@ -311,6 +378,11 @@ module spatz_controller
       scoreboard_d[vfu_rsp_i.id]             = '0;
       narrow_wide_d[vfu_rsp_i.id]            = 1'b0;
       wrote_result_narrowing_d[vfu_rsp_i.id] = 1'b0;
+      wrote_result_d[0][vfu_rsp_i.id]        = 1'b0;
+      wrote_result_d[1][vfu_rsp_i.id]        = 1'b0;
+      done_result_d[0][vfu_rsp_i.id]         = 1'b0;
+      done_result_d[1][vfu_rsp_i.id]         = 1'b0;
+      vl_cnt_d[vfu_rsp_i.id]                 = '0;
       for (int unsigned insn = 0; insn < NrParallelInstructions; insn++)
         scoreboard_d[insn].deps[vfu_rsp_i.id] = 1'b0;
     end
@@ -325,6 +397,11 @@ module spatz_controller
       scoreboard_d[vlsu_rsp_i.id]             = '0;
       narrow_wide_d[vlsu_rsp_i.id]            = 1'b0;
       wrote_result_narrowing_d[vlsu_rsp_i.id] = 1'b0;
+      wrote_result_d[0][vlsu_rsp_i.id]        = 1'b0;
+      wrote_result_d[1][vlsu_rsp_i.id]        = 1'b0;
+      done_result_d[0][vlsu_rsp_i.id]         = 1'b0;
+      done_result_d[1][vlsu_rsp_i.id]         = 1'b0;
+      vl_cnt_d[vlsu_rsp_i.id]                 = '0;
       for (int unsigned insn = 0; insn < NrParallelInstructions; insn++)
         scoreboard_d[insn].deps[vlsu_rsp_i.id] = 1'b0;
     end
@@ -339,6 +416,11 @@ module spatz_controller
       scoreboard_d[vsldu_rsp_i.id]             = '0;
       narrow_wide_d[vsldu_rsp_i.id]            = 1'b0;
       wrote_result_narrowing_d[vsldu_rsp_i.id] = 1'b0;
+      wrote_result_d[0][vsldu_rsp_i.id]        = 1'b0;
+      wrote_result_d[1][vsldu_rsp_i.id]        = 1'b0;
+      done_result_d[0][vsldu_rsp_i.id]         = 1'b0;
+      done_result_d[1][vsldu_rsp_i.id]         = 1'b0;
+      vl_cnt_d[vsldu_rsp_i.id]                 = '0;
       for (int unsigned insn = 0; insn < NrParallelInstructions; insn++)
         scoreboard_d[insn].deps[vsldu_rsp_i.id] = 1'b0;
     end
@@ -373,6 +455,11 @@ module spatz_controller
       // Is this a narrowing or widening instruction?
       if (spatz_req.op_arith.is_narrowing || spatz_req.op_arith.widen_vs1 || spatz_req.op_arith.widen_vs2)
         narrow_wide_d[spatz_req.id] = 1'b1;
+
+      // Track request vl for vector chaining
+      // TODO: split the vector length here properly based on number of FPUs, EW, vstart, etc...
+      vl_max_d[spatz_req.id] = (spatz_req.vl >> 1) << spatz_req.vtype.vsew;
+      vl_cnt_d[spatz_req.id] = '0;
     end
 
     // An instruction never depends on itself

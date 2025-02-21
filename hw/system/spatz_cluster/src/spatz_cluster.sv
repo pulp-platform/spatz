@@ -66,6 +66,7 @@ module spatz_cluster
     /// Spatz FPU/IPU Configuration
     parameter int                     unsigned               NumSpatzFPUs                       = 4,
     parameter int                     unsigned               NumSpatzIPUs                       = 1,
+    parameter int                     unsigned               NumSpatzTCDMPorts        [NrCores] = '{default: '0},
     /// Per-core enabling of the custom `Xdma` ISA extensions.
     parameter bit                              [NrCores-1:0] Xdma                               = '{default: '0},
     /// # Per-core parameters
@@ -170,7 +171,7 @@ module spatz_cluster
   localparam int unsigned NrSuperBanks      = NrBanks / BanksPerSuperBank;
 
   function automatic int unsigned get_tcdm_ports(int unsigned core);
-    return spatz_pkg::N_FU + 1;
+    return NumSpatzTCDMPorts[core] + 1;
   endfunction
 
   function automatic int unsigned get_tcdm_port_offs(int unsigned core_idx);
@@ -1181,6 +1182,7 @@ module spatz_cluster
       .RegisterCoreRsp         (RegisterCoreRsp            ),
       .NumSpatzFPUs            (NumSpatzFPUs               ),
       .NumSpatzIPUs            (NumSpatzIPUs               ),
+      .NumMemPortsPerSpatz     (NumSpatzTCDMPorts[i]       ),
       .TCDMAddrWidth           (SPMAddrWidth               )
     ) i_spatz_cc (
       .clk_i            (clk_i                               ),

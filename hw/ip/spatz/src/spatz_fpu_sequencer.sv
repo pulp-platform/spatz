@@ -615,7 +615,7 @@ module spatz_fpu_sequencer
 `else
     fp_lsu_qaddr   = issue_req_i.data_argc;
 `endif
-    fp_lsu_qdata   = fpr_rdata[1];
+    fp_lsu_qdata   = is_store ? fpr_rdata[1] : '0;
     fp_lsu_qsize   = ls_size;
     fp_lsu_qamo    = AMONone;
     fp_lsu_qvalid  = (is_load || is_store) && operands_available && !vlsu_stall;

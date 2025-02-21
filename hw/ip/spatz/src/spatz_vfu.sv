@@ -117,9 +117,10 @@ module spatz_vfu
   assign nr_elem_word = (N_FU * (1 << (MAXEW - spatz_req.vtype.vsew))) >> spatz_req.op_arith.is_narrowing;
 
   // Are we running integer or floating-point instructions?
-  enum logic {
+  typedef enum logic {
     VFU_RunningIPU, VFU_RunningFPU
-  } state_d, state_q;
+   } state_t;
+   state_t state_d, state_q;
   `FF(state_q, state_d, VFU_RunningFPU)
 
   // Propagate the tags through the functional units
@@ -178,13 +179,14 @@ module spatz_vfu
   logic last_request;
 
   // Reduction state
-  enum logic [2:0] {
+  typedef enum logic [2:0] {
     Reduction_NormalExecution,
     Reduction_Wait,
     Reduction_Init,
     Reduction_Reduce,
     Reduction_WriteBack
-  } reduction_state_d, reduction_state_q;
+  } reduction_state_t;
+   reduction_state_t reduction_state_d, reduction_state_q;
   `FF(reduction_state_q, reduction_state_d, Reduction_NormalExecution)
 
   // Is the reduction done?

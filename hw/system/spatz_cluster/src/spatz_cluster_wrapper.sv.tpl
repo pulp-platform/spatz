@@ -314,6 +314,7 @@ module ${cfg['name']}_wrapper
   localparam int unsigned NumIntOutstandingLoads   [NumCores] = '{${core_cfg('num_int_outstanding_loads')}};
   localparam int unsigned NumIntOutstandingMem     [NumCores] = '{${core_cfg('num_int_outstanding_mem')}};
   localparam int unsigned NumSpatzOutstandingLoads [NumCores] = '{${core_cfg('num_spatz_outstanding_loads')}};
+  localparam int unsigned NumSpatzTCDMPorts        [NumCores] = '{default: ${cfg['spatz_nports']}};
 
   spatz_cluster_pkg::spatz_axi_iwc_out_req_t axi_from_cluster_iwc_req;
   spatz_cluster_pkg::spatz_axi_iwc_out_resp_t axi_from_cluster_iwc_resp;
@@ -541,6 +542,7 @@ module ${cfg['name']}_wrapper
     .FPUImplementation (${cfg['pkg_name']}::FPUImplementation),
     .NumSpatzFPUs (${cfg['n_fpu']}),
     .NumSpatzIPUs (${cfg['n_ipu']}),
+    .NumSpatzTCDMPorts (NumSpatzTCDMPorts),
     .SnitchPMACfg (${cfg['pkg_name']}::SnitchPMACfg),
     .NumIntOutstandingLoads (NumIntOutstandingLoads),
     .NumIntOutstandingMem (NumIntOutstandingMem),

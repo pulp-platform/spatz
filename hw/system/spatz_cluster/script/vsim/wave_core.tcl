@@ -166,8 +166,8 @@ add wave -noupdate -group core[$1] -group Spatz -group FPU /tb_bin/i_dut/i_clust
 
 add wave -noupdate -group core[$1] -group Internal /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/*
 
-add wave -noupdate -group core[$1] -group Spatz -group VLSU -group ROB0 /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/i_spatz/i_vlsu/gen_rob[0]/i_reorder_buffer/*
-add wave -noupdate -group core[$1] -group Spatz -group VLSU -group ROB1 /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/i_spatz/i_vlsu/gen_rob[1]/i_reorder_buffer/*
+add wave -noupdate -group core[$1] -group Spatz -group VLSU -group ROB0_0 /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/i_spatz/i_vlsu/gen_rob_intf[0]/gen_rob_intf_fu[0]/i_reorder_buffer/*
+add wave -noupdate -group core[$1] -group Spatz -group VLSU -group ROB1_0 /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/i_spatz/i_vlsu/gen_rob_intf[1]/gen_rob_intf_fu[0]/i_reorder_buffer/*
 
 add wave -noupdate -group core[$1] -group Spatz -group RSP_FIFO /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/spatz_mem_rsp
 add wave -noupdate -group core[$1] -group Spatz -group RSP_FIFO /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/spatz_mem_fifo
