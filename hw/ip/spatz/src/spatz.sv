@@ -387,7 +387,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     .empty_o    (vlsu_buf_empty),
     .usage_o    (vlsu_buf_usage),
 
-    .data_i     ({vrf_wdata[VLSU_VD_WD1], vrf_waddr[VLSU_VD_WD1], vrf_wbe[VLSU_VD_WD1], sb_id[SB_VLSU_VD_WD1], vlsu_rsp, vlsu_rsp_valid}), 
+    .data_i     ({vrf_wdata[VLSU_VD_WD1], vrf_waddr[VLSU_VD_WD1], vrf_wbe[VLSU_VD_WD1], sb_id[SB_VLSU_VD_WD1], vlsu_rsp, vlsu_rsp_valid}),
     .push_i     (vlsu_buf_push),
 
     .data_o     (vlsu_buf_data),

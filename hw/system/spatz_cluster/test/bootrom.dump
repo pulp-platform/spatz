@@ -37,7 +37,7 @@ Disassembly of section .rodata:
     1054:	0000                	.2byte	0x0
     1056:	5100                	.2byte	0x5100
     1058:	0000                	.2byte	0x0
-    105a:	0002                	.2byte	0x2
+    105a:	0004                	.2byte	0x4
     105c:	0000                	.2byte	0x0
     105e:	0000                	.2byte	0x0
     1060:	0000                	.2byte	0x0
