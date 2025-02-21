@@ -241,12 +241,11 @@ module spatz_cluster
 
   // L1 Cache
   // Number of Spatz ports the controller has
-  localparam int unsigned L1NumSpatzPort  = NrTCDMPortsCores;
-  // localparam int unsigned L1NumSpatzPort  = NumSpatzTCDMPorts[0];
+  localparam int unsigned L1NumCachePort  = NrTCDMPortsCores - NumSpatzTCDMPorts[0];
   // Address width of cache
   localparam int unsigned L1AddrWidth     = 32;
   // Cache lane width
-  localparam int unsigned L1LineWidth     = 1024;
+  localparam int unsigned L1LineWidth     = 512;
   // Cache ways
   localparam int unsigned L1Associativity = 4;
   // Pesudo dual bank
@@ -254,7 +253,7 @@ module spatz_cluster
   // Coalecser window
   localparam int unsigned L1CoalFactor    = 2;
   // Total number of Data banks
-  localparam int unsigned L1NumDataBank   = 128;
+  localparam int unsigned L1NumDataBank   = 64;
   // SPM view: Number of banks in each bank wrap (Use to mitigate routing complexity of such many banks)
   localparam int unsigned L1BankPerWP     = L1NumDataBank / NrBanks;
   // 8 * 1024 * 64 / 512 = 1024)
@@ -488,21 +487,21 @@ module spatz_cluster
   spm_req_t   [NrTCDMPortsCores-1:0] spm_req;
   spm_rsp_t   [NrTCDMPortsCores-1:0] spm_rsp;
 
-  tcdm_req_t  [NrTCDMPortsCores-1:0] unmerge_req, strb_hdl_req, cache_req;
-  tcdm_rsp_t  [NrTCDMPortsCores-1:0] unmerge_rsp, strb_hdl_rsp, cache_rsp;
+  tcdm_req_t  [L1NumCachePort-1:0] unmerge_req, strb_hdl_req, cache_req;
+  tcdm_rsp_t  [L1NumCachePort-1:0] unmerge_rsp, strb_hdl_rsp, cache_rsp;
 
-  logic       [NrTCDMPortsCores-1:0] cache_req_valid;
-  logic       [NrTCDMPortsCores-1:0] cache_req_ready;
-  tcdm_addr_t [NrTCDMPortsCores-1:0] cache_req_addr;
-  tcdm_user_t [NrTCDMPortsCores-1:0] cache_req_meta;
-  logic       [NrTCDMPortsCores-1:0] cache_req_write;
-  data_t      [NrTCDMPortsCores-1:0] cache_req_data;
+  logic       [L1NumCachePort-1:0] cache_req_valid;
+  logic       [L1NumCachePort-1:0] cache_req_ready;
+  tcdm_addr_t [L1NumCachePort-1:0] cache_req_addr;
+  tcdm_user_t [L1NumCachePort-1:0] cache_req_meta;
+  logic       [L1NumCachePort-1:0] cache_req_write;
+  data_t      [L1NumCachePort-1:0] cache_req_data;
 
-  logic       [NrTCDMPortsCores-1:0] cache_rsp_valid;
-  logic       [NrTCDMPortsCores-1:0] cache_rsp_ready;
-  logic       [NrTCDMPortsCores-1:0] cache_rsp_write;
-  data_t      [NrTCDMPortsCores-1:0] cache_rsp_data;
-  tcdm_user_t [NrTCDMPortsCores-1:0] cache_rsp_meta;
+  logic       [L1NumCachePort-1:0] cache_rsp_valid;
+  logic       [L1NumCachePort-1:0] cache_rsp_ready;
+  logic       [L1NumCachePort-1:0] cache_rsp_write;
+  data_t      [L1NumCachePort-1:0] cache_rsp_data;
+  tcdm_user_t [L1NumCachePort-1:0] cache_rsp_meta;
 
   logic            [L1NumTagBank-1:0] l1_tag_bank_req;
   logic            [L1NumTagBank-1:0] l1_tag_bank_we;
@@ -849,18 +848,19 @@ module spatz_cluster
     end
   end
 
-  logic  [NrTCDMPortsCores-1:0] unmerge_pready, strb_hdl_pready, cache_pready;
+  logic  [L1NumCachePort-1:0] unmerge_pready, strb_hdl_pready, cache_pready;
   // assign spm_size        = cfg_spm_size * L1Associativity * L1LineWidth / 2 /2;
   assign spm_size        = cfg_spm_size * 1024;
 
   // split the requests for spm or cache from core side
   spatz_addr_mapper #(
     .NumSpmIO       (NrTCDMPortsCores ),
-    .NumCacheIO     (L1NumSpatzPort   ),
+    .NumCacheIO     (L1NumCachePort   ),
     .AddrWidth      (L1AddrWidth      ),
     .SPMAddrWidth   (SPMAddrWidth     ),
     .DataWidth      (DataWidth        ),
     .mem_req_t      (tcdm_req_t       ),
+    .mem_req_chan_t (tcdm_req_chan_t  ),
     .mem_rsp_t      (tcdm_rsp_t       ),
     .mem_rsp_chan_t (tcdm_rsp_chan_t  ),
     .spm_req_t      (spm_req_t        ),
@@ -889,9 +889,9 @@ module spatz_cluster
   logic  [NrTCDMPortsCores-1:0] strb_req_ack;
 
   spatz_strbreq_merge_tree #(
-    .NumIO              (NrTCDMPortsCores             ),
+    .NumIO              (L1NumCachePort               ),
     .NumOutstandingMem  (NumSpatzOutstandingLoads[0]  ),
-    .MergeNum           (NrTCDMPortsCores - NrCores   ),
+    .MergeNum           (L1NumCachePort - NrCores     ),
     .DataWidth          (DataWidth                    ),
     .mem_req_t          (tcdm_req_t                   ),
     .mem_rsp_t          (tcdm_rsp_t                   ),
@@ -908,7 +908,7 @@ module spatz_cluster
     .unmerge_rsp_o   (unmerge_rsp       )
   );
 
-  for (genvar j = 0; j < NrTCDMPortsCores; j++) begin: gen_strb_hdlr
+  for (genvar j = 0; j < L1NumCachePort; j++) begin: gen_strb_hdlr
     spatz_strbreq_handler #(
       .DataWidth      (DataWidth    ),
       .mem_req_t      (tcdm_req_t   ),
@@ -948,7 +948,7 @@ module spatz_cluster
 
   flamingo_spatz_cache_ctrl #(
     // Core
-    .NumPorts         (NrTCDMPortsCores  ),
+    .NumPorts         (L1NumCachePort    ),
     .CoalExtFactor    (L1CoalFactor      ),
     .AddrWidth        (L1AddrWidth       ),
     .WordWidth        (DataWidth         ),
@@ -1012,7 +1012,7 @@ module spatz_cluster
 
   // Generate a down converter if data size mismatches between cacheline and L2
   // CAUTION: it will reduce the performance by a lot
-  if (L1LineWidth != AxiDataWidth) begin
+  if (L1LineWidth != AxiDataWidth) begin : gen_cache_axi_dw_converter
     axi_dw_converter #(
       .AxiMaxReads        (2),
       .AxiSlvPortDataWidth(L1LineWidth),
@@ -1038,7 +1038,7 @@ module spatz_cluster
       .mst_req_o          (dcache_mst_req_tmp),
       .mst_resp_i         (wide_axi_mst_rsp[DCache])
     );
-  end else begin
+  end else begin : gen_cache_axi_interco
     assign dcache_mst_req_tmp = l1_axi_mst_req;
     assign l1_axi_mst_rsp     = wide_axi_mst_rsp[DCache];
   end

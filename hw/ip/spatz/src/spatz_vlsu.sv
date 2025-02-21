@@ -769,7 +769,7 @@ module spatz_vlsu
     end
 
     // Clear the commit recording if all ports have done it
-    if (&vrf_commit_done_d) begin
+    if (&vrf_commit_done_q) begin
       vrf_commit_done_d = '0;
     end
 
@@ -815,7 +815,8 @@ module spatz_vlsu
     `FFLARNC(vrf_valid_rsp_q[intf], 1'b1, vrf_valid_rsp[intf], vlsu_rsp_valid_o & ~resp_overlap[intf], 1'b0, clk_i, rst_ni)
 
     // Check if either a previously tracked response or there is a response in the current cycle
-    assign vrf_commit_intf_valid[intf] = vrf_valid_rsp[intf] | vrf_valid_rsp_q[intf] | vrf_commit_done_q[intf];
+    assign vrf_commit_intf_valid[intf] = vrf_valid_rsp[intf] | vrf_commit_done_q[intf];
+    // assign vrf_commit_intf_valid[intf] = vrf_valid_rsp[intf] | vrf_valid_rsp_q[intf] | vrf_commit_done_q[intf];
     `FF(vrf_commit_intf_valid_q[intf], vrf_commit_intf_valid[intf], 1'b0);
   end
 
@@ -835,7 +836,8 @@ module spatz_vlsu
   // Check if both the interfaces have completed request and have a valid response to send
   // Check if atleast one interface has a valid (interfaces can send responses asynchronously, but they finish the request together)
   // Set reponse high if one of the interfaces has a ready indicating the response has been written to the VRF
-  assign vlsu_rsp_valid_o = &vrf_commit_intf_valid && |vrf_req_valid_q ? |vrf_req_ready_q : vlsu_finished_req && !commit_insn_q.is_load;
+  assign vlsu_rsp_valid_o = &vrf_commit_intf_valid && |vrf_req_valid_q ? |vrf_req_ready_q :
+                                                                          vlsu_finished_req && !commit_insn_q.is_load;
 
   //////////////
   // Counters //
@@ -1079,7 +1081,12 @@ module spatz_vlsu
           // the interface buffers that still have to write something back.
           vrf_req_d[intf].waddr = vd_vreg_addr[intf];
           // Here, we do not enable the writing to ROB unless all ports are in loading mode (avoid racing in ports)
-          vrf_req_valid_d[intf] = &(rob_rvalid[intf] | (~mem_pending[intf] && port_state_load[intf])) && |mem_pending[intf];
+          // Also, do not push it into reg if it is the last commit and the previous insn is not fully ack.
+          vrf_req_valid_d[intf] = &(rob_rvalid[intf] |
+                                  (~mem_pending[intf] && port_state_load[intf])) &&
+                                  |mem_pending[intf] &&
+                                  (~(vrf_commit_done_q[intf] & vrf_req_d[intf].last));
+
 
           for (int unsigned fu = 0; fu < N_FU; fu++) begin
             automatic int unsigned port = intf * N_FU + fu;

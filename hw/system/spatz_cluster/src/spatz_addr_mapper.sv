@@ -53,7 +53,7 @@ module spatz_addr_mapper #(
   // We may need to expand the signals here to correctly wire them
   // Output Side
   /// SPM Side
-  output spm_req_t  [NumSpmIO-1:0]     spm_req_o,
+  output spm_req_t  [NumSpmIO-1:0]    spm_req_o,
   input  spm_rsp_t  [NumSpmIO-1:0]    spm_rsp_i,
   /// Cache Side
   output mem_req_t  [NumCacheIO-1:0]  cache_req_o,
@@ -72,6 +72,7 @@ module spatz_addr_mapper #(
 
   mem_req_t [NumSpmIO-1:0] cache_req_arb;
   mem_rsp_t [NumSpmIO-1:0] cache_rsp_arb;
+  logic     [NumSpmIO-1:0] cache_pready_arb;
 
   // Ports define
   localparam int unsigned NUM_PORTS_PER_SPATZ = NumSpmIO/2-1;
@@ -154,28 +155,33 @@ module spatz_addr_mapper #(
         .rst_ni,
         .flush_i ( 1'b0 ),
         .rr_i    ( '0   ),
-        .data_i  ( {cache_req_arb[j].q,       cache_req_arb[j+CACHE_PORT_OFFSET].q}      ),
+        .data_i  ( {cache_req_arb[j].q,       cache_req_arb[j+SPM_PORT_OFFSET].q}      ),
         .sel_i   ( '0   ),
-        .valid_i ( {cache_req_arb[j].q_valid, cache_req_arb[j+CACHE_PORT_OFFSET].q_valid}),
-        .ready_o ( {cache_rsp_arb[j].q_ready, cache_rsp_arb[j+CACHE_PORT_OFFSET].q_ready}),
+        .valid_i ( {cache_req_arb[j].q_valid, cache_req_arb[j+SPM_PORT_OFFSET].q_valid}),
+        .ready_o ( {cache_rsp_arb[j].q_ready, cache_rsp_arb[j+SPM_PORT_OFFSET].q_ready}),
         .data_o  ( cache_req_o[j].q ),
         .idx_o   ( ),
         .valid_o ( cache_req_o[j].q_valid ),
         .ready_i ( cache_rsp_i[j].q_ready )
       );
 
-      assign cache_rsp_arb[j].p                   = cache_rsp_i[j].p;
-      assign cache_rsp_arb[j+CACHE_PORT_OFFSET].p = cache_rsp_i[j].p;
-      assign cache_rsp_arb[j].p_valid                   = cache_rsp_i[j].p.user.core_id == 0 ? cache_rsp_i[j].p_valid : 1'b0;
-      assign cache_rsp_arb[j+CACHE_PORT_OFFSET].p_valid = cache_rsp_i[j].p.user.core_id == 1 ? cache_rsp_i[j].p_valid : 1'b0;
+      assign cache_rsp_arb[j].p                       = cache_rsp_i[j].p;
+      assign cache_rsp_arb[j+SPM_PORT_OFFSET].p       = cache_rsp_i[j].p;
+      assign cache_rsp_arb[j].p_valid                 = cache_rsp_i[j].p.user.core_id == 0 ? cache_rsp_i[j].p_valid : 1'b0;
+      assign cache_rsp_arb[j+SPM_PORT_OFFSET].p_valid = cache_rsp_i[j].p.user.core_id == 1 ? cache_rsp_i[j].p_valid : 1'b0;
+
+      assign cache_pready_o[j] = cache_rsp_i[j].p.user.core_id == 0 ? cache_pready_arb[j] : cache_pready_arb[j+SPM_PORT_OFFSET];
     end
 
     // Connect the Snitch side signals
     assign cache_req_o[CACHE_SNITCH0] = cache_req_arb[SPM_SNITCH0];
     assign cache_req_o[CACHE_SNITCH1] = cache_req_arb[SPM_SNITCH1];
 
-    assign cache_rsp_arb[SPM_SNITCH0].q_ready = cache_rsp_i[CACHE_SNITCH0].q_ready;
-    assign cache_rsp_arb[SPM_SNITCH1].q_ready = cache_rsp_i[CACHE_SNITCH1].q_ready;
+    assign cache_rsp_arb[SPM_SNITCH0] = cache_rsp_i[CACHE_SNITCH0];
+    assign cache_rsp_arb[SPM_SNITCH1] = cache_rsp_i[CACHE_SNITCH1];
+
+    assign cache_pready_o[CACHE_SNITCH0] = cache_pready_arb[SPM_SNITCH0];
+    assign cache_pready_o[CACHE_SNITCH1] = cache_pready_arb[SPM_SNITCH1];
 
   end else if (NumSpmIO == NumCacheIO) begin : gen_req_no_mux
     assign cache_req_o   = cache_req_arb;
@@ -190,20 +196,17 @@ module spatz_addr_mapper #(
   // Simutanueous responses from both Cache and SPM is possible but not common
   // An 2-1 arbiter/mux is needed to pick from it (round-robin?)
   // Note there is no p_ready signal, we may need a FIFO to protect the rsp
+  logic [NumSpmIO-1:0] postarb_valid, postarb_ready, arb_select;
 
   for (genvar j = 0; unsigned'(j) < NumSpmIO; j++) begin : gen_rsp
-    logic postarb_valid;
-    logic postarb_ready;
-    logic arb_select;
-
-    assign mem_rsp_o[j].p_valid = postarb_valid;
-    assign postarb_ready = 1'b1;
+    assign mem_rsp_o[j].p_valid = postarb_valid[j];
+    assign postarb_ready[j] = 1'b1;
     always_comb begin : hs_comb
       // Do not accept any req when cache is flushing
-      mem_rsp_o[j].q_ready = cache_rsp_i[j].q_ready && !(flush_i);
+      mem_rsp_o[j].q_ready   = cache_rsp_arb[j].q_ready && !(flush_i);
       // Use spm by default
-      arb_select           = SPM;
-      cache_pready_o[j]    = 1'b0;
+      arb_select[j]          = SPM;
+      cache_pready_arb[j]    = 1'b0;
 
       if (target_select[j] == SPM) begin
         mem_rsp_o[j].q_ready = spm_rsp_i[j].q_ready && !(flush_i);
@@ -212,13 +215,13 @@ module spatz_addr_mapper #(
       if (spm_rsp_i[j].p_valid) begin
         // SPM always has priority
         // stop cache response if spm is responding
-        arb_select        = SPM;
-        cache_pready_o[j] = 1'b0;
+        arb_select[j]       = SPM;
+        cache_pready_arb[j] = 1'b0;
       end else begin
         if (cache_rsp_arb[j].p_valid) begin
-          arb_select      = CACHE;
+          arb_select[j]     = CACHE;
         end
-        cache_pready_o[j] = 1'b1;
+        cache_pready_arb[j] = 1'b1;
       end
     end
 
@@ -232,12 +235,12 @@ module spatz_addr_mapper #(
       .clk_i   ( clk_i                                            ),
       .rst_ni  ( rst_ni                                           ),
       .flush_i ( '0                                               ),
-      .rr_i    ( arb_select                                       ),
+      .rr_i    ( arb_select[j]                                    ),
       .req_i   ( {spm_rsp_i[j].p_valid, cache_rsp_arb[j].p_valid} ),
       .gnt_o   (                                                  ),
       .data_i  ( {spm_rsp_i[j].p,       cache_rsp_arb[j].p}       ),
-      .req_o   ( postarb_valid                                    ),
-      .gnt_i   ( postarb_ready                                    ),
+      .req_o   ( postarb_valid[j]                                 ),
+      .gnt_i   ( postarb_ready[j]                                 ),
       .data_o  ( mem_rsp_o[j].p                                   ),
       .idx_o   ( /* not used */                                   )
     );
