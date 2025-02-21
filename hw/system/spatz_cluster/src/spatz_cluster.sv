@@ -240,6 +240,9 @@ module spatz_cluster
   };
 
   // L1 Cache
+  // Number of Spatz ports the controller has
+  localparam int unsigned L1NumSpatzPort  = NrTCDMPortsCores;
+  // localparam int unsigned L1NumSpatzPort  = NumSpatzTCDMPorts[0];
   // Address width of cache
   localparam int unsigned L1AddrWidth     = 32;
   // Cache lane width
@@ -852,7 +855,8 @@ module spatz_cluster
 
   // split the requests for spm or cache from core side
   spatz_addr_mapper #(
-    .NumIO          (NrTCDMPortsCores ),
+    .NumSpmIO       (NrTCDMPortsCores ),
+    .NumCacheIO     (L1NumSpatzPort   ),
     .AddrWidth      (L1AddrWidth      ),
     .SPMAddrWidth   (SPMAddrWidth     ),
     .DataWidth      (DataWidth        ),
@@ -1006,31 +1010,38 @@ module spatz_cluster
   axi_mst_dma_req_t  dcache_mst_req_tmp;
   axi_mst_dma_resp_t dcache_mst_rsp_tmp;
 
-  axi_dw_converter #(
-    .AxiMaxReads        (2),
-    .AxiSlvPortDataWidth(L1LineWidth),
-    .AxiMstPortDataWidth(AxiDataWidth),
-    .AxiAddrWidth       (AxiAddrWidth),
-    .AxiIdWidth         (WideIdWidthIn),
-    .aw_chan_t          (axi_mst_l1_aw_chan_t),
-    .mst_w_chan_t       (axi_mst_dma_w_chan_t),
-    .slv_w_chan_t       (axi_mst_l1_w_chan_t),
-    .b_chan_t           (axi_mst_l1_b_chan_t),
-    .ar_chan_t          (axi_mst_l1_ar_chan_t),
-    .mst_r_chan_t       (axi_mst_dma_r_chan_t),
-    .slv_r_chan_t       (axi_mst_l1_r_chan_t),
-    .axi_mst_req_t      (axi_mst_dma_req_t),
-    .axi_mst_resp_t     (axi_mst_dma_resp_t),
-    .axi_slv_req_t      (axi_mst_l1_req_t),
-    .axi_slv_resp_t     (axi_mst_l1_resp_t)
-  ) i_l1_req_split (
-    .clk_i              (clk_i),
-    .rst_ni             (rst_ni),
-    .slv_req_i          (l1_axi_mst_req),
-    .slv_resp_o         (l1_axi_mst_rsp),
-    .mst_req_o          (dcache_mst_req_tmp),
-    .mst_resp_i         (wide_axi_mst_rsp[DCache])
-  );
+  // Generate a down converter if data size mismatches between cacheline and L2
+  // CAUTION: it will reduce the performance by a lot
+  if (L1LineWidth != AxiDataWidth) begin
+    axi_dw_converter #(
+      .AxiMaxReads        (2),
+      .AxiSlvPortDataWidth(L1LineWidth),
+      .AxiMstPortDataWidth(AxiDataWidth),
+      .AxiAddrWidth       (AxiAddrWidth),
+      .AxiIdWidth         (WideIdWidthIn),
+      .aw_chan_t          (axi_mst_l1_aw_chan_t),
+      .mst_w_chan_t       (axi_mst_dma_w_chan_t),
+      .slv_w_chan_t       (axi_mst_l1_w_chan_t),
+      .b_chan_t           (axi_mst_l1_b_chan_t),
+      .ar_chan_t          (axi_mst_l1_ar_chan_t),
+      .mst_r_chan_t       (axi_mst_dma_r_chan_t),
+      .slv_r_chan_t       (axi_mst_l1_r_chan_t),
+      .axi_mst_req_t      (axi_mst_dma_req_t),
+      .axi_mst_resp_t     (axi_mst_dma_resp_t),
+      .axi_slv_req_t      (axi_mst_l1_req_t),
+      .axi_slv_resp_t     (axi_mst_l1_resp_t)
+    ) i_l1_req_split (
+      .clk_i              (clk_i),
+      .rst_ni             (rst_ni),
+      .slv_req_i          (l1_axi_mst_req),
+      .slv_resp_o         (l1_axi_mst_rsp),
+      .mst_req_o          (dcache_mst_req_tmp),
+      .mst_resp_i         (wide_axi_mst_rsp[DCache])
+    );
+  end else begin
+    assign dcache_mst_req_tmp = l1_axi_mst_req;
+    assign l1_axi_mst_rsp     = wide_axi_mst_rsp[DCache];
+  end
 
   always_comb begin
     wide_axi_mst_req[DCache] = dcache_mst_req_tmp;

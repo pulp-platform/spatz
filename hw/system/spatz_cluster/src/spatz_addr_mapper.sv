@@ -9,8 +9,10 @@
 `include "common_cells/registers.svh"
 
 module spatz_addr_mapper #(
-  // Number of input and one-side output ports
-  parameter int unsigned NumIO                = 0,
+  // Number of input and SPM-side output ports
+  parameter int unsigned NumSpmIO             = 0,
+  // Number of Cache-side output ports
+  parameter int unsigned NumCacheIO           = 0,
   // Full address length
   parameter int unsigned AddrWidth            = 32,
   // SPM address length
@@ -18,9 +20,10 @@ module spatz_addr_mapper #(
   // Data width
   parameter int unsigned DataWidth            = 32,
   // FIFO depth for the response channel
-  parameter int unsigned FifoDepth             = 2,
+  parameter int unsigned FifoDepth            = 2,
   // signal types for core and cache
   parameter type         mem_req_t            = logic,
+  parameter type         mem_req_chan_t       = logic,
   parameter type         mem_rsp_t            = logic,
   parameter type         mem_rsp_chan_t       = logic,
   // signal types for spm (shorter addr)
@@ -32,32 +35,30 @@ module spatz_addr_mapper #(
   parameter type         spm_addr_t           = logic [SPMAddrWidth-1:0],
   parameter type         data_t               = logic [DataWidth-1:0]
 ) (
-  input  logic                      clk_i,
-  input  logic                      rst_ni,
-
-  // CSR Side (Mapping Info)
+  input  logic                        clk_i,
+  input  logic                        rst_ni,
 
   // Input Side
-  input  mem_req_t  [NumIO-1:0]     mem_req_i,
-  output mem_rsp_t  [NumIO-1:0]     mem_rsp_o,
-  output logic      [NumIO-1:0]     error_o,
+  input  mem_req_t  [NumSpmIO-1:0]    mem_req_i,
+  output mem_rsp_t  [NumSpmIO-1:0]    mem_rsp_o,
+  output logic      [NumSpmIO-1:0]    error_o,
 
   // Reg and AddrMap
-  input  addr_t                     tcdm_start_address_i,
-  input  addr_t                     tcdm_end_address_i,
-  input  addr_t                     spm_size_i,
-  input  logic                      flush_i,
+  input  addr_t                       tcdm_start_address_i,
+  input  addr_t                       tcdm_end_address_i,
+  input  addr_t                       spm_size_i,
+  input  logic                        flush_i,
 
   // Two output will need different address size: cahce will need full addr, spm only needs log2(TCDMSize) bits
   // We may need to expand the signals here to correctly wire them
   // Output Side
   /// SPM Side
-  output spm_req_t  [NumIO-1:0]      spm_req_o,
-  input  spm_rsp_t  [NumIO-1:0]      spm_rsp_i,
+  output spm_req_t  [NumSpmIO-1:0]     spm_req_o,
+  input  spm_rsp_t  [NumSpmIO-1:0]    spm_rsp_i,
   /// Cache Side
-  output mem_req_t  [NumIO-1:0]      cache_req_o,
-  output logic      [NumIO-1:0]      cache_pready_o,
-  input  mem_rsp_t  [NumIO-1:0]      cache_rsp_i
+  output mem_req_t  [NumCacheIO-1:0]  cache_req_o,
+  output logic      [NumCacheIO-1:0]  cache_pready_o,
+  input  mem_rsp_t  [NumCacheIO-1:0]  cache_rsp_i
 );
 
   // ---------------------------
@@ -66,8 +67,24 @@ module spatz_addr_mapper #(
   typedef logic select_t;
 
   addr_t    spm_start_addr;
-  select_t  [NumIO-1:0] target_select;
-  // logic     [NumIO-1:0] mem_q_ready;
+  select_t  [NumSpmIO-1:0] target_select;
+  // logic     [NumSpmIO-1:0] mem_q_ready;
+
+  mem_req_t [NumSpmIO-1:0] cache_req_arb;
+  mem_rsp_t [NumSpmIO-1:0] cache_rsp_arb;
+
+  // Ports define
+  localparam int unsigned NUM_PORTS_PER_SPATZ = NumSpmIO/2-1;
+  localparam int unsigned SPM_PORT_OFFSET     = NumSpmIO/2;
+  localparam int unsigned CACHE_PORT_OFFSET   = NumCacheIO/2-1;
+
+  // First snitch prot at cache side
+  localparam int unsigned CACHE_SNITCH0 = NumCacheIO-2;
+  // Second snitch port at cache side
+  localparam int unsigned CACHE_SNITCH1 = NumCacheIO-1;
+
+  localparam int unsigned SPM_SNITCH0 = NumSpmIO/2-1;
+  localparam int unsigned SPM_SNITCH1 = NumSpmIO  -1;
 
   localparam int unsigned SPM   = 1;
   localparam int unsigned CACHE = 0;
@@ -87,10 +104,10 @@ module spatz_addr_mapper #(
   // start from `spm_start_addr`.
 
   always_comb begin
-    for (int j = 0; unsigned'(j) < NumIO; j++) begin : gen_req
+    for (int j = 0; unsigned'(j) < NumSpmIO; j++) begin : gen_req
       // Initial values
       spm_req_o[j]   = '0;
-      cache_req_o[j] = '0;
+      cache_req_arb[j] = '0;
       error_o[j]     = '0;
       if ((mem_req_i[j].q.addr >= tcdm_start_address_i) & (mem_req_i[j].q.addr < tcdm_end_address_i)) begin
         target_select[j] = SPM;
@@ -114,11 +131,57 @@ module spatz_addr_mapper #(
         end
       end else begin
         // Wire to Cache outputs
-        cache_req_o[j].q = mem_req_i[j].q;
-        cache_req_o[j].q_valid = mem_req_i[j].q_valid && (!flush_i);
+        cache_req_arb[j].q = mem_req_i[j].q;
+        cache_req_arb[j].q_valid = mem_req_i[j].q_valid && (!flush_i);
         target_select[j] = CACHE;
       end
     end
+  end
+
+  if (NumSpmIO > NumCacheIO) begin : gen_req_mux
+    // Only generate MUX for Spatz, Snitch will directly passed through
+    for (genvar j = 0; unsigned'(j) < NUM_PORTS_PER_SPATZ; j++) begin : gen_req_xbar
+      stream_xbar #(
+        .NumInp      ( 2    ),
+        .NumOut      ( 1    ),
+        .payload_t   ( mem_req_chan_t ),
+        .OutSpillReg ( 1'b0      ),
+        .ExtPrio     ( 1'b0      ),
+        .AxiVldRdy   ( 1'b1      ),
+        .LockIn      ( 1'b1      )
+      ) i_stream_xbar (
+        .clk_i,
+        .rst_ni,
+        .flush_i ( 1'b0 ),
+        .rr_i    ( '0   ),
+        .data_i  ( {cache_req_arb[j].q,       cache_req_arb[j+CACHE_PORT_OFFSET].q}      ),
+        .sel_i   ( '0   ),
+        .valid_i ( {cache_req_arb[j].q_valid, cache_req_arb[j+CACHE_PORT_OFFSET].q_valid}),
+        .ready_o ( {cache_rsp_arb[j].q_ready, cache_rsp_arb[j+CACHE_PORT_OFFSET].q_ready}),
+        .data_o  ( cache_req_o[j].q ),
+        .idx_o   ( ),
+        .valid_o ( cache_req_o[j].q_valid ),
+        .ready_i ( cache_rsp_i[j].q_ready )
+      );
+
+      assign cache_rsp_arb[j].p                   = cache_rsp_i[j].p;
+      assign cache_rsp_arb[j+CACHE_PORT_OFFSET].p = cache_rsp_i[j].p;
+      assign cache_rsp_arb[j].p_valid                   = cache_rsp_i[j].p.user.core_id == 0 ? cache_rsp_i[j].p_valid : 1'b0;
+      assign cache_rsp_arb[j+CACHE_PORT_OFFSET].p_valid = cache_rsp_i[j].p.user.core_id == 1 ? cache_rsp_i[j].p_valid : 1'b0;
+    end
+
+    // Connect the Snitch side signals
+    assign cache_req_o[CACHE_SNITCH0] = cache_req_arb[SPM_SNITCH0];
+    assign cache_req_o[CACHE_SNITCH1] = cache_req_arb[SPM_SNITCH1];
+
+    assign cache_rsp_arb[SPM_SNITCH0].q_ready = cache_rsp_i[CACHE_SNITCH0].q_ready;
+    assign cache_rsp_arb[SPM_SNITCH1].q_ready = cache_rsp_i[CACHE_SNITCH1].q_ready;
+
+  end else if (NumSpmIO == NumCacheIO) begin : gen_req_no_mux
+    assign cache_req_o   = cache_req_arb;
+    assign cache_rsp_arb = cache_rsp_i;
+  end else begin
+    $error("[ADDR_MAPPER], $Port > SPM, configuration not support");
   end
 
   // -------------
@@ -128,7 +191,7 @@ module spatz_addr_mapper #(
   // An 2-1 arbiter/mux is needed to pick from it (round-robin?)
   // Note there is no p_ready signal, we may need a FIFO to protect the rsp
 
-  for (genvar j = 0; unsigned'(j) < NumIO; j++) begin : gen_rsp
+  for (genvar j = 0; unsigned'(j) < NumSpmIO; j++) begin : gen_rsp
     logic postarb_valid;
     logic postarb_ready;
     logic arb_select;
@@ -152,7 +215,7 @@ module spatz_addr_mapper #(
         arb_select        = SPM;
         cache_pready_o[j] = 1'b0;
       end else begin
-        if (cache_rsp_i[j].p_valid) begin
+        if (cache_rsp_arb[j].p_valid) begin
           arb_select      = CACHE;
         end
         cache_pready_o[j] = 1'b1;
@@ -166,22 +229,18 @@ module spatz_addr_mapper #(
       .AxiVldRdy ( 1'b1           ),
       .LockIn    ( 1'b0           )
     ) i_rsp_arb (
-      .clk_i   ( clk_i                                          ),
-      .rst_ni  ( rst_ni                                         ),
-      .flush_i ( '0                                             ),
-      .rr_i    ( arb_select                                     ),
-      .req_i   ( {spm_rsp_i[j].p_valid, cache_rsp_i[j].p_valid} ),
-      .gnt_o   (                                                ),
-      .data_i  ( {spm_rsp_i[j].p,       cache_rsp_i[j].p}       ),
-      .req_o   ( postarb_valid                                  ),
-      .gnt_i   ( postarb_ready                                  ),
-      .data_o  ( mem_rsp_o[j].p                                 ),
-      .idx_o   ( /* not used */                                 )
+      .clk_i   ( clk_i                                            ),
+      .rst_ni  ( rst_ni                                           ),
+      .flush_i ( '0                                               ),
+      .rr_i    ( arb_select                                       ),
+      .req_i   ( {spm_rsp_i[j].p_valid, cache_rsp_arb[j].p_valid} ),
+      .gnt_o   (                                                  ),
+      .data_i  ( {spm_rsp_i[j].p,       cache_rsp_arb[j].p}       ),
+      .req_o   ( postarb_valid                                    ),
+      .gnt_i   ( postarb_ready                                    ),
+      .data_o  ( mem_rsp_o[j].p                                   ),
+      .idx_o   ( /* not used */                                   )
     );
-
-    // TODO: add a FIFO; should we make it fallthrough?
-
   end
-
 
 endmodule
