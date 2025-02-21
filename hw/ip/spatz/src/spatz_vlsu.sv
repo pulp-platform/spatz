@@ -355,8 +355,8 @@ module spatz_vlsu
       // For loads, column counter is enabled by default
       // For stores, row counter is enabled by default
       localparam int unsigned port = intf * N_FU + fu;
-      assign mx_cnt_en_row[port] = mem_spatz_req.op_arith.is_mx & mem_counter_en[port] & (mx_cnt_col_q[port] == mx_cnt_max_col);
-      assign mx_cnt_en_col[port] = mem_spatz_req.op_arith.is_mx & mem_counter_en[port];
+      assign mx_cnt_en_row[port] = mem_spatz_req.op_arith.is_mx & mem_counter_en[intf][fu]  & (mx_cnt_col_q[port] == mx_cnt_max_col);
+      assign mx_cnt_en_col[port] = mem_spatz_req.op_arith.is_mx & mem_counter_en[intf][fu];
       // Count up to (tile_size - 1), and tile_size is power of 2
       assign mx_cnt_clr_row[port] = mx_cnt_en_row[port] & (mx_cnt_row_q[port] == mx_cnt_max_row);
       assign mx_cnt_clr_col[port] = mx_cnt_en_col[port] & (mx_cnt_col_q[port] == mx_cnt_max_col);
