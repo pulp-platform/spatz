@@ -111,7 +111,7 @@ int main() {
     timer_tmp = benchmark_get_cycle();
 
     // Call AXPY
-    faxpy_v64b(*a, x_int, y_int, dim_core);
+    faxpy_v64b_unrl(*a, x_int, y_int, dim_core);
 
     // Wait for all cores to finish
     snrt_cluster_hw_barrier();
@@ -144,9 +144,11 @@ int main() {
           #if USE_CACHE == 0
           printf("Error: Index %d -> Result = %f, Expected = %f\n", i,
                  (float)y[i], (float)axpy_GR_dram[i]);
+          printf("Error Addr: %x, %x\n", &y[i], &axpy_GR_dram[i]);
           #else
           printf("Error: Index %d -> Result = %f, Expected = %f\n", i,
                  (float)axpy_Y_dram[i], (float)axpy_GR_dram[i]);
+          printf("Error Addr: %x, %x\n", &axpy_Y_dram[i], &axpy_GR_dram[i]);
           #endif
         #endif
           return 1;
