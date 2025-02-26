@@ -4,6 +4,8 @@
 //
 // Author: Matheus Cavalcante, ETH Zurich
 
+`define  BUF_FPU
+
 package spatz_pkg;
 
   import rvv_pkg::*;

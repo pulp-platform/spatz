@@ -751,7 +751,7 @@ module spatz_vlsu
   vrf_req_t [NrInterfaces-1:0] vrf_req_d, vrf_req_q;
   logic     [NrInterfaces-1:0] vrf_req_valid_d, vrf_req_ready_d;
   logic     [NrInterfaces-1:0] vrf_req_valid_q, vrf_req_ready_q;
-  logic     [NrInterfaces-1:0] vrf_valid_rsp_q, vrf_valid_rsp;
+  logic     [NrInterfaces-1:0] vrf_valid_rsp_d, vrf_valid_rsp_q, vrf_valid_rsp;
   logic     [NrInterfaces-1:0] vrf_commit_intf_valid, vrf_commit_intf_valid_q;
   logic     [NrInterfaces-1:0] resp_overlap;
 
@@ -812,12 +812,15 @@ module spatz_vlsu
 
     // To track a valid response on an interface until both interfaces finish and can send to the VRF
     // When this happens the FF is cleared
-    `FFLARNC(vrf_valid_rsp_q[intf], 1'b1, vrf_valid_rsp[intf], vlsu_rsp_valid_o & ~resp_overlap[intf], 1'b0, clk_i, rst_ni)
+    // `FFLARNC(vrf_valid_rsp_q[intf], 1'b1, vrf_valid_rsp[intf], vlsu_rsp_valid_o & ~resp_overlap[intf], 1'b0, clk_i, rst_ni)
+
+    assign vrf_valid_rsp_d[intf] = (vlsu_rsp_valid_o & ~resp_overlap[intf]) ? 1'b0 : (vrf_valid_rsp[intf] ? 1'b1 : vrf_valid_rsp_q[intf]);
+    `FF(vrf_valid_rsp_q[intf], vrf_valid_rsp_d[intf], 1'b0)
 
     // Check if either a previously tracked response or there is a response in the current cycle
     assign vrf_commit_intf_valid[intf] = vrf_valid_rsp[intf] | vrf_commit_done_q[intf];
     // assign vrf_commit_intf_valid[intf] = vrf_valid_rsp[intf] | vrf_valid_rsp_q[intf] | vrf_commit_done_q[intf];
-    `FF(vrf_commit_intf_valid_q[intf], vrf_commit_intf_valid[intf], 1'b0);
+    `FF(vrf_commit_intf_valid_q[intf], vrf_commit_intf_valid[intf], 1'b0)
   end
 
   ////////////////////////////
@@ -829,7 +832,7 @@ module spatz_vlsu
 
   // Check if interface 1 is the interface trying to commit, if so take resp information from interface 1
   // If both interfaces in sync, interface 1 is given priority
-  assign resp_intf = vrf_commit_intf_valid_q [1] == 1'b0 ? 1'b1 : 1'b0;
+  assign resp_intf = vrf_commit_intf_valid_q[1] == 1'b0 ? 1'b1 : 1'b0;
   assign vlsu_rsp_o = &vrf_commit_intf_valid && |vrf_req_valid_q ? vrf_req_q[resp_intf].rsp   : '{id: commit_insn_q.id, default: '0};
 
   // Send response back to the controller to indicate end of request

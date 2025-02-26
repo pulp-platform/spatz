@@ -349,7 +349,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   // Buffering of FPU writes to VRF to hide the conflicts and achieve high FPU utilizations
   assign vrf_buf_en =  sb_we[VFU_VD_WD] && (!vrf_wvalid[VFU_VD_WD] || (vrf_wvalid[VFU_VD_WD] && !buf_empty));
   fifo_v3 #(
-    .FALL_THROUGH (1'b1        ),
+    .FALL_THROUGH (1'b0        ),
     .dtype        (vrf_buf_t   ),
     .DEPTH        (FpuBufDepth )
   ) i_vfu_buf (
@@ -374,7 +374,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   assign vlsu_buf_en =  sb_we[VLSU_VD_WD1] && (!vrf_wvalid[VLSU_VD_WD1] || (vrf_wvalid[VLSU_VD_WD1] && !vlsu_buf_empty));
   assign vlsu_buf_push = vlsu_buf_en && !vlsu_buf_full;
   fifo_v3 #(
-    .FALL_THROUGH (1'b1         ),
+    .FALL_THROUGH (1'b0         ),
     .dtype        (vlsu_buf_t   ),
     .DEPTH        (VlsuBufDepth )
   ) i_vlsu_buf (
