@@ -47,7 +47,7 @@ int main() {
   #if MEAS_1ITER== 1
   uint32_t measure_iter = 1;
   #else
-  uint32_t measure_iter = 2;
+  uint32_t measure_iter = 3;
   #endif
 
   #if USE_CACHE == 1
@@ -98,6 +98,16 @@ int main() {
   a = (double *) &axpy_alpha_dram;
   double *x_int = axpy_X_dram + dim_core * cid;
   double *y_int = axpy_Y_dram + dim_core * cid;
+  #endif
+
+  #ifdef CHECK
+  if (cid == 0) {
+    printf("Core0: x_ptr:%x,y_ptr:%x\n", x_int, x=y_int);
+  }
+  snrt_cluster_hw_barrier();
+  if (cid == 1) {
+    printf("Core1: x_ptr:%x,y_ptr:%x\n", x_int, x=y_int);
+  }
   #endif
 
   // Wait for all cores to finish
