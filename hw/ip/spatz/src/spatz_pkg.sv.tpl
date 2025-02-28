@@ -483,21 +483,23 @@ package spatz_pkg;
     logic [1:0] mantissa;
   } spatz_fp8_t;
 
+  // FIXME: These conversions work for normal numbers and 0, but fail to correctly widen other numbers (0, inf, NaN).
+  // FIXME: These conversions do not work properly for FP8ALT and FP16ALT.
   function automatic spatz_fp64_t widen_fp32_to_fp64(spatz_fp32_t operand);
     widen_fp32_to_fp64.sign     = operand.sign;
-    widen_fp32_to_fp64.exponent = int'(operand.exponent - 127) + 1023;
+    widen_fp32_to_fp64.exponent = (operand.exponent == '0) ? '0 : int'(operand.exponent - 127) + 1023;
     widen_fp32_to_fp64.mantissa = {operand.mantissa, 29'b0};
   endfunction
 
   function automatic spatz_fp32_t widen_fp16_to_fp32(spatz_fp16_t operand);
     widen_fp16_to_fp32.sign     = operand.sign;
-    widen_fp16_to_fp32.exponent = int'(operand.exponent - 15) + 127;
+    widen_fp16_to_fp32.exponent = (operand.exponent == '0) ? '0 : int'(operand.exponent - 15) + 127;
     widen_fp16_to_fp32.mantissa = {operand.mantissa, 13'b0};
   endfunction
 
   function automatic spatz_fp16_t widen_fp8_to_fp16(spatz_fp8_t operand);
     widen_fp8_to_fp16.sign     = operand.sign;
-    widen_fp8_to_fp16.exponent = operand.exponent;
+    widen_fp8_to_fp16.exponent = (operand.exponent == '0) ? '0 : operand.exponent;
     widen_fp8_to_fp16.mantissa = {operand.mantissa, 8'b0};
   endfunction
 
