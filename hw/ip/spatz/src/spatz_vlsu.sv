@@ -632,6 +632,10 @@ module spatz_vlsu
           vd_vreg_addr[intf] += commit_insn_q.vl / (2 * N_FU * ELENB);
           vs2_vreg_idx_addr[intf] += ((mem_spatz_req.vl >> (mem_spatz_req.vtype.vsew - int'(mem_spatz_req.op_mem.ew))) / (2 * N_FU * ELENB));
         end
+      end else begin
+        // TODO: FIX IT!!!
+        vs2_vreg_addr[intf] = (mem_spatz_req.vs2 << $clog2(NrWordsPerVector)) + $unsigned(vs2_elem_id_q[intf])*NrInterfaces + intf;
+        vs2_vreg_idx_addr[intf] = vs2_vreg_addr[intf];
       end
     end
   end
@@ -766,10 +770,10 @@ module spatz_vlsu
   logic     [NrInterfaces-1:0] vrf_commit_intf_valid, vrf_commit_intf_valid_q;
   logic     [NrInterfaces-1:0] resp_overlap;
 
-  typedef   logic [7:0]        vrf_cnt_t;
-  vrf_cnt_t [NrInterfaces-1:0] vrf_cnt_d, vrf_cnt_q;
-  `FF(vrf_cnt_q, vrf_cnt_d, '0);
-  logic     [NrInterfaces-1:0] chain_en;
+  // typedef   logic [7:0]        vrf_cnt_t;
+  // vrf_cnt_t [NrInterfaces-1:0] vrf_cnt_d, vrf_cnt_q;
+  // `FF(vrf_cnt_q, vrf_cnt_d, '0);
+  // logic     [NrInterfaces-1:0] chain_en;
 
   logic     [NrInterfaces-1:0] vrf_commit_done_d, vrf_commit_done_q;
   `FF(vrf_commit_done_q, vrf_commit_done_d, '0);
@@ -799,43 +803,43 @@ module spatz_vlsu
 
   // Count the number of vec element wrote to the VRF for each port
   // This information is used to determine chaining for strided pattern
-  always_comb begin
-    // Initial values
-    vrf_cnt_d         = vrf_cnt_q;
-    chain_en          = '0;
+  // always_comb begin
+  //   // Initial values
+  //   vrf_cnt_d         = vrf_cnt_q;
+  //   chain_en          = '0;
 
-    // See if we wrote something to VRF this cycle
-    for (int intf = 0; intf < NrInterfaces; intf++) begin
-      if (vrf_req_valid_q[intf] & vrf_req_ready_q[intf]) begin
-        // valid handshaking, set the chain indicator for this port to 1
-        chain_en[intf] = 1'b1;
-        // Also increase the counter
-        vrf_cnt_d[intf] ++;
-      end
-    end
+  //   // See if we wrote something to VRF this cycle
+  //   for (int intf = 0; intf < NrInterfaces; intf++) begin
+  //     if (vrf_req_valid_q[intf] & vrf_req_ready_q[intf]) begin
+  //       // valid handshaking, set the chain indicator for this port to 1
+  //       chain_en[intf] = 1'b1;
+  //       // Also increase the counter
+  //       vrf_cnt_d[intf] ++;
+  //     end
+  //   end
 
-    if (vlsu_rsp_valid_o) begin
-      // Case 0: insn is complete, no need for chaining, clear cnter
-      vrf_cnt_d = '0;
-      chain_en  = '0;
-    end else if (&chain_en) begin
-      // Case 1: both ports write to VRF this cycle
-      // We will not increase the counter this cycle
-      vrf_cnt_d = vrf_cnt_q;
-    end else if (chain_en[0] & (vrf_cnt_q[1] > 0)) begin
-      // Case 2: intf 0 write this cycle, and intf 1 wrote before
-      vrf_cnt_d[0] --;
-      vrf_cnt_d[1] --;
-      chain_en [1] = 1'b1;
-    end else if (chain_en[1] & (vrf_cnt_q[0] > 0)) begin
-      // Case 3: intf 1 write this cycle, and intf 0 wrote before
-      vrf_cnt_d[0] --;
-      vrf_cnt_d[1] --;
-      chain_en [0] = 1'b1;
-    end
-  end
+  //   if (vlsu_rsp_valid_o) begin
+  //     // Case 0: insn is complete, no need for chaining, clear cnter
+  //     vrf_cnt_d = '0;
+  //     chain_en  = '0;
+  //   end else if (&chain_en) begin
+  //     // Case 1: both ports write to VRF this cycle
+  //     // We will not increase the counter this cycle
+  //     vrf_cnt_d = vrf_cnt_q;
+  //   end else if (chain_en[0] & (vrf_cnt_q[1] > 0)) begin
+  //     // Case 2: intf 0 write this cycle, and intf 1 wrote before
+  //     vrf_cnt_d[0] --;
+  //     vrf_cnt_d[1] --;
+  //     chain_en [1] = 1'b1;
+  //   end else if (chain_en[1] & (vrf_cnt_q[0] > 0)) begin
+  //     // Case 3: intf 1 write this cycle, and intf 0 wrote before
+  //     vrf_cnt_d[0] --;
+  //     vrf_cnt_d[1] --;
+  //     chain_en [0] = 1'b1;
+  //   end
+  // end
 
-  assign double_bw_chain_o = &chain_en;
+  // assign double_bw_chain_o = &chain_en;
 
   for (genvar intf = 0; intf < NrInterfaces; intf++) begin : gen_vrf_req_register_intf
     spill_register #(
@@ -938,7 +942,8 @@ module spatz_vlsu
         commit_operation_valid[intf][fu] = commit_insn_valid && (commit_counter_q[intf][fu] != max_bytes) && (catchup[intf][fu] || (!catchup[intf][fu] && ~|catchup));
         commit_operation_last[intf][fu]  = commit_operation_valid[intf][fu] && ((max_bytes - commit_counter_q[intf][fu]) <= (commit_is_single_element_operation ? commit_single_element_size : ELENB));
         commit_counter_delta[intf][fu]   = !commit_operation_valid[intf][fu] ? vlen_t'('d0) : commit_is_single_element_operation ? vlen_t'(commit_single_element_size) : commit_operation_last[intf][fu] ? (max_bytes - commit_counter_q[intf][fu]) : vlen_t'(ELENB);
-        commit_counter_en[intf][fu]      = commit_operation_valid[intf][fu] && (commit_insn_q.is_load && vrf_req_valid_d[intf] && vrf_req_ready_d[intf]) || (!commit_insn_q.is_load && vrf_rvalid_i[intf][0] && vrf_re_o[intf][0] && (!mem_is_indexed || vrf_rvalid_i[intf][1]));
+        commit_counter_en[intf][fu]      = commit_operation_valid[intf][fu] && (commit_insn_q.is_load && vrf_req_valid_d[intf] && vrf_req_ready_d[intf])
+                                          || (!commit_insn_q.is_load && vrf_rvalid_i[intf][0] && vrf_re_o[intf][0] && (!mem_is_indexed || vrf_rvalid_i[intf][1]));
 
         commit_counter_max[intf][fu]     = max_bytes;
       end
