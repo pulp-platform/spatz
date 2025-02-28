@@ -50,6 +50,12 @@ package spatz_pkg;
 % endif
   // Vector support
   localparam bit RVV            = 1;
+  // Vector MX dot product support
+% if cfg['spatz_xvmxdotp']:
+  localparam bit XVMXDOTP       = 1;
+% else:
+  localparam bit XVMXDOTP       = 0;
+% endif
 
   // Maximum size of a single vector element in bits
   localparam int unsigned ELEN   = RVD ? 64 : 32;
@@ -160,7 +166,9 @@ package spatz_pkg;
     VFADD, VFSUB, VFMUL,
     VFMINMAX, VFSGNJ, VFCMP, VFCLASS,
     VF2I, VF2U, VI2F, VU2F, VF2F,
-    VFMADD, VFMSUB, VFNMSUB, VFNMADD, VSDOTP
+    VFMADD, VFMSUB, VFNMSUB, VFNMADD, VSDOTP,
+    // MX dot product instruction
+    VMXDOTP
   } op_e;
 
   // Execution units
@@ -196,6 +204,7 @@ package spatz_pkg;
     logic use_carry_borrow_in;
     logic is_scalar;
     logic is_narrowing;
+    logic is_double_narrowing;
     logic is_reduction;
     logic switch_rs1_rd;
 
@@ -228,6 +237,10 @@ package spatz_pkg;
     logic use_vs1;
     vreg_t vs2;
     logic use_vs2;
+    vreg_t vs3;
+    logic use_vs3;
+    vreg_t vs4;
+    logic use_vs4;
     vreg_t vd;
     logic use_vd;
     logic vd_is_src;
@@ -241,6 +254,8 @@ package spatz_pkg;
     logic [GPRWidth-1:0] rd;
     logic use_rd;
 
+    // Identify source FP formats
+    fpnew_pkg::fp_format_e src_fmt;
     // Rounding mode
     fpnew_pkg::roundmode_e rm;
     // Format mode
@@ -356,10 +371,12 @@ package spatz_pkg;
   // VRF/SB Ports //
   //////////////////
 
-  typedef enum logic [idx_width(4 + 2 * ${int(cfg['spatz_nports'] / cfg['n_fpu'])}):0] {
+  typedef enum logic [idx_width(6 + 2 * ${int(cfg['spatz_nports'] / cfg['n_fpu'])}):0] {
     VFU_VS2_RD,
     VFU_VS1_RD,
     VFU_VD_RD,
+    VFU_VS3_RD,
+    VFU_VS4_RD,
 % if cfg['double_bw']:
     VLSU_VD_RD0,
     VLSU_VS2_RD0,
@@ -382,10 +399,12 @@ package spatz_pkg;
     VSLDU_VD_WD
   } vreg_port_wd_e;
 
-  typedef enum logic [idx_width(6 + 3 * ${int(cfg['spatz_nports'] / cfg['n_fpu'])}):0] {
+  typedef enum logic [idx_width(8 + 3 * ${int(cfg['spatz_nports'] / cfg['n_fpu'])}):0] {
     SB_VFU_VS2_RD,
     SB_VFU_VS1_RD,
     SB_VFU_VD_RD,
+    SB_VFU_VS3_RD,
+    SB_VFU_VS4_RD,
 % if cfg['double_bw']:
     SB_VLSU_VD_RD0,
     SB_VLSU_VS2_RD0,
@@ -420,20 +439,28 @@ package spatz_pkg;
     Width        : ELEN,
     EnableVectors: 1'b1,
     EnableNanBox : 1'b1,
-    //              FP32  FP64  FP16  FP8   FP16a FP8a
-    FpFmtMask    : {1'b1, 1'b1, 1'b1, 1'b1, 1'b1, 1'b1},
+    //              FP32  FP64  FP16  FP8   FP16a FP8a  FP6   FP6a  FP4
+    FpFmtMask    : {1'b1, 1'b1, 1'b1, 1'b1, 1'b1, 1'b1, 1'b0, 1'b0, 1'b0},
     //              INT8  INT16 INT32 INT64
-    IntFmtMask   : {1'b1, 1'b1, 1'b1, 1'b1}
+    IntFmtMask   : {1'b1, 1'b1, 1'b1, 1'b1},
+    //              FP32  FP64  FP16  FP8       FP16a FP8a      FP6       FP6a      FP4
+    MxFpFmtMask  : {1'b0, 1'b0, 1'b0, XVMXDOTP, 1'b0, XVMXDOTP, XVMXDOTP, XVMXDOTP, XVMXDOTP},
+    //              INT8      INT16 INT32 INT64
+    MxIntFmtMask : {XVMXDOTP, 1'b0, 1'b0, 1'b0}
   } :
   // Single Precision FPU
   '{
     Width        : ELEN,
     EnableVectors: 1'b1,
     EnableNanBox : 1'b1,
-    //              FP32  FP64  FP16  FP8   FP16a FP8a
-    FpFmtMask    : {RVF,  1'b0, 1'b1, 1'b1, 1'b0, 1'b0},
+    //              FP32  FP64  FP16  FP8   FP16a FP8a  FP6   FP6a  FP4
+    FpFmtMask    : {RVF,  1'b0, 1'b1, 1'b1, 1'b0, 1'b0, 1'b0, 1'b0, 1'b0},
     //              INT8  INT16 INT32 INT64
-    IntFmtMask   : {1'b1, 1'b1, 1'b1, 1'b0}
+    IntFmtMask   : {1'b1, 1'b1, 1'b1, 1'b1},
+    //              FP32  FP64  FP16  FP8       FP16a FP8a      FP6       FP6a      FP4
+    MxFpFmtMask  : {1'b0, 1'b0, 1'b0, XVMXDOTP, 1'b0, XVMXDOTP, XVMXDOTP, XVMXDOTP, XVMXDOTP},
+    //              INT8      INT16 INT32 INT64
+    MxIntFmtMask : {XVMXDOTP, 1'b0, 1'b0, 1'b0}
   };
 
 % if cfg['mempool']:
@@ -483,22 +510,36 @@ package spatz_pkg;
     logic [1:0] mantissa;
   } spatz_fp8_t;
 
+  // FIXME: These conversions work for normal numbers and 0, but fail to correctly widen other numbers (0, inf, NaN).
+  // FIXME: These conversions do not work properly for FP8ALT and FP16ALT.
   function automatic spatz_fp64_t widen_fp32_to_fp64(spatz_fp32_t operand);
     widen_fp32_to_fp64.sign     = operand.sign;
-    widen_fp32_to_fp64.exponent = int'(operand.exponent - 127) + 1023;
+    widen_fp32_to_fp64.exponent = (operand.exponent == '0) ? '0 : int'(operand.exponent - 127) + 1023;
     widen_fp32_to_fp64.mantissa = {operand.mantissa, 29'b0};
   endfunction
 
   function automatic spatz_fp32_t widen_fp16_to_fp32(spatz_fp16_t operand);
     widen_fp16_to_fp32.sign     = operand.sign;
-    widen_fp16_to_fp32.exponent = int'(operand.exponent - 15) + 127;
+    widen_fp16_to_fp32.exponent = (operand.exponent == '0) ? '0 : int'(operand.exponent - 15) + 127;
     widen_fp16_to_fp32.mantissa = {operand.mantissa, 13'b0};
   endfunction
 
   function automatic spatz_fp16_t widen_fp8_to_fp16(spatz_fp8_t operand);
     widen_fp8_to_fp16.sign     = operand.sign;
-    widen_fp8_to_fp16.exponent = operand.exponent;
+    widen_fp8_to_fp16.exponent = (operand.exponent == '0) ? '0 : operand.exponent;
     widen_fp8_to_fp16.mantissa = {operand.mantissa, 8'b0};
   endfunction
+
+
+  //////////////////////
+  //  MX Dot Product  //
+  //////////////////////
+
+  // MX dot product parameters
+  localparam int unsigned MxScaleWidth = 8;
+  localparam int unsigned MxElemsPerScale = ELEN / MxScaleWidth;
+  typedef logic [31:0] mx_acc32_t;
+  typedef logic [15:0] mx_acc16_t;
+  typedef logic  [7:0] mx_scale_t;
 
 endpackage : spatz_pkg

@@ -8,11 +8,12 @@
 // the operation issuer, the register scoreboard, and the result write back to
 // the main core.
 
+`include "common_cells/assertions.svh"
+
 module spatz_controller
   import spatz_pkg::*;
   import rvv_pkg::*;
-  import fpnew_pkg::roundmode_e;
-  import fpnew_pkg::fmt_mode_t;
+  import fpnew_pkg::*;
   #(
     parameter int  unsigned NrVregfilePorts   = 1,
     parameter int  unsigned NrWritePorts      = 1,
@@ -32,6 +33,7 @@ module spatz_controller
     input  logic                                   rsp_ready_i,
     output spatz_rsp_t                             rsp_o,
     // FPU untimed sidechannel
+    input  fp_format_e                             fpu_src_fmt_i,
     input  roundmode_e                             fpu_rnd_mode_i,
     input  fmt_mode_t                              fpu_fmt_mode_i,
     // Spatz request
@@ -168,6 +170,7 @@ module spatz_controller
     .decoder_rsp_o      (decoder_rsp      ),
     .decoder_rsp_valid_o(decoder_rsp_valid),
     // FPU untimed sidechannel
+    .fpu_src_fmt_i      (fpu_src_fmt_i    ),
     .fpu_rnd_mode_i     (fpu_rnd_mode_i   ),
     .fpu_fmt_mode_i     (fpu_fmt_mode_i   )
   );
@@ -419,6 +422,14 @@ module spatz_controller
     // Initialize the scoreboard metadata if we have a new instruction issued.
     if (spatz_req_valid && spatz_req.ex_unit != CON) begin
       // RAW hazard
+      if (XVMXDOTP && spatz_req.use_vs4) begin
+        scoreboard_d[spatz_req.id].deps[write_table_d[spatz_req.vs4].id] |= write_table_d[spatz_req.vs4].valid;
+        read_table_d[spatz_req.vs4] = {spatz_req.id, 1'b1};
+      end
+      if (XVMXDOTP && spatz_req.use_vs3) begin
+        scoreboard_d[spatz_req.id].deps[write_table_d[spatz_req.vs3].id] |= write_table_d[spatz_req.vs3].valid;
+        read_table_d[spatz_req.vs3] = {spatz_req.id, 1'b1};
+      end
       if (spatz_req.use_vs2) begin
         scoreboard_d[spatz_req.id].deps[write_table_d[spatz_req.vs2].id] |= write_table_d[spatz_req.vs2].valid;
         read_table_d[spatz_req.vs2] = {spatz_req.id, 1'b1};
@@ -444,7 +455,7 @@ module spatz_controller
         scoreboard_d[spatz_req.id].prevent_chaining = 1'b1;
 
       // Is this a narrowing or widening instruction?
-      if (spatz_req.op_arith.is_narrowing || spatz_req.op_arith.widen_vs1 || spatz_req.op_arith.widen_vs2)
+      if (spatz_req.op_arith.is_narrowing || spatz_req.op_arith.is_double_narrowing || spatz_req.op_arith.widen_vs1 || spatz_req.op_arith.widen_vs2)
         narrow_wide_d[spatz_req.id] = 1'b1;
 
 `ifdef DOUBLE_BW
@@ -700,5 +711,15 @@ module spatz_controller
   // Send request off to execution units
   assign spatz_req_o       = spatz_req;
   assign spatz_req_valid_o = spatz_req_valid;
+
+  ////////////////
+  // Assertions //
+  ////////////////
+
+  // VFU response stable while not accepted
+  // BUG: VFU doesn't fully handle backpressure. These assertions surface this bug to users as Spatz
+  //      as Spatz simply deadlocks as a consequence (as the VFU response is dropped).
+  `ASSERT(VfuRspStable, vfu_rsp_valid_i && !vfu_rsp_ready_o |=> vfu_rsp_valid_i)
+  `ASSERT(VfuRspDataStable, vfu_rsp_valid_i && !vfu_rsp_ready_o |=> $stable(vfu_rsp_i))
 
 endmodule : spatz_controller

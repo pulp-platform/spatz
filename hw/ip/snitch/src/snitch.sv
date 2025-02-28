@@ -36,6 +36,8 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
   parameter bit          XDivSqrt  = 0,
   /// Enable V Extension
   parameter bit          RVV       = 0,
+  /// Enable vector MX dot product (VMXDOTP) extension
+  parameter bit          XVMXDOTP  = 0,
   parameter bit          XFVEC     = 0,
   parameter bit          XFDOTP    = 0,
   parameter bit          XFAUX     = 0,
@@ -108,6 +110,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
   // FPU **un-timed** Side-channel
   output fpnew_pkg::roundmode_e     fpu_rnd_mode_o,
   output fpnew_pkg::fmt_mode_t      fpu_fmt_mode_o,
+  output fpnew_pkg::fp_format_e     fpu_src_fmt_o,
   input  fpnew_pkg::status_t        fpu_status_i,
   // Core events for performance counters
   output snitch_pkg::core_events_t  core_events_o
@@ -302,6 +305,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
   `FFAR(debug_q, debug_d, '0, clk_i, rst_i) // Debug mode
 
   typedef struct packed {
+    fpnew_pkg::fp_format_e src_fmt;
     fpnew_pkg::fmt_mode_t  fmode;
     fpnew_pkg::roundmode_e frm;
     fpnew_pkg::status_t    fflags;
@@ -312,6 +316,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
 
   assign fpu_rnd_mode_o = fcsr_q.frm;
   assign fpu_fmt_mode_o = fcsr_q.fmode;
+  assign fpu_src_fmt_o = fcsr_q.src_fmt;
 
   // Registers
   `FFAR(pc_q, pc_d, BootAddr, clk_i, rst_i)
@@ -2667,6 +2672,20 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           illegal_inst = 1'b1;
         end
       end
+      // MX dot product: 0 source registers
+      riscv_instr::VMXDOTP_WW,
+      riscv_instr::VMXDOTP_WF,
+      riscv_instr::VMXDOTP_QQ,
+      riscv_instr::VMXDOTP_QF: begin
+        if (RVV && XVMXDOTP) begin
+          write_rd        = 1'b0;
+          uses_rd         = 1'b0;
+          acc_qvalid_o    = valid_instr;
+          acc_register_rd = 1'b0;
+        end else begin
+          illegal_inst = 1'b1;
+        end
+      end
 `endif
 /* end of RVV extension */
 
@@ -2726,6 +2745,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
     priv_lvl_d = priv_lvl_q;
     // registers
     fcsr_d = fcsr_q;
+    fcsr_d.src_fmt = fcsr_q.src_fmt;
     fcsr_d.fflags = fcsr_q.fflags | fpu_status_i;
     fcsr_d.fmode.src = fcsr_q.fmode.src;
     fcsr_d.fmode.dst = fcsr_q.fmode.dst;
@@ -2946,16 +2966,16 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           end
           CSR_FMODE: begin
             if (FP_EN) begin
-              csr_rvalue = {30'b0, fcsr_q.fmode};
+              csr_rvalue = {28'b0, fcsr_q.fmode};
               read_fcsr  = 1'b1;
-              if (!exception) fcsr_d.fmode = fpnew_pkg::fmt_mode_t'(alu_result[1:0]);
+              if (!exception) fcsr_d.fmode = fpnew_pkg::fmt_mode_t'(alu_result[3:0]);
             end else illegal_csr = 1'b1;
           end
           CSR_FCSR: begin
             if (FP_EN) begin
-              csr_rvalue = {22'b0, fcsr_q};
+              csr_rvalue = {18'b0, fcsr_q};
               read_fcsr  = 1'b1;
-              if (!exception) fcsr_d = fcsr_t'(alu_result[9:0]);
+              if (!exception) fcsr_d = fcsr_t'(alu_result[13:0]);
             end else illegal_csr = 1'b1;
           end
           default: csr_rvalue = '0;
@@ -3411,5 +3431,9 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
 
   // Make sure that without virtual memory support, translation is never enabled
   `ASSERT(NoVMSupportNoTranslation, (~VMSupport |-> ~trans_active), clk_i, rst_i)
+
+  // XVXMDOTP (vector MX dot product) needs RVV and RVD
+  `ASSERT_INIT(XVMXDOTPNeedsRVV, !XVMXDOTP || RVV);
+  `ASSERT_INIT(XVMXDOTPNeedsRVD, !XVMXDOTP || RVD);
 
 endmodule

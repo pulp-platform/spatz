@@ -9,7 +9,7 @@
 module spatz_vrf
   import spatz_pkg::*;
   #(
-    parameter int unsigned NrReadPorts  = 5,
+    parameter int unsigned NrReadPorts  = 8,
     parameter int unsigned NrWritePorts = 3,
     parameter int unsigned FpuBufDepth  = 4
   ) (
@@ -248,8 +248,12 @@ module spatz_vrf
     // the VFU (vs1) and then by the slide unit. Port two can be accessed first by the
     // VFU (vd), then by the LSU.
     for (int unsigned bank = 0; bank < NrVRFBanks; bank++) begin
-      // Bank read port 0 - Priority: VFU (2) -> VLSU
-      if (read_request[bank][VFU_VS2_RD]) begin
+      // Bank read port 0 - Priority: VFU (3) -> VFU (2) -> VLSU
+      if (read_request[bank][VFU_VS3_RD]) begin
+        raddr[bank][0]       = f_vreg(raddr_i[VFU_VS3_RD]);
+        rdata_o[VFU_VS3_RD]  = rdata[bank][0];
+        rvalid_o[VFU_VS3_RD] = 1'b1;
+      end else if (read_request[bank][VFU_VS2_RD]) begin
         raddr[bank][0]       = f_vreg(raddr_i[VFU_VS2_RD]);
         rdata_o[VFU_VS2_RD]  = rdata[bank][0];
         rvalid_o[VFU_VS2_RD] = 1'b1;
@@ -268,8 +272,12 @@ module spatz_vrf
       end
 `endif
 
-      // Bank read port 1 - Priority: VFU (1) -> VLSU -> VSLDU
-      if (read_request[bank][VFU_VS1_RD]) begin
+      // Bank read port 1 - Priority: VFU (4) -> VFU (1) -> VSLDU
+      if (read_request[bank][VFU_VS4_RD]) begin
+        raddr[bank][1]       = f_vreg(raddr_i[VFU_VS4_RD]);
+        rdata_o[VFU_VS4_RD]  = rdata[bank][1];
+        rvalid_o[VFU_VS4_RD] = 1'b1;
+      end else if (read_request[bank][VFU_VS1_RD]) begin
         raddr[bank][1]       = f_vreg(raddr_i[VFU_VS1_RD]);
         rdata_o[VFU_VS1_RD]  = rdata[bank][1];
         rvalid_o[VFU_VS1_RD] = 1'b1;

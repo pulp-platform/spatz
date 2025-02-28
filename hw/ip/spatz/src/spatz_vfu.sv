@@ -33,17 +33,20 @@ module spatz_vfu
     output logic             vrf_we_o,
     output vrf_be_t          vrf_wbe_o,
     input  logic             vrf_wvalid_i,
-    output spatz_id_t  [3:0] vrf_id_o,
-    output vrf_addr_t  [2:0] vrf_raddr_o,
-    output logic       [2:0] vrf_re_o,
-    input  vrf_data_t  [2:0] vrf_rdata_i,
-    input  logic       [2:0] vrf_rvalid_i,
+    output spatz_id_t  [5:0] vrf_id_o,
+    output vrf_addr_t  [4:0] vrf_raddr_o,
+    output logic       [4:0] vrf_re_o,
+    input  vrf_data_t  [4:0] vrf_rdata_i,
+    input  logic       [4:0] vrf_rvalid_i,
     // FPU side channel
     output status_t          fpu_status_o
   );
 
 // Include FF
 `include "common_cells/registers.svh"
+
+  // If we support MX dot product with BF16 accumulation, we need double-narrowing support.
+  localparam int unsigned NarrowingIndexBits = XVMXDOTP ? 2 : 1;
 
   // Instruction tag (propagated together with the operands through the pipelines)
   typedef struct packed {
@@ -58,8 +61,11 @@ module spatz_vfu
     logic last;
 
     // Is this a narrowing instruction?
-    logic narrowing;
-    logic narrowing_upper;
+    logic                          narrowing;
+    // Is this a double-narrowing instruction (for XVMXDOTP with BF16 accumulation)?
+    logic                          double_narrowing;
+    // Which part of vd do we need to write to?
+    logic [NarrowingIndexBits-1:0] narrowing_index;
 
     // Is this a reduction?
     logic reduction;
@@ -100,7 +106,14 @@ module spatz_vfu
 
   // Number of elements in one VRF word
   logic [$clog2(N_FU*(ELEN/8)):0] nr_elem_word;
-  assign nr_elem_word = (N_FU * (1 << (MAXEW - spatz_req.vtype.vsew))) >> spatz_req.op_arith.is_narrowing;
+  always_comb begin
+    nr_elem_word = N_FU * (1 << (MAXEW - spatz_req.vtype.vsew));
+    if (spatz_req.op_arith.is_narrowing) begin
+      nr_elem_word = nr_elem_word >> 1;
+    end else if (XVMXDOTP && spatz_req.op_arith.is_double_narrowing) begin
+      nr_elem_word = nr_elem_word >> 2;
+    end
+  end
 
   // Are we running integer or floating-point instructions?
   typedef enum logic {
@@ -126,12 +139,18 @@ module spatz_vfu
   // Do we have the reduction operand?
   logic reduction_operand_ready_d, reduction_operand_ready_q;
 
+  // Are the MX scale operands valid?
+  logic mx_scale_operand1_valid, mx_scale_operand2_valid;
+
   // Are the VFU operands ready?
-  logic op1_is_ready, op2_is_ready, op3_is_ready, operands_ready;
+  logic op0_is_ready, op1_is_ready, op2_is_ready, op3_is_ready, op4_is_ready, operands_ready;
+  assign op0_is_ready   = spatz_req_valid && (!spatz_req.vd_is_src || vrf_rvalid_i[2]);
   assign op1_is_ready   = spatz_req_valid && ((!spatz_req.op_arith.is_reduction && (!spatz_req.use_vs1 || vrf_rvalid_i[1])) || (spatz_req.op_arith.is_reduction && reduction_operand_ready_q));
   assign op2_is_ready   = spatz_req_valid && ((!spatz_req.use_vs2 || vrf_rvalid_i[0]) || spatz_req.op_arith.is_reduction);
-  assign op3_is_ready   = spatz_req_valid && (!spatz_req.vd_is_src || vrf_rvalid_i[2]);
-  assign operands_ready = op1_is_ready && op2_is_ready && op3_is_ready && (!spatz_req.op_arith.is_scalar || vfu_rsp_ready_i) && !stall;
+  assign op3_is_ready   = spatz_req_valid && (!XVMXDOTP || !spatz_req.use_vs3 || mx_scale_operand1_valid);
+  assign op4_is_ready   = spatz_req_valid && (!XVMXDOTP || !spatz_req.use_vs4 || mx_scale_operand2_valid);
+  assign operands_ready = op0_is_ready && op1_is_ready && op2_is_ready &&
+      op3_is_ready && op4_is_ready && (!spatz_req.op_arith.is_scalar || vfu_rsp_ready_i) && !stall;
 
   // Valid operations
   logic [N_FU*ELENB-1:0] valid_operations;
@@ -150,7 +169,7 @@ module spatz_vfu
 
   // Is this a FPU instruction
   logic is_fpu_insn;
-  assign is_fpu_insn = FPU && spatz_req.op inside {[VFADD:VSDOTP]};
+  assign is_fpu_insn = FPU && spatz_req.op inside {[VFADD:VMXDOTP]};
 
   // Is the FPU busy?
   logic is_fpu_busy;
@@ -193,12 +212,16 @@ module spatz_vfu
   logic reduction_done;
 
   // Are we producing the upper or lower part of the results of a narrowing instruction?
-  logic narrowing_upper_d, narrowing_upper_q;
-  `FF(narrowing_upper_q, narrowing_upper_d, 1'b0)
+  logic [NarrowingIndexBits-1:0] narrowing_index_d, narrowing_index_q;
+  `FF(narrowing_index_q, narrowing_index_d, '0)
 
   // Are we reading the upper or lower part of the operands of a widening instruction?
   logic widening_upper_d, widening_upper_q;
   `FF(widening_upper_q, widening_upper_d, 1'b0)
+
+  // Which MX scale are we reading?
+  logic [$clog2(ELEN/MxScaleWidth)-1:0] widening_mx_scale_d, widening_mx_scale_q;
+  `FF(widening_mx_scale_q, widening_mx_scale_d, '0);
 
   // Are any results valid?
   logic [N_FU*ELEN-1:0]  result;
@@ -211,12 +234,13 @@ module spatz_vfu
 
   always_comb begin: control_proc
     // Maintain state
-    vl_d              = vl_q;
-    busy_d            = busy_q;
-    running_d         = running_q;
-    state_d           = state_q;
-    narrowing_upper_d = narrowing_upper_q;
-    widening_upper_d  = widening_upper_q;
+    vl_d                = vl_q;
+    busy_d              = busy_q;
+    running_d           = running_q;
+    state_d             = state_q;
+    narrowing_index_d   = narrowing_index_q;
+    widening_upper_d    = widening_upper_q;
+    widening_mx_scale_d = widening_mx_scale_q;
 
     // We are not stalling
     stall = 1'b0;
@@ -233,10 +257,11 @@ module spatz_vfu
 
     // Change number of remaining elements
     if (word_issued) begin
-      vl_d              = vl_q + nr_elem_word;
+      vl_d                = vl_q + nr_elem_word;
       // Update narrowing information
-      narrowing_upper_d = narrowing_upper_q ^ spatz_req.op_arith.is_narrowing;
-      widening_upper_d  = widening_upper_q ^ (spatz_req.op_arith.widen_vs1 || spatz_req.op_arith.widen_vs2);
+      narrowing_index_d   = narrowing_index_q + (spatz_req.op_arith.is_narrowing || spatz_req.op_arith.is_double_narrowing);
+      widening_upper_d    = widening_upper_q ^ (spatz_req.op_arith.widen_vs1 || spatz_req.op_arith.widen_vs2);
+      widening_mx_scale_d = widening_mx_scale_q + 1'b1;
     end
 
     // Current state of the VFU
@@ -274,7 +299,8 @@ module spatz_vfu
       last_request            = 1'b1;
       running_d[spatz_req.id] = 1'b0;
       widening_upper_d        = 1'b0;
-      narrowing_upper_d       = 1'b0;
+      narrowing_index_d       = '0;
+      widening_mx_scale_d     = '0;
     end
     // Do we have a new instruction?
     else if (spatz_req_valid && !running_d[spatz_req.id]) begin
@@ -318,16 +344,27 @@ module spatz_vfu
   logic [N_FU*ELENB-1:0] fpu_in_ready;
 
   // Operands and result signals
-  logic [N_FU*ELEN-1:0]  operand1, operand2, operand3;
+  logic [N_FU*ELEN-1:0]  operand0, operand1, operand2;
   logic [N_FU*ELENB-1:0] in_ready;
   always_comb begin: operand_proc
+    automatic vew_e eew = spatz_req.vtype.vsew;
+    if (spatz_req.op == VSDOTP) begin
+      // VSDOTP: pack two scalar operands, so the width doubles
+      eew = vew_e'(eew + 1);
+    end else if (XVMXDOTP && spatz_req.op == VMXDOTP) begin
+      // VMXDOTP: scalar operand is always 64-bit wide (full width)
+      eew = EW_64;
+    end
+
+    operand0 = spatz_req.op_arith.is_scalar ? {1*N_FU{spatz_req.rsd}} : vrf_rdata_i[2];
+
     if (spatz_req.op_arith.is_scalar)
       operand1 = {1*N_FU{spatz_req.rs1}};
     else if (spatz_req.use_vs1)
       operand1 = spatz_req.op_arith.is_reduction ? $unsigned(reduction_q[1]) : vrf_rdata_i[1];
     else begin
       // Replicate scalar operands
-      unique case (spatz_req.op == VSDOTP ? vew_e'(spatz_req.vtype.vsew + 1) : spatz_req.vtype.vsew)
+      unique case (eew)
         EW_8 : operand1   = MAXEW == EW_32 ? {4*N_FU{spatz_req.rs1[7:0]}}  : {8*N_FU{spatz_req.rs1[7:0]}};
         EW_16: operand1   = MAXEW == EW_32 ? {2*N_FU{spatz_req.rs1[15:0]}} : {4*N_FU{spatz_req.rs1[15:0]}};
         EW_32: operand1   = MAXEW == EW_32 ? {1*N_FU{spatz_req.rs1[31:0]}} : {2*N_FU{spatz_req.rs1[31:0]}};
@@ -339,14 +376,12 @@ module spatz_vfu
       operand2 = spatz_req.op_arith.is_reduction ? $unsigned(reduction_q[0]) : vrf_rdata_i[0];
     else
       // Replicate scalar operands
-      unique case (spatz_req.op == VSDOTP ? vew_e'(spatz_req.vtype.vsew + 1) : spatz_req.vtype.vsew)
+      unique case (eew)
         EW_8 : operand2   = MAXEW == EW_32 ? {4*N_FU{spatz_req.rs2[7:0]}}  : {8*N_FU{spatz_req.rs2[7:0]}};
         EW_16: operand2   = MAXEW == EW_32 ? {2*N_FU{spatz_req.rs2[15:0]}} : {4*N_FU{spatz_req.rs2[15:0]}};
         EW_32: operand2   = MAXEW == EW_32 ? {1*N_FU{spatz_req.rs2[31:0]}} : {2*N_FU{spatz_req.rs2[31:0]}};
         default: operand2 = {1*N_FU{spatz_req.rs2}};
       endcase
-
-    operand3 = spatz_req.op_arith.is_scalar ? {1*N_FU{spatz_req.rsd}} : vrf_rdata_i[2];
   end: operand_proc
 
   assign in_ready     = state_q == VFU_RunningIPU ? ipu_in_ready     : fpu_in_ready;
@@ -354,6 +389,86 @@ module spatz_vfu
   assign result_valid = state_q == VFU_RunningIPU ? ipu_result_valid : fpu_result_valid;
 
   assign scalar_result = result[ELEN-1:0];
+
+  //////////////////////////////
+  //  MX scale operand buffer //
+  //////////////////////////////
+
+  mx_scale_t [N_FU*MxElemsPerScale-1:0] mx_scale_operand1, mx_scale_operand2;
+
+  // Do we need to request new scales from the VRF?
+  logic mx_scale_operand1_req, mx_scale_operand2_req;
+  // Are we using the last of the buffered MX scales in this cycle?
+  logic mx_scale_last;
+
+  if (XVMXDOTP) begin : gen_mx_scales
+    assign mx_scale_last = (widening_mx_scale_q == MxElemsPerScale - 1'b1);
+
+    // data path (signals)
+    mx_scale_t [N_FU*MxElemsPerScale-1:0] mx_scale_operand1_d,       mx_scale_operand1_q;
+    mx_scale_t [N_FU*MxElemsPerScale-1:0] mx_scale_operand2_d,       mx_scale_operand2_q;
+    logic                                 mx_scale_operand1_valid_d, mx_scale_operand1_valid_q;
+    logic                                 mx_scale_operand2_valid_d, mx_scale_operand2_valid_q;
+
+    // data path
+    always_comb begin
+      // register signals
+      mx_scale_operand1_d       = mx_scale_operand1_q;
+      mx_scale_operand2_d       = mx_scale_operand2_q;
+      mx_scale_operand1_valid_d = mx_scale_operand1_valid_q;
+      mx_scale_operand2_valid_d = mx_scale_operand2_valid_q;
+      // output signals
+      mx_scale_operand1         = mx_scale_operand1_q;
+      mx_scale_operand2         = mx_scale_operand2_q;
+      mx_scale_operand1_valid   = mx_scale_operand1_valid_q;
+      mx_scale_operand2_valid   = mx_scale_operand2_valid_q;
+
+      // invalidate scales if an instruction finishes executing or we consumed all of them
+      if (spatz_req_ready || mx_scale_last) begin
+        mx_scale_operand1_valid_d = 1'b0;
+        mx_scale_operand2_valid_d = 1'b0;
+      end
+
+      // load scales if we requested them and the VRF provides them
+      if (mx_scale_operand1_req && vrf_rvalid_i[3]) begin
+        mx_scale_operand1_d       = vrf_rdata_i[3];
+        mx_scale_operand1_valid_d = 1'b1;
+        // forward data around register
+        mx_scale_operand1         = vrf_rdata_i[3];
+        mx_scale_operand1_valid   = 1'b1;
+      end
+      if (mx_scale_operand2_req && vrf_rvalid_i[4]) begin
+        mx_scale_operand2_d       = vrf_rdata_i[4];
+        mx_scale_operand2_valid_d = 1'b1;
+        // forward data around register
+        mx_scale_operand2         = vrf_rdata_i[4];
+        mx_scale_operand2_valid   = 1'b1;
+      end
+
+      // use scalar values for vmxdotp.wf
+      if (!spatz_req.use_vs3) begin
+        mx_scale_operand1       = {N_FU*MxElemsPerScale{mx_scale_t'(spatz_req.rsd)}};
+        mx_scale_operand1_valid = 1'b1;
+      end
+    end
+
+    `FF(mx_scale_operand1_q, mx_scale_operand1_d, '0);
+    `FF(mx_scale_operand2_q, mx_scale_operand2_d, '0);
+    `FF(mx_scale_operand1_valid_q, mx_scale_operand1_valid_d, 1'b0);
+    `FF(mx_scale_operand2_valid_q, mx_scale_operand2_valid_d, 1'b0);
+
+    // request logic (request if we need it but current register values are not valid)
+    assign mx_scale_operand1_req = spatz_req_valid && spatz_req.use_vs3 && !mx_scale_operand1_valid_q;
+    assign mx_scale_operand2_req = spatz_req_valid && spatz_req.use_vs4 && !mx_scale_operand2_valid_q;
+  end else begin : gen_no_mx_scales
+    assign mx_scale_operand1       = '0;
+    assign mx_scale_operand2       = '0;
+    assign mx_scale_operand1_valid = 1'b0;
+    assign mx_scale_operand2_valid = 1'b0;
+    assign mx_scale_operand1_req   = 1'b0;
+    assign mx_scale_operand2_req   = 1'b0;
+    assign mx_scale_last           = 1'b0;
+  end
 
   ///////////////////////
   //  Reduction logic  //
@@ -723,63 +838,82 @@ module spatz_vfu
 
   vrf_be_t       vreg_wbe;
   logic          vreg_we;
-  logic    [2:0] vreg_r_req;
+  logic    [4:0] vreg_re;
 
   // Address register
-  vrf_addr_t [2:0] vreg_addr_q, vreg_addr_d;
+  vrf_addr_t [4:0] vreg_addr_q, vreg_addr_d, vreg_addr;
   `FF(vreg_addr_q, vreg_addr_d, '0)
 
   // Calculate new vector register address
   always_comb begin : vreg_addr_proc
     vreg_addr_d = vreg_addr_q;
-
-    vrf_raddr_o = vreg_addr_d;
-    vrf_waddr_o = vrf_addr_t'(result_tag.vd_addr);
+    vreg_addr   = vreg_addr_q;
 
     // Tag (propagated with the operations)
     input_tag = '{
-      id             : spatz_req.id,
-      vsew           : spatz_req.vtype.vsew,
-      vstart         : spatz_req.vstart,
-      vd_addr        : spatz_req.op_arith.is_scalar ? vfu_rsp_addr_t'(spatz_req.rd) : vfu_rsp_addr_t'(vreg_addr_q[2]),
-      wb             : spatz_req.op_arith.is_scalar,
-      last           : last_request,
-      narrowing      : spatz_req.op_arith.is_narrowing,
-      narrowing_upper: narrowing_upper_q,
-      reduction      : spatz_req.op_arith.is_reduction
+      id              : spatz_req.id,
+      vsew            : spatz_req.vtype.vsew,
+      vstart          : spatz_req.vstart,
+      vd_addr         : spatz_req.op_arith.is_scalar ? vrf_addr_t'(spatz_req.rd) : vfu_rsp_addr_t'(vreg_addr_q[2]),
+      wb              : spatz_req.op_arith.is_scalar,
+      last            : last_request,
+      narrowing       : spatz_req.op_arith.is_narrowing,
+      double_narrowing: spatz_req.op_arith.is_double_narrowing,
+      narrowing_index : narrowing_index_q,
+      reduction       : spatz_req.op_arith.is_reduction
     };
 
+    // Initialize at start of instruction
     if (spatz_req_valid && vl_q == '0) begin
       vreg_addr_d[0] = (spatz_req.vs2 + vstart) << $clog2(NrWordsPerVector);
       vreg_addr_d[1] = (spatz_req.vs1 + vstart) << $clog2(NrWordsPerVector);
-      vreg_addr_d[2] = (spatz_req.vd + vstart) << $clog2(NrWordsPerVector);
+      vreg_addr_d[2] = (spatz_req.vd  + vstart) << $clog2(NrWordsPerVector);
+      if (XVMXDOTP) begin
+        vreg_addr_d[3] = (spatz_req.vs3 + vstart) << $clog2(NrWordsPerVector);
+        vreg_addr_d[4] = (spatz_req.vs4 + vstart) << $clog2(NrWordsPerVector);
+      end
 
       // Direct feedthrough
-      vrf_raddr_o = vreg_addr_d;
+      vreg_addr = vreg_addr_d;
       if (!spatz_req.op_arith.is_scalar)
         input_tag.vd_addr = vfu_rsp_addr_t'(vreg_addr_d[2]);
+    end
+    
+    if (spatz_req_valid && vl_q < spatz_req.vl && word_issued) begin
+      automatic logic increment_vs2 = !spatz_req.op_arith.widen_vs2 || widening_upper_q;
+      automatic logic increment_vs1 = !spatz_req.op_arith.widen_vs1 || widening_upper_q;
+      automatic logic increment_vd;
+      automatic logic increment_vs3 = XVMXDOTP && spatz_req.use_vs3 && mx_scale_last;
+      automatic logic increment_vs4 = XVMXDOTP && spatz_req.use_vs4 && mx_scale_last;
 
-      // Did we commit a word already?
-      if (word_issued) begin
-        vreg_addr_d[0] = vreg_addr_d[0] + (!spatz_req.op_arith.widen_vs2 || widening_upper_q);
-        vreg_addr_d[1] = vreg_addr_d[1] + (!spatz_req.op_arith.widen_vs1 || widening_upper_q);
-        vreg_addr_d[2] = vreg_addr_d[2] + (!spatz_req.op_arith.is_reduction && (!spatz_req.op_arith.is_narrowing || narrowing_upper_q) && (spatz_req.op != VFCMP));
-      end
-    end else if (spatz_req_valid && vl_q < spatz_req.vl && word_issued) begin
-      vreg_addr_d[0] = vreg_addr_q[0] + (!spatz_req.op_arith.widen_vs2 || widening_upper_q);
-      vreg_addr_d[1] = vreg_addr_q[1] + (!spatz_req.op_arith.widen_vs1 || widening_upper_q);
-      vreg_addr_d[2] = vreg_addr_q[2] + (!spatz_req.op_arith.is_reduction && (!spatz_req.op_arith.is_narrowing || narrowing_upper_q) && (spatz_req.op != VFCMP));
+      increment_vd = !spatz_req.op_arith.is_reduction && (spatz_req.op != VFCMP);
+      if (spatz_req.op_arith.is_narrowing)
+        increment_vd = narrowing_index_q[0];
+      else if (XVMXDOTP && spatz_req.op_arith.is_double_narrowing)
+        increment_vd = (narrowing_index_q == 2'b11);
+
+      vreg_addr_d[0] = vreg_addr_d[0] + increment_vs2;
+      vreg_addr_d[1] = vreg_addr_d[1] + increment_vs1;
+      vreg_addr_d[2] = vreg_addr_d[2] + increment_vd;
+      vreg_addr_d[3] = vreg_addr_d[3] + increment_vs3;
+      vreg_addr_d[4] = vreg_addr_d[4] + increment_vs4;
     end
   end: vreg_addr_proc
 
   always_comb begin : operand_req_proc
-    vreg_r_req = '0;
-    vreg_we    = '0;
-    vreg_wbe   = '0;
+    vreg_re  = '0;
+    vreg_we  = '0;
+    vreg_wbe = '0;
 
     if (spatz_req_valid && vl_q < spatz_req.vl)
       // Request operands
-      vreg_r_req = {spatz_req.vd_is_src, spatz_req.use_vs1 && reduction_operand_request[1], spatz_req.use_vs2 && reduction_operand_request[0]};
+      vreg_re = {
+        XVMXDOTP && mx_scale_operand2_req,
+        XVMXDOTP && mx_scale_operand1_req,
+        spatz_req.vd_is_src,
+        spatz_req.use_vs1 && reduction_operand_request[1],
+        spatz_req.use_vs2 && reduction_operand_request[0]
+      };
 
     // Got a new result
     if (&(result_valid | ~pending_results) && !result_tag.reduction) begin
@@ -788,13 +922,17 @@ module spatz_vfu
 
       if (result_tag.narrowing) begin
         // Only write half of the elements
-        vreg_wbe = result_tag.narrowing_upper ? {{(N_FU*ELENB/2){1'b1}}, {(N_FU*ELENB/2){1'b0}}} : {{(N_FU*ELENB/2){1'b0}}, {(N_FU*ELENB/2){1'b1}}};
+        vreg_wbe = result_tag.narrowing_index[0] ? {{(N_FU*ELENB/2){1'b1}}, {(N_FU*ELENB/2){1'b0}}} : {{(N_FU*ELENB/2){1'b0}}, {(N_FU*ELENB/2){1'b1}}};
       end else if (spatz_req.op == VFCMP) begin
         // every vector element requires 1 bit of wbe --> ceil(vl/8)
         automatic logic [$clog2((MAXVL+7)/8+1)-1:0] mask_bytes;
         vreg_we    = result_tag.last;
         mask_bytes = (spatz_req.vl + 7) >> 3;
         vreg_wbe   = (mask_bytes >= N_FU*ELENB) ? '1 : vrf_be_t'((vrf_be_t'(1) << mask_bytes) - 1);
+      end else if (XVMXDOTP && result_tag.double_narrowing) begin
+        // Only write a quarter of the bytes
+        vreg_wbe = '0;
+        vreg_wbe[(N_FU*ELENB/4) * result_tag.narrowing_index +: (N_FU*ELENB/4)] = '1;
       end
     end
 
@@ -837,36 +975,39 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
         EW_64: begin
           if (RVD)
             for (int element = 0; element < N_FU; element++)
-              vreg_wdata[32*element + (N_FU * ELEN * result_tag.narrowing_upper / 2) +: 32] = result[64*element +: 32];
+              vreg_wdata[32*element + (N_FU * ELEN * result_tag.narrowing_index[0] / 2) +: 32] = result[64*element +: 32];
         end
         EW_32: begin
           for (int element = 0; element < (MAXEW == EW_64 ? N_FU*2 : N_FU); element++)
-            vreg_wdata[16*element + (N_FU * ELEN * result_tag.narrowing_upper / 2) +: 16] = result[32*element +: 16];
+            vreg_wdata[16*element + (N_FU * ELEN * result_tag.narrowing_index[0] / 2) +: 16] = result[32*element +: 16];
         end
         default:;
       endcase
+    end else if (XVMXDOTP && result_tag.double_narrowing) begin
+      for (int element = 0; element < N_FU; element++)
+        vreg_wdata[16*element + (N_FU * ELEN * result_tag.narrowing_index / 4) +: 16] = result[64*element +: 16];
     end else if (spatz_req.op == VFCMP) begin
       // default
       vreg_wdata = '0;
-        unique case (spatz_req.vtype.vsew)
-          EW_8: begin
-            for (int i = 0; i < VRFWordWidth/8; i++)
-                vreg_wdata[i+(VRFWordWidth/8*word_idx_q)] = result[i*8];
-          end
-          EW_16: begin
-            for (int i = 0; i < VRFWordWidth/16; i++)
-                vreg_wdata[i+(VRFWordWidth/16*word_idx_q)] = result[i*16];
-          end
-          EW_32: begin
-            for (int i = 0; i < VRFWordWidth/32; i++)
-                vreg_wdata[i+(VRFWordWidth/32*word_idx_q)] = result[i*32];
-          end
-          EW_64: begin
-            for (int i = 0; i < VRFWordWidth/64; i++)
-                vreg_wdata[i+(VRFWordWidth/64*word_idx_q)] = result[i*64];
-          end
-          default:;
-        endcase
+      unique case (spatz_req.vtype.vsew)
+        EW_8: begin
+          for (int i = 0; i < VRFWordWidth/8; i++)
+              vreg_wdata[i+(VRFWordWidth/8*word_idx_q)] = result[i*8];
+        end
+        EW_16: begin
+          for (int i = 0; i < VRFWordWidth/16; i++)
+              vreg_wdata[i+(VRFWordWidth/16*word_idx_q)] = result[i*16];
+        end
+        EW_32: begin
+          for (int i = 0; i < VRFWordWidth/32; i++)
+              vreg_wdata[i+(VRFWordWidth/32*word_idx_q)] = result[i*32];
+        end
+        EW_64: begin
+          for (int i = 0; i < VRFWordWidth/64; i++)
+              vreg_wdata[i+(VRFWordWidth/64*word_idx_q)] = result[i*64];
+        end
+        default:;
+      endcase
     end
   end
 
@@ -885,11 +1026,13 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
   `FF(wdata_q, wdata_d, '0)
 
   // Register file signals
-  assign vrf_re_o    = vreg_r_req;
+  assign vrf_re_o    = vreg_re;
+  assign vrf_raddr_o = vreg_addr;
   assign vrf_we_o    = vreg_we;
   assign vrf_wbe_o   = vreg_wbe;
+  assign vrf_waddr_o = vrf_addr_t'(result_tag.vd_addr);
   assign vrf_wdata_o = (spatz_req.op == VFCMP) ? (wdata_q | vreg_wdata) : vreg_wdata;
-  assign vrf_id_o    = {result_tag.id, {3{spatz_req.id}}};
+  assign vrf_id_o    = {result_tag.id, {5{spatz_req.id}}};
 
   //////////
   // IPUs //
@@ -897,9 +1040,9 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
 
   // If there are fewer IPUs than FPUs, pipeline the execution of the integer instructions
   logic     [N_IPU*ELENB-1:0] int_ipu_in_ready;
+  logic     [N_IPU*ELEN-1:0]  int_ipu_operand0;
   logic     [N_IPU*ELEN-1:0]  int_ipu_operand1;
   logic     [N_IPU*ELEN-1:0]  int_ipu_operand2;
-  logic     [N_IPU*ELEN-1:0]  int_ipu_operand3;
   logic     [N_IPU*ELEN-1:0]  int_ipu_result;
   vfu_tag_t [N_IPU-1:0]       int_ipu_result_tag;
   logic     [N_IPU*ELENB-1:0] int_ipu_result_valid;
@@ -908,14 +1051,14 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
 
   assign is_ipu_busy = |int_ipu_busy;
 
-  logic [N_FU*ELEN-1:0] ipu_wide_operand1, ipu_wide_operand2, ipu_wide_operand3;
+  logic [N_FU*ELEN-1:0] ipu_wide_operand0, ipu_wide_operand1, ipu_wide_operand2;
   always_comb begin: gen_ipu_widening
     automatic logic [N_FU*ELEN/2-1:0] shift_operand1 = !widening_upper_q ? operand1[N_FU*ELEN/2-1:0] : operand1[N_FU*ELEN-1:N_FU*ELEN/2];
     automatic logic [N_FU*ELEN/2-1:0] shift_operand2 = !widening_upper_q ? operand2[N_FU*ELEN/2-1:0] : operand2[N_FU*ELEN-1:N_FU*ELEN/2];
 
+    ipu_wide_operand0 = operand0;
     ipu_wide_operand1 = operand1;
     ipu_wide_operand2 = operand2;
-    ipu_wide_operand3 = operand3;
 
     case (spatz_req.vtype.vsew)
       EW_32: begin
@@ -972,9 +1115,9 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
 
       // Send operands
       ipu_in_ready     = 1'b0;
+      int_ipu_operand0 = ipu_wide_operand0[ipu_operand_pnt_q*ELEN*N_IPU +: ELEN*N_IPU];
       int_ipu_operand1 = ipu_wide_operand1[ipu_operand_pnt_q*ELEN*N_IPU +: ELEN*N_IPU];
       int_ipu_operand2 = ipu_wide_operand2[ipu_operand_pnt_q*ELEN*N_IPU +: ELEN*N_IPU];
-      int_ipu_operand3 = ipu_wide_operand3[ipu_operand_pnt_q*ELEN*N_IPU +: ELEN*N_IPU];
       if (spatz_req_valid && operands_ready && &int_ipu_in_ready && !is_fpu_insn) begin
         ipu_operand_pnt_d = ipu_operand_pnt_q + 1;
         if (ipu_operand_pnt_d == '0 || !(&valid_operations[ipu_operand_pnt_d*ELENB*N_IPU +: ELENB*N_IPU]))
@@ -1013,9 +1156,9 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
     assign ipu_result_tag   = ipu_result_tag_q;
   end: gen_pipeline_ipu else begin: gen_no_pipeline_ipu
     assign ipu_in_ready         = int_ipu_in_ready;
+    assign int_ipu_operand0     = ipu_wide_operand0;
     assign int_ipu_operand1     = ipu_wide_operand1;
     assign int_ipu_operand2     = ipu_wide_operand2;
-    assign int_ipu_operand3     = ipu_wide_operand3;
     assign ipu_result           = int_ipu_result;
     assign ipu_result_valid     = int_ipu_result_valid;
     assign int_ipu_result_ready = result_ready;
@@ -1043,7 +1186,7 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
       .operation_ready_o(ipu_ready                                                                                       ),
       .op_s1_i          (int_ipu_operand1[ipu*ELEN +: ELEN]                                                              ),
       .op_s2_i          (int_ipu_operand2[ipu*ELEN +: ELEN]                                                              ),
-      .op_d_i           (int_ipu_operand3[ipu*ELEN +: ELEN]                                                              ),
+      .op_d_i           (int_ipu_operand0[ipu*ELEN +: ELEN]                                                              ),
       .tag_i            (input_tag                                                                                       ),
       .carry_i          ('0                                                                                              ),
       .sew_i            (sew                                                                                             ),
@@ -1170,19 +1313,58 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
 
           VSDOTP: fpu_op = fpnew_pkg::SDOTP;
 
+          VMXDOTP: begin
+            fpu_op = fpnew_pkg::MXDOTPF;
+            // Supported formats FP4 and FP8
+            if (spatz_req.src_fmt == fpnew_pkg::FP4) begin
+              fpu_src_fmt = fpnew_pkg::FP4;
+            end else begin
+              // Default is FP8 source operands
+              unique case (spatz_req.fm.src)
+                1'b0:  fpu_src_fmt = fpnew_pkg::FP8;
+                1'b1:  fpu_src_fmt = fpnew_pkg::FP8ALT;
+                default: fpu_src_fmt = fpnew_pkg::FP8;
+              endcase
+            end
+          end
+
           default:;
         endcase
       end
     end: gen_decoder
 
-    logic [N_FPU*ELEN-1:0] wide_operand1, wide_operand2, wide_operand3;
+    elen_t [N_FPU-1:0] mx_packed_operand;
+    always_comb begin: gen_mx_packed_op
+      automatic mx_scale_t [N_FPU-1:0] shift_mx_scale1 = mx_scale_operand1[N_FPU*widening_mx_scale_q +: N_FPU];
+      automatic mx_scale_t [N_FPU-1:0] shift_mx_scale2 = mx_scale_operand2[N_FPU*widening_mx_scale_q +: N_FPU];
+
+      // shift to choose correct operands for current cycle (depends on accumulator size)
+      automatic mx_acc32_t [31:0] shift_mx_acc32 = operand0[(N_FPU*ELEN/2) * narrowing_index_q[0] +: (N_FPU*ELEN/2)];
+      automatic mx_acc16_t [15:0] shift_mx_acc16 = operand0[(N_FPU*ELEN/4) * narrowing_index_q    +: (N_FPU*ELEN/4)];
+
+      // assemble packed operand:
+      // - accumulator (32 bits or 16 bits)
+      // - scale 1 and scale 2 (starting from bit 32)
+      mx_packed_operand = '0;
+      for (int el = 0; el < N_FPU; el++) begin
+        if (spatz_req.op_arith.is_double_narrowing) begin
+          mx_packed_operand[el][15: 0] = shift_mx_acc16[el];
+        end else begin
+          mx_packed_operand[el][31: 0] = shift_mx_acc32[el];
+        end
+        mx_packed_operand[el][39:32] = shift_mx_scale1[el]; // scale for operand1
+        mx_packed_operand[el][47:40] = shift_mx_scale2[el]; // scale for operand2
+      end
+    end
+
+    logic [N_FPU*ELEN-1:0] wide_operand0, wide_operand1, wide_operand2;
     always_comb begin: gen_widening
       automatic logic [N_FPU*ELEN/2-1:0] shift_operand1 = !widening_upper_q ? operand1[N_FPU*ELEN/2-1:0] : operand1[N_FPU*ELEN-1:N_FPU*ELEN/2];
       automatic logic [N_FPU*ELEN/2-1:0] shift_operand2 = !widening_upper_q ? operand2[N_FPU*ELEN/2-1:0] : operand2[N_FPU*ELEN-1:N_FPU*ELEN/2];
 
+      wide_operand0 = operand0;
       wide_operand1 = operand1;
       wide_operand2 = operand2;
-      wide_operand3 = operand3;
 
       case (spatz_req.vtype.vsew)
         EW_32: begin
@@ -1214,6 +1396,10 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
         end
         default:;
       endcase
+
+      // replace accumulator operand for MX dot product
+      if (XVMXDOTP && spatz_req.op == VMXDOTP)
+        wide_operand0 = mx_packed_operand;
     end: gen_widening
 
     for (genvar fpu = 0; unsigned'(fpu) < N_FPU; fpu++) begin : gen_fpnew
@@ -1225,9 +1411,9 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
       assign fpu_result_valid[fpu*ELENB +: ELENB] = {ELENB{int_fpu_result_valid}};
 
       elen_t fpu_operand1, fpu_operand2, fpu_operand3;
-      assign fpu_operand1 = spatz_req.op_arith.switch_rs1_rd ? wide_operand3[fpu*ELEN +: ELEN] : wide_operand1[fpu*ELEN +: ELEN];
+      assign fpu_operand1 = spatz_req.op_arith.switch_rs1_rd ? wide_operand0[fpu*ELEN +: ELEN] : wide_operand1[fpu*ELEN +: ELEN];
       assign fpu_operand2 = wide_operand2[fpu*ELEN +: ELEN];
-      assign fpu_operand3 = (fpu_op == fpnew_pkg::ADD || spatz_req.op_arith.switch_rs1_rd) ? wide_operand1[fpu*ELEN +: ELEN] : wide_operand3[fpu*ELEN +: ELEN];
+      assign fpu_operand3 = (fpu_op == fpnew_pkg::ADD || spatz_req.op_arith.switch_rs1_rd) ? wide_operand1[fpu*ELEN +: ELEN] : wide_operand0[fpu*ELEN +: ELEN];
 
       logic int_fpu_in_valid;
       assign int_fpu_in_valid = spatz_req_valid && operands_ready && (!spatz_req.op_arith.is_scalar || fpu == 0) && is_fpu_insn;

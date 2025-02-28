@@ -34,6 +34,7 @@
         "spatz_nports": 8,
         "double_bw": 1,
         "buf_fpu": 1,
+        "spatz_xvmxdotp": true,
         // Timing parameters
         "timing": {
             "lat_comp_fp32": 1,
@@ -45,6 +46,7 @@
             "lat_noncomp": 1,
             "lat_conv": 2,
             "lat_sdotp": 2,
+            "lat_mxdotp": 3,
             "fpu_pipe_config": "BEFORE",
             "xbar_latency": "CUT_ALL_PORTS",
 

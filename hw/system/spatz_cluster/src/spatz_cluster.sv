@@ -713,6 +713,7 @@ module spatz_cluster
       .RVF                     (RVF                        ),
       .RVD                     (RVD                        ),
       .RVV                     (RVV                        ),
+      .XVMXDOTP                (XVMXDOTP                   ),
       .Xdma                    (Xdma[i]                    ),
       .AddrWidth               (AxiAddrWidth               ),
       .DataWidth               (NarrowDataWidth            ),

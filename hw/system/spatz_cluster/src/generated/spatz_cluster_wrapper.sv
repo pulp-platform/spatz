@@ -85,35 +85,56 @@ package spatz_cluster_pkg;
                         0, // FP16
                         0, // FP8
                         0, // FP16alt
-                        0  // FP8alt
+                        0, // FP8alt
+                        0, // FP6
+                        0, // FP6alt
+                        0  // FP4
                       },
-                    '{1, 1, 1, 1, 1, 1},   // DIVSQRT
+                    '{1, 1, 1, 1, 1, 1, 1, 1, 1},   // DIVSQRT
                     '{1,
                       1,
                       1,
                       1,
                       1,
-                      1},   // NONCOMP
+                      1,
+                      0, 0, 0},   // NONCOMP
                     '{2,
                       2,
                       2,
                       2,
                       2,
-                      2},   // CONV
+                      2,
+                      0, 0, 0},   // CONV
                     '{2,
                       2,
                       2,
                       2,
                       2,
-                      2}    // DOTP
+                      2,
+                      0, 0, 0},   // DOTP
+                    '{3,
+                      3,
+                      3,
+                      3,
+                      3,
+                      3,
+                      3,
+                      3,
+                      3}   // MXDOTP
                     },
         UnitTypes: '{'{fpnew_pkg::MERGED,
                        fpnew_pkg::MERGED,
                        fpnew_pkg::MERGED,
                        fpnew_pkg::MERGED,
                        fpnew_pkg::MERGED,
-                       fpnew_pkg::MERGED},  // FMA
+                       fpnew_pkg::MERGED,
+                       fpnew_pkg::DISABLED,
+                       fpnew_pkg::DISABLED,
+                       fpnew_pkg::DISABLED},  // FMA
                     '{fpnew_pkg::DISABLED,
+                        fpnew_pkg::DISABLED,
+                        fpnew_pkg::DISABLED,
+                        fpnew_pkg::DISABLED,
                         fpnew_pkg::DISABLED,
                         fpnew_pkg::DISABLED,
                         fpnew_pkg::DISABLED,
@@ -124,19 +145,37 @@ package spatz_cluster_pkg;
                         fpnew_pkg::PARALLEL,
                         fpnew_pkg::PARALLEL,
                         fpnew_pkg::PARALLEL,
-                        fpnew_pkg::PARALLEL}, // NONCOMP
+                        fpnew_pkg::PARALLEL,
+                        fpnew_pkg::DISABLED,
+                        fpnew_pkg::DISABLED,
+                        fpnew_pkg::DISABLED}, // NONCOMP
                     '{fpnew_pkg::MERGED,
                         fpnew_pkg::MERGED,
                         fpnew_pkg::MERGED,
                         fpnew_pkg::MERGED,
                         fpnew_pkg::MERGED,
-                        fpnew_pkg::MERGED},   // CONV
+                        fpnew_pkg::MERGED,
+                        fpnew_pkg::DISABLED,
+                        fpnew_pkg::DISABLED,
+                        fpnew_pkg::DISABLED},   // CONV
                     '{fpnew_pkg::MERGED,
                         fpnew_pkg::MERGED,
                         fpnew_pkg::MERGED,
                         fpnew_pkg::MERGED,
                         fpnew_pkg::MERGED,
-                        fpnew_pkg::MERGED}},  // DOTP
+                        fpnew_pkg::MERGED,
+                        fpnew_pkg::DISABLED,
+                        fpnew_pkg::DISABLED,
+                        fpnew_pkg::DISABLED},  // DOTP
+                    '{fpnew_pkg::MERGED,
+                        fpnew_pkg::MERGED,
+                        fpnew_pkg::MERGED,
+                        fpnew_pkg::MERGED,
+                        fpnew_pkg::MERGED,
+                        fpnew_pkg::MERGED,
+                        fpnew_pkg::MERGED,
+                        fpnew_pkg::MERGED,
+                        fpnew_pkg::MERGED}}, // MXDOTP
         PipeConfig: fpnew_pkg::BEFORE
     },
     '{
@@ -147,35 +186,56 @@ package spatz_cluster_pkg;
                         0, // FP16
                         0, // FP8
                         0, // FP16alt
-                        0  // FP8alt
+                        0, // FP8alt
+                        0, // FP6
+                        0, // FP6alt
+                        0  // FP4
                       },
-                    '{1, 1, 1, 1, 1, 1},   // DIVSQRT
+                    '{1, 1, 1, 1, 1, 1, 1, 1, 1},   // DIVSQRT
                     '{1,
                       1,
                       1,
                       1,
                       1,
-                      1},   // NONCOMP
+                      1,
+                      0, 0, 0},   // NONCOMP
                     '{2,
                       2,
                       2,
                       2,
                       2,
-                      2},   // CONV
+                      2,
+                      0, 0, 0},   // CONV
                     '{2,
                       2,
                       2,
                       2,
                       2,
-                      2}    // DOTP
+                      2,
+                      0, 0, 0},   // DOTP
+                    '{3,
+                      3,
+                      3,
+                      3,
+                      3,
+                      3,
+                      3,
+                      3,
+                      3}   // MXDOTP
                     },
         UnitTypes: '{'{fpnew_pkg::MERGED,
                        fpnew_pkg::MERGED,
                        fpnew_pkg::MERGED,
                        fpnew_pkg::MERGED,
                        fpnew_pkg::MERGED,
-                       fpnew_pkg::MERGED},  // FMA
+                       fpnew_pkg::MERGED,
+                       fpnew_pkg::DISABLED,
+                       fpnew_pkg::DISABLED,
+                       fpnew_pkg::DISABLED},  // FMA
                     '{fpnew_pkg::DISABLED,
+                        fpnew_pkg::DISABLED,
+                        fpnew_pkg::DISABLED,
+                        fpnew_pkg::DISABLED,
                         fpnew_pkg::DISABLED,
                         fpnew_pkg::DISABLED,
                         fpnew_pkg::DISABLED,
@@ -186,19 +246,37 @@ package spatz_cluster_pkg;
                         fpnew_pkg::PARALLEL,
                         fpnew_pkg::PARALLEL,
                         fpnew_pkg::PARALLEL,
-                        fpnew_pkg::PARALLEL}, // NONCOMP
+                        fpnew_pkg::PARALLEL,
+                        fpnew_pkg::DISABLED,
+                        fpnew_pkg::DISABLED,
+                        fpnew_pkg::DISABLED}, // NONCOMP
                     '{fpnew_pkg::MERGED,
                         fpnew_pkg::MERGED,
                         fpnew_pkg::MERGED,
                         fpnew_pkg::MERGED,
                         fpnew_pkg::MERGED,
-                        fpnew_pkg::MERGED},   // CONV
+                        fpnew_pkg::MERGED,
+                        fpnew_pkg::DISABLED,
+                        fpnew_pkg::DISABLED,
+                        fpnew_pkg::DISABLED},   // CONV
                     '{fpnew_pkg::MERGED,
                         fpnew_pkg::MERGED,
                         fpnew_pkg::MERGED,
                         fpnew_pkg::MERGED,
                         fpnew_pkg::MERGED,
-                        fpnew_pkg::MERGED}},  // DOTP
+                        fpnew_pkg::MERGED,
+                        fpnew_pkg::DISABLED,
+                        fpnew_pkg::DISABLED,
+                        fpnew_pkg::DISABLED},  // DOTP
+                    '{fpnew_pkg::MERGED,
+                        fpnew_pkg::MERGED,
+                        fpnew_pkg::MERGED,
+                        fpnew_pkg::MERGED,
+                        fpnew_pkg::MERGED,
+                        fpnew_pkg::MERGED,
+                        fpnew_pkg::MERGED,
+                        fpnew_pkg::MERGED,
+                        fpnew_pkg::MERGED}}, // MXDOTP
         PipeConfig: fpnew_pkg::BEFORE
     }
   };

@@ -74,6 +74,13 @@ macro(add_spatz_test_threeParam_type name file param1 param2 param3 type)
   target_compile_definitions(test-${SNITCH_TEST_PREFIX}${target_name} PUBLIC DATAHEADER="data/data_${param1}_${param2}_${param3}_${type}.h" PREC=${type} SNRT_NFPU_PER_CORE=${SNRT_NFPU_PER_CORE})
 endmacro()
 
+macro(add_spatz_test_threeParam_mx name file param1 param2 param3 kernel)
+  set(target_name ${name}_M${param1}_N${param2}_K${param3}_${kernel})
+  add_snitch_test(${target_name} ${file})
+  target_link_libraries(test-${SNITCH_TEST_PREFIX}${target_name} benchmark ${SNITCH_RUNTIME})
+  target_compile_definitions(test-${SNITCH_TEST_PREFIX}${target_name} PUBLIC DATAHEADER="data/data_${param1}_${param2}_${param3}.h" SNRT_NFPU_PER_CORE=${SNRT_NFPU_PER_CORE} ${kernel}=1)
+endmacro()
+
 # Benchmark library
 add_library(benchmark benchmark/benchmark.c)
 
@@ -93,6 +100,7 @@ endif()
 
 add_library(sp-fmatmul sp-fmatmul/kernel/sp-fmatmul.c)
 add_library(hp-fmatmul hp-fmatmul/kernel/hp-fmatmul.c)
+add_library(hp-alt-fmatmul hp-alt-fmatmul/kernel/hp-alt-fmatmul.c)
 
 add_library(widening-hp-fmatmul widening-hp-fmatmul/kernel/widening-fmatmul.c)
 add_library(widening-bp-fmatmul widening-bp-fmatmul/kernel/widening-fmatmul.c)
@@ -107,6 +115,23 @@ enable_testing()
 set(SNITCH_TEST_PREFIX spatzBenchmarks-)
 
 if (ELEN EQUAL 64)
+  
+  # MX benchmarks
+  add_spatz_test_threeParam_mx(mxfp8-matmul-fp32 mxfp8/matmul-fp32/main.c 64 64   64 BASELINE)
+  add_spatz_test_threeParam_mx(mxfp8-matmul-fp32 mxfp8/matmul-fp32/main.c 64 64  512 BASELINE)
+  add_spatz_test_threeParam_mx(mxfp8-matmul-fp32 mxfp8/matmul-fp32/main.c 64 64   64 MXDOTP  )
+  add_spatz_test_threeParam_mx(mxfp8-matmul-fp32 mxfp8/matmul-fp32/main.c 64 64  512 MXDOTP  )
+  add_spatz_test_threeParam_mx(mxfp8-matmul-bf16 mxfp8/matmul-bf16/main.c 64 64   64 MXDOTP  )
+  add_spatz_test_threeParam_mx(mxfp8-matmul-bf16 mxfp8/matmul-bf16/main.c 64 64  512 MXDOTP  )
+  add_spatz_test_threeParam_mx(mxfp4-matmul-fp32 mxfp4/matmul-fp32/main.c 64 64   64 MXDOTP  )
+  add_spatz_test_threeParam_mx(mxfp4-matmul-fp32 mxfp4/matmul-fp32/main.c 64 64 1024 MXDOTP  )
+  add_spatz_test_threeParam_mx(mxfp4-matmul-bf16 mxfp4/matmul-bf16/main.c 64 64   64 MXDOTP  )
+  add_spatz_test_threeParam_mx(mxfp4-matmul-bf16 mxfp4/matmul-bf16/main.c 64 64 1024 MXDOTP  )
+  add_spatz_test_twoParam     (mxfp8-matvec      mxfp8-matvec/main.c         64   64         )
+  add_spatz_test_twoParam     (mxfp8-matvec      mxfp8-matvec/main.c         64  256         )
+  add_spatz_test_oneParam     (mxfp8-dotp        mxfp8/dotp-fp32/main.c         4096         )
+
+  # FP64 benchmarks
   add_spatz_test_threeParam(dp-fmatmul dp-fmatmul/main.c 64  64  64 )
 
   add_spatz_test_twoParam_type(dp-gemv gemv/main.c 64  128 64)
@@ -131,6 +156,10 @@ add_spatz_test_threeParam(sp-fmatmul sp-fmatmul/main.c 64  128 64 )
 add_spatz_test_threeParam(hp-fmatmul hp-fmatmul/main.c 64  64  64 )
 add_spatz_test_threeParam(hp-fmatmul hp-fmatmul/main.c 64  128 64 )
 add_spatz_test_threeParam(hp-fmatmul hp-fmatmul/main.c 128 128 128)
+
+add_spatz_test_threeParam(hp-alt-fmatmul hp-alt-fmatmul/main.c 64  64  64 )
+add_spatz_test_threeParam(hp-alt-fmatmul hp-alt-fmatmul/main.c 64  64  128)
+add_spatz_test_threeParam(hp-alt-fmatmul hp-alt-fmatmul/main.c 64  64  256)
 
 add_spatz_test_threeParam(widening-hp-fmatmul widening-hp-fmatmul/main.c 64  64  64 )
 add_spatz_test_threeParam(widening-hp-fmatmul widening-hp-fmatmul/main.c 64  128 64 )

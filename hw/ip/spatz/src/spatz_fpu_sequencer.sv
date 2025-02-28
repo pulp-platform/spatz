@@ -459,6 +459,17 @@ module spatz_fpu_sequencer
           end
         end
 
+        // Vector instructions with 2 FP scalar operands (MX dot product)
+        riscv_instr::VMXDOTP_WF,
+        riscv_instr::VMXDOTP_QF: begin
+          if (XVMXDOTP) begin
+            use_fs1 = 1'b1;
+            use_fs3 = 1'b1;
+          end else begin
+            illegal_inst = 1'b1;
+          end
+        end
+
         // Move to the FPR
         riscv_instr::VFMV_F_S: begin
           use_fd = 1'b1;

@@ -142,3 +142,5 @@ add_snitch_test(vfmv isa/rv64uv/vfmv.c)
 
 add_snitch_test(invalid isa/rv64uv/invalid.c)
 set_property(TEST ${SNITCH_TEST_PREFIX}rtl-invalid PROPERTY WILL_FAIL TRUE)
+
+add_snitch_test(vmxdotp isa/rv64uv/vmxdotp.c)

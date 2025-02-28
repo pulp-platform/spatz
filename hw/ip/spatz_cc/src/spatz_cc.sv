@@ -70,6 +70,8 @@ module spatz_cc
     parameter int                          unsigned        NumSpatzOutstandingLoads = 0,
     // Enable V Extension
     parameter bit                                          RVV                      = 1,
+    // Enable vector MX dot product (VMXDOTP) extension
+    parameter bit                                          XVMXDOTP                 = 0,
     // Spatz parameters
     parameter int                          unsigned        NumSpatzFPUs             = 4,
     parameter int                          unsigned        NumSpatzIPUs             = 1,
@@ -141,6 +143,7 @@ module spatz_cc
   logic dma_pvalid, dma_pready;
   logic acc_demux_snitch_valid, acc_demux_snitch_ready;
 
+  fpnew_pkg::fp_format_e fpu_src_fmt;
   fpnew_pkg::roundmode_e fpu_rnd_mode;
   fpnew_pkg::fmt_mode_t fpu_fmt_mode;
   fpnew_pkg::status_t fpu_status;
@@ -178,6 +181,7 @@ module spatz_cc
     .RVF                    (RVF                   ),
     .RVD                    (RVD                   ),
     .RVV                    (RVV                   ),
+    .XVMXDOTP               (XVMXDOTP              ),
     .XDivSqrt               (XDivSqrt              ),
     .XF16                   (XF16                  ),
     .XF16ALT                (XF16ALT               ),
@@ -215,6 +219,7 @@ module spatz_cc
     .ptw_is_4mega_i        (hive_rsp_i.ptw_is_4mega  ),
     .fpu_rnd_mode_o        (fpu_rnd_mode             ),
     .fpu_fmt_mode_o        (fpu_fmt_mode             ),
+    .fpu_src_fmt_o         (fpu_src_fmt              ),
     .fpu_status_i          (fpu_status               ),
     .core_events_o         (snitch_events            )
   );
@@ -312,6 +317,7 @@ module spatz_cc
     .fp_lsu_mem_rsp_i        (fp_lsu_mem_rsp        ),
     .fpu_rnd_mode_i          (fpu_rnd_mode          ),
     .fpu_fmt_mode_i          (fpu_fmt_mode          ),
+    .fpu_src_fmt_i           (fpu_src_fmt           ),
     .fpu_status_o            (fpu_status            )
   );
 
