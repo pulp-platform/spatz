@@ -61,7 +61,7 @@ module spatz_cache_mux #(
   // When a valid signal is taken when ready signal is low, it couldn't change anymore.)
   always_comb begin
     sel_lock_d = sel_lock_q;
-    if ((^inp_valid_i) && (!oup_ready_i)) begin
+    if ((|inp_valid_i) && (!oup_ready_i)) begin
       sel_lock_d = 1'b1;
     end
     if (oup_ready_i) begin
