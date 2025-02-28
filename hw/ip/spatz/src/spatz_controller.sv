@@ -49,6 +49,8 @@ module spatz_controller
     input  logic                                   vlsu_req_ready_i,
     input  logic                                   vlsu_rsp_valid_i,
     input  vlsu_rsp_t                              vlsu_rsp_i,
+    output logic                                   vlsu_dbw_mode_o,
+    input  logic                                   vlsu_dbw_chain_i,
     // VSLDU
     input  logic                                   vsldu_req_ready_i,
     input  logic                                   vsldu_rsp_valid_i,
@@ -66,6 +68,10 @@ module spatz_controller
   /////////////
   // Signals //
   /////////////
+
+  localparam int unsigned INTERLEAVE = 0;
+  localparam int unsigned UNITSTRIDE = 1;
+  assign vlsu_dbw_mode_o = INTERLEAVE;
 
   // Spatz request
   spatz_req_t spatz_req;

@@ -26,6 +26,8 @@ module spatz_vlsu
     input  spatz_req_t                      spatz_req_i,
     input  logic                            spatz_req_valid_i,
     output logic                            spatz_req_ready_o,
+    input  logic                            double_bw_stride_i,
+    output logic                            double_bw_chain_o,
     // VLSU response
     output logic                            vlsu_rsp_valid_o,
     output vlsu_rsp_t                       vlsu_rsp_o,
@@ -44,7 +46,7 @@ module spatz_vlsu
     output spatz_mem_req_t [NrMemPorts-1:0] spatz_mem_req_o,
     output logic           [NrMemPorts-1:0] spatz_mem_req_valid_o,
     input  logic           [NrMemPorts-1:0] spatz_mem_req_ready_i,
-    //  Memory Response
+    // Memory Response
     input  spatz_mem_rsp_t [NrMemPorts-1:0] spatz_mem_rsp_i,
     input  logic           [NrMemPorts-1:0] spatz_mem_rsp_valid_i,
     output logic           [NrMemPorts-1:0] spatz_mem_rsp_ready_o,
@@ -591,15 +593,22 @@ module spatz_vlsu
           mx_offset_store = (port << 3) + ((mx_cnt_row_q[port] * mem_spatz_req.rs2) << $clog2(MemDataWidthB)) + (mx_cnt_col_q[port] << ($clog2(NrMemPorts * MemDataWidthB)));
           offset = commit_insn_q.is_load ? mx_offset_load : mx_offset_store;
         end else begin
-          offset = ({mem_counter_q[intf][fu][$bits(vlen_t)-1:MAXEW] << $clog2(N_FU), mem_counter_q[intf][fu][int'(MAXEW)-1:0]} + (fu << MAXEW)) * stride;
+          if (double_bw_stride_i) begin
+            // Skip the load done by another interface
+            offset = ({mem_counter_q[intf][fu][$bits(vlen_t)-1:MAXEW] << $clog2(NrMemPorts), mem_counter_q[intf][fu][int'(MAXEW)-1:0]} + (port << MAXEW)) * stride;
+          end else begin
+            offset = ({mem_counter_q[intf][fu][$bits(vlen_t)-1:MAXEW] << $clog2(N_FU), mem_counter_q[intf][fu][int'(MAXEW)-1:0]} + (fu << MAXEW)) * stride;
+          end
         end
 
         // The second interface starts from half of the vector to straighten the write-back VRF access pattern
         // To ensure that the 2 interfaces do not also conflict at the TCDM, there is HW scrambling of addresses to TCDM
         // such that they access different superbanks.
-        if (!mem_is_indexed && !mem_is_strided && intf == 1) offset += (mem_spatz_req.vl / 2);
+        if (!double_bw_stride_i) begin
+          if (!mem_is_indexed && !mem_is_strided && intf == 1) offset += (mem_spatz_req.vl / 2);
+        end
 
-        addr                      = mem_spatz_req.rs1 + offset;
+        addr                          = mem_spatz_req.rs1 + offset;
         mem_req_addr[intf][fu]        = (addr >> MAXEW) << MAXEW;
         mem_req_addr_offset[intf][fu] = addr[int'(MAXEW)-1:0];
 
@@ -612,17 +621,19 @@ module spatz_vlsu
   always_comb begin : gen_vreg_addr
     for (int intf = 0; intf < NrInterfaces; intf++) begin : gen_vreg_addr_intf
       vd_vreg_addr[intf]  = (commit_insn_q.vd << $clog2(NrWordsPerVector)) + $unsigned(vd_elem_id[intf]);
-      
+
       // For indices for indexed operations
       vs2_vreg_addr[intf] = (mem_spatz_req.vs2 << $clog2(NrWordsPerVector)) + $unsigned(vs2_elem_id_q[intf]);
       vs2_vreg_idx_addr[intf] = vs2_vreg_addr[intf];
-      
-      // The second interface starts from half of the vector to straighten the write-back VRF access pattern   
-      if (intf == 1) begin
-        vd_vreg_addr[intf] += commit_insn_q.vl / (2 * N_FU * ELENB);
-        vs2_vreg_idx_addr[intf] += ((mem_spatz_req.vl >> (mem_spatz_req.vtype.vsew - int'(mem_spatz_req.op_mem.ew))) / (2 * N_FU * ELENB));
+
+      if (!double_bw_stride_i) begin
+        // The second interface starts from half of the vector to straighten the write-back VRF access pattern
+        if (intf == 1) begin
+          vd_vreg_addr[intf] += commit_insn_q.vl / (2 * N_FU * ELENB);
+          vs2_vreg_idx_addr[intf] += ((mem_spatz_req.vl >> (mem_spatz_req.vtype.vsew - int'(mem_spatz_req.op_mem.ew))) / (2 * N_FU * ELENB));
+        end
       end
-    end    
+    end
   end
 
   ///////////////
@@ -751,19 +762,26 @@ module spatz_vlsu
   vrf_req_t [NrInterfaces-1:0] vrf_req_d, vrf_req_q;
   logic     [NrInterfaces-1:0] vrf_req_valid_d, vrf_req_ready_d;
   logic     [NrInterfaces-1:0] vrf_req_valid_q, vrf_req_ready_q;
-  logic     [NrInterfaces-1:0] vrf_valid_rsp_d, vrf_valid_rsp_q, vrf_valid_rsp;
+  logic     [NrInterfaces-1:0] vrf_valid_rsp_q, vrf_valid_rsp;
   logic     [NrInterfaces-1:0] vrf_commit_intf_valid, vrf_commit_intf_valid_q;
   logic     [NrInterfaces-1:0] resp_overlap;
 
+  typedef   logic [7:0]        vrf_cnt_t;
+  vrf_cnt_t [NrInterfaces-1:0] vrf_cnt_d, vrf_cnt_q;
+  `FF(vrf_cnt_q, vrf_cnt_d, '0);
+  logic     [NrInterfaces-1:0] chain_en;
+
   logic     [NrInterfaces-1:0] vrf_commit_done_d, vrf_commit_done_q;
   `FF(vrf_commit_done_q, vrf_commit_done_d, '0);
+
+  // Check the last vrf write for one insn
   always_comb begin
     vrf_commit_done_d = vrf_commit_done_q;
 
     // Here, we check if each interface is committing the last vrf
     // If yes, we record the commit is done for this interface
     for (int intf = 0; intf < NrInterfaces; intf++) begin
-      if (vrf_req_q[intf].last & vrf_req_valid_q[intf]) begin
+      if (vrf_req_q[intf].last & vrf_req_valid_q[intf] & vrf_req_ready_q[intf]) begin
         vrf_commit_done_d[intf] = 1'b1;
       end
     end
@@ -778,6 +796,46 @@ module spatz_vlsu
       vrf_commit_done_d = '0;
     end
   end
+
+  // Count the number of vec element wrote to the VRF for each port
+  // This information is used to determine chaining for strided pattern
+  always_comb begin
+    // Initial values
+    vrf_cnt_d         = vrf_cnt_q;
+    chain_en          = '0;
+
+    // See if we wrote something to VRF this cycle
+    for (int intf = 0; intf < NrInterfaces; intf++) begin
+      if (vrf_req_valid_q[intf] & vrf_req_ready_q[intf]) begin
+        // valid handshaking, set the chain indicator for this port to 1
+        chain_en[intf] = 1'b1;
+        // Also increase the counter
+        vrf_cnt_d[intf] ++;
+      end
+    end
+
+    if (vlsu_rsp_valid_o) begin
+      // Case 0: insn is complete, no need for chaining, clear cnter
+      vrf_cnt_d = '0;
+      chain_en  = '0;
+    end else if (&chain_en) begin
+      // Case 1: both ports write to VRF this cycle
+      // We will not increase the counter this cycle
+      vrf_cnt_d = vrf_cnt_q;
+    end else if (chain_en[0] & (vrf_cnt_q[1] > 0)) begin
+      // Case 2: intf 0 write this cycle, and intf 1 wrote before
+      vrf_cnt_d[0] --;
+      vrf_cnt_d[1] --;
+      chain_en [1] = 1'b1;
+    end else if (chain_en[1] & (vrf_cnt_q[0] > 0)) begin
+      // Case 3: intf 1 write this cycle, and intf 0 wrote before
+      vrf_cnt_d[0] --;
+      vrf_cnt_d[1] --;
+      chain_en [0] = 1'b1;
+    end
+  end
+
+  assign double_bw_chain_o = &chain_en;
 
   for (genvar intf = 0; intf < NrInterfaces; intf++) begin : gen_vrf_req_register_intf
     spill_register #(
@@ -812,15 +870,12 @@ module spatz_vlsu
 
     // To track a valid response on an interface until both interfaces finish and can send to the VRF
     // When this happens the FF is cleared
-    // `FFLARNC(vrf_valid_rsp_q[intf], 1'b1, vrf_valid_rsp[intf], vlsu_rsp_valid_o & ~resp_overlap[intf], 1'b0, clk_i, rst_ni)
-
-    assign vrf_valid_rsp_d[intf] = (vlsu_rsp_valid_o & ~resp_overlap[intf]) ? 1'b0 : (vrf_valid_rsp[intf] ? 1'b1 : vrf_valid_rsp_q[intf]);
-    `FF(vrf_valid_rsp_q[intf], vrf_valid_rsp_d[intf], 1'b0)
+    `FFLARNC(vrf_valid_rsp_q[intf], 1'b1, vrf_valid_rsp[intf], vlsu_rsp_valid_o & ~resp_overlap[intf], 1'b0, clk_i, rst_ni)
 
     // Check if either a previously tracked response or there is a response in the current cycle
-    assign vrf_commit_intf_valid[intf] = vrf_valid_rsp[intf] | vrf_commit_done_q[intf];
+    assign vrf_commit_intf_valid[intf] = (vrf_valid_rsp[intf] & vrf_req_ready_q[intf]) | vrf_commit_done_q[intf];
     // assign vrf_commit_intf_valid[intf] = vrf_valid_rsp[intf] | vrf_valid_rsp_q[intf] | vrf_commit_done_q[intf];
-    `FF(vrf_commit_intf_valid_q[intf], vrf_commit_intf_valid[intf], 1'b0)
+    `FF(vrf_commit_intf_valid_q[intf], vrf_commit_intf_valid[intf], 1'b0);
   end
 
   ////////////////////////////
@@ -832,7 +887,7 @@ module spatz_vlsu
 
   // Check if interface 1 is the interface trying to commit, if so take resp information from interface 1
   // If both interfaces in sync, interface 1 is given priority
-  assign resp_intf = vrf_commit_intf_valid_q[1] == 1'b0 ? 1'b1 : 1'b0;
+  assign resp_intf = vrf_commit_intf_valid_q [1] == 1'b0 ? 1'b1 : 1'b0;
   assign vlsu_rsp_o = &vrf_commit_intf_valid && |vrf_req_valid_q ? vrf_req_q[resp_intf].rsp   : '{id: commit_insn_q.id, default: '0};
 
   // Send response back to the controller to indicate end of request
@@ -892,9 +947,17 @@ module spatz_vlsu
 
 
   for (genvar intf = 0; intf < NrInterfaces; intf++) begin: gen_vd_elem_id
-    assign vd_elem_id[intf] = (commit_counter_q[intf][0] > vreg_start_0)
-                            ? commit_counter_q[intf][0] >> $clog2(ELENB)
-                            : commit_counter_q[intf][3] >> $clog2(ELENB);
+    always_comb begin
+      if (double_bw_stride_i) begin
+        vd_elem_id[intf] = (commit_counter_q[intf][0] > vreg_start_0)
+                          ? NrInterfaces*(commit_counter_q[intf][0] >> $clog2(ELENB)) + intf
+                          : NrInterfaces*(commit_counter_q[intf][3] >> $clog2(ELENB)) + intf;
+      end else begin
+        vd_elem_id[intf] = (commit_counter_q[intf][0] > vreg_start_0)
+                          ? commit_counter_q[intf][0] >> $clog2(ELENB)
+                          : commit_counter_q[intf][3] >> $clog2(ELENB);
+      end
+    end
   end
 
   for (genvar intf = 0; intf < NrInterfaces; intf++) begin: gen_mem_counter_proc_intf
