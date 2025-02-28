@@ -194,6 +194,7 @@ sources:
       # Level 1
       - hw/system/spatz_cluster/src/spatz_barrier.sv
       - hw/system/spatz_cluster/src/spatz_cluster_peripheral/spatz_cluster_peripheral_reg_top.sv
+      - hw/system/spatz_cluster/src/spatz_cache_mux.sv
       # Level 2
       - hw/system/spatz_cluster/src/spatz_cluster_peripheral/spatz_cluster_peripheral.sv
       - hw/system/spatz_cluster/src/spatz_addr_mapper.sv

@@ -79,7 +79,7 @@ module spatz_addr_mapper #(
   localparam int unsigned SPM_PORT_OFFSET     = NumSpmIO/2;
   localparam int unsigned CACHE_PORT_OFFSET   = NumCacheIO/2-1;
 
-  // First snitch prot at cache side
+  // First snitch port at cache side
   localparam int unsigned CACHE_SNITCH0 = NumCacheIO-2;
   // Second snitch port at cache side
   localparam int unsigned CACHE_SNITCH1 = NumCacheIO-1;
@@ -89,6 +89,8 @@ module spatz_addr_mapper #(
 
   localparam int unsigned SPM   = 1;
   localparam int unsigned CACHE = 0;
+
+  localparam int unsigned ByteOffset = 6;
 
   // The end address substract the SPM region size would be the actual starting address
   assign spm_start_addr = tcdm_end_address_i - spm_size_i;
@@ -104,12 +106,14 @@ module spatz_addr_mapper #(
   // The available SPM region will ends at the `tcdm_end_address_i` and
   // start from `spm_start_addr`.
 
+  logic [NumCacheIO-1:0]          cache_req_valid;
+
   always_comb begin
     for (int j = 0; unsigned'(j) < NumSpmIO; j++) begin : gen_req
       // Initial values
-      spm_req_o[j]   = '0;
+      spm_req_o[j]     = '0;
       cache_req_arb[j] = '0;
-      error_o[j]     = '0;
+      error_o[j]       = '0;
       if ((mem_req_i[j].q.addr >= tcdm_start_address_i) & (mem_req_i[j].q.addr < tcdm_end_address_i)) begin
         target_select[j] = SPM;
         if (mem_req_i[j].q.addr < spm_start_addr) begin
@@ -132,37 +136,29 @@ module spatz_addr_mapper #(
         end
       end else begin
         // Wire to Cache outputs
-        cache_req_arb[j].q = mem_req_i[j].q;
+        cache_req_arb[j].q       = mem_req_i[j].q;
         cache_req_arb[j].q_valid = mem_req_i[j].q_valid && (!flush_i);
-        target_select[j] = CACHE;
+        target_select[j]         = CACHE;
       end
+      cache_req_valid[j] = cache_req_arb[j].q_valid;
     end
   end
 
   if (NumSpmIO > NumCacheIO) begin : gen_req_mux
     // Only generate MUX for Spatz, Snitch will directly passed through
-    for (genvar j = 0; unsigned'(j) < NUM_PORTS_PER_SPATZ; j++) begin : gen_req_xbar
-      stream_xbar #(
-        .NumInp      ( 2    ),
-        .NumOut      ( 1    ),
-        .payload_t   ( mem_req_chan_t ),
-        .OutSpillReg ( 1'b0      ),
-        .ExtPrio     ( 1'b0      ),
-        .AxiVldRdy   ( 1'b1      ),
-        .LockIn      ( 1'b1      )
-      ) i_stream_xbar (
+    for (genvar j = 0; unsigned'(j) < NUM_PORTS_PER_SPATZ; j++) begin : gen_mux_loop
+      spatz_cache_mux #(
+        .Offset      ( 6              ),
+        .DATA_T      ( mem_req_chan_t )
+      ) i_req_mux (
         .clk_i,
         .rst_ni,
-        .flush_i ( 1'b0 ),
-        .rr_i    ( '0   ),
-        .data_i  ( {cache_req_arb[j].q,       cache_req_arb[j+SPM_PORT_OFFSET].q}      ),
-        .sel_i   ( '0   ),
-        .valid_i ( {cache_req_arb[j].q_valid, cache_req_arb[j+SPM_PORT_OFFSET].q_valid}),
-        .ready_o ( {cache_rsp_arb[j].q_ready, cache_rsp_arb[j+SPM_PORT_OFFSET].q_ready}),
-        .data_o  ( cache_req_o[j].q ),
-        .idx_o   ( ),
-        .valid_o ( cache_req_o[j].q_valid ),
-        .ready_i ( cache_rsp_i[j].q_ready )
+        .inp_data_i  ( {cache_req_arb[j].q,       cache_req_arb[j+SPM_PORT_OFFSET].q}      ),
+        .inp_valid_i ( {cache_req_arb[j].q_valid, cache_req_arb[j+SPM_PORT_OFFSET].q_valid}),
+        .inp_ready_o ( {cache_rsp_arb[j].q_ready, cache_rsp_arb[j+SPM_PORT_OFFSET].q_ready}),
+        .oup_data_o  ( cache_req_o[j].q ),
+        .oup_valid_o ( cache_req_o[j].q_valid ),
+        .oup_ready_i ( cache_rsp_i[j].q_ready )
       );
 
       assign cache_rsp_arb[j].p                       = cache_rsp_i[j].p;
