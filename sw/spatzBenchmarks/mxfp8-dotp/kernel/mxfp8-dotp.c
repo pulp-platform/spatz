@@ -1,4 +1,4 @@
-// Copyright 2022 ETH Zurich and University of Bologna.
+// Copyright 2025 ETH Zurich and University of Bologna.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -22,39 +22,16 @@
 #define E8M0_BIAS 127
 #define FP32_BIAS 127
 
-#define DEBUG
-
-#ifdef DEBUG
-void snrt_putchar(char c);
-
-#define nibble_to_char(nibble) \
-   ((nibble) < 10 ? ((nibble) + '0') : ((nibble) - 10 + 'a'))
-
-static void dump_vreg(const char *regname, const char *reg, int len) {
-  while (*regname) {
-    snrt_putchar(*regname);
-    regname++;
-  }
-  snrt_putchar(':');
-  snrt_putchar(' ');
-
-  for (int i = len - 1; i >= 0; i--) {
-    unsigned char byte = reg[i];
-    snrt_putchar(nibble_to_char(byte >> 4));
-    snrt_putchar(nibble_to_char(byte & 0xf));
-    if ((i & 0x3) == 0)
-      snrt_putchar(' ');
-  }
-  snrt_putchar('\n');
-}
-#endif
-#include <stdio.h>
+#define NOP(count) for (int c = 0; c < (count); c++) asm volatile("nop")
 
 // MXFP8 dot product
 // - block size = 32 fixed
 // - avl == LENGTH(a) == LENGTH(b) == 32 * LENGTH(a_scale) == 32 * LENGTH(b_scale)
-// - element data format: FP8
+// - element data format: FP8_E5M2
 // - scale data format: E8M0 (bias = 127, NaN not handled)
+// - NOTE: This works only if the number of blocks is a multiple of 256 (width
+//         of the datapath), as other `vl` values are not handled correctly with
+//         the tail-undisturbed setting.
 //
 // REGISTER ALLOCATION:
 // - v0 (LMUL=4): global accumulator
@@ -62,11 +39,6 @@ static void dump_vreg(const char *regname, const char *reg, int len) {
 float mxfp8_dotp_fp32(const char *a, const char *b, const char *a_scale, const char *b_scale, unsigned int avl) {
   unsigned int block_avl = avl / MXFP8_BLOCK_SIZE;
   unsigned int block_vl; // # of blocks handled in current iteration
-
-#ifdef DEBUG
-  char tmpreg[512 / 8 * 8];
-  memset(&tmpreg, 0x55, 64);
-#endif
 
   // Clear global accumulators
   asm volatile("vsetvli zero, %0, e32, m4, ta, ma" :: "r"(-1));
@@ -79,24 +51,23 @@ float mxfp8_dotp_fp32(const char *a, const char *b, const char *a_scale, const c
       asm volatile("vlse8.v v9, (%0), %1" :: "r"(b + i), "r"(MXFP8_BLOCK_SIZE * sizeof(char)));
       // v8, v9 (LMUL=1): a and b as FP8
 
-      printf("loaded\n");
-
       // upcast from FP8 to FP16
       asm volatile("vmv.v.i v10, 0");
+      // FIXME: Currently required as there is an issue with RAW dependencies
+      //        between strided loads and arithmetic instructions.
+      NOP(11);
+      // FIXME: Currently required as vfwcvt.f.f.v is not implemented.
       asm volatile("vfwadd.vv v12, v8, v10");
       asm volatile("vfwadd.vv v14, v9, v10");
       // v12, v14 (LMUL=2): a and b as FP16
 
-      // printf("upcast 1\n");
-
       // upcast from FP16 to FP32
       asm volatile("vsetvli zero, %0, e16, m2, ta, ma" :: "r"(block_avl));
+      // FIXME: Currently required as vfwcvt.f.f.v is not implemented.
       asm volatile("vmv.v.i v8, 0");
       asm volatile("vfwadd.vv v16, v12, v8");
       asm volatile("vfwadd.vv v20, v14, v8");
       // v16, v20 (LMUL=4): a and b as FP32
-
-      // printf("upcast 2\n");
 
       asm volatile("vsetvli zero, %0, e32, m4, ta, ma" :: "r"(block_avl));
       if (i == 0) {
@@ -104,10 +75,6 @@ float mxfp8_dotp_fp32(const char *a, const char *b, const char *a_scale, const c
       } else {
         asm volatile("vfmacc.vv v4, v16, v20");
       }
-
-      // memset(&tmpreg, 0x55, 64); asm volatile("vse32.v  v4, (%0)" :: "r"(&tmpreg)); dump_vreg(" v4", tmpreg, 32);
-      // memset(&tmpreg, 0x55, 64); asm volatile("vse32.v v16, (%0)" :: "r"(&tmpreg)); dump_vreg("v16", tmpreg, 32);
-      // memset(&tmpreg, 0x55, 64); asm volatile("vse32.v v20, (%0)" :: "r"(&tmpreg)); dump_vreg("v20", tmpreg, 32);
     }
 
     // load `block_vl` E8M0 scales from `a_scale` and `b_scale`
@@ -117,37 +84,29 @@ float mxfp8_dotp_fp32(const char *a, const char *b, const char *a_scale, const c
     // v8, v9 (LMUL=1): a_scale and b_scale as UINT8 (E8M0)
 
     // upcast from UINT8 to UINT32, add them together
-    // asm volatile("vwaddu.vv v10, v8, v9");
+    // FIXME: Currently required to use multiplication with 1 as `vwadd` is not
+    //        implemented. (Widening integer move `vwcvt.x.x.v` is a
+    //        pseudo-instruction that maps to vwadd.vx).
     asm volatile("vwmulu.vx v12, v8, %0" :: "r"(1));
     asm volatile("vwmulu.vx v14, v9, %0" :: "r"(1));
-    // v12, v14 (LMUL=2): a_scale and b_scale as UINT8 (E8M0)
-
+    // v12, v14 (LMUL=2): a_scale and b_scale as UINT16 (E8M0)
     asm volatile("vsetvli zero, %0, e16, m2, ta, ma" :: "r"(block_avl));
     asm volatile("vadd.vv v8, v12, v14");
-    // v8 (LMUL=2): a_scale+b_scale as UINT8
-
+    // v8 (LMUL=2): a_scale+b_scale as UINT16
     asm volatile("vwmulu.vx v16, v8, %0" :: "r"(1));
-    // v16 (LMUL=4): a_scale+b_scale as UINT8
+    // v16 (LMUL=4): a_scale+b_scale as UINT32
 
     // remove double bias, shift to manually create an FP32 scale
     asm volatile("vsetvli zero, %0, e32, m4, ta, ma" :: "r"(block_avl));
     asm volatile("vsub.vx v16, v16, %0" :: "r"(2 * E8M0_BIAS - FP32_BIAS));
-    // memset(&tmpreg, 0x55, 64); asm volatile("vse32.v v16, (%0)" :: "r"(&tmpreg)); dump_vreg("scales_m", tmpreg, 64);
     asm volatile("vsll.vi v16, v16, 23");
-    // memset(&tmpreg, 0x55, 64); asm volatile("vse32.v v16, (%0)" :: "r"(&tmpreg)); dump_vreg("scales_f", tmpreg, 64);
     // v16 (LMUL=4): product of scales as FP32
-
-    // memset(&tmpreg, 0x55, 64); asm volatile("vse32.v  v0, (%0)" :: "r"(&tmpreg)); dump_vreg("global", tmpreg, 64);
-    // memset(&tmpreg, 0x55, 64); asm volatile("vse32.v  v4, (%0)" :: "r"(&tmpreg)); dump_vreg(" local", tmpreg, 64);
-    // memset(&tmpreg, 0x55, 64); asm volatile("vse32.v v16, (%0)" :: "r"(&tmpreg)); dump_vreg("scales", tmpreg, 64);
 
     // global accumulator[i] += local accumulator[i] * scale[i]
     // NOTE: Need tail-undisturbed setting here to avoid overwriting values in
     //       global accumulator for last blocks.
     asm volatile("vsetvli zero, %0, e32, m4, tu, ma" :: "r"(block_avl));
     asm volatile("vfmacc.vv v0, v4, v16");
-
-    // memset(&tmpreg, 0x55, 64); asm volatile("vse32.v  v0, (%0)" :: "r"(&tmpreg)); dump_vreg("global", tmpreg, 64);
 
     a += block_vl * MXFP8_BLOCK_SIZE;
     b += block_vl * MXFP8_BLOCK_SIZE;
@@ -156,18 +115,19 @@ float mxfp8_dotp_fp32(const char *a, const char *b, const char *a_scale, const c
     block_avl -= block_vl;
   } while (block_avl > 0);
 
-#ifdef DEBUG
-  printf("before reduce and return\n");
-#endif
-
   // Reduce and return
   // NOTE: avl=-1 to sum all elements in v0.
   asm volatile("vsetvli zero, %0, e32, m4, ta, ma" :: "r"(-1));
-  memset(&tmpreg, 0x55, 64); asm volatile("vse32.v  v0, (%0)" :: "r"(&tmpreg)); dump_vreg("global", tmpreg, 64);
-  asm volatile("vmv.v.i v8, 0"); // FIXME: could be vmv.s.x
-  memset(&tmpreg, 0x55, 64); asm volatile("vse32.v  v8, (%0)" :: "r"(&tmpreg)); dump_vreg("   out", tmpreg, 64);
+  // FIXME: This breaks if using vmv.s.x (scalar move), with a stale value being
+  //        moved into v8[0] instead of 0x0. This vector move is less efficient
+  //        but works correctly.
+  asm volatile("vmv.v.i v8, 0");
+
+  // FIXME: These NOPs avoid a deadlock that happens otherwise, which seems to
+  //        be related to the FP register file.
+  NOP(2);
+
   asm volatile("vfredusum.vs v8, v0, v8");
-  memset(&tmpreg, 0x55, 64); asm volatile("vse32.v  v8, (%0)" :: "r"(&tmpreg)); dump_vreg("   out", tmpreg, 64);
 
   float result;
   asm volatile("vfmv.f.s %0, v8" : "=f"(result));
