@@ -44,11 +44,21 @@ void TEST_CASE1() {
   XCMP(7, vl, snrt_min(avl, vlenb * 2 / 2));
 }
 
+void TEST_CASE2() {
+  uint32_t vl, avl;
+  uint32_t vlenb = read_csr(vlenb);
+
+  avl = 0xFFFFFFFF;
+  __asm__ volatile("vsetvli %[vl], %[avl], e8, m1, ta, ma" : [vl]"=r"(vl) : [avl] "r"(avl));
+  XCMP(8, vl, vlenb);
+}
+
 int main(void) {
   INIT_CHECK();
   enable_vec();
 
   TEST_CASE1();
+  TEST_CASE2();
 
   EXIT_CHECK();
 }
