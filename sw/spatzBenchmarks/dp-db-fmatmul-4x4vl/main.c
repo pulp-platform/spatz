@@ -62,10 +62,9 @@ int main() {
 
   // This configuration can take up to 128x128x128 matmul (peak 104 KiB SPM)
   // Adjust the M and N depends on SPM size and matmul size
-  const unsigned int matrix_M = 16;
+  const unsigned int matrix_M = ((gemm_l.M * gemm_l.K) > 1024) ? (1024/gemm_l.K) : gemm_l.M;
   const unsigned int matrix_K = gemm_l.K;
-  const unsigned int matrix_N = gemm_l.N;
-
+  const unsigned int matrix_N = ((gemm_l.N * gemm_l.K) > 4096) ? (4096/gemm_l.K) : gemm_l.N;
   unsigned int timer_start, timer_end, timer;
 
   unsigned int m_start, m_end;
@@ -76,7 +75,11 @@ int main() {
   const unsigned int B_size = matrix_K * matrix_N;
   const unsigned int C_size = matrix_M * matrix_N;
 
-  uint32_t spm_size = 124;
+  // Total number of in and out loops
+  const int tot_out = gemm_l.N / matrix_N;
+  const int tot_in  = gemm_l.M / matrix_M;
+
+  uint32_t spm_size = 127;
 
   if (cid == 0) {
     // Init the cache
@@ -88,17 +91,39 @@ int main() {
 
   // Allocate the L1 region for double buffering matrices
   if (cid == 0) {
-    // Divide entire SPM into two half for double buffering
-    matrix_a1 = (double *)snrt_l1alloc(A_size * sizeof(double));
-    matrix_a2 = (double *)snrt_l1alloc(A_size * sizeof(double));
-    matrix_b1 = (double *)snrt_l1alloc(B_size * sizeof(double));
-    matrix_b2 = (double *)snrt_l1alloc(B_size * sizeof(double));
-    matrix_c1 = (double *)snrt_l1alloc(C_size * sizeof(double));
-    matrix_c2 = (double *)snrt_l1alloc(C_size * sizeof(double));
-    printf("Allocate memory to the following regions:\n");
-    printf("a1:%p, a2:%p\n", matrix_a1, matrix_a2);
-    printf("b1:%p, b2:%p\n", matrix_b1, matrix_b2);
-    printf("c1:%p, c2:%p\n", matrix_c1, matrix_c2);
+    if (tot_in > 1) {
+      // Divide entire SPM into two half for double buffering
+      matrix_a1 = (double *)snrt_l1alloc(A_size * sizeof(double));
+      matrix_a2 = (double *)snrt_l1alloc(A_size * sizeof(double));
+      matrix_b1 = (double *)snrt_l1alloc(B_size * sizeof(double));
+      matrix_b2 = (double *)snrt_l1alloc(B_size * sizeof(double));
+      matrix_c1 = (double *)snrt_l1alloc(C_size * sizeof(double));
+      matrix_c2 = (double *)snrt_l1alloc(C_size * sizeof(double));
+      printf("Tiled matrix size:\n");
+      printf("A:%ux%u\n", matrix_M, matrix_K);
+      printf("B:%ux%u\n", matrix_K, matrix_N);
+      printf("C:%ux%u\n", matrix_M, matrix_N);
+
+      printf("Allocate memory to the following regions:\n");
+      printf("A_size:%p,a1:%p,a2:%p\n", A_size * sizeof(double), matrix_a1, matrix_a2);
+      printf("B_size:%p,b1:%p,b2:%p\n", B_size * sizeof(double), matrix_b1, matrix_b2);
+      printf("C_size:%p,c1:%p,c2:%p\n", C_size * sizeof(double), matrix_c1, matrix_c2);
+    } else {
+      // Divide entire SPM into two half for double buffering
+      matrix_a1 = (double *)snrt_l1alloc(A_size * sizeof(double));
+      matrix_b1 = (double *)snrt_l1alloc(B_size * sizeof(double));
+      matrix_c1 = (double *)snrt_l1alloc(C_size * sizeof(double));
+      printf("Tiled matrix size:\n");
+      printf("A:%ux%u\n", matrix_M, matrix_K);
+      printf("B:%ux%u\n", matrix_K, matrix_N);
+      printf("C:%ux%u\n", matrix_M, matrix_N);
+
+      printf("Allocate memory to the following regions:\n");
+      printf("A_size:%p,a1:%p\n", A_size * sizeof(double), matrix_a1);
+      printf("B_size:%p,b1:%p\n", B_size * sizeof(double), matrix_b1);
+      printf("C_size:%p,c1:%p\n", C_size * sizeof(double), matrix_c1);
+    }
+
   }
 
   double *a_comp;
@@ -111,10 +136,6 @@ int main() {
   double *b_l2;
   double *c_l2, *c_l2_st;
 
-  // TODO: Read it from header file
-  // Total number of in and out loops
-  const int tot_out = gemm_l.N / matrix_N;
-  const int tot_in  = gemm_l.M / matrix_M;
   // Reset timer
   timer = (unsigned int)-1;
 
@@ -134,8 +155,8 @@ int main() {
   c_l2_st = gemm_C_dram;
 
   if (cid == 0) {
+    printf("total in loops:%u, out loops:%u\n\n", tot_in, tot_out);
   #ifdef DEBUG
-    printf("total in loops:%u, out loops:%u\n", tot_in, tot_out);
     printf("L2 a:%p, b:%p, c:%p\n", (void*)a_l2, (void*)b_l2, (void*)c_l2);
     printf("L1 a:%p, b:%p, c:%p\n", (void*)matrix_a1, (void*)matrix_b1, (void*)matrix_c1);
   #endif
@@ -181,7 +202,7 @@ int main() {
 
     if (cid == 0 & (out_loop < tot_out-1)) {
       #ifdef DEBUG
-        printf("pre-load b:%p\n", (void*)b_l2);
+        printf("pre-load b from %p to %p\n", (void*)b_l2, (void*)b_dma);
       #endif
       // Load next part of B if it has
       // We want to load a K-by-N matrix to SPM, each stride has length of N
@@ -214,7 +235,7 @@ int main() {
       if (cid == 0) {
         if (in_loop > 0) {
         #ifdef DEBUG
-          printf("store c:%p\n", (void*)c_l2_st);
+          printf("store c from %p to %p\n\n", (void*)c_dma, (void*)c_l2_st);
         #endif
           // Store C back to its loaded place
           // We want to store a m-by-n matrix to L2 in M-by-N, 
@@ -228,13 +249,13 @@ int main() {
         }
         if (in_loop < tot_in-1) {
         #ifdef DEBUG
-          printf("pre-load a:%p\n", (void*)a_l2);
+          printf("pre-load a from %p to %p\n", (void*)a_l2, (void*)a_dma);
         #endif
           // Copy first parts of matrix for initialization
           snrt_dma_start_1d(a_dma, a_l2, A_size * sizeof(double));
           a_l2 += A_size;
         #ifdef DEBUG
-          printf("pre-load c:%p\n", (void*)c_l2);
+          printf("pre-load c from %p to %p\n", (void*)c_l2, (void*)c_dma);
         #endif
           // We want to load a m-by-n matrix from L2 in M-by-N, 
           // each stride has length of n then it jumps to next row repeating m times
@@ -261,10 +282,10 @@ int main() {
 
   if (cid == 0) {
   #ifdef DEBUG
-    printf("store c:%p\n", (void*)c_l2_st);
+    printf("store c from %p to %p\n\n", (void*)c_comp, (void*)c_l2_st);
   #endif
     // Write final trunk into dram
-    snrt_dma_start_1d(c_l2_st, c_dma, C_size * sizeof(double));
+    snrt_dma_start_1d(c_l2_st, c_comp, C_size * sizeof(double));
     snrt_dma_wait_all();
   }
   snrt_cluster_hw_barrier();
@@ -284,7 +305,10 @@ int main() {
     printf("The performance is %ld OP/1000cycle (%ld%%o utilization).\n",
            performance, utilization);
   #endif
+    l1d_flush();
   }
+
+  snrt_cluster_hw_barrier();
 
   #ifdef DEBUG
   if (cid == 0) {

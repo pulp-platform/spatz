@@ -7,6 +7,8 @@
 
 package snitch_pkg;
 
+  localparam logic [11:0] CSR_DBWMODE = 12'hb;
+
   localparam dm::hartinfo_t SnitchHartinfo = '{
     zero1: '0,
     nscratch: 1,

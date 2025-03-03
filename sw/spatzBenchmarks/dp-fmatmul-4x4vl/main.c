@@ -28,6 +28,8 @@
 #define KERNEL_SIZE 4
 #endif
 
+#define CHECK
+
 double *a;
 double *b;
 double *c;
@@ -155,6 +157,7 @@ int main() {
       stop_kernel();
     }
 
+    #ifdef CHECK
     if ((cid == 0) && (i == 0)) {
       int error =
           verify_matrix(c, (const double *)gemm_checksum, gemm_l.M, gemm_l.N);
@@ -166,6 +169,7 @@ int main() {
       #endif
       }
     }
+    #endif
 
     // Wait for all cores to finish
     snrt_cluster_hw_barrier();
@@ -185,18 +189,6 @@ int main() {
            performance, utilization);
   #endif
   }
-
-  // if (cid == 0) {
-  //   int error =
-  //       verify_matrix(c, (const double *)gemm_checksum, gemm_l.M, gemm_l.N);
-
-  //   if (error != 0) {
-  //   #ifdef PRINT_RESULT
-  //     printf("Error core %d: c[%d]=%u\n", cid, error, (int)c[error]);
-  //     return error;
-  //   #endif
-  //   }
-  // }
 
   // Wait for all cores to finish
   snrt_cluster_hw_barrier();

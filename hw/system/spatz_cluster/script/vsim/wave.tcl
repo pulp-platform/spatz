@@ -29,6 +29,11 @@ add wave -noupdate -group CSR -group flush_status /tb_bin/i_dut/i_cluster_wrappe
 add wave -noupdate -group CSR -group spm_size /tb_bin/i_dut/i_cluster_wrapper/i_cluster/i_snitch_cluster_peripheral/i_spatz_cluster_peripheral_reg_top/u_cfg_l1d_spm/*
 
 add wave -noupdate -group Mapper /tb_bin/i_dut/i_cluster_wrapper/i_cluster/i_tcdm_mapper/*
+add wave -noupdate -group Mapper -group req_mux0 /tb_bin/i_dut/i_cluster_wrapper/i_cluster/i_tcdm_mapper/gen_req_mux/gen_mux_loop[0]/i_req_mux/*
+add wave -noupdate -group Mapper -group req_mux1 /tb_bin/i_dut/i_cluster_wrapper/i_cluster/i_tcdm_mapper/gen_req_mux/gen_mux_loop[1]/i_req_mux/*
+add wave -noupdate -group Mapper -group req_mux4 /tb_bin/i_dut/i_cluster_wrapper/i_cluster/i_tcdm_mapper/gen_req_mux/gen_mux_loop[4]/i_req_mux/*
+add wave -noupdate -group Mapper -group req_mux5 /tb_bin/i_dut/i_cluster_wrapper/i_cluster/i_tcdm_mapper/gen_req_mux/gen_mux_loop[5]/i_req_mux/*
+
 
 add wave -noupdate -group L1D /tb_bin/i_dut/i_cluster_wrapper/i_cluster/i_l1_controller/*
 
