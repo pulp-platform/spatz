@@ -287,6 +287,9 @@ package spatz_pkg;
 
     // Did the memory request trigger an exception
     logic exc;
+
+    // Interface from which response is coming
+    logic intf_id;
   } vlsu_rsp_t;
 
 
