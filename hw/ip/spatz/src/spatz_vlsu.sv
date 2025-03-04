@@ -1107,11 +1107,8 @@ module spatz_vlsu
           vrf_req_d[intf].waddr = vd_vreg_addr[intf];
           // Here, we do not enable the writing to ROB unless all ports are in loading mode (avoid racing in ports)
           // Also, do not push it into reg if it is the last commit and the previous insn is not fully ack.
-          vrf_req_valid_d[intf] = &(rob_rvalid[intf] |
-                                  (~mem_pending[intf] && port_state_load[intf])) &&
-                                  |mem_pending[intf] &&
-                                  (~(vrf_commit_done_q[intf] & vrf_req_d[intf].last));
-
+          vrf_req_valid_d[intf] = &(rob_rvalid[intf] | (~mem_pending[intf] && port_state_load[intf])) &&
+                                  |mem_pending[intf] && (~(vrf_commit_done_q[intf] & vrf_req_d[intf].last));
 
           for (int unsigned fu = 0; fu < N_FU; fu++) begin
             automatic int unsigned port = intf * N_FU + fu;

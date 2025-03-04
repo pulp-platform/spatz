@@ -106,8 +106,6 @@ module spatz_addr_mapper #(
   // The available SPM region will ends at the `tcdm_end_address_i` and
   // start from `spm_start_addr`.
 
-  logic [NumCacheIO-1:0]          cache_req_valid;
-
   always_comb begin
     for (int j = 0; unsigned'(j) < NumSpmIO; j++) begin : gen_req
       // Initial values
@@ -140,7 +138,6 @@ module spatz_addr_mapper #(
         cache_req_arb[j].q_valid = mem_req_i[j].q_valid && (!flush_i);
         target_select[j]         = CACHE;
       end
-      cache_req_valid[j] = cache_req_arb[j].q_valid;
     end
   end
 

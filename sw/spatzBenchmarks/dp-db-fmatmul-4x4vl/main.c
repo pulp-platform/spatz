@@ -62,7 +62,7 @@ int main() {
 
   // This configuration can take up to 128x128x128 matmul (peak 104 KiB SPM)
   // Adjust the M and N depends on SPM size and matmul size
-  const unsigned int matrix_M = ((gemm_l.M * gemm_l.K) > 1024) ? (1024/gemm_l.K) : gemm_l.M;
+  const unsigned int matrix_M = ((gemm_l.M * gemm_l.K) > 2048) ? (2048/gemm_l.K) : gemm_l.M;
   const unsigned int matrix_K = gemm_l.K;
   const unsigned int matrix_N = ((gemm_l.N * gemm_l.K) > 4096) ? (4096/gemm_l.K) : gemm_l.N;
   unsigned int timer_start, timer_end, timer;
@@ -96,7 +96,11 @@ int main() {
       matrix_a1 = (double *)snrt_l1alloc(A_size * sizeof(double));
       matrix_a2 = (double *)snrt_l1alloc(A_size * sizeof(double));
       matrix_b1 = (double *)snrt_l1alloc(B_size * sizeof(double));
-      matrix_b2 = (double *)snrt_l1alloc(B_size * sizeof(double));
+      if (tot_out > 1) {
+        matrix_b2 = (double *)snrt_l1alloc(B_size * sizeof(double));
+      } else {
+        matrix_b2 = 0;
+      }
       matrix_c1 = (double *)snrt_l1alloc(C_size * sizeof(double));
       matrix_c2 = (double *)snrt_l1alloc(C_size * sizeof(double));
       printf("Tiled matrix size:\n");
