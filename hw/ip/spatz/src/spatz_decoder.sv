@@ -1799,7 +1799,8 @@ module spatz_decoder
             riscv_instr::CSR_MTYPE,
             riscv_instr::CSR_TILEM,
             riscv_instr::CSR_TILEK,
-            riscv_instr::CSR_TILEN: begin
+            riscv_instr::CSR_TILEN,
+            snitch_pkg::CSR_DBWMODE: begin
               spatz_req.op_csr.addr = csr_addr;
             end
             default: illegal_instr = 1'b1;
@@ -1816,8 +1817,11 @@ module spatz_decoder
 
             riscv_instr::CSRRS,
             riscv_instr::CSRRSI:
-              if (csr_addr == riscv_instr::CSR_VSTART)
+              if (csr_addr == riscv_instr::CSR_VSTART) begin
                 spatz_req.op_cfg.set_vstart = csr_rs1 != '0;
+              end else if (csr_addr == snitch_pkg::CSR_DBWMODE) begin
+                spatz_req.op_cfg.set_dbw    = csr_rs1[0];
+              end
 
             riscv_instr::CSRRC,
             riscv_instr::CSRRCI:

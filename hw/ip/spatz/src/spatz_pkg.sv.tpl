@@ -199,6 +199,7 @@ package spatz_pkg;
     logic set_vstart;
     logic clear_vstart;
     logic reset_vstart;
+    logic set_dbw;
     // MXU
     tile_dim_e dimTile;
   } op_cfg_t;

@@ -50,6 +50,7 @@ int main() {
 
   #if USE_CACHE == 1
   uint32_t spm_size = 16;
+  asm volatile("csrrsi x0, 0xb, 0x1");
   #else
   uint32_t spm_size = 120;
   #endif

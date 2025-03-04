@@ -70,7 +70,6 @@ module spatz_controller
 
   localparam int unsigned INTERLEAVE = 0;
   localparam int unsigned UNITSTRIDE = 1;
-  assign vlsu_dbw_mode_o = UNITSTRIDE;
 
   // Spatz request
   spatz_req_t spatz_req;
@@ -89,6 +88,8 @@ module spatz_controller
   elen_t tilem_d, tilem_q;
   elen_t tilen_d, tilen_q;
   elen_t tilek_d, tilek_q;
+  // Doubled BW mode
+  logic  dbw_mode_d, dbw_mode_q;
 
 
   `FF(vstart_q, vstart_d, '0)
@@ -100,12 +101,17 @@ module spatz_controller
   `FF(tilen_q, tilen_d, '0)
   `FF(tilek_q, tilek_d, '0)
 
+  // Double BW Mode
+  `FF(dbw_mode_q, dbw_mode_d, INTERLEAVE)
+  assign vlsu_dbw_mode_o = dbw_mode_d;
+
   always_comb begin : proc_vcsr
     automatic logic [$clog2(MAXVL):0] vlmax = 0;
 
-    vstart_d = vstart_q;
-    vl_d     = vl_q;
-    vtype_d  = vtype_q;
+    vstart_d   = vstart_q;
+    vl_d       = vl_q;
+    vtype_d    = vtype_q;
+    dbw_mode_d = dbw_mode_q;
     // MXU
     tilem_d  = tilem_q;
     tilen_d  = tilen_q;
@@ -125,6 +131,9 @@ module spatz_controller
           vstart_d = vstart_q | vlen_t'(spatz_req.rs1);
         end else if (spatz_req.op_cfg.clear_vstart) begin
           vstart_d = vstart_q & ~vlen_t'(spatz_req.rs1);
+        end else if (spatz_req.op_cfg.set_dbw) begin
+          // We only use the first bit here
+          dbw_mode_d = spatz_req.rs1[0];
         end
       end
 
