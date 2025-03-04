@@ -487,8 +487,8 @@ module spatz_cluster
   spm_req_t   [NrTCDMPortsCores-1:0] spm_req;
   spm_rsp_t   [NrTCDMPortsCores-1:0] spm_rsp;
 
-  tcdm_req_t  [L1NumCachePort-1:0] unmerge_req, strb_hdl_req, cache_req;
-  tcdm_rsp_t  [L1NumCachePort-1:0] unmerge_rsp, strb_hdl_rsp, cache_rsp;
+  tcdm_req_t  [L1NumCachePort-1:0] shuffled_req, unmerge_req, strb_hdl_req, cache_req;
+  tcdm_rsp_t  [L1NumCachePort-1:0] shuffled_rsp, unmerge_rsp, strb_hdl_rsp, cache_rsp;
 
   logic       [L1NumCachePort-1:0] cache_req_valid;
   logic       [L1NumCachePort-1:0] cache_req_ready;
@@ -848,7 +848,7 @@ module spatz_cluster
     end
   end
 
-  logic  [L1NumCachePort-1:0] unmerge_pready, strb_hdl_pready, cache_pready;
+  logic  [L1NumCachePort-1:0] shuffled_pready, unmerge_pready, strb_hdl_pready, cache_pready;
   // assign spm_size        = cfg_spm_size * L1Associativity * L1LineWidth / 2 /2;
   assign spm_size        = cfg_spm_size * 1024;
 
@@ -880,10 +880,32 @@ module spatz_cluster
     // Output
     .spm_req_o            (spm_req         ),
     .spm_rsp_i            (spm_rsp         ),
-    .cache_req_o          (unmerge_req       ),
-    .cache_pready_o       (unmerge_pready    ),
-    .cache_rsp_i          (unmerge_rsp       )
+    .cache_req_o          (shuffled_req    ),
+    .cache_pready_o       (shuffled_pready ),
+    .cache_rsp_i          (shuffled_rsp    )
   );
+
+  localparam int unsigned HalfSpatzPorts = L1NumCachePort/2-1;
+  // Snitch ports
+  assign unmerge_req[HalfSpatzPorts]      = shuffled_req[L1NumCachePort-2];
+  assign unmerge_pready[HalfSpatzPorts]   = shuffled_pready[L1NumCachePort-2];
+  assign shuffled_rsp[L1NumCachePort-2]   = unmerge_rsp[HalfSpatzPorts];
+
+  assign unmerge_req[L1NumCachePort-1]    = shuffled_req[L1NumCachePort-1];
+  assign unmerge_pready[L1NumCachePort-1] = shuffled_pready[L1NumCachePort-1];
+  assign shuffled_rsp[L1NumCachePort-1]   = unmerge_rsp[L1NumCachePort-1];
+
+  // Spatz 0-3
+  assign unmerge_req[0 +: HalfSpatzPorts]     = shuffled_req[0 +: HalfSpatzPorts];
+  assign unmerge_pready[0 +: HalfSpatzPorts]  = shuffled_pready[0 +: HalfSpatzPorts];
+  assign shuffled_rsp[0 +: HalfSpatzPorts]    = unmerge_rsp[0 +: HalfSpatzPorts];
+
+  // Spatz 4-7
+  assign unmerge_req[(HalfSpatzPorts+1) +: HalfSpatzPorts]    = shuffled_req[HalfSpatzPorts +: HalfSpatzPorts];
+  assign unmerge_pready[(HalfSpatzPorts+1) +: HalfSpatzPorts] = shuffled_pready[HalfSpatzPorts +: HalfSpatzPorts];
+  assign shuffled_rsp[HalfSpatzPorts +: HalfSpatzPorts]       = unmerge_rsp[(HalfSpatzPorts+1) +: HalfSpatzPorts];
+
+
 
   localparam int unsigned NumIOPerCore = get_tcdm_ports(0);
   logic  [NrTCDMPortsCores-1:0] strb_req_ack;

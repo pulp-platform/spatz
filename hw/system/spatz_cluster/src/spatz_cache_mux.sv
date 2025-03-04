@@ -1,4 +1,4 @@
-// Copyright 2018 ETH Zurich and University of Bologna.
+// Copyright 2025 ETH Zurich and University of Bologna.
 // Copyright and related rights are licensed under the Solderpad Hardware
 // License, Version 0.51 (the "License"); you may not use this file except in
 // compliance with the License. You may obtain a copy of the License at
@@ -8,8 +8,11 @@
 // CONDITIONS OF ANY KIND, either express or implied. See the License for the
 // specific language governing permissions and limitations under the License.
 
-/// Stream multiplexer: connects the output to one of `N_INP` data streams with valid-ready
-/// handshaking.
+/// Spatz_cache_mux: 2-1 MUX for spatz cache side interconnection
+/// selection are optimized for avoiding bank conflicts
+
+// Author: Hong Pang <hopang@iis.ee.ethz.ch>
+//         Diyou Shen <dishen@iis.ee.ethz.ch>
 
 `include "common_cells/registers.svh"
 

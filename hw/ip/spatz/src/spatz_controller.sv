@@ -50,7 +50,6 @@ module spatz_controller
     input  logic                                   vlsu_rsp_valid_i,
     input  vlsu_rsp_t                              vlsu_rsp_i,
     output logic                                   vlsu_dbw_mode_o,
-    input  logic                                   vlsu_dbw_chain_i,
     // VSLDU
     input  logic                                   vsldu_req_ready_i,
     input  logic                                   vsldu_rsp_valid_i,
@@ -315,7 +314,7 @@ module spatz_controller
     
     for (int unsigned port = 0; port < NrVregfilePorts; port++) begin
       // Calculate the load-store interface id to use here for chaining
-      automatic logic intID; 
+      automatic logic intID;
       
       // For vlsu ports use the write status of the corresponding interface
       if (port inside {SB_VLSU_VS2_RD0, SB_VLSU_VS2_RD1, SB_VLSU_VD_WD0}) begin
@@ -327,11 +326,17 @@ module spatz_controller
         if (vlsu_dbw_mode_o == INTERLEAVE) begin
           int_id_d[port] = (vl_cnt_q[sb_id_i[port]] < vl_max_d[sb_id_i[port]]) ? 0 : 1;
         end else begin
-          int_id_d[port] = wrote_result_q[int_id_q[port]] ? !int_id_q[port] : int_id_q[port];
+          if (sb_enable_i[port] && &(~scoreboard_q[sb_id_i[port]].deps | wrote_result_q[int_id_q[port]]))
+            int_id_d[port] = !int_id_q[port];
+
+          if (vl_cnt_q[sb_id_i[port]] == (vl_max_d[sb_id_i[port]] << 1))
+            int_id_d[port] = 0;
+
         end
       end
 
-      intID = int_id_d[port];
+      intID = int_id_q[port];
+
       // Enable the VRF port if the dependant instructions wrote in the previous cycle
       sb_enable_o[port] = sb_enable_i[port] && &(~scoreboard_q[sb_id_i[port]].deps | wrote_result_q[intID] | done_result_q[intID])
                                             && (!(|scoreboard_q[sb_id_i[port]].deps) || !scoreboard_q[sb_id_i[port]].prevent_chaining);

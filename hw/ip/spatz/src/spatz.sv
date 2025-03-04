@@ -263,7 +263,6 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   logic      [NrWritePorts-1:0]             sb_we, sb_we_buf;
   spatz_id_t [NrReadPorts+NrWritePorts-1:0] sb_id, sb_buf_id;
   logic double_bw_unit_stride;
-  logic double_bw_chain;
 
 
   spatz_controller #(
@@ -301,7 +300,6 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     .vlsu_rsp_valid_i (vlsu_rsp_buf_valid),
     .vlsu_rsp_i       (vlsu_rsp_buf      ),
     .vlsu_dbw_mode_o  (double_bw_unit_stride),
-    .vlsu_dbw_chain_i (double_bw_chain   ),
     // VLSD
     .vsldu_req_ready_i(vsldu_req_ready   ),
     .vsldu_rsp_valid_i(vsldu_rsp_valid   ),
@@ -472,7 +470,6 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     .spatz_req_valid_i       (spatz_req_valid                                      ),
     .spatz_req_ready_o       (vlsu_req_ready                                       ),
     .double_bw_stride_i      (double_bw_unit_stride                                ),
-    .double_bw_chain_o       (double_bw_chain                                      ),
     // Response
     .vlsu_rsp_valid_o        (vlsu_rsp_valid                                       ),
     .vlsu_rsp_o              (vlsu_rsp                                             ),

@@ -27,7 +27,6 @@ module spatz_vlsu
     input  logic                            spatz_req_valid_i,
     output logic                            spatz_req_ready_o,
     input  logic                            double_bw_stride_i,
-    output logic                            double_bw_chain_o,
     // VLSU response
     output logic                            vlsu_rsp_valid_o,
     output vlsu_rsp_t                       vlsu_rsp_o,
@@ -770,11 +769,6 @@ module spatz_vlsu
   logic     [NrInterfaces-1:0] vrf_commit_intf_valid, vrf_commit_intf_valid_q;
   logic     [NrInterfaces-1:0] resp_overlap;
 
-  // typedef   logic [7:0]        vrf_cnt_t;
-  // vrf_cnt_t [NrInterfaces-1:0] vrf_cnt_d, vrf_cnt_q;
-  // `FF(vrf_cnt_q, vrf_cnt_d, '0);
-  // logic     [NrInterfaces-1:0] chain_en;
-
   logic     [NrInterfaces-1:0] vrf_commit_done_d, vrf_commit_done_q;
   `FF(vrf_commit_done_q, vrf_commit_done_d, '0);
 
@@ -800,46 +794,6 @@ module spatz_vlsu
       vrf_commit_done_d = '0;
     end
   end
-
-  // Count the number of vec element wrote to the VRF for each port
-  // This information is used to determine chaining for strided pattern
-  // always_comb begin
-  //   // Initial values
-  //   vrf_cnt_d         = vrf_cnt_q;
-  //   chain_en          = '0;
-
-  //   // See if we wrote something to VRF this cycle
-  //   for (int intf = 0; intf < NrInterfaces; intf++) begin
-  //     if (vrf_req_valid_q[intf] & vrf_req_ready_q[intf]) begin
-  //       // valid handshaking, set the chain indicator for this port to 1
-  //       chain_en[intf] = 1'b1;
-  //       // Also increase the counter
-  //       vrf_cnt_d[intf] ++;
-  //     end
-  //   end
-
-  //   if (vlsu_rsp_valid_o) begin
-  //     // Case 0: insn is complete, no need for chaining, clear cnter
-  //     vrf_cnt_d = '0;
-  //     chain_en  = '0;
-  //   end else if (&chain_en) begin
-  //     // Case 1: both ports write to VRF this cycle
-  //     // We will not increase the counter this cycle
-  //     vrf_cnt_d = vrf_cnt_q;
-  //   end else if (chain_en[0] & (vrf_cnt_q[1] > 0)) begin
-  //     // Case 2: intf 0 write this cycle, and intf 1 wrote before
-  //     vrf_cnt_d[0] --;
-  //     vrf_cnt_d[1] --;
-  //     chain_en [1] = 1'b1;
-  //   end else if (chain_en[1] & (vrf_cnt_q[0] > 0)) begin
-  //     // Case 3: intf 1 write this cycle, and intf 0 wrote before
-  //     vrf_cnt_d[0] --;
-  //     vrf_cnt_d[1] --;
-  //     chain_en [0] = 1'b1;
-  //   end
-  // end
-
-  // assign double_bw_chain_o = &chain_en;
 
   for (genvar intf = 0; intf < NrInterfaces; intf++) begin : gen_vrf_req_register_intf
     spill_register #(
