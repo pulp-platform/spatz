@@ -200,12 +200,21 @@ sources:
       - hw/system/spatz_cluster/src/spatz_strbreq_merge_unit.sv
       - hw/system/spatz_cluster/src/spatz_strbreq_merge_tree.sv
       - hw/system/spatz_cluster/src/spatz_strbreq_handler.sv
-      # Level 3
-      - hw/system/spatz_cluster/src/spatz_cluster.sv
-      # Level 4
-      - hw/system/spatz_cluster/src/generated/spatz_cluster_wrapper.sv
+      - target: not(cachepool)
+        files:
+        # Level 3
+        - hw/system/spatz_cluster/src/spatz_cluster.sv
+        # Level 4
+        - hw/system/spatz_cluster/src/generated/spatz_cluster_wrapper.sv
+      - target: cachepool
+        files:
+        - ../../src/cachepool_cluster_simple.sv
+        - ../../tb/cachepool_cluster_wrapper.sv
+        - ../../tb/testharness.sv
 
       - target: spatz_test
         files:
-          # Level 1
-          - hw/system/spatz_cluster/tb/testharness.sv
+        - target: not(cachepool)
+          files:
+            # Level 1
+            - hw/system/spatz_cluster/tb/testharness.sv

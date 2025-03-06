@@ -14,6 +14,7 @@ CACHE_PATH  := $(shell $(BENDER) path insitu-cache)
 # Configuration file
 CFG ?= flamingo
 SPATZ_CLUSTER_CFG ?= $(SPATZ_CLUSTER_DIR)/cfg/$(CFG).hjson
+DEFS ?=
 
 # Include Makefrag
 include $(ROOT)/util/Makefrag
