@@ -93,7 +93,11 @@ void mxfp8_matmul_fp32_dotp(float *c,
       }
 
       // reduce
+      // NOTE: This improves the performance of the reduction by first adding
+      // the elements from both vector registers (in parallel) before reducing.
       asm volatile("vmv.v.i v24, 0");
+      asm volatile("vsetvli zero, %0, e32, m1, ta, ma" :: "r"(MXFP8_BLOCK_SIZE / 2));
+      asm volatile("vfadd.vv v0, v0, v1");
       asm volatile("vfredusum.vs v24, v0, v24");
 
       // store result in c[m][n]
