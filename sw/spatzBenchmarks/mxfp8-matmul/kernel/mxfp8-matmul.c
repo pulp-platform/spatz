@@ -74,8 +74,8 @@ void mxfp8_matmul_fp32_dotp(float *c,
 
         asm volatile("vsetvli zero, %0, e32, m2, ta, ma" :: "r"(MXFP8_BLOCK_SIZE));
 
-        uint32_t as = (uint32_t)a_scale[m * K_BLOCK + k_block];
-        uint32_t bs = (uint32_t)b_scale[n * K_BLOCK + k_block];
+        uint32_t as = (uint8_t)a_scale[m * K_BLOCK + k_block];
+        uint32_t bs = (uint8_t)b_scale[n * K_BLOCK + k_block];
         // add and re-bias for FP32
         uint32_t ss = as + bs - (2 * E8M0_BIAS - FP32_BIAS);
         // convert to FP32 using bit operations
