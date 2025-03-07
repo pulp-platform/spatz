@@ -209,6 +209,7 @@ sources:
       - target: cachepool
         files:
         - ../../src/cachepool_cluster_simple.sv
+        - ../../src/cachepool_pkg.sv
         - ../../tb/cachepool_cluster_wrapper.sv
         - ../../tb/testharness.sv
 
