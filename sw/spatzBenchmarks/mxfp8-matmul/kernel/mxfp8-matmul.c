@@ -48,7 +48,12 @@ void mxfp8_matmul_fp32_dotp(float *c,
 
   for (uint32_t m = 0; m < M; m++) {
     for (uint32_t n = 0; n < N; n++) {
-      float acc = 0;
+      // post-scale accumulator: v0-v1
+
+      // NOTE: We accumulate the elements in vector form here, which helps
+      //       amortize the expensive reduction operation at the end.
+      //       This is not energy-efficient as the scaling is applied 32 times
+      //       instead of once, but it is much more performant.
 
       for (uint32_t k = 0; k < K; k += MXFP8_BLOCK_SIZE) {
         uint32_t k_block = k / MXFP8_BLOCK_SIZE;
@@ -70,10 +75,6 @@ void mxfp8_matmul_fp32_dotp(float *c,
 
         asm volatile("vsetvli zero, %0, e32, m2, ta, ma" :: "r"(MXFP8_BLOCK_SIZE));
 
-        // reduce operands
-        asm volatile("vmv.s.x v6, zero");
-        asm volatile("vfredusum.vs v6, v4, v6");
-
         uint32_t as = (uint32_t)a_scale[m * K_BLOCK + k_block];
         uint32_t bs = (uint32_t)b_scale[n * K_BLOCK + k_block];
         // add and re-bias for FP32
@@ -83,15 +84,21 @@ void mxfp8_matmul_fp32_dotp(float *c,
         float scale;
         asm volatile("fmv.w.x %0, %1" : "=f"(scale) : "r"(ss));
 
-        // move reduced value to FP register
-        float reduced;
-        asm volatile("vfmv.f.s %0, v6" : "=f"(reduced));
-
-        // accumulate
-        acc += scale * reduced;
+        // scale and accumulate
+        if (k == 0) {
+          asm volatile("vfmul.vf v0, v4, %0" :: "f"(scale));
+        } else {
+          asm volatile("vfmacc.vf v0, %0, v4" :: "f"(scale));
+        }
       }
 
+      // reduce
+      asm volatile("vmv.v.i v24, 0");
+      asm volatile("vfredusum.vs v24, v0, v24");
+
       // store result in c[m][n]
+      float acc;
+      asm volatile("vfmv.f.s %0, v24" : "=f"(acc));
       c[m * N + n] = acc;
     }
   }
