@@ -83,22 +83,17 @@ float mxfp8_dotp_fp32(const char *a, const char *b, const char *a_scale, const c
     asm volatile("vle8.v v9, (%0)" :: "r"(b_scale));
     // v8, v9 (LMUL=1): a_scale and b_scale as UINT8 (E8M0)
 
-    // upcast from UINT8 to UINT32, add them together
-    // FIXME: Currently required to use multiplication with 1 as `vwadd` is not
-    //        implemented. (Widening integer move `vwcvt.x.x.v` is a
-    //        pseudo-instruction that maps to vwadd.vx).
-    asm volatile("vwmulu.vx v12, v8, %0" :: "r"(1));
-    asm volatile("vwmulu.vx v14, v9, %0" :: "r"(1));
-    // v12, v14 (LMUL=2): a_scale and b_scale as UINT16 (E8M0)
-    asm volatile("vsetvli zero, %0, e16, m2, ta, ma" :: "r"(block_avl));
-    asm volatile("vadd.vv v8, v12, v14");
-    // v8 (LMUL=2): a_scale+b_scale as UINT16
-    asm volatile("vwmulu.vx v16, v8, %0" :: "r"(1));
-    // v16 (LMUL=4): a_scale+b_scale as UINT32
+    // add scales together, upcasting to UINT16
+    asm volatile("vwaddu.vv v12, v8, v9");
+    // v12 (LMUL=2): a_scale+b_scale as UINT16
 
-    // remove double bias, shift to manually create an FP32 scale
+    // remove double bias, upcasting to UINT32
+    asm volatile("vsetvli zero, %0, e16, m2, ta, ma" :: "r"(block_avl));
+    asm volatile("vwsubu.vx v16, v12, %0" :: "r"(2 * E8M0_BIAS - FP32_BIAS));
+    // v16 (LMUL=4): re-biased scale as UINT32
+
+    // shift to manually create an FP32 scale
     asm volatile("vsetvli zero, %0, e32, m4, ta, ma" :: "r"(block_avl));
-    asm volatile("vsub.vx v16, v16, %0" :: "r"(2 * E8M0_BIAS - FP32_BIAS));
     asm volatile("vsll.vi v16, v16, 23");
     // v16 (LMUL=4): product of scales as FP32
 

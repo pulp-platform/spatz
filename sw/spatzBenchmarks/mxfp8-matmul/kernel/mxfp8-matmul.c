@@ -99,6 +99,9 @@ void mxfp8_matmul_fp32_dotp(float *c,
       asm volatile("vfadd.vv v0, v0, v1");
       asm volatile("vfredusum.vs v24, v0, v24");
 
+      // BUG: This is required to ensure correct results.
+      for (int i = 0; i < 4; i++) asm volatile("nop");
+
       // store result in c[m][n]
       float acc;
       asm volatile("vfmv.f.s %0, v24" : "=f"(acc));
@@ -326,22 +329,20 @@ void mxfp8_matmul_fp32_rowmaj_m4(float *c,
         // scaling
 
         // load operand: a_scale[m][k_block]
-        uint32_t as = *a_scale_;
+        uint8_t as = *a_scale_;
         // load operands: b_scale[k_block][n:n+n_vl] -> v12
         asm volatile("vsetvli zero, %0, e8, m1, ta, ma" :: "r"(N - n));
         asm volatile("vle8.v v12, (%0)" :: "r"(b_scale_));
 
-        // widen b_scale to 32-bit -> v8-v11
-        asm volatile("vwmulu.vx v14, v12, %0" :: "r"(1));
-        asm volatile("vsetvli zero, %0, e16, m2, ta, ma" :: "r"(N - n));
-        asm volatile("vwmulu.vx v8, v14, %0" :: "r"(1));
+        // add scales and widen to 16-bit -> v14-v15
+        asm volatile("vwadd.vx v14, v12, %0" :: "r"(as));
 
-        // add and re-bias for FP32 -> v8-v11
-        asm volatile("vsetvli zero, %0, e32, m4, ta, ma" :: "r"(N - n));
-        uint32_t as_rebiased = as - (2 * E8M0_BIAS - FP32_BIAS);
-        asm volatile("vadd.vx v8, v8, %0" :: "r"(as_rebiased));
+        // re-bias for FP32 and widen to 32-bit -> v8-v11
+        asm volatile("vsetvli zero, %0, e16, m2, ta, ma" :: "r"(N - n));
+        asm volatile("vwsubu.vx v8, v14, %0" :: "r"(2 * E8M0_BIAS - FP32_BIAS));
 
         // convert to FP32 using bit operations
+        asm volatile("vsetvli zero, %0, e32, m4, ta, ma" :: "r"(N - n));
         asm volatile("vsll.vi v8, v8, 23");
 
         // post-scale acc += pre-scale acc * scale
