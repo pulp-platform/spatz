@@ -116,7 +116,7 @@ int main() {
 
     // Calculate dotp
     double acc;
-    acc = fdotp_v64b(a_int, b_int, dim);
+    acc = fdotp_v64b_m8_unrl(a_int, b_int, dim);
     result[cid] = acc;
 
     // Wait for all cores to finish
