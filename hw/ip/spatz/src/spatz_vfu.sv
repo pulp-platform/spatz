@@ -537,7 +537,7 @@ module spatz_vfu
         end
 
         // Are we done?
-        if ((reduction_pointer_q == ((spatz_req.vl >> $clog2(N_FPU)) + 2)) &&  (reduction_operand_ready_d==1'b1)) begin
+        if ((reduction_pointer_q == ((spatz_req.vl >> $clog2(N_FPU)) + FPUImplementation.PipeRegs[ADDMUL][FP64])) &&  (reduction_operand_ready_d==1'b1)) begin
           reduction_state_d         = Reduction_InterLane;
         end
       end
@@ -568,7 +568,7 @@ module spatz_vfu
         end
 
         // Are we done?
-        if ((reduction_pointer_q == ((spatz_req.vl >> $clog2(N_FPU)) + 2 + $clog2(N_FPU))) && (reduction_operand_ready_d == 1'b1)) begin
+        if ((reduction_pointer_q == ((spatz_req.vl >> $clog2(N_FPU)) + FPUImplementation.PipeRegs[ADDMUL][FP64] + $clog2(N_FPU))) && (reduction_operand_ready_d == 1'b1)) begin
           reduction_state_d         = Reduction_WriteBack;
           shift_amnt_d = ELEN;
         end
