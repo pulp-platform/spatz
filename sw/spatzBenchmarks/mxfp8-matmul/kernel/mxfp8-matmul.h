@@ -33,4 +33,12 @@ void mxfp8_matmul_fp32_rowmaj_m4(float *c,
     const char *a, const char *b, const char *a_scale, const char *b_scale,
     const uint32_t M, const uint32_t N, const uint32_t K);
 
+void mxfp8_matmul_fp32_rowmaj2_m4(float *c,
+    const char *a, const char *b, const char *a_scale, const char *b_scale,
+    const uint32_t M, const uint32_t N, const uint32_t K);
+
+void mxfp8_matmul_fp32_rowmaj4_m2(float *c,
+    const char *a, const char *b, const char *a_scale, const char *b_scale,
+    const uint32_t M, const uint32_t N, const uint32_t K);
+
 #endif
