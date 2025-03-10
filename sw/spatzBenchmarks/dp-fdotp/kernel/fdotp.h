@@ -21,6 +21,8 @@
 
 inline double fdotp_v64b(const double *a, const double *b, unsigned int avl)
     __attribute__((always_inline));
+inline double fdotp_v64b_m4(const double *a, const double *b, unsigned int avl)
+    __attribute__((always_inline));
 inline float fdotp_v32b(const float *a, const float *b, unsigned int avl)
     __attribute__((always_inline));
 inline _Float16 fdotp_v16b(const _Float16 *a, const _Float16 *b,

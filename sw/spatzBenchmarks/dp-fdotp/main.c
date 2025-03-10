@@ -45,7 +45,7 @@ int main() {
   #if MEAS_1ITER == 1
   const int measure_iter = 1;
   #else
-  const int measure_iter = 2;
+  const int measure_iter = 3;
   #endif
 
   #if USE_CACHE == 1
@@ -115,7 +115,7 @@ int main() {
 
     // Calculate dotp
     double acc;
-    acc = fdotp_v64b(a_int, b_int, dim);
+    acc = fdotp_v64b_m4(a_int, b_int, dim);
     result[cid] = acc;
 
     // Wait for all cores to finish

@@ -47,7 +47,7 @@ int main() {
   #if MEAS_1ITER== 1
   uint32_t measure_iter = 1;
   #else
-  uint32_t measure_iter = 2;
+  uint32_t measure_iter = 3;
   #endif
 
   #if USE_CACHE == 1
@@ -95,9 +95,9 @@ int main() {
   double *y_int = y + dim_core * cid;
 
   #else
-  a = (double *) &axpy_alpha_dram;
   double *x_int = axpy_X_dram + dim_core * cid;
   double *y_int = axpy_Y_dram + dim_core * cid;
+  a = (double *) &axpy_alpha_dram;
   #endif
 
   // Wait for all cores to finish
