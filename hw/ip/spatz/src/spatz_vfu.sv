@@ -192,10 +192,12 @@ module spatz_vfu
    reduction_state_t reduction_state_d, reduction_state_q;
   `FF(reduction_state_q, reduction_state_d, Reduction_NormalExecution)
 
+  logic result_buf_valid_d, result_buf_valid_q;
   vrf_data_t result_buf_d, result_buf_q;
   // For reduction: interlane reduction
   logic [idx_width(ELEN*N_FPU)-1 : 0] shift_amnt_d, shift_amnt_q;
 
+  `FF(result_buf_valid_q, result_buf_valid_d, 1'b0)
   `FF(result_buf_q, result_buf_d, '0)
   `FF(shift_amnt_q, shift_amnt_d, ELEN)
 
@@ -398,6 +400,7 @@ module spatz_vfu
     reduction_operand_request[1] = (reduction_state_q inside {Reduction_Init, Reduction_Fill, Reduction_Reduce}) || !spatz_req.op_arith.is_reduction;
 
     result_buf_d = result_buf_q;
+    result_buf_valid_d  = result_buf_valid_q;
     shift_amnt_d = shift_amnt_q;
 
     unique case (reduction_state_q)
@@ -470,12 +473,14 @@ module spatz_vfu
         `endif
 
         // verilator lint_on SELRANGE
-        if (vrf_rvalid_i[1] && result_valid[0]) begin
+        if (vrf_rvalid_i[1]) begin
           reduction_operand_ready_d = 1'b1;
           reduction_pointer_d       = reduction_pointer_q + 1;
           word_issued = 1'b1;
-          reduction_state_d         = Reduction_Reduce;
-          result_ready = 1'b1;
+          if (result_valid) begin
+            reduction_state_d         = Reduction_Reduce;
+            result_ready = 1'b1;
+          end
         end
 
       end
@@ -504,10 +509,9 @@ module spatz_vfu
             word_issued = 1'b1;
           end
         end
-
         // Are we done?
-        if ((reduction_pointer_q == ((spatz_req.vl >> ($clog2(N_FPU) + (EW_64 - spatz_req.vtype.vsew)))-1)) && (reduction_operand_ready_d==1'b1)) begin
-          reduction_state_d = (spatz_req.vtype.vsew == EW_64) ? Reduction_InterLane : Reduction_IntraLane;
+        if ((reduction_pointer_q == ((spatz_req.vl >> $clog2(N_FPU))-1)) && (reduction_operand_ready_d==1'b1)) begin
+          reduction_state_d         = Reduction_IntraLane;
         end
       end
 
@@ -518,11 +522,19 @@ module spatz_vfu
           reduction_d = '0;
         `else
           reduction_d[0] = $unsigned(result);
-          reduction_d[1] = $unsigned(result) >> 32;
+          reduction_d[1] = $unsigned(result_buf_d);
         `endif
 
         // verilator lint_on SELRANGE
-        if (result_valid[0]) begin
+        if (~result_buf_valid_q & result_valid[0]) begin
+          result_buf_valid_d = 1'b1;
+          result_buf_d = result;
+          result_ready = 1'b1;
+        end
+
+        // verilator lint_on SELRANGE
+        if (result_buf_valid_q & result_valid[0]) begin
+            result_buf_valid_d = 1'b0;
             // Trigger a request
             reduction_operand_ready_d = 1'b1;
             // Bump pointer
@@ -532,7 +544,7 @@ module spatz_vfu
         end
 
         // Are we done?
-        if ((reduction_pointer_q == (spatz_req.vl >> ($clog2(N_FPU) + (EW_64 - spatz_req.vtype.vsew)))) &&  (reduction_operand_ready_d==1'b1)) begin
+        if ((reduction_pointer_q == ((spatz_req.vl >> $clog2(N_FPU)) + FPUImplementation.PipeRegs[ADDMUL][FP64])) &&  (reduction_operand_ready_d==1'b1)) begin
           reduction_state_d         = Reduction_InterLane;
         end
       end
@@ -559,7 +571,7 @@ module spatz_vfu
         end
 
         // Are we done?
-        if ((reduction_pointer_q == ((spatz_req.vl >> ($clog2(N_FPU) + (EW_64 - spatz_req.vtype.vsew))) - (spatz_req.vtype.vsew == EW_64) + $clog2(N_FPU))) && (reduction_operand_ready_d == 1'b1)) begin
+        if ((reduction_pointer_q == ((spatz_req.vl >> $clog2(N_FPU)) + FPUImplementation.PipeRegs[ADDMUL][FP64] + $clog2(N_FPU))) && (reduction_operand_ready_d == 1'b1)) begin
           reduction_state_d         = Reduction_WriteBack;
           shift_amnt_d = ELEN;
         end
