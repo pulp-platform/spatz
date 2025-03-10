@@ -58,51 +58,67 @@ int main() {
   const unsigned int num_cores = snrt_cluster_core_num();
   const unsigned int cid = snrt_cluster_core_idx();
 
-  if (cid != 0)
-    return 0;
-
   unsigned int timer_start, timer_end, timer;
 
   // Allocate the matrices in the local tile
-  a = (char *)snrt_l1alloc(M * K);
-  b = (char *)snrt_l1alloc(N * K);
-  a_scale = (char *)snrt_l1alloc(M * K / 32);
-  b_scale = (char *)snrt_l1alloc(N * K / 32);
-  c = (float *)snrt_l1alloc(M * N * sizeof(float));
+  if (cid == 0) {
+    a = (char *)snrt_l1alloc(M * K);
+    b = (char *)snrt_l1alloc(N * K);
+    a_scale = (char *)snrt_l1alloc(M * K / 32);
+    b_scale = (char *)snrt_l1alloc(N * K / 32);
+    c = (float *)snrt_l1alloc(M * N * sizeof(float));
 
-  memset(a, 0x3c, M * K); // 1.0 in FP8
-  memset(b, 0x3c, N * K); // 1.0 in FP8
-  memset(a_scale, 0x7f, M * K / 32); // 1 in E8M0
-  memset(b_scale, 0x7f, N * K / 32); // 1 in E8M0
+    memset(a, 0x3c, M * K); // 1.0 in FP8
+    memset(b, 0x3c, N * K); // 1.0 in FP8
+    memset(a_scale, 0x7f, M * K / 32); // 1 in E8M0
+    memset(b_scale, 0x7f, N * K / 32); // 1 in E8M0
+  }
+
+  snrt_cluster_hw_barrier();
+
+  uint32_t     local_m       = M / num_cores;
+  float       *local_c       = c       + (cid * local_m * N);
+  const char  *local_a       = a       + (cid * local_m * K);
+  const char  *local_a_scale = a_scale + (cid * local_m * K / 32);
+
+  snrt_cluster_hw_barrier();
 
   // Start timer
   timer = benchmark_get_cycle();
 
   // Start dump
-  start_kernel();
+  if (cid == 0)
+    start_kernel();
 
-  mxfp8_matmul_fp32_dotp(c, a, b, a_scale, b_scale, M, N, K);
+  mxfp8_matmul_fp32_dotp4(local_c, local_a, b, local_a_scale, b_scale, local_m, N, K);
+  // mxfp8_matmul_fp32_rowmaj_m4(local_c, local_a, b, local_a_scale, b_scale, local_m, N, K);
+  // mxfp8_matmul_fp32_rowmaj2_m4(local_c, local_a, b, local_a_scale, b_scale, local_m, N, K);
+
+  snrt_cluster_hw_barrier();
 
   // End dump
-  stop_kernel();
+  if (cid == 0)
+    stop_kernel();
 
   // End timer
   timer = benchmark_get_cycle() - timer;
 
-  // Check and display results
-  long unsigned int performance =
-      1000 * 2 * M * N * K / timer;
-  long unsigned int utilization =
-      performance / (2 * num_cores * SNRT_NFPU_PER_CORE * 2);
+  if (cid == 0) {
+    // Check and display results
+    long unsigned int performance =
+        1000 * 2 * M * N * K / timer;
+    long unsigned int utilization =
+        performance / (2 * num_cores * SNRT_NFPU_PER_CORE * 2);
 
-  printf("\n----- (%d,%d,%d) mxpf8 matmul -----\n", M, N, K);
-  printf("The execution took %u cycles.\n", timer);
-  printf("The performance is %ld OP/1000cycle (%ld%%o utilization).\n",
-          performance, utilization);
+    printf("\n----- (%d,%d,%d) mxfp8 matmul -----\n", M, N, K);
+    printf("The execution took %u cycles.\n", timer);
+    printf("The performance is %ld OP/1000cycle (%ld%%o utilization).\n",
+            performance, utilization);
 
-  printf("c[0][0] = %.3f\n", c[0]);
-  printf("c[0][1] = %.3f\n", c[1]);
-  printf("c[1][0] = %.3f\n", c[N]);
+    printf("c[0][0] = %.3f\n", c[0]);
+    printf("c[0][1] = %.3f\n", c[1]);
+    printf("c[1][0] = %.3f\n", c[N]);
+  }
 
   return 0;
 }
