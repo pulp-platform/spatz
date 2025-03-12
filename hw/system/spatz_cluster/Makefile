@@ -34,6 +34,8 @@ VLOG_FLAGS += -suppress 2583
 VLOG_FLAGS += -suppress 13314
 VLOG_FLAGS += -64
 
+DEFS			 += -DBUF_FPU=1
+
 
 # Verilated and compiled Spatz system
 VLT_ROOT = ${VERILATOR_INSTALL_DIR}/share/verilator

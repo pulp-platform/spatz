@@ -107,16 +107,22 @@ int main() {
 
   for (int iter = 0; iter < measure_iter; iter ++) {
     // // Start dump
-    if (cid == 0)
-      start_kernel();
+    // if (cid == 0)
+    start_kernel();
 
     // Start timer
-    if (cid == 0)
-      timer_tmp = benchmark_get_cycle();
+    // if (cid == 0)
+    timer_tmp = benchmark_get_cycle();
 
     // Calculate dotp
     double acc;
+
+  #if USE_CACHE == 1
+    // Cache cannot enjoy the double bandwidth, is more efficient to use m4 kernel
+    acc = fdotp_v64b_m4_unrl(a_int, b_int, dim);
+  #else
     acc = fdotp_v64b_m8_unrl(a_int, b_int, dim);
+  #endif
     result[cid] = acc;
 
     // Wait for all cores to finish
@@ -142,8 +148,7 @@ int main() {
     snrt_cluster_hw_barrier();
 
     // End dump
-    if (cid == 0)
-      stop_kernel();
+    stop_kernel();
 
     // // End timer and check if new best runtime
     // if (cid == 0) {
@@ -172,9 +177,9 @@ int main() {
   }
 
   if (cid == 0)
-    if (fp_check(result[0], dotp_result*measure_iter)) {
+    if (fp_check(result[0], dotp_result)) {
     #ifdef PRINT_RESULT
-      printf("Error: Result = %f, Golden = %f\n", result[0], dotp_result*measure_iter);
+      printf("Error: Result = %f, Golden = %f\n", result[0], dotp_result);
     #endif
       return -1;
     }

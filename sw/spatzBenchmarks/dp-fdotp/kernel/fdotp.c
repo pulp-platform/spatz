@@ -58,39 +58,54 @@ double fdotp_v64b(const double *a, const double *b, unsigned int avl) {
 }
 
 // 64-bit dot-product: a * b
+// Note this kernel assume the length of the dotp is a multiple for vl
+// Do not use this kernel for irregular dotp size
 double fdotp_v64b_m4_unrl(const double *a, const double *b, unsigned int avl) {
   const unsigned int orig_avl = avl;
   unsigned int vl;
 
   double red;
 
-  // Clean the accumulator
-  asm volatile("vmv.s.x v0, zero");
+  asm volatile("vsetvli %0, %1, e64, m4, ta, ma" : "=r"(vl) : "r"(avl));
+
+  // Load chunk a and b
+  asm volatile("vle64.v v0,  (%0)" ::"r"(a));
+  asm volatile("vle64.v v4,  (%0)" ::"r"(b));
+
+  asm volatile("vfmul.vv v24, v0, v4");
+
+  avl -= vl;
 
   // Stripmine and accumulate a partial reduced vector
   do {
-    // Set the vl
-    asm volatile("vsetvli %0, %1, e64, m4, ta, ma" : "=r"(vl) : "r"(avl));
+    a += vl;
+    b += vl;
 
     // Load chunk a and b
     asm volatile("vle64.v v8,  (%0)" ::"r"(a));
-    asm volatile("vle64.v v16, (%0)" ::"r"(b));
-
+    asm volatile("vle64.v v12, (%0)" ::"r"(b));
     // Multiply and accumulate
-    if (avl == orig_avl) {
-      asm volatile("vfmul.vv v24, v8, v16");
-    } else {
-      asm volatile("vfmacc.vv v24, v8, v16");
-    }
+    asm volatile("vfmacc.vv v24, v8, v12");
 
-    // Bump pointers
+    avl -= vl;
+
+    if (avl <= 0) break;
     a += vl;
     b += vl;
+
+    // Load chunk a and b
+    asm volatile("vle64.v v16,  (%0)" ::"r"(a));
+    asm volatile("vle64.v v20,  (%0)" ::"r"(b));
+    // Multiply and accumulate
+    asm volatile("vfmacc.vv v24, v16, v20");
+
     avl -= vl;
+
   } while (avl > 0);
 
 
   // Reduce and return
+  asm volatile("vmv.s.x v0, zero");
   asm volatile("vfredusum.vs v0, v24, v0");
   asm volatile("vfmv.f.s %0, v0" : "=f"(red));
 
