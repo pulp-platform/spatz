@@ -22,24 +22,29 @@
 #define E8M0_BIAS 127
 #define FP32_BIAS 127
 
-// MXFP8 dot product
+
+// MXFP8 matrix multiplication
+// ---------------------------
 // - block size = 32 fixed
-// - a is an MxK matrix, stored in row-major format
-// - b is an KxN matrix, stored in column-major format
-// - c is an MxN matrix, stored in row-major format
-// - in other words,
-//   K = reduction dimension = inner dimension = block quantization direction
-// - scale data format: E8M0 (bias = 127, NaN not handled)
-//
+// - a is an MxK matrix
+// - b is an KxN matrix
+// - c is an MxN matrix
+// - a_scale is an Mx(K/32)
+// - b_scale is an (K/32)xN
+// - K = reduction dimension = block quantization direction
+// - element data format: FP8
+// - scale data format: E8M0 (NaN not handled)
+// - accumulation in FP32
+
+
+// - inner product: vectorizing reduction dimension (K dimension)
+// - natural data layout: c, a, a_scale in row-major order
+//                        b, b_scale in column-major order
 // - M, N, K > 0
-// - K % 32 == 0 (integer number of blocks)
-//
-// NOTE: This assumes VLEN = 512, which leads to 16 elements per vector register
-// for SEW = 32 (and thus, an entire MX block fits when LMUL = 2 and SEW = 32).
-//
-// NOTE: This kernel simply loops through the output matrix and computes a dotp
-//       for each result entry, without re-using any memory.
-void mxfp8_matmul_fp32_dotp(float *c,
+// - statically assumes VLEN=512, making 32 elements with SEW=32 (entire MX
+//   block) fit into a vector register group with LMUL=2
+// - no data reuse
+void mxfp8_matmul_fp32_inner_1x(float *c,
     const char *a, const char *b, const char *a_scale, const char *b_scale,
     const uint32_t M, const uint32_t N, const uint32_t K)
 {
@@ -110,7 +115,16 @@ void mxfp8_matmul_fp32_dotp(float *c,
   }
 }
 
-void mxfp8_matmul_fp32_dotp_reducefirst(float *c,
+// - inner product: vectorizing reduction dimension (K dimension)
+// - reduce first: uses more (slow) reductions, potentially more energy
+//                 efficient
+// - natural data layout: c, a, a_scale in row-major order
+//                        b, b_scale in column-major order
+// - M, N, K > 0
+// - statically assumes VLEN=512, making 32 elements with SEW=32 (entire MX
+//   block) fit into a vector register group with LMUL=2
+// - no data reuse
+void mxfp8_matmul_fp32_inner_reducefirst_1x(float *c,
     const char *a, const char *b, const char *a_scale, const char *b_scale,
     const uint32_t M, const uint32_t N, const uint32_t K)
 {
@@ -166,22 +180,14 @@ void mxfp8_matmul_fp32_dotp_reducefirst(float *c,
   }
 }
 
-// MXFP8 dot product
-// - block size = 32 fixed
-// - a is an MxK matrix, stored in row-major format
-// - b is an KxN matrix, stored in column-major format
-// - c is an MxN matrix, stored in row-major format
-// - in other words,
-//   K = reduction dimension = inner dimension = block quantization direction
-// - scale data format: E8M0 (bias = 127, NaN not handled)
-//
+// - inner product: vectorizing reduction dimension (K dimension)
+// - natural data layout: c, a, a_scale in row-major order
+//                        b, b_scale in column-major order
 // - M, N, K > 0
-// - N %  4 == 0 (unroll factor)
-// - K % 32 == 0 (integer number of blocks)
-//
-// NOTE: This assumes VLEN = 512, which leads to 16 elements per vector register
-// for SEW = 32 (and thus, an entire MX block fits when LMUL = 2 and SEW = 32).
-void mxfp8_matmul_fp32_dotp4(float *c,
+// - statically assumes VLEN=512, making 32 elements with SEW=32 (entire MX
+//   block) fit into a vector register group with LMUL=2
+// - 4x data reuse
+void mxfp8_matmul_fp32_inner_4x(float *c,
     const char *a, const char *b, const char *a_scale, const char *b_scale,
     const uint32_t M, const uint32_t N, const uint32_t K)
 {
@@ -311,21 +317,12 @@ void mxfp8_matmul_fp32_dotp4(float *c,
   }
 }
 
-// MXFP8 dot product
-// - block size = 32 fixed
-// - a is an MxK matrix, stored in row-major format
-// - b is an KxN matrix, stored in row-major (!) format
-// - c is an MxN matrix, stored in row-major format
-// - a_scale is an Mx(K/32), stored in row-major format
-// - b_scale is an (K/32)xN, stored in row-major format
-// - K = reduction dimension = block quantization direction
-// - scale data format: E8M0 (bias = 127, NaN not handled)
-//
+// - outer product: vectorizing along output rows (N dimension)
+// - optimal data layout: all matrices in row-major order
 // - M, N, K > 0
-// - K % 32 == 0 (integer number of blocks)
-//
-// NOTE: For maximum throughput, N should be a multiple of (4 * VLEN / 32).
-void mxfp8_matmul_fp32_rowmaj_m4(float *c,
+// - no data reuse
+// - for maximum throughput, N should be a multiple of (4 * VLEN / 32)
+void mxfp8_matmul_fp32_outer_lmul4_1x(float *c,
     const char *a, const char *b, const char *a_scale, const char *b_scale,
     const uint32_t M, const uint32_t N, const uint32_t K)
 {
@@ -391,7 +388,7 @@ void mxfp8_matmul_fp32_rowmaj_m4(float *c,
         asm volatile("vle8.v v12, (%0)" :: "r"(b_scale_));
 
         // add scales and widen to 16-bit -> v14-v15
-        asm volatile("vwadd.vx v14, v12, %0" :: "r"(as));
+        asm volatile("vwaddu.vx v14, v12, %0" :: "r"(as));
 
         // re-bias for FP32 and widen to 32-bit -> v8-v11
         asm volatile("vsetvli zero, %0, e16, m2, ta, ma" :: "r"(N - n));
@@ -413,22 +410,12 @@ void mxfp8_matmul_fp32_rowmaj_m4(float *c,
   }
 }
 
-// MXFP8 dot product
-// - block size = 32 fixed
-// - a is an MxK matrix, stored in row-major format
-// - b is an KxN matrix, stored in row-major (!) format
-// - c is an MxN matrix, stored in row-major format
-// - a_scale is an Mx(K/32), stored in row-major format
-// - b_scale is an (K/32)xN, stored in row-major format
-// - K = reduction dimension = block quantization direction
-// - scale data format: E8M0 (bias = 127, NaN not handled)
-//
+// - outer product: vectorizing along output rows (N dimension)
+// - optimal data layout: all matrices in row-major order
 // - M, N, K > 0
-// - M % 2 == 0 (loop unroll factor)
-// - K % 32 == 0 (integer number of blocks)
-//
-// NOTE: For maximum throughput, N should be a multiple of (4 * VLEN / 32).
-void mxfp8_matmul_fp32_rowmaj2_m4(float *c,
+// - 2x data reuse
+// - for maximum throughput, N should be a multiple of (4 * VLEN / 32)
+void mxfp8_matmul_fp32_outer_lmul4_2x(float *c,
     const char *a, const char *b, const char *a_scale, const char *b_scale,
     const uint32_t M, const uint32_t N, const uint32_t K)
 {
@@ -526,22 +513,12 @@ void mxfp8_matmul_fp32_rowmaj2_m4(float *c,
   }
 }
 
-// MXFP8 dot product
-// - block size = 32 fixed
-// - a is an MxK matrix, stored in row-major format
-// - b is an KxN matrix, stored in row-major (!) format
-// - c is an MxN matrix, stored in row-major format
-// - a_scale is an Mx(K/32), stored in row-major format
-// - b_scale is an (K/32)xN, stored in row-major format
-// - K = reduction dimension = block quantization direction
-// - scale data format: E8M0 (bias = 127, NaN not handled)
-//
+// - outer product: vectorizing along output rows (N dimension)
+// - optimal data layout: all matrices in row-major order
 // - M, N, K > 0
-// - M % 4 == 0 (loop unroll factor)
-// - K % 32 == 0 (integer number of blocks)
-//
-// NOTE: For maximum throughput, N should be a multiple of (2 * VLEN / 32).
-void mxfp8_matmul_fp32_rowmaj4_m2(float *c,
+// - 4x data reuse
+// - for maximum throughput, N should be a multiple of (2 * VLEN / 32)
+void mxfp8_matmul_fp32_outer_lmul2_4x(float *c,
     const char *a, const char *b, const char *a_scale, const char *b_scale,
     const uint32_t M, const uint32_t N, const uint32_t K)
 {
@@ -624,10 +601,10 @@ void mxfp8_matmul_fp32_rowmaj4_m2(float *c,
         asm volatile("vle8.v v16, (%0)" :: "r"(b_scale_));
 
         // add scales and widen to 16-bit -> v18, v19, v20, v21
-        asm volatile("vwadd.vx v18, v16, %0" :: "r"(as0));
-        asm volatile("vwadd.vx v19, v16, %0" :: "r"(as1));
-        asm volatile("vwadd.vx v20, v16, %0" :: "r"(as2));
-        asm volatile("vwadd.vx v21, v16, %0" :: "r"(as3));
+        asm volatile("vwaddu.vx v18, v16, %0" :: "r"(as0));
+        asm volatile("vwaddu.vx v19, v16, %0" :: "r"(as1));
+        asm volatile("vwaddu.vx v20, v16, %0" :: "r"(as2));
+        asm volatile("vwaddu.vx v21, v16, %0" :: "r"(as3));
 
         // re-bias for FP32 and widen to 32-bit -> v24-v25, v26-v27, v28-v29, v30-v31
         asm volatile("vsetvli zero, %0, e16, m1, ta, ma" :: "r"(N - n));

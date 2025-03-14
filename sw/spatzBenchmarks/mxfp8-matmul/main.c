@@ -43,8 +43,6 @@ void copy_transpose_matrix(char *dst, const char *src, const uint32_t m, const u
 }
 
 bool verify_matrix(const float *actual, const float *expected, const uint32_t m, const uint32_t n) {
-  uint32_t count = 0;
-
   for (uint32_t i = 0; i < m; i++) {
     for (uint32_t j = 0; j < n; j++) {
       uint32_t idx = i * n + j;
@@ -58,10 +56,9 @@ bool verify_matrix(const float *actual, const float *expected, const uint32_t m,
         printf(" expected = 0x%08x = %.4f\n", *(uint32_t*)&exp, exp);
         return false;
       }
-      count++;
     }
   }
-  printf("Success: checked %d elements\n", count);
+  printf("Success: checked %dx%d matrix elements\n", m, n);
   return true;
 }
 
@@ -112,12 +109,12 @@ int main() {
     snrt_dma_start_1d(a, mx_matmul_A_elements_dram, m * k);
     snrt_dma_start_1d(a_scale, mx_matmul_A_scales_dram, m * k_block);
     if (natural_layout) {
+      snrt_dma_start_1d(b, mx_matmul_B_elements_dram, n * k);
+      snrt_dma_start_1d(b_scale, mx_matmul_B_scales_dram, n * k_block);
+    } else {
       // test data has B in column-major format, transpose for row-major format
       copy_transpose_matrix(b, mx_matmul_B_elements_dram, n, k);
       copy_transpose_matrix(b_scale, mx_matmul_B_scales_dram, n, k_block);
-    } else {
-      snrt_dma_start_1d(b, mx_matmul_B_elements_dram, n * k);
-      snrt_dma_start_1d(b_scale, mx_matmul_B_scales_dram, n * k_block);
     }
     snrt_dma_wait_all();
   }
@@ -144,13 +141,13 @@ int main() {
     start_kernel();
 
   if (natural_layout)
-    mxfp8_matmul_fp32_rowmaj2_m4(local_c,
-                                 local_a, local_b, local_a_scale, local_b_scale,
-                                 local_m, local_n, local_k);
+    mxfp8_matmul_fp32_inner_4x(
+      local_c, local_a, local_b, local_a_scale, local_b_scale,
+      local_m, local_n, local_k);
   else
-    mxfp8_matmul_fp32_dotp4(local_c,
-                            local_a, local_b, local_a_scale, local_b_scale,
-                            local_m, local_n, local_k);
+    mxfp8_matmul_fp32_outer_lmul4_2x(
+      local_c, local_a, local_b, local_a_scale, local_b_scale,
+      local_m, local_n, local_k);
 
   snrt_cluster_hw_barrier();
 
@@ -176,7 +173,7 @@ int main() {
 
   // Check results
   if (cid == 0) {
-    bool success = verify_matrix(c, mx_matmul_C_results_dram, 1, n);
+    bool success = verify_matrix(c, mx_matmul_C_results_dram, m, n);
     if (!success)
       return 1;
   }

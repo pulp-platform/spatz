@@ -16,32 +16,37 @@
 
 // Author: Max Wipfli <mwipfli@ethz.ch>
 
-#ifndef SPFMATMUL_H
-#define SPFMATMUL_H
+#ifndef MXFP8MATMUL_H
+#define MXFP8MATMUL_H
 
 #include <stdint.h>
 
-void mxfp8_matmul_fp32_dotp(float *c,
+// inner product: natural data layout
+
+void mxfp8_matmul_fp32_inner_1x(float *c,
     const char *a, const char *b, const char *a_scale, const char *b_scale,
     const uint32_t M, const uint32_t N, const uint32_t K);
 
-void mxfp8_matmul_fp32_dotp_reducefirst(float *c,
+void mxfp8_matmul_fp32_inner_reducefirst_1x(float *c,
     const char *a, const char *b, const char *a_scale, const char *b_scale,
     const uint32_t M, const uint32_t N, const uint32_t K);
 
-void mxfp8_matmul_fp32_dotp4(float *c,
+void mxfp8_matmul_fp32_inner_4x(float *c,
     const char *a, const char *b, const char *a_scale, const char *b_scale,
     const uint32_t M, const uint32_t N, const uint32_t K);
 
-void mxfp8_matmul_fp32_rowmaj_m4(float *c,
+
+// outer product: optimal data layout
+
+void mxfp8_matmul_fp32_outer_lmul4_1x(float *c,
     const char *a, const char *b, const char *a_scale, const char *b_scale,
     const uint32_t M, const uint32_t N, const uint32_t K);
 
-void mxfp8_matmul_fp32_rowmaj2_m4(float *c,
+void mxfp8_matmul_fp32_outer_lmul4_2x(float *c,
     const char *a, const char *b, const char *a_scale, const char *b_scale,
     const uint32_t M, const uint32_t N, const uint32_t K);
 
-void mxfp8_matmul_fp32_rowmaj4_m2(float *c,
+void mxfp8_matmul_fp32_outer_lmul2_4x(float *c,
     const char *a, const char *b, const char *a_scale, const char *b_scale,
     const uint32_t M, const uint32_t N, const uint32_t K);
 
