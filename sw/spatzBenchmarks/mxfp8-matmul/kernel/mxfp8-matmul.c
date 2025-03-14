@@ -299,13 +299,13 @@ void mxfp8_matmul_fp32_dotp4(float *c,
       *c_ = acc0;
       c_++;
       asm volatile("vfmv.f.s %0, v9" : "=f"(acc1));
-      *c_ = acc0;
+      *c_ = acc1;
       c_++;
       asm volatile("vfmv.f.s %0, v10" : "=f"(acc2));
-      *c_ = acc0;
+      *c_ = acc2;
       c_++;
       asm volatile("vfmv.f.s %0, v11" : "=f"(acc3));
-      *c_ = acc0;
+      *c_ = acc3;
       c_++;
     }
   }
