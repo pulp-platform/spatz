@@ -499,8 +499,8 @@ void mxfp8_matmul_fp32_rowmaj2_m4(float *c,
         asm volatile("vle8.v v12, (%0)" :: "r"(b_scale_));
 
         // add scales and widen to 16-bit -> v14-v15, v30-v31
-        asm volatile("vwadd.vx v14, v12, %0" :: "r"(as0));
-        asm volatile("vwadd.vx v30, v12, %0" :: "r"(as1));
+        asm volatile("vwaddu.vx v14, v12, %0" :: "r"(as0));
+        asm volatile("vwaddu.vx v30, v12, %0" :: "r"(as1));
 
         // re-bias for FP32 and widen to 32-bit -> v8-v11, v24-v27
         asm volatile("vsetvli zero, %0, e16, m2, ta, ma" :: "r"(N - n));
