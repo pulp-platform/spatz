@@ -17,12 +17,15 @@
 // Author: Matheus Cavalcante, ETH Zurich
 // Author: Max Wipfli <mwipfli@ethz.ch>
 
+#include "data/data_64_64_64.h"
 #include "kernel/mxfp8-matmul.h"
+
 #include <benchmark.h>
 #include <snrt.h>
+#include <stdbool.h>
 #include <stdio.h>
 
-// #include DATAHEADER
+#include DATAHEADER
 #include "kernel/mxfp8-matmul.c"
 
 char *a;
@@ -31,27 +34,35 @@ char *a_scale;
 char *b_scale;
 float *c;
 
-#define M 64
-#define N 64
-#define K 64
-
-// Verify the matrices
-int verify_matrix(float *matrix, const float *checksum,
-                  const unsigned int num_rows, const unsigned int num_columns) {
-  for (unsigned int i = 0; i < num_rows; ++i) {
-    float sum = 0;
-    for (unsigned int j = 0; j < num_columns; ++j) {
-      sum += (float)matrix[i * num_columns + j];
-    }
-
-    float diff = sum - (float)checksum[i];
-    if (diff < 0)
-      diff = -diff;
-    if (diff > 0.001) {
-      return i == 0 ? -1 : (int)i;
+void copy_transpose_matrix(char *dst, const char *src, const uint32_t m, const uint32_t n) {
+  for (uint32_t i = 0; i < m; i++) {
+    for (uint32_t j = 0; j < n; j++) {
+      dst[j * m + i] = src[i * n + j];
     }
   }
-  return 0;
+}
+
+bool verify_matrix(const float *actual, const float *expected, const uint32_t m, const uint32_t n) {
+  uint32_t count = 0;
+
+  for (uint32_t i = 0; i < m; i++) {
+    for (uint32_t j = 0; j < n; j++) {
+      uint32_t idx = i * n + j;
+      float exp = expected[idx];
+      float act = actual[idx];
+      float diff = fabsf(exp - act);
+      float eps = 0.05 * fabsf(exp);
+      if (diff > eps) {
+        printf("Error in c[%d][%d]:\n", i, j);
+        printf(" acutal   = 0x%08x = %.4f\n", *(uint32_t*)&act, act);
+        printf(" expected = 0x%08x = %.4f\n", *(uint32_t*)&exp, exp);
+        return false;
+      }
+      count++;
+    }
+  }
+  printf("Success: checked %d elements\n", count);
+  return true;
 }
 
 int main() {
@@ -60,26 +71,68 @@ int main() {
 
   unsigned int timer_start, timer_end, timer;
 
+  unsigned int m = mx_matmul_l.M;
+  unsigned int n = mx_matmul_l.N;
+  unsigned int k = mx_matmul_l.K;
+  unsigned int k_block = k / MX_BLOCK_SIZE;
+
+  // Check data consistency
+  if (cid == 0) {
+    if (k % MX_BLOCK_SIZE != 0) {
+      printf("K is not a multiple of MX_BLOCK_SIZE\n");
+      return 1;
+    }
+    if (mx_matmul_l.dtype_elements != FP8) {
+      printf("unsupported element dtype\n");
+      return 1;
+    }
+    if (mx_matmul_l.dtype_scales != E8M0) {
+      printf("unsupported scale dtype\n");
+      return 1;
+    }
+    if (mx_matmul_l.dtype_results != FP32) {
+      printf("unsupported result dtype\n");
+      return 1;
+    }
+  }
+
+  bool natural_layout = true;
+
   // Allocate the matrices in the local tile
   if (cid == 0) {
-    a = (char *)snrt_l1alloc(M * K);
-    b = (char *)snrt_l1alloc(N * K);
-    a_scale = (char *)snrt_l1alloc(M * K / 32);
-    b_scale = (char *)snrt_l1alloc(N * K / 32);
-    c = (float *)snrt_l1alloc(M * N * sizeof(float));
+    a = (char *)snrt_l1alloc(m * k);
+    b = (char *)snrt_l1alloc(n * k);
+    a_scale = (char *)snrt_l1alloc(m * k_block);
+    b_scale = (char *)snrt_l1alloc(n * k_block);
+    c = (float *)snrt_l1alloc(m * n * sizeof(float));
+  }
 
-    memset(a, 0x3c, M * K); // 1.0 in FP8
-    memset(b, 0x3c, N * K); // 1.0 in FP8
-    memset(a_scale, 0x7f, M * K / 32); // 1 in E8M0
-    memset(b_scale, 0x7f, N * K / 32); // 1 in E8M0
+  // Initialize the matrices
+  if (cid == 0) {
+    snrt_dma_start_1d(a, mx_matmul_A_elements_dram, m * k);
+    snrt_dma_start_1d(a_scale, mx_matmul_A_scales_dram, m * k_block);
+    if (natural_layout) {
+      // test data has B in column-major format, transpose for row-major format
+      copy_transpose_matrix(b, mx_matmul_B_elements_dram, n, k);
+      copy_transpose_matrix(b_scale, mx_matmul_B_scales_dram, n, k_block);
+    } else {
+      snrt_dma_start_1d(b, mx_matmul_B_elements_dram, n * k);
+      snrt_dma_start_1d(b_scale, mx_matmul_B_scales_dram, n * k_block);
+    }
+    snrt_dma_wait_all();
   }
 
   snrt_cluster_hw_barrier();
 
-  uint32_t     local_m       = M / num_cores;
-  float       *local_c       = c       + (cid * local_m * N);
-  const char  *local_a       = a       + (cid * local_m * K);
-  const char  *local_a_scale = a_scale + (cid * local_m * K / 32);
+  // tile on output row dimension (M)
+  uint32_t     local_m       = m / num_cores;
+  uint32_t     local_n       = n;
+  uint32_t     local_k       = k;
+  const char  *local_a       = a       + (cid * local_m * k);
+  const char  *local_b       = b;
+  const char  *local_a_scale = a_scale + (cid * local_m * k_block);
+  const char  *local_b_scale = b_scale;
+  float       *local_c       = c       + (cid * local_m * n);
 
   snrt_cluster_hw_barrier();
 
@@ -90,9 +143,14 @@ int main() {
   if (cid == 0)
     start_kernel();
 
-  mxfp8_matmul_fp32_dotp4(local_c, local_a, b, local_a_scale, b_scale, local_m, N, K);
-  // mxfp8_matmul_fp32_rowmaj_m4(local_c, local_a, b, local_a_scale, b_scale, local_m, N, K);
-  // mxfp8_matmul_fp32_rowmaj2_m4(local_c, local_a, b, local_a_scale, b_scale, local_m, N, K);
+  if (natural_layout)
+    mxfp8_matmul_fp32_rowmaj2_m4(local_c,
+                                 local_a, local_b, local_a_scale, local_b_scale,
+                                 local_m, local_n, local_k);
+  else
+    mxfp8_matmul_fp32_dotp4(local_c,
+                            local_a, local_b, local_a_scale, local_b_scale,
+                            local_m, local_n, local_k);
 
   snrt_cluster_hw_barrier();
 
@@ -103,22 +161,24 @@ int main() {
   // End timer
   timer = benchmark_get_cycle() - timer;
 
+  // Performance summary
   if (cid == 0) {
-    // Check and display results
     long unsigned int performance =
-        1000 * 2 * M * N * K / timer;
+        1000 * 2 * m * n * k / timer;
     long unsigned int utilization =
         performance / (2 * num_cores * SNRT_NFPU_PER_CORE * 2);
 
-    printf("\n----- (%d,%d,%d) mxfp8 matmul -----\n", M, N, K);
+    printf("\n----- (%d,%d,%d) mxfp8 matmul -----\n", m, n, k);
     printf("The execution took %u cycles.\n", timer);
     printf("The performance is %ld OP/1000cycle (%ld%%o utilization).\n",
             performance, utilization);
-
-    printf("c[0][0] = %.3f\n", c[0]);
-    printf("c[0][1] = %.3f\n", c[1]);
-    printf("c[1][0] = %.3f\n", c[N]);
   }
 
+  // Check results
+  if (cid == 0) {
+    bool success = verify_matrix(c, mx_matmul_C_results_dram, 1, n);
+    if (!success)
+      return 1;
+  }
   return 0;
 }
