@@ -274,7 +274,7 @@ module spatz_vfu
       vfu_rsp_o.id      = result_tag.id;
       vfu_rsp_o.rd      = result_tag.vd_addr[GPRWidth-1:0];
       vfu_rsp_o.wb      = result_tag.wb;
-      vfu_rsp_o.result  = scalar_result;
+      vfu_rsp_o.result  = result_tag.wb ? scalar_result : '0;
       vfu_rsp_valid_o   = 1'b1;
     end
   end: control_proc
@@ -333,7 +333,7 @@ module spatz_vfu
   assign result       = state_q == VFU_RunningIPU ? ipu_result       : fpu_result;
   assign result_valid = state_q == VFU_RunningIPU ? ipu_result_valid : fpu_result_valid;
 
-  assign scalar_result = spatz_req.op_arith.is_scalar ? result[ELEN-1:0] : '0;
+  assign scalar_result = result[ELEN-1:0];
 
   ///////////////////////
   //  Reduction logic  //
