@@ -564,6 +564,11 @@ void mxfp8_matmul_fp32_outer_lmul4_2x(float *c,
   uint32_t K_BLOCK = K / MXFP8_BLOCK_SIZE;
 
   uint32_t n_vl;
+
+  float *c_m0 = c;      // c[m][0]
+  const char *a_m0 = a; // a[m][0]
+  const uint8_t *a_scale_m0 = (const uint8_t*)a_scale; // a_scale[m][0]
+
   for (uint32_t m = 0; m < M; m += 2) {
     for (uint32_t n = 0; n < N; n += n_vl) {
       // post-scale accumulator: v0-v3, v16-v19
@@ -571,11 +576,11 @@ void mxfp8_matmul_fp32_outer_lmul4_2x(float *c,
       asm volatile("vmv.v.i  v0, 0");
       asm volatile("vmv.v.i v16, 0");
 
-      float *c_ = c + m * N + n;  // c[m][n]
-      const char *a_ = a + m * K; // a[m][0]
-      const char *b_ = b + n;     // b[0][n]
-      const uint8_t *a_scale_ = (const uint8_t *)a_scale + m * K_BLOCK;
-      const uint8_t *b_scale_ = (const uint8_t *)b_scale + n;
+      float *c_ = c_m0 + n;   // c[m][n]
+      const char *a_ = a_m0;  // a[m][0]
+      const char *b_ = b + n; // b[0][n]
+      const uint8_t *a_scale_ = a_scale_m0;                   // a_scale[m][0]
+      const uint8_t *b_scale_ = (const uint8_t *)b_scale + n; // b_scale[0][n]
 
       for (uint32_t k_block = 0; k_block < K_BLOCK; k_block++) {
         // pre-scale accumulator: v4-v7, v20-v23
@@ -643,6 +648,11 @@ void mxfp8_matmul_fp32_outer_lmul4_2x(float *c,
       asm volatile("vse32.v  v0, (%0)" :: "r"(c_));
       asm volatile("vse32.v v16, (%0)" :: "r"(c_ + N));
     }
+
+    // increment row
+    c_m0 += 2 * N;
+    a_m0 += 2 * K;
+    a_scale_m0 += 2 * K_BLOCK;
   }
 }
 
