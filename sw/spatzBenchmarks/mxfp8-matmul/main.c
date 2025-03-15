@@ -94,6 +94,7 @@ int main() {
   }
 
   bool natural_layout = true;
+  bool sdotp = false;
 
   // Allocate the matrices in the local tile
   if (cid == 0) {
@@ -140,14 +141,21 @@ int main() {
   if (cid == 0)
     start_kernel();
 
-  if (natural_layout)
-    mxfp8_matmul_fp32_inner_4x(
-      local_c, local_a, local_b, local_a_scale, local_b_scale,
-      local_m, local_n, local_k);
-  else
+  if (natural_layout) {
+    if (sdotp) {
+      mxfp8_matmul_fp32_inner_sdotp_4x(
+        local_c, local_a, local_b, local_a_scale, local_b_scale,
+        local_m, local_n, local_k);
+    } else {
+      mxfp8_matmul_fp32_inner_4x(
+        local_c, local_a, local_b, local_a_scale, local_b_scale,
+        local_m, local_n, local_k);
+    }
+  } else {
     mxfp8_matmul_fp32_outer_lmul4_2x(
       local_c, local_a, local_b, local_a_scale, local_b_scale,
       local_m, local_n, local_k);
+  }
 
   snrt_cluster_hw_barrier();
 
