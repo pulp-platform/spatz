@@ -93,7 +93,8 @@ int main() {
     }
   }
 
-  bool natural_layout = true;
+  bool skip_check = false;
+  bool natural_layout = false;
   bool sdotp = false;
 
   // Allocate the matrices in the local tile
@@ -109,7 +110,7 @@ int main() {
   if (cid == 0) {
     snrt_dma_start_1d(a, mx_matmul_A_elements_dram, m * k);
     snrt_dma_start_1d(a_scale, mx_matmul_A_scales_dram, m * k_block);
-    if (natural_layout) {
+    if (natural_layout || skip_check) {
       snrt_dma_start_1d(b, mx_matmul_B_elements_dram, n * k);
       snrt_dma_start_1d(b_scale, mx_matmul_B_scales_dram, n * k_block);
     } else {
@@ -180,7 +181,7 @@ int main() {
   }
 
   // Check results
-  if (cid == 0) {
+  if (cid == 0 && !skip_check) {
     bool success = verify_matrix(c, mx_matmul_C_results_dram, m, n);
     if (!success)
       return 1;
