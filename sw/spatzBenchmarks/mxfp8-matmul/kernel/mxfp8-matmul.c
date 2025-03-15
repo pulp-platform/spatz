@@ -583,25 +583,16 @@ void mxfp8_matmul_fp32_outer_lmul4_2x(float *c,
         for (uint32_t k_elem = 0; k_elem < MXFP8_BLOCK_SIZE; k_elem++) {
           asm volatile("vsetvli zero, %0, e8, m1, ta, ma" :: "r"(N - n));
 
-          // load operand: a[m:m+2][k]
+          // load operands: a[m:m+2][k] and b[k][n:n+n_vl]
           float a0, a1;
           asm volatile("flb %0, (%1)" : "=f"(a0) : "r"(a_));
           asm volatile("flb %0, (%1)" : "=f"(a1) : "r"(a_ + K));
-
-          // load operands: b[k][n:n+n_vl]
           asm volatile("vle8.v v8, (%0)" :: "r"(b_));
 
           // widen to FP16
-          asm volatile("vfwadd.vf v10, v8, %0" :: "f"(0.0f));
           asm volatile("fcvt.h.b %0, %0" : "+f"(a0));
           asm volatile("fcvt.h.b %0, %0" : "+f"(a1));
-          // BUG: Moving the fcvt.h.b before the vfwadd.vf breaks, because the
-          //      result is then written to the VRF instead of FP RF. This is
-          //      (I think) because spatz_vfu moves on to the next instruction
-          //      too quickly, which then clears the `op_arith.is_scalar` flag
-          //      in `spatz_req`, which leads the VFU to (incorrectly) send 0
-          //      instead of the result back to the controller. It also writes
-          //      the value to the VRF, even though it shouldn't.
+          asm volatile("vfwadd.vf v10, v8, %0" :: "f"(0.0f));
 
           asm volatile("vsetvli zero, %0, e16, m2, ta, ma" :: "r"(N - n));
 
