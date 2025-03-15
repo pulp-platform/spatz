@@ -238,7 +238,7 @@ void mxfp8_matmul_fp32_inner_4x(float *c,
         asm volatile("vfwmul.vv v28, v16, v19");
         asm volatile("vfwmul.vv v30, v16, v20");
 
-        asm volatile("vsetvli zero, %0, e32, m2, ta, ma" :: "r"(MXFP8_BLOCK_SIZE));
+        asm volatile("vsetvli zero, %0, e32, m1, ta, ma" :: "r"(MXFP8_BLOCK_SIZE / 2));
 
         // load scales, add and re-bias to FP32
         const uint8_t *a_scale_ = (const uint8_t *)a_scale + m * K_BLOCK + k_block;
@@ -257,6 +257,11 @@ void mxfp8_matmul_fp32_inner_4x(float *c,
         uint32_t bs3 = *b_scale_;
         uint32_t ss3 = as + bs3 - (2 * E8M0_BIAS - FP32_BIAS);
         b_scale_ += K_BLOCK;
+
+        asm volatile("vfadd.vv v24, v24, v25");
+        asm volatile("vfadd.vv v26, v26, v27");
+        asm volatile("vfadd.vv v28, v28, v29");
+        asm volatile("vfadd.vv v30, v30, v31");
 
         // convert to FP32 using bit operations
         float scale0, scale1, scale2, scale3;
@@ -289,10 +294,6 @@ void mxfp8_matmul_fp32_inner_4x(float *c,
       asm volatile("vsetvli zero, %0, e32, m1, ta, ma" :: "r"(MXFP8_BLOCK_SIZE / 2));
       asm volatile("vmv.v.i v23, 0");
 
-      asm volatile("vfadd.vv v0, v0, v1");
-      asm volatile("vfadd.vv v2, v2, v3");
-      asm volatile("vfadd.vv v4, v4, v5");
-      asm volatile("vfadd.vv v6, v6, v7");
       asm volatile("vfredusum.vs  v8, v0, v23");
       asm volatile("vfredusum.vs  v9, v2, v23");
       asm volatile("vfredusum.vs v10, v4, v23");
