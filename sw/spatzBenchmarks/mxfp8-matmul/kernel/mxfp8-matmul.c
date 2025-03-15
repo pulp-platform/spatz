@@ -623,14 +623,16 @@ void mxfp8_matmul_fp32_outer_lmul4_2x(float *c,
         asm volatile("vsetvli zero, %0, e8, m1, ta, ma" :: "r"(N - n));
         asm volatile("vle8.v v12, (%0)" :: "r"(b_scale_));
 
-        // add scales and widen to 16-bit -> v14-v15, v30-v31
-        asm volatile("vwaddu.vx v14, v12, %0" :: "r"(as0));
-        asm volatile("vwaddu.vx v30, v12, %0" :: "r"(as1));
+        int16_t as0_rescaled = as0 - (2 * E8M0_BIAS - FP32_BIAS);
+        int16_t as1_rescaled = as1 - (2 * E8M0_BIAS - FP32_BIAS);
 
-        // re-bias for FP32 and widen to 32-bit -> v8-v11, v24-v27
+        // widen to 16-bit unsigned integer -> v14-v15
+        asm volatile("vwcvtu.x.x.v v14, v12");
+
+        // add, re-bias for FP32 and widen to 32-bit -> v8-v11, v24-v27
         asm volatile("vsetvli zero, %0, e16, m2, ta, ma" :: "r"(N - n));
-        asm volatile("vwsubu.vx  v8, v14, %0" :: "r"(2 * E8M0_BIAS - FP32_BIAS));
-        asm volatile("vwsubu.vx v24, v30, %0" :: "r"(2 * E8M0_BIAS - FP32_BIAS));
+        asm volatile("vwadd.vx  v8, v14, %0" :: "r"(as0_rescaled));
+        asm volatile("vwadd.vx v24, v14, %0" :: "r"(as1_rescaled));
 
         // convert to FP32 using bit operations
         asm volatile("vsetvli zero, %0, e32, m4, ta, ma" :: "r"(N - n));
