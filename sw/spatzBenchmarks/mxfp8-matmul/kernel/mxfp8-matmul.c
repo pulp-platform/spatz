@@ -350,66 +350,72 @@ void mxfp8_matmul_fp32_inner_sdotp_4x(float *c,
 
         const char *a_ = a + m * K + k;
         const char *b_ = b + n * K + k;
-
-        // load operands and widen to FP16
-        //  (a) a[m][k:k+MXFP8_BLOCK_SIZE]   -> v23 (FP8) -> v16 (FP16)
-        asm volatile("vle8.v v23, (%0)" :: "r"(a_));
-        asm volatile("vfwadd.vf v16, v23, %0" :: "f"(0.0f));
-        // (b0) b[k:k+MXFP8_BLOCK_SIZE][n  ] -> v24 (FP8) -> v17 (FP16)
-        asm volatile("vle8.v v24, (%0)" :: "r"(b_));
-        asm volatile("vfwadd.vf v17, v24, %0" :: "f"(0.0f));
-        b_ += K;
-        // (b1) b[k:k+MXFP8_BLOCK_SIZE][n+1] -> v25 (FP8) -> v18 (FP16)
-        asm volatile("vle8.v v25, (%0)" :: "r"(b_));
-        asm volatile("vfwadd.vf v18, v25, %0" :: "f"(0.0f));
-        b_ += K;
-        // (b2) b[k:k+MXFP8_BLOCK_SIZE][n+2] -> v26 (FP8) -> v19 (FP16)
-        asm volatile("vle8.v v26, (%0)" :: "r"(b_));
-        asm volatile("vfwadd.vf v19, v26, %0" :: "f"(0.0f));
-        b_ += K;
-        // (b3) b[k:k+MXFP8_BLOCK_SIZE][n+3] -> v27 (FP8) -> v20 (FP16)
-        asm volatile("vle8.v v27, (%0)" :: "r"(b_));
-        asm volatile("vfwadd.vf v20, v27, %0" :: "f"(0.0f));
-        b_ += K;
-
-        asm volatile("vsetvli zero, %0, e16, m1, ta, ma" :: "r"(MXFP8_BLOCK_SIZE));
-
-        // widening dot product to FP32 -> v8, v9, v10, v11 (FP32) as LMUL=1
-        asm volatile("vfwdotp.vv  v8, v16, v17");
-        asm volatile("vfwdotp.vv  v9, v16, v18");
-        asm volatile("vfwdotp.vv v10, v16, v19");
-        asm volatile("vfwdotp.vv v11, v16, v20");
-
-        asm volatile("vsetvli zero, %0, e32, m1, ta, ma" :: "r"(MXFP8_BLOCK_SIZE / 2));
-
-        // load scales, add and re-bias to FP32
         const uint8_t *a_scale_ = (const uint8_t *)a_scale + m * K_BLOCK + k_block;
         const uint8_t *b_scale_ = (const uint8_t *)b_scale + n * K_BLOCK + k_block;
 
-        uint32_t as  = *a_scale_;
-        uint32_t bs0 = *b_scale_;
-        uint32_t ss0 = as + bs0 - (2 * E8M0_BIAS - FP32_BIAS);
-        b_scale_ += K_BLOCK;
-        uint32_t bs1 = *b_scale_;
-        uint32_t ss1 = as + bs1 - (2 * E8M0_BIAS - FP32_BIAS);
-        b_scale_ += K_BLOCK;
-        uint32_t bs2 = *b_scale_;
-        uint32_t ss2 = as + bs2 - (2 * E8M0_BIAS - FP32_BIAS);
-        b_scale_ += K_BLOCK;
-        uint32_t bs3 = *b_scale_;
-        uint32_t ss3 = as + bs3 - (2 * E8M0_BIAS - FP32_BIAS);
-        b_scale_ += K_BLOCK;
+        // (1) load operands and widen to FP16
+        // (2) load scales, add and re-bias to FP32
 
-        // convert to FP32 using bit operations
+        //  (a) a[m][k:k+MXFP8_BLOCK_SIZE]   -> v23 (FP8) -> v16 (FP16)
+        asm volatile("vle8.v v23, (%0)" :: "r"(a_));
+        uint32_t as  = *a_scale_;
+        asm volatile("vfwadd.vf v16, v23, %0" :: "f"(0.0f));
+
+        // (b0) b[k:k+MXFP8_BLOCK_SIZE][n  ] -> v24 (FP8) -> v17 (FP16)
+        asm volatile("vle8.v v24, (%0)" :: "r"(b_));
+        b_ += K;
+        uint32_t bs0 = *b_scale_;
+        b_scale_ += K_BLOCK;
+        asm volatile("vfwadd.vf v17, v24, %0" :: "f"(0.0f));
+        uint32_t ss0 = as + bs0 - (2 * E8M0_BIAS - FP32_BIAS);
+
+        // (b1) b[k:k+MXFP8_BLOCK_SIZE][n+1] -> v25 (FP8) -> v18 (FP16)
+        asm volatile("vle8.v v25, (%0)" :: "r"(b_));
+        b_ += K;
+        uint32_t bs1 = *b_scale_;
+        b_scale_ += K_BLOCK;
+        asm volatile("vfwadd.vf v18, v25, %0" :: "f"(0.0f));
+        uint32_t ss1 = as + bs1 - (2 * E8M0_BIAS - FP32_BIAS);
+
+        // (b2) b[k:k+MXFP8_BLOCK_SIZE][n+2] -> v26 (FP8) -> v19 (FP16)
+        asm volatile("vle8.v v26, (%0)" :: "r"(b_));
+        b_ += K;
+        uint32_t bs2 = *b_scale_;
+        b_scale_ += K_BLOCK;
+        asm volatile("vfwadd.vf v19, v26, %0" :: "f"(0.0f));
+        uint32_t ss2 = as + bs2 - (2 * E8M0_BIAS - FP32_BIAS);
+
+        // (b3) b[k:k+MXFP8_BLOCK_SIZE][n+3] -> v27 (FP8) -> v20 (FP16)
+        asm volatile("vle8.v v27, (%0)" :: "r"(b_));
+        b_ += K;
+        uint32_t bs3 = *b_scale_;
+        b_scale_ += K_BLOCK;
+        asm volatile("vfwadd.vf v20, v27, %0" :: "f"(0.0f));
+        uint32_t ss3 = as + bs3 - (2 * E8M0_BIAS - FP32_BIAS);
+
+        asm volatile("vsetvli zero, %0, e16, m1, ta, ma" :: "r"(MXFP8_BLOCK_SIZE));
+
+        // (1) widening dot product to FP32 -> v8, v9, v10, v11 (FP32) as LMUL=1
+        // (2) convert scales to FP32 using bit operations
         float scale0, scale1, scale2, scale3;
+
+        asm volatile("vfwdotp.vv  v8, v16, v17");
         ss0 <<= 23;
         asm volatile("fmv.w.x %0, %1" : "=f"(scale0) : "r"(ss0));
+
+        asm volatile("vfwdotp.vv  v9, v16, v18");
         ss1 <<= 23;
         asm volatile("fmv.w.x %0, %1" : "=f"(scale1) : "r"(ss1));
+
+        asm volatile("vfwdotp.vv v10, v16, v19");
         ss2 <<= 23;
         asm volatile("fmv.w.x %0, %1" : "=f"(scale2) : "r"(ss2));
+
+        asm volatile("vfwdotp.vv v11, v16, v20");
         ss3 <<= 23;
         asm volatile("fmv.w.x %0, %1" : "=f"(scale3) : "r"(ss3));
+
+        asm volatile("vsetvli zero, %0, e32, m1, ta, ma" :: "r"(MXFP8_BLOCK_SIZE / 2));
 
         // scale and accumulate
         if (k == 0) {
