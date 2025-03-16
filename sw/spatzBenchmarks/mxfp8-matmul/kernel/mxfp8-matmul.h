@@ -54,4 +54,10 @@ void mxfp8_matmul_fp32_outer_lmul2_4x(float *c,
     const char *a, const char *b, const char *a_scale, const char *b_scale,
     const uint32_t M, const uint32_t N, const uint32_t K);
 
+// outer product with vfdotp: optimal data layout
+
+void mxfp8_matmul_fp32_outer_sdotp_lmul2_4x(float *c,
+    const char *a, const char *b, const char *a_scale, const char *b_scale,
+    const uint32_t M, const uint32_t N, const uint32_t K);
+
 #endif

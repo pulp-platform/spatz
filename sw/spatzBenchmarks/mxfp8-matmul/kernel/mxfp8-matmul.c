@@ -783,3 +783,161 @@ void mxfp8_matmul_fp32_outer_lmul2_4x(float *c,
     }
   }
 }
+
+// - outer product: vectorizing along output rows (N dimension)
+// - sdotp: uses custom ExSdotp instructions (vfwdotp.vv)
+// - also uses SIMD vfcvt.h.b instruction
+// - optimal data layout: c, a, a_scale, b_scale in row-major layout
+//                        b in custom layout (TODO: explain this)
+// - M, N, K > 0
+// - 2x data reuse
+// - for maximum throughput, N should be a multiple of (4 * VLEN / 32)
+void mxfp8_matmul_fp32_outer_sdotp_lmul2_4x(float *c,
+    const char *a, const char *b, const char *a_scale, const char *b_scale,
+    const uint32_t M, const uint32_t N, const uint32_t K)
+{
+  uint32_t K_BLOCK = K / MXFP8_BLOCK_SIZE;
+
+  uint32_t n_vl;
+
+  float *c_m0 = c;      // c[m][0]
+  const char *a_m0 = a; // a[m][0]
+  const uint8_t *a_scale_m0 = (const uint8_t*)a_scale; // a_scale[m][0]
+
+  for (uint32_t m = 0; m < M; m += 4) {
+    for (uint32_t n = 0; n < N; n += n_vl) {
+      uint32_t n_remaining = N - n;
+
+      // post-scale accumulator: v0-v1, v2-v3, v4-v5, v6-v7 (4 rows)
+      asm volatile("vsetvli %0, %1, e32, m2, ta, ma" : "=r"(n_vl) : "r"(n_remaining));
+      asm volatile("vmv.v.i v0, 0");
+      asm volatile("vmv.v.i v2, 0");
+      asm volatile("vmv.v.i v4, 0");
+      asm volatile("vmv.v.i v6, 0");
+
+      float *c_ = c_m0 + n;       // c[m][n]
+      const char *a_ = a_m0;      // a[m][0]
+      const char *b_ = b + 2 * n; // b[0][n]
+      const uint8_t *a_scale_ = a_scale_m0;                   // a_scale[m][0]
+      const uint8_t *b_scale_ = (const uint8_t *)b_scale + n; // b_scale[0][n]
+
+      for (uint32_t k_block = 0; k_block < K_BLOCK; k_block++) {
+        // pre-scale accumulator: v8-v9, v10-v11, v12-v13, v14-v15
+        asm volatile("vsetvli zero, %0, e32, m8, ta, ma" :: "r"(-1));
+        asm volatile("vmv.v.i v8, 0");
+
+        for (uint32_t k_elem = 0; k_elem < MXFP8_BLOCK_SIZE; k_elem += 2) {
+
+          // load operands: a[m:m+4][k:k+2] and b[k:k+2][n:n+n_vl]
+          asm volatile("vsetvli zero, %0, e8, m1, ta, ma" :: "r"(2));
+          const char *a__ = a_;
+          asm volatile("vle8.v v20, (%0)" :: "r"(a__));
+          a__ += K;
+          asm volatile("vle8.v v21, (%0)" :: "r"(a__));
+          a__ += K;
+          asm volatile("vle8.v v22, (%0)" :: "r"(a__));
+          a__ += K;
+          asm volatile("vle8.v v23, (%0)" :: "r"(a__));
+
+          // widen to FP16
+          asm volatile("vfwadd.vf v24, v20, %0" :: "f"(0.0f));
+          asm volatile("vfwadd.vf v26, v21, %0" :: "f"(0.0f));
+          asm volatile("vfwadd.vf v28, v22, %0" :: "f"(0.0f));
+          asm volatile("vfwadd.vf v30, v23, %0" :: "f"(0.0f));
+
+          // load operands: b[k:k+2][n:n+n_vl]
+         asm volatile("vsetvli zero, %0, e8, m1, ta, ma" :: "r"(2 * n_remaining));
+          asm volatile("vle8.v v16, (%0)" :: "r"(b_));
+
+          // widen to FP16
+          asm volatile("vfwadd.vf v18, v16, %0" :: "f"(0.0f));
+
+          // for (int i = 0; i < 32; i++)
+          //   asm volatile("nop");
+
+          // move a0, a1, a2, a3 to scalar registers (2x FP16 packed into FP32
+          // register)
+          float a0, a1, a2, a3;
+          asm volatile("vsetvli zero, %0, e32, m1, ta, ma" :: "r"(1));
+          asm volatile("vfmv.f.s %0, v24" : "=f"(a0));
+          asm volatile("vfmv.f.s %0, v26" : "=f"(a1));
+          asm volatile("vfmv.f.s %0, v28" : "=f"(a2));
+          asm volatile("vfmv.f.s %0, v30" : "=f"(a3));
+
+          for (int i = 0; i < 32; i++)
+            asm volatile("nop");
+
+          // widen, multiply, and accumulate operands (pre-scaling) to FP32
+          asm volatile("vsetvli zero, %0, e16, m2, ta, ma" :: "r"(2 * n_remaining));
+          asm volatile("vfwdotp.vf  v8, %0, v18" :: "f"(a0));
+          asm volatile("vfwdotp.vf v10, %0, v18" :: "f"(a1));
+          asm volatile("vfwdotp.vf v12, %0, v18" :: "f"(a2));
+          asm volatile("vfwdotp.vf v14, %0, v18" :: "f"(a3));
+
+          a_ += 2; // next column
+          b_ += 2 * N; // next row
+        }
+
+        // scaling
+
+        // load operand: a_scale[m:m+4][k_block]
+        const uint8_t *a_scale__ = a_scale_;
+        uint8_t as0 = *(a_scale__);
+        a_scale__  += K_BLOCK;
+        uint8_t as1 = *(a_scale__);
+        a_scale__  += K_BLOCK;
+        uint8_t as2 = *(a_scale__);
+        a_scale__  += K_BLOCK;
+        uint8_t as3 = *(a_scale__);
+        // load operands: b_scale[k_block][n:n+n_vl] -> v16
+        asm volatile("vsetvli zero, %0, e8, mf2, ta, ma" :: "r"(n_remaining));
+        asm volatile("vle8.v v16, (%0)" :: "r"(b_scale_));
+
+        int16_t as0_rescaled = as0 - (2 * E8M0_BIAS - FP32_BIAS);
+        int16_t as1_rescaled = as1 - (2 * E8M0_BIAS - FP32_BIAS);
+        int16_t as2_rescaled = as2 - (2 * E8M0_BIAS - FP32_BIAS);
+        int16_t as3_rescaled = as3 - (2 * E8M0_BIAS - FP32_BIAS);
+
+        // widen to 16-bit unsigned integer -> v18-v19
+        asm volatile("vwcvtu.x.x.v v18, v16");
+
+        // add, re-bias for FP32 and widen to 32-bit -> v24-v25, ..., v30-v31
+        asm volatile("vsetvli zero, %0, e16, m1, ta, ma" :: "r"(n_remaining));
+        asm volatile("vwadd.vx v24, v18, %0" :: "r"(as0_rescaled));
+        asm volatile("vwadd.vx v26, v18, %0" :: "r"(as1_rescaled));
+        asm volatile("vwadd.vx v28, v18, %0" :: "r"(as2_rescaled));
+        asm volatile("vwadd.vx v30, v18, %0" :: "r"(as3_rescaled));
+
+        // convert to FP32 using bit operations
+        asm volatile("vsetvli zero, %0, e32, m2, ta, ma" :: "r"(n_remaining));
+        asm volatile("vsll.vi v24, v24, 23");
+        asm volatile("vsll.vi v26, v26, 23");
+        asm volatile("vsll.vi v28, v28, 23");
+        asm volatile("vsll.vi v30, v30, 23");
+
+        // post-scale acc += pre-scale acc * scale
+        asm volatile("vfmacc.vv  v0,  v8, v24");
+        asm volatile("vfmacc.vv  v2, v10, v26");
+        asm volatile("vfmacc.vv  v4, v12, v28");
+        asm volatile("vfmacc.vv  v6, v14, v30");
+
+        a_scale_ += 1; // next column
+        b_scale_ += N; // next row
+      }
+
+      float *c__ = c_;
+      asm volatile("vse32.v v0, (%0)" :: "r"(c__));
+      c__ += N;
+      asm volatile("vse32.v v2, (%0)" :: "r"(c__));
+      c__ += N;
+      asm volatile("vse32.v v4, (%0)" :: "r"(c__));
+      c__ += N;
+      asm volatile("vse32.v v6, (%0)" :: "r"(c__));
+    }
+
+    // increment row
+    c_m0 += 4 * N;
+    a_m0 += 4 * K;
+    a_scale_m0 += 4 * K_BLOCK;
+  }
+}

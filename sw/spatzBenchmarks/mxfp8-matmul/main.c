@@ -42,6 +42,24 @@ void copy_transpose_matrix(char *dst, const char *src, const uint32_t m, const u
   }
 }
 
+// - transpoes and shuffles B matrix for use with outer_sdotp kernels
+// - assumes input matrix is in column-major order
+//
+// data layout in memory where b[i][j] is element of row i, column j:
+//
+// b[0][0] b[1][0] b[0][1] b[1][1] ... b[0][cols-1] b[1][cols-1]  (2*cols items)
+// b[2][0] b[3][0] b[2][1] b[3][1] ... b[2][cols-1] b[3][cols-1]
+// ...
+// b[rows-2][0] b[rows-1][0]       ... b[rows-2][cols-1] b[rows-1][cols-1]
+void copy_shuffle_matrix_for_sdotp(char *dst, const char *src, const uint32_t rows, const uint32_t cols) {
+  for (uint32_t i = 0; i < rows; i += 2) {
+    for (uint32_t j = 0; j < cols; j++) {
+      dst[i * cols + 2 * j]     = src[j * rows + i];
+      dst[i * cols + 2 * j + 1] = src[j * rows + i + 1];
+    }
+  }
+}
+
 bool verify_matrix(const float *actual, const float *expected, const uint32_t m, const uint32_t n) {
   for (uint32_t i = 0; i < m; i++) {
     for (uint32_t j = 0; j < n; j++) {
@@ -114,9 +132,16 @@ int main() {
       snrt_dma_start_1d(b, mx_matmul_B_elements_dram, n * k);
       snrt_dma_start_1d(b_scale, mx_matmul_B_scales_dram, n * k_block);
     } else {
-      // test data has B in column-major format, transpose for row-major format
-      copy_transpose_matrix(b, mx_matmul_B_elements_dram, n, k);
-      copy_transpose_matrix(b_scale, mx_matmul_B_scales_dram, n, k_block);
+      // test data has B in column-major format
+      if (sdotp) {
+        // complex shuffling for outer product with sdotp
+        copy_shuffle_matrix_for_sdotp(b, mx_matmul_B_elements_dram, k, n);
+        copy_transpose_matrix(b_scale, mx_matmul_B_scales_dram, n, k_block);
+      } else {
+        // transpose for row-major format
+        copy_transpose_matrix(b, mx_matmul_B_elements_dram, n, k);
+        copy_transpose_matrix(b_scale, mx_matmul_B_scales_dram, n, k_block);
+      }
     }
     snrt_dma_wait_all();
   }
@@ -153,9 +178,15 @@ int main() {
         local_m, local_n, local_k);
     }
   } else {
-    mxfp8_matmul_fp32_outer_lmul4_2x(
-      local_c, local_a, local_b, local_a_scale, local_b_scale,
-      local_m, local_n, local_k);
+    if (sdotp) {
+      mxfp8_matmul_fp32_outer_sdotp_lmul2_4x(
+        local_c, local_a, local_b, local_a_scale, local_b_scale,
+        local_m, local_n, local_k);
+    } else {
+      mxfp8_matmul_fp32_outer_lmul4_2x(
+        local_c, local_a, local_b, local_a_scale, local_b_scale,
+        local_m, local_n, local_k);
+    }
   }
 
   snrt_cluster_hw_barrier();
@@ -173,6 +204,8 @@ int main() {
         1000 * 2 * m * n * k / timer;
     long unsigned int utilization =
         performance / (2 * num_cores * SNRT_NFPU_PER_CORE * 2);
+    if (sdotp)
+      utilization /= 2;
 
     printf("\n----- (%d,%d,%d) mxfp8 matmul -----\n", m, n, k);
     printf("The execution took %u cycles.\n", timer);
