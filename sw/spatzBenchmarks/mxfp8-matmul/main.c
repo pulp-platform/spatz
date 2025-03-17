@@ -179,7 +179,7 @@ int main() {
     }
   } else {
     if (sdotp) {
-      mxfp8_matmul_fp32_outer_sdotp_lmul2_4x(
+      mxfp8_matmul_fp32_outer_sdotp_lmul4_2x(
         local_c, local_a, local_b, local_a_scale, local_b_scale,
         local_m, local_n, local_k);
     } else {

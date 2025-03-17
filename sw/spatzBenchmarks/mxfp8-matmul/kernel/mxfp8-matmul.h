@@ -60,4 +60,8 @@ void mxfp8_matmul_fp32_outer_sdotp_lmul2_4x(float *c,
     const char *a, const char *b, const char *a_scale, const char *b_scale,
     const uint32_t M, const uint32_t N, const uint32_t K);
 
+void mxfp8_matmul_fp32_outer_sdotp_lmul4_2x(float *c,
+    const char *a, const char *b, const char *a_scale, const char *b_scale,
+    const uint32_t M, const uint32_t N, const uint32_t K);
+
 #endif
