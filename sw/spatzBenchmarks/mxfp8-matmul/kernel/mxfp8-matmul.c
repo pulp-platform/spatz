@@ -829,17 +829,23 @@ void mxfp8_matmul_fp32_outer_sdotp_lmul2_4x(float *c,
         for (uint32_t k_elem = 0; k_elem < MXFP8_BLOCK_SIZE; k_elem += 2) {
 
           // load operands: a[m:m+4][k:k+2] and b[k:k+2][n:n+n_vl]
-          asm volatile("vsetvli zero, %0, e8, m1, ta, ma" :: "r"(2));
+          // BUG: There is an issue with a RAW hazard between the VLSU and the
+          //      VFU when using 2-element 8-bit loads. Due to this, use a
+          //      single 16-bit load, which completes in a single cycle (and is
+          //      also more efficient). This bug only occurs if the address is
+          //      not 64-bit aligned.
+          asm volatile("vsetvli zero, %0, e16, m1, ta, ma" :: "r"(1));
           const char *a__ = a_;
-          asm volatile("vle8.v v20, (%0)" :: "r"(a__));
+          asm volatile("vle16.v v20, (%0)" :: "r"(a__));
           a__ += K;
-          asm volatile("vle8.v v21, (%0)" :: "r"(a__));
+          asm volatile("vle16.v v21, (%0)" :: "r"(a__));
           a__ += K;
-          asm volatile("vle8.v v22, (%0)" :: "r"(a__));
+          asm volatile("vle16.v v22, (%0)" :: "r"(a__));
           a__ += K;
-          asm volatile("vle8.v v23, (%0)" :: "r"(a__));
+          asm volatile("vle16.v v23, (%0)" :: "r"(a__));
 
           // widen to FP16
+          asm volatile("vsetvli zero, %0, e8, m1, ta, ma" :: "r"(2));
           asm volatile("vfwadd.vf v24, v20, %0" :: "f"(0.0f));
           asm volatile("vfwadd.vf v26, v21, %0" :: "f"(0.0f));
           asm volatile("vfwadd.vf v28, v22, %0" :: "f"(0.0f));
@@ -852,20 +858,27 @@ void mxfp8_matmul_fp32_outer_sdotp_lmul2_4x(float *c,
           // widen to FP16
           asm volatile("vfwadd.vf v18, v16, %0" :: "f"(0.0f));
 
-          // for (int i = 0; i < 32; i++)
-          //   asm volatile("nop");
-
           // move a0, a1, a2, a3 to scalar registers (2x FP16 packed into FP32
           // register)
           float a0, a1, a2, a3;
-          asm volatile("vsetvli zero, %0, e32, m1, ta, ma" :: "r"(1));
+          // NOTE:This should be required as per the RVV specification, but
+          //      isn't. This is because vfmv.f.s always movs a 64-bit element
+          //      (instead of considering SEW).
+          // BUG: Adding this vsetvli instruction triggers a bug where the VFU
+          //      doesn't handle back-pressure on the response properly, leading
+          //      to one of the vfmv.f.s results being dropped and a subsequent
+          //      deadlock (SVA: VfuRspDataStable).
+          // asm volatile("vsetvli zero, %0, e32, m1, ta, ma" :: "r"(1));
           asm volatile("vfmv.f.s %0, v24" : "=f"(a0));
           asm volatile("vfmv.f.s %0, v26" : "=f"(a1));
           asm volatile("vfmv.f.s %0, v28" : "=f"(a2));
           asm volatile("vfmv.f.s %0, v30" : "=f"(a3));
 
-          for (int i = 0; i < 32; i++)
-            asm volatile("nop");
+          // BUG: Wait here to ensure the vfmv.f.s instructions all commit
+          //      before the next vsetvli instruction is issued. Otherwise, the
+          //      controller will apply back-pressure to the VFU and one of the
+          //      vfmv.f.s responses will be dropped (SVA: VfuRspDataStable).
+          asm volatile("nop"); // 1 NOP is enough (determined experimentally)
 
           // widen, multiply, and accumulate operands (pre-scaling) to FP32
           asm volatile("vsetvli zero, %0, e16, m2, ta, ma" :: "r"(2 * n_remaining));
