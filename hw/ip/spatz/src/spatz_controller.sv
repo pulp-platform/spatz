@@ -8,6 +8,8 @@
 // the operation issuer, the register scoreboard, and the result write back to
 // the main core.
 
+`include "common_cells/assertions.svh"
+
 module spatz_controller
   import spatz_pkg::*;
   import rvv_pkg::*;
@@ -721,5 +723,15 @@ module spatz_controller
   // Send request off to execution units
   assign spatz_req_o       = spatz_req;
   assign spatz_req_valid_o = spatz_req_valid;
+
+  ////////////////
+  // Assertions //
+  ////////////////
+
+  // VFU response stable while not accepted
+  // BUG: VFU doesn't fully handle backpressure. These assertions surface this bug to users as Spatz
+  //      as Spatz simply deadlocks as a consequence (as the VFU response is dropped).
+  `ASSERT(VfuRspStable, vfu_rsp_valid_i && !vfu_rsp_ready_o |=> vfu_rsp_valid_i)
+  `ASSERT(VfuRspDataStable, vfu_rsp_valid_i && !vfu_rsp_ready_o |=> $stable(vfu_rsp_i))
 
 endmodule : spatz_controller
