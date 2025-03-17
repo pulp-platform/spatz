@@ -17,9 +17,6 @@
 // Author: Matheus Cavalcante, ETH Zurich
 // Author: Max Wipfli <mwipfli@ethz.ch>
 
-#include "data/data_64_64_64.h"
-#include "kernel/mxfp8-matmul.h"
-
 #include <benchmark.h>
 #include <snrt.h>
 #include <stdbool.h>
