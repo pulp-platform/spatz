@@ -765,7 +765,7 @@ module spatz_vlsu
   vrf_req_t [NrInterfaces-1:0] vrf_req_d, vrf_req_q;
   logic     [NrInterfaces-1:0] vrf_req_valid_d, vrf_req_ready_d;
   logic     [NrInterfaces-1:0] vrf_req_valid_q, vrf_req_ready_q;
-  logic     [NrInterfaces-1:0] vrf_valid_rsp_q, vrf_valid_rsp;
+  logic     [NrInterfaces-1:0] vrf_valid_rsp_q, vrf_valid_rsp_d, vrf_valid_rsp;
   logic     [NrInterfaces-1:0] vrf_commit_intf_valid, vrf_commit_intf_valid_q;
   logic     [NrInterfaces-1:0] resp_overlap;
 
@@ -828,7 +828,8 @@ module spatz_vlsu
 
     // To track a valid response on an interface until both interfaces finish and can send to the VRF
     // When this happens the FF is cleared
-    `FFLARNC(vrf_valid_rsp_q[intf], 1'b1, vrf_valid_rsp[intf], vlsu_rsp_valid_o & ~resp_overlap[intf], 1'b0, clk_i, rst_ni)
+    assign vrf_valid_rsp_d[intf] = (vlsu_rsp_valid_o & ~resp_overlap[intf]) ? 1'b0 : (vrf_valid_rsp[intf] ? 1'b1 : vrf_valid_rsp_q[intf]);
+    `FF(vrf_valid_rsp_q[intf], vrf_valid_rsp_d[intf], 1'b0);
 
     // Check if either a previously tracked response or there is a response in the current cycle
     assign vrf_commit_intf_valid[intf] = (vrf_valid_rsp[intf] & vrf_req_ready_q[intf]) | vrf_commit_done_q[intf];
