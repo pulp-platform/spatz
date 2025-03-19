@@ -17,7 +17,7 @@ dependencies:
   register_interface: { git: "https://github.com/pulp-platform/register_interface.git", version: 0.3.8          }
   riscv-dbg:          { git: "https://github.com/pulp-platform/riscv-dbg.git",          version: 0.7.0          }
   tech_cells_generic: { git: "https://github.com/pulp-platform/tech_cells_generic.git", version: 0.2.11         }
-  quadrilatero:       { git: "https://github.com/pulp-platform/quadrilatero.git",       rev:     f4a38dc        } 
+  quadrilatero:       { git: "https://github.com/pulp-platform/quadrilatero.git",       rev:     9c65ef9        } 
 
 export_include_dirs:
   - hw/ip/mem_interface/include
