@@ -101,13 +101,15 @@ int main() {
   #endif
 
   #ifdef CHECK
-  if (cid == 0) {
-    printf("Core0: x_ptr:%x,y_ptr:%x\n", x_int, x=y_int);
-  }
-  snrt_cluster_hw_barrier();
-  if (cid == 1) {
-    printf("Core1: x_ptr:%x,y_ptr:%x\n", x_int, x=y_int);
-  }
+    #ifdef PRINT_RESULT
+    if (cid == 0) {
+      printf("Core0: x_ptr:%x,y_ptr:%x\n", x_int, x=y_int);
+    }
+    snrt_cluster_hw_barrier();
+    if (cid == 1) {
+      printf("Core1: x_ptr:%x,y_ptr:%x\n", x_int, x=y_int);
+    }
+    #endif
   #endif
 
   // Wait for all cores to finish
