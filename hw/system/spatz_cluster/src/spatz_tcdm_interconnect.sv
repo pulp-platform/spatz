@@ -84,20 +84,19 @@ module spatz_tcdm_interconnect #(
   //                        row4 : superbank-7   superbank-8
 
   localparam int unsigned ROWSIZE = $clog2(DataWidth * NumOut / 8);
-  localparam int unsigned ADDRWIDTH = $bits(req_i[0].q.addr);
   addr_t [NumInp-1:0] row;
   logic [NumInp-1:0] [ROWSIZE-1:0] addr_shift;
-  logic [NumInp-1:0] [ADDRWIDTH-1:0] addr_misaligned;
+  logic [NumInp-1:0] [TCDMAddrWidth-1:0] addr_misaligned;
 
   always_comb begin : gen_addr_misalign
     row = '0;
     addr_shift = '0;
     addr_misaligned = '0;
     for (int i = 0; i < NumInp; i++) begin
-      row[i] = req_i[i].q.addr[ADDRWIDTH-1 : ROWSIZE];
+      row[i] = req_i[i].q.addr[TCDMAddrWidth-1 : ROWSIZE];
       addr_shift[i] = (row[i][1:0] == 2'b00) || (row[i][1:0] == 2'b11) ? 0 : (DataWidth * NumOut / 8) / 2;
       addr_misaligned[i] = req_i[i].q.addr + addr_shift[i];
-      addr_misaligned[i][ADDRWIDTH-1 : ROWSIZE] = req_i[i].q.addr[ADDRWIDTH-1 : ROWSIZE];
+      addr_misaligned[i][TCDMAddrWidth-1 : ROWSIZE] = req_i[i].q.addr[TCDMAddrWidth-1 : ROWSIZE];
     end
   end
 
