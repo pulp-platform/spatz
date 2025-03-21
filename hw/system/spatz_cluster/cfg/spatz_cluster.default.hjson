@@ -32,7 +32,7 @@
         "spatz_fpu": true,
         // Timing parameters
         "timing": {
-            "lat_comp_fp32": 1,
+            "lat_comp_fp32": 2, // fpnew runs at a minimum FP32 datpath latency of 2
             "lat_comp_fp64": 2,
             "lat_comp_fp16": 0,
             "lat_comp_fp16_alt": 0,
