@@ -28,6 +28,7 @@ module spatz_tcdm_interconnect #(
   /// Address width on the memory side. Must be smaller than the incoming
   /// address width.
   parameter int unsigned MemAddrWidth          = 32,
+  parameter int unsigned TCDMAddrWidth         = 32,
   /// Data size of the interconnect. Only the data portion counts. The offsets
   /// into the address are derived from this.
   parameter int unsigned DataWidth             = 32,
