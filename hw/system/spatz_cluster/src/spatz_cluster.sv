@@ -1127,6 +1127,7 @@ module spatz_cluster
     .mem_req_t             (mem_req_t           ),
     .mem_rsp_t             (mem_rsp_t           ),
     .MemAddrWidth          (TCDMMemAddrWidth    ),
+    .TCDMAddrWidth         (SPMAddrWidth        ),
     .DataWidth             (DataWidth           ),
     .user_t                (tcdm_user_t         ),
     .MemoryResponseLatency (1 + RegisterTCDMCuts)
