@@ -26,6 +26,13 @@ add_compile_options(-O3 -g -ffunction-sections)
 
 
 # Macro to regenerate the golden values and compile a module
+macro(add_spatz_test_zeroParam name file)
+  set(target_name ${name})
+  add_snitch_test(${target_name} ${file})
+  target_link_libraries(test-${SNITCH_TEST_PREFIX}${target_name} benchmark ${SNITCH_RUNTIME})
+  target_compile_definitions(test-${SNITCH_TEST_PREFIX}${target_name} PUBLIC SNRT_NFPU_PER_CORE=${SNRT_NFPU_PER_CORE})
+endmacro()
+
 macro(add_spatz_test_oneParam name file param1)
   set(target_name ${name}_M${param1})
   add_snitch_test(${target_name} ${file})
@@ -38,6 +45,13 @@ macro(add_spatz_test_twoParam name file param1 param2)
   add_snitch_test(${target_name} ${file})
   target_link_libraries(test-${SNITCH_TEST_PREFIX}${target_name} benchmark ${SNITCH_RUNTIME})
   target_compile_definitions(test-${SNITCH_TEST_PREFIX}${target_name} PUBLIC DATAHEADER="data/data_${param1}_${param2}.h" SNRT_NFPU_PER_CORE=${SNRT_NFPU_PER_CORE})
+endmacro()
+
+macro(add_spatz_test_twoParam_T name file param1 param2 type)
+  set(target_name ${name}_M${param1}_N${param2})
+  add_snitch_test(${target_name} ${file})
+  target_link_libraries(test-${SNITCH_TEST_PREFIX}${target_name} benchmark ${SNITCH_RUNTIME})
+  target_compile_definitions(test-${SNITCH_TEST_PREFIX}${target_name} PUBLIC DATAHEADER="data/data_${param1}_${param2}_${type}.h" PREC=${type} SNRT_NFPU_PER_CORE=${SNRT_NFPU_PER_CORE})
 endmacro()
 
 macro(add_spatz_test_threeParam name file param1 param2 param3)
@@ -106,6 +120,8 @@ add_spatz_test_oneParam(dp-faxpy dp-faxpy/main.c 1024)
 
 add_spatz_test_oneParam(dp-fdotp dp-fdotp/main.c 128)
 add_spatz_test_oneParam(dp-fdotp dp-fdotp/main.c 4096)
+
+add_spatz_test_twoParam_T(gemv gemv/main.c 64 128 64)
 
 add_spatz_test_threeParam(dp-fconv2d dp-fconv2d/main.c 32 32 7)
 add_spatz_test_threeParam(dp-fconv2d dp-fconv2d/main.c 64 64 7)
