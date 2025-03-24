@@ -68,8 +68,13 @@ package ${cfg['pkg_name']};
   % endif
 % endif
 
+% if cfg['norvd']:
+  `AXI_TYPEDEF_ALL(spatz_axi_in, axi_addr_t, axi_id_in_t, logic [31:0], logic [3:0], axi_user_t)
+  `AXI_TYPEDEF_ALL(spatz_axi_out, axi_addr_t, axi_id_out_t, axi_data_t, axi_strb_t, axi_user_t)
+% else :
   `AXI_TYPEDEF_ALL(spatz_axi_in, axi_addr_t, axi_id_in_t, logic [63:0], logic [7:0], axi_user_t)
   `AXI_TYPEDEF_ALL(spatz_axi_out, axi_addr_t, axi_id_out_t, axi_data_t, axi_strb_t, axi_user_t)
+% endif
 
   typedef logic [IwcAxiIdOutWidth-1:0] axi_id_out_iwc_t;
 
@@ -81,7 +86,11 @@ package ${cfg['pkg_name']};
 
   localparam int unsigned NumCores = ${cfg['nr_cores']};
 
+% if cfg['norvd']:
+  localparam int unsigned DataWidth  = 32;
+% else : 
   localparam int unsigned DataWidth  = 64;
+% endif
   localparam int unsigned BeWidth    = DataWidth / 8;
   localparam int unsigned ByteOffset = $clog2(BeWidth);
 

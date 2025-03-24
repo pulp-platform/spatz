@@ -20,7 +20,7 @@
         axi_isolate_enable: false,
         tcdm: {
             size: 128,
-            banks: 8,
+            banks: 16,
         },
         cluster_periph_size: 64, // kB
         dma_data_width: 512,
@@ -31,6 +31,7 @@
         n_fpu: 4,
         n_ipu: 4,
         spatz_fpu: true,
+        norvd: false,
         // Timing parameters
         timing: {
             lat_comp_fp32: 1,

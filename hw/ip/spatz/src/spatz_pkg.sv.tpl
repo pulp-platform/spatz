@@ -32,6 +32,11 @@ package spatz_pkg;
   localparam bit RVF            = `ifdef RVF `RVF `else 0 `endif;
   // Double-precision floating-point support
   localparam bit RVD            = `ifdef RVD `RVD `else 0 `endif;
+% elif cfg['norvd']:
+  // Single-precision floating point support
+  localparam bit RVF            = 1;
+  // Double-precision floating-point support
+  localparam bit RVD            = 0;
 % elif cfg['spatz_fpu']:
   // Single-precision floating point support
   localparam bit RVF            = 1;

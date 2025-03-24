@@ -255,7 +255,7 @@ module testharness (
    *  Simulation control  *
    ************************/
 
-  `REQRSP_TYPEDEF_ALL(reqrsp_cluster_in, axi_addr_t, logic [63:0], logic [7:0])
+  `REQRSP_TYPEDEF_ALL(reqrsp_cluster_in, axi_addr_t, logic [DataWidth-1:0], logic [(DataWidth/8):0])
   reqrsp_cluster_in_req_t to_cluster_req;
   reqrsp_cluster_in_rsp_t to_cluster_rsp;
 

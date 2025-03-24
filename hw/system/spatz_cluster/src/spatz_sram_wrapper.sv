@@ -35,7 +35,7 @@ module spatz_sram_wrapper #(
   /// Bank select type
   parameter type select_t                      = logic [$clog2(NumBanks)-1:0],
   /// Byte enable type
-  parameter type be_t                          = logic [ByteWidth-1:0]
+  parameter type be_t                          = logic [DataWidth/ByteWidth-1:0]
 ) (
   /// Clock, positive edge triggered.
   input  logic                                 clk_i,

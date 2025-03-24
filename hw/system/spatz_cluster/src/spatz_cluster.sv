@@ -105,7 +105,8 @@ module spatz_cluster
     // additional cycle latency, which is taken into account here.
     parameter int                     unsigned               MemoryMacroLatency                 = 1 + RegisterTCDMCuts,
     /// # SRAM Configuration rules needed: L1D Tag + L1D Data + L1D FIFO + L1I Tag + L1I Data
-    parameter int                     unsigned               NrSramCfg                          = 64 + 8 + 2 + ICacheSets + ICacheSets
+    /*** ATTENTION: `NrSramCfg` should be changed if `L1NumDataBank` and `L1NumTagBank` is changed ***/
+    parameter int                     unsigned               NrSramCfg                          = 128 + 8 + 2 + ICacheSets + ICacheSets
   ) (
     /// System clock.
     input  logic                             clk_i,
@@ -189,7 +190,7 @@ module spatz_cluster
   // Narrow AXI network parameters
   localparam int unsigned NarrowIdWidthIn  = AxiIdWidthIn;
   localparam int unsigned NarrowIdWidthOut = NarrowIdWidthIn + $clog2(NrNarrowMasters);
-  localparam int unsigned NarrowDataWidth  = 64;
+  localparam int unsigned NarrowDataWidth  = ELEN;
   localparam int unsigned NarrowUserWidth  = AxiUserWidth;
 
   // TCDM, Peripherals, SoC Request
@@ -238,26 +239,56 @@ module spatz_cluster
     default           : '0
   };
 
-  // L1 Cache
+  // // L1 Cache
+  // // Address width of cache
+  // localparam int unsigned L1AddrWidth     = 32;
+  // // Cache lane width
+  // localparam int unsigned L1LineWidth     = 128;
+  // // Cache ways
+  // localparam int unsigned L1Associativity = 4;
+  // // Pesudo dual bank
+  // localparam int unsigned L1BankFactor    = 2;
+  // // Coalecser window
+  // localparam int unsigned L1CoalFactor    = 2;
+  // // Total number of Data banks
+  // localparam int unsigned L1NumDataBank   = 128;
+  // // SPM view: Number of banks in each bank wrap (Use to mitigate routing complexity of such many banks)
+  // localparam int unsigned L1BankPerWP     = L1NumDataBank / NrBanks;
+  // // 8 * 1024 * 64 / 512 = 1024)
+  // // Number of entrys of L1 Cache
+  // localparam int unsigned L1NumEntry      = NrBanks * TCDMDepth * DataWidth / L1LineWidth;
+  // // Number of bank wraps SPM can see
+  // localparam int unsigned L1NumWrapper    = L1NumDataBank / L1BankPerWP;
+  // // Number of cache entries each cache way has
+  // localparam int unsigned L1CacheWayEntry = L1NumEntry / L1Associativity;
+  // // Number of cache sets each cache way has
+  // localparam int unsigned L1NumSet        = L1CacheWayEntry / L1BankFactor;
+  // // Number of Tag banks
+  // localparam int unsigned L1NumTagBank    = L1BankFactor * L1Associativity;
+  // // Number of lines per bank unit
+  // localparam int unsigned DepthPerBank    = TCDMDepth / L1BankPerWP;
+  // // Cache total size in KB
+  // localparam int unsigned L1Size          = NrBanks * TCDMDepth * DataWidth / 8 / 1024;
+
   // Address width of cache
   localparam int unsigned L1AddrWidth     = 32;
   // Cache lane width
-  localparam int unsigned L1LineWidth     = 512;
-  // Cache ways
-  localparam int unsigned L1Associativity = 4;
-  // Pesudo dual bank
-  localparam int unsigned L1BankFactor    = 2;
+  localparam int unsigned L1LineWidth     = AxiDataWidth;
   // Coalecser window
   localparam int unsigned L1CoalFactor    = 2;
   // Total number of Data banks
-  localparam int unsigned L1NumDataBank   = 64;
+  localparam int unsigned L1NumDataBank   = 128;
+  // Number of bank wraps SPM can see
+  localparam int unsigned L1NumWrapper    = NrBanks;
   // SPM view: Number of banks in each bank wrap (Use to mitigate routing complexity of such many banks)
   localparam int unsigned L1BankPerWP     = L1NumDataBank / NrBanks;
+  // Pesudo dual bank
+  localparam int unsigned L1BankFactor    = 2;
+  // Cache ways (total way number across multiple cache controllers)
+  localparam int unsigned L1Associativity = L1NumDataBank / (L1LineWidth / DataWidth) / L1BankFactor;
   // 8 * 1024 * 64 / 512 = 1024)
-  // Number of entrys of L1 Cache
+  // Number of entrys of L1 Cache (total number across multiple cache controllers)
   localparam int unsigned L1NumEntry      = NrBanks * TCDMDepth * DataWidth / L1LineWidth;
-  // Number of bank wraps SPM can see
-  localparam int unsigned L1NumWrapper    = L1NumDataBank / L1BankPerWP;
   // Number of cache entries each cache way has
   localparam int unsigned L1CacheWayEntry = L1NumEntry / L1Associativity;
   // Number of cache sets each cache way has
@@ -268,12 +299,23 @@ module spatz_cluster
   localparam int unsigned DepthPerBank    = TCDMDepth / L1BankPerWP;
   // Cache total size in KB
   localparam int unsigned L1Size          = NrBanks * TCDMDepth * DataWidth / 8 / 1024;
+  // Number of cache controller
+  localparam int unsigned NumL1CacheCtrl      = 1;
+  // Number of data banks assigned to each cache controller
+  localparam int unsigned NumDataBankPerCtrl  = L1NumDataBank / NumL1CacheCtrl;
+  // Number of tag banks assigned to each cache controller
+  localparam int unsigned NumTagBankPerCtrl   = L1NumTagBank / NumL1CacheCtrl;
+  // Number of ways per cache controller
+  localparam int unsigned L1AssoPerCtrl       = L1Associativity / NumL1CacheCtrl;
+  // Number of entries per cache controller
+  localparam int unsigned L1NumEntryPerCtrl   = L1NumEntry / NumL1CacheCtrl;
 
   // --------
   // Typedefs
   // --------
   typedef logic [AxiAddrWidth-1:0] addr_t;
   typedef logic [NarrowDataWidth-1:0] data_t;
+  typedef logic [63:0] tag_data_t;
   typedef logic [NarrowDataWidth/8-1:0] strb_t;
   typedef logic [AxiDataWidth-1:0] data_dma_t;
   typedef logic [AxiDataWidth/8-1:0] strb_dma_t;
@@ -482,33 +524,33 @@ module spatz_cluster
   tcdm_req_t  [NrTCDMPortsCores-1:0] unmerge_req, strb_hdl_req, cache_req;
   tcdm_rsp_t  [NrTCDMPortsCores-1:0] unmerge_rsp, strb_hdl_rsp, cache_rsp;
 
-  logic       [NrTCDMPortsCores-1:0] cache_req_valid;
-  logic       [NrTCDMPortsCores-1:0] cache_req_ready;
+  logic       [NumL1CacheCtrl-1:0][NrTCDMPortsCores-1:0] cache_req_valid;
+  logic       [NumL1CacheCtrl-1:0][NrTCDMPortsCores-1:0] cache_req_ready;
   tcdm_addr_t [NrTCDMPortsCores-1:0] cache_req_addr;
   tcdm_user_t [NrTCDMPortsCores-1:0] cache_req_meta;
   logic       [NrTCDMPortsCores-1:0] cache_req_write;
   data_t      [NrTCDMPortsCores-1:0] cache_req_data;
 
-  logic       [NrTCDMPortsCores-1:0] cache_rsp_valid;
-  logic       [NrTCDMPortsCores-1:0] cache_rsp_ready;
-  logic       [NrTCDMPortsCores-1:0] cache_rsp_write;
-  data_t      [NrTCDMPortsCores-1:0] cache_rsp_data;
-  tcdm_user_t [NrTCDMPortsCores-1:0] cache_rsp_meta;
+  logic       [NumL1CacheCtrl-1:0][NrTCDMPortsCores-1:0] cache_rsp_valid;
+  logic       [NumL1CacheCtrl-1:0][NrTCDMPortsCores-1:0] cache_rsp_ready;
+  logic       [NumL1CacheCtrl-1:0][NrTCDMPortsCores-1:0] cache_rsp_write;
+  data_t      [NumL1CacheCtrl-1:0][NrTCDMPortsCores-1:0] cache_rsp_data;
+  tcdm_user_t [NumL1CacheCtrl-1:0][NrTCDMPortsCores-1:0] cache_rsp_meta;
 
-  logic            [L1NumTagBank-1:0] l1_tag_bank_req;
-  logic            [L1NumTagBank-1:0] l1_tag_bank_we;
-  tcdm_bank_addr_t [L1NumTagBank-1:0] l1_tag_bank_addr;
-  data_t           [L1NumTagBank-1:0] l1_tag_bank_wdata;
-  logic            [L1NumTagBank-1:0] l1_tag_bank_be;
-  data_t           [L1NumTagBank-1:0] l1_tag_bank_rdata;
+  logic            [NumL1CacheCtrl-1:0][NumTagBankPerCtrl-1:0] l1_tag_bank_req;
+  logic            [NumL1CacheCtrl-1:0][NumTagBankPerCtrl-1:0] l1_tag_bank_we;
+  tcdm_bank_addr_t [NumL1CacheCtrl-1:0][NumTagBankPerCtrl-1:0] l1_tag_bank_addr;
+  tag_data_t       [NumL1CacheCtrl-1:0][NumTagBankPerCtrl-1:0] l1_tag_bank_wdata;
+  logic            [NumL1CacheCtrl-1:0][NumTagBankPerCtrl-1:0] l1_tag_bank_be;
+  tag_data_t       [NumL1CacheCtrl-1:0][NumTagBankPerCtrl-1:0] l1_tag_bank_rdata;
 
-  logic            [L1NumDataBank-1:0] l1_data_bank_req;
-  logic            [L1NumDataBank-1:0] l1_data_bank_we;
-  tcdm_bank_addr_t [L1NumDataBank-1:0] l1_data_bank_addr;
-  data_t           [L1NumDataBank-1:0] l1_data_bank_wdata;
-  logic            [L1NumDataBank-1:0] l1_data_bank_be;
-  data_t           [L1NumDataBank-1:0] l1_data_bank_rdata;
-  logic            [L1NumDataBank-1:0] l1_data_bank_gnt;
+  logic            [NumL1CacheCtrl-1:0][NumDataBankPerCtrl-1:0] l1_data_bank_req;
+  logic            [NumL1CacheCtrl-1:0][NumDataBankPerCtrl-1:0] l1_data_bank_we;
+  tcdm_bank_addr_t [NumL1CacheCtrl-1:0][NumDataBankPerCtrl-1:0] l1_data_bank_addr;
+  data_t           [NumL1CacheCtrl-1:0][NumDataBankPerCtrl-1:0] l1_data_bank_wdata;
+  logic            [NumL1CacheCtrl-1:0][NumDataBankPerCtrl-1:0] l1_data_bank_be;
+  data_t           [NumL1CacheCtrl-1:0][NumDataBankPerCtrl-1:0] l1_data_bank_rdata;
+  logic            [NumL1CacheCtrl-1:0][NumDataBankPerCtrl-1:0] l1_data_bank_gnt;
 
   logic            [L1NumWrapper-1:0][L1BankPerWP-1:0]      l1_cache_wp_req;
   logic            [L1NumWrapper-1:0][L1BankPerWP-1:0]      l1_cache_wp_we;
@@ -518,7 +560,21 @@ module spatz_cluster
   data_t           [L1NumWrapper-1:0][L1BankPerWP-1:0]      l1_cache_wp_rdata;
   logic            [L1NumWrapper-1:0][L1BankPerWP-1:0]      l1_cache_wp_gnt;
 
-  logic                   l1d_insn_valid, l1d_insn_ready;
+  // Used to bridge `l1_data_bank*` and `l1_cache_wp*` signals
+  logic            [L1NumDataBank-1:0] l1_data_bank_req_flat;
+  logic            [L1NumDataBank-1:0] l1_data_bank_we_flat;
+  tcdm_bank_addr_t [L1NumDataBank-1:0] l1_data_bank_addr_flat;
+  data_t           [L1NumDataBank-1:0] l1_data_bank_wdata_flat;
+  logic            [L1NumDataBank-1:0] l1_data_bank_be_flat;
+  data_t           [L1NumDataBank-1:0] l1_data_bank_rdata_flat;
+  logic            [L1NumDataBank-1:0] l1_data_bank_gnt_flat;
+
+  // Requests/Response to/from outside DRAM from cache controllers
+  axi_mst_dma_req_t  [NumL1CacheCtrl-1:0] wide_dcache_mst_req;
+  axi_mst_dma_resp_t [NumL1CacheCtrl-1:0] wide_dcache_mst_rsp;
+
+  logic                   l1d_insn_valid;
+  logic [NumL1CacheCtrl-1:0] l1d_insn_ready;
   logic [1:0]             l1d_insn;
   tcdm_bank_addr_t        cfg_spm_size;
   tcdm_addr_t             spm_size;
@@ -753,13 +809,20 @@ module spatz_cluster
         .rst_ni       (rst_ni               ),
         .spm_size_i   (cfg_spm_size         ),
         /// Cache Side TODO: Connect cache
-        .cache_req_i  (l1_cache_wp_req  [j] ),
-        .cache_we_i   (l1_cache_wp_we   [j] ),
-        .cache_addr_i (l1_cache_wp_addr [j] ),
-        .cache_wdata_i(l1_cache_wp_wdata[j] ),
-        .cache_be_i   (l1_cache_wp_be   [j] ),
-        .cache_rdata_o(l1_cache_wp_rdata[j] ),
-        .cache_ready_o(l1_cache_wp_gnt  [j] ),
+        // .cache_req_i  (l1_cache_wp_req  [j] ),
+        // .cache_we_i   (l1_cache_wp_we   [j] ),
+        // .cache_addr_i (l1_cache_wp_addr [j] ),
+        // .cache_wdata_i(l1_cache_wp_wdata[j] ),
+        // .cache_be_i   (l1_cache_wp_be   [j] ),
+        // .cache_rdata_o(l1_cache_wp_rdata[j] ),
+        // .cache_ready_o(l1_cache_wp_gnt  [j] ),
+        .cache_req_i  (l1_cache_wp_req  [i*BanksPerSuperBank+j] ),
+        .cache_we_i   (l1_cache_wp_we   [i*BanksPerSuperBank+j] ),
+        .cache_addr_i (l1_cache_wp_addr [i*BanksPerSuperBank+j] ),
+        .cache_wdata_i(l1_cache_wp_wdata[i*BanksPerSuperBank+j] ),
+        .cache_be_i   (l1_cache_wp_be   [i*BanksPerSuperBank+j] ),
+        .cache_rdata_o(l1_cache_wp_rdata[i*BanksPerSuperBank+j] ),
+        .cache_ready_o(l1_cache_wp_gnt  [i*BanksPerSuperBank+j] ),
         /// SPM Side
         .spm_req_i    (mem_cs               ),
         .spm_we_i     (mem_wen              ),
@@ -768,7 +831,8 @@ module spatz_cluster
         .spm_be_i     (mem_be               ),
         .spm_rdata_o  (mem_rdata            ),
         /// SRAM Configuration
-        .impl_i       (impl_l1d_data[j]     )
+        // .impl_i       (impl_l1d_data[j]     )
+        .impl_i       (impl_l1d_data[i*BanksPerSuperBank+j]     )
       );
 
       data_t amo_rdata_local;
@@ -875,7 +939,6 @@ module spatz_cluster
   );
 
   localparam int unsigned NumIOPerCore = get_tcdm_ports(0);
-  logic  [NrTCDMPortsCores-1:0] strb_req_ack;
 
   spatz_strbreq_merge_tree #(
     .NumIO              (NrTCDMPortsCores             ),
@@ -914,120 +977,183 @@ module spatz_cluster
       .strb_rsp_o       (strb_hdl_rsp[j]    )
     );
 
-    assign cache_req_valid[j] = cache_req[j].q_valid;
-    assign cache_rsp_ready[j] = cache_pready[j];
+    // Hong TODO: Now we hardwire ports to controller 0.
+    //            But later, we need to distribute these requests to the corresponding controllers based on
+    //            partition id (or address range).
     assign cache_req_addr[j]  = cache_req[j].q.addr;
     assign cache_req_meta[j]  = cache_req[j].q.user;
     assign cache_req_write[j] = cache_req[j].q.write;
     assign cache_req_data[j]  = cache_req[j].q.data;
 
-    assign cache_rsp[j].p_valid = cache_rsp_valid[j];
-    assign cache_rsp[j].q_ready = cache_req_ready[j];
-    assign cache_rsp[j].p.data  = cache_rsp_data[j];
-    assign cache_rsp[j].p.user  = cache_rsp_meta[j];
+    assign cache_rsp[j].p_valid = cache_rsp_valid[0][j];
+    assign cache_rsp[j].q_ready = cache_req_ready[0][j];
+    assign cache_rsp[j].p.data  = cache_rsp_data[0][j];
+    assign cache_rsp[j].p.user  = cache_rsp_meta[0][j];
 
-    assign cache_rsp[j].p.write = cache_rsp_write[j];
+    assign cache_rsp[j].p.write = cache_rsp_write[0][j];
+  end
+
+  for (genvar i = 0; i < NumL1CacheCtrl; i++) begin
+    for (genvar j = 0; j < NrTCDMPortsCores; j++) begin: gen_strb_hdlr
+      // Hong TODO: Now we hardwire ports to controller 0.
+      //            But later, we need to distribute these requests to the corresponding controllers based on
+      //            partition id (or address range).
+      if (i ==0) begin
+        assign cache_req_valid[i][j] = cache_req[j].q_valid;
+        assign cache_rsp_ready[i][j] = cache_pready[j];
+      end else begin
+        assign cache_req_valid[i][j] = 0;
+        assign cache_rsp_ready[i][j] = 0;
+      end
+    end
   end
 
   tcdm_bank_addr_t num_spm_lines;
   assign num_spm_lines = cfg_spm_size * (DepthPerBank / L1Size);
 
-  flamingo_spatz_cache_ctrl #(
-    // Core
-    .NumPorts         (NrTCDMPortsCores  ),
-    .CoalExtFactor    (L1CoalFactor      ),
-    .AddrWidth        (L1AddrWidth       ),
-    .WordWidth        (DataWidth         ),
-    // Cache
-    .NumCacheEntry    (L1NumEntry        ),
-    .CacheLineWidth   (L1LineWidth       ),
-    .SetAssociativity (L1Associativity   ),
-    .BankFactor       (L1BankFactor      ),
-    // Type
-    .core_meta_t      (tcdm_user_t       ),
-    .impl_in_t        (impl_in_t         ),
-    .axi_req_t        (axi_mst_dma_req_t ),
-    .axi_resp_t       (axi_mst_dma_resp_t)
-  ) i_l1_controller (
-    .clk_i                 (clk_i                    ),
-    .rst_ni                (rst_ni                   ),
-    .impl_i                (impl_l1d_fifo            ),
-    // Sync Control
-    .cache_sync_valid_i    (l1d_insn_valid           ),
-    .cache_sync_ready_o    (l1d_insn_ready           ),
-    .cache_sync_insn_i     (l1d_insn                 ),
-    // SPM Size
-    // The calculation of spm region in cache is different
-    // than other modules (needs to times 2)
-    .bank_depth_for_SPM_i  (num_spm_lines            ),
-    // Request
-    .core_req_valid_i      (cache_req_valid          ),
-    .core_req_ready_o      (cache_req_ready          ),
-    .core_req_addr_i       (cache_req_addr           ),
-    .core_req_meta_i       (cache_req_meta           ),
-    .core_req_write_i      (cache_req_write          ),
-    .core_req_wdata_i      (cache_req_data           ),
-    // Response
-    .core_resp_valid_o     (cache_rsp_valid          ),
-    .core_resp_ready_i     (cache_rsp_ready          ),
-    .core_resp_write_o     (cache_rsp_write          ),
-    .core_resp_data_o      (cache_rsp_data           ),
-    .core_resp_meta_o      (cache_rsp_meta           ),
-    // AXI refill
-    .axi_req_o             (wide_axi_mst_req[DCache] ),
-    .axi_resp_i            (wide_axi_mst_rsp[DCache] ),
-    // Tag Banks
-    .tcdm_tag_bank_req_o   (l1_tag_bank_req          ),
-    .tcdm_tag_bank_we_o    (l1_tag_bank_we           ),
-    .tcdm_tag_bank_addr_o  (l1_tag_bank_addr         ),
-    .tcdm_tag_bank_wdata_o (l1_tag_bank_wdata        ),
-    .tcdm_tag_bank_be_o    (l1_tag_bank_be           ),
-    .tcdm_tag_bank_rdata_i (l1_tag_bank_rdata        ),
-    // Data Banks
-    .tcdm_data_bank_req_o  (l1_data_bank_req         ),
-    .tcdm_data_bank_we_o   (l1_data_bank_we          ),
-    .tcdm_data_bank_addr_o (l1_data_bank_addr        ),
-    .tcdm_data_bank_wdata_o(l1_data_bank_wdata       ),
-    .tcdm_data_bank_be_o   (l1_data_bank_be          ),
-    .tcdm_data_bank_rdata_i(l1_data_bank_rdata       ),
-    .tcdm_data_bank_gnt_i  (l1_data_bank_gnt         )
-  );
-
-  for (genvar j = 0; j < L1NumTagBank; j++) begin: gen_l1_tag_banks
-    tc_sram_impl #(
-      .NumWords  (L1CacheWayEntry/L1BankFactor),
-      .DataWidth ($bits(data_t)               ),
-      .ByteWidth ($bits(data_t)               ),
-      .NumPorts  (1                           ),
-      .Latency   (1                           ),
-      .SimInit   ("zeros"                     ),
-      .impl_in_t (impl_in_t                   )
-    ) i_meta_bank (
-      .clk_i  (clk_i               ),
-      .rst_ni (rst_ni              ),
-      .impl_i (impl_l1d_tag     [j]),
-      .impl_o (/* unsed */         ),
-      .req_i  (l1_tag_bank_req  [j]),
-      .we_i   (l1_tag_bank_we   [j]),
-      .addr_i (l1_tag_bank_addr [j]),
-      .wdata_i(l1_tag_bank_wdata[j]),
-      .be_i   (l1_tag_bank_be   [j]),
-      .rdata_o(l1_tag_bank_rdata[j])
+  for (genvar i = 0; i < NumL1CacheCtrl; i++) begin: gen_l1_cache_ctrl
+    flamingo_spatz_cache_ctrl #(
+      // Core
+      .NumPorts         (NrTCDMPortsCores  ),
+      .CoalExtFactor    (L1CoalFactor      ),
+      .AddrWidth        (L1AddrWidth       ),
+      .WordWidth        (DataWidth         ),
+      // Cache
+      .NumCacheEntry    (L1NumEntryPerCtrl ),
+      .CacheLineWidth   (L1LineWidth       ),
+      .SetAssociativity (L1AssoPerCtrl     ),
+      .BankFactor       (L1BankFactor      ),
+      // Type
+      .core_meta_t      (tcdm_user_t       ),
+      .impl_in_t        (impl_in_t         ),
+      .axi_req_t        (axi_mst_dma_req_t ),
+      .axi_resp_t       (axi_mst_dma_resp_t)
+    ) i_l1_controller (
+      .clk_i                 (clk_i                    ),
+      .rst_ni                (rst_ni                   ),
+      .impl_i                (impl_l1d_fifo            ),
+      // Sync Control
+      .cache_sync_valid_i    (l1d_insn_valid           ),
+      .cache_sync_ready_o    (l1d_insn_ready[i]        ),
+      .cache_sync_insn_i     (l1d_insn                 ),
+      // SPM Size
+      // The calculation of spm region in cache is different
+      // than other modules (needs to times 2)
+      .bank_depth_for_SPM_i  (num_spm_lines            ),
+      // Request
+      .core_req_valid_i      (cache_req_valid[i]          ),
+      .core_req_ready_o      (cache_req_ready[i]          ),
+      .core_req_addr_i       (cache_req_addr           ),
+      .core_req_meta_i       (cache_req_meta           ),
+      .core_req_write_i      (cache_req_write          ),
+      .core_req_wdata_i      (cache_req_data           ),
+      // Response
+      .core_resp_valid_o     (cache_rsp_valid[i]          ),
+      .core_resp_ready_i     (cache_rsp_ready[i]          ),
+      .core_resp_write_o     (cache_rsp_write[i]          ),
+      .core_resp_data_o      (cache_rsp_data[i]           ),
+      .core_resp_meta_o      (cache_rsp_meta[i]           ),
+      // AXI refill
+      // Hong TODO: Replace it with signal `wide_axi_mst_cachectrl[i]`
+      //            Then these req across different cache controller will
+      //            go through an arbitor to notify which one should be 
+      //            taken, because we only have one `wide_axi_mst_req[DCache]`
+      //            to send the request to outside DRAM
+      .axi_req_o             (wide_dcache_mst_req[i] ),
+      .axi_resp_i            (wide_dcache_mst_rsp[i] ),
+      // .axi_resp_i            (wide_axi_mst_rsp[DCache] ),
+      // Tag Banks
+      .tcdm_tag_bank_req_o   (l1_tag_bank_req[i]          ),
+      .tcdm_tag_bank_we_o    (l1_tag_bank_we[i]           ),
+      .tcdm_tag_bank_addr_o  (l1_tag_bank_addr[i]         ),
+      .tcdm_tag_bank_wdata_o (l1_tag_bank_wdata[i]        ),
+      .tcdm_tag_bank_be_o    (l1_tag_bank_be[i]           ),
+      .tcdm_tag_bank_rdata_i (l1_tag_bank_rdata[i]        ),
+      // Data Banks
+      .tcdm_data_bank_req_o  (l1_data_bank_req[i]         ),
+      .tcdm_data_bank_we_o   (l1_data_bank_we[i]          ),
+      .tcdm_data_bank_addr_o (l1_data_bank_addr[i]        ),
+      .tcdm_data_bank_wdata_o(l1_data_bank_wdata[i]       ),
+      .tcdm_data_bank_be_o   (l1_data_bank_be[i]          ),
+      .tcdm_data_bank_rdata_i(l1_data_bank_rdata[i]       ),
+      .tcdm_data_bank_gnt_i  (l1_data_bank_gnt[i]         )
     );
   end
 
-  for (genvar i = 0; i < L1NumWrapper; i++) begin
-    for (genvar j = 0; j < L1Associativity*L1BankFactor; j++) begin
-      assign l1_cache_wp_req  [i][j] = l1_data_bank_req  [i + j*L1NumWrapper];
-      assign l1_cache_wp_we   [i][j] = l1_data_bank_we   [i + j*L1NumWrapper];
-      assign l1_cache_wp_addr [i][j] = l1_data_bank_addr [i + j*L1NumWrapper];
-      assign l1_cache_wp_wdata[i][j] = l1_data_bank_wdata[i + j*L1NumWrapper];
-      assign l1_cache_wp_be   [i][j] = (l1_data_bank_be  [i + j*L1NumWrapper]) ? {(NarrowDataWidth/8){1'b1}} : '0;
-
-      assign l1_data_bank_rdata[i + j*L1NumWrapper] = l1_cache_wp_rdata[i][j];
-      assign l1_data_bank_gnt  [i + j*L1NumWrapper] = l1_cache_wp_gnt  [i][j];
+  for (genvar i = 0; i < NumL1CacheCtrl; i++) begin: gen_l1_tag_banks
+    for (genvar j = 0; j < NumTagBankPerCtrl; j++) begin
+      tc_sram_impl #(
+        .NumWords  (L1CacheWayEntry/L1BankFactor),
+        // .DataWidth ($bits(data_t)               ),
+        // .ByteWidth ($bits(data_t)               ),
+        .DataWidth ($bits(tag_data_t)               ),
+        .ByteWidth ($bits(tag_data_t)               ),
+        .NumPorts  (1                           ),
+        .Latency   (1                           ),
+        .SimInit   ("zeros"                     ),
+        .impl_in_t (impl_in_t                   )
+      ) i_meta_bank (
+        .clk_i  (clk_i               ),
+        .rst_ni (rst_ni              ),
+        .impl_i (impl_l1d_tag     [i*NumL1CacheCtrl+j]),
+        .impl_o (/* unsed */         ),
+        .req_i  (l1_tag_bank_req  [i][j]),
+        .we_i   (l1_tag_bank_we   [i][j]),
+        .addr_i (l1_tag_bank_addr [i][j]),
+        .wdata_i(l1_tag_bank_wdata[i][j]),
+        .be_i   (l1_tag_bank_be   [i][j]),
+        .rdata_o(l1_tag_bank_rdata[i][j])
+      );
     end
   end
+
+  // Wire cache requests from controller ports to data banks
+  for (genvar i = 0; i < NumL1CacheCtrl; i++) begin
+    for (genvar j = 0; j < NumDataBankPerCtrl; j++) begin
+      assign l1_data_bank_req_flat  [i*NumDataBankPerCtrl+j]  = l1_data_bank_req  [i][j];
+      assign l1_data_bank_we_flat   [i*NumDataBankPerCtrl+j]  = l1_data_bank_we   [i][j];
+      assign l1_data_bank_addr_flat [i*NumDataBankPerCtrl+j]  = l1_data_bank_addr [i][j];
+      assign l1_data_bank_wdata_flat[i*NumDataBankPerCtrl+j]  = l1_data_bank_wdata[i][j];
+      assign l1_data_bank_be_flat   [i*NumDataBankPerCtrl+j]  = l1_data_bank_be   [i][j];
+
+      assign l1_data_bank_rdata[i][j] = l1_data_bank_rdata_flat [i*NumDataBankPerCtrl+j];
+      assign l1_data_bank_gnt[i][j]   = l1_data_bank_gnt_flat[i*NumDataBankPerCtrl+j];
+    end
+  end
+
+  for (genvar i = 0; i < NrSuperBanks; i++) begin
+    // 8 Bank Wraps per SuperBank
+    for (genvar j = 0; j < BanksPerSuperBank; j++) begin
+      // 8 Banks per Bank Wrap
+      for (genvar k = 0; k < L1BankPerWP; k++) begin
+        // [i*8+j][k]         => [0][0], [0][1], [0][2]....
+        // [i*8*4 + j*4 + k]  => [0],    [1]   , [2], ...
+        assign l1_cache_wp_req   [i*BanksPerSuperBank+j][k] = l1_data_bank_req_flat   [i*BanksPerSuperBank*L1BankPerWP+j*L1BankPerWP+k];
+        assign l1_cache_wp_we    [i*BanksPerSuperBank+j][k] = l1_data_bank_we_flat    [i*BanksPerSuperBank*L1BankPerWP+j*L1BankPerWP+k];
+        assign l1_cache_wp_addr  [i*BanksPerSuperBank+j][k] = l1_data_bank_addr_flat  [i*BanksPerSuperBank*L1BankPerWP+j*L1BankPerWP+k];
+        assign l1_cache_wp_wdata [i*BanksPerSuperBank+j][k] = l1_data_bank_wdata_flat [i*BanksPerSuperBank*L1BankPerWP+j*L1BankPerWP+k];
+        // L1 Cache has a write granularity of an entire cache line
+        assign l1_cache_wp_be    [i*BanksPerSuperBank+j][k] =
+              (l1_data_bank_be_flat[i*BanksPerSuperBank*L1BankPerWP+j*L1BankPerWP+k]) ? {(NarrowDataWidth/8){1'b1}} : '0;
+
+        assign l1_data_bank_rdata_flat[i*BanksPerSuperBank*L1BankPerWP+j*L1BankPerWP+k] = l1_cache_wp_rdata[i*BanksPerSuperBank+j][k];
+        assign l1_data_bank_gnt_flat  [i*BanksPerSuperBank*L1BankPerWP+j*L1BankPerWP+k] = l1_cache_wp_gnt  [i*BanksPerSuperBank+j][k];
+      end
+    end
+  end
+
+  // Hong TODO: Now only have one cache controller, so I hard-wire 
+  //            `wide_dcache_mst_req/wide_dcache_mst_rsp` to `wide_axi_mst_req[DCache]/wide_axi_mst_rsp[DCache]`
+  //            But later we need a crossbar to arbitate which one to take out
+  assign wide_axi_mst_req[DCache] = wide_dcache_mst_req[0];
+  for (genvar i = 0; i < NumL1CacheCtrl; i++) begin
+    if (i == 0) begin
+      assign wide_dcache_mst_rsp[i]   = wide_axi_mst_rsp[DCache];
+    end else begin
+      assign wide_dcache_mst_rsp[i]   = '0;
+    end
+  end
+
 
   // We have multiple banks form a pesudo bank (BankWP)
   spatz_tcdm_interconnect #(
@@ -1408,7 +1534,7 @@ module spatz_cluster
     .l1d_spm_size_o           (cfg_spm_size          ),
     .l1d_insn_o               (l1d_insn              ),
     .l1d_insn_valid_o         (l1d_insn_valid        ),
-    .l1d_insn_ready_i         (l1d_insn_ready        ),
+    .l1d_insn_ready_i         (&l1d_insn_ready       ),
     .l1d_busy_o               (l1d_busy              )
   );
 
