@@ -331,7 +331,6 @@ module spatz_cluster
   typedef logic [SPMAddrWidth-1:0] spm_addr_t;
 
   typedef logic [$clog2(NumSpatzOutstandingLoads[0])-1:0] reqid_t;
-  typedef logic [$clog2(NumSpatzOutstandingLoads[0]):0]   tcdm_meta_t;
 
   typedef logic [$clog2(L1NumSet)-1:0] tcdm_bank_addr_t;
 
@@ -340,6 +339,13 @@ module spatz_cluster
     logic is_core;
     reqid_t req_id;
   } tcdm_user_t;
+
+  // The metadata type used to restore the information from req to rsp
+  typedef struct packed {
+    tcdm_user_t user;
+    logic       write;
+  } tcdm_meta_t;
+
 
   // Regbus peripherals.
   `AXI_TYPEDEF_ALL(axi_mst, addr_t, id_mst_t, data_t, strb_t, user_t)
@@ -767,6 +773,13 @@ module spatz_cluster
     mem_req_t [BanksPerSuperBank-1:0] amo_req;
     mem_rsp_t [BanksPerSuperBank-1:0] amo_rsp;
 
+    logic           [BanksPerSuperBank-1:0] mem_cs, mem_wen;
+    tcdm_mem_addr_t [BanksPerSuperBank-1:0] mem_add;
+    tcdm_mem_addr_t [BanksPerSuperBank-1:0] mem_add_max;
+    strb_t          [BanksPerSuperBank-1:0] mem_be;
+    data_t          [BanksPerSuperBank-1:0] mem_rdata, mem_wdata;
+    tcdm_meta_t     [BanksPerSuperBank-1:0] bank_req_meta, mem_req_meta, bank_rsp_meta;
+
     mem_wide_narrow_mux #(
       .NarrowDataWidth  (NarrowDataWidth),
       .WideDataWidth    (AxiDataWidth   ),
@@ -788,51 +801,23 @@ module spatz_cluster
 
     // generate banks of the superbank
     for (genvar j = 0; j < BanksPerSuperBank; j++) begin : gen_tcdm_bank
-
-      logic mem_cs, mem_wen;
-      tcdm_mem_addr_t mem_add;
-      tcdm_mem_addr_t mem_add_max;
-      strb_t mem_be;
-      data_t mem_rdata, mem_wdata;
-      tcdm_meta_t mem_req_meta;
-      assign mem_add_max = 0 - 1'b1;
-
-      spatz_sram_wrapper #(
-        .NumBanks              (L1BankPerWP     ),
-        .NumWords              (TCDMDepth       ),
-        .ByteWidth             (8               ),
-        .DataWidth             (DataWidth       ),
-        .MemoryResponseLatency (1               ),
-        .impl_in_t             (impl_in_t       )
-      ) i_data_mem (
-        .clk_i        (clk_i                ),
-        .rst_ni       (rst_ni               ),
-        .spm_size_i   (cfg_spm_size         ),
-        /// Cache Side TODO: Connect cache
-        // .cache_req_i  (l1_cache_wp_req  [j] ),
-        // .cache_we_i   (l1_cache_wp_we   [j] ),
-        // .cache_addr_i (l1_cache_wp_addr [j] ),
-        // .cache_wdata_i(l1_cache_wp_wdata[j] ),
-        // .cache_be_i   (l1_cache_wp_be   [j] ),
-        // .cache_rdata_o(l1_cache_wp_rdata[j] ),
-        // .cache_ready_o(l1_cache_wp_gnt  [j] ),
-        .cache_req_i  (l1_cache_wp_req  [i*BanksPerSuperBank+j] ),
-        .cache_we_i   (l1_cache_wp_we   [i*BanksPerSuperBank+j] ),
-        .cache_addr_i (l1_cache_wp_addr [i*BanksPerSuperBank+j] ),
-        .cache_wdata_i(l1_cache_wp_wdata[i*BanksPerSuperBank+j] ),
-        .cache_be_i   (l1_cache_wp_be   [i*BanksPerSuperBank+j] ),
-        .cache_rdata_o(l1_cache_wp_rdata[i*BanksPerSuperBank+j] ),
-        .cache_ready_o(l1_cache_wp_gnt  [i*BanksPerSuperBank+j] ),
-        /// SPM Side
-        .spm_req_i    (mem_cs               ),
-        .spm_we_i     (mem_wen              ),
-        .spm_addr_i   (mem_add_max - mem_add), // swap the position of stack and data
-        .spm_wdata_i  (mem_wdata            ),
-        .spm_be_i     (mem_be               ),
-        .spm_rdata_o  (mem_rdata            ),
-        /// SRAM Configuration
-        // .impl_i       (impl_l1d_data[j]     )
-        .impl_i       (impl_l1d_data[i*BanksPerSuperBank+j]     )
+       tc_sram_impl #(
+        .NumWords  (TCDMDepth),
+        .DataWidth (DataWidth),
+        .ByteWidth (8        ),
+        .NumPorts  (1        ),
+        .Latency   (1        )
+      ) i_spm_mem (
+        .clk_i   (clk_i       ),
+        .rst_ni  (rst_ni      ),
+        .impl_i  ('0          ),
+        .impl_o  (/* Unused */),
+        .req_i   (mem_cs[j]      ),
+        .we_i    (mem_wen[j]     ),
+        .addr_i  (mem_add[j]     ),
+        .wdata_i (mem_wdata[j]   ),
+        .be_i    (mem_be[j]      ),
+        .rdata_o (mem_rdata[j]   )
       );
 
       data_t amo_rdata_local;
@@ -855,12 +840,12 @@ module spatz_cluster
         .is_core_i      (amo_req[j].q.user.is_core ),
         .rdata_o        (amo_rdata_local           ),
         .amo_i          (amo_req[j].q.amo          ),
-        .mem_req_o      (mem_cs                    ),
-        .mem_add_o      (mem_add                   ),
-        .mem_wen_o      (mem_wen                   ),
-        .mem_wdata_o    (mem_wdata                 ),
-        .mem_be_o       (mem_be                    ),
-        .mem_rdata_i    (mem_rdata                 ),
+        .mem_req_o      (mem_cs[j]                 ),
+        .mem_add_o      (mem_add[j]                ),
+        .mem_wen_o      (mem_wen[j]                ),
+        .mem_wdata_o    (mem_wdata[j]              ),
+        .mem_be_o       (mem_be[j]                 ),
+        .mem_rdata_i    (mem_rdata[j]              ),
         .dma_access_i   (sb_dma_req[i].q_valid     ),
         // TODO(zarubaf): Signal AMO conflict somewhere. Socregs?
         .amo_conflict_o (/* Unused */              )
@@ -877,30 +862,33 @@ module spatz_cluster
         .d_o   (amo_rsp[j].p.data)
       );
 
-      // delay the req_id two cycles: 1 for bank access, 1 for reg
-      shift_reg #(
-        .dtype(tcdm_meta_t           ),
-        .Depth(int'(RegisterTCDMCuts))
-      ) i_reqid_pipe1 (
-        .clk_i (clk_i            ),
-        .rst_ni(rst_ni           ),
-        .d_i   ({amo_req[j].q.user.req_id, amo_req[j].q.write}),
-        .d_o   (mem_req_meta     )
-      );
-      shift_reg #(
-        .dtype(tcdm_meta_t           ),
-        .Depth(int'(RegisterTCDMCuts))
-      ) i_reqid_pipe2 (
-        .clk_i (clk_i            ),
-        .rst_ni(rst_ni           ),
-        .d_i   (mem_req_meta     ),
-        .d_o   ({amo_rsp[j].p.user.req_id, amo_rsp[j].p.write})
-      );
+      // the meta data information
+      assign bank_req_meta[j] = '{
+        user:  amo_req[j].q.user,
+        write: amo_req[j].q.write,
+        default: '0
+      };
+      assign amo_rsp[j].p.user  = bank_rsp_meta[j].user;
+      assign amo_rsp[j].p.write = bank_rsp_meta[j].write;
 
-      // tie unused field to 0
-      // TODO: remove these fields
-      assign amo_rsp[j].p.user.core_id = '0;
-      assign amo_rsp[j].p.user.is_core = '0;
+      shift_reg #(
+        .dtype(tcdm_meta_t           ),
+        .Depth(int'(RegisterTCDMCuts))
+      ) i_req_meta_pipe (
+        .clk_i (clk_i            ),
+        .rst_ni(rst_ni           ),
+        .d_i   (bank_req_meta[j] ),
+        .d_o   (mem_req_meta[j]  )
+      );
+      shift_reg #(
+        .dtype(tcdm_meta_t           ),
+        .Depth(int'(RegisterTCDMCuts))
+      ) i_rsp_meta_pipe (
+        .clk_i (clk_i            ),
+        .rst_ni(rst_ni           ),
+        .d_i   (mem_req_meta[j]  ),
+        .d_o   (bank_rsp_meta[j] )
+      );
     end
   end
 
@@ -933,9 +921,9 @@ module spatz_cluster
     // Output
     .spm_req_o            (spm_req         ),
     .spm_rsp_i            (spm_rsp         ),
-    .cache_req_o          (unmerge_req       ),
-    .cache_pready_o       (unmerge_pready    ),
-    .cache_rsp_i          (unmerge_rsp       )
+    .cache_req_o          (unmerge_req     ),
+    .cache_pready_o       (unmerge_pready  ),
+    .cache_rsp_i          (unmerge_rsp     )
   );
 
   localparam int unsigned NumIOPerCore = get_tcdm_ports(0);
@@ -980,6 +968,11 @@ module spatz_cluster
     // Hong TODO: Now we hardwire ports to controller 0.
     //            But later, we need to distribute these requests to the corresponding controllers based on
     //            partition id (or address range).
+
+    // Diyou: Here we need to group wires in set of ports:
+    //        In case of Spatz4, we will have 5 ports, each ports have N inputs (number of cores)
+    //        Each cache controller should only have 5 input ports instead of 10.
+    // Queation: Should we bypass the strb unit for now? They may be broken if we adjust the number of ports
     assign cache_req_addr[j]  = cache_req[j].q.addr;
     assign cache_req_meta[j]  = cache_req[j].q.user;
     assign cache_req_write[j] = cache_req[j].q.write;
@@ -1011,7 +1004,7 @@ module spatz_cluster
   tcdm_bank_addr_t num_spm_lines;
   assign num_spm_lines = cfg_spm_size * (DepthPerBank / L1Size);
 
-  for (genvar i = 0; i < NumL1CacheCtrl; i++) begin: gen_l1_cache_ctrl
+  for (genvar cb = 0; cb < NumL1CacheCtrl; cb++) begin: gen_l1_cache_ctrl
     flamingo_spatz_cache_ctrl #(
       // Core
       .NumPorts         (NrTCDMPortsCores  ),
@@ -1034,58 +1027,53 @@ module spatz_cluster
       .impl_i                (impl_l1d_fifo            ),
       // Sync Control
       .cache_sync_valid_i    (l1d_insn_valid           ),
-      .cache_sync_ready_o    (l1d_insn_ready[i]        ),
+      .cache_sync_ready_o    (l1d_insn_ready[cb]       ),
       .cache_sync_insn_i     (l1d_insn                 ),
       // SPM Size
       // The calculation of spm region in cache is different
       // than other modules (needs to times 2)
       .bank_depth_for_SPM_i  (num_spm_lines            ),
       // Request
-      .core_req_valid_i      (cache_req_valid[i]          ),
-      .core_req_ready_o      (cache_req_ready[i]          ),
+      .core_req_valid_i      (cache_req_valid[cb]      ),
+      .core_req_ready_o      (cache_req_ready[cb]      ),
       .core_req_addr_i       (cache_req_addr           ),
       .core_req_meta_i       (cache_req_meta           ),
       .core_req_write_i      (cache_req_write          ),
       .core_req_wdata_i      (cache_req_data           ),
       // Response
-      .core_resp_valid_o     (cache_rsp_valid[i]          ),
-      .core_resp_ready_i     (cache_rsp_ready[i]          ),
-      .core_resp_write_o     (cache_rsp_write[i]          ),
-      .core_resp_data_o      (cache_rsp_data[i]           ),
-      .core_resp_meta_o      (cache_rsp_meta[i]           ),
+      .core_resp_valid_o     (cache_rsp_valid[cb]      ),
+      .core_resp_ready_i     (cache_rsp_ready[cb]      ),
+      .core_resp_write_o     (cache_rsp_write[cb]      ),
+      .core_resp_data_o      (cache_rsp_data[cb]       ),
+      .core_resp_meta_o      (cache_rsp_meta[cb]       ),
       // AXI refill
-      // Hong TODO: Replace it with signal `wide_axi_mst_cachectrl[i]`
+      // Hong TODO: Replace it with signal `wide_axi_mst_cachectrl[cb]`
       //            Then these req across different cache controller will
       //            go through an arbitor to notify which one should be 
       //            taken, because we only have one `wide_axi_mst_req[DCache]`
       //            to send the request to outside DRAM
-      .axi_req_o             (wide_dcache_mst_req[i] ),
-      .axi_resp_i            (wide_dcache_mst_rsp[i] ),
-      // .axi_resp_i            (wide_axi_mst_rsp[DCache] ),
+      .axi_req_o             (wide_dcache_mst_req[cb]  ),
+      .axi_resp_i            (wide_dcache_mst_rsp[cb]  ),
       // Tag Banks
-      .tcdm_tag_bank_req_o   (l1_tag_bank_req[i]          ),
-      .tcdm_tag_bank_we_o    (l1_tag_bank_we[i]           ),
-      .tcdm_tag_bank_addr_o  (l1_tag_bank_addr[i]         ),
-      .tcdm_tag_bank_wdata_o (l1_tag_bank_wdata[i]        ),
-      .tcdm_tag_bank_be_o    (l1_tag_bank_be[i]           ),
-      .tcdm_tag_bank_rdata_i (l1_tag_bank_rdata[i]        ),
+      .tcdm_tag_bank_req_o   (l1_tag_bank_req[cb]      ),
+      .tcdm_tag_bank_we_o    (l1_tag_bank_we[cb]       ),
+      .tcdm_tag_bank_addr_o  (l1_tag_bank_addr[cb]     ),
+      .tcdm_tag_bank_wdata_o (l1_tag_bank_wdata[cb]    ),
+      .tcdm_tag_bank_be_o    (l1_tag_bank_be[cb]       ),
+      .tcdm_tag_bank_rdata_i (l1_tag_bank_rdata[cb]    ),
       // Data Banks
-      .tcdm_data_bank_req_o  (l1_data_bank_req[i]         ),
-      .tcdm_data_bank_we_o   (l1_data_bank_we[i]          ),
-      .tcdm_data_bank_addr_o (l1_data_bank_addr[i]        ),
-      .tcdm_data_bank_wdata_o(l1_data_bank_wdata[i]       ),
-      .tcdm_data_bank_be_o   (l1_data_bank_be[i]          ),
-      .tcdm_data_bank_rdata_i(l1_data_bank_rdata[i]       ),
-      .tcdm_data_bank_gnt_i  (l1_data_bank_gnt[i]         )
+      .tcdm_data_bank_req_o  (l1_data_bank_req[cb]     ),
+      .tcdm_data_bank_we_o   (l1_data_bank_we[cb]      ),
+      .tcdm_data_bank_addr_o (l1_data_bank_addr[cb]    ),
+      .tcdm_data_bank_wdata_o(l1_data_bank_wdata[cb]   ),
+      .tcdm_data_bank_be_o   (l1_data_bank_be[cb]      ),
+      .tcdm_data_bank_rdata_i(l1_data_bank_rdata[cb]   ),
+      .tcdm_data_bank_gnt_i  (l1_data_bank_gnt[cb]     )
     );
-  end
 
-  for (genvar i = 0; i < NumL1CacheCtrl; i++) begin: gen_l1_tag_banks
     for (genvar j = 0; j < NumTagBankPerCtrl; j++) begin
       tc_sram_impl #(
         .NumWords  (L1CacheWayEntry/L1BankFactor),
-        // .DataWidth ($bits(data_t)               ),
-        // .ByteWidth ($bits(data_t)               ),
         .DataWidth ($bits(tag_data_t)               ),
         .ByteWidth ($bits(tag_data_t)               ),
         .NumPorts  (1                           ),
@@ -1095,52 +1083,74 @@ module spatz_cluster
       ) i_meta_bank (
         .clk_i  (clk_i               ),
         .rst_ni (rst_ni              ),
-        .impl_i (impl_l1d_tag     [i*NumL1CacheCtrl+j]),
+        .impl_i (impl_l1d_tag     [cb*NumL1CacheCtrl+j]),
         .impl_o (/* unsed */         ),
-        .req_i  (l1_tag_bank_req  [i][j]),
-        .we_i   (l1_tag_bank_we   [i][j]),
-        .addr_i (l1_tag_bank_addr [i][j]),
-        .wdata_i(l1_tag_bank_wdata[i][j]),
-        .be_i   (l1_tag_bank_be   [i][j]),
-        .rdata_o(l1_tag_bank_rdata[i][j])
+        .req_i  (l1_tag_bank_req  [cb][j]),
+        .we_i   (l1_tag_bank_we   [cb][j]),
+        .addr_i (l1_tag_bank_addr [cb][j]),
+        .wdata_i(l1_tag_bank_wdata[cb][j]),
+        .be_i   (l1_tag_bank_be   [cb][j]),
+        .rdata_o(l1_tag_bank_rdata[cb][j])
       );
     end
-  end
 
-  // Wire cache requests from controller ports to data banks
-  for (genvar i = 0; i < NumL1CacheCtrl; i++) begin
-    for (genvar j = 0; j < NumDataBankPerCtrl; j++) begin
-      assign l1_data_bank_req_flat  [i*NumDataBankPerCtrl+j]  = l1_data_bank_req  [i][j];
-      assign l1_data_bank_we_flat   [i*NumDataBankPerCtrl+j]  = l1_data_bank_we   [i][j];
-      assign l1_data_bank_addr_flat [i*NumDataBankPerCtrl+j]  = l1_data_bank_addr [i][j];
-      assign l1_data_bank_wdata_flat[i*NumDataBankPerCtrl+j]  = l1_data_bank_wdata[i][j];
-      assign l1_data_bank_be_flat   [i*NumDataBankPerCtrl+j]  = l1_data_bank_be   [i][j];
+    for (genvar j = 0; j < NumDataBankPerCtrl; j++) begin : gen_l1_data_banks
+      tc_sram_impl #(
+        .NumWords   (L1CacheWayEntry/L1BankFactor),
+        .DataWidth  (DataWidth),
+        .ByteWidth  (DataWidth),
+        .NumPorts   (1),
+        .Latency    (1),
+        .SimInit    ("zeros")
+      ) i_data_bank (
+        .clk_i  (clk_i                   ),
+        .rst_ni (rst_ni                  ),
+        .impl_i ('0                      ),
+        .impl_o (/* unsed */             ),
+        .req_i  (l1_data_bank_req  [cb][j]),
+        .we_i   (l1_data_bank_we   [cb][j]),
+        .addr_i (l1_data_bank_addr [cb][j]),
+        .wdata_i(l1_data_bank_wdata[cb][j]),
+        .be_i   (l1_data_bank_be   [cb][j]),
+        .rdata_o(l1_data_bank_rdata[cb][j])
+      );
 
-      assign l1_data_bank_rdata[i][j] = l1_data_bank_rdata_flat [i*NumDataBankPerCtrl+j];
-      assign l1_data_bank_gnt[i][j]   = l1_data_bank_gnt_flat[i*NumDataBankPerCtrl+j];
+      assign l1_data_bank_gnt[cb][j] = 1'b1;
     end
+
+    // // Wire cache requests from controller ports to data banks
+    // for (genvar j = 0; j < NumDataBankPerCtrl; j++) begin
+    //   assign l1_data_bank_req_flat  [i*NumDataBankPerCtrl+j]  = l1_data_bank_req  [i][j];
+    //   assign l1_data_bank_we_flat   [i*NumDataBankPerCtrl+j]  = l1_data_bank_we   [i][j];
+    //   assign l1_data_bank_addr_flat [i*NumDataBankPerCtrl+j]  = l1_data_bank_addr [i][j];
+    //   assign l1_data_bank_wdata_flat[i*NumDataBankPerCtrl+j]  = l1_data_bank_wdata[i][j];
+    //   assign l1_data_bank_be_flat   [i*NumDataBankPerCtrl+j]  = l1_data_bank_be   [i][j];
+
+    //   assign l1_data_bank_rdata[i][j] = l1_data_bank_rdata_flat [i*NumDataBankPerCtrl+j];
+    //   assign l1_data_bank_gnt[i][j]   = l1_data_bank_gnt_flat[i*NumDataBankPerCtrl+j];
+    // end
   end
 
-  for (genvar i = 0; i < NrSuperBanks; i++) begin
-    // 8 Bank Wraps per SuperBank
-    for (genvar j = 0; j < BanksPerSuperBank; j++) begin
-      // 8 Banks per Bank Wrap
-      for (genvar k = 0; k < L1BankPerWP; k++) begin
-        // [i*8+j][k]         => [0][0], [0][1], [0][2]....
-        // [i*8*4 + j*4 + k]  => [0],    [1]   , [2], ...
-        assign l1_cache_wp_req   [i*BanksPerSuperBank+j][k] = l1_data_bank_req_flat   [i*BanksPerSuperBank*L1BankPerWP+j*L1BankPerWP+k];
-        assign l1_cache_wp_we    [i*BanksPerSuperBank+j][k] = l1_data_bank_we_flat    [i*BanksPerSuperBank*L1BankPerWP+j*L1BankPerWP+k];
-        assign l1_cache_wp_addr  [i*BanksPerSuperBank+j][k] = l1_data_bank_addr_flat  [i*BanksPerSuperBank*L1BankPerWP+j*L1BankPerWP+k];
-        assign l1_cache_wp_wdata [i*BanksPerSuperBank+j][k] = l1_data_bank_wdata_flat [i*BanksPerSuperBank*L1BankPerWP+j*L1BankPerWP+k];
-        // L1 Cache has a write granularity of an entire cache line
-        assign l1_cache_wp_be    [i*BanksPerSuperBank+j][k] =
-              (l1_data_bank_be_flat[i*BanksPerSuperBank*L1BankPerWP+j*L1BankPerWP+k]) ? {(NarrowDataWidth/8){1'b1}} : '0;
+  // for (genvar i = 0; i < NrSuperBanks; i++) begin
+  //   // 8 Bank Wraps per SuperBank
+  //   for (genvar j = 0; j < BanksPerSuperBank; j++) begin
+  //     // 8 Banks per Bank Wrap
+  //     for (genvar k = 0; k < L1BankPerWP; k++) begin
+  //       // [i*8+j][k]         => [0][0], [0][1], [0][2]....
+  //       // [i*8*4 + j*4 + k]  => [0],    [1]   , [2], ...
+  //       assign l1_cache_wp_req   [i*BanksPerSuperBank+j][k] = l1_data_bank_req_flat   [i*BanksPerSuperBank*L1BankPerWP+j*L1BankPerWP+k];
+  //       assign l1_cache_wp_we    [i*BanksPerSuperBank+j][k] = l1_data_bank_we_flat    [i*BanksPerSuperBank*L1BankPerWP+j*L1BankPerWP+k];
+  //       assign l1_cache_wp_addr  [i*BanksPerSuperBank+j][k] = l1_data_bank_addr_flat  [i*BanksPerSuperBank*L1BankPerWP+j*L1BankPerWP+k];
+  //       assign l1_cache_wp_wdata [i*BanksPerSuperBank+j][k] = l1_data_bank_wdata_flat [i*BanksPerSuperBank*L1BankPerWP+j*L1BankPerWP+k];
+  //       // L1 Cache has a write granularity of an entire cache line
+  //       assign l1_cache_wp_be    [i*BanksPerSuperBank+j][k] =
+  //             (l1_data_bank_be_flat[i*BanksPerSuperBank*L1BankPerWP+j*L1BankPerWP+k]) ? {(NarrowDataWidth/8){1'b1}} : '0;
 
-        assign l1_data_bank_rdata_flat[i*BanksPerSuperBank*L1BankPerWP+j*L1BankPerWP+k] = l1_cache_wp_rdata[i*BanksPerSuperBank+j][k];
-        assign l1_data_bank_gnt_flat  [i*BanksPerSuperBank*L1BankPerWP+j*L1BankPerWP+k] = l1_cache_wp_gnt  [i*BanksPerSuperBank+j][k];
-      end
-    end
-  end
+  //       assign l1_data_bank_rdata_flat[i*BanksPerSuperBank*L1BankPerWP+j*L1BankPerWP+k] = l1_cache_wp_rdata[i*BanksPerSuperBank+j][k];
+  //       assign l1_data_bank_gnt_flat  [i*BanksPerSuperBank*L1BankPerWP+j*L1BankPerWP+k] = l1_cache_wp_gnt  [i*BanksPerSuperBank+j][k];
+  //     end
+  //   end
+  // end
 
   // Hong TODO: Now only have one cache controller, so I hard-wire 
   //            `wide_dcache_mst_req/wide_dcache_mst_rsp` to `wide_axi_mst_req[DCache]/wide_axi_mst_rsp[DCache]`
