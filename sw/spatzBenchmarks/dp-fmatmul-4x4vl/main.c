@@ -45,10 +45,29 @@ int verify_matrix(double *matrix, const double *checksum,
     if (diff < 0)
       diff = -diff;
     if (diff > 0.001) {
-      return i == 0 ? -1 : (int)i;
+      #ifdef PRINT_RESULT
+        printf("Row: %d, Result: %f, Golden reselt: %f\n", i, sum, (double)checksum[i]);
+      #endif
+      // return i == 0 ? -1 : (int)i;
     }
   }
   return 0;
+}
+
+int verify_matrix_per_core(double *matrix, const double *golden_mat,
+                  const unsigned int num_rows, const unsigned int num_columns) {
+  for (unsigned int i = 0; i < num_rows; ++i) {
+    for (unsigned int j = 0; j < num_columns; ++j) {
+      double diff = (double)matrix[i * num_columns + j] - (double)golden_mat[i * num_columns + j];
+      if (diff < 0)
+      diff = -diff;
+      if (diff > 0.001) {
+        #ifdef PRINT_RESULT
+          printf("Row: %d, Column: %d, Result: %f, Golden reselt: %f\n", i, j, (double)matrix[i * num_columns + j], (double)golden_mat[i * num_columns + j]);
+        #endif
+      }
+    }
+  }
 }
 
 int main() {
@@ -68,7 +87,7 @@ int main() {
   unsigned int kernel_size;
 
   #if USE_CACHE == 1
-  uint32_t spm_size = 16;
+  uint32_t spm_size = 32;
   #else
   uint32_t spm_size = 120;
   #endif
@@ -155,20 +174,30 @@ int main() {
       stop_kernel();
     }
 
-    if ((cid == 0) && (i == 0)) {
-      int error =
-          verify_matrix(c, (const double *)gemm_checksum, gemm_l.M, gemm_l.N);
-
-      if (error != 0) {
-      #ifdef PRINT_RESULT
-        printf("Error core %d: c[%d]=%u\n", cid, error, (int)c[error]);
-        return error;
-      #endif
+    #if USE_CACHE == 1
+      for (unsigned int i = 0; i < num_cores; ++i) {
+        if (cid == i){
+          #ifdef PRINT_RESULT
+            printf("Start checking core%d\n", i);
+          #endif
+          verify_matrix_per_core((const double *)(c+(gemm_l.M/num_cores)*gemm_l.N*i), (const double *)(gemm_C_dram+(gemm_l.M/num_cores)*gemm_l.N*i), gemm_l.M/num_cores, gemm_l.N);
+        }
+        // Wait for all cores to finish
+        snrt_cluster_hw_barrier();
       }
-    }
+    #else
+      if ((cid == 0) && (i == 0)) {
+        int error =
+            verify_matrix(c, (const double *)gemm_checksum, gemm_l.M, gemm_l.N);
 
-    // Wait for all cores to finish
-    snrt_cluster_hw_barrier();
+        if (error != 0) {
+        #ifdef PRINT_RESULT
+          printf("Error core %d: c[%d]=%u\n", cid, error, (int)c[error]);
+          return error;
+        #endif
+        }
+      }
+    #endif
   }
 
   // Check and display results

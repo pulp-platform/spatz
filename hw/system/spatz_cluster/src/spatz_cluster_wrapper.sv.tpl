@@ -44,7 +44,8 @@ package ${cfg['pkg_name']};
   localparam int unsigned SpatzAxiIdOutWidth = ${cfg['id_width_out']};
 
   // FIXED AxiIdOutWidth
-  localparam int unsigned IwcAxiIdOutWidth = 3;
+  // This applies when the number of cores equals number of cache controllers
+  localparam int unsigned IwcAxiIdOutWidth = 3 + $clog2(${cfg['nr_cores']});
 
   // AXI User Width
   localparam int unsigned SpatzAxiUserWidth = ${cfg['user_width']};

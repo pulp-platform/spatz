@@ -180,9 +180,10 @@ module spatz_cluster
     return n;
   endfunction
 
-  localparam int   unsigned                    NrTCDMPortsCores = get_tcdm_port_offs(NrCores);
-  localparam int   unsigned                    NumTCDMIn        = NrTCDMPortsCores + 1;
-  localparam logic          [AxiAddrWidth-1:0] TCDMMask         = ~(TCDMSize-1);
+  localparam int unsigned NrTCDMPortsPerCore          = get_tcdm_ports(0);
+  localparam int unsigned NrTCDMPortsCores            = get_tcdm_port_offs(NrCores);
+  localparam int unsigned NumTCDMIn                   = NrTCDMPortsCores + 1;
+  localparam logic        [AxiAddrWidth-1:0] TCDMMask = ~(TCDMSize-1);
 
   // Core Request, SoC Request
   localparam int unsigned NrNarrowMasters = 2;
@@ -299,8 +300,8 @@ module spatz_cluster
   localparam int unsigned DepthPerBank    = TCDMDepth / L1BankPerWP;
   // Cache total size in KB
   localparam int unsigned L1Size          = NrBanks * TCDMDepth * DataWidth / 8 / 1024;
-  // Number of cache controller
-  localparam int unsigned NumL1CacheCtrl      = 1;
+  // Number of cache controller (now is fixde to NrCores (if we change it, we need to change the controller axi output id width too)
+  localparam int unsigned NumL1CacheCtrl      = NrCores;
   // Number of data banks assigned to each cache controller
   localparam int unsigned NumDataBankPerCtrl  = L1NumDataBank / NumL1CacheCtrl;
   // Number of tag banks assigned to each cache controller
@@ -323,6 +324,7 @@ module spatz_cluster
   typedef logic [NarrowIdWidthOut-1:0] id_slv_t;
   typedef logic [WideIdWidthIn-1:0] id_dma_mst_t;
   typedef logic [WideIdWidthOut-1:0] id_dma_slv_t;
+  typedef logic [WideIdWidthIn-$clog2(NumL1CacheCtrl)-1:0] id_dcache_mst_t;
   typedef logic [NarrowUserWidth-1:0] user_t;
   typedef logic [AxiUserWidth-1:0] user_dma_t;
 
@@ -352,6 +354,7 @@ module spatz_cluster
   `AXI_TYPEDEF_ALL(axi_slv, addr_t, id_slv_t, data_t, strb_t, user_t)
   `AXI_TYPEDEF_ALL(axi_mst_dma, addr_t, id_dma_mst_t, data_dma_t, strb_dma_t, user_dma_t)
   `AXI_TYPEDEF_ALL(axi_slv_dma, addr_t, id_dma_slv_t, data_dma_t, strb_dma_t, user_dma_t)
+  `AXI_TYPEDEF_ALL(axi_dcache, addr_t, id_dcache_mst_t, data_dma_t, strb_dma_t, user_dma_t)
 
   `REQRSP_TYPEDEF_ALL(reqrsp, addr_t, data_t, strb_t)
 
@@ -484,6 +487,11 @@ module spatz_cluster
   axi_slv_dma_req_t  [NrWideSlaves-1 :0] wide_axi_slv_req;
   axi_slv_dma_resp_t [NrWideSlaves-1 :0] wide_axi_slv_rsp;
 
+  // AXI req/rsp from/to cache controllers
+  axi_dcache_req_t   [NumL1CacheCtrl-1:0] dcache_axi_req;
+  axi_dcache_resp_t  [NumL1CacheCtrl-1:0] dcache_axi_rsp;
+
+
   // 2. Memory Subsystem (Banks)
   mem_req_t [NrSuperBanks-1:0][BanksPerSuperBank-1:0] ic_req;
   mem_rsp_t [NrSuperBanks-1:0][BanksPerSuperBank-1:0] ic_rsp;
@@ -530,18 +538,18 @@ module spatz_cluster
   tcdm_req_t  [NrTCDMPortsCores-1:0] unmerge_req, strb_hdl_req, cache_req;
   tcdm_rsp_t  [NrTCDMPortsCores-1:0] unmerge_rsp, strb_hdl_rsp, cache_rsp;
 
-  logic       [NumL1CacheCtrl-1:0][NrTCDMPortsCores-1:0] cache_req_valid;
-  logic       [NumL1CacheCtrl-1:0][NrTCDMPortsCores-1:0] cache_req_ready;
-  tcdm_addr_t [NrTCDMPortsCores-1:0] cache_req_addr;
-  tcdm_user_t [NrTCDMPortsCores-1:0] cache_req_meta;
-  logic       [NrTCDMPortsCores-1:0] cache_req_write;
-  data_t      [NrTCDMPortsCores-1:0] cache_req_data;
+  logic       [NumL1CacheCtrl-1:0][NrTCDMPortsPerCore-1:0] cache_req_valid;
+  logic       [NumL1CacheCtrl-1:0][NrTCDMPortsPerCore-1:0] cache_req_ready;
+  tcdm_addr_t [NumL1CacheCtrl-1:0][NrTCDMPortsPerCore-1:0] cache_req_addr;
+  tcdm_user_t [NumL1CacheCtrl-1:0][NrTCDMPortsPerCore-1:0] cache_req_meta;
+  logic       [NumL1CacheCtrl-1:0][NrTCDMPortsPerCore-1:0] cache_req_write;
+  data_t      [NumL1CacheCtrl-1:0][NrTCDMPortsPerCore-1:0] cache_req_data;
 
-  logic       [NumL1CacheCtrl-1:0][NrTCDMPortsCores-1:0] cache_rsp_valid;
-  logic       [NumL1CacheCtrl-1:0][NrTCDMPortsCores-1:0] cache_rsp_ready;
-  logic       [NumL1CacheCtrl-1:0][NrTCDMPortsCores-1:0] cache_rsp_write;
-  data_t      [NumL1CacheCtrl-1:0][NrTCDMPortsCores-1:0] cache_rsp_data;
-  tcdm_user_t [NumL1CacheCtrl-1:0][NrTCDMPortsCores-1:0] cache_rsp_meta;
+  logic       [NumL1CacheCtrl-1:0][NrTCDMPortsPerCore-1:0] cache_rsp_valid;
+  logic       [NumL1CacheCtrl-1:0][NrTCDMPortsPerCore-1:0] cache_rsp_ready;
+  logic       [NumL1CacheCtrl-1:0][NrTCDMPortsPerCore-1:0] cache_rsp_write;
+  data_t      [NumL1CacheCtrl-1:0][NrTCDMPortsPerCore-1:0] cache_rsp_data;
+  tcdm_user_t [NumL1CacheCtrl-1:0][NrTCDMPortsPerCore-1:0] cache_rsp_meta;
 
   logic            [NumL1CacheCtrl-1:0][NumTagBankPerCtrl-1:0] l1_tag_bank_req;
   logic            [NumL1CacheCtrl-1:0][NumTagBankPerCtrl-1:0] l1_tag_bank_we;
@@ -926,8 +934,6 @@ module spatz_cluster
     .cache_rsp_i          (unmerge_rsp     )
   );
 
-  localparam int unsigned NumIOPerCore = get_tcdm_ports(0);
-
   spatz_strbreq_merge_tree #(
     .NumIO              (NrTCDMPortsCores             ),
     .NumOutstandingMem  (NumSpatzOutstandingLoads[0]  ),
@@ -964,40 +970,27 @@ module spatz_cluster
       .strb_rsp_ready_o (cache_pready[j]    ),
       .strb_rsp_o       (strb_hdl_rsp[j]    )
     );
-
-    // Hong TODO: Now we hardwire ports to controller 0.
-    //            But later, we need to distribute these requests to the corresponding controllers based on
-    //            partition id (or address range).
-
-    // Diyou: Here we need to group wires in set of ports:
-    //        In case of Spatz4, we will have 5 ports, each ports have N inputs (number of cores)
-    //        Each cache controller should only have 5 input ports instead of 10.
-    // Queation: Should we bypass the strb unit for now? They may be broken if we adjust the number of ports
-    assign cache_req_addr[j]  = cache_req[j].q.addr;
-    assign cache_req_meta[j]  = cache_req[j].q.user;
-    assign cache_req_write[j] = cache_req[j].q.write;
-    assign cache_req_data[j]  = cache_req[j].q.data;
-
-    assign cache_rsp[j].p_valid = cache_rsp_valid[0][j];
-    assign cache_rsp[j].q_ready = cache_req_ready[0][j];
-    assign cache_rsp[j].p.data  = cache_rsp_data[0][j];
-    assign cache_rsp[j].p.user  = cache_rsp_meta[0][j];
-
-    assign cache_rsp[j].p.write = cache_rsp_write[0][j];
   end
 
+  /// Wire requests after strb handling to the cache controller
+  // Hong TODO: Now we hardwire ports to controller ports one to one.
+  //            But later, we need to distribute these requests to the corresponding controllers based on
+  //            partition id (or address range).
   for (genvar i = 0; i < NumL1CacheCtrl; i++) begin
-    for (genvar j = 0; j < NrTCDMPortsCores; j++) begin: gen_strb_hdlr
-      // Hong TODO: Now we hardwire ports to controller 0.
-      //            But later, we need to distribute these requests to the corresponding controllers based on
-      //            partition id (or address range).
-      if (i ==0) begin
-        assign cache_req_valid[i][j] = cache_req[j].q_valid;
-        assign cache_rsp_ready[i][j] = cache_pready[j];
-      end else begin
-        assign cache_req_valid[i][j] = 0;
-        assign cache_rsp_ready[i][j] = 0;
-      end
+    for (genvar j = 0; j < NrTCDMPortsPerCore; j++) begin
+      assign cache_req_valid[i][j] = cache_req[i*NrTCDMPortsPerCore+j].q_valid;
+      assign cache_req_addr[i][j]  = cache_req[i*NrTCDMPortsPerCore+j].q.addr;
+      assign cache_req_meta[i][j]  = cache_req[i*NrTCDMPortsPerCore+j].q.user;
+      assign cache_req_write[i][j] = cache_req[i*NrTCDMPortsPerCore+j].q.write;
+      assign cache_req_data[i][j]  = cache_req[i*NrTCDMPortsPerCore+j].q.data;
+
+      assign cache_rsp_ready[i][j]   = cache_pready[i*NrTCDMPortsPerCore+j];
+      assign cache_rsp[i*NrTCDMPortsPerCore+j].p_valid = cache_rsp_valid[i][j];
+      assign cache_rsp[i*NrTCDMPortsPerCore+j].q_ready = cache_req_ready[i][j];
+      assign cache_rsp[i*NrTCDMPortsPerCore+j].p.data  = cache_rsp_data[i][j];
+      assign cache_rsp[i*NrTCDMPortsPerCore+j].p.user  = cache_rsp_meta[i][j];
+
+      assign cache_rsp[i*NrTCDMPortsPerCore+j].p.write = cache_rsp_write[i][j];
     end
   end
 
@@ -1007,7 +1000,7 @@ module spatz_cluster
   for (genvar cb = 0; cb < NumL1CacheCtrl; cb++) begin: gen_l1_cache_ctrl
     flamingo_spatz_cache_ctrl #(
       // Core
-      .NumPorts         (NrTCDMPortsCores  ),
+      .NumPorts         (NrTCDMPortsPerCore ),
       .CoalExtFactor    (L1CoalFactor      ),
       .AddrWidth        (L1AddrWidth       ),
       .WordWidth        (DataWidth         ),
@@ -1019,56 +1012,52 @@ module spatz_cluster
       // Type
       .core_meta_t      (tcdm_user_t       ),
       .impl_in_t        (impl_in_t         ),
-      .axi_req_t        (axi_mst_dma_req_t ),
-      .axi_resp_t       (axi_mst_dma_resp_t)
+      .axi_req_t        (axi_dcache_req_t  ),
+      .axi_resp_t       (axi_dcache_resp_t )
     ) i_l1_controller (
       .clk_i                 (clk_i                    ),
       .rst_ni                (rst_ni                   ),
       .impl_i                (impl_l1d_fifo            ),
       // Sync Control
       .cache_sync_valid_i    (l1d_insn_valid           ),
-      .cache_sync_ready_o    (l1d_insn_ready[cb]       ),
+      .cache_sync_ready_o    (l1d_insn_ready[cb]        ),
       .cache_sync_insn_i     (l1d_insn                 ),
       // SPM Size
       // The calculation of spm region in cache is different
       // than other modules (needs to times 2)
       .bank_depth_for_SPM_i  (num_spm_lines            ),
       // Request
-      .core_req_valid_i      (cache_req_valid[cb]      ),
-      .core_req_ready_o      (cache_req_ready[cb]      ),
-      .core_req_addr_i       (cache_req_addr           ),
-      .core_req_meta_i       (cache_req_meta           ),
-      .core_req_write_i      (cache_req_write          ),
-      .core_req_wdata_i      (cache_req_data           ),
+      .core_req_valid_i      (cache_req_valid[cb]          ),
+      .core_req_ready_o      (cache_req_ready[cb]          ),
+      .core_req_addr_i       (cache_req_addr[cb]           ),
+      .core_req_meta_i       (cache_req_meta[cb]           ),
+      .core_req_write_i      (cache_req_write[cb]          ),
+      .core_req_wdata_i      (cache_req_data[cb]           ),
       // Response
-      .core_resp_valid_o     (cache_rsp_valid[cb]      ),
-      .core_resp_ready_i     (cache_rsp_ready[cb]      ),
-      .core_resp_write_o     (cache_rsp_write[cb]      ),
-      .core_resp_data_o      (cache_rsp_data[cb]       ),
-      .core_resp_meta_o      (cache_rsp_meta[cb]       ),
+      .core_resp_valid_o     (cache_rsp_valid[cb]          ),
+      .core_resp_ready_i     (cache_rsp_ready[cb]          ),
+      .core_resp_write_o     (cache_rsp_write[cb]          ),
+      .core_resp_data_o      (cache_rsp_data[cb]           ),
+      .core_resp_meta_o      (cache_rsp_meta[cb]           ),
       // AXI refill
-      // Hong TODO: Replace it with signal `wide_axi_mst_cachectrl[cb]`
-      //            Then these req across different cache controller will
-      //            go through an arbitor to notify which one should be 
-      //            taken, because we only have one `wide_axi_mst_req[DCache]`
-      //            to send the request to outside DRAM
-      .axi_req_o             (wide_dcache_mst_req[cb]  ),
-      .axi_resp_i            (wide_dcache_mst_rsp[cb]  ),
+      .axi_req_o             (dcache_axi_req[cb] ),
+      .axi_resp_i            (dcache_axi_rsp[cb] ),
+      // .axi_resp_i            (wide_axi_mst_rsp[DCache] ),
       // Tag Banks
-      .tcdm_tag_bank_req_o   (l1_tag_bank_req[cb]      ),
-      .tcdm_tag_bank_we_o    (l1_tag_bank_we[cb]       ),
-      .tcdm_tag_bank_addr_o  (l1_tag_bank_addr[cb]     ),
-      .tcdm_tag_bank_wdata_o (l1_tag_bank_wdata[cb]    ),
-      .tcdm_tag_bank_be_o    (l1_tag_bank_be[cb]       ),
-      .tcdm_tag_bank_rdata_i (l1_tag_bank_rdata[cb]    ),
+      .tcdm_tag_bank_req_o   (l1_tag_bank_req[cb]          ),
+      .tcdm_tag_bank_we_o    (l1_tag_bank_we[cb]           ),
+      .tcdm_tag_bank_addr_o  (l1_tag_bank_addr[cb]         ),
+      .tcdm_tag_bank_wdata_o (l1_tag_bank_wdata[cb]        ),
+      .tcdm_tag_bank_be_o    (l1_tag_bank_be[cb]           ),
+      .tcdm_tag_bank_rdata_i (l1_tag_bank_rdata[cb]        ),
       // Data Banks
-      .tcdm_data_bank_req_o  (l1_data_bank_req[cb]     ),
-      .tcdm_data_bank_we_o   (l1_data_bank_we[cb]      ),
-      .tcdm_data_bank_addr_o (l1_data_bank_addr[cb]    ),
-      .tcdm_data_bank_wdata_o(l1_data_bank_wdata[cb]   ),
-      .tcdm_data_bank_be_o   (l1_data_bank_be[cb]      ),
-      .tcdm_data_bank_rdata_i(l1_data_bank_rdata[cb]   ),
-      .tcdm_data_bank_gnt_i  (l1_data_bank_gnt[cb]     )
+      .tcdm_data_bank_req_o  (l1_data_bank_req[cb]         ),
+      .tcdm_data_bank_we_o   (l1_data_bank_we[cb]          ),
+      .tcdm_data_bank_addr_o (l1_data_bank_addr[cb]        ),
+      .tcdm_data_bank_wdata_o(l1_data_bank_wdata[cb]       ),
+      .tcdm_data_bank_be_o   (l1_data_bank_be[cb]          ),
+      .tcdm_data_bank_rdata_i(l1_data_bank_rdata[cb]       ),
+      .tcdm_data_bank_gnt_i  (l1_data_bank_gnt[cb]         )
     );
 
     for (genvar j = 0; j < NumTagBankPerCtrl; j++) begin
@@ -1152,17 +1141,35 @@ module spatz_cluster
   //   end
   // end
 
-  // Hong TODO: Now only have one cache controller, so I hard-wire 
-  //            `wide_dcache_mst_req/wide_dcache_mst_rsp` to `wide_axi_mst_req[DCache]/wide_axi_mst_rsp[DCache]`
-  //            But later we need a crossbar to arbitate which one to take out
-  assign wide_axi_mst_req[DCache] = wide_dcache_mst_req[0];
-  for (genvar i = 0; i < NumL1CacheCtrl; i++) begin
-    if (i == 0) begin
-      assign wide_dcache_mst_rsp[i]   = wide_axi_mst_rsp[DCache];
-    end else begin
-      assign wide_dcache_mst_rsp[i]   = '0;
-    end
-  end
+  // Hong TODO: Now we multiplex axi requests from multiple cache controllers, 
+  //            the id width is prepended to the existing id value to tell which 
+  //            cache controller request is picked, later we can replace this if 
+  //            we have some more appealing mux policy.
+  axi_mux #(
+    .SlvAxiIDWidth ( WideIdWidthIn-$clog2(NumL1CacheCtrl) ), // ID width of the slave ports
+    .slv_aw_chan_t ( axi_dcache_aw_chan_t          ), // AW Channel Type, slave ports
+    .mst_aw_chan_t ( axi_mst_dma_aw_chan_t          ), // AW Channel Type, master port
+    .w_chan_t      ( axi_mst_dma_w_chan_t           ), //  W Channel Type, all ports
+    .slv_b_chan_t  ( axi_dcache_b_chan_t           ), //  B Channel Type, slave ports
+    .mst_b_chan_t  ( axi_mst_dma_b_chan_t           ), //  B Channel Type, master port
+    .slv_ar_chan_t ( axi_dcache_ar_chan_t          ), // AR Channel Type, slave ports
+    .mst_ar_chan_t ( axi_mst_dma_ar_chan_t          ), // AR Channel Type, master port
+    .slv_r_chan_t  ( axi_dcache_r_chan_t           ), //  R Channel Type, slave ports
+    .mst_r_chan_t  ( axi_mst_dma_r_chan_t           ), //  R Channel Type, master port
+    .slv_req_t     ( axi_dcache_req_t              ),
+    .slv_resp_t    ( axi_dcache_resp_t             ),
+    .mst_req_t     ( axi_mst_dma_req_t              ),
+    .mst_resp_t    ( axi_mst_dma_resp_t             ),
+    .NoSlvPorts    ( NumL1CacheCtrl                 ) // Number of Masters for the module
+  ) i_dcache_axi_mux (
+    .clk_i       ( clk_i                    ),
+    .rst_ni      ( rst_ni                   ),
+    .test_i      ( 1'b0                     ),  // Test Mode enable
+    .slv_reqs_i  ( dcache_axi_req           ),
+    .slv_resps_o ( dcache_axi_rsp           ),
+    .mst_req_o   ( wide_axi_mst_req[DCache] ),
+    .mst_resp_i  ( wide_axi_mst_rsp[DCache] )
+  );
 
 
   // We have multiple banks form a pesudo bank (BankWP)
