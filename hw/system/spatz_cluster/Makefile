@@ -43,6 +43,9 @@ VLOG_FLAGS += -64
 VLT_ROOT = ${VERILATOR_INSTALL_DIR}/share/verilator
 VLT_AR   = ${VLT_BUILDDIR}/Vtestharness__ALL.a
 
+# We turn on FPU Buffer for double bandwidth by default
+DEFS			 += -DBUF_FPU=1
+
 all:
 
 test: ${VSIM_SOURCES} ${TB_SRCS}
@@ -166,7 +169,7 @@ lint: generate lint/tmp/files lint/sdc/func.sdc lint/script/lint.tcl
 
 lint/tmp/files: ${BENDER}
 	mkdir -p lint/tmp
-	${BENDER} script verilator -t rtl -t spatz > lint/tmp/files
+	${BENDER} script verilator ${DEFS} -t rtl -t spatz > lint/tmp/files
 
 ######
 # SW #
