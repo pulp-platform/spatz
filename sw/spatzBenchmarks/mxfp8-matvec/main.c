@@ -127,8 +127,9 @@ int main() {
 
   if (natural_layout) {
     if (sdotp) {
-      printf("TODO\n");
-      return 1;
+      mxfp8_matvec_fp32_inner_sdotp_4x(
+        local_c, local_a, local_b, local_a_scale, local_b_scale,
+        local_m, local_n);
     } else {
       mxfp8_matvec_fp32_inner_4x(
         local_c, local_a, local_b, local_a_scale, local_b_scale,
