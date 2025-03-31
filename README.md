@@ -15,6 +15,12 @@ make all
 
 The Makefile target will automatically download and compile tested versions of LLVM, GCC, Spike, and Verilator. It might take a while. If you have issues cloning the GitHub modules, you might need to remove the folders in `sw/toolchain`.
 
+If you want to download also the Quadrilatero toolchain:
+
+```bash
+make quadrilatero
+```
+
 ETH users can source the toolchains and initialize the environment by doing:
 
 ```bash
@@ -29,7 +35,7 @@ The Spatz cluster system (hw/system/spatz_cluster) is a fundamental system aroun
 ### Simulating the system
 
 In `hw/system/spatz_cluster`:
-
+- To select the toolchain, modify `QUADRILATERO_TC` in the `Makefile`. When `QUADRILATERO_TC=ON`, the Quadrilatero toolchain is used. When `QUADRILATERO_TC=OFF`, the Spatz toolchain is used.
 - Compile the software and the binaries:
   - Verilator:
 ```bash

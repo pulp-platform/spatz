@@ -78,14 +78,18 @@ set(standalone_snitch_sources
 
 # Sources only compatible with the LLVM toolchain
 if (CMAKE_C_COMPILER_ID STREQUAL "Clang")
-    set(sources
-        ${sources}
-        # OpenMP support
-        src/omp/omp.c
-        src/omp/kmp.c
-        src/omp/eu.c
-        src/dm.c
-    )
+    if(QUADRILATERO_TC)
+        set(sources ${sources})
+    else()
+        set(sources
+            ${sources}
+            # OpenMP support
+            src/omp/omp.c
+            src/omp/kmp.c
+            src/omp/eu.c
+            src/dm.c
+        )
+    endif()
     # Check if static OpenMP runtime is requested
     if(OMPSTATIC_NUMTHREADS GREATER 0)
         message(STATUS "Using ${OMPSTATIC_NUMTHREADS} threads for optimized OpenMP runtime")

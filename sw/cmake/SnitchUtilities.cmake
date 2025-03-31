@@ -21,6 +21,9 @@ set(CMAKE_TOOLCHAIN_FILE toolchain-llvm CACHE STRING "Toolchain to use")
 # Select to build the tests
 set(BUILD_TESTS OFF CACHE BOOL "Build test executables")
 
+# Select if using Quadrilatero toolchain
+set(QUADRILATERO_TC OFF CACHE BOOL "Using Quadrilatero toolchain")
+
 macro(add_snitch_library name)
     add_library(${ARGV})
     add_custom_command(

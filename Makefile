@@ -5,6 +5,7 @@
 # Authors:
 # Matheus Cavalcante, ETH Zurich
 # Mattia Sinigaglia, University of Bologna
+# Danilo Cammarata, ETH Zurich
 
 # Include Makefrag
 include util/Makefrag
@@ -27,6 +28,7 @@ init: bender update_opcodes
 ###############
 
 toolchain: download tc-llvm tc-riscv-gcc tc-riscv-isa-sim verilator
+quadrilatero: sw/toolchain/quadrilatero-tc sw/toolchain/quadrilatero-tc/temp/riscv-gnu-toolchain-quadrilatero tc-riscv-gcc-quadrilatero tc-llvm-quadrilatero
 
 .PHONY: download
 download: sw/toolchain/riscv-gnu-toolchain sw/toolchain/llvm-project sw/toolchain/riscv-opcodes sw/toolchain/verilator sw/toolchain/riscv-isa-sim sw/toolchain/dtc
@@ -76,6 +78,21 @@ sw/toolchain/dtc:
 	cd sw/toolchain/dtc && wget -c https://git.kernel.org/pub/scm/utils/dtc/dtc.git/snapshot/dtc-1.7.0.tar.gz
 	cd sw/toolchain/dtc && tar xf dtc-1.7.0.tar.gz
 
+sw/toolchain/quadrilatero-tc:
+	mkdir -p sw/toolchain
+	cd sw/toolchain && git clone git@github.com:Camma2001/xheep_matrix_spec.git quadrilatero-tc
+	mkdir -p sw/toolchain/quadrilatero-tc/temp
+	mkdir -p sw/toolchain/quadrilatero-tc/temp/install
+	RISCV=sw/toolchain/quadrilatero-tc/temp/install
+	PATH=${RISCV}/bin:${PATH}
+
+sw/toolchain/quadrilatero-tc/temp/riscv-gnu-toolchain-quadrilatero: sw/toolchain/quadrilatero-tc sw/toolchain/riscv-gnu-toolchain-quadrilatero.version
+	mkdir -p sw/toolchain
+	cd sw/toolchain/quadrilatero-tc/temp && git clone https://github.com/pulp-platform/pulp-riscv-gnu-toolchain.git riscv-gnu-toolchain-quadrilatero
+	cd sw/toolchain/quadrilatero-tc/temp/riscv-gnu-toolchain-quadrilatero &&           \
+		git checkout `cat sw/toolchain/riscv-gnu-toolchain-quadrilatero.version` && \
+		git submodule update --init --recursive --jobs=8 .	
+
 tc-riscv-gcc: sw/toolchain/riscv-gnu-toolchain
 	mkdir -p $(GCC_INSTALL_DIR)
 	cd sw/toolchain/riscv-gnu-toolchain && rm -rf build && mkdir -p build && cd build && \
@@ -106,6 +123,24 @@ tc-riscv-isa-sim: sw/toolchain/riscv-isa-sim sw/toolchain/dtc
 	cd sw/toolchain/riscv-isa-sim && rm -rf build && mkdir -p build && cd build && \
 	PATH=$(SPIKE_INSTALL_DIR)/bin:$(PATH) ../configure --prefix=$(SPIKE_INSTALL_DIR) && \
 	$(MAKE) MAKEINFO=true -j4 install
+
+tc-riscv-gcc-quadrilatero: sw/toolchain/quadrilatero-tc/temp/riscv-gnu-toolchain-quadrilatero
+	cd sw/toolchain/quadrilatero-tc/temp/riscv-gnu-toolchain-quadrilatero && rm -rf build && mkdir -p build && cd build && \
+	../configure --prefix=$(ROOT_DIR)/sw/toolchain/quadrilatero-tc/temp/install --with-arch=rv32ima --with-abi=ilp32 --with-cmodel=medlow --enable-multilib && \
+	$(MAKE) MAKEINFO=true -j4
+
+tc-llvm-quadrilatero: sw/toolchain/quadrilatero-tc
+	cd sw/toolchain/quadrilatero-tc/temp && mkdir -p llvm-build && cd llvm-build && \
+	cmake -DCMAKE_BUILD_TYPE="Release"   \
+		-DBUILD_SHARED_LIBS=True -DLLVM_USE_SPLIT_DWARF=True \
+		-DCMAKE_INSTALL_PREFIX="$(ROOT_DIR)/sw/toolchain/quadrilatero-tc/temp/install"   \
+		-DLLVM_OPTIMIZED_TABLEGEN=True -DLLVM_BUILD_TESTS=False   \
+		-DDEFAULT_SYSROOT="$(ROOT_DIR)/sw/toolchain/quadrilatero-tc/temp/install/riscv32-unknown-elf"  \
+		-DLLVM_DEFAULT_TARGET_TRIPLE="riscv32-unknown-elf" \
+		-DLLVM_ENABLE_PROJECTS="clang" \
+		-DLLVM_TARGETS_TO_BUILD="RISCV"  \
+		../../llvm-project/llvm && \
+	cmake --build . --target install
 
 ############
 #  Bender  #

@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: SHL-0.51
 
 # Author: Matheus Cavalcante, ETH Zurich
+#         Danilo Cammarata, ETH Zurich
 
 SPATZ_DIR := $(shell git rev-parse --show-toplevel 2>/dev/null || echo $$SPATZ_DIR)
 ROOT := ${SPATZ_DIR}
@@ -21,8 +22,19 @@ SPATZ_CLUSTER_CFG_DEFINES += -DSNRT_CLUSTER_OFFSET=$(shell python3 -c "import js
 SPATZ_CLUSTER_CFG_DEFINES += -DSNRT_TCDM_SIZE=$(shell python3 -c "import jstyleson; f = open('$(SPATZ_CLUSTER_CFG)'); print(jstyleson.load(f)['cluster']['tcdm']['size'] * 1024)")
 SPATZ_CLUSTER_CFG_DEFINES += -DSNRT_NFPU_PER_CORE=$(shell python3 -c "import jstyleson; f = open('$(SPATZ_CLUSTER_CFG)'); print(jstyleson.load(f)['cluster']['n_fpu'])")
 
+# Select Toolchain
+QUADRILATERO_TC := ON
+
 # Include Makefrag
 include $(ROOT)/util/Makefrag
+
+# Toolchain
+LLVM_DIR := ${LLVM_INSTALL_DIR}
+GCC_DIR  := ${GCC_INSTALL_DIR}
+ifeq ($(QUADRILATERO_TC),ON)
+	LLVM_DIR := ${LLVM_INSTALL_DIR_QUADRILATERO}
+	GCC_DIR  := ${GCC_INSTALL_DIR_QUADRILATERO}
+endif
 
 # QuestaSim
 VSIM      = questa-2021.3-kgf vsim
@@ -71,9 +83,9 @@ VLT_COBJ += $(VLT_BUILDDIR)/vlt/verilated_vcd_c.o
 #################
 
 test/bootrom.elf test/bootrom.dump test/bootrom.bin: src/generated/spatz_cluster_wrapper.sv test/bootrom.S test/bootrom.ld test/bootdata_bootrom.cc Makefile
-	${GCC_INSTALL_DIR}/bin/riscv32-unknown-elf-gcc -mabi=ilp32 -march=rv32imaf -static -nostartfiles -Ttest/bootrom.ld test/bootrom.S test/bootdata_bootrom.cc -I../../ip/snitch_test/src -I../../../sw/snRuntime/include -I../../../sw/toolchain/riscv-opcodes/ -o test/bootrom.elf
-	${GCC_INSTALL_DIR}/bin/riscv32-unknown-elf-objdump -D test/bootrom.elf > test/bootrom.dump
-	${GCC_INSTALL_DIR}/bin/riscv32-unknown-elf-objcopy -O binary test/bootrom.elf test/bootrom.bin
+	${GCC_DIR}/bin/riscv32-unknown-elf-gcc -mabi=ilp32 -march=rv32imaf -static -nostartfiles -Ttest/bootrom.ld test/bootrom.S test/bootdata_bootrom.cc -I../../ip/snitch_test/src -I../../../sw/snRuntime/include -I../../../sw/toolchain/riscv-opcodes/ -o test/bootrom.elf
+	${GCC_DIR}/bin/riscv32-unknown-elf-objdump -D test/bootrom.elf > test/bootrom.dump
+	${GCC_DIR}/bin/riscv32-unknown-elf-objcopy -O binary test/bootrom.elf test/bootrom.bin
 
 .PHONY: bootrom
 bootrom: $(CURDIR)/src/generated/bootrom.sv
@@ -175,13 +187,13 @@ lint/tmp/files: ${BENDER}
 ## Build SW into sw/build with the LLVM toolchain
 sw: clean.sw
 	mkdir -p sw/build
-	cd sw/build && ${CMAKE} -DLLVM_PATH=${LLVM_INSTALL_DIR} -DGCC_PATH=${GCC_INSTALL_DIR} -DPYTHON=${PYTHON} ${SPATZ_CLUSTER_CFG_DEFINES} .. && make
+	cd sw/build && ${CMAKE} -DLLVM_PATH=${LLVM_DIR} -DGCC_PATH=${GCC_DIR} -DPYTHON=${PYTHON} ${SPATZ_CLUSTER_CFG_DEFINES} .. && make
 
 # VSIM
 ## Build SW into sw/build with the LLVM toolchain (including tests) for Questasim simulator
 sw.vsim: clean.sw bin/spatz_cluster.vsim
 	mkdir -p sw/build
-	cd sw/build && ${CMAKE} -DLLVM_PATH=${LLVM_INSTALL_DIR} -DGCC_PATH=${GCC_INSTALL_DIR} -DPYTHON=${PYTHON} -DSNITCH_SIMULATOR=../../../../../hw/system/spatz_cluster/bin/spatz_cluster.vsim -DBUILD_TESTS=ON ${SPATZ_CLUSTER_CFG_DEFINES} .. && make -j8
+	cd sw/build && ${CMAKE} -DLLVM_PATH=${LLVM_DIR} -DGCC_PATH=${GCC_DIR} -DPYTHON=${PYTHON} -DSNITCH_SIMULATOR=../../../../../hw/system/spatz_cluster/bin/spatz_cluster.vsim -DBUILD_TESTS=ON -DQUADRILATERO_TC=${QUADRILATERO_TC} ${SPATZ_CLUSTER_CFG_DEFINES} .. && make -j8
 
 ## Build SW and run all tests with Questasim simulator
 sw.test.vsim: sw.vsim
@@ -191,7 +203,7 @@ sw.test.vsim: sw.vsim
 ## Build SW into sw/build with the LLVM toolchain (including tests) for VCS simulator
 sw.vcs: clean.sw bin/spatz_cluster.vcs
 	mkdir -p sw/build
-	cd sw/build && ${CMAKE} -DLLVM_PATH=${LLVM_INSTALL_DIR} -DGCC_PATH=${GCC_INSTALL_DIR} -DPYTHON=${PYTHON} -DSNITCH_SIMULATOR=../../../../../hw/system/spatz_cluster/bin/spatz_cluster.vcs -DBUILD_TESTS=ON ${SPATZ_CLUSTER_CFG_DEFINES} .. && make -j8
+	cd sw/build && ${CMAKE} -DLLVM_PATH=${LLVM_DIR} -DGCC_PATH=${GCC_DIR} -DPYTHON=${PYTHON} -DSNITCH_SIMULATOR=../../../../../hw/system/spatz_cluster/bin/spatz_cluster.vcs -DBUILD_TESTS=ON -DQUADRILATERO_TC=${QUADRILATERO_TC} ${SPATZ_CLUSTER_CFG_DEFINES} .. && make -j8
 
 ## Build SW and run all tests with VCS simulator
 sw.test.vcs: sw.vcs
@@ -201,7 +213,7 @@ sw.test.vcs: sw.vcs
 ## Build SW into sw/build with the LLVM toolchain (including tests) for Verilator simulator
 sw.vlt: clean.sw bin/spatz_cluster.vlt
 	mkdir -p sw/build
-	cd sw/build && ${CMAKE} -DLLVM_PATH=${LLVM_INSTALL_DIR} -DGCC_PATH=${GCC_INSTALL_DIR} -DPYTHON=${PYTHON} -DSNITCH_SIMULATOR=../../../../../hw/system/spatz_cluster/bin/spatz_cluster.vlt -DBUILD_TESTS=ON ${SPATZ_CLUSTER_CFG_DEFINES} .. && make -j8
+	cd sw/build && ${CMAKE} -DLLVM_PATH=${LLVM_DIR} -DGCC_PATH=${GCC_DIR} -DPYTHON=${PYTHON} -DSNITCH_SIMULATOR=../../../../../hw/system/spatz_cluster/bin/spatz_cluster.vlt -DBUILD_TESTS=ON -DQUADRILATERO_TC=${QUADRILATERO_TC} ${SPATZ_CLUSTER_CFG_DEFINES} .. && make -j8
 
 ## Build SW and run all tests with Verilator simulator
 sw.test.vlt: sw.vlt

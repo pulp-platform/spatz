@@ -5,6 +5,7 @@
 # Authors:
 # Matheus Cavalcante, ETH Zurich
 # Mattia Sinigaglia, University of Bologna
+# Danilo Cammarata, ETH Zurich
 
 # Root
 SHELL = /usr/bin/env bash
@@ -19,6 +20,9 @@ GCC_INSTALL_DIR       ?= ${INSTALL_DIR}/riscv-gcc
 SPIKE_INSTALL_DIR     ?= ${INSTALL_DIR}/riscv-isa-sim
 BENDER_INSTALL_DIR    ?= ${INSTALL_DIR}/bender
 VERILATOR_INSTALL_DIR ?= ${INSTALL_DIR}/verilator
+
+LLVM_INSTALL_DIR_QUADRILATERO ?= ${SPATZ_DIR}/sw/toolchain/quadrilatero-tc/temp/install
+GCC_INSTALL_DIR_QUADRILATERO  ?= ${SPATZ_DIR}/sw/toolchain/quadrilatero-tc/temp/install
 
 # Support for local override
 BENDER ?= ${BENDER_INSTALL_DIR}/bender

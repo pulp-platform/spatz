@@ -55,12 +55,6 @@ add_library(dp-fmatmul dp-fmatmul/kernel/dp-fmatmul.c)
 add_library(sp-fmatmul sp-fmatmul/kernel/sp-fmatmul.c)
 add_library(hp-fmatmul hp-fmatmul/kernel/hp-fmatmul.c)
 
-add_library(widening-hp-fmatmul widening-hp-fmatmul/kernel/widening-fmatmul.c)
-add_library(widening-bp-fmatmul widening-bp-fmatmul/kernel/widening-fmatmul.c)
-
-add_library(sdotp-hp-fmatmul sdotp-hp-fmatmul/kernel/sdotp-fmatmul.c)
-add_library(sdotp-bp-fmatmul sdotp-bp-fmatmul/kernel/sdotp-fmatmul.c)
-
 add_library(dp-faxpy dp-faxpy/kernel/faxpy.c)
 
 add_library(dp-fdotp dp-fdotp/kernel/fdotp.c)
@@ -69,6 +63,14 @@ add_library(dp-fconv2d dp-fconv2d/kernel/fconv2d.c)
 
 add_library(dp-fft dp-fft/kernel/fft.c)
 add_library(sp-fft sp-fft/kernel/fft.c)
+
+if(NOT QUADRILATERO_TC)
+  add_library(widening-hp-fmatmul widening-hp-fmatmul/kernel/widening-fmatmul.c)
+  add_library(widening-bp-fmatmul widening-bp-fmatmul/kernel/widening-fmatmul.c)
+
+  add_library(sdotp-hp-fmatmul sdotp-hp-fmatmul/kernel/sdotp-fmatmul.c)
+  add_library(sdotp-bp-fmatmul sdotp-bp-fmatmul/kernel/sdotp-fmatmul.c)
+endif()
 
 # Tests
 enable_testing()
@@ -83,24 +85,6 @@ add_spatz_test_threeParam(hp-fmatmul hp-fmatmul/main.c 64  64  64 )
 add_spatz_test_threeParam(hp-fmatmul hp-fmatmul/main.c 64  128 64 )
 add_spatz_test_threeParam(hp-fmatmul hp-fmatmul/main.c 128 128 128)
 
-add_spatz_test_threeParam(widening-hp-fmatmul widening-hp-fmatmul/main.c 64  64  64 )
-add_spatz_test_threeParam(widening-hp-fmatmul widening-hp-fmatmul/main.c 64  128 64 )
-add_spatz_test_threeParam(widening-hp-fmatmul widening-hp-fmatmul/main.c 128 128 128)
-
-add_spatz_test_threeParam(widening-bp-fmatmul widening-bp-fmatmul/main.c 64  64  64 )
-add_spatz_test_threeParam(widening-bp-fmatmul widening-bp-fmatmul/main.c 64  128 64 )
-add_spatz_test_threeParam(widening-bp-fmatmul widening-bp-fmatmul/main.c 128 128 128)
-add_spatz_test_threeParam(widening-bp-fmatmul widening-bp-fmatmul/main.c 128 256 128)
-
-add_spatz_test_threeParam(sdotp-hp-fmatmul sdotp-hp-fmatmul/main.c 64  64  64 )
-add_spatz_test_threeParam(sdotp-hp-fmatmul sdotp-hp-fmatmul/main.c 64  128 64 )
-add_spatz_test_threeParam(sdotp-hp-fmatmul sdotp-hp-fmatmul/main.c 128 128 128)
-
-add_spatz_test_threeParam(sdotp-bp-fmatmul sdotp-bp-fmatmul/main.c 64  64  64 )
-add_spatz_test_threeParam(sdotp-bp-fmatmul sdotp-bp-fmatmul/main.c 64  128 64 )
-add_spatz_test_threeParam(sdotp-bp-fmatmul sdotp-bp-fmatmul/main.c 128 128 128)
-add_spatz_test_threeParam(sdotp-bp-fmatmul sdotp-bp-fmatmul/main.c 128 256 128)
-
 add_spatz_test_oneParam(dp-faxpy dp-faxpy/main.c 256)
 add_spatz_test_oneParam(dp-faxpy dp-faxpy/main.c 1024)
 
@@ -114,3 +98,23 @@ add_spatz_test_twoParam(dp-fft dp-fft/main.c 128 2)
 
 add_spatz_test_twoParam(sp-fft sp-fft/main.c 256 2)
 add_spatz_test_twoParam(sp-fft sp-fft/main.c 512 2)
+
+if(NOT QUADRILATERO_TC)
+  add_spatz_test_threeParam(widening-hp-fmatmul widening-hp-fmatmul/main.c 64  64  64 )
+  add_spatz_test_threeParam(widening-hp-fmatmul widening-hp-fmatmul/main.c 64  128 64 )
+  add_spatz_test_threeParam(widening-hp-fmatmul widening-hp-fmatmul/main.c 128 128 128)
+
+  add_spatz_test_threeParam(widening-bp-fmatmul widening-bp-fmatmul/main.c 64  64  64 )
+  add_spatz_test_threeParam(widening-bp-fmatmul widening-bp-fmatmul/main.c 64  128 64 )
+  add_spatz_test_threeParam(widening-bp-fmatmul widening-bp-fmatmul/main.c 128 128 128)
+  add_spatz_test_threeParam(widening-bp-fmatmul widening-bp-fmatmul/main.c 128 256 128)
+
+  add_spatz_test_threeParam(sdotp-hp-fmatmul sdotp-hp-fmatmul/main.c 64  64  64 )
+  add_spatz_test_threeParam(sdotp-hp-fmatmul sdotp-hp-fmatmul/main.c 64  128 64 )
+  add_spatz_test_threeParam(sdotp-hp-fmatmul sdotp-hp-fmatmul/main.c 128 128 128)
+
+  add_spatz_test_threeParam(sdotp-bp-fmatmul sdotp-bp-fmatmul/main.c 64  64  64 )
+  add_spatz_test_threeParam(sdotp-bp-fmatmul sdotp-bp-fmatmul/main.c 64  128 64 )
+  add_spatz_test_threeParam(sdotp-bp-fmatmul sdotp-bp-fmatmul/main.c 128 128 128)
+  add_spatz_test_threeParam(sdotp-bp-fmatmul sdotp-bp-fmatmul/main.c 128 256 128)
+endif()
