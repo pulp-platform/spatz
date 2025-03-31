@@ -160,4 +160,9 @@ add wave -noupdate -group core[$1] -group Spatz -group VSLDU /tb_bin/i_dut/i_clu
 
 add wave -noupdate -group core[$1] -group Spatz -group VFU /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/i_spatz/i_vfu/*
 
+add wave -noupdate -group core[$1] -group Spatz -group VFU -group "FPNew\[0\]" /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/i_spatz/i_vfu/gen_fpu/gen_fpnew[0]/i_fpu/*
+add wave -noupdate -group core[$1] -group Spatz -group VFU -group "FPNew\[1\]" /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/i_spatz/i_vfu/gen_fpu/gen_fpnew[1]/i_fpu/*
+add wave -noupdate -group core[$1] -group Spatz -group VFU -group "FPNew\[2\]" /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/i_spatz/i_vfu/gen_fpu/gen_fpnew[2]/i_fpu/*
+add wave -noupdate -group core[$1] -group Spatz -group VFU -group "FPNew\[3\]" /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/i_spatz/i_vfu/gen_fpu/gen_fpnew[3]/i_fpu/*
+
 add wave -noupdate -group core[$1] -group Internal /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/*
