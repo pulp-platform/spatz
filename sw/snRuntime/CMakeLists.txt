@@ -125,19 +125,20 @@ endif()
 # Tests
 enable_testing()
 set(SNITCH_TEST_PREFIX snRuntime-)
+if(NOT QUADRILATERO_TC)
+    # General snRuntime tests
+    add_snitch_test(tls tests/tls.c)
+    add_snitch_test(simple tests/simple.c)
+    add_snitch_test(varargs_1 tests/varargs_1.c)
+    add_snitch_test(varargs_2 tests/varargs_2.c)
+    add_snitch_test(barrier tests/barrier.c)
+    add_snitch_test(fence_i tests/fence_i.c)
+    add_snitch_test(interrupt-local tests/interrupt-local.c)
+    add_snitch_test(printf_simple tests/printf_simple.c)
 
-# General snRuntime tests
-add_snitch_test(tls tests/tls.c)
-add_snitch_test(simple tests/simple.c)
-add_snitch_test(varargs_1 tests/varargs_1.c)
-add_snitch_test(varargs_2 tests/varargs_2.c)
-add_snitch_test(barrier tests/barrier.c)
-add_snitch_test(fence_i tests/fence_i.c)
-add_snitch_test(interrupt-local tests/interrupt-local.c)
-add_snitch_test(printf_simple tests/printf_simple.c)
-
-# RTL only tests
-if(SNITCH_RUNTIME STREQUAL "snRuntime-cluster")
-    add_snitch_test(dma_simple tests/dma_simple.c)
-    add_snitch_test(atomics tests/atomics.c)
+    # RTL only tests
+    if(SNITCH_RUNTIME STREQUAL "snRuntime-cluster")
+        add_snitch_test(dma_simple tests/dma_simple.c)
+        add_snitch_test(atomics tests/atomics.c)
+    endif()
 endif()
