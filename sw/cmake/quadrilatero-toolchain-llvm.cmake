@@ -24,7 +24,7 @@ add_compile_options(-menable-experimental-extensions)
 # LLD doesn't support relaxation for RISC-V yet
 add_compile_options(-mno-relax)
 # Set the ISA and ABI
-add_compile_options(-march=rv32imafdvzfh_xtheadmatrix0p1 -mabi=ilp32)
+add_compile_options(-march=rv32imafdzfh_xtheadmatrix0p1 -mabi=ilp32)
 # Set the GCC path
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} --gcc-toolchain=${GCC_PATH}")
 
@@ -33,7 +33,7 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} --gcc-toolchain=${GCC_PATH}")
 ##
 add_link_options(-static -mcmodel=small -fuse-ld=lld)
 add_link_options(-nostartfiles)
-add_link_options(-march=rv32imafdvzfh -mabi=ilp32)
+add_link_options(-march=rv32imafdzfh -mabi=ilp32)
 # add_link_options(-march=rv32imafdvzfh_xdma -mabi=ilp32d)
 add_link_options(-ffast-math -fno-common -fno-builtin-printf)
 
