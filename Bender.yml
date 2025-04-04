@@ -7,6 +7,7 @@ package:
   authors:
     - "Matheus Cavalcante <matheusd@iis.ee.ethz.ch>"
     - "Mattia Sinigaglia <mattia.sinigaglia5@unibo.it>"
+    - "Danilo Cammarata <dcammarata@iis.ee.ethz.ch>"
 
 dependencies:
   axi:                { git: "https://github.com/pulp-platform/axi.git",                version: =0.39.1-beta   }
@@ -17,7 +18,7 @@ dependencies:
   register_interface: { git: "https://github.com/pulp-platform/register_interface.git", version: 0.3.8          }
   riscv-dbg:          { git: "https://github.com/pulp-platform/riscv-dbg.git",          version: 0.7.0          }
   tech_cells_generic: { git: "https://github.com/pulp-platform/tech_cells_generic.git", version: 0.2.11         }
-  quadrilatero:       { git: "https://github.com/pulp-platform/quadrilatero.git",       rev:     9c65ef9        } 
+  quadrilatero:       { git: "https://github.com/pulp-platform/quadrilatero.git",       rev:     fc6b90e        }
 
 export_include_dirs:
   - hw/ip/mem_interface/include
@@ -175,6 +176,7 @@ sources:
       - hw/ip/spatz_cc/src/axi_dma_tc_snitch_fe.sv
       # Level 3
       - hw/ip/spatz_cc/src/spatz_cc.sv
+      - hw/ip/spatz_cc/src/spatz_quadrilatero_cc.sv
 
       ## system/spatz_cluster ##
 
