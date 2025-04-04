@@ -83,9 +83,9 @@ int main() {
 
   // Initialize the matrices
   if (cid == 0) {
-    a = (double *) &axpy_alpha_dram;
     snrt_dma_start_1d(x, axpy_X_dram, dim * sizeof(double));
     snrt_dma_start_1d(y, axpy_Y_dram, dim * sizeof(double));
+    a = (double *) &axpy_alpha_dram;
   }
 
   // Wait for all cores to finish
@@ -95,9 +95,9 @@ int main() {
   double *y_int = y + dim_core * cid;
 
   #else
-  a = (double *) &axpy_alpha_dram;
   double *x_int = axpy_X_dram + dim_core * cid;
   double *y_int = axpy_Y_dram + dim_core * cid;
+  a = (double *) &axpy_alpha_dram;
   #endif
 
   // Wait for all cores to finish

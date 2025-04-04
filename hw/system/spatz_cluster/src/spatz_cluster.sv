@@ -535,8 +535,11 @@ module spatz_cluster
   spm_req_t   [NrTCDMPortsCores-1:0] spm_req;
   spm_rsp_t   [NrTCDMPortsCores-1:0] spm_rsp;
 
-  tcdm_req_t  [NrTCDMPortsCores-1:0] unmerge_req, strb_hdl_req, cache_req;
-  tcdm_rsp_t  [NrTCDMPortsCores-1:0] unmerge_rsp, strb_hdl_rsp, cache_rsp;
+  tcdm_req_t  [NrTCDMPortsCores-1:0] unmerge_req, strb_hdl_req;
+  tcdm_rsp_t  [NrTCDMPortsCores-1:0] unmerge_rsp, strb_hdl_rsp;
+
+  tcdm_req_t  [NrTCDMPortsPerCore-1:0][NumL1CacheCtrl-1:0] cache_req, cache_xbar_req;
+  tcdm_rsp_t  [NrTCDMPortsPerCore-1:0][NumL1CacheCtrl-1:0] cache_rsp, cache_xbar_rsp;
 
   logic       [NumL1CacheCtrl-1:0][NrTCDMPortsPerCore-1:0] cache_req_valid;
   logic       [NumL1CacheCtrl-1:0][NrTCDMPortsPerCore-1:0] cache_req_ready;
@@ -900,8 +903,11 @@ module spatz_cluster
     end
   end
 
-  logic  [NrTCDMPortsCores-1:0] unmerge_pready, strb_hdl_pready, cache_pready;
-  assign spm_size        = cfg_spm_size * 1024;
+  logic  [NrTCDMPortsCores-1:0] unmerge_pready, strb_hdl_pready;
+  logic  [NrTCDMPortsPerCore-1:0][NumL1CacheCtrl-1:0] cache_pready, cache_xbar_pready;
+  // Currently assume SPM is full 128 KiB
+  // assign spm_size        = 128 * 1024;
+  // assign spm_size        = cfg_spm_size * 1024;
 
   // split the requests for spm or cache from core side
   spatz_addr_mapper #(
@@ -924,7 +930,7 @@ module spatz_cluster
     // Address
     .tcdm_start_address_i (tcdm_start_address[L1AddrWidth-1:0] ),
     .tcdm_end_address_i   (tcdm_end_address[L1AddrWidth-1:0]   ),
-    .spm_size_i           (spm_size        ),
+    .spm_size_i           (tcdm_end_address[L1AddrWidth-1:0] -  tcdm_start_address[L1AddrWidth-1:0]),
     .flush_i              (l1d_busy        ),
     // Output
     .spm_req_o            (spm_req         ),
@@ -954,43 +960,69 @@ module spatz_cluster
     .unmerge_rsp_o   (unmerge_rsp       )
   );
 
-  for (genvar j = 0; j < NrTCDMPortsCores; j++) begin: gen_strb_hdlr
-    spatz_strbreq_handler #(
-      .DataWidth      (DataWidth    ),
-      .mem_req_t      (tcdm_req_t   ),
-      .mem_rsp_t      (tcdm_rsp_t   ),
-      .reqrsp_user_t  (tcdm_user_t  )
-    ) i_strbreq_handler (
-      .clk_i            (clk_i              ),
-      .rst_ni           (rst_ni             ),
-      .strb_req_i       (strb_hdl_req[j]    ),
-      .strb_rsp_ready_i (strb_hdl_pready[j] ),
-      .strb_rsp_i       (cache_rsp[j]       ),
-      .strb_req_o       (cache_req[j]       ),
-      .strb_rsp_ready_o (cache_pready[j]    ),
-      .strb_rsp_o       (strb_hdl_rsp[j]    )
-    );
+  // TODO: Should be NrCore instead of CacheBank here
+  for (genvar j = 0; j < NrTCDMPortsPerCore; j++) begin: gen_strb_hdlr
+    for (genvar cb = 0; cb < NumL1CacheCtrl; cb++) begin
+      spatz_strbreq_handler #(
+        .DataWidth      (DataWidth    ),
+        .mem_req_t      (tcdm_req_t   ),
+        .mem_rsp_t      (tcdm_rsp_t   ),
+        .reqrsp_user_t  (tcdm_user_t  )
+      ) i_strbreq_handler (
+        .clk_i            (clk_i              ),
+        .rst_ni           (rst_ni             ),
+        .strb_req_i       (strb_hdl_req   [cb*NrTCDMPortsPerCore+j]),
+        .strb_rsp_ready_i (strb_hdl_pready[cb*NrTCDMPortsPerCore+j]),
+        .strb_rsp_i       (cache_rsp      [j][cb]              ),
+        .strb_req_o       (cache_req      [j][cb]              ),
+        .strb_rsp_ready_o (cache_pready   [j][cb]              ),
+        .strb_rsp_o       (strb_hdl_rsp   [cb*NrTCDMPortsPerCore+j])
+      );
+    end
   end
 
   /// Wire requests after strb handling to the cache controller
   // Hong TODO: Now we hardwire ports to controller ports one to one.
   //            But later, we need to distribute these requests to the corresponding controllers based on
   //            partition id (or address range).
-  for (genvar i = 0; i < NumL1CacheCtrl; i++) begin
+  for (genvar j = 0; j < NrTCDMPortsPerCore; j++) begin : gen_cache_xbar
+    tcdm_cache_interco #(
+      .NumCore               (NrCores             ),
+      .NumCache              (NumL1CacheCtrl      ),
+      .Offset                ($clog2(L1LineWidth) ),
+      .tcdm_req_t            (tcdm_req_t          ),
+      .tcdm_rsp_t            (tcdm_rsp_t          ),
+      .tcdm_req_chan_t       (tcdm_req_chan_t     ),
+      .tcdm_rsp_chan_t       (tcdm_rsp_chan_t     )
+    ) i_cache_xbar (
+      .clk_i            (clk_i                  ),
+      .rst_ni           (rst_ni                 ),
+      .core_req_i       (cache_req[j]           ),
+      .core_rsp_ready_i (cache_pready[j]        ),
+      .core_rsp_o       (cache_rsp[j]           ),
+      .mem_req_o        (cache_xbar_req[j]      ),
+      .mem_rsp_ready_o  (cache_xbar_pready[j]   ),
+      .mem_rsp_i        (cache_xbar_rsp[j]      )
+    );
+  end
+
+  for (genvar cb = 0; cb < NumL1CacheCtrl; cb++) begin
     for (genvar j = 0; j < NrTCDMPortsPerCore; j++) begin
-      assign cache_req_valid[i][j] = cache_req[i*NrTCDMPortsPerCore+j].q_valid;
-      assign cache_req_addr[i][j]  = cache_req[i*NrTCDMPortsPerCore+j].q.addr;
-      assign cache_req_meta[i][j]  = cache_req[i*NrTCDMPortsPerCore+j].q.user;
-      assign cache_req_write[i][j] = cache_req[i*NrTCDMPortsPerCore+j].q.write;
-      assign cache_req_data[i][j]  = cache_req[i*NrTCDMPortsPerCore+j].q.data;
+      assign cache_req_valid[cb][j] = cache_xbar_req[j][cb].q_valid;
+      assign cache_req_addr [cb][j] = cache_xbar_req[j][cb].q.addr;
+      assign cache_req_meta [cb][j] = cache_xbar_req[j][cb].q.user;
+      assign cache_req_write[cb][j] = cache_xbar_req[j][cb].q.write;
+      assign cache_req_data [cb][j] = cache_xbar_req[j][cb].q.data;
 
-      assign cache_rsp_ready[i][j]   = cache_pready[i*NrTCDMPortsPerCore+j];
-      assign cache_rsp[i*NrTCDMPortsPerCore+j].p_valid = cache_rsp_valid[i][j];
-      assign cache_rsp[i*NrTCDMPortsPerCore+j].q_ready = cache_req_ready[i][j];
-      assign cache_rsp[i*NrTCDMPortsPerCore+j].p.data  = cache_rsp_data[i][j];
-      assign cache_rsp[i*NrTCDMPortsPerCore+j].p.user  = cache_rsp_meta[i][j];
+      // assign cache_rsp_ready[cb][j] = 1'b1;
+      assign cache_rsp_ready[cb][j] = cache_xbar_pready[j][cb];
 
-      assign cache_rsp[i*NrTCDMPortsPerCore+j].p.write = cache_rsp_write[i][j];
+      assign cache_xbar_rsp[j][cb].p_valid = cache_rsp_valid[cb][j];
+      assign cache_xbar_rsp[j][cb].q_ready = cache_req_ready[cb][j];
+      assign cache_xbar_rsp[j][cb].p.data  = cache_rsp_data [cb][j];
+      assign cache_xbar_rsp[j][cb].p.user  = cache_rsp_meta [cb][j];
+
+      assign cache_xbar_rsp[j][cb].p.write = cache_rsp_write[cb][j];
     end
   end
 
@@ -1020,12 +1052,13 @@ module spatz_cluster
       .impl_i                (impl_l1d_fifo            ),
       // Sync Control
       .cache_sync_valid_i    (l1d_insn_valid           ),
-      .cache_sync_ready_o    (l1d_insn_ready[cb]        ),
+      .cache_sync_ready_o    (l1d_insn_ready[cb]       ),
       .cache_sync_insn_i     (l1d_insn                 ),
       // SPM Size
       // The calculation of spm region in cache is different
       // than other modules (needs to times 2)
-      .bank_depth_for_SPM_i  (num_spm_lines            ),
+      // Currently assume full cache
+      .bank_depth_for_SPM_i  ('0                       ),
       // Request
       .core_req_valid_i      (cache_req_valid[cb]          ),
       .core_req_ready_o      (cache_req_ready[cb]          ),
@@ -1106,40 +1139,7 @@ module spatz_cluster
 
       assign l1_data_bank_gnt[cb][j] = 1'b1;
     end
-
-    // // Wire cache requests from controller ports to data banks
-    // for (genvar j = 0; j < NumDataBankPerCtrl; j++) begin
-    //   assign l1_data_bank_req_flat  [i*NumDataBankPerCtrl+j]  = l1_data_bank_req  [i][j];
-    //   assign l1_data_bank_we_flat   [i*NumDataBankPerCtrl+j]  = l1_data_bank_we   [i][j];
-    //   assign l1_data_bank_addr_flat [i*NumDataBankPerCtrl+j]  = l1_data_bank_addr [i][j];
-    //   assign l1_data_bank_wdata_flat[i*NumDataBankPerCtrl+j]  = l1_data_bank_wdata[i][j];
-    //   assign l1_data_bank_be_flat   [i*NumDataBankPerCtrl+j]  = l1_data_bank_be   [i][j];
-
-    //   assign l1_data_bank_rdata[i][j] = l1_data_bank_rdata_flat [i*NumDataBankPerCtrl+j];
-    //   assign l1_data_bank_gnt[i][j]   = l1_data_bank_gnt_flat[i*NumDataBankPerCtrl+j];
-    // end
   end
-
-  // for (genvar i = 0; i < NrSuperBanks; i++) begin
-  //   // 8 Bank Wraps per SuperBank
-  //   for (genvar j = 0; j < BanksPerSuperBank; j++) begin
-  //     // 8 Banks per Bank Wrap
-  //     for (genvar k = 0; k < L1BankPerWP; k++) begin
-  //       // [i*8+j][k]         => [0][0], [0][1], [0][2]....
-  //       // [i*8*4 + j*4 + k]  => [0],    [1]   , [2], ...
-  //       assign l1_cache_wp_req   [i*BanksPerSuperBank+j][k] = l1_data_bank_req_flat   [i*BanksPerSuperBank*L1BankPerWP+j*L1BankPerWP+k];
-  //       assign l1_cache_wp_we    [i*BanksPerSuperBank+j][k] = l1_data_bank_we_flat    [i*BanksPerSuperBank*L1BankPerWP+j*L1BankPerWP+k];
-  //       assign l1_cache_wp_addr  [i*BanksPerSuperBank+j][k] = l1_data_bank_addr_flat  [i*BanksPerSuperBank*L1BankPerWP+j*L1BankPerWP+k];
-  //       assign l1_cache_wp_wdata [i*BanksPerSuperBank+j][k] = l1_data_bank_wdata_flat [i*BanksPerSuperBank*L1BankPerWP+j*L1BankPerWP+k];
-  //       // L1 Cache has a write granularity of an entire cache line
-  //       assign l1_cache_wp_be    [i*BanksPerSuperBank+j][k] =
-  //             (l1_data_bank_be_flat[i*BanksPerSuperBank*L1BankPerWP+j*L1BankPerWP+k]) ? {(NarrowDataWidth/8){1'b1}} : '0;
-
-  //       assign l1_data_bank_rdata_flat[i*BanksPerSuperBank*L1BankPerWP+j*L1BankPerWP+k] = l1_cache_wp_rdata[i*BanksPerSuperBank+j][k];
-  //       assign l1_data_bank_gnt_flat  [i*BanksPerSuperBank*L1BankPerWP+j*L1BankPerWP+k] = l1_cache_wp_gnt  [i*BanksPerSuperBank+j][k];
-  //     end
-  //   end
-  // end
 
   // Hong TODO: Now we multiplex axi requests from multiple cache controllers, 
   //            the id width is prepended to the existing id value to tell which 
@@ -1147,17 +1147,17 @@ module spatz_cluster
   //            we have some more appealing mux policy.
   axi_mux #(
     .SlvAxiIDWidth ( WideIdWidthIn-$clog2(NumL1CacheCtrl) ), // ID width of the slave ports
-    .slv_aw_chan_t ( axi_dcache_aw_chan_t          ), // AW Channel Type, slave ports
+    .slv_aw_chan_t ( axi_dcache_aw_chan_t           ), // AW Channel Type, slave ports
     .mst_aw_chan_t ( axi_mst_dma_aw_chan_t          ), // AW Channel Type, master port
     .w_chan_t      ( axi_mst_dma_w_chan_t           ), //  W Channel Type, all ports
-    .slv_b_chan_t  ( axi_dcache_b_chan_t           ), //  B Channel Type, slave ports
+    .slv_b_chan_t  ( axi_dcache_b_chan_t            ), //  B Channel Type, slave ports
     .mst_b_chan_t  ( axi_mst_dma_b_chan_t           ), //  B Channel Type, master port
-    .slv_ar_chan_t ( axi_dcache_ar_chan_t          ), // AR Channel Type, slave ports
+    .slv_ar_chan_t ( axi_dcache_ar_chan_t           ), // AR Channel Type, slave ports
     .mst_ar_chan_t ( axi_mst_dma_ar_chan_t          ), // AR Channel Type, master port
-    .slv_r_chan_t  ( axi_dcache_r_chan_t           ), //  R Channel Type, slave ports
+    .slv_r_chan_t  ( axi_dcache_r_chan_t            ), //  R Channel Type, slave ports
     .mst_r_chan_t  ( axi_mst_dma_r_chan_t           ), //  R Channel Type, master port
-    .slv_req_t     ( axi_dcache_req_t              ),
-    .slv_resp_t    ( axi_dcache_resp_t             ),
+    .slv_req_t     ( axi_dcache_req_t               ),
+    .slv_resp_t    ( axi_dcache_resp_t              ),
     .mst_req_t     ( axi_mst_dma_req_t              ),
     .mst_resp_t    ( axi_mst_dma_resp_t             ),
     .NoSlvPorts    ( NumL1CacheCtrl                 ) // Number of Masters for the module

@@ -45,11 +45,11 @@ int main() {
   #if MEAS_1ITER == 1
   const int measure_iter = 1;
   #else
-  const int measure_iter = 2;
+  const int measure_iter = 3;
   #endif
 
   #if USE_CACHE == 1
-  uint32_t spm_size = 16;
+  uint32_t spm_size = 0;
   #else
   uint32_t spm_size = 120;
   #endif

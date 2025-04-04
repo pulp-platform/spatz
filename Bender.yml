@@ -200,6 +200,7 @@ sources:
       - hw/system/spatz_cluster/src/spatz_strbreq_merge_unit.sv
       - hw/system/spatz_cluster/src/spatz_strbreq_merge_tree.sv
       - hw/system/spatz_cluster/src/spatz_strbreq_handler.sv
+      - hw/system/spatz_cluster/src/tcdm_cache_interco.sv
       - target: not(cachepool)
         files:
         # Level 3
