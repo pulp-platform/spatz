@@ -7,7 +7,7 @@ cmake_minimum_required(VERSION 3.13)
 # Defines
 set(SNRT_NFPU_PER_CORE "0" CACHE STRING "Number of FPUs per Spatz")
 
-# Allow spatzBenchmarks to be built as a standalone library.
+# Allow QuadrilateroBenchmarks to be built as a standalone library.
 if (CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/../cmake)
     set(CMAKE_TOOLCHAIN_FILE toolchain-gcc CACHE STRING "Toolchain to use")
@@ -33,33 +33,22 @@ macro(add_quadrilatero_test_noParam name file)
   target_compile_definitions(test-${SNITCH_TEST_PREFIX}${target_name} PUBLIC DATAHEADER="matrixMul32i.h" SNRT_NFPU_PER_CORE=${SNRT_NFPU_PER_CORE})
 endmacro()
 
+macro(add_quadrilatero_test_threeParam name file param1 param2 param3)
+  set(target_name ${name}_M${param1}_N${param2}_K${param3})
+  add_snitch_test(${target_name} ${file})
+  target_link_libraries(test-${SNITCH_TEST_PREFIX}${target_name} benchmark ${SNITCH_RUNTIME})
+  target_compile_definitions(test-${SNITCH_TEST_PREFIX}${target_name} PUBLIC DATAHEADER="data/data_${param1}_${param2}_${param3}.h" SNRT_NFPU_PER_CORE=${SNRT_NFPU_PER_CORE})
+endmacro()
+
 # # Benchmark library
-# add_library(benchmark benchmark/benchmark.c)
+add_library(benchmark benchmark/benchmark.c)
 
 # # Kernels
-# add_library(dp-fmatmul dp-fmatmul/kernel/dp-fmatmul.c)
-# add_library(sp-fmatmul sp-fmatmul/kernel/sp-fmatmul.c)
-# add_library(hp-fmatmul hp-fmatmul/kernel/hp-fmatmul.c)
-
-# add_library(widening-hp-fmatmul widening-hp-fmatmul/kernel/widening-fmatmul.c)
-# add_library(widening-bp-fmatmul widening-bp-fmatmul/kernel/widening-fmatmul.c)
-
-# add_library(sdotp-hp-fmatmul sdotp-hp-fmatmul/kernel/sdotp-fmatmul.c)
-# add_library(sdotp-bp-fmatmul sdotp-bp-fmatmul/kernel/sdotp-fmatmul.c)
-
-# add_library(dp-faxpy dp-faxpy/kernel/faxpy.c)
-
-# add_library(dp-fdotp dp-fdotp/kernel/fdotp.c)
-
-# add_library(dp-fconv2d dp-fconv2d/kernel/fconv2d.c)
-
-# add_library(dp-fft dp-fft/kernel/fft.c)
-# add_library(sp-fft sp-fft/kernel/fft.c)
+add_library(sp-matmul sp-matmul/kernel/sp-matmul.c)
 
 # # Tests
 enable_testing()
 set(SNITCH_TEST_PREFIX quadrilateroBenchmarks-)
 add_quadrilatero_test_noParam(quadrilatero-matmul quadrilatero_matmul/main.c)
-# target_link_libraries(test-${SNITCH_TEST_PREFIX}quadrilatero-matmul)
-# target_link_libraries(test-${SNITCH_TEST_PREFIX}quadrilatero-matmul benchmark ${SNITCH_RUNTIME})
 
+add_quadrilatero_test_threeParam(sp-matmul sp-matmul/main.c 64 64 64)
