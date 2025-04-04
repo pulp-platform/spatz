@@ -12,6 +12,13 @@ package spatz_pkg;
   //  Parameters  //
   //////////////////
 
+% if cfg['quadrilatero']:
+  // Instantiate quadrilatero
+  localparam bit QUADRILATERO = 1;
+% else :
+  // Instantiate quadrilatero
+  localparam bit QUADRILATERO = 0;
+% endif
 % if cfg['mempool']:
   // Number of IPUs in each VFU (between 1 and 8)
   localparam int unsigned N_IPU = `ifdef N_IPU `N_IPU `else 4 `endif;

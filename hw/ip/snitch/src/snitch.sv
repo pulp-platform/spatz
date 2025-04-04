@@ -10,7 +10,7 @@
 
 // `SNITCH_ENABLE_PERF Enables mcycle, minstret performance counters (read only)
 
-module snitch import snitch_pkg::*; import riscv_instr::*; #(
+module snitch import snitch_pkg::*; import riscv_instr::*; import quadrilatero_instr_pkg::*;#(
   /// Boot address of core.
   parameter logic [31:0] BootAddr  = 32'h0000_1000,
   /// Physical Address width of the core.
@@ -40,6 +40,8 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
   parameter bit          XFDOTP    = 0,
   parameter bit          XFAUX     = 0,
   int unsigned           FLEN      = DataWidth,
+  // Enable Matrix Extension
+  parameter bit          RMM       = 0,
   /// Enable virtual memory support.
   parameter bit          VMSupport = 1,
   /// Enable experimental IPU extension.
@@ -2615,7 +2617,63 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
       end
 `endif
 /* end of RVV extension */
+/* RMM extension */
+`ifdef TARGET_SPATZ
+      quadrilatero_instr_pkg::FMMACC_S,
+      quadrilatero_instr_pkg::FMMACC_D,
+      quadrilatero_instr_pkg::FMMACC_H,
+      quadrilatero_instr_pkg::MMAQA_B,
+      quadrilatero_instr_pkg::MMADA_H,
+      quadrilatero_instr_pkg::MMASA_W,
+      quadrilatero_instr_pkg::MZERO: begin
+        if (RMM) begin
+          write_rd        = 1'b0;
+          uses_rd         = 1'b0;
+          acc_qvalid_o    = valid_instr;
+          acc_register_rd = 1'b0;
+          acc_qreq_o.addr = QUADRILATERO;
+        end else begin
+          illegal_inst = 1'b1;
+        end
+      end
 
+      // 2 source registers (rs1, rs2)
+      //quadrilatero_instr_pkg::MLD_B, -- change encoding
+      quadrilatero_instr_pkg::MLD_H,
+      quadrilatero_instr_pkg::MLD_W:
+      begin
+        if (RMM) begin
+          write_rd        = 1'b0;
+          uses_rd         = 1'b0;
+          acc_qvalid_o    = valid_instr && !acc_mem_stall;
+          opa_select      = Reg;
+          opb_select      = Reg;
+          acc_register_rd = 1'b0;
+          acc_qreq_o.addr = QUADRILATERO;
+        end else begin
+          illegal_inst = 1'b1;
+        end
+      end
+
+      // 2 source registers (rs1, rs2) and memory store operation
+      quadrilatero_instr_pkg::MST_B,
+      quadrilatero_instr_pkg::MST_H,
+      quadrilatero_instr_pkg::MST_W: begin
+        if (RMM) begin
+          write_rd        = 1'b0;
+          uses_rd         = 1'b0;
+          acc_qvalid_o    = valid_instr && !acc_mem_stall;
+          opa_select      = Reg;
+          opb_select      = Reg;
+          acc_register_rd = 1'b0;
+          acc_mem_store   = 1'b1;
+          acc_qreq_o.addr = QUADRILATERO;
+        end else begin
+          illegal_inst = 1'b1;
+        end
+      end
+`endif
+/* end of RMM extension */
       default: begin
         illegal_inst = 1'b1;
       end
