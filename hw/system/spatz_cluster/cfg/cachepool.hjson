@@ -54,6 +54,8 @@
         cores: [
             { $ref: "#/dma_core_template" },
             { $ref: "#/compute_core_template" },
+            { $ref: "#/compute_core_template" },
+            { $ref: "#/compute_core_template" },
         ],
         icache: {
             size: 4, // total instruction cache size in kByte

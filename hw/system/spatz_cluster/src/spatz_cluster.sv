@@ -240,37 +240,6 @@ module spatz_cluster
     default           : '0
   };
 
-  // // L1 Cache
-  // // Address width of cache
-  // localparam int unsigned L1AddrWidth     = 32;
-  // // Cache lane width
-  // localparam int unsigned L1LineWidth     = 128;
-  // // Cache ways
-  // localparam int unsigned L1Associativity = 4;
-  // // Pesudo dual bank
-  // localparam int unsigned L1BankFactor    = 2;
-  // // Coalecser window
-  // localparam int unsigned L1CoalFactor    = 2;
-  // // Total number of Data banks
-  // localparam int unsigned L1NumDataBank   = 128;
-  // // SPM view: Number of banks in each bank wrap (Use to mitigate routing complexity of such many banks)
-  // localparam int unsigned L1BankPerWP     = L1NumDataBank / NrBanks;
-  // // 8 * 1024 * 64 / 512 = 1024)
-  // // Number of entrys of L1 Cache
-  // localparam int unsigned L1NumEntry      = NrBanks * TCDMDepth * DataWidth / L1LineWidth;
-  // // Number of bank wraps SPM can see
-  // localparam int unsigned L1NumWrapper    = L1NumDataBank / L1BankPerWP;
-  // // Number of cache entries each cache way has
-  // localparam int unsigned L1CacheWayEntry = L1NumEntry / L1Associativity;
-  // // Number of cache sets each cache way has
-  // localparam int unsigned L1NumSet        = L1CacheWayEntry / L1BankFactor;
-  // // Number of Tag banks
-  // localparam int unsigned L1NumTagBank    = L1BankFactor * L1Associativity;
-  // // Number of lines per bank unit
-  // localparam int unsigned DepthPerBank    = TCDMDepth / L1BankPerWP;
-  // // Cache total size in KB
-  // localparam int unsigned L1Size          = NrBanks * TCDMDepth * DataWidth / 8 / 1024;
-
   // Address width of cache
   localparam int unsigned L1AddrWidth     = 32;
   // Cache lane width
@@ -940,44 +909,48 @@ module spatz_cluster
     .cache_rsp_i          (unmerge_rsp     )
   );
 
-  spatz_strbreq_merge_tree #(
-    .NumIO              (NrTCDMPortsCores             ),
-    .NumOutstandingMem  (NumSpatzOutstandingLoads[0]  ),
-    .MergeNum           (NrTCDMPortsCores - NrCores   ),
-    .DataWidth          (DataWidth                    ),
-    .mem_req_t          (tcdm_req_t                   ),
-    .mem_rsp_t          (tcdm_rsp_t                   ),
-    .req_id_t           (reqid_t                      ),
-    .tcdm_user_t        (tcdm_user_t                  )
-  ) i_strbreq_merge_tree (
-    .clk_i           (clk_i),
-    .rst_ni          (rst_ni),
-    .unmerge_req_i   (unmerge_req       ),
-    .unmerge_pready_i(unmerge_pready    ),
-    .merge_rsp_i     (strb_hdl_rsp      ),
-    .merge_req_o     (strb_hdl_req      ),
-    .merge_pready_o  (strb_hdl_pready   ),
-    .unmerge_rsp_o   (unmerge_rsp       )
-  );
+  // spatz_strbreq_merge_tree #(
+  //   .NumIO              (NrTCDMPortsCores             ),
+  //   .NumOutstandingMem  (NumSpatzOutstandingLoads[0]  ),
+  //   .MergeNum           (NrTCDMPortsCores - NrCores   ),
+  //   .DataWidth          (DataWidth                    ),
+  //   .mem_req_t          (tcdm_req_t                   ),
+  //   .mem_rsp_t          (tcdm_rsp_t                   ),
+  //   .req_id_t           (reqid_t                      ),
+  //   .tcdm_user_t        (tcdm_user_t                  )
+  // ) i_strbreq_merge_tree (
+  //   .clk_i           (clk_i),
+  //   .rst_ni          (rst_ni),
+  //   .unmerge_req_i   (unmerge_req       ),
+  //   .unmerge_pready_i(unmerge_pready    ),
+  //   .merge_rsp_i     (strb_hdl_rsp      ),
+  //   .merge_req_o     (strb_hdl_req      ),
+  //   .merge_pready_o  (strb_hdl_pready   ),
+  //   .unmerge_rsp_o   (unmerge_rsp       )
+  // );
 
   // TODO: Should be NrCore instead of CacheBank here
   for (genvar j = 0; j < NrTCDMPortsPerCore; j++) begin: gen_strb_hdlr
     for (genvar cb = 0; cb < NumL1CacheCtrl; cb++) begin
-      spatz_strbreq_handler #(
-        .DataWidth      (DataWidth    ),
-        .mem_req_t      (tcdm_req_t   ),
-        .mem_rsp_t      (tcdm_rsp_t   ),
-        .reqrsp_user_t  (tcdm_user_t  )
-      ) i_strbreq_handler (
-        .clk_i            (clk_i              ),
-        .rst_ni           (rst_ni             ),
-        .strb_req_i       (strb_hdl_req   [cb*NrTCDMPortsPerCore+j]),
-        .strb_rsp_ready_i (strb_hdl_pready[cb*NrTCDMPortsPerCore+j]),
-        .strb_rsp_i       (cache_rsp      [j][cb]              ),
-        .strb_req_o       (cache_req      [j][cb]              ),
-        .strb_rsp_ready_o (cache_pready   [j][cb]              ),
-        .strb_rsp_o       (strb_hdl_rsp   [cb*NrTCDMPortsPerCore+j])
-      );
+    //   spatz_strbreq_handler #(
+    //     .DataWidth      (DataWidth    ),
+    //     .mem_req_t      (tcdm_req_t   ),
+    //     .mem_rsp_t      (tcdm_rsp_t   ),
+    //     .reqrsp_user_t  (tcdm_user_t  )
+    //   ) i_strbreq_handler (
+    //     .clk_i            (clk_i              ),
+    //     .rst_ni           (rst_ni             ),
+    //     .strb_req_i       (strb_hdl_req   [cb*NrTCDMPortsPerCore+j]),
+    //     .strb_rsp_ready_i (strb_hdl_pready[cb*NrTCDMPortsPerCore+j]),
+    //     .strb_rsp_i       (cache_rsp      [j][cb]              ),
+    //     .strb_req_o       (cache_req      [j][cb]              ),
+    //     .strb_rsp_ready_o (cache_pready   [j][cb]              ),
+    //     .strb_rsp_o       (strb_hdl_rsp   [cb*NrTCDMPortsPerCore+j])
+    //   );
+    // end
+      assign cache_req   [j][cb] = unmerge_req   [cb*NrTCDMPortsPerCore+j];
+      assign cache_pready[j][cb] = unmerge_pready[cb*NrTCDMPortsPerCore+j];
+      assign unmerge_rsp [cb*NrTCDMPortsPerCore+j] = cache_rsp     [j][cb];
     end
   end
 
