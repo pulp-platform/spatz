@@ -576,84 +576,148 @@ void mxfp8_matmul_fp32_outer_lmul4_2x(float *c,
 
   for (uint32_t m = 0; m < M; m += 2) {
     for (uint32_t n = 0; n < N; n += n_vl) {
-      // post-scale accumulator: v0-v3, v16-v19
-      asm volatile("vsetvli %0, %1, e32, m4, ta, ma" : "=r"(n_vl) : "r"(N - n));
-      asm volatile("vmv.v.i  v0, 0");
-      asm volatile("vmv.v.i v16, 0");
+      uint32_t n_remaining = N - n;
 
-      float *c_ = c_m0 + n;   // c[m][n]
-      const char *a_ = a_m0;  // a[m][0]
-      const char *b_ = b + n; // b[0][n]
-      const uint8_t *a_scale_ = a_scale_m0;                   // a_scale[m][0]
-      const uint8_t *b_scale_ = (const uint8_t *)b_scale + n; // b_scale[0][n]
+      // post-scale accumulator (FP32): v0-v3, v4-v7
+      asm volatile("vsetvli %0, %1, e32, m4, ta, ma" : "=r"(n_vl) : "r"(n_remaining));
+      asm volatile("vmv.v.i v0, 0");
+      asm volatile("vmv.v.i v4, 0");
+
+      float *c_ = c_m0 + n;    // c[m][n]
+      const char *a_ = a_m0;   // a[m][0]
+      const char *b_ = b + n;  // b[0][n]
+      const uint8_t *a_scale_ = a_scale_m0;                    // a_scale[m][0]
+      const uint8_t *b_scale_ = (const uint8_t *)b_scale + n;  // b_scale[0][n]
 
       for (uint32_t k_block = 0; k_block < K_BLOCK; k_block++) {
-        // pre-scale accumulator: v4-v7, v20-v23
+        // pre-scale accumulator (FP32): v8-v11, v12-v15
 
-        for (uint32_t k_elem = 0; k_elem < MXFP8_BLOCK_SIZE; k_elem++) {
-          asm volatile("vsetvli zero, %0, e8, m1, ta, ma" :: "r"(N - n));
+        // loop head
 
-          // load operands: a[m:m+2][k] and b[k][n:n+n_vl]
-          float a0, a1;
-          asm volatile("flb %0, (%1)" : "=f"(a0) : "r"(a_));
-          asm volatile("flb %0, (%1)" : "=f"(a1) : "r"(a_ + K));
-          asm volatile("vle8.v v8, (%0)" :: "r"(b_));
+        // load operands and widen to FP16: b[k][n:n+n_vl]
+        asm volatile("vsetvli zero, %0, e8, m1, ta, ma" :: "r"(n_remaining));
+        asm volatile("vle8.v v16, (%0)" :: "r"(b_));
+        asm volatile("vfwadd.vf v18, v16, %0" :: "f"(0.0f));
+        b_ += N; // next row
 
-          // widen to FP16
-          asm volatile("fcvt.h.b %0, %0" : "+f"(a0));
-          asm volatile("fcvt.h.b %0, %0" : "+f"(a1));
-          asm volatile("vfwadd.vf v10, v8, %0" :: "f"(0.0f));
+        // load operands and widen to FP16: a[m:m+2][k]
+        const char *a__ = a_;
+        double a0, a1; // actually contain FP8 (and later FP16)
+        asm volatile("flb %0, (%1)" : "=f"(a0) : "r"(a__));
+        asm volatile("fcvt.h.b %0, %0" : "+f"(a0));
+        a__ += K;
+        asm volatile("flb %0, (%1)" : "=f"(a1) : "r"(a__));
+        asm volatile("fcvt.h.b %0, %0" : "+f"(a1));
+        a_ += 1; // next column
 
-          asm volatile("vsetvli zero, %0, e16, m2, ta, ma" :: "r"(N - n));
+        uint32_t k_elem = 0;
+
+        while (k_elem < MXFP8_BLOCK_SIZE) {
+          k_elem += 1;
+
+          // load operands: b[k][n:n+n_vl]
+          asm volatile("vsetvli zero, %0, e8, m1, ta, ma" :: "r"(n_remaining));
+          asm volatile("vle8.v v17, (%0)" :: "r"(b_));
+          asm volatile("vfwadd.vf v20, v17, %0" :: "f"(0.0f));
+          b_ += N; // next row
 
           // widen, multiply, and accumulate operands (pre-scaling) to FP32
-          if (k_elem == 0) {
-            asm volatile("vfwmul.vf  v4, v10, %0" :: "f"(a0));
-            asm volatile("vfwmul.vf v20, v10, %0" :: "f"(a1));
+          asm volatile("vsetvli zero, %0, e16, m2, ta, ma" :: "r"(n_remaining));
+          a__ = a_;
+          if (k_elem == 1) {
+            asm volatile("vfwmul.vf  v8, v18, %0" :: "f"(a0));
+            asm volatile("flb %0, (%1)" : "=f"(a0) : "r"(a__));
+            asm volatile("fcvt.h.b %0, %0" : "+f"(a0));
+            a__ += K;
+            asm volatile("vfwmul.vf v12, v18, %0" :: "f"(a1));
+            asm volatile("flb %0, (%1)" : "=f"(a1) : "r"(a__));
+            asm volatile("fcvt.h.b %0, %0" : "+f"(a1));
           } else {
-            asm volatile("vfwmacc.vf  v4, %0, v10" :: "f" (a0));
-            asm volatile("vfwmacc.vf v20, %0, v10" :: "f" (a1));
+            asm volatile("vfwmacc.vf  v8, %0, v18" :: "f" (a0));
+            asm volatile("flb %0, (%1)" : "=f"(a0) : "r"(a__));
+            asm volatile("fcvt.h.b %0, %0" : "+f"(a0));
+            a__ += K;
+            asm volatile("vfwmacc.vf v12, %0, v18" :: "f" (a1));
+            asm volatile("flb %0, (%1)" : "=f"(a1) : "r"(a__));
+            asm volatile("fcvt.h.b %0, %0" : "+f"(a1));
           }
-
           a_ += 1; // next column
+
+          // unrolled: repeat loop body
+          k_elem += 1;
+
+          if (k_elem == MXFP8_BLOCK_SIZE)
+            break;
+
+          // load operands: b[k][n:n+n_vl]
+          asm volatile("vsetvli zero, %0, e8, m1, ta, ma" :: "r"(n_remaining));
+          asm volatile("vle8.v v16, (%0)" :: "r"(b_));
+          asm volatile("vfwadd.vf v18, v16, %0" :: "f"(0.0f));
           b_ += N; // next row
+
+          // widen, multiply, and accumulate operands (pre-scaling) to FP32
+          asm volatile("vsetvli zero, %0, e16, m2, ta, ma" :: "r"(n_remaining));
+          a__ = a_;
+          asm volatile("vfwmacc.vf  v8, %0, v20" :: "f" (a0));
+          asm volatile("flb %0, (%1)" : "=f"(a0) : "r"(a__));
+          asm volatile("fcvt.h.b %0, %0" : "+f"(a0));
+          a__ += K;
+          asm volatile("vfwmacc.vf v12, %0, v20" :: "f" (a1));
+          asm volatile("flb %0, (%1)" : "=f"(a1) : "r"(a__));
+          asm volatile("fcvt.h.b %0, %0" : "+f"(a1));
+          a_ += 1; // next column
         }
+
+        // loop tail
+        asm volatile("vfwmacc.vf  v8, %0, v20" :: "f"(a0));
+        asm volatile("vfwmacc.vf v12, %0, v20" :: "f"(a1));
 
         // scaling
 
-        // load operand: a_scale[m:m+2][k_block]
-        uint8_t as0 = *(a_scale_);
-        uint8_t as1 = *(a_scale_ + K_BLOCK);
-        // load operands: b_scale[k_block][n:n+n_vl] -> v12
-        asm volatile("vsetvli zero, %0, e8, m1, ta, ma" :: "r"(N - n));
-        asm volatile("vle8.v v12, (%0)" :: "r"(b_scale_));
+        // load operands: b_scale[k_block][n:n+n_vl] -> v16
+        asm volatile("vsetvli zero, %0, e8, m1, ta, ma" :: "r"(n_remaining));
+        asm volatile("vle8.v v16, (%0)" :: "r"(b_scale_));
 
+        // load operand: a_scale[m:m+2][k_block]
+        const uint8_t *a_scale__ = a_scale_;
+        uint8_t as0 = *a_scale__;
+        a_scale__ += K_BLOCK;
+        uint8_t as1 = *a_scale__;
+
+        // widen to 16-bit unsigned integer -> v18-v19
+        asm volatile("vwcvtu.x.x.v v18, v16");
+
+        // re-bias scales for FP32
         int16_t as0_rescaled = as0 - (2 * E8M0_BIAS - FP32_BIAS);
         int16_t as1_rescaled = as1 - (2 * E8M0_BIAS - FP32_BIAS);
 
-        // widen to 16-bit unsigned integer -> v14-v15
-        asm volatile("vwcvtu.x.x.v v14, v12");
-
-        // add, re-bias for FP32 and widen to 32-bit -> v8-v11, v24-v27
-        asm volatile("vsetvli zero, %0, e16, m2, ta, ma" :: "r"(N - n));
-        asm volatile("vwadd.vx  v8, v14, %0" :: "r"(as0_rescaled));
-        asm volatile("vwadd.vx v24, v14, %0" :: "r"(as1_rescaled));
+        // add scales and widen to 32-bit -> v24-27, v28-v31
+        asm volatile("vsetvli zero, %0, e16, m2, ta, ma" :: "r"(n_remaining));
+        asm volatile("vwadd.vx v24, v18, %0" :: "r"(as0_rescaled));
+        asm volatile("vwadd.vx v28, v18, %0" :: "r"(as1_rescaled));
 
         // convert to FP32 using bit operations
-        asm volatile("vsetvli zero, %0, e32, m4, ta, ma" :: "r"(N - n));
-        asm volatile("vsll.vi  v8,  v8, 23");
+        asm volatile("vsetvli zero, %0, e32, m4, ta, ma" :: "r"(n_remaining));
         asm volatile("vsll.vi v24, v24, 23");
+        asm volatile("vsll.vi v28, v28, 23");
 
         // post-scale acc += pre-scale acc * scale
-        asm volatile("vfmacc.vv  v0,  v4,  v8");
-        asm volatile("vfmacc.vv v16, v20, v24");
+        if (k_block < K_BLOCK - 1) {
+          asm volatile("vfmacc.vv v0,  v8, v24");
+          asm volatile("vfmacc.vv v4, v12, v28");
+        } else {
+          // last iteration: issue stores
+          float *c__ = c_;
+          asm volatile("vfmacc.vv v0,  v8, v24");
+          asm volatile("vse32.v v0, (%0)" :: "r"(c__));
+          c__ += N;
+          asm volatile("vfmacc.vv v4, v12, v28");
+          asm volatile("vse32.v v4, (%0)" :: "r"(c__));
+        }
 
         a_scale_ += 1; // next column
         b_scale_ += N; // next row
       }
-
-      asm volatile("vse32.v  v0, (%0)" :: "r"(c_));
-      asm volatile("vse32.v v16, (%0)" :: "r"(c_ + N));
     }
 
     // increment row
