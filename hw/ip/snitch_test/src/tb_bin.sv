@@ -36,6 +36,24 @@ module tb_bin;
     end
   end
 
+  // Monitor VFU cycles.
+  int cycles_total         = 0;
+  int cycles_vfu_reduction = 0;
+  `define CORE0_SPATZ_VFU_REDUCTION_STATE \
+      i_dut.i_cluster_wrapper.i_cluster.gen_core[0].i_spatz_cc.i_spatz.i_vfu.reduction_state_q
+
+  initial begin
+    forever begin
+      @(posedge clk_i);
+      if (i_dut.cluster_probe) begin
+        cycles_total++;
+        if (`CORE0_SPATZ_VFU_REDUCTION_STATE != 3'b000) begin
+          cycles_vfu_reduction++;
+        end
+      end
+    end
+  end
+
   // Start `fesvr`.
   initial begin
     automatic int exit_code;
@@ -52,6 +70,16 @@ module tb_bin;
     end else begin
       $info("[SUCCESS] Program finished successfully");
     end
+
+    // statistics
+    if (cycles_total) begin
+      $display("");
+      $display("=== STATISTICS ===");
+      $display("benchmark runtime:  %8d cycles (100.0 %%)", cycles_total);
+      $display("VFU reduction:      %8d cycles (%5.1f %%)",
+        cycles_vfu_reduction, 100.0 * cycles_vfu_reduction / cycles_total);
+    end
+
     $finish;
   end
 
