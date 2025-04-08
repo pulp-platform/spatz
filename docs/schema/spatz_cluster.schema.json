@@ -170,6 +170,11 @@
             "description": "Number of TCDM ports per Spatz instance",
             "default": 4
         },
+        "spatz_xvmxdotp": {
+            "type": "boolean",
+            "description": "Activate MX dot product (VMXDOTP) support in Spatz (needs FPU)",
+            "default": false
+        },
         "timing": {
             "type": "object",
             "title": "Timing and Latency Tuning Parameter",
@@ -256,6 +261,11 @@
                 "lat_sdotp": {
                     "type": "number",
                     "description": "Latency setting (number of pipeline stages) for floating-point expanding dot product with accumulation.",
+                    "default": 2
+                },
+                "lat_mxdotp": {
+                    "type": "number",
+                    "description": "Latency setting (number of pipeline stages) for MX dot product.",
                     "default": 2
                 },
                 "fpu_pipe_config": {

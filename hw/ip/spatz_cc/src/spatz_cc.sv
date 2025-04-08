@@ -70,6 +70,8 @@ module spatz_cc
     parameter int                          unsigned        NumSpatzOutstandingLoads = 0,
     // Enable V Extension
     parameter bit                                          RVV                      = 1,
+    // Enable vector MX dot product (VMXDOTP) extension
+    parameter bit                                          XVMXDOTP                 = 0,
     // Spatz parameters
     parameter int                          unsigned        NumSpatzFPUs             = 4,
     parameter int                          unsigned        NumSpatzIPUs             = 1,
@@ -178,6 +180,7 @@ module spatz_cc
     .RVF                    (RVF                   ),
     .RVD                    (RVD                   ),
     .RVV                    (RVV                   ),
+    .XVMXDOTP               (XVMXDOTP              ),
     .XDivSqrt               (XDivSqrt              ),
     .XF16                   (XF16                  ),
     .XF16ALT                (XF16ALT               ),

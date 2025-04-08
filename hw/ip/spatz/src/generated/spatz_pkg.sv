@@ -29,6 +29,8 @@ package spatz_pkg;
   localparam bit RVD            = 1;
   // Vector support
   localparam bit RVV            = 1;
+  // Vector MX dot product support
+  localparam bit XVMXDOTP       = 1;
 
   // Maximum size of a single vector element in bits
   localparam int unsigned ELEN   = RVD ? 64 : 32;

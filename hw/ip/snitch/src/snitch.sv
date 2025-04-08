@@ -36,6 +36,8 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
   parameter bit          XDivSqrt  = 0,
   /// Enable V Extension
   parameter bit          RVV       = 0,
+  /// Enable vector MX dot product (VMXDOTP) extension
+  parameter bit          XVMXDOTP  = 0,
   parameter bit          XFVEC     = 0,
   parameter bit          XFDOTP    = 0,
   parameter bit          XFAUX     = 0,
@@ -3365,5 +3367,9 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
 
   // Make sure that without virtual memory support, translation is never enabled
   `ASSERT(NoVMSupportNoTranslation, (~VMSupport |-> ~trans_active), clk_i, rst_i)
+
+  // XVXMDOTP (vector MX dot product) needs RVV and RVD
+  `ASSERT_INIT(XVMXDOTPNeedsRVV, !XVMXDOTP || RVV);
+  `ASSERT_INIT(XVMXDOTPNeedsRVD, !XVMXDOTP || RVD);
 
 endmodule

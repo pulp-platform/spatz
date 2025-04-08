@@ -50,6 +50,12 @@ package spatz_pkg;
 % endif
   // Vector support
   localparam bit RVV            = 1;
+  // Vector MX dot product support
+% if cfg['spatz_xvmxdotp']:
+  localparam bit XVMXDOTP       = 1;
+% else:
+  localparam bit XVMXDOTP       = 0;
+% endif
 
   // Maximum size of a single vector element in bits
   localparam int unsigned ELEN   = RVD ? 64 : 32;
