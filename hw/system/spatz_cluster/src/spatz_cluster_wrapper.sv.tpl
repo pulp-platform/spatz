@@ -135,7 +135,8 @@ package ${cfg['pkg_name']};
                       ${cfg['timing']['lat_sdotp']},
                       ${cfg['timing']['lat_sdotp']},
                       ${cfg['timing']['lat_sdotp']},
-                      ${cfg['timing']['lat_sdotp']}}    // DOTP
+                      ${cfg['timing']['lat_sdotp']}},   // DOTP
+                    '{1, 1, 1, 1, 1, 1}    // MXDOTP
                     },
         UnitTypes: '{'{fpnew_pkg::MERGED,
                        fpnew_pkg::MERGED,
@@ -167,15 +168,21 @@ package ${cfg['pkg_name']};
                         fpnew_pkg::MERGED,
                         fpnew_pkg::MERGED,
                         fpnew_pkg::MERGED,
-                        fpnew_pkg::MERGED}},  // DOTP
+                        fpnew_pkg::MERGED},  // DOTP
 % else:
                     '{fpnew_pkg::DISABLED,
                         fpnew_pkg::DISABLED,
                         fpnew_pkg::DISABLED,
                         fpnew_pkg::DISABLED,
                         fpnew_pkg::DISABLED,
-                        fpnew_pkg::DISABLED}}, // DOTP
+                        fpnew_pkg::DISABLED}, // DOTP
 % endif
+                    '{fpnew_pkg::DISABLED,
+                        fpnew_pkg::DISABLED,
+                        fpnew_pkg::DISABLED,
+                        fpnew_pkg::DISABLED,
+                        fpnew_pkg::DISABLED,
+                        fpnew_pkg::DISABLED}}, // MXDOTP
         PipeConfig: fpnew_pkg::${cfg['timing']['fpu_pipe_config']}
     }${',\n' if not loop.last else '\n'}\
   % endfor
