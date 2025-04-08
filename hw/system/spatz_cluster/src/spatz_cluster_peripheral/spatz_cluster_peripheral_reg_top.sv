@@ -301,6 +301,12 @@ module spatz_cluster_peripheral_reg_top #(
   logic l1d_insn_commit_we;
   logic l1d_flush_status_qs;
   logic l1d_flush_status_re;
+  logic [4:0] xbar_offset_qs;
+  logic [4:0] xbar_offset_wd;
+  logic xbar_offset_we;
+  logic xbar_offset_commit_qs;
+  logic xbar_offset_commit_wd;
+  logic xbar_offset_commit_we;
 
   // Register instances
 
@@ -2318,9 +2324,63 @@ module spatz_cluster_peripheral_reg_top #(
   );
 
 
+  // R[xbar_offset]: V(False)
+
+  prim_subreg #(
+    .DW      (5),
+    .SWACCESS("RW"),
+    .RESVAL  (5'h0)
+  ) u_xbar_offset (
+    .clk_i   (clk_i    ),
+    .rst_ni  (rst_ni  ),
+
+    // from register interface
+    .we     (xbar_offset_we),
+    .wd     (xbar_offset_wd),
+
+    // from internal hardware
+    .de     (1'b0),
+    .d      ('0  ),
+
+    // to internal hardware
+    .qe     (),
+    .q      (reg2hw.xbar_offset.q ),
+
+    // to register interface (read)
+    .qs     (xbar_offset_qs)
+  );
 
 
-  logic [18:0] addr_hit;
+  // R[xbar_offset_commit]: V(False)
+
+  prim_subreg #(
+    .DW      (1),
+    .SWACCESS("RW"),
+    .RESVAL  (1'h0)
+  ) u_xbar_offset_commit (
+    .clk_i   (clk_i    ),
+    .rst_ni  (rst_ni  ),
+
+    // from register interface
+    .we     (xbar_offset_commit_we),
+    .wd     (xbar_offset_commit_wd),
+
+    // from internal hardware
+    .de     (hw2reg.xbar_offset_commit.de),
+    .d      (hw2reg.xbar_offset_commit.d ),
+
+    // to internal hardware
+    .qe     (),
+    .q      (reg2hw.xbar_offset_commit.q ),
+
+    // to register interface (read)
+    .qs     (xbar_offset_commit_qs)
+  );
+
+
+
+
+  logic [20:0] addr_hit;
   always_comb begin
     addr_hit = '0;
     addr_hit[ 0] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_PERF_COUNTER_ENABLE_0_OFFSET);
@@ -2342,6 +2402,8 @@ module spatz_cluster_peripheral_reg_top #(
     addr_hit[16] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_L1D_SPM_COMMIT_OFFSET);
     addr_hit[17] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_L1D_INSN_COMMIT_OFFSET);
     addr_hit[18] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_L1D_FLUSH_STATUS_OFFSET);
+    addr_hit[19] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_XBAR_OFFSET_OFFSET);
+    addr_hit[20] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_XBAR_OFFSET_COMMIT_OFFSET);
   end
 
   assign addrmiss = (reg_re || reg_we) ? ~|addr_hit : 1'b0 ;
@@ -2367,7 +2429,9 @@ module spatz_cluster_peripheral_reg_top #(
                (addr_hit[15] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[15] & ~reg_be))) |
                (addr_hit[16] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[16] & ~reg_be))) |
                (addr_hit[17] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[17] & ~reg_be))) |
-               (addr_hit[18] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[18] & ~reg_be)))));
+               (addr_hit[18] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[18] & ~reg_be))) |
+               (addr_hit[19] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[19] & ~reg_be))) |
+               (addr_hit[20] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[20] & ~reg_be)))));
   end
 
   assign perf_counter_enable_0_cycle_0_we = addr_hit[0] & reg_we & !reg_error;
@@ -2607,6 +2671,12 @@ module spatz_cluster_peripheral_reg_top #(
 
   assign l1d_flush_status_re = addr_hit[18] & reg_re & !reg_error;
 
+  assign xbar_offset_we = addr_hit[19] & reg_we & !reg_error;
+  assign xbar_offset_wd = reg_wdata[4:0];
+
+  assign xbar_offset_commit_we = addr_hit[20] & reg_we & !reg_error;
+  assign xbar_offset_commit_wd = reg_wdata[0];
+
   // Read data return
   always_comb begin
     reg_rdata_next = '0;
@@ -2745,6 +2815,14 @@ module spatz_cluster_peripheral_reg_top #(
 
       addr_hit[18]: begin
         reg_rdata_next[0] = l1d_flush_status_qs;
+      end
+
+      addr_hit[19]: begin
+        reg_rdata_next[4:0] = xbar_offset_qs;
+      end
+
+      addr_hit[20]: begin
+        reg_rdata_next[0] = xbar_offset_commit_qs;
       end
 
       default: begin

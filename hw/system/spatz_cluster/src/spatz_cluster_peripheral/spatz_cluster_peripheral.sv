@@ -39,6 +39,8 @@ module spatz_cluster_peripheral
   input  tcdm_events_t               tcdm_events_i,
   input  dma_events_t                dma_events_i,
   input  snitch_icache_pkg::icache_events_t [NrCores-1:0] icache_events_i,
+  /// For cache xbar dynamic configuration
+  output logic [4:0]                 dynamic_offset_o,
   output spm_size_t                  l1d_spm_size_o,
   output logic [1:0]                 l1d_insn_o,
   output logic                       l1d_insn_valid_o,
@@ -70,6 +72,27 @@ module spatz_cluster_peripheral
     .hw2reg (hw2reg)
   );
 
+  //////////// Cache XBar ////////////
+  logic [4:0] xbar_offset_d, xbar_offset_q;
+  assign      dynamic_offset_o    = xbar_offset_q;
+  logic       xbar_offset_commit;
+  assign      xbar_offset_commit  = reg2hw.xbar_offset_commit.q;
+  always_comb begin : xbar_offset_cfg
+    xbar_offset_d = xbar_offset_q;
+    hw2reg.xbar_offset_commit.d  = 1'b0;
+    hw2reg.xbar_offset_commit.de = 1'b0;
+
+    if (xbar_offset_commit) begin
+      xbar_offset_d = reg2hw.xbar_offset.q;
+      hw2reg.xbar_offset_commit.d  = 1'b0;
+      hw2reg.xbar_offset_commit.de = 1'b0;
+    end
+  end
+  // Default value is 13
+  `FF(xbar_offset_q, xbar_offset_d, 5'd14, clk_i, rst_ni)
+
+
+  //////////// L1 DCache ////////////
   logic [NumPerfCounters-1:0][47:0] perf_counter_d, perf_counter_q;
   logic [31:0] cl_clint_d, cl_clint_q;
   logic [9:0]  l1d_spm_size_d, l1d_spm_size_q;

@@ -8,11 +8,11 @@
 
 module tcdm_cache_interco #(
   /// Number of inputs into the interconnect (`> 0`).
-  parameter int unsigned NumCore         = 32'd0,
+  parameter int unsigned NumCore              = 32'd0,
   /// Number of outputs from the interconnect (`> 0`).
-  parameter int unsigned NumCache          = 32'd0,
+  parameter int unsigned NumCache             = 32'd0,
   /// Offset bits based on cacheline: 512b => 6 bits
-  parameter int unsigned Offset               = 32'd6,
+  parameter int unsigned AddrWidth            = 32'd32,
 
   /// Port type of the data request ports.
   parameter type         tcdm_req_t           = logic,
@@ -29,6 +29,8 @@ module tcdm_cache_interco #(
   input  logic                                  clk_i,
   /// Reset, active low.
   input  logic                                  rst_ni,
+  /// Dynamic address offset for cache bank selection
+  input  logic          [$clog2(AddrWidth)-1:0] dynamic_offset_i,
   /// Request port.
   input  tcdm_req_t               [NumCore-1:0] core_req_i,
   /// Response ready in
@@ -134,7 +136,8 @@ module tcdm_cache_interco #(
   // => 7 bits index; 2 bits cache bank bits;
   // addr: Tag: [31:14]; Index: [13:7]; Cache Bank: [7:6]; Offset: [5:0]
   for (genvar port = 0; port < NumCore; port++) begin : gen_req_sel
-    assign core_req_sel[port] = core_req[port].addr[Offset+:CacheBankBits];
+    // assign core_req_sel[port] = core_req[port].addr[13:12];
+    assign core_req_sel[port] = core_req[port].addr[dynamic_offset_i+:CacheBankBits];
   end
 
   // forward response to the sender core

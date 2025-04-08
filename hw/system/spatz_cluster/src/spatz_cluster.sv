@@ -958,11 +958,18 @@ module spatz_cluster
   // Hong TODO: Now we hardwire ports to controller ports one to one.
   //            But later, we need to distribute these requests to the corresponding controllers based on
   //            partition id (or address range).
+  // Used to determine the mapping policy between different cache banks.
+  // Set through CSR
+  logic [$clog2(32)-1:0] dynamic_offset;
+  // assign dynamic_offset = 14;
+
+
   for (genvar j = 0; j < NrTCDMPortsPerCore; j++) begin : gen_cache_xbar
     tcdm_cache_interco #(
       .NumCore               (NrCores             ),
       .NumCache              (NumL1CacheCtrl      ),
-      .Offset                ($clog2(L1LineWidth) ),
+      // .Offset                ($clog2(L1LineWidth)+5 ),
+      .AddrWidth             (32'd32              ),
       .tcdm_req_t            (tcdm_req_t          ),
       .tcdm_rsp_t            (tcdm_rsp_t          ),
       .tcdm_req_chan_t       (tcdm_req_chan_t     ),
@@ -970,6 +977,7 @@ module spatz_cluster
     ) i_cache_xbar (
       .clk_i            (clk_i                  ),
       .rst_ni           (rst_ni                 ),
+      .dynamic_offset_i (dynamic_offset         ),
       .core_req_i       (cache_req[j]           ),
       .core_rsp_ready_i (cache_pready[j]        ),
       .core_rsp_o       (cache_rsp[j]           ),
@@ -1521,6 +1529,7 @@ module spatz_cluster
     .dma_events_i             (dma_events            ),
     .icache_events_i          (icache_events         ),
     .cluster_probe_o          (cluster_probe_o       ),
+    .dynamic_offset_o         (dynamic_offset        ),
     .l1d_spm_size_o           (cfg_spm_size          ),
     .l1d_insn_o               (l1d_insn              ),
     .l1d_insn_valid_o         (l1d_insn_valid        ),

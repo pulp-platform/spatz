@@ -519,6 +519,30 @@
             name: "STATUS",
             desc: "High for running flush/invalidation; Low for idle"
         }]
-    }  
+    },
+    {
+        name: "XBAR_OFFSET",
+        desc: '''Cache xbar offset setting '''
+        swaccess: "rw",
+        hwaccess: "hro",
+        resval: "0",
+        fields: [{
+            bits: "4:0",
+            name: "OFFSET",
+            desc: "range: 0-31"
+        }]
+    },
+    {
+        name: "XBAR_OFFSET_COMMIT",
+        desc: '''Cache xbar offset setting '''
+        swaccess: "rw",
+        hwaccess: "hrw",
+        resval: "0",
+        fields: [{
+            bits: "0",
+            name: "COMMIT",
+            desc: "Commit the xbar offset configurations."
+        }]
+    }
   ]
 }
