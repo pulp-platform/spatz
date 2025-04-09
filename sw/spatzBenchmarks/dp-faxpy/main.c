@@ -58,6 +58,8 @@ int main() {
   #endif
 
   if (cid == 0) {
+    // Set xbar policy
+    l1d_xbar_config(axpy_l.M * sizeof(double), num_cores);
     // Init the cache
     l1d_init(spm_size);
   }

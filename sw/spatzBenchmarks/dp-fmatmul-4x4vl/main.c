@@ -92,6 +92,10 @@ int main() {
   uint32_t spm_size = 120;
   #endif
   if (cid == 0) {
+    // Set xbar policy
+    // All cores will access the same B
+    // Scramble based on cacheline
+    l1d_xbar_config(256/8, num_cores);
     // Init the cache
     l1d_init(spm_size);
   }
@@ -174,30 +178,17 @@ int main() {
       stop_kernel();
     }
 
-    #if USE_CACHE == 1
-      for (unsigned int i = 0; i < num_cores; ++i) {
-        if (cid == i){
-          #ifdef PRINT_RESULT
-            printf("Start checking core%d\n", i);
-          #endif
-          verify_matrix_per_core((const double *)(c+(gemm_l.M/num_cores)*gemm_l.N*i), (const double *)(gemm_C_dram+(gemm_l.M/num_cores)*gemm_l.N*i), gemm_l.M/num_cores, gemm_l.N);
-        }
-        // Wait for all cores to finish
-        snrt_cluster_hw_barrier();
-      }
-    #else
-      if ((cid == 0) && (i == 0)) {
-        int error =
-            verify_matrix(c, (const double *)gemm_checksum, gemm_l.M, gemm_l.N);
+    if ((cid == 0) && (i == 0)) {
+      int error =
+          verify_matrix(c, (const double *)gemm_checksum, gemm_l.M, gemm_l.N);
 
-        if (error != 0) {
-        #ifdef PRINT_RESULT
-          printf("Error core %d: c[%d]=%u\n", cid, error, (int)c[error]);
-          return error;
-        #endif
-        }
+      if (error != 0) {
+      #ifdef PRINT_RESULT
+        printf("Error core %d: c[%d]=%u\n", cid, error, (int)c[error]);
+        return error;
+      #endif
       }
-    #endif
+    }
   }
 
   // Check and display results

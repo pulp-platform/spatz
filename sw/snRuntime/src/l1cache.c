@@ -5,6 +5,28 @@
 
 #include <l1cache.h>
 
+void l1d_xbar_config(uint32_t size, uint32_t core) {
+  uint32_t offset = 31 - __builtin_clz(size/core);
+
+  // 5 is the cacheline width (log2(256b/8))
+  // granularity cannot be less than cacheline width
+  offset = (offset > 5) ? offset : 5;
+
+  uint32_t *cfg =
+      (uint32_t *)(_snrt_team_current->root->cluster_mem.end +
+                   SPATZ_CLUSTER_PERIPHERAL_XBAR_OFFSET_REG_OFFSET);
+  *cfg = offset;
+  l1d_xbar_commit();
+}
+
+
+void l1d_xbar_commit() {
+  uint32_t *commit =
+      (uint32_t *)(_snrt_team_current->root->cluster_mem.end +
+                   SPATZ_CLUSTER_PERIPHERAL_XBAR_OFFSET_COMMIT_REG_OFFSET);
+  *commit = 1;
+}
+
 void l1d_commit() {
   uint32_t *commit =
       (uint32_t *)(_snrt_team_current->root->cluster_mem.end +
