@@ -140,6 +140,10 @@ add_spatz_test_oneParam_T(sp-fdotp_new fdotp/main.c 4096 32)
 
 add_spatz_test_twoParam_T(gemv gemv/main.c 64 128 64)
 
+add_spatz_test_twoParam_T(dp-gemv-col gemv-col/main.c 64 128 64)
+add_spatz_test_twoParam_T(sp-gemv-col gemv-col/main.c 128 128 32)
+add_spatz_test_twoParam_T(hp-gemv-col gemv-col/main.c 256 128 16)
+
 add_spatz_test_threeParam(dp-fconv2d dp-fconv2d/main.c 32 32 7)
 add_spatz_test_threeParam(dp-fconv2d dp-fconv2d/main.c 64 64 7)
 
