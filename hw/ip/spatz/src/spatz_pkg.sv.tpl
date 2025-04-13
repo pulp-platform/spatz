@@ -515,4 +515,15 @@ package spatz_pkg;
     widen_fp8_to_fp16.mantissa = {operand.mantissa, 8'b0};
   endfunction
 
+
+  //////////////////////
+  //  MX Dot Product  //
+  //////////////////////
+
+  // MX dot product parameters
+  localparam int unsigned MxScaleWidth = 8;
+  localparam int unsigned MxElemsPerScale = ELEN / MxScaleWidth;
+  typedef logic [31:0] mx_acc_t;
+  typedef logic [7:0]  mx_scale_t;
+
 endpackage : spatz_pkg
