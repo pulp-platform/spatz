@@ -129,4 +129,6 @@ add_snitch_test(vfncvt isa/rv64uv/vfncvt.c)
 
 add_snitch_test(vfmv isa/rv64uv/vfmv.c)
 
+add_snitch_test(vmxdotp isa/rv64uv/vmxdotp.c)
+
 add_snitch_test(vlse isa/rv64uv/vlse.c)
