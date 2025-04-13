@@ -1209,6 +1209,40 @@ module spatz_decoder
           end
         end
 
+        // MX dot product
+        riscv_instr::VMXDOTP_WF: begin
+          if (spatz_pkg::FPU && spatz_pkg::XVMXDOTP) begin
+            automatic vreg_t arith_s1 = decoder_req_i.instr[19:15];
+            automatic vreg_t arith_s2 = decoder_req_i.instr[24:20];
+            automatic vreg_t arith_s3 = decoder_req_i.instr[31:27];
+            automatic vreg_t arith_s4 = {decoder_req_i.instr[26:25], decoder_req_i.instr[14:12]};
+            automatic vreg_t arith_d  = decoder_req_i.instr[11:7];
+
+            spatz_req.op                    = VMXDOTP;
+            spatz_req.ex_unit               = VFU;
+            spatz_req.op_arith.is_narrowing = 1'b1;
+            spatz_req.rm                    = fpu_rnd_mode_i;
+            spatz_req.fm                    = fpu_fmt_mode_i;
+
+            // operands
+            spatz_req.use_vd    = 1'b1;
+            spatz_req.vd        = arith_d;
+            spatz_req.vd_is_src = 1'b1;
+
+            spatz_req.use_vs1 = 1'b0;
+            spatz_req.rs1     = decoder_req_i.rs1;
+
+            spatz_req.use_vs2 = 1'b1;
+            spatz_req.vs2     = arith_s2;
+
+            spatz_req.use_vs3 = 1'b0;
+            spatz_req.rsd     = decoder_req_i.rsd; // contains scalar rs3
+
+            spatz_req.use_vs4 = 1'b1;
+            spatz_req.vs4     = arith_s4;
+          end
+        end
+
         // Move to the scalar FP RF
         riscv_instr::VFMV_F_S: begin
           if (spatz_pkg::FPU) begin

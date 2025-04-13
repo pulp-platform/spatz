@@ -137,7 +137,9 @@ package spatz_pkg;
     VFADD, VFSUB, VFMUL,
     VFMINMAX, VFSGNJ, VFCMP, VFCLASS,
     VF2I, VF2U, VI2F, VU2F, VF2F,
-    VFMADD, VFMSUB, VFNMSUB, VFNMADD, VSDOTP
+    VFMADD, VFMSUB, VFNMSUB, VFNMADD, VSDOTP,
+    // MX dot product instruction
+    VMXDOTP
   } op_e;
 
   // Execution units
@@ -205,6 +207,10 @@ package spatz_pkg;
     logic use_vs1;
     vreg_t vs2;
     logic use_vs2;
+    vreg_t vs3;
+    logic use_vs3;
+    vreg_t vs4;
+    logic use_vs4;
     vreg_t vd;
     logic use_vd;
     logic vd_is_src;
