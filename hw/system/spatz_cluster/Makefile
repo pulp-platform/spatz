@@ -9,6 +9,10 @@ ROOT := ${SPATZ_DIR}
 SPATZ_CLUSTER_DIR := ${SPATZ_DIR}/hw/system/spatz_cluster
 MKFILE_PATH := $(abspath $(lastword $(MAKEFILE_LIST)))
 MKFILE_DIR  := $(dir $(MKFILE_PATH))
+# Default to GCC/LLVM toolchain installed from the Spatz repository, otherwise
+# overwrite SPATZ_{GCC,LLVM}_DIR to pass an external compiler
+SPATZ_GCC_DIR ?= ${GCC_INSTALL_DIR}
+SPATZ_LLVM_DIR ?= ${LLVM_INSTALL_DIR}
 
 # Configuration file
 SPATZ_CLUSTER_CFG         ?= $(SPATZ_CLUSTER_DIR)/cfg/spatz_cluster.default.hjson
@@ -71,9 +75,9 @@ VLT_COBJ += $(VLT_BUILDDIR)/vlt/verilated_vcd_c.o
 #################
 
 test/bootrom.elf test/bootrom.dump test/bootrom.bin: src/generated/spatz_cluster_wrapper.sv test/bootrom.S test/bootrom.ld test/bootdata_bootrom.cc Makefile
-	${GCC_INSTALL_DIR}/bin/riscv32-unknown-elf-gcc -mabi=ilp32 -march=rv32imaf -static -nostartfiles -Ttest/bootrom.ld test/bootrom.S test/bootdata_bootrom.cc -I../../ip/snitch_test/src -I../../../sw/snRuntime/include -I../../../sw/toolchain/riscv-opcodes/ -o test/bootrom.elf
-	${GCC_INSTALL_DIR}/bin/riscv32-unknown-elf-objdump -D test/bootrom.elf > test/bootrom.dump
-	${GCC_INSTALL_DIR}/bin/riscv32-unknown-elf-objcopy -O binary test/bootrom.elf test/bootrom.bin
+	${SPATZ_GCC_DIR}/bin/riscv32-unknown-elf-gcc -mabi=ilp32 -march=rv32imaf -static -nostartfiles -Ttest/bootrom.ld test/bootrom.S test/bootdata_bootrom.cc -I../../ip/snitch_test/src -I../../../sw/snRuntime/include -I../../../sw/toolchain/riscv-opcodes/ -o test/bootrom.elf
+	${SPATZ_GCC_DIR}/bin/riscv32-unknown-elf-objdump -D test/bootrom.elf > test/bootrom.dump
+	${SPATZ_GCC_DIR}/bin/riscv32-unknown-elf-objcopy -O binary test/bootrom.elf test/bootrom.bin
 
 .PHONY: bootrom
 bootrom: $(CURDIR)/src/generated/bootrom.sv
@@ -175,13 +179,13 @@ lint/tmp/files: ${BENDER}
 ## Build SW into sw/build with the LLVM toolchain
 sw: clean.sw
 	mkdir -p sw/build
-	cd sw/build && ${CMAKE} -DLLVM_PATH=${LLVM_INSTALL_DIR} -DGCC_PATH=${GCC_INSTALL_DIR} -DPYTHON=${PYTHON} ${SPATZ_CLUSTER_CFG_DEFINES} .. && make
+	cd sw/build && ${CMAKE} -DLLVM_PATH=${SPATZ_LLVM_DIR} -DGCC_PATH=${SPATZ_GCC_DIR} -DPYTHON=${PYTHON} ${SPATZ_CLUSTER_CFG_DEFINES} .. && make
 
 # VSIM
 ## Build SW into sw/build with the LLVM toolchain (including tests) for Questasim simulator
 sw.vsim: clean.sw bin/spatz_cluster.vsim
 	mkdir -p sw/build
-	cd sw/build && ${CMAKE} -DLLVM_PATH=${LLVM_INSTALL_DIR} -DGCC_PATH=${GCC_INSTALL_DIR} -DPYTHON=${PYTHON} -DSNITCH_SIMULATOR=../../../../../hw/system/spatz_cluster/bin/spatz_cluster.vsim -DBUILD_TESTS=ON ${SPATZ_CLUSTER_CFG_DEFINES} .. && make -j8
+	cd sw/build && ${CMAKE} -DLLVM_PATH=${SPATZ_LLVM_DIR} -DGCC_PATH=${SPATZ_GCC_DIR} -DPYTHON=${PYTHON} -DSNITCH_SIMULATOR=../../../../../hw/system/spatz_cluster/bin/spatz_cluster.vsim -DBUILD_TESTS=ON ${SPATZ_CLUSTER_CFG_DEFINES} .. && make -j8
 
 ## Build SW and run all tests with Questasim simulator
 sw.test.vsim: sw.vsim
@@ -191,7 +195,7 @@ sw.test.vsim: sw.vsim
 ## Build SW into sw/build with the LLVM toolchain (including tests) for VCS simulator
 sw.vcs: clean.sw bin/spatz_cluster.vcs
 	mkdir -p sw/build
-	cd sw/build && ${CMAKE} -DLLVM_PATH=${LLVM_INSTALL_DIR} -DGCC_PATH=${GCC_INSTALL_DIR} -DPYTHON=${PYTHON} -DSNITCH_SIMULATOR=../../../../../hw/system/spatz_cluster/bin/spatz_cluster.vcs -DBUILD_TESTS=ON ${SPATZ_CLUSTER_CFG_DEFINES} .. && make -j8
+	cd sw/build && ${CMAKE} -DLLVM_PATH=${SPATZ_LLVM_DIR} -DGCC_PATH=${SPATZ_GCC_DIR} -DPYTHON=${PYTHON} -DSNITCH_SIMULATOR=../../../../../hw/system/spatz_cluster/bin/spatz_cluster.vcs -DBUILD_TESTS=ON ${SPATZ_CLUSTER_CFG_DEFINES} .. && make -j8
 
 ## Build SW and run all tests with VCS simulator
 sw.test.vcs: sw.vcs
@@ -201,7 +205,7 @@ sw.test.vcs: sw.vcs
 ## Build SW into sw/build with the LLVM toolchain (including tests) for Verilator simulator
 sw.vlt: clean.sw bin/spatz_cluster.vlt
 	mkdir -p sw/build
-	cd sw/build && ${CMAKE} -DLLVM_PATH=${LLVM_INSTALL_DIR} -DGCC_PATH=${GCC_INSTALL_DIR} -DPYTHON=${PYTHON} -DSNITCH_SIMULATOR=../../../../../hw/system/spatz_cluster/bin/spatz_cluster.vlt -DBUILD_TESTS=ON ${SPATZ_CLUSTER_CFG_DEFINES} .. && make -j8
+	cd sw/build && ${CMAKE} -DLLVM_PATH=${SPATZ_LLVM_DIR} -DGCC_PATH=${SPATZ_GCC_DIR} -DPYTHON=${PYTHON} -DSNITCH_SIMULATOR=../../../../../hw/system/spatz_cluster/bin/spatz_cluster.vlt -DBUILD_TESTS=ON ${SPATZ_CLUSTER_CFG_DEFINES} .. && make -j8
 
 ## Build SW and run all tests with Verilator simulator
 sw.test.vlt: sw.vlt
