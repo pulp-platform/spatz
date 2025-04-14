@@ -782,14 +782,18 @@ module spatz_vfu
 
     // Increment for each word issued
     if (spatz_req_valid && vl_q < spatz_req.vl && word_issued) begin
-      vreg_addr_d[0] = vreg_addr_q[0] + (!spatz_req.op_arith.widen_vs2 || widening_upper_q);
-      vreg_addr_d[1] = vreg_addr_q[1] + (!spatz_req.op_arith.widen_vs1 || widening_upper_q);
-      vreg_addr_d[2] = vreg_addr_q[2] + (!spatz_req.op_arith.is_reduction && (!spatz_req.op_arith.is_narrowing || narrowing_upper_q));
-
+      automatic logic increment_vs2 = !spatz_req.op_arith.widen_vs2 || widening_upper_q;
+      automatic logic increment_vs1 = !spatz_req.op_arith.widen_vs1 || widening_upper_q;
+      automatic logic increment_vd  = !spatz_req.op_arith.is_reduction &&
+        (!spatz_req.op_arith.is_narrowing || narrowing_upper_q);
 
       // FIXME: Make this nice once we add the *.ww instructions.
       if (spatz_req.use_vs4)
-        vreg_addr_d[1] = vreg_addr_q[1] + (widening_mx_scale_q == (MxElemsPerScale - 1));
+        increment_vs1 = (widening_mx_scale_q == (MxElemsPerScale - 1));
+
+      vreg_addr_d[0] = vreg_addr_d[0] + increment_vs2;
+      vreg_addr_d[1] = vreg_addr_d[1] + increment_vs1;
+      vreg_addr_d[2] = vreg_addr_d[2] + increment_vd;
     end
   end: vreg_addr_proc
 
