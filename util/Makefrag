@@ -152,7 +152,7 @@ work-vcs/compile.sh: ${VSIM_SOURCES} ${TB_SRCS}
 	mkdir -p work-vcs
 	${BENDER} script vcs ${VSIM_BENDER} ${DEFS} --vlog-arg="${VLOGAN_FLAGS}" --vcom-arg="${VHDLAN_FLAGS}" > $@
 	chmod +x $@
-	$@ > work-vcs/compile.log
+	$@ | tee work-vcs/compile.log
 
 ########
 # Util #
