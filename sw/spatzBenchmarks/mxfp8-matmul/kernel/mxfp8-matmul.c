@@ -1662,3 +1662,477 @@ void mxfp8_matmul_fp16_outer_sdotp_lmul2_4x(_Float16 *c,
     a_scale_m0 += 4 * K_BLOCK;
   }
 }
+
+#define VMXDOTP_WF_V0_F0_V16_F8_V29   asm volatile (".word 0xeb00005f")
+#define VMXDOTP_WF_V2_F1_V16_F9_V29   asm volatile (".word 0xeb00915f")
+#define VMXDOTP_WF_V4_F2_V16_F10_V29  asm volatile (".word 0xeb01225f")
+#define VMXDOTP_WF_V6_F3_V16_F11_V29  asm volatile (".word 0xeb01b35f")
+#define VMXDOTP_WF_V8_F4_V16_F12_V29  asm volatile (".word 0xeb02445f")
+#define VMXDOTP_WF_V10_F5_V16_F13_V29 asm volatile (".word 0xeb02d55f")
+#define VMXDOTP_WF_V12_F6_V16_F14_V29 asm volatile (".word 0xeb03665f")
+#define VMXDOTP_WF_V14_F7_V16_F15_V29 asm volatile (".word 0xeb03f75f")
+
+#define VMXDOTP_WF_V0_F0_V20_F8_V29   asm volatile (".word 0xeb40005f")
+#define VMXDOTP_WF_V2_F1_V20_F9_V29   asm volatile (".word 0xeb40915f")
+#define VMXDOTP_WF_V4_F2_V20_F10_V29  asm volatile (".word 0xeb41225f")
+#define VMXDOTP_WF_V6_F3_V20_F11_V29  asm volatile (".word 0xeb41b35f")
+#define VMXDOTP_WF_V8_F4_V20_F12_V29  asm volatile (".word 0xeb42445f")
+#define VMXDOTP_WF_V10_F5_V20_F13_V29 asm volatile (".word 0xeb42d55f")
+#define VMXDOTP_WF_V12_F6_V20_F14_V29 asm volatile (".word 0xeb43665f")
+#define VMXDOTP_WF_V14_F7_V20_F15_V29 asm volatile (".word 0xeb43f75f")
+
+// - outer product: vectorizing along output rows (N dimension)
+// - natural data layout: c, a, a_scale, b_scale in row-major order
+//                        b in column-major order
+// - accumulator EMUL = 2, element EMUL = 4, scale EMUL = 1/2
+// - TODO: data reuse
+// - TODO: maximum throughput
+void mxfp8_matmul_fp32_outer_mxdotp_lmul2_8x(float *c,
+    const char *a, const char *b, const char *a_scale, const char *b_scale,
+    const uint32_t M, const uint32_t N, const uint32_t K)
+{
+  // makes compiler avoid special cases on loop entries
+  if (M == 0 || N == 0 || K == 0)
+    return;
+
+  uint32_t K_BLOCK = K / MXFP8_BLOCK_SIZE;
+
+  // keep v30-v31 as constant zero register
+  asm volatile("vsetvli zero, %0, e32, m2, ta, ma" :: "r"(-1));
+  asm volatile("vmv.v.i v30, 0");
+
+  float *c_m_0 = c;      // c[m][0]
+  const char *a_m_0 = a; // a[m][0]
+  const uint8_t *a_scale_m_0 = (const uint8_t *)a_scale;
+
+  for (uint32_t m = 0; m < M; m += 8) {
+    float *c_m_n = c_m_0;
+    const char *b_n_0 = b; // b[col][row] = b[n][0]
+    const uint8_t *b_scale_0_n = (const uint8_t *)b_scale;
+
+    uint32_t n_vl;
+
+    for (uint32_t n = 0; n < N; n += n_vl) {
+      float *c_ = c_m_0 + n;
+      const char *a_ = a_m_0;
+      const char *b_ = b + 8 * n;
+      const uint8_t* a_scale_ = a_scale_m_0;
+      const uint8_t* b_scale_ = b_scale_0_n;
+
+      // 8x FP32 accumulators: v0-v1, v2-v3, ..., v14-v15 (EMUL=2)
+
+      asm volatile("vsetvli %0, %1, e32, m2, ta, ma" : "=r"(n_vl) : "r"(N - n));
+
+      // 2x FP8 operands:   v16-v19, v20-v23 (EMUL=4)
+      // 1x scale operands: v29              (EMUL=1/2)
+
+      // FP8 operands (scalar)
+      register double a0  asm ("f0");
+      register double a1  asm ("f1");
+      register double a2  asm ("f2");
+      register double a3  asm ("f3");
+      register double a4  asm ("f4");
+      register double a5  asm ("f5");
+      register double a6  asm ("f6");
+      register double a7  asm ("f7");
+      register double as0 asm ("f8");
+      register double as1 asm ("f9");
+      register double as2 asm ("f10");
+      register double as3 asm ("f11");
+      register double as4 asm ("f12");
+      register double as5 asm ("f13");
+      register double as6 asm ("f14");
+      register double as7 asm ("f15");
+
+      uint32_t k = 0;
+
+      // iter 0: load b (vector)
+      asm volatile("vlse64.v v16, (%0), %1" :: "r"(b_), "r"(K)); // EMUL=4
+      b_ += 8; // next 8 rows
+
+      // iter 0: load a (scalar)
+      const char *a__ = a_;
+      asm volatile("vfadd.vv  v0, v30, v30");
+      asm volatile("fld %0, (%1)" : "=f"(a0) : "r"(a__));
+      asm volatile("add %0, %0, %1" : "+r"(a__) : "r"(K));
+      asm volatile("fld %0, (%1)" : "=f"(a1) : "r"(a__));
+      a__ += K;
+      asm volatile("vfadd.vv  v2, v30, v30");
+      asm volatile("fld %0, (%1)" : "=f"(a2) : "r"(a__));
+      a__ += K;
+      asm volatile("fld %0, (%1)" : "=f"(a3) : "r"(a__));
+      a__ += K;
+      asm volatile("vfadd.vv  v4, v30, v30");
+      asm volatile("fld %0, (%1)" : "=f"(a4) : "r"(a__));
+      a__ += K;
+      asm volatile("fld %0, (%1)" : "=f"(a5) : "r"(a__));
+      a__ += K;
+      asm volatile("vfadd.vv  v6, v30, v30");
+      asm volatile("fld %0, (%1)" : "=f"(a6) : "r"(a__));
+      a__ += K;
+      asm volatile("fld %0, (%1)" : "=f"(a7) : "r"(a__));
+      a_ += 8; // next 8 columns
+
+      // iter 0: load b_scale (vector)
+      asm volatile("vle8.v  v29, (%0)" :: "r"(b_scale_)); // EMUL=1/2
+      b_scale_ += N; // next row
+
+      // iter 0: load a_scale (scalar)
+      const uint8_t *a_scale__ = a_scale_;
+      asm volatile("vfadd.vv  v8, v30, v30");
+      asm volatile("flb %0, (%1)" : "=f"(as0) : "r"(a_scale__));
+      asm volatile("add %0, %0, %1" : "+r"(a_scale__) : "r"(K_BLOCK));
+      asm volatile("flb %0, (%1)" : "=f"(as1) : "r"(a_scale__));
+      a_scale__ += K_BLOCK;
+      asm volatile("vfadd.vv v10, v30, v30");
+      asm volatile("flb %0, (%1)" : "=f"(as2) : "r"(a_scale__));
+      a_scale__ += K_BLOCK;
+      asm volatile("flb %0, (%1)" : "=f"(as3) : "r"(a_scale__));
+      a_scale__ += K_BLOCK;
+      asm volatile("vfadd.vv v12, v30, v30");
+      asm volatile("flb %0, (%1)" : "=f"(as4) : "r"(a_scale__));
+      a_scale__ += K_BLOCK;
+      asm volatile("flb %0, (%1)" : "=f"(as5) : "r"(a_scale__));
+      a_scale__ += K_BLOCK;
+      asm volatile("vfadd.vv v14, v30, v30");
+      asm volatile("flb %0, (%1)" : "=f"(as6) : "r"(a_scale__));
+      a_scale__ += K_BLOCK;
+      asm volatile("flb %0, (%1)" : "=f"(as7) : "r"(a_scale__));
+      a_scale_++; // next column
+
+      while (k < K) {
+        k += 8;
+
+        // load b (vector)
+        asm volatile("vlse64.v v20, (%0), %1" :: "r"(b_), "r"(K)); // EMUL=4
+        b_ += 8; // next 8 rows
+
+        // mxdotp + load a (scalar)
+        a__ = a_;
+        VMXDOTP_WF_V0_F0_V16_F8_V29;
+        asm volatile("fld %0, (%1)" : "=f"(a0) : "r"(a__));
+        asm volatile("add %0, %0, %1" : "+r"(a__) : "r"(K));
+        VMXDOTP_WF_V2_F1_V16_F9_V29;
+        asm volatile("fld %0, (%1)" : "=f"(a1) : "r"(a__));
+        a__ += K;
+        VMXDOTP_WF_V4_F2_V16_F10_V29;
+        asm volatile("fld %0, (%1)" : "=f"(a2) : "r"(a__));
+        a__ += K;
+        VMXDOTP_WF_V6_F3_V16_F11_V29;
+        asm volatile("fld %0, (%1)" : "=f"(a3) : "r"(a__));
+        a__ += K;
+        VMXDOTP_WF_V8_F4_V16_F12_V29;
+        asm volatile("fld %0, (%1)" : "=f"(a4) : "r"(a__));
+        a__ += K;
+        VMXDOTP_WF_V10_F5_V16_F13_V29;
+        asm volatile("fld %0, (%1)" : "=f"(a5) : "r"(a__));
+        a__ += K;
+        VMXDOTP_WF_V12_F6_V16_F14_V29;
+        asm volatile("fld %0, (%1)" : "=f"(a6) : "r"(a__));
+        a__ += K;
+        VMXDOTP_WF_V14_F7_V16_F15_V29;
+        asm volatile("fld %0, (%1)" : "=f"(a7) : "r"(a__));
+        a_ += 8; // next 8 columns
+
+        k += 8;
+
+        if (k == K)
+          break;
+
+        // load b (vector)
+        asm volatile("vlse64.v v16, (%0), %1" :: "r"(b_), "r"(K / 8)); // EMUL=4
+        b_ += 8; // next 8 rows
+
+        if (k % 32 == 0) {
+          // mxdotp + load a (scalar) + load a_scale (scalar)
+          a__ = a_;
+          a_scale__ = a_scale_;
+          VMXDOTP_WF_V0_F0_V20_F8_V29;
+          asm volatile("fld %0, (%1)" : "=f"(a0) : "r"(a__));
+          asm volatile("add %0, %0, %1" : "+r"(a__) : "r"(K));
+          asm volatile("flb %0, (%1)" : "=f"(as0) : "r"(a_scale__));
+          a_scale__ += K_BLOCK;
+          VMXDOTP_WF_V2_F1_V20_F9_V29;
+          asm volatile("fld %0, (%1)" : "=f"(a1) : "r"(a__));
+          a__ += K;
+          asm volatile("flb %0, (%1)" : "=f"(as1) : "r"(a_scale__));
+          a_scale__ += K_BLOCK;
+          VMXDOTP_WF_V4_F2_V20_F10_V29;
+          asm volatile("fld %0, (%1)" : "=f"(a2) : "r"(a__));
+          a__ += K;
+          asm volatile("flb %0, (%1)" : "=f"(as2) : "r"(a_scale__));
+          a_scale__ += K_BLOCK;
+          VMXDOTP_WF_V6_F3_V20_F11_V29;
+          asm volatile("fld %0, (%1)" : "=f"(a3) : "r"(a__));
+          a__ += K;
+          asm volatile("flb %0, (%1)" : "=f"(as3) : "r"(a_scale__));
+          a_scale__ += K_BLOCK;
+          VMXDOTP_WF_V8_F4_V20_F12_V29;
+          asm volatile("fld %0, (%1)" : "=f"(a4) : "r"(a__));
+          a__ += K;
+          asm volatile("flb %0, (%1)" : "=f"(as4) : "r"(a_scale__));
+          a_scale__ += K_BLOCK;
+          VMXDOTP_WF_V10_F5_V20_F13_V29;
+          asm volatile("fld %0, (%1)" : "=f"(a5) : "r"(a__));
+          a__ += K;
+          asm volatile("flb %0, (%1)" : "=f"(as5) : "r"(a_scale__));
+          a_scale__ += K_BLOCK;
+          VMXDOTP_WF_V12_F6_V20_F14_V29;
+          asm volatile("fld %0, (%1)" : "=f"(a6) : "r"(a__));
+          a__ += K;
+          asm volatile("flb %0, (%1)" : "=f"(as6) : "r"(a_scale__));
+          a_scale__ += K_BLOCK;
+          VMXDOTP_WF_V14_F7_V20_F15_V29;
+          asm volatile("fld %0, (%1)" : "=f"(a7) : "r"(a__));
+          a_ += 8; // next 8 columns
+          asm volatile("flb %0, (%1)" : "=f"(as7) : "r"(a_scale__));
+          a_scale_++; // next column
+
+          // load b_scale
+          asm volatile("vle8.v  v29, (%0)" :: "r"(b_scale_)); // EMUL=1/2
+          b_scale_ += N; // next row
+        } else {
+          // mxdotp + load a (scalar)
+          a__ = a_;
+          VMXDOTP_WF_V0_F0_V20_F8_V29;
+          asm volatile("fld %0, (%1)" : "=f"(a0) : "r"(a__));
+          asm volatile("add %0, %0, %1" : "+r"(a__) : "r"(K));
+          VMXDOTP_WF_V2_F1_V20_F9_V29;
+          asm volatile("fld %0, (%1)" : "=f"(a1) : "r"(a__));
+          a__ += K;
+          VMXDOTP_WF_V4_F2_V20_F10_V29;
+          asm volatile("fld %0, (%1)" : "=f"(a2) : "r"(a__));
+          a__ += K;
+          VMXDOTP_WF_V6_F3_V20_F11_V29;
+          asm volatile("fld %0, (%1)" : "=f"(a3) : "r"(a__));
+          a__ += K;
+          VMXDOTP_WF_V8_F4_V20_F12_V29;
+          asm volatile("fld %0, (%1)" : "=f"(a4) : "r"(a__));
+          a__ += K;
+          VMXDOTP_WF_V10_F5_V20_F13_V29;
+          asm volatile("fld %0, (%1)" : "=f"(a5) : "r"(a__));
+          a__ += K;
+          VMXDOTP_WF_V12_F6_V20_F14_V29;
+          asm volatile("fld %0, (%1)" : "=f"(a6) : "r"(a__));
+          a__ += K;
+          VMXDOTP_WF_V14_F7_V20_F15_V29;
+          asm volatile("fld %0, (%1)" : "=f"(a7) : "r"(a__));
+          a_ += 8; // next 8 columns
+        }
+      }
+
+      VMXDOTP_WF_V0_F0_V20_F8_V29;
+      asm volatile("vse32.v  v0, (%0)" :: "r"(c_));
+      c_ += N;
+      VMXDOTP_WF_V2_F1_V20_F9_V29;
+      asm volatile("vse32.v  v2, (%0)" :: "r"(c_));
+      c_ += N;
+      VMXDOTP_WF_V4_F2_V20_F10_V29;
+      asm volatile("vse32.v  v4, (%0)" :: "r"(c_));
+      c_ += N;
+      VMXDOTP_WF_V6_F3_V20_F11_V29;
+      asm volatile("vse32.v  v6, (%0)" :: "r"(c_));
+      c_ += N;
+      VMXDOTP_WF_V8_F4_V20_F12_V29;
+      asm volatile("vse32.v  v8, (%0)" :: "r"(c_));
+      c_ += N;
+      VMXDOTP_WF_V10_F5_V20_F13_V29;
+      asm volatile("vse32.v v10, (%0)" :: "r"(c_));
+      c_ += N;
+      VMXDOTP_WF_V12_F6_V20_F14_V29;
+      asm volatile("vse32.v v12, (%0)" :: "r"(c_));
+      c_ += N;
+      VMXDOTP_WF_V14_F7_V20_F15_V29;
+      asm volatile("vse32.v v14, (%0)" :: "r"(c_));
+
+      // next col C, B, and B_scale
+      c_m_n += n_vl;
+      // NOTE: These are expensive multiplications, but maybe we can simply
+      //       continue adding (as we do in the k_block loop).
+      b_n_0 += n_vl * K;
+      b_scale_0_n += n_vl;
+    }
+
+    // next row in C, A, and A_scale
+    c_m_0 += 8 * N;
+    a_m_0 += 8 * K;
+    a_scale_m_0 += 8 * K_BLOCK;
+  }
+}
+
+// WARN: This is just for performance tests, and will produce wrong results.
+//
+// - outer product: vectorizing along output rows (N dimension)
+// - natural data layout: c, a, a_scale, b_scale in row-major order
+//                        b in column-major order
+// - accumulator EMUL = 2, element EMUL = 4, scale EMUL = 1/2
+// - TODO: constraints like M, N, K > 0
+void mxfp8_matmul_dummyperf_lmul2_4x(float *c,
+    const char *a, const char *b, const char *a_scale, const char *b_scale,
+    const uint32_t M, const uint32_t N, const uint32_t K)
+{
+  uint32_t K_BLOCK = K / MXFP8_BLOCK_SIZE;
+
+  // keep v30-v31 as constant zero register
+  asm volatile("vsetvli zero, %0, e32, m2, ta, ma" :: "r"(-1));
+  asm volatile("vmv.v.i v30, 0");
+
+  float *c_m_0 = c;      // c[m][0]
+  const char *a_m_0 = a; // a[m][0]
+  const uint8_t *a_scale_m_0 = (const uint8_t *)a_scale;
+
+  for (uint32_t m = 0; m < M; m += 4) {
+    float *c_m_n = c_m_0;
+    const char *b_n_0 = b; // b[col][row] = b[n][0]
+    const uint8_t *b_scale_0_n = (const uint8_t *)b_scale;
+
+    uint32_t n_vl;
+
+    for (uint32_t n = 0; n < N; n += n_vl) {
+      float *c_ = c_m_0 + n;
+      const char *a_ = a_m_0;
+      const char *b_ = b + 8 * n;
+      const uint8_t* a_scale_ = a_scale_m_0;
+      const uint8_t* b_scale_ = b_scale_0_n;
+
+      asm volatile("vsetvli %0, %1, e32, m2, ta, ma" : "=r"(n_vl) : "r"(N - n));
+
+      // 4x FP32 accumulators: v0-v1, v2-v3, v4-v5, v6-v7 (EMUL=2)
+      asm volatile("vfadd.vv  v0, v30, v30");
+      asm volatile("vfadd.vv  v2, v30, v30");
+      asm volatile("vfadd.vv  v4, v30, v30");
+      asm volatile("vfadd.vv  v6, v30, v30");
+
+      // NOTE: This will not be required for the real vmxdotp instruction.
+      asm volatile("vsetvli zero, %0, e64, m4, ta, ma" :: "r"(N - n));
+
+      // 2x FP8 operands:   v16-v19, v20-v23 (EMUL=4)
+      // 1x scale operands: v29              (EMUL=1/2)
+
+      // FP8 operands (scalar)
+      double a0, a1, a2, a3;
+      double as0, as1, as2, as3;
+
+      uint32_t k = 0;
+
+      // iter 0: load b (vector)
+      asm volatile("vlse64.v v16, (%0), %1" :: "r"(b_), "r"(K / 8)); // EMUL=4
+      b_ += 8; // next 8 rows
+
+      // iter 0: load a (scalar)
+      const char *a__ = a_;
+      asm volatile("fld %0, (%1)" : "=f"(a0) : "r"(a__));
+      a__ += K;
+      asm volatile("fld %0, (%1)" : "=f"(a1) : "r"(a__));
+      a__ += K;
+      asm volatile("fld %0, (%1)" : "=f"(a2) : "r"(a__));
+      a__ += K;
+      asm volatile("fld %0, (%1)" : "=f"(a3) : "r"(a__));
+      a_ += 8; // next 8 columns
+
+      // iter 0: load b_scale (vector)
+      asm volatile("vle8.v  v29, (%0)" :: "r"(b_scale_)); // EMUL=1/2
+      b_scale_ += N; // next row
+
+      // iter 0: load a_scale (scalar)
+      const uint8_t *a_scale__ = a_scale_;
+      asm volatile("flb %0, (%1)" : "=f"(as0) : "r"(a_scale__));
+      a_scale__ += K_BLOCK;
+      asm volatile("flb %0, (%1)" : "=f"(as1) : "r"(a_scale__));
+      a_scale__ += K_BLOCK;
+      asm volatile("flb %0, (%1)" : "=f"(as2) : "r"(a_scale__));
+      a_scale__ += K_BLOCK;
+      asm volatile("flb %0, (%1)" : "=f"(as3) : "r"(a_scale__));
+      a_scale_ += 1; // next column
+
+      while (k < K) {
+        k += 8;
+
+        // load b (vector)
+        asm volatile("vlse64.v v20, (%0), %1" :: "r"(b_), "r"(K / 8)); // EMUL=4
+        b_ += 8; // next 8 rows
+
+        // mxdotp + load a (scalar)
+        a__ = a_;
+        asm volatile("vfmacc.vf  v0, %0, v16" :: "f"(a0));
+        asm volatile("fld %0, (%1)" : "=f"(a0) : "r"(a__));
+        a__ += K;
+        asm volatile("vfmacc.vf  v4, %0, v16" :: "f"(a1));
+        asm volatile("fld %0, (%1)" : "=f"(a1) : "r"(a__));
+        a__ += K;
+        asm volatile("vfmacc.vf  v0, %0, v16" :: "f"(a2));
+        asm volatile("fld %0, (%1)" : "=f"(a2) : "r"(a__));
+        a__ += K;
+        asm volatile("vfmacc.vf  v4, %0, v16" :: "f"(a3));
+        asm volatile("fld %0, (%1)" : "=f"(a3) : "r"(a__));
+        a_ += 8; // next 8 columns
+
+        k += 8;
+
+        if (k == K)
+          break;
+
+        // load b (vector)
+        asm volatile("vlse64.v v16, (%0), %1" :: "r"(b_), "r"(K / 8)); // EMUL=4
+        b_ += 8; // next 8 rows
+
+        // mxdotp + load a (scalar)
+        a__ = a_;
+        asm volatile("vfmacc.vf  v0, %0, v20" :: "f"(a0));
+        asm volatile("fld %0, (%1)" : "=f"(a0) : "r"(a__));
+        a__ += K;
+        asm volatile("vfmacc.vf  v4, %0, v20" :: "f"(a1));
+        asm volatile("fld %0, (%1)" : "=f"(a1) : "r"(a__));
+        a__ += K;
+        asm volatile("vfmacc.vf  v8, %0, v20" :: "f"(a2));
+        asm volatile("fld %0, (%1)" : "=f"(a2) : "r"(a__));
+        a__ += K;
+        asm volatile("vfmacc.vf v12, %0, v20" :: "f"(a3));
+        asm volatile("fld %0, (%1)" : "=f"(a3) : "r"(a__));
+        a_ += 8; // next 8 columns
+
+        if (k % 32 == 0) {
+          // load next scales
+
+          asm volatile("vle8.v  v29, (%0)" :: "r"(b_scale_)); // EMUL=1/2
+          b_scale_ += N; // next row
+
+          // iter 0: load a_scale (scalar)
+          a_scale__ = a_scale_;
+          asm volatile("flb %0, (%1)" : "=f"(as0) : "r"(a_scale__));
+          a_scale__ += K_BLOCK;
+          asm volatile("flb %0, (%1)" : "=f"(as1) : "r"(a_scale__));
+          a_scale__ += K_BLOCK;
+          asm volatile("flb %0, (%1)" : "=f"(as2) : "r"(a_scale__));
+          a_scale__ += K_BLOCK;
+          asm volatile("flb %0, (%1)" : "=f"(as3) : "r"(a_scale__));
+          a_scale_ += 1; // next column
+        }
+      }
+
+      asm volatile("vfmacc.vf  v0, %0, v20" :: "f"(a0));
+      asm volatile("vse32.v  v0, (%0)" :: "r"(c_));
+      c_ += N;
+      asm volatile("vfmacc.vf  v4, %0, v20" :: "f"(a1));
+      asm volatile("vse32.v  v4, (%0)" :: "r"(c_));
+      c_ += N;
+      asm volatile("vfmacc.vf  v0, %0, v20" :: "f"(a2));
+      asm volatile("vse32.v  v0, (%0)" :: "r"(c_));
+      c_ += N;
+      asm volatile("vfmacc.vf  v4, %0, v20" :: "f"(a3));
+      asm volatile("vse32.v  v4, (%0)" :: "r"(c_));
+
+      // next col C, B, and B_scale
+      c_m_n += n_vl;
+      // NOTE: These are expensive multiplications, but maybe we can simply
+      //       continue adding (as we do in the k_block loop).
+      b_n_0 += n_vl * K;
+      b_scale_0_n += n_vl;
+    }
+
+    // next row in C, A, and A_scale
+    c_m_0 += 4 * N;
+    a_m_0 += 4 * K;
+    a_scale_m_0 += 4 * K_BLOCK;
+  }
+}
