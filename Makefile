@@ -80,7 +80,7 @@ tc-riscv-gcc: sw/toolchain/riscv-gnu-toolchain
 	mkdir -p $(GCC_INSTALL_DIR)
 	cd sw/toolchain/riscv-gnu-toolchain && rm -rf build && mkdir -p build && cd build && \
 	../configure --prefix=$(GCC_INSTALL_DIR) --with-arch=rv32imafd --with-abi=ilp32d --with-cmodel=medlow --enable-multilib && \
-	$(MAKE) MAKEINFO=true -j4
+	$(MAKE) MAKEINFO=true
 
 tc-llvm: sw/toolchain/llvm-project
 	mkdir -p $(LLVM_INSTALL_DIR)
@@ -97,8 +97,8 @@ tc-llvm: sw/toolchain/llvm-project
 		-DLLVM_APPEND_VC_REV=ON \
 		-DCMAKE_BUILD_TYPE=Release \
 		../llvm && \
-	make -j8 all && \
-	make install
+	$(MAKE) all && \
+		$(MAKE) install
 
 tc-riscv-isa-sim: sw/toolchain/riscv-isa-sim sw/toolchain/dtc
 	mkdir -p $(SPIKE_INSTALL_DIR)
