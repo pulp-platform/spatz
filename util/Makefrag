@@ -68,6 +68,7 @@ VLOGAN_FLAGS := -assert svaext
 VLOGAN_FLAGS += -assert disable_cover
 VLOGAN_FLAGS += -full64
 VLOGAN_FLAGS += -kdb
+VLOGAN_FLAGS += -timescale=1ns/1ps
 VHDLAN_FLAGS := -full64
 VHDLAN_FLAGS += -kdb
 
