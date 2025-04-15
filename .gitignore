@@ -25,4 +25,3 @@ mems
 *.o
 install
 .projectBender.lock
-Bender.lock
