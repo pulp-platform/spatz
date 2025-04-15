@@ -53,8 +53,8 @@ module spatz_cluster
     parameter                         unsigned               ICacheLineWidth                    = 0,
     /// Number of icache lines per set.
     parameter int                     unsigned               ICacheLineCount                    = 0,
-    /// Number of icache sets.
-    parameter int                     unsigned               ICacheSets                         = 0,
+    /// Number of icache ways.
+    parameter int                     unsigned               ICacheWays                         = 0,
     // PMA Configuration
     parameter snitch_pma_t                                   SnitchPMACfg                       = '{default: 0},
     /// # Core-global parameters
@@ -142,7 +142,6 @@ module spatz_cluster
   // Imports
   // ---------
   import snitch_pkg::*;
-  import snitch_icache_pkg::icache_events_t;
 
   // ---------
   // Constants
@@ -398,7 +397,7 @@ module spatz_cluster
   core_events_t [NrCores-1:0] core_events;
   tcdm_events_t               tcdm_events;
   dma_events_t                dma_events;
-  snitch_icache_pkg::icache_events_t [NrCores-1:0] icache_events;
+  snitch_icache_pkg::icache_l0_events_t [NrCores-1:0] icache_events;
 
   // 4. Memory Subsystem (Core side).
   reqrsp_req_t [NrCores-1:0] core_req, filtered_core_req;
@@ -819,11 +818,14 @@ module spatz_cluster
     .L0_LINE_COUNT      ( 8                                                  ),
     .LINE_WIDTH         ( ICacheLineWidth                                    ),
     .LINE_COUNT         ( ICacheLineCount                                    ),
-    .SET_COUNT          ( ICacheSets                                         ),
+    .WAY_COUNT          ( ICacheWays                                         ),
     .FETCH_AW           ( AxiAddrWidth                                       ),
     .FETCH_DW           ( 32                                                 ),
     .FILL_AW            ( AxiAddrWidth                                       ),
     .FILL_DW            ( AxiDataWidth                                       ),
+    .SERIAL_LOOKUP      ( 0                                                  ),
+    .L1_TAG_SCM         ( 0                                                  ),
+    .NUM_AXI_OUTSTANDING( 2                                                  ),
     .EARLY_LATCH        ( 0                                                  ),
     .L0_EARLY_TAG_WIDTH ( snitch_pkg::PAGE_SHIFT - $clog2(ICacheLineWidth/8) ),
     .ISO_CROSSING       ( 1'b0                                               ),
@@ -834,7 +836,8 @@ module spatz_cluster
     .clk_d2_i             ( clk_i                    ),
     .rst_ni               ( rst_ni                   ),
     .enable_prefetching_i ( icache_prefetch_enable   ),
-    .icache_events_o      ( icache_events            ),
+    .icache_l0_events_o   ( icache_events            ),
+    .icache_l1_events_o   (                          ),
     .flush_valid_i        ( flush_valid              ),
     .flush_ready_o        ( flush_ready              ),
     .inst_addr_i          ( inst_addr                ),

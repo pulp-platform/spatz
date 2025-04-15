@@ -79,7 +79,7 @@
         ],
         "icache": {
             "size": 4, // total instruction cache size in kByte
-            "sets": 2, // number of ways
+            "ways": 2, // number of ways
             "cacheline": 256 // word size in bits
         }
     },
