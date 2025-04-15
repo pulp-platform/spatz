@@ -16,7 +16,8 @@ dependencies:
   idma:               { git: "https://github.com/pulp-platform/iDMA.git",               version: 0.4.2          }
   register_interface: { git: "https://github.com/pulp-platform/register_interface.git", version: 0.3.8          }
   riscv-dbg:          { git: "https://github.com/pulp-platform/riscv-dbg.git",          version: 0.7.0          }
-  tech_cells_generic: { git: "https://github.com/pulp-platform/tech_cells_generic.git", version: 0.2.11         }
+  tech_cells_generic: { git: "https://github.com/pulp-platform/tech_cells_generic.git", version: 0.2.13         }
+  cluster_icache:     { git: "https://github.com/pulp-platform/cluster_icache.git",     version: 0.2.0          }
 
 export_include_dirs:
   - hw/ip/mem_interface/include
@@ -100,23 +101,6 @@ sources:
     - target: test
       files:
         - hw/ip/snitch/test/snitch_l0_tlb_tb.sv
-
-    ## hw/ip/snitch_icache ##
-
-    # Level 0:
-    - hw/ip/snitch_icache/src/snitch_icache_pkg.sv
-    # Level 1:
-    - hw/ip/snitch_icache/src/snitch_icache_l0.sv
-    - hw/ip/snitch_icache/src/snitch_icache_refill.sv
-    - hw/ip/snitch_icache/src/snitch_icache_lfsr.sv
-    - hw/ip/snitch_icache/src/snitch_icache_lookup.sv
-    # Level 2:
-    - hw/ip/snitch_icache/src/snitch_icache_handler.sv
-    # Level 3:
-    - hw/ip/snitch_icache/src/snitch_icache.sv
-    - target: test
-      files:
-        - hw/ip/snitch_icache/test/snitch_icache_l0_tb.sv
 
     ## hw/ip/snitch_test ##
 

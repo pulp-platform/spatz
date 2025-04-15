@@ -277,7 +277,7 @@ class SnitchCluster(Generator):
         # Calc icache parameters
         cl_bytes = self.cfg["icache"]["cacheline"] // 8
         self.cfg["icache"]["depth"] = (
-            self.cfg["icache"]["size"] * 1024 // self.cfg["icache"]["sets"] // cl_bytes
+            self.cfg["icache"]["size"] * 1024 // self.cfg["icache"]["ways"] // cl_bytes
         )
         # tag width
         self.tag_width = (

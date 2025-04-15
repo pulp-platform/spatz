@@ -86,7 +86,7 @@ package ${cfg['pkg_name']};
 
   localparam int unsigned ICacheLineWidth = ${cfg['icache']['cacheline']};
   localparam int unsigned ICacheLineCount = ${cfg['icache']['depth']};
-  localparam int unsigned ICacheSets = ${cfg['icache']['sets']};
+  localparam int unsigned ICacheWays = ${cfg['icache']['ways']};
 
   localparam int unsigned TCDMStartAddr = ${to_sv_hex(cfg['cluster_base_addr'], cfg['addr_width'])};
   localparam int unsigned TCDMSize      = ${to_sv_hex(cfg['tcdm']['size'] * 1024, cfg['addr_width'])};
@@ -503,7 +503,7 @@ module ${cfg['name']}_wrapper
     .NrBanks (${cfg['tcdm']['banks']}),
     .ICacheLineWidth (${cfg['pkg_name']}::ICacheLineWidth),
     .ICacheLineCount (${cfg['pkg_name']}::ICacheLineCount),
-    .ICacheSets (${cfg['pkg_name']}::ICacheSets),
+    .ICacheWays (${cfg['pkg_name']}::ICacheWays),
     .FPUImplementation (${cfg['pkg_name']}::FPUImplementation),
     .SnitchPMACfg (${cfg['pkg_name']}::SnitchPMACfg),
     .NumIntOutstandingLoads (NumIntOutstandingLoads),
