@@ -57,6 +57,8 @@ add wave -noupdate -group cache_Xbar4 /tb_bin/i_dut/i_cluster_wrapper/i_cluster/
 add wave -noupdate -group cache_Xbar4 -group req_xbar /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_cache_xbar[4]/i_cache_xbar/i_req_xbar/*
 add wave -noupdate -group cache_Xbar4 -group rsp_xbar /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_cache_xbar[4]/i_cache_xbar/i_rsp_xbar/*
 
+add wave -noupdate -group amo0_4 /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_cache_connect[0]/gen_cache_amo[4]/i_cache_amo/*
+
 # add wave -noupdate -group superbank0 /tb_bin/i_dut/i_cluster_wrapper/i_cluster/l1_cache_wp*
 # add wave -noupdate -group superbank0 /tb_bin/i_dut/i_cluster_wrapper/i_cluster/l1_data_bank*
 # add wave -noupdate -group superbank0 -group mux /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_tcdm_super_bank[0]/i_tcdm_mux/*

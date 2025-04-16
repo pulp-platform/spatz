@@ -308,6 +308,7 @@ module spatz_cluster
   typedef struct packed {
     logic [CoreIDWidth-1:0] core_id;
     logic is_core;
+    logic is_amo;
     reqid_t req_id;
   } tcdm_user_t;
 
@@ -507,8 +508,8 @@ module spatz_cluster
   tcdm_req_t  [NrTCDMPortsCores-1:0] unmerge_req, strb_hdl_req;
   tcdm_rsp_t  [NrTCDMPortsCores-1:0] unmerge_rsp, strb_hdl_rsp;
 
-  tcdm_req_t  [NrTCDMPortsPerCore-1:0][NumL1CacheCtrl-1:0] cache_req, cache_xbar_req;
-  tcdm_rsp_t  [NrTCDMPortsPerCore-1:0][NumL1CacheCtrl-1:0] cache_rsp, cache_xbar_rsp;
+  tcdm_req_t  [NrTCDMPortsPerCore-1:0][NumL1CacheCtrl-1:0] cache_req, cache_xbar_req, cache_amo_req;
+  tcdm_rsp_t  [NrTCDMPortsPerCore-1:0][NumL1CacheCtrl-1:0] cache_rsp, cache_xbar_rsp, cache_amo_rsp;
 
   logic       [NumL1CacheCtrl-1:0][NrTCDMPortsPerCore-1:0] cache_req_valid;
   logic       [NumL1CacheCtrl-1:0][NrTCDMPortsPerCore-1:0] cache_req_ready;
@@ -873,7 +874,7 @@ module spatz_cluster
   end
 
   logic  [NrTCDMPortsCores-1:0] unmerge_pready, strb_hdl_pready;
-  logic  [NrTCDMPortsPerCore-1:0][NumL1CacheCtrl-1:0] cache_pready, cache_xbar_pready;
+  logic  [NrTCDMPortsPerCore-1:0][NumL1CacheCtrl-1:0] cache_pready, cache_xbar_pready, cache_amo_pready;
   // Currently assume SPM is full 128 KiB
   // assign spm_size        = 128 * 1024;
   // assign spm_size        = cfg_spm_size * 1024;
@@ -968,7 +969,6 @@ module spatz_cluster
     tcdm_cache_interco #(
       .NumCore               (NrCores             ),
       .NumCache              (NumL1CacheCtrl      ),
-      // .Offset                ($clog2(L1LineWidth)+5 ),
       .AddrWidth             (32'd32              ),
       .tcdm_req_t            (tcdm_req_t          ),
       .tcdm_rsp_t            (tcdm_rsp_t          ),
@@ -978,32 +978,50 @@ module spatz_cluster
       .clk_i            (clk_i                  ),
       .rst_ni           (rst_ni                 ),
       .dynamic_offset_i (dynamic_offset         ),
-      .core_req_i       (cache_req[j]           ),
-      .core_rsp_ready_i (cache_pready[j]        ),
-      .core_rsp_o       (cache_rsp[j]           ),
-      .mem_req_o        (cache_xbar_req[j]      ),
+      .core_req_i       (cache_req        [j]   ),
+      .core_rsp_ready_i (cache_pready     [j]   ),
+      .core_rsp_o       (cache_rsp        [j]   ),
+      .mem_req_o        (cache_xbar_req   [j]   ),
       .mem_rsp_ready_o  (cache_xbar_pready[j]   ),
-      .mem_rsp_i        (cache_xbar_rsp[j]      )
+      .mem_rsp_i        (cache_xbar_rsp   [j]   )
     );
   end
 
-  for (genvar cb = 0; cb < NumL1CacheCtrl; cb++) begin
-    for (genvar j = 0; j < NrTCDMPortsPerCore; j++) begin
-      assign cache_req_valid[cb][j] = cache_xbar_req[j][cb].q_valid;
-      assign cache_req_addr [cb][j] = cache_xbar_req[j][cb].q.addr;
-      assign cache_req_meta [cb][j] = cache_xbar_req[j][cb].q.user;
-      assign cache_req_write[cb][j] = cache_xbar_req[j][cb].q.write;
-      assign cache_req_data [cb][j] = cache_xbar_req[j][cb].q.data;
+  for (genvar cb = 0; cb < NumL1CacheCtrl; cb++) begin : gen_cache_connect
+    for (genvar j = 0; j < NrTCDMPortsPerCore; j++) begin : gen_cache_amo
+      spatz_cache_amo #(
+        .DataWidth        ( DataWidth        ),
+        .CoreIDWidth      ( CoreIDWidth      ),
+        .tcdm_req_t       ( tcdm_req_t       ),
+        .tcdm_rsp_t       ( tcdm_rsp_t       ),
+        .tcdm_req_chan_t  ( tcdm_req_chan_t  ),
+        .tcdm_rsp_chan_t  ( tcdm_rsp_chan_t  ),
+        .tcdm_user_t      ( tcdm_user_t      )
+      ) i_cache_amo (
+        .clk_i            (clk_i                    ),
+        .rst_ni           (rst_ni                   ),
+        .core_req_i       (cache_xbar_req   [j][cb] ),
+        .core_rsp_ready_i (cache_xbar_pready[j][cb] ),
+        .core_rsp_o       (cache_xbar_rsp   [j][cb] ),
+        .mem_req_o        (cache_amo_req    [j][cb] ),
+        .mem_rsp_ready_o  (cache_amo_pready [j][cb] ),
+        .mem_rsp_i        (cache_amo_rsp    [j][cb] )
+      );
+      assign cache_req_valid[cb][j] = cache_amo_req[j][cb].q_valid;
+      assign cache_req_addr [cb][j] = cache_amo_req[j][cb].q.addr;
+      assign cache_req_meta [cb][j] = cache_amo_req[j][cb].q.user;
+      assign cache_req_write[cb][j] = cache_amo_req[j][cb].q.write;
+      assign cache_req_data [cb][j] = cache_amo_req[j][cb].q.data;
 
       // assign cache_rsp_ready[cb][j] = 1'b1;
-      assign cache_rsp_ready[cb][j] = cache_xbar_pready[j][cb];
+      assign cache_rsp_ready[cb][j] = cache_amo_pready[j][cb];
 
-      assign cache_xbar_rsp[j][cb].p_valid = cache_rsp_valid[cb][j];
-      assign cache_xbar_rsp[j][cb].q_ready = cache_req_ready[cb][j];
-      assign cache_xbar_rsp[j][cb].p.data  = cache_rsp_data [cb][j];
-      assign cache_xbar_rsp[j][cb].p.user  = cache_rsp_meta [cb][j];
+      assign cache_amo_rsp[j][cb].p_valid = cache_rsp_valid[cb][j];
+      assign cache_amo_rsp[j][cb].q_ready = cache_req_ready[cb][j];
+      assign cache_amo_rsp[j][cb].p.data  = cache_rsp_data [cb][j];
+      assign cache_amo_rsp[j][cb].p.user  = cache_rsp_meta [cb][j];
 
-      assign cache_xbar_rsp[j][cb].p.write = cache_rsp_write[cb][j];
+      assign cache_amo_rsp[j][cb].p.write = cache_rsp_write[cb][j];
     end
   end
 

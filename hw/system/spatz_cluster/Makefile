@@ -174,8 +174,9 @@ lint/tmp/files: ${BENDER}
 ######
 
 # Use SPM by default
-USE_CACHE  ?= 0
+USE_CACHE  ?= 1
 MEAS_1ITER ?= 0
+ENABLE_PRINT ?= 1
 
 ## Build SW into sw/build with the LLVM toolchain
 sw: clean.sw
