@@ -15,3 +15,5 @@ waive --rule=interface-name-style --location="hw/ip/reqrsp_interface/src/reqrsp_
 waive --rule=interface-name-style --location="hw/ip/tcdm_interface/src/tcdm_interface.sv"
 # We have some long lines
 waive --rule=line-length --location="hw/*"
+# Some files are replaced by Bender thus do not respect the module-filename rule
+waive --rule=module-filename --location="hw/ip/spatz/src/vregfile_fpga.sv"
