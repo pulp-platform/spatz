@@ -3337,10 +3337,11 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
   // Make sure the instruction interface is stable. Otherwise, Snitch might violate the protocol at
   // the LSU or accelerator interface by withdrawing the valid signal.
   // TODO: Remove cacheability attribute, that should hold true for all instruction fetch transacitons.
+`ifndef VERILATOR
   `ASSERT(InstructionInterfaceStable,
       (inst_valid_o && inst_ready_i && inst_cacheable_o) ##1 (inst_valid_o && $stable(inst_addr_o))
       |-> inst_ready_i && $stable(inst_data_i), clk_i, rst_i)
-
+`endif
   // Snitch is a 32-bit processor so in case the memory subsystem is 64 bit
   // wide, there is a potential of `x`s to be returned. Its a bit of a nasty
   // hack but in case of retiring a load we want to relax the unknown

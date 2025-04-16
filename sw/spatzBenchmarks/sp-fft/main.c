@@ -46,7 +46,7 @@ int main() {
   const unsigned int cid = snrt_cluster_core_idx();
 
   // log2(nfft).
-  const unsigned int log2_nfft      = 31 - __builtin_clz(NFFT);
+  const unsigned int log2_nfft = 31 - __builtin_clz(NFFT);
   const unsigned int log2_half_nfft = 31 - __builtin_clz(NFFT >> 1);
 
   // Reset timer
@@ -57,8 +57,8 @@ int main() {
     samples = (float *)snrt_l1alloc(2 * NFFT * sizeof(float));
     buffer = (float *)snrt_l1alloc(2 * NFFT * sizeof(float));
     twiddle = (float *)snrt_l1alloc((2 * NTWI + NFFT) * sizeof(float));
-    store_idx =
-        (uint16_t *)snrt_l1alloc(log2_half_nfft * (NFFT / 4) * sizeof(uint16_t));
+    store_idx = (uint16_t *)snrt_l1alloc(log2_half_nfft * (NFFT / 4) *
+                                         sizeof(uint16_t));
     bitrev = (uint16_t *)snrt_l1alloc((NFFT / 4) * sizeof(uint16_t));
   }
 
@@ -113,9 +113,9 @@ int main() {
 
   // Display runtime
   if (cid == 0) {
-    // See the bottom of the file dp-fft/main.c for further info on the performance calculation
-    long unsigned int performance =
-        1000 * 5 * NFFT * log2_nfft / timer;
+    // See the bottom of the file dp-fft/main.c for further info on the
+    // performance calculation
+    long unsigned int performance = 1000 * 5 * NFFT * log2_nfft / timer;
     long unsigned int utilization =
         (1000 * performance) / (1250 * num_cores * SNRT_NFPU_PER_CORE * 2);
 

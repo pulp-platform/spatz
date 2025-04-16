@@ -68,6 +68,7 @@ VLOGAN_FLAGS := -assert svaext
 VLOGAN_FLAGS += -assert disable_cover
 VLOGAN_FLAGS += -full64
 VLOGAN_FLAGS += -kdb
+VLOGAN_FLAGS += -timescale=1ns/1ps
 VHDLAN_FLAGS := -full64
 VHDLAN_FLAGS += -kdb
 
@@ -152,7 +153,7 @@ work-vcs/compile.sh: ${VSIM_SOURCES} ${TB_SRCS}
 	mkdir -p work-vcs
 	${BENDER} script vcs ${VSIM_BENDER} ${DEFS} --vlog-arg="${VLOGAN_FLAGS}" --vcom-arg="${VHDLAN_FLAGS}" > $@
 	chmod +x $@
-	$@ > work-vcs/compile.log
+	$@ | tee work-vcs/compile.log
 
 ########
 # Util #
