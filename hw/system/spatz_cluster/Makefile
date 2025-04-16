@@ -30,7 +30,8 @@ VLOG      = questa-2021.3-kgf vlog
 VSIM_HOME = /usr/pack/questa-2021.3-kgf/questasim
 
 VSIM_FLAGS += -t 1ps
-VSIM_FLAGS += -voptargs=+acc
+# Default to fast simulation flags, use `-voptargs=+acc` for waveform debugging
+VSIM_FLAGS += -voptargs=-O5
 VSIM_FLAGS += -do "log -r /*; source ${SPATZ_CLUSTER_DIR}/script/vsim/wave.tcl; run -a"
 
 VLOG_FLAGS += -svinputport=compat
