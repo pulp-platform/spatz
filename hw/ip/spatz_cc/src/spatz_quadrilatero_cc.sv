@@ -264,7 +264,7 @@ module spatz_quadrilatero_cc
   if(spatz_pkg::QUADRILATERO) begin: gen_quadrilatero
     localparam int unsigned INPUT_BUFFER_DEPTH = 4;
     localparam int unsigned RES_IF_FIFO_DEPTH  = 4;
-    localparam int unsigned MATRIX_FPU         = 0; // Fix mac_flaot to use FPU = 1
+    localparam int unsigned MATRIX_FPU         = 1; // Fix mac_flaot to use FPU = 1
 
     acc_rsp_t quad_resp;
     logic quad_qvalid, quad_qready;
