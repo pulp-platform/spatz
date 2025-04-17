@@ -478,7 +478,7 @@ module spatz_cc
   // pragma translate_off
   int           f;
   string        fn;
-  logic  [63:0] cycle;
+  logic  [63:0] cycle= '0;
 
   initial begin
     // We need to schedule the assignment into a safe region, otherwise
