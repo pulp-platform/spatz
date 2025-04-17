@@ -1706,18 +1706,16 @@ void mxfp8_matmul_fp32_outer_mxdotp_lmul2_8x(float *c,
   const uint8_t *a_scale_m_0 = (const uint8_t *)a_scale;
 
   for (uint32_t m = 0; m < M; m += 8) {
-    float *c_m_n = c_m_0;
     const char *b_n_0 = b; // b[col][row] = b[n][0]
-    const uint8_t *b_scale_0_n = (const uint8_t *)b_scale;
 
     uint32_t n_vl;
 
     for (uint32_t n = 0; n < N; n += n_vl) {
-      float *c_ = c_m_0 + n;
-      const char *a_ = a_m_0;
-      const char *b_ = b + 8 * n;
-      const uint8_t* a_scale_ = a_scale_m_0;
-      const uint8_t* b_scale_ = b_scale_0_n;
+      float *c_ = c_m_0 + n;                                  // c[row=m][col=n]
+      const char *a_ = a_m_0;                                 // b[row=m][col=0]
+      const char *b_ = b_n_0;                                 // b[col=n][row=0]
+      const uint8_t* a_scale_ = a_scale_m_0;                  // a_scale[row=m][col=0]
+      const uint8_t* b_scale_ = (const uint8_t *)b_scale + n; // b_scale[row=0][col=n]
 
       // 8x FP32 accumulators: v0-v1, v2-v3, ..., v14-v15 (EMUL=2)
 
@@ -1809,28 +1807,28 @@ void mxfp8_matmul_fp32_outer_mxdotp_lmul2_8x(float *c,
 
         // mxdotp + load a (scalar)
         a__ = a_;
-        VMXDOTP_WF_V0_F0_V16_F8_V29;
+        asm volatile("vmxdotp.wf v0, %0, v16, %1, v29" :: "f"(a0), "f"(as0));
         asm volatile("fld %0, (%1)" : "=f"(a0) : "r"(a__));
         asm volatile("add %0, %0, %1" : "+r"(a__) : "r"(K));
-        VMXDOTP_WF_V2_F1_V16_F9_V29;
+        asm volatile("vmxdotp.wf  v2, %0, v16, %1, v29" :: "f"(a1), "f"(as1));
         asm volatile("fld %0, (%1)" : "=f"(a1) : "r"(a__));
         a__ += K;
-        VMXDOTP_WF_V4_F2_V16_F10_V29;
+        asm volatile("vmxdotp.wf  v4, %0, v16, %1, v29" :: "f"(a2), "f"(as2));
         asm volatile("fld %0, (%1)" : "=f"(a2) : "r"(a__));
         a__ += K;
-        VMXDOTP_WF_V6_F3_V16_F11_V29;
+        asm volatile("vmxdotp.wf  v6, %0, v16, %1, v29" :: "f"(a3), "f"(as3));
         asm volatile("fld %0, (%1)" : "=f"(a3) : "r"(a__));
         a__ += K;
-        VMXDOTP_WF_V8_F4_V16_F12_V29;
+        asm volatile("vmxdotp.wf  v8, %0, v16, %1, v29" :: "f"(a4), "f"(as4));
         asm volatile("fld %0, (%1)" : "=f"(a4) : "r"(a__));
         a__ += K;
-        VMXDOTP_WF_V10_F5_V16_F13_V29;
+        asm volatile("vmxdotp.wf v10, %0, v16, %1, v29" :: "f"(a5), "f"(as5));
         asm volatile("fld %0, (%1)" : "=f"(a5) : "r"(a__));
         a__ += K;
-        VMXDOTP_WF_V12_F6_V16_F14_V29;
+        asm volatile("vmxdotp.wf v12, %0, v16, %1, v29" :: "f"(a6), "f"(as6));
         asm volatile("fld %0, (%1)" : "=f"(a6) : "r"(a__));
         a__ += K;
-        VMXDOTP_WF_V14_F7_V16_F15_V29;
+        asm volatile("vmxdotp.wf v14, %0, v16, %1, v29" :: "f"(a7), "f"(as7));
         asm volatile("fld %0, (%1)" : "=f"(a7) : "r"(a__));
         a_ += 8; // next 8 columns
 
@@ -1840,49 +1838,49 @@ void mxfp8_matmul_fp32_outer_mxdotp_lmul2_8x(float *c,
           break;
 
         // load b (vector)
-        asm volatile("vlse64.v v16, (%0), %1" :: "r"(b_), "r"(K / 8)); // EMUL=4
+        asm volatile("vlse64.v v16, (%0), %1" :: "r"(b_), "r"(K)); // EMUL=4
         b_ += 8; // next 8 rows
 
         if (k % 32 == 0) {
           // mxdotp + load a (scalar) + load a_scale (scalar)
           a__ = a_;
           a_scale__ = a_scale_;
-          VMXDOTP_WF_V0_F0_V20_F8_V29;
+          asm volatile("vmxdotp.wf  v0, %0, v20, %1, v29" :: "f"(a0), "f"(as0));
           asm volatile("fld %0, (%1)" : "=f"(a0) : "r"(a__));
           asm volatile("add %0, %0, %1" : "+r"(a__) : "r"(K));
           asm volatile("flb %0, (%1)" : "=f"(as0) : "r"(a_scale__));
           a_scale__ += K_BLOCK;
-          VMXDOTP_WF_V2_F1_V20_F9_V29;
+          asm volatile("vmxdotp.wf  v2, %0, v20, %1, v29" :: "f"(a1), "f"(as1));
           asm volatile("fld %0, (%1)" : "=f"(a1) : "r"(a__));
           a__ += K;
           asm volatile("flb %0, (%1)" : "=f"(as1) : "r"(a_scale__));
           a_scale__ += K_BLOCK;
-          VMXDOTP_WF_V4_F2_V20_F10_V29;
+          asm volatile("vmxdotp.wf  v4, %0, v20, %1, v29" :: "f"(a2), "f"(as2));
           asm volatile("fld %0, (%1)" : "=f"(a2) : "r"(a__));
           a__ += K;
           asm volatile("flb %0, (%1)" : "=f"(as2) : "r"(a_scale__));
           a_scale__ += K_BLOCK;
-          VMXDOTP_WF_V6_F3_V20_F11_V29;
+          asm volatile("vmxdotp.wf  v6, %0, v20, %1, v29" :: "f"(a3), "f"(as3));
           asm volatile("fld %0, (%1)" : "=f"(a3) : "r"(a__));
           a__ += K;
           asm volatile("flb %0, (%1)" : "=f"(as3) : "r"(a_scale__));
           a_scale__ += K_BLOCK;
-          VMXDOTP_WF_V8_F4_V20_F12_V29;
+          asm volatile("vmxdotp.wf  v8, %0, v20, %1, v29" :: "f"(a4), "f"(as4));
           asm volatile("fld %0, (%1)" : "=f"(a4) : "r"(a__));
           a__ += K;
           asm volatile("flb %0, (%1)" : "=f"(as4) : "r"(a_scale__));
           a_scale__ += K_BLOCK;
-          VMXDOTP_WF_V10_F5_V20_F13_V29;
+          asm volatile("vmxdotp.wf v10, %0, v20, %1, v29" :: "f"(a5), "f"(as5));
           asm volatile("fld %0, (%1)" : "=f"(a5) : "r"(a__));
           a__ += K;
           asm volatile("flb %0, (%1)" : "=f"(as5) : "r"(a_scale__));
           a_scale__ += K_BLOCK;
-          VMXDOTP_WF_V12_F6_V20_F14_V29;
+          asm volatile("vmxdotp.wf v12, %0, v20, %1, v29" :: "f"(a6), "f"(as6));
           asm volatile("fld %0, (%1)" : "=f"(a6) : "r"(a__));
           a__ += K;
           asm volatile("flb %0, (%1)" : "=f"(as6) : "r"(a_scale__));
           a_scale__ += K_BLOCK;
-          VMXDOTP_WF_V14_F7_V20_F15_V29;
+          asm volatile("vmxdotp.wf v14, %0, v20, %1, v29" :: "f"(a7), "f"(as7));
           asm volatile("fld %0, (%1)" : "=f"(a7) : "r"(a__));
           a_ += 8; // next 8 columns
           asm volatile("flb %0, (%1)" : "=f"(as7) : "r"(a_scale__));
@@ -1894,63 +1892,61 @@ void mxfp8_matmul_fp32_outer_mxdotp_lmul2_8x(float *c,
         } else {
           // mxdotp + load a (scalar)
           a__ = a_;
-          VMXDOTP_WF_V0_F0_V20_F8_V29;
+          asm volatile("vmxdotp.wf  v0, %0, v20, %1, v29" :: "f"(a0), "f"(as0));
           asm volatile("fld %0, (%1)" : "=f"(a0) : "r"(a__));
           asm volatile("add %0, %0, %1" : "+r"(a__) : "r"(K));
-          VMXDOTP_WF_V2_F1_V20_F9_V29;
+          asm volatile("vmxdotp.wf  v2, %0, v20, %1, v29" :: "f"(a1), "f"(as1));
           asm volatile("fld %0, (%1)" : "=f"(a1) : "r"(a__));
           a__ += K;
-          VMXDOTP_WF_V4_F2_V20_F10_V29;
+          asm volatile("vmxdotp.wf  v4, %0, v20, %1, v29" :: "f"(a2), "f"(as2));
           asm volatile("fld %0, (%1)" : "=f"(a2) : "r"(a__));
           a__ += K;
-          VMXDOTP_WF_V6_F3_V20_F11_V29;
+          asm volatile("vmxdotp.wf  v6, %0, v20, %1, v29" :: "f"(a3), "f"(as3));
           asm volatile("fld %0, (%1)" : "=f"(a3) : "r"(a__));
           a__ += K;
-          VMXDOTP_WF_V8_F4_V20_F12_V29;
+          asm volatile("vmxdotp.wf  v8, %0, v20, %1, v29" :: "f"(a4), "f"(as4));
           asm volatile("fld %0, (%1)" : "=f"(a4) : "r"(a__));
           a__ += K;
-          VMXDOTP_WF_V10_F5_V20_F13_V29;
+          asm volatile("vmxdotp.wf v10, %0, v20, %1, v29" :: "f"(a5), "f"(as5));
           asm volatile("fld %0, (%1)" : "=f"(a5) : "r"(a__));
           a__ += K;
-          VMXDOTP_WF_V12_F6_V20_F14_V29;
+          asm volatile("vmxdotp.wf v12, %0, v20, %1, v29" :: "f"(a6), "f"(as6));
           asm volatile("fld %0, (%1)" : "=f"(a6) : "r"(a__));
           a__ += K;
-          VMXDOTP_WF_V14_F7_V20_F15_V29;
+          asm volatile("vmxdotp.wf v14, %0, v20, %1, v29" :: "f"(a7), "f"(as7));
           asm volatile("fld %0, (%1)" : "=f"(a7) : "r"(a__));
           a_ += 8; // next 8 columns
         }
       }
 
-      VMXDOTP_WF_V0_F0_V20_F8_V29;
+      asm volatile("vmxdotp.wf  v0, %0, v20, %1, v29" :: "f"(a0), "f"(as0));
       asm volatile("vse32.v  v0, (%0)" :: "r"(c_));
       c_ += N;
-      VMXDOTP_WF_V2_F1_V20_F9_V29;
+      asm volatile("vmxdotp.wf  v2, %0, v20, %1, v29" :: "f"(a1), "f"(as1));
       asm volatile("vse32.v  v2, (%0)" :: "r"(c_));
       c_ += N;
-      VMXDOTP_WF_V4_F2_V20_F10_V29;
+      asm volatile("vmxdotp.wf  v4, %0, v20, %1, v29" :: "f"(a2), "f"(as2));
       asm volatile("vse32.v  v4, (%0)" :: "r"(c_));
       c_ += N;
-      VMXDOTP_WF_V6_F3_V20_F11_V29;
+      asm volatile("vmxdotp.wf  v6, %0, v20, %1, v29" :: "f"(a3), "f"(as3));
       asm volatile("vse32.v  v6, (%0)" :: "r"(c_));
       c_ += N;
-      VMXDOTP_WF_V8_F4_V20_F12_V29;
+      asm volatile("vmxdotp.wf  v8, %0, v20, %1, v29" :: "f"(a4), "f"(as4));
       asm volatile("vse32.v  v8, (%0)" :: "r"(c_));
       c_ += N;
-      VMXDOTP_WF_V10_F5_V20_F13_V29;
+      asm volatile("vmxdotp.wf v10, %0, v20, %1, v29" :: "f"(a5), "f"(as5));
       asm volatile("vse32.v v10, (%0)" :: "r"(c_));
       c_ += N;
-      VMXDOTP_WF_V12_F6_V20_F14_V29;
+      asm volatile("vmxdotp.wf v12, %0, v20, %1, v29" :: "f"(a6), "f"(as6));
       asm volatile("vse32.v v12, (%0)" :: "r"(c_));
       c_ += N;
-      VMXDOTP_WF_V14_F7_V20_F15_V29;
+      asm volatile("vmxdotp.wf v14, %0, v20, %1, v29" :: "f"(a7), "f"(as7));
       asm volatile("vse32.v v14, (%0)" :: "r"(c_));
 
       // next col C, B, and B_scale
-      c_m_n += n_vl;
       // NOTE: These are expensive multiplications, but maybe we can simply
       //       continue adding (as we do in the k_block loop).
       b_n_0 += n_vl * K;
-      b_scale_0_n += n_vl;
     }
 
     // next row in C, A, and A_scale
