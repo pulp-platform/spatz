@@ -30,14 +30,14 @@ macro(add_quadrilatero_test_noParam name file)
   set(target_name ${name})
   add_snitch_test(${target_name} ${file})
   target_link_libraries(test-${SNITCH_TEST_PREFIX}${target_name} ${SNITCH_RUNTIME})
-  target_compile_definitions(test-${SNITCH_TEST_PREFIX}${target_name} PUBLIC DATAHEADER="matrixMul32i.h" SNRT_NFPU_PER_CORE=${SNRT_NFPU_PER_CORE})
+  target_compile_definitions(test-${SNITCH_TEST_PREFIX}${target_name} PUBLIC DATAHEADER="matrixMul32i.h" SNRT_NFPU_PER_CORE=16)
 endmacro()
 
 macro(add_quadrilatero_test_threeParam name file param1 param2 param3)
   set(target_name ${name}_M${param1}_N${param2}_K${param3})
   add_snitch_test(${target_name} ${file})
   target_link_libraries(test-${SNITCH_TEST_PREFIX}${target_name} benchmark ${SNITCH_RUNTIME})
-  target_compile_definitions(test-${SNITCH_TEST_PREFIX}${target_name} PUBLIC DATAHEADER="data/data_${param1}_${param2}_${param3}.h" SNRT_NFPU_PER_CORE=${SNRT_NFPU_PER_CORE})
+  target_compile_definitions(test-${SNITCH_TEST_PREFIX}${target_name} PUBLIC DATAHEADER="data/data_${param1}_${param2}_${param3}.h" SNRT_NFPU_PER_CORE=16)
 endmacro()
 
 # # Benchmark library
@@ -45,10 +45,16 @@ add_library(benchmark benchmark/benchmark.c)
 
 # # Kernels
 add_library(sp-matmul sp-matmul/kernel/sp-matmul.c)
+add_library(widening2x-hp-matmul widening2x-hp-matmul/kernel/widening2x-hp-matmul.c)
+add_library(widening4x-bp-matmul widening4x-bp-matmul/kernel/widening4x-bp-matmul.c)
+add_library(sp-fmatmul sp-fmatmul/kernel/sp-fmatmul.c)
 
 # # Tests
 enable_testing()
 set(SNITCH_TEST_PREFIX quadrilateroBenchmarks-)
-add_quadrilatero_test_noParam(quadrilatero-matmul quadrilatero_matmul/main.c)
+# add_quadrilatero_test_noParam(quadrilatero-matmul quadrilatero_matmul/main.c)
 
 add_quadrilatero_test_threeParam(sp-matmul sp-matmul/main.c 64 64 64)
+add_quadrilatero_test_threeParam(widening2x-hp-matmul widening2x-hp-matmul/main.c 64 64 64)
+add_quadrilatero_test_threeParam(widening4x-bp-matmul widening4x-bp-matmul/main.c 64 64 64)
+add_quadrilatero_test_threeParam(sp-fmatmul sp-fmatmul/main.c 64 64 64)
