@@ -23,7 +23,6 @@ void __attribute__ ((noinline)) matrixMul_8x8(int* addrA,int* addrB,int* addrC, 
     asm volatile("sw	s11, 0x00(sp)           "                            );   // 
 
     //--------------------------------------------------------------------------------
-    // asm volatile("addi    a7,x0, 4              "                            );   // a7  = WIDTH;
     asm volatile("sll     a6,%0,%1              " :: "r" (N),"r" (shift)     );   // a6  = N* 2**SIMD_SHIFT
     asm volatile("addi    t0,x0, 0              "                            );   // t0  = m0 =0;
     asm volatile("slli    s3,%0, 2              " :: "r" (K)                 );   // s3  = K*4;

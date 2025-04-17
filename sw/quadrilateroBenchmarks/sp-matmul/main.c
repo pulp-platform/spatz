@@ -44,7 +44,7 @@ int verify_matrix(int *matrix, const int *checksum,
   return 0;
 }
 
-int check_results(int *matrix, const int *expected, int K, int N, int M)
+int check_results(int *matrix, const int *expected, int N, int M)
 {
   // check
   int i, j;
@@ -52,12 +52,13 @@ int check_results(int *matrix, const int *expected, int K, int N, int M)
 
   // Check errors
   for(i = 0; i < M; i++) {
-      for(j = 0; j < N; j++) {
-         if(matrix[i*N+j] != expected[i*N+j])
-              err ++;
-          
-      }
-  }
+    for(j = 0; j < N; j++) {
+       if(matrix[i*N+j] != expected[i*N+j]){
+        if(i==0 && j==0) return -1;
+        else return i*N+j;
+       }         
+    }
+}
 
   return err;
 }
@@ -118,10 +119,9 @@ int main() {
       start_kernel();
 
     if (kernel_size == 4) {
-      matrixMul_8x8(a,b,c,gemm_l.M,gemm_l.N,gemm_l.M,2);
-      // matmul_4xVL(c, a, b, m_start, m_end, gemm_l.K, gemm_l.N, p_start, p_end);
+      matrixMul_8x8(a,b,c,gemm_l.K,gemm_l.N,gemm_l.M,2);
     } else if (kernel_size == 8) {
-      // matmul_8xVL(c, a, b, m_start, m_end, gemm_l.K, gemm_l.N, p_start, p_end);
+
     } else {
       return -2;
     }
@@ -148,9 +148,9 @@ int main() {
     long unsigned int performance =
         1000 * 2 * gemm_l.M * gemm_l.N * gemm_l.K / timer;
     long unsigned int utilization =
-        performance / (2 * num_cores * SNRT_NFPU_PER_CORE * 2);
+        performance / (2 * num_cores * SNRT_NFPU_PER_CORE);
 
-    printf("\n----- (%dx%d) sp fmatmul -----\n", gemm_l.M, gemm_l.N);
+    printf("\n----- (%dx%d) sp matmul -----\n", gemm_l.M, gemm_l.N);
     printf("The execution took %u cycles.\n", timer);
     printf("The performance is %ld OP/1000cycle (%ld%%o utilization).\n",
            performance, utilization);
@@ -158,7 +158,7 @@ int main() {
 
   if (cid == 0) {
     int error =
-      check_results(c, (const int *)gemm_EXP_dram, gemm_l.K, gemm_l.M, gemm_l.N);
+      check_results(c, (const int *)gemm_EXP_dram, gemm_l.M, gemm_l.N);
 
     if (error != 0) {
       printf("Error core %d: c[%d]=%u\n", cid, error, (int)c[error]);
