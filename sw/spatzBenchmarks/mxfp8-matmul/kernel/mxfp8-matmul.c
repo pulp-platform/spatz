@@ -1724,23 +1724,10 @@ void mxfp8_matmul_fp32_outer_mxdotp_lmul2_8x(float *c,
       // 2x FP8 operands:   v16-v19, v20-v23 (EMUL=4)
       // 1x scale operands: v29              (EMUL=1/2)
 
-      // FP8 operands (scalar)
-      register double a0  asm ("f0");
-      register double a1  asm ("f1");
-      register double a2  asm ("f2");
-      register double a3  asm ("f3");
-      register double a4  asm ("f4");
-      register double a5  asm ("f5");
-      register double a6  asm ("f6");
-      register double a7  asm ("f7");
-      register double as0 asm ("f8");
-      register double as1 asm ("f9");
-      register double as2 asm ("f10");
-      register double as3 asm ("f11");
-      register double as4 asm ("f12");
-      register double as5 asm ("f13");
-      register double as6 asm ("f14");
-      register double as7 asm ("f15");
+      // FP8 8x packed operands
+      double a0, a1, a2, a3, a4, a5, a6, a7;
+      // E8M0 1x packed operands
+      double as0, as1, as2, as3, as4, as5, as6, as7;
 
       uint32_t k = 0;
 
