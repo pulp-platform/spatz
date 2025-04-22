@@ -42,13 +42,17 @@ _start:
   mv x30, x0
   mv x31, x0
 
-  la      t1, exception
+  la      t1, __snrt_isr
   csrw    mtvec, t1
   la      a1, BOOTDATA
 
   // Activate MEIP
   li t1, MIP_MEIP
   csrw mie, t1
+  // Activate MSIP
+  csrr    a2, mie
+  ori     a2, a2, 0x8
+  csrw    mie, a2
 
   // Wait for the wakeup interrupt
   wfi
@@ -70,10 +74,9 @@ _start:
   // Jump to the entry point
   jr      t2
 
-exception:
-  wfi
-  j     exception
+__snrt_isr:
+  j     __snrt_isr
 
 .pushsection .boot_section,"aw",@progbits;
 entry_addr:
-  .word exception
+  .word __snrt_isr
