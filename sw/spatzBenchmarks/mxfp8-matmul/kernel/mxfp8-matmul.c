@@ -1663,24 +1663,6 @@ void mxfp8_matmul_fp16_outer_sdotp_lmul2_4x(_Float16 *c,
   }
 }
 
-#define VMXDOTP_WF_V0_F0_V16_F8_V29   asm volatile (".word 0xeb00005f")
-#define VMXDOTP_WF_V2_F1_V16_F9_V29   asm volatile (".word 0xeb00915f")
-#define VMXDOTP_WF_V4_F2_V16_F10_V29  asm volatile (".word 0xeb01225f")
-#define VMXDOTP_WF_V6_F3_V16_F11_V29  asm volatile (".word 0xeb01b35f")
-#define VMXDOTP_WF_V8_F4_V16_F12_V29  asm volatile (".word 0xeb02445f")
-#define VMXDOTP_WF_V10_F5_V16_F13_V29 asm volatile (".word 0xeb02d55f")
-#define VMXDOTP_WF_V12_F6_V16_F14_V29 asm volatile (".word 0xeb03665f")
-#define VMXDOTP_WF_V14_F7_V16_F15_V29 asm volatile (".word 0xeb03f75f")
-
-#define VMXDOTP_WF_V0_F0_V20_F8_V29   asm volatile (".word 0xeb40005f")
-#define VMXDOTP_WF_V2_F1_V20_F9_V29   asm volatile (".word 0xeb40915f")
-#define VMXDOTP_WF_V4_F2_V20_F10_V29  asm volatile (".word 0xeb41225f")
-#define VMXDOTP_WF_V6_F3_V20_F11_V29  asm volatile (".word 0xeb41b35f")
-#define VMXDOTP_WF_V8_F4_V20_F12_V29  asm volatile (".word 0xeb42445f")
-#define VMXDOTP_WF_V10_F5_V20_F13_V29 asm volatile (".word 0xeb42d55f")
-#define VMXDOTP_WF_V12_F6_V20_F14_V29 asm volatile (".word 0xeb43665f")
-#define VMXDOTP_WF_V14_F7_V20_F15_V29 asm volatile (".word 0xeb43f75f")
-
 // - outer product: vectorizing along output rows (N dimension)
 // - natural data layout: c, a, a_scale, b_scale in row-major order
 //                        b in column-major order
