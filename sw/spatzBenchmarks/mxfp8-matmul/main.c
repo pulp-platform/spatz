@@ -163,47 +163,49 @@ int main() {
 
   snrt_cluster_hw_barrier();
 
-  // Start timer
-  timer = benchmark_get_cycle();
-
-  // Start dump
-  if (cid == 0)
-    start_kernel();
-
-  if (mxdotp) {
-    mxfp8_matmul_fp32_outer_mxdotp_lmul2_8x(
-      local_c, local_a, local_b, local_a_scale, local_b_scale,
-      local_m, local_n, local_k);
-  } else if (natural_layout) {
-    if (sdotp) {
-      mxfp8_matmul_fp32_inner_sdotp_4x(
-        local_c, local_a, local_b, local_a_scale, local_b_scale,
-        local_m, local_n, local_k);
-    } else {
-      mxfp8_matmul_fp32_inner_4x(
-        local_c, local_a, local_b, local_a_scale, local_b_scale,
-        local_m, local_n, local_k);
+  for (int i = 0; i < 2; i++) {
+    if (cid == 0 && i == 1) {
+      // Start timer
+      timer = benchmark_get_cycle();
+      // Start dump
+      start_kernel();
     }
-  } else {
-    if (sdotp) {
-      mxfp8_matmul_fp32_outer_sdotp_lmul4_2x(
+
+    if (mxdotp) {
+      mxfp8_matmul_fp32_outer_mxdotp_lmul2_8x(
         local_c, local_a, local_b, local_a_scale, local_b_scale,
         local_m, local_n, local_k);
+    } else if (natural_layout) {
+      if (sdotp) {
+        mxfp8_matmul_fp32_inner_sdotp_4x(
+          local_c, local_a, local_b, local_a_scale, local_b_scale,
+          local_m, local_n, local_k);
+      } else {
+        mxfp8_matmul_fp32_inner_4x(
+          local_c, local_a, local_b, local_a_scale, local_b_scale,
+          local_m, local_n, local_k);
+      }
     } else {
-      mxfp8_matmul_fp32_outer_lmul4_2x(
-        local_c, local_a, local_b, local_a_scale, local_b_scale,
-        local_m, local_n, local_k);
+      if (sdotp) {
+        mxfp8_matmul_fp32_outer_sdotp_lmul4_2x(
+          local_c, local_a, local_b, local_a_scale, local_b_scale,
+          local_m, local_n, local_k);
+      } else {
+        mxfp8_matmul_fp32_outer_lmul4_2x(
+          local_c, local_a, local_b, local_a_scale, local_b_scale,
+          local_m, local_n, local_k);
+      }
+    }
+
+    snrt_cluster_hw_barrier();
+
+    if (cid == 0 && i == 1) {
+      // End dump
+      stop_kernel();
+      // End timer
+      timer = benchmark_get_cycle() - timer;
     }
   }
-
-  snrt_cluster_hw_barrier();
-
-  // End dump
-  if (cid == 0)
-    stop_kernel();
-
-  // End timer
-  timer = benchmark_get_cycle() - timer;
 
   // Performance summary
   if (cid == 0) {
