@@ -25,11 +25,43 @@ endif()
 add_compile_options(-O3 -g -ffunction-sections)
 
 # Platform sources
-set(PLATFORM_SOURCE_FOLDER "src/platforms/standalone" CACHE STRING "Path to the platform-specific sources")
+if("${SPATZ_CLUSTER_CFG}" STREQUAL "spatz_cluster.default.dram.hjson" OR ${SPATZ_CLUSTER_CFG} STREQUAL "spatz_cluster.mempool.dram.hjson")
+  set(_plat_folder "standalone")
+elseif("${SPATZ_CLUSTER_CFG}" MATCHES "^spatz_cluster.carfield\\.(l2|dram)\\.hjson$")
+  set(_plat_folder "cheshire")
+else()
+  message(FATAL_ERROR
+    "Unknown configuration SPATZ_CLUSTER_CFG: ${SPATZ_CLUSTER_CFG} for platform assignment")
+endif()
+
+set(PLATFORM_SOURCE_FOLDER "src/platforms/${_plat_folder}" CACHE STRING "Path to the platform-specific sources")
 
 # Default memory regions
-set(MEM_DRAM_ORIGIN "0x80000000" CACHE STRING "Base address of external memory")
-set(MEM_DRAM_SIZE "0x80000000" CACHE STRING "Size of external memory")
+set(MEM_SPATZ_CLUSTER_DEFAULT_DRAM_HJSON_ORIGIN  0x80000000)
+set(MEM_SPATZ_CLUSTER_DEFAULT_DRAM_HJSON_SIZE    0x80000000)
+set(MEM_SPATZ_CLUSTER_CARFIELD_L2_HJSON_ORIGIN   0x78000000)
+set(MEM_SPATZ_CLUSTER_CARFIELD_L2_HJSON_SIZE     0x00400000)
+set(MEM_SPATZ_CLUSTER_CARFIELD_DRAM_HJSON_ORIGIN 0x80000000)
+set(MEM_SPATZ_CLUSTER_CARFIELD_DRAM_HJSON_SIZE   0x80000000)
+set(MEM_SPATZ_CLUSTER_MEMPOOL_DRAM_HJSON_ORIGIN  0x80000000)
+set(MEM_SPATZ_CLUSTER_MEMPOOL_DRAM_HJSON_SIZE    0x80000000)
+
+# sanitize lookup key (replace dots with underscores, upper-case)
+string(REPLACE "." "_" _key "${SPATZ_CLUSTER_CFG}")
+string(TOUPPER       "${_key}"   _key)
+
+# build the variable names we defined above
+set(_orig_var "MEM_${_key}_ORIGIN")
+set(_size_var "MEM_${_key}_SIZE")
+
+if(DEFINED ${_orig_var} AND DEFINED ${_size_var})
+    # perform the lookup
+    set(MEM_DRAM_ORIGIN "${${_orig_var}}" CACHE STRING "Base address of external memory")
+    set(MEM_DRAM_SIZE   "${${_size_var}}"   CACHE STRING "Size of external memory")
+else()
+    message(FATAL_ERROR "Unknown configuration SPATZ_CLUSTER_CFG: ${SPATZ_CLUSTER_CFG} for memory origin assignment")
+endif()
+
 set(SNRT_BASE_HARTID "0" CACHE STRING "Base hart id of this cluster")
 set(SNRT_CLUSTER_CORE_NUM "0" CACHE STRING "Number of cores in this cluster")
 set(SNRT_TCDM_START_ADDR "0" CACHE STRING "Start address of the TCDM region")
