@@ -2619,9 +2619,9 @@ module snitch import snitch_pkg::*; import riscv_instr::*; import quadrilatero_i
 /* end of RVV extension */
 /* RMM extension */
 `ifdef TARGET_SPATZ
-      quadrilatero_instr_pkg::FMMACC_S,
-      quadrilatero_instr_pkg::FMMACC_D,
+      quadrilatero_instr_pkg::FMMACC_B,
       quadrilatero_instr_pkg::FMMACC_H,
+      quadrilatero_instr_pkg::FMMACC_S,
       quadrilatero_instr_pkg::MMAQA_B,
       quadrilatero_instr_pkg::MMADA_H,
       quadrilatero_instr_pkg::MMASA_W,
@@ -2639,7 +2639,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; import quadrilatero_i
 
       // 2 source registers (rs1, rs2)
       //quadrilatero_instr_pkg::MLD_B, -- change encoding
-      quadrilatero_instr_pkg::MLD_H,
+      // quadrilatero_instr_pkg::MLD_H,
       quadrilatero_instr_pkg::MLD_W:
       begin
         if (RMM) begin
