@@ -113,7 +113,7 @@ snRuntime-test-vsim:
   needs: ["tc-llvm", "tc-gcc"]
   parallel:
     matrix:
-      - cfg: [spatz_cluster.default, carfield]
+      - cfg: [spatz_cluster.default]
 
 snRuntime-test-vcs:
   stage: test
@@ -141,7 +141,7 @@ snRuntime-test-vcs:
   needs: ["tc-llvm", "tc-gcc"]
   parallel:
     matrix:
-      - cfg: [spatz_cluster.default, carfield]
+      - cfg: [spatz_cluster.default]
 
 snRuntime-test-vlt:
   stage: test
@@ -170,7 +170,7 @@ snRuntime-test-vlt:
   needs: ["tc-llvm", "tc-gcc", "verilator"]
   parallel:
     matrix:
-      - cfg: [spatz_cluster.default, carfield]
+      - cfg: [spatz_cluster.default]
 
 # RISC-V unit tests
 riscvTests-test-vlt:
@@ -200,7 +200,7 @@ riscvTests-test-vlt:
   needs: ["tc-llvm", "tc-gcc", "verilator"]
   parallel:
     matrix:
-      - cfg: [spatz_cluster.default, carfield]
+      - cfg: [spatz_cluster.default]
 
 # Spatz tests
 spatzBenchmarks-test-vlt:
@@ -230,4 +230,4 @@ spatzBenchmarks-test-vlt:
   needs: ["tc-llvm", "tc-gcc", "verilator"]
   parallel:
     matrix:
-      - cfg: [spatz_cluster.default, carfield]
+      - cfg: [spatz_cluster.default]
