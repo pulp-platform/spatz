@@ -181,7 +181,6 @@ module snitch_lsu #(
   assign lsu_pvalid_o = data_rsp_i.p_valid & ~mem_out;
   assign data_req_o.p_ready = lsu_pready_i | mem_out;
 
-// ----------
   // Assertions
   // ----------
   // It is a waste of resources to configure more outstanding loads than outstanding memory
