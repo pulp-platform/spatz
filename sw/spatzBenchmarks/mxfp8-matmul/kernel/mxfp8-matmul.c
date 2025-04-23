@@ -1744,7 +1744,16 @@ void mxfp8_matmul_fp32_outer_mxdotp_lmul2_8x(float *c,
       asm volatile("fld %0, (%1)" : "=f"(a7) : "r"(a__));
       a_ += 8; // next 8 columns
 
+      // NOTE: We load the scale twice, once for use with v16 and once with v20.
+      // This avoids stalls when "switching" to the next scale within the k-loop
+      // below. Otherwise, two consecutive FPU instructions need to use the same
+      // vector register but with different values (due to a load in-between),
+      // which forces a pipeline stall until the load can complete.
+      // This is not very energy-efficient, but easier than a vmv instruction
+      // (as this would require vsetvli to change LMUL).
+
       // iter 0: load b_scale (vector)
+      asm volatile("vle8.v  v28, (%0)" :: "r"(b_scale_)); // EMUL=1/2
       asm volatile("vle8.v  v29, (%0)" :: "r"(b_scale_)); // EMUL=1/2
       b_scale_ += N; // next row
 
@@ -1760,40 +1769,40 @@ void mxfp8_matmul_fp32_outer_mxdotp_lmul2_8x(float *c,
       asm volatile("add %0, %1, %2" : "=r"(a_scale__) : "r"(a_scale_), "r"(K_BLOCK));
       asm volatile("flb %0, (%1)" : "=f"(as1) : "r"(a_scale__));
       a_scale__ += K_BLOCK;
-      asm volatile("vmxdotp.wf v0, %0, v16, %1, v29" :: "f"(a0), "f"(as0));
+      asm volatile("vmxdotp.wf v0, %0, v16, %1, v28" :: "f"(a0), "f"(as0));
       asm volatile("flb %0, (%1)" : "=f"(as2) : "r"(a_scale__));
       a_scale__ += K_BLOCK;
       asm volatile("fld %0, (%1)" : "=f"(a0) : "r"(a_));
       asm volatile("add %0, %1, %2" : "=r"(a__) : "r"(a_), "r"(K));
-      asm volatile("vmxdotp.wf  v2, %0, v16, %1, v29" :: "f"(a1), "f"(as1));
+      asm volatile("vmxdotp.wf  v2, %0, v16, %1, v28" :: "f"(a1), "f"(as1));
       asm volatile("flb %0, (%1)" : "=f"(as3) : "r"(a_scale__));
       a_scale__ += K_BLOCK;
       asm volatile("fld %0, (%1)" : "=f"(a1) : "r"(a__));
       a__ += K;
-      asm volatile("vmxdotp.wf  v4, %0, v16, %1, v29" :: "f"(a2), "f"(as2));
+      asm volatile("vmxdotp.wf  v4, %0, v16, %1, v28" :: "f"(a2), "f"(as2));
       asm volatile("flb %0, (%1)" : "=f"(as4) : "r"(a_scale__));
       a_scale__ += K_BLOCK;
       asm volatile("fld %0, (%1)" : "=f"(a2) : "r"(a__));
       a__ += K;
-      asm volatile("vmxdotp.wf  v6, %0, v16, %1, v29" :: "f"(a3), "f"(as3));
+      asm volatile("vmxdotp.wf  v6, %0, v16, %1, v28" :: "f"(a3), "f"(as3));
       asm volatile("flb %0, (%1)" : "=f"(as5) : "r"(a_scale__));
       a_scale__ += K_BLOCK;
       asm volatile("fld %0, (%1)" : "=f"(a3) : "r"(a__));
       a__ += K;
-      asm volatile("vmxdotp.wf  v8, %0, v16, %1, v29" :: "f"(a4), "f"(as4));
+      asm volatile("vmxdotp.wf  v8, %0, v16, %1, v28" :: "f"(a4), "f"(as4));
       asm volatile("flb %0, (%1)" : "=f"(as6) : "r"(a_scale__));
       a_scale__ += K_BLOCK;
       asm volatile("fld %0, (%1)" : "=f"(a4) : "r"(a__));
       a__ += K;
-      asm volatile("vmxdotp.wf v10, %0, v16, %1, v29" :: "f"(a5), "f"(as5));
+      asm volatile("vmxdotp.wf v10, %0, v16, %1, v28" :: "f"(a5), "f"(as5));
       asm volatile("flb %0, (%1)" : "=f"(as7) : "r"(a_scale__));
       a_scale_++; // next column
       asm volatile("fld %0, (%1)" : "=f"(a5) : "r"(a__));
       a__ += K;
-      asm volatile("vmxdotp.wf v12, %0, v16, %1, v29" :: "f"(a6), "f"(as6));
+      asm volatile("vmxdotp.wf v12, %0, v16, %1, v28" :: "f"(a6), "f"(as6));
       asm volatile("fld %0, (%1)" : "=f"(a6) : "r"(a__));
       a__ += K;
-      asm volatile("vmxdotp.wf v14, %0, v16, %1, v29" :: "f"(a7), "f"(as7));
+      asm volatile("vmxdotp.wf v14, %0, v16, %1, v28" :: "f"(a7), "f"(as7));
       asm volatile("fld %0, (%1)" : "=f"(a7) : "r"(a__));
       a_ += 8; // next 8 columns
 
@@ -1808,28 +1817,28 @@ void mxfp8_matmul_fp32_outer_mxdotp_lmul2_8x(float *c,
         // previous loop iteration
 
         // mxdotp + load a (scalar)
-        asm volatile("vmxdotp.wf v0, %0, v16, %1, v29" :: "f"(a0), "f"(as0));
+        asm volatile("vmxdotp.wf v0, %0, v16, %1, v28" :: "f"(a0), "f"(as0));
         asm volatile("fld %0, (%1)" : "=f"(a0) : "r"(a_));
         asm volatile("add %0, %1, %2" : "=r"(a__) : "r"(a_), "r"(K));
-        asm volatile("vmxdotp.wf  v2, %0, v16, %1, v29" :: "f"(a1), "f"(as1));
+        asm volatile("vmxdotp.wf  v2, %0, v16, %1, v28" :: "f"(a1), "f"(as1));
         asm volatile("fld %0, (%1)" : "=f"(a1) : "r"(a__));
         a__ += K;
-        asm volatile("vmxdotp.wf  v4, %0, v16, %1, v29" :: "f"(a2), "f"(as2));
+        asm volatile("vmxdotp.wf  v4, %0, v16, %1, v28" :: "f"(a2), "f"(as2));
         asm volatile("fld %0, (%1)" : "=f"(a2) : "r"(a__));
         a__ += K;
-        asm volatile("vmxdotp.wf  v6, %0, v16, %1, v29" :: "f"(a3), "f"(as3));
+        asm volatile("vmxdotp.wf  v6, %0, v16, %1, v28" :: "f"(a3), "f"(as3));
         asm volatile("fld %0, (%1)" : "=f"(a3) : "r"(a__));
         a__ += K;
-        asm volatile("vmxdotp.wf  v8, %0, v16, %1, v29" :: "f"(a4), "f"(as4));
+        asm volatile("vmxdotp.wf  v8, %0, v16, %1, v28" :: "f"(a4), "f"(as4));
         asm volatile("fld %0, (%1)" : "=f"(a4) : "r"(a__));
         a__ += K;
-        asm volatile("vmxdotp.wf v10, %0, v16, %1, v29" :: "f"(a5), "f"(as5));
+        asm volatile("vmxdotp.wf v10, %0, v16, %1, v28" :: "f"(a5), "f"(as5));
         asm volatile("fld %0, (%1)" : "=f"(a5) : "r"(a__));
         a__ += K;
-        asm volatile("vmxdotp.wf v12, %0, v16, %1, v29" :: "f"(a6), "f"(as6));
+        asm volatile("vmxdotp.wf v12, %0, v16, %1, v28" :: "f"(a6), "f"(as6));
         asm volatile("fld %0, (%1)" : "=f"(a6) : "r"(a__));
         a__ += K;
-        asm volatile("vmxdotp.wf v14, %0, v16, %1, v29" :: "f"(a7), "f"(as7));
+        asm volatile("vmxdotp.wf v14, %0, v16, %1, v28" :: "f"(a7), "f"(as7));
         asm volatile("fld %0, (%1)" : "=f"(a7) : "r"(a__));
         a_ += 8; // next 8 columns
 
@@ -1846,6 +1855,9 @@ void mxfp8_matmul_fp32_outer_mxdotp_lmul2_8x(float *c,
 
         // mxdotp + load a (scalar)
         if (k % MXFP8_BLOCK_SIZE == 0) {
+          // load b_scale (for later)
+          asm volatile("vle8.v  v28, (%0)" :: "r"(b_scale_)); // EMUL=1/2
+
           asm volatile("vmxdotp.wf  v0, %0, v20, %1, v29" :: "f"(a0), "f"(as0));
           asm volatile("fld %0, (%1)" : "=f"(a0) : "r"(a_));
           asm volatile("add %0, %1, %2" : "=r"(a__) : "r"(a_), "r"(K));
