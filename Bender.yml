@@ -210,8 +210,8 @@ sources:
         - hw/system/spatz_cluster/src/generated/spatz_cluster_wrapper.sv
       - target: cachepool
         files:
-        - ../../src/cachepool_cluster_simple.sv
         - ../../src/cachepool_pkg.sv
+        - ../../src/cachepool_cluster_simple.sv
         - ../../tb/cachepool_cluster_wrapper.sv
         - ../../tb/testharness.sv
 

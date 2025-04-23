@@ -85,7 +85,7 @@ SECTIONS
     *(.dynsbss)
     *(.sbss .sbss.* .gnu.linkonce.sb.*)
     *(.scommon)
-  } >DRAM
+  } >L2
 
   /* Uninitialized data section */
   .bss            :
