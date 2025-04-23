@@ -182,7 +182,8 @@ ENABLE_PRINT ?= 1
 sw: clean.sw
 	mkdir -p sw/build
 	cd sw/build && ${CMAKE} \
-	-DUSE_CACHE=${USE_CACHE} -DMEAS_1ITER=${MEAS_1ITER} -DPRINT_CHECK=${ENABLE_PRINT} -DENABLE_FLAMINGO_TESTS=${ENABLE_FLA_TESTS} -DFLA_ROOT=${FLA_ROOT} \
+	-DUSE_CACHE=${USE_CACHE} -DMEAS_1ITER=${MEAS_1ITER} -DPRINT_CHECK=${ENABLE_PRINT} \
+	-DENABLE_CACHEPOOL_TESTS=${ENABLE_CACHEPOOL_TESTS} -DENABLE_FLAMINGO_TESTS=${ENABLE_FLA_TESTS} -DFLA_ROOT=${FLA_ROOT} \
 	-DLLVM_PATH=${LLVM_INSTALL_DIR} -DGCC_PATH=${GCC_INSTALL_DIR} -DPYTHON=${PYTHON} -DBUILD_TESTS=ON .. && make
 
 # VSIM
@@ -190,8 +191,10 @@ sw: clean.sw
 sw.vsim: clean.sw bin/spatz_cluster.vsim
 	mkdir -p sw/build
 	cd sw/build && ${CMAKE} \
-	-DUSE_CACHE=${USE_CACHE} -DMEAS_1ITER=${MEAS_1ITER} -DPRINT_CHECK=${ENABLE_PRINT} -DENABLE_FLAMINGO_TESTS=${ENABLE_FLA_TESTS} -DFLA_ROOT=${FLA_ROOT} \
-	-DLLVM_PATH=${LLVM_INSTALL_DIR} -DGCC_PATH=${GCC_INSTALL_DIR} -DPYTHON=${PYTHON} -DSNITCH_SIMULATOR=../../../../../hw/system/spatz_cluster/bin/spatz_cluster.vsim -DBUILD_TESTS=ON .. && make -j8
+	-DUSE_CACHE=${USE_CACHE} -DMEAS_1ITER=${MEAS_1ITER} -DPRINT_CHECK=${ENABLE_PRINT} \
+	-DENABLE_CACHEPOOL_TESTS=${ENABLE_CACHEPOOL_TESTS} -DENABLE_FLAMINGO_TESTS=${ENABLE_FLA_TESTS} -DFLA_ROOT=${FLA_ROOT} \
+	-DLLVM_PATH=${LLVM_INSTALL_DIR} -DGCC_PATH=${GCC_INSTALL_DIR} -DPYTHON=${PYTHON} \
+	-DSNITCH_SIMULATOR=../../../../../hw/system/spatz_cluster/bin/spatz_cluster.vsim -DBUILD_TESTS=ON .. && make -j8
 
 ## Build SW and run all tests with Questasim simulator
 sw.test.vsim: sw.vsim
@@ -202,8 +205,10 @@ sw.test.vsim: sw.vsim
 sw.vcs: clean.sw bin/spatz_cluster.vcs
 	mkdir -p sw/build
 	cd sw/build && ${CMAKE} \
-	-DUSE_CACHE=${USE_CACHE} -DMEAS_1ITER=${MEAS_1ITER} -DPRINT_CHECK=${ENABLE_PRINT} -DENABLE_FLAMINGO_TESTS=${ENABLE_FLA_TESTS} -DFLA_ROOT=${FLA_ROOT} \
-	-DLLVM_PATH=${LLVM_INSTALL_DIR} -DGCC_PATH=${GCC_INSTALL_DIR} -DPYTHON=${PYTHON} -DSNITCH_SIMULATOR=../../../../../hw/system/spatz_cluster/bin/spatz_cluster.vcs -DBUILD_TESTS=ON .. && make -j8
+	-DUSE_CACHE=${USE_CACHE} -DMEAS_1ITER=${MEAS_1ITER} -DPRINT_CHECK=${ENABLE_PRINT} \
+	-DENABLE_CACHEPOOL_TESTS=${ENABLE_CACHEPOOL_TESTS} -DENABLE_FLAMINGO_TESTS=${ENABLE_FLA_TESTS} -DFLA_ROOT=${FLA_ROOT} \
+	-DLLVM_PATH=${LLVM_INSTALL_DIR} -DGCC_PATH=${GCC_INSTALL_DIR} -DPYTHON=${PYTHON} \
+	-DSNITCH_SIMULATOR=../../../../../hw/system/spatz_cluster/bin/spatz_cluster.vcs -DBUILD_TESTS=ON .. && make -j8
 
 ## Build SW and run all tests with VCS simulator
 sw.test.vcs: sw.vcs
