@@ -17,7 +17,7 @@ set scriptDir [getScriptDirectory]
 add wave /tb_bin/i_dut/cluster_probe
 
 # Add all cores
-for {set core 0}  {$core < [examine -radix dec spatz_cluster_pkg::NumCores]} {incr core} {
+for {set core 0}  {$core < 4} {incr core} {
     do ${scriptDir}/wave_core.tcl $core
 }
 

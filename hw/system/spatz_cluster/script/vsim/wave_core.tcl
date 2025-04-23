@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: SHL-0.51
 
 # Create group for core $1
+onerror {resume}
 
 add wave -noupdate -group core[$1] -group Params /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/BootAddr
 add wave -noupdate -group core[$1] /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/i_snitch/clk_i
