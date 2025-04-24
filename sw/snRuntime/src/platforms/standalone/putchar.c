@@ -3,6 +3,17 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "snrt.h"
 
+// #define FLAMINGO
+
+/// UART
+// Register offsets
+#define UART_THR_REG_OFFSET 0
+#define UART_LINE_STATUS_REG_OFFSET 20
+// Register fields
+#define UART_LINE_STATUS_THR_EMPTY_BIT 5
+// Base address of uart
+#define __base_uart 0x03002000
+
 extern uintptr_t volatile tohost, fromhost;
 
 // Rudimentary string buffer for putc calls.
@@ -17,8 +28,27 @@ static volatile struct putc_buffer {
     char data[PUTC_BUFFER_LEN];
 } *const putc_buffer = (void *)&_edram;
 
+static inline volatile uint8_t *reg8(void *base, int offs) {
+    return (volatile uint8_t *)((uint8_t *)base + offs);
+}
+
+static inline int __uart_write_ready(void *uart_base) {
+    return *reg8(uart_base, UART_LINE_STATUS_REG_OFFSET) & (1 << UART_LINE_STATUS_THR_EMPTY_BIT);
+}
+
+void uart_write(void *uart_base, uint8_t byte) {
+    while (!__uart_write_ready(uart_base))
+        ;
+    *reg8(uart_base, UART_THR_REG_OFFSET) = byte;
+}
+
 // Provide an implementation for putchar.
 void snrt_putchar(char character) {
+
+#if PRINT_UART == 1
+    void *base = (void *)__base_uart;
+    uart_write(base, character);
+#else
     volatile struct putc_buffer *buf = &putc_buffer[snrt_hartid()];
     buf->data[buf->hdr.size++] = character;
     if (buf->hdr.size == PUTC_BUFFER_LEN || character == '\n') {
@@ -37,5 +67,5 @@ void snrt_putchar(char character) {
 
         buf->hdr.size = 0;
     }
-
+#endif
 }

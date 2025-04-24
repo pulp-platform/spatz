@@ -34,11 +34,26 @@ else()
     set(MEM_DRAM_ORIGIN "0x80000000" CACHE STRING "Base address of external memory")
     set(MEM_DRAM_SIZE "256M" CACHE STRING "Size of external memory")
 endif()
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/link/common.ld.in common.ld @ONLY)
-set(LINKER_SCRIPT ${CMAKE_CURRENT_BINARY_DIR}/common.ld CACHE PATH "")
 
-# provide linker script
-# set(LINKER_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/link/common.ld" CACHE PATH "")
+option(COMMON_L2 "Use common_l2.ld.in as linker script" OFF)
+option(COMMON_DRAM "Use common_dram.ld.in as linker script" OFF)
+
+# Determine which linker script to use
+if(COMMON_L2 AND NOT COMMON_DRAM)
+    set(LINKER_TEMPLATE "${CMAKE_CURRENT_SOURCE_DIR}/link/common_l2.ld.in")
+elseif(COMMON_DRAM AND NOT COMMON_L2)
+    set(LINKER_TEMPLATE "${CMAKE_CURRENT_SOURCE_DIR}/link/common_dram.ld.in")
+else()
+    set(LINKER_TEMPLATE "${CMAKE_CURRENT_SOURCE_DIR}/link/common.ld.in")
+endif()
+
+# Output debug info to file
+file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/linker_choice.txt
+     "Linker template used: ${LINKER_TEMPLATE}\n")
+
+# Configure and set the linker script
+configure_file(${LINKER_TEMPLATE} common.ld @ONLY)
+set(LINKER_SCRIPT ${CMAKE_CURRENT_BINARY_DIR}/common.ld CACHE PATH "")
 message(STATUS "Using common linker script: ${LINKER_SCRIPT}")
 
 # OpenMP
@@ -68,7 +83,10 @@ set(sources
     src/l1cache.c
 )
 
-# platform specific sources
+if(PRINT_CHECK)
+  add_compile_definitions(PRINT_UART=${PRINT_UART})
+endif()
+
 set(standalone_snitch_sources
     src/platforms/standalone/start_snitch.S
     src/platforms/standalone/putchar.c
