@@ -176,14 +176,13 @@ lint/tmp/files: ${BENDER}
 USE_CACHE  ?= 0
 MEAS_1ITER ?= 0
 PRINT_UART ?= 1
-COMMON_L2  ?= 0
-COMMON_DRAM ?= 0
+SNRT_LINK  ?= mix
 
 ## Build SW into sw/build with the LLVM toolchain
 sw: clean.sw
 	mkdir -p sw/build
 	cd sw/build && ${CMAKE} \
-	-DUSE_CACHE=${USE_CACHE} -DMEAS_1ITER=${MEAS_1ITER} -DPRINT_CHECK=${ENABLE_PRINT} -DPRINT_UART=${PRINT_UART} -DCOMMON_L2=${COMMON_L2} -DCOMMON_DRAM=${COMMON_DRAM} -DENABLE_FLAMINGO_TESTS=${ENABLE_FLA_TESTS} -DFLA_ROOT=${FLA_ROOT} \
+	-DUSE_CACHE=${USE_CACHE} -DMEAS_1ITER=${MEAS_1ITER} -DPRINT_CHECK=${ENABLE_PRINT} -DPRINT_UART=${PRINT_UART} -DSNRT_LINK=${SNRT_LINK} -DENABLE_FLAMINGO_TESTS=${ENABLE_FLA_TESTS} -DFLA_ROOT=${FLA_ROOT} \
 	-DLLVM_PATH=${LLVM_INSTALL_DIR} -DGCC_PATH=${GCC_INSTALL_DIR} -DPYTHON=${PYTHON} -DBUILD_TESTS=ON .. && make
 
 # VSIM
@@ -191,7 +190,7 @@ sw: clean.sw
 sw.vsim: clean.sw bin/spatz_cluster.vsim
 	mkdir -p sw/build
 	cd sw/build && ${CMAKE} \
-	-DUSE_CACHE=${USE_CACHE} -DMEAS_1ITER=${MEAS_1ITER} -DPRINT_CHECK=${ENABLE_PRINT} -DPRINT_UART=${PRINT_UART} -DCOMMON_L2=${COMMON_L2} -DCOMMON_DRAM=${COMMON_DRAM} -DENABLE_FLAMINGO_TESTS=${ENABLE_FLA_TESTS} -DFLA_ROOT=${FLA_ROOT} \
+	-DUSE_CACHE=${USE_CACHE} -DMEAS_1ITER=${MEAS_1ITER} -DPRINT_CHECK=${ENABLE_PRINT} -DPRINT_UART=${PRINT_UART} -DSNRT_LINK=${SNRT_LINK} -DENABLE_FLAMINGO_TESTS=${ENABLE_FLA_TESTS} -DFLA_ROOT=${FLA_ROOT} \
 	-DLLVM_PATH=${LLVM_INSTALL_DIR} -DGCC_PATH=${GCC_INSTALL_DIR} -DPYTHON=${PYTHON} -DSNITCH_SIMULATOR=../../../../../hw/system/spatz_cluster/bin/spatz_cluster.vsim -DBUILD_TESTS=ON .. && make -j8
 
 ## Build SW and run all tests with Questasim simulator
@@ -203,7 +202,7 @@ sw.test.vsim: sw.vsim
 sw.vcs: clean.sw bin/spatz_cluster.vcs
 	mkdir -p sw/build
 	cd sw/build && ${CMAKE} \
-	-DUSE_CACHE=${USE_CACHE} -DMEAS_1ITER=${MEAS_1ITER} -DPRINT_CHECK=${ENABLE_PRINT} -DPRINT_UART=${PRINT_UART} -DCOMMON_L2=${COMMON_L2} -DCOMMON_DRAM=${COMMON_DRAM} -DENABLE_FLAMINGO_TESTS=${ENABLE_FLA_TESTS} -DFLA_ROOT=${FLA_ROOT} \
+	-DUSE_CACHE=${USE_CACHE} -DMEAS_1ITER=${MEAS_1ITER} -DPRINT_CHECK=${ENABLE_PRINT} -DPRINT_UART=${PRINT_UART} -DSNRT_LINK=${SNRT_LINK} -DENABLE_FLAMINGO_TESTS=${ENABLE_FLA_TESTS} -DFLA_ROOT=${FLA_ROOT} \
 	-DLLVM_PATH=${LLVM_INSTALL_DIR} -DGCC_PATH=${GCC_INSTALL_DIR} -DPYTHON=${PYTHON} -DSNITCH_SIMULATOR=../../../../../hw/system/spatz_cluster/bin/spatz_cluster.vcs -DBUILD_TESTS=ON .. && make -j8
 
 ## Build SW and run all tests with VCS simulator
@@ -275,6 +274,5 @@ help:
 	@echo -e "${Blue}MEAS_1ITER     ${Black}Set to 1 to run 2 iterations of test."
 	@echo -e "${Blue}ENABLE_PRINT   ${Black}Set to 1 to use printing functions in software."
 	@echo -e "${Blue}PRINT_UART     ${Black}Set to 1 to use print with real UART block."
-	@echo -e "${Blue}COMMON_L2      ${Black}Set to 1 to place all data in L2."
-	@echo -e "${Blue}COMMON_DRAM    ${Black}Set to 1 to place all data in DRAM."
+	@echo -e "${Blue}SNRT_LINK      ${Black}Set to {mix, dram, l2} to choose corresponding link file."
 	@echo -e ""

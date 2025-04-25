@@ -35,16 +35,19 @@ else()
     set(MEM_DRAM_SIZE "256M" CACHE STRING "Size of external memory")
 endif()
 
-option(COMMON_L2 "Use common_l2.ld.in as linker script" OFF)
-option(COMMON_DRAM "Use common_dram.ld.in as linker script" OFF)
+# New variable to select linker script
+set(SNRT_LINK "mix" CACHE STRING "Select linker script: mix, dram, or l2")
+set_property(CACHE SNRT_LINK PROPERTY STRINGS mix dram l2)
 
-# Determine which linker script to use
-if(COMMON_L2 AND NOT COMMON_DRAM)
+# Determine which linker script to use based on SNRT_LINK
+if(SNRT_LINK STREQUAL "l2")
     set(LINKER_TEMPLATE "${CMAKE_CURRENT_SOURCE_DIR}/link/common_l2.ld.in")
-elseif(COMMON_DRAM AND NOT COMMON_L2)
+elseif(SNRT_LINK STREQUAL "dram")
     set(LINKER_TEMPLATE "${CMAKE_CURRENT_SOURCE_DIR}/link/common_dram.ld.in")
-else()
+elseif(SNRT_LINK STREQUAL "mix")
     set(LINKER_TEMPLATE "${CMAKE_CURRENT_SOURCE_DIR}/link/common.ld.in")
+else()
+    message(FATAL_ERROR "Invalid value for SNRT_LINK: ${SNRT_LINK}. Valid options are: mix, dram, l2.")
 endif()
 
 # Output debug info to file
