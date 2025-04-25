@@ -9,6 +9,7 @@ MEMORY
 {
     DRAM (rwxa)  : ORIGIN = @MEM_DRAM_ORIGIN@, LENGTH = @MEM_DRAM_SIZE@
     L2 (rwxa)  : ORIGIN = @L2_ORIGIN@, LENGTH = @L2_SIZE@
+    UNCACHED_REGION (rwxa) : ORIGIN = @UNCACHED_REGION_ORIGIN@,    LENGTH = @UNCACHED_REGION_SIZE@
 }
 
 SECTIONS
@@ -75,6 +76,13 @@ SECTIONS
     *(.data .data.* .gnu.linkonce.d.*)
     SORT(CONSTRUCTORS)
   } >L2
+  .data_uncached_region :
+  {
+    . = ALIGN(1024);
+    __DATA_BEGIN__ = .;
+    *(.data .data.* .gnu.linkonce.d.*)
+    SORT(CONSTRUCTORS)
+  } >UNCACHED_REGION
   _edata = .; PROVIDE (edata = .);
 
   /* small bss section */
@@ -110,4 +118,12 @@ SECTIONS
     *(.dram)
     _edram = .;
   } >DRAM
+  /* Stack section: Reserve 8KB for the stack and provide the symbol "stack" */
+  .stack (NOLOAD) :
+  {
+      __stack_start = .;
+      . = . + 0x2000; /* Reserve 8KB for the stack */
+      __stack_end = .;
+      PROVIDE(stack = __stack_end);
+  } >L2
 }

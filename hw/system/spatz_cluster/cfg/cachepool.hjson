@@ -76,6 +76,12 @@
         // 0x5200_0000
         length: 8388608
     },
+    uncached_region: {
+        // 0x5200_0000
+        address: 1375731712,
+        // 0x5280_0000
+        length: 8388608
+    },
     peripherals: {
     },
 
