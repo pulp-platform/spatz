@@ -127,10 +127,10 @@ module spatz_vfu
   logic reduction_operand_ready_d, reduction_operand_ready_q;
 
   // Are the VFU operands ready?
-  logic op1_is_ready, op2_is_ready, op3_is_ready, operands_ready;
+  logic op0_is_ready, op1_is_ready, op2_is_ready, operands_ready;
+  assign op0_is_ready   = spatz_req_valid && (!spatz_req.vd_is_src || vrf_rvalid_i[2]);
   assign op1_is_ready   = spatz_req_valid && ((!spatz_req.op_arith.is_reduction && (!spatz_req.use_vs1 || vrf_rvalid_i[1])) || (spatz_req.op_arith.is_reduction && reduction_operand_ready_q));
   assign op2_is_ready   = spatz_req_valid && ((!spatz_req.use_vs2 || vrf_rvalid_i[0]) || spatz_req.op_arith.is_reduction);
-  assign op3_is_ready   = spatz_req_valid && (!spatz_req.vd_is_src || vrf_rvalid_i[2]);
   assign operands_ready = op1_is_ready && op2_is_ready && op3_is_ready && (!spatz_req.op_arith.is_scalar || vfu_rsp_ready_i) && !stall;
 
   // Valid operations
@@ -321,11 +321,13 @@ module spatz_vfu
   logic [N_FU*ELENB-1:0] fpu_in_ready;
 
   // Operands and result signals
-  logic [N_FU*ELEN-1:0]  operand1, operand2, operand3;
+  logic [N_FU*ELEN-1:0]  operand0, operand1, operand2;
   logic [N_FU*ELENB-1:0] in_ready;
   always_comb begin: operand_proc
     automatic vew_e eew =
       (spatz_req.op inside {VSDOTP, VMXDOTP}) ? vew_e'(spatz_req.vtype.vsew + 1'b1) : spatz_req.vtype.vsew;
+
+    operand0 = spatz_req.op_arith.is_scalar ? {1*N_FU{spatz_req.rsd}} : vrf_rdata_i[2];
 
     if (spatz_req.op_arith.is_scalar)
       operand1 = {1*N_FU{spatz_req.rs1}};
@@ -351,8 +353,6 @@ module spatz_vfu
         EW_32: operand2   = MAXEW == EW_32 ? {1*N_FU{spatz_req.rs2[31:0]}} : {2*N_FU{spatz_req.rs2[31:0]}};
         default: operand2 = {1*N_FU{spatz_req.rs2}};
       endcase
-
-    operand3 = spatz_req.op_arith.is_scalar ? {1*N_FU{spatz_req.rsd}} : vrf_rdata_i[2];
   end: operand_proc
 
   assign in_ready     = state_q == VFU_RunningIPU ? ipu_in_ready     : fpu_in_ready;
@@ -866,9 +866,9 @@ module spatz_vfu
 
   // If there are fewer IPUs than FPUs, pipeline the execution of the integer instructions
   logic     [N_IPU*ELENB-1:0] int_ipu_in_ready;
+  logic     [N_IPU*ELEN-1:0]  int_ipu_operand0;
   logic     [N_IPU*ELEN-1:0]  int_ipu_operand1;
   logic     [N_IPU*ELEN-1:0]  int_ipu_operand2;
-  logic     [N_IPU*ELEN-1:0]  int_ipu_operand3;
   logic     [N_IPU*ELEN-1:0]  int_ipu_result;
   vfu_tag_t [N_IPU-1:0]       int_ipu_result_tag;
   logic     [N_IPU*ELENB-1:0] int_ipu_result_valid;
@@ -877,14 +877,14 @@ module spatz_vfu
 
   assign is_ipu_busy = |int_ipu_busy;
 
-  logic [N_FU*ELEN-1:0] ipu_wide_operand1, ipu_wide_operand2, ipu_wide_operand3;
+  logic [N_FU*ELEN-1:0] ipu_wide_operand0, ipu_wide_operand1, ipu_wide_operand2;
   always_comb begin: gen_ipu_widening
     automatic logic [N_FU*ELEN/2-1:0] shift_operand1 = !widening_upper_q ? operand1[N_FU*ELEN/2-1:0] : operand1[N_FU*ELEN-1:N_FU*ELEN/2];
     automatic logic [N_FU*ELEN/2-1:0] shift_operand2 = !widening_upper_q ? operand2[N_FU*ELEN/2-1:0] : operand2[N_FU*ELEN-1:N_FU*ELEN/2];
 
+    ipu_wide_operand0 = operand0;
     ipu_wide_operand1 = operand1;
     ipu_wide_operand2 = operand2;
-    ipu_wide_operand3 = operand3;
 
     case (spatz_req.vtype.vsew)
       EW_32: begin
@@ -941,9 +941,9 @@ module spatz_vfu
 
       // Send operands
       ipu_in_ready     = 1'b0;
+      int_ipu_operand0 = ipu_wide_operand0[ipu_operand_pnt_q*ELEN*N_IPU +: ELEN*N_IPU];
       int_ipu_operand1 = ipu_wide_operand1[ipu_operand_pnt_q*ELEN*N_IPU +: ELEN*N_IPU];
       int_ipu_operand2 = ipu_wide_operand2[ipu_operand_pnt_q*ELEN*N_IPU +: ELEN*N_IPU];
-      int_ipu_operand3 = ipu_wide_operand3[ipu_operand_pnt_q*ELEN*N_IPU +: ELEN*N_IPU];
       if (spatz_req_valid && operands_ready && &int_ipu_in_ready && !is_fpu_insn) begin
         ipu_operand_pnt_d = ipu_operand_pnt_q + 1;
         if (ipu_operand_pnt_d == '0 || !(&valid_operations[ipu_operand_pnt_d*ELENB*N_IPU +: ELENB*N_IPU]))
@@ -982,9 +982,9 @@ module spatz_vfu
     assign ipu_result_tag   = ipu_result_tag_q;
   end: gen_pipeline_ipu else begin: gen_no_pipeline_ipu
     assign ipu_in_ready         = int_ipu_in_ready;
+    assign int_ipu_operand0     = ipu_wide_operand0;
     assign int_ipu_operand1     = ipu_wide_operand1;
     assign int_ipu_operand2     = ipu_wide_operand2;
-    assign int_ipu_operand3     = ipu_wide_operand3;
     assign ipu_result           = int_ipu_result;
     assign ipu_result_valid     = int_ipu_result_valid;
     assign int_ipu_result_ready = result_ready;
@@ -1012,7 +1012,7 @@ module spatz_vfu
       .operation_ready_o(ipu_ready                                                                                       ),
       .op_s1_i          (int_ipu_operand1[ipu*ELEN +: ELEN]                                                              ),
       .op_s2_i          (int_ipu_operand2[ipu*ELEN +: ELEN]                                                              ),
-      .op_d_i           (int_ipu_operand3[ipu*ELEN +: ELEN]                                                              ),
+      .op_d_i           (int_ipu_operand0[ipu*ELEN +: ELEN]                                                              ),
       .tag_i            (input_tag                                                                                       ),
       .carry_i          ('0                                                                                              ),
       .sew_i            (sew                                                                                             ),
@@ -1149,7 +1149,7 @@ module spatz_vfu
     elen_t [N_FU-1:0] mx_packed_operand;
     always_comb begin: gen_mx_packed_op
       // shift to choose correct operands for current cycle
-      automatic mx_acc_t   [N_FU-1:0] shift_mx_acc    = !narrowing_upper_q ? operand3[N_FPU*ELEN/2-1:0] : operand3[N_FPU*ELEN-1:N_FPU*ELEN/2];
+      automatic mx_acc_t   [N_FU-1:0] shift_mx_acc    = !narrowing_upper_q ? operand0[N_FPU*ELEN/2-1:0] : operand0[N_FPU*ELEN-1:N_FPU*ELEN/2];
       automatic mx_scale_t [N_FU-1:0] shift_mx_scale1 = mx_scale_operand1[N_FU*widening_mx_scale_q +: N_FU];
       automatic mx_scale_t [N_FU-1:0] shift_mx_scale2 = mx_scale_operand2[N_FU*widening_mx_scale_q +: N_FU];
 
@@ -1161,14 +1161,14 @@ module spatz_vfu
       end
     end
 
-    logic [N_FPU*ELEN-1:0] wide_operand1, wide_operand2, wide_operand3;
+    logic [N_FPU*ELEN-1:0] wide_operand0, wide_operand1, wide_operand2;
     always_comb begin: gen_widening
       automatic logic [N_FPU*ELEN/2-1:0] shift_operand1 = !widening_upper_q ? operand1[N_FPU*ELEN/2-1:0] : operand1[N_FPU*ELEN-1:N_FPU*ELEN/2];
       automatic logic [N_FPU*ELEN/2-1:0] shift_operand2 = !widening_upper_q ? operand2[N_FPU*ELEN/2-1:0] : operand2[N_FPU*ELEN-1:N_FPU*ELEN/2];
 
+      wide_operand0 = operand0;
       wide_operand1 = operand1;
       wide_operand2 = operand2;
-      wide_operand3 = operand3;
 
       case (spatz_req.vtype.vsew)
         EW_32: begin
@@ -1203,7 +1203,7 @@ module spatz_vfu
 
       // replace accumulator operand for MX dot product
       if (spatz_req.op == VMXDOTP)
-        wide_operand3 = mx_packed_operand;
+        wide_operand0 = mx_packed_operand;
     end: gen_widening
 
     for (genvar fpu = 0; unsigned'(fpu) < N_FPU; fpu++) begin : gen_fpnew
@@ -1215,9 +1215,9 @@ module spatz_vfu
       assign fpu_result_valid[fpu*ELENB +: ELENB] = {ELENB{int_fpu_result_valid}};
 
       elen_t fpu_operand1, fpu_operand2, fpu_operand3;
-      assign fpu_operand1 = spatz_req.op_arith.switch_rs1_rd ? wide_operand3[fpu*ELEN +: ELEN] : wide_operand1[fpu*ELEN +: ELEN];
+      assign fpu_operand1 = spatz_req.op_arith.switch_rs1_rd ? wide_operand0[fpu*ELEN +: ELEN] : wide_operand1[fpu*ELEN +: ELEN];
       assign fpu_operand2 = wide_operand2[fpu*ELEN +: ELEN];
-      assign fpu_operand3 = (fpu_op == fpnew_pkg::ADD || spatz_req.op_arith.switch_rs1_rd) ? wide_operand1[fpu*ELEN +: ELEN] : wide_operand3[fpu*ELEN +: ELEN];
+      assign fpu_operand3 = (fpu_op == fpnew_pkg::ADD || spatz_req.op_arith.switch_rs1_rd) ? wide_operand1[fpu*ELEN +: ELEN] : wide_operand0[fpu*ELEN +: ELEN];
 
       logic int_fpu_in_valid;
       assign int_fpu_in_valid = spatz_req_valid && operands_ready && (!spatz_req.op_arith.is_scalar || fpu == 0) && is_fpu_insn;
