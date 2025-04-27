@@ -442,9 +442,13 @@ module spatz_controller
     // Initialize the scoreboard metadata if we have a new instruction issued.
     if (spatz_req_valid && spatz_req.ex_unit != CON) begin
       // RAW hazard
-      if (spatz_req.use_vs4) begin
+      if (XVMXDOTP && spatz_req.use_vs4) begin
         scoreboard_d[spatz_req.id].deps[write_table_d[spatz_req.vs4].id] |= write_table_d[spatz_req.vs4].valid;
         read_table_d[spatz_req.vs4] = {spatz_req.id, 1'b1};
+      end
+      if (XVMXDOTP && spatz_req.use_vs3) begin
+        scoreboard_d[spatz_req.id].deps[write_table_d[spatz_req.vs3].id] |= write_table_d[spatz_req.vs3].valid;
+        read_table_d[spatz_req.vs3] = {spatz_req.id, 1'b1};
       end
       if (spatz_req.use_vs2) begin
         scoreboard_d[spatz_req.id].deps[write_table_d[spatz_req.vs2].id] |= write_table_d[spatz_req.vs2].valid;
