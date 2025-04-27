@@ -126,12 +126,18 @@ module spatz_vfu
   // Do we have the reduction operand?
   logic reduction_operand_ready_d, reduction_operand_ready_q;
 
+  // Are the MX scale operands valid?
+  logic mx_scale_operand1_valid, mx_scale_operand2_valid;
+
   // Are the VFU operands ready?
-  logic op0_is_ready, op1_is_ready, op2_is_ready, operands_ready;
+  logic op0_is_ready, op1_is_ready, op2_is_ready, op3_is_ready, op4_is_ready, operands_ready;
   assign op0_is_ready   = spatz_req_valid && (!spatz_req.vd_is_src || vrf_rvalid_i[2]);
   assign op1_is_ready   = spatz_req_valid && ((!spatz_req.op_arith.is_reduction && (!spatz_req.use_vs1 || vrf_rvalid_i[1])) || (spatz_req.op_arith.is_reduction && reduction_operand_ready_q));
   assign op2_is_ready   = spatz_req_valid && ((!spatz_req.use_vs2 || vrf_rvalid_i[0]) || spatz_req.op_arith.is_reduction);
-  assign operands_ready = op1_is_ready && op2_is_ready && op3_is_ready && (!spatz_req.op_arith.is_scalar || vfu_rsp_ready_i) && !stall;
+  assign op3_is_ready   = spatz_req_valid && (!XVMXDOTP || !spatz_req.use_vs3 || mx_scale_operand1_valid);
+  assign op4_is_ready   = spatz_req_valid && (!XVMXDOTP || !spatz_req.use_vs4 || mx_scale_operand2_valid);
+  assign operands_ready = op0_is_ready && op1_is_ready && op2_is_ready &&
+      op3_is_ready && op4_is_ready && (!spatz_req.op_arith.is_scalar || vfu_rsp_ready_i) && !stall;
 
   // Valid operations
   logic [N_FU*ELENB-1:0] valid_operations;
@@ -361,15 +367,83 @@ module spatz_vfu
 
   assign scalar_result = result[ELEN-1:0];
 
-  /////////////////////////
-  //  MX scale operands  //
-  /////////////////////////
+  //////////////////////////////
+  //  MX scale operand buffer //
+  //////////////////////////////
 
   mx_scale_t [N_FU*MxElemsPerScale-1:0] mx_scale_operand1, mx_scale_operand2;
-  // mx_scale1: from scalar rsd register
-  assign mx_scale_operand1 = {N_FU*MxElemsPerScale{mx_scale_t'(spatz_req.rsd)}};
-  // mx_scale2: from vector vs4 register
-  assign mx_scale_operand2 = vrf_rdata_i[1];
+
+  // Do we need to request new scales from the VRF?
+  logic mx_scale_operand1_req, mx_scale_operand2_req;
+  // Are we using the last of the buffered MX scales in this cycle?
+  logic mx_scale_last;
+
+  if (XVMXDOTP) begin : gen_mx_scales
+    assign mx_scale_last = (widening_mx_scale_q == MxElemsPerScale - 1'b1);
+
+    // data path (signals)
+    mx_scale_t [N_FU*MxElemsPerScale-1:0] mx_scale_operand1_d,       mx_scale_operand1_q;
+    mx_scale_t [N_FU*MxElemsPerScale-1:0] mx_scale_operand2_d,       mx_scale_operand2_q;
+    logic                                 mx_scale_operand1_valid_d, mx_scale_operand1_valid_q;
+    logic                                 mx_scale_operand2_valid_d, mx_scale_operand2_valid_q;
+
+    // data path
+    always_comb begin
+      // register signals
+      mx_scale_operand1_d       = mx_scale_operand1_q;
+      mx_scale_operand2_d       = mx_scale_operand2_q;
+      mx_scale_operand1_valid_d = mx_scale_operand1_valid_q;
+      mx_scale_operand2_valid_d = mx_scale_operand2_valid_q;
+      // output signals
+      mx_scale_operand1         = mx_scale_operand1_q;
+      mx_scale_operand2         = mx_scale_operand2_q;
+      mx_scale_operand1_valid   = mx_scale_operand1_valid_q;
+      mx_scale_operand2_valid   = mx_scale_operand2_valid_q;
+
+      // invalidate scales if an instruction finishes executing or we consumed all of them
+      if (spatz_req_ready || mx_scale_last) begin
+        mx_scale_operand1_valid_d = 1'b0;
+        mx_scale_operand2_valid_d = 1'b0;
+      end
+
+      // load scales if we requested them and the VRF provides them
+      if (mx_scale_operand1_req && vrf_rvalid_i[0]) begin
+        mx_scale_operand1_d       = vrf_rdata_i[0];
+        mx_scale_operand1_valid_d = 1'b1;
+        // no forwarding
+      end
+      if (mx_scale_operand2_req && vrf_rvalid_i[1]) begin
+        mx_scale_operand2_d       = vrf_rdata_i[1];
+        mx_scale_operand2_valid_d = 1'b1;
+        // forward data around register (for vmxdotp.wf)
+        mx_scale_operand2         = vrf_rdata_i[0];
+        mx_scale_operand2_valid   = 1'b1;
+      end
+
+      // use scalar values for vmxdotp.wf
+      if (!spatz_req.use_vs3) begin
+        mx_scale_operand1       = {N_FU*MxElemsPerScale{mx_scale_t'(spatz_req.rsd)}};
+        mx_scale_operand1_valid = 1'b1;
+      end
+    end
+
+    `FF(mx_scale_operand1_q, mx_scale_operand1_d, '0);
+    `FF(mx_scale_operand2_q, mx_scale_operand2_d, '0);
+    `FF(mx_scale_operand1_valid_q, mx_scale_operand1_valid_d, 1'b0);
+    `FF(mx_scale_operand2_valid_q, mx_scale_operand2_valid_d, 1'b0);
+
+    // request logic (request if we need it but current register values are not valid)
+    assign mx_scale_operand1_req = spatz_req_valid && spatz_req.use_vs3 && !mx_scale_operand1_valid_q;
+    assign mx_scale_operand2_req = spatz_req_valid && spatz_req.use_vs4 && !mx_scale_operand2_valid_q;
+  end else begin : gen_no_mx_scales
+    assign mx_scale_operand1       = '0;
+    assign mx_scale_operand2       = '0;
+    assign mx_scale_operand1_valid = 1'b0;
+    assign mx_scale_operand2_valid = 1'b0;
+    assign mx_scale_operand1_req   = 1'b0;
+    assign mx_scale_operand2_req   = 1'b0;
+    assign mx_scale_last           = 1'b0;
+  end
 
   ///////////////////////
   //  Reduction logic  //
@@ -738,10 +812,10 @@ module spatz_vfu
 
   vrf_be_t       vreg_wbe;
   logic          vreg_we;
-  logic    [2:0] vreg_re;
+  logic    [4:0] vreg_re;
 
   // Address register
-  vrf_addr_t [2:0] vreg_addr_q, vreg_addr_d, vreg_addr;
+  vrf_addr_t [4:0] vreg_addr_q, vreg_addr_d, vreg_addr;
   `FF(vreg_addr_q, vreg_addr_d, '0)
 
   // Calculate new vector register address
@@ -769,10 +843,10 @@ module spatz_vfu
       vreg_addr_d[0] = (spatz_req.vs2 + vstart) << $clog2(NrWordsPerVector);
       vreg_addr_d[1] = (spatz_req.vs1 + vstart) << $clog2(NrWordsPerVector);
       vreg_addr_d[2] = (spatz_req.vd  + vstart) << $clog2(NrWordsPerVector);
-
-      // MX dot product
-      if (spatz_req.use_vs4)
-        vreg_addr_d[1] = (spatz_req.vs4 + vstart) << $clog2(NrWordsPerVector);
+      if (XVMXDOTP) begin
+        vreg_addr_d[3] = (spatz_req.vs3 + vstart) << $clog2(NrWordsPerVector);
+        vreg_addr_d[4] = (spatz_req.vs4 + vstart) << $clog2(NrWordsPerVector);
+      end
 
       // Direct feedthrough
       vreg_addr = vreg_addr_d;
@@ -787,13 +861,14 @@ module spatz_vfu
       automatic logic increment_vd  = !spatz_req.op_arith.is_reduction &&
         (!spatz_req.op_arith.is_narrowing || narrowing_upper_q);
 
-      // FIXME: Make this nice once we add the *.ww instructions.
-      if (spatz_req.use_vs4)
-        increment_vs1 = (widening_mx_scale_q == (MxElemsPerScale - 1));
+      automatic logic increment_vs3 = XVMXDOTP && spatz_req.use_vs3 && mx_scale_last;
+      automatic logic increment_vs4 = XVMXDOTP && spatz_req.use_vs4 && mx_scale_last;
 
       vreg_addr_d[0] = vreg_addr_d[0] + increment_vs2;
       vreg_addr_d[1] = vreg_addr_d[1] + increment_vs1;
       vreg_addr_d[2] = vreg_addr_d[2] + increment_vd;
+      vreg_addr_d[3] = vreg_addr_d[3] + increment_vs3;
+      vreg_addr_d[4] = vreg_addr_d[4] + increment_vs4;
     end
   end: vreg_addr_proc
 
@@ -804,11 +879,12 @@ module spatz_vfu
 
     if (spatz_req_valid && vl_q < spatz_req.vl)
       // Request operands
-      // MX dot product uses vs1 but not vs4
       vreg_re = {
+        XVMXDOTP && mx_scale_operand2_req,
+        XVMXDOTP && mx_scale_operand1_req,
         spatz_req.vd_is_src,
-        (spatz_req.use_vs1 || spatz_req.use_vs4) && reduction_operand_request[1],
-        spatz_req.use_vs2                        && reduction_operand_request[0]
+        spatz_req.use_vs1 && reduction_operand_request[1],
+        spatz_req.use_vs2 && reduction_operand_request[0]
       };
 
     // Got a new result
@@ -857,9 +933,31 @@ module spatz_vfu
     end
   end
 
+  // VRF read arbiter (for MX scale support)
+  logic      [2:0] vreg_re_arbited;
+  vrf_addr_t [2:0] vreg_raddr_arbited;
+  always_comb begin
+    // default: vs2, vs1 and vd
+    vreg_re_arbited    = vreg_re[2:0];
+    vreg_raddr_arbited = vreg_addr[2:0];
+
+    if (XVMXDOTP) begin
+      // port 0: vs3 has higher priority (MX scale 1)
+      if (vreg_re[3]) begin
+        vreg_re_arbited[0]    = vreg_re[3];
+        vreg_raddr_arbited[0] = vreg_addr[3];
+      end
+      // port 1: vs4 has higher priority (MX scale 2)
+      if (vreg_re[4]) begin
+        vreg_re_arbited[1]    = vreg_re[4];
+        vreg_raddr_arbited[1] = vreg_addr[4];
+      end
+    end
+  end
+
   // Register file signals
-  assign vrf_re_o    = vreg_re;
-  assign vrf_raddr_o = vreg_raddr;
+  assign vrf_re_o    = vreg_re_arbited;
+  assign vrf_raddr_o = vreg_raddr_arbited;
   assign vrf_we_o    = vreg_we;
   assign vrf_wbe_o   = vreg_wbe;
   assign vrf_waddr_o = result_tag.vd_addr;
@@ -1208,7 +1306,7 @@ module spatz_vfu
       endcase
 
       // replace accumulator operand for MX dot product
-      if (spatz_req.op == VMXDOTP)
+      if (XVMXDOTP && spatz_req.op == VMXDOTP)
         wide_operand0 = mx_packed_operand;
     end: gen_widening
 
