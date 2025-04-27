@@ -738,18 +738,18 @@ module spatz_vfu
 
   vrf_be_t       vreg_wbe;
   logic          vreg_we;
-  logic    [2:0] vreg_r_req;
+  logic    [2:0] vreg_re;
 
   // Address register
-  vrf_addr_t [2:0] vreg_addr_q, vreg_addr_d;
+  vrf_addr_t [2:0] vreg_addr_q, vreg_addr_d, vreg_addr;
   `FF(vreg_addr_q, vreg_addr_d, '0)
 
   // Calculate new vector register address
   always_comb begin : vreg_addr_proc
     vreg_addr_d = vreg_addr_q;
-
     vrf_raddr_o = vreg_addr_d;
     vrf_waddr_o = vrf_addr_t'(result_tag.vd_addr);
+    vreg_addr   = vreg_addr_q;
 
     // Tag (propagated with the operations)
     input_tag = '{
@@ -768,14 +768,14 @@ module spatz_vfu
     if (spatz_req_valid && vl_q == '0) begin
       vreg_addr_d[0] = (spatz_req.vs2 + vstart) << $clog2(NrWordsPerVector);
       vreg_addr_d[1] = (spatz_req.vs1 + vstart) << $clog2(NrWordsPerVector);
-      vreg_addr_d[2] = (spatz_req.vd + vstart) << $clog2(NrWordsPerVector);
+      vreg_addr_d[2] = (spatz_req.vd  + vstart) << $clog2(NrWordsPerVector);
 
       // MX dot product
       if (spatz_req.use_vs4)
         vreg_addr_d[1] = (spatz_req.vs4 + vstart) << $clog2(NrWordsPerVector);
 
       // Direct feedthrough
-      vrf_raddr_o = vreg_addr_d;
+      vreg_addr = vreg_addr_d;
       if (!spatz_req.op_arith.is_scalar)
         input_tag.vd_addr = vfu_rsp_addr_t'(vreg_addr_d[2]);
     end
@@ -798,14 +798,18 @@ module spatz_vfu
   end: vreg_addr_proc
 
   always_comb begin : operand_req_proc
-    vreg_r_req = '0;
-    vreg_we    = '0;
-    vreg_wbe   = '0;
+    vreg_re  = '0;
+    vreg_we  = '0;
+    vreg_wbe = '0;
 
     if (spatz_req_valid && vl_q < spatz_req.vl)
       // Request operands
       // MX dot product uses vs1 but not vs4
-      vreg_r_req = {spatz_req.vd_is_src, (spatz_req.use_vs1 || spatz_req.use_vs4) && reduction_operand_request[1], spatz_req.use_vs2 && reduction_operand_request[0]};
+      vreg_re = {
+        spatz_req.vd_is_src,
+        (spatz_req.use_vs1 || spatz_req.use_vs4) && reduction_operand_request[1],
+        spatz_req.use_vs2                        && reduction_operand_request[0]
+      };
 
     // Got a new result
     if (&(result_valid | ~pending_results) && !result_tag.reduction) begin
@@ -854,9 +858,11 @@ module spatz_vfu
   end
 
   // Register file signals
-  assign vrf_re_o    = vreg_r_req;
+  assign vrf_re_o    = vreg_re;
+  assign vrf_raddr_o = vreg_raddr;
   assign vrf_we_o    = vreg_we;
   assign vrf_wbe_o   = vreg_wbe;
+  assign vrf_waddr_o = result_tag.vd_addr;
   assign vrf_wdata_o = vreg_wdata;
   assign vrf_id_o    = {result_tag.id, {3{spatz_req.id}}};
 
