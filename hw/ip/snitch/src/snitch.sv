@@ -2623,7 +2623,8 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           illegal_inst = 1'b1;
         end
       end
-      // 2 source registers (rs1, rs3) for MX dot product
+      // MX dot product: 0 source registers
+      riscv_instr::VMXDOTP_WW,
       riscv_instr::VMXDOTP_WF: begin
         if (RVV && XVMXDOTP) begin
           write_rd        = 1'b0;

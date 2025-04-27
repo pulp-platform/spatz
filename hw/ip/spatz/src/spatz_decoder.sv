@@ -1210,6 +1210,7 @@ module spatz_decoder
         end
 
         // MX dot product
+        riscv_instr::VMXDOTP_WW,
         riscv_instr::VMXDOTP_WF: begin
           if (spatz_pkg::FPU && spatz_pkg::XVMXDOTP) begin
             automatic vreg_t arith_s1 = decoder_req_i.instr[19:15];
@@ -1229,13 +1230,15 @@ module spatz_decoder
             spatz_req.vd        = arith_d;
             spatz_req.vd_is_src = 1'b1;
 
-            spatz_req.use_vs1 = 1'b0;
+            spatz_req.use_vs1 = decoder_req_i.instr inside {riscv_instr::VMXDOTP_WW};
+            spatz_req.vs1     = arith_s1;
             spatz_req.rs1     = decoder_req_i.rs1;
 
             spatz_req.use_vs2 = 1'b1;
             spatz_req.vs2     = arith_s2;
 
-            spatz_req.use_vs3 = 1'b0;
+            spatz_req.use_vs3 = decoder_req_i.instr inside {riscv_instr::VMXDOTP_WW};
+            spatz_req.vs3     = arith_s3;
             spatz_req.rsd     = decoder_req_i.rsd; // contains scalar rs3
 
             spatz_req.use_vs4 = 1'b1;
