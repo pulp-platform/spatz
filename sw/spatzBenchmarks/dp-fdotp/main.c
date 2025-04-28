@@ -18,6 +18,7 @@
 
 #include <benchmark.h>
 #include <snrt.h>
+#include <uart.h>
 #include <stdio.h>
 
 #include DATAHEADER
@@ -39,6 +40,9 @@ static inline int fp_check(const double a, const double b) {
 }
 
 int main() {
+  void *base = (void *)__base_uart;
+  uart_init(base, 800000000, 115200);
+
   const unsigned int num_cores = snrt_cluster_core_num();
   const unsigned int cid = snrt_cluster_core_idx();
   
