@@ -99,11 +99,9 @@ module vregfile import spatz_pkg::*; #(
       );
 
       always_latch begin
-`ifndef SYNTHESIS
         if (!rst_ni)
           mem[vreg][b] <= '0;
         else
-`endif
           if (clk_latch)
             mem[vreg][b] <= wdata_q[b*8 +: 8];
       end
