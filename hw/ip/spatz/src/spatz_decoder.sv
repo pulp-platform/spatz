@@ -783,7 +783,7 @@ module spatz_decoder
               // vmv is the same as a zero slide
               spatz_req.op                 = VSLIDEUP;
               spatz_req.ex_unit            = SLD;
-              spatz_req.op_sld.insert      = (func3 == OPIVI || func3 == OPIVX);
+              spatz_req.op_sld.insert      = (func3 == OPIVI || func3 == OPIVX || func3 == OPMVX);
               spatz_req.op_sld.vmv         = 1'b1;
               spatz_req.vs2                = spatz_req.vs1;
               spatz_req.use_vs2            = func3 != OPIVI || decoder_req_i.instr inside {riscv_instr::VMV_S_X};
