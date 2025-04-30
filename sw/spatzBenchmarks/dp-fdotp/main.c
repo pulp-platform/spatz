@@ -175,7 +175,7 @@ int main() {
   }
 
   if (cid == 0)
-    if (fp_check(result[0], dotp_result*measure_iter)) {
+    if (fp_check(result[0], dotp_result)) {
     #ifdef PRINT_RESULT
       printf("Error: Result = %f, Golden = %f\n", result[0], dotp_result*measure_iter);
     #endif
