@@ -16,3 +16,4 @@ void l1d_wait();
 void l1d_spm_config (uint32_t size);
 
 void set_eoc();
+void set_eoc_and_return_code (int eoc_and_return_code);
