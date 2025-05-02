@@ -1,4 +1,4 @@
-// Copyright 2022 ETH Zurich and University of Bologna.
+// Copyright 2025 ETH Zurich and University of Bologna.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -16,24 +16,18 @@
 
 // Author: Max Wipfli <mwipfli@ethz.ch>
 
-#ifndef _MXFP8DOTPROD_H_
-#define _MXFP8DOTPROD_H_
+#pragma once
 
 #include <stdint.h>
 
-// software baseline
+#define MX_BLOCK_SIZE 32
 
-inline float mxfp8_dotp_fp32(
-    const char *a, const char *b,
-    const char *a_scale, const char *b_scale,
-    unsigned int avl)
-    __attribute__((always_inline));
+typedef enum { E8M0 = 64, FP16ALT = 32, FP8ALT = 16, FP64 = 8, FP32 = 4, FP16 = 2, FP8 = 1 } precision_t;
 
-// MXDOTP: ISA extension
+typedef struct mx_dotp_layer_struct {
+  uint32_t N;
+  precision_t dtype_elements;
+  precision_t dtype_scales;
+  precision_t dtype_results;
+} mx_dotp_layer;
 
-inline float mxfp8_dotp_fp32_mxdotp_lmul2(
-    const char *a, const char *b,
-    const char *a_scale, const char *b_scale,
-    const uint32_t N) __attribute__((always_inline));
-
-#endif

@@ -128,3 +128,99 @@ float mxfp8_dotp_fp32(const char *a, const char *b, const char *a_scale, const c
   asm volatile("vfmv.f.s %0, v8" : "=f"(result));
   return result;
 }
+
+
+// This requires that the scale vectors contain repeated entries such that there
+// is a scale for every 8 elements.
+// NOTE: This requires N % (8 * VL = 256) == 0.
+float mxfp8_dotp_fp32_mxdotp_lmul2(const char *a, const char *b,
+                                   const char *a_scale, const char *b_scale,
+                                   const uint32_t N) {
+  if (N == 0)
+    return 0.0f;
+
+  // v0-v2: accumulator
+  uint32_t n_vl;
+  asm volatile("vsetvli %0, %1, e32, m2, ta, ma" : "=r"(n_vl) : "r"(N));
+  asm volatile("vmv.v.i v0, 0");
+
+  // 2x FP8 operands   (a):       v8-v11,  v12-v15 (EMUL=4)
+  // 2x FP8 operands   (b):       v16-v19, v20-v23 (EMUL=4)
+  // 2x scale operands (a_scale): v24, v26 (EMUL=1/2)
+  // 2x scale operands (b_scale): v28, v30 (EMUL=1/2)
+  // NOTE: Scale register chosen to avoid bank conflicts with element registers
+  // (vs3 with vs2, vs4 with vs1).
+
+  const char *a_ = a;
+  const char *b_ = b;
+  const uint8_t *a_scale_ = (const uint8_t *)a_scale;
+  const uint8_t *b_scale_ = (const uint8_t *)b_scale;
+  int32_t n_left = N;
+
+  // load first set of operands
+  asm volatile("vle64.v v8,  (%0)" :: "r"(a_));
+  a_ += 8 * n_vl;
+  asm volatile("vle8.v  v24, (%0)" :: "r"(a_scale_));
+  a_scale_ += n_vl;
+  asm volatile("vle64.v v16, (%0)" :: "r"(b_));
+  b_ += 8 * n_vl;
+  asm volatile("vle8.v  v28, (%0)" :: "r"(b_scale_));
+  b_scale_ += n_vl;
+
+  // update counter
+  n_left -= 8 * n_vl;
+
+  // main loop
+  while (n_left > 0) {
+    // load next operands
+    asm volatile("vle64.v v12, (%0)" :: "r"(a_));
+    a_ += 8 * n_vl;
+    asm volatile("vle8.v  v26, (%0)" :: "r"(a_scale_));
+    a_scale_ += n_vl;
+    asm volatile("vle64.v v20, (%0)" :: "r"(b_));
+    b_ += 8 * n_vl;
+    asm volatile("vle8.v  v30, (%0)" :: "r"(b_scale_));
+    b_scale_ += n_vl;
+
+    // update counter
+    n_left -= 8 * n_vl;
+
+    // dot product
+    asm volatile("vmxdotp.ww v0, v8, v16, v24, v28");
+
+    if (n_left <= 0)
+      goto tail2;
+
+    // load next operands
+    asm volatile("vle64.v v8,  (%0)" :: "r"(a_));
+    a_ += 8 * n_vl;
+    asm volatile("vle8.v  v24, (%0)" :: "r"(a_scale_));
+    a_scale_ += n_vl;
+    asm volatile("vle64.v v16, (%0)" :: "r"(b_));
+    b_ += 8 * n_vl;
+    asm volatile("vle8.v  v28, (%0)" :: "r"(b_scale_));
+    b_scale_ += n_vl;
+
+    // update counter
+    n_left -= 8 * n_vl;
+
+    // dot product
+    asm volatile("vmxdotp.ww v0, v12, v20, v26, v30");
+  }
+  // tail with v8-v11, v16-v19, v24, v28
+  asm volatile("vmxdotp.ww v0, v8, v16, v24, v28");
+  goto out;
+
+tail2:
+  // tail with v12-v15, v20-v23, v26, v30
+  asm volatile("vmxdotp.ww v0, v12, v20, v26, v30");
+
+out:
+  asm volatile("vsetvli zero, %0, e32, m1, ta, ma" :: "r"(-1));
+  asm volatile("vmv.v.i v8, 0");
+  asm volatile("vfadd.vv v0, v0, v1");
+  asm volatile("vfredusum.vs v8, v0, v8");
+  float result;
+  asm volatile("vfmv.f.s %0, v8" : "=f"(result));
+  return result;
+}
