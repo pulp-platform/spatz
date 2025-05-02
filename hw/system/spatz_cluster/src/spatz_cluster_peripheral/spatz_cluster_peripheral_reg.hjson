@@ -446,7 +446,7 @@
         hwaccess: "hro",
         resval: "0",
         fields: [{
-            bits: "0:0",
+            bits: "31:0",
             name: "EOC_EXIT",
             desc: "Indicates the end of computation and exit status."
         }]

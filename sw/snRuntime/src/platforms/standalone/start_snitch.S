@@ -15,7 +15,7 @@ _snrt_exit:
     addi      sp, sp, -8
     sw        a0, 0(sp)
     sw        ra, 4(sp)
-    call      snrt_global_core_idx
+    call      snrt_cluster_core_idx
     # reload exit code into t0
     lw        t0, 0(sp)
     lw        ra, 4(sp)
@@ -29,8 +29,10 @@ _snrt_exit:
     ori       t0, t0, 1
     la        t1, tohost
     sw        t0, 0(t1)
+    mv        s0, t0
     call      l1d_flush
-    call      set_eoc
+    mv        a0, s0
+    call      set_eoc_and_return_code
 1:  ret
 
 # HTIF sections
