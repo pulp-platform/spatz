@@ -30,6 +30,7 @@ module snitch_regfile #(
 )(
   // clock and reset
   input  logic                                      clk_i,
+  input  logic                                      rst_ni,
   // read port
   input  logic [NR_READ_PORTS-1:0][4:0]             raddr_i,
   output logic [NR_READ_PORTS-1:0][DATA_WIDTH-1:0]  rdata_o,
@@ -83,18 +84,16 @@ module snitch_regfile #(
   end
 
   // block selector flops
-  always_ff @(posedge clk_i) begin
-    mem_block_sel_q <= mem_block_sel;
-  end
+  // always_ff @(posedge clk_i) begin
+  //   mem_block_sel_q <= mem_block_sel;
+  // end
+
+  `FF(mem_block_sel_q, mem_block_sel, '0, clk_i, rst_ni)
 
   // distributed RAM blocks
   logic [NR_READ_PORTS-1:0] [DATA_WIDTH-1:0] mem_read [NR_WRITE_PORTS];
   for (genvar j=0; j<NR_WRITE_PORTS; j++) begin : gen_regfile_ram_block
-    always_ff @(posedge clk_i) begin
-      if (we_i[j]) begin
-        mem[j][waddr_i[j]] <= wdata_i[j];
-      end
-    end
+    `FFL(mem[j][waddr_i[j]], wdata_i[j], we_i[j], '0, clk_i, rst_ni)
     for (genvar k=0; k<NR_READ_PORTS; k++) begin : gen_block_read
       assign mem_read[j][k] = mem[j][raddr_i[k]];
     end

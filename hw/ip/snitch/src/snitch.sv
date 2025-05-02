@@ -3028,6 +3028,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
     .ADDR_WIDTH     ( RegWidth )
   ) i_snitch_regfile (
     .clk_i,
+    .rst_ni    ( ~rst_i    ),
     .raddr_i   ( gpr_raddr ),
     .rdata_o   ( gpr_rdata ),
     .waddr_i   ( gpr_waddr ),
