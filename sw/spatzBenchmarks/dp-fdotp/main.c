@@ -27,6 +27,20 @@ double *a;
 double *b;
 double *result;
 
+int is_nan_double(double x) {
+    union {
+        double d;
+        uint64_t u;
+    } value;
+
+    value.d = x;
+
+    uint64_t exponent = (value.u >> 52) & 0x7FF;
+    uint64_t mantissa = value.u & 0xFFFFFFFFFFFFF; // lower 52 bits
+
+    return (exponent == 0x7FF) && (mantissa != 0);
+}
+
 static inline int fp_check(const double a, const double b) {
   const double threshold = 0.00001;
 
@@ -34,7 +48,15 @@ static inline int fp_check(const double a, const double b) {
   double comp = a - b;
   if (comp < 0)
     comp = -comp;
-
+  if (is_nan_double(a)){
+  #ifdef PRINT_RESULT
+    printf("Calculation result is NaN!\n");
+  #endif
+    return 1;
+  }
+  #ifdef PRINT_RESULT
+    printf("Calculation result is not NaN!\n");
+  #endif
   return comp > threshold;
 }
 
@@ -171,13 +193,14 @@ int main() {
   #endif
   }
 
-  if (cid == 0)
+  if (cid == 0) {
     if (fp_check(result[0], dotp_result)) {
     #ifdef PRINT_RESULT
-      printf("Error: Result = %f, Golden = %f\n", result[0], dotp_result*measure_iter);
+      printf("Error: Result = %f, Golden = %f\n", result[0], dotp_result);
     #endif
       return -1;
     }
+  }
 
   // Wait for core 0 to finish displaying results
   snrt_cluster_hw_barrier();
