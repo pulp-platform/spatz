@@ -31,8 +31,36 @@ double *twiddle;
 uint16_t *store_idx;
 uint16_t *bitrev;
 
+// NaN detection
+int is_nan_double(double x) {
+    union {
+        double d;
+        uint64_t u;
+    } value;
+
+    value.d = x;
+
+    uint64_t exponent = (value.u >> 52) & 0x7FF;
+    uint64_t mantissa = value.u & 0xFFFFFFFFFFFFF; // lower 52 bits
+
+    // #ifdef PRINT_RESULT
+    // if ((exponent == 0x7FF) && (mantissa != 0)) {
+    //   printf("Calculation result is NaN!\n");
+    // } else {
+    //   printf("Calculation result is not NaN!\n");
+    // }
+    // #endif
+
+    return (exponent == 0x7FF) && (mantissa != 0);
+}
+
 static inline int fp_check(const double a, const double b) {
   const double threshold = 0.00001;
+
+  // // Check nan
+  // if (is_nan_double(a)){
+  //   return 1;
+  // }
 
   // Absolute value
   double comp = a - b;
