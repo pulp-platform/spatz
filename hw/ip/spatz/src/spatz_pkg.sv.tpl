@@ -372,6 +372,8 @@ package spatz_pkg;
     VFU_VS2_RD,
     VFU_VS1_RD,
     VFU_VD_RD,
+    VFU_VS3_RD,
+    VFU_VS4_RD,
 % if cfg['double_bw']:
     VLSU_VD_RD0,
     VLSU_VS2_RD0,
@@ -398,6 +400,8 @@ package spatz_pkg;
     SB_VFU_VS2_RD,
     SB_VFU_VS1_RD,
     SB_VFU_VD_RD,
+    SB_VFU_VS3_RD,
+    SB_VFU_VS4_RD,
 % if cfg['double_bw']:
     SB_VLSU_VD_RD0,
     SB_VLSU_VS2_RD0,

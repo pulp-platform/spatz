@@ -33,11 +33,11 @@ module spatz_vfu
     output logic             vrf_we_o,
     output vrf_be_t          vrf_wbe_o,
     input  logic             vrf_wvalid_i,
-    output spatz_id_t  [3:0] vrf_id_o,
-    output vrf_addr_t  [2:0] vrf_raddr_o,
-    output logic       [2:0] vrf_re_o,
-    input  vrf_data_t  [2:0] vrf_rdata_i,
-    input  logic       [2:0] vrf_rvalid_i,
+    output spatz_id_t  [5:0] vrf_id_o,
+    output vrf_addr_t  [4:0] vrf_raddr_o,
+    output logic       [4:0] vrf_re_o,
+    input  vrf_data_t  [4:0] vrf_rdata_i,
+    input  logic       [4:0] vrf_rvalid_i,
     // FPU side channel
     output status_t          fpu_status_o
   );
@@ -407,16 +407,18 @@ module spatz_vfu
       end
 
       // load scales if we requested them and the VRF provides them
-      if (mx_scale_operand1_req && vrf_rvalid_i[0]) begin
-        mx_scale_operand1_d       = vrf_rdata_i[0];
+      if (mx_scale_operand1_req && vrf_rvalid_i[3]) begin
+        mx_scale_operand1_d       = vrf_rdata_i[3];
         mx_scale_operand1_valid_d = 1'b1;
-        // no forwarding
+        // forward data around register
+        mx_scale_operand1         = vrf_rdata_i[3];
+        mx_scale_operand1_valid   = 1'b1;
       end
-      if (mx_scale_operand2_req && vrf_rvalid_i[1]) begin
-        mx_scale_operand2_d       = vrf_rdata_i[1];
+      if (mx_scale_operand2_req && vrf_rvalid_i[4]) begin
+        mx_scale_operand2_d       = vrf_rdata_i[4];
         mx_scale_operand2_valid_d = 1'b1;
-        // forward data around register (for vmxdotp.wf)
-        mx_scale_operand2         = vrf_rdata_i[0];
+        // forward data around register
+        mx_scale_operand2         = vrf_rdata_i[4];
         mx_scale_operand2_valid   = 1'b1;
       end
 
@@ -933,36 +935,14 @@ module spatz_vfu
     end
   end
 
-  // VRF read arbiter (for MX scale support)
-  logic      [2:0] vreg_re_arbited;
-  vrf_addr_t [2:0] vreg_raddr_arbited;
-  always_comb begin
-    // default: vs2, vs1 and vd
-    vreg_re_arbited    = vreg_re[2:0];
-    vreg_raddr_arbited = vreg_addr[2:0];
-
-    if (XVMXDOTP) begin
-      // port 0: vs3 has higher priority (MX scale 1)
-      if (vreg_re[3]) begin
-        vreg_re_arbited[0]    = vreg_re[3];
-        vreg_raddr_arbited[0] = vreg_addr[3];
-      end
-      // port 1: vs4 has higher priority (MX scale 2)
-      if (vreg_re[4]) begin
-        vreg_re_arbited[1]    = vreg_re[4];
-        vreg_raddr_arbited[1] = vreg_addr[4];
-      end
-    end
-  end
-
   // Register file signals
-  assign vrf_re_o    = vreg_re_arbited;
-  assign vrf_raddr_o = vreg_raddr_arbited;
+  assign vrf_re_o    = vreg_re;
+  assign vrf_raddr_o = vreg_addr;
   assign vrf_we_o    = vreg_we;
   assign vrf_wbe_o   = vreg_wbe;
   assign vrf_waddr_o = result_tag.vd_addr;
   assign vrf_wdata_o = vreg_wdata;
-  assign vrf_id_o    = {result_tag.id, {3{spatz_req.id}}};
+  assign vrf_id_o    = {result_tag.id, {5{spatz_req.id}}};
 
   //////////
   // IPUs //

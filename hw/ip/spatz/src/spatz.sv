@@ -73,7 +73,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
 
   // Number of ports of the vector register file
   localparam int unsigned NrWritePorts = 2 + NumVLSUInterfaces; // 1 for VFU and SLDU each and 1 for each VLSU
-  localparam int unsigned NrReadPorts  = 4 + 2*NumVLSUInterfaces; // 3 for VFU, 1 for SLDU and 2 for each VLSU interface
+  localparam int unsigned NrReadPorts  = 4 + 2*NumVLSUInterfaces + 2; // 3 for VFU, 1 for SLDU and 2 for each VLSU interface, 2 for MX formats
 
   // FPU buffer size (need atleast depth of 2 to hide conflicts)
   localparam int unsigned FpuBufDepth = 4;
@@ -445,17 +445,17 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   spatz_vfu #(
     .FPUImplementation(FPUImplementation)
   ) i_vfu (
-    .clk_i            (clk_i                                                   ),
-    .rst_ni           (rst_ni                                                  ),
-    .hart_id_i        (hart_id_i                                               ),
+    .clk_i            (clk_i                                                    ),
+    .rst_ni           (rst_ni                                                   ),
+    .hart_id_i        (hart_id_i                                                ),
     // Request
-    .spatz_req_i      (spatz_req                                               ),
-    .spatz_req_valid_i(spatz_req_valid                                         ),
-    .spatz_req_ready_o(vfu_req_ready                                           ),
+    .spatz_req_i      (spatz_req                                                ),
+    .spatz_req_valid_i(spatz_req_valid                                          ),
+    .spatz_req_ready_o(vfu_req_ready                                            ),
     // Response
-    .vfu_rsp_valid_o  (vfu_rsp_valid                                           ),
-    .vfu_rsp_ready_i  (vfu_rsp_ready                                           ),
-    .vfu_rsp_o        (vfu_rsp                                                 ),
+    .vfu_rsp_valid_o  (vfu_rsp_valid                                            ),
+    .vfu_rsp_ready_i  (vfu_rsp_ready                                            ),
+    .vfu_rsp_o        (vfu_rsp                                                  ),
     // VRF
     .vrf_waddr_o      (vrf_waddr[VFU_VD_WD]                                    ),
     .vrf_wdata_o      (vrf_wdata[VFU_VD_WD]                                    ),
@@ -466,13 +466,14 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
 `else
     .vrf_wvalid_i     (vrf_wvalid[VFU_VD_WD]                                   ),
 `endif
-    .vrf_raddr_o      (vrf_raddr[VFU_VD_RD:VFU_VS2_RD]                         ),
-    .vrf_re_o         (sb_re[VFU_VD_RD:VFU_VS2_RD]                             ),
-    .vrf_rdata_i      (vrf_rdata[VFU_VD_RD:VFU_VS2_RD]                         ),
-    .vrf_rvalid_i     (vrf_rvalid[VFU_VD_RD:VFU_VS2_RD]                        ),
+    .vrf_raddr_o      (vrf_raddr[VFU_VS4_RD:VFU_VS2_RD]                         ),
+    .vrf_re_o         (sb_re[VFU_VS4_RD:VFU_VS2_RD]                             ),
+    .vrf_rdata_i      (vrf_rdata[VFU_VS4_RD:VFU_VS2_RD]                         ),
+    .vrf_rvalid_i     (vrf_rvalid[VFU_VS4_RD:VFU_VS2_RD]                        ),
     .vrf_id_o         ({sb_id[SB_VFU_VD_WD], sb_id[SB_VFU_VD_RD:SB_VFU_VS2_RD]}),
+    .vrf_id_o         ({sb_id[SB_VFU_VD_WD], sb_id[SB_VFU_VS4_RD:SB_VFU_VS2_RD]}),
     // FPU side-channel
-    .fpu_status_o     (fpu_status_o                                            )
+    .fpu_status_o     (fpu_status_o                                             )
   );
 
   //////////
