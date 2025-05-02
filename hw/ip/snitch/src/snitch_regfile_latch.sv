@@ -14,6 +14,7 @@ module snitch_regfile #(
 ) (
   // clock and reset
   input  logic                                      clk_i,
+  input  logic                                      rst_ni,
   // read port
   input  logic [NR_READ_PORTS-1:0][ADDR_WIDTH-1:0]  raddr_i,
   output logic [NR_READ_PORTS-1:0][DATA_WIDTH-1:0]  rdata_o,
@@ -49,7 +50,7 @@ module snitch_regfile #(
 
   // Sample Input Data
   for (genvar i = 0; i < NR_WRITE_PORTS; i++) begin : gen_data_ports
-    always_ff @(posedge clk) wdata_q[i] <= wdata_i[i];
+    `FF(wdata_q[i], wdata_i[i], '0, clk, rst_ni)
 
     for (genvar j = ZERO_REG_ZERO; j < NumWords; j++) begin : gen_data_words
       always_comb begin
