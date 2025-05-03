@@ -146,6 +146,8 @@ add_spatz_test_oneParam(mxfp8-dotp mxfp8-dotp/main.c  8192)
 add_spatz_test_oneParam(mxfp8-dotp mxfp8-dotp/main.c 16384)
 add_spatz_test_oneParam(mxfp8-dotp mxfp8-dotp/main.c 32768)
 
+add_spatz_test_oneParam(mxfp8-ww-synthetic mxfp8-ww-synthetic/main.c 262144)
+
 add_spatz_test_threeParam(mxfp8-matmul mxfp8-matmul/main.c 64 64   64)
 add_spatz_test_threeParam(mxfp8-matmul mxfp8-matmul/main.c 64 64  128)
 add_spatz_test_threeParam(mxfp8-matmul mxfp8-matmul/main.c 64 64  256)
