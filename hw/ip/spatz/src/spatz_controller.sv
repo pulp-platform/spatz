@@ -268,6 +268,9 @@ module spatz_controller
   logic [NrParallelInstructions-1:0] wrote_result_narrowing_q, wrote_result_narrowing_d;
   `FF(wrote_result_narrowing_q, wrote_result_narrowing_d, '0)
 
+  logic [NrVregfilePorts-1:0] int_id_d, int_id_q;
+  `FF(int_id_q, int_id_d, '0)
+
   always_comb begin : scoreboard
     // Maintain stated
     read_table_d             = read_table_q;
@@ -284,6 +287,7 @@ module spatz_controller
     sb_enable_o          = '0;
     vl_cnt_d             = vl_cnt_q;
     vl_max_d             = vl_max_q;
+    int_id_d             = int_id_q; 
     
     for (int unsigned port = 0; port < NrVregfilePorts; port++) begin
       // Calculate the load-store interface id to use here for chaining
@@ -296,26 +300,47 @@ module spatz_controller
         intID = 1;
       // For non vlsu ports, use the vector length to find the interface id for write status checks
       end else begin
+`ifdef BUF_FPU
         intID = (vl_cnt_q[sb_id_i[port]] < vl_max_d[sb_id_i[port]]) ? 0 : 1;
+`else
+        if (sb_enable_i[port] && &(~scoreboard_q[sb_id_i[port]].deps | wrote_result_q[int_id_q[port]]))
+          int_id_d[port] = ~int_id_q[port];
+
+        if (vl_cnt_q[sb_id_i[port]] == (vl_max_d[sb_id_i[port]] << 1))
+            int_id_d[port] = 0;
+
+`endif
+        intID = int_id_q[port];
       end
       
       // Enable the VRF port if the dependant instructions wrote in the previous cycle
       sb_enable_o[port] = sb_enable_i[port] && &(~scoreboard_q[sb_id_i[port]].deps | wrote_result_q[intID] | done_result_q[intID]) && (!(|scoreboard_q[sb_id_i[port]].deps) || !scoreboard_q[sb_id_i[port]].prevent_chaining);
+      
     end
 
     // Store the decisions
     if (sb_enable_o[SB_VFU_VD_WD]) begin
       // Calculate the load-store interface id to use here for chaining
+`ifdef BUF_FPU
       automatic logic intID = (vl_cnt_q[sb_id_i[SB_VFU_VD_WD]] < vl_max_d[sb_id_i[SB_VFU_VD_WD]]) ? 0 : 1;
+`else
+      automatic logic intID = int_id_q[SB_VFU_VD_WD];
+`endif
       automatic int VRFWriteSize = narrow_q[sb_id_i[SB_VFU_VD_WD]] ? VRFWordBWidth >> 1 : VRFWordBWidth;
       
       // Update vl_cnt if actually written into the VRF
       if (sb_wrote_result_i[SB_VFU_VD_WD - SB_VFU_VD_WD])
         vl_cnt_d[sb_id_i[SB_VFU_VD_WD]] += VRFWriteSize;
 
+`ifdef BUF_FPU
       if (vl_cnt_q[sb_id_i[SB_VFU_VD_WD]] >= (vl_max_d[sb_id_i[SB_VFU_VD_WD]] * (intID + 1) - VRFWriteSize)) begin
         done_result_d[intID][sb_id_i[SB_VFU_VD_WD]] = 1'b1;
       end
+`else
+     if (vl_cnt_q[sb_id_i[SB_VFU_VD_WD]] == (vl_max_d[sb_id_i[SB_VFU_VD_WD]] << 1)) begin
+       done_result_d[intID][sb_id_i[SB_VFU_VD_WD]] = 1'b1;
+     end
+`endif
 
       wrote_result_narrowing_d[sb_id_i[SB_VFU_VD_WD]] = sb_wrote_result_i[SB_VFU_VD_WD - SB_VFU_VD_WD] ^ narrow_wide_q[sb_id_i[SB_VFU_VD_WD]];
       wrote_result_d[intID][sb_id_i[SB_VFU_VD_WD]]    = sb_wrote_result_i[SB_VFU_VD_WD - SB_VFU_VD_WD] && (!narrow_wide_q[sb_id_i[SB_VFU_VD_WD]] || wrote_result_narrowing_q[sb_id_i[SB_VFU_VD_WD]]);
@@ -331,7 +356,11 @@ module spatz_controller
     end
     if (sb_enable_o[SB_VSLDU_VD_WD]) begin
       // Calculate the load-store interface id to use here for chaining
+`ifdef BUF_FPU
       automatic logic intID = (vl_cnt_q[sb_id_i[SB_VSLDU_VD_WD]] < vl_max_d[sb_id_i[SB_VSLDU_VD_WD]]) ? 0 : 1;
+`else
+      automatic logic intID = int_id_d[SB_VSLDU_VD_WD];
+`endif
       automatic int VRFWriteSize = narrow_q[sb_id_i[SB_VSLDU_VD_WD]] ? VRFWordBWidth >> 1 : VRFWordBWidth;
       
       // Update vl_cnt if actually written into the VRF

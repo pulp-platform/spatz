@@ -441,6 +441,8 @@ module spatz_vlsu
 
   // Calculate the memory address for each memory port
   addr_offset_t [NrInterfaces-1:0] [N_FU-1:0] mem_req_addr_offset;
+  logic [NrInterfaces-1:0] [N_FU-1:0] index_intf;
+
   for (genvar intf = 0; intf < NrInterfaces; intf++) begin: gen_mem_req_addr_intf
     for (genvar fu = 0; fu < N_FU; fu++) begin: gen_mem_req_addr_intf_fu
       localparam int unsigned port = intf * N_FU + fu;
@@ -462,30 +464,56 @@ module spatz_vlsu
           automatic logic [1:0] data_index_width_diff = int'(mem_spatz_req.vtype.vsew) - int'(mem_spatz_req.op_mem.ew);
 
           // Pointer to index
+`ifdef BUF_FPU
           automatic logic [idx_width(N_FU*ELENB)-1:0] word_index = (fu << (MAXEW - data_index_width_diff)) +
                                                                    (maxew_t'(idx_offset >> (MAXEW - data_index_width_diff)) << (MAXEW - data_index_width_diff)) * N_FU +
                                                                    (maxew_t'(idx_offset << data_index_width_diff) >> data_index_width_diff);
-
           // Index
           unique case (mem_spatz_req.op_mem.ew)
             EW_8 : offset   = $signed(vrf_rdata_i[intf][1][8 * word_index +: 8]);
             EW_16: offset   = $signed(vrf_rdata_i[intf][1][8 * word_index +: 16]);
             default: offset = $signed(vrf_rdata_i[intf][1][8 * word_index +: 32]);
           endcase
+`else
+          automatic logic [idx_width(N_FU*ELENB)-1:0] word_index = (port << (MAXEW - data_index_width_diff)) +
+                                                                   (maxew_t'(idx_offset >> (MAXEW - data_index_width_diff)) << (MAXEW - data_index_width_diff)) * NrMemPorts +
+                                                                   (maxew_t'(idx_offset << data_index_width_diff) >> data_index_width_diff);
+          // Index
+          index_intf[intf][fu] = (mem_idx_counter_q[intf][fu] << mem_spatz_req.op_mem.ew) >> $clog2(ELENB);
+          unique case (mem_spatz_req.op_mem.ew)
+            EW_8 : offset   = $signed(vrf_rdata_i[index_intf[intf][fu]][1][8 * word_index +: 8]);
+            EW_16: offset   = $signed(vrf_rdata_i[index_intf[intf][fu]][1][8 * word_index +: 16]);
+            default: offset = $signed(vrf_rdata_i[index_intf[intf][fu]][1][8 * word_index +: 32]);
+          endcase
+`endif
+
+
         end else begin
+`ifdef BUF_FPU
           offset = ({mem_counter_q[intf][fu][$bits(vlen_t)-1:MAXEW] << $clog2(N_FU), mem_counter_q[intf][fu][int'(MAXEW)-1:0]} + (fu << MAXEW)) * stride;
+`else
+          offset = ({mem_counter_q[intf][fu][$bits(vlen_t)-1:MAXEW] << $clog2(NrMemPorts), mem_counter_q[intf][fu][int'(MAXEW)-1:0]} + (port << MAXEW)) * stride;
+`endif
         end
 
         // The second interface starts from half of the vector to straighten the write-back VRF access pattern
         // To ensure that the 2 interfaces do not also conflict at the TCDM, there is HW scrambling of addresses to TCDM
         // such that they access different superbanks.
-        if (!mem_is_indexed && !mem_is_strided && intf == 1) offset += (mem_spatz_req.vl / 2);
+`ifdef BUF_FPU
+        if (!mem_is_indexed && !mem_is_strided && intf == 1) begin
+          offset += (mem_spatz_req.vl / 2);
+       end
+`endif
 
         addr                      = mem_spatz_req.rs1 + offset;
         mem_req_addr[intf][fu]        = (addr >> MAXEW) << MAXEW;
         mem_req_addr_offset[intf][fu] = addr[int'(MAXEW)-1:0];
 
+`ifdef BUF_FPU
         pending_index[intf][fu] = (mem_idx_counter_q[intf][fu][$clog2(NrWordsPerVector*ELENB)-1:0] >> MAXEW) != vs2_vreg_addr[intf][$clog2(NrWordsPerVector)-1:0];
+`else
+        pending_index[intf][fu] = (mem_idx_counter_q[intf][fu][$clog2(NrWordsPerVector*ELENB)-1:0] >> MAXEW) != vs2_vreg_addr[intf][1];
+`endif
       end
     end: gen_mem_req_addr_intf_fu
   end: gen_mem_req_addr_intf
@@ -493,16 +521,29 @@ module spatz_vlsu
   // Calculate the register file addresses
   always_comb begin : gen_vreg_addr
     for (int intf = 0; intf < NrInterfaces; intf++) begin : gen_vreg_addr_intf
+`ifdef BUF_FPU
       vd_vreg_addr[intf]  = (commit_insn_q.vd << $clog2(NrWordsPerVector)) + $unsigned(vd_elem_id[intf]);
       
       // For indices for indexed operations
       vs2_vreg_addr[intf] = (mem_spatz_req.vs2 << $clog2(NrWordsPerVector)) + $unsigned(vs2_elem_id_q[intf]);
       vs2_vreg_idx_addr[intf] = vs2_vreg_addr[intf];
+`else
+      vd_vreg_addr[intf]  = (commit_insn_q.vd << $clog2(NrWordsPerVector)) + NrInterfaces * $unsigned(vd_elem_id[intf]);
+      
+      // For indices for indexed operations
+      vs2_vreg_addr[intf] = (mem_spatz_req.vs2 << $clog2(NrWordsPerVector)) + NrInterfaces * $unsigned(vs2_elem_id_q[intf]);
+      vs2_vreg_idx_addr[intf] = vs2_vreg_addr[intf];
+`endif
       
       // The second interface starts from half of the vector to straighten the write-back VRF access pattern   
       if (intf == 1) begin
+`ifdef BUF_FPU
         vd_vreg_addr[intf] += commit_insn_q.vl / (2 * N_FU * ELENB);
         vs2_vreg_idx_addr[intf] += ((mem_spatz_req.vl >> (mem_spatz_req.vtype.vsew - int'(mem_spatz_req.op_mem.ew))) / (2 * N_FU * ELENB));
+`else 
+        vd_vreg_addr[intf] += 1;
+        vs2_vreg_idx_addr[intf] += 1;
+`endif
       end
 
     end    
@@ -667,7 +708,7 @@ module spatz_vlsu
     // To check if one interface is ahead and has another response to be written to the VRF
     // In this case check if there is a response overlap
     // If there is a response overlap, do not clear the FF
-    assign vrf_valid_rsp[intf] = vrf_req_valid_q[intf] & vrf_req_q[intf].rsp_valid;
+    assign vrf_valid_rsp[intf] = vrf_req_valid_q[intf] & vrf_req_ready_q[intf] & vrf_req_q[intf].rsp_valid;
     assign resp_overlap[intf] = vrf_valid_rsp[intf] & vrf_valid_rsp_q[intf];
 
     // To track a valid response on an interface until both interfaces finish and can send to the VRF
@@ -980,7 +1021,11 @@ module spatz_vlsu
 `endif
           if (!rob_full[intf][fu] && !offset_queue_full[intf][fu] && mem_operation_valid[intf][fu]) begin
             rob_req_id[intf][fu]     = spatz_mem_req_ready[intf][fu] & spatz_mem_req_valid[intf][fu];
+`ifdef BUF_FPU
             mem_req_lvalid[intf][fu] = (!mem_is_indexed || (vrf_rvalid_i[intf][1] && !pending_index[intf][fu])) && mem_spatz_req.op_mem.is_load;
+`else
+            mem_req_lvalid[intf][fu] = (!mem_is_indexed || (vrf_rvalid_i[index_intf[intf][fu]][1] && !pending_index[intf][fu])) && mem_spatz_req.op_mem.is_load;
+`endif
             mem_req_id[intf][fu]     = rob_id[intf][fu];
             mem_req_last[intf][fu]   = mem_operation_last[intf][fu];
           end
@@ -1046,8 +1091,11 @@ module spatz_vlsu
                 3'b111: mem_req_data[intf][fu]  = {data[7:0], data[63:8]};
                 default: mem_req_data[intf][fu] = data;
               endcase
-
+`ifdef BUF_FPU
             mem_req_svalid[intf][fu] = rob_rvalid[intf][fu] && (!mem_is_indexed || (vrf_rvalid_i[intf][1] && !pending_index[intf][fu])) && !mem_spatz_req.op_mem.is_load;
+`else
+            mem_req_svalid[intf][fu] = rob_rvalid[intf][fu] && (!mem_is_indexed || (vrf_rvalid_i[index_intf[intf][fu]][1] && !pending_index[intf][fu])) && !mem_spatz_req.op_mem.is_load;
+`endif
             mem_req_id[intf][fu]     = rob_rid[intf][fu];
             mem_req_last[intf][fu]   = mem_operation_last[intf][fu];
             rob_pop[intf][fu]        = spatz_mem_req_valid[intf][fu] && spatz_mem_req_ready[intf][fu];

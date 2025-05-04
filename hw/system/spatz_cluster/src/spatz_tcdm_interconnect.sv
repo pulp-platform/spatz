@@ -101,7 +101,11 @@ module spatz_tcdm_interconnect #(
   end
 
   for (genvar i = 0; i < NumInp; i++) begin : gen_bank_select
+`ifdef BUF_FPU
     assign bank_select[i] = addr_misaligned[i][ByteOffset+:SelWidth];
+`else
+    assign bank_select[i] = req_i[i].q.addr[ByteOffset+:SelWidth];
+`endif
   end
 
   mem_req_chan_t [NumInp-1:0] in_req;
@@ -115,7 +119,11 @@ module spatz_tcdm_interconnect #(
     assign req_q_valid_flat[i] = req_i[i].q_valid;
     assign rsp_o[i].q_ready = rsp_q_ready_flat[i];
     assign in_req[i] = '{
+`ifdef BUF_FPU
       addr: addr_misaligned[i][ByteOffset+SelWidth+:MemAddrWidth],
+`else
+      addr: req_i[i].q.addr[ByteOffset+SelWidth+:MemAddrWidth],
+`endif
       write: req_i[i].q.write,
       amo: req_i[i].q.amo,
       data: req_i[i].q.data,
