@@ -532,6 +532,7 @@ module spatz_controller
   );
 
   logic       rsp_valid_d;
+  logic       rsp_ready_d;
   spatz_rsp_t rsp_d;
   spill_register #(
     .T     (spatz_rsp_t ),
@@ -541,7 +542,7 @@ module spatz_controller
     .rst_ni (rst_ni      ),
     .data_i (rsp_d       ),
     .valid_i(rsp_valid_d ),
-    .ready_o(/* Unused */),
+    .ready_o(rsp_ready_d ),
     .data_o (rsp_o       ),
     .valid_o(rsp_valid_o ),
     .ready_i(rsp_ready_i )
@@ -588,7 +589,7 @@ module spatz_controller
       rsp_d.write   = 1'b1;
 `endif
       rsp_valid_d   = 1'b1;
-      vfu_rsp_ready = 1'b1;
+      vfu_rsp_ready = rsp_ready_d;
     end
   end // retire
 
