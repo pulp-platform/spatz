@@ -24,9 +24,9 @@ module spatz_strbreq_merge_tree #(
 	parameter type         	mem_req_t					= logic,
 	parameter type         	mem_rsp_t					= logic,
 	/// Request id
-	parameter type 			req_id_t							= logic,
+	parameter type 					req_id_t					= logic,
 	/// Req user type
-	parameter type 			tcdm_user_t 					= logic
+	parameter type 					tcdm_user_t 			= logic
 ) (
 	/// System clock
 	input logic 					clk_i,
