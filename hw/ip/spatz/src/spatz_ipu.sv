@@ -108,13 +108,15 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
 
   if (MAXEW == rvv_pkg::EW_32) begin: gen_32b_ipu
 
-    struct packed {
+    typedef struct packed {
+      logic [1:0][7:0] ew8;
+      logic [15:0]     ew16;
+      logic [31:0]     ew32;
+    } input_ops_t;
+
+    typedef struct packed {
       // Input operands
-      struct packed {
-        logic [1:0][7:0] ew8;
-        logic [15:0] ew16;
-        logic [31:0] ew32;
-      } [2:0] ops;
+      input_ops_t [2:0] ops;
       // Input carry
       logic [1:0] ew8_carry;
       logic ew16_carry;
@@ -123,21 +125,25 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
       logic [1:0] ew8_valid;
       logic ew16_valid;
       logic ew32_valid;
-    } lane_signal_inp;
+    } lane_signal_inp_t;
+
+    lane_signal_inp_t lane_signal_inp;
 
     // SIMD output signals
-    struct packed {
+    typedef struct packed {
       // Results
       logic [1:0][7:0] ew8_res;
       logic [15:0] ew16_res;
       logic [31:0] ew32_res;
-    } lane_signal_res;
+    } lane_signal_res_t;
+    lane_signal_res_t lane_signal_res;
 
-    struct packed {
+    typedef struct packed {
       logic [1:0] ew8_valid;
       logic ew16_valid;
       logic ew32_valid;
-    } lane_signal_res_valid;
+    } lane_signal_res_valid_t;
+    lane_signal_res_valid_t lane_signal_res_valid;
 
     /////////////////
     // Distributor //
@@ -311,14 +317,16 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
 
   end: gen_32b_ipu else if (MAXEW == rvv_pkg::EW_64) begin: gen_64b_ipu
 
-    struct packed {
+    typedef struct packed {
+      logic [3:0][7:0]  ew8;
+      logic [1:0][15:0] ew16;
+      logic [31:0]      ew32;
+      logic [63:0]      ew64;
+    } input_ops_t;
+
+    typedef struct packed {
       // Input operands
-      struct packed {
-        logic [3:0][7:0] ew8;
-        logic [1:0][15:0] ew16;
-        logic [31:0] ew32;
-        logic [63:0] ew64;
-      } [2:0] ops;
+      input_ops_t [2:0] ops;
       // Input carry
       logic [3:0] ew8_carry;
       logic [1:0] ew16_carry;
@@ -329,23 +337,26 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
       logic [1:0] ew16_valid;
       logic ew32_valid;
       logic ew64_valid;
-    } lane_signal_inp;
+    } lane_signal_inp_t;
+    lane_signal_inp_t lane_signal_inp;
 
     // SIMD output signals
-    struct packed {
+    typedef struct packed {
       // Results
       logic [3:0][7:0] ew8_res;
       logic [1:0][15:0] ew16_res;
       logic [31:0] ew32_res;
       logic [63:0] ew64_res;
-    } lane_signal_res;
+    } lane_signal_res_t;
+    lane_signal_res_t lane_signal_res;
 
-    struct packed {
+    typedef struct packed {
       logic [3:0] ew8_valid;
       logic [1:0] ew16_valid;
       logic ew32_valid;
       logic ew64_valid;
-    } lane_signal_res_valid;
+    } lane_signal_res_valid_t;
+    lane_signal_res_valid_t lane_signal_res_valid;
 
     /////////////////
     // Distributor //

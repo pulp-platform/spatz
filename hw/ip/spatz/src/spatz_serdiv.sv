@@ -10,7 +10,7 @@
 // Based on Ariane Multiply Divide
 
 module spatz_serdiv #(
-    parameter              WIDTH   = 64,
+    parameter int unsigned WIDTH   = 64,
     parameter int unsigned IdWidth = 5
   ) (
     input  logic               clk_i,
@@ -48,9 +48,10 @@ module spatz_serdiv #(
       rem = 1'b1;
   end
 
-  enum logic [1:0] {
+  typedef enum logic [1:0] {
     IDLE, DIVIDE, FINISH
-  } state_d, state_q;
+  } state_t;
+  state_t state_d, state_q;
 
   logic [WIDTH-1:0] res_q, res_d;
   logic [WIDTH-1:0] op_a_q, op_a_d;

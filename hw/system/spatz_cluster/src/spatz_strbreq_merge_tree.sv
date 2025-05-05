@@ -47,22 +47,22 @@ module spatz_strbreq_merge_tree #(
 );
 
 	// Pass non-VFU requests from input to output
-	for (genvar i = 0; i < NumCores; i++) begin
+	for (genvar i = 0; i < NumCores; i++) begin: gen_non_vfu_req
 		assign merge_req_o[(i+1)*(NumIO/NumCores)-1: (MergeNum/NumCores)+i*(NumIO/NumCores)]		= unmerge_req_i[(i+1)*(NumIO/NumCores)-1: (MergeNum/NumCores)+i*(NumIO/NumCores)];
 		assign unmerge_rsp_o[(i+1)*(NumIO/NumCores)-1: (MergeNum/NumCores)+i*(NumIO/NumCores)]		= merge_rsp_i[(i+1)*(NumIO/NumCores)-1: (MergeNum/NumCores)+i*(NumIO/NumCores)];
 		assign merge_pready_o[(i+1)*(NumIO/NumCores)-1: (MergeNum/NumCores)+i*(NumIO/NumCores)] 	= unmerge_pready_i[(i+1)*(NumIO/NumCores)-1: (MergeNum/NumCores)+i*(NumIO/NumCores)];
-	end
+	end: gen_non_vfu_req
 
 	// If no merge need, this module just pass the input request and response to the output
-	if (MergeNum == 1) begin
+	if (MergeNum == 1) begin: gen_mergenum_1
 		// Pass non-VFU requests from input to output
-		for (genvar i = 0; i < NumCores; i++) begin
+		for (genvar i = 0; i < NumCores; i++) begin: gen_mergenum_1_wire
 			assign merge_req_o[(MergeNum/NumCores)+i*(NumIO/NumCores)-1: i*(NumIO/NumCores)]		= unmerge_req_i[(MergeNum/NumCores)+i*(NumIO/NumCores)-1: i*(NumIO/NumCores)];
 			assign unmerge_rsp_o[(MergeNum/NumCores)+i*(NumIO/NumCores)-1: i*(NumIO/NumCores)]		= merge_rsp_i[(MergeNum/NumCores)+i*(NumIO/NumCores)-1: i*(NumIO/NumCores)];
 			assign merge_pready_o[(MergeNum/NumCores)+i*(NumIO/NumCores)-1: i*(NumIO/NumCores)] 	= unmerge_pready_i[(MergeNum/NumCores)+i*(NumIO/NumCores)-1: i*(NumIO/NumCores)];
-		end
+		end: gen_mergenum_1_wire
 	// 8 Ports needs to be checked
-	end if (MergeNum == 8) begin
+	end: gen_mergenum_1 if (MergeNum == 8) begin: gen_mergenum_8
 		mem_req_t	[NumIO-1:0]	inter_unit_req0, inter_unit_req1;
 		logic 		[NumIO-1:0]	inter_unit_pready0, inter_unit_pready1;
 		mem_rsp_t	[NumIO-1:0]	inter_unit_rsp0, inter_unit_rsp1;
@@ -282,5 +282,5 @@ module spatz_strbreq_merge_tree #(
 			.merge_pready_o  	({merge_pready_o[8], merge_pready_o[3]}					),
 			.unmerge_rsp_o   	({inter_unit_rsp1[8], inter_unit_rsp1[3]}				)
 		);
-	end
+	end: gen_mergenum_8
 endmodule

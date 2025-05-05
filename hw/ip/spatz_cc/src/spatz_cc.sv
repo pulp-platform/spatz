@@ -357,14 +357,14 @@ module spatz_cc
       // if input response is valid, put it into fifo for HS check by default
       spatz_mem_rsp_push[p]  = tcdm_rsp_i[p].p_valid;
       spatz_mem_rsp_pop[p]   = spatz_mem_rsp_valid[p] & spatz_mem_rsp_ready[p];
-      
+
       // Bypass FIFO if is a write response
       if (spatz_mem_fifo_bypass[p]) begin
         // make sure not write this response into fifo
         spatz_mem_rsp_push[p]  = 1'b0;
         spatz_mem_rsp_pop[p]   = 1'b0;
         spatz_mem_rsp_valid[p] = 1'b1;
-        spatz_mem_rsp[p]       = tcdm_rsp_i[p].p;        
+        spatz_mem_rsp[p]       = tcdm_rsp_i[p].p;
       end
     end
   end

@@ -15,7 +15,7 @@ module reorder_buffer
   parameter int unsigned NumWords  = 0,
   parameter bit FallThrough        = 1'b0,
   // Dependant parameters. Do not change!
-  parameter IdWidth                = idx_width(NumWords),
+  parameter int unsigned IdWidth   = idx_width(NumWords),
   parameter type data_t            = logic [DataWidth-1:0],
   parameter type id_t              = logic [IdWidth-1:0]
 ) (

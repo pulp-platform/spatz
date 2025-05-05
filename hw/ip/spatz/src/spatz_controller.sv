@@ -239,10 +239,11 @@ module spatz_controller
   ////////////////
 
   // Which instruction is reading and writing to each vector register?
-  struct packed {
+  typedef struct packed {
     spatz_id_t id;
     logic valid;
-  } [NRVREG-1:0] read_table_d, read_table_q, write_table_d, write_table_q;
+  } [NRVREG-1:0] table_t;
+  table_t read_table_d, read_table_q, write_table_d, write_table_q;
 
   `FF(read_table_q, read_table_d, '{default: '0})
   `FF(write_table_q, write_table_d, '{default: '0})
@@ -543,6 +544,7 @@ module spatz_controller
             issue_rsp_o.accept = 1'b0;
           end
         end // SLD
+        default:;
       endcase // Operation type
     // The decoding resulted in an illegal instruction
     end else if (decoder_rsp_valid && decoder_rsp.instr_illegal) begin

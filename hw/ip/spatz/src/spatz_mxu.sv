@@ -179,12 +179,12 @@ module spatz_mxu
         // Load as many vd as (M / OperandsPerVRFFetch)
         load_vd  = num_rows == 4 ? vl_i <= 0 : vl_i <= 4;
         // mtx_A row counter from 0 to M
-        part_col = num_cols == 4 ? num_rows == 4 ? col_counter_q[1:0] : col_counter_q[2:0] : col_counter_q;
+        part_col = num_cols == 4 ? (num_rows == 4 ? col_counter_q[1:0] : col_counter_q[2:0]) : col_counter_q;
     end
 
     // Accumulator counter from 0 to M
     // Can get result for accumulator even when all instructions are done due to latency, hence outside the enable_mx_i block
-    part_acc = num_cols == 4 ? num_rows == 4 ? acc_counter_q[1:0] : acc_counter_q[2:0] : acc_counter_q;
+    part_acc = num_cols == 4 ? (num_rows == 4 ? acc_counter_q[1:0] : acc_counter_q[2:0]) : acc_counter_q;
 
     // Update acc and col counters
     // For every accumulation result handshake update acc_counter
@@ -225,7 +225,7 @@ module spatz_mxu
         second : begin
           operand1 = current_operands_d[1];
           operand2 = previous_operands_d[0];
-          block_d  = next_block ? num_cols == 4 ? first : third : block_q;
+          block_d  = next_block ? (num_cols == 4 ? first : third) : block_q;
         end
         third : begin
           operand1 = previous_operands_d[1];
@@ -302,7 +302,7 @@ module spatz_mxu
         result_ready = 1'b1;
       end
       mx_read_enable[2]   = load_vd;
-    end 
+    end
   end
 
   ////////////////

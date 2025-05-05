@@ -11,8 +11,8 @@ module spatz_vlsu
   import spatz_pkg::*;
   import rvv_pkg::*;
   import cf_math_pkg::idx_width; #(
-    parameter                NrMemPorts         = 1,
-    parameter                NrOutstandingLoads = 4,
+    parameter int unsigned   NrMemPorts         = 1,
+    parameter int unsigned   NrOutstandingLoads = 4,
     // Memory request
     parameter  type          spatz_mem_req_t    = logic,
     parameter  type          spatz_mem_rsp_t    = logic,
@@ -896,7 +896,7 @@ module spatz_vlsu
   logic [NrMemPorts-1:0] load_flag, store_flag, clear_flag;
   // Indicate if each port is in loading or storing mode
   logic [NrMemPorts-1:0] port_state_load;
-  for (genvar port = 0; port < NrMemPorts; port++) begin
+  for (genvar port = 0; port < NrMemPorts; port++) begin: gen_port_ld_st
     assign port_state_load[port] = (port_state_q[port] == VLSU_RunningLoad);
   end
 
@@ -1097,7 +1097,7 @@ module spatz_vlsu
           mem_req_svalid[port] = rob_rvalid[port] && (!mem_is_indexed || (vrf_rvalid_i[1] && !pending_index[port])) && !mem_spatz_req.op_mem.is_load;
           mem_req_id[port]     = rob_rid[port];
           mem_req_last[port]   = mem_operation_last[port];
-          rob_pop[port]        = spatz_mem_req_valid[port] && spatz_mem_req_ready[port];     
+          rob_pop[port]        = spatz_mem_req_valid[port] && spatz_mem_req_ready[port];
 
           // Create byte enable signal for memory request
           if (mem_is_single_element_operation) begin
@@ -1116,7 +1116,7 @@ module spatz_vlsu
         end else begin
           spatz_mem_rsp_ready_o[port] = 1'b0;
           // clear_flag[port] = 1'b1;
-          
+
           // // Clear empty buffer id requests
           // if (!rob_empty[port]) begin
           //   rob_pop[port] = 1'b1;

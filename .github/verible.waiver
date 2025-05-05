@@ -10,13 +10,20 @@ waive --rule=parameter-name-style --location="hw/system/spatz_cluster/src/spatz_
 # Our parameters are not CamelCase
 waive --rule=parameter-name-style --location="hw/ip/snitch/src/snitch_pkg.sv"
 waive --rule=parameter-name-style --location="hw/ip/spatz/src/generated/spatz_pkg.sv"
+waive --rule=parameter-name-style --location="hw/ip/spatz/src/spatz_vlsu.sv"
+waive --rule=parameter-name-style --location="hw/ip/spatz/src/spatz_mxu.sv"
 # Our interfaces do not follow the interface conventions
 waive --rule=interface-name-style --location="hw/ip/reqrsp_interface/src/reqrsp_intf.sv"
 waive --rule=interface-name-style --location="hw/ip/tcdm_interface/src/tcdm_interface.sv"
+waive --rule=interface-name-style --location="hw/ip/mem_interface/src/mem_interface.sv"
 # We have some long lines
 waive --rule=line-length --location="hw/*"
 # Some files are replaced by Bender thus do not respect the module-filename rule
 waive --rule=module-filename --location="hw/ip/spatz/src/vregfile_fpga.sv"
-# Temporarily waive check violations in some spatz cluster code files
+# Waive tab and space violations in req strb modules
 waive --rule=no-tabs --location="hw/system/spatz_cluster/src/spatz_strbreq*"
 waive --rule=no-trailing-spaces --location="hw/system/spatz_cluster/src/spatz_strbreq*"
+# Waive violations in mempool related modules
+waive --rule=generate-label --location="hw/ip/spatz_cc/src/spatz_mempool_cc.sv"
+# We dont respect module name rule in amo_shim
+waive --rule=module-filename --location="hw/system/spatz_cluster/src/spatz_amo_shim.sv"

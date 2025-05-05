@@ -998,8 +998,8 @@ module spatz_cluster
     );
   end
 
-  for (genvar i = 0; i < L1NumWrapper; i++) begin
-    for (genvar j = 0; j < L1Associativity*L1BankFactor; j++) begin
+  for (genvar i = 0; i < L1NumWrapper; i++) begin: gen_bank_req_cnct
+    for (genvar j = 0; j < L1Associativity*L1BankFactor; j++) begin: gen_bank_req_connection
       assign l1_cache_wp_req  [i][j] = l1_data_bank_req  [i + j*L1NumWrapper];
       assign l1_cache_wp_we   [i][j] = l1_data_bank_we   [i + j*L1NumWrapper];
       assign l1_cache_wp_addr [i][j] = l1_data_bank_addr [i + j*L1NumWrapper];
@@ -1008,8 +1008,8 @@ module spatz_cluster
 
       assign l1_data_bank_rdata[i + j*L1NumWrapper] = l1_cache_wp_rdata[i][j];
       assign l1_data_bank_gnt  [i + j*L1NumWrapper] = l1_cache_wp_gnt  [i][j];
-    end
-  end
+    end: gen_bank_req_connection
+  end: gen_bank_req_cnct
 
   // We have multiple banks form a pesudo bank (BankWP)
   spatz_tcdm_interconnect #(
@@ -1142,7 +1142,7 @@ module spatz_cluster
       assign wide_axi_mst_req[SDMAMst] = axi_dma_req;
       assign axi_dma_res               = wide_axi_mst_rsp[SDMAMst];
       assign dma_events                = dma_core_events;
-    end else begin
+    end else begin : gen_no_dma_connection
       assign axi_dma_res = '0;
     end
   end

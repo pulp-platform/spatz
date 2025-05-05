@@ -103,7 +103,7 @@ module spatz_simd_lane import spatz_pkg::*; import rvv_pkg::vew_e; #(
 
   logic [$clog2(Width)-1:0] shift_amount;
   logic [Width-1:0]         shift_operand;
-  if (Width >= 64) begin : shift_operands
+  if (Width >= 64) begin : gen_shift_operands_64
     always_comb begin : shift_operands
       unique case (sew_i)
         rvv_pkg::EW_64: begin
@@ -127,7 +127,7 @@ module spatz_simd_lane import spatz_pkg::*; import rvv_pkg::vew_e; #(
         end
       endcase
     end
-  end else if (Width >= 32) begin
+  end else if (Width >= 32) begin: gen_shift_operands_32
     always_comb begin : shift_operands
       unique case (sew_i)
         rvv_pkg::EW_32: begin
@@ -146,7 +146,7 @@ module spatz_simd_lane import spatz_pkg::*; import rvv_pkg::vew_e; #(
         end
       endcase
     end // shift_operands
-  end else if (Width >= 16) begin
+  end else if (Width >= 16) begin: gen_shift_operands_16
     always_comb begin : shift_operands
       unique case (sew_i)
         rvv_pkg::EW_16: begin
@@ -160,7 +160,7 @@ module spatz_simd_lane import spatz_pkg::*; import rvv_pkg::vew_e; #(
         end
       endcase
     end // shift_operands
-  end else begin
+  end else begin: gen_shift_operands_8
     always_comb begin
       shift_amount  = op_s1_i[2:0];
       shift_operand = op_s2_i[7:0];

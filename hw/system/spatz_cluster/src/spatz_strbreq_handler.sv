@@ -164,7 +164,7 @@ module spatz_strbreq_handler #(
 
 	// Instantiate DataWidth/8 MUXs to select whether to take input req data or the inserted read req data
 	// Output result: aft_strb_data
-	for (genvar i = 0; i < (DataWidth/8); i++) begin
+	for (genvar i = 0; i < (DataWidth/8); i++) begin: gen_req_mux
 		assign aft_strb_data[((i + 1) * 8 - 1) : (i * 8)]	= strb_req_i.q.strb[i] ? 
 																												strb_req_i.q.data[((i + 1) * 8 - 1) : (i * 8)] : 
 																												rd_strb_data_d[((i + 1) * 8 - 1) : (i * 8)];
