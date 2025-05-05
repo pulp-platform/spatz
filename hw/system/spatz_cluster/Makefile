@@ -175,7 +175,7 @@ lint/tmp/files: ${BENDER}
 # Use SPM by default
 USE_CACHE  ?= 0
 MEAS_1ITER ?= 0
-PRINT_UART ?= 1
+PRINT_UART ?= 0
 SNRT_LINK  ?= mix
 
 ## Build SW into sw/build with the LLVM toolchain
