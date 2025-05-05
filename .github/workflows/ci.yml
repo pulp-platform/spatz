@@ -27,6 +27,7 @@ jobs:
           util/*
           docs/*
           install/*
+          hw/ip/snitch/src/riscv_instr.sv
 
   lint-sv:
     runs-on: ubuntu-latest
@@ -39,6 +40,8 @@ jobs:
       uses: chipsalliance/verible-linter-action@main
       with:
         paths: hw
+        exclude_paths: |
+          hw/ip/snitch/src/riscv_instr.sv
         extra_args: "--waiver_files .github/verible.waiver"
         github_token: ${{ secrets.GITHUB_TOKEN }}
         fail_on_error: true
@@ -55,3 +58,4 @@ jobs:
           domain: iis-git.ee.ethz.ch
           repo: github-mirror/spatz
           token: ${{ secrets.GITLAB_TOKEN }}
+          poll-count: 2160
