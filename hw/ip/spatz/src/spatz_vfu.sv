@@ -117,9 +117,10 @@ module spatz_vfu
   assign nr_elem_word = (N_FU * (1 << (MAXEW - spatz_req.vtype.vsew))) >> spatz_req.op_arith.is_narrowing;
 
   // Are we running integer or floating-point instructions?
-  enum logic {
+  typedef enum logic {
     VFU_RunningIPU, VFU_RunningFPU
-  } state_d, state_q;
+   } state_t;
+   state_t state_d, state_q;
   `FF(state_q, state_d, VFU_RunningFPU)
 
   // Propagate the tags through the functional units
@@ -178,13 +179,14 @@ module spatz_vfu
   logic last_request;
 
   // Reduction state
-  enum logic [2:0] {
+  typedef enum logic [2:0] {
     Reduction_NormalExecution,
     Reduction_Wait,
     Reduction_Init,
     Reduction_Reduce,
     Reduction_WriteBack
-  } reduction_state_d, reduction_state_q;
+   } reduction_state_t;
+   reduction_state_t reduction_state_d, reduction_state_q;
   `FF(reduction_state_q, reduction_state_d, Reduction_NormalExecution)
 
   // Is the reduction done?
@@ -721,7 +723,7 @@ module spatz_vfu
     ipu_wide_operand2 = operand2;
     ipu_wide_operand3 = operand3;
 
-    case (spatz_req.vtype.vsew)
+    unique case (spatz_req.vtype.vsew)
       EW_32: begin
         for (int el = 0; el < N_FU; el++) begin
           if (spatz_req.op_arith.widen_vs1 && MAXEW == EW_64)
@@ -749,6 +751,7 @@ module spatz_vfu
             ipu_wide_operand2[16*el +: 16] = spatz_req.op_arith.signed_vs2 ? {{8{shift_operand2[8*el+7]}}, shift_operand2[8*el +: 8]} : {8'b0, shift_operand2[8*el +: 8]};
         end
       end
+      default: /*do nothing*/;
     endcase
   end: gen_ipu_widening
 
@@ -814,7 +817,7 @@ module spatz_vfu
     assign ipu_result       = ipu_result_q;
     assign ipu_result_valid = ipu_result_valid_q;
     assign ipu_result_tag   = ipu_result_tag_q;
-  end: gen_pipeline_ipu else begin
+  end: gen_pipeline_ipu else begin: gen_pipeline_ipu_2
     assign ipu_in_ready         = int_ipu_in_ready;
     assign int_ipu_operand1     = ipu_wide_operand1;
     assign int_ipu_operand2     = ipu_wide_operand2;
@@ -823,7 +826,7 @@ module spatz_vfu
     assign ipu_result_valid     = int_ipu_result_valid;
     assign int_ipu_result_ready = result_ready;
     assign ipu_result_tag       = int_ipu_result_tag[0];
-  end
+  end: gen_pipeline_ipu_2
 
   for (genvar ipu = 0; unsigned'(ipu) < N_IPU; ipu++) begin : gen_ipus
     logic ipu_ready;
@@ -906,17 +909,17 @@ module spatz_vfu
           end
           EW_16: begin
             fpu_src_fmt      = spatz_req.op_arith.is_narrowing || spatz_req.op_arith.widen_vs1 || spatz_req.op_arith.widen_vs2 ? fpnew_pkg::FP32 :
-                                                                                                                                 spatz_req.fm.src ? fpnew_pkg::FP16ALT : fpnew_pkg::FP16;
+                                                                                                                                 (spatz_req.fm.src ? fpnew_pkg::FP16ALT : fpnew_pkg::FP16);
             fpu_dst_fmt      = spatz_req.op_arith.widen_vs1 || spatz_req.op_arith.widen_vs2 || spatz_req.op == VSDOTP ? fpnew_pkg::FP32          :
-                                                                                                                                 spatz_req.fm.dst ? fpnew_pkg::FP16ALT : fpnew_pkg::FP16;
+                                                                                                                                 (spatz_req.fm.dst ? fpnew_pkg::FP16ALT : fpnew_pkg::FP16);
             fpu_int_fmt      = spatz_req.op_arith.is_narrowing && spatz_req.op inside {VI2F, VU2F} ? fpnew_pkg::INT32                            : fpnew_pkg::INT16;
             fpu_vectorial_op = 1'b1;
           end
           EW_8: begin
-            fpu_src_fmt      = spatz_req.op_arith.is_narrowing || spatz_req.op_arith.widen_vs1 || spatz_req.op_arith.widen_vs2 ? spatz_req.fm.src ? fpnew_pkg::FP16ALT : fpnew_pkg::FP16 :
-                                                                                                                                 spatz_req.fm.src ? fpnew_pkg::FP8ALT : fpnew_pkg::FP8;
-            fpu_dst_fmt      = spatz_req.op_arith.widen_vs1 || spatz_req.op_arith.widen_vs2 || spatz_req.op == VSDOTP ? spatz_req.fm.dst ? fpnew_pkg::FP16ALT : fpnew_pkg::FP16          :
-                                                                                                                                 spatz_req.fm.dst ? fpnew_pkg::FP8ALT : fpnew_pkg::FP8;
+            fpu_src_fmt      = spatz_req.op_arith.is_narrowing || spatz_req.op_arith.widen_vs1 || spatz_req.op_arith.widen_vs2 ? (spatz_req.fm.src ? fpnew_pkg::FP16ALT : fpnew_pkg::FP16) :
+                                                                                                                                 (spatz_req.fm.src ? fpnew_pkg::FP8ALT : fpnew_pkg::FP8);
+            fpu_dst_fmt      = spatz_req.op_arith.widen_vs1 || spatz_req.op_arith.widen_vs2 || spatz_req.op == VSDOTP ? (spatz_req.fm.dst ? fpnew_pkg::FP16ALT : fpnew_pkg::FP16)          :
+                                                                                                                                 (spatz_req.fm.dst ? fpnew_pkg::FP8ALT : fpnew_pkg::FP8);
             fpu_int_fmt      = spatz_req.op_arith.is_narrowing && spatz_req.op inside {VI2F, VU2F} ? fpnew_pkg::INT16                            : fpnew_pkg::INT8;
             fpu_vectorial_op = 1'b1;
           end
@@ -988,7 +991,7 @@ module spatz_vfu
       wide_operand2 = operand2;
       wide_operand3 = operand3;
 
-      case (spatz_req.vtype.vsew)
+      unique case (spatz_req.vtype.vsew)
         EW_32: begin
           for (int el = 0; el < N_FPU; el++) begin
             if (spatz_req.op_arith.widen_vs1 && MAXEW == EW_64)
@@ -1016,6 +1019,7 @@ module spatz_vfu
               wide_operand2[16*el +: 16] = widen_fp8_to_fp16(shift_operand2[8*el +: 8]);
           end
         end
+        default:;
       endcase
     end: gen_widening
 
