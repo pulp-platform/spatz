@@ -213,7 +213,9 @@ sw.test.vcs: sw.vcs
 ## Build SW into sw/build with the LLVM toolchain (including tests) for Verilator simulator
 sw.vlt: clean.sw bin/spatz_cluster.vlt
 	mkdir -p sw/build
-	cd sw/build && ${CMAKE} -DLLVM_PATH=${LLVM_INSTALL_DIR} -DGCC_PATH=${GCC_INSTALL_DIR} -DPYTHON=${PYTHON} -DSNITCH_SIMULATOR=../../../../../hw/system/spatz_cluster/bin/spatz_cluster.vlt -DBUILD_TESTS=ON .. && make -j8
+	cd sw/build && ${CMAKE} \
+	-DUSE_CACHE=${USE_CACHE} -DMEAS_1ITER=${MEAS_1ITER} -DPRINT_CHECK=${ENABLE_PRINT} -DPRINT_UART=${PRINT_UART} -DSNRT_LINK=${SNRT_LINK} -DENABLE_FLAMINGO_TESTS=${ENABLE_FLA_TESTS} -DFLA_ROOT=${FLA_ROOT} \
+	-DLLVM_PATH=${LLVM_INSTALL_DIR} -DGCC_PATH=${GCC_INSTALL_DIR} -DPYTHON=${PYTHON} -DSNITCH_SIMULATOR=../../../../../hw/system/spatz_cluster/bin/spatz_cluster.vlt -DBUILD_TESTS=ON .. && make -j8
 
 ## Build SW and run all tests with Verilator simulator
 sw.test.vlt: sw.vlt
