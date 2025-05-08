@@ -204,6 +204,7 @@ package spatz_pkg;
     logic use_carry_borrow_in;
     logic is_scalar;
     logic is_narrowing;
+    logic is_double_narrowing;
     logic is_reduction;
     logic switch_rs1_rd;
 
@@ -527,7 +528,8 @@ package spatz_pkg;
   // MX dot product parameters
   localparam int unsigned MxScaleWidth = 8;
   localparam int unsigned MxElemsPerScale = ELEN / MxScaleWidth;
-  typedef logic [31:0] mx_acc_t;
-  typedef logic [7:0]  mx_scale_t;
+  typedef logic [31:0] mx_acc32_t;
+  typedef logic [15:0] mx_acc16_t;
+  typedef logic  [7:0] mx_scale_t;
 
 endpackage : spatz_pkg

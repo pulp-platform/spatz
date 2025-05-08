@@ -2625,7 +2625,9 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
       end
       // MX dot product: 0 source registers
       riscv_instr::VMXDOTP_WW,
-      riscv_instr::VMXDOTP_WF: begin
+      riscv_instr::VMXDOTP_WF,
+      riscv_instr::VMXDOTP_QQ,
+      riscv_instr::VMXDOTP_QF: begin
         if (RVV && XVMXDOTP) begin
           write_rd        = 1'b0;
           uses_rd         = 1'b0;
