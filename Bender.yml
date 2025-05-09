@@ -12,13 +12,8 @@ dependencies:
   axi:                { git: "https://github.com/pulp-platform/axi.git",                version: =0.39.1-beta   }
   axi_riscv_atomics:  { git: "https://github.com/pulp-platform/axi_riscv_atomics.git",  version: 0.7.0          }
   common_cells:       { git: "https://github.com/pulp-platform/common_cells.git",       version: 1.28.0         }
-<<<<<<< HEAD
-  FPnew:              { git: "https://github.com/pulp-platform/cvfpu.git",              rev:     pulp-v0.1.3    }
   idma:               { git: "https://github.com/pulp-platform/iDMA.git",               version: 0.6.4          }
-=======
-  FPnew:              { git: "git@iis-git.ee.ethz.ch:mx/mx-rtl.git",                    rev:     v1.1-asap25    }
-  idma:               { git: "https://github.com/pulp-platform/iDMA.git",               version: 0.4.2          }
->>>>>>> 9db4ee7 (hw: Switch to FPU from mx-rtl)
+  FPnew:              { git: "https://github.com/pulp-platform/cvfpu.git",              rev:     9211f05a33abc3a179d3e6be533ea47215359c24 }
   register_interface: { git: "https://github.com/pulp-platform/register_interface.git", version: 0.3.8          }
   riscv-dbg:          { git: "https://github.com/pulp-platform/riscv-dbg.git",          version: 0.7.0          }
   tech_cells_generic: { git: "https://github.com/pulp-platform/tech_cells_generic.git", version: 0.2.13         }

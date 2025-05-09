@@ -56,7 +56,7 @@ packages:
       Git: https://github.com/pulp-platform/common_verification.git
     dependencies: []
   fpnew:
-    revision: 446cd5a0d9a753dedf6c3502e89bc34983284069
+    revision: 44733dea65b48d7c90187aaf0a7dcc64969bd67b
     version: null
     source:
       Git: git@iis-git.ee.ethz.ch:mx/mx-rtl.git
