@@ -8,11 +8,15 @@
 #include "vector_macros.h"
 
 #define FCSR_MODE_DST (1 << 8)
+#define FCSR_MODE_SRC (1 << 9)
 
 // vmxdotp.ww
 // Test data generated using mxfp repository and
 // $ python3 -m golden.spatz --op inst.ww --dims 48
 void TEST_CASE1(void) {
+  // disable alternate FP formats
+  asm volatile("csrw fcsr, zero");
+
   VSET(48, e32, m4);
 
   // vd (accumulator)
@@ -112,6 +116,9 @@ void TEST_CASE1(void) {
 // Test data generated using mxfp repository and
 // $ python3 -m golden.spatz --op inst.wf --dims 48
 void TEST_CASE2(void) {
+  // disable alternate FP formats
+  asm volatile("csrw fcsr, zero");
+
   VSET(48, e32, m4);
 
   // vd (accumulator)
@@ -185,10 +192,189 @@ void TEST_CASE2(void) {
     0x44c5b476, 0x44bd80ac, 0x3cdf42fa, 0x4be03db0);
 };
 
+// vmxdotp.ww
+// Test data generated using mxfp repository and
+// $ python3 -m golden.spatz --op inst.ww --dims 48 --data-type FP8ALT
+void TEST_CASE3(void) {
+  // enable alternate FP8 format (i.e., FP8ALT)
+  asm volatile("csrw fcsr, %0" :: "r"(FCSR_MODE_SRC));
+
+  VSET(48, e32, m4);
+
+  // vd (accumulator)
+  VLOAD_32(v4,
+    0x6273ba83, 0xbda4f5af, 0x0f80bae3, 0x8dec47f0,
+    0x0362cba4, 0x39cd8586, 0x22329623, 0x5b22a216,
+    0xc1375dde, 0x3b1ec2f0, 0xac24ccc7, 0x3da256de,
+    0xb312bb95, 0x7167c7b9, 0xd26faa2a, 0x5ec2a92c,
+    0x62827e2b, 0x81fa0627, 0xc943be93, 0xcd9454e3,
+    0xcf95442d, 0xa48ae5e0, 0x67f86286, 0x89f0f4a1,
+    0xe60b483d, 0x264103c5, 0xbe40d9f3, 0xf76d8381,
+    0xbc735ca7, 0xe42b0627, 0xec1b2724, 0x6cc1aeaf,
+    0x11f10c60, 0xe149a837, 0x524550a4, 0x82f2e770,
+    0xfcd58c0f, 0xe76db5ef, 0xf81f5c80, 0xe49df6bb,
+    0xcdc98666, 0x63f666e0, 0x2ad9a40a, 0xc2557035,
+    0x022bc320, 0xb3df44a4, 0xc7038069, 0xa11d459a);
+
+  // vs1 (vector elements)
+  VLOAD_64(v8,
+    0xb7e5b7914217f4de, 0xca3ec9bf8fb1f54b, 0xf3f7573e752a9cc7, 0xf01aedf1c37555cf,
+    0x32d4b7bb892ac6ac, 0x37505517536db20a, 0x2830d624d338b1cd, 0x741a1f2a9cc0b5bf,
+    0xf3e46b0910a38964, 0x1bd4a44be84d0838, 0xb1cd0dc264e5a226, 0x21b4b8e8f059f6b2,
+    0xb1168fd75c22b6a7, 0x522366e20d45aa4d, 0x89f4f53d1a35b041, 0xbc968974728fd9a3,
+    0xae5b28df6be0da93, 0xc42ab22b7659ba0e, 0xad9c65f29c44e6ca, 0x4b3b386adb9a4b4e,
+    0xc3e7db25e3da43b1, 0x4d6befcc5268e889, 0x4512da545d659ecc, 0x8d153d89282d9158,
+    0x5359101cb1d75b4d, 0xe34ce94fe4906df7, 0x66b04b16dae92a20, 0xb2c1ededaf10a836,
+    0x8d9666bbe1cb3f57, 0x521ccaafed65d418, 0x999636e2c892b64b, 0x4830cd59f00b99e1,
+    0x390c08dc99563a68, 0x472652dce7580892, 0xbb76d3e344ceb31c, 0x9f44f43469ec3a5c,
+    0xefaee789bd4dda10, 0x27a694169f9dee43, 0x9fac9b09cca637db, 0x9c8ecfeee963ca1c,
+    0x5861946b2331348d, 0xb9c66c8893e7bc19, 0x93313a8e992bb5d4, 0x8a36af4126a59853,
+    0x0a0ef0e329b60cc7, 0x715ac0b0f54ef538, 0x41cddaa6d0afcb95, 0x30abd07617c69751);
+
+  // vs2 (vector elements)
+  VLOAD_64(v16,
+    0x366cd635360d23f3, 0xc7b8358f61da2332, 0x98b2c65347464e61, 0x1c1d343fda50c0ea,
+    0x57e54f610b773f3d, 0x8a29b6e9dc41cd0d, 0xa3394dd72e1bcc1b, 0x63c892924d962fdd,
+    0xcc16997796c63564, 0x176d292349903527, 0x131c09bd4b5f8cec, 0x5026bfac0ad56c59,
+    0x4fc550acd69cd7a7, 0x0b212840a0c5a064, 0x64e7212cb912cc74, 0xe83508b895ea3c8f,
+    0x1bf758a1a6e818c1, 0x63166a75d0ef29a7, 0x59e34fe36ba31ad7, 0xef52ae0c8b919026,
+    0x8f19dc1f900eaab9, 0x4a0debadbed8bd68, 0xad8ee172a892f79a, 0xa82351caabd6b9ea,
+    0x9915d6dd63f368bd, 0x6732b7c3c43c381c, 0x1c1e97df9759402c, 0x12e6a7bde6bcb20a,
+    0x28d2aad4cecd4924, 0xe48d5a7129e1696e, 0xb6afd13549adadf5, 0x74eee28c282d643f,
+    0x66ceb80aabbddb42, 0xa6b66810c144c623, 0x1364a1b46ac2d212, 0x1534a33c1a5f9529,
+    0xb1d6c8d3e2d62bbb, 0xa46bc6eaac9ba20b, 0xe1d949ba46bb9a71, 0x4d4051d62c520d6e,
+    0x6d2294756a4a15c7, 0x5d6f94a39bdd2bd7, 0x9923395074a9d12d, 0x4b1a60ebcdd9bbea,
+    0xd4aa91208cdda0cb, 0xdcca1a34298c7089, 0x3ac43d6b1be640b7, 0xf1a8a3cb6fe0db58);
+
+  // vs3 (vector scales)
+  VLOAD_8(v24,
+    0x8c, 0x74, 0x63, 0x77,
+    0x76, 0x83, 0x6c, 0x6f,
+    0x8e, 0x79, 0x85, 0x75,
+    0x89, 0x85, 0x88, 0x76,
+    0x79, 0x65, 0x78, 0x8c,
+    0x7b, 0x6a, 0x77, 0x67,
+    0x80, 0x7a, 0x8a, 0x7a,
+    0x7d, 0x67, 0x62, 0x7c,
+    0x6c, 0x78, 0x71, 0x80,
+    0x67, 0x85, 0x86, 0x7f,
+    0x72, 0x64, 0x84, 0x6c,
+    0x7c, 0x83, 0x6a, 0x61);
+
+  // vs4 (vector scales)
+  VLOAD_8(v25,
+    0x8c, 0x73, 0x83, 0x6e,
+    0x79, 0x74, 0x69, 0x89,
+    0x75, 0x69, 0x60, 0x87,
+    0x6d, 0x6d, 0x6d, 0x88,
+    0x80, 0x80, 0x69, 0x80,
+    0x79, 0x82, 0x7a, 0x70,
+    0x70, 0x82, 0x7a, 0x6d,
+    0x7b, 0x6e, 0x65, 0x66,
+    0x8a, 0x6a, 0x79, 0x7d,
+    0x7f, 0x66, 0x68, 0x80,
+    0x87, 0x6e, 0x7c, 0x71,
+    0x68, 0x7d, 0x81, 0x6b);
+
+  // vmxdotp.ww vd, vs1, vs2, vs3, vs4
+  asm volatile("vmxdotp.ww v4, v8, v16, v24, v25");
+
+  VCMP_U32(3, v4,
+    0x6273ba83, 0xbda4f63a, 0x38414c00, 0x3871a041,
+    0x3ca12afa, 0xbe9cfedd, 0xae3e67ff, 0x5b22a216,
+    0x47d1ba24, 0x3b1e62ff, 0xb8243225, 0xc5a9b932,
+    0xbfa0eb98, 0x7167c7b9, 0xd26faa2a, 0x5ec2a92c,
+    0x62827e2b, 0xb8fded74, 0xc943be93, 0xcd995ad8,
+    0xcf95442d, 0x3d16ea30, 0x67f86286, 0xb11ee031,
+    0xe60b483d, 0xc413bec0, 0xc7a15da8, 0xf76d8381,
+    0x4094cb82, 0xe42b0627, 0xec1b2724, 0x6cc1aeaf,
+    0x3f2c2030, 0xe149a837, 0x524550a4, 0xc4b0f51c,
+    0xfcd58c0f, 0xe76db5ef, 0xf81f5c80, 0xe49df6bb,
+    0xcdc98652, 0x63f666e0, 0xc21df3a0, 0xc2557035,
+    0x35287d80, 0xc7ec3e6d, 0xc7038069, 0xab81c705);
+};
+
+// vmxdotp.wf
+// Test data generated using mxfp repository and
+// $ python3 -m golden.spatz --op inst.wf --dims 48 --data-type FP8ALT
+void TEST_CASE4(void) {
+  VSET(48, e32, m4);
+
+  // vd (accumulator)
+  VLOAD_32(v8,
+    0x5a346e04, 0xe60b483d, 0x914c95d1, 0x264103c5,
+    0x25f96729, 0xbe40d9f3, 0xbdba19eb, 0xf76d8381,
+    0x25f46356, 0xbc735ca7, 0x01a38311, 0xe42b0627,
+    0x2f41f7cd, 0xcd266ea8, 0x4ced509a, 0x6cc1aeaf,
+    0xaa0cb6f5, 0x11f10c60, 0x07124b2f, 0xe149a837,
+    0xc02823ec, 0x524550a4, 0xbb798e9b, 0x4c001508,
+    0x6c2f5ecc, 0xb8a61715, 0xa2b249ab, 0x80185844,
+    0x25fe3a18, 0x2a2d551f, 0xb8378d82, 0x8f76dc87,
+    0x23669676, 0x899918a7, 0x780587f0, 0x53c617eb,
+    0xf845aed9, 0xbe773448, 0x14ed2049, 0xc2557035,
+    0xdb87872d, 0x022bc320, 0xb46108cc, 0xb3df44a4,
+    0xcc0e95ee, 0xc7038069, 0x855c3844, 0xa11d459a);
+
+  // vs2 (vector elements)
+  VLOAD_64(v16,
+    0x8d153d89282d9158, 0x9915d6dd63f368bd, 0x5359101cb1d75b4d, 0x6732b7c3c43cc82b,
+    0xe34ce94fe4906df7, 0x1c1e97df9759402c, 0x66b04b16dae92a20, 0x12e6a7bde6bcf21c,
+    0xb2c1ededaf10a836, 0xd84a4fc4ceec7428, 0x8d9666bbe1cb3f57, 0xe4554e6b59244ce0,
+    0x521ccaafed65d418, 0xf1c544ed1de0b4bc, 0x999636e2c892b64b, 0x74eee28c282d643f,
+    0x4830cd59f00b99e1, 0x66ceb80aabbddbda, 0x390c08dc99563a68, 0xa6b66810c144c623,
+    0x472652dce7580892, 0x1364a1b46aca5477, 0xa1bb76d3e344ceb3, 0xc81534a3dc618a31,
+    0xc9c8c29fae70f25e, 0xd8e3b1d6c8d3e246, 0xa05eefaee789cdd4, 0xda102956b94df72c,
+    0xa20b27a65cd6a1c2, 0xeef369e1d949ba46, 0xbb9a719fac4b15db, 0xa637db4d4051be1c,
+    0x0d8e9c8ecfeee90b, 0x1c6d2294756a4a15, 0xed5861946b233134, 0x3c5d97312baa6f94,
+    0x91bde5085db1cc3e, 0x9b992339886844b4, 0x93313a8e992bb5d4, 0x4b1a60ebcdd9bbea,
+    0x8a36af4126a59853, 0xd4aa91208cdda0cb, 0x0a0ef0e329b60cc7, 0xdcca1a34298c7089,
+    0x715ac0b0f54ef538, 0x3ac43d6b1be640b7, 0x41cddaa6d0afcb95, 0x30abd07617c69751);
+
+  // vs4 (vector scales)
+  VLOAD_8(v24,
+    0x67, 0x70, 0x80, 0x82,
+    0x7a, 0x7a, 0x8a, 0x6d,
+    0x7a, 0x7b, 0x7d, 0x6e,
+    0x67, 0x85, 0x62, 0x66,
+    0x7c, 0x8a, 0x6c, 0x6a,
+    0x78, 0x79, 0x88, 0x6a,
+    0x85, 0x7a, 0x71, 0x64,
+    0x72, 0x79, 0x84, 0x75,
+    0x85, 0x7b, 0x7f, 0x62,
+    0x74, 0x6a, 0x84, 0x71,
+    0x6c, 0x68, 0x7c, 0x7d,
+    0x83, 0x81, 0x6a, 0x61);
+
+  // rs1 (scalar elements)
+  double scalar_elements;
+  BOX_DOUBLE_IN_DOUBLE(scalar_elements, 0xf1a8a3cb6fe0db58);
+
+  // rs3 (scalar scale)
+  double scalar_scale;
+  BOX_DOUBLE_IN_DOUBLE(scalar_scale, 0x6b);
+
+  // vmxdotp.wf vd, rs1, vs2, rs3, vs4
+  asm volatile("vmxdotp.wf v8, %0, v16, %1, v24" :: "f"(scalar_elements), "f"(scalar_scale));
+
+  VCMP_U32(4, v8,
+    0x5a346e04, 0xe60b483d, 0xbb4290ac, 0xbd8bad7b,
+    0xb92e6b00, 0xbe40dd9e, 0xc1805216, 0xf76d8381,
+    0x37a0ac00, 0xbc730a2a, 0xba767a48, 0xe42b0627,
+    0xb03ed065, 0xcd266ea8, 0x4ced509a, 0x6cc1aeaf,
+    0xbb01c24c, 0xc1767b7c, 0x307f06e8, 0xe149a837,
+    0xc02824ea, 0x524550a4, 0xc02271a4, 0x4c001508,
+    0x6c2f5ecc, 0x3787a9dc, 0xb4e17340, 0x2e720f8d,
+    0x34cf2c05, 0x395ce480, 0xbc48d18e, 0xb20b4000,
+    0x3e8546e3, 0x3aadd716, 0x780587f0, 0x53c617eb,
+    0xf845aed9, 0xbe773448, 0xbbbb9480, 0xc2557035,
+    0xdb87872d, 0x2f9a7559, 0x38025417, 0x3927b93b,
+    0xcc0e95ee, 0xc7038068, 0xb00ed180, 0xab81c705);
+};
+
 // vmxdotp.qq
 // Test data generated using mxfp repository and
 // $ python3 -m golden.spatz --op inst.ww --dims 48 --acc-type BF16
-void TEST_CASE3(void) {
+void TEST_CASE5(void) {
   // enable alternate FP16 format (i.e., BF16)
   asm volatile("csrw fcsr, %0" :: "r"(FCSR_MODE_DST));
 
@@ -272,7 +458,7 @@ void TEST_CASE3(void) {
   // vmxdotp.qq vd, vs1, vs2, vs3, vs4
   asm volatile("vmxdotp.qq v4, v8, v16, v24, v25");
 
-  VCMP_U16(3, v4,
+  VCMP_U16(5, v4,
     0x65e5, 0xe0a1, 0x4040, 0x3f10,
     0xc141, 0xafe6, 0xef34, 0x5a15,
     0x4946, 0x2e28, 0x3636, 0x481a,
@@ -290,7 +476,7 @@ void TEST_CASE3(void) {
 // vmxdotp.qf
 // Test data generated using mxfp repository and
 // $ python3 -m golden.spatz --op inst.wf --dims 48 --acc-type BF16
-void TEST_CASE4(void) {
+void TEST_CASE6(void) {
   // enable alternate FP16 format (i.e., BF16)
   asm volatile("csrw fcsr, %0" :: "r"(FCSR_MODE_DST));
 
@@ -352,7 +538,7 @@ void TEST_CASE4(void) {
   // vmxdotp.qf vd, rs1, vs2, rs3, vs4
   asm volatile("vmxdotp.qf v8, %0, v16, %1, v24" :: "f"(scalar_elements), "f"(scalar_scale));
 
-  VCMP_U16(4, v8,
+  VCMP_U16(6, v8,
     0xbe0c, 0xb921, 0x547d, 0xbe49,
     0x447a, 0xba60, 0x2f6d, 0x4714,
     0x459f, 0x4d49, 0xc542, 0xdca1,
@@ -372,10 +558,17 @@ int main(void) {
   enable_vec();
   enable_fp();
 
+  // FP8 elements, FP32 accumulation
   TEST_CASE1();
   TEST_CASE2();
+
+  // FP8ALT elements, FP32 accumulation
   TEST_CASE3();
   TEST_CASE4();
+
+  // FP8 elements, FP16ALT (BF16) accumulation
+  TEST_CASE5();
+  TEST_CASE6();
 
   EXIT_CHECK();
 }
