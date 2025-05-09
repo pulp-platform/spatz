@@ -475,7 +475,7 @@ module spatz_controller
         scoreboard_d[spatz_req.id].prevent_chaining = 1'b1;
 
       // Is this a narrowing or widening instruction?
-      if (spatz_req.op_arith.is_narrowing || spatz_req.op_arith.widen_vs1 || spatz_req.op_arith.widen_vs2)
+      if (spatz_req.op_arith.is_narrowing || spatz_req.op_arith.is_double_narrowing || spatz_req.op_arith.widen_vs1 || spatz_req.op_arith.widen_vs2)
         narrow_wide_d[spatz_req.id] = 1'b1;
 
 `ifdef DOUBLE_BW
