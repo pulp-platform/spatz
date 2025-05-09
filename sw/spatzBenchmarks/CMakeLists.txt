@@ -156,3 +156,8 @@ add_spatz_test_threeParam(mxfp8-matmul mxfp8-matmul/main.c 64 64  512)
 add_spatz_test_twoParam(mxfp8-matvec mxfp8-matvec/main.c 64  64)
 add_spatz_test_twoParam(mxfp8-matvec mxfp8-matvec/main.c 64 128)
 add_spatz_test_twoParam(mxfp8-matvec mxfp8-matvec/main.c 64 256)
+
+add_spatz_test_threeParam(mxfp8-matmul-bf16 mxfp8/matmul-bf16/main.c 64 64  64)
+add_spatz_test_threeParam(mxfp8-matmul-bf16 mxfp8/matmul-bf16/main.c 64 64 128)
+add_spatz_test_threeParam(mxfp8-matmul-bf16 mxfp8/matmul-bf16/main.c 64 64 256)
+add_spatz_test_threeParam(mxfp8-matmul-bf16 mxfp8/matmul-bf16/main.c 64 64 512)
