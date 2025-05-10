@@ -81,12 +81,6 @@ code-style:
     - $CI_PROJECT_DIR/util/memora_retry.sh get tc-llvm
     - ./util/lint.sh
   needs: ["tc-llvm"]
-  rules:
-    - if: '$CI_MERGE_REQUEST_ID'
-      allow_failure: false
-    - if: '$CI_MERGE_REQUEST_ID == null'
-      allow_failure: true
-
 
 ###########
 #  Build  #
