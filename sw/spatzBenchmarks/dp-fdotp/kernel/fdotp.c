@@ -52,7 +52,7 @@ double fdotp_v64b(const double *a, const double *b, unsigned int avl) {
   } while (avl > 0);
 
   // Reduce and return
-  asm volatile("vsetvli zero, %0, e64, m8, ta, ma" :: "r"(orig_avl));
+  asm volatile("vsetvli zero, %0, e64, m8, ta, ma" ::"r"(orig_avl));
   asm volatile("vfredusum.vs v0, v24, v0");
   asm volatile("vfmv.f.s %0, v0" : "=f"(red));
 
@@ -92,7 +92,7 @@ float fdotp_v32b(const float *a, const float *b, unsigned int avl) {
   } while (avl > 0);
 
   // Reduce and return
-  asm volatile("vsetvli zero, %0, e32, m8, ta, ma" :: "r"(orig_avl));
+  asm volatile("vsetvli zero, %0, e32, m8, ta, ma" ::"r"(orig_avl));
   asm volatile("vfredusum.vs v0, v24, v0");
   asm volatile("vfmv.f.s %0, v0" : "=f"(red));
   return red;
@@ -131,7 +131,7 @@ _Float16 fdotp_v16b(const _Float16 *a, const _Float16 *b, unsigned int avl) {
   } while (avl > 0);
 
   // Reduce and return
-  asm volatile("vsetvli zero, %0, e16, m8, ta, ma" :: "r"(orig_avl));
+  asm volatile("vsetvli zero, %0, e16, m8, ta, ma" ::"r"(orig_avl));
   asm volatile("vfredusum.vs v0, v24, v0");
   asm volatile("vfmv.f.s %0, v0" : "=f"(red));
   return red;
