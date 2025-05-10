@@ -20,24 +20,18 @@
 
 #include <stdint.h>
 
-#define MX_BLOCK_SIZE 32
+// MXFP8 matrix multiplication
+// ---------------------------
+// - block size = 32 fixed
+// - a is an MxK matrix (row-major)
+// - b is an KxN matrix (column-major)
+// - c is an MxN matrix (row-major)
+// - a_scale is an Mx(K/32) (row-major)
+// - b_scale is an (K/32)xN (row-major)
+// - element data format:     FP4
+// - scale data format:       E8M0
+// - accumulator data format: FP32
 
-#define E8M0_BIAS 127
-#define FP32_BIAS 127
-#define BF16_BIAS 127
-
-#define FCSR_MODE_DST     (1 << 8)
-#define FCSR_MODE_SRC     (1 << 9)
-#define FCSR_MODE_SRC_FP4 (1 << 11)
-
-typedef enum { FP4 = 128, E8M0 = 64, FP16ALT = 32, FP8ALT = 16, FP64 = 8, FP32 = 4, FP16 = 2, FP8 = 1 } precision_t;
-
-typedef struct mx_matmul_layer_struct {
-  uint32_t M;
-  uint32_t N;
-  uint32_t K;
-  precision_t dtype_elements;
-  precision_t dtype_scales;
-  precision_t dtype_results;
-} mx_matmul_layer;
-
+void mxfp4_matmul_fp32_mxdotp_lmul2_8x(float *c,
+    const char *a, const char *b, const char *a_scale, const char *b_scale,
+    const uint32_t M, const uint32_t N, const uint32_t K);
