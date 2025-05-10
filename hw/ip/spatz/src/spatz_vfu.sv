@@ -1186,13 +1186,13 @@ module spatz_vfu
             fpu_vectorial_op = FLEN > 32;
           end
           EW_16: begin
-            fpu_src_fmt      = spatz_req.op_arith.is_narrowing || spatz_req.op_arith.widen_vs1 || spatz_req.op_arith.widen_vs2 ? fpnew_pkg::FP32 : (spatz_req.fm.src ? fpnew_pkg::FP16ALT : fpnew_pkg::FP16);
+            fpu_src_fmt      = spatz_req.op_arith.is_narrowing || spatz_req.op_arith.widen_vs1 || spatz_req.op_arith.widen_vs2 ? fpnew_pkg::FP32 : (spatz_req.fm.src[0] ? fpnew_pkg::FP16ALT : fpnew_pkg::FP16);
             fpu_dst_fmt      = spatz_req.op_arith.widen_vs1 || spatz_req.op_arith.widen_vs2 || spatz_req.op == VSDOTP          ? fpnew_pkg::FP32 : (spatz_req.fm.dst ? fpnew_pkg::FP16ALT : fpnew_pkg::FP16);
             fpu_int_fmt      = spatz_req.op_arith.is_narrowing && spatz_req.op inside {VI2F, VU2F}                             ? fpnew_pkg::INT32 : fpnew_pkg::INT16;
             fpu_vectorial_op = 1'b1;
           end
           EW_8: begin
-            fpu_src_fmt      = spatz_req.op_arith.is_narrowing || spatz_req.op_arith.widen_vs1 || spatz_req.op_arith.widen_vs2 ? (spatz_req.fm.src ? fpnew_pkg::FP16ALT : fpnew_pkg::FP16) : (spatz_req.fm.src ? fpnew_pkg::FP8ALT : fpnew_pkg::FP8);
+            fpu_src_fmt      = spatz_req.op_arith.is_narrowing || spatz_req.op_arith.widen_vs1 || spatz_req.op_arith.widen_vs2 ? (spatz_req.fm.src[0] ? fpnew_pkg::FP16ALT : fpnew_pkg::FP16) : (spatz_req.fm.src[0] ? fpnew_pkg::FP8ALT : fpnew_pkg::FP8);
             fpu_dst_fmt      = spatz_req.op_arith.widen_vs1 || spatz_req.op_arith.widen_vs2 || spatz_req.op == VSDOTP          ? (spatz_req.fm.dst ? fpnew_pkg::FP16ALT : fpnew_pkg::FP16) : (spatz_req.fm.dst ? fpnew_pkg::FP8ALT : fpnew_pkg::FP8);
             fpu_int_fmt      = spatz_req.op_arith.is_narrowing && spatz_req.op inside {VI2F, VU2F}                             ? fpnew_pkg::INT16 : fpnew_pkg::INT8;
             fpu_vectorial_op = 1'b1;
@@ -1253,7 +1253,13 @@ module spatz_vfu
 
           VMXDOTP: begin
             fpu_op = fpnew_pkg::MXSDOTP;
-            fpu_src_fmt = spatz_req.fm.src ? fpnew_pkg::FP8ALT : fpnew_pkg::FP8;
+            unique case (spatz_req.fm.src)
+              3'b000:  fpu_src_fmt = fpnew_pkg::FP8;
+              3'b001:  fpu_src_fmt = fpnew_pkg::FP8ALT;
+              // FP6 (3'b010), FP6ALT (3'b011) not supported
+              3'b100:  fpu_src_fmt = fpnew_pkg::FP4;
+              default: fpu_src_fmt = fpnew_pkg::FP8;
+            endcase
           end
 
           default:;
