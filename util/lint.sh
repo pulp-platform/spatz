@@ -22,7 +22,7 @@ fi
 # Check for clang format
 echo "Check C and C++ source code"
 ./util/vendor/run_clang_format.py \
-    --clang-format-executable=install/llvm/bin/clang-format -r sw/spatzBenchmarks || EXIT_STATUS=$?
+    --clang-format-executable="${LLVM_INSTALL_DIR}/bin/clang-format" -r sw/spatzBenchmarks || EXIT_STATUS=$?
 
 # Check python files
 echo "Check Python files"
