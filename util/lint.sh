@@ -19,10 +19,13 @@ else
   base="HEAD~1"
 fi
 
-# Check for clang format
+# Check for clang format. Check if clang-format exists in LLVM_INSTALL_DIR or is
+# locally installed. Error out if neither can be found.
 echo "Check C and C++ source code"
+( [ -d install/llvm ] || [ -n "$LLVM_INSTALL_DIR" ] ) || { echo "Error: neither install/llvm exists nor LLVM_INSTALL_DIR is set" >&2; exit 1; }; \
+CF=install/llvm/bin/clang-format; [ ! -d install/llvm ] && CF="$LLVM_INSTALL_DIR/bin/clang-format"; \
 ./util/vendor/run_clang_format.py \
-    --clang-format-executable=install/llvm/bin/clang-format -r sw/spatzBenchmarks || EXIT_STATUS=$?
+    --clang-format-executable="$CF" -r sw/spatzBenchmarks || EXIT_STATUS=$?
 
 # Check python files
 echo "Check Python files"
