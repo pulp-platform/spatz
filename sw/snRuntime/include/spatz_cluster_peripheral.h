@@ -192,6 +192,15 @@ extern "C" {
       .index =                                                                 \
           SPATZ_CLUSTER_PERIPHERAL_CLUSTER_BOOT_CONTROL_ENTRY_POINT_OFFSET})
 
+// End of computation and exit status register
+#define SPATZ_CLUSTER_PERIPHERAL_CLUSTER_EOC_EXIT_REG_OFFSET 0x60
+#define SPATZ_CLUSTER_PERIPHERAL_CLUSTER_EOC_EXIT_EOC_EXIT_MASK 0xffffffff
+#define SPATZ_CLUSTER_PERIPHERAL_CLUSTER_EOC_EXIT_EOC_EXIT_OFFSET 0
+#define SPATZ_CLUSTER_PERIPHERAL_CLUSTER_EOC_EXIT_EOC_EXIT_FIELD               \
+  ((bitfield_field32_t){                                                       \
+      .mask = SPATZ_CLUSTER_PERIPHERAL_CLUSTER_EOC_EXIT_EOC_EXIT_MASK,         \
+      .index = SPATZ_CLUSTER_PERIPHERAL_CLUSTER_EOC_EXIT_EOC_EXIT_OFFSET})
+
 #ifdef __cplusplus
 } // extern "C"
 #endif

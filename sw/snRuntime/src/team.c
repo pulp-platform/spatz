@@ -4,6 +4,7 @@
 #include "team.h"
 
 #include "snrt.h"
+#include "spatz_cluster_peripheral.h"
 
 // TLS copy of frequently used data that doesn't change at runtime
 __thread struct snrt_team *_snrt_team_current;
@@ -89,3 +90,10 @@ snrt_slice_t snrt_cluster_memory() {
 }
 
 void snrt_wakeup(uint32_t mask) { *snrt_peripherals()->wakeup = mask; }
+
+void snrt_set_eoc_and_return_code (int eoc_and_return_code) {
+    volatile uint32_t *eoc_reg =
+    (uint32_t *)(_snrt_team_current->root->cluster_mem.end +
+                SPATZ_CLUSTER_PERIPHERAL_CLUSTER_EOC_EXIT_REG_OFFSET);
+    *eoc_reg = eoc_and_return_code;
+}
