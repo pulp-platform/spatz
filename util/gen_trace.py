@@ -24,7 +24,7 @@ EXTRA_WB_WARN = "WARNING: {} transactions still in flight for {}."
 GENERAL_WARN = """WARNING: Inconsistent final state; performance metrics
 may be inaccurate. Is this trace complete?\n"""
 
-TRACE_IN_REGEX = r"(\d+)\s+(\d+)\s+(\d+)\s+(0x[0-9A-Fa-fz]+)\s+([^#;]*)(\s*#;\s*(.*))?"
+TRACE_IN_REGEX = r"(\d+)\s*(\d+)\s+(\d+)\s+(0x[0-9A-Fa-fz]+)\s+([^#;]*)(\s*#;\s*(.*))?"
 
 TRACE_OUT_FMT = "{:>8} {:>8} {:>8} {:>10} {:<30}"
 

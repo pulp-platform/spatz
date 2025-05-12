@@ -64,6 +64,11 @@ module spatz_vfu
     // Is this a reduction?
     logic reduction;
   } vfu_tag_t;
+  
+  // AFTER BELLOW MODIFICATION: 
+  // is_fpu_busy      = |fpu_busy_d; 
+  // I AM NOT SURE IF IT IS STILL NEEDED OR NOT
+  logic [N_FPU-1:0] fpu_load_ready; 
 
   ///////////////////////
   //  Operation queue  //
@@ -249,13 +254,26 @@ module spatz_vfu
 
     // Finished the execution!
     if (spatz_req_valid && ((vl_d >= spatz_req.vl && !spatz_req.op_arith.is_reduction) || reduction_done)) begin
-      spatz_req_ready         = spatz_req_valid;
-      busy_d                  = 1'b0;
-      vl_d                    = '0;
-      last_request            = 1'b1;
-      running_d[spatz_req.id] = 1'b0;
-      widening_upper_d        = 1'b0;
-      narrowing_upper_d       = 1'b0;
+      if(spatz_req.op == VFDIV)begin
+          last_request            = 1'b1;
+        if(result_tag.last)begin
+          spatz_req_ready         = spatz_req_valid;
+          busy_d                  = 1'b0;
+          vl_d                    = '0;
+          running_d[spatz_req.id] = 1'b0;
+          widening_upper_d        = 1'b0;
+          narrowing_upper_d       = 1'b0;
+        end
+      end else begin
+        spatz_req_ready         = spatz_req_valid;
+        busy_d                  = 1'b0;
+        vl_d                    = '0;
+        last_request            = 1'b1;
+        running_d[spatz_req.id] = 1'b0;
+        widening_upper_d        = 1'b0;
+        narrowing_upper_d       = 1'b0;
+      end
+
     end
     // Do we have a new instruction?
     else if (spatz_req_valid && !running_d[spatz_req.id]) begin
@@ -333,7 +351,7 @@ module spatz_vfu
   assign result       = state_q == VFU_RunningIPU ? ipu_result       : fpu_result;
   assign result_valid = state_q == VFU_RunningIPU ? ipu_result_valid : fpu_result_valid;
 
-  assign scalar_result = spatz_req.op_arith.is_scalar ? result[ELEN-1:0] : '0;
+  assign scalar_result = (spatz_req.op_arith.is_scalar || result_tag.last) ? result[ELEN-1:0] : '0;
 
   ///////////////////////
   //  Reduction logic  //
@@ -384,7 +402,7 @@ module spatz_vfu
 
         // Do we have a new reduction instruction?
         if (spatz_req_valid && !running_q[spatz_req.id] && spatz_req.op_arith.is_reduction)
-          reduction_state_d = is_fpu_busy ? Reduction_Wait : Reduction_Init;
+          reduction_state_d = (is_fpu_busy || !fpu_load_ready[0]) ? Reduction_Wait : Reduction_Init;
       end
 
       Reduction_Wait: begin
@@ -815,7 +833,8 @@ module spatz_vfu
       fpu_op           = fpnew_pkg::FMADD;
       fpu_op_mode      = 1'b0;
       fpu_vectorial_op = 1'b0;
-      is_fpu_busy      = |fpu_busy_q;
+      // is_fpu_busy      = |fpu_busy_q;
+      is_fpu_busy      = |fpu_busy_d;
       fpu_src_fmt      = fpnew_pkg::FP32;
       fpu_dst_fmt      = fpnew_pkg::FP32;
       fpu_int_fmt      = fpnew_pkg::INT32;
@@ -904,6 +923,8 @@ module spatz_vfu
           end
 
           VSDOTP: fpu_op = fpnew_pkg::SDOTP;
+          VFDIV:  fpu_op = fpnew_pkg::DIV;
+          VFSQRT:  fpu_op = fpnew_pkg::SQRT;
 
           default:;
         endcase
@@ -992,7 +1013,8 @@ module spatz_vfu
       `FFL(input_tag_q, input_tag, int_fpu_in_valid && int_fpu_in_ready, '{vsew: EW_8, default: '0})
       `FFL(fpu_in_valid_q, int_fpu_in_valid, int_fpu_in_ready, 1'b0)
       assign int_fpu_in_ready = !fpu_in_valid_q || fpu_in_valid_q && fpu_in_ready_d;
-
+      assign fpu_load_ready[fpu] = int_fpu_in_valid && int_fpu_in_ready;
+      
       fpnew_top #(
         .Features                   (FPUFeatures           ),
         .Implementation             (FPUImplementation     ),

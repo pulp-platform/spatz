@@ -292,12 +292,12 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     .vrf_wdata_o      (vrf_wdata[VFU_VD_WD]                                    ),
     .vrf_we_o         (sb_we[VFU_VD_WD]                                        ),
     .vrf_wbe_o        (vrf_wbe[VFU_VD_WD]                                      ),
-    .vrf_wvalid_i     (vrf_wvalid[VFU_VD_WD]                                   ),
+    .vrf_wvalid_i     (vrf_wvalid[VFU_VD_WD]                                   ),//vrf_wvalid[0]
     .vrf_raddr_o      (vrf_raddr[VFU_VD_RD:VFU_VS2_RD]                         ),
     .vrf_re_o         (sb_re[VFU_VD_RD:VFU_VS2_RD]                             ),
     .vrf_rdata_i      (vrf_rdata[VFU_VD_RD:VFU_VS2_RD]                         ),
-    .vrf_rvalid_i     (vrf_rvalid[VFU_VD_RD:VFU_VS2_RD]                        ),
-    .vrf_id_o         ({sb_id[SB_VFU_VD_WD], sb_id[SB_VFU_VD_RD:SB_VFU_VS2_RD]}),
+    .vrf_rvalid_i     (vrf_rvalid[VFU_VD_RD:VFU_VS2_RD]                        ),//vrf_rvalid[2:0]
+    .vrf_id_o         ({sb_id[SB_VFU_VD_WD], sb_id[SB_VFU_VD_RD:SB_VFU_VS2_RD]}),//sb_id[6],sb_id[2:0]
     // FPU side-channel
     .fpu_status_o     (fpu_status_o                                            )
   );
@@ -325,7 +325,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     .vrf_wdata_o             (vrf_wdata[VLSU_VD_WD]                                ),
     .vrf_we_o                (sb_we[VLSU_VD_WD]                                    ),
     .vrf_wbe_o               (vrf_wbe[VLSU_VD_WD]                                  ),
-    .vrf_wvalid_i            (vrf_wvalid[VLSU_VD_WD]                               ),
+    .vrf_wvalid_i            (vrf_wvalid[VLSU_VD_WD]                               ),//vrf_wvalid[1]
     .vrf_raddr_o             (vrf_raddr[VLSU_VD_RD:VLSU_VS2_RD]                    ),
     .vrf_re_o                (sb_re[VLSU_VD_RD:VLSU_VS2_RD]                        ),
     .vrf_rdata_i             (vrf_rdata[VLSU_VD_RD:VLSU_VS2_RD]                    ),

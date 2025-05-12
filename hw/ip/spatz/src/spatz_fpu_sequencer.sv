@@ -415,6 +415,7 @@ module spatz_fpu_sequencer
         end
 
         // Vector instructions with FP scalar operand
+        riscv_instr::VFDIV_VF,
         riscv_instr::VFADD_VF,
         riscv_instr::VFSUB_VF,
         riscv_instr::VFMIN_VF,
@@ -739,7 +740,7 @@ module spatz_fpu_sequencer
     else if (fp_move_result_valid_o) begin
       resp_o                 = fp_move_result_o;
       resp_valid_o           = 1'b1;
-      fp_move_result_ready_i = 1'b1;
+      fp_move_result_ready_i = resp_ready_i;
     end
 
     // Commit a FP LSU response

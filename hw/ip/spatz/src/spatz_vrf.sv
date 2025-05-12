@@ -97,19 +97,19 @@ module spatz_vrf
         wdata[bank]         = wdata_i[VFU_VD_WD];
         we[bank]            = 1'b1;
         wbe[bank]           = wbe_i[VFU_VD_WD];
-        wvalid_o[VFU_VD_WD] = 1'b1;
+        wvalid_o[VFU_VD_WD] = 1'b1;//0
       end else if (write_request[bank][VLSU_VD_WD]) begin
         waddr[bank]          = f_vreg(waddr_i[VLSU_VD_WD]);
         wdata[bank]          = wdata_i[VLSU_VD_WD];
         we[bank]             = 1'b1;
         wbe[bank]            = wbe_i[VLSU_VD_WD];
-        wvalid_o[VLSU_VD_WD] = 1'b1;
+        wvalid_o[VLSU_VD_WD] = 1'b1;//1
       end else if (write_request[bank][VSLDU_VD_WD]) begin
         waddr[bank]           = f_vreg(waddr_i[VSLDU_VD_WD]);
         wdata[bank]           = wdata_i[VSLDU_VD_WD];
         we[bank]              = 1'b1;
         wbe[bank]             = wbe_i[VSLDU_VD_WD];
-        wvalid_o[VSLDU_VD_WD] = 1'b1;
+        wvalid_o[VSLDU_VD_WD] = 1'b1;//2
       end
     end
   end
@@ -141,33 +141,33 @@ module spatz_vrf
       if (read_request[bank][VFU_VS2_RD]) begin
         raddr[bank][0]       = f_vreg(raddr_i[VFU_VS2_RD]);
         rdata_o[VFU_VS2_RD]  = rdata[bank][0];
-        rvalid_o[VFU_VS2_RD] = 1'b1;
+        rvalid_o[VFU_VS2_RD] = 1'b1;//0
       end else if (read_request[bank][VLSU_VS2_RD]) begin
         raddr[bank][0]        = f_vreg(raddr_i[VLSU_VS2_RD]);
         rdata_o[VLSU_VS2_RD]  = rdata[bank][0];
-        rvalid_o[VLSU_VS2_RD] = 1'b1;
+        rvalid_o[VLSU_VS2_RD] = 1'b1;//3
       end
 
       // Bank read port 1 - Priority: VFU (1) -> VSLDU
       if (read_request[bank][VFU_VS1_RD]) begin
         raddr[bank][1]       = f_vreg(raddr_i[VFU_VS1_RD]);
         rdata_o[VFU_VS1_RD]  = rdata[bank][1];
-        rvalid_o[VFU_VS1_RD] = 1'b1;
+        rvalid_o[VFU_VS1_RD] = 1'b1;//1
       end else if (read_request[bank][VSLDU_VS2_RD]) begin
         raddr[bank][1]         = f_vreg(raddr_i[VSLDU_VS2_RD]);
         rdata_o[VSLDU_VS2_RD]  = rdata[bank][1];
-        rvalid_o[VSLDU_VS2_RD] = 1'b1;
+        rvalid_o[VSLDU_VS2_RD] = 1'b1;//4
       end
 
       // Bank read port 2 - Priority: VFU (D) -> VLSU
       if (read_request[bank][VFU_VD_RD]) begin
         raddr[bank][2]      = f_vreg(raddr_i[VFU_VD_RD]);
         rdata_o[VFU_VD_RD]  = rdata[bank][2];
-        rvalid_o[VFU_VD_RD] = 1'b1;
+        rvalid_o[VFU_VD_RD] = 1'b1;//3
       end else if (read_request[bank][VLSU_VD_RD]) begin
         raddr[bank][2]       = f_vreg(raddr_i[VLSU_VD_RD]);
         rdata_o[VLSU_VD_RD]  = rdata[bank][2];
-        rvalid_o[VLSU_VD_RD] = 1'b1;
+        rvalid_o[VLSU_VD_RD] = 1'b1;//5
       end
     end
   end

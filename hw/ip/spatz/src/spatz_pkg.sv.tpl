@@ -145,7 +145,7 @@ package spatz_pkg;
     // VCSR
     VCSR,
     // Floating point instructions
-    VFADD, VFSUB, VFMUL,
+    VFADD, VFDIV, VFSQRT, VFSUB, VFMUL,
     VFMINMAX, VFSGNJ, VFCMP, VFCLASS,
     VF2I, VF2U, VI2F, VU2F, VF2F,
     VFMADD, VFMSUB, VFNMSUB, VFNMADD, VSDOTP
@@ -373,7 +373,7 @@ package spatz_pkg;
   /////////////////////////
 
   // No support for floating-point division and square-root for now
-  localparam bit FDivSqrt = 1'b0;
+  localparam bit FDivSqrt = 1'b1;
 
   localparam int unsigned FLEN = RVD ? 64 : 32;
 

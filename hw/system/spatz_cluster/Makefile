@@ -11,7 +11,8 @@ MKFILE_PATH := $(abspath $(lastword $(MAKEFILE_LIST)))
 MKFILE_DIR  := $(dir $(MKFILE_PATH))
 
 # Configuration file
-SPATZ_CLUSTER_CFG         ?= $(SPATZ_CLUSTER_DIR)/cfg/spatz_cluster.default.hjson
+SPATZ_CLUSTER_CFG         ?= $(SPATZ_CLUSTER_DIR)/cfg/spatz_cluster1.hjson
+# SPATZ_CLUSTER_CFG         ?= $(SPATZ_CLUSTER_DIR)/cfg/spatz_cluster.default.hjson
 SPATZ_CLUSTER_CFG_DEFINES += -DMEM_DRAM_ORIGIN=$(shell python3 -c "import jstyleson; f = open('$(SPATZ_CLUSTER_CFG)'); print(jstyleson.load(f)['dram']['address'])")
 SPATZ_CLUSTER_CFG_DEFINES += -DMEM_DRAM_SIZE=$(shell python3 -c "import jstyleson; f = open('$(SPATZ_CLUSTER_CFG)'); print(jstyleson.load(f)['dram']['length'])")
 SPATZ_CLUSTER_CFG_DEFINES += -DSNRT_BASE_HARTID=$(shell python3 -c "import jstyleson; f = open('$(SPATZ_CLUSTER_CFG)'); print(jstyleson.load(f)['cluster']['cluster_base_hartid'])")
@@ -182,6 +183,7 @@ sw: clean.sw
 sw.vsim: clean.sw bin/spatz_cluster.vsim
 	mkdir -p sw/build
 	cd sw/build && ${CMAKE} -DLLVM_PATH=${LLVM_INSTALL_DIR} -DGCC_PATH=${GCC_INSTALL_DIR} -DPYTHON=${PYTHON} -DSNITCH_SIMULATOR=../../../../../hw/system/spatz_cluster/bin/spatz_cluster.vsim -DBUILD_TESTS=ON ${SPATZ_CLUSTER_CFG_DEFINES} .. && make -j8
+	echo -e "\033[31m ***IMPORTANT*** SW compilation has done for the following config file: "$(SPATZ_CLUSTER_CFG)
 
 ## Build SW and run all tests with Questasim simulator
 sw.test.vsim: sw.vsim

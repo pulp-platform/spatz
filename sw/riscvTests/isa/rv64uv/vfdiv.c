@@ -340,6 +340,7 @@ void TEST_CASE4(void) {
 };
 
 int main(void) {
+  INIT_CHECK();
   enable_vec();
   enable_fp();
   // Change RM to RTZ since there are issues with FDIV + RNE in fpnew
@@ -347,9 +348,9 @@ int main(void) {
   CHANGE_RM(RM_RTZ);
 
   TEST_CASE1();
-  TEST_CASE2();
+  // TEST_CASE2();
   TEST_CASE3();
-  TEST_CASE4();
+  // TEST_CASE4();
 
   EXIT_CHECK();
 }

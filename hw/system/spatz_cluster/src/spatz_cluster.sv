@@ -733,7 +733,7 @@ module spatz_cluster
       .acc_rsp_t               (acc_rsp_t                  ),
       .dma_events_t            (dma_events_t               ),
       .dma_perf_t              (axi_dma_pkg::dma_perf_t    ),
-      .XDivSqrt                (1'b0                       ),
+      .XDivSqrt                (1'b1                       ),
       .XF16                    (1'b1                       ),
       .XF16ALT                 (1'b1                       ),
       .XF8                     (1'b1                       ),

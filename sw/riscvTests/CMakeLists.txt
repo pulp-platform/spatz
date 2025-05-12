@@ -121,3 +121,7 @@ add_snitch_test(vfcvt  isa/rv64uv/vfcvt.c)
 add_snitch_test(vfncvt isa/rv64uv/vfncvt.c)
 
 add_snitch_test(vfmv isa/rv64uv/vfmv.c)
+add_snitch_test(vfdiv isa/rv64uv/vfdiv.c)
+add_snitch_test(vfsqrt isa/rv64uv/vfsqrt.c)
+add_snitch_test(vls isa/rv64uv/vls.c)
+add_snitch_test(vss isa/rv64uv/vss.c)

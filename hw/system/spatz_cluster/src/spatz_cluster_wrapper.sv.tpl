@@ -148,12 +148,12 @@ package ${cfg['pkg_name']};
                        fpnew_pkg::MERGED,
                        fpnew_pkg::MERGED,
                        fpnew_pkg::MERGED},  // FMA
-                    '{fpnew_pkg::DISABLED,
-                        fpnew_pkg::DISABLED,
-                        fpnew_pkg::DISABLED,
-                        fpnew_pkg::DISABLED,
-                        fpnew_pkg::DISABLED,
-                        fpnew_pkg::DISABLED}, // DIVSQRT
+                    '{fpnew_pkg::MERGED,
+                        fpnew_pkg::MERGED,
+                        fpnew_pkg::MERGED,
+                        fpnew_pkg::MERGED,
+                        fpnew_pkg::MERGED,
+                        fpnew_pkg::MERGED}, // DIVSQRT
                     '{fpnew_pkg::PARALLEL,
                         fpnew_pkg::PARALLEL,
                         fpnew_pkg::PARALLEL,
@@ -172,7 +172,7 @@ package ${cfg['pkg_name']};
                         fpnew_pkg::MERGED,
                         fpnew_pkg::MERGED,
                         fpnew_pkg::MERGED,
-                        fpnew_pkg::MERGED}},  // DOTP
+                        fpnew_pkg::MERGED}},  // DOTP //should be removed for 32-bit version
 % else:
                     '{fpnew_pkg::DISABLED,
                         fpnew_pkg::DISABLED,

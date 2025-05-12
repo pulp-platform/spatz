@@ -214,6 +214,25 @@ module spatz_controller
     .ready_i   (req_buffer_pop       )
   );
 
+ // One signal per unit (VLSU-VFU-VSLDU)
+ logic [2:0] chain_stall;
+
+ always_ff @(posedge clk_i or negedge rst_ni) begin
+  if(~rst_ni) begin
+    chain_stall = 3'b0;
+  end else begin
+    if (buffer_spatz_req.op inside {VLSE, VLXE, VSSE, VSXE} && !chain_stall[2] && req_buffer_valid)
+      chain_stall[2] = 1'b1;
+    else if(vlsu_rsp_valid_i && chain_stall[2])
+      chain_stall[2] = 1'b0;
+
+    if (buffer_spatz_req.op inside {VSLIDEUP} && !chain_stall[1] && req_buffer_valid)
+      chain_stall[1] = 1'b1;
+    else if(vlsu_rsp_valid_i && chain_stall[1])
+      chain_stall[1] = 1'b0;
+  end  
+ end
+
   ////////////////
   // Scoreboard //
   ////////////////
@@ -393,7 +412,8 @@ module spatz_controller
   );
 
   // Pop the buffer if we do not have a unit stall
-  assign req_buffer_pop = ~stall & req_buffer_valid && !running_insn_full;
+  // assign req_buffer_pop = ~stall & req_buffer_valid && !running_insn_full;
+  assign req_buffer_pop = ~stall & req_buffer_valid && !running_insn_full && !(|chain_stall);
 
   // Issue new operation to execution units
   always_comb begin : ex_issue
