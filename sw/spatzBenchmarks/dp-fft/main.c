@@ -120,10 +120,10 @@ int main() {
     long unsigned int utilization =
         (1000 * performance) / (1250 * num_cores * SNRT_NFPU_PER_CORE);
 
-    printf("\n----- fft on %d samples -----\n", NFFT);
-    printf("The execution took %u cycles.\n", timer);
-    printf("The performance is %ld OP/1000cycle (%ld%%o utilization).\n",
-           performance, utilization);
+    // printf("\n----- fft on %d samples -----\n", NFFT);
+    // printf("The execution took %u cycles.\n", timer);
+    // printf("The performance is %ld OP/1000cycle (%ld%%o utilization).\n",
+    //        performance, utilization);
 
     // Verify the real part
     for (unsigned int i = 0; i < NFFT; i++) {
