@@ -1271,7 +1271,6 @@ module spatz_cluster
       .TCDMAddrWidth           (SPMAddrWidth               )
     ) i_spatz_cc (
       .clk_i            (clk_i                               ),
-      .clk_d2_i         (clk_i                               ),
       .rst_ni           (rst_ni                              ),
       .testmode_i       (1'b0                                ),
       .hart_id_i        (hart_id                             ),

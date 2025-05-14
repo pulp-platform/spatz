@@ -7,6 +7,7 @@
 `include "common_cells/assertions.svh"
 `include "common_cells/registers.svh"
 `include "snitch_vm/typedef.svh"
+`include "reqrsp_interface/typedef.svh"
 
 /// Spatz Core Complex (CC)
 /// Contains the Snitch Integer Core + Spatz Vector Unit
@@ -96,7 +97,6 @@ module spatz_cc
     parameter type                                         req_id_t                 = logic [$clog2(NumSpatzOutstandingLoads)-1:0]
   ) (
     input  logic                         clk_i,
-    input  logic                         clk_d2_i,
     input  logic                         rst_ni,
     input  logic                         testmode_i,
     input  logic         [31:0]          hart_id_i,
@@ -191,7 +191,7 @@ module spatz_cc
     .XF8ALT                 (XF8ALT                ),
     .FLEN                   (FLEN                  )
   ) i_snitch (
-    .clk_i                 (clk_d2_i                 ), // if necessary operate on half the frequency
+    .clk_i                 (clk_i                 ), // if necessary operate on half the frequency
     .rst_i                 (!rst_ni                  ),
     .hart_id_i             (hart_id_i                ),
     .irq_i                 (irq_i                    ),
@@ -225,22 +225,37 @@ module spatz_cc
     .core_events_o         (snitch_events            )
   );
 
-  reqrsp_iso #(
-    .AddrWidth (AddrWidth                       ),
-    .DataWidth (DataWidth                       ),
-    .req_t     (dreq_t                          ),
-    .rsp_t     (drsp_t                          ),
-    .BypassReq (!RegisterCoreReq                ),
-    .BypassRsp (!IsoCrossing && !RegisterCoreRsp)
-  ) i_reqrsp_iso (
-    .src_clk_i  (clk_d2_i     ),
-    .src_rst_ni (rst_ni       ),
-    .src_req_i  (snitch_dreq_d),
-    .src_rsp_o  (snitch_drsp_d),
-    .dst_clk_i  (clk_i        ),
-    .dst_rst_ni (rst_ni       ),
-    .dst_req_o  (snitch_dreq_q),
-    .dst_rsp_i  (snitch_drsp_q)
+  typedef logic [DataWidth-1:0]   data_t;
+  typedef logic [DataWidth/8-1:0] strb_t;
+
+  `REQRSP_TYPEDEF_ALL(reqrsp, addr_t, data_t, strb_t)
+
+  spill_register #(
+    .T      ( reqrsp_req_chan_t      ),
+    .Bypass ( !RegisterCoreReq       )
+  ) i_spill_register_req (
+    .clk_i                            ,
+    .rst_ni  ( rst_ni                ),
+    .valid_i ( snitch_dreq_d.q_valid ),
+    .ready_o ( snitch_drsp_d.q_ready ),
+    .data_i  ( snitch_dreq_d.q       ),
+    .valid_o ( snitch_dreq_q.q_valid ),
+    .ready_i ( snitch_drsp_q.q_ready ),
+    .data_o  ( snitch_dreq_q.q       )
+  );
+
+  spill_register #(
+    .T      ( reqrsp_rsp_chan_t                ),
+    .Bypass ( !IsoCrossing && !RegisterCoreRsp )
+  ) i_spill_register_rsp (
+    .clk_i                            ,
+    .rst_ni  ( rst_ni                ),
+    .valid_i ( snitch_drsp_q.p_valid ),
+    .ready_o ( snitch_dreq_q.p_ready ),
+    .data_i  ( snitch_drsp_q.p       ),
+    .valid_o ( snitch_drsp_d.p_valid ),
+    .ready_i ( snitch_dreq_d.p_ready ),
+    .data_o  ( snitch_drsp_d.p       )
   );
 
   // Accelerator Demux Port
