@@ -145,7 +145,7 @@ module spatz_cluster
     output axi_out_req_t                     axi_out_l2_req_o,
     input  axi_out_resp_t                    axi_out_l2_resp_i,
     /// SRAM Configuration: L1D Data + L1D Tag + L1D FIFO + L1I Data + L1I Tag
-    input  impl_in_t      [NrSramCfg-1:0]    impl_i,
+    input  impl_in_t      [2:0]              impl_i,
     /// Indicate the program execution is error
     output logic                             error_o
   );
@@ -521,7 +521,12 @@ module spatz_cluster
   impl_in_t [ICacheSets-1:0] impl_l1i_data;
   impl_in_t [ICacheSets-1:0] impl_l1i_tag;
 
-  assign {impl_l1d_data, impl_l1d_tag, impl_l1d_fifo, impl_l1i_data, impl_l1i_tag} = impl_i;
+  localparam int unsigned NrDataAndTagBank = L1NumWrapper * L1BankPerWP + L1NumTagBank;
+  localparam int unsigned NrInstAndTagBank = ICacheSets * 2;
+  assign {impl_l1d_data, impl_l1d_tag} = {NrDataAndTagBank{impl_i[0]}};
+  assign impl_l1d_fifo                 = {2{impl_i[1]}};
+  assign {impl_l1i_data, impl_l1i_tag} = {NrInstAndTagBank{impl_i[2]}};
+
   assign error_o = |spm_error;
 
 
