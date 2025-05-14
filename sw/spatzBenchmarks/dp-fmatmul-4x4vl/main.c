@@ -103,18 +103,9 @@ int main() {
   // Wait for all cores to finish
   snrt_cluster_hw_barrier();
 
-  // Allocate the matrices in the local tile
-  if (cid == 0) {
-  #if USE_CACHE == 1
-    a = gemm_A_dram;
-    b = gemm_B_dram;
-    c = gemm_C_dram;
-  #else
-    a = (double *)snrt_l1alloc(gemm_l.M * gemm_l.K * sizeof(double));
-    b = (double *)snrt_l1alloc(gemm_l.K * gemm_l.N * sizeof(double));
-    c = (double *)snrt_l1alloc(gemm_l.M * gemm_l.N * sizeof(double));
-  #endif
-  }
+  a = gemm_A_dram;
+  b = gemm_B_dram;
+  c = gemm_C_dram;
 
   // Reset timer
   timer = (unsigned int)-1;
@@ -128,16 +119,18 @@ int main() {
   m_start = (gemm_l.M / num_cores) * cid;
   m_end = (gemm_l.M / num_cores) * (cid + 1);
 
-  // Wait for all cores to finish
-  snrt_cluster_hw_barrier();
-
   // Initialize matrices
-  #if USE_CACHE == 0
+  #ifdef DEBUG
   if (cid == 0) {
-    snrt_dma_start_1d(a, gemm_A_dram, gemm_l.M * gemm_l.K * sizeof(double));
-    snrt_dma_start_1d(b, gemm_B_dram, gemm_l.K * gemm_l.N * sizeof(double));
-    snrt_dma_start_1d(c, gemm_C_dram, gemm_l.M * gemm_l.N * sizeof(double));
-    snrt_dma_wait_all();
+    printf ("a:%x\n", a);
+    printf ("b:%x\n", b);
+    printf ("c:%x\n", c);
+
+    printf ("m_start:%x\n", m_start);
+    printf ("m_end:%x\n",   m_end);
+
+    printf ("p_start:%x\n", p_start);
+    printf ("p_end:%x\n", p_end);
   }
   #endif
 
@@ -147,18 +140,19 @@ int main() {
   // Calculate matmul
   for (unsigned int i = 0; i < measure_iter; ++i) {
     // Start dump
-    if (cid == 0)
+    if (cid == 0) {
       start_kernel();
+    }
 
     // Start timer
     timer_start = benchmark_get_cycle();
 
     if (kernel_size == 2) {
-      matmul_2xVL(c, a, b, m_start, m_end, gemm_l.K, gemm_l.N, p_start, p_end);
+      matmul_2xVL(gemm_C_dram, gemm_A_dram, gemm_B_dram, m_start, m_end, gemm_l.K, gemm_l.N, p_start, p_end);
     } else if (kernel_size == 4) {
-      matmul_4xVL(c, a, b, m_start, m_end, gemm_l.K, gemm_l.N, p_start, p_end);
+      matmul_4xVL(gemm_C_dram, gemm_A_dram, gemm_B_dram, m_start, m_end, gemm_l.K, gemm_l.N, p_start, p_end);
     } else if (kernel_size == 8) {
-      matmul_8xVL(c, a, b, m_start, m_end, gemm_l.K, gemm_l.N, p_start, p_end);
+      matmul_8xVL(gemm_C_dram, gemm_A_dram, gemm_B_dram, m_start, m_end, gemm_l.K, gemm_l.N, p_start, p_end);
     } else {
       return -2;
     }
@@ -180,11 +174,11 @@ int main() {
 
     if ((cid == 0) && (i == 0)) {
       int error =
-          verify_matrix(c, (const double *)gemm_checksum, gemm_l.M, gemm_l.N);
+          verify_matrix(gemm_C_dram, (const double *)gemm_checksum, gemm_l.M, gemm_l.N);
 
       if (error != 0) {
       #ifdef PRINT_RESULT
-        printf("Error core %d: c[%d]=%u\n", cid, error, (int)c[error]);
+        printf("Error core %d: gemm_C_dram[%d]=%u\n", cid, error, (int)gemm_C_dram[error]);
         return error;
       #endif
       }
@@ -205,18 +199,6 @@ int main() {
            performance, utilization);
   #endif
   }
-
-  // if (cid == 0) {
-  //   int error =
-  //       verify_matrix(c, (const double *)gemm_checksum, gemm_l.M, gemm_l.N);
-
-  //   if (error != 0) {
-  //   #ifdef PRINT_RESULT
-  //     printf("Error core %d: c[%d]=%u\n", cid, error, (int)c[error]);
-  //     return error;
-  //   #endif
-  //   }
-  // }
 
   // Wait for all cores to finish
   snrt_cluster_hw_barrier();
