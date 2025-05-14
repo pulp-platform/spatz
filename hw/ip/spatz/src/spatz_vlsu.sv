@@ -893,7 +893,7 @@ module spatz_vlsu
   end
 
   // Debug flags
-  logic [NrMemPorts-1:0] load_flag, store_flag, clear_flag;
+  logic [NrMemPorts-1:0] load_flag, store_flag;
   // Indicate if each port is in loading or storing mode
   logic [NrMemPorts-1:0] port_state_load;
   for (genvar port = 0; port < NrMemPorts; port++) begin
@@ -925,7 +925,6 @@ module spatz_vlsu
     // Debugging flags
     load_flag  = '0;
     store_flag = '0;
-    clear_flag = '0;
 
     // Propagate request ID
     vrf_req_d.rsp.id    = commit_insn_q.id;
@@ -1115,13 +1114,6 @@ module spatz_vlsu
               mem_req_strb[port][k] = k < mem_counter_delta[port];
         end else begin
           spatz_mem_rsp_ready_o[port] = 1'b0;
-          // clear_flag[port] = 1'b1;
-          
-          // // Clear empty buffer id requests
-          // if (!rob_empty[port]) begin
-          //   rob_pop[port] = 1'b1;
-          //   clear_flag[port] = 1'b1;
-          // end
         end
       end
     end
@@ -1160,10 +1152,15 @@ module spatz_vlsu
     assign spatz_mem_req[port].amo   = reqrsp_pkg::AMONone;
     assign spatz_mem_req[port].data  = mem_req_data[port];
     assign spatz_mem_req[port].strb  = mem_req_strb[port];
-    // assign spatz_mem_req[port].user  = '0;
-    assign spatz_mem_req[port].user.req_id   = mem_req_id[port];
-    assign spatz_mem_req[port].user.core_id  = '0;
-    assign spatz_mem_req[port].user.is_core  = '0;
+
+    assign spatz_mem_req[port].user  = '{
+      req_id  : mem_req_id[port],
+      core_id : '0,
+      is_core : '0,
+      is_amo  : '0,
+      default : '0
+  };
+
     assign spatz_mem_req_valid[port] = mem_req_svalid[port] || mem_req_lvalid[port];
 `endif
   end
