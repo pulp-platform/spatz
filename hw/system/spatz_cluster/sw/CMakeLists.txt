@@ -4,7 +4,10 @@
 
 cmake_minimum_required(VERSION 3.13)
 
-set(SNITCH_SOFTWARE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../../../../sw)
+# set(SNITCH_SOFTWARE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../../../../sw)
+set(SNITCH_SOFTWARE_DIR ${RUNTIME_DIR})
+set(SPATZ_SOFTWARE_DIR ${SPATZ_SW_DIR})
+
 list(APPEND CMAKE_MODULE_PATH ${SNITCH_SOFTWARE_DIR}/cmake)
 set(CMAKE_TOOLCHAIN_FILE toolchain-llvm)
 set(SNITCH_RUNTIME snRuntime-cluster CACHE STRING "")
@@ -15,14 +18,8 @@ include(SnitchUtilities)
 
 enable_testing()
 add_subdirectory(${SNITCH_SOFTWARE_DIR}/snRuntime snRuntime)
-add_subdirectory(${SNITCH_SOFTWARE_DIR}/riscvTests riscvTests)
-add_subdirectory(${SNITCH_SOFTWARE_DIR}/spatzBenchmarks spatzBenchmarks)
-
-option(ENABLE_FLAMINGO_TESTS "Enable flamingo tests for spatz" OFF)
-if (ENABLE_FLAMINGO_TESTS)
-    message(STATUS "Adding flamingo tests")
-    add_subdirectory(${FLA_ROOT}/sw/spatz flamingoTests)
-endif()
+add_subdirectory(${SPATZ_SOFTWARE_DIR}/riscvTests riscvTests)
+add_subdirectory(${SPATZ_SOFTWARE_DIR}/spatzBenchmarks spatzBenchmarks)
 
 option(ENABLE_CACHEPOOL_TESTS "Enable CachePool tests for spatz" OFF)
 if (ENABLE_CACHEPOOL_TESTS)

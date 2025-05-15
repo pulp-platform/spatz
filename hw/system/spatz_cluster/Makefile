@@ -10,6 +10,12 @@ SPATZ_CLUSTER_DIR := ${SPATZ_DIR}/hw/system/spatz_cluster
 MKFILE_PATH := $(abspath $(lastword $(MAKEFILE_LIST)))
 MKFILE_DIR  := $(dir $(MKFILE_PATH))
 CACHE_PATH  := $(shell $(BENDER) path insitu-cache)
+SPATZ_SW_DIR := ${SPATZ_DIR}/sw
+
+# Runtime path, can be overwritten by top-level
+RUNTIME_DIR ?= ${SPATZ_SW_DIR}
+BUILD_DIR   ?= ${SPATZ_CLUSTER_DIR}/sw
+BIN_DIR 		?= ${SPATZ_CLUSTER_DIR}
 
 # Configuration file
 CFG ?= cachepool
@@ -112,7 +118,7 @@ $(VLT_BUILDDIR)/test/uartdpi/uartdpi.o: test/uartdpi/uartdpi.c
 	$(CC) $(CXXFLAGS) $(VLT_CFLAGS) -c $< -o $@
 
 # Link verilated archive wich $(VLT_COBJ)
-bin/spatz_cluster.vlt: $(VLT_AR) $(VLT_COBJ) ${VLT_BUILDDIR}/lib/libfesvr.a
+${BIN_DIR}/bin/spatz_cluster.vlt: $(VLT_AR) $(VLT_COBJ) ${VLT_BUILDDIR}/lib/libfesvr.a
 	mkdir -p $(dir $@)
 	$(CXX) $(LDFLAGS) -L ${VLT_BUILDDIR}/lib -o $@ $(VLT_COBJ) $(VLT_AR) -lpthread -lfesvr -lutil -latomic
 
@@ -120,7 +126,7 @@ bin/spatz_cluster.vlt: $(VLT_AR) $(VLT_COBJ) ${VLT_BUILDDIR}/lib/libfesvr.a
 .PHONY: clean.vlt
 clean.vlt:
 	rm -rf work-vlt
-	rm -f bin/spatz_cluster.vlt
+	rm -f ${BIN_DIR}/bin/spatz_cluster.vlt
 
 ############
 # Modelsim #
@@ -133,27 +139,27 @@ ${VSIM_BUILDDIR}/compile.vsim.tcl: test/bootrom.bin $(VSIM_SOURCES) ${TB_SRCS} $
 	echo '${VLOG} -work $(dir $@) test/uartdpi/uartdpi.c -ccflags "-Itest/uartdpi"' >> $@
 	echo 'return 0' >> $@
 
-bin/spatz_cluster.vsim: ${VSIM_BUILDDIR}/compile.vsim.tcl work/lib/libfesvr_vsim.a
-	mkdir -p bin/logs
+${BIN_DIR}/bin/spatz_cluster.vsim: ${VSIM_BUILDDIR}/compile.vsim.tcl work/lib/libfesvr_vsim.a
+	mkdir -p ${BIN_DIR}/bin/logs
 	$(call QUESTASIM,tb_bin)
 
 clean.vsim:
-	rm -rf bin/spatz_cluster.vsim bin/spatz_cluster.vsim.gui work-vsim work vsim.wlf vish_stacktrace.vstf transcript
+	rm -rf ${BIN_DIR}/bin/spatz_cluster.vsim ${BIN_DIR}/bin/spatz_cluster.vsim.gui work-vsim work vsim.wlf vish_stacktrace.vstf transcript
 
 #######
 # VCS #
 #######
 # @IIS: vcs-2020.12 make bin/spatz_cluster.vcs
 ## Build compilation script and compile all sources for VCS simulation
-bin/spatz_cluster.vcs: test/bootrom.bin work-vcs/compile.sh work/lib/libfesvr_vcs.a ${TB_DIR}/common_lib.cc test/bootdata.cc test/bootrom.bin test/uartdpi/uartdpi.c
+${BIN_DIR}/bin/spatz_cluster.vcs: test/bootrom.bin work-vcs/compile.sh work/lib/libfesvr_vcs.a ${TB_DIR}/common_lib.cc test/bootdata.cc test/bootrom.bin test/uartdpi/uartdpi.c
 	mkdir -p bin
-	vcs -Mlib=work-vcs -Mdir=work-vcs -debug_access+all -fgp -kdb +vcs+fsdbon -o bin/spatz_cluster.vcs -j4 -cc $(CC) -cpp $(CXX) \
+	vcs -Mlib=work-vcs -Mdir=work-vcs -debug_access+all -fgp -kdb +vcs+fsdbon -o ${BIN_DIR}/bin/spatz_cluster.vcs -j4 -cc $(CC) -cpp $(CXX) \
 		-assert disable_cover -override_timescale=1ns/1ps -full64 tb_bin ${TB_DIR}/rtl_lib.cc ${TB_DIR}/common_lib.cc test/bootdata.cc test/uartdpi/uartdpi.c \
 		-CFLAGS "-I${MKFILE_DIR} -I${MKFILE_DIR}/test -I${FESVR}/include -I${TB_DIR} -Itest/uartdpi" -LDFLAGS "-L${FESVR}/lib" -lfesvr_vcs -lutil
 
 ## Clean all build directories and temporary files for VCS simulation
 clean.vcs:
-	rm -rf bin/spatz_cluster.vcs work-vcs work.lib++ AN.DB work vc_hdrs.h
+	rm -rf ${BIN_DIR}/bin/spatz_cluster.vcs work-vcs work.lib++ AN.DB work vc_hdrs.h
 
 ############
 # SPYGLASS #
@@ -181,48 +187,48 @@ ENABLE_PRINT ?= 1
 ## Build SW into sw/build with the LLVM toolchain
 sw: clean.sw
 	echo $(CACHEPOOL_DIR)
-	mkdir -p sw/build
-	cd sw/build && ${CMAKE} \
+	mkdir -p ${BUILD_DIR}/build
+	cd ${BUILD_DIR}/build && ${CMAKE} \
 	-DUSE_CACHE=${USE_CACHE} -DMEAS_1ITER=${MEAS_1ITER} -DPRINT_CHECK=${ENABLE_PRINT} \
 	-DENABLE_CACHEPOOL_TESTS=${ENABLE_CACHEPOOL_TESTS} -DCACHEPOOL_DIR=$(CACHEPOOL_DIR) \
-	-DENABLE_FLAMINGO_TESTS=${ENABLE_FLA_TESTS} -DFLA_ROOT=${FLA_ROOT} \
+	-DRUNTIME_DIR=${RUNTIME_DIR} -DSPATZ_SW_DIR=$(SPATZ_SW_DIR) \
 	-DLLVM_PATH=${LLVM_INSTALL_DIR} -DGCC_PATH=${GCC_INSTALL_DIR} -DPYTHON=${PYTHON} -DBUILD_TESTS=ON .. && make
 
 # VSIM
 ## Build SW into sw/build with the LLVM toolchain (including tests) for Questasim simulator
-sw.vsim: clean.sw bin/spatz_cluster.vsim
-	mkdir -p sw/build
-	cd sw/build && ${CMAKE} \
+sw.vsim: clean.sw ${BIN_DIR}/bin/spatz_cluster.vsim
+	mkdir -p ${BUILD_DIR}/build
+	cd ${BUILD_DIR}/build && ${CMAKE} \
 	-DUSE_CACHE=${USE_CACHE} -DMEAS_1ITER=${MEAS_1ITER} -DPRINT_CHECK=${ENABLE_PRINT} \
 	-DENABLE_CACHEPOOL_TESTS=${ENABLE_CACHEPOOL_TESTS} -DCACHEPOOL_DIR=$(CACHEPOOL_DIR) \
-	-DENABLE_FLAMINGO_TESTS=${ENABLE_FLA_TESTS} -DFLA_ROOT=${FLA_ROOT} \
+	-DRUNTIME_DIR=${RUNTIME_DIR} -DSPATZ_SW_DIR=$(SPATZ_SW_DIR) \
 	-DLLVM_PATH=${LLVM_INSTALL_DIR} -DGCC_PATH=${GCC_INSTALL_DIR} -DPYTHON=${PYTHON} \
-	-DSNITCH_SIMULATOR=../../../../../hw/system/spatz_cluster/bin/spatz_cluster.vsim -DBUILD_TESTS=ON .. && make -j8
+	-DSNITCH_SIMULATOR=${BIN_DIR}/bin/spatz_cluster.vsim -DBUILD_TESTS=ON .. && make -j8
 
 ## Build SW and run all tests with Questasim simulator
 sw.test.vsim: sw.vsim
-	cd sw/build && make test
+	cd ${BUILD_DIR}/build && make test
 
 # VCS
 ## Build SW into sw/build with the LLVM toolchain (including tests) for VCS simulator
-sw.vcs: clean.sw bin/spatz_cluster.vcs
-	mkdir -p sw/build
-	cd sw/build && ${CMAKE} \
+sw.vcs: clean.sw ${BIN_DIR}/bin/spatz_cluster.vcs
+	mkdir -p ${BUILD_DIR}/build
+	cd ${BUILD_DIR}/build && ${CMAKE} \
 	-DUSE_CACHE=${USE_CACHE} -DMEAS_1ITER=${MEAS_1ITER} -DPRINT_CHECK=${ENABLE_PRINT} \
 	-DENABLE_CACHEPOOL_TESTS=${ENABLE_CACHEPOOL_TESTS} -DCACHEPOOL_DIR=$(CACHEPOOL_DIR) \
-	-DENABLE_FLAMINGO_TESTS=${ENABLE_FLA_TESTS} -DFLA_ROOT=${FLA_ROOT} \
+	-DRUNTIME_DIR=${RUNTIME_DIR} -DSPATZ_SW_DIR=$(SPATZ_SW_DIR) \
 	-DLLVM_PATH=${LLVM_INSTALL_DIR} -DGCC_PATH=${GCC_INSTALL_DIR} -DPYTHON=${PYTHON} \
-	-DSNITCH_SIMULATOR=../../../../../hw/system/spatz_cluster/bin/spatz_cluster.vcs -DBUILD_TESTS=ON .. && make -j8
+	-DSNITCH_SIMULATOR=${BIN_DIR}/bin/spatz_cluster.vcs -DBUILD_TESTS=ON .. && make -j8
 
 ## Build SW and run all tests with VCS simulator
 sw.test.vcs: sw.vcs
-	cd sw/build && make test
+	cd ${BUILD_DIR}/build && make test
 
 # VLT
 ## Build SW into sw/build with the LLVM toolchain (including tests) for Verilator simulator
-sw.vlt: clean.sw bin/spatz_cluster.vlt
-	mkdir -p sw/build
-	cd sw/build && ${CMAKE} -DLLVM_PATH=${LLVM_INSTALL_DIR} -DGCC_PATH=${GCC_INSTALL_DIR} -DPYTHON=${PYTHON} -DSNITCH_SIMULATOR=../../../../../hw/system/spatz_cluster/bin/spatz_cluster.vlt -DBUILD_TESTS=ON .. && make -j8
+sw.vlt: clean.sw ${BIN_DIR}/bin/spatz_cluster.vlt
+	mkdir -p ${BUILD_DIR}/build
+	cd ${BUILD_DIR}/build && ${CMAKE} -DLLVM_PATH=${LLVM_INSTALL_DIR} -DGCC_PATH=${GCC_INSTALL_DIR} -DPYTHON=${PYTHON} -DSNITCH_SIMULATOR=${BIN_DIR}/bin/spatz_cluster.vlt -DBUILD_TESTS=ON .. && make -j8
 
 ## Build SW and run all tests with Verilator simulator
 sw.test.vlt: sw.vlt
@@ -241,7 +247,7 @@ clean: clean.vcs clean.vlt clean.vsim clean.sw
 	rm -rf Bender.lock .bender/ work/
 
 clean.logs:
-	rm -rf logs/
+	rm -rf ${BIN_DIR}/logs/
 
 ## Help command
 .DEFAULT_GOAL := help
