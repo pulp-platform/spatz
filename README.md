@@ -7,13 +7,7 @@ Spatz is a compact vector processor based on [RISC-V's Vector Extension (RVV) v1
 
 ## Getting started
 
-Make sure you download all necessary dependencies:
-
-```bash
-make all
-```
-
-The Makefile target will automatically download and compile tested versions of LLVM, GCC, Spike, and Verilator. It might take a while. If you have issues cloning the GitHub modules, you might need to remove the folders in `sw/toolchain`.
+This branch is modified to be used for the SoCDAML mini-project. Please do NOT do normal development on top of it.
 
 ETH users can source the toolchains and initialize the environment by doing:
 
@@ -24,40 +18,41 @@ source util/iis-env.sh
 make init
 ```
 
+We have prepared a virtual environment containing necessary python packages for this mini-project. You can start the pre-built environment by:
+```bash
+conda activate /home/dishen/.conda/envs/mempool
+```
+Or, build it locally based on the environment list:
+```bash
+TODO
+```
+
 The Spatz cluster system (hw/system/spatz_cluster) is a fundamental system around a Snitch core and a Spatz coprocessor. The cluster can be configured using a config file. The configuration parameters are documented using JSON schema, and documentation is generated for the schema. The cluster testbench simulates an infinite memory. The RISC-V ELF file is preloaded using RISC-V's Front-end Server (`fesvr`).
+
+### Software Development
+
+All the benchmark kernels are located in `sw/spatzBenchmarks` directory and are built using CMake during simulation. In order to add a new benchmark, you will need to create a folder containing the `main.c`, some scritps to generate the random data, generated data and the kernel implementation (optional, can be merged into main).
+
+The `CMakeLists.txt` also needs to be modified to add your new kernels into the build list. You should follow the same style of the existing kernels inside this CMake list, by providing the kernel files (if need) and the main file with the needed data size.
 
 ### Simulating the system
 
 In `hw/system/spatz_cluster`:
 
 - Compile the software and the binaries:
-  - Verilator:
-```bash
-    make sw.vlt
-```
   - QuestaSim:
 ```bash
+    # Move to the directory if you are not yet there
+    cd hw/system/spatz_cluster
     make sw.vsim
 ```
-  - VCS:
-```bash
-    make sw.vcs
-```
 - Run a binary on the simulator:
-  - Verilator:
-```bash
-bin/spatz_cluster.vlt path/to/riscv/binary
-```
   - QuestaSim:
 ```bash
 # Headless
 bin/spatz_cluster.vsim path/to/riscv/binary
 # GUI
 bin/spatz_cluster.vsim.gui path/to/riscv/binary
-```
-  - VCS
-```bash
-bin/spatz_cluster.vcs path/to/riscv/binary
 ```
 - Build the traces in `.logs/trace_hart_X.txt` with the help of `spike-dasm`:
 ```bash
