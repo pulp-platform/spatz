@@ -47,7 +47,7 @@ void mxfp8_matmul_fp32_sdotp_lmul4_2x(float *c,
     for (uint32_t n = 0; n < N; n += n_vl) {
       uint32_t n_remaining = N - n;
 
-      // post-scale accumulator: v0-v3, v4-v7 (2 rows)
+      // post-scale accumulator (FP32): v0-v3, v4-v7
       asm volatile("vsetvli %0, %1, e32, m4, ta, ma" : "=r"(n_vl) : "r"(n_remaining));
       asm volatile("vmv.v.i v0, 0");
       asm volatile("vmv.v.i v4, 0");
@@ -59,57 +59,108 @@ void mxfp8_matmul_fp32_sdotp_lmul4_2x(float *c,
       const uint8_t *b_scale_ = (const uint8_t *)b_scale + n; // b_scale[0][n]
 
       for (uint32_t k_block = 0; k_block < K_BLOCK; k_block++) {
-        // pre-scale accumulator: v8-v11, v12-v15
+        // pre-scale accumulator (FP32): v8-v11, v12-v15
+
+        // loop head
         asm volatile("vsetvli zero, %0, e32, m8, ta, ma" :: "r"(-1));
         asm volatile("vmv.v.i v8, 0");
 
-        for (uint32_t k_elem = 0; k_elem < MX_BLOCK_SIZE; k_elem += 2) {
+        // load operands and widen to FP16: b[k:k+2][n:n+n_vl]
+        asm volatile("vsetvli zero, %0, e8, m2, ta, ma" :: "r"(2 * n_remaining));
+        asm volatile("vle8.v v16, (%0)" :: "r"(b_));
+        asm volatile("vfwadd.vf v20, v16, %0" :: "f"(0.0f));
+        b_ += 2 * N; // next row
 
-          // load operands: a[m:m+2][k:k+2] and b[k:k+2][n:n+n_vl]
-          // BUG: There is an issue with a RAW hazard between the VLSU and the
-          //      VFU when using 2-element 8-bit loads. Due to this, use a
-          //      single 16-bit load, which completes in a single cycle (and is
-          //      also more efficient). This bug only occurs if the address is
-          //      not 64-bit aligned.
-          asm volatile("vsetvli zero, %0, e16, m1, ta, ma" :: "r"(1));
-          const char *a__ = a_;
-          asm volatile("vle16.v v18, (%0)" :: "r"(a__));
-          a__ += K;
-          asm volatile("vle16.v v19, (%0)" :: "r"(a__));
+        // load operands and widen to FP16: a[m:m+2][k:k+2]
+        // BUG: There is an issue with a RAW hazard between the VLSU and the
+        //      VFU when using 2-element 8-bit loads. Due to this, use a
+        //      single 16-bit load, which completes in a single cycle (and is
+        //      also more efficient). This bug only occurs if the address is
+        //      not 64-bit aligned.
+        asm volatile("vsetvli zero, %0, e16, mf2, ta, ma" :: "r"(1));
+        asm volatile("vle16.v v18, (%0)" :: "r"(a_));
+        const char *a__ = a_ + K; // next row
+        asm volatile("vle16.v v19, (%0)" :: "r"(a__));
+        a_ += 2; // next column
+        asm volatile("vsetvli zero, %0, e8, mf2, ta, ma" :: "r"(2));
+        asm volatile("vfwadd.vf v28, v18, %0" :: "f"(0.0f));
+        asm volatile("vfwadd.vf v29, v19, %0" :: "f"(0.0f));
 
-          // widen to FP16
-          asm volatile("vsetvli zero, %0, e8, m1, ta, ma" :: "r"(2));
-          asm volatile("vfwadd.vf v24, v18, %0" :: "f"(0.0f));
-          asm volatile("vfwadd.vf v26, v19, %0" :: "f"(0.0f));
+        // move a0, a1 to scalar registers (2x FP16 packed)
+        double a0, a1;
+        // NOTE:This should be required as per the RVV specification, but
+        //      isn't. This is because vfmv.f.s always movs a 64-bit element
+        //      (instead of considering SEW).
+        // BUG: Adding this vsetvli instruction triggers a bug where the VFU
+        //      doesn't handle back-pressure on the response properly, leading
+        //      to one of the vfmv.f.s results being dropped and a subsequent
+        //      deadlock (SVA: VfuRspDataStable).
+        // asm volatile("vsetvli zero, %0, e32, m1, ta, ma" :: "r"(1));
+        asm volatile("vfmv.f.s %0, v28" : "=f"(a0));
+        asm volatile("vfmv.f.s %0, v29" : "=f"(a1));
 
-          // load operands: b[k:k+2][n:n+n_vl]
+        uint32_t k_elem = 0;
+
+        while (k_elem < MX_BLOCK_SIZE) {
+          k_elem += 2;
+
+          // load operands and widen to FP16: b[k:k+2][n:n+n_vl]
           asm volatile("vsetvli zero, %0, e8, m2, ta, ma" :: "r"(2 * n_remaining));
           asm volatile("vle8.v v16, (%0)" :: "r"(b_));
-
-          // widen to FP16
-          asm volatile("vfwadd.vf v20, v16, %0" :: "f"(0.0f));
-
-          // move a0, a1 to scalar registers (2x FP16 packed into FP32 register)
-          float a0, a1;
-          // NOTE:This should be required as per the RVV specification, but
-          //      isn't. This is because vfmv.f.s always movs a 64-bit element
-          //      (instead of considering SEW).
-          // BUG: Adding this vsetvli instruction triggers a bug where the VFU
-          //      doesn't handle back-pressure on the response properly, leading
-          //      to one of the vfmv.f.s results being dropped and a subsequent
-          //      deadlock (SVA: VfuRspDataStable).
-          // asm volatile("vsetvli zero, %0, e32, m1, ta, ma" :: "r"(1));
-          asm volatile("vfmv.f.s %0, v24" : "=f"(a0));
-          asm volatile("vfmv.f.s %0, v26" : "=f"(a1));
+          asm volatile("vfwadd.vf v24, v16, %0" :: "f"(0.0f));
+          b_ += 2 * N; // next row
 
           // widen, multiply, and accumulate operands (pre-scaling) to FP32
           asm volatile("vsetvli zero, %0, e16, m4, ta, ma" :: "r"(2 * n_remaining));
           asm volatile("vfwdotp.vf  v8, %0, v20" :: "f"(a0));
           asm volatile("vfwdotp.vf v12, %0, v20" :: "f"(a1));
 
+          // load next scalar operands
+          asm volatile("vsetvli zero, %0, e16, mf2, ta, ma" :: "r"(1));
+          asm volatile("vle16.v v18, (%0)" :: "r"(a_));
+          a__ = a_ + K; // next row
+          asm volatile("vle16.v v19, (%0)" :: "r"(a__));
           a_ += 2; // next column
+          asm volatile("vsetvli zero, %0, e8, mf2, ta, ma" :: "r"(2));
+          asm volatile("vfwadd.vf v28, v18, %0" :: "f"(0.0f));
+          asm volatile("vfwadd.vf v29, v19, %0" :: "f"(0.0f));
+          asm volatile("vfmv.f.s %0, v28" : "=f"(a0));
+          asm volatile("vfmv.f.s %0, v29" : "=f"(a1));
+
+          // unrolled: repeat loop body
+          k_elem += 2;
+
+          if (k_elem == MX_BLOCK_SIZE)
+            break;
+
+          // load operands and widen to FP16: b[k:k+2][n:n+n_vl]
+          asm volatile("vsetvli zero, %0, e8, m2, ta, ma" :: "r"(2 * n_remaining));
+          asm volatile("vle8.v v16, (%0)" :: "r"(b_));
+          asm volatile("vfwadd.vf v20, v16, %0" :: "f"(0.0f));
           b_ += 2 * N; // next row
+
+          // widen, multiply, and accumulate operands (pre-scaling) to FP32
+          asm volatile("vsetvli zero, %0, e16, m4, ta, ma" :: "r"(2 * n_remaining));
+          asm volatile("vfwdotp.vf  v8, %0, v24" :: "f"(a0));
+          asm volatile("vfwdotp.vf v12, %0, v24" :: "f"(a1));
+
+          // load next scalar operands
+          asm volatile("vsetvli zero, %0, e16, mf2, ta, ma" :: "r"(1));
+          asm volatile("vle16.v v18, (%0)" :: "r"(a_));
+          a__ = a_ + K; // next row
+          asm volatile("vle16.v v19, (%0)" :: "r"(a__));
+          a_ += 2; // next column
+          asm volatile("vsetvli zero, %0, e8, mf2, ta, ma" :: "r"(2));
+          asm volatile("vfwadd.vf v28, v18, %0" :: "f"(0.0f));
+          asm volatile("vfwadd.vf v29, v19, %0" :: "f"(0.0f));
+          asm volatile("vfmv.f.s %0, v28" : "=f"(a0));
+          asm volatile("vfmv.f.s %0, v29" : "=f"(a1));
         }
+
+        // loop tail
+        asm volatile("vsetvli zero, %0, e16, m4, ta, ma" :: "r"(2 * n_remaining));
+        asm volatile("vfwdotp.vf  v8, %0, v24" :: "f"(a0));
+        asm volatile("vfwdotp.vf v12, %0, v24" :: "f"(a1));
 
         // scaling
 
