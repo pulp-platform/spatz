@@ -28,10 +28,10 @@
 // - c is an MxN matrix (row-major)
 // - a_scale is an Mx(K/32) (row-major)
 // - b_scale is an (K/32)xN (row-major)
-// - element data format:     FP8 (or FP8ALT if the caller sets FCSR_MODE_SRC before calling)
+// - element data format:     FP8 (FP8ALT not supported for widening operations in Spatz)
 // - scale data format:       E8M0
 // - accumulator data format: BF16 (FP16ALT)
 
-void mxfp8_matmul_bf16_mxdotp_lmul1_8x(_Float16 *c,
+void mxfp8_matmul_bf16_outer_lmul2_4x(_Float16 *c,
     const char *a, const char *b, const char *a_scale, const char *b_scale,
     const uint32_t M, const uint32_t N, const uint32_t K);

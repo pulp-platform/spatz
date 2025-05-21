@@ -25,7 +25,7 @@
 // - scales:      2x EMUL=1/2: v28, v29
 // - constant zero:            v31
 __attribute__((noinline))
-void mxfp8_matmul_bf16_mxdotp_lmul1_8x(__fp16 *c,
+void mxfp8_matmul_bf16_mxdotp_lmul1_8x(_Float16 *c,
     const char *a, const char *b, const char *a_scale, const char *b_scale,
     const uint32_t M, const uint32_t N, const uint32_t K)
 {
@@ -42,7 +42,7 @@ void mxfp8_matmul_bf16_mxdotp_lmul1_8x(__fp16 *c,
   asm volatile("vsetvli zero, %0, e16, m1, ta, ma" :: "r"(-1));
   asm volatile("vmv.v.i v31, 0");
 
-  __fp16 *c_m_0 = c;      // c[m][0]
+  _Float16 *c_m_0 = c;   // c[m][0]
   const char *a_m_0 = a; // a[m][0]
   const uint8_t *a_scale_m_0 = (const uint8_t *)a_scale;
 
@@ -52,7 +52,7 @@ void mxfp8_matmul_bf16_mxdotp_lmul1_8x(__fp16 *c,
     uint32_t n_vl;
 
     for (uint32_t n = 0; n < N; n += n_vl) {
-      __fp16 *c_ = c_m_0 + n;                                 // c[row=m][col=n]
+      _Float16 *c_ = c_m_0 + n;                               // c[row=m][col=n]
       const char *a_ = a_m_0;                                 // b[row=m][col=0]
       const char *b_ = b_n_0;                                 // b[col=n][row=0]
       const uint8_t* a_scale_ = a_scale_m_0;                  // a_scale[row=m][col=0]

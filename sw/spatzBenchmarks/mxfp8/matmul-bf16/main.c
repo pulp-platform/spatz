@@ -17,7 +17,6 @@
 // Author: Matheus Cavalcante, ETH Zurich
 // Author: Max Wipfli <mwipfli@ethz.ch>
 
-#include "kernel/mxdotp.h"
 #include <benchmark.h>
 #include <snrt.h>
 #include <stdbool.h>
@@ -26,18 +25,22 @@
 
 #include DATAHEADER
 
-#define MXDOTP
+// #define MXDOTP 1
+#define BASELINE_SDOTP 1
+
 #ifdef MXDOTP
 #include "kernel/mxdotp.c"
+#elif BASELINE_SDOTP
+#include "kernel/baseline_sdotp.c"
 #else
-#error "baseline not implemented"
+#include "kernel/baseline.c"
 #endif
 
 char *a;
 char *b;
 char *a_scale;
 char *b_scale;
-__fp16 *c;
+_Float16 *c;
 
 void copy_transpose_matrix(char *dst, const char *src, const uint32_t m, const uint32_t n) {
   for (uint32_t i = 0; i < m; i++) {
@@ -67,7 +70,7 @@ void copy_shuffle_matrix_for_sdotp(char *dst, const char *src, const uint32_t ro
 
 // NOTE: This is a manual BF16-to-FP32 conversion as fcvt.s.h doesn't support
 // FP16ALT (i.e., BF16) properly.
-static inline float bf16_to_fp32(const __fp16 *val) {
+static inline float bf16_to_fp32(const _Float16 *val) {
   uint32_t tmp = *(const uint16_t *)val;
   tmp <<= 16;
   float result;
@@ -75,7 +78,7 @@ static inline float bf16_to_fp32(const __fp16 *val) {
   return result;
 }
 
-bool verify_matrix(const __fp16 *actual, const float *expected, const uint32_t m, const uint32_t n) {
+bool verify_matrix(const _Float16 *actual, const float *expected, const uint32_t m, const uint32_t n) {
   for (uint32_t i = 0; i < m; i++) {
     for (uint32_t j = 0; j < n; j++) {
       uint32_t idx = i * n + j;
@@ -130,11 +133,11 @@ int main() {
 
   // Allocate the matrices in the local tile
   if (cid == 0) {
-    a       = (char *) snrt_l1alloc(m * k);
-    b       = (char *) snrt_l1alloc(n * k);
-    a_scale = (char *) snrt_l1alloc(m * k_block);
-    b_scale = (char *) snrt_l1alloc(n * k_block);
-    c       = (__fp16*)snrt_l1alloc(m * n * sizeof(__fp16));
+    a       = (char *)   snrt_l1alloc(m * k);
+    b       = (char *)   snrt_l1alloc(n * k);
+    a_scale = (char *)   snrt_l1alloc(m * k_block);
+    b_scale = (char *)   snrt_l1alloc(n * k_block);
+    c       = (_Float16*)snrt_l1alloc(m * n * sizeof(_Float16));
   }
 
   // Initialize the matrices
@@ -146,8 +149,14 @@ int main() {
     snrt_dma_start_1d(b, mx_matmul_B_elements_dram, n * k);
     // b_scale: transpose from column-major to row-major layout
     copy_transpose_matrix(b_scale, mx_matmul_B_scales_dram, n, k_block);
+#elif BASELINE_SDOTP
+    // complex shuffling for outer product with sdotp
+    copy_shuffle_matrix_for_sdotp(b, mx_matmul_B_elements_dram, k, n);
+    copy_transpose_matrix(b_scale, mx_matmul_B_scales_dram, n, k_block);
 #else
-    #error "not implemented"
+    // transpose for row-major format
+    copy_transpose_matrix(b, mx_matmul_B_elements_dram, n, k);
+    copy_transpose_matrix(b_scale, mx_matmul_B_scales_dram, n, k_block);
 #endif
     snrt_dma_wait_all();
   }
@@ -162,7 +171,7 @@ int main() {
   const char *local_b       = b;
   const char *local_a_scale = a_scale + (cid * local_m * k_block);
   const char *local_b_scale = b_scale;
-  __fp16     *local_c       = c       + (cid * local_m * n);
+  _Float16   *local_c       = c       + (cid * local_m * n);
 
   snrt_cluster_hw_barrier();
 
@@ -174,12 +183,21 @@ int main() {
       start_kernel();
     }
 
+    // reset alternate FP formats (we use FP8, not FP8ALT)
+    asm volatile("csrw fcsr, zero");
+
 #ifdef MXDOTP
     mxfp8_matmul_bf16_mxdotp_lmul1_8x(local_c, local_a, local_b,
                                       local_a_scale, local_b_scale,
                                       local_m, local_n, local_k);
+#elif BASELINE_SDOTP
+    mxfp8_matmul_bf16_outer_sdotp_lmul2_4x(local_c, local_a, local_b,
+                                           local_a_scale, local_b_scale,
+                                           local_m, local_n, local_k);
 #else
-    #error "not implemented"
+    mxfp8_matmul_bf16_outer_lmul2_4x(local_c, local_a, local_b,
+                                     local_a_scale, local_b_scale,
+                                     local_m, local_n, local_k);
 #endif
 
     snrt_cluster_hw_barrier();
@@ -199,8 +217,12 @@ int main() {
 #ifdef MXDOTP
     // (MX vector size) * (total # FPUs) * (1 additon, 1 mult.)
     long unsigned int max_ops_per_cycle = 8 * num_cores * SNRT_NFPU_PER_CORE * 2;
+#elif BASELINE_SDOTP
+    // 8 FP8 multiplications per FPU per cycle (outputting 4x BF16)
+    long unsigned int max_ops_per_cycle = 8 * num_cores * SNRT_NFPU_PER_CORE * 2;
 #else
-    #error "not implemented"
+    // 4 BF16 multiplications per FPU per cycle
+    long unsigned int max_ops_per_cycle = 4 * num_cores * SNRT_NFPU_PER_CORE * 2;
 #endif
     long unsigned int utilization = performance / max_ops_per_cycle;
 
