@@ -66,6 +66,7 @@ module mem_wide_narrow_mux #(
     in_narrow_rsp_o = out_rsp_i;
     // Broadcast data from all banks.
     for (int i = 0; i < NrPorts; i++) begin
+      in_wide_rsp_o.p = '0;
       in_wide_rsp_o.p.data[i*NarrowDataWidth+:NarrowDataWidth] = out_rsp_i[i].p.data;
     end
 
