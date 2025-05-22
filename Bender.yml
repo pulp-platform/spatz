@@ -212,6 +212,8 @@ sources:
         files:
         - ../../src/cachepool_pkg.sv
         - ../../src/cachepool_cluster_simple.sv
+        - ../../src/cachepool_tile.sv
+        - ../../src/cachepool_cluster.sv
         - ../../tb/cachepool_cluster_wrapper.sv
         - ../../tb/testharness.sv
 
