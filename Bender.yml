@@ -201,21 +201,12 @@ sources:
       - hw/system/spatz_cluster/src/spatz_strbreq_merge_unit.sv
       - hw/system/spatz_cluster/src/spatz_strbreq_merge_tree.sv
       - hw/system/spatz_cluster/src/spatz_strbreq_handler.sv
-      - hw/system/spatz_cluster/src/tcdm_cache_interco.sv
       - target: not(cachepool)
         files:
         # Level 3
         - hw/system/spatz_cluster/src/spatz_cluster.sv
         # Level 4
         - hw/system/spatz_cluster/src/generated/spatz_cluster_wrapper.sv
-      - target: cachepool
-        files:
-        - ../../src/cachepool_pkg.sv
-        - ../../src/cachepool_cluster_simple.sv
-        - ../../src/cachepool_tile.sv
-        - ../../src/cachepool_cluster.sv
-        - ../../tb/cachepool_cluster_wrapper.sv
-        - ../../tb/testharness.sv
 
       - target: spatz_test
         files:
