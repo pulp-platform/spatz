@@ -176,15 +176,15 @@ int main() {
   snrt_cluster_hw_barrier();
 
   for (int i = 0; i < 2; i++) {
+    // reset alternate FP formats (we use FP8, not FP8ALT)
+    asm volatile("csrw fcsr, zero");
+
     if (cid == 0 && i == 1) {
       // Start timer
       timer = benchmark_get_cycle();
       // Start dump
       start_kernel();
     }
-
-    // reset alternate FP formats (we use FP8, not FP8ALT)
-    asm volatile("csrw fcsr, zero");
 
 #ifdef MXDOTP
     mxfp8_matmul_bf16_mxdotp_lmul1_8x(local_c, local_a, local_b,
