@@ -125,16 +125,16 @@ int main() {
     long unsigned int utilization =
         performance / (2 * num_cores * SNRT_NFPU_PER_CORE);
 
-    printf("\n----- (%dx%d) dp fconv2d -----\n", r, c);
-    printf("The execution took %u cycles.\n", timer);
-    printf("The performance is %lu OP/1000cycle (%lu%%o utilization).\n",
+    PRINTF("\n----- (%dx%d) dp fconv2d -----\n", r, c);
+    PRINTF("The execution took %u cycles.\n", timer);
+    PRINTF("The performance is %lu OP/1000cycle (%lu%%o utilization).\n",
            performance, utilization);
   }
 
   if (cid == 0)
     for (unsigned int k = 0; k < r * c; ++k) {
       if (!fp_check(fconv2d_GR_dram[k], omtx[k], THRESHOLD)) {
-        printf("Error index %d: result = %x (@ %x), golden = %x\n", k,
+        PRINTF("Error index %d: result = %x (@ %x), golden = %x\n", k,
                *((unsigned int *)&omtx[k]), (unsigned int)(omtx + k),
                *((unsigned int *)&fconv2d_GR_dram[k]));
         return -1;

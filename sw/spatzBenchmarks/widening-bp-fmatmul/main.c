@@ -118,9 +118,9 @@ int main() {
     long unsigned int utilization =
         performance / (2 * num_cores * SNRT_NFPU_PER_CORE * 4);
 
-    printf("\n----- (%dx%d) widening bp fmatmul -----\n", gemm_l.M, gemm_l.N);
-    printf("The execution took %u cycles.\n", timer);
-    printf("The performance is %ld OP/1000cycle (%ld%%o utilization).\n",
+    PRINTF("\n----- (%dx%d) widening bp fmatmul -----\n", gemm_l.M, gemm_l.N);
+    PRINTF("The execution took %u cycles.\n", timer);
+    PRINTF("The performance is %ld OP/1000cycle (%ld%%o utilization).\n",
            performance, utilization);
   }
 
