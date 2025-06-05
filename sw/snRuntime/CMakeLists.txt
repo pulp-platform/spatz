@@ -84,6 +84,11 @@ if(RUNTIME_TRACE)
     add_compile_definitions(__SNRT_USE_TRACE)
 endif()
 
+if(RUNTIME_PRINT)
+    # Enable runtime debugging with printfs
+    add_compile_definitions(__SNRT_USE_PRINT)
+endif()
+
 include_directories(
     include
     vendor
