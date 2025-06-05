@@ -16,7 +16,7 @@
 
 // Author: Max Wipfli <mwipfli@ethz.ch>
 
-#include "mxfp8-dotp.h"
+#include "mxdotp.h"
 
 #define MXFP8_BLOCK_SIZE 32
 #define E8M0_BIAS 127

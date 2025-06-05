@@ -22,13 +22,28 @@
 #include <stdio.h>
 
 #include DATAHEADER
-#include "kernel/mxfp8-dotp.c"
+
+#define MXDOTP 1
+
+#if MXDOTP
+#include "kernel/mxdotp.c"
+#endif
 
 char *a;
 char *b;
 char *a_scale;
 char *b_scale;
 float *result;
+
+static inline void copy_repeat_vector(char *dst, const char *src,
+                                      const uint32_t length,
+                                      const uint32_t repeat) {
+  for (uint32_t i = 0; i < length; i++) {
+    char value = *src++;
+    for (uint32_t j = 0; j < repeat; j++)
+      *dst++ = value;
+  }
+}
 
 static inline bool verify_result(const float actual, const float expected) {
   float diff = fabsf(expected - actual);
@@ -42,16 +57,6 @@ static inline bool verify_result(const float actual, const float expected) {
   }
 
   return true;
-}
-
-static inline void copy_repeat_vector(char *dst, const char *src,
-                                      const uint32_t length,
-                                      const uint32_t repeat) {
-  for (uint32_t i = 0; i < length; i++) {
-    char value = *src++;
-    for (uint32_t j = 0; j < repeat; j++)
-      *dst++ = value;
-  }
 }
 
 int main() {
@@ -83,14 +88,11 @@ int main() {
     }
   }
 
-  bool mxdotp = true;
-  bool skip_check = false;
-
+#ifdef MXDOTP
+  unsigned int scale_repeat = MX_BLOCK_SIZE / 8; // 8 = vector size
+#else
   unsigned int scale_repeat = 1;
-  if (mxdotp)
-    scale_repeat = MX_BLOCK_SIZE / 8; // 8 = vector size
-
-  printf("scale_repeat = %d\n", scale_repeat);
+#endif
 
   // Allocate the matrices in the local tile
   if (cid == 0) {
@@ -130,18 +132,16 @@ int main() {
       start_kernel();
     }
 
-    float res;
-
-    if (mxdotp) {
-      res = mxfp8_dotp_fp32_mxdotp_lmul2(local_a, local_b,
-                                         local_a_scale, local_b_scale,
-                                         local_n);
-    } else {
-      res = mxfp8_dotp_fp32(local_a, local_b,
-                            local_a_scale, local_b_scale,
-                            local_n);
-    }
-    result[i] = res;
+#ifdef MXDOTP
+    float res = mxfp8_dotp_fp32_mxdotp_lmul2(local_a, local_b,
+                                             local_a_scale, local_b_scale,
+                                             local_n);
+#else
+    float res = mxfp8_dotp_fp32(local_a, local_b,
+                                local_a_scale, local_b_scale,
+                                local_n);
+#endif
+    result[cid] = res;
 
     snrt_cluster_hw_barrier();
 
@@ -149,8 +149,8 @@ int main() {
     if (cid == 0) {
       for (unsigned int i = 1; i < num_cores; i++)
         res += result[i];
+      result[0] = res;
     }
-    result[0] = res;
 
     if (cid == 0 && i == 1) {
       // End dump
@@ -167,16 +167,22 @@ int main() {
     long unsigned int performance = 1000 * 2 * n / timer;
     long unsigned int utilization =
         performance / (2 * num_cores * SNRT_NFPU_PER_CORE);
-    // TODO: Compute correct utilization figures
+#if MXDOTP
+    // (MX vector size) * (total # FPUs) * (1 additon, 1 mult.)
+    long unsigned int max_ops_per_cycle = 8 * num_cores * SNRT_NFPU_PER_CORE * 2;
+#else
+    // 2 FP32 multiplications per FPU per cycle
+    long unsigned int max_ops_per_cycle = 2 * num_cores * SNRT_NFPU_PER_CORE * 2;
+#endif
 
-    printf("\n----- (%d) mxfp8 dotp -----\n", n);
+    printf("\n----- (%d) mxfp8/dotp-fp32 -----\n", n);
     printf("The execution took %u cycles.\n", timer);
     printf("The performance is %ld OP/1000cycle (%ld%%o utilization).\n",
            performance, utilization);
   }
 
   // Check result
-  if (cid == 0 && !skip_check) {
+  if (cid == 0) {
     bool success = verify_result(result[0], mx_dotp_C_result_dram);
     if (!success)
       return 1;

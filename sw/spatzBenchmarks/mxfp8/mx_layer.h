@@ -41,3 +41,9 @@ typedef struct mx_matmul_layer_struct {
   precision_t dtype_results;
 } mx_matmul_layer;
 
+typedef struct mx_dotp_layer_struct {
+  uint32_t N;
+  precision_t dtype_elements;
+  precision_t dtype_scales;
+  precision_t dtype_results;
+} mx_dotp_layer;
