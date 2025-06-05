@@ -119,15 +119,15 @@ int main() {
     long unsigned int utilization =
         (1000 * performance) / (1250 * num_cores * SNRT_NFPU_PER_CORE * 2);
 
-    printf("\n----- fft on %d samples -----\n", NFFT);
-    printf("The execution took %u cycles.\n", timer);
-    printf("The performance is %ld OP/1000cycle (%ld%%o utilization).\n",
+    PRINTF("\n----- fft on %d samples -----\n", NFFT);
+    PRINTF("The execution took %u cycles.\n", timer);
+    PRINTF("The performance is %ld OP/1000cycle (%ld%%o utilization).\n",
            performance, utilization);
 
     // Verify the real part
     for (unsigned int i = 0; i < NFFT; i++) {
       if (fp_check(buffer[i], gold_out_dram[2 * i])) {
-        printf("Error: Index %d -> Result = %f, Expected = %f\n", i,
+        PRINTF("Error: Index %d -> Result = %f, Expected = %f\n", i,
                (float)buffer[i], (float)gold_out_dram[2 * i]);
       }
     }
@@ -135,7 +135,7 @@ int main() {
     // Verify the imac part
     for (unsigned int i = 0; i < NFFT; i++) {
       if (fp_check(buffer[i + NFFT], gold_out_dram[2 * i + 1])) {
-        printf("Error: Index %d -> Result = %f, Expected = %f\n", i + NFFT,
+        PRINTF("Error: Index %d -> Result = %f, Expected = %f\n", i + NFFT,
                (float)buffer[i + NFFT], (float)gold_out_dram[2 * i + 1]);
       }
     }

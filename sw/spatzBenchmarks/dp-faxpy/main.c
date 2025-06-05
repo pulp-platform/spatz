@@ -101,16 +101,16 @@ int main() {
     long unsigned int utilization =
         performance / (2 * num_cores * SNRT_NFPU_PER_CORE);
 
-    printf("\n----- (%d) axpy -----\n", dim);
-    printf("The execution took %u cycles.\n", timer);
-    printf("The performance is %ld OP/1000cycle (%ld%%o utilization).\n",
+    PRINTF("\n----- (%d) axpy -----\n", dim);
+    PRINTF("The execution took %u cycles.\n", timer);
+    PRINTF("The performance is %ld OP/1000cycle (%ld%%o utilization).\n",
            performance, utilization);
   }
 
   if (cid == 0) {
     for (unsigned int i = 0; i < dim; i++) {
       if (fp_check(y[i], axpy_GR_dram[i])) {
-        printf("Error: Index %d -> Result = %f, Expected = %f\n", i,
+        PRINTF("Error: Index %d -> Result = %f, Expected = %f\n", i,
                (float)y[i], (float)axpy_GR_dram[i]);
       }
     }
