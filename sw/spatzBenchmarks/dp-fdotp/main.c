@@ -111,10 +111,10 @@ int main() {
     long unsigned int utilization =
         performance / (2 * num_cores * SNRT_NFPU_PER_CORE);
 
-    // printf("\n----- (%d) dp fdotp -----\n", dotp_l.M);
-    // printf("The execution took %u cycles.\n", timer);
-    // printf("The performance is %ld OP/1000cycle (%ld%%o utilization).\n",
-    //        performance, utilization);
+    printf("\n----- (%d) dp fdotp -----\n", dotp_l.M);
+    printf("The execution took %u cycles.\n", timer);
+    printf("The performance is %ld OP/1000cycle (%ld%%o utilization).\n",
+           performance, utilization);
   }
 
   if (cid == 0)
