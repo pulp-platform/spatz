@@ -9,6 +9,7 @@ set(SPIKE_DASM "spike-dasm" CACHE PATH "Path to the spike-dasm for generating tr
 set(LLVM_PATH "/home/spatz" CACH PATH "Path to the LLVM RISCV installation")
 set(GCC_PATH "/home/spatz" CACHE PATH "Path to the GCC RISCV installation")
 set(RUNTIME_TRACE OFF CACHE BOOL "Enable runtime trace output")
+set(RUNTIME_PRINT OFF CACHE BOOL "Enable runtime debug output with printfs")
 set(SNITCH_TEST_PREFIX "")
 if (SNITCH_SIMULATOR)
     message(STATUS "Using RTL simulator: ${SNITCH_SIMULATOR}")

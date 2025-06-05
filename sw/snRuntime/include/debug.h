@@ -33,6 +33,18 @@ extern "C" {
 
 #endif  // defined(__SNRT_USE_TRACE)
 
+#if defined(__SNRT_USE_PRINT)
+
+#include "printf.h"
+
+#define PRINTF(...) printf(__VA_ARGS__)
+
+#else
+
+#define PRINTF(...) ((void)0)
+
+#endif
+
 #ifdef __cplusplus
 }
 #endif
