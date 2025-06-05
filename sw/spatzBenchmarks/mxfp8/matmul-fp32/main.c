@@ -27,6 +27,7 @@
 // #define MXDOTP 1
 // #define BASELINE_SDOTP 1
 // #define BASELINE_INNER 1
+// #define BASELINE_INNER_REDUCEFIRST 1
 
 #if MXDOTP
 #include "kernel/mxdotp.c"
@@ -34,6 +35,8 @@
 #include "kernel/baseline-sdotp.c"
 #elif BASELINE_INNER
 #include "kernel/baseline-inner.c"
+#elif BASELINE_INNER_REDUCEFIRST
+#include "kernel/baseline-inner-reducefirst.c"
 #else
 #include "kernel/baseline.c"
 #endif
@@ -143,7 +146,7 @@ int main() {
     // complex shuffling for outer product with sdotp
     copy_shuffle_matrix_for_sdotp(b, mx_matmul_B_elements_dram, k, n);
     copy_transpose_matrix(b_scale, mx_matmul_B_scales_dram, n, k_block);
-#elif BASELINE_INNER
+#elif BASELINE_INNER || BASELINE_INNER_REDUCEFIRST
     snrt_dma_start_1d(b, mx_matmul_B_elements_dram, n * k);
     snrt_dma_start_1d(b_scale, mx_matmul_B_scales_dram, n * k_block);
 #else
@@ -182,6 +185,8 @@ int main() {
     mxfp8_matmul_fp32_sdotp_lmul4_2x
 #elif BASELINE_INNER
     mxfp8_matmul_fp32_inner_4x
+#elif BASELINE_INNER_REDUCEFIRST
+    mxfp8_matmul_fp32_inner_reducefirst_1x
 #else
     mxfp8_matmul_fp32_outer_lmul4_2x
 #endif
