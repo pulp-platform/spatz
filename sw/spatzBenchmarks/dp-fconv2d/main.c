@@ -125,10 +125,10 @@ int main() {
     long unsigned int utilization =
         performance / (2 * num_cores * SNRT_NFPU_PER_CORE);
 
-    // printf("\n----- (%dx%d) dp fconv2d -----\n", r, c);
-    // printf("The execution took %u cycles.\n", timer);
-    // printf("The performance is %lu OP/1000cycle (%lu%%o utilization).\n",
-    //        performance, utilization);
+    printf("\n----- (%dx%d) dp fconv2d -----\n", r, c);
+    printf("The execution took %u cycles.\n", timer);
+    printf("The performance is %lu OP/1000cycle (%lu%%o utilization).\n",
+           performance, utilization);
   }
 
   if (cid == 0)
