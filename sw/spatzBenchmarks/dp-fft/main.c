@@ -17,9 +17,9 @@
 // Author: Matteo Perotti, Marco Bertuletti, ETH Zurich
 
 #include <benchmark.h>
+#include <debug.h>
 #include <snrt.h>
 #include <stdio.h>
-#include <debug.h>
 
 #include DATAHEADER
 #include "kernel/fft.c"
