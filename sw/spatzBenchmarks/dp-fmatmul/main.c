@@ -17,9 +17,9 @@
 // Author: Matheus Cavalcante, ETH Zurich
 
 #include <benchmark.h>
+#include <debug.h>
 #include <snrt.h>
 #include <stdio.h>
-#include <debug.h>
 
 #include DATAHEADER
 #include "kernel/dp-fmatmul.c"
