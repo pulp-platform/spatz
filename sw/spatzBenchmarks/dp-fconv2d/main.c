@@ -19,6 +19,7 @@
 #include <benchmark.h>
 #include <snrt.h>
 #include <stdio.h>
+#include <debug.h>
 
 #include DATAHEADER
 #include "kernel/fconv2d.c"
