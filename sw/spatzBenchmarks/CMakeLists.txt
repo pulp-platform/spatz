@@ -129,16 +129,13 @@ add_spatz_test_oneParam(dp-faxpy dp-faxpy/main.c 1024)
 add_spatz_test_oneParam(dp-faxpy dp-faxpy/main.c 2048)
 add_spatz_test_oneParam(dp-faxpy dp-faxpy/main.c 4096)
 
-add_spatz_test_oneParam(dp-fdotp dp-fdotp/main.c 128)
-add_spatz_test_oneParam(dp-fdotp dp-fdotp/main.c 256)
-add_spatz_test_oneParam(dp-fdotp dp-fdotp/main.c 512)
-add_spatz_test_oneParam(dp-fdotp dp-fdotp/main.c 4096)
+add_spatz_test_oneParam_T(dp-fdotp fdotp/main.c 128 64)
+add_spatz_test_oneParam_T(dp-fdotp fdotp/main.c 256 64)
+add_spatz_test_oneParam_T(dp-fdotp fdotp/main.c 512 64)
+add_spatz_test_oneParam_T(dp-fdotp fdotp/main.c 4096 64)
+add_spatz_test_oneParam_T(sp-fdotp fdotp/main.c 4096 32)
 
-add_spatz_test_oneParam_T(dp-fdotp_new fdotp/main.c 4096 64)
-add_spatz_test_oneParam_T(sp-fdotp_new fdotp/main.c 4096 32)
-#add_spatz_test_oneParam_T(hp-fdotp_new fdotp/main.c 4096 16)
-
-add_spatz_test_twoParam_T(gemv gemv/main.c 64 128 64)
+add_spatz_test_twoParam_T(dp-gemv gemv/main.c 64 128 64)
 
 add_spatz_test_twoParam_T(dp-gemv-col gemv-col/main.c 64 128 64)
 add_spatz_test_twoParam_T(sp-gemv-col gemv-col/main.c 128 128 32)

@@ -127,6 +127,7 @@ double fdotp_v64b_m8_unrl(const double *a, const double *b, unsigned int avl) {
   asm volatile("vmv.s.x v0, zero");
 
   // Reduce and return
+  asm volatile("vsetvli zero, %0, e64, m8, ta, ma" ::"r"(orig_avl));
   asm volatile("vfredusum.vs v0, v24, v0");
   asm volatile("vfmv.f.s %0, v0" : "=f"(red));
 

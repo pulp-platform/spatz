@@ -92,7 +92,7 @@ int main() {
   // Calculate dotp
   T acc;
   if (sizeof(T) == 8)
-    acc = fdotp_v64b(a_int, b_int, dim);
+    acc = fdotp_v64b_m8_unrl(a_int, b_int, dim);
   else if (sizeof(T) == 4)
     acc = fdotp_v32b(a_int, b_int, dim);
   else 
@@ -110,16 +110,16 @@ int main() {
     result[0] = acc;
   }
 
+  // End timer and check if new best runtime
+  if (cid == 0)
+    timer = benchmark_get_cycle() - timer;
   // Wait for all cores to finish
+
   snrt_cluster_hw_barrier();
 
   // End dump
   if (cid == 0)
     stop_kernel();
-
-  // End timer and check if new best runtime
-  if (cid == 0)
-    timer = benchmark_get_cycle() - timer;
 
   // Check and display results
   if (cid == 0) {
