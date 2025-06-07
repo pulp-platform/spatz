@@ -667,7 +667,8 @@ module spatz_cluster
     .MemAddrWidth          (TCDMMemAddrWidth    ),
     .DataWidth             (DataWidth           ),
     .user_t                (tcdm_user_t         ),
-    .MemoryResponseLatency (1 + RegisterTCDMCuts)
+    .MemoryResponseLatency (1 + RegisterTCDMCuts),
+    .AddrMisalign          (AddrMisalign      )
   ) i_tcdm_interconnect (
     .clk_i     (clk_i                  ),
     .rst_ni    (rst_ni                 ),
