@@ -35,7 +35,9 @@ module spatz_tcdm_interconnect #(
   parameter type         user_t                = logic,
   /// Latency of memory response (in cycles)
   parameter int unsigned MemoryResponseLatency = 1,
-  parameter snitch_pkg::topo_e Topology        = snitch_pkg::LogarithmicInterconnect
+  parameter snitch_pkg::topo_e Topology        = snitch_pkg::LogarithmicInterconnect,
+  // Misalign rows of the TCDM
+  parameter logic              AddrMisalign    = 1'b0
 ) (
   /// Clock, positive edge triggered.
   input  logic                             clk_i,
@@ -101,7 +103,7 @@ module spatz_tcdm_interconnect #(
   end
 
   for (genvar i = 0; i < NumInp; i++) begin : gen_bank_select
-    assign bank_select[i] = addr_misaligned[i][ByteOffset+:SelWidth];
+    assign bank_select[i] = AddrMisalign ? addr_misaligned[i][ByteOffset+:SelWidth] : req_i[i].q.addr[ByteOffset+:SelWidth];
   end
 
   mem_req_chan_t [NumInp-1:0] in_req;
@@ -115,7 +117,7 @@ module spatz_tcdm_interconnect #(
     assign req_q_valid_flat[i] = req_i[i].q_valid;
     assign rsp_o[i].q_ready = rsp_q_ready_flat[i];
     assign in_req[i] = '{
-      addr: addr_misaligned[i][ByteOffset+SelWidth+:MemAddrWidth],
+      addr: AddrMisalign ? addr_misaligned[i][ByteOffset+SelWidth+:MemAddrWidth] : req_i[i].q.addr[ByteOffset+SelWidth+:MemAddrWidth],
       write: req_i[i].q.write,
       amo: req_i[i].q.amo,
       data: req_i[i].q.data,

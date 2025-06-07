@@ -85,7 +85,6 @@ package spatz_pkg;
   // Number of VLSU interfaces
   localparam int unsigned NumVLSUInterfaces = ${int(cfg['spatz_nports'] / cfg['n_fpu'])};
 
-
   // Width of scalar register file adresses
   // Depends on whether we have a FP regfile or not
   localparam int GPRWidth = FPU ? 6 : 5;
@@ -353,14 +352,23 @@ package spatz_pkg;
     VFU_VS2_RD,
     VFU_VS1_RD,
     VFU_VD_RD,
+% if cfg['troop']:
     VLSU_VS2_RD[${int(cfg['spatz_nports'] / cfg['n_fpu'])}],
     VLSU_VD_RD[${int(cfg['spatz_nports'] / cfg['n_fpu'])}],
+%else:
+    VLSU_VS2_RD,
+    VLSU_VD_RD,
+%endif
     VSLDU_VS2_RD
   } vreg_port_rd_e;
 
   typedef enum logic [idx_width(2 + ${int(cfg['spatz_nports'] / cfg['n_fpu'])}):0] {
     VFU_VD_WD,
+% if cfg['troop']:
     VLSU_VD_WD[${int(cfg['spatz_nports'] / cfg['n_fpu'])}],
+%else:
+    VLSU_VD_WD,
+%endif
     VSLDU_VD_WD
   } vreg_port_wd_e;
 
@@ -368,11 +376,20 @@ package spatz_pkg;
     SB_VFU_VS2_RD,
     SB_VFU_VS1_RD,
     SB_VFU_VD_RD,
+% if cfg['troop']:
     SB_VLSU_VS2_RD[${int(cfg['spatz_nports'] / cfg['n_fpu'])}],
     SB_VLSU_VD_RD[${int(cfg['spatz_nports'] / cfg['n_fpu'])}],
+%else:
+    SB_VLSU_VS2_RD,
+    SB_VLSU_VD_RD,
+%endif
     SB_VSLDU_VS2_RD,
     SB_VFU_VD_WD,
+% if cfg['troop']:
     SB_VLSU_VD_WD[${int(cfg['spatz_nports'] / cfg['n_fpu'])}],
+%else:
+    SB_VLSU_VD_WD,
+%endif
     SB_VSLDU_VD_WD
   } sb_port_e;
 

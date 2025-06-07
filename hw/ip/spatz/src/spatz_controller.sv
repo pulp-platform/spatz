@@ -14,7 +14,6 @@ module spatz_controller
   import fpnew_pkg::roundmode_e;
   import fpnew_pkg::fmt_mode_t;
   #(
-    parameter int  unsigned NrMemPorts        = 1,
     parameter int  unsigned NrVregfilePorts   = 1,
     parameter int  unsigned NrWritePorts      = 1,
     parameter bit           RegisterRsp       = 0,
@@ -22,7 +21,7 @@ module spatz_controller
     parameter type          spatz_issue_rsp_t = logic,
     parameter type          spatz_rsp_t       = logic,
     // Dependant parameters. DO NOT CHANGE!
-    localparam int  unsigned NrInterfaces     = NrMemPorts / spatz_pkg::N_FU
+    localparam int  unsigned NrInterfaces     = spatz_pkg::NumVLSUInterfaces
   ) (
     input  logic                                   clk_i,
     input  logic                                   rst_ni,
@@ -241,11 +240,10 @@ module spatz_controller
   `FF(scoreboard_q, scoreboard_d, '0)
 
   // Did the instruction write to the VRF in the previous cycle?
+`ifdef TROOP
   logic [NrInterfaces-1:0] [NrParallelInstructions-1:0] wrote_result_q, wrote_result_d;
-  // Did the instruction write to the VRF in the previous cycle with all its interfaces?
-  logic [NrParallelInstructions-1:0] wrote_result_all_intf_q;
-  `FF(wrote_result_q, wrote_result_d, '0)
-
+    
+  // Following counters are used only by TROOP for tracking
   logic [NrInterfaces-1:0] [NrParallelInstructions-1:0] done_result_q, done_result_d;
   `FF(done_result_q, done_result_d, '0)
 
@@ -254,15 +252,18 @@ module spatz_controller
   `FF(vl_cnt_q, vl_cnt_d, '0)
   `FF(vl_max_q, vl_max_d, '0)
 
-  // Did the instruction write twice to the VRF in the previous two cycles?
-  logic [NrParallelInstructions-1:0] wrote_result_twice_d, wrote_result_twice_q;
-  `FF(wrote_result_twice_q, wrote_result_twice_d, '0)
+  // Is this instruction a narrowing instruction?
+  logic [NrParallelInstructions-1:0] narrow_q, narrow_d;
+  `FF(narrow_q, narrow_d, '0)
+`else 
+  logic [NrParallelInstructions-1:0] wrote_result_q, wrote_result_d;
+`endif
+
+  `FF(wrote_result_q, wrote_result_d, '0)
 
   // Is this instruction a narrowing or widening instruction?
   logic [NrParallelInstructions-1:0] narrow_wide_q, narrow_wide_d;
-  logic [NrParallelInstructions-1:0] narrow_q, narrow_d;
   `FF(narrow_wide_q, narrow_wide_d, '0)
-  `FF(narrow_q, narrow_d, '0)
 
   // Did this narrowing instruction write to the VRF in the previous cycle?
   logic [NrParallelInstructions-1:0] wrote_result_narrowing_q, wrote_result_narrowing_d;
@@ -274,21 +275,24 @@ module spatz_controller
     write_table_d            = write_table_q;
     scoreboard_d             = scoreboard_q;
     narrow_wide_d            = narrow_wide_q;
-    narrow_d                 = narrow_q;
     wrote_result_narrowing_d = wrote_result_narrowing_q;
 
     // Nobody wrote to the VRF yet
-    wrote_result_twice_d = '0;
     wrote_result_d       = '0;
-    done_result_d        = done_result_q;
     sb_enable_o          = '0;
+
+`ifdef TROOP
+    done_result_d        = done_result_q;
+    narrow_d             = narrow_q;
     vl_cnt_d             = vl_cnt_q;
     vl_max_d             = vl_max_q;
-    
+`endif
+   
     for (int unsigned port = 0; port < NrVregfilePorts; port++) begin
+`ifdef TROOP
       // Calculate the load-store interface id to use here for chaining
       automatic logic intID; 
-      
+     
       // For vlsu ports use the write status of the corresponding interface
       if (port inside {SB_VLSU_VS2_RD0, SB_VLSU_VS2_RD1, SB_VLSU_VD_WD0}) begin
         intID = 0;
@@ -301,8 +305,12 @@ module spatz_controller
       
       // Enable the VRF port if the dependant instructions wrote in the previous cycle
       sb_enable_o[port] = sb_enable_i[port] && &(~scoreboard_q[sb_id_i[port]].deps | wrote_result_q[intID] | done_result_q[intID]) && (!(|scoreboard_q[sb_id_i[port]].deps) || !scoreboard_q[sb_id_i[port]].prevent_chaining);
+`else
+      sb_enable_o[port] = sb_enable_i[port] && &(~scoreboard_q[sb_id_i[port]].deps | wrote_result_q) && (!(|scoreboard_q[sb_id_i[port]].deps) || !scoreboard_q[sb_id_i[port]].prevent_chaining);
+`endif
     end
 
+`ifdef TROOP
     // Store the decisions
     if (sb_enable_o[SB_VFU_VD_WD]) begin
       // Calculate the load-store interface id to use here for chaining
@@ -345,6 +353,21 @@ module spatz_controller
       wrote_result_narrowing_d[sb_id_i[SB_VSLDU_VD_WD]] = sb_wrote_result_i[SB_VSLDU_VD_WD - SB_VFU_VD_WD] ^ narrow_wide_q[sb_id_i[SB_VSLDU_VD_WD]];
       wrote_result_d[intID][sb_id_i[SB_VSLDU_VD_WD]]    = sb_wrote_result_i[SB_VSLDU_VD_WD - SB_VFU_VD_WD] && (!narrow_wide_q[sb_id_i[SB_VSLDU_VD_WD]] || wrote_result_narrowing_q[sb_id_i[SB_VSLDU_VD_WD]]);
     end
+`else 
+    // Store the decisions
+    if (sb_enable_o[SB_VFU_VD_WD]) begin
+      wrote_result_narrowing_d[sb_id_i[SB_VFU_VD_WD]] = sb_wrote_result_i[SB_VFU_VD_WD - SB_VFU_VD_WD] ^ narrow_wide_q[sb_id_i[SB_VFU_VD_WD]];
+      wrote_result_d[sb_id_i[SB_VFU_VD_WD]]           = sb_wrote_result_i[SB_VFU_VD_WD - SB_VFU_VD_WD] && (!narrow_wide_q[sb_id_i[SB_VFU_VD_WD]] || wrote_result_narrowing_q[sb_id_i[SB_VFU_VD_WD]]);
+    end
+    if (sb_enable_o[SB_VLSU_VD_WD]) begin
+      wrote_result_narrowing_d[sb_id_i[SB_VLSU_VD_WD]] = sb_wrote_result_i[SB_VLSU_VD_WD - SB_VFU_VD_WD] ^ narrow_wide_q[sb_id_i[SB_VLSU_VD_WD]];
+      wrote_result_d[sb_id_i[SB_VLSU_VD_WD]]           = sb_wrote_result_i[SB_VLSU_VD_WD - SB_VFU_VD_WD] && (!narrow_wide_q[sb_id_i[SB_VLSU_VD_WD]] || wrote_result_narrowing_q[sb_id_i[SB_VLSU_VD_WD]]);
+    end
+    if (sb_enable_o[SB_VSLDU_VD_WD]) begin
+      wrote_result_narrowing_d[sb_id_i[SB_VSLDU_VD_WD]] = sb_wrote_result_i[SB_VSLDU_VD_WD - SB_VFU_VD_WD] ^ narrow_wide_q[sb_id_i[SB_VSLDU_VD_WD]];
+      wrote_result_d[sb_id_i[SB_VSLDU_VD_WD]]           = sb_wrote_result_i[SB_VSLDU_VD_WD - SB_VFU_VD_WD] && (!narrow_wide_q[sb_id_i[SB_VSLDU_VD_WD]] || wrote_result_narrowing_q[sb_id_i[SB_VSLDU_VD_WD]]);
+    end
+`endif
 
     // A unit has finished its VRF access. Reset the scoreboard. For each instruction, check
     // if a dependency existed. If so, invalidate it.
@@ -358,13 +381,15 @@ module spatz_controller
 
       scoreboard_d[vfu_rsp_i.id]             = '0;
       narrow_wide_d[vfu_rsp_i.id]            = 1'b0;
-      narrow_d[vfu_rsp_i.id]                 = 1'b0;
       wrote_result_narrowing_d[vfu_rsp_i.id] = 1'b0;
+`ifdef TROOP
+      narrow_d[vfu_rsp_i.id]                 = 1'b0;
       wrote_result_d[0][vfu_rsp_i.id]        = 1'b0;
       wrote_result_d[1][vfu_rsp_i.id]        = 1'b0;
       done_result_d[0][vfu_rsp_i.id]         = 1'b0;
       done_result_d[1][vfu_rsp_i.id]         = 1'b0;
       vl_cnt_d[vfu_rsp_i.id]                 = '0;
+`endif
       for (int unsigned insn = 0; insn < NrParallelInstructions; insn++)
         scoreboard_d[insn].deps[vfu_rsp_i.id] = 1'b0;
     end
@@ -378,13 +403,15 @@ module spatz_controller
 
       scoreboard_d[vlsu_rsp_i.id]             = '0;
       narrow_wide_d[vlsu_rsp_i.id]            = 1'b0;
-      narrow_d[vlsu_rsp_i.id]                 = 1'b0;
       wrote_result_narrowing_d[vlsu_rsp_i.id] = 1'b0;
+`ifdef TROOP
+      narrow_d[vlsu_rsp_i.id]                 = 1'b0;
       wrote_result_d[0][vlsu_rsp_i.id]        = 1'b0;
       wrote_result_d[1][vlsu_rsp_i.id]        = 1'b0;
       done_result_d[0][vlsu_rsp_i.id]         = 1'b0;
       done_result_d[1][vlsu_rsp_i.id]         = 1'b0;
       vl_cnt_d[vlsu_rsp_i.id]                 = '0;
+`endif
       for (int unsigned insn = 0; insn < NrParallelInstructions; insn++)
         scoreboard_d[insn].deps[vlsu_rsp_i.id] = 1'b0;
     end
@@ -398,13 +425,15 @@ module spatz_controller
 
       scoreboard_d[vsldu_rsp_i.id]             = '0;
       narrow_wide_d[vsldu_rsp_i.id]            = 1'b0;
-      narrow_d[vsldu_rsp_i.id]                 = 1'b0;
       wrote_result_narrowing_d[vsldu_rsp_i.id] = 1'b0;
+`ifdef TROOP
+      narrow_d[vsldu_rsp_i.id]                 = 1'b0;
       wrote_result_d[0][vsldu_rsp_i.id]        = 1'b0;
       wrote_result_d[1][vsldu_rsp_i.id]        = 1'b0;
       done_result_d[0][vsldu_rsp_i.id]         = 1'b0;
       done_result_d[1][vsldu_rsp_i.id]         = 1'b0;
       vl_cnt_d[vsldu_rsp_i.id]                 = '0;
+`endif
       for (int unsigned insn = 0; insn < NrParallelInstructions; insn++)
         scoreboard_d[insn].deps[vsldu_rsp_i.id] = 1'b0;
     end
@@ -440,12 +469,14 @@ module spatz_controller
       if (spatz_req.op_arith.is_narrowing || spatz_req.op_arith.widen_vs1 || spatz_req.op_arith.widen_vs2)
         narrow_wide_d[spatz_req.id] = 1'b1;
       
+`ifdef TROOP
       narrow_d[spatz_req.id] = spatz_req.op_arith.is_narrowing;
 
       // Track request vl for vector chaining
       // TODO: split the vector length here properly based on number of FPUs, EW, vstart, etc...
       vl_max_d[spatz_req.id] = (spatz_req.vl >> 1) << spatz_req.vtype.vsew;
       vl_cnt_d[spatz_req.id] = '0;
+`endif
     end
 
     // An instruction never depends on itself

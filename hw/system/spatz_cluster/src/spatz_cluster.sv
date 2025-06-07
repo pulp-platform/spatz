@@ -73,6 +73,8 @@ module spatz_cluster
     parameter int                     unsigned               NumSpatzFPUs             [NrCores] = '{default: '0},
     parameter int                     unsigned               NumSpatzIPUs             [NrCores] = '{default: '0},
     parameter int                     unsigned               NumSpatzTCDMPorts        [NrCores] = '{default: '0},
+    // Misalign rows of the TCDM
+    parameter logic                                          AddrMisalign                       = 1'b0,
     /// ## Timing Tuning Parameters
     /// Insert Pipeline registers into off-loading path (response)
     parameter bit                                            RegisterOffloadRsp                 = 1'b0,
@@ -546,7 +548,8 @@ module spatz_cluster
     .user_t                (logic             ),
     .MemAddrWidth          (TCDMMemAddrWidth  ),
     .DataWidth             (AxiDataWidth      ),
-    .MemoryResponseLatency (MemoryMacroLatency)
+    .MemoryResponseLatency (MemoryMacroLatency),
+    .AddrMisalign          (AddrMisalign      )
   ) i_dma_interconnect (
     .clk_i     (clk_i      ),
     .rst_ni    (rst_ni     ),

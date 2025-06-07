@@ -21,6 +21,18 @@ SPATZ_CLUSTER_CFG_DEFINES += -DSNRT_CLUSTER_OFFSET=$(shell python3 -c "import js
 SPATZ_CLUSTER_CFG_DEFINES += -DSNRT_TCDM_SIZE=$(shell python3 -c "import jstyleson; f = open('$(SPATZ_CLUSTER_CFG)'); print(jstyleson.load(f)['cluster']['tcdm']['size'] * 1024)")
 SPATZ_CLUSTER_CFG_DEFINES += -DSNRT_NFPU_PER_CORE=$(shell python3 -c "import jstyleson; f = open('$(SPATZ_CLUSTER_CFG)'); print(jstyleson.load(f)['cluster']['n_fpu'])")
 
+# Additional uA configurations for the spatz core
+TROOP := $(shell python3 -c "import jstyleson; print(jstyleson.load(open('$(SPATZ_CLUSTER_CFG)'))['cluster'].get('troop', 0))")
+BUF_FPU := $(shell python3 -c "import jstyleson; print(jstyleson.load(open('$(SPATZ_CLUSTER_CFG)'))['cluster'].get('buf_fpu', 0))")
+
+ifeq ($(TROOP),1)
+	DEFS += -DTROOP -DBUF_FPU
+endif
+
+ifeq ($(BUF_FPU),1)
+	DEFS += -DBUF_FPU
+endif
+
 # Include Makefrag
 include $(ROOT)/util/Makefrag
 

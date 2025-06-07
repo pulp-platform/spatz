@@ -90,7 +90,11 @@ package ${cfg['pkg_name']};
 
   localparam int unsigned TCDMStartAddr = ${to_sv_hex(cfg['cluster_base_addr'], cfg['addr_width'])};
   localparam int unsigned TCDMSize      = ${to_sv_hex(cfg['tcdm']['size'] * 1024, cfg['addr_width'])};
-
+% if cfg['tcdm']['misalign']:
+  localparam logic AddrMisalign =  1'b1; // 0-aligned, 1-misalign
+%else:
+  localparam logic AddrMisalign =  1'b0; // 0-aligned, 1-misalign
+%endif
   localparam int unsigned PeriStartAddr = TCDMStartAddr + TCDMSize;
 
   localparam int unsigned BootAddr      = ${to_sv_hex(cfg['boot_addr'], cfg['addr_width'])};
@@ -513,6 +517,7 @@ module ${cfg['name']}_wrapper
     .NumSpatzFPUs (NumSpatzFPUs),
     .NumSpatzIPUs (NumSpatzIPUs),
     .NumSpatzTCDMPorts (NumSpatzTCDMPorts),
+    .AddrMisalign (AddrMisalign),
     .axi_in_req_t (axi_in_req_t),
     .axi_in_resp_t (axi_in_resp_t),
     .axi_out_req_t (spatz_cluster_pkg::spatz_axi_iwc_out_req_t),
