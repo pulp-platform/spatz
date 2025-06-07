@@ -84,8 +84,6 @@ add_library(sdotp-bp-fmatmul sdotp-bp-fmatmul/kernel/sdotp-fmatmul.c)
 
 add_library(dp-faxpy dp-faxpy/kernel/faxpy.c)
 
-add_library(dp-fdotp dp-fdotp/kernel/fdotp.c)
-
 add_library(dp-fconv2d dp-fconv2d/kernel/fconv2d.c)
 
 add_library(dp-fft dp-fft/kernel/fft.c)
