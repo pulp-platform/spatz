@@ -102,6 +102,7 @@ module spatz_fpu_sequencer
     .ZERO_REG_ZERO (0           )
   ) i_fpr (
     .clk_i  (clk_i    ),
+    .rst_ni (rst_ni   ),
     .raddr_i(fpr_raddr),
     .rdata_o(fpr_rdata),
     .waddr_i(fpr_waddr),
