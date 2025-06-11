@@ -153,44 +153,82 @@ module axi_dma_tc_snitch_fe #(
   // transfer is completed if response is valid (there is no error handling)
   assign oned_trans_complete = idma_rsp_valid;
 
-  idma_backend #(
-    .DataWidth           ( DMADataWidth                ),
-    .AddrWidth           ( AddrWidth                   ),
-    .UserWidth           ( UserWidth                   ),
-    .AxiIdWidth          ( IdWidth                     ),
-    .NumAxInFlight       ( DMAAxiReqFifoDepth          ),
-    .BufferDepth         ( 3                           ),
-    .TFLenWidth          ( AddrWidth                   ),
-    .RAWCouplingAvail    ( 1                           ),
-    .MaskInvalidData     ( 1                           ),
-    .HardwareLegalizer   ( 1                           ),
-    .RejectZeroTransfers ( 1                           ),
-    .MemSysDepth         ( 0                           ),
-    .ErrorCap            ( idma_pkg::NO_ERROR_HANDLING ),
-    .idma_req_t          ( idma_req_t                  ),
-    .idma_rsp_t          ( idma_rsp_t                  ),
-    .idma_eh_req_t       ( idma_pkg::idma_eh_req_t     ),
-    .idma_busy_t         ( idma_pkg::idma_busy_t       ),
-    .protocol_req_t      ( axi_req_t                   ),
-    .protocol_rsp_t      ( axi_res_t                   ),
-    .ar_chan_t           ( axi_ar_chan_t               ),
-    .aw_chan_t           ( axi_aw_chan_t               )
+ typedef struct packed {
+    axi_ar_chan_t ar_chan;
+  } axi_read_meta_channel_t;
+
+  typedef struct packed {
+    axi_read_meta_channel_t axi;
+  } read_meta_channel_t;
+
+  typedef struct packed {
+    axi_aw_chan_t aw_chan;
+  } axi_write_meta_channel_t;
+
+  typedef struct packed {
+    axi_write_meta_channel_t axi;
+  } write_meta_channel_t;
+
+  // Internal AXI channels
+  axi_req_t axi_read_req, axi_write_req;
+  axi_res_t axi_read_rsp, axi_write_rsp;
+
+  idma_backend_rw_axi #(
+    .CombinedShifter      ( 1'b0                        ),
+    .PrintFifoInfo        ( 0                           ),
+    .DataWidth            ( DMADataWidth                ),
+    .AddrWidth            ( AddrWidth                   ),
+    .UserWidth            ( UserWidth                   ),
+    .AxiIdWidth           ( IdWidth                     ),
+    .NumAxInFlight        ( DMAAxiReqFifoDepth          ),
+    .BufferDepth          ( 3                           ),
+    .TFLenWidth           ( AddrWidth                   ),
+    .RAWCouplingAvail     ( 1                           ),
+    .MaskInvalidData      ( 1                           ),
+    .HardwareLegalizer    ( 1                           ),
+    .RejectZeroTransfers  ( 1                           ),
+    .MemSysDepth          ( 0                           ),
+    .ErrorCap             ( idma_pkg::NO_ERROR_HANDLING ),
+    .idma_req_t           ( idma_req_t                  ),
+    .idma_rsp_t           ( idma_rsp_t                  ),
+    .idma_eh_req_t        ( idma_pkg::idma_eh_req_t     ),
+    .idma_busy_t          ( idma_pkg::idma_busy_t       ),
+    .axi_req_t            ( axi_req_t                   ),
+    .axi_rsp_t            ( axi_res_t                   ),
+    .write_meta_channel_t ( write_meta_channel_t        ),
+    .read_meta_channel_t  ( read_meta_channel_t         )
   ) i_idma_backend (
-    .clk_i          ( clk_i               ),
-    .rst_ni         ( rst_ni              ),
-    .testmode_i     ( 1'b0                ),
-    .idma_req_i     ( idma_req            ),
-    .req_valid_i    ( burst_req_valid     ),
-    .req_ready_o    ( burst_req_ready     ),
-    .idma_rsp_o     ( /* NOT CONNECTED */ ),
-    .rsp_valid_o    ( idma_rsp_valid      ), // valid_o signals a completed transfer
-    .rsp_ready_i    ( 1'b1                ), // always ready for complete transfers
-    .idma_eh_req_i  ( '0                  ), // No error handling hardware is present
-    .eh_req_valid_i ( 1'b1                ),
-    .eh_req_ready_o ( /* NOT CONNECTED */ ),
-    .protocol_req_o ( axi_dma_req_o       ),
-    .protocol_rsp_i ( axi_dma_res_i       ),
-    .busy_o         ( idma_busy           )
+    .clk_i           ( clk_i               ),
+    .rst_ni          ( rst_ni              ),
+    .testmode_i      ( 1'b0                ),
+    .idma_req_i      ( idma_req            ),
+    .req_valid_i     ( burst_req_valid     ),
+    .req_ready_o     ( burst_req_ready     ),
+    .idma_rsp_o      ( /* NOT CONNECTED */ ),
+    .rsp_valid_o     ( idma_rsp_valid      ), // valid_o signals a completed transfer
+    .rsp_ready_i     ( 1'b1                ), // always ready for complete transfers
+    .idma_eh_req_i   ( '0                  ), // No error handling hardware is present
+    .eh_req_valid_i  ( 1'b1                ),
+    .eh_req_ready_o  ( /* NOT CONNECTED */ ),
+    .axi_read_req_o  ( axi_read_req        ),
+    .axi_read_rsp_i  ( axi_read_rsp        ),
+    .axi_write_req_o ( axi_write_req       ),
+    .axi_write_rsp_i ( axi_write_rsp       ),
+    .busy_o          ( idma_busy           )
+  );
+
+  axi_rw_join #(
+   .axi_req_t   ( axi_req_t ),
+   .axi_resp_t  ( axi_res_t )
+  ) i_axi_rw_join (
+   .clk_i,
+   .rst_ni,
+   .slv_read_req_i    ( axi_read_req  ),
+   .slv_read_resp_o   ( axi_read_rsp  ),
+   .slv_write_req_i   ( axi_write_req ),
+   .slv_write_resp_o  ( axi_write_rsp ),
+   .mst_req_o         ( axi_dma_req_o ),
+   .mst_resp_i        ( axi_dma_res_i )
   );
 
   //--------------------------------------

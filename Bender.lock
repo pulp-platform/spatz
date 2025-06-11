@@ -24,6 +24,13 @@ packages:
     - axi
     - common_cells
     - common_verification
+  axi_stream:
+    revision: 54891ff40455ca94a37641b9da4604647878cc07
+    version: 0.1.1
+    source:
+      Git: https://github.com/pulp-platform/axi_stream.git
+    dependencies:
+    - common_cells
   cluster_icache:
     revision: 64e21ae455bbdde850c4df13bef86ea55ac42537
     version: 0.2.0
@@ -64,15 +71,25 @@ packages:
     dependencies:
     - common_cells
   idma:
-    revision: b31e8f019c657eff4126bc789f0336d403da6766
-    version: 0.4.2
+    revision: ff5d56fffb3767814db88d6bf8f381974ea33aa5
+    version: 0.6.4
     source:
       Git: https://github.com/pulp-platform/iDMA.git
     dependencies:
     - axi
+    - axi_stream
     - common_cells
     - common_verification
+    - obi
     - register_interface
+  obi:
+    revision: 0155fc34e900c7c884e081c0a1114a247937ff69
+    version: 0.1.7
+    source:
+      Git: https://github.com/pulp-platform/obi.git
+    dependencies:
+    - common_cells
+    - common_verification
   register_interface:
     revision: 146501d80052b61475cdc333d3aab4cd769fd5dc
     version: 0.3.9
