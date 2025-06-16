@@ -2134,8 +2134,8 @@ module spatz_cluster_peripheral_reg_top #(
     .wd     (spatz_cycle_wd),
 
     // from internal hardware
-    .de     (hw2reg.spatz_cycle.de),
-    .d      (hw2reg.spatz_cycle.d ),
+    .de     (1'b0),
+    .d      ('0  ),
 
     // to internal hardware
     .qe     (),

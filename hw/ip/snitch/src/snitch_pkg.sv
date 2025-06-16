@@ -123,7 +123,8 @@ package snitch_pkg;
   typedef enum integer {
     TCDM               = 0,
     ClusterPeripherals = 1,
-    SoC                = 2
+    SoC                = 2,
+    UART               = 3
   } cluster_slave_e;
 
   typedef enum integer {

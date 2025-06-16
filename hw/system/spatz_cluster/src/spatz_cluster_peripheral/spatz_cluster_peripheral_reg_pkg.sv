@@ -188,11 +188,6 @@ package spatz_cluster_peripheral_reg_pkg;
   } spatz_cluster_peripheral_hw2reg_hw_barrier_reg_t;
 
   typedef struct packed {
-    logic [31:0] d;
-    logic        de;
-  } spatz_cluster_peripheral_hw2reg_spatz_cycle_reg_t;
-
-  typedef struct packed {
     logic        d;
     logic        de;
   } spatz_cluster_peripheral_hw2reg_l1d_spm_commit_reg_t;
@@ -234,9 +229,8 @@ package spatz_cluster_peripheral_reg_pkg;
 
   // HW -> register type
   typedef struct packed {
-    spatz_cluster_peripheral_hw2reg_perf_counter_mreg_t [1:0] perf_counter; // [167:72]
-    spatz_cluster_peripheral_hw2reg_hw_barrier_reg_t hw_barrier; // [71:40]
-    spatz_cluster_peripheral_hw2reg_spatz_cycle_reg_t spatz_cycle; // [39:7]
+    spatz_cluster_peripheral_hw2reg_perf_counter_mreg_t [1:0] perf_counter; // [134:39]
+    spatz_cluster_peripheral_hw2reg_hw_barrier_reg_t hw_barrier; // [38:7]
     spatz_cluster_peripheral_hw2reg_l1d_spm_commit_reg_t l1d_spm_commit; // [6:5]
     spatz_cluster_peripheral_hw2reg_l1d_insn_commit_reg_t l1d_insn_commit; // [4:3]
     spatz_cluster_peripheral_hw2reg_l1d_flush_status_reg_t l1d_flush_status; // [2:2]

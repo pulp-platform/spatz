@@ -449,10 +449,21 @@ module spatz_cc
   typedef logic [SelectWidth-1:0] select_t;
   select_t slave_select;
   // Combine if the a request is targetting at SPM or L2
-  logic cache_select;
-  assign cache_select = (slave_select == 0) ? 0 : 1;
+  logic bypass_cache;
+  // assign bypass_cache = (slave_select[1] == 1'b0) ? 1 : 0;
+  always_comb begin
+    // default bypass cache
+    bypass_cache = 1'b1;
+    if ((snitch_dreq_q.q.addr >= tcdm_addr_base_i) && (snitch_dreq_q.q.addr < 32'h51020000)) begin
+      // SPM
+      bypass_cache = 1'b0;
+    end else if ((snitch_dreq_q.q.addr >= 32'h8000_0000) && (snitch_dreq_q.q.addr < 32'h8100_0000)) begin
+      // DRAM
+      bypass_cache = 1'b0;
+    end
+  end
 
-  // Since we are now using cache, the fpu_sequencer should not
+  // Since we are now using cache, the fpu_sequencer should never
   // bypass the L1D cache.
 
   reqrsp_demux #(
@@ -463,11 +474,11 @@ module spatz_cc
   ) i_reqrsp_demux (
     .clk_i        (clk_i                      ),
     .rst_ni       (rst_ni                     ),
-    .slv_select_i (cache_select               ),
+    .slv_select_i (bypass_cache               ),
     .slv_req_i    (snitch_dreq_q              ),
     .slv_rsp_o    (snitch_drsp_q              ),
-    .mst_req_o    ({data_tcdm_req, data_soc_req}),
-    .mst_rsp_i    ({data_tcdm_rsp, data_soc_rsp})
+    .mst_req_o    ({data_soc_req, data_tcdm_req}),
+    .mst_rsp_i    ({data_soc_rsp, data_tcdm_rsp})
   );
 
   reqrsp_mux #(
@@ -541,32 +552,34 @@ module spatz_cc
   logic [AddrWidth-1:0] l2_addr_start, l2_addr_mask;
   assign l2_addr_start = L2Addr;
   assign l2_addr_mask  = ~(L2Size-1);
-  assign addr_map[0] = '{
-    idx : 1,
-    base: tcdm_addr_base_i,
-    mask: ({AddrWidth{1'b1}} << TCDMAddrWidth)
-  };
+  // SPM Region
+  // assign addr_map[0] = '{
+  //   idx : 0,
+  //   base: tcdm_addr_base_i,
+  //   mask: ({AddrWidth{1'b1}} << TCDMAddrWidth)
+  // };
+  // // Main Memory Region
+  // assign addr_map[1] = '{
+  //   idx : 1,
+  //   base: 32'h8000_0000,
+  //   mask: l2_addr_mask
+  // };
 
-  assign addr_map[1] = '{
-    idx : 2,
-    base: l2_addr_start,
-    mask: l2_addr_mask
-  };
 
-  addr_decode_napot #(
-    .NoIndices (3                    ),
-    .NoRules   (2                    ),
-    .addr_t    (logic [AddrWidth-1:0]),
-    .rule_t    (reqrsp_rule_t        )
-  ) i_addr_decode_napot (
-    .addr_i           (snitch_dreq_q.q.addr),
-    .addr_map_i       (addr_map          ),
-    .idx_o            (slave_select      ),
-    .dec_valid_o      (/* Unused */      ),
-    .dec_error_o      (/* Unused */      ),
-    .en_default_idx_i (1'b1              ),
-    .default_idx_i    ('0                )
-  );
+  // addr_decode_napot #(
+  //   .NoIndices (3                    ),
+  //   .NoRules   (2                    ),
+  //   .addr_t    (logic [AddrWidth-1:0]),
+  //   .rule_t    (reqrsp_rule_t        )
+  // ) i_addr_decode_napot (
+  //   .addr_i           (snitch_dreq_q.q.addr),
+  //   .addr_map_i       (addr_map          ),
+  //   .idx_o            (slave_select      ),
+  //   .dec_valid_o      (/* Unused */      ),
+  //   .dec_error_o      (/* Unused */      ),
+  //   .en_default_idx_i (1'b1              ),
+  //   .default_idx_i    (2'b10             )
+  // );
 
   reqrsp_to_tcdm #(
     .AddrWidth    (AddrWidth ),

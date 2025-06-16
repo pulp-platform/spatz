@@ -29,6 +29,7 @@ module spatz_cluster_peripheral
   input  reg_req_t                   reg_req_i,
   output reg_rsp_t                   reg_rsp_o,
 
+  output logic                       eoc_o,
   input  addr_t                      tcdm_start_address_i,
   input  addr_t                      tcdm_end_address_i,
   output logic                       icache_prefetch_enable_o,
@@ -72,6 +73,9 @@ module spatz_cluster_peripheral
     .hw2reg (hw2reg)
   );
 
+  //////////// EOC /////////////
+  assign eoc_o = reg2hw.cluster_eoc_exit.q;
+
   //////////// Cache XBar ////////////
   logic [4:0] xbar_offset_d, xbar_offset_q;
   assign      dynamic_offset_o    = xbar_offset_q;
@@ -85,7 +89,7 @@ module spatz_cluster_peripheral
     if (xbar_offset_commit) begin
       xbar_offset_d = reg2hw.xbar_offset.q;
       hw2reg.xbar_offset_commit.d  = 1'b0;
-      hw2reg.xbar_offset_commit.de = 1'b0;
+      hw2reg.xbar_offset_commit.de = 1'b1;
     end
   end
   // Default value is 13

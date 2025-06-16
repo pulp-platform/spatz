@@ -419,7 +419,7 @@
         name: "SPATZ_CYCLE",
         desc: '''Store cycle counts of kernels'''
         swaccess: "rw",
-        hwaccess: "hrw",
+        hwaccess: "hro",
         resval: "0",
         fields: [{
             bits: "31:0",

@@ -392,12 +392,6 @@ class SnitchClusterTB(Generator):
             self.cfg["dram"]["length"],
             self.cfg["cluster"]["addr_width"],
         )
-        pma_cfg.add_region_length(
-            PMA.CACHED,
-            self.cfg["l2"]["address"],
-            self.cfg["l2"]["length"],
-            self.cfg["cluster"]["addr_width"],
-        )
         self.cfg["cluster"]["tie_ports"] = True
         # Store Snitch cluster config in separate variable
         self.cluster = SnitchCluster(cfg["cluster"], pma_cfg)
