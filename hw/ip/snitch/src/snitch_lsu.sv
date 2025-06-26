@@ -8,6 +8,9 @@
 /// `NumOutstandingMem` requests in total) and optionally NaNBox if used in a
 /// floating-point setting. It expects its memory sub-system to keep order (as if
 /// issued with a single ID).
+
+`include "common_cells/assertions.svh"
+
 module snitch_lsu #(
   parameter int unsigned AddrWidth           = 32,
   parameter int unsigned DataWidth           = 32,
@@ -177,5 +180,12 @@ module snitch_lsu #(
   // without ans answer to the core.
   assign lsu_pvalid_o = data_rsp_i.p_valid & ~mem_out;
   assign data_req_o.p_ready = lsu_pready_i | mem_out;
+
+// ----------
+  // Assertions
+  // ----------
+  // It is a waste of resources to configure more outstanding loads than outstanding memory
+  // transactions, as this means the load address queue FIFO can never be fully used.
+  `ASSERT_INIT(CheckOutstandingConfig, NumOutstandingLoads <= NumOutstandingMem);
 
 endmodule

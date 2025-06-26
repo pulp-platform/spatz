@@ -530,6 +530,7 @@ module spatz_fpu_sequencer
     .dreq_t             (dreq_t             ),
     .drsp_t             (drsp_t             ),
     .DataWidth          (FLEN               ),
+    .NumOutstandingMem  (NumOutstandingLoads),
     .NumOutstandingLoads(NumOutstandingLoads)
   ) i_fp_lsu (
     .clk_i        (clk_i           ),
