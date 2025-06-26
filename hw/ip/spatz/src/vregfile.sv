@@ -99,11 +99,8 @@ module vregfile import spatz_pkg::*; #(
       );
 
       always_latch begin
-        if (!rst_ni)
-          mem[vreg][b] <= '0;
-        else
-          if (clk_latch)
-            mem[vreg][b] <= wdata_q[b*8 +: 8];
+        if (clk_latch)
+          mem[vreg][b] <= wdata_q[b*8 +: 8];
       end
     end
   end: gen_write_mem
