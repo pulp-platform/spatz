@@ -1155,9 +1155,6 @@ module spatz_vlsu
 
     assign spatz_mem_req[port].user  = '{
       req_id  : mem_req_id[port],
-      core_id : '0,
-      is_core : '0,
-      is_amo  : '0,
       default : '0
   };
 
