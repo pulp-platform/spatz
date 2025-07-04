@@ -204,7 +204,9 @@ module spatz_cache_amo
 
     unique case (state_q)
       // First cycle: Read operand a.
-      Idle: if (load_amo) state_d = DoAMO;
+      Idle: begin
+        if (load_amo) state_d = DoAMO;
+      end
       DoAMO: begin
         mem_req_o.q_valid = 1'b0;
         core_ready = 1'b0;
@@ -222,7 +224,9 @@ module spatz_cache_amo
         // Indicate that we are doing an AMO write-back
         // Used to filter out the response
         mem_req_o.q.user.is_amo = 1'b1;
-        state_d = Idle;
+
+        if (mem_rsp_i.q_ready)
+          state_d = Idle;
       end
       default:;
     endcase
