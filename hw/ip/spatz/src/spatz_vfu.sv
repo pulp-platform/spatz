@@ -1105,4 +1105,78 @@ module spatz_vfu
     assign fpu_status_o     = '0;
   end: gen_no_fpu
 
+
+  /////////////
+  // Monitor //
+  /////////////
+`ifndef TARGET_SYNTHESIS
+  // VFU Monitor Signals
+  // This part will be logged into file for performance analysis
+
+  typedef logic [31:0] cnt_t;
+
+  // VRF Write Monitor
+  cnt_t vrf_wvalid_cnt_d, vrf_wvalid_cnt_q;
+  cnt_t vrf_wtrans_cnt_d, vrf_wtrans_cnt_q;
+  `FF (vrf_wvalid_cnt_q, vrf_wvalid_cnt_d, '0)
+  `FF (vrf_wtrans_cnt_q, vrf_wtrans_cnt_d, '0)
+
+  // VRF Read Monitors
+  cnt_t [2:0] vrf_rvalid_cnt_d, vrf_rvalid_cnt_q;
+  cnt_t [2:0] vrf_rtrans_cnt_d, vrf_rtrans_cnt_q;
+  `FF (vrf_rvalid_cnt_q, vrf_rvalid_cnt_d, '0)
+  `FF (vrf_rtrans_cnt_q, vrf_rtrans_cnt_d, '0)
+
+  // Instruction Monitor
+  cnt_t vfu_insn_valid_cyc_q, vfu_insn_valid_cyc_d;
+  cnt_t vfu_insn_cnt_q, vfu_insn_cnt_d;
+  `FF(vfu_insn_valid_cyc_q, vfu_insn_valid_cyc_d, '0)
+  `FF(vfu_insn_cnt_q, vfu_insn_cnt_d, '0)
+
+  always_comb begin : gen_vfu_perf_cnt_comb
+    // VRF Monitor
+    /// Write Port
+    vrf_wvalid_cnt_d = vrf_wvalid_cnt_q;
+    vrf_wtrans_cnt_d = vrf_wtrans_cnt_q;
+
+    if (vrf_we_o) begin
+      // VRF Write Enable
+      vrf_wvalid_cnt_d ++;
+      if (vrf_wvalid_i) begin
+        // VRF Successful Write
+        vrf_wtrans_cnt_d ++;
+      end
+    end
+
+    /// Read Ports
+    vrf_rvalid_cnt_d = vrf_rvalid_cnt_q;
+    vrf_rtrans_cnt_d = vrf_rtrans_cnt_q;
+
+    for (int port = 0; port < 3; port++) begin
+      if (vrf_re_o[port]) begin
+        // VRF Write Enable
+        vrf_rvalid_cnt_d[port] ++;
+        if (vrf_rvalid_i[port]) begin
+          // VRF Successful Write
+          vrf_rtrans_cnt_d[port] ++;
+        end
+      end
+    end
+
+    // Instruction Monitor
+    vfu_insn_valid_cyc_d = vfu_insn_valid_cyc_q;
+    vfu_insn_cnt_d = vfu_insn_cnt_q;
+    if (busy_q == 1) begin
+      // VFU is busy handling instructions
+      vfu_insn_valid_cyc_d ++;
+    end
+
+    if (spatz_req_valid & spatz_req_ready) begin
+      // Valid Handshaking on VFU instruction pop
+      vfu_insn_cnt_d ++;
+    end
+  end
+
+`endif
+
 endmodule : spatz_vfu

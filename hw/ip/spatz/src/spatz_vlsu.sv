@@ -221,6 +221,7 @@ module spatz_vlsu
   id_t   [NrMemPorts-1:0] rob_rid;
   logic  [NrMemPorts-1:0] rob_req_id;
   id_t   [NrMemPorts-1:0] rob_id;
+  id_t   [NrMemPorts-1:0] rob_usage;
   logic  [NrMemPorts-1:0] rob_full;
   logic  [NrMemPorts-1:0] rob_empty;
 
@@ -244,7 +245,8 @@ module spatz_vlsu
       .id_o       (rob_id[port]      ),
       .id_valid_o (/* not used */    ),
       .full_o     (rob_full[port]    ),
-      .empty_o    (rob_empty[port]   )
+      .empty_o    (rob_empty[port]   ),
+      .usage_o    (rob_usage[port]   )
     );
   end: gen_rob
 
@@ -1174,5 +1176,94 @@ module spatz_vlsu
 
   if (NrMemPorts != 2**$clog2(NrMemPorts))
     $error("[spatz_vlsu] The NrMemPorts parameter needs to be a power of two");
+
+
+  /////////////
+  // Monitor //
+  /////////////
+`ifndef TARGET_SYNTHESIS
+  // VLSU Monitor Signals
+  // This part will be logged into file for performance analysis
+
+  typedef logic [31:0] cnt_t;
+
+  // VRF Write Monitor
+  cnt_t vrf_wvalid_cnt_d, vrf_wvalid_cnt_q;
+  cnt_t vrf_wtrans_cnt_d, vrf_wtrans_cnt_q;
+  `FF (vrf_wvalid_cnt_q, vrf_wvalid_cnt_d, '0)
+  `FF (vrf_wtrans_cnt_q, vrf_wtrans_cnt_d, '0)
+
+  // VLSU Memory Port Monitor
+  cnt_t mem_valid_cnt_q, mem_valid_cnt_d;
+  cnt_t mem_trans_cnt_q, mem_trans_cnt_d;
+  `FF(mem_valid_cnt_q, mem_valid_cnt_d, '0)
+  `FF(mem_trans_cnt_q, mem_trans_cnt_d, '0)
+
+  // ROB Monitor
+  cnt_t rob_usage_q, rob_usage_d;
+  cnt_t rob_use_cyc_q, rob_use_cyc_d;
+  cnt_t rob_peak_q, rob_peak_d;
+  `FF(rob_usage_q, rob_usage_d, '0)
+  `FF(rob_use_cyc_q, rob_use_cyc_d, '0)
+  `FF(rob_peak_q, rob_peak_d, '0)
+
+  // Instruction Monitor
+  cnt_t vlsu_insn_valid_cyc_q, vlsu_insn_valid_cyc_d;
+  cnt_t vlsu_insn_cnt_q, vlsu_insn_cnt_d;
+  `FF(vlsu_insn_valid_cyc_q, vlsu_insn_valid_cyc_d, '0)
+  `FF(vlsu_insn_cnt_q, vlsu_insn_cnt_d, '0)
+
+  always_comb begin : gen_vlsu_perf_cnt_comb
+    // VRF Monitor
+    vrf_wvalid_cnt_d = vrf_wvalid_cnt_q;
+    vrf_wtrans_cnt_d = vrf_wtrans_cnt_q;
+
+    if (vrf_we_o) begin
+      // VRF Write Enable
+      vrf_wvalid_cnt_d ++;
+      if (vrf_wvalid_i) begin
+        // VRF Successful Write
+        vrf_wtrans_cnt_d ++;
+      end
+    end
+
+    // Memory Port Monitor
+    mem_valid_cnt_d = mem_valid_cnt_q;
+    mem_trans_cnt_d = mem_trans_cnt_q;
+
+    if (spatz_mem_req_valid_o[0]) begin
+      mem_valid_cnt_d++;  // Accumulate total cycles
+      if (spatz_mem_req_ready_i[0]) begin
+        mem_trans_cnt_d++;  // Accumulate total trans
+      end
+    end
+
+    // ROB Monitor
+    rob_usage_d = rob_usage_q;
+    rob_use_cyc_d = rob_use_cyc_q;
+    rob_peak_d = rob_peak_q;
+
+    if (rob_usage[0] > 0) begin
+      // Only count the time when ROB is in use
+      rob_usage_d = rob_usage_q + rob_usage[0];
+      rob_use_cyc_d ++;
+      rob_peak_d = (rob_usage[0] > rob_peak_q) ? rob_usage[0] : rob_peak_q;
+    end
+
+    // Instruction Monitor
+    vlsu_insn_valid_cyc_d = vlsu_insn_valid_cyc_q;
+    vlsu_insn_cnt_d = vlsu_insn_cnt_q;
+    if (busy_q == 1) begin
+      // VLSU is busy handling instructions
+      vlsu_insn_valid_cyc_d ++;
+    end
+
+    if (mem_spatz_req_valid & mem_spatz_req_ready) begin
+      // Valid Handshaking on VLSU instruction pop
+      vlsu_insn_cnt_d ++;
+    end
+  end
+
+`endif
 
 endmodule : spatz_vlsu

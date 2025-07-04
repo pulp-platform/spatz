@@ -645,4 +645,130 @@ module spatz_controller
   assign spatz_req_o       = spatz_req;
   assign spatz_req_valid_o = spatz_req_valid;
 
+  /////////////
+  // Monitor //
+  /////////////
+`ifndef TARGET_SYNTHESIS
+  // Controller Monitor Signals
+  // This part will be logged into file for performance analysis
+
+  // Number of ports of the vector register file
+  localparam NrReadPorts  = 6;
+
+  typedef logic [31:0] cnt_t;
+
+  // VRF Write Monitor
+  cnt_t [NrWritePorts-1:0] ctrl_wvalid_cnt_d, ctrl_wvalid_cnt_q;
+  cnt_t [NrWritePorts-1:0] ctrl_wtrans_cnt_d, ctrl_wtrans_cnt_q;
+  `FF (ctrl_wvalid_cnt_q, ctrl_wvalid_cnt_d, '0)
+  `FF (ctrl_wtrans_cnt_q, ctrl_wtrans_cnt_d, '0)
+
+  // Stalling
+  cnt_t [NrReadPorts-1:0] ctrl_vlsu_stall_d,   ctrl_vlsu_stall_q;
+  cnt_t [NrReadPorts-1:0] ctrl_vlsu_active_d,  ctrl_vlsu_active_q;
+  `FF (ctrl_vlsu_stall_q,  ctrl_vlsu_stall_d,  '0)
+  `FF (ctrl_vlsu_active_q, ctrl_vlsu_active_d, '0)
+
+  cnt_t [NrReadPorts-1:0] ctrl_vfu_stall_d,    ctrl_vfu_stall_q;
+  cnt_t [NrReadPorts-1:0] ctrl_vfu_active_d,   ctrl_vfu_active_q;
+  `FF (ctrl_vfu_stall_q,  ctrl_vfu_stall_d,  '0)
+  `FF (ctrl_vfu_active_q, ctrl_vfu_active_d, '0)
+
+  cnt_t [NrReadPorts-1:0] ctrl_vsldu_stall_d,  ctrl_vsldu_stall_q;
+  cnt_t [NrReadPorts-1:0] ctrl_vsldu_active_d, ctrl_vsldu_active_q;
+  `FF (ctrl_vsldu_stall_q,  ctrl_vsldu_stall_d,  '0)
+  `FF (ctrl_vsldu_active_q, ctrl_vsldu_active_d, '0)
+
+  // Instruction Monitor
+  /// Track the number of instructions issued out
+  cnt_t [NrReadPorts-1:0] ctrl_vlsu_insn_d,   ctrl_vlsu_insn_q;
+  `FF (ctrl_vlsu_insn_q,  ctrl_vlsu_insn_d,  '0)
+
+  cnt_t [NrReadPorts-1:0] ctrl_vfu_insn_d,    ctrl_vfu_insn_q;
+  `FF (ctrl_vfu_insn_q,  ctrl_vfu_insn_d,  '0)
+
+  cnt_t [NrReadPorts-1:0] ctrl_vsldu_insn_d,  ctrl_vsldu_insn_q;
+  `FF (ctrl_vsldu_insn_q,  ctrl_vsldu_insn_d,  '0)
+
+
+  always_comb begin : gen_controller_perf_cnt_comb
+    // In Controller, we can see how long each valid request takes before being served
+    // This can due to either VRF conflicts or dependency
+
+    ctrl_wvalid_cnt_d = ctrl_wvalid_cnt_q;
+    ctrl_wtrans_cnt_d = ctrl_wtrans_cnt_q;
+
+    for (int port = 0; port < NrWritePorts; port++) begin
+      if (sb_enable_i[port + NrReadPorts]) begin
+        // VLSU tries to write
+        ctrl_wvalid_cnt_d[port] ++;
+        if ( sb_wrote_result_i[port]) begin
+          // The VRF is able to accept the
+          ctrl_wtrans_cnt_d[port] ++;
+        end
+      end
+    end
+
+    // Per-Unit Monitoring
+    /// VLSU
+    ctrl_vlsu_stall_d  = ctrl_vlsu_stall_q;
+    ctrl_vlsu_active_d = ctrl_vlsu_active_q;
+    ctrl_vlsu_insn_d   = ctrl_vlsu_insn_q;
+
+    if (spatz_req_o.ex_unit == LSU && spatz_req_valid_o) begin
+      ctrl_vlsu_active_d ++;
+      if (vlsu_req_ready_i) begin
+        ctrl_vlsu_insn_d ++;
+      end else begin
+        // We cannot dispatch the next instruction before VLSU is busy
+        ctrl_vlsu_stall_d ++;
+      end
+    end
+
+    //// VLSU Write Port Conflict
+    //// We have write request but not able to write into VRF
+    //// Indicates a write conflict
+    if (sb_enable_i[SB_VLSU_VD_WD]) begin
+      // VLSU tries to write
+      ctrl_wvalid_cnt_d[SB_VLSU_VD_WD] ++;
+      if ( sb_wrote_result_i[SB_VLSU_VD_WD]) begin
+        // The VRF is able to accept the
+        ctrl_wtrans_cnt_d[SB_VLSU_VD_WD] ++;
+      end
+    end
+
+    /// VFU
+    ctrl_vfu_stall_d  = ctrl_vfu_stall_q;
+    ctrl_vfu_active_d = ctrl_vfu_active_q;
+    ctrl_vfu_insn_d   = ctrl_vfu_insn_q;
+
+    if (spatz_req_o.ex_unit == VFU && spatz_req_valid_o) begin
+      ctrl_vfu_active_d ++;
+      if (vfu_req_ready_i) begin
+        // The next instruction belongs to VFU
+        ctrl_vfu_insn_d ++;
+      end else begin
+        // We cannot dispatch the next instruction before VFU is busy
+        ctrl_vfu_stall_d ++;
+      end
+    end
+
+    /// VSLDU
+    ctrl_vsldu_stall_d  = ctrl_vsldu_stall_q;
+    ctrl_vsldu_active_d = ctrl_vsldu_active_q;
+    ctrl_vsldu_insn_d   = ctrl_vsldu_insn_q;
+
+    if (spatz_req_o.ex_unit == SLD && spatz_req_valid_o) begin
+      ctrl_vsldu_active_d ++;
+      if (vsldu_req_ready_i) begin
+        // The next instruction belongs to VSLDU
+        ctrl_vsldu_insn_d ++;
+      end else begin
+        // We cannot dispatch the next instruction before VSLDU is busy
+        ctrl_vsldu_stall_d ++;
+      end
+    end
+  end
+`endif
+
 endmodule : spatz_controller
