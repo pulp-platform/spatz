@@ -22,7 +22,8 @@ interface REQRSP_BUS #(
   /// The width of the address.
   parameter int ADDR_WIDTH = -1,
   /// The width of the data.
-  parameter int DATA_WIDTH = -1
+  parameter int DATA_WIDTH = -1,
+  parameter int USER_WIDTH  = -1
 );
 
   import reqrsp_pkg::*;
@@ -32,6 +33,7 @@ interface REQRSP_BUS #(
   typedef logic [ADDR_WIDTH-1:0] addr_t;
   typedef logic [DATA_WIDTH-1:0] data_t;
   typedef logic [StrbWidth-1:0] strb_t;
+  typedef logic [USER_WIDTH-1:0] user_t;
   /// The request channel (Q).
   addr_t   q_addr;
   /// 0 = read, 1 = write, 1 = amo fetch-and-op
@@ -43,6 +45,7 @@ interface REQRSP_BUS #(
   size_t   q_size;
   logic    q_valid;
   logic    q_ready;
+  user_t   q_user;
 
   /// The response channel (P).
   data_t   p_data;
@@ -50,15 +53,16 @@ interface REQRSP_BUS #(
   logic    p_error;
   logic    p_valid;
   logic    p_ready;
+  user_t   p_user;
 
 
   modport in  (
-    input  q_addr, q_write, q_amo, q_size, q_data, q_strb, q_valid, p_ready,
-    output q_ready, p_data, p_error, p_valid
+    input  q_addr, q_write, q_amo, q_size, q_data, q_strb, q_user, q_valid, p_ready,
+    output q_ready, p_data, p_error, p_user, p_valid
   );
   modport out (
-    output q_addr, q_write, q_amo, q_size, q_data, q_strb, q_valid, p_ready,
-    input  q_ready, p_data, p_error, p_valid
+    output q_addr, q_write, q_amo, q_size, q_data, q_strb, q_user, q_valid, p_ready,
+    input  q_ready, p_data, p_error, p_user, p_valid
   );
 
 endinterface
@@ -68,7 +72,8 @@ interface REQRSP_BUS_DV #(
   /// The width of the address.
   parameter int ADDR_WIDTH = -1,
   /// The width of the data.
-  parameter int DATA_WIDTH = -1
+  parameter int DATA_WIDTH = -1,
+  parameter int USER_WIDTH  = -1
 ) (
   input logic clk_i
 );
@@ -80,6 +85,7 @@ interface REQRSP_BUS_DV #(
   typedef logic [ADDR_WIDTH-1:0] addr_t;
   typedef logic [DATA_WIDTH-1:0] data_t;
   typedef logic [StrbWidth-1:0] strb_t;
+  typedef logic [USER_WIDTH-1:0] user_t;
   /// The request channel (Q).
   addr_t   q_addr;
   /// 0 = read, 1 = write, 1 = amo fetch-and-op
@@ -89,6 +95,7 @@ interface REQRSP_BUS_DV #(
   /// Byte-wise strobe
   strb_t   q_strb;
   size_t   q_size;
+  user_t   q_user;
   logic    q_valid;
   logic    q_ready;
 
@@ -96,20 +103,21 @@ interface REQRSP_BUS_DV #(
   data_t   p_data;
   /// 0 = ok, 1 = error
   logic    p_error;
+  logic    p_user;
   logic    p_valid;
   logic    p_ready;
 
   modport in  (
-    input  q_addr, q_write, q_amo, q_size, q_data, q_strb, q_valid, p_ready,
-    output q_ready, p_data, p_error, p_valid
+    input  q_addr, q_write, q_amo, q_size, q_data, q_strb, q_user, q_valid, p_ready,
+    output q_ready, p_data, p_error, p_user, p_valid
   );
   modport out (
-    output q_addr, q_write, q_amo, q_size, q_data, q_strb, q_valid, p_ready,
-    input  q_ready, p_data, p_error, p_valid
+    output q_addr, q_write, q_amo, q_size, q_data, q_strb, q_user, q_valid, p_ready,
+    input  q_ready, p_data, p_error, p_user, p_valid
   );
   modport monitor (
-    input q_addr, q_write, q_amo, q_size, q_data, q_strb, q_valid, p_ready,
-          q_ready, p_data, p_error, p_valid
+    input q_addr, q_write, q_amo, q_size, q_data, q_strb, q_user, q_valid, p_ready,
+          q_ready, p_data, p_error, p_user, p_valid
   );
 
   // pragma translate_off
@@ -120,10 +128,12 @@ interface REQRSP_BUS_DV #(
   assert property (@(posedge clk_i) (q_valid && !q_ready |=> $stable(q_size)));
   assert property (@(posedge clk_i) (q_valid && !q_ready |=> $stable(q_data)));
   assert property (@(posedge clk_i) (q_valid && !q_ready |=> $stable(q_strb)));
+  assert property (@(posedge clk_i) (q_valid && !q_ready |=> $stable(q_user)));
   assert property (@(posedge clk_i) (q_valid && !q_ready |=> q_valid));
 
   assert property (@(posedge clk_i) (p_valid && !p_ready |=> $stable(p_data)));
   assert property (@(posedge clk_i) (p_valid && !p_ready |=> $stable(p_error)));
+  assert property (@(posedge clk_i) (q_valid && !q_ready |=> $stable(p_user)));
   assert property (@(posedge clk_i) (p_valid && !p_ready |=> p_valid));
   `endif
   // pragma translate_on

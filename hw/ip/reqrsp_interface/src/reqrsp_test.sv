@@ -70,18 +70,21 @@ package reqrsp_test;
   class reqrsp_driver #(
     parameter int  AW = -1,
     parameter int  DW = -1,
+    parameter int  UW = -1,
     parameter time TA = 0 , // stimuli application time
     parameter time TT = 0   // stimuli test time
   );
     virtual REQRSP_BUS_DV #(
       .ADDR_WIDTH(AW),
-      .DATA_WIDTH(DW)
+      .DATA_WIDTH(DW),
+      .USER_WIDTH(UW)
     ) bus;
 
     function new(
       virtual REQRSP_BUS_DV #(
         .ADDR_WIDTH(AW),
-        .DATA_WIDTH(DW)
+        .DATA_WIDTH(DW),
+        .USER_WIDTH(UW)
       ) bus
     );
       this.bus = bus;
@@ -95,12 +98,14 @@ package reqrsp_test;
       bus.q_strb  <= '0;
       bus.q_size  <= '0;
       bus.q_valid <= '0;
+      bus.q_user  <= '0;
       bus.p_ready <= '0;
     endtask
 
     task reset_slave;
       bus.q_ready <= '0;
       bus.p_data  <= '0;
+      bus.p_user  <= '0;
       bus.p_error <= '0;
       bus.p_valid <= '0;
     endtask
@@ -122,6 +127,7 @@ package reqrsp_test;
       bus.q_strb  <= #TA req.strb;
       bus.q_size  <= #TA req.size;
       bus.q_valid <= #TA 1;
+      bus.q_user  <= #TA 0;
       cycle_start();
       while (bus.q_ready != 1) begin cycle_end(); cycle_start(); end
       cycle_end();
@@ -129,6 +135,7 @@ package reqrsp_test;
       bus.q_write <= #TA '0;
       bus.q_data  <= #TA '0;
       bus.q_strb  <= #TA '0;
+      bus.q_user  <= #TA 0;
       bus.q_valid <= #TA 0;
     endtask
 
@@ -136,12 +143,14 @@ package reqrsp_test;
     task send_rsp (input rsp_t rsp);
       bus.p_data  <= #TA rsp.data;
       bus.p_error <= #TA rsp.error;
+      bus.p_user  <= #TA 0;
       bus.p_valid <= #TA 1;
       cycle_start();
       while (bus.p_ready != 1) begin cycle_end(); cycle_start(); end
       cycle_end();
       bus.p_data  <= #TA '0;
       bus.p_error <= #TA '0;
+      bus.p_user  <= #TA 0;
       bus.p_valid <= #TA 0;
     endtask
 
@@ -157,6 +166,7 @@ package reqrsp_test;
       req.data  = bus.q_data;
       req.strb  = bus.q_strb;
       req.size  = bus.q_size;
+      req.user  = bus.q_user;
       cycle_end();
       bus.q_ready <= #TA 0;
     endtask
@@ -184,6 +194,7 @@ package reqrsp_test;
       req.data  = bus.q_data;
       req.strb  = bus.q_strb;
       req.size  = bus.q_size;
+      req.user  = bus.q_user;
       cycle_end();
     endtask
 
@@ -194,6 +205,7 @@ package reqrsp_test;
       rsp = new;
       rsp.data  = bus.p_data;
       rsp.error = bus.p_error;
+      rsp.user  = bus.p_user;
       cycle_end();
     endtask
 
@@ -204,6 +216,7 @@ package reqrsp_test;
     // Reqrsp interface parameters
     parameter int   AW = 32,
     parameter int   DW = 32,
+    parameter int   UW = 1,
     // Stimuli application and test time
     parameter time  TA = 0ps,
     parameter time  TT = 0ps
@@ -213,6 +226,7 @@ package reqrsp_test;
       // Reqrsp bus interface paramaters;
       .AW ( AW ),
       .DW ( DW ),
+      .UW ( UW ),
       // Stimuli application and test time
       .TA ( TA ),
       .TT ( TT )
@@ -220,7 +234,7 @@ package reqrsp_test;
 
     reqrsp_driver_t drv;
 
-    function new(virtual REQRSP_BUS_DV #( .ADDR_WIDTH (AW), .DATA_WIDTH (DW)) bus);
+    function new(virtual REQRSP_BUS_DV #( .ADDR_WIDTH (AW), .DATA_WIDTH (DW), .USER_WIDTH (UW)) bus);
       this.drv = new (bus);
     endfunction
 
@@ -244,6 +258,7 @@ package reqrsp_test;
     // Reqrsp interface parameters
     parameter int   AW = 32,
     parameter int   DW = 32,
+    parameter int   UW = 1,
     // Stimuli application and test time
     parameter time  TA = 0ps,
     parameter time  TT = 0ps,
@@ -251,7 +266,7 @@ package reqrsp_test;
     parameter int unsigned REQ_MAX_WAIT_CYCLES = 20,
     parameter int unsigned RSP_MIN_WAIT_CYCLES = 1,
     parameter int unsigned RSP_MAX_WAIT_CYCLES = 20
-  ) extends rand_reqrsp #(.AW(AW), .DW(DW), .TA(TA), .TT(TT));
+  ) extends rand_reqrsp #(.AW(AW), .DW(DW), .UW(UW), .TA(TA), .TT(TT));
 
     int unsigned cnt = 0;
     bit req_done = 0;
@@ -262,7 +277,7 @@ package reqrsp_test;
     endtask
 
     /// Constructor.
-    function new(virtual REQRSP_BUS_DV #( .ADDR_WIDTH (AW), .DATA_WIDTH (DW)) bus);
+    function new(virtual REQRSP_BUS_DV #( .ADDR_WIDTH (AW), .DATA_WIDTH (DW), .USER_WIDTH (UW)) bus);
       super.new(bus);
     endfunction
 
@@ -301,6 +316,7 @@ package reqrsp_test;
     // Reqrsp interface parameters
     parameter int   AW = 32,
     parameter int   DW = 32,
+    parameter int   UW = 1,
     // Stimuli application and test time
     parameter time  TA = 0ps,
     parameter time  TT = 0ps,
@@ -308,7 +324,7 @@ package reqrsp_test;
     parameter int unsigned REQ_MAX_WAIT_CYCLES = 10,
     parameter int unsigned RSP_MIN_WAIT_CYCLES = 0,
     parameter int unsigned RSP_MAX_WAIT_CYCLES = 10
-  ) extends rand_reqrsp #(.AW(AW), .DW(DW), .TA(TA), .TT(TT));
+  ) extends rand_reqrsp #(.AW(AW), .DW(DW), .UW(UW), .TA(TA), .TT(TT));
 
     mailbox req_mbx = new();
 
@@ -325,7 +341,7 @@ package reqrsp_test;
     endtask
 
     /// Constructor.
-    function new(virtual REQRSP_BUS_DV #( .ADDR_WIDTH (AW), .DATA_WIDTH (DW)) bus);
+    function new(virtual REQRSP_BUS_DV #( .ADDR_WIDTH (AW), .DATA_WIDTH (DW), .USER_WIDTH (UW)) bus);
       super.new(bus);
     endfunction
 
@@ -355,15 +371,16 @@ package reqrsp_test;
     // Reqrsp interface parameters
     parameter int   AW = 32,
     parameter int   DW = 32,
+    parameter int   UW = 32,
     // Stimuli application and test time
     parameter time  TA = 0ps,
     parameter time  TT = 0ps
-  ) extends rand_reqrsp #(.AW(AW), .DW(DW), .TA(TA), .TT(TT));
+  ) extends rand_reqrsp #(.AW(AW), .DW(DW), .UW(UW), .TA(TA), .TT(TT));
 
     mailbox req_mbx = new, rsp_mbx = new;
 
     /// Constructor.
-    function new(virtual REQRSP_BUS_DV #( .ADDR_WIDTH (AW), .DATA_WIDTH (DW)) bus);
+    function new(virtual REQRSP_BUS_DV #( .ADDR_WIDTH (AW), .DATA_WIDTH (DW), .USER_WIDTH (UW)) bus);
       super.new(bus);
     endfunction
 

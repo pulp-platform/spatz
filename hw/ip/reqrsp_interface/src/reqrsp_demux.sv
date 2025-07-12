@@ -43,10 +43,12 @@ module reqrsp_demux #(
   always_comb begin
     for (int i = 0; i < NrPorts; i++) begin
       mst_req_o[i].q_valid = '0;
-      mst_req_o[i].q = slv_req_i.q;
+      // mst_req_o[i].q = slv_req_i.q;
+      mst_req_o[i].q = '0;
       mst_req_o[i].p_ready = fwd[i] ? slv_req_i.p_ready : 1'b0;
     end
     mst_req_o[slv_select_i].q_valid = req_valid;
+    mst_req_o[slv_select_i].q = slv_req_i.q;
   end
   assign req_ready = mst_rsp_i[slv_select_i].q_ready;
 
@@ -106,6 +108,8 @@ module reqrsp_demux_intf #(
     parameter int unsigned DataWidth    = 0,
     /// Amount of outstanding responses. Determines the FIFO size.
     parameter int unsigned RespDepth    = 8,
+    /// User width of the interface
+    parameter int unsigned UserWidth    = 0,
     // Dependent parameters, DO NOT OVERRIDE!
     parameter int unsigned SelectWidth    = cf_math_pkg::idx_width(NrPorts),
     parameter type         select_t       = logic [SelectWidth-1:0]
@@ -120,8 +124,9 @@ module reqrsp_demux_intf #(
   typedef logic [AddrWidth-1:0] addr_t;
   typedef logic [DataWidth-1:0] data_t;
   typedef logic [DataWidth/8-1:0] strb_t;
+  typedef logic [UserWidth-1:0] user_t;
 
-  `REQRSP_TYPEDEF_ALL(reqrsp, addr_t, data_t, strb_t)
+  `REQRSP_TYPEDEF_ALL(reqrsp, addr_t, data_t, strb_t, user_t)
 
   reqrsp_req_t reqrsp_slv_req;
   reqrsp_rsp_t reqrsp_slv_rsp;
@@ -131,6 +136,7 @@ module reqrsp_demux_intf #(
 
   reqrsp_demux #(
     .NrPorts (NrPorts),
+    .UserWidth  (UserWidth),
     .req_t (reqrsp_req_t),
     .rsp_t (reqrsp_rsp_t),
     .RespDepth (RespDepth)

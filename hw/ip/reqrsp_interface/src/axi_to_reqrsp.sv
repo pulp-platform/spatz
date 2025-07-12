@@ -28,12 +28,13 @@ module axi_to_reqrsp #(
   /// AXI4+ATOP request type. See `include/axi/typedef.svh`.
   parameter type         axi_req_t  = logic,
   /// AXI4+ATOP response type. See `include/axi/typedef.svh`.
-  parameter type         axi_rsp_t = logic,
+  parameter type         axi_rsp_t  = logic,
   /// Address width, has to be less or equal than the width off the AXI address
   /// field. Determines the width of `mem_addr_o`. Has to be wide enough to emit
   /// the memory region which should be accessible.
   parameter int unsigned AddrWidth  = 0,
   parameter int unsigned DataWidth  = 0,
+  parameter int unsigned UserWidth  = 0,
   /// AXI4+ATOP ID width.
   parameter int unsigned IdWidth    = 0,
   /// Depth of memory response buffer. This should be equal to the downstream
@@ -64,7 +65,12 @@ module axi_to_reqrsp #(
 
   typedef logic [AddrWidth-1:0]   addr_t;
   typedef logic [DataWidth-1:0]   data_t;
+  typedef logic [UserWidth-1:0]   requser_t;
   typedef logic [IdWidth-1:0]     axi_id_t;
+
+  logic [(2**IdWidth)-1:0] axi_arid_lock_d, axi_arid_lock_q;
+  logic arid_locked;
+  assign arid_locked = axi_arid_lock_q[axi_req_i.ar.id] & axi_req_i.ar_valid;
 
   typedef struct packed {
     addr_t          addr;
@@ -100,7 +106,7 @@ module axi_to_reqrsp #(
                   meta,           meta_buf;
 
   assign busy_o = axi_req_i.aw_valid | axi_req_i.ar_valid | axi_req_i.w_valid |
-                    axi_rsp_o.b_valid | axi_rsp_o.r_valid |
+                    axi_rsp_o.b_valid | axi_rsp_o.r_valid | arid_locked |
                     (r_cnt_q > 0) | (w_cnt_q > 0);
 
   // Handle reads.
@@ -111,6 +117,8 @@ module axi_to_reqrsp #(
     rd_meta             = '{default: '0};
     rd_valid            = 1'b0;
     r_cnt_d             = r_cnt_q;
+
+    axi_arid_lock_d     = axi_arid_lock_q;
     // Handle R burst in progress.
     if (r_cnt_q > '0) begin
       rd_meta_d.last = (r_cnt_q == 8'd1);
@@ -123,22 +131,36 @@ module axi_to_reqrsp #(
       end
     // Handle new AR if there is one.
     end else if (axi_req_i.ar_valid) begin
-      rd_meta_d = '{
-        addr:  addr_t'(axi_pkg::aligned_addr(axi_req_i.ar.addr, axi_req_i.ar.size)),
-        atop:  '0,
-        id:    axi_req_i.ar.id,
-        last:  (axi_req_i.ar.len == '0),
-        qos:   axi_req_i.ar.qos,
-        size:  axi_req_i.ar.size,
-        write: 1'b0,
-        lock: axi_req_i.ar.lock
-      };
-      rd_meta      = rd_meta_d;
-      rd_meta.addr = addr_t'(axi_req_i.ar.addr);
-      rd_valid     = 1'b1;
-      if (rd_ready) begin
-        r_cnt_d             = axi_req_i.ar.len;
-        axi_rsp_o.ar_ready = 1'b1;
+      if (axi_arid_lock_q[axi_req_i.ar.id] == 0) begin
+        // The input AR ID does not have a transaction oin-flight
+        rd_meta_d = '{
+          addr:  addr_t'(axi_pkg::aligned_addr(axi_req_i.ar.addr, axi_req_i.ar.size)),
+          atop:  '0,
+          id:    axi_req_i.ar.id,
+          last:  (axi_req_i.ar.len == '0),
+          qos:   axi_req_i.ar.qos,
+          size:  axi_req_i.ar.size,
+          write: 1'b0,
+          lock: axi_req_i.ar.lock
+        };
+        rd_meta      = rd_meta_d;
+        rd_meta.addr = addr_t'(axi_req_i.ar.addr);
+        rd_valid     = 1'b1;
+        if (rd_ready) begin
+          r_cnt_d             = axi_req_i.ar.len;
+          axi_rsp_o.ar_ready = 1'b1;
+          // Set the AR Read lock
+          axi_arid_lock_d[axi_req_i.ar.id] = 1'b1;
+        end
+      end
+    end
+
+
+    if (sel_buf_r & sel_buf_valid & sel_buf_ready) begin
+      // we accept a data back
+      if (r_cnt_q == 0) begin
+        // read done, remove lock
+        axi_arid_lock_d[rd_meta_q.id] = 1'b0;
       end
     end
   end
@@ -303,7 +325,7 @@ module axi_to_reqrsp #(
     // Silence those channels in case of a read.
     data: data & {DataWidth{meta.write}},
     strb: axi_req_i.w.strb & {StrbWidth{meta.write}},
-    id: '0,
+    user: '0,
     size: meta.size
   };
 
@@ -378,6 +400,7 @@ module axi_to_reqrsp #(
   `FFARN(wr_meta_q, wr_meta_d, meta_t'{default: '0}, clk_i, rst_ni)
   `FFARN(r_cnt_q, r_cnt_d, '0, clk_i, rst_ni)
   `FFARN(w_cnt_q, w_cnt_d, '0, clk_i, rst_ni)
+  `FFARN(axi_arid_lock_q, axi_arid_lock_d, 1'b0, clk_i, rst_ni)
 
   // Assertions
   // Make sure that write is never set for AMOs.
@@ -427,7 +450,9 @@ module axi_to_reqrsp_intf #(
   /// AXI id width.
   parameter int unsigned IdWidth    = 0,
   /// AXI user wdith.
-  parameter int unsigned UserWidth  = 0,
+  parameter int unsigned AxiUserWidth  = 0,
+  /// ReqRsp user width
+  parameter int unsigned UserWidth = 0,
   /// Depth of memory response buffer. This should be equal to the downstream
   /// response latency.
   parameter int unsigned BufDepth   = 1
@@ -446,15 +471,16 @@ module axi_to_reqrsp_intf #(
   typedef logic [DataWidth-1:0] data_t;
   typedef logic [DataWidth/8-1:0] strb_t;
   typedef logic [IdWidth-1:0] id_t;
+  typedef logic [AxiUserWidth-1:0] axi_user_t;
   typedef logic [UserWidth-1:0] user_t;
 
-  `REQRSP_TYPEDEF_ALL(reqrsp, addr_t, data_t, strb_t)
+  `REQRSP_TYPEDEF_ALL(reqrsp, addr_t, data_t, strb_t, user_t)
 
-  `AXI_TYPEDEF_AW_CHAN_T(aw_chan_t, addr_t, id_t, user_t)
-  `AXI_TYPEDEF_W_CHAN_T(w_chan_t, data_t, strb_t, user_t)
-  `AXI_TYPEDEF_B_CHAN_T(b_chan_t, id_t, user_t)
-  `AXI_TYPEDEF_AR_CHAN_T(ar_chan_t, addr_t, id_t, user_t)
-  `AXI_TYPEDEF_R_CHAN_T(r_chan_t, data_t, id_t, user_t)
+  `AXI_TYPEDEF_AW_CHAN_T(aw_chan_t, addr_t, id_t, axi_user_t)
+  `AXI_TYPEDEF_W_CHAN_T(w_chan_t, data_t, strb_t, axi_user_t)
+  `AXI_TYPEDEF_B_CHAN_T(b_chan_t, id_t, axi_user_t)
+  `AXI_TYPEDEF_AR_CHAN_T(ar_chan_t, addr_t, id_t, axi_user_t)
+  `AXI_TYPEDEF_R_CHAN_T(r_chan_t, data_t, id_t, axi_user_t)
 
   `AXI_TYPEDEF_REQ_T(axi_req_t, aw_chan_t, w_chan_t, ar_chan_t)
   `AXI_TYPEDEF_RESP_T(axi_rsp_t, b_chan_t, r_chan_t)
@@ -470,8 +496,9 @@ module axi_to_reqrsp_intf #(
     .axi_rsp_t (axi_rsp_t),
     .AddrWidth (AddrWidth),
     .DataWidth (DataWidth),
-    .IdWidth (IdWidth),
-    .BufDepth (BufDepth),
+    .IdWidth   (IdWidth),
+    .BufDepth  (BufDepth),
+    .UserWidth (UserWidth),
     .reqrsp_req_t (reqrsp_req_t),
     .reqrsp_rsp_t (reqrsp_rsp_t )
   ) i_dut (

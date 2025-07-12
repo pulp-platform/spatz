@@ -14,6 +14,7 @@ module axi_to_tcdm #(
     parameter int unsigned AddrWidth  = 0,
     parameter int unsigned DataWidth  = 0,
     parameter int unsigned IdWidth    = 0,
+    parameter int unsigned UserWidth  = 0,
     parameter int unsigned BufDepth   = 1
 ) (
     input  logic      clk_i,
@@ -27,8 +28,9 @@ module axi_to_tcdm #(
   typedef logic [AddrWidth-1:0] addr_t;
   typedef logic [DataWidth-1:0] data_t;
   typedef logic [DataWidth/8-1:0] strb_t;
+  typedef logic [UserWidth-1:0] user_t;
 
-  `REQRSP_TYPEDEF_ALL(reqrsp, addr_t, data_t, strb_t)
+  `REQRSP_TYPEDEF_ALL(reqrsp, addr_t, data_t, strb_t, user_t)
 
   reqrsp_req_t reqrsp_req;
   reqrsp_rsp_t reqrsp_rsp;
@@ -39,6 +41,7 @@ module axi_to_tcdm #(
     .AddrWidth (AddrWidth),
     .DataWidth (DataWidth),
     .IdWidth (IdWidth),
+    .UserWidth (UserWidth),
     .BufDepth (BufDepth),
     .reqrsp_req_t (reqrsp_req_t),
     .reqrsp_rsp_t (reqrsp_rsp_t)
@@ -56,6 +59,7 @@ module axi_to_tcdm #(
     .AddrWidth (AddrWidth),
     .DataWidth (DataWidth),
     .BufDepth (BufDepth),
+    .UserWidth (UserWidth),
     .reqrsp_req_t (reqrsp_req_t),
     .reqrsp_rsp_t (reqrsp_rsp_t),
     .tcdm_req_t (tcdm_req_t),

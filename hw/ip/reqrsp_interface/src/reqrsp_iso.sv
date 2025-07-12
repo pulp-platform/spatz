@@ -14,6 +14,8 @@ module reqrsp_iso #(
     parameter int unsigned AddrWidth = 0,
     /// Data width of the interface.
     parameter int unsigned DataWidth = 0,
+    /// User width of the interface
+    parameter int unsigned UserWidth    = 0,
     /// Request type.
     parameter type req_t             = logic,
     /// Response type.
@@ -43,8 +45,9 @@ module reqrsp_iso #(
   typedef logic [AddrWidth-1:0] addr_t;
   typedef logic [DataWidth-1:0] data_t;
   typedef logic [DataWidth/8-1:0] strb_t;
+  typedef logic [UserWidth-1:0] user_t;
 
-  `REQRSP_TYPEDEF_ALL(reqrsp, addr_t, data_t, strb_t)
+  `REQRSP_TYPEDEF_ALL(reqrsp, addr_t, data_t, strb_t, user_t)
 
   isochronous_spill_register #(
     .T (reqrsp_req_chan_t),
@@ -89,6 +92,8 @@ module reqrsp_iso_intf #(
     parameter int unsigned AddrWidth = 0,
     /// Data width of the interface.
     parameter int unsigned DataWidth = 0,
+    /// User width of the interface
+    parameter int unsigned UserWidth    = 0,
     /// Bypass.
     parameter bit  BypassReq         = 0,
     parameter bit  BypassRsp         = 0
@@ -110,8 +115,9 @@ module reqrsp_iso_intf #(
   typedef logic [AddrWidth-1:0] addr_t;
   typedef logic [DataWidth-1:0] data_t;
   typedef logic [DataWidth/8-1:0] strb_t;
+  typedef logic [UserWidth-1:0] user_t;
 
-  `REQRSP_TYPEDEF_ALL(reqrsp, addr_t, data_t, strb_t)
+  `REQRSP_TYPEDEF_ALL(reqrsp, addr_t, data_t, strb_t, user_t)
 
   reqrsp_req_t reqrsp_src_req, reqrsp_dst_req;
   reqrsp_rsp_t reqrsp_src_rsp, reqrsp_dst_rsp;
@@ -121,6 +127,7 @@ module reqrsp_iso_intf #(
     .DataWidth (DataWidth),
     .req_t     (reqrsp_req_t),
     .rsp_t     (reqrsp_rsp_t),
+    .UserWidth  (UserWidth),
     .BypassReq (BypassReq),
     .BypassRsp (BypassRsp)
   ) i_reqrsp_iso (

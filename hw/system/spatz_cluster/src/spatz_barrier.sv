@@ -48,6 +48,7 @@ module spatz_barrier
     in_rsp_o = out_rsp_i;
 
     for (int i = 0; i < NrPorts; i++) begin
+      out_req_o[i].q.user.core_id = i;
       case (state_q[i])
         Idle: begin
           if (in_req_i[i].q_valid &&

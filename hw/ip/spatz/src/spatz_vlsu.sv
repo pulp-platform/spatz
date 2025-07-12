@@ -211,6 +211,7 @@ module spatz_vlsu
   //////////////////////
 
   typedef logic [int'(MAXEW)-1:0] addr_offset_t;
+  typedef logic [IdWidth:0]       usage_t;
 
   elen_t [NrMemPorts-1:0] rob_wdata;
   id_t   [NrMemPorts-1:0] rob_wid;
@@ -221,7 +222,7 @@ module spatz_vlsu
   id_t   [NrMemPorts-1:0] rob_rid;
   logic  [NrMemPorts-1:0] rob_req_id;
   id_t   [NrMemPorts-1:0] rob_id;
-  id_t   [NrMemPorts-1:0] rob_usage;
+  usage_t[NrMemPorts-1:0] rob_usage;
   logic  [NrMemPorts-1:0] rob_full;
   logic  [NrMemPorts-1:0] rob_empty;
 

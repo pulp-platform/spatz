@@ -134,15 +134,20 @@ module snitch_lsu2
   // Only make a request when we got a valid request and if it is a load also
   // check that we can actually store the necessary information to process it in
   // the upcoming cycle(s).
-  assign data_req_o.q_valid = lsu_qvalid_i & (~id_table_full | hs_pending_q);
-  assign data_req_o.q.write = lsu_qwrite_i;
-  assign data_req_o.q.addr = lsu_qaddr_i;
-  assign data_req_o.q.amo  = lsu_qamo_i;
-  assign data_req_o.q.size = lsu_qsize_i;
-  assign data_req_o.q.id   = hs_pending_q ? req_id_q : req_id;
+
 
   // Generate byte enable mask.
   always_comb begin
+    data_req_o.q = '0;
+
+    data_req_o.q_valid = lsu_qvalid_i & (~id_table_full | hs_pending_q);
+    data_req_o.q.write = lsu_qwrite_i;
+    data_req_o.q.addr = lsu_qaddr_i;
+    data_req_o.q.amo  = lsu_qamo_i;
+    data_req_o.q.size = lsu_qsize_i;
+    data_req_o.q.user.req_id   = hs_pending_q ? req_id_q : req_id;
+    data_req_o.q.data = data_qdata[DataWidth-1:0];
+
     unique case (lsu_qsize_i)
       2'b00: data_req_o.q.strb = ('b1    << lsu_qaddr_i[DataAlign-1:0]);
       2'b01: data_req_o.q.strb = ('b11   << lsu_qaddr_i[DataAlign-1:0]);
@@ -168,7 +173,6 @@ module snitch_lsu2
       default: data_qdata = lsu_qdata;
     endcase
   end
-  assign data_req_o.q.data = data_qdata[DataWidth-1:0];
   /* verilator lint_on WIDTH */
 
   // The interface didn't accept our request yet
@@ -189,7 +193,7 @@ module snitch_lsu2
     endcase
   end
 
-  assign rsp_id = data_rsp_i.p.id;
+  assign rsp_id = data_rsp_i.p.user.req_id;
 
   assign lsu_perror_o = data_rsp_i.p.error;
   assign lsu_pdata_o  = ld_result[DataWidth-1:0];

@@ -36,8 +36,8 @@ module reorder_buffer
   output logic  id_valid_o,  // is the next id valid?
   output logic  full_o,
   output logic  empty_o,
-  // Statistic
-  output id_t   usage_o
+  // Statistic, one more bit
+  output logic [IdWidth:0]   usage_o
 );
 
   /*************
@@ -64,7 +64,7 @@ module reorder_buffer
   assign write_next_ptr = write_pointer_q + 1;
   assign id_valid_o     = id_valid_q[write_pointer_q] & id_valid_q[write_next_ptr];
 
-  assign usage_o = status_cnt_q[IdWidth-1:0];
+  assign usage_o = status_cnt_q;
 
   // Read and Write logic
   always_comb begin: read_write_comb

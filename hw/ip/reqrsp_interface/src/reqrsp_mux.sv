@@ -14,6 +14,8 @@ module reqrsp_mux #(
     parameter int unsigned               AddrWidth    = 0,
     /// Data width of the interface.
     parameter int unsigned               DataWidth    = 0,
+    /// User width of the interface
+    parameter int unsigned               UserWidth    = 0,
     /// Request type.
     parameter type                       req_t        = logic,
     /// Response type.
@@ -39,8 +41,9 @@ module reqrsp_mux #(
   typedef logic [AddrWidth-1:0] addr_t;
   typedef logic [DataWidth-1:0] data_t;
   typedef logic [DataWidth/8-1:0] strb_t;
+  typedef logic [UserWidth-1:0] user_t;
 
-  `REQRSP_TYPEDEF_REQ_CHAN_T(req_chan_t, addr_t, data_t, strb_t)
+  `REQRSP_TYPEDEF_REQ_CHAN_T(req_chan_t, addr_t, data_t, strb_t, user_t)
 
   localparam int unsigned LogNrPorts = cf_math_pkg::idx_width(NrPorts);
 
@@ -159,6 +162,8 @@ module reqrsp_mux_intf #(
     parameter int unsigned      AddrWidth    = 0,
     /// Data width of the interface.
     parameter int unsigned      DataWidth    = 0,
+    /// User width of the interface
+    parameter int unsigned      UserWidth    = 0,
     /// Amount of outstanding responses. Determines the FIFO size.
     parameter int unsigned      RespDepth    = 8,
     /// Cut timing paths on the request path. Incurs a cycle additional latency.
@@ -175,8 +180,9 @@ module reqrsp_mux_intf #(
   typedef logic [AddrWidth-1:0] addr_t;
   typedef logic [DataWidth-1:0] data_t;
   typedef logic [DataWidth/8-1:0] strb_t;
+  typedef logic [UserWidth-1:0] user_t;
 
-  `REQRSP_TYPEDEF_ALL(reqrsp, addr_t, data_t, strb_t)
+  `REQRSP_TYPEDEF_ALL(reqrsp, addr_t, data_t, strb_t, user_t)
 
   reqrsp_req_t [NrPorts-1:0] reqrsp_slv_req;
   reqrsp_rsp_t [NrPorts-1:0] reqrsp_slv_rsp;
@@ -188,6 +194,7 @@ module reqrsp_mux_intf #(
     .NrPorts (NrPorts),
     .AddrWidth (AddrWidth),
     .DataWidth (DataWidth),
+    .UserWidth  (UserWidth),
     .req_t (reqrsp_req_t),
     .rsp_t (reqrsp_rsp_t),
     .RespDepth (RespDepth),

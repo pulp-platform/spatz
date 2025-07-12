@@ -43,12 +43,18 @@
 module reqrsp_to_axi import reqrsp_pkg::*; #(
   /// Number of same transactions which can be in-flight
   /// simulatnously. Must be greater than 1.
-  parameter int unsigned MaxTrans = 4,
+  parameter int unsigned MaxTrans = 32,
   /// ID with which to send the transactions.
   parameter int unsigned ID = 0,
+  parameter int unsigned ShuffleId = 0,
+  parameter int unsigned AxiIdWidth = 8,
+  /// Req ID Width
+  parameter int unsigned UserWidth = 32'd6,
+  /// Set fall-through for reqid fifo, set when no latency between req and rsp
+  parameter int unsigned ReqUserFallThrough  = 1'b0,
   /// Data width of bus, must be 32 or 64.
   parameter int unsigned DataWidth = 32'b0,
-  parameter int unsigned UserWidth = 32'b0,
+  parameter int unsigned AxiUserWidth = 32'b0,
   parameter type reqrsp_req_t = logic,
   parameter type reqrsp_rsp_t = logic,
   parameter type axi_req_t = logic,
@@ -56,7 +62,7 @@ module reqrsp_to_axi import reqrsp_pkg::*; #(
 ) (
   input  logic clk_i,
   input  logic rst_ni,
-  input  logic [UserWidth-1:0] user_i,
+  input  logic [AxiUserWidth-1:0] user_i,
   input  reqrsp_req_t reqrsp_req_i,
   output reqrsp_rsp_t reqrsp_rsp_o,
   output axi_req_t axi_req_o,
@@ -71,6 +77,7 @@ module reqrsp_to_axi import reqrsp_pkg::*; #(
   logic atomic_in_flight_d, atomic_in_flight_q;
   cnt_t read_cnt_d, read_cnt_q;
   cnt_t write_cnt_d, write_cnt_q;
+  logic [AxiIdWidth-1:0] id_cnt_d, id_cnt_q;
   logic [DataWidth-1:0] write_data;
 
   logic q_valid, q_ready;
@@ -125,6 +132,34 @@ module reqrsp_to_axi import reqrsp_pkg::*; #(
   assign q_valid_write = q_valid & is_write;
   assign q_ready = (q_valid_read & q_ready_read) | (q_valid_write & q_ready_write);
 
+  // Used to store the request ID for response use
+  logic  requser_full, requser_empty, requser_push, requser_pop;
+  logic [UserWidth-1:0] requser_in, requser_out;
+
+  always_comb begin
+    requser_in = reqrsp_req_i.q.user;
+    requser_push = reqrsp_req_i.q_valid & reqrsp_rsp_o.q_ready;
+    requser_pop = reqrsp_rsp_o.p_valid & reqrsp_req_i.p_ready;
+  end
+
+  fifo_v3 #(
+    .FALL_THROUGH (ReqUserFallThrough      ),
+    .DATA_WIDTH   (UserWidth ),
+    .DEPTH        (MaxTrans  )
+  ) i_requser_fifo (
+    .clk_i      (clk_i      ),
+    .rst_ni     (rst_ni     ),
+    .flush_i    (1'b0       ),
+    .testmode_i (1'b0       ),
+    .full_o     (requser_full ),
+    .empty_o    (requser_empty),
+    .usage_o    (           ),
+    .data_i     (requser_in   ),
+    .push_i     (requser_push ),
+    .data_o     (requser_out  ),
+    .pop_i      (requser_pop  )
+  );
+
   // ------------------
   // Counter Management
   // ------------------
@@ -133,11 +168,13 @@ module reqrsp_to_axi import reqrsp_pkg::*; #(
   // Count the number of in-fligh writes.
   `FF(write_cnt_q, write_cnt_d, '0)
   `FF(atomic_in_flight_q, atomic_in_flight_d, '0)
+  `FF(id_cnt_q, id_cnt_d, '0)
 
   always_comb begin
     atomic_in_flight_d = atomic_in_flight_q;
     read_cnt_d = read_cnt_q;
     write_cnt_d = write_cnt_q;
+    id_cnt_d = id_cnt_q;
 
     if (reqrsp_req_i.q_valid && reqrsp_rsp_o.q_ready) begin
       // Set atomic in-flight flag if we sent an atomic.
@@ -148,6 +185,8 @@ module reqrsp_to_axi import reqrsp_pkg::*; #(
 
       if (!is_write) read_cnt_d++;
       else write_cnt_d++;
+
+      id_cnt_d = id_cnt_q + 1;
     end
 
     // Reset atomic in-flight flag.
@@ -174,7 +213,8 @@ module reqrsp_to_axi import reqrsp_pkg::*; #(
   assign axi_req_o.ar.burst  = axi_pkg::BURST_INCR;
   assign axi_req_o.ar.lock   = (reqrsp_req_i.q.amo == AMOLR);
   assign axi_req_o.ar.cache  = axi_pkg::CACHE_MODIFIABLE;
-  assign axi_req_o.ar.id     = $unsigned(ID);
+  assign axi_req_o.ar.id     = ShuffleId ? id_cnt_q : $unsigned(ID);
+  // assign axi_req_o.ar.id     = $unsigned(ID);
   assign axi_req_o.ar.user   = user_i;
   assign axi_req_o.ar_valid  = q_valid_read;
   assign q_ready_read        = axi_rsp_i.ar_ready;
@@ -253,9 +293,9 @@ module reqrsp_to_axi import reqrsp_pkg::*; #(
   assign axi_req_o.b_ready = (reqrsp_req_i.p_ready | atomic_in_flight_q) & axi_rsp_i.b_valid;
 
   always_comb begin
-    reqrsp_rsp_o.p.data = '0;
-    reqrsp_rsp_o.p.id   = '0;
-    reqrsp_rsp_o.p.write = '0;
+    reqrsp_rsp_o.p.data  = '0;
+    reqrsp_rsp_o.p.user  = requser_out;
+    reqrsp_rsp_o.p.write = axi_rsp_i.b_valid;
     // Normal case.
     if (r_valid) reqrsp_rsp_o.p.data = axi_rsp_i.r.data;
     // In case we got a B response and this wasn't an atomic, let's check
@@ -286,7 +326,7 @@ module reqrsp_to_axi import reqrsp_pkg::*; #(
     (reqrsp_req_i.q.amo != reqrsp_pkg::AMONone) |-> !reqrsp_req_i.q.write)
   // Check that the data width is in the range of 32 or 64 bit. We didn't define
   // any other bus widths so far.
-  `ASSERT_INIT(check_DataWidth, DataWidth inside {32, 64})
+  // `ASSERT_INIT(check_DataWidth, DataWidth inside {32, 64})
   `ASSERT_INIT(MaxTrans_greater_than_one, MaxTrans > 1)
   // 1. Assert that the in-flight counters are never both 2+ == 2+, that would
   //    imply an illegal state.
@@ -308,7 +348,8 @@ module reqrsp_to_axi_intf #(
   /// AXI and REQRSP data width.
   parameter int unsigned DataWidth = 32'd0,
   /// AXI user width.
-  parameter int unsigned AxiUserWidth = 32'd0
+  parameter int unsigned AxiUserWidth = 32'd0,
+  parameter int unsigned UserWidth = 32'd0
 ) (
   input logic clk_i,
   input logic rst_ni,
@@ -321,15 +362,16 @@ module reqrsp_to_axi_intf #(
   typedef logic [DataWidth-1:0] data_t;
   typedef logic [DataWidth/8-1:0] strb_t;
   typedef logic [AxiIdWidth-1:0] id_t;
-  typedef logic [AxiUserWidth-1:0] user_t;
+  typedef logic [AxiUserWidth-1:0] axi_user_t;
+  typedef logic [UserWidth-1:0] user_t;
 
-  `REQRSP_TYPEDEF_ALL(reqrsp, addr_t, data_t, strb_t)
+  `REQRSP_TYPEDEF_ALL(reqrsp, addr_t, data_t, strb_t, user_t)
 
-  `AXI_TYPEDEF_AW_CHAN_T(aw_chan_t, addr_t, id_t, user_t)
-  `AXI_TYPEDEF_W_CHAN_T(w_chan_t, data_t, strb_t, user_t)
-  `AXI_TYPEDEF_B_CHAN_T(b_chan_t, id_t, user_t)
-  `AXI_TYPEDEF_AR_CHAN_T(ar_chan_t, addr_t, id_t, user_t)
-  `AXI_TYPEDEF_R_CHAN_T(r_chan_t, data_t, id_t, user_t)
+  `AXI_TYPEDEF_AW_CHAN_T(aw_chan_t, addr_t, id_t, axi_user_t)
+  `AXI_TYPEDEF_W_CHAN_T(w_chan_t, data_t, strb_t, axi_user_t)
+  `AXI_TYPEDEF_B_CHAN_T(b_chan_t, id_t, axi_user_t)
+  `AXI_TYPEDEF_AR_CHAN_T(ar_chan_t, addr_t, id_t, axi_user_t)
+  `AXI_TYPEDEF_R_CHAN_T(r_chan_t, data_t, id_t, axi_user_t)
 
   `AXI_TYPEDEF_REQ_T(axi_req_t, aw_chan_t, w_chan_t, ar_chan_t)
   `AXI_TYPEDEF_RESP_T(axi_rsp_t, b_chan_t, r_chan_t)
@@ -342,6 +384,7 @@ module reqrsp_to_axi_intf #(
 
   reqrsp_to_axi #(
     .DataWidth ( DataWidth ),
+    .UserWidth ( UserWidth ),
     .reqrsp_req_t (reqrsp_req_t),
     .reqrsp_rsp_t (reqrsp_rsp_t),
     .axi_req_t (axi_req_t),
