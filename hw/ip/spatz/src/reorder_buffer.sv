@@ -57,7 +57,7 @@ module reorder_buffer
   logic  [NumWords-1:0] valid_d, valid_q;
 
   // Status flags
-  assign full_o    = (status_cnt_q == NumWords-1);
+  assign full_o    = (status_cnt_q == NumWords);
   assign empty_o   = (status_cnt_q == 'd0);
   assign id_o      = write_pointer_q;
   assign id_read_o = read_pointer_q;

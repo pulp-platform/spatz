@@ -55,8 +55,8 @@ module snitch_lsu2
 );
 
   localparam int unsigned DataAlign = $clog2(DataWidth/8);
-  logic [63:0] ld_result;
-  logic [63:0] lsu_qdata, data_qdata;
+  logic [31:0] ld_result;
+  logic [31:0] lsu_qdata, data_qdata;
 
   typedef struct packed {
     logic                  write;
@@ -162,14 +162,10 @@ module snitch_lsu2
   assign lsu_qdata = $unsigned(lsu_qdata_i);
   always_comb begin
     unique case (lsu_qaddr_i[DataAlign-1:0])
-      3'b000: data_qdata = lsu_qdata;
-      3'b001: data_qdata = {lsu_qdata[55:0], lsu_qdata[63:56]};
-      3'b010: data_qdata = {lsu_qdata[47:0], lsu_qdata[63:48]};
-      3'b011: data_qdata = {lsu_qdata[39:0], lsu_qdata[63:40]};
-      3'b100: data_qdata = {lsu_qdata[31:0], lsu_qdata[63:32]};
-      3'b101: data_qdata = {lsu_qdata[23:0], lsu_qdata[63:24]};
-      3'b110: data_qdata = {lsu_qdata[15:0], lsu_qdata[63:16]};
-      3'b111: data_qdata = {lsu_qdata[7:0],  lsu_qdata[63:8]};
+      2'b00: data_qdata = lsu_qdata;
+      2'b01: data_qdata = {lsu_qdata[23:0], lsu_qdata[31:24]};
+      2'b10: data_qdata = {lsu_qdata[15:0], lsu_qdata[31:16]};
+      2'b11: data_qdata = {lsu_qdata[ 7:0], lsu_qdata[31: 8]};
       default: data_qdata = lsu_qdata;
     endcase
   end
@@ -181,13 +177,13 @@ module snitch_lsu2
 
   // Return Path
   // shift the load data back
-  logic [63:0] shifted_data;
+  logic [31:0] shifted_data;
   assign shifted_data = data_rsp_i.p.data >> {rsp_laq.offset, 3'b000};
   always_comb begin
     unique case (rsp_laq.size)
-      2'b00: ld_result = {{56{(shifted_data[7]  | NaNBox) & rsp_laq.sign_ext}}, shifted_data[7:0]};
-      2'b01: ld_result = {{48{(shifted_data[15] | NaNBox) & rsp_laq.sign_ext}}, shifted_data[15:0]};
-      2'b10: ld_result = {{32{(shifted_data[31] | NaNBox) & rsp_laq.sign_ext}}, shifted_data[31:0]};
+      2'b00: ld_result = {{24{(shifted_data[7]  | NaNBox) & rsp_laq.sign_ext}}, shifted_data[7:0]};
+      2'b01: ld_result = {{16{(shifted_data[15] | NaNBox) & rsp_laq.sign_ext}}, shifted_data[15:0]};
+      2'b10: ld_result = shifted_data;
       2'b11: ld_result = shifted_data;
       default: ld_result = shifted_data;
     endcase
