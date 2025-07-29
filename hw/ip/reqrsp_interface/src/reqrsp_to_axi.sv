@@ -13,16 +13,13 @@
 /// 1. We need to be careful with the memory model: AXI does not imply any
 ///    ordering between the read and the write channel. On the other hand the
 ///    reqrsp protocol does (implicitly because everything is in issue order).
-/// 2. Atomic memory operations are supported and they are a bit quirky in the
-///    AXI5 standard. In particular the kind of break the assumption that every
-///    `AW` implies exactly one `B` because the read data is also returned on
-///    the `R` channel.
+/// 2. Burst is supported in this module to convert from a tcdm burst to
+///    axi burst
 ///
 /// ## Memory Ordering
 ///
-/// 1. Atomics need to block and wait until the ID becomes available again.
-/// 2. Reads can go after reads, AXI will maintain the ordering.
-/// 3. Similarly, writes can go after writes, AXI will also maintain the
+/// 1. Reads can go after reads, AXI will maintain the ordering.
+/// 2. Similarly, writes can go after writes, AXI will also maintain the
 ///    ordering there.
 ///
 /// This has the drawback that we are overly conservative when only
@@ -48,6 +45,8 @@ module reqrsp_to_axi import reqrsp_pkg::*; #(
   parameter int unsigned ID = 0,
   parameter int unsigned ShuffleId = 0,
   parameter int unsigned AxiIdWidth = 8,
+  // Enable burst support?
+  parameter int unsigned EnBurst = 0,
   /// Req ID Width
   parameter int unsigned UserWidth = 32'd6,
   /// Set fall-through for reqid fifo, set when no latency between req and rsp
@@ -71,10 +70,8 @@ module reqrsp_to_axi import reqrsp_pkg::*; #(
 
   localparam int unsigned CounterWidth = cf_math_pkg::idx_width(MaxTrans);
   typedef logic [CounterWidth-1:0] cnt_t;
-  logic req_is_amo;
   logic is_write;
 
-  logic atomic_in_flight_d, atomic_in_flight_q;
   cnt_t read_cnt_d, read_cnt_q;
   cnt_t write_cnt_d, write_cnt_q;
   logic [AxiIdWidth-1:0] id_cnt_d, id_cnt_q;
@@ -84,8 +81,7 @@ module reqrsp_to_axi import reqrsp_pkg::*; #(
   logic q_valid_read, q_ready_read;
   logic q_valid_write, q_ready_write;
 
-  logic delay_r_for_atomic, delay_r_for_atomic_q;
-  logic r_valid, r_ready;
+  logic r_valid, r_ready, r_last;
 
   // Globally no new transactions can be accepted if there is an unresolved
   // atomic transactions and per channel we can not accept a new transaction iff:
@@ -93,13 +89,11 @@ module reqrsp_to_axi import reqrsp_pkg::*; #(
   // - The counter would overflow.
   logic stall_read, dec_read_cnt, read_cnt_not_zero;
   logic stall_write, dec_write_cnt, write_cnt_not_zero;
-  // AMos need to make sure that they don't re-use an in-flight ID.
-  logic stall_amo;
 
-  assign req_is_amo = is_amo(reqrsp_req_i.q.amo);
-  assign is_write = reqrsp_req_i.q.write | req_is_amo | (reqrsp_req_i.q.amo == AMOSC);
+  assign is_write = reqrsp_req_i.q.write ;
 
-  assign dec_read_cnt = r_valid & r_ready;
+  // Only reduce the counter if we receive the last response from a burst
+  assign dec_read_cnt = r_valid & r_ready & r_last;
   assign dec_write_cnt = axi_rsp_i.b_valid & axi_req_o.b_ready;
 
   // Read count isn't zero in this cycle.
@@ -110,11 +104,6 @@ module reqrsp_to_axi import reqrsp_pkg::*; #(
   // See ordering rules above.
   assign stall_write = is_write & (write_cnt_q == MaxTrans-1 | read_cnt_not_zero);
   assign stall_read = !is_write & (read_cnt_q == MaxTrans-1 | write_cnt_not_zero);
-  // For atomics we additionally need to check whether there are any in-flight
-  // writes, as atomci are already write transactions this wouldn't be captured
-  // by the regular case. This makes sure that neither read nor writes are
-  // in-flight.
-  assign stall_amo = req_is_amo & write_cnt_not_zero;
 
   // Incoming handshake. Make sure we can accept the new transactions according
   // to our rules.
@@ -122,7 +111,7 @@ module reqrsp_to_axi import reqrsp_pkg::*; #(
     q_valid = reqrsp_req_i.q_valid;
     reqrsp_rsp_o.q_ready = q_ready;
     // Stall new transaction.
-    if (atomic_in_flight_q || stall_write || stall_read || stall_amo) begin
+    if (stall_write || stall_read) begin
       q_valid = 1'b0;
       reqrsp_rsp_o.q_ready = 1'b0;
     end
@@ -133,32 +122,41 @@ module reqrsp_to_axi import reqrsp_pkg::*; #(
   assign q_ready = (q_valid_read & q_ready_read) | (q_valid_write & q_ready_write);
 
   // Used to store the request ID for response use
+  // User info carries request ID for reordering
   logic  requser_full, requser_empty, requser_push, requser_pop;
   logic [UserWidth-1:0] requser_in, requser_out;
 
-  always_comb begin
-    requser_in = reqrsp_req_i.q.user;
-    requser_push = reqrsp_req_i.q_valid & reqrsp_rsp_o.q_ready;
-    requser_pop = reqrsp_rsp_o.p_valid & reqrsp_req_i.p_ready;
-  end
+  // Is it the last response from burst?
+  logic reqrsp_burst_last;
+  // Last transaction
+  assign reqrsp_burst_last = axi_rsp_i.r.last;
 
-  fifo_v3 #(
-    .FALL_THROUGH (ReqUserFallThrough      ),
-    .DATA_WIDTH   (UserWidth ),
-    .DEPTH        (MaxTrans  )
-  ) i_requser_fifo (
-    .clk_i      (clk_i      ),
-    .rst_ni     (rst_ni     ),
-    .flush_i    (1'b0       ),
-    .testmode_i (1'b0       ),
-    .full_o     (requser_full ),
-    .empty_o    (requser_empty),
-    .usage_o    (           ),
-    .data_i     (requser_in   ),
-    .push_i     (requser_push ),
-    .data_o     (requser_out  ),
-    .pop_i      (requser_pop  )
-  );
+  if (!EnBurst) begin
+    always_comb begin
+      requser_in = reqrsp_req_i.q.user;
+      requser_push = reqrsp_req_i.q_valid & reqrsp_rsp_o.q_ready;
+      // Do not pop the user if the burst response is not entirely processed
+      requser_pop = reqrsp_rsp_o.p_valid & reqrsp_req_i.p_ready & reqrsp_burst_last;
+    end
+
+    fifo_v3 #(
+      .FALL_THROUGH (ReqUserFallThrough      ),
+      .DATA_WIDTH   (UserWidth ),
+      .DEPTH        (MaxTrans  )
+    ) i_requser_fifo (
+      .clk_i      (clk_i        ),
+      .rst_ni     (rst_ni       ),
+      .flush_i    (1'b0         ),
+      .testmode_i (1'b0         ),
+      .full_o     (requser_full ),
+      .empty_o    (requser_empty),
+      .usage_o    (             ),
+      .data_i     (requser_in   ),
+      .push_i     (requser_push ),
+      .data_o     (requser_out  ),
+      .pop_i      (requser_pop  )
+    );
+  end
 
   // ------------------
   // Counter Management
@@ -167,32 +165,25 @@ module reqrsp_to_axi import reqrsp_pkg::*; #(
   `FF(read_cnt_q, read_cnt_d, '0)
   // Count the number of in-fligh writes.
   `FF(write_cnt_q, write_cnt_d, '0)
-  `FF(atomic_in_flight_q, atomic_in_flight_d, '0)
-  `FF(id_cnt_q, id_cnt_d, '0)
+  // Avoid ID collision between default ID and burst ID
+  `FF(id_cnt_q, id_cnt_d, ($unsigned(ID)+1))
 
   always_comb begin
-    atomic_in_flight_d = atomic_in_flight_q;
     read_cnt_d = read_cnt_q;
     write_cnt_d = write_cnt_q;
     id_cnt_d = id_cnt_q;
 
     if (reqrsp_req_i.q_valid && reqrsp_rsp_o.q_ready) begin
-      // Set atomic in-flight flag if we sent an atomic.
-      if (req_is_amo) begin
-        atomic_in_flight_d = 1'b1;
-        read_cnt_d++;
-      end
 
       if (!is_write) read_cnt_d++;
       else write_cnt_d++;
 
-      id_cnt_d = id_cnt_q + 1;
+      if (&id_cnt_q)
+        id_cnt_d = $unsigned(ID) + 1;
+      else
+        id_cnt_d = id_cnt_q + 1;
     end
 
-    // Reset atomic in-flight flag.
-    if (read_cnt_d == 0 && write_cnt_d == 0) begin
-      atomic_in_flight_d = 1'b0;
-    end
     // Decrement the write counter again when the signals arrived.
     if (dec_read_cnt) read_cnt_d--;
     if (dec_write_cnt) write_cnt_d--;
@@ -208,13 +199,28 @@ module reqrsp_to_axi import reqrsp_pkg::*; #(
   // -------------
 
   // AXI read bus assignment.
+  if (EnBurst == 1) begin
+    assign axi_req_o.ar.len  = reqrsp_req_i.q.user.burst.burst_len;
+  end else begin
+    assign axi_req_o.ar.len  = '0;
+  end
   assign axi_req_o.ar.addr   = reqrsp_req_i.q.addr;
   assign axi_req_o.ar.size   = {1'b0, reqrsp_req_i.q.size};
   assign axi_req_o.ar.burst  = axi_pkg::BURST_INCR;
-  assign axi_req_o.ar.lock   = (reqrsp_req_i.q.amo == AMOLR);
+  assign axi_req_o.ar.lock   = '0;
   assign axi_req_o.ar.cache  = axi_pkg::CACHE_MODIFIABLE;
-  assign axi_req_o.ar.id     = ShuffleId ? id_cnt_q : $unsigned(ID);
-  // assign axi_req_o.ar.id     = $unsigned(ID);
+  always_comb begin
+    if (ShuffleId) begin
+      if (axi_req_o.ar.len == '0) begin
+        axi_req_o.ar.id = $unsigned(ID);
+      end else begin
+        axi_req_o.ar.id = id_cnt_q;
+      end
+    end else begin
+      axi_req_o.ar.id   = $unsigned(ID);
+    end    
+  end
+
   assign axi_req_o.ar.user   = user_i;
   assign axi_req_o.ar_valid  = q_valid_read;
   assign q_ready_read        = axi_rsp_i.ar_ready;
@@ -227,9 +233,19 @@ module reqrsp_to_axi import reqrsp_pkg::*; #(
   assign axi_req_o.aw.addr   = reqrsp_req_i.q.addr;
   assign axi_req_o.aw.size   = {1'b0, reqrsp_req_i.q.size};
   assign axi_req_o.aw.burst  = axi_pkg::BURST_INCR;
-  assign axi_req_o.aw.lock   = (reqrsp_req_i.q.amo == AMOSC);
+  assign axi_req_o.aw.lock   = '0;
   assign axi_req_o.aw.cache  = axi_pkg::CACHE_MODIFIABLE;
-  assign axi_req_o.aw.id     = $unsigned(ID);
+  if (ShuffleId) begin
+    always_comb begin
+      if (reqrsp_req_i.q.user.burst.is_burst == '0) begin
+        axi_req_o.aw.id = $unsigned(ID);
+      end else begin
+        axi_req_o.aw.id = id_cnt_q;
+      end
+    end
+  end else begin
+     assign axi_req_o.aw.id   = $unsigned(ID);
+  end    
   assign axi_req_o.aw.user   = user_i;
   assign axi_req_o.w.data    = write_data;
   assign axi_req_o.w.strb    = reqrsp_req_i.q.strb;
@@ -251,29 +267,18 @@ module reqrsp_to_axi import reqrsp_pkg::*; #(
   `ASSERT(AssertStability, q_valid_write && !q_ready_write |=> q_valid_write)
 
   // Atomic signalling.
-  assign axi_req_o.aw.atop = to_axi_amo(reqrsp_req_i.q.amo);
+  assign axi_req_o.aw.atop = '0;
   always_comb begin
     write_data = reqrsp_req_i.q.data;
-    if (reqrsp_req_i.q.amo == AMOAnd) begin
-      // in this case we need to invert the data to get a "CLR"
-      write_data = ~reqrsp_req_i.q.data;
-    end
   end
 
   // -----------
   // Return Path
   // -----------
-  // There is an atomic instruction present which didn't receive a full
-  // handshake on either the AW or W channel. We silence the R channel.
-  assign delay_r_for_atomic = q_valid_write & ~q_ready_write & req_is_amo;
-
-  assign r_valid = axi_rsp_i.r_valid & ~delay_r_for_atomic_q;
-  assign axi_req_o.r_ready  = r_ready & ~delay_r_for_atomic_q;
-
-  // Delay the signal for one cycle. We will never get the R response in the
-  // same cycle as the request. (Except for when the W is after the AW and the R
-  // comes in the same cycle, we will loose a cycle latency)
-  `FF(delay_r_for_atomic_q, delay_r_for_atomic, '0)
+  assign r_valid = axi_rsp_i.r_valid;
+  // last response? Use for burst
+  assign r_last  = axi_rsp_i.r.last;
+  assign axi_req_o.r_ready  = r_ready;
 
   // As we can never have two read and write transactions in-flight (except for
   // atomics) simultaneously return path arbitration becomes quite an simply an
@@ -281,32 +286,62 @@ module reqrsp_to_axi import reqrsp_pkg::*; #(
   assign reqrsp_rsp_o.p.error = (r_valid & axi_rsp_i.r.resp[1])
                               | (axi_rsp_i.b_valid & axi_rsp_i.b.resp[1]);
 
-  // In case we have an atomic instruction in-flight we don't pass on the
-  // b channel as we are just interested in the read data. The logic in this
-  // module will make sure that we only issue new instructions if the atomic has
-  // been fully resolved.
-  assign reqrsp_rsp_o.p_valid = r_valid | (~atomic_in_flight_q & axi_rsp_i.b_valid);
-  // In case we have an atomic in flight we need to delay the r response. In AXI
-  // they can come before the interface accepted the W beat, this would mess
-  // with the counters (underflow).
-  assign r_ready = reqrsp_req_i.p_ready & r_valid;
-  assign axi_req_o.b_ready = (reqrsp_req_i.p_ready | atomic_in_flight_q) & axi_rsp_i.b_valid;
 
-  always_comb begin
-    reqrsp_rsp_o.p.data  = '0;
-    reqrsp_rsp_o.p.user  = requser_out;
-    reqrsp_rsp_o.p.write = axi_rsp_i.b_valid;
-    // Normal case.
-    if (r_valid) reqrsp_rsp_o.p.data = axi_rsp_i.r.data;
-    // In case we got a B response and this wasn't an atomic, let's check
-    // if we need to signal an `exclusive error` i.e., check if the we got `RESP_EXOKAY`.
-    // In case we didn't, we set the response to `1` which signals a failed
-    // store conditional for the reqrsp interface.
-    if ((axi_rsp_i.b_valid && ~atomic_in_flight_q
-          && axi_rsp_i.b.resp != axi_pkg::RESP_EXOKAY)) begin
-      // Set all 32-bit words to 1 since we don't know the alignment
-      // and which bits are cut off by the core.
-      reqrsp_rsp_o.p.data = {DataWidth/32{32'h1}};
+  if (EnBurst) begin
+    // Mute the write response from cache controller
+    logic is_burst_write_rsp, is_normal_write_rsp;
+    assign is_burst_write_rsp  = (axi_rsp_i.b_valid & (axi_rsp_i.b.user != '0));
+    assign is_normal_write_rsp = (axi_rsp_i.b_valid & (axi_rsp_i.b.user == '0));
+
+    assign reqrsp_rsp_o.p_valid = r_valid | is_normal_write_rsp;
+    assign axi_req_o.b_ready    = ((reqrsp_req_i.p_ready & is_normal_write_rsp) |
+                                  is_burst_write_rsp) & axi_rsp_i.b_valid;
+  end else begin
+    assign reqrsp_rsp_o.p_valid = r_valid | axi_rsp_i.b_valid;
+    assign axi_req_o.b_ready = reqrsp_req_i.p_ready & axi_rsp_i.b_valid;
+  end
+
+  assign r_ready = reqrsp_req_i.p_ready & r_valid;
+
+  if (EnBurst == 1) begin
+    always_comb begin
+      reqrsp_rsp_o.p.data  = '0;
+      // reqrsp_rsp_o.p.user  = requser_out;
+      reqrsp_rsp_o.p.user  = axi_rsp_i.r.user;
+      // reqrsp_rsp_o.p.user  = r_ready ? axi_rsp_i.r.user : axi_rsp_i.b.user;
+
+      if (reqrsp_burst_last)
+        reqrsp_rsp_o.p.user.burst.burst_len = 1'b0;
+
+      reqrsp_rsp_o.p.write = axi_rsp_i.b_valid;
+      // Normal case.
+      if (r_valid) reqrsp_rsp_o.p.data = axi_rsp_i.r.data;
+      // In case we got a B response and this wasn't an atomic, let's check
+      // if we need to signal an `exclusive error` i.e., check if the we got `RESP_EXOKAY`.
+      // In case we didn't, we set the response to `1` which signals a failed
+      // store conditional for the reqrsp interface.
+      if ((axi_rsp_i.b_valid && axi_rsp_i.b.resp != axi_pkg::RESP_EXOKAY)) begin
+        // Set all 32-bit words to 1 since we don't know the alignment
+        // and which bits are cut off by the core.
+        reqrsp_rsp_o.p.data = {DataWidth/32{32'h1}};
+      end
+    end
+  end else begin
+    always_comb begin
+      reqrsp_rsp_o.p.data  = '0;
+      reqrsp_rsp_o.p.user  = requser_out;
+      reqrsp_rsp_o.p.write = axi_rsp_i.b_valid;
+      // Normal case.
+      if (r_valid) reqrsp_rsp_o.p.data = axi_rsp_i.r.data;
+      // In case we got a B response and this wasn't an atomic, let's check
+      // if we need to signal an `exclusive error` i.e., check if the we got `RESP_EXOKAY`.
+      // In case we didn't, we set the response to `1` which signals a failed
+      // store conditional for the reqrsp interface.
+      if ((axi_rsp_i.b_valid && axi_rsp_i.b.resp != axi_pkg::RESP_EXOKAY)) begin
+        // Set all 32-bit words to 1 since we don't know the alignment
+        // and which bits are cut off by the core.
+        reqrsp_rsp_o.p.data = {DataWidth/32{32'h1}};
+      end
     end
   end
 
@@ -315,15 +350,11 @@ module reqrsp_to_axi import reqrsp_pkg::*; #(
   assign axi_req_o.aw.qos = 4'b0;
   assign axi_req_o.aw.prot = 3'b0;
   assign axi_req_o.aw.region = 4'b0;
-  assign axi_req_o.ar.len = '0;
   assign axi_req_o.ar.qos = 4'b0;
   assign axi_req_o.ar.prot = 3'b0;
   assign axi_req_o.ar.region = 4'b0;
 
   // Assertions:
-  // Make sure that write is never set for AMOs.
-  `ASSERT(AMOWriteEnable, reqrsp_req_i.q_valid &&
-    (reqrsp_req_i.q.amo != reqrsp_pkg::AMONone) |-> !reqrsp_req_i.q.write)
   // Check that the data width is in the range of 32 or 64 bit. We didn't define
   // any other bus widths so far.
   // `ASSERT_INIT(check_DataWidth, DataWidth inside {32, 64})
