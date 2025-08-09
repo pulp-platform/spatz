@@ -16,7 +16,7 @@
 
 // Author: Max Wipfli <mwipfli@ethz.ch>
 
-#include "baseline.h"
+#include "baseline_min.h"
 #include "../../mx_layer.h"
 
 // vector register allocation:
@@ -26,7 +26,7 @@
 //
 // - 4x data reuse
 // - For maximum throughput, N should be a multiple of (2 * VLEN / 16).
-void mxfp8_matmul_bf16_outer_lmul2_4x(_Float16 *c,
+void mxfp8_matmul_bf16_min_lmul2_4x(_Float16 *c,
     const char *a, const char *b, const char *a_scale, const char *b_scale,
     const uint32_t M, const uint32_t N, const uint32_t K)
 {
@@ -53,40 +53,45 @@ void mxfp8_matmul_bf16_outer_lmul2_4x(_Float16 *c,
     for (uint32_t n = 0; n < N; n += n_vl) {
       uint32_t n_remaining = N - n;
 
-      // post-scale accumulator (FP16): v0-v1, v2-v3, v4-v5, v6-v7
+      // post-scale accumulator (BF16): v0-v1, v2-v3, v4-v5, v6-v7
       asm volatile("vsetvli %0, %1, e16, m2, ta, ma" : "=r"(n_vl) : "r"(n_remaining));
       asm volatile("vmv.v.i v0, 0");
       asm volatile("vmv.v.i v2, 0");
       asm volatile("vmv.v.i v4, 0");
       asm volatile("vmv.v.i v6, 0");
 
-      _Float16 *c_ = c_m0 + n;    // c[m][n]
-      const char *a_ = a_m0;      // a[m][0]
-      const char *b_ = b + n;     // b[0][n]
-      const uint8_t *a_scale_ = a_scale_m0;                   // a_scale[m][0]
-      const uint8_t *b_scale_ = (const uint8_t *)b_scale + n; // b_scale[0][n]
+      _Float16 *c_ = c_m0 + n; // c[m][n]
+      const char *a_ = a_m0;   // a[m][0]
+      const char *b_ = b + n;  // b[0][n]
+      const uint8_t *a_scale_ = a_scale_m0;                    // a_scale[m][0]
+      const uint8_t *b_scale_ = (const uint8_t *)b_scale + n;  // b_scale[0][n]
 
       for (uint32_t k_block = 0; k_block < K_BLOCK; k_block++) {
-        // pre-scale accumulator (FP16): v8-v9, v10-v11, v12-v13, v14-v15
+        // pre-scale accumulator (BF16): v8-v9, v10-v11, v12-v13, v14-v15
         asm volatile("vsetvli zero, %0, e8, m1, ta, ma" :: "r"(n_remaining));
 
         asm volatile("csrw fcsr, %0" :: "r"(fcsr_elements));
 
         // loop head
 
-        // load operands: b[k][n:n+n_vl]
+        // load operands and widen to BF16: b[k][n:n+n_vl]
         asm volatile("vle8.v v16, (%0)" :: "r"(b_));
+        asm volatile("vfwadd.vf v18, v16, %0" :: "f"(0.0f));
         b_ += N; // next row
 
-        // load operands: a[m:m+4][k]
-        double a0, a1, a2, a3; // actually contain FP8
+        // load operands and widen to BF16: a[m:m+4][k]
+        double a0, a1, a2, a3; // actually contain FP8 (and later BF16)
         asm volatile("flb %0, (%1)" : "=f"(a0) : "r"(a_));
+        asm volatile("fcvt.h.b %0, %0" : "+f"(a0));
         const char *a__ = a_ + K;
         asm volatile("flb %0, (%1)" : "=f"(a1) : "r"(a__));
+        asm volatile("fcvt.h.b %0, %0" : "+f"(a1));
         a__ += K;
         asm volatile("flb %0, (%1)" : "=f"(a2) : "r"(a__));
+        asm volatile("fcvt.h.b %0, %0" : "+f"(a2));
         a__ += K;
         asm volatile("flb %0, (%1)" : "=f"(a3) : "r"(a__));
+        asm volatile("fcvt.h.b %0, %0" : "+f"(a3));
         a_ += 1; // next column
 
         uint32_t k_elem = 0;
@@ -95,35 +100,45 @@ void mxfp8_matmul_bf16_outer_lmul2_4x(_Float16 *c,
           k_elem += 1;
 
           // load operands: b[k][n:n+n_vl]
-          asm volatile("vle8.v v20, (%0)" :: "r"(b_));
+          asm volatile("vle8.v v17, (%0)" :: "r"(b_));
+          asm volatile("vfwadd.vf v20, v17, %0" :: "f"(0.0f));
           b_ += N; // next row
 
-          // widen, multiply, and accumulate operands (pre-scaling) to FP16
+          // multiply and accumulate operands (pre-scaling)
+          asm volatile("vsetvli zero, %0, e16, m2, ta, ma" :: "r"(n_remaining));
+          asm volatile("csrw fcsr, %0" :: "r"(FCSR_MODE_DST | FCSR_MODE_SRC));
+          a__ = a_;
           if (k_elem == 1) {
-            asm volatile("vfwmul.vf  v8, v16, %0" :: "f"(a0));
-            asm volatile("flb %0, (%1)" : "=f"(a0) : "r"(a_));
-            a__ = a_ + K;
-            asm volatile("vfwmul.vf v10, v16, %0" :: "f"(a1));
+            asm volatile("vfmul.vf  v8, v18, %0" :: "f"(a0));
+            asm volatile("flb %0, (%1)" : "=f"(a0) : "r"(a__));
+            a__ += K;
+            asm volatile("vfmul.vf v10, v18, %0" :: "f"(a1));
             asm volatile("flb %0, (%1)" : "=f"(a1) : "r"(a__));
             a__ += K;
-            asm volatile("vfwmul.vf v12, v16, %0" :: "f"(a2));
+            asm volatile("vfmul.vf v12, v18, %0" :: "f"(a2));
             asm volatile("flb %0, (%1)" : "=f"(a2) : "r"(a__));
             a__ += K;
-            asm volatile("vfwmul.vf v14, v16, %0" :: "f"(a3));
+            asm volatile("vfmul.vf v14, v18, %0" :: "f"(a3));
             asm volatile("flb %0, (%1)" : "=f"(a3) : "r"(a__));
           } else {
-            asm volatile("vfwmacc.vf  v8, %0, v16" :: "f"(a0));
-            asm volatile("flb %0, (%1)" : "=f"(a0) : "r"(a_));
-            a__ = a_ + K;
-            asm volatile("vfwmacc.vf v10, %0, v16" :: "f"(a1));
+            asm volatile("vfmacc.vf  v8, %0, v18" :: "f" (a0));
+            asm volatile("flb %0, (%1)" : "=f"(a0) : "r"(a__));
+            a__ += K;
+            asm volatile("vfmacc.vf v10, %0, v18" :: "f" (a1));
             asm volatile("flb %0, (%1)" : "=f"(a1) : "r"(a__));
             a__ += K;
-            asm volatile("vfwmacc.vf v12, %0, v16" :: "f"(a2));
+            asm volatile("vfmacc.vf v12, %0, v18" :: "f" (a2));
             asm volatile("flb %0, (%1)" : "=f"(a2) : "r"(a__));
             a__ += K;
-            asm volatile("vfwmacc.vf v14, %0, v16" :: "f"(a3));
+            asm volatile("vfmacc.vf v14, %0, v18" :: "f" (a3));
             asm volatile("flb %0, (%1)" : "=f"(a3) : "r"(a__));
           }
+          asm volatile("vsetvli zero, %0, e8, m1, ta, ma" :: "r"(n_remaining));
+          asm volatile("csrw fcsr, %0" :: "r"(fcsr_elements));
+          asm volatile("fcvt.h.b %0, %0" : "+f"(a0));
+          asm volatile("fcvt.h.b %0, %0" : "+f"(a1));
+          asm volatile("fcvt.h.b %0, %0" : "+f"(a2));
+          asm volatile("fcvt.h.b %0, %0" : "+f"(a3));
           a_ += 1; // next column
 
           // unrolled: repeat loop body
@@ -132,30 +147,47 @@ void mxfp8_matmul_bf16_outer_lmul2_4x(_Float16 *c,
           if (k_elem == MX_BLOCK_SIZE)
             break;
 
-          // load operands: b[k:k+2][n:n+n_vl]
+          // load operands: b[k][n:n+n_vl]
           asm volatile("vle8.v v16, (%0)" :: "r"(b_));
+          asm volatile("vfwadd.vf v18, v16, %0" :: "f"(0.0f));
           b_ += N; // next row
 
-          // widen, multiply, and accumulate operands (pre-scaling) to FP16
-          asm volatile("vfwmacc.vf  v8, %0, v20" :: "f"(a0));
-          asm volatile("flb %0, (%1)" : "=f"(a0) : "r"(a_));
-          a__ = a_ + K;
-          asm volatile("vfwmacc.vf v10, %0, v20" :: "f"(a1));
+          // multiply and accumulate operands (pre-scaling)
+          asm volatile("vsetvli zero, %0, e16, m2, ta, ma" :: "r"(n_remaining));
+          asm volatile("csrw fcsr, %0" :: "r"(FCSR_MODE_DST | FCSR_MODE_SRC));
+          a__ = a_;
+          asm volatile("vfmacc.vf  v8, %0, v20" :: "f" (a0));
+          asm volatile("flb %0, (%1)" : "=f"(a0) : "r"(a__));
+          a__ += K;
+          asm volatile("vfmacc.vf v10, %0, v20" :: "f" (a1));
           asm volatile("flb %0, (%1)" : "=f"(a1) : "r"(a__));
           a__ += K;
-          asm volatile("vfwmacc.vf v12, %0, v20" :: "f"(a2));
+          asm volatile("vfmacc.vf v12, %0, v20" :: "f" (a2));
           asm volatile("flb %0, (%1)" : "=f"(a2) : "r"(a__));
           a__ += K;
-          asm volatile("vfwmacc.vf v14, %0, v20" :: "f"(a3));
+          asm volatile("vfmacc.vf v14, %0, v20" :: "f" (a3));
           asm volatile("flb %0, (%1)" : "=f"(a3) : "r"(a__));
           a_ += 1; // next column
+
+          // WARN: This may happen too early due to the missing `vsetvli`
+          // "barrier".
+          asm volatile("vsetvli zero, %0, e8, m1, ta, ma" :: "r"(n_remaining));
+          asm volatile("csrw fcsr, %0" :: "r"(fcsr_elements));
+          asm volatile("fcvt.h.b %0, %0" : "+f"(a0));
+          asm volatile("fcvt.h.b %0, %0" : "+f"(a1));
+          asm volatile("fcvt.h.b %0, %0" : "+f"(a2));
+          asm volatile("fcvt.h.b %0, %0" : "+f"(a3));
         }
 
         // loop tail
-        asm volatile("vfwmacc.vf  v8, %0, v20" :: "f"(a0));
-        asm volatile("vfwmacc.vf v10, %0, v20" :: "f"(a1));
-        asm volatile("vfwmacc.vf v12, %0, v20" :: "f"(a2));
-        asm volatile("vfwmacc.vf v14, %0, v20" :: "f"(a3));
+        // WARN: This may happen too early due to the missing `vsetvli`
+        // "barrier".
+        asm volatile("vsetvli zero, %0, e16, m2, ta, ma" :: "r"(n_remaining));
+        asm volatile("csrw fcsr, %0" :: "r"(FCSR_MODE_DST | FCSR_MODE_SRC));
+        asm volatile("vfmacc.vf  v8, %0, v20" :: "f"(a0));
+        asm volatile("vfmacc.vf v10, %0, v20" :: "f"(a1));
+        asm volatile("vfmacc.vf v12, %0, v20" :: "f"(a2));
+        asm volatile("vfmacc.vf v14, %0, v20" :: "f"(a3));
 
         // scaling
 
@@ -165,27 +197,24 @@ void mxfp8_matmul_bf16_outer_lmul2_4x(_Float16 *c,
 
         // load operand: a_scale[m:m+4][k_block]
         const uint8_t *a_scale__ = a_scale_;
-        uint8_t as0 = *(a_scale__);
-        a_scale__  += K_BLOCK;
-        uint8_t as1 = *(a_scale__);
-        a_scale__  += K_BLOCK;
-        uint8_t as2 = *(a_scale__);
-        a_scale__  += K_BLOCK;
-        uint8_t as3 = *(a_scale__);
-
-        // enable alternate FP source and destination formats (BF16)
-        asm volatile("csrw fcsr, %0" :: "r"(FCSR_MODE_DST | FCSR_MODE_SRC));
+        uint8_t as0 = *a_scale__;
+        a_scale__ += K_BLOCK;
+        uint8_t as1 = *a_scale__;
+        a_scale__ += K_BLOCK;
+        uint8_t as2 = *a_scale__;
+        a_scale__ += K_BLOCK;
+        uint8_t as3 = *a_scale__;
 
         // widen to 16-bit unsigned integer -> v18-v19
         asm volatile("vwcvtu.x.x.v v18, v16");
 
-        // re-bias scales for BF16
-        int16_t as0_rescaled = as0 - (2 * E8M0_BIAS - BF16_BIAS);
-        int16_t as1_rescaled = as1 - (2 * E8M0_BIAS - BF16_BIAS);
-        int16_t as2_rescaled = as2 - (2 * E8M0_BIAS - BF16_BIAS);
-        int16_t as3_rescaled = as3 - (2 * E8M0_BIAS - BF16_BIAS);
+        // re-bias scales for FP32
+        int16_t as0_rescaled = as0 - (2 * E8M0_BIAS - FP32_BIAS);
+        int16_t as1_rescaled = as1 - (2 * E8M0_BIAS - FP32_BIAS);
+        int16_t as2_rescaled = as2 - (2 * E8M0_BIAS - FP32_BIAS);
+        int16_t as3_rescaled = as3 - (2 * E8M0_BIAS - FP32_BIAS);
 
-        // add scales -> v24-v25, ..., v30-v31
+        // add scales -> v24-25, v26-v27, v28-v29, v30-v31
         asm volatile("vsetvli zero, %0, e16, m2, ta, ma" :: "r"(n_remaining));
         asm volatile("vadd.vx v24, v18, %0" :: "r"(as0_rescaled));
         asm volatile("vadd.vx v26, v18, %0" :: "r"(as1_rescaled));
@@ -200,26 +229,23 @@ void mxfp8_matmul_bf16_outer_lmul2_4x(_Float16 *c,
 
         // post-scale acc += pre-scale acc * scale
         if (k_block < K_BLOCK - 1) {
-          asm volatile("vfmacc.vv  v0,  v8, v24");
-          asm volatile("vfmacc.vv  v2, v10, v26");
-          asm volatile("vfmacc.vv  v4, v12, v28");
-          asm volatile("vfmacc.vv  v6, v14, v30");
+          asm volatile("vfmacc.vv v0,  v8, v24");
+          asm volatile("vfmacc.vv v2, v10, v26");
+          asm volatile("vfmacc.vv v4, v12, v28");
+          asm volatile("vfmacc.vv v6, v14, v30");
         } else {
           // last iteration: issue stores
           _Float16 *c__ = c_;
-          asm volatile("vfmacc.vv  v0,  v8, v24");
+          asm volatile("vfmacc.vv v0,  v8, v24");
           asm volatile("vse16.v v0, (%0)" :: "r"(c__));
           c__ += N;
-
-          asm volatile("vfmacc.vv  v2, v10, v26");
+          asm volatile("vfmacc.vv v2, v10, v26");
           asm volatile("vse16.v v2, (%0)" :: "r"(c__));
           c__ += N;
-
-          asm volatile("vfmacc.vv  v4, v12, v28");
+          asm volatile("vfmacc.vv v4, v12, v28");
           asm volatile("vse16.v v4, (%0)" :: "r"(c__));
           c__ += N;
-
-          asm volatile("vfmacc.vv  v6, v14, v30");
+          asm volatile("vfmacc.vv v6, v14, v30");
           asm volatile("vse16.v v6, (%0)" :: "r"(c__));
         }
 

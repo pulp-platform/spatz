@@ -26,12 +26,15 @@
 #include DATAHEADER
 
 // #define MXDOTP 1
-#define BASELINE_SDOTP 1
+// #define BASELINE_SDOTP 1
+// #define BASELINE_MIN 1
 
 #ifdef MXDOTP
 #include "kernel/mxdotp.c"
 #elif BASELINE_SDOTP
 #include "kernel/baseline_sdotp.c"
+#elif BASELINE_MIN
+#include "kernel/baseline_min.c"
 #else
 #include "kernel/baseline.c"
 #endif
@@ -194,6 +197,10 @@ int main() {
     mxfp8_matmul_bf16_outer_sdotp_lmul2_4x(local_c, local_a, local_b,
                                            local_a_scale, local_b_scale,
                                            local_m, local_n, local_k);
+#elif BASELINE_MIN
+    mxfp8_matmul_bf16_min_lmul2_4x(local_c, local_a, local_b,
+                                   local_a_scale, local_b_scale,
+                                   local_m, local_n, local_k);
 #else
     mxfp8_matmul_bf16_outer_lmul2_4x(local_c, local_a, local_b,
                                      local_a_scale, local_b_scale,
