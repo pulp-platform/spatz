@@ -1204,9 +1204,11 @@ module spatz_vlsu
   cnt_t rob_usage_q, rob_usage_d;
   cnt_t rob_use_cyc_q, rob_use_cyc_d;
   cnt_t rob_peak_q, rob_peak_d;
+  cnt_t rob_full_cyc_q, rob_full_cyc_d;
   `FF(rob_usage_q, rob_usage_d, '0)
   `FF(rob_use_cyc_q, rob_use_cyc_d, '0)
   `FF(rob_peak_q, rob_peak_d, '0)
+  `FF(rob_full_cyc_q, rob_full_cyc_d, '0)
 
   // Instruction Monitor
   cnt_t vlsu_insn_valid_cyc_q, vlsu_insn_valid_cyc_d;
@@ -1240,15 +1242,19 @@ module spatz_vlsu
     end
 
     // ROB Monitor
-    rob_usage_d = rob_usage_q;
-    rob_use_cyc_d = rob_use_cyc_q;
-    rob_peak_d = rob_peak_q;
+    rob_usage_d     = rob_usage_q;
+    rob_use_cyc_d   = rob_use_cyc_q;
+    rob_peak_d      = rob_peak_q;
+    rob_full_cyc_d  = rob_full_cyc_q;
 
     if (rob_usage[0] > 0) begin
       // Only count the time when ROB is in use
       rob_usage_d = rob_usage_q + rob_usage[0];
       rob_use_cyc_d ++;
       rob_peak_d = (rob_usage[0] > rob_peak_q) ? rob_usage[0] : rob_peak_q;
+      if (|rob_full) begin
+        rob_full_cyc_d ++;
+      end
     end
 
     // Instruction Monitor

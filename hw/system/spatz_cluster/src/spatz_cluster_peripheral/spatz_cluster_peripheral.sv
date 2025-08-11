@@ -10,9 +10,11 @@ module spatz_cluster_peripheral
   import snitch_pkg::*;
   import spatz_cluster_peripheral_reg_pkg::*;
 #(
-  parameter int unsigned AddrWidth = 0,
+  parameter int unsigned AddrWidth    = 0,
   parameter int unsigned DMADataWidth = 0,
-  parameter int unsigned SPMWidth = 0,
+  parameter int unsigned SPMWidth     = 0,
+  // Used to generate the cache busy signal
+  parameter int unsigned NumCacheCtrl = 1,
   parameter type reg_req_t = logic,
   parameter type reg_rsp_t = logic,
   parameter type         tcdm_events_t = logic,
@@ -45,8 +47,8 @@ module spatz_cluster_peripheral
   output spm_size_t                  l1d_spm_size_o,
   output logic [1:0]                 l1d_insn_o,
   output logic                       l1d_insn_valid_o,
-  input  logic                       l1d_insn_ready_i,
-  output logic                       l1d_busy_o
+  input  logic [NumCacheCtrl-1:0]    l1d_insn_ready_i,
+  output logic [NumCacheCtrl-1:0]    l1d_busy_o
 );
 
   // Pipeline register to ease timing.
@@ -102,7 +104,7 @@ module spatz_cluster_peripheral
   logic [9:0]  l1d_spm_size_d, l1d_spm_size_q;
   // logic [1:0]  l1d_insn_d, l1d_insn_q;
   // L1 is running flush/invalidation
-  logic        l1d_lock_d, l1d_lock_q;
+  logic [NumCacheCtrl-1:0]       l1d_lock_d, l1d_lock_q;
   logic        l1d_spm_commit, l1d_insn_commit;
 
   // L1D Cache
@@ -143,29 +145,33 @@ module spatz_cluster_peripheral
 
     if (l1d_insn_commit) begin
       // User issues a flush/invalidation
-      if (!l1d_lock_q) begin
+      if (|l1d_lock_q == '0) begin
         // We are ready to accept a flush
         l1d_insn_o        = reg2hw.cfg_l1d_insn.q;
         l1d_insn_valid_o  = 1'b1;
         // Cache busy now!
-        l1d_lock_d        = 1'b1;
+        l1d_lock_d        = {NumCacheCtrl{1'b1}};
         // Clear the commit
         hw2reg.l1d_insn_commit.d  = 1'b0;
         hw2reg.l1d_insn_commit.de = 1'b1;
       end
     end
 
-    // unlock
-    if (l1d_insn_ready_i) begin
-      // Cache finishes previous insn, remove lock!
-      l1d_lock_d          = 1'b0;
+    for (int i = 0; i < NumCacheCtrl; i++) begin
+      // unlock
+      if (l1d_insn_ready_i[i]) begin
+        // Cache finishes previous insn, remove lock!
+        l1d_lock_d[i] --;
+      end
+
+      l1d_busy_o[i] = l1d_lock_q[i];
     end
   end
 
   `FF(l1d_lock_q, l1d_lock_d, '0, clk_i, rst_ni)
   // To show if the current flush/invalidation is complete
-  assign hw2reg.l1d_flush_status.d = l1d_lock_q;
-  assign l1d_busy_o = l1d_lock_q;
+  assign hw2reg.l1d_flush_status.d = (l1d_lock_q != '0);
+  // assign l1d_busy_o = (l1d_lock_q != '0);
 
   // Wake-up logic: Bits in cl_clint_q can be set/cleared with writes to
   // cl_clint_set/cl_clint_clear
