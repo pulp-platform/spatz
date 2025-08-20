@@ -23,7 +23,7 @@ package spatz_pkg;
   // Single-precision floating point support
   localparam bit RVF            = 1;
   // Double-precision floating-point support
-  localparam bit RVD            = 1;
+  localparam bit RVD            = 0;
   // Vector support
   localparam bit RVV            = 1;
 
