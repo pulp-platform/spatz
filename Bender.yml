@@ -160,7 +160,6 @@ sources:
     - hw/ip/spatz/src/spatz_vlsu.sv
     - hw/ip/spatz/src/spatz_vrf.sv
     - hw/ip/spatz/src/spatz_vsldu.sv
-    - hw/ip/spatz/src/spatz_mxu.sv
     # Level 4
     - hw/ip/spatz/src/spatz_controller.sv
     # Level 5

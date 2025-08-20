@@ -109,45 +109,10 @@ module spatz_vlsu
       EW_32: begin
         spatz_req_d.vl     = spatz_req_i.vl << 2;
         spatz_req_d.vstart = spatz_req_i.vstart << 2;
-        // MXU (32 bit)
-        if (spatz_req_i.op_arith.is_mx) begin
-          // The following code works if M, N, K are either 4 or 8, m*k = vl
-          unique case(spatz_req_i.matrix)
-            // Tile A is m*k, but since k = vl/m, then m*k == vl
-            TILE_A: spatz_req_d.vl = spatz_req_i.vl << 2;
-            // Tile B is k*n, and k = vl/m. Therefore, tile B size is vl * n/m
-            TILE_B: spatz_req_d.vl = spatz_req_i.vl << (
-              spatz_req_i.tile_M == spatz_req_i.tile_N
-              ? 2
-              : spatz_req_i.tile_M == 4
-                ? 3
-                : 1);
-            // Tile C is m*n. Since vl = m*k and m*n should fit a vreg,
-            // n <= k
-            TILE_C: spatz_req_d.vl = spatz_req_i.vl << (
-              spatz_req_i.tile_N == 4 && spatz_req_i.tile_K == 8 ? 1 : 2);
-            default: spatz_req_d.vl = spatz_req_i.vl << 2;
-          endcase
-        end
       end
       default: begin
         spatz_req_d.vl     = spatz_req_i.vl << MAXEW;
         spatz_req_d.vstart = spatz_req_i.vstart << MAXEW;
-        // MXU (64 bit)
-        if (spatz_req_i.op_arith.is_mx) begin
-          unique case(spatz_req_i.matrix)
-            TILE_A: spatz_req_d.vl = spatz_req_i.vl << MAXEW;
-            TILE_B: spatz_req_d.vl = spatz_req_i.vl << (
-              spatz_req_i.tile_M == spatz_req_i.tile_N
-              ? MAXEW
-              : spatz_req_i.tile_M == 4
-                ? MAXEW + 1
-                : MAXEW - 1);
-            TILE_C: spatz_req_d.vl = spatz_req_i.vl << (
-              spatz_req_i.tile_N == 4 && spatz_req_i.tile_K == 8 ? MAXEW - 1 : MAXEW);
-            default: spatz_req_d.vl = spatz_req_i.vl << MAXEW;
-          endcase
-        end
       end
     endcase
   end: proc_spatz_req
@@ -273,32 +238,6 @@ module spatz_vlsu
   vlen_t [NrMemPorts-1:0] mem_idx_counter_d;
   vlen_t [NrMemPorts-1:0] mem_idx_counter_q;
 
-  // MXU
-  // Counters to count rows (m dim) and columns (n dim (stores) or k dim (loads)) for each memory port
-  // When loading, the column dimension is k (in memory, A mtx is transposed)
-  // The impact of this code is 2*NrPorts counters with $clog2(MAX_TILE) bits
-  // This hardware works for TILE_M, TILE_N, TILE_K > NrMemPorts
-  localparam int unsigned MAX_TILE_ROW = MAX_TILE_M;
-  localparam int unsigned MAX_TILE_COL = MAX_TILE_N;
-  // Counters to parametrically handle memory loads/stores
-  logic [NrMemPorts-1:0] [$clog2(MAX_TILE_M)-1:0] mx_cnt_row_q;
-  logic [NrMemPorts-1:0] [$clog2(MAX_TILE_N)-1:0] mx_cnt_col_q;
-  logic [NrMemPorts-1:0] mx_cnt_en_row, mx_cnt_en_col;
-  logic [NrMemPorts-1:0] mx_cnt_clr_row, mx_cnt_clr_col;
-  logic [$clog2(MAX_TILE_N)-1:0] mx_cnt_max_row, mx_cnt_max_col;
-  // Max counter for m and n counters
-  logic [$clog2(MAX_TILE_M)-1:0] mx_max_row;
-  logic [$clog2(MAX_TILE_N)-1:0] mx_max_col;
-  assign mx_max_row = commit_insn_q.is_load
-                    ? mem_spatz_req.tile_K[$clog2(MAX_TILE_K)-1:0] - 1
-                    : mem_spatz_req.tile_M[$clog2(MAX_TILE_M)-1:0] - 1;
-  // Columns on the N dimension for mtx C store, otherwise on the K dimension
-  assign mx_max_col = commit_insn_q.is_load && mem_spatz_req.matrix == TILE_A
-                    ? mem_spatz_req.tile_M[$clog2(MAX_TILE_M)-1:0] - 1
-                    : mem_spatz_req.tile_N[$clog2(MAX_TILE_N)-1:0] - 1;
-  assign mx_cnt_max_row = mx_max_row; // >> ( commit_insn_q.is_load ? $clog2(NrMemPorts) : 0);
-  assign mx_cnt_max_col = mx_max_col >> $clog2(NrMemPorts); //(!commit_insn_q.is_load ? $clog2(NrMemPorts) : 0);
-
   for (genvar port = 0; port < NrMemPorts; port++) begin: gen_mem_counters
     delta_counter #(
       .WIDTH($bits(vlen_t))
@@ -332,51 +271,6 @@ module spatz_vlsu
 
     assign mem_port_finished_q[port] = mem_spatz_req_valid && (mem_counter_q[port] == mem_counter_max[port]);
 
-    ////////////////////
-    //  MXU counters  //
-    ////////////////////
-
-    // We store row-wise
-    // Go to a new row when we finished the previous one
-    // Load instructions: we load column-wise
-    // Store instructions: we store row-wise
-    // Both loads and stores are unit strides to exploit the coalescer of the L1 cache
-    // A is assumed to be Transposed in memory while B is in its original form
-    // For loads, column counter is enabled by default
-    // For stores, row counter is enabled by default
-    assign mx_cnt_en_row[port] = mem_spatz_req.op_arith.is_mx & mem_counter_en[port] & (mx_cnt_col_q[port] == mx_cnt_max_col);
-    assign mx_cnt_en_col[port] = mem_spatz_req.op_arith.is_mx & mem_counter_en[port];
-    // Count up to (tile_size - 1), and tile_size is power of 2
-    assign mx_cnt_clr_row[port] = mx_cnt_en_row[port] & (mx_cnt_row_q[port] == mx_cnt_max_row);
-    assign mx_cnt_clr_col[port] = mx_cnt_en_col[port] & (mx_cnt_col_q[port] == mx_cnt_max_col);
-
-    counter #(
-      .WIDTH($clog2(MAX_TILE_ROW))
-    ) i_mx_cnt_row (
-      .clk_i     (clk_i               ),
-      .rst_ni    (rst_ni              ),
-      .clear_i   (mx_cnt_clr_row[port]),
-      .en_i      (mx_cnt_en_row[port] ),
-      .load_i    ('0                  ),
-      .down_i    (1'b0                ), // We always count up
-      .d_i       ('0                  ),
-      .q_o       (mx_cnt_row_q[port]  ),
-      .overflow_o(/* Unused */        )
-    );
-
-    counter #(
-      .WIDTH($clog2(MAX_TILE_COL))
-    ) i_mx_cnt_col (
-      .clk_i     (clk_i               ),
-      .rst_ni    (rst_ni              ),
-      .clear_i   (mx_cnt_clr_col[port]),
-      .en_i      (mx_cnt_en_col[port] ),
-      .load_i    ('0                  ),
-      .down_i    (1'b0                ), // We always count up
-      .d_i       ('0                  ),
-      .q_o       (mx_cnt_col_q[port]  ),
-      .overflow_o(/* Unused */        )
-    );
   end: gen_mem_counters
 
   // Did the current instruction finished the memory requests?
@@ -514,10 +408,6 @@ module spatz_vlsu
   vrf_addr_t vd_vreg_addr;
   vrf_addr_t vs2_vreg_addr;
 
-  // MXU
-  elen_t [NrMemPorts-1:0] mx_offset_addr_d, mx_offset_addr_q;
-  `FF(mx_offset_addr_q, mx_offset_addr_d, '0)
-
   // Current element index and byte index that are being accessed at the register file
   vreg_elem_t vd_elem_id;
   vreg_elem_t vs2_elem_id_d, vs2_elem_id_q;
@@ -532,10 +422,6 @@ module spatz_vlsu
     logic [31:0] addr;
     logic [31:0] stride;
     logic [31:0] offset;
-    // MXU
-    logic [31:0] mx_offset_load;
-    logic [31:0] mx_offset_store;
-    logic [31:0] mx_offset;
 
     // Pre-shuffling index offset
     typedef logic [int'(MAXEW)-1:0] maxew_t;
@@ -558,16 +444,6 @@ module spatz_vlsu
           EW_16: offset   = $signed(vrf_rdata_i[1][8 * word_index +: 16]);
           default: offset = $signed(vrf_rdata_i[1][8 * word_index +: 32]);
         endcase
-      // MXU
-      end else if(mem_spatz_req.op_arith.is_mx) begin
-        // Ports finish storing one matrix column before passing to a new one
-        // If mem_spatz_req.rs2 is a power of 2, this can be further optimized
-        // mx_offset_load = (mem_spatz_req.rs2 * (port << 3)) + ((mx_cnt_row_q[port] * mem_spatz_req.rs2) << $clog2(NrMemPorts * MemDataWidthB)) + (mx_cnt_col_q[port] << $clog2(MemDataWidthB));
-        mx_offset_load = (1 * (port << 3)) + ((mx_cnt_col_q[port]) << $clog2(NrMemPorts * MemDataWidthB)) + ((mx_cnt_row_q[port]* mem_spatz_req.rs2) << $clog2(MemDataWidthB));
-        // Ports finish storing one matrix row before passing to a new one
-        // If mem_spatz_req.rs2 is a power of 2, this can be further optimized
-        mx_offset_store = (port << 3) + ((mx_cnt_row_q[port] * mem_spatz_req.rs2) << $clog2(MemDataWidthB)) + (mx_cnt_col_q[port] << ($clog2(NrMemPorts * MemDataWidthB)));
-        offset = commit_insn_q.is_load ? mx_offset_load : mx_offset_store;
       end else begin
         offset = ({mem_counter_q[port][$bits(vlen_t)-1:MAXEW] << $clog2(NrMemPorts), mem_counter_q[port][int'(MAXEW)-1:0]} + (port << MAXEW)) * stride;
       end
@@ -575,8 +451,6 @@ module spatz_vlsu
       addr                      = mem_spatz_req.rs1 + offset;
       mem_req_addr[port]        = (addr >> MAXEW) << MAXEW;
       mem_req_addr_offset[port] = addr[int'(MAXEW)-1:0];
-      // MXU
-      mx_offset_addr_d[port]    = offset;
 
       pending_index[port] = (mem_idx_counter_q[port][$clog2(NrWordsPerVector*ELENB)-1:0] >> MAXEW) != vs2_vreg_addr[$clog2(NrWordsPerVector)-1:0];
     end

@@ -209,106 +209,6 @@ module spatz_decoder
           endcase // decoder_req_i.instr
         end
 
-        // MXU Matrix load and store instructions
-        riscv_instr::MLE8_V_A ,
-        riscv_instr::MLE8_V_B ,
-        riscv_instr::MLE8_V_C ,
-        riscv_instr::MLE16_V_A,
-        riscv_instr::MLE16_V_B,
-        riscv_instr::MLE16_V_C,
-        riscv_instr::MLE32_V_A,
-        riscv_instr::MLE32_V_B,
-        riscv_instr::MLE32_V_C,
-        riscv_instr::MLE64_V_A,
-        riscv_instr::MLE64_V_B,
-        riscv_instr::MLE64_V_C,
-        riscv_instr::MSE8_V_A ,
-        riscv_instr::MSE8_V_B ,
-        riscv_instr::MSE8_V_C ,
-        riscv_instr::MSE16_V_A,
-        riscv_instr::MSE16_V_B,
-        riscv_instr::MSE16_V_C,
-        riscv_instr::MSE32_V_A,
-        riscv_instr::MSE32_V_B,
-        riscv_instr::MSE32_V_C,
-        riscv_instr::MSE64_V_A,
-        riscv_instr::MSE64_V_B,
-        riscv_instr::MSE64_V_C: begin
-          automatic vreg_t ls_vd         = decoder_req_i.instr[11:7];
-          automatic vreg_t ls_rs1        = decoder_req_i.instr[19:15];
-          automatic vreg_t ls_rs2        = decoder_req_i.instr[24:20];
-          automatic logic [2:0] ls_width = decoder_req_i.instr[14:12];
-          automatic logic ls_is_store    = decoder_req_i.instr[25];
-          automatic opcodev_func6_e func6 = opcodev_func6_e'(decoder_req_i.instr[31:26]);
-          spatz_req.op_arith.is_mx       = '1;
-
-          // Retrieve VSEW
-          unique case (ls_width)
-            3'b000: spatz_req.vtype.vsew = EW_8;
-            3'b101: spatz_req.vtype.vsew = EW_16;
-            3'b110: spatz_req.vtype.vsew = EW_32;
-            3'b111: spatz_req.vtype.vsew = EW_64;
-            default: illegal_instr       = 1'b1;
-          endcase
-
-          unique case (func6)
-            OPMVA: spatz_req.matrix = TILE_A;
-            OPMVB: spatz_req.matrix = TILE_B;
-            OPMVC: spatz_req.matrix = TILE_C;
-            default: illegal_instr  = 1'b1;
-          endcase
-
-          spatz_req.ex_unit   = LSU;
-
-          // Check which type of load or store operation is requested
-          unique casez (decoder_req_i.instr)
-
-            riscv_instr::MLE8_V_A ,
-            riscv_instr::MLE8_V_B ,
-            riscv_instr::MLE8_V_C ,
-            riscv_instr::MLE16_V_A,
-            riscv_instr::MLE16_V_B,
-            riscv_instr::MLE16_V_C,
-            riscv_instr::MLE32_V_A,
-            riscv_instr::MLE32_V_B,
-            riscv_instr::MLE32_V_C,
-            riscv_instr::MLE64_V_A,
-            riscv_instr::MLE64_V_B,
-            riscv_instr::MLE64_V_C: begin
-              spatz_req.op             = VLE;
-              spatz_req.op_mem.is_load = 1'b1;
-              spatz_req.vd             = ls_vd;
-              spatz_req.use_vd         = 1'b1;
-              spatz_req.rs1            = decoder_req_i.rs1;
-              spatz_req.rs2            = decoder_req_i.rs2;
-            end
-
-            riscv_instr::MSE8_V_A ,
-            riscv_instr::MSE8_V_B ,
-            riscv_instr::MSE8_V_C ,
-            riscv_instr::MSE16_V_A,
-            riscv_instr::MSE16_V_B,
-            riscv_instr::MSE16_V_C,
-            riscv_instr::MSE32_V_A,
-            riscv_instr::MSE32_V_B,
-            riscv_instr::MSE32_V_C,
-            riscv_instr::MSE64_V_A,
-            riscv_instr::MSE64_V_B,
-            riscv_instr::MSE64_V_C: begin
-              spatz_req.op             = VSE;
-              spatz_req.op_mem.is_load = 1'b0;
-              spatz_req.vd             = ls_vd;
-              spatz_req.use_vd         = 1'b1;
-              spatz_req.vd_is_src      = 1'b1;
-              spatz_req.rs1            = decoder_req_i.rs1;
-              spatz_req.rs2            = decoder_req_i.rs2;
-            end
-
-            default:
-              illegal_instr = 1'b1;
-          endcase // decoder_req_i.instr
-        end
-
         // Vector instruction
         riscv_instr::VADD_VV,
         riscv_instr::VADD_VX,
@@ -410,11 +310,6 @@ module spatz_decoder
         riscv_instr::VREM_VX,
         riscv_instr::VMACC_VV,
         riscv_instr::VMACC_VX,
-
-        // MXU
-        riscv_instr::MXMACC_VV,
-        riscv_instr::MXMACC_VX,
-
         riscv_instr::VNMSAC_VV,
         riscv_instr::VNMSAC_VX,
         riscv_instr::VMADD_VV,
@@ -779,14 +674,6 @@ module spatz_decoder
               spatz_req.vd_is_src = 1'b1;
             end
 
-            // MXU Matrix Multiply (MACC)
-            riscv_instr::MXMACC_VV,
-            riscv_instr::MXMACC_VX: begin
-              spatz_req.op             = MXMACC;
-              spatz_req.vd_is_src      = 1'b1;
-              spatz_req.op_arith.is_mx = 1'b1;
-            end
-
             riscv_instr::VNMSAC_VV,
             riscv_instr::VNMSAC_VX: begin
               spatz_req.op        = VNMSAC;
@@ -949,10 +836,6 @@ module spatz_decoder
         riscv_instr::VFNMACC_VV,
         riscv_instr::VFNMACC_VF,
 
-        // MXU
-        riscv_instr::MXFMACC_VV,
-        riscv_instr::MXFMACC_VF,
-
         riscv_instr::VFMSAC_VV,
         riscv_instr::VFMSAC_VF,
         riscv_instr::VFNMSAC_VV,
@@ -1073,15 +956,6 @@ module spatz_decoder
                 spatz_req.op                     = VFNMADD;
                 spatz_req.vd_is_src              = 1'b1;
                 spatz_req.op_arith.switch_rs1_rd = decoder_req_i.instr inside {riscv_instr::VFNMADD_VV, riscv_instr::VFNMADD_VF};
-              end
-              // MXU Matrix FP Multiply
-              riscv_instr::MXFMACC_VV,
-              riscv_instr::MXFMACC_VF: begin
-                spatz_req.op             = VFMADD;
-                spatz_req.vd_is_src      = 1'b1;
-                spatz_req.op_arith.is_mx = 1'b1;
-                spatz_req.vs1 = arith_s1;
-                spatz_req.vs2 = arith_s2;
               end
               riscv_instr::VFMSAC_VV,
               riscv_instr::VFMSAC_VF,
@@ -1795,12 +1669,7 @@ module spatz_decoder
             riscv_instr::CSR_VLENB,
             riscv_instr::CSR_VXSAT,
             riscv_instr::CSR_VXRM,
-            riscv_instr::CSR_VCSR,
-            // MXU
-            riscv_instr::CSR_MTYPE,
-            riscv_instr::CSR_TILEM,
-            riscv_instr::CSR_TILEK,
-            riscv_instr::CSR_TILEN: begin
+            riscv_instr::CSR_VCSR: begin
               spatz_req.op_csr.addr = csr_addr;
             end
             default: illegal_instr = 1'b1;
@@ -1860,32 +1729,6 @@ module spatz_decoder
           spatz_req.rs1            = (setvl_rs1 == 0 && setvl_rd != 0) ? '1 : spatz_req.rs1;
           // Keep vl
           spatz_req.op_cfg.keep_vl = setvl_rs1 == '0 && setvl_rd == '0;
-        end
-
-        // MXU
-        riscv_instr::MSETTILEM,
-        riscv_instr::MSETTILEK,
-        riscv_instr::MSETTILEN: begin
-          automatic vreg_t set_rd  = decoder_req_i.instr[11:7];
-          spatz_req.rs1     = decoder_req_i.rs1;
-          spatz_req.rd      = set_rd;
-          spatz_req.use_rd  = 1'b1;
-          spatz_req.op      = MCFG;
-          spatz_req.ex_unit = CON;
-          spatz_req.op_arith.is_mx = 1'b1;
-
-          unique casez (decoder_req_i.instr)
-            riscv_instr::MSETTILEM: begin
-              spatz_req.op_cfg.dimTile = DIM_M;
-            end
-            riscv_instr::MSETTILEK: begin
-              spatz_req.op_cfg.dimTile = DIM_K;
-            end
-            riscv_instr::MSETTILEN: begin
-              spatz_req.op_cfg.dimTile = DIM_N;
-            end
-            default: illegal_instr = 1'b1;
-          endcase
         end
 
         default: illegal_instr = 1'b1;

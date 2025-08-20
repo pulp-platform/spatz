@@ -32,18 +32,18 @@ Disassembly of section .rodata:
     104a:	0000                	.2byte	0x0
     104c:	0004                	.2byte	0x4
     104e:	0000                	.2byte	0x0
-    1050:	0010                	.2byte	0x10
+    1050:	0000                	.2byte	0x0
     1052:	0000                	.2byte	0x0
-    1054:	0000                	.2byte	0x0
-    1056:	5100                	.2byte	0x5100
-    1058:	0000                	.2byte	0x0
-    105a:	0002                	.2byte	0x2
-    105c:	0000                	.2byte	0x0
-    105e:	0000                	.2byte	0x0
-    1060:	0000                	.2byte	0x0
-    1062:	8000                	.2byte	0x8000
+    1054:	f800                	.2byte	0xf800
+    1056:	bfff                	.2byte	0xbfff
+    1058:	0800                	.2byte	0x800
 	...
-    106c:	0001                	.2byte	0x1
+    1062:	8000                	.2byte	0x8000
+    1064:	0000                	.2byte	0x0
+    1066:	0000                	.2byte	0x0
+    1068:	0000                	.2byte	0x0
+    106a:	a000                	.2byte	0xa000
+    106c:	0000                	.2byte	0x0
 	...
 
 Disassembly of section .boot_section:
