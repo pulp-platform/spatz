@@ -135,12 +135,20 @@ module spatz_vfu
   // Do we have the reduction operand?
   logic reduction_operand_ready_d, reduction_operand_ready_q;
 
+// CMY: Are we reading operands or v0.t?
+  typedef enum logic{
+    READ_OPERANDS, READ_V0_t
+  } operand_state_t;
+   operand_state_t operand_state_d, operand_state_q;
+  `FF(operand_state_q, operand_state_d, READ_OPERANDS)
+
   // Are the VFU operands ready?
   logic op1_is_ready, op2_is_ready, op3_is_ready, operands_ready;
-  assign op1_is_ready   = spatz_req_valid && ((!spatz_req.op_arith.is_reduction && (!spatz_req.use_vs1 || vrf_rvalid_i[1])) || (spatz_req.op_arith.is_reduction && reduction_operand_ready_q));
-  assign op2_is_ready   = spatz_req_valid && ((!spatz_req.use_vs2 || vrf_rvalid_i[0]) || spatz_req.op_arith.is_reduction);
-  assign op3_is_ready   = spatz_req_valid && (!spatz_req.vd_is_src || vrf_rvalid_i[2]);
+  assign op1_is_ready   = spatz_req_valid && (operand_state_q == READ_OPERANDS) && ((!spatz_req.op_arith.is_reduction && (!spatz_req.use_vs1 || vrf_rvalid_i[1])) || (spatz_req.op_arith.is_reduction && reduction_operand_ready_q));
+  assign op2_is_ready   = spatz_req_valid && (operand_state_q == READ_OPERANDS) && ((!spatz_req.use_vs2 || vrf_rvalid_i[0]) || spatz_req.op_arith.is_reduction);
+  assign op3_is_ready   = spatz_req_valid && (operand_state_q == READ_OPERANDS) && (!spatz_req.vd_is_src || vrf_rvalid_i[2]);
   assign operands_ready = op1_is_ready && op2_is_ready && op3_is_ready && (!spatz_req.op_arith.is_scalar || vfu_rsp_ready_i) && !stall;
+// CMY: added (operand_state_q == READ_OPERANDS).
 
   // Valid operations
   logic [N_FU*ELENB-1:0] valid_operations;
@@ -160,6 +168,7 @@ module spatz_vfu
   // Is this a FPU instruction
   logic is_fpu_insn;
   assign is_fpu_insn = FPU && spatz_req.op inside {[VFADD:VSDOTP]};
+  // FPU is defined in spart_pkg ,   localparam bit FPU            = N_FPU != 0;
 
   // Is the FPU busy?
   logic is_fpu_busy;
@@ -177,6 +186,7 @@ module spatz_vfu
   typedef enum logic [3:0] {
     Reduction_NormalExecution,
     Reduction_Wait,
+    Reduction_Read_V0_t, // CMY added a state
     Reduction_Init,
     Reduction_Reduce,
     Reduction_IntraLane,
@@ -245,7 +255,7 @@ module spatz_vfu
       vl_d              = vl_q + nr_elem_word;
       // Update narrowing information
       narrowing_upper_d = narrowing_upper_q ^ spatz_req.op_arith.is_narrowing;
-      widening_upper_d  = widening_upper_q ^ (spatz_req.op_arith.widen_vs1 || spatz_req.op_arith.widen_vs2);
+      widening_upper_d  = widening_upper_q ^ (spatz_req.op_arith.widen_vs1 || spatz_req.op_arith.widen_vs2); // toggle the signal if requires widening
     end
 
     // Current state of the VFU
@@ -254,7 +264,7 @@ module spatz_vfu
         VFU_RunningIPU: begin
           // Only go to the FPU state once the IPUs are no longer busy
           if (is_fpu_insn) begin
-            if (is_ipu_busy)
+            if (is_ipu_busy) // CMY: why should we waid for ipu idle when it is a fpu_insn?
               stall = 1'b1;
             else begin
               state_d = VFU_RunningFPU;
@@ -311,10 +321,124 @@ module spatz_vfu
   // Operands //
   //////////////
 
+//CMY: put the fpu_decoder in front of the reduction_useless_value selection.
+// because the value selection depends on the FPU source format.
+  operation_e fpu_op;
+  fp_format_e fpu_src_fmt, fpu_dst_fmt;
+  int_format_e fpu_int_fmt;
+  logic fpu_op_mode;
+  logic fpu_vectorial_op;
+
+  logic [N_FPU-1:0] fpu_busy_d, fpu_busy_q;
+  `FF(fpu_busy_q, fpu_busy_d, '0)
+
+  status_t [N_FPU-1:0] fpu_status_d, fpu_status_q;
+  `FF(fpu_status_q, fpu_status_d, '0)
+
+  always_comb begin: gen_decoder
+      fpu_op           = fpnew_pkg::FMADD;
+      fpu_op_mode      = 1'b0;
+      fpu_vectorial_op = 1'b0;
+      is_fpu_busy      = |fpu_busy_q;
+      fpu_src_fmt      = fpnew_pkg::FP32;
+      fpu_dst_fmt      = fpnew_pkg::FP32;
+      fpu_int_fmt      = fpnew_pkg::INT32;
+
+      fpu_status_o = '0;
+      for (int fpu = 0; fpu < N_FPU; fpu++)
+        fpu_status_o |= fpu_status_q[fpu];
+
+      if (FPU) begin
+        unique case (spatz_req.vtype.vsew)
+          EW_64: begin
+            if (RVD) begin
+              fpu_src_fmt = fpnew_pkg::FP64;
+              fpu_dst_fmt = fpnew_pkg::FP64;
+              fpu_int_fmt = fpnew_pkg::INT64;
+            end
+          end
+          EW_32: begin
+            fpu_src_fmt      = spatz_req.op_arith.is_narrowing || spatz_req.op_arith.widen_vs1 || spatz_req.op_arith.widen_vs2 ? fpnew_pkg::FP64 : fpnew_pkg::FP32;
+            fpu_dst_fmt      = spatz_req.op_arith.widen_vs1 || spatz_req.op_arith.widen_vs2 || spatz_req.op == VSDOTP ? fpnew_pkg::FP64          : fpnew_pkg::FP32;
+            fpu_int_fmt      = spatz_req.op_arith.is_narrowing && spatz_req.op inside {VI2F, VU2F} ? fpnew_pkg::INT64                            : fpnew_pkg::INT32;
+            fpu_vectorial_op = FLEN > 32;
+          end
+          EW_16: begin
+            fpu_src_fmt      = spatz_req.op_arith.is_narrowing || spatz_req.op_arith.widen_vs1 || spatz_req.op_arith.widen_vs2 ? fpnew_pkg::FP32 : (spatz_req.fm.src ? fpnew_pkg::FP16ALT : fpnew_pkg::FP16);
+            fpu_dst_fmt      = spatz_req.op_arith.widen_vs1 || spatz_req.op_arith.widen_vs2 || spatz_req.op == VSDOTP          ? fpnew_pkg::FP32 : (spatz_req.fm.dst ? fpnew_pkg::FP16ALT : fpnew_pkg::FP16);
+            fpu_int_fmt      = spatz_req.op_arith.is_narrowing && spatz_req.op inside {VI2F, VU2F}                             ? fpnew_pkg::INT32 : fpnew_pkg::INT16;
+            fpu_vectorial_op = 1'b1;
+          end
+          EW_8: begin
+            fpu_src_fmt      = spatz_req.op_arith.is_narrowing || spatz_req.op_arith.widen_vs1 || spatz_req.op_arith.widen_vs2 ? (spatz_req.fm.src ? fpnew_pkg::FP16ALT : fpnew_pkg::FP16) : (spatz_req.fm.src ? fpnew_pkg::FP8ALT : fpnew_pkg::FP8);
+            fpu_dst_fmt      = spatz_req.op_arith.widen_vs1 || spatz_req.op_arith.widen_vs2 || spatz_req.op == VSDOTP          ? (spatz_req.fm.dst ? fpnew_pkg::FP16ALT : fpnew_pkg::FP16) : (spatz_req.fm.dst ? fpnew_pkg::FP8ALT : fpnew_pkg::FP8);
+            fpu_int_fmt      = spatz_req.op_arith.is_narrowing && spatz_req.op inside {VI2F, VU2F}                             ? fpnew_pkg::INT16 : fpnew_pkg::INT8;
+            fpu_vectorial_op = 1'b1;
+          end
+          default:;
+        endcase
+
+        unique case (spatz_req.op)
+          VFADD: fpu_op = fpnew_pkg::ADD;
+          VFSUB: begin
+            fpu_op      = fpnew_pkg::ADD;
+            fpu_op_mode = 1'b1;
+          end
+          VFMUL  : fpu_op = fpnew_pkg::MUL;
+          VFMADD : fpu_op = fpnew_pkg::FMADD;
+          VFMSUB : begin
+            fpu_op      = fpnew_pkg::FMADD;
+            fpu_op_mode = 1'b1;
+          end
+          VFNMSUB: fpu_op = fpnew_pkg::FNMSUB;
+          VFNMADD: begin
+            fpu_op      = fpnew_pkg::FNMSUB;
+            fpu_op_mode = 1'b1;
+          end
+
+          VFMINMAX: begin
+            fpu_op = fpnew_pkg::MINMAX;
+            fpu_dst_fmt = fpu_src_fmt;
+          end
+
+
+          VFSGNJ : begin
+            fpu_op = fpnew_pkg::SGNJ;
+            fpu_dst_fmt = fpu_src_fmt;
+          end
+          VFCLASS: begin
+            fpu_op = fpnew_pkg::CLASSIFY;
+            fpu_dst_fmt = fpu_src_fmt;
+          end
+          VFCMP  : begin
+            fpu_op = fpnew_pkg::CMP;
+            fpu_dst_fmt = fpu_src_fmt;
+          end
+
+          VF2F: fpu_op = fpnew_pkg::F2F;
+          VF2I: fpu_op = fpnew_pkg::F2I;
+          VF2U: begin
+            fpu_op      = fpnew_pkg::F2I;
+            fpu_op_mode = 1'b1;
+          end
+          VI2F: fpu_op = fpnew_pkg::I2F;
+          VU2F: begin
+            fpu_op      = fpnew_pkg::I2F;
+            fpu_op_mode = 1'b1;
+          end
+
+          VSDOTP: fpu_op = fpnew_pkg::SDOTP;
+
+          default:;
+        endcase
+      end
+    end: gen_decoder
+
   // Reduction registers
   vrf_data_t [$clog2(N_FU)-1:0] reduction_q, reduction_d;
   vrf_data_t reduction_vector_data, reduction_scalar_data;
   `FF(reduction_q, reduction_d, '0)
+  elen_t reduction_useless_value;
 
   // IPU results
   logic [N_FU*ELEN-1:0]  ipu_result;
@@ -356,37 +480,89 @@ module spatz_vfu
 
   // Operands and result signals
   logic [N_FU*ELEN-1:0]  operand1, operand2, operand3;
+  logic [N_FU*ELEN-1:0]  operand_v0_t,operand_v0_t_q; // v0 should be read from vrf 
   logic [N_FU*ELENB-1:0] in_ready;
-  always_comb begin: operand_proc
-    if (spatz_req.op_arith.is_scalar)
-      operand1 = {1*N_FU{spatz_req.rs1}};
-    else if (spatz_req.use_vs1)
-      operand1 = spatz_req.op_arith.is_reduction ? $unsigned(reduction_q[1]) : vrf_rdata_masked[1];
-    else begin
-      // Replicate scalar operands
-      unique case (spatz_req.op == VSDOTP ? vew_e'(spatz_req.vtype.vsew + 1) : spatz_req.vtype.vsew)
-        EW_8 : operand1   = MAXEW == EW_32 ? {4*N_FU{spatz_req.rs1[7:0]}}  : {8*N_FU{spatz_req.rs1[7:0]}};
-        EW_16: operand1   = MAXEW == EW_32 ? {2*N_FU{spatz_req.rs1[15:0]}} : {4*N_FU{spatz_req.rs1[15:0]}};
-        EW_32: operand1   = MAXEW == EW_32 ? {1*N_FU{spatz_req.rs1[31:0]}} : {2*N_FU{spatz_req.rs1[31:0]}};
-        default: operand1 = {1*N_FU{spatz_req.rs1}};
-      endcase
-    end
 
-    //VFMV_F_S
-    if (spatz_req.use_rd && spatz_req.use_vs2 && spatz_req.op_arith.is_scalar)
-      operand2 = vrf_rdata_i[0];
-    else if ((!spatz_req.op_arith.is_scalar || spatz_req.op == VADD) && spatz_req.use_vs2)
-      operand2 = spatz_req.op_arith.is_reduction ? $unsigned(reduction_q[0]) : vrf_rdata_masked[0];
-    else
-      // Replicate scalar operands
-      unique case (spatz_req.op == VSDOTP ? vew_e'(spatz_req.vtype.vsew + 1) : spatz_req.vtype.vsew)
-        EW_8 : operand2   = MAXEW == EW_32 ? {4*N_FU{spatz_req.rs2[7:0]}}  : {8*N_FU{spatz_req.rs2[7:0]}};
-        EW_16: operand2   = MAXEW == EW_32 ? {2*N_FU{spatz_req.rs2[15:0]}} : {4*N_FU{spatz_req.rs2[15:0]}};
-        EW_32: operand2   = MAXEW == EW_32 ? {1*N_FU{spatz_req.rs2[31:0]}} : {2*N_FU{spatz_req.rs2[31:0]}};
-        default: operand2 = {1*N_FU{spatz_req.rs2}};
-      endcase
+  //CMY: have we fetched the v0.t in reduction masking instructions.
+  logic reduction_v0_t_is_ready;
+  assign reduction_v0_t_is_ready = (reduction_state_q == Reduction_Read_V0_t) && vrf_rvalid_i[0];
+  logic reduction_v0_t_read_done;
+  `FFL(reduction_v0_t_read_done,1'b1,reduction_v0_t_is_ready,'0);
 
-    operand3 = spatz_req.op_arith.is_scalar ? {1*N_FU{spatz_req.rsd}} : vrf_rdata_masked[2];
+  // back up v0.t for reduction instructions
+  logic [N_FU*ELEN-1:0]  reduction_operand_v0_t,reduction_operand_v0_t_q;
+  `FFL(reduction_operand_v0_t_q, reduction_operand_v0_t, reduction_v0_t_is_ready, '0)
+
+  // an FSM to manage operands between normal calculation and v0.t fetching
+  logic v0_t_is_ready;
+  assign v0_t_is_ready   = /*spatz_req_valid &&*/ (operand_state_q == READ_V0_t) && vrf_rvalid_i[0];
+  logic v0_t_read_done;
+  `FFL(v0_t_read_done,1'b1,v0_t_is_ready,'0);
+
+  always_comb begin: operand_selection
+    operand_state_d = operand_state_q;
+    // if(spatz_req_valid) begin
+      unique case(operand_state_q)
+        READ_V0_t:
+          if(v0_t_is_ready) operand_state_d = READ_OPERANDS;
+          else operand_state_d = operand_state_q;
+        READ_OPERANDS:
+          if(spatz_req_valid && !spatz_req.op_arith.is_scalar && !spatz_req.op_arith.vm && !v0_t_read_done && !spatz_req.op_arith.is_reduction)
+            operand_state_d = READ_V0_t;
+          else operand_state_d = READ_OPERANDS;
+        default: operand_state_d = operand_state_q;
+      endcase
+    // end
+  end:operand_selection
+
+  vlen_t vl_q_plus_nr_elem_word;
+  assign vl_q_plus_nr_elem_word = vl_q + nr_elem_word; // for monitoring.
+
+  always_comb begin: operand_proc // CMY: turn it into a FSM
+    reduction_operand_v0_t = '0;
+    operand_v0_t = '0;
+    operand1 = '0;
+    operand2 = '0;
+    case (operand_state_q)
+      READ_OPERANDS: begin
+          if(reduction_state_q == Reduction_Read_V0_t)
+            reduction_operand_v0_t = vrf_rdata_i[0];
+          else begin
+            if (spatz_req.op_arith.is_scalar)
+              operand1 = {1*N_FU{spatz_req.rs1}};
+            else if (spatz_req.use_vs1)
+              operand1 = spatz_req.op_arith.is_reduction ? $unsigned(reduction_q[1]) : vrf_rdata_masked[1];
+            else begin
+              // Replicate scalar operands
+              unique case (spatz_req.op == VSDOTP ? vew_e'(spatz_req.vtype.vsew + 1) : spatz_req.vtype.vsew)
+                EW_8 : operand1   = MAXEW == EW_32 ? {4*N_FU{spatz_req.rs1[7:0]}}  : {8*N_FU{spatz_req.rs1[7:0]}};
+                EW_16: operand1   = MAXEW == EW_32 ? {2*N_FU{spatz_req.rs1[15:0]}} : {4*N_FU{spatz_req.rs1[15:0]}};
+                EW_32: operand1   = MAXEW == EW_32 ? {1*N_FU{spatz_req.rs1[31:0]}} : {2*N_FU{spatz_req.rs1[31:0]}};
+                default: operand1 = {1*N_FU{spatz_req.rs1}};
+              endcase
+            end
+
+            //VFMV_F_S
+            if (spatz_req.use_rd && spatz_req.use_vs2 && spatz_req.op_arith.is_scalar)
+              operand2 = vrf_rdata_i[0];
+            else if ((!spatz_req.op_arith.is_scalar || spatz_req.op == VADD) && spatz_req.use_vs2)
+              operand2 = spatz_req.op_arith.is_reduction ? $unsigned(reduction_q[0]) : vrf_rdata_masked[0];
+            else
+              // Replicate scalar operands
+              unique case (spatz_req.op == VSDOTP ? vew_e'(spatz_req.vtype.vsew + 1) : spatz_req.vtype.vsew)
+                EW_8 : operand2   = MAXEW == EW_32 ? {4*N_FU{spatz_req.rs2[7:0]}}  : {8*N_FU{spatz_req.rs2[7:0]}};
+                EW_16: operand2   = MAXEW == EW_32 ? {2*N_FU{spatz_req.rs2[15:0]}} : {4*N_FU{spatz_req.rs2[15:0]}};
+                EW_32: operand2   = MAXEW == EW_32 ? {1*N_FU{spatz_req.rs2[31:0]}} : {2*N_FU{spatz_req.rs2[31:0]}};
+                default: operand2 = {1*N_FU{spatz_req.rs2}};
+              endcase
+          end
+      end
+      READ_V0_t: begin
+        operand_v0_t = vrf_rdata_i[0];
+      end
+      default:;
+    endcase
+    operand3 = spatz_req.op_arith.is_scalar ? {1*N_FU{spatz_req.rsd}} : vrf_rdata_masked[2]; // VFU_VD_RD // operand3 is used in MAC computation, like VMADD
   end: operand_proc
 
   assign in_ready     = state_q == VFU_RunningIPU ? ipu_in_ready     : fpu_in_ready;
@@ -394,6 +570,8 @@ module spatz_vfu
   assign result_valid = state_q == VFU_RunningIPU ? ipu_result_valid : fpu_result_valid;
 
   assign scalar_result = result[ELEN-1:0];
+
+  `FFL(operand_v0_t_q, operand_v0_t, v0_t_is_ready, '0) // CMY: backup v0.t
 
   ///////////////////////
   //  Reduction logic  //
@@ -426,7 +604,68 @@ module spatz_vfu
   logic [$clog2(N_FU)-1:0] num_inter_lane_iterations_d, num_inter_lane_iterations_q;
   `FF(num_inter_lane_iterations_q, num_inter_lane_iterations_d, '0)
 
+  logic [N_FU*ELEN-1:0] v0_mask; // bit mask to select the valid elements in v0.t for reduction instructions
   logic [N_FU*ELEN-1:0] mask; // bit mask
+
+  always_comb begin: reduction_useless_value_selection
+    reduction_useless_value = '0;
+    if(spatz_req.op_arith.is_reduction == 1'b1) begin
+      case(spatz_req.op)
+        VADD: // riscv_instr::VREDSUM_VS,riscv_instr::VFREDUSUM_VS,riscv_instr::VFREDOSUM_VS
+          reduction_useless_value = '0;
+        VAND: //riscv_instr::VREDAND_VS:
+          reduction_useless_value = '1;
+        VOR, //riscv_instr::VREDOR_VS,
+        VXOR: //riscv_instr::VREDXOR_VS:
+          reduction_useless_value = '0;
+        VMINU: //riscv_instr::VREDMINU_VS:
+          reduction_useless_value = '1;
+        VMIN: //riscv_instr::VREDMIN_VS:
+          unique case(spatz_req.vtype.vsew)
+            EW_8:reduction_useless_value = {1'b0,7'h7f};
+            EW_16:reduction_useless_value = {1'b0,15'h7fff};
+            EW_32:reduction_useless_value = {1'b0,31'h7fffffff};
+            default:
+              if(MAXEW == EW_64) reduction_useless_value = {1'b0,63'h7fffffffffffffff};
+          endcase
+        VMAXU: //riscv_instr::VREDMAXU_VS:
+          reduction_useless_value = '0;
+        VMAX: //riscv_instr::VREDMAX_VS: //complement code of -infinity
+          unique case(spatz_req.vtype.vsew)
+            EW_8:reduction_useless_value = {1'b1,7'h0};
+            EW_16:reduction_useless_value = {1'b1,15'h0};
+            EW_32:reduction_useless_value = {1'b1,31'h0};
+            default:
+              if(MAXEW == EW_64) reduction_useless_value = {1'b1,63'h0};
+          endcase
+        VFMINMAX: begin
+         if(spatz_req.rm == fpnew_pkg::RNE) begin //riscv_instr::VFREDMIN_VS:
+          unique case(fpu_src_fmt) // fpu_src_fmt is synchronous with spatz_req.op, while fpu_src_fmt_q is synchronous with op_q
+          // + infinity
+            fpnew_pkg::FP64:reduction_useless_value = {1'b0,11'h7ff,52'h0};
+            fpnew_pkg::FP32:reduction_useless_value = {1'b0,8'hff,23'h0};
+            fpnew_pkg::FP16:reduction_useless_value = {1'b0,5'h1f,10'h0};
+            fpnew_pkg::FP16ALT:reduction_useless_value = {1'b0,8'hff,7'h0};
+            fpnew_pkg::FP8:reduction_useless_value = {1'b0,5'h1f,2'h0};
+            fpnew_pkg::FP8ALT:reduction_useless_value = {1'b0,4'hf,3'h0};
+          endcase
+         end
+         if (spatz_req.rm == fpnew_pkg::RTZ) begin //riscv_instr::VFREDMAX_VS:
+          unique case(fpu_src_fmt)
+          // - infinity
+            fpnew_pkg::FP64:reduction_useless_value = {1'b1,11'h7ff,52'h0};
+            fpnew_pkg::FP32:reduction_useless_value = {1'b1,8'hff,23'h0};
+            fpnew_pkg::FP16:reduction_useless_value = {1'b1,5'h1f,10'h0};
+            fpnew_pkg::FP16ALT:reduction_useless_value = {1'b1,8'hff,7'h0};
+            fpnew_pkg::FP8:reduction_useless_value = {1'b1,5'h1f,2'h0};
+            fpnew_pkg::FP8ALT:reduction_useless_value = {1'b1,4'hf,3'h0};
+          endcase
+         end
+        end
+        default: reduction_useless_value='0;
+      endcase
+    end
+  end
 
   always_comb begin: proc_reduction
     // Maintain state
@@ -434,6 +673,7 @@ module spatz_vfu
     reduction_pointer_d = reduction_pointer_q;
     lat_count_d = lat_count_q;
     num_inter_lane_iterations_d = num_inter_lane_iterations_q;
+    v0_mask = '1;
     mask = '1;
     reduction_vector_data = '0;
     reduction_scalar_data = '0;
@@ -471,20 +711,48 @@ module spatz_vfu
       mask =  (width == 0) ? '1 : (1 << width)-1;
     end
 
-    // Preprocess vector data for masking before reduction
-    if (spatz_req.op inside {VFADD, VADD, VXOR}) begin
-      // Use '0 for unused data bits
-      reduction_vector_data = $unsigned(vrf_rdata_i[1] & mask);
-    end else if (spatz_req.op inside {VFMINMAX, VAND, VOR, VMAX, VMAXU, VMIN, VMINU}) begin
-      // Use the first element of the VRF word replicated for unused data bits
-      reduction_vector_data = spatz_req.vtype.vsew == EW_8  ? (vrf_rdata_i[1] & mask | {32{vrf_rdata_i[1][ 7:0]}} & (~mask)) :
-                              spatz_req.vtype.vsew == EW_16 ? (vrf_rdata_i[1] & mask | {16{vrf_rdata_i[1][15:0]}} & (~mask)) :
-                              spatz_req.vtype.vsew == EW_32 ? (vrf_rdata_i[1] & mask | { 8{vrf_rdata_i[1][31:0]}} & (~mask)) :
-                                                              (vrf_rdata_i[1] & mask | { 4{vrf_rdata_i[1][63:0]}} & (~mask));
+    // Creating v0_mask for reduction instructions
+    if (!spatz_req.op_arith.is_reduction || spatz_req.op_arith.vm) begin
+      v0_mask = '1; // unmasked
+    end else begin
+      unique case (spatz_req.vtype.vsew)
+        EW_8: begin
+          for (int i = 0; i < N_FU*ELEN/8; i++)
+            v0_mask[8*i +: 8] = {8{reduction_operand_v0_t_q[i]}};
+        end
+        EW_16: begin
+          for (int i = 0; i < N_FU*ELEN/16; i++)
+            v0_mask[16*i +: 16] = {16{reduction_operand_v0_t_q[i]}};
+        end
+        EW_32: begin
+          for (int i = 0; i < N_FU*ELEN/32; i++)
+            v0_mask[32*i +: 32] = {32{reduction_operand_v0_t_q[i]}};
+        end
+        default: begin
+          if (MAXEW == EW_64)
+            for (int i = 0; i < N_FU*ELEN/64; i++)
+              v0_mask[64*i +: 64] = {64{reduction_operand_v0_t_q[i]}};
+        end
+      endcase
     end
 
+    // Preprocess vector data for masking before reduction
+    // tail masking + v0.t masking
+    // use of reduction useless value
+    unique case (spatz_req.vtype.vsew)
+      EW_8:
+        reduction_vector_data = (vrf_rdata_i[1] & mask & v0_mask) | ({N_FU*(ELEN/8){reduction_useless_value[7:0]}} & ~(mask & v0_mask));
+      EW_16:
+        reduction_vector_data = (vrf_rdata_i[1] & mask & v0_mask) | ({N_FU*(ELEN/16){reduction_useless_value[15:0]}} & ~(mask & v0_mask));
+      EW_32:
+        reduction_vector_data = (vrf_rdata_i[1] & mask & v0_mask) | ({N_FU*(ELEN/32){reduction_useless_value[31:0]}} & ~(mask & v0_mask));
+      default:
+        if (MAXEW == EW_64)
+          reduction_vector_data = (vrf_rdata_i[1] & mask & v0_mask) | ({N_FU{reduction_useless_value[63:0]}} & ~(mask & v0_mask));
+    endcase
+
     unique case (reduction_state_q)
-      Reduction_NormalExecution: begin
+      Reduction_NormalExecution: begin // not a reduction instruction
         // Did we issue a word to the FUs?
         word_issued = spatz_req_valid && &(in_ready | ~valid_operations) && operands_ready && !stall;
 
@@ -496,7 +764,7 @@ module spatz_vfu
 
         // Do we have a new reduction instruction?
         if (spatz_req_valid && !running_q[spatz_req.id] && spatz_req.op_arith.is_reduction)
-          reduction_state_d = is_fpu_busy ? Reduction_Wait : Reduction_Init;
+          reduction_state_d = (!spatz_req.op_arith.vm) ? Reduction_Read_V0_t : is_fpu_busy ? Reduction_Wait : Reduction_Init; // CMY: added Reduction_Read_V0_t state
       end
 
       Reduction_Wait: begin
@@ -505,6 +773,15 @@ module spatz_vfu
 
         if (!is_fpu_busy)
           reduction_state_d = Reduction_Init;
+      end
+
+      Reduction_Read_V0_t:begin
+        if(reduction_v0_t_is_ready)
+        // if(reduction_v0_t_read_done)
+          if (!is_fpu_busy)
+            reduction_state_d = Reduction_Init;
+          else reduction_state_d = Reduction_Wait;
+        else reduction_state_d = Reduction_Read_V0_t;
       end
 
       Reduction_Init: begin
@@ -790,66 +1067,159 @@ module spatz_vfu
       valid_bytes    : valid_bytes_wr // count of the number of valid bytes in the VRF word (write side)
     };
 
-    if (spatz_req_valid && vl_q == '0) begin
-      vreg_addr_d[0] = (spatz_req.vs2 + vstart) << $clog2(NrWordsPerVector);
-      vreg_addr_d[1] = (spatz_req.vs1 + vstart) << $clog2(NrWordsPerVector);
-      vreg_addr_d[2] = (spatz_req.vd + vstart) << $clog2(NrWordsPerVector);
+    case(operand_state_q)// CMY modified
+       READ_OPERANDS:begin
+        if(reduction_state_q == Reduction_Read_V0_t) begin
+          vreg_addr_d[0] =  0 << $clog2(NrWordsPerVector);
+          vrf_raddr_o = vreg_addr_d;
+        end
+        else begin
 
-      // Direct feedthrough
-      vrf_raddr_o = vreg_addr_d;
-      if (!spatz_req.op_arith.is_scalar)
-        input_tag.vd_addr = vfu_rsp_addr_t'(vreg_addr_d[2]);
+          if (spatz_req_valid && vl_q == '0) begin
+            vreg_addr_d[0] = (spatz_req.vs2 + vstart) << $clog2(NrWordsPerVector);
+            vreg_addr_d[1] = (spatz_req.vs1 + vstart) << $clog2(NrWordsPerVector);
+            vreg_addr_d[2] = (spatz_req.vd + vstart) << $clog2(NrWordsPerVector);
 
-      // Did we commit a word already?
-      if (word_issued) begin
-        vreg_addr_d[0] = vreg_addr_d[0] + (!spatz_req.op_arith.widen_vs2 || widening_upper_q);
-        vreg_addr_d[1] = vreg_addr_d[1] + (!spatz_req.op_arith.widen_vs1 || widening_upper_q);
-        vreg_addr_d[2] = vreg_addr_d[2] + (!spatz_req.op_arith.is_reduction && (!spatz_req.op_arith.is_narrowing || narrowing_upper_q) && (spatz_req.op != VFCMP));
-      end
-    end else if (spatz_req_valid && vl_q < spatz_req.vl && word_issued) begin
-      vreg_addr_d[0] = vreg_addr_q[0] + (!spatz_req.op_arith.widen_vs2 || widening_upper_q);
-      vreg_addr_d[1] = vreg_addr_q[1] + (!spatz_req.op_arith.widen_vs1 || widening_upper_q);
-      vreg_addr_d[2] = vreg_addr_q[2] + (!spatz_req.op_arith.is_reduction && (!spatz_req.op_arith.is_narrowing || narrowing_upper_q) && (spatz_req.op != VFCMP));
-    end
+          // Direct feedthrough
+          vrf_raddr_o = vreg_addr_d;
+          if (!spatz_req.op_arith.is_scalar)
+            input_tag.vd_addr = vfu_rsp_addr_t'(vreg_addr_d[2]);
+
+          // Did we commit a word already?
+          if (word_issued) begin
+            vreg_addr_d[0] = vreg_addr_d[0] + (!spatz_req.op_arith.widen_vs2 || widening_upper_q);
+            vreg_addr_d[1] = vreg_addr_d[1] + (!spatz_req.op_arith.widen_vs1 || widening_upper_q); // if it is a widening operands, addr shouldn't add when reading the upper part.
+            vreg_addr_d[2] = vreg_addr_d[2] + (!spatz_req.op_arith.is_reduction && (!spatz_req.op_arith.is_narrowing || narrowing_upper_q) && (spatz_req.op != VFCMP));
+          end
+          end else if (spatz_req_valid && vl_q < spatz_req.vl && word_issued) begin
+            vreg_addr_d[0] = vreg_addr_q[0] + (!spatz_req.op_arith.widen_vs2 || widening_upper_q);
+            vreg_addr_d[1] = vreg_addr_q[1] + (!spatz_req.op_arith.widen_vs1 || widening_upper_q);
+            vreg_addr_d[2] = vreg_addr_q[2] + (!spatz_req.op_arith.is_reduction && (!spatz_req.op_arith.is_narrowing || narrowing_upper_q) && (spatz_req.op != VFCMP));
+          end
+        end
+       end
+       READ_V0_t: begin
+         vreg_addr_d[0] = ( 0 + vstart) << $clog2(NrWordsPerVector);
+         vrf_raddr_o = vreg_addr_d;
+       end
+       default:;
+   endcase
   end: vreg_addr_proc
 
   logic [VRFWordBWidth-1:0] tail_wbe;
   always_comb begin : operand_req_proc
     vreg_r_req = '0;
     vreg_we    = '0;
-    vreg_wbe   = '0;
 
-    //write just the significant bytes (tail unisturbed)
-    for (int b = 0; b < N_FU*ELENB; b++)
-      tail_wbe[b] = (b < result_tag.valid_bytes);
-
-
-    if (spatz_req_valid && vl_q < spatz_req.vl)
-      // Request operands
-      vreg_r_req = {spatz_req.vd_is_src, spatz_req.use_vs1 && reduction_operand_request[1], spatz_req.use_vs2 && reduction_operand_request[0]};
-
+    unique case(operand_state_q) // CMY: turn it into FSM logic
+      READ_V0_t: vreg_r_req = 3'b001;
+      READ_OPERANDS: begin
+        if(reduction_state_q == Reduction_Read_V0_t) vreg_r_req = 3'b001;
+        else
+          if (spatz_req_valid && vl_q < spatz_req.vl)
+            // Request operands
+            vreg_r_req = {spatz_req.vd_is_src, spatz_req.use_vs1 && reduction_operand_request[1], spatz_req.use_vs2 && reduction_operand_request[0]};
+      end
+      default:;
+    endcase
     // Got a new result
     if (&(result_valid | ~pending_results) && !result_tag.reduction) begin
       vreg_we  = !result_tag.wb;
-      vreg_wbe = tail_wbe;
-
-      if (result_tag.narrowing) begin
-        if (result_tag.narrowing_upper)
-          vreg_wbe = (tail_wbe << N_FU*ELENB/2) & {{N_FU*ELENB/2{1'b1}}, {N_FU*ELENB/2{1'b0}}};
-        else
-          vreg_wbe = tail_wbe & {{N_FU*ELENB/2{1'b0}}, {N_FU*ELENB/2{1'b1}}};
-      end else if (spatz_req.op == VFCMP) begin
-        // every vector element requires 1 bit of wbe --> ceil(vl/8)
-        automatic logic [$clog2((MAXVL+7)/8+1)-1:0] mask_bytes;
+      if (spatz_req.op == VFCMP) begin
         vreg_we    = result_tag.last;
-        mask_bytes = (spatz_req.vl + 7) >> 3;
-        vreg_wbe   = (mask_bytes >= N_FU*ELENB) ? '1 : vrf_be_t'((vrf_be_t'(1) << mask_bytes) - 1);
       end
     end
 
     // Reduction finished execution
     if (reduction_state_q == Reduction_WriteBack && (result_valid[0] || result_buf_valid_q)) begin
       vreg_we = 1'b1;
+    end
+  end : operand_req_proc
+
+  // CMY: vreg_wbe logic----------------------
+ vlen_t vreg_wb_word_cnt_q, vreg_wb_word_cnt_d;
+ `FF(vreg_wb_word_cnt_q, vreg_wb_word_cnt_d, '0)
+ vew_e sew_wb;
+ logic widening_wb;
+ assign widening_wb = spatz_req.op_arith.widen_vs1 || spatz_req.op_arith.widen_vs2;
+ assign sew_wb = vew_e'(int'(spatz_req.vtype.vsew) + widening_wb);
+
+ vrf_be_t       vreg_wbe_pre;
+ logic [VRFWordBWidth-1:0] tail_wbe_eff;
+
+always_comb begin : vreg_wbe_proc
+    vreg_wbe   = '0;
+    vreg_wb_word_cnt_d = vreg_wb_word_cnt_q;
+    vreg_wbe_pre = '0;
+
+    //write just the significant bytes (tail unisturbed)
+    for (int b = 0; b < N_FU*ELENB; b++)
+      tail_wbe[b] = (b < result_tag.valid_bytes);
+
+    if (result_tag.narrowing) begin
+      if (result_tag.narrowing_upper)
+        tail_wbe_eff = (tail_wbe << N_FU*ELENB/2) & {{N_FU*ELENB/2{1'b1}}, {N_FU*ELENB/2{1'b0}}};
+      else
+        tail_wbe_eff = tail_wbe & {{N_FU*ELENB/2{1'b0}}, {N_FU*ELENB/2{1'b1}}};
+    end else
+      tail_wbe_eff = tail_wbe;
+
+    if ((result_tag.last && &(result_valid | ~pending_results) && reduction_state_q inside {Reduction_NormalExecution, Reduction_Wait}) || reduction_done)
+      vreg_wb_word_cnt_d = 0;
+    else if (&(result_valid | ~pending_results) /*&& !result_tag.reduction*/ && (!spatz_req.op_arith.is_narrowing || narrowing_upper_q))
+      vreg_wb_word_cnt_d = vreg_wb_word_cnt_q + 1;
+
+  // Got a new result
+    if (&(result_valid | ~pending_results) && !result_tag.reduction) begin
+      if (spatz_req.op == VFCMP) begin
+        // every vector element requires 1 bit of wbe --> ceil(vl/8)
+        automatic logic [$clog2((MAXVL+7)/8+1)-1:0] mask_bytes;
+        mask_bytes = (spatz_req.vl + 7) >> 3;
+        vreg_wbe   = (mask_bytes >= N_FU*ELENB) ? '1 : vrf_be_t'((vrf_be_t'(1) << mask_bytes) - 1);
+      end else if(!spatz_req.op_arith.vm && !spatz_req.op_arith.is_scalar && !result_tag.narrowing) begin// CMY: masking the wb results
+        // unique case (spatz_req.vtype.vsew)
+        unique case (sew_wb) // CMY: add widening support
+          EW_8:for(int i=0;i<VRFWordBWidth/1;i=i+1)begin
+            vreg_wbe[i*1+:1] = {1{operand_v0_t_q[vreg_wb_word_cnt_q *32 + i]}};
+          end
+          EW_16:for(int i=0;i<VRFWordBWidth/2;i=i+1)begin
+            vreg_wbe[i*2+:2] = {2{operand_v0_t_q[vreg_wb_word_cnt_q *16 + i]}};
+          end
+          EW_32: for(int i=0;i<VRFWordBWidth/4;i=i+1)begin
+            vreg_wbe[i*4+:4] = {4{operand_v0_t_q[vreg_wb_word_cnt_q *8 + i]}};
+          end
+          default: if (MAXEW == EW_64) for(int i=0;i<VRFWordBWidth/8;i=i+1)begin
+            vreg_wbe[i*8+:8] = {8{operand_v0_t_q[vreg_wb_word_cnt_q *4 + i]}};
+          end
+        endcase
+        vreg_wbe &= tail_wbe_eff; // tail-undisturbed + masking (v0.t)
+      end else if(result_tag.narrowing) begin
+        if(!spatz_req.op_arith.vm && !spatz_req.op_arith.is_scalar) begin
+          unique case (sew_wb) // CMY: add narrowing support
+            EW_16:for(int i=0;i<VRFWordBWidth/2;i=i+1)begin
+              vreg_wbe_pre[i*2+:2] = {2{operand_v0_t_q[vreg_wb_word_cnt_q *16 + i]}};
+              vreg_wbe = result_tag.narrowing_upper ? {vreg_wbe_pre[N_FU*ELENB-1:(N_FU*ELENB/2)],{(N_FU*ELENB/2){1'b0}}} : {{(N_FU*ELENB/2){1'b0}}, vreg_wbe_pre[(N_FU*ELENB/2)-1:0]};
+            end
+            EW_32: for(int i=0;i<VRFWordBWidth/4;i=i+1)begin
+              vreg_wbe_pre[i*4+:4] = {4{operand_v0_t_q[vreg_wb_word_cnt_q *8 + i]}};
+              vreg_wbe = result_tag.narrowing_upper ? {vreg_wbe_pre[N_FU*ELENB-1:(N_FU*ELENB/2)],{(N_FU*ELENB/2){1'b0}}} : {{(N_FU*ELENB/2){1'b0}}, vreg_wbe_pre[(N_FU*ELENB/2)-1:0]};
+            end
+            EW_64: for(int i=0;i<VRFWordBWidth/8;i=i+1)begin
+              vreg_wbe_pre[i*8+:8] = {8{operand_v0_t_q[vreg_wb_word_cnt_q *4 + i]}};
+              vreg_wbe = result_tag.narrowing_upper ? {vreg_wbe_pre[N_FU*ELENB-1:(N_FU*ELENB/2)],{(N_FU*ELENB/2){1'b0}}} : {{(N_FU*ELENB/2){1'b0}}, vreg_wbe_pre[(N_FU*ELENB/2)-1:0]};
+            end
+            default:;
+          endcase
+          vreg_wbe &= tail_wbe_eff;
+        end else
+          vreg_wbe = tail_wbe_eff;
+      end else begin
+        vreg_wbe = tail_wbe_eff;
+      end
+    end
+
+    // Reduction finished execution
+    if (reduction_state_q == Reduction_WriteBack && result_valid[0]) begin
       unique case (spatz_req.vtype.vsew)
         EW_8 : vreg_wbe = 1'h1;
         EW_16: vreg_wbe = 2'h3;
@@ -857,7 +1227,9 @@ module spatz_vfu
         default: if (MAXEW == EW_64) vreg_wbe = 8'hff;
       endcase
     end
-  end : operand_req_proc
+end:vreg_wbe_proc
+//---------------------------------------------------------
+
 
 logic vfcmp_result_accepted;
 assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pending_results) && result_ready;
@@ -1001,7 +1373,7 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
   if (N_IPU < N_FU) begin: gen_pipeline_ipu
     logic [N_FU*ELEN-1:0] ipu_result_d, ipu_result_q;
     logic [N_FU*ELENB-1:0] ipu_result_valid_q, ipu_result_valid_d;
-    logic [idx_width(N_FU/N_IPU)-1:0] ipu_result_pnt_d, ipu_result_pnt_q;
+    logic [idx_width(N_FU/N_IPU)-1:0] ipu_result_pnt_d, ipu_result_pnt_q; // idx_width(N_FU/N_IPU) = $clog2(N_FU/N_IPU)
     vfu_tag_t ipu_result_tag_d, ipu_result_tag_q;
     logic [idx_width(N_FU/N_IPU)-1:0] ipu_operand_pnt_d, ipu_operand_pnt_q;
 
@@ -1043,7 +1415,7 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
 
       // Store results
       int_ipu_result_ready = '0;
-      if (&int_ipu_result_valid) begin
+      if (&int_ipu_result_valid) begin // all bytes are valid
         ipu_result_d[ipu_result_pnt_q*ELEN*N_IPU +: ELEN*N_IPU]         = int_ipu_result;
         ipu_result_valid_d[ipu_result_pnt_q*ELENB*N_IPU +: ELENB*N_IPU] = int_ipu_result_valid;
         ipu_result_tag_d                                                = int_ipu_result_tag[0];
@@ -1110,7 +1482,7 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
   ////////////
 
   if (FPU) begin: gen_fpu
-    operation_e fpu_op;
+    /*operation_e fpu_op;
     fp_format_e fpu_src_fmt, fpu_dst_fmt;
     int_format_e fpu_int_fmt;
     logic fpu_op_mode;
@@ -1222,7 +1594,7 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
           default:;
         endcase
       end
-    end: gen_decoder
+    end: gen_decoder*/
 
     logic [N_FPU*ELEN-1:0] wide_operand1, wide_operand2, wide_operand3;
     always_comb begin: gen_widening
@@ -1305,7 +1677,7 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
       `FFL(rm_q, (spatz_req.op == VFCMP && spatz_req.rm == fpnew_pkg::RUP) ? fpnew_pkg::RDN : spatz_req.rm, int_fpu_in_valid && int_fpu_in_ready, fpnew_pkg::RNE)
       `FFL(input_tag_q, input_tag, int_fpu_in_valid && int_fpu_in_ready, '{vsew: EW_8, default: '0})
       `FFL(fpu_in_valid_q, int_fpu_in_valid, int_fpu_in_ready, 1'b0)
-      assign int_fpu_in_ready = !fpu_in_valid_q || fpu_in_valid_q && fpu_in_ready_d;
+      assign int_fpu_in_ready = !fpu_in_valid_q || fpu_in_valid_q && fpu_in_ready_d; // no data is to be sent to FPU or data is to be sent and FPU is ready
 
       fpnew_top #(
         .Features                   (FPUFeatures           ),

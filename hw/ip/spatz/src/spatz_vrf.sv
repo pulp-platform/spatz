@@ -20,7 +20,7 @@ module spatz_vrf
     input  vrf_addr_t [NrWritePorts-1:0] waddr_i,
     input  vrf_data_t [NrWritePorts-1:0] wdata_i,
     input  logic      [NrWritePorts-1:0] we_i,
-    input  vrf_be_t   [NrWritePorts-1:0] wbe_i,
+    input  vrf_be_t   [NrWritePorts-1:0] wbe_i, // 32 bits* 3 WritePorts
     output logic      [NrWritePorts-1:0] wvalid_o,
 `ifdef BUF_FPU
     // Signal to track if  result can be buffered or not
@@ -65,7 +65,7 @@ module spatz_vrf
   // Typedefs //
   //////////////
 
-  typedef logic [$bits(vrf_addr_t)-$clog2(NrVRFBanks)-1:0] vregfile_addr_t;
+  typedef logic [$bits(vrf_addr_t)-$clog2(NrVRFBanks)-1:0] vregfile_addr_t; // divide the addresses into banks.
 
   // the word index within one bank
   function automatic logic [$clog2(NrWordsPerBank)-1:0] f_vreg(vrf_addr_t addr);

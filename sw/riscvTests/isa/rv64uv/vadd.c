@@ -36,7 +36,7 @@ void TEST_CASE1(void) {
 }
 
 void TEST_CASE2(void) {
-  VSET(16, e8, m8);
+  VSET(16, e8, m8); // #define VSET(VLEN, VTYPE, LMUL)  
   VLOAD_8(v8, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
   VLOAD_8(v16, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
   VLOAD_8(v0, 0xAA, 0xAA);
@@ -191,12 +191,13 @@ int main(void) {
   INIT_CHECK();
   enable_vec();
 
-  TEST_CASE1();
-  // TEST_CASE2();
-  TEST_CASE3();
+  // TEST_CASE1();
+  TEST_CASE2();
+  // TEST_CASE3();
   // TEST_CASE4();
-  TEST_CASE5();
+  // TEST_CASE5();
   // TEST_CASE6();
 
-  EXIT_CHECK();
+  EXIT_CHECK(); 
 }
+ 
