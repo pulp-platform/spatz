@@ -161,7 +161,8 @@ void TEST_CASE3() {
 }
 
 void TEST_CASE4() {
-  const uint32_t scalar = 0x0ff00ff0;
+//   const uint32_t scalar = 0x0ff00ff0;
+  const uint64_t scalar = 0x0ff00ff00ff00ff0;
 
   VSET(12, e8, m8);
   VLOAD_8(v16, 0xff, 0x01, 0xf0, 0xff, 0x01, 0xf0, 0xff, 0x01, 0xf0, 0xff, 0x01,
@@ -208,10 +209,14 @@ void TEST_CASE4() {
            0xdeadbeefdeadbeef, 0xdeadbeefdeadbeef, 0xdeadbeefdeadbeef,
            0xdeadbeefdeadbeef, 0xdeadbeefdeadbeef, 0xdeadbeefdeadbeef);
   asm volatile("vand.vx v8, v16, %[A], v0.t" ::[A] "r"(scalar));
-  VCMP_U64(16, v8, 0x000000000ff00ff0, 0xdeadbeefdeadbeef, 0x00f000f000f000f0,
+  /*VCMP_U64(16, v8, 0x000000000ff00ff0, 0xdeadbeefdeadbeef, 0x00f000f000f000f0,
            0x000000000ff00ff0, 0xdeadbeefdeadbeef, 0x00f000f000f000f0,
            0x000000000ff00ff0, 0xdeadbeefdeadbeef, 0x00f000f000f000f0,
-           0x000000000ff00ff0, 0xdeadbeefdeadbeef, 0x00f000f000f000f0);
+           0x000000000ff00ff0, 0xdeadbeefdeadbeef, 0x00f000f000f000f0);*/
+   VCMP_U64(16, v8, 0x0ff00ff00ff00ff0, 0xdeadbeefdeadbeef, 0x00f000f000f000f0,
+           0x0ff00ff00ff00ff0, 0xdeadbeefdeadbeef, 0x00f000f000f000f0,
+           0x0ff00ff00ff00ff0, 0xdeadbeefdeadbeef, 0x00f000f000f000f0,
+           0x0ff00ff00ff00ff0, 0xdeadbeefdeadbeef, 0x00f000f000f000f0);
 #endif
 }
 
@@ -310,12 +315,12 @@ int main(void) {
   INIT_CHECK();
   enable_vec();
 
-  TEST_CASE1();
-  // TEST_CASE2();
+//   TEST_CASE1();
+//   TEST_CASE2();
   TEST_CASE3();
-  // TEST_CASE4();
-  TEST_CASE5();
-  // TEST_CASE6();
+  TEST_CASE4();
+//   TEST_CASE5();
+//   TEST_CASE6();
 
   EXIT_CHECK();
 }

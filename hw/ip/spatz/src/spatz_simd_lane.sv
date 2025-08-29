@@ -220,9 +220,14 @@ module spatz_simd_lane import spatz_pkg::*; import rvv_pkg::vew_e; #(
         VSUB, VRSUB, VNMSAC, VNMSUB, VSBC: simd_result = subtractor_result[Width-1:0];
         VMIN, VMINU                      : simd_result = $signed({op_s1_i[Width-1] & is_signed_i, op_s1_i}) <= $signed({op_s2_i[Width-1] & is_signed_i, op_s2_i}) ? op_s1_i : op_s2_i;
         VMAX, VMAXU                      : simd_result = $signed({op_s1_i[Width-1] & is_signed_i, op_s1_i}) > $signed({op_s2_i[Width-1] & is_signed_i, op_s2_i}) ? op_s1_i : op_s2_i;
-        VAND                             : simd_result = op_s1_i & op_s2_i;
-        VOR                              : simd_result = op_s1_i | op_s2_i;
-        VXOR                             : simd_result = op_s1_i ^ op_s2_i;
+        VAND, VMAND                      : simd_result = op_s1_i & op_s2_i; // CMY: add masking support
+        VOR , VMOR                       : simd_result = op_s1_i | op_s2_i; // like above
+        VXOR, VMXOR                      : simd_result = op_s1_i ^ op_s2_i; // like above
+        VMANDNOT                         : simd_result = ~op_s1_i & op_s2_i; // like above
+        VMORNOT                          : simd_result = ~op_s1_i | op_s2_i; // like above
+        VMNAND                           : simd_result = ~(op_s1_i & op_s2_i); // like above
+        VMNOR                            : simd_result = ~(op_s1_i | op_s2_i); // like above
+        VMXNOR                           : simd_result = ~(op_s1_i ^ op_s2_i); // like above
         VSLL                             : simd_result = shift_operand << shift_amount;
         VSRL                             : simd_result = shift_operand >> shift_amount;
         VSRA                             : simd_result = $signed(shift_operand) >>> shift_amount;

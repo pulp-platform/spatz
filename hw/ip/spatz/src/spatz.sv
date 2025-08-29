@@ -289,7 +289,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     .vfu_rsp_o        (vfu_rsp                                                 ),
     // VRF
     .vrf_waddr_o      (vrf_waddr[VFU_VD_WD]                                    ),
-    .vrf_wdata_o      (vrf_wdata[VFU_VD_WD]                                    ),
+    .vrf_wdata_o      (vrf_wdata[VFU_VD_WD]                                    ), // N_FU*ELEN bits
     .vrf_we_o         (sb_we[VFU_VD_WD]                                        ),
     .vrf_wbe_o        (vrf_wbe[VFU_VD_WD]                                      ),
     .vrf_wvalid_i     (vrf_wvalid[VFU_VD_WD]                                   ),

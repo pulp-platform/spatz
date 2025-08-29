@@ -19,7 +19,7 @@ module spatz_vrf
     input  vrf_addr_t [NrWritePorts-1:0] waddr_i,
     input  vrf_data_t [NrWritePorts-1:0] wdata_i,
     input  logic      [NrWritePorts-1:0] we_i,
-    input  vrf_be_t   [NrWritePorts-1:0] wbe_i,
+    input  vrf_be_t   [NrWritePorts-1:0] wbe_i, // 32 bits* 3 WritePorts
     output logic      [NrWritePorts-1:0] wvalid_o,
     // Read ports
     input  vrf_addr_t [NrReadPorts-1:0]  raddr_i,
@@ -40,7 +40,7 @@ module spatz_vrf
   // Typedefs //
   //////////////
 
-  typedef logic [$bits(vrf_addr_t)-$clog2(NrVRFBanks)-1:0] vregfile_addr_t;
+  typedef logic [$bits(vrf_addr_t)-$clog2(NrVRFBanks)-1:0] vregfile_addr_t; // divide the addresses into banks.
 
   function automatic logic [$clog2(NrWordsPerBank)-1:0] f_vreg(vrf_addr_t addr);
     f_vreg = addr[$clog2(NrVRFWords)-1:$clog2(NrVRFBanks)];

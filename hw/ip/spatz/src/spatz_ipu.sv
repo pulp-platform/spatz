@@ -478,6 +478,7 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
     ///////////////
 
     // Collect results from the SIMD lanes
+    // each lane is responsible for calculating one element.
     always_comb begin : collector
       unique case (sew)
         rvv_pkg::EW_8 : begin

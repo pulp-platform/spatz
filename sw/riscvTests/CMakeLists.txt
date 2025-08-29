@@ -128,3 +128,23 @@ add_snitch_test(vfcvt  isa/rv64uv/vfcvt.c)
 add_snitch_test(vfncvt isa/rv64uv/vfncvt.c)
 
 add_snitch_test(vfmv isa/rv64uv/vfmv.c)
+
+# CMY: masking logic instructions
+add_snitch_test(vmand isa/rv64uv/vmand.c)
+add_snitch_test(vmor isa/rv64uv/vmor.c)
+add_snitch_test(vmandnot isa/rv64uv/vmandnot.c)
+add_snitch_test(vmnand isa/rv64uv/vmnand.c)
+add_snitch_test(vmnor isa/rv64uv/vmnor.c)
+add_snitch_test(vmornot isa/rv64uv/vmornot.c)
+add_snitch_test(vmxnor isa/rv64uv/vmxnor.c)
+add_snitch_test(vmxor isa/rv64uv/vmxor.c)
+
+# CMY: for testing the masking support for vector arithmetic instructions
+add_snitch_test(vadd_mask isa/rv64uv/vadd_mask.c)
+add_snitch_test(vand_ara isa/rv64uv/vand_ara.c)
+
+# CMY: narrowing arithmetic instructions
+add_snitch_test(vnsra isa/rv64uv/vnsra.c)
+
+# CMY: Load/Store instructions
+add_snitch_test(vle8 isa/rv64uv/vle8.c)

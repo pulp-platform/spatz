@@ -217,9 +217,9 @@ int main(void) {
 
   // SKIP 2,4: masking not supported
   TEST_CASE1();
-  // TEST_CASE2();
+  TEST_CASE2();
   TEST_CASE3();
-  // TEST_CASE4();
+  TEST_CASE4();
   // SKIP 5-8: vwadd.wv and vwadd.wx not supported
   // TEST_CASE5();
   // TEST_CASE6();

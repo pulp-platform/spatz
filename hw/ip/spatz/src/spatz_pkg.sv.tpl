@@ -108,6 +108,10 @@ package spatz_pkg;
   typedef logic [$clog2(NrVRFWords)-1:0] vrf_addr_t;
   typedef logic [N_FU*ELENB-1:0] vrf_be_t;
   typedef logic [N_FU*ELEN-1:0] vrf_data_t;
+  // ELEN = 64
+  // The VRF is centralized and serves all functional units.
+  // Each VRF port is 64F-bit wide. F denotes the number of FPUs.
+  // the FU here doesn't refer to Functioan Units. N_FU=max{N_IPU,N_FPU}
 
   // Instruction ID
   typedef logic [$clog2(NrParallelInstructions)-1:0] spatz_id_t;

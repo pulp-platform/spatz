@@ -7,6 +7,9 @@
 // The vector load/store unit is used to load vectors from memory
 // and to the vector register file and store them back again.
 
+// load: Memory -> LSU -> VRF
+// store: VRF -> LSU -> Memory
+
 module spatz_vlsu
   import spatz_pkg::*;
   import rvv_pkg::*;
@@ -67,7 +70,7 @@ module spatz_vlsu
   //////////////
 
   typedef logic [IdWidth-1:0] id_t;
-  typedef logic [$clog2(NrWordsPerVector*8)-1:0] vreg_elem_t;
+  typedef logic [$clog2(NrWordsPerVector*8)-1:0] vreg_elem_t; // element index. a word is 256bit and an element is 64bit
 
   ///////////////////////
   //  Operation queue  //
@@ -93,7 +96,9 @@ module spatz_vlsu
   );
 
   // Convert the vl to number of bytes for all element widths
-  always_comb begin: proc_spatz_req
+  // CMY: spatz_req_i.vl: the number of elements for this instruction
+  // CMY: spatz_req_d.vl: the number of bytes for this instruction  
+  always_comb begin: proc_spatz_req 
     spatz_req_d = spatz_req_i;
 
     unique case (spatz_req_i.vtype.vsew)
@@ -118,7 +123,7 @@ module spatz_vlsu
 
   // Do we have a strided memory access
   logic mem_is_strided;
-  assign mem_is_strided = (mem_spatz_req.op == VLSE) || (mem_spatz_req.op == VSSE);
+  assign mem_is_strided = (mem_spatz_req.op == VLSE) || (mem_spatz_req.op == VSSE); // CMY: Vector Load/Store Strided Elements
 
   // Do we have an indexed memory access
   logic mem_is_indexed;
@@ -129,14 +134,14 @@ module spatz_vlsu
   /////////////
 
   typedef enum logic {
-    VLSU_RunningLoad, VLSU_RunningStore
+    VLSU_RunningLoad, VLSU_RunningStore, VLSU_ReadingV0_t
   } state_t;
   state_t state_d, state_q;
   `FF(state_q, state_d, VLSU_RunningLoad)
 
 
-  id_t [NrMemPorts-1:0] store_count_q;
-  id_t [NrMemPorts-1:0] store_count_d;
+  id_t [NrMemPorts-1:0] store_count_q; // id_t = 3: width of NrPendingLoads
+  id_t [NrMemPorts-1:0] store_count_d; // NrMemPorts = N_FU = 4
 
   for (genvar port = 0; port < NrMemPorts; port++) begin: gen_store_count_q
     `FF(store_count_q[port], store_count_d[port], '0)
@@ -149,7 +154,7 @@ module spatz_vlsu
     for (int port = 0; port < NrMemPorts; port++) begin
       if (spatz_mem_req_o[port].write && spatz_mem_req_valid_o[port] && spatz_mem_req_ready_i[port])
         // Did we send a store?
-        store_count_d[port]++;
+        store_count_d[port]++; // number of outstanding store
 
       // Did we get the ack of a store?
   `ifdef MEMPOOL_SPATZ
@@ -385,7 +390,7 @@ module spatz_vlsu
   logic  [NrMemPorts-1:0] commit_finished_q;
   logic  [NrMemPorts-1:0] commit_finished_d;
 
-  for (genvar fu = 0; fu < N_FU; fu++) begin: gen_vreg_counters
+  for (genvar fu = 0; fu < N_FU; fu++) begin: gen_vreg_counters // N_FU: number of FPUs
     delta_counter #(
       .WIDTH($bits(vlen_t))
     ) i_delta_counter_vreg (
@@ -409,7 +414,7 @@ module spatz_vlsu
   // Address Generation //
   ////////////////////////
 
-  elen_t [NrMemPorts-1:0] mem_req_addr;
+  elen_t [NrMemPorts-1:0] mem_req_addr; // CMY: why elen_t? (64bits/hardware element)
 
   vrf_addr_t vd_vreg_addr;
   vrf_addr_t vs2_vreg_addr;
@@ -443,7 +448,7 @@ module spatz_vlsu
 
         // Pointer to index
         automatic logic [idx_width(N_FU*ELENB)-1:0] word_index = (port << (MAXEW - data_index_width_diff)) + (maxew_t'(idx_offset << data_index_width_diff) >> data_index_width_diff) + (maxew_t'(idx_offset >> (MAXEW - data_index_width_diff)) << (MAXEW - data_index_width_diff)) * NrMemPorts;
-
+        // CMY: word_index: the index of byte in vs2     //       starting point of a VRF port             +  lower bits of idx_offset, the index of bytes inside one port            +  higher bits of idx_offset, the starting point of a VRF word
         // Index
         unique case (mem_spatz_req.op_mem.ew)
           EW_8 : offset   = $signed(vrf_rdata_i[1][8 * word_index +: 8]);
@@ -452,8 +457,8 @@ module spatz_vlsu
         endcase
       end else begin
         offset = ({mem_counter_q[port][$bits(vlen_t)-1:MAXEW] << $clog2(NrMemPorts), mem_counter_q[port][int'(MAXEW)-1:0]} + (port << MAXEW)) * stride;
-      end
-
+      end // CMY: the starting point of a 32B block                                  , in-port offset                        +  starting point of a port, filling the blank of "<< $clog2(NrMemPorts)"
+      
       addr                      = mem_spatz_req.rs1 + offset;
       mem_req_addr[port]        = (addr >> MAXEW) << MAXEW;
       mem_req_addr_offset[port] = addr[int'(MAXEW)-1:0];
@@ -651,7 +656,7 @@ module spatz_vlsu
         commit_counter_d[fu] += ELENB;
       else if (commit_insn_q.vstart[idx_width(N_FU*ELENB)-1:$clog2(ELENB)] == fu)
         commit_counter_d[fu] += commit_insn_q.vstart[$clog2(ELENB)-1:0];
-      commit_operation_valid[fu] = commit_insn_valid && (commit_counter_q[fu] != max_elements) && (catchup[fu] || (!catchup[fu] && ~|catchup));
+      commit_operation_valid[fu] = (state_q == VLSU_RunningLoad || state_q == VLSU_RunningStore)&& commit_insn_valid && (commit_counter_q[fu] != max_elements) && (catchup[fu] || (!catchup[fu] && ~|catchup)); // CMY: added current state judgement
       commit_operation_last[fu]  = commit_operation_valid[fu] && ((max_elements - commit_counter_q[fu]) <= (commit_is_single_element_operation ? commit_single_element_size : ELENB));
       commit_counter_delta[fu]   = !commit_operation_valid[fu] ? vlen_t'('d0) : commit_is_single_element_operation ? vlen_t'(commit_single_element_size) : commit_operation_last[fu] ? (max_elements - commit_counter_q[fu]) : vlen_t'(ELENB);
       commit_counter_en[fu]      = commit_operation_valid[fu] && (commit_insn_q.is_load && vrf_req_valid_d && vrf_req_ready_d) || (!commit_insn_q.is_load && vrf_rvalid_i[0] && vrf_re_o[0] && (!mem_is_indexed || vrf_rvalid_i[1]));
@@ -702,16 +707,32 @@ module spatz_vlsu
   // State //
   ///////////
 
+  logic v0_t_is_ready;
+  assign v0_t_is_ready   = (state_q == VLSU_ReadingV0_t) && vrf_rvalid_i[1]; // reuse vrf_read[1] for V0 reading
+  logic v0_t_read_done;
+  `FFL(v0_t_read_done,1'b1,v0_t_is_ready,'0);
+
   always_comb begin: p_state
     // Maintain state
     state_d = state_q;
 
     unique case (state_q)
       VLSU_RunningLoad: begin
+        if(mem_spatz_req_valid && !mem_spatz_req.op_arith.vm && !v0_t_read_done)
+          state_d = VLSU_ReadingV0_t;
         if (commit_insn_valid && !commit_insn_q.is_load)
           if (&rob_empty)
             state_d = VLSU_RunningStore;
       end
+
+      VLSU_ReadingV0_t:
+        if(v0_t_is_ready) begin
+          if (commit_insn_valid && !commit_insn_q.is_load)
+            if (&rob_empty)
+            state_d = VLSU_RunningStore;
+          else state_d = VLSU_RunningLoad;
+        end
+        else state_d = state_q; 
 
       VLSU_RunningStore: begin
         if (commit_insn_valid && commit_insn_q.is_load)
@@ -758,7 +779,7 @@ module spatz_vlsu
 
   // verilator lint_off LATCH
   always_comb begin
-    vrf_raddr_o     = {vs2_vreg_addr, vd_vreg_addr};
+    vrf_raddr_o     = {vs2_vreg_addr, vd_vreg_addr}; // vs1 is not an operand of vle/vse
     vrf_re_o        = '0;
     vrf_req_d       = '0;
     vrf_req_valid_d = 1'b0;
@@ -781,21 +802,21 @@ module spatz_vlsu
     vrf_req_d.rsp_valid = commit_insn_valid && &commit_finished_d && mem_insn_finished_d[commit_insn_q.id];
 
     // Request indexes
-    vrf_re_o[1] = mem_is_indexed;
+    vrf_re_o[1] = mem_is_indexed; // for indexed load/store we need to read vs2
 
     // Count which vs2 element we should load (indexed loads)
     vs2_elem_id_d = vs2_elem_id_q;
-    if (&(pending_index ^ ~mem_operation_valid) && mem_is_indexed)
+    if (&(pending_index ^ ~mem_operation_valid) && mem_is_indexed) // no operation || (pending && valid)
       vs2_elem_id_d = vs2_elem_id_q + 1;
-    if (mem_spatz_req_ready)
+    if (mem_spatz_req_ready) // finish one instruction
       vs2_elem_id_d = '0;
 
     if (commit_insn_valid && commit_insn_q.is_load) begin
-      // If we have a valid element in the buffer, store it back to the register file
+      // If we have a valid element in the buffer, put it back to the register file
       if (state_q == VLSU_RunningLoad && |commit_operation_valid) begin
         // Enable write back to the VRF if we have a valid element in all buffers that still have to write something back.
         vrf_req_d.waddr = vd_vreg_addr;
-        vrf_req_valid_d = &(rob_rvalid | ~mem_pending) && |mem_pending;
+        vrf_req_valid_d = &(rob_rvalid | ~mem_pending) && |mem_pending; // CMY: rob_rvalid: data is in the rob ready to be written back to VRF
 
         for (int unsigned port = 0; port < NrMemPorts; port++) begin
           automatic logic [63:0] data = rob_rdata[port];
@@ -875,7 +896,7 @@ module spatz_vlsu
 `endif
         if (!rob_full[port] && !offset_queue_full[port] && mem_operation_valid[port]) begin
           rob_req_id[port]     = spatz_mem_req_ready[port] & spatz_mem_req_valid[port];
-          mem_req_lvalid[port] = (!mem_is_indexed || (vrf_rvalid_i[1] && !pending_index[port])) && mem_spatz_req.op_mem.is_load;
+          mem_req_lvalid[port] = (state_d == VLSU_RunningLoad)?(!mem_is_indexed || (vrf_rvalid_i[1] && !pending_index[port])) && mem_spatz_req.op_mem.is_load : 0; // CMY: added state_d judgement
           mem_req_id[port]     = rob_id[port];
           mem_req_last[port]   = mem_operation_last[port];
         end
@@ -940,7 +961,7 @@ module spatz_vlsu
               default: mem_req_data[port] = data;
             endcase
 
-          mem_req_svalid[port] = rob_rvalid[port] && (!mem_is_indexed || (vrf_rvalid_i[1] && !pending_index[port])) && !mem_spatz_req.op_mem.is_load;
+          mem_req_svalid[port] = (state_d == VLSU_RunningStore)? rob_rvalid[port] && (!mem_is_indexed || (vrf_rvalid_i[1] && !pending_index[port])) && !mem_spatz_req.op_mem.is_load : 0; //CMY: added state_d judgement
           mem_req_id[port]     = rob_rid[port];
           mem_req_last[port]   = mem_operation_last[port];
           rob_pop[port]        = spatz_mem_req_valid[port] && spatz_mem_req_ready[port];
