@@ -180,7 +180,7 @@ module spatz_vfu
 
   // Reduction intralane
   vlen_t reduction_pointer_d, reduction_pointer_q;
-  logic [idx_width(ELEN*N_FPU)-1 : 0] shift_amnt_d, shift_amnt_q;
+  logic [idx_width(ELEN*N_FU)-1 : 0] shift_amnt_d, shift_amnt_q;
   vrf_data_t result_buf_d, result_buf_q;
 
   `FF(result_buf_valid_q, result_buf_valid_d, 1'b0)
@@ -299,7 +299,7 @@ module spatz_vfu
   //////////////
 
   // Reduction registers
-  vrf_data_t [1:0] reduction_q, reduction_d;
+  vrf_data_t [$clog2(N_FU)-1:0] reduction_q, reduction_d;
   vrf_data_t reduction_vector_data, reduction_scalar_data;
   `FF(reduction_q, reduction_d, '0)
 
@@ -356,8 +356,8 @@ module spatz_vfu
   ///////////////////////
 
   // Reduction pointer
-  logic [$clog2(N_FPU/N_IPU)-1:0] pnt;
-  assign pnt = reduction_pointer_d[$clog2(N_FPU/N_IPU)-1:0];
+  logic [$clog2(N_FU)-1:0] pnt;
+  assign pnt = reduction_pointer_d[$clog2(N_FU)-1:0];
 
   // To identify the VLEN (Vector Length) /DLEN (Datapath Length)
   vlen_t fill_cnt;
@@ -379,7 +379,7 @@ module spatz_vfu
   assign FPUlatency = FPUImplementation.PipeRegs[ADDMUL][el_type];
   `FF(lat_count_q, lat_count_d, '0)
 
-  logic [1:0] num_inter_lane_iterations_d, num_inter_lane_iterations_q;
+  logic [$clog2(N_FU)-1:0] num_inter_lane_iterations_d, num_inter_lane_iterations_q;
   `FF(num_inter_lane_iterations_q, num_inter_lane_iterations_d, '0)
 
   logic [N_FU*ELEN-1:0] mask; // bit mask
@@ -421,92 +421,10 @@ module spatz_vfu
     // TODO: make it more general later (not just for reductions) and add more data types
 
     if (reduction_pointer_q == fill_cnt) begin
-
       // If this is the last VRF word, then mask the unused data
-      unique case (spatz_req.vtype.vsew)
-
-        EW_64: begin
-          case (spatz_req.vl[$clog2(N_FPU)-1:0])
-            1: mask[255:64]   = '0;
-            2: mask[255:128]  = '0;
-            3: mask[255:192]  = '0;
-            default: mask = '1;
-          endcase
-        end
-
-        EW_32: begin
-          case (spatz_req.vl[$clog2(N_FPU):0])
-            1: mask[255:32]   = '0;
-            2: mask[255:64]   = '0;
-            3: mask[255:96]   = '0;
-            4: mask[255:128]  = '0;
-            5: mask[255:160]  = '0;
-            6: mask[255:192]  = '0;
-            7: mask[255:224]  = '0;
-            default: mask = '1;
-          endcase
-        end
-
-        EW_16: begin
-          case (spatz_req.vl[$clog2(N_FPU)+1:0])
-            1:  mask[255:16]   = '0;
-            2:  mask[255:32]   = '0;
-            3:  mask[255:48]   = '0;
-            4:  mask[255:64]   = '0;
-            5:  mask[255:80]   = '0;
-            6:  mask[255:96]   = '0;
-            7:  mask[255:112]  = '0;
-            8:  mask[255:128]  = '0;
-            9:  mask[255:144]  = '0;
-            10: mask[255:160]  = '0;
-            11: mask[255:176]  = '0;
-            12: mask[255:192]  = '0;
-            13: mask[255:208]  = '0;
-            14: mask[255:224]  = '0;
-            15: mask[255:240]  = '0;
-            default: mask = '1;
-          endcase
-        end
-
-        EW_8: begin
-          case (spatz_req.vl[$clog2(N_FPU)+2:0])
-            1:  mask[255:8]    = '0;
-            2:  mask[255:16]   = '0;
-            3:  mask[255:24]   = '0;
-            4:  mask[255:32]   = '0;
-            5:  mask[255:40]   = '0;
-            6:  mask[255:48]   = '0;
-            7:  mask[255:56]   = '0;
-            8:  mask[255:64]   = '0;
-            9:  mask[255:72]   = '0;
-            10: mask[255:80]   = '0;
-            11: mask[255:88]   = '0;
-            12: mask[255:96]   = '0;
-            13: mask[255:104]  = '0;
-            14: mask[255:112]  = '0;
-            15: mask[255:120]  = '0;
-            16: mask[255:128]  = '0;
-            17: mask[255:136]  = '0;
-            18: mask[255:144]  = '0;
-            19: mask[255:152]  = '0;
-            20: mask[255:160]  = '0;
-            21: mask[255:168]  = '0;
-            22: mask[255:176]  = '0;
-            23: mask[255:184]  = '0;
-            24: mask[255:192]  = '0;
-            25: mask[255:200]  = '0;
-            26: mask[255:208]  = '0;
-            27: mask[255:216]  = '0;
-            28: mask[255:224]  = '0;
-            29: mask[255:232]  = '0;
-            30: mask[255:240]  = '0;
-            31: mask[255:248]  = '0;
-            default: mask = '1;
-          endcase
-        end
-
-        default: mask = '1;
-      endcase
+      automatic logic [$clog2(VRFWordWidth)-1:0] width;
+      width = (spatz_req.vl << spatz_req.vtype.vsew << MAXEW);
+      mask =  (width == 0) ? '1 : (1 << width)-1;
     end
 
     // Preprocess vector data for masking before reduction
@@ -590,7 +508,7 @@ module spatz_vfu
           reduction_state_d = Reduction_Reduce;
 
           // Request next word
-          word_issued = is_fpu_insn ? 1'b1 : !(|pnt) ? 1'b1 : 1'b0;
+          word_issued = is_fpu_insn ? 1'b1 : (VRFWordWidth==ELEN*N_IPU) ? 1'b1 : !(|pnt) ? 1'b1 : 1'b0;
           if (reduction_pointer_q == fill_cnt) begin
             reduction_state_d = Reduction_IntraLane;
             reduction_pointer_d = '0;
@@ -610,15 +528,20 @@ module spatz_vfu
         `else
           // Maintain the input operand or set to '0 for the inputs until valid results arrive
           reduction_d[0] = result_valid ? result : spatz_req.op inside {VFMINMAX, VAND, VOR, VMAX, VMAXU, VMIN, VMINU} ? reduction_q[0] : '0;
-          reduction_d[1] = is_fpu_insn ? $unsigned(reduction_vector_data) :
-                                         $unsigned(reduction_vector_data[64*reduction_pointer_q[idx_width(N_FU*ELENB)-4:0]+:64]);
+          if ((N_IPU>0) && ~is_fpu_insn) begin
+            // If IPU is used and if the DLEN < VRF word size, select the chunk
+            reduction_d[1] = (VRFWordWidth==N_IPU*ELEN) ? $unsigned(reduction_vector_data) :
+                                                          $unsigned(reduction_vector_data[ELEN*N_IPU*reduction_pointer_q[idx_width(VRFWordWidth/(N_IPU*ELEN))-1:0]+:ELEN*N_IPU]);
+          end else begin
+            reduction_d[1] = $unsigned(reduction_vector_data);
+          end
         `endif
 
         // verilator lint_on SELRANGE
         if (vrf_rvalid_i[1]) begin
           reduction_operand_ready_d = 1'b1;
           reduction_pointer_d = reduction_pointer_q + 1;
-          word_issued = is_fpu_insn ? 1'b1 : !(|pnt) ? 1'b1 : 1'b0;
+          word_issued = is_fpu_insn ? 1'b1 : (VRFWordWidth==ELEN*N_IPU) ? 1'b1 : !(|pnt) ? 1'b1 : 1'b0;
           if (result_valid[0]) begin
             result_ready = 1'b1;
           end
@@ -639,7 +562,7 @@ module spatz_vfu
           reduction_d = '0;
         `else
           reduction_d[0] = result_valid ? $unsigned(result) : reduction_q[0];
-          reduction_d[1] = $unsigned(result_buf_d);
+          reduction_d[1] = result_buf_valid_q ? $unsigned(result_buf_q) :  reduction_q[1];
         `endif
         lat_count_d = result_valid[0] ? '0 : lat_count_q + 1;
 
@@ -672,20 +595,15 @@ module spatz_vfu
         if (!result_valid[0] && (lat_count_q == (FPUlatency + 1))) begin
           reduction_state_d = Reduction_InterLane;
 
-          // Handle cases where the vector length is smaller than the total number of lanes
-          // Reduction for 4 FPUs
-          num_inter_lane_iterations_d = (spatz_req.vl >> (EW_64 - spatz_req.vtype.vsew)) <= 1 ? 0:
-                                        (spatz_req.vl >> (EW_64 - spatz_req.vtype.vsew)) <= 2 ? 1 : 2;
-
-          // Reduction for a single IPU
-          // Note: If use case requires more than IPU, add conditional cases as done above for FPU
-          if (~is_fpu_insn) begin
-            num_inter_lane_iterations_d = 0;
-          end
+          // Written for max 4 FPU / 4 IPUs
+          num_inter_lane_iterations_d = (spatz_req.vl << spatz_req.vtype.vsew) <= (ELENB) ? 0:
+                                        (spatz_req.vl << spatz_req.vtype.vsew) <= (2*ELENB) ? 1 : 2;
+          num_inter_lane_iterations_d = is_fpu_insn ? (num_inter_lane_iterations_d > $clog2(N_FPU) ? $clog2(N_FPU) : num_inter_lane_iterations_d) :
+                                                      (num_inter_lane_iterations_d > $clog2(N_IPU) ? $clog2(N_IPU) : num_inter_lane_iterations_d);
 
           // Skip interlane
           if (num_inter_lane_iterations_d == 0) begin
-            reduction_state_d = (spatz_req.vtype.vsew == EW_64) ? Reduction_WriteBack : spatz_req.vl == 1 ? Reduction_WriteBack : Reduction_SIMD;
+            reduction_state_d = (spatz_req.vtype.vsew == MAXEW) ? Reduction_WriteBack : spatz_req.vl == 1 ? Reduction_WriteBack : Reduction_SIMD;
             shift_amnt_d = ELEN >> (MAXEW - spatz_req.vtype.vsew);
           end else begin
             shift_amnt_d = ELEN;
@@ -725,7 +643,7 @@ module spatz_vfu
 
         // Are we done?
         if ((reduction_pointer_q == (num_inter_lane_iterations_q-1)) && (reduction_operand_ready_d == 1'b1)) begin
-          if (spatz_req.vtype.vsew != EW_64) begin
+          if (spatz_req.vtype.vsew != MAXEW) begin
             reduction_state_d = Reduction_SIMD;
           end else begin
             reduction_state_d = Reduction_WriteBack;
@@ -767,7 +685,7 @@ module spatz_vfu
         end
 
         // Are we done?
-        if ((reduction_pointer_q == (EW_64 - spatz_req.vtype.vsew - 1)) && (reduction_operand_ready_d == 1'b1)) begin
+        if ((reduction_pointer_q == (MAXEW - spatz_req.vtype.vsew - 1)) && (reduction_operand_ready_d == 1'b1)) begin
           reduction_state_d = Reduction_WriteBack;
           reduction_pointer_d = '0;
           shift_amnt_d = ELEN;
