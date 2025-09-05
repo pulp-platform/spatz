@@ -426,7 +426,7 @@ module spatz_vfu
 
   // Operands and result signals
   logic [N_FU*ELEN-1:0]  operand1, operand2, operand3;
-  logic [N_FU*ELEN-1:0]  operand_v0_t,operand_v0_t_q; // CMY: v0 should be read from vrf 
+  logic [N_FU*ELEN-1:0]  operand_v0_t,operand_v0_t_q; // CMY: v0 should be read from vrf
   logic [N_FU*ELENB-1:0] in_ready;
 
   //CMY: have we fetched the v0.t in reduction masking instructions.
@@ -434,7 +434,7 @@ module spatz_vfu
   assign reduction_v0_t_is_ready = (reduction_state_q == Reduction_Read_V0_t) && vrf_rvalid_i[0];
   logic reduction_v0_t_read_done;
   `FFL(reduction_v0_t_read_done,1'b1,reduction_v0_t_is_ready,'0);
-  //---------------------------------------------------------------- 
+  //----------------------------------------------------------------
 
   // CMY: back up v0.t for reduction instructions.-----------------------
   logic [N_FU*ELEN-1:0]  reduction_operand_v0_t,reduction_operand_v0_t_q;
@@ -590,6 +590,7 @@ module spatz_vfu
           endcase
          end
         end
+        default: reduction_useless_value='0;
       endcase
     end
   end
@@ -645,7 +646,7 @@ module spatz_vfu
       Reduction_Wait: begin
         // Are we ready to accept a result?
         result_ready = &(result_valid | ~pending_results) && ((result_tag.wb && vfu_rsp_ready_i) || vrf_wvalid_i);
-      
+        
         if (!is_fpu_busy)
           reduction_state_d = Reduction_Init;
       end

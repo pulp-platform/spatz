@@ -441,7 +441,7 @@ module spatz_vlsu
     assign idx_offset = mem_idx_counter_q[port];
 
     always_comb begin
-      addr = '0;;
+      addr = '0;
       stride ='0;
       offset ='0;
       stride = mem_is_strided ? mem_spatz_req.rs2 >> mem_spatz_req.vtype.vsew : 'd1;
