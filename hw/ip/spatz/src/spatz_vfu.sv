@@ -595,7 +595,7 @@ module spatz_vfu
     end
   end
 
-  // -------------------------------------------------------------
+  // -----------------------------------------------------------
 
   // CMY: add monitor signals for reduction_pointer_q and reduction_opreand_v0_t_q[reduction_pointer_q]
   logic [idx_width(N_FU*ELENB)-1:0]  reduction_pointer_q_idx_width_N_FU_ELENB_0;
@@ -646,7 +646,7 @@ module spatz_vfu
       Reduction_Wait: begin
         // Are we ready to accept a result?
         result_ready = &(result_valid | ~pending_results) && ((result_tag.wb && vfu_rsp_ready_i) || vrf_wvalid_i);
-        
+
         if (!is_fpu_busy)
           reduction_state_d = Reduction_Init;
       end
