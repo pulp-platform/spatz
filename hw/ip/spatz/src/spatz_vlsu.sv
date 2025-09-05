@@ -441,6 +441,9 @@ module spatz_vlsu
     assign idx_offset = mem_idx_counter_q[port];
 
     always_comb begin
+      addr = '0;;
+      stride ='0;
+      offset ='0;
       stride = mem_is_strided ? mem_spatz_req.rs2 >> mem_spatz_req.vtype.vsew : 'd1;
       // stride here(HW) is in element, compared to Byte-based in SW
       if (mem_is_indexed) begin
@@ -813,11 +816,13 @@ module spatz_vlsu
     else vm_masking = '1;
   end
 
-  vrf_be_t       load_wbe;
+  vrf_be_t       load_wbe; // CMY: intermediate wbe, before masking.
   // -----------------------------------------------
 
   // verilator lint_off LATCH
   always_comb begin
+    load_wbe = '0;
+
     vrf_raddr_o     = (state_q == VLSU_ReadingV0_t)? {v0_t_vreg_addr, vd_vreg_addr}:{vs2_vreg_addr, vd_vreg_addr}; // vs1 is not an operand of vle/vse
     vrf_re_o        = '0;
     vrf_req_d       = '0;

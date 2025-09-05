@@ -161,8 +161,8 @@ void TEST_CASE3() {
 }
 
 void TEST_CASE4() {
-//   const uint32_t scalar = 0x0ff00ff0;
-  const uint64_t scalar = 0x0ff00ff00ff00ff0;
+   const uint32_t scalar = 0x0ff00ff0; // snitch is 32-bit scalar core
+//  const uint64_t scalar = 0x0ff00ff00ff00ff0;
 
   VSET(12, e8, m8);
   VLOAD_8(v16, 0xff, 0x01, 0xf0, 0xff, 0x01, 0xf0, 0xff, 0x01, 0xf0, 0xff, 0x01,
@@ -213,10 +213,10 @@ void TEST_CASE4() {
            0x000000000ff00ff0, 0xdeadbeefdeadbeef, 0x00f000f000f000f0,
            0x000000000ff00ff0, 0xdeadbeefdeadbeef, 0x00f000f000f000f0,
            0x000000000ff00ff0, 0xdeadbeefdeadbeef, 0x00f000f000f000f0);*/
-   VCMP_U64(16, v8, 0x0ff00ff00ff00ff0, 0xdeadbeefdeadbeef, 0x00f000f000f000f0,
-           0x0ff00ff00ff00ff0, 0xdeadbeefdeadbeef, 0x00f000f000f000f0,
-           0x0ff00ff00ff00ff0, 0xdeadbeefdeadbeef, 0x00f000f000f000f0,
-           0x0ff00ff00ff00ff0, 0xdeadbeefdeadbeef, 0x00f000f000f000f0);
+   VCMP_U64(16, v8, 0x000000000ff00ff0, 0xdeadbeefdeadbeef, 0x0000000000f000f0,
+           0x000000000ff00ff0, 0xdeadbeefdeadbeef, 0x0000000000f000f0,
+           0x000000000ff00ff0, 0xdeadbeefdeadbeef, 0x0000000000f000f0,
+           0x000000000ff00ff0, 0xdeadbeefdeadbeef, 0x0000000000f000f0);
 #endif
 }
 

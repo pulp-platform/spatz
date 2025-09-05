@@ -469,6 +469,10 @@ module spatz_vfu
   //--------------------------------------------
 
   always_comb begin: operand_proc // CMY: turn it into a FSM
+    reduction_operand_v0_t = '0;
+    operand_v0_t = '0;
+    operand1 = '0;
+    operand2 = '0;
     case (operand_state_q)
       READ_OPERANDS: begin
           if(reduction_state_q == Reduction_Read_V0_t)
@@ -534,7 +538,7 @@ module spatz_vfu
   always_comb begin: reduction_useless_value_selection
     reduction_useless_value = '0;
     if(spatz_req.op_arith.is_reduction == 1'b1) begin
-      case(spatz_req.op
+      case(spatz_req.op)
         VADD: // riscv_instr::VREDSUM_VS,riscv_instr::VFREDUSUM_VS,riscv_instr::VFREDOSUM_VS
           reduction_useless_value = '0;
         VAND: //riscv_instr::VREDAND_VS:

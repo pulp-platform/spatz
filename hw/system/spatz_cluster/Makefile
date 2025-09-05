@@ -169,11 +169,14 @@ clean.vcs:
 # SPYGLASS #
 ############
 
-SNPS_SG ?= spyglass-2022.06
+#SNPS_SG ?= spyglass-2022.06
+SNPS_SG ?= spyglass #Mamothones
 
 .PHONY: lint lint/tmp/files
 lint: generate lint/tmp/files lint/sdc/func.sdc lint/script/lint.tcl
-	cd lint && $(SNPS_SG) sg_shell -tcl script/lint.tcl
+#	cd lint && $(SNPS_SG) sg_shell -tcl script/lint.tcl
+	cd lint && sg_shell -tcl script/lint.tcl
+
 
 lint/tmp/files: ${BENDER}
 	mkdir -p lint/tmp
