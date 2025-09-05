@@ -126,7 +126,7 @@ module spatz_vfu
   logic reduction_operand_ready_d, reduction_operand_ready_q;
 
 // CMY: Are we reading operands or v0.t?
-  typedef enum logic[1:0] {
+  typedef enum logic{
     READ_OPERANDS, READ_V0_t
   } operand_state_t;
    operand_state_t operand_state_d, operand_state_q;
@@ -833,7 +833,7 @@ module spatz_vfu
     case(operand_state_q)// CMY modified
        READ_OPERANDS:begin
         if(reduction_state_q == Reduction_Read_V0_t) begin
-          vreg_addr_d[0] = ( 0 + vstart) << $clog2(NrWordsPerVector);
+          vreg_addr_d[0] =  0 << $clog2(NrWordsPerVector);
           vrf_raddr_o = vreg_addr_d;
         end
         else begin

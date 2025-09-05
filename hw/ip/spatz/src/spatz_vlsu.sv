@@ -133,7 +133,7 @@ module spatz_vlsu
   //  State  //
   /////////////
 
-  typedef enum logic {
+  typedef enum logic [1:0] {
     VLSU_RunningLoad, VLSU_RunningStore, VLSU_ReadingV0_t
   } state_t;
   state_t state_d, state_q;
@@ -412,15 +412,16 @@ module spatz_vlsu
 
   ////////////////////////
   // Address Generation //
-  ////////////////////////
+  ////////////////////////   // CMY: VRF address generation
 
   elen_t [NrMemPorts-1:0] mem_req_addr; // CMY: why elen_t? (64bits/hardware element)
 
   vrf_addr_t vd_vreg_addr;
   vrf_addr_t vs2_vreg_addr;
+  vrf_addr_t v0_t_vreg_addr; // CMY
 
   // Current element index and byte index that are being accessed at the register file
-  vreg_elem_t vd_elem_id;
+  vreg_elem_t vd_elem_id; // 256/64=4   [3:0]
   vreg_elem_t vs2_elem_id_d, vs2_elem_id_q;
   `FF(vs2_elem_id_q, vs2_elem_id_d, '0)
 
@@ -441,24 +442,29 @@ module spatz_vlsu
 
     always_comb begin
       stride = mem_is_strided ? mem_spatz_req.rs2 >> mem_spatz_req.vtype.vsew : 'd1;
-
+      // stride here(HW) is in element, compared to Byte-based in SW
       if (mem_is_indexed) begin
         // What is the relationship between data and index width?
         automatic logic [1:0] data_index_width_diff = int'(mem_spatz_req.vtype.vsew) - int'(mem_spatz_req.op_mem.ew);
-
+        // // op_mem.ew encodes the index element width (EW of VS2)
         // Pointer to index
         automatic logic [idx_width(N_FU*ELENB)-1:0] word_index = (port << (MAXEW - data_index_width_diff)) + (maxew_t'(idx_offset << data_index_width_diff) >> data_index_width_diff) + (maxew_t'(idx_offset >> (MAXEW - data_index_width_diff)) << (MAXEW - data_index_width_diff)) * NrMemPorts;
         // CMY: word_index: the index of byte in vs2     //       starting point of a VRF port             +  lower bits of idx_offset, the index of bytes inside one port            +  higher bits of idx_offset, the starting point of a VRF word
-        // Index
-        unique case (mem_spatz_req.op_mem.ew)
-          EW_8 : offset   = $signed(vrf_rdata_i[1][8 * word_index +: 8]);
-          EW_16: offset   = $signed(vrf_rdata_i[1][8 * word_index +: 16]);
-          default: offset = $signed(vrf_rdata_i[1][8 * word_index +: 32]);
-        endcase
-      end else begin
+        //                                          word_index = (start of this port’s slice)              + (byte offset within the slice)                                           + (how many whole slices we’ve advanced).
+        //                  It computes the byte address inside the VS2 (index) vector
+        if(state_d == VLSU_RunningLoad || state_d == VLSU_RunningStore) begin
+          // Index
+          unique case (mem_spatz_req.op_mem.ew) // op_mem.ew encodes the index element width (EW of VS2)
+            EW_8 : offset   = $signed(vrf_rdata_i[1][8 * word_index +: 8]);
+            EW_16: offset   = $signed(vrf_rdata_i[1][8 * word_index +: 16]);
+            default: offset = $signed(vrf_rdata_i[1][8 * word_index +: 32]);
+          endcase
+        end
+      end else begin // strieded or normal (stride = 1)
         offset = ({mem_counter_q[port][$bits(vlen_t)-1:MAXEW] << $clog2(NrMemPorts), mem_counter_q[port][int'(MAXEW)-1:0]} + (port << MAXEW)) * stride;
-      end // CMY: the starting point of a 32B block                                  , in-port offset                        +  starting point of a port, filling the blank of "<< $clog2(NrMemPorts)"
-      
+      end 
+      // CMY: the starting point of a 32B block                                  , in-port offset                        + adds a port base offset so each port starts at a different initial byte position
+      // mem_counter_q: how many elements this port has issued/consumed
       addr                      = mem_spatz_req.rs1 + offset;
       mem_req_addr[port]        = (addr >> MAXEW) << MAXEW;
       mem_req_addr_offset[port] = addr[int'(MAXEW)-1:0];
@@ -467,10 +473,19 @@ module spatz_vlsu
     end
   end: gen_mem_req_addr
 
+  logic v0_t_is_ready;
+  assign v0_t_is_ready   = (state_q == VLSU_ReadingV0_t) && vrf_rvalid_i[1]; // reuse vrf_read[1] for V0 reading
+  logic [N_FU*ELEN-1:0]  operand_v0_t,operand_v0_t_q; // CMY: v0 should be read from vrf 
+  assign operand_v0_t = (state_q == VLSU_ReadingV0_t)? vrf_rdata_i[1]:'0;
+
+  `FFL(operand_v0_t_q, operand_v0_t, v0_t_is_ready, '0) // CMY: backup v0.t
+
+
   // Calculate the register file address
   always_comb begin : gen_vreg_addr
     vd_vreg_addr  = (commit_insn_q.vd << $clog2(NrWordsPerVector)) + $unsigned(vd_elem_id);
     vs2_vreg_addr = (mem_spatz_req.vs2 << $clog2(NrWordsPerVector)) + $unsigned(vs2_elem_id_q);
+    v0_t_vreg_addr =  0  << $clog2(NrWordsPerVector); // CMY: align prestart elements inside VLSU
   end
 
   ///////////////
@@ -707,8 +722,6 @@ module spatz_vlsu
   // State //
   ///////////
 
-  logic v0_t_is_ready;
-  assign v0_t_is_ready   = (state_q == VLSU_ReadingV0_t) && vrf_rvalid_i[1]; // reuse vrf_read[1] for V0 reading
   logic v0_t_read_done;
   `FFL(v0_t_read_done,1'b1,v0_t_is_ready,'0);
 
@@ -718,7 +731,7 @@ module spatz_vlsu
 
     unique case (state_q)
       VLSU_RunningLoad: begin
-        if(mem_spatz_req_valid && !mem_spatz_req.op_arith.vm && !v0_t_read_done)
+        if(mem_spatz_req_valid && !mem_spatz_req.op_mem.vm && !v0_t_read_done)
           state_d = VLSU_ReadingV0_t;
         if (commit_insn_valid && !commit_insn_q.is_load)
           if (&rob_empty)
@@ -727,10 +740,11 @@ module spatz_vlsu
 
       VLSU_ReadingV0_t:
         if(v0_t_is_ready) begin
+          state_d = VLSU_RunningLoad;
           if (commit_insn_valid && !commit_insn_q.is_load)
             if (&rob_empty)
             state_d = VLSU_RunningStore;
-          else state_d = VLSU_RunningLoad;
+          // else state_d = VLSU_RunningLoad;
         end
         else state_d = state_q; 
 
@@ -777,9 +791,34 @@ module spatz_vlsu
     end
   end
 
+  // CMY: generate masking based on V0.t-----------------------------------
+  vrf_data_t vm_masking;
+  always_comb begin
+    if(!mem_spatz_req.op_mem.vm) begin
+      case (commit_insn_q.vsew)
+        EW_8:for(int i=0;i<VRFWordBWidth/1;i=i+1)begin
+          vm_masking[i*1+:1] = {1{operand_v0_t_q[/*vreg_wb_word_cnt_q *32 +*/ i]}};
+        end
+        EW_16:for(int i=0;i<VRFWordBWidth/2;i=i+1)begin
+          vm_masking[i*2+:2] = {2{operand_v0_t_q[/*vreg_wb_word_cnt_q *16 +*/ i]}};
+        end        
+        EW_32: for(int i=0;i<VRFWordBWidth/4;i=i+1)begin
+          vm_masking[i*4+:4] = {4{operand_v0_t_q[/*vreg_wb_word_cnt_q *8 +*/ i]}};
+        end 
+        default: if (MAXEW == EW_64) for(int i=0;i<VRFWordBWidth/8;i=i+1)begin
+          vm_masking[i*8+:8] = {8{operand_v0_t_q[/*vreg_wb_word_cnt_q *4 +*/ i]}};
+        end
+      endcase
+    end
+    else vm_masking = '1;
+  end
+
+  vrf_be_t       load_wbe;
+  // -----------------------------------------------
+
   // verilator lint_off LATCH
   always_comb begin
-    vrf_raddr_o     = {vs2_vreg_addr, vd_vreg_addr}; // vs1 is not an operand of vle/vse
+    vrf_raddr_o     = (state_q == VLSU_ReadingV0_t)? {v0_t_vreg_addr, vd_vreg_addr}:{vs2_vreg_addr, vd_vreg_addr}; // vs1 is not an operand of vle/vse
     vrf_re_o        = '0;
     vrf_req_d       = '0;
     vrf_req_valid_d = 1'b0;
@@ -802,7 +841,7 @@ module spatz_vlsu
     vrf_req_d.rsp_valid = commit_insn_valid && &commit_finished_d && mem_insn_finished_d[commit_insn_q.id];
 
     // Request indexes
-    vrf_re_o[1] = mem_is_indexed; // for indexed load/store we need to read vs2
+    vrf_re_o[1] = (state_q == VLSU_ReadingV0_t)? 1'b1:mem_is_indexed; // for indexed load/store we need to read vs2
 
     // Count which vs2 element we should load (indexed loads)
     vs2_elem_id_d = vs2_elem_id_q;
@@ -877,10 +916,14 @@ module spatz_vlsu
                 EW_32: mask   = 15;
                 default: mask = '1;
               endcase
-              vrf_req_d.wbe[ELENB*port +: ELENB] = mask << shift;
-            end else
+              vrf_req_d.wbe[ELENB*port +: ELENB] = (mask << shift) & vm_masking;
+            end 
+            else begin
               for (int unsigned k = 0; k < ELENB; k++)
-                vrf_req_d.wbe[ELENB*port+k] = k < commit_counter_delta[port];
+                // vrf_req_d.wbe[ELENB*port+k] = (k < commit_counter_delta[port]) & vm_masking;
+                load_wbe[ELENB*port+k] = (k < commit_counter_delta[port]);
+                vrf_req_d.wbe = load_wbe & vm_masking;
+            end
         end
       end
 
@@ -1023,7 +1066,7 @@ module spatz_vlsu
     assign spatz_mem_req[port].data  = mem_req_data[port];
     assign spatz_mem_req[port].strb  = mem_req_strb[port];
     assign spatz_mem_req[port].user  = '0;
-    assign spatz_mem_req_valid[port] = mem_req_svalid[port] || mem_req_lvalid[port];
+    assign spatz_mem_req_valid[port] = (state_q == VLSU_RunningLoad || state_q == VLSU_RunningStore)&&(mem_req_svalid[port] || mem_req_lvalid[port]); // CMY: add state selection
 `endif
   end
 
