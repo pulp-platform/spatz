@@ -451,14 +451,14 @@ module spatz_vfu
     operand_state_d = operand_state_q;
     // if(spatz_req_valid) begin
       unique case(operand_state_q)
-        READ_V0_t: 
-          if(v0_t_is_ready) operand_state_d = READ_OPERANDS; 
-          else operand_state_d = operand_state_q; 
+        READ_V0_t:
+          if(v0_t_is_ready) operand_state_d = READ_OPERANDS;
+          else operand_state_d = operand_state_q;
         READ_OPERANDS:
-          if(spatz_req_valid && !spatz_req.op_arith.is_scalar && !spatz_req.op_arith.vm && !v0_t_read_done && !spatz_req.op_arith.is_reduction) 
-            operand_state_d = READ_V0_t; 
-          else operand_state_d = READ_OPERANDS;  
-        default: operand_state_d = operand_state_q; 
+          if(spatz_req_valid && !spatz_req.op_arith.is_scalar && !spatz_req.op_arith.vm && !v0_t_read_done && !spatz_req.op_arith.is_reduction)
+            operand_state_d = READ_V0_t;
+          else operand_state_d = READ_OPERANDS;
+        default: operand_state_d = operand_state_q;
       endcase
     // end
   end:operand_selection
@@ -534,7 +534,7 @@ module spatz_vfu
   always_comb begin: reduction_useless_value_selection
     reduction_useless_value = '0;
     if(spatz_req.op_arith.is_reduction == 1'b1) begin
-      case(spatz_req.op)
+      case(spatz_req.op
         VADD: // riscv_instr::VREDSUM_VS,riscv_instr::VFREDUSUM_VS,riscv_instr::VFREDOSUM_VS
           reduction_useless_value = '0;
         VAND: //riscv_instr::VREDAND_VS:
@@ -549,7 +549,7 @@ module spatz_vfu
             EW_8:reduction_useless_value = {1'b0,7'h7f};
             EW_16:reduction_useless_value = {1'b0,15'h7fff};
             EW_32:reduction_useless_value = {1'b0,31'h7fffffff};
-            default: 
+            default:
               if(MAXEW == EW_64) reduction_useless_value = {1'b0,63'h7fffffffffffffff};
           endcase
         VMAXU: //riscv_instr::VREDMAXU_VS:
@@ -559,7 +559,7 @@ module spatz_vfu
             EW_8:reduction_useless_value = {1'b1,7'h0};
             EW_16:reduction_useless_value = {1'b1,15'h0};
             EW_32:reduction_useless_value = {1'b1,31'h0};
-            default: 
+            default:
               if(MAXEW == EW_64) reduction_useless_value = {1'b1,63'h0};
           endcase
         VFMINMAX: begin
@@ -575,7 +575,7 @@ module spatz_vfu
           endcase
          end
          if (spatz_req.rm == fpnew_pkg::RTZ) begin //riscv_instr::VFREDMAX_VS:
-          unique case(fpu_src_fmt) 
+          unique case(fpu_src_fmt)
           // - infinity
             fpnew_pkg::FP64:reduction_useless_value = {1'b1,11'h7ff,52'h0};
             fpnew_pkg::FP32:reduction_useless_value = {1'b1,8'hff,23'h0};
@@ -641,7 +641,7 @@ module spatz_vfu
       Reduction_Wait: begin
         // Are we ready to accept a result?
         result_ready = &(result_valid | ~pending_results) && ((result_tag.wb && vfu_rsp_ready_i) || vrf_wvalid_i);
-        
+      
         if (!is_fpu_busy)
           reduction_state_d = Reduction_Init;
       end
@@ -924,13 +924,13 @@ always_comb begin : vreg_wbe_proc
           end
           EW_16:for(int i=0;i<VRFWordBWidth/2;i=i+1)begin
             vreg_wbe[i*2+:2] = {2{operand_v0_t_q[vreg_wb_word_cnt_q *16 + i]}};
-          end        
+          end
           EW_32: for(int i=0;i<VRFWordBWidth/4;i=i+1)begin
             vreg_wbe[i*4+:4] = {4{operand_v0_t_q[vreg_wb_word_cnt_q *8 + i]}};
-          end 
+          end
           default: if (MAXEW == EW_64) for(int i=0;i<VRFWordBWidth/8;i=i+1)begin
             vreg_wbe[i*8+:8] = {8{operand_v0_t_q[vreg_wb_word_cnt_q *4 + i]}};
-          end 
+          end
         endcase
       else if(result_tag.narrowing) begin
         if(!spatz_req.op_arith.vm && !spatz_req.op_arith.is_scalar)
@@ -938,11 +938,11 @@ always_comb begin : vreg_wbe_proc
           EW_16:for(int i=0;i<VRFWordBWidth/2;i=i+1)begin
             vreg_wbe_pre[i*2+:2] = {2{operand_v0_t_q[vreg_wb_word_cnt_q *16 + i]}};
             vreg_wbe = result_tag.narrowing_upper ? {vreg_wbe_pre[N_FU*ELENB-1:(N_FU*ELENB/2)],{(N_FU*ELENB/2){1'b0}}} : {{(N_FU*ELENB/2){1'b0}}, vreg_wbe_pre[(N_FU*ELENB/2)-1:0]};
-          end        
+          end
           EW_32: for(int i=0;i<VRFWordBWidth/4;i=i+1)begin
             vreg_wbe_pre[i*4+:4] = {4{operand_v0_t_q[vreg_wb_word_cnt_q *8 + i]}};
             vreg_wbe = result_tag.narrowing_upper ? {vreg_wbe_pre[N_FU*ELENB-1:(N_FU*ELENB/2)],{(N_FU*ELENB/2){1'b0}}} : {{(N_FU*ELENB/2){1'b0}}, vreg_wbe_pre[(N_FU*ELENB/2)-1:0]};
-          end 
+          end
           EW_64: for(int i=0;i<VRFWordBWidth/8;i=i+1)begin
             vreg_wbe_pre[i*8+:8] = {8{operand_v0_t_q[vreg_wb_word_cnt_q *4 + i]}};
             vreg_wbe = result_tag.narrowing_upper ? {vreg_wbe_pre[N_FU*ELENB-1:(N_FU*ELENB/2)],{(N_FU*ELENB/2){1'b0}}} : {{(N_FU*ELENB/2){1'b0}}, vreg_wbe_pre[(N_FU*ELENB/2)-1:0]};
@@ -950,7 +950,7 @@ always_comb begin : vreg_wbe_proc
           default:;
         endcase
         else
-          vreg_wbe = result_tag.narrowing_upper ? {{(N_FU*ELENB/2){1'b1}}, {(N_FU*ELENB/2){1'b0}}} : {{(N_FU*ELENB/2){1'b0}}, {(N_FU*ELENB/2){1'b1}}}; 
+          vreg_wbe = result_tag.narrowing_upper ? {{(N_FU*ELENB/2){1'b1}}, {(N_FU*ELENB/2){1'b0}}} : {{(N_FU*ELENB/2){1'b0}}, {(N_FU*ELENB/2){1'b1}}};
       end
       else vreg_wbe = '1;
     end

@@ -97,8 +97,8 @@ module spatz_vlsu
 
   // Convert the vl to number of bytes for all element widths
   // CMY: spatz_req_i.vl: the number of elements for this instruction
-  // CMY: spatz_req_d.vl: the number of bytes for this instruction  
-  always_comb begin: proc_spatz_req 
+  // CMY: spatz_req_d.vl: the number of bytes for this instruction
+  always_comb begin: proc_spatz_req
     spatz_req_d = spatz_req_i;
 
     unique case (spatz_req_i.vtype.vsew)
@@ -462,7 +462,7 @@ module spatz_vlsu
         end
       end else begin // strieded or normal (stride = 1)
         offset = ({mem_counter_q[port][$bits(vlen_t)-1:MAXEW] << $clog2(NrMemPorts), mem_counter_q[port][int'(MAXEW)-1:0]} + (port << MAXEW)) * stride;
-      end 
+      end
       // CMY: the starting point of a 32B block                                  , in-port offset                        + adds a port base offset so each port starts at a different initial byte position
       // mem_counter_q: how many elements this port has issued/consumed
       addr                      = mem_spatz_req.rs1 + offset;
@@ -475,7 +475,7 @@ module spatz_vlsu
 
   logic v0_t_is_ready;
   assign v0_t_is_ready   = (state_q == VLSU_ReadingV0_t) && vrf_rvalid_i[1]; // reuse vrf_read[1] for V0 reading
-  logic [N_FU*ELEN-1:0]  operand_v0_t,operand_v0_t_q; // CMY: v0 should be read from vrf 
+  logic [N_FU*ELEN-1:0]  operand_v0_t,operand_v0_t_q; // CMY: v0 should be read from vrf
   assign operand_v0_t = (state_q == VLSU_ReadingV0_t)? vrf_rdata_i[1]:'0;
 
   `FFL(operand_v0_t_q, operand_v0_t, v0_t_is_ready, '0) // CMY: backup v0.t
@@ -746,7 +746,7 @@ module spatz_vlsu
             state_d = VLSU_RunningStore;
           // else state_d = VLSU_RunningLoad;
         end
-        else state_d = state_q; 
+        else state_d = state_q;
 
       VLSU_RunningStore: begin
         if (commit_insn_valid && commit_insn_q.is_load)
@@ -801,10 +801,10 @@ module spatz_vlsu
         end
         EW_16:for(int i=0;i<VRFWordBWidth/2;i=i+1)begin
           vm_masking[i*2+:2] = {2{operand_v0_t_q[/*vreg_wb_word_cnt_q *16 +*/ i]}};
-        end        
+        end
         EW_32: for(int i=0;i<VRFWordBWidth/4;i=i+1)begin
           vm_masking[i*4+:4] = {4{operand_v0_t_q[/*vreg_wb_word_cnt_q *8 +*/ i]}};
-        end 
+        end
         default: if (MAXEW == EW_64) for(int i=0;i<VRFWordBWidth/8;i=i+1)begin
           vm_masking[i*8+:8] = {8{operand_v0_t_q[/*vreg_wb_word_cnt_q *4 +*/ i]}};
         end
@@ -917,7 +917,7 @@ module spatz_vlsu
                 default: mask = '1;
               endcase
               vrf_req_d.wbe[ELENB*port +: ELENB] = (mask << shift) & vm_masking;
-            end 
+            end
             else begin
               for (int unsigned k = 0; k < ELENB; k++)
                 // vrf_req_d.wbe[ELENB*port+k] = (k < commit_counter_delta[port]) & vm_masking;
