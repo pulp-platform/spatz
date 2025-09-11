@@ -332,7 +332,7 @@ module spatz_vlsu
     .full_o    (/* Unused */     ),
     .data_o    (commit_insn_q    ),
     .empty_o   (commit_insn_empty),
-    .pop_i     (commit_insn_pop  ),
+    .pop_i     (commit_insn_pop  ), // finish the execution
     .usage_o   (/* Unused */     )
   );
 
@@ -725,8 +725,19 @@ module spatz_vlsu
   // State //
   ///////////
 
+  logic vlsu_rsp_valid_q; // register the instruction finish signal
+  logic v0_t_is_ready_q;
   logic v0_t_read_done;
-  `FFL(v0_t_read_done,1'b1,v0_t_is_ready,'0);
+  `FFLARNC(v0_t_read_done,1'b1,v0_t_is_ready,vlsu_rsp_valid_o,1'b0,clk_i,rst_ni);
+  `FF(v0_t_is_ready_q,v0_t_is_ready,'0);
+  /*`define FFLARNC(__q, __d, __load, __clear, __reset_value, __clk, __arst_n) \
+  always_ff @(posedge (__clk) or negedge (__arst_n)) begin                 \
+    if (!__arst_n) begin                                                   \
+      __q <= (__reset_value);                                              \
+    end else begin                                                         \
+      __q <= (__clear) ? (__reset_value) : (__load) ? (__d) : (__q);       \
+    end                                                                    \
+  end*/
 
   always_comb begin: p_state
     // Maintain state
@@ -735,6 +746,7 @@ module spatz_vlsu
     unique case (state_q)
       VLSU_RunningLoad: begin
         if(mem_spatz_req_valid && !mem_spatz_req.op_mem.vm && !v0_t_read_done)
+        // if(commit_insn_valid && !commit_insn_q.op_mem.vm && !v0_t_read_done)
           state_d = VLSU_ReadingV0_t;
         if (commit_insn_valid && !commit_insn_q.is_load)
           if (&rob_empty)
@@ -742,7 +754,7 @@ module spatz_vlsu
       end
 
       VLSU_ReadingV0_t:
-        if(v0_t_is_ready) begin
+        if(/*v0_t_is_ready*/v0_t_is_ready & ~v0_t_is_ready_q) begin
           state_d = VLSU_RunningLoad;
           if (commit_insn_valid && !commit_insn_q.is_load)
             if (&rob_empty)
@@ -799,24 +811,43 @@ module spatz_vlsu
   always_comb begin
     if(!mem_spatz_req.op_mem.vm) begin
       case (commit_insn_q.vsew)
-        EW_8:for(int i=0;i<VRFWordBWidth/1;i=i+1)begin
-          vm_masking[i*1+:1] = {1{operand_v0_t_q[/*vreg_wb_word_cnt_q *32 +*/ i]}};
+        EW_8:for(int i=0;i<VLENB;i=i+1)begin
+          // vm_masking[i*1+:1] = {1{operand_v0_t_q[/*vreg_wb_word_cnt_q *32 +*/ i]}};
+          vm_masking[i*1+:1] = {1{operand_v0_t_q[i]}};
         end
-        EW_16:for(int i=0;i<VRFWordBWidth/2;i=i+1)begin
-          vm_masking[i*2+:2] = {2{operand_v0_t_q[/*vreg_wb_word_cnt_q *16 +*/ i]}};
+        EW_16:for(int i=0;i<VLENB;i=i+1)begin
+          vm_masking[i*2+:2] = {2{operand_v0_t_q[i]}};
         end
-        EW_32: for(int i=0;i<VRFWordBWidth/4;i=i+1)begin
-          vm_masking[i*4+:4] = {4{operand_v0_t_q[/*vreg_wb_word_cnt_q *8 +*/ i]}};
+        EW_32: for(int i=0;i<VLENB;i=i+1)begin
+          vm_masking[i*4+:4] = {4{operand_v0_t_q[i]}};
         end
-        default: if (MAXEW == EW_64) for(int i=0;i<VRFWordBWidth/8;i=i+1)begin
-          vm_masking[i*8+:8] = {8{operand_v0_t_q[/*vreg_wb_word_cnt_q *4 +*/ i]}};
+        default: if (MAXEW == EW_64) for(int i=0;i<VLENB;i=i+1)begin
+              // vm_masking[i*8+:8] = {8{operand_v0_t_q[/*vreg_wb_word_cnt_q  *4*/ + i]}};
+          vm_masking[i*8+:8] = {8{operand_v0_t_q[i]}};
         end
       endcase
     end
     else vm_masking = '1;
   end
 
-  vrf_be_t       load_wbe; // CMY: intermediate wbe, before masking.
+  vlen_t commit_counter_sum,mem_counter_sum;
+  logic [$bits(vlen_t)-5:0] commit_counter_mod32,mem_counter_mod32;
+  always_comb begin
+     commit_counter_sum = '0;
+     mem_counter_sum = '0;
+    for (int unsigned port = 0; port < NrMemPorts; port++) begin
+      commit_counter_sum += commit_counter_q[port];
+      mem_counter_sum += mem_counter_q[port];
+    end
+    // commit_counter_mod32 = (commit_counter_sum == 0)? 0: (commit_counter_sum - 1) >> 5 + 1;
+    commit_counter_mod32 = commit_counter_sum >> 5;
+    // mem_counter_mod32 = (mem_counter_sum == 0)? 0: (mem_counter_sum - 1) >> 5 + 1;
+    mem_counter_mod32 = mem_counter_sum >> 5;
+  end
+
+  vrf_be_t       load_wbe; // CMY: intermediate wbe, before vm_masking.
+  vrf_be_t       vm_wbe; // CMY: monitor the vm_wbe selected from vm_masking
+  logic [NrMemPorts-1:0][ELEN/8-1:0] store_strb; // CMY: intermediate strb, before vm_masking.
   // -----------------------------------------------
 
   // verilator lint_off LATCH
@@ -921,13 +952,17 @@ module spatz_vlsu
                 EW_32: mask   = 15;
                 default: mask = '1;
               endcase
-              vrf_req_d.wbe[ELENB*port +: ELENB] = (mask << shift) & vm_masking;
+              // vrf_req_d.wbe[ELENB*port +: ELENB] = (mask << shift) /*& vm_masking[ELENB*port + shift +: ELENB]*/;
+              load_wbe[ELENB*port +: ELENB] = (mask << shift);
+              vm_wbe = vm_masking[commit_counter_mod32*32 +:(N_FU*ELENB)];
+              vrf_req_d.wbe = load_wbe & vm_wbe; // CMY: commit_counter_sum mod 32
             end
             else begin
-              for (int unsigned k = 0; k < ELENB; k++)
-                // vrf_req_d.wbe[ELENB*port+k] = (k < commit_counter_delta[port]) & vm_masking;
+              for (int unsigned k = 0; k < ELENB; k++) begin
+                // vrf_req_d.wbe[ELENB*port+k] = (k < commit_counter_delta[port]) /*& vm_masking[ELENB*port+k]*/;
                 load_wbe[ELENB*port+k] = (k < commit_counter_delta[port]);
-                vrf_req_d.wbe = load_wbe & vm_masking;
+                vrf_req_d.wbe = load_wbe & vm_masking[commit_counter_mod32*32 +:(N_FU*ELENB)];
+              end
             end
         end
       end
@@ -1025,9 +1060,14 @@ module spatz_vlsu
               default: mask = '1;
             endcase
             mem_req_strb[port] = mask << shift;
+            // store_strb[port] = mask << shift;
+            // mem_req_strb[port] = ((mask) & vm_masking[mem_counter_mod32*32 + mem_counter_q[port]]) << shift;
           end else
-            for (int unsigned k = 0; k < ELENB; k++)
+            for (int unsigned k = 0; k < ELENB; k++) begin
               mem_req_strb[port][k] = k < mem_counter_delta[port];
+              // store_strb[port][k] = k < mem_counter_delta[port];
+            end
+            // mem_req_strb[port] = store_strb[port] & vm_masking[mem_counter_mod32*32 + port*ELEN +: ELEN];
         end else begin
           // Clear empty buffer id requests
           if (!rob_empty[port])
