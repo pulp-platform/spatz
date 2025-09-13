@@ -226,10 +226,10 @@ module spatz_controller
     else if(vlsu_rsp_valid_i && chain_stall[2])
       chain_stall[2] = 1'b0;
 
-    if (buffer_spatz_req.op inside {VSLIDEUP} && !chain_stall[1] && req_buffer_valid)
-      chain_stall[1] = 1'b1;
-    else if(vlsu_rsp_valid_i && chain_stall[1])
-      chain_stall[1] = 1'b0;
+    // if (buffer_spatz_req.op inside {VSLIDEUP} && !chain_stall[1] && req_buffer_valid)
+    //   chain_stall[1] = 1'b1;
+    // else if(vlsu_rsp_valid_i && chain_stall[1])
+    //   chain_stall[1] = 1'b0;
   end  
  end
 
@@ -289,7 +289,7 @@ module spatz_controller
       wrote_result_narrowing_d[sb_id_i[SB_VFU_VD_WD]] = sb_wrote_result_i[SB_VFU_VD_WD - SB_VFU_VD_WD] ^ narrow_wide_q[sb_id_i[SB_VFU_VD_WD]];
       wrote_result_d[sb_id_i[SB_VFU_VD_WD]]           = sb_wrote_result_i[SB_VFU_VD_WD - SB_VFU_VD_WD] && (!narrow_wide_q[sb_id_i[SB_VFU_VD_WD]] || wrote_result_narrowing_q[sb_id_i[SB_VFU_VD_WD]]);
     end
-    if (sb_enable_o[SB_VLSU_VD_WD]) begin
+    if (sb_enable_o[SB_VLSU_VD_WD]) begin//7
       wrote_result_narrowing_d[sb_id_i[SB_VLSU_VD_WD]] = sb_wrote_result_i[SB_VLSU_VD_WD - SB_VFU_VD_WD] ^ narrow_wide_q[sb_id_i[SB_VLSU_VD_WD]];
       wrote_result_d[sb_id_i[SB_VLSU_VD_WD]]           = sb_wrote_result_i[SB_VLSU_VD_WD - SB_VFU_VD_WD] && (!narrow_wide_q[sb_id_i[SB_VLSU_VD_WD]] || wrote_result_narrowing_q[sb_id_i[SB_VLSU_VD_WD]]);
     end

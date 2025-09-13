@@ -465,3 +465,19 @@ package spatz_pkg;
   endfunction
 
 endpackage : spatz_pkg
+
+package fpu0_cfg_pkg;
+  import fpnew_pkg::*;
+  import spatz_cluster_pkg::*;
+
+  function automatic fpu_implementation_t with_merged_ut1
+      (input fpu_implementation_t base);
+    fpu_implementation_t tmp = base;
+    tmp.UnitTypes[1] = '{MERGED, MERGED, MERGED, MERGED, MERGED, MERGED};
+    return tmp;
+  endfunction
+
+  // Build a constant variant once
+  localparam fpu_implementation_t FPUImplementation0 =
+      with_merged_ut1(FPUImplementation[0]);
+endpackage

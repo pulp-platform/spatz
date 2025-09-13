@@ -1,7 +1,7 @@
-#define KERNEL_TYPE_    2
-#define GAMMA1_         0.024993896484375
+#define KERNEL_TYPE_    0
+#define GAMMA1_         0.0f
 #define SVS_            100
-# define COEF_DIM_      97
+# define COEF_DIM_      1
 # define F_DIM_             4
 # define N_CLASS_       2
 # define N_DEC_VALUES_  100

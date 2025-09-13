@@ -44,54 +44,8 @@
 // #include "llmc/dataloader.h"
 //=====================================
 
-// int      *inp;
-// float    *out;
-// float    *data1;
-// float    *data2;
-// float    *data3;
-// float    *result;         //Result
-// float    *temp;           //TEMP
-
 #define THRESHOLD       0.00010f
 #define VLMAX 128
-// asm volatile("vsetvli %0, %1," #SEW "," #LMUL ", ta, ma" : "=r"(vl) : "r"(128));\
-
-#define PRINT_VEC(vec_reg, mem_ptr, size, SEW, LMUL)                                 \
-    asm volatile("vsetvli %0, %1," #SEW "," #LMUL ", ta, ma" : "=r"(vl) : "r"(128));\
-    asm volatile("vse32.v " #vec_reg ", (%0)" :: "r"(temp));              \
-    for (int i = 0; i < (size); i++) {                                    \
-        printf(#mem_ptr "[%d] = %f\n", i, (temp)[i]);                     \
-    }
-
-
-
-
-
-
-
-
-// int fp_check_32(float val, const float golden) {
-//     float diff = val - golden;
-//     if (diff < 0)
-//         diff = -diff;
-
-//     float eps = 0.01f * golden;
-//     if (eps < 0)
-//         eps = -eps;
-
-//     return ((diff > eps) && (diff > 1e-5));
-// }
-
-// int check_data32(float *a,float *g,int start, int end){
-//     int errors = 0;
-//     for (int i = start; i < end; ++i){
-//         if (fp_check_32((((float *) a)[i]), (((float *) g)[i-start]))) {
-//             errors ++;
-//             printf("error detected at index %d. Value = %x. Golden = %x \n", i, ((uint32_t *) a)[i], ((uint32_t *) g)[i-start]);
-//         }
-//     }
-//     return errors;
-// }
 
 void check_result(float *x,float *ref, int r){    
     float diff = 0.0f;
@@ -122,24 +76,28 @@ void fast_exp(float* inp, float* out, int memload, int vnum, int lmul, int size,
         asm volatile("vle32.v v24, (%0)" :: "r"(inp));
         asm volatile("vfmul.vf v24, v24, %[A]" ::[A] "f"(12102203.0f));
         asm volatile("vfadd.vf v24, v24, %[A]" ::[A] "f"(1064866805.0f));
-        asm volatile("vse32.v v24, (%0)" :: "r"(out));
-        for (int i = 0; i < size; i++){
-            result.f = out[i];
-            result.i = (uint32_t)result.f;
-            out[i] = result.f;
-        }
+        // asm volatile("vse32.v v24, (%0)" :: "r"(out));
+        // for (int i = 0; i < size; i++){
+        //     result.f = out[i];
+        //     result.i = (uint32_t)result.f;
+        //     out[i] = result.f;
+        // }
+        asm volatile("vfcvt.rtz.xu.f.v v24, v24");
+        asm volatile("vse32.v v16, (%0)" :: "r"(out));
+
     } else {
         if(vnum == 0){
             asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(size));
             asm volatile("vfmul.vf v0, v0, %[A]" ::[A] "f"(12102203.0f));
             asm volatile("vfadd.vf v0, v0, %[A]" ::[A] "f"(1064866805.0f));
-            asm volatile("vse32.v v0, (%0)" :: "r"(out));
-            for (int i = 0; i < size; i++){
-                result.f = out[i];
-                result.i = (uint32_t)result.f;
-                out[i] = result.f;
-            }
-            asm volatile("vle32.v v0, (%0)" :: "r"(out));
+            asm volatile("vfcvt.rtz.xu.f.v v0, v0");
+            // asm volatile("vse32.v v0, (%0)" :: "r"(out));
+            // for (int i = 0; i < size; i++){
+            //     result.f = out[i];
+            //     result.i = (uint32_t)result.f;
+            //     out[i] = result.f;
+            // }
+            // asm volatile("vle32.v v0, (%0)" :: "r"(out));
         }
     }
 }
@@ -187,16 +145,18 @@ void fast_cosh_v2(float* inp, float* out, float* temp, int memload ,int vnum,int
         asm volatile("vfmul.vf v16, v16, %[A]" ::[A] "f"(12102203.0f));
         asm volatile("vfadd.vf v16, v16, %[A]" ::[A] "f"(1064866805.0f));
 
-        asm volatile("vse32.v v24, (%0)" :: "r"(temp));
-        asm volatile("vse32.v v16, (%0)" :: "r"(temp+size));
-        for (int i = 0; i < size*2; i++){
-            result.f = temp[i];
-            result.i = (uint32_t)result.f;
-            temp[i] = result.f;
-        }
+        // asm volatile("vse32.v v24, (%0)" :: "r"(temp));
+        // asm volatile("vse32.v v16, (%0)" :: "r"(temp+size));
+        // for (int i = 0; i < size*2; i++){
+        //     result.f = temp[i];
+        //     result.i = (uint32_t)result.f;
+        //     temp[i] = result.f;
+        // }
+        // asm volatile("vle32.v v16, (%0)" :: "r"(temp));
+        // asm volatile("vle32.v v24, (%0)" :: "r"(temp+size));
+        asm volatile("vfcvt.rtz.xu.f.v v24, v24");
+        asm volatile("vfcvt.rtz.xu.f.v v16, v16");
 
-        asm volatile("vle32.v v16, (%0)" :: "r"(temp));
-        asm volatile("vle32.v v24, (%0)" :: "r"(temp+size));
         asm volatile("vfadd.vv v16, v16, v24");
         asm volatile("vfdiv.vf    v16, v16, %[A]" ::[A] "f"(2.0f));
         asm volatile("vse32.v v16, (%0)" :: "r"(out));
@@ -212,16 +172,19 @@ void fast_cosh_v2(float* inp, float* out, float* temp, int memload ,int vnum,int
         asm volatile("vfmul.vf v16, v16, %[A]" ::[A] "f"(12102203.0f));
         asm volatile("vfadd.vf v16, v16, %[A]" ::[A] "f"(1064866805.0f));
 
-        asm volatile("vse32.v v8, (%0)" :: "r"(temp));
-        asm volatile("vse32.v v16, (%0)" :: "r"(temp+size));
-        for (int i = 0; i < size*2; i++){
-            result.f = temp[i];
-            result.i = (uint32_t)result.f;
-            temp[i] = result.f;
-        }
+        // asm volatile("vse32.v v8, (%0)" :: "r"(temp));
+        // asm volatile("vse32.v v16, (%0)" :: "r"(temp+size));
+        // for (int i = 0; i < size*2; i++){
+        //     result.f = temp[i];
+        //     result.i = (uint32_t)result.f;
+        //     temp[i] = result.f;
+        // }
+        // asm volatile("vle32.v v16, (%0)" :: "r"(temp));
+        // asm volatile("vle32.v v8, (%0)" :: "r"(temp+size));
+        asm volatile("vfcvt.rtz.xu.f.v v16, v16");
+        asm volatile("vfcvt.rtz.xu.f.v v8 , v8");
 
-        asm volatile("vle32.v v16, (%0)" :: "r"(temp));
-        asm volatile("vle32.v v8, (%0)" :: "r"(temp+size));
+
         asm volatile("vfadd.vv v16, v16, v8");
         asm volatile("vfdiv.vf    v8, v16, %[A]" ::[A] "f"(2.0f));
         // asm volatile("vse32.v v16, (%0)" :: "r"(out));
@@ -240,14 +203,15 @@ void fast_tanh_v1(float* inp, float* out, float* temp, int memload ,int vnum,int
         asm volatile("vfmul.vf v28, v28, %[A]" ::[A] "f"(12102203.0f));
         asm volatile("vfadd.vf v28, v28, %[A]" ::[A] "f"(1064866805.0f));
 
-        asm volatile("vse32.v v28, (%0)" :: "r"(temp));
-        for (int i = 0; i < size; i++){
-            result.f = temp[i];
-            result.i = (uint32_t)result.f;
-            temp[i] = result.f;
-        }
+        // asm volatile("vse32.v v28, (%0)" :: "r"(temp));
+        // for (int i = 0; i < size; i++){
+        //     result.f = temp[i];
+        //     result.i = (uint32_t)result.f;
+        //     temp[i] = result.f;
+        // }
+        // asm volatile("vle32.v v28, (%0)" :: "r"(temp));
 
-        asm volatile("vle32.v v28, (%0)" :: "r"(temp));
+        asm volatile("vfcvt.rtz.xu.f.v v28, v28");
 
         asm volatile("vfadd.vf v24, v28, %[A]" ::[A] "f"(1.0f));
         asm volatile("vfsub.vf v28, v28, %[A]" ::[A] "f"(1.0f));
@@ -265,15 +229,16 @@ void fast_tanh_v1(float* inp, float* out, float* temp, int memload ,int vnum,int
             asm volatile("vfmul.vf v12, v12, %[A]" ::[A] "f"(12102203.0f));
             asm volatile("vfadd.vf v12, v12, %[A]" ::[A] "f"(1064866805.0f));
     
-            asm volatile("vse32.v v12, (%0)" :: "r"(temp));
-            for (int i = 0; i < size; i++){
-                result.f = temp[i];
-                result.i = (uint32_t)result.f;
-                temp[i] = result.f;
-            }
-    
-            asm volatile("vle32.v v12, (%0)" :: "r"(temp));
-    
+            // asm volatile("vse32.v v12, (%0)" :: "r"(temp));
+            // for (int i = 0; i < size; i++){
+            //     result.f = temp[i];
+            //     result.i = (uint32_t)result.f;
+            //     temp[i] = result.f;
+            // }
+            // asm volatile("vle32.v v12, (%0)" :: "r"(temp));
+
+            asm volatile("vfcvt.rtz.xu.f.v v12, v12");
+            
             asm volatile("vfadd.vf v8 , v12, %[A]" ::[A] "f"(1.0f));
             asm volatile("vfsub.vf v12, v12, %[A]" ::[A] "f"(1.0f));
     
@@ -287,15 +252,17 @@ void fast_tanh_v1(float* inp, float* out, float* temp, int memload ,int vnum,int
             asm volatile("vfmul.vf v20, v20, %[A]" ::[A] "f"(12102203.0f));
             asm volatile("vfadd.vf v20, v20, %[A]" ::[A] "f"(1064866805.0f));
     
-            asm volatile("vse32.v v20, (%0)" :: "r"(temp));
-            for (int i = 0; i < size; i++){
-                result.f = temp[i];
-                result.i = (uint32_t)result.f;
-                temp[i] = result.f;
-            }
-    
-            asm volatile("vle32.v v20, (%0)" :: "r"(temp));
-    
+            // asm volatile("vse32.v v20, (%0)" :: "r"(temp));
+            // for (int i = 0; i < size; i++){
+            //     result.f = temp[i];
+            //     result.i = (uint32_t)result.f;
+            //     temp[i] = result.f;
+            // }
+            // asm volatile("vle32.v v20, (%0)" :: "r"(temp));
+
+            asm volatile("vfcvt.rtz.xu.f.v v20, v20");
+            
+
             asm volatile("vfadd.vf v16 , v20, %[A]" ::[A] "f"(1.0f));
             asm volatile("vfsub.vf v20, v20, %[A]" ::[A] "f"(1.0f));
     
@@ -313,14 +280,15 @@ void fast_tanh_v2(float* inp, float* out, float* temp, int memload ,int vnum,int
         asm volatile("vfmul.vf v28, v28, %[A]" ::[A] "f"(12102203.0f));
         asm volatile("vfadd.vf v28, v28, %[A]" ::[A] "f"(1064866805.0f));
 
-        asm volatile("vse32.v v28, (%0)" :: "r"(temp));
-        for (int i = 0; i < size; i++){
-            result.f = temp[i];
-            result.i = (uint32_t)result.f;
-            temp[i] = result.f;
-        }
+        // asm volatile("vse32.v v28, (%0)" :: "r"(temp));
+        // for (int i = 0; i < size; i++){
+        //     result.f = temp[i];
+        //     result.i = (uint32_t)result.f;
+        //     temp[i] = result.f;
+        // }
+        // asm volatile("vle32.v v28, (%0)" :: "r"(temp));
 
-        asm volatile("vle32.v v28, (%0)" :: "r"(temp));
+        asm volatile("vfcvt.rtz.xu.f.v v28, v28");
 
         asm volatile("vfadd.vf v24, v28, %[A]" ::[A] "f"(1.0f));
         asm volatile("vfsub.vf v28, v28, %[A]" ::[A] "f"(1.0f));
@@ -337,15 +305,16 @@ void fast_tanh_v2(float* inp, float* out, float* temp, int memload ,int vnum,int
             asm volatile("vfmul.vf v16, v16, %[A]" ::[A] "f"(12102203.0f));
             asm volatile("vfadd.vf v16, v16, %[A]" ::[A] "f"(1064866805.0f));
     
-            asm volatile("vse32.v v16, (%0)" :: "r"(temp));
-            for (int i = 0; i < size; i++){
-                result.f = temp[i];
-                result.i = (uint32_t)result.f;
-                temp[i] = result.f;
-            }
-    
-            asm volatile("vle32.v v16, (%0)" :: "r"(temp));
-    
+            // asm volatile("vse32.v v16, (%0)" :: "r"(temp));
+            // for (int i = 0; i < size; i++){
+            //     result.f = temp[i];
+            //     result.i = (uint32_t)result.f;
+            //     temp[i] = result.f;
+            // }
+            // asm volatile("vle32.v v16, (%0)" :: "r"(temp));
+            asm volatile("vfcvt.rtz.xu.f.v v16, v16");
+
+            
             asm volatile("vfadd.vf v8 , v16, %[A]" ::[A] "f"(1.0f));
             asm volatile("vfsub.vf v16, v16, %[A]" ::[A] "f"(1.0f));
     
@@ -359,14 +328,15 @@ void fast_tanh_v2(float* inp, float* out, float* temp, int memload ,int vnum,int
             asm volatile("vfmul.vf v24, v24, %[A]" ::[A] "f"(12102203.0f));
             asm volatile("vfadd.vf v24, v24, %[A]" ::[A] "f"(1064866805.0f));
     
-            asm volatile("vse32.v v24, (%0)" :: "r"(temp));
-            for (int i = 0; i < size; i++){
-                result.f = temp[i];
-                result.i = (uint32_t)result.f;
-                temp[i] = result.f;
-            }
-    
-            asm volatile("vle32.v v24, (%0)" :: "r"(temp));
+            // asm volatile("vse32.v v24, (%0)" :: "r"(temp));
+            // for (int i = 0; i < size; i++){
+            //     result.f = temp[i];
+            //     result.i = (uint32_t)result.f;
+            //     temp[i] = result.f;
+            // }
+            // asm volatile("vle32.v v24, (%0)" :: "r"(temp));
+            asm volatile("vfcvt.rtz.xu.f.v v24, v24");
+
     
             asm volatile("vfadd.vf v16, v24, %[A]" ::[A] "f"(1.0f));
             asm volatile("vfsub.vf v24, v24, %[A]" ::[A] "f"(1.0f));
@@ -399,24 +369,25 @@ void encoder_forward(float* out,
             float* wpe_t = wpe + t * C;
             // add the two vectors and store the result in out[b,t,:]
 
-            //WTE_IX V0 -V8
-            //WPE_T  V8 -V15
-            //out_bt V16-V23
-            int C_itr = 0;
+            // WTE_IX V0 -V8
+            // WPE_T  V8 -V15
+            // out_bt V16-V23
+            int itr = 0;
+            int num_elements = C;
             asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(VLMAX));
-            while(C_itr*VLMAX + VLMAX <= C){
-                asm volatile("vle32.v v0 , (%0)" :: "r"(wte_ix+C_itr*VLMAX));
-                asm volatile("vle32.v v8 , (%0)" :: "r"(wpe_t +C_itr*VLMAX));
+            while(itr*VLMAX + VLMAX <= num_elements){
+                asm volatile("vle32.v v0 , (%0)" :: "r"(wte_ix+itr*VLMAX));
+                asm volatile("vle32.v v8 , (%0)" :: "r"(wpe_t +itr*VLMAX));
                 asm volatile("vfadd.vv v16, v0, v8");
-                asm volatile("vse32.v v16, (%0)" :: "r"(out_bt+C_itr*VLMAX));
-                C_itr++;
+                asm volatile("vse32.v v16, (%0)" :: "r"(out_bt+itr*VLMAX));
+                itr++;
             }
-            if(C_itr*VLMAX < C){
-                asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(C - C_itr*VLMAX));
-                asm volatile("vle32.v v0 , (%0)" :: "r"(wte_ix+C_itr*VLMAX));
-                asm volatile("vle32.v v8 , (%0)" :: "r"(wpe_t +C_itr*VLMAX));
+            if(itr*VLMAX < num_elements){
+                asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(num_elements - itr*VLMAX));
+                asm volatile("vle32.v v0 , (%0)" :: "r"(wte_ix+itr*VLMAX));
+                asm volatile("vle32.v v8 , (%0)" :: "r"(wpe_t +itr*VLMAX));
                 asm volatile("vfadd.vv v16, v0, v8");
-                asm volatile("vse32.v v16, (%0)" :: "r"(out_bt+C_itr*VLMAX));
+                asm volatile("vse32.v v16, (%0)" :: "r"(out_bt+itr*VLMAX));
             }
         }
     }
@@ -436,29 +407,30 @@ void encoder_backward(float* dwte, float* dwpe,
             //DWTE_IX V0 -V7
             //DWPE_T  V8 -V15
             //DOUT_BT V16-V23
-            int C_itr = 0;
+            int itr = 0;
+            int num_elements = C;            
             asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(VLMAX));
-            while(C_itr*VLMAX + VLMAX <= C){
-                asm volatile("vle32.v v0 , (%0)" :: "r"(dwte_ix +C_itr*VLMAX));
-                asm volatile("vle32.v v8 , (%0)" :: "r"(dwpe_t  +C_itr*VLMAX));
-                asm volatile("vle32.v v16, (%0)" :: "r"(dout_bt +C_itr*VLMAX));
+            while(itr*VLMAX + VLMAX <= num_elements){
+                asm volatile("vle32.v v0 , (%0)" :: "r"(dwte_ix +itr*VLMAX));
+                asm volatile("vle32.v v8 , (%0)" :: "r"(dwpe_t  +itr*VLMAX));
+                asm volatile("vle32.v v16, (%0)" :: "r"(dout_bt +itr*VLMAX));
                 asm volatile("vfadd.vv v0, v0, v16");
                 asm volatile("vfadd.vv v8, v8, v16");
-                asm volatile("vse32.v v0 , (%0)" :: "r"(dwte_ix +C_itr*VLMAX));
-                asm volatile("vse32.v v8 , (%0)" :: "r"(dwpe_t  +C_itr*VLMAX));
-                C_itr++;
+                asm volatile("vse32.v v0 , (%0)" :: "r"(dwte_ix +itr*VLMAX));
+                asm volatile("vse32.v v8 , (%0)" :: "r"(dwpe_t  +itr*VLMAX));
+                itr++;
             }
-            if(C_itr*VLMAX < C){
-                asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(C - C_itr*VLMAX));
-                asm volatile("vle32.v v0 , (%0)" :: "r"(dwte_ix +C_itr*VLMAX));
-                asm volatile("vle32.v v8 , (%0)" :: "r"(dwpe_t  +C_itr*VLMAX));
-                asm volatile("vle32.v v16, (%0)" :: "r"(dout_bt +C_itr*VLMAX));
+            if(itr*VLMAX < num_elements){
+                asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(num_elements - itr*VLMAX));
+                asm volatile("vle32.v v0 , (%0)" :: "r"(dwte_ix +itr*VLMAX));
+                asm volatile("vle32.v v8 , (%0)" :: "r"(dwpe_t  +itr*VLMAX));
+                asm volatile("vle32.v v16, (%0)" :: "r"(dout_bt +itr*VLMAX));
                 asm volatile("vfadd.vv v0, v0, v16");
                 asm volatile("vfadd.vv v8, v8, v16");
-                asm volatile("vse32.v v0 , (%0)" :: "r"(dwte_ix +C_itr*VLMAX));
-                asm volatile("vse32.v v8 , (%0)" :: "r"(dwpe_t  +C_itr*VLMAX));
+                asm volatile("vse32.v v0 , (%0)" :: "r"(dwte_ix +itr*VLMAX));
+                asm volatile("vse32.v v8 , (%0)" :: "r"(dwpe_t  +itr*VLMAX));
             }
-        }
+        }        
     }
 }
 
@@ -485,19 +457,19 @@ void layernorm_forward(float* out, float* mean, float* rstd,
             //m V8
             asm volatile("vsetvli %0, %1, e32, m1, ta, ma" : "=r"(vl) : "r"(1));
             asm volatile("vfsub.vv v31,v31,v31");
-            // asm volatile("vfmv.s.f v31, %0" : "=f"(t0));//THIS ONE IS THE CORRECT SOLUTION BUT THE INSTRUCTION DOES NOT WORK
-            int C_itr = 0;
+            int itr = 0;
+            int num_elements = C;
             asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(VLMAX));
-            while(C_itr*VLMAX + VLMAX <= C){
-                asm volatile("vle32.v v0 , (%0)" :: "r"(x +C_itr*VLMAX));
+            while(itr*VLMAX + VLMAX <= num_elements){
+                asm volatile("vle32.v v0 , (%0)" :: "r"(x +itr*VLMAX));
                 asm volatile("vfredsum.vs v8 , v0 , v31");
-                asm volatile("vfmv.f.s %0 , v8" : "=f"(m));//THIS PART SHOULD BE CHECKED BECAUSE OF VFMV INSTRUCTION
-                asm volatile("vfmv.s.f v31, %0" : "=f"(m));//THIS PART SHOULD BE CHECKED BECAUSE OF VFMV INSTRUCTION
-                C_itr++;
+                asm volatile("vfmv.f.s %0 , v8" : "=f"(m));
+                asm volatile("vfmv.s.f v31, %0" : "=f"(m));//BUG
+                itr++;
             }
-            if(C_itr*VLMAX < C){
-                asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(C - C_itr*VLMAX));
-                asm volatile("vle32.v v0 , (%0)" :: "r"(x +C_itr*VLMAX));
+            if(itr*VLMAX < num_elements){
+                asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(num_elements - itr*VLMAX));
+                asm volatile("vle32.v v0 , (%0)" :: "r"(x +itr*VLMAX));
                 asm volatile("vfredsum.vs v8 , v0 , v31");
                 asm volatile("vfmv.f.s %0 , v8" : "=f"(m));
             }
@@ -512,22 +484,23 @@ void layernorm_forward(float* out, float* mean, float* rstd,
             //V        V16
             asm volatile("vsetvli %0, %1, e32, m1, ta, ma" : "=r"(vl) : "r"(1));
             asm volatile("vfsub.vv v31,v31,v31");
-            // asm volatile("vfmv.s.f v31, %0" : "=f"(t0));//THIS ONE IS THE CORRECT SOLUTION BUT THE INSTRUCTION DOES NOT WORK
-            C_itr = 0;
+            itr = 0;
+            num_elements = C;
             asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(VLMAX));
             snrt_cluster_hw_barrier();//IT SHOULD BE HERE OTEHRWISE IT STUCKS
-            while(C_itr*VLMAX + VLMAX <= C){
-                asm volatile("vle32.v v0 , (%0)" :: "r"(x +C_itr*VLMAX));
+
+            while(itr*VLMAX + VLMAX <= num_elements){
+                asm volatile("vle32.v v0 , (%0)" :: "r"(x +itr*VLMAX));
                 asm volatile("vfsub.vf v8, v0, %[A]" ::[A] "f"(m));
                 asm volatile("vfmul.vv v8, v8, v8");
                 asm volatile("vfredsum.vs v16 , v8 , v31");
-                asm volatile("vfmv.f.s %0 , v16" : "=f"(v));//THIS PART SHOULD BE CHECKED BECAUSE OF VFMV INSTRUCTION
-                asm volatile("vfmv.s.f v31, %0 " : "=f"(v));//THIS PART SHOULD BE CHECKED BECAUSE OF VFMV INSTRUCTION
-                C_itr++;
+                asm volatile("vfmv.f.s %0 , v16" : "=f"(v));
+                asm volatile("vfmv.s.f v31, %0 " : "=f"(v));//BUG
+                itr++;
             }
-            if(C_itr*VLMAX < C){
-                asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(C - C_itr*VLMAX));
-                asm volatile("vle32.v v0 , (%0)" :: "r"(x +C_itr*VLMAX));
+            if(itr*VLMAX < num_elements){
+                asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(num_elements - itr*VLMAX));
+                asm volatile("vle32.v v0 , (%0)" :: "r"(x +itr*VLMAX));
                 asm volatile("vfsub.vf v8, v0, %[A]" ::[A] "f"(m));
                 asm volatile("vfmul.vv v8, v8, v8");
                 asm volatile("vfredsum.vs v16 , v8 , v31");
@@ -535,10 +508,9 @@ void layernorm_forward(float* out, float* mean, float* rstd,
             }
             v = v/C;
             // calculate the rstd (reciprocal standard deviation)
-            // float s = 1.0f / sqrtf(v + eps);!!!!!!!!//AS SCALAR SQRT IS NOT SUPPORTED I CHANGE IT
             float s = 1.0f / sqrtf(v + eps);
+            snrt_cluster_hw_barrier();// BY REMOVING THiS IT DOES NOT WORK. MATBE THE SAME ISSUE AS DIV THAT IS NOT PIPELINED
             // cache the rstd for the backward pass later
-            // rstd[b * T + t] = s;//I MOVE THIS HERE OTHERWISE DOES NOT WORK
             // seek to the output position in out[b,t,:]
             float* out_bt = out + b * T * C + t * C;
             //X        V0 - V7
@@ -548,30 +520,30 @@ void layernorm_forward(float* out, float* mean, float* rstd,
             //N*WEIGHT V8 - V15
             //XSHIFT^2 V8 - V15
             //V        V16
-            C_itr = 0;
+            itr = 0;
+            num_elements = C;
             asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(VLMAX));
-            // snrt_cluster_hw_barrier();//IT SHOULD BE HERE OTEHRWISE IT STUCKS
-            while(C_itr*VLMAX + VLMAX <= C){
-                asm volatile("vle32.v v0  , (%0)" :: "r"(x      +C_itr*VLMAX));
-                asm volatile("vle32.v v8  , (%0)" :: "r"(weight +C_itr*VLMAX));
-                asm volatile("vle32.v v16 , (%0)" :: "r"(bias   +C_itr*VLMAX));
+            while(itr*VLMAX + VLMAX <= num_elements){
+                asm volatile("vle32.v v0  , (%0)" :: "r"(x      +itr*VLMAX));
+                asm volatile("vle32.v v8  , (%0)" :: "r"(weight +itr*VLMAX));
+                asm volatile("vle32.v v16 , (%0)" :: "r"(bias   +itr*VLMAX));
                 asm volatile("vfsub.vf v0 , v0, %[A]" ::[A] "f"(m));
                 asm volatile("vfmul.vf v0 , v0, %[A]" ::[A] "f"(s));
                 asm volatile("vfmul.vv v8 , v0, v8");
                 asm volatile("vfadd.vv v16, v8, v16");
-                asm volatile("vse32.v v16 , (%0)" :: "r"(out_bt+C_itr*VLMAX));
-                C_itr++;
+                asm volatile("vse32.v v16 , (%0)" :: "r"(out_bt+itr*VLMAX));
+                itr++;
             }
-            if(C_itr*VLMAX < C){
-                asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(C - C_itr*VLMAX));
-                asm volatile("vle32.v v0  , (%0)" :: "r"(x      +C_itr*VLMAX));
-                asm volatile("vle32.v v8  , (%0)" :: "r"(weight +C_itr*VLMAX));
-                asm volatile("vle32.v v16 , (%0)" :: "r"(bias   +C_itr*VLMAX));
+            if(itr*VLMAX < num_elements){
+                asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(num_elements - itr*VLMAX));
+                asm volatile("vle32.v v0  , (%0)" :: "r"(x      +itr*VLMAX));
+                asm volatile("vle32.v v8  , (%0)" :: "r"(weight +itr*VLMAX));
+                asm volatile("vle32.v v16 , (%0)" :: "r"(bias   +itr*VLMAX));
                 asm volatile("vfsub.vf v0 , v0, %[A]" ::[A] "f"(m));
                 asm volatile("vfmul.vf v0 , v0, %[A]" ::[A] "f"(s));
                 asm volatile("vfmul.vv v8 , v0, v8");
                 asm volatile("vfadd.vv v16, v8, v16");
-                asm volatile("vse32.v v16 , (%0)" :: "r"(out_bt+C_itr*VLMAX));
+                asm volatile("vse32.v v16 , (%0)" :: "r"(out_bt+itr*VLMAX));
             }
             rstd[b * T + t] = s;
         }
@@ -606,35 +578,32 @@ void layernorm_backward(float* dinp, float* dweight, float* dbias,
             asm volatile("vfsub.vv v31,v31,v31");
             asm volatile("vfsub.vv v30,v30,v30");
 
-            // float t0 = 0;
-            // asm volatile("vfmv.s.f v31, %0" : "=f"(t0));//THIS ONE IS THE CORRECT SOLUTION BUT THE INSTRUCTION DOES NOT WORK
-            // asm volatile("vfmv.s.f v30, %0" : "=f"(t0));//THIS ONE IS THE CORRECT SOLUTION BUT THE INSTRUCTION DOES NOT WORK
-
-            int C_itr = 0;
+            int itr = 0;
+            int num_elements = C;
             asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(VLMAX));
-            while(C_itr*VLMAX + VLMAX <= C){
-                asm volatile("vle32.v v0  , (%0)" :: "r"(inp_bt  +C_itr*VLMAX));
-                asm volatile("vle32.v v8  , (%0)" :: "r"(weight  +C_itr*VLMAX));
-                asm volatile("vle32.v v16 , (%0)" :: "r"(dout_bt +C_itr*VLMAX));
+            while(itr*VLMAX + VLMAX <= num_elements){
+                asm volatile("vle32.v v0  , (%0)" :: "r"(inp_bt  +itr*VLMAX));
+                asm volatile("vle32.v v8  , (%0)" :: "r"(weight  +itr*VLMAX));
+                asm volatile("vle32.v v16 , (%0)" :: "r"(dout_bt +itr*VLMAX));
                 asm volatile("vfsub.vf v0 , v0, %[A]" ::[A] "f"(mean_bt));
                 asm volatile("vfmul.vf v0 , v0, %[A]" ::[A] "f"(rstd_bt));
                 asm volatile("vfmul.vv v8 , v8, v16");
                 asm volatile("vfredsum.vs v24 , v8  , v31");
-                asm volatile("vfmv.f.s %0 , v24" : "=f"(dnorm_mean));//THIS PART SHOULD BE CHECKED BECAUSE OF VFMV INSTRUCTION
-                asm volatile("vfmv.s.f v31, %0"  : "=f"(dnorm_mean));//THIS PART SHOULD BE CHECKED BECAUSE OF VFMV INSTRUCTION
+                asm volatile("vfmv.f.s %0 , v24" : "=f"(dnorm_mean));
+                asm volatile("vfmv.s.f v31, %0"  : "=f"(dnorm_mean));//BUG
 
                 asm volatile("vfmul.vv    v16 , v8  , v0");
                 asm volatile("vfredsum.vs v25 , v16 , v30");
-                asm volatile("vfmv.f.s %0 , v25" : "=f"(dnorm_norm_mean));//THIS PART SHOULD BE CHECKED BECAUSE OF VFMV INSTRUCTION
-                asm volatile("vfmv.s.f v30, %0"  : "=f"(dnorm_norm_mean));//THIS PART SHOULD BE CHECKED BECAUSE OF VFMV INSTRUCTION
+                asm volatile("vfmv.f.s %0 , v25" : "=f"(dnorm_norm_mean));
+                asm volatile("vfmv.s.f v30, %0"  : "=f"(dnorm_norm_mean));//BUG
 
-                C_itr++;
+                itr++;
             }
-            if(C_itr*VLMAX < C){
-                asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(C - C_itr*VLMAX));
-                asm volatile("vle32.v v0  , (%0)" :: "r"(inp_bt  +C_itr*VLMAX));
-                asm volatile("vle32.v v8  , (%0)" :: "r"(weight  +C_itr*VLMAX));
-                asm volatile("vle32.v v16 , (%0)" :: "r"(dout_bt +C_itr*VLMAX));
+            if(itr*VLMAX < num_elements){
+                asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(num_elements - itr*VLMAX));
+                asm volatile("vle32.v v0  , (%0)" :: "r"(inp_bt  +itr*VLMAX));
+                asm volatile("vle32.v v8  , (%0)" :: "r"(weight  +itr*VLMAX));
+                asm volatile("vle32.v v16 , (%0)" :: "r"(dout_bt +itr*VLMAX));
                 asm volatile("vfsub.vf v0 , v0, %[A]" ::[A] "f"(mean_bt));
                 asm volatile("vfmul.vf v0 , v0, %[A]" ::[A] "f"(rstd_bt));
                 asm volatile("vfmul.vv v8 , v8, v16");
@@ -665,60 +634,62 @@ void layernorm_backward(float* dinp, float* dweight, float* dbias,
             //dnorm_i-  V8 - V15
             //dnorm_i-- V8 - V15
 
+            itr = 0;
+            num_elements = C;
             // now iterate again and accumulate all the gradients
             asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(VLMAX));
-            while(C_itr*VLMAX + VLMAX <= C){
-                asm volatile("vle32.v   v0 , (%0)" :: "r"(inp_bt  +C_itr*VLMAX));
+            while(itr*VLMAX + VLMAX <= num_elements){
+                asm volatile("vle32.v   v0 , (%0)" :: "r"(inp_bt  +itr*VLMAX));
                 asm volatile("vfsub.vf  v0 , v0, %[A]" ::[A] "f"(mean_bt));
                 asm volatile("vfmul.vf  v0 , v0, %[A]" ::[A] "f"(rstd_bt));
 
-                asm volatile("vle32.v   v8 , (%0)" :: "r"(dout_bt +C_itr*VLMAX));
-                asm volatile("vle32.v   v16, (%0)" :: "r"(dbias   +C_itr*VLMAX));
+                asm volatile("vle32.v   v8 , (%0)" :: "r"(dout_bt +itr*VLMAX));
+                asm volatile("vle32.v   v16, (%0)" :: "r"(dbias   +itr*VLMAX));
                 asm volatile("vfadd.vv  v16, v8, v16");
-                asm volatile("vse32.v   v16, (%0)" :: "r"(dbias   +C_itr*VLMAX));
+                asm volatile("vse32.v   v16, (%0)" :: "r"(dbias   +itr*VLMAX));
                 
-                asm volatile("vle32.v   v16, (%0)" :: "r"(dweight +C_itr*VLMAX));
+                asm volatile("vle32.v   v16, (%0)" :: "r"(dweight +itr*VLMAX));
                 asm volatile("vfmacc.vv v16, v8, v0");
-                asm volatile("vse32.v   v16, (%0)" :: "r"(dweight +C_itr*VLMAX));
+                asm volatile("vse32.v   v16, (%0)" :: "r"(dweight +itr*VLMAX));
 
-                asm volatile("vle32.v   v16, (%0)" :: "r"(weight  +C_itr*VLMAX));
+                asm volatile("vle32.v   v16, (%0)" :: "r"(weight  +itr*VLMAX));
                 asm volatile("vfmul.vv  v8 , v8, v16");
                 //---------------------------------------------------------------
-                asm volatile("vle32.v   v16, (%0)" :: "r"(dinp_bt +C_itr*VLMAX));
+                asm volatile("vle32.v   v16, (%0)" :: "r"(dinp_bt +itr*VLMAX));
                 asm volatile("vfmul.vf  v0 , v0, %[A]" ::[A] "f"(dnorm_norm_mean));
                 asm volatile("vfsub.vf  v8 , v8, %[A]" ::[A] "f"(dnorm_mean));
                 asm volatile("vfsub.vv  v8 , v8, v0");
                 asm volatile("vfmul.vf  v8 , v8, %[A]" ::[A] "f"(rstd_bt));
                 asm volatile("vfadd.vv  v16 , v8, v16");
-                asm volatile("vse32.v   v16, (%0)" :: "r"(dinp_bt +C_itr*VLMAX));
+                asm volatile("vse32.v   v16, (%0)" :: "r"(dinp_bt +itr*VLMAX));
 
-                C_itr++;
+                itr++;
             }
-            if(C_itr*VLMAX < C){
-                asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(C - C_itr*VLMAX));
-                asm volatile("vle32.v   v0 , (%0)" :: "r"(inp_bt  +C_itr*VLMAX));
+            if(itr*VLMAX < num_elements){
+                asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(num_elements - itr*VLMAX));
+                asm volatile("vle32.v   v0 , (%0)" :: "r"(inp_bt  +itr*VLMAX));
                 asm volatile("vfsub.vf  v0 , v0, %[A]" ::[A] "f"(mean_bt));
                 asm volatile("vfmul.vf  v0 , v0, %[A]" ::[A] "f"(rstd_bt));
 
-                asm volatile("vle32.v   v8 , (%0)" :: "r"(dout_bt +C_itr*VLMAX));
-                asm volatile("vle32.v   v16, (%0)" :: "r"(dbias   +C_itr*VLMAX));
+                asm volatile("vle32.v   v8 , (%0)" :: "r"(dout_bt +itr*VLMAX));
+                asm volatile("vle32.v   v16, (%0)" :: "r"(dbias   +itr*VLMAX));
                 asm volatile("vfadd.vv  v16, v8, v16");
-                asm volatile("vse32.v   v16, (%0)" :: "r"(dbias   +C_itr*VLMAX));
+                asm volatile("vse32.v   v16, (%0)" :: "r"(dbias   +itr*VLMAX));
                 
-                asm volatile("vle32.v   v16, (%0)" :: "r"(dweight +C_itr*VLMAX));
+                asm volatile("vle32.v   v16, (%0)" :: "r"(dweight +itr*VLMAX));
                 asm volatile("vfmacc.vv v16, v8, v0");
-                asm volatile("vse32.v   v16, (%0)" :: "r"(dweight +C_itr*VLMAX));
+                asm volatile("vse32.v   v16, (%0)" :: "r"(dweight +itr*VLMAX));
 
-                asm volatile("vle32.v   v16, (%0)" :: "r"(weight  +C_itr*VLMAX));
+                asm volatile("vle32.v   v16, (%0)" :: "r"(weight  +itr*VLMAX));
                 asm volatile("vfmul.vv  v8 , v8, v16");
                 //---------------------------------------------------------------
-                asm volatile("vle32.v   v16, (%0)" :: "r"(dinp_bt +C_itr*VLMAX));
+                asm volatile("vle32.v   v16, (%0)" :: "r"(dinp_bt +itr*VLMAX));
                 asm volatile("vfmul.vf  v0 , v0, %[A]" ::[A] "f"(dnorm_norm_mean));
                 asm volatile("vfsub.vf  v8 , v8, %[A]" ::[A] "f"(dnorm_mean));
                 asm volatile("vfsub.vv  v8 , v8, v0");
                 asm volatile("vfmul.vf  v8 , v8, %[A]" ::[A] "f"(rstd_bt));
                 asm volatile("vfadd.vv  v16, v8, v16");
-                asm volatile("vse32.v   v16, (%0)" :: "r"(dinp_bt +C_itr*VLMAX));
+                asm volatile("vse32.v   v16, (%0)" :: "r"(dinp_bt +itr*VLMAX));
             }
         }
     }
@@ -731,25 +702,47 @@ void matmul_forward_naive(float* out,
 
     // THIS FUNCTION IN THE LLM.C MULTIPLY INP BY TRANSPOSED OF WEIGHT.
     // SO FIRST TRANSPOSED THE WEIGHT IN WEIGHTT AND THEN USE SPATZ MATHMUL.
-    for (int i = 0; i < OC; i++){
-        for (int j = 0; j < C; j++){
-            weightT[j*OC+i] = weight[i*C+j];
-        }
-    }
+    // for (int i = 0; i < OC; i++){
+    //     for (int j = 0; j < C; j++){
+    //         weightT[j*OC+i] = weight[i*C+j];
+    //     }
+    // }
 
-
-    matmul_2xVL(out, inp, weightT, 0, B*T, C, OC, 0, OC);
+    // matmul_8xVL(out, inp, weightT, 0, B*T, C, OC, 0, OC);
+    matmul_4xVL(out, inp, weight, 0, B*T, C, OC, 0, OC);
     // IF THE MATMUL SUPPORTS GEMM WE SHOULD FIRST INITIAL OUT WITH BIAS AND THEN USE MATHMUL.
     // NOW JUST MATMUL AND THEN ADDING BIAS
+    // for (int b = 0; b < B; b++) {
+    //     for (int t = 0; t < T; t++) {
+    //         int bt = b * T + t;
+    //         for (int o = 0; o < OC; o++) {
+    //             float val = (bias != NULL) ? bias[o] : 0.0f;
+    //             out[bt * OC + o] += val;
+    //         }
+    //     }
+    // }
     for (int b = 0; b < B; b++) {
         for (int t = 0; t < T; t++) {
-            int bt = b * T + t;
-            for (int o = 0; o < OC; o++) {
-                float val = (bias != NULL) ? bias[o] : 0.0f;
-                out[bt * OC + o] += val;
+            int out_bt = out + (b * T + t)*OC;
+            int itr = 0;
+            int num_elements = OC;
+            asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(VLMAX));
+            asm volatile("vle32.v v8 , (%0)" :: "r"(bias +itr*VLMAX));
+            while(itr*VLMAX + VLMAX <= num_elements){
+                asm volatile("vle32.v v0 , (%0)" :: "r"(out_bt+itr*VLMAX));
+                asm volatile("vfadd.vv v16, v0, v8");
+                asm volatile("vse32.v v16, (%0)" :: "r"(out_bt+itr*VLMAX));
+                itr++;
+            }
+            if(itr*VLMAX < num_elements){
+                asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(num_elements - itr*VLMAX));
+                asm volatile("vle32.v v0 , (%0)" :: "r"(out_bt+itr*VLMAX));
+                asm volatile("vle32.v v8 , (%0)" :: "r"(bias +itr*VLMAX));
+                asm volatile("vfadd.vv v16, v0, v8");
+                asm volatile("vse32.v v16, (%0)" :: "r"(out_bt+itr*VLMAX));
             }
         }
-    }
+    }    
 }
 
 void matmul_backward(float* dinp, float* dinp_t, float* dweight, float* dweight_t, float* dbias,
@@ -762,81 +755,152 @@ void matmul_backward(float* dinp, float* dinp_t, float* dweight, float* dweight_
 
     // IF THE MATMUL SUPPORTS GEMM WE SHOULD FIRST INITIAL OUT WITH BIAS AND THEN USE MATHMUL.
     // NOW JUST MATMUL AND THEN ADDING BIAS
-    matmul_2xVL(dinp_t, dout, weight, 0, B*T, OC, C, 0, C);
-    int C_itr = 0;
-    asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(VLMAX));
-    while(C_itr*VLMAX + VLMAX <= B*T*C){
-        asm volatile("vle32.v v0  , (%0)" :: "r"(dinp_t  +C_itr*VLMAX));
-        asm volatile("vle32.v v8  , (%0)" :: "r"(dinp    +C_itr*VLMAX));
-        asm volatile("vfadd.vv v8 , v0, v8");
-        asm volatile("vse32.v v8  , (%0)" :: "r"(dinp    +C_itr*VLMAX));
-        C_itr++;
-    }
-    if(C_itr*VLMAX < C){
-        asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(C - C_itr*VLMAX));
-        asm volatile("vle32.v v0  , (%0)" :: "r"(dinp_t  +C_itr*VLMAX));
-        asm volatile("vle32.v v8  , (%0)" :: "r"(dinp    +C_itr*VLMAX));
-        asm volatile("vfadd.vv v8 , v0, v8");
-        asm volatile("vse32.v v8  , (%0)" :: "r"(dinp    +C_itr*VLMAX));
-    }
+    
+    matmul_4xVL(dinp, dout, weight, 0, B*T, OC, C, 0, C);
+    // matmul_4xVL(dinp_t, dout, weight, 0, B*T, OC, C, 0, C);
+    // int itr = 0;
+    // int num_elements = B*T*C;
+    // asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(VLMAX));
+    // while(itr*VLMAX + VLMAX <= num_elements){
+    //     asm volatile("vle32.v v0  , (%0)" :: "r"(dinp_t  +itr*VLMAX));
+    //     asm volatile("vle32.v v8  , (%0)" :: "r"(dinp    +itr*VLMAX));
+    //     asm volatile("vfadd.vv v8 , v0, v8");
+    //     asm volatile("vse32.v v8  , (%0)" :: "r"(dinp    +itr*VLMAX));
+    //     itr++;
+    // }
+    // if(itr*VLMAX < num_elements){
+    //     asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(num_elements - itr*VLMAX));
+    //     asm volatile("vle32.v v0  , (%0)" :: "r"(dinp_t  +itr*VLMAX));
+    //     asm volatile("vle32.v v8  , (%0)" :: "r"(dinp    +itr*VLMAX));
+    //     asm volatile("vfadd.vv v8 , v0, v8");
+    //     asm volatile("vse32.v v8  , (%0)" :: "r"(dinp    +itr*VLMAX));
+    // }
     // backward into weight/bias, parallelize over output channels OC
     
     // THIS FUNCTION IN THE LLM.C MULTIPLY INP BY TRANSPOSED OF WEIGHT.
     // SO FIRST TRANSPOSED THE WEIGHT IN WEIGHTT AND THEN USE SPATZ MATHMUL.
+    // for (int i = 0; i < B*T; i++){
+    //     for (int j = 0; j < OC; j++){
+    //         doutT[j*B*T+i] = dout[i*OC+j];
+    //     }
+    // }
+
+    // for (int i = 0; i < B*T; i++) {
+    //     float* src = &dout[i * OC];
+    //     float* dst = &doutT[i];  // destination starts at the column
+
+    //     int j = 0;
+    //     while (j < OC) {
+    //         int vl;
+    //         asm volatile (
+    //             "vsetvli %[vl], %[oc_remain], e32\n\t"            // Set vector length
+    //             : [vl] "=r" (vl)
+    //             : [oc_remain] "r" (OC - j)
+    //         );
+
+    //         // Load from source (contiguous)
+    //         asm volatile ("vle32.v v0, (%[src])" :: [src] "r" (&src[j]));
+
+    //         // Strided store to destination
+    //         asm volatile (
+    //             "vsse32.v v0, (%[dst]), %[stride]":: [dst] "r" (&dst[j * B*T]),[stride] "r" (B*T * sizeof(float)));
+
+    //         j += vl;
+    //     }
+    // }
     for (int i = 0; i < B*T; i++){
-        for (int j = 0; j < OC; j++){
-            doutT[j*B*T+i] = dout[i*OC+j];
-        }
-    }
+        float* src = dout + i * OC;
+        float* dst = doutT + i;
 
-    matmul_2xVL(dweight_t, doutT, inp, 0, OC, B*T, C, 0, C);
-
-    C_itr = 0;
-    asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(VLMAX));
-    while(C_itr*VLMAX + VLMAX <= OC*C){
-        asm volatile("vle32.v v0  , (%0)" :: "r"(dweight_t  +C_itr*VLMAX));
-        asm volatile("vle32.v v8  , (%0)" :: "r"(dweight    +C_itr*VLMAX));
-        asm volatile("vfadd.vv v8 , v0, v8");
-        asm volatile("vse32.v v8  , (%0)" :: "r"(dweight    +C_itr*VLMAX));
-        C_itr++;
-    }
-    if(C_itr*VLMAX < OC*C){
-        asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(OC*C - C_itr*VLMAX));
-        asm volatile("vle32.v v0  , (%0)" :: "r"(dweight_t  +C_itr*VLMAX));
-        asm volatile("vle32.v v8  , (%0)" :: "r"(dweight    +C_itr*VLMAX));
-        asm volatile("vfadd.vv v8 , v0, v8");
-        asm volatile("vse32.v v8  , (%0)" :: "r"(dweight    +C_itr*VLMAX));
-    }
-
-    float temp1[B*T];
-    for (int i = 0; i < B*T; i++){
-        temp1[i] = 0;
-    }
-    
-
-    for (int o = 0; o < OC; o++) {
-        asm volatile("vsetvli %0, %1, e32, m1, ta, ma" : "=r"(vl) : "r"(1));
-        asm volatile("vfsub.vv v31,v31,v31");
-        asm volatile("vle32.v v31  , (%0)" :: "r"(dbias+o));
-        // asm volatile("vfmv.s.f v31, %0"  : "=f"(dbias[o]));//THIS PART SHOULD BE CHECKED BECAUSE OF VFMV INSTRUCTION
-
-        float *doutTaddress = doutT + o*B*T;
-        C_itr = 0;
+        int itr = 0;
+        int num_elements = OC;
         asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(VLMAX));
-        while(C_itr*VLMAX + VLMAX <= B*T){
+        while(itr*VLMAX + VLMAX <= num_elements){
             asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(VLMAX));
-            asm volatile("vle32.v v0  , (%0)" :: "r"(doutTaddress  +C_itr*VLMAX));
-            asm volatile("vfredsum.vs v24 , v0  , v31");
-            asm volatile("vfmv.f.s %0 , v24" : "=f"(dbias[o]));
-            asm volatile("vfmv.s.f v31, %0"  : "=f"(dbias[o]));
-            C_itr++;
+            asm volatile("vle32.v v0  , (%0)" :: "r"(src  +itr*VLMAX));
+            asm volatile("vsse32.v v0, (%0), %1" ::"r"(dst +itr*VLMAX*B*T), "r"(B*T * sizeof(float)));
+            itr++;
         }
-        if(C_itr*VLMAX < B*T){
-            asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(B*T - C_itr*VLMAX));
-            asm volatile("vle32.v v0  , (%0)" :: "r"(doutTaddress  +C_itr*VLMAX));
-            asm volatile("vfredsum.vs v24 , v0  , v31");
-            asm volatile("vfmv.f.s %0 , v24" : "=f"(dbias[o]));
+        if(itr*VLMAX < num_elements){
+            asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(num_elements - itr*VLMAX));
+            asm volatile("vle32.v v0  , (%0)" :: "r"(src  +itr*VLMAX));
+            asm volatile("vsse32.v v0, (%0), %1" ::"r"(dst +itr*VLMAX*B*T), "r"(B*T * sizeof(float)));
         }
+    }
+
+
+    matmul_4xVL(dweight, doutT, inp, 0, OC, B*T, C, 0, C);
+    // matmul_4xVL(dweight_t, doutT, inp, 0, OC, B*T, C, 0, C);
+
+    // int itr = 0;
+    // int num_elements = OC*C;
+    // asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(VLMAX));
+    // while(itr*VLMAX + VLMAX <= num_elements){
+    //     asm volatile("vle32.v v0  , (%0)" :: "r"(dweight_t  +itr*VLMAX));
+    //     asm volatile("vle32.v v8  , (%0)" :: "r"(dweight    +itr*VLMAX));
+    //     asm volatile("vfadd.vv v8 , v0, v8");
+    //     asm volatile("vse32.v v8  , (%0)" :: "r"(dweight    +itr*VLMAX));
+    //     itr++;
+    // }
+    // if(itr*VLMAX < num_elements){
+    //     asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(num_elements - itr*VLMAX));
+    //     asm volatile("vle32.v v0  , (%0)" :: "r"(dweight_t  +itr*VLMAX));
+    //     asm volatile("vle32.v v8  , (%0)" :: "r"(dweight    +itr*VLMAX));
+    //     asm volatile("vfadd.vv v8 , v0, v8");
+    //     asm volatile("vse32.v v8  , (%0)" :: "r"(dweight    +itr*VLMAX));
+    // }    
+
+    // for (int o = 0; o < OC; o++) {
+    //     asm volatile("vsetvli %0, %1, e32, m1, ta, ma" : "=r"(vl) : "r"(1));
+    //     asm volatile("vfsub.vv v31,v31,v31");
+    //     asm volatile("vle32.v v31  , (%0)" :: "r"(dbias+o));
+    //     // asm volatile("vfmv.s.f v31, %0"  : "=f"(dbias[o]));//THIS PART SHOULD BE CHECKED BECAUSE OF VFMV INSTRUCTION
+    //     float *doutTaddress = doutT + o*B*T;
+    //     int itr = 0;
+    //     int num_elements = B*T;
+    //     asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(VLMAX));
+    //     while(itr*VLMAX + VLMAX <= num_elements){
+    //         asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(VLMAX));
+    //         asm volatile("vle32.v v0  , (%0)" :: "r"(doutTaddress  +itr*VLMAX));
+    //         asm volatile("vfredsum.vs v24 , v0  , v31");
+    //         asm volatile("vfmv.f.s %0 , v24" : "=f"(dbias[o]));
+    //         //THESE TWO LINES SHOULD NE REPLACED BY VFMV.S.F
+    //         asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(1));
+    //         asm volatile("vle32.v v31  , (%0)" :: "r"(dbias+o));
+    //         itr++;
+    //     }
+    //     if(itr*VLMAX < num_elements){
+    //         asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(num_elements - itr*VLMAX));
+    //         asm volatile("vle32.v v0  , (%0)" :: "r"(doutTaddress  +itr*VLMAX));
+    //         asm volatile("vfredsum.vs v24 , v0  , v31");
+    //         asm volatile("vfmv.f.s %0 , v24" : "=f"(dbias[o]));
+    //     }
+    // }
+
+
+
+    int itr = 0;
+    int num_elements = OC;
+    asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(VLMAX));
+    while(itr*VLMAX + VLMAX <= num_elements){
+        asm volatile("vle32.v v8  , (%0)" :: "r"(dbias+itr*VLMAX));
+        for (int i = 0; i < B*T; i++) {
+                float *doutTaddress = dout + i*OC;
+                asm volatile("vle32.v v0  , (%0)" :: "r"(doutTaddress  +itr*VLMAX));
+                asm volatile("vfadd.vv    v8 , v8, v0");
+        }
+        asm volatile("vse32.v     v8 , (%0)" :: "r"(dbias+itr*VLMAX));
+        itr++;
+    }
+    if(itr*VLMAX < num_elements){
+        asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(num_elements - itr*VLMAX));
+        asm volatile("vle32.v v8  , (%0)" :: "r"(dbias+itr*VLMAX));
+        for (int i = 0; i < B*T; i++) {
+                float *doutTaddress = dout + i*OC;
+                asm volatile("vle32.v v0  , (%0)" :: "r"(doutTaddress  +itr*VLMAX));
+                asm volatile("vfadd.vv    v8 , v8, v0");
+        }
+        asm volatile("vse32.v     v8 , (%0)" :: "r"(dbias+itr*VLMAX));
     }
 }
 
@@ -859,8 +923,6 @@ void attention_forward(float* out, float* preatt, float* att,
     // float scale = 1.0 / hs;
 
     for (int b = 0; b < B; b++) {
-        printf("b = %d\n",b);
-
         for (int t = 0; t < T; t++) {
             for (int h = 0; h < NH; h++) {
                 float* query_t = inp + b * T * C3 + t * C3 + h * hs;
@@ -890,7 +952,7 @@ void attention_forward(float* out, float* preatt, float* att,
                         asm volatile("vfmul.vv    v8, v0, v8");
                         asm volatile("vfredsum.vs v16 , v8  , v31");
                         asm volatile("vfmv.f.s    %0 , v16" : "=f"(val));
-                        asm volatile("vfmv.s.f    v31, %0"  : "=f"(val));
+                        // asm volatile("vfmv.s.f    v31, %0"  : "=f"(val));
                         
                         itr++;
                     }
@@ -902,7 +964,6 @@ void attention_forward(float* out, float* preatt, float* att,
                         asm volatile("vfredsum.vs v16 , v8  , v31");
                         asm volatile("vfmv.f.s    %0 , v16" : "=f"(val));
                     }
-                    // printf("t2 = %d \t val = %f\n",t2,val);
                     val *= scale;
                     if (val > maxval) {
                         maxval = val;
@@ -951,7 +1012,7 @@ void attention_forward(float* out, float* preatt, float* att,
 
                     asm volatile("vfredsum.vs v8 , v0  , v31");
                     asm volatile("vfmv.f.s    %0 , v8" : "=f"(expsum));
-                    asm volatile("vfmv.s.f    v31, %0"  : "=f"(expsum));
+                    // asm volatile("vfmv.s.f    v31, %0"  : "=f"(expsum));
                     asm volatile("vse32.v     v0 , (%0)" :: "r"(att_bth+itr*VLMAX));
                     itr++;
                 }
@@ -978,11 +1039,11 @@ void attention_forward(float* out, float* preatt, float* att,
 
 
                 float expsum_inv = expsum == 0.0f ? 0.0f : 1.0f / expsum;
+                snrt_cluster_hw_barrier();//ISSUE
                 // pass 3: normalize to get the softmax
-                // int itr = 0;
-                // int num_elements = t+1;
                 itr = 0;
-                num_elements = t+1;                
+                num_elements = t+1;
+                // num_elements = C;
                 asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(VLMAX));
                 while(itr*VLMAX + VLMAX <= num_elements){
                     asm volatile("vle32.v   v0 , (%0)" :: "r"(att_bth+itr*VLMAX));
@@ -1008,21 +1069,22 @@ void attention_forward(float* out, float* preatt, float* att,
                 float* out_bth = out + b * T * C + t * C + h * hs;
                 float zero = 0.0f;
                 asm volatile("vsetvli  %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(VLMAX));
-                asm volatile("vfmv.v.f v0, %[A]" ::[A] "f"(zero));
+                asm volatile("vfsub.vv v0, v0, v0");//ISSUE
+                // asm volatile("vfmv.v.f v0, %[A]" ::[A] "f"(zero));//ISSUE
                 while(itr*VLMAX + VLMAX <= num_elements){
                     asm volatile("vse32.v v0 , (%0)" :: "r"(out_bth+itr*VLMAX));
                     itr++;
                 }
+                asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(num_elements - itr*VLMAX));
                 if(itr*VLMAX < num_elements){
-                    asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(num_elements - itr*VLMAX));
                     asm volatile("vse32.v v0 , (%0)" :: "r"(out_bth+itr*VLMAX));
                 }
-
                 for (int t2 = 0; t2 <= t; t2++) {
                     float* value_t2 = inp + b * T * C3 + t2 * C3 + h * hs + C*2; // +C*2 because it's value
                     float att_btht2 = att_bth[t2];
                     itr = 0;
                     num_elements = hs;
+
                     asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(VLMAX));
                     while(itr*VLMAX + VLMAX <= num_elements){
                         asm volatile("vle32.v    v0 , (%0)" :: "r"(value_t2+itr*VLMAX));
@@ -1055,7 +1117,6 @@ void attention_backward(float* dinp, float* dpreatt, float* datt,
     int hs = C / NH; // head size
     float scale = 1.f / sqrtf(hs);//I CHANGE THIS PART (I DID NOT CHECK THIS)
     // float scale = 1.f / hs;
-
     for (int b = 0; b < B; b++) {
         for (int t = 0; t < T; t++) {
             for (int h = 0; h < NH; h++) {
@@ -1091,7 +1152,7 @@ void attention_backward(float* dinp, float* dpreatt, float* datt,
                         asm volatile("vfmul.vv    v8, v0, v8");
                         asm volatile("vfredsum.vs v24 , v8  , v31");
                         asm volatile("vfmv.f.s    %0 , v24" : "=f"(temp));
-                        asm volatile("vfmv.s.f    v31, %0"  : "=f"(temp));
+                        // asm volatile("vfmv.s.f    v31, %0"  : "=f"(temp));//BUG
                         asm volatile("vfmacc.vf   v16, %[A], v0" ::[A] "f"(att_bth[t2]));
                         asm volatile("vse32.v     v16, (%0)" :: "r"(dvalue_t2 +itr*VLMAX));
                         itr++;
@@ -1522,46 +1583,30 @@ void softmax_forward(float* probs, float* logits, float* temp, int B, int T, int
 
             // maxval is only calculated and subtracted for numerical stability
             float maxval = -10000.0f; // TODO something better
-            // if(b == 0){
-            //     printf("maxval TOP= %f\n",maxval);
-            // }
             int itr = 0;
             int num_elements = V;
             //logits_bt    V0 - V7
             asm volatile("vsetvli %0, %1, e32, m1, ta, ma" : "=r"(vl) : "r"(1));
             asm volatile("vfsub.vv v31,v31,v31");
-            // asm volatile("vle32.v v31  , (%0)" :: "r"(maxval));
             
             //FIXING THE ISSUE OF THIS INSTRUCTION FOR WRITING BACK THE V31 in maxval
             // asm volatile("vfmv.s.f v31, %0"  : "=f"(maxval));
-
-
-
-
-
             asm volatile("vsetvli  %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(VLMAX));
             while(itr*VLMAX + VLMAX <= num_elements){
                 asm volatile("vle32.v     v0 , (%0)" :: "r"(logits_bt  +itr*VLMAX));
                 asm volatile("vfredmax.vs v8, v0, v31");
                 asm volatile("vfmv.f.s %0 , v8 " : "=f"(maxval));
-                asm volatile("vfmv.s.f v31, %0"  : "=f"(maxval));
+                asm volatile("vfmv.s.f v31, %0"  : "=f"(maxval));//BUG
                 itr++;
             }
             if(itr*VLMAX < num_elements){
                 asm volatile("vsetvli     %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(num_elements - itr*VLMAX));
                 asm volatile("vle32.v     v0 , (%0)" :: "r"(logits_bt  +itr*VLMAX));
-                // if(b == 0 && t == 1){
-                //     printf("maxval = %f\n",maxval);
-                //     for (int i = 0; i < num_elements; i++){
-                //         printf("logits_bt[%d] = %f\n",i,logits_bt[i]);
-                //     }                    
-                // }
                 asm volatile("vfredmax.vs v8, v0, v31");
                 asm volatile("vfmv.f.s %0 , v8 " : "=f"(maxval));
             }
-
             snrt_cluster_hw_barrier();
-            // printf("b = %d\t t = %d \t maxval = %f\n",b,t,maxval);
+            snrt_cluster_hw_barrier();//ISSUE
 
             float sum = 0.0f;
             itr = 0;
@@ -1585,14 +1630,14 @@ void softmax_forward(float* probs, float* logits, float* temp, int B, int T, int
 
                 //----------------------  FAST EXP
                 fast_exp(temp, probs_bt+itr*VLMAX, 0, 0, 8, VLMAX, vl);
+                asm volatile("vse32.v     v0 , (%0)" :: "r"(probs_bt+itr*VLMAX));
 
                 asm volatile("vfredsum.vs v8, v0, v31");
                 asm volatile("vfmv.f.s %0 , v8 " : "=f"(sum));
-                asm volatile("vfmv.s.f v31, %0"  : "=f"(sum));
+                asm volatile("vfmv.s.f v31, %0"  : "=f"(sum));//BUG
                 itr++;
             }
             if(itr*VLMAX < num_elements){
-                // printf("HI1\n");
                 asm volatile("vsetvli     %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(num_elements - itr*VLMAX));
                 asm volatile("vle32.v     v0 , (%0)" :: "r"(logits_bt  +itr*VLMAX));
                 asm volatile("vfsub.vf    v0 , v0, %[A]" ::[A] "f"(maxval));
@@ -1607,19 +1652,11 @@ void softmax_forward(float* probs, float* logits, float* temp, int B, int T, int
                 
                 //----------------------  FAST EXP
                 fast_exp(temp, probs_bt+itr*VLMAX, 0, 0, 8, (num_elements - itr*VLMAX), vl);
-
+                asm volatile("vse32.v     v0 , (%0)" :: "r"(probs_bt+itr*VLMAX));
                 asm volatile("vfredsum.vs v8, v0, v31");
                 asm volatile("vfmv.f.s %0 , v8 " : "=f"(sum));
-                // asm volatile("vfmv.s.f v31, %0"  : "=f"(sum));
             }
 
-            // printf("sum = %f\n",sum);
-
-
-            // note we only loop to V, leaving the padded dimensions
-            // for (int i = 0; i < V; i++) {
-            //     probs_bt[i] /= sum;
-            // }
             // THERE IS A PROBLEM WITH VSETVLI
             itr = 0;
             num_elements = V;
@@ -1646,47 +1683,6 @@ void softmax_forward(float* probs, float* logits, float* temp, int B, int T, int
     }
 }
 
-
-void softmax_forward_new(float* probs, float* logits, int B, int T, int V, int Vp) {
-    // output: probs are (B,T,Vp) of the probabilities (sums to 1.0 in each b,t position)
-    // input: logits is (B,T,Vp) of the unnormalized log probabilities
-    // Vp is the padded vocab size (for efficiency), V is the "real" vocab size
-    // example: Vp is 50304 and V is 50257
-    #pragma omp parallel for collapse(2)
-    for (int b = 0; b < B; b++) {
-        for (int t = 0; t < T; t++) {
-            // probs <- softmax(logits)
-            float* logits_bt = logits + b * T * Vp + t * Vp;
-            float* probs_bt = probs + b * T * Vp + t * Vp;
-
-            // maxval is only calculated and subtracted for numerical stability
-            float maxval = -10000.0f; // TODO something better
-            for (int i = 0; i < V; i++) {
-                if (logits_bt[i] > maxval) {
-                    maxval = logits_bt[i];
-                }
-            }
-            float sum = 0.0f;
-            for (int i = 0; i < V; i++) {
-                probs_bt[i] = expf(logits_bt[i] - maxval);//I CHANGED THIS LINE 
-                // probs_bt[i] = expf_v2(logits_bt[i] - maxval);//I CHANGED THIS LINE 
-                // probs_bt[i] = logits_bt[i] - maxval; 
-                sum += probs_bt[i];
-            }
-            // note we only loop to V, leaving the padded dimensions
-            for (int i = 0; i < V; i++) {
-                probs_bt[i] /= sum;
-            }
-            // for extra super safety we may wish to include this too,
-            // forcing the probabilities here to be zero, but it shouldn't matter
-            for (int i = V; i < Vp; i++) {
-                probs_bt[i] = 0.0f;
-            }
-        }
-    }
-}
-
-
 void crossentropy_forward(float* losses,
                           float* probs, int* targets,
                           int B, int T, int Vp) {
@@ -1698,8 +1694,7 @@ void crossentropy_forward(float* losses,
             // loss = -log(probs[target])
             float* probs_bt = probs + b * T * Vp + t * Vp;
             int ix = targets[b * T + t];
-            losses[b * T + t] = -logf(probs_bt[ix]);//I CHANGED THIS LINE
-            // losses[b * T + t] = probs_bt[ix];
+            losses[b * T + t] = -logf(probs_bt[ix]);
         }
     }
 }
@@ -1750,7 +1745,8 @@ int main() {
     volatile int errors = 0;
     
     const unsigned int num_cores = snrt_cluster_core_num();
-    const unsigned int cid = snrt_cluster_core_idx();
+    const unsigned int cid       = snrt_cluster_core_idx();
+    snrt_cluster_hw_barrier();
 
     // Reset timer
     unsigned int timer = (unsigned int)-1;
@@ -1759,10 +1755,15 @@ int main() {
     int T = T_Size;    
 
     
+    int  * inp_int  ;
     float* inp      ;
     float* dinp     ;
     float* dinp_t   ;//TEMP
     float* mean     ;
+    float* wte      ;
+    float* wpe      ;
+    float* dwte     ;
+    float* dwpe     ;
     float* rstd     ;
     float* weight   ;
     float* weightT  ;//TRANSPOSED
@@ -1777,97 +1778,24 @@ int main() {
     float* dpreatt  ;
     float* att      ;
     float* datt     ;
-
-    float* temp      ;
-    float* temp1     ;
-    float* temp2     ;
+    float* losses   ;
+    float* probs    ;
+    int  * targets  ;
+    float* dlosses  ;
+    float* dlogits  ;
+    float* temp     ;
+    float* temp1    ;
+    float* temp2    ;
 
     int NH = 2;
 
-
-
-
     if (cid == 0) {
 
-        temp        = (float*)snrt_l1alloc(B * T * C * sizeof(float));
-        temp1       = (float*)snrt_l1alloc(B * T * C * sizeof(float));
-        temp2       = (float*)snrt_l1alloc(B * T * C * sizeof(float)); 
-        inp       = (float*)snrt_l1alloc(B * T * C * sizeof(float));
-        dinp      = (float*)snrt_l1alloc(B * T * C * sizeof(float));
-        // dinp_t    = (float*)snrt_l1alloc(B * T * C * sizeof(float));
-        // weight    = (float*)snrt_l1alloc(1 * C * C * sizeof(float));
-        // dweight   = (float*)snrt_l1alloc(1 * C * C * sizeof(float));
-        // dweight_t = (float*)snrt_l1alloc(1 * C * C * sizeof(float));
-        // bias      = (float*)snrt_l1alloc(1 * 1 * C * sizeof(float));
-        // dbias     = (float*)snrt_l1alloc(1 * 1 * C * sizeof(float));        
-        // mean      = (float*)snrt_l1alloc(B * T * 1 * sizeof(float));
-        // rstd      = (float*)snrt_l1alloc(B * T * 1 * sizeof(float));
-        dout      = (float*)snrt_l1alloc(B * T * C * sizeof(float));
-        // doutT     = (float*)snrt_l1alloc(B * T * C * sizeof(float));
-        // out       = (float*)snrt_l1alloc(B * T * C * sizeof(float));
-
-        snrt_dma_start_1d(inp    , data1_dram, B * T * C * sizeof(float));
-        snrt_dma_start_1d(dinp   , data1_dram, B * T * C * sizeof(float));
-        // snrt_dma_start_1d(weight , data1_dram, 1 * C * C * sizeof(float));
-        // snrt_dma_start_1d(dweight, data1_dram, 1 * C * C * sizeof(float));
-        // snrt_dma_start_1d(bias   , data1_dram, 1 * 1 * C * sizeof(float));
-        // snrt_dma_start_1d(dbias  , data1_dram, 1 * 1 * C * sizeof(float));
-        // snrt_dma_start_1d(mean   , data1_dram, B * T * 1 * sizeof(float));
-        // snrt_dma_start_1d(rstd   , data1_dram, B * T * 1 * sizeof(float));
-        snrt_dma_start_1d(dout   , data1_dram, B * T * C * sizeof(float));        
-        // snrt_dma_start_1d(out    , data1_dram, B * T * C * sizeof(float));        
-    
-        // T = T/2;
-        // inp     = (float*)snrt_l1alloc(B * T  * 3*C   * sizeof(float));
-        // dinp    = (float*)snrt_l1alloc(B * T  * 3*C   * sizeof(float));
-        // dpreatt = (float*)snrt_l1alloc(B * NH * T * T * sizeof(float));
-        // preatt  = (float*)snrt_l1alloc(B * NH * T * T * sizeof(float));
-        // att     = (float*)snrt_l1alloc(B * NH * T * T * sizeof(float));
-        // datt    = (float*)snrt_l1alloc(B * NH * T * T * sizeof(float));
-        // dout    = (float*)snrt_l1alloc(B * T  * C     * sizeof(float));
-        // out     = (float*)snrt_l1alloc(B * T  * C     * sizeof(float));
-        // snrt_dma_start_1d(dout                          , data1_dram, B * T  * C        * sizeof(float));
-        // for (int i = 0; i < 3; i++){
-        //     snrt_dma_start_1d(inp    + i*(B * T * C)    , data1_dram, B * T  * C        * sizeof(float));
-        //     // snrt_dma_start_1d(dinp   + i*(B * T * C)    , data1_dram, B * T  * C        * sizeof(float));
-        // }
-        // snrt_dma_start_1d(dpreatt                       , data1_dram, B * NH * T * T    * sizeof(float));
-        // snrt_dma_start_1d(preatt                        , data1_dram, B * NH * T * T    * sizeof(float));
-        // snrt_dma_start_1d(att                           , data1_dram, B * NH * T * T    * sizeof(float));
-        // snrt_dma_start_1d(datt                          , data1_dram, B * NH * T * T    * sizeof(float));
-
-
-        // float* losses      = (float*)snrt_l1alloc(B * T  * sizeof(float));
-        // float* probs       = (float*)snrt_l1alloc(B * T  * C   * sizeof(float));
-        // int  * targets     = (int  *)snrt_l1alloc(B * T  * sizeof(int));
-        // snrt_dma_start_1d(probs  , data1_dram, B * T * C * sizeof(float));
-        // snrt_dma_start_1d(targets, inp_dram  , B * T * sizeof(int));        
-
-    snrt_dma_wait_all();
+        // temp        = (float*)snrt_l1alloc(B * T * C * sizeof(float));
+        // temp1       = (float*)snrt_l1alloc(B * T * C * sizeof(float));
+        // temp2       = (float*)snrt_l1alloc(B * T * C * sizeof(float));
+        snrt_dma_wait_all();
     }
-
-    // int V  = C;
-    // int Vp = C;
-
-    // float* losses      = (float*)snrt_l1alloc(B * T  * sizeof(float));
-    // float* probs       = (float*)snrt_l1alloc(B * T  * C   * sizeof(float));
-    // int  * targets     = (int  *)snrt_l1alloc(B * T  * sizeof(int));
-    // snrt_dma_start_1d(probs  , data1_dram, B * T * C * sizeof(float));
-    // snrt_dma_start_1d(targets, inp_dram  , B * T * sizeof(int));
-
-
-    // float* dlosses     = (float*)snrt_l1alloc(B * T  * sizeof(float));
-    // float* dlogits     = (float*)snrt_l1alloc(B * T  * Vp   * sizeof(float));
-    // float* probs       = (float*)snrt_l1alloc(B * T  * Vp   * sizeof(float));
-    // int  * targets     = (int  *)snrt_l1alloc(B * T  * sizeof(int));
-    // snrt_dma_start_1d(dlosses, data1_dram, B * T * sizeof(float));
-    // snrt_dma_start_1d(dlogits, data1_dram, B * T * Vp * sizeof(float));
-    // snrt_dma_start_1d(probs  , data1_dram, B * T * Vp * sizeof(float));
-    // snrt_dma_start_1d(targets, inp_dram  , B * T * sizeof(float));
-    // snrt_dma_wait_all();
-
-
-
 
     // Wait for all cores to finish
     snrt_cluster_hw_barrier();
@@ -1875,62 +1803,479 @@ int main() {
     unsigned int vl;
     // Start timer
 
-    timer = benchmark_get_cycle();
+    // timer = benchmark_get_cycle();
     // Start dump
-    start_kernel();
-    
-    // encoder_forward(out, inp, data1, data1, B, T, C, vl);
-    // encoder_backward(data2, data3, data1, inp, B, T, C, vl);
+
+    //--------------------------------------------------------- encoder_forward
+    // if (cid == 0) {
+    //     inp_int     = (int  *)snrt_l1alloc(B * T *     sizeof(int  ));
+    //     wte         = (float*)snrt_l1alloc(B * T * C * sizeof(float));
+    //     wpe         = (float*)snrt_l1alloc(B * T * C * sizeof(float));
+    //     out         = (float*)snrt_l1alloc(B * T * C * sizeof(float));
+    //     snrt_dma_start_1d(inp_int, inp_dram  , B * T *     sizeof(int  ));
+    //     snrt_dma_start_1d(wte    , data1_dram, B * T * C * sizeof(float));
+    //     snrt_dma_start_1d(wpe    , data1_dram, B * T * C * sizeof(float));
+    //     snrt_dma_wait_all();
+    // }
+    // snrt_cluster_hw_barrier();
+    // timer = benchmark_get_cycle();
+    // start_kernel();    
+    // encoder_forward(out, inp_int, wte, wpe, B, T, C, vl);
+    // stop_kernel();
+    // if(cid == 0){
+    //     printf("CHECK RESULTS1\n");
+    //     check_result(out  , outG   , B * T * C);
+    // }
+    //---------------------------------------------------------
+
+    //--------------------------------------------------------- encoder_backward
+    // if (cid == 0) {
+    //     inp_int      = (int  *)snrt_l1alloc(B * T *     sizeof(int  ));
+    //     dwte         = (float*)snrt_l1alloc(B * T * C * sizeof(float));
+    //     dwpe         = (float*)snrt_l1alloc(B * T * C * sizeof(float));
+    //     dout         = (float*)snrt_l1alloc(B * T * C * sizeof(float));
+    //     snrt_dma_start_1d(inp_int , inp_dram  , B * T *     sizeof(int  ));
+    //     snrt_dma_start_1d(dwte    , data1_dram, B * T * C * sizeof(float));
+    //     snrt_dma_start_1d(dwpe    , data1_dram, B * T * C * sizeof(float));
+    //     snrt_dma_start_1d(dout    , data1_dram, B * T * C * sizeof(float));
+    //     snrt_dma_wait_all();
+    // }
+    // snrt_cluster_hw_barrier();
+    // timer = benchmark_get_cycle();
+    // start_kernel();    
+    // encoder_backward(dwte, dwpe, dout, inp_int, B, T, C, vl);
+    // stop_kernel();
+    // if(cid == 0){
+    //     printf("CHECK RESULTS1\n");
+    //     check_result(dwte  , dwteG   , B * T * C);
+    //     printf("CHECK RESULTS2\n");
+    //     check_result(dwpe  , dwpeG   , B * T * C);        
+    // }
+    //---------------------------------------------------------
+
+    //--------------------------------------------------------- layernorm_forward
+    // if (cid == 0) {
+    //     inp       = (float*)snrt_l1alloc(B * T * C * sizeof(float));
+    //     mean      = (float*)snrt_l1alloc(B * T * 1 * sizeof(float));
+    //     rstd      = (float*)snrt_l1alloc(B * T * 1 * sizeof(float));
+    //     weight    = (float*)snrt_l1alloc(1 * C * C * sizeof(float));
+    //     bias      = (float*)snrt_l1alloc(1 * 1 * C * sizeof(float));
+    //     out       = (float*)snrt_l1alloc(B * T * C * sizeof(float));
+    //     snrt_dma_start_1d(inp    , data1_dram, B * T * C * sizeof(float));
+    //     snrt_dma_start_1d(weight , data1_dram, 1 * 1 * C * sizeof(float));
+    //     snrt_dma_start_1d(bias   , data1_dram, 1 * 1 * C * sizeof(float));
+    //     snrt_dma_start_1d(mean   , data1_dram, B * T * 1 * sizeof(float));
+    //     snrt_dma_start_1d(rstd   , data1_dram, B * T * 1 * sizeof(float));
+    //     snrt_dma_wait_all();
+    // }
+    // snrt_cluster_hw_barrier();
+    // timer = benchmark_get_cycle();
+    // start_kernel();    
     // layernorm_forward(out, mean, rstd, inp, weight, bias, B, T, C, vl);
-    // layernorm_backward(dinp, dweight, dbias, dout, inp, weight, mean, rstd, B, T, C, vl);
+    // stop_kernel();
+    // if(cid == 0){
+    //     printf("CHECK RESULTS1\n");
+    //     check_result(mean  , meanG   , B * T * 1);
+    //     printf("CHECK RESULTS2\n");
+    //     check_result(rstd  , rstdG   , B * T * 1);
+    //     printf("CHECK RESULTS3\n");
+    //     check_result(out   , outG    , B * T * C);        
+    // }
+    //---------------------------------------------------------
+
+    //--------------------------------------------------------- layernorm_backward
+    if (cid == 0) {
+        inp    = (float*)snrt_l1alloc(B * T * C * sizeof(float));
+        dinp   = (float*)snrt_l1alloc(B * T * C * sizeof(float));
+        mean   = (float*)snrt_l1alloc(B * T * 1 * sizeof(float));
+        rstd   = (float*)snrt_l1alloc(B * T * 1 * sizeof(float));
+        dweight= (float*)snrt_l1alloc(1 * 1 * C * sizeof(float));
+        weight = (float*)snrt_l1alloc(1 * 1 * C * sizeof(float));
+        dbias  = (float*)snrt_l1alloc(1 * 1 * C * sizeof(float));
+        dout   = (float*)snrt_l1alloc(B * T * C * sizeof(float));
+        snrt_dma_start_1d(inp    , data1_dram, B * T * C * sizeof(float));
+        snrt_dma_start_1d(dinp   , data1_dram, B * T * C * sizeof(float));
+        snrt_dma_start_1d(dweight, data1_dram, 1 * 1 * C * sizeof(float));
+        snrt_dma_start_1d(weight , data1_dram, 1 * 1 * C * sizeof(float));
+        snrt_dma_start_1d(dbias  , data1_dram, 1 * 1 * C * sizeof(float));
+        snrt_dma_start_1d(mean   , data1_dram, B * T * 1 * sizeof(float));
+        snrt_dma_start_1d(rstd   , data1_dram, B * T * 1 * sizeof(float));
+        snrt_dma_start_1d(dout   , data1_dram, B * T * C * sizeof(float));
+        snrt_dma_wait_all();
+    }
+    snrt_cluster_hw_barrier();
+    timer = benchmark_get_cycle();
+    start_kernel();    
+    layernorm_backward(dinp, dweight, dbias, dout, inp, weight, mean, rstd, B, T, C, vl);
+    stop_kernel();
+    // if(cid == 0){
+    //     printf("CHECK RESULTS1\n");
+    //     check_result(dbias    , dbiasG   , 1 * 1 * C);
+    //     printf("CHECK RESULTS2\n");
+    //     check_result(dweight  , dweightG , 1 * 1 * C);
+    //     printf("CHECK RESULTS3\n");
+    //     check_result(dinp     , dinpG    , B * T * C);        
+    // }
+    //---------------------------------------------------------
+
+    //--------------------------------------------------------- matmul_forward_naive
+    // int OC = C;
+    // if (cid == 0) {
+    //     inp     = (float*)snrt_l1alloc(B * T * C * sizeof(float));
+    //     weight  = (float*)snrt_l1alloc(1 * OC* C * sizeof(float));
+    //     weightT = (float*)snrt_l1alloc(1 * OC* C * sizeof(float));
+    //     bias    = (float*)snrt_l1alloc(1 * 1 * OC* sizeof(float));
+    //     out     = (float*)snrt_l1alloc(B * T * C * sizeof(float));
+    //     snrt_dma_start_1d(weight , data1_dram, 1 * OC* C * sizeof(float));
+    //     snrt_dma_start_1d(inp    , data1_dram, B * T * C * sizeof(float));
+    //     snrt_dma_start_1d(bias   , data1_dram, 1 * 1 * OC* sizeof(float));
+    //     snrt_dma_start_1d(out    , data1_dram, B * T * C * sizeof(float));
+    //     snrt_dma_wait_all();
+    // }
+    // snrt_cluster_hw_barrier();
+    // timer = benchmark_get_cycle();
+    // start_kernel();    
     // matmul_forward_naive(out, inp, weight, weightT, bias, B, T, C, C, vl);
+    // stop_kernel();
+    // if(cid == 0){
+    //     printf("CHECK RESULTS1\n");
+    //     check_result(out    , outG   , B * T * C);
+    // }
+    //---------------------------------------------------------
+
+    //--------------------------------------------------------- matmul_backward
+    // int OC = C;
+    // if (cid == 0) {
+    //     inp       = (float*)snrt_l1alloc(B * T * C * sizeof(float));
+    //     dinp      = (float*)snrt_l1alloc(B * T * C * sizeof(float));
+    //     // dinp_t    = (float*)snrt_l1alloc(B * T * C * sizeof(float));
+    //     dweight   = (float*)snrt_l1alloc(1 * OC* C * sizeof(float));
+    //     // dweight_t = (float*)snrt_l1alloc(1 * OC* C * sizeof(float));
+    //     weight    = (float*)snrt_l1alloc(1 * OC* C * sizeof(float));
+    //     dbias     = (float*)snrt_l1alloc(1 * 1 * OC* sizeof(float));
+    //     doutT     = (float*)snrt_l1alloc(B * T * OC* sizeof(float));
+    //     dout      = (float*)snrt_l1alloc(B * T * OC* sizeof(float));
+    //     snrt_dma_start_1d(inp    , data1_dram, B * T * C * sizeof(float));
+    //     snrt_dma_start_1d(dinp   , data1_dram, B * T * C * sizeof(float));
+    //     snrt_dma_start_1d(dweight, data1_dram, 1 * OC* C * sizeof(float));
+    //     snrt_dma_start_1d(weight , data1_dram, 1 * OC* C * sizeof(float));
+    //     snrt_dma_start_1d(dbias  , data1_dram, 1 * 1 * OC* sizeof(float));
+    //     snrt_dma_start_1d(dout   , data1_dram, B * T * C * sizeof(float));
+    //     snrt_dma_wait_all();
+    // }
+    // snrt_cluster_hw_barrier();
+    // timer = benchmark_get_cycle();
+    // start_kernel();    
     // matmul_backward(dinp, dinp_t, dweight, dweight_t, dbias, dout, doutT, inp, weight, B, T, C, C, vl);
+    // stop_kernel();
+    // if(cid == 0){
+    //     printf("CHECK RESULTS1\n");
+    //     check_result(dinp     , dinpG   , B * T * C);
+    //     printf("CHECK RESULTS2\n");
+    //     check_result(dweight  , dweightG, 1 * OC* C);
+    //     printf("CHECK RESULTS3\n");
+    //     check_result(dbias    , dbiasG  , 1 * 1 *OC);        
+    // }
+    //---------------------------------------------------------
+
+    //--------------------------------------------------------- attention_forward
+    // T = T/2;
+    // //-------------------- MAX UTIL
+    // B = 1;
+    // NH = 1;
+    // C = 64;
+    // T = 64;
+    // //--------------------
+    // if (cid == 0) {
+    //     temp    = (float*)snrt_l1alloc(VLMAX     * sizeof(float));
+    //     inp     = (float*)snrt_l1alloc(B * T  * 3*C   * sizeof(float));
+    //     preatt  = (float*)snrt_l1alloc(B * NH * T * T * sizeof(float));
+    //     att     = (float*)snrt_l1alloc(B * NH * T * T * sizeof(float));
+    //     out     = (float*)snrt_l1alloc(B * T  * C     * sizeof(float));
+    //     for (int i = 0; i < 3; i++){
+    //         snrt_dma_start_1d(inp    + i*(B * T * C)         , data1_dram, B * T  * C        * sizeof(float));
+    //     }
+    //     snrt_dma_start_1d(preatt , data1_dram, B * NH * T * T    * sizeof(float));
+    //     snrt_dma_start_1d(att    , data1_dram, B * NH * T * T    * sizeof(float));
+    //     snrt_dma_start_1d(out    , data1_dram, B * T * C * sizeof(float));    
+    //     snrt_dma_wait_all();
+    // }
+    // snrt_cluster_hw_barrier();
+    // timer = benchmark_get_cycle();
+    // start_kernel();    
     // attention_forward(out, preatt, att, inp, temp, B, T, C, NH, vl);
+    // stop_kernel();
+    // if(cid == 0){
+    //     printf("CHECK RESULTS1\n");
+    //     check_result(out     , outG   , B * T * C);
+    //     printf("CHECK RESULTS2\n");
+    //     check_result(preatt  , preattG, B * NH * T * T);
+    //     printf("CHECK RESULTS3\n");
+    //     check_result(att     , attG   , B * NH * T * T);        
+    // }
+    //---------------------------------------------------------
+
+    //--------------------------------------------------------- attention_backward
+    // T = T/2;
+    // //-------------------- MAX UTIL
+    // B = 1;
+    // NH = 1;
+    // C = 64;
+    // T = 64;
+    // //--------------------    
+    // if (cid == 0) {
+    //     inp     = (float*)snrt_l1alloc(B * T  * 3*C   * sizeof(float));
+    //     dinp    = (float*)snrt_l1alloc(B * T  * 3*C   * sizeof(float));
+    //     dpreatt = (float*)snrt_l1alloc(B * NH * T * T * sizeof(float));
+    //     att     = (float*)snrt_l1alloc(B * NH * T * T * sizeof(float));
+    //     datt    = (float*)snrt_l1alloc(B * NH * T * T * sizeof(float));
+    //     dout    = (float*)snrt_l1alloc(B * T  * C     * sizeof(float));
+    //     for (int i = 0; i < 3; i++){
+    //         snrt_dma_start_1d(inp    + i*(B * T * C)    , data1_dram, B * T  * C        * sizeof(float));
+    //         snrt_dma_start_1d(dinp   + i*(B * T * C)    , data1_dram, B * T  * C        * sizeof(float));
+    //     }
+    //     snrt_dma_start_1d(dpreatt                       , data1_dram, B * NH * T * T    * sizeof(float));
+    //     snrt_dma_start_1d(att                           , data1_dram, B * NH * T * T    * sizeof(float));
+    //     snrt_dma_start_1d(datt                          , data1_dram, B * NH * T * T    * sizeof(float));
+    //     snrt_dma_start_1d(dout                          , data1_dram, B * T * C         * sizeof(float));
+    //     snrt_dma_wait_all();
+    // }
+    // snrt_cluster_hw_barrier();
+    // timer = benchmark_get_cycle();
+    // start_kernel();
     // attention_backward(dinp, dpreatt, datt, dout, inp, att, B, T, C, NH, vl);
+    // stop_kernel();
+    // if(cid == 0){
+    //     printf("CHECK RESULTS1\n");
+    //     check_result(datt     , dattG   , B * NH * T * T);
+    //     printf("CHECK RESULTS2\n");
+    //     check_result(dpreatt  , dpreattG, B * NH * T * T);
+    //     printf("CHECK RESULTS3\n");
+    //     check_result(dinp     , dinpG   , B *  T * 3*C);        
+    // }
+    //---------------------------------------------------------
+
+    //--------------------------------------------------------- gelu_forward
+    // int N = B*T*C;
+    // if (cid == 0) {
+    //     inp     = (float*)snrt_l1alloc(B * T  * C   * sizeof(float));
+    //     out     = (float*)snrt_l1alloc(B * T  * C   * sizeof(float));
+    //     snrt_dma_start_1d(inp, data1_dram, B * T * C * sizeof(float));
+    //     snrt_dma_wait_all();
+    // }
+    // snrt_cluster_hw_barrier();
+    // timer = benchmark_get_cycle();
+    // start_kernel();    
     // gelu_forward(out, inp, temp ,temp2 ,B*T*C, vl);
-    // gelu_backward(dinp, inp, dout, B*T*C, vl);
-    // gelu_backward(dinp, inp, dout, temp, temp1, temp2, VLMAX, vl);
-    gelu_backward(dinp, inp, dout, temp, temp1, temp2, B*T*C, vl);
+    // stop_kernel();
+    // if(cid == 0){
+    //     printf("CHECK RESULTS1\n");
+    //     check_result(out     , outG   , B * T * C);   
+    // }
+    //---------------------------------------------------------
+
+    //--------------------------------------------------------- gelu_backward
+    // int N = B*T*C;
+    // if (cid == 0) {
+    //     inp     = (float*)snrt_l1alloc(B * T  * C   * sizeof(float));
+    //     dinp    = (float*)snrt_l1alloc(B * T  * C   * sizeof(float));
+    //     dout    = (float*)snrt_l1alloc(B * T  * C   * sizeof(float));
+    //     snrt_dma_start_1d(inp , data1_dram, B * T * C * sizeof(float));
+    //     snrt_dma_start_1d(dinp, data1_dram, B * T * C * sizeof(float));
+    //     snrt_dma_start_1d(dout, data1_dram, B * T * C * sizeof(float));
+    //     snrt_dma_wait_all();
+    // }
+    // snrt_cluster_hw_barrier();
+    // timer = benchmark_get_cycle();
+    // start_kernel();    
+    // gelu_backward(dinp, inp, dout, temp, temp1, temp2, B*T*C, vl);
+    // stop_kernel();
+    // if(cid == 0){
+    //     printf("CHECK RESULTS1\n");
+    //     check_result(dinp     , dinpG   , B * T * C);   
+    // }
+    //---------------------------------------------------------
+
+    //--------------------------------------------------------- residual_forward
+    // int N = B*T*C;
+    // if (cid == 0) {
+    //     inp     = (float*)snrt_l1alloc(B * T  * C   * sizeof(float));
+    //     dinp    = (float*)snrt_l1alloc(B * T  * C   * sizeof(float));
+    //     out     = (float*)snrt_l1alloc(B * T  * C   * sizeof(float));
+    //     snrt_dma_start_1d(inp , data1_dram, B * T * C * sizeof(float));
+    //     snrt_dma_start_1d(dinp, data1_dram, B * T * C * sizeof(float));
+    //     snrt_dma_wait_all();
+    // }
+    // snrt_cluster_hw_barrier();
+    // timer = benchmark_get_cycle();
+    // start_kernel();    
     // residual_forward(out, inp, dinp, B*T*C, vl);
+    // stop_kernel();
+    // if(cid == 0){
+    //     printf("CHECK RESULTS1\n");
+    //     check_result(out     , outG   , B * T * C);   
+    // }
+    //---------------------------------------------------------
+
+    //--------------------------------------------------------- residual_backward
+    // int N = B*T*C;
+    // if (cid == 0) {
+    //     inp     = (float*)snrt_l1alloc(B * T  * C   * sizeof(float));
+    //     dinp    = (float*)snrt_l1alloc(B * T  * C   * sizeof(float));
+    //     dout    = (float*)snrt_l1alloc(B * T  * C   * sizeof(float));
+    //     snrt_dma_start_1d(inp , data1_dram, B * T * C * sizeof(float));
+    //     snrt_dma_start_1d(dinp, data1_dram, B * T * C * sizeof(float));
+    //     snrt_dma_start_1d(dout, data1_dram, B * T * C * sizeof(float));
+    //     snrt_dma_wait_all();
+    // }
+    // snrt_cluster_hw_barrier();
+    // timer = benchmark_get_cycle();
+    // start_kernel();    
     // residual_backward(inp, dinp, dout, B*T*C, vl);
+    // stop_kernel();
+    // if(cid == 0){
+    //     printf("CHECK RESULTS1\n");
+    //     check_result(inp      , inpG    , B * T * C);   
+    //     printf("CHECK RESULTS2\n");
+    //     check_result(dinp     , dinpG   , B * T * C);
+    // }
+    //---------------------------------------------------------
+
+    //--------------------------------------------------------- softmax_forward
+    // int V  = C;
+    // // int Vp = C;
+    // int Vp = C+3;
+    // if (cid == 0) {
+    //     inp    = (float*)snrt_l1alloc(B * T  * C   * sizeof(float));
+    //     out    = (float*)snrt_l1alloc(B * T  * C   * sizeof(float));
+    //     snrt_dma_start_1d(inp , data1_dram, B * T * C * sizeof(float));
+    //     snrt_dma_wait_all();
+    // }
+    // snrt_cluster_hw_barrier();
+    // timer = benchmark_get_cycle();
+    // start_kernel();    
     // softmax_forward(out, inp, temp, B, T, C, C, vl);
-    // softmax_forward_new(out, inp, B, T, C, C);
+    // stop_kernel();
+    // if(cid == 0){
+    //     printf("CHECK RESULTS1\n");
+    //     check_result(out      , probsG    , B * T * C);
+    // }
+    //---------------------------------------------------------
+
+    //--------------------------------------------------------- crossentropy_forward
+    // int V  = C;
+    // int Vp = C;
+    // if (cid == 0) {
+    //     losses       = (float*)snrt_l1alloc(B * T         * sizeof(float));
+    //     probs        = (float*)snrt_l1alloc(B * T  * Vp   * sizeof(float));
+    //     targets      = (int  *)snrt_l1alloc(B * T         * sizeof(int));
+    //     snrt_dma_start_1d(probs  , data1_dram, B * T * Vp * sizeof(float));
+    //     snrt_dma_start_1d(targets, inp_dram  , B * T      * sizeof(int));
+    //     snrt_dma_wait_all();
+    // }
+    // snrt_cluster_hw_barrier();
+    // timer = benchmark_get_cycle();
+    // start_kernel();    
     // crossentropy_forward(losses, probs, targets, B, T, C);
+    // stop_kernel();
+    // if(cid == 0){
+    //     printf("CHECK RESULTS1\n");
+    //     check_result(losses      , lossesG    , B * T);   
+    // }
+    //---------------------------------------------------------
+
+    //--------------------------------------------------------- crossentropy_softmax_backward
+    // int V  = C;
+    // int Vp = C;
+    // if (cid == 0) {
+    //     dlosses     = (float*)snrt_l1alloc(B * T  * sizeof(float));
+    //     dlogits     = (float*)snrt_l1alloc(B * T  * Vp   * sizeof(float));
+    //     probs       = (float*)snrt_l1alloc(B * T  * Vp   * sizeof(float));
+    //     targets     = (int  *)snrt_l1alloc(B * T  * sizeof(int));
+    //     snrt_dma_start_1d(dlosses, data1_dram, B * T * sizeof(float));
+    //     snrt_dma_start_1d(dlogits, data1_dram, B * T * Vp * sizeof(float));
+    //     snrt_dma_start_1d(probs  , data1_dram, B * T * Vp * sizeof(float));
+    //     snrt_dma_start_1d(targets, inp_dram  , B * T * sizeof(float));
+    //     snrt_dma_wait_all();
+    // }
+    // snrt_cluster_hw_barrier();
+    // timer = benchmark_get_cycle();
+    // start_kernel();
     // crossentropy_softmax_backward(dlogits, dlosses, probs, targets, B, T, V, Vp, vl);
-    
+    // stop_kernel();
+    // if(cid == 0){
+    //     printf("CHECK RESULTS1\n");
+    //     check_result(dlogits      , dlogitsG    , B * T * Vp);   
+    // }
+    //---------------------------------------------------------
+
+    //--------------------------------------------------------- fast_exp
+    // if (cid == 0) {
+    //     inp       = (float*)snrt_l1alloc(B * T * C * sizeof(float));
+    //     out       = (float*)snrt_l1alloc(B * T * C * sizeof(float));
+    //     snrt_dma_start_1d(inp    , data1_dram, B * T * C * sizeof(float));
+    //     snrt_dma_wait_all();
+    // }
+    // snrt_cluster_hw_barrier();
+    // start_kernel();    
     // for (int i = 0; i < ((B*T*C)/VLMAX); i++){
     //     fast_exp(inp+i*VLMAX, out+i*VLMAX, 1, 0, 8, VLMAX, vl);
     // }
-    
+    // stop_kernel();
+    // if(cid == 0){
+    //     printf("CHECK RESULTS1\n");
+    //     check_result(out      , outG    , B * T * C);   
+    // }
+    //---------------------------------------------------------
+
+    //--------------------------------------------------------- fast_cosh
+    // if (cid == 0) {
+    //     inp       = (float*)snrt_l1alloc(B * T * C * sizeof(float));
+    //     out       = (float*)snrt_l1alloc(B * T * C * sizeof(float));
+    //     snrt_dma_start_1d(inp    , data1_dram, B * T * C * sizeof(float));
+    //     snrt_dma_wait_all();
+    // }
+    // snrt_cluster_hw_barrier();
+    // start_kernel();    
     // for (int i = 0; i < ((B*T*C)/(VLMAX/2)); i++){
     //     fast_cosh(inp+i*(VLMAX/2), out+i*(VLMAX/2), temp , (VLMAX/2), vl);
     // }
+    // stop_kernel();
+    // if(cid == 0){
+    //     printf("CHECK RESULTS1\n");
+    //     check_result(out      , outG    , B * T * C);   
+    // }
+    //---------------------------------------------------------
 
+    //--------------------------------------------------------- fast_tanh
+    // if (cid == 0) {
+    //     inp       = (float*)snrt_l1alloc(B * T * C * sizeof(float));
+    //     out       = (float*)snrt_l1alloc(B * T * C * sizeof(float));
+    //     snrt_dma_start_1d(inp    , data1_dram, B * T * C * sizeof(float));
+    //     snrt_dma_wait_all();
+    // }
+    // snrt_cluster_hw_barrier();
+    // start_kernel();    
     // for (int i = 0; i < ((B*T*C)/(VLMAX/2)); i++){
     //     fast_tanh(inp+i*(VLMAX/2), out+i*(VLMAX/2), temp , (VLMAX/2), vl);
     // }   
+    // stop_kernel();
+    // if(cid == 0){
+    //     printf("CHECK RESULTS1\n");
+    //     check_result(out      , outG    , B * T * C);   
+    // }
+    //---------------------------------------------------------
 
-    // End dump
-    stop_kernel();
-
-    if(cid == 0){
-
-        printf("CHECK RESULTS1\n");
-        check_result(dinp   , dinpG   , B * T * C);
-        // check_result(dinp   , dinpG   , VLMAX);
-        // printf("CHECK RESULTS2\n");
-        // check_result(preatt  , preattG   , B * T * C);
-        // printf("CHECK RESULTS3\n");
-        // check_result(att   , attG   , B * T * C);
-
-    }
 
     // End timer and check if new best runtime
     if (cid == 0)
         timer = benchmark_get_cycle() - timer;
 
     snrt_cluster_hw_barrier();
-
+    // Display runtime
+    if (cid == 0) {
+        printf("The execution took %u cycles.\n", timer);
+    }
     return errors;
 
 }

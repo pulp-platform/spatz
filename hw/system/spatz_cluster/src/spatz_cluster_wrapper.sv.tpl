@@ -148,12 +148,18 @@ package ${cfg['pkg_name']};
                        fpnew_pkg::MERGED,
                        fpnew_pkg::MERGED,
                        fpnew_pkg::MERGED},  // FMA
-                    '{fpnew_pkg::MERGED,
-                        fpnew_pkg::MERGED,
-                        fpnew_pkg::MERGED,
-                        fpnew_pkg::MERGED,
-                        fpnew_pkg::MERGED,
-                        fpnew_pkg::MERGED}, // DIVSQRT
+                    '{fpnew_pkg::DISABLED,
+                        fpnew_pkg::DISABLED,
+                        fpnew_pkg::DISABLED,
+                        fpnew_pkg::DISABLED,
+                        fpnew_pkg::DISABLED,
+                        fpnew_pkg::DISABLED}, // DIVSQRT
+//                    '{fpnew_pkg::MERGED,
+//                        fpnew_pkg::MERGED,
+//                        fpnew_pkg::MERGED,
+//                        fpnew_pkg::MERGED,
+//                        fpnew_pkg::MERGED,
+//                        fpnew_pkg::MERGED}, // DIVSQRT                        
                     '{fpnew_pkg::PARALLEL,
                         fpnew_pkg::PARALLEL,
                         fpnew_pkg::PARALLEL,

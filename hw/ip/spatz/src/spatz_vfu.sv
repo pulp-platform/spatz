@@ -10,6 +10,7 @@
 
 module spatz_vfu
   import spatz_pkg::*;
+  import fpu0_cfg_pkg::*;
   import rvv_pkg::*;
   import cf_math_pkg::idx_width;
   import fpnew_pkg::*; #(
@@ -1015,9 +1016,14 @@ module spatz_vfu
       assign int_fpu_in_ready = !fpu_in_valid_q || fpu_in_valid_q && fpu_in_ready_d;
       assign fpu_load_ready[fpu] = int_fpu_in_valid && int_fpu_in_ready;
       
+      // fpu_implementation_t FPUImplementation0 = FPUImplementation;
+      // assign FPUImplementation0.UnitTypes[1] = '{fpnew_pkg::MERGED,fpnew_pkg::MERGED,fpnew_pkg::MERGED,
+      //                                     fpnew_pkg::MERGED,fpnew_pkg::MERGED,fpnew_pkg::MERGED};
+      
       fpnew_top #(
         .Features                   (FPUFeatures           ),
-        .Implementation             (FPUImplementation     ),
+        .Implementation             ((fpu == 0)?FPUImplementation0:FPUImplementation),
+        // .Implementation             (FPUImplementation),
         .TagType                    (vfu_tag_t             ),
         .StochasticRndImplementation(fpnew_pkg::DEFAULT_RSR)
       ) i_fpu (

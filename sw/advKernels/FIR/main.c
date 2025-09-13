@@ -105,6 +105,123 @@ void FIR (float *Signal, float *Filter, float *Output,int FilterLength, int Inpu
   }
 }
 
+void FIR_v2 (float *Signal, float *Filter, float *Output,int FilterLength, int InputLength, unsigned int vl){
+
+  asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(FilterLength));//VLMAX = LMUL*VLEN/SEW =128
+  asm volatile("vle32.v v0, (%0)" :: "r"(Filter));
+  for (int i = 0; i < InputLength-FilterLength; i++){
+    asm volatile("vle32.v v8, (%0)" :: "r"(Signal + i));
+    asm volatile("vfmul.vv v16, v8, v0");
+    asm volatile("vfredsum.vs v24, v16, v31");
+    asm volatile("vfmv.f.s %0, v24" : "=f"(Output[i]));
+  }
+}
+
+void FIR_v3 (float *Signal, float *Filter, float *Output,int FilterLength, int InputLength, unsigned int vl){
+
+  asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(FilterLength));//VLMAX = LMUL*VLEN/SEW =128
+  asm volatile("vle32.v v0, (%0)" :: "r"(Filter));
+  asm volatile("vle32.v v8, (%0)" :: "r"(Signal));
+  for (int i = 0; i < InputLength-FilterLength-1; i++){
+    asm volatile("vfmul.vv v16, v8, v0");
+    asm volatile("vle32.v v8, (%0)" :: "r"(Signal+i+1));
+    asm volatile("vfredsum.vs v24, v16, v31");
+    asm volatile("vfmv.f.s %0, v24" : "=f"(Output[i]));
+  }
+  asm volatile("vfmul.vv v16, v8, v0");
+  asm volatile("vfredsum.vs v24, v16, v31");
+  asm volatile("vfmv.f.s %0, v24" : "=f"(Output[InputLength-FilterLength-1]));
+}
+
+void FIR_v4 (float *Signal, float *Filter, float *Output,int FilterLength, int InputLength, unsigned int vl){
+    int itr = 0;
+    int num_elements = InputLength-FilterLength;
+    int VLMAX = 128;
+    
+    asm volatile("vsetvli  %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(VLMAX));
+    while(itr*VLMAX + VLMAX <= num_elements){
+      for (int i = 0; i < FilterLength; i++){
+        asm volatile("vle32.v v0, (%0)" :: "r"(Signal+itr*VLMAX+i));
+        float f = Filter[FilterLength-i-1];
+        // snrt_cluster_hw_barrier();
+        if(i == 0){
+          asm volatile("vfmul.vf  v8, v0, %0" ::"f"(f));
+        }else{
+          asm volatile("vfmacc.vf v8, %0, v0" ::"f"(f));
+        }
+      }
+      asm volatile("vse32.v v8, (%0)" :: "r"(Output+itr*VLMAX));
+      itr++;
+    }
+    if(itr*VLMAX < num_elements){
+      asm volatile("vsetvli  %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(num_elements - itr*VLMAX));
+      for (int i = 0; i < FilterLength; i++){
+
+        asm volatile("vle32.v v0, (%0)" :: "r"(Signal+itr*VLMAX+i));  
+        float f = Filter[FilterLength-i-1];
+        // snrt_cluster_hw_barrier();
+        if(i == 0){
+          asm volatile("vfmul.vf  v8, v0, %0" ::"f"(f));
+        }else{
+          asm volatile("vfmacc.vf v8, %0, v0" ::"f"(f));
+        }
+      }
+      asm volatile("vse32.v v8, (%0)" :: "r"(Output+itr*VLMAX));
+    }
+}
+
+
+
+
+void FIR_v5 (float *Signal, float *Filter, float *Output,int FilterLength, int InputLength, unsigned int vl){
+    int itr = 0;
+    int num_elements = InputLength-FilterLength;
+    int VLMAX = 128;
+    float zero = 0;
+    asm volatile("vsetvli  %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(VLMAX));
+    while(itr*VLMAX + VLMAX <= num_elements){
+      asm volatile("vfsub.vv v8, v8, v8");
+      asm volatile("vfsub.vv v24, v24, v24");      
+      for (int i = 0; i < FilterLength; i+=2){
+        asm volatile("vle32.v v0, (%0)" :: "r"(Signal+itr*VLMAX+i));
+        float temp = Signal[(itr+1)*VLMAX+i];
+        asm volatile("vfslide1down.vf v16, v0, %[A]" ::[A] "f"(temp));
+        float f1 = Filter[FilterLength-i-1];
+        float f2 = Filter[FilterLength-(i+1)-1];
+        asm volatile("vfmacc.vf v8 , %0, v0 " ::"f"(f1));
+        asm volatile("vfmacc.vf v24, %0, v16" ::"f"(f2));
+      }
+      asm volatile("vfadd.vv v8, v24, v8");
+
+      asm volatile("vse32.v v8, (%0)" :: "r"(Output+itr*VLMAX));
+      itr++;
+    }
+    if(itr*VLMAX < num_elements){
+      asm volatile("vsetvli  %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(num_elements - itr*VLMAX));
+      asm volatile("vfsub.vv v8, v8, v8");
+      asm volatile("vfsub.vv v24, v24, v24");      
+      for (int i = 0; i < FilterLength; i+=2){
+        asm volatile("vle32.v v0, (%0)" :: "r"(Signal+itr*VLMAX+i));
+        // float temp = Signal[itr*VLMAX+FilterLength + i];
+        float temp = Signal[num_elements + i];
+        // float temp = 0;
+        asm volatile("vfslide1down.vf v16, v0, %[A]" ::[A] "f"(temp));
+        float f1 = Filter[FilterLength-i-1];
+        float f2 = Filter[FilterLength-(i+1)-1];
+        asm volatile("vfmacc.vf v8 , %0, v0 " ::"f"(f1));
+        asm volatile("vfmacc.vf v24, %0, v16" ::"f"(f2));
+      }
+      asm volatile("vfadd.vv v8, v24, v8");
+
+      asm volatile("vse32.v v8, (%0)" :: "r"(Output+itr*VLMAX));
+    }
+}
+
+
+
+
+
+
 int main() {
 
     volatile int errors = 0;
@@ -122,14 +239,11 @@ int main() {
     // Core 0 programs DMA transfer of inputs
     if (cid == 0) {
         input = (float   *)snrt_l1alloc(LENGTH * sizeof(float));
-        printf("input address = %x\t size = %x\n",input,LENGTH*sizeof(float));
         snrt_dma_start_1d(input, UnitImpulse_dram, LENGTH * sizeof(float));
 
         output = (float   *)snrt_l1alloc((LENGTH-ORDER) * sizeof(float));
-        printf("output address = %x\t size = %x\n",output,(LENGTH-ORDER)*sizeof(float));
 
         Filter = (float   *)snrt_l1alloc(ORDER * sizeof(float));
-        printf("Filter address = %x\t size = %x\n",Filter,(ORDER)*sizeof(float));
         snrt_dma_start_1d(Filter, Filter_dram, ORDER * sizeof(float));
 
 
@@ -159,13 +273,25 @@ int main() {
     
     // Start dump
     start_kernel();
-    printf("FIR Start\n");
 
-    FIR (input, Filter, output, ORDER, LENGTH, vl);
-
-    printf("FIR Done\n");
+    // FIR (input, Filter, output, ORDER, LENGTH, vl);
+    // FIR_v2 (input, Filter, output, ORDER, LENGTH, vl);
+    // FIR_v3 (input, Filter, output, ORDER, LENGTH, vl);
+    // FIR_v4 (input, Filter, output, ORDER, LENGTH, vl);
+    FIR_v5 (input, Filter, output, ORDER, LENGTH, vl);
+    
     // End dump
     stop_kernel();
+
+    // End timer and check if new best runtime
+    if (cid == 0)
+        timer = benchmark_get_cycle() - timer;
+
+    snrt_cluster_hw_barrier();
+    // Display runtime
+    if (cid == 0) {
+        printf("The execution took %u cycles.\n", timer);
+    }
 
     check_result(output,LENGTH-ORDER);
 

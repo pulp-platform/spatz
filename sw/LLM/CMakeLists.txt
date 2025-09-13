@@ -45,4 +45,5 @@ enable_testing()
 set(SNITCH_TEST_PREFIX LLMTests-)
 
 #WUS
-add_snitch_test(train_gpt2 train_gpt2/main.c)
+add_snitch_test(train_gpt2-FP32 train_gpt2-FP32/main.c)
+add_snitch_test(train_gpt2-FP16 train_gpt2-FP16/main.c)
