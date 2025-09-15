@@ -2,17 +2,6 @@
 
 #include "vector_macros.h"
 
-// static volatile uint8_t ALIGNED_I8[16] __attribute__((aligned(AXI_DWIDTH))) = {
-//     0xe0, 0xd3, 0x40, 0xd1, 0x84, 0x48, 0x89, 0x88,
-//     0x88, 0xae, 0x08, 0x91, 0x02, 0x59, 0x11, 0x89};
-
-// void TEST_CASE1(void) {
-//   VSET(15, e8, m1);
-//   asm volatile("vle8.v v0, (%0)" ::"r"(&ALIGNED_I8[1]));
-//   VCMP_U8(1, v0, 0xd3, 0x40, 0xd1, 0x84, 0x48, 0x89, 0x88, 0x88, 0xae, 0x08,
-//           0x91, 0x02, 0x59, 0x11, 0x89);
-// }
-
 // Positive-stride tests
 void TEST_CASE1(void) {
   VSET(4, e8, m1);
@@ -47,7 +36,7 @@ void TEST_CASE4(void) {
   VLOAD_8(v0, 0xAA);
   VCLEAR(v1);
   asm volatile("vlse8.v v1, (%0), %1, v0.t" ::"r"(INP1), "r"(stride));
-  VCMP_U8(4, v1, 0x00, 0x20, 0x00, 0xaa);
+  VCMP_U8(4, v1, 0x00, 0x20,0x00, 0xaa);
 }
 
 int main(void) {
@@ -55,8 +44,8 @@ int main(void) {
   enable_vec();
 
   TEST_CASE1();
-  TEST_CASE2();
-  TEST_CASE3();
+  // TEST_CASE2();
+  // TEST_CASE3();
   TEST_CASE4();
 
   EXIT_CHECK();

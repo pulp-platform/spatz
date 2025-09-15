@@ -306,6 +306,7 @@ module spatz_vlsu
     vlen_t vstart;
     logic [2:0] rs1;
 
+    logic vm; // CMY: if it is a maskede memory instruction
     logic is_load;
     logic is_strided;
     logic is_indexed;
@@ -344,6 +345,7 @@ module spatz_vlsu
       vl        : mem_spatz_req.vl,
       vstart    : mem_spatz_req.vstart,
       rs1       : mem_spatz_req.rs1[2:0],
+      vm        : mem_spatz_req.op_mem.vm,
       is_load   : mem_spatz_req.op_mem.is_load,
       is_strided: mem_is_strided,
       is_indexed: mem_is_indexed
@@ -745,8 +747,8 @@ module spatz_vlsu
 
     unique case (state_q)
       VLSU_RunningLoad: begin
-        if(mem_spatz_req_valid && !mem_spatz_req.op_mem.vm && !v0_t_read_done)
-        // if(commit_insn_valid && !commit_insn_q.op_mem.vm && !v0_t_read_done)
+        // if(mem_spatz_req_valid && !mem_spatz_req.op_mem.vm && !v0_t_read_done)
+        if(commit_insn_valid && !commit_insn_q.vm && !v0_t_read_done)
           state_d = VLSU_ReadingV0_t;
         if (commit_insn_valid && !commit_insn_q.is_load)
           if (&rob_empty)
@@ -757,13 +759,15 @@ module spatz_vlsu
         if(/*v0_t_is_ready*/v0_t_is_ready & ~v0_t_is_ready_q) begin
           state_d = VLSU_RunningLoad;
           if (commit_insn_valid && !commit_insn_q.is_load)
-            if (&rob_empty)
+            // if (&rob_empty) // CMY: we don't need to wait rob_empty because read_v0_t doesn't go through rob.
             state_d = VLSU_RunningStore;
           // else state_d = VLSU_RunningLoad;
         end
         else state_d = state_q;
 
       VLSU_RunningStore: begin
+        if(commit_insn_valid && !commit_insn_q.vm && !v0_t_read_done)
+          state_d = VLSU_ReadingV0_t;
         if (commit_insn_valid && commit_insn_q.is_load)
           if (&rob_empty)
             state_d = VLSU_RunningLoad;
@@ -809,7 +813,8 @@ module spatz_vlsu
   // CMY: generate masking based on V0.t-----------------------------------
   vrf_data_t vm_masking;
   always_comb begin
-    if(!mem_spatz_req.op_mem.vm) begin
+    // if(!mem_spatz_req.op_mem.vm) begin
+    if(!commit_insn_q.vm) begin
       case (commit_insn_q.vsew)
         EW_8:for(int i=0;i<VLENB;i=i+1)begin
           // vm_masking[i*1+:1] = {1{operand_v0_t_q[/*vreg_wb_word_cnt_q *32 +*/ i]}};
@@ -832,6 +837,7 @@ module spatz_vlsu
 
   vlen_t commit_counter_sum,mem_counter_sum;
   logic [$bits(vlen_t)-5:0] commit_counter_mod32,mem_counter_mod32;
+  vlen_t [NrMemPorts-1:0] prefix,mem_counter_position_sum; 
   always_comb begin
      commit_counter_sum = '0;
      mem_counter_sum = '0;
@@ -847,7 +853,15 @@ module spatz_vlsu
 
   vrf_be_t       load_wbe; // CMY: intermediate wbe, before vm_masking.
   vrf_be_t       vm_wbe; // CMY: monitor the vm_wbe selected from vm_masking
+  logic [NrMemPorts-1:0][ELEN/8-1:0] vm_wbe_store; // CMY: select 8-bit masking for each port, before reordering according to rs1
   logic [NrMemPorts-1:0][ELEN/8-1:0] store_strb; // CMY: intermediate strb, before vm_masking.
+  logic [NrMemPorts-1:0][ELEN/8-1:0] vm_strb; // CMY: to monitor the vm_masking on each port.
+
+  always_comb begin
+    for (int port = 0; port < NrMemPorts; port++) begin
+      vm_wbe_store[port] = vm_masking[mem_counter_mod32*32 + port*ELENB +: ELENB];
+    end
+  end 
   // -----------------------------------------------
 
   // verilator lint_off LATCH
@@ -999,13 +1013,14 @@ module spatz_vlsu
       end
 
       for (int unsigned port = 0; port < NrMemPorts; port++) begin
+        vm_strb[port] = vm_wbe_store[port];
         // Read element from buffer and execute memory request
         if (mem_operation_valid[port]) begin
           automatic logic [63:0] data = rob_rdata[port];
 
           // Shift data to lsb if we have a strided or indexed memory access
           if (mem_is_strided || mem_is_indexed)
-            if (MAXEW == EW_32)
+            if (MAXEW == EW_32) // MAXEW_32 doesn't support masking
               unique case (mem_counter_q[port][1:0])
                 2'b01: data = {data[7:0], data[31:8]};
                 2'b10: data = {data[15:0], data[31:16]};
@@ -1013,15 +1028,36 @@ module spatz_vlsu
                 default:; // Do nothing
               endcase
             else
-              unique case (mem_counter_q[port][2:0])
-                3'b001: data = {data[7:0], data[63:8]};
-                3'b010: data = {data[15:0], data[63:16]};
-                3'b011: data = {data[23:0], data[63:24]};
-                3'b100: data = {data[31:0], data[63:32]};
-                3'b101: data = {data[39:0], data[63:40]};
-                3'b110: data = {data[47:0], data[63:48]};
-                3'b111: data = {data[55:0], data[63:56]};
-                default:; // Do nothing
+              unique case (mem_counter_q[port][2:0]) // CMY: shift vm_masking along with data
+                3'b001: begin
+                  data = {data[7:0], data[63:8]};
+                  vm_strb[port] = {vm_wbe_store[port][0],vm_wbe_store[port][7:1]};
+                end
+                3'b010: begin
+                  data = {data[15:0], data[63:16]};
+                  vm_strb[port] = {vm_wbe_store[port][1:0],vm_wbe_store[port][7:2]};
+                end
+                3'b011: begin
+                  data = {data[23:0], data[63:24]};
+                  vm_strb[port] = {vm_wbe_store[port][2:0],vm_wbe_store[port][7:3]};
+                end
+                3'b100: begin
+                  data = {data[31:0], data[63:32]};
+                  vm_strb[port] = {vm_wbe_store[port][3:0],vm_wbe_store[port][7:4]};
+                end
+                3'b101: begin
+                  data = {data[39:0], data[63:40]};
+                  vm_strb[port] = {vm_wbe_store[port][4:0],vm_wbe_store[port][7:5]};
+                end
+                3'b110: begin
+                  data = {data[47:0], data[63:48]};
+                  vm_strb[port] = {vm_wbe_store[port][5:0],vm_wbe_store[port][7:6]};
+                end
+                3'b111: begin
+                  data = {data[55:0], data[63:56]};
+                  vm_strb[port] = {vm_wbe_store[port][6:0],vm_wbe_store[port][7]};
+                end
+                default: vm_strb[port] = vm_wbe_store[port]; // Do nothing
               endcase
 
           // Shift data to correct position if we have an unaligned memory request
@@ -1034,14 +1070,38 @@ module spatz_vlsu
             endcase
           else
             unique case ((mem_is_strided || mem_is_indexed) ? mem_req_addr_offset[port] : mem_spatz_req.rs1[2:0])
-              3'b001: mem_req_data[port]  = {data[55:0], data[63:56]};
-              3'b010: mem_req_data[port]  = {data[47:0], data[63:48]};
-              3'b011: mem_req_data[port]  = {data[39:0], data[63:40]};
-              3'b100: mem_req_data[port]  = {data[31:0], data[63:32]};
-              3'b101: mem_req_data[port]  = {data[23:0], data[63:24]};
-              3'b110: mem_req_data[port]  = {data[15:0], data[63:16]};
-              3'b111: mem_req_data[port]  = {data[7:0], data[63:8]};
-              default: mem_req_data[port] = data;
+              3'b001: begin
+                mem_req_data[port]  = {data[55:0], data[63:56]}; // CMY: reoreder vm_masking along with data
+                vm_strb[port] = {vm_strb[port][6:0],vm_strb[port][7]};
+              end
+              3'b010: begin
+                mem_req_data[port]  = {data[47:0], data[63:48]};
+                vm_strb[port] = {vm_strb[port][5:0],vm_strb[port][7:6]};
+              end
+              3'b011: begin
+                mem_req_data[port]  = {data[39:0], data[63:40]};
+                vm_strb[port] = {vm_strb[port][4:0],vm_strb[port][7:5]};
+              end
+              3'b100: begin
+                mem_req_data[port]  = {data[31:0], data[63:32]};
+                vm_strb[port] = {vm_strb[port][3:0],vm_strb[port][7:4]};
+              end
+              3'b101: begin
+                mem_req_data[port]  = {data[23:0], data[63:24]};
+                vm_strb[port] = {vm_strb[port][2:0],vm_strb[port][7:3]};
+              end
+              3'b110: begin
+                mem_req_data[port]  = {data[15:0], data[63:16]};
+                vm_strb[port] = {vm_strb[port][1:0],vm_strb[port][7:2]};
+              end
+              3'b111: begin
+                mem_req_data[port]  = {data[7:0], data[63:8]};
+                vm_strb[port] = {vm_strb[port][0],vm_strb[port][7:1]};
+              end
+              default: begin
+                mem_req_data[port] = data;
+                vm_strb[port] = vm_strb[port];
+              end
             endcase
 
           mem_req_svalid[port] = (state_d == VLSU_RunningStore)? rob_rvalid[port] && (!mem_is_indexed || (vrf_rvalid_i[1] && !pending_index[port])) && !mem_spatz_req.op_mem.is_load : 0; //CMY: added state_d judgement
@@ -1059,15 +1119,20 @@ module spatz_vlsu
               EW_32: mask   = 15;
               default: mask = '1;
             endcase
-            mem_req_strb[port] = mask << shift;
-            // store_strb[port] = mask << shift;
-            // mem_req_strb[port] = ((mask) & vm_masking[mem_counter_mod32*32 + mem_counter_q[port]]) << shift;
-          end else
+            // mem_req_strb[port] = mask << shift;
+            store_strb[port] = mask << shift;
+            // mem_req_strb[port] = ((mask) & vm_masking[mem_counter_mod32*32 + port*ELENB +: ELENB]) << shift;
+            // vm_strb[port] = vm_masking[mem_counter_mod32*32 + port*ELENB +: ELENB] << shift;
+            mem_req_strb[port] = store_strb[port] & vm_strb[port];
+            // mem_req_strb[port] = store_strb[port] & vm_masking[mem_counter_mod32*32 + port*ELENB +: ELENB];
+          end 
+          else begin
             for (int unsigned k = 0; k < ELENB; k++) begin
-              mem_req_strb[port][k] = k < mem_counter_delta[port];
-              // store_strb[port][k] = k < mem_counter_delta[port];
+              // mem_req_strb[port][k] = k < mem_counter_delta[port];
+              store_strb[port][k] = k < mem_counter_delta[port];
             end
-            // mem_req_strb[port] = store_strb[port] & vm_masking[mem_counter_mod32*32 + port*ELEN +: ELEN];
+            mem_req_strb[port] = store_strb[port] & vm_masking[mem_counter_mod32*32 + port*ELENB +: ELENB];
+          end
         end else begin
           // Clear empty buffer id requests
           if (!rob_empty[port])

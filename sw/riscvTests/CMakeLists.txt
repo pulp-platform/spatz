@@ -142,4 +142,11 @@ add_snitch_test(vmxor isa/rv64uv/vmxor.c)
 # CMY: Load/Store instructions
 add_snitch_test(vle8 isa/rv64uv/vle8.c)
 add_snitch_test(vle16 isa/rv64uv/vle16.c)
-#add_snitch_test(vle64 isa/rv64uv/vle64.c) # on fixing
+add_snitch_test(vle32 isa/rv64uv/vle32.c) # on fixing
+add_snitch_test(vle64 isa/rv64uv/vle64.c)
+add_snitch_test(vluxei isa/rv64uv/vluxei.c) # not supported by the original design.
+add_snitch_test(vse8 isa/rv64uv/vse8.c)
+add_snitch_test(vse16 isa/rv64uv/vse16.c)
+add_snitch_test(vse32 isa/rv64uv/vse32.c)
+add_snitch_test(vse64 isa/rv64uv/vse64.c)
+add_snitch_test(vss isa/rv64uv/vss.c) # on fixing
