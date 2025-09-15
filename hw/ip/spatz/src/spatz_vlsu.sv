@@ -837,7 +837,7 @@ module spatz_vlsu
 
   vlen_t commit_counter_sum,mem_counter_sum;
   logic [$bits(vlen_t)-5:0] commit_counter_mod32,mem_counter_mod32;
-  vlen_t [NrMemPorts-1:0] prefix,mem_counter_position_sum; 
+  vlen_t [NrMemPorts-1:0] prefix,mem_counter_position_sum;
   always_comb begin
      commit_counter_sum = '0;
      mem_counter_sum = '0;
@@ -861,7 +861,7 @@ module spatz_vlsu
     for (int port = 0; port < NrMemPorts; port++) begin
       vm_wbe_store[port] = vm_masking[mem_counter_mod32*32 + port*ELENB +: ELENB];
     end
-  end 
+  end
   // -----------------------------------------------
 
   // verilator lint_off LATCH
@@ -1125,7 +1125,7 @@ module spatz_vlsu
             // vm_strb[port] = vm_masking[mem_counter_mod32*32 + port*ELENB +: ELENB] << shift;
             mem_req_strb[port] = store_strb[port] & vm_strb[port];
             // mem_req_strb[port] = store_strb[port] & vm_masking[mem_counter_mod32*32 + port*ELENB +: ELENB];
-          end 
+          end
           else begin
             for (int unsigned k = 0; k < ELENB; k++) begin
               // mem_req_strb[port][k] = k < mem_counter_delta[port];
