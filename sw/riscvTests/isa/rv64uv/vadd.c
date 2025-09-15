@@ -187,16 +187,51 @@ void TEST_CASE6(void) {
 #endif
 }
 
+void TEST_CASE7(void) {
+  const uint32_t scalar = 5;
+
+  VSET(16, e8, m8);
+  VLOAD_8(v8, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
+  VLOAD_8(v0, 0xAA, 0xAB);
+  VCLEAR(v24);
+  asm volatile("vadd.vx v24, v8, %[A], v0.t" ::[A] "r"(scalar));
+  VCMP_U8(21, v24, 0, 7, 0, 9, 0, 11, 0, 13, 6, 7, 0, 9, 0, 11, 0, 13);
+
+  VSET(16, e16, m8);
+  VLOAD_16(v8, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
+  VLOAD_8(v0, 0xAA, 0xAB);
+  VCLEAR(v24);
+  asm volatile("vadd.vx v24, v8, %[A], v0.t" ::[A] "r"(scalar));
+  VCMP_U16(22, v24, 0, 7, 0, 9, 0, 11, 0, 13, 6, 7, 0, 9, 0, 11, 0, 13);
+
+  VSET(16, e32, m8);
+  VLOAD_32(v8, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
+  VLOAD_8(v0, 0xAA, 0xAB);
+  VCLEAR(v24);
+  asm volatile("vadd.vx v24, v8, %[A], v0.t" ::[A] "r"(scalar));
+  VCMP_U32(23, v24, 0, 7, 0, 9, 0, 11, 0, 13, 6, 7, 0, 9, 0, 11, 0, 13);
+
+#if ELEN == 64
+  VSET(16, e64, m8);
+  VLOAD_64(v8, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
+  VLOAD_8(v0, 0xAA, 0xAB);
+  VCLEAR(v24);
+  asm volatile("vadd.vx v24, v8, %[A], v0.t" ::[A] "r"(scalar));
+  VCMP_U64(24, v24, 0, 7, 0, 9, 0, 11, 0, 13, 6, 7, 0, 9, 0, 11, 0, 13);
+#endif
+}
+
 int main(void) {
   INIT_CHECK();
   enable_vec();
 
-  // TEST_CASE1();
+  TEST_CASE1();
   TEST_CASE2();
-  // TEST_CASE3();
-  // TEST_CASE4();
-  // TEST_CASE5();
-  // TEST_CASE6();
+  TEST_CASE3();
+  TEST_CASE4();
+  TEST_CASE5();
+  TEST_CASE6();
+  TEST_CASE7();
 
   EXIT_CHECK(); 
 }
