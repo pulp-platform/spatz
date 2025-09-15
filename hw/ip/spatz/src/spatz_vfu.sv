@@ -444,9 +444,11 @@ module spatz_vfu
   // CMY:an FSM to manage operands between normal calculation and v0.t fetching-----------------
 
   logic v0_t_is_ready;
-  assign v0_t_is_ready   = /*spatz_req_valid &&*/ (operand_state_q == READ_V0_t) && vrf_rvalid_i[0];
+  assign v0_t_is_ready   = (operand_state_q == READ_V0_t) && vrf_rvalid_i[0];
   logic v0_t_read_done;
-  `FFL(v0_t_read_done,1'b1,v0_t_is_ready,'0);
+  // `FFL(v0_t_read_done,1'b1,v0_t_is_ready,'0);
+  `FFLARNC(v0_t_read_done,1'b1,v0_t_is_ready,vfu_rsp_valid_o,1'b0,clk_i,rst_ni);
+
   always_comb begin: operand_selection
     operand_state_d = operand_state_q;
     // if(spatz_req_valid) begin
