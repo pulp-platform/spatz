@@ -85,6 +85,9 @@ add_snitch_test(vslide1up   isa/rv64uv/vslide1up.c)
 add_snitch_test(vslideup    isa/rv64uv/vslideup.c)
 add_snitch_test(vslide1down isa/rv64uv/vslide1down.c)
 add_snitch_test(vslidedown  isa/rv64uv/vslidedown.c)
+#CMY: float slide
+add_snitch_test(vfslide1down  isa/rv64uv/vfslide1down.c)
+add_snitch_test(vfslide1up  isa/rv64uv/vfslide1up.c)
 
 add_snitch_test(vdiv  isa/rv64uv/vdiv.c)
 add_snitch_test(vdivu isa/rv64uv/vdivu.c)
@@ -150,3 +153,4 @@ add_snitch_test(vse16 isa/rv64uv/vse16.c)
 add_snitch_test(vse32 isa/rv64uv/vse32.c)
 add_snitch_test(vse64 isa/rv64uv/vse64.c)
 add_snitch_test(vss isa/rv64uv/vss.c) # on fixing
+

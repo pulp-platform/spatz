@@ -76,7 +76,7 @@ int main(void) {
   enable_vec();
 
   TEST_CASE1();
-  // TEST_CASE2();
+  TEST_CASE2();
 
   EXIT_CHECK();
 }
