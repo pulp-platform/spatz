@@ -45,15 +45,12 @@ void TEST_CASE1() {
 
 void TEST_CASE2() {
   VSET(32, e8, m8);
-  VLOAD_8(v0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+  VLOAD_8(v16, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
           20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32);
   VSET(16, e8, m8);
   VLOAD_8(v8, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1);
-  VSET(32, e8, m8);
-  VLOAD_8(v0, 0xAA, 0xAA,0x00,0x11,0x22,0x33,0x44,0x55,0x66,0x77,0x88,0x99, 0xaa,0xbb,0xcc,0xdd,
-    0xee,0xff,0x00,0x11,0x22,0x33,0x44,0x55,0x66,0x77,0x88,0x99, 0xaa,0xbb,0xcc,0xdd
-    );
-  asm volatile("vslidedown.vi v8, v0, 3, v0.t");
+  VLOAD_8(v0, 0xAA, 0xAA);
+  asm volatile("vslidedown.vi v8, v16, 3, v0.t");
   VCMP_U8(5, v8, -1, 5, -1, 7, -1, 9, -1, 11, -1, 13, -1, 15, -1, 17, -1, 19);
 
   VSET(32, e16, m8);
@@ -168,10 +165,10 @@ int main(void) {
   INIT_CHECK();
   enable_vec();
 
-  // TEST_CASE1();
+  TEST_CASE1();
   TEST_CASE2();
-  // TEST_CASE3();
-  // TEST_CASE4();
+  TEST_CASE3();
+  TEST_CASE4();
 
   EXIT_CHECK();
 }
