@@ -420,7 +420,7 @@ module spatz_vlsu
 
   vrf_addr_t vd_vreg_addr;
   vrf_addr_t vs2_vreg_addr;
-  vrf_addr_t v0_t_vreg_addr; // CMY
+  vrf_addr_t v0_t_vreg_addr_lo, v0_t_vreg_addr_hi;
 
   // Current element index and byte index that are being accessed at the register file
   vreg_elem_t vd_elem_id; // 256/64=4   [3:0]
@@ -479,9 +479,9 @@ module spatz_vlsu
   end: gen_mem_req_addr
 
   logic v0_t_is_ready;
-  assign v0_t_is_ready   = (state_q == VLSU_ReadingV0_t) && vrf_rvalid_i[1]; // reuse vrf_read[1] for V0 reading
-  logic [N_FU*ELEN-1:0]  operand_v0_t,operand_v0_t_q; // CMY: v0 should be read from vrf
-  assign operand_v0_t = (state_q == VLSU_ReadingV0_t)? vrf_rdata_i[1]:'0;
+  assign v0_t_is_ready   = (state_q == VLSU_ReadingV0_t) && (&vrf_rvalid_i); // reuse vrf_read[1] for V0 reading
+  logic [VLEN-1:0]  operand_v0_t,operand_v0_t_q; // CMY: v0 should be read from vrf
+  assign operand_v0_t = (state_q == VLSU_ReadingV0_t)? {vrf_rdata_i[1],vrf_rdata_i[0]}:'0;
 
   `FFL(operand_v0_t_q, operand_v0_t, v0_t_is_ready, '0) // CMY: backup v0.t
 
@@ -490,7 +490,8 @@ module spatz_vlsu
   always_comb begin : gen_vreg_addr
     vd_vreg_addr  = (commit_insn_q.vd << $clog2(NrWordsPerVector)) + $unsigned(vd_elem_id);
     vs2_vreg_addr = (mem_spatz_req.vs2 << $clog2(NrWordsPerVector)) + $unsigned(vs2_elem_id_q);
-    v0_t_vreg_addr =  0  << $clog2(NrWordsPerVector); // CMY: align prestart elements inside VLSU
+    v0_t_vreg_addr_lo =  0  << $clog2(NrWordsPerVector); // CMY: align prestart elements inside VLSU
+    v0_t_vreg_addr_hi =  1  << $clog2(NrWordsPerVector);
   end
 
   ///////////////
@@ -732,14 +733,6 @@ module spatz_vlsu
   logic v0_t_read_done;
   `FFLARNC(v0_t_read_done,1'b1,v0_t_is_ready,vlsu_rsp_valid_o,1'b0,clk_i,rst_ni);
   `FF(v0_t_is_ready_q,v0_t_is_ready,'0);
-  /*`define FFLARNC(__q, __d, __load, __clear, __reset_value, __clk, __arst_n) \
-  always_ff @(posedge (__clk) or negedge (__arst_n)) begin                 \
-    if (!__arst_n) begin                                                   \
-      __q <= (__reset_value);                                              \
-    end else begin                                                         \
-      __q <= (__clear) ? (__reset_value) : (__load) ? (__d) : (__q);       \
-    end                                                                    \
-  end*/
 
   always_comb begin: p_state
     // Maintain state
@@ -811,13 +804,11 @@ module spatz_vlsu
   end
 
   // CMY: generate masking based on V0.t-----------------------------------
-  vrf_data_t vm_masking;
+  logic [VLEN-1:0] vm_masking;
   always_comb begin
-    // if(!mem_spatz_req.op_mem.vm) begin
     if(!commit_insn_q.vm) begin
       case (commit_insn_q.vsew)
         EW_8:for(int i=0;i<VLENB;i=i+1)begin
-          // vm_masking[i*1+:1] = {1{operand_v0_t_q[/*vreg_wb_word_cnt_q *32 +*/ i]}};
           vm_masking[i*1+:1] = {1{operand_v0_t_q[i]}};
         end
         EW_16:for(int i=0;i<VLENB;i=i+1)begin
@@ -868,7 +859,7 @@ module spatz_vlsu
   always_comb begin
     load_wbe = '0;
 
-    vrf_raddr_o     = (state_q == VLSU_ReadingV0_t)? {v0_t_vreg_addr, vd_vreg_addr}:{vs2_vreg_addr, vd_vreg_addr}; // vs1 is not an operand of vle/vse
+    vrf_raddr_o     = (state_q == VLSU_ReadingV0_t)? {v0_t_vreg_addr_hi, v0_t_vreg_addr_lo}:{vs2_vreg_addr, vd_vreg_addr}; // vs1 is not an operand of vle/vse
     vrf_re_o        = '0;
     vrf_req_d       = '0;
     vrf_req_valid_d = 1'b0;
@@ -892,6 +883,8 @@ module spatz_vlsu
 
     // Request indexes
     vrf_re_o[1] = (state_q == VLSU_ReadingV0_t)? 1'b1:mem_is_indexed; // for indexed load/store we need to read vs2
+    if (state_q == VLSU_ReadingV0_t)
+      vrf_re_o[0] = 1'b1;
 
     // Count which vs2 element we should load (indexed loads)
     vs2_elem_id_d = vs2_elem_id_q;
