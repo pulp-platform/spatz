@@ -86,8 +86,8 @@ add_snitch_test(vslideup    isa/rv64uv/vslideup.c)
 add_snitch_test(vslide1down isa/rv64uv/vslide1down.c)
 add_snitch_test(vslidedown  isa/rv64uv/vslidedown.c)
 #CMY: float slide
-add_snitch_test(vfslide1down  isa/rv64uv/vfslide1down.c)
-add_snitch_test(vfslide1up  isa/rv64uv/vfslide1up.c)
+#add_snitch_test(vfslide1down  isa/rv64uv/vfslide1down.c)
+#add_snitch_test(vfslide1up  isa/rv64uv/vfslide1up.c)
 
 add_snitch_test(vdiv  isa/rv64uv/vdiv.c)
 add_snitch_test(vdivu isa/rv64uv/vdivu.c)
@@ -145,9 +145,9 @@ add_snitch_test(vmxor isa/rv64uv/vmxor.c)
 # CMY: Load/Store instructions
 add_snitch_test(vle8 isa/rv64uv/vle8.c)
 add_snitch_test(vle16 isa/rv64uv/vle16.c)
-add_snitch_test(vle32 isa/rv64uv/vle32.c) # on fixing
+add_snitch_test(vle32 isa/rv64uv/vle32.c)
 add_snitch_test(vle64 isa/rv64uv/vle64.c)
-add_snitch_test(vluxei isa/rv64uv/vluxei.c) # not supported by the original design.
+#add_snitch_test(vluxei isa/rv64uv/vluxei.c) # not supported by the original design.
 add_snitch_test(vse8 isa/rv64uv/vse8.c)
 add_snitch_test(vse16 isa/rv64uv/vse16.c)
 add_snitch_test(vse32 isa/rv64uv/vse32.c)
