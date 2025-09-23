@@ -806,6 +806,7 @@ module spatz_vlsu
   // CMY: generate masking based on V0.t-----------------------------------
   logic [VLEN-1:0] vm_masking;
   always_comb begin
+    vm_masking = '1; // to avoid latch
     if(!commit_insn_q.vm) begin
       case (commit_insn_q.vsew)
         EW_8:for(int i=0;i<VLENB;i=i+1)begin
@@ -823,7 +824,7 @@ module spatz_vlsu
         end
       endcase
     end
-    else vm_masking = '1;
+    // else vm_masking = '1;
   end
 
   vlen_t commit_counter_sum,mem_counter_sum;
