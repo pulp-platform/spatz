@@ -426,27 +426,31 @@ module spatz_vfu
 
   // Operands and result signals
   logic [N_FU*ELEN-1:0]  operand1, operand2, operand3;
-  logic [N_FU*ELEN-1:0]  operand_v0_t,operand_v0_t_q; // CMY: v0 should be read from vrf
+  logic [N_FU*ELEN-1:0]  operand_v0_t_lo,operand_v0_t_lo_q; // CMY: v0 should be read from vrf
+  logic [N_FU*ELEN-1:0]  operand_v0_t_hi,operand_v0_t_hi_q;
   logic [N_FU*ELENB-1:0] in_ready;
 
   //CMY: have we fetched the v0.t in reduction masking instructions.
   logic reduction_v0_t_is_ready;
-  assign reduction_v0_t_is_ready = (reduction_state_q == Reduction_Read_V0_t) && vrf_rvalid_i[0];
+  assign reduction_v0_t_is_ready = (reduction_state_q == Reduction_Read_V0_t) && vrf_rvalid_i[0] && vrf_rvalid_i[1];
   logic reduction_v0_t_read_done;
-  `FFL(reduction_v0_t_read_done,1'b1,reduction_v0_t_is_ready,'0);
+  `FFLARNC(reduction_v0_t_read_done,1'b1,reduction_v0_t_is_ready,vfu_rsp_valid_o,1'b0,clk_i,rst_ni);
   //----------------------------------------------------------------
 
   // CMY: back up v0.t for reduction instructions.-----------------------
-  logic [N_FU*ELEN-1:0]  reduction_operand_v0_t,reduction_operand_v0_t_q;
-  `FFL(reduction_operand_v0_t_q, reduction_operand_v0_t, reduction_v0_t_is_ready, '0)
+  logic [N_FU*ELEN-1:0]  reduction_operand_v0_t_lo,reduction_operand_v0_t_lo_q;
+  logic [N_FU*ELEN-1:0]  reduction_operand_v0_t_hi,reduction_operand_v0_t_hi_q;
+  `FFL(reduction_operand_v0_t_lo_q, reduction_operand_v0_t_lo, reduction_v0_t_is_ready, '0)
+  `FFL(reduction_operand_v0_t_hi_q, reduction_operand_v0_t_hi, reduction_v0_t_is_ready, '0)
+  logic [VLEN-1:0] reduction_operand_v0_t_q;
+  assign reduction_operand_v0_t_q = {reduction_operand_v0_t_hi_q, reduction_operand_v0_t_lo_q};
   //---------------------------------------------------------------------------------
 
   // CMY:an FSM to manage operands between normal calculation and v0.t fetching-----------------
 
   logic v0_t_is_ready;
-  assign v0_t_is_ready   = (operand_state_q == READ_V0_t) && vrf_rvalid_i[0];
+  assign v0_t_is_ready   = (operand_state_q == READ_V0_t) && vrf_rvalid_i[0] && vrf_rvalid_i[1];
   logic v0_t_read_done;
-  // `FFL(v0_t_read_done,1'b1,v0_t_is_ready,'0);
   `FFLARNC(v0_t_read_done,1'b1,v0_t_is_ready,vfu_rsp_valid_o,1'b0,clk_i,rst_ni);
 
   always_comb begin: operand_selection
@@ -471,14 +475,18 @@ module spatz_vfu
   //--------------------------------------------
 
   always_comb begin: operand_proc // CMY: turn it into a FSM
-    reduction_operand_v0_t = '0;
-    operand_v0_t = '0;
+    reduction_operand_v0_t_lo = '0;
+    reduction_operand_v0_t_hi = '0;
+    operand_v0_t_lo = '0;
+    operand_v0_t_hi = '0;
     operand1 = '0;
     operand2 = '0;
     case (operand_state_q)
       READ_OPERANDS: begin
-          if(reduction_state_q == Reduction_Read_V0_t)
-            reduction_operand_v0_t = vrf_rdata_i[0];
+          if(reduction_state_q == Reduction_Read_V0_t) begin
+            reduction_operand_v0_t_lo = vrf_rdata_i[0];
+            reduction_operand_v0_t_hi = vrf_rdata_i[1];
+          end
           else begin
             if (spatz_req.op_arith.is_scalar)
               operand1 = {1*N_FU{spatz_req.rs1}};
@@ -507,7 +515,8 @@ module spatz_vfu
           end
       end
       READ_V0_t: begin
-        operand_v0_t = vrf_rdata_i[0];
+        operand_v0_t_lo = vrf_rdata_i[0];
+        operand_v0_t_hi = vrf_rdata_i[1];
       end
       default:;
     endcase
@@ -520,7 +529,11 @@ module spatz_vfu
 
   assign scalar_result = result[ELEN-1:0];
 
-  `FFL(operand_v0_t_q, operand_v0_t, v0_t_is_ready, '0) // CMY: backup v0.t
+  `FFL(operand_v0_t_lo_q, operand_v0_t_lo, v0_t_is_ready, '0) // CMY: backup v0.t
+  `FFL(operand_v0_t_hi_q, operand_v0_t_hi, v0_t_is_ready, '0)
+
+  logic [VLEN-1:0] operand_v0_t_q;
+  assign operand_v0_t_q = {operand_v0_t_hi_q,operand_v0_t_lo_q};
 
   ///////////////////////
   //  Reduction logic  //
@@ -655,7 +668,6 @@ module spatz_vfu
 
       Reduction_Read_V0_t:begin
         if(reduction_v0_t_is_ready)
-        // if(reduction_v0_t_read_done)
           if (!is_fpu_busy)
             reduction_state_d = Reduction_Init;
           else reduction_state_d = Reduction_Wait;
@@ -841,6 +853,7 @@ module spatz_vfu
        READ_OPERANDS:begin
         if(reduction_state_q == Reduction_Read_V0_t) begin
           vreg_addr_d[0] =  0 << $clog2(NrWordsPerVector);
+          vreg_addr_d[1] =  1 << $clog2(NrWordsPerVector);
           vrf_raddr_o = vreg_addr_d;
         end
         else begin
@@ -870,6 +883,7 @@ module spatz_vfu
        end
        READ_V0_t: begin
          vreg_addr_d[0] = ( 0 + vstart) << $clog2(NrWordsPerVector);
+         vreg_addr_d[1] = ( 1 + vstart) << $clog2(NrWordsPerVector);
          vrf_raddr_o = vreg_addr_d;
        end
        default:;
@@ -881,9 +895,9 @@ module spatz_vfu
     vreg_we    = '0;
 
     unique case(operand_state_q) // CMY: turn it into FSM logic
-      READ_V0_t: vreg_r_req = 3'b001;
+      READ_V0_t: vreg_r_req = 3'b011;
       READ_OPERANDS: begin
-        if(reduction_state_q == Reduction_Read_V0_t) vreg_r_req = 3'b001;
+        if(reduction_state_q == Reduction_Read_V0_t) vreg_r_req = 3'b011;
         else
           if (spatz_req_valid && vl_q < spatz_req.vl)
             // Request operands
