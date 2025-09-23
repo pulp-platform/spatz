@@ -209,16 +209,17 @@ module reqrsp_to_axi import reqrsp_pkg::*; #(
   assign axi_req_o.ar.burst  = axi_pkg::BURST_INCR;
   assign axi_req_o.ar.lock   = '0;
   assign axi_req_o.ar.cache  = axi_pkg::CACHE_MODIFIABLE;
-  always_comb begin
-    if (ShuffleId) begin
-      if (axi_req_o.ar.len == '0) begin
+
+  if (ShuffleId & EnBurst) begin
+    always_comb begin
+      if (axi_req_o.ar.len == '0 & reqrsp_req_i.q.user.burst.is_burst == '0) begin
         axi_req_o.ar.id = $unsigned(ID);
       end else begin
         axi_req_o.ar.id = id_cnt_q;
       end
-    end else begin
-      axi_req_o.ar.id   = $unsigned(ID);
-    end    
+    end
+  end else begin
+    assign axi_req_o.ar.id   = $unsigned(ID);
   end
 
   assign axi_req_o.ar.user   = user_i;
