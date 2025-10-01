@@ -52,6 +52,28 @@ macro(add_spatz_test_threeParam name file param1 param2 param3)
   target_compile_definitions(test-${SNITCH_TEST_PREFIX}${target_name} PUBLIC DATAHEADER="data/data_${param1}_${param2}_${param3}.h" SNRT_NFPU_PER_CORE=${SNRT_NFPU_PER_CORE})
 endmacro()
 
+# Use data type as another parameter
+macro(add_spatz_test_oneParam_type name file param1 type)
+  set(target_name ${name}_M${param1})
+  add_snitch_test(${target_name} ${file})
+  target_link_libraries(test-${SNITCH_TEST_PREFIX}${target_name} benchmark ${SNITCH_RUNTIME})
+  target_compile_definitions(test-${SNITCH_TEST_PREFIX}${target_name} PUBLIC DATAHEADER="data/data_${param1}_${type}.h" PREC=${type} SNRT_NFPU_PER_CORE=${SNRT_NFPU_PER_CORE})
+endmacro()
+
+macro(add_spatz_test_twoParam_type name file param1 param2 type)
+  set(target_name ${name}_M${param1}_N${param2})
+  add_snitch_test(${target_name} ${file})
+  target_link_libraries(test-${SNITCH_TEST_PREFIX}${target_name} benchmark ${SNITCH_RUNTIME})
+  target_compile_definitions(test-${SNITCH_TEST_PREFIX}${target_name} PUBLIC DATAHEADER="data/data_${param1}_${param2}_${type}.h" PREC=${type} SNRT_NFPU_PER_CORE=${SNRT_NFPU_PER_CORE})
+endmacro()
+
+macro(add_spatz_test_threeParam_type name file param1 param2 param3 type)
+  set(target_name ${name}_M${param1}_N${param2}_K${param3})
+  add_snitch_test(${target_name} ${file})
+  target_link_libraries(test-${SNITCH_TEST_PREFIX}${target_name} benchmark ${SNITCH_RUNTIME})
+  target_compile_definitions(test-${SNITCH_TEST_PREFIX}${target_name} PUBLIC DATAHEADER="data/data_${param1}_${param2}_${param3}_${type}.h" PREC=${type} SNRT_NFPU_PER_CORE=${SNRT_NFPU_PER_CORE})
+endmacro()
+
 # Benchmark library
 add_library(benchmark benchmark/benchmark.c)
 
@@ -86,6 +108,8 @@ set(SNITCH_TEST_PREFIX spatzBenchmarks-)
 
 if (ELEN EQUAL 64)
   add_spatz_test_threeParam(dp-fmatmul dp-fmatmul/main.c 64  64  64 )
+
+  add_spatz_test_twoParam_type(dp-gemv gemv/main.c 64  128 64)
 
   add_spatz_test_oneParam(dp-faxpy dp-faxpy/main.c 256)
   add_spatz_test_oneParam(dp-faxpy dp-faxpy/main.c 1024)
@@ -123,6 +147,9 @@ add_spatz_test_threeParam(sdotp-bp-fmatmul sdotp-bp-fmatmul/main.c 64  64  64 )
 add_spatz_test_threeParam(sdotp-bp-fmatmul sdotp-bp-fmatmul/main.c 64  128 64 )
 add_spatz_test_threeParam(sdotp-bp-fmatmul sdotp-bp-fmatmul/main.c 128 128 128)
 add_spatz_test_threeParam(sdotp-bp-fmatmul sdotp-bp-fmatmul/main.c 128 256 128)
+
+add_spatz_test_twoParam_type(sp-gemv gemv/main.c 128 128 32)
+add_spatz_test_twoParam_type(hp-gemv gemv/main.c 256 128 16)
 
 add_spatz_test_twoParam(sp-fft sp-fft/main.c 256 2)
 add_spatz_test_twoParam(sp-fft sp-fft/main.c 512 2)
