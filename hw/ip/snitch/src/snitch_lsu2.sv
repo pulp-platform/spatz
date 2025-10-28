@@ -146,7 +146,7 @@ module snitch_lsu2
     data_req_o.q.amo  = lsu_qamo_i;
     data_req_o.q.size = lsu_qsize_i;
     data_req_o.q.user.req_id   = hs_pending_q ? req_id_q : req_id;
-    data_req_o.q.data = data_qdata[DataWidth-1:0];
+    data_req_o.q.data = lsu_qwrite_i ? data_qdata[DataWidth-1:0] : '0;
 
     unique case (lsu_qsize_i)
       2'b00: data_req_o.q.strb = ('b1    << lsu_qaddr_i[DataAlign-1:0]);
