@@ -54,7 +54,8 @@ module spatz_controller
     input  logic             [NrVregfilePorts-1:0] sb_enable_i,
     input  logic             [NrWritePorts-1:0]    sb_wrote_result_i,
     output logic             [NrVregfilePorts-1:0] sb_enable_o,
-    input  spatz_id_t        [NrVregfilePorts-1:0] sb_id_i
+    input  spatz_id_t        [NrVregfilePorts-1:0] sb_id_i,
+    output logic  running_instrs_o //Signal that there are instructions running in Spatz
   );
 
 // Include FF
@@ -571,6 +572,8 @@ module spatz_controller
     end
   end // ex_issue
 
+  
+
   always_comb begin: proc_next_insn_id
     // Maintain state
     running_insn_d = running_insn_q;
@@ -587,6 +590,9 @@ module spatz_controller
     if (vsldu_rsp_valid_i)
       running_insn_d[vsldu_rsp_i.id] = 1'b0;
   end: proc_next_insn_id
+
+
+  assign running_instrs_o = |running_insn_q;
 
   // Respond to core about the decoded instruction.
   always_comb begin : acc_issue_resp

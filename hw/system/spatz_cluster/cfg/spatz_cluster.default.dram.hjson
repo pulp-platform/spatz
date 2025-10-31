@@ -29,7 +29,7 @@
         // Spatz parameters
         "vlen": 512,
         "n_fpu": 4,
-        "n_ipu": 1,
+        "n_ipu": 4,
         "spatz_fpu": true,
         "spatz_nports": 4,
         "double_bw": 0,
