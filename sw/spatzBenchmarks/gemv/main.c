@@ -21,8 +21,8 @@
 #include <snrt.h>
 #include <stdio.h>
 
-#include "kernel/gemv.c"
 #include DATAHEADER
+#include "kernel/gemv.c"
 
 #if (PREC == 64)
 #define T double
