@@ -28,6 +28,7 @@
         n_fpu: 4,
         n_ipu: 1,
         spatz_fpu: true,
+        buf_fpu: 0,
         // Timing parameters
         timing: {
             lat_comp_fp32: 1,
