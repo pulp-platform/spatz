@@ -7,6 +7,8 @@
 // The vector load/store unit is used to load vectors from memory
 // and to the vector register file and store them back again.
 
+//RG: indexed load address generation fixed - 05/11/2025
+
 module spatz_vlsu
   import spatz_pkg::*;
   import rvv_pkg::*;
@@ -434,16 +436,26 @@ module spatz_vlsu
     maxew_t idx_offset;
     assign idx_offset = mem_idx_counter_q[port];
 
+    //RG: removing automatic declaration inside always_comb + data_index_width_diff cannot be unsigned! If EEW dest < EEW ind --> wrong result!
+    //logic [1:0] data_index_width_diff;
+    logic signed [2:0] data_index_width_diff;
+    logic [idx_width(N_FU*ELENB)-1:0] word_index;
+
     always_comb begin
       stride = mem_is_strided ? mem_spatz_req.rs2 >> mem_spatz_req.vtype.vsew : 'd1;
 
       if (mem_is_indexed) begin
         // What is the relationship between data and index width?
-        automatic logic [1:0] data_index_width_diff = int'(mem_spatz_req.vtype.vsew) - int'(mem_spatz_req.op_mem.ew);
+        data_index_width_diff = int'(mem_spatz_req.vtype.vsew) - int'(mem_spatz_req.op_mem.ew);
 
         // Pointer to index
-        automatic logic [idx_width(N_FU*ELENB)-1:0] word_index = (port << (MAXEW - data_index_width_diff)) + (maxew_t'(idx_offset << data_index_width_diff) >> data_index_width_diff) + (maxew_t'(idx_offset >> (MAXEW - data_index_width_diff)) << (MAXEW - data_index_width_diff)) * NrMemPorts;
-
+        //RG: word_index calculation changes depending on the data_index_width_diff sign
+        if (data_index_width_diff >= 0) begin
+          word_index = (port << (MAXEW - data_index_width_diff)) + (maxew_t'(idx_offset << data_index_width_diff) >> data_index_width_diff) + (maxew_t'(idx_offset >> (MAXEW - data_index_width_diff)) << (MAXEW - data_index_width_diff)) * NrMemPorts;
+        end else begin
+          word_index = (port >> (MAXEW + data_index_width_diff)) + (maxew_t'(idx_offset >> -data_index_width_diff) << -data_index_width_diff) + (maxew_t'(idx_offset << (MAXEW + data_index_width_diff)) >> (MAXEW + data_index_width_diff)) * NrMemPorts;
+        end
+        
         // Index
         unique case (mem_spatz_req.op_mem.ew)
           EW_8 : offset   = $signed(vrf_rdata_i[1][8 * word_index +: 8]);
