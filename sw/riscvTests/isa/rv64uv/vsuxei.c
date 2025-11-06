@@ -10,37 +10,7 @@
 
 #define INIT 98
 
-void reset_vec8(volatile uint8_t *vec, int rst_val, uint64_t len) {
-  for (uint64_t i = 0; i < len; ++i)
-    vec[i] = rst_val;
-}
-void reset_vec16(volatile uint16_t *vec, int rst_val, uint64_t len) {
-  for (uint64_t i = 0; i < len; ++i)
-    vec[i] = rst_val;
-}
-void reset_vec32(volatile uint32_t *vec, int rst_val, uint64_t len) {
-  for (uint64_t i = 0; i < len; ++i)
-    vec[i] = rst_val;
-}
-void reset_vec64(volatile uint64_t *vec, int rst_val, uint64_t len) {
-  for (uint64_t i = 0; i < len; ++i)
-    vec[i] = rst_val;
-}
-
-/*volatile uint8_t BUFFER_O8[16] __attribute__((aligned(AXI_DWIDTH))) = {
-    INIT, INIT, INIT, INIT, INIT, INIT, INIT, INIT,
-    INIT, INIT, INIT, INIT, INIT, INIT, INIT, INIT};
-volatile uint16_t BUFFER_O16[16] __attribute__((aligned(AXI_DWIDTH))) = {
-    INIT, INIT, INIT, INIT, INIT, INIT, INIT, INIT,
-    INIT, INIT, INIT, INIT, INIT, INIT, INIT, INIT};
-volatile uint32_t BUFFER_O32[16] __attribute__((aligned(AXI_DWIDTH))) = {
-    INIT, INIT, INIT, INIT, INIT, INIT, INIT, INIT,
-    INIT, INIT, INIT, INIT, INIT, INIT, INIT, INIT};
-volatile uint64_t BUFFER_O64[16] __attribute__((aligned(AXI_DWIDTH))) = {
-    INIT, INIT, INIT, INIT, INIT, INIT, INIT, INIT,
-    INIT, INIT, INIT, INIT, INIT, INIT, INIT, INIT};*/
-
-// Naive test
+// Naive test: EEW Destination == EEW indexes
 void TEST_CASE1(void) {
   volatile uint8_t BUFFER_O8[] = {
     INIT, INIT, INIT, INIT, INIT, INIT, INIT, INIT,
@@ -131,12 +101,78 @@ void TEST_CASE1(void) {
             0x8913984898951989);
 }*/
 
+// EEW Destination > EEW indexes
+void TEST_CASE3(void) {
+
+  volatile uint16_t BUFFER_O16[] = {
+    INIT, INIT, INIT, INIT, INIT, INIT, INIT, INIT,
+    INIT, INIT, INIT, INIT, INIT, INIT, INIT, INIT};
+  
+  VSET(2, e16, m1);
+  VLOAD_16(v1, 0xbbd3, 0x1989);
+  VLOAD_8(v2, 2, 30);
+  asm volatile("vsuxei8.v v1, (%0), v2" ::"r"(&BUFFER_O16[0]));
+  VVCMP_U16(4, BUFFER_O16, INIT, 0xbbd3, INIT, INIT, INIT, INIT, INIT, INIT,
+            INIT, INIT, INIT, INIT, INIT, INIT, INIT, 0x1989);
+  
+  
+  volatile uint32_t BUFFER_O32[] = {
+    INIT, INIT, INIT, INIT, INIT, INIT, INIT, INIT,
+    INIT, INIT, INIT, INIT, INIT, INIT, INIT, INIT};
+  
+  VSET(2, e32, m1);
+  VLOAD_32(v1, 0xf9aa71f0, 0x89139848);
+  VLOAD_16(v2, 4, 60);
+  asm volatile("vsuxei16.v v1, (%0), v2" ::"r"(&BUFFER_O32[0]));
+  VVCMP_U32(5, BUFFER_O32, INIT, 0xf9aa71f0, INIT, INIT, INIT, INIT, INIT, INIT,
+            INIT, INIT, INIT, INIT, INIT, INIT, INIT, 0x89139848);
+  
+  volatile uint64_t BUFFER_O64[] = {
+    INIT, INIT, INIT, INIT, INIT, INIT, INIT, INIT,
+    INIT, INIT, INIT, INIT, INIT, INIT, INIT, INIT};
+  
+  VSET(2, e64, m1);
+  VLOAD_64(v1, 0xf9aa71f0c394bbd3, 0x8913984898951989);
+  VLOAD_32(v2, 8, 120);
+  asm volatile("vsuxei32.v v1, (%0), v2" ::"r"(&BUFFER_O64[0]));
+  VVCMP_U64(6, BUFFER_O64, INIT, 0xf9aa71f0c394bbd3, INIT, INIT, INIT, INIT, 
+            INIT, INIT, INIT, INIT, INIT, INIT, INIT, INIT, INIT, 0x8913984898951989);
+}
+
+// EEW Destination < EEW indexes
+void TEST_CASE4(void) {
+  
+  volatile uint8_t BUFFER_O8[] = {
+    INIT, INIT, INIT, INIT, INIT, INIT, INIT, INIT,
+    INIT, INIT, INIT, INIT, INIT, INIT, INIT, INIT};
+  
+  VSET(2, e8, m1);
+  VLOAD_8(v1, 0xd3, 0x89);
+  VLOAD_16(v2, 1, 15);
+  asm volatile("vsuxei16.v v1, (%0), v2" ::"r"(&BUFFER_O8[0]));
+  VVCMP_U8(7, BUFFER_O8, INIT, 0xd3, INIT, INIT, INIT, INIT, INIT, INIT,
+           INIT, INIT, INIT, INIT, INIT, INIT, INIT, 0x89);
+  
+  volatile uint16_t BUFFER_O16[] = {
+    INIT, INIT, INIT, INIT, INIT, INIT, INIT, INIT,
+    INIT, INIT, INIT, INIT, INIT, INIT, INIT, INIT};
+  
+  VSET(2, e16, m1);
+  VLOAD_16(v1, 0xbbd3, 0x1989);
+  VLOAD_32(v2, 2, 30);
+  asm volatile("vsuxei32.v v1, (%0), v2" ::"r"(&BUFFER_O16[0]));
+  VVCMP_U16(8, BUFFER_O16, INIT, 0xbbd3, INIT, INIT, INIT, INIT, INIT, INIT,
+            INIT, INIT, INIT, INIT, INIT, INIT, INIT, 0x1989);
+}
+
 int main(void) {
   INIT_CHECK();
   enable_vec();
 
   TEST_CASE1();
   //TEST_CASE2();
+  TEST_CASE3();
+  TEST_CASE4();
 
   EXIT_CHECK();
 }
