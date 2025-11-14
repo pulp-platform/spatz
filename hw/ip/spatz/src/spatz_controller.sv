@@ -495,11 +495,12 @@ module spatz_controller
   // not ready yet. Or we have a change in LMUL, for which we need to let all the
   // units finish first before scheduling a new operation (to avoid running into
   // issues with the socreboard).
-  logic stall, vfu_stall, vlsu_stall, vsldu_stall;
-  assign stall       = (vfu_stall | vlsu_stall | vsldu_stall) & req_buffer_valid;
+  logic stall, vfu_stall, vlsu_stall, vsldu_stall, core_stall;
+  assign stall       = (vfu_stall | vlsu_stall | vsldu_stall | core_stall) & req_buffer_valid;
   assign vfu_stall   = ~vfu_req_ready_i & (spatz_req.ex_unit == VFU);
   assign vlsu_stall  = ~vlsu_req_ready_i & (spatz_req.ex_unit == LSU);
   assign vsldu_stall = ~vsldu_req_ready_i & (spatz_req.ex_unit == SLD);
+
 
   // Running instructions
   logic      [NrParallelInstructions-1:0] running_insn_d, running_insn_q;
@@ -662,12 +663,14 @@ module spatz_controller
   logic       rsp_valid_d;
   logic       rsp_ready_d;
   spatz_rsp_t rsp_d;
-  spill_register #(
-    .T     (spatz_rsp_t ),
-    .Bypass(!RegisterRsp)
+
+  fall_through_register #(
+    .T     (spatz_rsp_t )
   ) i_spatz_rsp_register (
     .clk_i  (clk_i       ),
     .rst_ni (rst_ni      ),
+    .clr_i ('0),
+    .testmode_i ('0),
     .data_i (rsp_d       ),
     .valid_i(rsp_valid_d ),
     .ready_o(rsp_ready_d ),
@@ -675,6 +678,8 @@ module spatz_controller
     .valid_o(rsp_valid_o ),
     .ready_i(rsp_ready_i )
   );
+
+  assign core_stall = rsp_valid_d & ~rsp_ready_d;
 
   // Retire an operation/instruction and write back result to core
   // if necessary.
