@@ -116,7 +116,6 @@ snRuntime-test-vsim:
       - { cfg: spatz_cluster.default.dram }
       - { cfg: spatz_cluster.smallvrf.dram }
       - { cfg: spatz_cluster.doublebw.dram }
-
 snRuntime-test-vcs:
   stage: test
   script:
