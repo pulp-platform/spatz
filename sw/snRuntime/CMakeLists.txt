@@ -25,7 +25,7 @@ endif()
 add_compile_options(-O3 -g -ffunction-sections)
 
 # Platform sources
-if("${SPATZ_CLUSTER_CFG}" STREQUAL "spatz_cluster.default.dram.hjson" OR ${SPATZ_CLUSTER_CFG} STREQUAL "spatz_cluster.mempool.dram.hjson")
+if(SPATZ_CLUSTER_CFG MATCHES "^(spatz_cluster\.(default|mempool|smallvrf)\.dram)\.hjson$")
   set(_plat_folder "standalone")
 elseif("${SPATZ_CLUSTER_CFG}" MATCHES "^spatz_cluster.carfield\\.(l2|dram)\\.hjson$")
   set(_plat_folder "cheshire")
@@ -39,6 +39,8 @@ set(PLATFORM_SOURCE_FOLDER "src/platforms/${_plat_folder}" CACHE STRING "Path to
 # Default memory regions
 set(MEM_SPATZ_CLUSTER_DEFAULT_DRAM_HJSON_ORIGIN  0x80000000)
 set(MEM_SPATZ_CLUSTER_DEFAULT_DRAM_HJSON_SIZE    0x80000000)
+set(MEM_SPATZ_CLUSTER_SMALLVRF_DRAM_HJSON_ORIGIN 0x80000000)
+set(MEM_SPATZ_CLUSTER_SMALLVRF_DRAM_HJSON_SIZE   0x80000000)
 set(MEM_SPATZ_CLUSTER_CARFIELD_L2_HJSON_ORIGIN   0x78000000)
 set(MEM_SPATZ_CLUSTER_CARFIELD_L2_HJSON_SIZE     0x00400000)
 set(MEM_SPATZ_CLUSTER_CARFIELD_DRAM_HJSON_ORIGIN 0x80000000)
