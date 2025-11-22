@@ -53,7 +53,7 @@ module spatz_vfu
     vlen_t vstart;
 
     // Encodes both the scalar RD and the VD address in the VRF
-    vrf_addr_t vd_addr;
+    vfu_rsp_addr_t vd_addr;
     logic wb;
     logic last;
 
@@ -729,14 +729,14 @@ module spatz_vfu
     vreg_addr_d = vreg_addr_q;
 
     vrf_raddr_o = vreg_addr_d;
-    vrf_waddr_o = result_tag.vd_addr;
+    vrf_waddr_o = vrf_addr_t'(result_tag.vd_addr);
 
     // Tag (propagated with the operations)
     input_tag = '{
       id             : spatz_req.id,
       vsew           : spatz_req.vtype.vsew,
       vstart         : spatz_req.vstart,
-      vd_addr        : spatz_req.op_arith.is_scalar ? vrf_addr_t'(spatz_req.rd) : vreg_addr_q[2],
+      vd_addr        : spatz_req.op_arith.is_scalar ? vfu_rsp_addr_t'(spatz_req.rd) : vfu_rsp_addr_t'(vreg_addr_q[2]),
       wb             : spatz_req.op_arith.is_scalar,
       last           : last_request,
       narrowing      : spatz_req.op_arith.is_narrowing,
@@ -752,7 +752,7 @@ module spatz_vfu
       // Direct feedthrough
       vrf_raddr_o = vreg_addr_d;
       if (!spatz_req.op_arith.is_scalar)
-        input_tag.vd_addr = vreg_addr_d[2];
+        input_tag.vd_addr = vfu_rsp_addr_t'(vreg_addr_d[2]);
 
       // Did we commit a word already?
       if (word_issued) begin
