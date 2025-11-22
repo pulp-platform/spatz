@@ -449,11 +449,19 @@ module spatz_vsldu
   ////////////////////////
 
   vlen_t sld_offset_rd;
+  localparam int zero_fill_idx = (NrWordsPerVector > 1) ? $clog2(NrWordsPerVector) : 0;
+  vrf_addr_t base_raddr, base_waddr;
 
   always_comb begin
+    base_raddr = '0;
+    base_waddr = '0;
+
+    base_raddr[$bits(vrf_addr_t)-1:zero_fill_idx] = spatz_req.vs2;
+    base_waddr[$bits(vrf_addr_t)-1:zero_fill_idx] = spatz_req.vd;
+
     sld_offset_rd   = is_slide_up ? (prefetch_q ? -slide_amount_q[$bits(vlen_t)-1:$clog2(VRFWordBWidth)] - 1 : -slide_amount_q[$bits(vlen_t)-1:$clog2(VRFWordBWidth)]) : prefetch_q ? slide_amount_q[$bits(vlen_t)-1:$clog2(VRFWordBWidth)] : slide_amount_q[$bits(vlen_t)-1:$clog2(VRFWordBWidth)] + 1;
-    vrf_raddr_o     = {spatz_req.vs2, $clog2(NrWordsPerVector)'(1'b0)} + vreg_counter_q[$bits(vlen_t)-1:$clog2(VRFWordBWidth)] + sld_offset_rd;
-    vrf_req_d.waddr = {spatz_req.vd, $clog2(NrWordsPerVector)'(1'b0)} + vreg_counter_q[$bits(vlen_t)-1:$clog2(VRFWordBWidth)];
+    vrf_raddr_o     = base_raddr + vreg_counter_q[$bits(vlen_t)-1:$clog2(VRFWordBWidth)] + sld_offset_rd;
+    vrf_req_d.waddr = base_waddr + vreg_counter_q[$bits(vlen_t)-1:$clog2(VRFWordBWidth)];
   end
 
 endmodule : spatz_vsldu

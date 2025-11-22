@@ -113,7 +113,8 @@ snRuntime-test-vsim:
   needs: ["tc-llvm", "tc-gcc"]
   parallel:
     matrix:
-      - cfg: [spatz_cluster.default.dram]
+      - { cfg: spatz_cluster.default.dram }
+      - { cfg: spatz_cluster.smallvrf.dram }
 
 snRuntime-test-vcs:
   stage: test
@@ -141,7 +142,8 @@ snRuntime-test-vcs:
   needs: ["tc-llvm", "tc-gcc"]
   parallel:
     matrix:
-      - cfg: [spatz_cluster.default.dram]
+      - { cfg: spatz_cluster.default.dram }
+      - { cfg: spatz_cluster.smallvrf.dram }
 
 snRuntime-test-vlt:
   stage: test
@@ -170,7 +172,8 @@ snRuntime-test-vlt:
   needs: ["tc-llvm", "tc-gcc", "verilator"]
   parallel:
     matrix:
-      - cfg: [spatz_cluster.default.dram]
+      - { cfg: spatz_cluster.default.dram }
+      - { cfg: spatz_cluster.smallvrf.dram }
 
 # RISC-V unit tests
 riscvTests-test-vlt:
@@ -200,7 +203,8 @@ riscvTests-test-vlt:
   needs: ["tc-llvm", "tc-gcc", "verilator"]
   parallel:
     matrix:
-      - cfg: [spatz_cluster.default.dram]
+      - { cfg: spatz_cluster.default.dram }
+      - { cfg: spatz_cluster.smallvrf.dram }
 
 # Spatz tests
 spatzBenchmarks-test-vlt:
@@ -230,4 +234,5 @@ spatzBenchmarks-test-vlt:
   needs: ["tc-llvm", "tc-gcc", "verilator"]
   parallel:
     matrix:
-      - cfg: [spatz_cluster.default.dram]
+      - { cfg: spatz_cluster.default.dram }
+      - { cfg: spatz_cluster.smallvrf.dram }
