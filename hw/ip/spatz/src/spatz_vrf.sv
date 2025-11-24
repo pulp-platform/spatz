@@ -241,20 +241,35 @@ module spatz_vrf
         .raddr_i   (raddr[bank]                  ),
         .rdata_o   (rdata_int                    )
       );
-    end
-  end
+        end
+      end
 
-  ////////////////
-  // Assertions //
-  ////////////////
+      ////////////////
+      // Assertions //
+      ////////////////
 
-  if (NrReadPorts < 1)
-    $error("[spatz_vrf] The number of read ports has to be greater than zero.");
+      // Coverage assertion: Count conflicts on the register file banks.
+      // A conflict occurs if more than one write request targets the same bank in the same cycle.
+      for (genvar bank = 0; bank < NrVRFBanks; bank++) begin : gen_vrf_write_conflict_cov
+        cover property (@(posedge clk_i) disable iff (!rst_ni)
+      $countones(write_request[bank]) > 1);
+      end
 
-  if (NrWritePorts < 1)
-    $error("[spatz_vrf] The number of write ports has to be greater than zero.");
+      // Same assertion but for read requests. We can have up to 3 read requests per bank
+      for (genvar bank = 0; bank < NrVRFBanks; bank++) begin : gen_vrf_read_conflict_cov
+        cover property (@(posedge clk_i) disable iff (!rst_ni)
+      $countones(read_request[bank]) > 3);
+      end
 
-  if (NrReadPorts / NrReadPortsPerBank > NrVRFBanks)
-    $error("[spatz_vrf] The number of vregfile banks needs to be increased to handle the number of read ports.");
+      if (NrReadPorts < 1)
+        $error("[spatz_vrf] The number of read ports has to be greater than zero.");
 
-endmodule : spatz_vrf
+      if (NrWritePorts < 1)
+        $error("[spatz_vrf] The number of write ports has to be greater than zero.");
+
+      if (NrReadPorts / NrReadPortsPerBank > NrVRFBanks)
+        $error("[spatz_vrf] The number of vregfile banks needs to be increased to handle the number of read ports.");
+
+
+    endmodule : spatz_vrf
+

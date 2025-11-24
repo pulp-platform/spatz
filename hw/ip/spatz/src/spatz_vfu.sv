@@ -73,17 +73,23 @@ module spatz_vfu
   logic       spatz_req_valid;
   logic       spatz_req_ready;
 
-  spill_register #(
-    .T(spatz_req_t)
+
+  stream_fifo #(
+    .T            (spatz_req_t),
+    .DEPTH        (6),
+    .FALL_THROUGH (1'b0)
   ) i_operation_queue (
-    .clk_i  (clk_i                                          ),
-    .rst_ni (rst_ni                                         ),
-    .data_i (spatz_req_i                                    ),
-    .valid_i(spatz_req_valid_i && spatz_req_i.ex_unit == VFU),
-    .ready_o(spatz_req_ready_o                              ),
-    .data_o (spatz_req                                      ),
-    .valid_o(spatz_req_valid                                ),
-    .ready_i(spatz_req_ready                                )
+    .clk_i      (clk_i                                          ),
+    .rst_ni     (rst_ni                                         ),
+    .flush_i    (1'b0                                           ),
+    .testmode_i (1'b0                                           ),
+    .usage_o    (/* unused */                                   ),
+    .data_i     (spatz_req_i                                    ),
+    .valid_i    (spatz_req_valid_i && spatz_req_i.ex_unit == VFU),
+    .ready_o    (spatz_req_ready_o                              ),
+    .data_o     (spatz_req                                      ),
+    .valid_o    (spatz_req_valid                                ),
+    .ready_i    (spatz_req_ready                                )
   );
 
   ///////////////

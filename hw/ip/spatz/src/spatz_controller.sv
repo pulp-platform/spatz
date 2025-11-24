@@ -16,6 +16,7 @@ module spatz_controller
   #(
     parameter int  unsigned NrVregfilePorts   = 1,
     parameter int  unsigned NrWritePorts      = 1,
+    parameter int  unsigned NrReadPorts       = 1,
     parameter bit           RegisterRsp       = 0,
     parameter type          spatz_issue_req_t = logic,
     parameter type          spatz_issue_rsp_t = logic,
@@ -53,6 +54,7 @@ module spatz_controller
     // VRF Scoreboard
     input  logic             [NrVregfilePorts-1:0] sb_enable_i,
     input  logic             [NrWritePorts-1:0]    sb_wrote_result_i,
+    input  logic             [NrReadPorts-1:0]     sb_read_result_i,
     output logic             [NrVregfilePorts-1:0] sb_enable_o,
     input  spatz_id_t        [NrVregfilePorts-1:0] sb_id_i
   );
@@ -239,7 +241,9 @@ module spatz_controller
 
   // Did the instruction write to the VRF in the previous cycle?
   logic [NrParallelInstructions-1:0] wrote_result_q, wrote_result_d;
+  logic [NrParallelInstructions-1:0] read_result_q, read_result_d;
   `FF(wrote_result_q, wrote_result_d, '0)
+  `FF(read_result_q, read_result_d, '0)
 
   // Is this instruction a narrowing or widening instruction?
   logic [NrParallelInstructions-1:0] narrow_wide_q, narrow_wide_d;
@@ -259,11 +263,24 @@ module spatz_controller
 
     // Nobody wrote to the VRF yet
     wrote_result_d = '0;
+    read_result_d = '0;
     sb_enable_o    = '0;
 
     for (int unsigned port = 0; port < NrVregfilePorts; port++)
       // Enable the VRF port if the dependant instructions wrote in the previous cycle
-      sb_enable_o[port] = sb_enable_i[port] && &(~scoreboard_q[sb_id_i[port]].deps | wrote_result_q) && (!(|scoreboard_q[sb_id_i[port]].deps) || !scoreboard_q[sb_id_i[port]].prevent_chaining);
+
+      if (port < SB_VFU_VD_WD) begin
+        // RAW
+        sb_enable_o[port] = sb_enable_i[port] &&
+                &(~scoreboard_q[sb_id_i[port]].deps | wrote_result_q) &&
+                (!(|scoreboard_q[sb_id_i[port]].deps) || !scoreboard_q[sb_id_i[port]].prevent_chaining);
+      end else begin
+        // WAR
+        sb_enable_o[port] = sb_enable_i[port] &&
+                &(~scoreboard_q[sb_id_i[port]].deps | read_result_q) &&
+                (!(|scoreboard_q[sb_id_i[port]].deps) || !scoreboard_q[sb_id_i[port]].prevent_chaining);
+      end
+      // TODO: Check WAW implementation
 
     // Store the decisions
     if (sb_enable_o[SB_VFU_VD_WD]) begin
@@ -277,6 +294,22 @@ module spatz_controller
     if (sb_enable_o[SB_VSLDU_VD_WD]) begin
       wrote_result_narrowing_d[sb_id_i[SB_VSLDU_VD_WD]] = sb_wrote_result_i[SB_VSLDU_VD_WD - SB_VFU_VD_WD] ^ narrow_wide_q[sb_id_i[SB_VSLDU_VD_WD]];
       wrote_result_d[sb_id_i[SB_VSLDU_VD_WD]]           = sb_wrote_result_i[SB_VSLDU_VD_WD - SB_VFU_VD_WD] && (!narrow_wide_q[sb_id_i[SB_VSLDU_VD_WD]] || wrote_result_narrowing_q[sb_id_i[SB_VSLDU_VD_WD]]);
+    end
+
+    if (sb_enable_o[SB_VFU_VS1_RD]) begin
+      read_result_d[sb_id_i[SB_VFU_VS1_RD]] = sb_read_result_i[SB_VFU_VS1_RD - SB_VFU_VS1_RD];
+    end
+    if (sb_enable_o[SB_VFU_VS2_RD]) begin
+      read_result_d[sb_id_i[SB_VFU_VS2_RD]] = sb_read_result_i[SB_VFU_VS2_RD - SB_VFU_VS1_RD];
+    end
+    if (sb_enable_o[SB_VFU_VD_RD]) begin
+      read_result_d[sb_id_i[SB_VFU_VD_RD]] = sb_read_result_i[SB_VFU_VD_RD - SB_VFU_VS1_RD];
+    end
+    if (sb_enable_o[SB_VLSU_VS2_RD]) begin
+      read_result_d[sb_id_i[SB_VLSU_VS2_RD]] = sb_read_result_i[SB_VLSU_VS2_RD - SB_VFU_VS1_RD];
+    end
+    if (sb_enable_o[SB_VSLDU_VS2_RD]) begin
+      read_result_d[sb_id_i[SB_VSLDU_VS2_RD]] = sb_read_result_i[SB_VSLDU_VS2_RD - SB_VFU_VS1_RD];
     end
 
     // A unit has finished its VRF access. Reset the scoreboard. For each instruction, check
