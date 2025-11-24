@@ -272,6 +272,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   spatz_controller #(
     .NrVregfilePorts  (NrReadPorts+NrWritePorts),
     .NrWritePorts     (NrWritePorts            ),
+    .NrReadPorts      (NrReadPorts             ),
     .RegisterRsp      (RegisterRsp             ),
     .spatz_issue_req_t(spatz_issue_req_t       ),
     .spatz_issue_rsp_t(spatz_issue_rsp_t       ),
@@ -309,8 +310,9 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     // Scoreboard check
     .sb_id_i          (sb_buf_id         ),
     .sb_wrote_result_i(vrf_wvalid        ),
+    .sb_read_result_i( vrf_rvalid),
     .sb_enable_i      ({sb_we_buf, sb_re}),
-    .sb_enable_o      ({vrf_we, vrf_re}  )
+    .sb_enable_o      ({vrf_we, vrf_re}  ),
     .running_instrs_o (running_instrs_o)
   );
 

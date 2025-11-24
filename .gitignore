@@ -25,4 +25,4 @@ mems
 *.o
 install
 .projectBender.lock
-*/prv_notes
+prv_notes/
