@@ -10,7 +10,7 @@
 include util/Makefrag
 
 # Bender version
-BENDER_VERSION = 0.27.1
+BENDER_VERSION = 0.29.1
 
 # Do not include minifloat opcodes, since they conflict with the RVV opcodes!
 OPCODES := "opcodes-rvv opcodes-rv32b_CUSTOM opcodes-ipu_CUSTOM opcodes-frep_CUSTOM opcodes-dma_CUSTOM opcodes-ssr_CUSTOM opcodes-smallfloat"
