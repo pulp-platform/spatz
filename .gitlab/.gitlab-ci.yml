@@ -106,7 +106,7 @@ snRuntime-test-vsim:
     - ${PYTHON3} -m pip install --user mako
     # Compile the binaries
     - cd hw/system/spatz_cluster
-    - make sw.vsim SPATZ_CLUSTER_CFG=${cfg}.hjson
+    - make sw.vsim SPATZ_CLUSTER_CFG=${cfg}.hjson -B
     # Run the test
     - cd sw/build/snRuntime
     - ${CTEST} --output-on-failure
@@ -135,7 +135,7 @@ snRuntime-test-vcs:
     - ${PYTHON3} -m pip install --user mako
     # Compile the binaries
     - cd hw/system/spatz_cluster
-    - ${VCS} make sw.vcs SPATZ_CLUSTER_CFG=${cfg}.hjson
+    - ${VCS} make sw.vcs SPATZ_CLUSTER_CFG=${cfg}.hjson -B
     # Run the test
     - cd sw/build/snRuntime
     - ${CTEST} --output-on-failure
@@ -165,7 +165,7 @@ snRuntime-test-vlt:
     - ${PYTHON3} -m pip install --user mako
     # Compile the binaries
     - cd hw/system/spatz_cluster
-    - make sw.vlt SPATZ_CLUSTER_CFG=${cfg}.hjson
+    - make sw.vlt SPATZ_CLUSTER_CFG=${cfg}.hjson -B
     # Run the test
     - cd sw/build/snRuntime
     - ${CTEST} --output-on-failure
@@ -196,7 +196,7 @@ riscvTests-test-vlt:
     - ${PYTHON3} -m pip install --user mako
     # Compile the binaries
     - cd hw/system/spatz_cluster
-    - ${VCS} make sw.vlt SPATZ_CLUSTER_CFG=${cfg}.hjson
+    - ${VCS} make sw.vlt SPATZ_CLUSTER_CFG=${cfg}.hjson -B
     # Run the test
     - cd sw/build/riscvTests
     - ${CTEST} --output-on-failure -j4
@@ -227,7 +227,7 @@ spatzBenchmarks-test-vlt:
     - ${PYTHON3} -m pip install --user mako
     # Compile the binaries
     - cd hw/system/spatz_cluster
-    - ${VCS} make sw.vlt SPATZ_CLUSTER_CFG=${cfg}.hjson
+    - ${VCS} make sw.vlt SPATZ_CLUSTER_CFG=${cfg}.hjson -B
     # Run the test
     - cd sw/build/spatzBenchmarks
     - ${CTEST} --verbose
