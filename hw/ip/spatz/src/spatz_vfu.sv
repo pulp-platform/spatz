@@ -76,7 +76,7 @@ module spatz_vfu
 
   stream_fifo #(
     .T            (spatz_req_t),
-    .DEPTH        (6),
+    .DEPTH        (VFUBufDepth),
     .FALL_THROUGH (1'b0)
   ) i_operation_queue (
     .clk_i      (clk_i                                          ),

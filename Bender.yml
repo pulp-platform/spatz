@@ -92,11 +92,11 @@ sources:
       defines:
         SNITCH_ENABLE_PERF:
       files:
-        - hw/ip/snitch/src/snitch.sv
+        # - hw/ip/snitch/src/snitch.sv
     # Disable the performance monitoring counters to save area.
     - target: disable_pmcs
       files:
-        - hw/ip/snitch/src/snitch.sv
+        # - hw/ip/snitch/src/snitch.sv
 
     - target: test
       files:

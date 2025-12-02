@@ -35,7 +35,7 @@ package spatz_pkg;
   // Maximum size of a single vector element in bytes
   localparam int unsigned ELENB  = ELEN / 8;
   // Number of bits in a vector register
-  localparam int unsigned VLEN   = 512;
+  localparam int unsigned VLEN   = 256;
   // Number of bytes in a vector register
   localparam int unsigned VLENB  = VLEN / 8;
   // Maximum vector length in elements
@@ -68,8 +68,12 @@ package spatz_pkg;
   // Depends on whether we have a FP regfile or not
   localparam int GPRWidth = FPU ? 6 : 5;
 
+  localparam int VFUBufDepth = 6;
+  localparam int VLSUBufDepth = 2;
+  localparam int VSLDUBufDepth = 2;
+
   // Number of parallel vector instructions
-  localparam int unsigned NrParallelInstructions = 4;
+  localparam int unsigned NrParallelInstructions = VFUBufDepth + VLSUBufDepth + VSLDUBufDepth;
 
   // Largest element width that Spatz supports
   localparam vew_e MAXEW = RVD ? EW_64 : EW_32;
