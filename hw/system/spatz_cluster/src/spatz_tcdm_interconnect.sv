@@ -35,7 +35,9 @@ module spatz_tcdm_interconnect #(
   parameter type         user_t                = logic,
   /// Latency of memory response (in cycles)
   parameter int unsigned MemoryResponseLatency = 1,
-  parameter snitch_pkg::topo_e Topology        = snitch_pkg::LogarithmicInterconnect
+  parameter snitch_pkg::topo_e Topology        = snitch_pkg::LogarithmicInterconnect,
+  // Misalign rows of the TCDM
+  parameter logic              AddrMisalign    = 1'b0
 ) (
   /// Clock, positive edge triggered.
   input  logic                             clk_i,
@@ -74,8 +76,35 @@ module spatz_tcdm_interconnect #(
   // Generate the `bank_select` signal based on the address.
   // This generates a bank interleaved addressing scheme, where consecutive
   // addresses are routed to individual banks.
+
+  // Misalignment logic for TCDM to achieve no conflicts within 2x Spatz VLSU interfaces within a core
+  // Misalignment pattern :
+  //                               Superbank-0   Superbank-1
+  //                        row1 : Block-0       Block-1
+  //                        row2 : Block-3       Block-2
+  //                        row3 : Block-5       Block-4
+  //                        row4 : Block-6       Block-7
+
+  localparam int unsigned ROWSIZE = $clog2(DataWidth * NumOut / 8);
+  localparam int unsigned ADDRWIDTH = $bits(req_i[0].q.addr);
+  addr_t [NumInp-1:0] row;
+  logic [NumInp-1:0] [ROWSIZE-1:0] addr_shift;
+  logic [NumInp-1:0] [ADDRWIDTH-1:0] addr_misaligned;
+
+  always_comb begin : gen_addr_misalign
+    row = '0;
+    addr_shift = '0;
+    addr_misaligned = '0;
+    for (int i = 0; i < NumInp; i++) begin
+      row[i] = req_i[i].q.addr[ADDRWIDTH-1 : ROWSIZE];
+      addr_shift[i] = (row[i][1:0] == 2'b00) || (row[i][1:0] == 2'b11) ? 0 : (DataWidth * NumOut / 8) / 2;
+      addr_misaligned[i] = req_i[i].q.addr + addr_shift[i];
+      addr_misaligned[i][ADDRWIDTH-1 : ROWSIZE] = req_i[i].q.addr[ADDRWIDTH-1 : ROWSIZE];
+    end
+  end
+
   for (genvar i = 0; i < NumInp; i++) begin : gen_bank_select
-    assign bank_select[i] = req_i[i].q.addr[ByteOffset+:SelWidth];
+    assign bank_select[i] = AddrMisalign ? addr_misaligned[i][ByteOffset+:SelWidth] : req_i[i].q.addr[ByteOffset+:SelWidth];
   end
 
   mem_req_chan_t [NumInp-1:0] in_req;
@@ -89,7 +118,7 @@ module spatz_tcdm_interconnect #(
     assign req_q_valid_flat[i] = req_i[i].q_valid;
     assign rsp_o[i].q_ready = rsp_q_ready_flat[i];
     assign in_req[i] = '{
-      addr: req_i[i].q.addr[ByteOffset+SelWidth+:MemAddrWidth],
+      addr: AddrMisalign ? addr_misaligned[i][ByteOffset+SelWidth+:MemAddrWidth] : req_i[i].q.addr[ByteOffset+SelWidth+:MemAddrWidth],
       write: req_i[i].q.write,
       amo: req_i[i].q.amo,
       data: req_i[i].q.data,

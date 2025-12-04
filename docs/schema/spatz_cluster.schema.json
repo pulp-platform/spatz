@@ -165,6 +165,11 @@
             "description": "Activate floating point support in Spatz",
             "default": false
         },
+        "spatz_nports": {
+            "type": "number",
+            "description": "Number of TCDM ports per Spatz instance",
+            "default": 4
+        },
         "timing": {
             "type": "object",
             "title": "Timing and Latency Tuning Parameter",
