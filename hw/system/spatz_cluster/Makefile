@@ -30,7 +30,14 @@ else
 endif
 
 # Enable additional uA configurations for the spatz core
+DOUBLE_BW := $(shell python3 -c "import jstyleson; print(jstyleson.load(open('$(SPATZ_CLUSTER_CFG_PATH)'))['cluster'].get('double_bw', 0))")
 BUF_FPU := $(shell python3 -c "import jstyleson; print(jstyleson.load(open('$(SPATZ_CLUSTER_CFG_PATH)'))['cluster'].get('buf_fpu', 0))")
+
+ifeq ($(DOUBLE_BW),1)
+	DEFS += -DDOUBLE_BW
+	SPATZ_CLUSTER_CFG_DEFINES += -DUNROLL=1
+endif
+
 ifeq ($(BUF_FPU),1)
 	DEFS += -DBUF_FPU
 endif

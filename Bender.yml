@@ -139,6 +139,7 @@ sources:
     - hw/ip/spatz/src/spatz_ipu.sv
     - hw/ip/spatz/src/spatz_vfu.sv
     - hw/ip/spatz/src/spatz_vlsu.sv
+    - hw/ip/spatz/src/spatz_doublebw_vlsu.sv
     - hw/ip/spatz/src/spatz_vrf.sv
     - hw/ip/spatz/src/spatz_vsldu.sv
     # Level 4

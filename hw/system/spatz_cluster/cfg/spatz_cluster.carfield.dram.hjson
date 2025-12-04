@@ -21,7 +21,8 @@
         "axi_isolate_enable": true,
         "tcdm": {
             "size": 128,
-            "banks": 16
+            "banks": 16,
+            "misalign": false
         },
         "cluster_periph_size": 64, // kB
         "dma_data_width": 64,
@@ -32,6 +33,8 @@
         "n_fpu": 4,
         "n_ipu": 1,
         "spatz_fpu": true,
+        "spatz_nports": 4,
+        "double_bw": 0,
         "buf_fpu": 0,
         // Timing parameters
         "timing": {

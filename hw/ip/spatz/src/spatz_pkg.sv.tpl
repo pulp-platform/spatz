@@ -11,6 +11,7 @@ ${int(getattr(cfg['cores'][0]['isa_parsed'], isa))}\
 package spatz_pkg;
 
   import rvv_pkg::*;
+  import cf_math_pkg::idx_width;
 
   //////////////////
   //  Parameters  //
@@ -84,6 +85,9 @@ package spatz_pkg;
   localparam int unsigned NrVRFBanks       = 4;
   // Number of elements per VRF Bank
   localparam int unsigned NrWordsPerBank   = NrVRFWords / NrVRFBanks;
+
+  // Number of VLSU interfaces
+  localparam int unsigned NumVLSUInterfaces = ${int(cfg['spatz_nports'] / cfg['n_fpu'])};
 
   // Width of scalar register file adresses
   // Depends on whether we have a FP regfile or not
@@ -313,6 +317,9 @@ package spatz_pkg;
 
     // Did the memory request trigger an exception
     logic exc;
+
+    // Interface that is committing
+    logic intf_id;
   } vlsu_rsp_t;
 
 % if cfg['mempool']:
@@ -334,8 +341,8 @@ package spatz_pkg;
     logic err;
     logic write;
   } spatz_mem_rsp_t;
-
 %endif
+
   ////////////////////
   // VSLDU Response //
   ////////////////////
@@ -349,30 +356,52 @@ package spatz_pkg;
   // VRF/SB Ports //
   //////////////////
 
-  typedef enum logic [2:0] {
+  typedef enum logic [idx_width(4 + 2 * ${int(cfg['spatz_nports'] / cfg['n_fpu'])}):0] {
     VFU_VS2_RD,
     VFU_VS1_RD,
     VFU_VD_RD,
+% if cfg['double_bw']:
+    VLSU_VD_RD0,
+    VLSU_VS2_RD0,
+    VLSU_VD_RD1,
+    VLSU_VS2_RD1,
+%else:
     VLSU_VS2_RD,
     VLSU_VD_RD,
+%endif
     VSLDU_VS2_RD
   } vreg_port_rd_e;
 
-  typedef enum logic [1:0] {
+  typedef enum logic [idx_width(2 + ${int(cfg['spatz_nports'] / cfg['n_fpu'])}):0] {
     VFU_VD_WD,
+% if cfg['double_bw']:
+    VLSU_VD_WD[${int(cfg['spatz_nports'] / cfg['n_fpu'])}],
+%else:
     VLSU_VD_WD,
+%endif
     VSLDU_VD_WD
   } vreg_port_wd_e;
 
-  typedef enum logic [3:0] {
+  typedef enum logic [idx_width(6 + 3 * ${int(cfg['spatz_nports'] / cfg['n_fpu'])}):0] {
     SB_VFU_VS2_RD,
     SB_VFU_VS1_RD,
     SB_VFU_VD_RD,
+% if cfg['double_bw']:
+    SB_VLSU_VD_RD0,
+    SB_VLSU_VS2_RD0,
+    SB_VLSU_VD_RD1,
+    SB_VLSU_VS2_RD1,
+%else:
     SB_VLSU_VS2_RD,
     SB_VLSU_VD_RD,
+%endif
     SB_VSLDU_VS2_RD,
     SB_VFU_VD_WD,
+% if cfg['double_bw']:
+    SB_VLSU_VD_WD[${int(cfg['spatz_nports'] / cfg['n_fpu'])}],
+%else:
     SB_VLSU_VD_WD,
+%endif
     SB_VSLDU_VD_WD
   } sb_port_e;
 
