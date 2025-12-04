@@ -75,6 +75,9 @@ module spatz_cluster
     // Spatz parameters
     parameter int                     unsigned               NumSpatzFPUs             [NrCores] = '{default: '0},
     parameter int                     unsigned               NumSpatzIPUs             [NrCores] = '{default: '0},
+    parameter int                     unsigned               NumSpatzTCDMPorts        [NrCores] = '{default: '0},
+    // Misalign rows of the TCDM
+    parameter logic                                          AddrMisalign                       = 1'b0,
     /// ## Timing Tuning Parameters
     /// Insert Pipeline registers into off-loading path (response)
     parameter bit                                            RegisterOffloadRsp                 = 1'b0,
@@ -157,7 +160,7 @@ module spatz_cluster
   localparam int unsigned NrSuperBanks      = NrBanks / BanksPerSuperBank;
 
   function automatic int unsigned get_tcdm_ports(int unsigned core);
-    return spatz_pkg::N_FU + 1;
+    return NumSpatzTCDMPorts[core] + 1;
   endfunction
 
   function automatic int unsigned get_tcdm_port_offs(int unsigned core_idx);
@@ -547,7 +550,8 @@ module spatz_cluster
     .user_t                (logic             ),
     .MemAddrWidth          (TCDMMemAddrWidth  ),
     .DataWidth             (AxiDataWidth      ),
-    .MemoryResponseLatency (MemoryMacroLatency)
+    .MemoryResponseLatency (MemoryMacroLatency),
+    .AddrMisalign          (AddrMisalign      )
   ) i_dma_interconnect (
     .clk_i     (clk_i      ),
     .rst_ni    (rst_ni     ),
@@ -665,7 +669,8 @@ module spatz_cluster
     .MemAddrWidth          (TCDMMemAddrWidth    ),
     .DataWidth             (DataWidth           ),
     .user_t                (tcdm_user_t         ),
-    .MemoryResponseLatency (1 + RegisterTCDMCuts)
+    .MemoryResponseLatency (1 + RegisterTCDMCuts),
+    .AddrMisalign          (AddrMisalign      )
   ) i_tcdm_interconnect (
     .clk_i     (clk_i                  ),
     .rst_ni    (rst_ni                 ),
@@ -742,6 +747,7 @@ module spatz_cluster
       .IsoCrossing             (1'b0                       ),
       .NumSpatzFPUs            (NumSpatzFPUs[i]            ),
       .NumSpatzIPUs            (NumSpatzIPUs[i]            ),
+      .NumMemPortsPerSpatz     (NumSpatzTCDMPorts[i]       ),
       .NumIntOutstandingLoads  (NumIntOutstandingLoads[i]  ),
       .NumIntOutstandingMem    (NumIntOutstandingMem[i]    ),
       .NumSpatzOutstandingLoads(NumSpatzOutstandingLoads[i]),

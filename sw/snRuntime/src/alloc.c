@@ -8,7 +8,7 @@
 #define ALIGN_UP(addr, size) (((addr) + (size)-1) & ~((size)-1))
 #define ALIGN_DOWN(addr, size) ((addr) & ~((size)-1))
 
-#define MIN_CHUNK_SIZE 8
+#define MIN_CHUNK_SIZE 256 // Alignment needed when using double VLSU bandwidth
 
 /**
  * @brief Allocate a chunk of memory in the L1 memory
