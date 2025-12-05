@@ -37,54 +37,58 @@ Disassembly of section .text:
     1074:	00000f13          	li	t5,0
     1078:	00000f93          	li	t6,0
     107c:	00000317          	auipc	t1,0x0
-    1080:	04c30313          	addi	t1,t1,76 # 10c8 <dummy_exception>
+    1080:	05c30313          	addi	t1,t1,92 # 10d8 <dummy_exception>
     1084:	30531073          	csrw	mtvec,t1
     1088:	00000597          	auipc	a1,0x0
-    108c:	04858593          	addi	a1,a1,72 # 10d0 <BOOTDATA>
+    108c:	05858593          	addi	a1,a1,88 # 10e0 <BOOTDATA>
     1090:	00001337          	lui	t1,0x1
     1094:	80030313          	addi	t1,t1,-2048 # 800 <_start-0x800>
     1098:	30431073          	csrw	0x304,t1
     109c:	30402673          	csrr	a2,0x304
     10a0:	00866613          	ori	a2,a2,8
     10a4:	30461073          	csrw	0x304,a2
-    10a8:	10500073          	wfi
-    10ac:	0185a383          	lw	t2,24(a1)
-    10b0:	0205ae03          	lw	t3,32(a1)
-    10b4:	01c383b3          	add	t2,t2,t3
-    10b8:	05838393          	addi	t2,t2,88
-    10bc:	00038393          	mv	t2,t2
-    10c0:	0003a383          	lw	t2,0(t2)
-    10c4:	00038067          	jr	t2
+    10a8:	30402673          	csrr	a2,0x304
+    10ac:	00080337          	lui	t1,0x80
+    10b0:	00666633          	or	a2,a2,t1
+    10b4:	30461073          	csrw	0x304,a2
+    10b8:	10500073          	wfi
+    10bc:	0185a383          	lw	t2,24(a1)
+    10c0:	0205ae03          	lw	t3,32(a1)
+    10c4:	01c383b3          	add	t2,t2,t3
+    10c8:	05838393          	addi	t2,t2,88
+    10cc:	00038393          	mv	t2,t2
+    10d0:	0003a383          	lw	t2,0(t2)
+    10d4:	00038067          	jr	t2
 
-000010c8 <dummy_exception>:
-    10c8:	10500073          	wfi
-    10cc:	ffdff06f          	j	10c8 <dummy_exception>
+000010d8 <dummy_exception>:
+    10d8:	10500073          	wfi
+    10dc:	ffdff06f          	j	10d8 <dummy_exception>
 
 Disassembly of section .rodata:
 
-000010d0 <BOOTDATA>:
-    10d0:	1000                	addi	s0,sp,32
-    10d2:	0000                	unimp
-    10d4:	0000                	unimp
-    10d6:	0000                	unimp
-    10d8:	0002                	0x2
+000010e0 <BOOTDATA>:
+    10e0:	1000                	addi	s0,sp,32
+    10e2:	0000                	unimp
+    10e4:	0000                	unimp
+    10e6:	0000                	unimp
+    10e8:	0002                	0x2
 	...
-    10ea:	0010                	addi	a2,sp,0
-    10ec:	0000                	unimp
-    10ee:	0000                	unimp
-    10f0:	0000                	unimp
-    10f2:	0002                	0x2
-	...
+    10fa:	0010                	addi	a2,sp,0
+    10fc:	0000                	unimp
+    10fe:	0000                	unimp
     1100:	0000                	unimp
-    1102:	8000                	0x8000
+    1102:	0002                	0x2
 	...
-    110c:	0001                	nop
+    1110:	0000                	unimp
+    1112:	8000                	0x8000
+	...
+    111c:	0001                	nop
 	...
 
 Disassembly of section .boot_section:
 
-00001110 <entry_addr>:
-    1110:	10c8                	addi	a0,sp,100
+00001120 <entry_addr>:
+    1120:	10d8                	addi	a4,sp,100
 	...
 
 Disassembly of section .Pulp_Chip.Info:
@@ -101,7 +105,7 @@ Disassembly of section .Pulp_Chip.Info:
   10:	495f 666e 006f      	0x6f666e495f
   16:	70696863          	bltu	s2,t1,726 <_start-0x8da>
   1a:	6e3d                	lui	t3,0xf
-  1c:	20656e6f          	jal	t3,56222 <entry_addr+0x55112>
+  1c:	20656e6f          	jal	t3,56222 <entry_addr+0x55102>
   20:	3d757063          	bleu	s7,a0,3e0 <_start-0xc20>
   24:	6f6e                	flw	ft10,216(sp)
   26:	656e                	flw	fa0,216(sp)
