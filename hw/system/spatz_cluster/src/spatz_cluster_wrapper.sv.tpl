@@ -255,6 +255,7 @@ module ${cfg['name']}_wrapper
 % if not cfg['tie_ports']:
   input  logic [9:0]                    hart_base_id_i,
   input  logic [AxiAddrWidth-1:0]       cluster_base_addr_i,
+  input  logic [AxiUserWidth-1:0]       axi_core_default_user_i,
 % endif
   output logic                          cluster_probe_o,
 % if cfg['axi_isolate_enable']:
