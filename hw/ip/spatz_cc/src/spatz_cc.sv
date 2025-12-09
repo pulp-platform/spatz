@@ -502,6 +502,9 @@ module spatz_cc
     automatic snitch_pkg::fpu_sequencer_trace_port_t extras_fpu_seq_out;
 
     if (rst_ni) begin
+
+      cycle = '0;
+
       extras_snitch = '{
         // State
         source      : snitch_pkg::SrcSnitch,
