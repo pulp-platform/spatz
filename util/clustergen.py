@@ -54,6 +54,9 @@ def main():
     with open(outdir / "spatz_cluster_wrapper.sv", "w") as f:
         f.write(cluster_tb.render_wrapper())
 
+    with open(outdir / "spatz_cluster.rdl", "w") as f:
+        f.write(cluster_tb.render_rdl())
+
     with open(outdir / "link.ld", "w") as f:
         f.write(cluster_tb.render_linker_script())
 
