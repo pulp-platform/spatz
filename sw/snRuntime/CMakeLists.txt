@@ -30,8 +30,25 @@ if(SPATZ_CLUSTER_CFG MATCHES "^(spatz_cluster\.(default|mempool|smallvrf|32b|dou
 elseif("${SPATZ_CLUSTER_CFG}" MATCHES "^spatz_cluster.carfield\\.(l2|dram)\\.hjson$")
   set(_plat_folder "cheshire")
 else()
-  message(FATAL_ERROR
-    "Unknown configuration SPATZ_CLUSTER_CFG: ${SPATZ_CLUSTER_CFG} for platform assignment")
+  if(NOT DEFINED SPATZ_CLUSTER_PLATFORM)
+    message(WARNING
+        "Unknown configuration SPATZ_CLUSTER_CFG: ${SPATZ_CLUSTER_CFG} for platform assignment")
+  else()
+    message(STATUS
+      "Overwriting platform with SPATZ_CLUSTER_PLATFORM: ${SPATZ_CLUSTER_PLATFORM}")
+    set(_plat_folder "${SPATZ_CLUSTER_PLATFORM}")
+  endif()
+endif()
+
+# 3. Check for platform folder assignment and throw a FATAL_ERROR if missing
+if(NOT _plat_folder)
+  # Check if a platform was set (either by the match above or externally)
+    # If no platform was set AND the platform folder is missing, throw FATAL_ERROR
+    message(FATAL_ERROR
+      "Could not determine platform folder. "
+      "Configuration 'SPATZ_CLUSTER_CFG' was unmatched AND "
+      "required variable 'SPATZ_CLUSTER_PLATFORM' is not set.")
+
 endif()
 
 set(PLATFORM_SOURCE_FOLDER "src/platforms/${_plat_folder}" CACHE STRING "Path to the platform-specific sources")
@@ -59,6 +76,16 @@ string(TOUPPER       "${_key}"   _key)
 # build the variable names we defined above
 set(_orig_var "MEM_${_key}_ORIGIN")
 set(_size_var "MEM_${_key}_SIZE")
+
+if(NOT DEFINED ${_orig_var} AND DEFINED SPATZ_CLUSTER_MEMORY_ORIGIN)
+    message(STATUS "Overriding memory origin with SPATZ_CLUSTER_MEMORY_ORIGIN: ${SPATZ_CLUSTER_MEMORY_ORIGIN}")
+    set(_orig_var "SPATZ_CLUSTER_MEMORY_ORIGIN")
+endif()
+
+if(NOT DEFINED ${_size_var} AND DEFINED SPATZ_CLUSTER_MEMORY_SIZE)
+    message(STATUS "Overriding memory size with SPATZ_CLUSTER_MEMORY_SIZE: ${SPATZ_CLUSTER_MEMORY_SIZE}")
+    set(_size_var "SPATZ_CLUSTER_MEMORY_SIZE")
+endif()
 
 if(DEFINED ${_orig_var} AND DEFINED ${_size_var})
     # perform the lookup
