@@ -420,30 +420,32 @@ module spatz_cc
 
   typedef struct packed {
     int unsigned idx;
-    logic [AddrWidth-1:0] base;
-    logic [AddrWidth-1:0] mask;
+    logic [AddrWidth-1:0] start_addr;
+    logic [AddrWidth-1:0] end_addr;
   } reqrsp_rule_t;
 
   reqrsp_rule_t addr_map;
   assign addr_map = '{
-    idx : 1,
-    base: tcdm_addr_base_i,
-    mask: ({AddrWidth{1'b1}} << TCDMAddrWidth)
+    idx       : 1,
+    start_addr: tcdm_addr_base_i,
+    end_addr  : tcdm_addr_base_i + (1 << TCDMAddrWidth)
   };
 
-  addr_decode_napot #(
+  addr_decode_dync #(
     .NoIndices (2                    ),
     .NoRules   (1                    ),
     .addr_t    (logic [AddrWidth-1:0]),
-    .rule_t    (reqrsp_rule_t        )
-  ) i_addr_decode_napot (
-    .addr_i           (merged_dreq.q.addr),
-    .addr_map_i       (addr_map          ),
-    .idx_o            (slave_select      ),
-    .dec_valid_o      (/* Unused */      ),
-    .dec_error_o      (/* Unused */      ),
-    .en_default_idx_i (1'b1              ),
-    .default_idx_i    ('0                )
+    .rule_t    (reqrsp_rule_t        ),
+    .Napot     (0                    )  // Use range-based decoding (start/end addresses)
+  ) i_addr_decode_dync (
+    .addr_i            (merged_dreq.q.addr),
+    .addr_map_i        (addr_map          ),
+    .idx_o             (slave_select      ),
+    .dec_valid_o       (/* Unused */      ),
+    .dec_error_o       (/* Unused */      ),
+    .en_default_idx_i  (1'b1              ),
+    .default_idx_i     ('0                ),
+    .config_ongoing_i  (1'b0              )
   );
 
   reqrsp_to_tcdm #(
