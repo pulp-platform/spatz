@@ -551,6 +551,7 @@ module spatz_fpu_sequencer
     .lsu_perror_o (/* Unused */    ),
     .lsu_pvalid_o (fp_lsu_pvalid   ),
     .lsu_pready_i (fp_lsu_pready   ),
+    .lsu_empty_o  (/* Unused */    ),
     // Memory interface
 `ifdef MEMPOOL_SPATZ
     .data_qaddr_o (mem_qaddr              ),
