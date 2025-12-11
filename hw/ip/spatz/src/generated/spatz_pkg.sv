@@ -23,7 +23,7 @@ package spatz_pkg;
   // Single-precision floating point support
   localparam bit RVF            = 1;
   // Double-precision floating-point support
-  localparam bit RVD            = 1;
+  localparam bit RVD            = 0;
   // Vector support
   localparam bit RVV            = 1;
 
@@ -32,7 +32,7 @@ package spatz_pkg;
   // Maximum size of a single vector element in bytes
   localparam int unsigned ELENB  = ELEN / 8;
   // Number of bits in a vector register
-  localparam int unsigned VLEN   = 512;
+  localparam int unsigned VLEN   = 256;
   // Number of bytes in a vector register
   localparam int unsigned VLENB  = VLEN / 8;
   // Maximum vector length in elements
