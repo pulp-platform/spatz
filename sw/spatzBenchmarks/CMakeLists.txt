@@ -24,6 +24,10 @@ include_directories(${SNRUNTIME_INCLUDE_DIRS})
 
 add_compile_options(-O3 -g -ffunction-sections)
 
+# Use unrolled spatzBenchmarks
+if (UNROLL)
+add_definitions(-DUNROLL)
+endif()
 
 # Macro to regenerate the golden values and compile a module
 macro(add_spatz_test_oneParam name file param1)
