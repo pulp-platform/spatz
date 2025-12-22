@@ -1,3 +1,5 @@
 .project
 .dvt
 vendor
+.spatz_cluster_cfg
+work-xrun-runs
