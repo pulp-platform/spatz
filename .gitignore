@@ -24,5 +24,7 @@ mems
 .settings
 *.o
 install
-.projectBender.lock
+.project
 spatz_env
+.venv/
+hw/ip/snitch/src/riscv_instr.sv
