@@ -135,11 +135,22 @@ module spatz_vfu
 
   // Valid operations
   logic [N_FU*ELENB-1:0] valid_operations;
-  assign valid_operations = (spatz_req.op_arith.is_scalar || spatz_req.op_arith.is_reduction) ? (spatz_req.vtype.vsew == EW_32 ? 4'hf : 8'hff) : '1;
+  assign valid_operations = (spatz_req.op_arith.is_scalar || spatz_req.op_arith.is_reduction) ? 
+    (spatz_req.vtype.vsew == EW_64 ? {{(N_FU*ELENB-8){1'b0}}, 8'hff} :
+     spatz_req.vtype.vsew == EW_32 ? {{(N_FU*ELENB-4){1'b0}}, 4'hf} :
+     spatz_req.vtype.vsew == EW_16 ? {{(N_FU*ELENB-2){1'b0}}, 2'h3} :
+                                      {{(N_FU*ELENB-1){1'b0}}, 1'h1}) : 
+    '1;
 
   // Pending results
   logic [N_FU*ELENB-1:0] pending_results;
-  assign pending_results = result_tag.wb ? (spatz_req.vtype.vsew == EW_32 ? 4'hf : 8'hff) : '1;
+  // For scalar writeback (vmv.x.s), only the first element bytes are valid
+  assign pending_results = result_tag.wb ? 
+    (spatz_req.vtype.vsew == EW_64 ? {{(N_FU*ELENB-8){1'b0}}, 8'hff} :
+     spatz_req.vtype.vsew == EW_32 ? {{(N_FU*ELENB-4){1'b0}}, 4'hf} :
+     spatz_req.vtype.vsew == EW_16 ? {{(N_FU*ELENB-2){1'b0}}, 2'h3} :
+                                      {{(N_FU*ELENB-1){1'b0}}, 1'h1}) : 
+    '1;
 
   // Did we issue a microoperation?
   logic word_issued;
