@@ -843,6 +843,7 @@ module spatz_decoder
           spatz_req.vs2                = arith_s2;
           spatz_req.use_vs2            = 1'b1;
           spatz_req.op_arith.is_scalar = 1'b1;
+          spatz_req.vtype.vsew         = (ELEN == 32) ? EW_32 : EW_8;
         end
 
         // Vector floating-point instructions
