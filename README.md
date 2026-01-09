@@ -4,7 +4,14 @@
 # Spatz
 
 Spatz is a compact vector processor based on [RISC-V's Vector Extension (RVV) v1.0](https://github.com/riscv/riscv-v-spec/releases/tag/v1.0).
-Spatz acts as a coprocessor of [Snitch](https://github.com/pulp-platform/snitch), a tiny 64-bit scalar core.
+It is designed to operate as a tightly coupled coprocessor to [Snitch](https://github.com/pulp-platform/snitch), a lightweight 64-bit scalar core, enabling efficient execution of data-parallel workloads in different clusters.
+
+## Spatzennest
+
+Spatzennest is a cache-based variant of the Spatz cluster.
+Instead of a pure L1 scratchpad memory (SPM), it employs a hybrid Cache/SPM organization to improve programmability and latency tolerance.
+
+The cluster integrates the [InSitu-Cache](https://github.com/pulp-platform/Insitu-Cache) as its L1 memory system. This design re-purposes otherwise unused cacheline space to implement write buffers and Miss Status Holding Registers (MSHRs), enabling a non-blocking cache with minimal area overhead.
 
 ## Getting started
 
