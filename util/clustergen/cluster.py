@@ -392,7 +392,8 @@ class SnitchClusterTB(Generator):
             self.cfg["dram"]["length"],
             self.cfg["cluster"]["addr_width"],
         )
-        self.cfg["cluster"]["tie_ports"] = True
+        if "tie_ports" not in self.cfg["cluster"]:
+            self.cfg["cluster"]["tie_ports"] = True
         # Store Snitch cluster config in separate variable
         self.cluster = SnitchCluster(cfg["cluster"], pma_cfg)
 
