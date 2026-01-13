@@ -133,13 +133,25 @@ module spatz_vfu
   assign op3_is_ready   = spatz_req_valid && (!spatz_req.vd_is_src || vrf_rvalid_i[2]);
   assign operands_ready = op1_is_ready && op2_is_ready && op3_is_ready && (!spatz_req.op_arith.is_scalar || vfu_rsp_ready_i) && !stall;
 
+  // Function to compute valid byte mask based on element width
+  function automatic logic [N_FU*ELENB-1:0] get_valid_bytes(vew_e vsew);
+    case (vsew)
+      EW_8:  return {{(N_FU*ELENB-1){1'b0}}, 1'h1};
+      EW_16: return {{(N_FU*ELENB-2){1'b0}}, 2'h3};
+      EW_32: return {{(N_FU*ELENB-4){1'b0}}, 4'hf};
+      EW_64: return {{(N_FU*ELENB-8){1'b0}}, 8'hff};
+      default: return '1;
+    endcase
+  endfunction
+
   // Valid operations
   logic [N_FU*ELENB-1:0] valid_operations;
-  assign valid_operations = (spatz_req.op_arith.is_scalar || spatz_req.op_arith.is_reduction) ? (spatz_req.vtype.vsew == EW_32 ? 4'hf : 8'hff) : '1;
+  assign valid_operations = (spatz_req.op_arith.is_scalar || spatz_req.op_arith.is_reduction) ? 
+                            get_valid_bytes(spatz_req.vtype.vsew) : '1;
 
   // Pending results
   logic [N_FU*ELENB-1:0] pending_results;
-  assign pending_results = result_tag.wb ? (spatz_req.vtype.vsew == EW_32 ? 4'hf : 8'hff) : '1;
+  assign pending_results = result_tag.wb ? get_valid_bytes(spatz_req.vtype.vsew) : '1;
 
   // Did we issue a microoperation?
   logic word_issued;
