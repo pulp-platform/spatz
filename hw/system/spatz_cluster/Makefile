@@ -23,7 +23,14 @@ SPATZ_CLUSTER_CFG_DEFINES += -DSNRT_TCDM_SIZE=$(shell python3 -c "import jstyles
 SPATZ_CLUSTER_CFG_DEFINES += -DSNRT_NFPU_PER_CORE=$(shell python3 -c "import jstyleson; f = open('$(SPATZ_CLUSTER_CFG_PATH)'); print(jstyleson.load(f)['cluster']['n_fpu'])")
 
 # Enable additional uA configurations for the spatz core
+DOUBLE_BW := $(shell python3 -c "import jstyleson; print(jstyleson.load(open('$(SPATZ_CLUSTER_CFG_PATH)'))['cluster'].get('double_bw', 0))")
 BUF_FPU := $(shell python3 -c "import jstyleson; print(jstyleson.load(open('$(SPATZ_CLUSTER_CFG_PATH)'))['cluster'].get('buf_fpu', 0))")
+
+ifeq ($(DOUBLE_BW),1)
+	DEFS += -DDOUBLE_BW
+	SPATZ_CLUSTER_CFG_DEFINES += -DUNROLL=1
+endif
+
 ifeq ($(BUF_FPU),1)
 	DEFS += -DBUF_FPU
 endif
