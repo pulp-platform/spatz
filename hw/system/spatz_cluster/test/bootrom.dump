@@ -6,11 +6,11 @@ Disassembly of section .text:
 
 00001000 <_start>:
     1000:	00000317          	auipc	t1,0x0
-    1004:	07832303          	lw	t1,120(t1) # 1078 <_GLOBAL_OFFSET_TABLE_+0x4>
+    1004:	08032303          	lw	t1,128(t1) # 1080 <_GLOBAL_OFFSET_TABLE_+0x4>
     1008:	30531073          	csrw	mtvec,t1
     100c:	f1402573          	csrr	a0,mhartid
     1010:	00000597          	auipc	a1,0x0
-    1014:	06c5a583          	lw	a1,108(a1) # 107c <_GLOBAL_OFFSET_TABLE_+0x8>
+    1014:	0745a583          	lw	a1,116(a1) # 1084 <_GLOBAL_OFFSET_TABLE_+0x8>
     1018:	3047d073          	csrwi	mie,15
     101c:	10500073          	wfi
     1020:	00c5a383          	lw	t2,12(a1)
@@ -30,7 +30,7 @@ Disassembly of section .rodata:
 00001048 <BOOTDATA>:
     1048:	1000                	.2byte	0x1000
     104a:	0000                	.2byte	0x0
-    104c:	0004                	.2byte	0x4
+    104c:	0010                	.2byte	0x10
     104e:	0000                	.2byte	0x0
     1050:	0000                	.2byte	0x0
     1052:	0000                	.2byte	0x0
@@ -44,30 +44,34 @@ Disassembly of section .rodata:
     1068:	0000                	.2byte	0x0
     106a:	a000                	.2byte	0xa000
     106c:	0000                	.2byte	0x0
+    106e:	0000                	.2byte	0x0
+    1070:	0004                	.2byte	0x4
+    1072:	0000                	.2byte	0x0
+    1074:	0000                	.2byte	0x0
 	...
 
 Disassembly of section .boot_section:
 
-00001070 <entry_addr>:
-    1070:	103c                	.2byte	0x103c
+00001078 <entry_addr>:
+    1078:	103c                	.2byte	0x103c
 	...
 
 Disassembly of section .got:
 
-00001074 <_GLOBAL_OFFSET_TABLE_>:
-    1074:	0000                	.2byte	0x0
-    1076:	0000                	.2byte	0x0
-    1078:	103c                	.2byte	0x103c
-    107a:	0000                	.2byte	0x0
-    107c:	1048                	.2byte	0x1048
+0000107c <_GLOBAL_OFFSET_TABLE_>:
+    107c:	0000                	.2byte	0x0
+    107e:	0000                	.2byte	0x0
+    1080:	103c                	.2byte	0x103c
+    1082:	0000                	.2byte	0x0
+    1084:	1048                	.2byte	0x1048
 	...
 
 Disassembly of section .got.plt:
 
-00001080 <.got.plt>:
-    1080:	ffff                	.2byte	0xffff
-    1082:	ffff                	.2byte	0xffff
-    1084:	0000                	.2byte	0x0
+00001088 <.got.plt>:
+    1088:	ffff                	.2byte	0xffff
+    108a:	ffff                	.2byte	0xffff
+    108c:	0000                	.2byte	0x0
 	...
 
 Disassembly of section .riscv.attributes:
