@@ -1,4 +1,6 @@
-// Author: Riccardo Giunti - Fondazione CHIPS-IT - <riccardo.giunti@chips.it>
+// Licensed under the Apache License, Version 2.0, see LICENSE for details.
+// SPDX-License-Identifier: Apache-2.0
+// Author: Riccardo Giunti - Fondazione CHIPS-IT
 
 #include "vector_macros.h"
 

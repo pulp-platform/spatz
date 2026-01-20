@@ -1,8 +1,6 @@
-// Copyright 2021 ETH Zurich and University of Bologna.
-// Solderpad Hardware License, Version 0.51, see LICENSE for details.
-// SPDX-License-Identifier: SHL-0.51
-//
-// Author: Matteo Perotti <mperotti@iis.ee.ethz.ch>
+// Licensed under the Apache License, Version 2.0, see LICENSE for details.
+// SPDX-License-Identifier: Apache-2.0
+// Author: Riccardo Giunti - Fondazione CHIPS-IT
 
 #include "vector_macros.h"
 
