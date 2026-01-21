@@ -12,7 +12,7 @@ module spatz_vlsu
   import rvv_pkg::*;
   import cf_math_pkg::idx_width; #(
     parameter int unsigned   NrMemPorts         = 1,
-    parameter int unsigned   NrOutstandingLoads = 8,
+    parameter int unsigned   NrOutstandingLoads = 16,
     // Memory request
     parameter  type          spatz_mem_req_t    = logic,
     parameter  type          spatz_mem_rsp_t    = logic,
@@ -314,9 +314,9 @@ module spatz_vlsu
   logic             commit_insn_valid;
 
   fifo_v3 #(
-    .DEPTH       (3                ),
-    .FALL_THROUGH(1'b1             ),
-    .dtype       (commit_metadata_t)
+    .DEPTH       (3), // yzf modified
+    .FALL_THROUGH(1'b1                  ),
+    .dtype       (commit_metadata_t     )
   ) i_fifo_commit_insn (
     .clk_i     (clk_i            ),
     .rst_ni    (rst_ni           ),
@@ -795,7 +795,8 @@ module spatz_vlsu
       if (state_q == VLSU_RunningLoad && |commit_operation_valid) begin
         // Enable write back to the VRF if we have a valid element in all buffers that still have to write something back.
         vrf_req_d.waddr = vd_vreg_addr;
-        vrf_req_valid_d = &(rob_rvalid | ~mem_pending) && |mem_pending;
+        vrf_req_valid_d = (&rob_rvalid); // && (|mem_pending);
+        // vrf_req_valid_d = &(rob_rvalid | ~mem_pending) && |mem_pending;
 
         for (int unsigned port = 0; port < NrMemPorts; port++) begin
           automatic logic [63:0] data = rob_rdata[port];
@@ -866,13 +867,13 @@ module spatz_vlsu
       for (int unsigned port = 0; port < NrMemPorts; port++) begin
         // Write the load result to the buffer
         rob_wdata[port] = spatz_mem_rsp_i[port].data;
-`ifdef TARGET_MEMPOOL
+        `ifdef TARGET_MEMPOOL
         rob_wid[port]   = spatz_mem_rsp_i[port].id;
         // Need to consider out-of-order memory response
         rob_push[port]  = spatz_mem_rsp_valid_i[port] && (state_q == VLSU_RunningLoad) && spatz_mem_rsp_i[port].write == '0;
-`else
+        `else
         rob_push[port]  = spatz_mem_rsp_valid_i[port] && (state_q == VLSU_RunningLoad) && store_count_q[port] == '0;
-`endif
+        `endif
         if (!rob_full[port] && !offset_queue_full[port] && mem_operation_valid[port]) begin
           rob_req_id[port]     = spatz_mem_req_ready[port] & spatz_mem_req_valid[port];
           mem_req_lvalid[port] = (!mem_is_indexed || (vrf_rvalid_i[1] && !pending_index[port])) && mem_spatz_req.op_mem.is_load;
@@ -943,7 +944,7 @@ module spatz_vlsu
           mem_req_svalid[port] = rob_rvalid[port] && (!mem_is_indexed || (vrf_rvalid_i[1] && !pending_index[port])) && !mem_spatz_req.op_mem.is_load;
           mem_req_id[port]     = rob_rid[port];
           mem_req_last[port]   = mem_operation_last[port];
-          rob_pop[port]        = spatz_mem_req_valid[port] && spatz_mem_req_ready[port];
+          rob_pop[port]        = rob_rvalid[port] && spatz_mem_req_valid[port] && spatz_mem_req_ready[port];
 
           // Create byte enable signal for memory request
           if (mem_is_single_element_operation) begin
@@ -962,7 +963,7 @@ module spatz_vlsu
         end else begin
           // Clear empty buffer id requests
           if (!rob_empty[port])
-            rob_pop[port] = 1'b1;
+            rob_pop[port] = rob_rvalid[port];
         end
       end
     end
