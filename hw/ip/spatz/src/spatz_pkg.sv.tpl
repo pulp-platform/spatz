@@ -4,6 +4,10 @@
 //
 // Author: Matheus Cavalcante, ETH Zurich
 
+<%def name="core_isa_ext(isa)">\
+${int(getattr(cfg['cores'][0]['isa_parsed'], isa))}\
+</%def>
+
 package spatz_pkg;
 
   import rvv_pkg::*;
@@ -34,9 +38,9 @@ package spatz_pkg;
   localparam bit RVD            = `ifdef RVD `RVD `else 0 `endif;
 % elif cfg['spatz_fpu']:
   // Single-precision floating point support
-  localparam bit RVF            = 1;
+  localparam bit RVF            = ${core_isa_ext('f')};
   // Double-precision floating-point support
-  localparam bit RVD            = 1;
+  localparam bit RVD            = ${core_isa_ext('d')};
 % else :
   // Single-precision floating point support
   localparam bit RVF            = 0;

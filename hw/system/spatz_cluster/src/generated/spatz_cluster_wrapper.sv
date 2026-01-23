@@ -29,6 +29,9 @@ package spatz_cluster_pkg;
   // AXI User Width
   localparam int unsigned SpatzAxiUserWidth = 2;
 
+  // Narrow AXI Data width
+  localparam int unsigned SpatzNarrowAxiDataWidth = 64;
+
   typedef logic [SpatzAxiDataWidth-1:0] axi_data_t;
   typedef logic [SpatzAxiStrbWidth-1:0] axi_strb_t;
   typedef logic [SpatzAxiAddrWidth-1:0] axi_addr_t;
@@ -36,8 +39,11 @@ package spatz_cluster_pkg;
   typedef logic [SpatzAxiIdOutWidth-1:0] axi_id_out_t;
   typedef logic [SpatzAxiUserWidth-1:0] axi_user_t;
 
+  typedef logic [SpatzNarrowAxiDataWidth-1:0] narrow_axi_data_t;
+  typedef logic [SpatzNarrowAxiDataWidth/8-1:0] narrow_axi_strb_t;
 
-  `AXI_TYPEDEF_ALL(spatz_axi_in, axi_addr_t, axi_id_in_t, logic [63:0], logic [7:0], axi_user_t)
+
+  `AXI_TYPEDEF_ALL(spatz_axi_in, axi_addr_t, axi_id_in_t, narrow_axi_data_t, narrow_axi_strb_t, axi_user_t)
   `AXI_TYPEDEF_ALL(spatz_axi_out, axi_addr_t, axi_id_out_t, axi_data_t, axi_strb_t, axi_user_t)
 
   ////////////////////
@@ -45,10 +51,6 @@ package spatz_cluster_pkg;
   ////////////////////
 
   localparam int unsigned NumCores = 2;
-
-  localparam int unsigned DataWidth  = 64;
-  localparam int unsigned BeWidth    = DataWidth / 8;
-  localparam int unsigned ByteOffset = $clog2(BeWidth);
 
   localparam int unsigned ICacheLineWidth = 256;
   localparam int unsigned ICacheLineCount = 64;
@@ -283,10 +285,12 @@ module spatz_cluster_wrapper
     .AxiIdWidthIn (AxiInIdWidth),
     .AxiIdWidthOut (IwcAxiIdOutWidth),
     .AxiUserWidth (AxiUserWidth),
+    .NarrowAXIDataWidth (SpatzNarrowAxiDataWidth),
     .BootAddr (32'h1000),
     .ClusterPeriphSize (64),
     .NrCores (2),
     .TCDMDepth (1024),
+    .TCDMSize (TCDMSize),
     .NrBanks (16),
     .ICacheLineWidth (spatz_cluster_pkg::ICacheLineWidth),
     .ICacheLineCount (spatz_cluster_pkg::ICacheLineCount),
