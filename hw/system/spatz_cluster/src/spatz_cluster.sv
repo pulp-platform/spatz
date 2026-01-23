@@ -35,12 +35,15 @@ module spatz_cluster
     parameter int                     unsigned               AxiIdWidthOut                      = 2,
     /// AXI: user width.
     parameter int                     unsigned               AxiUserWidth                       = 1,
+    /// Width of narrow AXI port
+    parameter int                     unsigned               NarrowAXIDataWidth                 = 64,
     /// Address from which to fetch the first instructions.
     parameter logic                            [31:0]        BootAddr                           = 32'h0,
     /// The total amount of cores.
     parameter int                     unsigned               NrCores                            = 8,
     /// Data/TCDM memory depth per cut (in words).
     parameter int                     unsigned               TCDMDepth                          = 1024,
+    parameter int                     unsigned               TCDMSize                           = 32'h20000, // 128 KB
     /// Cluster peripheral address region size (in kB).
     parameter int                     unsigned               ClusterPeriphSize                  = 64,
     /// Number of TCDM Banks.
@@ -149,7 +152,6 @@ module spatz_cluster
   /// Minimum width to hold the core number.
   localparam int unsigned CoreIDWidth       = cf_math_pkg::idx_width(NrCores);
   localparam int unsigned TCDMMemAddrWidth  = $clog2(TCDMDepth);
-  localparam int unsigned TCDMSize          = NrBanks * TCDMDepth * (DataWidth/8);
   localparam int unsigned TCDMAddrWidth     = $clog2(TCDMSize);
   localparam int unsigned BanksPerSuperBank = AxiDataWidth / DataWidth;
   localparam int unsigned NrSuperBanks      = NrBanks / BanksPerSuperBank;
@@ -174,7 +176,7 @@ module spatz_cluster
   // Narrow AXI network parameters
   localparam int unsigned NarrowIdWidthIn  = AxiIdWidthIn;
   localparam int unsigned NarrowIdWidthOut = NarrowIdWidthIn + $clog2(NrNarrowMasters);
-  localparam int unsigned NarrowDataWidth  = 64;
+  localparam int unsigned NarrowDataWidth  = NarrowAXIDataWidth;
   localparam int unsigned NarrowUserWidth  = AxiUserWidth;
 
   // TCDM, Peripherals, SoC Request
