@@ -135,11 +135,11 @@ module spatz_vfu
 
   // Valid operations
   logic [N_FU*ELENB-1:0] valid_operations;
-  assign valid_operations = (spatz_req.op_arith.is_scalar || spatz_req.op_arith.is_reduction) ? (spatz_req.vtype.vsew == EW_32 ? 4'hf : 8'hff) : '1;
+  assign valid_operations = (spatz_req.op_arith.is_scalar || spatz_req.op_arith.is_reduction) ? (ELEN == 32 ? 4'hf : 8'hff) : '1;
 
   // Pending results
   logic [N_FU*ELENB-1:0] pending_results;
-  assign pending_results = result_tag.wb ? (spatz_req.vtype.vsew == EW_32 ? 4'hf : 8'hff) : '1;
+  assign pending_results = result_tag.wb ? (ELEN == 32 ? 4'hf : 8'hff) : '1;
 
   // Did we issue a microoperation?
   logic word_issued;
