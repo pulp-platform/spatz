@@ -45,12 +45,18 @@ package ${cfg['pkg_name']};
   // AXI User Width
   localparam int unsigned SpatzAxiUserWidth = ${cfg['user_width']};
 
+  // Narrow AXI Data width
+  localparam int unsigned SpatzNarrowAxiDataWidth = ${cfg['data_width']};
+
   typedef logic [SpatzAxiDataWidth-1:0] axi_data_t;
   typedef logic [SpatzAxiStrbWidth-1:0] axi_strb_t;
   typedef logic [SpatzAxiAddrWidth-1:0] axi_addr_t;
   typedef logic [SpatzAxiIdInWidth-1:0] axi_id_in_t;
   typedef logic [SpatzAxiIdOutWidth-1:0] axi_id_out_t;
   typedef logic [SpatzAxiUserWidth-1:0] axi_user_t;
+
+  typedef logic [SpatzNarrowAxiDataWidth-1:0] narrow_axi_data_t;
+  typedef logic [SpatzNarrowAxiDataWidth/8-1:0] narrow_axi_strb_t;
 
 % if cfg['axi_cdc_enable']:
   localparam int unsigned SpatzLogDepth = 3;
@@ -60,7 +66,7 @@ package ${cfg['pkg_name']};
   % endif
 % endif
 
-  `AXI_TYPEDEF_ALL(spatz_axi_in, axi_addr_t, axi_id_in_t, logic [63:0], logic [7:0], axi_user_t)
+  `AXI_TYPEDEF_ALL(spatz_axi_in, axi_addr_t, axi_id_in_t, narrow_axi_data_t, narrow_axi_strb_t, axi_user_t)
   `AXI_TYPEDEF_ALL(spatz_axi_out, axi_addr_t, axi_id_out_t, axi_data_t, axi_strb_t, axi_user_t)
 
   ////////////////////
@@ -68,10 +74,6 @@ package ${cfg['pkg_name']};
   ////////////////////
 
   localparam int unsigned NumCores = ${cfg['nr_cores']};
-
-  localparam int unsigned DataWidth  = 64;
-  localparam int unsigned BeWidth    = DataWidth / 8;
-  localparam int unsigned ByteOffset = $clog2(BeWidth);
 
   localparam int unsigned ICacheLineWidth = ${cfg['icache']['cacheline']};
   localparam int unsigned ICacheLineCount = ${cfg['icache']['depth']};
@@ -493,10 +495,12 @@ module ${cfg['name']}_wrapper
     .AxiIdWidthIn (AxiInIdWidth),
     .AxiIdWidthOut (IwcAxiIdOutWidth),
     .AxiUserWidth (AxiUserWidth),
+    .NarrowAXIDataWidth (SpatzNarrowAxiDataWidth),
     .BootAddr (${to_sv_hex(cfg['boot_addr'], 32)}),
     .ClusterPeriphSize (${cfg['cluster_periph_size']}),
     .NrCores (${cfg['nr_cores']}),
     .TCDMDepth (${cfg['tcdm']['depth']}),
+    .TCDMSize (TCDMSize),
     .NrBanks (${cfg['tcdm']['banks']}),
     .ICacheLineWidth (${cfg['pkg_name']}::ICacheLineWidth),
     .ICacheLineCount (${cfg['pkg_name']}::ICacheLineCount),

@@ -248,12 +248,12 @@ module testharness (
    *  Simulation control  *
    ************************/
 
-  `REQRSP_TYPEDEF_ALL(reqrsp_cluster_in, axi_addr_t, logic [63:0], logic [7:0])
+  `REQRSP_TYPEDEF_ALL(reqrsp_cluster_in, axi_addr_t, narrow_axi_data_t, narrow_axi_strb_t)
   reqrsp_cluster_in_req_t to_cluster_req;
   reqrsp_cluster_in_rsp_t to_cluster_rsp;
 
   reqrsp_to_axi #(
-    .DataWidth   (DataWidth              ),
+    .DataWidth   (SpatzNarrowAxiDataWidth),
     .UserWidth   (SpatzAxiUserWidth      ),
     .axi_req_t   (spatz_axi_in_req_t     ),
     .axi_rsp_t   (spatz_axi_in_resp_t    ),
