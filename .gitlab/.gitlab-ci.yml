@@ -205,6 +205,7 @@ riscvTests-test-vlt:
     matrix:
       - { cfg: spatz_cluster.default.dram }
       - { cfg: spatz_cluster.smallvrf.dram }
+      - { cfg: spatz_cluster.32b.dram }
 
 # Spatz tests
 spatzBenchmarks-test-vlt:
