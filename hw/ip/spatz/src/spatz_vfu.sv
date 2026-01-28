@@ -423,7 +423,7 @@ module spatz_vfu
     if (reduction_pointer_q == fill_cnt) begin
       // If this is the last VRF word, then mask the unused data
       automatic logic [$clog2(VRFWordWidth)-1:0] width;
-      width = (spatz_req.vl << spatz_req.vtype.vsew << MAXEW);
+      width = (spatz_req.vl << spatz_req.vtype.vsew << 3); // in number of bits required for mask
       mask =  (width == 0) ? '1 : (1 << width)-1;
     end
 

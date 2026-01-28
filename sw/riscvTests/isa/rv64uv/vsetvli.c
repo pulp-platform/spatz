@@ -26,9 +26,11 @@ void TEST_CASE1() {
   __asm__ volatile("vsetvli %[vl], %[avl], e32, m2, ta, ma" : [vl]"=r"(vl) : [avl] "r"(avl));
   XCMP(3, vl, snrt_min(avl, vlenb * 2 / 4));
 
+#if ELEN == 64
   avl = 69;
   __asm__ volatile("vsetvli %[vl], %[avl], e64, m8, ta, ma" : [vl]"=r"(vl) : [avl] "r"(avl));
   XCMP(4, vl, snrt_min(avl, vlenb * 8 / 8));
+#endif 
 
   // SEW=128 not supported
   // avl = 69;
