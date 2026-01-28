@@ -82,7 +82,11 @@ int main() {
 
   // Calculate dotp
   double acc;
+#ifdef UNROLL
+  acc = fdotp_v64b_m8_unrl(a_int, b_int, dim);
+#else
   acc = fdotp_v64b(a_int, b_int, dim);
+#endif
   result[cid] = acc;
 
   // Wait for all cores to finish
