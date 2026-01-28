@@ -22,12 +22,14 @@ void TEST_CASE1(void) {
   VSET(16, e32, m4);
   VCMP_U32(2, v6, 2, 4, 6, 8, 10, 12, 14, 16, 2, 4, 6, 8, 10, 12, 14, 16);
 
+#if ELEN == 64
   VSET(16, e32, m2);
   VLOAD_32(v4, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
   VLOAD_32(v8, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
   asm volatile("vwadd.vv v6, v4, v8");
   VSET(16, e64, m4);
   VCMP_U64(3, v6, 2, 4, 6, 8, 10, 12, 14, 16, 2, 4, 6, 8, 10, 12, 14, 16);
+#endif
 }
 
 void TEST_CASE2(void) {
@@ -49,6 +51,7 @@ void TEST_CASE2(void) {
   VSET(16, e32, m4);
   VCMP_U32(5, v6, 0, 4, 0, 8, 0, 12, 0, 16, 0, 4, 0, 8, 0, 12, 0, 16);
 
+#if ELEN == 64
   VSET(16, e32, m2);
   VLOAD_32(v4, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
   VLOAD_32(v8, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
@@ -57,6 +60,7 @@ void TEST_CASE2(void) {
   asm volatile("vwadd.vv v6, v4, v8, v0.t");
   VSET(16, e64, m4);
   VCMP_U64(6, v6, 0, 4, 0, 8, 0, 12, 0, 16, 0, 4, 0, 8, 0, 12, 0, 16);
+#endif
 }
 
 void TEST_CASE3(void) {
@@ -74,11 +78,13 @@ void TEST_CASE3(void) {
   VSET(16, e32, m4);
   VCMP_U32(8, v6, 6, 3, 8, 1, 10, -1, 12, -3, 14, -5, 16, -7, 18, -9, 20, -11);
 
+#if ELEN == 64
   VSET(16, e32, m2);
   VLOAD_32(v4, 1, -2, 3, -4, 5, -6, 7, -8, 9, -10, 11, -12, 13, -14, 15, -16);
   asm volatile("vwadd.vx v6, v4, %[A]" ::[A] "r"(scalar));
   VSET(16, e64, m4);
   VCMP_U64(9, v6, 6, 3, 8, 1, 10, -1, 12, -3, 14, -5, 16, -7, 18, -9, 20, -11);
+#endif
 }
 
 void TEST_CASE4(void) {
@@ -100,6 +106,7 @@ void TEST_CASE4(void) {
   VSET(16, e32, m4);
   VCMP_U32(11, v6, 0, 7, 0, 9, 0, 11, 0, 13, 0, 7, 0, 9, 0, 11, 0, 13);
 
+#if ELEN == 64
   VSET(16, e32, m2);
   VLOAD_32(v4, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
   VLOAD_8(v0, 0xAA, 0xAA);
@@ -107,6 +114,7 @@ void TEST_CASE4(void) {
   asm volatile("vwadd.vx v6, v4, %[A], v0.t" ::[A] "r"(scalar));
   VSET(16, e64, m4);
   VCMP_U64(12, v6, 0, 7, 0, 9, 0, 11, 0, 13, 0, 7, 0, 9, 0, 11, 0, 13);
+#endif
 }
 
 void TEST_CASE5(void) {
@@ -124,12 +132,14 @@ void TEST_CASE5(void) {
   VSET(16, e32, m4);
   VCMP_U32(14, v6, 2, 4, 6, 8, 10, 12, 14, 16, 2, 4, 6, 8, 10, 12, 14, 16);
 
+#if ELEN == 64
   VSET(16, e32, m2);
   VLOAD_64(v4, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
   VLOAD_32(v8, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
   asm volatile("vwadd.wv v6, v4, v8");
   VSET(16, e64, m4);
   VCMP_U64(15, v6, 2, 4, 6, 8, 10, 12, 14, 16, 2, 4, 6, 8, 10, 12, 14, 16);
+#endif
 }
 
 void TEST_CASE6(void) {
@@ -151,6 +161,7 @@ void TEST_CASE6(void) {
   VSET(16, e32, m4);
   VCMP_U32(17, v6, 0, 4, 0, 8, 0, 12, 0, 16, 0, 4, 0, 8, 0, 12, 0, 16);
 
+#if ELEN == 64
   VSET(16, e32, m2);
   VLOAD_64(v4, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
   VLOAD_32(v8, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
@@ -159,6 +170,7 @@ void TEST_CASE6(void) {
   asm volatile("vwadd.wv v6, v4, v8, v0.t");
   VSET(16, e64, m4);
   VCMP_U64(18, v6, 0, 4, 0, 8, 0, 12, 0, 16, 0, 4, 0, 8, 0, 12, 0, 16);
+#endif
 }
 
 void TEST_CASE7(void) {
@@ -176,11 +188,13 @@ void TEST_CASE7(void) {
   VSET(16, e32, m4);
   VCMP_U32(20, v6, 6, 3, 8, 1, 10, -1, 12, -3, 14, -5, 16, -7, 18, -9, 20, -11);
 
+#if ELEN == 64
   VSET(16, e32, m2);
   VLOAD_64(v4, 1, -2, 3, -4, 5, -6, 7, -8, 9, -10, 11, -12, 13, -14, 15, -16);
   asm volatile("vwadd.wx v6, v4, %[A]" ::[A] "r"(scalar));
   VSET(16, e64, m4);
   VCMP_U64(21, v6, 6, 3, 8, 1, 10, -1, 12, -3, 14, -5, 16, -7, 18, -9, 20, -11);
+#endif
 }
 
 void TEST_CASE8(void) {
@@ -202,6 +216,7 @@ void TEST_CASE8(void) {
   VSET(16, e32, m4);
   VCMP_U32(23, v6, 0, 7, 0, 9, 0, 11, 0, 13, 0, 7, 0, 9, 0, 11, 0, 13);
 
+#if ELEN == 64
   VSET(16, e32, m2);
   VLOAD_64(v4, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
   VLOAD_8(v0, 0xAA, 0xAA);
@@ -209,6 +224,7 @@ void TEST_CASE8(void) {
   asm volatile("vwadd.wx v6, v4, %[A], v0.t" ::[A] "r"(scalar));
   VSET(16, e64, m4);
   VCMP_U64(24, v6, 0, 7, 0, 9, 0, 11, 0, 13, 0, 7, 0, 9, 0, 11, 0, 13);
+#endif
 }
 
 int main(void) {
