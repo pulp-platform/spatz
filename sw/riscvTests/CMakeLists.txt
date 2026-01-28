@@ -17,7 +17,7 @@ if (CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
 endif()
 
 add_compile_options(-O3 -g -ffunction-sections)
-add_compile_options(-DELEN=64)
+add_compile_options(-DELEN=${ELEN})
 
 include_directories(include)
 include_directories(${SNRUNTIME_INCLUDE_DIRS})
