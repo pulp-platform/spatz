@@ -183,26 +183,22 @@ sources:
       - target: not(cachepool)
         files:
         - hw/ip/spatz_cc/src/spatz_cc.sv
-
-      ## system/spatz_cluster ##
-
-      # Level 0
-      - hw/system/spatz_cluster/src/spatz_sram_wrapper.sv
-      - hw/system/spatz_cluster/src/generated/bootrom.sv
-      - hw/system/spatz_cluster/src/spatz_amo_shim.sv
-      - hw/system/spatz_cluster/src/spatz_cluster_peripheral/spatz_cluster_peripheral_reg_pkg.sv
-      - hw/system/spatz_cluster/src/spatz_tcdm_interconnect.sv
-      # Level 1
-      - hw/system/spatz_cluster/src/spatz_barrier.sv
-      - hw/system/spatz_cluster/src/spatz_cluster_peripheral/spatz_cluster_peripheral_reg_top.sv
-      # Level 2
-      - hw/system/spatz_cluster/src/spatz_cluster_peripheral/spatz_cluster_peripheral.sv
-      - hw/system/spatz_cluster/src/spatz_addr_mapper.sv
-      - hw/system/spatz_cluster/src/spatz_strbreq_merge_unit.sv
-      - hw/system/spatz_cluster/src/spatz_strbreq_merge_tree.sv
-      - hw/system/spatz_cluster/src/spatz_strbreq_handler.sv
-      - target: not(cachepool)
-        files:
+        ## system/spatz_cluster ##
+        # Level 0
+        - hw/system/spatz_cluster/src/spatz_sram_wrapper.sv
+        - hw/system/spatz_cluster/src/generated/bootrom.sv
+        - hw/system/spatz_cluster/src/spatz_amo_shim.sv
+        - hw/system/spatz_cluster/src/spatz_cluster_peripheral/spatz_cluster_peripheral_reg_pkg.sv
+        - hw/system/spatz_cluster/src/spatz_tcdm_interconnect.sv
+        # Level 1
+        - hw/system/spatz_cluster/src/spatz_barrier.sv
+        - hw/system/spatz_cluster/src/spatz_cluster_peripheral/spatz_cluster_peripheral_reg_top.sv
+        # Level 2
+        - hw/system/spatz_cluster/src/spatz_cluster_peripheral/spatz_cluster_peripheral.sv
+        - hw/system/spatz_cluster/src/spatz_addr_mapper.sv
+        - hw/system/spatz_cluster/src/spatz_strbreq_merge_unit.sv
+        - hw/system/spatz_cluster/src/spatz_strbreq_merge_tree.sv
+        - hw/system/spatz_cluster/src/spatz_strbreq_handler.sv
         # Level 3
         - hw/system/spatz_cluster/src/spatz_cluster.sv
         # Level 4
