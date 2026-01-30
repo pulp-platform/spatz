@@ -21,6 +21,14 @@ Make sure you download all necessary dependencies:
 make all
 ```
 
+Or you can run the following command within ETH network domain:
+```bash
+# Link toochain
+make quick-start
+# Build opcode
+make update_opcodes
+```
+
 The Makefile target will automatically download and compile tested versions of LLVM, GCC, Spike, and Verilator. It might take a while. If you have issues cloning the GitHub modules, you might need to remove the folders in `sw/toolchain`.
 
 The Spatz cluster system (hw/system/spatz_cluster) is a fundamental system around a Snitch core and a Spatz coprocessor. The cluster can be configured using a config file. The configuration parameters are documented using JSON schema, and documentation is generated for the schema. The cluster testbench simulates an infinite memory. The RISC-V ELF file is preloaded using RISC-V's Front-end Server (`fesvr`).
@@ -42,6 +50,9 @@ In `hw/system/spatz_cluster`:
 ```bash
     make sw.vcs
 ```
+You can give extra target `USE_CACHE=1` to use cache mode for kernel execution. By default this option is set to `0` to use SPM instead.
+
+
 - Run a binary on the simulator:
   - Verilator:
 ```bash

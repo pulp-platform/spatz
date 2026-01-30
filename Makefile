@@ -16,6 +16,10 @@ OPCODES := "opcodes-rvv opcodes-rv32b_CUSTOM opcodes-ipu_CUSTOM opcodes-frep_CUS
 # Default target
 all: bender toolchain update_opcodes
 
+quick-start:
+	ln -sf /usr/scratch2/calanda/diyou/toolchain/spatz/install ./install
+
+
 ###############
 #  Toolchain  #
 ###############
