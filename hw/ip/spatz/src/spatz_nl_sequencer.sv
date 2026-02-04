@@ -48,6 +48,8 @@ module spatz_nl_sequencer
   output logic             need_vs2_o,
   output logic             need_vd_o,
 
+  output logic             is_nl_op_o,        
+
   // -- Data Overrides --
   output logic             nl_override_operands_o,
   output logic [NrFu*Elen-1:0] nl_op1_ovr_o,
@@ -401,9 +403,9 @@ module spatz_nl_sequencer
               nl_op3_ovr_o         = f32_zero_vec;
               nl_override_fpu_o    = 1'b1;
               nl_fpu_op_ovr_o      = fpnew_pkg::MUL;
-              nl_loopback_d         = word_issued_i ? 1'b1 : 1'b0;
-              is_last_uop_o           = nl_loopback_q ? 1'b1 : 1'b0;
-              nl_last_en            = 1'b1;
+              nl_loopback_d        = word_issued_i ? 1'b1 : 1'b0;
+              is_last_uop_o        = nl_loopback_q ? 1'b1 : 1'b0;
+              nl_last_en           = 1'b1;
             end
             NL_WAIT: begin
                 need_vs1_o = 0; need_vs2_o = 0; need_vd_o = 0;
