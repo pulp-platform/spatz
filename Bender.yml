@@ -135,6 +135,10 @@ sources:
       files:
         - hw/ip/spatz/src/vregfile.sv
     # Level 3
+    - hw/ip/spatz/src/spatz_nl_pkg.sv
+    - hw/ip/spatz/src/fpnew_nl_controller.sv
+    - hw/ip/spatz/src/spatz_nl_sequencer.sv
+    - hw/ip/spatz/src/fpnew_top_nl.sv
     - hw/ip/spatz/src/spatz_fpu_sequencer.sv
     - hw/ip/spatz/src/spatz_ipu.sv
     - hw/ip/spatz/src/spatz_vfu.sv
