@@ -12,7 +12,8 @@ module spatz_vfu
   import spatz_pkg::*;
   import rvv_pkg::*;
   import cf_math_pkg::idx_width;
-  import fpnew_pkg::*; #(
+  import fpnew_pkg::*;
+  import spatz_nl_pkg::*; #(
     /// FPU configuration.
     parameter fpu_implementation_t FPUImplementation = fpu_implementation_t'(0)
   ) (
@@ -63,6 +64,13 @@ module spatz_vfu
 
     // Is this a reduction?
     logic reduction;
+
+    // --- NL additions ---
+    logic      uop_last;   // last word of the *current phase*
+    logic      last_phase; // last phase of the NL macro
+    logic      nl;         // this uop belongs to an NL macro
+    nl_phase_e nl_phase;   // which NL phase produced this uop
+    nl_op_e    nl_op_sel;  // which NL op 
   } vfu_tag_t;
 
   ///////////////////////
@@ -89,6 +97,28 @@ module spatz_vfu
   ///////////////
   //  Control  //
   ///////////////
+  
+  // NL signals
+  logic       nl_active_eff;
+  nl_phase_e  nl_phase_eff;
+  nl_op_e     nl_func;
+  logic       nl_stop_issue;
+  logic       is_last_uop;
+  logic       nl_uop_last_issue;
+  
+  // Operand control masks
+  logic       nl_need_vs1, nl_need_vs2, nl_need_vd;
+  
+  // Data overrides
+  logic       nl_override_operands;
+  logic [N_FU*ELEN-1:0] nl_op1_ovr, nl_op2_ovr, nl_op3_ovr;
+
+  // FPU overrides
+  logic                    nl_override_fpu;
+  fpnew_pkg::operation_e   nl_fpu_op_ovr;
+  logic                    nl_fpu_op_mode_ovr;
+  fpnew_pkg::roundmode_e   nl_fpu_rm_ovr;
+  fpnew_pkg::int_format_e  nl_fpu_int_fmt_ovr;
 
   // Vector length counter
   vlen_t vl_q, vl_d;
@@ -128,9 +158,9 @@ module spatz_vfu
 
   // Are the VFU operands ready?
   logic op1_is_ready, op2_is_ready, op3_is_ready, operands_ready;
-  assign op1_is_ready   = spatz_req_valid && ((!spatz_req.op_arith.is_reduction && (!spatz_req.use_vs1 || vrf_rvalid_i[1])) || (spatz_req.op_arith.is_reduction && reduction_operand_ready_q));
-  assign op2_is_ready   = spatz_req_valid && ((!spatz_req.use_vs2 || vrf_rvalid_i[0]) || spatz_req.op_arith.is_reduction);
-  assign op3_is_ready   = spatz_req_valid && (!spatz_req.vd_is_src || vrf_rvalid_i[2]);
+  assign op1_is_ready   = spatz_req_valid && ((!spatz_req.op_arith.is_reduction && (!nl_need_vs1 || !spatz_req.use_vs1 || vrf_rvalid_i[1])) || (spatz_req.op_arith.is_reduction && reduction_operand_ready_q));
+  assign op2_is_ready   = spatz_req_valid && ((!nl_need_vs2 || !spatz_req.use_vs2 || vrf_rvalid_i[0]) || spatz_req.op_arith.is_reduction);
+  assign op3_is_ready   = spatz_req_valid && ((!nl_need_vd || !spatz_req.vd_is_src || vrf_rvalid_i[2]));
   assign operands_ready = op1_is_ready && op2_is_ready && op3_is_ready && (!spatz_req.op_arith.is_scalar || vfu_rsp_ready_i) && !stall;
 
   // Valid operations
@@ -294,6 +324,52 @@ module spatz_vfu
     end
   end: control_proc
 
+  /////////////////
+  //NL-Sequencer//
+  /////////////////
+
+  spatz_nl_sequencer #(
+    .NrFpu(N_FPU),
+    .NrFu (N_FU),
+    .Elen (ELEN),
+    .TagType(vfu_tag_t)
+  ) i_spatz_nl_sequencer (
+    .clk_i              (clk_i),
+    .rst_ni             (rst_ni),
+    // State inputs
+    .spatz_req_i        (spatz_req),
+    .spatz_req_valid_i  (spatz_req_valid),
+    .spatz_req_ready_i  (spatz_req_ready),
+    .running_i          (running_q[spatz_req.id]),
+    .vl_i               (vl_q),
+    .nr_elem_word_i     (nr_elem_word),
+    .word_issued_i      (word_issued),
+    // Feedback
+    .result_tag_i       (result_tag),
+    .result_valid_i     (result_valid),
+    .pending_results_i  (pending_results),
+    .is_next_uop_ready_i(|next_uop_ready_o), // OR-reduction of FPU ready bits
+    .vrf_rdata_i        (vrf_rdata_i),
+    // Outputs
+    .nl_active_o        (nl_active_eff),
+    .nl_phase_o         (nl_phase_eff),
+    .nl_func_o          (nl_func),
+    .nl_stop_issue_o    (nl_stop_issue),
+    .is_last_uop_o      (is_last_uop),
+    .nl_uop_last_issue_o(nl_uop_last_issue),
+    .need_vs1_o         (nl_need_vs1),
+    .need_vs2_o         (nl_need_vs2),
+    .need_vd_o          (nl_need_vd),
+    .nl_override_operands_o (nl_override_operands),
+    .nl_op1_ovr_o       (nl_op1_ovr),
+    .nl_op2_ovr_o       (nl_op2_ovr),
+    .nl_op3_ovr_o       (nl_op3_ovr),
+    .nl_override_fpu_o  (nl_override_fpu),
+    .nl_fpu_op_ovr_o    (nl_fpu_op_ovr),
+    .nl_fpu_op_mode_ovr_o (nl_fpu_op_mode_ovr),
+    .nl_fpu_rm_ovr_o    (nl_fpu_rm_ovr),
+    .nl_fpu_int_fmt_ovr_o (nl_fpu_int_fmt_ovr)
+  );
   //////////////
   // Operands //
   //////////////
@@ -343,6 +419,13 @@ module spatz_vfu
       endcase
 
     operand3 = spatz_req.op_arith.is_scalar ? {1*N_FU{spatz_req.rsd}} : vrf_rdata_i[2];
+
+    if (nl_override_operands) begin
+      operand1 = nl_op1_ovr;
+      operand2 = nl_op2_ovr;
+      operand3 = nl_op3_ovr;
+    end
+
   end: operand_proc
 
   assign in_ready     = state_q == VFU_RunningIPU ? ipu_in_ready     : fpu_in_ready;
@@ -442,7 +525,7 @@ module spatz_vfu
     unique case (reduction_state_q)
       Reduction_NormalExecution: begin
         // Did we issue a word to the FUs?
-        word_issued = spatz_req_valid && &(in_ready | ~valid_operations) && operands_ready && !stall;
+        word_issued = spatz_req_valid && &(in_ready | ~valid_operations) && operands_ready && !stall && !nl_stop_issue;
 
         // Are we ready to accept a result?
         result_ready = &(result_valid | ~pending_results) && ((result_tag.wb && vfu_rsp_ready_i) || vrf_wvalid_i);
@@ -741,7 +824,14 @@ module spatz_vfu
       last           : last_request,
       narrowing      : spatz_req.op_arith.is_narrowing,
       narrowing_upper: narrowing_upper_q,
-      reduction      : spatz_req.op_arith.is_reduction
+      reduction      : spatz_req.op_arith.is_reduction,
+
+      // --- NL  ---
+      uop_last       : nl_active_eff ? nl_uop_last_issue : last_request,
+      last_phase     : nl_active_eff ? is_last_uop : 1'b0,
+      nl             : nl_active_eff,
+      nl_phase       : nl_phase_eff,
+      nl_op_sel      : nl_func
     };
 
     if (spatz_req_valid && vl_q == '0) begin
@@ -1193,7 +1283,7 @@ module spatz_vfu
       `FFL(fpu_in_valid_q, int_fpu_in_valid, int_fpu_in_ready, 1'b0)
       assign int_fpu_in_ready = !fpu_in_valid_q || fpu_in_valid_q && fpu_in_ready_d;
 
-      fpnew_top #(
+      fpnew_top_nl #(
         .Features                   (FPUFeatures           ),
         .Implementation             (FPUImplementation     ),
         .TagType                    (vfu_tag_t             ),
@@ -1221,7 +1311,8 @@ module spatz_vfu
         .out_valid_o   (int_fpu_result_valid                                   ),
         .out_ready_i   (result_ready                                           ),
         .status_o      (fpu_status_d[fpu]                                      ),
-        .tag_o         (tag                                                    )
+        .tag_o         (tag                                                    ),
+        .next_uop_ready_o
       );
 
       if (fpu == 0) begin: gen_fpu_tag
