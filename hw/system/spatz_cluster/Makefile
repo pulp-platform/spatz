@@ -6,10 +6,24 @@
 
 SPATZ_DIR := $(shell git rev-parse --show-toplevel 2>/dev/null || echo $$SPATZ_DIR)
 ROOT := ${SPATZ_DIR}
+BENDER ?= bender
 SPATZ_CLUSTER_DIR := ${SPATZ_DIR}/hw/system/spatz_cluster
 MKFILE_PATH := $(abspath $(lastword $(MAKEFILE_LIST)))
 MKFILE_DIR  := $(dir $(MKFILE_PATH))
 CACHE_PATH  := $(shell $(BENDER) path insitu-cache)
+DRAMSYS_DIR 		 := $(shell $(BENDER) path dram_rtl_sim)
+DRAMSYS_LIB_PATH := ${DRAMSYS_DIR}/dramsys_lib/DRAMSys/build/lib
+DRAMSYS_RES_PATH := ${DRAMSYS_DIR}/dramsys_lib/DRAMSys/configs
+
+# Choose from mix, l2, dram
+# dram will use DRAMSys, l2 and mix for SPM
+SNRT_LINK  ?= mix
+
+ifeq ($(SNRT_LINK), dram)
+	USE_DRAMSYS = 1
+else
+	USE_DRAMSYS = 0
+endif
 
 # Configuration file
 CFG ?= flamingo
@@ -19,9 +33,10 @@ SPATZ_CLUSTER_CFG ?= $(SPATZ_CLUSTER_DIR)/cfg/$(CFG).hjson
 include $(ROOT)/util/Makefrag
 
 # QuestaSim
-VSIM      = questa-2021.3-kgf vsim
-VLOG      = questa-2021.3-kgf vlog
-VSIM_HOME = /usr/pack/questa-2021.3-kgf/questasim
+QUESTA_VER ?= questa-2025.3
+VSIM        = ${QUESTA_VER} vsim
+VLOG        = ${QUESTA_VER} vlog
+VSIM_HOME   = /usr/pack/${QUESTA_VER}/questasim
 
 VSIM_FLAGS += -t 1ps
 VSIM_FLAGS += -voptargs=+acc
@@ -34,6 +49,13 @@ VLOG_FLAGS += -suppress 2583
 VLOG_FLAGS += -suppress 13314
 VLOG_FLAGS += -64
 
+ifeq ($(USE_DRAMSYS),1)
+  VSIM_BENDER += -t DRAMSYS
+  VSIM_FLAGS  += +DRAMSYS_RES=$(DRAMSYS_RES_PATH)
+  VSIM_FLAGS  += -sv_lib $(DRAMSYS_LIB_PATH)/libsystemc
+  VSIM_FLAGS  += -sv_lib $(DRAMSYS_LIB_PATH)/libDRAMSys_Simulator
+  VSIM_FLAGS  += -sv_lib $(SIM_DIR)/${DPI_LIB}/spatz_dpi
+endif
 
 # Verilated and compiled Spatz system
 VLT_ROOT = ${VERILATOR_INSTALL_DIR}/share/verilator
@@ -44,6 +66,31 @@ all:
 test: ${VSIM_SOURCES} ${TB_SRCS}
 	echo ${VSIM_SOURCES}
 	touch test
+
+#############
+# DPI Build #
+#############
+SIM_DIR        ?= .
+WORK_DIR       ?= $(SIM_DIR)/work
+SIMBIN_DIR     ?= $(SIM_DIR)/bin
+DPI_PATH       ?= ../../ip/snitch_test/src
+DPI_LIB        ?= work-dpi
+TOP            ?= tb_cachepool
+VLT_TOP        ?= $(TOP)
+
+dpi_target := $(patsubst ${DPI_PATH}/%.cpp,${SIM_DIR}/${DPI_LIB}/%.o,$(wildcard ${DPI_PATH}/*.cpp))
+
+.PHONY: dpi
+dpi: ${SIM_DIR}/${DPI_LIB}/spatz_dpi.so
+
+${SIM_DIR}/${DPI_LIB}/%.o: ${DPI_PATH}/%.cpp
+	mkdir -p ${SIM_DIR}/${DPI_LIB}
+	$(CXX) -shared -fPIC -std=c++11 -Bsymbolic -c $< -I$(VSIM_HOME)/include -o $@
+
+${SIM_DIR}/${DPI_LIB}/spatz_dpi.so: ${dpi_target}
+	mkdir -p ${SIM_DIR}/${DPI_LIB}
+	$(CXX) -shared -m64 -o ${SIM_DIR}/${DPI_LIB}/spatz_dpi.so $^
+
 
 ###############
 # C testbench #
@@ -84,6 +131,12 @@ src/generated/spatz_cluster_wrapper.sv: ${SPATZ_CLUSTER_CFG} $(find src/tpl) $(f
 .PHONY: cache-init
 cache-init:
 	cd ${CACHE_PATH} && source sourceme.sh
+
+## Build DramSys
+.PHONY: dram-build
+dram-build:
+	echo $(CACHE_PATH)
+	make -BC ${DRAMSYS_DIR} -j8 dramsys CXX=$(CXX) CC=$(CC)
 
 #############
 # Verilator #
@@ -128,8 +181,8 @@ clean.vlt:
 ${VSIM_BUILDDIR}/compile.vsim.tcl: test/bootrom.bin $(VSIM_SOURCES) ${TB_SRCS} ${TB_DIR}/rtl_lib.cc ${TB_DIR}/common_lib.cc test/bootdata.cc test/bootrom.bin
 	vlib $(dir $@)
 	${BENDER} script vsim ${VSIM_BENDER} ${DEFS} --vlog-arg="${VLOG_FLAGS} -work $(dir $@) " > $@
-	echo '${VLOG} -work $(dir $@) ${TB_DIR}/rtl_lib.cc ${TB_DIR}/common_lib.cc test/bootdata.cc -ccflags "-std=c++17 -I${MKFILE_DIR}/test -I${MKFILE_DIR}/work/include -I${TB_DIR}"' >> $@
-	echo '${VLOG} -work $(dir $@) test/uartdpi/uartdpi.c -ccflags "-Itest/uartdpi"' >> $@
+	echo '${VLOG} -work $(dir $@) ${TB_DIR}/rtl_lib.cc ${TB_DIR}/common_lib.cc test/bootdata.cc -ccflags "-std=c++17 -I${MKFILE_DIR}/test -I${MKFILE_DIR}/work/include -I${TB_DIR}"  -cpppath "${CXX}"' >> $@
+	echo '${VLOG} -work $(dir $@) test/uartdpi/uartdpi.c -ccflags "-Itest/uartdpi" -cpppath "${CXX}"' >> $@
 	echo 'return 0' >> $@
 
 bin/spatz_cluster.vsim: ${VSIM_BUILDDIR}/compile.vsim.tcl work/lib/libfesvr_vsim.a
@@ -176,7 +229,6 @@ lint/tmp/files: ${BENDER}
 USE_CACHE  ?= 0
 MEAS_1ITER ?= 0
 PRINT_UART ?= 0
-SNRT_LINK  ?= mix
 
 ## Build SW into sw/build with the LLVM toolchain
 sw: clean.sw

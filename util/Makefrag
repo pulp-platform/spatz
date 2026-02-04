@@ -24,8 +24,8 @@ DASM   ?= ${SPIKE_INSTALL_DIR}/bin/spike-dasm
 VLT    ?= ${VERILATOR_INSTALL_DIR}/bin/verilator_bin
 CMAKE  ?= cmake-3.18.1
 PYTHON ?= python3.6
-CC     ?= gcc-11.2.0
-CXX    ?= g++-11.2.0
+CXX 	 := /usr/pack/gcc-11.2.0-af/linux-x64/bin/g++
+CC  	 := /usr/pack/gcc-11.2.0-af/linux-x64/bin/gcc
 
 MATCH_END := '/+incdir+/ s/$$/\/*\/*/'
 MATCH_BGN := 's/+incdir+//g'
@@ -83,7 +83,7 @@ work/${FESVR_VERSION}_unzip:
 	touch $@
 
 work/lib/libfesvr_vsim.a: work/${FESVR_VERSION}_unzip
-	cd $(dir $<)/ && PATH=${SPIKE_INSTALL_DIR}/bin:${PATH} CC=${VSIM_HOME}/gcc-7.4.0-linux_x86_64/bin/gcc CXX=${VSIM_HOME}/gcc-7.4.0-linux_x86_64/bin/g++ ./configure --prefix `pwd`
+	cd $(dir $<)/ && PATH=${SPIKE_INSTALL_DIR}/bin:${PATH} CC=$(CC) CXX=$(CXX) ./configure --prefix `pwd`
 	make -C $(dir $<) install-config-hdrs install-hdrs libfesvr.a
 	mkdir -p $(dir $@)
 	cp $(dir $<)libfesvr.a $@
@@ -131,15 +131,15 @@ define QUESTASIM
 	@mkdir -p bin
 	@echo "#!/bin/bash" > $@
 	@echo 'echo `realpath $$1` > bin/logs/.rtlbinary' >> $@
-	@echo '${VSIM} +permissive ${VSIM_FLAGS} -work ${MKFILE_DIR}/${VSIM_BUILDDIR} -c \
+	@echo '${VSIM} +permissive ${VSIM_FLAGS} -cpppath "${CXX}" -work ${MKFILE_DIR}/${VSIM_BUILDDIR} -c \
 				-ldflags "-Wl,-rpath,${FESVR}/lib -L${FESVR}/lib -lfesvr_vsim -lutil" \
-				$1 +permissive-off ++$$1' >> $@
+				$1 +permissive-off ++$$1 +PRELOAD=$$1' >> $@
 	@chmod +x $@
 	@echo "#!/bin/bash" > $@.gui
 	@echo 'echo `realpath $$1` > bin/logs/.rtlbinary' >> $@
-	@echo '${VSIM} +permissive ${VSIM_FLAGS} -work ${MKFILE_DIR}/${VSIM_BUILDDIR} \
+	@echo '${VSIM} +permissive ${VSIM_FLAGS} -cpppath "${CXX}" -work ${MKFILE_DIR}/${VSIM_BUILDDIR} \
 				-ldflags "-Wl,-rpath,${FESVR}/lib -L${FESVR}/lib -lfesvr_vsim -lutil" \
-				$1 +permissive-off ++$$1' >> $@.gui
+				$1 +permissive-off ++$$1 +PRELOAD=$$1' >> $@.gui
 	@chmod +x $@.gui
 endef
 

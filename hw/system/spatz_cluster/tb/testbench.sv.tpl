@@ -20,6 +20,10 @@ module testharness (
   import axi_pkg::xbar_rule_32_t;
 
   import "DPI-C" function int get_entry_point();
+  import "DPI-C" function void read_elf (input string filename);
+  import "DPI-C" function byte get_section (output longint address, output longint len);
+  import "DPI-C" context function byte read_section(input longint address, inout byte buffer[]);
+
 
   /*********
    *  AXI  *
@@ -278,6 +282,7 @@ module testharness (
 
   logic [31:0] entry_point;
   initial begin
+    #10;
     // Idle
     to_cluster_req = '0;
     debug_req      = '0;
@@ -332,7 +337,90 @@ module testharness (
    *  L2  *
    ********/
 
-  // Wide port into simulation memory.
+  `ifdef TARGET_DRAMSYS
+
+  localparam int unsigned L2BankWidth    = 512;
+  localparam int unsigned L2BankBeWidth  = L2BankWidth / 8;
+  localparam int unsigned DramBase = 32'h8000_0000;
+  localparam              DramType = "DDR4";
+
+  typedef struct packed {
+    int                           dram_ctrl_id;
+    logic [SpatzAxiAddrWidth-1:0] dram_ctrl_addr;
+  } dram_ctrl_interleave_t;
+
+  dram_sim_engine #(
+    .ClkPeriod  (1.0ns )
+  ) i_dram_engine (
+    .clk_i      (clk_i  ),
+    .rst_ni     (rst_ni )
+  );
+
+  function automatic dram_ctrl_interleave_t getDramCTRLInfo(axi_addr_t addr);
+    automatic dram_ctrl_interleave_t res;
+
+    res.dram_ctrl_id    = 0;
+    res.dram_ctrl_addr  = addr;
+    return res;
+  endfunction
+
+  // DRAMSys Initialization
+  initial begin : l2_init
+    byte                              buffer [];
+    axi_addr_t                        address;
+    axi_addr_t                        length;
+    string                            binary;
+    // Initialize memories
+    void'($value$plusargs("PRELOAD=%s", binary));
+      
+    $display("binary %s",binary);
+
+    #1;
+    if (binary != "") begin
+      // Read ELF
+      read_elf(binary);
+      $display("Loading %s", binary);
+      while (get_section(address, length)) begin
+        // Read sections
+        // Align data to BankBeWidth
+        automatic int nwords = (length + L2BankBeWidth - 1)/L2BankBeWidth;
+        $display("Loading section %x of length %x", address, length);
+        buffer = new[nwords * L2BankBeWidth];
+        void'(read_section(address, buffer));
+        if (address >= DramBase) begin
+          for (int i = 0; i < nwords * L2BankBeWidth; i++) begin //per byte
+            automatic dram_ctrl_interleave_t dram_ctrl_info;
+            dram_ctrl_info = getDramCTRLInfo(address + i - DramBase);
+            i_axi_dram_sim.i_sim_dram.load_a_byte_to_dram(dram_ctrl_info.dram_ctrl_addr, buffer[i]);
+          end
+        end else begin
+          $display("Cannot initialize address %x, which doesn't fall into the L2 DRAM region.", address);
+        end
+      end
+    end
+  end : l2_init
+
+  axi_dram_sim #(
+    .BASE         ( DramBase                  ),
+    .DRAMType     ( DramType                  ),
+    .AxiAddrWidth ( SpatzAxiAddrWidth         ),
+    .AxiDataWidth ( SpatzAxiDataWidth         ),
+    .AxiIdWidth   ( SpatzAxiIdOutWidth        ),
+    .AxiUserWidth ( SpatzAxiUserWidth         ),
+    .axi_req_t    ( spatz_axi_out_req_t       ),
+    .axi_resp_t   ( spatz_axi_out_resp_t      ),
+    .axi_ar_t     ( spatz_axi_out_ar_chan_t   ),
+    .axi_r_t      ( spatz_axi_out_r_chan_t    ),
+    .axi_aw_t     ( spatz_axi_out_aw_chan_t   ),
+    .axi_w_t      ( spatz_axi_out_w_chan_t    ),
+    .axi_b_t      ( spatz_axi_out_b_chan_t    )
+  ) i_axi_dram_sim (
+    .clk_i        ( clk_i                     ),
+    .rst_ni       ( rst_ni                    ),
+    .axi_req_i    ( axi_from_cluster_req      ),
+    .axi_resp_o   ( axi_from_cluster_resp     )
+  );
+  `else
   tb_memory_axi #(
     .AxiAddrWidth ( SpatzAxiAddrWidth    ),
     .AxiDataWidth ( SpatzAxiDataWidth    ),
@@ -346,6 +434,7 @@ module testharness (
     .req_i (axi_from_cluster_req ),
     .rsp_o (axi_from_cluster_resp)
   );
+  `endif
 
   // Wide port into simulation memory.
   tb_memory_axi #(
