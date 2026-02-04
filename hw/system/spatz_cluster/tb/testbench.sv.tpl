@@ -166,6 +166,7 @@ module testharness (
 
   logic                cluster_probe;
   logic [NumCores-1:0] debug_req;
+  logic [3:0]          eoc;
 
   spatz_cluster_wrapper i_cluster_wrapper (
     .clk_i           (clk_i                ),
@@ -173,6 +174,7 @@ module testharness (
     .meip_i          ('0                   ),
     .msip_i          ('0                   ),
     .mtip_i          ('0                   ),
+    .eoc_o           (eoc                  ),
   % if cfg['enable_debug']:
     .debug_req_i     ( debug_req           ),
   % endif
@@ -523,7 +525,7 @@ module testharness (
     .clk_i (clk_i               ),
     .rst_ni(rst_ni              ),
     .req_i (axi_tb_req[Lpddr]   ),
-    .rsp_o (axi_tb_req[Lpddr]   )
+    .rsp_o (axi_tb_resp[Lpddr]  )
   );
   `endif
 
@@ -541,5 +543,16 @@ module testharness (
     .req_i (axi_tb_req[L2spm]    ),
     .rsp_o (axi_tb_resp[L2spm]   )
   );
+
+  `ifdef TARGET_DRAMSYS
+    initial begin
+      repeat (1000)
+        @(posedge clk_i);
+      wait (eoc != 0);
+      // Now we cannot poll eoc signal from the sim memory.
+      $display("[EOC] Simulation ended at %t (retval = %d).", $time, (eoc-1));
+      $finish(0);
+    end
+  `endif
 
 endmodule : testharness

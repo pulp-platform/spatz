@@ -77,5 +77,8 @@ void set_eoc_and_return_code (int eoc_and_return_code) {
     volatile uint32_t *eoc_reg =
     (uint32_t *)(_snrt_team_current->root->cluster_mem.end +
                 SPATZ_CLUSTER_PERIPHERAL_CLUSTER_EOC_EXIT_REG_OFFSET);
-    *eoc_reg = eoc_and_return_code;
+    if (eoc_and_return_code != -1)
+      *eoc_reg = eoc_and_return_code + 1;
+    else
+      *eoc_reg = eoc_and_return_code;
 }

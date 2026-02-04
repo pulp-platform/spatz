@@ -32,6 +32,7 @@ module spatz_cluster_peripheral
   input  addr_t                      tcdm_start_address_i,
   input  addr_t                      tcdm_end_address_i,
   output logic                       icache_prefetch_enable_o,
+  output logic [3:0]                 eoc_o,
   output logic [NrCores-1:0]         cl_clint_o,
   output logic                       cluster_probe_o,
   input  logic [9:0]                 cluster_hart_base_id_i,
@@ -69,6 +70,10 @@ module spatz_cluster_peripheral
     .reg2hw (reg2hw),
     .hw2reg (hw2reg)
   );
+
+  // End of computing flag
+  // Make sure it is not '0 for tb
+  assign eoc_o = reg2hw.cluster_eoc_exit.q[3:0];
 
   logic [NumPerfCounters-1:0][47:0] perf_counter_d, perf_counter_q;
   logic [31:0] cl_clint_d, cl_clint_q;

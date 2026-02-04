@@ -45,7 +45,7 @@ package ${cfg['pkg_name']};
   localparam int unsigned SpatzAxiIdTBWidth = SpatzAxiIdOutWidth + 1;
 
   // FIXED AxiIdOutWidth
-  localparam int unsigned IwcAxiIdOutWidth = 3;
+  localparam int unsigned IwcAxiIdOutWidth = 6;
 
   // AXI User Width
   localparam int unsigned SpatzAxiUserWidth = ${cfg['user_width']};
@@ -266,6 +266,7 @@ module ${cfg['name']}_wrapper
   input  logic [NumCores-1:0] meip_i,
   input  logic [NumCores-1:0] mtip_i,
   input  logic [NumCores-1:0] msip_i,
+  output logic [3:0]          eoc_o,
 % if not cfg['tie_ports']:
   input  logic [9:0]                    hart_base_id_i,
   input  logic [AxiAddrWidth-1:0]       cluster_base_addr_i,
@@ -577,6 +578,7 @@ module ${cfg['name']}_wrapper
     .rst_ni,
     .impl_i( '0 ),
     .error_o(),
+    .eoc_o(eoc_o),
 % if cfg['enable_debug']:
     .debug_req_i,
 % else:

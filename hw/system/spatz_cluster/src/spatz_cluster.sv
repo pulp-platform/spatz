@@ -125,6 +125,8 @@ module spatz_cluster
     /// another core to facilitate inter-processor-interrupts. This signal is
     /// assumed to be _async_.
     input  logic          [NrCores-1:0]      msip_i,
+    /// End of computation flag
+    output logic          [3:0]              eoc_o,
     /// First hartid of the cluster. Cores of a cluster are monotonically
     /// increasing without a gap, i.e., a cluster with 8 cores and a
     /// `hart_base_id_i` of 5 get the hartids 5 - 12.
@@ -1385,6 +1387,7 @@ module spatz_cluster
     .tcdm_start_address_i     (tcdm_start_address    ),
     .tcdm_end_address_i       (tcdm_end_address      ),
     .icache_prefetch_enable_o (icache_prefetch_enable),
+    .eoc_o                    (eoc_o                 ),
     .cl_clint_o               (cl_interrupt          ),
     .cluster_hart_base_id_i   (hart_base_id_i        ),
     .core_events_i            (core_events           ),
