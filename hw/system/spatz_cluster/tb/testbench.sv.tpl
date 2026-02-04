@@ -212,12 +212,12 @@ module testharness (
     .async_axi_out_r_wptr_i  ( async_axi_out_r_wptr_i  ),
     .async_axi_out_r_rptr_o  ( async_axi_out_r_rptr_o  ),
 % else:
-    .axi_out_req_o   (axi_from_cluster_req ),
-    .axi_out_resp_i  (axi_from_cluster_resp),
-    .axi_out_l2_req_o   ( axi_l2_req ),
-    .axi_out_l2_resp_i  ( axi_l2_resp ),
-    .axi_in_req_i    (axi_to_cluster_req   ),
-    .axi_in_resp_o   (axi_to_cluster_resp  ),
+    .axi_out_req_o      (axi_from_cluster_req ),
+    .axi_out_resp_i     (axi_from_cluster_resp),
+    .axi_out_l2_req_o   (axi_l2_req           ),
+    .axi_out_l2_resp_i  (axi_l2_resp          ),
+    .axi_in_req_i       (axi_to_cluster_req   ),
+    .axi_in_resp_o      (axi_to_cluster_resp  ),
 % endif
 % if cfg['axi_isolate_enable']:
     //AXI Isolate
@@ -226,6 +226,86 @@ module testharness (
 % endif
     .cluster_probe_o (cluster_probe        )
   );
+
+  // Add a xbar to filter signals to UART
+  localparam axi_pkg::xbar_cfg_t TbXbarCfg = '{
+    NoSlvPorts        : 2,
+    NoMstPorts        : 3,
+    MaxMstTrans       : 64,
+    MaxSlvTrans       : 64,
+    FallThrough       : 1'b0,
+    LatencyMode       : axi_pkg::CUT_ALL_PORTS,
+    AxiIdWidthSlvPorts: SpatzAxiIdOutWidth,
+    AxiIdUsedSlvPorts : SpatzAxiIdOutWidth,
+    UniqueIds         : 1'b0,
+    AxiAddrWidth      : SpatzAxiAddrWidth,
+    AxiDataWidth      : SpatzAxiDataWidth,
+    NoAddrRules       : 2,
+    default           : '0
+  };
+
+  typedef enum int unsigned {
+    Uart      = 0,
+    Lpddr     = 1,
+    L2spm     = 2
+  } tb_xbar_e;
+
+  spatz_axi_tb_req_t  [2:0] axi_tb_req;
+  spatz_axi_tb_resp_t [2:0] axi_tb_resp;
+
+  typedef struct packed {
+    int unsigned idx;
+    axi_addr_t start_addr;
+    axi_addr_t end_addr;
+  } xbar_rule_t;
+
+  xbar_rule_t [TbXbarCfg.NoAddrRules-1:0] tb_xbar_rule;
+  assign tb_xbar_rule         = '{
+    '{
+      idx       : Uart,
+      start_addr: UartAddr,
+      end_addr  : UartAddr + 'h1000
+    },
+    '{
+      idx       : Lpddr,
+      start_addr: DramBase,
+      end_addr  : DramEnd
+    }
+  };
+
+  logic [3:0] default_port;
+  assign default_port = L2spm;
+
+  axi_xbar #(
+    .Cfg           (TbXbarCfg               ),
+    .ATOPs         (0                       ),
+    .mst_aw_chan_t (spatz_axi_tb_aw_chan_t  ),
+    .slv_aw_chan_t (spatz_axi_out_aw_chan_t ),
+    .w_chan_t      (spatz_axi_out_w_chan_t  ),
+    .mst_b_chan_t  (spatz_axi_tb_b_chan_t   ),
+    .slv_b_chan_t  (spatz_axi_out_b_chan_t  ),
+    .mst_ar_chan_t (spatz_axi_tb_ar_chan_t  ),
+    .slv_ar_chan_t (spatz_axi_out_ar_chan_t ),
+    .mst_r_chan_t  (spatz_axi_tb_r_chan_t   ),
+    .slv_r_chan_t  (spatz_axi_out_r_chan_t  ),
+    .mst_req_t     (spatz_axi_tb_req_t      ),
+    .mst_resp_t    (spatz_axi_tb_resp_t     ),
+    .slv_req_t     (spatz_axi_out_req_t     ),
+    .slv_resp_t    (spatz_axi_out_resp_t    ),
+    .rule_t        (xbar_rule_t             )
+  ) i_axi_tb_xbar (
+    .clk_i                 (clk_i                  ),
+    .rst_ni                (rst_ni                 ),
+    .test_i                (1'b0                   ),
+    .slv_ports_req_i       ({axi_from_cluster_req,  axi_l2_req}   ),
+    .slv_ports_resp_o      ({axi_from_cluster_resp, axi_l2_resp}  ),
+    .mst_ports_req_o       (axi_tb_req              ),
+    .mst_ports_resp_i      (axi_tb_resp             ),
+    .addr_map_i            (tb_xbar_rule            ),
+    .en_default_mst_port_i (2'b11                   ),
+    .default_mst_port_i    (default_port            )
+  );
+
 /**************
  *  VCD Dump  *
  **************/
@@ -333,16 +413,27 @@ module testharness (
     debug_req = '0;
   end
 
+  /**********
+  *  UART  *
+  **********/
+  // Since we are using DramSys, we need to have a separate UART module
+
+  axi_uart #(
+    .axi_req_t (spatz_axi_tb_req_t ),
+    .axi_resp_t(spatz_axi_tb_resp_t)
+  ) i_axi_uart (
+    .clk_i     (clk_i             ),
+    .rst_ni    (rst_ni            ),
+    .testmode_i(1'b0              ),
+    .axi_req_i (axi_tb_req[Uart]  ),
+    .axi_resp_o(axi_tb_resp[Uart] )
+  );
+
   /********
    *  L2  *
    ********/
 
   `ifdef TARGET_DRAMSYS
-
-  localparam int unsigned L2BankWidth    = 512;
-  localparam int unsigned L2BankBeWidth  = L2BankWidth / 8;
-  localparam int unsigned DramBase = 32'h8000_0000;
-  localparam              DramType = "DDR4";
 
   typedef struct packed {
     int                           dram_ctrl_id;
@@ -350,7 +441,7 @@ module testharness (
   } dram_ctrl_interleave_t;
 
   dram_sim_engine #(
-    .ClkPeriod  (1.0ns )
+    .ClkPeriod  (1.0ns  )
   ) i_dram_engine (
     .clk_i      (clk_i  ),
     .rst_ni     (rst_ni )
@@ -405,50 +496,50 @@ module testharness (
     .DRAMType     ( DramType                  ),
     .AxiAddrWidth ( SpatzAxiAddrWidth         ),
     .AxiDataWidth ( SpatzAxiDataWidth         ),
-    .AxiIdWidth   ( SpatzAxiIdOutWidth        ),
+    .AxiIdWidth   ( SpatzAxiIdTBWidth         ),
     .AxiUserWidth ( SpatzAxiUserWidth         ),
-    .axi_req_t    ( spatz_axi_out_req_t       ),
-    .axi_resp_t   ( spatz_axi_out_resp_t      ),
-    .axi_ar_t     ( spatz_axi_out_ar_chan_t   ),
-    .axi_r_t      ( spatz_axi_out_r_chan_t    ),
-    .axi_aw_t     ( spatz_axi_out_aw_chan_t   ),
-    .axi_w_t      ( spatz_axi_out_w_chan_t    ),
-    .axi_b_t      ( spatz_axi_out_b_chan_t    )
+    .axi_req_t    ( spatz_axi_tb_req_t        ),
+    .axi_resp_t   ( spatz_axi_tb_resp_t       ),
+    .axi_ar_t     ( spatz_axi_tb_ar_chan_t    ),
+    .axi_r_t      ( spatz_axi_tb_r_chan_t     ),
+    .axi_aw_t     ( spatz_axi_tb_aw_chan_t    ),
+    .axi_w_t      ( spatz_axi_tb_w_chan_t     ),
+    .axi_b_t      ( spatz_axi_tb_b_chan_t     )
   ) i_axi_dram_sim (
     .clk_i        ( clk_i                     ),
     .rst_ni       ( rst_ni                    ),
-    .axi_req_i    ( axi_from_cluster_req      ),
-    .axi_resp_o   ( axi_from_cluster_resp     )
+    .axi_req_i    ( axi_tb_req[Lpddr]         ),
+    .axi_resp_o   ( axi_tb_resp[Lpddr]        )
   );
   `else
   tb_memory_axi #(
-    .AxiAddrWidth ( SpatzAxiAddrWidth    ),
-    .AxiDataWidth ( SpatzAxiDataWidth    ),
-    .AxiIdWidth   ( SpatzAxiIdOutWidth   ),
-    .AxiUserWidth ( SpatzAxiUserWidth    ),
-    .req_t        ( spatz_axi_out_req_t  ),
-    .rsp_t        ( spatz_axi_out_resp_t )
+    .AxiAddrWidth ( SpatzAxiAddrWidth     ),
+    .AxiDataWidth ( SpatzAxiDataWidth     ),
+    .AxiIdWidth   ( SpatzAxiIdTBWidth     ),
+    .AxiUserWidth ( SpatzAxiUserWidth     ),
+    .req_t        ( spatz_axi_tb_req_t    ),
+    .rsp_t        ( spatz_axi_tb_resp_t   )
   ) i_dma (
-    .clk_i (clk_i                ),
-    .rst_ni(rst_ni               ),
-    .req_i (axi_from_cluster_req ),
-    .rsp_o (axi_from_cluster_resp)
+    .clk_i (clk_i               ),
+    .rst_ni(rst_ni              ),
+    .req_i (axi_tb_req[Lpddr]   ),
+    .rsp_o (axi_tb_req[Lpddr]   )
   );
   `endif
 
   // Wide port into simulation memory.
   tb_memory_axi #(
-    .AxiAddrWidth ( SpatzAxiAddrWidth    ),
-    .AxiDataWidth ( SpatzAxiDataWidth    ),
-    .AxiIdWidth   ( SpatzAxiIdOutWidth   ),
-    .AxiUserWidth ( SpatzAxiUserWidth    ),
-    .req_t        ( spatz_axi_out_req_t  ),
-    .rsp_t        ( spatz_axi_out_resp_t )
+    .AxiAddrWidth ( SpatzAxiAddrWidth     ),
+    .AxiDataWidth ( SpatzAxiDataWidth     ),
+    .AxiIdWidth   ( SpatzAxiIdTBWidth     ),
+    .AxiUserWidth ( SpatzAxiUserWidth     ),
+    .req_t        ( spatz_axi_tb_req_t    ),
+    .rsp_t        ( spatz_axi_tb_resp_t   )
   ) i_l2mem (
     .clk_i (clk_i                ),
     .rst_ni(rst_ni               ),
-    .req_i (axi_l2_req           ),
-    .rsp_o (axi_l2_resp          )
+    .req_i (axi_tb_req[L2spm]    ),
+    .rsp_o (axi_tb_resp[L2spm]   )
   );
 
 endmodule : testharness

@@ -13,6 +13,11 @@ MEMORY
 
 SECTIONS
 {
+  fake_uart              = 0xA0000000;
+}
+
+SECTIONS
+{
   /* The program code and other data goes into DRAM */
   .text :
   {

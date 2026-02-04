@@ -3,10 +3,19 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "snrt.h"
 
+#include <stdint.h>
+
+extern char fake_uart;
+
+void _putchar(char character) {
+  // send char to console
+  fake_uart = character;
+}
+
 void snrt_putchar(char character);
 
 // Use snrt_putchar for printf
-#define _putchar snrt_putchar
+// #define _putchar snrt_putchar
 
 /// vendor printf settings
 

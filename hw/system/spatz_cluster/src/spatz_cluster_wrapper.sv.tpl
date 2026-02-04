@@ -42,6 +42,7 @@ package ${cfg['pkg_name']};
   // AXI ID Width
   localparam int unsigned SpatzAxiIdInWidth = ${cfg['id_width_in']};
   localparam int unsigned SpatzAxiIdOutWidth = ${cfg['id_width_out']};
+  localparam int unsigned SpatzAxiIdTBWidth = SpatzAxiIdOutWidth + 1;
 
   // FIXED AxiIdOutWidth
   localparam int unsigned IwcAxiIdOutWidth = 3;
@@ -58,6 +59,7 @@ package ${cfg['pkg_name']};
   typedef logic [SpatzAxiAddrWidth-1:0] axi_addr_t;
   typedef logic [SpatzAxiIdInWidth-1:0] axi_id_in_t;
   typedef logic [SpatzAxiIdOutWidth-1:0] axi_id_out_t;
+  typedef logic [SpatzAxiIdTBWidth-1:0] axi_id_tb_t;
   typedef logic [SpatzAxiUserWidth-1:0] axi_user_t;
 
 % if cfg['axi_cdc_enable']:
@@ -70,10 +72,20 @@ package ${cfg['pkg_name']};
 
   `AXI_TYPEDEF_ALL(spatz_axi_in, axi_addr_t, axi_id_in_t, logic [63:0], logic [7:0], axi_user_t)
   `AXI_TYPEDEF_ALL(spatz_axi_out, axi_addr_t, axi_id_out_t, axi_data_t, axi_strb_t, axi_user_t)
+  `AXI_TYPEDEF_ALL(spatz_axi_tb, axi_addr_t, axi_id_tb_t, axi_data_t, axi_strb_t, axi_user_t)
 
   typedef logic [IwcAxiIdOutWidth-1:0] axi_id_out_iwc_t;
 
   `AXI_TYPEDEF_ALL(spatz_axi_iwc_out, axi_addr_t, axi_id_out_iwc_t, axi_data_t, axi_strb_t, axi_user_t)
+
+  // Dramsys
+  localparam int unsigned L2BankWidth    = 512;
+  localparam int unsigned L2BankBeWidth  = L2BankWidth / 8;
+  parameter               DramType       = "DDR4"; // "DDR4", "DDR3", "HBM2", "LPDDR4"
+
+  localparam int unsigned DramBase = 32'h8000_0000;
+  localparam int unsigned DramEnd  = 32'h9000_0000;
+  localparam int unsigned UartAddr = 32'hA000_0000;
 
   ////////////////////
   //  Spatz Cluster //
@@ -530,7 +542,7 @@ module ${cfg['name']}_wrapper
     .AxiUserWidth (AxiUserWidth),
     .BootAddr (${to_sv_hex(cfg['boot_addr'], 32)}),
     .L2Addr   (48'h5180_0000),
-    .L2Size   (48'h80_0000),
+    .L2Size   (48'h0080_0000),
     .ClusterPeriphSize (${cfg['cluster_periph_size']}),
     .NrCores (${cfg['nr_cores']}),
     .TCDMDepth (${cfg['tcdm']['depth']}),
