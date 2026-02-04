@@ -61,6 +61,9 @@ module spatz_vlsu
 
   localparam int unsigned MemDataWidth  = ELEN;
   localparam int unsigned MemDataWidthB = MemDataWidth/8;
+  localparam int unsigned MaxBurstWords = spatz_pkg::MaxBurstWords;
+  localparam int unsigned BurstLenWidth = spatz_pkg::BurstLenWidth;
+  localparam int unsigned BurstAlignBits = $clog2(MaxBurstWords*MemDataWidthB);
 
   //////////////
   // Typedefs //
@@ -123,6 +126,18 @@ module spatz_vlsu
   // Do we have an indexed memory access
   logic mem_is_indexed;
   assign mem_is_indexed = (mem_spatz_req.op == VLXE) || (mem_spatz_req.op == VSXE);
+
+  // Use only port 0 for aligned unit-stride vector loads (burst path).
+  logic use_port0_burst_req;
+  logic [NrMemPorts-1:0] mem_port_active;
+  assign use_port0_burst_req =
+      mem_spatz_req.op_mem.is_load &&
+      !mem_is_strided &&
+      !mem_is_indexed &&
+      (mem_spatz_req.vtype.vsew == EW_32) &&
+      (mem_spatz_req.rs1[BurstAlignBits-1:0] == '0);
+  assign mem_port_active =
+      use_port0_burst_req ? {{(NrMemPorts-1){1'b0}}, 1'b1} : {NrMemPorts{1'b1}};
 
   /////////////
   //  State  //
@@ -276,7 +291,9 @@ module spatz_vlsu
       .overflow_o(/* Unused */               )
     );
 
-    assign mem_port_finished_q[port] = mem_spatz_req_valid && (mem_counter_q[port] == mem_counter_max[port]);
+    assign mem_port_finished_q[port] =
+        mem_spatz_req_valid &&
+        (mem_port_active[port] ? (mem_counter_q[port] == mem_counter_max[port]) : 1'b1);
   end: gen_mem_counters
 
   // Did the current instruction finished the memory requests?
@@ -304,6 +321,7 @@ module spatz_vlsu
     logic is_load;
     logic is_strided;
     logic is_indexed;
+    logic use_port0_burst;
   } commit_metadata_t;
 
   commit_metadata_t commit_insn_d;
@@ -341,7 +359,8 @@ module spatz_vlsu
       rs1       : mem_spatz_req.rs1[2:0],
       is_load   : mem_spatz_req.op_mem.is_load,
       is_strided: mem_is_strided,
-      is_indexed: mem_is_indexed
+      is_indexed: mem_is_indexed,
+      use_port0_burst: use_port0_burst_req
   };
 
   always_comb begin: queue_control
@@ -367,9 +386,11 @@ module spatz_vlsu
       mem_spatz_req_ready                   = 1'b1;
     end
     // Did we acknowledge the end of an instruction?
-    if (vlsu_rsp_valid_o) begin
-      mem_insn_finished_d[vlsu_rsp_o.id] = 1'b0;
-      mem_insn_pending_d[vlsu_rsp_o.id]  = 1'b0;
+    if (vlsu_rsp_valid_o && commit_insn_valid) begin
+      // Clear the pending/finished bits for the committed instruction.
+      // Use commit_insn_q.id to avoid stale/unknown IDs on the response path.
+      mem_insn_finished_d[commit_insn_q.id] = 1'b0;
+      mem_insn_pending_d[commit_insn_q.id]  = 1'b0;
     end
   end
 
@@ -451,7 +472,10 @@ module spatz_vlsu
           default: offset = $signed(vrf_rdata_i[1][8 * word_index +: 32]);
         endcase
       end else begin
-        offset = ({mem_counter_q[port][$bits(vlen_t)-1:MAXEW] << $clog2(NrMemPorts), mem_counter_q[port][int'(MAXEW)-1:0]} + (port << MAXEW)) * stride;
+        if (use_port0_burst_req && (port == 0))
+          offset = mem_counter_q[port] * stride;
+        else
+          offset = ({mem_counter_q[port][$bits(vlen_t)-1:MAXEW] << $clog2(NrMemPorts), mem_counter_q[port][int'(MAXEW)-1:0]} + (port << MAXEW)) * stride;
       end
 
       addr                      = mem_spatz_req.rs1 + offset;
@@ -462,9 +486,24 @@ module spatz_vlsu
     end
   end: gen_mem_req_addr
 
+  // Burst request tracking (per port)
+  logic [NrMemPorts-1:0]                    burst_use;
+  logic [NrMemPorts-1:0][BurstLenWidth-1:0] burst_len_calc;
+  logic [NrMemPorts-1:0][BurstLenWidth-1:0] burst_len_eff;
+  logic [NrMemPorts-1:0][BurstLenWidth-1:0] burst_len_issue;
+  logic [NrMemPorts-1:0]                    burst_alloc_q, burst_alloc_d;
+  logic [NrMemPorts-1:0][BurstLenWidth-1:0] burst_len_q, burst_len_d;
+  logic [NrMemPorts-1:0][BurstLenWidth-1:0] burst_alloc_cnt_q, burst_alloc_cnt_d;
+  id_t  [NrMemPorts-1:0]                    burst_base_id_q, burst_base_id_d;
+  logic [NrMemPorts-1:0]                    burst_send;
+  logic [NrMemPorts-1:0]                    burst_alloc_fire;
+
   // Calculate the register file address
   always_comb begin : gen_vreg_addr
-    vd_vreg_addr  = (commit_insn_q.vd << $clog2(NrWordsPerVector)) + $unsigned(vd_elem_id);
+    if (commit_insn_q.use_port0_burst)
+      vd_vreg_addr  = (commit_insn_q.vd << $clog2(NrWordsPerVector)) + $unsigned(burst_word_idx);
+    else
+      vd_vreg_addr  = (commit_insn_q.vd << $clog2(NrWordsPerVector)) + $unsigned(vd_elem_id);
     vs2_vreg_addr = (mem_spatz_req.vs2 << $clog2(NrWordsPerVector)) + $unsigned(vs2_elem_id_q);
   end
 
@@ -570,7 +609,9 @@ module spatz_vlsu
       .testmode_i(1'b0                                                                 ),
       .empty_o   (/* Unused */                                                         ),
       .full_o    (offset_queue_full[port]                                              ),
-      .push_i    (spatz_mem_req_valid[port] && spatz_mem_req_ready[port] && mem_is_load),
+      .push_i    (mem_is_load &&
+                  (burst_alloc_fire[port] ||
+                   ((spatz_mem_req_valid[port] && spatz_mem_req_ready[port]) && !burst_use[port]))),
       .data_i    (mem_req_addr_offset[port]                                            ),
       .data_o    (vreg_addr_offset[port]                                               ),
       .pop_i     (rob_pop[port] && commit_insn_q.is_load                               ),
@@ -626,6 +667,32 @@ module spatz_vlsu
   // Do we need to catch up to reach element idx parity? (Because of non-zero vstart)
   vlen_t vreg_start_0;
   assign vreg_start_0 = vlen_t'(commit_insn_q.vstart[$clog2(ELENB)-1:0]);
+  logic [N_FU-1:0] commit_port_active;
+  assign commit_port_active =
+      commit_insn_q.use_port0_burst ? {{(N_FU-1){1'b0}}, 1'b1} : {N_FU{1'b1}};
+  // Burst load element/lane tracking (port0 only)
+  localparam int unsigned LaneIdxWidth = (N_FU > 1) ? $clog2(N_FU) : 1;
+  vreg_elem_t                       burst_elem_idx;
+  logic [LaneIdxWidth-1:0]          burst_lane_idx;
+  vreg_elem_t                       burst_word_idx;
+  logic [ELENB-1:0]                 burst_lane_wbe;
+  assign burst_elem_idx = commit_counter_q[0] >> $clog2(ELENB);
+  assign burst_lane_idx = burst_elem_idx[LaneIdxWidth-1:0];
+  assign burst_word_idx = burst_elem_idx >> $clog2(N_FU);
+  always_comb begin
+    burst_lane_wbe = '1;
+    if (commit_is_single_element_operation) begin
+      automatic logic [$clog2(ELENB)-1:0] shift = commit_counter_q[0][$clog2(ELENB)-1:0];
+      automatic logic [ELENB-1:0] mask          = '1;
+      case (commit_insn_q.vsew)
+        EW_8 : mask   = 1;
+        EW_16: mask   = 3;
+        EW_32: mask   = 15;
+        default: mask = '1;
+      endcase
+      burst_lane_wbe = mask << shift;
+    end
+  end
   logic [N_FU-1:0] catchup;
   for (genvar i = 0; i < N_FU; i++) begin: gen_catchup
     assign catchup[i] = (commit_counter_q[i] < vreg_start_0) & (commit_counter_max[i] != commit_counter_q[i]);
@@ -637,24 +704,43 @@ module spatz_vlsu
 
     always_comb begin
       // Default value
-      max_elements = (commit_insn_q.vl >> $clog2(N_FU*ELENB)) << $clog2(ELENB);
+      if (commit_insn_q.use_port0_burst)
+        max_elements = (fu == 0) ? commit_insn_q.vl : vlen_t'('0);
+      else
+        max_elements = (commit_insn_q.vl >> $clog2(N_FU*ELENB)) << $clog2(ELENB);
 
       // Full transfer
-      if (commit_insn_q.vl[$clog2(ELENB) +: $clog2(N_FU)] > fu)
-        max_elements += ELENB;
-      else if (commit_insn_q.vl[$clog2(N_FU*ELENB)-1:$clog2(ELENB)] == fu)
-        max_elements += commit_insn_q.vl[$clog2(ELENB)-1:0];
+      if (!commit_insn_q.use_port0_burst) begin
+        if (commit_insn_q.vl[$clog2(ELENB) +: $clog2(N_FU)] > fu)
+          max_elements += ELENB;
+        else if (commit_insn_q.vl[$clog2(N_FU*ELENB)-1:$clog2(ELENB)] == fu)
+          max_elements += commit_insn_q.vl[$clog2(ELENB)-1:0];
+      end
 
       commit_counter_load[fu] = commit_insn_pop;
-      commit_counter_d[fu]    = (commit_insn_q.vstart >> $clog2(N_FU*ELENB)) << $clog2(ELENB);
-      if (commit_insn_q.vstart[$clog2(N_FU*ELENB)-1:$clog2(ELENB)] > fu)
-        commit_counter_d[fu] += ELENB;
-      else if (commit_insn_q.vstart[idx_width(N_FU*ELENB)-1:$clog2(ELENB)] == fu)
-        commit_counter_d[fu] += commit_insn_q.vstart[$clog2(ELENB)-1:0];
-      commit_operation_valid[fu] = commit_insn_valid && (commit_counter_q[fu] != max_elements) && (catchup[fu] || (!catchup[fu] && ~|catchup));
-      commit_operation_last[fu]  = commit_operation_valid[fu] && ((max_elements - commit_counter_q[fu]) <= (commit_is_single_element_operation ? commit_single_element_size : ELENB));
-      commit_counter_delta[fu]   = !commit_operation_valid[fu] ? vlen_t'('d0) : commit_is_single_element_operation ? vlen_t'(commit_single_element_size) : commit_operation_last[fu] ? (max_elements - commit_counter_q[fu]) : vlen_t'(ELENB);
-      commit_counter_en[fu]      = commit_operation_valid[fu] && (commit_insn_q.is_load && vrf_req_valid_d && vrf_req_ready_d) || (!commit_insn_q.is_load && vrf_rvalid_i[0] && vrf_re_o[0] && (!mem_is_indexed || vrf_rvalid_i[1]));
+      if (commit_insn_q.use_port0_burst)
+        commit_counter_d[fu] = (fu == 0) ? commit_insn_q.vstart : vlen_t'('0);
+      else
+        commit_counter_d[fu]    = (commit_insn_q.vstart >> $clog2(N_FU*ELENB)) << $clog2(ELENB);
+      if (!commit_insn_q.use_port0_burst) begin
+        if (commit_insn_q.vstart[$clog2(N_FU*ELENB)-1:$clog2(ELENB)] > fu)
+          commit_counter_d[fu] += ELENB;
+        else if (commit_insn_q.vstart[idx_width(N_FU*ELENB)-1:$clog2(ELENB)] == fu)
+          commit_counter_d[fu] += commit_insn_q.vstart[$clog2(ELENB)-1:0];
+      end
+      commit_operation_valid[fu] = commit_port_active[fu] &&
+                                   commit_insn_valid &&
+                                   (commit_counter_q[fu] != max_elements) &&
+                                   (catchup[fu] || (!catchup[fu] && ~|catchup));
+      commit_operation_last[fu]  = commit_operation_valid[fu] &&
+                                   ((max_elements - commit_counter_q[fu]) <=
+                                    (commit_is_single_element_operation ? commit_single_element_size : ELENB));
+      commit_counter_delta[fu]   = !commit_operation_valid[fu] ? vlen_t'('d0) :
+                                   commit_is_single_element_operation ? vlen_t'(commit_single_element_size) :
+                                   commit_operation_last[fu] ? (max_elements - commit_counter_q[fu]) : vlen_t'(ELENB);
+      commit_counter_en[fu]      = commit_operation_valid[fu] &&
+                                   (commit_insn_q.is_load && vrf_req_valid_d && vrf_req_ready_d) ||
+                                   (!commit_insn_q.is_load && vrf_rvalid_i[0] && vrf_re_o[0] && (!mem_is_indexed || vrf_rvalid_i[1]));
       commit_counter_max[fu]     = max_elements;
     end
   end
@@ -664,37 +750,99 @@ module spatz_vlsu
   for (genvar port = 0; port < NrMemPorts; port++) begin: gen_mem_counter_proc
     // The total amount of elements we have to work through
     vlen_t max_elements;
+    int unsigned remaining_bytes;
+    int unsigned remaining_words;
 
     always_comb begin
-      // Default value
-      max_elements = (mem_spatz_req.vl >> $clog2(NrMemPorts*MemDataWidthB)) << $clog2(MemDataWidthB);
+      if (use_port0_burst_req && (port != 0)) begin
+        max_elements             = '0;
+        remaining_bytes          = 0;
+        remaining_words          = 0;
+        burst_len_calc[port]     = '0;
+        burst_use[port]          = 1'b0;
+        mem_operation_valid[port]= 1'b0;
+        mem_operation_last[port] = 1'b0;
+        mem_counter_load[port]   = mem_spatz_req_ready;
+        mem_counter_d[port]      = '0;
+        mem_counter_delta[port]  = '0;
+        mem_counter_en[port]     = 1'b0;
+        mem_counter_max[port]    = '0;
+        mem_idx_counter_d[port]  = '0;
+        mem_idx_counter_delta[port] = '0;
+      end else begin
+        // Default value
+        if (use_port0_burst_req)
+          max_elements = mem_spatz_req.vl;
+        else
+          max_elements = (mem_spatz_req.vl >> $clog2(NrMemPorts*MemDataWidthB)) << $clog2(MemDataWidthB);
 
-      if (NrMemPorts == 1)
-        max_elements = mem_spatz_req.vl;
-      else
-        if (mem_spatz_req.vl[$clog2(MemDataWidthB) +: $clog2(NrMemPorts)] > port)
-          max_elements += MemDataWidthB;
-        else if (mem_spatz_req.vl[$clog2(MemDataWidthB) +: $clog2(NrMemPorts)] == port)
-          max_elements += mem_spatz_req.vl[$clog2(MemDataWidthB)-1:0];
+        if (!use_port0_burst_req) begin
+          if (NrMemPorts == 1)
+            max_elements = mem_spatz_req.vl;
+          else
+            if (mem_spatz_req.vl[$clog2(MemDataWidthB) +: $clog2(NrMemPorts)] > port)
+              max_elements += MemDataWidthB;
+            else if (mem_spatz_req.vl[$clog2(MemDataWidthB) +: $clog2(NrMemPorts)] == port)
+              max_elements += mem_spatz_req.vl[$clog2(MemDataWidthB)-1:0];
+        end
 
-      mem_operation_valid[port] = mem_spatz_req_valid && (max_elements != mem_counter_q[port]);
-      mem_operation_last[port]  = mem_operation_valid[port] && ((max_elements - mem_counter_q[port]) <= (mem_is_single_element_operation ? mem_single_element_size : MemDataWidthB));
-      mem_counter_load[port]    = mem_spatz_req_ready;
-      mem_counter_d[port]       = (mem_spatz_req.vstart >> $clog2(NrMemPorts*MemDataWidthB)) << $clog2(MemDataWidthB);
-      if (NrMemPorts == 1)
-        mem_counter_d[port] = mem_spatz_req.vstart;
-      else
-        if (mem_spatz_req.vstart[$clog2(MemDataWidthB) +: $clog2(NrMemPorts)] > port)
-          mem_counter_d[port] += MemDataWidthB;
-        else if (mem_spatz_req.vstart[$clog2(MemDataWidthB) +: $clog2(NrMemPorts)] == port)
-          mem_counter_d[port] += mem_spatz_req.vstart[$clog2(MemDataWidthB)-1:0];
-      mem_counter_delta[port] = !mem_operation_valid[port] ? 'd0 : mem_is_single_element_operation ? mem_single_element_size : mem_operation_last[port] ? (max_elements - mem_counter_q[port]) : MemDataWidthB;
-      mem_counter_en[port]    = spatz_mem_req_ready[port] && spatz_mem_req_valid[port];
-      mem_counter_max[port]   = max_elements;
+        remaining_bytes = max_elements - mem_counter_q[port];
+        remaining_words = remaining_bytes >> $clog2(MemDataWidthB);
+        if (remaining_words > MaxBurstWords)
+          burst_len_calc[port] = MaxBurstWords[BurstLenWidth-1:0];
+        else
+          burst_len_calc[port] = remaining_words[BurstLenWidth-1:0];
 
-      // Index counter
-      mem_idx_counter_d[port]     = mem_counter_d[port];
-      mem_idx_counter_delta[port] = !mem_operation_valid[port] ? 'd0 : mem_idx_single_element_size;
+        burst_len_eff[port] = burst_len_calc[port];
+        if (burst_alloc_q[port] && rob_full[port] &&
+            (burst_alloc_cnt_q[port] != '0) &&
+            (burst_alloc_cnt_q[port] < burst_len_calc[port]))
+          burst_len_eff[port] = burst_alloc_cnt_q[port];
+
+        burst_use[port] = mem_is_load && !mem_is_single_element_operation &&
+                          (mem_spatz_req.vtype.vsew == EW_32) &&
+                          (mem_req_addr[port][BurstAlignBits-1:0] == '0) &&
+                          (rob_empty[port] || burst_alloc_q[port]) &&
+                          (burst_len_eff[port] > 1) &&
+                          (burst_len_eff[port] <= NrOutstandingLoads);
+
+        mem_operation_valid[port] = mem_spatz_req_valid && (max_elements != mem_counter_q[port]);
+        mem_operation_last[port]  = mem_operation_valid[port] &&
+                                    ((max_elements - mem_counter_q[port]) <=
+                                    (mem_is_single_element_operation ? mem_single_element_size :
+                                     (burst_use[port] ? (burst_len_issue[port] * MemDataWidthB) : MemDataWidthB)));
+        mem_counter_load[port]    = mem_spatz_req_ready;
+        if (use_port0_burst_req)
+          mem_counter_d[port] = mem_spatz_req.vstart;
+        else begin
+          mem_counter_d[port] = (mem_spatz_req.vstart >> $clog2(NrMemPorts*MemDataWidthB)) << $clog2(MemDataWidthB);
+          if (NrMemPorts == 1)
+            mem_counter_d[port] = mem_spatz_req.vstart;
+          else
+            if (mem_spatz_req.vstart[$clog2(MemDataWidthB) +: $clog2(NrMemPorts)] > port)
+              mem_counter_d[port] += MemDataWidthB;
+            else if (mem_spatz_req.vstart[$clog2(MemDataWidthB) +: $clog2(NrMemPorts)] == port)
+              mem_counter_d[port] += mem_spatz_req.vstart[$clog2(MemDataWidthB)-1:0];
+        end
+        if (!mem_operation_valid[port]) begin
+          mem_counter_delta[port] = 'd0;
+        end else if (mem_is_single_element_operation) begin
+          mem_counter_delta[port] = mem_single_element_size;
+        end else if (burst_use[port]) begin
+          mem_counter_delta[port] =
+              mem_operation_last[port] ? (max_elements - mem_counter_q[port]) :
+              (burst_len_issue[port] * MemDataWidthB);
+        end else begin
+          mem_counter_delta[port] =
+              mem_operation_last[port] ? (max_elements - mem_counter_q[port]) : MemDataWidthB;
+        end
+        mem_counter_en[port]    = spatz_mem_req_ready[port] && spatz_mem_req_valid[port];
+        mem_counter_max[port]   = max_elements;
+
+        // Index counter
+        mem_idx_counter_d[port]     = mem_counter_d[port];
+        mem_idx_counter_delta[port] = !mem_operation_valid[port] ? 'd0 : mem_idx_single_element_size;
+      end
     end
   end
 
@@ -739,6 +887,13 @@ module spatz_vlsu
   logic [NrMemPorts-1:0][idx_width(NrOutstandingLoads):0] mem_pending_d, mem_pending_q;
   logic [NrMemPorts-1:0] mem_pending;
   `FF(mem_pending_q, mem_pending_d, '{default: '0})
+
+  for (genvar port = 0; port < NrMemPorts; port++) begin : gen_burst_state
+    `FF(burst_alloc_q[port],      burst_alloc_d[port],      1'b0)
+    `FF(burst_len_q[port],        burst_len_d[port],        '0  )
+    `FF(burst_alloc_cnt_q[port],  burst_alloc_cnt_d[port],  '0  )
+    `FF(burst_base_id_q[port],    burst_base_id_d[port],    '0  )
+  end : gen_burst_state
   always_comb begin
     // Maintain state
     mem_pending_d = mem_pending_q;
@@ -747,14 +902,73 @@ module spatz_vlsu
       mem_pending[port] = mem_pending_q[port] != '0;
 
       // New request sent
-      if (mem_is_load && spatz_mem_req_valid[port] && spatz_mem_req_ready[port])
-        mem_pending_d[port]++;
+      if (mem_is_load && spatz_mem_req_valid[port] && spatz_mem_req_ready[port]) begin
+        if (burst_send[port])
+          mem_pending_d[port] = mem_pending_d[port] + burst_len_issue[port];
+        else
+          mem_pending_d[port] = mem_pending_d[port] + 1'b1;
+      end
 
       // Response used
       if (commit_insn_q.is_load && rob_rvalid[port] && rob_pop[port])
         mem_pending_d[port]--;
     end
   end
+
+  // Burst ID pre-allocation state (per port)
+  always_comb begin : proc_burst_alloc
+    burst_alloc_d     = burst_alloc_q;
+    burst_len_d       = burst_len_q;
+    burst_alloc_cnt_d = burst_alloc_cnt_q;
+    burst_base_id_d   = burst_base_id_q;
+    burst_send        = '0;
+    burst_alloc_fire  = '0;
+    burst_len_issue   = burst_len_q;
+
+    for (int port = 0; port < NrMemPorts; port++) begin
+      logic [BurstLenWidth-1:0] burst_len_send;
+      logic force_send;
+
+      burst_len_send = burst_len_q[port];
+      force_send = burst_alloc_q[port] && rob_full[port] &&
+                   (burst_alloc_cnt_q[port] != '0) &&
+                   (burst_alloc_cnt_q[port] < burst_len_q[port]);
+      if (force_send)
+        burst_len_send = burst_alloc_cnt_q[port];
+      burst_len_issue[port] = burst_len_send;
+
+      // Start a new burst allocation when eligible.
+      if (!burst_alloc_q[port] && mem_operation_valid[port] && burst_use[port]) begin
+        burst_alloc_d[port]     = 1'b1;
+        burst_len_d[port]       = burst_len_calc[port];
+        burst_alloc_cnt_d[port] = '0;
+      end
+
+      // Allocate one ROB ID per cycle for the burst.
+      if (burst_alloc_q[port] && (burst_alloc_cnt_q[port] < burst_len_q[port])) begin
+        if (!rob_full[port] && !offset_queue_full[port]) begin
+          burst_alloc_fire[port] = 1'b1;
+          if (burst_alloc_cnt_q[port] == '0)
+            burst_base_id_d[port] = rob_id[port];
+          burst_alloc_cnt_d[port] = burst_alloc_cnt_q[port] + 1'b1;
+        end
+      end
+
+      if (force_send)
+        burst_len_d[port] = burst_len_send;
+
+      burst_send[port] = burst_alloc_q[port] &&
+                         (burst_alloc_cnt_q[port] == burst_len_issue[port]) &&
+                         (burst_len_issue[port] != '0);
+
+      // Clear burst state once the request is accepted.
+      if (burst_send[port] && spatz_mem_req_valid[port] && spatz_mem_req_ready[port]) begin
+        burst_alloc_d[port]     = 1'b0;
+        burst_len_d[port]       = '0;
+        burst_alloc_cnt_d[port] = '0;
+      end
+    end
+  end : proc_burst_alloc
 
   // verilator lint_off LATCH
   always_comb begin
@@ -795,11 +1009,22 @@ module spatz_vlsu
       if (state_q == VLSU_RunningLoad && |commit_operation_valid) begin
         // Enable write back to the VRF if we have a valid element in all buffers that still have to write something back.
         vrf_req_d.waddr = vd_vreg_addr;
-        vrf_req_valid_d = (&rob_rvalid); // && (|mem_pending);
-        // vrf_req_valid_d = &(rob_rvalid | ~mem_pending) && |mem_pending;
 
-        for (int unsigned port = 0; port < NrMemPorts; port++) begin
-          automatic logic [63:0] data = rob_rdata[port];
+        if (commit_insn_q.use_port0_burst) begin
+          // Port0-only burst: steer data into the correct lane
+          vrf_req_valid_d = rob_rvalid[0];
+          rob_pop[0]      = rob_rvalid[0] && vrf_req_valid_d && vrf_req_ready_d && commit_counter_en[0];
+
+          vrf_req_d.wdata = '0;
+          vrf_req_d.wdata[ELEN*burst_lane_idx +: ELEN] = rob_rdata[0];
+          vrf_req_d.wbe   = '0;
+          vrf_req_d.wbe[ELENB*burst_lane_idx +: ELENB] = burst_lane_wbe;
+        end else begin
+          vrf_req_valid_d = &(rob_rvalid | ~commit_port_active);
+          // vrf_req_valid_d = &(rob_rvalid | ~mem_pending) && |mem_pending;
+
+          for (int unsigned port = 0; port < NrMemPorts; port++) begin
+            automatic logic [63:0] data = rob_rdata[port];
 
           // Shift data to correct position if we have an unaligned memory request
           if (MAXEW == EW_32)
@@ -821,8 +1046,8 @@ module spatz_vlsu
               default: data = data;
             endcase
 
-          // Pop stored element and free space in buffer
-          rob_pop[port] = rob_rvalid[port] && vrf_req_valid_d && vrf_req_ready_d && commit_counter_en[port];
+            // Pop stored element and free space in buffer
+            rob_pop[port] = rob_rvalid[port] && vrf_req_valid_d && vrf_req_ready_d && commit_counter_en[port];
 
           // Shift data to correct position if we have a strided memory access
           if (commit_insn_q.is_strided || commit_insn_q.is_indexed)
@@ -844,23 +1069,24 @@ module spatz_vlsu
                 3'b111: data  = {data[7:0], data[63:8]};
                 default: data = data;
               endcase
-          vrf_req_d.wdata[ELEN*port +: ELEN] = data;
+            vrf_req_d.wdata[ELEN*port +: ELEN] = data;
 
           // Create write byte enable mask for register file
-          if (commit_counter_en[port])
-            if (commit_is_single_element_operation) begin
-              automatic logic [$clog2(ELENB)-1:0] shift = commit_counter_q[port][$clog2(ELENB)-1:0];
-              automatic logic [ELENB-1:0] mask          = '1;
-              case (commit_insn_q.vsew)
-                EW_8 : mask   = 1;
-                EW_16: mask   = 3;
-                EW_32: mask   = 15;
-                default: mask = '1;
-              endcase
-              vrf_req_d.wbe[ELENB*port +: ELENB] = mask << shift;
-            end else
-              for (int unsigned k = 0; k < ELENB; k++)
-                vrf_req_d.wbe[ELENB*port+k] = k < commit_counter_delta[port];
+            if (commit_counter_en[port])
+              if (commit_is_single_element_operation) begin
+                automatic logic [$clog2(ELENB)-1:0] shift = commit_counter_q[port][$clog2(ELENB)-1:0];
+                automatic logic [ELENB-1:0] mask          = '1;
+                case (commit_insn_q.vsew)
+                  EW_8 : mask   = 1;
+                  EW_16: mask   = 3;
+                  EW_32: mask   = 15;
+                  default: mask = '1;
+                endcase
+                vrf_req_d.wbe[ELENB*port +: ELENB] = mask << shift;
+              end else
+                for (int unsigned k = 0; k < ELENB; k++)
+                  vrf_req_d.wbe[ELENB*port+k] = k < commit_counter_delta[port];
+          end
         end
       end
 
@@ -874,11 +1100,23 @@ module spatz_vlsu
         `else
         rob_push[port]  = spatz_mem_rsp_valid_i[port] && (state_q == VLSU_RunningLoad) && store_count_q[port] == '0;
         `endif
-        if (!rob_full[port] && !offset_queue_full[port] && mem_operation_valid[port]) begin
-          rob_req_id[port]     = spatz_mem_req_ready[port] & spatz_mem_req_valid[port];
-          mem_req_lvalid[port] = (!mem_is_indexed || (vrf_rvalid_i[1] && !pending_index[port])) && mem_spatz_req.op_mem.is_load;
-          mem_req_id[port]     = rob_id[port];
-          mem_req_last[port]   = mem_operation_last[port];
+        if (mem_operation_valid[port]) begin
+          if (burst_use[port]) begin
+            // Pre-allocate IDs for each beat and issue the burst once ready.
+            rob_req_id[port] = burst_alloc_fire[port];
+            if (burst_send[port]) begin
+              mem_req_lvalid[port] = (!mem_is_indexed || (vrf_rvalid_i[1] && !pending_index[port])) &&
+                                     mem_spatz_req.op_mem.is_load;
+              mem_req_id[port]     = burst_base_id_q[port];
+              mem_req_last[port]   = mem_operation_last[port];
+            end
+          end else if (!rob_full[port] && !offset_queue_full[port]) begin
+            rob_req_id[port]     = spatz_mem_req_ready[port] & spatz_mem_req_valid[port];
+            mem_req_lvalid[port] = (!mem_is_indexed || (vrf_rvalid_i[1] && !pending_index[port])) &&
+                                   mem_spatz_req.op_mem.is_load;
+            mem_req_id[port]     = rob_id[port];
+            mem_req_last[port]   = mem_operation_last[port];
+          end
         end
       end
     // Store operation
@@ -991,6 +1229,7 @@ module spatz_vlsu
     assign spatz_mem_req[port].mode  = '0; // Request always uses user privilege level
     assign spatz_mem_req[port].size  = mem_spatz_req.vtype.vsew[1:0];
     assign spatz_mem_req[port].write = !mem_is_load;
+    assign spatz_mem_req[port].burst_len = burst_send[port] ? burst_len_issue[port] : BurstLenWidth'(1);
     assign spatz_mem_req[port].strb  = mem_req_strb[port];
     assign spatz_mem_req[port].data  = mem_req_data[port];
     assign spatz_mem_req[port].last  = mem_req_last[port];
@@ -1002,6 +1241,7 @@ module spatz_vlsu
     assign spatz_mem_req[port].amo   = reqrsp_pkg::AMONone;
     assign spatz_mem_req[port].data  = mem_req_data[port];
     assign spatz_mem_req[port].strb  = mem_req_strb[port];
+    assign spatz_mem_req[port].burst_len = burst_send[port] ? burst_len_issue[port] : BurstLenWidth'(1);
     assign spatz_mem_req[port].user  = '0;
     assign spatz_mem_req_valid[port] = mem_req_svalid[port] || mem_req_lvalid[port];
 `endif
@@ -1019,5 +1259,14 @@ module spatz_vlsu
 
   if (NrMemPorts != 2**$clog2(NrMemPorts))
     $error("[spatz_vlsu] The NrMemPorts parameter needs to be a power of two");
+
+`ifndef SYNTHESIS
+  for (genvar port = 1; port < NrMemPorts; port++) begin : gen_port0_burst_assert
+    // In aligned unit-stride burst mode, only port 0 is allowed to issue requests.
+    assert property (@(posedge clk_i) disable iff (!rst_ni)
+        use_port0_burst_req |-> !spatz_mem_req_valid[port])
+      else $fatal(1, "[spatz_vlsu] Port %0d issued request during port0-only burst mode.", port);
+  end
+`endif
 
 endmodule : spatz_vlsu

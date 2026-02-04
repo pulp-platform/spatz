@@ -46,6 +46,7 @@ module spatz_mempool_cc
   output logic      [TCDMPorts-1:0][31:0]   data_qdata_o,
   output logic      [TCDMPorts-1:0][3:0]    data_qstrb_o,
   output meta_id_t  [TCDMPorts-1:0]         data_qid_o,
+  output logic      [TCDMPorts-1:0][snitch_pkg::BurstLenWidth-1:0] data_qburst_len_o,
   output logic      [TCDMPorts-1:0]         data_qvalid_o,
   input  logic      [TCDMPorts-1:0]         data_qready_i,
   input  logic      [TCDMPorts-1:0][31:0]   data_pdata_i,
@@ -267,6 +268,7 @@ module spatz_mempool_cc
     assign data_qdata_o[i+1]       = spatz_mem_req[i].data;
     assign data_qstrb_o[i+1]       = spatz_mem_req[i].strb;
     assign data_qid_o[i+1]         = spatz_mem_req[i].id;
+    assign data_qburst_len_o[i+1]  = spatz_mem_req[i].burst_len;
     assign data_qvalid_o[i+1]      = spatz_mem_req_valid[i];
     assign spatz_mem_req_ready[i]  = data_qready_i[i+1];
     assign spatz_mem_rsp[i].data   = data_pdata_i[i+1];
@@ -284,6 +286,7 @@ module spatz_mempool_cc
     write  : fp_lsu_mem_req.write,
     data   : fp_lsu_mem_req.data,
     strb   : fp_lsu_mem_req.strb,
+    burst_len: snitch_pkg::BurstLenWidth'(1),
     default: '0
   };
 
@@ -367,6 +370,7 @@ module spatz_mempool_cc
   assign data_qdata_o[0]      = data_req_q.data;
   assign data_qstrb_o[0]      = data_req_q.strb;
   assign data_qid_o[0]        = data_req_q.id;
+  assign data_qburst_len_o[0] = snitch_pkg::BurstLenWidth'(1);
   assign data_qvalid_o[0]     = data_req_q_valid;
   assign data_req_q_ready     = data_qready_i[0];
   assign data_resp_d.data     = data_pdata_i[0];

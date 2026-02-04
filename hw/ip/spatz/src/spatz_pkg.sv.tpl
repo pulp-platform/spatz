@@ -67,6 +67,9 @@ package spatz_pkg;
   localparam int unsigned DataWidth = ELEN;
   // Spatz' strobe width
   localparam int unsigned StrbWidth = ELENB;
+  // Burst length (in 32-bit words) for vector loads
+  localparam int unsigned MaxBurstWords = 16;
+  localparam int unsigned BurstLenWidth = $clog2(MaxBurstWords + 1);
 
   // Width of a VRF word
   localparam int unsigned VRFWordWidth     = N_FU * ELEN;
@@ -314,6 +317,7 @@ package spatz_pkg;
     logic [1:0] mode;
     logic [1:0] size;
     logic write;
+    logic [BurstLenWidth-1:0] burst_len;
     logic [DataWidth/8-1:0] strb;
     logic [DataWidth-1:0] data;
     logic last;
