@@ -16,14 +16,14 @@
     __data_t             data;  \
     __strb_t             strb;  \
     reqrsp_pkg::size_t   size;  \
-    logic [2:0]          id;    \
+    logic [4:0]          id;    \
   } __req_chan_t;
 
 `define REQRSP_TYPEDEF_RSP_CHAN_T(__rsp_chan_t, __data_t) \
   typedef struct packed { \
     __data_t    data;     \
     logic       error;    \
-    logic [3:0] id;       \
+    logic [4:0] id;       \
     logic       write;    \
   } __rsp_chan_t;
 

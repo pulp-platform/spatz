@@ -10,10 +10,10 @@
         cluster_base_addr: 1358954496, // 0x51000000
         cluster_base_offset: 0,        // 0x0
         cluster_base_hartid: 16,
-        addr_width: 48,
+        addr_width: 32,
         data_width: 64,
         id_width_in: 6,
-        id_width_out: 2,
+        id_width_out: 6,
         user_width: 10,
         axi_cdc_enable: false,
         sw_rst_enable: true,
@@ -27,7 +27,7 @@
         dma_axi_req_fifo_depth: 3,
         dma_req_fifo_depth: 3,
         // Spatz parameters
-        vlen: 512,
+        vlen: 1024,
         n_fpu: 4,
         n_ipu: 1,
         spatz_fpu: true,
@@ -86,7 +86,7 @@
         xdma: false,
         num_int_outstanding_loads: 4,
         num_int_outstanding_mem: 4,
-        num_spatz_outstanding_loads: 16,
+        num_spatz_outstanding_loads: 32,
         num_dtlb_entries: 1,
         num_itlb_entries: 1
     },
@@ -98,7 +98,7 @@
         xfdotp: true,
         num_int_outstanding_loads: 4,
         num_int_outstanding_mem: 4,
-        num_spatz_outstanding_loads: 16,
+        num_spatz_outstanding_loads: 32,
         num_dtlb_entries: 1,
         num_itlb_entries: 1
     }
