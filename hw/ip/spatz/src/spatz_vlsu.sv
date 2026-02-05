@@ -1020,7 +1020,7 @@ module spatz_vlsu
           vrf_req_d.wbe   = '0;
           vrf_req_d.wbe[ELENB*burst_lane_idx +: ELENB] = burst_lane_wbe;
         end else begin
-          vrf_req_valid_d = &(rob_rvalid | ~commit_port_active);
+          vrf_req_valid_d = &(rob_rvalid | ~commit_operation_valid);
           // vrf_req_valid_d = &(rob_rvalid | ~mem_pending) && |mem_pending;
 
           for (int unsigned port = 0; port < NrMemPorts; port++) begin
