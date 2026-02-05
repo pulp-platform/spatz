@@ -23,7 +23,7 @@
 #include DATAHEADER
 #include "kernel/dp-db-fmatmul.c"
 
-#define DEBUG
+// #define DEBUG
 
 #ifndef KERNEL_SIZE
 #define KERNEL_SIZE 4

@@ -73,6 +73,11 @@ The DRAM model can be adjusted by changing the value of `DramType` in `src/spatz
 
 Currently, the default will use DDR4-2400 model with customized address mapping. We have also prepared a HBM2E model with customized address mapping in `tb/dram_config` folder.
 
+A clean hw&sw building example scripts is shown as below using QuestaSim:
+```bash
+    # Data initialized in DRAM, using cache to run the program
+    make clean sw.vsim -B USE_CACHE=1 SNRT_LINK=dram
+```
 
 - Run a binary on the simulator:
   - Verilator:

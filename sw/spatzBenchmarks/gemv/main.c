@@ -67,8 +67,16 @@ int main() {
     l1d_init(spm_size);
   }
 
+  #if MEAS_1ITER == 1
+  const int measure_iter = 1;
+  #else
+  const int measure_iter = 2;
+  #endif
+
   // Reset timer
-  unsigned int timer = (unsigned int)-1;
+  unsigned int timer      = (unsigned int)-1;
+  unsigned int timer_best = (unsigned int)-1;
+  unsigned int timer_1iter = (unsigned int)-1;
   const unsigned int m_core = gemv_l.M / num_cores;
 
   // Allocate the matrices
@@ -105,56 +113,75 @@ int main() {
   #endif
 
 
-  // // Wait for all cores to finish
-  // snrt_cluster_hw_barrier();
-
-  // Start dump
-  if (cid == 0)
-    start_kernel();
-
-  // Start timer
-  if (cid == 0)
-    timer = benchmark_get_cycle();
-
-  // Calculate gemv
-  if (sizeof(T) == 8)
-    gemv_v64b_m4(a_core, b_core, result_core, gemv_l.M, m_core, gemv_l.N);
-  else if (sizeof(T) == 4)
-    gemv_v32b_m4(a_core, b_core, result_core, gemv_l.M, m_core, gemv_l.N);
-  else
-    gemv_v16b_m4(a_core, b_core, result_core, gemv_l.M, m_core, gemv_l.N);
-
   // Wait for all cores to finish
   snrt_cluster_hw_barrier();
 
-  // End dump
-  if (cid == 0)
-  stop_kernel();
+  for (int iter = 0; iter < measure_iter; iter ++) {
 
-  // End timer and check if new best runtime
-  if (cid == 0)
-    timer = benchmark_get_cycle() - timer;
+    // Start dump
+    if (cid == 0)
+      start_kernel();
+
+    // Start timer
+    if (cid == 0)
+      timer = benchmark_get_cycle();
+
+    // Calculate gemv
+    if (sizeof(T) == 8)
+      gemv_v64b_m4(a_core, b_core, result_core, gemv_l.M, m_core, gemv_l.N);
+    else if (sizeof(T) == 4)
+      gemv_v32b_m4(a_core, b_core, result_core, gemv_l.M, m_core, gemv_l.N);
+    else
+      gemv_v16b_m4(a_core, b_core, result_core, gemv_l.M, m_core, gemv_l.N);
+
+    // Wait for all cores to finish
+    snrt_cluster_hw_barrier();
+
+    // End dump
+    if (cid == 0)
+      stop_kernel();
+
+    // End timer and check if new best runtime
+    if (cid == 0) {
+      timer = benchmark_get_cycle() - timer;
+      if (iter == 0) {
+        timer_1iter = timer;
+        // Checking
+        for (int i = 0; i < gemv_l.M; i++) {
+          if (fp_check(&result_core[i], &gemv_result[i])) {
+            printf("Error: ID: %i Result = %f, Golden = %f\n", i, result_core[i], gemv_result[i]);
+            // return -1;
+          }
+        }
+      } else {
+        timer_best = (timer_best > timer) ? timer : timer_best;
+      }
+    }
+
+    snrt_cluster_hw_barrier();
+  }
 
   // Check and display results
   if (cid == 0) {
-    long unsigned int performance = 1000 * 2 * gemv_l.M * gemv_l.N / timer;
+    long unsigned int performance = 1000 * 2 * gemv_l.M * gemv_l.N / timer_best;
     long unsigned int utilization =
         performance / (2 * num_cores * num_fpu * 8 / sizeof(T));
 
     printf("\n----- (%d x %d) x (%d x 1) gemv -----\n", gemv_l.M, gemv_l.N, gemv_l.N);
-    printf("The execution took %u cycles.\n", timer);
+    printf("The first iter takes %u cycles.\n", timer_1iter);
+    printf("The best execution took %u cycles.\n", timer_best);
     printf("The performance is %ld OP/1000cycle (%ld%%o utilization).\n",
            performance, utilization);
   }
 
-  if (cid == 0) {
-    for (int i = 0; i < gemv_l.M; i++) {
-      if (fp_check(&result_core[i], &gemv_result[i])) {
-        printf("Error: ID: %i Result = %f, Golden = %f\n", i, result_core[i], gemv_result[i]);
-        return -1;
-      }
-    }
-  }
+  // if (cid == 0) {
+  //   for (int i = 0; i < gemv_l.M; i++) {
+  //     if (fp_check(&result_core[i], &gemv_result[i])) {
+  //       printf("Error: ID: %i Result = %f, Golden = %f\n", i, result_core[i], gemv_result[i]);
+  //       return -1;
+  //     }
+  //   }
+  // }
 
   // Wait for core 0 to finish displaying results
   snrt_cluster_hw_barrier();

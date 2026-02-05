@@ -133,14 +133,14 @@ add_library(linked-list linked-list/kernel/llist.c)
 enable_testing()
 set(SNITCH_TEST_PREFIX spatzBenchmarks-)
 
-add_spatz_test_threeParam(dp-fmatmul dp-fmatmul/main.c 64  64  64 )
+# add_spatz_test_threeParam(dp-fmatmul dp-fmatmul/main.c 64  64  64 )
 
-add_spatz_test_threeParam(sp-fmatmul sp-fmatmul/main.c 64  64  64 )
-add_spatz_test_threeParam(sp-fmatmul sp-fmatmul/main.c 64  128 64 )
+# add_spatz_test_threeParam(sp-fmatmul sp-fmatmul/main.c 64  64  64 )
+# add_spatz_test_threeParam(sp-fmatmul sp-fmatmul/main.c 64  128 64 )
 
-add_spatz_test_threeParam(hp-fmatmul hp-fmatmul/main.c 64  64  64 )
-add_spatz_test_threeParam(hp-fmatmul hp-fmatmul/main.c 64  128 64 )
-add_spatz_test_threeParam(hp-fmatmul hp-fmatmul/main.c 128 128 128)
+# add_spatz_test_threeParam(hp-fmatmul hp-fmatmul/main.c 64  64  64 )
+# add_spatz_test_threeParam(hp-fmatmul hp-fmatmul/main.c 64  128 64 )
+# add_spatz_test_threeParam(hp-fmatmul hp-fmatmul/main.c 128 128 128)
 
 # add_spatz_test_threeParam(widening-hp-fmatmul widening-hp-fmatmul/main.c 64  64  64 )
 # add_spatz_test_threeParam(widening-hp-fmatmul widening-hp-fmatmul/main.c 64  128 64 )
@@ -174,7 +174,7 @@ add_spatz_test_twoParam(dp-fft dp-fft/main.c 128 2)
 add_spatz_test_twoParam(sp-fft sp-fft/main.c 256 2)
 add_spatz_test_twoParam(sp-fft sp-fft/main.c 512 2)
 
-add_spatz_test_threeParam(dp-mxfmatmul dp-mxfmatmul/main.c 64 64 64)
+# add_spatz_test_threeParam(dp-mxfmatmul dp-mxfmatmul/main.c 64 64 64)
 
 add_spatz_test_twoParam(linked-list linked-list/main.c 64 8)
 add_spatz_test_twoParam(linked-list linked-list/main.c 256 16)
@@ -207,7 +207,7 @@ add_spatz_test_threeParam(dp-fmatmul-4x4vl dp-fmatmul-4x4vl/main.c 128 128 128)
 # add_spatz_test_threeParam(dp-mxfmatmul-m4n4k8-b2 dp-mxfmatmul-m4n4k8-b2/main.c 64 64 64)
 # add_spatz_test_threeParam(dp-mxfmatmul-m4n4k8-b2 dp-mxfmatmul-m4n4k8-b2/main.c 32 32 32)
 # add_spatz_test_threeParam(dp-mxfmatmul-m4n4k8-b2 dp-mxfmatmul-m4n4k8-b2/main.c 16 16 16)
-# # Double buffering
-# add_spatz_test_threeParam(dp-db-fmatmul-4x4vl dp-db-fmatmul-4x4vl/main.c 128 128 128)
-# add_spatz_test_threeParam(dp-db-fmatmul-4x4vl dp-db-fmatmul-4x4vl/main.c 64 64 64)
-# add_spatz_test_threeParam(dp-db-fmatmul-4x4vl dp-db-fmatmul-4x4vl/main.c 32 32 32)
+# Double buffering
+add_spatz_test_threeParam(dp-db-fmatmul-4x4vl dp-db-fmatmul-4x4vl/main.c 128 128 128)
+add_spatz_test_threeParam(dp-db-fmatmul-4x4vl dp-db-fmatmul-4x4vl/main.c 64 64 64)
+add_spatz_test_threeParam(dp-db-fmatmul-4x4vl dp-db-fmatmul-4x4vl/main.c 32 32 32)

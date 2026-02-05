@@ -23,7 +23,7 @@ double fdotp_v64b(const double *a, const double *b, unsigned int avl) {
   const unsigned int orig_avl = avl;
   unsigned int vl;
 
-  double red;
+  double red = 0;
 
   // Clean the accumulator
   asm volatile("vsetvli %0, %1, e64, m8, ta, ma" : "=r"(vl) : "r"(avl));

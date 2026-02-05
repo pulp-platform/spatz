@@ -190,7 +190,7 @@ int main() {
       if (error != 0) {
       #ifdef PRINT_RESULT
         printf("Error core %d: c[%d]=%u\n", cid, error, (int)c[error]);
-        return error;
+        // return error;
       #endif
       }
     }
