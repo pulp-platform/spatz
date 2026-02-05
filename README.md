@@ -33,9 +33,22 @@ The Makefile target will automatically download and compile tested versions of L
 
 The Spatz cluster system (hw/system/spatz_cluster) is a fundamental system around a Snitch core and a Spatz coprocessor. The cluster can be configured using a config file. The configuration parameters are documented using JSON schema, and documentation is generated for the schema. The cluster testbench simulates an infinite memory. The RISC-V ELF file is preloaded using RISC-V's Front-end Server (`fesvr`).
 
+
 ### Simulating the system
 
 In `hw/system/spatz_cluster`:
+
+Before compiling the hardware, DramSys is required to be built for accurate DRAM simulation:
+```bash
+    # Initialize the DramSys, only need to run once when first clone the repo
+    make dram-init
+    # Build the DramSys with customized configurations. Do not need to rebuild if no new configurations added
+    make dram-build
+```
+You can also clean the current build by:
+```bash
+    make dram-clean
+```
 
 - Compile the software and the binaries:
   - Verilator:
@@ -51,6 +64,14 @@ In `hw/system/spatz_cluster`:
     make sw.vcs
 ```
 You can give extra target `USE_CACHE=1` to use cache mode for kernel execution. By default this option is set to `0` to use SPM instead.
+
+The data preloading location can be adjusted with target `SNRT_LINK`. The available options are `dram`, `l2` and `mix`. The `dram` option will automatically enable DramSys, while the other two options remains the normal AXI simulation memory.
+
+Currently, the default configuration is set to `flamingo`, which has been modified to support `VLEN=1024` with 32 ROB entries. You can lower the ROB values in the `cfg/flamingo.hjson` but not increase it due to the supported ID width.
+
+The DRAM model can be adjusted by changing the value of `DramType` in `src/spatz_cluster_wrapper.sv.tpl`
+
+Currently, the default will use DDR4-2400 model with customized address mapping. We have also prepared a HBM2E model with customized address mapping in `tb/dram_config` folder.
 
 
 - Run a binary on the simulator:

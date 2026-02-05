@@ -12,8 +12,9 @@ MKFILE_PATH := $(abspath $(lastword $(MAKEFILE_LIST)))
 MKFILE_DIR  := $(dir $(MKFILE_PATH))
 CACHE_PATH  := $(shell $(BENDER) path insitu-cache)
 DRAMSYS_DIR 		 := $(shell $(BENDER) path dram_rtl_sim)
-DRAMSYS_LIB_PATH := ${DRAMSYS_DIR}/dramsys_lib/DRAMSys/build/lib
-DRAMSYS_RES_PATH := ${DRAMSYS_DIR}/dramsys_lib/DRAMSys/configs
+DRAMSYS_PATH 		 := ${DRAMSYS_DIR}/dramsys_lib/DRAMSys
+DRAMSYS_LIB_PATH := ${DRAMSYS_PATH}/build/lib
+DRAMSYS_RES_PATH := ${DRAMSYS_PATH}/configs
 
 # Choose from mix, l2, dram
 # dram will use DRAMSys, l2 and mix for SPM
@@ -134,9 +135,42 @@ cache-init:
 
 ## Build DramSys
 .PHONY: dram-build
-dram-build:
-	echo $(CACHE_PATH)
-	make -BC ${DRAMSYS_DIR} -j8 dramsys CXX=$(CXX) CC=$(CC)
+dram-build: dram-config
+	cd $(DRAMSYS_PATH) && \
+	if [ ! -d "build" ]; then \
+		mkdir build && cd build; \
+		$(CMAKE) -DCMAKE_CXX_FLAGS=-fPIC -DCMAKE_C_FLAGS=-fPIC -D DRAMSYS_WITH_DRAMPOWER=ON .. ; \
+		make -j; \
+	fi
+
+# Replace the default HBM2 model to cutmized model
+dram-config:
+	cp tb/dram_config/am_hbm2e_16Gb_pc_brc.json $(DRAMSYS_PATH)/configs/addressmapping/.
+	cp tb/dram_config/mc_hbm2e_fr_fcfs_grp.json $(DRAMSYS_PATH)/configs/mcconfig/.
+	cp tb/dram_config/ms_hbm2e_16Gb_3600.json $(DRAMSYS_PATH)/configs/memspec/.
+	cp tb/dram_config/simconfig_hbm2e.json $(DRAMSYS_PATH)/configs/simconfig/.
+	@if [ -f $(DRAMSYS_PATH)/configs/hbm2-example.json ]; then \
+		mv $(DRAMSYS_PATH)/configs/hbm2-example.json \
+		   $(DRAMSYS_PATH)/configs/hbm2-example.json.ori; \
+	fi
+	cp tb/dram_config/HBM2E-3600.json $(DRAMSYS_PATH)/configs/hbm2-example.json
+	cp tb/dram_config/am_ddr4.json $(DRAMSYS_PATH)/configs/addressmapping/.
+	cp tb/dram_config/simconfig_ddr4.json $(DRAMSYS_PATH)/configs/simconfig/.
+	@if [ -f $(DRAMSYS_PATH)/configs/ddr4-example.json ]; then \
+		mv $(DRAMSYS_PATH)/configs/ddr4-example.json \
+		   $(DRAMSYS_PATH)/configs/ddr4-example.json.ori; \
+	fi
+	cp tb/dram_config/DDR4-2400.json $(DRAMSYS_PATH)/configs/ddr4-example.json
+
+
+dram-clean:
+	if [ -d "$(DRAMSYS_PATH)/build" ]; then \
+		rm -rf $(DRAMSYS_PATH)/build; \
+	fi
+
+# To ensure the dramsys is downloaded, only need to call at first time
+dram-init:
+	make -C ${DRAMSYS_DIR} -j8 dramsys CXX=$(CXX) CC=$(CC)
 
 #############
 # Verilator #
