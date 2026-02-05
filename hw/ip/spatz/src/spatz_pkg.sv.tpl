@@ -112,6 +112,8 @@ package spatz_pkg;
   // Instruction ID
   typedef logic [$clog2(NrParallelInstructions)-1:0] spatz_id_t;
 
+  typedef enum logic [3:0] { NL_IDLE, NL_FPU_ISSUE_0,NL_FPU_ISSUE_1,NL_FPU_ISSUE_2 ,NL_FPU_ISSUE_3, NL_FPU_ISSUE_4, NL_FPU_ISSUE_5 , NL_FPU_ISSUE_6 , NL_WAIT } nl_phase_e;
+  typedef enum logic [2:0] { EXPS, COSHS, TANHS, LOGS, RSQRT, COS, SIN } nl_op_e;
   /////////////////////
   // Operation Types //
   /////////////////////
