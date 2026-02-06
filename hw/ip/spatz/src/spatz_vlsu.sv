@@ -488,6 +488,7 @@ module spatz_vlsu
 
   // Burst request tracking (per port)
   logic [NrMemPorts-1:0]                    burst_use;
+  logic [NrMemPorts-1:0]                    burst_addr_aligned;
   logic [NrMemPorts-1:0][BurstLenWidth-1:0] burst_len_calc;
   logic [NrMemPorts-1:0][BurstLenWidth-1:0] burst_len_eff;
   logic [NrMemPorts-1:0][BurstLenWidth-1:0] burst_len_issue;
@@ -799,9 +800,13 @@ module spatz_vlsu
             (burst_alloc_cnt_q[port] < burst_len_calc[port]))
           burst_len_eff[port] = burst_alloc_cnt_q[port];
 
+        // Burst alignment must be checked on the word address (not byte address).
+        // mem_req_addr is byte-addressed and already word-aligned, so drop MAXEW LSBs.
+        burst_addr_aligned[port] = (mem_req_addr[port][BurstAlignBits-1+MAXEW:MAXEW] == '0);
+
         burst_use[port] = mem_is_load && !mem_is_single_element_operation &&
                           (mem_spatz_req.vtype.vsew == EW_32) &&
-                          (mem_req_addr[port][BurstAlignBits-1:0] == '0) &&
+                          burst_addr_aligned[port] &&
                           (rob_empty[port] || burst_alloc_q[port]) &&
                           (burst_len_eff[port] > 1) &&
                           (burst_len_eff[port] <= NrOutstandingLoads);
