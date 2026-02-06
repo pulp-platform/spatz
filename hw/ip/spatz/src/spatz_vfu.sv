@@ -10,6 +10,7 @@
 
 module spatz_vfu
   import spatz_pkg::*;
+  import fpnew_nl_pkg::*;  
   import rvv_pkg::*;
   import cf_math_pkg::idx_width;
   import fpnew_pkg::*; #(
@@ -69,13 +70,8 @@ module spatz_vfu
     logic      last_phase; // last phase of the NL macro
     logic      nl;         // this uop belongs to an NL macro
     nl_phase_e nl_phase;   // which NL phase produced this uop
-    nl_op_e    nl_op_sel;  // which NL op (exp or cosh)
+    nl_op_e    nl_op_sel;
   } vfu_tag_t;
-  
-  // AFTER BELLOW MODIFICATION: 
-  // is_fpu_busy      = |fpu_busy_d; 
-  // I AM NOT SURE IF IT IS STILL NEEDED OR NOT
-  logic [N_FPU-1:0] fpu_load_ready; 
 
   ///////////////////////
   //  Operation queue  //
@@ -130,29 +126,6 @@ module spatz_vfu
   logic nl_uop_last_issue, nl_last_uop_execution_ff, nl_last_en;
   `FFL(nl_last_uop_execution_ff, nl_uop_last_issue, nl_last_en, '0)
 
-  // Schraudolph constants (FP32)
-  localparam logic [31:0] SCH_C_FP32      = 32'h4B38AA3B; // 12.102.203.0f
-  localparam logic [31:0] SCH_B_FP32      = 32'h4E7DE250; // 1.064.866.805.0f
-  localparam logic [31:0] SCH_B_COSH_FP32 = 32'h4e7bdf00; // 1.056.964.608.0f
-  localparam logic [31:0] F32_ZERO        = 32'h00000000;
-  localparam logic [31:0] INV_PIO2        = 32'h3f22f983; // 0.63661977236
-
-
-  logic [31:0] sch_c_sew, sch_b_sew, sch_b_cosh_sew, f32_zero_sew, inv_pio2_sew;
-  assign sch_c_sew        = SCH_C_FP32;
-  assign sch_b_sew        = SCH_B_FP32;
-  assign sch_b_cosh_sew   = SCH_B_COSH_FP32;
-  assign f32_zero_sew     = F32_ZERO;
-  assign inv_pio2_sew     = INV_PIO2;
- 
-
-  logic [N_FU*ELEN-1:0] sch_c_vec, sch_b_vec, f32_zero_vec, sch_b_cosh_vec, inv_pio2_vec;
-  assign sch_c_vec        = {N_FU*2{sch_c_sew}};
-  assign sch_b_vec        = {N_FU*2{sch_b_sew}};
-  assign f32_zero_vec     = {N_FU*2{f32_zero_sew}};
-  assign sch_b_cosh_vec   = {N_FU*2{sch_b_cosh_sew}};
-  assign inv_pio2_vec     = {N_FU*2{inv_pio2_sew}};
-
   ///////////////
   //  Control  //
   ///////////////
@@ -181,7 +154,7 @@ module spatz_vfu
   vfu_tag_t input_tag;
   logic result_buf_valid_d, result_buf_valid_q;
 
-   assign result_tag = result_buf_valid_q ? result_buf_tag_q : (state_q == VFU_RunningIPU ? ipu_result_tag : fpu_result_tag);
+  assign result_tag = result_buf_valid_q ? result_buf_tag_q : (state_q == VFU_RunningIPU ? ipu_result_tag : fpu_result_tag);
 
   // Number of words advanced by vstart
   vlen_t vstart;
@@ -221,18 +194,18 @@ module spatz_vfu
 
   assign is_nl_op = (spatz_req.op == VFEXPF || spatz_req.op == VFCOSHF || spatz_req.op == VFTANHF || spatz_req.op == VFLOG || spatz_req.op == VFRSQRT7 || spatz_req.op == VFCOS || spatz_req.op == VFSIN);
   assign is_fpu_insn = FPU && ((spatz_req.op inside {[VFADD:VSDOTP]}) || is_nl_op);
-
+ 
   always_comb begin
     if (is_nl_op) begin
       unique case (spatz_req.op)
-        VFEXPF:   nl_func = EXPS;
-        VFCOSHF:  nl_func = COSHS;
-        VFTANHF:  nl_func = TANHS;
-        VFLOG:    nl_func = LOGS;
+        VFEXPF:    nl_func = EXPS;
+        VFCOSHF:   nl_func = COSHS;
+        VFTANHF:   nl_func = TANHS;
+        VFLOG:     nl_func = LOGS;
         VFRSQRT7:  nl_func = RSQRT;
-        VFSIN:    nl_func = SIN;
-        VFCOS:    nl_func = COS;
-        default:  nl_func = EXPS; 
+        VFSIN:     nl_func = SIN;
+        VFCOS:     nl_func = COS;
+        default:   nl_func = EXPS; 
       endcase
     end else begin
       nl_func = EXPS; 
@@ -250,7 +223,6 @@ module spatz_vfu
 
   // Is this the last request?
   logic last_request;
-
   logic is_next_uop_ready;
 
   // Reduction state
@@ -258,7 +230,7 @@ module spatz_vfu
     Reduction_NormalExecution,
     Reduction_Wait,
     Reduction_Init,
-    Reduction_Reduce,    
+    Reduction_Reduce,
     Reduction_IntraLane,
     Reduction_InterLane,
     Reduction_SIMD,
@@ -308,7 +280,7 @@ module spatz_vfu
 
     // This is not the last request
     last_request = 1'b0;
-
+    
     // We are handling an instruction
     spatz_req_ready = 1'b0;
 
@@ -353,43 +325,42 @@ module spatz_vfu
 
     // Finished the execution!
     if (spatz_req_valid && ((vl_d >= spatz_req.vl && !spatz_req.op_arith.is_reduction) || reduction_done)) begin
-      if (nl_active_eff) begin
-        if (nl_phase_eff == NL_FPU_ISSUE_0 || nl_phase_eff == NL_FPU_ISSUE_1 ) begin
-          spatz_req_ready         = 1'b0;
-          busy_d                  = 1'b1;
-          running_d[spatz_req.id] = 1'b1;
-          widening_upper_d        = 1'b0;
-          narrowing_upper_d       = 1'b0;
-          last_request            = 1'b0;
-          if (nl_uop_last_issue) begin
-              last_request            = 1'b1;
-          end
-        end
-        if (nl_phase_eff == NL_WAIT) begin
-          if (result_tag.uop_last)begin
-            spatz_req_ready         = spatz_req_valid;
-            busy_d                  = 1'b0;
-            vl_d                    = '0;
-            running_d[spatz_req.id] = 1'b0;
-            widening_upper_d        = 1'b0;
-            narrowing_upper_d       = 1'b0;
-          end else begin
+        if (nl_active_eff) begin
+            if (nl_phase_eff == NL_FPU_ISSUE_0 || nl_phase_eff == NL_FPU_ISSUE_1 ) begin
             spatz_req_ready         = 1'b0;
             busy_d                  = 1'b1;
+            running_d[spatz_req.id] = 1'b1;
             widening_upper_d        = 1'b0;
             narrowing_upper_d       = 1'b0;
-          end
-        end
+            last_request            = 1'b0;
+                if (nl_uop_last_issue) begin
+                    last_request            = 1'b1;
+                end
+            end
+            if (nl_phase_eff == NL_WAIT) begin
+                if (result_tag.uop_last)begin
+                    spatz_req_ready         = spatz_req_valid;
+                    busy_d                  = 1'b0;
+                    vl_d                    = '0;
+                    running_d[spatz_req.id] = 1'b0;
+                    widening_upper_d        = 1'b0;
+                    narrowing_upper_d       = 1'b0;
+                end else begin
+                    spatz_req_ready         = 1'b0;
+                    busy_d                  = 1'b1;
+                    widening_upper_d        = 1'b0;
+                    narrowing_upper_d       = 1'b0;
+                end
+            end
       end else begin
-        spatz_req_ready         = spatz_req_valid;
-        busy_d                  = 1'b0;
-        vl_d                    = '0;
-        last_request            = 1'b1;
-        running_d[spatz_req.id] = 1'b0;
-        widening_upper_d        = 1'b0;
-        narrowing_upper_d       = 1'b0;
+      spatz_req_ready         = spatz_req_valid;
+      busy_d                  = 1'b0;
+      vl_d                    = '0;
+      last_request            = 1'b1;
+      running_d[spatz_req.id] = 1'b0;
+      widening_upper_d        = 1'b0;
+      narrowing_upper_d       = 1'b0;
       end
-
     end
     // Do we have a new instruction?
     else if (spatz_req_valid && !running_d[spatz_req.id]) begin
@@ -412,8 +383,7 @@ module spatz_vfu
       vfu_rsp_valid_o   = 1'b1;
     end
   end: control_proc
-
-  /////////////////
+    /////////////////
   //// NL FSM /////
   /////////////////
 
@@ -552,14 +522,13 @@ module spatz_vfu
   end
 logic  nl_stop_issue;
 
-  // NL decode -> effective VRF needs, operands, and FPU overrides
+  /// NL decode -> effective VRF needs, operands, and FPU overrides
   always_comb begin
-
-    // defaults: behave like base instruction
+   
     nl_need_vs1  = spatz_req.use_vs1;
     nl_need_vs2  = spatz_req.use_vs2;
     nl_need_vd   = spatz_req.vd_is_src;
-    is_last_uop = 1'b0;
+    is_last_uop  = 1'b0;
     nl_stop_issue = 1'b0;
     nl_loopback_d = nl_loopback_q;
 
@@ -568,243 +537,146 @@ logic  nl_stop_issue;
     nl_op2_ovr = '0;
     nl_op3_ovr = '0;
 
-    nl_override_fpu    = 1'b0;
-    nl_fpu_op_ovr      = fpnew_pkg::FMADD;
-    nl_fpu_op_mode_ovr = 1'b0;
-    nl_fpu_rm_ovr      = spatz_req.rm;
-    nl_fpu_int_fmt_ovr = fpnew_pkg::INT32;
-    nl_last_en         = 1'b0;
+    nl_override_fpu      = 1'b0;
+    nl_fpu_op_ovr        = fpnew_pkg::FMADD;
+    nl_fpu_op_mode_ovr   = 1'b0;             
+    nl_fpu_rm_ovr        = spatz_req.rm;
+    nl_fpu_int_fmt_ovr   = fpnew_pkg::INT32; 
+    nl_last_en           = 1'b0;
 
     if (nl_active_eff) begin
-      unique case (spatz_req.op)
-        VFEXPF:
-          unique case (nl_phase_eff)
-            // P0: vd <- B (FMADD(0,0,B)), no VRF reads
-            NL_FPU_ISSUE_0: begin
-              nl_need_vs1           = 1'b1; // x on vrf_rdata_i[1]
-              nl_need_vs2           = 1'b0;
-              nl_need_vd            = 1'b0;
-              nl_override_operands  = 1'b1;
-              nl_op1_ovr            = sch_c_vec;        // C
-              nl_op2_ovr            = vrf_rdata_i[1];   // x
-              nl_op3_ovr            = sch_b_vec;        // B
+      
+      if (nl_phase_eff == NL_WAIT) begin
+          nl_need_vs1          = 1'b0;
+          nl_need_vs2          = 1'b0;
+          nl_need_vd           = 1'b0;
+          nl_override_operands = 1'b0;
+          nl_override_fpu      = 1'b0;
+          nl_loopback_d        = 1'b0;
+          nl_stop_issue        = 1'b1;
+          if (spatz_req.op == VFEXPF || (spatz_req.op == VFCOSHF && nl_phase_q == NL_FPU_ISSUE_1)) 
+              is_last_uop = 1'b1; 
+      end 
+      else begin
+          // Active Processing Phases
+          unique case (spatz_req.op)
+            VFEXPF: begin
+               // P0: vd <- B (FMADD(0,0,B))
+               nl_need_vs1          = 1'b1; 
+               nl_need_vs2          = 1'b0; 
+               nl_need_vd           = 1'b0; 
+               nl_override_operands = 1'b1;
+               nl_op1_ovr           = SCH_C_VEC;
+               nl_op2_ovr           = vrf_rdata_i[1];
+               nl_op3_ovr           = SCH_B_VEC;
 
-              nl_override_fpu       = 1'b1;
-              nl_fpu_op_ovr         = fpnew_pkg::FMADD;
-              nl_fpu_op_mode_ovr    = 1'b0;
-              nl_fpu_rm_ovr         = spatz_req.rm;
-              nl_fpu_int_fmt_ovr    = fpnew_pkg::INT32;
-              is_last_uop           = 1'b1;
-
+               nl_override_fpu      = 1'b1;
+               nl_fpu_op_ovr        = fpnew_pkg::FMADD;
+               is_last_uop          = 1'b1;
             end
 
-            NL_WAIT: begin
-              nl_need_vs1           = 1'b0;
-              nl_need_vs2           = 1'b0; // y on vrf_rdata_i[0]
-              nl_need_vd            = 1'b0; // vd on vrf_rdata_i[2]
-              nl_override_operands  = 1'b0;
-              
+            VFCOSHF: begin
+               unique case (nl_phase_eff)
+                 NL_FPU_ISSUE_0: begin
+                   nl_need_vs1          = 1'b1;
+                   nl_need_vs2          = 1'b0; 
+                   nl_need_vd           = 1'b0;
+                   nl_override_operands = 1'b1;
+                   nl_op1_ovr           = SCH_C_VEC;
+                   nl_op2_ovr           = vrf_rdata_i[1];
+                   nl_op3_ovr           = SCH_B_COSH_VEC;
+                   nl_stop_issue        = 1'b1;
 
-              nl_override_fpu       = 1'b0;
-              is_last_uop           = 1'b1;
+                   nl_override_fpu      = 1'b1;
+                   nl_fpu_op_ovr        = fpnew_pkg::FMADD;
+                 end
 
+                 NL_FPU_ISSUE_1: begin
+                   nl_stop_issue        = 1'b0;
+                   nl_need_vs1          = 1'b1;
+                   nl_need_vs2          = 1'b0; 
+                   nl_override_operands = 1'b1;
+                   nl_op1_ovr           = SCH_C_VEC;
+                   nl_op2_ovr           = vrf_rdata_i[1];
+                   nl_op3_ovr           = SCH_B_COSH_VEC;
+
+                   nl_override_fpu      = 1'b1;
+                   nl_fpu_op_ovr        = fpnew_pkg::FNMSUB;
+                   nl_loopback_d        = 1'b1;
+                   if (nl_loopback_q) is_last_uop = 1'b1;
+                 end
+
+                 NL_FPU_ISSUE_2: begin
+                   nl_stop_issue        = 1'b1;
+                   is_last_uop          = 1'b1;
+
+                 end
+               endcase
             end
 
+            VFTANHF: begin
+               // NL_FPU_ISSUE_0
+               nl_need_vs1          = 1'b1;
+               nl_need_vs2          = 1'b1; 
+               nl_override_operands = 1'b1;
+               nl_op1_ovr           = vrf_rdata_i[1];
+               nl_op2_ovr           = vrf_rdata_i[1];
+               nl_op3_ovr           = F32_ZERO_VEC;
+
+               nl_override_fpu      = 1'b1;
+               nl_fpu_op_ovr        = fpnew_pkg::MUL;
+               nl_loopback_d        = word_issued ? 1'b1 : 1'b0;
+               is_last_uop          = nl_loopback_q ? 1'b1 : 1'b0;
+               nl_last_en           = 1'b1;
+            end
+
+            VFLOG: begin
+               nl_need_vs1          = 1'b1;
+               nl_need_vs2          = 1'b0; 
+               nl_override_operands = 1'b1;
+               nl_op1_ovr           = vrf_rdata_i[1];
+               nl_op2_ovr           = F32_ZERO_VEC;       
+               nl_op3_ovr           = F32_ZERO_VEC;          
+               nl_override_fpu      = 1'b1;
+               nl_fpu_op_ovr        = fpnew_pkg::I2F;
+               nl_loopback_d        = word_issued ? 1'b1 : 1'b0;
+               is_last_uop          = nl_loopback_q ? 1'b1 : 1'b0;
+               nl_last_en           = 1'b1;
+            end
+
+            VFRSQRT7: begin
+               nl_need_vs1          = 1'b1;
+               nl_need_vs2          = 1'b0; 
+               nl_override_operands = 1'b1;
+               nl_op1_ovr           = vrf_rdata_i[1];
+               nl_op2_ovr           = F32_ZERO_VEC;      
+               nl_op3_ovr           = F32_ZERO_VEC;      
+               nl_override_fpu      = 1'b1;
+               nl_fpu_op_ovr        = fpnew_pkg::MUL;
+               nl_loopback_d        = word_issued ? 1'b1 : 1'b0;
+               is_last_uop          = nl_loopback_q ? 1'b1 : 1'b0;
+               nl_last_en           = 1'b1;
+            end
+
+            VFSIN, VFCOS: begin
+               nl_need_vs1          = 1'b1;
+               nl_need_vs2          = 1'b0; 
+               nl_override_operands = 1'b1;
+               nl_op1_ovr           = vrf_rdata_i[1];
+               nl_op2_ovr           = INV_PIO2_VEC;      
+               nl_op3_ovr           = F32_ZERO_VEC;      
+               nl_override_fpu      = 1'b1;
+               nl_fpu_op_ovr        = fpnew_pkg::MUL;
+               nl_loopback_d        = word_issued ? 1'b1 : 1'b0;
+               is_last_uop          = nl_loopback_q ? 1'b1 : 1'b0;
+               nl_last_en           = 1'b1;
+            end
+            
             default: ;
           endcase
-
-        VFCOSHF:
-          unique case (nl_phase_eff)
-            // P0: vd <- cosh(x) (FCOSH(x))
-            NL_FPU_ISSUE_0: begin
-              nl_need_vs1           = 1'b1;
-              nl_need_vs2           = 1'b0;
-              nl_need_vd            = 1'b0;
-              nl_override_operands  = 1'b1;
-              nl_op1_ovr            = sch_c_vec;        // C
-              nl_op2_ovr            = vrf_rdata_i[1];   // x
-              nl_op3_ovr            = sch_b_cosh_vec;        // B
-              nl_stop_issue         = 1'b1;
-
-              nl_override_fpu       = 1'b1;
-              nl_fpu_op_ovr         = fpnew_pkg::FMADD;
-              nl_fpu_op_mode_ovr    = 1'b0;
-              nl_fpu_rm_ovr         = spatz_req.rm;
-              nl_fpu_int_fmt_ovr    = fpnew_pkg::INT32;
-
-
-            end
-
-            NL_FPU_ISSUE_1: begin
-              nl_stop_issue         = 1'b0;
-              nl_need_vs1           = 1'b1;
-              nl_need_vs2           = 1'b0;
-              nl_need_vd            = 1'b0;
-              nl_override_operands  = 1'b1;
-              nl_op1_ovr            = sch_c_vec;        // C
-              nl_op2_ovr            = vrf_rdata_i[1];   // x
-              nl_op3_ovr            = sch_b_cosh_vec;        // B
-
-              nl_override_fpu       = 1'b1;
-              nl_fpu_op_ovr         = fpnew_pkg::FNMSUB;
-              nl_fpu_op_mode_ovr    = 1'b0;
-              nl_fpu_rm_ovr         = spatz_req.rm;
-              nl_fpu_int_fmt_ovr    = fpnew_pkg::INT32;
-              nl_loopback_d         = 1'b1;
-              if (nl_loopback_q) begin
-                is_last_uop           = 1'b1;
-              end
-            end
-
-            NL_FPU_ISSUE_2: begin
-              nl_need_vs1           = 1'b0;
-              nl_need_vs2           = 1'b0; // y on vrf_rdata_i[0]
-              nl_need_vd            = 1'b0; // vd on vrf_rdata_i[2]
-              nl_override_operands  = 1'b0;
-              is_last_uop           = 1'b1;
-              nl_override_fpu       = 1'b0;
-              nl_loopback_d         = 1'b0;
-              nl_stop_issue         = 1'b1;
-            end
-
-            NL_WAIT: begin
-              nl_need_vs1           = 1'b0;
-              nl_need_vs2           = 1'b0; // y on vrf_rdata_i[0]
-              nl_need_vd            = 1'b0; // vd on vrf_rdata_i[2]
-              nl_override_operands  = 1'b0;
-              is_last_uop           = 1'b0;
-              nl_override_fpu       = 1'b0;
-              nl_loopback_d         = 1'b0;
-              nl_stop_issue         = 1'b1;
-
-            end
-            default: ;
-          endcase
-
-        VFTANHF:
-          unique case (nl_phase_eff)
-            NL_FPU_ISSUE_0: begin
-              nl_need_vs1           = 1'b1;
-              nl_need_vs2           = 1'b1;
-              nl_need_vd            = 1'b0;
-              nl_override_operands  = 1'b1;
-              nl_op1_ovr            = vrf_rdata_i[1];   // x
-              nl_op2_ovr            = vrf_rdata_i[1];   // x
-              nl_op3_ovr            = f32_zero_vec;        // B
-
-              nl_override_fpu       = 1'b1;
-              nl_fpu_op_ovr         = fpnew_pkg::MUL;
-              nl_fpu_op_mode_ovr    = 1'b0;
-              nl_fpu_rm_ovr         = spatz_req.rm;
-              nl_fpu_int_fmt_ovr    = fpnew_pkg::INT32;
-              nl_loopback_d         = nl_loopback_q ? 1'b1 : 1'b0;
-              is_last_uop           = nl_loopback_q ? 1'b1 : 1'b0;
-              nl_last_en            = 1'b1;
-            end
-
-            NL_WAIT: begin
-              nl_need_vs1           = 1'b0;
-              nl_need_vs2           = 1'b0; // y on vrf_rdata_i[0]
-              nl_need_vd            = 1'b0; // vd on vrf_rdata_i[2]
-              nl_override_operands  = 1'b0;
-              is_last_uop           = 1'b0;
-              nl_override_fpu       = 1'b0;
-              nl_loopback_d         = 1'b0;
-              nl_stop_issue         = 1'b1;
-
-            end
-            default: ;
-          endcase
-
-        VFLOG:
-          unique case (nl_phase_eff)
-            NL_FPU_ISSUE_0: begin
-              nl_need_vs1           = 1'b1;
-              nl_need_vs2           = 1'b0;
-              nl_need_vd            = 1'b0;
-              nl_override_operands  = 1'b1;
-              nl_op1_ovr            = vrf_rdata_i[1];   // x
-              nl_op2_ovr            = f32_zero_vec;        
-              nl_op3_ovr            = f32_zero_vec;          
-              nl_override_fpu       = 1'b1;
-              nl_fpu_op_ovr         = fpnew_pkg::I2F;
-              nl_fpu_op_mode_ovr    = 1'b0;
-              nl_fpu_rm_ovr         = spatz_req.rm;
-              nl_fpu_int_fmt_ovr    = fpnew_pkg::INT32;
-              nl_loopback_d         = word_issued ? 1'b1 : 1'b0;
-              is_last_uop           = nl_loopback_q ? 1'b1 : 1'b0;
-              nl_last_en            = 1'b1;
-            end
-
-            NL_WAIT: begin
-              nl_need_vs1           = 1'b0;
-              nl_need_vs2           = 1'b0; 
-              nl_need_vd            = 1'b0; 
-              nl_override_operands  = 1'b0;
-              is_last_uop           = 1'b0;
-              nl_override_fpu       = 1'b0;
-              nl_loopback_d         = 1'b0;
-              nl_stop_issue         = 1'b1;
-
-            end
-          endcase
-
-        VFRSQRT7:
-          unique case (nl_phase_eff)
-            NL_FPU_ISSUE_0: begin
-              nl_stop_issue         = 1'b0;
-              nl_need_vs1           = 1'b1;
-              nl_need_vs2           = 1'b0;
-              nl_need_vd            = 1'b0;
-              nl_override_operands  = 1'b1;
-              nl_op1_ovr            = vrf_rdata_i[1];   // x
-              nl_op2_ovr            = f32_zero_vec;     
-              nl_op3_ovr            = f32_zero_vec;     
-              nl_override_fpu       = 1'b1;
-              nl_fpu_op_ovr         = fpnew_pkg::MUL;
-              nl_fpu_op_mode_ovr    = 1'b0;
-              nl_fpu_rm_ovr         = spatz_req.rm;
-              nl_fpu_int_fmt_ovr    = fpnew_pkg::INT32;
-              nl_loopback_d         = word_issued ? 1'b1 : 1'b0;
-              is_last_uop           = nl_loopback_q ? 1'b1 : 1'b0;
-              nl_last_en            = 1'b1;
-              
-            end
-
-            NL_WAIT: begin
-              nl_stop_issue         = 1'b1;
-              nl_loopback_d         = 1'b0;
-            end
-          endcase 
-        VFSIN, VFCOS:
-          unique case (nl_phase_eff)
-            NL_FPU_ISSUE_0: begin
-              nl_stop_issue         = 1'b0;
-              nl_need_vs1           = 1'b1;
-              nl_need_vs2           = 1'b0;
-              nl_need_vd            = 1'b0;
-              nl_override_operands  = 1'b1;
-              nl_op1_ovr            = vrf_rdata_i[1];   // x
-              nl_op2_ovr            = inv_pio2_vec;     
-              nl_op3_ovr            = f32_zero_vec;     
-              nl_override_fpu       = 1'b1;
-              nl_fpu_op_ovr         = fpnew_pkg::MUL;
-              nl_fpu_op_mode_ovr    = 1'b0;
-              nl_fpu_rm_ovr         = spatz_req.rm;
-              nl_fpu_int_fmt_ovr    = fpnew_pkg::INT32;
-              nl_loopback_d         = word_issued ? 1'b1 : 1'b0;
-              is_last_uop           = nl_loopback_q ? 1'b1 : 1'b0;
-              nl_last_en            = 1'b1;
-            end
-            NL_WAIT: begin
-              nl_stop_issue         = 1'b1;
-              nl_loopback_d         = 1'b0;
-            end
-          endcase
-      endcase
-    end
+      end // End else (Active Phases)
+    end // End nl_active_eff
   end
-
 
   //////////////
   // Operands //
@@ -875,7 +747,7 @@ logic  nl_stop_issue;
   //  Reduction logic  //
   ///////////////////////
 
- // Reduction pointer
+  // Reduction pointer
   logic [$clog2(N_FU)-1:0] pnt;
   assign pnt = reduction_pointer_d[$clog2(N_FU)-1:0];
 
@@ -925,7 +797,7 @@ logic  nl_stop_issue;
     // Are we ready to accept a result?
     result_ready = 1'b0;
 
-     // Reduction did not finish
+    // Reduction did not finish
     reduction_done = 1'b0;
 
     // Only request when initializing the reduction register
@@ -971,7 +843,7 @@ logic  nl_stop_issue;
         reduction_pointer_d = '0;
 
         // Do we have a new reduction instruction?
-         if (spatz_req_valid && !running_q[spatz_req.id] && spatz_req.op_arith.is_reduction)
+        if (spatz_req_valid && !running_q[spatz_req.id] && spatz_req.op_arith.is_reduction)
           reduction_state_d = is_fpu_busy ? Reduction_Wait : Reduction_Init;
       end
 
@@ -1642,7 +1514,6 @@ logic  nl_stop_issue;
         fpu_op_mode = nl_fpu_op_mode_ovr;
         fpu_int_fmt = nl_fpu_int_fmt_ovr;
       end
-
     end: gen_decoder
 
     logic [N_FPU*ELEN-1:0] wide_operand1, wide_operand2, wide_operand3;
@@ -1706,7 +1577,6 @@ logic  nl_stop_issue;
       logic int_fpu_in_valid, is_fpu_in_valid_en_nl;
       assign is_fpu_in_valid_en_nl = nl_active_eff ?  nl_override_fpu : 1'b1;
       assign int_fpu_in_valid = spatz_req_valid && operands_ready && (!spatz_req.op_arith.is_scalar || fpu == 0) && is_fpu_insn && is_fpu_in_valid_en_nl;
-      
 
       // Generate an FPU pipeline
       elen_t fpu_operand1_q, fpu_operand2_q, fpu_operand3_q;
@@ -1733,38 +1603,37 @@ logic  nl_stop_issue;
       `FFL(input_tag_q, input_tag, int_fpu_in_valid && int_fpu_in_ready, '{vsew: EW_8, nl_phase: NL_IDLE, nl_op_sel: EXPS, default: '0})
       `FFL(fpu_in_valid_q, int_fpu_in_valid, int_fpu_in_ready, 1'b0)
       assign int_fpu_in_ready = !fpu_in_valid_q || fpu_in_valid_q && fpu_in_ready_d;
-      assign fpu_load_ready[fpu] = int_fpu_in_valid && int_fpu_in_ready;
-      
+
       fpnew_top_nl #(
         .Features                   (FPUFeatures           ),
-        .Implementation             (FPUImplementation),
+        .Implementation             (FPUImplementation     ),
         .TagType                    (vfu_tag_t             ),
         .StochasticRndImplementation(fpnew_pkg::DEFAULT_RSR)
-      ) i_fpu ( 
-        .clk_i          (clk_i                                                  ),
-        .rst_ni         (rst_ni                                                 ),
-        .hart_id_i      ({hart_id_i[31-$clog2(N_FPU):0], fpu[$clog2(N_FPU)-1:0]}),
-        .flush_i        (1'b0                                                   ),
-        .busy_o         (fpu_busy_d[fpu]                                        ),
-        .operands_i     ({fpu_operand3_q, fpu_operand2_q, fpu_operand1_q}       ),
-        // Only the FPU0 executes scalar instructions
-        .in_valid_i     (fpu_in_valid_q                                         ),
-        .in_ready_o     (fpu_in_ready_d                                         ),
-        .op_i           (fpu_op_q                                               ),
-        .src_fmt_i      (fpu_src_fmt_q                                          ),
-        .dst_fmt_i      (fpu_dst_fmt_q                                          ),
-        .int_fmt_i      (fpu_int_fmt_q                                          ),
-        .vectorial_op_i (fpu_vectorial_op_q                                     ),
-        .op_mod_i       (fpu_op_mode_q                                          ),
-        .tag_i          (input_tag_q                                            ),
-        .simd_mask_i    ('1                                                     ),
-        .rnd_mode_i     (rm_q                                                   ),
-        .result_o       (fpu_result[fpu*ELEN +: ELEN]                           ),
-        .out_valid_o    (int_fpu_result_valid                                   ),
-        .out_ready_i    (result_ready                                           ),
-        .status_o       (fpu_status_d[fpu]                                      ),
-        .tag_o          (tag                                                    ),
-        .next_uop_ready_o (next_uop_ready[fpu]                                  )
+      ) i_fpu (
+        .clk_i           (clk_i                                                  ),
+        .rst_ni          (rst_ni                                                 ),
+        .hart_id_i       ({hart_id_i[31-$clog2(N_FPU):0], fpu[$clog2(N_FPU)-1:0]}),
+        .flush_i         (1'b0                                                   ),
+        .busy_o          (fpu_busy_d[fpu]                                        ),
+        .operands_i      ({fpu_operand3_q, fpu_operand2_q, fpu_operand1_q}       ),
+        // Only the FPU  0 executes scalar instructions
+        .in_valid_i      (fpu_in_valid_q                                         ),
+        .in_ready_o      (fpu_in_ready_d                                         ),
+        .op_i            (fpu_op_q                                               ),
+        .src_fmt_i       (fpu_src_fmt_q                                          ),
+        .dst_fmt_i       (fpu_dst_fmt_q                                          ),
+        .int_fmt_i       (fpu_int_fmt_q                                          ),
+        .vectorial_op_i  (fpu_vectorial_op_q                                     ),
+        .op_mod_i        (fpu_op_mode_q                                          ),
+        .tag_i           (input_tag_q                                            ),
+        .simd_mask_i     ('1                                                     ),
+        .rnd_mode_i      (rm_q                                                   ),
+        .result_o        (fpu_result[fpu*ELEN +: ELEN]                           ),
+        .out_valid_o     (int_fpu_result_valid                                   ),
+        .out_ready_i     (result_ready                                           ),
+        .status_o        (fpu_status_d[fpu]                                      ),
+        .tag_o           (tag                                                    ),
+        .next_uop_ready_o(next_uop_ready[fpu]                                    )
       );
 
       if (fpu == 0) begin: gen_fpu_tag
@@ -1778,7 +1647,7 @@ logic  nl_stop_issue;
     assign fpu_result_valid = '0;
     assign fpu_result_tag   = '0;
     assign fpu_status_o     = '0;
-    assign next_uop_ready  = '0;
+    assign next_uop_ready   = '0;
   end: gen_no_fpu
 
 endmodule : spatz_vfu
