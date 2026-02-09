@@ -330,9 +330,12 @@ module spatz_vlsu
   logic             commit_insn_pop;
   logic             commit_insn_empty;
   logic             commit_insn_valid;
+  logic             commit_insn_full;
+  logic  [NrMemPorts-1:0] commit_finished_q;
+  logic  [NrMemPorts-1:0] commit_finished_d;
 
   fifo_v3 #(
-    .DEPTH       (3), // yzf modified
+    .DEPTH       (NrOutstandingLoads       ),
     .FALL_THROUGH(1'b1                  ),
     .dtype       (commit_metadata_t     )
   ) i_fifo_commit_insn (
@@ -342,7 +345,7 @@ module spatz_vlsu
     .testmode_i(1'b0             ),
     .data_i    (commit_insn_d    ),
     .push_i    (commit_insn_push ),
-    .full_o    (/* Unused */     ),
+    .full_o    (commit_insn_full ),
     .data_o    (commit_insn_q    ),
     .empty_o   (commit_insn_empty),
     .pop_i     (commit_insn_pop  ),
@@ -375,18 +378,23 @@ module spatz_vlsu
     commit_insn_push = 1'b0;
 
     // Did we start a new instruction?
-    if (mem_spatz_req_valid && !mem_insn_pending_q[mem_spatz_req.id]) begin
+    if (mem_spatz_req_valid && !mem_insn_pending_q[mem_spatz_req.id] && !commit_insn_full) begin
       mem_insn_pending_d[mem_spatz_req.id] = 1'b1;
       commit_insn_push                     = 1'b1;
     end
 
-    // Did an instruction finished its requests?
+    // Mark an instruction memory-finished once all request beats are issued.
     if (&mem_port_finished_q) begin
       mem_insn_finished_d[mem_spatz_req.id] = 1'b1;
-      mem_spatz_req_ready                   = 1'b1;
     end
-    // Did we acknowledge the end of an instruction?
-    if (vlsu_rsp_valid_o && commit_insn_valid) begin
+
+    // Advance operation queue only when committed metadata retires.
+    if (commit_insn_pop && commit_insn_valid &&
+        (commit_insn_q.id == mem_spatz_req.id)) begin
+      mem_spatz_req_ready = 1'b1;
+    end
+    // Retire bookkeeping only when the committed instruction actually pops.
+    if (commit_insn_pop) begin
       // Clear the pending/finished bits for the committed instruction.
       // Use commit_insn_q.id to avoid stale/unknown IDs on the response path.
       mem_insn_finished_d[commit_insn_q.id] = 1'b0;
@@ -403,9 +411,6 @@ module spatz_vlsu
   vlen_t [N_FU-1:0]       commit_counter_delta;
   vlen_t [N_FU-1:0]       commit_counter_d;
   vlen_t [N_FU-1:0]       commit_counter_q;
-  logic  [NrMemPorts-1:0] commit_finished_q;
-  logic  [NrMemPorts-1:0] commit_finished_d;
-
   for (genvar fu = 0; fu < N_FU; fu++) begin: gen_vreg_counters
     delta_counter #(
       .WIDTH($bits(vlen_t))
@@ -487,6 +492,7 @@ module spatz_vlsu
   end: gen_mem_req_addr
 
   // Burst request tracking (per port)
+  logic [NrMemPorts-1:0]                    burst_mode_req;
   logic [NrMemPorts-1:0]                    burst_use;
   logic [NrMemPorts-1:0]                    burst_addr_aligned;
   logic [NrMemPorts-1:0][BurstLenWidth-1:0] burst_len_calc;
@@ -524,6 +530,7 @@ module spatz_vlsu
   logic           [NrMemPorts-1:0] spatz_mem_req_valid;
   logic           [NrMemPorts-1:0] spatz_mem_req_ready;
 
+
   always_comb begin: control_proc
     // Maintain state
     busy_d = busy_q;
@@ -553,7 +560,9 @@ module spatz_vlsu
 
   // Is instruction a load?
   logic mem_is_load;
-  assign mem_is_load = mem_spatz_req.op_mem.is_load;
+  logic exec_is_load;
+  assign mem_is_load  = mem_spatz_req.op_mem.is_load;
+  assign exec_is_load = commit_insn_valid ? commit_insn_q.is_load : mem_spatz_req.op_mem.is_load;
 
   // Signal when we are finished with with accessing the memory (necessary
   // for the case with more than one memory port)
@@ -592,6 +601,10 @@ module spatz_vlsu
   logic [3:0] commit_single_element_size;
   assign commit_single_element_size = 1'b1 << commit_insn_q.vsew;
 
+  // Number of pending load requests (must be declared before offset queue use).
+  logic [NrMemPorts-1:0][idx_width(NrOutstandingLoads):0] mem_pending_d, mem_pending_q;
+  logic [NrMemPorts-1:0] mem_pending;
+
   ////////////////////
   //  Offset Queue  //
   ////////////////////
@@ -610,12 +623,13 @@ module spatz_vlsu
       .testmode_i(1'b0                                                                 ),
       .empty_o   (/* Unused */                                                         ),
       .full_o    (offset_queue_full[port]                                              ),
-      .push_i    (mem_is_load &&
+      .push_i    (exec_is_load &&
                   (burst_alloc_fire[port] ||
                    ((spatz_mem_req_valid[port] && spatz_mem_req_ready[port]) && !burst_use[port]))),
       .data_i    (mem_req_addr_offset[port]                                            ),
       .data_o    (vreg_addr_offset[port]                                               ),
-      .pop_i     (rob_pop[port] && commit_insn_q.is_load                               ),
+      // Pop only when a real pending load response is consumed.
+      .pop_i     (rob_pop[port] && commit_insn_q.is_load && mem_pending[port]          ),
       .usage_o   (/* Unused */                                                         )
     );
   end: gen_offset_queue
@@ -656,7 +670,6 @@ module spatz_vlsu
   assign vrf_we_o        = vrf_req_valid_q;
   assign vrf_id_o        = {vrf_req_q.rsp.id, mem_spatz_req.id, commit_insn_q.id};
   assign vrf_req_ready_q = vrf_wvalid_i;
-
   // Ack when the vector store finishes, or when the vector load commits to the VRF
   assign vlsu_rsp_o       = vrf_req_q.rsp_valid && vrf_req_valid_q ? vrf_req_q.rsp   : '{id: commit_insn_q.id, default: '0};
   assign vlsu_rsp_valid_o = vrf_req_q.rsp_valid && vrf_req_valid_q ? vrf_req_ready_q : vlsu_finished_req && !commit_insn_q.is_load;
@@ -804,12 +817,23 @@ module spatz_vlsu
         // mem_req_addr is byte-addressed and already word-aligned, so drop MAXEW LSBs.
         burst_addr_aligned[port] = (mem_req_addr[port][BurstAlignBits-1+MAXEW:MAXEW] == '0);
 
-        burst_use[port] = mem_is_load && !mem_is_single_element_operation &&
-                          (mem_spatz_req.vtype.vsew == EW_32) &&
-                          burst_addr_aligned[port] &&
-                          (rob_empty[port] || burst_alloc_q[port]) &&
-                          (burst_len_eff[port] > 1) &&
-                          (burst_len_eff[port] <= NrOutstandingLoads);
+        burst_mode_req[port] = mem_is_load && !mem_is_single_element_operation &&
+                               (mem_spatz_req.vtype.vsew == EW_32) &&
+                               burst_addr_aligned[port] &&
+                               (burst_len_eff[port] > 1) &&
+                               (burst_len_eff[port] <= NrOutstandingLoads);
+
+        // For burst mode, require a ROB-empty start and then keep allocating/sending
+        // from the same burst context. Do not silently fall back to scalar loads.
+        // Keep burst mode active once allocation started, even if queues become full.
+        // Otherwise burst_send can assert while mem_req_lvalid is masked off.
+        // Start a new burst only when no outstanding beats remain.
+        // This avoids ID reuse while late responses from a previous burst are still in flight.
+        burst_use[port] = burst_mode_req[port] &&
+                          (burst_alloc_q[port] ||
+                           (rob_empty[port] &&
+                            (mem_pending_q[port] == '0) &&
+                            !offset_queue_full[port]));
 
         mem_operation_valid[port] = mem_spatz_req_valid && (max_elements != mem_counter_q[port]);
         mem_operation_last[port]  = mem_operation_valid[port] &&
@@ -889,8 +913,6 @@ module spatz_vlsu
   logic [NrMemPorts-1:0]                   mem_req_last;
 
   // Number of pending requests
-  logic [NrMemPorts-1:0][idx_width(NrOutstandingLoads):0] mem_pending_d, mem_pending_q;
-  logic [NrMemPorts-1:0] mem_pending;
   `FF(mem_pending_q, mem_pending_d, '{default: '0})
 
   for (genvar port = 0; port < NrMemPorts; port++) begin : gen_burst_state
@@ -907,7 +929,7 @@ module spatz_vlsu
       mem_pending[port] = mem_pending_q[port] != '0;
 
       // New request sent
-      if (mem_is_load && spatz_mem_req_valid[port] && spatz_mem_req_ready[port]) begin
+      if (exec_is_load && spatz_mem_req_valid[port] && spatz_mem_req_ready[port]) begin
         if (burst_send[port])
           mem_pending_d[port] = mem_pending_d[port] + burst_len_issue[port];
         else
@@ -1017,16 +1039,19 @@ module spatz_vlsu
 
         if (commit_insn_q.use_port0_burst) begin
           // Port0-only burst: steer data into the correct lane
-          vrf_req_valid_d = rob_rvalid[0];
-          rob_pop[0]      = rob_rvalid[0] && vrf_req_valid_d && vrf_req_ready_d && commit_counter_en[0];
+          vrf_req_valid_d = rob_rvalid[0] && mem_pending[0];
+          // If a stale store entry leaks into load state, drop it without touching offset queue.
+          rob_pop[0]      = rob_rvalid[0] &&
+                            ((!mem_pending[0]) ||
+                             (vrf_req_valid_d && vrf_req_ready_d && commit_counter_en[0]));
 
           vrf_req_d.wdata = '0;
           vrf_req_d.wdata[ELEN*burst_lane_idx +: ELEN] = rob_rdata[0];
           vrf_req_d.wbe   = '0;
           vrf_req_d.wbe[ELENB*burst_lane_idx +: ELENB] = burst_lane_wbe;
         end else begin
-          vrf_req_valid_d = &(rob_rvalid | ~commit_operation_valid);
-          // vrf_req_valid_d = &(rob_rvalid | ~mem_pending) && |mem_pending;
+          // Only commit load data for ports that actually have pending load beats.
+          vrf_req_valid_d = &(rob_rvalid | ~mem_pending) && |mem_pending;
 
           for (int unsigned port = 0; port < NrMemPorts; port++) begin
             automatic logic [63:0] data = rob_rdata[port];
@@ -1052,7 +1077,9 @@ module spatz_vlsu
             endcase
 
             // Pop stored element and free space in buffer
-            rob_pop[port] = rob_rvalid[port] && vrf_req_valid_d && vrf_req_ready_d && commit_counter_en[port];
+            rob_pop[port] = rob_rvalid[port] &&
+                            ((!mem_pending[port]) ||
+                             (vrf_req_valid_d && vrf_req_ready_d && commit_counter_en[port]));
 
           // Shift data to correct position if we have a strided memory access
           if (commit_insn_q.is_strided || commit_insn_q.is_indexed)
@@ -1111,14 +1138,14 @@ module spatz_vlsu
             rob_req_id[port] = burst_alloc_fire[port];
             if (burst_send[port]) begin
               mem_req_lvalid[port] = (!mem_is_indexed || (vrf_rvalid_i[1] && !pending_index[port])) &&
-                                     mem_spatz_req.op_mem.is_load;
+                                     commit_insn_q.is_load;
               mem_req_id[port]     = burst_base_id_q[port];
               mem_req_last[port]   = mem_operation_last[port];
             end
-          end else if (!rob_full[port] && !offset_queue_full[port]) begin
+          end else if (!burst_mode_req[port] && !rob_full[port] && !offset_queue_full[port]) begin
             rob_req_id[port]     = spatz_mem_req_ready[port] & spatz_mem_req_valid[port];
             mem_req_lvalid[port] = (!mem_is_indexed || (vrf_rvalid_i[1] && !pending_index[port])) &&
-                                   mem_spatz_req.op_mem.is_load;
+                                   commit_insn_q.is_load;
             mem_req_id[port]     = rob_id[port];
             mem_req_last[port]   = mem_operation_last[port];
           end
@@ -1184,7 +1211,7 @@ module spatz_vlsu
               default: mem_req_data[port] = data;
             endcase
 
-          mem_req_svalid[port] = rob_rvalid[port] && (!mem_is_indexed || (vrf_rvalid_i[1] && !pending_index[port])) && !mem_spatz_req.op_mem.is_load;
+          mem_req_svalid[port] = rob_rvalid[port] && (!mem_is_indexed || (vrf_rvalid_i[1] && !pending_index[port])) && !commit_insn_q.is_load;
           mem_req_id[port]     = rob_rid[port];
           mem_req_last[port]   = mem_operation_last[port];
           rob_pop[port]        = rob_rvalid[port] && spatz_mem_req_valid[port] && spatz_mem_req_ready[port];
@@ -1233,7 +1260,7 @@ module spatz_vlsu
     assign spatz_mem_req[port].addr  = mem_req_addr[port];
     assign spatz_mem_req[port].mode  = '0; // Request always uses user privilege level
     assign spatz_mem_req[port].size  = mem_spatz_req.vtype.vsew[1:0];
-    assign spatz_mem_req[port].write = !mem_is_load;
+    assign spatz_mem_req[port].write = !exec_is_load;
     assign spatz_mem_req[port].burst_len = burst_send[port] ? burst_len_issue[port] : BurstLenWidth'(1);
     assign spatz_mem_req[port].strb  = mem_req_strb[port];
     assign spatz_mem_req[port].data  = mem_req_data[port];
@@ -1242,7 +1269,7 @@ module spatz_vlsu
     assign spatz_mem_req_valid[port] = mem_req_svalid[port] || mem_req_lvalid[port];
 `else
     assign spatz_mem_req[port].addr  = mem_req_addr[port];
-    assign spatz_mem_req[port].write = !mem_is_load;
+    assign spatz_mem_req[port].write = !exec_is_load;
     assign spatz_mem_req[port].amo   = reqrsp_pkg::AMONone;
     assign spatz_mem_req[port].data  = mem_req_data[port];
     assign spatz_mem_req[port].strb  = mem_req_strb[port];

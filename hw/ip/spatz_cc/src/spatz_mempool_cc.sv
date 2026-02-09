@@ -202,6 +202,12 @@ module spatz_mempool_cc
   assign acc_req_q_valid = acc_req_d_valid;
   assign acc_req_d_ready = acc_req_q_ready;
 
+  // Burst loads consume one ROB ID per returned word. Keep at least one full
+  // MaxBurstWords window to avoid ID aliasing during a single burst.
+  localparam int unsigned SpatzNumOutstandingLoads =
+      (snitch_pkg::NumIntOutstandingLoads < snitch_pkg::MaxBurstWords) ?
+      snitch_pkg::MaxBurstWords : snitch_pkg::NumIntOutstandingLoads;
+
   // Cut off-loading response path
   spill_register #(
     .T      ( snitch_pkg::acc_resp_t ),
@@ -219,7 +225,7 @@ module spatz_mempool_cc
 
   spatz #(
     .NrMemPorts         ( NumMemPortsPerSpatz     ),
-    .NumOutstandingLoads( snitch_pkg::NumIntOutstandingLoads ),
+    .NumOutstandingLoads( SpatzNumOutstandingLoads ),
     .FPUImplementation  ( FPUImplementation       ),
     .RegisterRsp        ( 1'b1                    ),
     .spatz_mem_req_t    ( spatz_mem_req_t         ),
