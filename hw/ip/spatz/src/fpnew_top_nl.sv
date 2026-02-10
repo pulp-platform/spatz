@@ -109,7 +109,7 @@ module fpnew_top_nl
 
  // Gating signal
   logic enable_precalc;
-  assign enable_precalc = in_valid_i && (tag_i.nl_op_sel == LOGS || tag_i.nl_op_sel == RSQRT);
+  assign enable_precalc = in_valid_i && (tag_i.nl_op_sel == LOGS || tag_i.nl_op_sel == RSQRT || tag_i.nl_op_sel == REC);
 
   logic [31:0] op0_hi, op0_lo;
   // Force to 0 if not a relevant op
@@ -137,6 +137,17 @@ module fpnew_top_nl
   assign rsqrt_res_hi = (rsqrt_hi_nan_or_sign) ? 32'h7FC00000 : ($signed(QUAKE_MAGIC) - $signed(op0_hi >> 1));
   assign rsqrt_res_lo = (rsqrt_lo_nan_or_sign) ? 32'h7FC00000 : ($signed(QUAKE_MAGIC) - $signed(op0_lo >> 1));
 
+   // REC Pre-calculation: Magic Constant - X
+  logic rec_hi_nan_or_sign, rec_lo_nan_or_sign;
+  logic [31:0] rec_res_hi, rec_res_lo;
+
+  assign rec_hi_nan_or_sign = (op0_hi == 32'h00000000) || ((op0_hi[30:23] == 8'hFF) && (op0_hi[22:0] != '0));
+  assign rec_lo_nan_or_sign = (op0_lo == 32'h00000000) || ((op0_lo[30:23] == 8'hFF) && (op0_lo[22:0] != '0));
+
+  // Note: Logical shift (>>) is intended here before subtraction
+  assign rec_res_hi = (rec_hi_nan_or_sign) ? 32'h7FC00000 : ($signed(REC_MAGIC) - $signed(op0_hi));
+  assign rec_res_lo = (rec_lo_nan_or_sign) ? 32'h7FC00000 : ($signed(REC_MAGIC) - $signed(op0_lo));
+
   logic [WIDTH-1:0] reconstructed_result;
   logic next_uop_ready;
   assign next_uop_ready_o = next_uop_ready;
@@ -157,7 +168,6 @@ module fpnew_top_nl
 
   assign addmul_inter_01_sel = addmul_last_phase ? nl_intermediate_1_q : nl_intermediate_0_q;
   assign addmul_inter_23_sel = addmul_last_phase ? nl_intermediate_3_q : nl_intermediate_2_q;
-
 
   always_comb begin : nl_phases_ctrl
     operands_fconv      = '0;
@@ -188,8 +198,6 @@ module fpnew_top_nl
     nl_wr_en_3          = 1'b0;
     k_en_0              = 1'b0;
     k_en_1              = 1'b0;
-
-    
 
     if(nl_concatenate) begin
       unique case(tag_i.nl_op_sel)
@@ -257,7 +265,7 @@ module fpnew_top_nl
                 nl_intermediate_2_d                = opgrp_outputs[0].result;
               end
 
-              NL_FPU_ISSUE_1: begin
+              NL_FPU_ISSUE_1: begin 
                 operands_add[1]                    = opgrp_outputs[0].result;
                 operands_add[2]                    = CHEBY_C_TANH_VEC;
                 operands_add[0]                    = addmul_inter_23_sel;
@@ -480,6 +488,72 @@ module fpnew_top_nl
             endcase
           end
         end
+        REC: begin
+          if (in_valid_i) begin
+            nl_wr_en_1          = input_last_phase;
+            nl_wr_en            = ~input_last_phase;
+            nl_intermediate_1_d = operands_i[0]; 
+            nl_intermediate_0_d = operands_i[0]; 
+          end
+            // First approximation is R = (2 - x * first_approx)
+            operands_add[0]     = {rec_res_hi, rec_res_lo};
+            operands_add[1]     = operands_i[0];
+            operands_add[2]     = C2_VEC;
+            nl_op_add           = fpnew_pkg::FNMSUB;
+            nl_rnd_add          = fpnew_pkg::RNE;
+            fadd_tag            = tag_i;
+            
+            nl_wr_en_3          = input_last_phase;
+            nl_wr_en_2          = ~input_last_phase;
+            nl_intermediate_3_d = {rec_res_hi, rec_res_lo};
+            nl_intermediate_2_d = {rec_res_hi, rec_res_lo};
+          if ( addmul_out_valid) begin
+            unique case(opgrp_outputs[0].tag.nl_phase) 
+              NL_FPU_ISSUE_0: begin // Y = R * first_approx  
+                operands_add[0]       = addmul_inter_23_sel;
+                operands_add[1]       = opgrp_outputs[fpnew_pkg::ADDMUL].result;
+                nl_op_add             = fpnew_pkg::MUL;
+                nl_rnd_add            = fpnew_pkg::RNE;
+                nl_opmode_add         = 1'b0;
+                fadd_tag              = opgrp_outputs[fpnew_pkg::ADDMUL].tag;
+                fadd_tag.nl_phase     = NL_FPU_ISSUE_1;
+                out_opgrp_ready[0]    = 1'b1;
+
+              end
+
+              NL_FPU_ISSUE_1: begin   // Y2 = 2 - Y*x 
+                operands_add[0]       = addmul_inter_01_sel;
+                operands_add[1]       = opgrp_outputs[fpnew_pkg::ADDMUL].result;
+                operands_add[2]       = C2_VEC;
+                nl_op_add             = fpnew_pkg::FNMSUB;
+                nl_rnd_add            = fpnew_pkg::RNE;
+                nl_opmode_add         = 1'b0;
+                fadd_tag              = opgrp_outputs[fpnew_pkg::ADDMUL].tag;
+                fadd_tag.nl_phase     = NL_FPU_ISSUE_2;
+                out_opgrp_ready[0]    = 1'b1;
+                nl_wr_en_3            = addmul_last_phase;
+                nl_wr_en_2            = ~addmul_last_phase;
+                nl_intermediate_3_d   = opgrp_outputs[fpnew_pkg::ADDMUL].result;
+                nl_intermediate_2_d   = opgrp_outputs[fpnew_pkg::ADDMUL].result;
+              end
+
+              NL_FPU_ISSUE_2: begin // Y3 = Y * Y2
+
+                operands_add[0]       = addmul_inter_23_sel; 
+                operands_add[1]       = opgrp_outputs[fpnew_pkg::ADDMUL].result; 
+                nl_op_add             = fpnew_pkg::MUL;
+                nl_rnd_add            = fpnew_pkg::RNE;
+                nl_opmode_add         = 1'b0;
+                fadd_tag              = opgrp_outputs[fpnew_pkg::ADDMUL].tag;
+                fadd_tag.nl_phase     = NL_WAIT;
+                out_opgrp_ready[0]    = 1'b1;
+                next_uop_ready        = 1'b1;
+              end
+              NL_WAIT: begin
+              end
+            endcase
+          end
+        end
       endcase
     end
   end
@@ -627,8 +701,8 @@ module fpnew_top_nl
     assign sincos_route_to_addmul_from_addmul = addmul_phase_not_wait_not_0;
   
     // Pre-computed routing for TANHS and RSQRT (same pattern)
-    logic tanhs_rsqrt_route_to_addmul;
-    assign tanhs_rsqrt_route_to_addmul = addmul_out_valid && addmul_phase_not_wait;
+    logic tanhs_rsqrt_rec_route_to_addmul;
+    assign tanhs_rsqrt_rec_route_to_addmul = addmul_out_valid && addmul_phase_not_wait;
 
     // Pre-computed routing for COSHS
     logic coshs_route_to_conv;
@@ -686,7 +760,7 @@ module fpnew_top_nl
             end
           end
           TANHS: begin
-            if (tanhs_rsqrt_route_to_addmul && (opgrp == 0)) begin
+            if (tanhs_rsqrt_rec_route_to_addmul && (opgrp == 0)) begin
               concatenate_in_valid[opgrp] = 1'b1;
               rnd_mode_in     = nl_rnd_add;
               op_in           = nl_op_add;
@@ -711,7 +785,7 @@ module fpnew_top_nl
             opgrp_tag_in    = (opgrp == 0) ?  fadd_tag      :  tag_i;
           end           
           RSQRT: begin
-            if (tanhs_rsqrt_route_to_addmul && (opgrp == 0)) begin
+            if (tanhs_rsqrt_rec_route_to_addmul && (opgrp == 0)) begin
               concatenate_in_valid[opgrp] = 1'b1;
               rnd_mode_in     = nl_rnd_add;
               op_in           = nl_op_add;
@@ -771,6 +845,23 @@ module fpnew_top_nl
               op_in           = op_i;
               opmode_in       = op_mod_i;
               operands_input  = operands_i;
+              opgrp_tag_in    = tag_i;
+            end
+          end
+          REC: begin
+            if (tanhs_rsqrt_rec_route_to_addmul && (opgrp == 0)) begin
+              concatenate_in_valid[opgrp] = 1'b1;
+              rnd_mode_in     = nl_rnd_add;
+              op_in           = nl_op_add;
+              opmode_in       = nl_opmode_add;
+              operands_input  = operands_add;
+              opgrp_tag_in    = fadd_tag;
+            end else begin
+              concatenate_in_valid[opgrp] = in_valid_i & (fpnew_pkg::get_opgroup(op_i) == fpnew_pkg::opgroup_e'(opgrp));
+              rnd_mode_in     = nl_rnd_add;
+              op_in           = nl_op_add;
+              opmode_in       = nl_opmode_add;
+              operands_input  = operands_add;
               opgrp_tag_in    = tag_i;
             end
           end
@@ -849,7 +940,7 @@ module fpnew_top_nl
          COSHS: begin 
             concatenate_out_valid[opgrp] = (opgrp == 0) && is_last_uop_q; 
          end
-         TANHS, RSQRT, SIN, COS: begin
+         TANHS, RSQRT, SIN, COS, REC: begin
             concatenate_out_valid[opgrp] = (opgrp == 0) && (opgrp_outputs[opgrp].tag.nl_phase == NL_WAIT);
          end
          LOGS: begin
