@@ -3,7 +3,7 @@ package fpnew_nl_pkg;
 import spatz_pkg::*;
 
   typedef enum logic [3:0] { NL_IDLE, NL_FPU_ISSUE_0,NL_FPU_ISSUE_1,NL_FPU_ISSUE_2 ,NL_FPU_ISSUE_3, NL_FPU_ISSUE_4, NL_FPU_ISSUE_5 , NL_FPU_ISSUE_6 , NL_WAIT } nl_phase_e;
-  typedef enum logic [2:0] { EXPS, COSHS, TANHS, LOGS, RSQRT, COS, SIN } nl_op_e;
+  typedef enum logic [2:0] { EXPS, COSHS, TANHS, LOGS, RSQRT, COS, SIN, REC } nl_op_e;
   // =======================================================================
   // CHEBYSHEV COEFFICIENTS (TANH)
   // =======================================================================
@@ -19,9 +19,10 @@ import spatz_pkg::*;
   // =======================================================================
   // TRIGONOMETRIC & GEOMETRIC CONSTANTS
   // =======================================================================
-  localparam logic [31:0] FP32_1_POINT_5   = 32'h3fc00000; //  1.5f
+  localparam logic [31:0] FP32_1_POINT_5   = 32'h3fc00000;   //  1.5f
   localparam logic [31:0] FP32_NEG_0_POINT_5 = 32'hbf000000; // -0.5f
-  localparam logic [31:0] FP32_ONE         = 32'h3f800000; //  1.0f
+  localparam logic [31:0] FP32_ONE         = 32'h3f800000;   //  1.0f
+  localparam logic [31:0] FP32_TWO         = 32'h40000000;   //  2.0f
   
   localparam logic [31:0] PIO2_HI          = 32'h3fc90fda; //  Pi/2
   localparam logic [31:0] COS_C2           = 32'hbefe4f76; // -0.49670f
@@ -34,16 +35,21 @@ import spatz_pkg::*;
   localparam logic [63:0] PIO2_HI_VEC      = {2{PIO2_HI}};
   localparam logic [63:0] COS_C2_VEC       = {2{COS_C2}};
   localparam logic [63:0] SIN_S3_VEC       = {2{SIN_S3}};
+  localparam logic [63:0] C2_VEC           = {2{FP32_TWO}};
+
+   // =======================================================================
 
   // =======================================================================
-  // SPECIAL FUNCTIONS (RSQRT & LOG)
+  // SPECIAL FUNCTIONS (RSQRT & LOG & REC)
   // =======================================================================
   localparam logic [31:0] QUAKE_MAGIC      = 32'h5f375928; // RSQRT Constant
   localparam logic [31:0] LOG_SCALE        = 32'h33b17218; // Log2(e)/2^23
+  localparam logic [31:0] REC_MAGIC        = 32'h7effffff; // REC Constant
 
   // Packed 64-bit Vectors
   localparam logic [63:0] QUAKE_MAGIC_VEC  = {2{QUAKE_MAGIC}};
   localparam logic [63:0] LOG_SCALE_VEC    = {2{LOG_SCALE}};
+  localparam logic [63:0] REC_MAGIC_VEC    = {2{REC_MAGIC}};
 
   // =======================================================================
   // MASKS

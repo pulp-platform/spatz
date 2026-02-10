@@ -192,7 +192,7 @@ module spatz_vfu
   logic is_fpu_insn;
   logic is_nl_op;
 
-  assign is_nl_op = (spatz_req.op == VFEXPF || spatz_req.op == VFCOSHF || spatz_req.op == VFTANHF || spatz_req.op == VFLOG || spatz_req.op == VFRSQRT7 || spatz_req.op == VFCOS || spatz_req.op == VFSIN);
+  assign is_nl_op = (spatz_req.op == VFEXPF || spatz_req.op == VFCOSHF || spatz_req.op == VFTANHF || spatz_req.op == VFLOG || spatz_req.op == VFRSQRT7 || spatz_req.op == VFCOS || spatz_req.op == VFSIN || spatz_req.op == VFREC7);
   assign is_fpu_insn = FPU && ((spatz_req.op inside {[VFADD:VSDOTP]}) || is_nl_op);
  
   always_comb begin
@@ -203,6 +203,7 @@ module spatz_vfu
         VFTANHF:   nl_func = TANHS;
         VFLOG:     nl_func = LOGS;
         VFRSQRT7:  nl_func = RSQRT;
+        VFREC7:    nl_func = REC;
         VFSIN:     nl_func = SIN;
         VFCOS:     nl_func = COS;
         default:   nl_func = EXPS; 
@@ -482,7 +483,7 @@ module spatz_vfu
           endcase
         end
 
-        VFRSQRT7: begin
+        VFRSQRT7, VFREC7: begin
           unique case (nl_phase_q)
             NL_IDLE:        if (nl_start)         nl_phase_d = NL_FPU_ISSUE_0;
             NL_FPU_ISSUE_0: if (nl_loopback_q)    nl_phase_d = NL_WAIT;
@@ -667,6 +668,20 @@ logic  nl_stop_issue;
                nl_op3_ovr           = F32_ZERO_VEC;      
                nl_override_fpu      = 1'b1;
                nl_fpu_op_ovr        = fpnew_pkg::MUL;
+               nl_loopback_d        = word_issued ? 1'b1 : 1'b0;
+               is_last_uop          = nl_loopback_q ? 1'b1 : 1'b0;
+               nl_last_en           = 1'b1;
+            end
+
+            VFREC7: begin
+               nl_need_vs1          = 1'b1;
+               nl_need_vs2          = 1'b0; 
+               nl_override_operands = 1'b1;
+               nl_op1_ovr           = vrf_rdata_i[1];
+               nl_op2_ovr           = F32_ZERO_VEC;      
+               nl_op3_ovr           = F32_ZERO_VEC;      
+               nl_override_fpu      = 1'b1;
+               nl_fpu_op_ovr        = fpnew_pkg::FNMSUB;
                nl_loopback_d        = word_issued ? 1'b1 : 1'b0;
                is_last_uop          = nl_loopback_q ? 1'b1 : 1'b0;
                nl_last_en           = 1'b1;
