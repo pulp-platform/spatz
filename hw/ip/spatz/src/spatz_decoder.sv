@@ -963,48 +963,60 @@ module spatz_decoder
 
             unique casez (decoder_req_i.instr)
               riscv_instr::VFREC7_V: begin
-                spatz_req.op = VFREC7;
-                spatz_req.rm = fpnew_pkg::RNE;
+                spatz_req.op      = VFREC7;
+                spatz_req.rm      = fpnew_pkg::RNE;
+                spatz_req.use_vs2 = 1'b0;
               end
               riscv_instr::VFRSQRT7_V: begin
                 spatz_req.op = VFRSQRT7;
                 spatz_req.rm = fpnew_pkg::RNE;
+                spatz_req.use_vs2 = 1'b0;
+
               end
               riscv_instr::VFEXPF_V: begin
                 spatz_req.op = VFEXPF;
                 spatz_req.rm = fpnew_pkg::RNE;
+                spatz_req.use_vs2 = 1'b0;
               end
               riscv_instr::VFEXPS_V: begin
                 spatz_req.op = VFEXPS;
                 spatz_req.rm = fpnew_pkg::RNE;
+                spatz_req.use_vs2 = 1'b0;
               end
               riscv_instr::VFCOSHF_V: begin
                 spatz_req.op = VFCOSHF;
                 spatz_req.rm = fpnew_pkg::RNE;
+                spatz_req.use_vs2 = 1'b0;
               end
               riscv_instr::VFCOSHS_V: begin
                 spatz_req.op = VFCOSHS;
                 spatz_req.rm = fpnew_pkg::RNE;
+                spatz_req.use_vs2 = 1'b0;
               end
               riscv_instr::VFTANHF_V: begin
                 spatz_req.op = VFTANHF;
                 spatz_req.rm = fpnew_pkg::RNE;
+                spatz_req.use_vs2 = 1'b0;
               end
               riscv_instr::VFTANHS_V: begin
                 spatz_req.op = VFTANHS;
                 spatz_req.rm = fpnew_pkg::RNE;
+                spatz_req.use_vs2 = 1'b0;
               end
               riscv_instr::VFLOG_V: begin
                 spatz_req.op = VFLOG;
                 spatz_req.rm = fpnew_pkg::RNE;
+                spatz_req.use_vs2 = 1'b0;
               end
               riscv_instr::VFSIN_V: begin
                 spatz_req.op = VFSIN;
                 spatz_req.rm = fpnew_pkg::RNE;
+                spatz_req.use_vs2 = 1'b0;
               end
               riscv_instr::VFCOS_V: begin
                 spatz_req.op = VFCOS;
                 spatz_req.rm = fpnew_pkg::RNE;
+                spatz_req.use_vs2 = 1'b0;
               end
               riscv_instr::VFADD_VV,
               riscv_instr::VFADD_VF: spatz_req.op = VFADD;
