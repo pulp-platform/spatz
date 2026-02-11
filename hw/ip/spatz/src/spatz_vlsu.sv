@@ -1258,6 +1258,11 @@ module spatz_vlsu
             mem_req_id[port]     = rob_id[port];
             mem_req_last[port]   = mem_operation_last[port];
           end
+        end else if (!mem_pending[port]) begin
+          // During port0-only burst loads, non-active ports can still carry stale
+          // ROB entries from the previous store phase. Drain them so they do not
+          // reappear as spurious store requests on the next store instruction.
+          rob_pop[port] = rob_rvalid[port];
         end
       end
     // Store operation
