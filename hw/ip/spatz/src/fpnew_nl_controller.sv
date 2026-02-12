@@ -58,6 +58,7 @@ module fpnew_nl_controller
   input  logic                               addmul_out_valid_i,
 
   input  logic [WIDTH-1:0]                   conv_result_i,
+  input  TagType                             conv_tag_result_i,
   input  logic                               conv_out_valid_i,
 
   //  Arbiter Handshake Management
@@ -105,7 +106,50 @@ module fpnew_nl_controller
   assign nl_active = (nl_inflight_q != '0) || is_nl_op_i;
   assign nl_busy_o = (nl_inflight_q != '0);
 
+  cosh_state_e      nl_state_q, nl_state_d;
+  logic [WIDTH-1:0] intermediate_q;
+  logic             intermediate_en;
+  logic             block_issue_nl;
+
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+      if (!rst_ni) begin
+      nl_state_q     <= COSH_EXP_POS_U;
+      intermediate_q <= '0;
+      end else if (flush_i) begin
+      nl_state_q     <= COSH_EXP_POS_U;
+      end else begin
+      nl_state_q     <= nl_state_d;
+      if (intermediate_en) intermediate_q <= conv_result_i; 
+      end
+  end
+
+  assign block_issue_nl = (op_i == COSHS) && (~(nl_state_q == COSH_EXP_NEG_U || nl_state_q == COSH_SUM_L));
+  assign intermediate_en = (nl_state_q == COSH_WAIT_L && conv_out_valid_i) || (nl_state_q == COSH_WAIT_U && conv_out_valid_i);
+  always_comb begin : state_control
+      nl_state_d = nl_state_q;
+      unique case (nl_state_q)
+      COSH_EXP_POS_U: if (is_nl_op_i && in_valid_i && op_i == COSHS && addmul_in_ready_i) nl_state_d = COSH_EXP_NEG_U;
+      COSH_EXP_NEG_U: if (addmul_in_ready_i) nl_state_d = COSH_EXP_POS_L;
+      COSH_EXP_POS_L: if (addmul_in_ready_i) nl_state_d = COSH_EXP_NEG_L;
+      COSH_EXP_NEG_L: if (addmul_in_ready_i && conv_in_ready_i) nl_state_d = COSH_WAIT_U;
+      COSH_WAIT_U:    if (conv_out_valid_i)  nl_state_d = COSH_SUM_U;
+      COSH_SUM_U:     if (addmul_in_ready_i) nl_state_d = COSH_WAIT_L;
+      COSH_WAIT_L:    if (conv_out_valid_i)  nl_state_d = COSH_SUM_L;
+      COSH_SUM_L:     if (addmul_in_ready_i) nl_state_d = COSH_DRAIN;
+      COSH_DRAIN:     if (addmul_out_valid_i)  nl_state_d = COSH_EXP_POS_U;
+      default:        nl_state_d = COSH_EXP_POS_U;
+      endcase
+  end
+
+
   always_comb begin : addmul_input_mux
+
+    addmul_src_fmt_o  = src_fmt_i;
+    addmul_dst_fmt_o  = dst_fmt_i;
+    addmul_int_fmt_o  = int_fmt_i;
+    addmul_tag_o      = tag_i;
+    addmul_in_valid_o = in_valid_i;
+    
     if (is_nl_op_i) begin
       unique case (op_i)
         EXPS: begin
@@ -117,12 +161,36 @@ module fpnew_nl_controller
           addmul_op_mod_o      = 1'b0;
         end
         COSHS: begin
-          addmul_operands_o[0] = SCH_C_VEC; 
-          addmul_operands_o[1] = operands_i[0];    
-          addmul_operands_o[2] = SCH_B_COSH_VEC; 
-          addmul_rnd_mode_o    = fpnew_pkg::RNE;
-          addmul_op_o          = fpnew_pkg::FMADD;
-          addmul_op_mod_o      = 1'b0;
+          unique case (nl_state_q)
+            COSH_EXP_POS_U, COSH_EXP_POS_L: begin
+              addmul_operands_o[0] = SCH_C_VEC;    
+              addmul_operands_o[1] = operands_i[0];     
+              addmul_operands_o[2] = SCH_B_COSH_VEC;      
+              addmul_rnd_mode_o    = fpnew_pkg::RNE;
+              addmul_op_o          = fpnew_pkg::FMADD;
+              addmul_op_mod_o      = 1'b0;
+            end
+            COSH_EXP_NEG_U, COSH_EXP_NEG_L: begin
+              addmul_operands_o[0] = SCH_C_VEC;
+              addmul_operands_o[1] = operands_i[0];
+              addmul_operands_o[2] = SCH_B_COSH_VEC;
+              addmul_rnd_mode_o    = fpnew_pkg::RNE;
+              addmul_op_o          = fpnew_pkg::FNMSUB;
+              addmul_op_mod_o      = 1'b0;
+            end
+            COSH_SUM_U, COSH_SUM_L: begin
+              addmul_operands_o[0] = intermediate_q;   
+              addmul_operands_o[1] = conv_result_i; 
+              addmul_operands_o[2] = '0;              
+              addmul_rnd_mode_o    = fpnew_pkg::RNE;
+              addmul_op_o          = fpnew_pkg::ADD;
+              addmul_op_mod_o      = 1'b0;
+              addmul_tag_o         = conv_tag_result_i;
+            end
+            COSH_WAIT_U,COSH_WAIT_L,COSH_DRAIN: begin
+                addmul_in_valid_o = 1'b0;
+            end
+          endcase
         end
         default: begin
           addmul_operands_o    = operands_i;
@@ -131,11 +199,6 @@ module fpnew_nl_controller
           addmul_op_mod_o      = op_mod_i;
         end
       endcase
-      addmul_src_fmt_o  = src_fmt_i;
-      addmul_dst_fmt_o  = dst_fmt_i;
-      addmul_int_fmt_o  = int_fmt_i;
-      addmul_tag_o      = tag_i;
-      addmul_in_valid_o = in_valid_i;
 
     end else begin
       addmul_operands_o = operands_i;
@@ -153,19 +216,48 @@ module fpnew_nl_controller
 
 
   always_comb begin : conv_input_mux
-    if (nl_active && addmul_out_valid_i) begin
-      conv_operands_o[0] = addmul_result_i;   
-      conv_operands_o[1] = '0;
-      conv_operands_o[2] = '0;
-      conv_rnd_mode_o    = fpnew_pkg::RTZ;  
-      conv_op_o          = fpnew_pkg::F2I;
-      conv_op_mod_o      = 1'b0;
-      conv_src_fmt_o     = src_fmt_i;           
-      conv_dst_fmt_o     = dst_fmt_i;
-      conv_int_fmt_o     = int_fmt_i;           
-      conv_tag_o         = addmul_tag_result_i; 
-      conv_in_valid_o    = 1'b1;
-    end else begin
+    conv_operands_o    = operands_i;
+    conv_rnd_mode_o    = rnd_mode_i;
+    conv_op_o          = op_i;
+    conv_op_mod_o      = op_mod_i;
+    conv_src_fmt_o     = src_fmt_i;
+    conv_dst_fmt_o     = dst_fmt_i;
+    conv_int_fmt_o     = int_fmt_i;
+    conv_tag_o         = tag_i;
+    conv_in_valid_o    = in_valid_i
+                           & (fpnew_pkg::get_opgroup(op_i) == fpnew_pkg::opgroup_e'(3));
+  unique case (op_i)
+    EXPS: begin
+        if (nl_active && addmul_out_valid_i) begin
+            conv_operands_o[0] = addmul_result_i;   
+            conv_operands_o[1] = '0;
+            conv_operands_o[2] = '0;
+            conv_rnd_mode_o    = fpnew_pkg::RTZ;  
+            conv_op_o          = fpnew_pkg::F2I;
+            conv_op_mod_o      = 1'b0;
+            conv_src_fmt_o     = src_fmt_i;           
+            conv_dst_fmt_o     = dst_fmt_i;
+            conv_int_fmt_o     = int_fmt_i;           
+            conv_tag_o         = addmul_tag_result_i; 
+            conv_in_valid_o    = 1'b1;
+        end
+    end
+    COSHS:begin 
+        if (nl_active && addmul_out_valid_i) begin
+            conv_operands_o[0] = addmul_result_i;   
+            conv_operands_o[1] = '0;
+            conv_operands_o[2] = '0;
+            conv_rnd_mode_o    = fpnew_pkg::RTZ;  
+            conv_op_o          = fpnew_pkg::F2I;
+            conv_op_mod_o      = 1'b0;
+            conv_src_fmt_o     = src_fmt_i;           
+            conv_dst_fmt_o     = dst_fmt_i;
+            conv_int_fmt_o     = int_fmt_i;           
+            conv_tag_o         = addmul_tag_result_i; 
+            conv_in_valid_o    = nl_state_q == COSH_SUM_L || nl_state_q == COSH_DRAIN ? 1'b0 : 1'b1;
+        end
+    end
+    default: begin
       conv_operands_o    = operands_i;
       conv_rnd_mode_o    = rnd_mode_i;
       conv_op_o          = op_i;
@@ -176,7 +268,9 @@ module fpnew_nl_controller
       conv_tag_o         = tag_i;
       conv_in_valid_o    = in_valid_i
                            & (fpnew_pkg::get_opgroup(op_i) == fpnew_pkg::opgroup_e'(3));
+
     end
+    endcase
   end
 
   always_comb begin : handshake_management
@@ -184,14 +278,23 @@ module fpnew_nl_controller
     arb_req_o         = opgrp_out_valid_i;
 
     if (nl_active) begin
-      opgrp_out_ready_o[0] = conv_in_ready_i;
-      arb_req_o[0]         = 1'b0;
-
+      unique case (op_i) 
+        EXPS:begin
+          opgrp_out_ready_o[0] = conv_in_ready_i;
+          arb_req_o[0]         = 1'b0;
+        end
+        COSHS : begin
+          opgrp_out_ready_o[0] = (nl_state_q == COSH_SUM_L  || nl_state_q == COSH_DRAIN)  ? arb_gnt_i[0] : conv_in_ready_i;
+          opgrp_out_ready_o[3] = (nl_state_q == COSH_WAIT_L || nl_state_q == COSH_WAIT_U) ? 1'b1         : addmul_in_ready_i;
+          arb_req_o[3]         = 1'b0;
+          arb_req_o[0]         = (nl_state_q == COSH_SUM_L || nl_state_q == COSH_DRAIN && addmul_out_valid_i) ? 1'b1 : 1'b0; 
+        end
+      endcase
     end
   end
 
   assign in_ready_o = is_nl_op_i
-                    ? addmul_in_ready_i
-                    : opgrp_in_ready_i[fpnew_pkg::get_opgroup(op_i)];
+                    ? in_valid_i & addmul_in_ready_i & !block_issue_nl
+                    : in_valid_i & opgrp_in_ready_i[fpnew_pkg::get_opgroup(op_i)];
 
 endmodule

@@ -174,6 +174,7 @@ module fpnew_top_nl
     .addmul_tag_result_i ( opgrp_outputs[0].tag    ),
     .addmul_out_valid_i  ( opgrp_out_valid[0]      ),
     .conv_result_i       ( opgrp_outputs[3].result ),
+    .conv_tag_result_i   ( opgrp_outputs[3].tag    ),
     .conv_out_valid_i    ( opgrp_out_valid[3]      ),
 
     // Arbiter handshake management
