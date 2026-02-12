@@ -1,6 +1,20 @@
 
 package fpnew_nl_pkg;
 import spatz_pkg::*;
+  // =======================================================================
+  // COSH STATES
+  // =======================================================================
+  typedef enum logic [3:0] {
+    COSH_DRAIN,
+    COSH_EXP_POS_U,   // Issue FMADD (Upper)
+    COSH_EXP_NEG_U,   // Issue FNMSUB (Upper)
+    COSH_EXP_POS_L,   // Issue FMADD (Lower)
+    COSH_EXP_NEG_L,   // Issue FNMSUB (Lower)
+    COSH_WAIT_U,      // Wait CONV Upper
+    COSH_SUM_U,       // Issue ADD (Upper)
+    COSH_WAIT_L,      // Wait CONV Lower
+    COSH_SUM_L        // Issue ADD (Lower)
+  } cosh_state_e;
 
   // =======================================================================
   // CHEBYSHEV COEFFICIENTS (TANH)
