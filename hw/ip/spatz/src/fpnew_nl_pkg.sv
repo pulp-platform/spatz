@@ -1,19 +1,20 @@
 
 package fpnew_nl_pkg;
 import spatz_pkg::*;
+
   // =======================================================================
   // COSH STATES
   // =======================================================================
   typedef enum logic [3:0] {
     COSH_DRAIN,
-    COSH_EXP_POS_U,   // Issue FMADD  (Upper)
-    COSH_EXP_NEG_U,   // Issue FNMSUB (Upper)
-    COSH_EXP_POS_L,   // Issue FMADD  (Lower)
-    COSH_EXP_NEG_L,   // Issue FNMSUB (Lower)
-    COSH_WAIT_U,      // Wait  CONV   (Upper)
-    COSH_SUM_U,       // Issue ADD    (Upper)
-    COSH_WAIT_L,      // Wait  CONV   (Lower)
-    COSH_SUM_L        // Issue ADD    (Lower)
+    COSH_EXP_POS_U,   
+    COSH_EXP_NEG_U,   
+    COSH_EXP_POS_L,   
+    COSH_EXP_NEG_L,   
+    COSH_WAIT_U,      
+    COSH_SUM_U,       
+    COSH_WAIT_L,      
+    COSH_SUM_L        
   } cosh_state_e;
 
   // =======================================================================
@@ -22,14 +23,14 @@ import spatz_pkg::*;
   typedef enum logic [3:0] {
     TANH_DRAIN_L,
     TANH_DRAIN_U,
-    TANH_X_SQUARE_U,// Issue MUL   (Upper)
-    TANH_X_SQUARE_L,// Issue MUL   (Lower)
-    TANH_POLY1_U,   // Issue FMADD (Upper)
-    TANH_POLY1_L,   // Issue FMADD (Lower)
-    TANH_POLY2_U,   // Issue FMADD (Upper)
-    TANH_POLY2_L,   // Issue FMADD (Lower)
-    TANH_POLY3_U,   // Issue MUL   (Upper)
-    TANH_POLY3_L    // Issue MUL   (Lower)       
+    TANH_X_SQUARE_U,
+    TANH_X_SQUARE_L,
+    TANH_POLY1_U,   
+    TANH_POLY1_L,   
+    TANH_POLY2_U,   
+    TANH_POLY2_L,   
+    TANH_POLY3_U,   
+    TANH_POLY3_L
   } tanh_state_e;
 
   // =======================================================================
@@ -38,30 +39,55 @@ import spatz_pkg::*;
   typedef enum logic [3:0] {
     RSQRT_DRAIN_L,
     RSQRT_DRAIN_U,
-    RSQRT_X_SQUARE_U,// Issue MUL   (Upper)
-    RSQRT_X_SQUARE_L,// Issue MUL   (Lower)
-    RSQRT_POLY1_U,   // Issue FMADD (Upper)
-    RSQRT_POLY1_L,   // Issue FMADD (Lower)
-    RSQRT_NR1_U,   // Issue FMADD (Upper)
-    RSQRT_NR1_L,   // Issue FMADD (Lower)
-    RSQRT_NR2_U,   // Issue MUL   (Upper)
-    RSQRT_NR2_L    // Issue MUL   (Lower)       
+    RSQRT_X_SQUARE_U,
+    RSQRT_X_SQUARE_L,
+    RSQRT_POLY1_U,   
+    RSQRT_POLY1_L,   
+    RSQRT_NR1_U,   
+    RSQRT_NR1_L,  
+    RSQRT_NR2_U,  
+    RSQRT_NR2_L          
   } rsqrt_state_e;
- // =======================================================================
+
+  // =======================================================================
   // REC STATES
   // =======================================================================
   typedef enum logic [3:0] {
     REC_DRAIN_L,
     REC_DRAIN_U,
-    REC_APPROX_U,// Issue MUL   (Upper)
-    REC_APPROX_L,// Issue MUL   (Lower)
-    REC_NR1_MUL_U,   // Issue FMADD (Upper)
-    REC_NR1_MUL_L,   // Issue FMADD (Lower)
-    REC_NR1_ACCUM_U,   // Issue MUL   (Upper)
-    REC_NR1_ACCUM_L,   // Issue FMADD (Lower)
-    REC_NR2_MUL_U,   // Issue FMADD (Upper)
+    REC_APPROX_U,
+    REC_APPROX_L,
+    REC_NR1_MUL_U,   
+    REC_NR1_MUL_L,   
+    REC_NR1_ACCUM_U,
+    REC_NR1_ACCUM_L,
+    REC_NR2_MUL_U,   
     REC_NR2_MUL_L  
   } rec_state_e;
+
+  // =======================================================================
+  // SIN_COS STATES
+  // =======================================================================
+  typedef enum logic [4:0] {
+    SIN_COS_DRAIN_L,
+    SIN_COS_DRAIN_U,
+    SIN_COS_POLY1_U,
+    SIN_COS_POLY1_L,
+    SIN_COS_POLY2_U,
+    SIN_COS_POLY2_L,
+    SIN_COS_POLY3_U,
+    SIN_COS_POLY3_L,
+    SIN_COS_POLY4_U,
+    SIN_COS_POLY4_L,
+    SIN_COS_POLY5_U,
+    SIN_COS_POLY5_L,
+    SIN_COS_FLOAT_CONV_U,   
+    SIN_COS_FLOAT_CONV_L,   
+    SIN_COS_INT_CONV_U,
+    SIN_COS_INT_CONV_L,
+    SIN_COS_RR_U,   
+    SIN_COS_RR_L  
+  } sin_cos_state_e;
 
   // =======================================================================
   // CHEBYSHEV COEFFICIENTS (TANH)
