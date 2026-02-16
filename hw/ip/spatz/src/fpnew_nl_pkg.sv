@@ -6,15 +6,62 @@ import spatz_pkg::*;
   // =======================================================================
   typedef enum logic [3:0] {
     COSH_DRAIN,
-    COSH_EXP_POS_U,   // Issue FMADD (Upper)
+    COSH_EXP_POS_U,   // Issue FMADD  (Upper)
     COSH_EXP_NEG_U,   // Issue FNMSUB (Upper)
-    COSH_EXP_POS_L,   // Issue FMADD (Lower)
+    COSH_EXP_POS_L,   // Issue FMADD  (Lower)
     COSH_EXP_NEG_L,   // Issue FNMSUB (Lower)
-    COSH_WAIT_U,      // Wait CONV Upper
-    COSH_SUM_U,       // Issue ADD (Upper)
-    COSH_WAIT_L,      // Wait CONV Lower
-    COSH_SUM_L        // Issue ADD (Lower)
+    COSH_WAIT_U,      // Wait  CONV   (Upper)
+    COSH_SUM_U,       // Issue ADD    (Upper)
+    COSH_WAIT_L,      // Wait  CONV   (Lower)
+    COSH_SUM_L        // Issue ADD    (Lower)
   } cosh_state_e;
+
+  // =======================================================================
+  // TANH STATES
+  // =======================================================================
+  typedef enum logic [3:0] {
+    TANH_DRAIN_L,
+    TANH_DRAIN_U,
+    TANH_X_SQUARE_U,// Issue MUL   (Upper)
+    TANH_X_SQUARE_L,// Issue MUL   (Lower)
+    TANH_POLY1_U,   // Issue FMADD (Upper)
+    TANH_POLY1_L,   // Issue FMADD (Lower)
+    TANH_POLY2_U,   // Issue FMADD (Upper)
+    TANH_POLY2_L,   // Issue FMADD (Lower)
+    TANH_POLY3_U,   // Issue MUL   (Upper)
+    TANH_POLY3_L    // Issue MUL   (Lower)       
+  } tanh_state_e;
+
+  // =======================================================================
+  // RSQRT STATES
+  // =======================================================================
+  typedef enum logic [3:0] {
+    RSQRT_DRAIN_L,
+    RSQRT_DRAIN_U,
+    RSQRT_X_SQUARE_U,// Issue MUL   (Upper)
+    RSQRT_X_SQUARE_L,// Issue MUL   (Lower)
+    RSQRT_POLY1_U,   // Issue FMADD (Upper)
+    RSQRT_POLY1_L,   // Issue FMADD (Lower)
+    RSQRT_NR1_U,   // Issue FMADD (Upper)
+    RSQRT_NR1_L,   // Issue FMADD (Lower)
+    RSQRT_NR2_U,   // Issue MUL   (Upper)
+    RSQRT_NR2_L    // Issue MUL   (Lower)       
+  } rsqrt_state_e;
+ // =======================================================================
+  // REC STATES
+  // =======================================================================
+  typedef enum logic [3:0] {
+    REC_DRAIN_L,
+    REC_DRAIN_U,
+    REC_APPROX_U,// Issue MUL   (Upper)
+    REC_APPROX_L,// Issue MUL   (Lower)
+    REC_NR1_MUL_U,   // Issue FMADD (Upper)
+    REC_NR1_MUL_L,   // Issue FMADD (Lower)
+    REC_NR1_ACCUM_U,   // Issue MUL   (Upper)
+    REC_NR1_ACCUM_L,   // Issue FMADD (Lower)
+    REC_NR2_MUL_U,   // Issue FMADD (Upper)
+    REC_NR2_MUL_L  
+  } rec_state_e;
 
   // =======================================================================
   // CHEBYSHEV COEFFICIENTS (TANH)

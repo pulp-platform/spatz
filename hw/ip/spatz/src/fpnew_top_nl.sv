@@ -118,6 +118,10 @@ module fpnew_top_nl
   logic [NUM_OPGROUPS-1:0] arb_req;    
   // NL status
   logic nl_busy;
+// Reconstructed result feedback (from NL controller)
+  logic [WIDTH-1:0] reconstructed_result;
+  logic             reconstructed_result_valid;
+  output_t [NUM_OPGROUPS-1:0] reconstruct_output_sel; // Modified to perform postprocessing 
 
   fpnew_nl_controller #(
     .WIDTH        ( WIDTH        ),
@@ -186,6 +190,10 @@ module fpnew_top_nl
     // Input ready
     .opgrp_in_ready_i   ( opgrp_in_ready   ),
     .in_ready_o         ( in_ready_o       ),
+
+    // Reconstructed result feedback
+    .reconstructed_result_o ( reconstructed_result ),
+    .reconstructed_result_valid_o ( reconstructed_result_valid ),
 
     // Status
     .nl_busy_o          ( nl_busy )
@@ -322,6 +330,13 @@ module fpnew_top_nl
   // ------------------
   output_t arbiter_output;
 
+  always_comb begin
+    reconstruct_output_sel = opgrp_outputs;
+    if (reconstructed_result_valid) begin
+      reconstruct_output_sel[0].result = reconstructed_result;
+    end 
+  end
+
   // Round-Robin arbiter to decide which result to use
   rr_arb_tree #(
     .NumIn     ( NUM_OPGROUPS ),
@@ -334,7 +349,7 @@ module fpnew_top_nl
     .rr_i   ( '0              ),
     .req_i  ( arb_req         ),  
     .gnt_o  ( arb_gnt         ), 
-    .data_i ( opgrp_outputs   ),
+    .data_i ( reconstruct_output_sel   ),
     .gnt_i  ( out_ready_i     ),
     .req_o  ( out_valid_o     ),
     .data_o ( arbiter_output  ),
