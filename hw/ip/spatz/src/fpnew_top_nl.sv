@@ -85,7 +85,7 @@ module fpnew_top_nl
   // ---------------
   logic is_nl_op;
   operation_e fpu_op;
-  assign is_nl_op  = op_i inside {[EXPS:REC]};
+  assign is_nl_op  = op_i inside {[EXPS:REC]} ;
 
   // -------------------------
   // NL Controller Signals
@@ -142,7 +142,6 @@ module fpnew_top_nl
     .src_fmt_i,
     .dst_fmt_i,
     .int_fmt_i,
-    .vectorial_op_i,
     .tag_i,
     .in_valid_i,
 
