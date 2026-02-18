@@ -816,10 +816,10 @@ module fpnew_nl_controller
   assign rec_draining     = (rec_state_q     == REC_DRAIN_U)      || (rec_state_q     == REC_DRAIN_L);
   assign sin_cos_draining = (sin_cos_state_q == SIN_COS_DRAIN_U)  || (sin_cos_state_q == SIN_COS_DRAIN_L);
  
-  assign tanh_loading     = (tanh_state_q    == TANH_X_SQUARE_L)  || (tanh_state_q    == TANH_X_SQUARE_U);
-  assign rsqrt_loading    = (rsqrt_state_q   == RSQRT_X_SQUARE_L) || (rsqrt_state_q   == RSQRT_X_SQUARE_U);
-  assign rec_loading      = (rec_state_q     == REC_APPROX_L)     || (rec_state_q     == REC_APPROX_U);
-  assign sin_cos_loading  = (sin_cos_state_q == SIN_COS_RR_L)     || (sin_cos_state_q == SIN_COS_RR_U);
+  assign tanh_loading     = ((tanh_state_q    == TANH_X_SQUARE_L)  || (tanh_state_q    == TANH_X_SQUARE_U))  && (op_i == TANHS);
+  assign rsqrt_loading    = ((rsqrt_state_q   == RSQRT_X_SQUARE_L) || (rsqrt_state_q   == RSQRT_X_SQUARE_U)) && (op_i == RSQRT);
+  assign rec_loading      = ((rec_state_q     == REC_APPROX_L)     || (rec_state_q     == REC_APPROX_U))     && (op_i == REC);
+  assign sin_cos_loading  = ((sin_cos_state_q == SIN_COS_RR_L)     || (sin_cos_state_q == SIN_COS_RR_U))     && (op_i == SIN || op_i == COS );
  
   assign draining_spill_op    = sin_cos_draining || tanh_draining || rsqrt_draining || rec_draining;
   assign needs_reconstruction = sin_cos_draining || tanh_draining;
@@ -852,7 +852,7 @@ module fpnew_nl_controller
         TANHS, RSQRT, REC: begin
           opgrp_out_ready_o[0] = addmul_out_ready_str && addmul_out_valid_i;
           arb_req_o[0]         = (tanh_draining || rsqrt_draining || rec_draining) && addmul_out_valid_i;
-          addmul_res_ready_d   = (rec_loading || rsqrt_loading || tanh_loading) && addmul_in_ready_i; 
+          addmul_res_ready_d   = ~(rec_loading || rsqrt_loading || tanh_loading) && addmul_in_ready_i; 
         end
         SIN,COS: begin
           opgrp_out_ready_o[0] =  (sin_cos_state_q == SIN_COS_INT_CONV_U   || sin_cos_state_q == SIN_COS_INT_CONV_L) ? conv_in_ready_i   : addmul_out_ready_str && addmul_out_valid_i;
