@@ -137,7 +137,7 @@ module fpnew_nl_controller
   logic        conv_res_valid_q;
   logic        conv_res_ready_d; // Ready signal from Controller into Spill Reg
   logic        conv_out_valid_str, conv_out_ready_str; // Valid signal from Spill Reg to Controller (streaming over same gruop operations)
-  assign conv_out_valid_str = conv_out_valid_i && (op_i == SIN ||op_i == COS ) && !addmul_in_ready_i ;
+  assign conv_out_valid_str = conv_out_valid_i && (op_i == SIN || op_i == COS || op_i == LOGS || op_i == COSHS);
   assign conv_res_d = {conv_result_i, conv_tag_result_i};
 
   spill_register_flushable #(
@@ -193,9 +193,9 @@ module fpnew_nl_controller
         COSH_EXP_NEG_U:   if (addmul_in_ready_i)                    nl_state_d = COSH_EXP_POS_L;
         COSH_EXP_POS_L:   if (addmul_in_ready_i)                    nl_state_d = COSH_EXP_NEG_L;
         COSH_EXP_NEG_L:   if (addmul_in_ready_i && conv_in_ready_i) nl_state_d = COSH_WAIT_U;
-        COSH_WAIT_U:      if (conv_out_valid_i)                     nl_state_d = COSH_SUM_U;
+        COSH_WAIT_U:      if (conv_res_valid_q)                     nl_state_d = COSH_SUM_U;
         COSH_SUM_U:       if (addmul_in_ready_i)                    nl_state_d = COSH_WAIT_L;
-        COSH_WAIT_L:      if (conv_out_valid_i)                     nl_state_d = COSH_SUM_L;
+        COSH_WAIT_L:      if (conv_res_valid_q)                     nl_state_d = COSH_SUM_L;
         COSH_SUM_L:       if (addmul_in_ready_i)                    nl_state_d = COSH_DRAIN;
         COSH_DRAIN:       if (addmul_out_valid_i)                   nl_state_d = COSH_EXP_POS_U;
         default:                                                    nl_state_d = COSH_EXP_POS_U;
@@ -242,12 +242,12 @@ module fpnew_nl_controller
       unique case (sin_cos_state_q)
         SIN_COS_RR_U:         if (is_nl_op_i && in_valid_i && (op_i == SIN || op_i == COS) && addmul_in_ready_i) sin_cos_state_d = SIN_COS_RR_L;
         SIN_COS_RR_L:         if (in_valid_i && addmul_in_ready_i)  sin_cos_state_d = SIN_COS_INT_CONV_U;
-        SIN_COS_INT_CONV_U:   if (addmul_out_valid_i)               sin_cos_state_d = SIN_COS_INT_CONV_L;
-        SIN_COS_INT_CONV_L:   if (addmul_out_valid_i)               sin_cos_state_d = SIN_COS_FLOAT_CONV_U;
+        SIN_COS_INT_CONV_U:   if (addmul_res_valid_q)               sin_cos_state_d = SIN_COS_INT_CONV_L;
+        SIN_COS_INT_CONV_L:   if (addmul_res_valid_q)               sin_cos_state_d = SIN_COS_FLOAT_CONV_U;
         SIN_COS_FLOAT_CONV_U: if (conv_in_valid_o)                  sin_cos_state_d = SIN_COS_FLOAT_CONV_L;
         SIN_COS_FLOAT_CONV_L: if (conv_in_valid_o)                  sin_cos_state_d = SIN_COS_POLY1_U;
-        SIN_COS_POLY1_U:      if (conv_out_valid_i)                 sin_cos_state_d = SIN_COS_POLY1_L;
-        SIN_COS_POLY1_L:      if (conv_out_valid_i)                 sin_cos_state_d = SIN_COS_POLY2_U;
+        SIN_COS_POLY1_U:      if (conv_res_valid_q)                 sin_cos_state_d = SIN_COS_POLY1_L;
+        SIN_COS_POLY1_L:      if (conv_res_valid_q)                 sin_cos_state_d = SIN_COS_POLY2_U;
         SIN_COS_POLY2_U:      if (addmul_in_valid_o)                sin_cos_state_d = SIN_COS_POLY2_L;
         SIN_COS_POLY2_L:      if (addmul_in_valid_o)                sin_cos_state_d = SIN_COS_POLY3_U;
         SIN_COS_POLY3_U:      if (addmul_in_valid_o)                sin_cos_state_d = SIN_COS_POLY3_L;
@@ -328,8 +328,8 @@ module fpnew_nl_controller
 
     unique case (op_i)
     COSHS: begin
-        nl_intermediate_0_d = conv_result_i;
-        nl_wr_en_0          = (nl_state_q == COSH_WAIT_U || nl_state_q == COSH_WAIT_L) && conv_out_valid_i;
+        nl_intermediate_0_d = conv_res_q.result;
+        nl_wr_en_0          = (nl_state_q == COSH_WAIT_U || nl_state_q == COSH_WAIT_L) && conv_res_valid_q;
     end
     TANHS: begin
         nl_wr_en_0          = (tanh_state_q == TANH_X_SQUARE_U) && in_valid_i        ;
@@ -420,6 +420,7 @@ module fpnew_nl_controller
               addmul_rnd_mode_o    = fpnew_pkg::RNE;
               addmul_op_o          = fpnew_pkg::FMADD;
               addmul_op_mod_o      = 1'b0;
+              addmul_in_valid_o    = nl_state_q == COSH_EXP_POS_L? addmul_res_valid_q : in_valid_i;
             end
             COSH_EXP_NEG_U, COSH_EXP_NEG_L: begin
               addmul_operands_o[0] = SCH_C_VEC;
@@ -431,12 +432,12 @@ module fpnew_nl_controller
             end
             COSH_SUM_U, COSH_SUM_L: begin
               addmul_operands_o[2] = nl_intermediate_0_q;   
-              addmul_operands_o[1] = conv_result_i; 
+              addmul_operands_o[1] = conv_res_q.result; 
               addmul_operands_o[0] = '0;              
               addmul_rnd_mode_o    = fpnew_pkg::RNE;
               addmul_op_o          = fpnew_pkg::ADD;
               addmul_op_mod_o      = 1'b0;
-              addmul_tag_o         = conv_tag_result_i;
+              addmul_tag_o         = conv_res_q.tag;
             end
             COSH_WAIT_U,COSH_WAIT_L,COSH_DRAIN: begin
                 addmul_in_valid_o = 1'b0;
@@ -492,13 +493,13 @@ module fpnew_nl_controller
         end
         LOGS: begin
            addmul_operands_o[0] = LOG_SCALE_VEC;       
-           addmul_operands_o[1] = conv_result_i;
+           addmul_operands_o[1] = conv_res_q.result;
            addmul_operands_o[2] = '0;
            addmul_rnd_mode_o    = fpnew_pkg::RNE;
            addmul_op_o          = fpnew_pkg::MUL;
            addmul_op_mod_o      = 1'b0;
-           addmul_tag_o         = conv_tag_result_i;
-           addmul_in_valid_o    = conv_out_valid_i;
+           addmul_tag_o         = conv_res_q.tag;
+           addmul_in_valid_o    = conv_res_valid_q;
         end
         RSQRT: begin
           unique case(rsqrt_state_q)
@@ -601,14 +602,14 @@ module fpnew_nl_controller
                     addmul_op_mod_o      = 1'b0;
                 end
                 SIN_COS_POLY1_U, SIN_COS_POLY1_L: begin 
-                    addmul_operands_o[0] = conv_result_i;       
+                    addmul_operands_o[0] = conv_res_q.result;
                     addmul_operands_o[1] = PIO2_HI_VEC;
                     addmul_operands_o[2] = sin_cos_state_q == SIN_COS_POLY1_U ? nl_intermediate_0_q : nl_intermediate_1_q;
                     addmul_rnd_mode_o    = fpnew_pkg::RNE;
                     addmul_op_o          = fpnew_pkg::FNMSUB;
                     addmul_op_mod_o      = 1'b0;
-                    addmul_tag_o         = conv_tag_result_i;
-                    addmul_in_valid_o    = conv_out_valid_i;
+                    addmul_tag_o         = conv_res_q.tag;
+                    addmul_in_valid_o    = conv_res_valid_q;
                 end
                 SIN_COS_POLY2_U, SIN_COS_POLY2_L: begin 
                     addmul_operands_o[0] = addmul_res_q.result;       
@@ -685,7 +686,7 @@ module fpnew_nl_controller
                            & (fpnew_pkg::get_opgroup(op_i) == fpnew_pkg::opgroup_e'(3));
     unique case (op_i)
     EXPS, COSHS: begin
-        conv_operands_o[0] = addmul_result_i;   
+        conv_operands_o[0] = addmul_res_q.result;   
         conv_operands_o[1] = '0;
         conv_operands_o[2] = '0;
         conv_rnd_mode_o    = fpnew_pkg::RTZ;  
@@ -694,9 +695,8 @@ module fpnew_nl_controller
         conv_src_fmt_o     = src_fmt_i;           
         conv_dst_fmt_o     = dst_fmt_i;
         conv_int_fmt_o     = int_fmt_i;           
-        conv_tag_o         = addmul_tag_result_i; 
-        conv_in_valid_o    = addmul_out_valid_i
-                           && !((op_i == COSHS) && (nl_state_q == COSH_SUM_L || nl_state_q == COSH_DRAIN));;
+        conv_tag_o         = addmul_res_q.tag; 
+        conv_in_valid_o    = addmul_res_valid_q  && !((op_i == COSHS) && (nl_state_q == COSH_SUM_L || nl_state_q == COSH_DRAIN));
     end
     LOGS: begin 
         conv_operands_o[0] = {log_res_hi, log_res_lo};   
@@ -710,14 +710,14 @@ module fpnew_nl_controller
     SIN,COS: begin 
         unique case(sin_cos_state_q)
             SIN_COS_INT_CONV_U, SIN_COS_INT_CONV_L: begin
-                conv_operands_o[0] = addmul_result_i;   
+                conv_operands_o[0] = addmul_res_q.result;     // from spill reg: registered ✓
                 conv_operands_o[1] = '0;
                 conv_operands_o[2] = '0;
                 conv_rnd_mode_o    = fpnew_pkg::RNE;  
                 conv_op_o          = fpnew_pkg::F2I;
                 conv_op_mod_o      = 1'b0;
-                conv_in_valid_o    = addmul_out_valid_i;
-                conv_tag_o         = addmul_tag_result_i;
+                conv_in_valid_o    = addmul_res_valid_q;
+                conv_tag_o         = addmul_res_q.tag;
             end
             SIN_COS_FLOAT_CONV_U, SIN_COS_FLOAT_CONV_L: begin
                 conv_operands_o[0] = conv_res_q.result;   
@@ -823,7 +823,7 @@ module fpnew_nl_controller
  
   assign draining_spill_op    = sin_cos_draining || tanh_draining || rsqrt_draining || rec_draining;
   assign needs_reconstruction = sin_cos_draining || tanh_draining;
-  assign addmul_out_valid_str = addmul_out_valid_i && (op_i == TANHS || op_i == RSQRT || op_i == REC || op_i == SIN || op_i == COS) && !conv_in_ready_i && !draining_spill_op;
+  assign addmul_out_valid_str = addmul_out_valid_i && (op_i == TANHS || op_i == RSQRT || op_i == REC || op_i == SIN  || op_i == COS|| op_i == EXPS || op_i == COSHS) && !draining_spill_op;
 
   always_comb begin : handshake_management
     opgrp_out_ready_o            = arb_gnt_i;
@@ -836,17 +836,25 @@ module fpnew_nl_controller
     if (nl_active) begin
       unique case (op_i) 
         EXPS:begin
-          opgrp_out_ready_o[0] = conv_in_ready_i;
+          opgrp_out_ready_o[0] = addmul_out_ready_str && addmul_out_valid_i;
+          addmul_res_ready_d   = conv_in_ready_i;
           arb_req_o[0]         = 1'b0;
         end
         COSHS : begin
-          opgrp_out_ready_o[0] = (nl_state_q == COSH_SUM_L  || nl_state_q == COSH_DRAIN)  ? arb_gnt_i[0] : conv_in_ready_i;
-          opgrp_out_ready_o[3] = (nl_state_q == COSH_WAIT_L || nl_state_q == COSH_WAIT_U) ? 1'b1         : addmul_in_ready_i;
+          opgrp_out_ready_o[0] = (nl_state_q == COSH_SUM_L  || nl_state_q == COSH_DRAIN)
+                                 ? arb_gnt_i[0]                              
+                                 : addmul_out_ready_str && addmul_out_valid_i;
+          opgrp_out_ready_o[3] = conv_out_ready_str   && conv_out_valid_i;                              
+          addmul_res_ready_d   = !(nl_state_q == COSH_SUM_L  || nl_state_q == COSH_DRAIN
+                                 || nl_state_q == COSH_WAIT_L)
+                                 && conv_in_ready_i;
+          conv_res_ready_d     = addmul_in_ready_i || nl_wr_en_0;
           arb_req_o[3]         = 1'b0;
-          arb_req_o[0]         = (nl_state_q == COSH_SUM_L  || nl_state_q == COSH_DRAIN) && addmul_out_valid_i; 
+          arb_req_o[0]         = (nl_state_q == COSH_WAIT_L  || nl_state_q == COSH_DRAIN) && addmul_out_valid_i; 
         end
         LOGS: begin
-          opgrp_out_ready_o[3] = addmul_in_ready_i;
+          opgrp_out_ready_o[3] = conv_out_ready_str && conv_out_valid_i;
+          conv_res_ready_d     = addmul_in_ready_i;
           arb_req_o[3]         = 1'b0;
         end
         TANHS, RSQRT, REC: begin
@@ -855,10 +863,11 @@ module fpnew_nl_controller
           addmul_res_ready_d   = ~(rec_loading || rsqrt_loading || tanh_loading) && addmul_in_ready_i; 
         end
         SIN,COS: begin
-          opgrp_out_ready_o[0] =  (sin_cos_state_q == SIN_COS_INT_CONV_U   || sin_cos_state_q == SIN_COS_INT_CONV_L) ? conv_in_ready_i   : addmul_out_ready_str && addmul_out_valid_i;
-          opgrp_out_ready_o[3] =  (sin_cos_state_q == SIN_COS_POLY1_U      || sin_cos_state_q == SIN_COS_POLY1_L)    ? addmul_in_ready_i : conv_out_ready_str && conv_out_valid_i;
-          addmul_res_ready_d   = ~sin_cos_loading && addmul_in_ready_i;
-          conv_res_ready_d     =  (sin_cos_state_q == SIN_COS_FLOAT_CONV_U || sin_cos_state_q == SIN_COS_FLOAT_CONV_L) && conv_in_ready_i;
+          opgrp_out_ready_o[0] = addmul_out_ready_str && addmul_out_valid_i;
+          opgrp_out_ready_o[3] = conv_out_ready_str   && conv_out_valid_i;
+          addmul_res_ready_d   = ~sin_cos_loading && addmul_in_ready_i || (conv_in_ready_i && (sin_cos_state_q == SIN_COS_INT_CONV_U || sin_cos_state_q == SIN_COS_INT_CONV_L));
+          conv_res_ready_d     = (sin_cos_state_q == SIN_COS_FLOAT_CONV_U || sin_cos_state_q == SIN_COS_FLOAT_CONV_L) && conv_in_ready_i 
+                                ||(addmul_in_ready_i) && (sin_cos_state_q == SIN_COS_POLY1_U || sin_cos_state_q == SIN_COS_POLY1_L) ;
           arb_req_o[3]         = 1'b0;
           arb_req_o[0]         = sin_cos_draining && addmul_out_valid_i; 
         end
