@@ -63,7 +63,8 @@ add_library(benchmark benchmark/benchmark.c)
 
 # Kernels
 # add_library(dp-fmatmul dp-fmatmul/kernel/dp-fmatmul.c)
-# add_library(sp-fmatmul sp-fmatmul/kernel/sp-fmatmul.c)
+add_library(sp-fmatmul                sp-fmatmul/kernel/sp-fmatmul.c)
+add_library(sp-fmatmul-post-increment sp-fmatmul-post-increment/kernel/sp-fmatmul-post-increment.c)
 # add_library(hp-fmatmul hp-fmatmul/kernel/hp-fmatmul.c)
 
 # add_library(widening-hp-fmatmul widening-hp-fmatmul/kernel/widening-fmatmul.c)
@@ -87,8 +88,10 @@ set(SNITCH_TEST_PREFIX spatzBenchmarks-)
 
 # add_spatz_test_threeParam(dp-fmatmul dp-fmatmul/main.c 64  64  64 )
 
-# add_spatz_test_threeParam(sp-fmatmul sp-fmatmul/main.c 64  64  64 )
+add_spatz_test_threeParam(sp-fmatmul sp-fmatmul/main.c 64  64  64 )
 # add_spatz_test_threeParam(sp-fmatmul sp-fmatmul/main.c 64  128 64 )
+
+add_spatz_test_threeParam(sp-fmatmul-post-increment sp-fmatmul-post-increment/main.c 64  64  64 )
 
 # add_spatz_test_threeParam(hp-fmatmul hp-fmatmul/main.c 64  64  64 )
 # add_spatz_test_threeParam(hp-fmatmul hp-fmatmul/main.c 64  128 64 )
@@ -126,4 +129,4 @@ set(SNITCH_TEST_PREFIX spatzBenchmarks-)
 # add_spatz_test_twoParam(sp-fft sp-fft/main.c 256 2)
 # add_spatz_test_twoParam(sp-fft sp-fft/main.c 512 2)
 
-add_spatz_test_noParam(post-increment post-increment/main.c)
+# add_spatz_test_noParam(post-increment post-increment/main.c)

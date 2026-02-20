@@ -22,7 +22,7 @@
 #include <stdio.h>
 
 #include DATAHEADER
-#include "kernel/sp-fmatmul.c"
+#include "kernel/sp-fmatmul-post-increment.c"
 
 float *a;
 float *b;
