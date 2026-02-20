@@ -208,10 +208,24 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
   logic valid_instr;
   logic exception;
 
-  // Add post-increment semantics to vector loads
+  // Add post-increment semantics (vector + scalar FP loads)
   logic retire_postinc;                // retire rs1 post-increment update
+  logic is_postinc_rrpost;             // current instruction has RRPOST semantics
   logic is_vload_rrpost;               // current instruction is P_VLE*_V_RRPOST
+  logic is_fp_load_rrpost;             // current instruction is P_FL*_RRPOST
   logic [RegWidth-1:0] postinc_waddr;  // destination GPR for post-inc (rs1)
+
+  logic [31:0] mem_addr_virt;  // effective virtual address for LSU/FP-load path
+
+  // Effective virtual address used for LSU/FP load/store path.
+  // For scalar FP RRPOST loads, ALU computes post-increment (rs1+rs2), while the
+  // actual load address must remain the original base rs1 (imm = 0 semantic).
+  always_comb begin
+    mem_addr_virt = alu_result;
+    if (is_fp_load_rrpost) begin
+      mem_addr_virt = gpr_rdata[0];  // rs1 base address
+    end
+  end
 
   // ALU Operations
   typedef enum logic [3:0]  {
@@ -373,6 +387,31 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
         // Preserve vd, rs1, vm, and all other fields.
         acc_data_op[28] = 1'b0;   // clear mew/custom-slot bit (the bit you used to distinguish P_*)
         acc_data_op[24:20] = 5'b00000; // standard VLE has lumop/nf field as zero for unit-stride
+      end
+
+      // P_FL*_RRPOST -> FL* (imm = 0)
+      riscv_instr::P_FLB_RRPOST: begin
+        acc_data_op = riscv_instr::FLB;    // preserve exact FLB encoding template
+        acc_data_op[19:15] = inst_data_i[19:15]; // rs1
+        acc_data_op[11:7]  = inst_data_i[11:7];  // rd
+      end
+
+      riscv_instr::P_FLH_RRPOST: begin
+        acc_data_op = riscv_instr::FLH;
+        acc_data_op[19:15] = inst_data_i[19:15];
+        acc_data_op[11:7]  = inst_data_i[11:7];
+      end
+
+      riscv_instr::P_FLW_RRPOST: begin
+        acc_data_op = riscv_instr::FLW;
+        acc_data_op[19:15] = inst_data_i[19:15];
+        acc_data_op[11:7]  = inst_data_i[11:7];
+      end
+
+      riscv_instr::P_FLD_RRPOST: begin
+        acc_data_op = riscv_instr::FLD;
+        acc_data_op[19:15] = inst_data_i[19:15];
+        acc_data_op[11:7]  = inst_data_i[11:7];
       end
 
       default: begin
@@ -564,8 +603,10 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
     acc_mem_store = 1'b0;
 
     // post-increment related signals
-    is_vload_rrpost = 1'b0;
-    postinc_waddr   = rs1;
+    is_postinc_rrpost = 1'b0;
+    is_vload_rrpost   = 1'b0;
+    is_fp_load_rrpost = 1'b0;
+    postinc_waddr     = rs1;
 
     debug_d = (!debug_q && (
           // the external debugger or an ebreak instruction triggerd the
@@ -2120,6 +2161,22 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           illegal_inst = 1'b1;
         end
       end
+      P_FLW_RRPOST: begin
+        if (FP_EN && RVF) begin
+          opa_select       = Reg;               // rs1 base
+          opb_select       = Reg;               // rs2 increment
+          alu_op           = Add;               // ALU computes post-inc = rs1 + rs2
+          write_rd         = 1'b0;              // FP rd handled by accelerator
+          acc_qvalid_o     = valid_instr & trans_ready;
+          ls_size          = Word;
+          is_fp_load       = 1'b1;
+          is_fp_load_rrpost= 1'b1;
+          is_postinc_rrpost= 1'b1;
+          postinc_waddr    = rs1;
+        end else begin
+          illegal_inst = 1'b1;
+        end
+      end
       FSW: begin
         if (FP_EN && RVF) begin
           opa_select = Reg;
@@ -2141,6 +2198,22 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           acc_qvalid_o = valid_instr & trans_ready;
           ls_size = Double;
           is_fp_load = 1'b1;
+        end else begin
+          illegal_inst = 1'b1;
+        end
+      end
+      P_FLD_RRPOST: begin
+        if (FP_EN && (RVD || XFVEC)) begin
+          opa_select       = Reg;
+          opb_select       = Reg;
+          alu_op           = Add;
+          write_rd         = 1'b0;
+          acc_qvalid_o     = valid_instr & trans_ready;
+          ls_size          = Double;
+          is_fp_load       = 1'b1;
+          is_fp_load_rrpost= 1'b1;
+          is_postinc_rrpost= 1'b1;
+          postinc_waddr    = rs1;
         end else begin
           illegal_inst = 1'b1;
         end
@@ -2170,6 +2243,22 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           illegal_inst = 1'b1;
         end
       end
+      P_FLH_RRPOST: begin
+        if (FP_EN && (XF16 || XF16ALT)) begin
+          opa_select       = Reg;
+          opb_select       = Reg;
+          alu_op           = Add;
+          write_rd         = 1'b0;
+          acc_qvalid_o     = valid_instr & trans_ready;
+          ls_size          = HalfWord;
+          is_fp_load       = 1'b1;
+          is_fp_load_rrpost= 1'b1;
+          is_postinc_rrpost= 1'b1;
+          postinc_waddr    = rs1;
+        end else begin
+          illegal_inst = 1'b1;
+        end
+      end
       FSH: begin
         if (FP_EN && (XF16 || XF16ALT)) begin
           opa_select = Reg;
@@ -2191,6 +2280,22 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           acc_qvalid_o = valid_instr & trans_ready;
           ls_size = Byte;
           is_fp_load = 1'b1;
+        end else begin
+          illegal_inst = 1'b1;
+        end
+      end
+      P_FLB_RRPOST: begin
+        if (FP_EN && (XF8 || XF8ALT)) begin
+          opa_select       = Reg;
+          opb_select       = Reg;
+          alu_op           = Add;
+          write_rd         = 1'b0;
+          acc_qvalid_o     = valid_instr & trans_ready;
+          ls_size          = Byte;
+          is_fp_load       = 1'b1;
+          is_fp_load_rrpost= 1'b1;
+          is_postinc_rrpost= 1'b1;
+          postinc_waddr    = rs1;
         end else begin
           illegal_inst = 1'b1;
         end
@@ -2611,6 +2716,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           alu_op          = Add;               // explicit: use ALU for rs1+rs2
           acc_register_rd = 1'b0;
           is_vload_rrpost = 1'b1;              // mark for local rs1 writeback
+          is_postinc_rrpost = 1'b1;
           postinc_waddr   = rs1;
         end else begin
           illegal_inst = 1'b1;
@@ -3175,7 +3281,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
   // --------------------
   // L0 DTLB
   // --------------------
-  assign dtlb_va = va_t'(alu_result[31:PAGE_SHIFT]);
+  assign dtlb_va = va_t'(mem_addr_virt[31:PAGE_SHIFT]);
 
   if (VMSupport) begin : gen_dtlb
     snitch_l0_tlb #(
@@ -3226,8 +3332,8 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
   // Mulitplexer using and/or as this signal is likely timing critical.
   assign ls_paddr[PPNSize+PAGE_SHIFT-1:PAGE_SHIFT] =
           ({(PPNSize){trans_active}} & dtlb_pa) |
-          (~{(PPNSize){trans_active}} & {mseg_q, alu_result[31:PAGE_SHIFT]});
-  assign ls_paddr[PAGE_SHIFT-1:0] = alu_result[PAGE_SHIFT-1:0];
+          (~{(PPNSize){trans_active}} & {mseg_q, mem_addr_virt[31:PAGE_SHIFT]});
+  assign ls_paddr[PAGE_SHIFT-1:0] = mem_addr_virt[PAGE_SHIFT-1:0];
 
   assign lsu_qvalid = lsu_tlb_qvalid & trans_ready & ~acc_mem_stall;
   assign lsu_tlb_qready = lsu_qready & trans_ready;
@@ -3277,7 +3383,11 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
   // only for post-increment instruction
   // we can only retire when the offload handshake happened
   // don’t commit side effects on exceptions
-  assign retire_postinc = is_vload_rrpost & acc_qvalid_o & acc_qready_i & !exception & (rs1 != '0);
+  assign retire_postinc = is_postinc_rrpost
+                        & acc_qvalid_o
+                        & acc_qready_i
+                        & !exception
+                        & (rs1 != '0);
 
   // Number of memory operations in the accelerator
   logic [2:0] acc_mem_cnt_q, acc_mem_cnt_d;
@@ -3320,10 +3430,10 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
   always_comb begin
     ls_misaligned = 1'b0;
     unique case (ls_size)
-      HalfWord: if (alu_result[0] != 1'b0) ls_misaligned = 1'b1;
-      Word: if (alu_result[1:0] != 2'b00) ls_misaligned = 1'b1;
-      Double: if (alu_result[2:0] != 3'b000) ls_misaligned = 1'b1;
-      default: ls_misaligned = 1'b0;
+      HalfWord: if (mem_addr_virt[0]   != 1'b0)   ls_misaligned = 1'b1;
+      Word:     if (mem_addr_virt[1:0] != 2'b00)  ls_misaligned = 1'b1;
+      Double:   if (mem_addr_virt[2:0] != 3'b000) ls_misaligned = 1'b1;
+      default:  ls_misaligned = 1'b0;
     endcase
   end
 
