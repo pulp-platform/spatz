@@ -420,32 +420,37 @@ package spatz_pkg;
     Width        : ELEN,
     EnableVectors: 1'b1,
     EnableNanBox : 1'b1,
-    //              FP32  FP64  FP16  FP8   FP16a FP8a
-    FpFmtMask    : {1'b1, 1'b1, 1'b1, 1'b1, 1'b1, 1'b1},
+    //              FP32  FP64  FP16  FP8   FP16a FP8a  FP6   FP6a  FP4
+    FpFmtMask    : {1'b1, 1'b1, 1'b1, 1'b1, 1'b1, 1'b1, 1'b0, 1'b0, 1'b0},
     //              INT8  INT16 INT32 INT64
-    IntFmtMask   : {1'b1, 1'b1, 1'b1, 1'b1}
+    IntFmtMask   : {1'b1, 1'b1, 1'b1, 1'b1},
+    MxFpFmtMask  : {1'b0, 1'b0, 1'b0, 1'b1, 1'b0, 1'b1, 1'b0, 1'b0, 1'b1},
+    MxIntFmtMask : {1'b0, 1'b0, 1'b0, 1'b0}
   } :
   // Single Precision FPU
   '{
     Width        : ELEN,
     EnableVectors: 1'b1,
     EnableNanBox : 1'b1,
-    //              FP32  FP64  FP16  FP8   FP16a FP8a
-    FpFmtMask    : {RVF,  1'b0, 1'b1, 1'b1, 1'b0, 1'b0},
+    //              FP32  FP64  FP16  FP8   FP16a FP8a  FP6   FP6a  FP4
+    FpFmtMask    : {RVF,  1'b0, 1'b1, 1'b1, 1'b0, 1'b0, 1'b0, 1'b0, 1'b0},
     //              INT8  INT16 INT32 INT64
-    IntFmtMask   : {1'b1, 1'b1, 1'b1, 1'b0}
+    IntFmtMask   : {1'b1, 1'b1, 1'b1, 1'b0},
+    MxFpFmtMask  : {1'b0, 1'b0, 1'b0, 1'b0, 1'b0, 1'b0, 1'b0, 1'b0, 1'b0},
+    MxIntFmtMask : {1'b0, 1'b0, 1'b0, 1'b0}
   };
 
 % if cfg['mempool']:
   localparam fpnew_pkg::fpu_implementation_t MemPoolFPUImpl =
   '{
       // Pipeline stages
-      //              FP32 FP64 FP16 FP8 FP16a FP8a
-      PipeRegs: '{'{  1,   2,   1,   1,   0,   0},    // ADDMUL
-                  '{  1,   1,   1,   1,   1,   1},    // DIVSQRT
-                  '{  1,   1,   1,   1,   1,   1},    // NONCOMP
-                  '{  2,   2,   2,   2,   2,   2},    // CONV
-                  '{  2,   2,   2,   2,   2,   2}},   // DOTP
+      //              FP32 FP64 FP16 FP8 FP16a FP8a FP6  FP6a FP4
+      PipeRegs: '{'{  1,   2,   1,   1,   0,   0,   0,   0,   0},    // ADDMUL
+                  '{  1,   1,   1,   1,   1,   1,   0,   0,   0},    // DIVSQRT
+                  '{  1,   1,   1,   1,   1,   1,   0,   0,   0},    // NONCOMP
+                  '{  2,   2,   2,   2,   2,   2,   0,   0,   0},    // CONV
+                  '{  2,   2,   2,   2,   2,   2,   0,   0,   0},    // DOTP
+                  '{  3,   3,   3,   3,   3,   3,   3,   3,   3}},   // MXDOTP
       // MERGED: share one functional unit for all types
       // PARALLEL: multiple functional units
       // DISABLED: turn off
@@ -453,7 +458,8 @@ package spatz_pkg;
                   '{  default: fpnew_pkg::DISABLED},  // DIVSQRT
                   '{  default: fpnew_pkg::PARALLEL},  // NONCOMP
                   '{  default: fpnew_pkg::MERGED},    // CONV
-                  '{  default: fpnew_pkg::MERGED}},   // DOTP
+                  '{  default: fpnew_pkg::MERGED},    // DOTP
+                  '{  default: fpnew_pkg::DISABLED}}, // MXDOTP
       PipeConfig: fpnew_pkg::BEFORE
   };
 

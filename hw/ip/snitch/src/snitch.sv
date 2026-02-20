@@ -38,6 +38,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
   parameter bit          RVV       = 0,
   parameter bit          XFVEC     = 0,
   parameter bit          XFDOTP    = 0,
+  parameter bit          XFMXDOTP  = 0,
   parameter bit          XFAUX     = 0,
   int unsigned           FLEN      = DataWidth,
   /// Enable virtual memory support.

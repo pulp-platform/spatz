@@ -258,6 +258,11 @@
                     "description": "Latency setting (number of pipeline stages) for floating-point expanding dot product with accumulation.",
                     "default": 2
                 },
+                "lat_mxdotp": {
+                    "type": "number",
+                    "description": "Latency setting (number of pipeline stages) for floating-point MX dot product with accumulation.",
+                    "default": 3
+                },
                 "fpu_pipe_config": {
                     "type": "string",
                     "description": "Pipeline configuration (i.e., position of the registers) of the FPU.",
@@ -352,6 +357,12 @@
                             "type": "boolean",
                             "title": "Xfdotp Extension",
                             "description": "Enable DOTP extensions.",
+                            "default": false
+                        },
+                        "xfmxdotp": {
+                            "type": "boolean",
+                            "title": "Xfmxdotp Extension",
+                            "description": "Enable MXDOTP extensions.",
                             "default": false
                         },
                         "num_int_outstanding_loads": {

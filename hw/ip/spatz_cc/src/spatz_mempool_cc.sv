@@ -12,6 +12,7 @@ module spatz_mempool_cc
   parameter bit          RVV        = 0,  // Enable Vector Extension
   parameter bit          XFVEC      = 0,
   parameter bit          XFDOTP     = 0,
+  parameter bit          XFMXDOTP   = 0,
   parameter bit          XFAUX      = 0,
   /// Enable F Extension.
   parameter bit          RVF        = 0,
@@ -140,6 +141,7 @@ module spatz_mempool_cc
     .RVV        ( RVV       ),
     .XFVEC      ( XFVEC     ),
     .XFDOTP     ( XFDOTP    ),
+    .XFMXDOTP   ( XFMXDOTP  ),
     .XFAUX      ( XFAUX     ),
     .RVF        ( RVF       ),
     .RVD        ( RVD       ),
