@@ -362,12 +362,22 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
 
   always_comb begin
     acc_data_op = inst_data_i;
-    unique case (inst_data_i)
-      riscv_instr::P_VLE8_V_RRPOST:  acc_data_op = riscv_instr::VLE8_V;
-      riscv_instr::P_VLE16_V_RRPOST: acc_data_op = riscv_instr::VLE16_V;
-      riscv_instr::P_VLE32_V_RRPOST: acc_data_op = riscv_instr::VLE32_V;
-      riscv_instr::P_VLE64_V_RRPOST: acc_data_op = riscv_instr::VLE64_V;
-      default: ;
+
+    unique casez (inst_data_i)
+      // P_VLE8_V_RRPOST  -> VLE8_V
+      riscv_instr::P_VLE8_V_RRPOST,
+      riscv_instr::P_VLE16_V_RRPOST,
+      riscv_instr::P_VLE32_V_RRPOST,
+      riscv_instr::P_VLE64_V_RRPOST: begin
+        // Convert custom "extended slot" encoding back to standard VLE slot.
+        // Preserve vd, rs1, vm, and all other fields.
+        acc_data_op[28] = 1'b0;   // clear mew/custom-slot bit (the bit you used to distinguish P_*)
+        acc_data_op[24:20] = 5'b00000; // standard VLE has lumop/nf field as zero for unit-stride
+      end
+
+      default: begin
+        // keep original instruction unchanged
+      end
     endcase
   end
 
