@@ -129,4 +129,4 @@ add_spatz_test_threeParam(sp-fmatmul-post-increment sp-fmatmul-post-increment/ma
 # add_spatz_test_twoParam(sp-fft sp-fft/main.c 256 2)
 # add_spatz_test_twoParam(sp-fft sp-fft/main.c 512 2)
 
-# add_spatz_test_noParam(post-increment post-increment/main.c)
+add_spatz_test_noParam(post-increment post-increment/main.c)
