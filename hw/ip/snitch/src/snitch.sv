@@ -208,6 +208,11 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
   logic valid_instr;
   logic exception;
 
+  // Add post-increment semantics to vector loads
+  logic retire_postinc;                // retire rs1 post-increment update
+  logic is_vload_rrpost;               // current instruction is P_VLE*_V_RRPOST
+  logic [RegWidth-1:0] postinc_waddr;  // destination GPR for post-inc (rs1)
+
   // ALU Operations
   typedef enum logic [3:0]  {
     Add, Sub,
@@ -352,8 +357,22 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
   // Offloaded mem operation is a store operation
   logic acc_mem_store;
 
+  // MUX logic to offload a plain VLE instruction
+  logic [31:0] acc_data_op;
+
+  always_comb begin
+    acc_data_op = inst_data_i;
+    unique case (inst_data_i)
+      riscv_instr::P_VLE8_V_RRPOST:  acc_data_op = riscv_instr::VLE8_V;
+      riscv_instr::P_VLE16_V_RRPOST: acc_data_op = riscv_instr::VLE16_V;
+      riscv_instr::P_VLE32_V_RRPOST: acc_data_op = riscv_instr::VLE32_V;
+      riscv_instr::P_VLE64_V_RRPOST: acc_data_op = riscv_instr::VLE64_V;
+      default: ;
+    endcase
+  end
+
   assign acc_qreq_o.id = rd;
-  assign acc_qreq_o.data_op = inst_data_i;
+  assign acc_qreq_o.data_op = acc_data_op;
   assign acc_qreq_o.data_arga = {{32{opa[31]}}, opa};
   assign acc_qreq_o.data_argb = {{32{opb[31]}}, opb};
   // operand C is currently only used for load/store instructions
@@ -533,6 +552,10 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
     acc_qreq_o.addr = SPATZ;
     acc_register_rd = 1'b0;
     acc_mem_store = 1'b0;
+
+    // post-increment related signals
+    is_vload_rrpost = 1'b0;
+    postinc_waddr   = rs1;
 
     debug_d = (!debug_q && (
           // the external debugger or an ebreak instruction triggerd the
@@ -2564,6 +2587,25 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           illegal_inst = 1'b1;
         end
       end
+      // Custom post-increment vector loads: rs1 <- rs1 + rs2
+      riscv_instr::P_VLE8_V_RRPOST,
+      riscv_instr::P_VLE16_V_RRPOST,
+      riscv_instr::P_VLE32_V_RRPOST,
+      riscv_instr::P_VLE64_V_RRPOST: begin
+        if (RVV) begin
+          write_rd        = 1'b0;
+          uses_rd         = 1'b0;              // no architectural rd write from Snitch side
+          acc_qvalid_o    = valid_instr && !acc_mem_stall;
+          opa_select      = Reg;               // rs1 base
+          opb_select      = Reg;               // rs2 increment
+          alu_op          = Add;               // explicit: use ALU for rs1+rs2
+          acc_register_rd = 1'b0;
+          is_vload_rrpost = 1'b1;              // mark for local rs1 writeback
+          postinc_waddr   = rs1;
+        end else begin
+          illegal_inst = 1'b1;
+        end
+      end
       // 1 source register (rs1) and memory store operation
       riscv_instr::VSE8_V,
       riscv_instr::VSE16_V,
@@ -3222,6 +3264,10 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
 
   // we can retire if we are not stalling and if the instruction is writing a register
   assign retire_i = write_rd & valid_instr & (rd != 0);
+  // only for post-increment instruction
+  // we can only retire when the offload handshake happened
+  // don’t commit side effects on exceptions
+  assign retire_postinc = is_vload_rrpost & acc_qvalid_o & acc_qready_i & !exception & (rs1 != '0);
 
   // Number of memory operations in the accelerator
   logic [2:0] acc_mem_cnt_q, acc_mem_cnt_d;
@@ -3312,6 +3358,11 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
 
     if (retire_i) begin
       gpr_we[0] = 1'b1;
+
+    end else if (retire_postinc) begin 
+      gpr_we[0]    = 1'b1;
+      gpr_waddr[0] = postinc_waddr;   // rs1
+      gpr_wdata[0] = alu_result;      // reuse ALU result = rs1 + rs2
     // if we are not retiring another instruction retire the load now
     end else if (lsu_pvalid) begin
       retire_load = 1'b1;
