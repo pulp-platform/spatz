@@ -1,47 +1,24 @@
 // Copyright 2026 ETH Zurich and University of Bologna.
 //
 // SPDX-License-Identifier: Apache-2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//    http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// Author: Bowen Wang, ETH Zurich
 
 #include "sp-fmatmul-post-increment.h"
 #include <stddef.h>
 #include <stdint.h>
-
-// -----------------------------------------------------------------------------
-// Inline-asm helpers using compiler-supported custom mnemonics
-// -----------------------------------------------------------------------------
-
-// Vector post-increment loads (e32)
-#define P_VLE32_RRPOST_TO_V16(ptr_, inc_bytes_)                                            \
-  asm volatile("p.vle32.v.rrpost v16, (%0), %1"                                             \
-               : "+r"(ptr_)                                                                 \
-               : "r"(inc_bytes_)                                                            \
-               : "memory")
-
-#define P_VLE32_RRPOST_TO_V18(ptr_, inc_bytes_)                                            \
-  asm volatile("p.vle32.v.rrpost v18, (%0), %1"                                             \
-               : "+r"(ptr_)                                                                 \
-               : "r"(inc_bytes_)                                                            \
-               : "memory")
-
-#define P_VLE32_RRPOST_TO_V20(ptr_, inc_bytes_)                                            \
-  asm volatile("p.vle32.v.rrpost v20, (%0), %1"                                             \
-               : "+r"(ptr_)                                                                 \
-               : "r"(inc_bytes_)                                                            \
-               : "memory")
-
-#define P_VLE32_RRPOST_TO_V24(ptr_, inc_bytes_)                                            \
-  asm volatile("p.vle32.v.rrpost v24, (%0), %1"                                             \
-               : "+r"(ptr_)                                                                 \
-               : "r"(inc_bytes_)                                                            \
-               : "memory")
-
-// Scalar FP post-increment load (single precision)
-// Writes directly to a C float output (compiler picks an FP reg for dst)
-#define P_FLW_RRPOST_TO_SCALAR(dst_, ptr_, inc_bytes_)                                     \
-  asm volatile("pflw.rrpost %0, (%1), %2"                                                  \
-               : "=f"(dst_), "+r"(ptr_)                                                    \
-               : "r"(inc_bytes_)                                                           \
-               : "memory")
 
 // ---------------
 // 2xVL
