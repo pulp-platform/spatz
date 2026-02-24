@@ -70,7 +70,7 @@ int main() {
   timer = (unsigned int)-1;
 
   // Set matrix dimension
-  kernel_size = 4;
+  kernel_size = 8;
 
   // Work over complete P dimension
   p_start = 0;
