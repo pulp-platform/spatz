@@ -53,6 +53,11 @@ _start:
   csrr    a2, mie
   ori     a2, a2, 0x8
   csrw    mie, a2
+  // Activate MCIP
+  csrr    a2, mie
+  li      t1, 0x80000
+  or      a2, a2, t1
+  csrw    mie, a2
 
   // Wait for the wakeup interrupt
   wfi
