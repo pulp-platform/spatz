@@ -5,6 +5,48 @@
 
 Spatz is a compact vector processor based on [RISC-V's Vector Extension (RVV) v1.0](https://github.com/riscv/riscv-v-spec/releases/tag/v1.0). Spatz acts as a coprocessor of [Snitch](https://github.com/pulp-platform/snitch), a tiny 64-bit scalar core. It is developed as part of the PULP project, a joint effort between ETH Zurich and the University of Bologna.
 
+
+## Post-increment load support (RVV + FP loads)
+
+This branch adds **post-increment (RRPOST) semantics** for:
+- **RVV unit-stride vector loads** (`P_VLE*_V_RRPOST`)
+- **Scalar floating-point loads** (`P_FLB_RRPOST`, `P_FLH_RRPOST`, `P_FLW_RRPOST`, `P_FLD_RRPOST`)
+
+The new semantics perform the load using `rs1` as the base address, while also updating the base register after the access:
+- **Load address:** `rs1`
+- **Post-update:** `rs1 <- rs1 + rs2`
+
+This is useful to **improve FPU utilization when LMUL is constrained to be small**, by reducing address-update overhead in tight kernels (e.g., GEMM-style loops).
+
+### Files changed (high level)
+
+- **HW decode / execution support**
+  - `hw/ip/snitch/src/riscv_instr.sv` (custom opcode encodings)
+  - `hw/ip/snitch/src/snitch.sv` (decode, address handling, post-increment retire/writeback)
+- **Software tests / benchmarks**
+  - `sw/spatzBenchmarks/CMakeLists.txt` (new post-increment tests)
+  - `sw/spatzBenchmarks/post-increment/main.c` (instruction tests)
+  - `sw/spatzBenchmarks/sp-fmatmul-post-increment/` (new benchmark kernel, data, and scripts)
+  - `sw/spatzBenchmarks/sp-fmatmul/main.c` (minor test output cleanup)
+- **Toolchain pinning**
+  - `sw/toolchain/llvm-project.version`
+  - `sw/toolchain/riscv-opcodes.version`
+
+### Toolchain requirement (custom LLVM)
+
+This feature requires **custom LLVM support**. Build and use the local LLVM version pinned in:
+
+- `sw/toolchain/llvm-project.version`
+
+### Important note about `make init`
+
+The custom opcode definitions in:
+
+- `hw/ip/snitch/src/riscv_instr.sv`
+
+must be **manually re-applied after `make init`**, because this file may be regenerated/overwritten during initialization.
+
+
 ## Getting started
 
 Make sure you download all necessary dependencies:
