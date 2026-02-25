@@ -44,41 +44,12 @@
 #include <stdint.h>
 #include <stdio.h>
 
-#define RVV_V8   8u
-#define RVV_V16 16u
 
 #define RVX_T2   7u   // x7  = t2 (increment)
 #define RVX_T3   28u  // x28 = t3 (base pointer)
 
 // FP register indices used in raw scalar FP RRPOST encodings
-#define FREG_F0  0u
 #define FREG_F1  1u
-
-// -----------------------------
-// RVV P_VLE*_V_RRPOST encodings
-// -----------------------------
-// Common custom load encoding template:
-//   bits [31:29] = 3'b000
-//   bit  [28]    = 1'b1   (custom slot in former VLE128/256/512/1024 space)
-//   bits [27:26] = 2'b00
-//   bit  [25]    = vm
-//   bits [24:20] = rs2 (post-increment register)
-//   bits [19:15] = rs1 (base pointer register)
-//   bits [14:12] = width code
-//   bits [11:7]  = vd
-//   bits [6:0]   = 0x07 (vector load opcode)
-
-#define _P_VLE_RRPOST_ENC(vd, rs2, rs1, vm, width3)                                      \
-  (((uint32_t)0u << 29) | ((uint32_t)1u << 28) | ((uint32_t)0u << 27) |                  \
-   ((uint32_t)0u << 26) | ((uint32_t)((vm)   & 0x01u) << 25) |                           \
-   ((uint32_t)((rs2)  & 0x1Fu) << 20) | ((uint32_t)((rs1)  & 0x1Fu) << 15) |             \
-   ((uint32_t)((width3) & 0x07u) << 12) | ((uint32_t)((vd)   & 0x1Fu) << 7) |            \
-   (uint32_t)0x07u)
-
-#define P_VLE8_V_RRPOST(vd, rs2, rs1, vm)   _P_VLE_RRPOST_ENC((vd), (rs2), (rs1), (vm), 0u)
-#define P_VLE16_V_RRPOST(vd, rs2, rs1, vm)  _P_VLE_RRPOST_ENC((vd), (rs2), (rs1), (vm), 5u)
-#define P_VLE32_V_RRPOST(vd, rs2, rs1, vm)  _P_VLE_RRPOST_ENC((vd), (rs2), (rs1), (vm), 6u)
-#define P_VLE64_V_RRPOST(vd, rs2, rs1, vm)  _P_VLE_RRPOST_ENC((vd), (rs2), (rs1), (vm), 7u)
 
 // ---------------------------
 // Scalar FP P_FL*_RRPOST encs
@@ -99,9 +70,6 @@
    (uint32_t)0x2Bu)
 
 #define P_FLB_RRPOST(frd, rs2, rs1)  _P_FL_RRPOST_ENC((frd), (rs2), (rs1), 0u)
-#define P_FLH_RRPOST(frd, rs2, rs1)  _P_FL_RRPOST_ENC((frd), (rs2), (rs1), 1u)
-#define P_FLW_RRPOST(frd, rs2, rs1)  _P_FL_RRPOST_ENC((frd), (rs2), (rs1), 2u)
-#define P_FLD_RRPOST(frd, rs2, rs1)  _P_FL_RRPOST_ENC((frd), (rs2), (rs1), 3u)
 
 // Use a reasonably long buffer so we can request longer VLs safely.
 #define BUF_BYTES   512u
@@ -164,10 +132,11 @@ static int test_vle8_rrpost(void) {
   register uintptr_t inc_reg    asm("t2") = (uintptr_t)inc_bytes;
 
   asm volatile("vle8.v v8, (%0)" :: "r"(addr_ori) : "memory");
-  asm volatile(".word %2"
-               : "+r"(addr_p_reg)
-               : "r"(inc_reg), "i"(P_VLE8_V_RRPOST(RVV_V16, RVX_T2, RVX_T3, 1))
-               : "memory");
+  // asm volatile(".word %2"
+  //              : "+r"(addr_p_reg)
+  //              : "r"(inc_reg), "i"(P_VLE8_V_RRPOST(RVV_V16, RVX_T2, RVX_T3, 1))
+  //              : "memory");
+  asm volatile("p.vle8.v.rrpost v16, (%0), %1" : "+r"(addr_p_reg) : "r"(inc_reg) : "memory");
   asm volatile("vse8.v v8, (%0)"  :: "r"(out_ref_bytes)  : "memory");
   asm volatile("vse8.v v16, (%0)" :: "r"(out_post_bytes) : "memory");
 
@@ -207,10 +176,7 @@ static int test_vle16_rrpost(void) {
   register uintptr_t inc_reg    asm("t2") = (uintptr_t)inc_bytes;
 
   asm volatile("vle16.v v8, (%0)" :: "r"(addr_ori) : "memory");
-  asm volatile(".word %2"
-               : "+r"(addr_p_reg)
-               : "r"(inc_reg), "i"(P_VLE16_V_RRPOST(RVV_V16, RVX_T2, RVX_T3, 1))
-               : "memory");
+  asm volatile("p.vle16.v.rrpost v16, (%0), %1" : "+r"(addr_p_reg) : "r"(inc_reg) : "memory");
   asm volatile("vse16.v v8, (%0)"  :: "r"(out_ref_bytes)  : "memory");
   asm volatile("vse16.v v16, (%0)" :: "r"(out_post_bytes) : "memory");
 
@@ -252,10 +218,7 @@ static int test_vle32_rrpost(void) {
   register uintptr_t inc_reg    asm("t2") = (uintptr_t)inc_bytes;
 
   asm volatile("vle32.v v8, (%0)" :: "r"(addr_ori) : "memory");
-  asm volatile(".word %2"
-               : "+r"(addr_p_reg)
-               : "r"(inc_reg), "i"(P_VLE32_V_RRPOST(RVV_V16, RVX_T2, RVX_T3, 1))
-               : "memory");
+  asm volatile("p.vle32.v.rrpost v16, (%0), %1" : "+r"(addr_p_reg) : "r"(inc_reg) : "memory");
   asm volatile("vse32.v v8, (%0)"  :: "r"(out_ref_bytes)  : "memory");
   asm volatile("vse32.v v16, (%0)" :: "r"(out_post_bytes) : "memory");
 
@@ -297,10 +260,7 @@ static int test_vle64_rrpost(void) {
   register uintptr_t inc_reg    asm("t2") = (uintptr_t)inc_bytes;
 
   asm volatile("vle64.v v8, (%0)" :: "r"(addr_ori) : "memory");
-  asm volatile(".word %2"
-               : "+r"(addr_p_reg)
-               : "r"(inc_reg), "i"(P_VLE64_V_RRPOST(RVV_V16, RVX_T2, RVX_T3, 1))
-               : "memory");
+  asm volatile("p.vle64.v.rrpost v16, (%0), %1" : "+r"(addr_p_reg) : "r"(inc_reg) : "memory");
   asm volatile("vse64.v v8, (%0)"  :: "r"(out_ref_bytes)  : "memory");
   asm volatile("vse64.v v16, (%0)" :: "r"(out_post_bytes) : "memory");
 
@@ -380,10 +340,7 @@ static int test_flh_rrpost(void) {
   register uintptr_t inc_reg    asm("t2") = (uintptr_t)inc_bytes;
 
   asm volatile("flh f0, 0(%0)" :: "r"(addr_ori) : "memory");
-  asm volatile(".word %2"
-               : "+r"(addr_p_reg)
-               : "r"(inc_reg), "i"(P_FLH_RRPOST(FREG_F1, RVX_T2, RVX_T3))
-               : "memory");
+  asm volatile("pflh.rrpost f1, (%0), %1" : "+r"(addr_p_reg) : "r"(inc_reg) : "memory");
   asm volatile("fsh f0, 0(%0)" :: "r"(out_ref_bytes) : "memory");
   asm volatile("fsh f1, 0(%0)" :: "r"(out_post_bytes) : "memory");
 
@@ -418,10 +375,7 @@ static int test_flw_rrpost(void) {
   register uintptr_t inc_reg    asm("t2") = (uintptr_t)inc_bytes;
 
   asm volatile("flw f0, 0(%0)" :: "r"(addr_ori) : "memory");
-  asm volatile(".word %2"
-               : "+r"(addr_p_reg)
-               : "r"(inc_reg), "i"(P_FLW_RRPOST(FREG_F1, RVX_T2, RVX_T3))
-               : "memory");
+  asm volatile("pflw.rrpost f1, (%0), %1" : "+r"(addr_p_reg) : "r"(inc_reg) : "memory");
   asm volatile("fsw f0, 0(%0)" :: "r"(out_ref_bytes) : "memory");
   asm volatile("fsw f1, 0(%0)" :: "r"(out_post_bytes) : "memory");
 
@@ -456,10 +410,7 @@ static int test_fld_rrpost(void) {
   register uintptr_t inc_reg    asm("t2") = (uintptr_t)inc_bytes;
 
   asm volatile("fld f0, 0(%0)" :: "r"(addr_ori) : "memory");
-  asm volatile(".word %2"
-               : "+r"(addr_p_reg)
-               : "r"(inc_reg), "i"(P_FLD_RRPOST(FREG_F1, RVX_T2, RVX_T3))
-               : "memory");
+  asm volatile("pfld.rrpost f1, (%0), %1" : "+r"(addr_p_reg) : "r"(inc_reg) : "memory");
   asm volatile("fsd f0, 0(%0)" :: "r"(out_ref_bytes) : "memory");
   asm volatile("fsd f1, 0(%0)" :: "r"(out_post_bytes) : "memory");
 
