@@ -37,6 +37,7 @@ module fpnew_nl_controller
   output TagType                             addmul_tag_o,
   output logic                               addmul_in_valid_o,
   input  logic                               addmul_in_ready_i,
+  input  fpnew_pkg::status_t                 addmul_status_i,
 
   //  Muxed Outputs → CONV 
   output logic [NUM_OPERANDS-1:0][WIDTH-1:0] conv_operands_o,
@@ -70,6 +71,8 @@ module fpnew_nl_controller
   output logic                               in_ready_o,
 
   output logic [WIDTH-1:0]                   reconstructed_result_o,
+  output TagType                             reconstructed_tag_o,
+  output fpnew_pkg::status_t                 reconstructed_status_o,
   output logic                               reconstructed_result_valid_o,
 
   //  Status
@@ -142,15 +145,21 @@ logic conv_predicted_ready;
     .out_ready_o(conv_predicted_ready)    
   );
 
-  
-  
+  logic [WIDTH-1:0]      nl_out_result_q;
+  TagType                nl_out_tag_q;
+  fpnew_pkg::status_t    nl_out_status_q;
+  logic                  nl_out_valid_q;
+  logic                  nl_out_capture, nl_out_drain;
+  logic                  needs_reconstruction;
+
+ // State machines control logic 
   always_comb begin : in_ready_logic
     unique case (op_i)
-        COSHS:    allow_issue_nl = (nl_state_q      == COSH_EXP_NEG_U   || nl_state_q      == COSH_SUM_L);
-        TANHS:    allow_issue_nl = (tanh_state_q    == TANH_X_SQUARE_U  || tanh_state_q    == TANH_POLY3_L);
-        RSQRT:    allow_issue_nl = (rsqrt_state_q   == RSQRT_X_SQUARE_U || rsqrt_state_q   == RSQRT_NR2_L);
+        COSHS:    allow_issue_nl = (nl_state_q      == COSH_EXP_NEG_U   || nl_state_q      == COSH_SUM_L   );
+        TANHS:    allow_issue_nl = (tanh_state_q    == TANH_X_SQUARE_U  || tanh_state_q    == TANH_POLY3_L );
+        RSQRT:    allow_issue_nl = (rsqrt_state_q   == RSQRT_X_SQUARE_U || rsqrt_state_q   == RSQRT_NR2_L  );
         REC:      allow_issue_nl = (rec_state_q     == REC_APPROX_U     || rec_state_q     == REC_NR2_MUL_L);
-        SIN, COS: allow_issue_nl = (sin_cos_state_q == SIN_COS_RR_U     || sin_cos_state_q == SIN_COS_RR_L);
+        SIN, COS: allow_issue_nl = (sin_cos_state_q == SIN_COS_RR_U     || sin_cos_state_q == SIN_COS_RR_L );
         default:  allow_issue_nl = 1'b1;
     endcase
   end
@@ -184,7 +193,7 @@ logic conv_predicted_ready;
         TANH_POLY3_U:     if (addmul_in_valid_o)                    tanh_state_d = TANH_POLY3_L;
         TANH_POLY3_L:     if (addmul_in_valid_o)                    tanh_state_d = TANH_DRAIN_U;
         TANH_DRAIN_U:     if (addmul_out_valid_i)                   tanh_state_d = TANH_DRAIN_L;
-        TANH_DRAIN_L:     if (addmul_out_valid_i)                   tanh_state_d = TANH_X_SQUARE_U;
+        TANH_DRAIN_L:     if (~nl_out_capture)                      tanh_state_d = TANH_X_SQUARE_U;
         default:                                                    tanh_state_d = TANH_X_SQUARE_U;
       endcase
       unique case (rsqrt_state_q)
@@ -231,7 +240,7 @@ logic conv_predicted_ready;
         SIN_COS_POLY5_U:      if (addmul_in_valid_o)                sin_cos_state_d = SIN_COS_POLY5_L;
         SIN_COS_POLY5_L:      if (addmul_in_valid_o)                sin_cos_state_d = SIN_COS_DRAIN_U;
         SIN_COS_DRAIN_U:      if (addmul_out_valid_i)               sin_cos_state_d = SIN_COS_DRAIN_L;
-        SIN_COS_DRAIN_L:      if (addmul_out_valid_i)               sin_cos_state_d = SIN_COS_RR_U;
+        SIN_COS_DRAIN_L:      if (~nl_out_capture)                  sin_cos_state_d = SIN_COS_RR_U;
         default:                                                    sin_cos_state_d = SIN_COS_RR_U;
       endcase   
   end
@@ -712,13 +721,39 @@ logic conv_predicted_ready;
 
 //  OUTPUT POST-PROCESSING 
   logic [WIDTH-1:0] reconstructed_result;
+  assign nl_out_capture = needs_reconstruction
+                        & addmul_out_valid_i;
+
+  assign nl_out_drain   = nl_out_valid_q & arb_gnt_i[0];
+
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (!rst_ni)
+      nl_out_valid_q <= 1'b0;
+    else if (flush_i)
+      nl_out_valid_q <= 1'b0;
+    else if (nl_out_capture)
+      nl_out_valid_q <= 1'b1;
+    else
+      nl_out_valid_q <= 1'b0;
+  end
+
+  `FFL(nl_out_result_q, reconstructed_result, nl_out_capture, '0)
+  `FFL(nl_out_tag_q,    addmul_tag_result_i,  nl_out_capture, '0)
+  `FFL(nl_out_status_q, addmul_status_i,      nl_out_capture, '0)
+
+  // Output port assignments — always registered
+  assign reconstructed_result_o       = nl_out_result_q;
+  assign reconstructed_tag_o          = nl_out_tag_q;
+  assign reconstructed_status_o       = nl_out_status_q;
+  assign reconstructed_result_valid_o = nl_out_valid_q;
+
+  
   logic [WIDTH-1:0] nl_intermediate_sel;
   logic [3:0]       k_int_sel, k_adj;
   logic [31:0]      x32_0, x32_1, abs32_0, abs32_1;
   logic             sign_0, sign_1;
   logic             is_nan_0, is_inf_0, clamp_mag_0;
   logic             is_nan_1, is_inf_1, clamp_mag_1;
-  logic             needs_reconstruction;
   logic [1:0]       sin_adj;
 
   assign nl_intermediate_sel = (tanh_state_q == TANH_DRAIN_U || sin_cos_state_q == SIN_COS_DRAIN_U) ? nl_intermediate_0_q : nl_intermediate_1_q;
@@ -736,28 +771,26 @@ logic conv_predicted_ready;
     is_nan_1 = 1'b0;  is_inf_1 = 1'b0; clamp_mag_1 = 1'b0;
     if (needs_reconstruction) begin
     // --- TANH Reconstruction ---
-        if (tanh_state_q == TANH_DRAIN_U || tanh_state_q == TANH_DRAIN_L) begin
-        
-        // Use pre-selected intermediate (removes one mux level from critical path)
-        x32_0 = nl_intermediate_sel[63:32];
-        x32_1 = nl_intermediate_sel[31:0];
-        
-        {sign_0, abs32_0} = {x32_0[31], 1'b0, x32_0[30:0]};
-        {sign_1, abs32_1} = {x32_1[31], 1'b0, x32_1[30:0]};
-        
-        is_nan_0    = (abs32_0[30:23] == 8'hFF) && (abs32_0[22:0] != 0);
-        is_inf_0    = (abs32_0[30:23] == 8'hFF) && (abs32_0[22:0] == 0);
-        clamp_mag_0 = (abs32_0[30:23] >= 8'h80);
+        if (op_i == TANHS) begin
+          x32_0 = nl_intermediate_sel[63:32];
+          x32_1 = nl_intermediate_sel[31:0];
+          
+          {sign_0, abs32_0} = {x32_0[31], 1'b0, x32_0[30:0]};
+          {sign_1, abs32_1} = {x32_1[31], 1'b0, x32_1[30:0]};
+          
+          is_nan_0    = (abs32_0[30:23] == 8'hFF) && (abs32_0[22:0] != 0);
+          is_inf_0    = (abs32_0[30:23] == 8'hFF) && (abs32_0[22:0] == 0);
+          clamp_mag_0 = (abs32_0[30:23] >= 8'h80);
 
-        is_nan_1    = (abs32_1[30:23] == 8'hFF) && (abs32_1[22:0] != 0);
-        is_inf_1    = (abs32_1[30:23] == 8'hFF) && (abs32_1[22:0] == 0);
-        clamp_mag_1 = (abs32_1[30:23] >= 8'h80);
+          is_nan_1    = (abs32_1[30:23] == 8'hFF) && (abs32_1[22:0] != 0);
+          is_inf_1    = (abs32_1[30:23] == 8'hFF) && (abs32_1[22:0] == 0);
+          clamp_mag_1 = (abs32_1[30:23] >= 8'h80);
 
-        if (clamp_mag_0 || is_inf_0) reconstructed_result[63:32] = {sign_0, 31'h3F800000}; 
-        else if (is_nan_0)           reconstructed_result[63:32] = x32_0; 
-        
-        if (clamp_mag_1 || is_inf_1) reconstructed_result[31:0]  = {sign_1, 31'h3F800000}; 
-        else if (is_nan_1)           reconstructed_result[31:0]  = x32_1; 
+          if (clamp_mag_0 || is_inf_0) reconstructed_result[63:32] = {sign_0, 31'h3F800000}; 
+          else if (is_nan_0)           reconstructed_result[63:32] = x32_0; 
+          
+          if (clamp_mag_1 || is_inf_1) reconstructed_result[31:0]  = {sign_1, 31'h3F800000}; 
+          else if (is_nan_1)           reconstructed_result[31:0]  = x32_1; 
 
         end
         // SIN/COS Quadrant Reconstruction ---
@@ -785,17 +818,15 @@ logic conv_predicted_ready;
 // Arbitration
   logic   tanh_draining, rsqrt_draining, rec_draining, sin_cos_draining;
 
-  assign tanh_draining    = (tanh_state_q    == TANH_DRAIN_U)     || (tanh_state_q    == TANH_DRAIN_L);
-  assign rsqrt_draining   = (rsqrt_state_q   == RSQRT_DRAIN_U)    || (rsqrt_state_q   == RSQRT_DRAIN_L);
-  assign rec_draining     = (rec_state_q     == REC_DRAIN_U)      || (rec_state_q     == REC_DRAIN_L);
-  assign sin_cos_draining = (sin_cos_state_q == SIN_COS_DRAIN_U)  || (sin_cos_state_q == SIN_COS_DRAIN_L);
+  assign tanh_draining    = (tanh_state_q    == TANH_DRAIN_U   ) || (tanh_state_q    == TANH_DRAIN_L   );
+  assign rsqrt_draining   = (rsqrt_state_q   == RSQRT_DRAIN_U  ) || (rsqrt_state_q   == RSQRT_DRAIN_L  );
+  assign rec_draining     = (rec_state_q     == REC_DRAIN_U    ) || (rec_state_q     == REC_DRAIN_L    );
+  assign sin_cos_draining = (sin_cos_state_q == SIN_COS_DRAIN_U) || (sin_cos_state_q == SIN_COS_DRAIN_L);
   assign needs_reconstruction = sin_cos_draining || tanh_draining;
 
   always_comb begin : handshake_management
     opgrp_out_ready_o            = arb_gnt_i;
     arb_req_o                    = opgrp_out_valid_i;
-    reconstructed_result_o       = reconstructed_result;
-    reconstructed_result_valid_o = needs_reconstruction && addmul_out_valid_i;
 
     if (nl_active) begin
       unique case (op_i) 
@@ -817,13 +848,13 @@ logic conv_predicted_ready;
         end
         TANHS, RSQRT, REC: begin
           opgrp_out_ready_o[0] = addmul_predicted_ready;
-          arb_req_o[0]         = (tanh_draining || rsqrt_draining || rec_draining) && addmul_out_valid_i;
+          arb_req_o[0]         = ((tanh_draining && nl_out_valid_q) || (rsqrt_draining || rec_draining) && addmul_out_valid_i);
         end
         SIN,COS: begin
           opgrp_out_ready_o[0] = addmul_predicted_ready ;
           opgrp_out_ready_o[3] = conv_predicted_ready;
           arb_req_o[3]         = 1'b0;
-          arb_req_o[0]         = sin_cos_draining && addmul_out_valid_i; 
+          arb_req_o[0]         = sin_cos_draining && nl_out_valid_q; 
         end
         default:;
       endcase
