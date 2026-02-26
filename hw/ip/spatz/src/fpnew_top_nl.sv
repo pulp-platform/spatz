@@ -85,7 +85,7 @@ module fpnew_top_nl
   // ---------------
   logic is_nl_op;
   operation_e fpu_op;
-  assign is_nl_op  = op_i inside {[EXPS:REC]} ;
+  assign is_nl_op  = op_i inside {[EXPS:REC]};
 
   // -------------------------
   // NL Controller Signals
@@ -122,6 +122,8 @@ module fpnew_top_nl
   logic [WIDTH-1:0] reconstructed_result;
   logic             reconstructed_result_valid;
   output_t [NUM_OPGROUPS-1:0] reconstruct_output_sel; // Modified to perform postprocessing 
+  TagType              reconstructed_tag;
+  fpnew_pkg::status_t  reconstructed_status;
 
   fpnew_nl_controller #(
     .WIDTH        ( WIDTH        ),
@@ -159,6 +161,7 @@ module fpnew_top_nl
     .addmul_tag_o      ( nl_addmul_tag      ),
     .addmul_in_valid_o ( nl_addmul_in_valid ),
     .addmul_in_ready_i ( opgrp_in_ready[0]  ),
+    .addmul_status_i   ( opgrp_outputs[0].status ),
 
     // CONV opgroup muxed outputs
     .conv_operands_o   ( nl_conv_operands  ),
@@ -192,6 +195,8 @@ module fpnew_top_nl
 
     // Reconstructed result feedback
     .reconstructed_result_o ( reconstructed_result ),
+    .reconstructed_tag_o    ( reconstructed_tag    ),
+    .reconstructed_status_o ( reconstructed_status ),
     .reconstructed_result_valid_o ( reconstructed_result_valid ),
 
     // Status
@@ -329,11 +334,14 @@ module fpnew_top_nl
   // ------------------
   output_t arbiter_output;
 
+  // CHANGE arbiter input mux — override full output_t, not just result:
   always_comb begin
     reconstruct_output_sel = opgrp_outputs;
     if (reconstructed_result_valid) begin
       reconstruct_output_sel[0].result = reconstructed_result;
-    end 
+      reconstruct_output_sel[0].tag    = reconstructed_tag;
+      reconstruct_output_sel[0].status = reconstructed_status;
+    end
   end
 
   // Round-Robin arbiter to decide which result to use
