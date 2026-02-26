@@ -215,6 +215,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   logic      [NrReadPorts-1:0]  vrf_re;
   vrf_data_t [NrReadPorts-1:0]  vrf_rdata;
   logic      [NrReadPorts-1:0]  vrf_rvalid;
+  logic      [NrWritePorts-1:0] vrf_wvalid_vlsu;
 
   spatz_vrf #(
     .NrReadPorts (NrReadPorts ),
@@ -229,6 +230,8 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     .we_i            (vrf_we        ),
     .wbe_i           (vrf_wbe_buf   ),
     .wvalid_o        (vrf_wvalid    ),
+    .wvalid_vlsu_o  (vrf_wvalid_vlsu),
+
   `ifdef BUF_FPU
     .fpu_buf_usage_i (vfu_buf_usage ),
   `endif
@@ -424,7 +427,8 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     .vrf_wdata_o             (vrf_wdata[VLSU_VD_WD]                                ),
     .vrf_we_o                (sb_we[VLSU_VD_WD]                                    ),
     .vrf_wbe_o               (vrf_wbe[VLSU_VD_WD]                                  ),
-    .vrf_wvalid_i            (vrf_wvalid[VLSU_VD_WD]                               ),
+    // .vrf_wvalid_i            (vrf_wvalid[VLSU_VD_WD]                               ),
+    .vrf_wvalid_i            (vrf_wvalid_vlsu[VLSU_VD_WD]                               ),//vrf_wvalid[1]
     .vrf_raddr_o             (vrf_raddr[VLSU_VD_RD:VLSU_VS2_RD]                    ),
     .vrf_re_o                (sb_re[VLSU_VD_RD:VLSU_VS2_RD]                        ),
     .vrf_rdata_i             (vrf_rdata[VLSU_VD_RD:VLSU_VS2_RD]                    ),
