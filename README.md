@@ -60,6 +60,8 @@ sw/spatzBenchmarks/hp-dqmatmul
 
 ### Generate input data (Optional)
 
+Provided M32_N32_K32, M32_N128_K32, and M128_N128_K128 data.
+
 ```tcl
 cd sw/spatzBenchmarks/hp-dqmatmul
 python3 script/gen_data.py -c script/dqmatmul.json
@@ -76,7 +78,7 @@ Run without GUI:
 ```tcl
 bin/spatz_cluster.vsim ./sw/build/spatzBenchmarks/test-spatzBenchmarks-hp-dqmatmul_M32_N128_K32
 ```
-Instruction encoding note
+## Instruction encoding note
 
 The current vlxblk* instructions use custom-2 opcodes.
 
