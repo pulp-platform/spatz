@@ -157,6 +157,7 @@ class SnitchCluster(Generator):
     files = {
         "spatzpkg": "src/spatz_pkg.sv.tpl",
         "wrapper": "src/spatz_cluster_wrapper.sv.tpl",
+        "rdl": "src/spatz_cluster.rdl.tpl",
         "testbench": "tb/testbench.sv.tpl",
     }
 
@@ -183,6 +184,13 @@ class SnitchCluster(Generator):
     def l1_region(self):
         """Return L1 Region as tuple. Base and length."""
         return (self.cfg["cluster_base_addr"], self.cfg["tcdm"]["size"])
+
+    def render_rdl(self):
+        """Render the cluster RDL"""
+        cfg_template = self.templates.get_template(self.files["rdl"])
+        return cfg_template.render_unicode(
+            cfg=self.cfg, to_sv_hex=to_sv_hex, disclaimer=self.DISCLAIMER
+        )
 
     def render_wrapper(self):
         """Render the cluster wrapper"""
@@ -396,6 +404,9 @@ class SnitchClusterTB(Generator):
             self.cfg["cluster"]["tie_ports"] = True
         # Store Snitch cluster config in separate variable
         self.cluster = SnitchCluster(cfg["cluster"], pma_cfg)
+
+    def render_rdl(self):
+        return self.cluster.render_rdl()
 
     def render_wrapper(self):
         return self.cluster.render_wrapper()
