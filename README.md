@@ -47,8 +47,9 @@ If you use the IIS environment helper, source:
 
 ```tcl
 source util/iis-env.sh
-Added software: hp-dqmatmul
 ```
+
+### Added software: hp-dqmatmul
 
 A new software kernel was added for vector dequantized matrix multiplication using the new instructions.
 
