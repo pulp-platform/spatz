@@ -32,8 +32,13 @@ The new instructions depend on the local changes in both **LLVM** and **riscv-op
 Run the following from the repository root:
 
 ```bash
+# set env properly
+source util/iis-env.sh
+# update opcodes
 make init
+# clone customed LLVM
 make sw/toolchain/llvm-project
+# build LLVM
 make tc-llvm
 ```
 
@@ -41,12 +46,6 @@ The local LLVM toolchain will be installed to:
 
 ```tcl
 spatz/build/llvm
-```
-
-If you use the IIS environment helper, source:
-
-```tcl
-source util/iis-env.sh
 ```
 
 ### Added software: hp-dqmatmul
