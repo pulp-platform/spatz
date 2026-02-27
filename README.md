@@ -3,6 +3,88 @@
 
 # Spatz
 
+## Local updates: VLXBLK custom instruction support
+
+This branch includes local changes for newly added `vlxblk*` custom vector instructions and the software/kernel support around them.
+
+### What changed
+
+- **LLVM support**
+  - Added inline assembly recognition for the new `vlxblk*` instructions.
+  - Relevant changes are in:
+    - `sw/toolchain/llvm-project`
+    - `RISCVInstrFormatsV.td`
+    - `RISCVInstrInfoV.td`
+
+- **riscv-opcodes support**
+  - Added opcode descriptions for the new `vlxblk*` instructions so that `riscv_instr.sv` and related generated files can be reproduced through the opcode toolchain.
+
+- **Environment script**
+  - `util/iis-env.sh` was updated to support a **local LLVM installation**.
+
+- **Software kernel**
+  - Added `hp-dqmatmul`: a vector dequantized matrix multiplication kernel using the new `vlxblk*` instructions.
+
+### How to use
+
+The new instructions depend on the local changes in both **LLVM** and **riscv-opcodes**.
+
+Run the following from the repository root:
+
+```bash
+make init
+make sw/toolchain/llvm-project
+make tc-llvm
+```
+
+The local LLVM toolchain will be installed to:
+
+```tcl
+spatz/build/llvm
+```
+
+If you use the IIS environment helper, source:
+
+```tcl
+source util/iis-env.sh
+Added software: hp-dqmatmul
+```
+
+A new software kernel was added for vector dequantized matrix multiplication using the new instructions.
+
+Path:
+
+```tcl
+sw/spatzBenchmarks/hp-dqmatmul
+```
+
+### Generate input data (Optional)
+
+```tcl
+cd sw/spatzBenchmarks/hp-dqmatmul
+python3 script/gen_data.py -c script/dqmatmul.json
+```
+
+### Run simulation
+```tcl
+cd hw/system/spatz_cluster
+make clean && make sw.vsim -B
+```
+
+Run without GUI:
+
+```tcl
+bin/spatz_cluster.vsim ./sw/build/spatzBenchmarks/test-spatzBenchmarks-hp-dqmatmul_M32_N128_K32
+```
+Instruction encoding note
+
+The current vlxblk* instructions use custom-2 opcodes.
+
+At the moment, the block size is hardcoded in the instruction encoding.
+In a future version, this should be generalized so that the block size is passed through a register or another configurable mechanism.
+
+---
+
 Spatz is a compact vector processor based on [RISC-V's Vector Extension (RVV) v1.0](https://github.com/riscv/riscv-v-spec/releases/tag/v1.0). Spatz acts as a coprocessor of [Snitch](https://github.com/pulp-platform/snitch), a tiny 64-bit scalar core. It is developed as part of the PULP project, a joint effort between ETH Zurich and the University of Bologna.
 
 ## Getting started
