@@ -7,7 +7,7 @@
 
 ${disclaimer}
 
-<%! 
+<%!
 import math
 
 def next_power_of_2(n):
