@@ -24,6 +24,10 @@ include_directories(${SNRUNTIME_INCLUDE_DIRS})
 
 add_compile_options(-O3 -g -ffunction-sections)
 
+# Use unrolled spatzBenchmarks
+# if (UNROLL)
+# add_definitions(-DUNROLL)
+# endif()
 
 # Macro to regenerate the golden values and compile a module
 macro(add_spatz_test_oneParam name file param1)
@@ -47,13 +51,23 @@ macro(add_spatz_test_threeParam name file param1 param2 param3)
   target_compile_definitions(test-${SNITCH_TEST_PREFIX}${target_name} PUBLIC DATAHEADER="data/data_${param1}_${param2}_${param3}.h" SNRT_NFPU_PER_CORE=${SNRT_NFPU_PER_CORE})
 endmacro()
 
+macro(add_spatz_test_threeParam_dq name file param1 param2 param3)
+  set(target_name ${name}_M${param1}_N${param2}_K${param3})
+  add_snitch_test(${target_name} ${file})
+  target_link_libraries(test-${SNITCH_TEST_PREFIX}${target_name} benchmark ${SNITCH_RUNTIME})
+  target_compile_definitions(test-${SNITCH_TEST_PREFIX}${target_name}
+    PUBLIC DATAHEADER="data/data_dq_${param1}_${param2}_${param3}.h"
+           SNRT_NFPU_PER_CORE=${SNRT_NFPU_PER_CORE})
+endmacro()
+
 # Benchmark library
 add_library(benchmark benchmark/benchmark.c)
 
 # Kernels
-add_library(dp-fmatmul dp-fmatmul/kernel/dp-fmatmul.c)
-add_library(sp-fmatmul sp-fmatmul/kernel/sp-fmatmul.c)
-add_library(hp-fmatmul hp-fmatmul/kernel/hp-fmatmul.c)
+add_library(dp-fmatmul  dp-fmatmul/kernel/dp-fmatmul.c)
+add_library(sp-fmatmul  sp-fmatmul/kernel/sp-fmatmul.c)
+add_library(hp-fmatmul  hp-fmatmul/kernel/hp-fmatmul.c)
+add_library(hp-dqmatmul hp-dqmatmul/kernel/hp-dqmatmul.c)
 
 add_library(widening-hp-fmatmul widening-hp-fmatmul/kernel/widening-fmatmul.c)
 add_library(widening-bp-fmatmul widening-bp-fmatmul/kernel/widening-fmatmul.c)
@@ -114,3 +128,8 @@ add_spatz_test_twoParam(dp-fft dp-fft/main.c 128 2)
 
 add_spatz_test_twoParam(sp-fft sp-fft/main.c 256 2)
 add_spatz_test_twoParam(sp-fft sp-fft/main.c 512 2)
+
+# Vector-DQ with different block sizes (groups, block_size)
+add_spatz_test_threeParam_dq(hp-dqmatmul hp-dqmatmul/main.c 32 32 32)
+add_spatz_test_threeParam_dq(hp-dqmatmul hp-dqmatmul/main.c 32 128 32)
+add_spatz_test_threeParam_dq(hp-dqmatmul hp-dqmatmul/main.c 128 128 128)

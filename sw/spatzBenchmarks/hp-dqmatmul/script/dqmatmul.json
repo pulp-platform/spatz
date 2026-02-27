@@ -1,0 +1,23 @@
+// Copyright 2020 ETH Zurich and University of Bologna.
+// Solderpad Hardware License, Version 0.51, see LICENSE for details.
+// SPDX-License-Identifier: SHL-0.51
+
+// Parameters for a VQ-GEMM
+
+{
+    kernel: "VQ-GEMM"
+    M: 128,
+    N: 128,
+    K: 128,
+    alpha: 0,
+    transpose_A: false,
+    transpose_B: false,
+    prec: 16,
+    expand: 0,
+    CB0_N: 128,
+    CB0_D: 8,
+    CB1_N: 128,
+    CB1_D: 8,
+    CB0_IDX_WIDTH: 1,
+    CB1_IDX_WIDTH: 1
+}
