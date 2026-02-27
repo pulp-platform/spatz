@@ -89,12 +89,11 @@ module spatz_decoder
           automatic vreg_t ls_vd         = decoder_req_i.instr[11:7];
           automatic vreg_t ls_rs1        = decoder_req_i.instr[19:15];
           automatic vreg_t ls_s2         = decoder_req_i.instr[24:20];
-          automatic logic [2:0] ls_width = decoder_req_i.instr[14:12];
+          automatic logic [2:0] ls_width = decoder_req_i.instr[14:12];//index ew
           automatic logic ls_vm          = decoder_req_i.instr[25];
           automatic logic [1:0] ls_mop   = decoder_req_i.instr[27:26];
           automatic logic ls_mew         = decoder_req_i.instr[28];
           automatic logic [2:0] ls_nf    = decoder_req_i.instr[31:29];
-
           // Retrieve VSEW
           unique case ({ls_mew, ls_width})
             4'b0000: spatz_req.vtype.vsew = EW_8;
@@ -103,7 +102,6 @@ module spatz_decoder
             4'b0111: spatz_req.vtype.vsew = EW_64;
             default: illegal_instr        = 1'b1;
           endcase
-
           spatz_req.op_mem.vm = ls_vm;
           spatz_req.ex_unit   = LSU;
 
@@ -156,7 +154,38 @@ module spatz_decoder
               spatz_req.op_mem.ew  = spatz_req.vtype.vsew;
               spatz_req.vtype.vsew = decoder_req_i.vtype.vsew;
             end
+            // riscv_instr::VLXBLK4EI8_V,
+            // riscv_instr::VLXBLK4EI16_V,
+            // riscv_instr::VLXBLK6EI8_V,
+            // riscv_instr::VLXBLK6EI16_V,
+            // riscv_instr::VLXBLK8EI8_V,
+            // riscv_instr::VLXBLK8EI16_V,
+            // riscv_instr::VLXBLK12EI8_V,
+            // riscv_instr::VLXBLK12EI16_V,
+            // riscv_instr::VLXBLK16EI8_V,
+            // riscv_instr::VLXBLK16EI16_V: begin
+            //   spatz_req.op             = VLXBLK;
+            //   spatz_req.op_mem.is_load = 1'b1;
+            //   spatz_req.vd             = ls_vd;
+            //   spatz_req.use_vd         = 1'b1;
+            //   spatz_req.rs1            = decoder_req_i.rs1;
+            //   spatz_req.vs2            = ls_s2;
+            //   spatz_req.use_vs2        = 1'b1;
 
+            //  unique case (ls_nf)
+            //    3'd0: spatz_req.op_mem.blk_len = BLKLEN_4;
+            //    3'd1: spatz_req.op_mem.blk_len = BLKLEN_6;
+            //    3'd2: spatz_req.op_mem.blk_len = BLKLEN_8;
+            //    3'd3: spatz_req.op_mem.blk_len = BLKLEN_12;
+            //    3'd4: spatz_req.op_mem.blk_len = BLKLEN_16;
+            //    default: illegal_instr = 1'b1;
+            //  endcase
+
+            //   // Indexed block load: op_mem.ew = index width, vtype.vsew = data element width
+            //   spatz_req.op_mem.ew  = spatz_req.vtype.vsew;
+            //   spatz_req.vtype.vsew = decoder_req_i.vtype.vsew;
+
+            // end
             riscv_instr::VSE8_V,
             riscv_instr::VSE16_V,
             riscv_instr::VSE32_V,
@@ -207,6 +236,59 @@ module spatz_decoder
             default:
               illegal_instr = 1'b1;
           endcase // decoder_req_i.instr
+        end
+
+        riscv_instr::VLXBLK4EI8_V,
+        riscv_instr::VLXBLK4EI16_V,
+        riscv_instr::VLXBLK6EI8_V,
+        riscv_instr::VLXBLK6EI16_V,
+        riscv_instr::VLXBLK8EI8_V,
+        riscv_instr::VLXBLK8EI16_V,
+        riscv_instr::VLXBLK12EI8_V,
+        riscv_instr::VLXBLK12EI16_V,
+        riscv_instr::VLXBLK16EI8_V,
+        riscv_instr::VLXBLK16EI16_V: begin
+          automatic vreg_t blk_vd         = decoder_req_i.instr[11:7];
+          automatic vreg_t blk_rs1        = decoder_req_i.instr[19:15];
+          automatic vreg_t blk_vs2        = decoder_req_i.instr[24:20];
+          automatic logic [2:0] blk_width = decoder_req_i.instr[14:12];
+          automatic logic [6:0] blk_funct7 = decoder_req_i.instr[31:25];
+
+          spatz_req.op             = VLXBLK;
+          spatz_req.ex_unit        = LSU;
+          spatz_req.op_mem.is_load = 1'b1;
+
+          spatz_req.vd             = blk_vd;
+          spatz_req.use_vd         = 1'b1;
+
+          spatz_req.rs1            = decoder_req_i.rs1;
+
+          spatz_req.vs2            = blk_vs2;
+          spatz_req.use_vs2        = 1'b1;
+
+          // New custom encoding has no vm field. Treat as unmasked.
+          spatz_req.op_mem.vm      = 1'b1;
+
+          // Indexed block load:
+          // op_mem.ew = index element width
+          // vtype.vsew = data element width from current vtype CSR
+          unique case (blk_width)
+            3'b000: spatz_req.op_mem.ew = EW_8;
+            3'b101: spatz_req.op_mem.ew = EW_16;
+            default: illegal_instr = 1'b1;
+          endcase
+
+          spatz_req.vtype.vsew = decoder_req_i.vtype.vsew;
+
+          // Block length is encoded in funct7[31:25]
+          unique case (blk_funct7)
+            7'b0001000: spatz_req.op_mem.blk_len = BLKLEN_4;
+            7'b0001001: spatz_req.op_mem.blk_len = BLKLEN_6;
+            7'b0001010: spatz_req.op_mem.blk_len = BLKLEN_8;
+            7'b0001011: spatz_req.op_mem.blk_len = BLKLEN_12;
+            7'b0001100: spatz_req.op_mem.blk_len = BLKLEN_16;
+            default: illegal_instr = 1'b1;
+          endcase
         end
 
         // Vector instruction

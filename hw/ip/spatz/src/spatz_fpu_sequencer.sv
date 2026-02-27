@@ -586,7 +586,9 @@ module spatz_fpu_sequencer
     {riscv_instr::VLE8_V, riscv_instr::VLE16_V, riscv_instr::VLE32_V, riscv_instr::VLE64_V,
     riscv_instr::VLSE8_V, riscv_instr::VLSE16_V, riscv_instr::VLSE32_V, riscv_instr::VLSE64_V,
     riscv_instr::VLOXEI8_V, riscv_instr::VLOXEI16_V, riscv_instr::VLOXEI32_V, riscv_instr::VLOXEI64_V,
-    riscv_instr::VLUXEI8_V, riscv_instr::VLUXEI16_V, riscv_instr::VLUXEI32_V, riscv_instr::VLUXEI64_V};
+    riscv_instr::VLUXEI8_V, riscv_instr::VLUXEI16_V, riscv_instr::VLUXEI32_V, riscv_instr::VLUXEI64_V,
+    riscv_instr::VLXBLK8EI8_V
+    };
 
   // Is the current instruction a vector store?
   logic is_vector_store;

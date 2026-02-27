@@ -61,6 +61,9 @@ module spatz_vlsu
 
   localparam int unsigned MemDataWidth  = ELEN;
   localparam int unsigned MemDataWidthB = MemDataWidth/8;
+  // VRF word is N_FU lanes wide.
+  localparam int unsigned VS2_WORD_BYTES = N_FU * ELENB;
+  localparam int unsigned VS2_WORD_SHIFT = $clog2(VS2_WORD_BYTES);
 
   //////////////
   // Typedefs //
@@ -115,7 +118,7 @@ module spatz_vlsu
       end
     endcase
   end: proc_spatz_req
-
+ // Detect operation s
   // Do we have a strided memory access
   logic mem_is_strided;
   assign mem_is_strided = (mem_spatz_req.op == VLSE) || (mem_spatz_req.op == VSSE);
@@ -124,6 +127,12 @@ module spatz_vlsu
   logic mem_is_indexed;
   assign mem_is_indexed = (mem_spatz_req.op == VLXE) || (mem_spatz_req.op == VSXE);
 
+  // Do we have an indexed block memory access
+  logic mem_is_indexed_blk;
+  assign mem_is_indexed_blk =  (mem_spatz_req.op == VLXBLK);
+
+  logic mem_is_indexed_any;
+  assign mem_is_indexed_any = mem_is_indexed || mem_is_indexed_blk ;
   /////////////
   //  State  //
   /////////////
@@ -304,6 +313,7 @@ module spatz_vlsu
     logic is_load;
     logic is_strided;
     logic is_indexed;
+    logic is_indexed_blk;
   } commit_metadata_t;
 
   commit_metadata_t commit_insn_d;
@@ -341,7 +351,9 @@ module spatz_vlsu
       rs1       : mem_spatz_req.rs1[2:0],
       is_load   : mem_spatz_req.op_mem.is_load,
       is_strided: mem_is_strided,
-      is_indexed: mem_is_indexed
+      is_indexed: mem_is_indexed,
+      is_indexed_blk: mem_is_indexed_blk
+
   };
 
   always_comb begin: queue_control
@@ -422,34 +434,117 @@ module spatz_vlsu
   // Pending indexes
   logic [NrMemPorts-1:0] pending_index;
 
+
   // Calculate the memory address for each memory port
   addr_offset_t [NrMemPorts-1:0] mem_req_addr_offset;
   for (genvar port = 0; port < NrMemPorts; port++) begin: gen_mem_req_addr
     logic [31:0] addr;
     logic [31:0] stride;
     logic [31:0] offset;
-
+    logic [31:0] index_value;
+    vlen_t blk_len;
+    vlen_t blk_bytes;
+    vlen_t data_byte_idx;
+    vlen_t data_elem_idx;
+    vlen_t blk_idx;
+    vlen_t blk_elem_off;
+    logic [2:0] blk_log2;
+    vlen_t blk_mask;
     // Pre-shuffling index offset
     typedef logic [int'(MAXEW)-1:0] maxew_t;
     maxew_t idx_offset;
-    assign idx_offset = mem_idx_counter_q[port];
+    vlen_t  idx_offset_full;
+    logic [1:0] data_index_width_diff;
+    logic [idx_width(N_FU*ELENB)-1:0] word_index;
 
     always_comb begin
       stride = mem_is_strided ? mem_spatz_req.rs2 >> mem_spatz_req.vtype.vsew : 'd1;
+      index_value     = '0;
+      blk_len         = '0;
+      blk_bytes       = '0;
+      data_byte_idx   = '0;
+      data_elem_idx   = '0;
+      blk_idx         = '0;
+      blk_elem_off    = '0;
+      blk_log2        = '0;
+      blk_mask        = '0;
+      idx_offset_full = mem_idx_counter_q[port];
+      idx_offset      = maxew_t'(idx_offset_full);
+      data_index_width_diff = '0;
+      word_index            = '0;
+      if (mem_is_indexed_any) begin
+        if (mem_is_indexed_blk) begin
+          unique case (mem_spatz_req.op_mem.blk_len)
+            BLKLEN_4: begin
+              blk_len  = vlen_t'(4);
+              blk_log2 = 3'd2;
+            end
+            BLKLEN_8: begin
+              blk_len  = vlen_t'(8);
+              blk_log2 = 3'd3;
+            end
+            BLKLEN_16: begin
+              blk_len  = vlen_t'(16);
+              blk_log2 = 3'd4;
+            end
+            default: begin
+              blk_len  = vlen_t'(1);
+              blk_log2 = 3'd0;
+            end
+          endcase
 
-      if (mem_is_indexed) begin
+          blk_bytes = blk_len << mem_spatz_req.vtype.vsew;
+          // For indexed block loads, compute the global byte index before deriving the element and block indices.
+          data_byte_idx =
+            {mem_counter_q[port][$bits(vlen_t)-1:MAXEW] << $clog2(NrMemPorts),
+             mem_counter_q[port][int'(MAXEW)-1:0]} + (port << MAXEW);
+          data_elem_idx = data_byte_idx >> mem_spatz_req.vtype.vsew;
+          blk_mask = (vlen_t'(1) << blk_log2) - 1;
+          blk_idx = data_elem_idx >> blk_log2;
+          blk_elem_off = data_elem_idx & blk_mask;
+          // Use the block index (in bytes) as the index pointer for VLXBLK.
+          // One index per block, shared across ports.
+          idx_offset_full = blk_idx << mem_spatz_req.op_mem.ew;
+          idx_offset      = maxew_t'(idx_offset_full);
+          if (mem_is_indexed_blk && port == 0) begin
+            // $display("VLXBLK: mem_cnt=%0d data_elem=%0d blk_idx=%0d blk_off=%0d idx_off=%0d vl=%0d vl_valid=%0d",
+            //          mem_counter_q[port], data_elem_idx, blk_idx, blk_elem_off,
+            //          idx_offset_full, mem_spatz_req.vl, mem_spatz_req_valid);
+          end
+        end
+
         // What is the relationship between data and index width?
-        automatic logic [1:0] data_index_width_diff = int'(mem_spatz_req.vtype.vsew) - int'(mem_spatz_req.op_mem.ew);
+        data_index_width_diff = int'(mem_spatz_req.vtype.vsew) - int'(mem_spatz_req.op_mem.ew);
 
-        // Pointer to index
-        automatic logic [idx_width(N_FU*ELENB)-1:0] word_index = (port << (MAXEW - data_index_width_diff)) + (maxew_t'(idx_offset << data_index_width_diff) >> data_index_width_diff) + (maxew_t'(idx_offset >> (MAXEW - data_index_width_diff)) << (MAXEW - data_index_width_diff)) * NrMemPorts;
+        // Pointer to index (read idx from vs2)
+        if (mem_is_indexed_blk) begin
+          // One index per block (group), so use the block index directly.
+          // idx_offset_full is byte address within the index stream; only keep
+          // the byte offset inside the currently addressed vs2 word.
+          word_index = idx_offset_full[VS2_WORD_SHIFT-1:0];
+        end else begin
+          word_index = (port << (MAXEW - data_index_width_diff)) +
+                       (maxew_t'(idx_offset << data_index_width_diff) >> data_index_width_diff) +
+                       (maxew_t'(idx_offset >> (MAXEW - data_index_width_diff)) << (MAXEW - data_index_width_diff)) * NrMemPorts;
+        end
 
         // Index
         unique case (mem_spatz_req.op_mem.ew)
-          EW_8 : offset   = $signed(vrf_rdata_i[1][8 * word_index +: 8]);
-          EW_16: offset   = $signed(vrf_rdata_i[1][8 * word_index +: 16]);
-          default: offset = $signed(vrf_rdata_i[1][8 * word_index +: 32]);
+          EW_8:  index_value = {24'b0, vrf_rdata_i[1][8 * word_index +: 8]};
+          EW_16: index_value = {16'b0, vrf_rdata_i[1][8 * word_index +: 16]};
+          default: index_value = vrf_rdata_i[1][8 * word_index +: 32];
         endcase
+        if (mem_is_indexed_blk && port == 0) begin
+          // $display(" word_index=%0d index_value=%0d", word_index, index_value);
+        end
+
+        if (mem_is_indexed_blk) begin
+          // Word-granular block load: base + element offset within block
+          offset = (index_value * blk_bytes) + (blk_elem_off << mem_spatz_req.vtype.vsew);
+        end else begin
+          offset = index_value;
+        end
+
       end else begin
         offset = ({mem_counter_q[port][$bits(vlen_t)-1:MAXEW] << $clog2(NrMemPorts), mem_counter_q[port][int'(MAXEW)-1:0]} + (port << MAXEW)) * stride;
       end
@@ -457,8 +552,12 @@ module spatz_vlsu
       addr                      = mem_spatz_req.rs1 + offset;
       mem_req_addr[port]        = (addr >> MAXEW) << MAXEW;
       mem_req_addr_offset[port] = addr[int'(MAXEW)-1:0];
-
-      pending_index[port] = (mem_idx_counter_q[port][$clog2(NrWordsPerVector*ELENB)-1:0] >> MAXEW) != (vs2_vreg_addr & ((1'b1 << $clog2(NrWordsPerVector))-1));
+      // For indexed block loads, the index vector is byte-addressed; advance the vs2 word
+      // when idx_offset_full crosses an ELENB boundary.
+      pending_index[port] =
+        (idx_offset_full[$clog2(NrWordsPerVector*VS2_WORD_BYTES)-1:0] >>
+         (mem_is_indexed_blk ? VS2_WORD_SHIFT : int'(MAXEW))) !=
+        (vs2_vreg_addr & ((1'b1 << $clog2(NrWordsPerVector))-1));
     end
   end: gen_mem_req_addr
 
@@ -545,6 +644,7 @@ module spatz_vlsu
   assign commit_is_addr_unaligned = commit_insn_q.rs1[int'(MAXEW)-1:0] != '0;
 
   // Do we have to access every single element on its own
+
   logic commit_is_single_element_operation;
   assign commit_is_single_element_operation = commit_is_addr_unaligned || commit_insn_q.is_strided || commit_insn_q.is_indexed || (commit_insn_q.vstart != '0);
 
@@ -577,6 +677,7 @@ module spatz_vlsu
       .usage_o   (/* Unused */                                                         )
     );
   end: gen_offset_queue
+
 
   ///////////////////////
   //  Output Register  //
@@ -619,6 +720,8 @@ module spatz_vlsu
   assign vlsu_rsp_o       = vrf_req_q.rsp_valid && vrf_req_valid_q ? vrf_req_q.rsp   : '{id: commit_insn_q.id, default: '0};
   assign vlsu_rsp_valid_o = vrf_req_q.rsp_valid && vrf_req_valid_q ? vrf_req_ready_q : vlsu_finished_req && !commit_insn_q.is_load;
 
+
+
   //////////////
   // Counters //
   //////////////
@@ -654,7 +757,7 @@ module spatz_vlsu
       commit_operation_valid[fu] = commit_insn_valid && (commit_counter_q[fu] != max_elements) && (catchup[fu] || (!catchup[fu] && ~|catchup));
       commit_operation_last[fu]  = commit_operation_valid[fu] && ((max_elements - commit_counter_q[fu]) <= (commit_is_single_element_operation ? commit_single_element_size : ELENB));
       commit_counter_delta[fu]   = !commit_operation_valid[fu] ? vlen_t'('d0) : commit_is_single_element_operation ? vlen_t'(commit_single_element_size) : commit_operation_last[fu] ? (max_elements - commit_counter_q[fu]) : vlen_t'(ELENB);
-      commit_counter_en[fu]      = commit_operation_valid[fu] && (commit_insn_q.is_load && vrf_req_valid_d && vrf_req_ready_d) || (!commit_insn_q.is_load && vrf_rvalid_i[0] && vrf_re_o[0] && (!mem_is_indexed || vrf_rvalid_i[1]));
+      commit_counter_en[fu]      = commit_operation_valid[fu] && (commit_insn_q.is_load && vrf_req_valid_d && vrf_req_ready_d) || (!commit_insn_q.is_load && vrf_rvalid_i[0] && vrf_re_o[0] && (!mem_is_indexed_any || vrf_rvalid_i[1]));
       commit_counter_max[fu]     = max_elements;
     end
   end
@@ -692,9 +795,67 @@ module spatz_vlsu
       mem_counter_en[port]    = spatz_mem_req_ready[port] && spatz_mem_req_valid[port];
       mem_counter_max[port]   = max_elements;
 
-      // Index counter
-      mem_idx_counter_d[port]     = mem_counter_d[port];
-      mem_idx_counter_delta[port] = !mem_operation_valid[port] ? 'd0 : mem_idx_single_element_size;
+      if (mem_is_indexed_blk && port == 0 && mem_counter_q[port] == 0 && mem_spatz_req_valid) begin
+        // $display("  max_elements=%0d (vl=%0d)", max_elements, mem_spatz_req.vl);
+      end
+
+  if (mem_is_indexed_blk) begin
+        vlen_t blk_len;
+        vlen_t data_elem_idx;
+        vlen_t blk_elem_off;
+        vlen_t data_elem_idx_start;
+        vlen_t blk_idx_start;
+        logic [2:0] blk_log2;
+        vlen_t blk_mask;
+        vlen_t elems_per_beat;
+        logic last_beat_in_block;
+
+        unique case (mem_spatz_req.op_mem.blk_len)
+          BLKLEN_4: begin
+            blk_len  = vlen_t'(4);
+            blk_log2 = 3'd2;
+          end
+          BLKLEN_8: begin
+            blk_len  = vlen_t'(8);
+            blk_log2 = 3'd3; //log2 of 8
+          end
+          BLKLEN_16: begin
+            blk_len  = vlen_t'(16);
+            blk_log2 = 3'd4;
+          end
+          default: begin
+            blk_len  = vlen_t'(1);
+            blk_log2 = 3'd0;
+          end
+        endcase
+        // vd2
+        data_elem_idx = ({mem_counter_q[port][$bits(vlen_t)-1:MAXEW] << $clog2(NrMemPorts),
+                          mem_counter_q[port][int'(MAXEW)-1:0]} + (port << MAXEW)) >> mem_spatz_req.vtype.vsew;
+
+        blk_mask = (vlen_t'(1) << blk_log2) - 1;
+        blk_elem_off = data_elem_idx & blk_mask;
+
+        //  how many elements per MemDataWidthB beat?
+        elems_per_beat = MemDataWidthB >> mem_spatz_req.vtype.vsew;
+
+        // Is this the last beat of the block ?
+        last_beat_in_block = (blk_elem_off + elems_per_beat) >= blk_len;
+
+        // Advance index only on last beat of block
+        mem_idx_counter_delta[port] = !mem_operation_valid[port] ? 'd0 :
+                                      last_beat_in_block ? mem_idx_single_element_size : 'd0;
+
+        data_elem_idx_start = ({mem_counter_d[port][$bits(vlen_t)-1:MAXEW] << $clog2(NrMemPorts),
+                                mem_counter_d[port][int'(MAXEW)-1:0]} + (port << MAXEW)) >> mem_spatz_req.vtype.vsew;
+
+        blk_idx_start = data_elem_idx_start >> blk_log2;
+
+        mem_idx_counter_d[port] = blk_idx_start << mem_spatz_req.op_mem.ew;
+      end else begin
+        mem_idx_counter_d[port]     = mem_counter_d[port];
+        mem_idx_counter_delta[port] = !mem_operation_valid[port] ? 'd0 : mem_idx_single_element_size;
+      end
+
     end
   end
 
@@ -781,11 +942,11 @@ module spatz_vlsu
     vrf_req_d.rsp_valid = commit_insn_valid && &commit_finished_d && mem_insn_finished_d[commit_insn_q.id];
 
     // Request indexes
-    vrf_re_o[1] = mem_is_indexed;
+    vrf_re_o[1] = mem_is_indexed_any;
 
     // Count which vs2 element we should load (indexed loads)
     vs2_elem_id_d = vs2_elem_id_q;
-    if (&(pending_index ^ ~mem_operation_valid) && mem_is_indexed)
+    if (&(pending_index ^ ~mem_operation_valid) && mem_is_indexed_any)
       vs2_elem_id_d = vs2_elem_id_q + 1;
     if (mem_spatz_req_ready)
       vs2_elem_id_d = '0;
@@ -802,14 +963,14 @@ module spatz_vlsu
 
           // Shift data to correct position if we have an unaligned memory request
           if (MAXEW == EW_32)
-            unique case ((commit_insn_q.is_strided || commit_insn_q.is_indexed) ? vreg_addr_offset[port] : commit_insn_q.rs1[1:0])
+            unique case ( ((commit_insn_q.is_strided || commit_insn_q.is_indexed)&&! commit_insn_q.is_indexed_blk) ? vreg_addr_offset[port] : commit_insn_q.rs1[1:0])
               2'b01: data   = {data[7:0], data[31:8]};
               2'b10: data   = {data[15:0], data[31:16]};
               2'b11: data   = {data[23:0], data[31:24]};
               default: data = data;
             endcase
           else
-            unique case ((commit_insn_q.is_strided || commit_insn_q.is_indexed) ? vreg_addr_offset[port] : commit_insn_q.rs1[2:0])
+            unique case ( ((commit_insn_q.is_strided || commit_insn_q.is_indexed)&&! commit_insn_q.is_indexed_blk) ? vreg_addr_offset[port] : commit_insn_q.rs1[2:0])
               3'b001: data  = {data[7:0], data[63:8]};
               3'b010: data  = {data[15:0], data[63:16]};
               3'b011: data  = {data[23:0], data[63:24]};
@@ -824,7 +985,7 @@ module spatz_vlsu
           rob_pop[port] = rob_rvalid[port] && vrf_req_valid_d && vrf_req_ready_d && commit_counter_en[port];
 
           // Shift data to correct position if we have a strided memory access
-          if (commit_insn_q.is_strided || commit_insn_q.is_indexed)
+          if (commit_insn_q.is_strided || commit_insn_q.is_indexed|| commit_insn_q.is_indexed_blk)
             if (MAXEW == EW_32)
               unique case (commit_counter_q[port][1:0])
                 2'b01: data   = {data[23:0], data[31:24]};
@@ -875,7 +1036,7 @@ module spatz_vlsu
 `endif
         if (!rob_full[port] && !offset_queue_full[port] && mem_operation_valid[port]) begin
           rob_req_id[port]     = spatz_mem_req_ready[port] & spatz_mem_req_valid[port];
-          mem_req_lvalid[port] = (!mem_is_indexed || (vrf_rvalid_i[1] && !pending_index[port])) && mem_spatz_req.op_mem.is_load;
+          mem_req_lvalid[port] = (!mem_is_indexed_any || (vrf_rvalid_i[1] && !pending_index[port])) && mem_spatz_req.op_mem.is_load;
           mem_req_id[port]     = rob_id[port];
           mem_req_last[port]   = mem_operation_last[port];
         end
@@ -889,7 +1050,7 @@ module spatz_vlsu
         for (int unsigned port = 0; port < NrMemPorts; port++) begin
           rob_wdata[port]  = vrf_rdata_i[0][ELEN*port +: ELEN];
           rob_wid[port]    = rob_id[port];
-          rob_req_id[port] = vrf_rvalid_i[0] && (!mem_is_indexed || vrf_rvalid_i[1]);
+          rob_req_id[port] = vrf_rvalid_i[0] && (!mem_is_indexed_any || vrf_rvalid_i[1]);
           rob_push[port]   = rob_req_id[port];
         end
       end
@@ -900,7 +1061,7 @@ module spatz_vlsu
           automatic logic [63:0] data = rob_rdata[port];
 
           // Shift data to lsb if we have a strided or indexed memory access
-          if (mem_is_strided || mem_is_indexed)
+          if ((mem_is_strided || mem_is_indexed) && !mem_is_indexed_blk)
             if (MAXEW == EW_32)
               unique case (mem_counter_q[port][1:0])
                 2'b01: data = {data[7:0], data[31:8]};
@@ -920,16 +1081,16 @@ module spatz_vlsu
                 default:; // Do nothing
               endcase
 
-          // Shift data to correct position if we have an unaligned memory request
+// Shift data to correct position if we have an unaligned memory request// vlxblk is bacisally unit stride load so we dont include it here
           if (MAXEW == EW_32)
-            unique case ((mem_is_strided || mem_is_indexed) ? mem_req_addr_offset[port] : mem_spatz_req.rs1[1:0])
+            unique case (((mem_is_strided || mem_is_indexed) && !mem_is_indexed_blk) ? mem_req_addr_offset[port] : mem_spatz_req.rs1[1:0])
               2'b01: mem_req_data[port]   = {data[23:0], data[31:24]};
               2'b10: mem_req_data[port]   = {data[15:0], data[31:16]};
               2'b11: mem_req_data[port]   = {data[7:0], data[31:8]};
               default: mem_req_data[port] = data;
             endcase
           else
-            unique case ((mem_is_strided || mem_is_indexed) ? mem_req_addr_offset[port] : mem_spatz_req.rs1[2:0])
+            unique case (((mem_is_strided || mem_is_indexed) && !mem_is_indexed_blk) ? mem_req_addr_offset[port] : mem_spatz_req.rs1[2:0])
               3'b001: mem_req_data[port]  = {data[55:0], data[63:56]};
               3'b010: mem_req_data[port]  = {data[47:0], data[63:48]};
               3'b011: mem_req_data[port]  = {data[39:0], data[63:40]};
@@ -947,7 +1108,7 @@ module spatz_vlsu
 
           // Create byte enable signal for memory request
           if (mem_is_single_element_operation) begin
-            automatic logic [$clog2(ELENB)-1:0] shift = (mem_is_strided || mem_is_indexed) ? mem_req_addr_offset[port] : mem_counter_q[port][$clog2(ELENB)-1:0] + commit_insn_q.rs1[int'(MAXEW)-1:0];
+            automatic logic [$clog2(ELENB)-1:0] shift = (mem_is_strided || mem_is_indexed_any) ? mem_req_addr_offset[port] : mem_counter_q[port][$clog2(ELENB)-1:0] + commit_insn_q.rs1[int'(MAXEW)-1:0];
             automatic logic [MemDataWidthB-1:0] mask  = '1;
             case (mem_spatz_req.vtype.vsew)
               EW_8 : mask   = 1;

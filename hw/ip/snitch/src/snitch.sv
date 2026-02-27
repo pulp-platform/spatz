@@ -2063,8 +2063,9 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
       end
 `endif
       // FP Sequencer
-      FREP_O,
-      FREP_I: begin
+      // FREP_O,
+      // FREP_I: begin
+      FREP_O: begin
         if (FP_EN) begin
           opa_select = Reg;
           write_rd = 1'b0;
@@ -2553,7 +2554,18 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
       riscv_instr::VLUXEI8_V,
       riscv_instr::VLUXEI16_V,
       riscv_instr::VLUXEI32_V,
-      riscv_instr::VLUXEI64_V: begin
+      riscv_instr::VLUXEI64_V,
+      riscv_instr::VLUXEI64_V,
+      riscv_instr::VLXBLK4EI8_V,
+      riscv_instr::VLXBLK4EI16_V,
+      riscv_instr::VLXBLK6EI8_V,
+      riscv_instr::VLXBLK6EI16_V,
+      riscv_instr::VLXBLK8EI8_V,
+      riscv_instr::VLXBLK8EI16_V,
+      riscv_instr::VLXBLK12EI8_V,
+      riscv_instr::VLXBLK12EI16_V,
+      riscv_instr::VLXBLK16EI8_V,
+      riscv_instr::VLXBLK16EI16_V: begin
         if (RVV) begin
           write_rd        = 1'b0;
           uses_rd         = 1'b0;
