@@ -22,12 +22,22 @@
 #define SPMV_NUM_CORES 0
 #endif
 
+enum {
+  SPMV_M = (uint32_t)(sizeof(spmv_result) / sizeof(spmv_result[0])),
+  SPMV_N = (uint32_t)(sizeof(spmv_x_dram) / sizeof(spmv_x_dram[0])),
+  SPMV_K = (uint32_t)(sizeof(spmv_col_idx_dram) / sizeof(spmv_col_idx_dram[0])),
+};
+
 static T *row_val;
 static T *x_vec;
 static T *result;
 static uint32_t *row_ptr;
 static uint32_t *col_idx;
 static uint32_t *x_off;
+
+// In cache mode we keep temporary arrays in .data (L2-backed, cacheable).
+static uint32_t x_off_cache[SPMV_K] __attribute__((section(".data"), aligned(8)));
+static T result_cache[SPMV_M] __attribute__((section(".data"), aligned(8)));
 
 static inline void *l1alloc_aligned(size_t size, size_t alignment) {
   uintptr_t raw = (uintptr_t)snrt_l1alloc(size + alignment - 1);
@@ -62,7 +72,7 @@ int main() {
   uint32_t spm_size = 120;
 #endif
 
-  const uint32_t num_fpu = sizeof(T) / 2;
+  const uint32_t num_fpu = 4;
 
   if (cid == 0) {
     l1d_init(spm_size);
@@ -85,8 +95,8 @@ int main() {
 
 #if USE_CACHE == 1
   if (cid == 0) {
-    x_off = (uint32_t *)l1alloc_aligned(spmv_l.K * sizeof(uint32_t), 8);
-    result = (T *)l1alloc_aligned(spmv_l.M * sizeof(T), 8);
+    x_off = x_off_cache;
+    result = result_cache;
     build_offsets(x_off, spmv_col_idx_dram, spmv_l.K);
   }
 
@@ -167,6 +177,7 @@ int main() {
 
       printf("\n----- (%u x %u, nnz=%u) spmv -----\n", spmv_l.M, spmv_l.N,
              spmv_l.K);
+      printf("LMUL setting: m%d\n", SPMV_LMUL);
       printf("Active cores: %u / %u\n", num_cores, num_cores_hw);
       printf("The first iter takes %u cycles.\n", timer_1iter);
       printf("The best execution took %u cycles.\n", timer_best);

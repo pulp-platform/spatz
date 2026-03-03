@@ -6,13 +6,13 @@
 
 {
     kernel: "SPMV"
-    M: 64
-    N: 64
-    K: 256
+    M: 512
+    N: 512
+    K: 32768
     prec: 64
     seed: 42
     power_of_two: true
     debug_comment: false
-    min_per_row: 8
-    max_per_row: 8
+    min_per_row: 64
+    max_per_row: 64
 }

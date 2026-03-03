@@ -209,5 +209,5 @@ python gen_data.py -c spmv.json --debug-comment -v
 ## Example
 
 ```sh
-python sw/spatzBenchmarks/spmv/script/gen_data.py -c sw/spatzBenchmarks/spmv/script/spmv.json --K 256 -v --debug-comment --min-nnz-per-row 8
+python sw/spatzBenchmarks/spmv/script/gen_data.py -c sw/spatzBenchmarks/spmv/script/spmv.json -v --debug-comment
 ```
