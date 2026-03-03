@@ -1,0 +1,18 @@
+// Copyright 2025 ETH Zurich and University of Bologna.
+// Solderpad Hardware License, Version 0.51, see LICENSE for details.
+// SPDX-License-Identifier: SHL-0.51
+
+// Parameters for CSR SpMV data generation.
+
+{
+    kernel: "SPMV"
+    M: 64
+    N: 64
+    K: 256
+    prec: 64
+    seed: 42
+    power_of_two: true
+    debug_comment: false
+    min_per_row: 8
+    max_per_row: 8
+}

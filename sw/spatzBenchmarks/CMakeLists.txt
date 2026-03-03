@@ -111,6 +111,7 @@ add_library(hp-fmatmul hp-fmatmul/kernel/hp-fmatmul.c)
 
 add_spatz_test_twoParam_type(dp-gemv gemv/main.c 64  128 64)
 add_spatz_test_twoParam_type(sp-gemv gemv/main.c 128 128 32)
+add_spatz_test_threeParam_type(dp-spmv spmv/main.c 64 64 512 64)
 
 # add_library(widening-hp-fmatmul widening-hp-fmatmul/kernel/widening-fmatmul.c)
 # add_library(widening-bp-fmatmul widening-bp-fmatmul/kernel/widening-fmatmul.c)
