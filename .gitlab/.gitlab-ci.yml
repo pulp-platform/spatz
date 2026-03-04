@@ -8,19 +8,8 @@ variables:
   GIT_SUBMODULE_STRATEGY: none
   ROOT_DIR: '$CI_PROJECT_DIR'
   APPS: "tests"
-  RUST_LOG: 'memora=debug'
-  VERILATOR_ROOT: '$CI_PROJECT_DIR/install/verilator/share/verilator'
-  VERILATOR_BIN: '$CI_PROJECT_DIR/install/verilator/bin'
   OBJCACHE: ''
   RISCV_WARNINGS: '-Werror'
-  CC: 'gcc-11.2.0'
-  CXX: 'g++-11.2.0'
-  # Use the system cmake by absolute path: the sepp `cmake` wrapper depends on individual git runner
-  CMAKE: '/usr/bin/cmake'
-  CTEST: '/usr/bin/ctest'
-  VCS: 'vcs-2022.06'
-  PYTHON: 'python3'
-  BENDER_INSTALL_DIR: '/usr/local/bin'
 
 workflow:
   rules:
@@ -29,59 +18,13 @@ workflow:
     - if: $CI_COMMIT_REF_NAME
 
 before_script:
-  - export PATH="$VERILATOR_BIN:$HOME/.local/bin:$PATH"
-  - export PYTHONPATH="$CI_PROJECT_DIR/install/python-deps:$PYTHONPATH"
-  - env
+  - source util/chips-it-env.sh
+  - make update_opcodes
 
 stages:
-  - tools
   - lint
   - test
   - benchmark
-
-###########
-#  Tools  #
-###########
-
-tc-gcc:
-  stage: tools
-  script:
-    - |
-      if ! $CI_PROJECT_DIR/util/memora_retry.sh lookup tc-riscv-gcc; then
-        make sw/toolchain/riscv-gnu-toolchain tc-riscv-gcc
-        $CI_PROJECT_DIR/util/memora_retry.sh insert tc-riscv-gcc
-      fi
-
-tc-llvm:
-  stage: tools
-  script:
-    - |
-      if ! $CI_PROJECT_DIR/util/memora_retry.sh lookup tc-llvm; then
-        make sw/toolchain/llvm-project tc-llvm
-        $CI_PROJECT_DIR/util/memora_retry.sh insert tc-llvm
-      fi
-
-verilator:
-  stage: tools
-  script:
-    - |
-      if ! $CI_PROJECT_DIR/util/memora_retry.sh lookup verilator; then
-        export VERILATOR_CI="--disable-defenv"
-        # Verilator requires a more recent version of python than the default one.
-        export PYTHON3=$(which python3)
-        make sw/toolchain/verilator verilator
-        $CI_PROJECT_DIR/util/memora_retry.sh insert verilator
-      fi
-
-python-deps:
-  stage: tools
-  script:
-    - |
-      if ! $CI_PROJECT_DIR/util/memora_retry.sh lookup python-deps; then
-        PIP_USER=0 python3 -m pip install --target=$CI_PROJECT_DIR/install/python-deps -r $CI_PROJECT_DIR/requirements.txt
-        PIP_USER=0 python3 -m pip install --target=$CI_PROJECT_DIR/install/python-deps torch --index-url https://download.pytorch.org/whl/cpu
-        $CI_PROJECT_DIR/util/memora_retry.sh insert python-deps
-      fi
 
 ##########
 #  Lint  #
@@ -91,162 +34,78 @@ python-deps:
 code-style:
   stage: lint
   script:
-    # Download LLVM and Python deps
-    - $CI_PROJECT_DIR/util/memora_retry.sh get tc-llvm
-    - $CI_PROJECT_DIR/util/memora_retry.sh get python-deps
     - ./util/lint.sh
-  needs: ["tc-llvm", "python-deps"]
 
 ###########
-#  Build  #
+#  Tests  #
 ###########
+
+.sim-test:
+  stage: test
+  script:
+    - cd hw/system/spatz_cluster
+    - make ${TOOL} SPATZ_CLUSTER_CFG=${cfg}
+    - make spatz_cluster.${TOOL}.test SUITE=${SUITE} CTEST_ARGS="${CTEST_ARGS}"
 
 # Runtime tests
 snRuntime-test-vsim:
-  stage: test
-  script:
-    # Download LLVM, GCC, and Python deps
-    - $CI_PROJECT_DIR/util/memora_retry.sh get tc-llvm
-    - $CI_PROJECT_DIR/util/memora_retry.sh get tc-riscv-gcc
-    - $CI_PROJECT_DIR/util/memora_retry.sh get python-deps
-    # Download bender
-    - make bender
-    # Update opcodes
-    - make update_opcodes
-    # Compile the binaries
-    - cd hw/system/spatz_cluster
-    - make sw.vsim SPATZ_CLUSTER_CFG=${cfg}.hjson -B
-    # Run the test
-    - cd sw/build/snRuntime
-    - ${CTEST} --output-on-failure
-  needs: ["tc-llvm", "tc-gcc", "python-deps"]
+  extends: .sim-test
+  variables:
+    TOOL: vsim
+    SUITE: snRuntime
+    CTEST_ARGS: '--output-on-failure'
   parallel:
     matrix:
-      - { cfg: spatz_cluster.default.dram }
-      - { cfg: spatz_cluster.smallvrf.dram }
-      - { cfg: spatz_cluster.doublebw.dram }
+      - { cfg: [default, smallvrf, doublebw] }
 
 snRuntime-test-vcs:
-  stage: test
-  script:
-    # Download LLVM, GCC, and Python deps
-    - $CI_PROJECT_DIR/util/memora_retry.sh get tc-llvm
-    - $CI_PROJECT_DIR/util/memora_retry.sh get tc-riscv-gcc
-    - $CI_PROJECT_DIR/util/memora_retry.sh get python-deps
-    # Download bender
-    - make bender
-    # Update opcodes
-    - make update_opcodes
-    # Compile the binaries
-    - cd hw/system/spatz_cluster
-    - ${VCS} make sw.vcs SPATZ_CLUSTER_CFG=${cfg}.hjson -B
-    # Run the test
-    - cd sw/build/snRuntime
-    - ${CTEST} --output-on-failure
-  needs: ["tc-llvm", "tc-gcc", "python-deps"]
+  extends: .sim-test
+  variables:
+    TOOL: vcs
+    SUITE: snRuntime
+    CTEST_ARGS: '--output-on-failure'
   parallel:
     matrix:
-      - { cfg: spatz_cluster.default.dram }
-      - { cfg: spatz_cluster.smallvrf.dram }
-      - { cfg: spatz_cluster.doublebw.dram }
+      - { cfg: [default, smallvrf, doublebw] }
 
 snRuntime-test-vlt:
-  stage: test
-  script:
-    # Download LLVM, GCC, Verilator, and Python deps
-    - $CI_PROJECT_DIR/util/memora_retry.sh get tc-llvm
-    - $CI_PROJECT_DIR/util/memora_retry.sh get tc-riscv-gcc
-    - $CI_PROJECT_DIR/util/memora_retry.sh get verilator
-    - $CI_PROJECT_DIR/util/memora_retry.sh get python-deps
-    # Download bender
-    - make bender
-    # Update opcodes
-    - make update_opcodes
-    # Compile the binaries
-    - cd hw/system/spatz_cluster
-    - make sw.vlt SPATZ_CLUSTER_CFG=${cfg}.hjson -B
-    # Run the test
-    - cd sw/build/snRuntime
-    - ${CTEST} --output-on-failure
-  needs: ["tc-llvm", "tc-gcc", "verilator", "python-deps"]
+  extends: .sim-test
+  variables:
+    TOOL: vlt
+    SUITE: snRuntime
+    CTEST_ARGS: '--output-on-failure'
   parallel:
     matrix:
-      - { cfg: spatz_cluster.default.dram }
-      - { cfg: spatz_cluster.smallvrf.dram }
-      - { cfg: spatz_cluster.doublebw.dram }
+      - { cfg: [default, smallvrf, doublebw] }
 
 # RISC-V unit tests
 riscvTests-test-vlt:
-  stage: test
-  script:
-    # Download LLVM, GCC, Verilator, and Python deps
-    - $CI_PROJECT_DIR/util/memora_retry.sh get tc-llvm
-    - $CI_PROJECT_DIR/util/memora_retry.sh get tc-riscv-gcc
-    - $CI_PROJECT_DIR/util/memora_retry.sh get verilator
-    - $CI_PROJECT_DIR/util/memora_retry.sh get python-deps
-    # Download bender
-    - make bender
-    # Update opcodes
-    - make update_opcodes
-    # Compile the binaries
-    - cd hw/system/spatz_cluster
-    - ${VCS} make sw.vlt SPATZ_CLUSTER_CFG=${cfg}.hjson -B
-    # Run the test
-    - cd sw/build/riscvTests
-    - ${CTEST} --output-on-failure -j4
-  needs: ["tc-llvm", "tc-gcc", "verilator", "python-deps"]
+  extends: .sim-test
+  variables:
+    TOOL: vlt
+    SUITE: riscvTests
+    CTEST_ARGS: '--output-on-failure -j4'
   parallel:
     matrix:
-      - { cfg: spatz_cluster.default.dram }
-      - { cfg: spatz_cluster.smallvrf.dram }
-      - { cfg: spatz_cluster.32b.dram }
-      - { cfg: spatz_cluster.doublebw.dram }
-      - { cfg: spatz_cluster.4ipu.dram }
+      - { cfg: [default, smallvrf, 32b, doublebw] }
 
 # Spatz tests
 spatzBenchmarks-test-vlt:
-  stage: benchmark
-  script:
-    # Download LLVM, GCC, Verilator, and Python deps
-    - $CI_PROJECT_DIR/util/memora_retry.sh get tc-llvm
-    - $CI_PROJECT_DIR/util/memora_retry.sh get tc-riscv-gcc
-    - $CI_PROJECT_DIR/util/memora_retry.sh get verilator
-    - $CI_PROJECT_DIR/util/memora_retry.sh get python-deps
-    # Download bender
-    - make bender
-    # Update opcodes
-    - make update_opcodes
-    # Compile the binaries
-    - cd hw/system/spatz_cluster
-    - ${VCS} make sw.vlt SPATZ_CLUSTER_CFG=${cfg}.hjson -B
-    # Run the test
-    - cd sw/build/spatzBenchmarks
-    - ${CTEST} --verbose
-  needs: ["tc-llvm", "tc-gcc", "verilator", "python-deps"]
+  extends: .sim-test
+  variables:
+    TOOL: vlt
+    SUITE: spatzBenchmarks
+    CTEST_ARGS: '--output-on-failure'
   parallel:
     matrix:
-      - { cfg: spatz_cluster.default.dram }
-      - { cfg: spatz_cluster.smallvrf.dram }
-      - { cfg: spatz_cluster.32b.dram }
-      - { cfg: spatz_cluster.doublebw.dram }
-      - { cfg: spatz_cluster.4ipu.dram }
+      - { cfg: [default, smallvrf, 32b, doublebw] }
 
 spatzBenchmarks-ventaglio-test-vlt:
-  stage: benchmark
-  script:
-    # Download LLVM, GCC, Verilator, and Python deps
-    - $CI_PROJECT_DIR/util/memora_retry.sh get tc-llvm
-    - $CI_PROJECT_DIR/util/memora_retry.sh get tc-riscv-gcc
-    - $CI_PROJECT_DIR/util/memora_retry.sh get verilator
-    - $CI_PROJECT_DIR/util/memora_retry.sh get python-deps
-    # Download bender
-    - make bender
-    # Update opcodes
-    - make update_opcodes
-    # Compile the binaries
-    - cd hw/system/spatz_cluster
-    - ${VCS} make sw.vlt SPATZ_CLUSTER_CFG=spatz_cluster.ventaglio.dram.hjson -B
-    # Run only the Ventaglio sparse benchmarks
-    - cd sw/build/spatzBenchmarks
-    - ${CTEST} --verbose -R "spatzBenchmarks-rtl-sp-SpM"
-  needs: ["tc-llvm", "tc-gcc", "verilator", "python-deps"]
+  extends: .sim-test
+  variables:
+    TOOL: vlt
+    SUITE: spatzBenchmarks
+    CTEST_ARGS: '--verbose -R spatzBenchmarks-rtl-sp-SpM'
+  parallel:
+    matrix:
+      - { cfg: [ventaglio] }
