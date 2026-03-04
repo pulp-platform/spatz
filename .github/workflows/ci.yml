@@ -53,9 +53,8 @@ jobs:
       - name: Check Gitlab CI
         uses: pulp-platform/pulp-actions/gitlab-ci@v2
         # Skip on forks or pull requests from forks due to missing secrets.
-        if: github.repository == 'pulp-platform/spatz' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+        if: github.repository == 'FondazioneChipsIT/spatz' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
         with:
-          domain: iis-git.ee.ethz.ch
-          repo: github-mirror/spatz
+          domain: gitlab.chips.it
+          repo: digitalresearchline/githubmirrors/spatz
           token: ${{ secrets.GITLAB_TOKEN }}
-          poll-count: 2160
