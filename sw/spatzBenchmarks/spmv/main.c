@@ -8,7 +8,7 @@
 #include <stdio.h>
 
 #include DATAHEADER
-#include "kernel/spmv.c"
+#include "kernel/spmv.h"
 
 #if (PREC != 64)
 #error "spmv currently supports double precision only"
@@ -20,6 +20,13 @@
 // limit the kernel to a smaller number of worker cores.
 #ifndef SPMV_NUM_CORES
 #define SPMV_NUM_CORES 0
+#endif
+
+#if defined(__clang__)
+#define SPMV_PRAGMA(X) _Pragma(#X)
+#define SPMV_NO_UNROLL SPMV_PRAGMA(clang loop unroll(disable))
+#else
+#define SPMV_NO_UNROLL
 #endif
 
 enum {
@@ -77,11 +84,12 @@ int main() {
   if (cid == 0) {
     l1d_init(spm_size);
   }
+  snrt_cluster_hw_barrier();
 
 #if MEAS_1ITER == 1
-  const int measure_iter = 1;
+  volatile int measure_iter = 1;
 #else
-  const int measure_iter = 2;
+  volatile int measure_iter = 2;
 #endif
 
   unsigned int timer = (unsigned int)-1;
@@ -94,9 +102,9 @@ int main() {
       (cid < num_cores) ? (spmv_l.M * (cid + 1)) / num_cores : 0;
 
 #if USE_CACHE == 1
+  x_off = x_off_cache;
+  result = result_cache;
   if (cid == 0) {
-    x_off = x_off_cache;
-    result = result_cache;
     build_offsets(x_off, spmv_col_idx_dram, spmv_l.K);
   }
 
@@ -125,6 +133,18 @@ int main() {
 
   snrt_cluster_hw_barrier();
 
+#if USE_CACHE == 1
+  // Workaround for DRAM-link cold-start behavior: touch row-0 input lines once
+  // before entering the vector kernel.
+  if (cid == 0) {
+    volatile double warm =
+        row_val[row_ptr[0]] + x_vec[col_idx[row_ptr[0]]] + (double)row_ptr[1];
+    (void)warm;
+  }
+  snrt_cluster_hw_barrier();
+#endif
+
+  SPMV_NO_UNROLL
   for (int iter = 0; iter < measure_iter; ++iter) {
     if (cid == 0) {
       start_kernel();

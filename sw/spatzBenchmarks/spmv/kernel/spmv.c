@@ -5,12 +5,13 @@
 #include "spmv.h"
 
 #define SPMV_SMALL_ROW_THRESHOLD 4
+#define SPMV_NOINLINE __attribute__((noinline))
 
 // x_off contains 32-bit byte offsets into x. On this rv32 target, vluxei64 is
 // not available, so gather indices stay 32-bit even for fp64 data.
 #define DEFINE_SPMV_ROW_FN(FN, LMUL, VIDX, VVAL, VX, VACC)                     \
-  static inline double FN(const double *val, const uint32_t *x_off,            \
-                          const double *x, uint32_t avl) {                      \
+  static SPMV_NOINLINE double FN(const double *val, const uint32_t *x_off,     \
+                                 const double *x, uint32_t avl) {               \
     if (avl == 0) return 0.0;                                                   \
     const uint32_t orig_avl = avl;                                              \
     uint32_t vl;                                                                 \
@@ -47,8 +48,9 @@ DEFINE_SPMV_ROW_FN(spmv_row_v64b_m4, "m4", "v4", "v8", "v16", "v24")
 DEFINE_SPMV_ROW_FN(spmv_row_v64b_m8, "m8", "v4", "v8", "v16", "v24")
 
 #define DEFINE_SPMV_KERNEL(FN, ROW_FN)                                          \
-  void FN(const uint32_t *row_ptr, const uint32_t *x_off, const double *val,    \
-          const double *x, double *y, uint32_t row_start, uint32_t row_end) {   \
+  SPMV_NOINLINE void FN(const uint32_t *row_ptr, const uint32_t *x_off,         \
+                        const double *val, const double *x, double *y,           \
+                        uint32_t row_start, uint32_t row_end) {                  \
     for (uint32_t row = row_start; row < row_end; ++row) {                       \
       const uint32_t start = row_ptr[row];                                       \
       const uint32_t end = row_ptr[row + 1];                                     \
@@ -70,9 +72,9 @@ DEFINE_SPMV_KERNEL(spmv_v64b_m2, spmv_row_v64b_m2)
 DEFINE_SPMV_KERNEL(spmv_v64b_m4, spmv_row_v64b_m4)
 DEFINE_SPMV_KERNEL(spmv_v64b_m8, spmv_row_v64b_m8)
 
-void spmv_v64b(const uint32_t *row_ptr, const uint32_t *x_off, const double *val,
-               const double *x, double *y, uint32_t row_start,
-               uint32_t row_end) {
+SPMV_NOINLINE void spmv_v64b(const uint32_t *row_ptr, const uint32_t *x_off,
+                             const double *val, const double *x, double *y,
+                             uint32_t row_start, uint32_t row_end) {
 #if (SPMV_LMUL == 1)
   spmv_v64b_m1(row_ptr, x_off, val, x, y, row_start, row_end);
 #elif (SPMV_LMUL == 2)
