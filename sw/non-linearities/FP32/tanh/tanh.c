@@ -207,7 +207,7 @@ static inline void vtanh_approx_poly_clamped(const float* inp, float* out, int N
     for (; remaining > 0; remaining -= (int)vl, pin += vl, pout += vl) {
 
         // 1. Calculate Vector Length
-        asm volatile("vsetvli %0, %1, e32, m2, ta, mu"
+        asm volatile("vsetvli %0, %1, e32, m1, ta, mu"
                      : "=r"(vl) 
                      : "r"(remaining));
 
@@ -405,7 +405,7 @@ void vtanh_optimized(const float* inp, float* out,  int N) {
     
     unsigned long vl;
     // Configure VTYPE for max length (16 elements per group)
-    asm volatile("vsetvli %0, zero, e32, m1, ta, ma" : "=r"(vl)); 
+    asm volatile("vsetvli %0, zero, e32, m8, ta, ma" : "=r"(vl)); 
 
     // Loop 32 times to process 2048 elements
     for (int i = 0; i < 4; i++) {
@@ -496,7 +496,7 @@ int main(void) {
         start_kernel();
         unsigned t0 = benchmark_get_cycle();
 
-        vtanh_approx_poly_clamped(g_in + start, g_out + start, count);
+        vtanh_optimized(g_in + start, g_out + start, count);
 
         unsigned cycles = benchmark_get_cycle() - t0;
         stop_kernel();

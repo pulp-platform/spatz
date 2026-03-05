@@ -18,4 +18,7 @@ add_subdirectory(${SNITCH_SOFTWARE_DIR}/snRuntime snRuntime)
 add_subdirectory(${SNITCH_SOFTWARE_DIR}/riscvTests riscvTests)
 add_subdirectory(${SNITCH_SOFTWARE_DIR}/spatzBenchmarks spatzBenchmarks)
 add_subdirectory(${SNITCH_SOFTWARE_DIR}/non-linearities non-linearities)
+add_subdirectory(${SNITCH_SOFTWARE_DIR}/power/fp32 power_fp32)
+add_subdirectory(${SNITCH_SOFTWARE_DIR}/power/bf16 power_bf16)
+add_subdirectory(${SNITCH_SOFTWARE_DIR}/power/fp16 power_fp16)
 

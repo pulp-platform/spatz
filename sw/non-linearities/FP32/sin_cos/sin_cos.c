@@ -394,7 +394,7 @@ static inline void vfcos_hw_test(const float* inp, float* out, int N) {
 
   unsigned long vl;
   // Fixed VTYPE: e32, m4
-  asm volatile("vsetvli %0, zero, e32, m1, ta, ma" : "=r"(vl) :: "memory");
+  asm volatile("vsetvli %0, zero, e32, m8, ta, ma" : "=r"(vl) :: "memory");
 
   // 4 vector-groups per iteration => 4*vl elements/iter
   const int iters = N / (int)(4ul * vl);
@@ -425,6 +425,74 @@ static inline void vfcos_hw_test(const float* inp, float* out, int N) {
     pin  += 4ul * vl;
     pout += 4ul * vl;
   }
+}
+static inline void fast_sincos_cheapest_corrected_f32_m2_v1(
+    const float* inp, float* outs, float* outc, int N)
+{
+    const float C2      = -0.49670f;
+    const float S3      = -0.16605f;
+    const float INVPIO2 =  0.63661977f;
+    const float PIO2_HI =  1.57079632f;
+    const float PIO2_LO =  6.12323399e-17f;
+
+    while (N > 0) {
+        size_t vl;
+        asm volatile("vsetvli %0, %1, e32, m2, ta, ma" : "=r"(vl) : "r"(N));
+        asm volatile("vle32.v v4, (%0)" :: "r"(inp));
+
+        // Range reduction
+        asm volatile("vfmul.vf v2, v4, %0"   :: "f"(INVPIO2));
+        asm volatile("vfcvt.x.f.v v22, v2");
+        asm volatile("vfcvt.f.x.v v2, v22");
+        asm volatile("vfnmsac.vf v4, %0, v2" :: "f"(PIO2_HI));
+        asm volatile("vfnmsac.vf v4, %0, v2" :: "f"(PIO2_LO));  // r in v4
+
+        asm volatile("vfmul.vv v6, v4, v4");  // z = r*r
+
+        // Cos poly: 1 + C2*z → v8
+        asm volatile("vfmv.v.f v8, %0"        :: "f"(1.0f));
+        asm volatile("vfmacc.vf v8, %0, v6"   :: "f"(C2));
+
+        // Sin poly: r*(1 + S3*z) → v10
+        asm volatile("vfmv.v.f v10, %0"       :: "f"(1.0f));
+        asm volatile("vfmacc.vf v10, %0, v6"  :: "f"(S3));
+        asm volatile("vfmul.vv v10, v10, v4");
+
+        // bit0 → float 0.0 or 1.0 in v24
+        asm volatile("vand.vi  v24, v22, 1");          // bit0 int
+        asm volatile("vfcvt.f.xu.v v24, v24");         // 0.0 or 1.0
+
+        // Arithmetic blend replacing vmerge:
+        //   cos_mag = cos_poly + bit0*(sin_poly - cos_poly)
+        //   sin_mag = sin_poly + bit0*(cos_poly - sin_poly)
+        asm volatile("vfsub.vv v26, v10, v8");         // sin-cos
+        asm volatile("vfmacc.vv v8, v24, v26");        // cos_mag → v8
+        asm volatile("vfsub.vv v26, v8, v10");         // (new cos_mag) - sin_poly
+        // Actually cleaner: compute sin_mag before v8 is modified:
+
+        // --- Redo cleanly: compute both before any in-place write ---
+        // Step back: restore cos_poly to v8 (already there), sin_poly to v10
+        // diff = sin - cos (v26), bit0_f in v24
+        // cos_out = cos + bit0*(sin-cos)  = v8 + v24*v26
+        // sin_out = sin - bit0*(sin-cos)  = v10 - v24*v26
+
+        asm volatile("vfsub.vv v26, v10, v8");         // diff = sin-cos
+        asm volatile("vfmacc.vv v8,  v24, v26");       // cos_mag = cos + bit0*diff
+        asm volatile("vfnmsac.vv v10, v24, v26");      // sin_mag = sin - bit0*diff
+
+        // Signs: cos sign = bit1^bit0, sin sign = bit1
+        asm volatile("vand.vi   v24, v22, 1");         // bit0 int (recompute)
+        asm volatile("vsrl.vi   v26, v22, 1");         // bit1 int
+        asm volatile("vxor.vv   v28, v26, v24");       // bit1^bit0 → cos sign bit
+        asm volatile("vsll.vi   v28, v28, 31");
+        asm volatile("vsll.vi   v26, v26, 31");
+        asm volatile("vfsgnjx.vv v8,  v8,  v28");      // cos sign
+        asm volatile("vfsgnjx.vv v10, v10, v26");      // sin sign
+
+        asm volatile("vse32.v v10, (%0)" :: "r"(outs));
+        asm volatile("vse32.v v8,  (%0)" :: "r"(outc));
+        inp  += vl; outs += vl; outc += vl; N -= vl;
+    }
 }
 /* Fast single-output cosf with RVV (SEW=32, LMUL=4), strip-mined & maskless.
    Requires FRM = RNE so vfcvt.x.f.v does round-to-nearest-even for k. */
@@ -732,6 +800,7 @@ static inline void fast_sincos_poly_f32_m2_strip(
         remaining -= (int)vl_local;
     }
 }
+
 
 // Wrapper that selects the LMUL variant based on LMUL_MODE
 static inline void fast_sincos_poly_f32_strip(
