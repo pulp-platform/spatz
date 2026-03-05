@@ -412,7 +412,7 @@ void vcosh_optimized_v8(const float* inp, float* out,  int N) {
     
     unsigned long vl;
     // Configure VTYPE for max length (128 elements per group)
-    asm volatile("vsetvli %0, zero, e32, m8, ta, ma" : "=r"(vl)); 
+    asm volatile("vsetvli %0, zero, e32, m1, ta, ma" : "=r"(vl)); 
 
     // Loop 4 times to process 2048 elements
     for (int i = 0; i < 4; i++) {
@@ -590,7 +590,7 @@ int main(void) {
         start_kernel();
         unsigned t0 = benchmark_get_cycle();
 
-        vcosh_optimized(g_in + start, g_out + start, count);
+        vcosh_optimized_m4(g_in + start, g_out + start, count);
 
         unsigned cycles = benchmark_get_cycle() - t0;
         stop_kernel();

@@ -350,7 +350,7 @@ static inline void vlogf_optimized_m4(const float* inp, float* out, int N) {
 
   unsigned long vl;
   // Fixed VTYPE: e32, m4
-  asm volatile("vsetvli %0, zero, e32, m8, ta, ma" : "=r"(vl) :: "memory");
+  asm volatile("vsetvli %0, zero, e32, m1, ta, ma" : "=r"(vl) :: "memory");
 
   // 4 vector-groups per iteration => 4*vl elements/iter
   const int iters = N / (int)(4ul * vl);
@@ -396,7 +396,7 @@ static inline void vlogf_m8_cheapest(const float* inp, float* out, int N)
     while (remaining > 0) {
         size_t vl;
         asm volatile(
-            "vsetvli %0, %1, e32, m1, ta, ma" 
+            "vsetvli %0, %1, e32, m8, ta, ma" 
             : "=r"(vl) : "r"(remaining)
         );
 
@@ -404,30 +404,30 @@ static inline void vlogf_m8_cheapest(const float* inp, float* out, int N)
             // -----------------------------------------------------------------
             // 1. Load Data (Interpret bits as Integer)
             // -----------------------------------------------------------------
-            "vle32.v v8, (%2) \n\t"        // v8 = I_x (Raw Bits)
+            "vle32.v v0, (%2) \n\t"        // v8 = I_x (Raw Bits)
 
             // -----------------------------------------------------------------
             // 2. Integer Subtract (The "Log" step)
             // -----------------------------------------------------------------
             // Result = I_x - Bias
-            "vsub.vx v8, v8, %3 \n\t"      // v8 is now a signed integer
+            "vsub.vx v8, v0, %3 \n\t"      // v8 is now a signed integer
 
             // -----------------------------------------------------------------
             // 3. Convert to Float
             // -----------------------------------------------------------------
             // Cast the integer result directly to float
-            "vfcvt.f.x.v v8, v8 \n\t"      // v8 is now float(I_x - Bias)
+            "vfcvt.f.x.v v16, v8 \n\t"      // v8 is now float(I_x - Bias)
 
             // -----------------------------------------------------------------
             // 4. Scale to Natural Log
             // -----------------------------------------------------------------
             // Final = float_val * (ln2 / 2^23)
-            "vfmul.vf v8, v8, %4 \n\t"     // v8 = ln(x)
+            "vfmul.vf v24, v16, %4 \n\t"     // v16 = ln(x)
 
             // -----------------------------------------------------------------
             // 5. Store
             // -----------------------------------------------------------------
-            "vse32.v v8, (%5) \n\t"
+            "vse32.v v24, (%5) \n\t"
 
             : "=&r"(vl)                    // %0
             : "r"(remaining),              // %1
@@ -606,10 +606,11 @@ int main(void) {
 
     // Per-core compute
     if (count > 0) {
+
         start_kernel();
         unsigned t0 = benchmark_get_cycle();
 
-        vlogf_m8_cheapest(g_in + start, g_out + start, count);
+        vlogf_optimized_m4(g_in + start, g_out + start, count);
 
         unsigned cycles = benchmark_get_cycle() - t0;
         stop_kernel();

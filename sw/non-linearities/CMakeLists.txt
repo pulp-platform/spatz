@@ -52,5 +52,12 @@ add_snitch_test(tanh /usr/scratch2/pisoc1/msc25h16/spatz/sw/non-linearities/FP32
 add_snitch_test(cosh /usr/scratch2/pisoc1/msc25h16/spatz/sw/non-linearities/FP32/cosh/cosh.c)
 add_snitch_test(exp /usr/scratch2/pisoc1/msc25h16/spatz/sw/non-linearities/FP32/exp/exp.c)
 add_snitch_test(rec /usr/scratch2/pisoc1/msc25h16/spatz/sw/non-linearities/FP32/rec/rec.c)
+add_snitch_test(exp16 /usr/scratch2/pisoc1/msc25h16/spatz/sw/non-linearities/FP16/exp/exp.c)
+add_snitch_test(cosh16 /usr/scratch2/pisoc1/msc25h16/spatz/sw/non-linearities/FP16/cosh/cosh.c)
+add_snitch_test(tanh16 /usr/scratch2/pisoc1/msc25h16/spatz/sw/non-linearities/FP16/tanh/tanh.c)
+add_snitch_test(rec16 /usr/scratch2/pisoc1/msc25h16/spatz/sw/non-linearities/FP16/rec/rec.c)
+add_snitch_test(logf16 /usr/scratch2/pisoc1/msc25h16/spatz/sw/non-linearities/FP16/logf/logf.c)
+add_snitch_test(rsqrt16 /usr/scratch2/pisoc1/msc25h16/spatz/sw/non-linearities/FP16/rsqrt/rsqrt.c)
+add_snitch_test(sin_cos16 /usr/scratch2/pisoc1/msc25h16/spatz/sw/non-linearities/FP16/sin_cos/sin_cos.c)
 
 

@@ -147,7 +147,7 @@ void vrsqrt_sw(const float* inp, float* out, int N) {
         
         // 1. Set configuration: 32-bit elements, LMUL=8
         // This treats registers in groups of 8 (v8-v15, v16-v23, etc.)
-        asm volatile("vsetvli %0, %1, e32, m8, ta, ma"
+        asm volatile("vsetvli %0, %1, e32, m1, ta, ma"
                      : "=r"(vl) : "r"(remaining) : "memory");
 
         // 2. Load input 'x' into v8 (effectively v8-v15)
@@ -196,7 +196,7 @@ void vrsqrt_optimized(const float* inp, float* out,  int N) {
     // Loop 32 times to process 2048 elements
    while (remaining > 0) {
         unsigned long vl;
-        asm volatile("vsetvli %0, %1, e32, m1, ta, ma"
+        asm volatile("vsetvli %0, %1, e32, m8, ta, ma"
                      : "=r"(vl) : "r"(remaining) : "memory");
         // --- STEP 1: LOAD PHASE (Fill the Register File) ---
         asm volatile("vle32.v v0,  (%0)" :: "r"(pin)         : "memory");

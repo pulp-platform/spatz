@@ -89,7 +89,7 @@ void vrec_hw(const float* inp, float* out,  int N) {
     // Loop 32 times to process 2048 elements
    while (remaining > 0) {
         unsigned long vl;
-        asm volatile("vsetvli %0, %1, e32, m1, ta, ma"
+        asm volatile("vsetvli %0, %1, e32, m8, ta, ma"
                      : "=r"(vl) : "r"(remaining) : "memory");
         // --- STEP 1: LOAD PHASE (Fill the Register File) ---
         asm volatile("vle32.v v0,  (%0)" :: "r"(pin)         : "memory");
@@ -163,7 +163,7 @@ int main(void) {
         start_kernel();
         unsigned t0 = benchmark_get_cycle();
 
-        vrecip_sw(g_in + start, g_out + start, count);
+        vrec_hw(g_in + start, g_out + start, count);
 
         unsigned cycles = benchmark_get_cycle() - t0;
         stop_kernel();
