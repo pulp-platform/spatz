@@ -6,22 +6,23 @@
 
 #define SPMV_SMALL_ROW_THRESHOLD 4
 #define SPMV_NOINLINE __attribute__((noinline))
+#define SPMV_ALWAYS_INLINE __attribute__((always_inline)) inline
 
 // x_off contains 32-bit byte offsets into x. On this rv32 target, vluxei64 is
 // not available, so gather indices stay 32-bit even for fp64 data.
 #define DEFINE_SPMV_ROW_FN(FN, LMUL, VIDX, VVAL, VX, VACC)                     \
-  static SPMV_NOINLINE double FN(const double *val, const uint32_t *x_off,     \
-                                 const double *x, uint32_t avl) {               \
+  static SPMV_ALWAYS_INLINE double FN(const double *val, const uint32_t *x_off, \
+                                      const double *x, uint32_t avl) {          \
     if (avl == 0) return 0.0;                                                   \
     const uint32_t orig_avl = avl;                                              \
     uint32_t vl;                                                                 \
     double red = 0.0;                                                            \
-    asm volatile("vsetvli %0, %1, e64, " LMUL ", tu, ma"                        \
+    asm volatile("vsetvli %0, %1, e64, " LMUL ", ta, ma"                        \
                  : "=r"(vl)                                                      \
                  : "r"(avl));                                                    \
     asm volatile("vmv.s.x v0, zero");                                           \
     do {                                                                         \
-      asm volatile("vsetvli %0, %1, e64, " LMUL ", tu, ma"                      \
+      asm volatile("vsetvli %0, %1, e64, " LMUL ", ta, ma"                      \
                    : "=r"(vl)                                                    \
                    : "r"(avl));                                                  \
       asm volatile("vle64.v " VVAL ", (%0)" : : "r"(val));                      \
@@ -36,7 +37,8 @@
       x_off += vl;                                                               \
       avl -= vl;                                                                 \
     } while (avl > 0);                                                           \
-    asm volatile("vsetvli zero, %0, e64, " LMUL ", tu, ma" : : "r"(orig_avl)); \
+    asm volatile("vsetvli zero, %0, e64, " LMUL ", ta, ma" : : "r"(orig_avl)); \
+    asm volatile("vmv.s.x v0, zero");                                           \
     asm volatile("vfredusum.vs v0, " VACC ", v0");                              \
     asm volatile("vfmv.f.s %0, v0" : "=f"(red));                                \
     return red;                                                                  \
@@ -45,7 +47,7 @@
 DEFINE_SPMV_ROW_FN(spmv_row_v64b_m1, "m1", "v16", "v8", "v24", "v28")
 DEFINE_SPMV_ROW_FN(spmv_row_v64b_m2, "m2", "v4", "v8", "v10", "v12")
 DEFINE_SPMV_ROW_FN(spmv_row_v64b_m4, "m4", "v4", "v8", "v16", "v24")
-DEFINE_SPMV_ROW_FN(spmv_row_v64b_m8, "m8", "v4", "v8", "v16", "v24")
+DEFINE_SPMV_ROW_FN(spmv_row_v64b_m8, "m8", "v0", "v8", "v16", "v24")
 
 #define DEFINE_SPMV_KERNEL(FN, ROW_FN)                                          \
   SPMV_NOINLINE void FN(const uint32_t *row_ptr, const uint32_t *x_off,         \
