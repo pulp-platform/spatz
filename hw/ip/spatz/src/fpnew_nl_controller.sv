@@ -110,6 +110,34 @@ module fpnew_nl_controller
   assign nl_active = (nl_inflight_q != '0) || is_nl_op_i;
   assign nl_busy_o = (nl_inflight_q != '0);
 
+ logic is_fp32, is_fp16, is_bf16;
+ assign is_fp32 = (src_fmt_i == fpnew_pkg::FP32);
+ assign is_fp16 = (src_fmt_i == fpnew_pkg::FP16);
+ assign is_bf16 = (src_fmt_i == fpnew_pkg::FP16ALT);
+
+// ── Constant selection (one mux per constant, gated by SEW) ──
+  logic [WIDTH-1:0] sel_cheby_a, sel_cheby_b, sel_cheby_c;
+  logic [WIDTH-1:0] sel_c3_halves, sel_c1_half, sel_c_one, sel_c2;
+  logic [WIDTH-1:0] sel_pio2_hi, sel_cos_c2, sel_sin_s3;
+  logic [WIDTH-1:0] sel_log_scale;
+  logic [WIDTH-1:0] sel_sch_c, sel_sch_b, sel_sch_b_cosh, sel_inv_pio2;
+
+  assign sel_cheby_a    = is_bf16 ? CHEBY_A_TANH_VEC_BF16 : (is_fp16 ? CHEBY_A_TANH_VEC_F16 : CHEBY_A_TANH_VEC);
+  assign sel_cheby_b    = is_bf16 ? CHEBY_B_TANH_VEC_BF16 : (is_fp16 ? CHEBY_B_TANH_VEC_F16 : CHEBY_B_TANH_VEC);
+  assign sel_cheby_c    = is_bf16 ? CHEBY_C_TANH_VEC_BF16 : (is_fp16 ? CHEBY_C_TANH_VEC_F16 : CHEBY_C_TANH_VEC);
+  assign sel_c3_halves  = is_bf16 ? C3_HALVES_VEC_BF16    : (is_fp16 ? C3_HALVES_VEC_F16    : C3_HALVES_VEC);
+  assign sel_c1_half    = is_bf16 ? C1_HALF_VEC_BF16      : (is_fp16 ? C1_HALF_VEC_F16      : C1_HALF_VEC);
+  assign sel_c_one      = is_bf16 ? C_ONE_VEC_BF16        : (is_fp16 ? C_ONE_VEC_F16        : C_ONE_VEC);
+  assign sel_c2         = is_bf16 ? C2_VEC_BF16           : (is_fp16 ? C2_VEC_F16           : C2_VEC);
+  assign sel_pio2_hi    = is_bf16 ? PIO2_HI_VEC_BF16      : (is_fp16 ? PIO2_HI_VEC_F16      : PIO2_HI_VEC);
+  assign sel_cos_c2     = is_bf16 ? COS_C2_VEC_BF16       : (is_fp16 ? COS_C2_VEC_F16       : COS_C2_VEC);
+  assign sel_sin_s3     = is_bf16 ? SIN_S3_VEC_BF16       : (is_fp16 ? SIN_S3_VEC_F16       : SIN_S3_VEC);
+  assign sel_log_scale  = is_bf16 ? LOG_SCALE_VEC_BF16    : (is_fp16 ? LOG_SCALE_VEC_F16    : LOG_SCALE_VEC);
+  assign sel_sch_c      = is_bf16 ? SCH_C_VEC_BF16        : (is_fp16 ? SCH_C_VEC_F16        : SCH_C_VEC);
+  assign sel_sch_b      = is_bf16 ? SCH_B_VEC_BF16        : (is_fp16 ? SCH_B_VEC_F16        : SCH_B_VEC);
+  assign sel_sch_b_cosh = is_bf16 ? SCH_B_COSH_VEC_BF16   : (is_fp16 ? SCH_B_COSH_VEC_F16   : SCH_B_COSH_VEC);
+  assign sel_inv_pio2   = is_bf16 ? INV_PIO2_VEC_BF16     : (is_fp16 ? INV_PIO2_VEC_F16     : INV_PIO2_VEC);
+
 // State Machines
   cosh_state_e    nl_state_q,      nl_state_d;
   tanh_state_e    tanh_state_q,    tanh_state_d;
@@ -124,8 +152,8 @@ module fpnew_nl_controller
   `FF(sin_cos_state_q, sin_cos_state_d, SIN_COS_RR_U)
 
 // Ack prediction
-logic addmul_predicted_ready;
-logic conv_predicted_ready;
+ logic addmul_predicted_ready;
+ logic conv_predicted_ready;
 
   fpnew_nl_predicted_ready #(.LATENCY(2)) i_pred_ready_addmul (
     .clk_i      (clk_i),
@@ -223,24 +251,24 @@ logic conv_predicted_ready;
         default:                                                    rec_state_d = REC_APPROX_U;
       endcase    
       unique case (sin_cos_state_q)
-        SIN_COS_RR_U:         if (is_nl_op_i && in_valid_i && (op_i == SIN || op_i == COS) && addmul_in_ready_i) sin_cos_state_d = SIN_COS_RR_L;
-        SIN_COS_RR_L:         if (in_valid_i && addmul_in_ready_i)  sin_cos_state_d = SIN_COS_INT_CONV_U;
-        SIN_COS_INT_CONV_U:   if (addmul_out_valid_i)               sin_cos_state_d = SIN_COS_INT_CONV_L;
-        SIN_COS_INT_CONV_L:   if (addmul_out_valid_i)               sin_cos_state_d = SIN_COS_FLOAT_CONV_U;
-        SIN_COS_FLOAT_CONV_U: if (conv_in_valid_o)                  sin_cos_state_d = SIN_COS_FLOAT_CONV_L;
-        SIN_COS_FLOAT_CONV_L: if (conv_in_valid_o)                  sin_cos_state_d = SIN_COS_POLY1_U;
-        SIN_COS_POLY1_U:      if (conv_out_valid_i)                 sin_cos_state_d = SIN_COS_POLY1_L;
-        SIN_COS_POLY1_L:      if (conv_out_valid_i)                 sin_cos_state_d = SIN_COS_POLY2_U;
-        SIN_COS_POLY2_U:      if (addmul_in_valid_o)                sin_cos_state_d = SIN_COS_POLY2_L;
-        SIN_COS_POLY2_L:      if (addmul_in_valid_o)                sin_cos_state_d = SIN_COS_POLY3_U;
-        SIN_COS_POLY3_U:      if (addmul_in_valid_o)                sin_cos_state_d = SIN_COS_POLY3_L;
-        SIN_COS_POLY3_L:      if (addmul_in_valid_o)                sin_cos_state_d = SIN_COS_POLY4_U;
-        SIN_COS_POLY4_U:      if (addmul_in_valid_o)                sin_cos_state_d = SIN_COS_POLY4_L;
-        SIN_COS_POLY4_L:      if (addmul_in_valid_o)                sin_cos_state_d = SIN_COS_POLY5_U;
-        SIN_COS_POLY5_U:      if (addmul_in_valid_o)                sin_cos_state_d = SIN_COS_POLY5_L;
-        SIN_COS_POLY5_L:      if (addmul_in_valid_o)                sin_cos_state_d = SIN_COS_DRAIN_U;
-        SIN_COS_DRAIN_U:      if (addmul_out_valid_i)               sin_cos_state_d = SIN_COS_DRAIN_L;
-        SIN_COS_DRAIN_L:      if (~nl_out_capture)                  sin_cos_state_d = SIN_COS_RR_U;
+        SIN_COS_RR_U:         if ( is_nl_op_i && in_valid_i && (op_i == SIN || op_i == COS) && addmul_in_ready_i) sin_cos_state_d = SIN_COS_RR_L;
+        SIN_COS_RR_L:         if ( in_valid_i && addmul_in_ready_i) sin_cos_state_d = SIN_COS_INT_CONV_U;
+        SIN_COS_INT_CONV_U:   if ( addmul_out_valid_i )             sin_cos_state_d = SIN_COS_INT_CONV_L;
+        SIN_COS_INT_CONV_L:   if ( addmul_out_valid_i )             sin_cos_state_d = SIN_COS_FLOAT_CONV_U;
+        SIN_COS_FLOAT_CONV_U: if ( conv_in_valid_o    )             sin_cos_state_d = SIN_COS_FLOAT_CONV_L;
+        SIN_COS_FLOAT_CONV_L: if ( conv_in_valid_o    )             sin_cos_state_d = SIN_COS_POLY1_U;
+        SIN_COS_POLY1_U:      if ( conv_out_valid_i   )             sin_cos_state_d = SIN_COS_POLY1_L;
+        SIN_COS_POLY1_L:      if ( conv_out_valid_i   )             sin_cos_state_d = SIN_COS_POLY2_U;
+        SIN_COS_POLY2_U:      if ( addmul_in_valid_o  )             sin_cos_state_d = SIN_COS_POLY2_L;
+        SIN_COS_POLY2_L:      if ( addmul_in_valid_o  )             sin_cos_state_d = SIN_COS_POLY3_U;
+        SIN_COS_POLY3_U:      if ( addmul_in_valid_o  )             sin_cos_state_d = SIN_COS_POLY3_L;
+        SIN_COS_POLY3_L:      if ( addmul_in_valid_o  )             sin_cos_state_d = SIN_COS_POLY4_U;
+        SIN_COS_POLY4_U:      if ( addmul_in_valid_o  )             sin_cos_state_d = SIN_COS_POLY4_L;
+        SIN_COS_POLY4_L:      if ( addmul_in_valid_o  )             sin_cos_state_d = SIN_COS_POLY5_U;
+        SIN_COS_POLY5_U:      if ( addmul_in_valid_o  )             sin_cos_state_d = SIN_COS_POLY5_L;
+        SIN_COS_POLY5_L:      if ( addmul_in_valid_o  )             sin_cos_state_d = SIN_COS_DRAIN_U;
+        SIN_COS_DRAIN_U:      if ( addmul_out_valid_i )             sin_cos_state_d = SIN_COS_DRAIN_L;
+        SIN_COS_DRAIN_L:      if ( ~nl_out_capture    )             sin_cos_state_d = SIN_COS_RR_U;
         default:                                                    sin_cos_state_d = SIN_COS_RR_U;
       endcase   
   end
@@ -290,11 +318,80 @@ logic conv_predicted_ready;
   assign rec_res_hi          = rec_hi_nan_or_sign ? 32'h7FC00000 : ($signed(REC_MAGIC) - $signed(rec_op_hi));
   assign rec_res_lo          = rec_lo_nan_or_sign ? 32'h7FC00000 : ($signed(REC_MAGIC) - $signed(rec_op_lo));
 
+  // ── Unified pre-results: FP16 (4 × 16-bit) or FP32 (2 × 32-bit) ──
+  logic [WIDTH-1:0] log_pre, rsqrt_pre, rec_pre;
+
+  always_comb begin : nl_pre_mux
+    // Default: FP32 path
+    log_pre   = {log_res_hi, log_res_lo};
+    rsqrt_pre = {rsqrt_res_hi, rsqrt_res_lo};
+    rec_pre   = {rec_res_hi, rec_res_lo};
+
+    if (is_fp16) begin
+      for (int l = 0; l < 4; l++) begin
+        // LOG: (x − 1.0h) as signed integer, fed to I2F
+        if (en_log) begin
+          if (operands_i[0][l*16 + 15]
+              || (operands_i[0][l*16+10 +: 5] == 5'h1F && operands_i[0][l*16 +: 10] != '0))
+            log_pre[l*16 +: 16] = 16'h7E00;
+          else
+            log_pre[l*16 +: 16] = operands_i[0][l*16 +: 16] - 16'h3C00;
+        end
+        // RSQRT: magic − (x >> 1)
+        if (en_rsqrt) begin
+          if (operands_i[0][l*16 + 15]
+              || (operands_i[0][l*16+10 +: 5] == 5'h1F && operands_i[0][l*16 +: 10] != '0))
+            rsqrt_pre[l*16 +: 16] = 16'h7E00;
+          else
+            rsqrt_pre[l*16 +: 16] = QUAKE_MAGIC_F16 - (operands_i[0][l*16 +: 16] >> 1);
+        end
+        // REC: magic − x  (zero or NaN → NaN)
+        if (en_rec) begin
+          if ((operands_i[0][l*16 +: 16] == 16'h0000)
+              || (operands_i[0][l*16+10 +: 5] == 5'h1F && operands_i[0][l*16 +: 10] != '0))
+            rec_pre[l*16 +: 16] = 16'h7E00;
+          else
+            rec_pre[l*16 +: 16] = REC_MAGIC_F16 - operands_i[0][l*16 +: 16];
+        end
+      end
+    end
+
+    if (is_bf16) begin
+      for (int l = 0; l < 4; l++) begin
+        // LOG: (x − 1.0bf16) as signed integer, fed to I2F
+        // BF16: exp[14:7] (8 bits), mantissa[6:0] (7 bits), qNaN=0x7FC0
+        if (en_log) begin
+          if (operands_i[0][l*16 + 15]
+              || (operands_i[0][l*16+7 +: 8] == 8'hFF && operands_i[0][l*16 +: 7] != '0))
+            log_pre[l*16 +: 16] = 16'h7FC0;
+          else
+            log_pre[l*16 +: 16] = operands_i[0][l*16 +: 16] - 16'h3F80;
+        end
+        // RSQRT: magic − (x >> 1)
+        if (en_rsqrt) begin
+          if (operands_i[0][l*16 + 15]
+              || (operands_i[0][l*16+7 +: 8] == 8'hFF && operands_i[0][l*16 +: 7] != '0))
+            rsqrt_pre[l*16 +: 16] = 16'h7FC0;
+          else
+            rsqrt_pre[l*16 +: 16] = QUAKE_MAGIC_BF16 - (operands_i[0][l*16 +: 16] >> 1);
+        end
+        // REC: magic − x  (zero or NaN → NaN)
+        if (en_rec) begin
+          if ((operands_i[0][l*16 +: 16] == 16'h0000)
+              || (operands_i[0][l*16+7 +: 8] == 8'hFF && operands_i[0][l*16 +: 7] != '0))
+            rec_pre[l*16 +: 16] = 16'h7FC0;
+          else
+            rec_pre[l*16 +: 16] = REC_MAGIC_BF16 - operands_i[0][l*16 +: 16];
+        end
+      end
+    end
+  end
+
 // Buffers
   logic [WIDTH-1:0] nl_intermediate_0_d, nl_intermediate_1_d, nl_intermediate_2_d, nl_intermediate_3_d;
   logic [WIDTH-1:0] nl_intermediate_0_q, nl_intermediate_1_q, nl_intermediate_2_q, nl_intermediate_3_q;
   logic             nl_wr_en_0, nl_wr_en_1, nl_wr_en_2, nl_wr_en_3, k_en_0, k_en_1;
-  logic [3:0] k_int_d_0, k_int_d_1, k_int_q_0, k_int_q_1;
+  logic [7:0] k_int_d_0, k_int_d_1, k_int_q_0, k_int_q_1;
 
   `FFL(nl_intermediate_0_q, nl_intermediate_0_d, nl_wr_en_0, '0)
   `FFL(nl_intermediate_1_q, nl_intermediate_1_d, nl_wr_en_1, '0)
@@ -331,8 +428,8 @@ logic conv_predicted_ready;
         nl_wr_en_3          = (rsqrt_state_q == RSQRT_X_SQUARE_L) && in_valid_i;
         nl_intermediate_0_d = operands_i[0];
         nl_intermediate_1_d = operands_i[0]; 
-        nl_intermediate_2_d = {rsqrt_res_hi, rsqrt_res_lo};
-        nl_intermediate_3_d = {rsqrt_res_hi, rsqrt_res_lo};       
+        nl_intermediate_2_d = rsqrt_pre;
+        nl_intermediate_3_d = rsqrt_pre;       
     end 
     REC: begin       
         nl_wr_en_0          =  (rec_state_q == REC_APPROX_U) && in_valid_i;
@@ -341,8 +438,8 @@ logic conv_predicted_ready;
         nl_wr_en_3          = ((rec_state_q == REC_APPROX_L) && in_valid_i) || ((rec_state_q == REC_NR1_ACCUM_L) && addmul_out_valid_i);
         nl_intermediate_0_d = operands_i[0];
         nl_intermediate_1_d = operands_i[0]; 
-        nl_intermediate_2_d = rec_state_q == REC_NR1_ACCUM_U ? addmul_result_i : {rec_res_hi, rec_res_lo};
-        nl_intermediate_3_d = rec_state_q == REC_NR1_ACCUM_L ? addmul_result_i : {rec_res_hi, rec_res_lo}; 
+        nl_intermediate_2_d = rec_state_q == REC_NR1_ACCUM_U ? addmul_result_i : rec_pre;
+        nl_intermediate_3_d = rec_state_q == REC_NR1_ACCUM_L ? addmul_result_i : rec_pre; 
     end
     SIN,COS: begin 
         nl_wr_en_0          = ((sin_cos_state_q == SIN_COS_RR_U)    && in_valid_i) 
@@ -360,10 +457,19 @@ logic conv_predicted_ready;
 
         k_en_1              = sin_cos_state_q == SIN_COS_FLOAT_CONV_U;
         k_en_0              = sin_cos_state_q == SIN_COS_FLOAT_CONV_L;
-        k_int_d_1[3:2]      = conv_result_i[33:32];
-        k_int_d_1[1:0]      = conv_result_i[1:0];
-        k_int_d_0[3:2]      = conv_result_i[33:32];
-        k_int_d_0[1:0]      = conv_result_i[1:0];
+        if (is_fp16 || is_bf16) begin
+          // FP16/BF16: 4 × 16-bit F2I results — extract 2 LSBs per lane
+          for (int l = 0; l < 4; l++) begin
+            k_int_d_1[l*2 +: 2] = conv_result_i[l*16 +: 2];
+            k_int_d_0[l*2 +: 2] = conv_result_i[l*16 +: 2];
+          end
+        end else begin
+          // FP32: 2 × 32-bit F2I results
+          k_int_d_1[3:2] = conv_result_i[33:32];
+          k_int_d_1[1:0] = conv_result_i[1:0];
+          k_int_d_0[3:2] = conv_result_i[33:32];
+          k_int_d_0[1:0] = conv_result_i[1:0];
+        end
 
     end
     default: begin
@@ -387,9 +493,9 @@ logic conv_predicted_ready;
     if (is_nl_op_i) begin
       unique case (op_i)
         EXPS: begin
-          addmul_operands_o[0] = SCH_C_VEC;       
+          addmul_operands_o[0] = sel_sch_c;       
           addmul_operands_o[1] = operands_i[0];   
-          addmul_operands_o[2] = SCH_B_VEC;       
+          addmul_operands_o[2] = sel_sch_b;       
           addmul_rnd_mode_o    = fpnew_pkg::RNE;
           addmul_op_o          = fpnew_pkg::FMADD;
           addmul_op_mod_o      = 1'b0;
@@ -397,18 +503,18 @@ logic conv_predicted_ready;
         COSHS: begin
           unique case (nl_state_q)
             COSH_EXP_POS_U, COSH_EXP_POS_L: begin
-              addmul_operands_o[0] = SCH_C_VEC;    
+              addmul_operands_o[0] = sel_sch_c;    
               addmul_operands_o[1] = operands_i[0];     
-              addmul_operands_o[2] = SCH_B_COSH_VEC;      
+              addmul_operands_o[2] = sel_sch_b_cosh;      
               addmul_rnd_mode_o    = fpnew_pkg::RNE;
               addmul_op_o          = fpnew_pkg::FMADD;
               addmul_op_mod_o      = 1'b0;
               addmul_in_valid_o    = nl_state_q == COSH_EXP_POS_L? addmul_out_valid_i : in_valid_i;
             end
             COSH_EXP_NEG_U, COSH_EXP_NEG_L: begin
-              addmul_operands_o[0] = SCH_C_VEC;
+              addmul_operands_o[0] = sel_sch_c;
               addmul_operands_o[1] = operands_i[0];
-              addmul_operands_o[2] = SCH_B_COSH_VEC;
+              addmul_operands_o[2] = sel_sch_b_cosh;
               addmul_rnd_mode_o    = fpnew_pkg::RNE;
               addmul_op_o          = fpnew_pkg::FNMSUB;
               addmul_op_mod_o      = 1'b0;
@@ -440,8 +546,8 @@ logic conv_predicted_ready;
                 end
                 TANH_POLY1_U, TANH_POLY1_L: begin
                 addmul_operands_o[0] = addmul_result_i; 
-                addmul_operands_o[1] = CHEBY_A_TANH_VEC; 
-                addmul_operands_o[2] = CHEBY_B_TANH_VEC; 
+                addmul_operands_o[1] = sel_cheby_a; 
+                addmul_operands_o[2] = sel_cheby_b; 
                 addmul_rnd_mode_o    = fpnew_pkg::RNE;
                 addmul_op_o          = fpnew_pkg::FMADD;
                 addmul_op_mod_o      = 1'b0;
@@ -451,7 +557,7 @@ logic conv_predicted_ready;
                 TANH_POLY2_U, TANH_POLY2_L: begin
                 addmul_operands_o[0] = tanh_state_q == TANH_POLY2_U ? nl_intermediate_2_q : nl_intermediate_3_q;
                 addmul_operands_o[1] = addmul_result_i; 
-                addmul_operands_o[2] = CHEBY_C_TANH_VEC;
+                addmul_operands_o[2] = sel_cheby_c;
                 addmul_rnd_mode_o    = fpnew_pkg::RNE;
                 addmul_op_o          = fpnew_pkg::FMADD;
                 addmul_op_mod_o      = 1'b0;
@@ -475,7 +581,7 @@ logic conv_predicted_ready;
             endcase
         end
         LOGS: begin
-           addmul_operands_o[0] = LOG_SCALE_VEC;       
+           addmul_operands_o[0] = sel_log_scale;       
            addmul_operands_o[1] = conv_result_i;
            addmul_operands_o[2] = '0;
            addmul_rnd_mode_o    = fpnew_pkg::RNE;
@@ -487,8 +593,8 @@ logic conv_predicted_ready;
         RSQRT: begin
           unique case(rsqrt_state_q)
             RSQRT_X_SQUARE_U, RSQRT_X_SQUARE_L: begin
-                addmul_operands_o[0] = {rsqrt_res_hi, rsqrt_res_lo};       
-                addmul_operands_o[1] = {rsqrt_res_hi, rsqrt_res_lo};
+                addmul_operands_o[0] = rsqrt_pre;       
+                addmul_operands_o[1] = rsqrt_pre;
                 addmul_operands_o[2] = '0;   
                 addmul_rnd_mode_o    = fpnew_pkg::RNE;
                 addmul_op_o          = fpnew_pkg::MUL;
@@ -506,8 +612,8 @@ logic conv_predicted_ready;
             end
             RSQRT_NR1_U, RSQRT_NR1_L: begin
                 addmul_operands_o[0] = addmul_result_i;       
-                addmul_operands_o[1] = C1_HALF_VEC; 
-                addmul_operands_o[2] = C3_HALVES_VEC;
+                addmul_operands_o[1] = sel_c1_half; 
+                addmul_operands_o[2] = sel_c3_halves;
                 addmul_rnd_mode_o    = fpnew_pkg::RNE;
                 addmul_op_o          = fpnew_pkg::FMADD;
                 addmul_op_mod_o      = 1'b0;
@@ -532,9 +638,9 @@ logic conv_predicted_ready;
         REC: begin
           unique case(rec_state_q)
             REC_APPROX_U, REC_APPROX_L: begin
-                addmul_operands_o[0] = {rec_res_hi, rec_res_lo};       
+                addmul_operands_o[0] = rec_pre;       
                 addmul_operands_o[1] = operands_i[0];
-                addmul_operands_o[2] = C2_VEC;
+                addmul_operands_o[2] = sel_c2;
                 addmul_rnd_mode_o    = fpnew_pkg::RNE;
                 addmul_op_o          = fpnew_pkg::FNMSUB;
                 addmul_op_mod_o      = 1'b0;
@@ -552,7 +658,7 @@ logic conv_predicted_ready;
             REC_NR1_ACCUM_U, REC_NR1_ACCUM_L: begin
                 addmul_operands_o[0] = rec_state_q == REC_NR1_ACCUM_U ? nl_intermediate_0_q : nl_intermediate_1_q;       
                 addmul_operands_o[1] = addmul_result_i;
-                addmul_operands_o[2] = C2_VEC;
+                addmul_operands_o[2] = sel_c2;
                 addmul_rnd_mode_o    = fpnew_pkg::RNE;
                 addmul_op_o          = fpnew_pkg::FNMSUB;
                 addmul_op_mod_o      = 1'b0;
@@ -578,7 +684,7 @@ logic conv_predicted_ready;
             unique case(sin_cos_state_q)
                 SIN_COS_RR_U, SIN_COS_RR_L: begin
                     addmul_operands_o[0] = operands_i[0];       
-                    addmul_operands_o[1] = INV_PIO2_VEC;
+                    addmul_operands_o[1] = sel_inv_pio2;
                     addmul_operands_o[2] = '0;
                     addmul_rnd_mode_o    = fpnew_pkg::RNE;
                     addmul_op_o          = fpnew_pkg::MUL;
@@ -586,7 +692,7 @@ logic conv_predicted_ready;
                 end
                 SIN_COS_POLY1_U, SIN_COS_POLY1_L: begin 
                     addmul_operands_o[0] = conv_result_i;
-                    addmul_operands_o[1] = PIO2_HI_VEC;
+                    addmul_operands_o[1] = sel_pio2_hi;
                     addmul_operands_o[2] = sin_cos_state_q == SIN_COS_POLY1_U ? nl_intermediate_0_q : nl_intermediate_1_q;
                     addmul_rnd_mode_o    = fpnew_pkg::RNE;
                     addmul_op_o          = fpnew_pkg::FNMSUB;
@@ -606,8 +712,8 @@ logic conv_predicted_ready;
                 end
                 SIN_COS_POLY3_U, SIN_COS_POLY3_L: begin 
                     addmul_operands_o[0] =  addmul_result_i;       
-                    addmul_operands_o[1] = SIN_S3_VEC;
-                    addmul_operands_o[2] = C_ONE_VEC;
+                    addmul_operands_o[1] = sel_sin_s3;
+                    addmul_operands_o[2] = sel_c_one;
                     addmul_rnd_mode_o    = fpnew_pkg::RNE;
                     addmul_op_o          = fpnew_pkg::FMADD;
                     addmul_op_mod_o      = 1'b0;
@@ -626,8 +732,8 @@ logic conv_predicted_ready;
                 end
                 SIN_COS_POLY5_U, SIN_COS_POLY5_L: begin 
                     addmul_operands_o[0] = sin_cos_state_q == SIN_COS_POLY5_U ? nl_intermediate_2_q : nl_intermediate_3_q;       
-                    addmul_operands_o[1] = COS_C2_VEC;
-                    addmul_operands_o[2] = C_ONE_VEC;
+                    addmul_operands_o[1] = sel_cos_c2;
+                    addmul_operands_o[2] = sel_c_one;
                     addmul_rnd_mode_o    = fpnew_pkg::RNE;
                     addmul_op_o          = fpnew_pkg::FMADD;
                     addmul_op_mod_o      = 1'b0;
@@ -682,7 +788,7 @@ logic conv_predicted_ready;
         conv_in_valid_o    = addmul_out_valid_i  && !((op_i == COSHS) && (nl_state_q == COSH_SUM_L || nl_state_q == COSH_DRAIN));
     end
     LOGS: begin 
-        conv_operands_o[0] = {log_res_hi, log_res_lo};   
+        conv_operands_o[0] = log_pre;   
         conv_operands_o[1] = '0;
         conv_operands_o[2] = '0;
         conv_rnd_mode_o    = fpnew_pkg::RNE;  
@@ -749,7 +855,7 @@ logic conv_predicted_ready;
 
   
   logic [WIDTH-1:0] nl_intermediate_sel;
-  logic [3:0]       k_int_sel, k_adj;
+  logic [7:0]       k_int_sel, k_adj;
   logic [31:0]      x32_0, x32_1, abs32_0, abs32_1;
   logic             sign_0, sign_1;
   logic             is_nan_0, is_inf_0, clamp_mag_0;
@@ -759,8 +865,9 @@ logic conv_predicted_ready;
   assign nl_intermediate_sel = (tanh_state_q == TANH_DRAIN_U || sin_cos_state_q == SIN_COS_DRAIN_U) ? nl_intermediate_0_q : nl_intermediate_1_q;
   assign k_int_sel           = sin_cos_state_q == SIN_COS_DRAIN_U ? k_int_q_1 : k_int_q_0;
   assign sin_adj             = (op_i == SIN) ? 2'd1 : 2'd0;
-  assign k_adj[3:2]          = k_int_sel[3:2] - sin_adj;
-  assign k_adj[1:0]          = k_int_sel[1:0] - sin_adj;
+
+  for (genvar gl = 0; gl < 4; gl++)
+    assign k_adj[gl*2 +: 2] = k_int_sel[gl*2 +: 2] - sin_adj;
 
   always_comb begin : output_postproc
     reconstructed_result = addmul_result_i; 
@@ -772,45 +879,59 @@ logic conv_predicted_ready;
     if (needs_reconstruction) begin
     // --- TANH Reconstruction ---
         if (op_i == TANHS) begin
-          x32_0 = nl_intermediate_sel[63:32];
-          x32_1 = nl_intermediate_sel[31:0];
+          if (is_bf16) begin
+            for (int l = 0; l < 4; l++)
+              if (nl_intermediate_sel[l*16 + 14])                       
+                reconstructed_result[l*16 +: 16] = {nl_intermediate_sel[l*16 + 15], 15'h3F80};
+          end else if (is_fp16) begin
+            for (int l = 0; l < 4; l++)
+              if (nl_intermediate_sel[l*16 + 14])                      
+                reconstructed_result[l*16 +: 16] = {nl_intermediate_sel[l*16 + 15], 15'h3C00};
+          end else begin
+            // FP32: 2 × 32-bit lanes
+            x32_0 = nl_intermediate_sel[63:32];
+            x32_1 = nl_intermediate_sel[31:0];
           
-          {sign_0, abs32_0} = {x32_0[31], 1'b0, x32_0[30:0]};
-          {sign_1, abs32_1} = {x32_1[31], 1'b0, x32_1[30:0]};
+            {sign_0, abs32_0} = {x32_0[31], 1'b0, x32_0[30:0]};
+            {sign_1, abs32_1} = {x32_1[31], 1'b0, x32_1[30:0]};
           
-          is_nan_0    = (abs32_0[30:23] == 8'hFF) && (abs32_0[22:0] != 0);
-          is_inf_0    = (abs32_0[30:23] == 8'hFF) && (abs32_0[22:0] == 0);
-          clamp_mag_0 = (abs32_0[30:23] >= 8'h80);
+            is_nan_0    = (abs32_0[30:23] == 8'hFF) && (abs32_0[22:0] != 0);
+            is_inf_0    = (abs32_0[30:23] == 8'hFF) && (abs32_0[22:0] == 0);
+            clamp_mag_0 = (abs32_0[30:23] >= 8'h80);
 
-          is_nan_1    = (abs32_1[30:23] == 8'hFF) && (abs32_1[22:0] != 0);
-          is_inf_1    = (abs32_1[30:23] == 8'hFF) && (abs32_1[22:0] == 0);
-          clamp_mag_1 = (abs32_1[30:23] >= 8'h80);
+            is_nan_1    = (abs32_1[30:23] == 8'hFF) && (abs32_1[22:0] != 0);
+            is_inf_1    = (abs32_1[30:23] == 8'hFF) && (abs32_1[22:0] == 0);
+            clamp_mag_1 = (abs32_1[30:23] >= 8'h80);
 
-          if (clamp_mag_0 || is_inf_0) reconstructed_result[63:32] = {sign_0, 31'h3F800000}; 
-          else if (is_nan_0)           reconstructed_result[63:32] = x32_0; 
+            if (clamp_mag_0 || is_inf_0) reconstructed_result[63:32] = {sign_0, 31'h3F800000}; 
+            else if (is_nan_0)           reconstructed_result[63:32] = x32_0; 
           
-          if (clamp_mag_1 || is_inf_1) reconstructed_result[31:0]  = {sign_1, 31'h3F800000}; 
-          else if (is_nan_1)           reconstructed_result[31:0]  = x32_1; 
-
+            if (clamp_mag_1 || is_inf_1) reconstructed_result[31:0]  = {sign_1, 31'h3F800000}; 
+            else if (is_nan_1)           reconstructed_result[31:0]  = x32_1; 
+          end
         end
-        // SIN/COS Quadrant Reconstruction ---
+        // SIN/COS Quadrant Reconstruction --- 
         else if ((op_i == SIN || op_i == COS)) begin
-        unique case (k_adj[3:2])
-            2'b00: {sign_1, x32_1} = {addmul_result_i[63],                addmul_result_i[63:32]};
-            2'b01: {sign_1, x32_1} = {nl_intermediate_sel[63] ^ 1'b1, nl_intermediate_sel[63:32]};
-            2'b10: {sign_1, x32_1} = {addmul_result_i[63] ^ 1'b1,         addmul_result_i[63:32]};
-            2'b11: {sign_1, x32_1} = {nl_intermediate_sel[63],        nl_intermediate_sel[63:32]};
-        endcase
-        // Lane 0 (Lower 32 bits)
-        unique case (k_adj[1:0])
-            2'b00: {sign_0, x32_0} = {addmul_result_i[31],                addmul_result_i[31:0]};
-            2'b01: {sign_0, x32_0} = {nl_intermediate_sel[31] ^ 1'b1, nl_intermediate_sel[31:0]};
-            2'b10: {sign_0, x32_0} = {addmul_result_i[31] ^ 1'b1,         addmul_result_i[31:0]};
-            2'b11: {sign_0, x32_0} = {nl_intermediate_sel[31],        nl_intermediate_sel[31:0]};
-        endcase
-
-        reconstructed_result[63:32] = {sign_1, x32_1[30:0]};
-        reconstructed_result[31:0]  = {sign_0, x32_0[30:0]};
+          if (is_fp16 || is_bf16) begin
+            for (int l = 0; l < 4; l++) begin
+              if (k_adj[l*2])  // cos path
+                reconstructed_result[l*16 +: 16] = {nl_intermediate_sel[l*16 + 15] ^ (k_adj[l*2] ^ k_adj[l*2 + 1]),
+                                                     nl_intermediate_sel[l*16 +: 15]};
+              else              // sin path
+                reconstructed_result[l*16 +: 16] = {addmul_result_i[l*16 + 15] ^ (k_adj[l*2] ^ k_adj[l*2 + 1]),
+                                                     addmul_result_i[l*16 +: 15]};
+            end
+          end else begin
+            // FP32: 2 × 32-bit lanes
+            for (int l = 0; l < 2; l++) begin
+              if (k_adj[l*2]) 
+                reconstructed_result[l*32 +: 32] = {nl_intermediate_sel[l*32 + 31] ^ (k_adj[l*2] ^ k_adj[l*2 + 1]),
+                                                     nl_intermediate_sel[l*32 +: 31]};
+              else             
+                reconstructed_result[l*32 +: 32] = {addmul_result_i[l*32 + 31] ^ (k_adj[l*2] ^ k_adj[l*2 + 1]),
+                                                     addmul_result_i[l*32 +: 31]};
+            end
+          end
         end
     end
   end
