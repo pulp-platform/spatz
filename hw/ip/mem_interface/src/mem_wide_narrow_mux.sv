@@ -64,6 +64,7 @@ module mem_wide_narrow_mux #(
     // Backward Channel
     // ----------------
     in_narrow_rsp_o = out_rsp_i;
+    in_wide_rsp_o   = '0;
     // Broadcast data from all banks.
     for (int i = 0; i < NrPorts; i++) begin
       in_wide_rsp_o.p.data[i*NarrowDataWidth+:NarrowDataWidth] = out_rsp_i[i].p.data;

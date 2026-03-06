@@ -381,6 +381,57 @@ module testharness (
     repeat (1000)
       @(negedge clk_i);
 
+    // Initialize the Cache
+    to_cluster_req = '{
+      q: '{
+        addr   : PeriStartAddr + SPATZ_CLUSTER_PERIPHERAL_CFG_L1D_INSN_OFFSET,
+        data   : 64'd3,
+        write  : 1'b1,
+        strb   : '1,
+        amo    : reqrsp_pkg::AMONone,
+        default: '0
+      },
+      q_valid: 1'b1,
+      p_ready: 1'b0
+    };
+    `wait_for(to_cluster_rsp.q_ready);
+    to_cluster_req = '0;
+    `wait_for(to_cluster_rsp.p_valid);
+    to_cluster_req = '{
+      p_ready: 1'b1,
+      q      : '{
+        amo    : reqrsp_pkg::AMONone,
+        default: '0
+      },
+      default: '0
+    };
+    @(negedge clk_i);
+    to_cluster_req = '{
+      q: '{
+        addr   : PeriStartAddr + SPATZ_CLUSTER_PERIPHERAL_L1D_INSN_COMMIT_OFFSET,
+        data   : 64'd1,
+        write  : 1'b1,
+        strb   : '1,
+        amo    : reqrsp_pkg::AMONone,
+        default: '0
+      },
+      q_valid: 1'b1,
+      p_ready: 1'b0
+    };
+    `wait_for(to_cluster_rsp.q_ready);
+    to_cluster_req = '0;
+    `wait_for(to_cluster_rsp.p_valid);
+    to_cluster_req = '{
+      p_ready: 1'b1,
+      q      : '{
+        amo    : reqrsp_pkg::AMONone,
+        default: '0
+      },
+      default: '0
+    };
+    @(negedge clk_i);
+    to_cluster_req = '0;
+
     // Store the entry point in the Spatz cluster
     to_cluster_req = '{
       q: '{

@@ -34,7 +34,7 @@ SPATZ_CLUSTER_CFG ?= $(SPATZ_CLUSTER_DIR)/cfg/$(CFG).hjson
 include $(ROOT)/util/Makefrag
 
 # QuestaSim
-QUESTA_VER ?= questa-2025.3
+QUESTA_VER ?= questa-2025.3-dz
 VSIM        = ${QUESTA_VER} vsim
 VLOG        = ${QUESTA_VER} vlog
 VSIM_HOME   = /usr/pack/${QUESTA_VER}/questasim
@@ -212,7 +212,7 @@ clean.vlt:
 # Modelsim #
 ############
 
-${VSIM_BUILDDIR}/compile.vsim.tcl: test/bootrom.bin $(VSIM_SOURCES) ${TB_SRCS} ${TB_DIR}/rtl_lib.cc ${TB_DIR}/common_lib.cc test/bootdata.cc test/bootrom.bin
+${VSIM_BUILDDIR}/compile.vsim.tcl: test/bootrom.bin ${TB_DIR}/rtl_lib.cc ${TB_DIR}/common_lib.cc test/bootdata.cc test/bootrom.bin
 	vlib $(dir $@)
 	${BENDER} script vsim ${VSIM_BENDER} ${DEFS} --vlog-arg="${VLOG_FLAGS} -work $(dir $@) " > $@
 	echo '${VLOG} -work $(dir $@) ${TB_DIR}/rtl_lib.cc ${TB_DIR}/common_lib.cc test/bootdata.cc -ccflags "-std=c++17 -I${MKFILE_DIR}/test -I${MKFILE_DIR}/work/include -I${TB_DIR}"  -cpppath "${CXX}"' >> $@
@@ -251,7 +251,7 @@ SNPS_SG ?= spyglass-2022.06
 lint: generate lint/tmp/files lint/sdc/func.sdc lint/script/lint.tcl
 	cd lint && $(SNPS_SG) sg_shell -tcl script/lint.tcl
 
-lint/tmp/files: ${BENDER}
+lint/tmp/files:
 	mkdir -p lint/tmp
 	${BENDER} script verilator -t rtl -t spatz --define COMMON_CELLS_ASSERTS_OFF > lint/tmp/files
 
