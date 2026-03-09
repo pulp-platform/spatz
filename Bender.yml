@@ -11,8 +11,8 @@ package:
 dependencies:
   axi:                { git: "https://github.com/pulp-platform/axi.git",                version: =0.39.1-beta   }
   axi_riscv_atomics:  { git: "https://github.com/pulp-platform/axi_riscv_atomics.git",  version: 0.7.0          }
-  common_cells:       { git: "https://github.com/pulp-platform/common_cells.git",       version: 1.28.0         }
-  idma:               { git: "https://github.com/pulp-platform/iDMA.git",               version: 0.6.4          }
+  common_cells:       { git: "https://github.com/pulp-platform/common_cells.git",       version: 1.39.0         }
+  idma:               { git: "https://github.com/pulp-platform/iDMA.git",               version: 0.6.5          }
   FPnew:              { git: "https://github.com/pulp-platform/cvfpu.git",              rev:     9211f05a33abc3a179d3e6be533ea47215359c24 }
   register_interface: { git: "https://github.com/pulp-platform/register_interface.git", version: 0.3.8          }
   riscv-dbg:          { git: "https://github.com/pulp-platform/riscv-dbg.git",          version: 0.7.0          }

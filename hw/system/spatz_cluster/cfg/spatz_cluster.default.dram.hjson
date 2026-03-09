@@ -34,6 +34,7 @@
         "spatz_nports": 4,
         "double_bw": 0,
         "buf_fpu": 1,
+        "spatz_xvmxdotp": true,
         // Timing parameters
         "timing": {
             "lat_comp_fp32": 1,

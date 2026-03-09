@@ -42,8 +42,8 @@ packages:
     - scm
     - tech_cells_generic
   common_cells:
-    revision: 9afda9abb565971649c2aa0985639c096f351171
-    version: 1.38.0
+    revision: 9ca8a7655f741e7dd5736669a20a301325194c28
+    version: 1.39.0
     source:
       Git: https://github.com/pulp-platform/common_cells.git
     dependencies:
@@ -56,10 +56,10 @@ packages:
       Git: https://github.com/pulp-platform/common_verification.git
     dependencies: []
   fpnew:
-    revision: 44733dea65b48d7c90187aaf0a7dcc64969bd67b
+    revision: 9211f05a33abc3a179d3e6be533ea47215359c24
     version: null
     source:
-      Git: git@iis-git.ee.ethz.ch:mx/mx-rtl.git
+      Git: https://github.com/pulp-platform/cvfpu.git
     dependencies:
     - common_cells
     - fpu_div_sqrt_mvp
@@ -71,8 +71,8 @@ packages:
     dependencies:
     - common_cells
   idma:
-    revision: ff5d56fffb3767814db88d6bf8f381974ea33aa5
-    version: 0.6.4
+    revision: 28a36e5e07705549e59fc33db96ab681bc1ca88e
+    version: 0.6.5
     source:
       Git: https://github.com/pulp-platform/iDMA.git
     dependencies:
@@ -108,8 +108,8 @@ packages:
     - common_cells
     - tech_cells_generic
   scm:
-    revision: 472f99affe44ff7b282b519c047a3cfeb35b16c6
-    version: 1.2.0
+    revision: 1976c7efb4979271eee2abe262fde0f9a20e2557
+    version: 1.2.1
     source:
       Git: https://github.com/pulp-platform/scm.git
     dependencies:

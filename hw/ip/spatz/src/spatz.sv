@@ -470,7 +470,6 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     .vrf_re_o         (sb_re[VFU_VS4_RD:VFU_VS2_RD]                             ),
     .vrf_rdata_i      (vrf_rdata[VFU_VS4_RD:VFU_VS2_RD]                         ),
     .vrf_rvalid_i     (vrf_rvalid[VFU_VS4_RD:VFU_VS2_RD]                        ),
-    .vrf_id_o         ({sb_id[SB_VFU_VD_WD], sb_id[SB_VFU_VD_RD:SB_VFU_VS2_RD]}),
     .vrf_id_o         ({sb_id[SB_VFU_VD_WD], sb_id[SB_VFU_VS4_RD:SB_VFU_VS2_RD]}),
     // FPU side-channel
     .fpu_status_o     (fpu_status_o                                             )
