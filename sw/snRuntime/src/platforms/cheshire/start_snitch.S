@@ -15,7 +15,7 @@ _snrt_exit:
     addi      sp, sp, -8
     sw        a0, 0(sp)
     sw        ra, 4(sp)
-    call      snrt_global_core_idx
+    call      snrt_cluster_core_idx
     # reload exit code into t0
     lw        t0, 0(sp)
     lw        ra, 4(sp)
@@ -25,8 +25,17 @@ _snrt_exit:
     # - a0: global core index
     # - t0: exit code
     bnez      a0, 1f
+    addi      sp, sp, -8
+    sw        a0, 0(sp)
+    sw        ra, 4(sp)
+
     slli      t0, t0, 1
     ori       t0, t0, 1
     mv        a0, t0
     call      snrt_set_eoc_and_return_code
+    
+    lw        t0, 0(sp)
+    lw        ra, 4(sp)
+    addi      sp, sp, 8
+
 1:  ret
