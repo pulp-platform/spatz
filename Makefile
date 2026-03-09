@@ -40,7 +40,7 @@ sw/toolchain/riscv-gnu-toolchain: sw/toolchain/riscv-gnu-toolchain.version
 
 sw/toolchain/llvm-project: sw/toolchain/llvm-project.version
 	mkdir -p sw/toolchain
-	cd sw/toolchain && git clone git@iis-git.ee.ethz.ch:mx-spatz/llvm-project.git
+	cd sw/toolchain && git clone https://github.com/pulp-platform/llvm-project.git
 	cd sw/toolchain/llvm-project &&                  \
 		git checkout `cat ../llvm-project.version` && \
 		git submodule update --init --recursive --jobs=8 .
