@@ -148,7 +148,9 @@ package ${cfg['pkg_name']};
                       ${cfg['timing']['lat_mxdotp']},
                       ${cfg['timing']['lat_mxdotp']},
                       ${cfg['timing']['lat_mxdotp']},
-                      0, 0, 0}   // MXDOTP
+                      ${cfg['timing']['lat_mxdotp']},
+                      ${cfg['timing']['lat_mxdotp']},
+                      ${cfg['timing']['lat_mxdotp']}}   // MXDOTP
                     },
         UnitTypes: '{'{fpnew_pkg::MERGED,
                        fpnew_pkg::MERGED,
@@ -208,18 +210,15 @@ package ${cfg['pkg_name']};
                         fpnew_pkg::DISABLED}, // DOTP
 % endif
 % if cfg["spatz_xvmxdotp"]:
-                    // NOTE: For MXDOTP, UnitTypes are not respected properly by
-                    // the FPU. The actual enabling/disabling of source and
-                    // destination data types is done internally in the FPU.
                     '{fpnew_pkg::MERGED,
                         fpnew_pkg::MERGED,
                         fpnew_pkg::MERGED,
                         fpnew_pkg::MERGED,
                         fpnew_pkg::MERGED,
                         fpnew_pkg::MERGED,
-                        fpnew_pkg::DISABLED,
-                        fpnew_pkg::DISABLED,
-                        fpnew_pkg::DISABLED}}, // MXDOTP
+                        fpnew_pkg::MERGED,
+                        fpnew_pkg::MERGED,
+                        fpnew_pkg::MERGED}}, // MXDOTP
 % else:
                     '{fpnew_pkg::DISABLED,
                         fpnew_pkg::DISABLED,
