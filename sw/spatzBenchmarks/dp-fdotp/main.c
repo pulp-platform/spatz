@@ -85,7 +85,7 @@ int main() {
 
   if (cid == 0) {
     // Init the cache
-    l1d_init(spm_size);
+    l1d_spm_config(spm_size);
   }
 
   // Wait for all cores to finish
@@ -135,7 +135,7 @@ int main() {
 
   for (int iter = 0; iter < measure_iter; iter ++) {
     // // Start dump
-    if (cid == 0)
+    if (cid == 0 && iter == (measure_iter-1))
       start_kernel();
 
     // Start timer
@@ -153,6 +153,7 @@ int main() {
     // End timer and check if new best runtime
     if (cid == 0) {
       timer_tmp = benchmark_get_cycle() - timer_tmp;
+
       timer = (timer < timer_tmp) ? timer : timer_tmp;
       if (iter == 0)
         timer_iter1 = timer;
@@ -170,7 +171,7 @@ int main() {
     snrt_cluster_hw_barrier();
 
     // End dump
-    if (cid == 0)
+    if (cid == 0 && iter == (measure_iter-1))
       stop_kernel();
 
     // // End timer and check if new best runtime

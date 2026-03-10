@@ -102,7 +102,7 @@ int main() {
   #endif
   if (cid == 0) {
     // Init the cache
-    l1d_init(spm_size);
+    l1d_spm_config(spm_size);
   }
 
   // Wait for all cores to finish
@@ -152,7 +152,7 @@ int main() {
   // Calculate matmul
   for (unsigned int i = 0; i < measure_iter; ++i) {
     // Start dump
-    if (cid == 0)
+    if (cid == 0 && i == (measure_iter-1))
       start_kernel();
 
     // Start timer
@@ -180,7 +180,8 @@ int main() {
         if (i == 0)
           timer_iter1 = timer;
       }
-      stop_kernel();
+      if (i == (measure_iter-1))
+        stop_kernel();
     }
 
     if ((cid == 0) && (i == 0)) {

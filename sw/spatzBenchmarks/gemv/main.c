@@ -64,7 +64,7 @@ int main() {
 
   if (cid == 0) {
     // Init the cache
-    l1d_init(spm_size);
+    l1d_spm_config(spm_size);
   }
 
   #if MEAS_1ITER == 1
@@ -119,7 +119,7 @@ int main() {
   for (int iter = 0; iter < measure_iter; iter ++) {
 
     // Start dump
-    if (cid == 0)
+    if (cid == 0 && iter == (measure_iter-1))
       start_kernel();
 
     // Start timer
@@ -138,7 +138,7 @@ int main() {
     snrt_cluster_hw_barrier();
 
     // End dump
-    if (cid == 0)
+    if (cid == 0 && iter == (measure_iter-1))
       stop_kernel();
 
     // End timer and check if new best runtime

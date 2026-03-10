@@ -14,382 +14,351 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Author: Diyou Shen, ETH Zurich
+// Author: Tim Frey,    ETH Zurich
+//         Diyou Shen,  ETH Zurich
+
 
 #include "dp-db-fmatmul.h"
 #include <stddef.h>
 
+
+#include <benchmark.h>
+#include <snrt.h>
+#include <stddef.h>
+
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
 
-void matmul(double *c, const double *a, const double *b, const unsigned int M,
-            const unsigned int N, const unsigned int P) {
-  if (M <= 4) {
-    matmul_2xVL(c, a, b, 0, M, N, P, 0, P);
-  } else if (M <= 8) {
-    matmul_4xVL(c, a, b, 0, M, N, P, 0, P);
-  } else {
-    matmul_8xVL(c, a, b, 0, M, N, P, 0, P);
+#define DEBUG 1
+#if DEBUG == 0
+#define debug_print(fmt, ...)
+#else
+#define debug_print(fmt, ...)                  \
+    if (snrt_cluster_core_idx() == 0) \
+      printf(fmt __VA_OPT__(, ) __VA_ARGS__);
+#endif
+#define TS sizeof(double)  // TYPE SIZE
+
+void print_matrix(const char* name, const double* matrix, const unsigned int M,
+                  const unsigned int N) {
+  if (DEBUG == 0) return;
+  for (unsigned int i = 0; i < M; ++i) {
+    debug_print("%s[%d] = [", name, i);
+    for (unsigned int j = 0; j < N; ++j) {
+      debug_print("%.2f, ", matrix[i * N + j]);
+    }
+    debug_print("]\n");
   }
 }
 
-// ---------------
-// 2xVL
-// ---------------
+const unsigned int KERNEL_SIZE = 4;
+const unsigned int VL = 32;  // VECTOR LENGTH
 
-void matmul_2xVL(double *c, const double *a, const double *b,
-                 const unsigned int m_start, const unsigned int m_end,
-                 const unsigned int N, const unsigned int P,
-                 const unsigned int p_start, const unsigned int p_end) {
+// matrix multiplication c = a * b
+unsigned int dp_fmatmul_double_buffering_kernel(
+    double* c,                    // result in DRAM
+    const double* a,              // a in DRAM
+    const double* b,              // b in DRAM
+    const double* buf,            // L1 buffer
+    const unsigned int BUF_SIZE,  // size of buffer in words
+    const unsigned int M,         // a matrix rows
+    const unsigned int K,         // a matrix columns / b matrix rows
+    const unsigned int N          // b matrix columns
+) {
+  // Only using BUF_SIZE words in buffer - which has to point to the L1
 
-  unsigned int p = p_start;
-  while (p < p_end) {
-    // Calculate the vl
-    size_t gvl;
-    asm volatile("vsetvli %[gvl], %[vl], e64, m8, ta, ma"
-                 : [gvl] "=r"(gvl)
-                 : [vl] "r"(p_end - p));
+  const unsigned int num_cores = snrt_cluster_core_num();
+  const unsigned int cid = snrt_cluster_core_idx();
 
-    const double *b_ = b + p;
-    double *c_ = c + p;
+  // STEP SIZE
+  const unsigned int M_ = num_cores * KERNEL_SIZE;  // rows of a to be processed
+  const unsigned int N_ = VL;  // columns of b to be processed
 
-    for (unsigned int m = m_start; m < m_end; m += 2) {
-      const double *a_ = a + m * N;
-      const double *a__ = a_;
+  // Chunk size in K dimension
+  //  = columns of a
+  //  = rows of b
+  // to be processed at a time
+  const unsigned int K_ = 128; // change to 64 if needed
 
-      asm volatile("vle64.v v16, (%0);" ::"r"(b_));
-      const double *b__ = b_ + P;
+  // Devide L1 buffer
+  const unsigned int A_SIZE = M_ * K_;
+  const unsigned int B_SIZE = K_ * N_;
+  const unsigned int C_SIZE = M_ * N_;
 
-      double *c__ = c_ + m * P;
+  // double buffering of b in inner loop
+  const unsigned BUF_SIZE_REQUIRED = 2 * (A_SIZE + B_SIZE + C_SIZE);
+  if (BUF_SIZE < BUF_SIZE_REQUIRED) {
+    printf("Buffer size is too small: %d < %d\n", BUF_SIZE, BUF_SIZE_REQUIRED);
+    snrt_cluster_hw_barrier();
+    return -1;
+  }
 
-      double t0, t1;
+  const unsigned int N_CHUNKS = N / N_;  // number of vertical chunks of b
+  const unsigned int M_CHUNKS = M / M_;  // number of horizontal chunks of a
+  const unsigned int K_CHUNKS = K / K_;  // number of horizontal chunks of b
 
-      t0 = *a__;
-      a__ += N;
-      t1 = *a__;
+  if (N % N_ != 0) {
+    printf("N is not a multiple of N_: %d %% %d != 0\n", N, N_);
+    snrt_cluster_hw_barrier();
+    return -1;
+  }
+  if (M % M_ != 0) {
+    printf("M is not a multiple of M_: %d %% %d != 0\n", M, M_);
+    snrt_cluster_hw_barrier();
+    return -1;
+  }
+  if (K % K_ != 0) {
+    printf("K is not a multiple of K_: %d %% %d != 0\n", K, K_);
+    snrt_cluster_hw_barrier();
+    return -1;
+  }
 
-      unsigned int n = 0;
+  double* c_ = c;    // moving DRAM pointer, moving vertically
+  double* a_ = a;    // moving DRAM pointer, moving vertically
+  double* a__ = a_;  // moving DRAM pointer, moving horizontally
+  double* b_ = b;    // moving DRAM pointer, moving vertically
 
-      while (n < N) {
-        a__ = a_ + ++n;
+  // Partition L1 buffer, double buffering
+  // the pointers for a, c are core id specific to
+  // directly access the right part of the buffer per core
+  double* ptr = buf;
 
-        asm volatile("vle64.v v24, (%0);" ::"r"(b__));
-        b__ += P;
+  double* a_buf1 = ptr + cid * KERNEL_SIZE * K_;
+  ptr += A_SIZE;
+  double* a_buf2 = ptr + cid * KERNEL_SIZE * K_;
+  ptr += A_SIZE;
 
-        if (n == 1) {
-          asm volatile("vfmul.vf v0, v16, %0" ::"f"(t0));
-          t0 = *a__;
-          a__ += N;
-          asm volatile("vfmul.vf v8, v16, %0" ::"f"(t1));
-          t1 = *a__;
-        } else {
-          asm volatile("vfmacc.vf v0, %0, v16" ::"f"(t0));
-          t0 = *a__;
-          a__ += N;
-          asm volatile("vfmacc.vf v8, %0, v16" ::"f"(t1));
-          t1 = *a__;
-        }
+  double* b_buf1 = ptr;
+  ptr += B_SIZE;
+  double* b_buf2 = ptr;
+  ptr += B_SIZE;
 
-        a__ = a_ + ++n;
+  double* c_buf1 = ptr + cid * KERNEL_SIZE * N_;
+  ptr += C_SIZE;
+  double* c_buf2 = ptr + cid * KERNEL_SIZE * N_;
+  // ptr += C_SIZE;
 
-        if (n == N)
-          break;
+  snrt_cluster_hw_barrier();
 
-        asm volatile("vle64.v v16, (%0);" ::"r"(b__));
-        b__ += P;
+  // snrt_dma_txid_t a_transfer;
+  unsigned int timer = 0;
 
-        asm volatile("vfmacc.vf v0, %0, v24" ::"f"(t0));
-        t0 = *a__;
-        a__ += N;
-        asm volatile("vfmacc.vf v8, %0, v24" ::"f"(t1));
-        t1 = *a__;
+  size_t gvl;
+
+  // fetch first chunk of all
+  if (cid == 0) {
+    snrt_dma_start_2d(a_buf1,   // destination
+                      a__,      // source
+                      K_ * TS,  // elements per row
+                      K_ * TS,  // destination stride = aligned
+                      K * TS,   // source stride = go to next row
+                      M_        // rows
+    );
+    a__ += K_;
+
+    snrt_dma_start_2d(b_buf1,   // destination
+                      b_,       // source
+                      N_ * TS,  // N_ elements per row
+                      N_ * TS,  // destination stride = aligned
+                      N * TS,   // source stride = go to next row
+                      K_        // K_ rows
+    );
+    b_ += K_ * N;  // move down to next chunk of b
+  }
+
+  asm volatile("vsetvli %[gvl], %[vl], e64, m4, ta, ma"
+               : [gvl] "=r"(gvl)
+               : [vl] "r"(N_));
+
+  // clean vector registers
+  asm volatile("vmv.v.i v0, 0");
+  asm volatile("vmv.v.i v4, 0");
+  asm volatile("vmv.v.i v8, 0");
+  asm volatile("vmv.v.i v12, 0");
+
+  if (cid == 1) {
+    printf(" vl = %zu, M_ = %d, N_ = %d, K_ = %d\n", gvl, M_, N_, K_);
+  }
+  snrt_cluster_hw_barrier();
+
+  if (cid == 0) {
+    snrt_dma_wait_all();
+    start_kernel();
+    timer = benchmark_get_cycle();
+  }
+  snrt_cluster_hw_barrier();
+
+  // asm volatile("vle64.v v16, (%0);" ::"r"(b_buf1));
+
+  for (int n_chunk_id = N_CHUNKS - 1; n_chunk_id >= 0; n_chunk_id--) {
+    // outer column loop
+
+    const double* c_ = c;  // c_ is moving downwards, c is moving horizontally
+    c += N_;               // next column chunk of c for next iteration
+
+    for (int m_chunk_id = M_CHUNKS - 1; m_chunk_id >= 0; m_chunk_id--) {
+      // outer row loop
+
+      a_ += K * M_;  // move vertically to next row of a
+      if (m_chunk_id == 0) {
+        b += N_;  // move horizontally to next column of b
+        a_ = a;   // reset vertical moving pointer to the beginning of a
       }
 
-      asm volatile("vfmacc.vf v0, %0, v24" ::"f"(t0));
-      asm volatile("vse64.v v0, (%0);" ::"r"(c__));
-      c__ += P;
-      asm volatile("vfmacc.vf v8, %0, v24" ::"f"(t1));
-      asm volatile("vse64.v v8, (%0);" ::"r"(c__));
-    }
+      for (int k_chunk_id = K_CHUNKS - 1; k_chunk_id >= 0; k_chunk_id--) {
+        // inner chunk loop
 
-    p += gvl;
-  }
-}
+        // if (cid == 0) {
+        //   snrt_dma_wait(a_transfer);
+        // }
+        snrt_cluster_hw_barrier();  // keep one barrier in loop to sync cores
 
-// ---------------
-// 4xVL
-// ---------------
+        // preload
+        asm volatile("vle64.v v16, (%0);" ::"r"(b_buf1));
 
-void matmul_4xVL(double *c, const double *a, const double *b,
-                 const unsigned int m_start, const unsigned int m_end,
-                 const unsigned int N, const unsigned int P,
-                 const unsigned int p_start, const unsigned int p_end) {
+        if (cid == 0) {
+          // start fetching next a and b
+          if (1) {  // do not check if not last element, much faster this way
 
-  unsigned int p = p_start;
-  while (p < p_end) {
-    // Calculate the vl
-    size_t gvl;
-    asm volatile("vsetvli %[gvl], %[vl], e64, m4, ta, ma"
-                 : [gvl] "=r"(gvl)
-                 : [vl] "r"(p_end - p));
+            if (k_chunk_id == 0) {
+              // will be down with K_CHUNKS
+              b_ = b;    // jump to start of next column of b
+              a__ = a_;  // jump to start of next row of a
+            }
 
-    const double *b_ = b + p;
-    double *c_ = c + p;
+            // a_transfer =
+            snrt_dma_start_2d(a_buf2,   // dest
+                              a__,      // src
+                              K_ * TS,  // K_ elements per row
+                              K_ * TS,  // destination stride = aligned
+                              K * TS,   // source stride = go to next row
+                              M_        // M_ rows
+            );
+            a__ += K_;  // move to the right to next chunk of a
 
-    for (unsigned int m = m_start; m < m_end; m += 4) {
-      // Horizontally parallel A matrix for loop unrolling (row-wise)
-      const double *a_ = a + m * N;
-      const double *a__ = a_;
+            snrt_dma_start_2d(b_buf2,   // dest
+                              b_,       // src
+                              N_ * TS,  // N_ elements per row
+                              N_ * TS,  // destination stride = aligned
+                              N * TS,   // source stride = go to next row
+                              K_        // K_ rows
+            );
+            b_ += K_ * N;  // move down to next chunk of b
+          }
+        }
 
-      asm volatile("vle64.v v16, (%0);" ::"r"(b_));
-      const double *b__ = b_ + P;
+        // actual calculation of (M_ * K_) x (K_ * N_) sub matrix
+        double* a_buf_ = a_buf1;       // this pointer is moving horizontally
+        double* a_buf__ = a_buf_;      // this pointer is moving vertically
+        double* b_buf_ = b_buf1 + N_;  // this pointer is moving line by line
 
-      double *c__ = c_ + m * P;
+        // preload first elements of a
+        double t0, t1, t2, t3;
+        t0 = *a_buf__;
+        a_buf__ += K_;
+        t1 = *a_buf__;
+        a_buf__ += K_;
+        t2 = *a_buf__;
+        a_buf__ += K_;
+        t3 = *a_buf__;
 
-      double t0, t1, t2, t3;
+        // already preloaded first row vector of b
 
-      t0 = *a__;
-      a__ += N;
-      t1 = *a__;
-      a__ += N;
-      t2 = *a__;
-      a__ += N;
-      t3 = *a__;
+        // unrolled loop for prefetching vectors
+        for (int k = K_ - 2; k >= 0; k -= 2) {
+          asm volatile("vle64.v v24, (%0);" ::"r"(b_buf_));  // preload
+          b_buf_ += N_;
 
-      unsigned int n = 0;
+          a_buf_ += 1;       // move one col to the right
+          a_buf__ = a_buf_;  // reset vertical moving pointer
 
-      while (n < N) {
-        asm volatile("vle64.v v20, (%0);" ::"r"(b__));
-        b__ += P;
-
-        a__ = a_ + ++n;
-
-        if (n == 1) {
-          asm volatile("vfmul.vf v0, v16, %0" ::"f"(t0));
-          t0 = *a__;
-          a__ += N;
-          asm volatile("vfmul.vf v4, v16, %0" ::"f"(t1));
-          t1 = *a__;
-          a__ += N;
-          asm volatile("vfmul.vf v8, v16, %0" ::"f"(t2));
-          t2 = *a__;
-          a__ += N;
-          asm volatile("vfmul.vf v12, v16, %0" ::"f"(t3));
-          t3 = *a__;
-        } else {
           asm volatile("vfmacc.vf v0, %0, v16" ::"f"(t0));
-          t0 = *a__;
-          a__ += N;
+          t0 = *a_buf__;
           asm volatile("vfmacc.vf v4, %0, v16" ::"f"(t1));
-          t1 = *a__;
-          a__ += N;
+          a_buf__ += K_;
+          t1 = *a_buf__;
           asm volatile("vfmacc.vf v8, %0, v16" ::"f"(t2));
-          t2 = *a__;
-          a__ += N;
+          a_buf__ += K_;
+          t2 = *a_buf__;
           asm volatile("vfmacc.vf v12, %0, v16" ::"f"(t3));
-          t3 = *a__;
-        }
+          a_buf__ += K_;
+          t3 = *a_buf__;
 
-        a__ = a_ + ++n;
+          a_buf_ += 1;
+          a_buf__ = a_buf_;
 
-        if (n == N)
-          break;
+          asm volatile("vle64.v v16, (%0);" ::"r"(b_buf_));  // preload
+          b_buf_ += N_;
 
-        asm volatile("vle64.v v16, (%0);" ::"r"(b__));
-        b__ += P;
+          asm volatile("vfmacc.vf v0, %0, v24" ::"f"(t0));
+          t0 = *a_buf__;
+          asm volatile("vfmacc.vf v4, %0, v24" ::"f"(t1));
+          a_buf__ += K_;
+          t1 = *a_buf__;
+          asm volatile("vfmacc.vf v8, %0, v24" ::"f"(t2));
+          a_buf__ += K_;
+          t2 = *a_buf__;
+          asm volatile("vfmacc.vf v12, %0, v24" ::"f"(t3));
+          a_buf__ += K_;
+          t3 = *a_buf__;
+        }  // k loop end
 
-        asm volatile("vfmacc.vf v0, %0, v20" ::"f"(t0));
-        t0 = *a__;
-        a__ += N;
-        asm volatile("vfmacc.vf v4, %0, v20" ::"f"(t1));
-        t1 = *a__;
-        a__ += N;
-        asm volatile("vfmacc.vf v8, %0, v20" ::"f"(t2));
-        t2 = *a__;
-        a__ += N;
-        asm volatile("vfmacc.vf v12, %0, v20" ::"f"(t3));
-        t3 = *a__;
+        // swap buffers for b and a
+        double* tempb = b_buf1;
+        b_buf1 = b_buf2;
+        b_buf2 = tempb;
+
+        double* tempa = a_buf1;
+        a_buf1 = a_buf2;
+        a_buf2 = tempa;
+
+      }  // k chunk loop end
+
+      const double* c_buf__ = c_buf1;  // this pointer is moving line by line
+
+      // store vector result into L1
+      asm volatile("vse64.v v0, (%0);" ::"r"(c_buf__));
+      c_buf__ += N_;
+      asm volatile("vse64.v v4, (%0);" ::"r"(c_buf__));
+      c_buf__ += N_;
+      asm volatile("vse64.v v8, (%0);" ::"r"(c_buf__));
+      c_buf__ += N_;
+      asm volatile("vse64.v v12, (%0);" ::"r"(c_buf__));
+
+      // clean vector registers
+      asm volatile("vmv.v.i v0, 0");
+      asm volatile("vmv.v.i v4, 0");
+      asm volatile("vmv.v.i v8, 0");
+      asm volatile("vmv.v.i v12, 0");
+
+      // snrt_cluster_hw_barrier(); // do we need to wait here?
+
+      // post result to DRAM
+      if (cid == 0) {
+        snrt_dma_start_2d(c_,       // dst
+                          c_buf1,   // src
+                          N_ * TS,  // N_ elements per row
+                          N * TS,   // destination stride = next row
+                          N_ * TS,  // source stride = aligned
+                          M_        // M_ rows
+        );
+        c_ += M_ * N;  // move one chunk down
       }
 
-      asm volatile("vfmacc.vf v0, %0, v20" ::"f"(t0));
-      asm volatile("vse64.v v0, (%0);" ::"r"(c__));
-      c__ += P;
-      asm volatile("vfmacc.vf v4, %0, v20" ::"f"(t1));
-      asm volatile("vse64.v v4, (%0);" ::"r"(c__));
-      c__ += P;
-      asm volatile("vfmacc.vf v8, %0, v20" ::"f"(t2));
-      asm volatile("vse64.v v8, (%0);" ::"r"(c__));
-      c__ += P;
-      asm volatile("vfmacc.vf v12, %0, v20" ::"f"(t3));
-      asm volatile("vse64.v v12, (%0);" ::"r"(c__));
-    }
+      // swap buffers for c
+      double* tempc = c_buf1;
+      c_buf1 = c_buf2;
+      c_buf2 = tempc;
 
-    p += gvl;
+    }  // m chunk loop end
+
+  }  // n chunk loop end
+
+  if (cid == 0) {
+    timer = benchmark_get_cycle() - timer;
+    stop_kernel();
+    snrt_dma_wait_all();
   }
-}
-
-// ---------------
-// 8xVL
-// ---------------
-
-void matmul_8xVL(double *c, const double *a, const double *b,
-                 const unsigned int m_start, const unsigned int m_end,
-                 const unsigned int N, const unsigned int P,
-                 const unsigned int p_start, const unsigned int p_end) {
-
-  unsigned int p = p_start;
-  while (p < p_end) {
-    // Calculate the vl
-    size_t gvl;
-    asm volatile("vsetvli %[gvl], %[vl], e64, m2, ta, ma"
-                 : [gvl] "=r"(gvl)
-                 : [vl] "r"(p_end - p));
-
-    const double *b_ = b + p;
-    double *c_ = c + p;
-
-    for (unsigned int m = m_start; m < m_end; m += 8) {
-      const double *a_ = a + m * N;
-      const double *a__ = a_;
-
-      asm volatile("vle64.v v18, (%0);" ::"r"(b_));
-      const double *b__ = b_ + P;
-
-      double *c__ = c_ + m * P;
-
-      double t0, t1, t2, t3, t4, t5, t6, t7;
-
-      t0 = *a__;
-      a__ += N;
-      t1 = *a__;
-      a__ += N;
-      t2 = *a__;
-      a__ += N;
-      t3 = *a__;
-      a__ += N;
-      t4 = *a__;
-      a__ += N;
-      t5 = *a__;
-      a__ += N;
-      t6 = *a__;
-      a__ += N;
-      t7 = *a__;
-
-      unsigned int n = 0;
-
-      while (n < N) {
-        a__ = a_ + ++n;
-
-        asm volatile("vle64.v v20, (%0);" ::"r"(b__));
-        b__ += P;
-
-        if (n == 1) {
-          asm volatile("vfmul.vf v0, v18, %0" ::"f"(t0));
-          t0 = *a__;
-          a__ += N;
-          asm volatile("vfmul.vf v2, v18, %0" ::"f"(t1));
-          t1 = *a__;
-          a__ += N;
-          asm volatile("vfmul.vf v4, v18, %0" ::"f"(t2));
-          t2 = *a__;
-          a__ += N;
-          asm volatile("vfmul.vf v6, v18, %0" ::"f"(t3));
-          t3 = *a__;
-          a__ += N;
-          asm volatile("vfmul.vf v8, v18, %0" ::"f"(t4));
-          t4 = *a__;
-          a__ += N;
-          asm volatile("vfmul.vf v10, v18, %0" ::"f"(t5));
-          t5 = *a__;
-          a__ += N;
-          asm volatile("vfmul.vf v12, v18, %0" ::"f"(t6));
-          t6 = *a__;
-          a__ += N;
-          asm volatile("vfmul.vf v14, v18, %0" ::"f"(t7));
-          t7 = *a__;
-        } else {
-          asm volatile("vfmacc.vf v0, %0, v18" ::"f"(t0));
-          t0 = *a__;
-          a__ += N;
-          asm volatile("vfmacc.vf v2, %0, v18" ::"f"(t1));
-          t1 = *a__;
-          a__ += N;
-          asm volatile("vfmacc.vf v4, %0, v18" ::"f"(t2));
-          t2 = *a__;
-          a__ += N;
-          asm volatile("vfmacc.vf v6, %0, v18" ::"f"(t3));
-          t3 = *a__;
-          a__ += N;
-          asm volatile("vfmacc.vf v8, %0, v18" ::"f"(t4));
-          t4 = *a__;
-          a__ += N;
-          asm volatile("vfmacc.vf v10, %0, v18" ::"f"(t5));
-          t5 = *a__;
-          a__ += N;
-          asm volatile("vfmacc.vf v12, %0, v18" ::"f"(t6));
-          t6 = *a__;
-          a__ += N;
-          asm volatile("vfmacc.vf v14, %0, v18" ::"f"(t7));
-          t7 = *a__;
-        }
-
-        a__ = a_ + ++n;
-
-        if (n == N)
-          break;
-
-        asm volatile("vle64.v v18, (%0);" ::"r"(b__));
-        b__ += P;
-
-        asm volatile("vfmacc.vf v0, %0, v20" ::"f"(t0));
-        t0 = *a__;
-        a__ += N;
-        asm volatile("vfmacc.vf v2, %0, v20" ::"f"(t1));
-        t1 = *a__;
-        a__ += N;
-        asm volatile("vfmacc.vf v4, %0, v20" ::"f"(t2));
-        t2 = *a__;
-        a__ += N;
-        asm volatile("vfmacc.vf v6, %0, v20" ::"f"(t3));
-        t3 = *a__;
-        a__ += N;
-        asm volatile("vfmacc.vf v8, %0, v20" ::"f"(t4));
-        t4 = *a__;
-        a__ += N;
-        asm volatile("vfmacc.vf v10, %0, v20" ::"f"(t5));
-        t5 = *a__;
-        a__ += N;
-        asm volatile("vfmacc.vf v12, %0, v20" ::"f"(t6));
-        t6 = *a__;
-        a__ += N;
-        asm volatile("vfmacc.vf v14, %0, v20" ::"f"(t7));
-        t7 = *a__;
-      }
-
-      asm volatile("vfmacc.vf v0, %0, v20" ::"f"(t0));
-      asm volatile("vse64.v v0, (%0);" ::"r"(c__));
-      c__ += P;
-      asm volatile("vfmacc.vf v2, %0, v20" ::"f"(t1));
-      asm volatile("vse64.v v2, (%0);" ::"r"(c__));
-      c__ += P;
-      asm volatile("vfmacc.vf v4, %0, v20" ::"f"(t2));
-      asm volatile("vse64.v v4, (%0);" ::"r"(c__));
-      c__ += P;
-      asm volatile("vfmacc.vf v6, %0, v20" ::"f"(t3));
-      asm volatile("vse64.v v6, (%0);" ::"r"(c__));
-      c__ += P;
-      asm volatile("vfmacc.vf v8, %0, v20" ::"f"(t4));
-      asm volatile("vse64.v v8, (%0);" ::"r"(c__));
-      c__ += P;
-      asm volatile("vfmacc.vf v10, %0, v20" ::"f"(t5));
-      asm volatile("vse64.v v10, (%0);" ::"r"(c__));
-      c__ += P;
-      asm volatile("vfmacc.vf v12, %0, v20" ::"f"(t6));
-      asm volatile("vse64.v v12, (%0);" ::"r"(c__));
-      c__ += P;
-      asm volatile("vfmacc.vf v14, %0, v20" ::"f"(t7));
-      asm volatile("vse64.v v14, (%0);" ::"r"(c__));
-    }
-
-    p += gvl;
-  }
+  snrt_cluster_hw_barrier();
+  return timer;
 }

@@ -14,7 +14,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Author: Diyou Shen, ETH Zurich
+// Author: Tim Frey,    ETH Zurich
+//         Diyou Shen,  ETH Zurich
 
 #ifndef DPFMATMUL_H
 #define DPFMATMUL_H
