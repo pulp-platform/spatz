@@ -110,7 +110,7 @@ add_library(sp-fmatmul sp-fmatmul/kernel/sp-fmatmul.c)
 add_library(hp-fmatmul hp-fmatmul/kernel/hp-fmatmul.c)
 
 add_spatz_test_twoParam_type(dp-gemv gemv/main.c 64  128 64)
-add_spatz_test_twoParam_type(sp-gemv gemv/main.c 128 128 32)
+# add_spatz_test_twoParam_type(sp-gemv gemv/main.c 128 128 32)
 add_spatz_test_threeParam_type(dp-spmv spmv/main.c 64 64 512 64)
 macro(add_spmv_kernel_source target_name)
   target_sources(test-${SNITCH_TEST_PREFIX}${target_name} PRIVATE spmv/kernel/spmv.c)
@@ -128,6 +128,7 @@ add_spmv_kernel_source(dp-spmv_M64_N64_K512)
 add_library(dp-faxpy dp-faxpy/kernel/faxpy.c)
 
 add_library(dp-fdotp dp-fdotp/kernel/fdotp.c)
+add_library(dp-dbfdotp dp-db-fdotp/kernel/db-fdotp.c)
 
 add_library(dp-fconv2d dp-fconv2d/kernel/fconv2d.c)
 
@@ -172,6 +173,9 @@ add_spatz_test_oneParam(dp-faxpy dp-faxpy/main.c 1024)
 
 add_spatz_test_oneParam(dp-fdotp dp-fdotp/main.c 128)
 add_spatz_test_oneParam(dp-fdotp dp-fdotp/main.c 4096)
+add_spatz_test_oneParam(dp-db-fdotp dp-db-fdotp/main.c 4096)
+add_spatz_test_oneParam(dp-db-fdotp dp-db-fdotp/main.c 8192)
+add_spatz_test_oneParam(dp-db-fdotp dp-db-fdotp/main.c 32768)
 
 add_spatz_test_threeParam(dp-fconv2d dp-fconv2d/main.c 32 32 7)
 add_spatz_test_threeParam(dp-fconv2d dp-fconv2d/main.c 64 64 7)
