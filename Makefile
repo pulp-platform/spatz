@@ -45,7 +45,7 @@ sw/toolchain/llvm-project: sw/toolchain/llvm-project.version
 
 sw/toolchain/riscv-opcodes: sw/toolchain/riscv-opcodes.version
 	mkdir -p sw/toolchain
-	cd sw/toolchain && git clone https://github.com/mp-17/riscv-opcodes.git
+	cd sw/toolchain && git clone https://github.com/bowwwang/riscv-opcodes-spatzennest.git
 	cd sw/toolchain/riscv-opcodes &&                 \
 		git checkout `cat ../riscv-opcodes.version` && \
 		git submodule update --init --recursive --jobs=8 .
