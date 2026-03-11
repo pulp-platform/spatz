@@ -381,6 +381,7 @@ double dp_dotp_db_simple(
       dotp_B_dram + load_idx,
       NUM_ELEM_PER_ITER * T_S
     );
+    start_kernel();
     performance_timer = benchmark_get_cycle();
   }
 
@@ -452,6 +453,7 @@ double dp_dotp_db_simple(
 
   if (cid == 0) {
     performance_timer = benchmark_get_cycle() - performance_timer;
+    stop_kernel();
   }
 
 
@@ -499,46 +501,55 @@ int main() {
   // The minimal buffer size is 32 doubles (16 banks * 2 cores)
   // const unsigned int SCALAR = dim / 32;
   // const unsigned int BUF_SIZE = num_cores * NUM_BANKS * SCALAR; // in doubles
-  unsigned int BUF_SIZE = 8192; // in doubles, 64kB
-
-  if (cid == 0) {
-    printf("dim: %u, BUF_SIZE: %u (FP64), T_S: %u\n", dim, BUF_SIZE, T_S);
-
-    l1_buf = (double *)snrt_l1alloc(BUF_SIZE * T_S);
-
-    if (l1_buf == NULL) {
-      printf("Error: Could not allocate buffer of size %d\n", BUF_SIZE);
-      return -1;
-    }
-  }
+  unsigned int BUF_SIZE = 12288; // in doubles, 64kB
 
   // Wait for all cores to finish
   snrt_cluster_hw_barrier();
 
   unsigned max_dim = dim;
-  // dim = 32768;
-  while (dim <= 32768) {
-    if (cid == 0)
-      printf("Running with dim: %u\n", dim);
 
-    snrt_cluster_hw_barrier();
+  unsigned int current_dim = dotp_l.M;
 
-    while (BUF_SIZE <= 16384) {
-      // Test the second implementation
-      if (cid == 0)
-        printf("Running with dim: %u, BUF_SIZE: %u\n", dim, BUF_SIZE);
+  while (current_dim <= 32768) {
+    unsigned int test_buf_size = BUF_SIZE; // Start small (64kB)
+    int out_of_mem = 0;
+
+    while (test_buf_size <= 16384 && !out_of_mem) {
+      if (cid == 0) {
+        // Attempt allocation for this specific iteration
+        l1_buf = (double *)snrt_l1alloc(test_buf_size * sizeof(double));
+
+        if (l1_buf == NULL) {
+          printf("Reached L1 limit at BUF_SIZE: %u. Stopping size growth.\n", test_buf_size);
+            out_of_mem = 1;
+        } else {
+          printf("Running: Dim %u, Buf %u (Allocated at %p)\n", current_dim, test_buf_size, l1_buf);
+        }
+      }
+
+      // Synchronize: Don't let other cores start until CID 0 checks the pointer
+      snrt_cluster_hw_barrier();
+
+      // Broadcast the out_of_mem status or check l1_buf
+      if (l1_buf == NULL) break;
 
       dp_dotp_db_simple(
         (double *)dotp_A_dram,
         (double *)dotp_B_dram,
-        dim,
+        current_dim,
         l1_buf,
-        BUF_SIZE
+        test_buf_size
       );
-      BUF_SIZE *= 2;
-    }
 
-    dim *= 2;
+      if (cid == 0) {
+        // IMPORTANT: Reset L1 space for the next loop if your runtime allows.
+        l1d_spm_config(spm_size);
+      }
+
+      test_buf_size *= 2;
+      snrt_cluster_hw_barrier();
+    }
+    current_dim *= 2;
   }
 
   // Wait for core 0 to finish displaying results

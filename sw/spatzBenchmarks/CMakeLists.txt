@@ -173,7 +173,7 @@ add_spatz_test_oneParam(dp-faxpy dp-faxpy/main.c 1024)
 
 add_spatz_test_oneParam(dp-fdotp dp-fdotp/main.c 128)
 add_spatz_test_oneParam(dp-fdotp dp-fdotp/main.c 4096)
-add_spatz_test_oneParam(dp-db-fdotp dp-db-fdotp/main.c 4096)
+add_spatz_test_oneParam(dp-fdotp dp-fdotp/main.c 32768)
 add_spatz_test_oneParam(dp-db-fdotp dp-db-fdotp/main.c 8192)
 add_spatz_test_oneParam(dp-db-fdotp dp-db-fdotp/main.c 32768)
 

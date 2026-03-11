@@ -14,7 +14,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Author: Matteo Perotti <mperotti@iis.ee.ethz.ch>
+// Author: Imfeld Jonah,ETH Zurich
+//         Diyou Shen,  ETH Zurich
 
 #include "db-fdotp.h"
 
