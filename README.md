@@ -40,6 +40,8 @@ In `hw/system/spatz_cluster`:
 
 Before compiling the hardware, DramSys is required to be built for accurate DRAM simulation:
 ```bash
+    # Force to rebuild the bootrom. This is needed to prevent some errors in the steps below.
+    make bootrom -B
     # Initialize the DramSys, only need to run once when first clone the repo
     make dram-init
     # Build the DramSys with customized configurations. Do not need to rebuild if no new configurations added
@@ -75,6 +77,8 @@ Currently, the default will use DDR4-2400 model with customized address mapping.
 
 A clean hw&sw building example scripts is shown as below using QuestaSim:
 ```bash
+    # Build the DPI files
+    make dpi -B
     # Data initialized in DRAM, using cache to run the program
     make clean sw.vsim -B USE_CACHE=1 SNRT_LINK=dram
 ```
