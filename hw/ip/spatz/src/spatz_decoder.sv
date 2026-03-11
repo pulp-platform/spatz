@@ -209,6 +209,59 @@ module spatz_decoder
           endcase // decoder_req_i.instr
         end
 
+        riscv_instr::VLXBLK4EI8_V,
+        riscv_instr::VLXBLK4EI16_V,
+        riscv_instr::VLXBLK6EI8_V,
+        riscv_instr::VLXBLK6EI16_V,
+        riscv_instr::VLXBLK8EI8_V,
+        riscv_instr::VLXBLK8EI16_V,
+        riscv_instr::VLXBLK12EI8_V,
+        riscv_instr::VLXBLK12EI16_V,
+        riscv_instr::VLXBLK16EI8_V,
+        riscv_instr::VLXBLK16EI16_V: begin
+          automatic vreg_t blk_vd         = decoder_req_i.instr[11:7];
+          automatic vreg_t blk_rs1        = decoder_req_i.instr[19:15];
+          automatic vreg_t blk_vs2        = decoder_req_i.instr[24:20];
+          automatic logic [2:0] blk_width = decoder_req_i.instr[14:12];
+          automatic logic [6:0] blk_funct7 = decoder_req_i.instr[31:25];
+
+          spatz_req.op             = VLXBLK;
+          spatz_req.ex_unit        = LSU;
+          spatz_req.op_mem.is_load = 1'b1;
+
+          spatz_req.vd             = blk_vd;
+          spatz_req.use_vd         = 1'b1;
+
+          spatz_req.rs1            = decoder_req_i.rs1;
+
+          spatz_req.vs2            = blk_vs2;
+          spatz_req.use_vs2        = 1'b1;
+
+          // New custom encoding has no vm field. Treat as unmasked.
+          spatz_req.op_mem.vm      = 1'b1;
+
+          // Indexed block load:
+          // op_mem.ew = index element width
+          // vtype.vsew = data element width from current vtype CSR
+          unique case (blk_width)
+            3'b000: spatz_req.op_mem.ew = EW_8;
+            3'b101: spatz_req.op_mem.ew = EW_16;
+            default: illegal_instr = 1'b1;
+          endcase
+
+          spatz_req.vtype.vsew = decoder_req_i.vtype.vsew;
+
+          // Block length is encoded in funct7[31:25]
+          unique case (blk_funct7)
+            7'b0001000: spatz_req.op_mem.blk_len = BLKLEN_4;
+            7'b0001001: spatz_req.op_mem.blk_len = BLKLEN_6;
+            7'b0001010: spatz_req.op_mem.blk_len = BLKLEN_8;
+            7'b0001011: spatz_req.op_mem.blk_len = BLKLEN_12;
+            7'b0001100: spatz_req.op_mem.blk_len = BLKLEN_16;
+            default: illegal_instr = 1'b1;
+          endcase
+        end
+
         // MXU Matrix load and store instructions
         riscv_instr::MLE8_V_A ,
         riscv_instr::MLE8_V_B ,

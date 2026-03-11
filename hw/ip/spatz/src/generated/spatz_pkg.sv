@@ -132,7 +132,7 @@ package spatz_pkg;
     // Slide instructions
     VSLIDEUP, VSLIDEDOWN,
     // Load instructions
-    VLE, VLSE, VLXE,
+    VLE, VLSE, VLXE, VLXBLK,
     // Store instructions
     VSE, VSSE, VSXE,
     // Config instruction
@@ -201,6 +201,7 @@ package spatz_pkg;
     logic vm;
     logic is_load;
     vew_e ew;
+    logic [2:0] blk_len;   // block length encoding
   } op_mem_t;
 
   typedef struct packed {

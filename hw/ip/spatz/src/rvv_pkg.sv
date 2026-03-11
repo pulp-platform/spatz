@@ -18,6 +18,14 @@ package rvv_pkg;
   } vew_e;
 
   typedef enum logic [2:0] {
+    BLKLEN_4  = 3'd0,
+    BLKLEN_6  = 3'd1,
+    BLKLEN_8  = 3'd2,
+    BLKLEN_12 = 3'd3,
+    BLKLEN_16 = 3'd4
+  } vlblklen_e;
+
+  typedef enum logic [2:0] {
     LMUL_RES = 3'b100,
     LMUL_F8  = 3'b101,
     LMUL_F4  = 3'b110,
