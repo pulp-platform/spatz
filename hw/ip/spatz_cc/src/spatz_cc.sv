@@ -458,8 +458,8 @@ module spatz_cc
   always_comb begin
     fp_mux_mem_req = fp_lsu_mem_req;
     fp_lsu_mem_rsp = fp_mux_mem_rsp;
-    fp_mux_mem_req.q.id[$clog(NumSpatzOutstandingLoads)-1] = 1'b1;
-    fp_lsu_mem_rsp.p.id[$clog(NumSpatzOutstandingLoads)-1] = 1'b0;
+    fp_mux_mem_req.q.id[$clog2(NumSpatzOutstandingLoads)-1] = 1'b1;
+    fp_lsu_mem_rsp.p.id[$clog2(NumSpatzOutstandingLoads)-1] = 1'b0;
   end
 
   reqrsp_mux_oo #(
