@@ -77,6 +77,15 @@ macro(add_spatz_test_threeParam name file param1 param2 param3)
   target_compile_definitions(test-${SNITCH_TEST_PREFIX}${target_name} PUBLIC DATAHEADER="data/data_${param1}_${param2}_${param3}.h" PRINT_RESULT USE_CACHE=${USE_CACHE} MEAS_1ITER=${MEAS_1ITER} PRINT_UART=${PRINT_UART})
 endmacro()
 
+macro(add_spatz_test_threeParam_dq name file param1 param2 param3)
+  set(target_name ${name}_M${param1}_N${param2}_K${param3})
+  add_snitch_test(${target_name} ${file})
+  target_link_libraries(test-${SNITCH_TEST_PREFIX}${target_name} benchmark ${SNITCH_RUNTIME})
+  target_compile_definitions(test-${SNITCH_TEST_PREFIX}${target_name}
+    PUBLIC DATAHEADER="data/data_dq_${param1}_${param2}_${param3}.h"
+           SNRT_NFPU_PER_CORE=${SNRT_NFPU_PER_CORE})
+endmacro()
+
 # Use data type as another parameter
 macro(add_spatz_test_oneParam_type name file param1 type)
   set(target_name ${name}_M${param1})
@@ -108,6 +117,7 @@ add_library(benchmark benchmark/benchmark.c)
 add_library(dp-fmatmul dp-fmatmul/kernel/dp-fmatmul.c)
 add_library(sp-fmatmul sp-fmatmul/kernel/sp-fmatmul.c)
 add_library(hp-fmatmul hp-fmatmul/kernel/hp-fmatmul.c)
+add_library(hp-dqmatmul hp-dqmatmul/kernel/hp-dqmatmul.c)
 
 # add_spatz_test_twoParam_type(dp-gemv gemv/main.c 64  128 64)
 # add_spatz_test_twoParam_type(sp-gemv gemv/main.c 128 128 32)
@@ -212,3 +222,7 @@ add_spatz_test_threeParam(dp-fmatmul-4x4vl dp-fmatmul-4x4vl/main.c 128 128 128)
 add_spatz_test_threeParam(dp-db-fmatmul-4x4vl dp-db-fmatmul-4x4vl/main.c 128 128 128)
 add_spatz_test_threeParam(dp-db-fmatmul-4x4vl dp-db-fmatmul-4x4vl/main.c 64 64 64)
 add_spatz_test_threeParam(dp-db-fmatmul-4x4vl dp-db-fmatmul-4x4vl/main.c 32 32 32)
+
+ # Vector Dequantization
+ add_spatz_test_threeParam_dq(hp-dqmatmul hp-dqmatmul/main.c 32 32 32)
+ add_spatz_test_threeParam_dq(hp-dqmatmul hp-dqmatmul/main.c 128 128 128)
