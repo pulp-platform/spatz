@@ -17,7 +17,7 @@ OPCODES := "opcodes-rvv opcodes-rv32b_CUSTOM opcodes-ipu_CUSTOM opcodes-frep_CUS
 all: bender toolchain update_opcodes
 
 quick-start:
-	ln -sf /usr/scratch2/calanda/diyou/toolchain/spatz/install ./install
+	ln -sf /usr/scratch2/calanda/diyou/toolchain/spatz-vq/install ./install
 
 
 ###############
@@ -46,6 +46,7 @@ sw/toolchain/llvm-project: sw/toolchain/llvm-project.version
 sw/toolchain/riscv-opcodes: sw/toolchain/riscv-opcodes.version
 	mkdir -p sw/toolchain
 	cd sw/toolchain && git clone https://github.com/bowwwang/riscv-opcodes-spatzennest.git
+	mv sw/toolchain/riscv-opcodes-spatzennest sw/toolchain/riscv-opcodes
 	cd sw/toolchain/riscv-opcodes &&                 \
 		git checkout `cat ../riscv-opcodes.version` && \
 		git submodule update --init --recursive --jobs=8 .

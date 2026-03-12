@@ -83,7 +83,8 @@ macro(add_spatz_test_threeParam_dq name file param1 param2 param3)
   target_link_libraries(test-${SNITCH_TEST_PREFIX}${target_name} benchmark ${SNITCH_RUNTIME})
   target_compile_definitions(test-${SNITCH_TEST_PREFIX}${target_name}
     PUBLIC DATAHEADER="data/data_dq_${param1}_${param2}_${param3}.h"
-           SNRT_NFPU_PER_CORE=${SNRT_NFPU_PER_CORE})
+           SNRT_NFPU_PER_CORE=${SNRT_NFPU_PER_CORE}
+           USE_CACHE=${USE_CACHE} MEAS_1ITER=${MEAS_1ITER})
 endmacro()
 
 # Use data type as another parameter
