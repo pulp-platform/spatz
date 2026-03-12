@@ -274,8 +274,8 @@ module spatz_cc
     .oup_ready_i ( acc_demux_snitch_ready    )
   );
 
-  dreq_t fp_lsu_mem_req;
-  drsp_t fp_lsu_mem_rsp;
+  dreq_t fp_lsu_mem_req, fp_mux_mem_req;
+  drsp_t fp_lsu_mem_rsp, fp_mux_mem_rsp;
 
   tcdm_req_chan_t [NumMemPortsPerSpatz-1:0] spatz_mem_req;
   logic           [NumMemPortsPerSpatz-1:0] spatz_mem_req_valid;
@@ -455,23 +455,30 @@ module spatz_cc
     .mst_rsp_i    ({data_tcdm_rsp, data_soc_rsp})
   );
 
-  reqrsp_mux #(
+  always_comb begin
+    fp_mux_mem_req = fp_lsu_mem_req;
+    fp_lsu_mem_rsp = fp_mux_mem_rsp;
+    fp_mux_mem_req.q.id[$clog(NumSpatzOutstandingLoads)-1] = 1'b1;
+    fp_lsu_mem_rsp.p.id[$clog(NumSpatzOutstandingLoads)-1] = 1'b0;
+  end
+
+  reqrsp_mux_oo #(
     .NrPorts     (2           ),
     .AddrWidth   (AddrWidth   ),
     .DataWidth   (DataWidth   ),
     .req_t       (dreq_t      ),
     .rsp_t       (drsp_t      ),
     // TODO(zarubaf): Wire-up to top-level.
-    .RespDepth   (4           ),
+    .RespDepth   (32          ),
     .RegisterReq ({1'b1, 1'b0})
   ) i_reqrsp_mux (
     .clk_i     (clk_i                          ),
     .rst_ni    (rst_ni                         ),
-    .slv_req_i ({fp_lsu_mem_req, data_tcdm_req}),
-    .slv_rsp_o ({fp_lsu_mem_rsp, data_tcdm_rsp}),
+    .slv_req_i ({fp_mux_mem_req, data_tcdm_req}),
+    .slv_rsp_o ({fp_mux_mem_rsp, data_tcdm_rsp}),
     .mst_req_o (merged_dreq                    ),
     .mst_rsp_i (merged_drsp                    ),
-    .idx_o     (/*not connected*/              )
+    .idx_i     (merged_drsp.p.id[4]            )
   );
 
   // Add a fifo here to store id information for non-tcdm request (in-order)
