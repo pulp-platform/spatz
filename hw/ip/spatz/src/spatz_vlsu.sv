@@ -411,7 +411,7 @@ module spatz_vlsu
   logic             commit_insn_valid;
 
   fifo_v3 #(
-    .DEPTH       (3                ),
+    .DEPTH       (4                ),
     .FALL_THROUGH(1'b1             ),
     .dtype       (commit_metadata_t)
   ) i_fifo_commit_insn (
