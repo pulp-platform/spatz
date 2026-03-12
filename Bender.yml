@@ -41,6 +41,7 @@ sources:
     - hw/ip/reqrsp_interface/src/reqrsp_iso.sv
     - hw/ip/reqrsp_interface/src/reqrsp_mux.sv
     - hw/ip/reqrsp_interface/src/reqrsp_to_axi.sv
+    - hw/ip/reqrsp_interface/src/reqrsp_mux_oo.sv
     - target: simulation
       files:
         - hw/ip/reqrsp_interface/src/reqrsp_test.sv

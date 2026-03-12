@@ -120,6 +120,9 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
   localparam int unsigned PPNSize = AddrWidth - PAGE_SHIFT;
   localparam bit NSX = XF16 | XF16ALT | XF8 | XFVEC;
 
+  dreq_t data_req;
+  drsp_t data_rsp;
+
   logic illegal_inst, illegal_csr;
   logic interrupt, ecall, ebreak;
   logic zero_lsb;
@@ -3238,9 +3241,14 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
     .lsu_pvalid_o  (lsu_pvalid  ),
     .lsu_pready_i  (lsu_pready  ),
     .lsu_empty_o   (lsu_empty   ),
-    .data_req_o    (data_req_o  ),
-    .data_rsp_i    (data_rsp_i  )
+    .data_req_o    (data_req    ),
+    .data_rsp_i    (data_rsp    )
   );
+
+  always_comb begin
+    data_req_o = data_req;
+    data_rsp   = data_rsp_i;
+  end
 
   assign lsu_tlb_qvalid = valid_instr & (is_load | is_store)
                                       & ~(ld_addr_misaligned | st_addr_misaligned);
