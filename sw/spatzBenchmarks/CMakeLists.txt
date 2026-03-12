@@ -181,6 +181,8 @@ add_spatz_test_threeParam(dp-fconv2d dp-fconv2d/main.c 32 32 7)
 add_spatz_test_threeParam(dp-fconv2d dp-fconv2d/main.c 64 64 7)
 
 add_spatz_test_twoParam(dp-fft dp-fft/main.c 128 2)
+add_spatz_test_twoParam(dp-fft dp-fft/main.c 1024 2)
+add_spatz_test_twoParam(dp-fft dp-fft/main.c 2048 2)
 
 add_spatz_test_twoParam(sp-fft sp-fft/main.c 256 2)
 add_spatz_test_twoParam(sp-fft sp-fft/main.c 512 2)
