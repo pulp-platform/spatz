@@ -22,7 +22,8 @@
 #include <stdio.h>
 
 #include DATAHEADER
-#include "kernel/hp-dqmatmul.c"
+// #include "kernel/hp-dqmatmul.c"
+#include "kernel/hp-dqmatmul-blk32.c"
 
 #ifndef NFPU_PER_CORE
 #define NFPU_PER_CORE 4
@@ -73,7 +74,7 @@ int main() {
   #if USE_CACHE == 0
   uint32_t spm_size = 120;
   #else 
-  uint32_t spm_size = 16;
+  uint32_t spm_size = 4;
   #endif
 
   if (cid == 0) {
@@ -138,28 +139,30 @@ int main() {
   // Calculate matmul
   for (unsigned int i = 0; i < measure_iterations; ++i) {
     // Start timer
-    timer_start = benchmark_get_cycle();
 
     // Start dump
-    if (cid == 0)
+    if (cid == 0) {
       start_kernel();
+      timer_start = benchmark_get_cycle();
+    }
     #if USE_CACHE == 0
-    dq_matmul_4xVL(c, a, b_cb0, b_cb1, b_idx0, b_idx1, m_start, m_end, dq_gemm_l.K, dq_gemm_l.N, p_start, p_end);
+    dq_matmul_4xVL_blk32(c, a, b_cb0, b_cb1, b_idx0, b_idx1, m_start, m_end, dq_gemm_l.K, dq_gemm_l.N, p_start, p_end);
     #else
-    dq_matmul_4xVL_dp(c, a, b_cb0, b_cb1, b_idx0, b_idx1, m_start, m_end, dq_gemm_l.K, dq_gemm_l.N, p_start, p_end);
+    dq_matmul_4xVL_dp_blk32(c, a, b_cb0, b_cb1, b_idx0, b_idx1, m_start, m_end, dq_gemm_l.K, dq_gemm_l.N, p_start, p_end);
     #endif
 
     // Wait for all cores to finish
     snrt_cluster_hw_barrier();
 
     // End dump
-    if (cid == 0)
+    if (cid == 0) {
+      timer_end = benchmark_get_cycle();
       stop_kernel();
+    }
 
     // End timer and check if new best runtime
-    timer_end = benchmark_get_cycle();
-    unsigned int timer_temp = timer_end - timer_start;
     if (cid == 0) {
+      unsigned int timer_temp = timer_end - timer_start;
       if (timer_temp < timer) {
         timer = timer_temp;
       }
@@ -179,14 +182,14 @@ int main() {
            performance, utilization);
   }
 
-  // if (cid == 0) {
+  if (cid == 0) {
 
-  //   if (fp16_check(gemm_golden, c, dq_gemm_l.M, dq_gemm_l.N)) {
-  //     printf("WRONG!   \n");
-  //   } else {
-  //     printf("CORRECT! \n");
-  //   }
-  // }
+    if (fp16_check(gemm_golden, c, dq_gemm_l.M, dq_gemm_l.N)) {
+      printf("WRONG!   \n");
+    } else {
+      printf("CORRECT! \n");
+    }
+  }
 
   // Wait for all cores to finish
   snrt_cluster_hw_barrier();
