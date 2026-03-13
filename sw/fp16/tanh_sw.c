@@ -1,8 +1,6 @@
-/*  tanh_sw.c – Approximate polynomial clamped tanh(x) for BF16 power evaluation
+/*  tanh_sw.c – Software tanh via degree-2 polynomial (FP16)
  *
- *  Algorithm:  y = x · (C + x² · (B + A·x²)),  clamped to [-1, +1]
- *    A ≈ 0.02661 (BF16: 0x3CDA),  B ≈ -0.22852 (BF16: 0xBE6A),  C ≈ 0.98047 (BF16: 0x3F7B)
- *
+ *  Algorithm: tanh(x) = clamp(x*(C + x²*(B + A*x²)), -1, +1)
  *  Compile with -DLMUL_MODE={1,2,4,8}
  */
 
@@ -11,19 +9,19 @@
 #include "data/data.h"
 #include "golden/gold.h"
 #include "benchmark/benchmark.c"
+#include "sanity_check.h"
 
-#include <math.h>
 #include <stdint.h>
 
 #ifndef LMUL_MODE
 #define LMUL_MODE 8
 #endif
 
-static const float COEFF_A =  0.026611328125f;  /* BF16: 0x3CDA */
-static const float COEFF_B = -0.228515625f;     /* BF16: 0xBE6A */
-static const float COEFF_C =  0.98046875f;      /* BF16: 0x3F7B */
-static const float POS_ONE =  1.0f;
-static const float NEG_ONE = -1.0f;
+static const float A  =  0.026611328125f;
+static const float B  = -0.228515625f;
+static const float C  =  0.98046875f;
+static const float P1 =  1.0f;
+static const float N1 = -1.0f;
 
 /* ========================= LMUL = 8 ========================= */
 static inline void vtanh_m8(const uint16_t *inp, uint16_t *out, int N) {
@@ -33,7 +31,7 @@ static inline void vtanh_m8(const uint16_t *inp, uint16_t *out, int N) {
         asm volatile("vsetvli %0, %1, e16, m8, ta, ma"
                      : "=r"(vl) : "r"(rem));
         asm volatile(
-            "vle16.v   v0,  (%[pin])           \n\t"
+            "vle16.v   v0,  (%[p])             \n\t"
             "vfmul.vv  v8,  v0,  v0            \n\t"
             "vfmv.v.f  v16, %[B]               \n\t"
             "vfmacc.vf v16, %[A], v8            \n\t"
@@ -42,10 +40,10 @@ static inline void vtanh_m8(const uint16_t *inp, uint16_t *out, int N) {
             "vfmul.vv  v24, v0,  v24            \n\t"
             "vfmax.vf  v24, v24, %[N1]          \n\t"
             "vfmin.vf  v24, v24, %[P1]          \n\t"
-            "vse16.v   v24, (%[po])             \n\t"
-            : : [pin]"r"(inp), [po]"r"(out),
-                [A]"f"(COEFF_A), [B]"f"(COEFF_B), [C]"f"(COEFF_C),
-                [P1]"f"(POS_ONE), [N1]"f"(NEG_ONE)
+            "vse16.v   v24, (%[o])              \n\t"
+            :: [p]"r"(inp), [o]"r"(out),
+               [A]"f"(A), [B]"f"(B), [C]"f"(C),
+               [P1]"f"(P1), [N1]"f"(N1)
             : "memory"
         );
         inp += vl; out += vl; rem -= vl;
@@ -60,7 +58,7 @@ static inline void vtanh_m4(const uint16_t *inp, uint16_t *out, int N) {
         asm volatile("vsetvli %0, %1, e16, m4, ta, ma"
                      : "=r"(vl) : "r"(rem));
         asm volatile(
-            "vle16.v   v0,  (%[pin])           \n\t"
+            "vle16.v   v0,  (%[p])             \n\t"
             "vfmul.vv  v4,  v0,  v0            \n\t"
             "vfmv.v.f  v8,  %[B]               \n\t"
             "vfmacc.vf v8,  %[A], v4            \n\t"
@@ -69,10 +67,10 @@ static inline void vtanh_m4(const uint16_t *inp, uint16_t *out, int N) {
             "vfmul.vv  v12, v0,  v12            \n\t"
             "vfmax.vf  v12, v12, %[N1]          \n\t"
             "vfmin.vf  v12, v12, %[P1]          \n\t"
-            "vse16.v   v12, (%[po])             \n\t"
-            : : [pin]"r"(inp), [po]"r"(out),
-                [A]"f"(COEFF_A), [B]"f"(COEFF_B), [C]"f"(COEFF_C),
-                [P1]"f"(POS_ONE), [N1]"f"(NEG_ONE)
+            "vse16.v   v12, (%[o])              \n\t"
+            :: [p]"r"(inp), [o]"r"(out),
+               [A]"f"(A), [B]"f"(B), [C]"f"(C),
+               [P1]"f"(P1), [N1]"f"(N1)
             : "memory"
         );
         inp += vl; out += vl; rem -= vl;
@@ -87,7 +85,7 @@ static inline void vtanh_m2(const uint16_t *inp, uint16_t *out, int N) {
         asm volatile("vsetvli %0, %1, e16, m2, ta, ma"
                      : "=r"(vl) : "r"(rem));
         asm volatile(
-            "vle16.v   v0,  (%[pin])           \n\t"
+            "vle16.v   v0,  (%[p])             \n\t"
             "vfmul.vv  v2,  v0,  v0            \n\t"
             "vfmv.v.f  v4,  %[B]               \n\t"
             "vfmacc.vf v4,  %[A], v2            \n\t"
@@ -96,10 +94,10 @@ static inline void vtanh_m2(const uint16_t *inp, uint16_t *out, int N) {
             "vfmul.vv  v6,  v0,  v6             \n\t"
             "vfmax.vf  v6,  v6,  %[N1]          \n\t"
             "vfmin.vf  v6,  v6,  %[P1]          \n\t"
-            "vse16.v   v6,  (%[po])             \n\t"
-            : : [pin]"r"(inp), [po]"r"(out),
-                [A]"f"(COEFF_A), [B]"f"(COEFF_B), [C]"f"(COEFF_C),
-                [P1]"f"(POS_ONE), [N1]"f"(NEG_ONE)
+            "vse16.v   v6,  (%[o])              \n\t"
+            :: [p]"r"(inp), [o]"r"(out),
+               [A]"f"(A), [B]"f"(B), [C]"f"(C),
+               [P1]"f"(P1), [N1]"f"(N1)
             : "memory"
         );
         inp += vl; out += vl; rem -= vl;
@@ -114,7 +112,7 @@ static inline void vtanh_m1(const uint16_t *inp, uint16_t *out, int N) {
         asm volatile("vsetvli %0, %1, e16, m1, ta, ma"
                      : "=r"(vl) : "r"(rem));
         asm volatile(
-            "vle16.v   v0,  (%[pin])           \n\t"
+            "vle16.v   v0,  (%[p])             \n\t"
             "vfmul.vv  v1,  v0,  v0            \n\t"
             "vfmv.v.f  v2,  %[B]               \n\t"
             "vfmacc.vf v2,  %[A], v1            \n\t"
@@ -123,10 +121,10 @@ static inline void vtanh_m1(const uint16_t *inp, uint16_t *out, int N) {
             "vfmul.vv  v3,  v0,  v3             \n\t"
             "vfmax.vf  v3,  v3,  %[N1]          \n\t"
             "vfmin.vf  v3,  v3,  %[P1]          \n\t"
-            "vse16.v   v3,  (%[po])             \n\t"
-            : : [pin]"r"(inp), [po]"r"(out),
-                [A]"f"(COEFF_A), [B]"f"(COEFF_B), [C]"f"(COEFF_C),
-                [P1]"f"(POS_ONE), [N1]"f"(NEG_ONE)
+            "vse16.v   v3,  (%[o])              \n\t"
+            :: [p]"r"(inp), [o]"r"(out),
+               [A]"f"(A), [B]"f"(B), [C]"f"(C),
+               [P1]"f"(P1), [N1]"f"(N1)
             : "memory"
         );
         inp += vl; out += vl; rem -= vl;
@@ -153,7 +151,9 @@ int main(void) {
     const unsigned cid   = snrt_cluster_core_idx();
     const unsigned cores = snrt_cluster_core_num();
     snrt_cluster_hw_barrier();
+
     const int N = B_Size * T_Size * C_Size;
+
     if (cid == 0) {
         g_inp = (uint16_t *)snrt_l1alloc(N * sizeof(uint16_t));
         g_out = (uint16_t *)snrt_l1alloc(N * sizeof(uint16_t));
@@ -161,22 +161,26 @@ int main(void) {
         snrt_dma_wait_all();
     }
     snrt_cluster_hw_barrier();
+
     const int start = (int)((int64_t)cid       * N / (int64_t)cores);
     const int end   = (int)((int64_t)(cid + 1) * N / (int64_t)cores);
     const int len   = end - start;
+
     snrt_cluster_hw_barrier();
+
     unsigned t0 = 0;
     if (cid == 0) { start_kernel(); t0 = benchmark_get_cycle(); }
-    asm volatile("csrwi 0x800, 3" ::: "memory");  /* FMODE: enable BF16 */
+
     if (len > 0) vtanh_kernel(g_inp + start, g_out + start, len);
-    asm volatile("csrwi 0x800, 0" ::: "memory");  /* FMODE: restore FP16 */
+
     snrt_cluster_hw_barrier();
+
     if (cid == 0) {
         unsigned cyc = benchmark_get_cycle() - t0;
         stop_kernel();
-        printf("[TANH_BF16 LMUL=%d] cycles=%u  cores=%u  N=%d\n",
+        printf("[TANH_SW LMUL=%d] cycles=%u  cores=%u  N=%d\n",
                LMUL_MODE, cyc, cores, N);
-        check_bf16(g_out, outT, N, "TANH_BF16");
+        check_fp16(g_out, outT, N, "TANH_SW");
     }
     snrt_cluster_hw_barrier();
     return 0;
