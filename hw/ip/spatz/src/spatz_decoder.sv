@@ -218,7 +218,8 @@ module spatz_decoder
         riscv_instr::VLXBLK12EI8_V,
         riscv_instr::VLXBLK12EI16_V,
         riscv_instr::VLXBLK16EI8_V,
-        riscv_instr::VLXBLK16EI16_V: begin
+        riscv_instr::VLXBLK16EI16_V,
+        riscv_instr::VLXBLK32EI8_V: begin
           automatic vreg_t blk_vd         = decoder_req_i.instr[11:7];
           automatic vreg_t blk_rs1        = decoder_req_i.instr[19:15];
           automatic vreg_t blk_vs2        = decoder_req_i.instr[24:20];
@@ -258,6 +259,7 @@ module spatz_decoder
             7'b0001010: spatz_req.op_mem.blk_len = BLKLEN_8;
             7'b0001011: spatz_req.op_mem.blk_len = BLKLEN_12;
             7'b0001100: spatz_req.op_mem.blk_len = BLKLEN_16;
+            7'b0001101: spatz_req.op_mem.blk_len = BLKLEN_32;
             default: illegal_instr = 1'b1;
           endcase
         end

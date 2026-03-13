@@ -2566,7 +2566,8 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
       riscv_instr::VLXBLK12EI8_V,
       riscv_instr::VLXBLK12EI16_V,
       riscv_instr::VLXBLK16EI8_V,
-      riscv_instr::VLXBLK16EI16_V: begin
+      riscv_instr::VLXBLK16EI16_V,
+      riscv_instr::VLXBLK32EI8_V: begin
         if (RVV) begin
           write_rd        = 1'b0;
           uses_rd         = 1'b0;

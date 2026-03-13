@@ -22,7 +22,8 @@ package rvv_pkg;
     BLKLEN_6  = 3'd1,
     BLKLEN_8  = 3'd2,
     BLKLEN_12 = 3'd3,
-    BLKLEN_16 = 3'd4
+    BLKLEN_16 = 3'd4,
+    BLKLEN_32 = 3'd5
   } vlblklen_e;
 
   typedef enum logic [2:0] {

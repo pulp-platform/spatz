@@ -573,6 +573,10 @@ module spatz_vlsu
               blk_len  = vlen_t'(16);
               blk_log2 = 3'd4;
             end
+            BLKLEN_32: begin
+              blk_len  = vlen_t'(32);
+              blk_log2 = 3'd5;
+            end
             default: begin
               blk_len  = vlen_t'(1);
               blk_log2 = 3'd0;
