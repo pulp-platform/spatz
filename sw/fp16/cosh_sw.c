@@ -1,8 +1,6 @@
-/*  cosh_sw.c – Schraudolph-based fast cosh(x) for BF16 power evaluation
+/*  cosh_sw.c – Software cosh via Schraudolph (exp+exp−)/2 (FP16)
  *
- *  Algorithm:  cosh(x) = 0.5 * (exp(x) + exp(-x))
- *    where exp(x) ≈ reinterpret_bf16( uint16( B + C·x ) )
- *
+ *  Algorithm:  cosh(x) = 0.5*(exp(x) + exp(−x))
  *  Compile with -DLMUL_MODE={1,2,4,8}
  */
 
@@ -11,27 +9,27 @@
 #include "data/data.h"
 #include "golden/gold.h"
 #include "benchmark/benchmark.c"
+#include "sanity_check.h"
 
-#include <math.h>
 #include <stdint.h>
 
 #ifndef LMUL_MODE
 #define LMUL_MODE 8
 #endif
 
-static const float SCH_C = 185.0f;       /* BF16: 0x4339 */
-static const float SCH_B = 16256.0f;      /* BF16: 0x467E */
+static const float SCH_C = 1477.3197f;
+static const float SCH_B = 15360.0f;
 
 /* ========================= LMUL = 8 ========================= */
 static inline void vcosh_m8(const uint16_t *inp, uint16_t *out, int N) {
-    float half = 0.5f;
+    const float half = 0.5f;
     int rem = N;
     while (rem > 0) {
         size_t vl;
         asm volatile("vsetvli %0, %1, e16, m8, ta, ma"
                      : "=r"(vl) : "r"(rem));
         asm volatile(
-            "vle16.v   v0,  (%[pin])           \n\t"
+            "vle16.v   v0,  (%[p])             \n\t"
             "vfmv.v.f  v8,  %[B]               \n\t"
             "vfmacc.vf v8,  %[C], v0            \n\t"
             "vfcvt.rtz.xu.f.v v8,  v8           \n\t"
@@ -41,9 +39,9 @@ static inline void vcosh_m8(const uint16_t *inp, uint16_t *out, int N) {
             "vfcvt.rtz.xu.f.v v16, v16          \n\t"
             "vfadd.vv  v24, v8, v16             \n\t"
             "vfmul.vf  v24, v24, %[H]           \n\t"
-            "vse16.v   v24, (%[po])             \n\t"
-            : : [pin]"r"(inp), [po]"r"(out),
-                [B]"f"(SCH_B), [C]"f"(SCH_C), [H]"f"(half)
+            "vse16.v   v24, (%[o])              \n\t"
+            :: [p]"r"(inp), [o]"r"(out),
+               [B]"f"(SCH_B), [C]"f"(SCH_C), [H]"f"(half)
             : "memory"
         );
         inp += vl; out += vl; rem -= vl;
@@ -52,26 +50,26 @@ static inline void vcosh_m8(const uint16_t *inp, uint16_t *out, int N) {
 
 /* ========================= LMUL = 4 ========================= */
 static inline void vcosh_m4(const uint16_t *inp, uint16_t *out, int N) {
-    float half = 0.5f;
+    const float half = 0.5f;
     int rem = N;
     while (rem > 0) {
         size_t vl;
         asm volatile("vsetvli %0, %1, e16, m4, ta, ma"
                      : "=r"(vl) : "r"(rem));
         asm volatile(
-            "vle16.v   v0,  (%[pin])           \n\t"
+            "vle16.v   v0,  (%[p])             \n\t"
             "vfmv.v.f  v4,  %[B]               \n\t"
             "vfmacc.vf v4,  %[C], v0            \n\t"
-            "vfcvt.rtz.xu.f.v v4, v4            \n\t"
+            "vfcvt.rtz.xu.f.v v4,  v4           \n\t"
             "vfsgnjn.vv v0, v0, v0              \n\t"
             "vfmv.v.f  v8,  %[B]               \n\t"
             "vfmacc.vf v8,  %[C], v0            \n\t"
-            "vfcvt.rtz.xu.f.v v8, v8            \n\t"
+            "vfcvt.rtz.xu.f.v v8,  v8           \n\t"
             "vfadd.vv  v12, v4, v8              \n\t"
             "vfmul.vf  v12, v12, %[H]           \n\t"
-            "vse16.v   v12, (%[po])             \n\t"
-            : : [pin]"r"(inp), [po]"r"(out),
-                [B]"f"(SCH_B), [C]"f"(SCH_C), [H]"f"(half)
+            "vse16.v   v12, (%[o])              \n\t"
+            :: [p]"r"(inp), [o]"r"(out),
+               [B]"f"(SCH_B), [C]"f"(SCH_C), [H]"f"(half)
             : "memory"
         );
         inp += vl; out += vl; rem -= vl;
@@ -80,26 +78,26 @@ static inline void vcosh_m4(const uint16_t *inp, uint16_t *out, int N) {
 
 /* ========================= LMUL = 2 ========================= */
 static inline void vcosh_m2(const uint16_t *inp, uint16_t *out, int N) {
-    float half = 0.5f;
+    const float half = 0.5f;
     int rem = N;
     while (rem > 0) {
         size_t vl;
         asm volatile("vsetvli %0, %1, e16, m2, ta, ma"
                      : "=r"(vl) : "r"(rem));
         asm volatile(
-            "vle16.v   v0,  (%[pin])           \n\t"
+            "vle16.v   v0,  (%[p])             \n\t"
             "vfmv.v.f  v2,  %[B]               \n\t"
             "vfmacc.vf v2,  %[C], v0            \n\t"
-            "vfcvt.rtz.xu.f.v v2, v2            \n\t"
+            "vfcvt.rtz.xu.f.v v2,  v2           \n\t"
             "vfsgnjn.vv v0, v0, v0              \n\t"
             "vfmv.v.f  v4,  %[B]               \n\t"
             "vfmacc.vf v4,  %[C], v0            \n\t"
-            "vfcvt.rtz.xu.f.v v4, v4            \n\t"
+            "vfcvt.rtz.xu.f.v v4,  v4           \n\t"
             "vfadd.vv  v6,  v2, v4              \n\t"
-            "vfmul.vf  v6,  v6,  %[H]           \n\t"
-            "vse16.v   v6,  (%[po])             \n\t"
-            : : [pin]"r"(inp), [po]"r"(out),
-                [B]"f"(SCH_B), [C]"f"(SCH_C), [H]"f"(half)
+            "vfmul.vf  v6,  v6, %[H]            \n\t"
+            "vse16.v   v6,  (%[o])              \n\t"
+            :: [p]"r"(inp), [o]"r"(out),
+               [B]"f"(SCH_B), [C]"f"(SCH_C), [H]"f"(half)
             : "memory"
         );
         inp += vl; out += vl; rem -= vl;
@@ -108,26 +106,26 @@ static inline void vcosh_m2(const uint16_t *inp, uint16_t *out, int N) {
 
 /* ========================= LMUL = 1 ========================= */
 static inline void vcosh_m1(const uint16_t *inp, uint16_t *out, int N) {
-    float half = 0.5f;
+    const float half = 0.5f;
     int rem = N;
     while (rem > 0) {
         size_t vl;
         asm volatile("vsetvli %0, %1, e16, m1, ta, ma"
                      : "=r"(vl) : "r"(rem));
         asm volatile(
-            "vle16.v   v0,  (%[pin])           \n\t"
+            "vle16.v   v0,  (%[p])             \n\t"
             "vfmv.v.f  v1,  %[B]               \n\t"
             "vfmacc.vf v1,  %[C], v0            \n\t"
-            "vfcvt.rtz.xu.f.v v1, v1            \n\t"
+            "vfcvt.rtz.xu.f.v v1,  v1           \n\t"
             "vfsgnjn.vv v0, v0, v0              \n\t"
             "vfmv.v.f  v2,  %[B]               \n\t"
             "vfmacc.vf v2,  %[C], v0            \n\t"
-            "vfcvt.rtz.xu.f.v v2, v2            \n\t"
+            "vfcvt.rtz.xu.f.v v2,  v2           \n\t"
             "vfadd.vv  v3,  v1, v2              \n\t"
-            "vfmul.vf  v3,  v3,  %[H]           \n\t"
-            "vse16.v   v3,  (%[po])             \n\t"
-            : : [pin]"r"(inp), [po]"r"(out),
-                [B]"f"(SCH_B), [C]"f"(SCH_C), [H]"f"(half)
+            "vfmul.vf  v3,  v3, %[H]            \n\t"
+            "vse16.v   v3,  (%[o])              \n\t"
+            :: [p]"r"(inp), [o]"r"(out),
+               [B]"f"(SCH_B), [C]"f"(SCH_C), [H]"f"(half)
             : "memory"
         );
         inp += vl; out += vl; rem -= vl;
@@ -174,18 +172,16 @@ int main(void) {
     unsigned t0 = 0;
     if (cid == 0) { start_kernel(); t0 = benchmark_get_cycle(); }
 
-    asm volatile("csrwi 0x800, 3" ::: "memory");  /* FMODE: enable BF16 */
     if (len > 0) vcosh_kernel(g_inp + start, g_out + start, len);
-    asm volatile("csrwi 0x800, 0" ::: "memory");  /* FMODE: restore FP16 */
 
     snrt_cluster_hw_barrier();
 
     if (cid == 0) {
         unsigned cyc = benchmark_get_cycle() - t0;
         stop_kernel();
-        printf("[COSH_BF16 LMUL=%d] cycles=%u  cores=%u  N=%d\n",
+        printf("[COSH_SW LMUL=%d] cycles=%u  cores=%u  N=%d\n",
                LMUL_MODE, cyc, cores, N);
-        check_bf16(g_out, outC, N, "COSH_BF16");
+        check_fp16(g_out, outC, N, "COSH_SW");
     }
     snrt_cluster_hw_barrier();
     return 0;

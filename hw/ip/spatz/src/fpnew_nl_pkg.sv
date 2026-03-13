@@ -110,7 +110,7 @@ import spatz_pkg::*;
 
   localparam logic [15:0] SCH_C_BF16           = 16'h4339;  // 2^7/ln(2) ≈ 185.0
   localparam logic [15:0] SCH_B_BF16           = 16'h467E;  // bias*2^7 corrected ≈ 16256.0
-  localparam logic [15:0] SCH_B_COSH_BF16      = 16'h467E;  // cosh correction (same at BF16 precision)
+  localparam logic [15:0] SCH_B_COSH_BF16      = 16'h467C;  // cosh correction (same at BF16 precision)
   localparam logic [15:0] INV_PIO2_BF16        = 16'h3F23;  // 2/π ≈ 0.63672
   localparam logic [15:0] BF16_ZERO            = 16'h0000;
 
@@ -154,7 +154,7 @@ import spatz_pkg::*;
 
   localparam logic [15:0] SCH_C_F16            = 16'h65c5;
   localparam logic [15:0] SCH_B_F16            = 16'h737a;
-  localparam logic [15:0] SCH_B_COSH_F16       = 16'h72F8;
+  localparam logic [15:0] SCH_B_COSH_F16       = 16'h72FB;  //
   localparam logic [15:0] INV_PIO2_F16         = 16'h3918;
   localparam logic [15:0] F16_ZERO             = 16'h0000;
 

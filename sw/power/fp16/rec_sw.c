@@ -30,7 +30,7 @@ static inline float bf16_scalar(uint32_t bf16_hex) {
     return f;
 }
 
-static const unsigned int REC_MAGIC = 0x7BFFu;
+static const unsigned int REC_MAGIC = 0x77FFu;
 #define FP16_TWO  0x4000u   /* 2.0 */
 
 /* ========================= LMUL = 8 ========================= */
