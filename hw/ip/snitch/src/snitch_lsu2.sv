@@ -134,9 +134,23 @@ module snitch_lsu2
   // Only make a request when we got a valid request and if it is a load also
   // check that we can actually store the necessary information to process it in
   // the upcoming cycle(s).
+  logic align_addr;
+  always_comb begin
+    align_addr = 1'b0;
+    if (lsu_qaddr_i > 32'h8000_0000 && lsu_qaddr_i < 32'hA000_0000) begin
+      align_addr = 1'b1;
+    end else if (lsu_qaddr_i > 32'h5180_0000 && lsu_qaddr_i < 32'h5200_0000) begin
+      align_addr = 1'b1;
+    end
+  end
+
+
   assign data_req_o.q_valid = lsu_qvalid_i & (~id_table_full | hs_pending_q);
   assign data_req_o.q.write = lsu_qwrite_i;
-  assign data_req_o.q.addr = lsu_qaddr_i;
+  // assign data_req_o.q.addr = lsu_qaddr_i;
+  // Align with 64b if it is not targetting to bootrom
+  assign data_req_o.q.addr = align_addr ?
+                              {lsu_qaddr_i[AddrWidth-1:3], 3'b000} : lsu_qaddr_i;
   assign data_req_o.q.amo  = lsu_qamo_i;
   assign data_req_o.q.size = lsu_qsize_i;
   assign data_req_o.q.id   = hs_pending_q ? req_id_q : req_id;

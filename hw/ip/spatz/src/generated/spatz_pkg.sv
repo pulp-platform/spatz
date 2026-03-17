@@ -63,7 +63,7 @@ package spatz_pkg;
   localparam int GPRWidth = FPU ? 6 : 5;
 
   // Number of parallel vector instructions
-  localparam int unsigned NrParallelInstructions = 4;
+  localparam int unsigned NrParallelInstructions = 8;
 
   // Largest element width that Spatz supports
   localparam vew_e MAXEW = RVD ? EW_64 : EW_32;
