@@ -8,16 +8,16 @@ package:
     - "Matheus Cavalcante <matheusd@iis.ee.ethz.ch>"
 
 dependencies:
-  axi:                { git: "https://github.com/pulp-platform/axi.git",                version: =0.39.1-beta   }
-  axi_riscv_atomics:  { git: "https://github.com/pulp-platform/axi_riscv_atomics.git",  version: 0.7.0          }
-  common_cells:       { git: "https://github.com/pulp-platform/common_cells.git",       version: 1.28.0         }
-  FPnew:              { git: "https://github.com/pulp-platform/cvfpu.git",              rev:     pulp-v0.1.3    }
-  idma:               { git: "https://github.com/pulp-platform/iDMA.git",               version: 0.6.3          }
-  register_interface: { git: "https://github.com/pulp-platform/register_interface.git", version: 0.3.8          }
-  riscv-dbg:          { git: "https://github.com/pulp-platform/riscv-dbg.git",          version: 0.7.0          }
-  tech_cells_generic: { git: "https://github.com/pulp-platform/tech_cells_generic.git", version: 0.2.11         }
-  insitu-cache:       { git: "git@iis-git.ee.ethz.ch:flamingo/spatz_cache_wrapper.git", rev:     main           }
-  dram_rtl_sim:        { git: "https://github.com/pulp-platform/dram_rtl_sim.git",      rev:     main           }
+  axi:                { git: "https://github.com/pulp-platform/axi.git",                version: =0.39.1-beta           }
+  axi_riscv_atomics:  { git: "https://github.com/pulp-platform/axi_riscv_atomics.git",  version: 0.7.0                  }
+  common_cells:       { git: "https://github.com/pulp-platform/common_cells.git",       version: 1.28.0                 }
+  FPnew:              { git: "https://github.com/pulp-platform/cvfpu.git",              rev:     pulp-v0.1.3            }
+  idma:               { git: "https://github.com/pulp-platform/iDMA.git",               version: 0.6.3                  }
+  register_interface: { git: "https://github.com/pulp-platform/register_interface.git", version: 0.3.8                  }
+  riscv-dbg:          { git: "https://github.com/pulp-platform/riscv-dbg.git",          version: 0.7.0                  }
+  tech_cells_generic: { git: "https://github.com/pulp-platform/tech_cells_generic.git", version: 0.2.11                 }
+  insitu-cache:       { git: "git@iis-git.ee.ethz.ch:flamingo/spatz_cache_wrapper.git", rev:     spatzennest/power-opt  }
+  dram_rtl_sim:        { git: "https://github.com/pulp-platform/dram_rtl_sim.git",      rev:     main                   }
 
 export_include_dirs:
   - hw/ip/reqrsp_interface/include

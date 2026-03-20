@@ -30,7 +30,11 @@ add wave -noupdate -group CSR -group spm_size /tb_bin/i_dut/i_cluster_wrapper/i_
 
 add wave -noupdate -group Mapper /tb_bin/i_dut/i_cluster_wrapper/i_cluster/i_tcdm_mapper/*
 
-add wave -noupdate -group L1D /tb_bin/i_dut/i_cluster_wrapper/i_cluster/i_l1_controller/*
+set cache_path /tb_bin/i_dut/i_cluster_wrapper/i_cluster/i_l1_controller
+add wave -noupdate -group L1D -group decoder ${cache_path}/i_insitu_cache_tcdm_wrapper/i_insitu_cache_tcdm_wrapper/i_insitu_cache_core/i_insitu_cache_decoder/*
+add wave -noupdate -group L1D -group encoder ${cache_path}/i_insitu_cache_tcdm_wrapper/i_insitu_cache_tcdm_wrapper/i_insitu_cache_core/i_insitu_cache_encoder/*
+add wave -noupdate -group L1D -group core ${cache_path}/i_insitu_cache_tcdm_wrapper/i_insitu_cache_tcdm_wrapper/i_insitu_cache_core/*
+add wave -noupdate -group L1D ${cache_path}/*
 
 
 # add wave -noupdate -group Cluster -group amo {sim:/tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_tcdm_super_bank[1]/gen_tcdm_bank[7]/i_amo_shim/*}

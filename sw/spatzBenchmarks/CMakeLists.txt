@@ -139,7 +139,7 @@ add_library(linked-list linked-list/kernel/llist.c)
 
 # Tests
 enable_testing()
-set(SNITCH_TEST_PREFIX spatzBenchmarks-)
+set(SNITCH_TEST_PREFIX )
 
 # add_spatz_test_threeParam(dp-fmatmul dp-fmatmul/main.c 64  64  64 )
 
