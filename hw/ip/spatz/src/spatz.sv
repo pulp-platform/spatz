@@ -494,8 +494,9 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     // Response
     .vlsu_rsp_valid_o        (vlsu_rsp_valid                                       ),
     .vlsu_rsp_o              (vlsu_rsp                                             ),
+    .vlsu_buf_empty_i        (vlsu_buf_empty                                       ),
     // VRF
-    .vrf_wvalid_i            ({vrf_vlsu_wvalid, vrf_wvalid[VLSU_VD_WD0]}         ),
+    .vrf_wvalid_i            ({vrf_vlsu_wvalid, vrf_wvalid[VLSU_VD_WD0]}           ),
     .vrf_waddr_o             (vrf_waddr[VLSU_VD_WD1:VLSU_VD_WD0]                   ),
     .vrf_wdata_o             (vrf_wdata[VLSU_VD_WD1:VLSU_VD_WD0]                   ),
     .vrf_we_o                (sb_we[VLSU_VD_WD1:VLSU_VD_WD0]                       ),

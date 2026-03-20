@@ -33,6 +33,7 @@ module spatz_doublebw_vlsu
     // VLSU response
     output logic                            vlsu_rsp_valid_o,
     output vlsu_rsp_t                       vlsu_rsp_o,
+    input  logic                            vlsu_buf_empty_i,
     // Interface with the VRF
     output vrf_addr_t      [NrInterfaces-1:0] vrf_waddr_o,
     output vrf_data_t      [NrInterfaces-1:0] vrf_wdata_o,
@@ -674,7 +675,10 @@ module spatz_doublebw_vlsu
     assign vrf_waddr_o[intf]     = vrf_req_q[intf].waddr;
     assign vrf_wdata_o[intf]     = vrf_req_q[intf].wdata;
     assign vrf_wbe_o[intf]       = vrf_req_q[intf].wbe;
-    assign vrf_we_o[intf]        = vrf_req_valid_q[intf] & ~vrf_commit_pending_q[intf];
+    // If VLSU0 is the last interface to finish, make sure there is nothing in the VLSU1 buffer to VRF to avoid
+    // clearing the instruction from controller before all commits to VRF are done for the instruction
+    // If VLSU1 is last to finish, since it goes through the buffer, we know it will never go ahead of VLSU0
+    assign vrf_we_o[intf]        = vrf_req_valid_q[intf] & ~vrf_commit_pending_q[intf] & ((intf == 0) && vrf_valid_rsp[0] && !vrf_valid_rsp[1] ? vlsu_buf_empty_i : 1'b1);
     assign vrf_id_o[intf]        = {vrf_req_q[intf].rsp.id, mem_spatz_req.id, commit_insn_q.id};
     assign vrf_req_ready_q[intf] = vrf_wvalid_i[intf];
 
