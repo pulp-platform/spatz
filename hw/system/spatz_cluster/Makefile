@@ -40,7 +40,6 @@ VLOG        = ${QUESTA_VER} vlog
 VSIM_HOME   = /usr/pack/${QUESTA_VER}/questasim
 
 VSIM_FLAGS += -t 1ps
-VSIM_FLAGS += -voptargs=+acc
 VSIM_FLAGS += -suppress vsim-3999
 VSIM_FLAGS += -do "log -r /*; source ${SPATZ_CLUSTER_DIR}/script/vsim/wave.tcl; run -a"
 

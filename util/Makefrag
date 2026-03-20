@@ -137,7 +137,7 @@ define QUESTASIM
 	@chmod +x $@
 	@echo "#!/bin/bash" > $@.gui
 	@echo 'echo `realpath $$1` > bin/logs/.rtlbinary' >> $@
-	@echo '${VSIM} +permissive ${VSIM_FLAGS} -cpppath "${CXX}" -work ${MKFILE_DIR}/${VSIM_BUILDDIR} \
+	@echo '${VSIM} +permissive ${VSIM_FLAGS} -voptargs=+acc -cpppath "${CXX}" -work ${MKFILE_DIR}/${VSIM_BUILDDIR} \
 				-ldflags "-Wl,-rpath,${FESVR}/lib -L${FESVR}/lib -lfesvr_vsim -lutil" \
 				$1 +permissive-off ++$$1 +PRELOAD=$$1' >> $@.gui
 	@chmod +x $@.gui

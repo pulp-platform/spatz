@@ -1,0 +1,30 @@
+// Copyright 2020 ETH Zurich and University of Bologna.
+// Solderpad Hardware License, Version 0.51, see LICENSE for details.
+// SPDX-License-Identifier: SHL-0.51
+
+// Parameters for the double-buffered sectioned FFT
+//
+// npoints : total FFT size N (power of 2)
+// ncores  : number of real hardware cores
+// nsec    : number of sections S (power of 2, must be >= ncores)
+//           log2(nsec) = number of Phase 1 stages
+//           N/nsec     = sub-FFT size per section (Phase 2)
+//
+// L1 working set guidance (doubles):
+//   Phase 1 slot: 6 * (N/nsec)
+//   Phase 2 slot: 2*N + 2*NTWI_P2  where NTWI_P2 = log2(N/nsec)*(N/nsec)/2
+//   Total (2 slots x 2 cores): 4 * max(P1_slot, P2_slot)
+//   Must fit in L1 SPM (120 KiB = 15360 doubles at 8 bytes each)
+//
+// Example fits for 128 KiB L1 (15360 doubles usable):
+//   NFFT=1024, nsec=4  -> P2 slot = 2*1024 + 2*128 = 2304 doubles -> 4*2*2304=18432 doubles TIGHT
+//   NFFT=1024, nsec=8  -> P2 slot = 2*1024 + 2*64  = 2176 doubles -> 4*2*2176=17408 doubles TIGHT
+//   NFFT=512,  nsec=4  -> P2 slot = 2*512  + 2*64  = 1152 doubles -> 4*2*1152=9216  doubles OK
+//   NFFT=256,  nsec=4  -> P2 slot = 2*256  + 2*32  = 576  doubles -> 4*2*576 =4608  doubles OK
+
+{
+    npoints: 1024,
+    ncores: 2,
+    nsec: 4,
+    prec: 64
+}
