@@ -39,25 +39,21 @@ void init_matrix(__fp16 *dst, const __fp16 *src, const unsigned int rows_start,
   }
 }
 
-// Verify the matrices
-int verify_matrix(__fp16 *matrix, const __fp16 *checksum,
-                  const unsigned int num_rows, const unsigned int num_columns) {
+int verify_matrix_elementwise(__fp16 *matrix, const __fp16 *expected,
+                              const unsigned int num_rows,
+                              const unsigned int num_columns) {
   for (unsigned int i = 0; i < num_rows; ++i) {
-    float sum = 0;
     for (unsigned int j = 0; j < num_columns; ++j) {
-      sum += (float)matrix[i * num_columns + j];
-    }
-
-    float diff = sum - (float)checksum[i];
-    if (diff < 0)
-      diff = -diff;
-
-    float eps = 0.05f * (float)checksum[i];
-    if (eps < 0)
-      eps = -eps;
-
-    if (diff > eps) {
-      return i == 0 ? -1 : (int)i;
+      float computed = (float)matrix[i * num_columns + j];
+      float ref = (float)expected[i * num_columns + j];
+      float abs_error =
+          (computed - ref) > 0 ? (computed - ref) : (ref - computed);
+      float abs_ref = ref > 0 ? ref : -ref;
+      if ((abs_error > 0.05f * abs_ref) && (abs_error > 0.1f)) {
+        printf("Error at [%u][%u]: got %f, expected %f, abs_error=%f\n", i, j,
+               computed, ref, abs_error);
+        return -1;
+      }
     }
   }
   return 0;
@@ -162,8 +158,8 @@ int main() {
   }
 
   if (cid == 0) {
-    int error =
-        verify_matrix(c, (const __fp16 *)gemm_checksum, gemm_l.M, gemm_l.N);
+    int error = verify_matrix_elementwise(c, (const __fp16 *)gemm_result,
+                                          gemm_l.M, gemm_l.N);
 
     if (error != 0) {
       PRINTF("Error core %d: c[%d]=%u\n", cid, error, (int)c[error]);

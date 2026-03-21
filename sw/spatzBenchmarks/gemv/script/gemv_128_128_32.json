@@ -2,10 +2,14 @@
 // Solderpad Hardware License, Version 0.51, see LICENSE for details.
 // SPDX-License-Identifier: SHL-0.51
 
-// Parameters for an FFT
+// Parameters for a GEMV
 
 {
-    npoints: 128,
-    ncores: 2,
-    prec: 64
+    kernel: "GEMV"
+    M: 128,
+    N: 128,
+    transpose_A: false,
+    transpose_B: false,
+    prec: 32,
+    expand: 0
 }
