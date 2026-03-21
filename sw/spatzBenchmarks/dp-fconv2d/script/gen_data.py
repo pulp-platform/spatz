@@ -9,7 +9,7 @@ import numpy as np
 import torch
 import argparse
 import pathlib
-import scipy
+from scipy import signal
 import hjson
 
 np.random.seed(42)
@@ -42,6 +42,7 @@ def array_to_cstr(a, fmt=float):
 def emit_header_file(layer_type: str, **kwargs):
 
     file_path = pathlib.Path(__file__).parent.parent / "data"
+    file_path.mkdir(parents=True, exist_ok=True)
     emit_str = (
         "// Copyright 2023 ETH Zurich and University of Bologna.\n"
         + "// Licensed under the Apache License, Version 2.0, see LICENSE for details.\n"
@@ -181,7 +182,7 @@ def zero_data_generator(shape, prec, alt=False):
 
 def fconv2d(i, f, r, CH, R, C, F, dtype):
     for ch in range(CH):
-        r += scipy.signal.convolve2d(np.flip(f.tolist()[ch]), i[ch], "valid")
+        r += signal.convolve2d(np.flip(f.tolist()[ch]), i[ch], "valid")
     return r
 
 

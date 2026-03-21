@@ -44,6 +44,7 @@ def array_to_cstr(a, fmt=float):
 def emit_header_file(layer_type: str, **kwargs):
 
     file_path = pathlib.Path(__file__).parent.parent / "data"
+    file_path.mkdir(parents=True, exist_ok=True)
     emit_str = (
         "// Copyright 2023 ETH Zurich and University of Bologna.\n"
         + "// Licensed under the Apache License, Version 2.0, see LICENSE for details.\n"
@@ -166,8 +167,8 @@ def emit_GEMM_layer(name="gemm", **kwargs):
             + ";\n\n\n"
         )
         layer_str += (
-            f"static const {dtype} {name}_checksum[{m}] = "
-            + array_to_cstr(torch.sum(result, dim=-1))
+            f"static const {dtype} {name}_result[{m}*{n}] = "
+            + array_to_cstr(result)
             + ";\n\n\n"
         )
     else:

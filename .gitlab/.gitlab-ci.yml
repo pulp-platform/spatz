@@ -104,6 +104,8 @@ snRuntime-test-vsim:
     - ${PYTHON3} -m pip install --user jstyleson
     - ${PYTHON3} -m pip install --user dataclasses
     - ${PYTHON3} -m pip install --user mako
+    - ${PYTHON3} -m pip install --user scipy
+    - ${PYTHON3} -m pip install --user torch --index-url https://download.pytorch.org/whl/cpu
     # Compile the binaries
     - cd hw/system/spatz_cluster
     - make sw.vsim SPATZ_CLUSTER_CFG=${cfg}.hjson -B
@@ -134,6 +136,8 @@ snRuntime-test-vcs:
     - ${PYTHON3} -m pip install --user jstyleson
     - ${PYTHON3} -m pip install --user dataclasses
     - ${PYTHON3} -m pip install --user mako
+    - ${PYTHON3} -m pip install --user scipy
+    - ${PYTHON3} -m pip install --user torch --index-url https://download.pytorch.org/whl/cpu
     # Compile the binaries
     - cd hw/system/spatz_cluster
     - ${VCS} make sw.vcs SPATZ_CLUSTER_CFG=${cfg}.hjson -B
@@ -165,6 +169,8 @@ snRuntime-test-vlt:
     - ${PYTHON3} -m pip install --user jstyleson
     - ${PYTHON3} -m pip install --user dataclasses
     - ${PYTHON3} -m pip install --user mako
+    - ${PYTHON3} -m pip install --user scipy
+    - ${PYTHON3} -m pip install --user torch --index-url https://download.pytorch.org/whl/cpu
     # Compile the binaries
     - cd hw/system/spatz_cluster
     - make sw.vlt SPATZ_CLUSTER_CFG=${cfg}.hjson -B
@@ -197,6 +203,8 @@ riscvTests-test-vlt:
     - ${PYTHON3} -m pip install --user jstyleson
     - ${PYTHON3} -m pip install --user dataclasses
     - ${PYTHON3} -m pip install --user mako
+    - ${PYTHON3} -m pip install --user scipy
+    - ${PYTHON3} -m pip install --user torch --index-url https://download.pytorch.org/whl/cpu
     # Compile the binaries
     - cd hw/system/spatz_cluster
     - ${VCS} make sw.vlt SPATZ_CLUSTER_CFG=${cfg}.hjson -B
@@ -230,6 +238,8 @@ spatzBenchmarks-test-vlt:
     - ${PYTHON3} -m pip install --user jstyleson
     - ${PYTHON3} -m pip install --user dataclasses
     - ${PYTHON3} -m pip install --user mako
+    - ${PYTHON3} -m pip install --user scipy
+    - ${PYTHON3} -m pip install --user torch --index-url https://download.pytorch.org/whl/cpu
     # Compile the binaries
     - cd hw/system/spatz_cluster
     - ${VCS} make sw.vlt SPATZ_CLUSTER_CFG=${cfg}.hjson -B

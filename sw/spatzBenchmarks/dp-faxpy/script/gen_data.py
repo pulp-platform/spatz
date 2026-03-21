@@ -42,6 +42,7 @@ def array_to_cstr(a, fmt=float):
 def emit_header_file(layer_type: str, **kwargs):
 
     file_path = pathlib.Path(__file__).parent.parent / "data"
+    file_path.mkdir(parents=True, exist_ok=True)
     emit_str = (
         "// Copyright 2023 ETH Zurich and University of Bologna.\n"
         + "// Licensed under the Apache License, Version 2.0, see LICENSE for details.\n"
