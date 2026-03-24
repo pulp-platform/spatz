@@ -441,7 +441,7 @@ module spatz_doublebw_vlsu
   `FF(vs2_elem_id_q, vs2_elem_id_d, '0)
 
   // Pending indexes
-  logic [NrInterfaces-1:0] [N_FU-1:0] pending_index;
+  logic [NrInterfaces-1:0] [N_FU-1:0] fetch_next_idx;
 
   // Calculate the memory address for each memory port
   addr_offset_t [NrInterfaces-1:0] [N_FU-1:0] mem_req_addr_offset;
@@ -454,9 +454,17 @@ module spatz_doublebw_vlsu
       logic [31:0] offset;
 
       // Pre-shuffling index offset
-      typedef logic [int'(MAXEW)-1:0] maxew_t;
-      maxew_t idx_offset;
+      logic [$clog2(8*8):0] idx_offset; // Max index offset (in B) when 8 x 8B (num elements in one MAXEW x index width in bytes for 1 element)
       assign idx_offset = mem_idx_counter_q[intf][fu];
+
+      // Calculate shift amount for address normalization
+      logic [$bits(vew_e)-1:0] log2_num_el_maxew;
+      logic [$bits(vew_e)  :0] log2_num_idx_maxew_bytes;
+      logic [2 * MAXEW     :0] num_idx_maxew_bytes;
+
+      assign log2_num_el_maxew = MAXEW - mem_spatz_req.vtype.vsew;                       // Number of elements in MAXEW
+      assign log2_num_idx_maxew_bytes = log2_num_el_maxew + mem_spatz_req.op_mem.ew;
+      assign num_idx_maxew_bytes = 1'b1 << log2_num_idx_maxew_bytes;                     // Number of indices for MAXEW/SEW elements in bytes
 
       always_comb begin
         stride = mem_is_strided ? mem_spatz_req.rs2 >> mem_spatz_req.vtype.vsew : 'd1;
@@ -466,9 +474,9 @@ module spatz_doublebw_vlsu
           automatic logic [1:0] data_index_width_diff = int'(mem_spatz_req.vtype.vsew) - int'(mem_spatz_req.op_mem.ew);
 
           // Pointer to index
-          automatic logic [idx_width(N_FU*ELENB)-1:0] word_index = (fu << (MAXEW - data_index_width_diff)) +
-                                                                   (maxew_t'(idx_offset >> (MAXEW - data_index_width_diff)) << (MAXEW - data_index_width_diff)) * N_FU +
-                                                                   (maxew_t'(idx_offset << data_index_width_diff) >> data_index_width_diff);
+          automatic logic [idx_width(N_FU*ELENB)-1:0] word_index = (fu << log2_num_idx_maxew_bytes) +
+                                                                   (idx_offset & (num_idx_maxew_bytes - 1)) +
+                                                                   ((idx_offset >> log2_num_idx_maxew_bytes) << log2_num_idx_maxew_bytes) * N_FU;
 
           // Index
           unique case (mem_spatz_req.op_mem.ew)
@@ -492,7 +500,7 @@ module spatz_doublebw_vlsu
         mem_req_addr[intf][fu]        = (addr >> MAXEW) << MAXEW;
         mem_req_addr_offset[intf][fu] = addr[int'(MAXEW)-1:0];
 
-        pending_index[intf][fu] = (mem_idx_counter_q[intf][fu][$clog2(NrWordsPerVector*ELENB)-1:0] >> MAXEW) != vs2_vreg_addr[intf][$clog2(NrWordsPerVector)-1:0];
+        fetch_next_idx[intf][fu] = (mem_idx_counter_q[intf][fu][$clog2(NrWordsPerVector*ELENB)-1:0] == (num_idx_maxew_bytes - (1'b1 << mem_spatz_req.op_mem.ew))) && mem_counter_en[intf][fu];
       end
     end: gen_mem_req_addr_intf_fu
   end: gen_mem_req_addr_intf
@@ -906,7 +914,7 @@ module spatz_doublebw_vlsu
       // Count which vs2 element we should load (indexed loads)
       vs2_elem_id_d = vs2_elem_id_q;
       for (int intf = 0; intf < NrInterfaces; intf++) begin
-        if (&(pending_index[intf] ^ ~mem_operation_valid[intf]) && mem_is_indexed)
+        if (&(fetch_next_idx[intf] ^ ~mem_operation_valid[intf]) && mem_is_indexed)
           vs2_elem_id_d[intf] = vs2_elem_id_q[intf] + 1;
       end
       if (mem_spatz_req_ready)
@@ -1002,7 +1010,7 @@ module spatz_doublebw_vlsu
 `endif
           if (!rob_full[intf][fu] && !offset_queue_full[intf][fu] && mem_operation_valid[intf][fu]) begin
             rob_req_id[intf][fu]     = spatz_mem_req_ready[intf][fu] & spatz_mem_req_valid[intf][fu];
-            mem_req_lvalid[intf][fu] = (!mem_is_indexed || (vrf_rvalid_i[intf][1] && !pending_index[intf][fu])) && mem_spatz_req.op_mem.is_load;
+            mem_req_lvalid[intf][fu] = (!mem_is_indexed || vrf_rvalid_i[intf][1]) && mem_spatz_req.op_mem.is_load;
             mem_req_id[intf][fu]     = rob_id[intf][fu];
             mem_req_last[intf][fu]   = mem_operation_last[intf][fu];
           end
@@ -1069,7 +1077,7 @@ module spatz_doublebw_vlsu
                 default: mem_req_data[intf][fu] = data;
               endcase
 
-            mem_req_svalid[intf][fu] = rob_rvalid[intf][fu] && (!mem_is_indexed || (vrf_rvalid_i[intf][1] && !pending_index[intf][fu])) && !mem_spatz_req.op_mem.is_load;
+            mem_req_svalid[intf][fu] = rob_rvalid[intf][fu] && (!mem_is_indexed || vrf_rvalid_i[intf][1]) && !mem_spatz_req.op_mem.is_load;
             mem_req_id[intf][fu]     = rob_rid[intf][fu];
             mem_req_last[intf][fu]   = mem_operation_last[intf][fu];
             rob_pop[intf][fu]        = spatz_mem_req_valid[intf][fu] && spatz_mem_req_ready[intf][fu];
