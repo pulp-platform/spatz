@@ -59,6 +59,7 @@ void TEST_CASE2(void) {
   asm volatile("vloxei16.v v1, (%0), v2" ::"r"(&ALIGNED_I32[0]));
   VCMP_U32(5, v1, 0xf9aa71f0, 0x89139848);
 
+#if ELEN == 64
   volatile uint64_t ALIGNED_I64[] = {
         0x9fe419208f2e05e0, 0xf9aa71f0c394bbd3, 0xa11a9384a7163840,
         0x99991348a9f38cd1, 0x9fa831c7a11a9384, 0x3819759853987548,
@@ -71,6 +72,7 @@ void TEST_CASE2(void) {
   VLOAD_32(v2, 8, 120);
   asm volatile("vloxei32.v v1, (%0), v2" ::"r"(&ALIGNED_I64[0]));
   VCMP_U64(6, v1, 0xf9aa71f0c394bbd3, 0x8913984898951989);
+#endif
 }
 
 // EEW Destination < EEW indexes

@@ -125,6 +125,7 @@ void TEST_CASE3(void) {
   VVCMP_U32(5, BUFFER_O32, INIT, 0xf9aa71f0, INIT, INIT, INIT, INIT, INIT, INIT,
             INIT, INIT, INIT, INIT, INIT, INIT, INIT, 0x89139848);
 
+#if ELEN == 64
   volatile uint64_t BUFFER_O64[] = {
     INIT, INIT, INIT, INIT, INIT, INIT, INIT, INIT,
     INIT, INIT, INIT, INIT, INIT, INIT, INIT, INIT};
@@ -135,6 +136,7 @@ void TEST_CASE3(void) {
   asm volatile("vsuxei32.v v1, (%0), v2" ::"r"(&BUFFER_O64[0]));
   VVCMP_U64(6, BUFFER_O64, INIT, 0xf9aa71f0c394bbd3, INIT, INIT, INIT, INIT,
             INIT, INIT, INIT, INIT, INIT, INIT, INIT, INIT, INIT, 0x8913984898951989);
+#endif
 }
 
 // EEW Destination < EEW indexes
