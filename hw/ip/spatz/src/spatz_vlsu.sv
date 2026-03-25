@@ -420,7 +420,7 @@ module spatz_vlsu
   `FF(vs2_elem_id_q, vs2_elem_id_d, '0)
 
   // Pending indexes
-  logic [NrMemPorts-1:0] pending_index;
+  logic [NrMemPorts-1:0] fetch_next_idx;
 
   // Calculate the memory address for each memory port
   addr_offset_t [NrMemPorts-1:0] mem_req_addr_offset;
@@ -430,19 +430,30 @@ module spatz_vlsu
     logic [31:0] offset;
 
     // Pre-shuffling index offset
-    typedef logic [int'(MAXEW)-1:0] maxew_t;
-    maxew_t idx_offset;
+    logic [$clog2(8*8):0] idx_offset; // Max index offset (in B) when 8 x 8B (num elements in one MAXEW x index width in bytes for 1 element)
     assign idx_offset = mem_idx_counter_q[port];
 
+    logic signed [2:0] data_index_width_diff;
+    logic [idx_width(N_FU*ELENB)-1:0] word_index;
+
+    // Calculate shift amount for address normalization
+    logic [$bits(vew_e)-1:0] log2_num_el_maxew;
+    logic [$bits(vew_e)  :0] log2_num_idx_maxew_bytes;
+    logic [2 * MAXEW     :0] num_idx_maxew_bytes;
+
+    assign log2_num_el_maxew = MAXEW - mem_spatz_req.vtype.vsew;                       // Number of elements in MAXEW
+    assign log2_num_idx_maxew_bytes = log2_num_el_maxew + mem_spatz_req.op_mem.ew;
+    assign num_idx_maxew_bytes = 1'b1 << log2_num_idx_maxew_bytes;                     // Number of indices for MAXEW/SEW elements in bytes
+
     always_comb begin
+      word_index = '0;
       stride = mem_is_strided ? mem_spatz_req.rs2 >> mem_spatz_req.vtype.vsew : 'd1;
 
       if (mem_is_indexed) begin
-        // What is the relationship between data and index width?
-        automatic logic [1:0] data_index_width_diff = int'(mem_spatz_req.vtype.vsew) - int'(mem_spatz_req.op_mem.ew);
-
-        // Pointer to index
-        automatic logic [idx_width(N_FU*ELENB)-1:0] word_index = (port << (MAXEW - data_index_width_diff)) + (maxew_t'(idx_offset << data_index_width_diff) >> data_index_width_diff) + (maxew_t'(idx_offset >> (MAXEW - data_index_width_diff)) << (MAXEW - data_index_width_diff)) * NrMemPorts;
+        // Compute word index from port offset, normalized index, and wrapped indices
+        word_index = (port << log2_num_idx_maxew_bytes) +
+                      (idx_offset & (num_idx_maxew_bytes - 1)) +
+                      ((idx_offset >> log2_num_idx_maxew_bytes) << log2_num_idx_maxew_bytes) * NrMemPorts;
 
         // Index
         unique case (mem_spatz_req.op_mem.ew)
@@ -458,7 +469,9 @@ module spatz_vlsu
       mem_req_addr[port]        = (addr >> MAXEW) << MAXEW;
       mem_req_addr_offset[port] = addr[int'(MAXEW)-1:0];
 
-      pending_index[port] = (mem_idx_counter_q[port][$clog2(NrWordsPerVector*ELENB)-1:0] >> MAXEW) != (vs2_vreg_addr & ((1'b1 << $clog2(NrWordsPerVector))-1));
+      // If the request has been pushed into the memory request fifo and this is the last offset
+      // update address for index to fetch the next address in the following cycle
+      fetch_next_idx[port] = (mem_idx_counter_q[port][$clog2(NrWordsPerVector*ELENB)-1:0] == (num_idx_maxew_bytes - (1'b1 << mem_spatz_req.op_mem.ew))) && mem_counter_en[port];
     end
   end: gen_mem_req_addr
 
@@ -785,7 +798,7 @@ module spatz_vlsu
 
     // Count which vs2 element we should load (indexed loads)
     vs2_elem_id_d = vs2_elem_id_q;
-    if (&(pending_index ^ ~mem_operation_valid) && mem_is_indexed)
+    if (&(fetch_next_idx ^ ~mem_operation_valid) && mem_is_indexed)
       vs2_elem_id_d = vs2_elem_id_q + 1;
     if (mem_spatz_req_ready)
       vs2_elem_id_d = '0;
@@ -875,7 +888,7 @@ module spatz_vlsu
 `endif
         if (!rob_full[port] && !offset_queue_full[port] && mem_operation_valid[port]) begin
           rob_req_id[port]     = spatz_mem_req_ready[port] & spatz_mem_req_valid[port];
-          mem_req_lvalid[port] = (!mem_is_indexed || (vrf_rvalid_i[1] && !pending_index[port])) && mem_spatz_req.op_mem.is_load;
+          mem_req_lvalid[port] = (!mem_is_indexed || vrf_rvalid_i[1]) && mem_spatz_req.op_mem.is_load;
           mem_req_id[port]     = rob_id[port];
           mem_req_last[port]   = mem_operation_last[port];
         end
@@ -940,7 +953,7 @@ module spatz_vlsu
               default: mem_req_data[port] = data;
             endcase
 
-          mem_req_svalid[port] = rob_rvalid[port] && (!mem_is_indexed || (vrf_rvalid_i[1] && !pending_index[port])) && !mem_spatz_req.op_mem.is_load;
+          mem_req_svalid[port] = rob_rvalid[port] && (!mem_is_indexed || vrf_rvalid_i[1]) && !mem_spatz_req.op_mem.is_load;
           mem_req_id[port]     = rob_rid[port];
           mem_req_last[port]   = mem_operation_last[port];
           rob_pop[port]        = spatz_mem_req_valid[port] && spatz_mem_req_ready[port];
