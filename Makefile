@@ -40,7 +40,7 @@ sw/toolchain/riscv-gnu-toolchain: sw/toolchain/riscv-gnu-toolchain.version
 
 sw/toolchain/llvm-project: sw/toolchain/llvm-project.version
 	mkdir -p sw/toolchain
-	cd sw/toolchain && git clone git@github.com:pulp-platform/llvm-project.git
+	cd sw/toolchain && git clone https://github.com/pulp-platform/llvm-project.git
 	cd sw/toolchain/llvm-project &&                  \
 		git checkout `cat ../llvm-project.version` && \
 		git submodule update --init --recursive --jobs=8 .
@@ -102,7 +102,7 @@ tc-llvm: sw/toolchain/llvm-project
 
 tc-riscv-isa-sim: sw/toolchain/riscv-isa-sim sw/toolchain/dtc
 	mkdir -p $(SPIKE_INSTALL_DIR)
-	cd sw/toolchain/dtc/dtc-1.7.0 && make install PREFIX=$(SPIKE_INSTALL_DIR)
+	cd sw/toolchain/dtc/dtc-1.7.0 && make NO_PYTHON=1 install PREFIX=$(SPIKE_INSTALL_DIR)
 	cd sw/toolchain/riscv-isa-sim && rm -rf build && mkdir -p build && cd build && \
 	PATH=$(SPIKE_INSTALL_DIR)/bin:$(PATH) ../configure --prefix=$(SPIKE_INSTALL_DIR) && \
 	$(MAKE) MAKEINFO=true -j4 install
