@@ -1,0 +1,70 @@
+# Copyright 2020 ETH Zurich and University of Bologna.
+# Licensed under the Apache License, Version 2.0, see LICENSE for details.
+# SPDX-License-Identifier: Apache-2.0
+
+cmake_minimum_required(VERSION 3.13)
+
+# Defines
+set(SNRT_NFPU_PER_CORE "0" CACHE STRING "Number of FPUs per Spatz")
+set(QUAD_RLEN "0" CACHE STRING "Quadrilatero RLEN parameter")
+
+# Allow QuadrilateroBenchmarks to be built as a standalone library.
+if (CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+    list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/../cmake)
+    set(CMAKE_TOOLCHAIN_FILE toolchain-gcc CACHE STRING "Toolchain to use")
+
+    project(Benchmarks LANGUAGES C ASM)
+    include(SnitchUtilities)
+
+    # Build the runtime.
+    add_subdirectory(../snRuntime snRuntime)
+endif()
+
+include_directories(include)
+include_directories(${SNRUNTIME_INCLUDE_DIRS})
+
+add_compile_options(-O3 -g -ffunction-sections)
+
+
+# Macro to regenerate the golden values and compile a module
+macro(add_quadrilatero_test_noParam name file)
+  set(target_name ${name})
+  add_snitch_test(${target_name} ${file})
+  target_link_libraries(test-${SNITCH_TEST_PREFIX}${target_name} ${SNITCH_RUNTIME})
+  target_compile_definitions(test-${SNITCH_TEST_PREFIX}${target_name} PUBLIC DATAHEADER="matrixMul32i.h" SNRT_NFPU_PER_CORE=16)
+endmacro()
+
+macro(add_quadrilatero_test_threeParam name file param1 param2 param3)
+  set(target_name ${name}_M${param1}_N${param2}_K${param3})
+  add_snitch_test(${target_name} ${file})
+  target_link_libraries(test-${SNITCH_TEST_PREFIX}${target_name} benchmark-quadrilatero ${SNITCH_RUNTIME})
+  target_compile_definitions(test-${SNITCH_TEST_PREFIX}${target_name} PUBLIC DATAHEADER="data/data_${param1}_${param2}_${param3}.h" SNRT_NFPU_PER_CORE=16 QUAD_RLEN=${QUAD_RLEN})
+endmacro()
+
+# Benchmark library
+add_library(benchmark-quadrilatero benchmark-quadrilatero/benchmark.c)
+
+# Kernels
+# add_library(sp-matmul-quadrilatero sp-matmul-quadrilatero/kernel/sp-matmul-quadrilatero.c)
+# add_library(widening2x-hp-matmul-quadrilatero widening2x-hp-matmul-quadrilatero/kernel/widening2x-hp-matmul-quadrilatero.c)
+# add_library(widening4x-bp-matmul-quadrilatero widening4x-bp-matmul-quadrilatero/kernel/widening4x-bp-matmul-quadrilatero.c)
+add_library(sp-fmatmul-quadrilatero sp-fmatmul-quadrilatero/kernel/sp-fmatmul-quadrilatero.c)
+# add_library(widening2x-hp-fmatmul-quadrilatero widening2x-hp-fmatmul-quadrilatero/kernel/widening2x-hp-fmatmul-quadrilatero.c)
+# add_library(widening4x-bp-fmatmul-quadrilatero widening4x-bp-fmatmul-quadrilatero/kernel/widening4x-bp-fmatmul-quadrilatero.c)
+add_library(verify-quadrilatero verify-quadrilatero/kernel/verify-quadrilatero.c)
+
+# # Tests
+enable_testing()
+set(SNITCH_TEST_PREFIX quadrilateroBenchmarks-)
+# add_quadrilatero_test_noParam(quadrilatero-matmul quadrilatero_matmul/main.c)
+
+# add_quadrilatero_test_threeParam(sp-matmul-quadrilatero sp-matmul-quadrilatero/main.c 64 64 64)
+# add_quadrilatero_test_threeParam(widening2x-hp-matmul-quadrilatero widening2x-hp-matmul-quadrilatero/main.c 64 64 64)
+# add_quadrilatero_test_threeParam(widening4x-bp-matmul-quadrilatero widening4x-bp-matmul-quadrilatero/main.c 64 64 64)
+# add_quadrilatero_test_threeParam(sp-fmatmul-quadrilatero sp-fmatmul-quadrilatero/main.c 64 64 64)
+# add_quadrilatero_test_threeParam(sp-fmatmul-quadrilatero sp-fmatmul-quadrilatero/main.c 64 64 8)
+add_quadrilatero_test_threeParam(sp-fmatmul-quadrilatero sp-fmatmul-quadrilatero/main.c 8 8 8)
+# add_quadrilatero_test_threeParam(sp-fmatmul-quadrilatero sp-fmatmul-quadrilatero/main.c 8 16 72)
+# add_quadrilatero_test_threeParam(widening2x-hp-fmatmul-quadrilatero widening2x-hp-fmatmul-quadrilatero/main.c 64 64 64)
+add_quadrilatero_test_threeParam(verify-quadrilatero verify-quadrilatero/main.c 64 64 64)
+# add_quadrilatero_test_threeParam(widening4x-bp-fmatmul-quadrilatero widening4x-bp-fmatmul-quadrilatero/main.c 64 64 64)
