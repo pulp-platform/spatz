@@ -94,6 +94,13 @@ VLT_COBJ += $(VLT_BUILDDIR)/vlt/verilated_vcd_c.o
 #################
 # Prerequisites #
 #################
+CFG_HASH := $(shell md5sum $(SPATZ_CLUSTER_CFG_PATH) | cut -d' ' -f1)
+CFG_STAMP := work/cfg_$(CFG_HASH).stamp
+
+$(CFG_STAMP):
+	mkdir -p work
+	rm -f work/cfg_*.stamp
+	touch $@
 
 test/bootrom.elf test/bootrom.dump test/bootrom.bin: src/generated/spatz_cluster_wrapper.sv test/bootrom.S test/bootrom.ld test/bootdata_bootrom.cc Makefile
 	${GCC_INSTALL_DIR}/bin/riscv32-unknown-elf-gcc -mabi=ilp32 -march=rv32imaf -static -nostartfiles -Ttest/bootrom.ld test/bootrom.S test/bootdata_bootrom.cc -I../../ip/snitch_test/src -I../../../sw/snRuntime/include -I../../../sw/toolchain/riscv-opcodes/ -o test/bootrom.elf
@@ -107,7 +114,7 @@ $(CURDIR)/src/generated/bootrom.sv: test/bootrom.bin
 
 .PHONY: generate
 generate: src/generated/spatz_cluster_wrapper.sv
-src/generated/spatz_cluster_wrapper.sv: ${SPATZ_CLUSTER_CFG_PATH} $(find src/tpl) $(find test/*tpl)
+src/generated/spatz_cluster_wrapper.sv test/bootdata_bootrom.cc: ${SPATZ_CLUSTER_CFG_PATH} $(find src/tpl) $(find test/*tpl)
 	${PYTHON} ${SPATZ_DIR}/util/clustergen.py -c ${SPATZ_CLUSTER_CFG_PATH} -o src/
 
 #############
@@ -150,7 +157,7 @@ clean.vlt:
 # Modelsim #
 ############
 
-${VSIM_BUILDDIR}/compile.vsim.tcl: test/bootrom.bin $(VSIM_SOURCES) ${TB_SRCS} ${TB_DIR}/rtl_lib.cc ${TB_DIR}/common_lib.cc test/bootdata.cc test/bootrom.bin
+${VSIM_BUILDDIR}/compile.vsim.tcl: $(CFG_STAMP) test/bootrom.bin $(VSIM_SOURCES) ${TB_SRCS} ${TB_DIR}/rtl_lib.cc ${TB_DIR}/common_lib.cc test/bootdata.cc test/bootrom.bin $(CURDIR)/src/generated/bootrom.sv
 	vlib $(dir $@)
 	${BENDER} script vsim ${VSIM_BENDER} ${DEFS} --vlog-arg="${VLOG_FLAGS} -work $(dir $@) " > $@
 	echo '${VLOG} -work $(dir $@) ${TB_DIR}/rtl_lib.cc ${TB_DIR}/common_lib.cc test/bootdata.cc -ccflags "-std=c++17 -I${MKFILE_DIR}/test -I${MKFILE_DIR}/work/include -I${TB_DIR}"' >> $@
@@ -243,6 +250,7 @@ clean.sw:
 
 ## Clean everything except logs
 clean: clean.vcs clean.vlt clean.vsim clean.sw
+	rm -rf src/generated
 	rm -rf Bender.lock .bender/ work/
 
 clean.logs:
