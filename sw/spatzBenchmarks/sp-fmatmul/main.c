@@ -40,7 +40,7 @@ int verify_matrix(float *matrix, const float *checksum,
     float diff = sum - (float)checksum[i];
     if (diff < 0)
       diff = -diff;
-    if (diff > 0.001) {
+    if (diff > 0.001f) {
       return i == 0 ? -1 : (int)i;
     }
   }
