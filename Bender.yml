@@ -10,16 +10,16 @@ package:
     - "Danilo Cammarata <dcammarata@iis.ee.ethz.ch>"
 
 dependencies:
-  axi:                { git: "https://github.com/pulp-platform/axi.git",                version: =0.39.1-beta   }
-  axi_riscv_atomics:  { git: "https://github.com/pulp-platform/axi_riscv_atomics.git",  version: 0.7.0          }
-  common_cells:       { git: "https://github.com/pulp-platform/common_cells.git",       rev:     a8d8a006       }
-  FPnew:              { git: "https://github.com/pulp-platform/cvfpu.git",              rev:     pulp-v0.1.3    }
-  idma:               { git: "https://github.com/pulp-platform/iDMA.git",               version: 0.6.4          }
-  register_interface: { git: "https://github.com/pulp-platform/register_interface.git", version: 0.3.8          }
-  cluster_icache:     { git: "https://github.com/pulp-platform/cluster_icache.git",     version: 0.2.0          }
-  riscv-dbg:          { git: "https://github.com/pulp-platform/riscv-dbg.git",          version: 0.7.0          }
-  tech_cells_generic: { git: "https://github.com/pulp-platform/tech_cells_generic.git", version: 0.2.13         }
-  quadrilatero      : { git: "git@iis-git.ee.ethz.ch:quadrilatero/quadrilatero.git",    rev:     aab6a10        }
+  axi:                { git: "https://github.com/pulp-platform/axi.git",                 version: =0.39.1-beta   }
+  axi_riscv_atomics:  { git: "https://github.com/pulp-platform/axi_riscv_atomics.git",   version: 0.7.0          }
+  common_cells:       { git: "https://github.com/pulp-platform/common_cells.git",        rev:     a8d8a006       }
+  FPnew:              { git: "https://github.com/pulp-platform/cvfpu.git",               rev:     pulp-v0.1.3    }
+  idma:               { git: "https://github.com/pulp-platform/iDMA.git",                version: 0.6.4          }
+  register_interface: { git: "https://github.com/pulp-platform/register_interface.git",  version: 0.3.8          }
+  cluster_icache:     { git: "https://github.com/pulp-platform/cluster_icache.git",      version: 0.2.0          }
+  riscv-dbg:          { git: "https://github.com/pulp-platform/riscv-dbg.git",           version: 0.7.0          }
+  tech_cells_generic: { git: "https://github.com/pulp-platform/tech_cells_generic.git",  version: 0.2.13         }
+  quadrilatero      : { git: "https://iis-git.ee.ethz.ch/quadrilatero/quadrilatero.git", rev:     aab6a10        }
 
 export_include_dirs:
   - hw/ip/mem_interface/include
