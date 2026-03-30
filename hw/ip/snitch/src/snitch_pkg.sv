@@ -32,7 +32,8 @@ package snitch_pkg;
 
   typedef enum logic [31:0] {
     SPATZ = 0,
-    DMA_SS = 1
+    DMA_SS = 1,
+    QUADRILATERO = 2
   } acc_addr_e;
 
   typedef enum logic [1:0] {

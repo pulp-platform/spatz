@@ -24,6 +24,7 @@ module spatz_cluster
   import spatz_pkg::*;
   import fpnew_pkg::fpu_implementation_t;
   import snitch_pma_pkg::snitch_pma_t;
+  import quadrilatero_pkg::*;
   #(
     /// Width of physical address.
     parameter int                     unsigned               AxiAddrWidth                       = 48,
@@ -160,7 +161,8 @@ module spatz_cluster
   localparam int unsigned NrSuperBanks      = NrBanks / BanksPerSuperBank;
 
   function automatic int unsigned get_tcdm_ports(int unsigned core);
-    return NumSpatzTCDMPorts[core] + 1;
+    if(spatz_pkg::QUADRILATERO) return NumSpatzTCDMPorts[core] + 1 + quadrilatero_pkg::LLEN/DataWidth;
+    else                        return NumSpatzTCDMPorts[core] + 1;
   endfunction
 
   function automatic int unsigned get_tcdm_port_offs(int unsigned core_idx);
@@ -707,12 +709,13 @@ module spatz_cluster
     logic [31:0] hart_id;
     assign hart_id = hart_base_id_i + i;
 
-    spatz_cc #(
+    spatz_quadrilatero_cc #(
       .BootAddr                (BootAddr                   ),
       .RVE                     (1'b0                       ),
       .RVF                     (RVF                        ),
       .RVD                     (RVD                        ),
       .RVV                     (RVV                        ),
+      .RMM                     (spatz_pkg::QUADRILATERO    ),
       .Xdma                    (Xdma[i]                    ),
       .AddrWidth               (AxiAddrWidth               ),
       .DataWidth               (NarrowDataWidth            ),
@@ -756,7 +759,7 @@ module spatz_cluster
       .RegisterCoreReq         (RegisterCoreReq            ),
       .RegisterCoreRsp         (RegisterCoreRsp            ),
       .TCDMAddrWidth           (TCDMAddrWidth              )
-    ) i_spatz_cc (
+    ) i_spatz_quadrilatero_cc (
       .clk_i            (clk_i                               ),
       .clk_d2_i         (clk_i                               ),
       .rst_ni           (rst_ni                              ),
