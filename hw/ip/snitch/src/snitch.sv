@@ -10,7 +10,7 @@
 
 // `SNITCH_ENABLE_PERF Enables mcycle, minstret performance counters (read only)
 
-module snitch import snitch_pkg::*; import riscv_instr::*; #(
+module snitch import snitch_pkg::*; import riscv_instr::*; import quadrilatero_instr_pkg::*;#(
   /// Boot address of core.
   parameter logic [31:0] BootAddr  = 32'h0000_1000,
   /// Physical Address width of the core.
@@ -40,6 +40,8 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
   parameter bit          XFDOTP    = 0,
   parameter bit          XFAUX     = 0,
   int unsigned           FLEN      = DataWidth,
+  // Enable Matrix Extension
+  parameter bit          RMM       = 0,
   /// Enable virtual memory support.
   parameter bit          VMSupport = 1,
   /// Enable experimental IPU extension.
@@ -2061,7 +2063,6 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           end
         end
       end
-`endif
       // FP Sequencer
       FREP_O,
       FREP_I: begin
@@ -2073,6 +2074,8 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           illegal_inst = 1'b1;
         end
       end
+`endif
+      
       // Floating-Point Load/Store
       // Single Precision Floating-Point
       FLW: begin
@@ -2623,7 +2626,76 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
       end
 `endif
 /* end of RVV extension */
+/* RMM extension */
+`ifdef TARGET_SPATZ
+      quadrilatero_instr_pkg::MMACC   ,
+      quadrilatero_instr_pkg::MZERO_M ,
+      quadrilatero_instr_pkg::MZERO_A ,
+      quadrilatero_instr_pkg::MMACC_DT,
+      quadrilatero_instr_pkg::MMOV_MM ,
+      quadrilatero_instr_pkg::MMOV_MA ,
+      quadrilatero_instr_pkg::MMOV_AM ,
+      quadrilatero_instr_pkg::MMOV_AA : begin
+        if (RMM) begin
+          write_rd        = 1'b0;
+          uses_rd         = 1'b0;
+          acc_qvalid_o    = valid_instr;
+          acc_register_rd = 1'b0;
+          acc_qreq_o.addr = QUADRILATERO;
+        end else begin
+          illegal_inst = 1'b1;
+        end
+      end
 
+      // 1 source register (rs1) and 1 destination register (rd)
+      quadrilatero_instr_pkg::MCFGK,
+      quadrilatero_instr_pkg::MCFGM,
+      quadrilatero_instr_pkg::MCFGN: begin
+        if (RMM) begin
+          write_rd        = 1'b0;
+          uses_rd         = 1'b1;
+          acc_qvalid_o    = valid_instr;
+          opa_select      = Reg;
+          acc_register_rd = 1'b1;
+          acc_qreq_o.addr = QUADRILATERO;
+        end else begin
+          illegal_inst = 1'b1;
+        end
+      end
+
+      // 2 source registers (rs1, rs2)
+      quadrilatero_instr_pkg::MLD_LHS,
+      quadrilatero_instr_pkg::MLD_RHS: begin
+        if (RMM) begin
+          write_rd        = 1'b0;
+          uses_rd         = 1'b0;
+          acc_qvalid_o    = valid_instr && !acc_mem_stall;
+          opa_select      = Reg;
+          opb_select      = Reg;
+          acc_register_rd = 1'b0;
+          acc_qreq_o.addr = QUADRILATERO;
+        end else begin
+          illegal_inst = 1'b1;
+        end
+      end
+
+      // 2 source registers (rs1, rs2) and memory store operation
+      quadrilatero_instr_pkg::MST: begin
+        if (RMM) begin
+          write_rd        = 1'b0;
+          uses_rd         = 1'b0;
+          acc_qvalid_o    = valid_instr && !acc_mem_stall;
+          opa_select      = Reg;
+          opb_select      = Reg;
+          acc_register_rd = 1'b0;
+          acc_mem_store   = 1'b1;
+          acc_qreq_o.addr = QUADRILATERO;
+        end else begin
+          illegal_inst = 1'b1;
+        end
+      end
+`endif
+/* end of RMM extension */
       default: begin
         illegal_inst = 1'b1;
       end

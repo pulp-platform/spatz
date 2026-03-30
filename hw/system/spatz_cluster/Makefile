@@ -151,6 +151,8 @@ bin/spatz_cluster.vlt: $(VLT_AR) $(VLT_COBJ) ${VLT_BUILDDIR}/lib/libfesvr.a
 # Clean all build directories and temporary files for Verilator simulation
 .PHONY: clean.vlt
 clean.vlt:
+	rm -rf src/generated
+	rm -rf ${SPATZ_DIR}/hw/ip/spatz/generated
 	rm -rf work-vlt
 	rm -f bin/spatz_cluster.vlt
 
@@ -170,6 +172,8 @@ bin/spatz_cluster.vsim: ${VSIM_BUILDDIR}/compile.vsim.tcl work/lib/libfesvr_vsim
 	$(call QUESTASIM,tb_bin)
 
 clean.vsim:
+	rm -rf src/generated
+	rm -rf ${SPATZ_DIR}/hw/ip/spatz/generated
 	rm -rf bin/spatz_cluster.vsim bin/spatz_cluster.vsim.gui work-vsim work vsim.wlf vish_stacktrace.vstf transcript
 
 #######
@@ -186,6 +190,8 @@ bin/spatz_cluster.vcs: test/bootrom.bin work-vcs/compile.sh work/lib/libfesvr_vc
 
 ## Clean all build directories and temporary files for VCS simulation
 clean.vcs:
+	rm -rf src/generated
+	rm -rf ${SPATZ_DIR}/hw/ip/spatz/generated
 	rm -rf bin/spatz_cluster.vcs work-vcs work.lib++ AN.DB work vc_hdrs.h
 
 ############
@@ -251,8 +257,7 @@ clean.sw:
 
 ## Clean everything except logs
 clean: clean.vcs clean.vlt clean.vsim clean.sw
-	rm -rf src/generated
-	rm -rf Bender.lock .bender/ work/
+	rm -rf ${SPATZ_DIR}/Bender.lock ${SPATZ_DIR}/.bender/ work/
 
 clean.logs:
 	rm -rf logs/
