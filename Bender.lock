@@ -42,8 +42,8 @@ packages:
     - scm
     - tech_cells_generic
   common_cells:
-    revision: 9afda9abb565971649c2aa0985639c096f351171
-    version: 1.38.0
+    revision: 9ca8a7655f741e7dd5736669a20a301325194c28
+    version: 1.39.0
     source:
       Git: https://github.com/pulp-platform/common_cells.git
     dependencies:
@@ -71,8 +71,8 @@ packages:
     dependencies:
     - common_cells
   idma:
-    revision: ff5d56fffb3767814db88d6bf8f381974ea33aa5
-    version: 0.6.4
+    revision: 28a36e5e07705549e59fc33db96ab681bc1ca88e
+    version: 0.6.5
     source:
       Git: https://github.com/pulp-platform/iDMA.git
     dependencies:
@@ -90,6 +90,14 @@ packages:
     dependencies:
     - common_cells
     - common_verification
+  quadrilatero:
+    revision: null
+    version: null
+    source:
+      Path: /scratch/dcammarata/spatz_quadrilatero/quadrilatero
+    dependencies:
+    - common_cells
+    - fpnew
   register_interface:
     revision: 146501d80052b61475cdc333d3aab4cd769fd5dc
     version: 0.3.9
@@ -108,8 +116,8 @@ packages:
     - common_cells
     - tech_cells_generic
   scm:
-    revision: 472f99affe44ff7b282b519c047a3cfeb35b16c6
-    version: 1.2.0
+    revision: 1976c7efb4979271eee2abe262fde0f9a20e2557
+    version: 1.2.1
     source:
       Git: https://github.com/pulp-platform/scm.git
     dependencies:
