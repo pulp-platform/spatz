@@ -28,6 +28,9 @@ module vregfile import spatz_pkg::*; #(
     output data_t [NrReadPorts-1:0] rdata_o
   );
 
+  // Include FF
+  `include "common_cells/registers.svh"
+
   /////////////
   // Signals //
   /////////////
@@ -39,7 +42,7 @@ module vregfile import spatz_pkg::*; #(
   logic [NrWords-1:0][WordWidth/8-1:0][7:0] mem;
 
   // Write data sampling
-  data_t wdata_q;
+  data_t wdata_q, wdata_d;
 
   ///////////////////
   // Register File //
@@ -53,10 +56,9 @@ module vregfile import spatz_pkg::*; #(
     .clk_o    (clk       )
   );
 
-  // Sample Input Data
-  always_ff @(posedge clk) begin
-    wdata_q <= wdata_i;
-  end
+  `FF(wdata_q, wdata_d, '0)
+  assign wdata_d = wdata_i;
+
 
   // Row decoder. Create a clock for each SCM row
   logic [NrWords-1:0] row_clk;
@@ -99,11 +101,8 @@ module vregfile import spatz_pkg::*; #(
       );
 
       always_latch begin
-        if (!rst_ni)
-          mem[vreg][b] <= '0;
-        else
-          if (clk_latch)
-            mem[vreg][b] <= wdata_q[b*8 +: 8];
+        if (clk_latch)
+          mem[vreg][b] <= wdata_q[b*8 +: 8];
       end
     end: gen_word
   end: gen_write_mem
