@@ -51,6 +51,9 @@ def main():
     with open(spatzoutdir / "spatz_pkg.sv", "w") as f:
         f.write(cluster_tb.render_spatzpkg())
 
+    with open(outdir / "quadrilatero_pkg.sv", "w") as f:
+        f.write(cluster_tb.render_quadrilateropkg())
+
     with open(outdir / "spatz_cluster_wrapper.sv", "w") as f:
         f.write(cluster_tb.render_wrapper())
 

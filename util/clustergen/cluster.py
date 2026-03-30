@@ -155,6 +155,7 @@ class SnitchCluster(Generator):
     """
 
     files = {
+        "quadrilateropkg" : "src/quadrilatero_pkg.sv.tpl",
         "spatzpkg": "src/spatz_pkg.sv.tpl",
         "wrapper": "src/spatz_cluster_wrapper.sv.tpl",
         "testbench": "tb/testbench.sv.tpl",
@@ -194,6 +195,13 @@ class SnitchCluster(Generator):
     def render_spatzpkg(self):
         """Render the Spatz PKG"""
         cfg_template = self.templates.get_template(self.files["spatzpkg"])
+        return cfg_template.render_unicode(
+            cfg=self.cfg, to_sv_hex=to_sv_hex, disclaimer=self.DISCLAIMER
+        )
+
+    def render_quadrilateropkg(self):
+        """Render the Quadrilatero PKG"""
+        cfg_template = self.templates.get_template(self.files["quadrilateropkg"])
         return cfg_template.render_unicode(
             cfg=self.cfg, to_sv_hex=to_sv_hex, disclaimer=self.DISCLAIMER
         )
@@ -402,6 +410,9 @@ class SnitchClusterTB(Generator):
 
     def render_spatzpkg(self):
         return self.cluster.render_spatzpkg()
+
+    def render_quadrilateropkg(self):
+        return self.cluster.render_quadrilateropkg()
 
     def render_testbench(self):
         return self.cluster.render_testbench()
