@@ -18,7 +18,7 @@ package spatz_cluster_pkg;
   ///////////
 
   // AXI Data Width
-  localparam int unsigned SpatzAxiDataWidth = 512;
+  localparam int unsigned SpatzAxiDataWidth = 256;
   localparam int unsigned SpatzAxiStrbWidth = SpatzAxiDataWidth / 8;
   // AXI Address Width
   localparam int unsigned SpatzAxiAddrWidth = 32;
@@ -30,7 +30,7 @@ package spatz_cluster_pkg;
   localparam int unsigned SpatzAxiUserWidth = 2;
 
   // Narrow AXI Data width
-  localparam int unsigned SpatzNarrowAxiDataWidth = 64;
+  localparam int unsigned SpatzNarrowAxiDataWidth = 32;
 
   typedef logic [SpatzAxiDataWidth-1:0] axi_data_t;
   typedef logic [SpatzAxiStrbWidth-1:0] axi_strb_t;
@@ -290,7 +290,7 @@ module spatz_cluster_wrapper
     .BootAddr (32'h1000),
     .ClusterPeriphSize (64),
     .NrCores (2),
-    .TCDMDepth (1024),
+    .TCDMDepth (2048),
     .TCDMSize (TCDMSize),
     .NrBanks (16),
     .ICacheLineWidth (spatz_cluster_pkg::ICacheLineWidth),

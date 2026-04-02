@@ -24,8 +24,9 @@ VERILATOR_INSTALL_DIR ?= ${INSTALL_DIR}/verilator
 BENDER ?= ${BENDER_INSTALL_DIR}/bender
 DASM   ?= ${SPIKE_INSTALL_DIR}/bin/spike-dasm
 VLT    ?= ${VERILATOR_INSTALL_DIR}/bin/verilator_bin
+# CMAKE  ?= cmake-3.18.1
 CMAKE  ?= cmake
-PYTHON ?= python3
+PYTHON ?= python3.6
 CC     ?= gcc-11.2.0
 CXX    ?= g++-11.2.0
 
@@ -35,7 +36,7 @@ SED_SRCS  := sed -e ${MATCH_END} -e ${MATCH_BGN}
 TB_SRCS   := $(wildcard ${ROOT}/hw/ip/snitch_test/*.sv)
 TB_DIR    := ${ROOT}/hw/ip/snitch_test/src
 
-VSIM_BENDER   += -t test -t rtl -t simulation -t spatz -t spatz_test -t snitch_test ${BENDER_CFG_TARGETS}
+VSIM_BENDER   += -t test -t rtl -t simulation -t spatz -t spatz_test -t snitch_test
 VSIM_SOURCES  := $(shell ${BENDER} script flist ${VSIM_BENDER} | ${SED_SRCS})
 VSIM_BUILDDIR := work-vsim
 
@@ -59,8 +60,7 @@ VLT_FLAGS    += -Wno-PINMISSING
 VLT_FLAGS    += -Wno-fatal
 VLT_FLAGS    += --unroll-count 1024
 VLT_FLAGS    += --timing
-VLT_FLAGS    += -CFLAGS "-std=c++17 -fcoroutines"
-VLT_BENDER   += -t rtl -t spatz -t spatz_test -t snitch_test ${BENDER_CFG_TARGETS} --define COMMON_CELLS_ASSERTS_OFF
+VLT_BENDER   += -t rtl -t spatz -t spatz_test -t snitch_test --define COMMON_CELLS_ASSERTS_OFF
 VLT_SOURCES  := $(shell ${BENDER} script flist ${VLT_BENDER} | ${SED_SRCS})
 VLT_CFLAGS   += -std=c++17 -fcoroutines
 VLT_CFLAGS   += -I${VLT_BUILDDIR}/riscv-isa-sim -I${VLT_BUILDDIR} -I${VERILATOR_INSTALL_DIR}/share/verilator/include -I${VERILATOR_INSTALL_DIR}/share/verilator/include/vltstd -I${ROOT}/hw/ip/snitch_test/src
@@ -82,7 +82,7 @@ all:
 # Eventually it could be an option to package this statically using musl libc.
 work/${FESVR_VERSION}_unzip:
 	mkdir -p $(dir $@)
-	curl -fL -o $(dir $@)/${FESVR_VERSION} https://github.com/riscv/riscv-isa-sim/tarball/${FESVR_VERSION}
+	wget -O $(dir $@)/${FESVR_VERSION} https://github.com/riscv/riscv-isa-sim/tarball/${FESVR_VERSION}
 	tar xfm $(dir $@)${FESVR_VERSION} --strip-components=1 -C $(dir $@)
 	touch $@
 
@@ -102,7 +102,7 @@ work/lib/libfesvr_vcs.a: work/${FESVR_VERSION}_unzip
 # and libraries than modelsim/vcs and
 $(VLT_FESVR)/${FESVR_VERSION}_unzip:
 	mkdir -p $(dir $@)
-	curl -fL -o $(dir $@)/${FESVR_VERSION} https://github.com/riscv/riscv-isa-sim/tarball/${FESVR_VERSION}
+	wget -O $(dir $@)/${FESVR_VERSION} https://github.com/riscv/riscv-isa-sim/tarball/${FESVR_VERSION}
 	tar xfm $(dir $@)${FESVR_VERSION} --strip-components=1 -C $(dir $@)
 	touch $@
 
