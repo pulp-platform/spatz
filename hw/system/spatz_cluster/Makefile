@@ -11,7 +11,8 @@ MKFILE_PATH := $(abspath $(lastword $(MAKEFILE_LIST)))
 MKFILE_DIR  := $(dir $(MKFILE_PATH))
 
 # Configuration file
-SPATZ_CLUSTER_CFG         ?= spatz_cluster.default.dram.hjson
+# SPATZ_CLUSTER_CFG         ?= spatz_cluster.default.dram.hjson
+SPATZ_CLUSTER_CFG         ?= spatz_cluster.32b.dram.hjson
 SPATZ_CLUSTER_CFG_PATH    := $(SPATZ_CLUSTER_DIR)/cfg/$(SPATZ_CLUSTER_CFG)
 SPATZ_CLUSTER_CFG_DEFINES += -DMEM_DRAM_ORIGIN=$(shell python3 -c "import jstyleson; f = open('$(SPATZ_CLUSTER_CFG_PATH)'); print(jstyleson.load(f)['dram']['address'])")
 SPATZ_CLUSTER_CFG_DEFINES += -DMEM_DRAM_SIZE=$(shell python3 -c "import jstyleson; f = open('$(SPATZ_CLUSTER_CFG_PATH)'); print(jstyleson.load(f)['dram']['length'])")
@@ -46,9 +47,13 @@ endif
 include $(ROOT)/util/Makefrag
 
 # QuestaSim
-VSIM      = questa-2021.3-kgf vsim
-VLOG      = questa-2021.3-kgf vlog
-VSIM_HOME = /usr/pack/questa-2021.3-kgf/questasim
+# VSIM      = questa-2021.3-kgf vsim
+# VLOG      = questa-2021.3-kgf vlog
+# VSIM_HOME = /usr/pack/questa-2021.3-kgf/questasim
+
+VSIM      = vsim
+VLOG      = vlog
+VSIM_HOME = /sw/CAD/Siemens/questa/2024.3/questasim
 
 VSIM_FLAGS += -t 1ps
 VSIM_FLAGS += -do "log -r /*; source ${SPATZ_CLUSTER_DIR}/script/vsim/wave.tcl; run -a"

@@ -1027,7 +1027,8 @@ module spatz_vlsu
     $error("[spatz_vlsu] The memory data width needs to be equal to %d.", ELEN);
 
   if (NrMemPorts != N_FU)
-    $error("[spatz_vlsu] The number of memory ports needs to be equal to the number of FUs.");
+    $error("[spatz_vlsu] The number of memory ports needs to be equal to the number of FUs. NrMemPorts=%0d, N_FU=%0d",
+         NrMemPorts, N_FU);
 
   if (NrMemPorts != 2**$clog2(NrMemPorts))
     $error("[spatz_vlsu] The NrMemPorts parameter needs to be a power of two");
