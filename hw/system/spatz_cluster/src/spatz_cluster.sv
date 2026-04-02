@@ -747,7 +747,7 @@ module spatz_cluster
       .IsoCrossing             (1'b0                       ),
       .NumSpatzFPUs            (NumSpatzFPUs[i]            ),
       .NumSpatzIPUs            (NumSpatzIPUs[i]            ),
-      .NumMemPortsPerSpatz     (NumSpatzTCDMPorts[i]       ),
+      // .NumMemPortsPerSpatz     (NumSpatzTCDMPorts[i]       ), // CMY: comment this parameter passing to avoid unalignment of N_FPU and N_TCDM_port
       .NumIntOutstandingLoads  (NumIntOutstandingLoads[i]  ),
       .NumIntOutstandingMem    (NumIntOutstandingMem[i]    ),
       .NumSpatzOutstandingLoads(NumSpatzOutstandingLoads[i]),
