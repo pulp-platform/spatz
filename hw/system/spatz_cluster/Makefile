@@ -65,9 +65,13 @@ endif
 include $(ROOT)/util/Makefrag
 
 # QuestaSim
-VSIM      = questa-2021.3-kgf vsim
-VLOG      = questa-2021.3-kgf vlog
-VSIM_HOME = /usr/pack/questa-2021.3-kgf/questasim
+# VSIM      = questa-2021.3-kgf vsim
+# VLOG      = questa-2021.3-kgf vlog
+# VSIM_HOME = /usr/pack/questa-2021.3-kgf/questasim
+
+VSIM      = vsim
+VLOG      = vlog
+VSIM_HOME = /sw/CAD/Siemens/questa/2024.3/questasim
 
 VSIM_FLAGS += -t 1ps
 VSIM_FLAGS += -do "log -r /*; source ${SPATZ_CLUSTER_DIR}/script/vsim/wave.tcl; run -a"
