@@ -48,6 +48,7 @@ void TEST_CASE1(void) {
   VSET(1, e16, m1);
   VCMP_U16(2, v1, 0x0665);
 
+#if ELEN == 64
   VSET(8, e64, m1);
   VLOAD_64(v2, 0x3feba8d9296c7e74, 0x3fdefda0947f3460, 0x3fed8915c5665532,
            0xbfee55c27d3d743e, 0xbfc0c0dbc6990b38, 0xbfd84eacd38c6ca4,
@@ -61,6 +62,7 @@ void TEST_CASE1(void) {
   asm volatile("vmfle.vv v1, v2, v3");
   VSET(1, e16, m1);
   VCMP_U8(3, v1, 0xbc);
+#endif
 };
 
 // Simple random test with similar values + 1 subnormal (masked)
@@ -105,6 +107,7 @@ void TEST_CASE2(void) {
   VSET(1, e16, m1);
   VCMP_U16(5, v1, 0x8220);
 
+#if ELEN == 64
   VSET(8, e64, m1);
   //               0.8643613633211786,  0.4842301798024149,  0.9229840140784857,
   //               -0.9479687162489723, -0.1308855743137316,
@@ -124,27 +127,42 @@ void TEST_CASE2(void) {
   asm volatile("vmfle.vv v1, v2, v3, v0.t");
   VSET(1, e8, m1);
   VCMP_U16(6, v1, 0xaa);
+#endif
 };
 
 // Simple random test with similar values (vector-scalar)
 void TEST_CASE3(void) {
   VSET(16, e16, m1);
+#if ELEN == 64
   double dscalar_16;
   //                             -0.2649
   BOX_HALF_IN_DOUBLE(dscalar_16, 0xb43d);
+#else
+  float fscalar_16;
+  BOX_HALF_IN_FLOAT(fscalar_16, 0xb43d);
+#endif
   //              -0.0651,  0.5806,  0.2563, -0.4783,  0.7393, -0.2649, -0.4590,
   //              0.5469, -0.9082,  0.6235, -0.8276, -0.7939, -0.0236, -0.1166,
   //              0.4026,  0.0022
   VLOAD_16(v2, 0xac2a, 0x38a5, 0x341a, 0xb7a7, 0x39ea, 0xb43d, 0xb758, 0x3860,
            0xbb44, 0x38fd, 0xba9f, 0xba5a, 0xa60b, 0xaf76, 0x3671, 0x1896);
+#if ELEN == 64
   asm volatile("vmfle.vf v1, v2, %[A]" ::[A] "f"(dscalar_16));
+#else
+  asm volatile("vmfle.vf v1, v2, %[A]" ::[A] "f"(fscalar_16));
+#endif
   VSET(1, e16, m1);
   VCMP_U16(7, v1, 0x0d68);
 
   VSET(16, e32, m1);
+#if ELEN == 64
   double dscalar_32;
   //                               0.80517912
   BOX_FLOAT_IN_DOUBLE(dscalar_32, 0x3f4e2038);
+#else
+  float fscalar_32;
+  memcpy(&fscalar_32, &(uint32_t){0x3f4e2038}, sizeof(float));
+#endif
   //              -0.15601152, -0.92020410, -0.29387674,  0.98594254,
   //              0.88163614, -0.44641387,  0.88191622,  0.15161350,
   //              -0.79952192, -0.03668820, -0.38464722, -0.54745716,
@@ -153,10 +171,15 @@ void TEST_CASE3(void) {
            0x3f4e2038, 0x3f4e2038, 0x3f4e2038, 0x3f4e2038, 0x3f4e2038,
            0x3f4e2038, 0x3f4e2038, 0x3f4e2038, 0x3f4e2038, 0x3f4e2038,
            0xbf4b1daf);
+#if ELEN == 64
   asm volatile("vmfle.vf v1, v2, %[A]" ::[A] "f"(dscalar_32));
+#else
+  asm volatile("vmfle.vf v1, v2, %[A]" ::[A] "f"(fscalar_32));
+#endif
   VSET(1, e16, m1);
   VCMP_U16(8, v1, 0xffff);
 
+#if ELEN == 64
   VSET(8, e64, m1);
   double dscalar_64;
   //                               -0.3394093097660049
@@ -171,14 +194,20 @@ void TEST_CASE3(void) {
   asm volatile("vmfle.vf v1, v2, %[A]" ::[A] "f"(dscalar_64));
   VSET(1, e8, m1);
   VCMP_U8(9, v1, 0x8c);
+#endif
 };
 
 // Simple random test with similar values (vector-scalar) (masked)
 void TEST_CASE4(void) {
   VSET(16, e16, m1);
+#if ELEN == 64
   double dscalar_16;
   //                             -0.2649
   BOX_HALF_IN_DOUBLE(dscalar_16, 0xb43d);
+#else
+  float fscalar_16;
+  BOX_HALF_IN_FLOAT(fscalar_16, 0xb43d);
+#endif
   //               -0.2649,  0.5806, -0.2649, -0.4783, -0.2649, -0.2649,
   //               -0.2649, -0.2649, -0.2649, -0.2649, -0.2649, -0.2649,
   //               -0.2649, -0.2649, -0.2649, -0.2649,
@@ -186,14 +215,23 @@ void TEST_CASE4(void) {
            0xb43d, 0xb43d, 0xb43d, 0xb43d, 0xb43d, 0xb43d, 0xb43d, 0xb43d);
   VLOAD_8(v0, 0xAA, 0xAA);
   VCLEAR(v1);
+#if ELEN == 64
   asm volatile("vmfle.vf v1, v2, %[A], v0.t" ::[A] "f"(dscalar_16));
+#else
+  asm volatile("vmfle.vf v1, v2, %[A], v0.t" ::[A] "f"(fscalar_16));
+#endif
   VSET(1, e16, m1);
   VCMP_U16(10, v1, 0xaaa0);
 
   VSET(16, e32, m1);
+#if ELEN == 64
   double dscalar_32;
   //                               0.80517912
   BOX_FLOAT_IN_DOUBLE(dscalar_32, 0x3f4e2038);
+#else
+  float fscalar_32;
+  memcpy(&fscalar_32, &(uint32_t){0x3f4e2038}, sizeof(float));
+#endif
   //                0.80517912,  0.80517912, -0.29387674,  0.98594254,
   //                0.88163614, -0.44641387,  0.88191622,  0.15161350,
   //                -0.79952192, -0.03668820, -0.38464722, -0.54745716,
@@ -204,10 +242,15 @@ void TEST_CASE4(void) {
            0xbf4b1daf);
   VLOAD_8(v0, 0xAA, 0xAA);
   VCLEAR(v1);
+#if ELEN == 64
   asm volatile("vmfle.vf v1, v2, %[A], v0.t" ::[A] "f"(dscalar_32));
+#else
+  asm volatile("vmfle.vf v1, v2, %[A], v0.t" ::[A] "f"(fscalar_32));
+#endif
   VSET(1, e16, m1);
   VCMP_U16(11, v1, 0xaaa2);
 
+#if ELEN == 64
   VSET(8, e64, m1);
   double dscalar_64;
   //                               -0.3394093097660049
@@ -224,6 +267,7 @@ void TEST_CASE4(void) {
   asm volatile("vmfle.vf v1, v2, %[A], v0.t" ::[A] "f"(dscalar_64));
   VSET(1, e8, m1);
   VCMP_U16(12, v1, 0x88);
+#endif
 };
 
 int main(void) {
