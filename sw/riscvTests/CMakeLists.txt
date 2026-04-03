@@ -101,6 +101,13 @@ add_snitch_test(vfrsub isa/rv64uv/vfrsub.c)
 add_snitch_test(vfmin isa/rv64uv/vfmin.c)
 add_snitch_test(vfmax isa/rv64uv/vfmax.c)
 
+add_snitch_test(vmfeq isa/rv64uv/vmfeq.c)
+add_snitch_test(vmfne isa/rv64uv/vmfne.c)
+add_snitch_test(vmflt isa/rv64uv/vmflt.c)
+add_snitch_test(vmfle isa/rv64uv/vmfle.c)
+add_snitch_test(vmfgt isa/rv64uv/vmfgt.c)
+add_snitch_test(vmfge isa/rv64uv/vmfge.c)
+
 add_snitch_test(vfmul   isa/rv64uv/vfmul.c)
 add_snitch_test(vfmacc  isa/rv64uv/vfmacc.c)
 add_snitch_test(vfnmacc isa/rv64uv/vfnmacc.c)

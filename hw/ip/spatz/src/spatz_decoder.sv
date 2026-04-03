@@ -855,6 +855,16 @@ module spatz_decoder
         riscv_instr::VFMIN_VF,
         riscv_instr::VFMAX_VV,
         riscv_instr::VFMAX_VF,
+        riscv_instr::VMFEQ_VV,
+        riscv_instr::VMFEQ_VF,
+        riscv_instr::VMFNE_VV,
+        riscv_instr::VMFNE_VF,
+        riscv_instr::VMFLT_VV,
+        riscv_instr::VMFLT_VF,
+        riscv_instr::VMFLE_VV,
+        riscv_instr::VMFLE_VF,
+        riscv_instr::VMFGT_VF,
+        riscv_instr::VMFGE_VF,
         riscv_instr::VFSGNJ_VV,
         riscv_instr::VFSGNJ_VF,
         riscv_instr::VFSGNJN_VV,
@@ -976,6 +986,51 @@ module spatz_decoder
               riscv_instr::VFMAX_VF: begin
                 spatz_req.op = VFMINMAX;
                 spatz_req.rm = fpnew_pkg::RTZ;
+              end
+
+              riscv_instr::VMFEQ_VV,
+              riscv_instr::VMFEQ_VF: begin
+                spatz_req.op = VFCMP;
+                spatz_req.rm = fpnew_pkg::RDN;
+              end
+
+              riscv_instr::VMFNE_VV,
+              riscv_instr::VMFNE_VF: begin
+                spatz_req.op = VFCMP;
+                spatz_req.rm = fpnew_pkg::RUP;
+              end
+
+              riscv_instr::VMFLT_VV,
+              riscv_instr::VMFLT_VF: begin
+                spatz_req.op = VFCMP;
+                spatz_req.rm = fpnew_pkg::RTZ;
+              end
+
+              riscv_instr::VMFGT_VF: begin
+                spatz_req.op = VFCMP;
+                spatz_req.rm = fpnew_pkg::RTZ;
+                //Switch the operands
+                spatz_req.vs2     = arith_s2;
+                spatz_req.use_vs2 = 1'b1;
+                spatz_req.rs1     = decoder_req_i.rs1;
+                spatz_req.use_vs1 = 1'b0;
+
+              end
+
+              riscv_instr::VMFLE_VV,
+              riscv_instr::VMFLE_VF: begin
+                spatz_req.op = VFCMP;
+                spatz_req.rm = fpnew_pkg::RNE;
+              end
+
+              riscv_instr::VMFGE_VF: begin
+                spatz_req.op = VFCMP;
+                spatz_req.rm = fpnew_pkg::RNE;
+                //Switch the operands
+                spatz_req.vs2     = arith_s2;
+                spatz_req.use_vs2 = 1'b1;
+                spatz_req.rs1     = decoder_req_i.rs1;
+                spatz_req.use_vs1 = 1'b0;
               end
 
               riscv_instr::VFMUL_VV,
