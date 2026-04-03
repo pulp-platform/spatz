@@ -1,11 +1,3 @@
-/*  cos_hw.c – Hardware cos via vfcos.v burst pattern
- *
- *  Algorithm:  4-way unrolled load → vfcos.v → store
- *  The HW instruction computes cos(x) in the non-linear pipeline.
- *
- *  Compile with -DLMUL_MODE={1,2,4,8}
- */
-
 #include "snrt.h"
 #include "printf.h"
 #include "data/data.h"
@@ -18,9 +10,7 @@
 #define LMUL_MODE 8
 #endif
 
-/* ========================= LMUL = 8 =========================
- * Groups: v0, v8, v16, v24   (4 groups of 8 = 32 regs)
- */
+/* ========================= LMUL = 8 ========================= */
 static inline void vcos_hw_m8(const float *inp, float *out, int N) {
     size_t vl;
     asm volatile("vsetvli %0, zero, e32, m8, ta, ma" : "=r"(vl));

@@ -1,37 +1,3 @@
-/*
- * Copyright (C) 2021 ETH Zurich
- * and University of Bologna
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- * -----------------------------------------------------------------------
- *
- * RVV tanhf (SEW=16) — strip-mined, maskless, runtime-sized VL.
- *
- * Build-time params:
- *   -DLMUL_MODE=8|4|2        (default: 4)
- *   -DTANH_DEG=0|2|3|4       (0 = Schraudolph fast exp; 2/3/4 = Cheby Horner)
- *
- * Identity:
- *   tanh(x) = sign(x) * (1 - 2/(exp(2|x|) + 1))
- *
- * TANH_DEG=0 (Schraudolph fast exp):
- *   E ≈ *(__fp16*)&( (uint32_t) (z*C + B) ),  where z = 2|x|
- *   C = 2^23 / ln(2) ≈ 1448.15f,  B ≈ 15360.0f (tuned bias)
- *
- * TANH_DEG=2/3/4 (Chebyshev on r ∈ [-ln2, ln2]):
- *   z = 2|x|;  y=z*LOG2E;  k=int(y);  r = z - k*LN2
- *   exp(z) ≈ P(r) * 2^k,  P via Horner with FP32-friendly coeffs.
- */
 
 #include <stdint.h>
 #include <math.h>
