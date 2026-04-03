@@ -110,6 +110,29 @@ generate: src/generated/spatz_cluster_wrapper.sv
 src/generated/spatz_cluster_wrapper.sv: ${SPATZ_CLUSTER_CFG_PATH} $(find src/tpl) $(find test/*tpl)
 	${PYTHON} ${SPATZ_DIR}/util/clustergen.py -c ${SPATZ_CLUSTER_CFG_PATH} -o src/
 
+## Generate data for all spatz benchmarks
+.PHONY: spatz.gendata
+spatz.gendata:
+	@for benchmark_dir in $(ROOT)/sw/spatzBenchmarks/*/; do \
+		script_dir="$$benchmark_dir/script"; \
+		data_dir="$$benchmark_dir/data"; \
+		if [ -d "$$script_dir" ]; then \
+			json_count=$$(find "$$script_dir" -name '*.json' -type f | wc -l); \
+			data_count=$$(find "$$data_dir" -name 'data*.h' -type f 2>/dev/null | wc -l); \
+			if [ "$$json_count" -ne "$$data_count" ]; then \
+				echo "Generating data for benchmark $$benchmark_dir ($$json_count json configs, $$data_count data files found)"; \
+				for config in "$$script_dir"/*.json; do \
+					if [ -f "$$config" ]; then \
+						config_path="script/$$(basename $$config)"; \
+						(cd "$$benchmark_dir" && ${PYTHON} script/gen_data.py -c "$$config_path") || true; \
+					fi \
+				done \
+			else \
+				echo "Data already present for benchmark $$benchmark_dir ($$json_count data files)"; \
+			fi \
+		fi \
+	done
+
 #############
 # Verilator #
 #############
@@ -199,13 +222,13 @@ lint/tmp/files: ${BENDER}
 ######
 
 ## Build SW into sw/build with the LLVM toolchain
-sw: clean.sw
+sw: clean.sw spatz.gendata
 	mkdir -p sw/build
 	cd sw/build && ${CMAKE} -DLLVM_PATH=${LLVM_INSTALL_DIR} -DGCC_PATH=${GCC_INSTALL_DIR} -DPYTHON=${PYTHON} -DBUILD_TESTS=ON -DSPATZ_CLUSTER_CFG=${SPATZ_CLUSTER_CFG} ${SPATZ_CLUSTER_CFG_DEFINES} .. && make -j8
 
 # VSIM
 ## Build SW into sw/build with the LLVM toolchain (including tests) for Questasim simulator
-sw.vsim: clean.sw bin/spatz_cluster.vsim
+sw.vsim: clean.sw bin/spatz_cluster.vsim spatz.gendata
 	mkdir -p sw/build
 	cd sw/build && ${CMAKE} -DLLVM_PATH=${LLVM_INSTALL_DIR} -DGCC_PATH=${GCC_INSTALL_DIR} -DPYTHON=${PYTHON} -DSNITCH_SIMULATOR=../../../../../hw/system/spatz_cluster/bin/spatz_cluster.vsim -DBUILD_TESTS=ON -DSPATZ_CLUSTER_CFG=${SPATZ_CLUSTER_CFG} ${SPATZ_CLUSTER_CFG_DEFINES} .. && make -j8
 
@@ -215,7 +238,7 @@ sw.test.vsim: sw.vsim
 
 # VCS
 ## Build SW into sw/build with the LLVM toolchain (including tests) for VCS simulator
-sw.vcs: clean.sw bin/spatz_cluster.vcs
+sw.vcs: clean.sw bin/spatz_cluster.vcs spatz.gendata
 	mkdir -p sw/build
 	cd sw/build && ${CMAKE} -DLLVM_PATH=${LLVM_INSTALL_DIR} -DGCC_PATH=${GCC_INSTALL_DIR} -DPYTHON=${PYTHON} -DSNITCH_SIMULATOR=../../../../../hw/system/spatz_cluster/bin/spatz_cluster.vcs -DBUILD_TESTS=ON -DSPATZ_CLUSTER_CFG=${SPATZ_CLUSTER_CFG} ${SPATZ_CLUSTER_CFG_DEFINES} .. && make -j8
 
@@ -225,7 +248,7 @@ sw.test.vcs: sw.vcs
 
 # VLT
 ## Build SW into sw/build with the LLVM toolchain (including tests) for Verilator simulator
-sw.vlt: clean.sw bin/spatz_cluster.vlt
+sw.vlt: clean.sw bin/spatz_cluster.vlt spatz.gendata
 	mkdir -p sw/build
 	cd sw/build && ${CMAKE} -DLLVM_PATH=${LLVM_INSTALL_DIR} -DGCC_PATH=${GCC_INSTALL_DIR} -DPYTHON=${PYTHON} -DSNITCH_SIMULATOR=../../../../../hw/system/spatz_cluster/bin/spatz_cluster.vlt -DBUILD_TESTS=ON -DSPATZ_CLUSTER_CFG=${SPATZ_CLUSTER_CFG} ${SPATZ_CLUSTER_CFG_DEFINES} .. && make -j8
 
@@ -282,3 +305,5 @@ help:
 	@echo -e ""
 	@echo -e "Additional useful targets from the included Makefrag:"
 	@echo -e "${Blue}traces         ${Black}Generate the better readable traces in .logs/trace_hart_<hart_id>.txt with spike-dasm."
+	@echo -e ""
+	@echo -e "${Blue}spatz.gendata  ${Black}Generate data for all spatz benchmarks using gen_data.py with all config files."

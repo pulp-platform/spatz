@@ -10,7 +10,6 @@ import torch
 import argparse
 import pathlib
 import hjson
-from functools import reduce
 
 np.random.seed(42)
 torch.manual_seed(42)
@@ -19,14 +18,22 @@ global verbose
 
 
 def array_to_cstr(a, fmt=float):
-    out = "{"
+    out = "{\n"
     if fmt == float:
         if isinstance(a, np.ndarray):
-            a = a.flat
-        if isinstance(a, torch.Tensor):
-            a = a.numpy().flat
-        for el in a:
-            out += "{}, ".format(el)
+            a = list(a.flat)
+        elif isinstance(a, torch.Tensor):
+            a = a.numpy().flatten().tolist()
+        else:
+            a = list(a)
+        for i, el in enumerate(a):
+            if i % 3 == 0:
+                out += "    "
+            out += "{},".format(el)
+            if (i + 1) % 3 == 0:
+                out += "\n"
+            else:
+                out += " "
     else:
         for sign, exp, mant in zip(
             a["sign"].numpy().flat,
@@ -34,8 +41,8 @@ def array_to_cstr(a, fmt=float):
             a["mantissa"].numpy().flat,
         ):
             value = sign * 2**7 + exp * 2**2 + mant
-            out += "0x{:02x}, ".format(value)
-    out = out[:-2] + "}"
+            out += "0x{:02x},\n".format(value)
+    out = out.rstrip() + "\n}"
     return out
 
 
@@ -44,66 +51,64 @@ def emit_header_file(layer_type: str, **kwargs):
     file_path = pathlib.Path(__file__).parent.parent / "data"
     file_path.mkdir(parents=True, exist_ok=True)
     emit_str = (
-        "// Copyright 2023 ETH Zurich and University of Bologna.\n"
+        "// Copyright 2025 ETH Zurich and University of Bologna.\n"
         + "// Licensed under the Apache License, Version 2.0, see LICENSE for details.\n"
         + "// SPDX-License-Identifier: Apache-2.0\n\n"
         + "// This file was generated automatically.\n\n"
     )
 
-    file = file_path / ("data_" + str(kwargs["M"]) + ".h")
-    emit_str += emit_dotp_layer(**kwargs)
+    file = file_path / ("data_" + str(kwargs["M"]) + "_" + str(kwargs["N"]) + "_" + str(kwargs["prec"]) + ".h")
+    emit_str += emit_gemv_layer(**kwargs)
     with file.open("w") as f:
         f.write(emit_str)
 
 
-def emit_dotp_layer(name="dotp", **kwargs):
-    vec_A = kwargs["A"]
+def emit_gemv_layer(name="gemv", **kwargs):
+    mat_A = kwargs["A"]
     vec_B = kwargs["B"]
     result = kwargs["result"]
 
     m = kwargs["M"]
+    n = kwargs["N"]
 
     layer_str = ""
     layer_str += '#include "layer.h"\n\n'
-    layer_str += f"dotp_layer {name}_l = {{\n"
-    layer_str += f"\t.M = {m},\n"
-    layer_str += f'\t.dtype = FP{kwargs["prec"]},\n'
-    layer_str += "};\n\n\n"
+    layer_str += f'const gemv_layer {name}_l = {{.M = {m}, .N = {n}, .dtype = FP{kwargs["prec"]}}};\n\n'
 
     ctypes = {"64": "double", "32": "float", "16": "__fp16", "8": "char"}
 
     dtype = ctypes[str(kwargs["prec"])]
     if dtype != "char":
         layer_str += (
-            f'static {dtype} {name}_A_dram [{m}] __attribute__((section(".data"))) = '
-            + array_to_cstr(vec_A)
-            + ";\n\n\n"
+            f'static {dtype} {name}_A_dram[{m} * {n}] __attribute__((section(".data"))) = '
+            + array_to_cstr(mat_A)
+            + ";\n\n"
         )
         layer_str += (
-            f'static {dtype} {name}_B_dram [{m}] __attribute__((section(".data"))) = '
+            f'static {dtype} {name}_B_dram[{n}] __attribute__((section(".data"))) = '
             + array_to_cstr(vec_B)
-            + ";\n\n\n"
+            + ";\n\n"
         )
         layer_str += (
-            f'static {dtype} {name}_result __attribute__((section(".data"))) = '
+            f'static {dtype} {name}_result[{m}] __attribute__((section(".data"))) = '
             + array_to_cstr(result)
-            + ";\n\n\n"
+            + ";\n"
         )
     else:
         layer_str += (
-            f"static {dtype} {name}_A_dram [{m}] = "
+            f"static {dtype} {name}_A_dram[{m} * {n}] = "
             + array_to_cstr(kwargs["bits_A"], fmt="char")
-            + ";\n\n\n"
+            + ";\n\n"
         )
         layer_str += (
-            f"static {dtype} {name}_B_dram [{m}] = "
+            f"static {dtype} {name}_B_dram[{n}] = "
             + array_to_cstr(kwargs["bits_B"], fmt="char")
-            + ";\n\n\n"
+            + ";\n\n"
         )
         layer_str += (
-            f"static {dtype} {name}_result = "
+            f"static {dtype} {name}_result[{m}] = "
             + array_to_cstr(kwargs["result"], fmt="char")
-            + ";\n\n\n"
+            + ";\n"
         )
 
     return layer_str
@@ -136,8 +141,16 @@ def rand_data_generator(shape, prec, alt=False):
         ), bits
 
 
-def dotp(a, b):
-    return reduce(lambda a, b: a + b, np.multiply(a, b))
+def gemv(a, b):
+    # PyTorch doesn't support matmul for float16 on CPU, so convert to float32
+    original_dtype = a.dtype
+    if original_dtype == torch.float16:
+        a = a.float()
+        b = b.float()
+    result = torch.matmul(a, b)
+    if original_dtype == torch.float16:
+        result = result.half()
+    return result
 
 
 def main():
@@ -160,22 +173,27 @@ def main():
     with args.cfg.open() as f:
         param = hjson.loads(f.read())
 
-    vec_A, bits_A = rand_data_generator((param["M"], 1), param["prec"])
-    vec_B, bits_B = rand_data_generator((param["M"], 1), param["prec"])
-    result = dotp(vec_A, vec_B)
+    mat_A, bits_A = rand_data_generator((param["M"], param["N"]), param["prec"])
+    vec_B, bits_B = rand_data_generator((param["N"], 1), param["prec"])
+
+    result = gemv(mat_A, vec_B)
+
+    # Store A in col major format
+    mat_A = mat_A.T
 
     kwargs = {
-        "A": vec_A,
+        "A": mat_A,
         "B": vec_B,
         "result": result,
         "M": param["M"],
+        "N": param["N"],
         "prec": param["prec"],
         "expand": param["expand"],
         "bits_A": bits_A,
         "bits_B": bits_B,
     }
 
-    emit_header_file("dotp", **kwargs)
+    emit_header_file("gemv", **kwargs)
 
 
 if __name__ == "__main__":
