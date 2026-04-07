@@ -205,6 +205,10 @@ module spatz_vfu
   logic [N_FU*ELENB-1:0] result_valid;
   logic                  result_ready;
 
+  // it represents the VRF word index
+  logic [$clog2(NrWordsPerVector):0] word_idx_d, word_idx_q;
+  `FF(word_idx_q, word_idx_d, '0)
+
   always_comb begin: control_proc
     // Maintain state
     vl_d              = vl_q;
@@ -445,7 +449,7 @@ module spatz_vfu
         word_issued = spatz_req_valid && &(in_ready | ~valid_operations) && operands_ready && !stall;
 
         // Are we ready to accept a result?
-        result_ready = &(result_valid | ~pending_results) && ((result_tag.wb && vfu_rsp_ready_i) || vrf_wvalid_i);
+        result_ready = &(result_valid | ~pending_results) && ((result_tag.wb && vfu_rsp_ready_i) || vrf_wvalid_i || (spatz_req.op == VFCMP && !result_tag.last));
 
         // Initialize the pointers
         reduction_pointer_d = '0;
@@ -787,6 +791,7 @@ module spatz_vfu
       end else if (spatz_req.op == VFCMP) begin
         // every vector element requires 1 bit of wbe --> ceil(vl/8)
         automatic logic [$clog2((MAXVL+7)/8+1)-1:0] mask_bytes;
+        vreg_we    = result_tag.last;
         mask_bytes = (spatz_req.vl + 7) >> 3;
         vreg_wbe   = (mask_bytes >= N_FU*ELENB) ? '1 : vrf_be_t'((vrf_be_t'(1) << mask_bytes) - 1);
       end
@@ -804,14 +809,19 @@ module spatz_vfu
     end
   end : operand_req_proc
 
-  // it represents the VRF word index
-  logic [1:0] word_idx_d, word_idx_q;
-  `FF(word_idx_q, word_idx_d, '0)
+logic vfcmp_result_accepted;
+assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pending_results) && result_ready;
+
   always_comb begin : VRF_cnt_proc
-    if (vreg_we)
-      word_idx_d = word_idx_q + 1;
-    else
+    word_idx_d = word_idx_q;
+    if (spatz_req.op != VFCMP)
       word_idx_d = '0;
+    else if (vfcmp_result_accepted) begin
+      if (result_tag.last)
+        word_idx_d = '0;
+      else
+        word_idx_d = word_idx_q + 1;
+    end
   end
 
   logic [N_FU*ELEN-1:0] vreg_wdata, wdata_d, wdata_q;
@@ -860,12 +870,15 @@ module spatz_vfu
   end
 
   always_comb begin : wdata_proc
-    if (vreg_we && spatz_req.op == VFCMP)
-      wdata_d = wdata_q | vreg_wdata;
-    else if (spatz_req.op == VFCMP)
-      wdata_d = wdata_q;
-    else
+    wdata_d = wdata_q;
+    if (spatz_req.op != VFCMP) begin
       wdata_d = '0;
+    end else if (vfcmp_result_accepted) begin
+      if (result_tag.last)
+        wdata_d = '0;
+      else
+        wdata_d = wdata_q | vreg_wdata;
+    end
   end
 
   `FF(wdata_q, wdata_d, '0)
@@ -874,7 +887,7 @@ module spatz_vfu
   assign vrf_re_o    = vreg_r_req;
   assign vrf_we_o    = vreg_we;
   assign vrf_wbe_o   = vreg_wbe;
-  assign vrf_wdata_o = (spatz_req.op == VFCMP) ? wdata_d : vreg_wdata;
+  assign vrf_wdata_o = (spatz_req.op == VFCMP) ? (wdata_q | vreg_wdata) : vreg_wdata;
   assign vrf_id_o    = {result_tag.id, {3{spatz_req.id}}};
 
   //////////
