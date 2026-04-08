@@ -25,7 +25,7 @@ endif()
 add_compile_options(-O3 -g -ffunction-sections)
 
 # Platform sources
-if(SPATZ_CLUSTER_CFG MATCHES "^(spatz_cluster\.(default|mempool|smallvrf|32b|doublebw)\.dram)\.hjson$")
+if(SPATZ_CLUSTER_CFG MATCHES "^(spatz_cluster\.(default|mempool|smallvrf|32b|doublebw|32bdoublebw)\.dram)\.hjson$")
   set(_plat_folder "standalone")
 elseif("${SPATZ_CLUSTER_CFG}" MATCHES "^spatz_cluster.carfield\\.(l2|dram)\\.hjson$")
   set(_plat_folder "cheshire")
@@ -68,6 +68,8 @@ set(MEM_SPATZ_CLUSTER_MEMPOOL_DRAM_HJSON_ORIGIN  0x80000000)
 set(MEM_SPATZ_CLUSTER_MEMPOOL_DRAM_HJSON_SIZE    0x80000000)
 set(MEM_SPATZ_CLUSTER_32B_DRAM_HJSON_ORIGIN      0x80000000)
 set(MEM_SPATZ_CLUSTER_32B_DRAM_HJSON_SIZE        0x80000000)
+set(MEM_SPATZ_CLUSTER_32BDOUBLEBW_DRAM_HJSON_ORIGIN      0x80000000)
+set(MEM_SPATZ_CLUSTER_32BDOUBLEBW_DRAM_HJSON_SIZE        0x80000000)
 
 # sanitize lookup key (replace dots with underscores, upper-case)
 string(REPLACE "." "_" _key "${SPATZ_CLUSTER_CFG}")
