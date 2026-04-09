@@ -205,6 +205,10 @@ module spatz_vfu
   logic [N_FU*ELENB-1:0] result_valid;
   logic                  result_ready;
 
+  // it represents the VRF word index
+  logic [$clog2(NrWordsPerVector):0] word_idx_d, word_idx_q;
+  `FF(word_idx_q, word_idx_d, '0)
+
   always_comb begin: control_proc
     // Maintain state
     vl_d              = vl_q;
@@ -445,7 +449,7 @@ module spatz_vfu
         word_issued = spatz_req_valid && &(in_ready | ~valid_operations) && operands_ready && !stall;
 
         // Are we ready to accept a result?
-        result_ready = &(result_valid | ~pending_results) && ((result_tag.wb && vfu_rsp_ready_i) || vrf_wvalid_i);
+        result_ready = &(result_valid | ~pending_results) && ((result_tag.wb && vfu_rsp_ready_i) || vrf_wvalid_i || (spatz_req.op == VFCMP && !result_tag.last));
 
         // Initialize the pointers
         reduction_pointer_d = '0;
@@ -758,12 +762,12 @@ module spatz_vfu
       if (word_issued) begin
         vreg_addr_d[0] = vreg_addr_d[0] + (!spatz_req.op_arith.widen_vs2 || widening_upper_q);
         vreg_addr_d[1] = vreg_addr_d[1] + (!spatz_req.op_arith.widen_vs1 || widening_upper_q);
-        vreg_addr_d[2] = vreg_addr_d[2] + (!spatz_req.op_arith.is_reduction && (!spatz_req.op_arith.is_narrowing || narrowing_upper_q));
+        vreg_addr_d[2] = vreg_addr_d[2] + (!spatz_req.op_arith.is_reduction && (!spatz_req.op_arith.is_narrowing || narrowing_upper_q) && (spatz_req.op != VFCMP));
       end
     end else if (spatz_req_valid && vl_q < spatz_req.vl && word_issued) begin
       vreg_addr_d[0] = vreg_addr_q[0] + (!spatz_req.op_arith.widen_vs2 || widening_upper_q);
       vreg_addr_d[1] = vreg_addr_q[1] + (!spatz_req.op_arith.widen_vs1 || widening_upper_q);
-      vreg_addr_d[2] = vreg_addr_q[2] + (!spatz_req.op_arith.is_reduction && (!spatz_req.op_arith.is_narrowing || narrowing_upper_q));
+      vreg_addr_d[2] = vreg_addr_q[2] + (!spatz_req.op_arith.is_reduction && (!spatz_req.op_arith.is_narrowing || narrowing_upper_q) && (spatz_req.op != VFCMP));
     end
   end: vreg_addr_proc
 
@@ -784,6 +788,12 @@ module spatz_vfu
       if (result_tag.narrowing) begin
         // Only write half of the elements
         vreg_wbe = result_tag.narrowing_upper ? {{(N_FU*ELENB/2){1'b1}}, {(N_FU*ELENB/2){1'b0}}} : {{(N_FU*ELENB/2){1'b0}}, {(N_FU*ELENB/2){1'b1}}};
+      end else if (spatz_req.op == VFCMP) begin
+        // every vector element requires 1 bit of wbe --> ceil(vl/8)
+        automatic logic [$clog2((MAXVL+7)/8+1)-1:0] mask_bytes;
+        vreg_we    = result_tag.last;
+        mask_bytes = (spatz_req.vl + 7) >> 3;
+        vreg_wbe   = (mask_bytes >= N_FU*ELENB) ? '1 : vrf_be_t'((vrf_be_t'(1) << mask_bytes) - 1);
       end
     end
 
@@ -799,7 +809,22 @@ module spatz_vfu
     end
   end : operand_req_proc
 
-  logic [N_FU*ELEN-1:0] vreg_wdata;
+logic vfcmp_result_accepted;
+assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pending_results) && result_ready;
+
+  always_comb begin : VRF_cnt_proc
+    word_idx_d = word_idx_q;
+    if (spatz_req.op != VFCMP)
+      word_idx_d = '0;
+    else if (vfcmp_result_accepted) begin
+      if (result_tag.last)
+        word_idx_d = '0;
+      else
+        word_idx_d = word_idx_q + 1;
+    end
+  end
+
+  logic [N_FU*ELEN-1:0] vreg_wdata, wdata_d, wdata_q;
   always_comb begin: align_result
     // Data from the FU to be written to the VRF
     // For reductions, if the result is present in the buffer used for intra-lane reductions
@@ -819,14 +844,50 @@ module spatz_vfu
         end
         default:;
       endcase
+    end else if (spatz_req.op == VFCMP) begin
+      // default
+      vreg_wdata = '0;
+        unique case (spatz_req.vtype.vsew)
+          EW_8: begin
+            for (int i = 0; i < VRFWordWidth/8; i++)
+                vreg_wdata[i+(VRFWordWidth/8*word_idx_q)] = result[i*8];
+          end
+          EW_16: begin
+            for (int i = 0; i < VRFWordWidth/16; i++)
+                vreg_wdata[i+(VRFWordWidth/16*word_idx_q)] = result[i*16]; 
+          end
+          EW_32: begin
+            for (int i = 0; i < VRFWordWidth/32; i++)
+                vreg_wdata[i+(VRFWordWidth/32*word_idx_q)] = result[i*32];           
+          end
+          EW_64: begin
+            for (int i = 0; i < VRFWordWidth/64; i++)
+                vreg_wdata[i+(VRFWordWidth/64*word_idx_q)] = result[i*64];                    
+          end
+          default:;
+        endcase
     end
   end
+
+  always_comb begin : wdata_proc
+    wdata_d = wdata_q;
+    if (spatz_req.op != VFCMP) begin
+      wdata_d = '0;
+    end else if (vfcmp_result_accepted) begin
+      if (result_tag.last)
+        wdata_d = '0;
+      else
+        wdata_d = wdata_q | vreg_wdata;
+    end
+  end
+
+  `FF(wdata_q, wdata_d, '0)
 
   // Register file signals
   assign vrf_re_o    = vreg_r_req;
   assign vrf_we_o    = vreg_we;
   assign vrf_wbe_o   = vreg_wbe;
-  assign vrf_wdata_o = vreg_wdata;
+  assign vrf_wdata_o = (spatz_req.op == VFCMP) ? (wdata_q | vreg_wdata) : vreg_wdata;
   assign vrf_id_o    = {result_tag.id, {3{spatz_req.id}}};
 
   //////////
@@ -1089,6 +1150,9 @@ module spatz_vfu
           VFCMP  : begin
             fpu_op = fpnew_pkg::CMP;
             fpu_dst_fmt = fpu_src_fmt;
+            if (spatz_req.rm == fpnew_pkg::RUP)
+                // Boolean result inverted
+                fpu_op_mode = 1'b1;
           end
 
           VF2F: fpu_op = fpnew_pkg::F2F;
@@ -1188,7 +1252,7 @@ module spatz_vfu
       `FFL(fpu_int_fmt_q, fpu_int_fmt, int_fpu_in_valid && int_fpu_in_ready, fpnew_pkg::INT8)
       `FFL(fpu_op_mode_q, fpu_op_mode, int_fpu_in_valid && int_fpu_in_ready, 1'b0)
       `FFL(fpu_vectorial_op_q, fpu_vectorial_op, int_fpu_in_valid && int_fpu_in_ready, 1'b0)
-      `FFL(rm_q, spatz_req.rm, int_fpu_in_valid && int_fpu_in_ready, fpnew_pkg::RNE)
+      `FFL(rm_q, (spatz_req.op == VFCMP && spatz_req.rm == fpnew_pkg::RUP) ? fpnew_pkg::RDN : spatz_req.rm, int_fpu_in_valid && int_fpu_in_ready, fpnew_pkg::RNE)
       `FFL(input_tag_q, input_tag, int_fpu_in_valid && int_fpu_in_ready, '{vsew: EW_8, default: '0})
       `FFL(fpu_in_valid_q, int_fpu_in_valid, int_fpu_in_ready, 1'b0)
       assign int_fpu_in_ready = !fpu_in_valid_q || fpu_in_valid_q && fpu_in_ready_d;
