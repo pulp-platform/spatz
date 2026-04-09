@@ -1,10 +1,14 @@
+// Copyright 2021 ETH Zurich and University of Bologna.
+// Solderpad Hardware License, Version 0.51, see LICENSE for details.
+// SPDX-License-Identifier: SHL-0.51
+
 #include "vector_macros.h"
 
-
+//**********Checking functionality of vse8 ********//
 void TEST_CASE1(void) {
   VSET(16, e8, m1);
   VLOAD_8(v0, 0x11, 0x22);
-  volatile uint8_t ALIGNED_I8[1024];
+  volatile uint8_t ALIGNED_I8[16];
   VLOAD_8(v1, 0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef, 0x11, 0x22, 0x33,
           0x44, 0x55, 0x66, 0x77, 0x88);
   asm volatile("vse8.v v1, (%0)" ::"r"(ALIGNED_I8));
@@ -68,16 +72,40 @@ void TEST_CASE5(void) {
            13, 0x59, 15, 0x89);
 }
 
+void TEST_CASE6(void) {
+  VSET(64, e8, m8);
+  volatile uint8_t ALIGNED_I8[64];
+
+  //init mem
+  for (int i = 0; i < 64; i++) ALIGNED_I8[i] = 0xFF;
+
+  VLOAD_8(v8,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15, 16,
+              17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32,
+              33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48,
+              49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64);
+
+  VCLEAR(v0);
+  VLOAD_8(v0, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA);
+
+  asm volatile("vse8.v v8, (%0), v0.t" ::"r"(ALIGNED_I8));
+
+  VVCMP_U8(6, ALIGNED_I8,
+    0xFF,  2, 0xFF,  4, 0xFF,  6, 0xFF,  8, 0xFF, 10, 0xFF, 12, 0xFF, 14, 0xFF, 16,
+    0xFF, 18, 0xFF, 20, 0xFF, 22, 0xFF, 24, 0xFF, 26, 0xFF, 28, 0xFF, 30, 0xFF, 32,
+    0xFF, 34, 0xFF, 36, 0xFF, 38, 0xFF, 40, 0xFF, 42, 0xFF, 44, 0xFF, 46, 0xFF, 48,
+    0xFF, 50, 0xFF, 52, 0xFF, 54, 0xFF, 56, 0xFF, 58, 0xFF, 60, 0xFF, 62, 0xFF, 64);
+}
+
 int main(void) {
   INIT_CHECK();
   enable_vec();
 
-//   TEST_CASE0();
   TEST_CASE1();
   TEST_CASE2();
   TEST_CASE3();
   TEST_CASE4();
   TEST_CASE5();
+  TEST_CASE6();
 
   EXIT_CHECK();
 }

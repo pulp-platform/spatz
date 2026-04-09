@@ -146,6 +146,8 @@ add_snitch_test(vfmv isa/rv64uv/vfmv.c)
 add_snitch_test(invalid isa/rv64uv/invalid.c)
 set_property(TEST ${SNITCH_TEST_PREFIX}rtl-invalid PROPERTY WILL_FAIL TRUE)
 # CMY: masking logic instructions
+add_snitch_test(vls isa/rv64uv/vls.c)
+
 add_snitch_test(vmand isa/rv64uv/vmand.c)
 add_snitch_test(vmor isa/rv64uv/vmor.c)
 add_snitch_test(vmandnot isa/rv64uv/vmandnot.c)
@@ -155,14 +157,12 @@ add_snitch_test(vmornot isa/rv64uv/vmornot.c)
 add_snitch_test(vmxnor isa/rv64uv/vmxnor.c)
 add_snitch_test(vmxor isa/rv64uv/vmxor.c)
 
-# CMY: Load/Store instructions
 add_snitch_test(vle8 isa/rv64uv/vle8.c)
 add_snitch_test(vle16 isa/rv64uv/vle16.c)
-add_snitch_test(vle32 isa/rv64uv/vle32.c) # on fixing
+add_snitch_test(vle32 isa/rv64uv/vle32.c)
 add_snitch_test(vle64 isa/rv64uv/vle64.c)
-add_snitch_test(vluxei isa/rv64uv/vluxei.c) # not supported by the original design.
 add_snitch_test(vse8 isa/rv64uv/vse8.c)
 add_snitch_test(vse16 isa/rv64uv/vse16.c)
 add_snitch_test(vse32 isa/rv64uv/vse32.c)
 add_snitch_test(vse64 isa/rv64uv/vse64.c)
-add_snitch_test(vss isa/rv64uv/vss.c) # on fixing
+add_snitch_test(vss isa/rv64uv/vss.c)

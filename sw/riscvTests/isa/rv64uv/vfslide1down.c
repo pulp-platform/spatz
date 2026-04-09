@@ -36,6 +36,7 @@ void TEST_CASE1() {
   VCMP_U32(2, v2, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
            0xbf75e762);
 
+#if ELEN == 64
   double dscalar_64;
   //                               0.9108707261227378
   BOX_DOUBLE_IN_DOUBLE(dscalar_64, 0x3fed25da5d7296fe);
@@ -49,6 +50,7 @@ void TEST_CASE1() {
   asm volatile("vfslide1down.vf v2, v4, %[A]" ::[A] "f"(dscalar_64));
   VCMP_U64(3, v2, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
            0x3fed25da5d7296fe);
+#endif
 }
 
 void TEST_CASE2() {
@@ -81,6 +83,7 @@ void TEST_CASE2() {
   VCMP_U32(7, v2, -1, 3, -1, 5, -1, 7, -1, 9, -1, 11, -1, 13, -1, 15, -1,
            0xbf75e762);
 
+#if ELEN == 64
   double dscalar_64;
   //                               0.9108707261227378
   BOX_DOUBLE_IN_DOUBLE(dscalar_64, 0x3fed25da5d7296fe);
