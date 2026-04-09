@@ -27,7 +27,7 @@ void TEST_CASE1(void) {
   VSET(1, e16, m1);
   VCMP_U16(1, v1, 0x0);
 
-  VSET(16, e32, m1);
+  VSET(16, e32, m2);
   //                       +0,        sNaN, -0.34645590, -0.06222415,
   //                       0.96037650, -0.81018746, -0.69337404,  0.70466602,
   //                       -0.30920035, -0.31596854, -0.92116749,  0.51336122,
@@ -40,16 +40,16 @@ void TEST_CASE1(void) {
   //                       0.24656086, -0.71423489, -0.44735566, -0.25510681,
   //                       -0.94378990, -0.30138883,  0.19188073, -0.29310879,
   //                       -0.22981364, -0.58626360, -0.80913633, -0.00670803
-  VLOAD_32(v3, 0x80000000, 0xffffffff, 0x3ec9be30, 0xbf518bb7, 0x3e7c7a73,
+  VLOAD_32(v4, 0x80000000, 0xffffffff, 0x3ec9be30, 0xbf518bb7, 0x3e7c7a73,
            0xbf36d819, 0xbee50bcd, 0xbe829d5c, 0xbf719c37, 0xbe9a4fa3,
            0x3e447c62, 0xbe96125b, 0xbe6b5444, 0xbf16155f, 0xbf4f238f,
            0xbbdbcefe);
-  asm volatile("vmfeq.vv v1, v2, v3");
+  asm volatile("vmfeq.vv v1, v2, v4");
   VSET(1, e16, m1);
   VCMP_U16(2, v1, 0x1);
 
 #if ELEN == 64
-  VSET(8, e64, m1);
+  VSET(8, e64, m2);
   //               0.8643613633211786,  0.4842301798024149,  0.9229840140784857,
   //               -0.9479687162489723, -0.1308855743137316,
   //               -0.3798019472030296,  0.1570811980936915,
@@ -60,10 +60,10 @@ void TEST_CASE1(void) {
   //              -0.3562510538138417, -0.0135629748736219,  0.6176167733891369,
   //              0.9703747829163081, -0.0909539316920625, -0.1057326828885887,
   //              -0.8792039527057112, -0.1745056251010144
-  VLOAD_64(v3, 0xbfd6ccd13852f170, 0xbf8bc6e7ac263f80, 0x3fed8915c5665532,
+  VLOAD_64(v4, 0xbfd6ccd13852f170, 0xbf8bc6e7ac263f80, 0x3fed8915c5665532,
            0x3fef0d4f6aafa2f6, 0xbfb748c1c20f5de0, 0xbfbb114c0f1ff4b0,
            0xbfec227053ec5198, 0xbfc6563348637140);
-  asm volatile("vmfeq.vv v1, v2, v3");
+  asm volatile("vmfeq.vv v1, v2, v4");
   VSET(1, e8, m1);
   VCMP_U8(3, v1, 0x4);
 #endif
@@ -88,7 +88,7 @@ void TEST_CASE2(void) {
   VSET(1, e16, m1);
   VCMP_U16(4, v1, 0x0002);
 
-  VSET(16, e32, m1);
+  VSET(16, e32, m2);
   //               0x00000000,  0.09933749, -0.34645590, -0.06222415,
   //               0.96037650, -0.81018746, -0.69337404,  0.70466602,
   //               -0.30920035, -0.31596854, -0.92116749,  0.51336122,
@@ -101,18 +101,18 @@ void TEST_CASE2(void) {
   //               0.24656086, -0.71423489, -0.44735566, -0.25510681,
   //               -0.94378990, -0.30138883,  0.19188073, -0.29310879,
   //               -0.22981364, -0.58626360, -0.80913633,  0.85755372
-  VLOAD_32(v3, 0x00000000, 0xbf25d7d9, 0x3ec9be30, 0xbf518bb7, 0x3e7c7a73,
+  VLOAD_32(v4, 0x00000000, 0xbf25d7d9, 0x3ec9be30, 0xbf518bb7, 0x3e7c7a73,
            0xbf36d819, 0xbee50bcd, 0xbe829d5c, 0xbf719c37, 0xbe9a4fa3,
            0x3e447c62, 0xbe96125b, 0xbe6b5444, 0xbf16155f, 0xbf4f238f,
            0x3f5d88a4);
   VLOAD_8(v0, 0xAA, 0xAA);
-  VCLEAR(v1);
-  asm volatile("vmfeq.vv v1, v2, v3, v0.t");
+  VCLEAR(v8);
+  asm volatile("vmfeq.vv v8, v2, v4, v0.t");
   VSET(1, e16, m1);
-  VCMP_U16(5, v1, 0x8000);
+  VCMP_U16(5, v8, 0x8000);
 
 #if ELEN == 64
-  VSET(8, e64, m1);
+  VSET(8, e64, m2);
   //               0.8643613633211786,  0.4842301798024149,  0.9229840140784857,
   //               -0.9479687162489723, -0.1308855743137316,
   //               -0.3798019472030296,  0.1570811980936915,
@@ -123,14 +123,14 @@ void TEST_CASE2(void) {
   //               0.8643613633211786,  0.4842301798024149,  0.6176167733891369,
   //               0.9703747829163081, -0.0909539316920625, -0.1057326828885887,
   //               -0.8792039527057112, -0.1745056251010144
-  VLOAD_64(v3, 0x3feba8d9296c7e74, 0x3fdefda0947f3460, 0x3fed8915c5665532,
+  VLOAD_64(v4, 0x3feba8d9296c7e74, 0x3fdefda0947f3460, 0x3fed8915c5665532,
            0xbfee55c27d3d743e, 0xbfb748c1c20f5de0, 0xbfbb114c0f1ff4b0,
            0xbfec227053ec5198, 0xbfc6563348637140);
   VLOAD_8(v0, 0xAA, 0xAA);
-  VCLEAR(v1);
-  asm volatile("vmfeq.vv v1, v2, v3, v0.t");
+  VCLEAR(v8);
+  asm volatile("vmfeq.vv v8, v2, v4, v0.t");
   VSET(1, e8, m1);
-  VCMP_U8(6, v1, 0x0a);
+  VCMP_U8(6, v8, 0x0a);
 #endif
 };
 
@@ -158,7 +158,7 @@ void TEST_CASE3(void) {
   VSET(1, e16, m1);
   VCMP_U16(7, v1, 0x0020);
 
-  VSET(16, e32, m1);
+  VSET(16, e32, m2);
 #if ELEN == 64
   double dscalar_32;
   //                               0.80517912
@@ -184,7 +184,7 @@ void TEST_CASE3(void) {
   VCMP_U16(8, v1, 0x7ffe);
 
 #if ELEN == 64
-  VSET(8, e64, m1);
+  VSET(8, e64, m2);
   double dscalar_64;
   //                               -0.3394093097660049
   BOX_DOUBLE_IN_DOUBLE(dscalar_64, 0xbfd5b8e1d359c984);
@@ -227,7 +227,7 @@ void TEST_CASE4(void) {
   VSET(1, e16, m1);
   VCMP_U16(10, v1, 0xaaa0);
 
-  VSET(16, e32, m1);
+  VSET(16, e32, m2);
 #if ELEN == 64
   double dscalar_32;
   //                               0.80517912
@@ -245,17 +245,17 @@ void TEST_CASE4(void) {
            0xbec4f07b, 0xbf0c2627, 0x3dcbe820, 0x3e5dbf70, 0xbec04b31,
            0xbf4b1daf);
   VLOAD_8(v0, 0xAA, 0xAA);
-  VCLEAR(v1);
+  VCLEAR(v8);
 #if ELEN == 64
-  asm volatile("vmfeq.vf v1, v2, %[A], v0.t" ::[A] "f"(dscalar_32));
+  asm volatile("vmfeq.vf v8, v2, %[A], v0.t" ::[A] "f"(dscalar_32));
 #else
-  asm volatile("vmfeq.vf v1, v2, %[A], v0.t" ::[A] "f"(fscalar_32));
+  asm volatile("vmfeq.vf v8, v2, %[A], v0.t" ::[A] "f"(fscalar_32));
 #endif
   VSET(1, e16, m1);
-  VCMP_U16(11, v1, 0x0002);
+  VCMP_U16(11, v8, 0x0002);
 
 #if ELEN == 64
-  VSET(8, e64, m1);
+  VSET(8, e64, m2);
   double dscalar_64;
   //                               -0.3394093097660049
   BOX_DOUBLE_IN_DOUBLE(dscalar_64, 0xbfd5b8e1d359c984);
@@ -267,10 +267,10 @@ void TEST_CASE4(void) {
            0xbfd5b8e1d359c984, 0x3feaef91475b6422, 0xbfbf20b464e8e5d0,
            0x3fee377960758bfa, 0xbfd98f8e02b6aa78);
   VLOAD_8(v0, 0xAA, 0xAA);
-  VCLEAR(v1);
-  asm volatile("vmfeq.vf v1, v2, %[A], v0.t" ::[A] "f"(dscalar_64));
+  VCLEAR(v8);
+  asm volatile("vmfeq.vf v8, v2, %[A], v0.t" ::[A] "f"(dscalar_64));
   VSET(1, e8, m1);
-  VCMP_U8(12, v1, 0x08);
+  VCMP_U8(12, v8, 0x08);
 #endif
 };
 
@@ -301,7 +301,7 @@ void TEST_CASE5(void) {
   VLOAD_64(v1, 0xffffffffffffffff);
   // Perform vmfeq.vv on 16 different elements, and then check that the last (64
   // - 16 = 48) bits were not overwritten with zeroes
-  VSET(16, e32, m1);
+  VSET(16, e32, m2);
   //              -0.72077256,        sNaN, -0.34645590, -0.06222415,
   //              0.96037650, -0.81018746, -0.69337404,  0.70466602,
   //              -0.30920035, -0.31596854, -0.92116749,  0.51336122,
@@ -314,11 +314,11 @@ void TEST_CASE5(void) {
   //               0.24656086, -0.71423489, -0.44735566, -0.25510681,
   //               -0.94378990, -0.30138883,  0.19188073, -0.29310879,
   //               -0.22981364, -0.58626360, -0.80913633, -0.00670803
-  VLOAD_32(v3, 0x80000000, 0xffffffff, 0xbeb162ab, 0xbf518bb7, 0x3e7c7a73,
+  VLOAD_32(v4, 0x80000000, 0xffffffff, 0xbeb162ab, 0xbf518bb7, 0x3e7c7a73,
            0xbf36d819, 0xbee50bcd, 0xbe829d5c, 0xbf719c37, 0xbe9a4fa3,
            0x3e447c62, 0xbe96125b, 0xbe6b5444, 0xbf16155f, 0xbf4f238f,
            0xbbdbcefe);
-  asm volatile("vmfeq.vv v1, v2, v3");
+  asm volatile("vmfeq.vv v1, v2, v4");
   VSET(1, e64, m1);
   VCMP_U64(14, v1, 0xffffffffffff0004);
 
@@ -327,16 +327,16 @@ void TEST_CASE5(void) {
   VLOAD_64(v1, 0xffffffffffffffff);
   // Perform vmfeq.vv on 16 different elements, and then check that the last (64
   // - 16 = 48) bits were not overwritten with zeroes
-  VSET(8, e64, m1);
+  VSET(8, e64, m2);
 
   VLOAD_64(v2, 0x3feba8d9296c7e74, 0x3fdefda0947f3460, 0xbf3180f63f75db3c,
            0xbfee55c27d3d743e, 0xbfc0c0dbc6990b38, 0xbfd84eacd38c6ca4,
            0x3fc41b3c98507fe0, 0xbfe8877fabcbce12);
 
-  VLOAD_64(v3, 0x3feba8d9296c7e74, 0xbf8bc6e7ac263f80, 0x3fed8915c5665532,
+  VLOAD_64(v4, 0x3feba8d9296c7e74, 0xbf8bc6e7ac263f80, 0x3fed8915c5665532,
            0x3fef0d4f6aafa2f6, 0xbfb748c1c20f5de0, 0xbfbb114c0f1ff4b0,
            0xbfec227053ec5198, 0xbfc6563348637140);
-  asm volatile("vmfeq.vv v1, v2, v3");
+  asm volatile("vmfeq.vv v1, v2, v4");
   VSET(1, e64, m1);
   VCMP_U64(15, v1, 0xffffffffffffff01);
 };
@@ -360,7 +360,7 @@ void TEST_CASE6(void) {
   VSET(1, e16, m1);
   VCMP_U16(16, v0, 0x2222);
 
-  VSET(16, e32, m1);
+  VSET(16, e32, m2);
   //               0x00000000,  0.09933749, -0.34645590, -0.06222415,
   //               0.96037650, -0.81018746, -0.69337404,  0.70466602,
   //               -0.30920035, -0.31596854, -0.92116749,  0.51336122,
@@ -373,18 +373,17 @@ void TEST_CASE6(void) {
   //               0.96037650, -0.81018746, -0.44735566, -0.25510681,
   //               -0.30920035, -0.31596854,  0.19188073, -0.29310879,
   //               0.22002794,  0.48599416, -0.80913633, -0.30138883
-  VLOAD_32(v3, 0x00000000, 0x3dcb7174, 0x3ec9be30, 0xbf518bb7, 0x3f75db3c,
+  VLOAD_32(v4, 0x00000000, 0x3dcb7174, 0x3ec9be30, 0xbf518bb7, 0x3f75db3c,
            0xbf4f6872, 0xbee50bcd, 0xbe829d5c, 0xbe9e4f82, 0xbea1c6a1,
            0x3e447c62, 0xbe96125b, 0x3e614f01, 0x3ef8d43a, 0xbf4f238f,
            0xbe9a4fa3);
   VLOAD_8(v0, 0xAA, 0xAA);
-  VCLEAR(v1);
-  asm volatile("vmfeq.vv v0, v2, v3, v0.t");
+  asm volatile("vmfeq.vv v0, v2, v4, v0.t");
   VSET(1, e16, m1);
   VCMP_U16(17, v0, 0x2222);
 
 #if ELEN == 64
-  VSET(8, e64, m1);
+  VSET(8, e64, m2);
   //               0.8643613633211786,  0.4842301798024149,  0.9229840140784857,
   //               -0.8792039527057112, -0.1308855743137316,
   //               -0.3798019472030296,  0.1570811980936915,
@@ -395,12 +394,11 @@ void TEST_CASE6(void) {
   //               0.8643613633211786,  0.4842301798024149, -0.8792039527057112,
   //               0.9703747829163081, -0.1308855743137316, -0.3798019472030296,
   //               -0.8792039527057112, -0.1745056251010144
-  VLOAD_64(v3, 0x3feba8d9296c7e74, 0x3fdefda0947f3460, 0xbfec227053ec5198,
+  VLOAD_64(v4, 0x3feba8d9296c7e74, 0x3fdefda0947f3460, 0xbfec227053ec5198,
            0x9fee55c27d3d743e, 0xbfc0c0dbc6990b38, 0xbfd84eacd38c6ca4,
            0xbfec227053ec5198, 0xbfc6563348637140);
   VLOAD_8(v0, 0xAA, 0xAA);
-  VCLEAR(v1);
-  asm volatile("vmfeq.vv v0, v2, v3, v0.t");
+  asm volatile("vmfeq.vv v0, v2, v4, v0.t");
   VSET(1, e8, m1);
   VCMP_U8(18, v0, 0x22);
 #endif
@@ -417,51 +415,47 @@ void TEST_CASE7(void) {
   VLOAD_16(v3, 0x33ca, qNaNh, qNaNh, 0x39cb, 0x1975, 0xb9b1, 0x3432, 0x3432,
            0xb8a1, 0xb6c4, 0x38c9, 0x38c9, 0x39c6, qNaNh, qNaNh, 0x3040);
   VLOAD_8(v0, 0xAA, 0xAA);
-  VCLEAR(v1);
   asm volatile("vmfeq.vv v0, v2, v3");
   VSET(1, e16, m1);
   VCMP_U16(19, v0, 0x0330);
 
-  VSET(16, e32, m1);
+  VSET(16, e32, m2);
   VLOAD_32(v2, 0x3f75db3c, qNaNf, qNaNf, qNaNf, 0x3f75db3c, 0xbf4f6872,
            0xbf3180f6, 0x3f3464fe, 0xbe9e4f82, 0xbea1c6a1, 0xbf6bd1a2,
            0x3f036ba4, qNaNf, qNaNf, 0x3f3110b0, qNaNf);
-  VLOAD_32(v3, 0x3f75db3c, 0x3dcb7174, qNaNf, 0xbf518bb7, 0x3f75db3c,
+  VLOAD_32(v4, 0x3f75db3c, 0x3dcb7174, qNaNf, 0xbf518bb7, 0x3f75db3c,
            0xbf4f6872, 0xbee50bcd, 0xbe829d5c, 0xbe9e4f82, 0xbea1c6a1,
            0x3e447c62, 0xbe96125b, qNaNf, 0x3ef8d43a, qNaNf, qNaNf);
   VLOAD_8(v0, 0xAA, 0xAA);
-  VCLEAR(v1);
-  asm volatile("vmfeq.vv v0, v2, v3");
+  asm volatile("vmfeq.vv v0, v2, v4");
   VSET(1, e16, m1);
   VCMP_U16(20, v0, 0x0331);
 
 #if ELEN == 64
-  VSET(8, e64, m1);
+  VSET(8, e64, m2);
   VLOAD_64(v2, qNaNd, qNaNd, 0x3fed8915c5665532, 0xbfec227053ec5198,
            0xbfc0c0dbc6990b38, 0xbfd84eacd38c6ca4, 0x3fc41b3c98507fe0,
            0xbfe8877fabcbce12);
-  VLOAD_64(v3, qNaNd, 0x3fdefda0947f3460, qNaNd, 0x9fee55c27d3d743e,
+  VLOAD_64(v4, qNaNd, 0x3fdefda0947f3460, qNaNd, 0x9fee55c27d3d743e,
            0xbfc0c0dbc6990b38, 0xbfd84eacd38c6ca4, 0xbfec227053ec5198,
            0xbfc6563348637140);
   VLOAD_8(v0, 0xAA, 0xAA);
-  VCLEAR(v1);
-  asm volatile("vmfeq.vv v0, v2, v3");
+  asm volatile("vmfeq.vv v0, v2, v4");
   VSET(1, e8, m1);
   VCMP_U8(21, v0, 0x30);
   CHECK_FFLAGS(0);
 #endif
 
   // Give sNaN (Invalid operation)
-  VSET(16, e32, m1);
+  VSET(16, e32, m2);
   VLOAD_32(v2, 0x3f75db3c, sNaNf, sNaNf, qNaNf, 0x3f75db3c, 0xbf4f6872,
            0xbf3180f6, 0x3f3464fe, 0xbe9e4f82, 0xbea1c6a1, 0xbf6bd1a2,
            0x3f036ba4, qNaNf, qNaNf, 0x3f3110b0, qNaNf);
-  VLOAD_32(v3, 0x3f75db3c, 0x3dcb7174, qNaNf, 0xbf518bb7, 0x3f75db3c,
+  VLOAD_32(v4, 0x3f75db3c, 0x3dcb7174, qNaNf, 0xbf518bb7, 0x3f75db3c,
            0xbf4f6872, 0xbee50bcd, 0xbe829d5c, 0xbe9e4f82, 0xbea1c6a1,
            0x3e447c62, 0xbe96125b, qNaNf, 0x3ef8d43a, qNaNf, qNaNf);
   VLOAD_8(v0, 0xAA, 0xAA);
-  VCLEAR(v1);
-  asm volatile("vmfeq.vv v0, v2, v3");
+  asm volatile("vmfeq.vv v0, v2, v4");
   VSET(1, e16, m1);
   VCMP_U16(22, v0, 0x0331);
   CHECK_FFLAGS(NV);
