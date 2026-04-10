@@ -1,0 +1,13 @@
+// Copyright 2025 ETH Zurich and University of Bologna.
+// Solderpad Hardware License, Version 0.51, see LICENSE for details.
+// SPDX-License-Identifier: SHL-0.51
+
+// Parameters for row-sparse SpMV data generation.
+
+{
+    kernel: "RS_SPMV"
+    M: 64
+    K: 512
+    nz_rows: 16
+    seed: 42
+}

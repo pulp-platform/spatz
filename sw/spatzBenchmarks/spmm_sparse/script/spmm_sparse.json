@@ -1,0 +1,20 @@
+// Copyright 2025 ETH Zurich and University of Bologna.
+// Solderpad Hardware License, Version 0.51, see LICENSE for details.
+// SPDX-License-Identifier: SHL-0.51
+
+// Parameters for dense-backed sparse SpMM data generation.
+
+{
+    kernel: "SPMM_SPARSE"
+    M: 32
+    N: 16
+    K: 512
+    nnz: 2048
+    prec: 64
+    seed: 42
+    power_of_two: true
+    debug_comment: false
+    sorted_cols: false
+    min_per_row: 64
+    max_per_row: 64
+}

@@ -8,7 +8,7 @@
 #include <stdint.h>
 
 #ifndef SPMV_LMUL
-#define SPMV_LMUL 1
+#define SPMV_LMUL 4
 #endif
 
 void spmv_v64b_m1(const uint32_t *row_ptr, const uint32_t *x_off,
