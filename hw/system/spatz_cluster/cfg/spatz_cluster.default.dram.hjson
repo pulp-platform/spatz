@@ -41,7 +41,7 @@
             "lat_noncomp": 1,
             "lat_conv": 2,
             "lat_sdotp": 2,
-            "fpu_pipe_config": "DISTRIBUTED",
+            "fpu_pipe_config": "BEFORE",
             "xbar_latency": "CUT_ALL_PORTS",
 
             "register_core_req": true,
