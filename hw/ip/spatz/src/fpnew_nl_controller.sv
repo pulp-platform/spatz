@@ -1,3 +1,5 @@
+// Author: Francesco Murande <fmurande@ethz.ch>
+
 module fpnew_nl_controller
   import fpnew_pkg::*;
   import fpnew_nl_pkg::*;

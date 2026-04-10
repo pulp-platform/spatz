@@ -1,3 +1,4 @@
+// Author: Francesco Murande <fmurande@ethz.ch>
 
 module fpnew_nl_predicted_ready #(
   parameter int unsigned LATENCY = 2

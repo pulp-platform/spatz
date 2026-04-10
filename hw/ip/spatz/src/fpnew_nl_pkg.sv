@@ -1,3 +1,4 @@
+// Author: Francesco Murande <fmurande@ethz.ch>
 
 package fpnew_nl_pkg;
 import spatz_pkg::*;
