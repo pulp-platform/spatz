@@ -143,9 +143,11 @@ module spatz_vlsu
       !mem_is_strided &&
       !mem_is_indexed &&
       (mem_spatz_req.vtype.vsew == EW_32) &&
-      // Keep short aligned loads on all ports; use port0-only mode only if at
-      // least one full burst can be formed.
+      // At least one full burst (vl is in bytes after proc_spatz_req conversion).
       (mem_spatz_req.vl >= FullBurstBytes) &&
+      // Total data must fit in one ROB batch to avoid multi-burst deadlock
+      // (scoreboard-blocked VRF writes prevent ROB drain between batches).
+      (mem_spatz_req.vl <= (NrOutstandingLoads * MemDataWidthB)) &&
       (mem_spatz_req.rs1[BurstAlignBits-1:0] == '0);
   assign burst_full_bytes_req    = (mem_spatz_req.vl >> BurstAlignBits) << BurstAlignBits;
   assign burst_full_bytes_commit = (commit_insn_q.vl >> BurstAlignBits) << BurstAlignBits;

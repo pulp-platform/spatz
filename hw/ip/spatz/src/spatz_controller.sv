@@ -238,20 +238,20 @@ module spatz_controller
   `FF(scoreboard_q, scoreboard_d, '0)
 
   // VFU deferred ID release: the VFU fires vfu_rsp_valid before its multi-cycle
-  // VRF write-back completes. Track the deferred release so the scoreboard entry
-  // and running_insn slot stay occupied until the write finishes.
-  logic      vfu_rsp_pending_q, vfu_rsp_pending_d;
-  spatz_id_t vfu_rsp_pending_id_q, vfu_rsp_pending_id_d;
-  `FF(vfu_rsp_pending_q,    vfu_rsp_pending_d,    1'b0)
-  `FF(vfu_rsp_pending_id_q, vfu_rsp_pending_id_d, '0)
+  // VRF write-back completes. Per-instruction vector tracks each independently
+  // (with LMUL>=2, multiple VFU instructions can overlap write-backs).
+  logic [NrParallelInstructions-1:0] vfu_rsp_pending_q, vfu_rsp_pending_d;
+  `FF(vfu_rsp_pending_q, vfu_rsp_pending_d, '0)
 
-  // VFU write port is still writing data for the deferred instruction.
-  // Check both that the VFU is actively requesting AND that the ID matches.
-  // Once the VFU moves on to a different ID or stops writing, the deferred
-  // instruction's write-back is complete.
-  logic vfu_wr_pending_match;
-  assign vfu_wr_pending_match = sb_enable_i[SB_VFU_VD_WD] &&
-                                (sb_id_i[SB_VFU_VD_WD] == vfu_rsp_pending_id_q);
+  // Per-instruction: VFU write port is still writing data for this deferred ID.
+  logic [NrParallelInstructions-1:0] vfu_wr_pending_match;
+  always_comb begin
+    for (int unsigned i = 0; i < NrParallelInstructions; i++) begin
+      vfu_wr_pending_match[i] = vfu_rsp_pending_q[i] &&
+                                 sb_enable_i[SB_VFU_VD_WD] &&
+                                 (sb_id_i[SB_VFU_VD_WD] == spatz_id_t'(i));
+    end
+  end
 
   // Did the instruction write to the VRF in the previous cycle?
   logic [NrParallelInstructions-1:0] wrote_result_q, wrote_result_d;
@@ -351,18 +351,22 @@ module spatz_controller
         wrote_result_narrowing_d[vfu_rsp_i.id] = 1'b0;
       end
     end
-    // Deferred VFU cleanup: VFU write-back for the deferred ID just completed
-    // (the VFU write port went idle or moved to a different instruction ID).
-    if (vfu_rsp_pending_q && !vfu_wr_pending_match) begin
-      for (int unsigned vreg = 0; vreg < NRVREG; vreg++) begin
-        if (read_table_q[vreg].id == vfu_rsp_pending_id_q && read_table_q[vreg].valid)
-          read_table_d[vreg] = '0;
-        if (write_table_q[vreg].id == vfu_rsp_pending_id_q && write_table_q[vreg].valid)
-          write_table_d[vreg] = '0;
+    // Deferred VFU cleanup: for each pending instruction whose VFU write-back
+    // just completed, clear deps, scoreboard, and tables.
+    for (int unsigned insn = 0; insn < NrParallelInstructions; insn++) begin
+      if (vfu_rsp_pending_q[insn] && !vfu_wr_pending_match[insn]) begin
+        for (int unsigned j = 0; j < NrParallelInstructions; j++)
+          scoreboard_d[j].deps[insn] = 1'b0;
+        for (int unsigned vreg = 0; vreg < NRVREG; vreg++) begin
+          if (read_table_q[vreg].id == spatz_id_t'(insn) && read_table_q[vreg].valid)
+            read_table_d[vreg] = '0;
+          if (write_table_q[vreg].id == spatz_id_t'(insn) && write_table_q[vreg].valid)
+            write_table_d[vreg] = '0;
+        end
+        scoreboard_d[insn]             = '0;
+        narrow_wide_d[insn]            = 1'b0;
+        wrote_result_narrowing_d[insn] = 1'b0;
       end
-      scoreboard_d[vfu_rsp_pending_id_q]             = '0;
-      narrow_wide_d[vfu_rsp_pending_id_q]            = 1'b0;
-      wrote_result_narrowing_d[vfu_rsp_pending_id_q] = 1'b0;
     end
     if (vlsu_rsp_valid_i) begin
       for (int unsigned vreg = 0; vreg < NRVREG; vreg++) begin
@@ -520,34 +524,27 @@ module spatz_controller
 
   always_comb begin: proc_next_insn_id
     // Maintain state
-    running_insn_d = running_insn_q;
-    vfu_rsp_pending_d    = vfu_rsp_pending_q;
-    vfu_rsp_pending_id_d = vfu_rsp_pending_id_q;
+    running_insn_d    = running_insn_q;
+    vfu_rsp_pending_d = vfu_rsp_pending_q;
 
     // New instruction!
     if (spatz_req_valid && spatz_req.ex_unit != CON)
       running_insn_d[next_insn_id] = 1'b1;
 
-    // Finished an instruction
-    // VFU: defer ID release if the VFU write port is still actively writing
-    // data for this instruction (multi-cycle write-back in progress).
-    // Releasing early lets the controller reuse the ID, whose new scoreboard
-    // WAR deps would then block the old VFU writes → deadlock.
-    if (vfu_rsp_valid_i) begin
-      if (!sb_enable_i[SB_VFU_VD_WD]) begin
-        // VFU write port already idle — safe to release immediately.
-        running_insn_d[vfu_rsp_i.id] = 1'b0;
-      end else begin
-        // VFU responded but write-back still in progress — defer release.
-        vfu_rsp_pending_d    = 1'b1;
-        vfu_rsp_pending_id_d = vfu_rsp_i.id;
+    // Step 1: Complete deferred releases (before new VFU responses).
+    for (int unsigned i = 0; i < NrParallelInstructions; i++) begin
+      if (vfu_rsp_pending_q[i] && !vfu_wr_pending_match[i]) begin
+        running_insn_d[i]    = 1'b0;
+        vfu_rsp_pending_d[i] = 1'b0;
       end
     end
-    // Complete deferred release once the VFU write port stops writing for
-    // the deferred ID (either finishes or moves to a different instruction).
-    if (vfu_rsp_pending_q && !vfu_wr_pending_match) begin
-      running_insn_d[vfu_rsp_pending_id_q] = 1'b0;
-      vfu_rsp_pending_d = 1'b0;
+
+    // Step 2: New VFU response — defer if write-back still active.
+    if (vfu_rsp_valid_i) begin
+      if (!sb_enable_i[SB_VFU_VD_WD])
+        running_insn_d[vfu_rsp_i.id] = 1'b0;
+      else
+        vfu_rsp_pending_d[vfu_rsp_i.id] = 1'b1;
     end
 
     if (vlsu_rsp_valid_i)

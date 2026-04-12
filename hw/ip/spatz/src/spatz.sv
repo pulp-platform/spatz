@@ -307,9 +307,10 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   //////////
 
   spatz_vlsu #(
-    .NrMemPorts      (NrMemPorts      ),
-    .spatz_mem_req_t (spatz_mem_req_t ),
-    .spatz_mem_rsp_t (spatz_mem_rsp_t )
+    .NrMemPorts        (NrMemPorts        ),
+    .NrOutstandingLoads(32                ),
+    .spatz_mem_req_t   (spatz_mem_req_t   ),
+    .spatz_mem_rsp_t   (spatz_mem_rsp_t   )
   ) i_vlsu (
     .clk_i                   (clk_i                                                ),
     .rst_ni                  (rst_ni                                               ),
