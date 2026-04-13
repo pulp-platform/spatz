@@ -101,6 +101,13 @@ macro(add_spatz_test_threeParam_type name file param1 param2 param3 type)
   target_compile_definitions(test-${SNITCH_TEST_PREFIX}${target_name} PUBLIC DATAHEADER="data/data_${param1}_${param2}_${param3}_${type}.h" USE_CACHE=${USE_CACHE} PREC=${type} SNRT_NFPU_PER_CORE=${SNRT_NFPU_PER_CORE})
 endmacro()
 
+macro(add_spatz_test_threeParam_type_lmul name file param1 param2 param3 type lmul)
+  set(target_name ${name}_M${param1}_N${param2}_K${param3}_LMUL${lmul})
+  add_snitch_test(${target_name} ${file})
+  target_link_libraries(test-${SNITCH_TEST_PREFIX}${target_name} benchmark ${SNITCH_RUNTIME})
+  target_compile_definitions(test-${SNITCH_TEST_PREFIX}${target_name} PUBLIC DATAHEADER="data/data_${param1}_${param2}_${param3}_${type}.h" USE_CACHE=${USE_CACHE} PREC=${type} SPMV_LMUL=${lmul} SNRT_NFPU_PER_CORE=${SNRT_NFPU_PER_CORE})
+endmacro()
+
 # Benchmark library
 add_library(benchmark benchmark/benchmark.c)
 
@@ -111,13 +118,106 @@ add_library(hp-fmatmul hp-fmatmul/kernel/hp-fmatmul.c)
 
 add_spatz_test_twoParam_type(dp-gemv gemv/main.c 64  128 64)
 # add_spatz_test_twoParam_type(sp-gemv gemv/main.c 128 128 32)
+# --- spmv: compressed CSR SpMV (existing, kept for reference) ---
 add_spatz_test_threeParam_type(dp-spmv spmv/main.c 64 64 512 64)
+add_spatz_test_threeParam_type_lmul(dp-spmv spmv/main.c 32 512 2048 64 4)
+
 macro(add_spmv_kernel_source target_name)
   target_sources(test-${SNITCH_TEST_PREFIX}${target_name} PRIVATE spmv/kernel/spmv.c)
   target_compile_options(test-${SNITCH_TEST_PREFIX}${target_name} PRIVATE -fno-unroll-loops)
 endmacro()
 
 add_spmv_kernel_source(dp-spmv_M64_N64_K512)
+add_spmv_kernel_source(dp-spmv_M32_N512_K2048_LMUL4)
+
+# --- spmv_sparse: dense-backed CSR SpMV with indexed gathers ---
+# Paper sizes: S=32x512, M=64x1024, Sq=64x64
+add_spatz_test_threeParam_type_lmul(dp-spmv-sparse spmv_sparse/main.c 32 512 2048 64 4)
+add_spatz_test_threeParam_type_lmul(dp-spmv-sparse spmv_sparse/main.c 64 1024 4096 64 4)
+add_spatz_test_threeParam_type_lmul(dp-spmv-sparse spmv_sparse/main.c 64 64 4096 64 4)
+
+macro(add_spmv_sparse_kernel_source target_name)
+  target_sources(test-${SNITCH_TEST_PREFIX}${target_name} PRIVATE spmv_sparse/kernel/spmv_sparse.c)
+  target_compile_options(test-${SNITCH_TEST_PREFIX}${target_name} PRIVATE -fno-unroll-loops)
+endmacro()
+
+add_spmv_sparse_kernel_source(dp-spmv-sparse_M32_N512_K2048_LMUL4)
+add_spmv_sparse_kernel_source(dp-spmv-sparse_M64_N1024_K4096_LMUL4)
+add_spmv_sparse_kernel_source(dp-spmv-sparse_M64_N64_K4096_LMUL4)
+
+# --- spmm_sparse: dense-backed CSR SpMM with contiguous B loads ---
+# Paper sizes: S=32x512xN16, M=64x512xN16, Sq=64x64xN16
+add_spatz_test_threeParam_type(dp-spmm-sparse spmm_sparse/main.c 32 16 512 64)
+add_spatz_test_threeParam_type(dp-spmm-sparse spmm_sparse/main.c 64 16 512 64)
+add_spatz_test_threeParam_type(dp-spmm-sparse spmm_sparse/main.c 64 16 64 64)
+
+macro(add_spmm_sparse_kernel_source target_name)
+  target_sources(test-${SNITCH_TEST_PREFIX}${target_name} PRIVATE spmm_sparse/kernel/spmm_sparse.c)
+  target_compile_options(test-${SNITCH_TEST_PREFIX}${target_name} PRIVATE -fno-unroll-loops)
+endmacro()
+
+add_spmm_sparse_kernel_source(dp-spmm-sparse_M32_N16_K512)
+add_spmm_sparse_kernel_source(dp-spmm-sparse_M64_N16_K512)
+add_spmm_sparse_kernel_source(dp-spmm-sparse_M64_N16_K64)
+
+# --- rs_spmv: row-sparse SpMV (sparse attention pattern) ---
+# Paper sizes: S=64x512, L=128x512, Sq=128x128
+add_spatz_test_threeParam_type(dp-rs-spmv rs_spmv/main.c 64 512 16 64)
+add_spatz_test_threeParam_type(dp-rs-spmv rs_spmv/main.c 128 512 16 64)
+add_spatz_test_threeParam_type(dp-rs-spmv rs_spmv/main.c 128 128 16 64)
+
+macro(add_rs_spmv_kernel_source target_name)
+  target_sources(test-${SNITCH_TEST_PREFIX}${target_name} PRIVATE rs_spmv/kernel/rs_spmv.c)
+  target_compile_options(test-${SNITCH_TEST_PREFIX}${target_name} PRIVATE -fno-unroll-loops)
+endmacro()
+
+add_rs_spmv_kernel_source(dp-rs-spmv_M64_N512_K16)
+add_rs_spmv_kernel_source(dp-rs-spmv_M128_N512_K16)
+add_rs_spmv_kernel_source(dp-rs-spmv_M128_N128_K16)
+
+# --- rs_spmm: row-sparse SpMM (sparse attention pattern) ---
+# Paper sizes: S=64x512xN16, L=128x512xN16, Sq=128x128xN16
+macro(add_rs_spmm_test name file M K N nzr type)
+  set(target_name ${name}_M${M}_K${K}_N${N}_NZR${nzr})
+  add_snitch_test(${target_name} ${file})
+  target_link_libraries(test-${SNITCH_TEST_PREFIX}${target_name} benchmark ${SNITCH_RUNTIME})
+  target_compile_definitions(test-${SNITCH_TEST_PREFIX}${target_name} PUBLIC DATAHEADER="data/data_${M}_${K}_${N}_${nzr}_${type}.h" USE_CACHE=${USE_CACHE} PREC=${type} SNRT_NFPU_PER_CORE=${SNRT_NFPU_PER_CORE})
+endmacro()
+
+add_rs_spmm_test(dp-rs-spmm rs_spmm/main.c 64 512 16 16 64)
+add_rs_spmm_test(dp-rs-spmm rs_spmm/main.c 128 512 16 16 64)
+add_rs_spmm_test(dp-rs-spmm rs_spmm/main.c 128 128 16 16 64)
+
+macro(add_rs_spmm_kernel_source target_name)
+  target_sources(test-${SNITCH_TEST_PREFIX}${target_name} PRIVATE rs_spmm/kernel/rs_spmm.c)
+  target_compile_options(test-${SNITCH_TEST_PREFIX}${target_name} PRIVATE -fno-unroll-loops)
+endmacro()
+
+add_rs_spmm_kernel_source(dp-rs-spmm_M64_K512_N16_NZR16)
+add_rs_spmm_kernel_source(dp-rs-spmm_M128_K512_N16_NZR16)
+add_rs_spmm_kernel_source(dp-rs-spmm_M128_K128_N16_NZR16)
+
+# --- sq_spmm_sparse: square SpMM with 2D tiling (A rows × B columns) ---
+add_spatz_test_threeParam_type(dp-sq-spmm-sparse sq_spmm_sparse/main.c 64 64 64 64)
+
+macro(add_sq_spmm_sparse_kernel_source target_name)
+  target_sources(test-${SNITCH_TEST_PREFIX}${target_name} PRIVATE spmm_sparse/kernel/spmm_sparse.c)
+  target_compile_options(test-${SNITCH_TEST_PREFIX}${target_name} PRIVATE -fno-unroll-loops)
+endmacro()
+
+add_sq_spmm_sparse_kernel_source(dp-sq-spmm-sparse_M64_N64_K64)
+
+# --- sq_rs_spmm: square row-sparse SpMM with 2D tiling ---
+add_rs_spmm_test(dp-sq-rs-spmm sq_rs_spmm/main.c 64 64 64 16 64)
+add_rs_spmm_test(dp-sq-rs-spmm sq_rs_spmm/main.c 128 128 128 16 64)
+
+macro(add_sq_rs_spmm_kernel_source target_name)
+  target_sources(test-${SNITCH_TEST_PREFIX}${target_name} PRIVATE rs_spmm/kernel/rs_spmm.c)
+  target_compile_options(test-${SNITCH_TEST_PREFIX}${target_name} PRIVATE -fno-unroll-loops)
+endmacro()
+
+add_sq_rs_spmm_kernel_source(dp-sq-rs-spmm_M64_K64_N64_NZR16)
+add_sq_rs_spmm_kernel_source(dp-sq-rs-spmm_M128_K128_N128_NZR16)
 
 # add_library(widening-hp-fmatmul widening-hp-fmatmul/kernel/widening-fmatmul.c)
 # add_library(widening-bp-fmatmul widening-bp-fmatmul/kernel/widening-fmatmul.c)
