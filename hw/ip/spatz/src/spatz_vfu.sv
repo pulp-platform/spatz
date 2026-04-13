@@ -854,15 +854,15 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
           end
           EW_16: begin
             for (int i = 0; i < VRFWordWidth/16; i++)
-                vreg_wdata[i+(VRFWordWidth/16*word_idx_q)] = result[i*16]; 
+                vreg_wdata[i+(VRFWordWidth/16*word_idx_q)] = result[i*16];
           end
           EW_32: begin
             for (int i = 0; i < VRFWordWidth/32; i++)
-                vreg_wdata[i+(VRFWordWidth/32*word_idx_q)] = result[i*32];           
+                vreg_wdata[i+(VRFWordWidth/32*word_idx_q)] = result[i*32];
           end
           EW_64: begin
             for (int i = 0; i < VRFWordWidth/64; i++)
-                vreg_wdata[i+(VRFWordWidth/64*word_idx_q)] = result[i*64];                    
+                vreg_wdata[i+(VRFWordWidth/64*word_idx_q)] = result[i*64];
           end
           default:;
         endcase
