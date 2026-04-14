@@ -147,7 +147,7 @@ int main() {
 
   if (cid == 0) {
     int error =
-      check_results(c, (const int32_t *)gemm_EXP_dram, gemm_l.M, gemm_l.N);
+      check_results(c, (const int32_t *)gemm_C_dram, gemm_l.M, gemm_l.N);
 
     if (error != 0) {
       printf("Error core %d: c[%d]=%u\n", cid, error, (int)c[error]);
