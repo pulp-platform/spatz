@@ -18,11 +18,11 @@
 // Author: Danilo Cammarata, ETH Zurich
 
 #include <benchmark.h>
+#include <quadrilatero.h>
 #include <snrt.h>
 #include <stdio.h>
 
 #include DATAHEADER
-#include "kernel/sp-matmul-quadrilatero.c"
 
 int *a;
 int *b;
@@ -74,7 +74,6 @@ int main() {
 
   unsigned int m_start, m_end;
   unsigned int p_start, p_end;
-  unsigned int kernel_size;
 
   // Allocate the matrices in the local tile
   if (cid == 0) {
@@ -85,9 +84,6 @@ int main() {
 
   // Reset timer
   timer = (unsigned int)-1;
-
-  // Set matrix dimension
-  kernel_size = QUAD_RLEN/32;
 
   // Work over complete P dimension
   p_start = 0;
@@ -102,7 +98,6 @@ int main() {
   if (cid == 0) {
     snrt_dma_start_1d(a, gemm_A_dram, gemm_l.M * gemm_l.K * sizeof(int));
     snrt_dma_start_1d(b, gemm_B_dram, gemm_l.K * gemm_l.N * sizeof(int));
-    // snrt_dma_start_1d(c, gemm_C_dram, gemm_l.M * gemm_l.N * sizeof(int));
     snrt_dma_wait_all();
   }
 
@@ -115,23 +110,17 @@ int main() {
     timer_start = benchmark_get_cycle();
 
     // Start dump
-    if (cid == 0)
+    if (cid == 1){
       start_kernel();
-
-    if (kernel_size == 4) {
-      matrixMul_8x8(a,b,c,gemm_l.K,gemm_l.N,gemm_l.M,2);
-    } else if (kernel_size == 8) {
-      matrixMul_16x16(a,b,c,gemm_l.K,gemm_l.N,gemm_l.M,2);
-    } else {
-      return -2;
+      matmul(INT32, INT32, INT32, a,b,c,gemm_l.K,gemm_l.N,gemm_l.M,2);
     }
 
     // Wait for all cores to finish
     snrt_cluster_hw_barrier();
+    if (cid == 1) stop_kernel();
 
-    // End dump
-    if (cid == 0)
-      stop_kernel();
+    // Wait for all cores to finish
+    snrt_cluster_hw_barrier();
 
     // End timer and check if new best runtime
     timer_end = benchmark_get_cycle();
