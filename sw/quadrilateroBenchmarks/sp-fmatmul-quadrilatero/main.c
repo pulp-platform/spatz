@@ -18,11 +18,11 @@
 // Author: Danilo Cammarata, ETH Zurich
 
 #include <benchmark.h>
+#include <quadrilatero.h>
 #include <snrt.h>
 #include <stdio.h>
 
 #include DATAHEADER
-#include "kernel/sp-fmatmul-quadrilatero.c"
 
 float *a;
 float *b;
@@ -40,7 +40,7 @@ int verify_matrix(float *matrix, const float *checksum,
     float diff = sum - (float)checksum[i];
     if (diff < 0)
       diff = -diff;
-    if (diff > 0.001) {
+    if (diff > 0.001f) {
       return i == 0 ? -1 : (int)i;
     }
   }
@@ -58,7 +58,7 @@ int check_results(float *matrix, const float *expected, int N, int M)
       for(j = 0; j < N; j++) {
          float diff;
          diff = matrix[i*N+j] - expected[i*N+j];
-         diff = diff * (diff >= 0);
+         diff = diff * (diff >= 0.0f);
          if(diff > 0.001f) {
            if(i==0 && j==0) return -1;
            else return i*N+j;
@@ -79,7 +79,6 @@ int main() {
 
   unsigned int m_start, m_end;
   unsigned int p_start, p_end;
-  unsigned int kernel_size;
 
   // Allocate the matrices in the local tile
   if (cid == 0) {
@@ -90,9 +89,6 @@ int main() {
 
   // Reset timer
   timer = (unsigned int)-1;
-
-  // Set matrix dimension
-  kernel_size = QUAD_RLEN/32;
 
   // Work over complete P dimension
   p_start = 0;
@@ -107,7 +103,6 @@ int main() {
   if (cid == 0) {
     snrt_dma_start_1d(a, gemm_A_dram, gemm_l.M * gemm_l.K * sizeof(float));
     snrt_dma_start_1d(b, gemm_B_dram, gemm_l.K * gemm_l.N * sizeof(float));
-    // snrt_dma_start_1d(c, gemm_C_dram, gemm_l.M * gemm_l.N * sizeof(float));
     snrt_dma_wait_all();
   }
 
@@ -120,23 +115,17 @@ int main() {
     timer_start = benchmark_get_cycle();
 
     // Start dump
-    if (cid == 0)
+    if (cid == 1){
       start_kernel();
-
-    if (kernel_size == 4) {
-      matrixMul_8x8(a,b,c,gemm_l.K,gemm_l.N,gemm_l.M,2);
-    } else if (kernel_size == 8) {
-      matrixMul_16x16(a,b,c,gemm_l.K,gemm_l.N,gemm_l.M,2);
-    } else {
-      return -2;
+      matmul(FP32, FP32, FP32, a,b,c,gemm_l.K,gemm_l.N,gemm_l.M,2);
     }
 
     // Wait for all cores to finish
     snrt_cluster_hw_barrier();
+    if (cid == 1) stop_kernel();
 
-    // End dump
-    if (cid == 0)
-      stop_kernel();
+    // Wait for all cores to finish
+    snrt_cluster_hw_barrier();
 
     // End timer and check if new best runtime
     timer_end = benchmark_get_cycle();
@@ -166,7 +155,7 @@ int main() {
       check_results(c, (const float *)gemm_C_dram, gemm_l.M, gemm_l.N);
 
     if (error != 0) {
-      printf("Error core %d: c[%d]=%f\n", cid, error, (float)c[error]);
+      printf("Error core %d: c[%d]=%u\n", cid, error, (uint32_t)c[error]);
       return error;
     }
   }

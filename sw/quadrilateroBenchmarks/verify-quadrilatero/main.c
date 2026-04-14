@@ -79,7 +79,6 @@ int main() {
 
   unsigned int m_start, m_end;
   unsigned int p_start, p_end;
-  unsigned int kernel_size;
 
   // Allocate the matrices in the local tile
   if (cid == 0) {
@@ -90,9 +89,6 @@ int main() {
 
   // Reset timer
   timer = (unsigned int)-1;
-
-  // Set matrix dimension
-  kernel_size = QUAD_RLEN/32;
 
   // Work over complete P dimension
   p_start = 0;
@@ -107,7 +103,6 @@ int main() {
   if (cid == 0) {
     snrt_dma_start_1d(a, gemm_A_dram, gemm_l.M * gemm_l.K * sizeof(float));
     snrt_dma_start_1d(b, gemm_B_dram, gemm_l.K * gemm_l.N * sizeof(float));
-    // snrt_dma_start_1d(c, gemm_C_dram, gemm_l.M * gemm_l.N * sizeof(float));
     snrt_dma_wait_all();
   }
 
@@ -115,29 +110,16 @@ int main() {
   snrt_cluster_hw_barrier();
 
   // Start dump
-  start_kernel();
-  
-  // printf("Matrix Load Test started\n");
-  // test_load (a, gemm_l.K);
-  // printf("Matrix Load Test completed successfully\n");
+  if (cid == 1) {
+    start_kernel();
+    verify_quadrilatero (a,b,c, gemm_l.K);
+  }
 
-  // printf("Matrix Store Test started\n");
-  // test_store (a, c, gemm_l.K);
-  // printf("Matrix Store Test completed successfully\n");
-
-  // printf("Matrix Load/Store Test started\n");
-  // test_load_store (a, c, gemm_l.K);
-  // printf("Matrix Load/Store Test completed successfully\n");
-
-  // printf("Matrix MACC Test started\n");
-  // test_macc (a,b,c, gemm_l.K);
-  // printf("Matrix MACC Test completed successfully\n");
-  verify_quadrilatero (a,b,c, gemm_l.K);
   // Wait for all cores to finish
   snrt_cluster_hw_barrier();
 
   // End dump
-  stop_kernel();
+  if (cid == 1) stop_kernel();
 
     
   // Wait for all cores to finish

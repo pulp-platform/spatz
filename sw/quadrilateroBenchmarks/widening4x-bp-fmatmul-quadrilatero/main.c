@@ -18,11 +18,11 @@
 // Author: Danilo Cammarata, ETH Zurich
 
 #include <benchmark.h>
+#include <quadrilatero.h>
 #include <snrt.h>
 #include <stdio.h>
 
 #include DATAHEADER
-#include "kernel/widening4x-bp-fmatmul-quadrilatero.c"
 
 char *a;
 char *b;
@@ -69,7 +69,6 @@ int check_results(float *matrix, const float *expected, int N, int M)
   return err;
 }
 
-
 int main() {
   const unsigned int num_cores = snrt_cluster_core_num();
   const unsigned int cid = snrt_cluster_core_idx();
@@ -80,7 +79,6 @@ int main() {
 
   unsigned int m_start, m_end;
   unsigned int p_start, p_end;
-  unsigned int kernel_size;
 
   // Allocate the matrices in the local tile
   if (cid == 0) {
@@ -91,9 +89,6 @@ int main() {
 
   // Reset timer
   timer = (unsigned int)-1;
-
-  // Set matrix dimension
-  kernel_size = QUAD_RLEN/32;
 
   // Work over complete P dimension
   p_start = 0;
@@ -108,7 +103,6 @@ int main() {
   if (cid == 0) {
     snrt_dma_start_1d(a, gemm_A_dram, gemm_l.M * gemm_l.K * sizeof(char));
     snrt_dma_start_1d(b, gemm_B_dram, gemm_l.K * gemm_l.N * sizeof(char));
-    // snrt_dma_start_1d(c, gemm_C_dram, gemm_l.M * gemm_l.N * sizeof(float));
     snrt_dma_wait_all();
   }
 
@@ -121,23 +115,17 @@ int main() {
     timer_start = benchmark_get_cycle();
 
     // Start dump
-    if (cid == 0)
+    if (cid == 1){
       start_kernel();
-
-    if (kernel_size == 4) {
-      matrixMul_8x8(a,b,c,gemm_l.K/4,gemm_l.N,gemm_l.M,0);
-    } else if (kernel_size == 8) {
-      matrixMul_16x16(a,b,c,gemm_l.K/4,gemm_l.N,gemm_l.M,0);
-    } else {
-      return -2;
+      matmul(FP8, FP8, FP32, a,b,c,gemm_l.K >> 2,gemm_l.N,gemm_l.M,0);
     }
 
     // Wait for all cores to finish
     snrt_cluster_hw_barrier();
+    if (cid == 1) stop_kernel();
 
-    // End dump
-    if (cid == 0)
-      stop_kernel();
+    // Wait for all cores to finish
+    snrt_cluster_hw_barrier();
 
     // End timer and check if new best runtime
     timer_end = benchmark_get_cycle();
