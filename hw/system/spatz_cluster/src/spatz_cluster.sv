@@ -24,7 +24,6 @@ module spatz_cluster
   import spatz_pkg::*;
   import fpnew_pkg::fpu_implementation_t;
   import snitch_pma_pkg::snitch_pma_t;
-  import quadrilatero_pkg::*;
   #(
     /// Width of physical address.
     parameter int                     unsigned               AxiAddrWidth                       = 48,
@@ -161,8 +160,7 @@ module spatz_cluster
   localparam int unsigned NrSuperBanks      = NrBanks / BanksPerSuperBank;
 
   function automatic int unsigned get_tcdm_ports(int unsigned core);
-    if(spatz_pkg::QUADRILATERO) return NumSpatzTCDMPorts[core] + 1 + quadrilatero_pkg::LLEN/DataWidth;
-    else                        return NumSpatzTCDMPorts[core] + 1;
+    return NumSpatzTCDMPorts[core] + 1;
   endfunction
 
   function automatic int unsigned get_tcdm_port_offs(int unsigned core_idx);
@@ -399,7 +397,11 @@ module spatz_cluster
   tcdm_rsp_t axi_soc_rsp;
 
   tcdm_req_t [NrTCDMPortsCores-1:0] tcdm_req;
+  tcdm_req_t [NrTCDMPortsCores-1:0] spatz_tcdm_req;
+  tcdm_req_t [NrTCDMPortsCores-1:0] quad_tcdm_req;
   tcdm_rsp_t [NrTCDMPortsCores-1:0] tcdm_rsp;
+  tcdm_rsp_t [NrTCDMPortsCores-1:0] spatz_tcdm_rsp;
+  tcdm_rsp_t [NrTCDMPortsCores-1:0] quad_tcdm_rsp;
 
   core_events_t [NrCores-1:0] core_events;
   tcdm_events_t               tcdm_events;
@@ -704,90 +706,169 @@ module spatz_cluster
     i_sync_msip (.clk_i, .rst_ni, .serial_i (msip_i[i]), .serial_o (irq.msip));
     assign irq.mcip = cl_interrupt[i];
 
-    tcdm_req_t [TcdmPorts-1:0] tcdm_req_wo_user;
+    tcdm_req_t [TcdmPorts-1:0] spatz_tcdm_req_wo_user;
 
     logic [31:0] hart_id;
     assign hart_id = hart_base_id_i + i;
 
-    spatz_quadrilatero_cc #(
-      .BootAddr                (BootAddr                   ),
-      .RVE                     (1'b0                       ),
-      .RVF                     (RVF                        ),
-      .RVD                     (RVD                        ),
-      .RVV                     (RVV                        ),
-      .RMM                     (spatz_pkg::QUADRILATERO    ),
-      .Xdma                    (Xdma[i]                    ),
-      .AddrWidth               (AxiAddrWidth               ),
-      .DataWidth               (NarrowDataWidth            ),
-      .UserWidth               (AxiUserWidth               ),
-      .DMADataWidth            (AxiDataWidth               ),
-      .DMAIdWidth              (AxiIdWidthIn               ),
-      .SnitchPMACfg            (SnitchPMACfg               ),
-      .DMAAxiReqFifoDepth      (DMAAxiReqFifoDepth         ),
-      .DMAReqFifoDepth         (DMAReqFifoDepth            ),
-      .dreq_t                  (reqrsp_req_t               ),
-      .drsp_t                  (reqrsp_rsp_t               ),
-      .tcdm_req_t              (tcdm_req_t                 ),
-      .tcdm_req_chan_t         (tcdm_req_chan_t            ),
-      .tcdm_rsp_t              (tcdm_rsp_t                 ),
-      .tcdm_rsp_chan_t         (tcdm_rsp_chan_t            ),
-      .axi_req_t               (axi_mst_dma_req_t          ),
-      .axi_ar_chan_t           (axi_mst_dma_ar_chan_t      ),
-      .axi_aw_chan_t           (axi_mst_dma_aw_chan_t      ),
-      .axi_rsp_t               (axi_mst_dma_resp_t         ),
-      .hive_req_t              (hive_req_t                 ),
-      .hive_rsp_t              (hive_rsp_t                 ),
-      .acc_issue_req_t         (acc_issue_req_t            ),
-      .acc_issue_rsp_t         (acc_issue_rsp_t            ),
-      .acc_rsp_t               (acc_rsp_t                  ),
-      .dma_events_t            (dma_events_t               ),
-      .dma_perf_t              (axi_dma_pkg::dma_perf_t    ),
-      .XDivSqrt                (1'b0                       ),
-      .XF16                    (1'b1                       ),
-      .XF16ALT                 (1'b1                       ),
-      .XF8                     (1'b1                       ),
-      .XF8ALT                  (1'b1                       ),
-      .IsoCrossing             (1'b0                       ),
-      .NumSpatzFPUs            (NumSpatzFPUs[i]            ),
-      .NumSpatzIPUs            (NumSpatzIPUs[i]            ),
-      .NumMemPortsPerSpatz     (NumSpatzTCDMPorts[i]       ),
-      .NumIntOutstandingLoads  (NumIntOutstandingLoads[i]  ),
-      .NumIntOutstandingMem    (NumIntOutstandingMem[i]    ),
-      .NumSpatzOutstandingLoads(NumSpatzOutstandingLoads[i]),
-      .FPUImplementation       (FPUImplementation[i]       ),
-      .RegisterOffloadRsp      (RegisterOffloadRsp         ),
-      .RegisterCoreReq         (RegisterCoreReq            ),
-      .RegisterCoreRsp         (RegisterCoreRsp            ),
-      .TCDMAddrWidth           (TCDMAddrWidth              )
-    ) i_spatz_quadrilatero_cc (
-      .clk_i            (clk_i                               ),
-      .clk_d2_i         (clk_i                               ),
-      .rst_ni           (rst_ni                              ),
-      .testmode_i       (1'b0                                ),
-      .hart_id_i        (hart_id                             ),
-      .hive_req_o       (hive_req[i]                         ),
-      .hive_rsp_i       (hive_rsp[i]                         ),
-      .irq_i            (irq                                 ),
-      .data_req_o       (core_req[i]                         ),
-      .data_rsp_i       (core_rsp[i]                         ),
-      .tcdm_req_o       (tcdm_req_wo_user                    ),
-      .tcdm_rsp_i       (tcdm_rsp[TcdmPortsOffs +: TcdmPorts]),
-      .axi_dma_req_o    (axi_dma_req                         ),
-      .axi_dma_res_i    (axi_dma_res                         ),
-      .axi_dma_busy_o   (/* Unused */                        ),
-      .axi_dma_perf_o   (/* Unused */                        ),
-      .axi_dma_events_o (dma_core_events                     ),
-      .core_events_o    (core_events[i]                      ),
-      .tcdm_addr_base_i (tcdm_start_address                  )
-    );
+    if(i == 1 & spatz_pkg::QUADRILATERO) begin : gen_quadrilatero_cc
+      spatz_quadrilatero_cc #(
+        .BootAddr                (BootAddr                   ),
+        .RVE                     (1'b0                       ),
+        .RVF                     (RVF                        ),
+        .RVD                     (RVD                        ),
+        .RVV                     (RVV                        ),
+        .RMM                     (spatz_pkg::QUADRILATERO    ),
+        .Xdma                    (Xdma[i]                    ),
+        .AddrWidth               (AxiAddrWidth               ),
+        .DataWidth               (NarrowDataWidth            ),
+        .UserWidth               (AxiUserWidth               ),
+        .DMADataWidth            (AxiDataWidth               ),
+        .DMAIdWidth              (AxiIdWidthIn               ),
+        .SnitchPMACfg            (SnitchPMACfg               ),
+        .DMAAxiReqFifoDepth      (DMAAxiReqFifoDepth         ),
+        .DMAReqFifoDepth         (DMAReqFifoDepth            ),
+        .dreq_t                  (reqrsp_req_t               ),
+        .drsp_t                  (reqrsp_rsp_t               ),
+        .tcdm_req_t              (tcdm_req_t                 ),
+        .tcdm_req_chan_t         (tcdm_req_chan_t            ),
+        .tcdm_rsp_t              (tcdm_rsp_t                 ),
+        .tcdm_rsp_chan_t         (tcdm_rsp_chan_t            ),
+        .axi_req_t               (axi_mst_dma_req_t          ),
+        .axi_ar_chan_t           (axi_mst_dma_ar_chan_t      ),
+        .axi_aw_chan_t           (axi_mst_dma_aw_chan_t      ),
+        .axi_rsp_t               (axi_mst_dma_resp_t         ),
+        .hive_req_t              (hive_req_t                 ),
+        .hive_rsp_t              (hive_rsp_t                 ),
+        .acc_issue_req_t         (acc_issue_req_t            ),
+        .acc_issue_rsp_t         (acc_issue_rsp_t            ),
+        .acc_rsp_t               (acc_rsp_t                  ),
+        .dma_events_t            (dma_events_t               ),
+        .dma_perf_t              (axi_dma_pkg::dma_perf_t    ),
+        .XDivSqrt                (1'b0                       ),
+        .XF16                    (1'b1                       ),
+        .XF16ALT                 (1'b1                       ),
+        .XF8                     (1'b1                       ),
+        .XF8ALT                  (1'b1                       ),
+        .IsoCrossing             (1'b0                       ),
+        .NumSpatzFPUs            (NumSpatzFPUs[i]            ),
+        .NumSpatzIPUs            (NumSpatzIPUs[i]            ),
+        .NumMemPortsPerSpatz     (NumSpatzTCDMPorts[i]       ),
+        .NumIntOutstandingLoads  (NumIntOutstandingLoads[i]  ),
+        .NumIntOutstandingMem    (NumIntOutstandingMem[i]    ),
+        .NumSpatzOutstandingLoads(NumSpatzOutstandingLoads[i]),
+        .FPUImplementation       (FPUImplementation[i]       ),
+        .RegisterOffloadRsp      (RegisterOffloadRsp         ),
+        .RegisterCoreReq         (RegisterCoreReq            ),
+        .RegisterCoreRsp         (RegisterCoreRsp            ),
+        .TCDMAddrWidth           (TCDMAddrWidth              )
+      ) i_spatz_quadrilatero_cc (
+        .clk_i            (clk_i                               ),
+        .clk_d2_i         (clk_i                               ),
+        .rst_ni           (rst_ni                              ),
+        .testmode_i       (1'b0                                ),
+        .hart_id_i        (hart_id                             ),
+        .hive_req_o       (hive_req[i]                         ),
+        .hive_rsp_i       (hive_rsp[i]                         ),
+        .irq_i            (irq                                 ),
+        .data_req_o       (core_req[i]                         ),
+        .data_rsp_i       (core_rsp[i]                         ),
+        .spatz_tcdm_req_o (spatz_tcdm_req_wo_user              ),
+        .spatz_tcdm_rsp_i (spatz_tcdm_rsp[TcdmPortsOffs +: TcdmPorts]),
+        .quad_tcdm_req_o  (quad_tcdm_req                       ),
+        .quad_tcdm_rsp_i  (quad_tcdm_rsp                       ),
+        .axi_dma_req_o    (axi_dma_req                         ),
+        .axi_dma_res_i    (axi_dma_res                         ),
+        .axi_dma_busy_o   (/* Unused */                        ),
+        .axi_dma_perf_o   (/* Unused */                        ),
+        .axi_dma_events_o (dma_core_events                     ),
+        .core_events_o    (core_events[i]                      ),
+        .tcdm_addr_base_i (tcdm_start_address                  )
+      );
+    end else begin : gen_spatz_cc
+      spatz_cc #(
+        .BootAddr                (BootAddr                   ),
+        .RVE                     (1'b0                       ),
+        .RVF                     (RVF                        ),
+        .RVD                     (RVD                        ),
+        .RVV                     (RVV                        ),
+        .Xdma                    (Xdma[i]                    ),
+        .AddrWidth               (AxiAddrWidth               ),
+        .DataWidth               (NarrowDataWidth            ),
+        .UserWidth               (AxiUserWidth               ),
+        .DMADataWidth            (AxiDataWidth               ),
+        .DMAIdWidth              (AxiIdWidthIn               ),
+        .SnitchPMACfg            (SnitchPMACfg               ),
+        .DMAAxiReqFifoDepth      (DMAAxiReqFifoDepth         ),
+        .DMAReqFifoDepth         (DMAReqFifoDepth            ),
+        .dreq_t                  (reqrsp_req_t               ),
+        .drsp_t                  (reqrsp_rsp_t               ),
+        .tcdm_req_t              (tcdm_req_t                 ),
+        .tcdm_req_chan_t         (tcdm_req_chan_t            ),
+        .tcdm_rsp_t              (tcdm_rsp_t                 ),
+        .tcdm_rsp_chan_t         (tcdm_rsp_chan_t            ),
+        .axi_req_t               (axi_mst_dma_req_t          ),
+        .axi_ar_chan_t           (axi_mst_dma_ar_chan_t      ),
+        .axi_aw_chan_t           (axi_mst_dma_aw_chan_t      ),
+        .axi_rsp_t               (axi_mst_dma_resp_t         ),
+        .hive_req_t              (hive_req_t                 ),
+        .hive_rsp_t              (hive_rsp_t                 ),
+        .acc_issue_req_t         (acc_issue_req_t            ),
+        .acc_issue_rsp_t         (acc_issue_rsp_t            ),
+        .acc_rsp_t               (acc_rsp_t                  ),
+        .dma_events_t            (dma_events_t               ),
+        .dma_perf_t              (axi_dma_pkg::dma_perf_t    ),
+        .XDivSqrt                (1'b0                       ),
+        .XF16                    (1'b1                       ),
+        .XF16ALT                 (1'b1                       ),
+        .XF8                     (1'b1                       ),
+        .XF8ALT                  (1'b1                       ),
+        .IsoCrossing             (1'b0                       ),
+        .NumSpatzFPUs            (NumSpatzFPUs[i]            ),
+        .NumSpatzIPUs            (NumSpatzIPUs[i]            ),
+        .NumMemPortsPerSpatz     (NumSpatzTCDMPorts[i]       ),
+        .NumIntOutstandingLoads  (NumIntOutstandingLoads[i]  ),
+        .NumIntOutstandingMem    (NumIntOutstandingMem[i]    ),
+        .NumSpatzOutstandingLoads(NumSpatzOutstandingLoads[i]),
+        .FPUImplementation       (FPUImplementation[i]       ),
+        .RegisterOffloadRsp      (RegisterOffloadRsp         ),
+        .RegisterCoreReq         (RegisterCoreReq            ),
+        .RegisterCoreRsp         (RegisterCoreRsp            ),
+        .TCDMAddrWidth           (TCDMAddrWidth              )
+      ) i_spatz_cc (
+        .clk_i            (clk_i                               ),
+        .clk_d2_i         (clk_i                               ),
+        .rst_ni           (rst_ni                              ),
+        .testmode_i       (1'b0                                ),
+        .hart_id_i        (hart_id                             ),
+        .hive_req_o       (hive_req[i]                         ),
+        .hive_rsp_i       (hive_rsp[i]                         ),
+        .irq_i            (irq                                 ),
+        .data_req_o       (core_req[i]                         ),
+        .data_rsp_i       (core_rsp[i]                         ),
+        .tcdm_req_o       (spatz_tcdm_req_wo_user              ),
+        .tcdm_rsp_i       (spatz_tcdm_rsp[TcdmPortsOffs +: TcdmPorts]),
+        .axi_dma_req_o    (axi_dma_req                         ),
+        .axi_dma_res_i    (axi_dma_res                         ),
+        .axi_dma_busy_o   (/* Unused */                        ),
+        .axi_dma_perf_o   (/* Unused */                        ),
+        .axi_dma_events_o (dma_core_events                     ),
+        .core_events_o    (core_events[i]                      ),
+        .tcdm_addr_base_i (tcdm_start_address                  )
+      );
+    end
+    if(i == 1 &! spatz_pkg::QUADRILATERO) begin
+      assign quad_tcdm_req = '0;
+    end
     for (genvar j = 0; j < TcdmPorts; j++) begin : gen_tcdm_user
       always_comb begin
-        tcdm_req[TcdmPortsOffs+j].q              = tcdm_req_wo_user[j].q;
-        tcdm_req[TcdmPortsOffs+j].q.user.core_id = i[CoreIDWidth-1:0];
-        tcdm_req[TcdmPortsOffs+j].q.user.is_core = 1;
-        tcdm_req[TcdmPortsOffs+j].q_valid        = tcdm_req_wo_user[j].q_valid;
+        spatz_tcdm_req[TcdmPortsOffs+j].q              = spatz_tcdm_req_wo_user[j].q;
+        spatz_tcdm_req[TcdmPortsOffs+j].q.user.core_id = i[CoreIDWidth-1:0];
+        spatz_tcdm_req[TcdmPortsOffs+j].q.user.is_core = 1;
+        spatz_tcdm_req[TcdmPortsOffs+j].q_valid        = spatz_tcdm_req_wo_user[j].q_valid;
       end
     end
+
     if (Xdma[i]) begin : gen_dma_connection
       assign wide_axi_mst_req[SDMAMst] = axi_dma_req;
       assign axi_dma_res               = wide_axi_mst_rsp[SDMAMst];
@@ -797,6 +878,45 @@ module spatz_cluster
     end
   end
 
+
+  for (genvar j = 0; j < NrTCDMPortsCores; j++) begin : gen_tcdm_signals
+    stream_arbiter #(
+      .DATA_T ( tcdm_req_chan_t  ),
+      .N_INP  ( 2                )
+    ) i_stream_arbiter_tcdm (
+      .clk_i       ( clk_i                        ),
+      .rst_ni      ( rst_ni                       ),
+      .inp_data_i  ( {spatz_tcdm_req[j].q      , quad_tcdm_req[j].q       } ),
+      .inp_valid_i ( {spatz_tcdm_req[j].q_valid, quad_tcdm_req[j].q_valid } ),
+      .inp_ready_o ( {spatz_tcdm_rsp[j].q_ready, quad_tcdm_rsp[j].q_ready } ),
+      .oup_data_o  ( tcdm_req[j].q               ),
+      .oup_valid_o ( tcdm_req[j].q_valid         ),
+      .oup_ready_i ( tcdm_rsp[j].q_ready         )
+    );
+
+    shift_reg #(
+      .dtype ( logic ),
+      .Depth ( 1 + RegisterTCDMCuts )
+    ) i_shift_reg_spatz (
+      .clk_i,
+      .rst_ni,
+      .d_i ( spatz_tcdm_req[j].q_valid & spatz_tcdm_rsp[j].q_ready ),
+      .d_o ( spatz_tcdm_rsp[j].p_valid )
+    );
+
+    shift_reg #(
+      .dtype ( logic ),
+      .Depth ( 1 + RegisterTCDMCuts )
+    ) i_shift_reg_quad (
+      .clk_i,
+      .rst_ni,
+      .d_i ( quad_tcdm_req[j].q_valid & quad_tcdm_rsp[j].q_ready ),
+      .d_o ( quad_tcdm_rsp[j].p_valid )
+    );
+
+    assign quad_tcdm_rsp[j].p  =  quad_tcdm_rsp[j].p_valid ? tcdm_rsp[j].p :'0;
+    assign spatz_tcdm_rsp[j].p = spatz_tcdm_rsp[j].p_valid ? tcdm_rsp[j].p :'0;
+  end
   // ----------------
   // Instruction Cache
   // ----------------
