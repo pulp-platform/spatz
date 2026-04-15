@@ -12,7 +12,7 @@
         "cluster_base_offset": 0,     // 0x0
         "cluster_base_hartid": 0,
         "addr_width": 32,
-        "data_width": 64,
+        "data_width": 32,
         "id_width_in": 2,
         "id_width_out": 4,
         "user_width": 2,
@@ -20,8 +20,8 @@
         "axi_cdc_enable": false,
         "tcdm": {
             "size": 128,
-            "banks": 16,
-            "misalign": false
+            "banks": 32,
+            "misalign": true
         },
         "cluster_periph_size": 64, // kB
         "dma_data_width": 512,
@@ -36,8 +36,8 @@
         "n_fpu": 4,
         "n_ipu": 1,
         "spatz_fpu": true,
-        "spatz_nports": 4,
-        "double_bw": 0,
+        "spatz_nports": 8,
+        "double_bw": 1,
         "buf_fpu": 1,
         // Timing parameters
         "timing": {
@@ -60,11 +60,25 @@
         "cores": [
             // DMA core
             {
-                "isa": "rv32imafd",
+                "isa": "rv32imaf",
                 "xdma": true,
                 "xf16": true,
                 "xf8": true,
                 "xfdotp": true,
+                "num_int_outstanding_loads": 1,
+                "num_int_outstanding_mem": 4,
+                "num_spatz_outstanding_loads": 4,
+                "num_dtlb_entries": 1,
+                "num_itlb_entries": 1
+            },
+
+            // Compute core
+            {
+                "isa": "rv32imaf",
+                "xf16": true,
+                "xf8": true,
+                "xfdotp": true,
+                "xdma": false,
                 "num_int_outstanding_loads": 1,
                 "num_int_outstanding_mem": 4,
                 "num_spatz_outstanding_loads": 4,
