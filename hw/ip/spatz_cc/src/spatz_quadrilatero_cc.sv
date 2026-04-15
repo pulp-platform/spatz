@@ -9,14 +9,12 @@
 `include "common_cells/registers.svh"
 `include "snitch_vm/typedef.svh"
 
-/// Spatz Quadrilatero Core Complex (CC)
+/// Spatz-Quadrilatero Core Complex (CC)
 /// Contains the Snitch Integer Core + Spatz Vector Unit + Quadrilatero Matrix Unit
 module spatz_quadrilatero_cc
   import snitch_pkg::interrupts_t;
   import snitch_pkg::core_events_t;
-  import fpnew_pkg::fpu_implementation_t;
-  import quadrilatero_pkg::*;
-  import xif_pkg::*; #(
+  import fpnew_pkg::fpu_implementation_t; #(
     /// Address width of the buses
     parameter int                          unsigned        AddrWidth                = 0,
     /// Data width of the buses.
@@ -74,7 +72,7 @@ module spatz_quadrilatero_cc
     // Enable V Extension
     parameter bit                                          RVV                      = 1,
     // Enable Matrix Extension
-    parameter bit                                          RMM                      = 1,
+    parameter bit                                          RMM                      = 0,
     // Spatz parameters
     parameter int                          unsigned        NumSpatzFPUs             = 4,
     parameter int                          unsigned        NumSpatzIPUs             = 1,
@@ -92,8 +90,7 @@ module spatz_quadrilatero_cc
     /// Derived parameter *Do not override*
     parameter int                          unsigned        NumSpatzFUs              = (NumSpatzFPUs > NumSpatzIPUs) ? NumSpatzFPUs : NumSpatzIPUs,
     parameter int                          unsigned        NumMemPortsPerSpatz      = NumSpatzFUs,
-    parameter int                          unsigned        NumMemPortsPerQuad       = RMM ? quadrilatero_pkg::LLEN/DataWidth : 0,
-    parameter int                          unsigned        TCDMPorts                = RVV ? NumMemPortsPerSpatz + 1 + NumMemPortsPerQuad : 1 + NumMemPortsPerQuad,
+    parameter int                          unsigned        TCDMPorts                = RVV ? NumMemPortsPerSpatz + 1 : 1,
     parameter type                                         addr_t                   = logic [AddrWidth-1:0]
   ) (
     input  logic                         clk_i,
@@ -108,8 +105,11 @@ module spatz_quadrilatero_cc
     output dreq_t                        data_req_o,
     input  drsp_t                        data_rsp_i,
     // TCDM Streamer Ports
-    output tcdm_req_t    [TCDMPorts-1:0] tcdm_req_o,
-    input  tcdm_rsp_t    [TCDMPorts-1:0] tcdm_rsp_i,
+    output tcdm_req_t    [TCDMPorts-1:0] spatz_tcdm_req_o,
+    input  tcdm_rsp_t    [TCDMPorts-1:0] spatz_tcdm_rsp_i,
+    // TCDM Streamer Ports
+    output tcdm_req_t   [2*TCDMPorts-1:0] quad_tcdm_req_o,
+    input  tcdm_rsp_t   [2*TCDMPorts-1:0] quad_tcdm_rsp_i,
     // Accelerator Offload port
     // DMA ports
     output axi_req_t                     axi_dma_req_o,
@@ -135,17 +135,18 @@ module spatz_quadrilatero_cc
   acc_issue_req_t acc_snitch_demux;
   acc_issue_rsp_t acc_snitch_resp;
   acc_issue_rsp_t spatz_snitch_resp;
+  acc_issue_rsp_t quad_snitch_resp;
 
   acc_rsp_t acc_demux_snitch;
-  acc_rsp_t acc_resp;
-  acc_rsp_t dma_resp;
+  acc_rsp_t spatz_resp;
+  acc_rsp_t quad_resp;
 
   logic acc_snitch_demux_qvalid, acc_snitch_demux_qready;
-  logic acc_qvalid, acc_qready;
-  logic dma_qvalid, dma_qready;
+  logic spatz_qvalid, spatz_qready;
+  logic quad_qvalid, quad_qready;
 
-  logic acc_pvalid, acc_pready;
-  logic dma_pvalid, dma_pready;
+  logic spatz_pvalid, spatz_pready;
+  logic quad_pvalid, quad_pready;
   logic acc_demux_snitch_valid, acc_demux_snitch_ready;
 
   fpnew_pkg::roundmode_e fpu_rnd_mode;
@@ -227,6 +228,7 @@ module spatz_quadrilatero_cc
     .core_events_o         (snitch_events            )
   );
 
+
   reqrsp_iso #(
     .AddrWidth (AddrWidth                       ),
     .DataWidth (DataWidth                       ),
@@ -245,11 +247,36 @@ module spatz_quadrilatero_cc
     .dst_rsp_i  (snitch_drsp_q)
   );
 
+  // Accelerator Demux Port
+  stream_demux #(
+    .N_OUP ( 2 )
+  ) i_stream_demux_offload (
+    .inp_valid_i (acc_snitch_demux_qvalid             ),
+    .inp_ready_o (acc_snitch_demux_qready             ),
+    .oup_sel_i   (acc_snitch_demux.addr[$clog2(2)-1:0]),
+    .oup_valid_o ({quad_qvalid, spatz_qvalid}            ),
+    .oup_ready_i ({quad_qready, spatz_qready}            )
+  );
+
   // There is no shared muldiv in this configuration
   assign hive_req_o.acc_qvalid = 1'b0;
   assign hive_req_o.acc_pready = 1'b0;
   assign hive_req_o.acc_req    = '0;
   assign acc_snitch_req        = acc_snitch_demux;
+
+  stream_arbiter #(
+    .DATA_T ( acc_rsp_t ),
+    .N_INP  ( 2         )
+  ) i_stream_arbiter_offload (
+    .clk_i       ( clk_i                        ),
+    .rst_ni      ( rst_ni                       ),
+    .inp_data_i  ( {quad_resp  , spatz_resp }   ),
+    .inp_valid_i ( {quad_pvalid, spatz_pvalid } ),
+    .inp_ready_o ( {quad_pready, spatz_pready } ),
+    .oup_data_o  ( acc_demux_snitch             ),
+    .oup_valid_o ( acc_demux_snitch_valid       ),
+    .oup_ready_i ( acc_demux_snitch_ready       )
+  );
 
   dreq_t fp_lsu_mem_req;
   drsp_t fp_lsu_mem_rsp;
@@ -259,260 +286,6 @@ module spatz_quadrilatero_cc
   logic           [NumMemPortsPerSpatz-1:0] spatz_mem_req_ready;
   tcdm_rsp_chan_t [NumMemPortsPerSpatz-1:0] spatz_mem_rsp;
   logic           [NumMemPortsPerSpatz-1:0] spatz_mem_rsp_valid;
-
-  // Matrix coprocessor
-  if(spatz_pkg::QUADRILATERO) begin: gen_quadrilatero
-    localparam int unsigned INPUT_BUFFER_DEPTH = 4;
-    localparam int unsigned RES_IF_FIFO_DEPTH  = 4;
-    localparam int unsigned MATRIX_FPU         = 1; // Fix mac_flaot to use FPU = 1
-
-    acc_rsp_t       quad_resp        ;
-    logic           quad_qvalid      ; 
-    logic           quad_qready      ;
-    logic           quad_pvalid      ; 
-    logic           quad_result_valid; 
-    logic           quad_result_ready; 
-    logic           quad_pready      ;
-    x_issue_req_t   quad_issue_req   ;
-    x_issue_resp_t  quad_issue_resp  ;
-    x_commit_t      quad_commit      ;
-    logic           quad_commit_valid;
-    x_result_t      quad_result      ;
-    acc_issue_rsp_t quad_snitch_resp;
-
-    logic[xif_pkg::X_ID_WIDTH-1 : 0]      id_cnt_d,id_cnt_q;
-
-    // Accelerator Demux Port
-    stream_demux #(
-      .N_OUP ( 3 )
-    ) i_stream_demux_offload (
-      .inp_valid_i (acc_snitch_demux_qvalid             ),
-      .inp_ready_o (acc_snitch_demux_qready             ),
-      .oup_sel_i   (acc_snitch_demux.addr[$clog2(4)-1:0]),
-      .oup_valid_o ({quad_qvalid, dma_qvalid, acc_qvalid} ),
-      .oup_ready_i ({quad_qready, dma_qready, acc_qready} )
-    );
-
-    always_comb begin: xif_signals
-
-      // ID Conversion
-      id_cnt_d   = (quad_qvalid & quad_qready) ? id_cnt_q + 1 : id_cnt_q;
-       
-      // XIF Issue Request
-      quad_issue_req.instr     = acc_snitch_req.data_op;
-      quad_issue_req.mode      = 2'b11;
-      quad_issue_req.id        = id_cnt_q;
-      quad_issue_req.rs[0]     = acc_snitch_req.data_arga;
-      quad_issue_req.rs[1]     = acc_snitch_req.data_argb;
-      quad_issue_req.rs[2]     = acc_snitch_req.data_argc;
-      quad_issue_req.rs_valid  = '1  ;
-      quad_issue_req.ecs       = '0  ;
-      quad_issue_req.ecs_valid = 1'b1;
-
-      // XIF Issue Response
-      quad_snitch_resp.accept    = quad_issue_resp.accept;
-      quad_snitch_resp.writeback = quad_issue_resp.writeback;
-      quad_snitch_resp.loadstore = quad_issue_resp.loadstore;
-      quad_snitch_resp.exception = quad_issue_resp.exc;
-      quad_snitch_resp.isfloat   = 1'b0;
-      acc_snitch_resp    = quad_qvalid ? quad_snitch_resp : spatz_snitch_resp;
-
-      // XIF Commit
-      quad_commit_valid        = quad_qvalid;
-      quad_commit.id           = id_cnt_q   ;
-      quad_commit.commit_kill  = 1'b0;
-
-      // XIF Result
-      quad_resp.id      = quad_result.rd  ;
-      quad_resp.error   = quad_result.err ;
-      quad_resp.data    = quad_result.data;
-      quad_pvalid       = quad_result.we  ;
-      quad_result_ready = quad_pvalid ? quad_pready : 1'b1;
-    end
-
-    stream_arbiter #(
-      .DATA_T ( acc_rsp_t ),
-      .N_INP  ( 3         )
-    ) i_stream_arbiter_offload (
-      .clk_i       ( clk_i                     ),
-      .rst_ni      ( rst_ni                    ),
-      .inp_data_i  ( {quad_resp  , dma_resp  , acc_resp   } ),
-      .inp_valid_i ( {quad_pvalid, dma_pvalid, acc_pvalid } ),
-      .inp_ready_o ( {quad_pready, dma_pready, acc_pready } ),
-      .oup_data_o  ( acc_demux_snitch          ),
-      .oup_valid_o ( acc_demux_snitch_valid    ),
-      .oup_ready_i ( acc_demux_snitch_ready    )
-    );
-    
-    localparam int unsigned LSU_PORTS = quadrilatero_pkg::LSU_PORTS;
-    localparam int unsigned LLEN      = quadrilatero_pkg::LLEN;
-    // Internal signals
-    tcdm_req_chan_t [LSU_PORTS-1:0][NumMemPortsPerQuad/LSU_PORTS-1:0] quad_mem_req      ;
-    tcdm_rsp_chan_t [LSU_PORTS-1:0][NumMemPortsPerQuad/LSU_PORTS-1:0] quad_mem_rsp      ;
-    logic           [LSU_PORTS-1:0][NumMemPortsPerQuad/LSU_PORTS-1:0] quad_mem_req_valid;
-    logic           [LSU_PORTS-1:0][NumMemPortsPerQuad/LSU_PORTS-1:0] quad_mem_req_ready;
-    logic           [LSU_PORTS-1:0][NumMemPortsPerQuad/LSU_PORTS-1:0] quad_mem_rsp_valid;
-
-    logic [LSU_PORTS-1:0]                         quad_obi_req   ;
-    logic [LSU_PORTS-1:0]                         quad_obi_we    ;
-    logic [LSU_PORTS-1:0][LLEN/LSU_PORTS/8 - 1:0] quad_obi_be    ;
-    logic [LSU_PORTS-1:0][        31:0]           quad_obi_addr  ;
-    logic [LSU_PORTS-1:0][  LLEN/LSU_PORTS - 1:0] quad_obi_wdata ;
-    logic [LSU_PORTS-1:0]                         quad_obi_gnt   ;
-    logic [LSU_PORTS-1:0]                         quad_obi_rvalid;
-    logic [LSU_PORTS-1:0][  LLEN/LSU_PORTS - 1:0] quad_obi_rdata ; 
-
-    logic [LSU_PORTS-1:0][NumMemPortsPerQuad/LSU_PORTS-1:0] gnt_q               ;
-    logic [LSU_PORTS-1:0][NumMemPortsPerQuad/LSU_PORTS-1:0] gnt_d               ; 
-    logic [LSU_PORTS-1:0][NumMemPortsPerQuad/LSU_PORTS-1:0] quad_obi_gnt_lane   ;
-    logic [LSU_PORTS-1:0][NumMemPortsPerQuad/LSU_PORTS-1:0] quad_obi_rvalid_lane;
-    logic [LSU_PORTS-1:0][NumMemPortsPerQuad/LSU_PORTS-1:0] rvalid_q            ;
-    logic [LSU_PORTS-1:0][NumMemPortsPerQuad/LSU_PORTS-1:0] rvalid_d            ;
-    logic [LSU_PORTS-1:0][LLEN/LSU_PORTS - 1:0]             rdata_q             ;
-    logic [LSU_PORTS-1:0][LLEN/LSU_PORTS - 1:0]             rdata_d             ;
-
-    // OBI output generation
-    // always_comb begin : obi_out
-    for (genvar lsu = 0; lsu < LSU_PORTS; lsu++) begin
-      for (genvar port = 0; port < NumMemPortsPerQuad/LSU_PORTS; port++) begin
-
-        // TCDM request
-        assign quad_mem_req_valid[lsu][port] = quad_obi_req[lsu] & ~gnt_q[lsu][port];
-        assign quad_mem_req[lsu][port].write = quad_obi_we   [lsu];
-        assign quad_mem_req[lsu][port].strb  = quad_obi_be   [lsu][(DataWidth/8)*port+:DataWidth/8];
-        assign quad_mem_req[lsu][port].addr  = quad_obi_addr [lsu][16:0] + (DataWidth/8 * port);
-        assign quad_mem_req[lsu][port].data  = quad_obi_wdata[lsu][DataWidth*port+:DataWidth];
-        assign quad_mem_req[lsu][port].amo   = reqrsp_pkg::AMONone;
-        assign quad_mem_req[lsu][port].user  = '0;
-
-        assign quad_obi_gnt_lane[lsu][port]  = quad_mem_req_ready[lsu][port] | gnt_q[lsu][port];
-        assign gnt_d            [lsu][port]  = quad_obi_gnt      [lsu]       ? 1'b0 : 
-                                               quad_mem_req_ready[lsu][port] ? 1'b1 : gnt_q[lsu][port];
-
-        assign tcdm_req_o[NumMemPortsPerSpatz+1+port+lsu*LSU_PORTS] = '{
-            q      : quad_mem_req[lsu][port],
-            q_valid: quad_mem_req_valid[lsu][port]
-          };
-        assign quad_mem_req_ready[lsu][port] = tcdm_rsp_i[NumMemPortsPerSpatz+1+port+lsu*LSU_PORTS].q_ready;
-
-        // TCDM response
-        assign quad_obi_rvalid_lane[lsu][port] = quad_mem_rsp_valid[lsu][port] | rvalid_q[lsu][port];
-        assign quad_obi_rdata[lsu][DataWidth*port+:DataWidth] = rvalid_q[lsu][port] ? 
-                                                                  rdata_q[lsu][DataWidth*port+:DataWidth] : 
-                                                                  quad_mem_rsp[lsu][port].data;
-        
-
-        assign rvalid_d[lsu][port] = quad_obi_rvalid[lsu]          ? 1'b0 :
-                                quad_mem_rsp_valid[lsu][port] ? 1'b1 : rvalid_q[lsu][port];
-
-        assign rdata_d[lsu][DataWidth*port+:DataWidth] = 
-                  quad_mem_rsp_valid[lsu][port] &~ quad_obi_rvalid[lsu] ? quad_mem_rsp[lsu][port].data : 
-                                                                          rdata_q[lsu][DataWidth*port+:DataWidth];
-
-
-        assign quad_mem_rsp[lsu][port].data  = tcdm_rsp_i[NumMemPortsPerSpatz+1+port+lsu*LSU_PORTS].p;
-        assign quad_mem_rsp_valid[lsu][port] = tcdm_rsp_i[NumMemPortsPerSpatz+1+port+lsu*LSU_PORTS].p_valid;
-      end
-      assign quad_obi_gnt   [lsu] = &quad_obi_gnt_lane[lsu]   ;
-      assign quad_obi_rvalid[lsu] = &quad_obi_rvalid_lane[lsu];
-    end
-
-    // Sequential block
-    always_ff @(negedge rst_ni, posedge clk_i) begin : seq_block
-      if (!rst_ni) begin
-        gnt_q      <= '0;
-        rdata_q    <= '0;
-        rvalid_q   <= '0;
-        id_cnt_q   <= '0;
-      end else begin
-        gnt_q      <= gnt_d;
-        rdata_q    <= rdata_d;
-        rvalid_q   <= rvalid_d;
-        id_cnt_q   <= id_cnt_d;
-      end
-    end   
-
-    
-
-    ///////////////////////////////////////////////  
-    quadrilatero #(
-        .INPUT_BUFFER_DEPTH(INPUT_BUFFER_DEPTH),  // 0 means no input buffer 
-        .RES_IF_FIFO_DEPTH (RES_IF_FIFO_DEPTH ),
-        .FPU               (MATRIX_FPU        )
-    ) i_quadrilatero (
-        .clk_i,
-        .rst_ni,
-
-        // OBI signals
-        .mem_req_o   (quad_obi_req   ),
-        .mem_we_o    (quad_obi_we    ),
-        .mem_be_o    (quad_obi_be    ),
-        .mem_addr_o  (quad_obi_addr  ),
-        .mem_wdata_o (quad_obi_wdata ),
-        .mem_gnt_i   (quad_obi_gnt   ),
-        .mem_rvalid_i(quad_obi_rvalid),
-        .mem_rdata_i (quad_obi_rdata ),
-
-        // Compressed Interface
-        .x_compressed_valid_i(          '0),
-        .x_compressed_ready_o(/* Unused */),
-        .x_compressed_req_i  (          '0),
-        .x_compressed_resp_o (/* Unused */),
-
-        // Issue Interface
-        .x_issue_valid_i(quad_qvalid    ),
-        .x_issue_ready_o(quad_qready    ),
-        .x_issue_req_i  (quad_issue_req ),
-        .x_issue_resp_o (quad_issue_resp),
-
-        // Commit Interface
-        .x_commit_valid_i(quad_commit_valid),
-        .x_commit_i      (quad_commit),
-
-        // Memory Request/Response Interface
-        .x_mem_valid_o(/* Unused */ ),
-        .x_mem_ready_i(           '0),
-        .x_mem_req_o  (/* Unused */ ),
-        .x_mem_resp_i (           '0),
-
-        // Memory Result Interface
-        .x_mem_result_valid_i('0),
-        .x_mem_result_i      ('0),
-
-        // Result Interface
-        .x_result_valid_o(quad_result_valid),
-        .x_result_ready_i(quad_result_ready),
-        .x_result_o      (quad_result      )
-    );
-  end else begin: gen_no_quadrilatero
-    
-    // Accelerator Demux Port
-    stream_demux #(
-      .N_OUP ( 2 )
-    ) i_stream_demux_offload (
-      .inp_valid_i (acc_snitch_demux_qvalid             ),
-      .inp_ready_o (acc_snitch_demux_qready             ),
-      .oup_sel_i   (acc_snitch_demux.addr[$clog2(2)-1:0]),
-      .oup_valid_o ({dma_qvalid, acc_qvalid}            ),
-      .oup_ready_i ({dma_qready, acc_qready}            )
-    );
-
-    stream_arbiter #(
-      .DATA_T ( acc_rsp_t ),
-      .N_INP  ( 2         )
-    ) i_stream_arbiter_offload (
-      .clk_i       ( clk_i                     ),
-      .rst_ni      ( rst_ni                    ),
-      .inp_data_i  ( {dma_resp, acc_resp }     ),
-      .inp_valid_i ( {dma_pvalid, acc_pvalid } ),
-      .inp_ready_o ( {dma_pready, acc_pready } ),
-      .oup_data_o  ( acc_demux_snitch          ),
-      .oup_valid_o ( acc_demux_snitch_valid    ),
-      .oup_ready_i ( acc_demux_snitch_ready    )
-    );  
-
-    assign acc_snitch_resp = spatz_snitch_resp;
-  end
 
   spatz #(
     .NrMemPorts         (NumMemPortsPerSpatz     ),
@@ -531,13 +304,13 @@ module spatz_quadrilatero_cc
     .rst_ni                  (rst_ni                ),
     .testmode_i              (testmode_i            ),
     .hart_id_i               (hart_id_i             ),
-    .issue_valid_i           (acc_qvalid            ),
-    .issue_ready_o           (acc_qready            ),
+    .issue_valid_i           (spatz_qvalid          ),
+    .issue_ready_o           (spatz_qready          ),
     .issue_req_i             (acc_snitch_req        ),
     .issue_rsp_o             (spatz_snitch_resp     ),
-    .rsp_valid_o             (acc_pvalid            ),
-    .rsp_ready_i             (acc_pready            ),
-    .rsp_o                   (acc_resp              ),
+    .rsp_valid_o             (spatz_pvalid          ),
+    .rsp_ready_i             (spatz_pready          ),
+    .rsp_o                   (spatz_resp            ),
     .spatz_mem_req_o         (spatz_mem_req         ),
     .spatz_mem_req_valid_o   (spatz_mem_req_valid   ),
     .spatz_mem_req_ready_i   (spatz_mem_req_ready   ),
@@ -552,15 +325,15 @@ module spatz_quadrilatero_cc
     .fpu_status_o            (fpu_status            )
   );
 
-  for (genvar p = 0; p < NumMemPortsPerSpatz; p++) begin: gen_tcdm_assignment
-    assign tcdm_req_o[p] = '{
+  for (genvar p = 0; p < NumMemPortsPerSpatz; p++) begin: gen_spatz_tcdm_assignment
+    assign spatz_tcdm_req_o[p] = '{
          q      : spatz_mem_req[p],
          q_valid: spatz_mem_req_valid[p]
        };
-    assign spatz_mem_req_ready[p] = tcdm_rsp_i[p].q_ready;
+    assign spatz_mem_req_ready[p] = spatz_tcdm_rsp_i[p].q_ready;
 
-    assign spatz_mem_rsp[p]       = tcdm_rsp_i[p].p;
-    assign spatz_mem_rsp_valid[p] = tcdm_rsp_i[p].p_valid;
+    assign spatz_mem_rsp[p]       = spatz_tcdm_rsp_i[p].p;
+    assign spatz_mem_rsp_valid[p] = spatz_tcdm_rsp_i[p].p_valid;
   end
 
   reqrsp_mux #(
@@ -582,57 +355,60 @@ module spatz_quadrilatero_cc
     .idx_o     (/*not connected*/              )
   );
 
-  if (Xdma) begin : gen_dma
-    axi_dma_tc_snitch_fe #(
-      .AddrWidth          (AddrWidth         ),
-      .DataWidth          (DataWidth         ),
-      .DMADataWidth       (DMADataWidth      ),
-      .IdWidth            (DMAIdWidth        ),
-      .UserWidth          (UserWidth         ),
-      .DMAAxiReqFifoDepth (DMAAxiReqFifoDepth),
-      .DMAReqFifoDepth    (DMAReqFifoDepth   ),
-      .axi_req_t          (axi_req_t         ),
-      .axi_ar_chan_t      (axi_ar_chan_t     ),
-      .axi_aw_chan_t      (axi_aw_chan_t     ),
-      .axi_res_t          (axi_rsp_t         ),
-      .acc_resp_t         (acc_rsp_t         ),
-      .dma_events_t       (dma_events_t      )
-    ) i_axi_dma_tc_snitch_fe (
-      .clk_i            ( clk_i                    ),
-      .rst_ni           ( rst_ni                   ),
-      .axi_dma_req_o    ( axi_dma_req_o            ),
-      .axi_dma_res_i    ( axi_dma_res_i            ),
-      .dma_busy_o       ( axi_dma_busy_o           ),
-      .acc_qaddr_i      ( acc_snitch_req.addr      ),
-      .acc_qid_i        ( acc_snitch_req.id        ),
-      .acc_qdata_op_i   ( acc_snitch_req.data_op   ),
-      .acc_qdata_arga_i ( acc_snitch_req.data_arga ),
-      .acc_qdata_argb_i ( acc_snitch_req.data_argb ),
-      .acc_qdata_argc_i ( acc_snitch_req.data_argc ),
-      .acc_qvalid_i     ( dma_qvalid               ),
-      .acc_qready_o     ( dma_qready               ),
-      .acc_pdata_o      ( dma_resp.data            ),
-      .acc_pid_o        ( dma_resp.id              ),
-      .acc_perror_o     ( dma_resp.error           ),
-      .acc_pvalid_o     ( dma_pvalid               ),
-      .acc_pready_i     ( dma_pready               ),
-      .hart_id_i        ( hart_id_i                ),
-      .dma_perf_o       ( axi_dma_perf_o           ),
-      .dma_events_o     ( axi_dma_events_o         )
-    );
+  tcdm_req_chan_t [2*NumMemPortsPerSpatz-1:0] quad_mem_req;
+  logic           [2*NumMemPortsPerSpatz-1:0] quad_mem_req_valid;
+  logic           [2*NumMemPortsPerSpatz-1:0] quad_mem_req_ready;
+  tcdm_rsp_chan_t [2*NumMemPortsPerSpatz-1:0] quad_mem_rsp;
+  logic           [2*NumMemPortsPerSpatz-1:0] quad_mem_rsp_valid;
+  quadrilatero_top #(
+    .NrMemPorts         (2*NumMemPortsPerSpatz   ),
+    .NumOutstandingLoads(NumSpatzOutstandingLoads),
+    .FPUImplementation  (FPUImplementation       ),
+    .RegisterRsp        (RegisterOffloadRsp      ),
+    .dreq_t             (dreq_t                  ),
+    .drsp_t             (drsp_t                  ),
+    .quad_mem_req_t     (tcdm_req_chan_t         ),
+    .quad_mem_rsp_t     (tcdm_rsp_chan_t         ),
+    .quad_issue_req_t   (acc_issue_req_t         ),
+    .quad_issue_rsp_t   (acc_issue_rsp_t         ),
+    .quad_rsp_t         (acc_rsp_t               )
+  ) i_quadrilatero_top (
+    .clk_i                  (clk_i                ),
+    .rst_ni                 (rst_ni               ),
+    .issue_valid_i          (quad_qvalid          ),
+    .issue_ready_o          (quad_qready          ),
+    .issue_req_i            (acc_snitch_req       ),
+    .issue_rsp_o            (quad_snitch_resp     ),
+    .rsp_valid_o            (quad_pvalid          ),
+    .rsp_ready_i            (quad_pready          ),
+    .rsp_o                  (quad_resp            ),
+    .quad_mem_req_o         (quad_mem_req         ),
+    .quad_mem_req_valid_o   (quad_mem_req_valid   ),
+    .quad_mem_req_ready_i   (quad_mem_req_ready   ),
+    .quad_mem_rsp_i         (quad_mem_rsp         ),
+    .quad_mem_rsp_valid_i   (quad_mem_rsp_valid   )
+  );
 
-  // no DMA instanciated
-  end else begin : gen_no_dma
-    // tie-off unused signals
-    assign axi_dma_req_o  = '0;
-    assign axi_dma_busy_o = 1'b0;
+  for (genvar c = 0; c < 2; c++) begin: gen_quad_tcdm_assignment_l1
+    for (genvar p = 0; p < NumMemPortsPerSpatz; p++) begin: gen_quad_tcdm_assignment_l2
+      assign quad_tcdm_req_o[p+c*(NumMemPortsPerSpatz+1)] = '{
+          q      : quad_mem_req[p+c*NumMemPortsPerSpatz],
+          q_valid: quad_mem_req_valid[p+c*NumMemPortsPerSpatz]
+        };
+      assign quad_mem_req_ready[p+c*NumMemPortsPerSpatz] = quad_tcdm_rsp_i[p+c*(NumMemPortsPerSpatz+1)].q_ready;
 
-    assign dma_qready = '0;
-    assign dma_pvalid = '0;
-
-    assign dma_resp       = '0;
-    assign axi_dma_perf_o = '0;
+      assign quad_mem_rsp[p+c*NumMemPortsPerSpatz]       = quad_tcdm_rsp_i[p+c*(NumMemPortsPerSpatz+1)].p;
+      assign quad_mem_rsp_valid[p+c*NumMemPortsPerSpatz] = quad_tcdm_rsp_i[p+c*(NumMemPortsPerSpatz+1)].p_valid;
+    end
+    assign quad_tcdm_req_o[c*(NumMemPortsPerSpatz+1) + NumMemPortsPerSpatz] = '0;
   end
+
+  assign acc_snitch_resp    = quad_qvalid ? quad_snitch_resp : spatz_snitch_resp;
+
+  // tie-off DMA unused signals
+  assign axi_dma_req_o  = '0;
+  assign axi_dma_busy_o = 1'b0;
+  assign axi_dma_perf_o = '0;
 
   // Decide whether to go to SoC or TCDM
   dreq_t                  data_tcdm_req;
@@ -696,8 +472,8 @@ module spatz_quadrilatero_cc
     .rst_ni       (rst_ni                         ),
     .reqrsp_req_i (data_tcdm_req                  ),
     .reqrsp_rsp_o (data_tcdm_rsp                  ),
-    .tcdm_req_o   (tcdm_req_o[NumMemPortsPerSpatz]),
-    .tcdm_rsp_i   (tcdm_rsp_i[NumMemPortsPerSpatz])
+    .tcdm_req_o   (spatz_tcdm_req_o[NumMemPortsPerSpatz]),
+    .tcdm_rsp_i   (spatz_tcdm_rsp_i[NumMemPortsPerSpatz])
   );
 
   // Core events for performance counters
