@@ -19,20 +19,20 @@
         "cluster_default_axi_user": 1,
         "axi_cdc_enable": false,
         "tcdm": {
-            "size":  64,
-            "banks": 16,
+            "size": 128,
+            "banks": 32,
             "misalign": true
         },
         "cluster_periph_size": 64, // kB
-        "dma_data_width": 256,
+        "dma_data_width": 512,
         "dma_axi_req_fifo_depth": 3,
         "dma_req_fifo_depth": 3,
         // Quadrilatero parameters
-        "rlen": 128,
-        "alen": 128,
-        "llen": 128,
+        "rlen": 256,
+        "alen": 256,
+        "llen": 512,
         // Spatz parameters
-        "vlen": 256,
+        "vlen": 512,
         "n_fpu": 4,
         "n_ipu": 1,
         "spatz_fpu": true,
