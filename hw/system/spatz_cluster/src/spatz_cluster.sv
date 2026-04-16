@@ -596,25 +596,57 @@ module spatz_cluster
       strb_t mem_be;
       data_t mem_rdata, mem_wdata;
 
-      tc_sram_impl #(
+      // CMY: replace the SRAM to a ECC_enhanced version--------------------
+      logic ecc_sram_gnt;
+
+      // tc_sram_impl #(
+      //   .NumWords  (TCDMDepth),
+      //   .DataWidth (DataWidth),
+      //   .ByteWidth (8        ),
+      //   .NumPorts  (1        ),
+      //   .Latency   (1        )
+      // ) i_data_mem (
+      //   .clk_i   (clk_i       ),
+      //   .rst_ni  (rst_ni      ),
+      //   .impl_i  ('0          ),
+      //   .impl_o  (/* Unused */),
+      //   .req_i   (mem_cs      ),
+      //   .we_i    (mem_wen     ),
+      //   .addr_i  (mem_add     ),
+      //   .wdata_i (mem_wdata   ),
+      //   .be_i    (mem_be      ),
+      //   .rdata_o (mem_rdata   )
+      // );
+
+      ecc_sram #(
         .NumWords  (TCDMDepth),
-        .DataWidth (DataWidth),
-        .ByteWidth (8        ),
-        .NumPorts  (1        ),
-        .Latency   (1        )
-      ) i_data_mem (
+        .UnprotectedWidth (DataWidth),
+        .ProtectedWidth   (DataWidth + 7), // TBD
+        .InputECC         (0),// 0: no ECC on input
+                              // 1: SECDED on input
+        .NumRMWCuts       (0), // Number of cuts in the read-modify-write path
+        .SimInit          ("zeros"), // ("zeros", "ones", "random", "none")
+        .ByteWidth        (8)
+      ) i_ecc_sram (
         .clk_i   (clk_i       ),
         .rst_ni  (rst_ni      ),
-        .impl_i  ('0          ),
-        .impl_o  (/* Unused */),
+
+        .scrub_trigger_i  ('0          ), // Set to 1'b0 to disable scrubber
+        .scrubber_fix_o   (/* Unused */),
+        .scrub_uncorrectable_o  (/* Unused */),
+
+        .wdata_i (mem_wdata   ),
+        .addr_i  (mem_add     ),
         .req_i   (mem_cs      ),
         .we_i    (mem_wen     ),
-        .addr_i  (mem_add     ),
-        .wdata_i (mem_wdata   ),
         .be_i    (mem_be      ),
-        .rdata_o (mem_rdata   )
-      );
+        .rdata_o (mem_rdata   ),
+        .gnt_o   (ecc_sram_gnt)
 
+        // .single_error_o(),
+        // .multi_error_o()
+        );
+//---------------------------------------------------------------------------------
       data_t amo_rdata_local;
 
       // TODO(zarubaf): Share atomic units between mutltiple cuts
@@ -643,7 +675,8 @@ module spatz_cluster
         .mem_rdata_i    (mem_rdata                 ),
         .dma_access_i   (sb_dma_req[i].q_valid     ),
         // TODO(zarubaf): Signal AMO conflict somewhere. Socregs?
-        .amo_conflict_o (/* Unused */              )
+        .amo_conflict_o (/* Unused */              ),
+        .ecc_sram_gnt_i (ecc_sram_gnt              )
       );
 
       // Insert a pipeline register at the output of each SRAM.

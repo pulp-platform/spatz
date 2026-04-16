@@ -12,18 +12,21 @@ void TEST_CASE1(void) {
   VLOAD_8(v16, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
   VLOAD_8(v8, 1);
   asm volatile("vredsum.vs v24, v16, v8");
+  VSET(1, e8, m4);
   VCMP_U8(1, v24, 73);
 
   VSET(16, e16, m4);
   VLOAD_16(v16, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
   VLOAD_16(v8, 1);
   asm volatile("vredsum.vs v24, v16, v8");
+  VSET(1, e16, m4);
   VCMP_U16(2, v24, 73);
 
   VSET(16, e32, m4);
   VLOAD_32(v16, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
   VLOAD_32(v8, 1);
   asm volatile("vredsum.vs v24, v16, v8");
+  VSET(1, e32, m4);
   VCMP_U32(3, v24, 73);
 
 #if ELEN == 64
@@ -31,6 +34,7 @@ void TEST_CASE1(void) {
   VLOAD_64(v16, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
   VLOAD_64(v8, 1);
   asm volatile("vredsum.vs v24, v16, v8");
+  VSET(1, e64, m4);
   VCMP_U64(4, v24, 73);
 #endif
 }
