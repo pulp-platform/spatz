@@ -71,7 +71,9 @@ module spatz_amo_shim
   /// Read data.
   input   logic [DataWidth-1:0]     mem_rdata_i,
   /// Status signal, AMO clashed with DMA transfer.
-  output  logic                     amo_conflict_o
+  output  logic                     amo_conflict_o,
+  // CMY: input grant signal from ecc_sram
+  input   logic                     ecc_sram_gnt_i
 );
 
   logic idx_q, idx_d;
@@ -85,7 +87,7 @@ module spatz_amo_shim
   typedef enum logic [1:0] {
     Idle, DoAMO, WriteBackAMO
   } state_e;
-  state_e state_q, state_d;
+  state_e state_q, state_d; // AMO access FSM
 
   typedef struct packed {
     /// Is the reservation valid.
@@ -117,21 +119,21 @@ module spatz_amo_shim
   //  DMA has priority.
   always_comb begin
     mem_req_o = core_valid;
-    ready_o = core_ready;
+    ready_o = core_ready & ecc_sram_gnt_i;
     mem_add_o = core_add;
     mem_wen_o = core_wen;
     mem_wdata_o = core_wdata;
     mem_be_o = core_be;
-    core_arb_ready = 1'b1;
+    core_arb_ready = 1'b1 & ecc_sram_gnt_i;
 
     if (dma_access_i) begin
       mem_req_o = valid_i;
-      ready_o = 1'b1;
+      ready_o = 1'b1 & ecc_sram_gnt_i;
       mem_add_o = addr_i;
       mem_wen_o = write_i;
       mem_wdata_o = wdata_i;
       mem_be_o = wstrb_i;
-      core_arb_ready = 1'b0;
+      core_arb_ready = 1'b0 & ecc_sram_gnt_i;
     end
   end
 
@@ -202,7 +204,7 @@ module spatz_amo_shim
   assign operand_a = mem_rdata_i[32*idx_q+:32];
 
   always_comb begin
-    // pass-through by default
+    // pass-through by default (if it's not AMO access)
     core_valid = valid_i;
     core_ready = 1'b1;
     core_add = addr_i;

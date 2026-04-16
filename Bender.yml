@@ -172,6 +172,12 @@ sources:
       - hw/system/spatz_cluster/src/spatz_amo_shim.sv
       - hw/system/spatz_cluster/src/spatz_cluster_peripheral/spatz_cluster_peripheral_reg_pkg.sv
       - hw/system/spatz_cluster/src/spatz_tcdm_interconnect.sv
+      - hw/ip/redundancy_cells/hsiao_ecc_pkg.sv
+      - hw/ip/redundancy_cells/hsiao_ecc_enc.sv
+      - hw/ip/redundancy_cells/hsiao_ecc_dec.sv
+      - hw/ip/redundancy_cells/hsiao_ecc_cor.sv
+      - hw/ip/redundancy_cells/ecc_scrubber.sv
+      - hw/ip/redundancy_cells/ecc_sram.sv
       # Level 1
       - hw/system/spatz_cluster/src/spatz_barrier.sv
       - hw/system/spatz_cluster/src/spatz_cluster_peripheral/spatz_cluster_peripheral_reg_top.sv

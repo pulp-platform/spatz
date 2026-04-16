@@ -12,18 +12,21 @@ void TEST_CASE1(void) {
   VLOAD_8(v16, 1, 2, 3, 4, 5, 6, 7, 0, 1, 9, 3, 4, 5, 6, 7, 8);
   VLOAD_8(v8, 1);
   asm volatile("vredminu.vs v24, v16, v8");
+  VSET(1, e8, m8);
   VCMP_U8(1, v24, 0);
 
   VSET(16, e16, m8);
   VLOAD_16(v16, 1, 2, -3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
   VLOAD_16(v8, 0);
   asm volatile("vredminu.vs v24, v16, v8");
+  VSET(1, e16, m8);
   VCMP_U16(2, v24, 0);
 
   VSET(16, e32, m8);
   VLOAD_32(v16, 9, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
   VLOAD_32(v8, -1);
   asm volatile("vredminu.vs v24, v16, v8");
+  VSET(1, e32, m8);
   VCMP_U32(3, v24, 1);
 
 #if ELEN == 64
@@ -31,6 +34,7 @@ void TEST_CASE1(void) {
   VLOAD_64(v16, -1, 2, 3, 4, 5, -6, 7, -9, -1, -2, 3, 4, 5, 6, 7, 8);
   VLOAD_64(v8, -1);
   asm volatile("vredminu.vs v24, v16, v8");
+  VSET(1, e64, m8);
   VCMP_U64(4, v24, 2);
 #endif
 }
@@ -43,6 +47,7 @@ void TEST_CASE2(void) {
   VLOAD_8(v8, 1);
   VLOAD_8(v24, 1);
   asm volatile("vredminu.vs v24, v16, v8, v0.t");
+  VSET(1, e8, m8);
   VCMP_U8(5, v24, 1);
 
   VSET(16, e16, m8);
@@ -51,6 +56,7 @@ void TEST_CASE2(void) {
   VLOAD_16(v8, 3);
   VLOAD_16(v24, 1);
   asm volatile("vredminu.vs v24, v16, v8, v0.t");
+  VSET(1, e16, m8);
   VCMP_U16(6, v24, 3);
 
   VSET(16, e32, m8);
@@ -59,6 +65,7 @@ void TEST_CASE2(void) {
   VLOAD_32(v8, 8);
   VLOAD_32(v24, 1);
   asm volatile("vredminu.vs v24, v16, v8, v0.t");
+  VSET(1, e32, m8);
   VCMP_U32(7, v24, 7);
 
 #if ELEN == 64
@@ -68,6 +75,7 @@ void TEST_CASE2(void) {
   VLOAD_64(v8, 4);
   VLOAD_64(v24, 1);
   asm volatile("vredminu.vs v24, v16, v8, v0.t");
+  VSET(1, e64, m8);
   VCMP_U64(8, v24, 1);
 #endif
 }

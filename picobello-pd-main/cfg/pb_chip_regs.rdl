@@ -1,0 +1,64 @@
+// Copyright 2025 ETH Zurich and University of Bologna.
+// Solderpad Hardware License, Version 0.51, see LICENSE for details.
+// SPDX-License-Identifier: SHL-0.51
+//
+// Author: Tim Fischer <fischeti@iis.ee.ethz.ch>
+
+`ifndef __PB_CHIP_REGS_RDL__
+`define __PB_CHIP_REGS_RDL__
+
+addrmap pb_chip_regs #(
+  longint unsigned NUM_FLLS = 1,
+  longint unsigned CLK_DIV_VALUE_WIDTH = 11
+) {
+
+  reg fll_ctrl {
+    field {
+      name = "fll_out_en";
+      desc = "FLL output enable";
+      hw = r;
+      sw = rw;
+    } fll_out_en[0:0] = 0x1;
+  };
+
+  reg fll_status {
+    field {
+      name = "fll_lock";
+      desc = "FLL locked status";
+      hw = w;
+      sw = r;
+    } fll_lock[0:0];
+  };
+
+  reg clk_div_ctrl {
+    field {
+      name = "en";
+      desc = "Clock divider enable";
+      hw = r;
+      sw = rw;
+    } en[0:0] = 0x1;
+    field {
+      name = "div";
+      desc = "Clock divider value";
+      hw = r;
+      sw = rw;
+      swmod = true;
+    } div[CLK_DIV_VALUE_WIDTH:1] = 1024;
+  };
+
+  reg io_ctrl {
+    field {
+      name = "drv_strength";
+      desc = "I/O driver strength";
+      hw = r;
+      sw = rw;
+    } drv_strength[3:0] = 0x8;
+  };
+
+           fll_ctrl     fll_ctrl[NUM_FLLS];
+  external fll_status   fll_status[NUM_FLLS];
+           clk_div_ctrl clk_div_ctrl[NUM_FLLS];
+           io_ctrl      io_ctrl;
+};
+
+`endif // PB_CHIP_REGS_RDL

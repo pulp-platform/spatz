@@ -1,0 +1,144 @@
+[cockpit]
+  # Do not change this section
+  config = 2025
+
+  # Still Work in Progress
+
+[library]
+  # Setup files will be generated for these libraries.
+  #
+  # - only libraries that can be found in the "kit.ascii" database
+  #   can be used (see cockpit.log for the full unix path)
+  #   Standard cells, Low VT (fast), Regular VT and High VT (slow) are possible.
+  #   Note that you can mix and match all VTs..
+  # - use "-update" or "-rewrite" for the changes to take effect
+  #
+  # The following libraries are available:
+  #   technology    : tsmc7
+  #
+  #   designkit     : 1P10M_1X_h_1Xa_v_1Ya_h_4Y_vhvh_1Z1U_UT-AlRDL_RF__CRN7_v1.0_2p1a
+  #                   1P15M_1X_h_1Xa_v_1Ya_h_5Y_vhvhv_2Yy2Yx2R_UT-AlRDL_RF__CRN7_v1.0_2p1a
+  #
+  #
+  #   standard cell libraries 6 track
+  #   Gate length      -----8-----                            -----11-----
+  #
+  #   #base
+  #   standard         tcbn07_bwph240l8p57pd_base_svt_130b    tcbn07_bwph240l11p57pd_base_svt_130b
+  #   lvt              tcbn07_bwph240l8p57pd_base_lvt_130b    tcbn07_bwph240l11p57pd_base_lvt_130b
+  #   ulvt             tcbn07_bwph240l8p57pd_base_ulvt_130b   tcbn07_bwph240l11p57pd_base_ulvt_130b
+  #
+  #   #mb: Multi-bit Serial Scan D Flip-Flop
+  #   standard         tcbn07_bwph240l8p57pd_mb_svt_130c      tcbn07_bwph240l11p57pd_mb_svt_130c
+  #   lvt              tcbn07_bwph240l8p57pd_mb_lvt_130c      tcbn07_bwph240l11p57pd_mb_lvt_130c
+  #   ulvt             tcbn07_bwph240l8p57pd_mb_ulvt_130c     tcbn07_bwph240l11p57pd_mb_ulvt_130c
+  #
+  #   #lvl: Level shifter
+  #   standard         tcbn07_bwph240l8p57pd_lvl_svt_130b     tcbn07_bwph240l11p57pd_lvl_svt_130b
+  #   lvt              tcbn07_bwph240l8p57pd_lvl_lvt_130b     tcbn07_bwph240l11p57pd_lvl_lvt_130b
+  #   ulvt             tcbn07_bwph240l8p57pd_lvl_ulvt_130b    tcbn07_bwph240l11p57pd_lvl_ulvt_130b
+  #
+  #   #pm: Header Cell & Always-On Cell & Coarse Grain Retention Flip Flop
+  #   standard         tcbn07_bwph240l8p57pd_pm_svt_130b      tcbn07_bwph240l11p57pd_pm_svt_130b
+  #   lvt              tcbn07_bwph240l8p57pd_pm_lvt_130b      tcbn07_bwph240l11p57pd_pm_lvt_130b
+  #   ulvt             tcbn07_bwph240l8p57pd_pm_ulvt_130b     tcbn07_bwph240l11p57pd_pm_ulvt_130b
+  #
+  #
+  #   pad-libraries :  tphn7_18gpio_univ_10m_1x1xa1ya4y1z1u_130a
+  #                    tphn7_18gpio_univ_15m_1x1xa1ya5y2yy2yx2r_130a
+  #
+  #   pad-bond      :  tpbn7_univ_10m_1x1xa1ya4y1z1u_100a
+  #                    tpbn7_univ_15m_1x1xa1ya5y2yy2yx2r_100a
+  #
+  #
+  #   mem compiler  :  tsn7_2prf_20151201_130b          # One port read and one port write function
+  #                    tsn7_spsbsram_20151201_130b      # Single Bank one port read/write function with high current bit cell
+  #                    tsn7_1prf_20151201_130b          # One port read/write function with higher area utilization than HSSP
+  #                    tsn7_l1cache_20151201_130a       # One port read/write function with highest speed
+  #   rom compiler  :  tsn7_rom_20151201_130c           # Non-volatile read only memory
+  #
+  #   ip blocks     :  tsmc7_FLL_v0p1
+  #
+  #   bump          :  N10_N7_EU_LF_Bump_0_8
+
+
+  #   For the memory size (macros = ) you require, please first check if it is exist in below path:
+  #     /usr/pack/tsmc-7-kgf/tsmc/sram/Compiler/$mem_ver/tsmc_output
+  #   enter the name in the "macros = "
+  #   If not, please write an email to dz@ethz.ch to ask for it.
+
+
+
+  libs    = tsmc7 1P15M_1X_h_1Xa_v_1Ya_h_5Y_vhvhv_2Yy2Yx2R_UT-AlRDL_RF__CRN7_v1.0_2p1a \
+            tcbn07_bwph240l8p57pd_base_svt_130b \
+            tcbn07_bwph240l8p57pd_base_lvt_130b \
+            tcbn07_bwph240l8p57pd_base_ulvt_130b \
+            tcbn07_bwph240l11p57pd_base_svt_130b \
+            tcbn07_bwph240l11p57pd_base_lvt_130b \
+            tcbn07_bwph240l11p57pd_base_ulvt_130b \
+            tcbn07_bwph240l8p57pd_mb_svt_130c \
+            tcbn07_bwph240l8p57pd_mb_lvt_130c \
+            tcbn07_bwph240l8p57pd_mb_ulvt_130c \
+            tcbn07_bwph240l11p57pd_mb_svt_130c \
+            tcbn07_bwph240l11p57pd_mb_lvt_130c \
+            tcbn07_bwph240l11p57pd_mb_ulvt_130c \
+            tsn7_spsbsram_20151201_130b \
+            tsn7_l1cache_20151201_130a \
+            tphn7_18gpio_univ_15m_1x1xa1ya5y2yy2yx2r_130a \
+            tpbn7_univ_15m_1x1xa1ya5y2yy2yx2r_100a \
+            tsmc7_FLL_v0p1 \
+            N10_N7_EU_LF_Bump_0_8
+
+  macros  = tsn7_spsbsram_128x38m4 \
+            tsn7_spsbsram_512x64m4 \
+            tsn7_spsbsram_128x256m2 \
+            tsn7_spsbsram_256x128m4 \
+            tsn7_spsbsram_256x45m4 \
+            tsn7_spsbsram_256x136m4 \
+            tsn7_spsbsram_256x36m4 \
+            tsn7_spsbsram_2048x64m8 \
+            tsn7_l1cache_512x64m4 \
+            tsn7_spsbsram_512x256m2 \
+            tsn7_spsbsram_1024x128m4 \
+            tsn7_spsbsram_128x40m4 \
+            tsn7_spsbsram_256x64m4 \
+            tsn7_spsbsram_256x32m4
+
+[version]
+  # Setup files will be generated for these software versions.
+  # - only versions that can be found in the "kit.ascii" database
+  #   can be used (see cockpit.log for the full unix path)
+  # - if you change a version you might need to adjust some
+  #   startups in the [command] section too...
+  # - use "-update" or "-rewrite" for the changes to take effect
+
+  # WARNING: The primary purpose is to keep version settings within each
+  # project. Fiddling around will most likely result in an unsupported
+  # combinations and perl errors. Better update this file as a whole
+  # with '-updaterc'.
+
+  modelsim  =  modelsim-2023.4
+  synopsys  =  synopsys-2022.12
+  tetramax  =  tetramax-2022.12
+  innovus   =  innovus-22
+  fusion    =  fusion-24
+  dfii      =  ic-20
+  calibre   =  calibre-2024.2
+
+[command]
+  # Startup commands available through the GUI buttons.
+  # - startup commands can be modified but need to be compatible with the
+  #   setup file versions selected in the [version] section
+  # - to add more modelsim/synopsys startups to the GUI just put your own entries
+  #   of the form "(modelsim|synopsys):<label> = <command>" there
+  # - changes will take effect the next time you start
+
+  modelsim                     =  questa-2023.4 vsim
+  synopsys:DC Shell            =  xterm -g 120x40 -T synopsys-2022.12 -e "sh -c 'synopsys-2022.12 dc_shell -64bit | tee view_command.log'"
+  synopsys:DesignVision        =  xterm -g 120x40 -T synopsys-2022.12 -e "sh -c 'synopsys-2022.12 design_vision -64bit -xg_mode | tee view_command.log'"
+  tetramax                     =  synopsys-2022.12 tmax
+  fusion                       =  xterm -g 120x40 -T fs_compiler-2024.09 -e "sh -c 'fs_compiler-2024.09-zr fc_shell -64bit -gui | tee fc_command.log'"
+  innovus                      =  xterm -g 136x40 -T innovus-22.15 -e "cds_ddi-22.15.000 innovus"
+  calibre                      =  xterm -g 120x40 -T calibredrv -e "./start_calibre"
+  dfii                         =  ./start_dfii
+  dz:llama                     = llama

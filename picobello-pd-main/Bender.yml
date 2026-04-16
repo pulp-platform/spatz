@@ -1,0 +1,71 @@
+# A more detailed description of the manifest format `Bender.yml` can be found here:
+# https://github.com/pulp-platform/bender#manifest-format-benderyml
+
+package:
+  name: picobello-pd
+  authors:
+    - "Tim Fischer <fischeti@iis.ee.ethz.ch>"
+
+export_include_dirs:
+  - tsmc7/src/include
+
+sources:
+  # Source files grouped in levels. Files in level 0 have no dependencies on files in this
+  # package. Files in level 1 only depend on files in level 0, files in level 2 on files in
+  # levels 1 and 0, etc. Files within a level are ordered alphabetically.
+  # Level 0
+
+  - target: all(asic, tsmc7)
+    files:
+      - tsmc7/src/tsmc7_pkg.sv
+      - tsmc7/src/tc_clk.sv
+      - tsmc7/src/tc_sram.sv
+      - ../.generated/pb_chip_regs_pkg.sv
+      - ../.generated/pb_chip_regs.sv
+
+  - target: all(tsmc7, not(synthesis))
+    files:
+      - tsmc7/technology/ip/rtl/FLLPkg.vhd
+      - tsmc7/technology/ip/rtl/FLL_clk_divider.vhd
+      - tsmc7/technology/ip/rtl/FLL_clk_period_quantizer.vhd
+      - tsmc7/technology/ip/rtl/FLL_clock_gated.tsmc7.vhd
+      - tsmc7/technology/ip/rtl/FLL_digital.vhd
+      - tsmc7/technology/ip/rtl/FLL_dither_pattern_gen.vhd
+      - tsmc7/technology/ip/rtl/FLL_glitchfree_clkdiv.vhd
+      - tsmc7/technology/ip/rtl/FLL_glitchfree_clkmux.vhd
+      - tsmc7/technology/ip/rtl/FLL_loop_filter.vhd
+      - tsmc7/technology/ip/rtl/FLL_mux.tsmc7.vhd
+      - tsmc7/technology/ip/rtl/FLL_reg.vhd
+      - tsmc7/technology/ip/rtl/FLL_settling_monitor.vhd
+      - tsmc7/technology/ip/rtl/FLL_synchroedge.vhd
+      - tsmc7/technology/ip/rtl/FLL_zerodelta.vhd
+      - tsmc7/technology/ip/rtl/tsmc7_FLL_DCO_model.vhd
+      - tsmc7/technology/ip/rtl/tsmc7_FLL.v
+      - /usr/pack/tsmc-7-kgf/tsmc/digital/Front_End/verilog/tcbn07_bwph240l8p57pd_base_svt_130a/tcbn07_bwph240l8p57pd_base_svt.v
+      - /usr/pack/tsmc-7-kgf/tsmc/digital/Front_End/verilog/tcbn07_bwph240l8p57pd_base_lvt_130a/tcbn07_bwph240l8p57pd_base_lvt.v
+      - /usr/pack/tsmc-7-kgf/tsmc/digital/Front_End/verilog/tcbn07_bwph240l8p57pd_base_ulvt_130a/tcbn07_bwph240l8p57pd_base_ulvt.v
+      - /usr/pack/tsmc-7-kgf/tsmc/digital/Front_End/verilog/tcbn07_bwph240l11p57pd_base_svt_130a/tcbn07_bwph240l11p57pd_base_svt.v
+      - /usr/pack/tsmc-7-kgf/tsmc/digital/Front_End/verilog/tcbn07_bwph240l11p57pd_base_lvt_130a/tcbn07_bwph240l11p57pd_base_lvt.v
+      - /usr/pack/tsmc-7-kgf/tsmc/digital/Front_End/verilog/tcbn07_bwph240l11p57pd_base_ulvt_130a/tcbn07_bwph240l11p57pd_base_ulvt.v
+      - /usr/pack/tsmc-7-kgf/tsmc/digital/Front_End/verilog/tcbn07_bwph240l8p57pd_mb_svt_120b/tcbn07_bwph240l8p57pd_mb_svt.v
+      - /usr/pack/tsmc-7-kgf/tsmc/digital/Front_End/verilog/tcbn07_bwph240l8p57pd_mb_lvt_120b/tcbn07_bwph240l8p57pd_mb_lvt.v
+      - /usr/pack/tsmc-7-kgf/tsmc/digital/Front_End/verilog/tcbn07_bwph240l8p57pd_mb_ulvt_120b/tcbn07_bwph240l8p57pd_mb_ulvt.v
+      - /usr/pack/tsmc-7-kgf/tsmc/digital/Front_End/verilog/tcbn07_bwph240l11p57pd_mb_svt_120b/tcbn07_bwph240l11p57pd_mb_svt.v
+      - /usr/pack/tsmc-7-kgf/tsmc/digital/Front_End/verilog/tcbn07_bwph240l11p57pd_mb_lvt_120b/tcbn07_bwph240l11p57pd_mb_lvt.v
+      - /usr/pack/tsmc-7-kgf/tsmc/digital/Front_End/verilog/tcbn07_bwph240l11p57pd_mb_ulvt_120b/tcbn07_bwph240l11p57pd_mb_ulvt.v
+      - /usr/pack/tsmc-7-kgf/tsmc/digital/Front_End/verilog/tphn7_18gpio_univ_130a/tphn7_18gpio_univ.v
+      - /usr/pack/tsmc-7-kgf/tsmc/sram/Compiler/tsn7_l1cache_20151201_130a/verilog.dz/tsn7_l1cache_512x64m4.v
+      - /usr/pack/tsmc-7-kgf/tsmc/sram/Compiler/tsn7_spsbsram_20151201_130b/verilog.dz/tsn7_spsbsram_128x38m4.v
+      - /usr/pack/tsmc-7-kgf/tsmc/sram/Compiler/tsn7_spsbsram_20151201_130b/verilog.dz/tsn7_spsbsram_256x36m4.v
+      - /usr/pack/tsmc-7-kgf/tsmc/sram/Compiler/tsn7_spsbsram_20151201_130b/verilog.dz/tsn7_spsbsram_256x128m4.v
+      - /usr/pack/tsmc-7-kgf/tsmc/sram/Compiler/tsn7_spsbsram_20151201_130b/verilog.dz/tsn7_spsbsram_512x16m4.v
+      - /usr/pack/tsmc-7-kgf/tsmc/sram/Compiler/tsn7_spsbsram_20151201_130b/verilog.dz/tsn7_spsbsram_512x256m2.v
+      - /usr/pack/tsmc-7-kgf/tsmc/sram/Compiler/tsn7_spsbsram_20151201_130b/verilog.dz/tsn7_spsbsram_1024x128m4.v
+      - /usr/pack/tsmc-7-kgf/tsmc/sram/Compiler/tsn7_spsbsram_20151201_130b/verilog.dz/tsn7_spsbsram_128x256m2.v
+      - /usr/pack/tsmc-7-kgf/tsmc/sram/Compiler/tsn7_spsbsram_20151201_130b/verilog.dz/tsn7_spsbsram_256x45m4.v
+      - /usr/pack/tsmc-7-kgf/tsmc/sram/Compiler/tsn7_spsbsram_20151201_130b/verilog.dz/tsn7_spsbsram_256x136m4.v
+      - /usr/pack/tsmc-7-kgf/tsmc/sram/Compiler/tsn7_spsbsram_20151201_130b/verilog.dz/tsn7_spsbsram_512x64m4.v
+      - /usr/pack/tsmc-7-kgf/tsmc/sram/Compiler/tsn7_spsbsram_20151201_130b/verilog.dz/tsn7_spsbsram_2048x64m8.v
+      - /usr/pack/tsmc-7-kgf/tsmc/sram/Compiler/tsn7_spsbsram_20151201_130b/verilog.dz/tsn7_spsbsram_256x64m4.v
+      - /usr/pack/tsmc-7-kgf/tsmc/sram/Compiler/tsn7_spsbsram_20151201_130b/verilog.dz/tsn7_spsbsram_256x32m4.v
+      - /usr/pack/tsmc-7-kgf/tsmc/sram/Compiler/tsn7_spsbsram_20151201_130b/verilog.dz/tsn7_spsbsram_128x40m4.v

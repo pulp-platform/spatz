@@ -28,10 +28,12 @@
         "dma_req_fifo_depth": 3,
         // Spatz parameters
         "vlen": 512,
-        "n_fpu": 4,
+        //"n_fpu": 4,
+        "n_fpu": 8, // CMY: try
         "n_ipu": 1,
         "spatz_fpu": true,
-        "spatz_nports": 4,
+        //"spatz_nports": 4,
+        "spatz_nports": 8, // spatz_nports should be equal to n_fpu
         "double_bw": 0,
         "buf_fpu": 1,
         // Timing parameters
@@ -68,18 +70,18 @@
             },
 
             // Compute core
-            {
-                "isa": "rv32imaf",
-                "xf16": true,
-                "xf8": true,
-                "xfdotp": true,
-                "xdma": false,
-                "num_int_outstanding_loads": 1,
-                "num_int_outstanding_mem": 4,
-                "num_spatz_outstanding_loads": 4,
-                "num_dtlb_entries": 1,
-                "num_itlb_entries": 1
-            }
+            //{
+                //"isa": "rv32imaf",
+                //"xf16": true,
+                //"xf8": true,
+                //"xfdotp": true,
+                //"xdma": false,
+                //"num_int_outstanding_loads": 1,
+                //"num_int_outstanding_mem": 4,
+                //"num_spatz_outstanding_loads": 4,
+                //"num_dtlb_entries": 1,
+                //"num_itlb_entries": 1
+            //}
         ],
         "icache": {
             "size": 4, // total instruction cache size in kByte

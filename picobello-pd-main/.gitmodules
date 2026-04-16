@@ -1,0 +1,3 @@
+[submodule "artistic"]
+	path = util/artistic
+	url = https://github.com/pulp-platform/artistic.git

@@ -18,7 +18,7 @@ package spatz_pkg;
   // Number of IPUs in each VFU (between 1 and 8)
   localparam int unsigned N_IPU = 1;
   // Number of FPUs in each VFU (between 1 and 8)
-  localparam int unsigned N_FPU = 4;
+  localparam int unsigned N_FPU = 8;
   // Number of FUs in each VFU
   localparam int unsigned N_FU  = N_IPU > N_FPU ? N_IPU : N_FPU;
   // FPU support

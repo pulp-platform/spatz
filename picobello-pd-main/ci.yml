@@ -1,0 +1,434 @@
+# Copyright (c) 2025 ETH Zurich.
+# Tim Fischer <fischeti@iis.ee.ethz.ch>
+# Cyrill Durrer <cdurrer@iis.ee.ethz.ch>
+
+default:
+  interruptible: true
+
+include:
+  - local: .gitlab/common.yml
+  - local: .gitlab/sw-tests.yml
+
+stages:
+  - init
+  - build
+  - elaboration
+  - run
+
+# Sources the environment variables for the IIS environment
+.init-env:
+  before_script:
+    - source iis-env.sh
+    - make init-pd
+    - make cockpit
+
+##################
+# Initialization #
+##################
+
+init-deps:
+  stage: init
+  extends:
+    - .init-env
+    - .init-deps-tpl
+
+########################
+# Generate RTL Sources #
+########################
+
+generate-rtl:
+  stage: build
+  extends:
+    - .generate-rtl-tpl
+
+###############
+# Elaboration #
+###############
+
+.elab:
+  tags:
+    - picobello-pd
+  extends:
+    - .init-env
+    - .cache-deps
+  needs:
+    - generate-rtl
+  variables:
+    REPORT_DIR: pd/tsmc7/fusion/reports/elab_$DESIGN
+  script:
+    # Elaborate the chip
+    - make elab
+    # Check that the analysis and elab logs are present
+    - ls $REPORT_DIR/**/analysis.log
+    - ls $REPORT_DIR/**/elaboration.log
+    # Check for Errors
+    - (! grep -n "Error:" $REPORT_DIR/**/*.log)
+  timeout: 3 hours
+  artifacts:
+    paths:
+      - $REPORT_DIR
+    expire_in: 1 week
+
+elab-chip:
+  stage: elaboration
+  extends:
+    - .elab
+  variables:
+    DESIGN: picobello_chip
+
+elab-optional:
+  stage: elaboration
+  when: manual
+  extends:
+    - .elab
+  parallel:
+      matrix:
+        - DESIGN: picobello_top
+        - DESIGN: cluster_tile
+        - DESIGN: cheshire_tile
+        - DESIGN: mem_tile
+        - DESIGN: dummy_tile
+        - DESIGN: fhg_spu_tile
+
+########################
+# Build Software Tests #
+########################
+
+sn-sw:
+  stage: build
+  needs:
+    - generate-rtl
+  extends:
+    - .sn-sw-tpl
+
+chs-sw:
+  stage: build
+  needs:
+    - generate-rtl
+  extends:
+    - .chs-sw-tpl
+  after_script:
+    - cp .deps/fhg_spu_cluster/sw/cheshire/tests/*.elf sw/cheshire/tests/
+
+#####################
+# Build Simulations #
+#####################
+
+vsim-compile-chip:
+  stage: build
+  tags:
+    - picobello-pd
+  extends:
+    - .init-env
+  needs:
+    - generate-rtl
+  variables:
+    FLOO_GEN_ARGS: --no-format
+    DUT: chip
+    ACC: OFF
+  script:
+    # Run compilation
+    - make vsim-compile-chip | tee compile.log 2>&1
+    - '! grep "\*\* Error" compile.log'
+  artifacts:
+    paths:
+      - pd
+    expire_in: 1 day
+
+vsim-compile-chip-pss:
+  stage: build
+  when: manual
+  tags:
+    - picobello-pd
+  extends:
+    - .init-env
+  needs:
+    - generate-rtl
+  variables:
+    FLOO_GEN_ARGS: --no-format
+    DUT: chip
+    ACC: OFF
+    FUSION_RUN: HANDOFF
+  script:
+    # Initialize the cockpit
+    - make cockpit
+    # Run compilation
+    - make vsim-compile-chip | tee compile_pss.log 2>&1
+    - '! grep "\*\* Error" compile_pss.log'
+  parallel:
+    matrix:
+      - NETLISTS: cluster_tile
+      - NETLISTS: cheshire_tile
+      - NETLISTS: mem_tile
+      - NETLISTS: fhg_spu_tile
+      - NETLISTS: picobello_chip
+  artifacts:
+    paths:
+      - pd
+    expire_in: 1 day
+
+vsim-compile-chip-pls:
+  stage: build
+  when: manual
+  tags:
+    - picobello-pd
+  extends:
+    - .init-env
+  needs:
+    - generate-rtl
+  variables:
+    FLOO_GEN_ARGS: --no-format
+    DUT: chip
+    ACC: OFF
+  script:
+    # Initialize the cockpit
+    - make cockpit
+    # Run compilation
+    - make vsim-compile-chip | tee compile_pls.log 2>&1
+    - '! grep "\*\* Error" compile_pls.log'
+  parallel:
+    matrix:
+      - NETLISTS: cluster_tile
+      - NETLISTS: cheshire_tile
+      - NETLISTS: mem_tile
+      - NETLISTS: fhg_spu_tile
+      - NETLISTS: picobello_chip
+  artifacts:
+    paths:
+      - pd
+    expire_in: 1 day
+
+###################
+# Run simulations #
+###################
+
+.sim-vsim-chip:
+  stage: run
+  tags:
+    - picobello-pd
+  extends:
+    - .init-env
+  variables:
+    LOG_FILE: pd/target/sim/vsim/transcript
+  needs:
+    - chs-sw
+    - sn-sw
+    - generate-rtl
+    - vsim-compile-chip
+  script:
+    # Run the simulation
+    - make vsim-run-batch-chip
+    # Check either success or failure for non-zero exit codes
+    - 'if [ -z "${NZ_EXIT_CODE}" ]; then grep "] SUCCESS" transcript || (exit 1); else grep "] FAILED: return code ${NZ_EXIT_CODE}" transcript || (exit 1); fi'
+    # Check for UART output
+    - 'if [ ! -z "${USTR}" ]; then (grep " \[UART\] ${USTR}" transcript); fi'
+    # Check for any fatal errors
+    - 'if grep "Fatal:" transcript; then exit 1; fi'
+    # Check for any errors (except one for non-zero exit codes)
+    - 'if [ ! -z "${NZ_EXIT_CODE}" ]; then count=$(grep -c "Error:" transcript); if [ "$count" -ne 1 ]; then exit 1; fi; else if grep -q "Error:" transcript; then exit 1; fi; fi'
+  artifacts:
+    paths:
+      - transcript
+
+.sw-tests-chip:
+  stage: run
+  variables:
+    CHS_BUILD_DIR: sw/cheshire/tests
+    SN_BUILD_DIR: sw/snitch/tests/build
+    SPU_BUILD_DIR: .deps/fhg_spu_cluster/sw/spu/tests/build
+  parallel:
+    matrix:
+      - { CHS_BINARY: $CHS_BUILD_DIR/sanity.spm.elf, PRELMODE: 0, USE_FLL: 1}
+      - { CHS_BINARY: $CHS_BUILD_DIR/sanity.spm.elf, PRELMODE: 1, USE_FLL: 1}
+      - { CHS_BINARY: $CHS_BUILD_DIR/sanity_fail.spm.elf, NZ_EXIT_CODE: 7, USE_FLL: 1}
+      # NOTE(fischeti): SPU has been disabled by default.
+      # - { CHS_BINARY: $CHS_BUILD_DIR/simple_offload_spu.spm.elf, SN_BINARY: $SPU_BUILD_DIR/spu_simple.elf, PRELMODE: 3}
+      # - { CHS_BINARY: $CHS_BUILD_DIR/simple_offload_spu.spm.elf, SN_BINARY: $SPU_BUILD_DIR/spu_double_values_test.elf, PRELMODE: 3}
+
+.sw-tests-chip-pss:
+  stage: run
+  variables:
+    CHS_BUILD_DIR: sw/cheshire/tests
+    SN_BUILD_DIR: sw/snitch/tests/build
+    SPU_BUILD_DIR: .deps/fhg_spu_cluster/sw/spu/tests/build
+  timeout: 2 hours
+  parallel:
+    matrix:
+      - { CHS_BINARY: $CHS_BUILD_DIR/sanity.spm.elf, PRELMODE: 0, USE_FLL: 1}
+      - { CHS_BINARY: $CHS_BUILD_DIR/sanity.spm.elf, PRELMODE: 1, USE_FLL: 1}
+      - { CHS_BINARY: $CHS_BUILD_DIR/sanity_fail.spm.elf, NZ_EXIT_CODE: 7, USE_FLL: 1}
+      - { CHS_BINARY: $CHS_BUILD_DIR/simple_offload_spu.spm.elf, SN_BINARY: $SPU_BUILD_DIR/spu_simple.elf, PRELMODE: 3}
+      - { CHS_BINARY: $CHS_BUILD_DIR/simple_offload_spu.spm.elf, SN_BINARY: $SPU_BUILD_DIR/spu_double_values_test.elf, PRELMODE: 3}
+      - { CHS_BINARY: $CHS_BUILD_DIR/sanity.spm.elf, PRELMODE: 0 }
+      - { CHS_BINARY: $CHS_BUILD_DIR/sanity.spm.elf, PRELMODE: 1 }
+      # - { CHS_BINARY: $CHS_BUILD_DIR/sanity.spm.elf, PRELMODE: 2 } # UART preloading takes over 1h, maybe enable later again
+      - { CHS_BINARY: $CHS_BUILD_DIR/sanity_fail.spm.elf, NZ_EXIT_CODE: 7}
+      - { CHS_BINARY: $CHS_BUILD_DIR/helloworld.spm.elf, USTR: "Hello World!" }
+      - { CHS_BINARY: $CHS_BUILD_DIR/access_l2.spm.elf, PRELMODE: 1}
+      - { CHS_BINARY: $CHS_BUILD_DIR/access_clk_gating_rst_ctrl_reg.spm.elf, PRELMODE: 1}
+      - { CHS_BINARY: $CHS_BUILD_DIR/simple_offload.spm.elf, SN_BINARY: $SN_BUILD_DIR/simple.elf, PRELMODE: 0 }
+      - { CHS_BINARY: $CHS_BUILD_DIR/simple_offload.spm.elf, SN_BINARY: $SN_BUILD_DIR/simple.elf, PRELMODE: 1 }
+      - { CHS_BINARY: $CHS_BUILD_DIR/simple_offload.spm.elf, SN_BINARY: $SN_BUILD_DIR/simple.elf, PRELMODE: 3 }
+      - { CHS_BINARY: $CHS_BUILD_DIR/simple_offload.spm.elf, SN_BINARY: $SN_BUILD_DIR/non_null_exitcode.elf, NZ_EXIT_CODE: 896 }
+      - { CHS_BINARY: $CHS_BUILD_DIR/simple_offload.spm.elf, SN_BINARY: $SN_BUILD_DIR/multicluster_atomics.elf }
+      - { CHS_BINARY: $CHS_BUILD_DIR/simple_offload.spm.elf, SN_BINARY: $SN_BUILD_DIR/mcast_barrier.elf }
+      - { CHS_BINARY: $CHS_BUILD_DIR/simple_offload.spm.elf, SN_BINARY: $SN_BUILD_DIR/dma_multicast.elf }
+      - { CHS_BINARY: $CHS_BUILD_DIR/simple_offload.spm.elf, SN_BINARY: $SN_BUILD_DIR/multi_mcast.elf }
+      - { CHS_BINARY: $CHS_BUILD_DIR/simple_offload.spm.elf, SN_BINARY: $SN_BUILD_DIR/row_col_mcast.elf }
+      - { CHS_BINARY: $CHS_BUILD_DIR/simple_offload.spm.elf, SN_BINARY: $SN_BUILD_DIR/access_spm.elf }
+
+sim-vsim-chip:
+  extends:
+    - .sw-tests
+    - .sim-vsim-chip
+
+sim-vsim-chip-only:
+  extends:
+    - .sw-tests-chip
+    - .sim-vsim-chip
+
+.sim-vsim-chip-pss:
+  extends:
+    - .init-env
+    - .sw-tests-chip-pss
+  needs:
+    - chs-sw
+    - sn-sw
+    - generate-rtl
+  script:
+    # Run the simulation
+    - make vsim-run-batch-chip
+    # Check either success or failure for non-zero exit codes
+    - 'if [ -z "${NZ_EXIT_CODE}" ]; then grep "] SUCCESS" transcript || (exit 1); else grep "] FAILED: return code ${NZ_EXIT_CODE}" transcript || (exit 1); fi'
+    # Check for UART output
+    - 'if [ ! -z "${USTR}" ]; then (grep " \[UART\] ${USTR}" transcript); fi'
+    # Check for any fatal errors
+    - 'if grep "Fatal:" transcript; then exit 1; fi'
+    # Check for any errors (except one for non-zero exit codes)
+    - 'if [ ! -z "${NZ_EXIT_CODE}" ]; then count=$(grep -c "Error:" transcript); if [ "$count" -ne 1 ]; then exit 1; fi; else if grep -q "Error:" transcript; then exit 1; fi; fi'
+  artifacts:
+    paths:
+      - transcript
+
+.sim-vsim-chip-pls:
+  extends:
+    - .init-env
+    - .sw-tests-chip-pss
+  needs:
+    - chs-sw
+    - sn-sw
+    - generate-rtl
+  script:
+    # Run the simulation
+    - make vsim-run-batch-chip
+    # Check either success or failure for non-zero exit codes
+    - 'if [ -z "${NZ_EXIT_CODE}" ]; then grep "] SUCCESS" transcript || (exit 1); else grep "] FAILED: return code ${NZ_EXIT_CODE}" transcript || (exit 1); fi'
+    # Check for UART output
+    - 'if [ ! -z "${USTR}" ]; then (grep " \[UART\] ${USTR}" transcript); fi'
+    # Check for any fatal errors
+    - 'if grep "Fatal:" transcript; then exit 1; fi'
+    # Check for any errors (except one for non-zero exit codes)
+    - 'if [ ! -z "${NZ_EXIT_CODE}" ]; then count=$(grep -c "Error:" transcript); if [ "$count" -ne 1 ]; then exit 1; fi; else if grep -q "Error:" transcript; then exit 1; fi; fi'
+  artifacts:
+    paths:
+      - transcript
+
+sim-vsim-chip-pss-cluster_tile:
+  stage: run
+  tags:
+    - picobello-pd
+  extends:
+    - .sim-vsim-chip-pss
+  needs:
+    - !reference [ .sim-vsim-chip-pss, needs]
+    - 'vsim-compile-chip-pss: [cluster_tile]'
+
+sim-vsim-chip-pss-cheshire_tile:
+  stage: run
+  tags:
+    - picobello-pd
+  extends:
+    - .sim-vsim-chip-pss
+  needs:
+    - !reference [ .sim-vsim-chip-pss, needs]
+    - 'vsim-compile-chip-pss: [cheshire_tile]'
+
+sim-vsim-chip-pss-mem_tile:
+  stage: run
+  tags:
+    - picobello-pd
+  extends:
+    - .sim-vsim-chip-pss
+  needs:
+    - !reference [ .sim-vsim-chip-pss, needs]
+    - 'vsim-compile-chip-pss: [mem_tile]'
+
+sim-vsim-chip-pss-fhg_spu_tile:
+  stage: run
+  tags:
+    - picobello-pd
+  extends:
+    - .sim-vsim-chip-pss
+  needs:
+    - !reference [ .sim-vsim-chip-pss, needs]
+    - 'vsim-compile-chip-pss: [fhg_spu_tile]'
+
+sim-vsim-chip-pss-picobello_chip:
+  stage: run
+  tags:
+    - picobello-pd
+  extends:
+    - .sim-vsim-chip-pss
+  needs:
+    - !reference [ .sim-vsim-chip-pss, needs]
+    - 'vsim-compile-chip-pss: [picobello_chip]'
+
+sim-vsim-chip-pls-cluster_tile:
+  stage: run
+  tags:
+    - picobello-pd
+  extends:
+    - .sim-vsim-chip-pls
+  needs:
+    - !reference [ .sim-vsim-chip-pls, needs]
+    - 'vsim-compile-chip-pls: [cluster_tile]'
+
+sim-vsim-chip-pls-cheshire_tile:
+  stage: run
+  tags:
+    - picobello-pd
+  extends:
+    - .sim-vsim-chip-pls
+  needs:
+    - !reference [ .sim-vsim-chip-pls, needs]
+    - 'vsim-compile-chip-pls: [cheshire_tile]'
+
+sim-vsim-chip-pls-mem_tile:
+  stage: run
+  tags:
+    - picobello-pd
+  extends:
+    - .sim-vsim-chip-pls
+  needs:
+    - !reference [ .sim-vsim-chip-pls, needs]
+    - 'vsim-compile-chip-pls: [mem_tile]'
+
+sim-vsim-chip-pls-fhg_spu_tile:
+  stage: run
+  tags:
+    - picobello-pd
+  extends:
+    - .sim-vsim-chip-pls
+  needs:
+    - !reference [ .sim-vsim-chip-pls, needs]
+    - 'vsim-compile-chip-pls: [fhg_spu_tile]'
+
+sim-vsim-chip-pls-picobello_chip:
+  stage: run
+  tags:
+    - picobello-pd
+  extends:
+    - .sim-vsim-chip-pls
+  needs:
+    - !reference [ .sim-vsim-chip-pls, needs]
+    - 'vsim-compile-chip-pls: [picobello_chip]'

@@ -1,0 +1,51 @@
+{
+    "image": {
+        "overrender_factor" : 2,
+        "num_segs_width"    : 1,
+        "num_segs_height"   : 1
+    },
+    "paper": {
+        "width_cm"  : 84.1,
+        "height_cm" : "-"
+    },
+    "colors" : {
+        "M0":      {"layer": "180/250", "color": "#FFD700", "alpha": "1.0"},
+        "M0mask1": {"layer": "180/255", "color": "#FFD700", "alpha": "1.0"},
+        "M0mask2": {"layer": "180/256", "color": "#FFD700", "alpha": "1.0"},
+
+        "M3mask2": {"layer": "33/316",  "color": "#cf7004", "alpha": "1.0"},
+
+        "M4":      {"layer": "34/330",  "color": "#536DFE", "alpha": "0.10"},
+        "M5":      {"layer": "35/360",  "color": "#3B82F6", "alpha": "0.10"},
+        "M6":      {"layer": "35/360",  "color": "#60A5FA", "alpha": "0.10"},
+        "M7":      {"layer": "35/360",  "color": "#6366F1", "alpha": "0.10"},
+        "M8":      {"layer": "35/360",  "color": "#2563EB", "alpha": "0.10"},
+        "M9":      {"layer": "35/360",  "color": "#1D4ED8", "alpha": "0.10"},
+        "M10":     {"layer": "35/360",  "color": "#93C5FD", "alpha": "0.10"},
+        "M11":     {"layer": "35/360",  "color": "#0B3B6F", "alpha": "0.10"},
+
+        "AP":      {"layer": "34/330",  "color": "#FFD700", "alpha": "0.00"}
+    },
+    "tech" : {
+        "manifest_version" : 1,
+        "max_px_tile"      : 2500000000,
+        "pdk"              : "tsmc7",
+        "layer_order"      : [
+            "M0",
+            "M0mask1",
+            "M0mask2",
+            "M3mask2",
+            "M4",
+            "M5",
+            "M6",
+            "M7",
+            "M8",
+            "M9",
+            "M10",
+            "M11",
+            "AP"
+        ],
+        "db_unit_nm"       : 0.5,
+        "dry_run"          : false
+    }
+}
