@@ -1,0 +1,108 @@
+// Copyright 2025 ETH Zurich and University of Bologna.
+// Solderpad Hardware License, Version 0.51, see LICENSE for details.
+// SPDX-License-Identifier: SHL-0.51
+//
+// Author: Tim Fischer <fischeti@iis.ee.ethz.ch>
+
+`ifndef __FLL_RDL__
+`define __FLL_RDL__
+
+addrmap fll {
+
+  reg status {
+    field {
+      name = "mult";
+      desc = "current multiplication factor (i.e., current frequency)";
+      hw = rw;
+      sw = r;
+    } mult[15:0];
+  };
+
+  reg config1 {
+    default hw = rw;
+    default sw = rw;
+    field {
+      name = "op_mode";
+      desc = "Operation mode select (0=stand-alone, 1=normal)";
+    } op_mode[31:31];
+    field {
+      name = "gate_output";
+      desc = "FLL output gated by LOCK signal (active high)";
+    } gate_output[30:30];
+    field {
+      name = "div";
+      desc = "FLL output clock divider setting (default: divide-by-2)";
+    } div[29:26];
+    field {
+      name = "dco_in_code";
+      desc = "DCO input code for stand-alone mode";
+    } dco_in_code[25:16];
+    field {
+      name = "mult";
+      desc = "Target clock multiplication factor for normal mode";
+    } mult[15:0];
+  };
+
+  reg config2 {
+    default hw = rw;
+    default sw = rw;
+    field {
+      name = "dith_en";
+      desc = "Dithering enable (active high)";
+    } dith_en[31:31];
+
+    field {
+      name = "olwl";
+      desc = "Open-loop-when-locked (active high)";
+    } olwl[30:30];
+
+    field {
+      name = "sta_clk_sel";
+      desc = "Config clock select in STA mode (0=DCOCLK, 1=REFCLK)";
+    } sta_clk_sel[29:29];
+
+    field {
+      name = "lock_tol";
+      desc = "Lock tolerance: margin around the target multiplication factor within which the output clock is considered stable";
+    } lock_tol[27:16];
+
+    field {
+      name = "lock_cnt_hi";
+      desc = "Normal mode: no. of stable REFCLK cycles until LOCK assert. Stand-alone mode: upper 6-bit of LOCK assert counter target.";
+    } lock_cnt_hi[15:10];
+
+    field {
+      name = "lock_cnt_lo";
+      desc = "Normal mode: no. of unstable REFCLK cycles until LOCK de-assert. Stand-alone mode: lower 6-bit of LOCK assert counter target.";
+    } lock_cnt_lo[9:4];
+
+    field {
+      name = "loop_gain";
+      desc = "FLL loop gain setting (default: 2^-7 = 1/256)";
+    } loop_gain[3:0];
+  };
+
+  reg integrator {
+    field {
+      name = "int_part";
+      desc = "Integrator state: integer part (DCO input bits)";
+      hw = rw;
+      sw = rw;
+    } int_part[25:16];
+
+    field {
+      name = "frac_part";
+      desc = "Integrator state: fractional part (dither unit input)";
+      hw = rw;
+      sw = rw;
+    } frac_part[15:9];
+  };
+
+  external status     status;
+  external config1    config1;
+  external config2    config2;
+  external integrator integrator;
+
+};
+
+`endif // __FLL_RDL__
