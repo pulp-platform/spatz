@@ -112,7 +112,7 @@ int main() {
     // Start dump
     if (cid == 1){
       start_kernel();
-      matmul(INT32, INT32, INT32, a,b,c,gemm_l.K,gemm_l.N,gemm_l.M,2);
+      matmul(INT32, INT32, INT32, a,b,c,gemm_l.K,gemm_l.N,gemm_l.M);
     }
 
     // Wait for all cores to finish
@@ -137,9 +137,9 @@ int main() {
     long unsigned int performance =
         1000 * 2 * gemm_l.M * gemm_l.N * gemm_l.K / timer;
     long unsigned int utilization =
-        performance / (2 * num_cores * SNRT_NFPU_PER_CORE);
+        performance / (2 * QUAD_RLEN/32 * QUAD_RLEN/32);
 
-    printf("\n----- (%dx%d) sp matmul -----\n", gemm_l.M, gemm_l.N);
+    printf("\n----- (%dx%dx%d) INT32 -> INT32 matmul -----\n", gemm_l.M, gemm_l.K,gemm_l.N);
     printf("The execution took %u cycles.\n", timer);
     printf("The performance is %ld OP/1000cycle (%ld%%o utilization).\n",
            performance, utilization);

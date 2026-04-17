@@ -1,24 +1,7 @@
 
-void __attribute__ ((noinline)) FUNC_NAME(void* addrA,void* addrB, void* addrC, int K, int N, int M, int shift)
+void __attribute__ ((noinline)) FUNC_NAME(void* addrA,void* addrB, void* addrC, int K, int N, int M)
 {
-    int strideA;
-    int strideB;
-    int strideC;
-    asm volatile(
-        // --- PROLOGUE: Save registers ---
-        "addi sp, sp, -0x30   \n\t" 
-        "sw s0 , 0x2c(sp)     \n\t"   
-        "sw s1 , 0x28(sp)     \n\t"   
-        "sw s2 , 0x24(sp)     \n\t"   
-        "sw s3 , 0x20(sp)     \n\t"   
-        "sw s4 , 0x1c(sp)     \n\t"   
-        "sw s5 , 0x18(sp)     \n\t"   
-        "sw s6 , 0x14(sp)     \n\t"   
-        "sw s7 , 0x10(sp)     \n\t"   
-        "sw s8 , 0x0c(sp)     \n\t"   
-        "sw s9 , 0x08(sp)     \n\t"   
-        "sw s10, 0x04(sp)     \n\t"   
-        "sw s11, 0x00(sp)     \n\t"   
+    asm volatile(  
 
         // 1. Data Types Configuration
         "mmac.dt %[dt_typeC], %[dt_typeA], %[dt_typeB] \n\t"
@@ -27,9 +10,8 @@ void __attribute__ ((noinline)) FUNC_NAME(void* addrA,void* addrB, void* addrC, 
         "add s0, x0, %[addrC] \n\t"    // s0 = Current row pointer for C
         "add s1, x0, %[addrA] \n\t"    // s1 = Current row pointer for A (LHS)
 
-        "sll %[strideA], %[M], %[shift] \n\t"   // Compute strideA = M * 2^shift
-        "sll %[strideB], %[N], %[shift] \n\t"   // Compute strideB = M * 2^shift
-        "sll %[strideC], %[N], %[shift] \n\t"   // Compute strideC = M * 2^shift
+        "slli s10, %[M], 2 \n\t"   // Compute strideA = M * 2^shift
+        "slli s11, %[N], 2 \n\t"   // Compute strideB = M * 2^shift
 
         "1: \n\t"
         "mcfgm t3, t0, %[rmul] \n\t"   // t3 = Processed M rows
@@ -49,17 +31,17 @@ void __attribute__ ((noinline)) FUNC_NAME(void* addrA,void* addrB, void* addrC, 
         "3: \n\t"
 
         // 2. Load First Tiles
-        "mld.lhs m0, (s4), %[strideA] \n\t"  
-        "mld.rhs m4, (s5), %[strideB] \n\t"       
+        "mld.lhs m0, (s4), s10 \n\t"  
+        "mld.rhs m4, (s5), s11 \n\t"       
         "mmacc   acc0, m4, m0 \n\t" 
-        "mul  s8, t5, %[strideA] \n\t"   
-        "mul  s9, t5, %[strideB] \n\t"   
+        "mul  s8, t5, s10 \n\t"   
+        "mul  s9, t5, s11 \n\t"   
           
         "add  s6, s4, s8 \n\t"               // s6 = Pointer to 2nd tile of A
-        "mld.lhs m2, (s6), %[strideA] \n\t" 
+        "mld.lhs m2, (s6), s10 \n\t" 
           
         "add  s7, s5, s9 \n\t"               // s7 = Pointer to 2nd tile of B
-        "mld.rhs m6, (s7), %[strideB] \n\t"          
+        "mld.rhs m6, (s7), s11 \n\t"          
 
         // 5. Advance K pointers by TWO blocks
         "add  t6, s8, s8 \n\t"               
@@ -77,7 +59,7 @@ void __attribute__ ((noinline)) FUNC_NAME(void* addrA,void* addrB, void* addrC, 
 
         // 6. Transfer to MR and Store
         "mmov.am m8, acc0 \n\t"     
-        "mst     m8, (s2), %[strideC] \n\t"  
+        "mst     m8, (s2), s11 \n\t"  
 
         // 7. Advance along N
         "slli t6, t4, 2 \n\t"                
@@ -88,7 +70,7 @@ void __attribute__ ((noinline)) FUNC_NAME(void* addrA,void* addrB, void* addrC, 
         "bgtz t1, 2b \n\t"          
 
         // 8. Advance along M
-        "mul t6, t3, %[strideC] \n\t"        
+        "mul t6, t3, s11 \n\t"        
         "add s0, s0, t6 \n\t"
         
         "slli t6, t3, 2 \n\t"                
@@ -97,28 +79,11 @@ void __attribute__ ((noinline)) FUNC_NAME(void* addrA,void* addrB, void* addrC, 
         "sub t0, t0, t3 \n\t"                
         "bgtz t0, 1b \n\t"
 
-        // --- EPILOGUE: Restore registers ---
-        "lw s0 , 0x2c(sp)         \n\t"
-        "lw s1 , 0x28(sp)         \n\t"
-        "lw s2 , 0x24(sp)         \n\t"
-        "lw s3 , 0x20(sp)         \n\t"
-        "lw s4 , 0x1c(sp)         \n\t"
-        "lw s5 , 0x18(sp)         \n\t"
-        "lw s6 , 0x14(sp)         \n\t"
-        "lw s7 , 0x10(sp)         \n\t"
-        "lw s8 , 0x0c(sp)         \n\t"
-        "lw s9 , 0x08(sp)         \n\t"
-        "lw s10, 0x04(sp)         \n\t"
-        "lw s11, 0x00(sp)         \n\t"
-        "addi sp, sp, 0x30        \n\t" 
-        // ----------------------------------
-
         : 
         : [addrA] "r" (addrA), [addrB] "r" (addrB), [addrC] "r" (addrC),
-          [M] "r" (M), [N] "r" (N), [K] "r" (K), [shift] "r" (shift),
-          [strideA] "r" (strideA), [strideB] "r" (strideB), [strideC] "r" (strideC),
+          [M] "r" (M), [N] "r" (N), [K] "r" (K),
           [dt_typeC] "i" (DTC), [dt_typeA] "i" (DTA), [dt_typeB] "i" (DTB),
           [rmul] "i" (RMUL_2), [cmul] "i" (CMUL_2)
-        : "t0", "t1", "t2", "t3", "t4", "t5", "t6", "s0", "s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9", "memory"
+        : "t0", "t1", "t2", "t3", "t4", "t5", "t6", "s0", "s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9", "s10", "s11", "memory"
     );
 }

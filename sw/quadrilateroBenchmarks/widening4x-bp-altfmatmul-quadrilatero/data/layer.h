@@ -6,7 +6,7 @@
 
 #include <stdint.h>
 
-typedef enum { FP64, FP32, FP16, FP8E5M2, BF16, FP8ALT, INT32, INT16, INT8, UINT32, UINT16, UINT8 } precision_t;
+typedef enum { FP64, FP32, FP16, FP8, BF16, FP8E4M3, INT32, INT16, INT8, UINT32, UINT16, UINT8 } precision_t;
 
 /**
  * @struct gemm_layer_struct

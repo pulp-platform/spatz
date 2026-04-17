@@ -117,7 +117,7 @@ int main() {
     // Start dump
     if (cid == 1){
       start_kernel();
-      matmul(FP8, FP8, FP32, a,b,c,gemm_l.K >> 2,gemm_l.N,gemm_l.M);
+      matmul(FP8ALT, FP8ALT, FP32, a,b,c,gemm_l.K >> 2,gemm_l.N,gemm_l.M);
     }
 
     // Wait for all cores to finish
@@ -144,7 +144,7 @@ int main() {
     long unsigned int utilization =
         performance / (2 * QUAD_RLEN/32 * QUAD_RLEN/32 *4);
 
-    printf("\n----- (%dx%dx%d) FP8E5M2 -> FP32 matmul -----\n", gemm_l.M, gemm_l.K,gemm_l.N);
+    printf("\n----- (%dx%dx%d) FP8E4M3 -> FP32 matmul -----\n", gemm_l.M, gemm_l.K,gemm_l.N);
     printf("The execution took %u cycles.\n", timer);
     printf("The performance is %ld OP/1000cycle (%ld%%o utilization).\n",
            performance, utilization);

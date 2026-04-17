@@ -24,30 +24,27 @@
 
 #include DATAHEADER
 
-char *a;
-char *b;
-float *c;
+uint8_t *a;
+uint8_t *b;
+uint32_t *c;
 
 // Verify the matrices
-int verify_matrix(float *matrix, const float *checksum,
+int verify_matrix(uint32_t *matrix, const uint32_t *checksum,
                   const unsigned int num_rows, const unsigned int num_columns) {
   for (unsigned int i = 0; i < num_rows; ++i) {
-    float sum = 0;
+    int sum = 0;
     for (unsigned int j = 0; j < num_columns; ++j) {
-      sum += (float)matrix[i * num_columns + j];
+      sum += (int)matrix[i * num_columns + j];
     }
 
-    float diff = sum - (float)checksum[i];
-    if (diff < 0)
-      diff = -diff;
-    if (diff > 0.001) {
-      return i == 0 ? -1 : (int)i;
-    }
+    int diff = sum - (int)checksum[i];
+    if (diff != 0) return i == 0 ? -1 : (int)i; 
+    
   }
   return 0;
 }
 
-int check_results(float *matrix, const float *expected, int N, int M)
+int check_results(uint32_t *matrix, const uint32_t *expected, int N, int M)
 {
   // check
   int i, j;
@@ -55,19 +52,17 @@ int check_results(float *matrix, const float *expected, int N, int M)
 
   // Check errors
   for(i = 0; i < M; i++) {
-    for(j = 0; j < N; j++) {
-      float diff;
-      diff = matrix[i*N+j] - expected[i*N+j];
-      diff = (diff >= 0.0f) ? diff : -diff;
-      if(diff > 0.1f) {
-        if(i==0 && j==0) return -1;
-        else return i*N+j;
+      for(j = 0; j < N; j++) {
+         if(matrix[i*N+j] != expected[i*N+j]){
+          if(i==0 && j==0) return -1;
+          else return i*N+j;
+         }         
       }
-    }
   }
 
   return err;
 }
+
 
 int main() {
   const unsigned int num_cores = snrt_cluster_core_num();
@@ -82,9 +77,9 @@ int main() {
 
   // Allocate the matrices in the local tile
   if (cid == 0) {
-    a = (char *)snrt_l1alloc(gemm_l.M * gemm_l.K * sizeof(char));
-    b = (char *)snrt_l1alloc(gemm_l.K * gemm_l.N * sizeof(char));
-    c = (float  *)snrt_l1alloc(gemm_l.M * gemm_l.N * sizeof(float));
+    a = (uint8_t  *)snrt_l1alloc(gemm_l.M * gemm_l.K * sizeof(uint8_t ));
+    b = (uint8_t  *)snrt_l1alloc(gemm_l.K * gemm_l.N * sizeof(uint8_t ));
+    c = (uint32_t *)snrt_l1alloc(gemm_l.M * gemm_l.N * sizeof(uint32_t));
   }
 
   // Reset timer
@@ -101,8 +96,8 @@ int main() {
 
   // Initialize matrices
   if (cid == 0) {
-    snrt_dma_start_1d(a, gemm_A_dram, gemm_l.M * gemm_l.K * sizeof(char));
-    snrt_dma_start_1d(b, gemm_B_dram, gemm_l.K * gemm_l.N * sizeof(char));
+    snrt_dma_start_1d(a, gemm_A_dram, gemm_l.M * gemm_l.K * sizeof(uint8_t));
+    snrt_dma_start_1d(b, gemm_B_dram, gemm_l.K * gemm_l.N * sizeof(uint8_t));
     snrt_dma_wait_all();
   }
 
@@ -117,7 +112,7 @@ int main() {
     // Start dump
     if (cid == 1){
       start_kernel();
-      matmul(FP8, FP8, FP32, a,b,c,gemm_l.K >> 2,gemm_l.N,gemm_l.M);
+      matmul(UINT8, UINT8, UINT32, a,b,c,gemm_l.K >> 2,gemm_l.N,gemm_l.M);
     }
 
     // Wait for all cores to finish
@@ -144,7 +139,7 @@ int main() {
     long unsigned int utilization =
         performance / (2 * QUAD_RLEN/32 * QUAD_RLEN/32 *4);
 
-    printf("\n----- (%dx%dx%d) FP8E5M2 -> FP32 matmul -----\n", gemm_l.M, gemm_l.K,gemm_l.N);
+    printf("\n----- (%dx%dx%d) UINT8 -> UINT32 matmul -----\n", gemm_l.M, gemm_l.K,gemm_l.N);
     printf("The execution took %u cycles.\n", timer);
     printf("The performance is %ld OP/1000cycle (%ld%%o utilization).\n",
            performance, utilization);
@@ -152,7 +147,7 @@ int main() {
 
   if (cid == 0) {
     int error =
-      check_results(c, (const float *)gemm_C_dram, gemm_l.M, gemm_l.N);
+      check_results(c, (const uint32_t *)gemm_C_dram, gemm_l.M, gemm_l.N);
 
     if (error != 0) {
       printf("Error core %d: c[%d]=%u\n", cid, error, (int)c[error]);

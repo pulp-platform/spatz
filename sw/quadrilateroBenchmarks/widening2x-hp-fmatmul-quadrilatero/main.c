@@ -47,6 +47,16 @@ int verify_matrix(float *matrix, const float *checksum,
   return 0;
 }
 
+void safe_print_float(float f) {
+  int prec = 1000; 
+  int ipart = (int)f;
+  int fpart = (int)((f - (float)ipart) * (float)prec);
+  
+  if (fpart < 0) fpart = -fpart;
+
+  printf("Value: %d.%03d\n", ipart, fpart);
+}
+
 int check_results(float *matrix, const float *expected, int N, int M)
 {
   // check
@@ -58,7 +68,7 @@ int check_results(float *matrix, const float *expected, int N, int M)
     for(j = 0; j < N; j++) {
       float diff;
       diff = matrix[i*N+j] - expected[i*N+j];
-      diff = diff * (diff >= 0);
+      diff = (diff >= 0.0f) ? diff : -diff;
       if(diff > 0.02f) {
         if(i==0 && j==0) return -1;
         else return i*N+j;
@@ -117,7 +127,7 @@ int main() {
     // Start dump
     if (cid == 1){
       start_kernel();
-      matmul(FP16, FP16, FP32, a,b,c,gemm_l.K >> 1,gemm_l.N,gemm_l.M,1);
+      matmul(FP16, FP16, FP32, a,b,c,gemm_l.K >> 1,gemm_l.N,gemm_l.M);
     }
 
     // Wait for all cores to finish
@@ -142,9 +152,9 @@ int main() {
     long unsigned int performance =
         1000 * 2 * gemm_l.M * gemm_l.N * gemm_l.K / timer;
     long unsigned int utilization =
-        performance / (2 * num_cores * SNRT_NFPU_PER_CORE * 2);
+        performance / (2 * QUAD_RLEN/32 * QUAD_RLEN/32 *2);
 
-    printf("\n----- (%dx%d) widening2x hp fmatmul -----\n", gemm_l.M, gemm_l.N);
+    printf("\n----- (%dx%dx%d) FP16 -> FP32 matmul -----\n", gemm_l.M, gemm_l.K,gemm_l.N);
     printf("The execution took %u cycles.\n", timer);
     printf("The performance is %ld OP/1000cycle (%ld%%o utilization).\n",
            performance, utilization);
