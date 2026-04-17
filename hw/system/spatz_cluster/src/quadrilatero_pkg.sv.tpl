@@ -18,6 +18,7 @@ package quadrilatero_pkg;
   localparam int unsigned N_ROWS        = RLEN/DATA_WIDTH;
 
   localparam int unsigned NUM_EXEC_UNITS =   4;  // change me to add units
+  localparam int unsigned NUM_MAC_UNITS  =   4;  // change me to add units
 
   localparam int unsigned LSU_PORTS     = LLEN/RLEN    ;
   localparam int unsigned READ_PORTS    = 2 + LSU_PORTS;
@@ -30,7 +31,7 @@ package quadrilatero_pkg;
     Width:         32,
     EnableVectors: 1'b0,
     EnableNanBox:  1'b1,
-    FpFmtMask:     6'b101100,
+    FpFmtMask:     6'b101111,
     IntFmtMask:    4'b0010
   };
 
@@ -38,11 +39,11 @@ package quadrilatero_pkg;
     '{
         PipeRegs: // FMA Block
                   '{// FP32 FP64 FP16 FP8 FP16alt FP8alt
-                    '{   4,   0,   0,  0,   0,      0   },   // FMA Block
+                    '{   3,   0,   0,  0,   0,      0   },   // FMA Block
                     '{   0,   0,   0,  0,   0,      0   },   // DIVSQRT
                     '{   0,   0,   0,  0,   0,      0   },   // NONCOMP
                     '{   0,   0,   0,  0,   0,      0   },   // CONV
-                    '{   0,   0,   0,  0,   0,      0   }    // DOTP
+                    '{   3,   3,   3,  3,   3,      3   }    // DOTP
                     },
         UnitTypes: '{'{fpnew_pkg::PARALLEL,
                        fpnew_pkg::DISABLED,
@@ -104,18 +105,20 @@ package quadrilatero_pkg;
     id_t         id  ;
   } xif_result_t;
   typedef struct packed {
-    sel_op1_e                     sel_op1        ;
-    sel_op2_e                     sel_op2        ;
-    sel_op3_e                     sel_op3        ;
-    acc_reg_t                     md             ;
-    fpnew_pkg::roundmode_e        rnd_mode       ;
-    fpnew_pkg::operation_e        op             ;
-    logic                         op_mod         ;
-    fpnew_pkg::fp_format_e        src_fmt        ;
-    fpnew_pkg::fp_format_e        dst_fmt        ;
-    fpnew_pkg::int_format_e       int_fmt        ;
-    logic                         vectorial_op   ;
-    logic                         simd_mask      ;
+    sel_op1_e                         sel_op1     ;
+    sel_op2_e                         sel_op2     ;
+    sel_op3_e                         sel_op3     ;
+    acc_reg_t                         md          ;
+    fpnew_pkg::roundmode_e            rnd_mode    ;
+    fpnew_pkg::operation_e            op          ;
+    logic                             op_mod      ;
+    fpnew_pkg::fp_format_e            src_fmt     ;
+    fpnew_pkg::fp_format_e            dst_fmt     ;
+    fpnew_pkg::int_format_e           int_fmt     ;
+    logic                             vectorial_op;
+    logic                             simd_mask   ;
+    logic                             is_signed   ;
+    logic[$clog2(NUM_MAC_UNITS)-1:0]  unit        ;
   } cfg_fpu_t;
   typedef struct packed {
     logic ext_ld         ;
@@ -223,6 +226,8 @@ package quadrilatero_pkg;
     fpnew_pkg::int_format_e int_fmt        ;
     logic                   vectorial_op   ;
     logic                   simd_mask      ;
+    logic                             is_signed   ;
+    logic[$clog2(NUM_MAC_UNITS)-1:0]  unit        ;
   } sa_instr_t;
 
   typedef struct packed {
@@ -249,6 +254,8 @@ package quadrilatero_pkg;
     fpnew_pkg::int_format_e int_fmt      ;
     logic                   vectorial_op ;
     logic                   simd_mask    ;
+    logic                             is_signed   ;
+    logic[$clog2(NUM_MAC_UNITS)-1:0]  unit        ;
   } mac_instr_t;
   typedef struct packed {
     src_reg_t md         ;
