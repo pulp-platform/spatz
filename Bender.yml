@@ -146,8 +146,10 @@ sources:
     - hw/ip/spatz/src/spatz_vsldu.sv
     # Level 4
     - hw/ip/spatz/src/spatz_controller.sv
+    - hw/ip/spatz/src/spatz_scalar_unit.sv
     # Level 5
     - hw/ip/spatz/src/spatz.sv
+    - hw/ip/spatz/src/spatz_scalar_only.sv
     # Level 6
     - target: mempool
       files:

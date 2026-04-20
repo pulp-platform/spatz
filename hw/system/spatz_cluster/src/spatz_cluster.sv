@@ -169,7 +169,7 @@ module spatz_cluster
     return n;
   endfunction
 
-  localparam int   unsigned                    NrTCDMPortsCores = get_tcdm_port_offs(NrCores);
+  localparam int   unsigned                    NrTCDMPortsCores = spatz_pkg::QUADRILATERO ? get_tcdm_port_offs(1) : get_tcdm_port_offs(NrCores);
   localparam int   unsigned                    NumTCDMIn        = NrTCDMPortsCores + 1;
   localparam logic          [AxiAddrWidth-1:0] TCDMMask         = ~(TCDMSize-1);
 
@@ -397,11 +397,11 @@ module spatz_cluster
   tcdm_rsp_t axi_soc_rsp;
 
   tcdm_req_t [NrTCDMPortsCores-1:0] tcdm_req;
-  tcdm_req_t [NrTCDMPortsCores-1:0] spatz_tcdm_req;
-  tcdm_req_t [NrTCDMPortsCores-1:0] quad_tcdm_req;
   tcdm_rsp_t [NrTCDMPortsCores-1:0] tcdm_rsp;
+  tcdm_req_t [NrTCDMPortsCores-1:0] spatz_tcdm_req;
   tcdm_rsp_t [NrTCDMPortsCores-1:0] spatz_tcdm_rsp;
-  tcdm_rsp_t [NrTCDMPortsCores-1:0] quad_tcdm_rsp;
+  tcdm_req_t [NrTCDMPortsCores-1:0] quad_tcdm_req ;
+  tcdm_rsp_t [NrTCDMPortsCores-1:0] quad_tcdm_rsp ;
 
   core_events_t [NrCores-1:0] core_events;
   tcdm_events_t               tcdm_events;
@@ -706,20 +706,19 @@ module spatz_cluster
     i_sync_msip (.clk_i, .rst_ni, .serial_i (msip_i[i]), .serial_o (irq.msip));
     assign irq.mcip = cl_interrupt[i];
 
-    tcdm_req_t [TcdmPorts-1:0] spatz_tcdm_req_wo_user;
 
     logic [31:0] hart_id;
     assign hart_id = hart_base_id_i + i;
 
-    if(i == 1 & spatz_pkg::QUADRILATERO) begin : gen_quadrilatero_cc
+    if(i==1 && spatz_pkg::QUADRILATERO) begin : gen_quadrilatero_cc
       spatz_quadrilatero_cc #(
         .BootAddr                (BootAddr                   ),
         .RVE                     (1'b0                       ),
-        .RVF                     (RVF                        ),
-        .RVD                     (RVD                        ),
-        .RVV                     (RVV                        ),
-        .RMM                     (spatz_pkg::QUADRILATERO    ),
-        .Xdma                    (Xdma[i]                    ),
+        .RVF                     (1'b1                       ),
+        .RVD                     (1'b0                       ),
+        .RVV                     (1'b0                       ),
+        .RMM                     (1'b1                       ),
+        .Xdma                    (1'b0                       ),
         .AddrWidth               (AxiAddrWidth               ),
         .DataWidth               (NarrowDataWidth            ),
         .UserWidth               (AxiUserWidth               ),
@@ -751,13 +750,11 @@ module spatz_cluster
         .XF8                     (1'b1                       ),
         .XF8ALT                  (1'b1                       ),
         .IsoCrossing             (1'b0                       ),
-        .NumSpatzFPUs            (NumSpatzFPUs[i]            ),
-        .NumSpatzIPUs            (NumSpatzIPUs[i]            ),
-        .NumMemPortsPerSpatz     (NumSpatzTCDMPorts[i]       ),
-        .NumIntOutstandingLoads  (NumIntOutstandingLoads[i]  ),
-        .NumIntOutstandingMem    (NumIntOutstandingMem[i]    ),
-        .NumSpatzOutstandingLoads(NumSpatzOutstandingLoads[i]),
-        .FPUImplementation       (FPUImplementation[i]       ),
+        .NumMemPortsQuad         (NumSpatzTCDMPorts[0]       ),
+        .NumIntOutstandingLoads  (NumIntOutstandingLoads[0]  ),
+        .NumIntOutstandingMem    (NumIntOutstandingMem[0]    ),
+        .NumSpatzOutstandingLoads(NumSpatzOutstandingLoads[0]),
+        .FPUImplementation       (FPUImplementation[0]       ),
         .RegisterOffloadRsp      (RegisterOffloadRsp         ),
         .RegisterCoreReq         (RegisterCoreReq            ),
         .RegisterCoreRsp         (RegisterCoreRsp            ),
@@ -773,8 +770,6 @@ module spatz_cluster
         .irq_i            (irq                                 ),
         .data_req_o       (core_req[i]                         ),
         .data_rsp_i       (core_rsp[i]                         ),
-        .spatz_tcdm_req_o (spatz_tcdm_req_wo_user              ),
-        .spatz_tcdm_rsp_i (spatz_tcdm_rsp[TcdmPortsOffs +: TcdmPorts]),
         .quad_tcdm_req_o  (quad_tcdm_req                       ),
         .quad_tcdm_rsp_i  (quad_tcdm_rsp                       ),
         .axi_dma_req_o    (axi_dma_req                         ),
@@ -785,7 +780,8 @@ module spatz_cluster
         .core_events_o    (core_events[i]                      ),
         .tcdm_addr_base_i (tcdm_start_address                  )
       );
-    end else begin : gen_spatz_cc
+    end else begin
+      tcdm_req_t [TcdmPorts-1:0] spatz_tcdm_req_wo_user;
       spatz_cc #(
         .BootAddr                (BootAddr                   ),
         .RVE                     (1'b0                       ),
@@ -856,19 +852,17 @@ module spatz_cluster
         .core_events_o    (core_events[i]                      ),
         .tcdm_addr_base_i (tcdm_start_address                  )
       );
-    end
-    if(i == 1 &! spatz_pkg::QUADRILATERO) begin
-      assign quad_tcdm_req = '0;
-    end
-    for (genvar j = 0; j < TcdmPorts; j++) begin : gen_tcdm_user
-      always_comb begin
-        spatz_tcdm_req[TcdmPortsOffs+j].q              = spatz_tcdm_req_wo_user[j].q;
-        spatz_tcdm_req[TcdmPortsOffs+j].q.user.core_id = i[CoreIDWidth-1:0];
-        spatz_tcdm_req[TcdmPortsOffs+j].q.user.is_core = 1;
-        spatz_tcdm_req[TcdmPortsOffs+j].q_valid        = spatz_tcdm_req_wo_user[j].q_valid;
+      for (genvar j = 0; j < TcdmPorts; j++) begin : gen_tcdm_user
+        always_comb begin
+          spatz_tcdm_req[TcdmPortsOffs+j].q              = spatz_tcdm_req_wo_user[j].q;
+          spatz_tcdm_req[TcdmPortsOffs+j].q.user.core_id = i[CoreIDWidth-1:0];
+          spatz_tcdm_req[TcdmPortsOffs+j].q.user.is_core = 1;
+          spatz_tcdm_req[TcdmPortsOffs+j].q_valid        = spatz_tcdm_req_wo_user[j].q_valid;
+        end
       end
     end
 
+    if(i==1 &! spatz_pkg::QUADRILATERO) assign quad_tcdm_req = '0;
     if (Xdma[i]) begin : gen_dma_connection
       assign wide_axi_mst_req[SDMAMst] = axi_dma_req;
       assign axi_dma_res               = wide_axi_mst_rsp[SDMAMst];
@@ -877,7 +871,6 @@ module spatz_cluster
       assign axi_dma_res = '0;
     end
   end
-
 
   for (genvar j = 0; j < NrTCDMPortsCores; j++) begin : gen_tcdm_signals
     stream_arbiter #(
