@@ -32,7 +32,7 @@
         "alen": 128,
         "llen": 128,
         // Spatz parameters
-        "vlen": 256,
+        "vlen": 512,
         "n_fpu": 4,
         "n_ipu": 1,
         "spatz_fpu": true,
