@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH SHL-2.1
 //
 // Author: Danilo Cammarata
+
 package quadrilatero_pkg;
 
   localparam int unsigned N_REGS     = 16;
