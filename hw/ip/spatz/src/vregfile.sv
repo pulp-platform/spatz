@@ -49,43 +49,43 @@ module vregfile import spatz_pkg::*; #(
   ///////////////////
 
   // First-level clock gate
-  tc_clk_gating i_first_level_cg (
-    .clk_i    (clk_i     ),
-    .en_i     (|we_i     ),
-    .test_en_i(testmode_i),
-    .clk_o    (clk       )
-  );
+  // tc_clk_gating i_first_level_cg (
+  //   .clk_i    (clk_i     ),
+  //   .en_i     (|we_i     ),
+  //   .test_en_i(testmode_i),
+  //   .clk_o    (clk       )
+  // );
 
-  `FF(wdata_q, wdata_d, '0)
+  // `FF(wdata_q, wdata_d, '0)
   assign wdata_d = wdata_i;
 
 
   // Row decoder. Create a clock for each SCM row
-  logic [NrWords-1:0] row_clk;
-  for (genvar row = 0; row < NrWords; row++) begin: gen_row_decoder
-    // Create latch clock signal
-    logic row_onehot;
-    assign row_onehot = (waddr_i == row);
+  // logic [NrWords-1:0] row_clk;
+  // for (genvar row = 0; row < NrWords; row++) begin: gen_row_decoder
+  //   // Create latch clock signal
+  //   logic row_onehot;
+  //   assign row_onehot = (waddr_i == row);
 
-    // Create a clock for each SCM row
-    tc_clk_gating i_waddr_cg (
-      .clk_i    (clk         ),
-      .en_i     (row_onehot  ),
-      .test_en_i(testmode_i  ),
-      .clk_o    (row_clk[row])
-    );
-  end: gen_row_decoder
+  //   // Create a clock for each SCM row
+  //   tc_clk_gating i_waddr_cg (
+  //     .clk_i    (clk         ),
+  //     .en_i     (row_onehot  ),
+  //     .test_en_i(testmode_i  ),
+  //     .clk_o    (row_clk[row])
+  //   );
+  // end: gen_row_decoder
 
-  // Column decoder. Create a clock for each SCM column
-  logic [WordWidth/8-1:0] col_clk;
-  for (genvar b = 0; b < WordWidth/8; b++) begin: gen_col_decoder
-    tc_clk_gating i_wbe_cg (
-      .clk_i    (clk       ),
-      .en_i     (wbe_i[b]  ),
-      .test_en_i(testmode_i),
-      .clk_o    (col_clk[b])
-    );
-  end: gen_col_decoder
+  // // Column decoder. Create a clock for each SCM column
+  // logic [WordWidth/8-1:0] col_clk;
+  // for (genvar b = 0; b < WordWidth/8; b++) begin: gen_col_decoder
+  //   tc_clk_gating i_wbe_cg (
+  //     .clk_i    (clk       ),
+  //     .en_i     (wbe_i[b]  ),
+  //     .test_en_i(testmode_i),
+  //     .clk_o    (col_clk[b])
+  //   );
+  // end: gen_col_decoder
 
   // Select which destination bytes to write into
 
@@ -93,17 +93,27 @@ module vregfile import spatz_pkg::*; #(
   /* verilator lint_off NOLATCH */
   for (genvar vreg = 0; vreg < NrWords; vreg++) begin: gen_write_mem
     for (genvar b = 0; b < WordWidth/8; b++) begin: gen_word
-      logic clk_latch;
-      tc_clk_and2 i_clk_and (
-        .clk0_i(row_clk[vreg]),
-        .clk1_i(col_clk[b]   ),
-        .clk_o (clk_latch    )
-      );
+      // logic clk_latch;
+      // tc_clk_and2 i_clk_and (
+      //   .clk0_i(row_clk[vreg]),
+      //   .clk1_i(col_clk[b]   ),
+      //   .clk_o (clk_latch    )
+      // );
 
-      always_latch begin
-        if (clk_latch)
-          mem[vreg][b] <= wdata_q[b*8 +: 8];
-      end
+      // always_latch begin
+      //   if (clk_latch)
+      //     mem[vreg][b] <= wdata_q[b*8 +: 8];
+      // end
+
+      logic wr_en;
+      assign wr_en = we_i & (waddr_i == vreg) & wbe_i[b];
+
+      always_ff @(posedge clk_i or negedge rst_ni) begin
+        if (!rst_ni)
+          mem[vreg][b] <= '0;
+        else if(wr_en)
+          mem[vreg][b] <= wdata_d[b*8 +: 8];
+      end // CMY: FF-based VRF
     end: gen_word
   end: gen_write_mem
   /* verilator lint_on NOLATCH */
