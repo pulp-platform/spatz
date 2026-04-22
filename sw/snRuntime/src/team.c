@@ -58,7 +58,7 @@ uint32_t snrt_cluster_compute_core_num() {
 }
 
 uint32_t snrt_cluster_dm_core_idx() {
-    // Core 0 ties to DMA control in hardware 
+    // Core 0 ties to DMA control in hardware
     return 0;
 }
 
@@ -73,7 +73,7 @@ int snrt_is_compute_core() {
 }
 
 int snrt_is_dm_core() {
-    // Core 0 ties to DMA control in hardware 
+    // Core 0 ties to DMA control in hardware
     return !snrt_cluster_core_idx();
 }
 
