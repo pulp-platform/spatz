@@ -19,7 +19,7 @@
         "cluster_default_axi_user": 1,
         "axi_cdc_enable": false,
         "tcdm": {
-            "size":  64,
+            "size":  128,
             "banks": 16,
             "misalign": true
         },

@@ -711,6 +711,7 @@ module spatz_cluster
     assign hart_id = hart_base_id_i + i;
 
     if(i==1 && spatz_pkg::QUADRILATERO) begin : gen_quadrilatero_cc
+      tcdm_req_t [TcdmPorts-1:0] quad_tcdm_req_wo_user;
       spatz_quadrilatero_cc #(
         .BootAddr                (BootAddr                   ),
         .RVE                     (1'b0                       ),
@@ -770,7 +771,7 @@ module spatz_cluster
         .irq_i            (irq                                 ),
         .data_req_o       (core_req[i]                         ),
         .data_rsp_i       (core_rsp[i]                         ),
-        .quad_tcdm_req_o  (quad_tcdm_req                       ),
+        .quad_tcdm_req_o  (quad_tcdm_req_wo_user               ),
         .quad_tcdm_rsp_i  (quad_tcdm_rsp                       ),
         .axi_dma_req_o    (axi_dma_req                         ),
         .axi_dma_res_i    (axi_dma_res                         ),
@@ -780,6 +781,14 @@ module spatz_cluster
         .core_events_o    (core_events[i]                      ),
         .tcdm_addr_base_i (tcdm_start_address                  )
       );
+      for (genvar j = 0; j < TcdmPorts; j++) begin
+        always_comb begin
+          quad_tcdm_req[j].q              = quad_tcdm_req_wo_user[j].q;
+          quad_tcdm_req[j].q.user.core_id = i[CoreIDWidth-1:0];
+          quad_tcdm_req[j].q.user.is_core = 1;
+          quad_tcdm_req[j].q_valid        = quad_tcdm_req_wo_user[j].q_valid;
+        end
+      end
     end else begin
       tcdm_req_t [TcdmPorts-1:0] spatz_tcdm_req_wo_user;
       spatz_cc #(
