@@ -1,8 +1,8 @@
-// Copyright 2024 EPFL
-// Solderpad Hardware License, Version 2.1, see LICENSE.md for details.
-// SPDX-License-Identifier: Apache-2.0 WITH SHL-2.1
+// Copyright 2026 ETH Zurich and University of Bologna.
+// Licensed under the Apache License, Version 2.0, see LICENSE for details.
+// SPDX-License-Identifier: Apache-2.0
 //
-// Author: Danilo Cammarata
+// Author: Danilo Cammarata, ETH Zurich
 
 package quadrilatero_pkg;
 
