@@ -43,7 +43,7 @@ static inline int fp_check(const double a, const double b) {
 }
 
 int main() {
-  const unsigned int num_cores = snrt_cluster_core_num();
+  const unsigned int num_cores = snrt_cluster_core_num() - (QUAD_RLEN != 0);
   const unsigned int cid = snrt_cluster_core_idx();
 
   // log2(nfft).

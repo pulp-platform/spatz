@@ -43,7 +43,7 @@ static inline int fp_check(const float a, const float b) {
 }
 
 int main() {
-  const unsigned int num_cores = snrt_cluster_core_num();
+  const unsigned int num_cores = snrt_cluster_core_num() - (QUAD_RLEN != 0);
   const unsigned int cid = snrt_cluster_core_idx();
 
   // log2(nfft).
@@ -92,14 +92,17 @@ int main() {
   if (cid == 0)
     start_kernel();
 
-  // First stage
-  fft_2c(samples, buffer, twiddle, NFFT, cid);
-
+  if((QUAD_RLEN == 0) || cid == 0){
+    // First stage
+    fft_2c(samples, buffer, twiddle, NFFT, cid);
+  }
   // Wait for all cores to finish the first stage
   snrt_cluster_hw_barrier();
 
-  // Fall back into the single-core case
-  fft_sc(s_, buf_, twi_, store_idx, bitrev, NFFT >> 1, log2_half_nfft, cid);
+  if((QUAD_RLEN == 0) || cid == 0){
+    // Fall back into the single-core case
+    fft_sc(s_, buf_, twi_, store_idx, bitrev, NFFT >> 1, log2_half_nfft, cid);
+  }
 
   // Wait for all cores to finish fft
   snrt_cluster_hw_barrier();

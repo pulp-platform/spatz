@@ -49,7 +49,7 @@ int verify_matrix_elementwise(__fp16 *matrix, const __fp16 *expected,
 }
 
 int main() {
-  const unsigned int num_cores = snrt_cluster_core_num();
+  const unsigned int num_cores = snrt_cluster_core_num() - (QUAD_RLEN != 0);
   const unsigned int cid = snrt_cluster_core_idx();
 
   const unsigned int measure_iterations = 1;
@@ -102,14 +102,16 @@ int main() {
     if (cid == 0)
       start_kernel();
 
-    if (kernel_size == 2) {
-      matmul_2xVL(c, a, b, m_start, m_end, gemm_l.K, gemm_l.N, p_start, p_end);
-    } else if (kernel_size == 4) {
-      matmul_4xVL(c, a, b, m_start, m_end, gemm_l.K, gemm_l.N, p_start, p_end);
-    } else if (kernel_size == 8) {
-      matmul_8xVL(c, a, b, m_start, m_end, gemm_l.K, gemm_l.N, p_start, p_end);
-    } else {
-      return -2;
+    if((QUAD_RLEN == 0) || cid == 0){
+      if (kernel_size == 2) {
+        matmul_2xVL(c, a, b, m_start, m_end, gemm_l.K, gemm_l.N, p_start, p_end);
+      } else if (kernel_size == 4) {
+        matmul_4xVL(c, a, b, m_start, m_end, gemm_l.K, gemm_l.N, p_start, p_end);
+      } else if (kernel_size == 8) {
+        matmul_8xVL(c, a, b, m_start, m_end, gemm_l.K, gemm_l.N, p_start, p_end);
+      } else {
+        return -2;
+      }
     }
 
     // Wait for all cores to finish
