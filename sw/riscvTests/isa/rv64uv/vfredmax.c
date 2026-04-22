@@ -16,6 +16,7 @@ void TEST_CASE1(void) {
            0x3c00, 0x4000, 0x4200, 0x4400, 0x4500, 0x4600, 0x4700, 0x4800);
   VLOAD_16(v24, 0x3c00);
   asm volatile("vfredmax.vs v8, v16, v24");
+  VSET(1, e16, m1);
   VCMP_U16(1, v8, 0x4800);
 
   VSET(16, e32, m8);
@@ -25,6 +26,7 @@ void TEST_CASE1(void) {
            0x41000000);
   VLOAD_32(v24, 0x3F800000);
   asm volatile("vfredmax.vs v8, v16, v24");
+  VSET(1, e32, m1);
   VCMP_U32(2, v8, 0x41000000);
 
 #if ELEN == 64
@@ -37,6 +39,7 @@ void TEST_CASE1(void) {
            0x4020000000000000);
   VLOAD_64(v24, 0x3FF0000000000000);
   asm volatile("vfredmax.vs v8, v16, v24");
+  VSET(1, e64, m1);
   VCMP_U64(3, v8, 0x4020000000000000);
 #endif
 
@@ -56,6 +59,7 @@ void TEST_CASE1(void) {
       0x40800000, 0x40A00000, 0x40C00000, 0x40E00000, 0x41000000);
   VLOAD_32(v24, 0x3F800000);
   asm volatile("vfredmax.vs v8, v16, v24");
+  VSET(1, e32, m1);
   VCMP_U32(4, v8, 0x41000000);
 }
 
@@ -68,6 +72,7 @@ void TEST_CASE2(void) {
            0x3c00, 0x4000, 0x4200, 0x4400, 0x4500, 0x4600, 0x4700, 0x4800);
   VLOAD_16(v24, 0x3c00);
   asm volatile("vfredmax.vs v8, v16, v24, v0.t");
+  VSET(1, e16, m1);
   VCMP_U16(5, v8, 0x4800);
 
   VSET(16, e32, m8);
@@ -78,6 +83,7 @@ void TEST_CASE2(void) {
            0x41000000);
   VLOAD_32(v24, 0x3F800000);
   asm volatile("vfredmax.vs v8, v16, v24, v0.t");
+  VSET(1, e32, m1);
   VCMP_U32(6, v8, 0x41000000);
 
 #if ELEN == 64
@@ -91,6 +97,7 @@ void TEST_CASE2(void) {
            0x4020000000000000);
   VLOAD_64(v24, 0x3FF0000000000000);
   asm volatile("vfredmax.vs v8, v16, v24, v0.t");
+  VSET(1, e64, m1);
   VCMP_U64(7, v8, 0x4020000000000000);
 #endif
 }
