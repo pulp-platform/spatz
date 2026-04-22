@@ -14,10 +14,13 @@ void TEST_CASE1() {
   BOX_HALF_IN_FLOAT(fscalar_16, 0xbb81);
 
   VSET(16, e16, m2);
-  VLOAD_16(v4, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16);
+  //VLOAD_16(v4, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16);
+  VLOAD_16(v4, 0xabcd, 0xdead, 0xbeef, 0xfeed, 0xabba, 0xdada, 0xc0da, 0x1234, 0x4321, 0xaabb, 0xbbaa, 0xccdd, 0xddcc, 0xeeff, 0xffee, 0xaaaa);
   VLOAD_16(v2, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1);
   asm volatile("vfslide1up.vf v2, v4, %[A]" ::[A] "f"(fscalar_16));
-  VCMP_U16(1, v2, 0xbb81, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15);
+
+  VCMP_U16(1, v2, 0xbb81, 0xabcd, 0xdead, 0xbeef, 0xfeed, 0xabba, 0xdada, 0xc0da, 0x1234, 0x4321, 0xaabb, 0xbbaa, 0xccdd, 0xddcc, 0xeeff, 0xffee);
+
 
   float fscalar_32;
   //                             -0.96056187
@@ -85,11 +88,12 @@ void TEST_CASE2() {
 }
 
 int main(void) {
+  INIT_CHECK();
   enable_vec();
   enable_fp();
 
   TEST_CASE1();
-  // TEST_CASE2();
+  TEST_CASE2();
 
   EXIT_CHECK();
 }
