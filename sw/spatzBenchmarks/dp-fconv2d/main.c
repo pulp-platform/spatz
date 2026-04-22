@@ -44,7 +44,7 @@ void init_matrix(double *matrix, const double *src, const unsigned int len) {
 }
 
 int main() {
-  const unsigned int num_cores = snrt_cluster_core_num();
+  const unsigned int num_cores = snrt_cluster_core_num() - (QUAD_RLEN != 0);
   const unsigned int cid = snrt_cluster_core_idx();
 
   // Set matrix dimension
@@ -100,8 +100,10 @@ int main() {
   if (cid == 0)
     start_kernel();
 
-  // Calculate the result
-  conv3d_CHx7x7(o, i, fmtx, r / num_cores, r, c, f);
+  if((QUAD_RLEN == 0) || cid == 0){
+    // Calculate the result
+    conv3d_CHx7x7(o, i, fmtx, r / num_cores, r, c, f);
+  }
 
   // Wait for all cores to finish
   snrt_cluster_hw_barrier();

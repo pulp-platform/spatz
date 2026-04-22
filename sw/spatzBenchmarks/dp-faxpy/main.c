@@ -40,7 +40,7 @@ static inline int fp_check(const double a, const double b) {
 }
 
 int main() {
-  const unsigned int num_cores = snrt_cluster_core_num();
+  const unsigned int num_cores = snrt_cluster_core_num() - (QUAD_RLEN != 0);
   const unsigned int cid = snrt_cluster_core_idx();
 
   // Reset timer
@@ -83,12 +83,14 @@ int main() {
   if (cid == 0)
     timer = benchmark_get_cycle();
 
+  if((QUAD_RLEN == 0) || cid == 0){
     // Call AXPY
 #ifdef UNROLL
-  faxpy_v64b_unrl(*a, x_int, y_int, dim_core);
+    faxpy_v64b_unrl(*a, x_int, y_int, dim_core);
 #else
-  faxpy_v64b(*a, x_int, y_int, dim_core);
+    faxpy_v64b(*a, x_int, y_int, dim_core);
 #endif
+  }
 
   // Wait for all cores to finish
   snrt_cluster_hw_barrier();
