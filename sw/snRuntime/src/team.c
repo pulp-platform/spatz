@@ -58,8 +58,8 @@ uint32_t snrt_cluster_compute_core_num() {
 }
 
 uint32_t snrt_cluster_dm_core_idx() {
-    // TODO: Actually derive this from the device tree!
-    return snrt_cluster_core_num() - 1;
+    // Core 0 ties to DMA control in hardware
+    return 0;
 }
 
 uint32_t snrt_cluster_dm_core_num() {
@@ -68,13 +68,13 @@ uint32_t snrt_cluster_dm_core_num() {
 }
 
 int snrt_is_compute_core() {
-    // TODO: Actually derive this from the device tree!
-    return snrt_cluster_core_idx() < snrt_cluster_core_num() - 1;
+    // All Spatz CCs are compute core
+    return 1;
 }
 
 int snrt_is_dm_core() {
-    // TODO: Actually derive this from the device tree!
-    return !snrt_is_compute_core();
+    // Core 0 ties to DMA control in hardware
+    return !snrt_cluster_core_idx();
 }
 
 uint32_t _snrt_barrier_reg_ptr() {
