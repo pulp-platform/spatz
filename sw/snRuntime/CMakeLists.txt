@@ -201,6 +201,7 @@ add_snitch_test(barrier tests/barrier.c)
 add_snitch_test(fence_i tests/fence_i.c)
 add_snitch_test(interrupt-local tests/interrupt-local.c)
 add_snitch_test(printf_simple tests/printf_simple.c)
+add_snitch_test(l3alloc tests/l3alloc.c)
 
 # RTL only tests
 if(SNITCH_RUNTIME STREQUAL "snRuntime-cluster")
