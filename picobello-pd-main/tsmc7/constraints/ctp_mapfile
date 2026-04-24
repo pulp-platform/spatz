@@ -1,5 +1,0 @@
-cluster_tile CTS_CONSTRAINT ../../constraints/block_ctp.tcl
-mem_tile CTS_CONSTRAINT ../../constraints/block_ctp.tcl
-cheshire_tile CTS_CONSTRAINT ../../constraints/block_ctp.tcl
-fhg_spu_tile CTS_CONSTRAINT ../../constraints/block_ctp.tcl
-picobello_chip CTS_CONSTRAINT ../../constraints/top_ctp.tcl

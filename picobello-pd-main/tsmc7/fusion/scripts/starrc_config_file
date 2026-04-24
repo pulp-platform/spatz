@@ -1,3 +1,0 @@
-SIGNOFF_IMAGE:   /usr/pack/starrc-2022.03-zr/starrc/bin/StarXtract
-MAPPING_FILE:    /usr/pack/tsmc-7-kgf/tsmc/util/apr/icc2/V14_1a/PRTF_ICC2_N7_starrc_15M_1X1Xa1Ya5Y2Yy2Yx2R.14_1a.map
-CORNER_GRD_FILE: ../scripts/corner.grdmapping

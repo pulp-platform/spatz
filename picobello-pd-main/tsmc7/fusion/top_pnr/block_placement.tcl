@@ -1,1 +1,0 @@
-../design_planning/block_placement.tcl
