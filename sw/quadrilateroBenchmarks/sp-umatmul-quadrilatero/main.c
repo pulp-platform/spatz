@@ -112,7 +112,8 @@ int main() {
     // Start dump
     if (cid == 1){
       start_kernel();
-      matmul(UINT32, UINT32, UINT32, a,b,c,gemm_l.K,gemm_l.N,gemm_l.M);
+      int unsigned widening = 0;
+      matmul(UINT32, UINT32, UINT32, a,b,c,gemm_l.K,gemm_l.N,gemm_l.M, widening);
     }
 
     // Wait for all cores to finish

@@ -117,7 +117,8 @@ int main() {
     // Start dump
     if (cid == 1){
       start_kernel();
-      matmul(FP8, FP8, FP32, a,b,c,gemm_l.K >> 2,gemm_l.N,gemm_l.M);
+      int unsigned widening = 2;
+      matmul(FP8, FP8, FP32, a,b,c,gemm_l.K,gemm_l.N,gemm_l.M, widening);
     }
 
     // Wait for all cores to finish
