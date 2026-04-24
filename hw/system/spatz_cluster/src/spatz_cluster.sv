@@ -789,7 +789,7 @@ module spatz_cluster
           quad_tcdm_req[j].q_valid        = quad_tcdm_req_wo_user[j].q_valid;
         end
       end
-    end else begin
+    end else begin : gen_spatz_cc
       tcdm_req_t [TcdmPorts-1:0] spatz_tcdm_req_wo_user;
       spatz_cc #(
         .BootAddr                (BootAddr                   ),
