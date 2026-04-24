@@ -110,6 +110,7 @@ if (ELEN EQUAL 64)
   add_spatz_test_threeParam(dp-fmatmul dp-fmatmul/main.c 64  64  64 )
 
   add_spatz_test_twoParam_type(dp-gemv gemv/main.c 64  128 64)
+  add_spatz_test_threeParam_type(dp-sa-gemv sa-gemv/main.c 256 128 16 64)
 
   add_spatz_test_oneParam(dp-faxpy dp-faxpy/main.c 256)
   add_spatz_test_oneParam(dp-faxpy dp-faxpy/main.c 1024)
@@ -121,6 +122,7 @@ if (ELEN EQUAL 64)
   add_spatz_test_threeParam(dp-fconv2d dp-fconv2d/main.c 64 64 7)
 
   add_spatz_test_twoParam(dp-fft dp-fft/main.c 128 2)
+
 endif()
 
 add_spatz_test_threeParam(sp-fmatmul sp-fmatmul/main.c 64  64  64 )
@@ -150,6 +152,7 @@ add_spatz_test_threeParam(sdotp-bp-fmatmul sdotp-bp-fmatmul/main.c 128 256 128)
 
 add_spatz_test_twoParam_type(sp-gemv gemv/main.c 128 128 32)
 add_spatz_test_twoParam_type(hp-gemv gemv/main.c 256 128 16)
+add_spatz_test_threeParam_type(hp-sa-gemv sa-gemv/main.c 128 4096 512 16)
 
 add_spatz_test_twoParam(sp-fft sp-fft/main.c 256 2)
 add_spatz_test_twoParam(sp-fft sp-fft/main.c 512 2)
