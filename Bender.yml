@@ -19,7 +19,7 @@ dependencies:
   cluster_icache:     { git: "https://github.com/pulp-platform/cluster_icache.git",      version: 0.2.0          }
   riscv-dbg:          { git: "https://github.com/pulp-platform/riscv-dbg.git",           version: 0.7.0          }
   tech_cells_generic: { git: "https://github.com/pulp-platform/tech_cells_generic.git",  version: 0.2.13         }
-  quadrilatero      : { git: "https://iis-git.ee.ethz.ch/quadrilatero/quadrilatero.git", rev:     d03b302        }
+  quadrilatero      : { git: "https://iis-git.ee.ethz.ch/quadrilatero/quadrilatero.git", rev:     1d17161        }
 
 export_include_dirs:
   - hw/ip/mem_interface/include
