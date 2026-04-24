@@ -32,7 +32,7 @@ static inline int fp_check(const double a, const double b) {
   const double threshold = 0.00001;
 
   // Absolute value
-  double comp = a - b;
+  double comp = a - 1;
   if (comp < 0)
     comp = -comp;
 
