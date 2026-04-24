@@ -156,6 +156,7 @@ def gemv(a, b):
     # Upcast to float32 for CPU math, then downcast back to the original dtype
     return torch.matmul(a.float(), b.float()).to(a.dtype)
 
+
 def main():
 
     parser = argparse.ArgumentParser(description="Generate data for kernels")
