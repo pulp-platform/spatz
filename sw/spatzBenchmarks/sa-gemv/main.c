@@ -86,7 +86,7 @@ int main() {
   const uint32_t dense_vec_size = sizeof(T) * tot_nz_dram;
   const uint32_t dense_idx_size = sizeof(uint16_t) * tot_nz_dram;
   const uint32_t result_size    = sizeof(T) * gemv_l.M;
-  
+
   // leave 8 KiB for Stack
   const uint32_t l1_size  = (spm_size - 8) * 1024;
   const uint32_t fixed_alloc_size = dense_vec_size + dense_idx_size + result_size;
@@ -94,7 +94,7 @@ int main() {
   // --- BOUNDS CHECK 1: Do the fixed arrays fit in L1? ---
   if (fixed_alloc_size >= l1_size) {
     if (cid == 0) {
-      printf("FATAL: L1 Memory Overflow! Fixed arrays require %u bytes, but only %u bytes available.\n", 
+      printf("FATAL: L1 Memory Overflow! Fixed arrays require %u bytes, but only %u bytes available.\n",
              fixed_alloc_size, l1_size);
     }
     snrt_cluster_hw_barrier();
@@ -110,7 +110,7 @@ int main() {
   if (num_row_mat < 1) {
     if (cid == 0) {
       printf("FATAL: L1 Memory Overflow! Cannot fit at least 2 rows for double buffering. "
-             "Chunk space left: %u bytes, Row size: %u bytes.\n", 
+             "Chunk space left: %u bytes, Row size: %u bytes.\n",
              l1_for_chunk, row_size);
     }
     snrt_cluster_hw_barrier();
@@ -181,8 +181,8 @@ int main() {
       // Make sure the previous load completes
       snrt_dma_wait_all();
       // Double buffer to search the next non-zero
-      uint32_t next_bytes = (vec_size - (i + 1) * vec_chunk_size < vec_chunk_size) 
-                        ? (vec_size - (i + 1) * vec_chunk_size) 
+      uint32_t next_bytes = (vec_size - (i + 1) * vec_chunk_size < vec_chunk_size)
+                        ? (vec_size - (i + 1) * vec_chunk_size)
                         : vec_chunk_size;
 
       if (i < num_vec_chunk - 1) {
@@ -257,7 +257,7 @@ int main() {
     printf("GEMV PreLD\n");
     printf("Active Rows:%u\n", active_rows);
     #endif
-    
+
     for (unsigned int i = 0; i < active_rows; i++) {
       #ifdef DEBUG
       printf("Row:%u, SRC:%p, TGT:%p, SIZE:%u\n",
@@ -295,10 +295,10 @@ int main() {
     // Determine bounds for the NEXT chunk (for background DMA)
     uint32_t next_chunk_start = (chunk_idx + 1) * num_row_mat;
     uint32_t next_active_rows = 0;
-    
+
     if (next_chunk_start < tot_nz_dram) {
-        next_active_rows = (tot_nz_dram - next_chunk_start < num_row_mat) 
-                           ? (tot_nz_dram - next_chunk_start) 
+        next_active_rows = (tot_nz_dram - next_chunk_start < num_row_mat)
+                           ? (tot_nz_dram - next_chunk_start)
                            : num_row_mat;
     }
 
@@ -318,16 +318,16 @@ int main() {
                 mat_db_ptr + i * gemv_l.M,
                 row_size);
         #endif
-        snrt_dma_start_1d(mat_db_ptr + i * gemv_l.M, 
-                          gemv_mat_dram + (size_t)(*idx_ptr) * gemv_l.M, 
+        snrt_dma_start_1d(mat_db_ptr + i * gemv_l.M,
+                          gemv_mat_dram + (size_t)(*idx_ptr) * gemv_l.M,
                           row_size);
         idx_ptr++;
       }
     }
 
     // Calculate active rows for the CURRENT compute phase
-    uint32_t curr_active_rows = (tot_nz_dram - chunk_idx * num_row_mat < num_row_mat) 
-                                ? (tot_nz_dram - chunk_idx * num_row_mat) 
+    uint32_t curr_active_rows = (tot_nz_dram - chunk_idx * num_row_mat < num_row_mat)
+                                ? (tot_nz_dram - chunk_idx * num_row_mat)
                                 : num_row_mat;
 
     // Calculate GEMV on the current chunk

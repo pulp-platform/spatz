@@ -187,7 +187,7 @@ def main():
     nz_indices = torch.randperm(param["N"])[:tot_nz]
     mask = torch.zeros((param["N"], 1), dtype=torch.bool)
     mask[nz_indices, 0] = True
-    
+
     # Temporarily upcast to float32 for the masking math, then cast back
     vec_B = (vec_B.float() * mask).to(vec_B.dtype)
 
