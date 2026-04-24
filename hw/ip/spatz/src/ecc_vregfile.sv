@@ -14,6 +14,12 @@ module vregfile import spatz_pkg::*; #(
     parameter type          addr_t      = logic[$clog2(NrWords)-1:0],
     parameter type          data_t      = logic [WordWidth-1:0],
     parameter type          strb_t      = logic [WordWidth/8-1:0]
+    // Reliability parameters
+    parameter  int unsigned UnprotectedWidth = 32,
+    parameter  int unsigned ProtectedWidth   = 39,
+    parameter  bit          InputECC         = 0, // 0: no ECC on input
+                                                // 1: SECDED on input
+    localparam int unsigned DataInWidth      = InputECC ? ProtectedWidth : UnprotectedWidth
   ) (
     input  logic                    clk_i,
     input  logic                    rst_ni,
@@ -47,8 +53,64 @@ module vregfile import spatz_pkg::*; #(
   ///////////////////
   // Register File //
   ///////////////////
+  typedef enum logic { NORMAL, READ_MODIFY_WRITE } store_state_e;
+  store_state_e store_state_d, store_state_q;
 
-  assign wdata_d = wdata_i;
+    always_comb begin
+    store_state_d  = NORMAL;
+    gnt_o          = 1'b1;
+    bank_addr      = addr_i;
+    bank_we        = internal_we;
+    input_buffer_d = wdata_i;
+    addr_buffer_d  = addr_i;
+    be_buffer_d    = be_i;
+    bank_req       = req_i;
+    rmw_count_d    = rmw_count_q;
+    if (store_state_q == NORMAL) begin
+      if (req_i & (be_i != {ByteEnWidth{1'b1}}) & internal_we) begin
+        store_state_d = READ_MODIFY_WRITE;
+        bank_we       = 1'b0;
+        rmw_count_d   = rmw_count_t'(NumRMWCuts);
+      end
+    end else begin
+      gnt_o           = 1'b0;
+      bank_addr       = addr_buffer_q;
+      bank_we         = 1'b1;
+      input_buffer_d  = input_buffer_q;
+      addr_buffer_d   = addr_buffer_q;
+      be_buffer_d     = be_buffer_q;
+      if (rmw_count_q == '0) begin
+        bank_req      = 1'b1;
+      end else begin
+        bank_req      = 1'b0;
+        rmw_count_d   = rmw_count_q - 1;
+        store_state_d = READ_MODIFY_WRITE;
+      end
+    end
+  end
+
+
+// VRF ECC encoding and decoding-----------------------
+  hsiao_ecc_dec #(
+      .DataWidth (UnprotectedWidth),
+      .ProtWidth (ProtectedWidth - UnprotectedWidth)
+    ) ecc_decode (
+      .in        ( decoder_in ),
+      .out       ( loaded ),
+      .syndrome_o(),
+      .err_o     ( ecc_error )
+    );
+
+    hsiao_ecc_enc #(
+      .DataWidth (UnprotectedWidth),
+      .ProtWidth (ProtectedWidth - UnprotectedWidth)
+    ) ecc_encode (
+      .in  ( to_store   ),
+      .out ( wdata_d )
+    );
+//---------------------------------------------------------
+
+  // assign wdata_d = wdata_i;
 
 
   // Row decoder. Create a clock for each SCM row
