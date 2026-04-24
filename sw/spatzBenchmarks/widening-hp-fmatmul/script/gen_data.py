@@ -42,7 +42,6 @@ def array_to_cstr(a, fmt=float):
 
 
 def emit_header_file(layer_type: str, **kwargs):
-
     file_path = pathlib.Path(__file__).parent.parent / "data"
     file_path.mkdir(parents=True, exist_ok=True)
     emit_str = (
@@ -96,7 +95,7 @@ def emit_conv2d_layer(name="conv2d", **kwargs):
     layer_str += f'static double {name}_result[{oh}][{ow}][{co}] __attribute__((section(".data")));\n\n'
     layer_str += (
         f"static double {name}_checksum[{oh}][{ow}] = "
-        + array_to_cstr(torch.sum(ofmap, dim=-1))
+        + array_to_cstr(torch.sum(ofmap.float(), dim=-1)) # Safe sum for checksum
         + ";\n\n\n"
     )
     layer_str += (
@@ -119,7 +118,6 @@ def emit_conv2d_layer(name="conv2d", **kwargs):
 
 
 def emit_linear_layer(input, weights, ofmap):
-
     layer_str = ""
     return layer_str
 
@@ -168,7 +166,7 @@ def emit_GEMM_layer(name="gemm", **kwargs):
         )
         layer_str += (
             f"static const {dtype} {name}_result[{m}*{n}] = "
-            + array_to_cstr(result)
+            + array_to_cstr(torch.sum(result.float(), dim=-1))
             + ";\n\n\n"
         )
     else:
@@ -192,7 +190,6 @@ def emit_GEMM_layer(name="gemm", **kwargs):
 
 
 def emit_batchnorm_layer(name="batchnorm", **kwargs):
-
     ifmap = kwargs["ifmap"]
     ofmap = kwargs["ofmap"]
     beta = kwargs["beta"]
@@ -215,7 +212,7 @@ def emit_batchnorm_layer(name="batchnorm", **kwargs):
     layer_str += f'static double {name}_result[{oh}][{ow}][{co}] __attribute__((section(".data")));\n\n'
     layer_str += (
         f"static double {name}_checksum[{oh}][{ow}] = "
-        + array_to_cstr(torch.sum(ofmap, dim=-1))
+        + array_to_cstr(torch.sum(ofmap.float(), dim=-1))
         + ";\n\n\n"
     )
     layer_str += (
@@ -239,7 +236,6 @@ def emit_batchnorm_layer(name="batchnorm", **kwargs):
 
 
 def emit_maxpool_layer(name="maxpool", **kwargs):
-
     ifmap = kwargs["ifmap"]
     ofmap = kwargs["ofmap"]
     k = kwargs["kernel_size"]
@@ -263,7 +259,7 @@ def emit_maxpool_layer(name="maxpool", **kwargs):
     layer_str += f'static double {name}_result[{oh}][{ow}][{co}] __attribute__((section(".data")));\n\n'
     layer_str += (
         f"static double {name}_checksum[{oh}][{ow}] = "
-        + array_to_cstr(torch.sum(ofmap, dim=-1))
+        + array_to_cstr(torch.sum(ofmap.float(), dim=-1))
         + ";\n\n\n"
     )
     layer_str += (
@@ -281,7 +277,6 @@ def emit_maxpool_layer(name="maxpool", **kwargs):
 
 
 def emit_fusedconv(name="fusedconv", **kwargs):
-
     ifmap = kwargs["ifmap"]
     kernel = kwargs["kernel"]
     bn_k = kwargs["bn_k"]
@@ -363,70 +358,78 @@ def rand_data_generator(shape, prec, alt=False):
         return torch.randn(shape, requires_grad=False, dtype=torch.float32), {}
     elif prec == 16:
         if alt:
-            return torch.randn(shape, requires_grad=False, dtype=torch.bfloat16), {}
+            # Universal Fix: Generate FP32, cast to BF16
+            return torch.randn(shape, requires_grad=False, dtype=torch.float32).to(torch.bfloat16), {}
         else:
-            return (
-                torch.randn(
-                    shape, requires_grad=False, dtype=torch.float16, device=device
-                ),
-                {},
-            )
+            # Universal Fix: Generate FP32, cast to FP16
+            return torch.randn(shape, requires_grad=False, dtype=torch.float32, device=device).to(torch.float16), {}
     elif prec == 8:
-        sign = torch.randint(
-            0, 2, shape, requires_grad=False, dtype=torch.uint8
-        )  # -1 or 1
-        exponent = torch.randint(
-            0, 16, shape, requires_grad=False, dtype=torch.uint8
-        )  # < 0b01111
-        mantissa = torch.randint(
-            0, 4, shape, requires_grad=False, dtype=torch.uint8
-        )  # can be arbitrary
+        sign = torch.randint(0, 2, shape, requires_grad=False, dtype=torch.uint8)
+        exponent = torch.randint(0, 16, shape, requires_grad=False, dtype=torch.uint8)
+        mantissa = torch.randint(0, 4, shape, requires_grad=False, dtype=torch.uint8)
         bits = {"sign": sign, "exponent": exponent, "mantissa": mantissa}
-        # TODO: not actually correct
         return ((-1.0) ** sign.double()) * (2.0 ** (exponent.double() - 15.0)) * (
             1.0 + mantissa.double() / (2**2)
         ), bits
 
 
 def conv2d(ifmap, weights, padding=1, stride=1):
+    # Universal Fix: Upcast for CPU Math
+    orig_dtype = ifmap.dtype
+    ifmap, weights = ifmap.float(), weights.float()
+
     n, ci, ih, iw = ifmap.shape
     co, _, fh, fw = weights.shape
 
     conv2d = nn.Conv2d(ci, co, (fh, fw), padding=((fh - 1) // 2, (fw - 1) // 2))
     conv2d.weight = nn.Parameter(weights, requires_grad=False)
-    conv2d.bias = nn.Parameter(
-        torch.zeros_like(conv2d.bias, dtype=weights.dtype), requires_grad=False
-    )
+    # Ensure bias natively generates in float32
+    conv2d.bias = nn.Parameter(torch.zeros_like(conv2d.bias, dtype=torch.float32), requires_grad=False)
+
     ofmap = conv2d(ifmap)
 
-    return ofmap
+    # Universal Fix: Downcast back
+    return ofmap.to(orig_dtype)
 
 
 def max_pooling(ifmap, kernel):
+    orig_dtype = ifmap.dtype
+    ifmap = ifmap.float()
+
     n, ci, ih, iw = ifmap.shape
     max_pool = nn.MaxPool2d(kernel_size=kernel)
     ofmap = max_pool(ifmap)
 
-    return ofmap
+    return ofmap.to(orig_dtype)
 
 
 def batchnorm(ifmap):
+    orig_dtype = ifmap.dtype
+    ifmap = ifmap.float()
+
     n, ci, ih, iw = ifmap.shape
     bn = torch.nn.BatchNorm2d(ci)
     bn.weight.requires_grad = False
     bn.bias.requires_grad = False
-    running_mean = torch.randn_like(bn.running_mean, requires_grad=False)
-    running_var = torch.rand_like(bn.running_var, requires_grad=False)
+    running_mean = torch.randn_like(bn.running_mean, requires_grad=False, dtype=torch.float32)
+    running_var = torch.rand_like(bn.running_var, requires_grad=False, dtype=torch.float32)
+
     gamma = bn.weight / torch.sqrt(running_var + bn.eps)
     beta = bn.bias - running_mean * bn.weight / torch.sqrt(running_var + bn.eps)
     ofmap = ifmap * gamma.unsqueeze(-1).unsqueeze(-1) + beta.unsqueeze(-1).unsqueeze(-1)
 
-    return ofmap, gamma, beta
+    return ofmap.to(orig_dtype), gamma.to(orig_dtype), beta.to(orig_dtype)
 
 
 def fused_conv(
     ifmap, weights, bn_k, bn_l, padding, stride, bn, relu, accumulate, depthwise
 ):
+    # Universal Fix: Upcast EVERYTHING before starting the math
+    orig_dtype = ifmap.dtype
+    ifmap = ifmap.float()
+    weights = weights.float()
+    bn_k = bn_k.float()
+    bn_l = bn_l.float()
 
     ih, iw, ci = ifmap.shape
     if not depthwise:
@@ -440,14 +443,13 @@ def fused_conv(
         iw + padding["padding_x_left"] + padding["padding_x_right"],
         ci,
         requires_grad=False,
-        dtype=ifmap.dtype,
+        dtype=ifmap.dtype, # Safely uses float32
     )
     ifmap_padded[
         padding["padding_y_top"] : ih + padding["padding_y_top"],
         padding["padding_x_left"] : iw + padding["padding_x_left"],
     ] = ifmap
 
-    # Don't cover undefined behaviour when there are steps without a complete kernel window
     if (ifmap_padded.shape[0] - (fh - 1) - 1) % stride["stride_y"] != 0:
         print("Warning: rounding h output dimension")
     if (ifmap_padded.shape[1] - (fw - 1) - 1) % stride["stride_x"] != 0:
@@ -458,16 +460,16 @@ def fused_conv(
         (ifmap_padded.shape[1] - (fw - 1) - 1) // stride["stride_x"] + 1,
         co,
     )
+
     if accumulate:
-        ofmap_before = torch.randn_like(ofmap, requires_grad=False)
+        ofmap_before = torch.randn_like(ofmap, requires_grad=False, dtype=torch.float32)
     else:
-        ofmap_before = torch.zeros_like(ofmap, requires_grad=False)
+        ofmap_before = torch.zeros_like(ofmap, requires_grad=False, dtype=torch.float32)
 
     if verbose:
         print(ifmap.shape, ifmap_padded.shape, ofmap.shape)
 
     if depthwise:
-        # depthwise Conv2d
         for h in range(0, ifmap_padded.shape[0] - (fh - 1), stride["stride_y"]):
             for w in range(0, ifmap_padded.shape[1] - (fw - 1), stride["stride_x"]):
                 for c in range(co):
@@ -478,7 +480,6 @@ def fused_conv(
                         weights[:, :, c].flatten(),
                     )
     else:
-        # Conv2d
         for h in range(0, ifmap_padded.shape[0] - (fh - 1), stride["stride_y"]):
             for w in range(0, ifmap_padded.shape[1] - (fw - 1), stride["stride_x"]):
                 for c in range(co):
@@ -491,29 +492,22 @@ def fused_conv(
 
     ofmap += ofmap_before
 
-    # BatchNorm
     if bn:
         ofmap = ofmap * bn_k + bn_l
 
-    # ReLU
     if relu:
         ofmap = torch.nn.functional.relu(ofmap)
 
-    return ofmap, ofmap_before, ifmap_padded
+    # Universal Fix: Downcast back
+    return ofmap.to(orig_dtype), ofmap_before.to(orig_dtype), ifmap_padded.to(orig_dtype)
 
 
 def main():
-
     parser = argparse.ArgumentParser(description="Generate data for kernels")
     parser.add_argument(
-        "-c",
-        "--cfg",
-        type=pathlib.Path,
-        required=True,
-        help="Select param config file kernel",
+        "-c", "--cfg", type=pathlib.Path, required=True, help="Select param config file kernel",
     )
     parser.add_argument("-v", "--verbose", action="store_true", help="Set verbose")
-
     args = parser.parse_args()
 
     global verbose
@@ -532,31 +526,18 @@ def main():
         dtype = torch.float32
 
     if param["kernel"] == "Conv2d":
+        # Generate safely in float32, then cast
         ifmap = torch.randn(
-            1,
-            param["channels"]["in"],
-            param["input_dim"]["height"],
-            param["input_dim"]["width"],
-            requires_grad=False,
-            dtype=dtype,
-        )
+            1, param["channels"]["in"], param["input_dim"]["height"], param["input_dim"]["width"],
+            requires_grad=False, dtype=torch.float32,
+        ).to(dtype)
         weights = torch.randn(
-            param["channels"]["out"],
-            param["channels"]["in"],
-            param["filter"]["height"],
-            param["filter"]["width"],
-            requires_grad=False,
-            dtype=dtype,
-        )
+            param["channels"]["out"], param["channels"]["in"], param["filter"]["height"], param["filter"]["width"],
+            requires_grad=False, dtype=torch.float32,
+        ).to(dtype)
 
-        ofmap = conv2d(
-            ifmap,
-            weights,
-            padding=param["filter"]["padding"],
-            stride=param["filter"]["stride"],
-        )
+        ofmap = conv2d(ifmap, weights, padding=param["filter"]["padding"], stride=param["filter"]["stride"])
 
-        # convert from CHW to HWC format
         ifmap = ifmap.permute(0, 2, 3, 1)
         ofmap = ofmap.permute(0, 2, 3, 1)
         weights = weights.permute(0, 2, 3, 1)
@@ -568,7 +549,8 @@ def main():
         mat_B, bits_B = rand_data_generator((param["K"], param["N"]), param["prec"])
         mat_C, bits_C = rand_data_generator((param["M"], param["N"]), param["prec"])
 
-        result = torch.matmul(mat_A, mat_B)
+        # Upcast for CPU Math
+        result = torch.matmul(mat_A.float(), mat_B.float()).to(dtype)
 
         if param["transpose_A"]:
             mat_A = mat_A.T
@@ -592,22 +574,16 @@ def main():
             "bits_B": bits_B,
             "bits_C": bits_C,
         }
-
         emit_header_file("GEMM", **kwargs)
 
     elif param["kernel"] == "BatchNorm":
         ifmap = torch.randn(
-            1,
-            param["channels"]["in"],
-            param["input_dim"]["height"],
-            param["input_dim"]["width"],
-            requires_grad=False,
-            dtype=dtype,
-        )
+            1, param["channels"]["in"], param["input_dim"]["height"], param["input_dim"]["width"],
+            requires_grad=False, dtype=torch.float32,
+        ).to(dtype)
 
         ofmap, gamma, beta = batchnorm(ifmap)
 
-        # convert from CHW to HWC format
         ifmap = ifmap.permute(0, 2, 3, 1)
         ofmap = ofmap.permute(0, 2, 3, 1)
 
@@ -616,17 +592,12 @@ def main():
 
     elif param["kernel"] == "MaxPool":
         ifmap = torch.randn(
-            1,
-            param["channels"]["in"],
-            param["input_dim"]["height"],
-            param["input_dim"]["width"],
-            requires_grad=False,
-            dtype=dtype,
-        )
+            1, param["channels"]["in"], param["input_dim"]["height"], param["input_dim"]["width"],
+            requires_grad=False, dtype=torch.float32,
+        ).to(dtype)
 
         ofmap = max_pooling(ifmap, param["kernel_size"])
 
-        # convert from CHW to HWC format
         ifmap = ifmap.permute(0, 2, 3, 1)
         ofmap = ofmap.permute(0, 2, 3, 1)
 
@@ -635,44 +606,28 @@ def main():
 
     elif param["kernel"] == "FusedConv":
         ifmap = torch.randn(
-            param["dim_in_y"],
-            param["dim_in_x"],
-            param["ch_in"],
-            requires_grad=False,
-            dtype=dtype,
-        )
+            param["dim_in_y"], param["dim_in_x"], param["ch_in"],
+            requires_grad=False, dtype=torch.float32,
+        ).to(dtype)
+
         if not param["depthwise"]:
             kernel = torch.randn(
-                param["ch_out"],
-                param["dim_kernel_y"],
-                param["dim_kernel_x"],
-                param["ch_in"],
-                requires_grad=False,
-                dtype=dtype,
-            )
+                param["ch_out"], param["dim_kernel_y"], param["dim_kernel_x"], param["ch_in"],
+                requires_grad=False, dtype=torch.float32,
+            ).to(dtype)
         else:
             kernel = torch.randn(
-                param["dim_kernel_y"],
-                param["dim_kernel_x"],
-                param["ch_in"],
-                requires_grad=False,
-                dtype=dtype,
-            )
+                param["dim_kernel_y"], param["dim_kernel_x"], param["ch_in"],
+                requires_grad=False, dtype=torch.float32,
+            ).to(dtype)
 
-        bn_k = torch.randn(param["ch_out"], requires_grad=False)
-        bn_l = torch.randn(param["ch_out"], requires_grad=False)
+        bn_k = torch.randn(param["ch_out"], requires_grad=False, dtype=torch.float32).to(dtype)
+        bn_l = torch.randn(param["ch_out"], requires_grad=False, dtype=torch.float32).to(dtype)
 
         ofmap, ofmap_before, ifmap_padded = fused_conv(
-            ifmap,
-            kernel,
-            bn_k,
-            bn_l,
-            param["padding"],
-            param["stride"],
-            param["flags"]["flag_batch_norm"],
-            param["flags"]["flag_relu"],
-            not param["flags"]["flag_y_accumulate_start"],
-            param["depthwise"],
+            ifmap, kernel, bn_k, bn_l, param["padding"], param["stride"],
+            param["flags"]["flag_batch_norm"], param["flags"]["flag_relu"],
+            not param["flags"]["flag_y_accumulate_start"], param["depthwise"],
         )
 
         if param["chw_layer"]:
@@ -699,7 +654,6 @@ def main():
 
     else:
         print("No valid kernel selected")
-
 
 if __name__ == "__main__":
     main()

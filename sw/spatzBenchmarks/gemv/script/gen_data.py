@@ -23,7 +23,8 @@ def array_to_cstr(a, fmt=float):
         if isinstance(a, np.ndarray):
             a = list(a.flat)
         elif isinstance(a, torch.Tensor):
-            a = a.numpy().flatten().tolist()
+            # Universal Fix: Cast to float32 before sending to NumPy/C-string to avoid formatting errors
+            a = a.float().numpy().flatten().tolist()
         else:
             a = list(a)
         for i, el in enumerate(a):
@@ -121,9 +122,11 @@ def rand_data_generator(shape, prec, alt=False):
         return torch.randn(shape, requires_grad=False, dtype=torch.float32), {}
     elif prec == 16:
         if alt:
-            return torch.randn(shape, requires_grad=False, dtype=torch.bfloat16), {}
+            # Universal Fix: Generate FP32, cast to BF16
+            return torch.randn(shape, requires_grad=False, dtype=torch.float32).to(torch.bfloat16), {}
         else:
-            return torch.randn(shape, requires_grad=False, dtype=torch.float16), {}
+            # Universal Fix: Generate FP32, cast to FP16
+            return torch.randn(shape, requires_grad=False, dtype=torch.float32).to(torch.float16), {}
     elif prec == 8:
         sign = torch.randint(
             0, 2, shape, requires_grad=False, dtype=torch.uint8
@@ -142,15 +145,8 @@ def rand_data_generator(shape, prec, alt=False):
 
 
 def gemv(a, b):
-    # PyTorch doesn't support matmul for float16 on CPU, so convert to float32
-    original_dtype = a.dtype
-    if original_dtype == torch.float16:
-        a = a.float()
-        b = b.float()
-    result = torch.matmul(a, b)
-    if original_dtype == torch.float16:
-        result = result.half()
-    return result
+    # Universal Fix: One-liner upcast and downcast
+    return torch.matmul(a.float(), b.float()).to(a.dtype)
 
 
 def main():
@@ -198,3 +194,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+    
