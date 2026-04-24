@@ -601,7 +601,7 @@ module spatz_vfu
 
           // Written for max 8 FPU / 8 IPUs
           num_inter_lane_iterations_d = (spatz_req.vl << spatz_req.vtype.vsew) <= (ELENB) ? 0:
-                                        (spatz_req.vl << spatz_req.vtype.vsew) <= (2*ELENB) ? 1 : 
+                                        (spatz_req.vl << spatz_req.vtype.vsew) <= (2*ELENB) ? 1 :
                                           (spatz_req.vl << spatz_req.vtype.vsew) <= (4*ELENB) ? 2 : 3;
           num_inter_lane_iterations_d = is_fpu_insn ? (num_inter_lane_iterations_d > $clog2(N_FPU) ? $clog2(N_FPU) : num_inter_lane_iterations_d) :
                                                       (num_inter_lane_iterations_d > $clog2(N_IPU) ? $clog2(N_IPU) : num_inter_lane_iterations_d);
