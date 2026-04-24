@@ -63,7 +63,7 @@ package spatz_pkg;
   localparam int GPRWidth = FPU ? 6 : 5;
 
   // Number of parallel vector instructions
-  localparam int unsigned NrParallelInstructions = 4;
+  localparam int unsigned NrParallelInstructions = 8;
 
   // Largest element width that Spatz supports
   localparam vew_e MAXEW = RVD ? EW_64 : EW_32;
@@ -78,6 +78,9 @@ package spatz_pkg;
   // If you change this parameter, better parametrize the col counter
   // in the VLSU as well
   localparam int unsigned MAX_TILE_K = MAX_TILE_N;
+
+  // Encodes both the scalar RD and the VD address in the VRF
+  localparam int VFURespAddrWidth  = GPRWidth > $clog2(NrVRFWords) ? GPRWidth : $clog2(NrVRFWords);
 
   //////////////////////
   // Type Definitions //
@@ -94,6 +97,7 @@ package spatz_pkg;
 
   // VREG address, byte enable, and data type
   typedef logic [$clog2(NrVRFWords)-1:0] vrf_addr_t;
+  typedef logic [VFURespAddrWidth-1:0] vfu_rsp_addr_t;
   typedef logic [N_FU*ELENB-1:0] vrf_be_t;
   typedef logic [N_FU*ELEN-1:0] vrf_data_t;
 
