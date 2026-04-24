@@ -94,7 +94,7 @@ int main() {
   // --- BOUNDS CHECK 1: Do the fixed arrays fit in L1? ---
   if (fixed_alloc_size >= l1_size) {
     if (cid == 0) {
-      printf("FATAL: L1 Memory Overflow! Fixed arrays require %u bytes, but only %u bytes available.\n",
+      PRINTF("FATAL: L1 Memory Overflow! Fixed arrays require %u bytes, but only %u bytes available.\n",
              fixed_alloc_size, l1_size);
     }
     snrt_cluster_hw_barrier();
@@ -109,7 +109,7 @@ int main() {
   // --- BOUNDS CHECK 2: Can we double buffer at least 1 row? ---
   if (num_row_mat < 1) {
     if (cid == 0) {
-      printf("FATAL: L1 Memory Overflow! Cannot fit at least 2 rows for double buffering. "
+      PRINTF("FATAL: L1 Memory Overflow! Cannot fit at least 2 rows for double buffering. "
              "Chunk space left: %u bytes, Row size: %u bytes.\n",
              l1_for_chunk, row_size);
     }
@@ -165,8 +165,8 @@ int main() {
   // Task 1: Find out the non-zeros
   if (cid == 0) {
     #ifdef DEBUG_NZ
-    printf("NZ-Calc PreLD\n");
-    printf("DMA SRC:%p, TGT:%p, SIZE:%u\n", vec_ptr, gemv_vec_dram, vec_chunk_size);
+    PRINTF("NZ-Calc PreLD\n");
+    PRINTF("DMA SRC:%p, TGT:%p, SIZE:%u\n", vec_ptr, gemv_vec_dram, vec_chunk_size);
     #endif
     snrt_dma_start_1d(vec_ptr, gemv_vec_dram, vec_chunk_size);
     snrt_dma_wait_all();
@@ -187,8 +187,8 @@ int main() {
 
       if (i < num_vec_chunk - 1) {
         #ifdef DEBUG_NZ
-        printf("NZ-Calc DB Iter%u\n", i);
-        printf("DMA SRC:%p, TGT:%p, SIZE:%u\n",
+        PRINTF("NZ-Calc DB Iter%u\n", i);
+        PRINTF("DMA SRC:%p, TGT:%p, SIZE:%u\n",
                 gemv_vec_dram + (i + 1) * vec_chunk_len,
                 vec_db_ptr,
                 next_bytes);
@@ -227,13 +227,13 @@ int main() {
 
   #ifdef DEBUG_NZ
   if (cid == 0)
-    printf("Non-Zero Calc Complete\n");
+    PRINTF("Non-Zero Calc Complete\n");
   #endif
 
   #ifdef DEBUG_NZ_IDX
   if (cid == 0) {
     for (uint32_t i = 0; i < tot_nz_dram; i++) {
-      printf("IDX[%u]=%u\n", i, dense_idx[i]);
+      PRINTF("IDX[%u]=%u\n", i, dense_idx[i]);
     }
   }
   #endif
@@ -254,13 +254,13 @@ int main() {
     uint32_t active_rows = (tot_nz_dram < num_row_mat) ? tot_nz_dram : num_row_mat;
 
     #ifdef DEBUG_GEMV_PreLD
-    printf("GEMV PreLD\n");
-    printf("Active Rows:%u\n", active_rows);
+    PRINTF("GEMV PreLD\n");
+    PRINTF("Active Rows:%u\n", active_rows);
     #endif
 
     for (unsigned int i = 0; i < active_rows; i++) {
       #ifdef DEBUG
-      printf("Row:%u, SRC:%p, TGT:%p, SIZE:%u\n",
+      PRINTF("Row:%u, SRC:%p, TGT:%p, SIZE:%u\n",
               i,
               gemv_mat_dram + (size_t)(*idx_ptr) * gemv_l.M,
               mat_ptr + i * gemv_l.M,
@@ -277,12 +277,12 @@ int main() {
 
   #ifdef DEBUG_GEMV_PreLD
   if (cid == 0)
-    printf("GEMV PreLD Complete\n");
+    PRINTF("GEMV PreLD Complete\n");
   #endif
 
   #ifdef DEBUG_GEMV_DB
   if (cid == 0)
-    printf("Tot Chunks %u\n", num_mat_chunk);
+    PRINTF("Tot Chunks %u\n", num_mat_chunk);
   #endif
 
   for (unsigned int chunk_idx = 0; chunk_idx < num_mat_chunk; chunk_idx++) {
@@ -304,14 +304,14 @@ int main() {
 
     #ifdef DEBUG_GEMV_DB
     if (cid == 0)
-      printf("Chunk%u, DB Rows%u\n", chunk_idx, next_active_rows);
+      PRINTF("Chunk%u, DB Rows%u\n", chunk_idx, next_active_rows);
     #endif
 
     // Load NEXT chunk in the background
     if (cid == 0 && next_active_rows > 0) {
       for (unsigned int i = 0; i < next_active_rows; i++) {
         #ifdef DEBUG_GEMV_DB
-        printf("Ptr:%p, Row:%u, SRC:%p, TGT:%p, SIZE:%u\n",
+        PRINTF("Ptr:%p, Row:%u, SRC:%p, TGT:%p, SIZE:%u\n",
                 idx_ptr,
                 i,
                 gemv_mat_dram + (size_t)(*idx_ptr) * gemv_l.M,
@@ -363,7 +363,7 @@ int main() {
     // Checking
     for (unsigned int i = 0; i < gemv_l.M; i++) {
       if (fp_check(&result[i], &gemv_result[i])) {
-        printf("Error: ID: %i Result = %f, Golden = %f\n", i, result[i], gemv_result[i]);
+        PRINTF("Error: ID: %i Result = %f, Golden = %f\n", i, result[i], gemv_result[i]);
       }
     }
   }
@@ -380,10 +380,10 @@ int main() {
     long unsigned int utilization =
         performance / (2 * num_cores * 4 * 8 / sizeof(T));
 
-    printf("\n----- (%d x %d) x (%d x 1) sa-gemv -----\n", gemv_l.M, gemv_l.N, tot_nz_dram);
-    printf("The NZ finding takes %u cycles.\n", timer_nz);
-    printf("The GEMV execution took %u cycles.\n", timer);
-    printf("The performance is %ld OP/1000cycle (%ld%%o utilization).\n",
+    PRINTF("\n----- (%d x %d) x (%d x 1) sa-gemv -----\n", gemv_l.M, gemv_l.N, tot_nz_dram);
+    PRINTF("The NZ finding takes %u cycles.\n", timer_nz);
+    PRINTF("The GEMV execution took %u cycles.\n", timer);
+    PRINTF("The performance is %ld OP/1000cycle (%ld%%o utilization).\n",
            performance, utilization);
   }
 
