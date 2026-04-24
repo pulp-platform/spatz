@@ -36,16 +36,30 @@ void *snrt_l1alloc(size_t size) {
 }
 
 /**
- * @brief Allocate a chunk of memory in the L3 memory
- * @details This currently does not support free-ing of memory
+ * @brief Allocate a chunk of memory in the L3 memory (external DRAM)
+ * @details Bump allocator. Does not support free-ing of memory.
+ *          Bounds are set by snrt_alloc_init based on linker symbols
+ *          _edram (heap start) and __l3_end (end of DRAM region).
  *
  * @param size number of bytes to allocate
- * @return pointer to the allocated memory
+ * @return pointer to the allocated memory, or 0 on overflow
  */
 void *snrt_l3alloc(size_t size) {
     struct snrt_allocator_inst *alloc = &snrt_current_team()->allocator.l3;
 
-    // TODO: L3 alloc size check
+    size = ALIGN_UP(size, MIN_CHUNK_SIZE);
+
+    // Wrap-safe overflow check. We can't use (base + size > next + size) here
+    // because on 32-bit systems DRAM can span up to 0x100000000, which wraps
+    // to 0. Use "remaining" arithmetic (all subtractions stay within range).
+    uint32_t used = alloc->next - alloc->base;
+    if (size > alloc->size - used) {
+        snrt_trace(
+            SNRT_TRACE_ALLOC,
+            "Not enough L3 memory to allocate: base %#x size %#x next %#x req %#x\n",
+            alloc->base, alloc->size, alloc->next, size);
+        return 0;
+    }
 
     void *ret = (void *)alloc->next;
     alloc->next += size;
@@ -66,11 +80,16 @@ void snrt_alloc_init(struct snrt_team_root *team, uint32_t l3off) {
     team->allocator.l1.size =
         (uint32_t)(team->cluster_mem.end - team->cluster_mem.start);
     team->allocator.l1.next = team->allocator.l1.base;
-    // Allocator in L3 shared memory
+    // Allocator in L3 (external DRAM) shared memory.
+    // _edram and __l3_end are linker-provided symbols; take their addresses
+    // (the value at those locations is meaningless). See common.ld.in.
+    // __l3_end marks the *last valid byte* of DRAM (inclusive), not one
+    // past the end — the "+ 1" below accounts for that.
     extern uint32_t _edram;
+    extern uint32_t __l3_end;
     team->allocator.l3.base =
-        ALIGN_UP((uint32_t)_edram + l3off, MIN_CHUNK_SIZE);
-    ;
-    team->allocator.l3.size = 0;
+        ALIGN_UP((uint32_t)&_edram + l3off, MIN_CHUNK_SIZE);
+    team->allocator.l3.size =
+        (uint32_t)&__l3_end - team->allocator.l3.base + 1;
     team->allocator.l3.next = team->allocator.l3.base;
 }
