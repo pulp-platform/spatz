@@ -1,5 +1,5 @@
 
-void __attribute__ ((noinline)) FUNC_NAME(void* addrA,void* addrB, void* addrC, int K, int N, int M)
+void __attribute__ ((noinline)) FUNC_NAME(void* addrA,void* addrB, void* addrC, int K, int N, int M, int widening)
 {
     asm volatile(  
 
@@ -34,6 +34,12 @@ void __attribute__ ((noinline)) FUNC_NAME(void* addrA,void* addrB, void* addrC, 
         "mld.lhs m0, (s4), s10 \n\t"  
         "mld.rhs m4, (s5), s11 \n\t"       
         "mmacc   acc0, m4, m0 \n\t" 
+
+        // Decrease remaining K by two blocks
+        "add  t6, t5, t5 \n\t"
+        "sub  t2, t2, t6 \n\t" 
+        "srl  t5, t5, %[widening]\n\t"         
+
         "mul  s8, t5, s10 \n\t"   
         "mul  s9, t5, s11 \n\t"   
           
@@ -50,9 +56,6 @@ void __attribute__ ((noinline)) FUNC_NAME(void* addrA,void* addrB, void* addrC, 
         "add  t6, s9, s9 \n\t"               
         "add  s5, s5, t6 \n\t"               
 
-        // Decrease remaining K by two blocks
-        "add  t6, t5, t5 \n\t"
-        "sub  t2, t2, t6 \n\t"          
         "mmacc   acc0, m6, m2 \n\t" 
         "mcfgk t5, t2 \n\t"            // t5 = Processed K depth for a single block             
         "bgtz t2, 3b \n\t"          
@@ -83,7 +86,7 @@ void __attribute__ ((noinline)) FUNC_NAME(void* addrA,void* addrB, void* addrC, 
         : [addrA] "r" (addrA), [addrB] "r" (addrB), [addrC] "r" (addrC),
           [M] "r" (M), [N] "r" (N), [K] "r" (K),
           [dt_typeC] "i" (DTC), [dt_typeA] "i" (DTA), [dt_typeB] "i" (DTB),
-          [rmul] "i" (RMUL_2), [cmul] "i" (CMUL_2)
+          [rmul] "i" (RMUL_2), [cmul] "i" (CMUL_2), [widening] "r" (widening)
         : "t0", "t1", "t2", "t3", "t4", "t5", "t6", "s0", "s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9", "s10", "s11", "memory"
     );
 }
