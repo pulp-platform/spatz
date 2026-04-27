@@ -32,10 +32,10 @@ int Sim::run() {
     target.init(sim_thread_main, this);
 
     int exit_code = htif_t::run();
-    if (exit_code > 0)
-      fprintf(stderr, "[FAILURE] Finished with exit code %2d\n", exit_code);
-    else
+    if (exit_code == 0)
       fprintf(stderr, "[SUCCESS] Program finished successfully\n");
+    else
+      fprintf(stderr, "[FAILURE] Finished with exit code %2d\n", exit_code);
     return exit_code;
 }
 
