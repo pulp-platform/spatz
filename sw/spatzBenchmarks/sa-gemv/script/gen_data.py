@@ -93,7 +93,7 @@ def emit_gemv_layer(name="gemv", **kwargs):
             + ";\n"
         )
         # Assuming you have variables like M (output size) and tot_nz (number of non-zeros)
-        layer_str += f'// Auto-generated buffers for Cache Mode\n'
+        layer_str += '// Auto-generated buffers for Cache Mode\n'
         layer_str += f'static uint16_t dense_idx_dram[{tot_nz}] __attribute__((section(".data"))) = {{0}};\n'
         layer_str += f'static {dtype} dense_vec_dram[{tot_nz}] __attribute__((section(".data"))) = {{0.0}};\n'
         layer_str += f'static {dtype} result_buf_dram[{m}] __attribute__((section(".data"))) = {{0.0}};\n'
