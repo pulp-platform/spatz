@@ -53,7 +53,7 @@ static inline int fp_check(const T *a, const T *b) {
   const T threshold = 0.001;
 
   // Absolute value
-  double comp = (double)*a - (double)*b;
+  float comp = (float)*a - (float)*b;
   if (comp < 0)
     comp = -comp;
 
@@ -199,7 +199,7 @@ int main() {
       }
 
       for (unsigned int j = 0; j < vec_chunk_len; ++j) {
-        if ((double) vec_ptr[j] != 0.0) {
+        if ((float) vec_ptr[j] != 0.0) {
           dense_vec[nz_count] = vec_ptr[j];
           dense_idx[nz_count] = i * vec_chunk_len + j;
           nz_count++;
