@@ -19,7 +19,7 @@
 
 #include "sa-gemv.h"
 
-void gemv_v64b_m4(double *a, double* b, double* c, int M, int M_core, int N) {
+void gemv_v64b_m4(double *a, double *b, double *c, int M, int M_core, int N) {
   unsigned int vl, avl = M_core;
   double *a_, *a_start = a;
   double *c_ = c;
@@ -66,7 +66,7 @@ void gemv_v64b_m4(double *a, double* b, double* c, int M, int M_core, int N) {
   } while (avl > 0);
 }
 
-void gemv_v32b_m4(float *a, float* b, float* c, int M, int M_core, int N) {
+void gemv_v32b_m4(float *a, float *b, float *c, int M, int M_core, int N) {
   unsigned int vl, avl = M_core;
   float *a_, *a_start = a;
   float *c_ = c;
@@ -114,7 +114,7 @@ void gemv_v32b_m4(float *a, float* b, float* c, int M, int M_core, int N) {
   } while (avl > 0);
 }
 
-void gemv_v16b_m4(__fp16 *a, __fp16* b, __fp16* c, int M, int M_core, int N) {
+void gemv_v16b_m4(__fp16 *a, __fp16 *b, __fp16 *c, int M, int M_core, int N) {
   unsigned int vl, avl = M_core;
   __fp16 *a_, *a_start = a;
   __fp16 *c_ = c;
