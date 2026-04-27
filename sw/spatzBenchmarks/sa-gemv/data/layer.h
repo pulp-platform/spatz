@@ -9,8 +9,8 @@
 typedef enum { FP64 = 8, FP32 = 4, FP16 = 2, FP8 = 1 } precision_t;
 
 typedef struct gemv_layer_struct {
-    uint32_t M;
-    uint32_t N;
+  uint32_t M;
+  uint32_t N;
 
-    precision_t dtype;
+  precision_t dtype;
 } gemv_layer;

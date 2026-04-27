@@ -102,11 +102,11 @@ void gemv_v32b_m4(float *a, float *b, float *c, int M, int M_core, int N) {
 
     asm volatile("vle32.v v16, (%0)" ::"r"(c_));
     asm volatile("vfadd.vv v4, v4, v16");
-    asm volatile("vse32.v v12, (%0)" ::"r"(c_)); // wait, mapping v4 to v12? No, use v4.
+    asm volatile("vse32.v v12, (%0)" ::"r"(c_));
     // Correction:
     // asm volatile("vse32.v v4, (%0)" ::"r"(c_));
     // Let's rewrite this block safely:
-    asm volatile("vse32.v v4, (%0)" ::"r"(c_)); // Fixed register writeback
+    asm volatile("vse32.v v4, (%0)" ::"r"(c_));
 
     avl -= vl;
     c_ += vl;
