@@ -599,9 +599,10 @@ module spatz_vfu
         if (!result_valid[0] && (lat_count_q == (FPUlatency + 1))) begin
           reduction_state_d = Reduction_InterLane;
 
-          // Written for max 4 FPU / 4 IPUs
+          // Written for max 8 FPU / 8 IPUs
           num_inter_lane_iterations_d = (spatz_req.vl << spatz_req.vtype.vsew) <= (ELENB) ? 0:
-                                        (spatz_req.vl << spatz_req.vtype.vsew) <= (2*ELENB) ? 1 : 2;
+                                        (spatz_req.vl << spatz_req.vtype.vsew) <= (2*ELENB) ? 1 :
+                                          (spatz_req.vl << spatz_req.vtype.vsew) <= (4*ELENB) ? 2 : 3;
           num_inter_lane_iterations_d = is_fpu_insn ? (num_inter_lane_iterations_d > $clog2(N_FPU) ? $clog2(N_FPU) : num_inter_lane_iterations_d) :
                                                       (num_inter_lane_iterations_d > $clog2(N_IPU) ? $clog2(N_IPU) : num_inter_lane_iterations_d);
 
