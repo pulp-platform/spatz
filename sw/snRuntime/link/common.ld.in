@@ -108,3 +108,10 @@ SECTIONS
     _edram = .;
   } >DRAM
 }
+
+/* Last valid byte of the DRAM region. Used by snrt_l3alloc to bound the L3
+ * heap. We use (... + LENGTH - 1) rather than (... + LENGTH) so the result
+ * stays within uint32_t when DRAM spans the full upper 2GB (otherwise the
+ * symbol address wraps to 0, which both breaks arithmetic in C and triggers
+ * clang's "address of a declared object is never NULL" optimization). */
+__l3_end = ORIGIN(DRAM) + LENGTH(DRAM) - 1;

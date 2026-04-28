@@ -116,13 +116,17 @@ module spatz_vlsu
     endcase
   end: proc_spatz_req
 
+  // Only do the judgement when we have a valid instruction
+  // This is used to protect false triggeering the counter in some corner cases
   // Do we have a strided memory access
   logic mem_is_strided;
-  assign mem_is_strided = (mem_spatz_req.op == VLSE) || (mem_spatz_req.op == VSSE);
+  assign mem_is_strided = mem_spatz_req_valid &&
+                          ((mem_spatz_req.op == VLSE) || (mem_spatz_req.op == VSSE));
 
   // Do we have an indexed memory access
   logic mem_is_indexed;
-  assign mem_is_indexed = (mem_spatz_req.op == VLXE) || (mem_spatz_req.op == VSXE);
+  assign mem_is_indexed = mem_spatz_req_valid &&
+                          ((mem_spatz_req.op == VLXE) || (mem_spatz_req.op == VSXE));
 
   /////////////
   //  State  //
