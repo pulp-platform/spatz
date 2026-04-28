@@ -182,7 +182,7 @@ quadrilatero.gendata:
 		if [ -f "$$output" ]; then \
 			echo "Data already present for benchmark $$benchmark_dir"; \
 		else \
-			cmd="python3.11 $(ROOT)/../../dataMatMul.py --M $$M --N $$N --K $$K --dtype $$dtype --inc_dir $$benchmark_dir/data --transA 1 --bits $$bits"; \
+			cmd="python3.11 $(ROOT)/sw/quadrilateroBenchmarks/scripts/dataMatMul.py --M $$M --N $$N --K $$K --dtype $$dtype --inc_dir $$benchmark_dir/data --transA 1 --bits $$bits"; \
 			if [ -n "$$fp8_fmt" ]; then cmd="$$cmd --fp8_fmt $$fp8_fmt"; fi; \
 			echo "Generating $$name: $$cmd"; \
 			(cd "$$benchmark_dir" && $$cmd) || true; \
