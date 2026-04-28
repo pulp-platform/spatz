@@ -414,6 +414,9 @@ module spatz_vfu
           VFCMP  : begin
             fpu_op = fpnew_pkg::CMP;
             fpu_dst_fmt = fpu_src_fmt;
+            if (spatz_req.rm == fpnew_pkg::RUP)
+                // Boolean result inverted
+                fpu_op_mode = 1'b1;
           end
 
           VF2F: fpu_op = fpnew_pkg::F2F;
@@ -1190,6 +1193,7 @@ always_comb begin : vreg_wbe_proc
     else if (&(result_valid | ~pending_results) && (!spatz_req.op_arith.is_narrowing || narrowing_upper_q)) vreg_wb_word_cnt_d = vreg_wb_word_cnt_q + 1;
     // Got a new result
     if (&(result_valid | ~pending_results) && !result_tag.reduction) begin
+      vreg_wbe = '1;
       if (spatz_req.op == VFCMP) begin
         // every vector element requires 1 bit of wbe --> ceil(vl/8)
         automatic logic [$clog2((MAXVL+7)/8+1)-1:0] mask_bytes;
@@ -1264,12 +1268,11 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
   end
 
   logic [N_FU*ELEN-1:0] vreg_wdata, wdata_d, wdata_q;
-  always_comb begin: align_result
+  always_comb begin : align_result
     // Data from the FU to be written to the VRF
     // For reductions, if the result is present in the buffer used for intra-lane reductions
     vreg_wdata = result_buf_valid_q ? result_buf_q : result;
 
-    // Realign results
     if (result_tag.narrowing) begin
       unique case (MAXEW)
         EW_64: begin
@@ -1283,28 +1286,38 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
         end
         default:;
       endcase
+
     end else if (spatz_req.op == VFCMP) begin
-      // default
+      automatic logic v0_bit;
       vreg_wdata = '0;
-        unique case (spatz_req.vtype.vsew)
-          EW_8: begin
-            for (int i = 0; i < VRFWordWidth/8; i++)
-                vreg_wdata[i+(VRFWordWidth/8*word_idx_q)] = result[i*8];
+
+      unique case (spatz_req.vtype.vsew)
+        EW_8: begin
+          for (int i = 0; i < VRFWordWidth/8; i++) begin
+            v0_bit = (spatz_req.op_arith.vm) ? 1'b1 : operand_v0_t_q[i + (VRFWordWidth/8)*word_idx_q];
+            vreg_wdata[i + (VRFWordWidth/8)*word_idx_q] = result[i*8] & v0_bit;
           end
-          EW_16: begin
-            for (int i = 0; i < VRFWordWidth/16; i++)
-                vreg_wdata[i+(VRFWordWidth/16*word_idx_q)] = result[i*16];
+        end
+        EW_16: begin
+          for (int i = 0; i < VRFWordWidth/16; i++) begin
+            v0_bit = (spatz_req.op_arith.vm) ? 1'b1 : operand_v0_t_q[i + (VRFWordWidth/16)*word_idx_q];
+            vreg_wdata[i + (VRFWordWidth/16)*word_idx_q] = result[i*16] & v0_bit;
           end
-          EW_32: begin
-            for (int i = 0; i < VRFWordWidth/32; i++)
-                vreg_wdata[i+(VRFWordWidth/32*word_idx_q)] = result[i*32];
+        end
+        EW_32: begin
+          for (int i = 0; i < VRFWordWidth/32; i++) begin
+            v0_bit = (spatz_req.op_arith.vm) ? 1'b1 : operand_v0_t_q[i + (VRFWordWidth/32)*word_idx_q];
+            vreg_wdata[i + (VRFWordWidth/32)*word_idx_q] = result[i*32] & v0_bit;
           end
-          EW_64: begin
-            for (int i = 0; i < VRFWordWidth/64; i++)
-                vreg_wdata[i+(VRFWordWidth/64*word_idx_q)] = result[i*64];
+        end
+        EW_64: begin
+          for (int i = 0; i < VRFWordWidth/64; i++) begin
+            v0_bit = (spatz_req.op_arith.vm) ? 1'b1 : operand_v0_t_q[i + (VRFWordWidth/64)*word_idx_q];
+            vreg_wdata[i + (VRFWordWidth/64)*word_idx_q] = result[i*64] & v0_bit;
           end
-          default:;
-        endcase
+        end
+        default:;
+      endcase
     end
   end
 
