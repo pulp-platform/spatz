@@ -1090,7 +1090,10 @@ module spatz_vfu
 
     case(operand_state_q)
        READ_OPERANDS:begin
-        if(reduction_state_q == Reduction_Read_V0_t) begin
+        if(operand_state_d == READ_V0_t) begin
+          vrf_raddr_o = vreg_addr_d;
+        
+        end else if(reduction_state_q == Reduction_Read_V0_t) begin
           vreg_addr_d[0] =  0 << $clog2(NrWordsPerVector);
           vreg_addr_d[1] =  1 << $clog2(NrWordsPerVector);
           vrf_raddr_o = vreg_addr_d;
@@ -1137,10 +1140,12 @@ module spatz_vfu
     unique case(operand_state_q)
       READ_V0_t: vreg_r_req = 3'b011;
       READ_OPERANDS: begin
-        if(reduction_state_q == Reduction_Read_V0_t) vreg_r_req = 3'b011;
+        if (operand_state_d == READ_V0_t) begin
+          vreg_r_req = '0;  // avoid unuseful read
+        end
+        else if(reduction_state_q == Reduction_Read_V0_t) vreg_r_req = 3'b011;
         else
           if (spatz_req_valid && vl_q < spatz_req.vl)
-            // Request operands
             vreg_r_req = {spatz_req.vd_is_src, spatz_req.use_vs1 && reduction_operand_request[1], spatz_req.use_vs2 && reduction_operand_request[0]};
       end
       default:;
