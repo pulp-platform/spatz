@@ -154,6 +154,44 @@ spatz.cleandata:
 		fi \
 	done
 	@echo "All benchmark data cleaned."
+.PHONY: quadrilatero.gendata
+ifneq ($(QUAD_RLEN),0)
+quadrilatero.gendata:
+	@python3.11 -c "import torch, numpy" 2>/dev/null || python3.11 -m pip install --user torch numpy
+	@for benchmark_dir in $(ROOT)/sw/quadrilateroBenchmarks/matmul/*/; do \
+		name=$$(basename $$benchmark_dir); \
+		\
+		widening=$$(echo "$$name" | sed -n 's/widening\([0-9]\)x.*/\1/p'); \
+		if [ -z "$$widening" ]; then \
+			M=64; K=64; N=64; \
+			bits=32; \
+		else \
+			M=64; K=$$((64 * widening)); N=64; \
+			bits=$$((32/widening)); \
+		fi; \
+		\
+		if echo "$$name" | grep -q "hp-altfmatmul"; then dtype="bfloat"; fp8_fmt=""; \
+		elif echo "$$name" | grep -q "bp-fmatmul"; then dtype="float"; fp8_fmt="e5m2"; \
+		elif echo "$$name" | grep -q "bp-altfmatmul"; then dtype="float"; fp8_fmt="e4m3"; \
+		elif echo "$$name" | grep -q "fmatmul"; then dtype="float"; fp8_fmt=""; \
+		elif echo "$$name" | grep -q "umatmul"; then dtype="uint"; fp8_fmt=""; \
+		else dtype="int"; fp8_fmt=""; fi; \
+		\
+		output="$$benchmark_dir/data/data_$${M}_$${N}_$${K}.h"; \
+		\
+		if [ -f "$$output" ]; then \
+			echo "Data already present for benchmark $$benchmark_dir"; \
+		else \
+			cmd="python3.11 $(ROOT)/../../dataMatMul.py --M $$M --N $$N --K $$K --dtype $$dtype --inc_dir $$benchmark_dir/data --transA 1 --bits $$bits"; \
+			if [ -n "$$fp8_fmt" ]; then cmd="$$cmd --fp8_fmt $$fp8_fmt"; fi; \
+			echo "Generating $$name: $$cmd"; \
+			(cd "$$benchmark_dir" && $$cmd) || true; \
+		fi; \
+	done
+else
+quadrilatero.gendata:
+	@echo "Skipping Quadrilatero data generation (QUAD_RLEN=0)"
+endif
 
 #############
 # Verilator #
@@ -250,13 +288,13 @@ lint/tmp/files: ${BENDER}
 ######
 
 ## Build SW into sw/build with the LLVM toolchain
-sw: clean.sw spatz.gendata
+sw: clean.sw spatz.gendata quadrilatero.gendata
 	mkdir -p sw/build
 	cd sw/build && ${CMAKE} -DLLVM_PATH=${LLVM_INSTALL_DIR} -DGCC_PATH=${GCC_INSTALL_DIR} -DPYTHON=${PYTHON} -DBUILD_TESTS=ON -DSPATZ_CLUSTER_CFG=${SPATZ_CLUSTER_CFG} ${SPATZ_CLUSTER_CFG_DEFINES} .. && make -j8
 
 # VSIM
 ## Build SW into sw/build with the LLVM toolchain (including tests) for Questasim simulator
-sw.vsim: clean.sw bin/spatz_cluster.vsim spatz.gendata
+sw.vsim: clean.sw bin/spatz_cluster.vsim spatz.gendata quadrilatero.gendata
 	mkdir -p sw/build
 	cd sw/build && ${CMAKE} -DLLVM_PATH=${LLVM_INSTALL_DIR} -DGCC_PATH=${GCC_INSTALL_DIR} -DPYTHON=${PYTHON} -DSNITCH_SIMULATOR=../../../../../hw/system/spatz_cluster/bin/spatz_cluster.vsim -DBUILD_TESTS=ON -DSPATZ_CLUSTER_CFG=${SPATZ_CLUSTER_CFG} ${SPATZ_CLUSTER_CFG_DEFINES} .. && make -j8
 
@@ -266,7 +304,7 @@ sw.test.vsim: sw.vsim
 
 # VCS
 ## Build SW into sw/build with the LLVM toolchain (including tests) for VCS simulator
-sw.vcs: clean.sw bin/spatz_cluster.vcs spatz.gendata
+sw.vcs: clean.sw bin/spatz_cluster.vcs spatz.gendata quadrilatero.gendata
 	mkdir -p sw/build
 	cd sw/build && ${CMAKE} -DLLVM_PATH=${LLVM_INSTALL_DIR} -DGCC_PATH=${GCC_INSTALL_DIR} -DPYTHON=${PYTHON} -DSNITCH_SIMULATOR=../../../../../hw/system/spatz_cluster/bin/spatz_cluster.vcs -DBUILD_TESTS=ON -DSPATZ_CLUSTER_CFG=${SPATZ_CLUSTER_CFG} ${SPATZ_CLUSTER_CFG_DEFINES} .. && make -j8
 
@@ -276,7 +314,7 @@ sw.test.vcs: sw.vcs
 
 # VLT
 ## Build SW into sw/build with the LLVM toolchain (including tests) for Verilator simulator
-sw.vlt: clean.sw bin/spatz_cluster.vlt spatz.gendata
+sw.vlt: clean.sw bin/spatz_cluster.vlt spatz.gendata quadrilatero.gendata
 	mkdir -p sw/build
 	cd sw/build && ${CMAKE} -DLLVM_PATH=${LLVM_INSTALL_DIR} -DGCC_PATH=${GCC_INSTALL_DIR} -DPYTHON=${PYTHON} -DSNITCH_SIMULATOR=../../../../../hw/system/spatz_cluster/bin/spatz_cluster.vlt -DBUILD_TESTS=ON -DSPATZ_CLUSTER_CFG=${SPATZ_CLUSTER_CFG} ${SPATZ_CLUSTER_CFG_DEFINES} .. && make -j8
 
@@ -335,3 +373,4 @@ help:
 	@echo -e "${Blue}traces         ${Black}Generate the better readable traces in .logs/trace_hart_<hart_id>.txt with spike-dasm."
 	@echo -e ""
 	@echo -e "${Blue}spatz.gendata  ${Black}Generate data for all spatz benchmarks using gen_data.py with all config files."
+	@echo -e "${Blue}quadrilatero.gendata	${Black}Generate data for all quadrilatero benchmarks using dataMatMul.py with all config files."
