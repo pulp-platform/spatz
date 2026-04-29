@@ -6,13 +6,13 @@
 #
 # Author: Samuel Riedel, ETH Zurich
 
-from string import Template
-from math import log2
 import argparse
-import hjson
 import os.path
 import sys
+from math import log2
+from string import Template
 
+import hjson
 from jsonref import JsonRef
 
 parser = argparse.ArgumentParser(description="Convert binary file to verilog rom")
@@ -116,18 +116,18 @@ $content
 """
 
 
-def read_bin():
+def read_bin(byte_width):
     with open(filename + ".bin", "rb") as f:
         rom = bytes.hex(f.read())
         rom = list(map("".join, zip(rom[::2], rom[1::2])))
-    # align to 64 bit
-    align = (int((len(rom) + 7) / 8)) * 8
+
+    align = (int((len(rom) + (byte_width - 1)) / byte_width)) * byte_width
     for i in range(len(rom), align):
         rom.append("00")
     return rom
 
 
-rom = read_bin()
+rom = read_bin(int(cfg["cluster"]["dma_data_width"] / 8))
 
 """ Generate SystemVerilog bootcode for FPGA and ASIC
 """
@@ -142,7 +142,7 @@ with open(output, "w") as f:
                 "".join(rom[i * ByteWidth + b * 4 : i * ByteWidth + b * 4 + 4][::-1])
                 + "_"
             )
-            rom_str = rom_str[:-1]
+        rom_str = rom_str[:-1]
         rom_str += ",\n"
     # remove the trailing comma
     rom_str = rom_str[:-2]
