@@ -22,8 +22,8 @@ module ecc_scrubber #(
   input  logic                        rst_ni,
 
   input  logic                        scrub_trigger_i, // Set to 1'b0 to disable
-  output logic                        bit_corrected_o,
-  output logic                        uncorrectable_o,
+  // output logic                        bit_corrected_o,
+  // output logic                        uncorrectable_o,
 
   // Input signals from others accessing memory bank
   input  logic                        intc_req_i,
@@ -44,6 +44,11 @@ module ecc_scrubber #(
   input  logic [       DataWidth-1:0] ecc_in_i,
   input  logic [                 2:0] ecc_err_i
 );
+
+// FI strobe signals----------------------------
+  logic                        bit_corrected_o;
+  logic                        uncorrectable_o;
+//----------------------------------------------
 
   logic [                 1:0] ecc_err;
 

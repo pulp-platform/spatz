@@ -254,8 +254,8 @@ module ecc_sram #(
     .clk_i,
     .rst_ni,
 
-    .scrub_trigger_i ( scrub_trigger_i       ),
-    .bit_corrected_o ( scrubber_fix_o        ),
+    // .scrub_trigger_i ( scrub_trigger_i       ),
+    // .bit_corrected_o ( scrubber_fix_o        ), // temporarily keep internal for FI tests.
     .uncorrectable_o ( scrub_uncorrectable_o ),
 
     .intc_req_i      ( bank_req              ),
