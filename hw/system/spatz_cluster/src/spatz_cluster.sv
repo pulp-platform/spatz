@@ -618,6 +618,16 @@ module spatz_cluster
       //   .rdata_o (mem_rdata   )
       // );
 
+      // CMY：perodical scrub_trigger generator----
+      logic scrub_trigger;
+      scrub_timer #(.PERIOD(10_000_000)) i_scrub_timer (
+        .clk_i,
+        .rst_ni,
+        .scrub_trigger_o  (scrub_trigger)
+      );
+      //-------------------------------------------
+
+
       ecc_sram #(
         .NumWords  (TCDMDepth),
         .UnprotectedWidth (DataWidth),
@@ -631,7 +641,7 @@ module spatz_cluster
         .clk_i   (clk_i       ),
         .rst_ni  (rst_ni      ),
 
-        .scrub_trigger_i  ('0          ), // Set to 1'b0 to disable scrubber
+        .scrub_trigger_i  (scrub_trigger), // Set to 1'b0 to disable scrubber
         .scrubber_fix_o   (/* Unused */),
         .scrub_uncorrectable_o  (/* Unused */),
 
