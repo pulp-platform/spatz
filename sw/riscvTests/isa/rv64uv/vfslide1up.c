@@ -13,31 +13,30 @@ void TEST_CASE1() {
   //                            -0.9380
   BOX_HALF_IN_FLOAT(fscalar_16, 0xbb81);
 
-  VSET(16, e16, m2);
+  VSET(16, e16, m8);
   //VLOAD_16(v4, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16);
-  VLOAD_16(v4, 0xabcd, 0xdead, 0xbeef, 0xfeed, 0xabba, 0xdada, 0xc0da, 0x1234, 0x4321, 0xaabb, 0xbbaa, 0xccdd, 0xddcc, 0xeeff, 0xffee, 0xaaaa);
-  VLOAD_16(v2, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1);
-  asm volatile("vfslide1up.vf v2, v4, %[A]" ::[A] "f"(fscalar_16));
+  VLOAD_16(v8, 0xabcd, 0xdead, 0xbeef, 0xfeed, 0xabba, 0xdada, 0xc0da, 0x1234, 0x4321, 0xaabb, 0xbbaa, 0xccdd, 0xddcc, 0xeeff, 0xffee, 0xaaaa);
+  VLOAD_16(v1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1);
+  asm volatile("vfslide1up.vf v1, v8, %[A]" ::[A] "f"(fscalar_16));
 
-  VCMP_U16(1, v2, 0xbb81, 0xabcd, 0xdead, 0xbeef, 0xfeed, 0xabba, 0xdada, 0xc0da, 0x1234, 0x4321, 0xaabb, 0xbbaa, 0xccdd, 0xddcc, 0xeeff, 0xffee);
+  VCMP_U16(1, v1, 0xbb81, 0xabcd, 0xdead, 0xbeef, 0xfeed, 0xabba, 0xdada, 0xc0da, 0x1234, 0x4321, 0xaabb, 0xbbaa, 0xccdd, 0xddcc, 0xeeff, 0xffee);
 
 
   float fscalar_32;
   //                             -0.96056187
   BOX_FLOAT_IN_FLOAT(fscalar_32, 0xbf75e762);
 
-  VSET(16, e32, m2);
-  VLOAD_32(v4, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16);
-  VLOAD_32(v2, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1);
-  asm volatile("vfslide1up.vf v2, v4, %[A]" ::[A] "f"(fscalar_32));
-  VCMP_U32(2, v2, 0xbf75e762, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14,
+  VSET(16, e32, m8);
+  VLOAD_32(v8, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16);
+  VLOAD_32(v1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1);
+  asm volatile("vfslide1up.vf v1, v8, %[A]" ::[A] "f"(fscalar_32));
+  VCMP_U32(2, v1, 0xbf75e762, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14,
            15);
 
 #if ELEN == 64
   double dscalar_64;
   //                               0.9108707261227378
   BOX_DOUBLE_IN_DOUBLE(dscalar_64, 0x3fed25da5d7296fe);
-
 
   VSET(16, e64, m8);
   VLOAD_64(v8, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16);
@@ -53,39 +52,40 @@ void TEST_CASE2() {
   //                            -0.9380
   BOX_HALF_IN_FLOAT(fscalar_16, 0xbb81);
 
-  VSET(16, e16, m2);
-  VLOAD_16(v4, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16);
-  VLOAD_16(v2, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1);
+  VSET(16, e16, m8);
+  VLOAD_16(v8, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16);
+  VLOAD_16(v1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1);
   VLOAD_8(v0, 0x55, 0x55);
-  asm volatile("vfslide1up.vf v2, v4, %[A], v0.t" ::[A] "f"(fscalar_16));
-  VCMP_U16(4, v2, 0xbb81, -1, 2, -1, 4, -1, 6, -1, 8, -1, 10, -1, 12, -1, 14,
+  asm volatile("vfslide1up.vf v1, v8, %[A], v0.t" ::[A] "f"(fscalar_16));
+  VCMP_U16(4, v1, 0xbb81, -1, 2, -1, 4, -1, 6, -1, 8, -1, 10, -1, 12, -1, 14,
            -1);
 
   float fscalar_32;
   //                             -0.96056187
   BOX_FLOAT_IN_FLOAT(fscalar_32, 0xbf75e762);
 
-  VSET(16, e32, m2);
-  VLOAD_32(v4, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16);
-  VLOAD_32(v2, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1);
+  VSET(16, e32, m8);
+  VLOAD_32(v8, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16);
+  VLOAD_32(v1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1);
   VLOAD_8(v0, 0xAA, 0xAA);
-  asm volatile("vfslide1up.vf v2, v4, %[A], v0.t" ::[A] "f"(fscalar_32));
-  VCMP_U32(5, v2, -1, 1, -1, 3, -1, 5, -1, 7, -1, 9, -1, 11, -1, 13, -1, 15);
+  asm volatile("vfslide1up.vf v1, v8, %[A], v0.t" ::[A] "f"(fscalar_32));
+  VCMP_U32(5, v1, -1, 1, -1, 3, -1, 5, -1, 7, -1, 9, -1, 11, -1, 13, -1, 15);
 
 #if ELEN == 64
   double dscalar_64;
   //                               0.9108707261227378
   BOX_DOUBLE_IN_DOUBLE(dscalar_64, 0x3fed25da5d7296fe);
 
-  VSET(16, e64, m2);
-  VLOAD_64(v4, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16);
-  VLOAD_64(v2, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1);
+  VSET(16, e64, m8);
+  VLOAD_64(v8, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16);
+  VLOAD_64(v1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1);
   VLOAD_8(v0, 0x55, 0x55);
   asm volatile("vfslide1up.vf v1, v8, %[A], v0.t" ::[A] "f"(dscalar_64));
   VCMP_U64(6, v1, 0x3fed25da5d7296fe, -1, 2, -1, 4, -1, 6, -1, 8, -1, 10,
            -1, 12, -1, 14, -1);
 #endif
 }
+
 
 int main(void) {
   INIT_CHECK();
