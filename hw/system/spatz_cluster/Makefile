@@ -133,6 +133,20 @@ spatz.gendata:
 		fi \
 	done
 
+.PHONY: spatz.cleandata
+spatz.cleandata:
+	@for benchmark_dir in $(ROOT)/sw/spatzBenchmarks/*/; do \
+		data_dir="$$benchmark_dir/data"; \
+		if [ -d "$$data_dir" ]; then \
+			data_count=$$(find "$$data_dir" -name 'data*.h' -type f 2>/dev/null | wc -l); \
+			if [ "$$data_count" -gt 0 ]; then \
+				echo "Cleaning $$data_count data file(s) from $$data_dir"; \
+				rm -f "$$data_dir"/data*.h; \
+			fi \
+		fi \
+	done
+	@echo "All benchmark data cleaned."
+
 #############
 # Verilator #
 #############

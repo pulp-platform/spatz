@@ -46,11 +46,13 @@ module tb_bin;
       if (exit_code == 0)
         #200ns;
     end while (exit_code == 0);
+
     exit_code >>= 1;
-    if (exit_code > 0) begin
-      $error("[FAILURE] Finished with exit code %2d", exit_code);
-    end else begin
+
+    if (exit_code == 0) begin
       $info("[SUCCESS] Program finished successfully");
+    end else begin
+      $error("[FAILURE] Finished with exit code %2d", exit_code);
     end
     $finish;
   end
