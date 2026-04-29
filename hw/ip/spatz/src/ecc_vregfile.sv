@@ -166,10 +166,11 @@ module ecc_vregfile import spatz_pkg::*; #(
       be_buffer_d    = be_buffer_q;
 
       if (rmw_count_q == '0) begin
-        // Merge+write cycle
-        bank_req  = 1'b1;
-        // Return to NORMAL next cycle (store_state_d already = NORMAL)
-        // gnt_o stays 0 this cycle, upstream can send next request next cycle
+        // Merge+write cycle: assert bank_req to trigger the actual write,
+        // and raise gnt_o so upstream sees wvalid_o=1 and stops re-issuing we=1.
+        // store_state_d stays NORMAL (default), so next cycle we return to NORMAL.
+        bank_req = 1'b1;
+        gnt_o    = 1'b1;
       end else begin
         bank_req      = 1'b0;
         rmw_count_d   = rmw_count_q - 1;
