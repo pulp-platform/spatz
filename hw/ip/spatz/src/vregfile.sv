@@ -39,10 +39,16 @@ module vregfile import spatz_pkg::*; #(
   logic clk;
 
   // Register file memory
-  logic [NrWords-1:0][WordWidth/8-1:0][7:0] mem;
+  logic [NrWords-1:0][WordWidth/8-1:0][7:0] mem; // NrWords × WordWidth DFFs
+
+  // CMY: ECC encode and decode combinational logic
+  typedef enum logic { NORMAL, READ_MODIFY_WRITE } store_state_e;
+  store_state_e store_state_d, store_state_q;
+
 
   // Write data sampling
-  data_t wdata_q, wdata_d;
+  // data_t wdata_q, wdata_d;
+  data_t wdata_d;
 
   ///////////////////
   // Register File //
@@ -84,17 +90,6 @@ module vregfile import spatz_pkg::*; #(
   /* verilator lint_off NOLATCH */
   for (genvar vreg = 0; vreg < NrWords; vreg++) begin: gen_write_mem
     for (genvar b = 0; b < WordWidth/8; b++) begin: gen_word
-      // logic clk_latch;
-      // tc_clk_and2 i_clk_and (
-      //   .clk0_i(row_clk[vreg]),
-      //   .clk1_i(col_clk[b]   ),
-      //   .clk_o (clk_latch    )
-      // );
-
-      // always_latch begin
-      //   if (clk_latch)
-      //     mem[vreg][b] <= wdata_q[b*8 +: 8];
-      // end
 
       logic wr_en;
       assign wr_en = we_i & (waddr_i == vreg) & wbe_i[b];
@@ -131,5 +126,5 @@ module vregfile import spatz_pkg::*; #(
       .gnt_i  (1'b1         )
     );
   end: gen_read_mem
-
+  
 endmodule : vregfile

@@ -145,6 +145,7 @@ sources:
             - hw/ip/ventaglio/ventaglio_scatter_datapath.sv
             - hw/ip/ventaglio/ventaglio_scatter.sv
             - hw/ip/ventaglio/ventaglio_gather.sv
+        - hw/ip/spatz/src/ecc_vregfile.sv
     # Level 3
     - hw/ip/spatz/src/spatz_fpu_sequencer.sv
     - hw/ip/spatz/src/spatz_ipu.sv
@@ -152,6 +153,7 @@ sources:
     - hw/ip/spatz/src/spatz_vlsu.sv
     - hw/ip/spatz/src/spatz_doublebw_vlsu.sv
     - hw/ip/spatz/src/spatz_vrf.sv
+    - hw/ip/spatz/src/spatz_vrf_ecc.sv
     - hw/ip/spatz/src/spatz_vsldu.sv
     - target: ventaglio
       files:
@@ -203,6 +205,7 @@ sources:
       - hw/ip/redundancy_cells/hsiao_ecc_dec.sv
       - hw/ip/redundancy_cells/hsiao_ecc_cor.sv
       - hw/ip/redundancy_cells/ecc_scrubber.sv
+      - hw/ip/redundancy_cells/scrub_timer.sv
       - hw/ip/redundancy_cells/ecc_sram.sv
       # Level 1
       - hw/system/spatz_cluster/src/spatz_barrier.sv

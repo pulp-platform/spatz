@@ -263,7 +263,8 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   logic                         vrf_vtl_rgather_en;
 `endif
 
-  spatz_vrf #(
+  // spatz_vrf #(
+  spatz_vrf_ecc #(
     .NrReadPorts (NrReadPorts ),
     .NrWritePorts(NrWritePorts),
     .FpuBufDepth (FpuBufDepth )
