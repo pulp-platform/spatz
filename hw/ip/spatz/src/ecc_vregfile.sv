@@ -1,86 +1,175 @@
-// Copyright 2023 ETH Zurich and University of Bologna.
+// Copyright 2020 ETH Zurich and University of Bologna.
 // Licensed under the Apache License, Version 2.0, see LICENSE for details.
 // SPDX-License-Identifier: Apache-2.0
-//
-// Author: Matheus Cavalcante, ETH Zurich
-//
-// Generic vector register file that makes use of latches to store data.
 
-module vregfile import spatz_pkg::*; #(
-    parameter int  unsigned NrReadPorts = 0,
-    parameter int  unsigned NrWords     = NRVREG,
-    parameter int  unsigned WordWidth   = VRFWordWidth,
-    // Derived parameters.  Do not change!
-    parameter type          addr_t      = logic[$clog2(NrWords)-1:0],
-    parameter type          data_t      = logic [WordWidth-1:0],
-    parameter type          strb_t      = logic [WordWidth/8-1:0]
-    // Reliability parameters
-    parameter  int unsigned UnprotectedWidth = 32,
-    parameter  int unsigned ProtectedWidth   = 39,
-    parameter  bit          InputECC         = 0, // 0: no ECC on input
-                                                // 1: SECDED on input
-    localparam int unsigned DataInWidth      = InputECC ? ProtectedWidth : UnprotectedWidth
-  ) (
-    input  logic                    clk_i,
-    input  logic                    rst_ni,
-    input  logic                    testmode_i,
-    // Write ports
-    input  addr_t                   waddr_i,
-    input  data_t                   wdata_i,
-    input  logic                    we_i,
-    input  strb_t                   wbe_i,
-    // Read ports
-    input  addr_t [NrReadPorts-1:0] raddr_i,
-    output data_t [NrReadPorts-1:0] rdata_o
-  );
+module ecc_vregfile import spatz_pkg::*; #(
+  parameter int  unsigned NrReadPorts      = 0,
+  parameter int  unsigned NrWords          = NRVREG,
+  parameter int  unsigned WordWidth        = VRFWordWidth,
+  // Derived parameters. Do not change!
+  parameter type          addr_t           = logic [$clog2(NrWords)-1:0],
+  parameter type          data_t           = logic [WordWidth-1:0],
+  parameter type          strb_t           = logic [WordWidth/8-1:0],
+  // ECC parameters
+  parameter int  unsigned UnprotectedWidth = WordWidth,      // must equal WordWidth
+  parameter int  unsigned ProtectedWidth   = WordWidth + 7,  // e.g. 32+7=39 for SECDED
+  parameter int  unsigned NumRMWCuts       = 0,              // FF-based: keep 0
+  parameter int  unsigned ByteWidth        = 8,
+  // Derived ECC parameters. Do not change!
+  localparam int unsigned ByteEnWidth      = UnprotectedWidth / ByteWidth,
+  localparam int unsigned BankAddrWidth    = $clog2(NrWords)
+) (
+  input  logic                     clk_i,
+  input  logic                     rst_ni,
+  input  logic                     testmode_i,
+  // Write port
+  input  addr_t                    waddr_i,
+  input  data_t                    wdata_i,   // unprotected write data
+  input  logic                     we_i,
+  input  strb_t                    wbe_i,
+  // Read ports
+  input  addr_t [NrReadPorts-1:0]  raddr_i,
+  output data_t [NrReadPorts-1:0]  rdata_o,
+  // ECC status outputs
+  output logic  [NrReadPorts-1:0]  single_error_o,
+  output logic  [NrReadPorts-1:0]  multi_error_o,
+  // Write grant (low during RMW stall)
+  output logic                     gnt_o
+);
 
-  // Include FF
-  `include "common_cells/registers.svh"
+  // -------------------------------------------------------------------------
+  // Derived localparams
+  // -------------------------------------------------------------------------
+  localparam int unsigned ProtWidth = ProtectedWidth - UnprotectedWidth;
 
-  /////////////
-  // Signals //
-  /////////////
+  // -------------------------------------------------------------------------
+  // ECC register file memory (stores encoded words)
+  // -------------------------------------------------------------------------
+  logic [NrWords-1:0][ProtectedWidth-1:0] mem;
 
-  // Gated clock
-  logic clk;
-
-  // Register file memory
-  logic [NrWords-1:0][WordWidth/8-1:0][7:0] mem;
-
-  // Write data sampling
-  data_t wdata_q, wdata_d;
-
-  ///////////////////
-  // Register File //
-  ///////////////////
+  // -------------------------------------------------------------------------
+  // RMW state machine signals (mirrors ecc_sram)
+  // -------------------------------------------------------------------------
   typedef enum logic { NORMAL, READ_MODIFY_WRITE } store_state_e;
   store_state_e store_state_d, store_state_q;
 
-    always_comb begin
+  // rmw_count_t: protect against NumRMWCuts==0 giving 0-width type
+  localparam int unsigned RMWCountWidth = (NumRMWCuts > 0)
+                                          ? cf_math_pkg::idx_width(NumRMWCuts) : 1;
+  typedef logic [RMWCountWidth-1:0] rmw_count_t;
+  rmw_count_t rmw_count_d, rmw_count_q;
+
+  logic                      internal_we;
+  logic                      bank_req;
+  logic                      bank_we;
+  addr_t                     bank_addr;
+  logic [ProtectedWidth-1:0] bank_wdata;
+  logic [ProtectedWidth-1:0] bank_rdata;  // combinational read for RMW
+
+  logic [UnprotectedWidth-1:0] input_buffer_d, input_buffer_q;
+  addr_t                       addr_buffer_d,  addr_buffer_q;
+  strb_t                       be_buffer_d,    be_buffer_q;
+
+  // be_selector: expand byte-enable strobe to bit mask
+  logic [UnprotectedWidth-1:0] be_selector;
+  for (genvar i = 0; i < ByteEnWidth; i++) begin : gen_be_sel
+    assign be_selector[i*ByteWidth +: ByteWidth] = {ByteWidth{be_buffer_q[i]}};
+  end
+
+  // RMW pipeline buffer (NumRMWCuts=0 → transparent, depth=0 shift_reg)
+  // For FF-based VRF, bank_rdata is combinational so NumRMWCuts should be 0.
+  logic [ProtectedWidth-1:0] rmw_buffer_end;
+  if (NumRMWCuts == 0) begin : gen_no_rmw_cuts
+    assign rmw_buffer_end = bank_rdata;
+  end else begin : gen_rmw_cuts
+    shift_reg #(
+      .dtype (logic [ProtectedWidth-1:0]),
+      .Depth (NumRMWCuts)
+    ) i_rmw_buffer (
+      .clk_i,
+      .rst_ni,
+      .d_i (bank_rdata   ),
+      .d_o (rmw_buffer_end)
+    );
+  end
+
+  // -------------------------------------------------------------------------
+  // ECC encode / decode for write path (RMW)
+  // -------------------------------------------------------------------------
+  logic [UnprotectedWidth-1:0] to_store;   // input to encoder
+  logic [UnprotectedWidth-1:0] loaded;     // decoded old data for RMW merge
+  logic [1:0]                  rmw_ecc_error;
+
+  // Decoder: used only for RMW merge; input selects between
+  // same-cycle read (NORMAL, for full-word write no RMW needed but
+  // decoder is always present) and buffered read (RMW state)
+  logic [ProtectedWidth-1:0] rmw_decoder_in;
+  assign rmw_decoder_in = (store_state_q == NORMAL) ? bank_rdata : rmw_buffer_end;
+
+  hsiao_ecc_dec #(
+    .DataWidth (UnprotectedWidth),
+    .ProtWidth (ProtWidth)
+  ) i_rmw_ecc_dec (
+    .in         (rmw_decoder_in),
+    .out        (loaded        ),
+    .syndrome_o (              ),
+    .err_o      (rmw_ecc_error )
+  );
+
+  // Merge: select new or old bytes according to be_buffer_q
+  assign to_store = (store_state_q == NORMAL)
+                    ? wdata_i                                          // full-word: encode new data directly
+                    : (be_selector & input_buffer_q)                  // RMW: new bytes
+                    | (~be_selector & loaded);                         //       old bytes
+
+  hsiao_ecc_enc #(
+    .DataWidth (UnprotectedWidth),
+    .ProtWidth (ProtWidth)
+  ) i_ecc_enc (
+    .in  (to_store  ),
+    .out (bank_wdata)
+  );
+
+  // -------------------------------------------------------------------------
+  // Write FSM (identical structure to ecc_sram)
+  // -------------------------------------------------------------------------
+  assign internal_we = we_i & (wbe_i != '0);
+
+  always_comb begin
     store_state_d  = NORMAL;
     gnt_o          = 1'b1;
-    bank_addr      = addr_i;
+    bank_addr      = waddr_i;
     bank_we        = internal_we;
     input_buffer_d = wdata_i;
-    addr_buffer_d  = addr_i;
-    be_buffer_d    = be_i;
-    bank_req       = req_i;
+    addr_buffer_d  = waddr_i;
+    be_buffer_d    = wbe_i;
+    bank_req       = we_i;
     rmw_count_d    = rmw_count_q;
+
     if (store_state_q == NORMAL) begin
-      if (req_i & (be_i != {ByteEnWidth{1'b1}}) & internal_we) begin
+      // Partial-byte write → need RMW
+      if (we_i & (wbe_i != {ByteEnWidth{1'b1}}) & internal_we) begin
         store_state_d = READ_MODIFY_WRITE;
-        bank_we       = 1'b0;
+        bank_we       = 1'b0;             // suppress write on first cycle
+        bank_req      = 1'b0;
         rmw_count_d   = rmw_count_t'(NumRMWCuts);
+        gnt_o         = 1'b0;
       end
     end else begin
-      gnt_o           = 1'b0;
-      bank_addr       = addr_buffer_q;
-      bank_we         = 1'b1;
-      input_buffer_d  = input_buffer_q;
-      addr_buffer_d   = addr_buffer_q;
-      be_buffer_d     = be_buffer_q;
+      // Stall upstream
+      gnt_o          = 1'b0;
+      bank_addr      = addr_buffer_q;
+      bank_we        = 1'b1;
+      bank_req       = 1'b0;
+      input_buffer_d = input_buffer_q;
+      addr_buffer_d  = addr_buffer_q;
+      be_buffer_d    = be_buffer_q;
+
       if (rmw_count_q == '0) begin
-        bank_req      = 1'b1;
+        // Merge+write cycle
+        bank_req  = 1'b1;
+        // Return to NORMAL next cycle (store_state_d already = NORMAL)
+        // gnt_o stays 0 this cycle, upstream can send next request next cycle
       end else begin
         bank_req      = 1'b0;
         rmw_count_d   = rmw_count_q - 1;
@@ -89,109 +178,71 @@ module vregfile import spatz_pkg::*; #(
     end
   end
 
+  always_ff @(posedge clk_i or negedge rst_ni) begin : proc_rmw_ff
+    if (!rst_ni) begin
+      store_state_q  <= NORMAL;
+      addr_buffer_q  <= '0;
+      input_buffer_q <= '0;
+      be_buffer_q    <= '0;
+      rmw_count_q    <= '0;
+    end else begin
+      store_state_q  <= store_state_d;
+      addr_buffer_q  <= addr_buffer_d;
+      input_buffer_q <= input_buffer_d;
+      be_buffer_q    <= be_buffer_d;
+      rmw_count_q    <= rmw_count_d;
+    end
+  end
 
-// VRF ECC encoding and decoding-----------------------
-  hsiao_ecc_dec #(
+  // -------------------------------------------------------------------------
+  // FF memory array – write path
+  // bank_rdata is a combinational read used only by the RMW path (write addr)
+  // -------------------------------------------------------------------------
+  assign bank_rdata = mem[bank_addr];  // combinational; bank_addr tracks addr_buffer_q in RMW
+
+  for (genvar vreg = 0; vreg < NrWords; vreg++) begin : gen_write_mem
+    logic wr_en;
+    assign wr_en = bank_req & bank_we & (bank_addr == addr_t'(vreg));
+
+    always_ff @(posedge clk_i or negedge rst_ni) begin
+      if (!rst_ni)        mem[vreg] <= '0;
+      else if (wr_en)     mem[vreg] <= bank_wdata;
+    end
+  end : gen_write_mem
+
+  // -------------------------------------------------------------------------
+  // Read ports – each port gets its own decoder
+  // -------------------------------------------------------------------------
+  for (genvar port = 0; port < NrReadPorts; port++) begin : gen_read_ports
+    logic [ProtectedWidth-1:0] raw_rdata;
+    logic [1:0]                port_ecc_err;
+
+    // Combinational read
+    assign raw_rdata = mem[raddr_i[port]];
+
+    hsiao_ecc_dec #(
       .DataWidth (UnprotectedWidth),
-      .ProtWidth (ProtectedWidth - UnprotectedWidth)
-    ) ecc_decode (
-      .in        ( decoder_in ),
-      .out       ( loaded ),
-      .syndrome_o(),
-      .err_o     ( ecc_error )
+      .ProtWidth (ProtWidth)
+    ) i_rd_ecc_dec (
+      .in         (raw_rdata    ),
+      .out        (rdata_o[port]),
+      .syndrome_o (             ),
+      .err_o      (port_ecc_err )
     );
 
-    hsiao_ecc_enc #(
-      .DataWidth (UnprotectedWidth),
-      .ProtWidth (ProtectedWidth - UnprotectedWidth)
-    ) ecc_encode (
-      .in  ( to_store   ),
-      .out ( wdata_d )
-    );
-//---------------------------------------------------------
+    assign single_error_o[port] = port_ecc_err[0];
+    assign multi_error_o [port] = port_ecc_err[1];
+  end : gen_read_ports
 
-  // assign wdata_d = wdata_i;
+`ifndef TARGET_SYNTHESIS
+  always @(posedge clk_i) begin
+    for (int p = 0; p < NrReadPorts; p++) begin
+      if (single_error_o[p])
+        $display("[ECC vregfile] %t port %0d - single-bit error corrected", $realtime, p);
+      if (multi_error_o[p])
+        $display("[ECC vregfile] %t port %0d - multi-bit error detected", $realtime, p);
+    end
+  end
+`endif
 
-
-  // Row decoder. Create a clock for each SCM row
-  // logic [NrWords-1:0] row_clk;
-  // for (genvar row = 0; row < NrWords; row++) begin: gen_row_decoder
-  //   // Create latch clock signal
-  //   logic row_onehot;
-  //   assign row_onehot = (waddr_i == row);
-
-  //   // Create a clock for each SCM row
-  //   tc_clk_gating i_waddr_cg (
-  //     .clk_i    (clk         ),
-  //     .en_i     (row_onehot  ),
-  //     .test_en_i(testmode_i  ),
-  //     .clk_o    (row_clk[row])
-  //   );
-  // end: gen_row_decoder
-
-  // // Column decoder. Create a clock for each SCM column
-  // logic [WordWidth/8-1:0] col_clk;
-  // for (genvar b = 0; b < WordWidth/8; b++) begin: gen_col_decoder
-  //   tc_clk_gating i_wbe_cg (
-  //     .clk_i    (clk       ),
-  //     .en_i     (wbe_i[b]  ),
-  //     .test_en_i(testmode_i),
-  //     .clk_o    (col_clk[b])
-  //   );
-  // end: gen_col_decoder
-
-  // Select which destination bytes to write into
-
-  // Store new data to memory
-  /* verilator lint_off NOLATCH */
-  for (genvar vreg = 0; vreg < NrWords; vreg++) begin: gen_write_mem
-    for (genvar b = 0; b < WordWidth/8; b++) begin: gen_word
-      // logic clk_latch;
-      // tc_clk_and2 i_clk_and (
-      //   .clk0_i(row_clk[vreg]),
-      //   .clk1_i(col_clk[b]   ),
-      //   .clk_o (clk_latch    )
-      // );
-
-      // always_latch begin
-      //   if (clk_latch)
-      //     mem[vreg][b] <= wdata_q[b*8 +: 8];
-      // end
-
-      logic wr_en;
-      assign wr_en = we_i & (waddr_i == vreg) & wbe_i[b];
-
-      always_ff @(posedge clk_i or negedge rst_ni) begin
-        if (!rst_ni)
-          mem[vreg][b] <= '0;
-        else if(wr_en)
-          mem[vreg][b] <= wdata_d[b*8 +: 8];
-      end // CMY: FF-based VRF
-    end: gen_word
-  end: gen_write_mem
-  /* verilator lint_on NOLATCH */
-
-  // Read data from memory
-  for (genvar port = 0; port < NrReadPorts; port++) begin: gen_read_mem
-    // Reuse the decision tree from the RR arbiter
-    rr_arb_tree #(
-      .AxiVldRdy(1'b1     ),
-      .ExtPrio  (1'b1     ),
-      .DataWidth(WordWidth),
-      .NumIn    (NrWords  )
-    ) i_read_tree (
-      .clk_i  (clk_i        ),
-      .rst_ni (rst_ni       ),
-      .flush_i(1'b0         ),
-      .idx_o  (/* Unused */ ),
-      .data_i (mem          ),
-      .rr_i   (raddr_i[port]),
-      .data_o (rdata_o[port]),
-      .req_i  ('1           ),
-      .gnt_o  (/* Unused */ ),
-      .req_o  (/* Unused */ ),
-      .gnt_i  (1'b1         )
-    );
-  end: gen_read_mem
-
-endmodule : vregfile
+endmodule : ecc_vregfile
