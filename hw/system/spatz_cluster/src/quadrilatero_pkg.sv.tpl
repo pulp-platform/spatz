@@ -25,7 +25,7 @@ package quadrilatero_pkg;
   localparam int unsigned READ_PORTS    = 2 + LSU_PORTS;
   localparam int unsigned WRITE_PORTS   = 1 + LSU_PORTS;
   localparam int unsigned N_PORTS       = READ_PORTS + WRITE_PORTS;
-  localparam int unsigned LOG_N_PORTS   = $ceil($clog2(N_PORTS));
+  localparam int unsigned LOG_N_PORTS   = $clog2(N_PORTS);
   localparam int unsigned LOG_LSU_PORTS = LSU_PORTS > 1 ? $clog2(LSU_PORTS) : 1;
   
   localparam fpnew_pkg::fpu_features_t RV32_QUAD = '{
@@ -94,7 +94,16 @@ package quadrilatero_pkg;
     FU_LSU,
     FU_RF,
     FU_CFG
-  } execution_units_t;
+  } execution_units_e;
+
+  typedef enum logic [LOG_N_PORTS-1:0] {
+    SA_W_R = 0,   // Read  Port : Systolic Array Weight
+    SA_D_R = 1,   // Read  Port : Systolic Array Data
+    SA_A_W = 2,   // Write Port : Systolic Array Accumulator
+    LSU_R  = 3,   // Read  Port : Load-Store Unit
+    LSU_W  = 4    // Write Port : Load-Store Unit
+                  // ...
+  } ports_e;
 
   typedef struct packed {
     logic                  write  ;
@@ -122,10 +131,8 @@ package quadrilatero_pkg;
     logic[$clog2(NUM_MAC_UNITS)-1:0]  unit        ;
   } cfg_fpu_t;
   typedef struct packed {
-    logic ext_ld         ;
     logic finished       ;
     logic first_iteration;
-    logic stall          ;
   } ctrl_fpu_t;
   typedef struct packed {
     // logic     wen      ;
@@ -187,7 +194,7 @@ package quadrilatero_pkg;
     logic      is_mac         ;
     logic      is_move        ;
     mcfg_t     mcfg           ;
-    execution_units_t eu      ;
+    execution_units_e eu      ;
     xif_result_t     result   ;
     logic            result_we;
     logic[$clog2(RLEN)-1:0]             n_col_bytes   ;
@@ -289,12 +296,37 @@ package quadrilatero_pkg;
     logic[$clog2(RLEN):0]     n_rows     ;
   } lsu_instr_t;
 
-  typedef enum logic [LOG_N_PORTS-1:0] {
-    SA_W_R = 0,   // Read  Port : Systolic Array Weight
-    SA_D_R = 1,   // Read  Port : Systolic Array Data
-    SA_A_W = 2,   // Write Port : Systolic Array Accumulator
-    LSU_R  = 3,   // Read  Port : Load-Store Unit
-    LSU_W  = 4    // Write Port : Load-Store Unit
-                  // ...
-  } ports_e;
+  typedef struct packed {
+    sel_op1_e         [1:0] Op1    ;
+    sel_op2_e         [1:0] Op2    ;
+    sel_op3_e         [1:0] Op3    ;
+    ports_e           [4:0] Ports  ;
+    execution_units_e [3:0] ExUnits;
+  } quadrilatero_enum_t;
+
+  typedef struct packed {
+   int unsigned NRegs      ;
+   int unsigned DataWidth  ;
+   int unsigned RegCE      ;
+   int unsigned Rlen       ;
+   int unsigned Llen       ;
+   int unsigned NumExUnits ;
+   int unsigned NumMacUnits;
+   quadrilatero_enum_t EnumList;
+  } quadrilatero_cfg_t;
+
+  localparam quadrilatero_cfg_t QuadrilateroCfg = '{
+    NRegs      : N_REGS        ,
+    DataWidth  : DATA_WIDTH    ,
+    RegCE      : REG_PER_CE    ,
+    Rlen       : RLEN          , // change register dimension
+    Llen       : LLEN          , // change for different bus width
+    NumExUnits : NUM_EXEC_UNITS,  // change me to add units
+    NumMacUnits: NUM_MAC_UNITS , // change me to add units
+    EnumList   : '{ Op1:{SEL1_ACT, SEL1_ACC }, 
+                    Op2:{SEL2_WGT, SEL2_ACC }, 
+                    Op3:{SEL3_ACC, SEL3_ZERO},
+                    Ports:{LSU_W,LSU_R,SA_A_W,SA_D_R,SA_W_R},
+                    ExUnits:{FU_CFG,FU_RF,FU_LSU,FU_SYSTOLIC_ARRAY}}
+  };
 endpackage
