@@ -1,3 +1,9 @@
+// Copyright 2026 ETH Zurich and University of Bologna.
+// Licensed under the Apache License, Version 2.0, see LICENSE for details.
+// SPDX-License-Identifier: Apache-2.0
+//
+// Author: Danilo Cammarata, ETH Zurich
+
 module quadrilatero_top import fpnew_pkg::*; import quadrilatero_pkg::*; #(
     parameter int                  unsigned NrMemPorts          = 1,
     parameter bit                           RegisterRsp         = 0,
