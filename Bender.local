@@ -8,4 +8,3 @@ overrides:
   register_interface: { git: "https://github.com/pulp-platform/register_interface.git", version: 0.3.9          }
   cluster_icache:     { git: "https://github.com/pulp-platform/cluster_icache.git",     version: 0.2.0          }
   common_cells:       { git: "https://github.com/pulp-platform/common_cells.git",       version: 1.38.0         }
-  quadrilatero: {path: "/scratch/dcammarata/spatz_quadrilatero/quadrilatero"                    }
