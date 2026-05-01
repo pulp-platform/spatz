@@ -91,10 +91,10 @@ packages:
     - common_cells
     - common_verification
   quadrilatero:
-    revision: f6efa91b87380db7dfb3b49544d1444ee7914f1e
+    revision: null
     version: null
     source:
-      Git: git@iis-git.ee.ethz.ch:quadrilatero/quadrilatero.git
+      Path: /scratch/dcammarata/spatz_quadrilatero/quadrilatero
     dependencies:
     - common_cells
     - fpnew
