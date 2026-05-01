@@ -30,6 +30,7 @@ before_script:
   - export PATH="$VERILATOR_BIN:$HOME/.local/bin:$PATH"
   - export PYTHONPATH="$CI_PROJECT_DIR/install/python-deps:$PYTHONPATH"
   - env
+  - git config --global url."https://gitlab-ci-token:${CI_JOB_TOKEN}@iis-git.ee.ethz.ch/".insteadOf "https://iis-git.ee.ethz.ch/"
 
 stages:
   - tools
