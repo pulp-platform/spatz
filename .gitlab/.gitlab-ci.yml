@@ -30,7 +30,10 @@ before_script:
   - export PATH="$VERILATOR_BIN:$HOME/.local/bin:$PATH"
   - export PYTHONPATH="$CI_PROJECT_DIR/install/python-deps:$PYTHONPATH"
   - env
-  - git config --global url."https://gitlab-ci-token:${CI_JOB_TOKEN}@iis-git.ee.ethz.ch/".insteadOf "https://iis-git.ee.ethz.ch/"
+  # Rewrite the URL to include the Deploy Token credentials
+  - git config --global url."https://${READ_USER}:${READ_TOKEN}@iis-git.ee.ethz.ch/".insteadOf "https://iis-git.ee.ethz.ch/"
+  # Clean the bender cache to remove the "Access Denied" history
+  - rm -rf .bender
 
 stages:
   - tools
@@ -158,6 +161,7 @@ snRuntime-test-vlt:
     - $CI_PROJECT_DIR/util/memora_retry.sh get verilator
     - $CI_PROJECT_DIR/util/memora_retry.sh get python-deps
     # Download bender
+    - rm -rf bender
     - make bender
     # Update opcodes
     - make update_opcodes
