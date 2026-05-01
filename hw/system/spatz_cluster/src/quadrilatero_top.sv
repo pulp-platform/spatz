@@ -43,10 +43,6 @@ module quadrilatero_top import fpnew_pkg::*; import quadrilatero_pkg::*; #(
     input  logic            [NrMemPorts-1:0] quad_mem_rsp_valid_i
   );
 
-  localparam int unsigned INPUT_BUFFER_DEPTH = 4;
-  localparam int unsigned RES_IF_FIFO_DEPTH  = 4;
-  localparam int unsigned MATRIX_FPU         = 1; // Fix mac_flaot to use FPU = 1
-
   localparam int unsigned DataWidth = 32;
   localparam int unsigned NumMemPortsPerSpatz = NrMemPorts/2;
 
@@ -183,9 +179,6 @@ module quadrilatero_top import fpnew_pkg::*; import quadrilatero_pkg::*; #(
   end   
 
   quadrilatero #(
-      .INPUT_BUFFER_DEPTH(INPUT_BUFFER_DEPTH),  // 0 means no input buffer 
-      .RES_IF_FIFO_DEPTH (RES_IF_FIFO_DEPTH ),
-      .FPU               (MATRIX_FPU        ),
       .quadrilatero_cfg_t(quadrilatero_pkg::quadrilatero_cfg_t),
       .Cfg               (quadrilatero_pkg::QuadrilateroCfg   ),
       .id_t              (quadrilatero_pkg::id_t              ),
@@ -204,6 +197,7 @@ module quadrilatero_top import fpnew_pkg::*; import quadrilatero_pkg::*; #(
       .lsu_instr_t       (quadrilatero_pkg::lsu_instr_t       ),
       .execution_units_e (quadrilatero_pkg::execution_units_e ),
       .ports_e           (quadrilatero_pkg::ports_e           ),
+      .tech_e            (quadrilatero_pkg::tech_e            ),
       .sel_op1_e         (quadrilatero_pkg::sel_op1_e         ),
       .sel_op2_e         (quadrilatero_pkg::sel_op2_e         ),
       .sel_op3_e         (quadrilatero_pkg::sel_op3_e         )

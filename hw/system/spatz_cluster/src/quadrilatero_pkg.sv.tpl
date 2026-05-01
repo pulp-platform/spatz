@@ -10,16 +10,38 @@ package quadrilatero_pkg;
   localparam int unsigned DATA_WIDTH = 32;
   localparam int unsigned REG_PER_CE =  4;
 
-  localparam int unsigned RLEN = ${cfg['rlen']};; // change register dimension
-  localparam int unsigned ALEN = RLEN;            // change systolic array dimension
-  localparam int unsigned LLEN = ${cfg['llen']};; // change for different bus width
+  // Quadrilatero Sizes
+  localparam int unsigned RLEN = ${cfg['rlen']};
+  localparam int unsigned ALEN = RLEN;           
+  localparam int unsigned LLEN = ${cfg['llen']};
 
+  // Unit Parameters
+  localparam int unsigned NUM_EXEC_UNITS =   4;
+  localparam int unsigned NUM_MAC_UNITS  =   4;
+
+  // Buffer Sizes
+  localparam int unsigned INPUT_BUFFER_DEPTH = 4;
+  localparam int unsigned RES_IF_FIFO_DEPTH  = 4;
+  localparam int unsigned LSU_FIFO_DEPTH     = 4;
+
+  // Other Parameters
+  localparam bit    ISSUE_STAGE_FF = 1'b0;
+
+  typedef enum logic[1:0] {LATCH, SRAM, FF} tech_e;
+  localparam tech_e MRF_TECH = FF;
+
+  // DataTypes parameters
+  localparam bit EN_FMA      = 1'b0;
+  localparam bit EN_INT32    = 1'b0;
+  localparam bit EN_INT16    = 1'b1;
+  localparam bit EN_INT8     = 1'b1;
+  localparam bit EN_SIGNED   = 1'b1;
+  localparam bit EN_UNSIGNED = 1'b1;
+
+  // Derived Parameters
   localparam int unsigned MESH_WIDTH    = RLEN/DATA_WIDTH;  
   localparam int unsigned SA_MESH_WIDTH = ALEN/DATA_WIDTH;
   localparam int unsigned N_ROWS        = RLEN/DATA_WIDTH;
-
-  localparam int unsigned NUM_EXEC_UNITS =   4;  // change me to add units
-  localparam int unsigned NUM_MAC_UNITS  =   4;  // change me to add units
 
   localparam int unsigned LSU_PORTS     = LLEN/RLEN    ;
   localparam int unsigned READ_PORTS    = 2 + LSU_PORTS;
@@ -27,58 +49,6 @@ package quadrilatero_pkg;
   localparam int unsigned N_PORTS       = READ_PORTS + WRITE_PORTS;
   localparam int unsigned LOG_N_PORTS   = $clog2(N_PORTS);
   localparam int unsigned LOG_LSU_PORTS = LSU_PORTS > 1 ? $clog2(LSU_PORTS) : 1;
-  
-  localparam fpnew_pkg::fpu_features_t RV32_QUAD = '{
-    Width:         32,
-    EnableVectors: 1'b0,
-    EnableNanBox:  1'b1,
-    FpFmtMask:     6'b101111,
-    IntFmtMask:    4'b0010
-  };
-
-  localparam fpnew_pkg::fpu_implementation_t FPUImplementation [1] = '{
-    '{
-        PipeRegs: // FMA Block
-                  '{// FP32 FP64 FP16 FP8 FP16alt FP8alt
-                    '{   3,   0,   0,  0,   0,      0   },   // FMA Block
-                    '{   0,   0,   0,  0,   0,      0   },   // DIVSQRT
-                    '{   0,   0,   0,  0,   0,      0   },   // NONCOMP
-                    '{   0,   0,   0,  0,   0,      0   },   // CONV
-                    '{   3,   3,   3,  3,   3,      3   }    // DOTP
-                    },
-        UnitTypes: '{'{fpnew_pkg::PARALLEL,
-                       fpnew_pkg::DISABLED,
-                       fpnew_pkg::DISABLED,
-                       fpnew_pkg::DISABLED,
-                       fpnew_pkg::DISABLED,
-                       fpnew_pkg::DISABLED},  // FMA
-                    '{fpnew_pkg::DISABLED,
-                        fpnew_pkg::DISABLED,
-                        fpnew_pkg::DISABLED,
-                        fpnew_pkg::DISABLED,
-                        fpnew_pkg::DISABLED,
-                        fpnew_pkg::DISABLED}, // DIVSQRT
-                    '{fpnew_pkg::DISABLED,
-                        fpnew_pkg::DISABLED,
-                        fpnew_pkg::DISABLED,
-                        fpnew_pkg::DISABLED,
-                        fpnew_pkg::DISABLED,
-                        fpnew_pkg::DISABLED}, // NONCOMP
-                    '{fpnew_pkg::DISABLED,
-                        fpnew_pkg::DISABLED,
-                        fpnew_pkg::DISABLED,
-                        fpnew_pkg::DISABLED,
-                        fpnew_pkg::DISABLED,
-                        fpnew_pkg::DISABLED},   // CONV
-                    '{fpnew_pkg::MERGED,
-                        fpnew_pkg::DISABLED,
-                        fpnew_pkg::MERGED,
-                        fpnew_pkg::MERGED,
-                        fpnew_pkg::DISABLED,
-                        fpnew_pkg::DISABLED}},  // DOTP
-        PipeConfig: fpnew_pkg::BEFORE
-    }
-  };
 
   typedef logic [xif_pkg::X_ID_WIDTH-1:0] id_t     ;
   typedef logic [$clog2(REG_PER_CE) -1:0] acc_reg_t;
@@ -300,33 +270,57 @@ package quadrilatero_pkg;
     sel_op1_e         [1:0] Op1    ;
     sel_op2_e         [1:0] Op2    ;
     sel_op3_e         [1:0] Op3    ;
-    ports_e           [4:0] Ports  ;
+    tech_e            [2:0] MRFTech;
     execution_units_e [3:0] ExUnits;
+    ports_e           [4:0] Ports  ;
   } quadrilatero_enum_t;
 
   typedef struct packed {
-   int unsigned NRegs      ;
-   int unsigned DataWidth  ;
-   int unsigned RegCE      ;
-   int unsigned Rlen       ;
-   int unsigned Llen       ;
-   int unsigned NumExUnits ;
-   int unsigned NumMacUnits;
+   int unsigned NRegs            ;
+   int unsigned DataWidth        ;
+   int unsigned RegCE            ;
+   int unsigned Rlen             ;
+   int unsigned Llen             ;
+   int unsigned NumExUnits       ;
+   int unsigned NumMacUnits      ;
+   int unsigned InputBufferDepth ;
+   int unsigned OutputBufferDepth;
+   int unsigned LSUFifoDepth     ;
+   tech_e       MRFTech          ;
+   bit          IssueStageFF     ;
+   bit          EnableFMA        ;
+   bit          EnableInt32      ;
+   bit          EnableInt16      ;
+   bit          EnableInt8       ;
+   bit          EnableSigned     ;
+   bit          EnableUnsigned   ;
    quadrilatero_enum_t EnumList;
   } quadrilatero_cfg_t;
 
   localparam quadrilatero_cfg_t QuadrilateroCfg = '{
-    NRegs      : N_REGS        ,
-    DataWidth  : DATA_WIDTH    ,
-    RegCE      : REG_PER_CE    ,
-    Rlen       : RLEN          , // change register dimension
-    Llen       : LLEN          , // change for different bus width
-    NumExUnits : NUM_EXEC_UNITS,  // change me to add units
-    NumMacUnits: NUM_MAC_UNITS , // change me to add units
+    NRegs            : N_REGS            ,
+    DataWidth        : DATA_WIDTH        ,
+    RegCE            : REG_PER_CE        ,
+    Rlen             : RLEN              ,
+    Llen             : LLEN              ,
+    NumExUnits       : NUM_EXEC_UNITS    ,
+    NumMacUnits      : NUM_MAC_UNITS     ,
+    InputBufferDepth : INPUT_BUFFER_DEPTH,
+    OutputBufferDepth: RES_IF_FIFO_DEPTH ,
+    LSUFifoDepth     : LSU_FIFO_DEPTH    ,
+    IssueStageFF     : ISSUE_STAGE_FF    ,
+    MRFTech          : MRF_TECH          ,
+    EnableFMA        : EN_FMA            ,
+    EnableInt32      : EN_INT32          ,
+    EnableInt16      : EN_INT16          ,
+    EnableInt8       : EN_INT8           ,
+    EnableSigned     : EN_SIGNED         ,
+    EnableUnsigned   : EN_UNSIGNED       ,
     EnumList   : '{ Op1:{SEL1_ACT, SEL1_ACC }, 
                     Op2:{SEL2_WGT, SEL2_ACC }, 
                     Op3:{SEL3_ACC, SEL3_ZERO},
-                    Ports:{LSU_W,LSU_R,SA_A_W,SA_D_R,SA_W_R},
-                    ExUnits:{FU_CFG,FU_RF,FU_LSU,FU_SYSTOLIC_ARRAY}}
+                    MRFTech:{LATCH, SRAM, FF},
+                    ExUnits:{FU_CFG,FU_RF,FU_LSU,FU_SYSTOLIC_ARRAY},
+                    Ports:{LSU_W,LSU_R,SA_A_W,SA_D_R,SA_W_R}}
   };
 endpackage
