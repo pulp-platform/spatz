@@ -158,15 +158,15 @@ spatz.cleandata:
 ifneq ($(QUAD_RLEN),0)
 quadrilatero.gendata:
 	@python3.11 -c "import torch, numpy" 2>/dev/null || python3.11 -m pip install --user torch numpy
-	@for benchmark_dir in $(ROOT)/sw/quadrilateroBenchmarks/matmul/*/; do \
-		name=$$(basename $$benchmark_dir); \
+	@grep -E '^\s*add_quadrilatero_test_threeParam\(' $(ROOT)/sw/quadrilateroBenchmarks/CMakeLists.txt | \
+	sed 's/.*add_quadrilatero_test_threeParam(\([^)]*\))/\1/' | \
+	while IFS=' ' read -r name _path M N K rest; do \
+		benchmark_dir=$(ROOT)/sw/quadrilateroBenchmarks/matmul/$$name; \
 		\
 		widening=$$(echo "$$name" | sed -n 's/widening\([0-9]\)x.*/\1/p'); \
 		if [ -z "$$widening" ]; then \
-			M=64; K=64; N=64; \
 			bits=32; \
 		else \
-			M=64; K=$$((64 * widening)); N=64; \
 			bits=$$((32/widening)); \
 		fi; \
 		\
@@ -180,11 +180,11 @@ quadrilatero.gendata:
 		output="$$benchmark_dir/data/data_$${M}_$${N}_$${K}.h"; \
 		\
 		if [ -f "$$output" ]; then \
-			echo "Data already present for benchmark $$benchmark_dir"; \
+			echo "Data already present for benchmark $$name (M=$$M N=$$N K=$$K)"; \
 		else \
 			cmd="python3.11 $(ROOT)/sw/quadrilateroBenchmarks/scripts/dataMatMul.py --M $$M --N $$N --K $$K --dtype $$dtype --inc_dir $$benchmark_dir/data --transA 1 --bits $$bits"; \
 			if [ -n "$$fp8_fmt" ]; then cmd="$$cmd --fp8_fmt $$fp8_fmt"; fi; \
-			echo "Generating $$name: $$cmd"; \
+			echo "Generating $$name (M=$$M N=$$N K=$$K): $$cmd"; \
 			(cd "$$benchmark_dir" && $$cmd) || true; \
 		fi; \
 	done
