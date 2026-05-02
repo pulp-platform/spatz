@@ -126,7 +126,10 @@ snRuntime-test-vsim:
     matrix:
       - { cfg: spatz_cluster.default.dram }
       - { cfg: spatz_cluster.smallvrf.dram }
+      - { cfg: spatz_cluster.32b.dram }
       - { cfg: spatz_cluster.doublebw.dram }
+      - { cfg: spatz_quadrilatero_128_128_256.dram }
+      - { cfg: spatz_quadrilatero_256_256_512.dram }
 
 snRuntime-test-vcs:
   stage: test
@@ -150,7 +153,10 @@ snRuntime-test-vcs:
     matrix:
       - { cfg: spatz_cluster.default.dram }
       - { cfg: spatz_cluster.smallvrf.dram }
+      - { cfg: spatz_cluster.32b.dram }
       - { cfg: spatz_cluster.doublebw.dram }
+      - { cfg: spatz_quadrilatero_128_128_256.dram }
+      - { cfg: spatz_quadrilatero_256_256_512.dram }
 
 snRuntime-test-vlt:
   stage: test
@@ -176,7 +182,10 @@ snRuntime-test-vlt:
     matrix:
       - { cfg: spatz_cluster.default.dram }
       - { cfg: spatz_cluster.smallvrf.dram }
+      - { cfg: spatz_cluster.32b.dram }
       - { cfg: spatz_cluster.doublebw.dram }
+      - { cfg: spatz_quadrilatero_128_128_256.dram }
+      - { cfg: spatz_quadrilatero_256_256_512.dram }
 
 # RISC-V unit tests
 riscvTests-test-vlt:
@@ -204,6 +213,8 @@ riscvTests-test-vlt:
       - { cfg: spatz_cluster.smallvrf.dram }
       - { cfg: spatz_cluster.32b.dram }
       - { cfg: spatz_cluster.doublebw.dram }
+      - { cfg: spatz_quadrilatero_128_128_256.dram }
+      - { cfg: spatz_quadrilatero_256_256_512.dram }
 
 # Spatz tests
 spatzBenchmarks-test-vlt:
@@ -231,3 +242,5 @@ spatzBenchmarks-test-vlt:
       - { cfg: spatz_cluster.smallvrf.dram }
       - { cfg: spatz_cluster.32b.dram }
       - { cfg: spatz_cluster.doublebw.dram }
+      - { cfg: spatz_quadrilatero_128_128_256.dram }
+      - { cfg: spatz_quadrilatero_256_256_512.dram }
