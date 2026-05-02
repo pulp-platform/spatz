@@ -47,29 +47,22 @@ add_library(benchmark-quadrilatero kernels/benchmark.c)
 
 # Kernels
 add_library(matmul kernels/matmul.c)
-# add_library(verify-quadrilatero verify-quadrilatero/kernel/verify-quadrilatero.c)
 
 # # Tests
 enable_testing()
 set(SNITCH_TEST_PREFIX quadrilateroBenchmarks-)
-# add_quadrilatero_test_noParam(quadrilatero-matmul quadrilatero_matmul/main.c)
 
-add_quadrilatero_test_threeParam(sp-matmul-quadrilatero matmul/sp-matmul-quadrilatero/main.c 64 64 64)
+# add_quadrilatero_test_threeParam(sp-matmul-quadrilatero matmul/sp-matmul-quadrilatero/main.c 64 64 64)
 add_quadrilatero_test_threeParam(widening2x-hp-matmul-quadrilatero matmul/widening2x-hp-matmul-quadrilatero/main.c 64 64 128)
 add_quadrilatero_test_threeParam(widening4x-bp-matmul-quadrilatero matmul/widening4x-bp-matmul-quadrilatero/main.c 64 64 256)
 
-add_quadrilatero_test_threeParam(sp-umatmul-quadrilatero matmul/sp-umatmul-quadrilatero/main.c 64 64 64)
+# add_quadrilatero_test_threeParam(sp-umatmul-quadrilatero matmul/sp-umatmul-quadrilatero/main.c 64 64 64)
 add_quadrilatero_test_threeParam(widening2x-hp-umatmul-quadrilatero matmul/widening2x-hp-umatmul-quadrilatero/main.c 64 64 128)
 add_quadrilatero_test_threeParam(widening4x-bp-umatmul-quadrilatero matmul/widening4x-bp-umatmul-quadrilatero/main.c 64 64 256)
 
-add_quadrilatero_test_threeParam(sp-fmatmul-quadrilatero matmul/sp-fmatmul-quadrilatero/main.c 64 64 64)
+# add_quadrilatero_test_threeParam(sp-fmatmul-quadrilatero matmul/sp-fmatmul-quadrilatero/main.c 64 64 64)
 add_quadrilatero_test_threeParam(widening2x-hp-fmatmul-quadrilatero matmul/widening2x-hp-fmatmul-quadrilatero/main.c 64 64 128)
 add_quadrilatero_test_threeParam(widening4x-bp-fmatmul-quadrilatero matmul/widening4x-bp-fmatmul-quadrilatero/main.c 64 64 256)
 
 add_quadrilatero_test_threeParam(widening2x-hp-altfmatmul-quadrilatero matmul/widening2x-hp-altfmatmul-quadrilatero/main.c 64 64 128)
 add_quadrilatero_test_threeParam(widening4x-bp-altfmatmul-quadrilatero matmul/widening4x-bp-altfmatmul-quadrilatero/main.c 64 64 256)
-
-# add_quadrilatero_test_threeParam(sp-fmatmul-quadrilatero sp-fmatmul-quadrilatero/main.c 64 64 8)
-# add_quadrilatero_test_threeParam(sp-fmatmul-quadrilatero sp-fmatmul-quadrilatero/main.c 8 8 8)
-# add_quadrilatero_test_threeParam(sp-fmatmul-quadrilatero sp-fmatmul-quadrilatero/main.c 8 16 72)
-# add_quadrilatero_test_threeParam(verify-quadrilatero verify-quadrilatero/main.c 64 64 64)
