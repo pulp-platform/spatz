@@ -33,6 +33,7 @@ endif
 # Enable additional uA configurations for the spatz core
 DOUBLE_BW := $(shell python3 -c "import jstyleson; print(jstyleson.load(open('$(SPATZ_CLUSTER_CFG_PATH)'))['cluster'].get('double_bw', 0))")
 BUF_FPU := $(shell python3 -c "import jstyleson; print(jstyleson.load(open('$(SPATZ_CLUSTER_CFG_PATH)'))['cluster'].get('buf_fpu', 0))")
+QUADRILATERO := $(shell python3 -c "import jstyleson; print(jstyleson.load(open('$(SPATZ_CLUSTER_CFG_PATH)'))['cluster'].get('quadrilatero', 0))")
 
 ifeq ($(DOUBLE_BW),1)
 	DEFS += -DDOUBLE_BW
@@ -41,6 +42,11 @@ endif
 
 ifeq ($(BUF_FPU),1)
 	DEFS += -DBUF_FPU
+endif
+
+ifeq ($(QUADRILATERO),1)
+	VSIM_BENDER += -t quadrilatero
+	VLT_BENDER += -t quadrilatero
 endif
 
 # Include Makefrag

@@ -19,7 +19,7 @@ dependencies:
   cluster_icache:     { git: "https://github.com/pulp-platform/cluster_icache.git",      version: 0.2.0          }
   riscv-dbg:          { git: "https://github.com/pulp-platform/riscv-dbg.git",           version: 0.7.0          }
   tech_cells_generic: { git: "https://github.com/pulp-platform/tech_cells_generic.git",  version: 0.2.13         }
-  quadrilatero      : { git: https://iis-git.ee.ethz.ch/quadrilatero/quadrilatero.git,   rev:     f6efa91        }
+  quadrilatero      : { git: https://iis-git.ee.ethz.ch/quadrilatero/quadrilatero.git,   rev:     f42f6ad        }
 
 export_include_dirs:
   - hw/ip/mem_interface/include
@@ -168,9 +168,12 @@ sources:
       - hw/ip/spatz_cc/src/axi_dma_tc_snitch_fe.sv
       # Level 3
       - hw/ip/spatz_cc/src/spatz_cc.sv
-      - hw/system/spatz_cluster/src/generated/quadrilatero_pkg.sv
-      - hw/system/spatz_cluster/src/quadrilatero_top.sv
-      - hw/ip/spatz_cc/src/spatz_quadrilatero_cc.sv
+    
+      - target: quadrilatero
+        files:
+        - hw/system/spatz_cluster/src/generated/quadrilatero_pkg.sv
+        - hw/system/spatz_cluster/src/quadrilatero_top.sv
+        - hw/ip/spatz_cc/src/spatz_quadrilatero_cc.sv
 
       ## system/spatz_cluster ##
 
