@@ -39,7 +39,7 @@ before_script:
   # This creates a folder named 'python'. Set your variables to use it.
   - export PATH="$CI_PROJECT_DIR/python/bin:$PATH"
   # Now 'python3.11' will be found in the current directory's path
-  - python3.11 -m pip install numpy torch
+  - python3.11 -m pip install --user numpy torch
 
 stages:
   - tools
