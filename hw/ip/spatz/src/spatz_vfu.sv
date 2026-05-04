@@ -596,7 +596,7 @@ module spatz_vfu
 
         // Are we done?
         // Wait until FU latency to ensure the pipelines are drained
-        if (!result_valid[0] && (lat_count_q == (FPUlatency + 1))) begin
+        if (!result_valid[0] && (lat_count_q > (FPUlatency + 1))) begin
           reduction_state_d = Reduction_InterLane;
 
           // Written for max 8 FPU / 8 IPUs
