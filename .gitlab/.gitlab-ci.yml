@@ -38,8 +38,12 @@ before_script:
   - curl -L https://github.com/indygreg/python-build-standalone/releases/download/20240107/cpython-3.11.7+20240107-x86_64-unknown-linux-gnu-install_only.tar.gz | tar -xz
   # This creates a folder named 'python'. Set your variables to use it.
   - export PATH="$CI_PROJECT_DIR/python/bin:$PATH"
-  # Now 'python3.11' will be found in the current directory's path
-  - python3.11 -m pip install --user numpy torch
+  # Clean up any corrupted packages left in the local user directory from previous runs
+  - rm -rf ~/.local/lib/python3.11/site-packages/torch*
+  # Install all the standard python dependencies your project needs
+  - python3.11 -m pip install jsonref jsonschema jstyleson mako scipy numpy
+  # Explicitly install the CPU-only version of PyTorch
+  - python3.11 -m pip install torch --index-url https://download.pytorch.org/whl/cpu
 
 stages:
   - tools
