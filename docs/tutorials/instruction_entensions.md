@@ -375,4 +375,4 @@ instruction — your edit will be wiped on the next regeneration. Always
 edit the `opcodes-*` source instead.
 
 ---
-*Authored by Bowen Wang &lt;bowwang@iis.ee.ethz.ch&gt;. Last updated 2026-05-06.*   
+*Authored by Bowen Wang &lt;bowwang@iis.ee.ethz.ch&gt;. Last updated 2026-05-06.*
