@@ -67,7 +67,6 @@ module spatz_vlsu
 
   localparam int unsigned MemDataWidth  = ELEN;
   localparam int unsigned MemDataWidthB = MemDataWidth/8;
-  localparam int unsigned LogVRFWordBWidth = $clog2(VRFWordBWidth);
 
   //////////////
   // Typedefs //
@@ -460,8 +459,29 @@ module spatz_vlsu
   vreg_elem_t vs2_elem_id_d, vs2_elem_id_q;
   `FF(vs2_elem_id_q, vs2_elem_id_d, '0)
 
-  // Pending indexes
-  logic [NrMemPorts-1:0] fetch_next_idx;
+  // Total bytes of indexes consumed since instruction start
+  vlen_t total_idx_bytes_q, total_idx_bytes_d;
+  `FF(total_idx_bytes_q, total_idx_bytes_d, '0)
+
+  logic fetch_next_idx_global;
+
+  always_comb begin
+    total_idx_bytes_d = total_idx_bytes_q;
+
+    // Reset on new instruction
+    if (mem_spatz_req_ready) begin
+      total_idx_bytes_d = '0;
+    end else begin
+      for (int unsigned p = 0; p < NrMemPorts; p++) begin
+        if (mem_counter_en[p])
+          total_idx_bytes_d = total_idx_bytes_d + (vlen_t'(1) << mem_spatz_req.op_mem.ew);
+      end
+    end
+
+    // Advance vs2_elem_id when we cross a VRF word boundary
+    fetch_next_idx_global = mem_is_indexed && ((total_idx_bytes_d >> $clog2(VRFWordBWidth)) != (total_idx_bytes_q >> $clog2(VRFWordBWidth)));
+  end
+
 
   // Calculate the memory address for each memory port
   addr_offset_t [NrMemPorts-1:0] mem_req_addr_offset;
@@ -513,10 +533,6 @@ module spatz_vlsu
       addr                      = mem_spatz_req.rs1 + offset;
       mem_req_addr[port]        = (addr >> MAXEW) << MAXEW;
       mem_req_addr_offset[port] = addr[int'(MAXEW)-1:0];
-
-      // If the request has been pushed into the memory request fifo and this is the last offset
-      // update address for index to fetch the next address in the following cycle
-      fetch_next_idx[port] = (mem_idx_counter_q[port][$clog2(NrWordsPerVector*ELENB)-1:0] == (num_idx_maxew_bytes - (1'b1 << mem_spatz_req.op_mem.ew))) && mem_counter_en[port];
     end
   end: gen_mem_req_addr
 
@@ -889,8 +905,8 @@ module spatz_vlsu
       commit_counter_sum += commit_counter_q[port];
       mem_counter_sum += mem_counter_q[port];
     end
-    commit_slice_base = (commit_counter_sum >> LogVRFWordBWidth) << LogVRFWordBWidth;
-    mem_slice_base    = (mem_counter_sum    >> LogVRFWordBWidth) << LogVRFWordBWidth;
+    commit_slice_base = (commit_counter_sum >> $clog2(VRFWordBWidth)) << $clog2(VRFWordBWidth);
+    mem_slice_base    = (mem_counter_sum    >> $clog2(VRFWordBWidth)) << $clog2(VRFWordBWidth);
   end
 
 
@@ -948,7 +964,7 @@ module spatz_vlsu
 
     // Count which vs2 element we should load (indexed loads)
     vs2_elem_id_d = vs2_elem_id_q;
-    if (&(fetch_next_idx ^ ~mem_operation_valid) && mem_is_indexed)
+    if (fetch_next_idx_global)
       vs2_elem_id_d = vs2_elem_id_q + 1;
     if (mem_spatz_req_ready) // finish one instruction
       vs2_elem_id_d = '0;
