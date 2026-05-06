@@ -67,6 +67,7 @@ module spatz_vlsu
 
   localparam int unsigned MemDataWidth  = ELEN;
   localparam int unsigned MemDataWidthB = MemDataWidth/8;
+  localparam int unsigned LogVRFWordBWidth = $clog2(VRFWordBWidth);
 
   //////////////
   // Typedefs //
@@ -878,8 +879,9 @@ module spatz_vlsu
   end
 
   vlen_t commit_counter_sum,mem_counter_sum;
-  logic [$bits(vlen_t)-5:0] commit_counter_mod32,mem_counter_mod32;
   vlen_t [NrMemPorts-1:0] prefix,mem_counter_position_sum;
+  vlen_t commit_slice_base, mem_slice_base;
+
   always_comb begin
      commit_counter_sum = '0;
      mem_counter_sum = '0;
@@ -887,9 +889,10 @@ module spatz_vlsu
       commit_counter_sum += commit_counter_q[port];
       mem_counter_sum += mem_counter_q[port];
     end
-    commit_counter_mod32 = commit_counter_sum >> 5;
-    mem_counter_mod32 = mem_counter_sum >> 5;
+    commit_slice_base = (commit_counter_sum >> LogVRFWordBWidth) << LogVRFWordBWidth;
+    mem_slice_base    = (mem_counter_sum    >> LogVRFWordBWidth) << LogVRFWordBWidth;
   end
+
 
   // Intermediate wbe, before vm_masking.
   vrf_be_t load_wbe;
@@ -908,7 +911,7 @@ module spatz_vlsu
 
   always_comb begin
     for (int port = 0; port < NrMemPorts; port++) begin
-      vm_wbe_store[port] = vm_masking[mem_counter_mod32*32 + port*ELENB +: ELENB];
+      vm_wbe_store[port] = vm_masking[mem_slice_base + port*ELENB +: ELENB];
     end
   end
 
@@ -1018,13 +1021,13 @@ module spatz_vlsu
               endcase
 
               load_wbe[ELENB*port +: ELENB] = (mask << shift);
-              vm_wbe = vm_masking[commit_counter_mod32*32 +:(N_FU*ELENB)];
+              vm_wbe = vm_masking[commit_slice_base +: VRFWordBWidth];
               vrf_req_d.wbe = load_wbe & vm_wbe;
             end
             else begin
               for (int unsigned k = 0; k < ELENB; k++) begin
                 load_wbe[ELENB*port+k] = (k < commit_counter_delta[port]);
-                vrf_req_d.wbe = load_wbe & vm_masking[commit_counter_mod32*32 +:(N_FU*ELENB)];
+                vrf_req_d.wbe = load_wbe & vm_masking[commit_slice_base +: VRFWordBWidth];
               end
             end
         end
@@ -1069,12 +1072,21 @@ module spatz_vlsu
 
           // Shift data to lsb if we have a strided or indexed memory access
           if (mem_is_strided || mem_is_indexed)
-            if (MAXEW == EW_32) // MAXEW_32 doesn't support masking
+            if (MAXEW == EW_32)
               unique case (mem_counter_q[port][1:0])
-                2'b01: data = {data[7:0], data[31:8]};
-                2'b10: data = {data[15:0], data[31:16]};
-                2'b11: data = {data[23:0], data[31:24]};
-                default:; // Do nothing
+                2'b01: begin
+                  data          = {data[7:0], data[31:8]};
+                  vm_strb[port] = {vm_wbe_store[port][0],   vm_wbe_store[port][3:1]};
+                end
+                2'b10: begin
+                  data          = {data[15:0], data[31:16]};
+                  vm_strb[port] = {vm_wbe_store[port][1:0], vm_wbe_store[port][3:2]};
+                end
+                2'b11: begin
+                  data          = {data[23:0], data[31:24]};
+                  vm_strb[port] = {vm_wbe_store[port][2:0], vm_wbe_store[port][3]};
+                end
+                default: vm_strb[port] = vm_wbe_store[port];
               endcase
             else
               // Shift vm_masking along with data
@@ -1112,12 +1124,21 @@ module spatz_vlsu
 
           // Shift data to correct position if we have an unaligned memory request
           if (MAXEW == EW_32)
-            unique case ((mem_is_strided || mem_is_indexed) ? mem_req_addr_offset[port] : mem_spatz_req.rs1[1:0])
-              2'b01: mem_req_data[port]   = {data[23:0], data[31:24]};
-              2'b10: mem_req_data[port]   = {data[15:0], data[31:16]};
-              2'b11: mem_req_data[port]   = {data[7:0], data[31:8]};
-              default: mem_req_data[port] = data;
-            endcase
+              unique case ((mem_is_strided || mem_is_indexed) ? mem_req_addr_offset[port] : mem_spatz_req.rs1[1:0])
+                2'b01: begin
+                  mem_req_data[port] = {data[23:0], data[31:24]};
+                  vm_strb[port]      = {vm_strb[port][2:0], vm_strb[port][3]};
+                end
+                2'b10: begin
+                  mem_req_data[port] = {data[15:0], data[31:16]};
+                  vm_strb[port]      = {vm_strb[port][1:0], vm_strb[port][3:2]};
+                end
+                2'b11: begin
+                  mem_req_data[port] = {data[7:0], data[31:8]};
+                  vm_strb[port]      = {vm_strb[port][0], vm_strb[port][3:1]};
+                end
+                default: mem_req_data[port] = data;
+              endcase
           else
             unique case ((mem_is_strided || mem_is_indexed) ? mem_req_addr_offset[port] : mem_spatz_req.rs1[2:0])
               3'b001: begin
@@ -1177,7 +1198,7 @@ module spatz_vlsu
             for (int unsigned k = 0; k < ELENB; k++) begin
               store_strb[port][k] = k < mem_counter_delta[port];
             end
-            mem_req_strb[port] = store_strb[port] & vm_masking[mem_counter_mod32*32 + port*ELENB +: ELENB];
+            mem_req_strb[port] = store_strb[port] & vm_masking[mem_slice_base + port*ELENB +: ELENB];
           end
         end else begin
           // Clear empty buffer id requests
