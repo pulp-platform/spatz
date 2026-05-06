@@ -1195,7 +1195,8 @@ always_comb begin : vreg_wbe_proc
 
     if ((result_tag.last && &(result_valid | ~pending_results) && reduction_state_q inside {Reduction_NormalExecution, Reduction_Wait}) || reduction_done)
       vreg_wb_word_cnt_d = 0;
-    else if (&(result_valid | ~pending_results) && (!spatz_req.op_arith.is_narrowing || narrowing_upper_q)) vreg_wb_word_cnt_d = vreg_wb_word_cnt_q + 1;
+    else if (&(result_valid | ~pending_results) && (!spatz_req.op_arith.is_narrowing || narrowing_upper_q))
+      vreg_wb_word_cnt_d = vreg_wb_word_cnt_q + 1;
     // Got a new result
     if (&(result_valid | ~pending_results) && !result_tag.reduction) begin
       vreg_wbe = '1;
@@ -1204,20 +1205,19 @@ always_comb begin : vreg_wbe_proc
         automatic logic [$clog2((MAXVL+7)/8+1)-1:0] mask_bytes;
         mask_bytes = (spatz_req.vl + 7) >> 3;
         vreg_wbe   = (mask_bytes >= N_FU*ELENB) ? '1 : vrf_be_t'((vrf_be_t'(1) << mask_bytes) - 1);
-      end else if(!spatz_req.op_arith.vm && !spatz_req.op_arith.is_scalar && !result_tag.narrowing) begin// CMY: masking the wb results
-        // unique case (spatz_req.vtype.vsew)
-        unique case (sew_wb) // CMY: add widening support
-          EW_8:for(int i=0;i<VRFWordBWidth/1;i=i+1)begin
-            vreg_wbe[i*1+:1] = {1{operand_v0_t_q[vreg_wb_word_cnt_q *32 + i]}};
+      end else if(!spatz_req.op_arith.vm && !spatz_req.op_arith.is_scalar && !result_tag.narrowing) begin //masking the wb results
+        unique case (sew_wb) // add widening support
+          EW_8:for(int i=0;i<VRFWordBWidth;i=i+1)begin
+            vreg_wbe[i*1+:1] = {1{operand_v0_t_q[vreg_wb_word_cnt_q * VRFWordBWidth + i]}};
           end
           EW_16:for(int i=0;i<VRFWordBWidth/2;i=i+1)begin
-            vreg_wbe[i*2+:2] = {2{operand_v0_t_q[vreg_wb_word_cnt_q *16 + i]}};
+            vreg_wbe[i*2+:2] = {2{operand_v0_t_q[vreg_wb_word_cnt_q * (VRFWordBWidth/2) + i]}};
           end
           EW_32: for(int i=0;i<VRFWordBWidth/4;i=i+1)begin
-            vreg_wbe[i*4+:4] = {4{operand_v0_t_q[vreg_wb_word_cnt_q *8 + i]}};
+            vreg_wbe[i*4+:4] = {4{operand_v0_t_q[vreg_wb_word_cnt_q * (VRFWordBWidth/4) + i]}};
           end
           default: if (MAXEW == EW_64) for(int i=0;i<VRFWordBWidth/8;i=i+1)begin
-            vreg_wbe[i*8+:8] = {8{operand_v0_t_q[vreg_wb_word_cnt_q *4 + i]}};
+            vreg_wbe[i*8+:8] = {8{operand_v0_t_q[vreg_wb_word_cnt_q * (VRFWordBWidth/8) + i]}};
           end
         endcase
         vreg_wbe &= tail_wbe_eff; // tail-undisturbed + masking (v0.t)
