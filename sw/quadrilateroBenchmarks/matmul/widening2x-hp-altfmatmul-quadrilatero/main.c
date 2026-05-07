@@ -24,8 +24,8 @@
 
 #include DATAHEADER
 
-__fp16 *a;
-__fp16 *b;
+void *a;
+void *b;
 float *c;
 
 // Verify the matrices
@@ -45,16 +45,6 @@ int verify_matrix(float *matrix, const float *checksum,
     }
   }
   return 0;
-}
-
-void safe_print_float(float f) {
-  int prec = 1000; 
-  int ipart = (int)f;
-  int fpart = (int)((f - (float)ipart) * (float)prec);
-  
-  if (fpart < 0) fpart = -fpart;
-
-  printf("Value: %d.%03d\n", ipart, fpart);
 }
 
 int check_results(float *matrix, const float *expected, int N, int M)
@@ -87,32 +77,25 @@ int main() {
 
   unsigned int timer_start, timer_end, timer;
 
-  unsigned int m_start, m_end;
-  unsigned int p_start, p_end;
+  uint32_t Kapp = (gemm_l.K >> 1) + (gemm_l.K & 0x1);
 
   // Allocate the matrices in the local tile
   if (cid == 0) {
-    a = (__fp16 *)snrt_l1alloc(gemm_l.M * gemm_l.K * sizeof(__fp16));
-    b = (__fp16 *)snrt_l1alloc(gemm_l.K * gemm_l.N * sizeof(__fp16));
-    c = (float  *)snrt_l1alloc(gemm_l.M * gemm_l.N * sizeof(float));
+    a = (void *)snrt_l1alloc(gemm_l.M *   Kapp   * sizeof(int32_t));
+    b = (void *)snrt_l1alloc(gemm_l.N *   Kapp   * sizeof(int32_t));
+    c = (void *)snrt_l1alloc(gemm_l.M * gemm_l.N * sizeof(int32_t));
   }
 
   // Reset timer
   timer = (unsigned int)-1;
-
-  // Work over complete P dimension
-  p_start = 0;
-  p_end = gemm_l.N;
-  m_start = (gemm_l.M / num_cores) * cid;
-  m_end = (gemm_l.M / num_cores) * (cid + 1);
 
   // Wait for all cores to finish
   snrt_cluster_hw_barrier();
 
   // Initialize matrices
   if (cid == 0) {
-    snrt_dma_start_1d(a, gemm_A_dram, gemm_l.M * gemm_l.K * sizeof(__fp16));
-    snrt_dma_start_1d(b, gemm_B_dram, gemm_l.K * gemm_l.N * sizeof(__fp16));
+    snrt_dma_start_1d(a, gemm_A_dram, gemm_l.M * Kapp * sizeof(int32_t));
+    snrt_dma_start_1d(b, gemm_B_dram, gemm_l.N * Kapp * sizeof(int32_t));
     snrt_dma_wait_all();
   }
 
