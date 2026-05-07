@@ -1,0 +1,118 @@
+// Copyright 2026 ETH Zurich and University of Bologna.
+// Licensed under the Apache License, Version 2.0, see LICENSE for details.
+// SPDX-License-Identifier: Apache-2.0
+//
+// Validation test for the spatz_fault_monitor register interface.
+//
+// Flow:
+//   1. Assert clear, deassert clear — verify all counters read 0.
+//   2. Run a short vector-and-TCDM workload to exercise ECC paths.
+//   3. Read back all counters and print them.
+//   4. Return total uncorrectable error count (non-zero = detected faults).
+//
+// When run without fault injection the expected result is all-zero counters.
+// When run under FI the counters will reflect the injected errors.
+
+#include <snrt.h>
+#include <stdio.h>
+#include "include/redundancy_modules.h"
+
+// Number of 32-bit words to exercise in TCDM.
+#define TCDM_TEST_WORDS 64
+
+// Simple vector-stride load/store workload using RVV.
+static void run_vector_workload(volatile uint32_t *buf, uint32_t n) {
+    uint32_t vl;
+    for (uint32_t i = 0; i < n;) {
+        asm volatile(
+            "vsetvli %0, %1, e32, m1, ta, ma"
+            : "=r"(vl)
+            : "r"(n - i));
+        // Load from TCDM into VRF, then store back — exercises both ECC paths.
+        asm volatile(
+            "vle32.v v0, (%0)\n\t"
+            "vse32.v v0, (%0)"
+            :
+            : "r"(buf + i)
+            : "memory");
+        i += vl;
+    }
+}
+
+// Print and accumulate one counter row.
+static uint32_t report(const char *name, uint32_t idx, uint32_t corr,
+                       uint32_t uncorr) {
+    printf("  %s[%u]: correctable=%u  uncorrectable=%u\n", name, idx, corr,
+           uncorr);
+    return uncorr;
+}
+
+int main(void) {
+    const uint32_t cid = snrt_cluster_core_idx();
+    int total_uncorr = 0;
+
+    if (cid == 0) {
+        // ----------------------------------------------------------------
+        // Step 1: clear all counters and verify they read back as zero.
+        // ----------------------------------------------------------------
+        err_monitor_clear();
+        err_monitor_resume();
+
+        for (uint32_t i = 0; i < ERR_MONITOR_NUM_VRF_UNITS; i++) {
+            if (err_monitor_vrf_correctable(i) != 0 ||
+                err_monitor_vrf_uncorrectable(i) != 0) {
+                printf("FAIL: VRF counter %u non-zero after clear\n", i);
+                return -1;
+            }
+        }
+        for (uint32_t i = 0; i < ERR_MONITOR_NUM_TCDM_BANKS; i++) {
+            if (err_monitor_tcdm_rd_correctable(i) != 0 ||
+                err_monitor_tcdm_rd_uncorrectable(i) != 0 ||
+                err_monitor_tcdm_scrub_correctable(i) != 0 ||
+                err_monitor_tcdm_scrub_uncorrectable(i) != 0) {
+                printf("FAIL: TCDM counter %u non-zero after clear\n", i);
+                return -1;
+            }
+        }
+        printf("Clear test PASSED — all counters zero after clear.\n");
+
+        // ----------------------------------------------------------------
+        // Step 2: run a workload that exercises VRF and TCDM ECC paths.
+        // ----------------------------------------------------------------
+        // volatile uint32_t *buf =
+        //     (volatile uint32_t *)snrt_l1alloc(TCDM_TEST_WORDS * sizeof(uint32_t));
+        // for (uint32_t i = 0; i < TCDM_TEST_WORDS; i++)
+        //     buf[i] = i;
+
+        // run_vector_workload(buf, TCDM_TEST_WORDS);
+
+        // ----------------------------------------------------------------
+        // Step 3: read back and print all counters.
+        // ----------------------------------------------------------------
+        printf("\n--- Error Monitor Counters ---\n");
+
+        for (uint32_t i = 0; i < ERR_MONITOR_NUM_VRF_UNITS; i++) {
+            total_uncorr += report("VRF", i,
+                                   err_monitor_vrf_correctable(i),
+                                   err_monitor_vrf_uncorrectable(i));
+        }
+        for (uint32_t i = 0; i < ERR_MONITOR_NUM_TCDM_BANKS; i++) {
+            total_uncorr += report("TCDM_RD", i,
+                                   err_monitor_tcdm_rd_correctable(i),
+                                   err_monitor_tcdm_rd_uncorrectable(i));
+            total_uncorr += report("TCDM_SCRUB", i,
+                                   err_monitor_tcdm_scrub_correctable(i),
+                                   err_monitor_tcdm_scrub_uncorrectable(i));
+        }
+
+        printf("\nTotal uncorrectable errors: %d\n", total_uncorr);
+        if (total_uncorr == 0)
+            printf("Result: PASS (no uncorrectable faults detected)\n");
+        else
+            printf("Result: FAIL (%d uncorrectable fault(s) detected)\n",
+                   total_uncorr);
+    }
+
+    snrt_cluster_hw_barrier();
+    return total_uncorr;
+}

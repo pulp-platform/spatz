@@ -30,7 +30,12 @@ module spatz_vrf_ecc
     input  vrf_addr_t [NrReadPorts-1:0]  raddr_i,
     input  logic      [NrReadPorts-1:0]  re_i,
     output vrf_data_t [NrReadPorts-1:0]  rdata_o,
-    output logic      [NrReadPorts-1:0]  rvalid_o
+    output logic      [NrReadPorts-1:0]  rvalid_o,
+
+    // error correction and detection outputs
+    // We only use one signal to indicate an error occurance in VRF, but the ECC regfile provides per-bank, per-read-port error signals which we can use for more fine grained monitoring if desired.
+    output logic                    single_error_o,
+    output logic                    multi_error_o
   );
 
 `include "common_cells/registers.svh"
@@ -370,6 +375,9 @@ module spatz_vrf_ecc
     assign ecc_vregfile_gnt_o_bank[bank] = & ecc_vregfile_gnt_o[bank];
   end
 
+  logic [NrVRFBanks-1:0][N_FU-1:0][NrReadPortsPerBank-1:0] single_error_vregfile;
+  logic [NrVRFBanks-1:0][N_FU-1:0][NrReadPortsPerBank-1:0] multi_error_vregfile;
+
   for (genvar bank = 0; bank < NrVRFBanks; bank++) begin : gen_reg_banks
     for (genvar cut = 0; cut < N_FU; cut++) begin: gen_vrf_slice
       elen_t [NrReadPortsPerBank-1:0] rdata_int;
@@ -394,12 +402,16 @@ module spatz_vrf_ecc
         .wbe_i     (wbe[bank][ELENB*cut +: ELENB]),
         .raddr_i   (raddr[bank]                  ),
         .rdata_o   (rdata_int                    ),
-        .gnt_o     (ecc_vregfile_gnt_o[bank][cut]),
-        .single_error_o(/* TODO: connect or tie */    ),
-        .multi_error_o (/* TODO: connect or tie */    ) 
+        .single_error_o       (single_error_vregfile[bank][cut]),
+        .multi_error_o        (multi_error_vregfile[bank][cut]), 
+        .gnt_o     (ecc_vregfile_gnt_o[bank][cut])        
       );
     end
   end
+
+  assign single_error_o = |single_error_vregfile;
+  assign multi_error_o  = |multi_error_vregfile;
+
   //-------------------------------------------------
 
   ////////////////
