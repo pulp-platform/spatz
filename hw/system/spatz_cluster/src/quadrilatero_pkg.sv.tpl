@@ -168,7 +168,8 @@ package quadrilatero_pkg;
     xif_result_t     result   ;
     logic            result_we;
     logic[$clog2(RLEN)-1:0]             n_col_bytes   ;
-    logic[$clog2(RLEN):0]               n_rows        ;
+    logic[$clog2(N_ROWS)+2:0]           n_rows        ;
+    logic[1:0]                          extra_k       ;
     logic[N_REGS -1:0][LOG_N_PORTS-1:0] port_id       ;
     logic[1:0]                          sa_sel_demux  ;
     logic[LOG_LSU_PORTS-1:0]            lsu_sel_demux ;
@@ -263,7 +264,9 @@ package quadrilatero_pkg;
     acc_reg_t    cmul       ;
     acc_reg_t    rmul       ;
     logic[$clog2(RLEN)-1:0]   n_col_bytes;
-    logic[$clog2(RLEN):0]     n_rows     ;
+    logic[$clog2(N_ROWS)+2:0] n_rows     ;
+    logic[1:0]                extra_k    ;
+    logic[1:0]                datawidth  ;
   } lsu_instr_t;
 
   typedef struct packed {
