@@ -37,6 +37,11 @@ module ecc_vregfile import spatz_pkg::*; #(
   output logic                     gnt_o
 );
 
+  // FI strobe signals----------------------
+  // logic  [NrReadPorts-1:0]  single_error_o;
+  // logic  [NrReadPorts-1:0]  multi_error_o;
+  //-----------------------------------------
+
   // -------------------------------------------------------------------------
   // Derived localparams
   // -------------------------------------------------------------------------
