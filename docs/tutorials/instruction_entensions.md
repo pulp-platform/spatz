@@ -1,0 +1,378 @@
+# Adding a Custom RISC-V Instruction to the Toolchain
+
+This tutorial walks through how to teach the software toolchain about a new
+RISC-V instruction so that you can write it in source code (instead of poking
+raw bytes), and so that the simulator and the hardware decoder agree on what
+the bits mean.
+
+The audience is students who have written some RISC-V assembly but have not
+worked inside a compiler before.
+
+What this tutorial **does not** cover:
+
+- Designing the new instruction (encoding, operand layout, semantics).
+- Adding the instruction to the hardware modules (decoder, execution unit).
+
+We assume those decisions already exist, and we focus on the **toolchain**
+side: telling the assembler about the new instruction and making sure the
+generated bits match what the hardware expects.
+
+---
+
+## 1. A few terms, in plain words
+
+| Term | What it means |
+|---|---|
+| **Mnemonic** | The human-readable name of an instruction, like `add` or `vfadd.vf`. |
+| **Encoding** | The patterns that the core (i.e., Snitch) actually executes. The mnemonic and its operands get translated to this. |
+| **Field** | A range of bits inside the encoding that holds something specific. For example, bits `[11:7]` typically hold the destination register number; that range is called the `rd` field. |
+| **Opcode** | The lowest 7 bits of the encoding (`[6:0]`). It provides information on what *family* the instruction belongs to (load, store, branch, vector, **custom**, …). |
+| **funct3 / funct7 / funct6** | Sub-codes inside the encoding that further distinguish instructions sharing the same opcode. For example, `add` and `sub` share the same opcode, but `add` has `funct7 = 0` while `sub` has `funct7 = 0x20`. |
+| **Assembler** | The program (executable) that turns assembly source code (mnemonics) into binary instructions. In our flow, the assembler is built into `clang`. |
+| **TableGen** | A small description language used inside LLVM (the compiler we use). We tell TableGen "this mnemonic uses these bits"; LLVM's build system then auto-generates the C++ code that implements the assembler. |
+
+---
+
+## 2. The big picture: from C source to running on hardware
+
+When you write an inline assembly line like
+
+```c
+asm volatile("add a0, a1, a2");
+```
+
+the program goes through several stages before the hardware runs it:
+
+![High-level LLVM flow for inline assembly](fig/llvm_inline_asm_flow.png)
+
+The key idea is that **clang does not parse the asm string itself**; it hands
+it off to its built-in **assembler** (`llvm-mc`, the "machine code" layer).
+The assembler is what knows about each instruction — its mnemonic, its
+operands, and the exact 32-bit pattern it produces.
+
+The output of the whole pipeline is an ELF binary (a standard container
+format) full of 32-bit instruction words. When the simulator (if you use GVSoC) or the hardware
+loads that binary, its **decoder** matches the bit patterns against its own
+table to recognize each instruction.
+
+For this to work end-to-end, **everyone in the pipeline needs to agree on the
+bit layout**: clang's assembler and the hardware's
+decoder all need the same understanding of "mnemonic ↔ encoding."
+
+---
+
+## 3. The two source-of-truth repositories
+
+In our toolchain, this agreement is maintained in two places.
+
+### `sw/toolchain/riscv-opcodes` — the encoding database
+
+This repository holds a *plain-text database* of every instruction's encoding.
+Each instruction has a single line saying which mnemonic uses which bits.
+Every consumer of this database (the hardware-side SystemVerilog header, the
+Spike simulator's instruction table, various encoding tools) is **regenerated
+from these source files**.
+
+For our hardware, the file `hw/ip/snitch/src/riscv_instr.sv` is one of those
+generated outputs. So whatever is committed in
+`riscv-opcodes` flows through to the hardware decoder's pattern matching.
+
+The repository contains many files like:
+
+```
+opcodes-rv32i        # baseline integer instructions
+opcodes-rv32f        # single-precision floating-point
+opcodes-rvv          # vector extension
+opcodes-custom       # placeholders for custom extensions
+…
+```
+
+Each line in these files specifies one instruction's encoding. The format
+will be explained shortly.
+
+### `sw/toolchain/llvm-project` — the compiler
+
+This is the LLVM source tree. Inside it, the RISC-V backend has a directory
+`llvm/lib/Target/RISCV/` containing files that describe RISC-V to LLVM.
+Most of those files are written in **TableGen**, a small declarative
+language that LLVM uses to describe instructions in a structured way.
+
+Important: **LLVM does not read the riscv-opcodes database**. It has its own
+description, written by hand in TableGen. The two repositories are
+independent paths to the same goal — telling tools about new instructions.
+
+That is why every new instruction must be added in **both** places:
+
+- in `riscv-opcodes`, so the hardware decoder's table stays in sync,
+- in `llvm-project`, so clang's assembler recognizes the mnemonic.
+
+If you only update one, you get inconsistent behavior. For example, if you
+update only LLVM, your kernel will compile, but the hardware may not
+understand the produced bit pattern — it would give you an `illegal instruction` error`.
+
+---
+
+## 4. Looking inside the LLVM assembler
+
+To see *why* the LLVM step is more involved than just adding a single line, it
+helps to look at how the assembler is actually built.
+
+![Zoom into llvm-mc and TableGen](fig/llvm_mc_tablegen_flow.png)
+
+LLVM has a build-time tool called `llvm-tblgen`. During the LLVM build:
+
+1. `llvm-tblgen` reads all the TableGen files (`.td`).
+2. From them, it generates large C++ tables that the assembler uses at
+   run-time: a table mapping mnemonics to encodings, a table for parsing
+   operands, a table for the disassembler, and so on.
+3. Those generated C++ files are compiled into clang/llvm-mc.
+
+So when we say "add a new instruction to LLVM," what we really mean is: write
+a new TableGen description, then rebuild LLVM so the regenerated tables pick
+it up.
+
+---
+
+## 5. The shape of an instruction encoding
+
+Before showing the worked example, let us look at what we mean by *fields* in
+a 32-bit encoding. Consider the standard RISC-V `add` instruction. Its
+encoding is:
+
+```
+ 31      25  24    20  19    15  14  12  11    7  6    0
++----------+--------+--------+------+--------+--------+
+|  funct7  |   rs2  |   rs1  |funct3|   rd   | opcode |
+|  0000000 |        |        |  000 |        |0110011 |
++----------+--------+--------+------+--------+--------+
+```
+
+- The **opcode** in the bottom 7 bits is fixed (`0110011` for "OP" = integer
+  ALU).
+- **funct3** (3 bits) and **funct7** (7 bits) are also fixed for `add`,
+  selecting the operation among everything that shares the OP opcode.
+- **rd**, **rs1**, **rs2** are *variable* fields — they hold whichever
+  registers the user wrote (`a0`, `a1`, etc.).
+
+When we add a new instruction, we are essentially specifying which bits are
+*fixed* (and to what value) and which bits are *variable* (and which user-
+visible operand fills them).
+
+Let us now look at how a real RVV (RISC-V Vector) instruction is described.
+
+---
+
+## 6. Worked example: the vfadd instruction
+
+We will use **`vfadd`** — vector floating-point add — as the running example.
+It is a standard RVV instruction with two variants:
+
+- `vfadd.vv vd, vs2, vs1` — adds two vector registers element-wise.
+- `vfadd.vf vd, vs2, rs1` — adds a vector register and a scalar floating-
+  point register element-wise.
+
+Although we use `vfadd` for illustration, the *same pattern* applies to any
+new instruction you add: edit the encoding line in `riscv-opcodes`, edit the
+TableGen description in `llvm-project`, rebuild, test.
+
+### 6.1 The encoding entry in `riscv-opcodes`
+
+The relevant file is `opcodes-rvv`. The line that defines `vfadd.vf` looks
+like this:
+
+```
+vfadd.vf  31..26=0x00 vm vs2 rs1 14..12=0x5 vd 6..0=0x57
+```
+
+Reading it left to right:
+
+| Token | Meaning |
+|---|---|
+| `vfadd.vf` | The mnemonic the assembler will recognize. |
+| `31..26=0x00` | Bits 31 through 26 are fixed to `0x00`. (This is the *funct6* in the RVV encoding.) |
+| `vm` | One bit at position 25 — the mask bit. The parser already knows where `vm` lives. |
+| `vs2` | Five bits, source vector register #2. The parser already knows it sits at bits 24..20. |
+| `rs1` | Five bits, the FP scalar source register, at bits 19..15. |
+| `14..12=0x5` | Bits 14..12 fixed to `0b101` — this is the *funct3* code identifying the variant. |
+| `vd` | Five bits, destination vector register, at bits 11..7. |
+| `6..0=0x57` | The opcode, fixed to `0b1010111` (the RVV opcode). |
+
+A *named token* (like `vd`, `vs2`, `vm`) is a variable field — the parser
+already knows its position. A *bit-range token* (like `31..26=0x00`) is a
+fixed value. The combination fully specifies the encoding.
+
+When `parse_opcodes` runs over this file, it generates several artifacts, the
+one that matters for hardware being a SystemVerilog package
+(`inst.sverilog`) which gets installed as `riscv_instr.sv` inside the
+hardware tree.
+
+### 6.2 The TableGen description in LLVM
+
+In `llvm/lib/Target/RISCV/RISCVInstrInfoV.td`, `vfadd` is defined indirectly,
+through a *multiclass* (a TableGen template that generates several
+instructions at once):
+
+```td
+defm VFADD_V : VALU_FV_V_F<"vfadd", 0b000000>;
+```
+
+This expands to two instruction definitions: one for `vfadd.vv` and one for
+`vfadd.vf`, sharing the `funct6` value `0b000000` and the mnemonic root
+`"vfadd"`.
+
+The `VALU_FV_V_F` multiclass is itself defined a bit higher up in the file.
+Its body, simplified, looks like:
+
+```td
+multiclass VALU_FV_V_F<string opcodestr, bits<6> funct6> {
+  // .vv variant: all operands are vector registers.
+  def V : VALUVV<funct6, OPFVV, opcodestr # ".vv">;
+  // .vf variant: rs1 is a scalar FP register instead of a vector register.
+  def F : VALUVF<funct6, OPFVF, opcodestr # ".vf">;
+}
+```
+
+And `VALUVF` is one of LLVM's per-format classes — it nails down the bit
+layout *and* declares what kind of registers each operand slot accepts:
+
+```td
+class VALUVF<bits<6> funct6, RISCVVFormat opv, string opcodestr>
+    : RVInstVX<funct6, opv,
+               (outs VR:$vd),
+               (ins VR:$vs2, FPR32:$rs1, VMaskOp:$vm),
+               opcodestr, "$vd, $vs2, $rs1$vm">;
+```
+
+A few things to notice in that snippet:
+
+- `(outs VR:$vd)` — the *output* is one operand named `$vd`, of register
+  class **VR** (vector register). The user must pass a vector register here.
+- `(ins VR:$vs2, FPR32:$rs1, VMaskOp:$vm)` — the *inputs* are a vector
+  register, an FP scalar register (32-bit), and an optional mask operand.
+- `"$vd, $vs2, $rs1$vm"` — the assembly *syntax*: the order operands appear
+  in the source code (the `$vm` token is omitted when no mask is used).
+
+So a single TableGen `def` carries three pieces of information:
+
+1. The bit layout (which bits hold what).
+2. The operand types (which slots accept which kinds of registers).
+3. The asm syntax (the order in source).
+
+Together, they let the assembler:
+
+- **Recognize** `vfadd.vf v8, v4, ft0` as a valid instruction;
+- **Validate** that `v8` is a vector register, `v4` is a vector register, and
+  `ft0` is an FP scalar register;
+- **Encode** the right 32-bit pattern;
+- **Disassemble** the same pattern back to the same source line.
+
+---
+
+## 7. Files you will touch when adding your own instruction
+
+The list of files is short, but each one does a different job. Here is a
+summary, with the worked example to cross-reference.
+
+### 7.1 In the `riscv-opcodes` repository
+
+| File | Role | Example |
+|---|---|---|
+| `opcodes-rvv` (or another `opcodes-*` file matching your extension family) | Adds an entry that describes the encoding of your new instruction in plain text. This is the source-of-truth for the hardware decoder package and many other tools. | The `vfadd.vf` line shown above. |
+| The output `inst.sverilog` (or equivalent) | **Generated.** You should *not* edit this by hand. It is produced by running `parse_opcodes` over the `opcodes-*` files. The hardware tree usually copies this file into `riscv_instr.sv`. | — |
+
+After editing `opcodes-rvv`, regenerate the downstream files with command:
+```tcl
+make update_opcodes
+```
+
+### 7.2 In the LLVM repository (`llvm-project`)
+
+| File | Role | Example |
+|---|---|---|
+| `llvm/lib/Target/RISCV/RISCVInstrInfoV.td` (or `RISCVInstrInfoF.td`, `RISCVInstrInfoXfrep.td`, etc., depending on the extension family) | Declares the new instruction in TableGen. This describes the bit layout, operand types, and asm syntax. If your instruction's encoding format does not fit any existing class, you may also need to define a new format class. | The `defm VFADD_V : VALU_FV_V_F<"vfadd", 0b000000>;` line above. |
+| `llvm/lib/Target/RISCV/RISCVInstrFormats.td` | Defines the *families of bit layouts*. You only edit this if your new instruction's bit layout is not already representable by one of the existing format classes. | Defines `RVInstR`, `RVInstR4`, `RVInstI`, etc. |
+| `RISCVFeatures.td`, `RISCVProcessors.td` | Optional. Used if your extension is gated by a feature flag (so the assembler accepts the mnemonic only when a target is configured with that feature). | — |
+
+After editing the `.td` files, you must **rebuild LLVM**. The `llvm-tblgen`
+tool re-runs and regenerates the assembler tables.
+
+---
+
+## 8. Step-by-step workflow
+
+Putting it all together, the sequence to add a new instruction is:
+
+1. **Decide the encoding.** Pick the bit layout — which bits are fixed
+   (opcode, funct3/funct7/etc.) and which are variable (which register
+   fields, immediates, etc.).
+2. **Add the line in `riscv-opcodes`.** Pick the right `opcodes-*` file for
+   the extension family, write a single line in the format shown earlier.
+3. **Regenerate downstream files.** Run the repository's regeneration target
+   (commonly `make`). Copy the new `inst.sverilog` to `riscv_instr.sv` in
+   the hardware tree if your project keeps a copy.
+4. **Add the LLVM TableGen description.** In the appropriate `.td` file:
+   - If your instruction's bit layout matches an existing format class
+     (most do), instantiate that class with a new mnemonic and the right
+     funct codes.
+   - Otherwise, define a new format class first — then instantiate it.
+5. **Rebuild LLVM.** Use the project's standard build steps (typically
+   `cmake` + `ninja` or `make`).
+6. **Test with inline asm.** Write a tiny test program that uses the new
+   mnemonic in inline assembly:
+   ```c
+   asm volatile("yourinstr a0, a1, a2");
+   ```
+   Compile with the rebuilt clang.
+7. **Disassemble** The new mnemonic should appear in the disassembly,
+   instead of a raw `.4byte` placeholder. This confirms the assembler picked
+   it up. Go check it in the dump file.
+8. **Run on the simulation** to confirm the hardware decoder also recognizes
+   the encoding.
+
+If any step fails, the troubleshooting flow is usually:
+
+- Mnemonic rejected at compile time → LLVM is missing the definition or the
+  build was not refreshed.
+- Mnemonic compiles but disassembles as a raw word → LLVM has the encoder
+  but not the disassembler — usually a typo in the format class.
+- Mnemonic compiles, disassembly looks right, simulator complains "illegal
+  instruction" → the hardware decoder file (`riscv_instr.sv`) was not
+  regenerated from `riscv-opcodes`, or the hardware module that *acts on*
+  the instruction was not updated.
+
+---
+
+## 9. A few things to be careful about
+
+**Bit-pattern collisions.** Two instructions with overlapping bit patterns
+will confuse the decoder. If you re-use the same opcode as an existing
+extension, make sure your funct3/funct7/funct6 values do not overlap. The
+parse_opcodes tool will warn you if it detects a collision while
+regenerating.
+
+**The TableGen format class fits the layout, not the meaning.** When you
+pick a format class in TableGen, you are choosing based on the *bit
+arrangement*, not the *semantics*. If your instruction has a 4-operand
+register layout that happens to match the existing R4 class, you can reuse
+R4 — even if the operands are vector registers and not the integer
+registers R4 was originally designed for. The class only describes the bit
+layout; the operand register classes are passed in separately when you
+instantiate the class.
+
+**`riscv-opcodes` and LLVM are independent.** Editing one does not affect
+the other. You must update both for the new instruction to flow through end
+to end.
+
+**Custom opcodes are shared.** The custom-0 opcode (`0001011`) is a single
+slot reserved for vendor extensions. Multiple custom extensions may live in
+that opcode space, distinguished by funct3 and other sub-fields. Before
+choosing your encoding, check what other custom extensions in your project
+are already using.
+
+**Regeneration discipline.** Because the hardware decoder file is generated
+from `riscv-opcodes`, *never* edit `riscv_instr.sv` directly to add an
+instruction — your edit will be wiped on the next regeneration. Always
+edit the `opcodes-*` source instead.
+
+---
+*Authored by Bowen Wang &lt;bowwang@iis.ee.ethz.ch&gt;. Last updated 2026-05-06.*
