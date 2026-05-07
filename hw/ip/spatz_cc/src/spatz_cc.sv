@@ -113,7 +113,10 @@ module spatz_cc
     output dma_events_t                  axi_dma_events_o,
     // Core event strobes
     output core_events_t                 core_events_o,
-    input  addr_t                        tcdm_addr_base_i
+    input  addr_t                        tcdm_addr_base_i,
+    // ECC VRF outputs
+    output logic                         vrf_single_error_o,
+    output logic                         vrf_multi_error_o
   );
 
   // FMA architecture is "merged" -> mulexp and macexp instructions are supported
@@ -312,7 +315,10 @@ module spatz_cc
     .fp_lsu_mem_rsp_i        (fp_lsu_mem_rsp        ),
     .fpu_rnd_mode_i          (fpu_rnd_mode          ),
     .fpu_fmt_mode_i          (fpu_fmt_mode          ),
-    .fpu_status_o            (fpu_status            )
+    .fpu_status_o            (fpu_status            ),
+    // ECC VRF outputs
+    .vrf_single_error_o      (vrf_single_error_o    ),
+    .vrf_multi_error_o       (vrf_multi_error_o     )
   );
 
   for (genvar p = 0; p < NumMemPortsPerSpatz; p++) begin: gen_tcdm_assignment

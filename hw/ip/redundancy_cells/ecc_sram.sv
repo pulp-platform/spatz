@@ -37,14 +37,14 @@ module ecc_sram #(
   input  logic                     we_i,
   input  logic [  ByteEnWidth-1:0] be_i,
   output logic [  DataInWidth-1:0] rdata_o,
-  output logic                     gnt_o
+  output logic                     gnt_o,
 
-  // output logic                     single_error_o,
-  // output logic                     multi_error_o
+  output logic                     single_error_o,
+  output logic                     multi_error_o
 );
 
-  logic                     single_error_o;
-  logic                     multi_error_o;
+  // logic                     single_error_o;
+  // logic                     multi_error_o;
 
   logic [1:0] ecc_error;
   logic       valid_read_d, valid_read_q;

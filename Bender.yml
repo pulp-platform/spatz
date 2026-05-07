@@ -181,6 +181,7 @@ sources:
       - hw/ip/redundancy_cells/ecc_scrubber.sv
       - hw/ip/redundancy_cells/scrub_timer.sv
       - hw/ip/redundancy_cells/ecc_sram.sv
+      - hw/ip/redundancy_cells/spatz_fault_monitor.sv
       # Level 1
       - hw/system/spatz_cluster/src/spatz_barrier.sv
       - hw/system/spatz_cluster/src/spatz_cluster_peripheral/spatz_cluster_peripheral_reg_top.sv

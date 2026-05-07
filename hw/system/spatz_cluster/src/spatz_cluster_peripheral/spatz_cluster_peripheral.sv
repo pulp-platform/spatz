@@ -36,7 +36,16 @@ module spatz_cluster_peripheral
   input  core_events_t [NrCores-1:0] core_events_i,
   input  tcdm_events_t               tcdm_events_i,
   input  dma_events_t                dma_events_i,
-  input  snitch_icache_pkg::icache_l0_events_t [NrCores-1:0] icache_events_i
+  input  snitch_icache_pkg::icache_l0_events_t [NrCores-1:0] icache_events_i,
+
+  // Error monitor interface
+  output logic                                             err_monitor_clear_o,
+  input  logic [NumVrfUnits-1:0][31:0]                    vrf_correctable_count_i,
+  input  logic [NumVrfUnits-1:0][31:0]                    vrf_uncorrectable_count_i,
+  input  logic [NumTcdmBanks-1:0][31:0]                   tcdm_rd_correctable_count_i,
+  input  logic [NumTcdmBanks-1:0][31:0]                   tcdm_rd_uncorrectable_count_i,
+  input  logic [NumTcdmBanks-1:0][31:0]                   tcdm_scrub_correctable_count_i,
+  input  logic [NumTcdmBanks-1:0][31:0]                   tcdm_scrub_uncorrectable_count_i
 );
 
   // Pipeline register to ease timing.
@@ -242,5 +251,20 @@ module spatz_cluster_peripheral
   end
 
   `FF(perf_counter_q, perf_counter_d, '0, clk_i, rst_ni)
+
+  // Error monitor registers
+  assign err_monitor_clear_o = reg2hw.err_monitor_clear.q;
+
+  for (genvar i = 0; i < NumVrfUnits; i++) begin : gen_vrf_count_assign
+    assign hw2reg.vrf_correctable_count[i].d   = vrf_correctable_count_i[i];
+    assign hw2reg.vrf_uncorrectable_count[i].d = vrf_uncorrectable_count_i[i];
+  end
+
+  for (genvar i = 0; i < NumTcdmBanks; i++) begin : gen_tcdm_count_assign
+    assign hw2reg.tcdm_rd_correctable_count[i].d     = tcdm_rd_correctable_count_i[i];
+    assign hw2reg.tcdm_rd_uncorrectable_count[i].d   = tcdm_rd_uncorrectable_count_i[i];
+    assign hw2reg.tcdm_scrub_correctable_count[i].d   = tcdm_scrub_correctable_count_i[i];
+    assign hw2reg.tcdm_scrub_uncorrectable_count[i].d = tcdm_scrub_uncorrectable_count_i[i];
+  end
 
 endmodule
