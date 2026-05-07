@@ -64,7 +64,10 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     // FPU side channel
     input  roundmode_e                        fpu_rnd_mode_i,
     input  fmt_mode_t                         fpu_fmt_mode_i,
-    output status_t                           fpu_status_o
+    output status_t                           fpu_status_o,
+    // ECC VRF outputs
+    output logic                              vrf_single_error_o,
+    output logic                              vrf_multi_error_o
   );
 
   ////////////////
@@ -251,7 +254,10 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     .raddr_i         (vrf_raddr     ),
     .re_i            (vrf_re        ),
     .rdata_o         (vrf_rdata     ),
-    .rvalid_o        (vrf_rvalid    )
+    .rvalid_o        (vrf_rvalid    ),
+    // ECC outputs
+    .single_error_o  (vrf_single_error_o),
+    .multi_error_o   (vrf_multi_error_o )
   );
 
   ////////////////

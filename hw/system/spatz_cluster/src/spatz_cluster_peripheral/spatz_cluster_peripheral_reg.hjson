@@ -9,6 +9,16 @@
 	type: "int",
 	default: "2"
 	},
+	{ name: "NumVrfUnits",
+	desc: "Number of VRF units (must equal NrCores in the cluster)",
+	type: "int",
+	default: "1"
+	},
+	{ name: "NumTcdmBanks",
+	desc: "Number of TCDM banks (must equal NrSuperBanks*BanksPerSuperBank in the cluster)",
+	type: "int",
+	default: "16"
+	},
     ],
     name: "spatz_cluster_peripheral",
     clock_primary: "clk_i",
@@ -438,6 +448,120 @@
 	    name: "EOC_EXIT",
 	    desc: "Indicates the end of computation and exit status."
 	}]
+     },
+     {
+	name: "ERR_MONITOR_CLEAR",
+	desc: '''Write 1 to clear all error monitor counters; write 0 to resume counting.'''
+	swaccess: "rw",
+	hwaccess: "hro",
+	resval: "0",
+	fields: [{
+	    bits: "0:0",
+	    name: "CLEAR",
+	    desc: "Level-sensitive clear for all ECC error counters in the fault monitor."
+	}]
+     },
+     {
+	multireg: {
+	    name: "VRF_CORRECTABLE_COUNT",
+	    desc: "Per-VRF-unit correctable (single-bit) ECC error counter.",
+	    swaccess: "ro",
+	    hwaccess: "hrw",
+	    hwext: "true",
+	    count: "NumVrfUnits",
+	    compact: "false",
+	    cname: "vrf_correctable_count",
+	    fields: [{
+		bits: "31:0",
+		name: "COUNT",
+		desc: "Saturating count of correctable ECC errors for this VRF unit."
+	    }]
+	}
+     },
+     {
+	multireg: {
+	    name: "VRF_UNCORRECTABLE_COUNT",
+	    desc: "Per-VRF-unit uncorrectable (multi-bit) ECC error counter.",
+	    swaccess: "ro",
+	    hwaccess: "hrw",
+	    hwext: "true",
+	    count: "NumVrfUnits",
+	    compact: "false",
+	    cname: "vrf_uncorrectable_count",
+	    fields: [{
+		bits: "31:0",
+		name: "COUNT",
+		desc: "Saturating count of uncorrectable ECC errors for this VRF unit."
+	    }]
+	}
+     },
+     {
+	multireg: {
+	    name: "TCDM_RD_CORRECTABLE_COUNT",
+	    desc: "Per-TCDM-bank correctable read ECC error counter.",
+	    swaccess: "ro",
+	    hwaccess: "hrw",
+	    hwext: "true",
+	    count: "NumTcdmBanks",
+	    compact: "false",
+	    cname: "tcdm_rd_correctable_count",
+	    fields: [{
+		bits: "31:0",
+		name: "COUNT",
+		desc: "Saturating count of correctable read ECC errors for this TCDM bank."
+	    }]
+	}
+     },
+     {
+	multireg: {
+	    name: "TCDM_RD_UNCORRECTABLE_COUNT",
+	    desc: "Per-TCDM-bank uncorrectable read ECC error counter.",
+	    swaccess: "ro",
+	    hwaccess: "hrw",
+	    hwext: "true",
+	    count: "NumTcdmBanks",
+	    compact: "false",
+	    cname: "tcdm_rd_uncorrectable_count",
+	    fields: [{
+		bits: "31:0",
+		name: "COUNT",
+		desc: "Saturating count of uncorrectable read ECC errors for this TCDM bank."
+	    }]
+	}
+     },
+     {
+	multireg: {
+	    name: "TCDM_SCRUB_CORRECTABLE_COUNT",
+	    desc: "Per-TCDM-bank correctable scrub ECC error counter.",
+	    swaccess: "ro",
+	    hwaccess: "hrw",
+	    hwext: "true",
+	    count: "NumTcdmBanks",
+	    compact: "false",
+	    cname: "tcdm_scrub_correctable_count",
+	    fields: [{
+		bits: "31:0",
+		name: "COUNT",
+		desc: "Saturating count of correctable scrub ECC errors for this TCDM bank."
+	    }]
+	}
+     },
+     {
+	multireg: {
+	    name: "TCDM_SCRUB_UNCORRECTABLE_COUNT",
+	    desc: "Per-TCDM-bank uncorrectable scrub ECC error counter.",
+	    swaccess: "ro",
+	    hwaccess: "hrw",
+	    hwext: "true",
+	    count: "NumTcdmBanks",
+	    compact: "false",
+	    cname: "tcdm_scrub_uncorrectable_count",
+	    fields: [{
+		bits: "31:0",
+		name: "COUNT",
+		desc: "Saturating count of uncorrectable scrub ECC errors for this TCDM bank."
+	    }]
+	}
      }
   ]
 }
