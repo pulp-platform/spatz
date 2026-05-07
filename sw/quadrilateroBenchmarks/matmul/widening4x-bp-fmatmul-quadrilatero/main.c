@@ -24,8 +24,8 @@
 
 #include DATAHEADER
 
-char *a;
-char *b;
+void *a;
+void *b;
 float *c;
 
 // Verify the matrices
@@ -77,32 +77,25 @@ int main() {
 
   unsigned int timer_start, timer_end, timer;
 
-  unsigned int m_start, m_end;
-  unsigned int p_start, p_end;
+  uint32_t Kapp = (gemm_l.K >> 2) + (gemm_l.K & 0x11);
 
   // Allocate the matrices in the local tile
   if (cid == 0) {
-    a = (char *)snrt_l1alloc(gemm_l.M * gemm_l.K * sizeof(char));
-    b = (char *)snrt_l1alloc(gemm_l.K * gemm_l.N * sizeof(char));
-    c = (float  *)snrt_l1alloc(gemm_l.M * gemm_l.N * sizeof(float));
+    a = (void *)snrt_l1alloc(gemm_l.M *   Kapp   * sizeof(int32_t));
+    b = (void *)snrt_l1alloc(gemm_l.N *   Kapp   * sizeof(int32_t));
+    c = (void *)snrt_l1alloc(gemm_l.M * gemm_l.N * sizeof(int32_t));
   }
 
   // Reset timer
   timer = (unsigned int)-1;
-
-  // Work over complete P dimension
-  p_start = 0;
-  p_end = gemm_l.N;
-  m_start = (gemm_l.M / num_cores) * cid;
-  m_end = (gemm_l.M / num_cores) * (cid + 1);
 
   // Wait for all cores to finish
   snrt_cluster_hw_barrier();
 
   // Initialize matrices
   if (cid == 0) {
-    snrt_dma_start_1d(a, gemm_A_dram, gemm_l.M * gemm_l.K * sizeof(char));
-    snrt_dma_start_1d(b, gemm_B_dram, gemm_l.K * gemm_l.N * sizeof(char));
+    snrt_dma_start_1d(a, gemm_A_dram, gemm_l.M * Kapp * sizeof(int32_t));
+    snrt_dma_start_1d(b, gemm_B_dram, gemm_l.N * Kapp * sizeof(int32_t));
     snrt_dma_wait_all();
   }
 
