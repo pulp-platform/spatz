@@ -420,6 +420,64 @@ module spatz_cluster
   logic               icache_prefetch_enable;
   logic [NrCores-1:0] cl_interrupt;
 
+  // --------------
+  // Error Monitor 
+  // --------------
+
+  localparam int NumTcdmBanks = NrSuperBanks * BanksPerSuperBank;
+  localparam int ErrorCounterWidth = 32;
+
+  logic err_monitor_clear;
+
+  logic [NrCores-1:0]  vrf_correctable_fault;
+  logic [NrCores-1:0]  vrf_uncorrectable_fault; // NrCores == NumVrfUnits
+
+  logic [NumTcdmBanks-1:0] tcdm_rd_correctable_fault;
+  logic [NumTcdmBanks-1:0] tcdm_rd_uncorrectable_fault;
+
+  logic [NumTcdmBanks-1:0] tcdm_scrub_correctable_fault;
+  logic [NumTcdmBanks-1:0] tcdm_scrub_uncorrectable_fault;
+
+  logic [NrCores-1:0][ErrorCounterWidth-1:0]  vrf_correctable_count;
+  logic [NrCores-1:0][ErrorCounterWidth-1:0]  vrf_uncorrectable_count;
+
+  logic [NumTcdmBanks-1:0][ErrorCounterWidth-1:0] tcdm_rd_correctable_count;
+  logic [NumTcdmBanks-1:0][ErrorCounterWidth-1:0] tcdm_rd_uncorrectable_count;
+  logic [NumTcdmBanks-1:0][ErrorCounterWidth-1:0] tcdm_scrub_correctable_count;
+  logic [NumTcdmBanks-1:0][ErrorCounterWidth-1:0] tcdm_scrub_uncorrectable_count;
+
+  spatz_fault_monitor #(
+  .NumVrfUnits  (NrCores),
+  .NumTcdmBanks    (NumTcdmBanks),
+  .CounterWidth    (ErrorCounterWidth),
+  .SaturatingCount (1'b1)
+  ) i_err_monitor (
+  .clk_i  (clk_i                      ),
+  .rst_ni (rst_ni                     ),
+
+  // Tie to 1'b0 if no explicit clear is needed.
+  .clear_i (err_monitor_clear          ),
+
+  // Fault inputs.
+  // Expected to be one-cycle pulses.
+  .vrf_correctable_fault_i (vrf_correctable_fault),
+  .vrf_uncorrectable_fault_i (vrf_uncorrectable_fault),
+
+  .tcdm_rd_correctable_fault_i (tcdm_rd_correctable_fault),
+  .tcdm_rd_uncorrectable_fault_i (tcdm_rd_uncorrectable_fault),
+  .tcdm_scrub_correctable_fault_i (tcdm_scrub_correctable_fault),
+  .tcdm_scrub_uncorrectable_fault_i (tcdm_scrub_uncorrectable_fault),
+
+  // Per-source counters.
+  .vrf_correctable_count_o (vrf_correctable_count),
+  .vrf_uncorrectable_count_o(vrf_uncorrectable_count),
+
+  .tcdm_rd_correctable_count_o (tcdm_rd_correctable_count),
+  .tcdm_rd_uncorrectable_count_o (tcdm_rd_uncorrectable_count),
+  .tcdm_scrub_correctable_count_o (tcdm_scrub_correctable_count),
+  .tcdm_scrub_uncorrectable_count_o (tcdm_scrub_uncorrectable_count)
+);
+
   // -------------
   // DMA Subsystem
   // -------------
@@ -564,6 +622,12 @@ module spatz_cluster
   // ----------------
   // Memory Subsystem
   // ----------------
+  logic [NrSuperBanks-1:0] [BanksPerSuperBank-1:0] sram_rd_single_error;
+  logic [NrSuperBanks-1:0] [BanksPerSuperBank-1:0] sram_rd_multi_error;
+
+  logic [NrSuperBanks-1:0] [BanksPerSuperBank-1:0] sram_scrub_single_error;
+  logic [NrSuperBanks-1:0] [BanksPerSuperBank-1:0] sram_scrub_multi_error;
+
   for (genvar i = 0; i < NrSuperBanks; i++) begin : gen_tcdm_super_bank
 
     mem_req_t [BanksPerSuperBank-1:0] amo_req;
@@ -642,8 +706,8 @@ module spatz_cluster
         .rst_ni  (rst_ni      ),
 
         .scrub_trigger_i  (scrub_trigger), // Set to 1'b0 to disable scrubber
-        .scrubber_fix_o   (/* Unused */),
-        .scrub_uncorrectable_o  (/* Unused */),
+        .scrubber_fix_o   (sram_scrub_single_error[i][j]), // Pulse indicating a single-bit error was corrected by the scrubber
+        .scrub_uncorrectable_o  (sram_scrub_multi_error[i][j]), // Pulse indicating a multi-bit error was not corrected by the scrubber
 
         .wdata_i (mem_wdata   ),
         .addr_i  (mem_add     ),
@@ -651,10 +715,10 @@ module spatz_cluster
         .we_i    (mem_wen     ),
         .be_i    (mem_be      ),
         .rdata_o (mem_rdata   ),
-        .gnt_o   (ecc_sram_gnt)
+        .gnt_o   (ecc_sram_gnt),
 
-        // .single_error_o(),
-        // .multi_error_o()
+        .single_error_o(sram_rd_single_error[i][j]),
+        .multi_error_o(sram_rd_multi_error[i][j])
         );
 //---------------------------------------------------------------------------------
       data_t amo_rdata_local;
@@ -701,6 +765,11 @@ module spatz_cluster
       );
     end
   end
+
+  assign tcdm_rd_correctable_fault = |sram_rd_single_error;
+  assign tcdm_rd_uncorrectable_fault = |sram_rd_multi_error;
+  assign tcdm_scrub_correctable_fault = |sram_scrub_single_error;
+  assign tcdm_scrub_uncorrectable_fault = |sram_scrub_multi_error;
 
   spatz_tcdm_interconnect #(
     .NumInp                (NumTCDMIn           ),
@@ -818,7 +887,10 @@ module spatz_cluster
       .axi_dma_perf_o   (/* Unused */                        ),
       .axi_dma_events_o (dma_core_events                     ),
       .core_events_o    (core_events[i]                      ),
-      .tcdm_addr_base_i (tcdm_start_address                  )
+      .tcdm_addr_base_i (tcdm_start_address                  ),
+      // ECC VRF signals
+      .vrf_single_error_o (vrf_correctable_fault[i]  ),
+      .vrf_multi_error_o (vrf_uncorrectable_fault[i])
     );
     for (genvar j = 0; j < TcdmPorts; j++) begin : gen_tcdm_user
       always_comb begin
@@ -1076,7 +1148,15 @@ module spatz_cluster
     .tcdm_events_i            (tcdm_events           ),
     .dma_events_i             (dma_events            ),
     .icache_events_i          (icache_events         ),
-    .cluster_probe_o          (cluster_probe_o       )
+    .cluster_probe_o          (cluster_probe_o       ),
+    // Error monitor
+    .err_monitor_clear_o              (err_monitor_clear              ),
+    .vrf_correctable_count_i          (vrf_correctable_count          ),
+    .vrf_uncorrectable_count_i        (vrf_uncorrectable_count        ),
+    .tcdm_rd_correctable_count_i      (tcdm_rd_correctable_count      ),
+    .tcdm_rd_uncorrectable_count_i    (tcdm_rd_uncorrectable_count    ),
+    .tcdm_scrub_correctable_count_i   (tcdm_scrub_correctable_count   ),
+    .tcdm_scrub_uncorrectable_count_i (tcdm_scrub_uncorrectable_count )
   );
 
   // 3. BootROM
