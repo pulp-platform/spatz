@@ -291,6 +291,9 @@ module spatz_vlsu
   logic [NrParallelInstructions-1:0] mem_insn_pending_q, mem_insn_pending_d;
   `FF(mem_insn_pending_q, mem_insn_pending_d, '0)
 
+  // Is there are pending write request to be sent to the memory
+  logic write_pending;
+
   ///////////////////
   //  VRF request  //
   ///////////////////
@@ -366,7 +369,7 @@ module spatz_vlsu
     end
 
     // Did an instruction finished its requests?
-    if (&mem_port_finished_q) begin
+    if (&mem_port_finished_q & !write_pending) begin
       mem_insn_finished_d[mem_spatz_req.id] = 1'b1;
       mem_spatz_req_ready                   = 1'b1;
     end
@@ -722,6 +725,11 @@ module spatz_vlsu
   always_comb begin: p_state
     // Maintain state
     state_d = state_q;
+    write_pending = 1'b0;
+
+    for (int port = 0; port < NrMemPorts; port++) begin
+      write_pending |= (spatz_mem_req_o[port].write & spatz_mem_req_valid_o[port]);
+    end
 
     unique case (state_q)
       VLSU_RunningLoad: begin
@@ -733,7 +741,8 @@ module spatz_vlsu
       VLSU_RunningStore: begin
         if (commit_insn_valid && commit_insn_q.is_load)
           if (&rob_empty)
-            state_d = VLSU_RunningLoad;
+            if (!write_pending)
+              state_d = VLSU_RunningLoad;
       end
 
       default:;
