@@ -890,7 +890,6 @@ module spatz_vlsu
   end
 
   vlen_t commit_counter_sum,mem_counter_sum;
-  vlen_t [NrMemPorts-1:0] prefix,mem_counter_position_sum;
   vlen_t commit_slice_base, mem_slice_base;
 
   always_comb begin
