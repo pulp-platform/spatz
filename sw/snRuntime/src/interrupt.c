@@ -67,9 +67,7 @@ void __snrt_isr(void) {
                 break;
         }
     } else {
-        // exceptions not handled, halt
-        while (1)
-            ;
+      _snrt_exit(0xBAD);
     }
 }
 
