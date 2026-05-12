@@ -83,7 +83,7 @@ int main() {
   if (cid == 0)
     timer = benchmark_get_cycle();
 
-  if((QUAD_RLEN == 0) || cid == 0){
+  if ((QUAD_RLEN == 0) || cid == 0) {
     // Call AXPY
 #ifdef UNROLL
     faxpy_v64b_unrl(*a, x_int, y_int, dim_core);

@@ -100,7 +100,7 @@ int main() {
   if (cid == 0)
     start_kernel();
 
-  if((QUAD_RLEN == 0) || cid == 0){
+  if ((QUAD_RLEN == 0) || cid == 0) {
     // Calculate the result
     conv3d_CHx7x7(o, i, fmtx, r / num_cores, r, c, f);
   }

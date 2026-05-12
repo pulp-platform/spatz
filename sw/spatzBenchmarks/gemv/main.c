@@ -93,7 +93,7 @@ int main() {
     timer = benchmark_get_cycle();
 
   // Calculate gemv
-  if((QUAD_RLEN == 0) || cid == 0){
+  if ((QUAD_RLEN == 0) || cid == 0) {
     if (sizeof(T) == 8)
       gemv_v64b_m4(a_core, b, result_core, gemv_l.M, m_core, gemv_l.N);
     else if (sizeof(T) == 4)
