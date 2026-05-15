@@ -63,6 +63,8 @@ module spatz_vfu
 
     // Is this a reduction?
     logic reduction;
+    // valid bytes in this VRF word
+    logic [$clog2(VRFWordBWidth+1)-1:0] valid_bytes;
   } vfu_tag_t;
 
   ///////////////////////
@@ -317,6 +319,34 @@ module spatz_vfu
   logic [N_FU*ELENB-1:0] fpu_result_valid;
   logic [N_FU*ELENB-1:0] fpu_in_ready;
 
+  // Valid bytes in current VRF word
+  logic [$clog2(MAXVL*8+1)-1:0] remaining_bytes;
+  logic [$clog2(VRFWordBWidth+1)-1:0] valid_bytes_rd, valid_bytes_wr;
+  logic [VRFWordWidth-1:0] tail_mask;
+  vew_e src_vsew;
+
+  always_comb begin: proc_tail_mask
+    automatic logic [$clog2(MAXVL*8+1)-1:0] rem_rd, rem_wr;
+    src_vsew = vew_e'(spatz_req.vtype.vsew + spatz_req.op_arith.is_narrowing);
+
+    // Read side: source-width bytes
+    rem_rd = (vl_q < spatz_req.vl) ? ((spatz_req.vl - vl_q) << src_vsew) : '0;
+    valid_bytes_rd = (rem_rd >= VRFWordBWidth) ? ($bits(valid_bytes_rd))'(VRFWordBWidth) : rem_rd[$bits(valid_bytes_rd)-1:0];
+
+    // Write side: dest-width bytes
+    rem_wr = (vl_q < spatz_req.vl) ? ((spatz_req.vl - vl_q) << spatz_req.vtype.vsew) : '0;
+    valid_bytes_wr = (rem_wr >= VRFWordBWidth) ? ($bits(valid_bytes_wr))'(VRFWordBWidth) : rem_wr[$bits(valid_bytes_wr)-1:0];
+
+    for (int b = 0; b < VRFWordBWidth; b++)
+      tail_mask[b*8 +: 8] = (b < valid_bytes_rd) ? 8'hFF : 8'h00;
+  end: proc_tail_mask
+
+  // apply mask to read data
+  vrf_data_t [2:0] vrf_rdata_masked;
+  for (genvar i = 0; i < 3; i++) begin: gen_data_mask
+    assign vrf_rdata_masked[i] = vrf_rdata_i[i] & tail_mask;
+  end: gen_data_mask
+
   // Operands and result signals
   logic [N_FU*ELEN-1:0]  operand1, operand2, operand3;
   logic [N_FU*ELENB-1:0] in_ready;
@@ -324,7 +354,7 @@ module spatz_vfu
     if (spatz_req.op_arith.is_scalar)
       operand1 = {1*N_FU{spatz_req.rs1}};
     else if (spatz_req.use_vs1)
-      operand1 = spatz_req.op_arith.is_reduction ? $unsigned(reduction_q[1]) : vrf_rdata_i[1];
+      operand1 = spatz_req.op_arith.is_reduction ? $unsigned(reduction_q[1]) : vrf_rdata_masked[1];
     else begin
       // Replicate scalar operands
       unique case (spatz_req.op == VSDOTP ? vew_e'(spatz_req.vtype.vsew + 1) : spatz_req.vtype.vsew)
@@ -336,7 +366,7 @@ module spatz_vfu
     end
 
     if ((!spatz_req.op_arith.is_scalar || spatz_req.op == VADD) && spatz_req.use_vs2)
-      operand2 = spatz_req.op_arith.is_reduction ? $unsigned(reduction_q[0]) : vrf_rdata_i[0];
+      operand2 = spatz_req.op_arith.is_reduction ? $unsigned(reduction_q[0]) : vrf_rdata_masked[0];
     else
       // Replicate scalar operands
       unique case (spatz_req.op == VSDOTP ? vew_e'(spatz_req.vtype.vsew + 1) : spatz_req.vtype.vsew)
@@ -346,7 +376,7 @@ module spatz_vfu
         default: operand2 = {1*N_FU{spatz_req.rs2}};
       endcase
 
-    operand3 = spatz_req.op_arith.is_scalar ? {1*N_FU{spatz_req.rsd}} : vrf_rdata_i[2];
+    operand3 = spatz_req.op_arith.is_scalar ? {1*N_FU{spatz_req.rsd}} : vrf_rdata_masked[2];
   end: operand_proc
 
   assign in_ready     = state_q == VFU_RunningIPU ? ipu_in_ready     : fpu_in_ready;
@@ -746,7 +776,8 @@ module spatz_vfu
       last           : last_request,
       narrowing      : spatz_req.op_arith.is_narrowing,
       narrowing_upper: narrowing_upper_q,
-      reduction      : spatz_req.op_arith.is_reduction
+      reduction      : spatz_req.op_arith.is_reduction,
+      valid_bytes    : valid_bytes_wr // count of the number of valid bytes in the VRF word (write side)
     };
 
     if (spatz_req_valid && vl_q == '0) begin
@@ -772,10 +803,16 @@ module spatz_vfu
     end
   end: vreg_addr_proc
 
+  logic [VRFWordBWidth-1:0] tail_wbe;
   always_comb begin : operand_req_proc
     vreg_r_req = '0;
     vreg_we    = '0;
     vreg_wbe   = '0;
+
+    //write just the significant bytes (tail unisturbed)
+    for (int b = 0; b < N_FU*ELENB; b++)
+      tail_wbe[b] = (b < result_tag.valid_bytes);
+
 
     if (spatz_req_valid && vl_q < spatz_req.vl)
       // Request operands
@@ -784,11 +821,13 @@ module spatz_vfu
     // Got a new result
     if (&(result_valid | ~pending_results) && !result_tag.reduction) begin
       vreg_we  = !result_tag.wb;
-      vreg_wbe = '1;
+      vreg_wbe = tail_wbe;
 
       if (result_tag.narrowing) begin
-        // Only write half of the elements
-        vreg_wbe = result_tag.narrowing_upper ? {{(N_FU*ELENB/2){1'b1}}, {(N_FU*ELENB/2){1'b0}}} : {{(N_FU*ELENB/2){1'b0}}, {(N_FU*ELENB/2){1'b1}}};
+        if (result_tag.narrowing_upper)
+          vreg_wbe = (tail_wbe << N_FU*ELENB/2) & {{N_FU*ELENB/2{1'b1}}, {N_FU*ELENB/2{1'b0}}};
+        else
+          vreg_wbe = tail_wbe & {{N_FU*ELENB/2{1'b0}}, {N_FU*ELENB/2{1'b1}}};
       end else if (spatz_req.op == VFCMP) begin
         // every vector element requires 1 bit of wbe --> ceil(vl/8)
         automatic logic [$clog2((MAXVL+7)/8+1)-1:0] mask_bytes;
