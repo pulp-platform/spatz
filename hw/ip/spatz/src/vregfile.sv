@@ -77,15 +77,17 @@ module vregfile import spatz_pkg::*; #(
   end: gen_row_decoder
 
   // Column decoder. Create a clock for each SCM column
-  logic [WordWidth/8-1:0] col_clk;
-  for (genvar b = 0; b < WordWidth/8; b++) begin: gen_col_decoder
-    tc_clk_gating i_wbe_cg (
-      .clk_i    (clk       ),
-      .en_i     (wbe_i[b]  ),
-      .test_en_i(testmode_i),
-      .clk_o    (col_clk[b])
-    );
-  end: gen_col_decoder
+  logic [NrWords-1:0][WordWidth/8-1:0] col_clk;
+  for (genvar row = 0; row < NrWords; row++) begin: gen_row
+    for (genvar b = 0; b < WordWidth/8; b++) begin: gen_col_decoder
+      tc_clk_gating i_wbe_cg (
+        .clk_i    (row_clk[row]),
+        .en_i     (wbe_i[b]  ),
+        .test_en_i(testmode_i),
+        .clk_o    (col_clk[row][b])
+      );
+    end: gen_col_decoder
+  end: gen_row
 
   // Select which destination bytes to write into
 
@@ -93,15 +95,8 @@ module vregfile import spatz_pkg::*; #(
   /* verilator lint_off NOLATCH */
   for (genvar vreg = 0; vreg < NrWords; vreg++) begin: gen_write_mem
     for (genvar b = 0; b < WordWidth/8; b++) begin: gen_word
-      logic clk_latch;
-      tc_clk_and2 i_clk_and (
-        .clk0_i(row_clk[vreg]),
-        .clk1_i(col_clk[b]   ),
-        .clk_o (clk_latch    )
-      );
-
       always_latch begin
-        if (clk_latch)
+        if (col_clk[vreg][b])
           mem[vreg][b] <= wdata_q[b*8 +: 8];
       end
     end: gen_word
