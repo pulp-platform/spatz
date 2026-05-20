@@ -32,6 +32,10 @@ endif
 # Enable additional uA configurations for the spatz core
 DOUBLE_BW := $(shell python3 -c "import jstyleson; print(jstyleson.load(open('$(SPATZ_CLUSTER_CFG_PATH)'))['cluster'].get('double_bw', 0))")
 BUF_FPU := $(shell python3 -c "import jstyleson; print(jstyleson.load(open('$(SPATZ_CLUSTER_CFG_PATH)'))['cluster'].get('buf_fpu', 0))")
+# Ventaglio (VTL) compile-time gate. OR'd across all cores: if any core has
+# `ventaglio: true` in the hjson, define VENTAGLIO so the RTL `ifdef
+# VENTAGLIO ... `endif blocks pull in the VTL integration.
+SPATZ_CLUSTER_VENTAGLIO := $(shell python3 -c "import jstyleson; f = open('$(SPATZ_CLUSTER_CFG_PATH)'); cores = jstyleson.load(f)['cluster']['cores']; print(1 if any(c.get('ventaglio', False) for c in cores) else 0)")
 
 ifeq ($(DOUBLE_BW),1)
 	DEFS += -DDOUBLE_BW
@@ -40,6 +44,10 @@ endif
 
 ifeq ($(BUF_FPU),1)
 	DEFS += -DBUF_FPU
+endif
+
+ifeq ($(SPATZ_CLUSTER_VENTAGLIO),1)
+	DEFS += -DVENTAGLIO
 endif
 
 # Include Makefrag
