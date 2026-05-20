@@ -208,6 +208,24 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
   logic valid_instr;
   logic exception;
 
+  logic retire_postinc;                // retire rs1 post-increment update
+  logic is_postinc_rrpost;             // current instruction has RRPOST semantics
+  logic is_vload_rrpost;               // current instruction is P_VLE*_V_RRPOST
+  logic is_fp_load_rrpost;             // current instruction is P_FL*_RRPOST
+  logic [RegWidth-1:0] postinc_waddr;  // destination GPR for post-inc (rs1)
+
+  logic [31:0] mem_addr_virt;  // effective virtual address for LSU/FP-load path
+
+  // Effective virtual address used for LSU/FP load/store path.
+  // For scalar FP RRPOST loads, ALU computes post-increment (rs1+rs2), while the
+  // actual load address must remain the original base rs1 (imm = 0 semantic).
+  always_comb begin
+    mem_addr_virt = alu_result;
+    if (is_fp_load_rrpost) begin
+      mem_addr_virt = gpr_rdata[0];  // rs1 base address
+    end
+  end
+
   // ALU Operations
   typedef enum logic [3:0]  {
     Add, Sub,
@@ -352,8 +370,70 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
   // Offloaded mem operation is a store operation
   logic acc_mem_store;
 
+  // MUX logic to offload a plain VLE or VLX instruction
+  logic [31:0] acc_data_op;
+
+  always_comb begin
+    acc_data_op = inst_data_i;
+
+    unique casez (inst_data_i)
+      // P_VLE*_V_RRPOST  -> VLE*_V
+      riscv_instr::P_VLE8_V_RRPOST,
+      riscv_instr::P_VLE16_V_RRPOST,
+      riscv_instr::P_VLE32_V_RRPOST,
+      riscv_instr::P_VLE64_V_RRPOST: begin
+        // Convert custom "extended slot" encoding back to standard VLE slot.
+        // Preserve vd, rs1, vm.
+        acc_data_op[31:29] = 3'b000;     // cast the top 3-bit of func6
+        acc_data_op[24:20] = 5'b00000;   // cast rs2 back to zeros for unit-stride
+        acc_data_op[6:0]   = 7'b0000111; // cast opcode to unit-stride
+      end
+
+      // P_VLX*_V_RRPOST  -> VLX*_V
+      riscv_instr::P_VLX8_V_RRPOST,
+      riscv_instr::P_VLX16_V_RRPOST,
+      riscv_instr::P_VLX32_V_RRPOST,
+      riscv_instr::P_VLX64_V_RRPOST: begin
+        // Convert custom "extended slot" encoding back to standard VLX slot.
+        // Preserve vd, rs1, vm.
+        acc_data_op[31:26] = 3'b000100;  // cast func6
+        acc_data_op[24:20] = 5'b00000;   // cast rs2 back to zeros for unit-stride
+        acc_data_op[6:0]   = 7'b0000111; // cast opcode to unit-stride
+      end
+
+      // P_FL*_RRPOST -> FL* (imm = 0)
+      riscv_instr::P_FLB_RRPOST: begin
+        acc_data_op = riscv_instr::FLB;    // preserve exact FLB encoding template
+        acc_data_op[19:15] = inst_data_i[19:15]; // rs1
+        acc_data_op[11:7]  = inst_data_i[11:7];  // rd
+      end
+
+      riscv_instr::P_FLH_RRPOST: begin
+        acc_data_op = riscv_instr::FLH;
+        acc_data_op[19:15] = inst_data_i[19:15];
+        acc_data_op[11:7]  = inst_data_i[11:7];
+      end
+
+      riscv_instr::P_FLW_RRPOST: begin
+        acc_data_op = riscv_instr::FLW;
+        acc_data_op[19:15] = inst_data_i[19:15];
+        acc_data_op[11:7]  = inst_data_i[11:7];
+      end
+
+      riscv_instr::P_FLD_RRPOST: begin
+        acc_data_op = riscv_instr::FLD;
+        acc_data_op[19:15] = inst_data_i[19:15];
+        acc_data_op[11:7]  = inst_data_i[11:7];
+      end
+
+      default: begin
+        // keep original instruction unchanged
+      end
+    endcase
+  end
+
   assign acc_qreq_o.id = rd;
-  assign acc_qreq_o.data_op = inst_data_i;
+  assign acc_qreq_o.data_op = acc_data_op;
   assign acc_qreq_o.data_arga = {{32{opa[31]}}, opa};
   assign acc_qreq_o.data_argb = {{32{opb[31]}}, opb};
   // operand C is currently only used for load/store instructions
@@ -533,6 +613,12 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
     acc_qreq_o.addr = SPATZ;
     acc_register_rd = 1'b0;
     acc_mem_store = 1'b0;
+
+    // post-increment related signals
+    is_postinc_rrpost = 1'b0;
+    is_vload_rrpost   = 1'b0;
+    is_fp_load_rrpost = 1'b0;
+    postinc_waddr     = rs1;
 
     debug_d = (!debug_q && (
           // the external debugger or an ebreak instruction triggerd the
@@ -781,7 +867,11 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           riscv_instr::CSR_VLENB,
           riscv_instr::CSR_VXSAT,
           riscv_instr::CSR_VXRM,
-          riscv_instr::CSR_VCSR: begin
+          riscv_instr::CSR_VCSR,
+          riscv_instr::CSR_VTLIDXW,
+          riscv_instr::CSR_VTLBLKS,
+          riscv_instr::CSR_VTLRATIO,
+          riscv_instr::CSR_VTLREG: begin
             if (RVV) begin
               write_rd        = 1'b0;
               uses_rd         = rd != 0;
@@ -811,7 +901,11 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           riscv_instr::CSR_VLENB,
           riscv_instr::CSR_VXSAT,
           riscv_instr::CSR_VXRM,
-          riscv_instr::CSR_VCSR: begin
+          riscv_instr::CSR_VCSR,
+          riscv_instr::CSR_VTLIDXW,
+          riscv_instr::CSR_VTLBLKS,
+          riscv_instr::CSR_VTLRATIO,
+          riscv_instr::CSR_VTLREG: begin
             if (RVV) begin
               write_rd        = 1'b0;
               uses_rd         = rd != 0;
@@ -840,7 +934,11 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           riscv_instr::CSR_VLENB,
           riscv_instr::CSR_VXSAT,
           riscv_instr::CSR_VXRM,
-          riscv_instr::CSR_VCSR: begin
+          riscv_instr::CSR_VCSR,
+          riscv_instr::CSR_VTLIDXW,
+          riscv_instr::CSR_VTLBLKS,
+          riscv_instr::CSR_VTLRATIO,
+          riscv_instr::CSR_VTLREG: begin
             if (RVV) begin
               write_rd        = 1'b0;
               uses_rd         = 1'b1;
@@ -871,7 +969,11 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           riscv_instr::CSR_VLENB,
           riscv_instr::CSR_VXSAT,
           riscv_instr::CSR_VXRM,
-          riscv_instr::CSR_VCSR: begin
+          riscv_instr::CSR_VCSR,
+          riscv_instr::CSR_VTLIDXW,
+          riscv_instr::CSR_VTLBLKS,
+          riscv_instr::CSR_VTLRATIO,
+          riscv_instr::CSR_VTLREG: begin
             if (RVV) begin
               write_rd        = 1'b0;
               uses_rd         = 1'b1;
@@ -906,7 +1008,11 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           riscv_instr::CSR_VLENB,
           riscv_instr::CSR_VXSAT,
           riscv_instr::CSR_VXRM,
-          riscv_instr::CSR_VCSR: begin
+          riscv_instr::CSR_VCSR,
+          riscv_instr::CSR_VTLIDXW,
+          riscv_instr::CSR_VTLBLKS,
+          riscv_instr::CSR_VTLRATIO,
+          riscv_instr::CSR_VTLREG: begin
             if (RVV) begin
               write_rd        = 1'b0;
               uses_rd         = 1'b1;
@@ -937,7 +1043,11 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           riscv_instr::CSR_VLENB,
           riscv_instr::CSR_VXSAT,
           riscv_instr::CSR_VXRM,
-          riscv_instr::CSR_VCSR: begin
+          riscv_instr::CSR_VCSR,
+          riscv_instr::CSR_VTLIDXW,
+          riscv_instr::CSR_VTLBLKS,
+          riscv_instr::CSR_VTLRATIO,
+          riscv_instr::CSR_VTLREG: begin
             if (RVV) begin
               write_rd        = 1'b0;
               uses_rd         = 1'b1;
@@ -2123,6 +2233,22 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           illegal_inst = 1'b1;
         end
       end
+      P_FLW_RRPOST: begin
+        if (FP_EN && RVF) begin
+          opa_select       = Reg;               // rs1 base
+          opb_select       = Reg;               // rs2 increment
+          alu_op           = Add;               // ALU computes post-inc = rs1 + rs2
+          write_rd         = 1'b0;              // FP rd handled by accelerator
+          acc_qvalid_o     = valid_instr & trans_ready;
+          ls_size          = Word;
+          is_fp_load       = 1'b1;
+          is_fp_load_rrpost= 1'b1;
+          is_postinc_rrpost= 1'b1;
+          postinc_waddr    = rs1;
+        end else begin
+          illegal_inst = 1'b1;
+        end
+      end
       FSW: begin
         if (FP_EN && RVF) begin
           opa_select = Reg;
@@ -2144,6 +2270,22 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           acc_qvalid_o = valid_instr & trans_ready;
           ls_size = Double;
           is_fp_load = 1'b1;
+        end else begin
+          illegal_inst = 1'b1;
+        end
+      end
+      P_FLD_RRPOST: begin
+        if (FP_EN && (RVD || XFVEC)) begin
+          opa_select       = Reg;
+          opb_select       = Reg;
+          alu_op           = Add;
+          write_rd         = 1'b0;
+          acc_qvalid_o     = valid_instr & trans_ready;
+          ls_size          = Double;
+          is_fp_load       = 1'b1;
+          is_fp_load_rrpost= 1'b1;
+          is_postinc_rrpost= 1'b1;
+          postinc_waddr    = rs1;
         end else begin
           illegal_inst = 1'b1;
         end
@@ -2173,6 +2315,22 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           illegal_inst = 1'b1;
         end
       end
+      P_FLH_RRPOST: begin
+        if (FP_EN && (XF16 || XF16ALT)) begin
+          opa_select       = Reg;
+          opb_select       = Reg;
+          alu_op           = Add;
+          write_rd         = 1'b0;
+          acc_qvalid_o     = valid_instr & trans_ready;
+          ls_size          = HalfWord;
+          is_fp_load       = 1'b1;
+          is_fp_load_rrpost= 1'b1;
+          is_postinc_rrpost= 1'b1;
+          postinc_waddr    = rs1;
+        end else begin
+          illegal_inst = 1'b1;
+        end
+      end
       FSH: begin
         if (FP_EN && (XF16 || XF16ALT)) begin
           opa_select = Reg;
@@ -2194,6 +2352,22 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           acc_qvalid_o = valid_instr & trans_ready;
           ls_size = Byte;
           is_fp_load = 1'b1;
+        end else begin
+          illegal_inst = 1'b1;
+        end
+      end
+      P_FLB_RRPOST: begin
+        if (FP_EN && (XF8 || XF8ALT)) begin
+          opa_select       = Reg;
+          opb_select       = Reg;
+          alu_op           = Add;
+          write_rd         = 1'b0;
+          acc_qvalid_o     = valid_instr & trans_ready;
+          ls_size          = Byte;
+          is_fp_load       = 1'b1;
+          is_fp_load_rrpost= 1'b1;
+          is_postinc_rrpost= 1'b1;
+          postinc_waddr    = rs1;
         end else begin
           illegal_inst = 1'b1;
         end
@@ -2559,6 +2733,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
       riscv_instr::VFSLIDE1DOWN_VF,
       riscv_instr::VFMV_V_F,
       riscv_instr::VFMV_S_F,
+      riscv_instr::VFXMUL_VF,
       riscv_instr::VFMUL_VF,
       riscv_instr::VFRSUB_VF,
       riscv_instr::VFMADD_VF,
@@ -2567,6 +2742,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
       riscv_instr::VFNMSUB_VF,
       riscv_instr::VFMACC_VF,
       riscv_instr::VFNMACC_VF,
+      riscv_instr::VFXMACC_VF,
       riscv_instr::VFMSAC_VF,
       riscv_instr::VFNMSAC_VF,
       riscv_instr::VFWADD_VF,
@@ -2588,10 +2764,28 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           illegal_inst = 1'b1;
         end
       end
+
+      riscv_instr::VFXMACC_VRF,
+      riscv_instr::VFXMUL_VRF,
+      riscv_instr::VVENTCLR: begin
+        if (RVV && RVF) begin
+          write_rd        = 1'b0;                                                                                                                                                                                      
+          uses_rd         = 1'b0;                                                                                                                                                                                      
+          acc_qvalid_o    = valid_instr;
+          acc_register_rd = 1'b0;                                                                                                                                                                                      
+        end else begin
+          illegal_inst = 1'b1;                                                                                                                                                                                         
+        end           
+      end
+
       riscv_instr::VLE8_V,
       riscv_instr::VLE16_V,
       riscv_instr::VLE32_V,
       riscv_instr::VLE64_V,
+      riscv_instr::VLX8_V,
+      riscv_instr::VLX16_V,
+      riscv_instr::VLX32_V,
+      riscv_instr::VLX64_V,
       riscv_instr::VLOXEI8_V,
       riscv_instr::VLOXEI16_V,
       riscv_instr::VLOXEI32_V,
@@ -2606,6 +2800,30 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           acc_qvalid_o    = valid_instr && !acc_mem_stall;
           opa_select      = Reg;
           acc_register_rd = 1'b0;
+        end else begin
+          illegal_inst = 1'b1;
+        end
+      end
+      // Custom post-increment vector loads: rs1 <- rs1 + rs2
+      riscv_instr::P_VLE8_V_RRPOST,
+      riscv_instr::P_VLE16_V_RRPOST,
+      riscv_instr::P_VLE32_V_RRPOST,
+      riscv_instr::P_VLE64_V_RRPOST,
+      riscv_instr::P_VLX8_V_RRPOST,
+      riscv_instr::P_VLX16_V_RRPOST,
+      riscv_instr::P_VLX32_V_RRPOST,
+      riscv_instr::P_VLX64_V_RRPOST: begin
+        if (RVV) begin
+          write_rd        = 1'b0;
+          uses_rd         = 1'b0;              // no architectural rd write from Snitch side
+          acc_qvalid_o    = valid_instr && !acc_mem_stall;
+          opa_select      = Reg;               // rs1 base
+          opb_select      = Reg;               // rs2 increment
+          alu_op          = Add;               // explicit: use ALU for rs1+rs2
+          acc_register_rd = 1'b0;
+          is_vload_rrpost = 1'b1;              // mark for local rs1 writeback
+          is_postinc_rrpost = 1'b1;
+          postinc_waddr   = rs1;
         end else begin
           illegal_inst = 1'b1;
         end
@@ -3169,7 +3387,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
   // --------------------
   // L0 DTLB
   // --------------------
-  assign dtlb_va = va_t'(alu_result[31:PAGE_SHIFT]);
+  assign dtlb_va = va_t'(mem_addr_virt[31:PAGE_SHIFT]);
 
   if (VMSupport) begin : gen_dtlb
     snitch_l0_tlb #(
@@ -3220,8 +3438,8 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
   // Mulitplexer using and/or as this signal is likely timing critical.
   assign ls_paddr[PPNSize+PAGE_SHIFT-1:PAGE_SHIFT] =
           ({(PPNSize){trans_active}} & dtlb_pa) |
-          (~{(PPNSize){trans_active}} & {mseg_q, alu_result[31:PAGE_SHIFT]});
-  assign ls_paddr[PAGE_SHIFT-1:0] = alu_result[PAGE_SHIFT-1:0];
+          (~{(PPNSize){trans_active}} & {mseg_q, mem_addr_virt[31:PAGE_SHIFT]});
+  assign ls_paddr[PAGE_SHIFT-1:0] = mem_addr_virt[PAGE_SHIFT-1:0];
 
   assign lsu_qvalid = lsu_tlb_qvalid & trans_ready & ~acc_mem_stall;
   assign lsu_tlb_qready = lsu_qready & trans_ready;
@@ -3268,6 +3486,11 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
 
   // we can retire if we are not stalling and if the instruction is writing a register
   assign retire_i = write_rd & valid_instr & (rd != 0);
+  assign retire_postinc = is_postinc_rrpost
+                        & acc_qvalid_o
+                        & acc_qready_i
+                        & !exception
+                        & (rs1 != '0);
 
   // Number of memory operations in the accelerator
   logic [2:0] acc_mem_cnt_q, acc_mem_cnt_d;
@@ -3310,10 +3533,10 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
   always_comb begin
     ls_misaligned = 1'b0;
     unique case (ls_size)
-      HalfWord: if (alu_result[0] != 1'b0) ls_misaligned = 1'b1;
-      Word: if (alu_result[1:0] != 2'b00) ls_misaligned = 1'b1;
-      Double: if (alu_result[2:0] != 3'b000) ls_misaligned = 1'b1;
-      default: ls_misaligned = 1'b0;
+      HalfWord: if (mem_addr_virt[0]   != 1'b0)   ls_misaligned = 1'b1;
+      Word:     if (mem_addr_virt[1:0] != 2'b00)  ls_misaligned = 1'b1;
+      Double:   if (mem_addr_virt[2:0] != 3'b000) ls_misaligned = 1'b1;
+      default:  ls_misaligned = 1'b0;
     endcase
   end
 
@@ -3358,6 +3581,10 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
 
     if (retire_i) begin
       gpr_we[0] = 1'b1;
+    end else if (retire_postinc) begin 
+      gpr_we[0]    = 1'b1;
+      gpr_waddr[0] = postinc_waddr;   // rs1
+      gpr_wdata[0] = alu_result;      // reuse ALU result = rs1 + rs2
     // if we are not retiring another instruction retire the load now
     end else if (lsu_pvalid) begin
       retire_load = 1'b1;

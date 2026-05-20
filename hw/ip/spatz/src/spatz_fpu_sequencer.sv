@@ -433,12 +433,16 @@ module spatz_fpu_sequencer
         riscv_instr::VFMV_V_F,
         riscv_instr::VFMV_S_F,
         riscv_instr::VFMUL_VF,
+        riscv_instr::VFXMUL_VF,
         riscv_instr::VFRSUB_VF,
         riscv_instr::VFMADD_VF,
         riscv_instr::VFNMADD_VF,
         riscv_instr::VFMSUB_VF,
         riscv_instr::VFNMSUB_VF,
         riscv_instr::VFMACC_VF,
+        riscv_instr::VFXMACC_VF,
+        riscv_instr::VFXMACC_VRF,
+        riscv_instr::VFXMUL_VRF,
         riscv_instr::VFNMACC_VF,
         riscv_instr::VFMSAC_VF,
         riscv_instr::VFNMSAC_VF,
@@ -590,6 +594,7 @@ module spatz_fpu_sequencer
   logic is_vector_load;
   assign is_vector_load = issue_req_i.data_op inside
     {riscv_instr::VLE8_V, riscv_instr::VLE16_V, riscv_instr::VLE32_V, riscv_instr::VLE64_V,
+    riscv_instr::VLX8_V, riscv_instr::VLX16_V, riscv_instr::VLX32_V, riscv_instr::VLX64_V,
     riscv_instr::VLSE8_V, riscv_instr::VLSE16_V, riscv_instr::VLSE32_V, riscv_instr::VLSE64_V,
     riscv_instr::VLOXEI8_V, riscv_instr::VLOXEI16_V, riscv_instr::VLOXEI32_V, riscv_instr::VLOXEI64_V,
     riscv_instr::VLUXEI8_V, riscv_instr::VLUXEI16_V, riscv_instr::VLUXEI32_V, riscv_instr::VLUXEI64_V};

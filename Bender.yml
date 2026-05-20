@@ -122,6 +122,7 @@ sources:
     # Level 0
     - hw/ip/spatz/src/reorder_buffer.sv
     - hw/ip/spatz/src/rvv_pkg.sv
+    - hw/ip/spatz/src/vtl_pkg.sv
     # Level 1
     - hw/ip/spatz/src/generated/spatz_pkg.sv
     - hw/ip/spatz/src/spatz_serdiv.sv
@@ -134,6 +135,11 @@ sources:
     - target: not(fpga)
       files:
         - hw/ip/spatz/src/vregfile.sv
+        - hw/ip/ventaglio/ventaglio_regfile.sv
+        - hw/ip/ventaglio/ventaglio_gather_datapath.sv
+        - hw/ip/ventaglio/ventaglio_scatter_datapath.sv
+        - hw/ip/ventaglio/ventaglio_scatter.sv
+        - hw/ip/ventaglio/ventaglio_gather.sv
     # Level 3
     - hw/ip/spatz/src/spatz_fpu_sequencer.sv
     - hw/ip/spatz/src/spatz_ipu.sv
@@ -142,6 +148,7 @@ sources:
     - hw/ip/spatz/src/spatz_doublebw_vlsu.sv
     - hw/ip/spatz/src/spatz_vrf.sv
     - hw/ip/spatz/src/spatz_vsldu.sv
+    - hw/ip/ventaglio/ventaglio.sv
     # Level 4
     - hw/ip/spatz/src/spatz_controller.sv
     # Level 5
