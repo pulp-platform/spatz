@@ -140,5 +140,9 @@ add_snitch_test(vfncvt isa/rv64uv/vfncvt.c)
 
 add_snitch_test(vfmv isa/rv64uv/vfmv.c)
 
+<<<<<<< HEAD
 add_snitch_test(invalid isa/rv64uv/invalid.c)
 set_property(TEST ${SNITCH_TEST_PREFIX}rtl-invalid PROPERTY WILL_FAIL TRUE)
+=======
+add_snitch_test(vtmmutvv isa/rv64uv/vtmmutvv.c)
+>>>>>>> f9365bc94901 ([SW] link to my riscv-opcodes URL)
