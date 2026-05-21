@@ -1,9 +1,8 @@
-// Copyright 2026 ETH Zurich and University of Bologna.
+// Copyright 2023 ETH Zurich and University of Bologna.
 // Licensed under the Apache License, Version 2.0, see LICENSE for details.
 // SPDX-License-Identifier: Apache-2.0
 //
 // Author: Matheus Cavalcante, ETH Zurich
-// Author: Pei-Yu Lin, ETH Zurich
 //
 // The controller contains all of the CSR registers, the instruction decoder,
 // the operation issuer, the register scoreboard, and the result write back to
@@ -48,6 +47,10 @@ module spatz_controller
     input  logic                                   vfu_rsp_valid_i,
     output logic                                   vfu_rsp_ready_o,
     input  vfu_rsp_t                               vfu_rsp_i,
+    // OPE
+    input  logic                                   ope_req_ready_i,
+    input  logic                                   ope_rsp_valid_i,
+    input  vfu_rsp_t                               ope_rsp_i,
     // VLSU
     input  logic                                   vlsu_req_ready_i,
     input  logic                                   vlsu_rsp_valid_i,
@@ -65,10 +68,6 @@ module spatz_controller
     input  logic                                   vtl_rsp_valid_i,
     input  vsldu_rsp_t                             vtl_rsp_i,
 `endif
-    // OPE
-    input  logic                                   ope_req_ready_i,
-    input  logic                                   ope_rsp_valid_i,
-    input  vfu_rsp_t                               ope_rsp_i,
     // VRF Scoreboard
     input  logic             [NrVregfilePorts-1:0]              sb_enable_i,
     input  logic             [NrWritePorts-1:0]                 sb_wrote_result_i,
@@ -100,6 +99,41 @@ module spatz_controller
   logic       spatz_req_vtl_illegal;
 `endif
 
+  logic spatz_req_is_tile;
+  logic buffer_req_is_tile;
+
+  assign spatz_req_is_tile =
+      spatz_req.op inside {VTLE, VTSE, VTMV_VT, VTMV_TV, VTZERO, VTDISCARD,
+                          VTFMM, VTFMM_ALT, VTMMU, VTMMS};
+
+  assign buffer_req_is_tile =
+      buffer_spatz_req.op inside {VTLE, VTSE, VTMV_VT, VTMV_TV, VTZERO, VTDISCARD,
+                                  VTFMM, VTFMM_ALT, VTMMU, VTMMS};
+
+  logic [NrParallelInstructions-1:0] tile_running_d, tile_running_q;
+
+  `FF(tile_running_q, tile_running_d, '0)
+
+  always_comb begin
+    tile_running_d = tile_running_q;
+
+    if (spatz_req_valid && spatz_req.ex_unit != CON && spatz_req_is_tile) begin
+      tile_running_d[spatz_req.id] = 1'b1;
+    end
+
+    if (vfu_rsp_valid_i)
+      tile_running_d[vfu_rsp_i.id] = 1'b0;
+
+    if (vlsu_rsp_valid_i)
+      tile_running_d[vlsu_rsp_i.id] = 1'b0;
+
+    if (vsldu_rsp_valid_i)
+      tile_running_d[vsldu_rsp_i.id] = 1'b0;
+
+    if (ope_rsp_valid_i)
+      tile_running_d[ope_rsp_i.id] = 1'b0;
+  end
+
   //////////
   // CSRs //
   //////////
@@ -129,6 +163,7 @@ module spatz_controller
 
   `FF(tn_q,     tn_d,     '0)
   `FF(mtype_q,  mtype_d,  '0)
+
 
   always_comb begin : proc_vcsr
     automatic logic [$clog2(MAXVL):0] vlmax = 0;
@@ -180,7 +215,7 @@ module spatz_controller
         // Check if vtype is valid
         if ((spatz_req.vtype.vsew > MAXEW) || (spatz_req.vtype.vlmul inside {LMUL_RES, LMUL_F8}) || (signed'(spatz_req.vtype.vlmul) + signed'($clog2(ELEN)) < signed'(spatz_req.vtype.vsew))) begin
           // Invalid
-          vtype_d = '{vill: 1'b1, altfmt: 1'b0, vsew: EW_8, vlmul: LMUL_1, default: '0};
+          vtype_d = '{vill: 1'b1, vsew: EW_8, vlmul: LMUL_1, default: '0};
           vl_d    = '0;
         end else begin
           // Valid
@@ -189,7 +224,8 @@ module spatz_controller
           vtype_d = spatz_req.vtype;
           if (!spatz_req.op_cfg.keep_vl) begin
             // Normal stripmining mode or set to MAXVL
-            vlmax = VLENB >> int'(spatz_req.vtype.vsew);
+            vlmax = VLENB >> spatz_req.vtype.vsew;
+
             unique case (spatz_req.vtype.vlmul)
               LMUL_F2: vlmax >>= 1;
               LMUL_F4: vlmax >>= 2;
@@ -197,7 +233,7 @@ module spatz_controller
               LMUL_2 : vlmax <<= 1;
               LMUL_4 : vlmax <<= 2;
               LMUL_8 : vlmax <<= 3;
-              default: vlmax = '0;
+              default: vlmax = vlmax;
             endcase
 
             vl_d = (int'(vlmax) < spatz_req.rs1) ? vlmax : spatz_req.rs1;
@@ -206,7 +242,7 @@ module spatz_controller
 
             // If new vtype changes ration, mark as illegal
             if (($signed(spatz_req.vtype.vsew) - $signed(vtype_q.vsew)) != ($signed(spatz_req.vtype.vlmul) - $signed(vtype_q.vlmul))) begin
-              vtype_d = '{vill: 1'b1, altfmt: 1'b0, vsew: EW_8, vlmul: LMUL_1, default: '0};
+              vtype_d = '{vill: 1'b1, vsew: EW_8, vlmul: LMUL_1, default: '0};
               vl_d    = '0;
             end
           end
@@ -813,28 +849,6 @@ module spatz_controller
         scoreboard_d[insn].deps[vtl_rsp_i.id] = 1'b0;
     end
 `endif
-    if (ope_rsp_valid_i) begin
-      for (int unsigned vreg = 0; vreg < NRVREG; vreg++) begin
-        if (read_table_q[vreg].id == ope_rsp_i.id && read_table_q[vreg].valid)
-          read_table_d[vreg] = '0;
-        if (write_table_q[vreg].id == ope_rsp_i.id && write_table_q[vreg].valid)
-          write_table_d[vreg] = '0;
-      end
-
-      scoreboard_d[ope_rsp_i.id]             = '0;
-      narrow_wide_d[ope_rsp_i.id]            = 1'b0;
-      wrote_result_narrowing_d[ope_rsp_i.id] = 1'b0;
-`ifdef DOUBLE_BW
-      narrow_d[ope_rsp_i.id]                 = 1'b0;
-      wrote_result_d[0][ope_rsp_i.id]        = 1'b0;
-      wrote_result_d[1][ope_rsp_i.id]        = 1'b0;
-      done_result_d[0][ope_rsp_i.id]         = 1'b0;
-      done_result_d[1][ope_rsp_i.id]         = 1'b0;
-      vl_cnt_d[ope_rsp_i.id]                 = '0;
-`endif
-      for (int unsigned insn = 0; insn < NrParallelInstructions; insn++)
-        scoreboard_d[insn].deps[ope_rsp_i.id] = 1'b0;
-    end
 
     // Initialize the scoreboard metadata if we have a new instruction issued.
     if (spatz_req_valid && spatz_req.ex_unit != CON) begin
@@ -967,10 +981,9 @@ module spatz_controller
   // not ready yet. Or we have a change in LMUL, for which we need to let all the
   // units finish first before scheduling a new operation (to avoid running into
   // issues with the socreboard).
-  logic stall, vfu_stall, vlsu_stall, vsldu_stall, vtl_stall, ope_stall;
-  assign stall       = (vfu_stall | vlsu_stall | vsldu_stall | vtl_stall | ope_stall)
-                       & req_buffer_valid;
-  assign vfu_stall   = ~vfu_req_ready_i & (spatz_req.ex_unit == VFU);
+  logic stall, vfu_stall, vlsu_stall, vsldu_stall, vtl_stall, ope_stall, tile_stall;
+  assign stall       = ((vfu_stall | vlsu_stall | vsldu_stall | vtl_stall | ope_stall) & req_buffer_valid) || tile_stall;
+  assign vfu_stall   = ~vfu_req_ready_i  & (spatz_req.ex_unit == VFU);
   assign vlsu_stall  = ~vlsu_req_ready_i & (spatz_req.ex_unit == LSU);
 `ifdef VENTAGLIO
   // VSLDU stalls only for true SLD-routed non-VTL ops (the VTL/VSLDU
@@ -986,6 +999,7 @@ module spatz_controller
   assign vtl_stall   = 1'b0;
 `endif
   assign ope_stall   = ~ope_req_ready_i  & (spatz_req.ex_unit == OPE);
+  assign tile_stall = req_buffer_valid && buffer_req_is_tile && (|tile_running_q);
 
   // Running instructions
   logic      [NrParallelInstructions-1:0] running_insn_d, running_insn_q;
@@ -1025,7 +1039,7 @@ module spatz_controller
     if (spatz_req_valid) begin
       case (spatz_req.ex_unit)
         VFU: begin
-          // RVV arithmetic ops: overwrite CSRs from current vector CSR state
+          // Overwrite all csrs in request
           spatz_req.vtype  = vtype_q;
           spatz_req.vl     = spatz_req.op_arith.widen_vs1 || spatz_req.op_arith.widen_vs2 ? vl_q * 2 : vl_q;
           spatz_req.vstart = vstart_q;
@@ -1050,7 +1064,7 @@ module spatz_controller
           spatz_req.op_tile.tn = tn_q;
           spatz_req.op_tile.tm = elen_t'(mtype_q.tm);
           spatz_req.op_tile.tk = elen_t'(mtype_q.tk);
-          spatz_req.vstart            = '0;
+          spatz_req.vstart     = '0;
         end
 
         LSU: begin
@@ -1101,20 +1115,6 @@ module spatz_controller
     end
   end // ex_issue
 
-  always_ff @(posedge clk_i) begin
-    if (rst_ni && retire_csr && spatz_req.op == VMCFG) begin
-      $display("[RET VMCFG] cfg=%0d rs1=%0d rd=%0d tn_d=%0d rsp_id=%0d rsp_data=%0d rsp_valid=%0b",
-        spatz_req.op_tile.cfg_sel,
-        spatz_req.rs1,
-        spatz_req.rd,
-        tn_d,
-        rsp_d.id,
-        rsp_d.data,
-        rsp_valid_d
-      );
-    end
-  end
-
   always_comb begin: proc_next_insn_id
     // Maintain state
     running_insn_d = running_insn_q;
@@ -1138,8 +1138,6 @@ module spatz_controller
       running_insn_d[vtl_rsp_i.id] = 1'b0;
     end
 `endif
-    if (ope_rsp_valid_i)
-      running_insn_d[ope_rsp_i.id] = 1'b0;
   end: proc_next_insn_id
 
   // Respond to core about the decoded instruction.
@@ -1178,6 +1176,12 @@ module spatz_controller
             issue_rsp_o.accept = 1'b0;
           end
         end // SLD
+        OPE: begin
+          // mtype is illegal -> illegal instruction
+          if (mtype_q.mtwiden == 0) begin
+            issue_rsp_o.accept = 1'b0;
+          end
+        end
         default:;
       endcase // Operation type
     // The decoding resulted in an illegal instruction
