@@ -58,10 +58,10 @@ module ventaglio_regfile import spatz_pkg::*; #(
       assign row_sel = (waddr_i == addr_t'(row));
 
       always_comb begin
-      	mem_d[row][b] = mem_q[row][b];
-      	if (we_i && row_sel && wbe_i[b]) begin
-      		mem_d[row][b] = wdata_i[b*8 +: 8];
-  		end
+        mem_d[row][b] = mem_q[row][b];
+        if (we_i && row_sel && wbe_i[b]) begin
+            mem_d[row][b] = wdata_i[b*8 +: 8];
+        end
       end
 
       always_ff @ (posedge clk_cg or negedge rst_ni) begin
@@ -77,25 +77,25 @@ module ventaglio_regfile import spatz_pkg::*; #(
   // BOWWANG: might not need arbiter here if we only need one read port
   if (NrReadPorts > 0) begin : gen_reads
     for (genvar p = 0; p < NrReadPorts; p++) begin : gen_rp
-    	// Reuse the decision tree from the RR arbiter
-	    rr_arb_tree #(
-	      .AxiVldRdy(1'b1     ),
-	      .ExtPrio  (1'b1     ),
-	      .DataWidth(WordWidth),
-	      .NumIn    (NrWords  )
-	    ) i_read_tree (
-	      .clk_i  (clk_i        ),
-	      .rst_ni (rst_ni       ),
-	      .flush_i(1'b0         ),
-	      .idx_o  (/* Unused */ ),
-	      .data_i (mem_q        ),
-	      .rr_i   (raddr_i[p]),
-	      .data_o (rdata_o[p]),
-	      .req_i  ('1           ),
-	      .gnt_o  (/* Unused */ ),
-	      .req_o  (/* Unused */ ),
-	      .gnt_i  (1'b1         )
-	    );
+        // Reuse the decision tree from the RR arbiter
+        rr_arb_tree #(
+          .AxiVldRdy(1'b1     ),
+          .ExtPrio  (1'b1     ),
+          .DataWidth(WordWidth),
+          .NumIn    (NrWords  )
+        ) i_read_tree (
+          .clk_i  (clk_i        ),
+          .rst_ni (rst_ni       ),
+          .flush_i(1'b0         ),
+          .idx_o  (/* Unused */ ),
+          .data_i (mem_q        ),
+          .rr_i   (raddr_i[p]),
+          .data_o (rdata_o[p]),
+          .req_i  ('1           ),
+          .gnt_o  (/* Unused */ ),
+          .req_o  (/* Unused */ ),
+          .gnt_i  (1'b1         )
+        );
     end
   end
 

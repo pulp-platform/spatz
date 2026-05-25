@@ -4,7 +4,7 @@
 //
 // Author: Bowen Wang, ETH Zurich
 
-module ventaglio_gather_datapath 
+module ventaglio_gather_datapath
   import spatz_pkg::*;
   import   vtl_pkg::*; #(
   parameter int unsigned NrEffElePerBlk = 2,
@@ -63,9 +63,9 @@ module ventaglio_gather_datapath
 
   // Unpack indices (same style as yours)
   logic [NrBeatsPerInput-1:0][NrBlksPerBeat-1:0][NrEffElePerBlk-1:0][IdxWidth-1:0] idx;
-  for (genvar beat = 0; beat < NrBeatsPerInput; beat++) begin
-    for (genvar blk = 0; blk < NrBlksPerBeat; blk++) begin
-      for (genvar ele = 0; ele < NrEffElePerBlk; ele++) begin
+  for (genvar beat = 0; beat < NrBeatsPerInput; beat++) begin : gen_unpack_idx_beat
+    for (genvar blk = 0; blk < NrBlksPerBeat; blk++) begin : gen_unpack_idx_blk
+      for (genvar ele = 0; ele < NrEffElePerBlk; ele++) begin : gen_unpack_idx_ele
         assign idx[beat][blk][ele] =
           index_i[beat*NrBlksPerBeat*NrEffElePerBlk*IdxWidth +
                   blk*NrEffElePerBlk*IdxWidth +
@@ -76,22 +76,22 @@ module ventaglio_gather_datapath
 
   // Flatten read data for THIS core instance’s channel count
   logic [VRFWordWidth*NrCh-1:0] flatten_rdata;
-  for (genvar ch = 0; ch < NrCh; ch++) begin
+  for (genvar ch = 0; ch < NrCh; ch++) begin : gen_flatten_rdata
     assign flatten_rdata[ch*VRFWordWidth +: VRFWordWidth] = rdata_i[ch];
   end
 
   // Pre-gather blocks
   logic [NrBlksPerBeat-1:0][NrElePerBlk-1:0][EleWidth-1:0] rdata_pre_gather;
-  for (genvar blk = 0; blk < NrBlksPerBeat; blk++) begin
-    for (genvar ele = 0; ele < NrElePerBlk; ele++) begin
+  for (genvar blk = 0; blk < NrBlksPerBeat; blk++) begin : gen_pre_gather_blk
+    for (genvar ele = 0; ele < NrElePerBlk; ele++) begin : gen_pre_gather_ele
       assign rdata_pre_gather[blk][ele] =
         flatten_rdata[blk*NrElePerBlk*EleWidth + ele*EleWidth +: EleWidth];
     end
   end
 
   // Post-gather blocks + pack output
-  for (genvar blk = 0; blk < NrBlksPerBeat; blk++) begin
-    for (genvar ele = 0; ele < NrEffElePerBlk; ele++) begin
+  for (genvar blk = 0; blk < NrBlksPerBeat; blk++) begin : gen_post_gather_blk
+    for (genvar ele = 0; ele < NrEffElePerBlk; ele++) begin : gen_post_gather_ele
       wire [EleWidth-1:0] sel =
         rdata_pre_gather[blk][ idx[beat_cnt_d][blk][ele] ];
       assign rdata_o[blk*NrEffElePerBlk*EleWidth + ele*EleWidth +: EleWidth] = sel;

@@ -5,7 +5,7 @@
 // Author: Bowen Wang, ETH Zurich
 //
 // Standalone Gather/Scatter datapath
-// 
+//
 
 module ventaglio
   import spatz_pkg::*;
@@ -36,17 +36,17 @@ module ventaglio
     input  logic             vfu_rsp_valid_i,
     input  vfu_rsp_t         vfu_rsp_i,
     // Slave Write ports
-    input  vrf_addr_t  [NrWritePorts-1:0]		waddr_i,
-    input  vrf_data_t  [NrWritePorts-1:0]		wdata_i,
-    input  logic       [NrWritePorts-1:0]		we_i,
-    input  vrf_be_t    [NrWritePorts-1:0]		wbe_i,
-    output logic       [NrWritePorts-1:0]		wvalid_o,
+    input  vrf_addr_t  [NrWritePorts-1:0]       waddr_i,
+    input  vrf_data_t  [NrWritePorts-1:0]       wdata_i,
+    input  logic       [NrWritePorts-1:0]       we_i,
+    input  vrf_be_t    [NrWritePorts-1:0]       wbe_i,
+    output logic       [NrWritePorts-1:0]       wvalid_o,
     input  logic       [NrWritePorts-1:0]   wscatter_en_i,
     // Slave Read ports
-    input  vrf_addr_t  [NrReadPorts-1:0]		raddr_i,
-    input  logic       [NrReadPorts-1:0]		re_i,
-    output vrf_data_t  [NrReadPorts-1:0]		rdata_o,
-    output logic       [NrReadPorts-1:0]		rvalid_o,
+    input  vrf_addr_t  [NrReadPorts-1:0]        raddr_i,
+    input  logic       [NrReadPorts-1:0]        re_i,
+    output vrf_data_t  [NrReadPorts-1:0]        rdata_o,
+    output logic       [NrReadPorts-1:0]        rvalid_o,
     input  logic       [NrReadPorts-1:0]    rgather_en_i,
 
     // Master VRF interface
@@ -69,7 +69,7 @@ module ventaglio
 
 // Include FF
 `include "common_cells/registers.svh"
-  
+
   ///////////////////////
   //  Operation queue  //
   ///////////////////////
@@ -215,7 +215,7 @@ module ventaglio
   // Locked fetch state — once vrf_re_o is issued, latch the target slot/id/
   // vreg so a slow vrf response can't be misrouted if spatz_req_i changes
   // mid-flight (e.g. controller switches to a non-VTL op).
-  // Notes: 
+  // Notes:
   // fetch_lock   - Set the cycle we issue vrf_re_o; held high until vrf_rvalid_i returns
   // fetch_target - Snapshot of which slot the in-flight read is for
   // fetch_id     - Snapshot of the id we're fetching for
@@ -398,12 +398,12 @@ module ventaglio
   logic [4:0] op_beat_cnt_d, op_beat_cnt_q;
   `FF(op_beat_cnt_q, op_beat_cnt_d, '0)
 
-  always_comb begin 
+  always_comb begin
     op_beat_cnt_d = op_beat_cnt_q;
-    // counter proceed 
+    // counter proceed
     if (is_gather && rvalid_o && req_proceed ) op_beat_cnt_d = op_beat_cnt_q + 1;
     if (op_beat_cnt_q == num_beats_per_op - 1) op_beat_cnt_d = 0;
-  end 
+  end
 
   // VRF master interface — driven by the effective (locked-or-fresh) fetch.
   // The controller's standard scoreboard still gates the read via the RAW
@@ -460,12 +460,12 @@ module ventaglio
   end
 
   /******************************/
-  /*           Types            */ 
+  /*           Types            */
   /******************************/
 
   // We current assume one r/w port from VRF
-  localparam int unsigned VRF_WD = 0;
-  localparam int unsigned VRF_RD = 0;
+  localparam int unsigned VrfWd = 0;
+  localparam int unsigned VrfRd = 0;
 
   // The input address has type `vrf_addr_t`
   // It is used to address `NRVREG * NrWordsPerVector` words
@@ -514,7 +514,7 @@ module ventaglio
   vtg_row_addr_t          [VTGNrChannels-1:0][VTGNrReadPortsPerBank-1:0] raddr;
   ventaglio_narrow_data_t [VTGNrChannels-1:0][VTGNrReadPortsPerBank-1:0] rdata;
 
-  // write mapping 
+  // write mapping
   logic                    [VTGNrChannels-1:0][NrWritePorts-1:0] write_request;
   logic [VTGNrChannels-1:0][VTGNrChannels-1:0][NrWritePorts-1:0] scatter_write_request;
 
@@ -536,11 +536,11 @@ module ventaglio
     end
     // scatter requests
     for (int b_channel = 0; b_channel < VTGNrChannels; b_channel++) begin   // channels from the bank side
-      for (int s_channel = 0; s_channel < VTGNrChannels; s_channel++) begin // channels from the scatter datapath side 
+      for (int s_channel = 0; s_channel < VTGNrChannels; s_channel++) begin // channels from the scatter datapath side
         for (int port = 0; port < NrWritePorts; port++) begin
           scatter_write_request[b_channel][s_channel][port] = scatter_we[s_channel][port] && f_channel(scatter_waddr[s_channel][port]) == b_channel && is_scatter;
         end
-      end 
+      end
     end
   end: gen_write_request
 
@@ -562,27 +562,27 @@ module ventaglio
       // wvalid_o stays 0: no slave-port write is being acknowledged.
     end else if (!is_scatter) begin // priority 1: normal requests
       for (int unsigned channel = 0; channel < VTGNrChannels; channel++) begin
-        if (write_request[channel][VRF_WD]) begin
-          waddr[channel]         = f_row(waddr_i[VRF_WD]);
-          wdata[channel]         = wdata_i[VRF_WD];
+        if (write_request[channel][VrfWd]) begin
+          waddr[channel]         = f_row(waddr_i[VrfWd]);
+          wdata[channel]         = wdata_i[VrfWd];
           we[channel]            = 1'b1;
-          wbe[channel]           = wbe_i[VRF_WD];
-          wvalid_o[VRF_WD]       = 1'b1;
+          wbe[channel]           = wbe_i[VrfWd];
+          wvalid_o[VrfWd]       = 1'b1;
         end
       end
     end else begin // priority 2: scatter requests
       for (int unsigned b_channel = 0; b_channel < VTGNrChannels; b_channel++) begin
         for (int unsigned s_channel = 0; s_channel < VTGNrChannels; s_channel++) begin
-          if (scatter_write_request[b_channel][s_channel][VRF_WD]) begin
-            waddr[b_channel]                  = f_row(scatter_waddr[s_channel][VRF_WD]);
-            wdata[b_channel]                  = scatter_wdata[s_channel][VRF_WD];
+          if (scatter_write_request[b_channel][s_channel][VrfWd]) begin
+            waddr[b_channel]                  = f_row(scatter_waddr[s_channel][VrfWd]);
+            wdata[b_channel]                  = scatter_wdata[s_channel][VrfWd];
             we[b_channel]                     = 1'b1;
-            wbe[b_channel]                    = scatter_wbe[s_channel][VRF_WD];
-            scatter_wvalid[s_channel][VRF_WD] = 1'b1;
+            wbe[b_channel]                    = scatter_wbe[s_channel][VrfWd];
+            scatter_wvalid[s_channel][VrfWd] = 1'b1;
           end
         end
       end
-      wvalid_o[VRF_WD] = post_scatter_wvalid[0];
+      wvalid_o[VrfWd] = post_scatter_wvalid[0];
     end
 
   end : proc_write
@@ -613,11 +613,11 @@ module ventaglio
     end
     // gathered requests
     for (int b_channel = 0; b_channel < VTGNrChannels; b_channel++) begin   // channels from the bank side
-      for (int g_channel = 0; g_channel < VTGNrChannels; g_channel++) begin // channels from the gather datapath side 
+      for (int g_channel = 0; g_channel < VTGNrChannels; g_channel++) begin // channels from the gather datapath side
         for (int port = 0; port < NrReadPorts; port++) begin
           gather_read_request[b_channel][g_channel][port] = gather_re[g_channel][port] && f_channel(gather_raddr[g_channel][port]) == b_channel && is_gather;
         end
-      end 
+      end
     end
   end: gen_read_request
 
@@ -632,31 +632,31 @@ module ventaglio
 
     if (!is_gather) begin // priority 1: normal read requests
       for (int unsigned b_channel = 0; b_channel < VTGNrChannels; b_channel++) begin // channels from the bank side
-        if (read_request[b_channel][VRF_RD]) begin
-          raddr[b_channel][0]    = f_row(raddr_i[VRF_RD]);
-          rdata_o[VRF_RD]      = rdata[b_channel][0];
-          rvalid_o[VRF_RD]     = 1'b1;
+        if (read_request[b_channel][VrfRd]) begin
+          raddr[b_channel][0]    = f_row(raddr_i[VrfRd]);
+          rdata_o[VrfRd]      = rdata[b_channel][0];
+          rvalid_o[VrfRd]     = 1'b1;
         end
       end
     end else if (is_gather) begin // priority 2: gather accesses
       for (int unsigned b_channel = 0; b_channel < VTGNrChannels; b_channel++) begin // channels from the bank side
         for (int unsigned g_channel = 0; g_channel < VTGNrChannels; g_channel++) begin // channels from the gather datapath side
-          if (gather_read_request[b_channel][g_channel][VRF_RD]) begin
-            raddr[b_channel][0]                  = f_row(gather_raddr[g_channel][VRF_RD]);
-            gather_rdata[g_channel][VRF_RD]      = rdata[b_channel][0];
-            // gather_rvalid[g_channel][VRF_RD]     = 1'b1;
-            gather_rvalid[g_channel][VRF_RD]     = index_valid_q;
+          if (gather_read_request[b_channel][g_channel][VrfRd]) begin
+            raddr[b_channel][0]                  = f_row(gather_raddr[g_channel][VrfRd]);
+            gather_rdata[g_channel][VrfRd]      = rdata[b_channel][0];
+            // gather_rvalid[g_channel][VrfRd]     = 1'b1;
+            gather_rvalid[g_channel][VrfRd]     = index_valid_q;
           end
         end
       end
-      // assign the gathered data to the output 
-      rdata_o[VRF_RD]      = post_gather_rdata[0];
-      rvalid_o[VRF_RD]     = post_gather_rvalid[0];
-    end 
+      // assign the gathered data to the output
+      rdata_o[VrfRd]      = post_gather_rdata[0];
+      rvalid_o[VrfRd]     = post_gather_rvalid[0];
+    end
   end
 
   /******************************/
-  /*      Scatter DataPath      */ 
+  /*      Scatter DataPath      */
   /******************************/
   ventaglio_scatter #(
     .NarrowDataWidth (NarrowDataWidth),
@@ -677,7 +677,7 @@ module ventaglio
     .we_o        (scatter_we),
     .wbe_o       (scatter_wbe),
     .wvalid_i    (scatter_wvalid),
-    // control 
+    // control
     // TODO: it is better to implement as a counter to track
     .scatter_done_i      (!is_scatter),
     .num_beats_per_op_i  (num_beats_per_op),
@@ -689,7 +689,7 @@ module ventaglio
 
 
   /******************************/
-  /*           Buffer           */ 
+  /*           Buffer           */
   /******************************/
 
   // Buffer has `VTGNrChannels` channels
@@ -723,7 +723,7 @@ module ventaglio
   end
 
   /******************************/
-  /*      Gather  DataPath      */ 
+  /*      Gather  DataPath      */
   /******************************/
 
   ventaglio_gather #(

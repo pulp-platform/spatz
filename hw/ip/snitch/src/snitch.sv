@@ -2769,13 +2769,13 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
       riscv_instr::VFXMUL_VRF,
       riscv_instr::VVENTCLR: begin
         if (RVV && RVF) begin
-          write_rd        = 1'b0;                                                                                                                                                                                      
-          uses_rd         = 1'b0;                                                                                                                                                                                      
+          write_rd        = 1'b0;
+          uses_rd         = 1'b0;
           acc_qvalid_o    = valid_instr;
-          acc_register_rd = 1'b0;                                                                                                                                                                                      
+          acc_register_rd = 1'b0;
         end else begin
-          illegal_inst = 1'b1;                                                                                                                                                                                         
-        end           
+          illegal_inst = 1'b1;
+        end
       end
 
       riscv_instr::VLE8_V,
@@ -3581,7 +3581,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
 
     if (retire_i) begin
       gpr_we[0] = 1'b1;
-    end else if (retire_postinc) begin 
+    end else if (retire_postinc) begin
       gpr_we[0]    = 1'b1;
       gpr_waddr[0] = postinc_waddr;   // rs1
       gpr_wdata[0] = alu_result;      // reuse ALU result = rs1 + rs2

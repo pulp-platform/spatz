@@ -30,7 +30,7 @@ package vtl_pkg;
   } sp_blk_e;
 
   typedef enum logic [2:0] {
-  	SP_RATIO_075   = 3'b000,    // e.g., 3:4
+    SP_RATIO_075   = 3'b000,    // e.g., 3:4
     SP_RATIO_050   = 3'b001,    // e.g., 2:4
     SP_RATIO_025   = 3'b010,    // e.g., 1:4
     SP_RATIO_125   = 3'b011     // e.g., 1:8

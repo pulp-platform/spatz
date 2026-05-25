@@ -630,7 +630,7 @@ module spatz_controller
       if (spatz_req.use_vd) begin
         scoreboard_d[spatz_req.id].deps[write_table_d[spatz_req.vd].id] |= write_table_d[spatz_req.vd].valid;
         scoreboard_d[spatz_req.id].deps[read_table_d[spatz_req.vd].id] |= read_table_d[spatz_req.vd].valid;
-        if (spatz_req.op inside {VLX}) begin 
+        if (spatz_req.op inside {VLX}) begin
           scoreboard_d[spatz_req.id].deps = '0;
         end
         write_table_d[spatz_req.vd] = {spatz_req.id, 1'b1};
@@ -822,12 +822,12 @@ module spatz_controller
       running_insn_d[next_insn_id] = 1'b1;
 
     // Finished a instruction
-    if (vfu_rsp_valid_i) begin 
+    if (vfu_rsp_valid_i) begin
       running_insn_d[vfu_rsp_i.id] = 1'b0;
-    end 
-    if (vlsu_rsp_valid_i) begin 
+    end
+    if (vlsu_rsp_valid_i) begin
       running_insn_d[vlsu_rsp_i.id] = 1'b0;
-    end 
+    end
     if (vsldu_rsp_valid_i) begin
       running_insn_d[vsldu_rsp_i.id] = 1'b0;
     end

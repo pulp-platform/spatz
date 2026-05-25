@@ -112,9 +112,9 @@ module ventaglio_scatter_datapath
 
   // Unpack indices from shared registered index
   logic [NrBeatsPerInput-1:0][NrBlksPerBeat-1:0][NrEffElePerBlk-1:0][IdxWidth-1:0] idx;
-  for (genvar beat = 0; beat < NrBeatsPerInput; beat++) begin
-    for (genvar blk = 0; blk < NrBlksPerBeat; blk++) begin
-      for (genvar ele = 0; ele < NrEffElePerBlk; ele++) begin
+  for (genvar beat = 0; beat < NrBeatsPerInput; beat++) begin : gen_unpack_idx_beat
+    for (genvar blk = 0; blk < NrBlksPerBeat; blk++) begin : gen_unpack_idx_blk
+      for (genvar ele = 0; ele < NrEffElePerBlk; ele++) begin : gen_unpack_idx_ele
         assign idx[beat][blk][ele] =
           index_q_i[beat*NrBlksPerBeat*NrEffElePerBlk*IdxWidth +
                     blk*NrEffElePerBlk*IdxWidth +
@@ -127,8 +127,8 @@ module ventaglio_scatter_datapath
   logic [NrBlksPerBeat-1:0][NrEffElePerBlk-1:0][EleWidth-1:0]  wdata_pre_scatter;
   logic [NrBlksPerBeat-1:0][NrEffElePerBlk-1:0][EleWidthB-1:0] wbe_pre_scatter;
 
-  for (genvar blk = 0; blk < NrBlksPerBeat; blk++) begin
-    for (genvar ele = 0; ele < NrEffElePerBlk; ele++) begin
+  for (genvar blk = 0; blk < NrBlksPerBeat; blk++) begin : gen_pre_scatter_blk
+    for (genvar ele = 0; ele < NrEffElePerBlk; ele++) begin : gen_pre_scatter_ele
       assign wdata_pre_scatter[blk][ele] =
         wdata_i[blk*NrEffElePerBlk*EleWidth + ele*EleWidth +: EleWidth];
       assign wbe_pre_scatter[blk][ele] =
@@ -158,8 +158,8 @@ module ventaglio_scatter_datapath
   logic [VRFWordWidth*NrCh-1:0]   flatten_wdata;
   logic [VRFWordBWidth*NrCh-1:0] flatten_wbe;
 
-  for (genvar blk = 0; blk < NrBlksPerBeat; blk++) begin
-    for (genvar ele = 0; ele < NrElePerBlk; ele++) begin
+  for (genvar blk = 0; blk < NrBlksPerBeat; blk++) begin : gen_flatten_blk
+    for (genvar ele = 0; ele < NrElePerBlk; ele++) begin : gen_flatten_ele
       assign flatten_wdata[blk*NrElePerBlk*EleWidth + ele*EleWidth +: EleWidth] =
         wdata_post_scatter[blk][ele];
       assign flatten_wbe[blk*NrElePerBlk*EleWidthB + ele*EleWidthB +: EleWidthB] =
@@ -169,10 +169,10 @@ module ventaglio_scatter_datapath
 
   // Drive output arrays: first NrCh channels get data, rest are zero
   for (genvar ch = 0; ch < VENTAGLIO_WFACTOR; ch++) begin : gen_out
-    if (ch < NrCh) begin
+    if (ch < NrCh) begin : gen_out_active
       assign wdata_o[ch] = active_i ? flatten_wdata[ch*VRFWordWidth +: VRFWordWidth] : '0;
       assign wbe_o[ch]   = active_i ? flatten_wbe  [ch*VRFWordBWidth +: VRFWordBWidth] : '0;
-    end else begin
+    end else begin : gen_out_zero
       assign wdata_o[ch] = '0;
       assign wbe_o[ch]   = '0;
     end
