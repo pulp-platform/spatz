@@ -94,8 +94,15 @@ package spatz_pkg;
   // Depends on whether we have a FP regfile or not
   localparam int GPRWidth = FPU ? 6 : 5;
 
-  // Number of parallel vector instructions
+  // Number of parallel vector instructions. Ventaglio needs more in-flight
+  // slots (vfx, vlx32, vventclr can stack with regular vector ops) so the
+  // scoreboard is widened to 8 when VENTAGLIO is defined; otherwise stays
+  // at the upstream default of 4.
+`ifdef VENTAGLIO
   localparam int unsigned NrParallelInstructions = 8;
+`else
+  localparam int unsigned NrParallelInstructions = 4;
+`endif
 
   // Largest element width that Spatz supports
   localparam vew_e MAXEW = RVD ? EW_64 : EW_32;
