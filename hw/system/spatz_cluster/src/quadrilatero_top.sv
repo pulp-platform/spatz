@@ -5,25 +5,21 @@
 // Author: Danilo Cammarata, ETH Zurich
 
 module quadrilatero_top import fpnew_pkg::*; import quadrilatero_pkg::*; #(
-    parameter int                  unsigned NrMemPorts          = 1,
-    parameter bit                           RegisterRsp         = 0,
+    parameter int unsigned  NrMemPorts       = 1,
     // Memory request (VLSU)
-    parameter type                          quad_mem_req_t     = logic,
-    parameter type                          quad_mem_rsp_t     = logic,
-    // Memory request (FP Sequencer)
-    parameter type                          dreq_t              = logic,
-    parameter type                          drsp_t              = logic,
+    parameter type          quad_mem_req_t   = logic,
+    parameter type          quad_mem_rsp_t   = logic,
     // Snitch interface
-    parameter type                          quad_issue_req_t   = logic,
-    parameter type                          quad_issue_rsp_t   = logic,
-    parameter type                          quad_rsp_t         = logic,
+    parameter type          quad_issue_req_t = logic,
+    parameter type          quad_issue_rsp_t = logic,
+    parameter type          quad_rsp_t       = logic,
     // ReqRsp
-    parameter type                          amo_op_e           = logic,
-    parameter amo_op_e                      AMONone            = 1'b0 ,
-    /// FPU configuration.
-    parameter fpu_implementation_t          FPUImplementation   = fpu_implementation_t'(0),
+    parameter type          amo_op_e         = logic,
+    parameter amo_op_e      AMONone          = 1'b0 ,
     // Derived parameters. DO NOT CHANGE!
-    parameter int                  unsigned NumOutstandingLoads = 8
+    localparam int unsigned DataWidth        = quadrilatero_pkg::DATA_WIDTH,
+    localparam int unsigned LLEN             = quadrilatero_pkg::LLEN      ,
+    localparam int unsigned LSU_PORTS        = quadrilatero_pkg::LSU_PORTS 
   ) (
     input  logic                              clk_i,
     input  logic                              rst_ni,
@@ -43,22 +39,18 @@ module quadrilatero_top import fpnew_pkg::*; import quadrilatero_pkg::*; #(
     input  logic            [NrMemPorts-1:0] quad_mem_rsp_valid_i
   );
 
-  localparam int unsigned DataWidth = 32;
-  localparam int unsigned NumMemPortsPerSpatz = NrMemPorts/2;
-
-  localparam int unsigned LLEN      = quadrilatero_pkg::LLEN     ;
-  localparam int unsigned LSU_PORTS = quadrilatero_pkg::LSU_PORTS;
-
-
-  logic           quad_result_valid; 
-  logic           quad_result_ready; 
+  // ------------------
+  // XIF Signals
+  // ------------------
+  logic                    quad_result_valid; 
+  logic                    quad_result_ready; 
   xif_pkg::x_issue_req_t   quad_issue_req   ;
   xif_pkg::x_issue_resp_t  quad_issue_resp  ;
   xif_pkg::x_commit_t      quad_commit      ;
   logic                    quad_commit_valid;
   xif_pkg::x_result_t      quad_result      ;
 
-  logic[xif_pkg::X_ID_WIDTH-1 : 0]      id_cnt_d,id_cnt_q;
+  logic[xif_pkg::X_ID_WIDTH-1 : 0] id_cnt_d, id_cnt_q;
 
   always_comb begin: xif_signals
 
@@ -96,53 +88,34 @@ module quadrilatero_top import fpnew_pkg::*; import quadrilatero_pkg::*; #(
     quad_result_ready = !rsp_valid_o | rsp_ready_i;
   end
   
-  logic [LSU_PORTS-1:0]                         quad_obi_req   ;
-  logic [LSU_PORTS-1:0]                         quad_obi_we    ;
-  logic [LSU_PORTS-1:0][LLEN/LSU_PORTS/8 - 1:0] quad_obi_be    ;
-  logic [LSU_PORTS-1:0][31:0]                   quad_obi_addr  ;
-  logic [LSU_PORTS-1:0][  LLEN/LSU_PORTS - 1:0] quad_obi_wdata ;
-  logic [LSU_PORTS-1:0]                         quad_obi_gnt   ;
-  logic [LSU_PORTS-1:0]                         quad_obi_rvalid;
-  logic [LSU_PORTS-1:0][  LLEN/LSU_PORTS - 1:0] quad_obi_rdata ; 
-
-  logic [LSU_PORTS-1:0][NrMemPorts/LSU_PORTS-1:0] gnt_q               ;
-  logic [LSU_PORTS-1:0][NrMemPorts/LSU_PORTS-1:0] gnt_d               ; 
-  logic [LSU_PORTS-1:0][NrMemPorts/LSU_PORTS-1:0] quad_obi_gnt_lane   ;
-  logic [LSU_PORTS-1:0][NrMemPorts/LSU_PORTS-1:0] quad_obi_rvalid_lane;
-  logic [LSU_PORTS-1:0][NrMemPorts/LSU_PORTS-1:0] rvalid_q            ;
-  logic [LSU_PORTS-1:0][NrMemPorts/LSU_PORTS-1:0] rvalid_d            ;
-  logic [LSU_PORTS-1:0][LLEN/LSU_PORTS - 1:0]     rdata_q             ;
-  logic [LSU_PORTS-1:0][LLEN/LSU_PORTS - 1:0]     rdata_d             ;
+  // ------------------
+  // Memory Signals
+  // ------------------
+  logic [LSU_PORTS-1:0][NrMemPorts/LSU_PORTS-1:0]                    quad_obi_req   ;
+  logic [LSU_PORTS-1:0][NrMemPorts/LSU_PORTS-1:0]                    quad_obi_we    ;
+  logic [LSU_PORTS-1:0][NrMemPorts/LSU_PORTS-1:0][DataWidth/8 - 1:0] quad_obi_be    ;
+  logic [LSU_PORTS-1:0][NrMemPorts/LSU_PORTS-1:0][31:0]              quad_obi_addr  ;
+  logic [LSU_PORTS-1:0][NrMemPorts/LSU_PORTS-1:0][DataWidth - 1:0]   quad_obi_wdata ;
+  logic [LSU_PORTS-1:0][NrMemPorts/LSU_PORTS-1:0]                    quad_obi_gnt   ;
+  logic [LSU_PORTS-1:0][NrMemPorts/LSU_PORTS-1:0]                    quad_obi_rvalid;
+  logic [LSU_PORTS-1:0][NrMemPorts/LSU_PORTS-1:0][DataWidth - 1:0]   quad_obi_rdata ;
 
   for (genvar lsu = 0; lsu < LSU_PORTS; lsu++) begin
     for (genvar port = 0; port < NrMemPorts/LSU_PORTS; port++) begin
       if(port < LLEN/LSU_PORTS/DataWidth) begin
         // TCDM request
-        assign quad_mem_req_valid_o[port+lsu*NrMemPorts/LSU_PORTS] = quad_obi_req  [lsu] & ~gnt_q[lsu][port];
-        assign quad_mem_req_o[port+lsu*NrMemPorts/LSU_PORTS].write = quad_obi_we   [lsu];
-        assign quad_mem_req_o[port+lsu*NrMemPorts/LSU_PORTS].strb  = quad_obi_be   [lsu][(DataWidth/8)*port+:DataWidth/8];
-        assign quad_mem_req_o[port+lsu*NrMemPorts/LSU_PORTS].addr  = quad_obi_addr [lsu][16:0] + (DataWidth/8 * port);
-        assign quad_mem_req_o[port+lsu*NrMemPorts/LSU_PORTS].data  = quad_obi_wdata[lsu][DataWidth*port+:DataWidth];
+        assign quad_mem_req_valid_o[port+lsu*NrMemPorts/LSU_PORTS] = quad_obi_req  [lsu][port];
+        assign quad_mem_req_o[port+lsu*NrMemPorts/LSU_PORTS].write = quad_obi_we   [lsu][port];
+        assign quad_mem_req_o[port+lsu*NrMemPorts/LSU_PORTS].strb  = quad_obi_be   [lsu][port];
+        assign quad_mem_req_o[port+lsu*NrMemPorts/LSU_PORTS].addr  = quad_obi_addr [lsu][port][16:0];
+        assign quad_mem_req_o[port+lsu*NrMemPorts/LSU_PORTS].data  = quad_obi_wdata[lsu][port];
         assign quad_mem_req_o[port+lsu*NrMemPorts/LSU_PORTS].amo   = AMONone;
         assign quad_mem_req_o[port+lsu*NrMemPorts/LSU_PORTS].user  = '0;
 
-        assign quad_obi_gnt_lane[lsu][port]  = quad_mem_req_ready_i[port+lsu*NrMemPorts/LSU_PORTS] | gnt_q[lsu][port];
-        assign gnt_d            [lsu][port]  = quad_obi_gnt        [     lsu          ] ? 1'b0 : 
-                                              quad_mem_req_ready_i[port+lsu*NrMemPorts/LSU_PORTS] ? 1'b1 : gnt_q[lsu][port];
-
         // TCDM response
-        assign quad_obi_rvalid_lane[lsu][port] = quad_mem_rsp_valid_i[port+lsu*NrMemPorts/LSU_PORTS] | rvalid_q[lsu][port];
-        assign quad_obi_rdata[lsu][DataWidth*port+:DataWidth] = rvalid_q[lsu][port] ? 
-                                                                  rdata_q[lsu][DataWidth*port+:DataWidth] : 
-                                                                  quad_mem_rsp_i[port+lsu*NrMemPorts/LSU_PORTS].data;
-        
-
-        assign rvalid_d[lsu][port] = quad_obi_rvalid[lsu]          ? 1'b0 :
-                                quad_mem_rsp_valid_i[port+lsu*NrMemPorts/LSU_PORTS] ? 1'b1 : rvalid_q[lsu][port];
-
-        assign rdata_d[lsu][DataWidth*port+:DataWidth] = 
-                  quad_mem_rsp_valid_i[port+lsu*NrMemPorts/LSU_PORTS] &~ quad_obi_rvalid[lsu] ? quad_mem_rsp_i[port+lsu*NrMemPorts/LSU_PORTS].data : 
-                                                                          rdata_q[lsu][DataWidth*port+:DataWidth];
+        assign quad_obi_rdata [lsu][port] = quad_mem_rsp_i[port+lsu*NrMemPorts/LSU_PORTS].data ;
+        assign quad_obi_rvalid[lsu][port] = quad_mem_rsp_valid_i[port+lsu*NrMemPorts/LSU_PORTS];
+        assign quad_obi_gnt   [lsu][port] = quad_mem_req_ready_i[port+lsu*NrMemPorts/LSU_PORTS];
       end else begin
 
         // TCDM request
@@ -152,32 +125,14 @@ module quadrilatero_top import fpnew_pkg::*; import quadrilatero_pkg::*; #(
         assign quad_mem_req_o[port+lsu*NrMemPorts/LSU_PORTS].addr  = '0;
         assign quad_mem_req_o[port+lsu*NrMemPorts/LSU_PORTS].data  = '0;
         assign quad_mem_req_o[port+lsu*NrMemPorts/LSU_PORTS].amo   = AMONone;
-        assign quad_mem_req_o[port+lsu*NrMemPorts/LSU_PORTS].user  = '0;
-
-        assign quad_obi_gnt_lane   [lsu][port] = 1'b1;
-        assign quad_obi_rvalid_lane[lsu][port] = 1'b1;
-        
+        assign quad_mem_req_o[port+lsu*NrMemPorts/LSU_PORTS].user  = '0;        
       end
     end
-    assign quad_obi_gnt   [lsu] = &quad_obi_gnt_lane[lsu]   ;
-    assign quad_obi_rvalid[lsu] = &quad_obi_rvalid_lane[lsu];
-  end
+  end  
 
-  // Sequential block
-  always_ff @(negedge rst_ni, posedge clk_i) begin : seq_block
-    if (!rst_ni) begin
-      gnt_q      <= '0;
-      rdata_q    <= '0;
-      rvalid_q   <= '0;
-      id_cnt_q   <= '0;
-    end else begin
-      gnt_q      <= gnt_d;
-      rdata_q    <= rdata_d;
-      rvalid_q   <= rvalid_d;
-      id_cnt_q   <= id_cnt_d;
-    end
-  end   
-
+  // ------------------
+  // Quadrilatero
+  // ------------------
   quadrilatero #(
       .quadrilatero_cfg_t(quadrilatero_pkg::quadrilatero_cfg_t),
       .Cfg               (quadrilatero_pkg::QuadrilateroCfg   ),
@@ -246,5 +201,14 @@ module quadrilatero_top import fpnew_pkg::*; import quadrilatero_pkg::*; #(
       .x_result_ready_i     (quad_result_ready ),
       .x_result_o           (quad_result       )
   );
+
+  // Sequential block
+  always_ff @(negedge rst_ni, posedge clk_i) begin : seq_block
+    if (!rst_ni) begin
+      id_cnt_q   <= '0;
+    end else begin
+      id_cnt_q   <= id_cnt_d;
+    end
+  end 
   
 endmodule

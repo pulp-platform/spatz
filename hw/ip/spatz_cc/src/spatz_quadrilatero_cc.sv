@@ -386,13 +386,8 @@ module spatz_quadrilatero_cc
   logic           [NumMemPortsQuad-1:0] quad_mem_rsp_valid;
   quadrilatero_top #(
     .NrMemPorts         (NumMemPortsQuad         ),
-    .NumOutstandingLoads(NumSpatzOutstandingLoads),
-    .FPUImplementation  (FPUImplementation       ),
-    .RegisterRsp        (RegisterOffloadRsp      ),
     .amo_op_e           (reqrsp_pkg::amo_op_e    ),
     .AMONone            (reqrsp_pkg::AMONone     ),
-    .dreq_t             (dreq_t                  ),
-    .drsp_t             (drsp_t                  ),
     .quad_mem_req_t     (tcdm_req_chan_t         ),
     .quad_mem_rsp_t     (tcdm_rsp_chan_t         ),
     .quad_issue_req_t   (acc_issue_req_t         ),
