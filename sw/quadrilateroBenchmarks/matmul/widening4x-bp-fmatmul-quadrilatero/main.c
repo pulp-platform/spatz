@@ -77,7 +77,7 @@ int main() {
 
   unsigned int timer_start, timer_end, timer;
 
-  uint32_t Kapp = (gemm_l.K >> 2) + (gemm_l.K & 0x11);
+  uint32_t Kapp = (gemm_l.K >> 2) + (gemm_l.K & 0x3);
 
   // Allocate the matrices in the local tile
   if (cid == 0) {
