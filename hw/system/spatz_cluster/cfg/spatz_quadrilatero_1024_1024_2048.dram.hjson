@@ -19,24 +19,24 @@
         "cluster_default_axi_user": 1,
         "axi_cdc_enable": false,
         "tcdm": {
-            "size": 128,
-            "banks": 32,
+            "size": 512,
+            "banks": 128,
             "misalign": true
         },
         "cluster_periph_size": 64, // kB
-        "dma_data_width": 512,
+        "dma_data_width": 1024,
         "dma_axi_req_fifo_depth": 3,
         "dma_req_fifo_depth": 3,
         // Quadrilatero parameters
-        "rlen": 256,
-        "alen": 256,
-        "llen": 256,
+        "rlen": 1024,
+        "alen": 1024,
+        "llen": 2048,
         // Spatz parameters
-        "vlen": 1024,
-        "n_fpu": 8,
-        "n_ipu": 1,
+        "vlen": 4096,
+        "n_fpu": 32,
+        "n_ipu": 32,
         "spatz_fpu": true,
-        "spatz_nports": 16,
+        "spatz_nports": 64,
         "double_bw": 1,
         "buf_fpu": 1,
         // Timing parameters
