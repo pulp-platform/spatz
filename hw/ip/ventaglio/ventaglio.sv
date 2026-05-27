@@ -50,6 +50,9 @@ module ventaglio
     input  logic       [NrReadPorts-1:0]    rgather_en_i,
 
     // Master VRF interface
+    // Master VRF write outputs are RESERVED for a future scatter→VRF write-back
+    // path (e.g., draining bank results to the regular VRF). Currently tied to
+    // zero; see the assignment-site comment at the bottom of this module.
     output vrf_addr_t                       vrf_waddr_o,
     output vrf_data_t                       vrf_wdata_o,
     output logic                            vrf_we_o,
@@ -134,9 +137,8 @@ module ventaglio
   `FF(running_q, running_d, '0)
 
   // New instruction
-  logic new_vtl_request_d, new_vtl_request_q;
-  assign new_vtl_request_d = spatz_req_valid && !running_q[spatz_req.id];
-  `FF(new_vtl_request_q, new_vtl_request_d, '0)
+  logic new_vtl_request;
+  assign new_vtl_request = spatz_req_valid && !running_q[spatz_req.id];
 
   always_comb begin : proc_clear
     clear_active_d = clear_active_q;
@@ -144,7 +146,7 @@ module ventaglio
     clear_id_d     = clear_id_q;
 
     // Start clearing when a clear_buffer op is freshly latched in the spill.
-    if (!clear_active_q && new_vtl_request_d && spatz_req.op_vtl.clear_buffer) begin
+    if (!clear_active_q && new_vtl_request && spatz_req.op_vtl.clear_buffer) begin
       clear_active_d = 1'b1;
       clear_row_d    = '0;
       clear_id_d     = spatz_req.id;
@@ -166,7 +168,7 @@ module ventaglio
     spatz_req_ready = !spatz_req_valid;
 
     // A new spatz_req is received
-    if (new_vtl_request_d) begin
+    if (new_vtl_request) begin
       running_d[spatz_req.id] = 1'b1;
     end
 
@@ -391,18 +393,29 @@ module ventaglio
   assign last_addr_bit_d = raddr_i[0];
   assign req_proceed = last_addr_bit_d ^ last_addr_bit_q;
 
+  // Beats per op = vl / elements_per_beat, where elements_per_beat =
+  // VRFWordBWidth >> vsew (VRFWordBWidth = N_FU * ELENB). Derivation in
+  // README ("Beats per operation"). Truncates for non-aligned vl, which
+  // vsetvli prevents in current kernels (VLMAX is a multiple of width).
   logic [4:0] num_beats_per_op;
-  // TODO: only considered N_FU=4
-  assign num_beats_per_op = (spatz_req.vtype.vsew == EW_32) ? (spatz_req.vl >> 3) : spatz_req.vl[7:0];
+  assign num_beats_per_op =
+      spatz_req.vl >> ($clog2(VRFWordBWidth) - int'(spatz_req.vtype.vsew));
 
   logic [4:0] op_beat_cnt_d, op_beat_cnt_q;
   `FF(op_beat_cnt_q, op_beat_cnt_d, '0)
 
+  // Per-op beat counter. Kept as an explicit hook for a future long-vector
+  // index-refresh: when a single op spans more beats than the index buffer
+  // holds, this counter triggers a mid-op refresh. The wrap is gated on
+  // `rvalid_o && req_proceed` so the counter only ever wraps the cycle it
+  // actually advances — otherwise an idle cycle at `_q == max-1` would
+  // silently reset it.
   always_comb begin
     op_beat_cnt_d = op_beat_cnt_q;
-    // counter proceed
-    if (is_gather && rvalid_o && req_proceed ) op_beat_cnt_d = op_beat_cnt_q + 1;
-    if (op_beat_cnt_q == num_beats_per_op - 1) op_beat_cnt_d = 0;
+    if (is_gather && rvalid_o && req_proceed) begin
+      op_beat_cnt_d = (op_beat_cnt_q == num_beats_per_op - 1) ? '0
+                                                              : op_beat_cnt_q + 1;
+    end
   end
 
   // VRF master interface — driven by the effective (locked-or-fresh) fetch.
@@ -755,6 +768,10 @@ module ventaglio
   /*      Write Requests        */
   /******************************/
 
+  // RESERVED: master VRF write port is held idle. A future scatter→VRF
+  // write-back path will drive these to drain bank results to the regular
+  // VRF. Keeping the port plumbed so the integration in spatz_vrf.sv does
+  // not need to change when that path lands.
   assign vrf_we_o    = '0;
   assign vrf_wbe_o   = '0;
   assign vrf_waddr_o = '0;
