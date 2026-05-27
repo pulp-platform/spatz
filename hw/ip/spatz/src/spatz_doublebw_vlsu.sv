@@ -34,6 +34,7 @@ module spatz_doublebw_vlsu
     output logic                            vlsu_rsp_valid_o,
     output vlsu_rsp_t                       vlsu_rsp_o,
     input  logic                            vlsu_buf_empty_i,
+    input  logic                            vlsu_buf_full_i,
     // Interface with the VRF
     output vrf_addr_t      [NrInterfaces-1:0] vrf_waddr_o,
     output vrf_data_t      [NrInterfaces-1:0] vrf_wdata_o,
@@ -650,16 +651,16 @@ module spatz_doublebw_vlsu
 
     vlsu_rsp_t rsp;
     logic rsp_valid;
+    vlen_t commit_vl;
   } vrf_req_t;
 
   vrf_req_t [NrInterfaces-1:0] vrf_req_d, vrf_req_q;
   logic     [NrInterfaces-1:0] vrf_req_valid_d, vrf_req_ready_d;
   logic     [NrInterfaces-1:0] vrf_req_valid_q, vrf_req_ready_q;
-  logic     [NrInterfaces-1:0] vrf_commit_pending_d, vrf_commit_pending_q, vrf_valid_rsp;
+  logic     [NrInterfaces-1:0] vrf_commit_waiting_d, vrf_commit_waiting_q, vrf_valid_rsp;
   logic     [NrInterfaces-1:0] vrf_commit_intf_valid, vrf_commit_intf_valid_q;
 
-  logic vrf_commit_bypass_d, vrf_commit_bypass_q;
-  `FF(vrf_commit_bypass_q, vrf_commit_bypass_d, 1'b0)
+  logic vrf_commit_bypass;
 
   for (genvar intf = 0; intf < NrInterfaces; intf++) begin : gen_vrf_req_register_intf
     spill_register #(
@@ -678,15 +679,22 @@ module spatz_doublebw_vlsu
     assign vrf_waddr_o[intf]     = vrf_req_q[intf].waddr;
     assign vrf_wdata_o[intf]     = vrf_req_q[intf].wdata;
     assign vrf_wbe_o[intf]       = vrf_req_q[intf].wbe;
-    // If VLSU0 is the last interface to finish, make sure there is nothing in the VLSU1 buffer to VRF to avoid
-    // clearing the instruction from controller before all commits to VRF are done for the instruction
-    // If VLSU1 is last to finish, since it goes through the buffer, we know it will never go ahead of VLSU0
-    assign vrf_we_o[intf]        = vrf_req_valid_q[intf] & ~vrf_commit_pending_q[intf] & ((intf == 0) && vrf_valid_rsp[0] && !vrf_valid_rsp[1] ? vlsu_buf_empty_i : 1'b1);
+    // Ensure simpler synchronization for commits from both interfaces
+    // Writeback:
+    // For interface 1, check if interface 0 commit can go through
+    // For interface 0, check if interface1 buffer is not full
+    // Retiring:
+    // If Interface 1, is resp interface (usually the default)
+    // If Interface 0, is resp interface (if interface 0 has more vector elements), then ensure interface 1 has nothing in buffer
+    // to avoid retiring before interface 1 commits to the VRF
+    assign vrf_we_o[intf]        = ((&vrf_req_valid_q) | ((intf==0) ? vrf_req_valid_q[0] & (vrf_commit_bypass | vrf_commit_waiting_q[1]) & vlsu_buf_empty_i : 1'b0)) &
+                                   ((intf==1) ? (vrf_wvalid_i[0] & (vrf_req_q[1].rsp.id == vrf_req_q[0].rsp.id)) : 1'b1) &
+                                   !vlsu_buf_full_i;
     assign vrf_id_o[intf]        = {vrf_req_q[intf].rsp.id, mem_spatz_req.id, commit_insn_q.id};
     assign vrf_req_ready_q[intf] = vrf_wvalid_i[intf];
 
     `FF(vrf_commit_intf_valid_q[intf], vrf_commit_intf_valid[intf], 1'b0)
-    `FF(vrf_commit_pending_q[intf], vrf_commit_pending_d[intf], 1'b0)
+    `FF(vrf_commit_waiting_q[intf], vrf_commit_waiting_d[intf], 1'b0)
   end
 
   //////////////////////////////////////
@@ -696,22 +704,21 @@ module spatz_doublebw_vlsu
   always_comb begin
     vrf_valid_rsp = '0;
     vrf_commit_intf_valid = vrf_commit_intf_valid_q;
-    vrf_commit_pending_d = vrf_commit_pending_q;
-    vrf_commit_bypass_d = vrf_commit_bypass_q;
+    vrf_commit_waiting_d = vrf_commit_waiting_q;
 
     // To track if the second interface is committing or not for small vector lengths
-    vrf_commit_bypass_d = commit_insn_valid ? ((commit_insn_q.vl <= ( SpatzMemBytes / 2)) ? 1'b1 : 1'b0) : vrf_commit_bypass_q;
+    vrf_commit_bypass = vrf_req_valid_q[0] ? ((vrf_req_q[0].commit_vl <= ( SpatzMemBytes / 2)) ? 1'b1 : 1'b0) : 1'b0;
 
     for (int intf = 0; intf < NrInterfaces; intf++) begin
       // We have a final resp to write to VRF
       vrf_valid_rsp[intf] = (vrf_req_valid_q[intf] & vrf_req_q[intf].rsp_valid);
 
       // Track if the final resp has already been written to the VRF
-      vrf_commit_intf_valid[intf] = ((vrf_valid_rsp[intf] & vrf_wvalid_i[intf]) | vrf_commit_pending_q[intf]) | (intf == 1 ? vrf_commit_bypass_q : 1'b0);
+      vrf_commit_intf_valid[intf] = ((vrf_valid_rsp[intf] & vrf_wvalid_i[intf]) | vrf_commit_waiting_q[intf]) | (intf == 1 ? vrf_commit_bypass : 1'b0);
 
       // To track if the last packet has already been committed for the interface, but a response cannot be sent to the controller
       // since waiting for the other interface to finish
-      vrf_commit_pending_d[intf] = vrf_commit_intf_valid[intf] ? (vlsu_rsp_valid_o ? 1'b0 : 1'b1) : 1'b0;
+      vrf_commit_waiting_d[intf] = vrf_commit_intf_valid[intf] ? (vlsu_rsp_valid_o ? 1'b0 : 1'b1) : 1'b0;
     end
   end
 
@@ -724,7 +731,7 @@ module spatz_doublebw_vlsu
 
   // Check if interface 1 is the interface trying to commit, if so take resp information from interface 1
   // If both interfaces in sync, interface 1 is given priority
-  assign resp_intf = vrf_commit_intf_valid_q [1] == 1'b0 ? 1'b1 : 1'b0;
+  assign resp_intf = ((vrf_commit_intf_valid [1] == 1'b1) & !vrf_commit_bypass) ? 1'b1 : 1'b0;
 
   // Check is both interfaces has reached to a completion and if the last write to the VRF is also done
   // Assign the instruction id from the interface that completes the last
@@ -923,6 +930,7 @@ module spatz_doublebw_vlsu
       vrf_req_d[intf].rsp.id    = commit_insn_q.id;
       vrf_req_d[intf].rsp.intf_id = intf;
       vrf_req_d[intf].rsp_valid = commit_insn_valid && &commit_finished_d[intf] && mem_insn_finished_d[commit_insn_q.id];
+      vrf_req_d[intf].commit_vl = commit_insn_q.vl;
 
       // Request indexes
       vrf_re_o[intf][1] = mem_is_indexed;

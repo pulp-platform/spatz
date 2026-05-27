@@ -320,12 +320,11 @@ module spatz_controller
       if (sb_wrote_result_i[SB_VFU_VD_WD - SB_VFU_VD_WD])
         vl_cnt_d[sb_id_i[SB_VFU_VD_WD]] += VRFWriteSize;
 
-      if (vl_cnt_q[sb_id_i[SB_VFU_VD_WD]] >= (vl_max_d[sb_id_i[SB_VFU_VD_WD]] * (intID + 1) - VRFWriteSize)) begin
-        done_result_d[intID][sb_id_i[SB_VFU_VD_WD]] = 1'b1;
-      end
-
       wrote_result_narrowing_d[sb_id_i[SB_VFU_VD_WD]] = sb_wrote_result_i[SB_VFU_VD_WD - SB_VFU_VD_WD] ^ narrow_wide_q[sb_id_i[SB_VFU_VD_WD]];
       wrote_result_d[intID][sb_id_i[SB_VFU_VD_WD]]    = sb_wrote_result_i[SB_VFU_VD_WD - SB_VFU_VD_WD] && (!narrow_wide_q[sb_id_i[SB_VFU_VD_WD]] || wrote_result_narrowing_q[sb_id_i[SB_VFU_VD_WD]]);
+      if (vl_cnt_q[sb_id_i[SB_VFU_VD_WD]] >= (vl_max_d[sb_id_i[SB_VFU_VD_WD]] * (intID + 1) - VRFWriteSize)) begin
+        done_result_d[intID][sb_id_i[SB_VFU_VD_WD]] = wrote_result_d[intID][sb_id_i[SB_VFU_VD_WD]];
+      end
     end
     if (sb_enable_o[SB_VLSU_VD_WD0]) begin
       // Calculate the load-store interface id to use here for chaining
@@ -345,12 +344,11 @@ module spatz_controller
       if (sb_wrote_result_i[SB_VSLDU_VD_WD - SB_VFU_VD_WD])
         vl_cnt_d[sb_id_i[SB_VSLDU_VD_WD]] += VRFWriteSize;
 
-      if (vl_cnt_q[sb_id_i[SB_VSLDU_VD_WD]] >= (vl_max_d[sb_id_i[SB_VSLDU_VD_WD]] * (intID + 1) - VRFWriteSize)) begin
-        done_result_d[intID][sb_id_i[SB_VSLDU_VD_WD]] = 1'b1;
-      end
-
       wrote_result_narrowing_d[sb_id_i[SB_VSLDU_VD_WD]] = sb_wrote_result_i[SB_VSLDU_VD_WD - SB_VFU_VD_WD] ^ narrow_wide_q[sb_id_i[SB_VSLDU_VD_WD]];
       wrote_result_d[intID][sb_id_i[SB_VSLDU_VD_WD]]    = sb_wrote_result_i[SB_VSLDU_VD_WD - SB_VFU_VD_WD] && (!narrow_wide_q[sb_id_i[SB_VSLDU_VD_WD]] || wrote_result_narrowing_q[sb_id_i[SB_VSLDU_VD_WD]]);
+      if (vl_cnt_q[sb_id_i[SB_VSLDU_VD_WD]] >= (vl_max_d[sb_id_i[SB_VSLDU_VD_WD]] * (intID + 1) - VRFWriteSize)) begin
+        done_result_d[intID][sb_id_i[SB_VSLDU_VD_WD]] = wrote_result_d[intID][sb_id_i[SB_VSLDU_VD_WD]];
+      end
     end
 `else
     // Store the decisions
