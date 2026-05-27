@@ -10,10 +10,7 @@ variables:
   APPS: "tests"
   RUST_LOG: 'memora=debug'
   VERILATOR_ROOT: '$CI_PROJECT_DIR/install/verilator/share/verilator'
-  # Per the new runner runbook, /home/gitlabci/... paths are forbidden;
-  # bender is now managed by IT on the default PATH, and per-pipeline
-  # pip-user installs go to $HOME/.local/bin (per-pipeline $HOME).
-  PATH: '/usr/local/bin:/usr/bin:/usr/sbin:/sbin:/usr/local/condor/bin:/usr/sepp/bin:$CI_PROJECT_DIR/install/verilator/bin:$HOME/.local/bin'
+  VERILATOR_BIN: '$CI_PROJECT_DIR/install/verilator/bin'
   OBJCACHE: ''
   RISCV_WARNINGS: '-Werror'
   CC: 'gcc-11.2.0'
@@ -31,6 +28,7 @@ workflow:
     - if: $CI_COMMIT_REF_NAME
 
 before_script:
+  - export PATH="$VERILATOR_BIN:$HOME/.local/bin:$PATH"
   - env
 
 stages:
