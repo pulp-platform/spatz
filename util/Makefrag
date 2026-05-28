@@ -81,7 +81,7 @@ all:
 # Eventually it could be an option to package this statically using musl libc.
 work/${FESVR_VERSION}_unzip:
 	mkdir -p $(dir $@)
-	wget -O $(dir $@)/${FESVR_VERSION} https://github.com/riscv/riscv-isa-sim/tarball/${FESVR_VERSION}
+	curl -fL -o $(dir $@)/${FESVR_VERSION} https://github.com/riscv/riscv-isa-sim/tarball/${FESVR_VERSION}
 	tar xfm $(dir $@)${FESVR_VERSION} --strip-components=1 -C $(dir $@)
 	touch $@
 
@@ -101,7 +101,7 @@ work/lib/libfesvr_vcs.a: work/${FESVR_VERSION}_unzip
 # and libraries than modelsim/vcs and
 $(VLT_FESVR)/${FESVR_VERSION}_unzip:
 	mkdir -p $(dir $@)
-	wget -O $(dir $@)/${FESVR_VERSION} https://github.com/riscv/riscv-isa-sim/tarball/${FESVR_VERSION}
+	curl -fL -o $(dir $@)/${FESVR_VERSION} https://github.com/riscv/riscv-isa-sim/tarball/${FESVR_VERSION}
 	tar xfm $(dir $@)${FESVR_VERSION} --strip-components=1 -C $(dir $@)
 	touch $@
 
