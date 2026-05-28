@@ -28,6 +28,7 @@ workflow:
 
 before_script:
   - export PATH="$VERILATOR_BIN:$HOME/.local/bin:$PATH"
+  - export PYTHONPATH="$CI_PROJECT_DIR/install/python-deps:$PYTHONPATH"
   - env
 
 stages:
@@ -72,8 +73,12 @@ verilator:
 python-deps:
   stage: tools
   script:
-    - python3 -m pip install --user hjson jsonref jsonschema jstyleson mako scipy flake8
-    - python3 -m pip install --user torch --index-url https://download.pytorch.org/whl/cpu
+    - |
+      if ! $CI_PROJECT_DIR/util/memora_retry.sh lookup python-deps; then
+        python3 -m pip install --target=$CI_PROJECT_DIR/install/python-deps -r $CI_PROJECT_DIR/requirements.txt
+        python3 -m pip install --target=$CI_PROJECT_DIR/install/python-deps torch --index-url https://download.pytorch.org/whl/cpu
+        $CI_PROJECT_DIR/util/memora_retry.sh insert python-deps
+      fi
 
 ##########
 #  Lint  #
@@ -83,8 +88,9 @@ python-deps:
 code-style:
   stage: lint
   script:
-    # Download LLVM
+    # Download LLVM and Python deps
     - $CI_PROJECT_DIR/util/memora_retry.sh get tc-llvm
+    - $CI_PROJECT_DIR/util/memora_retry.sh get python-deps
     - ./util/lint.sh
   needs: ["tc-llvm", "python-deps"]
 
@@ -96,9 +102,10 @@ code-style:
 snRuntime-test-vsim:
   stage: test
   script:
-    # Download LLVM and GCC
+    # Download LLVM, GCC, and Python deps
     - $CI_PROJECT_DIR/util/memora_retry.sh get tc-llvm
     - $CI_PROJECT_DIR/util/memora_retry.sh get tc-riscv-gcc
+    - $CI_PROJECT_DIR/util/memora_retry.sh get python-deps
     # Download bender
     - make bender
     # Update opcodes
@@ -119,9 +126,10 @@ snRuntime-test-vsim:
 snRuntime-test-vcs:
   stage: test
   script:
-    # Download LLVM and GCC
+    # Download LLVM, GCC, and Python deps
     - $CI_PROJECT_DIR/util/memora_retry.sh get tc-llvm
     - $CI_PROJECT_DIR/util/memora_retry.sh get tc-riscv-gcc
+    - $CI_PROJECT_DIR/util/memora_retry.sh get python-deps
     # Download bender
     - make bender
     # Update opcodes
@@ -142,10 +150,11 @@ snRuntime-test-vcs:
 snRuntime-test-vlt:
   stage: test
   script:
-    # Download LLVM and GCC
+    # Download LLVM, GCC, Verilator, and Python deps
     - $CI_PROJECT_DIR/util/memora_retry.sh get tc-llvm
     - $CI_PROJECT_DIR/util/memora_retry.sh get tc-riscv-gcc
     - $CI_PROJECT_DIR/util/memora_retry.sh get verilator
+    - $CI_PROJECT_DIR/util/memora_retry.sh get python-deps
     # Download bender
     - make bender
     # Update opcodes
@@ -167,10 +176,11 @@ snRuntime-test-vlt:
 riscvTests-test-vlt:
   stage: test
   script:
-    # Download LLVM and GCC
+    # Download LLVM, GCC, Verilator, and Python deps
     - $CI_PROJECT_DIR/util/memora_retry.sh get tc-llvm
     - $CI_PROJECT_DIR/util/memora_retry.sh get tc-riscv-gcc
     - $CI_PROJECT_DIR/util/memora_retry.sh get verilator
+    - $CI_PROJECT_DIR/util/memora_retry.sh get python-deps
     # Download bender
     - make bender
     # Update opcodes
@@ -193,10 +203,11 @@ riscvTests-test-vlt:
 spatzBenchmarks-test-vlt:
   stage: test
   script:
-    # Download LLVM and GCC
+    # Download LLVM, GCC, Verilator, and Python deps
     - $CI_PROJECT_DIR/util/memora_retry.sh get tc-llvm
     - $CI_PROJECT_DIR/util/memora_retry.sh get tc-riscv-gcc
     - $CI_PROJECT_DIR/util/memora_retry.sh get verilator
+    - $CI_PROJECT_DIR/util/memora_retry.sh get python-deps
     # Download bender
     - make bender
     # Update opcodes
