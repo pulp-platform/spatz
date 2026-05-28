@@ -80,7 +80,7 @@ tc-riscv-gcc: sw/toolchain/riscv-gnu-toolchain
 	mkdir -p $(GCC_INSTALL_DIR)
 	cd sw/toolchain/riscv-gnu-toolchain && rm -rf build && mkdir -p build && cd build && \
 	../configure --prefix=$(GCC_INSTALL_DIR) --with-arch=rv32imafd --with-abi=ilp32d --with-cmodel=medlow --enable-multilib --disable-werror && \
-	$(MAKE) MAKEINFO=true -j4
+	$(MAKE) MAKEINFO=true WERROR_CFLAGS="" -j4
 
 tc-llvm: sw/toolchain/llvm-project
 	mkdir -p $(LLVM_INSTALL_DIR)
