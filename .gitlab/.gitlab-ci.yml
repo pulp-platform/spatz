@@ -33,8 +33,9 @@ before_script:
 
 stages:
   - tools
-  - test
   - lint
+  - test
+  - benchmark
 
 ###########
 #  Tools  #
@@ -201,7 +202,7 @@ riscvTests-test-vlt:
 
 # Spatz tests
 spatzBenchmarks-test-vlt:
-  stage: test
+  stage: benchmark
   script:
     # Download LLVM, GCC, Verilator, and Python deps
     - $CI_PROJECT_DIR/util/memora_retry.sh get tc-llvm

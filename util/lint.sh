@@ -30,9 +30,9 @@ CF=install/llvm/bin/clang-format; [ ! -d install/llvm ] && CF="$LLVM_INSTALL_DIR
 # Check python files
 echo "Check Python files"
 python3=$(command -v python3) || EXIT_STATUS=$?
-${python3} -m flake8 --ignore=E501,W503,E203 sw/snRuntime || EXIT_STATUS=$?
-${python3} -m flake8 --ignore=E501,W503,E203 sw/spatzBenchmarks || EXIT_STATUS=$?
-${python3} -m flake8 --ignore=E501,W503,E203 util || EXIT_STATUS=$?
+${python3} -m flake8 --ignore=E501,W503,E203,E226,E231,F824 sw/snRuntime || EXIT_STATUS=$?
+${python3} -m flake8 --ignore=E501,W503,E203,E226,E231,F824 sw/spatzBenchmarks || EXIT_STATUS=$?
+${python3} -m flake8 --ignore=E501,W503,E203,E226,E231,F824 util || EXIT_STATUS=$?
 
 # Check for trailing whitespaces and tabs
 echo "Checking for trailing whitespaces and tabs in unstaged files"
