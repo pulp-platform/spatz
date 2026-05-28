@@ -81,6 +81,7 @@ tc-riscv-gcc: sw/toolchain/riscv-gnu-toolchain
 	cd sw/toolchain/riscv-gnu-toolchain && rm -rf build && mkdir -p build && cd build && \
 	../configure --prefix=$(GCC_INSTALL_DIR) --with-arch=rv32imafd --with-abi=ilp32d --with-cmodel=medlow --enable-multilib --disable-werror && \
 	sed -i 's/--disable-werror/--disable-werror --disable-gdb/g' Makefile && \
+	sed -i 's/type wget/false/' ../riscv-gcc/contrib/download_prerequisites && \
 	$(MAKE) MAKEINFO=true WERROR_CFLAGS="" -j4
 
 tc-llvm: sw/toolchain/llvm-project
