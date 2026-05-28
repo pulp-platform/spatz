@@ -69,6 +69,12 @@ verilator:
         $CI_PROJECT_DIR/util/memora_retry.sh insert verilator
       fi
 
+python-deps:
+  stage: tools
+  script:
+    - python3 -m pip install --user hjson jsonref jsonschema jstyleson mako scipy flake8
+    - python3 -m pip install --user torch --index-url https://download.pytorch.org/whl/cpu
+
 ##########
 #  Lint  #
 ##########
@@ -80,7 +86,7 @@ code-style:
     # Download LLVM
     - $CI_PROJECT_DIR/util/memora_retry.sh get tc-llvm
     - ./util/lint.sh
-  needs: ["tc-llvm"]
+  needs: ["tc-llvm", "python-deps"]
 
 ###########
 #  Build  #
@@ -97,22 +103,13 @@ snRuntime-test-vsim:
     - make bender
     # Update opcodes
     - make update_opcodes
-    # Download python dependencies
-    - export PYTHON3=$(which python3)
-    - ${PYTHON3} -m pip install --user hjson
-    - ${PYTHON3} -m pip install --user jsonref
-    - ${PYTHON3} -m pip install --user jsonschema
-    - ${PYTHON3} -m pip install --user jstyleson
-    - ${PYTHON3} -m pip install --user mako
-    - ${PYTHON3} -m pip install --user scipy
-    - ${PYTHON3} -m pip install --user torch --index-url https://download.pytorch.org/whl/cpu
     # Compile the binaries
     - cd hw/system/spatz_cluster
     - make sw.vsim SPATZ_CLUSTER_CFG=${cfg}.hjson -B
     # Run the test
     - cd sw/build/snRuntime
     - ${CTEST} --output-on-failure
-  needs: ["tc-llvm", "tc-gcc"]
+  needs: ["tc-llvm", "tc-gcc", "python-deps"]
   parallel:
     matrix:
       - { cfg: spatz_cluster.default.dram }
@@ -129,22 +126,13 @@ snRuntime-test-vcs:
     - make bender
     # Update opcodes
     - make update_opcodes
-    # Download python dependencies
-    - export PYTHON3=$(which python3)
-    - ${PYTHON3} -m pip install --user hjson
-    - ${PYTHON3} -m pip install --user jsonref
-    - ${PYTHON3} -m pip install --user jsonschema
-    - ${PYTHON3} -m pip install --user jstyleson
-    - ${PYTHON3} -m pip install --user mako
-    - ${PYTHON3} -m pip install --user scipy
-    - ${PYTHON3} -m pip install --user torch --index-url https://download.pytorch.org/whl/cpu
     # Compile the binaries
     - cd hw/system/spatz_cluster
     - ${VCS} make sw.vcs SPATZ_CLUSTER_CFG=${cfg}.hjson -B
     # Run the test
     - cd sw/build/snRuntime
     - ${CTEST} --output-on-failure
-  needs: ["tc-llvm", "tc-gcc"]
+  needs: ["tc-llvm", "tc-gcc", "python-deps"]
   parallel:
     matrix:
       - { cfg: spatz_cluster.default.dram }
@@ -162,22 +150,13 @@ snRuntime-test-vlt:
     - make bender
     # Update opcodes
     - make update_opcodes
-    # Download python dependencies
-    - export PYTHON3=$(which python3)
-    - ${PYTHON3} -m pip install --user hjson
-    - ${PYTHON3} -m pip install --user jsonref
-    - ${PYTHON3} -m pip install --user jsonschema
-    - ${PYTHON3} -m pip install --user jstyleson
-    - ${PYTHON3} -m pip install --user mako
-    - ${PYTHON3} -m pip install --user scipy
-    - ${PYTHON3} -m pip install --user torch --index-url https://download.pytorch.org/whl/cpu
     # Compile the binaries
     - cd hw/system/spatz_cluster
     - make sw.vlt SPATZ_CLUSTER_CFG=${cfg}.hjson -B
     # Run the test
     - cd sw/build/snRuntime
     - ${CTEST} --output-on-failure
-  needs: ["tc-llvm", "tc-gcc", "verilator"]
+  needs: ["tc-llvm", "tc-gcc", "verilator", "python-deps"]
   parallel:
     matrix:
       - { cfg: spatz_cluster.default.dram }
@@ -196,22 +175,13 @@ riscvTests-test-vlt:
     - make bender
     # Update opcodes
     - make update_opcodes
-    # Download python dependencies
-    - export PYTHON3=$(which python3)
-    - ${PYTHON3} -m pip install --user hjson
-    - ${PYTHON3} -m pip install --user jsonref
-    - ${PYTHON3} -m pip install --user jsonschema
-    - ${PYTHON3} -m pip install --user jstyleson
-    - ${PYTHON3} -m pip install --user mako
-    - ${PYTHON3} -m pip install --user scipy
-    - ${PYTHON3} -m pip install --user torch --index-url https://download.pytorch.org/whl/cpu
     # Compile the binaries
     - cd hw/system/spatz_cluster
     - ${VCS} make sw.vlt SPATZ_CLUSTER_CFG=${cfg}.hjson -B
     # Run the test
     - cd sw/build/riscvTests
     - ${CTEST} --output-on-failure -j4
-  needs: ["tc-llvm", "tc-gcc", "verilator"]
+  needs: ["tc-llvm", "tc-gcc", "verilator", "python-deps"]
   parallel:
     matrix:
       - { cfg: spatz_cluster.default.dram }
@@ -231,22 +201,13 @@ spatzBenchmarks-test-vlt:
     - make bender
     # Update opcodes
     - make update_opcodes
-    # Download python dependencies
-    - export PYTHON3=$(which python3)
-    - ${PYTHON3} -m pip install --user hjson
-    - ${PYTHON3} -m pip install --user jsonref
-    - ${PYTHON3} -m pip install --user jsonschema
-    - ${PYTHON3} -m pip install --user jstyleson
-    - ${PYTHON3} -m pip install --user mako
-    - ${PYTHON3} -m pip install --user scipy
-    - ${PYTHON3} -m pip install --user torch --index-url https://download.pytorch.org/whl/cpu
     # Compile the binaries
     - cd hw/system/spatz_cluster
     - ${VCS} make sw.vlt SPATZ_CLUSTER_CFG=${cfg}.hjson -B
     # Run the test
     - cd sw/build/spatzBenchmarks
     - ${CTEST} --verbose
-  needs: ["tc-llvm", "tc-gcc", "verilator"]
+  needs: ["tc-llvm", "tc-gcc", "verilator", "python-deps"]
   parallel:
     matrix:
       - { cfg: spatz_cluster.default.dram }
