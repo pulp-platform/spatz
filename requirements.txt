@@ -1,0 +1,7 @@
+hjson
+jsonref
+jsonschema
+jstyleson
+mako
+scipy
+flake8
