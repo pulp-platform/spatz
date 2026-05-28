@@ -75,8 +75,8 @@ python-deps:
   script:
     - |
       if ! $CI_PROJECT_DIR/util/memora_retry.sh lookup python-deps; then
-        python3 -m pip install --target=$CI_PROJECT_DIR/install/python-deps -r $CI_PROJECT_DIR/requirements.txt
-        python3 -m pip install --target=$CI_PROJECT_DIR/install/python-deps torch --index-url https://download.pytorch.org/whl/cpu
+        PIP_USER=0 python3 -m pip install --target=$CI_PROJECT_DIR/install/python-deps -r $CI_PROJECT_DIR/requirements.txt
+        PIP_USER=0 python3 -m pip install --target=$CI_PROJECT_DIR/install/python-deps torch --index-url https://download.pytorch.org/whl/cpu
         $CI_PROJECT_DIR/util/memora_retry.sh insert python-deps
       fi
 
