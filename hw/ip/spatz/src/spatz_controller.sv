@@ -311,58 +311,39 @@ module spatz_controller
 
 `ifdef DOUBLE_BW
     // Store the decisions
-    if (sb_enable_o[SB_VFU_VD_WD]) begin
-      // Calculate the load-store interface id to use here for chaining
-      automatic logic intID = (vl_cnt_q[sb_id_i[SB_VFU_VD_WD]] < vl_max_d[sb_id_i[SB_VFU_VD_WD]]) ? 0 : 1;
-      automatic int VRFWriteSize = narrow_q[sb_id_i[SB_VFU_VD_WD]] ? VRFWordBWidth >> 1 : VRFWordBWidth;
+    for (int unsigned port = 0; port < NrVregfilePorts; port++) begin
+      automatic int unsigned port_idx = port - SB_VFU_VD_WD;
+      if (sb_enable_o[port]) begin
+        // VFU and VSLDU: intID derived from vl_cnt progress, vl_cnt updated every successful write
+        if (port inside {SB_VFU_VD_WD, SB_VSLDU_VD_WD}) begin
+          automatic logic  intID  = (vl_cnt_q[sb_id_i[port]] < vl_max_d[sb_id_i[port]]) ? 0 : 1;
+          automatic int VRFWriteSize = narrow_q[sb_id_i[port]] ? VRFWordBWidth >> 1 : VRFWordBWidth;
 
-      // Update vl_cnt if actually written into the VRF
-      if (sb_wrote_result_i[SB_VFU_VD_WD - SB_VFU_VD_WD])
-        vl_cnt_d[sb_id_i[SB_VFU_VD_WD]] += VRFWriteSize;
+          // Update vl_cnt if actually written into the VRF
+          if (sb_wrote_result_i[port_idx])
+            vl_cnt_d[sb_id_i[port]] += VRFWriteSize;
 
-      wrote_result_narrowing_d[sb_id_i[SB_VFU_VD_WD]] = sb_wrote_result_i[SB_VFU_VD_WD - SB_VFU_VD_WD] ^ narrow_wide_q[sb_id_i[SB_VFU_VD_WD]];
-      wrote_result_d[intID][sb_id_i[SB_VFU_VD_WD]]    = sb_wrote_result_i[SB_VFU_VD_WD - SB_VFU_VD_WD] && (!narrow_wide_q[sb_id_i[SB_VFU_VD_WD]] || wrote_result_narrowing_q[sb_id_i[SB_VFU_VD_WD]]);
-      if (vl_cnt_q[sb_id_i[SB_VFU_VD_WD]] >= (vl_max_d[sb_id_i[SB_VFU_VD_WD]] * (intID + 1) - VRFWriteSize)) begin
-        done_result_d[intID][sb_id_i[SB_VFU_VD_WD]] = wrote_result_d[intID][sb_id_i[SB_VFU_VD_WD]];
-      end
-    end
-    if (sb_enable_o[SB_VLSU_VD_WD0]) begin
-      // Calculate the load-store interface id to use here for chaining
-      wrote_result_narrowing_d[sb_id_i[SB_VLSU_VD_WD0]] = sb_wrote_result_i[SB_VLSU_VD_WD0 - SB_VFU_VD_WD] ^ narrow_wide_q[sb_id_i[SB_VLSU_VD_WD0]];
-      wrote_result_d[0][sb_id_i[SB_VLSU_VD_WD0]]        = sb_wrote_result_i[SB_VLSU_VD_WD0 - SB_VFU_VD_WD] && (!narrow_wide_q[sb_id_i[SB_VLSU_VD_WD0]] || wrote_result_narrowing_q[sb_id_i[SB_VLSU_VD_WD0]]);
-    end
-    if (sb_enable_o[SB_VLSU_VD_WD1]) begin
-      wrote_result_narrowing_d[sb_id_i[SB_VLSU_VD_WD1]] = sb_wrote_result_i[SB_VLSU_VD_WD1 - SB_VFU_VD_WD] ^ narrow_wide_q[sb_id_i[SB_VLSU_VD_WD1]];
-      wrote_result_d[1][sb_id_i[SB_VLSU_VD_WD1]]        = sb_wrote_result_i[SB_VLSU_VD_WD1 - SB_VFU_VD_WD] && (!narrow_wide_q[sb_id_i[SB_VLSU_VD_WD1]] || wrote_result_narrowing_q[sb_id_i[SB_VLSU_VD_WD1]]);
-    end
-    if (sb_enable_o[SB_VSLDU_VD_WD]) begin
-      // Calculate the load-store interface id to use here for chaining
-      automatic logic intID = (vl_cnt_q[sb_id_i[SB_VSLDU_VD_WD]] < vl_max_d[sb_id_i[SB_VSLDU_VD_WD]]) ? 0 : 1;
-      automatic int VRFWriteSize = narrow_q[sb_id_i[SB_VSLDU_VD_WD]] ? VRFWordBWidth >> 1 : VRFWordBWidth;
-
-      // Update vl_cnt if actually written into the VRF
-      if (sb_wrote_result_i[SB_VSLDU_VD_WD - SB_VFU_VD_WD])
-        vl_cnt_d[sb_id_i[SB_VSLDU_VD_WD]] += VRFWriteSize;
-
-      wrote_result_narrowing_d[sb_id_i[SB_VSLDU_VD_WD]] = sb_wrote_result_i[SB_VSLDU_VD_WD - SB_VFU_VD_WD] ^ narrow_wide_q[sb_id_i[SB_VSLDU_VD_WD]];
-      wrote_result_d[intID][sb_id_i[SB_VSLDU_VD_WD]]    = sb_wrote_result_i[SB_VSLDU_VD_WD - SB_VFU_VD_WD] && (!narrow_wide_q[sb_id_i[SB_VSLDU_VD_WD]] || wrote_result_narrowing_q[sb_id_i[SB_VSLDU_VD_WD]]);
-      if (vl_cnt_q[sb_id_i[SB_VSLDU_VD_WD]] >= (vl_max_d[sb_id_i[SB_VSLDU_VD_WD]] * (intID + 1) - VRFWriteSize)) begin
-        done_result_d[intID][sb_id_i[SB_VSLDU_VD_WD]] = wrote_result_d[intID][sb_id_i[SB_VSLDU_VD_WD]];
+          wrote_result_narrowing_d[sb_id_i[port]] = sb_wrote_result_i[port_idx] ^ narrow_wide_q[sb_id_i[port]];
+          wrote_result_d[intID][sb_id_i[port]]    = sb_wrote_result_i[port_idx] && (!narrow_wide_q[sb_id_i[port]] || wrote_result_narrowing_q[sb_id_i[port]]);
+          if (vl_cnt_q[sb_id_i[port]] >= (vl_max_d[sb_id_i[port]] * (intID + 1) - VRFWriteSize))
+            done_result_d[intID][sb_id_i[port]] = wrote_result_d[intID][sb_id_i[port]];
+        end
+        // VLSU: intID is fixed per interface (0 for WD0, 1 for WD1)
+        if (port inside {SB_VLSU_VD_WD0, SB_VLSU_VD_WD1}) begin
+          automatic int unsigned intID  = port - SB_VLSU_VD_WD0;
+          wrote_result_narrowing_d[sb_id_i[port]] = sb_wrote_result_i[port_idx] ^ narrow_wide_q[sb_id_i[port]];
+          wrote_result_d[intID][sb_id_i[port]]    = sb_wrote_result_i[port_idx] && (!narrow_wide_q[sb_id_i[port]] || wrote_result_narrowing_q[sb_id_i[port]]);
+        end
       end
     end
 `else
-    // Store the decisions
-    if (sb_enable_o[SB_VFU_VD_WD]) begin
-      wrote_result_narrowing_d[sb_id_i[SB_VFU_VD_WD]] = sb_wrote_result_i[SB_VFU_VD_WD - SB_VFU_VD_WD] ^ narrow_wide_q[sb_id_i[SB_VFU_VD_WD]];
-      wrote_result_d[sb_id_i[SB_VFU_VD_WD]]           = sb_wrote_result_i[SB_VFU_VD_WD - SB_VFU_VD_WD] && (!narrow_wide_q[sb_id_i[SB_VFU_VD_WD]] || wrote_result_narrowing_q[sb_id_i[SB_VFU_VD_WD]]);
-    end
-    if (sb_enable_o[SB_VLSU_VD_WD]) begin
-      wrote_result_narrowing_d[sb_id_i[SB_VLSU_VD_WD]] = sb_wrote_result_i[SB_VLSU_VD_WD - SB_VFU_VD_WD] ^ narrow_wide_q[sb_id_i[SB_VLSU_VD_WD]];
-      wrote_result_d[sb_id_i[SB_VLSU_VD_WD]]           = sb_wrote_result_i[SB_VLSU_VD_WD - SB_VFU_VD_WD] && (!narrow_wide_q[sb_id_i[SB_VLSU_VD_WD]] || wrote_result_narrowing_q[sb_id_i[SB_VLSU_VD_WD]]);
-    end
-    if (sb_enable_o[SB_VSLDU_VD_WD]) begin
-      wrote_result_narrowing_d[sb_id_i[SB_VSLDU_VD_WD]] = sb_wrote_result_i[SB_VSLDU_VD_WD - SB_VFU_VD_WD] ^ narrow_wide_q[sb_id_i[SB_VSLDU_VD_WD]];
-      wrote_result_d[sb_id_i[SB_VSLDU_VD_WD]]           = sb_wrote_result_i[SB_VSLDU_VD_WD - SB_VFU_VD_WD] && (!narrow_wide_q[sb_id_i[SB_VSLDU_VD_WD]] || wrote_result_narrowing_q[sb_id_i[SB_VSLDU_VD_WD]]);
+    // Store the decisions for all write-destination ports: VFU, VLSU, VSLDU
+    for (int unsigned port = 0; port < NrVregfilePorts; port++) begin
+      if (sb_enable_o[port] && (port inside {SB_VFU_VD_WD, SB_VLSU_VD_WD, SB_VSLDU_VD_WD})) begin
+        automatic int unsigned port_idx = port - SB_VFU_VD_WD;
+        wrote_result_narrowing_d[sb_id_i[port]] = sb_wrote_result_i[port_idx] ^ narrow_wide_q[sb_id_i[port]];
+        wrote_result_d[sb_id_i[port]]           = sb_wrote_result_i[port_idx] && (!narrow_wide_q[sb_id_i[port]] || wrote_result_narrowing_q[sb_id_i[port]]);
+      end
     end
 `endif
 
