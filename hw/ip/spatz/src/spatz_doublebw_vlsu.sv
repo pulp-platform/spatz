@@ -490,18 +490,19 @@ module spatz_doublebw_vlsu
             default: offset = $signed(vrf_rdata_i[intf][1][8 * word_index +: 32]);
           endcase
         end else begin
-          offset = ({mem_counter_q[intf][fu][$bits(vlen_t)-1:MAXEW] << $clog2(N_FU), mem_counter_q[intf][fu][int'(MAXEW)-1:0]} + (fu << MAXEW)) * stride;
+          offset = ({mem_counter_q[intf][fu][$bits(vlen_t)-1:MAXEW] << $clog2(N_FU), mem_counter_q[intf][fu][int'(MAXEW)-1:0]} + (fu << MAXEW));
         end
 
         // The second interface starts from half of the vector to straighten the write-back VRF access pattern
         // To ensure that the 2 interfaces do not also conflict at the TCDM, there is HW scrambling of addresses to TCDM
         // such that they access different superbanks.
-        if (!mem_is_indexed && !mem_is_strided && intf == 1) begin
+        if (!mem_is_indexed && intf == 1) begin
           // Align the vector length with SpatzMemBytes bytes
           offset += ((mem_spatz_req.vl +  (SpatzMemBytes / 2)) >> $clog2(SpatzMemBytes) << $clog2(SpatzMemBytes)) / 2;
         end
+        offset *= stride;
 
-        addr                      = mem_spatz_req.rs1 + offset;
+        addr                          = mem_spatz_req.rs1 + offset;
         mem_req_addr[intf][fu]        = (addr >> MAXEW) << MAXEW;
         mem_req_addr_offset[intf][fu] = addr[int'(MAXEW)-1:0];
 
