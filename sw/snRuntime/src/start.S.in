@@ -15,7 +15,7 @@ _start:
 snrt.crt0.init_vec_registers:
     # Check if core has vector registers, otherwise skip
     csrr    t0, misa
-    li      t1, (1 << 21)    
+    li      t1, (1 << 21)
     and     t0, t0, t1       # check 'V' extension (bit 21 = 'V')
     beqz    t0, snrt.crt0.init_fp_registers
     li      t0, -1
