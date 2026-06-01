@@ -68,19 +68,22 @@ sw/toolchain/riscv-isa-sim: sw/toolchain/riscv-isa-sim.version
 
 sw/toolchain/help2man:
 	mkdir -p sw/toolchain/help2man
-	cd sw/toolchain/help2man && wget -c https://ftp.gnu.org/gnu/help2man/help2man-1.49.3.tar.xz
+	cd sw/toolchain/help2man && curl -fLO https://ftp.gnu.org/gnu/help2man/help2man-1.49.3.tar.xz
 	cd sw/toolchain/help2man && tar xf help2man-1.49.3.tar.xz
 
 sw/toolchain/dtc:
 	mkdir -p sw/toolchain/dtc
-	cd sw/toolchain/dtc && wget -c https://git.kernel.org/pub/scm/utils/dtc/dtc.git/snapshot/dtc-1.7.0.tar.gz
+	cd sw/toolchain/dtc && curl -fLO https://git.kernel.org/pub/scm/utils/dtc/dtc.git/snapshot/dtc-1.7.0.tar.gz
 	cd sw/toolchain/dtc && tar xf dtc-1.7.0.tar.gz
 
 tc-riscv-gcc: sw/toolchain/riscv-gnu-toolchain
 	mkdir -p $(GCC_INSTALL_DIR)
 	cd sw/toolchain/riscv-gnu-toolchain && rm -rf build && mkdir -p build && cd build && \
-	../configure --prefix=$(GCC_INSTALL_DIR) --with-arch=rv32imafd --with-abi=ilp32d --with-cmodel=medlow --enable-multilib && \
-	$(MAKE) MAKEINFO=true -j4
+	unset LIBRARY_PATH && \
+	../configure --prefix=$(GCC_INSTALL_DIR) --with-arch=rv32imafd --with-abi=ilp32d --with-cmodel=medlow --enable-multilib --disable-werror && \
+	sed -i 's/--disable-werror/--disable-werror --disable-gdb/g' Makefile && \
+	sed -i 's/type wget/false/' ../riscv-gcc/contrib/download_prerequisites && \
+	$(MAKE) MAKEINFO=true WERROR_CFLAGS="" -j4
 
 tc-llvm: sw/toolchain/llvm-project
 	mkdir -p $(LLVM_INSTALL_DIR)
