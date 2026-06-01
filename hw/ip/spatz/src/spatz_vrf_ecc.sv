@@ -16,21 +16,21 @@ module spatz_vrf_ecc
     input  logic                         clk_i,
     input  logic                         rst_ni,
     input  logic                         testmode_i,
-    // Write ports
-    input  vrf_addr_t [NrWritePorts-1:0] waddr_i,
-    input  vrf_data_t [NrWritePorts-1:0] wdata_i,
-    input  logic      [NrWritePorts-1:0] we_i,
-    input  vrf_be_t   [NrWritePorts-1:0] wbe_i,
-    output logic      [NrWritePorts-1:0] wvalid_o,
+    // Write ports  (wdata carries 39-bit ECC codewords, one per FU slice)
+    input  vrf_addr_t [NrWritePorts-1:0]                 waddr_i,
+    input  logic      [NrWritePorts-1:0][N_FU*(ELEN+7)-1:0] wdata_i,
+    input  logic      [NrWritePorts-1:0]                 we_i,
+    input  vrf_be_t   [NrWritePorts-1:0]                 wbe_i,
+    output logic      [NrWritePorts-1:0]                 wvalid_o,
 `ifdef BUF_FPU
     // Signal to track if  result can be buffered or not
     input  logic      [$clog2(FpuBufDepth)-1:0] fpu_buf_usage_i,
 `endif
-    // Read ports
-    input  vrf_addr_t [NrReadPorts-1:0]  raddr_i,
-    input  logic      [NrReadPorts-1:0]  re_i,
-    output vrf_data_t [NrReadPorts-1:0]  rdata_o,
-    output logic      [NrReadPorts-1:0]  rvalid_o,
+    // Read ports  (rdata carries 39-bit ECC codewords, one per FU slice)
+    input  vrf_addr_t [NrReadPorts-1:0]                  raddr_i,
+    input  logic      [NrReadPorts-1:0]                  re_i,
+    output logic      [NrReadPorts-1:0][N_FU*(ELEN+7)-1:0]  rdata_o,
+    output logic      [NrReadPorts-1:0]                  rvalid_o,
 
     // error correction and detection outputs
     // We only use one signal to indicate an error occurance in VRF, but the ECC regfile provides per-bank, per-read-port error signals which we can use for more fine grained monitoring if desired.
@@ -76,23 +76,21 @@ module spatz_vrf_ecc
   // Signals //
   /////////////
 
+  localparam int unsigned CWWidth = ELEN + 7; // 39-bit SECDED codeword per FU slice
+
   // Write signals
-  vregfile_addr_t [NrVRFBanks-1:0] waddr;
-  vrf_data_t      [NrVRFBanks-1:0] wdata;
-  logic           [NrVRFBanks-1:0] we;
-  vrf_be_t        [NrVRFBanks-1:0] wbe;
+  vregfile_addr_t [NrVRFBanks-1:0]                              waddr;
+  logic           [NrVRFBanks-1:0][N_FU*CWWidth-1:0]           wdata; // encoded
+  logic           [NrVRFBanks-1:0]                              we;
+  vrf_be_t        [NrVRFBanks-1:0]                              wbe;
 
   // Signals to handle conflicts between VFU and VLSU interfaces
   logic           [NrVRFBanks-1:0] w_vlsu_vfu_conflict;
   logic           [NrVRFBanks-1:0] w_vfu;
 
   // Read signals
-  vregfile_addr_t [NrVRFBanks-1:0][NrReadPortsPerBank-1:0] raddr;
-  vrf_data_t      [NrVRFBanks-1:0][NrReadPortsPerBank-1:0] rdata;
-
-  // vregfile ECC signals
-  logic   [NrVRFBanks-1:0][N_FU-1:0] ecc_vregfile_gnt_o;
-  logic   [NrVRFBanks-1:0] ecc_vregfile_gnt_o_bank;
+  vregfile_addr_t [NrVRFBanks-1:0][NrReadPortsPerBank-1:0]     raddr;
+  logic           [NrVRFBanks-1:0][NrReadPortsPerBank-1:0][N_FU*CWWidth-1:0] rdata; // encoded
 
   ///////////////////
   // Write Mapping //
@@ -140,29 +138,25 @@ module spatz_vrf_ecc
           wdata[bank]          = wdata_i[VLSU_VD_WD0];
           we[bank]             = 1'b1;
           wbe[bank]            = wbe_i[VLSU_VD_WD0];
-          // wvalid_o[VLSU_VD_WD0] = 1'b1;
-          wvalid_o[VLSU_VD_WD0] = ecc_vregfile_gnt_o_bank[bank];
+          wvalid_o[VLSU_VD_WD0] = 1'b1;
         end else if (write_request[bank][VLSU_VD_WD1]) begin
           waddr[bank]          = f_vreg(waddr_i[VLSU_VD_WD1]);
           wdata[bank]          = wdata_i[VLSU_VD_WD1];
           we[bank]             = 1'b1;
           wbe[bank]            = wbe_i[VLSU_VD_WD1];
-          // wvalid_o[VLSU_VD_WD1] = 1'b1;
-          wvalid_o[VLSU_VD_WD1] = ecc_vregfile_gnt_o_bank[bank];
+          wvalid_o[VLSU_VD_WD1] = 1'b1;
         end else if (write_request[bank][VFU_VD_WD]) begin
           waddr[bank]         = f_vreg(waddr_i[VFU_VD_WD]);
           wdata[bank]         = wdata_i[VFU_VD_WD];
           we[bank]            = 1'b1;
           wbe[bank]           = wbe_i[VFU_VD_WD];
-          // wvalid_o[VFU_VD_WD] = 1'b1;
-          wvalid_o[VFU_VD_WD] = ecc_vregfile_gnt_o_bank[bank];
+          wvalid_o[VFU_VD_WD] = 1'b1;
         end else if (write_request[bank][VSLDU_VD_WD]) begin
           waddr[bank]           = f_vreg(waddr_i[VSLDU_VD_WD]);
           wdata[bank]           = wdata_i[VSLDU_VD_WD];
           we[bank]              = 1'b1;
           wbe[bank]             = wbe_i[VSLDU_VD_WD];
-          // wvalid_o[VSLDU_VD_WD] = 1'b1;
-          wvalid_o[VSLDU_VD_WD] = ecc_vregfile_gnt_o_bank[bank];
+          wvalid_o[VSLDU_VD_WD] = 1'b1;
         end
       end else begin
         // Prioritize VFU
@@ -171,29 +165,25 @@ module spatz_vrf_ecc
           wdata[bank]         = wdata_i[VFU_VD_WD];
           we[bank]            = 1'b1;
           wbe[bank]           = wbe_i[VFU_VD_WD];
-          // wvalid_o[VFU_VD_WD] = 1'b1;
-          wvalid_o[VFU_VD_WD] = ecc_vregfile_gnt_o_bank[bank];
+          wvalid_o[VFU_VD_WD] = 1'b1;
         end else if (write_request[bank][VLSU_VD_WD0]) begin
           waddr[bank]          = f_vreg(waddr_i[VLSU_VD_WD0]);
           wdata[bank]          = wdata_i[VLSU_VD_WD0];
           we[bank]             = 1'b1;
           wbe[bank]            = wbe_i[VLSU_VD_WD0];
-          // wvalid_o[VLSU_VD_WD0] = 1'b1;
-          wvalid_o[VLSU_VD_WD0] = ecc_vregfile_gnt_o_bank[bank];
+          wvalid_o[VLSU_VD_WD0] = 1'b1;
         end else if (write_request[bank][VLSU_VD_WD1]) begin
           waddr[bank]          = f_vreg(waddr_i[VLSU_VD_WD1]);
           wdata[bank]          = wdata_i[VLSU_VD_WD1];
           we[bank]             = 1'b1;
           wbe[bank]            = wbe_i[VLSU_VD_WD1];
-          // wvalid_o[VLSU_VD_WD1] = 1'b1;
-          wvalid_o[VLSU_VD_WD1] = ecc_vregfile_gnt_o_bank[bank];
+          wvalid_o[VLSU_VD_WD1] = 1'b1;
         end else if (write_request[bank][VSLDU_VD_WD]) begin
           waddr[bank]           = f_vreg(waddr_i[VSLDU_VD_WD]);
           wdata[bank]           = wdata_i[VSLDU_VD_WD];
           we[bank]              = 1'b1;
           wbe[bank]             = wbe_i[VSLDU_VD_WD];
-          // wvalid_o[VSLDU_VD_WD] = 1'b1;
-          wvalid_o[VSLDU_VD_WD] = ecc_vregfile_gnt_o_bank[bank];
+          wvalid_o[VSLDU_VD_WD] = 1'b1;
         end
       end
 `else
@@ -204,22 +194,19 @@ module spatz_vrf_ecc
           wdata[bank]          = wdata_i[VLSU_VD_WD];
           we[bank]             = 1'b1;
           wbe[bank]            = wbe_i[VLSU_VD_WD];
-          // wvalid_o[VLSU_VD_WD] = 1'b1;
-          wvalid_o[VLSU_VD_WD] = ecc_vregfile_gnt_o_bank[bank];
+          wvalid_o[VLSU_VD_WD] = 1'b1;
         end else if (write_request[bank][VFU_VD_WD]) begin
           waddr[bank]         = f_vreg(waddr_i[VFU_VD_WD]);
           wdata[bank]         = wdata_i[VFU_VD_WD];
           we[bank]            = 1'b1;
           wbe[bank]           = wbe_i[VFU_VD_WD];
-          // wvalid_o[VFU_VD_WD] = 1'b1;
-          wvalid_o[VFU_VD_WD] = ecc_vregfile_gnt_o_bank[bank];
+          wvalid_o[VFU_VD_WD] = 1'b1;
         end else if (write_request[bank][VSLDU_VD_WD]) begin
           waddr[bank]           = f_vreg(waddr_i[VSLDU_VD_WD]);
           wdata[bank]           = wdata_i[VSLDU_VD_WD];
           we[bank]              = 1'b1;
           wbe[bank]             = wbe_i[VSLDU_VD_WD];
-          // wvalid_o[VSLDU_VD_WD] = 1'b1;
-          wvalid_o[VSLDU_VD_WD] = ecc_vregfile_gnt_o_bank[bank];
+          wvalid_o[VSLDU_VD_WD] = 1'b1;
         end
       end else begin
         // Prioritize VFU
@@ -228,22 +215,19 @@ module spatz_vrf_ecc
           wdata[bank]         = wdata_i[VFU_VD_WD];
           we[bank]            = 1'b1;
           wbe[bank]           = wbe_i[VFU_VD_WD];
-          // wvalid_o[VFU_VD_WD] = 1'b1;
-          wvalid_o[VFU_VD_WD] = ecc_vregfile_gnt_o_bank[bank];
+          wvalid_o[VFU_VD_WD] = 1'b1;
         end else if (write_request[bank][VLSU_VD_WD]) begin
           waddr[bank]          = f_vreg(waddr_i[VLSU_VD_WD]);
           wdata[bank]          = wdata_i[VLSU_VD_WD];
           we[bank]             = 1'b1;
           wbe[bank]            = wbe_i[VLSU_VD_WD];
-          // wvalid_o[VLSU_VD_WD] = 1'b1;
-          wvalid_o[VLSU_VD_WD] = ecc_vregfile_gnt_o_bank[bank];
+          wvalid_o[VLSU_VD_WD] = 1'b1;
         end else if (write_request[bank][VSLDU_VD_WD]) begin
           waddr[bank]           = f_vreg(waddr_i[VSLDU_VD_WD]);
           wdata[bank]           = wdata_i[VSLDU_VD_WD];
           we[bank]              = 1'b1;
           wbe[bank]             = wbe_i[VSLDU_VD_WD];
-          // wvalid_o[VSLDU_VD_WD] = 1'b1;
-          wvalid_o[VSLDU_VD_WD] = ecc_vregfile_gnt_o_bank[bank];
+          wvalid_o[VSLDU_VD_WD] = 1'b1;
         end
       end
 `endif
@@ -369,50 +353,46 @@ module spatz_vrf_ecc
   //   end
   // end
 
-  // ECC VREG Banks //--------------------------------
+  // VRF Banks – plain 39-bit FF storage (enc/dec handled by spatz.sv) //-----------
+  //
+  // Each FU slice of each bank stores one 39-bit ECC codeword per word.
+  // Writes are gated per FU slice by the byte-enable: if any byte of slice c
+  // is enabled the full 39-bit codeword is written from wdata[bank][c*CWWidth+:CWWidth].
+  // Reads are combinational: rdata[bank][port][c*CWWidth+:CWWidth] = mem[bank][c][raddr].
+  // gnt_o is always 1 — no RMW stall inside the VRF; RMW is handled upstream.
 
-  for (genvar bank = 0; bank < NrVRFBanks; bank++) begin : gen_ecc_gnt_o_bank
-    assign ecc_vregfile_gnt_o_bank[bank] = & ecc_vregfile_gnt_o[bank];
-  end
+  logic [NrVRFBanks-1:0][N_FU-1:0][NrWordsPerBank-1:0][CWWidth-1:0] vrf_mem;
 
-  logic [NrVRFBanks-1:0][N_FU-1:0][NrReadPortsPerBank-1:0] single_error_vregfile;
-  logic [NrVRFBanks-1:0][N_FU-1:0][NrReadPortsPerBank-1:0] multi_error_vregfile;
+  for (genvar bank = 0; bank < NrVRFBanks; bank++) begin : gen_vrf_banks
+    for (genvar cut = 0; cut < N_FU; cut++) begin : gen_vrf_cuts
 
-  for (genvar bank = 0; bank < NrVRFBanks; bank++) begin : gen_reg_banks
-    for (genvar cut = 0; cut < N_FU; cut++) begin: gen_vrf_slice
-      elen_t [NrReadPortsPerBank-1:0] rdata_int;
+      // Per-cut write enable: asserted when any byte of this FU slice is enabled
+      logic wr_cut_we;
+      assign wr_cut_we = we[bank] & (wbe[bank][cut*ELENB +: ELENB] != '0);
 
-      for (genvar port = 0; port < NrReadPortsPerBank; port++) begin: gen_rdata_assignment
-        assign rdata[bank][port][ELEN*cut +: ELEN] = rdata_int[port];
-      end
+      // FF-based memory write (full 39-bit codeword)
+      for (genvar word = 0; word < NrWordsPerBank; word++) begin : gen_mem_words
+        always_ff @(posedge clk_i or negedge rst_ni) begin
+          if (!rst_ni)
+            vrf_mem[bank][cut][word] <= '0;
+          else if (wr_cut_we && waddr[bank] == vregfile_addr_t'(word))
+            vrf_mem[bank][cut][word] <= wdata[bank][cut*CWWidth +: CWWidth];
+        end
+      end : gen_mem_words
 
-      ecc_vregfile #(
-        .NrReadPorts(NrReadPortsPerBank),
-        .NrWords    (NrWordsPerBank    ),
-        .WordWidth  (ELEN              ),
-        .UnprotectedWidth (ELEN        ), 
-        .ProtectedWidth   (ELEN + 7    )
-      ) i_ecc_vregfile (
-        .clk_i     (clk_i                        ),
-        .rst_ni    (rst_ni                       ),
-        .testmode_i(testmode_i                   ),
-        .waddr_i   (waddr[bank]                  ),
-        .wdata_i   (wdata[bank][ELEN*cut +: ELEN]),
-        .we_i      (we[bank]                     ),
-        .wbe_i     (wbe[bank][ELENB*cut +: ELENB]),
-        .raddr_i   (raddr[bank]                  ),
-        .rdata_o   (rdata_int                    ),
-        .single_error_o       (single_error_vregfile[bank][cut]),
-        .multi_error_o        (multi_error_vregfile[bank][cut]), 
-        .gnt_o     (ecc_vregfile_gnt_o[bank][cut])        
-      );
-    end
-  end
+      // Combinational reads: one per bank read port
+      for (genvar port = 0; port < NrReadPortsPerBank; port++) begin : gen_rd_ports
+        assign rdata[bank][port][cut*CWWidth +: CWWidth] = vrf_mem[bank][cut][raddr[bank][port]];
+      end : gen_rd_ports
 
-  assign single_error_o = |single_error_vregfile;
-  assign multi_error_o  = |multi_error_vregfile;
+    end : gen_vrf_cuts
+  end : gen_vrf_banks
 
-  //-------------------------------------------------
+  // ECC error outputs are driven by the decoders in spatz.sv
+  assign single_error_o = 1'b0;
+  assign multi_error_o  = 1'b0;
+
+  //---------------------------------------------------------------------------------
 
   ////////////////
   // Assertions //

@@ -33,14 +33,14 @@ module spatz_vlsu
     output vlsu_rsp_t                       vlsu_rsp_o,
     // Interface with the VRF
     output vrf_addr_t                       vrf_waddr_o,
-    output vrf_data_t                       vrf_wdata_o,
+    output logic [N_FU*(ELEN+7)-1:0]        vrf_wdata_ecc_o,
     output logic                            vrf_we_o,
     output vrf_be_t                         vrf_wbe_o,
     input  logic                            vrf_wvalid_i,
     output spatz_id_t      [2:0]            vrf_id_o,
     output vrf_addr_t      [1:0]            vrf_raddr_o,
     output logic           [1:0]            vrf_re_o,
-    input  vrf_data_t      [1:0]            vrf_rdata_i,
+    input  logic [1:0][N_FU*(ELEN+7)-1:0]  vrf_rdata_ecc,
     input  logic           [1:0]            vrf_rvalid_i,
     // Memory Request
     output spatz_mem_req_t [NrMemPorts-1:0] spatz_mem_req_o,
@@ -197,11 +197,11 @@ module spatz_vlsu
 
   typedef logic [int'(MAXEW)-1:0] addr_offset_t;
 
-  elen_t [NrMemPorts-1:0] rob_wdata;
-  id_t   [NrMemPorts-1:0] rob_wid;
-  logic  [NrMemPorts-1:0] rob_push;
-  logic  [NrMemPorts-1:0] rob_rvalid;
-  elen_t [NrMemPorts-1:0] rob_rdata;
+  logic  [NrMemPorts-1:0][ELEN+7-1:0] rob_wdata;
+  id_t   [NrMemPorts-1:0]             rob_wid;
+  logic  [NrMemPorts-1:0]             rob_push;
+  logic  [NrMemPorts-1:0]             rob_rvalid;
+  logic  [NrMemPorts-1:0][ELEN+7-1:0] rob_rdata;
   logic  [NrMemPorts-1:0] rob_pop;
   id_t   [NrMemPorts-1:0] rob_rid;
   logic  [NrMemPorts-1:0] rob_req_id;
@@ -214,7 +214,7 @@ module spatz_vlsu
   for (genvar port = 0; port < NrMemPorts; port++) begin : gen_rob
 `ifdef MEMPOOL_SPATZ
     reorder_buffer #(
-      .DataWidth(ELEN              ),
+      .DataWidth(ELEN+7            ),
       .NumWords (NrOutstandingLoads)
     ) i_reorder_buffer (
       .clk_i    (clk_i           ),
@@ -233,7 +233,7 @@ module spatz_vlsu
     );
 `else
     fifo_v3 #(
-      .DATA_WIDTH(ELEN              ),
+      .DATA_WIDTH(ELEN+7            ),
       .DEPTH     (NrOutstandingLoads)
     ) i_reorder_buffer (
       .clk_i     (clk_i           ),
@@ -445,6 +445,20 @@ module spatz_vlsu
   // Address Generation //
   ////////////////////////
 
+  // Decoded VS2 word for indexed-load address computation (N_FU lanes decoded in parallel)
+  logic [N_FU*ELEN-1:0] vs2_decoded;
+  for (genvar cut = 0; cut < N_FU; cut++) begin : gen_vs2_idx_dec
+    hsiao_ecc_dec #(
+      .DataWidth(ELEN),
+      .ProtWidth(7)
+    ) i_vs2_idx_dec (
+      .in        (vrf_rdata_ecc[1][(ELEN+7)*cut +: (ELEN+7)]),
+      .out       (vs2_decoded[ELEN*cut +: ELEN]),
+      .syndrome_o(),
+      .err_o     ()
+    );
+  end : gen_vs2_idx_dec
+
   elen_t [NrMemPorts-1:0] mem_req_addr;
 
   vrf_addr_t vd_vreg_addr;
@@ -516,11 +530,11 @@ module spatz_vlsu
                       (idx_offset & (num_idx_maxew_bytes - 1)) +
                       ((idx_offset >> log2_num_idx_maxew_bytes) << log2_num_idx_maxew_bytes) * NrMemPorts;
 
-        // Index
+        // Index — use decoded VS2 word (N_FU decoders above)
         unique case (mem_spatz_req.op_mem.ew)
-          EW_8 : offset   = $signed(vrf_rdata_i[1][8 * word_index +: 8]);
-          EW_16: offset   = $signed(vrf_rdata_i[1][8 * word_index +: 16]);
-          default: offset = $signed(vrf_rdata_i[1][8 * word_index +: 32]);
+          EW_8 : offset   = $signed(vs2_decoded[8 * word_index +: 8]);
+          EW_16: offset   = $signed(vs2_decoded[8 * word_index +: 16]);
+          default: offset = $signed(vs2_decoded[8 * word_index +: 32]);
         endcase
       end else begin
         offset = ({mem_counter_q[port][$bits(vlen_t)-1:MAXEW] << $clog2(NrMemPorts), mem_counter_q[port][int'(MAXEW)-1:0]} + (port << MAXEW)) * stride;
@@ -669,7 +683,7 @@ module spatz_vlsu
 
   typedef struct packed {
     vrf_addr_t waddr;
-    vrf_data_t wdata;
+    logic [N_FU*(ELEN+7)-1:0] wdata;
     vrf_be_t wbe;
 
     vlsu_rsp_t rsp;
@@ -693,79 +707,28 @@ module spatz_vlsu
     .ready_i(vrf_req_ready_q)
   );
 
-  /////////////////////////
-  //  Coalescing Buffer  //
-  /////////////////////////
+  //////////////////////////
+  //  VRF Write Interface  //
+  //////////////////////////
 
-  // Coalesce the data write to VRF after it construct a full vector word
-  vrf_req_t coalesce_d, coalesce_q;
-  logic     coalesce_valid_d, coalesce_valid_q;
+  // Drive the VRF write port directly from the spill-register output. Each
+  // partial (possibly sub-word) write is forwarded as-is, still encoded as a
+  // 39-bit ECC codeword per FU lane — it is never decoded here. Merging of
+  // successive partial writes that target the same VRF word (byte-level
+  // read-modify-write across cycles) happens downstream, in spatz.sv's
+  // gen_vlsu_vrf_ecc/vlsu_prev_merged_q logic, which is the only place the
+  // codeword is decoded, merged with the accumulated bytes, and re-encoded
+  // before reaching the VRF.
+  assign vrf_waddr_o     = vrf_req_q.waddr;
+  assign vrf_wdata_ecc_o = vrf_req_q.wdata;
+  assign vrf_wbe_o       = vrf_req_q.wbe;
+  assign vrf_we_o        = vrf_req_valid_q;
+  assign vrf_id_o        = {vrf_req_q.rsp.id, mem_spatz_req.id, commit_insn_q.id};
+  assign vrf_req_ready_q = vrf_wvalid_i;
 
-  `FF(coalesce_q, coalesce_d, '0)
-  `FF(coalesce_valid_q, coalesce_valid_d, '0)
-
-  // The coalescing buffer is ready to commit when the accumulated byte-enable
-  // covers the full VRF word, or when this is the last write of the instruction.
-  // Force a commit when the next pending write targets a different VRF word address.
-  logic next_addr_different;
-  assign next_addr_different = coalesce_valid_q && vrf_req_valid_q &&
-                               (coalesce_q.waddr != vrf_req_q.waddr);
-
-  logic coalesce_commit;
-  assign coalesce_commit = coalesce_valid_q && (&coalesce_q.wbe || coalesce_q.rsp_valid || next_addr_different);
-
-  // Drive VRF outputs from the coalescing buffer, not the raw spill-register.
-  assign vrf_waddr_o = coalesce_q.waddr;
-  assign vrf_wdata_o = coalesce_q.wdata;
-  assign vrf_wbe_o   = coalesce_q.wbe;
-  assign vrf_we_o    = coalesce_commit;
-  assign vrf_id_o    = {coalesce_q.rsp.id, mem_spatz_req.id, commit_insn_q.id};
-
-  // The spill register may be popped when the coalescing buffer can accept:
-  //   - buffer is empty, OR
-  //   - buffer is still accumulating (not yet commit-ready), OR
-  //   - buffer is committing this cycle (VRF accepting, freeing a slot)
-  assign vrf_req_ready_q = !coalesce_valid_q || !coalesce_commit || vrf_wvalid_i;
-
-  // Ack when the vector store finishes, or when the load's coalesced write commits to the VRF
-  assign vlsu_rsp_o       = coalesce_q.rsp_valid && coalesce_commit ? coalesce_q.rsp : '{id: commit_insn_q.id, default: '0};
-  assign vlsu_rsp_valid_o = coalesce_q.rsp_valid && coalesce_commit ? vrf_wvalid_i   : vlsu_finished_req && !commit_insn_q.is_load;
-
-  always_comb begin : coalesce_proc
-    coalesce_d       = coalesce_q;
-    coalesce_valid_d = coalesce_valid_q;
-
-    // When the VRF accepts the coalesced write, clear the buffer.
-    if (coalesce_commit && vrf_wvalid_i) begin
-      coalesce_d       = '0;
-      coalesce_valid_d = 1'b0;
-    end
-
-    // Accept a new partial write from the spill-register output.
-    if (vrf_req_valid_q && vrf_req_ready_q) begin
-      if (coalesce_valid_q && !(coalesce_commit && vrf_wvalid_i)) begin
-        // Merge into the existing accumulation (same VRF word in progress):
-        // OR the byte enables and splice in only the newly-valid data bytes.
-        for (int unsigned i = 0; i < N_FU*ELENB; i++)
-          if (vrf_req_q.wbe[i])
-            coalesce_d.wdata[8*i +: 8] = vrf_req_q.wdata[8*i +: 8];
-        coalesce_d.wbe = coalesce_d.wbe | vrf_req_q.wbe;
-        // Carry the rsp metadata from the last write of the instruction.
-        if (vrf_req_q.rsp_valid) begin
-          coalesce_d.rsp       = vrf_req_q.rsp;
-          coalesce_d.rsp_valid = 1'b1;
-        end
-      end else begin
-        // Buffer was empty or just committed — start a fresh accumulation.
-        coalesce_d.waddr     = vrf_req_q.waddr;
-        coalesce_d.wdata     = vrf_req_q.wdata;
-        coalesce_d.wbe       = vrf_req_q.wbe;
-        coalesce_d.rsp       = vrf_req_q.rsp;
-        coalesce_d.rsp_valid = vrf_req_q.rsp_valid;
-        coalesce_valid_d     = 1'b1;
-      end
-    end
-  end : coalesce_proc
+  // Ack when the vector store finishes, or when the load's write commits to the VRF
+  assign vlsu_rsp_o       = vrf_req_q.rsp_valid && vrf_req_valid_q ? vrf_req_q.rsp   : '{id: commit_insn_q.id, default: '0};
+  assign vlsu_rsp_valid_o = vrf_req_q.rsp_valid && vrf_req_valid_q ? vrf_req_ready_q : vlsu_finished_req && !commit_insn_q.is_load;
 
   //////////////
   // Counters //
@@ -901,7 +864,7 @@ module spatz_vlsu
 
   // Memory request signals
   id_t  [NrMemPorts-1:0]                   mem_req_id;
-  logic [NrMemPorts-1:0][MemDataWidth-1:0] mem_req_data;
+  logic [NrMemPorts-1:0][ELEN+7-1:0]      mem_req_data;
   logic [NrMemPorts-1:0]                   mem_req_svalid;
   logic [NrMemPorts-1:0][ELEN/8-1:0]       mem_req_strb;
   logic [NrMemPorts-1:0]                   mem_req_lvalid;
@@ -988,6 +951,35 @@ module spatz_vlsu
     end
   end
 
+  // Load-side ECC decode/re-encode for byte-level data manipulation.
+  //
+  // rob_rdata stores a 39-bit ECC codeword. When the load commit path needs
+  // byte-level realignment, the codeword must not be rotated directly.
+  // Instead, decode to the 32-bit payload, realign the payload, and re-encode.
+  logic [NrMemPorts-1:0][ELEN-1:0]   load_rsp_data_decoded;
+  logic [NrMemPorts-1:0][ELEN-1:0]   load_rsp_data_aligned;
+  logic [NrMemPorts-1:0][ELEN+7-1:0] load_rsp_data_encoded;
+
+  for (genvar port = 0; port < NrMemPorts; port++) begin : gen_load_rsp_ecc
+    hsiao_ecc_dec #(
+      .DataWidth(ELEN),
+      .ProtWidth(7)
+    ) i_load_rsp_ecc_dec (
+      .in        (rob_rdata[port]),
+      .out       (load_rsp_data_decoded[port]),
+      .syndrome_o(),
+      .err_o     ()
+    );
+
+    hsiao_ecc_enc #(
+      .DataWidth(ELEN),
+      .ProtWidth(7)
+    ) i_load_rsp_ecc_enc (
+      .in  (load_rsp_data_aligned[port]),
+      .out (load_rsp_data_encoded[port])
+    );
+  end
+
   // verilator lint_off LATCH
   always_comb begin
     load_wbe = '0;
@@ -1009,6 +1001,8 @@ module spatz_vlsu
     mem_req_svalid = '0;
     mem_req_lvalid = '0;
     mem_req_last   = '0;
+
+    load_rsp_data_aligned = load_rsp_data_decoded;
 
     // Propagate request ID
     vrf_req_d.rsp.id    = commit_insn_q.id;
@@ -1034,7 +1028,11 @@ module spatz_vlsu
         // rob_rvalid: data is in the rob ready to be written back to VRF
         vrf_req_valid_d = &(rob_rvalid | ~mem_pending) && |mem_pending && (commit_insn_q.vm || v0_t_read_done);
         for (int unsigned port = 0; port < NrMemPorts; port++) begin
-          automatic logic [63:0] data = rob_rdata[port];
+          // automatic logic [63:0] data = rob_rdata[port];
+          automatic logic [63:0] data;
+
+          data = '0;
+          data[ELEN-1:0] = load_rsp_data_decoded[port];
 
           // Shift data to correct position if we have an unaligned memory request
           if (MAXEW == EW_32)
@@ -1079,7 +1077,9 @@ module spatz_vlsu
                 3'b111: data  = {data[7:0], data[63:8]};
                 default: data = data;
               endcase
-          vrf_req_d.wdata[ELEN*port +: ELEN] = data;
+          // vrf_req_d.wdata[(ELEN+7)*port +: (ELEN+7)] = data[ELEN+7-1:0];
+          load_rsp_data_aligned[port] = data[ELEN-1:0];
+          vrf_req_d.wdata[(ELEN+7)*port +: (ELEN+7)] = load_rsp_data_encoded[port];
 
           // Create write byte enable mask for register file
           if (commit_counter_en[port])
@@ -1130,7 +1130,7 @@ module spatz_vlsu
         vrf_re_o[0] = 1'b1;
 
         for (int unsigned port = 0; port < NrMemPorts; port++) begin
-          rob_wdata[port]  = vrf_rdata_i[0][ELEN*port +: ELEN];
+          rob_wdata[port]  = vrf_rdata_ecc[0][(ELEN+7)*port +: (ELEN+7)];
           rob_wid[port]    = rob_id[port];
           rob_req_id[port] = vrf_rvalid_i[0] && (!mem_is_indexed || vrf_rvalid_i[1]);
           rob_push[port]   = rob_req_id[port];

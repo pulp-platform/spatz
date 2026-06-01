@@ -129,10 +129,38 @@ module spatz_vsldu
     .ready_i(vrf_req_ready_q)
   );
 
+  // ECC RMW FSM: stall for one cycle on partial write, then write merged codeword.
+  // Read port (VSLDU_VS2_RD) is redirected to write address in PENDING state;
+  // spatz.sv decodes the old codeword and returns it via vrf_rdata_i.
+  typedef enum logic { VSLDU_RMW_IDLE, VSLDU_RMW_PENDING } vsldu_rmw_e;
+  vsldu_rmw_e vsldu_rmw_q, vsldu_rmw_d;
+  `FF(vsldu_rmw_q, vsldu_rmw_d, VSLDU_RMW_IDLE)
+
+  logic vsldu_rmw_stall; // 1 during the stall cycle: suppresses vrf_we_o
+
+  // Gate vrf_rvalid_i from slider logic so that RMW reads don't advance
+  // counters or clear the prefetch flag.
+  logic vrf_rvalid_slider;
+  assign vrf_rvalid_slider = vrf_rvalid_i & (vsldu_rmw_q == VSLDU_RMW_IDLE);
+
+  // Natural re from the slider (without RMW override); used in req_valid.
+  logic vrf_re_slider;
+
+  // Byte-enable to bit-mask expansion for merge
+  logic [N_FU*ELEN-1:0] vsldu_rmw_be_mask;
+  for (genvar b = 0; b < N_FU*ELENB; b++) begin : gen_vsldu_rmw_be_mask
+    assign vsldu_rmw_be_mask[b*8 +: 8] = {8{vrf_req_q.wbe[b]}};
+  end
+
+  // Merged data: new bytes from write buffer, old bytes from VS2_RD (decoded by spatz.sv)
+  logic [N_FU*ELEN-1:0] vsldu_rmw_merged;
+  assign vsldu_rmw_merged = ( vrf_req_q.wdata &  vsldu_rmw_be_mask)
+                          | (vrf_rdata_i       & ~vsldu_rmw_be_mask);
+
   assign vrf_waddr_o     = vrf_req_q.waddr;
-  assign vrf_wdata_o     = vrf_req_q.wdata;
-  assign vrf_wbe_o       = vrf_req_q.wbe;
-  assign vrf_we_o        = vrf_req_valid_q;
+  assign vrf_wdata_o     = (vsldu_rmw_q == VSLDU_RMW_PENDING) ? vsldu_rmw_merged : vrf_req_q.wdata;
+  assign vrf_wbe_o       = (vsldu_rmw_q == VSLDU_RMW_PENDING) ? '1               : vrf_req_q.wbe;
+  assign vrf_we_o        = vrf_req_valid_q & ~vsldu_rmw_stall;
   assign vrf_id_o[0]     = spatz_req.id; // ID of the instruction currently reading elements
   assign vrf_req_ready_q = vrf_wvalid_i;
 
@@ -366,7 +394,7 @@ module spatz_vsldu
     end
 
     // Do we have to increment the counter?
-    vreg_counter_en = (vreg_operation_first_q!=VREG_READ_V0_t_lo) && (vreg_operation_first_q!=VREG_READ_V0_t_hi) && ((spatz_req.use_vs2 && vrf_re_o && vrf_rvalid_i) || !spatz_req.use_vs2) && ((spatz_req.use_vd && vrf_req_valid_d && vrf_req_ready_d) || !spatz_req.use_vd);
+    vreg_counter_en = (vreg_operation_first_q!=VREG_READ_V0_t_lo) && (vreg_operation_first_q!=VREG_READ_V0_t_hi) && ((spatz_req.use_vs2 && vrf_re_o && vrf_rvalid_slider) || !spatz_req.use_vs2) && ((spatz_req.use_vd && vrf_req_valid_d && vrf_req_ready_d) || !spatz_req.use_vd);
     if (vreg_counter_en) begin
       if (vreg_operation_last)
         // Reset the counter
@@ -534,8 +562,12 @@ module spatz_vsldu
   end
 
   // VRF signals
-  assign vrf_re_o        = (vreg_operation_first_q == VREG_READ_V0_t_lo)||(vreg_operation_first_q == VREG_READ_V0_t_hi)||(spatz_req.use_vs2 && (spatz_req_valid || prefetch_q) && running_q[spatz_req.id]);
-  assign vrf_req_valid_d = (vreg_operation_first_q != VREG_READ_V0_t_lo)&&(vreg_operation_first_q != VREG_READ_V0_t_hi)&& spatz_req_valid && spatz_req.use_vd && (vrf_re_o || !spatz_req.use_vs2) && (vrf_rvalid_i || !spatz_req.use_vs2) && !prefetch_q;
+  assign vrf_re_slider   = spatz_req.use_vs2 && (spatz_req_valid || prefetch_q) && running_q[spatz_req.id];
+  // In RMW_PENDING, force re=1 so VS2_RD port reads old codeword at write address.
+  // Also force re=1 while reading the v0.t mask operand (not covered by vrf_re_slider).
+  assign vrf_re_o        = (vreg_operation_first_q == VREG_READ_V0_t_lo) || (vreg_operation_first_q == VREG_READ_V0_t_hi) || (vsldu_rmw_q == VSLDU_RMW_PENDING) ? 1'b1 : vrf_re_slider;
+  // Gate with vrf_re_slider / vrf_rvalid_slider so the RMW read never triggers a new write.
+  assign vrf_req_valid_d = (vreg_operation_first_q != VREG_READ_V0_t_lo) && (vreg_operation_first_q != VREG_READ_V0_t_hi) && spatz_req_valid && spatz_req.use_vd && (vrf_re_slider || !spatz_req.use_vs2) && (vrf_rvalid_slider || !spatz_req.use_vs2) && !prefetch_q;
 
   ////////////////////////
   // Address Generation //
@@ -553,8 +585,34 @@ module spatz_vsldu
     base_waddr[$bits(vrf_addr_t)-1:zero_fill_idx] = spatz_req.vd;
 
     sld_offset_rd   = is_slide_up ? (prefetch_q ? -slide_amount_q[$bits(vlen_t)-1:$clog2(VRFWordBWidth)] - 1 : -slide_amount_q[$bits(vlen_t)-1:$clog2(VRFWordBWidth)]) : prefetch_q ? slide_amount_q[$bits(vlen_t)-1:$clog2(VRFWordBWidth)] : slide_amount_q[$bits(vlen_t)-1:$clog2(VRFWordBWidth)] + 1;
-    vrf_raddr_o     = (vreg_operation_first_q == VREG_READ_V0_t_lo) ? '0 : (vreg_operation_first_q == VREG_READ_V0_t_hi) ? vrf_addr_t'(1) : base_raddr + vreg_counter_q[$bits(vlen_t)-1:$clog2(VRFWordBWidth)] + sld_offset_rd;
+    // In RMW_PENDING, redirect VS2_RD to write address so spatz.sv can decode old codeword.
+    vrf_raddr_o     = (vreg_operation_first_q == VREG_READ_V0_t_lo) ? '0
+                    : (vreg_operation_first_q == VREG_READ_V0_t_hi) ? vrf_addr_t'(1)
+                    : (vsldu_rmw_q == VSLDU_RMW_PENDING) ? vrf_req_q.waddr
+                    : base_raddr + vreg_counter_q[$bits(vlen_t)-1:$clog2(VRFWordBWidth)] + sld_offset_rd;
     vrf_req_d.waddr = base_waddr + vreg_counter_q[$bits(vlen_t)-1:$clog2(VRFWordBWidth)];
   end
+
+  // RMW FSM
+  // IDLE    : pass writes through; detect partial write → stall (we=0) → PENDING.
+  // PENDING : VS2_RD reads old codeword at write address; write merged result;
+  //           if VRF grants it (wvalid=1) the spill register pops normally.
+  //           If the VRF write fails (bank conflict) spill register retains data,
+  //           the next cycle re-detects the partial write and retries.
+  always_comb begin : vsldu_rmw_fsm
+    vsldu_rmw_d     = vsldu_rmw_q;
+    vsldu_rmw_stall = 1'b0;
+    unique case (vsldu_rmw_q)
+      VSLDU_RMW_IDLE: begin
+        if (vrf_req_valid_q && (vrf_req_q.wbe != {(N_FU*ELENB){1'b1}})) begin
+          vsldu_rmw_stall = 1'b1;           // suppress write; old data not yet fetched
+          vsldu_rmw_d     = VSLDU_RMW_PENDING;
+        end
+      end
+      VSLDU_RMW_PENDING:
+        vsldu_rmw_d = VSLDU_RMW_IDLE;      // merged write issued this cycle
+      default:;
+    endcase
+  end : vsldu_rmw_fsm
 
 endmodule : spatz_vsldu

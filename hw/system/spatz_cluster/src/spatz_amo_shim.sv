@@ -284,9 +284,9 @@ module spatz_amo_shim
   // ----------
   // Assertions
   // ----------
-  // Check that data width is legal (a power of two and at least 32 bit).
-  `ASSERT_INIT(DataWidthCheck,
-    DataWidth >= 32 &&  DataWidth <= 64 && 2**$clog2(DataWidth) == DataWidth)
+  // Check that data width is at least 32 bit and at most 64 bit.
+  // Power-of-2 not required: ECC-protected widths (e.g. 39) are valid.
+  `ASSERT_INIT(DataWidthCheck, DataWidth >= 32 && DataWidth <= 64)
   // Make sure that write is never set for AMOs.
   `ASSERT(AMOWriteEnable, valid_i && !amo_i inside {AMONone} |-> !write_i)
   // Make sure DMA transfers are not AMOs.

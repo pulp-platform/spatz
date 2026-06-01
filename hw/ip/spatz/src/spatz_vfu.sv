@@ -1068,6 +1068,24 @@ module spatz_vfu
   vrf_addr_t [2:0] vreg_addr_q, vreg_addr_d;
   `FF(vreg_addr_q, vreg_addr_d, '0)
 
+  // ECC RMW FSM: for partial writes (narrowing, reductions) stall one cycle,
+  // then redirect VFU_VD_RD to the write address so spatz.sv returns the old
+  // decoded codeword via vrf_rdata_i[2] for merging.
+  typedef enum logic { VFU_NORMAL, VFU_RMW } vfu_rmw_e;
+  vfu_rmw_e vfu_rmw_q, vfu_rmw_d;
+  `FF(vfu_rmw_q, vfu_rmw_d, VFU_NORMAL)
+
+  // Byte-enable to bit-mask expansion for RMW merge
+  logic [N_FU*ELEN-1:0] vfu_rmw_be_mask;
+  for (genvar b = 0; b < N_FU*ELENB; b++) begin : gen_vfu_rmw_be_mask
+    assign vfu_rmw_be_mask[b*8 +: 8] = {8{vreg_wbe[b]}};
+  end
+
+  // Merged data: new bytes from VFU result (post VFCMP accumulation), old bytes from VD_RD (decoded in spatz.sv)
+  logic [N_FU*ELEN-1:0] vfu_rmw_merged;
+  logic [N_FU*ELEN-1:0] vrf_wdata_pre;
+  assign vfu_rmw_merged = (vrf_wdata_pre & vfu_rmw_be_mask) | (vrf_rdata_i[2] & ~vfu_rmw_be_mask);
+
   // Calculate new vector register address
   always_comb begin : vreg_addr_proc
     vreg_addr_d = vreg_addr_q;
@@ -1099,6 +1117,9 @@ module spatz_vfu
           vreg_addr_d[1] =  1 << $clog2(NrWordsPerVector);
           vrf_raddr_o = vreg_addr_d;
         end
+        // RMW: redirect VD_RD (index 2) to write address so spatz.sv decodes old codeword
+        if (vfu_rmw_q == VFU_RMW)
+          vrf_raddr_o[2] = vrf_addr_t'(result_tag.vd_addr);
         else begin
 
           if (spatz_req_valid && vl_q == '0) begin
@@ -1341,12 +1362,33 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
 
   `FF(wdata_q, wdata_d, '0)
 
-  // Register file signals
-  assign vrf_re_o    = vreg_r_req;
-  assign vrf_we_o    = vreg_we;
-  assign vrf_wbe_o   = vreg_wbe;
-  assign vrf_wdata_o = (spatz_req.op == VFCMP) ? (wdata_q | vreg_wdata) : vreg_wdata;
-  assign vrf_id_o    = {result_tag.id, {3{spatz_req.id}}};
+  // Data to be written to the VRF before ECC RMW merging (VFCMP accumulates masked compare bits)
+  assign vrf_wdata_pre = (spatz_req.op == VFCMP) ? (wdata_q | vreg_wdata) : vreg_wdata;
+
+  // Register file signals – RMW FSM controls stall and merged write
+  always_comb begin : vfu_rmw_write_out
+    vfu_rmw_d   = vfu_rmw_q;
+    vrf_we_o    = vreg_we;
+    vrf_wbe_o   = vreg_wbe;
+    vrf_wdata_o = vrf_wdata_pre;
+    unique case (vfu_rmw_q)
+      VFU_NORMAL: begin
+        if (vreg_we && (vreg_wbe != '1)) begin
+          vrf_we_o  = 1'b0;   // stall: old codeword not yet fetched
+          vfu_rmw_d = VFU_RMW;
+        end
+      end
+      VFU_RMW: begin
+        vrf_wdata_o = vfu_rmw_merged; // merged: new bytes | old bytes
+        vrf_wbe_o   = '1;             // write full word
+        vfu_rmw_d   = VFU_NORMAL;
+      end
+      default:;
+    endcase
+  end : vfu_rmw_write_out
+
+  assign vrf_re_o = (vfu_rmw_q == VFU_RMW) ? (vreg_r_req | 3'b100) : vreg_r_req;
+  assign vrf_id_o = {result_tag.id, {3{spatz_req.id}}};
 
   //////////
   // IPUs //

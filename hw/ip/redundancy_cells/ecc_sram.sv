@@ -152,7 +152,6 @@ module ecc_sram #(
 
   end else begin : gen_ecc_input
 
-    assign ecc_error = '0;
     logic [  ProtectedWidth-1:0] lns_wdata;
     logic [UnprotectedWidth-1:0] intermediate_data_ld, intermediate_data_st;
 
@@ -166,7 +165,7 @@ module ecc_sram #(
       .in        ( rmw_buffer_end ),
       .out       ( intermediate_data_ld ),
       .syndrome_o(),
-      .err_o     ()
+      .err_o     (ecc_error)
     );
 
     hsiao_ecc_dec #(

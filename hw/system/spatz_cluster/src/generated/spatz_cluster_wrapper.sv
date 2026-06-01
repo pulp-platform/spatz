@@ -181,7 +181,7 @@ module spatz_cluster_wrapper
   localparam int unsigned NumSpatzOutstandingLoads [NumCores] = '{4};
   localparam int unsigned NumSpatzFPUs             [NumCores] = '{default: 8};
   localparam int unsigned NumSpatzIPUs             [NumCores] = '{default: 1};
-  localparam int unsigned NumSpatzTCDMPorts        [NumCores] = '{default: 8};
+  localparam int unsigned NumSpatzTCDMPorts        [NumCores] = '{default: 8}; // every core has 8 TCDM ports
 
   typedef logic [IwcAxiIdOutWidth-1:0] axi_id_out_iwc_t;
 
@@ -225,6 +225,7 @@ module spatz_cluster_wrapper
     .AxiIdWidthOut (IwcAxiIdOutWidth),
     .AxiUserWidth (AxiUserWidth),
     .NarrowAXIDataWidth (SpatzNarrowAxiDataWidth),
+    .TCDMProtDataWidth  (SpatzNarrowAxiDataWidth + 7),
     .BootAddr (32'h1000),
     .ClusterPeriphSize (64),
     .NrCores (1),
