@@ -47,6 +47,7 @@ endif
 ifeq ($(QUADRILATERO),1)
 	VSIM_BENDER += -t quadrilatero
 	VLT_BENDER += -t quadrilatero
+	VSIM_BENDER += -t quadrilatero_debug
 endif
 
 # Include Makefrag
@@ -163,7 +164,7 @@ spatz.cleandata:
 .PHONY: quadrilatero.gendata
 ifneq ($(QUAD_RLEN),0)
 quadrilatero.gendata:
-	@python3.11 -c "import torch, numpy" 2>/dev/null || python3.11 -m pip install --user torch numpy
+	@${PYTHON} -c "import torch, numpy" 2>/dev/null || ${PYTHON} -m pip install --user torch numpy
 	@grep -E '^\s*add_quadrilatero_test_threeParam\(' $(ROOT)/sw/quadrilateroBenchmarks/CMakeLists.txt | \
 	sed 's/.*add_quadrilatero_test_threeParam(\([^)]*\))/\1/' | \
 	while IFS=' ' read -r name _path M N K rest; do \
@@ -188,15 +189,22 @@ quadrilatero.gendata:
 		if [ -f "$$output" ]; then \
 			echo "Data already present for benchmark $$name (M=$$M N=$$N K=$$K)"; \
 		else \
-			cmd="python3.11 $(ROOT)/sw/quadrilateroBenchmarks/scripts/dataMatMul.py --M $$M --N $$N --K $$K --dtype $$dtype --inc_dir $$benchmark_dir/data --transA 1 --bits $$bits"; \
+			cmd="${PYTHON} $(ROOT)/sw/quadrilateroBenchmarks/scripts/dataMatMul.py --M $$M --N $$N --K $$K --dtype $$dtype --inc_dir $$benchmark_dir/data --transA 1 --bits $$bits"; \
 			if [ -n "$$fp8_fmt" ]; then cmd="$$cmd --fp8_fmt $$fp8_fmt"; fi; \
 			echo "Generating $$name (M=$$M N=$$N K=$$K): $$cmd"; \
 			(cd "$$benchmark_dir" && $$cmd) || true; \
 		fi; \
 	done
+
+quadrilatero.cleandata:
+	rm $(ROOT)/sw/quadrilateroBenchmarks/matmul/*/data/data_*.h
+	
 else
 quadrilatero.gendata:
 	@echo "Skipping Quadrilatero data generation (QUAD_RLEN=0)"
+
+quadrilatero.cleandata:
+	@echo "Skipping Quadrilatero clean data (QUAD_RLEN=0)"
 endif
 
 #############
