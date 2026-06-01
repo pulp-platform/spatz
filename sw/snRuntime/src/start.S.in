@@ -13,8 +13,13 @@ _start:
     .globl _start
 
 snrt.crt0.init_vec_registers:
-    li t0, -1
-    vsetvli	zero, t0, e32, m8, ta, ma
+    # Check if core has vector registers, otherwise skip
+    csrr    t0, misa
+    li      t1, (1 << 21)    
+    and     t0, t0, t1       # check 'V' extension (bit 21 = 'V')
+    beqz    t0, snrt.crt0.init_fp_registers
+    li      t0, -1
+    vsetvli zero, t0, e32, m8, ta, ma
     vmv.v.i v0, 0
     vmv.v.i v8, 0
     vmv.v.i v16, 0
