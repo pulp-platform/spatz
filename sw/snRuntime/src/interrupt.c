@@ -31,6 +31,12 @@ void irq_m_ext(uint32_t core_idx);
 void irq_m_cluster(uint32_t core_idx);
 
 //================================================================================
+// Runtime assembly definitions
+//================================================================================
+
+extern void _snrt_exit(uint32_t code);
+
+//================================================================================
 // Public functions
 //================================================================================
 
@@ -67,9 +73,7 @@ void __snrt_isr(void) {
                 break;
         }
     } else {
-        // exceptions not handled, halt
-        while (1)
-            ;
+      _snrt_exit(0xBAD);
     }
 }
 
