@@ -339,14 +339,14 @@ int main() {
 
     if ((QUAD_RLEN == 0) || cid == 0) {
 #if (PREC == 64)
-      gemv_v64b_m4(mat_core_ptr, current_dense_vec, result_core, gemv_l.M, m_core,
-                  curr_active_rows);
+      gemv_v64b_m4(mat_core_ptr, current_dense_vec, result_core, gemv_l.M,
+                   m_core, curr_active_rows);
 #elif (PREC == 32)
-      gemv_v32b_m4(mat_core_ptr, current_dense_vec, result_core, gemv_l.M, m_core,
-                  curr_active_rows);
+      gemv_v32b_m4(mat_core_ptr, current_dense_vec, result_core, gemv_l.M,
+                   m_core, curr_active_rows);
 #else
-      gemv_v16b_m4(mat_core_ptr, current_dense_vec, result_core, gemv_l.M, m_core,
-                  curr_active_rows);
+      gemv_v16b_m4(mat_core_ptr, current_dense_vec, result_core, gemv_l.M,
+                   m_core, curr_active_rows);
 #endif
     }
 

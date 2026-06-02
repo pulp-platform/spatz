@@ -27,6 +27,7 @@ workflow:
     - if: $CI_COMMIT_REF_NAME
 
 before_script:
+  - mkdir -p /home/gitlabci/caches
   - export PATH="$VERILATOR_BIN:$HOME/.local/bin:$PATH"
   - export PYTHONPATH="$CI_PROJECT_DIR/install/python-deps:$PYTHONPATH"
   # Clean the bender cache to remove the "Access Denied" history
