@@ -129,7 +129,18 @@ module spatz_vsldu
     .ready_i(vrf_req_ready_q)
   );
 
-  // ECC RMW FSM: stall for one cycle on partial write, then write merged codeword.
+  // Per-cut RMW needed: fires when any cut has a mixed byte enable (0 < wbe[cut] < all-1).
+  // This covers slide boundary elements where prestart bytes must be preserved.
+  // Cut-aligned slides (slide_amount % ELENB == 0) never trigger this.
+  logic vsldu_rmw_needed;
+  always_comb begin
+    vsldu_rmw_needed = 1'b0;
+    for (int c = 0; c < N_FU; c++)
+      if (vrf_req_q.wbe[c*ELENB +: ELENB] != '0 && vrf_req_q.wbe[c*ELENB +: ELENB] != {ELENB{1'b1}})
+        vsldu_rmw_needed = 1'b1;
+  end
+
+  // ECC RMW FSM: stall for one cycle on partial inner-cut write, then write merged codeword.
   // Read port (VSLDU_VS2_RD) is redirected to write address in PENDING state;
   // spatz.sv decodes the old codeword and returns it via vrf_rdata_i.
   typedef enum logic { VSLDU_RMW_IDLE, VSLDU_RMW_PENDING } vsldu_rmw_e;
@@ -161,7 +172,7 @@ module spatz_vsldu
   assign vrf_wdata_o     = (vsldu_rmw_q == VSLDU_RMW_PENDING) ? vsldu_rmw_merged : vrf_req_q.wdata;
   assign vrf_wbe_o       = (vsldu_rmw_q == VSLDU_RMW_PENDING) ? '1               : vrf_req_q.wbe;
   assign vrf_we_o        = vrf_req_valid_q & ~vsldu_rmw_stall;
-  assign vrf_id_o[0]     = spatz_req.id; // ID of the instruction currently reading elements
+  assign vrf_id_o[0]     = spatz_req.id;
   assign vrf_req_ready_q = vrf_wvalid_i;
 
   /////////////
@@ -594,23 +605,20 @@ module spatz_vsldu
   end
 
   // RMW FSM
-  // IDLE    : pass writes through; detect partial write → stall (we=0) → PENDING.
-  // PENDING : VS2_RD reads old codeword at write address; write merged result;
-  //           if VRF grants it (wvalid=1) the spill register pops normally.
-  //           If the VRF write fails (bank conflict) spill register retains data,
-  //           the next cycle re-detects the partial write and retries.
+  // IDLE    : pass writes through; detect inner-cut partial write → stall (we=0) → PENDING.
+  // PENDING : VS2_RD reads old codeword at write address; write merged result → IDLE.
   always_comb begin : vsldu_rmw_fsm
     vsldu_rmw_d     = vsldu_rmw_q;
     vsldu_rmw_stall = 1'b0;
     unique case (vsldu_rmw_q)
       VSLDU_RMW_IDLE: begin
-        if (vrf_req_valid_q && (vrf_req_q.wbe != {(N_FU*ELENB){1'b1}})) begin
-          vsldu_rmw_stall = 1'b1;           // suppress write; old data not yet fetched
+        if (vrf_req_valid_q && vsldu_rmw_needed) begin
+          vsldu_rmw_stall = 1'b1;
           vsldu_rmw_d     = VSLDU_RMW_PENDING;
         end
       end
       VSLDU_RMW_PENDING:
-        vsldu_rmw_d = VSLDU_RMW_IDLE;      // merged write issued this cycle
+        vsldu_rmw_d = VSLDU_RMW_IDLE;
       default:;
     endcase
   end : vsldu_rmw_fsm
