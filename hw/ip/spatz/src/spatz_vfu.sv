@@ -1068,14 +1068,24 @@ module spatz_vfu
   vrf_addr_t [2:0] vreg_addr_q, vreg_addr_d;
   `FF(vreg_addr_q, vreg_addr_d, '0)
 
-  // ECC RMW FSM: for partial writes (narrowing, reductions) stall one cycle,
-  // then redirect VFU_VD_RD to the write address so spatz.sv returns the old
-  // decoded codeword via vrf_rdata_i[2] for merging.
+  logic [N_FU*ELEN-1:0] vreg_wdata;
+
+  // Per-cut RMW needed: any cut where 0 < wbe[cut] < all-1.
+  // Narrowing never triggers this (each active cut has all ELENB bytes enabled).
+  // Masked instructions and EW_8/EW_16 reductions can have partial per-cut byte enables.
+  logic vfu_rmw_needed;
+  always_comb begin
+    vfu_rmw_needed = 1'b0;
+    for (int c = 0; c < N_FU; c++)
+      if (vreg_wbe[c*ELENB +: ELENB] != '0 && vreg_wbe[c*ELENB +: ELENB] != {ELENB{1'b1}})
+        vfu_rmw_needed = 1'b1;
+  end
+
   typedef enum logic { VFU_NORMAL, VFU_RMW } vfu_rmw_e;
   vfu_rmw_e vfu_rmw_q, vfu_rmw_d;
   `FF(vfu_rmw_q, vfu_rmw_d, VFU_NORMAL)
 
-  // Byte-enable to bit-mask expansion for RMW merge
+  // Byte-enable to bit-mask expansion for merge
   logic [N_FU*ELEN-1:0] vfu_rmw_be_mask;
   for (genvar b = 0; b < N_FU*ELENB; b++) begin : gen_vfu_rmw_be_mask
     assign vfu_rmw_be_mask[b*8 +: 8] = {8{vreg_wbe[b]}};
@@ -1365,30 +1375,31 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
   // Data to be written to the VRF before ECC RMW merging (VFCMP accumulates masked compare bits)
   assign vrf_wdata_pre = (spatz_req.op == VFCMP) ? (wdata_q | vreg_wdata) : vreg_wdata;
 
-  // Register file signals – RMW FSM controls stall and merged write
-  always_comb begin : vfu_rmw_write_out
-    vfu_rmw_d   = vfu_rmw_q;
-    vrf_we_o    = vreg_we;
-    vrf_wbe_o   = vreg_wbe;
-    vrf_wdata_o = vrf_wdata_pre;
+  // RMW FSM
+  // NORMAL : pass writes through; detect inner-cut partial write → stall (we=0) → VFU_RMW.
+  // VFU_RMW: assert re[2] with raddr[2]=write_addr; write merged result when rvalid[2]=1 → NORMAL.
+  always_comb begin : vfu_rmw_fsm
+    vfu_rmw_d = vfu_rmw_q;
     unique case (vfu_rmw_q)
-      VFU_NORMAL: begin
-        if (vreg_we && (vreg_wbe != '1)) begin
-          vrf_we_o  = 1'b0;   // stall: old codeword not yet fetched
+      VFU_NORMAL:
+        if (vreg_we && vfu_rmw_needed)
           vfu_rmw_d = VFU_RMW;
-        end
-      end
-      VFU_RMW: begin
-        vrf_wdata_o = vfu_rmw_merged; // merged: new bytes | old bytes
-        vrf_wbe_o   = '1;             // write full word
-        vfu_rmw_d   = VFU_NORMAL;
-      end
+      VFU_RMW:
+        if (vrf_rvalid_i[2])
+          vfu_rmw_d = VFU_NORMAL;
       default:;
     endcase
-  end : vfu_rmw_write_out
+  end : vfu_rmw_fsm
 
-  assign vrf_re_o = (vfu_rmw_q == VFU_RMW) ? (vreg_r_req | 3'b100) : vreg_r_req;
-  assign vrf_id_o = {result_tag.id, {3{spatz_req.id}}};
+  // In VFU_RMW: assert re[2] so spatz.sv reads old VD codeword at the write address.
+  assign vrf_re_o    = vreg_r_req | ((vfu_rmw_q == VFU_RMW) ? 3'b100 : 3'b000);
+  // NORMAL: suppress write when inner-cut partial write detected.
+  // VFU_RMW: write merged codeword once read data is valid.
+  assign vrf_we_o    = (vfu_rmw_q == VFU_RMW) ? (vreg_we && vrf_rvalid_i[2])
+                                               : (vreg_we && !vfu_rmw_needed);
+  assign vrf_wbe_o   = (vfu_rmw_q == VFU_RMW) ? '1             : vreg_wbe;
+  assign vrf_wdata_o = (vfu_rmw_q == VFU_RMW) ? vfu_rmw_merged : vrf_wdata_pre;
+  assign vrf_id_o    = {result_tag.id, {3{spatz_req.id}}};
 
   //////////
   // IPUs //

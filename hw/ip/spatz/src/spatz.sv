@@ -730,8 +730,11 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
 
     logic [ELEN-1:0] vlsu_merged_cut;
     for (genvar b = 0; b < ELENB; b++) begin : gen_vlsu_byte_merge
-      // wbe=1: take new decoded byte; wbe=0 + same addr: keep accumulated byte; else 0
+      // Gate the entire mux on vrf_we: when VLSU is not writing, feed the encoder a known
+      // value (accumulated register) to prevent X from undriven inputs propagating through
+      // the combinational ECC encoder and corrupting vrf_wdata_ecc[VLSU_VD_WD].
       assign vlsu_merged_cut[8*b +: 8] =
+        !vrf_we[VLSU_VD_WD] ? vlsu_prev_merged_q[ELEN*vlsu_cut + 8*b +: 8] :
         vrf_wbe_buf[VLSU_VD_WD][ELENB*vlsu_cut + b] ?
           vlsu_wdata_dec[ELEN*vlsu_cut + 8*b +: 8] :
           ((vrf_waddr_buf[VLSU_VD_WD] == vlsu_prev_waddr_q) ?
