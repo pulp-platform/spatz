@@ -88,7 +88,7 @@ int main() {
 #else
     acc = fdotp_v64b(a_int, b_int, dim);
 #endif
-  } else 
+  } else
     acc = 0.0;
   result[cid] = acc;
 

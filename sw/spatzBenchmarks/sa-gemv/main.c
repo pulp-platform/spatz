@@ -61,7 +61,7 @@ static inline int fp_check(const T *a, const T *b) {
 }
 
 int main() {
-  const unsigned int num_cores = snrt_cluster_core_num();
+  const unsigned int num_cores = snrt_cluster_core_num() - (QUAD_RLEN != 0);
   const unsigned int cid = snrt_cluster_core_idx();
 
   // Reset timer
@@ -337,16 +337,18 @@ int main() {
     // rows
     T *mat_core_ptr = mat_ptr + m_core * cid;
 
+    if ((QUAD_RLEN == 0) || cid == 0) {
 #if (PREC == 64)
-    gemv_v64b_m4(mat_core_ptr, current_dense_vec, result_core, gemv_l.M, m_core,
-                 curr_active_rows);
+      gemv_v64b_m4(mat_core_ptr, current_dense_vec, result_core, gemv_l.M, m_core,
+                  curr_active_rows);
 #elif (PREC == 32)
-    gemv_v32b_m4(mat_core_ptr, current_dense_vec, result_core, gemv_l.M, m_core,
-                 curr_active_rows);
+      gemv_v32b_m4(mat_core_ptr, current_dense_vec, result_core, gemv_l.M, m_core,
+                  curr_active_rows);
 #else
-    gemv_v16b_m4(mat_core_ptr, current_dense_vec, result_core, gemv_l.M, m_core,
-                 curr_active_rows);
+      gemv_v16b_m4(mat_core_ptr, current_dense_vec, result_core, gemv_l.M, m_core,
+                  curr_active_rows);
 #endif
+    }
 
     // Swap pointers for the next iteration
     T *temp = mat_ptr;
