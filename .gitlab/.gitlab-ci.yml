@@ -248,7 +248,7 @@ spatzBenchmarks-test-vlt:
 
 # Quadrilatero tests
 quadrilateroBenchmarks-test-vlt:
-  stage: test
+  stage: benchmark
   script:
     # Download LLVM and GCC
     - $CI_PROJECT_DIR/util/memora_retry.sh get tc-llvm
@@ -273,7 +273,7 @@ quadrilateroBenchmarks-test-vlt:
     - cd hw/system/spatz_cluster
     - ${VCS} make sw.vlt SPATZ_CLUSTER_CFG=${cfg}.hjson -B
     # Run the test
-    - cd sw/build/quadrilateroBenchmarksBenchmarks
+    - cd sw/build/quadrilateroBenchmarks
     - ${CTEST} --verbose
   needs: ["tc-llvm", "tc-gcc", "verilator"]
   parallel:
