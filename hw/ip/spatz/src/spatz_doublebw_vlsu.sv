@@ -87,6 +87,8 @@ module spatz_doublebw_vlsu
   logic       mem_spatz_req_valid;
   logic       mem_spatz_req_ready;
 
+  logic spatz_req_ready;
+
   spill_register #(
     .T(spatz_req_t)
   ) i_operation_queue (
@@ -94,7 +96,7 @@ module spatz_doublebw_vlsu
     .rst_ni (rst_ni                                         ),
     .data_i (spatz_req_d                                    ),
     .valid_i(spatz_req_valid_i && spatz_req_i.ex_unit == LSU),
-    .ready_o(spatz_req_ready_o                              ),
+    .ready_o(spatz_req_ready                                ),
     .data_o (mem_spatz_req                                  ),
     .valid_o(mem_spatz_req_valid                            ),
     .ready_i(mem_spatz_req_ready                            )
@@ -337,7 +339,7 @@ module spatz_doublebw_vlsu
   logic             commit_insn_push;
   commit_metadata_t commit_insn_q;
   logic             commit_insn_pop;
-  logic             commit_insn_empty;
+  logic             commit_insn_empty, commit_insn_full;
   logic             commit_insn_valid;
 
   fifo_v3 #(
@@ -351,12 +353,14 @@ module spatz_doublebw_vlsu
     .testmode_i(1'b0             ),
     .data_i    (commit_insn_d    ),
     .push_i    (commit_insn_push ),
-    .full_o    (/* Unused */     ),
+    .full_o    (commit_insn_full ),
     .data_o    (commit_insn_q    ),
     .empty_o   (commit_insn_empty),
     .pop_i     (commit_insn_pop  ),
     .usage_o   (/* Unused */     )
   );
+
+  assign spatz_req_ready_o = spatz_req_ready & !commit_insn_full;
 
   assign commit_insn_valid = !commit_insn_empty;
   assign commit_insn_d     = '{
@@ -383,7 +387,7 @@ module spatz_doublebw_vlsu
     commit_insn_push = 1'b0;
 
     // Did we start a new instruction?
-    if (mem_spatz_req_valid && !mem_insn_pending_q[mem_spatz_req.id]) begin
+    if (mem_spatz_req_valid && !mem_insn_pending_q[mem_spatz_req.id] && !commit_insn_full) begin
       mem_insn_pending_d[mem_spatz_req.id] = 1'b1;
       commit_insn_push                     = 1'b1;
     end
