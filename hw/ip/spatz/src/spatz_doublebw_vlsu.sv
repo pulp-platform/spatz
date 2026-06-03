@@ -142,6 +142,10 @@ module spatz_doublebw_vlsu
   state_t state_d, state_q;
   `FF(state_q, state_d, VLSU_RunningLoad)
 
+  // Memory requests
+  spatz_mem_req_t [NrInterfaces-1:0] [N_FU-1:0] spatz_mem_req;
+  logic           [NrInterfaces-1:0] [N_FU-1:0] spatz_mem_req_valid;
+  logic           [NrInterfaces-1:0] [N_FU-1:0] spatz_mem_req_ready;
 
   id_t [NrInterfaces-1:0] [N_FU-1:0] store_count_q;
   id_t [NrInterfaces-1:0] [N_FU-1:0] store_count_d;
@@ -160,7 +164,7 @@ module spatz_doublebw_vlsu
       for (int fu = 0; fu < N_FU; fu++) begin
         automatic int unsigned port = intf * N_FU + fu;
 
-        if (spatz_mem_req_o[port].write && spatz_mem_req_valid_o[port] && spatz_mem_req_ready_i[port])
+        if (spatz_mem_req[intf][fu].write && spatz_mem_req_valid[intf][fu] && spatz_mem_req_ready[intf][fu])
           // Did we send a store?
           store_count_d[intf][fu]++;
 
@@ -540,11 +544,6 @@ module spatz_doublebw_vlsu
   // Did we finish an instruction?
   logic vlsu_finished_req;
 
-  // Memory requests
-  spatz_mem_req_t [NrInterfaces-1:0] [N_FU-1:0] spatz_mem_req;
-  logic           [NrInterfaces-1:0] [N_FU-1:0] spatz_mem_req_valid;
-  logic           [NrInterfaces-1:0] [N_FU-1:0] spatz_mem_req_ready;
-
   always_comb begin: control_proc
     // Maintain state
     busy_d = busy_q;
@@ -849,7 +848,7 @@ module spatz_doublebw_vlsu
     for (int intf = 0; intf < NrInterfaces; intf++) begin
       for (int fu = 0; fu < N_FU; fu++) begin
         automatic int unsigned port = intf * N_FU + fu;
-        write_pending |= (spatz_mem_req_o[port].write & spatz_mem_req_valid_o[port]);
+        write_pending |= (store_count_d[intf][fu] != '0);
       end
     end
 
