@@ -120,6 +120,11 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
   localparam int unsigned PPNSize = AddrWidth - PAGE_SHIFT;
   localparam bit NSX = XF16 | XF16ALT | XF8 | XFVEC;
 
+  // Semantic aliases: borrowed opcodes for fine-grained fence variants.
+  // FENCE_I and SFENCE_VMA are unused on this bare-metal platform.
+  localparam logic [31:0] FENCE_SNITCH = FENCE_I;
+  localparam logic [31:0] FENCE_SPATZ  = SFENCE_VMA;
+
   logic illegal_inst, illegal_csr;
   logic interrupt, ecall, ebreak;
   logic zero_lsb;
@@ -426,6 +431,10 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
   logic dst_ready;
   logic opa_ready, opb_ready;
 
+  // Number of memory operations in the accelerator
+  logic [2:0] acc_mem_cnt_q, acc_mem_cnt_d;
+  `FFAR(acc_mem_cnt_q, acc_mem_cnt_d, '0, clk_i, rst_i)
+
   always_comb begin
     sb_d = sb_q;
     if (retire_load) sb_d[lsu_rd] = 1'b0;
@@ -451,16 +460,25 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
   assign acc_stall = (acc_qvalid_o & ~acc_qready_i) || (read_fcsr && acc_qrsp_i.isfloat);
   // the LSU Interface didn't accept our request yet
   assign lsu_stall = (lsu_tlb_qvalid & ~lsu_tlb_qready) || acc_mem_stall;
+  // fence.snitch (FENCE_I opcode): stall until Snitch LSU is drained.
+  logic fence_snitch_stall;
+  assign fence_snitch_stall = valid_instr & (inst_data_i ==? FENCE_SNITCH) & ~lsu_empty;
+  // fence.spatz (SFENCE_VMA opcode): stall until Spatz operations are drained.
+  logic fence_spatz_stall;
+  assign fence_spatz_stall = valid_instr & (inst_data_i ==? FENCE_SPATZ) & (|acc_mem_cnt_q);
+  // Full fence (FENCE opcode): stall until both Snitch LSU and Spatz are drained.
+  logic fence_stall;
+  assign fence_stall = valid_instr & (inst_data_i ==? FENCE) & (~lsu_empty | (|acc_mem_cnt_q));
   // Stall the stage if we either didn't get a valid instruction or the LSU/Accelerator is not ready
   assign stall = ~valid_instr
                 // The LSU is stalling.
                 | lsu_stall
                 // The accelerator port is stalling.
                 | acc_stall
-                // We are waiting on the `fence.i` flush.
-                | (flush_i_valid_o & ~flush_i_ready_i)
-                // We are waiting on the `fence` flush.
-                | (valid_instr & (inst_data_i ==? FENCE) & ~lsu_empty);
+                // We are waiting on a fence flush.
+                | fence_snitch_stall
+                | fence_spatz_stall
+                | fence_stall;
 
   // --------------------
   // Instruction Frontend
@@ -992,12 +1010,13 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
       FENCE: begin
         write_rd = 1'b0;
       end
-      FENCE_I: begin
-        flush_i_valid_o = valid_instr;
+      // fence.snitch: drain Snitch LSU only (stall handled via fence_snitch_stall).
+      FENCE_SNITCH: begin
+        write_rd = 1'b0;
       end
-      SFENCE_VMA: begin
-        if (priv_lvl_q == PrivLvlU) illegal_inst = 1'b1;
-        else tlb_flush = valid_instr;
+      // fence.spatz: drain Spatz operations only (stall handled via fence_spatz_stall).
+      FENCE_SPATZ: begin
+        write_rd = 1'b0;
       end
       WFI: begin
         if (priv_lvl_q == PrivLvlU) illegal_inst = 1'b1;
@@ -3251,15 +3270,15 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
   // we can retire if we are not stalling and if the instruction is writing a register
   assign retire_i = write_rd & valid_instr & (rd != 0);
 
-  // Number of memory operations in the accelerator
-  logic [2:0] acc_mem_cnt_q, acc_mem_cnt_d;
-  `FFAR(acc_mem_cnt_q, acc_mem_cnt_d, '0, clk_i, rst_i)
 
   // Number of store operations in the accelerator
   logic [2:0] acc_mem_str_cnt_q, acc_mem_str_cnt_d;
   `FFAR(acc_mem_str_cnt_q, acc_mem_str_cnt_d, '0, clk_i, rst_i)
 
-  assign acc_mem_stall = (is_store && acc_mem_cnt_q != '0) || (is_load && acc_mem_str_cnt_q != 0) || acc_mem_cnt_q == '1;
+  // Scalar LD/ST ordering against Spatz is the programmer's responsibility
+  // via snrt_fence(). Only the rollover guard is kept here, since vec/scalar
+  // address spaces are disjoint in practice on this platform.
+  assign acc_mem_stall = (acc_mem_cnt_q == '1);
 
   always_comb begin
     acc_mem_cnt_d = acc_mem_cnt_q;
