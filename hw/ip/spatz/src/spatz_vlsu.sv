@@ -51,7 +51,12 @@ module spatz_vlsu
     input  logic           [NrMemPorts-1:0] spatz_mem_rsp_valid_i,
     // Memory Finished
     output logic                            spatz_mem_finished_o,
-    output logic                            spatz_mem_str_finished_o
+    output logic                            spatz_mem_str_finished_o,
+    // ECC error outputs
+    output logic [N_FU-1:0]                vlsu_vs2_sec_err_o,   // per-cut SEC on VS2 index read
+    output logic [N_FU-1:0]                vlsu_vs2_ded_err_o,   // per-cut DED on VS2 index read
+    output logic                            vlsu_ld_sec_err_o,    // any-port SEC on load response
+    output logic                            vlsu_ld_ded_err_o     // any-port DED on load response
   );
 
 // Include FF
@@ -447,6 +452,7 @@ module spatz_vlsu
 
   // Decoded VS2 word for indexed-load address computation (N_FU lanes decoded in parallel)
   logic [N_FU*ELEN-1:0] vs2_decoded;
+  logic [N_FU-1:0] vs2_idx_sec_err, vs2_idx_ded_err;
   for (genvar cut = 0; cut < N_FU; cut++) begin : gen_vs2_idx_dec
     hsiao_ecc_dec #(
       .DataWidth(ELEN),
@@ -455,9 +461,11 @@ module spatz_vlsu
       .in        (vrf_rdata_ecc[1][(ELEN+7)*cut +: (ELEN+7)]),
       .out       (vs2_decoded[ELEN*cut +: ELEN]),
       .syndrome_o(),
-      .err_o     ()
+      .err_o     ({vs2_idx_ded_err[cut], vs2_idx_sec_err[cut]})
     );
   end : gen_vs2_idx_dec
+  assign vlsu_vs2_sec_err_o = vs2_idx_sec_err;
+  assign vlsu_vs2_ded_err_o = vs2_idx_ded_err;
 
   elen_t [NrMemPorts-1:0] mem_req_addr;
 
@@ -959,6 +967,7 @@ module spatz_vlsu
   logic [NrMemPorts-1:0][ELEN-1:0]   load_rsp_data_decoded;
   logic [NrMemPorts-1:0][ELEN-1:0]   load_rsp_data_aligned;
   logic [NrMemPorts-1:0][ELEN+7-1:0] load_rsp_data_encoded;
+  logic [NrMemPorts-1:0]              load_rsp_sec_err, load_rsp_ded_err;
 
   for (genvar port = 0; port < NrMemPorts; port++) begin : gen_load_rsp_ecc
     hsiao_ecc_dec #(
@@ -968,7 +977,7 @@ module spatz_vlsu
       .in        (rob_rdata[port]),
       .out       (load_rsp_data_decoded[port]),
       .syndrome_o(),
-      .err_o     ()
+      .err_o     ({load_rsp_ded_err[port], load_rsp_sec_err[port]})
     );
 
     hsiao_ecc_enc #(
@@ -979,6 +988,8 @@ module spatz_vlsu
       .out (load_rsp_data_encoded[port])
     );
   end
+  assign vlsu_ld_sec_err_o = |load_rsp_sec_err;
+  assign vlsu_ld_ded_err_o = |load_rsp_ded_err;
 
   // verilator lint_off LATCH
   always_comb begin
