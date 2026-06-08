@@ -279,8 +279,11 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   // Per-port, per-cut ECC decoder error signals aggregated onto module outputs
   logic [NrReadPorts-1:0][N_FU-1:0] dec_sec_err, dec_ded_err;
   logic vrf_sec_err_raw, vrf_ded_err_raw;
-  assign vrf_single_error_o = vrf_sec_err_raw | (|dec_sec_err);
-  assign vrf_multi_error_o  = vrf_ded_err_raw | (|dec_ded_err);
+  // VLSU errors not tied to a VRF read-port slot: load response and write-path decode
+  logic vlsu_ld_sec_err, vlsu_ld_ded_err;
+  logic vlsu_wr_sec_err, vlsu_wr_ded_err;
+  assign vrf_single_error_o = vrf_sec_err_raw | (|dec_sec_err) | vlsu_ld_sec_err | vlsu_wr_sec_err;
+  assign vrf_multi_error_o  = vrf_ded_err_raw | (|dec_ded_err) | vlsu_ld_ded_err | vlsu_wr_ded_err;
 
   // spatz_vrf #(
   spatz_vrf_ecc #(
@@ -677,14 +680,17 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     .spatz_mem_rsp_i         (spatz_mem_rsp_i                                      ),
     .spatz_mem_rsp_valid_i   (spatz_mem_rsp_valid_i                                ),
     .spatz_mem_finished_o    (spatz_mem_finished                                   ),
-    .spatz_mem_str_finished_o(spatz_mem_str_finished                               )
+    .spatz_mem_str_finished_o(spatz_mem_str_finished                               ),
+    .vlsu_vs2_sec_err_o      (dec_sec_err[VLSU_VS2_RD]                            ),
+    .vlsu_vs2_ded_err_o      (dec_ded_err[VLSU_VS2_RD]                            ),
+    .vlsu_ld_sec_err_o       (vlsu_ld_sec_err                                     ),
+    .vlsu_ld_ded_err_o       (vlsu_ld_ded_err                                     )
   );
 `endif
 
-  // VLSU read ports: raw ECC consumed directly inside VLSU; stub decoded data and errors
+  // VLSU read ports: raw ECC consumed directly inside VLSU; stub decoded data.
+  // VS2_RD errors are now driven by VLSU outputs above; VD_RD is store-source only.
 `ifndef DOUBLE_BW
-  assign dec_sec_err[VLSU_VS2_RD] = '0;
-  assign dec_ded_err[VLSU_VS2_RD] = '0;
   assign dec_sec_err[VLSU_VD_RD]  = '0;
   assign dec_ded_err[VLSU_VD_RD]  = '0;
   assign vrf_rdata[VLSU_VS2_RD]   = '0;
@@ -720,12 +726,15 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   end
 
   // Per-cut: decode VLSU write codeword, merge with accumulated bytes, re-encode for VRF
+  logic [N_FU-1:0] vlsu_wr_sec_err_vec, vlsu_wr_ded_err_vec;
+  assign vlsu_wr_sec_err = |vlsu_wr_sec_err_vec;
+  assign vlsu_wr_ded_err = |vlsu_wr_ded_err_vec;
   for (genvar vlsu_cut = 0; vlsu_cut < N_FU; vlsu_cut++) begin : gen_vlsu_vrf_ecc
     hsiao_ecc_dec #(.DataWidth(ELEN), .ProtWidth(7)) vlsu_vd_wr_ecc_dec (
       .in        (vlsu_wdata_ecc_raw[(ELEN+7)*vlsu_cut +: (ELEN+7)]),
       .out       (vlsu_wdata_dec[ELEN*vlsu_cut +: ELEN]),
       .syndrome_o(),
-      .err_o     ()
+      .err_o     ({vlsu_wr_ded_err_vec[vlsu_cut], vlsu_wr_sec_err_vec[vlsu_cut]})
     );
 
     logic [ELEN-1:0] vlsu_merged_cut;
