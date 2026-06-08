@@ -87,6 +87,21 @@ macro(add_spatz_test_threeParam_dq name file param1 param2 param3)
            USE_CACHE=${USE_CACHE} MEAS_1ITER=${MEAS_1ITER})
 endmacro()
 
+# Tagged VQ-GEMM variant: selects the dequant kernel via DQ_CASE and uses the
+# tagged data header data_dq_${tag}_${M}_${N}_${K}.h
+#   dqcase 1 = blk4    (1 codebook,  EI8 )
+#   dqcase 2 = blk8ei16(2 codebooks, EI16)
+macro(add_spatz_test_dq_variant name file tag param1 param2 param3 dqcase)
+  set(target_name ${name}_${tag}_M${param1}_N${param2}_K${param3})
+  add_snitch_test(${target_name} ${file})
+  target_link_libraries(test-${SNITCH_TEST_PREFIX}${target_name} benchmark ${SNITCH_RUNTIME})
+  target_compile_definitions(test-${SNITCH_TEST_PREFIX}${target_name}
+    PUBLIC DATAHEADER="data/data_dq_${tag}_${param1}_${param2}_${param3}.h"
+           DQ_CASE=${dqcase}
+           SNRT_NFPU_PER_CORE=${SNRT_NFPU_PER_CORE}
+           USE_CACHE=${USE_CACHE} MEAS_1ITER=${MEAS_1ITER})
+endmacro()
+
 # Use data type as another parameter
 macro(add_spatz_test_oneParam_type name file param1 type)
   set(target_name ${name}_M${param1})
@@ -120,6 +135,8 @@ add_library(sp-fmatmul sp-fmatmul/kernel/sp-fmatmul.c)
 add_library(hp-fmatmul hp-fmatmul/kernel/hp-fmatmul.c)
 # add_library(hp-dqmatmul hp-dqmatmul/kernel/hp-dqmatmul.c)
 add_library(hp-dqmatmul hp-dqmatmul/kernel/hp-dqmatmul-blk32.c)
+add_library(hp-dqmatmul-blk4 hp-dqmatmul/kernel/hp-dqmatmul-blk4.c)
+add_library(hp-dqmatmul-blk8ei16 hp-dqmatmul/kernel/hp-dqmatmul-blk8ei16.c)
 
 # add_spatz_test_twoParam_type(dp-gemv gemv/main.c 64  128 64)
 # add_spatz_test_twoParam_type(sp-gemv gemv/main.c 128 128 32)
@@ -228,3 +245,7 @@ add_spatz_test_threeParam(dp-db-fmatmul-4x4vl dp-db-fmatmul-4x4vl/main.c 32 32 3
  # Vector Dequantization
  add_spatz_test_threeParam_dq(hp-dqmatmul hp-dqmatmul/main.c 32 32 32)
  add_spatz_test_threeParam_dq(hp-dqmatmul hp-dqmatmul/main.c 128 128 128)
+ # Case 1: blk4, EI8, single codebook (no addition)
+ add_spatz_test_dq_variant(hp-dqmatmul hp-dqmatmul/main.c blk4 128 128 128 1)
+ # Case 2: blk8, EI16, two codebooks, additive reconstruction
+ add_spatz_test_dq_variant(hp-dqmatmul hp-dqmatmul/main.c blk8ei16 128 128 128 2)

@@ -12,7 +12,8 @@ ROOT_DIR := ${SPATZ_DIR}
 # Binaries
 INSTALL_PREFIX        ?= install
 INSTALL_DIR           ?= ${ROOT_DIR}/${INSTALL_PREFIX}
-LLVM_INSTALL_DIR      ?= ${INSTALL_DIR}/llvm
+# LLVM_INSTALL_DIR      ?= ${INSTALL_DIR}/llvm
+LLVM_INSTALL_DIR      ?= /scratch2/bowwang/spatz_nf/spatzennest/spatz/sw/toolchain/llvm-project/build/build/llvm
 GCC_INSTALL_DIR       ?= ${INSTALL_DIR}/riscv-gcc
 SPIKE_INSTALL_DIR     ?= ${INSTALL_DIR}/riscv-isa-sim
 BENDER_INSTALL_DIR    ?= ${INSTALL_DIR}/bender

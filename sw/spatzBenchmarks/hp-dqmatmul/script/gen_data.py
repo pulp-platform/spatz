@@ -27,32 +27,37 @@ def array_to_cstr(a, fmt=float):
     fmt == "u8": emits hex bytes for uint8_t arrays
     fmt else: legacy fp8 bit-pack path (kept for compatibility)
     """
-    out = "{"
+    # Use ''.join over a list instead of repeated string concatenation: with
+    # 2^16-entry codebooks the arrays hold ~1M elements and "out += ..." in a
+    # loop becomes pathologically slow.
     if fmt == float:
         if isinstance(a, np.ndarray):
             a = a.flat
         if isinstance(a, torch.Tensor):
             a = a.detach().cpu().numpy().flat
-        for el in a:
-            out += "{}, ".format(el)
+        body = ", ".join("{}".format(el) for el in a)
     elif fmt == "u8":
         if isinstance(a, torch.Tensor):
             a = a.detach().cpu().numpy()
         a = np.asarray(a, dtype=np.uint8).flat
-        for el in a:
-            out += "0x{:02x}, ".format(int(el))
+        body = ", ".join("0x{:02x}".format(int(el)) for el in a)
+    elif fmt == "u16":
+        if isinstance(a, torch.Tensor):
+            a = a.detach().cpu().numpy()
+        a = np.asarray(a, dtype=np.uint16).flat
+        body = ", ".join("0x{:04x}".format(int(el)) for el in a)
     else:
         # legacy fp8 path from original script
-        for sign, exp, mant in zip(
-            a["sign"].numpy().flat,
-            a["exponent"].numpy().flat,
-            a["mantissa"].numpy().flat,
-        ):
-            value = sign * 2**7 + exp * 2**2 + mant
-            out += "0x{:02x}, ".format(value)
+        body = ", ".join(
+            "0x{:02x}".format(sign * 2**7 + exp * 2**2 + mant)
+            for sign, exp, mant in zip(
+                a["sign"].numpy().flat,
+                a["exponent"].numpy().flat,
+                a["mantissa"].numpy().flat,
+            )
+        )
 
-    out = out[:-2] + "}"
-    return out
+    return "{" + body + "}"
 
 
 def emit_header_file(layer_type: str, **kwargs):
@@ -78,8 +83,10 @@ def emit_header_file(layer_type: str, **kwargs):
         )
         emit_str += emit_GEMM_layer(**kwargs)
     elif layer_type == "VQ-GEMM":
+        tag = kwargs.get("tag", "")
+        tag_str = (tag + "_") if tag else ""
         file = file_path / (
-            "data_dq_" + str(kwargs["M"]) + "_" + str(kwargs["N"]) + "_" + str(kwargs["K"]) + ".h"
+            "data_dq_" + tag_str + str(kwargs["M"]) + "_" + str(kwargs["N"]) + "_" + str(kwargs["K"]) + ".h"
         )
         emit_str += emit_VQ_GEMM_layer(**kwargs)
     else:
@@ -148,27 +155,32 @@ def emit_GEMM_layer(name="gemm", **kwargs):
 
 def make_vq_B_from_codebooks(cb0, cb1, idx0, idx1, D=8):
     """
-    Reconstruct dense B from two codebooks:
+    Reconstruct dense B from one or two codebooks:
 
-      B[k, j*D:(j+1)*D] = cb0[idx0[k,j]] + cb1[idx1[k,j]]
+      two codebooks (additive): B[k, j*D:(j+1)*D] = cb0[idx0[k,j]] + cb1[idx1[k,j]]
+      single codebook:          B[k, j*D:(j+1)*D] = cb0[idx0[k,j]]
+
+    Pass cb1=None and idx1=None for the single-codebook case.
 
     cb0: [CB0_N, D] fp16
-    cb1: [CB1_N, D] fp16
-    idx0/idx1: [K, N/D] uint8 (on CPU is fine)
-    returns B: [K, N] fp16 (on device of cb0/cb1)
+    cb1: [CB1_N, D] fp16 or None
+    idx0/idx1: [K, N/D] integer indices (on CPU is fine), idx1 may be None
+    returns B: [K, N] fp16 (on device of cb0)
     """
     K, blocks = idx0.shape
     N = blocks * D
     B = torch.empty((K, N), dtype=cb0.dtype, device=cb0.device)
 
     idx0_np = idx0.detach().cpu().numpy()
-    idx1_np = idx1.detach().cpu().numpy()
+    idx1_np = idx1.detach().cpu().numpy() if idx1 is not None else None
 
     for k in range(K):
         for j in range(blocks):
             i0 = int(idx0_np[k, j])
-            i1 = int(idx1_np[k, j])
-            v = cb0[i0] + cb1[i1]
+            v = cb0[i0]
+            if cb1 is not None:
+                i1 = int(idx1_np[k, j])
+                v = v + cb1[i1]
             B[k, j * D : (j + 1) * D] = v
 
     return B
@@ -186,14 +198,16 @@ def emit_VQ_GEMM_layer(name="gemm", **kwargs):
     A = kwargs["A"]
     C = kwargs["C"]
     B_cb0 = kwargs["B_cb0"]
-    B_cb1 = kwargs["B_cb1"]
-    idx0 = kwargs["idx0"]      # [K, N/CB0_D] uint8
-    idx1 = kwargs["idx1"]      # [K, N/CB1_D] uint8
+    B_cb1 = kwargs["B_cb1"]       # may be None for single-codebook
+    idx0 = kwargs["idx0"]      # [K, N/CB0_D] integer indices
+    idx1 = kwargs["idx1"]      # [K, N/CB1_D] integer indices, or None
     golden = kwargs["golden"]  # [M, N] fp16 golden output to compare element-wise
 
     M = kwargs["M"]
     N = kwargs["N"]
     K = kwargs["K"]
+
+    num_cb = kwargs["num_cb"]
 
     CB0_N = kwargs["CB0_N"]
     CB0_D = kwargs["CB0_D"]
@@ -202,13 +216,18 @@ def emit_VQ_GEMM_layer(name="gemm", **kwargs):
     CB0_IDX_WIDTH = kwargs["CB0_IDX_WIDTH"]
     CB1_IDX_WIDTH = kwargs["CB1_IDX_WIDTH"]
 
+    # Map index byte-width -> C type and emit format
+    idx_ctype = {1: "uint8_t", 2: "uint16_t"}
+    idx_fmt   = {1: "u8", 2: "u16"}
+
     # Generator assumptions
-    assert CB0_D == CB1_D, "Expected same block width for both codebooks"
     assert (N % CB0_D) == 0, "N must be divisible by CB_D"
-    assert CB0_IDX_WIDTH == 1 and CB1_IDX_WIDTH == 1, \
-        "Generator currently emits uint8_t indices only"
+    assert CB0_IDX_WIDTH in (1, 2), "Generator emits uint8_t (1) or uint16_t (2) indices"
     assert not kwargs["ta"] and not kwargs["tb"], \
         "Generator assumes no transpose (matches kernel)"
+    if num_cb == 2:
+        assert CB0_D == CB1_D, "Additive dequant requires CB0_D == CB1_D"
+        assert CB1_IDX_WIDTH in (1, 2), "Generator emits uint8_t (1) or uint16_t (2) indices"
 
     blocks = N // CB0_D
     size_idx0 = K * blocks
@@ -247,22 +266,24 @@ def emit_VQ_GEMM_layer(name="gemm", **kwargs):
         + array_to_cstr(B_cb0)
         + ";\n\n\n"
     )
+
     layer_str += (
-        f'static {dtype} gemm_B_cb1_dram[{CB1_N}*{CB1_D}] __attribute__((section(".data"))) = '
-        + array_to_cstr(B_cb1)
+        f'static {idx_ctype[CB0_IDX_WIDTH]} gemm_B_idx0_dram[{size_idx0}] __attribute__((section(".data"))) = '
+        + array_to_cstr(idx0.reshape(-1), fmt=idx_fmt[CB0_IDX_WIDTH])
         + ";\n\n\n"
     )
 
-    layer_str += (
-        f'static uint8_t gemm_B_idx0_dram[{size_idx0}] __attribute__((section(".data"))) = '
-        + array_to_cstr(idx0.reshape(-1), fmt="u8")
-        + ";\n\n\n"
-    )
-    layer_str += (
-        f'static uint8_t gemm_B_idx1_dram[{size_idx1}] __attribute__((section(".data"))) = '
-        + array_to_cstr(idx1.reshape(-1), fmt="u8")
-        + ";\n\n\n"
-    )
+    if num_cb == 2:
+        layer_str += (
+            f'static {dtype} gemm_B_cb1_dram[{CB1_N}*{CB1_D}] __attribute__((section(".data"))) = '
+            + array_to_cstr(B_cb1)
+            + ";\n\n\n"
+        )
+        layer_str += (
+            f'static {idx_ctype[CB1_IDX_WIDTH]} gemm_B_idx1_dram[{size_idx1}] __attribute__((section(".data"))) = '
+            + array_to_cstr(idx1.reshape(-1), fmt=idx_fmt[CB1_IDX_WIDTH])
+            + ";\n\n\n"
+        )
 
     layer_str += (
         f'static {dtype} gemm_C_dram[{M}*{N}] __attribute__((section(".data"))) = '
@@ -302,21 +323,31 @@ def main():
         assert int(param["prec"]) == 16, "This generator targets prec=16 for your RVV kernel"
 
         M, N, K = int(param["M"]), int(param["N"]), int(param["K"])
+
+        # Number of codebooks: 1 (single, no addition) or 2 (additive)
+        num_cb = int(param.get("num_codebooks", 2))
+        if num_cb not in (1, 2):
+            raise ValueError(f"num_codebooks must be 1 or 2 (got {num_cb})")
+
+        # Optional filename tag to disambiguate configs sharing the same M/N/K
+        tag = str(param.get("tag", ""))
+
         CB0_N, CB0_D = int(param["CB0_N"]), int(param["CB0_D"])
-        CB1_N, CB1_D = int(param["CB1_N"]), int(param["CB1_D"])
         CB0_IDX_WIDTH = int(param.get("CB0_IDX_WIDTH", 1))
-        CB1_IDX_WIDTH = int(param.get("CB1_IDX_WIDTH", 1))
 
         ta = bool(param.get("transpose_A", False))
         tb = bool(param.get("transpose_B", False))
         if ta or tb:
             raise ValueError("VQ-GEMM generator currently assumes no transpose (matches your kernel)")
 
-        if CB0_D != CB1_D:
-            raise ValueError("Additive dequant currently requires CB0_D == CB1_D")
+        if CB0_IDX_WIDTH not in (1, 2):
+            raise ValueError("CB0_IDX_WIDTH must be 1 (uint8) or 2 (uint16)")
 
         if N % CB0_D != 0:
             raise ValueError(f"N ({N}) must be divisible by CB_D ({CB0_D})")
+
+        # Index numpy dtype per byte-width
+        idx_np_dtype = {1: torch.uint8, 2: torch.int32}  # torch lacks uint16; emit as int32, cast on print
 
         alpha = int(param.get("alpha", 0))
         if alpha != 0 and verbose:
@@ -326,19 +357,33 @@ def main():
         A = torch.randn((M, K), dtype=torch.float16, device=device)
         C = torch.randn((M, N), dtype=torch.float16, device=device)
 
-        # Codebooks: [CB*_N, CB*_D] (FP16)
+        # Codebook 0: [CB0_N, CB0_D] (FP16)
         cb0 = torch.randn((CB0_N, CB0_D), dtype=torch.float16, device=device)
-        cb1 = torch.randn((CB1_N, CB1_D), dtype=torch.float16, device=device)
 
-        # Indices per row and per block (EI8)
+        # Indices per row and per block
         blocks = N // CB0_D
-        idx0 = torch.randint(0, CB0_N, (K, blocks), dtype=torch.uint8, device="cpu")
-        idx1 = torch.randint(0, CB1_N, (K, blocks), dtype=torch.uint8, device="cpu")
+        idx0 = torch.randint(0, CB0_N, (K, blocks), dtype=idx_np_dtype[CB0_IDX_WIDTH], device="cpu")
+
+        # Second codebook (only for additive reconstruction)
+        if num_cb == 2:
+            CB1_N, CB1_D = int(param["CB1_N"]), int(param["CB1_D"])
+            CB1_IDX_WIDTH = int(param.get("CB1_IDX_WIDTH", 1))
+            if CB1_IDX_WIDTH not in (1, 2):
+                raise ValueError("CB1_IDX_WIDTH must be 1 (uint8) or 2 (uint16)")
+            if CB0_D != CB1_D:
+                raise ValueError("Additive dequant requires CB0_D == CB1_D")
+            cb1 = torch.randn((CB1_N, CB1_D), dtype=torch.float16, device=device)
+            idx1 = torch.randint(0, CB1_N, (K, blocks), dtype=idx_np_dtype[CB1_IDX_WIDTH], device="cpu")
+        else:
+            # Single codebook: no second codebook. Emit zeroed CB1 metadata.
+            CB1_N, CB1_D, CB1_IDX_WIDTH = 0, 0, 0
+            cb1 = None
+            idx1 = None
 
         # Reconstruct B and compute element-wise golden output
         B = make_vq_B_from_codebooks(cb0, cb1, idx0, idx1, D=CB0_D)
 
-        # Golden output: if your kernel computes C = A@B (and ignores input C), use this:
+        # Golden output: kernel computes C = A@B (and ignores input C)
         golden = torch.matmul(A, B)
 
         # If your kernel instead should do: C_out = A@B + alpha*C_in, use this instead:
@@ -360,6 +405,8 @@ def main():
             "alpha": alpha,
             "prec": int(param["prec"]),
             "expand": int(param.get("expand", 0)),
+            "num_cb": num_cb,
+            "tag": tag,
             "CB0_N": CB0_N,
             "CB0_D": CB0_D,
             "CB1_N": CB1_N,

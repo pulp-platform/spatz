@@ -22,8 +22,55 @@
 #include <stdio.h>
 
 #include DATAHEADER
+
+// ---- Select dequant kernel variant --------------------------------------
+// DQ_CASE: 0 = blk32   (2 codebooks, EI8,  CB_D=32) [default / existing]
+//          1 = blk4    (1 codebook,  EI8,  CB_D=4 ) [case 1]
+//          2 = blk8ei16(2 codebooks, EI16, CB_D=8 ) [case 2]
+#ifndef DQ_CASE
+#define DQ_CASE 0
+#endif
+
+// CB_IN_DRAM: in the no-cache (SPM) build, keep the codebook(s) resident in
+// DRAM instead of copying them into L1 SPM. Needed when a codebook is too large
+// to fit in L1 (e.g. the 2^16-entry EI16 case = 1 MiB per codebook). A, indices
+// and C are still DMA'd into SPM; the codebook is gathered directly from DRAM
+// (build with SNRT_LINK=dram). In cache mode (USE_CACHE=1) this knob is unused.
+#if DQ_CASE == 1
 // #include "kernel/hp-dqmatmul.c"
+#include "kernel/hp-dqmatmul-blk4.c"
+#define NUM_CB 1
+#define IDX_T  uint8_t
+#define CB_IN_DRAM 0
+#define RUN_KERNEL_NOCACHE()                                                    \
+  dq_matmul_4xVL_blk4(c, a, b_cb0, b_idx0, m_start, m_end, dq_gemm_l.K,         \
+                      dq_gemm_l.N, p_start, p_end)
+#define RUN_KERNEL_CACHE()                                                      \
+  dq_matmul_4xVL_dp_blk4(c, a, b_cb0, b_idx0, m_start, m_end, dq_gemm_l.K,      \
+                         dq_gemm_l.N, p_start, p_end)
+#elif DQ_CASE == 2
+#include "kernel/hp-dqmatmul-blk8ei16.c"
+#define NUM_CB 2
+#define IDX_T  uint16_t
+#define CB_IN_DRAM 1
+#define RUN_KERNEL_NOCACHE()                                                    \
+  dq_matmul_4xVL_blk8ei16(c, a, b_cb0, b_cb1, b_idx0, b_idx1, m_start, m_end,   \
+                          dq_gemm_l.K, dq_gemm_l.N, p_start, p_end)
+#define RUN_KERNEL_CACHE()                                                      \
+  dq_matmul_4xVL_dp_blk8ei16(c, a, b_cb0, b_cb1, b_idx0, b_idx1, m_start,       \
+                             m_end, dq_gemm_l.K, dq_gemm_l.N, p_start, p_end)
+#else
 #include "kernel/hp-dqmatmul-blk32.c"
+#define NUM_CB 2
+#define IDX_T  uint8_t
+#define CB_IN_DRAM 0
+#define RUN_KERNEL_NOCACHE()                                                    \
+  dq_matmul_4xVL_blk32(c, a, b_cb0, b_cb1, b_idx0, b_idx1, m_start, m_end,      \
+                       dq_gemm_l.K, dq_gemm_l.N, p_start, p_end)
+#define RUN_KERNEL_CACHE()                                                      \
+  dq_matmul_4xVL_dp_blk32(c, a, b_cb0, b_cb1, b_idx0, b_idx1, m_start, m_end,   \
+                          dq_gemm_l.K, dq_gemm_l.N, p_start, p_end)
+#endif
 
 #ifndef NFPU_PER_CORE
 #define NFPU_PER_CORE 4
@@ -31,12 +78,14 @@
 
 
 // Assume B is vector quantized
-__fp16  *a;
-__fp16  *b_cb0;
-__fp16  *b_cb1;
-uint8_t *b_idx0;
-uint8_t *b_idx1;
-__fp16  *c;
+__fp16 *a;
+__fp16 *b_cb0;
+IDX_T  *b_idx0;
+#if NUM_CB == 2
+__fp16 *b_cb1;
+IDX_T  *b_idx1;
+#endif
+__fp16 *c;
 
 
 static inline int fp16_check(__fp16 *a, __fp16 *b, uint32_t M, uint32_t N) {
@@ -89,20 +138,38 @@ int main() {
   // Allocate the matrices in the local tile
   if (cid == 0) {
     a      =  (__fp16 *)snrt_l1alloc(dq_gemm_l.M     * dq_gemm_l.K     * sizeof(__fp16));
-    b_cb0  =  (__fp16 *)snrt_l1alloc(dq_gemm_l.CB0_N * dq_gemm_l.CB0_D * sizeof(__fp16));
-    b_cb1  =  (__fp16 *)snrt_l1alloc(dq_gemm_l.CB1_N * dq_gemm_l.CB1_D * sizeof(__fp16));
-    b_idx0 = (uint8_t *)snrt_l1alloc(dq_gemm_l.K     * (dq_gemm_l.N / dq_gemm_l.CB0_D) * dq_gemm_l.CB0_IDX_WIDTH); 
-    b_idx1 = (uint8_t *)snrt_l1alloc(dq_gemm_l.K     * (dq_gemm_l.N / dq_gemm_l.CB1_D) * dq_gemm_l.CB1_IDX_WIDTH);
+    b_idx0 = (IDX_T  *)snrt_l1alloc(dq_gemm_l.K     * (dq_gemm_l.N / dq_gemm_l.CB0_D) * dq_gemm_l.CB0_IDX_WIDTH);
+    #if NUM_CB == 2
+    b_idx1 = (IDX_T  *)snrt_l1alloc(dq_gemm_l.K     * (dq_gemm_l.N / dq_gemm_l.CB1_D) * dq_gemm_l.CB1_IDX_WIDTH);
+    #endif
     c      =  (__fp16 *)snrt_l1alloc(dq_gemm_l.M * dq_gemm_l.N * sizeof(__fp16));
+    #if CB_IN_DRAM
+    // Codebook(s) too large for L1: keep them resident in DRAM (no SPM copy).
+    b_cb0  = gemm_B_cb0_dram;
+    #if NUM_CB == 2
+    b_cb1  = gemm_B_cb1_dram;
+    #endif
+    #else
+    b_cb0  =  (__fp16 *)snrt_l1alloc(dq_gemm_l.CB0_N * dq_gemm_l.CB0_D * sizeof(__fp16));
+    #if NUM_CB == 2
+    b_cb1  =  (__fp16 *)snrt_l1alloc(dq_gemm_l.CB1_N * dq_gemm_l.CB1_D * sizeof(__fp16));
+    #endif
+    #endif
   }
 
   // Initialize matrices
   if (cid == 0) {
     snrt_dma_start_1d(a,      gemm_A_dram,      dq_gemm_l.M     * dq_gemm_l.K     * sizeof(__fp16));
-    snrt_dma_start_1d(b_cb0,  gemm_B_cb0_dram,  dq_gemm_l.CB0_N * dq_gemm_l.CB0_D * sizeof(__fp16));
-    snrt_dma_start_1d(b_cb1,  gemm_B_cb1_dram,  dq_gemm_l.CB1_N * dq_gemm_l.CB1_D * sizeof(__fp16));
     snrt_dma_start_1d(b_idx0, gemm_B_idx0_dram, dq_gemm_l.K     * (dq_gemm_l.N / dq_gemm_l.CB0_D) * dq_gemm_l.CB0_IDX_WIDTH);
+    #if NUM_CB == 2
     snrt_dma_start_1d(b_idx1, gemm_B_idx1_dram, dq_gemm_l.K     * (dq_gemm_l.N / dq_gemm_l.CB1_D) * dq_gemm_l.CB1_IDX_WIDTH);
+    #endif
+    #if !CB_IN_DRAM
+    snrt_dma_start_1d(b_cb0,  gemm_B_cb0_dram,  dq_gemm_l.CB0_N * dq_gemm_l.CB0_D * sizeof(__fp16));
+    #if NUM_CB == 2
+    snrt_dma_start_1d(b_cb1,  gemm_B_cb1_dram,  dq_gemm_l.CB1_N * dq_gemm_l.CB1_D * sizeof(__fp16));
+    #endif
+    #endif
     snrt_dma_start_1d(c,      gemm_C_dram,      dq_gemm_l.M     * dq_gemm_l.N     * sizeof(__fp16));
     snrt_dma_wait_all();
   }
@@ -110,9 +177,11 @@ int main() {
   #else
   a      = gemm_A_dram;
   b_cb0  = gemm_B_cb0_dram;
-  b_cb1  = gemm_B_cb1_dram;
   b_idx0 = gemm_B_idx0_dram;
+  #if NUM_CB == 2
+  b_cb1  = gemm_B_cb1_dram;
   b_idx1 = gemm_B_idx1_dram;
+  #endif
   c      = gemm_C_dram;
   #endif
 
@@ -146,9 +215,9 @@ int main() {
       timer_start = benchmark_get_cycle();
     }
     #if USE_CACHE == 0
-    dq_matmul_4xVL_blk32(c, a, b_cb0, b_cb1, b_idx0, b_idx1, m_start, m_end, dq_gemm_l.K, dq_gemm_l.N, p_start, p_end);
+    RUN_KERNEL_NOCACHE();
     #else
-    dq_matmul_4xVL_dp_blk32(c, a, b_cb0, b_cb1, b_idx0, b_idx1, m_start, m_end, dq_gemm_l.K, dq_gemm_l.N, p_start, p_end);
+    RUN_KERNEL_CACHE();
     #endif
 
     // Wait for all cores to finish

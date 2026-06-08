@@ -139,7 +139,7 @@ dram-build: dram-config
 	cd $(DRAMSYS_PATH) && \
 	if [ ! -d "build" ]; then \
 		mkdir build && cd build; \
-		$(CMAKE) -DCMAKE_CXX_FLAGS=-fPIC -DCMAKE_C_FLAGS=-fPIC -D DRAMSYS_WITH_DRAMPOWER=ON .. ; \
+		cmake-3.28.3 -DCMAKE_CXX_FLAGS=-fPIC -DCMAKE_C_FLAGS=-fPIC -D DRAMSYS_WITH_DRAMPOWER=ON .. ; \
 		make -j; \
 	fi
 
@@ -170,7 +170,7 @@ dram-clean:
 
 # To ensure the dramsys is downloaded, only need to call at first time
 dram-init:
-	make -C ${DRAMSYS_DIR} -j8 dramsys CXX=$(CXX) CC=$(CC)
+	make -C ${DRAMSYS_DIR} -j8 dramsys CXX=$(CXX) CC=$(CC) CMAKE=cmake-3.28.3
 
 #############
 # Verilator #
