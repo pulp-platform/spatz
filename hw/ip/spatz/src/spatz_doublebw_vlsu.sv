@@ -34,6 +34,7 @@ module spatz_doublebw_vlsu
     output logic                            vlsu_rsp_valid_o,
     output vlsu_rsp_t                       vlsu_rsp_o,
     input  logic                            vlsu_buf_empty_i,
+    input  logic                            vlsu_buf_full_i,
     // Interface with the VRF
     output vrf_addr_t      [NrInterfaces-1:0] vrf_waddr_o,
     output vrf_data_t      [NrInterfaces-1:0] vrf_wdata_o,
@@ -86,6 +87,8 @@ module spatz_doublebw_vlsu
   logic       mem_spatz_req_valid;
   logic       mem_spatz_req_ready;
 
+  logic spatz_req_ready;
+
   spill_register #(
     .T(spatz_req_t)
   ) i_operation_queue (
@@ -93,7 +96,7 @@ module spatz_doublebw_vlsu
     .rst_ni (rst_ni                                         ),
     .data_i (spatz_req_d                                    ),
     .valid_i(spatz_req_valid_i && spatz_req_i.ex_unit == LSU),
-    .ready_o(spatz_req_ready_o                              ),
+    .ready_o(spatz_req_ready                                ),
     .data_o (mem_spatz_req                                  ),
     .valid_o(mem_spatz_req_valid                            ),
     .ready_i(mem_spatz_req_ready                            )
@@ -141,6 +144,10 @@ module spatz_doublebw_vlsu
   state_t state_d, state_q;
   `FF(state_q, state_d, VLSU_RunningLoad)
 
+  // Memory requests
+  spatz_mem_req_t [NrInterfaces-1:0] [N_FU-1:0] spatz_mem_req;
+  logic           [NrInterfaces-1:0] [N_FU-1:0] spatz_mem_req_valid;
+  logic           [NrInterfaces-1:0] [N_FU-1:0] spatz_mem_req_ready;
 
   id_t [NrInterfaces-1:0] [N_FU-1:0] store_count_q;
   id_t [NrInterfaces-1:0] [N_FU-1:0] store_count_d;
@@ -159,7 +166,7 @@ module spatz_doublebw_vlsu
       for (int fu = 0; fu < N_FU; fu++) begin
         automatic int unsigned port = intf * N_FU + fu;
 
-        if (spatz_mem_req_o[port].write && spatz_mem_req_valid_o[port] && spatz_mem_req_ready_i[port])
+        if (spatz_mem_req[intf][fu].write && spatz_mem_req_valid[intf][fu] && spatz_mem_req_ready[intf][fu])
           // Did we send a store?
           store_count_d[intf][fu]++;
 
@@ -332,7 +339,7 @@ module spatz_doublebw_vlsu
   logic             commit_insn_push;
   commit_metadata_t commit_insn_q;
   logic             commit_insn_pop;
-  logic             commit_insn_empty;
+  logic             commit_insn_empty, commit_insn_full;
   logic             commit_insn_valid;
 
   fifo_v3 #(
@@ -346,12 +353,14 @@ module spatz_doublebw_vlsu
     .testmode_i(1'b0             ),
     .data_i    (commit_insn_d    ),
     .push_i    (commit_insn_push ),
-    .full_o    (/* Unused */     ),
+    .full_o    (commit_insn_full ),
     .data_o    (commit_insn_q    ),
     .empty_o   (commit_insn_empty),
     .pop_i     (commit_insn_pop  ),
     .usage_o   (/* Unused */     )
   );
+
+  assign spatz_req_ready_o = spatz_req_ready & !commit_insn_full;
 
   assign commit_insn_valid = !commit_insn_empty;
   assign commit_insn_d     = '{
@@ -378,7 +387,7 @@ module spatz_doublebw_vlsu
     commit_insn_push = 1'b0;
 
     // Did we start a new instruction?
-    if (mem_spatz_req_valid && !mem_insn_pending_q[mem_spatz_req.id]) begin
+    if (mem_spatz_req_valid && !mem_insn_pending_q[mem_spatz_req.id] && !commit_insn_full) begin
       mem_insn_pending_d[mem_spatz_req.id] = 1'b1;
       commit_insn_push                     = 1'b1;
     end
@@ -489,18 +498,19 @@ module spatz_doublebw_vlsu
             default: offset = $signed(vrf_rdata_i[intf][1][8 * word_index +: 32]);
           endcase
         end else begin
-          offset = ({mem_counter_q[intf][fu][$bits(vlen_t)-1:MAXEW] << $clog2(N_FU), mem_counter_q[intf][fu][int'(MAXEW)-1:0]} + (fu << MAXEW)) * stride;
+          offset = ({mem_counter_q[intf][fu][$bits(vlen_t)-1:MAXEW] << $clog2(N_FU), mem_counter_q[intf][fu][int'(MAXEW)-1:0]} + (fu << MAXEW));
         end
 
         // The second interface starts from half of the vector to straighten the write-back VRF access pattern
         // To ensure that the 2 interfaces do not also conflict at the TCDM, there is HW scrambling of addresses to TCDM
         // such that they access different superbanks.
-        if (!mem_is_indexed && !mem_is_strided && intf == 1) begin
+        if (!mem_is_indexed && intf == 1) begin
           // Align the vector length with SpatzMemBytes bytes
           offset += ((mem_spatz_req.vl +  (SpatzMemBytes / 2)) >> $clog2(SpatzMemBytes) << $clog2(SpatzMemBytes)) / 2;
         end
+        offset *= stride;
 
-        addr                      = mem_spatz_req.rs1 + offset;
+        addr                          = mem_spatz_req.rs1 + offset;
         mem_req_addr[intf][fu]        = (addr >> MAXEW) << MAXEW;
         mem_req_addr_offset[intf][fu] = addr[int'(MAXEW)-1:0];
 
@@ -537,11 +547,6 @@ module spatz_doublebw_vlsu
 
   // Did we finish an instruction?
   logic vlsu_finished_req;
-
-  // Memory requests
-  spatz_mem_req_t [NrInterfaces-1:0] [N_FU-1:0] spatz_mem_req;
-  logic           [NrInterfaces-1:0] [N_FU-1:0] spatz_mem_req_valid;
-  logic           [NrInterfaces-1:0] [N_FU-1:0] spatz_mem_req_ready;
 
   always_comb begin: control_proc
     // Maintain state
@@ -650,16 +655,16 @@ module spatz_doublebw_vlsu
 
     vlsu_rsp_t rsp;
     logic rsp_valid;
+    vlen_t commit_vl;
   } vrf_req_t;
 
   vrf_req_t [NrInterfaces-1:0] vrf_req_d, vrf_req_q;
   logic     [NrInterfaces-1:0] vrf_req_valid_d, vrf_req_ready_d;
   logic     [NrInterfaces-1:0] vrf_req_valid_q, vrf_req_ready_q;
-  logic     [NrInterfaces-1:0] vrf_commit_pending_d, vrf_commit_pending_q, vrf_valid_rsp;
+  logic     [NrInterfaces-1:0] vrf_commit_waiting_d, vrf_commit_waiting_q, vrf_valid_rsp;
   logic     [NrInterfaces-1:0] vrf_commit_intf_valid, vrf_commit_intf_valid_q;
 
-  logic vrf_commit_bypass_d, vrf_commit_bypass_q;
-  `FF(vrf_commit_bypass_q, vrf_commit_bypass_d, 1'b0)
+  logic vrf_commit_bypass;
 
   for (genvar intf = 0; intf < NrInterfaces; intf++) begin : gen_vrf_req_register_intf
     spill_register #(
@@ -678,15 +683,22 @@ module spatz_doublebw_vlsu
     assign vrf_waddr_o[intf]     = vrf_req_q[intf].waddr;
     assign vrf_wdata_o[intf]     = vrf_req_q[intf].wdata;
     assign vrf_wbe_o[intf]       = vrf_req_q[intf].wbe;
-    // If VLSU0 is the last interface to finish, make sure there is nothing in the VLSU1 buffer to VRF to avoid
-    // clearing the instruction from controller before all commits to VRF are done for the instruction
-    // If VLSU1 is last to finish, since it goes through the buffer, we know it will never go ahead of VLSU0
-    assign vrf_we_o[intf]        = vrf_req_valid_q[intf] & ~vrf_commit_pending_q[intf] & ((intf == 0) && vrf_valid_rsp[0] && !vrf_valid_rsp[1] ? vlsu_buf_empty_i : 1'b1);
+    // Ensure simpler synchronization for commits from both interfaces
+    // Writeback:
+    // For interface 1, check if interface 0 commit can go through
+    // For interface 0, check if interface1 buffer is not full
+    // Retiring:
+    // If Interface 1, is resp interface (usually the default)
+    // If Interface 0, is resp interface (if interface 0 has more vector elements), then ensure interface 1 has nothing in buffer
+    // to avoid retiring before interface 1 commits to the VRF
+    assign vrf_we_o[intf]        = ((&vrf_req_valid_q) | ((intf==0) ? vrf_req_valid_q[0] & (vrf_commit_bypass | vrf_commit_waiting_q[1]) & vlsu_buf_empty_i : 1'b0)) &
+                                   ((intf==1) ? (vrf_wvalid_i[0] & (vrf_req_q[1].rsp.id == vrf_req_q[0].rsp.id)) : 1'b1) &
+                                   !vlsu_buf_full_i;
     assign vrf_id_o[intf]        = {vrf_req_q[intf].rsp.id, mem_spatz_req.id, commit_insn_q.id};
     assign vrf_req_ready_q[intf] = vrf_wvalid_i[intf];
 
     `FF(vrf_commit_intf_valid_q[intf], vrf_commit_intf_valid[intf], 1'b0)
-    `FF(vrf_commit_pending_q[intf], vrf_commit_pending_d[intf], 1'b0)
+    `FF(vrf_commit_waiting_q[intf], vrf_commit_waiting_d[intf], 1'b0)
   end
 
   //////////////////////////////////////
@@ -696,22 +708,21 @@ module spatz_doublebw_vlsu
   always_comb begin
     vrf_valid_rsp = '0;
     vrf_commit_intf_valid = vrf_commit_intf_valid_q;
-    vrf_commit_pending_d = vrf_commit_pending_q;
-    vrf_commit_bypass_d = vrf_commit_bypass_q;
+    vrf_commit_waiting_d = vrf_commit_waiting_q;
 
     // To track if the second interface is committing or not for small vector lengths
-    vrf_commit_bypass_d = commit_insn_valid ? ((commit_insn_q.vl <= ( SpatzMemBytes / 2)) ? 1'b1 : 1'b0) : vrf_commit_bypass_q;
+    vrf_commit_bypass = vrf_req_valid_q[0] ? ((vrf_req_q[0].commit_vl <= ( SpatzMemBytes / 2)) ? 1'b1 : 1'b0) : 1'b0;
 
     for (int intf = 0; intf < NrInterfaces; intf++) begin
       // We have a final resp to write to VRF
       vrf_valid_rsp[intf] = (vrf_req_valid_q[intf] & vrf_req_q[intf].rsp_valid);
 
       // Track if the final resp has already been written to the VRF
-      vrf_commit_intf_valid[intf] = ((vrf_valid_rsp[intf] & vrf_wvalid_i[intf]) | vrf_commit_pending_q[intf]) | (intf == 1 ? vrf_commit_bypass_q : 1'b0);
+      vrf_commit_intf_valid[intf] = ((vrf_valid_rsp[intf] & vrf_wvalid_i[intf]) | vrf_commit_waiting_q[intf]) | (intf == 1 ? vrf_commit_bypass : 1'b0);
 
       // To track if the last packet has already been committed for the interface, but a response cannot be sent to the controller
       // since waiting for the other interface to finish
-      vrf_commit_pending_d[intf] = vrf_commit_intf_valid[intf] ? (vlsu_rsp_valid_o ? 1'b0 : 1'b1) : 1'b0;
+      vrf_commit_waiting_d[intf] = vrf_commit_intf_valid[intf] ? (vlsu_rsp_valid_o ? 1'b0 : 1'b1) : 1'b0;
     end
   end
 
@@ -724,7 +735,7 @@ module spatz_doublebw_vlsu
 
   // Check if interface 1 is the interface trying to commit, if so take resp information from interface 1
   // If both interfaces in sync, interface 1 is given priority
-  assign resp_intf = vrf_commit_intf_valid_q [1] == 1'b0 ? 1'b1 : 1'b0;
+  assign resp_intf = ((vrf_commit_intf_valid [1] == 1'b1) & !vrf_commit_bypass) ? 1'b1 : 1'b0;
 
   // Check is both interfaces has reached to a completion and if the last write to the VRF is also done
   // Assign the instruction id from the interface that completes the last
@@ -841,7 +852,7 @@ module spatz_doublebw_vlsu
     for (int intf = 0; intf < NrInterfaces; intf++) begin
       for (int fu = 0; fu < N_FU; fu++) begin
         automatic int unsigned port = intf * N_FU + fu;
-        write_pending |= (spatz_mem_req_o[port].write & spatz_mem_req_valid_o[port]);
+        write_pending |= (store_count_d[intf][fu] != '0);
       end
     end
 
@@ -923,6 +934,7 @@ module spatz_doublebw_vlsu
       vrf_req_d[intf].rsp.id    = commit_insn_q.id;
       vrf_req_d[intf].rsp.intf_id = intf;
       vrf_req_d[intf].rsp_valid = commit_insn_valid && &commit_finished_d[intf] && mem_insn_finished_d[commit_insn_q.id];
+      vrf_req_d[intf].commit_vl = commit_insn_q.vl;
 
       // Request indexes
       vrf_re_o[intf][1] = mem_is_indexed;
