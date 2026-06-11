@@ -175,7 +175,7 @@ $(VLT_BUILDDIR)/test/uartdpi/uartdpi.o: test/uartdpi/uartdpi.c
 # Link verilated archive wich $(VLT_COBJ)
 bin/spatz_cluster.vlt: $(VLT_AR) $(VLT_COBJ) ${VLT_BUILDDIR}/lib/libfesvr.a
 	mkdir -p $(dir $@)
-	$(CXX) $(LDFLAGS) -L ${VLT_BUILDDIR}/lib -o $@ $(VLT_COBJ) $(VLT_AR) -lpthread -lfesvr -lutil -latomic
+	$(CXX) $(LDFLAGS) -static-libstdc++ -static-libgcc -L ${VLT_BUILDDIR}/lib -o $@ $(VLT_COBJ) $(VLT_AR) -lpthread -lfesvr -lutil -latomic
 
 # Clean all build directories and temporary files for Verilator simulation
 .PHONY: clean.vlt
