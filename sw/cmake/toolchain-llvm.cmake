@@ -6,7 +6,7 @@
 set(CMAKE_C_COMPILER ${LLVM_PATH}/bin/clang)
 set(CMAKE_CXX_COMPILER ${LLVM_PATH}/bin/clang++)
 set(CMAKE_OBJCOPY ${LLVM_PATH}/bin/llvm-objcopy)
-set(CMAKE_OBJDUMP ${LLVM_PATH}/bin/llvm-objdump --mcpu=snitch --mattr=a --mattr=v --mattr=m --mattr=zfh)
+set(CMAKE_OBJDUMP ${LLVM_PATH}/bin/llvm-objdump --mcpu=snitch --mattr=a --mattr=v --mattr=m --mattr=zfh --mattr=+experimental-xvme)
 set(CMAKE_AR ${LLVM_PATH}/bin/llvm-ar)
 set(CMAKE_STRIP ${LLVM_PATH}/bin/llvm-strip)
 set(CMAKE_RANLIB ${LLVM_PATH}/bin/llvm-ranlib)
@@ -15,7 +15,7 @@ set(CMAKE_RANLIB ${LLVM_PATH}/bin/llvm-ranlib)
 ## Compile options
 ##
 add_compile_options(-mcpu=snitch -mcmodel=small -ffast-math -fno-builtin-printf -fno-common -falign-loops=16)
-add_compile_options(-ffunction-sections)
+add_compile_options(-O3 -g0 -ffunction-sections)
 add_compile_options(-Wextra)
 add_compile_options(-static)
 add_compile_options(-mllvm -misched-topdown)
@@ -24,7 +24,7 @@ add_compile_options(-menable-experimental-extensions)
 # LLD doesn't support relaxation for RISC-V yet
 add_compile_options(-mno-relax)
 # Set the ISA and ABI
-add_compile_options(-march=rv32imafdvzfh_xdma_xfquarter -mabi=ilp32d)
+add_compile_options(-march=rv32imafdvzfh_xdma_xfquarter_xvme0p1 -mabi=ilp32d)
 # Set the GCC path
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} --gcc-toolchain=${GCC_PATH}")
 
