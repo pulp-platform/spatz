@@ -316,7 +316,6 @@ module spatz_decoder
         riscv_instr::VREDMINU_VS,
         riscv_instr::VREDMAX_VS,
         riscv_instr::VREDMAXU_VS,
-// CMY: add VMANDNOT VMAND VMOR VMXOR VMORNOT VMNAND VMNOR VMXNOR, 8 masking instructions
         riscv_instr::VMANDN_MM,
         riscv_instr::VMAND_MM,
         riscv_instr::VMOR_MM,
@@ -325,7 +324,6 @@ module spatz_decoder
         riscv_instr::VMNAND_MM,
         riscv_instr::VMNOR_MM,
         riscv_instr::VMXNOR_MM,
-//-------------------------------------------------------------
         riscv_instr::VMSEQ_VV,
         riscv_instr::VMSEQ_VX,
         riscv_instr::VMSEQ_VI,
@@ -400,7 +398,7 @@ module spatz_decoder
           automatic vreg_t arith_s1       = decoder_req_i.instr[19:15];
           automatic vreg_t arith_s2       = decoder_req_i.instr[24:20];
           automatic vreg_t arith_d        = decoder_req_i.instr[11:7];
-          automatic logic arith_vm        = decoder_req_i.instr[25]; //Vector Arithmetic Masking Enable bit
+          automatic logic arith_vm        = decoder_req_i.instr[25];
 
           spatz_req.op_arith.vm = arith_vm;
           spatz_req.op_sld.vm   = arith_vm;
@@ -879,7 +877,6 @@ module spatz_decoder
               end
             end
 
-       // CMY: Mask operations
             riscv_instr::VMANDN_MM: begin
               spatz_req.op = VMANDNOT;
             end

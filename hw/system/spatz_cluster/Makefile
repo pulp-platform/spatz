@@ -56,14 +56,9 @@ endif
 include $(ROOT)/util/Makefrag
 
 # QuestaSim
-#VSIM      = questa-2021.3-kgf vsim
-#VLOG      = questa-2021.3-kgf vlog
-#VSIM_HOME = /usr/pack/questa-2021.3-kgf/questasim
-VSIM      = vsim
-VLOG      = vlog
-VSIM_HOME = /sw/CAD/Siemens/questa/2024.3/questasim
-#CMY modified
-
+VSIM      = questa-2021.3-kgf vsim
+VLOG      = questa-2021.3-kgf vlog
+VSIM_HOME = /usr/pack/questa-2021.3-kgf/questasim
 
 VSIM_FLAGS += -t 1ps
 VSIM_FLAGS += -do "log -r /*; source ${SPATZ_CLUSTER_DIR}/script/vsim/wave.tcl; run -a"
@@ -235,14 +230,11 @@ clean.vcs:
 # SPYGLASS #
 ############
 
-#SNPS_SG ?= spyglass-2022.06
-SNPS_SG ?= spyglass #Mamothones
+SNPS_SG ?= spyglass-2022.06
 
 .PHONY: lint lint/tmp/files
 lint: generate lint/tmp/files lint/sdc/func.sdc lint/script/lint.tcl
-#	cd lint && $(SNPS_SG) sg_shell -tcl script/lint.tcl
-	cd lint && sg_shell -tcl script/lint.tcl
-
+	cd lint && $(SNPS_SG) sg_shell -tcl script/lint.tcl
 
 lint/tmp/files: ${BENDER}
 	mkdir -p lint/tmp

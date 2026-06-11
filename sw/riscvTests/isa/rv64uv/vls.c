@@ -221,7 +221,7 @@ void TEST_CASE18(void) {
   VSET(1, e8, m1);
   VCLEAR(v0);
   VLOAD_8(v0, 0xAA);
-  
+
   VSET(8, e64, m2);
   volatile uint64_t INP1[] = {
       0x9fe419208f2e05e0, 0xf9aa71f0c394bbd3, 0xa11a9384a7163840,

@@ -88,7 +88,6 @@ add_snitch_test(vslide1up   isa/rv64uv/vslide1up.c)
 add_snitch_test(vslideup    isa/rv64uv/vslideup.c)
 add_snitch_test(vslide1down isa/rv64uv/vslide1down.c)
 add_snitch_test(vslidedown  isa/rv64uv/vslidedown.c)
-#CMY: float slide
 add_snitch_test(vfslide1down  isa/rv64uv/vfslide1down.c)
 add_snitch_test(vfslide1up  isa/rv64uv/vfslide1up.c)
 
@@ -144,7 +143,6 @@ add_snitch_test(vfmv isa/rv64uv/vfmv.c)
 
 add_snitch_test(invalid isa/rv64uv/invalid.c)
 set_property(TEST ${SNITCH_TEST_PREFIX}rtl-invalid PROPERTY WILL_FAIL TRUE)
-# CMY: masking logic instructions
 add_snitch_test(vls isa/rv64uv/vls.c)
 
 add_snitch_test(vmand isa/rv64uv/vmand.c)

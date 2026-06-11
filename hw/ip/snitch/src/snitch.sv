@@ -2535,7 +2535,6 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
       riscv_instr::VREDMINU_VS,
       riscv_instr::VREDMAX_VS,
       riscv_instr::VREDMAXU_VS,
-      // CMY: add VMANDNOT VMAND VMOR VMXOR VMORNOT VMNAND VMNOR VMXNOR, 8 masking instructions
       riscv_instr::VMANDN_MM,
       riscv_instr::VMAND_MM,
       riscv_instr::VMOR_MM,
@@ -2544,7 +2543,6 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
       riscv_instr::VMNAND_MM,
       riscv_instr::VMNOR_MM,
       riscv_instr::VMXNOR_MM,
-      //----------------------------------------------------------
       riscv_instr::VMSEQ_VV,
       riscv_instr::VMSEQ_VI,
       riscv_instr::VMSNE_VV,

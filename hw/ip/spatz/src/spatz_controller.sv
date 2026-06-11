@@ -258,7 +258,7 @@ module spatz_controller
   logic       req_buffer_ready, req_buffer_valid, req_buffer_pop;
 
   // One element wide instruction buffer
-  fall_through_register #( // a fifo.
+  fall_through_register #(
     .T(spatz_req_t)
   ) i_req_buffer (
     .clk_i     (clk_i                ),
@@ -613,12 +613,11 @@ module spatz_controller
         scoreboard_d[spatz_req.id].deps[write_table_d[spatz_req.vd].id] |= write_table_d[spatz_req.vd].valid;
         read_table_d[spatz_req.vd] = {spatz_req.id, 1'b1};
       end
-      // CMY: tackling v0 RAW hazard-------------------------------------------------------
+      // tackling v0 RAW hazard
       if (!spatz_req.op_arith.vm) begin
         scoreboard_d[spatz_req.id].deps[write_table_d[0].id] |= write_table_d[0].valid;
         read_table_d[0] = {spatz_req.id, 1'b1};
       end
-      //--------------------------------------------------------------------------------------
 
 `ifdef VENTAGLIO
       // RAW hazard on the explicit index vreg used by vfxmacc.vrf
@@ -821,7 +820,7 @@ module spatz_controller
     running_insn_d = running_insn_q;
 
     // New instruction!
-    if (spatz_req_valid && spatz_req.ex_unit != CON) // declare a new instruction
+    if (spatz_req_valid && spatz_req.ex_unit != CON)
       running_insn_d[next_insn_id] = 1'b1;
 
     // Finished a instruction

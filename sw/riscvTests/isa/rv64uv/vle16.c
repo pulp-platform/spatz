@@ -53,7 +53,7 @@ void TEST_CASE4(void) {
                               0xFF88, 0xFFae, 0xFF08, 0xFF91, 0xFF02, 0xFF59, 0xFF11, 0xFF89};
   VCLEAR(v1);
   VLOAD_16(v1, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16);
-  
+
   asm volatile("vle16.v v1, (%0), v0.t" ::"r"(INP1));
   VCMP_U16(4, v1, 1, 0xFFd3, 3, 0xFFd1, 5, 0xFF48, 7, 0xFF88,
                   9, 0xFFae, 11, 0xFF91, 13, 0xFF59, 15, 0xFF89);
@@ -69,7 +69,7 @@ void TEST_CASE5(void) {
                               0xFF88, 0xFFae, 0xFF08, 0xFF91, 0xFF02, 0xFF59, 0xFF11, 0xFF89};
   VCLEAR(v8);
   VLOAD_16(v8, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16);
-  
+
   asm volatile("vle16.v v8, (%0), v0.t" ::"r"(INP1));
   VCMP_U16(5, v8, 1, 0xFFd3, 3, 0xFFd1, 5, 0xFF48, 7, 0xFF88,
                   9, 0xFFae, 11, 0xFF91, 13, 0xFF59, 15, 0xFF89);

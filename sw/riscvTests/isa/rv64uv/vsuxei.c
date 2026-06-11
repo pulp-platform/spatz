@@ -75,7 +75,7 @@ void TEST_CASE1(void) {
   asm volatile("vsuxei32.v v4, (%0), v8" ::"r"(&BUFFER_O32[0]));
   VVCMP_U32(4, BUFFER_O32, INIT, 0xf9aa71f0, 0xa11a9384, 0x99991348, 0x9fa831c7, 0x38197598, INIT, 0x81937598,
                            0x18747547, 0x3eeeeeee, INIT, 0xab8b9148, 0x90318509, 0x31897598, INIT, 0x89139848);
-  
+
 }
 // TODO
 // Naive test, masked

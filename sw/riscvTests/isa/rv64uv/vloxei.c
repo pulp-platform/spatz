@@ -122,7 +122,7 @@ void TEST_CASE4(void) {
   VCLEAR(v2);
   VLOAD_16(v1, 999, 999);
   VLOAD_16(v2, 2, 30);
-  
+
   asm volatile("vloxei16.v v1, (%0), v2, v0.t" ::"r"(&ALIGNED_I16[0]));
   VCMP_U16(10, v1, 999, 0x1989);
 

@@ -440,7 +440,7 @@ module spatz_vfu
   vrf_data_t [$clog2(N_FU)-1:0] reduction_q, reduction_d;
   vrf_data_t reduction_vector_data, reduction_scalar_data;
   `FF(reduction_q, reduction_d, '0)
-  elen_t reduction_useless_value;
+  elen_t reduction_neutral_value;
 
   // IPU results
   logic [N_FU*ELEN-1:0]  ipu_result;
@@ -623,62 +623,62 @@ module spatz_vfu
   logic [N_FU*ELEN-1:0] v0_mask; // bit mask to select the valid elements in v0.t for reduction instructions
   logic [N_FU*ELEN-1:0] mask; // bit mask
 
-  always_comb begin: reduction_useless_value_selection
-    reduction_useless_value = '0;
+  always_comb begin: reduction_neutral_value_selection
+    reduction_neutral_value = '0;
     if(spatz_req.op_arith.is_reduction == 1'b1) begin
       case(spatz_req.op)
         VADD: // VREDSUM_VS, VFREDUSUM_VS, VFREDOSUM_VS
-          reduction_useless_value = '0;
+          reduction_neutral_value = '0;
         VAND: // VREDAND_VS:
-          reduction_useless_value = '1;
+          reduction_neutral_value = '1;
         VOR, // VREDOR_VS,
         VXOR: // VREDXOR_VS:
-          reduction_useless_value = '0;
+          reduction_neutral_value = '0;
         VMINU: // VREDMINU_VS:
-          reduction_useless_value = '1;
+          reduction_neutral_value = '1;
         VMIN: // VREDMIN_VS:
           unique case(spatz_req.vtype.vsew)
-            EW_8:reduction_useless_value = {1'b0,7'h7f};
-            EW_16:reduction_useless_value = {1'b0,15'h7fff};
-            EW_32:reduction_useless_value = {1'b0,31'h7fffffff};
+            EW_8:reduction_neutral_value = {1'b0,7'h7f};
+            EW_16:reduction_neutral_value = {1'b0,15'h7fff};
+            EW_32:reduction_neutral_value = {1'b0,31'h7fffffff};
             default:
-              if(MAXEW == EW_64) reduction_useless_value = {1'b0,63'h7fffffffffffffff};
+              if(MAXEW == EW_64) reduction_neutral_value = {1'b0,63'h7fffffffffffffff};
           endcase
         VMAXU: // VREDMAXU_VS
-          reduction_useless_value = '0;
+          reduction_neutral_value = '0;
         VMAX: // VREDMAX_VS
           unique case(spatz_req.vtype.vsew)
-            EW_8:reduction_useless_value = {1'b1,7'h0};
-            EW_16:reduction_useless_value = {1'b1,15'h0};
-            EW_32:reduction_useless_value = {1'b1,31'h0};
+            EW_8:reduction_neutral_value = {1'b1,7'h0};
+            EW_16:reduction_neutral_value = {1'b1,15'h0};
+            EW_32:reduction_neutral_value = {1'b1,31'h0};
             default:
-              if(MAXEW == EW_64) reduction_useless_value = {1'b1,63'h0};
+              if(MAXEW == EW_64) reduction_neutral_value = {1'b1,63'h0};
           endcase
         VFMINMAX: begin
          if(spatz_req.rm == fpnew_pkg::RNE) begin // VFREDMIN_VS
           unique case(fpu_src_fmt)
           // + infinity
-            fpnew_pkg::FP64:reduction_useless_value = {1'b0,11'h7ff,52'h0};
-            fpnew_pkg::FP32:reduction_useless_value = {1'b0,8'hff,23'h0};
-            fpnew_pkg::FP16:reduction_useless_value = {1'b0,5'h1f,10'h0};
-            fpnew_pkg::FP16ALT:reduction_useless_value = {1'b0,8'hff,7'h0};
-            fpnew_pkg::FP8:reduction_useless_value = {1'b0,5'h1f,2'h0};
-            fpnew_pkg::FP8ALT:reduction_useless_value = {1'b0,4'hf,3'h0};
+            fpnew_pkg::FP64:reduction_neutral_value = {1'b0,11'h7ff,52'h0};
+            fpnew_pkg::FP32:reduction_neutral_value = {1'b0,8'hff,23'h0};
+            fpnew_pkg::FP16:reduction_neutral_value = {1'b0,5'h1f,10'h0};
+            fpnew_pkg::FP16ALT:reduction_neutral_value = {1'b0,8'hff,7'h0};
+            fpnew_pkg::FP8:reduction_neutral_value = {1'b0,5'h1f,2'h0};
+            fpnew_pkg::FP8ALT:reduction_neutral_value = {1'b0,4'hf,3'h0};
           endcase
          end
          if (spatz_req.rm == fpnew_pkg::RTZ) begin // VFREDMAX_VS
           unique case(fpu_src_fmt)
           // - infinity
-            fpnew_pkg::FP64:reduction_useless_value = {1'b1,11'h7ff,52'h0};
-            fpnew_pkg::FP32:reduction_useless_value = {1'b1,8'hff,23'h0};
-            fpnew_pkg::FP16:reduction_useless_value = {1'b1,5'h1f,10'h0};
-            fpnew_pkg::FP16ALT:reduction_useless_value = {1'b1,8'hff,7'h0};
-            fpnew_pkg::FP8:reduction_useless_value = {1'b1,5'h1f,2'h0};
-            fpnew_pkg::FP8ALT:reduction_useless_value = {1'b1,4'hf,3'h0};
+            fpnew_pkg::FP64:reduction_neutral_value = {1'b1,11'h7ff,52'h0};
+            fpnew_pkg::FP32:reduction_neutral_value = {1'b1,8'hff,23'h0};
+            fpnew_pkg::FP16:reduction_neutral_value = {1'b1,5'h1f,10'h0};
+            fpnew_pkg::FP16ALT:reduction_neutral_value = {1'b1,8'hff,7'h0};
+            fpnew_pkg::FP8:reduction_neutral_value = {1'b1,5'h1f,2'h0};
+            fpnew_pkg::FP8ALT:reduction_neutral_value = {1'b1,4'hf,3'h0};
           endcase
          end
         end
-        default: reduction_useless_value='0;
+        default: reduction_neutral_value='0;
       endcase
     end
   end
@@ -764,14 +764,14 @@ module spatz_vfu
     // use of reduction useless value
     unique case (spatz_req.vtype.vsew)
       EW_8:
-        reduction_vector_data = (vrf_rdata_i[1] & mask & v0_mask) | ({N_FU*(ELEN/8){reduction_useless_value[7:0]}} & ~(mask & v0_mask));
+        reduction_vector_data = (vrf_rdata_i[1] & mask & v0_mask) | ({N_FU*(ELEN/8){reduction_neutral_value[7:0]}} & ~(mask & v0_mask));
       EW_16:
-        reduction_vector_data = (vrf_rdata_i[1] & mask & v0_mask) | ({N_FU*(ELEN/16){reduction_useless_value[15:0]}} & ~(mask & v0_mask));
+        reduction_vector_data = (vrf_rdata_i[1] & mask & v0_mask) | ({N_FU*(ELEN/16){reduction_neutral_value[15:0]}} & ~(mask & v0_mask));
       EW_32:
-        reduction_vector_data = (vrf_rdata_i[1] & mask & v0_mask) | ({N_FU*(ELEN/32){reduction_useless_value[31:0]}} & ~(mask & v0_mask));
+        reduction_vector_data = (vrf_rdata_i[1] & mask & v0_mask) | ({N_FU*(ELEN/32){reduction_neutral_value[31:0]}} & ~(mask & v0_mask));
       default:
         if (MAXEW == EW_64)
-          reduction_vector_data = (vrf_rdata_i[1] & mask & v0_mask) | ({N_FU{reduction_useless_value[63:0]}} & ~(mask & v0_mask));
+          reduction_vector_data = (vrf_rdata_i[1] & mask & v0_mask) | ({N_FU{reduction_neutral_value[63:0]}} & ~(mask & v0_mask));
     endcase
 
     unique case (reduction_state_q)
@@ -1224,7 +1224,7 @@ always_comb begin : vreg_wbe_proc
         vreg_wbe &= tail_wbe_eff; // tail-undisturbed + masking (v0.t)
       end else if(result_tag.narrowing) begin
         if(!spatz_req.op_arith.vm && !spatz_req.op_arith.is_scalar) begin
-          unique case (sew_wb) // CMY: add narrowing support
+          unique case (sew_wb)
             EW_16:for(int i=0;i<VRFWordBWidth/2;i=i+1)begin
               vreg_wbe_pre[i*2+:2] = {2{operand_v0_t_q[vreg_wb_word_cnt_q *16 + i]}};
               vreg_wbe = result_tag.narrowing_upper ? {vreg_wbe_pre[N_FU*ELENB-1:(N_FU*ELENB/2)],{(N_FU*ELENB/2){1'b0}}} : {{(N_FU*ELENB/2){1'b0}}, vreg_wbe_pre[(N_FU*ELENB/2)-1:0]};
