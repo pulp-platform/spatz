@@ -584,21 +584,23 @@ int main(void) {
   enable_vec();
   enable_fp();
 
-  // // FP8 elements, FP32 accumulation
+#if ELEN == 64
+  // FP8 elements, FP32 accumulation
   TEST_CASE1();
   TEST_CASE2();
 
-  // // FP8ALT elements, FP32 accumulation
+  // FP8ALT elements, FP32 accumulation
   TEST_CASE3();
   TEST_CASE4();
 
-  // // FP8 elements, FP16ALT (BF16) accumulation
+  // FP8 elements, FP16ALT (BF16) accumulation
   TEST_CASE5();
   TEST_CASE6();
 
-  // // FP4 elements, FP32 accumulation
+  // FP4 elements, FP32 accumulation
   TEST_CASE7();
   TEST_CASE8();
+#endif
 
   EXIT_CHECK();
 }
