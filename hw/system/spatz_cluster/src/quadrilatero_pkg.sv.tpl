@@ -55,12 +55,12 @@ package quadrilatero_pkg;
   typedef logic [$clog2(N_REGS    ) -1:0] src_reg_t;
   typedef logic [$clog2(N_ROWS    ) -1:0] row_t    ;
 
-  typedef enum logic      {SEL1_ACT, SEL1_ACC } sel_op1_e;
-  typedef enum logic[1:0] {SEL2_WGT, SEL2_ACC } sel_op2_e;
-  typedef enum logic      {SEL3_ACC, SEL3_ZERO} sel_op3_e;
+  typedef enum logic {SEL1_ACT, SEL1_ACC } sel_op1_e;
+  typedef enum logic {SEL2_WGT, SEL2_ACC } sel_op2_e;
+  typedef enum logic {SEL3_ACC, SEL3_ZERO} sel_op3_e;
 
   typedef enum logic [$clog2(NUM_EXEC_UNITS)-1:0] {
-    FU_SYSTOLIC_ARRAY = 0,
+    FU_SA = 0,
     FU_LSU,
     FU_RF,
     FU_CFG
@@ -323,7 +323,7 @@ package quadrilatero_pkg;
                     Op2:{SEL2_WGT, SEL2_ACC }, 
                     Op3:{SEL3_ACC, SEL3_ZERO},
                     MRFTech:{LATCH, SRAM, FF},
-                    ExUnits:{FU_CFG,FU_RF,FU_LSU,FU_SYSTOLIC_ARRAY},
+                    ExUnits:{FU_CFG,FU_RF,FU_LSU,FU_SA},
                     Ports:{LSU_W,LSU_R,SA_A_W,SA_D_R,SA_W_R}}
   };
 endpackage

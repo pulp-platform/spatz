@@ -133,30 +133,7 @@ module quadrilatero_top import fpnew_pkg::*; import quadrilatero_pkg::*; #(
   // ------------------
   // Quadrilatero
   // ------------------
-  quadrilatero #(
-      .quadrilatero_cfg_t(quadrilatero_pkg::quadrilatero_cfg_t),
-      .Cfg               (quadrilatero_pkg::QuadrilateroCfg   ),
-      .id_t              (quadrilatero_pkg::id_t              ),
-      .sb_req_t          (quadrilatero_pkg::sb_req_t          ),
-      .xif_result_t      (quadrilatero_pkg::xif_result_t      ),
-      .cfg_fpu_t         (quadrilatero_pkg::cfg_fpu_t         ),
-      .ctrl_fpu_t        (quadrilatero_pkg::ctrl_fpu_t        ),
-      .ctrl_acc_t        (quadrilatero_pkg::ctrl_acc_t        ),
-      .cfg_act_t         (quadrilatero_pkg::cfg_act_t         ),
-      .cfg_wgt_t         (quadrilatero_pkg::cfg_wgt_t         ),
-      .cfg_move_t        (quadrilatero_pkg::cfg_move_t        ),
-      .mcfg_t            (quadrilatero_pkg::mcfg_t            ),
-      .dec_instr_t       (quadrilatero_pkg::dec_instr_t       ),
-      .mac_instr_t       (quadrilatero_pkg::mac_instr_t       ),
-      .move_instr_t      (quadrilatero_pkg::move_instr_t      ),
-      .lsu_instr_t       (quadrilatero_pkg::lsu_instr_t       ),
-      .execution_units_e (quadrilatero_pkg::execution_units_e ),
-      .ports_e           (quadrilatero_pkg::ports_e           ),
-      .tech_e            (quadrilatero_pkg::tech_e            ),
-      .sel_op1_e         (quadrilatero_pkg::sel_op1_e         ),
-      .sel_op2_e         (quadrilatero_pkg::sel_op2_e         ),
-      .sel_op3_e         (quadrilatero_pkg::sel_op3_e         )
-  ) i_quadrilatero (
+  quadrilatero i_quadrilatero (
       .clk_i,
       .rst_ni,
 
