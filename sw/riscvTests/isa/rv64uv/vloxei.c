@@ -98,15 +98,18 @@ void TEST_CASE3(void) {
 
 // Naive, masked
 void TEST_CASE4(void) {
+  VSET(1, e8, m1);
+  VCLEAR(v0);
+  VLOAD_8(v0, 0xAA);
 
   volatile uint8_t ALIGNED_I8[] = {0xe0, 0xd3, 0x40, 0xd1, 0x84, 0x48, 0x89, 0x88,
     0x88, 0xae, 0x08, 0x91, 0x02, 0x59, 0x11, 0x89};
 
-
   VSET(2, e8, m1);
+  VCLEAR(v1);
+  VCLEAR(v2);
   VLOAD_8(v1, 99, 99);
   VLOAD_8(v2, 1, 15);
-  VLOAD_8(v0, 0xAA);
   asm volatile("vloxei8.v v1, (%0), v2, v0.t" ::"r"(&ALIGNED_I8[0]));
   VCMP_U8(9, v1, 99, 0x89);
 
@@ -115,9 +118,11 @@ void TEST_CASE4(void) {
         0x8188, 0x11ae, 0x5808, 0x4891, 0x4902, 0x8759, 0x1111, 0x1989};
 
   VSET(2, e16, m1);
+  VCLEAR(v1);
+  VCLEAR(v2);
   VLOAD_16(v1, 999, 999);
   VLOAD_16(v2, 2, 30);
-  VLOAD_8(v0, 0xAA);
+  
   asm volatile("vloxei16.v v1, (%0), v2, v0.t" ::"r"(&ALIGNED_I16[0]));
   VCMP_U16(10, v1, 999, 0x1989);
 
@@ -127,9 +132,10 @@ void TEST_CASE4(void) {
         0x90318509, 0x31897598, 0x83195999, 0x89139848};
 
   VSET(2, e32, m1);
+  VCLEAR(v1);
+  VCLEAR(v2);
   VLOAD_32(v1, 999, 999);
   VLOAD_32(v2, 4, 60);
-  VLOAD_8(v0, 0xAA);
   asm volatile("vloxei32.v v1, (%0), v2, v0.t" ::"r"(&ALIGNED_I32[0]));
   VCMP_U32(11, v1, 999, 0x89139848);
 

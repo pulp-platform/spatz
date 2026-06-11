@@ -17,48 +17,57 @@ void TEST_CASE1(void) {
 
 //*******Checking functionality of vle32 with different values of masking register******//
 void TEST_CASE2(void) {
-  VSET(8, e32, m1);
-  volatile uint32_t INP1[] = {0xDEADBEe0, 0xDEADBEd3, 0xDEADBE40, 0xDEADBEd1,
-                              0xDEADBE84, 0xDEADBE48, 0xDEADBE89, 0xDEADBE88};
-  VCLEAR(v1);
+  volatile uint32_t INP1[] = {0xDEADBE00, 0xDEADBE9f, 0xDEADBEe4, 0xDEADBE19,
+                              0xDEADBE20, 0xDEADBE8f, 0xDEADBE2e, 0xDEADBE05};
+  VSET(1, e8, m1);
+  VCLEAR(v0);
   VLOAD_8(v0, 0xFF);
+
   VSET(8, e32, m1);
+  VCLEAR(v1);
   asm volatile("vle32.v v1, (%0), v0.t" ::"r"(INP1));
-  VCMP_U32(2, v1, 0xDEADBEe0, 0xDEADBEd3, 0xDEADBE40, 0xDEADBEd1,
-                  0xDEADBE84, 0xDEADBE48, 0xDEADBE89, 0xDEADBE88);
+  VCMP_U32(2, v1, 0xDEADBE00, 0xDEADBE9f, 0xDEADBEe4, 0xDEADBE19,
+                  0xDEADBE20, 0xDEADBE8f, 0xDEADBE2e, 0xDEADBE05);
 }
 
 void TEST_CASE3(void) {
-  VSET(8, e32, m1);
   volatile uint32_t INP1[] = {0xDEADBEe0, 0xDEADBEd3, 0xDEADBE40, 0xDEADBEd1,
                               0xDEADBE84, 0xDEADBE48, 0xDEADBE89, 0xDEADBE88};
-  VLOAD_32(v1, 1, 2, 3, 4, 5, 6, 7, 8);
+  VSET(1, e8, m1);
+  VCLEAR(v0);
   VLOAD_8(v0, 0x00);
+
   VSET(8, e32, m1);
+  VCLEAR(v1);
+  VLOAD_32(v1, 1, 2, 3, 4, 5, 6, 7, 8);
   asm volatile("vle32.v v1, (%0), v0.t" ::"r"(INP1));
   VCMP_U32(3, v1, 1, 2, 3, 4, 5, 6, 7, 8);
 }
 
 void TEST_CASE4(void) {
-  VSET(8, e32, m1);
   volatile uint32_t INP1[] = {0xDEADBEe0, 0xDEADBEd3, 0xDEADBE40, 0xDEADBEd1,
                               0xDEADBE84, 0xDEADBE48, 0xDEADBE89, 0xDEADBE88};
+  VSET(1, e8, m1);
+  VCLEAR(v0);
+  VLOAD_8(v0, 0xAA);
+
+  VSET(8, e32, m1);
   VCLEAR(v1);
   VLOAD_32(v1, 1, 2, 3, 4, 5, 6, 7, 8);
-  VLOAD_8(v0, 0xAA);
-  VSET(8, e32, m1);
   asm volatile("vle32.v v1, (%0), v0.t" ::"r"(INP1));
   VCMP_U32(4, v1, 1, 0xDEADBEd3, 3, 0xDEADBEd1, 5, 0xDEADBE48, 7, 0xDEADBE88);
 }
 
 void TEST_CASE5(void) {
-  VSET(8, e32, m8);
   volatile uint32_t INP1[] = {0xDEADBEe0, 0xDEADBEd3, 0xDEADBE40, 0xDEADBEd1,
                               0xDEADBE84, 0xDEADBE48, 0xDEADBE89, 0xDEADBE88};
+  VSET(1, e8, m1);
+  VCLEAR(v0);
+  VLOAD_8(v0, 0xAA);
+
+  VSET(8, e32, m8);
   VCLEAR(v8);
   VLOAD_32(v8, 1, 2, 3, 4, 5, 6, 7, 8);
-  VLOAD_8(v0, 0xAA);
-  VSET(8, e32, m8);
   asm volatile("vle32.v v8, (%0), v0.t" ::"r"(INP1));
   VCMP_U32(5, v8, 1, 0xDEADBEd3, 3, 0xDEADBEd1, 5, 0xDEADBE48, 7, 0xDEADBE88);
 }
@@ -92,10 +101,9 @@ void TEST_CASE6(void) {
               0x0000001C, 0x0000001D, 0x0000001E, 0x0000001F);
 }
 
-//NB: alignment is a workarounfd for a bug in the implementation of doublebw_vlsu, and should be removed once the bug is fixed
 void TEST_CASE7(void) {
   VSET(64, e32, m8);
-  volatile uint32_t __attribute__((aligned(8))) INP1[] = {
+  volatile uint32_t INP1[] = {
       0x00000000, 0x00000001, 0x00000002, 0x00000003,
       0x00000004, 0x00000005, 0x00000006, 0x00000007,
       0x00000008, 0x00000009, 0x0000000A, 0x0000000B,
@@ -141,9 +149,9 @@ void TEST_CASE7(void) {
     0x0000003C, 0x0000003D, 0x0000003E, 0x0000003F);
 }
 
+// TODO
 void TEST_CASE8(void) {
-  VSET(64, e32, m8);
-  volatile uint32_t __attribute__((aligned(8))) INP1[] = {
+  volatile uint32_t INP1[] = {
       0x00000000, 0x00000001, 0x00000002, 0x00000003,
       0x00000004, 0x00000005, 0x00000006, 0x00000007,
       0x00000008, 0x00000009, 0x0000000A, 0x0000000B,
@@ -165,8 +173,12 @@ void TEST_CASE8(void) {
       0x0000003C, 0x0000003D, 0x0000003E, 0x0000003F
   };
 
-  VCLEAR(v8);
+  VSET(8, e8, m1);
+  VCLEAR(v0);
+  VLOAD_8(v0, 0xAA, 0xAA, 0xAA, 0xAA, 0xAB, 0xAB, 0xAB, 0xAB);
 
+  VSET(64, e32, m8);
+  VCLEAR(v8);
   VLOAD_32(v8,
       99,  99,  99,  99,  99,  99,  99,  99,
       99,  99,  99,  99,  99,  99,  99,  99,
@@ -176,11 +188,6 @@ void TEST_CASE8(void) {
       99,  99,  99,  99,  99,  99,  99,  99,
       99,  99,  99,  99,  99,  99,  99,  99,
       99,  99,  99,  99,  99,  99,  99,  99);
-
-  VLOAD_8(v0, 0xAA, 0xAA, 0xAA, 0xAA,
-              0xAB, 0xAB, 0xAB, 0xAB);
-
-  VSET(64, e32, m8);
 
   asm volatile("vle32.v v8, (%0), v0.t" ::"r"(INP1));
 

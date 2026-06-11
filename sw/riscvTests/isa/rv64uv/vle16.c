@@ -17,55 +17,69 @@ void TEST_CASE1(void) {
 
 //*******Checking functionality of vle16 with different values of masking register******//
 void TEST_CASE2(void) {
+  VSET(2, e8, m1);
+  VCLEAR(v0);
+  VLOAD_8(v0, 0xFF, 0xFF);
+
   VSET(16, e16, m1);
   volatile uint16_t INP1[] = {0xFFe0, 0xFFd3, 0xFF40, 0xFFd1, 0xFF84, 0xFF48, 0xFF89, 0xFF88,
                               0xFF88, 0xFFae, 0xFF08, 0xFF91, 0xFF02, 0xFF59, 0xFF11, 0xFF89};
   VCLEAR(v1);
-  VLOAD_8(v0, 0xFF, 0xFF);
-  VSET(16, e16, m1);
   asm volatile("vle16.v v1, (%0), v0.t" ::"r"(INP1));
   VCMP_U16(2, v1, 0xFFe0, 0xFFd3, 0xFF40, 0xFFd1, 0xFF84, 0xFF48, 0xFF89, 0xFF88,
                   0xFF88, 0xFFae, 0xFF08, 0xFF91, 0xFF02, 0xFF59, 0xFF11, 0xFF89);
 }
 
 void TEST_CASE3(void) {
+  VSET(2, e8, m1);
+  VCLEAR(v0);
+  VLOAD_8(v0, 0x00, 0x00);
+
   VSET(16, e16, m1);
   volatile uint16_t INP1[] = {0xFFe0, 0xFFd3, 0xFF40, 0xFFd1, 0xFF84, 0xFF48, 0xFF89, 0xFF88,
                               0xFF88, 0xFFae, 0xFF08, 0xFF91, 0xFF02, 0xFF59, 0xFF11, 0xFF89};
   VLOAD_16(v1, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16);
-  VLOAD_8(v0, 0x00, 0x00);
-  VSET(16, e16, m1);
   asm volatile("vle16.v v1, (%0), v0.t" ::"r"(INP1));
   VCMP_U16(3, v1, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16);
 }
 
 void TEST_CASE4(void) {
+  VSET(2, e8, m1);
+  VCLEAR(v0);
+  VLOAD_8(v0, 0xAA, 0xAA);
+
   VSET(16, e16, m1);
   volatile uint16_t INP1[] = {0xFFe0, 0xFFd3, 0xFF40, 0xFFd1, 0xFF84, 0xFF48, 0xFF89, 0xFF88,
                               0xFF88, 0xFFae, 0xFF08, 0xFF91, 0xFF02, 0xFF59, 0xFF11, 0xFF89};
   VCLEAR(v1);
   VLOAD_16(v1, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16);
-  VLOAD_8(v0, 0xAA, 0xAA);
-  VSET(16, e16, m1);
+  
   asm volatile("vle16.v v1, (%0), v0.t" ::"r"(INP1));
   VCMP_U16(4, v1, 1, 0xFFd3, 3, 0xFFd1, 5, 0xFF48, 7, 0xFF88,
                   9, 0xFFae, 11, 0xFF91, 13, 0xFF59, 15, 0xFF89);
 }
 
 void TEST_CASE5(void) {
+  VSET(2, e8, m1);
+  VCLEAR(v0);
+  VLOAD_8(v0, 0xAA, 0xAA);
+
   VSET(16, e16, m8);
   volatile uint16_t INP1[] = {0xFFe0, 0xFFd3, 0xFF40, 0xFFd1, 0xFF84, 0xFF48, 0xFF89, 0xFF88,
                               0xFF88, 0xFFae, 0xFF08, 0xFF91, 0xFF02, 0xFF59, 0xFF11, 0xFF89};
   VCLEAR(v8);
   VLOAD_16(v8, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16);
-  VLOAD_8(v0, 0xAA, 0xAA);
-  VSET(16, e16, m8);
+  
   asm volatile("vle16.v v8, (%0), v0.t" ::"r"(INP1));
   VCMP_U16(5, v8, 1, 0xFFd3, 3, 0xFFd1, 5, 0xFF48, 7, 0xFF88,
                   9, 0xFFae, 11, 0xFF91, 13, 0xFF59, 15, 0xFF89);
 }
 
 void TEST_CASE6(void) {
+  VSET(8, e8, m1);
+  VCLEAR(v0);
+  VLOAD_8(v0, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA);
+
   VSET(64, e16, m8);
   volatile uint16_t INP1[] = {
         0x0000, 0x0001, 0x0002, 0x0003, 0x0004, 0x0005, 0x0006, 0x0007,
@@ -83,9 +97,6 @@ void TEST_CASE6(void) {
                33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48,
                49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64);
 
-
-  VLOAD_8(v0, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA);
-  VSET(64, e16, m8);
   asm volatile("vle16.v v8, (%0), v0.t" ::"r"(INP1));
   VCMP_U16(6, v8,  1, 0x0001,  3, 0x0003,  5, 0x0005,  7, 0x0007,  9, 0x0009, 11, 0x000B, 13, 0x000D, 15, 0x000F,
                   17, 0x0011, 19, 0x0013, 21, 0x0015, 23, 0x0017, 25, 0x0019,27, 0x001B, 29, 0x001D, 31, 0x001F,

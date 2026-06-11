@@ -23,13 +23,16 @@ void TEST_CASE1(void) {
 //*******Checking functionality of vse32 with different values of masking
 // register******//
 void TEST_CASE2(void) {
+  VSET(2, e8, m1);
+  VCLEAR(v0);
+  VLOAD_8(v0, 0xFF, 0xFF);
+
   volatile uint32_t ALIGNED_I32[16]={0};
   VSET(16, e32, m2);
   VLOAD_32(v2, 0x9fe41920, 0xf9aa71f0, 0xa11a9384, 0x99991348, 0x9fa831c7,
            0x38197598, 0x18931795, 0x81937598, 0x18747547, 0x3eeeeeee,
            0x90139301, 0xab8b9148, 0x90318509, 0x31897598, 0x83195999,
            0x89139848);
-  VLOAD_8(v0, 0xFF, 0xFF);
   asm volatile("vse32.v v2, (%0), v0.t" ::"r"(ALIGNED_I32));
   VCLEAR(v2);
   VVCMP_U32(2, ALIGNED_I32, 0x9fe41920, 0xf9aa71f0, 0xa11a9384, 0x99991348,
@@ -39,6 +42,10 @@ void TEST_CASE2(void) {
 }
 
 void TEST_CASE3(void) {
+  VSET(2, e8, m1);
+  VCLEAR(v0);
+  VLOAD_8(v0, 0x00, 0x00);
+
   volatile uint32_t ALIGNED_I32[16];
   VSET(16, e32, m4);
   VLOAD_32(v4, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16);
@@ -48,7 +55,6 @@ void TEST_CASE3(void) {
            0x38197598, 0x18931795, 0x81937598, 0x18747547, 0x3eeeeeee,
            0x90139301, 0xab8b9148, 0x90318509, 0x31897598, 0x83195999,
            0x89139848);
-  VLOAD_8(v0, 0x00, 0x00);
   asm volatile("vse32.v v4, (%0), v0.t" ::"r"(ALIGNED_I32));
   VCLEAR(v4);
   VVCMP_U32(3, ALIGNED_I32, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
@@ -56,6 +62,10 @@ void TEST_CASE3(void) {
 }
 
 void TEST_CASE4(void) {
+  VSET(2, e8, m1);
+  VCLEAR(v0);
+  VLOAD_8(v0, 0xAA, 0xAA);
+
   volatile uint32_t ALIGNED_I32[16];
   VSET(16, e32, m8);
   VLOAD_32(v8, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16);
@@ -65,7 +75,6 @@ void TEST_CASE4(void) {
            0x55555555, 0x66666666, 0x77777777, 0x88888888, 0x99999999,
            0xaaaaaaaa, 0xbbbbbbbb, 0xcccccccc, 0xdddddddd, 0xeeeeeeee,
            0xffffffff,0x00000000);
-  VLOAD_8(v0, 0xAA, 0xAA);
   asm volatile("vse32.v v8, (%0), v0.t" ::"r"(ALIGNED_I32));
   VCLEAR(v8);
   VVCMP_U32(4, ALIGNED_I32, 1, 0x22222222, 3, 0x44444444, 5, 0x66666666, 7,
@@ -92,6 +101,10 @@ void TEST_CASE5(void) {
 
 
 void TEST_CASE6(void) {
+  VSET(2, e32, m1);
+  VCLEAR(v0);
+  VLOAD_32(v0, 0xAAAAAAAA, 0xAAAAAAAA);
+
   VSET(64, e32, m8);
   volatile uint32_t ALIGNED_I32[64];
 
@@ -102,10 +115,6 @@ void TEST_CASE6(void) {
                17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32,
                33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48,
                49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64);
-
-  VCLEAR(v0);
-  VLOAD_32(v0, 0xAAAAAAAA, 0xAAAAAAAA);
-
   asm volatile("vse32.v v8, (%0), v0.t" ::"r"(ALIGNED_I32));
 
   VVCMP_U32(6, ALIGNED_I32,

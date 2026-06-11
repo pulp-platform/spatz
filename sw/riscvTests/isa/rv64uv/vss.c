@@ -104,15 +104,16 @@ void TEST_CASE5(void) {
             0x0000000000000000, 0x9100229933847134, 0x0000000000000000,
             0x9affaaffaaffaaf4, 0x0000000000000000);
 }
-
 // Masked strided store
 void TEST_CASE6(void) {
+  VSET(1, e8, m1);
+  VCLEAR(v0);
+  VLOAD_8(v0, 0xA);
+
   VSET(4, e8, m1);
   volatile uint8_t OUT1[] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
                              0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
   uint64_t stride = 3;
-  // VLOAD_8(v0, 0xAA);
-  VLOAD_8(v0, 0xA);
   VLOAD_8(v1, 0x9f, 0xe4, 0x19, 0x20);
   asm volatile("vsse8.v v1, (%0), %1, v0.t" ::"r"(OUT1), "r"(stride));
   VVCMP_U8(6, OUT1, 0x00, 0x00, 0x00, 0xe4, 0x00, 0x00, 0x00, 0x00, 0x00, 0x20,
@@ -120,6 +121,10 @@ void TEST_CASE6(void) {
 }
 
 void TEST_CASE7(void) {
+  VSET(1, e16, m1);
+  VCLEAR(v0);
+  VLOAD_16(v0, 0xAAAA);
+
   VSET(16, e32, m4);
   volatile uint32_t OUT1[] = {0x00000000, 0x00000000, 0x00000000, 0x00000000,
                               0x00000000, 0x00000000, 0x00000000, 0x00000000,
@@ -130,7 +135,6 @@ void TEST_CASE7(void) {
                               0x00000000, 0x00000000, 0x00000000, 0x00000000,
                               0x00000000, 0x00000000, 0x00000000, 0x00000000};
   uint64_t stride = 8;
-  VLOAD_16(v0, 0xAAAA);
   VLOAD_32(v1, 0x9f872456, 0xe1356784, 0x13241139, 0x20862497, 0x9f872456, 0xe1356784, 0x13241139, 0x20862497,
                0x9f872456, 0xe1356784, 0x13241139, 0x20862497, 0x9f872456, 0xe1356784, 0x13241139, 0x20862497);
 
@@ -142,11 +146,14 @@ void TEST_CASE7(void) {
                      0x00000000, 0x00000000, 0xe1356784, 0x00000000, 0x00000000,
                      0x00000000, 0x20862497, 0x00000000, 0x00000000, 0x00000000,
                      0xe1356784, 0x00000000, 0x00000000, 0x00000000, 0x20862497,
-                     0x00000000
-            );
+                     0x00000000);
 }
 
 void TEST_CASE8(void) {
+  VSET(2, e8, m1);
+  VCLEAR(v0);
+  VLOAD_8(v0, 0xAA, 0xAA);
+
   VSET(16, e64, m4);
   volatile uint64_t OUT1[] = {
       0x0000000000000000, 0x0000000000000000, 0x0000000000000000,
@@ -167,7 +174,6 @@ void TEST_CASE8(void) {
            0x1086252110062497, 0x1100229933847134, 0xaaffaaffaaffaaf4,
            0x9315345345241139, 0x9086252110062497, 0x9100229933847134,
            0x9affaaffaaffaaf4);
-  VLOAD_8(v0, 0xAA, 0xAA);
   asm volatile("vsse64.v v4, (%0), %1, v0.t" ::"r"(OUT1), "r"(stride));
   VVCMP_U64(8, OUT1, 0x0000000000000000, 0x0000000000000000, 0xe135578794246784,
             0x0000000000000000, 0x0000000000000000, 0x0000000000000000,

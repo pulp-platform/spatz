@@ -17,47 +17,59 @@ void TEST_CASE1(void) {
 
 //*******Checking functionality of vle64 with different values of masking register******//
 void TEST_CASE2(void) {
+  VSET(1, e8, m1);
+  VCLEAR(v0);
+  VLOAD_8(v0, 0x0F);
+
   VSET(4, e64, m1);
   volatile uint64_t INP1[] = {0xDEADBEEFCAFE00e0, 0xDEADBEEFCAFE00d3,
                               0xDEADBEEFCAFE0040, 0xDEADBEEFCAFE00d1};
   VCLEAR(v1);
-  VLOAD_8(v0, 0x0F);
-  VSET(4, e64, m1);
+
   asm volatile("vle64.v v1, (%0), v0.t" ::"r"(INP1));
   VCMP_U64(2, v1, 0xDEADBEEFCAFE00e0, 0xDEADBEEFCAFE00d3,
                   0xDEADBEEFCAFE0040, 0xDEADBEEFCAFE00d1);
 }
 
 void TEST_CASE3(void) {
-  VSET(4, e64, m1);
-  volatile uint64_t INP1[] = {0xDEADBEEFCAFE00e0, 0xDEADBEEFCAFE00d3,
-                              0xDEADBEEFCAFE0040, 0xDEADBEEFCAFE00d1};
-  VLOAD_64(v1, 1, 2, 3, 4);
+  VSET(1, e8, m1);
+  VCLEAR(v0);
   VLOAD_8(v0, 0x00);
-  VSET(4, e64, m1);
-  asm volatile("vle64.v v1, (%0), v0.t" ::"r"(INP1));
-  VCMP_U64(3, v1, 1, 2, 3, 4);
-}
 
-void TEST_CASE4(void) {
   VSET(4, e64, m1);
   volatile uint64_t INP1[] = {0xDEADBEEFCAFE00e0, 0xDEADBEEFCAFE00d3,
                               0xDEADBEEFCAFE0040, 0xDEADBEEFCAFE00d1};
   VCLEAR(v1);
   VLOAD_64(v1, 1, 2, 3, 4);
+  asm volatile("vle64.v v1, (%0), v0.t" ::"r"(INP1));
+  VCMP_U64(3, v1, 1, 2, 3, 4);
+}
+
+void TEST_CASE4(void) {
+  VSET(1, e8, m1);
+  VCLEAR(v0);
   VLOAD_8(v0, 0x0A);
+
+  VSET(4, e64, m1);
+  volatile uint64_t INP1[] = {0xDEADBEEFCAFE00e0, 0xDEADBEEFCAFE00d3,
+                              0xDEADBEEFCAFE0040, 0xDEADBEEFCAFE00d1};
+  VCLEAR(v1);
+  VLOAD_64(v1, 1, 2, 3, 4);
   VSET(4, e64, m1);
   asm volatile("vle64.v v1, (%0), v0.t" ::"r"(INP1));
   VCMP_U64(4, v1, 1, 0xDEADBEEFCAFE00d3, 3, 0xDEADBEEFCAFE00d1);
 }
 
 void TEST_CASE5(void) {
+  VSET(1, e8, m1);
+  VCLEAR(v0);
+  VLOAD_8(v0, 0x0A);
+
   VSET(4, e64, m8);
   volatile uint64_t INP1[] = {0xDEADBEEFCAFE00e0, 0xDEADBEEFCAFE00d3,
                               0xDEADBEEFCAFE0040, 0xDEADBEEFCAFE00d1};
   VCLEAR(v8);
   VLOAD_64(v8, 1, 2, 3, 4);
-  VLOAD_8(v0, 0x0A);
   VSET(4, e64, m8);
   asm volatile("vle64.v v8, (%0), v0.t" ::"r"(INP1));
   VCMP_U64(5, v8, 1, 0xDEADBEEFCAFE00d3, 3, 0xDEADBEEFCAFE00d1);
@@ -81,10 +93,9 @@ void TEST_CASE6(void) {
       0x000000000000000C, 0x000000000000000D, 0x000000000000000E, 0x000000000000000F);
 }
 
-//NB: alignment is a workarounfd for a bug in the implementation of doublebw_vlsu, and should be removed once the bug is fixed
 void TEST_CASE7(void) {
   VSET(32, e64, m8);
-  volatile uint64_t __attribute__((aligned(8))) INP1[] = {
+  volatile uint64_t INP1[] = {
       0x0000000000000000, 0x0000000000000001, 0x0000000000000002, 0x0000000000000003,
       0x0000000000000004, 0x0000000000000005, 0x0000000000000006, 0x0000000000000007,
       0x0000000000000008, 0x0000000000000009, 0x000000000000000A, 0x000000000000000B,
@@ -110,9 +121,12 @@ void TEST_CASE7(void) {
 }
 
 void TEST_CASE8(void) {
-  VSET(32, e64, m8);
+  VSET(4, e8, m1);
+  VCLEAR(v0);
+  VLOAD_8(v0, 0xAB, 0xAB, 0xAA, 0xAA);
 
-  volatile uint64_t __attribute__((aligned(8))) INP1[] = {
+  VSET(32, e64, m8);
+  volatile uint64_t INP1[] = {
       0x0000000000000000, 0x0000000000000001, 0x0000000000000002, 0x0000000000000003,
       0x0000000000000004, 0x0000000000000005, 0x0000000000000006, 0x0000000000000007,
       0x0000000000000008, 0x0000000000000009, 0x000000000000000A, 0x000000000000000B,
@@ -132,8 +146,6 @@ void TEST_CASE8(void) {
       99,  99,  99,  99,  99,  99,  99,  99);
 
   VLOAD_8(v0, 0xAB, 0xAB, 0xAA, 0xAA);
-
-  VSET(32, e64, m8);
 
   asm volatile("vle64.v v8, (%0), v0.t" ::"r"(INP1));
 

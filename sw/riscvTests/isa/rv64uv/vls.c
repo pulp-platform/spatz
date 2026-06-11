@@ -174,40 +174,54 @@ void TEST_CASE14(void) {
 
 // Masked stride loads
 void TEST_CASE15(void) {
+  VSET(1, e8, m1);
+  VCLEAR(v0);
+  VLOAD_8(v0, 0xAA);
+
   VSET(4, e8, m1);
   volatile uint8_t INP1[] = {0x9f, 0xe4, 0x19, 0x20, 0x8f, 0x2e, 0x05, 0xe0,
                              0xf9, 0xaa, 0x71, 0xf0, 0xc3, 0x94, 0xbb, 0xd3};
   uint64_t stride = 3;
-  VLOAD_8(v0, 0xAA);
   VCLEAR(v1);
   asm volatile("vlse8.v v1, (%0), %1, v0.t" ::"r"(INP1), "r"(stride));
   VCMP_U8(15, v1, 0x00, 0x20, 0x00, 0xaa);
 }
 
 void TEST_CASE16(void) {
+  VSET(1, e8, m1);
+  VCLEAR(v0);
+  VLOAD_8(v0, 0xAA);
+
   VSET(4, e16, m1);
   volatile uint16_t INP1[] = {0x9fe4, 0x1920, 0x8f2e, 0x05e0,
                               0xf9aa, 0x71f0, 0xc394, 0xbbd3};
   uint64_t stride = 4;
-  VLOAD_8(v0, 0xAA);
   VCLEAR(v1);
   asm volatile("vlse16.v v1, (%0), %1, v0.t" ::"r"(INP1), "r"(stride));
   VCMP_U16(16, v1, 0, 0x8f2e, 0, 0xc394);
 }
 
 void TEST_CASE17(void) {
+  VSET(1, e8, m1);
+  VCLEAR(v0);
+  VLOAD_8(v0, 0xAA);
+
   VSET(4, e32, m1);
   volatile uint32_t INP1[] = {0x9fe41920, 0x8f2e05e0, 0xf9aa71f0, 0xc394bbd3,
                               0xa11a9384, 0xa7163840, 0x99991348, 0xa9f38cd1};
   uint64_t stride = 8;
-  VLOAD_8(v0, 0xAA);
   VCLEAR(v1);
   asm volatile("vlse32.v v1, (%0), %1, v0.t" ::"r"(INP1), "r"(stride));
   VCMP_U32(17, v1, 0, 0xf9aa71f0, 0, 0x99991348);
 }
 
 void TEST_CASE18(void) {
+
 #if ELEN == 64
+  VSET(1, e8, m1);
+  VCLEAR(v0);
+  VLOAD_8(v0, 0xAA);
+  
   VSET(8, e64, m2);
   volatile uint64_t INP1[] = {
       0x9fe419208f2e05e0, 0xf9aa71f0c394bbd3, 0xa11a9384a7163840,
@@ -217,8 +231,7 @@ void TEST_CASE18(void) {
       0x9031850931584902, 0x3189759837598759, 0x8319599991911111,
       0x8913984898951989};
   uint64_t stride = 16;
-  VLOAD_8(v0, 0xAA);
-  VCLEAR(v1);
+  VCLEAR(v2);
   asm volatile("vlse64.v v2, (%0), %1, v0.t" ::"r"(INP1), "r"(stride));
   VCMP_U64(18, v2, 0, 0xa11a9384a7163840, 0, 0x1893179501093489, 0,
            0x9013930148815808, 0, 0x8319599991911111);
@@ -377,10 +390,10 @@ int main(void) {
   TEST_CASE14();
 
   // TODO: Masked stride loads
-  // TEST_CASE15();
-  // TEST_CASE16();
-  // TEST_CASE17();
-  // TEST_CASE18();
+  TEST_CASE15();
+  TEST_CASE16();
+  TEST_CASE17();
+  TEST_CASE18();
 
   // Large vector lengths
   TEST_CASE19();
