@@ -1259,6 +1259,20 @@ module spatz_vlsu
               mem_req_id[port]     = burst_base_id_q[port];
               mem_req_last[port]   = mem_operation_last[port];
             end
+          end else if (burst_alloc_q[port] && burst_send[port]) begin
+            // force_send collapsed a burst to a single pre-allocated beat
+            // (burst_alloc_cnt_q==1 while rob_full): burst_use is false because
+            // burst_len_eff==1, but the ROB id is already reserved, so issue it
+            // directly -- crucially WITHOUT the !rob_full gate of the scalar
+            // branch below (rob_full is exactly what triggered force_send).
+            // Otherwise the beat never issues, the burst state never clears
+            // (the clear at ~1102 needs mem_req_lvalid), and the port wedges
+            // (stall, deadlock-capable under sustained burst ROB pressure).
+            mem_req_lvalid[port] = (!mem_is_indexed || (vrf_rvalid_i[1] && !pending_index[port])) &&
+                                   !commit_insn_push &&
+                                   commit_insn_q.is_load;
+            mem_req_id[port]     = burst_base_id_q[port];
+            mem_req_last[port]   = mem_operation_last[port];
           end else if ((!burst_mode_req[port] || !burst_use[port]) &&
                        !rob_full[port] && !offset_queue_full[port]) begin
             mem_req_lvalid[port] = (!mem_is_indexed || (vrf_rvalid_i[1] && !pending_index[port])) &&
