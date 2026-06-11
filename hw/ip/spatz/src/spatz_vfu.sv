@@ -854,7 +854,7 @@ module spatz_vfu
       id              : spatz_req.id,
       vsew            : spatz_req.vtype.vsew,
       vstart          : spatz_req.vstart,
-      vd_addr         : spatz_req.op_arith.is_scalar ? vrf_addr_t'(spatz_req.rd) : vfu_rsp_addr_t'(vreg_addr_q[2]),
+      vd_addr         : spatz_req.op_arith.is_scalar ? vfu_rsp_addr_t'(spatz_req.rd) : vfu_rsp_addr_t'(vreg_addr_q[2]),
       wb              : spatz_req.op_arith.is_scalar,
       last            : last_request,
       narrowing       : spatz_req.op_arith.is_narrowing,

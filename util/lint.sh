@@ -25,7 +25,8 @@ echo "Check C and C++ source code"
 ( [ -d install/llvm ] || [ -n "$LLVM_INSTALL_DIR" ] ) || { echo "Error: neither install/llvm exists nor LLVM_INSTALL_DIR is set" >&2; exit 1; }; \
 CF=install/llvm/bin/clang-format; [ ! -d install/llvm ] && CF="$LLVM_INSTALL_DIR/bin/clang-format"; \
 ./util/vendor/run_clang_format.py \
-    --clang-format-executable="$CF" -r sw/spatzBenchmarks || EXIT_STATUS=$?
+    --clang-format-executable="$CF" -r sw/spatzBenchmarks \
+    --exclude "*/data/*.h" --exclude "*/data/*.c" || EXIT_STATUS=$?
 
 # Check python files
 echo "Check Python files"
@@ -41,6 +42,7 @@ git --no-pager diff --check -- \
     ':(exclude)**.patch' \
     ':(exclude)sw/toolchain/**' \
     ':(exclude)sw/riscv-tests/**' \
+    ':(exclude)sw/spatzBenchmarks/*/data/*' \
     || EXIT_STATUS=$?
 
 echo "Checking for trailing whitespaces and tabs between HEAD and $base"
@@ -49,6 +51,7 @@ git --no-pager diff --check $base HEAD -- \
     ':(exclude)**.patch' \
     ':(exclude)sw/toolchain/**' \
     ':(exclude)sw/riscv-tests/**' \
+    ':(exclude)sw/spatzBenchmarks/*/data/*' \
     || EXIT_STATUS=$?
 
 exit $EXIT_STATUS
