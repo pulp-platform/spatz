@@ -1016,6 +1016,15 @@ module spatz_vlsu
       // multi-port tail mode, to keep ordering simple.
       (mem_counter_q[0] >= burst_full_bytes_req) &&
       (commit_counter_q[0] >= burst_full_bytes_commit) &&
+      // ...but only while tail work actually still remains. If port0 has already
+      // drained the whole instruction by itself (counters reached vl), the burst
+      // is finished and there is nothing to switch to. Re-asserting here would
+      // reload burst_tail_base into mem_counter/commit_counter and corrupt the
+      // *next* instruction: mem_counter is reloaded on commit_insn_push but
+      // commit_counter only on commit_insn_pop, so a following store keeps the
+      // stale base and wedges (observed: VL=24 m2 burst+tail load -> store hang).
+      (mem_counter_q[0]    < commit_insn_q.vl) &&
+      (commit_counter_q[0] < commit_insn_q.vl) &&
       (mem_pending_q[0] == '0);
 
   always_comb begin : proc_burst_tail_phase
