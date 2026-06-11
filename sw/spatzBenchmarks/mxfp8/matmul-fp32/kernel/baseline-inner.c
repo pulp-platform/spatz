@@ -27,10 +27,10 @@
 // - 4x data reuse
 // - statically assumes VLEN=512, making 32 elements with SEW=32 (entire MX
 //   block) fit into a vector register group with LMUL=2
-void mxfp8_matmul_fp32_inner_4x(float *c,
-    const char *a, const char *b, const char *a_scale, const char *b_scale,
-    const uint32_t M, const uint32_t N, const uint32_t K)
-{
+void mxfp8_matmul_fp32_inner_4x(float *c, const char *a, const char *b,
+                                const char *a_scale, const char *b_scale,
+                                const uint32_t M, const uint32_t N,
+                                const uint32_t K) {
   // makes compiler avoid special cases on loop entries
   if (M == 0 || N == 0 || K == 0 || K % MX_BLOCK_SIZE != 0)
     return;
@@ -46,33 +46,33 @@ void mxfp8_matmul_fp32_inner_4x(float *c,
 
       for (uint32_t k = 0; k < K; k += MX_BLOCK_SIZE) {
         uint32_t k_block = k / MX_BLOCK_SIZE;
-        asm volatile("vsetvli zero, %0, e8, mf2, ta, ma" :: "r"(MX_BLOCK_SIZE));
+        asm volatile("vsetvli zero, %0, e8, mf2, ta, ma" ::"r"(MX_BLOCK_SIZE));
 
         const char *a_ = a + m * K + k;
         const char *b_ = b + n * K + k;
 
         // load operands and widen to FP16
         //  (a) a[m][k:k+MX_BLOCK_SIZE]   -> v23 () -> v16 (FP16)
-        asm volatile("vle8.v v23, (%0)" :: "r"(a_));
-        asm volatile("vfwadd.vf v16, v23, %0" :: "f"(0.0f));
+        asm volatile("vle8.v v23, (%0)" ::"r"(a_));
+        asm volatile("vfwadd.vf v16, v23, %0" ::"f"(0.0f));
         // (b0) b[k:k+MX_BLOCK_SIZE][n  ] -> v24 () -> v17 (FP16)
-        asm volatile("vle8.v v24, (%0)" :: "r"(b_));
-        asm volatile("vfwadd.vf v17, v24, %0" :: "f"(0.0f));
+        asm volatile("vle8.v v24, (%0)" ::"r"(b_));
+        asm volatile("vfwadd.vf v17, v24, %0" ::"f"(0.0f));
         b_ += K;
         // (b1) b[k:k+MX_BLOCK_SIZE][n+1] -> v25 () -> v18 (FP16)
-        asm volatile("vle8.v v25, (%0)" :: "r"(b_));
-        asm volatile("vfwadd.vf v18, v25, %0" :: "f"(0.0f));
+        asm volatile("vle8.v v25, (%0)" ::"r"(b_));
+        asm volatile("vfwadd.vf v18, v25, %0" ::"f"(0.0f));
         b_ += K;
         // (b2) b[k:k+MX_BLOCK_SIZE][n+2] -> v26 () -> v19 (FP16)
-        asm volatile("vle8.v v26, (%0)" :: "r"(b_));
-        asm volatile("vfwadd.vf v19, v26, %0" :: "f"(0.0f));
+        asm volatile("vle8.v v26, (%0)" ::"r"(b_));
+        asm volatile("vfwadd.vf v19, v26, %0" ::"f"(0.0f));
         b_ += K;
         // (b3) b[k:k+MX_BLOCK_SIZE][n+3] -> v27 () -> v20 (FP16)
-        asm volatile("vle8.v v27, (%0)" :: "r"(b_));
-        asm volatile("vfwadd.vf v20, v27, %0" :: "f"(0.0f));
+        asm volatile("vle8.v v27, (%0)" ::"r"(b_));
+        asm volatile("vfwadd.vf v20, v27, %0" ::"f"(0.0f));
         b_ += K;
 
-        asm volatile("vsetvli zero, %0, e16, m1, ta, ma" :: "r"(MX_BLOCK_SIZE));
+        asm volatile("vsetvli zero, %0, e16, m1, ta, ma" ::"r"(MX_BLOCK_SIZE));
 
         // widen and multiply operands to FP32
         asm volatile("vfwmul.vv v24, v16, v17");
@@ -80,13 +80,16 @@ void mxfp8_matmul_fp32_inner_4x(float *c,
         asm volatile("vfwmul.vv v28, v16, v19");
         asm volatile("vfwmul.vv v30, v16, v20");
 
-        asm volatile("vsetvli zero, %0, e32, m1, ta, ma" :: "r"(MX_BLOCK_SIZE / 2));
+        asm volatile(
+            "vsetvli zero, %0, e32, m1, ta, ma" ::"r"(MX_BLOCK_SIZE / 2));
 
         // load scales, add and re-bias to FP32
-        const uint8_t *a_scale_ = (const uint8_t *)a_scale + m * K_BLOCK + k_block;
-        const uint8_t *b_scale_ = (const uint8_t *)b_scale + n * K_BLOCK + k_block;
+        const uint8_t *a_scale_ =
+            (const uint8_t *)a_scale + m * K_BLOCK + k_block;
+        const uint8_t *b_scale_ =
+            (const uint8_t *)b_scale + n * K_BLOCK + k_block;
 
-        uint32_t as  = *a_scale_;
+        uint32_t as = *a_scale_;
         uint32_t bs0 = *b_scale_;
         uint32_t ss0 = as + bs0 - (2 * E8M0_BIAS - FP32_BIAS);
         b_scale_ += K_BLOCK;
@@ -118,22 +121,23 @@ void mxfp8_matmul_fp32_inner_4x(float *c,
 
         // scale and accumulate
         if (k == 0) {
-          asm volatile("vfmul.vf v0, v24, %0" :: "f"(scale0));
-          asm volatile("vfmul.vf v2, v26, %0" :: "f"(scale1));
-          asm volatile("vfmul.vf v4, v28, %0" :: "f"(scale2));
-          asm volatile("vfmul.vf v6, v30, %0" :: "f"(scale3));
+          asm volatile("vfmul.vf v0, v24, %0" ::"f"(scale0));
+          asm volatile("vfmul.vf v2, v26, %0" ::"f"(scale1));
+          asm volatile("vfmul.vf v4, v28, %0" ::"f"(scale2));
+          asm volatile("vfmul.vf v6, v30, %0" ::"f"(scale3));
         } else {
-          asm volatile("vfmacc.vf v0, %0, v24" :: "f"(scale0));
-          asm volatile("vfmacc.vf v2, %0, v26" :: "f"(scale1));
-          asm volatile("vfmacc.vf v4, %0, v28" :: "f"(scale2));
-          asm volatile("vfmacc.vf v6, %0, v30" :: "f"(scale3));
+          asm volatile("vfmacc.vf v0, %0, v24" ::"f"(scale0));
+          asm volatile("vfmacc.vf v2, %0, v26" ::"f"(scale1));
+          asm volatile("vfmacc.vf v4, %0, v28" ::"f"(scale2));
+          asm volatile("vfmacc.vf v6, %0, v30" ::"f"(scale3));
         }
       }
 
       // reduce
       // NOTE: This improves the performance of the reduction by first adding
       // the elements from both vector registers (in parallel) before reducing.
-      asm volatile("vsetvli zero, %0, e32, m1, ta, ma" :: "r"(MX_BLOCK_SIZE / 2));
+      asm volatile(
+          "vsetvli zero, %0, e32, m1, ta, ma" ::"r"(MX_BLOCK_SIZE / 2));
       asm volatile("vmv.v.i v23, 0");
 
       asm volatile("vfredusum.vs  v8, v0, v23");

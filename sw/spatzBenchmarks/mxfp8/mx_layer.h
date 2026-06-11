@@ -26,11 +26,20 @@
 #define FP32_BIAS 127
 #define BF16_BIAS 127
 
-#define FCSR_MODE_DST     (1 << 8)
-#define FCSR_MODE_SRC     (1 << 9)
+#define FCSR_MODE_DST (1 << 8)
+#define FCSR_MODE_SRC (1 << 9)
 #define FCSR_MODE_SRC_FP4 (1 << 13)
 
-typedef enum { FP4 = 128, E8M0 = 64, FP16ALT = 32, FP8ALT = 16, FP64 = 8, FP32 = 4, FP16 = 2, FP8 = 1 } precision_t;
+typedef enum {
+  FP4 = 128,
+  E8M0 = 64,
+  FP16ALT = 32,
+  FP8ALT = 16,
+  FP64 = 8,
+  FP32 = 4,
+  FP16 = 2,
+  FP8 = 1
+} precision_t;
 
 typedef struct mx_matmul_layer_struct {
   uint32_t M;

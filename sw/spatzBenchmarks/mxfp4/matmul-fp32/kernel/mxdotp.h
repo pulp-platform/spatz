@@ -32,6 +32,7 @@
 // - scale data format:       E8M0
 // - accumulator data format: FP32
 
-void mxfp4_matmul_fp32_mxdotp_lmul2_8x(float *c,
-    const char *a, const char *b, const char *a_scale, const char *b_scale,
-    const uint32_t M, const uint32_t N, const uint32_t K);
+void mxfp4_matmul_fp32_mxdotp_lmul2_8x(float *c, const char *a, const char *b,
+                                       const char *a_scale, const char *b_scale,
+                                       const uint32_t M, const uint32_t N,
+                                       const uint32_t K);

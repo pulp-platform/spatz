@@ -19,8 +19,8 @@
 #include "hp-alt-fmatmul.h"
 #include <stddef.h>
 
-#define FCSR_MODE_DST     (1 << 8)
-#define FCSR_MODE_SRC     (1 << 9)
+#define FCSR_MODE_DST (1 << 8)
+#define FCSR_MODE_SRC (1 << 9)
 
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 

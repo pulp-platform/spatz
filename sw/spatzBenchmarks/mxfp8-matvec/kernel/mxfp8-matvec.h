@@ -23,13 +23,13 @@
 
 // inner product: natural data layout
 
-void mxfp8_matvec_fp32_inner_4x(float *c,
-    const char *a, const char *b, const char *a_scale, const char *b_scale,
-    const uint32_t M, const uint32_t N);
+void mxfp8_matvec_fp32_inner_4x(float *c, const char *a, const char *b,
+                                const char *a_scale, const char *b_scale,
+                                const uint32_t M, const uint32_t N);
 
 // inner product with vfdotp: natural data layout
-void mxfp8_matvec_fp32_inner_sdotp_4x(float *c,
-    const char *a, const char *b, const char *a_scale, const char *b_scale,
-    const uint32_t M, const uint32_t N);
+void mxfp8_matvec_fp32_inner_sdotp_4x(float *c, const char *a, const char *b,
+                                      const char *a_scale, const char *b_scale,
+                                      const uint32_t M, const uint32_t N);
 
 #endif

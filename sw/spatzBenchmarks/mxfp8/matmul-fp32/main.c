@@ -47,7 +47,8 @@ char *a_scale;
 char *b_scale;
 float *c;
 
-void copy_transpose_matrix(char *dst, const char *src, const uint32_t m, const uint32_t n) {
+void copy_transpose_matrix(char *dst, const char *src, const uint32_t m,
+                           const uint32_t n) {
   for (uint32_t i = 0; i < m; i++) {
     for (uint32_t j = 0; j < n; j++) {
       dst[j * m + i] = src[i * n + j];
@@ -64,16 +65,18 @@ void copy_transpose_matrix(char *dst, const char *src, const uint32_t m, const u
 // b[2][0] b[3][0] b[2][1] b[3][1] ... b[2][cols-1] b[3][cols-1]
 // ...
 // b[rows-2][0] b[rows-1][0]       ... b[rows-2][cols-1] b[rows-1][cols-1]
-void copy_shuffle_matrix_for_sdotp(char *dst, const char *src, const uint32_t rows, const uint32_t cols) {
+void copy_shuffle_matrix_for_sdotp(char *dst, const char *src,
+                                   const uint32_t rows, const uint32_t cols) {
   for (uint32_t i = 0; i < rows; i += 2) {
     for (uint32_t j = 0; j < cols; j++) {
-      dst[i * cols + 2 * j]     = src[j * rows + i];
+      dst[i * cols + 2 * j] = src[j * rows + i];
       dst[i * cols + 2 * j + 1] = src[j * rows + i + 1];
     }
   }
 }
 
-bool verify_matrix(const float *actual, const float *expected, const uint32_t m, const uint32_t n) {
+bool verify_matrix(const float *actual, const float *expected, const uint32_t m,
+                   const uint32_t n) {
   for (uint32_t i = 0; i < m; i++) {
     for (uint32_t j = 0; j < n; j++) {
       uint32_t idx = i * n + j;
@@ -83,8 +86,8 @@ bool verify_matrix(const float *actual, const float *expected, const uint32_t m,
       float eps = 0.05 * fabsf(exp);
       if (diff > eps) {
         printf("Error in c[%d][%d]:\n", i, j);
-        printf(" acutal   = 0x%08x = %.4f\n", *(uint32_t*)&act, act);
-        printf(" expected = 0x%08x = %.4f\n", *(uint32_t*)&exp, exp);
+        printf(" acutal   = 0x%08x = %.4f\n", *(uint32_t *)&act, act);
+        printf(" expected = 0x%08x = %.4f\n", *(uint32_t *)&exp, exp);
         return false;
       }
     }
@@ -160,14 +163,14 @@ int main() {
   snrt_cluster_hw_barrier();
 
   // tile on output row dimension (M)
-  uint32_t     local_m       = m / num_cores;
-  uint32_t     local_n       = n;
-  uint32_t     local_k       = k;
-  const char  *local_a       = a       + (cid * local_m * k);
-  const char  *local_b       = b;
-  const char  *local_a_scale = a_scale + (cid * local_m * k_block);
-  const char  *local_b_scale = b_scale;
-  float       *local_c       = c       + (cid * local_m * n);
+  uint32_t local_m = m / num_cores;
+  uint32_t local_n = n;
+  uint32_t local_k = k;
+  const char *local_a = a + (cid * local_m * k);
+  const char *local_b = b;
+  const char *local_a_scale = a_scale + (cid * local_m * k_block);
+  const char *local_b_scale = b_scale;
+  float *local_c = c + (cid * local_m * n);
 
   snrt_cluster_hw_barrier();
 
@@ -190,7 +193,8 @@ int main() {
 #else
     mxfp8_matmul_fp32_outer_lmul4_2x
 #endif
-      (local_c, local_a, local_b, local_a_scale, local_b_scale, local_m, local_n, local_k);
+        (local_c, local_a, local_b, local_a_scale, local_b_scale, local_m,
+         local_n, local_k);
 
     snrt_cluster_hw_barrier();
 
@@ -204,24 +208,26 @@ int main() {
 
   // Performance summary
   if (cid == 0) {
-    long unsigned int performance =
-        1000 * 2 * m * n * k / timer;
+    long unsigned int performance = 1000 * 2 * m * n * k / timer;
 #if MXDOTP
     // (MX vector size) * (total # FPUs) * (1 additon, 1 mult.)
-    long unsigned int max_ops_per_cycle = 8 * num_cores * SNRT_NFPU_PER_CORE * 2;
+    long unsigned int max_ops_per_cycle =
+        8 * num_cores * SNRT_NFPU_PER_CORE * 2;
 #elif BASELINE_SDOTP
     // 4 FP16 multiplications per FPU per cycle (outputting 2x FP32)
-    long unsigned int max_ops_per_cycle = 4 * num_cores * SNRT_NFPU_PER_CORE * 2;
+    long unsigned int max_ops_per_cycle =
+        4 * num_cores * SNRT_NFPU_PER_CORE * 2;
 #else
     // 2 FP32 multiplications per FPU per cycle
-    long unsigned int max_ops_per_cycle = 2 * num_cores * SNRT_NFPU_PER_CORE * 2;
+    long unsigned int max_ops_per_cycle =
+        2 * num_cores * SNRT_NFPU_PER_CORE * 2;
 #endif
     long unsigned int utilization = performance / max_ops_per_cycle;
 
     printf("\n----- (%d,%d,%d) mxfp8/matmul-fp32 -----\n", m, n, k);
     printf("The execution took %u cycles.\n", timer);
     printf("The performance is %ld OP/1000cycle (%ld%%o utilization).\n",
-            performance, utilization);
+           performance, utilization);
   }
 
   // Check results

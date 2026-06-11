@@ -23,17 +23,15 @@
 
 // software baseline
 
-inline float mxfp8_dotp_fp32(
-    const char *a, const char *b,
-    const char *a_scale, const char *b_scale,
-    unsigned int avl)
+inline float mxfp8_dotp_fp32(const char *a, const char *b, const char *a_scale,
+                             const char *b_scale, unsigned int avl)
     __attribute__((always_inline));
 
 // MXDOTP: ISA extension
 
-inline float mxfp8_dotp_fp32_mxdotp_lmul2(
-    const char *a, const char *b,
-    const char *a_scale, const char *b_scale,
-    const uint32_t N) __attribute__((always_inline));
+inline float mxfp8_dotp_fp32_mxdotp_lmul2(const char *a, const char *b,
+                                          const char *a_scale,
+                                          const char *b_scale, const uint32_t N)
+    __attribute__((always_inline));
 
 #endif

@@ -32,6 +32,7 @@
 // - scale data format:       E8M0
 // - accumulator data format: BF16 (FP16ALT)
 
-void mxfp4_matmul_bf16_mxdotp_lmul1_8x(_Float16 *c,
-    const char *a, const char *b, const char *a_scale, const char *b_scale,
-    const uint32_t M, const uint32_t N, const uint32_t K);
+void mxfp4_matmul_bf16_mxdotp_lmul1_8x(_Float16 *c, const char *a,
+                                       const char *b, const char *a_scale,
+                                       const char *b_scale, const uint32_t M,
+                                       const uint32_t N, const uint32_t K);

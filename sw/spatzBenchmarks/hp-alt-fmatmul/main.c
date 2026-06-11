@@ -99,7 +99,7 @@ int main() {
     snrt_dma_wait_all();
   }
 
-  asm volatile("csrw fcsr, %0" :: "r"(FCSR_MODE_DST | FCSR_MODE_SRC));
+  asm volatile("csrw fcsr, %0" ::"r"(FCSR_MODE_DST | FCSR_MODE_SRC));
 
   // Wait for all cores to finish
   snrt_cluster_hw_barrier();
@@ -154,8 +154,7 @@ int main() {
   }
 
   if (cid == 0) {
-    int error =
-        verify_matrix(c, gemm_checksum, gemm_l.M, gemm_l.N);
+    int error = verify_matrix(c, gemm_checksum, gemm_l.M, gemm_l.N);
 
     if (error != 0) {
       printf("Error core %d: c[%d]=%u\n", cid, error, (int)c[error]);

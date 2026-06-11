@@ -28,10 +28,12 @@
 // - c is an MxN matrix (row-major)
 // - a_scale is an Mx(K/32) (row-major)
 // - b_scale is an (K/32)xN (column-major)
-// - element data format:     FP8 (or FP8ALT if the caller sets FCSR_MODE_SRC before calling)
+// - element data format:     FP8 (or FP8ALT if the caller sets FCSR_MODE_SRC
+// before calling)
 // - scale data format:       E8M0
 // - accumulator data format: FP32
 
-void mxfp8_matmul_fp32_inner_4x(float *c,
-    const char *a, const char *b, const char *a_scale, const char *b_scale,
-    const uint32_t M, const uint32_t N, const uint32_t K);
+void mxfp8_matmul_fp32_inner_4x(float *c, const char *a, const char *b,
+                                const char *a_scale, const char *b_scale,
+                                const uint32_t M, const uint32_t N,
+                                const uint32_t K);

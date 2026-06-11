@@ -51,8 +51,8 @@ static inline bool verify_result(const float actual, const float expected) {
 
   if (diff > eps) {
     printf("Error:\n");
-    printf(" actual   = 0x%08x\n", *(uint32_t*)&actual);
-    printf(" expected = 0x%08x\n", *(uint32_t*)&expected);
+    printf(" actual   = 0x%08x\n", *(uint32_t *)&actual);
+    printf(" expected = 0x%08x\n", *(uint32_t *)&expected);
     return false;
   }
 
@@ -115,11 +115,11 @@ int main() {
   snrt_cluster_hw_barrier();
 
   // tiling
-  uint32_t    local_n       = n / num_cores;
-  uint32_t    local_n_block = n_block / num_cores;
-  const char *local_a       = a       + (cid * local_n);
+  uint32_t local_n = n / num_cores;
+  uint32_t local_n_block = n_block / num_cores;
+  const char *local_a = a + (cid * local_n);
   const char *local_a_scale = a_scale + (cid * local_n_block * scale_repeat);
-  const char *local_b       = b       + (cid * local_n);
+  const char *local_b = b + (cid * local_n);
   const char *local_b_scale = b_scale + (cid * local_n_block * scale_repeat);
 
   snrt_cluster_hw_barrier();
@@ -133,12 +133,10 @@ int main() {
     }
 
 #ifdef MXDOTP
-    float res = mxfp8_dotp_fp32_mxdotp_lmul2(local_a, local_b,
-                                             local_a_scale, local_b_scale,
-                                             local_n);
+    float res = mxfp8_dotp_fp32_mxdotp_lmul2(local_a, local_b, local_a_scale,
+                                             local_b_scale, local_n);
 #else
-    float res = mxfp8_dotp_fp32(local_a, local_b,
-                                local_a_scale, local_b_scale,
+    float res = mxfp8_dotp_fp32(local_a, local_b, local_a_scale, local_b_scale,
                                 local_n);
 #endif
     result[cid] = res;
@@ -167,10 +165,12 @@ int main() {
     long unsigned int performance = 1000 * 2 * n / timer;
 #if MXDOTP
     // (MX vector size) * (total # FPUs) * (1 additon, 1 mult.)
-    long unsigned int max_ops_per_cycle = 8 * num_cores * SNRT_NFPU_PER_CORE * 2;
+    long unsigned int max_ops_per_cycle =
+        8 * num_cores * SNRT_NFPU_PER_CORE * 2;
 #else
     // 2 FP32 multiplications per FPU per cycle
-    long unsigned int max_ops_per_cycle = 2 * num_cores * SNRT_NFPU_PER_CORE * 2;
+    long unsigned int max_ops_per_cycle =
+        2 * num_cores * SNRT_NFPU_PER_CORE * 2;
 #endif
     long unsigned int utilization = performance / max_ops_per_cycle;
 

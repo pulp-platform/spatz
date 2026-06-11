@@ -31,7 +31,8 @@ char *a_scale;
 char *b_scale;
 float *c;
 
-bool verify_vector(const float *actual, const float *expected, const uint32_t m) {
+bool verify_vector(const float *actual, const float *expected,
+                   const uint32_t m) {
   for (uint32_t i = 0; i < m; i++) {
     float exp = expected[i];
     float act = actual[i];
@@ -39,8 +40,8 @@ bool verify_vector(const float *actual, const float *expected, const uint32_t m)
     float eps = 0.05 * fabsf(exp);
     if (diff > eps) {
       printf("Error in c[%d]:\n", i);
-      printf(" acutal   = 0x%08x\n", *(uint32_t*)&act);
-      printf(" expected = 0x%08x\n", *(uint32_t*)&exp);
+      printf(" acutal   = 0x%08x\n", *(uint32_t *)&act);
+      printf(" expected = 0x%08x\n", *(uint32_t *)&exp);
       return false;
     }
   }
@@ -108,13 +109,13 @@ int main() {
   snrt_cluster_hw_barrier();
 
   // tile on output dimension (M)
-  uint32_t     local_m       = m / num_cores;
-  uint32_t     local_n       = n;
-  const char  *local_a       = a       + (cid * local_m * n);
-  const char  *local_b       = b;
-  const char  *local_a_scale = a_scale + (cid * local_m * n_block);
-  const char  *local_b_scale = b_scale;
-  float       *local_c       = c       + (cid * local_m);
+  uint32_t local_m = m / num_cores;
+  uint32_t local_n = n;
+  const char *local_a = a + (cid * local_m * n);
+  const char *local_b = b;
+  const char *local_a_scale = a_scale + (cid * local_m * n_block);
+  const char *local_b_scale = b_scale;
+  float *local_c = c + (cid * local_m);
 
   snrt_cluster_hw_barrier();
 
@@ -127,13 +128,11 @@ int main() {
 
   if (natural_layout) {
     if (sdotp) {
-      mxfp8_matvec_fp32_inner_sdotp_4x(
-        local_c, local_a, local_b, local_a_scale, local_b_scale,
-        local_m, local_n);
+      mxfp8_matvec_fp32_inner_sdotp_4x(local_c, local_a, local_b, local_a_scale,
+                                       local_b_scale, local_m, local_n);
     } else {
-      mxfp8_matvec_fp32_inner_4x(
-        local_c, local_a, local_b, local_a_scale, local_b_scale,
-        local_m, local_n);
+      mxfp8_matvec_fp32_inner_4x(local_c, local_a, local_b, local_a_scale,
+                                 local_b_scale, local_m, local_n);
     }
   } else {
     if (sdotp) {
@@ -156,8 +155,7 @@ int main() {
 
   // Performance summary
   if (cid == 0) {
-    long unsigned int performance =
-        1000 * 2 * m * n / timer;
+    long unsigned int performance = 1000 * 2 * m * n / timer;
     long unsigned int utilization =
         performance / (2 * num_cores * SNRT_NFPU_PER_CORE * 2);
     if (sdotp)
@@ -166,7 +164,7 @@ int main() {
     printf("\n----- (%d,%d) mxfp8 matvec -----\n", m, n);
     printf("The execution took %u cycles.\n", timer);
     printf("The performance is %ld OP/1000cycle (%ld%%o utilization).\n",
-            performance, utilization);
+           performance, utilization);
   }
 
   // Check results

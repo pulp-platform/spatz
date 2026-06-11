@@ -20,8 +20,8 @@
 #include <benchmark.h>
 #include <snrt.h>
 #include <stdbool.h>
-#include <stdio.h>
 #include <stdint.h>
+#include <stdio.h>
 
 #include DATAHEADER
 
@@ -38,7 +38,8 @@ char *a_scale;
 char *b_scale;
 _Float16 *c;
 
-void copy_transpose_matrix(char *dst, const char *src, const uint32_t m, const uint32_t n) {
+void copy_transpose_matrix(char *dst, const char *src, const uint32_t m,
+                           const uint32_t n) {
   for (uint32_t i = 0; i < m; i++) {
     for (uint32_t j = 0; j < n; j++) {
       dst[j * m + i] = src[i * n + j];
@@ -56,7 +57,8 @@ static inline float bf16_to_fp32(const _Float16 *val) {
   return result;
 }
 
-bool verify_matrix(const _Float16 *actual, const float *expected, const uint32_t m, const uint32_t n) {
+bool verify_matrix(const _Float16 *actual, const float *expected,
+                   const uint32_t m, const uint32_t n) {
   for (uint32_t i = 0; i < m; i++) {
     for (uint32_t j = 0; j < n; j++) {
       uint32_t idx = i * n + j;
@@ -66,8 +68,8 @@ bool verify_matrix(const _Float16 *actual, const float *expected, const uint32_t
       float eps = 0.05 * fabsf(exp);
       if (diff > eps) {
         printf("Error in c[%d][%d]:\n", i, j);
-        uint16_t act_int = *(uint16_t*)&actual[idx];
-        uint16_t exp_int = *((uint16_t*)&expected[idx] + 1);
+        uint16_t act_int = *(uint16_t *)&actual[idx];
+        uint16_t exp_int = *((uint16_t *)&expected[idx] + 1);
         printf(" acutal   = 0x%04x\n", act_int);
         printf(" expected = 0x%04x\n", exp_int);
         // return false;
@@ -112,11 +114,11 @@ int main() {
 
   // Allocate the matrices in the local tile
   if (cid == 0) {
-    a       = (char *)    snrt_l1alloc(m * k_bytes);
-    b       = (char *)    snrt_l1alloc(n * k_bytes);
-    a_scale = (char *)    snrt_l1alloc(m * k_block);
-    b_scale = (char *)    snrt_l1alloc(n * k_block);
-    c       = (_Float16 *)snrt_l1alloc(m * n * sizeof(_Float16));
+    a = (char *)snrt_l1alloc(m * k_bytes);
+    b = (char *)snrt_l1alloc(n * k_bytes);
+    a_scale = (char *)snrt_l1alloc(m * k_block);
+    b_scale = (char *)snrt_l1alloc(n * k_block);
+    c = (_Float16 *)snrt_l1alloc(m * n * sizeof(_Float16));
   }
 
   // Initialize the matrices
@@ -129,7 +131,7 @@ int main() {
     // b_scale: transpose from column-major to row-major layout
     copy_transpose_matrix(b_scale, mx_matmul_B_scales_dram, n, k_block);
 #else
-    #error "not implemented"
+#error "not implemented"
 #endif
     snrt_dma_wait_all();
   }
@@ -137,14 +139,14 @@ int main() {
   snrt_cluster_hw_barrier();
 
   // tile on output row dimension (M)
-  uint32_t    local_m       = m / num_cores;
-  uint32_t    local_n       = n;
-  uint32_t    local_k       = k;
-  const char *local_a       = a       + (cid * local_m * k_bytes);
-  const char *local_b       = b;
+  uint32_t local_m = m / num_cores;
+  uint32_t local_n = n;
+  uint32_t local_k = k;
+  const char *local_a = a + (cid * local_m * k_bytes);
+  const char *local_b = b;
   const char *local_a_scale = a_scale + (cid * local_m * k_block);
   const char *local_b_scale = b_scale;
-  _Float16   *local_c       = c       + (cid * local_m * n);
+  _Float16 *local_c = c + (cid * local_m * n);
 
   snrt_cluster_hw_barrier();
 
@@ -157,11 +159,10 @@ int main() {
     }
 
 #ifdef MXDOTP
-    mxfp4_matmul_bf16_mxdotp_lmul1_8x(local_c, local_a, local_b,
-                                      local_a_scale, local_b_scale,
-                                      local_m, local_n, local_k);
+    mxfp4_matmul_bf16_mxdotp_lmul1_8x(local_c, local_a, local_b, local_a_scale,
+                                      local_b_scale, local_m, local_n, local_k);
 #else
-    #error "not implemented"
+#error "not implemented"
 #endif
 
     snrt_cluster_hw_barrier();
@@ -176,20 +177,20 @@ int main() {
 
   // Performance summary
   if (cid == 0) {
-    long unsigned int performance =
-        1000 * 2 * m * n * k / timer;
+    long unsigned int performance = 1000 * 2 * m * n * k / timer;
 #ifdef MXDOTP
     // (MX vector size) * (total # FPUs) * (1 additon, 1 mult.)
-    long unsigned int max_ops_per_cycle = 16 * num_cores * SNRT_NFPU_PER_CORE * 2;
+    long unsigned int max_ops_per_cycle =
+        16 * num_cores * SNRT_NFPU_PER_CORE * 2;
 #else
-    #error "not implemented"
+#error "not implemented"
 #endif
     long unsigned int utilization = performance / max_ops_per_cycle;
 
     printf("\n----- (%d,%d,%d) mxfp4/matmul-bf16 -----\n", m, n, k);
     printf("The execution took %u cycles.\n", timer);
     printf("The performance is %ld OP/1000cycle (%ld%%o utilization).\n",
-            performance, utilization);
+           performance, utilization);
   }
 
   // Check results
