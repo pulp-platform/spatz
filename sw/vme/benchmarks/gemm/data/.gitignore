@@ -1,0 +1,2 @@
+# Generated data headers – regenerate with: python3 script/gen_data.py -c script/gemm_64_64_64.json
+data_*.h

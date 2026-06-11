@@ -38,3 +38,5 @@ add_snitch_test(vtle isaTests/vtle.c)
 add_snitch_test(vtse isaTests/vtse.c)
 add_snitch_test(vtmv isaTests/vtmv.c)
 add_snitch_test(vtzero isaTests/vtzero.c)
+
+add_subdirectory(benchmarks)
