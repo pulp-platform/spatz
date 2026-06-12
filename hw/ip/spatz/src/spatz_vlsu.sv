@@ -632,16 +632,74 @@ module spatz_vlsu
     .ready_i(vrf_req_ready_q)
   );
 
-  assign vrf_waddr_o     = vrf_req_q.waddr;
-  assign vrf_wdata_o     = vrf_req_q.wdata;
-  assign vrf_wbe_o       = vrf_req_q.wbe;
-  assign vrf_we_o        = vrf_req_valid_q;
-  assign vrf_id_o        = {vrf_req_q.rsp.id, mem_spatz_req.id, commit_insn_q.id};
-  assign vrf_req_ready_q = vrf_wvalid_i;
+  /////////////////////////
+  //  Coalescing Buffer  //
+  /////////////////////////
 
-  // Ack when the vector store finishes, or when the vector load commits to the VRF
-  assign vlsu_rsp_o       = vrf_req_q.rsp_valid && vrf_req_valid_q ? vrf_req_q.rsp   : '{id: commit_insn_q.id, default: '0};
-  assign vlsu_rsp_valid_o = vrf_req_q.rsp_valid && vrf_req_valid_q ? vrf_req_ready_q : vlsu_finished_req && !commit_insn_q.is_load;
+  // Coalesce the data write to VRF after it construct a full vector word
+  vrf_req_t coalesce_d, coalesce_q;
+  logic     coalesce_valid_d, coalesce_valid_q;
+
+  `FF(coalesce_q, coalesce_d, '0)
+  `FF(coalesce_valid_q, coalesce_valid_d, '0)
+
+  // The coalescing buffer is ready to commit when the accumulated byte-enable
+  // covers the full VRF word, or when this is the last write of the instruction.
+  logic coalesce_commit;
+  assign coalesce_commit = coalesce_valid_q && (&coalesce_q.wbe || coalesce_q.rsp_valid);
+
+  // Drive VRF outputs from the coalescing buffer, not the raw spill-register.
+  assign vrf_waddr_o = coalesce_q.waddr;
+  assign vrf_wdata_o = coalesce_q.wdata;
+  assign vrf_wbe_o   = coalesce_q.wbe;
+  assign vrf_we_o    = coalesce_commit;
+  assign vrf_id_o    = {coalesce_q.rsp.id, mem_spatz_req.id, commit_insn_q.id};
+
+  // The spill register may be popped when the coalescing buffer can accept:
+  //   - buffer is empty, OR
+  //   - buffer is still accumulating (not yet commit-ready), OR
+  //   - buffer is committing this cycle (VRF accepting, freeing a slot)
+  assign vrf_req_ready_q = !coalesce_valid_q || !coalesce_commit || vrf_wvalid_i;
+
+  // Ack when the vector store finishes, or when the load's coalesced write commits to the VRF
+  assign vlsu_rsp_o       = coalesce_q.rsp_valid && coalesce_commit ? coalesce_q.rsp : '{id: commit_insn_q.id, default: '0};
+  assign vlsu_rsp_valid_o = coalesce_q.rsp_valid && coalesce_commit ? vrf_wvalid_i   : vlsu_finished_req && !commit_insn_q.is_load;
+
+  always_comb begin : coalesce_proc
+    coalesce_d       = coalesce_q;
+    coalesce_valid_d = coalesce_valid_q;
+
+    // When the VRF accepts the coalesced write, clear the buffer.
+    if (coalesce_commit && vrf_wvalid_i) begin
+      coalesce_d       = '0;
+      coalesce_valid_d = 1'b0;
+    end
+
+    // Accept a new partial write from the spill-register output.
+    if (vrf_req_valid_q && vrf_req_ready_q) begin
+      if (coalesce_valid_q && !(coalesce_commit && vrf_wvalid_i)) begin
+        // Merge into the existing accumulation (same VRF word in progress):
+        // OR the byte enables and splice in only the newly-valid data bytes.
+        for (int unsigned i = 0; i < N_FU*ELENB; i++)
+          if (vrf_req_q.wbe[i])
+            coalesce_d.wdata[8*i +: 8] = vrf_req_q.wdata[8*i +: 8];
+        coalesce_d.wbe = coalesce_d.wbe | vrf_req_q.wbe;
+        // Carry the rsp metadata from the last write of the instruction.
+        if (vrf_req_q.rsp_valid) begin
+          coalesce_d.rsp       = vrf_req_q.rsp;
+          coalesce_d.rsp_valid = 1'b1;
+        end
+      end else begin
+        // Buffer was empty or just committed — start a fresh accumulation.
+        coalesce_d.waddr     = vrf_req_q.waddr;
+        coalesce_d.wdata     = vrf_req_q.wdata;
+        coalesce_d.wbe       = vrf_req_q.wbe;
+        coalesce_d.rsp       = vrf_req_q.rsp;
+        coalesce_d.rsp_valid = vrf_req_q.rsp_valid;
+        coalesce_valid_d     = 1'b1;
+      end
+    end
+  end : coalesce_proc
 
   //////////////
   // Counters //
