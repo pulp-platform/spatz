@@ -676,6 +676,13 @@ module spatz_doublebw_vlsu
   logic     [NrInterfaces-1:0] coalesce_valid_d, coalesce_valid_q;
   logic     [NrInterfaces-1:0] coalesce_commit;
 
+  // Both interfaces must be ready before either commits (normal path). This
+  // prevents the faster interface from draining its buffer while the slower
+  // one is still accumulating, which would leave the slower interface with
+  // rsp_valid data it can never flush (no &coalesce_valid_q, no vrf_wvalid_i[0]).
+  logic both_commit;
+  assign both_commit = coalesce_commit[0] & coalesce_commit[1];
+
   for (genvar intf = 0; intf < NrInterfaces; intf++) begin : gen_vrf_req_register_intf
     spill_register #(
       .T(vrf_req_t)
@@ -708,8 +715,11 @@ module spatz_doublebw_vlsu
     // If Interface 1, is resp interface (usually the default)
     // If Interface 0, is resp interface (if interface 0 has more vector elements), then ensure interface 1 has nothing in buffer
     // to avoid retiring before interface 1 commits to the VRF
-    assign vrf_we_o[intf] = coalesce_commit[intf] &
-                            ((&coalesce_valid_q) | ((intf==0) ? coalesce_valid_q[0] & (vrf_commit_bypass | vrf_commit_waiting_q[1]) & vlsu_buf_empty_i : 1'b0)) &
+    // Normal path: both coalescing buffers must be commit-ready (both_commit)
+    // before either fires, so no interface drains ahead of the other.
+    // Bypass path (intf 0 only): interface 1 has nothing to write (small vl).
+    assign vrf_we_o[intf] = (both_commit |
+                             ((intf==0) ? coalesce_commit[0] & (vrf_commit_bypass | vrf_commit_waiting_q[1]) & vlsu_buf_empty_i : 1'b0)) &
                             ((intf==1) ? (vrf_wvalid_i[0] & (coalesce_q[1].rsp.id == coalesce_q[0].rsp.id)) : 1'b1) &
                             !vlsu_buf_full_i;
     assign vrf_id_o[intf] = {coalesce_q[intf].rsp.id, mem_spatz_req.id, commit_insn_q.id};
