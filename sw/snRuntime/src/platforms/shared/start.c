@@ -83,7 +83,7 @@ void _snrt_init_team(uint32_t cluster_core_id, uint32_t cluster_core_num,
                      SPATZ_CLUSTER_PERIPHERAL_CL_CLINT_SET_REG_OFFSET);
 
     // Init allocator
-    // putc_buffer is a per-core array
+    // putc_buffer is a per-core array, reserve per core slot
     snrt_alloc_init(team, cluster_core_num * sizeof(struct putc_buffer));
     snrt_int_init(team);
 }
