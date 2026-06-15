@@ -324,9 +324,9 @@ module spatz_vfu
   logic [$clog2(VRFWordBWidth+1)-1:0] valid_bytes_rd, valid_bytes_wr;
   logic [VRFWordWidth-1:0] tail_mask;
   vew_e src_vsew;
+  logic [$clog2(MAXVL*8+1)-1:0] rem_rd, rem_wr;
 
   always_comb begin: proc_tail_mask
-    automatic logic [$clog2(MAXVL*8+1)-1:0] rem_rd, rem_wr;
     src_vsew = vew_e'(spatz_req.vtype.vsew + spatz_req.op_arith.is_narrowing);
 
     // Read side: source-width bytes
@@ -365,7 +365,10 @@ module spatz_vfu
       endcase
     end
 
-    if ((!spatz_req.op_arith.is_scalar || spatz_req.op == VADD) && spatz_req.use_vs2)
+    //VFMV_F_S
+    if (spatz_req.use_rd && spatz_req.use_vs2 && spatz_req.op_arith.is_scalar)
+      operand2 = vrf_rdata_i[0];
+    else if ((!spatz_req.op_arith.is_scalar || spatz_req.op == VADD) && spatz_req.use_vs2)
       operand2 = spatz_req.op_arith.is_reduction ? $unsigned(reduction_q[0]) : vrf_rdata_masked[0];
     else
       // Replicate scalar operands
