@@ -33,7 +33,8 @@ before_script:
   # Clean the bender cache to remove the "Access Denied" history
   - rm -rf .bender
   - env
-  # Rewrite the URL to include the Deploy Token credentials
+  - rm -f "${HOME}/.gitconfig.lock"
+  - rm -f "${HOME}/.gitconfig"
   - git config --global url."https://${READ_USER}:${READ_TOKEN}@iis-git.ee.ethz.ch/".insteadOf "https://iis-git.ee.ethz.ch/"
 
 stages:
