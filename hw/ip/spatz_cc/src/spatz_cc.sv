@@ -86,6 +86,10 @@ module spatz_cc
     /// Insert Pipeline registers into data memory path (response)
     parameter bit                                          RegisterCoreRsp          = 0,
     parameter snitch_pma_pkg::snitch_pma_t                 SnitchPMACfg             = '{default: 0},
+    /// TCDM word width (unprotected; 32 bits for Spatz).
+    parameter int                          unsigned        TCDMDataWidth            = 32,
+    /// TCDM codeword width (ECC-protected; equals TCDMDataWidth when no ECC).
+    parameter int                          unsigned        TCDMProtDataWidth        = TCDMDataWidth,
     /// Derived parameter *Do not override*
     parameter int                          unsigned        NumSpatzFUs              = (NumSpatzFPUs > NumSpatzIPUs) ? NumSpatzFPUs : NumSpatzIPUs,
     parameter int                          unsigned        NumMemPortsPerSpatz      = NumSpatzFUs,
@@ -120,6 +124,10 @@ module spatz_cc
     output logic                         vrf_single_error_o,
     output logic                         vrf_multi_error_o
   );
+
+  // ECC protection width for TCDM codewords (parity bits only).
+  // Declared here so it's visible in both gen_tcdm_assignment and gen_snitch_wdata_enc.
+  localparam int unsigned SnitchTCDMProtWidth = TCDMProtDataWidth - TCDMDataWidth;
 
   // FMA architecture is "merged" -> mulexp and macexp instructions are supported
   localparam bit FPEn = RVF | RVD | XF16 | XF8;
@@ -324,11 +332,36 @@ module spatz_cc
     .vrf_multi_error_o       (vrf_multi_error_o     )
   );
 
+  // VLSU byte-rotate stores produce a 32-bit rotated value in data[31:0] with
+  // zero parity bits in data[38:32]. Re-encode data[TCDMDataWidth-1:0] to always
+  // produce a valid codeword. For non-rotated stores (already valid), this is the
+  // Hsiao identity: encode(codeword[31:0]) == codeword.
   for (genvar p = 0; p < NumMemPortsPerSpatz; p++) begin: gen_tcdm_assignment
+    logic [TCDMProtDataWidth-1:0] vlsu_enc_data;
+
+    if (TCDMProtDataWidth > TCDMDataWidth) begin : gen_vlsu_enc
+      hsiao_ecc_enc #(
+        .DataWidth (TCDMDataWidth      ),
+        .ProtWidth (SnitchTCDMProtWidth)
+      ) i_vlsu_enc (
+        .in  (spatz_mem_req[p].data[TCDMDataWidth-1:0]),
+        .out (vlsu_enc_data)
+      );
+    end else begin : gen_vlsu_no_enc
+      assign vlsu_enc_data = spatz_mem_req[p].data;
+    end
+
     assign tcdm_req_o[p] = '{
-         q      : spatz_mem_req[p],
-         q_valid: spatz_mem_req_valid[p]
-       };
+      q: '{
+        addr : spatz_mem_req[p].addr,
+        write: spatz_mem_req[p].write,
+        amo  : spatz_mem_req[p].amo,
+        data : vlsu_enc_data,
+        strb : spatz_mem_req[p].strb,
+        user : '0
+      },
+      q_valid: spatz_mem_req_valid[p]
+    };
     assign spatz_mem_req_ready[p] = tcdm_rsp_i[p].q_ready;
 
     assign spatz_mem_rsp[p]       = tcdm_rsp_i[p].p;
@@ -455,6 +488,9 @@ module spatz_cc
     .default_idx_i    ('0                )
   );
 
+  // Route Snitch scalar TCDM through an intermediate signal so we can encode
+  // write data to a valid ECC codeword before it reaches the 39-bit TCDM bus.
+  tcdm_req_t snitch_tcdm_req_raw;
   reqrsp_to_tcdm #(
     .AddrWidth    (AddrWidth ),
     .DataWidth    (DataWidth ),
@@ -468,9 +504,42 @@ module spatz_cc
     .rst_ni       (rst_ni                         ),
     .reqrsp_req_i (data_tcdm_req                  ),
     .reqrsp_rsp_o (data_tcdm_rsp                  ),
-    .tcdm_req_o   (tcdm_req_o[NumMemPortsPerSpatz]),
+    .tcdm_req_o   (snitch_tcdm_req_raw            ),
     .tcdm_rsp_i   (tcdm_rsp_i[NumMemPortsPerSpatz])
   );
+
+  // ECC encode Snitch's TCDMDataWidth-bit data to a valid TCDMProtDataWidth-bit
+  // codeword. The data field is always encoded:
+  //   - regular stores/SC: SRAM receives a valid codeword
+  //   - AMO operand B: shim extracts wdata_i[TCDMDataWidth-1:0] via systematic property
+  //   - reads (loads/LR): data field is ignored by the AMO shim
+  // Read responses need no decoding: Snitch reads p.data[TCDMDataWidth-1:0] which
+  // equals the original data by Hsiao systematic property.
+  logic [TCDMProtDataWidth-1:0] snitch_enc_data;
+
+  if (TCDMProtDataWidth > TCDMDataWidth) begin : gen_snitch_wdata_enc
+    hsiao_ecc_enc #(
+      .DataWidth (TCDMDataWidth      ),
+      .ProtWidth (SnitchTCDMProtWidth)
+    ) i_snitch_wdata_enc (
+      .in  (snitch_tcdm_req_raw.q.data[TCDMDataWidth-1:0]),
+      .out (snitch_enc_data)
+    );
+  end else begin : gen_snitch_no_enc
+    assign snitch_enc_data = snitch_tcdm_req_raw.q.data;
+  end
+
+  assign tcdm_req_o[NumMemPortsPerSpatz] = '{
+    q: '{
+      addr : snitch_tcdm_req_raw.q.addr,
+      write: snitch_tcdm_req_raw.q.write,
+      amo  : snitch_tcdm_req_raw.q.amo,
+      data : snitch_enc_data,
+      strb : snitch_tcdm_req_raw.q.strb,
+      user : snitch_tcdm_req_raw.q.user
+    },
+    q_valid: snitch_tcdm_req_raw.q_valid
+  };
 
   // Core events for performance counters
   assign core_events_o.retired_instr     = snitch_events.retired_instr;

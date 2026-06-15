@@ -672,12 +672,11 @@ module spatz_cluster
       logic mem_cs, mem_wen;
       tcdm_mem_addr_t mem_add;
       strb_t mem_be;
-      tcdm_data_t           mem_rdata;         // raw 39-bit codeword from SRAM
-      logic [DataWidth-1:0] mem_rdata_dec;     // decoded 32-bit for AMO shim
-      logic [DataWidth-1:0] mem_wdata_raw;     // 32-bit result from AMO shim
-      tcdm_data_t           mem_wdata_enc;     // re-encoded 39-bit codeword to SRAM
+      tcdm_data_t mem_rdata;     // raw 39-bit codeword from SRAM
+      tcdm_data_t mem_wdata_enc; // 39-bit codeword to SRAM (direct from AMO shim)
+      tcdm_data_t amo_shim_rdata; // 39-bit read response from AMO shim
 
-      // CMY: replace the SRAM to a ECC_enhanced version--------------------
+      // CMY: replace the SRAM to a ECC_enhanced version w/ inputECC---------------
       logic ecc_sram_gnt;
 
       // tc_sram_impl #(
@@ -736,70 +735,37 @@ module spatz_cluster
         .single_error_o(sram_rd_single_error[i][j]),
         .multi_error_o(sram_rd_multi_error[i][j])
         );
-//---------------------------------------------------------------------------------
-      logic [DataWidth-1:0] amo_rdata_local;   // 32-bit read result from AMO shim
-      tcdm_data_t           amo_rdata_39;     // re-encoded 39-bit codeword for response channel
-
-      // ECC decode: SRAM codeword → 32-bit data for AMO shim
-      hsiao_ecc_dec #(
-        .DataWidth(DataWidth),
-        .ProtWidth(TCDMProtDataWidth - DataWidth)
-      ) i_amo_rdata_dec (
-        .in        (mem_rdata    ),
-        .out       (mem_rdata_dec),
-        .syndrome_o(/* unused */ ),
-        .err_o     (/* unused */ )
-      );
-
-      // ECC encode: 32-bit AMO shim write result → valid 39-bit codeword for SRAM.
-      // Hsiao is systematic ([DataWidth-1:0] = data), so re-encoding a pass-through
-      // write is an identity: encode(codeword[31:0]) == codeword.
-      hsiao_ecc_enc #(
-        .DataWidth(DataWidth),
-        .ProtWidth(TCDMProtDataWidth - DataWidth)
-      ) i_amo_wdata_enc (
-        .in  (mem_wdata_raw),
-        .out (mem_wdata_enc)
-      );
-
-      // ECC encode: re-encode 32-bit read response to a valid 39-bit codeword.
-      // This also correctly encodes LR/SC status values (0 = success, 1 = fail).
-      hsiao_ecc_enc #(
-        .DataWidth(DataWidth),
-        .ProtWidth(TCDMProtDataWidth - DataWidth)
-      ) i_amo_rdata_enc (
-        .in  (amo_rdata_local),
-        .out (amo_rdata_39   )
-      );
-
-      // TODO(zarubaf): Share atomic units between mutltiple cuts
+      // AMO shim: 39-bit native interface. Non-AMO codewords pass through unchanged;
+      // AMO/SC operations decode internally (via Hsiao systematic property on mem_rdata_i),
+      // apply the ALU, and re-encode the result before writing back to SRAM.
       spatz_amo_shim #(
-        .AddrMemWidth ( TCDMMemAddrWidth ),
-        .DataWidth    ( DataWidth        ),  // 32-bit: AMO ALU operates on plain data
-        .CoreIDWidth  ( CoreIDWidth      )
+        .AddrMemWidth  ( TCDMMemAddrWidth  ),
+        .DataWidth     ( DataWidth         ),  // 32-bit AMO ALU
+        .ProtDataWidth ( TCDMProtDataWidth ),  // 39-bit codeword I/O
+        .CoreIDWidth   ( CoreIDWidth       )
       ) i_amo_shim (
-        .clk_i          (clk_i                              ),
-        .rst_ni         (rst_ni                             ),
-        .valid_i        (amo_req[j].q_valid                 ),
-        .ready_o        (amo_rsp[j].q_ready                 ),
-        .addr_i         (amo_req[j].q.addr                  ),
-        .write_i        (amo_req[j].q.write                 ),
-        .wdata_i        (amo_req[j].q.data[DataWidth-1:0]   ), // data bits only (Hsiao systematic)
-        .wstrb_i        (amo_req[j].q.strb                  ),
-        .core_id_i      (amo_req[j].q.user.core_id          ),
-        .is_core_i      (amo_req[j].q.user.is_core          ),
-        .rdata_o        (amo_rdata_local                    ),
-        .amo_i          (amo_req[j].q.amo                   ),
-        .mem_req_o      (mem_cs                             ),
-        .mem_add_o      (mem_add                            ),
-        .mem_wen_o      (mem_wen                            ),
-        .mem_wdata_o    (mem_wdata_raw                      ),
-        .mem_be_o       (mem_be                             ),
-        .mem_rdata_i    (mem_rdata_dec                      ),
-        .dma_access_i   (sb_dma_req[i].q_valid              ),
+        .clk_i          (clk_i                ),
+        .rst_ni         (rst_ni               ),
+        .valid_i        (amo_req[j].q_valid   ),
+        .ready_o        (amo_rsp[j].q_ready   ),
+        .addr_i         (amo_req[j].q.addr    ),
+        .write_i        (amo_req[j].q.write   ),
+        .wdata_i        (amo_req[j].q.data    ), // full 39-bit codeword (pre-encoded by requester)
+        .wstrb_i        (amo_req[j].q.strb    ),
+        .core_id_i      (amo_req[j].q.user.core_id),
+        .is_core_i      (amo_req[j].q.user.is_core),
+        .rdata_o        (amo_shim_rdata       ), // 39-bit codeword response
+        .amo_i          (amo_req[j].q.amo     ),
+        .mem_req_o      (mem_cs               ),
+        .mem_add_o      (mem_add              ),
+        .mem_wen_o      (mem_wen              ),
+        .mem_wdata_o    (mem_wdata_enc        ), // 39-bit codeword direct to SRAM
+        .mem_be_o       (mem_be               ),
+        .mem_rdata_i    (mem_rdata            ), // 39-bit codeword from SRAM
+        .dma_access_i   (sb_dma_req[i].q_valid),
         // TODO(zarubaf): Signal AMO conflict somewhere. Socregs?
-        .amo_conflict_o (/* Unused */                       ),
-        .ecc_sram_gnt_i (ecc_sram_gnt                       )
+        .amo_conflict_o (/* Unused */         ),
+        .ecc_sram_gnt_i (ecc_sram_gnt         )
       );
 
       // Insert a pipeline register at the output of each SRAM.
@@ -807,10 +773,10 @@ module spatz_cluster
         .dtype(tcdm_data_t           ),
         .Depth(int'(RegisterTCDMCuts))
       ) i_sram_pipe (
-        .clk_i (clk_i             ),
-        .rst_ni(rst_ni            ),
-        .d_i   (amo_rdata_39      ),
-        .d_o   (amo_rsp[j].p.data)
+        .clk_i (clk_i              ),
+        .rst_ni(rst_ni             ),
+        .d_i   (amo_shim_rdata     ),
+        .d_o   (amo_rsp[j].p.data )
       );
     end
   end
@@ -998,7 +964,9 @@ module spatz_cluster
         .RegisterOffloadRsp      (RegisterOffloadRsp         ),
         .RegisterCoreReq         (RegisterCoreReq            ),
         .RegisterCoreRsp         (RegisterCoreRsp            ),
-        .TCDMAddrWidth           (TCDMAddrWidth              )
+        .TCDMAddrWidth           (TCDMAddrWidth              ),
+        .TCDMDataWidth           (DataWidth                  ),  // spatz_pkg::DataWidth = 32
+        .TCDMProtDataWidth       (TCDMProtDataWidth          )   // 39-bit ECC codeword
       ) i_spatz_cc (
         .clk_i            (clk_i                               ),
         .clk_d2_i         (clk_i                               ),
@@ -1020,8 +988,8 @@ module spatz_cluster
         .core_events_o    (core_events[i]                      ),
         .tcdm_addr_base_i (tcdm_start_address                  ),
         // ECC VRF signals
-      .vrf_single_error_o (vrf_correctable_fault[i]  ),
-      .vrf_multi_error_o (vrf_uncorrectable_fault[i])
+        .vrf_single_error_o (vrf_correctable_fault[i]  ),
+        .vrf_multi_error_o (vrf_uncorrectable_fault[i])
       );
       for (genvar j = 0; j < TcdmPorts; j++) begin : gen_tcdm_user
         always_comb begin
