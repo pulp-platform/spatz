@@ -87,21 +87,23 @@ void TEST_CASE3(void) {
   VLOAD_8(v8, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
   VLOAD_8(v24, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
   asm volatile("vredsum.vs v24, v16, v8");
-  VCMP_U8(9, v24, 73, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
+  // VCMP_U8(9, v24, 73, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
+  VCMP_U8(9, v24, 73); // we only check the first element, as vta = va
 
   VSET(16, e16, m4);
   VLOAD_16(v16, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
   VLOAD_16(v8, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
   VLOAD_16(v24, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
   asm volatile("vredsum.vs v24, v16, v8");
-  VCMP_U16(10, v24, 73, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
+  VCMP_U16(10, v24, 73); // we only check the first element, as vta = va
 
   VSET(16, e32, m4);
   VLOAD_32(v16, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
   VLOAD_32(v8, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
   VLOAD_32(v24, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
   asm volatile("vredsum.vs v24, v16, v8");
-  VCMP_U32(11, v24, 73, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
+  // VCMP_U32(11, v24, 73, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
+  VCMP_U32(11, v24, 73); // we only check the first element, as vta = va
 
 #if ELEN == 64
   VSET(16, e64, m4);
@@ -109,7 +111,7 @@ void TEST_CASE3(void) {
   VLOAD_64(v8, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
   VLOAD_64(v24, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
   asm volatile("vredsum.vs v24, v16, v8");
-  VCMP_U64(12, v24, 73, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
+  VCMP_U64(12, v24, 73); // we only check the first element, as vta = va
 #endif
 }
 
@@ -120,21 +122,23 @@ void TEST_CASE4(void) {
   VLOAD_8(v8, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
   VLOAD_8(v24, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
   asm volatile("vredsum.vs v24, v16, v8");
-  VCMP_U8(13, v24, 65, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
+  VCMP_U8(13, v24, 65); // we only check the first element, as vta = va
 
   VSET(1, e16, m4);
   VLOAD_16(v16, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
   VLOAD_16(v8, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
   VLOAD_16(v24, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
   asm volatile("vredsum.vs v24, v16, v8");
-  VCMP_U16(14, v24, 2, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
+  // VCMP_U16(14, v24, 2, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
+  VCMP_U16(14, v24, 2); // we only check the first element, as vta = va
 
   VSET(3, e32, m4);
   VLOAD_32(v16, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
   VLOAD_32(v8, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
   VLOAD_32(v24, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
   asm volatile("vredsum.vs v24, v16, v8");
-  VCMP_U32(15, v24, 7, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
+  // VCMP_U32(15, v24, 7, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
+  VCMP_U32(15, v24, 7); // we only check the first element, as vta = va
 
 #if ELEN == 64
   VSET(7, e64, m4);
@@ -142,14 +146,16 @@ void TEST_CASE4(void) {
   VLOAD_64(v8, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
   VLOAD_64(v24, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
   asm volatile("vredsum.vs v24, v16, v8");
-  VCMP_U64(16, v24, 29, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
+  // VCMP_U64(16, v24, 29, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
+  VCMP_U64(16, v24, 29); // we only check the first element, as vta = va
 
   VSET(15, e64, m4);
   VLOAD_64(v16, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
   VLOAD_64(v8, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
   VLOAD_64(v24, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
   asm volatile("vredsum.vs v24, v16, v8");
-  VCMP_U64(17, v24, 65, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
+  // VCMP_U64(17, v24, 65, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
+  VCMP_U64(17, v24, 65); // we only check the first element, as vta = va
 #endif
 }
 
@@ -161,7 +167,8 @@ void TEST_CASE5(void) {
   VLOAD_8(v8, 100, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
   VLOAD_8(v24, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
   asm volatile("vredsum.vs v24, v16, v8, v0.t");
-  VCMP_U8(18, v24, 107, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
+  // VCMP_U8(18, v24, 107, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
+  VCMP_U8(18, v24, 107); // we only check the first element, as vta = va
 
   VSET(1, e16, m4);
   VLOAD_8(v0, 0xaa, 0x55);
@@ -169,7 +176,8 @@ void TEST_CASE5(void) {
   VLOAD_16(v8, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
   VLOAD_16(v24, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
   asm volatile("vredsum.vs v24, v16, v8, v0.t");
-  VCMP_U16(19, v24, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
+  // VCMP_U16(19, v24, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
+  VCMP_U16(19, v24, 1); // we only check the first element, as vta = va
 
 #if ELEN == 64
   VSET(3, e32, m4);
@@ -178,7 +186,8 @@ void TEST_CASE5(void) {
   VLOAD_32(v8, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
   VLOAD_32(v24, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
   asm volatile("vredsum.vs v24, v16, v8, v0.t");
-  VCMP_U32(20, v24, 3, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
+  // VCMP_U32(20, v24, 3, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
+  VCMP_U32(20, v24, 3); // we only check the first element, as vta = va
 #endif
 }
 
