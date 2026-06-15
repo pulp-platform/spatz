@@ -137,6 +137,32 @@ int test_case;
   }                                                                            \
   printf("PASSED.\n");
 
+#define FCMP32(casenum, act, exp_bits)                                         \
+do {                                                                           \
+    uint32_t bits;                                                             \
+    memcpy(&bits, &(act), sizeof(bits));                                       \
+    if (bits != (uint32_t)(exp_bits)) {                                        \
+        printf("[TC %d] FAILED. Got 0x%08x, expected 0x%08x\n",                \
+               casenum, bits, (uint32_t)(exp_bits));                           \
+        num_failed++;                                                          \
+        return;                                                                \
+    }                                                                          \
+    printf("[TC %d] PASSED.\n", casenum);                                                       \
+} while (0)
+
+#define FCMP64(casenum, act, exp_bits)                                         \
+do {                                                                           \
+    uint64_t bits;                                                             \
+    memcpy(&bits, &(act), sizeof(bits));                                       \
+    if (bits != (uint64_t)(exp_bits)) {                                        \
+        printf("[TC %d] FAILED. Got 0x%016lx, expected 0x%016lx\n",            \
+               casenum, bits, (uint64_t)(exp_bits));                           \
+        num_failed++;                                                          \
+        return;                                                                \
+    }                                                                          \
+    printf("[TC %d] PASSED.\n", casenum);                                                       \
+} while (0)
+
 // Check the results against a vector of golden values
 #define VCMP(T, str, casenum, vexp, act...)                                    \
   do {                                                                         \
