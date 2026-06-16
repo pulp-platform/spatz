@@ -517,8 +517,8 @@ module ventaglio
   ventaglio_narrow_be_t   [VTGNrChannels-1:0] wbe;
 
   // read signals
-  vtg_row_addr_t          [VTGNrChannels-1:0][VTGNrReadPortsPerBank-1:0] raddr;
-  ventaglio_narrow_data_t [VTGNrChannels-1:0][VTGNrReadPortsPerBank-1:0] rdata;
+  vtg_row_addr_t          [VTGNrChannels-1:0] raddr;
+  ventaglio_narrow_data_t [VTGNrChannels-1:0] rdata;
 
   // write mapping
   logic [VTGNrChannels-1:0]                    write_request;
@@ -631,17 +631,17 @@ module ventaglio
     if (!is_gather) begin // priority 1: normal read requests
       for (int unsigned b_channel = 0; b_channel < VTGNrChannels; b_channel++) begin // channels from the bank side
         if (read_request[b_channel]) begin
-          raddr[b_channel][0] = f_row(raddr_i);
-          rdata_o             = rdata[b_channel][0];
-          rvalid_o            = 1'b1;
+          raddr[b_channel] = f_row(raddr_i);
+          rdata_o          = rdata[b_channel];
+          rvalid_o         = 1'b1;
         end
       end
     end else if (is_gather) begin // priority 2: gather accesses
       for (int unsigned b_channel = 0; b_channel < VTGNrChannels; b_channel++) begin // channels from the bank side
         for (int unsigned g_channel = 0; g_channel < VTGNrChannels; g_channel++) begin // channels from the gather datapath side
           if (gather_read_request[b_channel][g_channel]) begin
-            raddr[b_channel][0]       = f_row(gather_raddr[g_channel]);
-            gather_rdata[g_channel]   = rdata[b_channel][0];
+            raddr[b_channel]          = f_row(gather_raddr[g_channel]);
+            gather_rdata[g_channel]   = rdata[b_channel];
             gather_rvalid[g_channel]  = index_valid_q;
           end
         end
@@ -694,27 +694,19 @@ module ventaglio
   // In this way, each channel can provide the same bandwidth as the VLSU and VPU
   for (genvar channel = 0; channel < VTGNrChannels; channel++) begin : gen_vtg_channels
     for (genvar bank = 0; bank < N_FU; bank++) begin: gen_vtg_banks
-      elen_t [VTGNrReadPortsPerBank-1:0] rdata_int;
-
-      for (genvar port = 0; port < VTGNrReadPortsPerBank; port++) begin: gen_rdata_assignment
-        // assign rdara_pre_gather[channel][port][ELEN*bank +: ELEN] = rdata_int[port];
-        assign rdata[channel][port][ELEN*bank +: ELEN] = rdata_int[port];
-      end
-
       ventaglio_regfile #(
-        .NrReadPorts(VTGNrReadPortsPerBank),
         .NrWords    (VTGNrWordsPerChannel ),
         .WordWidth  (ELEN                 )
       ) i_vtg_vregfile (
-        .clk_i     (clk_i                            ),
-        .rst_ni    (rst_ni                           ),
-        .testmode_i(testmode_i                       ),
-        .waddr_i   (waddr[channel]                   ),
-        .wdata_i   (wdata[channel][ELEN*bank +: ELEN]),
-        .we_i      (we[channel]                      ),
-        .wbe_i     (wbe[channel][ELENB*bank +: ELENB]    ),
-        .raddr_i   (raddr[channel]                  ),
-        .rdata_o   (rdata_int                    )
+        .clk_i     (clk_i                              ),
+        .rst_ni    (rst_ni                             ),
+        .testmode_i(testmode_i                         ),
+        .waddr_i   (waddr[channel]                     ),
+        .wdata_i   (wdata[channel][ELEN*bank +: ELEN]  ),
+        .we_i      (we[channel]                        ),
+        .wbe_i     (wbe[channel][ELENB*bank +: ELENB]  ),
+        .raddr_i   (raddr[channel]                     ),
+        .rdata_o   (rdata[channel][ELEN*bank +: ELEN]  )
       );
     end
   end

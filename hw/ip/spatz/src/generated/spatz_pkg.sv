@@ -492,7 +492,6 @@ package spatz_pkg;
   // 1:2 -> 2). Default 4 (= 1:4 support).
   localparam int unsigned VTGNrChannels         = VENTAGLIO_WFACTOR;
   localparam int unsigned VTGNrBanksPerChannel  = N_FU;
-  localparam int unsigned VTGNrReadPortsPerBank = 1;
   localparam int unsigned VTGChannelWidth       = VTGNrBanksPerChannel * ELEN;
   localparam int unsigned VTGChannelBWidth      = VTGNrBanksPerChannel * ELENB;
   localparam int unsigned VTGNrWordsPerChannel  = VENTAGLIO_BUFFER_SIZE / (VTGNrChannels * VTGChannelWidth);

@@ -7,7 +7,6 @@
 // Generic register file that makes use of flip-flops to store data.
 
 module ventaglio_regfile import spatz_pkg::*; #(
-    parameter int  unsigned NrReadPorts = 0,
     parameter int  unsigned NrWords     = NRVREG,
     parameter int  unsigned WordWidth   = VRFWordWidth,
     // Derived parameters.  Do not change!
@@ -15,17 +14,17 @@ module ventaglio_regfile import spatz_pkg::*; #(
     parameter type          data_t      = logic [WordWidth-1:0],
     parameter type          strb_t      = logic [WordWidth/8-1:0]
   ) (
-    input  logic                    clk_i,
-    input  logic                    rst_ni,
-    input  logic                    testmode_i,
-    // Write ports
-    input  addr_t                   waddr_i,
-    input  data_t                   wdata_i,
-    input  logic                    we_i,
-    input  strb_t                   wbe_i,
-    // Read ports
-    input  addr_t [NrReadPorts-1:0] raddr_i,
-    output data_t [NrReadPorts-1:0] rdata_o
+    input  logic    clk_i,
+    input  logic    rst_ni,
+    input  logic    testmode_i,
+    // Write port (single)
+    input  addr_t   waddr_i,
+    input  data_t   wdata_i,
+    input  logic    we_i,
+    input  strb_t   wbe_i,
+    // Read port (single)
+    input  addr_t   raddr_i,
+    output data_t   rdata_o
   );
 
   /////////////
@@ -73,30 +72,25 @@ module ventaglio_regfile import spatz_pkg::*; #(
     end: gen_word
   end: gen_mem_row
 
-  // Combinational read ports
-  // BOWWANG: might not need arbiter here if we only need one read port
-  if (NrReadPorts > 0) begin : gen_reads
-    for (genvar p = 0; p < NrReadPorts; p++) begin : gen_rp
-        // Reuse the decision tree from the RR arbiter
-        rr_arb_tree #(
-          .AxiVldRdy(1'b1     ),
-          .ExtPrio  (1'b1     ),
-          .DataWidth(WordWidth),
-          .NumIn    (NrWords  )
-        ) i_read_tree (
-          .clk_i  (clk_i        ),
-          .rst_ni (rst_ni       ),
-          .flush_i(1'b0         ),
-          .idx_o  (/* Unused */ ),
-          .data_i (mem_q        ),
-          .rr_i   (raddr_i[p]),
-          .data_o (rdata_o[p]),
-          .req_i  ('1           ),
-          .gnt_o  (/* Unused */ ),
-          .req_o  (/* Unused */ ),
-          .gnt_i  (1'b1         )
-        );
-    end
-  end
+  // Combinational read port. Reuse rr_arb_tree as an N-to-1 MUX selected
+  // by raddr_i.
+  rr_arb_tree #(
+    .AxiVldRdy(1'b1     ),
+    .ExtPrio  (1'b1     ),
+    .DataWidth(WordWidth),
+    .NumIn    (NrWords  )
+  ) i_read_tree (
+    .clk_i  (clk_i        ),
+    .rst_ni (rst_ni       ),
+    .flush_i(1'b0         ),
+    .idx_o  (/* Unused */ ),
+    .data_i (mem_q        ),
+    .rr_i   (raddr_i      ),
+    .data_o (rdata_o      ),
+    .req_i  ('1           ),
+    .gnt_o  (/* Unused */ ),
+    .req_o  (/* Unused */ ),
+    .gnt_i  (1'b1         )
+  );
 
 endmodule : ventaglio_regfile

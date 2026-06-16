@@ -33,9 +33,8 @@ Items raised during the 2026-05-27 walkthrough; check off as addressed.
 - [x] **D1** — dropped the dead `new_vtl_request_q` flop; the signal is now pure combinational `new_vtl_request` (no `_d` / `_q` suffix since there is no register).
 - [x] **Slave-port flattening (NrReadPorts / NrWritePorts drop)** — both parameters were always 1; removed them, flattened the 11 slave ports to scalar, dropped `VrfRd` / `VrfWd` localparams, collapsed inner `for (port = ...)` loops, and dropped one `[port]` dimension from internal `read_request` / `write_request` / `gather_*` / `scatter_*` arrays. Connected callers in `spatz.sv` already declared the corresponding signals as scalar (the previous vector ports relied on SV's relaxed 1-bit-packed-vector binding); no caller change required. Also dropped the dead D3 commented-out `gather_rvalid` line that lived in the same region.
 - [x] **D3** — dropped along with the slave-port flattening.
-
-### Open (correctness / scope)
-- [ ] **D4** — drop the dead `// assign rdara_pre_gather[...]` comment inside `gen_rdata_assignment`.
+- [x] **D4** — dropped the dead `// assign rdara_pre_gather[...]` comment along with the internal bank-port simplification below.
+- [x] **Internal bank-port simplification** — `ventaglio_regfile.sv`'s `NrReadPorts` parameter and per-port `rr_arb_tree` `gen_reads`/`gen_rp` wrappers are gone (single scalar `raddr_i` / `rdata_o`); `VTGNrReadPortsPerBank` retired from `spatz_pkg.sv` + `.tpl`; the 2D `raddr` / `rdata` in `ventaglio.sv` collapsed to 1D and the `gen_rdata_assignment` intermediate (which also held the D4 dead comment) replaced by a direct slice assignment from each regfile instance's scalar `rdata_o` into `rdata[channel][ELEN*bank +: ELEN]`.
 
 ### Deferred (do not attempt under this PR)
 - **D2 / vfu_*-removal refactor** — attempted on 2026-05-21..27 (removing
@@ -45,12 +44,6 @@ Items raised during the 2026-05-27 walkthrough; check off as addressed.
   the PR window; the controller-side scoreboard chain check appears to be
   timing-coupled to the original `vfu_rsp_valid` retire path in ways that
   warrant its own targeted PR. Reverted in full.
-- **Internal bank-port simplification** — the multi-read-port hook in
-  `ventaglio_regfile.sv` (`NrReadPorts` parameter + per-port `rr_arb_tree`
-  loop) and the `VTGNrReadPortsPerBank` constant in `spatz_pkg.sv` /
-  `.tpl` cover the *internal* per-bank read-port concept, separate from
-  the slave-port flattening above. They're always 1 today too and could
-  be retired in a follow-up PR.
 
 ### Open
 
