@@ -12,7 +12,7 @@ package quadrilatero_pkg;
 
   // Quadrilatero Sizes
   localparam int unsigned RLEN = ${cfg['rlen']};
-  localparam int unsigned ALEN = RLEN;           
+  localparam int unsigned ALEN = RLEN;
   localparam int unsigned LLEN = ${cfg['llen']};
 
   // Unit Parameters

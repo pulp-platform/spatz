@@ -12,7 +12,7 @@ package quadrilatero_pkg;
 
   // Quadrilatero Sizes
   localparam int unsigned RLEN = 256;
-  localparam int unsigned ALEN = RLEN;           
+  localparam int unsigned ALEN = RLEN;
   localparam int unsigned LLEN = 512;
 
   // Unit Parameters

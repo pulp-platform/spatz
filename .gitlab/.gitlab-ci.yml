@@ -114,6 +114,7 @@ snRuntime-test-vsim:
     - $CI_PROJECT_DIR/util/memora_retry.sh get tc-riscv-gcc
     - $CI_PROJECT_DIR/util/memora_retry.sh get python-deps
     # Download bender
+    - cd $CI_PROJECT_DIR 
     - make bender
     - cd .bender/git/checkouts/quadrilatero*
     - mkdir -p tb/spatz/hw/system/spatz_cluster/src/generated/
@@ -144,6 +145,7 @@ snRuntime-test-vcs:
     - $CI_PROJECT_DIR/util/memora_retry.sh get tc-riscv-gcc
     - $CI_PROJECT_DIR/util/memora_retry.sh get python-deps
     # Download bender
+    - cd $CI_PROJECT_DIR 
     - make bender
     - cd .bender/git/checkouts/quadrilatero*
     - mkdir -p tb/spatz/hw/system/spatz_cluster/src/generated/
@@ -175,7 +177,7 @@ snRuntime-test-vlt:
     - $CI_PROJECT_DIR/util/memora_retry.sh get verilator
     - $CI_PROJECT_DIR/util/memora_retry.sh get python-deps
     # Download bender
-    - rm -rf bender
+    - cd $CI_PROJECT_DIR 
     - make bender
     - cd .bender/git/checkouts/quadrilatero*
     - mkdir -p tb/spatz/hw/system/spatz_cluster/src/generated/
@@ -208,6 +210,7 @@ riscvTests-test-vlt:
     - $CI_PROJECT_DIR/util/memora_retry.sh get verilator
     - $CI_PROJECT_DIR/util/memora_retry.sh get python-deps
     # Download bender
+    - cd $CI_PROJECT_DIR 
     - make bender
     - cd .bender/git/checkouts/quadrilatero*
     - mkdir -p tb/spatz/hw/system/spatz_cluster/src/generated/
@@ -240,6 +243,7 @@ spatzBenchmarks-test-vlt:
     - $CI_PROJECT_DIR/util/memora_retry.sh get verilator
     - $CI_PROJECT_DIR/util/memora_retry.sh get python-deps
     # Download bender
+    - cd $CI_PROJECT_DIR 
     - make bender
     - cd .bender/git/checkouts/quadrilatero*
     - mkdir -p tb/spatz/hw/system/spatz_cluster/src/generated/
@@ -271,6 +275,7 @@ quadrilateroBenchmarks-test-vlt:
     - $CI_PROJECT_DIR/util/memora_retry.sh get tc-riscv-gcc
     - $CI_PROJECT_DIR/util/memora_retry.sh get verilator
     # Download bender
+    - cd $CI_PROJECT_DIR 
     - make bender
     - cd .bender/git/checkouts/quadrilatero*
     - mkdir -p tb/spatz/hw/system/spatz_cluster/src/generated/
