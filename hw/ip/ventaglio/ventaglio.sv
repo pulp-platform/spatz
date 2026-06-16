@@ -74,13 +74,9 @@ module ventaglio
   //  Operation queue  //
   ///////////////////////
 
-  spatz_req_t spatz_req_d;
-
   spatz_req_t spatz_req;
   logic       spatz_req_valid;
   logic       spatz_req_ready;
-
-
 
   // Spill admits any VTL op regardless of which ex_unit it routes to:
   //   - vfxmacc.vrf / vfxmul.vrf are dispatched as ex_unit=VFU.
@@ -91,17 +87,13 @@ module ventaglio
   ) i_operation_queue (
     .clk_i  (clk_i                                              ),
     .rst_ni (rst_ni                                             ),
-    .data_i (spatz_req_d                                        ),
+    .data_i (spatz_req_i                                        ),
     .valid_i(spatz_req_valid_i && spatz_req_i.op_vtl.use_vtl    ),
     .ready_o(vtl_req_ready_o                                    ),
     .data_o (spatz_req                                          ),
     .valid_o(spatz_req_valid                                    ),
     .ready_i(spatz_req_ready                                    )
   );
-
-  always_comb begin : proc_spatz_req
-    spatz_req_d = spatz_req_i;
-  end
 
   /******************************/
   /*       Clear Sequencer      */
