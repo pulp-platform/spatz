@@ -31,7 +31,9 @@ package quadrilatero_pkg;
   localparam tech_e MRF_TECH = FF;
 
   // DataTypes parameters
-  localparam bit EN_FMA      = 1'b0;
+  localparam bit EN_FP32     = 1'b0;
+  localparam bit EN_FP16     = 1'b1;
+  localparam bit EN_FP8      = 1'b1;
   localparam bit EN_INT32    = 1'b0;
   localparam bit EN_INT16    = 1'b1;
   localparam bit EN_INT8     = 1'b1;
@@ -278,52 +280,4 @@ package quadrilatero_pkg;
     ports_e           [4:0] Ports  ;
   } quadrilatero_enum_t;
 
-  typedef struct packed {
-   int unsigned NRegs            ;
-   int unsigned DataWidth        ;
-   int unsigned RegCE            ;
-   int unsigned Rlen             ;
-   int unsigned Llen             ;
-   int unsigned NumExUnits       ;
-   int unsigned NumMacUnits      ;
-   int unsigned InputBufferDepth ;
-   int unsigned OutputBufferDepth;
-   int unsigned LSUFifoDepth     ;
-   tech_e       MRFTech          ;
-   bit          IssueStageFF     ;
-   bit          EnableFMA        ;
-   bit          EnableInt32      ;
-   bit          EnableInt16      ;
-   bit          EnableInt8       ;
-   bit          EnableSigned     ;
-   bit          EnableUnsigned   ;
-   quadrilatero_enum_t EnumList;
-  } quadrilatero_cfg_t;
-
-  localparam quadrilatero_cfg_t QuadrilateroCfg = '{
-    NRegs            : N_REGS            ,
-    DataWidth        : DATA_WIDTH        ,
-    RegCE            : REG_PER_CE        ,
-    Rlen             : RLEN              ,
-    Llen             : LLEN              ,
-    NumExUnits       : NUM_EXEC_UNITS    ,
-    NumMacUnits      : NUM_MAC_UNITS     ,
-    InputBufferDepth : INPUT_BUFFER_DEPTH,
-    OutputBufferDepth: RES_IF_FIFO_DEPTH ,
-    LSUFifoDepth     : LSU_FIFO_DEPTH    ,
-    IssueStageFF     : ISSUE_STAGE_FF    ,
-    MRFTech          : MRF_TECH          ,
-    EnableFMA        : EN_FMA            ,
-    EnableInt32      : EN_INT32          ,
-    EnableInt16      : EN_INT16          ,
-    EnableInt8       : EN_INT8           ,
-    EnableSigned     : EN_SIGNED         ,
-    EnableUnsigned   : EN_UNSIGNED       ,
-    EnumList   : '{ Op1:{SEL1_ACT, SEL1_ACC }, 
-                    Op2:{SEL2_WGT, SEL2_ACC }, 
-                    Op3:{SEL3_ACC, SEL3_ZERO},
-                    MRFTech:{LATCH, SRAM, FF},
-                    ExUnits:{FU_CFG,FU_RF,FU_LSU,FU_SA},
-                    Ports:{LSU_W,LSU_R,SA_A_W,SA_D_R,SA_W_R}}
-  };
 endpackage

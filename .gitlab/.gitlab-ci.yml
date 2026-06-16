@@ -115,6 +115,9 @@ snRuntime-test-vsim:
     - $CI_PROJECT_DIR/util/memora_retry.sh get python-deps
     # Download bender
     - make bender
+    - cd .bender/git/checkouts/quadrilatero*
+    - mkdir -p tb/spatz/hw/system/spatz_cluster/src/generated/
+    - ln -s ../../../../../../../../../../../hw/system/spatz_cluster/src/generated/quadrilatero_pkg.sv tb/spatz/hw/system/spatz_cluster/src/generated/quadrilatero_pkg.sv
     # Update opcodes
     - make update_opcodes
     # Compile the binaries
@@ -142,6 +145,9 @@ snRuntime-test-vcs:
     - $CI_PROJECT_DIR/util/memora_retry.sh get python-deps
     # Download bender
     - make bender
+    - cd .bender/git/checkouts/quadrilatero*
+    - mkdir -p tb/spatz/hw/system/spatz_cluster/src/generated/
+    - ln -s ../../../../../../../../../../../hw/system/spatz_cluster/src/generated/quadrilatero_pkg.sv tb/spatz/hw/system/spatz_cluster/src/generated/quadrilatero_pkg.sv
     # Update opcodes
     - make update_opcodes
     # Compile the binaries
@@ -171,6 +177,9 @@ snRuntime-test-vlt:
     # Download bender
     - rm -rf bender
     - make bender
+    - cd .bender/git/checkouts/quadrilatero*
+    - mkdir -p tb/spatz/hw/system/spatz_cluster/src/generated/
+    - ln -s ../../../../../../../../../../../hw/system/spatz_cluster/src/generated/quadrilatero_pkg.sv tb/spatz/hw/system/spatz_cluster/src/generated/quadrilatero_pkg.sv
     # Update opcodes
     - make update_opcodes
     # Compile the binaries
@@ -200,6 +209,9 @@ riscvTests-test-vlt:
     - $CI_PROJECT_DIR/util/memora_retry.sh get python-deps
     # Download bender
     - make bender
+    - cd .bender/git/checkouts/quadrilatero*
+    - mkdir -p tb/spatz/hw/system/spatz_cluster/src/generated/
+    - ln -s ../../../../../../../../../../../hw/system/spatz_cluster/src/generated/quadrilatero_pkg.sv tb/spatz/hw/system/spatz_cluster/src/generated/quadrilatero_pkg.sv
     # Update opcodes
     - make update_opcodes
     # Compile the binaries
@@ -229,6 +241,9 @@ spatzBenchmarks-test-vlt:
     - $CI_PROJECT_DIR/util/memora_retry.sh get python-deps
     # Download bender
     - make bender
+    - cd .bender/git/checkouts/quadrilatero*
+    - mkdir -p tb/spatz/hw/system/spatz_cluster/src/generated/
+    - ln -s ../../../../../../../../../../../hw/system/spatz_cluster/src/generated/quadrilatero_pkg.sv tb/spatz/hw/system/spatz_cluster/src/generated/quadrilatero_pkg.sv
     # Update opcodes
     - make update_opcodes
     # Compile the binaries
@@ -257,6 +272,9 @@ quadrilateroBenchmarks-test-vlt:
     - $CI_PROJECT_DIR/util/memora_retry.sh get verilator
     # Download bender
     - make bender
+    - cd .bender/git/checkouts/quadrilatero*
+    - mkdir -p tb/spatz/hw/system/spatz_cluster/src/generated/
+    - ln -s ../../../../../../../../../../../hw/system/spatz_cluster/src/generated/quadrilatero_pkg.sv tb/spatz/hw/system/spatz_cluster/src/generated/quadrilatero_pkg.sv
     # Update opcodes
     - make update_opcodes
     # Download python dependencies

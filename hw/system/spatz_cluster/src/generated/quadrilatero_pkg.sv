@@ -10,91 +10,72 @@ package quadrilatero_pkg;
   localparam int unsigned DATA_WIDTH = 32;
   localparam int unsigned REG_PER_CE =  4;
 
-  localparam int unsigned RLEN = 128;; // change register dimension
-  localparam int unsigned ALEN = RLEN;            // change systolic array dimension
-  localparam int unsigned LLEN = 256;; // change for different bus width
+  // Quadrilatero Sizes
+  localparam int unsigned RLEN = 256;
+  localparam int unsigned ALEN = RLEN;           
+  localparam int unsigned LLEN = 512;
 
+  // Unit Parameters
+  localparam int unsigned NUM_EXEC_UNITS =   4;
+  localparam int unsigned NUM_MAC_UNITS  =   4;
+
+  // Buffer Sizes
+  localparam int unsigned INPUT_BUFFER_DEPTH = 4;
+  localparam int unsigned RES_IF_FIFO_DEPTH  = 4;
+  localparam int unsigned LSU_FIFO_DEPTH     = 4;
+
+  // Other Parameters
+  localparam bit    ISSUE_STAGE_FF = 1'b0;
+
+  typedef enum logic[1:0] {LATCH, SRAM, FF} tech_e;
+  localparam tech_e MRF_TECH = FF;
+
+  // DataTypes parameters
+  localparam bit EN_FP32     = 1'b0;
+  localparam bit EN_FP16     = 1'b1;
+  localparam bit EN_FP8      = 1'b1;
+  localparam bit EN_INT32    = 1'b0;
+  localparam bit EN_INT16    = 1'b1;
+  localparam bit EN_INT8     = 1'b1;
+  localparam bit EN_SIGNED   = 1'b1;
+  localparam bit EN_UNSIGNED = 1'b1;
+
+  // Derived Parameters
   localparam int unsigned MESH_WIDTH    = RLEN/DATA_WIDTH;  
   localparam int unsigned SA_MESH_WIDTH = ALEN/DATA_WIDTH;
   localparam int unsigned N_ROWS        = RLEN/DATA_WIDTH;
-
-  localparam int unsigned NUM_EXEC_UNITS =   4;  // change me to add units
-  localparam int unsigned NUM_MAC_UNITS  =   4;  // change me to add units
 
   localparam int unsigned LSU_PORTS     = LLEN/RLEN    ;
   localparam int unsigned READ_PORTS    = 2 + LSU_PORTS;
   localparam int unsigned WRITE_PORTS   = 1 + LSU_PORTS;
   localparam int unsigned N_PORTS       = READ_PORTS + WRITE_PORTS;
-  localparam int unsigned LOG_N_PORTS   = $ceil($clog2(N_PORTS));
+  localparam int unsigned LOG_N_PORTS   = $clog2(N_PORTS);
   localparam int unsigned LOG_LSU_PORTS = LSU_PORTS > 1 ? $clog2(LSU_PORTS) : 1;
-  
-  localparam fpnew_pkg::fpu_features_t RV32_QUAD = '{
-    Width:         32,
-    EnableVectors: 1'b0,
-    EnableNanBox:  1'b1,
-    FpFmtMask:     6'b101111,
-    IntFmtMask:    4'b0010
-  };
-
-  localparam fpnew_pkg::fpu_implementation_t FPUImplementation [1] = '{
-    '{
-        PipeRegs: // FMA Block
-                  '{// FP32 FP64 FP16 FP8 FP16alt FP8alt
-                    '{   3,   0,   0,  0,   0,      0   },   // FMA Block
-                    '{   0,   0,   0,  0,   0,      0   },   // DIVSQRT
-                    '{   0,   0,   0,  0,   0,      0   },   // NONCOMP
-                    '{   0,   0,   0,  0,   0,      0   },   // CONV
-                    '{   3,   3,   3,  3,   3,      3   }    // DOTP
-                    },
-        UnitTypes: '{'{fpnew_pkg::PARALLEL,
-                       fpnew_pkg::DISABLED,
-                       fpnew_pkg::DISABLED,
-                       fpnew_pkg::DISABLED,
-                       fpnew_pkg::DISABLED,
-                       fpnew_pkg::DISABLED},  // FMA
-                    '{fpnew_pkg::DISABLED,
-                        fpnew_pkg::DISABLED,
-                        fpnew_pkg::DISABLED,
-                        fpnew_pkg::DISABLED,
-                        fpnew_pkg::DISABLED,
-                        fpnew_pkg::DISABLED}, // DIVSQRT
-                    '{fpnew_pkg::DISABLED,
-                        fpnew_pkg::DISABLED,
-                        fpnew_pkg::DISABLED,
-                        fpnew_pkg::DISABLED,
-                        fpnew_pkg::DISABLED,
-                        fpnew_pkg::DISABLED}, // NONCOMP
-                    '{fpnew_pkg::DISABLED,
-                        fpnew_pkg::DISABLED,
-                        fpnew_pkg::DISABLED,
-                        fpnew_pkg::DISABLED,
-                        fpnew_pkg::DISABLED,
-                        fpnew_pkg::DISABLED},   // CONV
-                    '{fpnew_pkg::MERGED,
-                        fpnew_pkg::DISABLED,
-                        fpnew_pkg::MERGED,
-                        fpnew_pkg::MERGED,
-                        fpnew_pkg::DISABLED,
-                        fpnew_pkg::DISABLED}},  // DOTP
-        PipeConfig: fpnew_pkg::BEFORE
-    }
-  };
 
   typedef logic [xif_pkg::X_ID_WIDTH-1:0] id_t     ;
   typedef logic [$clog2(REG_PER_CE) -1:0] acc_reg_t;
   typedef logic [$clog2(N_REGS    ) -1:0] src_reg_t;
   typedef logic [$clog2(N_ROWS    ) -1:0] row_t    ;
 
-  typedef enum logic      {SEL1_ACT, SEL1_ACC } sel_op1_e;
-  typedef enum logic[1:0] {SEL2_WGT, SEL2_ACC } sel_op2_e;
-  typedef enum logic      {SEL3_ACC, SEL3_ZERO} sel_op3_e;
+  typedef enum logic {SEL1_ACT, SEL1_ACC } sel_op1_e;
+  typedef enum logic {SEL2_WGT, SEL2_ACC } sel_op2_e;
+  typedef enum logic {SEL3_ACC, SEL3_ZERO} sel_op3_e;
 
   typedef enum logic [$clog2(NUM_EXEC_UNITS)-1:0] {
-    FU_SYSTOLIC_ARRAY = 0,
+    FU_SA = 0,
     FU_LSU,
     FU_RF,
     FU_CFG
-  } execution_units_t;
+  } execution_units_e;
+
+  typedef enum logic [LOG_N_PORTS-1:0] {
+    SA_W_R = 0,   // Read  Port : Systolic Array Weight
+    SA_D_R = 1,   // Read  Port : Systolic Array Data
+    SA_A_W = 2,   // Write Port : Systolic Array Accumulator
+    LSU_R  = 3,   // Read  Port : Load-Store Unit
+    LSU_W  = 4    // Write Port : Load-Store Unit
+                  // ...
+  } ports_e;
 
   typedef struct packed {
     logic                  write  ;
@@ -122,10 +103,8 @@ package quadrilatero_pkg;
     logic[$clog2(NUM_MAC_UNITS)-1:0]  unit        ;
   } cfg_fpu_t;
   typedef struct packed {
-    logic ext_ld         ;
     logic finished       ;
     logic first_iteration;
-    logic stall          ;
   } ctrl_fpu_t;
   typedef struct packed {
     // logic     wen      ;
@@ -187,11 +166,12 @@ package quadrilatero_pkg;
     logic      is_mac         ;
     logic      is_move        ;
     mcfg_t     mcfg           ;
-    execution_units_t eu      ;
+    execution_units_e eu      ;
     xif_result_t     result   ;
     logic            result_we;
     logic[$clog2(RLEN)-1:0]             n_col_bytes   ;
-    logic[$clog2(RLEN):0]               n_rows        ;
+    logic[$clog2(N_ROWS)+2:0]           n_rows        ;
+    logic[1:0]                          extra_k       ;
     logic[N_REGS -1:0][LOG_N_PORTS-1:0] port_id       ;
     logic[1:0]                          sa_sel_demux  ;
     logic[LOG_LSU_PORTS-1:0]            lsu_sel_demux ;
@@ -286,15 +266,18 @@ package quadrilatero_pkg;
     acc_reg_t    cmul       ;
     acc_reg_t    rmul       ;
     logic[$clog2(RLEN)-1:0]   n_col_bytes;
-    logic[$clog2(RLEN):0]     n_rows     ;
+    logic[$clog2(N_ROWS)+2:0] n_rows     ;
+    logic[1:0]                extra_k    ;
+    logic[1:0]                datawidth  ;
   } lsu_instr_t;
 
-  typedef enum logic [LOG_N_PORTS-1:0] {
-    SA_W_R = 0,   // Read  Port : Systolic Array Weight
-    SA_D_R = 1,   // Read  Port : Systolic Array Data
-    SA_A_W = 2,   // Write Port : Systolic Array Accumulator
-    LSU_R  = 3,   // Read  Port : Load-Store Unit
-    LSU_W  = 4    // Write Port : Load-Store Unit
-                  // ...
-  } ports_e;
+  typedef struct packed {
+    sel_op1_e         [1:0] Op1    ;
+    sel_op2_e         [1:0] Op2    ;
+    sel_op3_e         [1:0] Op3    ;
+    tech_e            [2:0] MRFTech;
+    execution_units_e [3:0] ExUnits;
+    ports_e           [4:0] Ports  ;
+  } quadrilatero_enum_t;
+
 endpackage
