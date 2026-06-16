@@ -31,10 +31,11 @@ Items raised during the 2026-05-27 walkthrough; check off as addressed.
 - [x] **C2** — generalize `num_beats_per_op` formula (no longer hard-coded to `N_FU=4` / `EW_32`); derivation moved to this README.
 - [x] **C4** — `op_beat_cnt_q` wrap is now gated on `rvalid_o`; the counter is kept as an explicit hook for long-vector index-refresh and the comment documents that.
 - [x] **D1** — dropped the dead `new_vtl_request_q` flop; the signal is now pure combinational `new_vtl_request` (no `_d` / `_q` suffix since there is no register).
+- [x] **Slave-port flattening (NrReadPorts / NrWritePorts drop)** — both parameters were always 1; removed them, flattened the 11 slave ports to scalar, dropped `VrfRd` / `VrfWd` localparams, collapsed inner `for (port = ...)` loops, and dropped one `[port]` dimension from internal `read_request` / `write_request` / `gather_*` / `scatter_*` arrays. Connected callers in `spatz.sv` already declared the corresponding signals as scalar (the previous vector ports relied on SV's relaxed 1-bit-packed-vector binding); no caller change required. Also dropped the dead D3 commented-out `gather_rvalid` line that lived in the same region.
+- [x] **D3** — dropped along with the slave-port flattening.
 
 ### Open (correctness / scope)
-- [ ] **D3** — drop the dead `// gather_rvalid[g_channel][VrfRd] = 1'b1;` left next to its live replacement.
-- [ ] **D4** — drop the dead `// assign rdara_pre_gather[...]` comment.
+- [ ] **D4** — drop the dead `// assign rdara_pre_gather[...]` comment inside `gen_rdata_assignment`.
 
 ### Deferred (do not attempt under this PR)
 - **D2 / vfu_*-removal refactor** — attempted on 2026-05-21..27 (removing
@@ -44,13 +45,12 @@ Items raised during the 2026-05-27 walkthrough; check off as addressed.
   the PR window; the controller-side scoreboard chain check appears to be
   timing-coupled to the original `vfu_rsp_valid` retire path in ways that
   warrant its own targeted PR. Reverted in full.
-- **Port-simplification (slave-port flattening + multi-read-port hook)** — the
-  multi-read-port hook in `ventaglio_regfile.sv` (`NrReadPorts` parameter +
-  per-port `rr_arb_tree` loop), the `VTGNrReadPortsPerBank` constant in
-  `spatz_pkg.sv` / `.tpl`, and the vector-shaped slave VRF ports in
-  `ventaglio.sv` form one coupled change. Started but reverted alongside D2
-  since the regfile / pkg side cannot land without the matching
-  `ventaglio.sv`-side flattening. Land as a single follow-up PR.
+- **Internal bank-port simplification** — the multi-read-port hook in
+  `ventaglio_regfile.sv` (`NrReadPorts` parameter + per-port `rr_arb_tree`
+  loop) and the `VTGNrReadPortsPerBank` constant in `spatz_pkg.sv` /
+  `.tpl` cover the *internal* per-bank read-port concept, separate from
+  the slave-port flattening above. They're always 1 today too and could
+  be retired in a follow-up PR.
 
 ### Open
 
