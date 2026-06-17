@@ -1,10 +1,25 @@
-// Copyright 2025 ETH Zurich and University of Bologna.
+// Copyright 2026 ETH Zurich and University of Bologna.
 // Licensed under the Apache License, Version 2.0, see LICENSE for details.
 // SPDX-License-Identifier: Apache-2.0
 //
 // Author: Bowen Wang, ETH Zurich
 //
-// Standalone Gather/Scatter datapath
+// Ventaglio — streamlined sparse gather/scatter execution unit.
+//
+//   Bank       : VTGNrChannels channels x N_FU banks (ELEN each), channel-
+//                interleaved (f_channel/f_row). Holds the sparsity-expanded
+//                accumulator vreg(s).
+//   Op queue   : i_operation_queue spill latches each use_vtl op
+//                (vfxmul / vfxmacc / vventclr) issued by the controller.
+//   Index path : two spill registers. i_idx_req_reg buffers the master VRF
+//                *read request* for the op's index vreg (pushed on the
+//                pre-spill admit handshake, held until vrf_rvalid_i).
+//                i_idx_spill buffers the returned index *data* that feeds the
+//                scatter/gather datapaths.
+//   Datapaths  : ventaglio_scatter (vfx -> bank), ventaglio_gather
+//                (bank -> vfx), plus the Clear Sequencer for vventclr.
+//   VRF ports  : slave ports serve controller-redirected VLSU/VFU accesses to
+//                bank vregs; the master read port fetches indices from the VRF.
 //
 
 module ventaglio
@@ -138,6 +153,7 @@ module ventaglio
   /******************************/
   always_comb begin : proc_vtl_state
     running_d = running_q;
+    // Default: no op latched in the spill -> ready to accept whatever arrives.
     spatz_req_ready = !spatz_req_valid;
 
     // A new spatz_req is received
@@ -165,8 +181,11 @@ module ventaglio
   //////////////////////////////////
   //   Index Buffer (FIFO)        //
   //////////////////////////////////
-  // Fetch signals
-  // moniters pre-spill spatz_req channel, triggered by a successful handshake  
+  // Fetch trigger: monitors the pre-spill spatz_req channel, fired by a
+  // successful admit handshake. Issuing the read one cycle later (through
+  // i_idx_req_reg below) lets the controller scoreboard register the index
+  // vreg's RAW dependency before the read lands, so a stale/zero index is
+  // never returned.
   logic       eff_fetch;
   spatz_id_t  eff_id;
   vreg_t      eff_vidx;
@@ -174,12 +193,12 @@ module ventaglio
   assign eff_fetch = spatz_req_valid_i
                     && spatz_req_i.op_vtl.use_vtl
                     && !spatz_req_i.op_vtl.clear_buffer
-                    && vtl_req_ready_o; 
+                    && vtl_req_ready_o;
   assign eff_id    = spatz_req_i.id;
   assign eff_vidx  = spatz_req_i.op_vtl.idx_vreg;
-  
-  // Index used for scatter and gather data path
-  // Spill register cut the timing path 
+
+  // Index data feeding the scatter/gather datapaths. The spill register cuts
+  // the timing path from the master VRF read response.
   vrf_data_t  index_q;
   logic       index_valid_q;
 
@@ -201,7 +220,12 @@ module ventaglio
     .ready_i(idx_spill_pop     )
   );
 
-  // Index load requests
+  // Master VRF read-request buffer. Carries {id, addr} so vrf_re_o /
+  // vrf_id_o[0] / vrf_raddr_o stay asserted and stable from issue until
+  // vrf_rvalid_i pops it (ready_i = vrf_rvalid_i). ready_o is intentionally
+  // unused: eff_fetch is not back-pressured — correctness relies on never
+  // having more than the spill's two index requests outstanding, guaranteed
+  // by the operation-queue depth and the in-order, one-fetch-per-op admit.
   typedef struct packed {
     spatz_id_t id;
     vrf_addr_t addr;
@@ -232,37 +256,14 @@ module ventaglio
   // signals for gather or scatter
   logic is_gather, is_scatter;
 
-  logic req_proceed;
-  logic last_addr_bit_d, last_addr_bit_q;
-  `FF(last_addr_bit_q, last_addr_bit_d, '0)
-
-  assign last_addr_bit_d = raddr_i[0];
-  assign req_proceed = last_addr_bit_d ^ last_addr_bit_q;
-
   // Beats per op = vl / elements_per_beat, where elements_per_beat =
   // VRFWordBWidth >> vsew (VRFWordBWidth = N_FU * ELENB). Derivation in
   // README ("Beats per operation"). Truncates for non-aligned vl, which
   // vsetvli prevents in current kernels (VLMAX is a multiple of width).
+  // Consumed by the scatter datapath (i_vtl_scatter.num_beats_per_op_i).
   logic [4:0] num_beats_per_op;
   assign num_beats_per_op =
       spatz_req.vl >> ($clog2(VRFWordBWidth) - int'(spatz_req.vtype.vsew));
-
-  logic [4:0] op_beat_cnt_d, op_beat_cnt_q;
-  `FF(op_beat_cnt_q, op_beat_cnt_d, '0)
-
-  // Per-op beat counter. Kept as an explicit hook for a future long-vector
-  // index-refresh: when a single op spans more beats than the index buffer
-  // holds, this counter triggers a mid-op refresh. The wrap is gated on
-  // `rvalid_o && req_proceed` so the counter only ever wraps the cycle it
-  // actually advances — otherwise an idle cycle at `_q == max-1` would
-  // silently reset it.
-  always_comb begin
-    op_beat_cnt_d = op_beat_cnt_q;
-    if (is_gather && rvalid_o && req_proceed) begin
-      op_beat_cnt_d = (op_beat_cnt_q == num_beats_per_op - 1) ? '0
-                                                              : op_beat_cnt_q + 1;
-    end
-  end
 
   /******************************/
   /*           Types            */
@@ -270,7 +271,7 @@ module ventaglio
 
   // The input address has type `vrf_addr_t`
   // It is used to address `NRVREG * NrWordsPerVector` words
-  // Word is represented as `N_FU * ELEN`, is the bandwidth VPU or VLSU comsume
+  // Word is represented as `N_FU * ELEN`, is the bandwidth VPU or VLSU consume
   // In VTL, each channel provide `N_FU * ELEN` bandwidth as well, so it is channel addressable
 
   // We currently utilized a interleaved address scheme
@@ -295,13 +296,19 @@ module ventaglio
   /*          Signals           */
   /******************************/
 
-  // signals for gather or scatter
-  logic gather_done;
-  `FF(gather_done, spatz_vfu_req_ready_i&&spatz_req_valid, '0)
+  // 1-cycle-delayed "gather admitted" pulse — registers
+  // (spatz_vfu_req_ready_i && spatz_req_valid). NOT "gather finished"; the name
+  // reflects a delayed admit. Feeds the gather datapath's gather_done_i.
+  logic gather_admitted_q;
+  `FF(gather_admitted_q, spatz_vfu_req_ready_i && spatz_req_valid, '0)
 
-  // `rgather_en_i` and `wscatter_en_i` signals are attached in VRF bypass logic
+  // is_gather / is_scatter qualify a slave-port access as a bank gather/scatter
+  // for the currently-latched vfx op. Both halves are required: op_vtl.*_vd is
+  // the op's intent (set at decode), while rgather_en_i / wscatter_en_i is the
+  // controller's per-access redirect grant (asserted when the VRF routes a
+  // VTL-mapped vreg access to this bank). Neither alone is sufficient.
   always_comb begin
-    is_gather  = spatz_req.op_vtl.gather_vd && rgather_en_i;
+    is_gather  = spatz_req.op_vtl.gather_vd  && rgather_en_i;
     is_scatter = spatz_req.op_vtl.scatter_vd && wscatter_en_i;
   end
 
@@ -528,21 +535,23 @@ module ventaglio
     .rdata_i     (gather_rdata         ),
     .rvalid_i    (gather_rvalid        ),
     // control
-    .gather_done_i(gather_done          ),
+    .gather_done_i(gather_admitted_q    ),
     // index cfg
     .index_i     (index_q              ),
     .vtl_cfg_i   (spatz_req.op_vtl.sp_cfg),
-    .load_index_o(vreg_idx_counter_en)
+    .load_index_o(/* unused: per-beat index-refresh hook, no consumer */)
   );
 
   /******************************/
   /*      Write Requests        */
   /******************************/
 
-  // RESERVED: master VRF write port is held idle.
+  // RESERVED: master VRF write port is held idle. vrf_id_o[1] is the write id
+  // (paired with the write port); tied off so it is never X.
   assign vrf_we_o    = '0;
   assign vrf_wbe_o   = '0;
   assign vrf_waddr_o = '0;
   assign vrf_wdata_o = '0;
+  assign vrf_id_o[1] = '0;
 
 endmodule : ventaglio

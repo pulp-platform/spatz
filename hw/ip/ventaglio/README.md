@@ -26,6 +26,65 @@ Concretely:
 
 Items raised during the 2026-05-27 walkthrough; check off as addressed.
 
+### Status update (2026-06-17) — supersedes stale items below
+
+All four sparse regressions pass: `sp-SpMV_2to4`, `sp-SpMV_1to4`,
+`sp-SpMM_2to4_M8`, `sp-SpMM_1to4_M8`. The index path and the LSU `vl` handling
+were reworked after the original list was written, so several items below are
+now done or obsolete:
+
+- **Index path is now two spill registers** (replaces the old single-spill +
+  `fetch_in_flight_q`/`fetched_id_q`/`fetched_vidx_q` snapshot and the
+  `VTG_TRACE_IDX_SPILL` probe, both removed):
+  - `i_idx_req_reg` (`T = {id, addr}`) buffers the master VRF *read request*.
+    Pushed by `eff_fetch` (pre-spill admit handshake); `valid_o`→`vrf_re_o`,
+    `data_o`→`vrf_id_o[0]`/`vrf_raddr_o`, `ready_i = vrf_rvalid_i` holds it
+    stable until the read returns. The one-cycle registration is the fix for
+    the SpMV stale-index bug: it delays the read to the cycle after issue, so
+    the controller scoreboard has registered the index vreg's RAW dependency
+    before the read lands (otherwise a combinational read against a stale
+    scoreboard returned a zeroed index). `ready_o` is intentionally unused —
+    no back-pressure; correctness relies on ≤2 requests outstanding.
+  - `i_idx_spill` (`T = vrf_data_t`) buffers the returned index *data*
+    (`index_q`) feeding the scatter/gather datapaths.
+- **Done in the 2026-06-17 cleanup pass:** C5 (`gather_done`→`gather_admitted_q`),
+  Doc1 (module architectural header), Doc2 (`is_gather`/`is_scatter` comment),
+  M1/M4 (alignment + default-ready comment), `vrf_id_o[1]` tied to `'0`, both
+  typos (`2025→2026`, "comsume"→"consume"), and a trailing-whitespace sweep.
+  Dead code removed: `op_beat_cnt_q/d`, `req_proceed`, `last_addr_bit_q/d`;
+  `ventaglio_gather.load_index_o` left explicitly unconnected (per-beat
+  index-refresh hook, no consumer in the single-index-word design).
+- **Obsolete:** M2/M3 (referenced `proc_idx_addr_gen`, which is gone — the read
+  address now comes from `idx_req_out.addr`); C3/C4/M5 op-beat-counter parts
+  (the counter is removed; `num_beats_per_op` stays, used only by the scatter
+  datapath).
+- **Deferred (latent, follow-up PR):** a slave-port read takes the gather
+  datapath whenever a `gather_vd=1` op is latched and `rgather_en_i` is high, so
+  a plain `vse` of a bank vreg relies on timing not to coincide with a latched
+  `vfxmacc`. Not observed to fail in the four regressions; a robust fix carries
+  a per-access gather/plain qualifier from the controller.
+
+### Sparsity-expansion limits
+
+The VTL store of the expanded accumulator remaps `vl` by the sparsity ratio
+(`vl<<2` for 1:4, `<<1` for 2:4); the VLSU then converts elements→bytes
+(`<<2` for e32). Both the byte-domain `vl` (`vlen_t`) and the per-op word index
+(`vreg_elem_t` in `spatz_vlsu.sv`) must hold the expanded value, so under
+`` `ifdef VENTAGLIO `` both are widened by 2 bits. The bank is
+`VENTAGLIO_BUFFER_SIZE = 8192` bits = 256 fp32.
+
+For the default config (`VLEN=512`, `N_FU=4`, `WFACTOR=4`):
+
+| case      | elements | bytes | bank use |
+|-----------|----------|-------|----------|
+| m2 × 1:4  | 128      | 512   | 50%      |
+| m4 × 1:4  | 256      | 1024  | **100%** |
+| m4 × 2:4  | 128      | 512   | 50%      |
+
+m4×1:4 works with the widened types but has **zero margin** — a larger `VLMAX`,
+a 1:8 ratio, or `WFACTOR<4` overflows the bank and/or the byte-`vl` and must
+bump `VENTAGLIO_BUFFER_SIZE` / `vlen_t`. 1:4 at LMUL≤m2 needs no widening.
+
 ### Already done
 - [x] **C1** — annotate the master VRF write outputs as reserved for future scatter→VRF write-back (port-decl + assignment-site comments).
 - [x] **C2** — generalize `num_beats_per_op` formula (no longer hard-coded to `N_FU=4` / `EW_32`); derivation moved to this README.
