@@ -52,19 +52,31 @@ module reqrsp_to_tcdm #(
     .mem_resp_valid_i (tcdm_rsp_i.p_valid)
   );
 
-  assign tcdm_req_o.q = '{
-    addr: req.addr,
-    write: req.write,
-    amo: req.amo,
-    data: req.data,
-    strb: req.strb,
-    user: '0
-  };
+  // assign tcdm_req_o.q = '{
+  //   addr: req.addr,
+  //   write: req.write,
+  //   amo: req.amo,
+  //   data: req.data,
+  //   strb: req.strb,
+  //   user: '0
+  // };
 
-  assign rsp = '{
-    data: tcdm_rsp_i.p.data,
-    error: 1'b0
-  };
+  // assign rsp = '{
+  //   data: tcdm_rsp_i.p.data, // trucate the upper 7-bit "0"
+  //   error: 1'b0
+  // };
+
+  //re-write struct assignment to support "-fsim"
+  assign tcdm_req_o.q.addr = req.addr;
+  assign tcdm_req_o.q.write = req.write;
+  assign tcdm_req_o.q.amo = req.amo;
+  assign tcdm_req_o.q.data = req.data;
+  assign tcdm_req_o.q.strb = req.strb;
+  assign tcdm_req_o.q.user = '0;
+
+  assign rsp.data = tcdm_rsp_i.p.data; // trucate the upper 7-bit "0"
+  assign rsp.error = 1'b0;
+
 
 endmodule
 
