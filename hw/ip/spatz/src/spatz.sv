@@ -751,9 +751,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     .vrf_re_o         (mst_vtl_re          ),
     .vrf_rdata_i      (mst_vtl_rdata       ),
     .vrf_rvalid_i     (mst_vtl_rvalid      ),
-    .vrf_id_o         ({mst_vtl_wid, mst_vtl_rid}),
-    // Per-vreg "writer in flight" feed from controller for prefetch gating
-    .vreg_write_pending_i (vreg_write_pending                         )
+    .vrf_id_o         ({mst_vtl_wid, mst_vtl_rid})
   );
 
   spatz_vsldu i_vsldu (
