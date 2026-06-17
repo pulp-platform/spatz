@@ -70,7 +70,11 @@ module spatz_vlsu
   //////////////
 
   typedef logic [IdWidth-1:0] id_t;
+`ifdef VENTAGLIO
+  typedef logic [$clog2(NrWordsPerVector*8)+1:0] vreg_elem_t;
+`else
   typedef logic [$clog2(NrWordsPerVector*8)-1:0] vreg_elem_t;
+`endif
 
   ///////////////////////
   //  Operation queue  //

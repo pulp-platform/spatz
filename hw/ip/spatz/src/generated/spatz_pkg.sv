@@ -90,7 +90,11 @@ package spatz_pkg;
   //////////////////////
 
   // Vector length register
+`ifdef VENTAGLIO
+  typedef logic [$clog2(MAXVL+1)+1:0] vlen_t;
+`else
   typedef logic [$clog2(MAXVL+1)-1:0] vlen_t;
+`endif
   // Vector register
   typedef logic [$clog2(NRVREG)-1:0] vreg_t;
 
