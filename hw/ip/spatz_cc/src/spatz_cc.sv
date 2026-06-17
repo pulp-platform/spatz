@@ -488,10 +488,36 @@ module spatz_cc
     .default_idx_i    ('0                )
   );
 
-  // Route Snitch scalar TCDM through an intermediate signal so we can encode
-  // write data to a valid ECC codeword before it reaches the 39-bit TCDM bus.
+  // Route Snitch/FP-LSU scalar TCDM through intermediate signals so we can
+  // encode write data and decode read data at the 39-bit TCDM bus boundary.
   tcdm_req_t snitch_tcdm_req_raw;
-  reqrsp_to_tcdm #(
+  tcdm_rsp_t snitch_tcdm_rsp_dec;
+
+  // ECC-decode the 39-bit TCDM read response → corrected 32-bit data.
+  // Decoded data is placed in snitch_tcdm_rsp_dec.p.data[TCDMDataWidth-1:0] with
+  // explicit zeros in the upper SnitchTCDMProtWidth bits (parity position).
+  // reqrsp_to_tcdm receives snitch_tcdm_rsp_dec and sees the corrected value
+  // when it extracts p.data[DataWidth-1:0] internally.
+  if (TCDMProtDataWidth > TCDMDataWidth) begin : gen_snitch_rdata_dec
+    logic [TCDMDataWidth-1:0] snitch_rdata_corrected;
+    hsiao_ecc_dec #(
+      .DataWidth (TCDMDataWidth      ),
+      .ProtWidth (SnitchTCDMProtWidth)
+    ) i_snitch_rdata_dec (
+      .in        (tcdm_rsp_i[NumMemPortsPerSpatz].p.data),
+      .out       (snitch_rdata_corrected),
+      .syndrome_o(),
+      .err_o     ()
+    );
+    always_comb begin
+      snitch_tcdm_rsp_dec        = tcdm_rsp_i[NumMemPortsPerSpatz];
+      snitch_tcdm_rsp_dec.p.data = {{SnitchTCDMProtWidth{1'b0}}, snitch_rdata_corrected};
+    end
+  end else begin : gen_snitch_no_rdata_dec
+    assign snitch_tcdm_rsp_dec = tcdm_rsp_i[NumMemPortsPerSpatz];
+  end
+
+  reqrsp_to_tcdm #( // only for cross clock domain decoupling
     .AddrWidth    (AddrWidth ),
     .DataWidth    (DataWidth ),
     .BufDepth     (4         ),
@@ -500,21 +526,15 @@ module spatz_cc
     .tcdm_req_t   (tcdm_req_t),
     .tcdm_rsp_t   (tcdm_rsp_t)
   ) i_reqrsp_to_tcdm (
-    .clk_i        (clk_i                          ),
-    .rst_ni       (rst_ni                         ),
-    .reqrsp_req_i (data_tcdm_req                  ),
-    .reqrsp_rsp_o (data_tcdm_rsp                  ),
-    .tcdm_req_o   (snitch_tcdm_req_raw            ),
-    .tcdm_rsp_i   (tcdm_rsp_i[NumMemPortsPerSpatz])
+    .clk_i        (clk_i              ),
+    .rst_ni       (rst_ni             ),
+    .reqrsp_req_i (data_tcdm_req      ),
+    .reqrsp_rsp_o (data_tcdm_rsp      ),
+    .tcdm_req_o   (snitch_tcdm_req_raw),// 32-bit ata_tcdm_req + 7-bit 0-pad
+    .tcdm_rsp_i   (snitch_tcdm_rsp_dec)
   );
 
-  // ECC encode Snitch's TCDMDataWidth-bit data to a valid TCDMProtDataWidth-bit
-  // codeword. The data field is always encoded:
-  //   - regular stores/SC: SRAM receives a valid codeword
-  //   - AMO operand B: shim extracts wdata_i[TCDMDataWidth-1:0] via systematic property
-  //   - reads (loads/LR): data field is ignored by the AMO shim
-  // Read responses need no decoding: Snitch reads p.data[TCDMDataWidth-1:0] which
-  // equals the original data by Hsiao systematic property.
+  // ECC-encode Snitch's 32-bit write data → 39-bit codeword for the TCDM bus.
   logic [TCDMProtDataWidth-1:0] snitch_enc_data;
 
   if (TCDMProtDataWidth > TCDMDataWidth) begin : gen_snitch_wdata_enc
