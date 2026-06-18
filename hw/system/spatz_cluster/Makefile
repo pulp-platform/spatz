@@ -125,6 +125,11 @@ spatz.gendata:
 		script_dir="$$benchmark_dir/script"; \
 		data_dir="$$benchmark_dir/data"; \
 		if [ -d "$$script_dir" ]; then \
+			if [ -f "$$script_dir/gen_all.sh" ]; then \
+				echo "Generating data for benchmark $$benchmark_dir using script/gen_all.sh"; \
+				(cd "$$benchmark_dir" && bash script/gen_all.sh); \
+				continue; \
+			fi; \
 			json_count=$$(find "$$script_dir" -name '*.json' -type f | wc -l); \
 			data_count=$$(find "$$data_dir" -name 'data*.h' -type f 2>/dev/null | wc -l); \
 			if [ "$$json_count" -ne "$$data_count" ]; then \
