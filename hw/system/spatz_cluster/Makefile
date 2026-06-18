@@ -229,7 +229,7 @@ lint: generate lint/tmp/files lint/sdc/func.sdc lint/script/lint.tcl
 
 lint/tmp/files: ${BENDER}
 	mkdir -p lint/tmp
-	${BENDER} script verilator -t rtl -t spatz > lint/tmp/files
+	${BENDER} script verilator -t rtl -t spatz ${DEFS} > lint/tmp/files
 
 ######
 # SW #

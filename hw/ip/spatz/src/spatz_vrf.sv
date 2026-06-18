@@ -108,7 +108,7 @@ module spatz_vrf
     for (int unsigned bank = 0; bank < NrVRFBanks; bank++) begin
 `ifdef BUF_FPU
 `ifdef DOUBLE_BW
-      automatic logic write_request_vlsu = write_request[bank][VLSU_VD_WD0] | write_request[bank][VLSU_VD_WD1];
+      automatic logic write_request_vlsu = write_request[bank][VLSU_VD_WD0];
 `else
       automatic logic write_request_vlsu = write_request[bank][VLSU_VD_WD];
 `endif
