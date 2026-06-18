@@ -101,13 +101,13 @@ def emit_spmm_layer(name: str, **kwargs) -> str:
     s += f'\t.NM_INDEX_ROW_WORDS = {kwargs["row_words"]},\n'
     s += f'\t.NM_INDEX_WORDS     = {kwargs["total_index_words"]}\n'
     s += '};\n\n'
-    s += c_array_floats(f'{name}_a_dram',        kwargs['a'])
+    s += c_array_floats(f'{name}_a_dram', kwargs['a'])
     s += '\n'
-    s += c_array_floats(f'{name}_w_dram',        kwargs['w'])
+    s += c_array_floats(f'{name}_w_dram', kwargs['w'])
     s += '\n'
-    s += c_array_u32(   f'{name}_nm_index_dram', kwargs['nm_index_words'])
+    s += c_array_u32(f'{name}_nm_index_dram', kwargs['nm_index_words'])
     s += '\n'
-    s += c_array_floats(f'{name}_golden_dram',   kwargs['golden'])
+    s += c_array_floats(f'{name}_golden_dram', kwargs['golden'])
     return s
 
 
@@ -137,7 +137,7 @@ def gen_spmm(fmt: str, M: int, N: int, P_W: int, seed: int):
             f'{P_W * idx_width} bits.')
 
     blocks = P_W // n_sparse
-    P      = blocks * m_sparse
+    P = blocks * m_sparse
 
     rng = random.Random(seed)
     # Activation matrix A (row-major): M rows, N cols
@@ -157,7 +157,7 @@ def gen_spmm(fmt: str, M: int, N: int, P_W: int, seed: int):
         all_indices.append(row_idx)
         nm_index_words.extend(pack_indices_row(row_idx, idx_width))
 
-    row_words   = ceil_div(P_W * idx_width, 32)
+    row_words = ceil_div(P_W * idx_width, 32)
     total_words = N * row_words
     assert len(nm_index_words) == total_words
 
@@ -177,21 +177,21 @@ def gen_spmm(fmt: str, M: int, N: int, P_W: int, seed: int):
                 golden[base_c + out_pos] += act * w[base_w + j]
 
     return {
-        'format':    fmt,
-        'M':         M,
-        'N':         N,
-        'P':         P,
-        'P_W':       P_W,
-        'n_sparse':  n_sparse,
-        'm_sparse':  m_sparse,
+        'format': fmt,
+        'M': M,
+        'N': N,
+        'P': P,
+        'P_W': P_W,
+        'n_sparse': n_sparse,
+        'm_sparse': m_sparse,
         'idx_width': idx_width,
         'row_words': row_words,
         'total_index_words': total_words,
-        'seed':      seed,
-        'a':         a,
-        'w':         w,
+        'seed': seed,
+        'a': a,
+        'w': w,
         'nm_index_words': nm_index_words,
-        'golden':    golden,
+        'golden': golden,
     }
 
 
