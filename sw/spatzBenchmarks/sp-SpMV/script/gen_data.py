@@ -17,6 +17,7 @@
 # variant.
 
 import argparse
+import hjson
 import pathlib
 import random
 from typing import List, Tuple
@@ -199,6 +200,7 @@ def emit_header_file(out_path: pathlib.Path, **kwargs):
         '#pragma once\n\n'
         '#include <stdint.h>\n\n'
     )
+    out_path.parent.mkdir(parents=True, exist_ok=True)
     with out_path.open('w') as f:
         f.write(header + body)
     print(f'Wrote {out_path}')
@@ -206,6 +208,8 @@ def emit_header_file(out_path: pathlib.Path, **kwargs):
 
 def main():
     parser = argparse.ArgumentParser(description='Generate one data header for sp-SpMV')
+    parser.add_argument('-c', '--config', type=pathlib.Path,
+                        help='HJSON config file, used by spatz.gendata')
     parser.add_argument('--format', default='1_to_4', choices=['1_to_4', '2_to_4'],
                         help='n:m sparsity pattern (default: 1_to_4)')
     parser.add_argument('--N', type=int, default=16,
@@ -218,6 +222,16 @@ def main():
                         help='output header path (default: '
                              'data/data_spmv_<fmt>_N<N>_PW<PW>.h)')
     args = parser.parse_args()
+
+    if args.config is not None:
+        with args.config.open() as f:
+            cfg = hjson.load(f)
+        args.format = cfg.get('format', args.format)
+        args.N = cfg.get('N', args.N)
+        args.P_W = cfg.get('P_W', args.P_W)
+        args.seed = cfg.get('seed', args.seed)
+        if 'out' in cfg:
+            args.out = pathlib.Path(cfg['out'])
 
     kwargs = gen_spmv(args.format, args.N, args.P_W, args.seed)
 

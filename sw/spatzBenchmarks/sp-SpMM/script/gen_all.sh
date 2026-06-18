@@ -9,6 +9,7 @@
 
 set -euo pipefail
 cd "$(dirname "$0")"
+mkdir -p ../data
 
 variants=(
   "1_to_4 8 32 128"
