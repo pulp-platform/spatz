@@ -22,31 +22,15 @@
 // vsuxei32, with software N:M index unpacking into a `byte_offsets[P_W]`
 // scratch buffer supplied by the caller. M loop also unrolled by 2.
 
-void spmm_ventaglio(float *res,
-                    const float *a,
-                    const float *w,
-                    const uint32_t *nm_index,
-                    uint32_t M,
-                    uint32_t N,
-                    uint32_t P,
-                    uint32_t P_W,
-                    uint32_t NM_INDEX_ROW_WORDS,
-                    uint32_t idx_width,
-                    uint32_t m_sparse,
-                    uint32_t n_sparse);
+void spmm_ventaglio(float *res, const float *a, const float *w,
+                    const uint32_t *nm_index, uint32_t M, uint32_t N,
+                    uint32_t P, uint32_t P_W, uint32_t NM_INDEX_ROW_WORDS,
+                    uint32_t idx_width, uint32_t m_sparse, uint32_t n_sparse);
 
-void spmm_baseline(float          *res,
-                   const float    *a,
-                   const float    *w,
-                   const uint32_t *nm_index,
-                   uint32_t       *byte_offsets,
-                   uint32_t M,
-                   uint32_t N,
-                   uint32_t P,
-                   uint32_t P_W,
-                   uint32_t NM_INDEX_ROW_WORDS,
-                   uint32_t idx_width,
-                   uint32_t m_sparse,
-                   uint32_t n_sparse);
+void spmm_baseline(float *res, const float *a, const float *w,
+                   const uint32_t *nm_index, uint32_t *byte_offsets, uint32_t M,
+                   uint32_t N, uint32_t P, uint32_t P_W,
+                   uint32_t NM_INDEX_ROW_WORDS, uint32_t idx_width,
+                   uint32_t m_sparse, uint32_t n_sparse);
 
 #endif // SP_SPMM_H
