@@ -24,6 +24,39 @@ snrt.crt0.init_vec_registers:
     vmv.v.i v8, 0
     vmv.v.i v16, 0
     vmv.v.i v24, 0
+    j       snrt.crt0.init_tile_registers
+
+snrt.crt0.init_tile_registers:
+#ifdef SNRT_HAS_VME
+    # Check if core has tile register, otherwise skip
+    csrr    t0, misa
+    li      t1, (1 << 23)
+    and     t0, t0, t1      # check 'X' extension (bit 23 = 'X')
+    beqz    t0, snrt.crt0.init_fp_registers
+
+    # Configure matrix unit for TEW = 32.
+    li      t0, 1               # mtype = mtwiden=1, tm=0, tk=0
+    li      t1, (2 << 3)        # vtype.vsew=e32
+    msetmtype t0, t1
+
+    # Set tm and tn to maximum supported values.
+    li      t0, -1              # Hardware clamps -1 to implementation max.
+    msettm  zero, t0
+    msettn  zero, t0
+
+    # TEW=32 exposes four architectural tiles: mt0, mt4, mt8, mt12.
+    vtzero  mt0
+    vtzero  mt4
+    vtzero  mt8
+    vtzero  mt12
+
+    # Restore original vector configuration used by crt0.
+    # vsetvli also clears mtype.
+    li      t0, -1
+    vsetvli zero, t0, e32, m8, ta, ma
+#endif
+
+    j       snrt.crt0.init_fp_registers
 
 snrt.crt0.init_fp_registers:
     # Check if core has FP registers otherwise skip

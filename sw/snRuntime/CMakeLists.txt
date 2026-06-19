@@ -176,7 +176,14 @@ if (CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     # Bare Runtimes (with startup code)
     add_snitch_library(snRuntime-cluster ${CMAKE_CURRENT_BINARY_DIR}/start.S src/platforms/shared/start.c ${standalone_snitch_sources} ${sources})
 
+    # Enable VME tile initialization in crt0/start.S.in
+    if(TARGET snRuntime)
+        target_compile_definitions(snRuntime PRIVATE SNRT_HAS_VME=1)
+    endif()
 
+    if(TARGET snRuntime-cluster)
+        target_compile_definitions(snRuntime-cluster PRIVATE SNRT_HAS_VME=1)
+    endif()
 else()
     # snRuntime is added externally, only build required runtime
     if(SNITCH_RUNTIME STREQUAL "snRuntime")

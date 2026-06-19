@@ -1,127 +1,145 @@
-// Copyright 2024 ETH Zurich and University of Bologna.
+// Copyright 2026 ETH Zurich and University of Bologna.
 // Solderpad Hardware License, Version 0.51, see LICENSE for details.
 // SPDX-License-Identifier: SHL-0.51
 //
 // Authors: Pei-Yu Lin (peilin@ethz.ch)
 //
 // msettm — Set tile M dimension (tm = number of output rows)
-//
-// -------------------------------------------------------
-// Test cases:
-//   TC1: mtwiden=3, SEW=e8, request tm=4  → 4
-//   TC2: mtwiden=3, SEW=e8, request tm>ETE → clamped to ETE
-//   TC3: mtwiden=3, SEW=e8, request tm=0  → 0
-//   TC4: mtwiden=0 → forced to 0
-//   TC5: returned rd == mtype[23:10]
-//   TC6: msettm does NOT change vl
 
 #include <stdint.h>
 #include "vector_macros.h"
 #include "vector_matrix_macros.h"
 
-// Discover ETE at runtime: clamp a large request and read back
-static uintptr_t get_ete(void) {
-    uintptr_t vl_val;
-    uintptr_t large = 0xFFFFFFFF;
-    asm volatile("msetmtypei 0x3, 0x0" ::: "memory");
-    asm volatile("msettn x0, %[v]" :: [v]"r"(large) : "memory");
-    asm volatile("csrr %[B], vl" : [B]"=r"(vl_val));
-    return vl_val;
+static inline uintptr_t min3(uintptr_t a, uintptr_t b, uintptr_t c) {
+    uintptr_t tmp;
+    tmp = (a < b) ? a : b;
+    return (tmp < c) ? tmp : c;
 }
 
-// -------------------------------------------------------
-// TC1: mtwiden=3, request tm=4
-//   new_tm = min(4, ETE) = 4
-// -------------------------------------------------------
 void TEST_CASE1(void) {
-    uintptr_t mtype_val;
-    uintptr_t req_tm = 4;
+    uintptr_t rd_val, mtype_val;
+    uintptr_t req_tm   = 4;
+    uintptr_t expected;
+    uintptr_t vlenb, vlen_bits, tew_bits;
+    uintptr_t lmul_eve, ete;
+
+    asm volatile("csrr %0, vlenb" : "=r"(vlenb));
+    vlen_bits = vlenb * 8u;
+    tew_bits  = 8u * 4u;      // SEW=e8, TWIDEN=4 => TEW=32
+    lmul_eve  = vlen_bits / tew_bits;
+    ete       = (vlen_bits / 2u) / tew_bits;
+    expected  = min3(req_tm, lmul_eve, ete);
 
     asm volatile("msetmtypei 0x3, 0x0" ::: "memory");
-    asm volatile("msettm x0, %[tm]" :: [tm]"r"(req_tm) : "memory");
-    read_mtype(mtype_val);
+    asm volatile("msettm %[rd], %[tm]" : [rd]"=r"(rd_val) : [tm]"r"(req_tm) : "memory");
+    asm volatile("csrr %[B], 0xC23" : [B]"=r"(mtype_val));
 
-    XCMP(1, MTYPE_TM(mtype_val), 4);
+    XCMP(1, rd_val, expected);
+    XCMP(2, MTYPE_TM(mtype_val), expected);
+    XCMP(3, MTYPE_TM(mtype_val), rd_val);
 }
 
-// -------------------------------------------------------
-// TC2: mtwiden=3, request tm > ETE → clamped to ETE
-// -------------------------------------------------------
 void TEST_CASE2(void) {
-    uintptr_t mtype_val;
-    uintptr_t ete = get_ete();
-    uintptr_t req_tm = 0xFFFF;
+    uintptr_t rd_val, mtype_val;
+    uintptr_t req_tm   = (uintptr_t)-1;
+    uintptr_t expected;
+    uintptr_t vlenb, vlen_bits, tew_bits;
+    uintptr_t lmul_eve, ete;
+
+    asm volatile("csrr %0, vlenb" : "=r"(vlenb));
+    vlen_bits = vlenb * 8u;
+    tew_bits  = 8u * 4u;      // SEW=e8, TWIDEN=4 => TEW=32
+    lmul_eve  = vlen_bits / tew_bits;
+    ete       = (vlen_bits / 2u) / tew_bits;
+    expected  = min3(req_tm, lmul_eve, ete);
 
     asm volatile("msetmtypei 0x3, 0x0" ::: "memory");
-    asm volatile("msettm x0, %[tm]" :: [tm]"r"(req_tm) : "memory");
-    read_mtype(mtype_val);
+    asm volatile("msettm %[rd], %[tm]" : [rd]"=r"(rd_val) : [tm]"r"(req_tm) : "memory");
+    asm volatile("csrr %[B], 0xC23" : [B]"=r"(mtype_val));
 
-    XCMP(2, MTYPE_TM(mtype_val), ete);
-}
-
-// -------------------------------------------------------
-// TC3: mtwiden=3, request tm=0 → 0
-// -------------------------------------------------------
-void TEST_CASE3(void) {
-    uintptr_t mtype_val;
-    uintptr_t req_tm = 0;
-
-    asm volatile("msetmtypei 0x3, 0x0" ::: "memory");
-    asm volatile("msettm x0, %[tm]" :: [tm]"r"(req_tm) : "memory");
-    read_mtype(mtype_val);
-
-    XCMP(3, MTYPE_TM(mtype_val), 0);
-}
-
-// -------------------------------------------------------
-// TC4: mtwiden=0 → new_tm forced to 0
-// -------------------------------------------------------
-void TEST_CASE4(void) {
-    uintptr_t mtype_val;
-    uintptr_t req_tm = 4;
-
-    asm volatile("msetmtypei 0x0, 0x0" ::: "memory");
-    asm volatile("msettm x0, %[tm]" :: [tm]"r"(req_tm) : "memory");
-    read_mtype(mtype_val);
-
-    XCMP(4, MTYPE_TM(mtype_val), 0);
-}
-
-// -------------------------------------------------------
-// TC5: returned rd == mtype[23:10]
-// -------------------------------------------------------
-void TEST_CASE5(void) {
-    uintptr_t rd_val = 0xDEAD;
-    uintptr_t mtype_val;
-    uintptr_t req_tm = 4;
-
-    asm volatile("msetmtypei 0x3, 0x0" ::: "memory");
-    asm volatile("msettm %[rd], %[tm]"
-                 : [rd]"=r"(rd_val)
-                 : [tm]"r"(req_tm)
-                 : "memory");
-    read_mtype(mtype_val);
-
-    XCMP(5, rd_val, 4);
+    XCMP(4, rd_val, expected);
+    XCMP(5, MTYPE_TM(mtype_val), expected);
     XCMP(6, MTYPE_TM(mtype_val), rd_val);
 }
 
-// -------------------------------------------------------
-// TC6: msettm does NOT change vl
-// -------------------------------------------------------
-void TEST_CASE6(void) {
-    uintptr_t vl_before, vl_after;
-    uintptr_t req_tn = 4, req_tm = 4;
+void TEST_CASE3(void) {
+    uintptr_t rd_val, mtype_val;
+    uintptr_t req_tm   = 0;
+    uintptr_t expected;
+    uintptr_t vlenb, vlen_bits, tew_bits;
+    uintptr_t lmul_eve, ete;
+
+    asm volatile("csrr %0, vlenb" : "=r"(vlenb));
+    vlen_bits = vlenb * 8u;
+    tew_bits  = 8u * 4u;      // SEW=e8, TWIDEN=4 => TEW=32
+    lmul_eve  = vlen_bits / tew_bits;
+    ete       = (vlen_bits / 2u) / tew_bits;
+    expected  = min3(req_tm, lmul_eve, ete);
 
     asm volatile("msetmtypei 0x3, 0x0" ::: "memory");
-    asm volatile("msettn x0, %[tn]" :: [tn]"r"(req_tn) : "memory");
-    read_vl(vl_before);
+    asm volatile("msettm %[rd], %[tm]" : [rd]"=r"(rd_val) : [tm]"r"(req_tm) : "memory");
+    asm volatile("csrr %[B], 0xC23" : [B]"=r"(mtype_val));
 
-    asm volatile("msettm x0, %[tm]" :: [tm]"r"(req_tm) : "memory");
-    read_vl(vl_after);
+    XCMP(7, rd_val, expected);
+    XCMP(8, MTYPE_TM(mtype_val), expected);
+    XCMP(9, MTYPE_TM(mtype_val), rd_val);
+}
 
-    XCMP(7, vl_before, 4);
-    XCMP(8, vl_after,  vl_before);   // vl unchanged by msettm
+void TEST_CASE4(void) {
+    uintptr_t rd_val, mtype_val;
+    uintptr_t req_tm   = 4;
+    uintptr_t expected = 0;
+
+    asm volatile("msetmtypei 0x0, 0x0" ::: "memory");
+    asm volatile("msettm %[rd], %[tm]" : [rd]"=r"(rd_val) : [tm]"r"(req_tm) : "memory");
+    asm volatile("csrr %[B], 0xC23" : [B]"=r"(mtype_val));
+
+    XCMP(10, rd_val, expected);
+    XCMP(11, MTYPE_TM(mtype_val), expected);
+    XCMP(12, MTYPE_TM(mtype_val), rd_val);
+}
+
+void TEST_CASE5(void) {
+    uintptr_t rd_val, mtype_val;
+    uintptr_t req_tm   = 4;
+    uintptr_t expected;
+    uintptr_t vlenb, vlen_bits, tew_bits;
+    uintptr_t lmul_eve, ete;
+
+    asm volatile("csrr %0, vlenb" : "=r"(vlenb));
+    vlen_bits = vlenb * 8u;
+    tew_bits  = 8u * 4u;      // SEW=e8, TWIDEN=4 => TEW=32
+    lmul_eve  = vlen_bits / tew_bits;
+    ete       = (vlen_bits / 2u) / tew_bits;
+    expected  = min3(req_tm, lmul_eve, ete);
+
+    asm volatile("msetmtypei 0x3, 0x0" ::: "memory");
+    asm volatile("msettm %[rd], %[tm]" : [rd]"=r"(rd_val) : [tm]"r"(req_tm) : "memory");
+    asm volatile("csrr %[B], 0xC23" : [B]"=r"(mtype_val));
+
+    XCMP(13, rd_val, expected);
+    XCMP(14, MTYPE_TM(mtype_val), expected);
+    XCMP(15, MTYPE_TM(mtype_val), rd_val);
+}
+
+void TEST_CASE6(void) {
+    uintptr_t rd_val, mtype_val;
+    uintptr_t vl_before, vl_after;
+    uintptr_t req_tm   = 4;
+    uintptr_t expected = 0;
+
+    asm volatile("msetmtypei 0x0, 0x0" ::: "memory");
+    asm volatile("vsetivli x0, 7, e8, m1, ta, ma" ::: "memory");
+    asm volatile("csrr %[BUF], vl" : [BUF]"=r"(vl_before));
+
+    asm volatile("msettm %[rd], %[tm]" : [rd]"=r"(rd_val) : [tm]"r"(req_tm) : "memory");
+    asm volatile("csrr %[B], 0xC23" : [B]"=r"(mtype_val));
+    asm volatile("csrr %[BUF], vl" : [BUF]"=r"(vl_after));
+
+    XCMP(16, rd_val, expected);
+    XCMP(17, MTYPE_TM(mtype_val), expected);
+    XCMP(18, MTYPE_TM(mtype_val), rd_val);
+    XCMP(19, vl_after, vl_before);
 }
 
 int main(void) {

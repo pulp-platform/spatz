@@ -589,18 +589,10 @@ def main():
         mat_B, bits_B = rand_data_generator((param["K"], param["N"]), param["prec"])
         mat_C, bits_C = rand_data_generator((param["M"], param["N"]), param["prec"])
 
-<<<<<<< HEAD
         if mat_A.dtype in [torch.float16, torch.bfloat16]:
             result = torch.matmul(mat_A.float(), mat_B.float()).to(mat_A.dtype)
         else:
             result = torch.matmul(mat_A, mat_B)
-=======
-        dtype  = torch.float16 if device.type == "cuda" else torch.float32
-        mat_A = mat_A.to(device=device, dtype=dtype)
-        mat_B = mat_B.to(device=device, dtype=dtype)
-
-        result = torch.matmul(mat_A.float(), mat_B.float()).half()
->>>>>>> e050f66a5448 ([SW] typecast float16 to float32 since NO GPU on my machine)
 
         if param["transpose_A"]:
             mat_A = mat_A.T
