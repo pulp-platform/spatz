@@ -1,4 +1,4 @@
-// Copyright 2023 ETH Zurich and University of Bologna.
+// Copyright 2026 ETH Zurich and University of Bologna.
 // Solderpad Hardware License, Version 0.51, see LICENSE for details.
 // SPDX-License-Identifier: SHL-0.51
 
@@ -70,6 +70,8 @@ module spatz_cc
     parameter int                          unsigned        NumSpatzOutstandingLoads = 0,
     // Enable V Extension
     parameter bit                                          RVV                      = 1,
+    // Enable Vector Matrix Extension
+    parameter bit                                          XVME                     = 1,
     // Spatz parameters
     parameter int                          unsigned        NumSpatzFPUs             = 4,
     parameter int                          unsigned        NumSpatzIPUs             = 1,
@@ -178,6 +180,7 @@ module spatz_cc
     .RVF                    (RVF                   ),
     .RVD                    (RVD                   ),
     .RVV                    (RVV                   ),
+    .XVME                   (XVME                  ),
     .XDivSqrt               (XDivSqrt              ),
     .XF16                   (XF16                  ),
     .XF16ALT                (XF16ALT               ),

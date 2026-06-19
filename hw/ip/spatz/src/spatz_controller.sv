@@ -1,8 +1,9 @@
-// Copyright 2023 ETH Zurich and University of Bologna.
+// Copyright 2026 ETH Zurich and University of Bologna.
 // Licensed under the Apache License, Version 2.0, see LICENSE for details.
 // SPDX-License-Identifier: Apache-2.0
 //
 // Author: Matheus Cavalcante, ETH Zurich
+// Author: Pei-Yu Lin, ETH Zurich
 //
 // The controller contains all of the CSR registers, the instruction decoder,
 // the operation issuer, the register scoreboard, and the result write back to
@@ -64,6 +65,10 @@ module spatz_controller
     input  logic                                   vtl_rsp_valid_i,
     input  vsldu_rsp_t                             vtl_rsp_i,
 `endif
+    // OPE
+    input  logic                                   ope_req_ready_i,
+    input  logic                                   ope_rsp_valid_i,
+    input  vfu_rsp_t                               ope_rsp_i,
     // VRF Scoreboard
     input  logic             [NrVregfilePorts-1:0]              sb_enable_i,
     input  logic             [NrWritePorts-1:0]                 sb_wrote_result_i,
@@ -112,13 +117,18 @@ module spatz_controller
 
   `FF(vstart_q,  vstart_d,  '0)
   `FF(vl_q,      vl_d,      '0)
-  `FF(vtype_q,   vtype_d,   '{vill: 1'b1, vsew: EW_8, vlmul: LMUL_1, default: '0})
+  `FF(vtype_q,   vtype_d,   '{vill: 1'b1, altfmt: 1'b0, vsew: EW_8, vlmul: LMUL_1, default: '0})
 `ifdef VENTAGLIO
   `FF(vtl_en_q,  vtl_en_d, 1'b0)     // VTL extension enable
   `FF(VTLVreg_q, VTLVreg_d, '0)     // VTL register setting
   `FF(VTL_cfg_q, VTL_cfg_d, '0)
 `endif
 
+  elen_t  tn_d, tn_q;         // tn: mirrors vl
+  mtype_t mtype_d,  mtype_q;  // mtype CSR: mtwiden + tm + tk
+
+  `FF(tn_q,     tn_d,     '0)
+  `FF(mtype_q,  mtype_d,  '0)
 
   always_comb begin : proc_vcsr
     automatic logic [$clog2(MAXVL):0] vlmax = 0;
@@ -170,7 +180,7 @@ module spatz_controller
         // Check if vtype is valid
         if ((spatz_req.vtype.vsew > MAXEW) || (spatz_req.vtype.vlmul inside {LMUL_RES, LMUL_F8}) || (signed'(spatz_req.vtype.vlmul) + signed'($clog2(ELEN)) < signed'(spatz_req.vtype.vsew))) begin
           // Invalid
-          vtype_d = '{vill: 1'b1, vsew: EW_8, vlmul: LMUL_1, default: '0};
+          vtype_d = '{vill: 1'b1, altfmt: 1'b0, vsew: EW_8, vlmul: LMUL_1, default: '0};
           vl_d    = '0;
         end else begin
           // Valid
@@ -179,8 +189,7 @@ module spatz_controller
           vtype_d = spatz_req.vtype;
           if (!spatz_req.op_cfg.keep_vl) begin
             // Normal stripmining mode or set to MAXVL
-            vlmax = VLENB >> spatz_req.vtype.vsew;
-
+            vlmax = VLENB >> int'(spatz_req.vtype.vsew);
             unique case (spatz_req.vtype.vlmul)
               LMUL_F2: vlmax >>= 1;
               LMUL_F4: vlmax >>= 2;
@@ -188,7 +197,7 @@ module spatz_controller
               LMUL_2 : vlmax <<= 1;
               LMUL_4 : vlmax <<= 2;
               LMUL_8 : vlmax <<= 3;
-              default: vlmax = vlmax;
+              default: vlmax = '0;
             endcase
 
             vl_d = (int'(vlmax) < spatz_req.rs1) ? vlmax : spatz_req.rs1;
@@ -197,14 +206,265 @@ module spatz_controller
 
             // If new vtype changes ration, mark as illegal
             if (($signed(spatz_req.vtype.vsew) - $signed(vtype_q.vsew)) != ($signed(spatz_req.vtype.vlmul) - $signed(vtype_q.vlmul))) begin
-              vtype_d = '{vill: 1'b1, vsew: EW_8, vlmul: LMUL_1, default: '0};
+              vtype_d = '{vill: 1'b1, altfmt: 1'b0, vsew: EW_8, vlmul: LMUL_1, default: '0};
               vl_d    = '0;
             end
           end
         end
       end // spatz_req.op == VCFG
+
+      // Matrix configuration instructions that modify vector CSR state.
+      else if (spatz_req.op == VMCFG) begin
+        unique case (spatz_req.op_tile.cfg_sel)
+
+          // msetmtype / msetmtypei: vl = 0, update vtype, calculate matrix LMUL
+          2'b00: begin : msetmtype_vcsr
+            logic        invalid_vtype;
+            int unsigned sew;
+            int unsigned twiden;
+            int unsigned tew;
+            int unsigned kmax;
+            int unsigned ete;
+            int unsigned eve;
+            int unsigned req_lmul;
+            int unsigned sel_lmul;
+            int unsigned max_lmul_k;
+            int unsigned max_lmul_widen;
+
+            vtype_d = spatz_req.vtype;
+
+            invalid_vtype =
+                vtype_d.vill
+                || (vtype_d.vsew > MAXEW)
+                || (vtype_d.vlmul inside {LMUL_RES, LMUL_F8})
+                || (signed'(vtype_d.vlmul) + signed'($clog2(ELEN)) < signed'(vtype_d.vsew));
+
+            if (!invalid_vtype && spatz_req.mtype.mtwiden != 2'b00) begin
+              sew = 8 << int'(vtype_d.vsew);
+
+              unique case (spatz_req.mtype.mtwiden)
+                2'b01: twiden = 1;
+                2'b10: twiden = 2;
+                2'b11: twiden = 4;
+                default: twiden = 0;
+              endcase
+
+              tew = sew * twiden;
+
+              if (tew > ELEN) begin
+                invalid_vtype = 1'b1;
+              end else begin
+                kmax = (vtype_d.vsew == EW_8 ) ? 4 :
+                       (vtype_d.vsew == EW_16) ? 2 : 1;
+
+                ete = (tew < 64) ? TE : (TE >> 1);
+                eve = VLENB >> int'(vtype_d.vsew);
+
+                req_lmul = (ete + eve - 1) / eve;
+
+                max_lmul_k     = 8 / kmax;
+                max_lmul_widen = 8 / twiden;
+
+                sel_lmul = req_lmul;
+
+                if (max_lmul_k < sel_lmul) begin
+                  sel_lmul = max_lmul_k;
+                end
+
+                if (max_lmul_widen < sel_lmul) begin
+                  sel_lmul = max_lmul_widen;
+                end
+
+                unique case (sel_lmul)
+                  8:       vtype_d.vlmul = LMUL_8;
+                  4:       vtype_d.vlmul = LMUL_4;
+                  2:       vtype_d.vlmul = LMUL_2;
+                  default: vtype_d.vlmul = LMUL_1;
+                endcase
+
+                vtype_d.vma = 1'b1;
+                vtype_d.vta = 1'b1;
+              end
+            end
+
+            vtype_d = (invalid_vtype) ?
+                      '{vill: 1'b1, altfmt: 1'b0, vsew: EW_8, vlmul: LMUL_1, default: '0}
+                      : vtype_d;
+
+            vl_d = '0;  // always writes vl = 0.
+          end
+          // msettn:
+          //   unconfigured: vl = min(rs1, LMUL * EVE)
+          //   configured:   vl = min(rs1, LMUL * EVE, ETE)
+          2'b01: begin : msettn_vcsr
+            logic [$clog2(MAXVL):0] lmul_eve;
+            elen_t                  ete;
+            int unsigned            sew;
+            int unsigned            twiden;
+            int unsigned            tew;
+
+            if (vtype_q.vill) begin
+              vl_d = '0;
+            end else begin
+              lmul_eve = VLENB >> int'(vtype_q.vsew);
+              unique case (vtype_q.vlmul)
+                LMUL_F2: lmul_eve >>= 1;
+                LMUL_F4: lmul_eve >>= 2;
+                LMUL_1 : lmul_eve <<= 0;
+                LMUL_2 : lmul_eve <<= 1;
+                LMUL_4 : lmul_eve <<= 2;
+                LMUL_8 : lmul_eve <<= 3;
+                default: lmul_eve = '0;
+              endcase
+
+              if (mtype_q.mtwiden == 2'b00) begin
+                vl_d = (spatz_req.rs1 > elen_t'(lmul_eve))
+                       ? vlen_t'(lmul_eve) : vlen_t'(spatz_req.rs1);
+              end else begin
+                sew = 8 << int'(vtype_q.vsew);
+
+                unique case (mtype_q.mtwiden)
+                  2'b01: twiden = 1;
+                  2'b10: twiden = 2;
+                  2'b11: twiden = 4;
+                  default: twiden = 0;
+                endcase
+
+                tew = sew * twiden;
+                ete = (tew < 64) ? elen_t'(TE) : elen_t'(TE >> 1);
+
+                vl_d = vlen_t'(min3(elen_t'(spatz_req.rs1), elen_t'(lmul_eve), ete));
+              end
+            end
+          end
+          default: ;
+        endcase
+      end
     end // spatz_req_valid
   end
+
+  always_comb begin : proc_mcsr
+    tn_d = tn_q;
+    mtype_d  = mtype_q;
+
+    if (spatz_req_valid) begin
+      if (spatz_req.op == VCFG)
+        mtype_d = '0;
+
+      if (spatz_req.op == VMCFG) begin
+        unique case (spatz_req.op_tile.cfg_sel)
+
+          // msetmtype / msetmtypei: write spatz_req.mtype with clamped tk/tm
+          2'b00: begin : msetmtype_mcsr
+              logic [2:0]             kmax_val;
+              elen_t                  ete;
+              logic [$clog2(MAXVL):0] lmul_eve;
+              logic                   is_ill;
+              int unsigned            sew;
+              int unsigned            twiden;
+              int unsigned            tew;
+
+              mtype_d = spatz_req.mtype;
+
+              unique case (mtype_d.mtwiden)
+                2'b01: twiden = 1;
+                2'b10: twiden = 2;
+                2'b11: twiden = 4;
+                default: twiden = 0;
+              endcase
+
+              sew = 8 << int'(vtype_d.vsew);
+              tew = sew * twiden;
+
+              // clamp tk
+              kmax_val  = (vtype_d.vsew == EW_8 ) ? 3'd4 :
+                          (vtype_d.vsew == EW_16) ? 3'd2 : 3'd1;
+              if (mtype_d.tk > kmax_val) begin
+                mtype_d.tk = kmax_val;
+              end
+
+              // clamp tm using the newly selected matrix LMUL in vtype_d.
+              ete = (tew < 64) ? elen_t'(TE) : elen_t'(TE >> 1);
+
+              lmul_eve = VLENB >> int'(vtype_d.vsew);
+              unique case (vtype_d.vlmul)
+                LMUL_F2: lmul_eve >>= 1;
+                LMUL_F4: lmul_eve >>= 2;
+                LMUL_1 : lmul_eve <<= 0;
+                LMUL_2 : lmul_eve <<= 1;
+                LMUL_4 : lmul_eve <<= 2;
+                LMUL_8 : lmul_eve <<= 3;
+                default: lmul_eve = '0;
+              endcase
+
+              mtype_d.tm = 14'(min3(elen_t'(mtype_d.tm), elen_t'(lmul_eve), ete));
+
+              // reset vl / tn
+              tn_d = '0;
+
+              is_ill = (mtype_d.mtwiden == 2'b00) || vtype_d.vill || (tew > ELEN);
+              mtype_d = is_ill ? '0 : mtype_d;
+          end
+          // msettn: tn mirrors the new vl computed in proc_vcsr
+          2'b01: begin
+            tn_d = elen_t'(vl_d);
+          end
+
+          // msettm: mtype.tm = min(rs1, LMUL*EVE, ETE)   (0 if unconfigured)
+          2'b10: begin
+            if (mtype_q.mtwiden == 2'b00) begin
+              mtype_d.tm = '0;
+            end else begin
+              logic [$clog2(MAXVL):0] lmul_eve;
+              elen_t                  ete;
+              int unsigned            sew;
+              int unsigned            twiden;
+              int unsigned            tew;
+
+              lmul_eve = VLENB >> int'(vtype_q.vsew);
+              unique case (vtype_q.vlmul)
+                LMUL_F2: lmul_eve >>= 1;
+                LMUL_F4: lmul_eve >>= 2;
+                LMUL_1 : lmul_eve <<= 0;
+                LMUL_2 : lmul_eve <<= 1;
+                LMUL_4 : lmul_eve <<= 2;
+                LMUL_8 : lmul_eve <<= 3;
+                default: lmul_eve = '0;
+              endcase
+
+              sew = 8 << int'(vtype_q.vsew);
+
+              unique case (mtype_q.mtwiden)
+                2'b01: twiden = 1;
+                2'b10: twiden = 2;
+                2'b11: twiden = 4;
+                default: twiden = 0;
+              endcase
+
+              tew = sew * twiden;
+              ete = (tew < 64) ? elen_t'(TE) : elen_t'(TE >> 1);
+
+              mtype_d.tm = 14'(min3(elen_t'(spatz_req.rs1), elen_t'(lmul_eve), ete));
+            end
+          end
+          // msettk: mtype.tk = min(rs1, KMAX)   (0 if unconfigured)
+          2'b11: begin
+            if (mtype_q.mtwiden == 2'b0) begin
+              mtype_d.tk = '0;
+            end else begin
+              logic [2:0] kmax_val;
+              kmax_val   = (vtype_q.vsew == EW_8)  ? 3'd4 :
+                           (vtype_q.vsew == EW_16) ? 3'd2 : 3'd1;
+              mtype_d.tk = (spatz_req.rs1 > elen_t'(kmax_val))
+                           ? kmax_val : 3'(spatz_req.rs1);
+            end
+          end
+
+          default: ;
+        endcase
+      end
+    end
+  end : proc_mcsr
 
   //////////////
   // Decoding //
@@ -553,6 +813,28 @@ module spatz_controller
         scoreboard_d[insn].deps[vtl_rsp_i.id] = 1'b0;
     end
 `endif
+    if (ope_rsp_valid_i) begin
+      for (int unsigned vreg = 0; vreg < NRVREG; vreg++) begin
+        if (read_table_q[vreg].id == ope_rsp_i.id && read_table_q[vreg].valid)
+          read_table_d[vreg] = '0;
+        if (write_table_q[vreg].id == ope_rsp_i.id && write_table_q[vreg].valid)
+          write_table_d[vreg] = '0;
+      end
+
+      scoreboard_d[ope_rsp_i.id]             = '0;
+      narrow_wide_d[ope_rsp_i.id]            = 1'b0;
+      wrote_result_narrowing_d[ope_rsp_i.id] = 1'b0;
+`ifdef DOUBLE_BW
+      narrow_d[ope_rsp_i.id]                 = 1'b0;
+      wrote_result_d[0][ope_rsp_i.id]        = 1'b0;
+      wrote_result_d[1][ope_rsp_i.id]        = 1'b0;
+      done_result_d[0][ope_rsp_i.id]         = 1'b0;
+      done_result_d[1][ope_rsp_i.id]         = 1'b0;
+      vl_cnt_d[ope_rsp_i.id]                 = '0;
+`endif
+      for (int unsigned insn = 0; insn < NrParallelInstructions; insn++)
+        scoreboard_d[insn].deps[ope_rsp_i.id] = 1'b0;
+    end
 
     // Initialize the scoreboard metadata if we have a new instruction issued.
     if (spatz_req_valid && spatz_req.ex_unit != CON) begin
@@ -685,8 +967,8 @@ module spatz_controller
   // not ready yet. Or we have a change in LMUL, for which we need to let all the
   // units finish first before scheduling a new operation (to avoid running into
   // issues with the socreboard).
-  logic stall, vfu_stall, vlsu_stall, vsldu_stall, vtl_stall;
-  assign stall       = (vfu_stall | vlsu_stall | vsldu_stall | vtl_stall)
+  logic stall, vfu_stall, vlsu_stall, vsldu_stall, vtl_stall, ope_stall;
+  assign stall       = (vfu_stall | vlsu_stall | vsldu_stall | vtl_stall | ope_stall)
                        & req_buffer_valid;
   assign vfu_stall   = ~vfu_req_ready_i & (spatz_req.ex_unit == VFU);
   assign vlsu_stall  = ~vlsu_req_ready_i & (spatz_req.ex_unit == LSU);
@@ -703,6 +985,7 @@ module spatz_controller
   assign vsldu_stall = ~vsldu_req_ready_i & (spatz_req.ex_unit == SLD);
   assign vtl_stall   = 1'b0;
 `endif
+  assign ope_stall   = ~ope_req_ready_i  & (spatz_req.ex_unit == OPE);
 
   // Running instructions
   logic      [NrParallelInstructions-1:0] running_insn_d, running_insn_q;
@@ -742,7 +1025,7 @@ module spatz_controller
     if (spatz_req_valid) begin
       case (spatz_req.ex_unit)
         VFU: begin
-          // Overwrite all csrs in request
+          // RVV arithmetic ops: overwrite CSRs from current vector CSR state
           spatz_req.vtype  = vtype_q;
           spatz_req.vl     = spatz_req.op_arith.widen_vs1 || spatz_req.op_arith.widen_vs2 ? vl_q * 2 : vl_q;
           spatz_req.vstart = vstart_q;
@@ -760,6 +1043,14 @@ module spatz_controller
             spatz_req.op_vtl.sp_cfg = VTL_cfg_q;
           end
 `endif
+        end
+
+        OPE: begin
+          // VME matrix ops: embed current tile dimensions into the request
+          spatz_req.op_tile.tn = tn_q;
+          spatz_req.op_tile.tm = elen_t'(mtype_q.tm);
+          spatz_req.op_tile.tk = elen_t'(mtype_q.tk);
+          spatz_req.vstart            = '0;
         end
 
         LSU: begin
@@ -810,6 +1101,20 @@ module spatz_controller
     end
   end // ex_issue
 
+  always_ff @(posedge clk_i) begin
+    if (rst_ni && retire_csr && spatz_req.op == VMCFG) begin
+      $display("[RET VMCFG] cfg=%0d rs1=%0d rd=%0d tn_d=%0d rsp_id=%0d rsp_data=%0d rsp_valid=%0b",
+        spatz_req.op_tile.cfg_sel,
+        spatz_req.rs1,
+        spatz_req.rd,
+        tn_d,
+        rsp_d.id,
+        rsp_d.data,
+        rsp_valid_d
+      );
+    end
+  end
+
   always_comb begin: proc_next_insn_id
     // Maintain state
     running_insn_d = running_insn_q;
@@ -833,6 +1138,8 @@ module spatz_controller
       running_insn_d[vtl_rsp_i.id] = 1'b0;
     end
 `endif
+    if (ope_rsp_valid_i)
+      running_insn_d[ope_rsp_i.id] = 1'b0;
   end: proc_next_insn_id
 
   // Respond to core about the decoded instruction.
@@ -852,8 +1159,9 @@ module spatz_controller
           issue_rsp_o.writeback = spatz_req.use_rd;
         end // CON
         VFU: begin
-          // vtype is illegal -> illegal instruction
-          if (vtype_q.vill) begin
+          // vtype is illegal -> illegal instruction (VME tile ops do not use vtype)
+          if (vtype_q.vill && !(decoder_rsp.spatz_req.op inside
+              {VTFMM, VTFMM_ALT, VTMMU, VTMMS, VTMV_VT, VTMV_TV, VTZERO, VTDISCARD})) begin
             issue_rsp_o.accept = 1'b0;
           end
         end // VFU
@@ -937,6 +1245,7 @@ module spatz_controller
             riscv_instr::CSR_VL    : rsp_d.data = elen_t'(vl_q);
             riscv_instr::CSR_VTYPE : rsp_d.data = elen_t'(vtype_q);
             riscv_instr::CSR_VLENB : rsp_d.data = elen_t'(VLENB);
+            riscv_instr::CSR_MTYPE : rsp_d.data = elen_t'(mtype_q);
             riscv_instr::CSR_VXSAT : rsp_d.data = '0;
             riscv_instr::CSR_VXRM  : rsp_d.data = '0;
             riscv_instr::CSR_VCSR  : rsp_d.data = '0;
@@ -945,8 +1254,18 @@ module spatz_controller
         end
         rsp_d.id    = spatz_req.rd;
         rsp_valid_d = 1'b1;
+      end else if (spatz_req.op == VMCFG && spatz_req.use_rd) begin
+        // VMCFG: return the newly configured tile dimension
+        rsp_d.id = spatz_req.rd;
+        unique case (spatz_req.op_tile.cfg_sel)
+          2'b01: rsp_d.data = elen_t'(tn_d);
+          2'b10: rsp_d.data = elen_t'(mtype_d.tm);
+          2'b11: rsp_d.data = elen_t'(mtype_d.tk);
+          default: rsp_d.data = '0;
+        endcase
+        rsp_valid_d = 1'b1;
       end else begin
-        // Change configuration and send back vl
+        // VCFG: change configuration and send back vl
         rsp_d.id    = spatz_req.rd;
         rsp_d.data  = elen_t'(vl_d);
         rsp_valid_d = 1'b1;

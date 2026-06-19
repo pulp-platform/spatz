@@ -1,4 +1,4 @@
-// Copyright 2020 ETH Zurich and University of Bologna.
+// Copyright 2026 ETH Zurich and University of Bologna.
 // Solderpad Hardware License, Version 0.51, see LICENSE for details.
 // SPDX-License-Identifier: SHL-0.51
 
@@ -36,6 +36,8 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
   parameter bit          XDivSqrt  = 0,
   /// Enable V Extension
   parameter bit          RVV       = 0,
+  /// Enable Vecor Matrix Extension (VME)
+  parameter bit          XVME      = 0,
   parameter bit          XFVEC     = 0,
   parameter bit          XFDOTP    = 0,
   parameter bit          XFAUX     = 0,
@@ -855,6 +857,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           riscv_instr::CSR_VL,
           riscv_instr::CSR_VTYPE,
           riscv_instr::CSR_VLENB,
+          riscv_instr::CSR_MTYPE,
           riscv_instr::CSR_VXSAT,
           riscv_instr::CSR_VXRM,
           riscv_instr::CSR_VCSR,
@@ -889,6 +892,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           riscv_instr::CSR_VL,
           riscv_instr::CSR_VTYPE,
           riscv_instr::CSR_VLENB,
+          riscv_instr::CSR_MTYPE,
           riscv_instr::CSR_VXSAT,
           riscv_instr::CSR_VXRM,
           riscv_instr::CSR_VCSR,
@@ -922,6 +926,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           riscv_instr::CSR_VL,
           riscv_instr::CSR_VTYPE,
           riscv_instr::CSR_VLENB,
+          riscv_instr::CSR_MTYPE,
           riscv_instr::CSR_VXSAT,
           riscv_instr::CSR_VXRM,
           riscv_instr::CSR_VCSR,
@@ -957,6 +962,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           riscv_instr::CSR_VL,
           riscv_instr::CSR_VTYPE,
           riscv_instr::CSR_VLENB,
+          riscv_instr::CSR_MTYPE,
           riscv_instr::CSR_VXSAT,
           riscv_instr::CSR_VXRM,
           riscv_instr::CSR_VCSR,
@@ -996,6 +1002,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           riscv_instr::CSR_VL,
           riscv_instr::CSR_VTYPE,
           riscv_instr::CSR_VLENB,
+          riscv_instr::CSR_MTYPE,
           riscv_instr::CSR_VXSAT,
           riscv_instr::CSR_VXRM,
           riscv_instr::CSR_VCSR,
@@ -2875,8 +2882,132 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           illegal_inst = 1'b1;
         end
       end
+
+/* VME (Vector Matrix Extension / Zvt) */
+      // Matrix configuration: msettn/msettm/msettk return tile dimension in rd
+      riscv_instr::MSETTN,
+      riscv_instr::MSETTM,
+      riscv_instr::MSETTK: begin
+        if (XVME) begin
+          write_rd        = 1'b0;
+          uses_rd         = 1'b1;
+          acc_qvalid_o    = valid_instr;
+          opa_select      = Reg;
+          acc_register_rd = 1'b1;
+        end else begin
+          illegal_inst = 1'b1;
+        end
+      end
+      // Matrix configuration: msetmtype reads rs1 (mtype value) and rs2 (vtype value)
+      riscv_instr::MSETMTYPE: begin
+        if (XVME) begin
+          write_rd        = 1'b0;
+          uses_rd         = 1'b0;
+          acc_qvalid_o    = valid_instr;
+          opa_select      = Reg;
+          opb_select      = Reg;
+          acc_register_rd = 1'b0;
+        end else begin
+          illegal_inst = 1'b1;
+        end
+      end
+      // Matrix configuration immediate: msetmtypei (zimm embedded in instruction)
+      riscv_instr::MSETMTYPEI: begin
+        if (XVME) begin
+          write_rd        = 1'b0;
+          uses_rd         = 1'b0;
+          acc_qvalid_o    = valid_instr;
+          acc_register_rd = 1'b0;
+        end else begin
+          illegal_inst = 1'b1;
+        end
+      end
+      // FP & INT matrix multiply, no scalar operands or result
+      riscv_instr::VTMMU_TVV,
+      riscv_instr::VTMMS_TVV,
+      riscv_instr::VTFMM_TVV,
+      riscv_instr::VTFMM_ALT_TVV: begin
+        if (XVME) begin
+          write_rd        = 1'b0;
+          uses_rd         = 1'b0;
+          acc_qvalid_o    = valid_instr;
+          acc_register_rd = 1'b0;
+        end else begin
+          illegal_inst = 1'b1;
+        end
+      end
+      // Tile loads: rs1 = base address, rs2 = Tile Subset Specifier
+      riscv_instr::VTLE8,
+      riscv_instr::VTLE16,
+      riscv_instr::VTLE32,
+      riscv_instr::VTLE64: begin
+        if (XVME) begin
+          write_rd        = 1'b0;
+          uses_rd         = 1'b0;
+          acc_qvalid_o    = valid_instr && !acc_mem_stall;
+          opa_select      = Reg;
+          opb_select      = Reg;
+          acc_register_rd = 1'b0;
+        end else begin
+          illegal_inst = 1'b1;
+        end
+      end
+      // Tile stores: rs1 = base address, rs2 = Tile Subset Specifier
+      riscv_instr::VTSE8,
+      riscv_instr::VTSE16,
+      riscv_instr::VTSE32,
+      riscv_instr::VTSE64: begin
+        if (XVME) begin
+          write_rd        = 1'b0;
+          uses_rd         = 1'b0;
+          acc_qvalid_o    = valid_instr && !acc_mem_stall;
+          opa_select      = Reg;
+          opb_select      = Reg;
+          acc_register_rd = 1'b0;
+          acc_mem_store   = 1'b1;
+        end else begin
+          illegal_inst = 1'b1;
+        end
+      end
+      // Move tile subset → vector register group: rs1 = Tile Subset Specifier
+      riscv_instr::VTMV_V_T: begin
+        if (XVME) begin
+          write_rd        = 1'b0;
+          uses_rd         = 1'b0;
+          acc_qvalid_o    = valid_instr;
+          opa_select      = Reg;
+          acc_register_rd = 1'b0;
+        end else begin
+          illegal_inst = 1'b1;
+        end
+      end
+      // Move vector register group → tile subset: rs1 = Tile Subset Specifier
+      riscv_instr::VTMV_T_V: begin
+        if (XVME) begin
+          write_rd        = 1'b0;
+          uses_rd         = 1'b0;
+          acc_qvalid_o    = valid_instr;
+          opa_select      = Reg;
+          acc_register_rd = 1'b0;
+        end else begin
+          illegal_inst = 1'b1;
+        end
+      end
+      // Zero a tile register / discard tile context: no scalar operands or result
+      riscv_instr::VTZERO,
+      riscv_instr::VTDISCARD: begin
+        if (XVME) begin
+          write_rd        = 1'b0;
+          uses_rd         = 1'b0;
+          acc_qvalid_o    = valid_instr;
+          acc_register_rd = 1'b0;
+        end else begin
+          illegal_inst = 1'b1;
+        end
+      end
+/* end of VME */
 `endif
-/* end of RVV extension */
+/* end of VME extension */
 
       default: begin
         illegal_inst = 1'b1;
@@ -3007,7 +3138,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
                               // V - Vector extension implemented
                               | (RVV << 21)
                               // X - Non-standard extensions present
-                              | (((NSX & FP_EN) | Xdma | Xssr) << 23)
+                              | (((NSX & FP_EN) | Xdma | Xssr | XVME) << 23)
                               // RV32
                               | (1   << 30);
           CSR_MHARTID: begin
