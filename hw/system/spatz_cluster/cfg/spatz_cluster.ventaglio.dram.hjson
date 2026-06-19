@@ -2,7 +2,7 @@
 // Licensed under the Apache License, Version 2.0, see LICENSE for details.
 // SPDX-License-Identifier: Apache-2.0
 
-// Cluster configuration for a simple system.
+// Cluster configuration for a simple system with Ventaglio enabled.
 {
     "cluster": {
         "mempool": 0,
@@ -60,6 +60,7 @@
                 "xf16": true,
                 "xf8": true,
                 "xfdotp": true,
+                "ventaglio": true,
                 "num_int_outstanding_loads": 1,
                 "num_int_outstanding_mem": 4,
                 "num_spatz_outstanding_loads": 4,
@@ -74,6 +75,7 @@
                 "xf8": true,
                 "xfdotp": true,
                 "xdma": false,
+                "ventaglio": true,
                 "num_int_outstanding_loads": 1,
                 "num_int_outstanding_mem": 4,
                 "num_spatz_outstanding_loads": 4,
