@@ -12,8 +12,8 @@ cd "$(dirname "$0")"
 mkdir -p ../data
 
 variants=(
-  "1_to_4 8 32 128"
-  "2_to_4 8 32 128"
+  "1_to_4 4 8 64"
+  "2_to_4 4 8 64"
 )
 
 for v in "${variants[@]}"; do

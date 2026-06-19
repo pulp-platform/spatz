@@ -4,9 +4,9 @@
 
 {
     kernel: "SpMM"
-    format: "1_to_4"
-    M: 8
-    N: 32
-    P_W: 128
+    format: "2_to_4"
+    M: 4
+    N: 8
+    P_W: 64
     seed: 1
 }
