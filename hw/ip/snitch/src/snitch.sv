@@ -376,55 +376,45 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
   always_comb begin
     acc_data_op = inst_data_i;
 
-    unique casez (inst_data_i)
-      // P_VLE*_V_RRPOST  -> VLE*_V
+    // Full-word assignments per branch to avoid Verilator hang
+    casez (inst_data_i)
+      // P_VLE*_V_RRPOST  -> VLE*_V (unit-stride). Preserve vm, rs1, width, vd.
       riscv_instr::P_VLE8_V_RRPOST,
       riscv_instr::P_VLE16_V_RRPOST,
       riscv_instr::P_VLE32_V_RRPOST,
       riscv_instr::P_VLE64_V_RRPOST: begin
-        // Convert custom "extended slot" encoding back to standard VLE slot.
-        // Preserve vd, rs1, vm.
-        acc_data_op[31:29] = 3'b000;     // cast the top 3-bit of func6
-        acc_data_op[24:20] = 5'b00000;   // cast rs2 back to zeros for unit-stride
-        acc_data_op[6:0]   = 7'b0000111; // cast opcode to unit-stride
+        acc_data_op = {3'b000,               // [31:29] nf -> 0
+                       inst_data_i[28:25],   // [28:26] mop/mew -> 0 (already), [25] vm
+                       5'b00000,             // [24:20] lumop
+                       inst_data_i[19:7],    // [19:15] rs1, [14:12] width, [11:7] vd
+                       7'b0000111};          // [6:0] opcode = LOAD-FP
       end
 
-      // P_VLX*_V_RRPOST  -> VLX*_V
+      // P_VLX*_V_RRPOST  -> VLX*_V (indexed-unordered). Preserve vm, rs1, width, vd.
       riscv_instr::P_VLX8_V_RRPOST,
       riscv_instr::P_VLX16_V_RRPOST,
       riscv_instr::P_VLX32_V_RRPOST,
       riscv_instr::P_VLX64_V_RRPOST: begin
-        // Convert custom "extended slot" encoding back to standard VLX slot.
-        // Preserve vd, rs1, vm.
-        acc_data_op[31:26] = 3'b000100;  // cast func6
-        acc_data_op[24:20] = 5'b00000;   // cast rs2 back to zeros for unit-stride
-        acc_data_op[6:0]   = 7'b0000111; // cast opcode to unit-stride
+        acc_data_op = {3'b000,               // [31:29] nf -> 0
+                       3'b100,               // [28:26] mop = indexed-unordered (bit28=1)
+                       inst_data_i[25],      // [25] vm
+                       5'b00000,             // [24:20] (vs2/index handled separately)
+                       inst_data_i[19:7],    // [19:15] rs1, [14:12] width, [11:7] vd
+                       7'b0000111};          // [6:0] opcode = LOAD-FP
       end
 
-      // P_FL*_RRPOST -> FL* (imm = 0)
-      riscv_instr::P_FLB_RRPOST: begin
-        acc_data_op = riscv_instr::FLB;    // preserve exact FLB encoding template
-        acc_data_op[19:15] = inst_data_i[19:15]; // rs1
-        acc_data_op[11:7]  = inst_data_i[11:7];  // rd
-      end
+      // P_FL*_RRPOST -> FL* (imm = 0). Preserve rs1, rd.
+      riscv_instr::P_FLB_RRPOST:
+        acc_data_op = {12'b0, inst_data_i[19:15], 3'b100, inst_data_i[11:7], 7'b0000111};
 
-      riscv_instr::P_FLH_RRPOST: begin
-        acc_data_op = riscv_instr::FLH;
-        acc_data_op[19:15] = inst_data_i[19:15];
-        acc_data_op[11:7]  = inst_data_i[11:7];
-      end
+      riscv_instr::P_FLH_RRPOST:
+        acc_data_op = {12'b0, inst_data_i[19:15], 3'b001, inst_data_i[11:7], 7'b0000111};
 
-      riscv_instr::P_FLW_RRPOST: begin
-        acc_data_op = riscv_instr::FLW;
-        acc_data_op[19:15] = inst_data_i[19:15];
-        acc_data_op[11:7]  = inst_data_i[11:7];
-      end
+      riscv_instr::P_FLW_RRPOST:
+        acc_data_op = {12'b0, inst_data_i[19:15], 3'b010, inst_data_i[11:7], 7'b0000111};
 
-      riscv_instr::P_FLD_RRPOST: begin
-        acc_data_op = riscv_instr::FLD;
-        acc_data_op[19:15] = inst_data_i[19:15];
-        acc_data_op[11:7]  = inst_data_i[11:7];
-      end
+      riscv_instr::P_FLD_RRPOST:
+        acc_data_op = {12'b0, inst_data_i[19:15], 3'b011, inst_data_i[11:7], 7'b0000111};
 
       default: begin
         // keep original instruction unchanged
