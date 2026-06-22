@@ -1226,15 +1226,15 @@ always_comb begin : vreg_wbe_proc
         if(!spatz_req.op_arith.vm && !spatz_req.op_arith.is_scalar) begin
           unique case (sew_wb)
             EW_16:for(int i=0;i<VRFWordBWidth/2;i=i+1)begin
-              vreg_wbe_pre[i*2+:2] = {2{operand_v0_t_q[vreg_wb_word_cnt_q *16 + i]}};
+              vreg_wbe_pre[i*2+:2] = {2{operand_v0_t_q[vreg_wb_word_cnt_q * (VRFWordBWidth/2) + i]}};
               vreg_wbe = result_tag.narrowing_upper ? {vreg_wbe_pre[N_FU*ELENB-1:(N_FU*ELENB/2)],{(N_FU*ELENB/2){1'b0}}} : {{(N_FU*ELENB/2){1'b0}}, vreg_wbe_pre[(N_FU*ELENB/2)-1:0]};
             end
             EW_32: for(int i=0;i<VRFWordBWidth/4;i=i+1)begin
-              vreg_wbe_pre[i*4+:4] = {4{operand_v0_t_q[vreg_wb_word_cnt_q *8 + i]}};
+              vreg_wbe_pre[i*4+:4] = {4{operand_v0_t_q[vreg_wb_word_cnt_q * (VRFWordBWidth/4) + i]}};
               vreg_wbe = result_tag.narrowing_upper ? {vreg_wbe_pre[N_FU*ELENB-1:(N_FU*ELENB/2)],{(N_FU*ELENB/2){1'b0}}} : {{(N_FU*ELENB/2){1'b0}}, vreg_wbe_pre[(N_FU*ELENB/2)-1:0]};
             end
             EW_64: for(int i=0;i<VRFWordBWidth/8;i=i+1)begin
-              vreg_wbe_pre[i*8+:8] = {8{operand_v0_t_q[vreg_wb_word_cnt_q *4 + i]}};
+              vreg_wbe_pre[i*8+:8] = {8{operand_v0_t_q[vreg_wb_word_cnt_q * (VRFWordBWidth/8) + i]}};
               vreg_wbe = result_tag.narrowing_upper ? {vreg_wbe_pre[N_FU*ELENB-1:(N_FU*ELENB/2)],{(N_FU*ELENB/2){1'b0}}} : {{(N_FU*ELENB/2){1'b0}}, vreg_wbe_pre[(N_FU*ELENB/2)-1:0]};
             end
             default:;
