@@ -351,9 +351,6 @@ module spatz_controller
   logic [NrParallelInstructions-1:0] wrote_result_narrowing_q, wrote_result_narrowing_d;
   `FF(wrote_result_narrowing_q, wrote_result_narrowing_d, '0)
 
-  // internal signal for sb_enable
-  // logic [NrVregfilePorts-1:0] sb_enable;
-
   always_comb begin : scoreboard
     // Maintain stated
     read_table_d             = read_table_q;
@@ -724,7 +721,7 @@ module spatz_controller
   );
 
   // Pop the buffer if we do not have a unit stall
-  assign req_buffer_pop = ~stall & req_buffer_valid && (!running_insn_full);
+  assign req_buffer_pop = !stall && req_buffer_valid && !running_insn_full;
 
   // Issue new operation to execution units
   always_comb begin : ex_issue

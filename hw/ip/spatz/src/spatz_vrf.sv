@@ -387,16 +387,6 @@ module spatz_vrf
         rvalid_o[VSLDU_VS2_RD] = 1'b1;
       end
 
-      // if (read_request[bank][VSLDU_VS2_RD]) begin
-      //   raddr[bank][1]         = f_vreg(raddr_i[VSLDU_VS2_RD]);
-      //   rdata_o[VSLDU_VS2_RD]  = rdata[bank][1];
-      //   rvalid_o[VSLDU_VS2_RD] = 1'b1;
-      // end else if (read_request[bank][VFU_VS1_RD]) begin
-      //   raddr[bank][1]       = f_vreg(raddr_i[VFU_VS1_RD]);
-      //   rdata_o[VFU_VS1_RD]  = rdata[bank][1];
-      //   rvalid_o[VFU_VS1_RD] = 1'b1;
-      // end
-
       // Bank read port 2 - Priority: VFU (D) -> VLSU
       if (read_request[bank][VFU_VD_RD]) begin
         raddr[bank][2]      = f_vreg(raddr_i[VFU_VD_RD]);

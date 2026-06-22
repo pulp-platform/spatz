@@ -1,4 +1,4 @@
-// Copyright 2020 ETH Zurich and University of Bologna.
+// Copyright 2026 ETH Zurich and University of Bologna.
 // Licensed under the Apache License, Version 2.0, see LICENSE for details.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -33,6 +33,7 @@
         "spatz_fpu": true,
         "spatz_nports": 4,
         "double_bw": 0,
+        "ventaglio": true,
         "buf_fpu": 1,
         // Timing parameters
         "timing": {
@@ -60,7 +61,6 @@
                 "xf16": true,
                 "xf8": true,
                 "xfdotp": true,
-                "ventaglio": true,
                 "num_int_outstanding_loads": 1,
                 "num_int_outstanding_mem": 4,
                 "num_spatz_outstanding_loads": 4,
@@ -75,7 +75,6 @@
                 "xf8": true,
                 "xfdotp": true,
                 "xdma": false,
-                "ventaglio": true,
                 "num_int_outstanding_loads": 1,
                 "num_int_outstanding_mem": 4,
                 "num_spatz_outstanding_loads": 4,

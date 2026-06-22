@@ -32,10 +32,10 @@ endif
 # Enable additional uA configurations for the spatz core
 DOUBLE_BW := $(shell python3 -c "import jstyleson; print(jstyleson.load(open('$(SPATZ_CLUSTER_CFG_PATH)'))['cluster'].get('double_bw', 0))")
 BUF_FPU := $(shell python3 -c "import jstyleson; print(jstyleson.load(open('$(SPATZ_CLUSTER_CFG_PATH)'))['cluster'].get('buf_fpu', 0))")
-# Ventaglio (VTL) compile-time gate. OR'd across all cores: if any core has
-# `ventaglio: true` in the hjson, define VENTAGLIO so the RTL `ifdef
+# Ventaglio (VTL) compile-time gate. If the cluster has `ventaglio: true` in the
+# hjson (a Spatz/cluster-level extension), define VENTAGLIO so the RTL `ifdef
 # VENTAGLIO ... `endif blocks pull in the VTL integration.
-SPATZ_CLUSTER_VENTAGLIO := $(shell python3 -c "import jstyleson; f = open('$(SPATZ_CLUSTER_CFG_PATH)'); cores = jstyleson.load(f)['cluster']['cores']; print(1 if any(c.get('ventaglio', False) for c in cores) else 0)")
+SPATZ_CLUSTER_VENTAGLIO := $(shell python3 -c "import jstyleson; f = open('$(SPATZ_CLUSTER_CFG_PATH)'); print(1 if jstyleson.load(f)['cluster'].get('ventaglio', False) else 0)")
 
 ifeq ($(DOUBLE_BW),1)
 	DEFS += -DDOUBLE_BW
@@ -49,6 +49,7 @@ endif
 ifeq ($(SPATZ_CLUSTER_VENTAGLIO),1)
 	DEFS += -DVENTAGLIO
 	BENDER_CFG_TARGETS += -t ventaglio
+	SPATZ_CLUSTER_CFG_DEFINES += -DSPATZ_CLUSTER_VENTAGLIO=1
 endif
 
 # Include Makefrag
@@ -246,13 +247,13 @@ lint/tmp/files: ${BENDER}
 ## Build SW into sw/build with the LLVM toolchain
 sw: clean.sw spatz.gendata
 	mkdir -p sw/build
-	cd sw/build && ${CMAKE} -DLLVM_PATH=${LLVM_INSTALL_DIR} -DGCC_PATH=${GCC_INSTALL_DIR} -DPYTHON=${PYTHON} -DBUILD_TESTS=ON -DSPATZ_CLUSTER_CFG=${SPATZ_CLUSTER_CFG} -DSPATZ_CLUSTER_VENTAGLIO=${SPATZ_CLUSTER_VENTAGLIO} ${SPATZ_CLUSTER_CFG_DEFINES} .. && make -j8
+	cd sw/build && ${CMAKE} -DLLVM_PATH=${LLVM_INSTALL_DIR} -DGCC_PATH=${GCC_INSTALL_DIR} -DPYTHON=${PYTHON} -DBUILD_TESTS=ON -DSPATZ_CLUSTER_CFG=${SPATZ_CLUSTER_CFG} ${SPATZ_CLUSTER_CFG_DEFINES} .. && make -j8
 
 # VSIM
 ## Build SW into sw/build with the LLVM toolchain (including tests) for Questasim simulator
 sw.vsim: clean.sw bin/spatz_cluster.vsim spatz.gendata
 	mkdir -p sw/build
-	cd sw/build && ${CMAKE} -DLLVM_PATH=${LLVM_INSTALL_DIR} -DGCC_PATH=${GCC_INSTALL_DIR} -DPYTHON=${PYTHON} -DSNITCH_SIMULATOR=../../../../../hw/system/spatz_cluster/bin/spatz_cluster.vsim -DBUILD_TESTS=ON -DSPATZ_CLUSTER_CFG=${SPATZ_CLUSTER_CFG} -DSPATZ_CLUSTER_VENTAGLIO=${SPATZ_CLUSTER_VENTAGLIO} ${SPATZ_CLUSTER_CFG_DEFINES} .. && make -j8
+	cd sw/build && ${CMAKE} -DLLVM_PATH=${LLVM_INSTALL_DIR} -DGCC_PATH=${GCC_INSTALL_DIR} -DPYTHON=${PYTHON} -DSNITCH_SIMULATOR=../../../../../hw/system/spatz_cluster/bin/spatz_cluster.vsim -DBUILD_TESTS=ON -DSPATZ_CLUSTER_CFG=${SPATZ_CLUSTER_CFG} ${SPATZ_CLUSTER_CFG_DEFINES} .. && make -j8
 
 ## Build SW and run all tests with Questasim simulator
 sw.test.vsim: sw.vsim
@@ -262,7 +263,7 @@ sw.test.vsim: sw.vsim
 ## Build SW into sw/build with the LLVM toolchain (including tests) for VCS simulator
 sw.vcs: clean.sw bin/spatz_cluster.vcs spatz.gendata
 	mkdir -p sw/build
-	cd sw/build && ${CMAKE} -DLLVM_PATH=${LLVM_INSTALL_DIR} -DGCC_PATH=${GCC_INSTALL_DIR} -DPYTHON=${PYTHON} -DSNITCH_SIMULATOR=../../../../../hw/system/spatz_cluster/bin/spatz_cluster.vcs -DBUILD_TESTS=ON -DSPATZ_CLUSTER_CFG=${SPATZ_CLUSTER_CFG} -DSPATZ_CLUSTER_VENTAGLIO=${SPATZ_CLUSTER_VENTAGLIO} ${SPATZ_CLUSTER_CFG_DEFINES} .. && make -j8
+	cd sw/build && ${CMAKE} -DLLVM_PATH=${LLVM_INSTALL_DIR} -DGCC_PATH=${GCC_INSTALL_DIR} -DPYTHON=${PYTHON} -DSNITCH_SIMULATOR=../../../../../hw/system/spatz_cluster/bin/spatz_cluster.vcs -DBUILD_TESTS=ON -DSPATZ_CLUSTER_CFG=${SPATZ_CLUSTER_CFG} ${SPATZ_CLUSTER_CFG_DEFINES} .. && make -j8
 
 ## Build SW and run all tests with VCS simulator
 sw.test.vcs: sw.vcs
@@ -272,7 +273,7 @@ sw.test.vcs: sw.vcs
 ## Build SW into sw/build with the LLVM toolchain (including tests) for Verilator simulator
 sw.vlt: clean.sw bin/spatz_cluster.vlt spatz.gendata
 	mkdir -p sw/build
-	cd sw/build && ${CMAKE} -DLLVM_PATH=${LLVM_INSTALL_DIR} -DGCC_PATH=${GCC_INSTALL_DIR} -DPYTHON=${PYTHON} -DSNITCH_SIMULATOR=../../../../../hw/system/spatz_cluster/bin/spatz_cluster.vlt -DBUILD_TESTS=ON -DSPATZ_CLUSTER_CFG=${SPATZ_CLUSTER_CFG} -DSPATZ_CLUSTER_VENTAGLIO=${SPATZ_CLUSTER_VENTAGLIO} ${SPATZ_CLUSTER_CFG_DEFINES} .. && make -j8
+	cd sw/build && ${CMAKE} -DLLVM_PATH=${LLVM_INSTALL_DIR} -DGCC_PATH=${GCC_INSTALL_DIR} -DPYTHON=${PYTHON} -DSNITCH_SIMULATOR=../../../../../hw/system/spatz_cluster/bin/spatz_cluster.vlt -DBUILD_TESTS=ON -DSPATZ_CLUSTER_CFG=${SPATZ_CLUSTER_CFG} ${SPATZ_CLUSTER_CFG_DEFINES} .. && make -j8
 
 ## Build SW and run all tests with Verilator simulator
 sw.test.vlt: sw.vlt
