@@ -15,7 +15,7 @@ config.
 
 A plain `vfxmacc.vf` cannot encode the *index* vreg, so the Spatz controller
 cannot trace the RAW dependency on it. Ventaglio therefore uses a custom-0
-encoding that names the index explicitly.
+encoding that names the index explicitly. This instruction is depreciated.
 
 ```
    31    27 26 25 24    20 19    15 14  12 11   7 6      0
