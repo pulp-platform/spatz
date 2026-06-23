@@ -666,6 +666,23 @@ module spatz_doublebw_vlsu
 
   logic vrf_commit_bypass;
 
+  /////////////////////////
+  //  Coalescing Buffer  //
+  /////////////////////////
+
+  // Per-interface coalescing buffers: accumulate partial wbe writes before
+  // committing to the VRF, preventing premature chaining on partial VRF words.
+  vrf_req_t [NrInterfaces-1:0] coalesce_d, coalesce_q;
+  logic     [NrInterfaces-1:0] coalesce_valid_d, coalesce_valid_q;
+  logic     [NrInterfaces-1:0] coalesce_commit;
+
+  // Both interfaces must be ready before either commits (normal path). This
+  // prevents the faster interface from draining its buffer while the slower
+  // one is still accumulating, which would leave the slower interface with
+  // rsp_valid data it can never flush (no &coalesce_valid_q, no vrf_wvalid_i[0]).
+  logic both_commit;
+  assign both_commit = coalesce_commit[0] & coalesce_commit[1];
+
   for (genvar intf = 0; intf < NrInterfaces; intf++) begin : gen_vrf_req_register_intf
     spill_register #(
       .T(vrf_req_t)
@@ -680,9 +697,16 @@ module spatz_doublebw_vlsu
       .ready_i(vrf_req_ready_q[intf])
     );
 
-    assign vrf_waddr_o[intf]     = vrf_req_q[intf].waddr;
-    assign vrf_wdata_o[intf]     = vrf_req_q[intf].wdata;
-    assign vrf_wbe_o[intf]       = vrf_req_q[intf].wbe;
+    `FF(coalesce_q[intf], coalesce_d[intf], '0)
+    `FF(coalesce_valid_q[intf], coalesce_valid_d[intf], '0)
+
+    // Commit the coalescing buffer when the VRF word is fully assembled or
+    // this is the last write of the instruction.
+    assign coalesce_commit[intf] = coalesce_valid_q[intf] && (&coalesce_q[intf].wbe || coalesce_q[intf].rsp_valid);
+
+    assign vrf_waddr_o[intf] = coalesce_q[intf].waddr;
+    assign vrf_wdata_o[intf] = coalesce_q[intf].wdata;
+    assign vrf_wbe_o[intf]   = coalesce_q[intf].wbe;
     // Ensure simpler synchronization for commits from both interfaces
     // Writeback:
     // For interface 1, check if interface 0 commit can go through
@@ -691,14 +715,55 @@ module spatz_doublebw_vlsu
     // If Interface 1, is resp interface (usually the default)
     // If Interface 0, is resp interface (if interface 0 has more vector elements), then ensure interface 1 has nothing in buffer
     // to avoid retiring before interface 1 commits to the VRF
-    assign vrf_we_o[intf]        = ((&vrf_req_valid_q) | ((intf==0) ? vrf_req_valid_q[0] & (vrf_commit_bypass | vrf_commit_waiting_q[1]) & vlsu_buf_empty_i : 1'b0)) &
-                                   ((intf==1) ? (vrf_wvalid_i[0] & (vrf_req_q[1].rsp.id == vrf_req_q[0].rsp.id)) : 1'b1) &
-                                   !vlsu_buf_full_i;
-    assign vrf_id_o[intf]        = {vrf_req_q[intf].rsp.id, mem_spatz_req.id, commit_insn_q.id};
-    assign vrf_req_ready_q[intf] = vrf_wvalid_i[intf];
+    // Normal path: both coalescing buffers must be commit-ready (both_commit)
+    // before either fires, so no interface drains ahead of the other.
+    // Bypass path (intf 0 only): interface 1 has nothing to write (small vl).
+    assign vrf_we_o[intf] = (both_commit |
+                             ((intf==0) ? coalesce_commit[0] & (vrf_commit_bypass | vrf_commit_waiting_q[1]) & vlsu_buf_empty_i : 1'b0)) &
+                            ((intf==1) ? (vrf_wvalid_i[0] & (coalesce_q[1].rsp.id == coalesce_q[0].rsp.id)) : 1'b1) &
+                            !vlsu_buf_full_i;
+    assign vrf_id_o[intf] = {coalesce_q[intf].rsp.id, mem_spatz_req.id, commit_insn_q.id};
+    // The spill register may be popped when the coalescing buffer can accept:
+    //   - buffer is empty, OR
+    //   - buffer is still accumulating (not yet commit-ready), OR
+    //   - buffer is committing this cycle (VRF accepting, freeing a slot)
+    assign vrf_req_ready_q[intf] = !coalesce_valid_q[intf] || !coalesce_commit[intf] || vrf_wvalid_i[intf];
 
     `FF(vrf_commit_intf_valid_q[intf], vrf_commit_intf_valid[intf], 1'b0)
     `FF(vrf_commit_waiting_q[intf], vrf_commit_waiting_d[intf], 1'b0)
+
+    always_comb begin : coalesce_proc
+      coalesce_d[intf]       = coalesce_q[intf];
+      coalesce_valid_d[intf] = coalesce_valid_q[intf];
+
+      // When the VRF accepts the coalesced write, clear the buffer.
+      if (coalesce_commit[intf] && vrf_wvalid_i[intf]) begin
+        coalesce_d[intf]       = '0;
+        coalesce_valid_d[intf] = 1'b0;
+      end
+
+      // Accept a new partial write from the spill-register output.
+      if (vrf_req_valid_q[intf] && vrf_req_ready_q[intf]) begin
+        if (coalesce_valid_q[intf] && !(coalesce_commit[intf] && vrf_wvalid_i[intf])) begin
+          // Merge into the existing accumulation (same VRF word in progress):
+          // OR the byte enables and splice in only the newly-valid data bytes.
+          for (int unsigned i = 0; i < N_FU*ELENB; i++)
+            if (vrf_req_q[intf].wbe[i])
+              coalesce_d[intf].wdata[8*i +: 8] = vrf_req_q[intf].wdata[8*i +: 8];
+          coalesce_d[intf].wbe = coalesce_d[intf].wbe | vrf_req_q[intf].wbe;
+          // Carry the rsp metadata from the last write of the instruction.
+          if (vrf_req_q[intf].rsp_valid) begin
+            coalesce_d[intf].rsp       = vrf_req_q[intf].rsp;
+            coalesce_d[intf].rsp_valid = 1'b1;
+          end
+        end else begin
+          // Buffer was empty or just committed — start a fresh accumulation.
+          // Copy the full struct so no field (e.g. commit_vl) is left at 0.
+          coalesce_d[intf]       = vrf_req_q[intf];
+          coalesce_valid_d[intf] = 1'b1;
+        end
+      end
+    end : coalesce_proc
   end
 
   //////////////////////////////////////
@@ -711,11 +776,11 @@ module spatz_doublebw_vlsu
     vrf_commit_waiting_d = vrf_commit_waiting_q;
 
     // To track if the second interface is committing or not for small vector lengths
-    vrf_commit_bypass = vrf_req_valid_q[0] ? ((vrf_req_q[0].commit_vl <= ( SpatzMemBytes / 2)) ? 1'b1 : 1'b0) : 1'b0;
+    vrf_commit_bypass = coalesce_valid_q[0] ? ((coalesce_q[0].commit_vl <= (SpatzMemBytes / 2)) ? 1'b1 : 1'b0) : 1'b0;
 
     for (int intf = 0; intf < NrInterfaces; intf++) begin
-      // We have a final resp to write to VRF
-      vrf_valid_rsp[intf] = (vrf_req_valid_q[intf] & vrf_req_q[intf].rsp_valid);
+      // We have a final resp ready to commit to VRF (coalesced word is complete and is the last write)
+      vrf_valid_rsp[intf] = (coalesce_valid_q[intf] & coalesce_q[intf].rsp_valid & coalesce_commit[intf]);
 
       // Track if the final resp has already been written to the VRF
       vrf_commit_intf_valid[intf] = ((vrf_valid_rsp[intf] & vrf_wvalid_i[intf]) | vrf_commit_waiting_q[intf]) | (intf == 1 ? vrf_commit_bypass : 1'b0);
@@ -739,13 +804,13 @@ module spatz_doublebw_vlsu
 
   // Check is both interfaces has reached to a completion and if the last write to the VRF is also done
   // Assign the instruction id from the interface that completes the last
-  assign vlsu_rsp_o = &vrf_commit_intf_valid && |vrf_req_valid_q ? vrf_req_q[resp_intf].rsp   : '{id: commit_insn_q.id, default: '0};
+  assign vlsu_rsp_o = &vrf_commit_intf_valid && |coalesce_valid_q ? coalesce_q[resp_intf].rsp : '{id: commit_insn_q.id, default: '0};
 
   // Send response back to the controller to indicate end of request
   // Check if both the interfaces have completed request and have a valid response to send
   // Check if atleast one interface has a valid (interfaces can send responses asynchronously to the VRF)
-  // Set reponse high if one of the interfaces has a ready indicating the response has been written to the VRF
-  assign vlsu_rsp_valid_o = &vrf_commit_intf_valid && |vrf_req_valid_q ? |vrf_req_ready_q : vlsu_finished_req && !commit_insn_q.is_load;
+  // Set response high when both interfaces have committed and the VRF accepts the final write
+  assign vlsu_rsp_valid_o = &vrf_commit_intf_valid && |coalesce_valid_q ? |vrf_wvalid_i : vlsu_finished_req && !commit_insn_q.is_load;
 
   //////////////
   // Counters //
