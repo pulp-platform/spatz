@@ -52,6 +52,9 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     // Memory Finished
     output logic             [1:0]            spatz_mem_finished_o,
     output logic             [1:0]            spatz_mem_str_finished_o,
+    // Request-side: per-lane pulse when all of a mem instruction's requests are issued
+    // (bit[1]=VLSU, bit[0]=FP-LSU). Responses may still be in flight.
+    output logic             [1:0]            spatz_mem_req_sent_o,
     // FPU memory interface interface
 `ifdef TARGET_MEMPOOL
     output logic                              fp_lsu_mem_req_valid_o,
@@ -114,8 +117,12 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   logic fp_lsu_mem_str_finished;
   logic spatz_mem_finished;
   logic spatz_mem_str_finished;
+  logic spatz_mem_req_sent;
   assign spatz_mem_finished_o     = {spatz_mem_finished, fp_lsu_mem_finished};
   assign spatz_mem_str_finished_o = {spatz_mem_str_finished, fp_lsu_mem_str_finished};
+  // bit[1]=VLSU request-sent (one-shot per vector mem op); bit[0]=FP-LSU reuses its
+  // mem_finished (scalar flw/fsw are single-beat, so finished ~= request-sent).
+  assign spatz_mem_req_sent_o     = {spatz_mem_req_sent, fp_lsu_mem_finished};
 
   if (!FPU) begin: gen_no_fpu_sequencer
     // Spatz configured without an FPU. Just forward the requests to Spatz.
@@ -339,7 +346,8 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     .spatz_mem_rsp_i         (spatz_mem_rsp_i                                      ),
     .spatz_mem_rsp_valid_i   (spatz_mem_rsp_valid_i                                ),
     .spatz_mem_finished_o    (spatz_mem_finished                                   ),
-    .spatz_mem_str_finished_o(spatz_mem_str_finished                               )
+    .spatz_mem_str_finished_o(spatz_mem_str_finished                               ),
+    .spatz_mem_req_sent_o    (spatz_mem_req_sent                                   )
   );
 
   ///////////

@@ -48,7 +48,10 @@ module spatz_vlsu
     input  logic           [NrMemPorts-1:0] spatz_mem_rsp_valid_i,
     // Memory Finished
     output logic                            spatz_mem_finished_o,
-    output logic                            spatz_mem_str_finished_o
+    output logic                            spatz_mem_str_finished_o,
+    // Request-side: pulses once per vector mem instruction when ALL its request beats
+    // have been issued to the interconnect (responses may still be in flight).
+    output logic                            spatz_mem_req_sent_o
   );
 
 // Include FF
@@ -607,6 +610,11 @@ module spatz_vlsu
   // for the case with more than one memory port)
   assign spatz_mem_finished_o     = mem_finish_ready;
   assign spatz_mem_str_finished_o = mem_finish_ready && !commit_insn_q.is_load;
+  // Request-side one-shot: rising edge of the per-instruction "all request beats
+  // issued" bitmap (mem_insn_finished is driven from the request handshakes only --
+  // not responses), so this pulses once per vector mem instruction when its requests
+  // are all out, responses still pending. Feeds the snitch request-sent fence.
+  assign spatz_mem_req_sent_o     = |(mem_insn_finished_d & ~mem_insn_finished_q);
 
   // Do we start at the very fist element
   logic mem_is_vstart_zero;
