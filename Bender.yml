@@ -101,3 +101,15 @@ sources:
         files:
         # Level 1
         - hw/system/spatz_cluster/tb/testharness.sv
+
+      - target: all(synthesis, gf22)
+        files:
+        - gf22/sourcecode/tc_sram_impl.sv
+        - gf22/sourcecode/tc_sram.sv
+        - gf22/sourcecode/tc_clk.sv
+
+      - target: all(synthesis, gf12)
+        files:
+        - gf12/sourcecode/tc_sram_impl.sv
+        - gf12/sourcecode/tc_sram.sv
+        - gf12/sourcecode/tc_clk.sv
