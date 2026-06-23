@@ -11,6 +11,9 @@
 module spatz_controller
   import spatz_pkg::*;
   import rvv_pkg::*;
+`ifdef VENTAGLIO
+  import vtl_pkg::*;
+`endif
   import fpnew_pkg::roundmode_e;
   import fpnew_pkg::fmt_mode_t;
   #(
@@ -19,7 +22,9 @@ module spatz_controller
     parameter bit           RegisterRsp       = 0,
     parameter type          spatz_issue_req_t = logic,
     parameter type          spatz_issue_rsp_t = logic,
-    parameter type          spatz_rsp_t       = logic
+    parameter type          spatz_rsp_t       = logic,
+    // implicit setting
+    parameter int  unsigned NrReadPorts      = NrVregfilePorts - NrWritePorts
   ) (
     input  logic                                   clk_i,
     input  logic                                   rst_ni,
@@ -50,11 +55,29 @@ module spatz_controller
     input  logic                                   vsldu_req_ready_i,
     input  logic                                   vsldu_rsp_valid_i,
     input  vsldu_rsp_t                             vsldu_rsp_i,
+`ifdef VENTAGLIO
+    // VTL (Ventaglio) — separate control path so VTL and VSLDU can share
+    // the same physical VRF master port while keeping admit/retire
+    // handshakes distinct. `vtl_rsp_*` only fires for vventclr; vfx ops
+    // (ex_unit=VFU, op_vtl.use_vtl=1) retire via vfu_rsp.
+    input  logic                                   vtl_req_ready_i,
+    input  logic                                   vtl_rsp_valid_i,
+    input  vsldu_rsp_t                             vtl_rsp_i,
+`endif
     // VRF Scoreboard
-    input  logic             [NrVregfilePorts-1:0] sb_enable_i,
-    input  logic             [NrWritePorts-1:0]    sb_wrote_result_i,
-    output logic             [NrVregfilePorts-1:0] sb_enable_o,
-    input  spatz_id_t        [NrVregfilePorts-1:0] sb_id_i
+    input  logic             [NrVregfilePorts-1:0]              sb_enable_i,
+    input  logic             [NrWritePorts-1:0]                 sb_wrote_result_i,
+    output logic             [NrVregfilePorts-1:0]              sb_enable_o,
+    input  spatz_id_t        [NrVregfilePorts-1:0]              sb_id_i
+`ifdef VENTAGLIO
+    ,
+    output logic             [NrVregfilePorts-NrWritePorts-1:0] sb_vtl_redirect_read_o,
+    output logic             [NrWritePorts-1:0]                 sb_vtl_redirect_write_o,
+    // Per-vreg "writer in flight" — combinational from write_table_q.valid
+    // (which is cleared on retire). Exposed so the Ventaglio prefetch can
+    // safely fire as soon as the next op's index vreg has no pending write.
+    output logic             [NRVREG-1:0]                       vreg_write_pending_o
+`endif
   );
 
 // Include FF
@@ -68,26 +91,46 @@ module spatz_controller
   spatz_req_t spatz_req;
   logic       spatz_req_valid;
   logic       spatz_req_illegal;
+`ifdef VENTAGLIO
+  logic       spatz_req_vtl_illegal;
+`endif
 
   //////////
   // CSRs //
   //////////
+  typedef logic [NRVREG-1:0] vid_t;
 
   // CSR registers
-  vlen_t  vstart_d, vstart_q;
-  vlen_t  vl_d, vl_q;
-  vtype_t vtype_d, vtype_q;
+  vlen_t   vstart_d,  vstart_q;
+  vlen_t   vl_d,      vl_q;
+  vtype_t  vtype_d,   vtype_q;
+`ifdef VENTAGLIO
+  logic    vtl_en_d,  vtl_en_q;     // VTL extension enable (1: VTL enabled; 0: VTL disabled)
+  vid_t    VTLVreg_d, VTLVreg_q;    // Bit mask for register mapping in VTL (1: Vreg mapped to VTL)
+  sp_cfg_t VTL_cfg_d, VTL_cfg_q;    // Formats
+`endif
 
-  `FF(vstart_q, vstart_d, '0)
-  `FF(vl_q, vl_d, '0)
-  `FF(vtype_q, vtype_d, '{vill: 1'b1, vsew: EW_8, vlmul: LMUL_1, default: '0})
+  `FF(vstart_q,  vstart_d,  '0)
+  `FF(vl_q,      vl_d,      '0)
+  `FF(vtype_q,   vtype_d,   '{vill: 1'b1, vsew: EW_8, vlmul: LMUL_1, default: '0})
+`ifdef VENTAGLIO
+  `FF(vtl_en_q,  vtl_en_d, 1'b0)     // VTL extension enable
+  `FF(VTLVreg_q, VTLVreg_d, '0)     // VTL register setting
+  `FF(VTL_cfg_q, VTL_cfg_d, '0)
+`endif
+
 
   always_comb begin : proc_vcsr
     automatic logic [$clog2(MAXVL):0] vlmax = 0;
 
-    vstart_d = vstart_q;
-    vl_d     = vl_q;
-    vtype_d  = vtype_q;
+    vstart_d   = vstart_q;
+    vl_d       = vl_q;
+    vtype_d    = vtype_q;
+`ifdef VENTAGLIO
+    vtl_en_d   = vtl_en_q;   // VTL extension enable
+    VTLVreg_d  = VTLVreg_q;
+    VTL_cfg_d  = VTL_cfg_q;
+`endif
 
     if (spatz_req_valid) begin
       // Reset vstart to zero if we have a new non CSR operation
@@ -103,8 +146,24 @@ module spatz_controller
           vstart_d = vstart_q | vlen_t'(spatz_req.rs1);
         end else if (spatz_req.op_cfg.clear_vstart) begin
           vstart_d = vstart_q & ~vlen_t'(spatz_req.rs1);
+`ifdef VENTAGLIO
+        end else if (spatz_req.op_cfg.vtl_redirect) begin // For the VTL extensions
+          if (vtl_en_q && (VTLVreg_q == vid_t'(spatz_req.rs1))) begin
+            vtl_en_d            = 1'b0;                   // Disable if the same register is written again
+            VTLVreg_d           =   '0;
+          end else begin
+            vtl_en_d  = 1'b1;
+            VTLVreg_d = vid_t'(spatz_req.rs1);            // Set which registers are mapped to VTL
+          end
+        end else if (spatz_req.op_cfg.set_vtl_index_width) begin
+          VTL_cfg_d.sp_cfg_index_width = sp_idxw_e'(spatz_req.rs1);
+        end else if (spatz_req.op_cfg.set_vtl_blk_size) begin
+          VTL_cfg_d.sp_cfg_blk_size    = sp_blk_e'(spatz_req.rs1);
+        end else if (spatz_req.op_cfg.set_vtl_ratio) begin
+          VTL_cfg_d.sp_cfg_ratio       = sp_ratio_e'(spatz_req.rs1);
+`endif
         end
-      end
+      end // spatz_req.op == VCSR
 
       // Change vtype and vl if we have a config instruction
       if (spatz_req.op == VCFG) begin
@@ -237,6 +296,30 @@ module spatz_controller
   scoreboard_metadata_t [NrParallelInstructions-1:0] scoreboard_q, scoreboard_d;
   `FF(scoreboard_q, scoreboard_d, '0)
 
+`ifdef VENTAGLIO
+  ///////////////
+  // VTL Table //
+  ///////////////
+
+  // To track if the indices used for scatter/gather is already in the VTL buffer
+  typedef struct packed {
+    logic                          use_vtl;
+    logic   [NrWritePorts-1:0]       write;
+    logic   [NrReadPorts-1:0]         read;
+  } vtl_table_t;
+  vtl_table_t [NrParallelInstructions-1:0] vtl_table_d, vtl_table_q;
+  `FF(vtl_table_q, vtl_table_d, '{default: '0})
+
+  // For better wiring
+  logic [NrParallelInstructions-1:0][NrVregfilePorts-1:0] vtl_table_wr;
+  always_comb begin
+    for (int id = 0; id < NrParallelInstructions; id++) begin
+      vtl_table_wr[id] = {vtl_table_q[id].write, vtl_table_q[id].read};
+    end
+  end
+`endif
+
+
   // Did the instruction write to the VRF in the previous cycle?
 `ifdef DOUBLE_BW
   logic [NumVLSUInterfaces-1:0] [NrParallelInstructions-1:0] wrote_result_q, wrote_result_d;
@@ -275,6 +358,12 @@ module spatz_controller
     scoreboard_d             = scoreboard_q;
     narrow_wide_d            = narrow_wide_q;
     wrote_result_narrowing_d = wrote_result_narrowing_q;
+`ifdef VENTAGLIO
+    vtl_table_d              = vtl_table_q;
+    sb_vtl_redirect_read_o    = '0;
+    sb_vtl_redirect_write_o   = '0;
+`endif
+
 
     // Nobody wrote to the VRF yet
     wrote_result_d = '0;
@@ -305,7 +394,31 @@ module spatz_controller
       // Enable the VRF port if the dependant instructions wrote in the previous cycle
       sb_enable_o[port] = sb_enable_i[port] && &(~scoreboard_q[sb_id_i[port]].deps | wrote_result_q[intID] | done_result_q[intID]) && (!(|scoreboard_q[sb_id_i[port]].deps) || !scoreboard_q[sb_id_i[port]].prevent_chaining);
 `else
+      // Enable the VRF port if the dependant instructions wrote in the previous cycle
+      // sb_enable_o[port] - scoreboard check if you can use this vrf port
+      // sb_enable_i[port] - some unit want to use this vrf port
+      // sb_id_i[port] - the instruction ID that is using this port
+      // &(~scoreboard_q[sb_id_i[port]].deps | wrote_result_q) - we either do not care about the other instructions, or they have wrote to vrf
+      //                                                         in words: All dependencies must have written their results in the previous cycle
       sb_enable_o[port] = sb_enable_i[port] && &(~scoreboard_q[sb_id_i[port]].deps | wrote_result_q) && (!(|scoreboard_q[sb_id_i[port]].deps) || !scoreboard_q[sb_id_i[port]].prevent_chaining);
+`endif
+
+`ifdef VENTAGLIO
+      if (sb_enable_o[port] && vtl_en_q) begin : proc_vtl_rw_o
+        if (port < NrReadPorts) begin // read
+          if (vtl_table_q[sb_id_i[port]].read[port]) begin
+            sb_vtl_redirect_read_o[port] = 1'b1;
+          end else begin
+            sb_vtl_redirect_read_o[port] = 1'b0;
+          end
+        end else begin // write
+          if (vtl_table_q[sb_id_i[port]].write[port - NrReadPorts]) begin
+            sb_vtl_redirect_write_o[port - NrReadPorts] = 1'b1;
+          end else begin
+            sb_vtl_redirect_write_o[port - NrReadPorts] = 1'b0;
+          end
+        end
+      end // proc_vtl_rw_o
 `endif
     end
 
@@ -360,6 +473,9 @@ module spatz_controller
       scoreboard_d[vfu_rsp_i.id]             = '0;
       narrow_wide_d[vfu_rsp_i.id]            = 1'b0;
       wrote_result_narrowing_d[vfu_rsp_i.id] = 1'b0;
+`ifdef VENTAGLIO
+      vtl_table_d[vfu_rsp_i.id]              = '0;
+`endif
 `ifdef DOUBLE_BW
       narrow_d[vfu_rsp_i.id]                 = 1'b0;
       wrote_result_d[0][vfu_rsp_i.id]        = 1'b0;
@@ -378,10 +494,12 @@ module spatz_controller
         if (write_table_q[vreg].id == vlsu_rsp_i.id && write_table_q[vreg].valid)
           write_table_d[vreg] = '0;
       end
-
       scoreboard_d[vlsu_rsp_i.id]             = '0;
       narrow_wide_d[vlsu_rsp_i.id]            = 1'b0;
       wrote_result_narrowing_d[vlsu_rsp_i.id] = 1'b0;
+`ifdef VENTAGLIO
+      vtl_table_d[vlsu_rsp_i.id]              = '0;
+`endif
 `ifdef DOUBLE_BW
       narrow_d[vlsu_rsp_i.id]                 = 1'b0;
       wrote_result_d[0][vlsu_rsp_i.id]        = 1'b0;
@@ -404,6 +522,9 @@ module spatz_controller
       scoreboard_d[vsldu_rsp_i.id]             = '0;
       narrow_wide_d[vsldu_rsp_i.id]            = 1'b0;
       wrote_result_narrowing_d[vsldu_rsp_i.id] = 1'b0;
+`ifdef VENTAGLIO
+      vtl_table_d[vsldu_rsp_i.id]              = '0;
+`endif
 `ifdef DOUBLE_BW
       narrow_d[vsldu_rsp_i.id]                 = 1'b0;
       wrote_result_d[0][vsldu_rsp_i.id]        = 1'b0;
@@ -415,9 +536,70 @@ module spatz_controller
       for (int unsigned insn = 0; insn < NrParallelInstructions; insn++)
         scoreboard_d[insn].deps[vsldu_rsp_i.id] = 1'b0;
     end
+`ifdef VENTAGLIO
+    if (vtl_rsp_valid_i) begin
+      for (int unsigned vreg = 0; vreg < NRVREG; vreg++) begin
+        if (read_table_q[vreg].id == vtl_rsp_i.id && read_table_q[vreg].valid)
+          read_table_d[vreg] = '0;
+        if (write_table_q[vreg].id == vtl_rsp_i.id && write_table_q[vreg].valid)
+          write_table_d[vreg] = '0;
+      end
+
+      scoreboard_d[vtl_rsp_i.id]             = '0;
+      narrow_wide_d[vtl_rsp_i.id]            = 1'b0;
+      wrote_result_narrowing_d[vtl_rsp_i.id] = 1'b0;
+      vtl_table_d[vtl_rsp_i.id]              = '0;
+      for (int unsigned insn = 0; insn < NrParallelInstructions; insn++)
+        scoreboard_d[insn].deps[vtl_rsp_i.id] = 1'b0;
+    end
+`endif
 
     // Initialize the scoreboard metadata if we have a new instruction issued.
     if (spatz_req_valid && spatz_req.ex_unit != CON) begin
+`ifdef VENTAGLIO
+      // VTL forward extension
+      vtl_table_d[spatz_req.id] = '{use_vtl: 1'b0, write: '0, read: '0}; // init a table entry
+      if (vtl_en_q) begin
+        case (spatz_req.ex_unit)
+          VFU: begin
+            // First mark this instruction with VTL usage
+            if (spatz_req.op_vtl.use_vtl) begin
+              vtl_table_d[spatz_req.id].use_vtl = 1'b1;
+            end
+            // Then mark the request from which port should be redirected to VTL
+            // Let's say if v8 is mapped to VTL
+            // for an instruction do not use VTL, v8 is still in Vregfile
+            // This is distinguished from spatz_req.op_vtl settings
+            if (spatz_req.use_vs1   && |((32'b1 << spatz_req.vs1) & VTLVreg_q) ) // VFU read: vs1
+              vtl_table_d[spatz_req.id].read[SB_VFU_VS1_RD] = 1'b1;
+            if (spatz_req.use_vs2   && |((32'b1 << spatz_req.vs2) & VTLVreg_q) ) // VFU read: vs2
+              vtl_table_d[spatz_req.id].read[SB_VFU_VS2_RD] = 1'b1;
+            if (spatz_req.vd_is_src && |((32'b1 << spatz_req.vd) & VTLVreg_q) ) // VFU read: vd
+              vtl_table_d[spatz_req.id].read[SB_VFU_VD_RD] = 1'b1;
+            if (spatz_req.use_vd    && |((32'b1 << spatz_req.vd) & VTLVreg_q) )   // VFU write: vd
+              vtl_table_d[spatz_req.id].write[SB_VFU_VD_WD-NrReadPorts] = 1'b1;
+          end
+          LSU: begin
+            // bowwang: we do not set ld/st instruction as `use_vtl`
+            //          set 'use_vtl' is to add an addtional check for scoreboard, ensuring the index is ready to use
+            //          which should be changed (?) if we want to support unstructured sparsity
+
+            // Normal ld/st instructions are considered
+            // `vlx` instructions never map to VTL
+            if (spatz_req.use_vd && |((32'b1 << spatz_req.op_vtl.old_vd) & VTLVreg_q) && !spatz_req.op_vtl.is_load_idx && spatz_req.op_mem.is_load) begin
+              vtl_table_d[spatz_req.id].write[SB_VLSU_VD_WD-NrReadPorts] = 1'b1; // w
+            end
+            if (spatz_req.use_vd && |((32'b1 << spatz_req.op_vtl.old_vd) & VTLVreg_q) && !spatz_req.op_vtl.is_load_idx && !spatz_req.op_mem.is_load) begin
+              vtl_table_d[spatz_req.id].read[SB_VLSU_VD_RD] = 1'b1; // r
+            end
+          end
+          default: begin
+            vtl_table_d[spatz_req.id] = '{use_vtl: 1'b0, write: '0, read: '0};
+          end
+        endcase
+      end
+`endif
+
       // RAW hazard
       if (spatz_req.use_vs2) begin
         scoreboard_d[spatz_req.id].deps[write_table_d[spatz_req.vs2].id] |= write_table_d[spatz_req.vs2].valid;
@@ -432,10 +614,22 @@ module spatz_controller
         read_table_d[spatz_req.vd] = {spatz_req.id, 1'b1};
       end
 
+`ifdef VENTAGLIO
+      // RAW hazard on the explicit index vreg used by vfxmacc.vrf
+      if (spatz_req.op_vtl.use_vtl) begin
+        scoreboard_d[spatz_req.id].deps[write_table_d[spatz_req.op_vtl.idx_vreg].id] |=
+            write_table_d[spatz_req.op_vtl.idx_vreg].valid;
+        read_table_d[spatz_req.op_vtl.idx_vreg] = {spatz_req.id, 1'b1};
+      end
+`endif
+
       // WAW and WAR hazards
       if (spatz_req.use_vd) begin
         scoreboard_d[spatz_req.id].deps[write_table_d[spatz_req.vd].id] |= write_table_d[spatz_req.vd].valid;
         scoreboard_d[spatz_req.id].deps[read_table_d[spatz_req.vd].id] |= read_table_d[spatz_req.vd].valid;
+        if (spatz_req.op inside {VLX}) begin
+          scoreboard_d[spatz_req.id].deps = '0;
+        end
         write_table_d[spatz_req.vd] = {spatz_req.id, 1'b1};
       end
 
@@ -462,6 +656,24 @@ module spatz_controller
       scoreboard_d[insn].deps[insn] = 1'b0;
   end
 
+  // Per-vreg "writer in flight" export. Sourced from `write_table_d` (the
+  // about-to-register value) rather than `write_table_q` so the signal
+  // falls the same cycle the writer's response fires, not one cycle
+  // later. This lets Ventaglio's `fetch_for_next` prefetch a freshly-
+  // written index vreg (e.g. sp-SpMV's v20 written by vlx) one cycle
+  // sooner — saving one cycle of the inter-op bubble on `rvalid_o` at
+  // the VFU boundary. Issue side is unaffected: write_table_d goes high
+  // the cycle a writer is admitted, same as before. Safe because the
+  // _d wire is a combinational fan-in of registered inputs only
+  // (write_table_q, *_rsp_valid_i, *_rsp_i.id, and the issue claims),
+  // and the prefetch consumer is itself fully combinational so cycle-
+  // accurate visibility is what we want.
+`ifdef VENTAGLIO
+  for (genvar v = 0; v < NRVREG; v++) begin : gen_vreg_pending_export
+    assign vreg_write_pending_o[v] = write_table_d[v].valid;
+  end
+`endif
+
   /////////////
   // Issuing //
   /////////////
@@ -473,17 +685,32 @@ module spatz_controller
   // not ready yet. Or we have a change in LMUL, for which we need to let all the
   // units finish first before scheduling a new operation (to avoid running into
   // issues with the socreboard).
-  logic stall, vfu_stall, vlsu_stall, vsldu_stall;
-  assign stall       = (vfu_stall | vlsu_stall | vsldu_stall) & req_buffer_valid;
+  logic stall, vfu_stall, vlsu_stall, vsldu_stall, vtl_stall;
+  assign stall       = (vfu_stall | vlsu_stall | vsldu_stall | vtl_stall)
+                       & req_buffer_valid;
   assign vfu_stall   = ~vfu_req_ready_i & (spatz_req.ex_unit == VFU);
   assign vlsu_stall  = ~vlsu_req_ready_i & (spatz_req.ex_unit == LSU);
+`ifdef VENTAGLIO
+  // VSLDU stalls only for true SLD-routed non-VTL ops (the VTL/VSLDU
+  // shared-port arbiter routes use_vtl ops through ventaglio instead).
+  assign vsldu_stall = ~vsldu_req_ready_i &
+                       (spatz_req.ex_unit == SLD && !spatz_req.op_vtl.use_vtl);
+  // VTL stalls for ANY use_vtl op (vventclr = SLD-routed, vfx = VFU-routed)
+  // so vfxmacc/vfxmul wait for vventclr (and other in-flight VTL ops) to
+  // drain ventaglio's spill register before admitting.
+  assign vtl_stall   = ~vtl_req_ready_i & spatz_req.op_vtl.use_vtl;
+`else
   assign vsldu_stall = ~vsldu_req_ready_i & (spatz_req.ex_unit == SLD);
+  assign vtl_stall   = 1'b0;
+`endif
 
   // Running instructions
   logic      [NrParallelInstructions-1:0] running_insn_d, running_insn_q;
   spatz_id_t                              next_insn_id;
   logic                                   running_insn_full;
   `FF(running_insn_q, running_insn_d, '0)
+  logic                                   insn_shortcut_en;
+  spatz_id_t                              insn_shortcut_id;
 
   find_first_one #(
     .WIDTH(NrParallelInstructions)
@@ -494,17 +721,22 @@ module spatz_controller
   );
 
   // Pop the buffer if we do not have a unit stall
-  assign req_buffer_pop = ~stall & req_buffer_valid && !running_insn_full;
+  assign req_buffer_pop = !stall && req_buffer_valid && !running_insn_full;
 
   // Issue new operation to execution units
   always_comb begin : ex_issue
     retire_csr = 1'b0;
 
     // Define new spatz request
-    spatz_req         = buffer_spatz_req;
-    spatz_req.id      = next_insn_id;
-    spatz_req_illegal = decoder_rsp_valid ? decoder_rsp.instr_illegal : 1'b0;
-    spatz_req_valid   = req_buffer_pop && !spatz_req_illegal && !running_insn_full;
+    spatz_req             = buffer_spatz_req;
+    spatz_req.id          = next_insn_id;
+`ifdef VENTAGLIO
+    spatz_req_vtl_illegal = !vtl_en_q && decoder_rsp.spatz_req.op_vtl.use_vtl; // illegal if vtl is disabled but used
+    spatz_req_illegal     = decoder_rsp_valid ? decoder_rsp.instr_illegal || spatz_req_vtl_illegal : 1'b0;
+`else
+    spatz_req_illegal     = decoder_rsp_valid ? decoder_rsp.instr_illegal : 1'b0;
+`endif
+    spatz_req_valid       = req_buffer_pop && !spatz_req_illegal && (!running_insn_full);
 
     // We have a new instruction and there is no stall.
     if (spatz_req_valid) begin
@@ -521,12 +753,40 @@ module spatz_controller
             spatz_req.vl     = 1;
             spatz_req.vstart = '0;
           end
+
+`ifdef VENTAGLIO
+          // Is this a VTL related instruction?
+          if (spatz_req.op_vtl.use_vtl) begin
+            spatz_req.op_vtl.sp_cfg = VTL_cfg_q;
+          end
+`endif
         end
 
         LSU: begin
           // Overwrite vl and vstart in request (preserve vtype with vsew)
           spatz_req.vl     = vl_q;
           spatz_req.vstart = vstart_q;
+          // The decoder's load/store branches set `op_vtl.old_vd = ls_vd`
+          // unconditionally (the field stays defined regardless of
+          // VENTAGLIO), but they comment out the direct `spatz_req.vd = ls_vd`
+          // assignment. So we copy `op_vtl.old_vd -> vd` here in the
+          // controller for ALL builds. When VENTAGLIO=off this is just
+          // "use the decoded ls_vd"; when VENTAGLIO=on the VTL block below
+          // may further remap `vd` based on the sparsity ratio.
+          spatz_req.vd     = spatz_req.op_vtl.old_vd;
+`ifdef VENTAGLIO
+          // If VTL is enabled, we add vtl_cfg to support vlx instruction
+          if (vtl_en_q) begin
+            spatz_req.op_vtl.sp_cfg = VTL_cfg_q;
+          end
+          if (VTLVreg_q[spatz_req.op_vtl.old_vd] && vtl_en_q) begin
+            // VTL extension is enabled, the target vreg is mapped to VTL
+            spatz_req.vl = (VTL_cfg_q.sp_cfg_ratio == SP_RATIO_025) ? vl_q << 2 :
+                           (VTL_cfg_q.sp_cfg_ratio == SP_RATIO_050) ? vl_q << 1 : vl_q;
+            spatz_req.vd = (VTL_cfg_q.sp_cfg_ratio == SP_RATIO_025) ? spatz_req.op_vtl.old_vd << 2 :
+                           (VTL_cfg_q.sp_cfg_ratio == SP_RATIO_050) ? spatz_req.op_vtl.old_vd << 1 : spatz_req.op_vtl.old_vd;
+          end
+`endif
         end
 
         SLD: begin
@@ -559,12 +819,20 @@ module spatz_controller
       running_insn_d[next_insn_id] = 1'b1;
 
     // Finished a instruction
-    if (vfu_rsp_valid_i)
+    if (vfu_rsp_valid_i) begin
       running_insn_d[vfu_rsp_i.id] = 1'b0;
-    if (vlsu_rsp_valid_i)
+    end
+    if (vlsu_rsp_valid_i) begin
       running_insn_d[vlsu_rsp_i.id] = 1'b0;
-    if (vsldu_rsp_valid_i)
+    end
+    if (vsldu_rsp_valid_i) begin
       running_insn_d[vsldu_rsp_i.id] = 1'b0;
+    end
+`ifdef VENTAGLIO
+    if (vtl_rsp_valid_i) begin
+      running_insn_d[vtl_rsp_i.id] = 1'b0;
+    end
+`endif
   end: proc_next_insn_id
 
   // Respond to core about the decoded instruction.

@@ -11,6 +11,7 @@ ${int(getattr(cfg['cores'][0]['isa_parsed'], isa))}\
 package spatz_pkg;
 
   import rvv_pkg::*;
+  import vtl_pkg::*;
   import cf_math_pkg::idx_width;
 
   //////////////////
@@ -93,8 +94,15 @@ package spatz_pkg;
   // Depends on whether we have a FP regfile or not
   localparam int GPRWidth = FPU ? 6 : 5;
 
-  // Number of parallel vector instructions
+  // Number of parallel vector instructions. Ventaglio needs more in-flight
+  // slots (vfx, vlx32, vventclr can stack with regular vector ops) so the
+  // scoreboard is widened to 8 when VENTAGLIO is defined; otherwise stays
+  // at the upstream default of 4.
+`ifdef VENTAGLIO
+  localparam int unsigned NrParallelInstructions = 8;
+`else
   localparam int unsigned NrParallelInstructions = 4;
+`endif
 
   // Largest element width that Spatz supports
   localparam vew_e MAXEW = RVD ? EW_64 : EW_32;
@@ -107,7 +115,11 @@ package spatz_pkg;
   //////////////////////
 
   // Vector length register
+`ifdef VENTAGLIO
+  typedef logic [$clog2(MAXVL+1)+1:0] vlen_t;
+`else
   typedef logic [$clog2(MAXVL+1)-1:0] vlen_t;
+`endif
   // Vector register
   typedef logic [$clog2(NRVREG)-1:0] vreg_t;
 
@@ -150,6 +162,9 @@ package spatz_pkg;
     VSLIDEUP, VSLIDEDOWN,
     // Load instructions
     VLE, VLSE, VLXE,
+    // Ventaglio (VTL) custom load: vlx32.v — indexed load whose index
+    // vreg lives in the VTL bank rather than the regular VRF.
+    VLX,
     // Store instructions
     VSE, VSSE, VSXE,
     // Config instruction
@@ -160,7 +175,9 @@ package spatz_pkg;
     VFADD, VFSUB, VFMUL,
     VFMINMAX, VFSGNJ, VFCMP, VFCLASS,
     VF2I, VF2U, VI2F, VU2F, VF2F,
-    VFMADD, VFMSUB, VFNMSUB, VFNMADD, VSDOTP
+    VFMADD, VFMSUB, VFNMSUB, VFNMADD, VSDOTP,
+    // Ventaglio indexed fused-multiply ops (vfxmacc.vrf / vfxmul.vrf)
+    VFXMADD
   } op_e;
 
   // Execution units
@@ -185,6 +202,12 @@ package spatz_pkg;
     logic set_vstart;
     logic clear_vstart;
     logic reset_vstart;
+    // Ventaglio (VTL) CSR control flags. Decoded from the vcsr immediates
+    // 0x7c3..0x7c6; consumed in the controller's proc_vcsr block.
+    logic vtl_redirect;          // 0x7c3: write VTL vreg bitmap
+    logic set_vtl_index_width;   // 0x7c4: encode IDXW_*
+    logic set_vtl_blk_size;      // 0x7c5: encode BLK_*
+    logic set_vtl_ratio;         // 0x7c6: encode SP_RATIO_*
   } op_cfg_t;
 
   typedef struct packed {
@@ -217,6 +240,40 @@ package spatz_pkg;
     logic insert;
     logic vmv;
   } op_sld_t;
+
+  ////////////////////////////////////
+  // Ventaglio (VTL) operand details //
+  ////////////////////////////////////
+  // The sparse-format config CSRs (set via vcsr 0x7c4..0x7c6). Live in
+  // every spatz_req so the controller and ventaglio see a consistent
+  // snapshot of the format in effect when the op was issued.
+  typedef struct packed {
+    sp_idxw_e  sp_cfg_index_width;
+    // TODO: planned for future sparse-format BLK_SIZE configurability;
+    // currently set from `csrwi 0x7c5` but not consumed by any datapath.
+    sp_blk_e   sp_cfg_blk_size;
+    sp_ratio_e sp_cfg_ratio;
+  } sp_cfg_t;
+
+  // Per-op VTL operand metadata. Set by the decoder for vfxmacc.vrf /
+  // vfxmul.vrf / vlx32.v / vventclr; left at all-zero for any op that
+  // doesn't touch the Ventaglio bank. Consumed by the controller's
+  // scoreboard (vtl_table) and by ventaglio itself.
+  typedef struct packed {
+    logic vm;
+
+    // general flag
+    logic use_vtl;       // any operand go through VTL
+    logic is_load_idx;   // vlx32.v: this load targets the VTL bank's index vreg
+
+    logic gather_vd;     // vfx ops with vd_is_src: pre-gather old vd
+    logic scatter_vd;    // vfx ops: scatter result back through index
+    logic clear_buffer;  // vventclr: zero the entire ventaglio bank
+
+    vreg_t old_vd;       // decoded vd (before VTL ratio remap)
+    vreg_t idx_vreg;     // explicit index vreg for vfxmacc.vrf / vfxmul.vrf
+    sp_cfg_t sp_cfg;
+  } op_vtl_t;
 
   // Result from decoder
   typedef struct packed {
@@ -256,6 +313,7 @@ package spatz_pkg;
     op_arith_t op_arith;
     op_mem_t op_mem;
     op_sld_t op_sld;
+    op_vtl_t op_vtl;
 
     // Spatz config details
     vtype_t vtype;
@@ -500,5 +558,35 @@ package spatz_pkg;
     widen_fp8_to_fp16.exponent = operand.exponent;
     widen_fp8_to_fp16.mantissa = {operand.mantissa, 8'b0};
   endfunction
+
+  //////////////////////////////
+  // Ventaglio Configurations //
+  //////////////////////////////
+
+  // Ventaglio internal wide datapath. By default Ventaglio supports 4x
+  // scatter/gather; the bank is sliced into VENTAGLIO_WFACTOR channels.
+  localparam int unsigned VENTAGLIO_WFACTOR     = `ifdef VENTAGLIO_WFACTOR `VENTAGLIO_WFACTOR `else 4 `endif;
+  // Buffer size in bit. By default 8192 (8K-bit).
+  localparam int unsigned VENTAGLIO_BUFFER_SIZE = `ifdef VENTAGLIO_BUFFER_SIZE `VENTAGLIO_BUFFER_SIZE `else 8192 `endif;
+
+  // Ventaglio wide datapath types (one element per channel slot)
+  typedef logic [VENTAGLIO_WFACTOR*N_FU*ELENB-1:0] ventaglio_wide_be_t;
+  typedef logic [VENTAGLIO_WFACTOR*N_FU*ELEN-1:0]  ventaglio_wide_data_t;
+  // Ventaglio narrow datapath types (one channel slot)
+  typedef logic                   [N_FU*ELENB-1:0] ventaglio_narrow_be_t;
+  typedef logic                   [N_FU*ELEN-1:0]  ventaglio_narrow_data_t;
+
+  // Buffer layout:
+  // | ------------------------------ Buffer ------------------------------- |
+  // | --- Channel --- | --- Channel --- | --- Channel --- | --- Channel --- |
+  // | -Bank- | -Bank- | -Bank- | -Bank- | -Bank- | -Bank- | -Bank- | -Bank- |
+  //
+  // VTGNrChannels represents the max asymmetric bandwidth ratio (1:4 -> 4,
+  // 1:2 -> 2). Default 4 (= 1:4 support).
+  localparam int unsigned VTGNrChannels         = VENTAGLIO_WFACTOR;
+  localparam int unsigned VTGNrBanksPerChannel  = N_FU;
+  localparam int unsigned VTGChannelWidth       = VTGNrBanksPerChannel * ELEN;
+  localparam int unsigned VTGChannelBWidth      = VTGNrBanksPerChannel * ELENB;
+  localparam int unsigned VTGNrWordsPerChannel  = VENTAGLIO_BUFFER_SIZE / (VTGNrChannels * VTGChannelWidth);
 
 endpackage : spatz_pkg

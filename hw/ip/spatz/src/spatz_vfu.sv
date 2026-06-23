@@ -23,6 +23,9 @@ module spatz_vfu
     input  spatz_req_t       spatz_req_i,
     input  logic             spatz_req_valid_i,
     output logic             spatz_req_ready_o,
+`ifdef VENTAGLIO
+    output logic             vfu_vtl_req_ready_o,
+`endif
     // VFU response
     output logic             vfu_rsp_valid_o,
     input  logic             vfu_rsp_ready_i,
@@ -74,6 +77,10 @@ module spatz_vfu
   spatz_req_t spatz_req;
   logic       spatz_req_valid;
   logic       spatz_req_ready;
+
+`ifdef VENTAGLIO
+  assign      vfu_vtl_req_ready_o = spatz_req_ready;
+`endif
 
   spill_register #(
     .T(spatz_req_t)
