@@ -55,6 +55,9 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     // Request-side: per-lane pulse when all of a mem instruction's requests are issued
     // (bit[1]=VLSU, bit[0]=FP-LSU). Responses may still be in flight.
     output logic             [1:0]            spatz_mem_req_sent_o,
+    // Vector mem op accepted (offloaded to the VLSU) -- the vector-only request-sent
+    // fence increment on the snitch side.
+    output logic                              acc_mem_vec_accepted_o,
     // FPU memory interface interface
 `ifdef TARGET_MEMPOOL
     output logic                              fp_lsu_mem_req_valid_o,
@@ -115,14 +118,15 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   // Did we finish a memory request?
   logic fp_lsu_mem_finished;
   logic fp_lsu_mem_str_finished;
+  logic fp_lsu_mem_req_sent;
   logic spatz_mem_finished;
   logic spatz_mem_str_finished;
   logic spatz_mem_req_sent;
   assign spatz_mem_finished_o     = {spatz_mem_finished, fp_lsu_mem_finished};
   assign spatz_mem_str_finished_o = {spatz_mem_str_finished, fp_lsu_mem_str_finished};
-  // bit[1]=VLSU request-sent (one-shot per vector mem op); bit[0]=FP-LSU reuses its
-  // mem_finished (scalar flw/fsw are single-beat, so finished ~= request-sent).
-  assign spatz_mem_req_sent_o     = {spatz_mem_req_sent, fp_lsu_mem_finished};
+  // Request-sent (NOT completion): bit[1]=VLSU all-requests-issued (one-shot per vector
+  // mem op); bit[0]=FP-LSU request-accept handshake. Responses may still be in flight.
+  assign spatz_mem_req_sent_o     = {spatz_mem_req_sent, fp_lsu_mem_req_sent};
 
   if (!FPU) begin: gen_no_fpu_sequencer
     // Spatz configured without an FPU. Just forward the requests to Spatz.
@@ -143,6 +147,8 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
 `endif
     assign fp_lsu_mem_finished     = 1'b0;
     assign fp_lsu_mem_str_finished = 1'b0;
+    assign fp_lsu_mem_req_sent     = 1'b0;
+    assign acc_mem_vec_accepted_o  = 1'b0;
   end: gen_no_fpu_sequencer else begin: gen_fpu_sequencer
     spatz_fpu_sequencer #(
       .dreq_t             (dreq_t              ),
@@ -181,6 +187,8 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
       .fp_lsu_mem_rsp_i         ( fp_lsu_mem_rsp_i       ),
       .fp_lsu_mem_finished_o    ( fp_lsu_mem_finished    ),
       .fp_lsu_mem_str_finished_o( fp_lsu_mem_str_finished),
+      .fp_lsu_mem_req_sent_o    ( fp_lsu_mem_req_sent    ),
+      .acc_mem_vec_accepted_o   ( acc_mem_vec_accepted_o ),
       // Spatz VLSU side channel
       .spatz_mem_finished_i     ( spatz_mem_finished     ),
       .spatz_mem_str_finished_i ( spatz_mem_str_finished )

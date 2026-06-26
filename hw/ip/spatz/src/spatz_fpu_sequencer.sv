@@ -55,6 +55,8 @@ module spatz_fpu_sequencer
     input  drsp_t            fp_lsu_mem_rsp_i,
     output logic             fp_lsu_mem_finished_o,
     output logic             fp_lsu_mem_str_finished_o,
+    output logic             fp_lsu_mem_req_sent_o,      // true FP-LSU request-sent (load+store)
+    output logic             acc_mem_vec_accepted_o,     // vector mem op accepted (fence increment)
     // Spatz VLSU side channel
     input  logic             spatz_mem_finished_i,
     input  logic             spatz_mem_str_finished_i
@@ -595,6 +597,13 @@ module spatz_fpu_sequencer
     riscv_instr::VSSE8_V, riscv_instr::VSSE16_V, riscv_instr::VSSE32_V, riscv_instr::VSSE64_V,
     riscv_instr::VSOXEI8_V, riscv_instr::VSOXEI16_V, riscv_instr::VSOXEI32_V, riscv_instr::VSOXEI64_V,
     riscv_instr::VSUXEI8_V, riscv_instr::VSUXEI16_V, riscv_instr::VSUXEI32_V, riscv_instr::VSUXEI64_V};
+
+  // True FP-LSU request-sent: the request-accept handshake (load OR store), distinct from
+  // fp_lsu_mem_finished_o (which for a load is the RESPONSE). Single-beat for scalar flw/fsw.
+  assign fp_lsu_mem_req_sent_o  = fp_lsu_qvalid && fp_lsu_qready;
+  // Vector mem op accepted (offloaded to Spatz) -- same condition as the acc_mem_cnt
+  // increment below; the snitch uses this as the VECTOR-ONLY request-sent fence increment.
+  assign acc_mem_vec_accepted_o = (is_vector_load || is_vector_store) && issue_ready_i && issue_valid_o;
 
   // Do we need to delay is load/store because of the VLSU?
   assign vlsu_stall = (is_store && acc_mem_cnt_q != '0) || (is_load && acc_mem_str_cnt_q != '0) || acc_mem_cnt_q == '1;

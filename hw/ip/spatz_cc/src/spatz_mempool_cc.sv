@@ -108,6 +108,7 @@ module spatz_mempool_cc
   logic [1:0] spatz_mem_finished;
   logic [1:0] spatz_mem_str_finished;
   logic [1:0] spatz_mem_req_sent;      // request-side: all of a mem op's requests issued
+  logic       acc_mem_vec_accepted;    // vector mem op accepted -> vector-only fence increment
 
   // Spatz floating point signals
   fpnew_pkg::roundmode_e fpu_rnd_mode;
@@ -179,6 +180,7 @@ module spatz_mempool_cc
     .acc_mem_finished_i     ( spatz_mem_finished     ),
     .acc_mem_str_finished_i ( spatz_mem_str_finished ),
     .acc_mem_req_sent_i     ( spatz_mem_req_sent     ),
+    .acc_mem_vec_accepted_i ( acc_mem_vec_accepted   ),
     /// TCDM
     .data_qaddr_o           ( snitch_req.addr        ),
     .data_qwrite_o          ( snitch_req.write       ),
@@ -257,6 +259,7 @@ module spatz_mempool_cc
     .spatz_mem_finished_o    ( spatz_mem_finished    ),
     .spatz_mem_str_finished_o( spatz_mem_str_finished),
     .spatz_mem_req_sent_o    ( spatz_mem_req_sent    ),
+    .acc_mem_vec_accepted_o  ( acc_mem_vec_accepted  ),
     .fp_lsu_mem_req_o        ( fp_lsu_mem_req        ),
     .fp_lsu_mem_req_valid_o  ( fp_lsu_mem_req_valid  ),
     .fp_lsu_mem_req_ready_i  ( fp_lsu_mem_req_ready  ),

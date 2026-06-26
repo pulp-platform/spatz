@@ -285,6 +285,12 @@ module spatz_vlsu
   vlen_t [NrMemPorts-1:0] mem_counter_d;
   vlen_t [NrMemPorts-1:0] mem_counter_q;
   logic  [NrMemPorts-1:0] mem_port_finished_q;
+  // Per-port working values for gen_mem_counter_proc, hoisted out of the generate loop
+  // for waveform visibility (RTL convention: no signal declarations inside generate blocks).
+  vlen_t [NrMemPorts-1:0] mem_max_elements;
+  vlen_t [NrMemPorts-1:0] mem_burst_tail_base;
+  vlen_t [NrMemPorts-1:0] mem_remaining_bytes;
+  vlen_t [NrMemPorts-1:0] mem_remaining_words;
 
   vlen_t [NrMemPorts-1:0] mem_idx_counter_delta;
   vlen_t [NrMemPorts-1:0] mem_idx_counter_d;
@@ -610,11 +616,30 @@ module spatz_vlsu
   // for the case with more than one memory port)
   assign spatz_mem_finished_o     = mem_finish_ready;
   assign spatz_mem_str_finished_o = mem_finish_ready && !commit_insn_q.is_load;
-  // Request-side one-shot: rising edge of the per-instruction "all request beats
-  // issued" bitmap (mem_insn_finished is driven from the request handshakes only --
-  // not responses), so this pulses once per vector mem instruction when its requests
-  // are all out, responses still pending. Feeds the snitch request-sent fence.
-  assign spatz_mem_req_sent_o     = |(mem_insn_finished_d & ~mem_insn_finished_q);
+  // Request-sent one-shot for the snitch request-sent fence (acc_mem_req_sent_i[1]).
+  // Pulses when the current vector mem op has issued ALL its request beats: every active
+  // port has reached mem_counter_max (equivalently remaining_words==0). This is the UNGATED
+  // issue-complete point -- unlike mem_insn_finished (whose mem_spatz_req_valid qualifier +
+  // id-indexed bitmap, cleared only at retire, coupled its rising edge to response-gated
+  // completion) it carries no response term, so it fires at request-issue, ahead of
+  // spatz_mem_finished_o. Fires for both vector loads and stores (balances the snitch's
+  // per-vector-mem-op acc_mem_req_cnt, which increments on load OR store offload).
+  logic [NrMemPorts-1:0] mem_port_req_issued;
+  logic                  mem_req_all_issued;
+  logic                  mem_req_all_issued_q;
+  for (genvar port = 0; port < NrMemPorts; port++) begin : gen_mem_port_req_issued
+    // Guard with !mem_counter_load: mem_spatz_req_valid rises one cycle BEFORE the registered
+    // delta_counter loads mem_counter_q, so on a new instruction's first cycle the counter still
+    // holds the PREVIOUS instruction's value -- which equals the new mem_counter_max whenever
+    // consecutive ops share vl (e.g. matmul vle32). Without this guard that stale match yields a
+    // false "all request beats issued" pulse before any request has been sent.
+    assign mem_port_req_issued[port] =
+        mem_port_active[port] ?
+          (!mem_counter_load[port] && (mem_counter_q[port] == mem_counter_max[port])) : 1'b1;
+  end
+  assign mem_req_all_issued   = mem_spatz_req_valid && (&mem_port_req_issued);
+  `FF(mem_req_all_issued_q, mem_req_all_issued, 1'b0)
+  assign spatz_mem_req_sent_o = mem_req_all_issued && !mem_req_all_issued_q;
 
   // Do we start at the very fist element
   logic mem_is_vstart_zero;
@@ -819,50 +844,46 @@ module spatz_vlsu
   assign vd_elem_id = (commit_counter_q[0] > vreg_start_0) ? commit_counter_q[0] >> $clog2(ELENB) : commit_counter_q[N_FU-1] >> $clog2(ELENB);
 
   for (genvar port = 0; port < NrMemPorts; port++) begin: gen_mem_counter_proc
-    // The total amount of elements we have to work through
-    vlen_t max_elements;
-    vlen_t burst_tail_base;
-    int unsigned remaining_bytes;
-    int unsigned remaining_words;
-
+    // max_elements / burst_tail_base / remaining_bytes / remaining_words are hoisted to
+    // module scope (mem_*) for waveform visibility -- declared near the mem counters above.
     always_comb begin
-      burst_tail_base = burst_full_bytes_req >> $clog2(NrMemPorts);
+      mem_burst_tail_base[port] = burst_full_bytes_req >> $clog2(NrMemPorts);
       if (mem_use_port0_burst && (port != 0)) begin
-        max_elements             = '0;
-        remaining_bytes          = 0;
-        remaining_words          = 0;
+        mem_max_elements[port]             = '0;
+        mem_remaining_bytes[port]          = 0;
+        mem_remaining_words[port]          = 0;
         burst_len_calc[port]     = '0;
         burst_use[port]          = 1'b0;
         mem_operation_valid[port]= 1'b0;
         mem_operation_last[port] = 1'b0;
         mem_counter_load[port]   = commit_insn_push || switch_to_tail_phase;
-        mem_counter_d[port]      = switch_to_tail_phase ? burst_tail_base : '0;
+        mem_counter_d[port]      = switch_to_tail_phase ? mem_burst_tail_base[port] : '0;
         mem_counter_delta[port]  = '0;
         mem_counter_en[port]     = 1'b0;
         mem_counter_max[port]    = '0;
-        mem_idx_counter_d[port]  = switch_to_tail_phase ? burst_tail_base : '0;
+        mem_idx_counter_d[port]  = switch_to_tail_phase ? mem_burst_tail_base[port] : '0;
         mem_idx_counter_delta[port] = '0;
       end else begin
         // Default value
         if (mem_use_port0_burst)
-          max_elements = mem_spatz_req.vl;
+          mem_max_elements[port] = mem_spatz_req.vl;
         else
-          max_elements = (mem_spatz_req.vl >> $clog2(NrMemPorts*MemDataWidthB)) << $clog2(MemDataWidthB);
+          mem_max_elements[port] = (mem_spatz_req.vl >> $clog2(NrMemPorts*MemDataWidthB)) << $clog2(MemDataWidthB);
 
         if (!mem_use_port0_burst) begin
           if (NrMemPorts == 1)
-            max_elements = mem_spatz_req.vl;
+            mem_max_elements[port] = mem_spatz_req.vl;
           else
             if (mem_spatz_req.vl[$clog2(MemDataWidthB) +: $clog2(NrMemPorts)] > port)
-              max_elements += MemDataWidthB;
+              mem_max_elements[port] += MemDataWidthB;
             else if (mem_spatz_req.vl[$clog2(MemDataWidthB) +: $clog2(NrMemPorts)] == port)
-              max_elements += mem_spatz_req.vl[$clog2(MemDataWidthB)-1:0];
+              mem_max_elements[port] += mem_spatz_req.vl[$clog2(MemDataWidthB)-1:0];
         end
 
-        remaining_bytes = max_elements - mem_counter_q[port];
-        remaining_words = remaining_bytes >> $clog2(MemDataWidthB);
+        mem_remaining_bytes[port] = mem_max_elements[port] - mem_counter_q[port];
+        mem_remaining_words[port] = mem_remaining_bytes[port] >> $clog2(MemDataWidthB);
         // Only form full-size bursts. Smaller tails fall back to word requests.
-        if (remaining_words >= MaxBurstWords)
+        if (mem_remaining_words[port] >= MaxBurstWords)
           burst_len_calc[port] = MaxBurstWords[BurstLenWidth-1:0];
         else
           burst_len_calc[port] = BurstLenWidth'(1);
@@ -894,16 +915,16 @@ module spatz_vlsu
                            (!rob_full[port] &&
                             !offset_queue_full[port]));
 
-        mem_operation_valid[port] = mem_spatz_req_valid && (max_elements != mem_counter_q[port]);
+        mem_operation_valid[port] = mem_spatz_req_valid && (mem_max_elements[port] != mem_counter_q[port]);
         mem_operation_last[port]  = mem_operation_valid[port] &&
-                                    ((max_elements - mem_counter_q[port]) <=
+                                    ((mem_max_elements[port] - mem_counter_q[port]) <=
                                     (mem_is_single_element_operation ? mem_single_element_size :
                                      (burst_use[port] ? (burst_len_issue[port] * MemDataWidthB) : MemDataWidthB)));
         // Load request-side counters when a new instruction is enqueued; this
         // avoids carrying stale per-port offsets across instruction boundaries.
         mem_counter_load[port]    = commit_insn_push || switch_to_tail_phase;
         if (switch_to_tail_phase) begin
-          mem_counter_d[port] = burst_tail_base;
+          mem_counter_d[port] = mem_burst_tail_base[port];
         end else begin
           if (mem_use_port0_burst)
             mem_counter_d[port] = mem_spatz_req.vstart;
@@ -924,14 +945,14 @@ module spatz_vlsu
           mem_counter_delta[port] = mem_single_element_size;
         end else if (burst_use[port]) begin
           mem_counter_delta[port] =
-              mem_operation_last[port] ? (max_elements - mem_counter_q[port]) :
+              mem_operation_last[port] ? (mem_max_elements[port] - mem_counter_q[port]) :
               (burst_len_issue[port] * MemDataWidthB);
         end else begin
           mem_counter_delta[port] =
-              mem_operation_last[port] ? (max_elements - mem_counter_q[port]) : MemDataWidthB;
+              mem_operation_last[port] ? (mem_max_elements[port] - mem_counter_q[port]) : MemDataWidthB;
         end
         mem_counter_en[port]    = spatz_mem_req_ready[port] && spatz_mem_req_valid[port];
-        mem_counter_max[port]   = max_elements;
+        mem_counter_max[port]   = mem_max_elements[port];
 
         // Index counter
         mem_idx_counter_d[port]     = mem_counter_d[port];
