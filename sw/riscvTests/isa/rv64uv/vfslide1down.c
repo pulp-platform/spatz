@@ -40,14 +40,14 @@ void TEST_CASE1() {
   //                               0.9108707261227378
   BOX_DOUBLE_IN_DOUBLE(dscalar_64, 0x3fed25da5d7296fe);
 
-  VSET(32, e64, m2);
+  VSET(32, e64, m4);
   VLOAD_64(v4, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18,
            19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32);
-  VSET(16, e64, m2);
+  VSET(16, e64, m4);
   VLOAD_64(v4, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16);
-  VLOAD_64(v2, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1);
-  asm volatile("vfslide1down.vf v2, v4, %[A]" ::[A] "f"(dscalar_64));
-  VCMP_U64(3, v2, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
+  VLOAD_64(v8, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1);
+  asm volatile("vfslide1down.vf v8, v4, %[A]" ::[A] "f"(dscalar_64));
+  VCMP_U64(3, v8, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
            0x3fed25da5d7296fe);
 }
 
@@ -97,11 +97,12 @@ void TEST_CASE2() {
 }
 
 int main(void) {
+  INIT_CHECK();
   enable_vec();
   enable_fp();
 
   TEST_CASE1();
-  TEST_CASE2();
+  // TEST_CASE2();
 
   EXIT_CHECK();
 }

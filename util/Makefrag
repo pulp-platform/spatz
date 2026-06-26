@@ -25,7 +25,7 @@ BENDER ?= ${BENDER_INSTALL_DIR}/bender
 DASM   ?= ${SPIKE_INSTALL_DIR}/bin/spike-dasm
 VLT    ?= ${VERILATOR_INSTALL_DIR}/bin/verilator_bin
 CMAKE  ?= cmake
-PYTHON ?= python3
+PYTHON ?= python3.6
 CC     ?= gcc-11.2.0
 CXX    ?= g++-11.2.0
 
