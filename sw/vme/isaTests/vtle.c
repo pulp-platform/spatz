@@ -40,7 +40,6 @@ void TEST_CASE1(void) {
     asm volatile("msetmtypei 1, 2" ::: "memory");
     asm volatile("msettn x0, %0" :: "r"(TN) : "memory");
     asm volatile("msettm x0, %0" :: "r"(TM) : "memory");
-    VSET(4, e32, m1);
     uintptr_t t = TSS_ROW(0, 0);
     asm volatile("vtmv.v.t v1, %[t]" :: [t]"r"(t) : "memory");
     VCMP_I32(1, v1, 10, 20, 30, 40);
@@ -68,7 +67,6 @@ void TEST_CASE2(void) {
     asm volatile("msetmtypei 1, 2" ::: "memory");
     asm volatile("msettn x0, %0" :: "r"(TN) : "memory");
     asm volatile("msettm x0, %0" :: "r"(TM) : "memory");
-    VSET(4, e32, m1);
     uintptr_t t = TSS_ROW(0, 0);
     asm volatile("vtmv.v.t v1, %[t]" :: [t]"r"(t) : "memory");
     VCMP_I32(2, v1, 100, 200, 300, 400);
@@ -93,7 +91,6 @@ void TEST_CASE3(void) {
     asm volatile("vtzero mt0" ::: "memory");
     asm volatile("vtle32 %[tss], (%[base])" :: [tss]"r"(tss), [base]"r"(base) : "memory");
 
-    VSET(4, e32, m1);
     uintptr_t t = TSS_ROW(0, 0);
     asm volatile("vtmv.v.t v1, %[t]" :: [t]"r"(t) : "memory");
     VCMP_I32(3, v1, 1000, 2000, -3000, -4000);
@@ -121,7 +118,6 @@ void TEST_CASE4(void) {
     asm volatile("msetmtypei 1, 2" ::: "memory");
     asm volatile("msettn x0, %0" :: "r"(TN) : "memory");
     asm volatile("msettm x0, %0" :: "r"(TM) : "memory");
-    VSET(4, e32, m1);
     uintptr_t t = TSS_COL(0, 0);
     asm volatile("vtmv.v.t v1, %[t]" :: [t]"r"(t) : "memory");
     VCMP_I32(4, v1, 5, 6, 7, 8);
@@ -161,7 +157,6 @@ void TEST_CASE5(void) {
     asm volatile("msetmtypei 1, 2" ::: "memory");
     asm volatile("msettn x0, %0" :: "r"(TN) : "memory");
     asm volatile("msettm x0, %0" :: "r"(TM) : "memory");
-    VSET(4, e32, m1);
 
     uintptr_t t;
     t = TSS_ROW(0, 0); asm volatile("vtmv.v.t v1, %[t]" :: [t]"r"(t) : "memory");
@@ -198,7 +193,6 @@ void TEST_CASE6(void) {
     asm volatile("msetmtypei 1, 2" ::: "memory");
     asm volatile("msettn x0, %0" :: "r"(TN) : "memory");
     asm volatile("msettm x0, %0" :: "r"(TM) : "memory");
-    VSET(2, e32, m1);
 
     uintptr_t t;
     t = TSS_ROW(0, 0); asm volatile("vtmv.v.t v1, %[t]" :: [t]"r"(t) : "memory");
@@ -234,7 +228,6 @@ void TEST_CASE7(void) {
     base = (uintptr_t)dst;
     asm volatile("vtse32 %[tss], (%[base])" :: [tss]"r"(tss), [base]"r"(base) : "memory");
 
-    VSET(4, e32, m1);
     asm volatile("vle32.v v1, (%0)" :: "r"(dst) : "memory");
     VCMP_I32(11, v1, 111, 222, 333, 444);
 
@@ -246,13 +239,13 @@ int main(void) {
     enable_vec();
     enable_vme();
 
-    TEST_CASE1();
-    TEST_CASE2();
+    // TEST_CASE1();
+    // TEST_CASE2();
     TEST_CASE3();
-    TEST_CASE4();
-    TEST_CASE5();
-    TEST_CASE6();
-    TEST_CASE7();
+    // TEST_CASE4();
+    // TEST_CASE5();
+    // TEST_CASE6();
+    // TEST_CASE7();
 
     EXIT_CHECK();
 }

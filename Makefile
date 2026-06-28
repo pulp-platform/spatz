@@ -15,7 +15,6 @@ BENDER_VERSION = 0.29.1
 # Do not include minifloat opcodes, since they conflict with the RVV opcodes!
 OPCODES := "opcodes-rvv opcodes-vme opcodes-rv32b_CUSTOM opcodes-ipu_CUSTOM opcodes-frep_CUSTOM opcodes-dma_CUSTOM opcodes-ssr_CUSTOM opcodes-smallfloat opcodes-vfx_CUSTOM"
 
-
 # Default target
 all: bender toolchain update_opcodes
 

@@ -444,7 +444,7 @@ int main(void) {
     // TEST_CASE5();   // vtfmm.alt  SEW=16 BF16→fp32, known product
     // TEST_CASE6();   // vtfmm.alt  SEW=16 BF16→fp32, accumulation ×2
     TEST_CASE7();   // vtfmm.tvv  SEW=32 fp32→fp32, known product
-    // TEST_CASE8();   // vtfmm.tvv  SEW=32 fp32→fp32, accumulation ×2
+    TEST_CASE8();   // vtfmm.tvv  SEW=32 fp32→fp32, accumulation ×2
     // TEST_CASE9();   // vtfmm.tvv  SEW=8  E4M3*E4M3  altfmt=0
     // TEST_CASE10();  // vtfmm.tvv  SEW=8  E4M3*E5M2  altfmt=1
     // TEST_CASE11();  // vtfmm.alt  SEW=8  E5M2*E4M3  altfmt=0

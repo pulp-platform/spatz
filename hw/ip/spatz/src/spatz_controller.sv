@@ -783,6 +783,21 @@ module spatz_controller
       for (int unsigned insn = 0; insn < NrParallelInstructions; insn++)
         scoreboard_d[insn].deps[vfu_rsp_i.id] = 1'b0;
     end
+    if (ope_rsp_valid_i) begin
+      for (int unsigned vreg = 0; vreg < NRVREG; vreg++) begin
+        if (read_table_q[vreg].id == ope_rsp_i.id && read_table_q[vreg].valid)
+          read_table_d[vreg] = '0;
+        if (write_table_q[vreg].id == ope_rsp_i.id && write_table_q[vreg].valid)
+          write_table_d[vreg] = '0;
+      end
+
+      scoreboard_d[ope_rsp_i.id] = '0;
+      narrow_wide_d[ope_rsp_i.id] = 1'b0;
+      wrote_result_narrowing_d[ope_rsp_i.id] = 1'b0;
+
+      for (int unsigned insn = 0; insn < NrParallelInstructions; insn++)
+        scoreboard_d[insn].deps[ope_rsp_i.id] = 1'b0;
+    end
     if (vlsu_rsp_valid_i) begin
       for (int unsigned vreg = 0; vreg < NRVREG; vreg++) begin
         if (read_table_q[vreg].id == vlsu_rsp_i.id && read_table_q[vreg].valid)
@@ -1133,6 +1148,9 @@ module spatz_controller
     if (vsldu_rsp_valid_i) begin
       running_insn_d[vsldu_rsp_i.id] = 1'b0;
     end
+    if (ope_rsp_valid_i) begin
+      running_insn_d[ope_rsp_i.id] = 1'b0;
+    end
 `ifdef VENTAGLIO
     if (vtl_rsp_valid_i) begin
       running_insn_d[vtl_rsp_i.id] = 1'b0;
@@ -1158,8 +1176,7 @@ module spatz_controller
         end // CON
         VFU: begin
           // vtype is illegal -> illegal instruction (VME tile ops do not use vtype)
-          if (vtype_q.vill && !(decoder_rsp.spatz_req.op inside
-              {VTFMM, VTFMM_ALT, VTMMU, VTMMS, VTMV_VT, VTMV_TV, VTZERO, VTDISCARD})) begin
+          if (vtype_q.vill) begin
             issue_rsp_o.accept = 1'b0;
           end
         end // VFU
@@ -1292,4 +1309,9 @@ module spatz_controller
   assign spatz_req_o       = spatz_req;
   assign spatz_req_valid_o = spatz_req_valid;
 
+// always_ff @(posedge clk_i) begin
+//   if (spatz_req_valid) begin
+//     $display("[CTRL ISSUE ALL] t=%0t op=%0d ex=%0d id=%0d vd=%0d vs1=%0d vs2=%0d use_vs1=%0b use_vs2=%0b use_vd=%0b vd_is_src=%0b running=%b", $time, spatz_req.op, spatz_req.ex_unit, spatz_req.id, spatz_req.vd, spatz_req.vs1, spatz_req.vs2, spatz_req.use_vs1, spatz_req.use_vs2, spatz_req.use_vd, spatz_req.vd_is_src, running_insn_q);
+//   end
+// end
 endmodule : spatz_controller

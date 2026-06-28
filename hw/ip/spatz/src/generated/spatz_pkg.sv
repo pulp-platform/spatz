@@ -65,7 +65,7 @@ package spatz_pkg;
   localparam int unsigned NrWordsPerBank   = NrVRFWords / NrVRFBanks;
 
   // Number of VLSU interfaces
-  localparam int unsigned NumVLSUInterfaces = 1;
+  localparam int unsigned NumVLSUInterfaces = 2;
 
   // Width of scalar register file adresses
   // Depends on whether we have a FP regfile or not
@@ -411,30 +411,34 @@ package spatz_pkg;
   // VRF/SB Ports //
   //////////////////
 
-  typedef enum logic [idx_width(4 + 2 * 1):0] {
+  typedef enum logic [idx_width(4 + 2 * 2):0] {
     VFU_VS2_RD,
     VFU_VS1_RD,
     VFU_VD_RD,
-    VLSU_VS2_RD,
-    VLSU_VD_RD,
+    VLSU_VD_RD0,
+    VLSU_VS2_RD0,
+    VLSU_VD_RD1,
+    VLSU_VS2_RD1,
     VSLDU_VS2_RD
   } vreg_port_rd_e;
 
-  typedef enum logic [idx_width(2 + 1):0] {
+  typedef enum logic [idx_width(2 + 2):0] {
     VFU_VD_WD,
-    VLSU_VD_WD,
+    VLSU_VD_WD[2],
     VSLDU_VD_WD
   } vreg_port_wd_e;
 
-  typedef enum logic [idx_width(6 + 3 * 1):0] {
+  typedef enum logic [idx_width(6 + 3 * 2):0] {
     SB_VFU_VS2_RD,
     SB_VFU_VS1_RD,
     SB_VFU_VD_RD,
-    SB_VLSU_VS2_RD,
-    SB_VLSU_VD_RD,
+    SB_VLSU_VD_RD0,
+    SB_VLSU_VS2_RD0,
+    SB_VLSU_VD_RD1,
+    SB_VLSU_VS2_RD1,
     SB_VSLDU_VS2_RD,
     SB_VFU_VD_WD,
-    SB_VLSU_VD_WD,
+    SB_VLSU_VD_WD[2],
     SB_VSLDU_VD_WD
   } sb_port_e;
 

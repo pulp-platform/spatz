@@ -58,7 +58,7 @@ package spatz_cluster_pkg;
 
   localparam int unsigned TCDMStartAddr = 32'h100000;
   localparam int unsigned TCDMSize      = 32'h20000;
-  localparam logic AddrMisalign =  1'b0; // 0-aligned, 1-misalign
+  localparam logic AddrMisalign =  1'b1; // 0-aligned, 1-misalign
   localparam int unsigned PeriStartAddr = TCDMStartAddr + TCDMSize;
 
   localparam int unsigned BootAddr      = 32'h1000;
@@ -243,7 +243,7 @@ module spatz_cluster_wrapper
   localparam int unsigned NumSpatzOutstandingLoads [NumCores] = '{4, 4};
   localparam int unsigned NumSpatzFPUs             [NumCores] = '{default: 4};
   localparam int unsigned NumSpatzIPUs             [NumCores] = '{default: 1};
-  localparam int unsigned NumSpatzTCDMPorts        [NumCores] = '{default: 4};
+  localparam int unsigned NumSpatzTCDMPorts        [NumCores] = '{default: 8};
 
   typedef logic [IwcAxiIdOutWidth-1:0] axi_id_out_iwc_t;
 

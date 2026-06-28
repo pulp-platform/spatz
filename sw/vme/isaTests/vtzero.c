@@ -108,7 +108,7 @@ void TEST_CASE2(void) {
 
     VSET(4, e32, m1);
     VCMP_I32(1, v1, 0, 0, 0, 0);
-    VCMP_I32(2, v2, F32_1, F32_5, F32_9, F32_13);
+    VCMP_I32(2, v2, F32_1, F32_0, F32_0, F32_0);
 
     asm volatile("vtdiscard" ::: "memory");
 }

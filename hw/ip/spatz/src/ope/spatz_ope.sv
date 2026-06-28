@@ -85,11 +85,13 @@ module spatz_ope
   //  OPE tile-state FSM       //
   ///////////////////////////////
 
-  typedef enum logic [2:0] {
+  typedef enum logic [3:0] {
     OPE_Idle,
+    OPE_WaitVrf,
     OPE_Execute,
     OPE_Drain,
     OPE_ReadTile,
+    OPE_WriteVector,
     OPE_LoadTile,
     OPE_Zero,
     OPE_Resp
@@ -188,7 +190,7 @@ module spatz_ope
       vrf_raddr_o[0] = vrf_addr_t'(spatz_req.vs2) << $clog2(NrWordsPerVector);
       vrf_raddr_o[1] = vrf_addr_t'(spatz_req.vs1) << $clog2(NrWordsPerVector);
 
-      if (spatz_req.op == VTMV_VT && ope_state_q == OPE_ReadTile)
+      if (spatz_req.op == VTMV_VT && ope_state_q == OPE_WriteVector)
         vrf_waddr_o = vrf_addr_t'(spatz_req.vd) << $clog2(NrWordsPerVector);
     end
   end: vreg_addr_proc
@@ -207,19 +209,19 @@ module spatz_ope
       unique case (spatz_req.op)
 
         VTFMM, VTFMM_ALT, VTMMU, VTMMS: begin
-          if (ope_state_q == OPE_Idle) begin
+          if ((ope_state_q == OPE_Idle) || (ope_state_q == OPE_WaitVrf)) begin
             vrf_re_o[0] = spatz_req.use_vs2;
             vrf_re_o[1] = spatz_req.use_vs1;
           end
         end
 
         VTMV_TV: begin
-          if (ope_state_q == OPE_Idle)
+          if ((ope_state_q == OPE_Idle) || (ope_state_q == OPE_WaitVrf))
             vrf_re_o[0] = spatz_req.use_vs2;
         end
 
         VTMV_VT: begin
-          if (ope_state_q == OPE_ReadTile) begin
+          if (ope_state_q == OPE_WriteVector) begin
             vrf_we_o  = spatz_req.use_vd;
             vrf_wbe_o = '1;
             for (int unsigned col = 0; col < TE; col++)
@@ -231,6 +233,35 @@ module spatz_ope
       endcase
     end
   end: operand_req_proc
+
+  logic ope_needs_vs2;
+  logic ope_needs_vs1;
+  logic ope_vrf_ready;
+
+  always_comb begin
+    ope_needs_vs2 = 1'b0;
+    ope_needs_vs1 = 1'b0;
+
+    if (spatz_req_valid) begin
+      unique case (spatz_req.op)
+        VTMV_TV: begin
+          ope_needs_vs2 = spatz_req.use_vs2;
+        end
+
+        VTFMM, VTFMM_ALT, VTMMU, VTMMS: begin
+          ope_needs_vs2 = spatz_req.use_vs2;
+          ope_needs_vs1 = spatz_req.use_vs1;
+        end
+
+        default: begin
+          ope_needs_vs2 = 1'b0;
+          ope_needs_vs1 = 1'b0;
+        end
+      endcase
+    end
+
+    ope_vrf_ready = (!ope_needs_vs2 || vrf_rvalid_i[0]) && (!ope_needs_vs1 || vrf_rvalid_i[1]);
+  end
 
   assign vrf_id_o[0] = spatz_req.id; // vs2 read
   assign vrf_id_o[1] = spatz_req.id; // vs1 read
@@ -289,11 +320,13 @@ module spatz_ope
           unique case (spatz_req.op)
 
             VTFMM, VTFMM_ALT, VTMMU, VTMMS: begin
-              if (vrf_rvalid_i[0] && vrf_rvalid_i[1]) begin
+              if (ope_vrf_ready) begin
                 x_operand_d = vrf_rdata_i[0][TE*TEW-1:0];
                 w_operand_d = vrf_rdata_i[1][TE*TEW-1:0];
                 ope_ctrl.tile_write_to_engine= spatz_req.vd[3:2];
                 ope_state_d = OPE_Execute;
+              end else begin
+                ope_state_d = OPE_WaitVrf;
               end
             end
 
@@ -307,9 +340,11 @@ module spatz_ope
             VTMV_TV: begin
               if (!tss_valid) begin
                 ope_state_d = OPE_Resp;
-              end else if (vrf_rvalid_i[0]) begin
+              end else if (ope_vrf_ready) begin
                 y_bias_d    = vrf_rdata_i[0];
                 ope_state_d = OPE_LoadTile;
+              end else begin
+                ope_state_d = OPE_WaitVrf;
               end
             end
 
@@ -331,29 +366,68 @@ module spatz_ope
         end
       end
 
+      OPE_WaitVrf: begin
+        unique case (spatz_req.op)
+
+          VTFMM, VTFMM_ALT, VTMMU, VTMMS: begin
+            if (ope_vrf_ready) begin
+              x_operand_d = vrf_rdata_i[0][TE*TEW-1:0];
+              w_operand_d = vrf_rdata_i[1][TE*TEW-1:0];
+              ope_ctrl.tile_write_to_engine = spatz_req.vd[3:2];
+              ope_state_d = OPE_Execute;
+            end
+          end
+
+          VTMV_TV: begin
+            if (!tss_valid) begin
+              ope_state_d = OPE_Resp;
+            end else if (ope_vrf_ready) begin
+              y_bias_d    = vrf_rdata_i[0];
+              ope_state_d = OPE_LoadTile;
+            end
+          end
+
+          default: begin
+            ope_state_d = OPE_Resp;
+          end
+        endcase
+      end
+
       OPE_Execute: begin
-        ope_ctrl.tile_enable         = 1'b1;
-        ope_ctrl.acc_input_selector = 1'b1;
+        ope_ctrl.tile_enable          = 1'b1;
+        ope_ctrl.acc_input_selector   = 1'b1;
+        ope_ctrl.z_read_tile_index    = spatz_req.vd[3:2];
+        ope_ctrl.z_read_row_index     = '0;
+        ope_ctrl.tile_write_to_engine = spatz_req.vd[3:2];
 
         ope_state_d     = OPE_Drain;
         ope_drain_cnt_d = NumPipeRegs[$bits(ope_drain_cnt_d)-1:0];
       end
 
       OPE_Drain: begin
-        ope_ctrl.tile_enable        = 1'b1;
-        ope_ctrl.acc_input_selector = 1'b1;
+        ope_ctrl.tile_enable          = 1'b1;
+        ope_ctrl.acc_input_selector   = 1'b1;
+        ope_ctrl.z_read_tile_index    = spatz_req.vd[3:2];
+        ope_ctrl.z_read_row_index     = '0;
+        ope_ctrl.tile_write_to_engine = spatz_req.vd[3:2];
+
         if (ope_drain_cnt_q == '0) begin
-          ope_state_d      = OPE_Resp;
+          ope_state_d = OPE_Resp;
         end else begin
           ope_drain_cnt_d = ope_drain_cnt_q - 1'b1;
         end
+end
+      OPE_ReadTile: begin
+        ope_ctrl.z_read_tile_index = tss_tile_index;
+        ope_ctrl.z_read_row_index  = tss_row_index;
+        ope_state_d = OPE_WriteVector;
       end
 
-      OPE_ReadTile: begin
-        ope_ctrl.z_read_tile_index  = tss_tile_index;
-        ope_ctrl.z_read_row_index   = tss_row_index;
+      OPE_WriteVector: begin
+        ope_ctrl.z_read_tile_index = tss_tile_index;
+        ope_ctrl.z_read_row_index  = tss_row_index;
         if (vrf_wvalid_i) begin
-          ope_state_d      = OPE_Resp;
+          ope_state_d = OPE_Resp;
         end
       end
 
@@ -395,8 +469,8 @@ module spatz_ope
   end: ope_fsm_proc
 
   // Tile interface outputs: ready when OPE is idle
-  assign tile_wready_o = (ope_state_q == OPE_Idle);
-  assign tile_rready_o = (ope_state_q == OPE_Idle);
+  assign tile_wready_o = (ope_state_q == OPE_Idle) && !spatz_req_valid;
+  assign tile_rready_o = (ope_state_q == OPE_Idle) && !spatz_req_valid;
 
   always_comb begin : tile_rdata_proc
     tile_rdata_o = '0;

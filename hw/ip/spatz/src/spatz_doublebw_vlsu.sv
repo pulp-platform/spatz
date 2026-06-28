@@ -262,6 +262,51 @@ module spatz_doublebw_vlsu
   assign tile_bytes_this  = (MemDataWidthB < tile_bytes_left) ? MemDataWidthB : tile_bytes_left;
   assign tile_mem_addr    = tile_req_q.rs1 + tile_byte_offset;
   
+  vrf_data_t tile_store_packed;
+  always_comb begin
+    tile_store_packed = '0;
+
+    for (int unsigned col = 0; col < TE; col++) begin
+      unique case (tile_req_q.op_tile.ew)
+        EW_8: tile_store_packed[col*8 +: 8] = tile_rdata_i[col*TEW +: 8];
+        EW_16: tile_store_packed[col*16 +: 16] = tile_rdata_i[col*TEW +: 16];
+        EW_32: tile_store_packed[col*32 +: 32] = tile_rdata_i[col*TEW +: 32];
+        default: tile_store_packed[col*32 +: 32] = tile_rdata_i[col*TEW +: 32];
+      endcase
+    end
+  end
+
+  localparam int unsigned MemByteOffW = $clog2(MemDataWidthB);
+
+  logic [MemByteOffW-1:0] tile_base_byte_off;
+  logic [31:0]            tile_aligned_base;
+  logic [31:0]            tile_aligned_addr;
+  logic [31:0]            tile_store_byte_start;
+  logic [MemDataWidth-1:0] tile_mem_store_data;
+  logic [MemDataWidthB-1:0] tile_mem_store_strb;
+  logic                  tile_store_last;
+
+  assign tile_base_byte_off = tile_req_q.rs1[MemByteOffW-1:0];
+  assign tile_aligned_base  = {tile_req_q.rs1[31:MemByteOffW], {MemByteOffW{1'b0}}};
+  assign tile_aligned_addr  = tile_aligned_base + (tile_beat_q << $clog2(MemDataWidthB));
+
+  always_comb begin
+    tile_mem_store_data = '0;
+    tile_mem_store_strb = '0;
+
+    for (int unsigned b = 0; b < MemDataWidthB; b++) begin
+      automatic int signed row_byte_idx;
+      row_byte_idx = int'(tile_beat_q * MemDataWidthB) + int'(b) - int'(tile_base_byte_off);
+
+      if ((row_byte_idx >= 0) && (row_byte_idx < int'(tile_row_bytes_q))) begin
+        tile_mem_store_data[b*8 +: 8] = tile_store_data_q[row_byte_idx*8 +: 8];
+        tile_mem_store_strb[b]        = 1'b1;
+      end
+    end
+  end
+
+  assign tile_store_last = (((tile_beat_q + 1'b1) * MemDataWidthB) >= (tile_base_byte_off + tile_row_bytes_q));
+
   always_comb begin : tile_mem_fsm
     tile_mem_state_d = tile_mem_state_q;
 
@@ -367,7 +412,7 @@ module spatz_doublebw_vlsu
         tile_rrow_o   = tile_row_q;
 
         if (tile_rready_i) begin
-          tile_store_data_d = tile_rdata_i;
+          tile_store_data_d = tile_store_packed;
           tile_beat_d       = '0;
           tile_mem_state_d  = Tile_Store;
         end
@@ -387,7 +432,7 @@ module spatz_doublebw_vlsu
   `else
         if (spatz_mem_rsp_valid_i[0]) begin
   `endif
-          if ((tile_byte_offset + MemDataWidthB) >= tile_row_bytes_q) begin
+          if (tile_store_last) begin
             tile_mem_state_d = Tile_Done;
           end else begin
             tile_beat_d      = tile_beat_q + 1'b1;
@@ -1433,23 +1478,22 @@ module spatz_doublebw_vlsu
       logic tile_req_on_port;
       assign tile_req_on_port = (tile_mem_state_q == Tile_Load_Req || tile_mem_state_q == Tile_Store) && (port == 0);
       assign spatz_mem_req[intf][fu].id    = tile_req_on_port ? '0 :  mem_req_id[intf][fu];
-      assign spatz_mem_req[intf][fu].addr  = tile_req_on_port ? tile_mem_addr : mem_req_addr[intf][fu];
+      assign spatz_mem_req[intf][fu].addr  = tile_req_on_port ? tile_aligned_addr : mem_req_addr[intf][fu];
       assign spatz_mem_req[intf][fu].mode  = '0; // Request always uses user privilege level
       assign spatz_mem_req[intf][fu].size  = tile_req_on_port ? tile_req_q.op_mem.ew[1:0]:  mem_spatz_req.vtype.vsew[1:0];
       assign spatz_mem_req[intf][fu].write = !mem_is_load;
-      assign spatz_mem_req[intf][fu].strb  = tile_req_on_port ? tile_byte_mask : mem_req_strb[intf][fu];
-      assign spatz_mem_req[intf][fu].data  = tile_req_on_port ? tile_store_data_q[tile_beat_q*MemDataWidth +: MemDataWidth] : mem_req_data[intf][fu];
-      assign spatz_mem_req[intf][fu].last  = tile_req_on_port ? ((tile_byte_offset + MemDataWidthB) >= tile_row_bytes_q) : mem_req_last[intf][fu];
+      assign spatz_mem_req[intf][fu].strb  = tile_req_on_port ? tile_mem_store_strb : mem_req_strb[intf][fu];
+      assign spatz_mem_req[intf][fu].data  = tile_req_on_port ? tile_mem_store_data : mem_req_data[intf][fu];
+      assign spatz_mem_req[intf][fu].last  = tile_req_on_port ? tile_store_last : mem_req_last[intf][fu];
       assign spatz_mem_req[intf][fu].spec  = 1'b0; // Request is never speculative
       assign spatz_mem_req_valid[intf][fu] = tile_req_on_port ? 1'b1 : (!tile_mem_busy && (mem_req_svalid[intf][fu] || mem_req_lvalid[intf][fu]));
 `else
       logic tile_req_on_port;
       assign tile_req_on_port = (tile_mem_state_q == Tile_Load_Req || tile_mem_state_q == Tile_Store) && (port == 0);
-      assign spatz_mem_req[intf][fu].addr  = tile_req_on_port ? tile_mem_addr : mem_req_addr[intf][fu];
-      assign spatz_mem_req[intf][fu].write = !mem_is_load;
+      assign spatz_mem_req[intf][fu].addr = tile_req_on_port ? tile_aligned_addr : mem_req_addr[intf][fu];      assign spatz_mem_req[intf][fu].write = !mem_is_load;
       assign spatz_mem_req[intf][fu].amo   = reqrsp_pkg::AMONone;
-      assign spatz_mem_req[intf][fu].data  = tile_req_on_port ? tile_store_data_q[tile_beat_q*MemDataWidth +: MemDataWidth] : mem_req_data[intf][fu];
-      assign spatz_mem_req[intf][fu].strb  = tile_req_on_port ? tile_byte_mask : mem_req_strb[intf][fu];
+      assign spatz_mem_req[intf][fu].data  = tile_req_on_port ? tile_mem_store_data : mem_req_data[intf][fu];
+      assign spatz_mem_req[intf][fu].strb  = tile_req_on_port ? tile_mem_store_strb : mem_req_strb[intf][fu];
       assign spatz_mem_req[intf][fu].user  = '0;
       assign spatz_mem_req_valid[intf][fu] = tile_req_on_port ? 1'b1 : (!tile_mem_busy && (mem_req_svalid[intf][fu] || mem_req_lvalid[intf][fu]));
 `endif

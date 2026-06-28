@@ -53,6 +53,48 @@ module spatz_decoder
       automatic logic [6:0] opcode = decoder_req_i.instr[6:0];
 
       unique casez (decoder_req_i.instr)
+        // --- Tile load/store (memory ↔ tile accumulators via LSU) ---
+        // vtle8/16/32/64 — load from memory into tile
+        riscv_instr::VTLE8,
+        riscv_instr::VTLE16,
+        riscv_instr::VTLE32,
+        riscv_instr::VTLE64: begin
+          spatz_req.op                = VTLE;
+          spatz_req.ex_unit           = LSU;
+          spatz_req.rs1               = decoder_req_i.rs1; // base address
+          spatz_req.rs2               = decoder_req_i.rs2; // TSS (Tile Subset Specifier)
+          // instr[11:7] hardwired 0b00000; tile target identified via rs2 (TSS)
+          spatz_req.op_tile.is_load = 1'b1;
+          spatz_req.op_mem.is_load    = 1'b1;
+          unique case (decoder_req_i.instr[31:29])
+            3'h0: begin spatz_req.op_tile.ew = EW_8;  spatz_req.op_mem.ew = EW_8;  end
+            3'h1: begin spatz_req.op_tile.ew = EW_16; spatz_req.op_mem.ew = EW_16; end
+            3'h2: begin spatz_req.op_tile.ew = EW_32; spatz_req.op_mem.ew = EW_32; end
+            3'h3: begin spatz_req.op_tile.ew = EW_64; spatz_req.op_mem.ew = EW_64; end
+            default: illegal_instr = 1'b1;
+          endcase
+        end
+
+        // vtse8/16/32/64 — store from tile to memory
+        riscv_instr::VTSE8,
+        riscv_instr::VTSE16,
+        riscv_instr::VTSE32,
+        riscv_instr::VTSE64: begin
+          spatz_req.op                = VTSE;
+          spatz_req.ex_unit           = LSU;
+          spatz_req.rs1               = decoder_req_i.rs1;
+          spatz_req.rs2               = decoder_req_i.rs2; // TSS (Tile Subset Specifier)
+          // instr[11:7] hardwired 0b00000; tile source identified via rs2 (TSS)
+          spatz_req.op_tile.is_load = 1'b0;
+          spatz_req.op_mem.is_load    = 1'b0;
+          unique case (decoder_req_i.instr[31:29])
+            3'h0: begin spatz_req.op_tile.ew = EW_8;  spatz_req.op_mem.ew = EW_8;  end
+            3'h1: begin spatz_req.op_tile.ew = EW_16; spatz_req.op_mem.ew = EW_16; end
+            3'h2: begin spatz_req.op_tile.ew = EW_32; spatz_req.op_mem.ew = EW_32; end
+            3'h3: begin spatz_req.op_tile.ew = EW_64; spatz_req.op_mem.ew = EW_64; end
+            default: illegal_instr = 1'b1;
+          endcase
+        end
         // Load and store instructions
         riscv_instr::VLE8_V,
         riscv_instr::VLE16_V,
@@ -2117,48 +2159,48 @@ module spatz_decoder
           spatz_req.fm               = fpu_fmt_mode_i;
         end
 
-        // --- Tile load/store (memory ↔ tile accumulators via LSU) ---
-        // vtle8/16/32/64 — load from memory into tile
-        riscv_instr::VTLE8,
-        riscv_instr::VTLE16,
-        riscv_instr::VTLE32,
-        riscv_instr::VTLE64: begin
-          spatz_req.op                = VTLE;
-          spatz_req.ex_unit           = LSU;
-          spatz_req.rs1               = decoder_req_i.rs1; // base address
-          spatz_req.rs2               = decoder_req_i.rs2; // TSS (Tile Subset Specifier)
-          // instr[11:7] hardwired 0b00000; tile target identified via rs2 (TSS)
-          spatz_req.op_tile.is_load = 1'b1;
-          spatz_req.op_mem.is_load    = 1'b1;
-          unique case (decoder_req_i.instr[31:29])
-            3'h0: begin spatz_req.op_tile.ew = EW_8;  spatz_req.op_mem.ew = EW_8;  end
-            3'h1: begin spatz_req.op_tile.ew = EW_16; spatz_req.op_mem.ew = EW_16; end
-            3'h2: begin spatz_req.op_tile.ew = EW_32; spatz_req.op_mem.ew = EW_32; end
-            3'h3: begin spatz_req.op_tile.ew = EW_64; spatz_req.op_mem.ew = EW_64; end
-            default: illegal_instr = 1'b1;
-          endcase
-        end
+        // // --- Tile load/store (memory ↔ tile accumulators via LSU) ---
+        // // vtle8/16/32/64 — load from memory into tile
+        // riscv_instr::VTLE8,
+        // riscv_instr::VTLE16,
+        // riscv_instr::VTLE32,
+        // riscv_instr::VTLE64: begin
+        //   spatz_req.op                = VTLE;
+        //   spatz_req.ex_unit           = LSU;
+        //   spatz_req.rs1               = decoder_req_i.rs1; // base address
+        //   spatz_req.rs2               = decoder_req_i.rs2; // TSS (Tile Subset Specifier)
+        //   // instr[11:7] hardwired 0b00000; tile target identified via rs2 (TSS)
+        //   spatz_req.op_tile.is_load = 1'b1;
+        //   spatz_req.op_mem.is_load    = 1'b1;
+        //   unique case (decoder_req_i.instr[31:29])
+        //     3'h0: begin spatz_req.op_tile.ew = EW_8;  spatz_req.op_mem.ew = EW_8;  end
+        //     3'h1: begin spatz_req.op_tile.ew = EW_16; spatz_req.op_mem.ew = EW_16; end
+        //     3'h2: begin spatz_req.op_tile.ew = EW_32; spatz_req.op_mem.ew = EW_32; end
+        //     3'h3: begin spatz_req.op_tile.ew = EW_64; spatz_req.op_mem.ew = EW_64; end
+        //     default: illegal_instr = 1'b1;
+        //   endcase
+        // end
 
-        // vtse8/16/32/64 — store from tile to memory
-        riscv_instr::VTSE8,
-        riscv_instr::VTSE16,
-        riscv_instr::VTSE32,
-        riscv_instr::VTSE64: begin
-          spatz_req.op                = VTSE;
-          spatz_req.ex_unit           = LSU;
-          spatz_req.rs1               = decoder_req_i.rs1;
-          spatz_req.rs2               = decoder_req_i.rs2; // TSS (Tile Subset Specifier)
-          // instr[11:7] hardwired 0b00000; tile source identified via rs2 (TSS)
-          spatz_req.op_tile.is_load = 1'b0;
-          spatz_req.op_mem.is_load    = 1'b0;
-          unique case (decoder_req_i.instr[31:29])
-            3'h0: begin spatz_req.op_tile.ew = EW_8;  spatz_req.op_mem.ew = EW_8;  end
-            3'h1: begin spatz_req.op_tile.ew = EW_16; spatz_req.op_mem.ew = EW_16; end
-            3'h2: begin spatz_req.op_tile.ew = EW_32; spatz_req.op_mem.ew = EW_32; end
-            3'h3: begin spatz_req.op_tile.ew = EW_64; spatz_req.op_mem.ew = EW_64; end
-            default: illegal_instr = 1'b1;
-          endcase
-        end
+        // // vtse8/16/32/64 — store from tile to memory
+        // riscv_instr::VTSE8,
+        // riscv_instr::VTSE16,
+        // riscv_instr::VTSE32,
+        // riscv_instr::VTSE64: begin
+        //   spatz_req.op                = VTSE;
+        //   spatz_req.ex_unit           = LSU;
+        //   spatz_req.rs1               = decoder_req_i.rs1;
+        //   spatz_req.rs2               = decoder_req_i.rs2; // TSS (Tile Subset Specifier)
+        //   // instr[11:7] hardwired 0b00000; tile source identified via rs2 (TSS)
+        //   spatz_req.op_tile.is_load = 1'b0;
+        //   spatz_req.op_mem.is_load    = 1'b0;
+        //   unique case (decoder_req_i.instr[31:29])
+        //     3'h0: begin spatz_req.op_tile.ew = EW_8;  spatz_req.op_mem.ew = EW_8;  end
+        //     3'h1: begin spatz_req.op_tile.ew = EW_16; spatz_req.op_mem.ew = EW_16; end
+        //     3'h2: begin spatz_req.op_tile.ew = EW_32; spatz_req.op_mem.ew = EW_32; end
+        //     3'h3: begin spatz_req.op_tile.ew = EW_64; spatz_req.op_mem.ew = EW_64; end
+        //     default: illegal_instr = 1'b1;
+        //   endcase
+        // end
 
         // --- Move tile ↔ vector register ---
         // vtmv.v.t — tile row → vector register  (rs1 = tile row selector)
@@ -2210,5 +2252,55 @@ module spatz_decoder
   assign decoder_rsp_o.spatz_req     = spatz_req;
   assign decoder_rsp_o.instr_illegal = decoder_req_valid_i & illegal_instr;
   assign decoder_rsp_valid_o         = decoder_req_valid_i;
+logic hit_vtle;
+logic hit_vle32;
+logic hit_vle64;
+logic hit_vlx64;
+logic hit_vluxe64;
+logic hit_vloxe64;
 
+always_comb begin
+  hit_vtle    = 1'b0;
+  hit_vle32   = 1'b0;
+  hit_vle64   = 1'b0;
+  hit_vlx64   = 1'b0;
+  hit_vluxe64 = 1'b0;
+  hit_vloxe64 = 1'b0;
+
+  casez (decoder_req_i.instr)
+    riscv_instr::VTLE32: hit_vtle = 1'b1;
+    default: ;
+  endcase
+
+  casez (decoder_req_i.instr)
+    riscv_instr::VLE32_V: hit_vle32 = 1'b1;
+    default: ;
+  endcase
+
+  casez (decoder_req_i.instr)
+    riscv_instr::VLE64_V: hit_vle64 = 1'b1;
+    default: ;
+  endcase
+
+  casez (decoder_req_i.instr)
+    riscv_instr::VLX64_V: hit_vlx64 = 1'b1;
+    default: ;
+  endcase
+
+  casez (decoder_req_i.instr)
+    riscv_instr::VLUXEI64_V: hit_vluxe64 = 1'b1;
+    default: ;
+  endcase
+
+  casez (decoder_req_i.instr)
+    riscv_instr::VLOXEI64_V: hit_vloxe64 = 1'b1;
+    default: ;
+  endcase
+end
+
+// always_ff @(posedge clk_i) begin
+//   if ((hit_vtle || hit_vle32 || hit_vle64 || hit_vlx64 || hit_vluxe64 || hit_vloxe64)) begin
+//     $display("[SNITCH MATCH] t=%0t instr=%h hit_vtle=%0b hit_vle32=%0b hit_vle64=%0b hit_vlx64=%0b hit_vluxe64=%0b hit_vloxe64=%0b", $time, decoder_req_i.instr, hit_vtle, hit_vle32, hit_vle64, hit_vlx64, hit_vluxe64, hit_vloxe64);
+//   end
+// end
 endmodule : spatz_decoder
