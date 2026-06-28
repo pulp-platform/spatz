@@ -1,4 +1,4 @@
-// Copyright 2023 ETH Zurich and University of Bologna.
+// Copyright 2026 ETH Zurich and University of Bologna.
 // Licensed under the Apache License, Version 2.0, see LICENSE for details.
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -30,6 +30,8 @@ package spatz_pkg;
   localparam bit RVD            = 1;
   // Vector support
   localparam bit RVV            = 1;
+  // Vector Matrix Extension support
+  localparam bit XVME           = 1;
 
   // Maximum size of a single vector element in bits
   localparam int unsigned ELEN   = RVD ? 64 : 32;
@@ -63,7 +65,7 @@ package spatz_pkg;
   localparam int unsigned NrWordsPerBank   = NrVRFWords / NrVRFBanks;
 
   // Number of VLSU interfaces
-  localparam int unsigned NumVLSUInterfaces = 1;
+  localparam int unsigned NumVLSUInterfaces = 2;
 
   // Width of scalar register file adresses
   // Depends on whether we have a FP regfile or not
@@ -85,6 +87,12 @@ package spatz_pkg;
   // Encodes both the scalar RD and the VD address in the VRF
   localparam int VFURespAddrWidth  = GPRWidth > $clog2(NrVRFWords) ? GPRWidth : $clog2(NrVRFWords);
 
+  // Number of elements along tile edge (for TEW=32 accumulation)
+  localparam int unsigned TEW    = 32;
+  localparam int unsigned TE     = VLEN/2/TEW;
+  // Maximum number of tiles across all supported TEW values (TEW=8 uses all 16)
+  localparam int unsigned NRTILE = 16;
+
   //////////////////////
   // Type Definitions //
   //////////////////////
@@ -101,6 +109,18 @@ package spatz_pkg;
   // Element of length type
   typedef logic [ELEN-1:0] elen_t;
   typedef logic [ELENB-1:0] elenb_t;
+
+  // Zvt mtype CSR (address 0xC23) layout
+  // bits[ELEN-1:24] reserved | bits[23:10] tm[13:0] | bits[9:8] reserved
+  // bits[7:5] tk[2:0] | bits[4:2] reserved | bits[1:0] mtwiden[1:0]
+  typedef struct packed {
+    logic [ELEN-25:0] reserved2; // bits[ELEN-1:24]
+    logic [13:0]      tm;        // bits[23:10]: output-row bound (0..ETE)
+    logic [1:0]       reserved1; // bits[9:8]
+    logic [2:0]       tk;        // bits[7:5]:  K-dimension bound (0..KMAX)
+    logic [2:0]       reserved0; // bits[4:2]
+    logic [1:0]       mtwiden;   // bits[1:0]:  0=unconfigured, 1=x1, 2=x2, 3=x4
+  } mtype_t;
 
   // VREG address, byte enable, and data type
   typedef logic [$clog2(NrVRFWords)-1:0] vrf_addr_t;
@@ -152,11 +172,18 @@ package spatz_pkg;
     VF2I, VF2U, VI2F, VU2F, VF2F,
     VFMADD, VFMSUB, VFNMSUB, VFNMADD, VSDOTP,
     // Ventaglio indexed fused-multiply ops (vfxmacc.vrf / vfxmul.vrf)
-    VFXMADD
+    VFXMADD,
+    // VME (Vector Matrix Extension / Zvt) instructions
+    VMCFG,
+    VTMMU, VTMMS,
+    VTFMM, VTFMM_ALT,
+    VTLE, VTSE,
+    VTMV_VT, VTMV_TV,
+    VTZERO, VTDISCARD
   } op_e;
 
   // Execution units
-  typedef enum logic [1:0] {
+  typedef enum logic [2:0] {
     // Controller
     CON,
     // Load/Store unit
@@ -164,7 +191,9 @@ package spatz_pkg;
     // Slide unit
     SLD,
     // Functional unit
-    VFU
+    VFU,
+    // Outer Product Engine
+    OPE
   } ex_unit_e;
 
   ///////////////////
@@ -250,6 +279,17 @@ package spatz_pkg;
     sp_cfg_t sp_cfg;
   } op_vtl_t;
 
+  typedef struct packed {
+    logic [1:0] cfg_sel;    // 2'b00=mtype, 2'b01=TN, 2'b10=TM, 2'b11=TK
+    logic       signed_vs1;
+    logic       signed_vs2;
+    logic       is_load;
+    vew_e       ew;         // element width for tile load/store
+    elen_t      tn;         // N dimension (output columns)
+    elen_t      tm;         // M dimension (output rows)
+    elen_t      tk;         // K dimension (reduction depth)
+  } op_tile_t;
+
   // Result from decoder
   typedef struct packed {
     // Instruction ID
@@ -289,9 +329,11 @@ package spatz_pkg;
     op_mem_t op_mem;
     op_sld_t op_sld;
     op_vtl_t op_vtl;
+    op_tile_t op_tile;
 
     // Spatz config details
     vtype_t vtype;
+    mtype_t mtype;
     vlen_t vl;
     vlen_t vstart;
   } spatz_req_t;
@@ -369,30 +411,34 @@ package spatz_pkg;
   // VRF/SB Ports //
   //////////////////
 
-  typedef enum logic [idx_width(4 + 2 * 1):0] {
+  typedef enum logic [idx_width(4 + 2 * 2):0] {
     VFU_VS2_RD,
     VFU_VS1_RD,
     VFU_VD_RD,
-    VLSU_VS2_RD,
-    VLSU_VD_RD,
+    VLSU_VD_RD0,
+    VLSU_VS2_RD0,
+    VLSU_VD_RD1,
+    VLSU_VS2_RD1,
     VSLDU_VS2_RD
   } vreg_port_rd_e;
 
-  typedef enum logic [idx_width(2 + 1):0] {
+  typedef enum logic [idx_width(2 + 2):0] {
     VFU_VD_WD,
-    VLSU_VD_WD,
+    VLSU_VD_WD[2],
     VSLDU_VD_WD
   } vreg_port_wd_e;
 
-  typedef enum logic [idx_width(6 + 3 * 1):0] {
+  typedef enum logic [idx_width(6 + 3 * 2):0] {
     SB_VFU_VS2_RD,
     SB_VFU_VS1_RD,
     SB_VFU_VD_RD,
-    SB_VLSU_VS2_RD,
-    SB_VLSU_VD_RD,
+    SB_VLSU_VD_RD0,
+    SB_VLSU_VS2_RD0,
+    SB_VLSU_VD_RD1,
+    SB_VLSU_VS2_RD1,
     SB_VSLDU_VS2_RD,
     SB_VFU_VD_WD,
-    SB_VLSU_VD_WD,
+    SB_VLSU_VD_WD[2],
     SB_VSLDU_VD_WD
   } sb_port_e;
 
@@ -499,5 +545,11 @@ package spatz_pkg;
   localparam int unsigned VTGChannelWidth       = VTGNrBanksPerChannel * ELEN;
   localparam int unsigned VTGChannelBWidth      = VTGNrBanksPerChannel * ELENB;
   localparam int unsigned VTGNrWordsPerChannel  = VENTAGLIO_BUFFER_SIZE / (VTGNrChannels * VTGChannelWidth);
+
+  function automatic elen_t min3(input elen_t a,input elen_t b,input elen_t c);
+    elen_t tmp;
+    tmp = (a < b) ? a : b;
+    min3 = (tmp < c) ? tmp : c;
+  endfunction
 
 endpackage : spatz_pkg

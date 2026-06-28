@@ -1,4 +1,4 @@
-// Copyright 2023 ETH Zurich and University of Bologna.
+// Copyright 2026 ETH Zurich and University of Bologna.
 // Licensed under the Apache License, Version 2.0, see LICENSE for details.
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -53,6 +53,48 @@ module spatz_decoder
       automatic logic [6:0] opcode = decoder_req_i.instr[6:0];
 
       unique casez (decoder_req_i.instr)
+        // --- Tile load/store (memory ↔ tile accumulators via LSU) ---
+        // vtle8/16/32/64 — load from memory into tile
+        riscv_instr::VTLE8,
+        riscv_instr::VTLE16,
+        riscv_instr::VTLE32,
+        riscv_instr::VTLE64: begin
+          spatz_req.op                = VTLE;
+          spatz_req.ex_unit           = LSU;
+          spatz_req.rs1               = decoder_req_i.rs1; // base address
+          spatz_req.rs2               = decoder_req_i.rs2; // TSS (Tile Subset Specifier)
+          // instr[11:7] hardwired 0b00000; tile target identified via rs2 (TSS)
+          spatz_req.op_tile.is_load = 1'b1;
+          spatz_req.op_mem.is_load    = 1'b1;
+          unique case (decoder_req_i.instr[31:29])
+            3'h0: begin spatz_req.op_tile.ew = EW_8;  spatz_req.op_mem.ew = EW_8;  end
+            3'h1: begin spatz_req.op_tile.ew = EW_16; spatz_req.op_mem.ew = EW_16; end
+            3'h2: begin spatz_req.op_tile.ew = EW_32; spatz_req.op_mem.ew = EW_32; end
+            3'h3: begin spatz_req.op_tile.ew = EW_64; spatz_req.op_mem.ew = EW_64; end
+            default: illegal_instr = 1'b1;
+          endcase
+        end
+
+        // vtse8/16/32/64 — store from tile to memory
+        riscv_instr::VTSE8,
+        riscv_instr::VTSE16,
+        riscv_instr::VTSE32,
+        riscv_instr::VTSE64: begin
+          spatz_req.op                = VTSE;
+          spatz_req.ex_unit           = LSU;
+          spatz_req.rs1               = decoder_req_i.rs1;
+          spatz_req.rs2               = decoder_req_i.rs2; // TSS (Tile Subset Specifier)
+          // instr[11:7] hardwired 0b00000; tile source identified via rs2 (TSS)
+          spatz_req.op_tile.is_load = 1'b0;
+          spatz_req.op_mem.is_load    = 1'b0;
+          unique case (decoder_req_i.instr[31:29])
+            3'h0: begin spatz_req.op_tile.ew = EW_8;  spatz_req.op_mem.ew = EW_8;  end
+            3'h1: begin spatz_req.op_tile.ew = EW_16; spatz_req.op_mem.ew = EW_16; end
+            3'h2: begin spatz_req.op_tile.ew = EW_32; spatz_req.op_mem.ew = EW_32; end
+            3'h3: begin spatz_req.op_tile.ew = EW_64; spatz_req.op_mem.ew = EW_64; end
+            default: illegal_instr = 1'b1;
+          endcase
+        end
         // Load and store instructions
         riscv_instr::VLE8_V,
         riscv_instr::VLE16_V,
@@ -1921,6 +1963,7 @@ module spatz_decoder
             riscv_instr::CSR_VL,
             riscv_instr::CSR_VTYPE,
             riscv_instr::CSR_VLENB,
+            riscv_instr::CSR_MTYPE,
             riscv_instr::CSR_VXSAT,
             riscv_instr::CSR_VXRM,
             riscv_instr::CSR_VCSR,
@@ -2013,6 +2056,189 @@ module spatz_decoder
           spatz_req.op_cfg.keep_vl = setvl_rs1 == '0 && setvl_rd == '0;
         end
 
+        // -------------------------------------------------------
+        // VME (Vector Matrix Extension) Instructions
+        // -------------------------------------------------------
+
+        riscv_instr::MSETMTYPE,
+        riscv_instr::MSETMTYPEI: begin
+          spatz_req.op                = VMCFG;
+          spatz_req.ex_unit           = CON;
+          spatz_req.use_rd            = 1'b0;
+          spatz_req.op_tile.cfg_sel = 2'b00;
+
+          if (decoder_req_i.instr[25]) begin
+            // register form: msetmtype
+            spatz_req.mtype = mtype_t'(decoder_req_i.rs1);
+            spatz_req.vtype = vtype_t'(decoder_req_i.rs2);
+          end else begin
+            // immediate form: msetmtypei
+            spatz_req.mtype = '0;
+            spatz_req.mtype[4:0] = decoder_req_i.instr[19:15];
+
+            spatz_req.vtype = '0;
+            spatz_req.vtype.vsew = vew_e'(decoder_req_i.instr[24:22]);
+          end
+        end
+
+        riscv_instr::MSETTN,
+        riscv_instr::MSETTM,
+        riscv_instr::MSETTK: begin
+          spatz_req.op      = VMCFG;
+          spatz_req.ex_unit = CON;
+          spatz_req.use_rd  = 1'b1;
+          spatz_req.rd      = decoder_req_i.rd;
+          spatz_req.rs1     = decoder_req_i.rs1;
+
+          unique casez (decoder_req_i.instr)
+            riscv_instr::MSETTN: spatz_req.op_tile.cfg_sel = 2'b01;
+            riscv_instr::MSETTM: spatz_req.op_tile.cfg_sel = 2'b10;
+            riscv_instr::MSETTK: spatz_req.op_tile.cfg_sel = 2'b11;
+
+            default:;
+          endcase
+        end
+
+        // --- Integer matrix multiply (outer-product accumulate) ---
+        // vtmmu.tvv — unsigned
+        riscv_instr::VTMMU_TVV: begin
+          spatz_req.op       = VTMMU;
+          spatz_req.ex_unit  = OPE;
+          spatz_req.vs1      = decoder_req_i.instr[19:15]; // B row    (w_input)
+          spatz_req.use_vs1  = 1'b1;
+          spatz_req.vs2      = decoder_req_i.instr[24:20]; // A column (x_input)
+          spatz_req.use_vs2  = 1'b1;
+          spatz_req.vd       = vreg_t'({1'b0, decoder_req_i.instr[11:8]}); // tile reg (rdhi4)
+          spatz_req.use_vd   = 1'b1;
+          spatz_req.vd_is_src = 1'b1; // accumulate into existing tile
+        end
+
+        // vtmms.tvv — signed
+        riscv_instr::VTMMS_TVV: begin
+          spatz_req.op                   = VTMMS;
+          spatz_req.ex_unit              = OPE;
+          spatz_req.vs1                  = decoder_req_i.instr[19:15];
+          spatz_req.use_vs1              = 1'b1;
+          spatz_req.vs2                  = decoder_req_i.instr[24:20];
+          spatz_req.use_vs2              = 1'b1;
+          spatz_req.vd                   = vreg_t'({1'b0, decoder_req_i.instr[11:8]});
+          spatz_req.use_vd               = 1'b1;
+          spatz_req.vd_is_src            = 1'b1;
+          spatz_req.op_tile.signed_vs1 = 1'b1;
+          spatz_req.op_tile.signed_vs2 = 1'b1;
+        end
+
+        // --- FP matrix multiply (outer-product accumulate) ---
+        // vtfmm.tvv — normal accumulate  C[tile] += A[vs2] * B[vs1]  (vs2=A col/x_input, vs1=B row/w_input)
+        riscv_instr::VTFMM_TVV: begin
+          spatz_req.op              = VTFMM;
+          spatz_req.ex_unit         = OPE;
+          spatz_req.vs1             = decoder_req_i.instr[19:15];
+          spatz_req.use_vs1         = 1'b1;
+          spatz_req.vs2             = decoder_req_i.instr[24:20];
+          spatz_req.use_vs2         = 1'b1;
+          spatz_req.vd              = vreg_t'({1'b0, decoder_req_i.instr[11:8]});
+          spatz_req.use_vd          = 1'b1;
+          spatz_req.vd_is_src       = 1'b1;
+          spatz_req.rm              = fpu_rnd_mode_i;
+          spatz_req.fm              = fpu_fmt_mode_i;
+        end
+
+        // vtfmm.alt.tvv — alternate accumulate (BF16 input path)
+        riscv_instr::VTFMM_ALT_TVV: begin
+          spatz_req.op               = VTFMM_ALT;
+          spatz_req.ex_unit          = OPE;
+          spatz_req.vs1              = decoder_req_i.instr[19:15];
+          spatz_req.use_vs1          = 1'b1;
+          spatz_req.vs2              = decoder_req_i.instr[24:20];
+          spatz_req.use_vs2          = 1'b1;
+          spatz_req.vd               = vreg_t'({1'b0, decoder_req_i.instr[11:8]});
+          spatz_req.use_vd           = 1'b1;
+          spatz_req.vd_is_src        = 1'b1;
+          spatz_req.rm               = fpu_rnd_mode_i;
+          spatz_req.fm               = fpu_fmt_mode_i;
+        end
+
+        // // --- Tile load/store (memory ↔ tile accumulators via LSU) ---
+        // // vtle8/16/32/64 — load from memory into tile
+        // riscv_instr::VTLE8,
+        // riscv_instr::VTLE16,
+        // riscv_instr::VTLE32,
+        // riscv_instr::VTLE64: begin
+        //   spatz_req.op                = VTLE;
+        //   spatz_req.ex_unit           = LSU;
+        //   spatz_req.rs1               = decoder_req_i.rs1; // base address
+        //   spatz_req.rs2               = decoder_req_i.rs2; // TSS (Tile Subset Specifier)
+        //   // instr[11:7] hardwired 0b00000; tile target identified via rs2 (TSS)
+        //   spatz_req.op_tile.is_load = 1'b1;
+        //   spatz_req.op_mem.is_load    = 1'b1;
+        //   unique case (decoder_req_i.instr[31:29])
+        //     3'h0: begin spatz_req.op_tile.ew = EW_8;  spatz_req.op_mem.ew = EW_8;  end
+        //     3'h1: begin spatz_req.op_tile.ew = EW_16; spatz_req.op_mem.ew = EW_16; end
+        //     3'h2: begin spatz_req.op_tile.ew = EW_32; spatz_req.op_mem.ew = EW_32; end
+        //     3'h3: begin spatz_req.op_tile.ew = EW_64; spatz_req.op_mem.ew = EW_64; end
+        //     default: illegal_instr = 1'b1;
+        //   endcase
+        // end
+
+        // // vtse8/16/32/64 — store from tile to memory
+        // riscv_instr::VTSE8,
+        // riscv_instr::VTSE16,
+        // riscv_instr::VTSE32,
+        // riscv_instr::VTSE64: begin
+        //   spatz_req.op                = VTSE;
+        //   spatz_req.ex_unit           = LSU;
+        //   spatz_req.rs1               = decoder_req_i.rs1;
+        //   spatz_req.rs2               = decoder_req_i.rs2; // TSS (Tile Subset Specifier)
+        //   // instr[11:7] hardwired 0b00000; tile source identified via rs2 (TSS)
+        //   spatz_req.op_tile.is_load = 1'b0;
+        //   spatz_req.op_mem.is_load    = 1'b0;
+        //   unique case (decoder_req_i.instr[31:29])
+        //     3'h0: begin spatz_req.op_tile.ew = EW_8;  spatz_req.op_mem.ew = EW_8;  end
+        //     3'h1: begin spatz_req.op_tile.ew = EW_16; spatz_req.op_mem.ew = EW_16; end
+        //     3'h2: begin spatz_req.op_tile.ew = EW_32; spatz_req.op_mem.ew = EW_32; end
+        //     3'h3: begin spatz_req.op_tile.ew = EW_64; spatz_req.op_mem.ew = EW_64; end
+        //     default: illegal_instr = 1'b1;
+        //   endcase
+        // end
+
+        // --- Move tile ↔ vector register ---
+        // vtmv.v.t — tile row → vector register  (rs1 = tile row selector)
+        riscv_instr::VTMV_V_T: begin
+          spatz_req.op      = VTMV_VT;
+          spatz_req.ex_unit = OPE;
+          spatz_req.rs1     = decoder_req_i.rs1; // tile row index (from scalar reg)
+          spatz_req.vd      = decoder_req_i.instr[11:7]; // destination vector reg
+          spatz_req.use_vd  = 1'b1;
+        end
+
+        // vtmv.t.v — vector register → tile row  (rs1 = tile row selector)
+        riscv_instr::VTMV_T_V: begin
+          spatz_req.op      = VTMV_TV;
+          spatz_req.ex_unit = OPE;
+          spatz_req.rs1     = decoder_req_i.rs1; // tile row index (from scalar reg)
+          spatz_req.vs2     = decoder_req_i.instr[24:20]; // source vector reg
+          spatz_req.use_vs2 = 1'b1;
+        end
+
+        // --- Tile zero and context discard ---
+        // vtzero — zero all accumulators of a tile register
+        riscv_instr::VTZERO: begin
+          spatz_req.op     = VTZERO;
+          spatz_req.ex_unit = OPE;
+          spatz_req.vd     = vreg_t'({1'b0, decoder_req_i.instr[11:8]}); // tile reg
+          spatz_req.use_vd = 1'b1;
+        end
+
+        // vtdiscard — invalidate all tile state (no data path needed)
+        riscv_instr::VTDISCARD: begin
+          spatz_req.op      = VTDISCARD;
+          spatz_req.ex_unit = OPE;
+        end
+        // -------------------------------------------------------
+        // end of VME
+        // -------------------------------------------------------
+
         default: illegal_instr = 1'b1;
       endcase // Opcodes
 
@@ -2026,5 +2252,55 @@ module spatz_decoder
   assign decoder_rsp_o.spatz_req     = spatz_req;
   assign decoder_rsp_o.instr_illegal = decoder_req_valid_i & illegal_instr;
   assign decoder_rsp_valid_o         = decoder_req_valid_i;
+logic hit_vtle;
+logic hit_vle32;
+logic hit_vle64;
+logic hit_vlx64;
+logic hit_vluxe64;
+logic hit_vloxe64;
 
+always_comb begin
+  hit_vtle    = 1'b0;
+  hit_vle32   = 1'b0;
+  hit_vle64   = 1'b0;
+  hit_vlx64   = 1'b0;
+  hit_vluxe64 = 1'b0;
+  hit_vloxe64 = 1'b0;
+
+  casez (decoder_req_i.instr)
+    riscv_instr::VTLE32: hit_vtle = 1'b1;
+    default: ;
+  endcase
+
+  casez (decoder_req_i.instr)
+    riscv_instr::VLE32_V: hit_vle32 = 1'b1;
+    default: ;
+  endcase
+
+  casez (decoder_req_i.instr)
+    riscv_instr::VLE64_V: hit_vle64 = 1'b1;
+    default: ;
+  endcase
+
+  casez (decoder_req_i.instr)
+    riscv_instr::VLX64_V: hit_vlx64 = 1'b1;
+    default: ;
+  endcase
+
+  casez (decoder_req_i.instr)
+    riscv_instr::VLUXEI64_V: hit_vluxe64 = 1'b1;
+    default: ;
+  endcase
+
+  casez (decoder_req_i.instr)
+    riscv_instr::VLOXEI64_V: hit_vloxe64 = 1'b1;
+    default: ;
+  endcase
+end
+
+// always_ff @(posedge clk_i) begin
+//   if ((hit_vtle || hit_vle32 || hit_vle64 || hit_vlx64 || hit_vluxe64 || hit_vloxe64)) begin
+//     $display("[SNITCH MATCH] t=%0t instr=%h hit_vtle=%0b hit_vle32=%0b hit_vle64=%0b hit_vlx64=%0b hit_vluxe64=%0b hit_vloxe64=%0b", $time, decoder_req_i.instr, hit_vtle, hit_vle32, hit_vle64, hit_vlx64, hit_vluxe64, hit_vloxe64);
+//   end
+// end
 endmodule : spatz_decoder

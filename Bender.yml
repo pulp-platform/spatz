@@ -153,6 +153,11 @@ sources:
     - target: ventaglio
       files:
         - hw/ip/ventaglio/ventaglio.sv
+    # OPE (Output Processing Engine)
+    - hw/ip/spatz/src/ope/opope_pkg.sv
+    - hw/ip/spatz/src/ope/opope_fma.sv
+    - hw/ip/spatz/src/ope/opope_accumulator.sv
+    - hw/ip/spatz/src/ope/spatz_ope.sv
     # Level 4
     - hw/ip/spatz/src/spatz_controller.sv
     # Level 5

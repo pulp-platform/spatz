@@ -21,5 +21,5 @@ The `toolchain` directory contains third-party tools that we inline into this re
 - `toolchain/llvm-project`: A patched LLVM 14 installation with support for RISC-V's Vector Extension and Spatz-specific instructions (e.g., SDOTP).
 - `toolchain/riscv-gnu-toolchain`: A patched GCC installation with support for RISC-V's Vector Extension. We use this mainly for libstdc++. This repository compiles all binaries with Clang, and does not support a GCC-based compilation flow.
 - `toolchain/riscv-isa-sim`: A Spike installation, used for disassembling the core traces.
-- `toolchain/riscv-opcodes`: Utilities to manage instruction encodings and generate functions and data structurse for parsing and representation in various languages.
+- `toolchain/riscv-opcodes`: Utilities to manage instruction encodings and generate functions and data structure for parsing and representation in various languages.
 - `toolchain/verilator`: An updated Verilator installation, with which we guarantee the verilation of Spatz-based systems.

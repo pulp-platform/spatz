@@ -1,4 +1,4 @@
-// Copyright 2023 ETH Zurich and University of Bologna.
+// Copyright 2026 ETH Zurich and University of Bologna.
 // Licensed under the Apache License, Version 2.0, see LICENSE for details.
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -29,11 +29,12 @@ package rvv_pkg;
   } vlmul_e;
 
   typedef struct packed {
-    logic   vill;
-    logic   vma;
-    logic   vta;
-    vew_e   vsew;
-    vlmul_e vlmul;
+    logic   vill;    // bit[XLEN-1]: illegal flag
+    logic   altfmt;  // self-def bit[8]: alternate format for VME
+    logic   vma;     // bit[7]:      mask-agnostic
+    logic   vta;     // bit[6]:      tail-agnostic
+    vew_e   vsew;    // bits[5:3]:   SEW encoding
+    vlmul_e vlmul;   // bits[2:0]:   LMUL encoding
   } vtype_t;
 
   ///////////////

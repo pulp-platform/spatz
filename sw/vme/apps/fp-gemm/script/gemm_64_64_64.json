@@ -1,0 +1,17 @@
+// Copyright 2026 ETH Zurich and University of Bologna.
+// Licensed under the Apache License, Version 2.0, see LICENSE for details.
+// SPDX-License-Identifier: Apache-2.0
+//
+// Author: Pei-Yu Lin <peilin@ethz.ch>
+//
+// Configuration for a 64×64×64 VME GEMM benchmark.
+{
+    kernel: "VME_GEMM",
+    M: 64,
+    N: 64,
+    K: 64,
+    TM: 16,
+    TN: 16,
+    // Seed for reproducible random data (numpy / torch)
+    seed: 42
+}
