@@ -1405,6 +1405,9 @@ module spatz_decoder
           spatz_req.op_vtl.gather_vd  = 1'b1;
           spatz_req.op_vtl.scatter_vd = 1'b1;
           spatz_req.op_vtl.idx_vreg   = vs1_field;   // explicit index vreg
+
+          // disable masking
+          spatz_req.op_arith.vm = 1'b1;
         end
 
         riscv_instr::VFXMUL_VRF: begin
@@ -1439,6 +1442,9 @@ module spatz_decoder
           spatz_req.op_vtl.scatter_vd = 1'b1;
           // op_vtl.gather_vd intentionally NOT set
           spatz_req.op_vtl.idx_vreg   = vs1_field;
+
+          // disable masking
+          spatz_req.op_arith.vm = 1'b1;
         end
 
         // vventclr — zero the entire ventaglio bank. Issued once per outer
@@ -1461,6 +1467,9 @@ module spatz_decoder
           // VTL plumbing
           spatz_req.op_vtl.use_vtl       = 1'b1;
           spatz_req.op_vtl.clear_buffer  = 1'b1;
+
+          // disable masking
+          spatz_req.op_arith.vm = 1'b1;
         end
 `endif // VENTAGLIO
 
