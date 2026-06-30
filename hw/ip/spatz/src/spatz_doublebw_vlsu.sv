@@ -589,6 +589,13 @@ module spatz_doublebw_vlsu
         mem_req_addr[intf][fu]        = (addr >> MAXEW) << MAXEW;
         mem_req_addr_offset[intf][fu] = addr[int'(MAXEW)-1:0];
 
+        // If the index byte counter moved to another VRF word, fetch that word
+        // from vs2 before issuing the memory request.
+        if (NrWordsPerVector == 1) begin
+          fetch_next_idx[intf][fu] = (mem_idx_counter_q[intf][fu] >> MAXEW) != vs2_elem_id_q[intf];
+        end else begin
+          fetch_next_idx[intf][fu] = (mem_idx_counter_q[intf][fu][$clog2(NrWordsPerVector*ELENB)-1:0] >> MAXEW) != vs2_vreg_addr[intf][$clog2(NrWordsPerVector)-1:0];
+        end
       end
     end: gen_mem_req_addr_intf_fu
   end: gen_mem_req_addr_intf
@@ -1308,7 +1315,7 @@ module spatz_doublebw_vlsu
 `endif
           if (!rob_full[intf][fu] && !offset_queue_full[intf][fu] && mem_operation_valid[intf][fu]) begin
             rob_req_id[intf][fu]     = spatz_mem_req_ready[intf][fu] & spatz_mem_req_valid[intf][fu];
-            mem_req_lvalid[intf][fu] = (!mem_is_indexed || idx_valid[intf]) && mem_spatz_req.op_mem.is_load;
+            mem_req_lvalid[intf][fu] = (!mem_is_indexed || (vrf_rvalid_i[intf][1] & !fetch_next_idx[intf][fu])) && mem_spatz_req.op_mem.is_load;
             mem_req_id[intf][fu]     = rob_id[intf][fu];
             mem_req_last[intf][fu]   = mem_operation_last[intf][fu];
           end
@@ -1439,7 +1446,7 @@ module spatz_doublebw_vlsu
                 end
               endcase
 
-            mem_req_svalid[intf][fu] = rob_rvalid[intf][fu] && (!mem_is_indexed || idx_valid[intf]) && !mem_spatz_req.op_mem.is_load && (commit_insn_q.vm || v0_t_read_done);
+            mem_req_svalid[intf][fu] = rob_rvalid[intf][fu] && (!mem_is_indexed || (vrf_rvalid_i[intf][1] & !fetch_next_idx[intf][fu])) && !mem_spatz_req.op_mem.is_load && (commit_insn_q.vm || v0_t_read_done);
             mem_req_id[intf][fu]     = rob_rid[intf][fu];
             mem_req_last[intf][fu]   = mem_operation_last[intf][fu];
             rob_pop[intf][fu]        = spatz_mem_req_valid[intf][fu] && spatz_mem_req_ready[intf][fu];
