@@ -113,17 +113,6 @@ message(STATUS "Using common linker script: ${LINKER_SCRIPT}")
 # OpenMP
 set(OMPSTATIC_NUMTHREADS "0" CACHE STRING "If set to a non-zero value the OpenMP runtime is optimized to the number of cores")
 
-
-if(RUNTIME_TRACE)
-    # Enable runtime tracing
-    add_compile_definitions(__SNRT_USE_TRACE)
-endif()
-
-if(RUNTIME_PRINT)
-    # Enable runtime debugging with printfs
-    add_compile_definitions(__SNRT_USE_PRINT)
-endif()
-
 include_directories(
     include
     vendor
