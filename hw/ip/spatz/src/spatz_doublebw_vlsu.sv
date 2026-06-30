@@ -473,7 +473,7 @@ module spatz_doublebw_vlsu
       end else begin
         for (int unsigned fu = 0; fu < N_FU; fu++) begin
           if (mem_counter_en[intf][fu])
-            total_idx_bytes_d[intf] = total_idx_bytes_q[intf] + (vlen_t'(1) << mem_spatz_req.op_mem.ew);
+            total_idx_bytes_d[intf] = total_idx_bytes_d[intf] + (vlen_t'(1) << mem_spatz_req.op_mem.ew);
         end
       end
 
@@ -509,13 +509,8 @@ module spatz_doublebw_vlsu
         stride = mem_is_strided ? mem_spatz_req.rs2 >> mem_spatz_req.vtype.vsew : 'd1;
 
         if (mem_is_indexed) begin
-          // What is the relationship between data and index width?
-          automatic logic [1:0] data_index_width_diff = int'(mem_spatz_req.vtype.vsew) - int'(mem_spatz_req.op_mem.ew);
-
           // Pointer to index
-          automatic logic [idx_width(N_FU*ELENB)-1:0] word_index = (fu << log2_num_idx_maxew_bytes) +
-                                                                   (idx_offset & (num_idx_maxew_bytes - 1)) +
-                                                                   ((idx_offset >> log2_num_idx_maxew_bytes) << log2_num_idx_maxew_bytes) * N_FU;
+          word_index = (fu << log2_num_idx_maxew_bytes) + (idx_offset & (num_idx_maxew_bytes - 1)) + ((idx_offset >> log2_num_idx_maxew_bytes) << log2_num_idx_maxew_bytes) * N_FU;
 
           // Index
           unique case (mem_spatz_req.op_mem.ew)
