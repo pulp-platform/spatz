@@ -128,17 +128,21 @@ int main() {
 
     // Verify the real part
     for (unsigned int i = 0; i < NFFT; i++) {
-      if (fp_check(buffer[i], gold_out_dram[2 * i])) {
+      int fail = fp_check(buffer[i], gold_out_dram[2 * i]);
+      if (fail) {
         PRINTF("Error: Index %d -> Result = %f, Expected = %f\n", i,
                (float)buffer[i], (float)gold_out_dram[2 * i]);
+        return (i + 1);
       }
     }
 
     // Verify the imac part
     for (unsigned int i = 0; i < NFFT; i++) {
-      if (fp_check(buffer[i + NFFT], gold_out_dram[2 * i + 1])) {
+      int fail = fp_check(buffer[i + NFFT], gold_out_dram[2 * i + 1]);
+      if (fail) {
         PRINTF("Error: Index %d -> Result = %f, Expected = %f\n", i + NFFT,
                (float)buffer[i + NFFT], (float)gold_out_dram[2 * i + 1]);
+        return (i + 1);
       }
     }
   }
