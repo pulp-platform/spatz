@@ -505,7 +505,7 @@ module spatz_vlsu
 
       // If the request has been pushed into the memory request fifo and this is the last offset
       // update address for index to fetch the next address in the following cycle
-      fetch_next_idx[port] = (mem_idx_counter_q[port][$clog2(NrWordsPerVector*ELENB)-1:0] == (num_idx_maxew_bytes - (1'b1 << mem_spatz_req.op_mem.ew))) && mem_counter_en[port];
+      fetch_next_idx[port] = (mem_idx_counter_q[port][$clog2(NrWordsPerVector*ELENB)-1:0] >> MAXEW) != (vs2_vreg_addr & ((1'b1 << $clog2(NrWordsPerVector))-1));
     end
   end: gen_mem_req_addr
 
@@ -928,7 +928,7 @@ module spatz_vlsu
 `endif
         if (!rob_full[port] && !offset_queue_full[port] && mem_operation_valid[port]) begin
           rob_req_id[port]     = spatz_mem_req_ready[port] & spatz_mem_req_valid[port];
-          mem_req_lvalid[port] = (!mem_is_indexed || vrf_rvalid_i[1]) && mem_spatz_req.op_mem.is_load;
+          mem_req_lvalid[port] = (!mem_is_indexed || (vrf_rvalid_i[1] && !fetch_next_idx[port])) && mem_spatz_req.op_mem.is_load;
           mem_req_id[port]     = rob_id[port];
           mem_req_last[port]   = mem_operation_last[port];
         end
@@ -993,7 +993,7 @@ module spatz_vlsu
               default: mem_req_data[port] = data;
             endcase
 
-          mem_req_svalid[port] = rob_rvalid[port] && (!mem_is_indexed || vrf_rvalid_i[1]) && !mem_spatz_req.op_mem.is_load;
+          mem_req_svalid[port] = rob_rvalid[port] && (!mem_is_indexed || (vrf_rvalid_i[1] && !fetch_next_idx[port])) && !mem_spatz_req.op_mem.is_load;
           mem_req_id[port]     = rob_rid[port];
           mem_req_last[port]   = mem_operation_last[port];
           rob_pop[port]        = spatz_mem_req_valid[port] && spatz_mem_req_ready[port];
