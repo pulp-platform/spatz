@@ -132,8 +132,9 @@ spatz.gendata:
 		data_dir="$$benchmark_dir/data"; \
 		if [ -d "$$script_dir" ]; then \
 			json_count=$$(find "$$script_dir" -name '*.json' -type f | wc -l); \
-			if [ "$$json_count" -gt 0 ]; then \
-				echo "Generating data for benchmark $$benchmark_dir ($$json_count json configs)"; \
+			data_count=$$(find "$$data_dir" -name 'data*.h' -type f 2>/dev/null | wc -l); \
+			if [ "$$json_count" -ne "$$data_count" ]; then \
+				echo "Generating data for benchmark $$benchmark_dir ($$json_count json configs, $$data_count data files found)"; \
 				for config in "$$script_dir"/*.json; do \
 					if [ -f "$$config" ]; then \
 						config_path="script/$$(basename $$config)"; \
@@ -141,7 +142,7 @@ spatz.gendata:
 					fi \
 				done \
 			else \
-				echo "No json data configs for benchmark $$benchmark_dir"; \
+				echo "Data already present for benchmark $$benchmark_dir ($$json_count data files)"; \
 			fi \
 		fi \
 	done
