@@ -51,19 +51,32 @@ T *result;
 
 static inline int fp_check(const T *a, const T *b) {
 #if (PREC == 64)
-  const T threshold = 0.001;
+  const float threshold = 0.001f;
 #elif (PREC == 32)
-  const T threshold = 0.01;
+  const float threshold = 0.01f;
 #else
-  const T threshold = 0.5;
+  const float threshold = 0.5f;
 #endif
 
-  // Absolute value
   float comp = (float)*a - (float)*b;
-  if (comp < 0)
-    comp = -comp;
 
-  return comp > threshold;
+  // Compare via the raw bit pattern with the sign bit cleared instead of a
+  // floating-point subtraction/compare against `threshold`. This is called
+  // from inside the result-checking loop right before a conditional PRINTF,
+  // and keeping `threshold` as a live float across that call pushes the
+  // compiler to spill it through a callee-saved fs* register (fsd/fld),
+  // which traps as an illegal instruction on hardware built without the D
+  // extension. IEEE-754 positive floats compare the same way as unsigned
+  // integers of their bit pattern, so this avoids needing a persistent FP
+  // register altogether.
+  union {
+    float f;
+    uint32_t u;
+  } conv, thr;
+  conv.f = comp;
+  thr.f = threshold;
+
+  return (conv.u & 0x7FFFFFFFu) > thr.u;
 }
 
 int main() {
@@ -253,6 +266,8 @@ int main() {
       idx_ptr++;
     }
   }
+  // error accumulator for checking
+  int error = 0;
 
   snrt_cluster_hw_barrier();
 
@@ -355,6 +370,7 @@ int main() {
         PRINTF("Error: ID: %i Result = %x, Golden = %x\n", i,
                *(uint16_t *)&result[i], *(uint16_t *)&gemv_result[i]);
 #endif
+        error++;
       }
     }
   }
@@ -380,5 +396,8 @@ int main() {
 
   // Wait for core 0 to finish displaying results
   snrt_cluster_hw_barrier();
-  return 0;
+  if (error > 0)
+    return -1;
+  else
+    return 0;
 }
