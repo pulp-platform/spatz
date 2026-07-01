@@ -13,6 +13,7 @@ void TEST_CASE1(void) {
           0x00);
   VLOAD_8(v8, 0x10);
   asm volatile("vredor.vs v24, v16, v8");
+  VSET(1, e8, m1);
   VCMP_U8(1, v24, 0x11);
 
   VSET(12, e16, m8);
@@ -20,6 +21,7 @@ void TEST_CASE1(void) {
            0x0000, 0x0000, 0x0101, 0x0100);
   VLOAD_16(v8, 0xe000);
   asm volatile("vredor.vs v24, v16, v8");
+  VSET(1, e16, m1);
   VCMP_U16(2, v24, 0xe701);
 
   VSET(12, e32, m8);
@@ -28,6 +30,7 @@ void TEST_CASE1(void) {
            0x10000001, 0x00000000);
   VLOAD_32(v8, 0x00001000);
   asm volatile("vredor.vs v24, v16, v8");
+  VSET(1, e32, m1);
   VCMP_U32(3, v24, 0x10001001);
 
 #if ELEN == 64
@@ -38,6 +41,7 @@ void TEST_CASE1(void) {
            0x0000000000000000, 0x1000000000000001, 0x0000000000000000);
   VLOAD_64(v8, 0x0000000000000007);
   asm volatile("vredor.vs v24, v16, v8");
+  VSET(1, e64, m1);
   VCMP_U64(4, v24, 0x1000000000000007);
 #endif
 }
@@ -51,6 +55,7 @@ void TEST_CASE2(void) {
   VLOAD_8(v8, 0x00);
   VLOAD_8(v24, 1);
   asm volatile("vredor.vs v24, v16, v8, v0.t");
+  VSET(1, e8, m1);
   VCMP_U8(5, v24, 0x01);
 
   VSET(12, e16, m8);
@@ -60,6 +65,7 @@ void TEST_CASE2(void) {
   VLOAD_16(v8, 0xe000);
   VLOAD_16(v24, 1);
   asm volatile("vredor.vs v24, v16, v8, v0.t");
+  VSET(1, e16, m1);
   VCMP_U16(6, v24, 0xe100);
 
   VSET(12, e32, m8);
@@ -70,6 +76,7 @@ void TEST_CASE2(void) {
   VLOAD_32(v8, 0x00001000);
   VLOAD_32(v24, 1);
   asm volatile("vredor.vs v24, v16, v8, v0.t");
+  VSET(1, e32, m1);
   VCMP_U32(7, v24, 0x10001001);
 
 #if ELEN == 64
@@ -82,6 +89,7 @@ void TEST_CASE2(void) {
   VLOAD_64(v8, 0x0000000000000007);
   VLOAD_64(v24, 1);
   asm volatile("vredor.vs v24, v16, v8, v0.t");
+  VSET(1, e64, m1);
   VCMP_U64(8, v24, 0x1000000000000007);
 #endif
 }
@@ -91,7 +99,7 @@ int main(void) {
   enable_vec();
 
   TEST_CASE1();
-  // TEST_CASE2();
+  TEST_CASE2();
 
   EXIT_CHECK();
 }

@@ -613,6 +613,11 @@ module spatz_controller
         scoreboard_d[spatz_req.id].deps[write_table_d[spatz_req.vd].id] |= write_table_d[spatz_req.vd].valid;
         read_table_d[spatz_req.vd] = {spatz_req.id, 1'b1};
       end
+      // tackling v0 RAW hazard
+      if (!spatz_req.op_arith.vm) begin
+        scoreboard_d[spatz_req.id].deps[write_table_d[0].id] |= write_table_d[0].valid;
+        read_table_d[0] = {spatz_req.id, 1'b1};
+      end
 
 `ifdef VENTAGLIO
       // RAW hazard on the explicit index vreg used by vfxmacc.vrf

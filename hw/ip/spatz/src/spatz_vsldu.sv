@@ -58,6 +58,18 @@ module spatz_vsldu
     .ready_i(spatz_req_ready                                )
   );
 
+
+  vrf_data_t rs1_masked;
+  always_comb begin: rs1_proc
+    rs1_masked = '0;
+    unique case (spatz_req.vtype.vsew)
+      EW_8 : rs1_masked = vrf_data_t'(spatz_req.rs1[7:0]);
+      EW_16: rs1_masked = vrf_data_t'(spatz_req.rs1[15:0]);
+      EW_32: rs1_masked = vrf_data_t'(spatz_req.rs1[31:0]);
+      default: rs1_masked = vrf_data_t'(spatz_req.rs1);  // EW_64
+    endcase
+  end
+
   // Convert the vl to number of bytes for all element widths
   always_comb begin: proc_spatz_req
     spatz_req_d = spatz_req_i;
@@ -174,6 +186,15 @@ module spatz_vsldu
 
   `FF(new_vsldu_request_q, new_vsldu_request, '0)
 
+  typedef enum logic[1:0] {
+    VREG_READ_V0_t_lo, // Add a state to read v0.t
+    VREG_READ_V0_t_hi,
+    VREG_IDLE,
+    VREG_WAIT_FIRST_WRITE
+  } vreg_operation_first_t;
+  vreg_operation_first_t vreg_operation_first_q, vreg_operation_first_d;
+  `FF(vreg_operation_first_q, vreg_operation_first_d, VREG_IDLE)
+
   // Accept a new operation or clear req register if we are finished
   always_comb begin
     slide_amount_d = slide_amount_q;
@@ -204,7 +225,7 @@ module spatz_vsldu
     end
 
     // Clear the prefetch register
-    if (prefetch_q && vrf_re_o && vrf_rvalid_i)
+    if (prefetch_q && vrf_re_o && vrf_rvalid_i && vreg_operation_first_q != VREG_READ_V0_t_lo && vreg_operation_first_q != VREG_READ_V0_t_hi)
       prefetch_d = 1'b0;
   end
 
@@ -219,17 +240,60 @@ module spatz_vsldu
   vlen_t vreg_counter_q;
   `FF(vreg_counter_q, vreg_counter_d, '0)
 
+  // Count how many VRFWords we have already committed
+  logic [$bits(vlen_t)-$clog2(VRFWordBWidth):0] vreg_counter_mod_wordBwidth;
+  assign vreg_counter_mod_wordBwidth = vreg_counter_q >> $clog2(VRFWordBWidth);
+
   // Are we on the first/last VRF operation?
   logic vreg_operation_first;
   logic vreg_operation_last;
 
-  // FSM to decide whether we are on the first operation or not
-  typedef enum logic {
-    VREG_IDLE,
-    VREG_WAIT_FIRST_WRITE
-  } vreg_operation_first_t;
-  vreg_operation_first_t vreg_operation_first_q, vreg_operation_first_d;
-  `FF(vreg_operation_first_q, vreg_operation_first_d, VREG_IDLE)
+  logic v0_t_lo_is_ready,v0_t_hi_is_ready;
+  logic v0_t_lo_read_done,v0_t_hi_read_done;
+
+  assign v0_t_lo_is_ready   = (vreg_operation_first_q == VREG_READ_V0_t_lo) && vrf_rvalid_i;
+  assign v0_t_hi_is_ready   = (vreg_operation_first_q == VREG_READ_V0_t_hi) && vrf_rvalid_i;
+
+  `FFLARNC(v0_t_lo_read_done,1'b1,v0_t_lo_is_ready,vsldu_rsp_valid_o,1'b0,clk_i,rst_ni);
+  `FFLARNC(v0_t_hi_read_done,1'b1,v0_t_hi_is_ready,vsldu_rsp_valid_o,1'b0,clk_i,rst_ni);
+
+  // v0 should be read from VRF
+  vrf_data_t  operand_v0_t_lo,operand_v0_t_lo_q;
+  vrf_data_t  operand_v0_t_hi,operand_v0_t_hi_q;
+
+  assign operand_v0_t_lo = (vreg_operation_first_q == VREG_READ_V0_t_lo)? vrf_rdata_i:'0;
+  assign operand_v0_t_hi = (vreg_operation_first_q == VREG_READ_V0_t_hi)? vrf_rdata_i:'0;
+
+  // Backup v0.t
+  `FFL(operand_v0_t_lo_q, operand_v0_t_lo, v0_t_lo_is_ready, '0)
+  `FFL(operand_v0_t_hi_q, operand_v0_t_hi, v0_t_hi_is_ready, '0)
+
+  logic [VLEN-1:0] operand_v0_t_q;
+  assign operand_v0_t_q = {operand_v0_t_hi_q,operand_v0_t_lo_q};
+
+  // Generate masking based on v0.t
+  logic [VLEN-1:0] vm_masking;
+
+  always_comb begin
+    vm_masking = '1;
+    if(!spatz_req.op_sld.vm) begin
+      case (spatz_req.vtype.vsew)
+        // i < (VLEN/vsew)*8 where 8 --> max lmul
+        EW_8:for(int i=0;i<VLEN;i=i+1)begin
+          vm_masking[i*1+:1] = {1{operand_v0_t_q[i]}};
+        end
+        EW_16:for(int i=0;i<(VLEN/2);i=i+1)begin
+          vm_masking[i*2+:2] = {2{operand_v0_t_q[i]}};
+        end
+        EW_32: for(int i=0;i<(VLEN/4);i=i+1)begin
+          vm_masking[i*4+:4] = {4{operand_v0_t_q[i]}};
+        end
+        default: if (MAXEW == EW_64) for(int i=0;i<(VLEN/8);i=i+1)begin
+          vm_masking[i*8+:8] = {8{operand_v0_t_q[i]}};
+        end
+      endcase
+    end
+  end
 
   always_comb begin: vsldu_vreg_counter_proc
     // How many elements are left to do
@@ -254,12 +318,34 @@ module spatz_vsldu
       VREG_IDLE: begin
         // Wait until our first write operation
         vreg_operation_first = spatz_req_valid && !prefetch_q && new_vsldu_request_q;
-        if (spatz_req_valid && vreg_counter_q <= slide_amount_q)
-          vreg_operation_first_d = VREG_WAIT_FIRST_WRITE;
 
-        if (vrf_req_valid_d && vrf_req_ready_d)
-          vreg_operation_first_d = VREG_IDLE;
+        if(spatz_req_valid && !spatz_req.op_sld.vm && !v0_t_lo_read_done)
+          vreg_operation_first_d = VREG_READ_V0_t_lo;
+        else begin
+          if (spatz_req_valid && vreg_counter_q <= slide_amount_q)
+            vreg_operation_first_d = VREG_WAIT_FIRST_WRITE;
+
+          if (vrf_req_valid_d && vrf_req_ready_d)
+            vreg_operation_first_d = VREG_IDLE;
+        end
       end
+
+      VREG_READ_V0_t_lo: begin
+        vreg_operation_first = 0;
+        if(v0_t_lo_is_ready) begin
+          vreg_operation_first_d = VREG_READ_V0_t_hi;
+        end
+        else vreg_operation_first_d = VREG_READ_V0_t_lo;
+      end
+
+      VREG_READ_V0_t_hi: begin
+        vreg_operation_first = 0;
+        if(v0_t_hi_is_ready) begin
+          vreg_operation_first_d = VREG_WAIT_FIRST_WRITE;
+        end
+        else vreg_operation_first_d = VREG_READ_V0_t_hi;
+      end
+
       VREG_WAIT_FIRST_WRITE: begin
         vreg_operation_first = spatz_req_valid && !prefetch_q;
         if (vrf_req_valid_d && vrf_req_ready_d)
@@ -280,7 +366,7 @@ module spatz_vsldu
     end
 
     // Do we have to increment the counter?
-    vreg_counter_en = ((spatz_req.use_vs2 && vrf_re_o && vrf_rvalid_i) || !spatz_req.use_vs2) && ((spatz_req.use_vd && vrf_req_valid_d && vrf_req_ready_d) || !spatz_req.use_vd);
+    vreg_counter_en = (vreg_operation_first_q!=VREG_READ_V0_t_lo) && (vreg_operation_first_q!=VREG_READ_V0_t_hi) && ((spatz_req.use_vs2 && vrf_re_o && vrf_rvalid_i) || !spatz_req.use_vs2) && ((spatz_req.use_vd && vrf_req_valid_d && vrf_req_ready_d) || !spatz_req.use_vd);
     if (vreg_counter_en) begin
       if (vreg_operation_last)
         // Reset the counter
@@ -351,6 +437,7 @@ module spatz_vsldu
 
   // Data signals for different stages of the shift
   vrf_data_t data_in, data_out, data_low, data_high;
+  vrf_be_t slide_wbe; // Used for monitor wbe signals before vm_masking
 
   always_comb begin
     shift_overflow_d = shift_overflow_q;
@@ -363,17 +450,20 @@ module spatz_vsldu
     vrf_req_d.wbe   = '0;
     vrf_req_d.wdata = '0;
 
+    slide_wbe = '0;
+
     // Is there a vector instruction executing now?
     if (!is_vl_zero) begin
-      if (is_slide_up && spatz_req.op_sld.insert && spatz_req.op_sld.vmv) begin
-        for (int b_src = 0; b_src < VRFWordBWidth; b_src++)
-          data_in[(VRFWordBWidth-b_src-1)*8 +: 8] = spatz_req.rs1[b_src*8%ELEN +: 8];
-      end else if (is_slide_up) begin
-        // If we have a slide up operation, flip all bytes around (d[-i] = d[i])
-        for (int b_src = 0; b_src < VRFWordBWidth; b_src++)
-          data_in[(VRFWordBWidth-b_src-1)*8 +: 8] = vrf_rdata_i[b_src*8 +: 8];
-      end else begin
-        data_in = vrf_rdata_i;
+        if (is_slide_up && spatz_req.op_sld.insert && spatz_req.op_sld.vmv) begin
+          for (int b_src = 0; b_src < VRFWordBWidth; b_src++)
+            data_in[(VRFWordBWidth-b_src-1)*8 +: 8] = spatz_req.rs1[b_src*8%ELEN +: 8];
+        end
+        else if (is_slide_up) begin
+          // If we have a slide up operation, flip all bytes around (d[-i] = d[i])
+          for (int b_src = 0; b_src < VRFWordBWidth; b_src++)
+            data_in[(VRFWordBWidth-b_src-1)*8 +: 8] = (vreg_operation_first_q == VREG_READ_V0_t_lo || vreg_operation_first_q == VREG_READ_V0_t_hi )? data_in[(VRFWordBWidth-b_src-1)*8 +: 8] : vrf_rdata_i[b_src*8 +: 8];
+        end else begin
+          data_in = (vreg_operation_first_q == VREG_READ_V0_t_lo || vreg_operation_first_q == VREG_READ_V0_t_hi)? data_in : vrf_rdata_i;
 
         // If we are already over the MAXVL, all continuing elements are zero
         if ((vreg_counter_q >= MAXVL - slide_amount_q) || (vreg_operation_last && spatz_req.op_sld.insert))
@@ -409,7 +499,7 @@ module spatz_vsldu
           for (int b = 0; b < VRFWordBWidth; b++)
             if (b >= (vreg_counter_q[$clog2(VRFWordBWidth)-1:0] + vreg_counter_delta - (4'b0001<<spatz_req.vtype.vsew)))
               data_out[b*8 +: 8] = data_low[b*8 +: 8];
-          data_out = data_out | (vrf_data_t'(spatz_req.rs1) << 8*(vreg_counter_q[$clog2(VRFWordBWidth)-1:0]+vreg_counter_delta-(4'b0001<<spatz_req.vtype.vsew)));
+          data_out = data_out | (vrf_data_t'(rs1_masked) << 8*(vreg_counter_q[$clog2(VRFWordBWidth)-1:0]+vreg_counter_delta-(4'b0001<<spatz_req.vtype.vsew)));
         end
       end
 
@@ -420,29 +510,32 @@ module spatz_vsldu
 
         // Insert rs1 element at the first position
         if (spatz_req.op_sld.insert && !spatz_req.op_sld.vmv && vreg_operation_first && spatz_req.vstart == 'd0)
-          vrf_req_d.wdata = vrf_req_d.wdata | vrf_data_t'(spatz_req.rs1);
+          // fill the LSB with rs1_masked
+          vrf_req_d.wdata = vrf_req_d.wdata | vrf_data_t'(rs1_masked);
       end else begin
         vrf_req_d.wdata = data_out;
       end
 
       // Create byte enable mask
       for (int i = 0; i < VRFWordBWidth; i++)
-        vrf_req_d.wbe[i] = i < vreg_counter_delta;
+        slide_wbe[i] = i < vreg_counter_delta;
 
       // Special byte enable mask case when we are operating on the first register element.
       if (vreg_operation_first && is_slide_up)
         for (int i = 0; i < VRFWordBWidth; i++)
-          vrf_req_d.wbe[i] = (spatz_req.op_sld.insert || (i >= slide_amount_d[$clog2(VRFWordBWidth)-1:0])) & (i < (vreg_counter_q[$clog2(VRFWordBWidth)-1:0] + vreg_counter_delta));
+          slide_wbe[i] = (spatz_req.op_sld.insert || (i >= slide_amount_d[$clog2(VRFWordBWidth)-1:0])) & (i < (vreg_counter_q[$clog2(VRFWordBWidth)-1:0] + vreg_counter_delta));
     end
 
     // Reset overflow register when finished
     if (vreg_operations_finished)
       shift_overflow_d = '0;
+
+    vrf_req_d.wbe = slide_wbe & vm_masking[vreg_counter_mod_wordBwidth*VRFWordBWidth +:VRFWordBWidth];
   end
 
   // VRF signals
-  assign vrf_re_o        = spatz_req.use_vs2 && (spatz_req_valid || prefetch_q) && running_q[spatz_req.id];
-  assign vrf_req_valid_d = spatz_req_valid && spatz_req.use_vd && (vrf_re_o || !spatz_req.use_vs2) && (vrf_rvalid_i || !spatz_req.use_vs2) && !prefetch_q;
+  assign vrf_re_o        = (vreg_operation_first_q == VREG_READ_V0_t_lo)||(vreg_operation_first_q == VREG_READ_V0_t_hi)||(spatz_req.use_vs2 && (spatz_req_valid || prefetch_q) && running_q[spatz_req.id]);
+  assign vrf_req_valid_d = (vreg_operation_first_q != VREG_READ_V0_t_lo)&&(vreg_operation_first_q != VREG_READ_V0_t_hi)&& spatz_req_valid && spatz_req.use_vd && (vrf_re_o || !spatz_req.use_vs2) && (vrf_rvalid_i || !spatz_req.use_vs2) && !prefetch_q;
 
   ////////////////////////
   // Address Generation //
@@ -460,7 +553,7 @@ module spatz_vsldu
     base_waddr[$bits(vrf_addr_t)-1:zero_fill_idx] = spatz_req.vd;
 
     sld_offset_rd   = is_slide_up ? (prefetch_q ? -slide_amount_q[$bits(vlen_t)-1:$clog2(VRFWordBWidth)] - 1 : -slide_amount_q[$bits(vlen_t)-1:$clog2(VRFWordBWidth)]) : prefetch_q ? slide_amount_q[$bits(vlen_t)-1:$clog2(VRFWordBWidth)] : slide_amount_q[$bits(vlen_t)-1:$clog2(VRFWordBWidth)] + 1;
-    vrf_raddr_o     = base_raddr + vreg_counter_q[$bits(vlen_t)-1:$clog2(VRFWordBWidth)] + sld_offset_rd;
+    vrf_raddr_o     = (vreg_operation_first_q == VREG_READ_V0_t_lo) ? '0 : (vreg_operation_first_q == VREG_READ_V0_t_hi) ? vrf_addr_t'(1) : base_raddr + vreg_counter_q[$bits(vlen_t)-1:$clog2(VRFWordBWidth)] + sld_offset_rd;
     vrf_req_d.waddr = base_waddr + vreg_counter_q[$bits(vlen_t)-1:$clog2(VRFWordBWidth)];
   end
 

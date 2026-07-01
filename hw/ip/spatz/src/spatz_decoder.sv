@@ -316,6 +316,14 @@ module spatz_decoder
         riscv_instr::VREDMINU_VS,
         riscv_instr::VREDMAX_VS,
         riscv_instr::VREDMAXU_VS,
+        riscv_instr::VMANDN_MM,
+        riscv_instr::VMAND_MM,
+        riscv_instr::VMOR_MM,
+        riscv_instr::VMXOR_MM,
+        riscv_instr::VMORN_MM,
+        riscv_instr::VMNAND_MM,
+        riscv_instr::VMNOR_MM,
+        riscv_instr::VMXNOR_MM,
         riscv_instr::VMSEQ_VV,
         riscv_instr::VMSEQ_VX,
         riscv_instr::VMSEQ_VI,
@@ -869,6 +877,38 @@ module spatz_decoder
               end
             end
 
+            riscv_instr::VMANDN_MM: begin
+              spatz_req.op = VMANDNOT;
+            end
+
+            riscv_instr::VMAND_MM: begin
+              spatz_req.op = VMAND;
+            end
+
+            riscv_instr::VMOR_MM: begin
+              spatz_req.op = VMOR;
+            end
+
+            riscv_instr::VMXOR_MM: begin
+              spatz_req.op = VMXOR;
+            end
+
+          riscv_instr::VMORN_MM: begin
+              spatz_req.op = VMORNOT;
+            end
+
+          riscv_instr::VMNAND_MM: begin
+              spatz_req.op = VMNAND;
+            end
+
+          riscv_instr::VMNOR_MM: begin
+              spatz_req.op = VMNOR;
+            end
+
+          riscv_instr::VMXNOR_MM: begin
+              spatz_req.op = VMXNOR;
+            end
+
             default: illegal_instr = 1'b1;
           endcase // Arithmetic Instruction Type
         end
@@ -1365,6 +1405,9 @@ module spatz_decoder
           spatz_req.op_vtl.gather_vd  = 1'b1;
           spatz_req.op_vtl.scatter_vd = 1'b1;
           spatz_req.op_vtl.idx_vreg   = vs1_field;   // explicit index vreg
+
+          // disable masking
+          spatz_req.op_arith.vm = 1'b1;
         end
 
         riscv_instr::VFXMUL_VRF: begin
@@ -1399,6 +1442,9 @@ module spatz_decoder
           spatz_req.op_vtl.scatter_vd = 1'b1;
           // op_vtl.gather_vd intentionally NOT set
           spatz_req.op_vtl.idx_vreg   = vs1_field;
+
+          // disable masking
+          spatz_req.op_arith.vm = 1'b1;
         end
 
         // vventclr — zero the entire ventaglio bank. Issued once per outer
@@ -1421,6 +1467,9 @@ module spatz_decoder
           // VTL plumbing
           spatz_req.op_vtl.use_vtl       = 1'b1;
           spatz_req.op_vtl.clear_buffer  = 1'b1;
+
+          // disable masking
+          spatz_req.op_arith.vm = 1'b1;
         end
 `endif // VENTAGLIO
 

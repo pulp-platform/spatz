@@ -157,8 +157,8 @@ module spatz_vlsu
   //  State  //
   /////////////
 
-  typedef enum logic {
-    VLSU_RunningLoad, VLSU_RunningStore
+  typedef enum logic [1:0] {
+    VLSU_RunningLoad, VLSU_RunningStore, VLSU_ReadingV0_t
   } state_t;
   state_t state_d, state_q;
   `FF(state_q, state_d, VLSU_RunningLoad)
@@ -333,6 +333,7 @@ module spatz_vlsu
     vlen_t vstart;
     logic [2:0] rs1;
 
+    logic vm;
     logic is_load;
     logic is_strided;
     logic is_indexed;
@@ -371,6 +372,7 @@ module spatz_vlsu
       vl        : mem_spatz_req.vl,
       vstart    : mem_spatz_req.vstart,
       rs1       : mem_spatz_req.rs1[2:0],
+      vm        : mem_spatz_req.op_mem.vm,
       is_load   : mem_spatz_req.op_mem.is_load,
       is_strided: mem_is_strided,
       is_indexed: mem_is_indexed
@@ -447,14 +449,36 @@ module spatz_vlsu
 
   vrf_addr_t vd_vreg_addr;
   vrf_addr_t vs2_vreg_addr;
+  vrf_addr_t v0_t_vreg_addr_lo, v0_t_vreg_addr_hi;
 
   // Current element index and byte index that are being accessed at the register file
   vreg_elem_t vd_elem_id;
   vreg_elem_t vs2_elem_id_d, vs2_elem_id_q;
   `FF(vs2_elem_id_q, vs2_elem_id_d, '0)
 
-  // Pending indexes
-  logic [NrMemPorts-1:0] fetch_next_idx;
+  // Total bytes of indexes consumed since instruction start
+  vlen_t total_idx_bytes_q, total_idx_bytes_d;
+  `FF(total_idx_bytes_q, total_idx_bytes_d, '0)
+
+  logic fetch_next_idx_global;
+
+  always_comb begin
+    total_idx_bytes_d = total_idx_bytes_q;
+
+    // Reset on new instruction
+    if (mem_spatz_req_ready) begin
+      total_idx_bytes_d = '0;
+    end else begin
+      for (int unsigned p = 0; p < NrMemPorts; p++) begin
+        if (mem_counter_en[p])
+          total_idx_bytes_d = total_idx_bytes_d + (vlen_t'(1) << mem_spatz_req.op_mem.ew);
+      end
+    end
+
+    // Advance vs2_elem_id when we cross a VRF word boundary
+    fetch_next_idx_global = mem_is_indexed && ((total_idx_bytes_d >> $clog2(VRFWordBWidth)) != (total_idx_bytes_q >> $clog2(VRFWordBWidth)));
+  end
+
 
   // Calculate the memory address for each memory port
   addr_offset_t [NrMemPorts-1:0] mem_req_addr_offset;
@@ -481,6 +505,9 @@ module spatz_vlsu
 
     always_comb begin
       word_index = '0;
+      addr = '0;
+      stride ='0;
+      offset ='0;
       stride = mem_is_strided ? mem_spatz_req.rs2 >> mem_spatz_req.vtype.vsew : 'd1;
 
       if (mem_is_indexed) begin
@@ -502,17 +529,28 @@ module spatz_vlsu
       addr                      = mem_spatz_req.rs1 + offset;
       mem_req_addr[port]        = (addr >> MAXEW) << MAXEW;
       mem_req_addr_offset[port] = addr[int'(MAXEW)-1:0];
-
-      // If the request has been pushed into the memory request fifo and this is the last offset
-      // update address for index to fetch the next address in the following cycle
-      fetch_next_idx[port] = (mem_idx_counter_q[port][$clog2(NrWordsPerVector*ELENB)-1:0] == (num_idx_maxew_bytes - (1'b1 << mem_spatz_req.op_mem.ew))) && mem_counter_en[port];
     end
   end: gen_mem_req_addr
+
+  logic v0_t_is_ready;
+  // Reuse vrf_read[1] for V0 reading
+  assign v0_t_is_ready   = (state_q == VLSU_ReadingV0_t) && (&vrf_rvalid_i);
+
+  // v0 should be read from vrf
+  logic [VLEN-1:0]  operand_v0_t,operand_v0_t_q;
+  assign operand_v0_t = (state_q == VLSU_ReadingV0_t)? {vrf_rdata_i[1],vrf_rdata_i[0]}:'0;
+
+  // Backup v0.t
+  `FFL(operand_v0_t_q, operand_v0_t, v0_t_is_ready, '0)
+
 
   // Calculate the register file address
   always_comb begin : gen_vreg_addr
     vd_vreg_addr  = (commit_insn_q.vd << $clog2(NrWordsPerVector)) + $unsigned(vd_elem_id);
     vs2_vreg_addr = (mem_spatz_req.vs2 << $clog2(NrWordsPerVector)) + $unsigned(vs2_elem_id_q);
+
+    v0_t_vreg_addr_lo = vrf_addr_t'(0);   // v0 word 0
+    v0_t_vreg_addr_hi = vrf_addr_t'(1);   // v0 word 1
   end
 
   ///////////////
@@ -698,7 +736,7 @@ module spatz_vlsu
         commit_counter_d[fu] += ELENB;
       else if (commit_insn_q.vstart[idx_width(N_FU*ELENB)-1:$clog2(ELENB)] == fu)
         commit_counter_d[fu] += commit_insn_q.vstart[$clog2(ELENB)-1:0];
-      commit_operation_valid[fu] = commit_insn_valid && (commit_counter_q[fu] != max_elements) && (catchup[fu] || (!catchup[fu] && ~|catchup));
+      commit_operation_valid[fu] = (state_q == VLSU_RunningLoad || state_q == VLSU_RunningStore)&& commit_insn_valid && (commit_counter_q[fu] != max_elements) && (catchup[fu] || (!catchup[fu] && ~|catchup));
       commit_operation_last[fu]  = commit_operation_valid[fu] && ((max_elements - commit_counter_q[fu]) <= (commit_is_single_element_operation ? commit_single_element_size : ELENB));
       commit_counter_delta[fu]   = !commit_operation_valid[fu] ? vlen_t'('d0) : commit_is_single_element_operation ? vlen_t'(commit_single_element_size) : commit_operation_last[fu] ? (max_elements - commit_counter_q[fu]) : vlen_t'(ELENB);
       commit_counter_en[fu]      = commit_operation_valid[fu] && (commit_insn_q.is_load && vrf_req_valid_d && vrf_req_ready_d) || (!commit_insn_q.is_load && vrf_rvalid_i[0] && vrf_re_o[0] && (!mem_is_indexed || vrf_rvalid_i[1]));
@@ -749,6 +787,12 @@ module spatz_vlsu
   // State //
   ///////////
 
+  logic vlsu_rsp_valid_q; // register the instruction finish signal
+  logic v0_t_is_ready_q;
+  logic v0_t_read_done;
+  `FFLARNC(v0_t_read_done,1'b1,v0_t_is_ready,vlsu_rsp_valid_o,1'b0,clk_i,rst_ni);
+  `FF(v0_t_is_ready_q,v0_t_is_ready,'0);
+
   always_comb begin: p_state
     // Maintain state
     state_d = state_q;
@@ -760,12 +804,24 @@ module spatz_vlsu
 
     unique case (state_q)
       VLSU_RunningLoad: begin
+        if(commit_insn_valid && !commit_insn_q.vm && !v0_t_read_done)
+          state_d = VLSU_ReadingV0_t;
         if (commit_insn_valid && !commit_insn_q.is_load)
           if (&rob_empty)
             state_d = VLSU_RunningStore;
       end
 
+      VLSU_ReadingV0_t:
+        if(v0_t_is_ready & ~v0_t_is_ready_q) begin
+          state_d = VLSU_RunningLoad;
+          if (commit_insn_valid && !commit_insn_q.is_load)
+            state_d = VLSU_RunningStore;
+        end
+        else state_d = state_q;
+
       VLSU_RunningStore: begin
+        if(commit_insn_valid && !commit_insn_q.vm && !v0_t_read_done)
+          state_d = VLSU_ReadingV0_t;
         if (commit_insn_valid && commit_insn_q.is_load)
           if (&rob_empty)
             if (!write_pending)
@@ -809,9 +865,71 @@ module spatz_vlsu
     end
   end
 
+  // Generate masking based on v0.t
+  logic [VLEN-1:0] vm_masking;
+
+  always_comb begin
+    vm_masking = '1;
+    if(!commit_insn_q.vm) begin
+      case (commit_insn_q.vsew)
+        // i < (VLEN/vsew)*8 where 8 --> max lmul
+        EW_8:for(int i=0;i<VLEN;i=i+1)begin
+          vm_masking[i*1+:1] = {1{operand_v0_t_q[i]}};
+        end
+        EW_16:for(int i=0;i<(VLEN/2);i=i+1)begin
+          vm_masking[i*2+:2] = {2{operand_v0_t_q[i]}};
+        end
+        EW_32: for(int i=0;i<(VLEN/4);i=i+1)begin
+          vm_masking[i*4+:4] = {4{operand_v0_t_q[i]}};
+        end
+        default: if (MAXEW == EW_64) for(int i=0;i<(VLEN/8);i=i+1)begin
+          vm_masking[i*8+:8] = {8{operand_v0_t_q[i]}};
+        end
+      endcase
+    end
+  end
+
+  vlen_t commit_counter_sum,mem_counter_sum;
+  vlen_t commit_slice_base, mem_slice_base;
+
+  always_comb begin
+     commit_counter_sum = '0;
+     mem_counter_sum = '0;
+    for (int unsigned port = 0; port < NrMemPorts; port++) begin
+      commit_counter_sum += commit_counter_q[port];
+      mem_counter_sum += mem_counter_q[port];
+    end
+    commit_slice_base = (commit_counter_sum >> $clog2(VRFWordBWidth)) << $clog2(VRFWordBWidth);
+    mem_slice_base    = (mem_counter_sum    >> $clog2(VRFWordBWidth)) << $clog2(VRFWordBWidth);
+  end
+
+
+  // Intermediate wbe, before vm_masking.
+  vrf_be_t load_wbe;
+
+  // Monitor the vm_wbe selected from vm_masking
+  vrf_be_t vm_wbe;
+
+  // Select 8-bit masking for each port, before reordering according to rs1
+  logic [NrMemPorts-1:0][ELEN/8-1:0] vm_wbe_store;
+
+  // Intermediate strb, before vm_masking.
+  logic [NrMemPorts-1:0][ELEN/8-1:0] store_strb;
+
+  // To monitor the vm_masking on each port.
+  logic [NrMemPorts-1:0][ELEN/8-1:0] vm_strb;
+
+  always_comb begin
+    for (int port = 0; port < NrMemPorts; port++) begin
+      vm_wbe_store[port] = commit_insn_q.vm ? {ELENB{1'b1}} : vm_masking[mem_slice_base + port*ELENB +: ELENB];
+    end
+  end
+
   // verilator lint_off LATCH
   always_comb begin
-    vrf_raddr_o     = {vs2_vreg_addr, vd_vreg_addr};
+    load_wbe = '0;
+
+    vrf_raddr_o     = (state_q == VLSU_ReadingV0_t)? {v0_t_vreg_addr_hi, v0_t_vreg_addr_lo}:{vs2_vreg_addr, vd_vreg_addr};
     vrf_re_o        = '0;
     vrf_req_d       = '0;
     vrf_req_valid_d = 1'b0;
@@ -834,22 +952,24 @@ module spatz_vlsu
     vrf_req_d.rsp_valid = commit_insn_valid && &commit_finished_d && mem_insn_finished_d[commit_insn_q.id];
 
     // Request indexes
-    vrf_re_o[1] = mem_is_indexed;
+    vrf_re_o[1] = (state_q == VLSU_ReadingV0_t)? 1'b1:mem_is_indexed; // for indexed load/store we need to read vs2
+    if (state_q == VLSU_ReadingV0_t)
+      vrf_re_o[0] = 1'b1;
 
     // Count which vs2 element we should load (indexed loads)
     vs2_elem_id_d = vs2_elem_id_q;
-    if (&(fetch_next_idx ^ ~mem_operation_valid) && mem_is_indexed)
+    if (fetch_next_idx_global)
       vs2_elem_id_d = vs2_elem_id_q + 1;
-    if (mem_spatz_req_ready)
+    if (mem_spatz_req_ready) // finish one instruction
       vs2_elem_id_d = '0;
 
     if (commit_insn_valid && commit_insn_q.is_load) begin
-      // If we have a valid element in the buffer, store it back to the register file
+      // If we have a valid element in the buffer, put it back to the register file
       if (state_q == VLSU_RunningLoad && |commit_operation_valid) begin
         // Enable write back to the VRF if we have a valid element in all buffers that still have to write something back.
         vrf_req_d.waddr = vd_vreg_addr;
-        vrf_req_valid_d = &(rob_rvalid | ~mem_pending) && |mem_pending;
-
+        // rob_rvalid: data is in the rob ready to be written back to VRF
+        vrf_req_valid_d = &(rob_rvalid | ~mem_pending) && |mem_pending && (commit_insn_q.vm || v0_t_read_done);
         for (int unsigned port = 0; port < NrMemPorts; port++) begin
           automatic logic [63:0] data = rob_rdata[port];
 
@@ -909,10 +1029,17 @@ module spatz_vlsu
                 EW_32: mask   = 15;
                 default: mask = '1;
               endcase
-              vrf_req_d.wbe[ELENB*port +: ELENB] = mask << shift;
-            end else
-              for (int unsigned k = 0; k < ELENB; k++)
-                vrf_req_d.wbe[ELENB*port+k] = k < commit_counter_delta[port];
+
+              load_wbe[ELENB*port +: ELENB] = (mask << shift);
+              vm_wbe = vm_masking[commit_slice_base +: VRFWordBWidth];
+              vrf_req_d.wbe = load_wbe & vm_wbe;
+            end
+            else begin
+              for (int unsigned k = 0; k < ELENB; k++) begin
+                load_wbe[ELENB*port+k] = (k < commit_counter_delta[port]);
+                vrf_req_d.wbe = load_wbe & (commit_insn_q.vm ? {VRFWordBWidth{1'b1}} : vm_masking[commit_slice_base +: VRFWordBWidth]);
+              end
+            end
         end
       end
 
@@ -922,9 +1049,9 @@ module spatz_vlsu
 `ifdef MEMPOOL_SPATZ
         rob_wid[port]   = spatz_mem_rsp_i[port].id;
         // Need to consider out-of-order memory response
-        rob_push[port]  = spatz_mem_rsp_valid_i[port] && (state_q == VLSU_RunningLoad) && spatz_mem_rsp_i[port].write == '0;
+        rob_push[port]  = spatz_mem_rsp_valid_i[port] && (state_q == VLSU_RunningLoad || state_q == VLSU_ReadingV0_t) && store_count_q[port] == '0;
 `else
-        rob_push[port]  = spatz_mem_rsp_valid_i[port] && (state_q == VLSU_RunningLoad) && store_count_q[port] == '0;
+        rob_push[port]  = spatz_mem_rsp_valid_i[port] && (state_q == VLSU_RunningLoad || state_q == VLSU_ReadingV0_t) && store_count_q[port] == '0;
 `endif
         if (!rob_full[port] && !offset_queue_full[port] && mem_operation_valid[port]) begin
           rob_req_id[port]     = spatz_mem_req_ready[port] & spatz_mem_req_valid[port];
@@ -948,6 +1075,7 @@ module spatz_vlsu
       end
 
       for (int unsigned port = 0; port < NrMemPorts; port++) begin
+        vm_strb[port] = vm_wbe_store[port];
         // Read element from buffer and execute memory request
         if (mem_operation_valid[port]) begin
           automatic logic [63:0] data = rob_rdata[port];
@@ -956,44 +1084,109 @@ module spatz_vlsu
           if (mem_is_strided || mem_is_indexed)
             if (MAXEW == EW_32)
               unique case (mem_counter_q[port][1:0])
-                2'b01: data = {data[7:0], data[31:8]};
-                2'b10: data = {data[15:0], data[31:16]};
-                2'b11: data = {data[23:0], data[31:24]};
-                default:; // Do nothing
+                2'b01: begin
+                  data          = {data[7:0], data[31:8]};
+                  vm_strb[port] = {vm_wbe_store[port][0],   vm_wbe_store[port][3:1]};
+                end
+                2'b10: begin
+                  data          = {data[15:0], data[31:16]};
+                  vm_strb[port] = {vm_wbe_store[port][1:0], vm_wbe_store[port][3:2]};
+                end
+                2'b11: begin
+                  data          = {data[23:0], data[31:24]};
+                  vm_strb[port] = {vm_wbe_store[port][2:0], vm_wbe_store[port][3]};
+                end
+                default: vm_strb[port] = vm_wbe_store[port];
               endcase
             else
+              // Shift vm_masking along with data
               unique case (mem_counter_q[port][2:0])
-                3'b001: data = {data[7:0], data[63:8]};
-                3'b010: data = {data[15:0], data[63:16]};
-                3'b011: data = {data[23:0], data[63:24]};
-                3'b100: data = {data[31:0], data[63:32]};
-                3'b101: data = {data[39:0], data[63:40]};
-                3'b110: data = {data[47:0], data[63:48]};
-                3'b111: data = {data[55:0], data[63:56]};
-                default:; // Do nothing
+                3'b001: begin
+                  data = {data[7:0], data[63:8]};
+                  vm_strb[port] = {vm_wbe_store[port][0],vm_wbe_store[port][7:1]};
+                end
+                3'b010: begin
+                  data = {data[15:0], data[63:16]};
+                  vm_strb[port] = {vm_wbe_store[port][1:0],vm_wbe_store[port][7:2]};
+                end
+                3'b011: begin
+                  data = {data[23:0], data[63:24]};
+                  vm_strb[port] = {vm_wbe_store[port][2:0],vm_wbe_store[port][7:3]};
+                end
+                3'b100: begin
+                  data = {data[31:0], data[63:32]};
+                  vm_strb[port] = {vm_wbe_store[port][3:0],vm_wbe_store[port][7:4]};
+                end
+                3'b101: begin
+                  data = {data[39:0], data[63:40]};
+                  vm_strb[port] = {vm_wbe_store[port][4:0],vm_wbe_store[port][7:5]};
+                end
+                3'b110: begin
+                  data = {data[47:0], data[63:48]};
+                  vm_strb[port] = {vm_wbe_store[port][5:0],vm_wbe_store[port][7:6]};
+                end
+                3'b111: begin
+                  data = {data[55:0], data[63:56]};
+                  vm_strb[port] = {vm_wbe_store[port][6:0],vm_wbe_store[port][7]};
+                end
+                default: vm_strb[port] = vm_wbe_store[port]; // Do nothing
               endcase
 
           // Shift data to correct position if we have an unaligned memory request
           if (MAXEW == EW_32)
-            unique case ((mem_is_strided || mem_is_indexed) ? mem_req_addr_offset[port] : mem_spatz_req.rs1[1:0])
-              2'b01: mem_req_data[port]   = {data[23:0], data[31:24]};
-              2'b10: mem_req_data[port]   = {data[15:0], data[31:16]};
-              2'b11: mem_req_data[port]   = {data[7:0], data[31:8]};
-              default: mem_req_data[port] = data;
-            endcase
+              unique case ((mem_is_strided || mem_is_indexed) ? mem_req_addr_offset[port] : mem_spatz_req.rs1[1:0])
+                2'b01: begin
+                  mem_req_data[port] = {data[23:0], data[31:24]};
+                  vm_strb[port]      = {vm_strb[port][2:0], vm_strb[port][3]};
+                end
+                2'b10: begin
+                  mem_req_data[port] = {data[15:0], data[31:16]};
+                  vm_strb[port]      = {vm_strb[port][1:0], vm_strb[port][3:2]};
+                end
+                2'b11: begin
+                  mem_req_data[port] = {data[7:0], data[31:8]};
+                  vm_strb[port]      = {vm_strb[port][0], vm_strb[port][3:1]};
+                end
+                default: mem_req_data[port] = data;
+              endcase
           else
             unique case ((mem_is_strided || mem_is_indexed) ? mem_req_addr_offset[port] : mem_spatz_req.rs1[2:0])
-              3'b001: mem_req_data[port]  = {data[55:0], data[63:56]};
-              3'b010: mem_req_data[port]  = {data[47:0], data[63:48]};
-              3'b011: mem_req_data[port]  = {data[39:0], data[63:40]};
-              3'b100: mem_req_data[port]  = {data[31:0], data[63:32]};
-              3'b101: mem_req_data[port]  = {data[23:0], data[63:24]};
-              3'b110: mem_req_data[port]  = {data[15:0], data[63:16]};
-              3'b111: mem_req_data[port]  = {data[7:0], data[63:8]};
-              default: mem_req_data[port] = data;
+              3'b001: begin
+                // Reoreder vm_masking along with data
+                mem_req_data[port]  = {data[55:0], data[63:56]};
+                vm_strb[port] = {vm_strb[port][6:0],vm_strb[port][7]};
+              end
+              3'b010: begin
+                mem_req_data[port]  = {data[47:0], data[63:48]};
+                vm_strb[port] = {vm_strb[port][5:0],vm_strb[port][7:6]};
+              end
+              3'b011: begin
+                mem_req_data[port]  = {data[39:0], data[63:40]};
+                vm_strb[port] = {vm_strb[port][4:0],vm_strb[port][7:5]};
+              end
+              3'b100: begin
+                mem_req_data[port]  = {data[31:0], data[63:32]};
+                vm_strb[port] = {vm_strb[port][3:0],vm_strb[port][7:4]};
+              end
+              3'b101: begin
+                mem_req_data[port]  = {data[23:0], data[63:24]};
+                vm_strb[port] = {vm_strb[port][2:0],vm_strb[port][7:3]};
+              end
+              3'b110: begin
+                mem_req_data[port]  = {data[15:0], data[63:16]};
+                vm_strb[port] = {vm_strb[port][1:0],vm_strb[port][7:2]};
+              end
+              3'b111: begin
+                mem_req_data[port]  = {data[7:0], data[63:8]};
+                vm_strb[port] = {vm_strb[port][0],vm_strb[port][7:1]};
+              end
+              default: begin
+                mem_req_data[port] = data;
+                vm_strb[port] = vm_strb[port];
+              end
             endcase
 
-          mem_req_svalid[port] = rob_rvalid[port] && (!mem_is_indexed || vrf_rvalid_i[1]) && !mem_spatz_req.op_mem.is_load;
+          mem_req_svalid[port] = rob_rvalid[port] && (!mem_is_indexed || vrf_rvalid_i[1]) && !mem_spatz_req.op_mem.is_load && (commit_insn_q.vm || v0_t_read_done);
           mem_req_id[port]     = rob_rid[port];
           mem_req_last[port]   = mem_operation_last[port];
           rob_pop[port]        = spatz_mem_req_valid[port] && spatz_mem_req_ready[port];
@@ -1008,10 +1201,15 @@ module spatz_vlsu
               EW_32: mask   = 15;
               default: mask = '1;
             endcase
-            mem_req_strb[port] = mask << shift;
-          end else
-            for (int unsigned k = 0; k < ELENB; k++)
-              mem_req_strb[port][k] = k < mem_counter_delta[port];
+            store_strb[port] = mask << shift;
+            mem_req_strb[port] = store_strb[port] & vm_strb[port];
+          end
+          else begin
+            for (int unsigned k = 0; k < ELENB; k++) begin
+              store_strb[port][k] = k < mem_counter_delta[port];
+            end
+            mem_req_strb[port] = store_strb[port] & (commit_insn_q.vm ? {ELENB{1'b1}} : vm_masking[mem_slice_base + port*ELENB +: ELENB]);
+          end
         end else begin
           // Clear empty buffer id requests
           if (!rob_empty[port])
@@ -1055,7 +1253,7 @@ module spatz_vlsu
     assign spatz_mem_req[port].data  = mem_req_data[port];
     assign spatz_mem_req[port].strb  = mem_req_strb[port];
     assign spatz_mem_req[port].user  = '0;
-    assign spatz_mem_req_valid[port] = mem_req_svalid[port] || mem_req_lvalid[port];
+    assign spatz_mem_req_valid[port] = (state_q == VLSU_RunningLoad || state_q == VLSU_RunningStore)&&(mem_req_svalid[port] || mem_req_lvalid[port]);
 `endif
   end
 

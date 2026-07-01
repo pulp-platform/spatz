@@ -37,29 +37,35 @@ void TEST_CASE2(void) {
   VLOAD_8(v4, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
   VLOAD_8(v8, 8, 7, 6, 5, 4, 3, 2, 1, 8, 7, 6, 5, 4, 3, 2, 1);
   VLOAD_8(v0, 0xAA, 0xAA);
-  VCLEAR(v6);
-  asm volatile("vwsub.vv v6, v4, v8, v0.t");
   VSET(16, e16, m4);
-  VCMP_U16(4, v6, 0, -5, 0, -1, 0, 3, 0, 7, 0, -5, 0, -1, 0, 3, 0, 7);
+  VCLEAR(v16);
+  VSET(16, e8, m2);
+  asm volatile("vwsub.vv v16, v4, v8, v0.t");
+  VSET(16, e16, m4);
+  VCMP_U16(4, v16, 0, -5, 0, -1, 0, 3, 0, 7, 0, -5, 0, -1, 0, 3, 0, 7);
 
   VSET(16, e16, m2);
   VLOAD_16(v4, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
   VLOAD_16(v8, 8, 7, 6, 5, 4, 3, 2, 1, 8, 7, 6, 5, 4, 3, 2, 1);
   VLOAD_8(v0, 0xAA, 0xAA);
-  VCLEAR(v6);
-  asm volatile("vwsub.vv v6, v4, v8, v0.t");
   VSET(16, e32, m4);
-  VCMP_U32(5, v6, 0, -5, 0, -1, 0, 3, 0, 7, 0, -5, 0, -1, 0, 3, 0, 7);
+  VCLEAR(v16);
+  VSET(16, e16, m2);
+  asm volatile("vwsub.vv v16, v4, v8, v0.t");
+  VSET(16, e32, m4);
+  VCMP_U32(5, v16, 0, -5, 0, -1, 0, 3, 0, 7, 0, -5, 0, -1, 0, 3, 0, 7);
 
 #if ELEN == 64
   VSET(16, e32, m2);
   VLOAD_32(v4, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
   VLOAD_32(v8, 8, 7, 6, 5, 4, 3, 2, 1, 8, 7, 6, 5, 4, 3, 2, 1);
   VLOAD_8(v0, 0xAA, 0xAA);
-  VCLEAR(v6);
-  asm volatile("vwsub.vv v6, v4, v8, v0.t");
   VSET(16, e64, m4);
-  VCMP_U64(6, v6, 0, -5, 0, -1, 0, 3, 0, 7, 0, -5, 0, -1, 0, 3, 0, 7);
+  VCLEAR(v16);
+  VSET(16, e32, m2);
+  asm volatile("vwsub.vv v16, v4, v8, v0.t");
+  VSET(16, e64, m4);
+  VCMP_U64(6, v16, 0, -5, 0, -1, 0, 3, 0, 7, 0, -5, 0, -1, 0, 3, 0, 7);
 #endif
 }
 
@@ -96,27 +102,33 @@ void TEST_CASE4(void) {
   VSET(16, e8, m2);
   VLOAD_8(v4, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
   VLOAD_8(v0, 0xAA, 0xAA);
-  VCLEAR(v6);
-  asm volatile("vwsub.vx v6, v4, %[A], v0.t" ::[A] "r"(scalar));
   VSET(16, e16, m4);
-  VCMP_U16(10, v6, 0, -3, 0, -1, 0, 1, 0, 3, 0, -3, 0, -1, 0, 1, 0, 3);
+  VCLEAR(v16);
+  VSET(16, e8, m2);
+  asm volatile("vwsub.vx v16, v4, %[A], v0.t" ::[A] "r"(scalar));
+  VSET(16, e16, m4);
+  VCMP_U16(10, v16, 0, -3, 0, -1, 0, 1, 0, 3, 0, -3, 0, -1, 0, 1, 0, 3);
 
   VSET(16, e16, m2);
   VLOAD_16(v4, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
   VLOAD_8(v0, 0xAA, 0xAA);
-  VCLEAR(v6);
-  asm volatile("vwsub.vx v6, v4, %[A], v0.t" ::[A] "r"(scalar));
   VSET(16, e32, m4);
-  VCMP_U32(11, v6, 0, -3, 0, -1, 0, 1, 0, 3, 0, -3, 0, -1, 0, 1, 0, 3);
+  VCLEAR(v16);
+  VSET(16, e16, m2);
+  asm volatile("vwsub.vx v16, v4, %[A], v0.t" ::[A] "r"(scalar));
+  VSET(16, e32, m4);
+  VCMP_U32(11, v16, 0, -3, 0, -1, 0, 1, 0, 3, 0, -3, 0, -1, 0, 1, 0, 3);
 
 #if ELEN == 64
   VSET(16, e32, m2);
   VLOAD_32(v4, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
   VLOAD_8(v0, 0xAA, 0xAA);
-  VCLEAR(v6);
-  asm volatile("vwsub.vx v6, v4, %[A], v0.t" ::[A] "r"(scalar));
   VSET(16, e64, m4);
-  VCMP_U64(12, v6, 0, -3, 0, -1, 0, 1, 0, 3, 0, -3, 0, -1, 0, 1, 0, 3);
+  VCLEAR(v16);
+  VSET(16, e32, m2);
+  asm volatile("vwsub.vx v16, v4, %[A], v0.t" ::[A] "r"(scalar));
+  VSET(16, e64, m4);
+  VCMP_U64(12, v16, 0, -3, 0, -1, 0, 1, 0, 3, 0, -3, 0, -1, 0, 1, 0, 3);
 #endif
 }
 
@@ -150,29 +162,35 @@ void TEST_CASE6(void) {
   VLOAD_16(v4, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
   VLOAD_8(v8, 8, 7, 6, 5, 4, 3, 2, 1, 8, 7, 6, 5, 4, 3, 2, 1);
   VLOAD_8(v0, 0xAA, 0xAA);
-  VCLEAR(v6);
-  asm volatile("vwsub.wv v6, v4, v8, v0.t");
   VSET(16, e16, m4);
-  VCMP_U16(16, v6, 0, -5, 0, -1, 0, 3, 0, 7, 0, -5, 0, -1, 0, 3, 0, 7);
+  VCLEAR(v16);
+  VSET(16, e8, m2);
+  asm volatile("vwsub.wv v16, v4, v8, v0.t");
+  VSET(16, e16, m4);
+  VCMP_U16(16, v16, 0, -5, 0, -1, 0, 3, 0, 7, 0, -5, 0, -1, 0, 3, 0, 7);
 
   VSET(16, e16, m2);
   VLOAD_32(v4, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
   VLOAD_16(v8, 8, 7, 6, 5, 4, 3, 2, 1, 8, 7, 6, 5, 4, 3, 2, 1);
   VLOAD_8(v0, 0xAA, 0xAA);
-  VCLEAR(v6);
-  asm volatile("vwsub.wv v6, v4, v8, v0.t");
   VSET(16, e32, m4);
-  VCMP_U32(17, v6, 0, -5, 0, -1, 0, 3, 0, 7, 0, -5, 0, -1, 0, 3, 0, 7);
+  VCLEAR(v16);
+  VSET(16, e16, m2);
+  asm volatile("vwsub.wv v16, v4, v8, v0.t");
+  VSET(16, e32, m4);
+  VCMP_U32(17, v16, 0, -5, 0, -1, 0, 3, 0, 7, 0, -5, 0, -1, 0, 3, 0, 7);
 
 #if ELEN == 64
   VSET(16, e32, m2);
   VLOAD_64(v4, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
   VLOAD_32(v8, 8, 7, 6, 5, 4, 3, 2, 1, 8, 7, 6, 5, 4, 3, 2, 1);
   VLOAD_8(v0, 0xAA, 0xAA);
-  VCLEAR(v6);
-  asm volatile("vwsub.wv v6, v4, v8, v0.t");
   VSET(16, e64, m4);
-  VCMP_U64(18, v6, 0, -5, 0, -1, 0, 3, 0, 7, 0, -5, 0, -1, 0, 3, 0, 7);
+  VCLEAR(v16);
+  VSET(16, e32, m2);
+  asm volatile("vwsub.wv v16, v4, v8, v0.t");
+  VSET(16, e64, m4);
+  VCMP_U64(18, v16, 0, -5, 0, -1, 0, 3, 0, 7, 0, -5, 0, -1, 0, 3, 0, 7);
 #endif
 }
 
@@ -209,27 +227,33 @@ void TEST_CASE8(void) {
   VSET(16, e8, m2);
   VLOAD_16(v4, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
   VLOAD_8(v0, 0xAA, 0xAA);
-  VCLEAR(v6);
-  asm volatile("vwsub.wx v6, v4, %[A], v0.t" ::[A] "r"(scalar));
   VSET(16, e16, m4);
-  VCMP_U16(22, v6, 0, -3, 0, -1, 0, 1, 0, 3, 0, -3, 0, -1, 0, 1, 0, 3);
+  VCLEAR(v16);
+  VSET(16, e8, m2);
+  asm volatile("vwsub.wx v16, v4, %[A], v0.t" ::[A] "r"(scalar));
+  VSET(16, e16, m4);
+  VCMP_U16(22, v16, 0, -3, 0, -1, 0, 1, 0, 3, 0, -3, 0, -1, 0, 1, 0, 3);
 
   VSET(16, e16, m2);
   VLOAD_32(v4, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
   VLOAD_8(v0, 0xAA, 0xAA);
-  VCLEAR(v6);
-  asm volatile("vwsub.wx v6, v4, %[A], v0.t" ::[A] "r"(scalar));
   VSET(16, e32, m4);
-  VCMP_U32(23, v6, 0, -3, 0, -1, 0, 1, 0, 3, 0, -3, 0, -1, 0, 1, 0, 3);
+  VCLEAR(v16);
+  VSET(16, e16, m2);
+  asm volatile("vwsub.wx v16, v4, %[A], v0.t" ::[A] "r"(scalar));
+  VSET(16, e32, m4);
+  VCMP_U32(23, v16, 0, -3, 0, -1, 0, 1, 0, 3, 0, -3, 0, -1, 0, 1, 0, 3);
 
 #if ELEN == 64
   VSET(16, e32, m2);
   VLOAD_64(v4, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
   VLOAD_8(v0, 0xAA, 0xAA);
-  VCLEAR(v6);
-  asm volatile("vwsub.wx v6, v4, %[A], v0.t" ::[A] "r"(scalar));
   VSET(16, e64, m4);
-  VCMP_U64(24, v6, 0, -3, 0, -1, 0, 1, 0, 3, 0, -3, 0, -1, 0, 1, 0, 3);
+  VCLEAR(v16);
+  VSET(16, e32, m2);
+  asm volatile("vwsub.wx v16, v4, %[A], v0.t" ::[A] "r"(scalar));
+  VSET(16, e64, m4);
+  VCMP_U64(24, v16, 0, -3, 0, -1, 0, 1, 0, 3, 0, -3, 0, -1, 0, 1, 0, 3);
 #endif
 }
 
@@ -239,9 +263,9 @@ int main(void) {
 
   // SKIP 2,4: masking not supported
   TEST_CASE1();
-  // TEST_CASE2();
+  TEST_CASE2();
   TEST_CASE3();
-  // TEST_CASE4();
+  TEST_CASE4();
   // SKIP 5-8: vwsub.wv, vwsub.wx not supported
   // TEST_CASE5();
   // TEST_CASE6();
