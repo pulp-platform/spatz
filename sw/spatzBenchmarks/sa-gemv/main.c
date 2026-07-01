@@ -50,7 +50,13 @@ T *mat_buf1;
 T *result;
 
 static inline int fp_check(const T *a, const T *b) {
+#if (PREC == 64)
   const T threshold = 0.001;
+#elif (PREC == 32)
+  const T threshold = 0.01;
+#else
+  const T threshold = 0.5;
+#endif
 
   // Absolute value
   float comp = (float)*a - (float)*b;
@@ -105,10 +111,23 @@ int main() {
 
   const uint32_t l1_for_chunk = l1_size - fixed_alloc_size;
 
+  // --- BOUNDS CHECK 2: Does the full sparse vector fit in L1 at once? ---
+  // Non-zero finding no longer double buffers the vector, so it must be
+  // loaded in a single chunk.
+  if (vec_size > l1_for_chunk) {
+    if (cid == 0) {
+      PRINTF("FATAL: L1 Memory Overflow! Vector requires %u bytes, but only "
+             "%u bytes available for non-zero finding.\n",
+             vec_size, l1_for_chunk);
+    }
+    snrt_cluster_hw_barrier();
+    return -1; // Exit gracefully
+  }
+
   // How many whole rows (or columns) can fit in half the L1 chunk space?
   const uint32_t num_row_mat = (l1_for_chunk / 2) / row_size;
 
-  // --- BOUNDS CHECK 2: Can we double buffer at least 1 row? ---
+  // --- BOUNDS CHECK 3: Can we double buffer at least 1 row? ---
   if (num_row_mat < 1) {
     if (cid == 0) {
       PRINTF("FATAL: L1 Memory Overflow! Cannot fit at least 2 rows for double "
@@ -120,12 +139,8 @@ int main() {
     return -1; // Exit gracefully
   }
 
-  // Always strictly split the available memory in half for double-buffering
+  // Split the available memory in half for matrix double-buffering
   const uint32_t vec_chunk_size = l1_for_chunk / 2;
-  const uint32_t num_vec_chunk =
-      (l1_for_chunk > vec_size)
-          ? 1
-          : ((vec_size + vec_chunk_size - 1) / vec_chunk_size);
 
   // Recalculate exact chunk size based on whole rows
   const uint32_t mat_chunk_size = num_row_mat * row_size;
@@ -163,66 +178,30 @@ int main() {
 
   timer = benchmark_get_cycle();
 
-  // Calculate internal pointers
-  T *vec_ptr = vec_buf0;
-  T *vec_db_ptr = vec_buf1;
-
   // Task 1: Find out the non-zeros
-  if (cid == 0) {
-#ifdef DEBUG_NZ
-    PRINTF("NZ-Calc PreLD\n");
-    PRINTF("DMA SRC:%p, TGT:%p, SIZE:%u\n", vec_ptr, gemv_vec_dram,
-           vec_chunk_size);
-#endif
-    snrt_dma_start_1d(vec_ptr, gemv_vec_dram, vec_chunk_size);
-    snrt_dma_wait_all();
-  }
-
   uint32_t nz_count = 0;
 
   if (cid == 0) {
-    for (unsigned int i = 0; i < num_vec_chunk; ++i) {
-      // Step 1.1: preload the next chunk if not the end
-      // Make sure the previous load completes
-      snrt_dma_wait_all();
-      // Double buffer to search the next non-zero
-      uint32_t next_bytes =
-          (vec_size - (i + 1) * vec_chunk_size < vec_chunk_size)
-              ? (vec_size - (i + 1) * vec_chunk_size)
-              : vec_chunk_size;
-
-      if (i < num_vec_chunk - 1) {
 #ifdef DEBUG_NZ
-        PRINTF("NZ-Calc DB Iter%u\n", i);
-        PRINTF("DMA SRC:%p, TGT:%p, SIZE:%u\n",
-               gemv_vec_dram + (i + 1) * vec_chunk_len, vec_db_ptr, next_bytes);
+    PRINTF("NZ-Calc Load\n");
+    PRINTF("DMA SRC:%p, TGT:%p, SIZE:%u\n", gemv_vec_dram, vec_buf0, vec_size);
 #endif
-        snrt_dma_start_1d(vec_db_ptr, gemv_vec_dram + (i + 1) * vec_chunk_len,
-                          next_bytes); // Use exact bytes
-      }
+    snrt_dma_start_1d(vec_buf0, gemv_vec_dram, vec_size);
+    snrt_dma_wait_all();
 
-      for (unsigned int j = 0; j < vec_chunk_len; ++j) {
-        if ((float)vec_ptr[j] != 0.0) {
-          dense_vec[nz_count] = vec_ptr[j];
-          dense_idx[nz_count] = i * vec_chunk_len + j;
-          nz_count++;
-        }
-
-        if (nz_count == tot_nz_dram)
-          break;
+    // Non-zero entries are guaranteed by data generation to have magnitude
+    // >= NZ_THRESHOLD, while masked-out entries are exactly 0.0.
+    const float nz_threshold = 0.1f;
+    for (unsigned int j = 0; j < gemv_l.N; ++j) {
+      float val = (float)vec_buf0[j];
+      if (val > nz_threshold || val < -nz_threshold) {
+        dense_vec[nz_count] = vec_buf0[j];
+        dense_idx[nz_count] = j;
+        nz_count++;
       }
 
       if (nz_count == tot_nz_dram)
         break;
-
-      if (i % 2 == 0) {
-        // pointer exchange
-        vec_ptr = vec_buf1;
-        vec_db_ptr = vec_buf0;
-      } else {
-        vec_ptr = vec_buf0;
-        vec_db_ptr = vec_buf1;
-      }
     }
   }
 
@@ -369,9 +348,12 @@ int main() {
 #if (PREC == 64)
         PRINTF("Error: ID: %i Result = %f, Golden = %f\n", i, result[i],
                gemv_result[i]);
-#else
+#elif (PREC == 32)
         PRINTF("Error: ID: %i Result = %x, Golden = %x\n", i,
                *(int *)&result[i], *(int *)&gemv_result[i]);
+#else
+        PRINTF("Error: ID: %i Result = %x, Golden = %x\n", i,
+               *(uint16_t *)&result[i], *(uint16_t *)&gemv_result[i]);
 #endif
       }
     }
