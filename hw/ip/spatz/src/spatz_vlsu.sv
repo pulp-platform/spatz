@@ -487,10 +487,6 @@ module spatz_vlsu
     logic [31:0] stride;
     logic [31:0] offset;
 
-    // Pre-shuffling index offset
-    logic [$clog2(8*8):0] idx_offset; // Max index offset (in B) when 8 x 8B (num elements in one MAXEW x index width in bytes for 1 element)
-    assign idx_offset = mem_idx_counter_q[port];
-
     logic [idx_width(N_FU*ELENB)-1:0] word_index;
 
     // Calculate shift amount for address normalization
@@ -512,8 +508,8 @@ module spatz_vlsu
       if (mem_is_indexed) begin
         // Compute word index from port offset, normalized index, and wrapped indices
         word_index = (port << log2_num_idx_maxew_bytes) +
-                      (idx_offset & (num_idx_maxew_bytes - 1)) +
-                      ((idx_offset >> log2_num_idx_maxew_bytes) << log2_num_idx_maxew_bytes) * NrMemPorts;
+                      (mem_idx_counter_q[port] & (num_idx_maxew_bytes - 1)) +
+                      ((mem_idx_counter_q[port] >> log2_num_idx_maxew_bytes) << log2_num_idx_maxew_bytes) * NrMemPorts;
 
         // Index
         unique case (mem_spatz_req.op_mem.ew)
