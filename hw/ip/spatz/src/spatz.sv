@@ -306,7 +306,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     // Read Ports
     .raddr_i         (vrf_raddr     ),
     .re_i            (vrf_re        ),
-    .rdata_o         (vrf_rdata     ),
+    .rdata_o         (vrf_rdata_ecc ),
     .rvalid_o        (vrf_rvalid    ),
     // ECC outputs (decoders in spatz.sv collect errors; VRF drives raw placeholder)
     .single_error_o  (vrf_sec_err_raw),
@@ -755,6 +755,30 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
       .out (vrf_wdata_ecc[VLSU_VD_WD][(ELEN+7)*vlsu_cut +: (ELEN+7)])
     );
   end : gen_vlsu_vrf_ecc
+
+  // Should be unreachable now that spatz_vlsu.sv performs its own RMW merge
+  // (vlsu_rmw_needed/vlsu_ld_rmw_fsm) for any load whose first write to a
+  // fresh word could otherwise leave bytes partially updated. Note the
+  // invariant is PER-CUT, not whole-word: a short-vl operation legitimately
+  // leaves many cuts entirely untouched (wbe=='0 for that cut), which is
+  // safe since spatz_vrf_ecc.sv simply doesn't write an all-zero-wbe cut.
+  // Only a cut with SOME-but-not-all bytes set indicates a coverage gap.
+`ifndef SYNTHESIS
+  logic vlsu_new_word_partial_cut;
+  always_comb begin
+    vlsu_new_word_partial_cut = 1'b0;
+    for (int c = 0; c < N_FU; c++)
+      if (vrf_wbe_buf[VLSU_VD_WD][c*ELENB +: ELENB] != '0 &&
+          vrf_wbe_buf[VLSU_VD_WD][c*ELENB +: ELENB] != {ELENB{1'b1}})
+        vlsu_new_word_partial_cut = 1'b1;
+  end
+
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+    !(vrf_we[VLSU_VD_WD] && (vrf_waddr_buf[VLSU_VD_WD] != vlsu_prev_waddr_q) &&
+      vlsu_new_word_partial_cut))
+    else $error("VLSU first-write-to-new-word arrived with a partial-cut wbe — RMW coverage gap: waddr=%0d prev_waddr_q=%0d wbe=%0b",
+                vrf_waddr_buf[VLSU_VD_WD], vlsu_prev_waddr_q, vrf_wbe_buf[VLSU_VD_WD]);
+`endif
 `endif
 
   /////////////////

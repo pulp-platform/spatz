@@ -1068,8 +1068,6 @@ module spatz_vfu
   vrf_addr_t [2:0] vreg_addr_q, vreg_addr_d;
   `FF(vreg_addr_q, vreg_addr_d, '0)
 
-  logic [N_FU*ELEN-1:0] vreg_wdata;
-
   // Per-cut RMW needed: any cut where 0 < wbe[cut] < all-1.
   // Narrowing never triggers this (each active cut has all ELENB bytes enabled).
   // Masked instructions and EW_8/EW_16 reductions can have partial per-cut byte enables.
@@ -1130,7 +1128,12 @@ module spatz_vfu
         // RMW: redirect VD_RD (index 2) to write address so spatz.sv decodes old codeword
         if (vfu_rmw_q == VFU_RMW)
           vrf_raddr_o[2] = vrf_addr_t'(result_tag.vd_addr);
-        else begin
+        // Skip normal vs1/vs2/vd address generation while servicing a reduction's
+        // v0.t mask read (above): vl_q=='0 stays true for that whole phase, and
+        // this branch is otherwise unconditional, so without this guard it
+        // clobbers the v0 redirect on every cycle of the mask read with the
+        // (decoder-swapped) reduction operand addresses instead.
+        else if (reduction_state_q != Reduction_Read_V0_t) begin
 
           if (spatz_req_valid && vl_q == '0) begin
             vreg_addr_d[0] = (spatz_req.vs2 + vstart) << $clog2(NrWordsPerVector);
