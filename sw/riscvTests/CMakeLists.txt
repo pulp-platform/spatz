@@ -164,3 +164,6 @@ add_snitch_test(vse16 isa/rv64uv/vse16.c)
 add_snitch_test(vse32 isa/rv64uv/vse32.c)
 add_snitch_test(vse64 isa/rv64uv/vse64.c)
 add_snitch_test(vss isa/rv64uv/vss.c)
+
+# Upstream scalar RISC-V ISA tests (rv32u*), built against stock env/p.
+include(${CMAKE_CURRENT_LIST_DIR}/RiscvIsaTests.cmake)
