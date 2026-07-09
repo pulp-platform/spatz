@@ -441,6 +441,33 @@ module spatz_doublebw_vlsu
     end: gen_vreg_counters_intf_fu
   end: gen_vreg_counters_intf
 
+  /////////////////////
+  // Interface split //
+  /////////////////////
+
+//   for doublebw configuration: SpatzMemBytes = NrMemPorts*ELENB = 8*8B = 64B
+
+//   +----------------+----------------+
+//   | intf 0 (32B)   | intf 1 (32B)   |
+//   +----------------+----------------+
+//   0               32               64
+
+  // split = (SpatzMemBytes/2) * ceil(vl/SpatzMemBytes).
+  // Ex. vl = 9 --> 72B   split = 64B/2 * ceil(72B/64B) = 64B   
+  vlen_t mem_split_bytes, commit_split_bytes;
+  assign mem_split_bytes    = ((mem_spatz_req.vl + SpatzMemBytes - 1) >> $clog2(SpatzMemBytes)) << ($clog2(SpatzMemBytes) - 1);
+  assign commit_split_bytes = ((commit_insn_q.vl  + SpatzMemBytes - 1) >> $clog2(SpatzMemBytes)) << ($clog2(SpatzMemBytes) - 1);
+
+  // intf0 = [0, split], intf1 = [split, vl]
+  // Ex. intf0 = [byte0 - byte63]   intf1 = [byte64 - byte71] --> the 64B of intf0 will be elaborated in 2 words (32B=256bit each), the 8B of intf1 in 1 word
+  vlen_t [NrInterfaces-1:0] mem_local_vl, commit_local_vl, commit_local_vstart;
+  assign mem_local_vl[0]    = (mem_spatz_req.vl < mem_split_bytes) ? mem_spatz_req.vl : mem_split_bytes;
+  assign mem_local_vl[1]    = (mem_spatz_req.vl < mem_split_bytes) ? vlen_t'('0)      : mem_spatz_req.vl - mem_split_bytes;
+  assign commit_local_vl[0] = (commit_insn_q.vl < commit_split_bytes) ? commit_insn_q.vl : commit_split_bytes;
+  assign commit_local_vl[1] = (commit_insn_q.vl < commit_split_bytes) ? vlen_t'('0)      : commit_insn_q.vl - commit_split_bytes;
+  assign commit_local_vstart[0] = (commit_insn_q.vstart < commit_split_bytes) ? commit_insn_q.vstart : commit_split_bytes;
+  assign commit_local_vstart[1] = (commit_insn_q.vstart < commit_split_bytes) ? vlen_t'('0)      : commit_insn_q.vstart - commit_split_bytes;
+
   ////////////////////////
   // Address Generation //
   ////////////////////////
@@ -520,11 +547,15 @@ module spatz_doublebw_vlsu
         stride = mem_is_strided ? mem_spatz_req.rs2 >> mem_spatz_req.vtype.vsew : 'd1;
 
         if (mem_is_indexed) begin
+          // Ex. With mem_split_bytes = 64B, vsew = EW_64, ew = EW_16
+          // intf1: intf_idx_bytes = 16 --> intf 0 manages up to 16B
           if (intf == 0) begin
             intf_idx_bytes = '0;
           end else begin
-            intf_idx_bytes = (((mem_spatz_req.vl + (SpatzMemBytes >> 1)) >> $clog2(SpatzMemBytes) << $clog2(SpatzMemBytes)) >> 1)
-                                   >> (mem_spatz_req.vtype.vsew - int'(mem_spatz_req.op_mem.ew));
+            if (mem_spatz_req.vtype.vsew >= mem_spatz_req.op_mem.ew)
+              intf_idx_bytes = mem_split_bytes >> (mem_spatz_req.vtype.vsew - int'(mem_spatz_req.op_mem.ew));
+            else
+              intf_idx_bytes = mem_split_bytes << (int'(mem_spatz_req.op_mem.ew) - mem_spatz_req.vtype.vsew);
           end
 
           // Pointer to index
@@ -550,7 +581,7 @@ module spatz_doublebw_vlsu
         // such that they access different superbanks.
         if (!mem_is_indexed && intf == 1) begin
           // Align the vector length with SpatzMemBytes bytes
-          offset += ((mem_spatz_req.vl +  (SpatzMemBytes / 2)) >> $clog2(SpatzMemBytes) << $clog2(SpatzMemBytes)) / 2;
+          offset += mem_split_bytes;
         end
         offset *= stride;
 
@@ -574,7 +605,7 @@ module spatz_doublebw_vlsu
   // Calculate the register file addresses
   always_comb begin : gen_vreg_addr
     for (int intf = 0; intf < NrInterfaces; intf++) begin : gen_vreg_addr_intf
-      vd_vreg_addr[intf]  = (commit_insn_q.vd << $clog2(NrWordsPerVector)) + $unsigned(vd_elem_id[intf] << 1);
+      vd_vreg_addr[intf]  = (commit_insn_q.vd << $clog2(NrWordsPerVector)) + $unsigned(vd_elem_id[intf]);
 
       // For indices for indexed operations
       vs2_vreg_addr[intf] = (mem_spatz_req.vs2 << $clog2(NrWordsPerVector)) + $unsigned(vs2_elem_id_q[intf]);
@@ -582,9 +613,8 @@ module spatz_doublebw_vlsu
 
       // The second interface starts from half of the vector to straighten the write-back VRF access pattern
       if (intf == 1) begin
-        vd_vreg_addr[intf] += (commit_insn_q.vl + (SpatzMemBytes / 2)) >> $clog2(SpatzMemBytes);
-        vs2_vreg_idx_addr[intf] += ((((mem_spatz_req.vl + (SpatzMemBytes / 2)) >> $clog2(SpatzMemBytes) << $clog2(SpatzMemBytes)) / 2)
-                                   >> (mem_spatz_req.vtype.vsew - int'(mem_spatz_req.op_mem.ew))) / VRFWordBWidth;
+        vd_vreg_addr[intf]      += commit_split_bytes >> $clog2(VRFWordBWidth);
+        vs2_vreg_idx_addr[intf] += (mem_split_bytes >> (mem_spatz_req.vtype.vsew - int'(mem_spatz_req.op_mem.ew))) >> $clog2(VRFWordBWidth);
       end
     end
 
@@ -593,16 +623,13 @@ module spatz_doublebw_vlsu
 
   end
 
-  logic idx_same_word;
-  assign idx_same_word = (vs2_vreg_idx_addr[1] == vs2_vreg_idx_addr[0]);
-
   logic [NrInterfaces-1:0] idx_valid;
   always_comb begin : idx_valid_proc
     if (!mem_is_indexed) begin
-      idx_valid = vrf_rvalid_i;
+      idx_valid = '1;
     end else begin
       idx_valid[0] = vrf_rvalid_i[0][1];
-      idx_valid[1] = idx_same_word ? vrf_rvalid_i[0][1] : vrf_rvalid_i[1][1];
+      idx_valid[1] = (vs2_vreg_idx_addr[1] == vs2_vreg_idx_addr[0]) ? vrf_rvalid_i[0][1] : vrf_rvalid_i[1][1];
     end
   end : idx_valid_proc
 
@@ -910,20 +937,19 @@ module spatz_doublebw_vlsu
 
       always_comb begin
         // Default value
-        max_bytes = (commit_insn_q.vl >> $clog2(SpatzMemBytes)) << $clog2(ELENB);
+        max_bytes = (commit_local_vl[intf] >> $clog2(N_FU*ELENB)) << $clog2(ELENB);
 
-        // Full transfer
-        if (commit_insn_q.vl[$clog2(ELENB) +: $clog2(NrMemPorts)] > port)
+        if (commit_local_vl[intf][$clog2(ELENB) +: $clog2(N_FU)] > fu)
           max_bytes += ELENB;
-        else if (commit_insn_q.vl[$clog2(SpatzMemBytes)-1:$clog2(ELENB)] == port)
-          max_bytes += commit_insn_q.vl[$clog2(ELENB)-1:0];
+        else if (commit_local_vl[intf][$clog2(ELENB) +: $clog2(N_FU)] == fu)
+          max_bytes += commit_local_vl[intf][$clog2(ELENB)-1:0];
 
         commit_counter_load[intf][fu] = commit_insn_pop;
-        commit_counter_d[intf][fu]    = (commit_insn_q.vstart >> $clog2(SpatzMemBytes)) << $clog2(ELENB);
-        if (commit_insn_q.vstart[$clog2(SpatzMemBytes)-1:$clog2(ELENB)] > port)
+        commit_counter_d[intf][fu] = (commit_local_vstart[intf] >> $clog2(N_FU*ELENB)) << $clog2(ELENB);
+        if (commit_local_vstart[intf][$clog2(ELENB) +: $clog2(N_FU)] > fu)
           commit_counter_d[intf][fu] += ELENB;
-        else if (commit_insn_q.vstart[idx_width(SpatzMemBytes)-1:$clog2(ELENB)] == port)
-          commit_counter_d[intf][fu] += commit_insn_q.vstart[$clog2(ELENB)-1:0];
+        else if (commit_local_vstart[intf][$clog2(ELENB) +: $clog2(N_FU)] == fu)
+          commit_counter_d[intf][fu] += commit_local_vstart[intf][$clog2(ELENB)-1:0];
         commit_operation_valid[intf][fu] = (state_q == VLSU_RunningLoad || state_q == VLSU_RunningStore) && commit_insn_valid && (commit_counter_q[intf][fu] != max_bytes) && (catchup[intf][fu] || (!catchup[intf][fu] && ~|catchup));
         commit_operation_last[intf][fu]  = commit_operation_valid[intf][fu] && ((max_bytes - commit_counter_q[intf][fu]) <= (commit_is_single_element_operation ? commit_single_element_size : ELENB));
         commit_counter_delta[intf][fu]   = !commit_operation_valid[intf][fu] ? vlen_t'('d0) : commit_is_single_element_operation ? vlen_t'(commit_single_element_size) : commit_operation_last[intf][fu] ? (max_bytes - commit_counter_q[intf][fu]) : vlen_t'(ELENB);
@@ -947,16 +973,15 @@ module spatz_doublebw_vlsu
       vlen_t max_bytes;
 
       always_comb begin
-        // Default value
-        max_bytes = (mem_spatz_req.vl >> $clog2(NrMemPorts*MemDataWidthB)) << $clog2(MemDataWidthB);
-
-        if (NrMemPorts == 1)
-          max_bytes = mem_spatz_req.vl;
-        else
-          if (mem_spatz_req.vl[$clog2(MemDataWidthB) +: $clog2(NrMemPorts)] > port)
+        if (N_FU == 1)
+          max_bytes = mem_local_vl[intf];
+        else begin
+          max_bytes = (mem_local_vl[intf] >> $clog2(N_FU*MemDataWidthB)) << $clog2(MemDataWidthB);
+          if (mem_local_vl[intf][$clog2(MemDataWidthB) +: $clog2(N_FU)] > fu)
             max_bytes += MemDataWidthB;
-          else if (mem_spatz_req.vl[$clog2(MemDataWidthB) +: $clog2(NrMemPorts)] == port)
-            max_bytes += mem_spatz_req.vl[$clog2(MemDataWidthB)-1:0];
+          else if (mem_local_vl[intf][$clog2(MemDataWidthB) +: $clog2(N_FU)] == fu)
+            max_bytes += mem_local_vl[intf][$clog2(MemDataWidthB)-1:0];
+        end
 
         mem_operation_valid[intf][fu] = mem_spatz_req_valid && (max_bytes != mem_counter_q[intf][fu]);
         mem_operation_last[intf][fu]  = mem_operation_valid[intf][fu] && ((max_bytes - mem_counter_q[intf][fu]) <= (mem_is_single_element_operation ? mem_single_element_size : MemDataWidthB));
@@ -1101,7 +1126,7 @@ module spatz_doublebw_vlsu
         intf_byte_offset[intf] = '0;
       else
         // Valid for intf == 1
-        intf_byte_offset[intf] = ((commit_insn_q.vl + (SpatzMemBytes >> 1)) >> $clog2(SpatzMemBytes) << $clog2(SpatzMemBytes)) >> 1;
+        intf_byte_offset[intf] = commit_split_bytes;
     end
   end
 
