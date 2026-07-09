@@ -20,12 +20,14 @@
 #include <debug.h>
 #include <snrt.h>
 #include <stdio.h>
+#include <string.h>
 
 #include DATAHEADER
 #include "kernel/fft.c"
 
 float *samples;
 float *buffer;
+float *tmp_buffer;
 float *twiddle;
 
 uint16_t *store_idx;
@@ -57,6 +59,7 @@ int main() {
   if (cid == 0) {
     samples = (float *)snrt_l1alloc(2 * NFFT * sizeof(float));
     buffer = (float *)snrt_l1alloc(2 * NFFT * sizeof(float));
+    tmp_buffer = (float *)snrt_l1alloc(2 * NFFT * sizeof(float));
     twiddle = (float *)snrt_l1alloc((2 * NTWI + NFFT) * sizeof(float));
     store_idx = (uint16_t *)snrt_l1alloc(log2_half_nfft * (NFFT / 4) *
                                          sizeof(uint16_t));
@@ -80,6 +83,7 @@ int main() {
   // Calculate pointers for the second butterfly onwards
   float *s_ = samples + cid * (NFFT >> 1);
   float *buf_ = buffer + cid * (NFFT >> 1);
+  float *tmp_ = tmp_buffer + cid * (NFFT >> 1);
   float *twi_ = twiddle + NFFT;
 
   // Wait for all cores to finish
@@ -99,7 +103,8 @@ int main() {
   snrt_cluster_hw_barrier();
 
   // Fall back into the single-core case
-  fft_sc(s_, buf_, twi_, store_idx, bitrev, NFFT >> 1, log2_half_nfft, cid);
+  fft_sc(s_, buf_, tmp_, twi_, store_idx, bitrev, NFFT >> 1, log2_half_nfft,
+         cid);
 
   // Wait for all cores to finish fft
   snrt_cluster_hw_barrier();
@@ -111,6 +116,12 @@ int main() {
   // End timer and check if new best runtime
   if (cid == 0)
     timer = benchmark_get_cycle() - timer;
+
+  if ((log2_half_nfft & 1) && cid == 0)
+    memcpy(buffer, tmp_buffer, 2 * NFFT * sizeof(float));
+
+  // Wait for core 0 to finish copying the temporary output, if needed.
+  snrt_cluster_hw_barrier();
 
   // Display runtime
   if (cid == 0) {
