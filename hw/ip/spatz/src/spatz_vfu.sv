@@ -309,7 +309,7 @@ module spatz_vfu
     end
 
     // An instruction finished execution
-    if ((result_tag.last && &(result_valid | ~pending_results) && reduction_state_q inside {Reduction_NormalExecution, Reduction_Wait}) || reduction_done) begin
+    if ((result_tag.last && &(result_valid | ~pending_results) && (reduction_state_q inside {Reduction_NormalExecution, Reduction_Wait} || ! result_tag.reduction)) || reduction_done) begin
       vfu_rsp_o.id      = result_tag.id;
       vfu_rsp_o.rd      = result_tag.vd_addr[GPRWidth-1:0];
       vfu_rsp_o.wb      = result_tag.wb;
