@@ -921,6 +921,70 @@ module spatz_doublebw_vlsu
   // Set response high when both interfaces have committed and the VRF accepts the final write
   assign vlsu_rsp_valid_o = &vrf_commit_intf_valid && |coalesce_valid_q ? |vrf_wvalid_i : vlsu_finished_req && !commit_insn_q.is_load;
 
+`ifndef TARGET_SYNTHESIS
+`ifdef TRACE
+  // pragma translate_off
+  int trace_vrf_wb_fd;
+  int trace_mem_fd;
+  string trace_vrf_wb_file;
+  string trace_mem_file;
+
+  initial begin
+    trace_vrf_wb_file = "spatz_doublebw_vlsu_vrf_wb.log";
+    trace_vrf_wb_fd = $fopen(trace_vrf_wb_file, "w");
+
+    trace_mem_file = "spatz_doublebw_vlsu_mem_trace.log";
+    trace_mem_fd = $fopen(trace_mem_file, "w");
+  end
+
+  always_ff @(posedge clk_i) begin
+    if (rst_ni && trace_vrf_wb_fd != 0) begin
+      for (int unsigned intf = 0; intf < NrInterfaces; intf++) begin
+        if (vrf_we_o[intf] && vrf_wvalid_i[intf]) begin
+          $fdisplay(trace_vrf_wb_fd,
+                    "[spatz_doublebw_vlsu] vrf_wb intf=%0d id=%0d waddr=0x%0h wbe=0x%0h wdata=0x%0h",
+                    intf, vrf_req_q[intf].rsp.id, vrf_req_q[intf].waddr,
+                    vrf_req_q[intf].wbe, vrf_req_q[intf].wdata);
+        end
+      end
+    end
+  end
+
+  always_ff @(posedge clk_i) begin
+    if (rst_ni && trace_mem_fd != 0) begin
+      for (int unsigned port = 0; port < NrMemPorts; port++) begin
+        if (spatz_mem_req_valid_o[port] && spatz_mem_req_ready_i[port]) begin
+          if (spatz_mem_req_o[port].write) begin
+            $fdisplay(trace_mem_fd,
+                      "[spatz_doublebw_vlsu] mem_req port=%0d write=1 addr=0x%0h data=0x%0h",
+                      port, spatz_mem_req_o[port].addr, spatz_mem_req_o[port].data);
+          end else begin
+            $fdisplay(trace_mem_fd,
+                      "[spatz_doublebw_vlsu] mem_req port=%0d write=0 addr=0x%0h",
+                      port, spatz_mem_req_o[port].addr);
+          end
+        end
+
+`ifdef MEMPOOL_SPATZ
+        if (spatz_mem_rsp_valid_i[port]) begin
+          $fdisplay(trace_mem_fd,
+                    "[spatz_doublebw_vlsu] mem_rsp port=%0d write=%0d data=0x%0h",
+                    port, spatz_mem_rsp_i[port].write, spatz_mem_rsp_i[port].data);
+        end
+`else
+        if (spatz_mem_rsp_valid_i[port]) begin
+          $fdisplay(trace_mem_fd,
+                    "[spatz_doublebw_vlsu] mem_rsp port=%0d data=0x%0h",
+                    port, spatz_mem_rsp_i[port].data);
+        end
+`endif
+      end
+    end
+  end
+  // pragma translate_on
+`endif
+`endif
+
   //////////////
   // Counters //
   //////////////
