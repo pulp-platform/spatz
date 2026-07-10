@@ -257,7 +257,7 @@ module spatz_vlsu
   //////////////////////
 
   // Is the memory operation valid and are we at the last one?
-  logic [NrMemPorts-1:0] mem_operation_valid;
+  logic [NrMemPorts-1:0] mem_operation_valid, mem_idx_vrf_fetch_pending;
   logic [NrMemPorts-1:0] mem_operation_last;
 
   // For each memory port we count how many elements we have already loaded/stored.
@@ -628,6 +628,10 @@ module spatz_vlsu
   logic [3:0] mem_idx_single_element_size;
   assign mem_idx_single_element_size = 1'b1 << mem_spatz_req.op_mem.ew;
 
+  // Number of bytes in the index vector for an indexed memory operation
+  vlen_t mem_idx_vl;
+  assign mem_idx_vl = (mem_spatz_req.vl >> mem_spatz_req.vtype.vsew) << mem_spatz_req.op_mem.ew;
+
   // Is the memory address unaligned
   logic commit_is_addr_unaligned;
   assign commit_is_addr_unaligned = commit_insn_q.rs1[int'(MAXEW)-1:0] != '0;
@@ -875,7 +879,7 @@ module spatz_vlsu
 
   for (genvar port = 0; port < NrMemPorts; port++) begin: gen_mem_counter_proc
     // The total amount of elements we have to work through
-    vlen_t max_elements;
+    vlen_t max_elements, max_idx_elements;
 
     always_comb begin
       // Default value
@@ -905,6 +909,29 @@ module spatz_vlsu
       mem_counter_max[port]   = max_elements;
 
       // Index counter
+      
+      // The following logic is intended to decide if indices need to be fetched from the VRF
+      // The logic is as follows:
+      // We calculate how many indices are expected to be fetched from the VRF for this port
+      // This signal gives more flexibility in index fetching especially if SEW and index width are different
+
+      // E.g. vl=2 SEW=16 index_width=32 and 32b config
+      // port 0 is the only port sending memory requests
+      // But index needs to be fetched corresponding to 2 ports - port 0 and port 1
+      // This signal is used to decide if we need to fetch next index or not
+      
+      max_idx_elements = (mem_idx_vl >> $clog2(NrMemPorts*MemDataWidthB)) << $clog2(MemDataWidthB);
+
+      if (NrMemPorts == 1)
+        max_idx_elements = mem_idx_vl;
+      else
+        if (mem_idx_vl[$clog2(MemDataWidthB) +: $clog2(NrMemPorts)] > port)
+          max_idx_elements += MemDataWidthB;
+        else if (mem_idx_vl[$clog2(MemDataWidthB) +: $clog2(NrMemPorts)] == port)
+          max_idx_elements += mem_idx_vl[$clog2(MemDataWidthB)-1:0];
+      
+      mem_idx_vrf_fetch_pending[port] = mem_spatz_req_valid && (max_idx_elements != mem_idx_counter_q[port]);
+
       mem_idx_counter_d[port]     = mem_counter_d[port];
       mem_idx_counter_delta[port] = !mem_operation_valid[port] ? 'd0 : mem_idx_single_element_size;
     end
@@ -1085,9 +1112,13 @@ module spatz_vlsu
 
     // Count which vs2 element we should load (indexed loads)
     vs2_elem_id_d = vs2_elem_id_q;
-    if (fetch_next_idx_global)
+
+    // Signal to fetch the next index from the VRF if we are not at the last element and we have an indexed memory operation
+    // We check the fetch_next_idx signal only if there is a pending fetch from the VRF
+    if (&(~mem_idx_vrf_fetch_pending | fetch_next_idx) && mem_is_indexed) begin
       vs2_elem_id_d = vs2_elem_id_q + 1;
-    if (mem_spatz_req_ready) // finish one instruction
+    end
+    if (mem_spatz_req_ready)
       vs2_elem_id_d = '0;
 
     if (commit_insn_valid && commit_insn_q.is_load) begin
@@ -1182,7 +1213,11 @@ module spatz_vlsu
 `endif
         if (!rob_full[port] && !offset_queue_full[port] && mem_operation_valid[port]) begin
           rob_req_id[port]     = spatz_mem_req_ready[port] & spatz_mem_req_valid[port];
-          mem_req_lvalid[port] = (!mem_is_indexed || (vrf_rvalid_i[1] && !fetch_next_idx[port])) && mem_spatz_req.op_mem.is_load;
+
+          // If we have an index oepration, we ensure we are not fetching the next index
+          // This is because fetch_next_idx uses mem_idx_counter_q signal and requires a 1 cycle bubble before issuing the next index operation
+          // This could be optimized but index operations are anyways slow and not performance critical
+          mem_req_lvalid[port] = (!mem_is_indexed || (vrf_rvalid_i[1] && (!(fetch_next_idx[port] && mem_idx_vrf_fetch_pending[port])))) && mem_spatz_req.op_mem.is_load;
           mem_req_id[port]     = rob_id[port];
           mem_req_last[port]   = mem_operation_last[port];
         end
@@ -1313,7 +1348,7 @@ module spatz_vlsu
               end
             endcase
 
-          mem_req_svalid[port] = rob_rvalid[port] && (!mem_is_indexed || (vrf_rvalid_i[1] && !fetch_next_idx[port])) && !mem_spatz_req.op_mem.is_load && (commit_insn_q.vm || v0_t_read_done);
+          mem_req_svalid[port] = rob_rvalid[port] && (!mem_is_indexed || (vrf_rvalid_i[1] && (!(fetch_next_idx[port] && mem_idx_vrf_fetch_pending[port])))) && !mem_spatz_req.op_mem.is_load && (commit_insn_q.vm || v0_t_read_done);
           mem_req_id[port]     = rob_rid[port];
           mem_req_last[port]   = mem_operation_last[port];
           rob_pop[port]        = spatz_mem_req_valid[port] && spatz_mem_req_ready[port];
