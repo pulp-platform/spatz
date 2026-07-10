@@ -353,7 +353,11 @@ module spatz_vfu
             if (RVD) begin
               fpu_src_fmt = fpnew_pkg::FP64;
               fpu_dst_fmt = fpnew_pkg::FP64;
-              fpu_int_fmt = fpnew_pkg::INT64;
+              // A scalar fcvt.w.d/wu.d (and fcvt.d.w/d.wu) is decoded as EW_64 to
+              // select FP64, but its integer operand is a 32-bit GPR, so INT64
+              // saturates an out-of-range or NaN source to INT64_MAX and returns the
+              // wrong low 32 bits. Vector EW_64 fcvt keeps INT64.
+              fpu_int_fmt = spatz_req.op_arith.is_scalar ? fpnew_pkg::INT32 : fpnew_pkg::INT64;
             end
           end
           EW_32: begin
