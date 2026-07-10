@@ -706,8 +706,13 @@ module spatz_vlsu
 
   // The coalescing buffer is ready to commit when the accumulated byte-enable
   // covers the full VRF word, or when this is the last write of the instruction.
+  // Force a commit when the next pending write targets a different VRF word address.
+  logic next_addr_different;
+  assign next_addr_different = coalesce_valid_q && vrf_req_valid_q &&
+                               (coalesce_q.waddr != vrf_req_q.waddr);
+
   logic coalesce_commit;
-  assign coalesce_commit = coalesce_valid_q && (&coalesce_q.wbe || coalesce_q.rsp_valid);
+  assign coalesce_commit = coalesce_valid_q && (&coalesce_q.wbe || coalesce_q.rsp_valid || next_addr_different);
 
   // Drive VRF outputs from the coalescing buffer, not the raw spill-register.
   assign vrf_waddr_o = coalesce_q.waddr;

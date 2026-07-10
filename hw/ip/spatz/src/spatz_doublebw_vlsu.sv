@@ -714,6 +714,9 @@ module spatz_doublebw_vlsu
   logic     [NrInterfaces-1:0] coalesce_valid_d, coalesce_valid_q;
   logic     [NrInterfaces-1:0] coalesce_commit;
 
+  // Force a commit when the next pending write targets a different VRF word address.
+  logic [NrInterfaces-1:0] next_addr_different;
+
   // Both interfaces must be ready before either commits (normal path). This
   // prevents the faster interface from draining its buffer while the slower
   // one is still accumulating, which would leave the slower interface with
@@ -738,9 +741,12 @@ module spatz_doublebw_vlsu
     `FF(coalesce_q[intf], coalesce_d[intf], '0)
     `FF(coalesce_valid_q[intf], coalesce_valid_d[intf], '0)
 
-    // Commit the coalescing buffer when the VRF word is fully assembled or
-    // this is the last write of the instruction.
-    assign coalesce_commit[intf] = coalesce_valid_q[intf] && (&coalesce_q[intf].wbe || coalesce_q[intf].rsp_valid);
+    assign next_addr_different[intf] = coalesce_valid_q[intf] && vrf_req_valid_q[intf] &&
+                                       (coalesce_q[intf].waddr != vrf_req_q[intf].waddr);
+
+    // Commit the coalescing buffer when the VRF word is fully assembled, this is
+    // the last write of the instruction, or the next write targets a different address.
+    assign coalesce_commit[intf] = coalesce_valid_q[intf] && (&coalesce_q[intf].wbe || coalesce_q[intf].rsp_valid || next_addr_different[intf]);
 
     assign vrf_waddr_o[intf] = coalesce_q[intf].waddr;
     assign vrf_wdata_o[intf] = coalesce_q[intf].wdata;
