@@ -12,6 +12,9 @@ module spatz_vlsu
   import rvv_pkg::*;
   import cf_math_pkg::idx_width; #(
     parameter int unsigned   NrMemPorts         = 1,
+    // Usable remote response ports the burst RECEIVE may spread across (threaded from
+    // the tile; spatz IP cannot see mempool_pkg). 1 => legacy single-port burst receive.
+    parameter int unsigned   NumRespPorts       = 1,
     parameter int unsigned   NrOutstandingLoads = 16,
     // Memory request
     parameter  type          spatz_mem_req_t    = logic,
@@ -68,6 +71,10 @@ module spatz_vlsu
   localparam int unsigned BurstLenWidth = spatz_pkg::BurstLenWidth;
   localparam int unsigned BurstAlignBits = $clog2(MaxBurstWords*MemDataWidthB);
   localparam int unsigned FullBurstBytes = MaxBurstWords * MemDataWidthB;
+  // Option A: receive a single-port burst's response across BurstRecvPorts ROBs (-> N words/cyc).
+  // = min(NrMemPorts, usable resp ports threaded from the tile). Must divide N_FU. 1 => legacy
+  // (port-0-only burst, all the beat-spread paths below degenerate to today's single-port flow).
+  localparam int unsigned BurstRecvPorts = (NrMemPorts < NumRespPorts) ? NrMemPorts : NumRespPorts;
 
   //////////////
   // Typedefs //
@@ -135,6 +142,10 @@ module spatz_vlsu
   logic use_port0_burst_req;
   logic mem_use_port0_burst;
   logic commit_use_port0_burst;
+  // Beat-spread (Option A): a port-0 burst whose response beats are spread across BurstRecvPorts
+  // ROBs (-> N words/cyc commit). Fold to 0 (legacy single-ROB burst) when BurstRecvPorts==1.
+  logic mem_beat_spread;
+  logic commit_beat_spread;
   logic burst_tail_phase_q, burst_tail_phase_d;
   logic switch_to_tail_phase;
   vlen_t burst_full_bytes_req, burst_full_bytes_commit;
@@ -160,6 +171,16 @@ module spatz_vlsu
                                    (burst_full_bytes_commit != commit_insn_q.vl);
   assign mem_use_port0_burst     = use_port0_burst_req && !burst_tail_phase_q;
   assign commit_use_port0_burst  = commit_insn_q.use_port0_burst && !burst_tail_phase_q;
+  // Beat-spread only engages when the whole vl is full 16-word bursts. A sub-burst TAIL (vl not a
+  // multiple of FullBurstBytes, e.g. vld m2 vl=24 = one burst + 8) is issued by the mem FSM as
+  // single-word PORT-0 fallbacks (burst_use goes false once <16 words remain, burst_len_calc==1) that
+  // all land in ROB0 -- but the 2-wide commit reads ROB0+ROB1 in lockstep, so the odd tail elements
+  // (ROB1) are never written and the even ones are mis-lane'd. switch_to_tail never rescues it: port 0
+  // reaches vl by itself (~8 cyc) long before the remote burst responses commit, so (mem_counter<vl)
+  // is already false. Excluding tail loads routes them through the proven legacy single-ROB burst path
+  // (bit-identical to the OFF build). Inert when BurstRecvPorts==1 (the (>1) term already forces 0).
+  assign mem_beat_spread    = mem_use_port0_burst    && (BurstRecvPorts > 1) && !burst_has_tail_req;
+  assign commit_beat_spread = commit_use_port0_burst && (BurstRecvPorts > 1) && !burst_has_tail_commit;
   assign mem_port_active =
       mem_use_port0_burst ? {{(NrMemPorts-1){1'b0}}, 1'b1} : {NrMemPorts{1'b1}};
   assign commit_port_active =
@@ -830,10 +851,12 @@ module spatz_vlsu
                                    (catchup[fu] || (!catchup[fu] && ~|catchup));
       commit_operation_last[fu]  = commit_operation_valid[fu] &&
                                    ((max_elements - commit_counter_q[fu]) <=
-                                    (commit_is_single_element_operation ? commit_single_element_size : ELENB));
+                                    (commit_is_single_element_operation ? commit_single_element_size :
+                                     commit_beat_spread ? vlen_t'(BurstRecvPorts*ELENB) : vlen_t'(ELENB)));
       commit_counter_delta[fu]   = !commit_operation_valid[fu] ? vlen_t'('d0) :
                                    commit_is_single_element_operation ? vlen_t'(commit_single_element_size) :
-                                   commit_operation_last[fu] ? (max_elements - commit_counter_q[fu]) : vlen_t'(ELENB);
+                                   commit_operation_last[fu] ? (max_elements - commit_counter_q[fu]) :
+                                   commit_beat_spread ? vlen_t'(BurstRecvPorts*ELENB) : vlen_t'(ELENB);
       commit_counter_en[fu]      = commit_operation_valid[fu] &&
                                    (commit_insn_q.is_load && vrf_req_valid_d && vrf_req_ready_d) ||
                                    (!commit_insn_q.is_load && vrf_rvalid_i[0] && vrf_re_o[0] && (!mem_is_indexed || vrf_rvalid_i[1]));
@@ -889,7 +912,7 @@ module spatz_vlsu
           burst_len_calc[port] = BurstLenWidth'(1);
 
         burst_len_eff[port] = burst_len_calc[port];
-        if (burst_alloc_q[port] && rob_full[port] &&
+        if (burst_alloc_q[port] && rob_full[port] && !mem_beat_spread &&
             (burst_alloc_cnt_q[port] != '0) &&
             (burst_alloc_cnt_q[port] < burst_len_calc[port]))
           burst_len_eff[port] = burst_alloc_cnt_q[port];
@@ -1013,9 +1036,24 @@ module spatz_vlsu
     mem_pending_d = mem_pending_q;
 
     // The pending counters are per in-flight memory instruction.
-    // Reset on instruction enqueue to avoid stale carry-over.
-    if (commit_insn_push)
-      mem_pending_d = '{default: '0};
+    // Reset on instruction enqueue to avoid stale carry-over -- but ONLY for ports that are fully
+    // drained (rob_empty). mem_pending is a single per-port counter SHARED across in-flight
+    // instructions; a non-empty receive ROB belongs to an older, still-draining instruction
+    // (pipelined beat-spread bursts). Wiping its live beat count mis-classifies its arrived beats as
+    // stale -> the beat-spread drain pops+discards them without a VRF write, frees ROB ids early ->
+    // DUP_ALLOC + STILL_INFLIGHT under pipelined bursts. Clearing only empty ports preserves the
+    // original stale-clear intent (a drained port's residual count is genuinely stale). The
+    // feature-off else keeps the ORIGINAL unconditional wipe so the BurstRecvPorts==1 netlist
+    // const-folds to exactly the legacy behavior (bit-identical).
+    if (commit_insn_push) begin
+      if (BurstRecvPorts > 1) begin
+        for (int rp = 0; rp < NrMemPorts; rp++)
+          if (rob_empty[rp])
+            mem_pending_d[rp] = '0;
+      end else begin
+        mem_pending_d = '{default: '0};
+      end
+    end
 
     for (int port = 0; port < NrMemPorts; port++) begin
       mem_pending[port] = mem_pending_q[port] != '0;
@@ -1025,7 +1063,17 @@ module spatz_vlsu
       // packed request write bit during mode transitions.
       if (spatz_mem_req_valid[port] && spatz_mem_req_ready[port] &&
           mem_req_lvalid[port]) begin
-        mem_pending_d[port] = mem_pending_d[port] + spatz_mem_req[port].burst_len;
+        if (mem_beat_spread && (port == 0)) begin
+          // Beat-spread: the MSHR spreads this port-0 burst's burst_len beats across BurstRecvPorts
+          // ROBs. Charge each receive port its share so (a) port>0 beats are NOT stale-drained at the
+          // !mem_pending gate below, and (b) the per-port pop-decrement balances (charge K, pop K).
+          for (int rp = 0; rp < BurstRecvPorts; rp++)
+            mem_pending_d[rp] = mem_pending_d[rp] +
+                (spatz_mem_req[port].burst_len / BurstRecvPorts) +
+                (((spatz_mem_req[port].burst_len % BurstRecvPorts) > rp) ? 1'b1 : 1'b0);
+        end else begin
+          mem_pending_d[port] = mem_pending_d[port] + spatz_mem_req[port].burst_len;
+        end
       end
 
       // Response used
@@ -1054,7 +1102,8 @@ module spatz_vlsu
       // stale base and wedges (observed: VL=24 m2 burst+tail load -> store hang).
       (mem_counter_q[0]    < commit_insn_q.vl) &&
       (commit_counter_q[0] < commit_insn_q.vl) &&
-      (mem_pending_q[0] == '0);
+      // Beat-spread: pending beats split across ports 0..BurstRecvPorts-1; all must drain before tail.
+      (~|mem_pending_q[BurstRecvPorts-1:0]);
 
   always_comb begin : proc_burst_tail_phase
     burst_tail_phase_d = burst_tail_phase_q;
@@ -1079,6 +1128,8 @@ module spatz_vlsu
     for (int port = 0; port < NrMemPorts; port++) begin
       logic [BurstLenWidth-1:0] burst_len_send;
       logic force_send;
+      // Beat-spread steers the single port-0 FSM round-robin across ROBs (cnt % N); else bs_target=port.
+      logic [$clog2(NrMemPorts)-1:0] bs_target;
 
       burst_len_send = burst_len_q[port];
       if (!exec_is_load) begin
@@ -1091,7 +1142,7 @@ module spatz_vlsu
         burst_send[port]        = 1'b0;
         burst_alloc_fire[port]  = 1'b0;
       end else begin
-      force_send = burst_alloc_q[port] && rob_full[port] &&
+      force_send = burst_alloc_q[port] && rob_full[port] && !mem_beat_spread &&
                    (burst_alloc_cnt_q[port] != '0) &&
                    (burst_alloc_cnt_q[port] < burst_len_q[port]);
       if (force_send)
@@ -1105,15 +1156,23 @@ module spatz_vlsu
         burst_alloc_cnt_d[port] = '0;
       end
 
-      // Allocate one ROB ID per cycle for the burst.
+      // Allocate one ROB ID per cycle for the burst. Beat-spread steers each pulse to ROB (cnt%N);
+      // legacy keeps bs_target=port. force_send is suppressed for beat_spread (burst_len fixed at 16),
+      // so a full target ROB simply stalls cnt here -- deadlock-free: vl<=128B caps one burst at
+      // <=16 ids/ROB (< depth 32), so it never self-fills; prior bursts drain via the commit path.
+      bs_target = ((port == 0) && mem_beat_spread)
+                  ? ($clog2(NrMemPorts))'(burst_alloc_cnt_q[port] % BurstRecvPorts)
+                  : ($clog2(NrMemPorts))'(port);
       if (burst_alloc_q[port] && (burst_alloc_cnt_q[port] < burst_len_q[port])) begin
-        // Burst pre-allocation only needs one free ROB slot per beat.
-        // Using rob_id_valid here can deadlock at the last beat because
-        // rob_id_valid requires two available IDs.
-        if (!rob_full[port] && !offset_queue_full[port]) begin
-          burst_alloc_fire[port] = 1'b1;
-          if (burst_alloc_cnt_q[port] == '0)
-            burst_base_id_d[port] = rob_id[port];
+        // Only one free slot per beat is needed; rob_id_valid (two free) can deadlock the last beat.
+        if (!rob_full[bs_target] && !offset_queue_full[bs_target]) begin
+          burst_alloc_fire[bs_target] = 1'b1;
+          // Capture each ROB's base on the FIRST beat that reaches it: beat-spread seeds bases
+          // 0..N-1 at cnt 0..N-1; legacy seeds base[port] at cnt==0.
+          if (((port == 0) && mem_beat_spread)
+              ? (burst_alloc_cnt_q[port] < BurstRecvPorts)
+              : (burst_alloc_cnt_q[port] == '0))
+            burst_base_id_d[bs_target] = rob_id[bs_target];
           burst_alloc_cnt_d[port] = burst_alloc_cnt_q[port] + 1'b1;
         end
       end
@@ -1178,17 +1237,42 @@ module spatz_vlsu
         vrf_req_d.waddr = vd_vreg_addr;
 
         if (commit_use_port0_burst) begin
-          // Port0-only burst: steer data into the correct lane
-          vrf_req_valid_d = rob_rvalid[0] && mem_pending[0];
-          // If a stale store entry leaks into load state, drop it without touching offset queue.
-          rob_pop[0]      = rob_rvalid[0] &&
-                            ((!mem_pending[0]) ||
-                             (vrf_req_valid_d && vrf_req_ready_d && commit_counter_en[0]));
-
           vrf_req_d.wdata = '0;
-          vrf_req_d.wdata[ELEN*burst_lane_idx +: ELEN] = rob_rdata[0];
           vrf_req_d.wbe   = '0;
-          vrf_req_d.wbe[ELENB*burst_lane_idx +: ELENB] = burst_lane_wbe;
+          if (commit_beat_spread) begin
+            // Beat-spread (Option A): ROB p holds element (burst_elem_idx + p); commit one element per
+            // receive ROB this cycle into lane (burst_elem_idx + p) mod N_FU. burst_elem_idx advances
+            // by N=BurstRecvPorts (V8), so the N lanes always share one VRF row (single waddr).
+            automatic logic [BurstRecvPorts-1:0] bs_pending;
+            automatic logic [BurstRecvPorts-1:0] bs_rvalid;
+            for (int unsigned p = 0; p < BurstRecvPorts; p++) begin
+              bs_pending[p] = mem_pending[p];
+              bs_rvalid[p]  = rob_rvalid[p];
+            end
+            // Fire only when every STILL-pending receive ROB head is valid (a drained port is masked
+            // via ~bs_pending). Robust to beat skew: waits for the matching pair.
+            vrf_req_valid_d = (&(bs_rvalid | ~bs_pending)) && (|bs_pending);
+            for (int unsigned p = 0; p < BurstRecvPorts; p++) begin
+              automatic logic [LaneIdxWidth-1:0] lane =
+                  LaneIdxWidth'((burst_elem_idx + p) & (N_FU-1));
+              if (bs_pending[p]) begin
+                vrf_req_d.wdata[ELEN*lane  +: ELEN ] = rob_rdata[p];
+                vrf_req_d.wbe[ELENB*lane   +: ELENB] = burst_lane_wbe;
+              end
+              // Pop each ROB head on the accepted VRF write; drain a stale non-pending head as legacy.
+              rob_pop[p] = rob_rvalid[p] &&
+                           ((!mem_pending[p]) ||
+                            (vrf_req_valid_d && vrf_req_ready_d && commit_counter_en[0]));
+            end
+          end else begin
+            // Legacy single-ROB burst: one element/cyc into burst_lane_idx.
+            vrf_req_valid_d = rob_rvalid[0] && mem_pending[0];
+            rob_pop[0]      = rob_rvalid[0] &&
+                              ((!mem_pending[0]) ||
+                               (vrf_req_valid_d && vrf_req_ready_d && commit_counter_en[0]));
+            vrf_req_d.wdata[ELEN*burst_lane_idx +: ELEN] = rob_rdata[0];
+            vrf_req_d.wbe[ELENB*burst_lane_idx +: ELENB] = burst_lane_wbe;
+          end
         end else begin
           // Only commit load data for ports that actually have pending load beats.
           vrf_req_valid_d = &(rob_rvalid | ~mem_pending) && |mem_pending;
@@ -1281,6 +1365,12 @@ module spatz_vlsu
           if (burst_use[port]) begin
             // Pre-allocate IDs for each beat and issue the burst once ready.
             rob_req_id[port] = burst_alloc_fire[port];
+            // Beat-spread: the port-0 FSM also drives id_req on the spread ROBs (1..N-1), which have
+            // mem_operation_valid==0 and never reach this block themselves. burst_alloc_fire already
+            // carries the steered target; just forward it. (N==1 -> empty loop, inert.)
+            if ((port == 0) && mem_beat_spread)
+              for (int unsigned bs = 1; bs < BurstRecvPorts; bs++)
+                rob_req_id[bs] = burst_alloc_fire[bs];
             if (burst_send[port]) begin
               mem_req_lvalid[port] = (!mem_is_indexed || (vrf_rvalid_i[1] && !pending_index[port])) &&
                                      !commit_insn_push &&
@@ -1431,7 +1521,13 @@ module spatz_vlsu
     assign spatz_mem_req[port].write = mem_req_svalid[port];
     assign spatz_mem_req[port].burst_len = (mem_req_lvalid[port] && burst_send[port]) ? burst_len_issue[port] : BurstLenWidth'(1);
     assign spatz_mem_req[port].strb  = mem_req_strb[port];
-    assign spatz_mem_req[port].data  = mem_req_data[port];
+    // Beat-spread (Option A): carry {aux_base, flag} in the spare data field (mem_req_data is 0 on a
+    // load -> free). data[0]=beat_spread flag; data[IdWidth:1]=burst_base_id_q[1]=aux_base (port-1 ROB
+    // base, MSHR M2). Gated on burst_send[0] so only the actual burst beat carries it.
+    assign spatz_mem_req[port].data  =
+        (mem_beat_spread && (port == 0) && burst_send[0])
+          ? {{(MemDataWidth-1-IdWidth){1'b0}}, burst_base_id_q[1], 1'b1}
+          : mem_req_data[port];
     assign spatz_mem_req[port].last  = mem_req_last[port];
     assign spatz_mem_req[port].spec  = 1'b0; // Request is never speculative
     assign spatz_mem_req_valid[port] = mem_req_svalid[port] || mem_req_lvalid[port];
@@ -1453,6 +1549,20 @@ module spatz_vlsu
 
   if (MemDataWidth != ELEN)
     $error("[spatz_vlsu] The memory data width needs to be equal to %d.", ELEN);
+
+  // Beat-spread (Option A) preconditions: N=BurstRecvPorts must divide N_FU (lane math) and equal the
+  // MSHR DrainBeatsPerEntry (both spread beat b -> port b%N). The latter holds iff NumRespPorts<=NrMemPorts
+  // (else BurstRecvPorts=min(...) clamps below DrainBeatsPerEntry, routing odd beats to a port w/o a ROB).
+  if ((BurstRecvPorts > 1) && (N_FU % BurstRecvPorts != 0))
+    $error("[spatz_vlsu] BurstRecvPorts (%0d) must divide N_FU (%0d).", BurstRecvPorts, N_FU);
+  if (NumRespPorts > NrMemPorts)
+    $error("[spatz_vlsu] NumRespPorts (%0d) must be <= NrMemPorts (%0d).", NumRespPorts, NrMemPorts);
+  // The aux_base transport carries exactly ONE spare ROB base (burst_base_id_q[1]) in the burst
+  // request's spare data word, so the receive spread is hardwired for N<=2. A larger N would
+  // elaborate but leave ROBs 2..N-1 without a base -> silent corruption.
+  if (BurstRecvPorts > 2)
+    $error("[spatz_vlsu] BurstRecvPorts (%0d) > 2 unsupported: aux_base transport is 2-wide.",
+           BurstRecvPorts);
 
   if (NrMemPorts != N_FU)
     $error("[spatz_vlsu] The number of memory ports needs to be equal to the number of FUs.");

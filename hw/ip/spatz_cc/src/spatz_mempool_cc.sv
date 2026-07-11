@@ -29,7 +29,9 @@ module spatz_mempool_cc
   parameter bit RegisterTCDMResp    = 0,
 
   parameter int unsigned        TCDMPorts              = 1,
-  parameter int unsigned        NumMemPortsPerSpatz    = 1
+  parameter int unsigned        NumMemPortsPerSpatz    = 1,
+  // Usable remote resp ports for the burst-receive spread (threaded down to the VLSU).
+  parameter int unsigned        NumRespPorts           = 1
 ) (
   input  logic                                        clk_i,
   input  logic                                        rst_i,
@@ -229,6 +231,7 @@ module spatz_mempool_cc
 
   spatz #(
     .NrMemPorts         ( NumMemPortsPerSpatz     ),
+    .NumRespPorts       ( NumRespPorts            ),
     .NumOutstandingLoads( SpatzNumOutstandingLoads ),
     .FPUImplementation  ( FPUImplementation       ),
     .RegisterRsp        ( 1'b1                    ),

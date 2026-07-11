@@ -15,6 +15,7 @@
 
 module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     parameter int                  unsigned NrMemPorts          = 1,
+    parameter int                  unsigned NumRespPorts        = 1,
     parameter bit                           RegisterRsp         = 0,
     // Memory request (VLSU)
     parameter type                          spatz_mem_req_t     = logic,
@@ -323,6 +324,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
 
   spatz_vlsu #(
     .NrMemPorts        (NrMemPorts        ),
+    .NumRespPorts      (NumRespPorts      ),
     .NrOutstandingLoads(32                ),
     .spatz_mem_req_t   (spatz_mem_req_t   ),
     .spatz_mem_rsp_t   (spatz_mem_rsp_t   )
