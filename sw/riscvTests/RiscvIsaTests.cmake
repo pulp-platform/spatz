@@ -13,10 +13,13 @@
 
 if (BUILD_TESTS)
   include(FetchContent)
+  # Patch `move` to mask spatz's non-standard fmode out of fcsr WPRI bits.
+  set(RVTESTS_PATCH ${CMAKE_CURRENT_LIST_DIR}/patches/move-fcsr-wpri.patch)
   FetchContent_Declare(riscv_tests
     GIT_REPOSITORY https://github.com/riscv-software-src/riscv-tests.git
     GIT_TAG        34e6b6d1e7936b526075432fb730d89148623484
-    GIT_SUBMODULES_RECURSE TRUE)
+    GIT_SUBMODULES_RECURSE TRUE
+    PATCH_COMMAND  sh -c "git apply --reverse --check '${RVTESTS_PATCH}' 2>/dev/null || git apply '${RVTESTS_PATCH}'")
   FetchContent_MakeAvailable(riscv_tests)
   set(RVTESTS_ROOT ${riscv_tests_SOURCE_DIR})
   set(RVTESTS_ISA  ${RVTESTS_ROOT}/isa)
