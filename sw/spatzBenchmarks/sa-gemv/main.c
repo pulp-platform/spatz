@@ -212,9 +212,11 @@ int main() {
         dense_idx[nz_count] = j;
         nz_count++;
       }
-
-      if (nz_count == tot_nz_dram)
-        break;
+    }
+    if (nz_count != tot_nz_dram) {
+      PRINTF("Found NZ: %d, Total NZ: %d\n", nz_count, tot_nz_dram);
+      PRINTF("Fail to find all non-zeros! Test Failed!\n");
+      return -1;
     }
   }
 
