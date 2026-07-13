@@ -204,7 +204,7 @@ int main() {
 
     // Non-zero entries are guaranteed by data generation to have magnitude
     // >= NZ_THRESHOLD, while masked-out entries are exactly 0.0.
-    const float nz_threshold = 0.1f;
+    const float nz_threshold = 0.01f;
     for (unsigned int j = 0; j < gemv_l.N; ++j) {
       float val = (float)vec_buf0[j];
       if (val > nz_threshold || val < -nz_threshold) {

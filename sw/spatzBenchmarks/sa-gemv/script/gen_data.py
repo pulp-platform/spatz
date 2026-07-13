@@ -192,7 +192,7 @@ def main():
     # Push kept entries away from 0 by at least NZ_THRESHOLD so the kernel
     # can tell non-zeros apart from the masked-out zeros with a simple
     # magnitude threshold, instead of relying on bit-exact equality to 0.0.
-    NZ_THRESHOLD = 0.1
+    NZ_THRESHOLD = 0.5
     orig_dtype = vec_B.dtype
     vec_B = vec_B.float()
     sign = torch.sign(vec_B)
