@@ -88,9 +88,10 @@ module spatz_quadrilatero_cc
     parameter bit                                          RegisterCoreRsp          = 0,
     parameter snitch_pma_pkg::snitch_pma_t                 SnitchPMACfg             = '{default: 0},
     /// Derived parameter *Do not override*
-    parameter int                          unsigned        NumSpatzFUs              = (NumSpatzFPUs > NumSpatzIPUs) ? NumSpatzFPUs : NumSpatzIPUs,
-    parameter int                          unsigned        NumMemPortsPerSpatz      = NumSpatzFUs,
-    parameter int                          unsigned        TCDMPorts                = RVV ? NumMemPortsPerSpatz + 1 : 1,
+    // parameter int                          unsigned        NumSpatzFUs              = (NumSpatzFPUs > NumSpatzIPUs) ? NumSpatzFPUs : NumSpatzIPUs,
+    // parameter int                          unsigned        NumMemPortsPerSpatz      = NumSpatzFUs,
+    parameter int                          unsigned        NumMemPortsQuad          = 4,
+    parameter int                          unsigned        TCDMPorts                = NumMemPortsQuad + 1,
     parameter type                                         addr_t                   = logic [AddrWidth-1:0]
   ) (
     input  logic                         clk_i,
@@ -104,12 +105,12 @@ module spatz_quadrilatero_cc
     // Core data ports
     output dreq_t                        data_req_o,
     input  drsp_t                        data_rsp_i,
+    // // TCDM Streamer Ports
+    // output tcdm_req_t    [TCDMPorts-1:0] spatz_tcdm_req_o,
+    // input  tcdm_rsp_t    [TCDMPorts-1:0] spatz_tcdm_rsp_i,
     // TCDM Streamer Ports
-    output tcdm_req_t    [TCDMPorts-1:0] spatz_tcdm_req_o,
-    input  tcdm_rsp_t    [TCDMPorts-1:0] spatz_tcdm_rsp_i,
-    // TCDM Streamer Ports
-    output tcdm_req_t   [2*TCDMPorts-1:0] quad_tcdm_req_o,
-    input  tcdm_rsp_t   [2*TCDMPorts-1:0] quad_tcdm_rsp_i,
+    output tcdm_req_t   [TCDMPorts-1:0] quad_tcdm_req_o,
+    input  tcdm_rsp_t   [TCDMPorts-1:0] quad_tcdm_rsp_i,
     // Accelerator Offload port
     // DMA ports
     output axi_req_t                     axi_dma_req_o,
@@ -281,59 +282,82 @@ module spatz_quadrilatero_cc
   dreq_t fp_lsu_mem_req;
   drsp_t fp_lsu_mem_rsp;
 
-  tcdm_req_chan_t [NumMemPortsPerSpatz-1:0] spatz_mem_req;
-  logic           [NumMemPortsPerSpatz-1:0] spatz_mem_req_valid;
-  logic           [NumMemPortsPerSpatz-1:0] spatz_mem_req_ready;
-  tcdm_rsp_chan_t [NumMemPortsPerSpatz-1:0] spatz_mem_rsp;
-  logic           [NumMemPortsPerSpatz-1:0] spatz_mem_rsp_valid;
-
-  spatz #(
-    .NrMemPorts         (NumMemPortsPerSpatz     ),
-    .NumOutstandingLoads(NumSpatzOutstandingLoads),
-    .FPUImplementation  (FPUImplementation       ),
-    .RegisterRsp        (RegisterOffloadRsp      ),
-    .dreq_t             (dreq_t                  ),
-    .drsp_t             (drsp_t                  ),
-    .spatz_mem_req_t    (tcdm_req_chan_t         ),
-    .spatz_mem_rsp_t    (tcdm_rsp_chan_t         ),
-    .spatz_issue_req_t  (acc_issue_req_t         ),
-    .spatz_issue_rsp_t  (acc_issue_rsp_t         ),
-    .spatz_rsp_t        (acc_rsp_t               )
-  ) i_spatz (
-    .clk_i                   (clk_i                 ),
-    .rst_ni                  (rst_ni                ),
-    .testmode_i              (testmode_i            ),
-    .hart_id_i               (hart_id_i             ),
-    .issue_valid_i           (spatz_qvalid          ),
-    .issue_ready_o           (spatz_qready          ),
-    .issue_req_i             (acc_snitch_req        ),
-    .issue_rsp_o             (spatz_snitch_resp     ),
-    .rsp_valid_o             (spatz_pvalid          ),
-    .rsp_ready_i             (spatz_pready          ),
-    .rsp_o                   (spatz_resp            ),
-    .spatz_mem_req_o         (spatz_mem_req         ),
-    .spatz_mem_req_valid_o   (spatz_mem_req_valid   ),
-    .spatz_mem_req_ready_i   (spatz_mem_req_ready   ),
-    .spatz_mem_rsp_i         (spatz_mem_rsp         ),
-    .spatz_mem_rsp_valid_i   (spatz_mem_rsp_valid   ),
-    .spatz_mem_finished_o    (spatz_mem_finished    ),
-    .spatz_mem_str_finished_o(spatz_mem_str_finished),
-    .fp_lsu_mem_req_o        (fp_lsu_mem_req        ),
-    .fp_lsu_mem_rsp_i        (fp_lsu_mem_rsp        ),
-    .fpu_rnd_mode_i          (fpu_rnd_mode          ),
-    .fpu_fmt_mode_i          (fpu_fmt_mode          ),
-    .fpu_status_o            (fpu_status            )
-  );
-
-  for (genvar p = 0; p < NumMemPortsPerSpatz; p++) begin: gen_spatz_tcdm_assignment
-    assign spatz_tcdm_req_o[p] = '{
-         q      : spatz_mem_req[p],
-         q_valid: spatz_mem_req_valid[p]
-       };
-    assign spatz_mem_req_ready[p] = spatz_tcdm_rsp_i[p].q_ready;
-
-    assign spatz_mem_rsp[p]       = spatz_tcdm_rsp_i[p].p;
-    assign spatz_mem_rsp_valid[p] = spatz_tcdm_rsp_i[p].p_valid;
+  if(RVV) begin
+    spatz #(
+      .NrMemPorts         (16     ),
+      .NumOutstandingLoads(NumSpatzOutstandingLoads),
+      .FPUImplementation  (FPUImplementation       ),
+      .RegisterRsp        (RegisterOffloadRsp      ),
+      .dreq_t             (dreq_t                  ),
+      .drsp_t             (drsp_t                  ),
+      .spatz_mem_req_t    (tcdm_req_chan_t         ),
+      .spatz_mem_rsp_t    (tcdm_rsp_chan_t         ),
+      .spatz_issue_req_t  (acc_issue_req_t         ),
+      .spatz_issue_rsp_t  (acc_issue_rsp_t         ),
+      .spatz_rsp_t        (acc_rsp_t               )
+    ) i_spatz (
+      .clk_i                   (clk_i                 ),
+      .rst_ni                  (rst_ni                ),
+      .testmode_i              (testmode_i            ),
+      .hart_id_i               (hart_id_i             ),
+      .issue_valid_i           (spatz_qvalid          ),
+      .issue_ready_o           (spatz_qready          ),
+      .issue_req_i             (acc_snitch_req        ),
+      .issue_rsp_o             (spatz_snitch_resp     ),
+      .rsp_valid_o             (spatz_pvalid          ),
+      .rsp_ready_i             (spatz_pready          ),
+      .rsp_o                   (spatz_resp            ),
+      .spatz_mem_req_o         (                      ),
+      .spatz_mem_req_valid_o   (                      ),
+      .spatz_mem_req_ready_i   ('0                    ),
+      .spatz_mem_rsp_i         ('0                    ),
+      .spatz_mem_rsp_valid_i   ('0                    ),
+      .spatz_mem_finished_o    (spatz_mem_finished    ),
+      .spatz_mem_str_finished_o(spatz_mem_str_finished),
+      .fp_lsu_mem_req_o        (fp_lsu_mem_req        ),
+      .fp_lsu_mem_rsp_i        (fp_lsu_mem_rsp        ),
+      .fpu_rnd_mode_i          (fpu_rnd_mode          ),
+      .fpu_fmt_mode_i          (fpu_fmt_mode          ),
+      .fpu_status_o            (fpu_status            )
+    );
+  end else begin
+    spatz_scalar_only #(
+      .NrMemPorts         (16     ),
+      .NumOutstandingLoads(NumSpatzOutstandingLoads),
+      .FPUImplementation  (FPUImplementation       ),
+      .RegisterRsp        (RegisterOffloadRsp      ),
+      .dreq_t             (dreq_t                  ),
+      .drsp_t             (drsp_t                  ),
+      .spatz_mem_req_t    (tcdm_req_chan_t         ),
+      .spatz_mem_rsp_t    (tcdm_rsp_chan_t         ),
+      .spatz_issue_req_t  (acc_issue_req_t         ),
+      .spatz_issue_rsp_t  (acc_issue_rsp_t         ),
+      .spatz_rsp_t        (acc_rsp_t               )
+    ) i_spatz (
+      .clk_i                   (clk_i                 ),
+      .rst_ni                  (rst_ni                ),
+      .testmode_i              (testmode_i            ),
+      .hart_id_i               (hart_id_i             ),
+      .issue_valid_i           (spatz_qvalid          ),
+      .issue_ready_o           (spatz_qready          ),
+      .issue_req_i             (acc_snitch_req        ),
+      .issue_rsp_o             (spatz_snitch_resp     ),
+      .rsp_valid_o             (spatz_pvalid          ),
+      .rsp_ready_i             (spatz_pready          ),
+      .rsp_o                   (spatz_resp            ),
+      .spatz_mem_req_o         (                      ),
+      .spatz_mem_req_valid_o   (                      ),
+      .spatz_mem_req_ready_i   ('0                    ),
+      .spatz_mem_rsp_i         ('0                    ),
+      .spatz_mem_rsp_valid_i   ('0                    ),
+      .spatz_mem_finished_o    (spatz_mem_finished    ),
+      .spatz_mem_str_finished_o(spatz_mem_str_finished),
+      .fp_lsu_mem_req_o        (fp_lsu_mem_req        ),
+      .fp_lsu_mem_rsp_i        (fp_lsu_mem_rsp        ),
+      .fpu_rnd_mode_i          (fpu_rnd_mode          ),
+      .fpu_fmt_mode_i          (fpu_fmt_mode          ),
+      .fpu_status_o            (fpu_status            )
+    );
   end
 
   reqrsp_mux #(
@@ -355,16 +379,18 @@ module spatz_quadrilatero_cc
     .idx_o     (/*not connected*/              )
   );
 
-  tcdm_req_chan_t [2*NumMemPortsPerSpatz-1:0] quad_mem_req;
-  logic           [2*NumMemPortsPerSpatz-1:0] quad_mem_req_valid;
-  logic           [2*NumMemPortsPerSpatz-1:0] quad_mem_req_ready;
-  tcdm_rsp_chan_t [2*NumMemPortsPerSpatz-1:0] quad_mem_rsp;
-  logic           [2*NumMemPortsPerSpatz-1:0] quad_mem_rsp_valid;
+  tcdm_req_chan_t [NumMemPortsQuad-1:0] quad_mem_req;
+  logic           [NumMemPortsQuad-1:0] quad_mem_req_valid;
+  logic           [NumMemPortsQuad-1:0] quad_mem_req_ready;
+  tcdm_rsp_chan_t [NumMemPortsQuad-1:0] quad_mem_rsp;
+  logic           [NumMemPortsQuad-1:0] quad_mem_rsp_valid;
   quadrilatero_top #(
-    .NrMemPorts         (2*NumMemPortsPerSpatz   ),
+    .NrMemPorts         (NumMemPortsQuad         ),
     .NumOutstandingLoads(NumSpatzOutstandingLoads),
     .FPUImplementation  (FPUImplementation       ),
     .RegisterRsp        (RegisterOffloadRsp      ),
+    .amo_op_e           (reqrsp_pkg::amo_op_e    ),
+    .AMONone            (reqrsp_pkg::AMONone     ),
     .dreq_t             (dreq_t                  ),
     .drsp_t             (drsp_t                  ),
     .quad_mem_req_t     (tcdm_req_chan_t         ),
@@ -389,18 +415,15 @@ module spatz_quadrilatero_cc
     .quad_mem_rsp_valid_i   (quad_mem_rsp_valid   )
   );
 
-  for (genvar c = 0; c < 2; c++) begin: gen_quad_tcdm_assignment_l1
-    for (genvar p = 0; p < NumMemPortsPerSpatz; p++) begin: gen_quad_tcdm_assignment_l2
-      assign quad_tcdm_req_o[p+c*(NumMemPortsPerSpatz+1)] = '{
-          q      : quad_mem_req[p+c*NumMemPortsPerSpatz],
-          q_valid: quad_mem_req_valid[p+c*NumMemPortsPerSpatz]
-        };
-      assign quad_mem_req_ready[p+c*NumMemPortsPerSpatz] = quad_tcdm_rsp_i[p+c*(NumMemPortsPerSpatz+1)].q_ready;
+  for (genvar p = 0; p < NumMemPortsQuad; p++) begin: gen_quad_tcdm_assignment
+    assign quad_tcdm_req_o[p] = '{
+        q      : quad_mem_req[p],
+        q_valid: quad_mem_req_valid[p]
+      };
+    assign quad_mem_req_ready[p] = quad_tcdm_rsp_i[p].q_ready;
 
-      assign quad_mem_rsp[p+c*NumMemPortsPerSpatz]       = quad_tcdm_rsp_i[p+c*(NumMemPortsPerSpatz+1)].p;
-      assign quad_mem_rsp_valid[p+c*NumMemPortsPerSpatz] = quad_tcdm_rsp_i[p+c*(NumMemPortsPerSpatz+1)].p_valid;
-    end
-    assign quad_tcdm_req_o[c*(NumMemPortsPerSpatz+1) + NumMemPortsPerSpatz] = '0;
+    assign quad_mem_rsp[p]       = quad_tcdm_rsp_i[p].p;
+    assign quad_mem_rsp_valid[p] = quad_tcdm_rsp_i[p].p_valid;
   end
 
   assign acc_snitch_resp    = quad_qvalid ? quad_snitch_resp : spatz_snitch_resp;
@@ -468,12 +491,12 @@ module spatz_quadrilatero_cc
     .tcdm_req_t   (tcdm_req_t),
     .tcdm_rsp_t   (tcdm_rsp_t)
   ) i_reqrsp_to_tcdm (
-    .clk_i        (clk_i                          ),
-    .rst_ni       (rst_ni                         ),
-    .reqrsp_req_i (data_tcdm_req                  ),
-    .reqrsp_rsp_o (data_tcdm_rsp                  ),
-    .tcdm_req_o   (spatz_tcdm_req_o[NumMemPortsPerSpatz]),
-    .tcdm_rsp_i   (spatz_tcdm_rsp_i[NumMemPortsPerSpatz])
+    .clk_i        (clk_i                            ),
+    .rst_ni       (rst_ni                           ),
+    .reqrsp_req_i (data_tcdm_req                    ),
+    .reqrsp_rsp_o (data_tcdm_rsp                    ),
+    .tcdm_req_o   (quad_tcdm_req_o[NumMemPortsQuad]),
+    .tcdm_rsp_i   (quad_tcdm_rsp_i[NumMemPortsQuad])
   );
 
   // Core events for performance counters
