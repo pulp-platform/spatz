@@ -37,6 +37,7 @@ BUF_FPU := $(shell python3 -c "import jstyleson; print(jstyleson.load(open('$(SP
 # hjson (a Spatz/cluster-level extension), define VENTAGLIO so the RTL `ifdef
 # VENTAGLIO ... `endif blocks pull in the VTL integration.
 SPATZ_CLUSTER_VENTAGLIO := $(shell python3 -c "import jstyleson; f = open('$(SPATZ_CLUSTER_CFG_PATH)'); print(1 if jstyleson.load(f)['cluster'].get('ventaglio', False) else 0)")
+QUADRILATERO := $(shell python3 -c "import jstyleson; print(jstyleson.load(open('$(SPATZ_CLUSTER_CFG_PATH)'))['cluster'].get('quadrilatero', 0))")
 
 ifeq ($(DOUBLE_BW),1)
 	DEFS += -DDOUBLE_BW
@@ -51,6 +52,11 @@ ifeq ($(SPATZ_CLUSTER_VENTAGLIO),1)
 	DEFS += -DVENTAGLIO
 	BENDER_CFG_TARGETS += -t ventaglio
 	SPATZ_CLUSTER_CFG_DEFINES += -DSPATZ_CLUSTER_VENTAGLIO=1
+endif
+
+ifeq ($(QUADRILATERO),1)
+	VSIM_BENDER += -t quadrilatero
+	VLT_BENDER += -t quadrilatero
 endif
 
 # Include Makefrag
