@@ -29,11 +29,17 @@ workflow:
 before_script:
   - export PATH="$VERILATOR_BIN:$HOME/.local/bin:$PATH"
   - export PYTHONPATH="$CI_PROJECT_DIR/install/python-deps:$PYTHONPATH"
+  # Clean the bender cache to remove the "Access Denied" history
+  - rm -rf .bender
+  # Install pip specifically for Python 3.11 (pipes script directly to the binary)
+  - curl -sS https://bootstrap.pypa.io/get-pip.py | python3.11
+  # Install packages to the user directory (no sudo required)
+  - python3.11 -m pip install --user numpy torch
+  # Ensure the local bin is in your PATH so you can use what you just installed
+  - export PATH="$HOME/.local/bin:$PATH"
   - env
   # Rewrite the URL to include the Deploy Token credentials
   - git config --global url."https://${READ_USER}:${READ_TOKEN}@iis-git.ee.ethz.ch/".insteadOf "https://iis-git.ee.ethz.ch/"
-  # Clean the bender cache to remove the "Access Denied" history
-  - rm -rf .bender
 
 stages:
   - tools
