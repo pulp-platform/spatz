@@ -85,13 +85,16 @@ int main() {
     if (cid == 0)
       start_kernel();
 
-    if((QUAD_RLEN == 0) || cid == 0){
+    if ((QUAD_RLEN == 0) || cid == 0) {
       if (kernel_size == 2) {
-        matmul_2xVL(c, a, b, m_start, m_end, gemm_l.K, gemm_l.N, p_start, p_end);
+        matmul_2xVL(c, a, b, m_start, m_end, gemm_l.K, gemm_l.N, p_start,
+                    p_end);
       } else if (kernel_size == 4) {
-        matmul_4xVL(c, a, b, m_start, m_end, gemm_l.K, gemm_l.N, p_start, p_end);
+        matmul_4xVL(c, a, b, m_start, m_end, gemm_l.K, gemm_l.N, p_start,
+                    p_end);
       } else if (kernel_size == 8) {
-        matmul_8xVL(c, a, b, m_start, m_end, gemm_l.K, gemm_l.N, p_start, p_end);
+        matmul_8xVL(c, a, b, m_start, m_end, gemm_l.K, gemm_l.N, p_start,
+                    p_end);
       } else {
         return -2;
       }

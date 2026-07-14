@@ -92,14 +92,14 @@ int main() {
   if (cid == 0)
     start_kernel();
 
-  if((QUAD_RLEN == 0) || cid == 0){
+  if ((QUAD_RLEN == 0) || cid == 0) {
     // First stage
     fft_2c(samples, buffer, twiddle, NFFT, cid);
   }
   // Wait for all cores to finish the first stage
   snrt_cluster_hw_barrier();
 
-  if((QUAD_RLEN == 0) || cid == 0){
+  if ((QUAD_RLEN == 0) || cid == 0) {
     // Fall back into the single-core case
     fft_sc(s_, buf_, twi_, store_idx, bitrev, NFFT >> 1, log2_half_nfft, cid);
   }
