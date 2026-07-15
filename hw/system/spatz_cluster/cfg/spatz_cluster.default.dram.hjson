@@ -28,9 +28,9 @@
         "dma_axi_req_fifo_depth": 3,
         "dma_req_fifo_depth": 3,
         // Quadrilatero parameters
-        "rlen": 0,
-        "alen": 0,
-        "llen": 0,
+        "rlen": 128,
+        "alen": 128,
+        "llen": 256,
         // Spatz parameters
         "vlen": 512,
         "n_fpu": 4,
