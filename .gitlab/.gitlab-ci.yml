@@ -119,10 +119,9 @@ snRuntime-test-vsim:
     # Update opcodes
     - make update_opcodes
     # Fix quadrilatero dependencies
-    - cd .bender/git/checkouts/quadrilatero*
-    - mkdir -p tb/spatz/hw/system/spatz_cluster/src/generated/
-    - ln -s ../../../../../../../../../../../hw/system/spatz_cluster/src/generated/quadrilatero_pkg.sv tb/spatz/hw/system/spatz_cluster/src/generated/quadrilatero_pkg.sv
-    - cd -
+    - bender clone quadrilatero -p $CI_PROJECT_DIR
+    - rm $CI_PROJECT_DIR/quadrilatero/rtl/include/quadrilatero_pkg.sv
+    - ln -s $CI_PROJECT_DIR/hw/system/spatz_cluster/src/generated/quadrilatero_pkg.sv $CI_PROJECT_DIR/quadrilatero/rtl/include/quadrilatero_pkg.sv
     # Compile the binaries
     - cd hw/system/spatz_cluster
     - make sw.vsim SPATZ_CLUSTER_CFG=${cfg}.hjson -B
@@ -152,10 +151,9 @@ snRuntime-test-vcs:
     # Update opcodes
     - make update_opcodes
     # Fix quadrilatero dependencies
-    - cd .bender/git/checkouts/quadrilatero*
-    - mkdir -p tb/spatz/hw/system/spatz_cluster/src/generated/
-    - ln -s ../../../../../../../../../../../hw/system/spatz_cluster/src/generated/quadrilatero_pkg.sv tb/spatz/hw/system/spatz_cluster/src/generated/quadrilatero_pkg.sv
-    - cd -
+    - bender clone quadrilatero -p $CI_PROJECT_DIR
+    - rm $CI_PROJECT_DIR/quadrilatero/rtl/include/quadrilatero_pkg.sv
+    - ln -s $CI_PROJECT_DIR/hw/system/spatz_cluster/src/generated/quadrilatero_pkg.sv $CI_PROJECT_DIR/quadrilatero/rtl/include/quadrilatero_pkg.sv
     # Compile the binaries
     - cd hw/system/spatz_cluster
     - ${VCS} make sw.vcs SPATZ_CLUSTER_CFG=${cfg}.hjson -B
@@ -186,10 +184,9 @@ snRuntime-test-vlt:
     # Update opcodes
     - make update_opcodes
     # Fix quadrilatero dependencies
-    - cd .bender/git/checkouts/quadrilatero*
-    - mkdir -p tb/spatz/hw/system/spatz_cluster/src/generated/
-    - ln -s ../../../../../../../../../../../hw/system/spatz_cluster/src/generated/quadrilatero_pkg.sv tb/spatz/hw/system/spatz_cluster/src/generated/quadrilatero_pkg.sv
-    - cd -
+    - bender clone quadrilatero -p $CI_PROJECT_DIR
+    - rm $CI_PROJECT_DIR/quadrilatero/rtl/include/quadrilatero_pkg.sv
+    - ln -s $CI_PROJECT_DIR/hw/system/spatz_cluster/src/generated/quadrilatero_pkg.sv $CI_PROJECT_DIR/quadrilatero/rtl/include/quadrilatero_pkg.sv
     # Compile the binaries
     - cd hw/system/spatz_cluster
     - make sw.vlt SPATZ_CLUSTER_CFG=${cfg}.hjson -B
@@ -221,10 +218,9 @@ riscvTests-test-vlt:
     # Update opcodes
     - make update_opcodes
     # Fix quadrilatero dependencies
-    - cd .bender/git/checkouts/quadrilatero*
-    - mkdir -p tb/spatz/hw/system/spatz_cluster/src/generated/
-    - ln -s ../../../../../../../../../../../hw/system/spatz_cluster/src/generated/quadrilatero_pkg.sv tb/spatz/hw/system/spatz_cluster/src/generated/quadrilatero_pkg.sv
-    - cd -
+    - bender clone quadrilatero -p $CI_PROJECT_DIR
+    - rm $CI_PROJECT_DIR/quadrilatero/rtl/include/quadrilatero_pkg.sv
+    - ln -s $CI_PROJECT_DIR/hw/system/spatz_cluster/src/generated/quadrilatero_pkg.sv $CI_PROJECT_DIR/quadrilatero/rtl/include/quadrilatero_pkg.sv
     # Compile the binaries
     - cd hw/system/spatz_cluster
     - ${VCS} make sw.vlt SPATZ_CLUSTER_CFG=${cfg}.hjson -B
@@ -256,10 +252,9 @@ spatzBenchmarks-test-vlt:
     # Update opcodes
     - make update_opcodes
     # Fix quadrilatero dependencies
-    - cd .bender/git/checkouts/quadrilatero*
-    - mkdir -p tb/spatz/hw/system/spatz_cluster/src/generated/
-    - ln -s ../../../../../../../../../../../hw/system/spatz_cluster/src/generated/quadrilatero_pkg.sv tb/spatz/hw/system/spatz_cluster/src/generated/quadrilatero_pkg.sv
-    - cd -
+    - bender clone quadrilatero -p $CI_PROJECT_DIR
+    - rm $CI_PROJECT_DIR/quadrilatero/rtl/include/quadrilatero_pkg.sv
+    - ln -s $CI_PROJECT_DIR/hw/system/spatz_cluster/src/generated/quadrilatero_pkg.sv $CI_PROJECT_DIR/quadrilatero/rtl/include/quadrilatero_pkg.sv
     # Compile the binaries
     - cd hw/system/spatz_cluster
     - ${VCS} make sw.vlt SPATZ_CLUSTER_CFG=${cfg}.hjson -B
@@ -288,6 +283,10 @@ spatzBenchmarks-ventaglio-test-vlt:
     - make bender
     # Update opcodes
     - make update_opcodes
+    # Fix quadrilatero dependencies
+    - bender clone quadrilatero -p $CI_PROJECT_DIR
+    - rm $CI_PROJECT_DIR/quadrilatero/rtl/include/quadrilatero_pkg.sv
+    - ln -s $CI_PROJECT_DIR/hw/system/spatz_cluster/src/generated/quadrilatero_pkg.sv $CI_PROJECT_DIR/quadrilatero/rtl/include/quadrilatero_pkg.sv
     # Compile the binaries
     - cd hw/system/spatz_cluster
     - ${VCS} make sw.vlt SPATZ_CLUSTER_CFG=spatz_cluster.ventaglio.dram.hjson -B
@@ -310,10 +309,9 @@ quadrilateroBenchmarks-test-vlt:
     # Update opcodes
     - make update_opcodes
     # Fix quadrilatero dependencies
-    - cd .bender/git/checkouts/quadrilatero*
-    - mkdir -p tb/spatz/hw/system/spatz_cluster/src/generated/
-    - ln -s ../../../../../../../../../../../hw/system/spatz_cluster/src/generated/quadrilatero_pkg.sv tb/spatz/hw/system/spatz_cluster/src/generated/quadrilatero_pkg.sv
-    - cd -
+    - bender clone quadrilatero -p $CI_PROJECT_DIR
+    - rm $CI_PROJECT_DIR/quadrilatero/rtl/include/quadrilatero_pkg.sv
+    - ln -s $CI_PROJECT_DIR/hw/system/spatz_cluster/src/generated/quadrilatero_pkg.sv $CI_PROJECT_DIR/quadrilatero/rtl/include/quadrilatero_pkg.sv
     # Download python dependencies
     - export PYTHON3=$(which python3)
     - ${PYTHON3} -m pip install --user jsonref
