@@ -229,6 +229,14 @@ module spatz_vfu
   logic [$clog2(NrWordsPerVector):0] word_idx_d, word_idx_q;
   `FF(word_idx_q, word_idx_d, '0)
 
+  // Raw "instruction complete" response computed by control_proc below --
+  // deferred into the real vfu_rsp_valid_o/vfu_rsp_o (see the RMW section
+  // further down) whenever the last word's write still needs an RMW merge,
+  // so the scoreboard doesn't release a dependent read before that merged
+  // write has actually landed in the VRF.
+  logic     vfu_rsp_valid_raw;
+  vfu_rsp_t vfu_rsp_o_raw;
+
   always_comb begin: control_proc
     // Maintain state
     vl_d              = vl_q;
@@ -248,8 +256,8 @@ module spatz_vfu
     spatz_req_ready = 1'b0;
 
     // Do not ack anything
-    vfu_rsp_valid_o = 1'b0;
-    vfu_rsp_o       = '0;
+    vfu_rsp_valid_raw = 1'b0;
+    vfu_rsp_o_raw     = '0;
 
     // Change number of remaining elements
     if (word_issued) begin
@@ -310,11 +318,11 @@ module spatz_vfu
 
     // An instruction finished execution
     if ((result_tag.last && &(result_valid | ~pending_results) && reduction_state_q inside {Reduction_NormalExecution, Reduction_Wait}) || reduction_done) begin
-      vfu_rsp_o.id      = result_tag.id;
-      vfu_rsp_o.rd      = result_tag.vd_addr[GPRWidth-1:0];
-      vfu_rsp_o.wb      = result_tag.wb;
-      vfu_rsp_o.result  = result_tag.wb ? scalar_result : '0;
-      vfu_rsp_valid_o   = 1'b1;
+      vfu_rsp_o_raw.id      = result_tag.id;
+      vfu_rsp_o_raw.rd      = result_tag.vd_addr[GPRWidth-1:0];
+      vfu_rsp_o_raw.wb      = result_tag.wb;
+      vfu_rsp_o_raw.result  = result_tag.wb ? scalar_result : '0;
+      vfu_rsp_valid_raw     = 1'b1;
     end
   end: control_proc
 
@@ -1403,6 +1411,43 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
   assign vrf_wbe_o   = (vfu_rmw_q == VFU_RMW) ? '1             : vreg_wbe;
   assign vrf_wdata_o = (vfu_rmw_q == VFU_RMW) ? vfu_rmw_merged : vrf_wdata_pre;
   assign vrf_id_o    = {result_tag.id, {3{spatz_req.id}}};
+
+  // Defer the "instruction complete" response for a VRF write (!wb) that
+  // hasn't actually landed in the VRF yet this cycle -- whether stalled by
+  // an RMW merge (vfu_rmw_fsm above) or simply losing write-bank arbitration
+  // (buffered into i_vfu_buf in spatz.sv). Firing vfu_rsp_valid_o before the
+  // write truly retires would let the scoreboard release a dependent read
+  // of vd into a same-cycle (or earlier) race with the write. Checking
+  // vrf_we_o && vrf_wvalid_i directly (rather than inferring from
+  // vfu_rmw_needed) also covers reduction write-back, whose vreg_we/vreg_wbe
+  // timing relative to reduction_done doesn't line up with vfu_rmw_needed
+  // the same way the non-reduction path's does.
+  logic vfu_rsp_defer;
+  assign vfu_rsp_defer = vfu_rsp_valid_raw && !vfu_rsp_o_raw.wb && !(vrf_we_o && vrf_wvalid_i);
+
+  logic     vfu_rsp_pending_q, vfu_rsp_pending_d;
+  vfu_rsp_t vfu_rsp_pending_data_q, vfu_rsp_pending_data_d;
+  `FF(vfu_rsp_pending_q, vfu_rsp_pending_d, 1'b0)
+  `FF(vfu_rsp_pending_data_q, vfu_rsp_pending_data_d, '0)
+
+  always_comb begin
+    vfu_rsp_pending_d      = vfu_rsp_pending_q;
+    vfu_rsp_pending_data_d = vfu_rsp_pending_data_q;
+    vfu_rsp_valid_o         = vfu_rsp_valid_raw && !vfu_rsp_defer;
+    vfu_rsp_o               = vfu_rsp_o_raw;
+
+    if (vfu_rsp_defer) begin
+      vfu_rsp_pending_d      = 1'b1;
+      vfu_rsp_pending_data_d = vfu_rsp_o_raw;
+    end
+
+    // Fire the deferred response once the RMW-merged write actually retires.
+    if (vfu_rsp_pending_q && vrf_we_o && vrf_wvalid_i) begin
+      vfu_rsp_valid_o   = 1'b1;
+      vfu_rsp_o         = vfu_rsp_pending_data_q;
+      vfu_rsp_pending_d = 1'b0;
+    end
+  end
 
   //////////
   // IPUs //
