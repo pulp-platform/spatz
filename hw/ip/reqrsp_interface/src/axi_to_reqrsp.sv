@@ -43,7 +43,13 @@ module axi_to_reqrsp #(
   /// Reqrsp request channel type.
   parameter type         reqrsp_req_t = logic,
   /// Reqrsp response channel type.
-  parameter type         reqrsp_rsp_t = logic
+  parameter type         reqrsp_rsp_t = logic,
+  /// When enabled, the AXI ID is passed through the reqrsp user field
+  /// (lower IdWidth bits) instead of being reconstructed from the
+  /// internal meta-data FIFO. This is needed when the downstream
+  /// transport (e.g. a NoC) does not preserve request/response ordering
+  /// per AXI ID.
+  parameter bit          EnUserIdPassthrough = 1'b0
 ) (
   /// Clock input.
   input  logic                           clk_i,
@@ -132,21 +138,32 @@ module axi_to_reqrsp #(
     // Handle new AR if there is one.
     end else if (axi_req_i.ar_valid) begin
       if (axi_arid_lock_q[axi_req_i.ar.id] == 0) begin
-        // The input AR ID does not have a transaction oin-flight
-        rd_meta_d = '{
-          addr:  addr_t'(axi_pkg::aligned_addr(axi_req_i.ar.addr, axi_req_i.ar.size)),
+        // The input AR ID does not have a transaction in-flight.
+        // Build combinational metadata for the stream_mux data path.
+        rd_meta = '{
+          addr:  addr_t'(axi_req_i.ar.addr),
           atop:  '0,
           id:    axi_req_i.ar.id,
           last:  (axi_req_i.ar.len == '0),
           qos:   axi_req_i.ar.qos,
           size:  axi_req_i.ar.size,
           write: 1'b0,
-          lock: axi_req_i.ar.lock
+          lock:  axi_req_i.ar.lock
         };
-        rd_meta      = rd_meta_d;
-        rd_meta.addr = addr_t'(axi_req_i.ar.addr);
-        rd_valid     = 1'b1;
+        rd_valid = 1'b1;
+        // Only update the registered metadata when the request is accepted,
+        // so rd_meta_q.id stays valid for arid_lock release.
         if (rd_ready) begin
+          rd_meta_d = '{
+            addr:  addr_t'(axi_pkg::aligned_addr(axi_req_i.ar.addr, axi_req_i.ar.size)),
+            atop:  '0,
+            id:    axi_req_i.ar.id,
+            last:  (axi_req_i.ar.len == '0),
+            qos:   axi_req_i.ar.qos,
+            size:  axi_req_i.ar.size,
+            write: 1'b0,
+            lock:  axi_req_i.ar.lock
+          };
           r_cnt_d             = axi_req_i.ar.len;
           axi_rsp_o.ar_ready = 1'b1;
           // Set the AR Read lock
@@ -325,7 +342,7 @@ module axi_to_reqrsp #(
     // Silence those channels in case of a read.
     data: data & {DataWidth{meta.write}},
     strb: axi_req_i.w.strb & {StrbWidth{meta.write}},
-    user: '0,
+    user: EnUserIdPassthrough ? {{(UserWidth-IdWidth){1'b0}}, meta.id} : '0,
     size: meta.size
   };
 
@@ -379,7 +396,7 @@ module axi_to_reqrsp #(
 
   // Compose B responses.
   assign axi_rsp_o.b = '{
-    id:   meta_buf.id,
+    id:   EnUserIdPassthrough ? axi_id_t'(reqrsp_rsp_i.p.user) : meta_buf.id,
     resp: resp,
     user: '0
   };
@@ -387,7 +404,7 @@ module axi_to_reqrsp #(
   // Compose R responses.
   assign axi_rsp_o.r = '{
     data: reqrsp_rsp_i.p.data,
-    id:   meta_buf.id,
+    id:   EnUserIdPassthrough ? axi_id_t'(reqrsp_rsp_i.p.user) : meta_buf.id,
     last: meta_buf.last,
     resp: resp,
     user: '0

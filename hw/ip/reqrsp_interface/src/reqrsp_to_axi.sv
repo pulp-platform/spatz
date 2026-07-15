@@ -47,6 +47,7 @@ module reqrsp_to_axi import reqrsp_pkg::*; #(
   parameter int unsigned AxiIdWidth = 8,
   // Enable burst support?
   parameter int unsigned EnBurst = 0,
+  parameter int unsigned MaxBlen = 0,
   /// Req ID Width
   parameter int unsigned UserWidth = 32'd6,
   /// Set fall-through for reqid fifo, set when no latency between req and rsp
@@ -135,8 +136,11 @@ module reqrsp_to_axi import reqrsp_pkg::*; #(
     always_comb begin
       requser_in = reqrsp_req_i.q.user;
       requser_push = reqrsp_req_i.q_valid & reqrsp_rsp_o.q_ready;
-      // Do not pop the user if the burst response is not entirely processed
-      requser_pop = reqrsp_rsp_o.p_valid & reqrsp_req_i.p_ready & reqrsp_burst_last;
+      // Pop on any completed response: reads (r.last) or writes (b_valid).
+      // Without this, write responses never pop (r.last is undefined on B channel),
+      // leaving stale entries that offset subsequent read user fields.
+      requser_pop = reqrsp_rsp_o.p_valid & reqrsp_req_i.p_ready
+                  & (reqrsp_burst_last | axi_rsp_i.b_valid);
     end
 
     fifo_v3 #(
@@ -222,7 +226,7 @@ module reqrsp_to_axi import reqrsp_pkg::*; #(
     assign axi_req_o.ar.id   = $unsigned(ID);
   end
 
-  assign axi_req_o.ar.user   = user_i;
+  assign axi_req_o.ar.user   = reqrsp_req_i.q.user;
   assign axi_req_o.ar_valid  = q_valid_read;
   assign q_ready_read        = axi_rsp_i.ar_ready;
 
@@ -247,11 +251,11 @@ module reqrsp_to_axi import reqrsp_pkg::*; #(
   end else begin
      assign axi_req_o.aw.id   = $unsigned(ID);
   end    
-  assign axi_req_o.aw.user   = user_i;
+  assign axi_req_o.aw.user   = reqrsp_req_i.q.user;
   assign axi_req_o.w.data    = write_data;
   assign axi_req_o.w.strb    = reqrsp_req_i.q.strb;
   assign axi_req_o.w.last    = 1'b1;
-  assign axi_req_o.w.user    = user_i;
+  assign axi_req_o.w.user    = reqrsp_req_i.q.user;
 
   // Both channels need to handshake (independently).
   stream_fork #(
@@ -288,15 +292,25 @@ module reqrsp_to_axi import reqrsp_pkg::*; #(
                               | (axi_rsp_i.b_valid & axi_rsp_i.b.resp[1]);
 
 
+  logic is_burst_write_rsp, is_normal_write_rsp;
+
   if (EnBurst) begin
     // Mute the write response from cache controller
-    logic is_burst_write_rsp, is_normal_write_rsp;
+
     assign is_burst_write_rsp  = (axi_rsp_i.b_valid & (axi_rsp_i.b.user != '0));
     assign is_normal_write_rsp = (axi_rsp_i.b_valid & (axi_rsp_i.b.user == '0));
 
-    assign reqrsp_rsp_o.p_valid = r_valid | is_normal_write_rsp;
-    assign axi_req_o.b_ready    = ((reqrsp_req_i.p_ready & is_normal_write_rsp) |
+    // MaxBlen == 0 means we always have "fake" burst for AXI ID switching only
+    assign reqrsp_rsp_o.p_valid = r_valid | is_normal_write_rsp | (is_burst_write_rsp & (MaxBlen == 0));
+    if (MaxBlen == 0) begin
+      // All B responses are forwarded upstream — must respect backpressure
+      assign axi_req_o.b_ready = reqrsp_req_i.p_ready & axi_rsp_i.b_valid;
+    end else begin
+      // Only normal (ID=0) B responses are forwarded; burst B responses are
+      // muted (silently consumed) so they can bypass p_ready.
+      assign axi_req_o.b_ready = ((reqrsp_req_i.p_ready & is_normal_write_rsp) |
                                   is_burst_write_rsp) & axi_rsp_i.b_valid;
+    end
   end else begin
     assign reqrsp_rsp_o.p_valid = r_valid | axi_rsp_i.b_valid;
     assign axi_req_o.b_ready = reqrsp_req_i.p_ready & axi_rsp_i.b_valid;
@@ -307,9 +321,7 @@ module reqrsp_to_axi import reqrsp_pkg::*; #(
   if (EnBurst == 1) begin
     always_comb begin
       reqrsp_rsp_o.p.data  = '0;
-      // reqrsp_rsp_o.p.user  = requser_out;
-      reqrsp_rsp_o.p.user  = axi_rsp_i.r.user;
-      // reqrsp_rsp_o.p.user  = r_ready ? axi_rsp_i.r.user : axi_rsp_i.b.user;
+      reqrsp_rsp_o.p.user  = r_valid ? axi_rsp_i.r.user : axi_rsp_i.b.user;
 
       if (reqrsp_burst_last)
         reqrsp_rsp_o.p.user.burst.burst_len = 1'b0;

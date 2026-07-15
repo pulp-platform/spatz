@@ -1090,6 +1090,23 @@ module spatz_vlsu
   `FF(vlsu_insn_valid_cyc_q, vlsu_insn_valid_cyc_d, '0)
   `FF(vlsu_insn_cnt_q, vlsu_insn_cnt_d, '0)
 
+  // Load Latency Monitor (request-to-commit latency, port 0)
+  // Commit (ROB pop into the VRF) happens strictly in request order, but
+  // responses may return out of order, so this can be larger than the raw
+  // memory round-trip latency whenever an earlier load is still outstanding.
+  cnt_t cycle_cnt_q, cycle_cnt_d;
+  `FF(cycle_cnt_q, cycle_cnt_d, '0)
+
+  cnt_t [NrOutstandingLoads-1:0] load_req_cycle_q, load_req_cycle_d;
+  for (genvar i = 0; i < NrOutstandingLoads; i++) begin : gen_load_req_cycle
+    `FF(load_req_cycle_q[i], load_req_cycle_d[i], '0)
+  end
+
+  cnt_t load_lat_sum_q, load_lat_sum_d;
+  cnt_t load_lat_cnt_q, load_lat_cnt_d;
+  `FF(load_lat_sum_q, load_lat_sum_d, '0)
+  `FF(load_lat_cnt_q, load_lat_cnt_d, '0)
+
   always_comb begin : gen_vlsu_perf_cnt_comb
     // VRF Monitor
     vrf_wvalid_cnt_d = vrf_wvalid_cnt_q;
@@ -1142,6 +1159,20 @@ module spatz_vlsu
     if (mem_spatz_req_valid & mem_spatz_req_ready) begin
       // Valid Handshaking on VLSU instruction pop
       vlsu_insn_cnt_d ++;
+    end
+
+    // Load Latency Monitor
+    cycle_cnt_d = cycle_cnt_q + 1;
+
+    load_req_cycle_d = load_req_cycle_q;
+    if (mem_is_load && spatz_mem_req_valid[0] && spatz_mem_req_ready[0])
+      load_req_cycle_d[mem_req_id[0]] = cycle_cnt_q;
+
+    load_lat_sum_d = load_lat_sum_q;
+    load_lat_cnt_d = load_lat_cnt_q;
+    if (commit_insn_q.is_load && rob_pop[0]) begin
+      load_lat_sum_d = load_lat_sum_q + (cycle_cnt_q - load_req_cycle_q[rob_rid[0]]);
+      load_lat_cnt_d = load_lat_cnt_q + 1;
     end
   end
 
