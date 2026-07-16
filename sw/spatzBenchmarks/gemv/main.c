@@ -53,7 +53,7 @@ static inline int fp_check(const T *a, const T *b) {
 }
 
 int main() {
-  const unsigned int num_cores = snrt_cluster_core_num() - (QUAD_RLEN != 0);
+  const unsigned int num_cores = snrt_cluster_core_num() - (QUADRILATERO != 0);
   const unsigned int cid = snrt_cluster_core_idx();
 
   // Reset timer
@@ -93,7 +93,7 @@ int main() {
     timer = benchmark_get_cycle();
 
   // Calculate gemv
-  if ((QUAD_RLEN == 0) || cid == 0) {
+  if ((QUADRILATERO == 0) || cid == 0) {
     if (sizeof(T) == 8)
       gemv_v64b_m4(a_core, b, result_core, gemv_l.M, m_core, gemv_l.N);
     else if (sizeof(T) == 4)

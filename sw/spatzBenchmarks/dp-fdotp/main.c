@@ -40,7 +40,7 @@ static inline int fp_check(const double a, const double b) {
 }
 
 int main() {
-  const unsigned int num_cores = snrt_cluster_core_num() - (QUAD_RLEN != 0);
+  const unsigned int num_cores = snrt_cluster_core_num() - (QUADRILATERO != 0);
   const unsigned int cid = snrt_cluster_core_idx();
 
   // Reset timer
@@ -82,7 +82,7 @@ int main() {
 
   // Calculate dotp
   double acc;
-  if ((QUAD_RLEN == 0) || cid == 0) {
+  if ((QUADRILATERO == 0) || cid == 0) {
 #ifdef UNROLL
     acc = fdotp_v64b_m8_unrl(a_int, b_int, dim);
 #else

@@ -38,6 +38,7 @@ BUF_FPU := $(shell python3 -c "import jstyleson; print(jstyleson.load(open('$(SP
 # VENTAGLIO ... `endif blocks pull in the VTL integration.
 SPATZ_CLUSTER_VENTAGLIO := $(shell python3 -c "import jstyleson; f = open('$(SPATZ_CLUSTER_CFG_PATH)'); print(1 if jstyleson.load(f)['cluster'].get('ventaglio', False) else 0)")
 QUADRILATERO := $(shell python3 -c "import jstyleson; print(jstyleson.load(open('$(SPATZ_CLUSTER_CFG_PATH)'))['cluster'].get('quadrilatero', 0))")
+SPATZ_CLUSTER_CFG_DEFINES += -DQUADRILATERO=$(QUADRILATERO)
 
 ifeq ($(DOUBLE_BW),1)
 	DEFS += -DDOUBLE_BW
@@ -170,8 +171,9 @@ spatz.cleandata:
 		fi \
 	done
 	@echo "All benchmark data cleaned."
+
 .PHONY: quadrilatero.gendata
-ifneq ($(QUAD_RLEN),0)
+ifeq ($(QUADRILATERO),1)
 quadrilatero.gendata:
 	@${PYTHON} -c "import torch, numpy" 2>/dev/null || ${PYTHON} -m pip install --user torch numpy
 	@grep -E '^\s*add_quadrilatero_test_threeParam\(' $(ROOT)/sw/quadrilateroBenchmarks/CMakeLists.txt | \
@@ -210,10 +212,10 @@ quadrilatero.cleandata:
 	
 else
 quadrilatero.gendata:
-	@echo "Skipping Quadrilatero data generation (QUAD_RLEN=0)"
+	@echo "Skipping Quadrilatero data generation (QUADRILATERO=0)"
 
 quadrilatero.cleandata:
-	@echo "Skipping Quadrilatero clean data (QUAD_RLEN=0)"
+	@echo "Skipping Quadrilatero clean data (QUADRILATERO=0)"
 endif
 
 #############
