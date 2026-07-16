@@ -1584,6 +1584,48 @@ module spatz_vlsu
       else $fatal(1, "[spatz_vlsu] Port %0d issued request during port0-only burst mode.", port);
   end
 
+`ifdef TARGET_MEMPOOL
+`ifndef VERILATOR
+  // [VPERF] kernel-window VLSU performance counters (permanent sim-only instrumentation; the
+  // matmul bottleneck study's anchor -- keep as a regression guard for receive-path changes).
+  // Gated by the benchmark trace CSR window (same gate as the TB profilers); one summary line
+  // per core at window close. Cycle-accounting identity (verified exactly): win = pair_commit +
+  // wait_beats + no_insn + store/residual + vrf_bp. wait_beats is VLSU OCCUPANCY, not
+  // critical-path exposure (it overlaps VFU compute) -- see docs/matmul_bottleneck_report.md §5.
+  if (1) begin : gen_vperf
+    logic        vperf_win_q;
+    logic [31:0] c_win, c_insn, c_noinsn, c_pairok, c_single, c_waitbeat, c_vrfbp, c_reqstall, c_ret;
+    wire vperf_win = mempool_tb.csr_trace_any_global;
+    always_ff @(posedge clk_i or negedge rst_ni) begin
+      if (!rst_ni) begin
+        vperf_win_q <= 1'b0;
+        {c_win, c_insn, c_noinsn, c_pairok, c_single, c_waitbeat, c_vrfbp, c_reqstall, c_ret} <= '0;
+      end else begin
+        vperf_win_q <= vperf_win;
+        if (vperf_win && !vperf_win_q) begin
+          {c_win, c_insn, c_noinsn, c_pairok, c_single, c_waitbeat, c_vrfbp, c_reqstall, c_ret} <= '0;
+        end else if (vperf_win) begin
+          c_win <= c_win + 1;
+          if (commit_insn_valid && commit_insn_q.is_load) c_insn <= c_insn + 1;
+          if (!commit_insn_valid)                         c_noinsn <= c_noinsn + 1;
+          if (commit_pair_active && vrf_req_valid_d && vrf_req_ready_d) c_pairok <= c_pairok + 1;
+          if (commit_use_port0_burst && !commit_pair_active &&
+              vrf_req_valid_d && vrf_req_ready_d)         c_single <= c_single + 1;
+          if (commit_pair_active && mem_pending[0] &&
+              !(rob_rvalid[0] && rob_rvalid2[0]))         c_waitbeat <= c_waitbeat + 1;
+          if (vrf_req_valid_d && !vrf_req_ready_d)        c_vrfbp <= c_vrfbp + 1;
+          if (mem_req_lvalid[0] && !spatz_mem_req_ready[0]) c_reqstall <= c_reqstall + 1;
+          if (commit_insn_pop)                            c_ret <= c_ret + 1;
+        end
+        if (!vperf_win && vperf_win_q && (c_ret != 0))
+          $display("[VPERF] %m win=%0d insn_act=%0d no_insn=%0d pair_commit=%0d single_commit=%0d wait_beats=%0d vrf_bp=%0d req_stall=%0d insn_ret=%0d",
+                   c_win, c_insn, c_noinsn, c_pairok, c_single, c_waitbeat, c_vrfbp, c_reqstall, c_ret);
+      end
+    end
+  end
+`endif
+`endif
+
   if (BurstRecvPorts > 1) begin : gen_twinrob0_asserts
     // The odd-expected classifier is sound because the mem op-queue serializes instructions
     // until full retire: no native port-1 (strided/indexed) ROB1 allocation may be outstanding
