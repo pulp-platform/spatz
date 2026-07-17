@@ -48,6 +48,8 @@ module spatz_cluster
     parameter int                     unsigned               ClusterPeriphSize                  = 64,
     /// Number of TCDM Banks.
     parameter int                     unsigned               NrBanks                            = 2 * NrCores,
+    /// Number of Hyperbanks
+    parameter int                     unsigned               NumHyperBanks                      = 32'd2,
     /// Size of DMA AXI buffer.
     parameter int                     unsigned               DMAAxiReqFifoDepth                 = 3,
     /// Size of DMA request fifo.
@@ -547,6 +549,7 @@ module spatz_cluster
   spatz_tcdm_interconnect #(
     .NumInp                (1                 ),
     .NumOut                (NrSuperBanks      ),
+    .NumHyperBanks         (NumHyperBanks     ),
     .tcdm_req_t            (tcdm_dma_req_t    ),
     .tcdm_rsp_t            (tcdm_dma_rsp_t    ),
     .mem_req_t             (mem_dma_req_t     ),
@@ -666,6 +669,7 @@ module spatz_cluster
   spatz_tcdm_interconnect #(
     .NumInp                (NumTCDMIn           ),
     .NumOut                (NrBanks             ),
+    .NumHyperBanks         (NumHyperBanks       ),
     .tcdm_req_t            (tcdm_req_t          ),
     .tcdm_rsp_t            (tcdm_rsp_t          ),
     .mem_req_t             (mem_req_t           ),

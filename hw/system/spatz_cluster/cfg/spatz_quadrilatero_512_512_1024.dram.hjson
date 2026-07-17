@@ -21,7 +21,8 @@
         "tcdm": {
             "size": 256,
             "banks": 64,
-            "misalign": true
+            "hyperbanks": 2,
+            "misalign": false
         },
         "cluster_periph_size": 64, // kB
         "dma_data_width": 1024,

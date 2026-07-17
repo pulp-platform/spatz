@@ -11,9 +11,9 @@ package quadrilatero_pkg;
   localparam int unsigned REG_PER_CE =  4;
 
   // Quadrilatero Sizes
-  localparam int unsigned RLEN = 256;
+  localparam int unsigned RLEN = 128;
   localparam int unsigned ALEN = RLEN;
-  localparam int unsigned LLEN = 512;
+  localparam int unsigned LLEN = 256;
 
   // Unit Parameters
   localparam int unsigned NUM_EXEC_UNITS =   4;
@@ -31,10 +31,10 @@ package quadrilatero_pkg;
   localparam tech_e MRF_TECH = FF;
 
   // DataTypes parameters
-  localparam bit EN_FP32     = 1'b0;
+  localparam bit EN_FP32     = 1'b1;
   localparam bit EN_FP16     = 1'b1;
   localparam bit EN_FP8      = 1'b1;
-  localparam bit EN_INT32    = 1'b0;
+  localparam bit EN_INT32    = 1'b1;
   localparam bit EN_INT16    = 1'b1;
   localparam bit EN_INT8     = 1'b1;
   localparam bit EN_SIGNED   = 1'b1;

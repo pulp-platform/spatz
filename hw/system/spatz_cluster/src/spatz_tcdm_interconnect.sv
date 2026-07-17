@@ -6,6 +6,9 @@
 // Author: Wolfgang Roenninger <wroennin@ethz.ch>
 
 `include "mem_interface/typedef.svh"
+// `include "tcdm_interface/typedef.svh"
+`include "common_cells/registers.svh"
+// `include "common_cells/assertions.svh"
 
 /// Lightweight wrapper for a fixed response latency interconnect, i.e.,
 /// something that can be used to interconnect memories.
@@ -17,6 +20,8 @@ module spatz_tcdm_interconnect #(
   /// Radix of the individual switch points of the network.
   /// Currently supported are `32'd2` and `32'd4`.
   parameter int unsigned Radix                 = 32'd2,
+  /// Number of Hyperbanks to simplify FC Xbar
+  parameter int unsigned NumHyperBanks         = 32'd2,
   /// Payload type of the data request ports.
   parameter type         tcdm_req_t            = logic,
   /// Payload type of the data response ports.
@@ -54,163 +59,92 @@ module spatz_tcdm_interconnect #(
   input  mem_rsp_t            [NumOut-1:0] mem_rsp_i
 );
 
+  localparam int unsigned BanksPerHyperBank = NumOut / NumHyperBanks;
+  localparam int unsigned VirtualMemAddrWidth = MemAddrWidth + $clog2(NumHyperBanks);
+
   localparam int unsigned ByteOffset = $clog2(DataWidth/8);
   localparam int unsigned StrbWidth = DataWidth/8;
+  typedef logic [VirtualMemAddrWidth-1:0] virtual_mem_addr_t;
   typedef logic [MemAddrWidth-1:0] addr_t;
   typedef logic [DataWidth-1:0] data_t;
   typedef logic [StrbWidth-1:0] strb_t;
-  `MEM_TYPEDEF_REQ_CHAN_T(mem_req_chan_t, addr_t, data_t, strb_t, user_t);
 
-  // Width of the bank select signal.
-  localparam int unsigned SelWidth = cf_math_pkg::idx_width(NumOut);
-  typedef logic [SelWidth-1:0] select_t;
-  select_t [NumInp-1:0] bank_select;
+  // Define a new datatype to support larger addresses from TCDM interconnect
+  // We basically pretend to the IC that our banks are combined as larger hyperbanks (Add memoryspace from two banks into one), such that we can demux the address later
+  // Banks within the same hyperbank cannot be accessed simultaiousely
+  `MEM_TYPEDEF_REQ_CHAN_T(mem_req_chan_t, virtual_mem_addr_t, data_t, strb_t, user_t);
+  `MEM_TYPEDEF_REQ_T(virtual_mem_req_t, mem_req_chan_t);
+  virtual_mem_req_t [BanksPerHyperBank-1:0] ic_mem_req;
+  mem_rsp_t         [BanksPerHyperBank-1:0] ic_mem_rsp;
 
-  typedef struct packed {
-    // Which bank was selected.
-    select_t bank_select;
-    // The response is valid.
-    logic valid;
-  } rsp_t;
+  // Instantiate one demux per bank in the hyperbank
+  for (genvar i = 0; i < BanksPerHyperBank; i++) begin : gen_bank_connection
+    if (NumHyperBanks > 1) begin : gen_hyperbank_demux
 
-  // Generate the `bank_select` signal based on the address.
-  // This generates a bank interleaved addressing scheme, where consecutive
-  // addresses are routed to individual banks.
+      logic select, sel_q, sel_d;
 
-  // Misalignment logic for TCDM to achieve no conflicts within 2x Spatz VLSU interfaces within a core
-  // Misalignment pattern :
-  //                               Superbank-0   Superbank-1
-  //                        row1 : Block-0       Block-1
-  //                        row2 : Block-3       Block-2
-  //                        row3 : Block-5       Block-4
-  //                        row4 : Block-6       Block-7
+      `FF(sel_q, sel_d, '0, clk_i, rst_ni)
 
-  localparam int unsigned ROWSIZE = $clog2(DataWidth * NumOut / 8);
-  localparam int unsigned ADDRWIDTH = $bits(req_i[0].q.addr);
-  addr_t [NumInp-1:0] row;
-  logic [NumInp-1:0] [ROWSIZE-1:0] addr_shift;
-  logic [NumInp-1:0] [ADDRWIDTH-1:0] addr_misaligned;
+      // Demux select signal is determined by the MSB of the request address
+      assign select = ic_mem_req[i].q.addr[VirtualMemAddrWidth-1];
+      assign sel_d = ic_mem_req[i].q_valid && ic_mem_rsp[i].q_ready ? select : sel_q;
 
-  always_comb begin : gen_addr_misalign
-    row = '0;
-    addr_shift = '0;
-    addr_misaligned = '0;
-    for (int i = 0; i < NumInp; i++) begin
-      row[i] = req_i[i].q.addr[ADDRWIDTH-1 : ROWSIZE];
-      addr_shift[i] = (row[i][1:0] == 2'b00) || (row[i][1:0] == 2'b11) ? 0 : (DataWidth * NumOut / 8) / 2;
-      addr_misaligned[i] = req_i[i].q.addr + addr_shift[i];
-      addr_misaligned[i][ADDRWIDTH-1 : ROWSIZE] = req_i[i].q.addr[ADDRWIDTH-1 : ROWSIZE];
+      // Request demux
+      assign mem_req_o[i].q_valid = !select && ic_mem_req[i].q_valid;
+      assign mem_req_o[i].q.addr  = ic_mem_req[i].q.addr[MemAddrWidth-1:0];
+      assign mem_req_o[i].q.write = ic_mem_req[i].q.write;
+      assign mem_req_o[i].q.data  = ic_mem_req[i].q.data;
+      assign mem_req_o[i].q.strb  = ic_mem_req[i].q.strb;
+      assign mem_req_o[i].q.user  = ic_mem_req[i].q.user;
+      assign mem_req_o[i].q.amo   = ic_mem_req[i].q.amo;
+      assign mem_req_o[i+BanksPerHyperBank].q_valid = select && ic_mem_req[i].q_valid;
+      assign mem_req_o[i+BanksPerHyperBank].q.addr  = ic_mem_req[i].q.addr[MemAddrWidth-1:0];
+      assign mem_req_o[i+BanksPerHyperBank].q.write = ic_mem_req[i].q.write;
+      assign mem_req_o[i+BanksPerHyperBank].q.data  = ic_mem_req[i].q.data;
+      assign mem_req_o[i+BanksPerHyperBank].q.strb  = ic_mem_req[i].q.strb;
+      assign mem_req_o[i+BanksPerHyperBank].q.user  = ic_mem_req[i].q.user;
+      assign mem_req_o[i+BanksPerHyperBank].q.amo   = ic_mem_req[i].q.amo;
+
+      // Response mux (currently assumes response arrives exactly one cycle after request)
+      assign ic_mem_rsp[i].q_ready = select ? mem_rsp_i[i+BanksPerHyperBank].q_ready :
+        mem_rsp_i[i].q_ready;
+      assign ic_mem_rsp[i].p = sel_q ? mem_rsp_i[i+BanksPerHyperBank].p : mem_rsp_i[i].p;
+
+    end else begin : gen_no_demux
+
+      // Demux and mux degenerate to direct one-to-one connections
+      assign mem_req_o[i].q_valid  = ic_mem_req[i].q_valid;
+      assign mem_req_o[i].q.addr   = ic_mem_req[i].q.addr[MemAddrWidth-1:0];
+      assign mem_req_o[i].q.write  = ic_mem_req[i].q.write;
+      assign mem_req_o[i].q.data   = ic_mem_req[i].q.data;
+      assign mem_req_o[i].q.strb   = ic_mem_req[i].q.strb;
+      assign mem_req_o[i].q.user   = ic_mem_req[i].q.user;
+      assign mem_req_o[i].q.amo    = ic_mem_req[i].q.amo;
+      assign ic_mem_rsp[i].q_ready = mem_rsp_i[i].q_ready;
+      assign ic_mem_rsp[i].p       = mem_rsp_i[i].p;
+
     end
   end
 
-  for (genvar i = 0; i < NumInp; i++) begin : gen_bank_select
-    assign bank_select[i] = AddrMisalign ? addr_misaligned[i][ByteOffset+:SelWidth] : req_i[i].q.addr[ByteOffset+:SelWidth];
-  end
-
-  mem_req_chan_t [NumInp-1:0] in_req;
-  mem_req_chan_t [NumOut-1:0] out_req;
-
-  logic [NumInp-1:0] req_q_valid_flat, rsp_q_ready_flat;
-  logic [NumOut-1:0] mem_q_valid_flat, mem_q_ready_flat;
-
-  // The usual struct packing unpacking.
-  for (genvar i = 0; i < NumInp; i++) begin : gen_flat_inp
-    assign req_q_valid_flat[i] = req_i[i].q_valid;
-    assign rsp_o[i].q_ready = rsp_q_ready_flat[i];
-    assign in_req[i] = '{
-      addr: AddrMisalign ? addr_misaligned[i][ByteOffset+SelWidth+:MemAddrWidth] : req_i[i].q.addr[ByteOffset+SelWidth+:MemAddrWidth],
-      write: req_i[i].q.write,
-      amo: req_i[i].q.amo,
-      data: req_i[i].q.data,
-      strb: req_i[i].q.strb,
-      user: req_i[i].q.user
-    };
-  end
-
-  for (genvar i = 0; i < NumOut; i++) begin : gen_flat_oup
-    assign mem_req_o[i].q_valid = mem_q_valid_flat[i];
-    assign mem_q_ready_flat[i] = mem_rsp_i[i].q_ready;
-    assign mem_req_o[i].q = out_req[i];
-  end
-
-  // ------------
-  // Request Side
-  // ------------
-  // We need to arbitrate the requests coming from the input side and resolve
-  // potential bank conflicts. Therefore a full arbitration tree is needed.
-  if (Topology == snitch_pkg::LogarithmicInterconnect) begin : gen_xbar
-    stream_xbar #(
-      .NumInp      ( NumInp    ),
-      .NumOut      ( NumOut    ),
-      .payload_t   ( mem_req_chan_t ),
-      .OutSpillReg ( 1'b0      ),
-      .ExtPrio     ( 1'b0      ),
-      .AxiVldRdy   ( 1'b1      ),
-      .LockIn      ( 1'b1      )
-    ) i_stream_xbar (
-      .clk_i,
-      .rst_ni,
-      .flush_i ( 1'b0 ),
-      .rr_i    ( '0 ),
-      .data_i  ( in_req ),
-      .sel_i   ( bank_select ),
-      .valid_i ( req_q_valid_flat ),
-      .ready_o ( rsp_q_ready_flat ),
-      .data_o  ( out_req ),
-      .idx_o   ( ),
-      .valid_o ( mem_q_valid_flat ),
-      .ready_i ( mem_q_ready_flat )
-    );
-  end else if (Topology == snitch_pkg::OmegaNet) begin : gen_omega_net
-    stream_omega_net #(
-      .NumInp      ( NumInp        ),
-      .NumOut      ( NumOut        ),
-      .payload_t   ( mem_req_chan_t ),
-      .SpillReg    ( 1'b0          ),
-      .ExtPrio     ( 1'b0          ),
-      .AxiVldRdy   ( 1'b1          ),
-      .LockIn      ( 1'b1          ),
-      .Radix       ( Radix         )
-    ) i_stream_omega_net (
-      .clk_i,
-      .rst_ni,
-      .flush_i ( 1'b0 ),
-      .rr_i    ( '0 ),
-      .data_i  ( in_req ),
-      .sel_i   ( bank_select ),
-      .valid_i ( req_q_valid_flat ),
-      .ready_o ( rsp_q_ready_flat ),
-      .data_o  ( out_req ),
-      .idx_o   ( ),
-      .valid_o ( mem_q_valid_flat ),
-      .ready_i ( mem_q_ready_flat )
-    );
-  end
-
-  // -------------
-  // Response Side
-  // -------------
-  // A simple multiplexer is sufficient here.
-  for (genvar i = 0; i < NumInp; i++) begin : gen_rsp_mux
-    rsp_t out_rsp_mux, in_rsp_mux;
-    assign in_rsp_mux = '{
-      bank_select: bank_select[i],
-      valid: req_i[i].q_valid & rsp_o[i].q_ready
-    };
-    // A this is a fixed latency interconnect a simple shift register is
-    // sufficient to track the arbitration decisions.
-    shift_reg #(
-      .dtype ( rsp_t ),
-      .Depth ( MemoryResponseLatency )
-    ) i_shift_reg (
-      .clk_i,
-      .rst_ni,
-      .d_i ( in_rsp_mux ),
-      .d_o ( out_rsp_mux )
-    );
-    assign rsp_o[i].p.data = mem_rsp_i[out_rsp_mux.bank_select].p.data;
-    assign rsp_o[i].p_valid = out_rsp_mux.valid;
-  end
-
+  spatz_tcdm_fc_interconnect #(
+    .NumInp                (NumInp               ),
+    .NumOut                (BanksPerHyperBank    ),
+    .tcdm_req_t            (tcdm_req_t           ),
+    .tcdm_rsp_t            (tcdm_rsp_t           ),
+    .mem_req_t             (virtual_mem_req_t    ),
+    .mem_rsp_t             (mem_rsp_t            ),
+    .user_t                (user_t               ),
+    .MemAddrWidth          (VirtualMemAddrWidth  ),
+    .DataWidth             (DataWidth            ),
+    .MemoryResponseLatency (MemoryResponseLatency),
+    .AddrMisalign          (AddrMisalign         )
+  ) i_fc_interconnect (
+    .clk_i                 ,
+    .rst_ni                ,
+    .req_i     (req_i     ),
+    .rsp_o     (rsp_o     ),
+    .mem_req_o (ic_mem_req),
+    .mem_rsp_i (ic_mem_rsp)
+  );
 
 endmodule

@@ -21,6 +21,7 @@
         "tcdm": {
             "size": 128,
             "banks": 16,
+            "hyperbanks": 1,
             "misalign": true
         },
         "cluster_periph_size": 64, // kB
