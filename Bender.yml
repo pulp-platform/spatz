@@ -181,8 +181,11 @@ sources:
       - hw/ip/spatz_cc/src/spatz_cc.sv
     
       - target: quadrilatero
+        override_files: true
         files:
-        - hw/system/spatz_cluster/src/generated/quadrilatero_pkg.sv
+          - hw/system/spatz_cluster/src/generated/quadrilatero_pkg.sv
+      - target: quadrilatero
+        files:
         - hw/system/spatz_cluster/src/quadrilatero_top.sv
         - hw/ip/spatz_cc/src/spatz_quadrilatero_cc.sv
 
