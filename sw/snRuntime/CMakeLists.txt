@@ -31,6 +31,8 @@ elseif("${SPATZ_CLUSTER_CFG}" MATCHES "^spatz_cluster.carfield\\.(l2|dram)\\.hjs
   set(_plat_folder "cheshire")
 elseif("${SPATZ_CLUSTER_CFG}" MATCHES "^spatz_quadrilatero_[0-9]+_[0-9]+_[0-9]+\\.dram\\.hjson$")
   set(_plat_folder "standalone")
+elseif("${SPATZ_CLUSTER_CFG}" MATCHES "^spatz_quadrilatero\\.dora\\.dram\\.hjson$")
+  set(_plat_folder "standalone")
 else()
   if(NOT DEFINED SPATZ_CLUSTER_PLATFORM)
     message(WARNING
@@ -80,6 +82,8 @@ set(MEM_SPATZ_QUADRILATERO_512_512_1024_DRAM_HJSON_ORIGIN     0x80000000)
 set(MEM_SPATZ_QUADRILATERO_512_512_1024_DRAM_HJSON_SIZE       0x80000000)
 set(MEM_SPATZ_QUADRILATERO_1024_1024_2048_DRAM_HJSON_ORIGIN   0x80000000)
 set(MEM_SPATZ_QUADRILATERO_1024_1024_2048_DRAM_HJSON_SIZE     0x80000000)
+set(MEM_SPATZ_QUADRILATERO_DORA_DRAM_HJSON_ORIGIN      0x80000000)
+set(MEM_SPATZ_QUADRILATERO_DORA_DRAM_HJSON_SIZE        0x80000000)
 
 # sanitize lookup key (replace dots with underscores, upper-case)
 string(REPLACE "." "_" _key "${SPATZ_CLUSTER_CFG}")
