@@ -562,6 +562,23 @@
 		desc: "Saturating count of uncorrectable scrub ECC errors for this TCDM bank."
 	    }]
 	}
+     },
+     {
+	multireg: {
+	    name: "CORE_TMR_FAULT_COUNT",
+	    desc: "Per-core whole-core TMR lockstep replica-mismatch counter.",
+	    swaccess: "ro",
+	    hwaccess: "hrw",
+	    hwext: "true",
+	    count: "NumVrfUnits",
+	    compact: "false",
+	    cname: "core_tmr_fault_count",
+	    fields: [{
+		bits: "31:0",
+		name: "COUNT",
+		desc: "Saturating count of whole-core TMR replica mismatches for this core."
+	    }]
+	}
      }
   ]
 }

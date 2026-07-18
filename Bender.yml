@@ -175,9 +175,13 @@ sources:
       files:
       # Level 0
       - hw/ip/spatz_cc/src/axi_dma_pkg.sv
+      - hw/ip/redundancy_cells/TMR_voter.sv
+      - hw/ip/redundancy_cells/TMR_voter_fail.sv
+      - hw/ip/redundancy_cells/bitwise_TMR_voter_fail.sv
       # Level 1
       - hw/ip/spatz_cc/src/axi_dma_perf_counters.sv
       - hw/ip/spatz_cc/src/axi_dma_twod_ext.sv
+      - hw/ip/spatz_cc/src/spatz_snitch_tmr.sv
       # Level 2
       - hw/ip/spatz_cc/src/axi_dma_tc_snitch_fe.sv
       # Level 3

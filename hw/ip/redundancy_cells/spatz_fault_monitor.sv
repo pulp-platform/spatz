@@ -5,6 +5,7 @@
 module spatz_fault_monitor #(
   parameter int unsigned NumVrfUnits     = 1,
   parameter int unsigned NumTcdmBanks    = 1,
+  parameter int unsigned NumCores        = 1,
   parameter int unsigned CounterWidth    = 32,
   parameter bit          SaturatingCount = 1'b1
 ) (
@@ -24,6 +25,9 @@ module spatz_fault_monitor #(
   input  logic [NumTcdmBanks-1:0] tcdm_scrub_correctable_fault_i,
   input  logic [NumTcdmBanks-1:0] tcdm_scrub_uncorrectable_fault_i,
 
+  // Per-core whole-core TMR lockstep replica-mismatch fault.
+  input  logic [NumCores-1:0]     core_tmr_fault_i,
+
   // Per-source counters.
   output logic [NumVrfUnits-1:0][CounterWidth-1:0]  vrf_correctable_count_o,
   output logic [NumVrfUnits-1:0][CounterWidth-1:0]  vrf_uncorrectable_count_o,
@@ -31,7 +35,9 @@ module spatz_fault_monitor #(
   output logic [NumTcdmBanks-1:0][CounterWidth-1:0] tcdm_rd_correctable_count_o,
   output logic [NumTcdmBanks-1:0][CounterWidth-1:0] tcdm_rd_uncorrectable_count_o,
   output logic [NumTcdmBanks-1:0][CounterWidth-1:0] tcdm_scrub_correctable_count_o,
-  output logic [NumTcdmBanks-1:0][CounterWidth-1:0] tcdm_scrub_uncorrectable_count_o
+  output logic [NumTcdmBanks-1:0][CounterWidth-1:0] tcdm_scrub_uncorrectable_count_o,
+
+  output logic [NumCores-1:0][CounterWidth-1:0]     core_tmr_fault_count_o
 );
 
 
@@ -43,6 +49,7 @@ module spatz_fault_monitor #(
       tcdm_rd_uncorrectable_count_o <= '0;
       tcdm_scrub_correctable_count_o   <= '0;
       tcdm_scrub_uncorrectable_count_o <= '0;
+      core_tmr_fault_count_o <= '0;
 
     end else if (clear_i) begin
       vrf_correctable_count_o    <= '0;
@@ -51,6 +58,7 @@ module spatz_fault_monitor #(
       tcdm_rd_uncorrectable_count_o <= '0;
       tcdm_scrub_correctable_count_o   <= '0;
       tcdm_scrub_uncorrectable_count_o <= '0;
+      core_tmr_fault_count_o <= '0;
 
     end else begin
       for (int unsigned i = 0; i < NumVrfUnits; i++) begin
@@ -89,6 +97,14 @@ module spatz_fault_monitor #(
         if (tcdm_scrub_uncorrectable_fault_i[i]) begin
           if (!SaturatingCount || !(&tcdm_scrub_uncorrectable_count_o[i])) begin
             tcdm_scrub_uncorrectable_count_o[i] <= tcdm_scrub_uncorrectable_count_o[i] + 1'b1;
+          end
+        end
+      end
+
+      for (int unsigned i = 0; i < NumCores; i++) begin
+        if (core_tmr_fault_i[i]) begin
+          if (!SaturatingCount || !(&core_tmr_fault_count_o[i])) begin
+            core_tmr_fault_count_o[i] <= core_tmr_fault_count_o[i] + 1'b1;
           end
         end
       end
