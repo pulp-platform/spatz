@@ -445,6 +445,9 @@ module spatz_cluster
   logic [NrCores-1:0]  vrf_correctable_fault;
   logic [NrCores-1:0]  vrf_uncorrectable_fault; // NrCores == NumVrfUnits
 
+  // Per-core whole-core TMR lockstep mismatch.
+  logic [NrCores-1:0]  core_tmr_fault;
+
   logic [NumTcdmBanks-1:0] tcdm_rd_correctable_fault;
   logic [NumTcdmBanks-1:0] tcdm_rd_uncorrectable_fault;
 
@@ -459,9 +462,12 @@ module spatz_cluster
   logic [NumTcdmBanks-1:0][ErrorCounterWidth-1:0] tcdm_scrub_correctable_count;
   logic [NumTcdmBanks-1:0][ErrorCounterWidth-1:0] tcdm_scrub_uncorrectable_count;
 
+  logic [NrCores-1:0][ErrorCounterWidth-1:0] core_tmr_fault_count;
+
   spatz_fault_monitor #(
   .NumVrfUnits  (NrCores),
   .NumTcdmBanks    (NumTcdmBanks),
+  .NumCores        (NrCores),
   .CounterWidth    (ErrorCounterWidth),
   .SaturatingCount (1'b1)
   ) i_err_monitor (
@@ -481,6 +487,8 @@ module spatz_cluster
   .tcdm_scrub_correctable_fault_i (tcdm_scrub_correctable_fault),
   .tcdm_scrub_uncorrectable_fault_i (tcdm_scrub_uncorrectable_fault),
 
+  .core_tmr_fault_i (core_tmr_fault),
+
   // Per-source counters.
   .vrf_correctable_count_o (vrf_correctable_count),
   .vrf_uncorrectable_count_o(vrf_uncorrectable_count),
@@ -488,7 +496,9 @@ module spatz_cluster
   .tcdm_rd_correctable_count_o (tcdm_rd_correctable_count),
   .tcdm_rd_uncorrectable_count_o (tcdm_rd_uncorrectable_count),
   .tcdm_scrub_correctable_count_o (tcdm_scrub_correctable_count),
-  .tcdm_scrub_uncorrectable_count_o (tcdm_scrub_uncorrectable_count)
+  .tcdm_scrub_uncorrectable_count_o (tcdm_scrub_uncorrectable_count),
+
+  .core_tmr_fault_count_o (core_tmr_fault_count)
 );
 
   // -------------
@@ -989,7 +999,8 @@ module spatz_cluster
         .tcdm_addr_base_i (tcdm_start_address                  ),
         // ECC VRF signals
         .vrf_single_error_o (vrf_correctable_fault[i]  ),
-        .vrf_multi_error_o (vrf_uncorrectable_fault[i])
+        .vrf_multi_error_o (vrf_uncorrectable_fault[i]),
+        .core_tmr_fault_o (core_tmr_fault[i])
       );
       for (genvar j = 0; j < TcdmPorts; j++) begin : gen_tcdm_user
         always_comb begin
@@ -1313,7 +1324,8 @@ module spatz_cluster
     .tcdm_rd_correctable_count_i      (tcdm_rd_correctable_count      ),
     .tcdm_rd_uncorrectable_count_i    (tcdm_rd_uncorrectable_count    ),
     .tcdm_scrub_correctable_count_i   (tcdm_scrub_correctable_count   ),
-    .tcdm_scrub_uncorrectable_count_i (tcdm_scrub_uncorrectable_count )
+    .tcdm_scrub_uncorrectable_count_i (tcdm_scrub_uncorrectable_count ),
+    .core_tmr_fault_count_i           (core_tmr_fault_count           )
   );
 
   // 3. BootROM
