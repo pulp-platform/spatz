@@ -139,6 +139,7 @@ module spatz_tcdm_interconnect #(
     .user_t                (user_t               ),
     .MemAddrWidth          (VirtualMemAddrWidth  ),
     .DataWidth             (DataWidth            ),
+    .ProtDataWidth         (ProtDataWidth        ),
     .MemoryResponseLatency (MemoryResponseLatency),
     .AddrMisalign          (AddrMisalign         )
   ) i_fc_interconnect (

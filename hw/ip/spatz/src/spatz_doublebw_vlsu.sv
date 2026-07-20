@@ -752,6 +752,56 @@ module spatz_doublebw_vlsu
   logic both_commit;
   assign both_commit = coalesce_commit[0] & coalesce_commit[1];
 
+  // A cut's codeword bits are not byte-aligned, so accumulating several
+  // partial (single-element) commits into the same VRF word cannot splice
+  // the raw codewords. Decode both the buffered cut and the newly-arriving
+  // cut back to their ELEN-bit payload, splice at byte granularity using the
+  // new write's byte-enable (bytes it doesn't cover keep the buffered
+  // payload instead of being lost), then re-encode. Mirrors the VD RMW merge
+  // below, but merges against this buffer's own not-yet-committed data
+  // rather than the old VD register content.
+  logic [NrInterfaces-1:0][N_FU-1:0][ELEN-1:0]   coalesce_buf_decoded, coalesce_new_decoded;
+  logic [NrInterfaces-1:0][N_FU-1:0][ELEN-1:0]   coalesce_merged_payload;
+  logic [NrInterfaces-1:0][N_FU-1:0][ELEN+7-1:0] coalesce_merged_enc;
+
+  for (genvar intf = 0; intf < NrInterfaces; intf++) begin : gen_coalesce_merge_intf
+    for (genvar fu = 0; fu < N_FU; fu++) begin : gen_coalesce_merge_fu
+      hsiao_ecc_dec #(
+        .DataWidth(ELEN),
+        .ProtWidth(7)
+      ) i_coalesce_buf_ecc_dec (
+        .in        (coalesce_q[intf].wdata[(ELEN+7)*fu +: (ELEN+7)]),
+        .out       (coalesce_buf_decoded[intf][fu]),
+        .syndrome_o(),
+        .err_o     ()
+      );
+
+      hsiao_ecc_dec #(
+        .DataWidth(ELEN),
+        .ProtWidth(7)
+      ) i_coalesce_new_ecc_dec (
+        .in        (vrf_req_q[intf].wdata[(ELEN+7)*fu +: (ELEN+7)]),
+        .out       (coalesce_new_decoded[intf][fu]),
+        .syndrome_o(),
+        .err_o     ()
+      );
+
+      for (genvar b = 0; b < ELENB; b++) begin : gen_coalesce_merge_byte
+        assign coalesce_merged_payload[intf][fu][8*b +: 8] =
+          vrf_req_q[intf].wbe[ELENB*fu + b] ? coalesce_new_decoded[intf][fu][8*b +: 8]
+                                             : coalesce_buf_decoded[intf][fu][8*b +: 8];
+      end : gen_coalesce_merge_byte
+
+      hsiao_ecc_enc #(
+        .DataWidth(ELEN),
+        .ProtWidth(7)
+      ) i_coalesce_merge_ecc_enc (
+        .in  (coalesce_merged_payload[intf][fu]),
+        .out (coalesce_merged_enc[intf][fu])
+      );
+    end : gen_coalesce_merge_fu
+  end : gen_coalesce_merge_intf
+
   for (genvar intf = 0; intf < NrInterfaces; intf++) begin : gen_vrf_req_register_intf
     spill_register #(
       .T(vrf_req_t)
@@ -777,9 +827,9 @@ module spatz_doublebw_vlsu
     assign coalesce_commit[intf] = coalesce_valid_q[intf] && (&coalesce_q[intf].wbe || coalesce_q[intf].rsp_valid || next_addr_different[intf]);
 
     // Drive the VRF write port from the coalescing buffer, still as a raw
-    // 39-bit-per-cut ECC codeword. Decoding only happens where a byte-level
-    // merge is actually required (the VD RMW logic further below) -- never
-    // here, and not in coalesce_proc's merge step either (see its comment).
+    // 39-bit-per-cut ECC codeword: coalesce_proc below already merges in any
+    // earlier partial commits at the decoded level (see gen_coalesce_merge_intf)
+    // before this word is ever accepted into coalesce_q.
     assign vrf_waddr_o[intf]     = coalesce_q[intf].waddr;
     assign vrf_wdata_ecc_o[intf] = coalesce_q[intf].wdata;
     assign vrf_wbe_o[intf]       = coalesce_q[intf].wbe;
@@ -821,17 +871,17 @@ module spatz_doublebw_vlsu
       // Accept a new partial write from the spill-register output.
       if (vrf_req_valid_q[intf] && vrf_req_ready_q[intf]) begin
         if (coalesce_valid_q[intf] && !(coalesce_commit[intf] && vrf_wvalid_i[intf])) begin
-          // vrf_req_q[intf].wdata is already a complete, valid per-cut ECC
-          // codeword: the VD RMW accumulator below (vd_rmw_data_q) merges
-          // every new commit against everything already written to this
-          // word so far, immediately, before it ever reaches vrf_req_d. So
-          // the newest write simply supersedes the buffered one instead of
-          // being spliced into it byte-by-byte -- a codeword's bit lanes
-          // are not byte-aligned, so raw splicing is not even possible.
-          // Only the accumulated byte-enable (used to detect a full VRF
-          // word below) and the latched rsp need to persist across merges.
-          coalesce_d[intf]     = vrf_req_q[intf];
-          coalesce_d[intf].wbe = coalesce_q[intf].wbe | vrf_req_q[intf].wbe;
+          // Merge into the existing accumulation (same VRF word in progress).
+          // vrf_req_q[intf].wdata is a complete per-cut ECC codeword, and a
+          // codeword's bits aren't byte-aligned, so the new write can't be
+          // spliced into the buffered one directly. gen_coalesce_merge_intf
+          // above already decoded both, spliced at byte granularity using
+          // this write's byte-enable, and re-encoded the result -- use that
+          // instead of letting the newest write blindly supersede (and
+          // silently drop) whatever earlier partial commits had written.
+          coalesce_d[intf]       = vrf_req_q[intf];
+          coalesce_d[intf].wdata = coalesce_merged_enc[intf];
+          coalesce_d[intf].wbe   = coalesce_q[intf].wbe | vrf_req_q[intf].wbe;
           if (!vrf_req_q[intf].rsp_valid) begin
             coalesce_d[intf].rsp       = coalesce_q[intf].rsp;
             coalesce_d[intf].rsp_valid = coalesce_q[intf].rsp_valid;

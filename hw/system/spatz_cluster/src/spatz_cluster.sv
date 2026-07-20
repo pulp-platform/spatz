@@ -1012,7 +1012,6 @@ module spatz_cluster
       end
     end
 
-    if(i==1 &! spatz_pkg::QUADRILATERO) assign quad_tcdm_req = '0;
     if (Xdma[i]) begin : gen_dma_connection
       assign wide_axi_mst_req[SDMAMst] = axi_dma_req;
       assign axi_dma_res               = wide_axi_mst_rsp[SDMAMst];
@@ -1021,6 +1020,8 @@ module spatz_cluster
       assign axi_dma_res = '0;
     end
   end
+
+  if (!spatz_pkg::QUADRILATERO) assign quad_tcdm_req = '0;
 
   for (genvar j = 0; j < NrTCDMPortsCores; j++) begin : gen_tcdm_signals
     stream_arbiter #(

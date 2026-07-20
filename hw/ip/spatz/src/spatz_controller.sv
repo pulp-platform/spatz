@@ -441,11 +441,32 @@ module spatz_controller
           if (vl_cnt_q[sb_id_i[port]] >= (vl_max_d[sb_id_i[port]] * (intID + 1) - VRFWriteSize))
             done_result_d[intID][sb_id_i[port]] = wrote_result_d[intID][sb_id_i[port]];
         end
-        // VLSU: intID is fixed per interface (0 for WD0, 1 for WD1)
+        // VLSU: intID is fixed per interface (0 for WD0, 1 for WD1).
+        //
+        // Unlike VFU/VSLDU, sb_wrote_result_i here is a raw per-commit VRF
+        // write pulse from the coalescing buffer (spatz_doublebw_vlsu.sv):
+        // it fires once a VRF word is fully assembled, but that can be the
+        // *first* of two word-commits a single vl=8-class load needs (one
+        // per interface). A RAW-dependent's own intID only ever checks ONE
+        // interface at admission time, so latching this transient pulse
+        // into wrote_result_q would let it chain in as soon as interface
+        // intID alone finishes -- without any guarantee the *other*
+        // interface (which the same load may still be writing) has
+        // committed too. That's the exact "controller enables chaining
+        // after the first partial write" hazard riscvTests/vls_chain.c
+        // exists to catch.
+        //
+        // There is no cheap per-interface "this is the load's true last
+        // write" signal available here (unlike VFU/VSLDU's vl_cnt
+        // threshold), so don't populate the fast-path wrote_result_q for
+        // VLSU writers at all. Dependents instead wait for the
+        // guaranteed-correct signal: vlsu_rsp_valid_i, which only fires
+        // once *both* interfaces have committed, and which directly clears
+        // this dependency's bit below (see the vlsu_rsp_valid_i block).
+        // This costs a little chaining latency for VLSU-sourced RAW
+        // dependencies but is otherwise correct.
         if (port inside {SB_VLSU_VD_WD0, SB_VLSU_VD_WD1}) begin
-          automatic int unsigned intID  = port - SB_VLSU_VD_WD0;
           wrote_result_narrowing_d[sb_id_i[port]] = sb_wrote_result_i[port_idx] ^ narrow_wide_q[sb_id_i[port]];
-          wrote_result_d[intID][sb_id_i[port]]    = sb_wrote_result_i[port_idx] && (!narrow_wide_q[sb_id_i[port]] || wrote_result_narrowing_q[sb_id_i[port]]);
         end
       end
     end
