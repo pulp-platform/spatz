@@ -20,6 +20,7 @@ dependencies:
   riscv-dbg:          { git: "https://github.com/pulp-platform/riscv-dbg.git",           version: 0.7.0          }
   tech_cells_generic: { git: "https://github.com/pulp-platform/tech_cells_generic.git",  version: 0.2.13         }
   quadrilatero      : { git: "https://iis-git.ee.ethz.ch/quadrilatero/quadrilatero.git", rev:     6185842        }
+  redundancy_cells  : { git: "https://github.com/pulp-platform/redundancy_cells.git",    rev:     3c7c57e8      }
 
 export_include_dirs:
   - hw/ip/mem_interface/include
@@ -174,9 +175,10 @@ sources:
       files:
       # Level 0
       - hw/ip/spatz_cc/src/axi_dma_pkg.sv
-      - hw/ip/redundancy_cells/TMR_voter.sv
-      - hw/ip/redundancy_cells/TMR_voter_fail.sv
-      - hw/ip/redundancy_cells/bitwise_TMR_voter_fail.sv
+      # TMR_voter.sv, TMR_voter_fail.sv: now sourced from the redundancy_cells
+      # bender dependency (see Bender.yml dependencies:) instead of a
+      # copy-pasted local file, so they no longer fail lint-license with the
+      # old Solderpad-style header.
       # Level 1
       - hw/ip/spatz_cc/src/axi_dma_perf_counters.sv
       - hw/ip/spatz_cc/src/axi_dma_twod_ext.sv
@@ -204,13 +206,16 @@ sources:
       - hw/system/spatz_cluster/src/spatz_cluster_peripheral/spatz_cluster_peripheral_reg_pkg.sv
       - hw/system/spatz_cluster/src/spatz_tcdm_fc_interconnect.sv
       - hw/system/spatz_cluster/src/spatz_tcdm_interconnect.sv
-      - hw/ip/redundancy_cells/hsiao_ecc_pkg.sv
-      - hw/ip/redundancy_cells/hsiao_ecc_enc.sv
-      - hw/ip/redundancy_cells/hsiao_ecc_dec.sv
-      - hw/ip/redundancy_cells/hsiao_ecc_cor.sv
-      - hw/ip/redundancy_cells/ecc_scrubber.sv
+      # hsiao_ecc_pkg/enc/dec/cor.sv: now sourced from the redundancy_cells
+      # bender dependency (see Bender.yml dependencies:) instead of a
+      # copy-pasted local file.
+      # ecc_scrubber.sv, ecc_sram.sv: now sourced from the redundancy_cells
+      # bender dependency (see Bender.yml dependencies:) instead of a
+      # copy-pasted local file. Upstream's ecc_sram.sv already wires the
+      # scrubber's bit_corrected_o/uncorrectable_o correctly; its RMW path
+      # intentionally does not double as an on-access error-report checkpoint
+      # (TCDM errors are reported via scrubbing only).
       - hw/ip/redundancy_cells/scrub_timer.sv
-      - hw/ip/redundancy_cells/ecc_sram.sv
       - hw/ip/redundancy_cells/spatz_fault_monitor.sv
       # Level 1
       - hw/system/spatz_cluster/src/spatz_barrier.sv
