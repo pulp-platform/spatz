@@ -190,12 +190,12 @@ def emit_GEMM_layer(name="gemm", **kwargs):
             f"static const {dtype} {name}_checksum[{m}] = "
             + array_to_cstr(torch.sum(result, dim=-1))
             + ";\n\n\n"
-        )        
+        )
         layer_str += (
             f"static const {dtype} {name}_golden[{m}][{n}] = "
             + array_to_cstr(result)
             + ";\n\n\n"
-        )        
+        )
     return layer_str
 
 
