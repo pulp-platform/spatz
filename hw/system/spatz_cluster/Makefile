@@ -65,7 +65,7 @@ endif
 # Include Makefrag
 include $(ROOT)/util/Makefrag
 
-QuestaSim
+#QuestaSim
 VSIM      = questa-2021.3-kgf vsim
 VLOG      = questa-2021.3-kgf vlog
 VSIM_HOME = /usr/pack/questa-2021.3-kgf/questasim
