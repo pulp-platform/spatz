@@ -29,8 +29,13 @@ module spatz_tcdm_fc_interconnect #(
   /// address width.
   parameter int unsigned MemAddrWidth          = 32,
   /// Data size of the interconnect. Only the data portion counts. The offsets
-  /// into the address are derived from this.
+  /// into the address are derived from this. Must equal the unprotected word
+  /// width (e.g. 32) -- used for byte-offset/strobe sizing only. Do NOT set
+  /// to ProtDataWidth.
   parameter int unsigned DataWidth             = 32,
+  /// Actual data field width carried in each request/response (may include
+  /// ECC bits). Defaults to DataWidth for backward compatibility.
+  parameter int unsigned ProtDataWidth         = DataWidth,
   /// Additional user payload to route.
   parameter type         user_t                = logic,
   /// Latency of memory response (in cycles)
@@ -57,7 +62,7 @@ module spatz_tcdm_fc_interconnect #(
   localparam int unsigned ByteOffset = $clog2(DataWidth/8);
   localparam int unsigned StrbWidth = DataWidth/8;
   typedef logic [MemAddrWidth-1:0] addr_t;
-  typedef logic [DataWidth-1:0] data_t;
+  typedef logic [ProtDataWidth-1:0] data_t;
   typedef logic [StrbWidth-1:0] strb_t;
   `MEM_TYPEDEF_REQ_CHAN_T(mem_req_chan_t, addr_t, data_t, strb_t, user_t);
 

@@ -43,6 +43,8 @@ module spatz_snitch_tmr
   parameter bit          XFDOTP    = 0,
   parameter bit          XFAUX     = 0,
   int unsigned           FLEN      = DataWidth,
+  // Enable Matrix Extension
+  parameter bit          RMM       = 0,
   /// Enable virtual memory support.
   parameter bit          VMSupport = 1,
   /// Enable experimental IPU extension.
@@ -152,6 +154,7 @@ module spatz_snitch_tmr
       .XFDOTP                 (XFDOTP                ),
       .XFAUX                  (XFAUX                 ),
       .FLEN                   (FLEN                  ),
+      .RMM                    (RMM                   ),
       .VMSupport              (VMSupport             ),
       .Xipu                   (Xipu                  ),
       .dreq_t                 (dreq_t                ),
