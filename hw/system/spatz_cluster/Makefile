@@ -57,17 +57,14 @@ endif
 
 ifeq ($(QUADRILATERO),1)
 	VSIM_BENDER += -t quadrilatero
-<<<<<<< HEAD
 	BENDER_CFG_TARGETS += -t quadrilatero
-=======
-	VLT_BENDER += -t quadrilatero
->>>>>>> 02232057 (Fix CI violation)
 	VSIM_BENDER += -t quadrilatero_debug
 endif
 
 # Include Makefrag
 include $(ROOT)/util/Makefrag
 
+<<<<<<< HEAD
 <<<<<<< HEAD
 # QuestaSim
 # VSIM      = questa-2021.3-kgf vsim
@@ -79,6 +76,9 @@ VLOG      = vlog
 VSIM_HOME = /sw/CAD/Siemens/questa/2024.3/questasim
 =======
 QuestaSim
+=======
+#QuestaSim
+>>>>>>> b1cbb9dd (Fix CI violation)
 VSIM      = questa-2021.3-kgf vsim
 VLOG      = questa-2021.3-kgf vlog
 VSIM_HOME = /usr/pack/questa-2021.3-kgf/questasim
