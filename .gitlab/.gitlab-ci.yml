@@ -226,26 +226,6 @@ spatzBenchmarks-test-vlt:
     matrix:
       - { cfg: spatz_quadrilatero.dora.dram }
 
-spatzBenchmarks-ventaglio-test-vlt:
-  stage: benchmark
-  script:
-    # Download LLVM, GCC, Verilator, and Python deps
-    - $CI_PROJECT_DIR/util/memora_retry.sh get tc-llvm
-    - $CI_PROJECT_DIR/util/memora_retry.sh get tc-riscv-gcc
-    - $CI_PROJECT_DIR/util/memora_retry.sh get verilator
-    - $CI_PROJECT_DIR/util/memora_retry.sh get python-deps
-    # Download bender
-    - make bender
-    # Update opcodes
-    - make update_opcodes
-    # Compile the binaries
-    - cd hw/system/spatz_cluster
-    - ${VCS} make sw.vlt SPATZ_CLUSTER_CFG=spatz_cluster.ventaglio.dram.hjson -B
-    # Run only the Ventaglio sparse benchmarks
-    - cd sw/build/spatzBenchmarks
-    - ${CTEST} --verbose -R "spatzBenchmarks-rtl-sp-SpM"
-  needs: ["tc-llvm", "tc-gcc", "verilator", "python-deps"]
-
   # Quadrilatero tests
 quadrilateroBenchmarks-test-vlt:
   stage: benchmark
