@@ -1929,3 +1929,193 @@ void verify_quadrilatero (float* addrA,float* addrB,float* addrC, int K)
   // verify_dependencies (addrA,addrB,addrC, K);
   // printf("MVerify Dependencies Test completed successfully\n");
 }
+
+// void __attribute__ ((noinline)) test_cfg (){
+//   // --- Original tests (commented out) ---
+//   asm volatile("mcfgk t2, t1"   );
+//   asm volatile("mcfgm t2, t1, 3");
+//   asm volatile("mcfgn t2, t1, 3");
+//   asm volatile("fmmacc.b acc0, m2, m0");
+//   asm volatile("fmmacc.h acc0, m2, m0");
+//   asm volatile("mmacc acc0, m2, m0");
+//   asm volatile("mmaqa.b acc0, m2, m0");
+//   asm volatile("mmada.h acc0, m2, m0");
+//   asm volatile("mmasa.w acc0, m2, m0");
+//   asm volatile("mmov.mm m1, m0");
+//   asm volatile("mmov.ma acc0, m0");
+//   asm volatile("mmov.am m1, acc0");
+//   asm volatile("mmov.aa acc0, acc0");
+//   asm volatile("mzero.m m1");
+//   asm volatile("mzero.a acc0");
+//   asm volatile("mld.b m1, (t0), t4");
+//   asm volatile("mld.h m1, (t0), t4");
+//   asm volatile("mld.lhs m1, (t0), t4");
+//   asm volatile("mst.b m1, (t0), t4");
+//   asm volatile("mst.h m1, (t0), t4");
+//   asm volatile("mst m1, (t0), t4");
+
+//   // ==========================================
+//   // Zvame: Attached Matrix Extension
+//   // ==========================================
+
+//   // --- Datatype Management ---
+//   asm volatile("agettyp t2, acc0");
+//   asm volatile("mgettyp t2, m1");
+//   asm volatile("asettyp acc0, t1");
+//   asm volatile("msettyp m1, t1");
+
+//   // --- Unary Elementwise ---
+//   asm volatile("mabs.ew m1, m2");
+//   asm volatile("mexp2.ew m1, m2");
+//   asm volatile("mlog2.ew m1, m2");
+//   asm volatile("mbcast.x m1, t1");
+//   asm volatile("mconv.ew m1, m2");
+//   asm volatile("mcolunzip.ew m1, m2");
+//   asm volatile("mcolzip.ew m1, m2");
+//   asm volatile("mrowunzip.ew m1, m2");
+
+//   // --- Binary Elementwise ---
+//   asm volatile("madd.ew m1, m2, m3");
+//   asm volatile("msub.ew m1, m2, m3");
+//   asm volatile("mmul.ew m1, m2, m3");
+//   asm volatile("mabsdiff.ew m1, m2, m3");
+//   asm volatile("mand.ew m1, m2, m3");
+//   asm volatile("mor.ew m1, m2, m3");
+//   asm volatile("mxor.ew m1, m2, m3");
+//   asm volatile("mandnot.ew m1, m2, m3");
+//   asm volatile("mornot.ew m1, m2, m3");
+//   asm volatile("mmax.ew m1, m2, m3");
+//   asm volatile("mmin.ew m1, m2, m3");
+//   asm volatile("mmean.ew m1, m2, m3");
+//   asm volatile("mhdiff.ew m1, m2, m3");
+//   asm volatile("mgather.ew m1, m2, m3");
+//   asm volatile("mrowzip.ew m1, m2, m3");
+
+//   // --- Scalar Binary (.x) ---
+//   asm volatile("madd.ew.x m1, t1, m2");
+//   asm volatile("msub.ew.x m1, t1, m2");
+//   asm volatile("mmul.ew.x m1, t1, m2");
+//   asm volatile("mabsdiff.ew.x m1, t1, m2");
+//   asm volatile("mand.ew.x m1, t1, m2");
+//   asm volatile("mor.ew.x m1, t1, m2");
+//   asm volatile("mxor.ew.x m1, t1, m2");
+//   asm volatile("mandnot.ew.x m1, t1, m2");
+//   asm volatile("mornot.ew.x m1, t1, m2");
+//   asm volatile("mmax.ew.x m1, t1, m2");
+//   asm volatile("mmin.ew.x m1, t1, m2");
+//   asm volatile("mmean.ew.x m1, t1, m2");
+//   asm volatile("mhdiff.ew.x m1, t1, m2");
+
+//   // --- Compare & Select ---
+//   asm volatile("mcmpge.ew m1, m2, m3");
+//   asm volatile("mcmplt.ew m1, m2, m3");
+//   asm volatile("mcmpge.ew.x m1, t1, m2");
+//   asm volatile("mcmplt.ew.x m1, t1, m2");
+//   asm volatile("mcmovge.ew m1, m2, m3");
+//   asm volatile("mcmovlt.ew m1, m2, m3");
+//   asm volatile("mselge.ew m1, m2, m3");
+//   asm volatile("msellt.ew m1, m2, m3");
+
+//   // --- Fused Multiply-Add Variants ---
+//   asm volatile("mmulacc.ew m1, m2, m3");
+//   asm volatile("mmulaccneg.ew m1, m2, m3");
+//   asm volatile("mmuladd.ew m1, m2, m3");
+//   asm volatile("mmulsub.ew m1, m2, m3");
+//   asm volatile("mmulacc.ew.x m1, t1, m2");
+//   asm volatile("mmulaccneg.ew.x m1, t1, m2");
+//   asm volatile("mmuladd.ew.x m1, t1, m2");
+//   asm volatile("mmulsub.ew.x m1, t1, m2");
+//   asm volatile("mmulneg.ew m1, m2, m3");
+//   asm volatile("mmulneg.ew.x m1, t1, m2");
+
+//   // --- Log/Exp with Bias ---
+//   asm volatile("mlog2sub.ew m1, m2, m3");
+//   asm volatile("msublog2.ew m1, m2, m3");
+//   asm volatile("mlog2sub.ew.x m1, t1, m2");
+//   asm volatile("msublog2.ew.x m1, t1, m2");
+
+//   // --- Shift/Scale ---
+//   asm volatile("mldexp.ew m1, m2, m3");
+//   asm volatile("mrdexp.ew m1, m2, m3");
+//   asm volatile("mldexp.ew.x m1, t1, m2");
+//   asm volatile("mldexpacc.ew m1, m2, m3");
+//   asm volatile("mrdexpacc.ew m1, m2, m3");
+//   asm volatile("mldexpacc.ew.x m1, t1, m2");
+//   asm volatile("mshift.ew m1, m2, 5");
+
+//   // --- Prefix & Reduce ---
+//   asm volatile("mprefixadd.row m1, m2");
+//   asm volatile("mprefixadd.col m1, m2");
+//   asm volatile("mprefixmax.row m1, m2");
+//   asm volatile("mprefixmax.col m1, m2");
+//   asm volatile("mreduceadd.row m1, m2");
+//   asm volatile("mreduceadd.col m1, m2");
+//   asm volatile("mreducemax.row m1, m2");
+//   asm volatile("mreducemax.col m1, m2");
+
+//   // --- Scatter ---
+//   asm volatile("mscatadd.col m1, m2, m3");
+//   asm volatile("mscatadd.row m1, m2, m3");
+//   asm volatile("mscatmax.col m1, m2, m3");
+//   asm volatile("mscatmax.row m1, m2, m3");
+
+//   // --- Matrix Multiply (2D) ---
+//   asm volatile("mmul.2d acc0, m2, m3");
+//   asm volatile("mmulacc.2d acc0, m2, m3");
+//   asm volatile("mmulaccneg.2d acc0, m2, m3");
+//   asm volatile("mmulneg.2d acc0, m2, m3");
+//   asm volatile("mmulat.2d acc0, m2, m3");
+//   asm volatile("mmulatacc.2d acc0, m2, m3");
+//   asm volatile("mmulbt.2d acc0, m2, m3");
+//   asm volatile("mmulbtacc.2d acc0, m2, m3");
+
+//   // --- Accumulator Management ---
+//   asm volatile("mzero.2d acc0");
+//   asm volatile("mmov.a.m m1, acc0");
+//   asm volatile("mmov.m.m m1, m2");
+
+//   // --- Load/Store (fixed: removed parentheses) ---
+//   asm volatile("mls m1, t0");
+//   asm volatile("mls.rm m1, t0");
+//   asm volatile("mls.cm m1, t0");
+//   asm volatile("mss m1, t0");
+//   asm volatile("mss.rm m1, t0");
+//   asm volatile("mss.cm m1, t0");
+
+//   // ==========================================
+//   // Zvt: Vector Matrix Extensions
+//   // ==========================================
+
+//   // --- Matrix Configuration ---
+//   asm volatile("msetmtype t1, t2");
+//   asm volatile("msettn t2, t1");
+//   asm volatile("msettm t2, t1");
+//   asm volatile("msettk t2, t1");
+//   asm volatile("msetmtypei 5, 3"); // uimm5, uimm3
+
+//   // --- Matrix Arithmetic (fixed: m1 → mt1) ---
+//   asm volatile("vtfmm.tvv mt1, v2, v1");
+//   asm volatile("vtfmm.alt.tvv mt1, v2, v1");
+//   asm volatile("vtmmu.tvv mt1, v2, v1");
+//   asm volatile("vtmms.tvv mt1, v2, v1");
+
+//   // --- Load/Store Tile Subset to Memory ---
+//   asm volatile("vtle8 t4, (t0)");
+//   asm volatile("vtle16 t4, (t0)");
+//   asm volatile("vtle32 t4, (t0)");
+//   asm volatile("vtle64 t4, (t0)");
+//   asm volatile("vtse8 t4, (t0)");
+//   asm volatile("vtse16 t4, (t0)");
+//   asm volatile("vtse32 t4, (t0)");
+//   asm volatile("vtse64 t4, (t0)");
+
+//   // --- Move Tile Subset ---
+//   asm volatile("vtmv.v.t v1, t0");
+//   asm volatile("vtmv.t.v t0, v2");
+
+//   // --- Matrix Tile-Zero (fixed: m1 → mt1) ---
+//   asm volatile("vtzero mt1");
+
+//   // --- Context Discard ---
+//   asm volatile("vtdiscard");
+// }
