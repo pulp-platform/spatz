@@ -77,6 +77,7 @@ python3 gen_encoding_viz.py [--repo DIR] [--out FILE] [--spec-commit SHA] [--cry
 | `--out FILE` | `encoding_map.html` next to the script | Where to write the HTML. |
 | `--spec-commit SHA` | pinned commit | Which upstream `riscv-opcodes` commit to diff against. |
 | `--crypto` | off | Also draw the ratified vector-crypto exts (`rv_zv*`) on the canvas (they claim OP-V slots too — e.g. Zvfbfwma's `vfwmaccbf16` sits on funct6 0x3b, which `vfwdotp` reuses). |
+| `--decoder FILE.sv` | — | Treat an additional RTL file as a decoder (repeatable; extends the built-in list). |
 
 Examples:
 ```sh
@@ -137,6 +138,22 @@ requests), so you can open it locally, email it, or host it on any internal web
 server / GitLab Pages — no dependencies required.
 
 ---
+
+## Adding a new custom extension
+
+The tool follows the build configuration automatically:
+
+1. Add your `opcodes-xxx_CUSTOM` file and list it in the top-level Makefile
+   `OPCODES` variable — the tool parses that variable each run and assigns the
+   new extension a distinct hue automatically.
+2. Run `make update_opcodes` — if you forget, the tool warns that
+   `riscv_instr.sv` is stale.
+3. If the new instructions are decoded by one of the known decoders
+   (`snitch.sv`, `spatz_decoder.sv`, `spatz_fpu_sequencer.sv`,
+   `axi_dma_tc_snitch_fe.sv`), nothing else to do. If your hardware adds a
+   **new decoder file**, the tool detects instructions referenced outside the
+   known decoders and prints/renders a warning — re-run with
+   `--decoder your_decoder.sv` (repeatable) to include it in the scan.
 
 ## Notes & limitations
 

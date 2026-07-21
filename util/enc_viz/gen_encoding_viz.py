@@ -97,6 +97,12 @@ EXT_COLORS = OrderedDict([
     (ORIGIN_RVV_LOCAL,       "#8a5a2b"),  # brown
 ])
 
+# Reserve hues, assigned deterministically (Makefile order) to extension
+# files that have no curated entry above — so a newly added opcodes-* file
+# gets a distinct color with zero script changes.
+EXTRA_HUES = ["#9c36b5", "#2f9e44", "#e8590c", "#1971c2",
+              "#a61e4d", "#5f3dc4", "#087f5b", "#d9480f"]
+
 COLOR_IMPL = "#1f6fd6"   # blue  : spec, handled by HW
 COLOR_UNIMPL = "#b7bdc6"  # gray  : spec, NOT handled by HW
 COLOR_DEAD = "#101317"   # black : custom, defined in build but NOT handled by HW
@@ -286,11 +292,13 @@ def parse_handled(repo, candidates, rtl_root=RTL_ROOT):
     """
     handled = set()
     where = defaultdict(set)
+    outside = defaultdict(set)   # candidate refs in files NOT in DECODER_FILES
     root = os.path.join(repo, rtl_root)
     for dirpath, _, filenames in os.walk(root):
         for fn in filenames:
-            if fn not in DECODER_FILES:
+            if not fn.endswith((".sv", ".svh")) or fn == DEFINITION_FILE:
                 continue
+            is_decoder = fn in DECODER_FILES
             p = os.path.join(dirpath, fn)
             try:
                 with open(p, errors="ignore") as fh:
@@ -301,9 +309,12 @@ def parse_handled(repo, candidates, rtl_root=RTL_ROOT):
                 continue
             for t in set(_TOKEN_RE.findall(txt)):
                 if t in candidates:
-                    handled.add(t)
-                    where[t].add(fn)
-    return handled, {k: sorted(v) for k, v in where.items()}
+                    if is_decoder:
+                        handled.add(t)
+                        where[t].add(fn)
+                    else:
+                        outside[fn].add(t)
+    return handled, {k: sorted(v) for k, v in where.items()}, dict(outside)
 
 
 # ---------------------------------------------------------------------------
@@ -431,6 +442,14 @@ def render_html(ctx):
     .legend{display:flex;flex-wrap:wrap;gap:10px 18px;font-size:12px;align-items:center;margin:10px 0 4px;}
     .legend span{display:inline-flex;align-items:center;gap:6px;}
     .sw{width:14px;height:14px;border-radius:3px;border:1px solid rgba(0,0,0,.2);display:inline-block;}
+    .callout{border:1px solid var(--line);border-left:4px solid #1f6fd6;background:var(--panel);border-radius:6px;padding:10px 14px;font-size:12.5px;line-height:1.65;margin:12px 0;}
+    .callout a{color:#1f6fd6;text-decoration:none;border-bottom:1px dotted #1f6fd6;}
+    ol.qs{font-size:12.5px;margin:6px 0 14px;padding-left:24px;line-height:1.75;}
+    table.legendtb{border-collapse:collapse;font-size:12px;margin:10px 0 6px;}
+    table.legendtb td{border:1px solid var(--line);padding:5px 10px;vertical-align:middle;}
+    table.legendtb td.swc{text-align:center;width:70px;}
+    table.legendtb .sw{vertical-align:middle;}
+    table.legendtb .extname{display:inline-flex;align-items:center;gap:5px;margin-right:14px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;}
     .stats{display:flex;flex-wrap:wrap;gap:18px;font-size:12px;color:var(--muted);margin:8px 0 4px;}
     .stats b{color:var(--fg);}
     table.grid{border-collapse:collapse;font-size:10.5px;overflow-x:auto;display:block;max-width:100%;}
@@ -459,7 +478,6 @@ def render_html(ctx):
     table.bd tr.alldead td{color:var(--muted);}
     .conflicts .row.latent{border-left-color:#8a8f98;background:rgba(138,143,152,.10);}
     .gridscroll{max-height:440px;overflow:auto;border:1px solid var(--line);border-radius:4px;margin:4px 0;}
-    td.cell.free.colclaim{background:repeating-linear-gradient(45deg,transparent,transparent 4px,rgba(224,49,49,.18) 4px,rgba(224,49,49,.18) 8px);}
     details>summary{padding:5px 2px;}
     details[open]>summary{margin-bottom:4px;}
     """)
@@ -467,35 +485,66 @@ def render_html(ctx):
 
     a(f"<h1>{esc(ctx['title'])}</h1>")
     canvas = "rv_v (RVV v1.0)" + (" + rv_zv* crypto" if ctx["crypto"] else "")
-    a(f"<div class='sub'>Ground truth: upstream riscv/riscv-opcodes <b>{canvas}</b> "
-      f"@ {ctx['spec_commit'][:10]} &nbsp;·&nbsp; "
-      f"<b>implemented = decoded</b> in {', '.join(DECODER_FILES)} "
-      f"(decode check only; the logic behind the decoder is not verified) "
-      f"&nbsp;·&nbsp; generated read-only, no repo files modified</div>")
-    a("<div class='sub'>This map answers four questions: "
-      "<b>1)</b> which RVV v1.0 spec instructions the hardware decodes "
-      "(<span style='color:" + COLOR_IMPL + "'>blue</span>) vs not (gray) · "
-      "<b>2)</b> which custom instructions are hardware-backed (one hue per "
-      "extension) · <b>3)</b> which are in the toolchain (riscv_instr.sv) but "
-      "not decoded (black; see the dedicated section) · "
-      "<b>4)</b> where the implementation deviates from the spec "
-      "(mismatch / overlap panels).</div>")
-
-    # legend
-    a("<div class='legend'>")
-    a(f"<span><i class='sw' style='background:{COLOR_IMPL}'></i>spec — implemented</span>")
-    a(f"<span><i class='sw' style='background:{COLOR_UNIMPL}'></i>spec — not implemented (gray)</span>")
-    a(f"<span><i class='sw' style='background:{COLOR_DEAD};border-color:#5b6472'></i>custom — in toolchain, not decoded (black)</span>")
-    a("<span style='width:100%;height:0'></span>")
-    a("<span style='color:var(--muted)'>custom, implemented:</span>")
-    for ext in ctx["ext_files"] + [ORIGIN_RVV_LOCAL]:
-        col = EXT_COLORS.get(ext, "#888")
-        a(f"<span><i class='sw' style='background:{col}'></i>{esc(ext.replace('opcodes-',''))}</span>")
-    a("<span style='width:100%;height:0'></span>")
-    a(f"<span><i class='sw' style='background:linear-gradient(135deg,{COLOR_IMPL} 0 50%,{COLOR_UNIMPL} 50% 100%)'></i>spec slot — partially implemented</span>")
-    a("<span><i class='sw' style='background:repeating-linear-gradient(45deg,#e03131,#e03131 3px,#ff8787 3px,#ff8787 6px)'></i>genuine conflict (bits overlap)</span>")
-    a(f"<span><i class='sw' style='background:{COLOR_FREE};border:1px solid #999'></i>free</span>")
+    spec_url = (f"https://github.com/riscv/riscv-opcodes/blob/"
+                f"{ctx['spec_commit']}/extensions/rv_v")
+    a("<div class='callout'>")
+    a(f"<b>Ground truth:</b> upstream riscv/riscv-opcodes "
+      f"<a href='{spec_url}' target='_blank' rel='noopener'>{canvas}</a> "
+      f"@ <code>{ctx['spec_commit'][:10]}</code><br>")
+    a(f"<b>Implemented</b> = decoded in {', '.join(DECODER_FILES)} "
+      f"(decode check only; the logic behind the decoder is not verified)<br>")
+    a("Generated read-only — no repo files modified.")
     a("</div>")
+    if ctx["missed"]:
+        a("<div class='callout' style='border-left-color:#e8590c'>")
+        a("<b>⚠ Possible unscanned decoder:</b> the following RTL files reference "
+          "instructions that no scanned decoder handles — if one is a new "
+          "decoder, re-run with <code>--decoder &lt;file&gt;</code>:<br>")
+        for fn, names in sorted(ctx["missed"].items()):
+            only = sorted(names)
+            a(f"<code>{esc(fn)}</code>: {esc(', '.join(only[:8]))}"
+              f"{' …' if len(only) > 8 else ''}<br>")
+        a("</div>")
+    a("<div class='sub'>This map answers four questions:</div>")
+    a("<ol class='qs'>")
+    a(f"<li>Which RVV v1.0 spec instructions does the hardware decode "
+      f"(<b style='color:{COLOR_IMPL}'>blue</b>) — and which not (gray)?</li>")
+    a("<li>Which custom instructions are hardware-backed (one hue per extension)?</li>")
+    a("<li>Which instructions are in the toolchain (riscv_instr.sv) but not decoded "
+      "(black — see the dedicated section)?</li>")
+    a("<li>Where does the implementation deviate from the spec "
+      "(mismatch / overlap panels)?</li>")
+    a("</ol>")
+
+    # legend — ordered color-code table
+    a("<table class='legendtb'>")
+    a(f"<tr><td class='swc'><i class='sw' style='background:{COLOR_IMPL}'></i></td>"
+      "<td><b>spec — implemented</b>: RVV v1.0 instruction decoded by the hardware</td></tr>")
+    a(f"<tr><td class='swc'><i class='sw' style='background:{COLOR_UNIMPL}'></i></td>"
+      "<td><b>spec — not implemented</b>: RVV v1.0 instruction with no decoder reference</td></tr>")
+    a(f"<tr><td class='swc'><i class='sw' style='background:linear-gradient(135deg,"
+      f"{COLOR_IMPL} 0 50%,{COLOR_UNIMPL} 50% 100%)'></i></td>"
+      "<td><b>spec — partially implemented</b>: slot holds several sub-encodings, "
+      "only some decoded (hover for the list)</td></tr>")
+    ext_sws = "".join(
+        f"<span class='extname'><i class='sw' style='background:"
+        f"{EXT_COLORS.get(ext, '#888')}'></i>{esc(ext.replace('opcodes-', ''))}</span>"
+        for ext in ctx["ext_files"] + [ORIGIN_RVV_LOCAL])
+    a("<tr><td class='swc'><i class='sw' style='background:conic-gradient("
+      + ",".join(EXT_COLORS.get(e, "#888") for e in ctx["ext_files"] + [ORIGIN_RVV_LOCAL])
+      + ")'></i></td>"
+      f"<td><b>custom — implemented</b>, one hue per extension:<br>{ext_sws}</td></tr>")
+    a(f"<tr><td class='swc'><i class='sw' style='background:{COLOR_DEAD};"
+      "border-color:#5b6472'></i></td>"
+      "<td><b>custom — in toolchain, not decoded</b>: has a riscv_instr.sv localparam "
+      "but no decoder reference (reclaimable)</td></tr>")
+    a("<tr><td class='swc'><i class='sw' style='background:repeating-linear-gradient("
+      "45deg,#e03131,#e03131 3px,#ff8787 3px,#ff8787 6px)'></i></td>"
+      "<td><b>conflict</b>: two instructions' fixed bits genuinely overlap</td></tr>")
+    a(f"<tr><td class='swc'><i class='sw' style='background:{COLOR_FREE};"
+      "border:1px solid #999'></i></td>"
+      "<td><b>free</b>: unallocated encoding space</td></tr>")
+    a("</table>")
 
     # stats
     s = ctx["stats"]
@@ -534,7 +583,7 @@ def render_html(ctx):
 
     # point 3: in toolchain, not decoded — the full list, per extension
     n_dead = sum(len(d) for _, _, d in ctx["dead_groups"])
-    a(f"<h2>⬛ In toolchain but not decoded by hardware "
+    a(f"<h2>In toolchain but not decoded by hardware "
       f"<span style='font-weight:400;color:var(--muted);font-size:12px'>— "
       f"{n_dead} instructions have a riscv_instr.sv localparam but appear in no "
       f"decoder; their encoding space is reclaimable</span></h2>")
@@ -617,9 +666,10 @@ def render_html(ctx):
 
     # custom major-opcode grids (funct7 × funct3)
     a("<h2>Custom major opcodes — funct7 × funct3 grids</h2>")
-    a("<div class='sub'>CUSTOM-0/1/2/3 (0x0b/2b/5b/7b): DMA, post-increment, "
-      "ipu, vfx, frep. Rows = funct7 (bits 31..25), cols = funct3. "
-      "Red-hatched free cells = column claimed by an I-type immediate op. "
+    a("<div class='sub'>CUSTOM-0/1/2/3 (0x0b/2b/5b/7b). Rows = funct7 "
+      "(bits 31..25), cols = funct3. An op that uses funct7 bits as "
+      "immediate/operand (e.g. frep, *.vrf) fills every funct7 row its "
+      "encoding covers — up to a whole column. "
       "Click a header to expand/collapse.</div>")
     for op, name, ents in ctx["custom_grids"]:
         a(render_custom_grid(op, name, ents))
@@ -739,14 +789,16 @@ def render_opv_grid(ctx):
 def build_custom_grid(entries):
     """Slot custom-major entries into a funct7(31..25) × funct3(14..12) grid.
 
-    Returns (cells, itype, other) where:
-      cells[(funct7, funct3)] = [entry, ...]  (R-type, funct7 fixed;
-          funct6-only ops occupy both funct7 rows 2*f6 and 2*f6+1)
-      itype[funct3]           = [entry, ...]  (no funct7/funct6 -> whole column)
+    Every entry occupies exactly the funct7 rows its fixed bits allow: a fully
+    fixed funct7 -> 1 row; funct6-only -> 2 rows; an op using bits 31..25 as
+    immediate/operand (frep, *.vrf) -> every compatible row, up to the whole
+    column. Returns (cells, spans, other) where:
+      cells[(funct7, funct3)] = [entry, ...]
+      spans                   = [(entry, funct3, nrows), ...]  (nrows > 1)
       other                   = [entry, ...]  (funct3 not fixed -> can't place)
     """
     cells = defaultdict(list)
-    itype = defaultdict(list)
+    spans = []
     other = []
     for ent in entries:
         m, v = ent["mask"], ent["match"]
@@ -754,23 +806,20 @@ def build_custom_grid(entries):
             other.append(ent)
             continue
         f3 = (v >> 12) & 0x7
-        if (m >> 25) & 0x7f == 0x7f:               # funct7 fully fixed
-            cells[((v >> 25) & 0x7f, f3)].append(ent)
-        elif (m >> 26) & 0x3f == 0x3f:             # funct6 fixed, bit25 free
-            f6 = (v >> 26) & 0x3f
-            cells[(f6 * 2, f3)].append(ent)
-            cells[(f6 * 2 + 1, f3)].append(ent)
-        else:                                       # I-type imm -> whole column
-            itype[f3].append(ent)
-    return cells, itype, other
+        m7 = (m >> 25) & 0x7f                       # fixed funct7 bits
+        v7 = (v >> 25) & 0x7f
+        rows = [f7 for f7 in range(128) if (f7 & m7) == v7]
+        for f7 in rows:
+            cells[(f7, f3)].append(ent)
+        if len(rows) > 1:
+            spans.append((ent, f3, len(rows)))
+    return cells, spans, other
 
 
 def render_custom_grid(op, name, entries):
-    cells, itype, other = build_custom_grid(entries)
-    claimed_cols = set(itype)
+    cells, spans, other = build_custom_grid(entries)
     used = len(cells)
-    free = sum(1 for f7 in range(128) for f3 in range(8)
-               if (f7, f3) not in cells and f3 not in claimed_cols)
+    free = 128 * 8 - used
     live = sum(1 for e in entries if e["state"] == "impl")
     exts = sorted({e["origin"].replace("opcodes-", "") for e in entries})
 
@@ -783,19 +832,17 @@ def render_custom_grid(op, name, entries):
         P.append("<div class='sub'>note: " + str(len(other)) +
                  " instr(s) here don't fix funct3 and can't be gridded — "
                  + esc(", ".join(e["name"] for e in other)) + "</div>")
-    # I-type banner
-    if itype:
-        P.append("<div class='sub'>funct3 columns claimed by an I-type "
-                 "(immediate, spans all funct7):</div><div class='lst'>")
-        for f3 in sorted(itype):
-            for ent in itype[f3]:
-                cls, style, label, tip = cell_visual(
-                    [ent], f"funct3={f3} (whole column, I-type)")
-                chip = "chip" + (" dead" if "dead" in cls else "")
-                sty = style or ("background:repeating-linear-gradient(45deg,"
-                                "#e03131,#e03131 3px,#ff8787 3px,#ff8787 6px)")
-                P.append(f"<span class='{chip}' style='{sty}' data-tip=\"{tip}\">"
-                         f"f3={f3}: {esc(ent['name'])}</span>")
+    # multi-row spans: ops using (some of) funct7 as immediate/operand bits
+    if spans:
+        P.append("<div class='sub'>ops using funct7 bits as immediate/operand "
+                 "— each fills every funct7 row its encoding covers:</div>"
+                 "<div class='lst'>")
+        for ent, f3, nrows in sorted(spans, key=lambda s: (s[1], s[0]["name"])):
+            cls, style, label, tip = cell_visual(
+                [ent], f"funct3={f3}, spans {nrows} funct7 rows")
+            chip = "chip" + (" dead" if "dead" in cls else "")
+            P.append(f"<span class='{chip}' style='{style}' data-tip=\"{tip}\">"
+                     f"f3={f3}: {esc(ent['name'])} ×{nrows}</span>")
         P.append("</div>")
     # funct7 × funct3 grid
     P.append("<div class='gridscroll'><table class='grid'>")
@@ -808,11 +855,7 @@ def render_custom_grid(op, name, entries):
         for f3 in range(8):
             ents = cells.get((f7, f3))
             if not ents:
-                col_claimed = f3 in claimed_cols
-                tip = (f"free — but funct3={f3} column is claimed by an I-type"
-                       if col_claimed else "free encoding slot")
-                fc = " colclaim" if col_claimed else ""
-                P.append(f"<td class='cell free{fc}' data-tip=\"{tip}\">"
+                P.append("<td class='cell free' data-tip=\"free encoding slot\">"
                          "<span class='nm'></span></td>")
                 continue
             cls, style, label, tip = cell_visual(
@@ -867,7 +910,11 @@ def main():
     ap.add_argument("--crypto", action="store_true",
                     help="also draw the ratified vector-crypto exts (rv_zv*) on "
                          "the spec canvas (default: base rv_v v1.0 only)")
+    ap.add_argument("--decoder", action="append", default=[], metavar="FILE.sv",
+                    help="treat an additional RTL file as a decoder "
+                         "(repeatable; extends the built-in list)")
     args = ap.parse_args()
+    DECODER_FILES.extend(f for f in args.decoder if f not in DECODER_FILES)
 
     here = os.path.dirname(os.path.abspath(__file__))
     repo = args.repo or find_repo(here)
@@ -901,6 +948,11 @@ def main():
         ext_files = list(EXT_FILES_FALLBACK)
     print(f"  enabled custom exts (Makefile OPCODES): "
           f"{', '.join(f.replace('opcodes-', '') for f in ext_files)}")
+    # deterministic hue for any ext file without a curated color
+    extra_hues = iter(EXTRA_HUES)
+    for f in ext_files:
+        if f not in EXT_COLORS:
+            EXT_COLORS[f] = next(extra_hues, "#888")
     exts = []
     for f in ext_files:
         p = os.path.join(local_opc, f)
@@ -949,10 +1001,21 @@ def main():
 
     # 4. implemented-in-hardware set: name referenced in one of the DECODER
     #    files (decode check only). Candidate names = everything we classify.
+    #    `outside` = candidate refs in non-decoder RTL — usually FUs consuming
+    #    an already-decoded op, but a NEW decoder file would show up here too.
     candidates = {e.name for e in spec} | {e.name for e in exts}
-    handled, where = parse_handled(repo, candidates)
+    handled, where, outside = parse_handled(repo, candidates)
     print(f"  implemented (decoded in {', '.join(DECODER_FILES)}): "
           f"{len(handled & candidates)}")
+    missed = {fn: names for fn, names in outside.items()
+              if names - handled}   # names decoded NOWHERE but referenced here
+    if missed:
+        for fn, names in sorted(missed.items()):
+            only = sorted(names - handled)
+            print(f"  WARN: {fn} references {len(only)} instr(s) no decoder "
+                  f"handles (new decoder? add --decoder {fn}): "
+                  f"{', '.join(only[:6])}{' …' if len(only) > 6 else ''}",
+                  file=sys.stderr)
 
     # 5. conflicts (across all sources), split into active vs latent.
     #    active = both sides are actually decoded by HW (real silicon collision)
@@ -1089,6 +1152,7 @@ def main():
         "spec_commit": args.spec_commit,
         "crypto": args.crypto,
         "ext_files": ext_files,
+        "missed": {fn: names - handled for fn, names in missed.items()},
         "opv_grid": opv_grid,
         "custom_grids": custom_grids,
         "sections": sections,
