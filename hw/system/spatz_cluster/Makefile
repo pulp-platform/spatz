@@ -57,7 +57,7 @@ endif
 
 ifeq ($(QUADRILATERO),1)
 	VSIM_BENDER += -t quadrilatero
-	VLT_BENDER += -t quadrilatero
+	BENDER_CFG_TARGETS += -t quadrilatero
 	VSIM_BENDER += -t quadrilatero_debug
 endif
 
