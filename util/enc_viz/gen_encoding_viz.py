@@ -9,6 +9,10 @@
 # encoding space (and the adjacent custom major opcodes) is occupied by:
 #   * the official RVV spec         (upstream riscv/riscv-opcodes)
 #   * the custom extensions we ship  (local sw/toolchain/riscv-opcodes/opcodes-*)
+#   * local additions inside opcodes-rvv itself (entries absent upstream, e.g.
+#     vlx*, vfwdotp, legacy v0.9 leftovers) -> shown as their own pseudo-ext;
+#     same-name entries whose fixed bits differ from upstream are listed in an
+#     encoding-mismatch panel
 #   * what our hardware actually decodes (riscv_instr:: refs in the primary
 #     decoders: spatz_decoder.sv + snitch.sv)
 #
@@ -41,21 +45,45 @@ from collections import defaultdict, OrderedDict
 UPSTREAM_URL = "https://github.com/riscv/riscv-opcodes.git"
 UPSTREAM_COMMIT = "c6edca7d8c3f92694963a0a0baeb511930fb2af4"
 
-# Spec canvas: base V + ratified vector crypto (they claim OP-V funct6 slots too,
-# so they matter for "which slots are already taken by the spec").
-SPEC_FILES = ["rv_v"]  # extended at runtime with rv_zv* found in the clone
+# Spec canvas: the RVV v1.0 ground truth = extensions/rv_v in upstream
+# riscv/riscv-opcodes. Pass --crypto to additionally draw the ratified
+# vector-crypto extensions (rv_zv*): they claim OP-V funct6 slots too (e.g.
+# Zvfbfwma's vfwmaccbf16 sits on funct6 0x3b, which our vfwdotp reuses).
+SPEC_FILES = ["rv_v"]  # extended with rv_zv* only when --crypto is given
 
-# Custom / shipped extensions -- taken from the Makefile OPCODES variable.
-# order here == legend order; opcodes-rvv is the spec and handled separately.
-EXT_FILES = [
-    "opcodes-rv32b_CUSTOM",
-    "opcodes-ipu_CUSTOM",
+# Custom / shipped extensions: read live from the top-level Makefile OPCODES
+# variable, so the map always reflects the currently-enabled build. This list
+# is only the fallback if the Makefile can't be parsed. opcodes-rvv is the
+# spec copy and handled separately.
+EXT_FILES_FALLBACK = [
     "opcodes-frep_CUSTOM",
     "opcodes-dma_CUSTOM",
-    "opcodes-ssr_CUSTOM",
     "opcodes-smallfloat",
     "opcodes-vfx_CUSTOM",
 ]
+
+_OPCODES_RE = re.compile(r'^\s*OPCODES\s*:?=\s*"([^"]+)"', re.M)
+
+
+def parse_makefile_opcodes(repo):
+    """Return the opcode files enabled in the top-level Makefile OPCODES var
+    (minus opcodes-rvv), or None if the variable can't be found."""
+    try:
+        with open(os.path.join(repo, "Makefile")) as fh:
+            m = _OPCODES_RE.search(fh.read())
+    except OSError:
+        return None
+    if not m:
+        return None
+    return [f for f in m.group(1).split() if f != RVV_LOCAL_FILE]
+
+# The local copy of the RVV spec fed to the riscv_instr.sv generator. It is
+# diffed against the upstream canvas: entries whose name is absent upstream are
+# local additions riding in the RVV space (e.g. vlx*, vfwdotp, legacy v0.9
+# leftovers) and are rendered as a pseudo-extension of their own; same-name
+# entries whose fixed bits differ are reported in a mismatch panel.
+RVV_LOCAL_FILE = "opcodes-rvv"
+ORIGIN_RVV_LOCAL = "opcodes-rvv (not in spec v1.0)"
 
 # One distinct, accessible hue per extension (color-blind-aware categorical set).
 EXT_COLORS = OrderedDict([
@@ -66,6 +94,7 @@ EXT_COLORS = OrderedDict([
     ("opcodes-ssr_CUSTOM",   "#c9184a"),  # crimson
     ("opcodes-smallfloat",   "#5c7f00"),  # olive
     ("opcodes-vfx_CUSTOM",   "#0b7285"),  # deep cyan
+    (ORIGIN_RVV_LOCAL,       "#8a5a2b"),  # brown
 ])
 
 COLOR_IMPL = "#1f6fd6"   # blue  : spec, handled by HW
@@ -74,15 +103,20 @@ COLOR_DEAD = "#101317"   # black : custom, defined in build but NOT handled by H
 COLOR_CONFLICT = "#e03131"  # red border/hatch
 COLOR_FREE = "#f5f6f8"   # empty slot
 
-# "Handled by hardware" = an instruction name is referenced (riscv_instr::NAME)
-# somewhere in the decode/execute RTL. We scan every SystemVerilog file under
-# hw/ because different extensions are handled in different blocks (e.g. RVV in
-# spatz_decoder, DMA in axi_dma_tc_snitch_fe, small-float in the FPU sequencer,
-# Ventaglio/vfx in snitch + spatz_decoder). An instruction that appears nowhere
-# is neither decoded nor executed -> reclaimable encoding space.
+# "Implemented in hardware" = the instruction name is referenced
+# (riscv_instr::NAME) in one of the DECODER files below. This is a *decode*
+# check only — it deliberately does not verify the logical implementation
+# behind the decoder. Different instruction groups decode in different
+# front-ends: RVV + custom vector in snitch/spatz_decoder, small-float offload
+# in the FPU sequencer, DMA in the AXI DMA front-end. An instruction that no
+# decoder references is not implemented -> reclaimable encoding space.
 RTL_ROOT = "hw"
-# The primary decoders, kept only for the human-readable subtitle.
-PRIMARY_DECODERS = ["spatz_decoder.sv", "snitch.sv"]
+DECODER_FILES = [
+    "snitch.sv",               # scalar core: offload + custom scalar decode
+    "spatz_decoder.sv",        # vector unit decoder
+    "spatz_fpu_sequencer.sv",  # FP offload sequencer
+    "axi_dma_tc_snitch_fe.sv", # DMA front-end decoder
+]
 
 # OP-V funct3 -> category column.
 FUNCT3_CAT = {
@@ -241,21 +275,21 @@ _TOKEN_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 def parse_handled(repo, candidates, rtl_root=RTL_ROOT):
     """Return (handled, where) for the instruction names in `candidates`.
 
-    An instruction is "handled by hardware" if its name appears in the
-    decode/execute RTL either qualified (`riscv_instr::NAME`) or unqualified
-    (`NAME`, when the file does `import riscv_instr::*`). We match whole-word
-    tokens against the known candidate set, which makes unqualified matching
-    safe (no partial/substring hits), and we:
-      * skip the definition file (it lists every name but uses none), and
-      * only scan files that reference the riscv_instr package at all,
-    so an unrelated signal can't accidentally mark an instruction as live.
+    An instruction is "implemented" if its name appears in one of the
+    DECODER_FILES either qualified (`riscv_instr::NAME`) or unqualified
+    (`NAME`, when the file does `import riscv_instr::*`). This is a decode
+    check only — the logic behind the decoder is not verified. We match
+    whole-word tokens against the known candidate set, which makes unqualified
+    matching safe (no partial/substring hits), and we only scan files that
+    reference the riscv_instr package at all, so an unrelated signal can't
+    accidentally mark an instruction as live.
     """
     handled = set()
     where = defaultdict(set)
     root = os.path.join(repo, rtl_root)
     for dirpath, _, filenames in os.walk(root):
         for fn in filenames:
-            if not fn.endswith((".sv", ".svh")) or fn == DEFINITION_FILE:
+            if fn not in DECODER_FILES:
                 continue
             p = os.path.join(dirpath, fn)
             try:
@@ -432,19 +466,30 @@ def render_html(ctx):
     a("</style>")
 
     a(f"<h1>{esc(ctx['title'])}</h1>")
-    a(f"<div class='sub'>Spec source: upstream riscv/riscv-opcodes @ {ctx['spec_commit'][:10]} "
-      f"&nbsp;·&nbsp; <b>Implemented = referenced (riscv_instr::) anywhere in the decode/execute RTL under hw/</b> "
-      f"(primary decoders: {', '.join(PRIMARY_DECODERS)}; plus FUs, FPU sequencer, DMA front-end, …) "
+    canvas = "rv_v (RVV v1.0)" + (" + rv_zv* crypto" if ctx["crypto"] else "")
+    a(f"<div class='sub'>Ground truth: upstream riscv/riscv-opcodes <b>{canvas}</b> "
+      f"@ {ctx['spec_commit'][:10]} &nbsp;·&nbsp; "
+      f"<b>implemented = decoded</b> in {', '.join(DECODER_FILES)} "
+      f"(decode check only; the logic behind the decoder is not verified) "
       f"&nbsp;·&nbsp; generated read-only, no repo files modified</div>")
+    a("<div class='sub'>This map answers four questions: "
+      "<b>1)</b> which RVV v1.0 spec instructions the hardware decodes "
+      "(<span style='color:" + COLOR_IMPL + "'>blue</span>) vs not (gray) · "
+      "<b>2)</b> which custom instructions are hardware-backed (one hue per "
+      "extension) · <b>3)</b> which are in the toolchain (riscv_instr.sv) but "
+      "not decoded (black; see the dedicated section) · "
+      "<b>4)</b> where the implementation deviates from the spec "
+      "(mismatch / overlap panels).</div>")
 
     # legend
     a("<div class='legend'>")
     a(f"<span><i class='sw' style='background:{COLOR_IMPL}'></i>spec — implemented</span>")
     a(f"<span><i class='sw' style='background:{COLOR_UNIMPL}'></i>spec — not implemented (gray)</span>")
-    a(f"<span><i class='sw' style='background:{COLOR_DEAD};border-color:#5b6472'></i>custom — in build, not implemented (black)</span>")
+    a(f"<span><i class='sw' style='background:{COLOR_DEAD};border-color:#5b6472'></i>custom — in toolchain, not decoded (black)</span>")
     a("<span style='width:100%;height:0'></span>")
     a("<span style='color:var(--muted)'>custom, implemented:</span>")
-    for ext, col in EXT_COLORS.items():
+    for ext in ctx["ext_files"] + [ORIGIN_RVV_LOCAL]:
+        col = EXT_COLORS.get(ext, "#888")
         a(f"<span><i class='sw' style='background:{col}'></i>{esc(ext.replace('opcodes-',''))}</span>")
     a("<span style='width:100%;height:0'></span>")
     a(f"<span><i class='sw' style='background:linear-gradient(135deg,{COLOR_IMPL} 0 50%,{COLOR_UNIMPL} 50% 100%)'></i>spec slot — partially implemented</span>")
@@ -462,6 +507,8 @@ def render_html(ctx):
       f"(<b>{s['ext_live']}</b> live / <b style='color:#c1121f'>{s['ext_dead']}</b> dead)</span>")
     a(f"<span>active conflicts: <b style='color:#e03131'>{s['conflicts']}</b></span>")
     a(f"<span>latent (paper) conflicts: <b>{s['latent']}</b></span>")
+    a(f"<span>spec deviations: <b style='color:#e8590c'>{s['rvv_mismatch']}</b> mismatches, "
+      f"<b style='color:#e8590c'>{s['spec_overlap']}</b> custom-on-spec overlaps</span>")
     a(f"<span>OP-V free slots: <b>{s['opv_free']}/448</b></span>")
     a("</div>")
 
@@ -476,7 +523,32 @@ def render_html(ctx):
           f"<td>{b['total']}</td><td>{b['live']}</td><td>{dead_txt}</td></tr>")
     a("</table>")
     a("<div class='sub'>“dead” = defined in the Makefile OPCODES build (present in riscv_instr.sv) "
-      "but never referenced in the decode/execute RTL — encoding space reserved on paper, free to reclaim.</div>")
+      "but referenced by no decoder — encoding space reserved on paper, free to reclaim.</div>")
+
+    # toolchain staleness (opcode files vs generated riscv_instr.sv)
+    if ctx["tc_missing"] or ctx["tc_enc_diff"]:
+        a("<div class='conflicts'><div class='row'>⚠ riscv_instr.sv is STALE vs the "
+          "opcode files — run <code>make update_opcodes</code>. Missing: "
+          f"{esc(', '.join(ctx['tc_missing']) or '—')} · encoding drift: "
+          f"{esc(', '.join(ctx['tc_enc_diff']) or '—')}</div></div>")
+
+    # point 3: in toolchain, not decoded — the full list, per extension
+    n_dead = sum(len(d) for _, _, d in ctx["dead_groups"])
+    a(f"<h2>⬛ In toolchain but not decoded by hardware "
+      f"<span style='font-weight:400;color:var(--muted);font-size:12px'>— "
+      f"{n_dead} instructions have a riscv_instr.sv localparam but appear in no "
+      f"decoder; their encoding space is reclaimable</span></h2>")
+    if not ctx["dead_groups"]:
+        a("<div class='sub'>None — every toolchain-defined custom instruction is decoded. 🎉</div>")
+    for origin, col, dead in ctx["dead_groups"]:
+        a(f"<details><summary><span class='dot' style='display:inline-block;width:10px;"
+          f"height:10px;border-radius:2px;background:{col};margin-right:6px'></span>"
+          f"{esc(origin.replace('opcodes-', ''))} — {len(dead)} dead definitions</summary>")
+        a("<div class='lst'>")
+        for entry in sorted(dead, key=lambda e: e["match"] & 0xffffffff):
+            a(f"<span class='chip dead' style='background:{COLOR_DEAD}' "
+              f"data-tip=\"{tip_for(entry)}\">{esc(entry['name'])}</span>")
+        a("</div></details>")
 
     # conflicts panels
     a("<h2>Active encoding conflicts <span style='font-weight:400;color:var(--muted);font-size:12px'>— both sides live in hardware</span></h2>")
@@ -498,6 +570,42 @@ def render_html(ctx):
             a(f"<div class='row latent'>{esc(a1.name)} <span style='color:#aaa'>[{esc(a1.origin)}]</span>"
               f" ⨯ {esc(b1.name)} <span style='color:#aaa'>[{esc(b1.origin)}]</span></div>")
         a("</div></details>")
+
+    # point 4: deviations from the RVV spec
+    a("<h2>⚠ Deviations from the RVV v1.0 spec "
+      "<span style='font-weight:400;color:var(--muted);font-size:12px'>— where our "
+      "implementation and the spec disagree about an encoding</span></h2>")
+    if not ctx["rvv_mismatch"] and not ctx["spec_overlap"]:
+        a("<div class='sub'>None. The implemented encodings agree with the spec. 🎉</div>")
+
+    if ctx["rvv_mismatch"]:
+        a("<div class='sub'><b>Encoding mismatches</b> — same instruction name, "
+          "different fixed bits between local opcodes-rvv and the spec; the "
+          "generated decoder masks deviate from the spec:</div>")
+        a("<div class='conflicts'>")
+        for loc1, up1 in ctx["rvv_mismatch"]:
+            live = (" <span style='color:#e8590c'>(decoded in HW)</span>"
+                    if loc1.name in ctx["handled"] else "")
+            a(f"<div class='row' style='border-left-color:#e8590c;background:rgba(232,89,12,.08)'>"
+              f"{esc(loc1.name)}{live}<br>"
+              f"&nbsp;&nbsp;local: {bits_str(loc1.mask, loc1.match)}<br>"
+              f"&nbsp;&nbsp;spec : {bits_str(up1.mask, up1.match)}</div>")
+        a("</div>")
+
+    if ctx["spec_overlap"]:
+        a("<div class='sub'><b>Custom instructions on spec-claimed encodings</b> — "
+          "a custom instruction's fixed bits overlap an RVV spec instruction:</div>")
+        a("<div class='conflicts'>")
+        for a1, b1, active in ctx["spec_overlap"]:
+            sp, cu = (a1, b1) if a1.kind == "spec" else (b1, a1)
+            tag = ("<span style='color:#e03131'>(both decoded — active collision)</span>"
+                   if active else "<span style='color:#8a8f98'>(latent)</span>")
+            a(f"<div class='row{'' if active else ' latent'}'>"
+              f"{esc(cu.name)} <span style='color:#aaa'>[{esc(cu.origin)}]</span>"
+              f" occupies {esc(sp.name)} <span style='color:#aaa'>[{esc(sp.origin)}]</span> {tag}<br>"
+              f"&nbsp;&nbsp;custom: {bits_str(cu.mask, cu.match)}<br>"
+              f"&nbsp;&nbsp;spec  : {bits_str(sp.mask, sp.match)}</div>")
+        a("</div>")
 
     # OP-V grid
     a("<h2>OP-V space (major 0x57) — funct6 × category</h2>")
@@ -547,11 +655,11 @@ def tip_for(entry):
              f"{bits_str(entry['mask'], entry['match'])}"]
     if entry["state"] == "impl":
         w = entry.get("where") or []
-        lines.append("handled by HW" + (": " + esc(", ".join(w)) if w else ""))
+        lines.append("decoded by" + (": " + esc(", ".join(w)) if w else " HW"))
     elif entry["kind"] == "spec":
-        lines.append("spec — NOT implemented")
+        lines.append("spec — NOT implemented (no decoder reference)")
     else:
-        lines.append("custom — in build, NOT decoded/executed (reclaimable)")
+        lines.append("custom — in toolchain (riscv_instr.sv), NOT decoded (reclaimable)")
     if entry["conflict"]:
         lines.append("<span style='color:#ff8787'>⚠ CONFLICT: " +
                      esc(", ".join(entry["conflict_with"])) + "</span>")
@@ -756,8 +864,9 @@ def main():
     ap.add_argument("--repo", help="spatz repo root (auto-detected by default)")
     ap.add_argument("--out", default=None, help="output HTML path")
     ap.add_argument("--spec-commit", default=UPSTREAM_COMMIT)
-    ap.add_argument("--no-crypto", action="store_true",
-                    help="exclude ratified vector-crypto ext from the spec canvas")
+    ap.add_argument("--crypto", action="store_true",
+                    help="also draw the ratified vector-crypto exts (rv_zv*) on "
+                         "the spec canvas (default: base rv_v v1.0 only)")
     args = ap.parse_args()
 
     here = os.path.dirname(os.path.abspath(__file__))
@@ -769,10 +878,10 @@ def main():
     print("Encoding-space visualizer")
     print(f"  repo: {repo}")
 
-    # 1. spec canvas
+    # 1. spec canvas (ground truth: rv_v v1.0; rv_zv* only on request)
     up = ensure_upstream(os.path.join(here, ".cache"), args.spec_commit)
     spec_files = list(SPEC_FILES)
-    if not args.no_crypto:
+    if args.crypto:
         extdir = os.path.join(up, "extensions")
         spec_files += sorted(f for f in os.listdir(extdir)
                              if f.startswith("rv_zv"))
@@ -783,9 +892,17 @@ def main():
             spec += parse_opcode_file(p, f"spec:{f}", "spec")
     print(f"  spec instrs parsed: {len(spec)} from {spec_files}")
 
-    # 2. custom extensions (local)
+    # 2. custom extensions (local) — the set currently enabled in the
+    #    top-level Makefile OPCODES variable.
+    ext_files = parse_makefile_opcodes(repo)
+    if ext_files is None:
+        print("  WARN: could not parse OPCODES from Makefile; using fallback list",
+              file=sys.stderr)
+        ext_files = list(EXT_FILES_FALLBACK)
+    print(f"  enabled custom exts (Makefile OPCODES): "
+          f"{', '.join(f.replace('opcodes-', '') for f in ext_files)}")
     exts = []
-    for f in EXT_FILES:
+    for f in ext_files:
         p = os.path.join(local_opc, f)
         if os.path.isfile(p):
             exts += parse_opcode_file(p, f, "ext")
@@ -793,15 +910,52 @@ def main():
             print(f"  WARN: missing local ext file {f}", file=sys.stderr)
     print(f"  custom-ext instrs parsed: {len(exts)}")
 
-    # 3. handled-by-hardware set (name referenced in decode/execute RTL,
-    #    qualified or unqualified). Candidate names = everything we classify.
+    # 2b. local opcodes-rvv vs upstream spec canvas.
+    #     * name absent upstream  -> local addition riding in the RVV space
+    #       (vlx*, vfwdotp, legacy v0.9 leftovers) -> pseudo-extension, so its
+    #       occupied encoding space is drawn instead of reading as free.
+    #     * same name, different fixed bits -> encoding mismatch panel.
+    rvv_mismatch = []
+    rvv_path = os.path.join(local_opc, RVV_LOCAL_FILE)
+    if os.path.isfile(rvv_path):
+        up_by_name = {e.name: e for e in spec}
+        n_local_only = 0
+        for e in parse_opcode_file(rvv_path, ORIGIN_RVV_LOCAL, "ext"):
+            u = up_by_name.get(e.name)
+            if u is None:
+                exts.append(e)
+                n_local_only += 1
+            elif (u.mask, u.match) != (e.mask, e.match):
+                rvv_mismatch.append((e, u))
+        print(f"  local {RVV_LOCAL_FILE}: {n_local_only} instrs not in spec v1.0, "
+              f"{len(rvv_mismatch)} encoding mismatches vs upstream spec")
+    else:
+        print(f"  WARN: missing local {RVV_LOCAL_FILE}", file=sys.stderr)
+
+    # 3. toolchain truth: riscv_instr.sv (generated from the OPCODES files).
+    #    "in toolchain" = the name has a localparam there. Also verify the
+    #    opcode files and the generated file have not drifted apart.
+    sv_encs = parse_riscv_instr_sv(sv_path)
+    tc_missing = sorted(e.name for e in exts if e.name not in sv_encs)
+    tc_enc_diff = sorted(e.name for e in exts
+                         if e.name in sv_encs
+                         and sv_encs[e.name] != (e.mask, e.match))
+    print(f"  toolchain (riscv_instr.sv): {len(sv_encs)} localparams; "
+          f"opcode-file entries missing there: {len(tc_missing)}, "
+          f"encoding drift: {len(tc_enc_diff)}")
+    if tc_missing or tc_enc_diff:
+        print("  WARN: riscv_instr.sv is stale vs the opcode files — "
+              "run `make update_opcodes`", file=sys.stderr)
+
+    # 4. implemented-in-hardware set: name referenced in one of the DECODER
+    #    files (decode check only). Candidate names = everything we classify.
     candidates = {e.name for e in spec} | {e.name for e in exts}
     handled, where = parse_handled(repo, candidates)
-    print(f"  handled by HW (name refs across {RTL_ROOT}/, excl {DEFINITION_FILE}): "
+    print(f"  implemented (decoded in {', '.join(DECODER_FILES)}): "
           f"{len(handled & candidates)}")
 
-    # 4. conflicts (across all sources), split into active vs latent.
-    #    active = both sides are actually handled by HW (real silicon collision)
+    # 5. conflicts (across all sources), split into active vs latent.
+    #    active = both sides are actually decoded by HW (real silicon collision)
     #    latent = at least one side is defined-but-dead (paper collision only)
     all_encs = spec + exts
     raw_conflicts = find_conflicts(all_encs)
@@ -811,6 +965,12 @@ def main():
             conflicts.append((a1, b1))
         else:
             latent.append((a1, b1))
+
+    # custom instructions sitting on encodings the RVV spec has claimed —
+    # these are spec deviations, surfaced in their own panel.
+    spec_overlap = [(a1, b1, a1.name in handled and b1.name in handled)
+                    for a1, b1 in raw_conflicts
+                    if {a1.kind, b1.kind} == {"spec", "ext"}]
 
     # dedup spec by name (aliases): keep first
     seen = set()
@@ -888,9 +1048,9 @@ def main():
     dropped = sum(len(v) for v in other_by_major.values())
     print(f"  routed to standard/other majors (not dropped): {dropped}")
 
-    # per-extension live/dead breakdown
+    # per-extension live/dead breakdown (incl. the not-in-spec rvv pseudo-ext)
     ext_breakdown = []
-    for f in EXT_FILES:
+    for f in ext_files + [ORIGIN_RVV_LOCAL]:
         names = [e.name for e in exts if e.origin == f]
         live = sum(1 for n in names if n in handled)
         ext_breakdown.append({
@@ -898,6 +1058,16 @@ def main():
             "total": len(names), "live": live, "dead": len(names) - live,
             "color": EXT_COLORS.get(f, "#888"),
         })
+
+    # "in toolchain, not in hardware": every custom-side instruction that has
+    # a riscv_instr.sv localparam but no decoder reference, grouped by origin.
+    dead_groups = []
+    for f in ext_files + [ORIGIN_RVV_LOCAL]:
+        dead = [entries[id(e)] for e in exts
+                if e.origin == f and e.name not in handled
+                and e.name in sv_encs]
+        if dead:
+            dead_groups.append((f, EXT_COLORS.get(f, "#888"), dead))
 
     stats = {
         "spec_total": len(spec_u),
@@ -908,6 +1078,8 @@ def main():
         "ext_dead": sum(1 for e in exts if e.name not in handled),
         "conflicts": len(conflicts),
         "latent": len(latent),
+        "rvv_mismatch": len(rvv_mismatch),
+        "spec_overlap": len(spec_overlap),
         "opv_free": 448 - len(opv_grid),
         "opv_multi": sum(1 for v in opv_grid.values() if len(v) > 1),
     }
@@ -915,11 +1087,18 @@ def main():
     ctx = {
         "title": "RVV & custom encoding-space map — Spatz",
         "spec_commit": args.spec_commit,
+        "crypto": args.crypto,
+        "ext_files": ext_files,
         "opv_grid": opv_grid,
         "custom_grids": custom_grids,
         "sections": sections,
         "conflicts": conflicts,
         "latent": latent,
+        "rvv_mismatch": rvv_mismatch,
+        "spec_overlap": spec_overlap,
+        "dead_groups": dead_groups,
+        "tc_missing": tc_missing,
+        "tc_enc_diff": tc_enc_diff,
         "handled": handled,
         "ext_breakdown": ext_breakdown,
         "stats": stats,

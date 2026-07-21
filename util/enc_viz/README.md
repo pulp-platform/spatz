@@ -4,10 +4,24 @@
 RISC-V Vector (RVV) encoding space — and the adjacent custom major opcodes — is
 used by this hardware. It is **read-only**: it never modifies the repo.
 
-It answers three questions at a glance:
-- Which RVV spec instructions do we implement, and which don't we?
-- Which encoding space do our custom extensions occupy (and how much is free)?
-- Where do two extensions (or an extension and the spec) actually collide?
+It answers four questions at a glance, checked against the RVV v1.0 ground
+truth ([upstream `riscv-opcodes` `extensions/rv_v`](https://github.com/riscv/riscv-opcodes/blob/master/extensions/rv_v)):
+
+1. **Which RVV v1.0 spec instructions does the hardware implement?**
+   🟦 blue = decoded, ⬜ gray = not. *Implemented = the instruction is decoded
+   by one of the decoders (snitch, spatz decoder, FPU sequencer, DMA
+   front-end) — a decode check only; the logic behind the decoder is not
+   verified.*
+2. **Which custom instructions are hardware-backed?** One hue per custom
+   extension group (same decode check).
+3. **What is in the toolchain but not in hardware?** Instructions with a
+   `riscv_instr.sv` localparam that no decoder references — shown ⬛ black in
+   the grids *and* listed exhaustively in a dedicated section (reclaimable
+   encoding space).
+4. **Where does the implementation deviate from the spec?** A dedicated
+   panel lists (a) encoding mismatches — same instruction name, different
+   fixed bits vs the spec — and (b) custom instructions occupying
+   spec-claimed encodings.
 
 ---
 
@@ -39,21 +53,22 @@ map always reflects the current sources.
 
 | Input | Role |
 |-------|------|
-| upstream `riscv/riscv-opcodes` (auto-cloned, pinned commit) | the full RVV spec = the canvas |
-| `sw/toolchain/riscv-opcodes/opcodes-*` (the 7 custom entries in the Makefile `OPCODES` var; the 8th, `opcodes-rvv`, is the spec) | our custom extensions |
-| `hw/ip/snitch/src/riscv_instr.sv` | the exact generated bit patterns |
-| every `*.sv`/`*.svh` under `hw/` (except `riscv_instr.sv`) | what the hardware actually decodes/executes |
+| upstream `riscv/riscv-opcodes` `extensions/rv_v` (auto-cloned, pinned commit) | the RVV v1.0 ground truth = the canvas (`--crypto` adds the `rv_zv*` exts) |
+| `sw/toolchain/riscv-opcodes/opcodes-*` (the 7 custom entries in the Makefile `OPCODES` var) | our custom extensions |
+| `sw/toolchain/riscv-opcodes/opcodes-rvv` (the 8th `OPCODES` entry) | diffed against the upstream canvas: entries absent upstream (e.g. `vlx*`, `vfwdotp`, legacy v0.9 leftovers) become the **`rvv (not in spec v1.0)`** pseudo-extension; same-name entries with different fixed bits are listed in the **spec-deviation panel** |
+| `hw/ip/snitch/src/riscv_instr.sv` | the toolchain truth: "in toolchain" = has a localparam here (also cross-checked against the opcode files; a stale file triggers a warning) |
+| the decoders under `hw/`: `snitch.sv`, `spatz_decoder.sv`, `spatz_fpu_sequencer.sv`, `axi_dma_tc_snitch_fe.sv` | what the hardware actually decodes |
 
-"Implemented / handled by HW" = the instruction name is referenced in the
-decode/execute RTL, either qualified (`riscv_instr::VADD_VV`) or unqualified
-(`FREP_O`, when a file does `import riscv_instr::*`).
+"Implemented" = the instruction name is referenced in one of the decoder
+files, either qualified (`riscv_instr::VADD_VV`) or unqualified (`FREP_O`,
+when the file does `import riscv_instr::*`). This is a decode check only.
 
 ---
 
 ## Command-line options
 
 ```
-python3 gen_encoding_viz.py [--repo DIR] [--out FILE] [--spec-commit SHA] [--no-crypto]
+python3 gen_encoding_viz.py [--repo DIR] [--out FILE] [--spec-commit SHA] [--crypto]
 ```
 
 | Option | Default | Meaning |
@@ -61,7 +76,7 @@ python3 gen_encoding_viz.py [--repo DIR] [--out FILE] [--spec-commit SHA] [--no-
 | `--repo DIR` | auto-detected | Spatz repo root (found by walking up from the script). |
 | `--out FILE` | `encoding_map.html` next to the script | Where to write the HTML. |
 | `--spec-commit SHA` | pinned commit | Which upstream `riscv-opcodes` commit to diff against. |
-| `--no-crypto` | off | Drop the ratified vector-crypto extensions from the spec canvas. |
+| `--crypto` | off | Also draw the ratified vector-crypto exts (`rv_zv*`) on the canvas (they claim OP-V slots too — e.g. Zvfbfwma's `vfwmaccbf16` sits on funct6 0x3b, which `vfwdotp` reuses). |
 
 Examples:
 ```sh
@@ -79,10 +94,10 @@ python3 util/enc_viz/gen_encoding_viz.py --repo /path/to/spatz
 **Colors**
 | Color | Meaning |
 |-------|---------|
-| 🟦 blue | spec instruction we implement |
+| 🟦 blue | spec instruction the hardware decodes |
 | ⬜ gray | spec instruction we do **not** implement |
-| extension hue | custom instruction that **is** decoded/executed |
-| ⬛ black | custom instruction defined in the build but **dead** in hardware (reclaimable) |
+| extension hue | custom instruction that **is** decoded |
+| ⬛ black | in the toolchain (`riscv_instr.sv`) but decoded by no hardware (reclaimable) |
 | blue/gray two-tone | one slot holding both implemented and unimplemented sub-encodings |
 | 🟥 red hatch | a **genuine** encoding conflict (two instructions' fixed bits overlap) |
 | empty | free encoding space |
@@ -97,9 +112,17 @@ python3 util/enc_viz/gen_encoding_viz.py --repo /path/to/spatz
   cells inside a claimed column are red-hatched.
 - **Standard opcodes overloaded by custom ext** — rv32b (OP / OP-IMM),
   smallfloat (OP-FP / FMA), vector-crypto (0x77), listed so nothing is dropped.
-- **Active vs latent conflicts** — *active* = both sides are live in hardware
+- **In toolchain but not decoded by hardware** — the exhaustive list of ⬛
+  dead definitions, grouped per extension (collapsible), so reclaimable
+  encoding space is visible at a glance rather than scattered across grids.
+- **Active vs latent conflicts** — *active* = both sides decoded in hardware
   (real collision); *latent* = at least one side is a dead definition
   (paper collision only).
+- **Deviations from the RVV v1.0 spec** — (a) *encoding mismatches*: same
+  instruction name, different fixed bits between our `opcodes-rvv` and the
+  spec (these deviations end up in the generated decoder masks); (b) *custom
+  instructions on spec-claimed encodings*: a custom instruction's fixed bits
+  overlap an RVV spec instruction.
 - **Extension status table** — per extension: defined / implemented / dead.
 
 Hover any cell or chip for the full 32-bit pattern, origin file, and the RTL
@@ -117,9 +140,10 @@ server / GitLab Pages — no dependencies required.
 
 ## Notes & limitations
 
-- "Implemented" is a strong proxy (name referenced in decode/execute RTL). A
-  rare instruction that is decoded but silently never executed would still read
-  as implemented.
+- "Implemented" is a decode check by design: the name is referenced in one of
+  the decoder files. An instruction that is decoded but whose execution logic
+  is broken/absent still reads as implemented — verifying the logic is out of
+  scope for this tool.
 - The standard-overloaded majors (OP / OP-IMM / OP-FP) are shown as lists, not
   grids — gridding them would require drawing base-ISA occupancy too.
 - The upstream spec commit is pinned for reproducibility; bump `--spec-commit`
