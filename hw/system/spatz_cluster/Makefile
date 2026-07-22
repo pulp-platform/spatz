@@ -267,7 +267,11 @@ clean.vlt:
 
 ${VSIM_BUILDDIR}/compile.vsim.tcl: $(CFG_STAMP) test/bootrom.bin $(VSIM_SOURCES) ${TB_SRCS} ${TB_DIR}/rtl_lib.cc ${TB_DIR}/common_lib.cc test/bootdata.cc test/bootrom.bin $(CURDIR)/src/generated/bootrom.sv
 	vlib $(dir $@)
-	${BENDER} script vsim ${VSIM_BENDER} ${DEFS} --vlog-arg="${VLOG_FLAGS} -work $(dir $@) " > $@
+	# hmr_unit.sv is pulled in unconditionally by the redundancy_cells dependency
+	# (no Bender target gates it) but is never instantiated in this design; its
+	# `core_in_tmr[i]` generate-if condition is not elaboration-constant, which
+	# vlog rejects even though the module is dead code. Drop it from the compile list.
+	${BENDER} script vsim ${VSIM_BENDER} ${DEFS} --vlog-arg="${VLOG_FLAGS} -work $(dir $@) " | grep -v 'HMR/hmr_unit\.sv' > $@
 	echo '${VLOG} -work $(dir $@) ${TB_DIR}/rtl_lib.cc ${TB_DIR}/common_lib.cc test/bootdata.cc -ccflags "-std=c++17 -I${MKFILE_DIR}/test -I${MKFILE_DIR}/work/include -I${TB_DIR}"' >> $@
 	echo '${VLOG} -work $(dir $@) test/uartdpi/uartdpi.c -ccflags "-Itest/uartdpi"' >> $@
 	echo 'return 0' >> $@

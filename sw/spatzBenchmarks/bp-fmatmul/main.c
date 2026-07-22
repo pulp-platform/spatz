@@ -160,7 +160,7 @@ int main() {
   //   for (int i = 0; i < 32; i++){
   //     printf("0x%2x, \n",(unsigned)c[i]);
   //   }
-    
+
   //   // int error =
   //   //     verify_matrix(c, (const char *)gemm_checksum, gemm_l.M, gemm_l.N);
 
