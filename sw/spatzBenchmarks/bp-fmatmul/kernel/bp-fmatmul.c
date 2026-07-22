@@ -67,7 +67,7 @@ void matmul_2xVL(char *c, const char *a, const char *b,
       // asm volatile ("lbu %[t], 0(%[a])": [t] "=r"(temp): [a] "r"(a__));
       // asm volatile ("fmv.w.x %[f], %[x]" : [f] "=f"(t0) : [x] "r"(temp));
       asm volatile("flb %[t], 0(%[a])" : [t] "=f"(t0) : [a] "r"(a__));
-      
+
       a__ += N;
       // asm volatile ("lbu %[t], 0(%[a])": [t] "=r"(temp): [a] "r"(a__));
       // asm volatile ("fmv.w.x %[f], %[x]" : [f] "=f"(t1) : [x] "r"(temp));
@@ -96,7 +96,6 @@ void matmul_2xVL(char *c, const char *a, const char *b,
           a__ += N;
           asm volatile("vfmacc.vf v8, %0, v16" ::"f"(t1));
           asm volatile("flb %[t], 0(%[a])" : [t] "=f"(t1) : [a] "r"(a__));
-
         }
 
         a__ = a_ + ++n;
@@ -113,7 +112,6 @@ void matmul_2xVL(char *c, const char *a, const char *b,
         a__ += N;
         asm volatile("vfmacc.vf v8, %0, v24" ::"f"(t1));
         asm volatile("flb %[t], 0(%[a])" : [t] "=f"(t1) : [a] "r"(a__));
-
       }
 
       asm volatile("vfmacc.vf v0, %0, v24" ::"f"(t0));
@@ -204,7 +202,6 @@ void matmul_4xVL(char *c, const char *a, const char *b,
           a__ += N;
           asm volatile("vfmacc.vf v12, %0, v16" ::"f"(t3));
           asm volatile("flb %[t], 0(%[a])" : [t] "=f"(t3) : [a] "r"(a__));
-
         }
 
         a__ = a_ + ++n;
@@ -226,7 +223,6 @@ void matmul_4xVL(char *c, const char *a, const char *b,
         a__ += N;
         asm volatile("vfmacc.vf v12, %0, v20" ::"f"(t3));
         asm volatile("flb %[t], 0(%[a])" : [t] "=f"(t3) : [a] "r"(a__));
-
       }
 
       asm volatile("vfmacc.vf v0, %0, v20" ::"f"(t0));
@@ -366,7 +362,6 @@ void matmul_8xVL(char *c, const char *a, const char *b,
           a__ += N;
           asm volatile("vfmacc.vf v14, %0, v18" ::"f"(t7));
           asm volatile("flb %[t], 0(%[a])" : [t] "=f"(t7) : [a] "r"(a__));
-
         }
 
         a__ = a_ + ++n;
@@ -400,7 +395,6 @@ void matmul_8xVL(char *c, const char *a, const char *b,
         a__ += N;
         asm volatile("vfmacc.vf v14, %0, v20" ::"f"(t7));
         asm volatile("flb %[t], 0(%[a])" : [t] "=f"(t7) : [a] "r"(a__));
-
       }
 
       asm volatile("vfmacc.vf v0, %0, v20" ::"f"(t0));

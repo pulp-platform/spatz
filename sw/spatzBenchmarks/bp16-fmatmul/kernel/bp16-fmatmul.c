@@ -398,9 +398,9 @@ void matmul_8xVL(__fp16 *c, const __fp16 *a, const __fp16 *b,
 // ---------------
 
 void matmul_16xVL(__fp16 *c, const __fp16 *a, const __fp16 *b,
-                 const unsigned int m_start, const unsigned int m_end,
-                 const unsigned int N, const unsigned int P,
-                 const unsigned int p_start, const unsigned int p_end) {
+                  const unsigned int m_start, const unsigned int m_end,
+                  const unsigned int N, const unsigned int P,
+                  const unsigned int p_start, const unsigned int p_end) {
 
   unsigned int p = p_start;
 
@@ -423,7 +423,8 @@ void matmul_16xVL(__fp16 *c, const __fp16 *a, const __fp16 *b,
 
       __fp16 *c__ = c_ + m * P;
 
-      float t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15;
+      float t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14,
+          t15;
 
       asm volatile("flh %[t], 0(%[a])" : [t] "=f"(t0) : [a] "r"(a__));
       a__ += N;

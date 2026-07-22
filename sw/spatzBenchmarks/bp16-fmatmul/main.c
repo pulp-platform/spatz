@@ -23,37 +23,38 @@
 #include DATAHEADER
 #include "kernel/bp16-fmatmul.c"
 
-#define THRESHOLD       0.00010f
+#define THRESHOLD 0.00010f
 
 uint16_t *a;
 uint16_t *b;
 uint16_t *c;
 
-void check_result(uint16_t *x, int r){    
-    float diff = 0.0f;
-    int err = 0;
+void check_result(uint16_t *x, int r) {
+  float diff = 0.0f;
+  int err = 0;
 
-    for(int i = 0; i < r; i++){  
-        // printf("i = %d\n",i);
-        diff = fabs((float)(x[i] - check[i]));
-        if(diff>THRESHOLD){
-            err++;
-            // printf("Error at index %d:\t expected %f\t real %f\t error %f\n", i, c_dram[i], x[i], diff);
-            // printf("Error at index %d:\t expected 0x%04x\t real 0x%04x\t error %f\n", i, check[i], x[i], diff);
-        }
+  for (int i = 0; i < r; i++) {
+    // printf("i = %d\n",i);
+    diff = fabs((float)(x[i] - gemm_checksum[i]));
+    if (diff > THRESHOLD) {
+      err++;
+      // printf("Error at index %d:\t expected %f\t real %f\t error %f\n", i,
+      // c_dram[i], x[i], diff); printf("Error at index %d:\t expected 0x%04x\t
+      // real 0x%04x\t error %f\n", i, check[i], x[i], diff);
     }
+  }
 
-    if(err != 0)
-        printf("TEST FAILED with %d errors!!\n", err);
-    else
-        printf("TEST PASSED!!\n");
+  if (err != 0)
+    printf("TEST FAILED with %d errors!!\n", err);
+  else
+    printf("TEST PASSED!!\n");
 }
 
 int main() {
   const unsigned int num_cores = snrt_cluster_core_num();
   const unsigned int cid = snrt_cluster_core_idx();
   // const unsigned int num_cores = 1;
-  // const unsigned int cid = 0;  
+  // const unsigned int cid = 0;
 
   const unsigned int measure_iterations = 1;
 
@@ -97,9 +98,9 @@ int main() {
   snrt_cluster_hw_barrier();
 
   uint32_t v;
-  asm volatile ("csrr %0, 0x800" : "=r"(v));
+  asm volatile("csrr %0, 0x800" : "=r"(v));
 
-  asm volatile ("csrw 0x800, %0" :: "r"(v | 3));
+  asm volatile("csrw 0x800, %0" ::"r"(v | 3));
 
   // Calculate matmul
   for (unsigned int i = 0; i < measure_iterations; ++i) {
@@ -111,13 +112,17 @@ int main() {
       start_kernel();
 
     if (kernel_size == 2) {
-      matmul_2xVL((__fp16*)c, (__fp16*)a, (__fp16*)b, m_start, m_end, gemm_l.K, gemm_l.N, p_start, p_end);
+      matmul_2xVL((__fp16 *)c, (__fp16 *)a, (__fp16 *)b, m_start, m_end,
+                  gemm_l.K, gemm_l.N, p_start, p_end);
     } else if (kernel_size == 4) {
-      matmul_4xVL((__fp16*)c, (__fp16*)a, (__fp16*)b, m_start, m_end, gemm_l.K, gemm_l.N, p_start, p_end);
+      matmul_4xVL((__fp16 *)c, (__fp16 *)a, (__fp16 *)b, m_start, m_end,
+                  gemm_l.K, gemm_l.N, p_start, p_end);
     } else if (kernel_size == 8) {
-      matmul_8xVL((__fp16*)c, (__fp16*)a, (__fp16*)b, m_start, m_end, gemm_l.K, gemm_l.N, p_start, p_end);
+      matmul_8xVL((__fp16 *)c, (__fp16 *)a, (__fp16 *)b, m_start, m_end,
+                  gemm_l.K, gemm_l.N, p_start, p_end);
     } else if (kernel_size == 16) {
-      matmul_16xVL((__fp16*)c, (__fp16*)a, (__fp16*)b, m_start, m_end, gemm_l.K, gemm_l.N, p_start, p_end);      
+      matmul_16xVL((__fp16 *)c, (__fp16 *)a, (__fp16 *)b, m_start, m_end,
+                   gemm_l.K, gemm_l.N, p_start, p_end);
     } else {
       return -2;
     }
