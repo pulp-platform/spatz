@@ -12,8 +12,26 @@ include util/Makefrag
 # Bender version
 BENDER_VERSION = 0.29.1
 
-# Do not include minifloat opcodes, since they conflict with the RVV opcodes!
-OPCODES := "opcodes-rvv opcodes-rv32b_CUSTOM opcodes-ipu_CUSTOM opcodes-frep_CUSTOM opcodes-dma_CUSTOM opcodes-ssr_CUSTOM opcodes-smallfloat opcodes-vfx_CUSTOM"
+# Extension selection for the upstream-aligned riscv-opcodes layout.
+# "rv*" covers all ratified extensions (incl. rv_v); Spatz customs live in
+# extensions/unratified/. Note rv_xfrep_spatz is selected INSTEAD of
+# rv_xfrep (see extensions/unratified/README.md in riscv-opcodes).
+OPCODES := "rv*" \
+	"unratified/rv32_xb" \
+	"unratified/rv_xipu" \
+	"unratified/rv_xrrpost" \
+	"unratified/rv_xdma" \
+	"unratified/rv_xssr" \
+	"unratified/rv_xsmallfloat_h" \
+	"unratified/rv_xsmallfloat_b" \
+	"unratified/rv_xsmallfloat_vs" \
+	"unratified/rv_xsmallfloat_vh" \
+	"unratified/rv_xsmallfloat_vb" \
+	"unratified/rv_xsmallfloat_spatz" \
+	"unratified/rv_xvfx" \
+	"unratified/rv_xvfwdotp" \
+	"unratified/rv_xnl" \
+	"unratified/rv_xvmxdotp"
 
 
 # Default target
@@ -146,9 +164,9 @@ $(VERILATOR_INSTALL_DIR)/bin/verilator: sw/toolchain/verilator sw/toolchain/help
 
 update_opcodes: sw/toolchain/riscv-opcodes sw/toolchain/riscv-opcodes/encoding.h hw/ip/snitch/src/riscv_instr.sv
 hw/ip/snitch/src/riscv_instr.sv: sw/toolchain/riscv-opcodes
-	MY_OPCODES=$(OPCODES) make -C sw/toolchain/riscv-opcodes inst.sverilog
+	make -C sw/toolchain/riscv-opcodes inst.sverilog EXTENSIONS='$(OPCODES)'
 	mv sw/toolchain/riscv-opcodes/inst.sverilog $@
 
 sw/toolchain/riscv-opcodes/encoding.h:
-	MY_OPCODES=$(OPCODES) make -C sw/toolchain/riscv-opcodes all
-	cp sw/toolchain/riscv-opcodes/encoding_out.h $@
+	make -C sw/toolchain/riscv-opcodes encoding.out.h EXTENSIONS='$(OPCODES)'
+	cp sw/toolchain/riscv-opcodes/encoding.out.h $@
