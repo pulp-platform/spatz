@@ -1,0 +1,5 @@
+# Excluded from CI (not wired into sw/spatzBenchmarks/CMakeLists.txt):
+# design doesn't support these benchmarks, not meant to be checked.
+sw/spatzBenchmarks/bp-fmatmul
+sw/spatzBenchmarks/bpAlt-fmatmul
+sw/spatzBenchmarks/bp16-fmatmul
