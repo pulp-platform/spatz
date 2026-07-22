@@ -415,6 +415,7 @@ module spatz_fpu_sequencer
         end
 
         // Vector instructions with FP scalar operand
+        riscv_instr::VFDIV_VF,
         riscv_instr::VFADD_VF,
         riscv_instr::VFSUB_VF,
         riscv_instr::VFMIN_VF,

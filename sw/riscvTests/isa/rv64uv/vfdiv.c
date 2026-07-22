@@ -11,6 +11,37 @@
 // Simple random test with similar values + 1 subnormal
 void TEST_CASE1(void) {
   VSET(16, e16, m2);
+  VLOAD_16(v2, 0xb68d, 0x293e, 0xb9d8, 0x3b3b, 0xb5ac, 0x3487, 0xb9a4, 0xb9b3,
+               0xb900, 0xb900, 0xb900, 0xb900, 0xb900, 0xb900, 0xb900, 0xb900);
+
+  VSET(8, e16, m2);
+  //              -0.8057, -0.8564,  0.3425, -0.3066, -0.7314, -0.6396,  0.7588, -0.3743
+  VLOAD_16(v4, 0xba72, 0xbada, 0x357b, 0xb4e8, 0xb9da, 0xb91e, 0x3a12, 0xb5fd);
+  //              -0.4094,  0.0410, -0.7305,  0.9038, -0.3545,  0.2830, -0.7051, -0.7124
+  VLOAD_16(v6, 0xb68d, 0x293e, 0xb9d8, 0x3b3b, 0xb5ac, 0x3487, 0xb9a4, 0xb9b3);
+  asm volatile("vfdiv.vv v2, v4, v6");
+  //               1.9678, -20.9062, -0.4690, -0.3394,  2.0625, -2.2598, -1.0762, 0.5254
+  VCMP_U16(1, v2, 0x3fdf, 0xcd3a, 0xb780, 0xb56d, 0x4020, 0xc085, 0xbc4e, 0x3833,);
+
+
+
+
+
+  VSET(16, e16, m2);
+  VLOAD_16(v2, 0xb68d, 0x293e, 0xb9d8, 0x3b3b, 0xb5ac, 0x3487, 0xb9a4, 0xb9b3,
+               0xb900, 0xb900, 0xb900, 0xb900, 0xb900, 0xb900, 0xb900, 0xb900);
+
+  VSET(2, e16, m2);
+  //              -0.8057, -0.8564
+  VLOAD_16(v4, 0xba72, 0xbada);
+  //              -0.4094,  0.0410
+  VLOAD_16(v6, 0xb68d, 0x293e);
+  asm volatile("vfdiv.vv v2, v4, v6");
+  //              1.9678, -20.9062
+  VCMP_U16(1, v2, 0x3fdf, 0xcd3a);
+
+
+  VSET(16, e16, m2);
   //              -0.8057, -0.8564,  0.3425, -0.3066, -0.7314, -0.6396,  0.7588,
   //              -0.3743,  0.8706, -0.3064,  0.0390,  0.6123,  0.0237, -0.6201,
   //              -0.4524,  0.3337
@@ -340,6 +371,7 @@ void TEST_CASE4(void) {
 };
 
 int main(void) {
+  INIT_CHECK();
   enable_vec();
   enable_fp();
   // Change RM to RTZ since there are issues with FDIV + RNE in fpnew

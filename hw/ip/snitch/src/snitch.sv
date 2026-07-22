@@ -2591,6 +2591,8 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           illegal_inst = 1'b1;
         end
       end
+      riscv_instr::VFSQRT_V,
+      riscv_instr::VFDIV_VV,
       riscv_instr::VFADD_VV,
       riscv_instr::VFSUB_VV,
       riscv_instr::VFMIN_VV,
@@ -2714,6 +2716,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           illegal_inst = 1'b1;
         end
       end
+      riscv_instr::VFDIV_VF,
       riscv_instr::VFADD_VF,
       riscv_instr::VFSUB_VF,
       riscv_instr::VFMIN_VF,
