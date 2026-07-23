@@ -110,6 +110,13 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
   output fpnew_pkg::roundmode_e     fpu_rnd_mode_o,
   output fpnew_pkg::fmt_mode_t      fpu_fmt_mode_o,
   input  fpnew_pkg::status_t        fpu_status_i,
+  // Per-core private-L1 (LP1) CMO trigger, driven from the core via CSR.
+  // A `csrw CSR_LP1CMO` asserts lp1_cmo_valid_o (held until lp1_cmo_done_i)
+  // and stalls the core, giving single-instruction, blocking CMOs.
+  output logic                      lp1_cmo_valid_o,
+  output logic [2:0]                lp1_cmo_op_o,
+  output logic [31:0]               lp1_cmo_addr_o,
+  input  logic                      lp1_cmo_done_i,
   // Core events for performance counters
   output snitch_pkg::core_events_t  core_events_o
 );
@@ -353,6 +360,11 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
   logic [AddrWidth > 32 ? (AddrWidth-32-1) : 0:0] mseg_q, mseg_d;
   `FFAR(mseg_q, mseg_d, '0, clk_i, rst_i)
 
+  // LP1 CMO line-address register (written by `csrw CSR_LP1CMOADDR`, consumed
+  // by INVAL_NLINE).  The op comes combinationally from the triggering write.
+  logic [31:0] lp1cmoaddr_q, lp1cmoaddr_d;
+  `FFAR(lp1cmoaddr_q, lp1cmoaddr_d, '0, clk_i, rst_i)
+
   // accelerator offloading interface
   // register int destination in scoreboard
   logic  acc_register_rd;
@@ -469,6 +481,19 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
   // Full fence (FENCE opcode): stall until both Snitch LSU and Spatz are drained.
   logic fence_stall;
   assign fence_stall = valid_instr & (inst_data_i ==? FENCE) & (~lsu_empty | (|acc_mem_cnt_q));
+  // LP1 CMO trigger: `csrw CSR_LP1CMO` requests a private-L1 CMO and blocks the
+  // core until the injector reports completion (lp1_cmo_done_i).  csr_en marks a
+  // CSR access in the stage; we AND valid_instr explicitly (the CSRRW arm sets
+  // csr_en unconditionally) so the trigger is high only for a live, valid CSR
+  // access to CSR_LP1CMO.  Holding valid until done makes it a level request;
+  // when done pulses, lp1_cmo_stall drops the same cycle and the instruction
+  // retires, so the injector (which latches on accept) sees exactly one request.
+  logic lp1_cmo_trig, lp1_cmo_stall;
+  assign lp1_cmo_trig    = valid_instr & csr_en & (inst_data_i[31:20] == CSR_LP1CMO);
+  assign lp1_cmo_stall   = lp1_cmo_trig & ~lp1_cmo_done_i;
+  assign lp1_cmo_valid_o = lp1_cmo_stall;
+  assign lp1_cmo_op_o    = alu_result[2:0];
+  assign lp1_cmo_addr_o  = lp1cmoaddr_q;
   // Stall the stage if we either didn't get a valid instruction or the LSU/Accelerator is not ready
   assign stall = ~valid_instr
                 // The LSU is stalling.
@@ -478,7 +503,9 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
                 // We are waiting on a fence flush.
                 | fence_snitch_stall
                 | fence_spatz_stall
-                | fence_stall;
+                | fence_stall
+                // We are waiting on a private-L1 CMO to complete.
+                | lp1_cmo_stall;
 
   // --------------------
   // Instruction Frontend
@@ -2737,6 +2764,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
 
     satp_d = satp_q;
     mseg_d = mseg_q;
+    lp1cmoaddr_d = lp1cmoaddr_q;
     mpp_d = mpp_q;
     ie_d = ie_q;
     pie_d = pie_q;
@@ -2822,6 +2850,17 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           CSR_MSEG: begin
             csr_rvalue = mseg_q;
             if (!exception) mseg_d = alu_result[$bits(mseg_q)-1:0];
+          end
+          // LP1 CMO line-address register (for INVAL_NLINE).
+          CSR_LP1CMOADDR: begin
+            csr_rvalue = lp1cmoaddr_q;
+            if (!exception) lp1cmoaddr_d = alu_result[31:0];
+          end
+          // LP1 CMO trigger: the op is exported combinationally and the write
+          // blocks via lp1_cmo_stall (handled in the stall logic); no register
+          // state here.  Reads return 0.
+          CSR_LP1CMO: begin
+            csr_rvalue = '0;
           end
           // Privleged Extension:
           CSR_MSTATUS: begin

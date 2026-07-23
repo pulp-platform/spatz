@@ -168,6 +168,13 @@ package snitch_pkg;
   // SSRs
   localparam logic [11:0] CSR_MSEG = 12'hBC0;
 
+  // CachePool per-core private-L1 (LP1) CMO trigger CSRs (machine RW, custom).
+  //   CSR_LP1CMOADDR : holds the cacheline address for INVAL_NLINE.
+  //   CSR_LP1CMO     : write value = op (0=FENCE, 1=INVAL_ALL, 2=INVAL_NLINE);
+  //                    the write blocks the core until the CMO completes.
+  localparam logic [11:0] CSR_LP1CMOADDR = 12'hBC1;
+  localparam logic [11:0] CSR_LP1CMO     = 12'hBC2;
+
   // --------------------
   // Trace Infrastructure
   // --------------------
