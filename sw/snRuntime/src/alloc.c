@@ -93,3 +93,13 @@ void snrt_alloc_init(struct snrt_team_root *team, uint32_t l3off) {
         (uint32_t)&__l3_end - team->allocator.l3.base + 1;
     team->allocator.l3.next = team->allocator.l3.base;
 }
+
+
+/**
+ * @brief Reset the L1 memory allocator
+ * @details Brute-force frees all memory allocated in the L1 TCDM for the current team
+ */
+void snrt_l1alloc_reset(void) {
+    struct snrt_allocator_inst *alloc = &snrt_current_team()->allocator.l1;
+    alloc->next = alloc->base; 
+}
