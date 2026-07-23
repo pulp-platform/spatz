@@ -726,9 +726,16 @@ module spatz_fpu_sequencer
     if (is_move && use_rd && operands_available) begin
       fp_move_result_i = spatz_rsp_t'{
         id     : issue_req_i.id,
-        data   : fpr_rdata[0],
         default: '0
       };
+      // FPR->GPR moves with values narrower than XLEN must sign-extend the
+      // value; the FPR's upper (NaN-box) bits must not leak into the GPR.
+      unique casez (issue_req_i.data_op)
+        riscv_instr::FMV_X_S: fp_move_result_i.data = {{(FLEN-32){fpr_rdata[0][31]}}, fpr_rdata[0][31:0]};
+        riscv_instr::FMV_X_H: fp_move_result_i.data = {{(FLEN-16){fpr_rdata[0][15]}}, fpr_rdata[0][15:0]};
+        riscv_instr::FMV_X_B: fp_move_result_i.data = {{(FLEN- 8){fpr_rdata[0][ 7]}}, fpr_rdata[0][ 7:0]};
+        default:              fp_move_result_i.data = fpr_rdata[0];
+      endcase
       fp_move_result_valid_i = 1'b1;
     end
 
