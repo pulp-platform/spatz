@@ -383,13 +383,13 @@ module spatz_fpu_sequencer
         end
 
         // Floating-Point Load/Store
-        riscv_instr::FLB_SPATZ,
+        riscv_instr::FLB,
         riscv_instr::FLH,
         riscv_instr::FLW,
         riscv_instr::FLD: begin
           use_fd = 1'b1;
           casez (issue_req_i.data_op)
-            riscv_instr::FLB_SPATZ: ls_size    = Byte;
+            riscv_instr::FLB: ls_size    = Byte;
             riscv_instr::FLH: ls_size          = HalfWord;
             riscv_instr::FLW: ls_size          = Word;
             riscv_instr::FLD: if (RVD) ls_size = Double;
@@ -398,13 +398,13 @@ module spatz_fpu_sequencer
           is_load      = 1'b1;
           illegal_inst = !RVD && issue_req_i.data_op inside {riscv_instr::FLD};
         end
-        riscv_instr::FSB_SPATZ,
+        riscv_instr::FSB,
         riscv_instr::FSH,
         riscv_instr::FSW,
         riscv_instr::FSD: begin
           use_fs2 = 1'b1;
           casez (issue_req_i.data_op)
-            riscv_instr::FSB_SPATZ: ls_size    = Byte;
+            riscv_instr::FSB: ls_size    = Byte;
             riscv_instr::FSH: ls_size          = HalfWord;
             riscv_instr::FSW: ls_size          = Word;
             riscv_instr::FSD: if (RVD) ls_size = Double;

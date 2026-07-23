@@ -2323,7 +2323,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
         end
       end
       // Quarter Precision Floating-Point
-      FLB_SPATZ: begin
+      FLB: begin
         if (FP_EN && (XF8 || XF8ALT)) begin
           opa_select = Reg;
           opb_select = IImmediate;
@@ -2351,7 +2351,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           illegal_inst = 1'b1;
         end
       end
-      FSB_SPATZ: begin
+      FSB: begin
         if (FP_EN && (XF8 || XF8ALT)) begin
           opa_select = Reg;
           opb_select = SFImmediate;

@@ -12,26 +12,15 @@ include util/Makefrag
 # Bender version
 BENDER_VERSION = 0.29.1
 
-# Extension selection for the upstream-aligned riscv-opcodes layout.
-# "rv*" covers all ratified extensions (incl. rv_v); Spatz customs live in
-# extensions/unratified/. Note rv_xfrep_spatz is selected INSTEAD of
-# rv_xfrep (see extensions/unratified/README.md in riscv-opcodes).
-OPCODES := "rv*" \
-	"unratified/rv32_xb" \
-	"unratified/rv_xipu" \
-	"unratified/rv_xrrpost" \
-	"unratified/rv_xdma" \
-	"unratified/rv_xssr" \
-	"unratified/rv_xsmallfloat_h" \
-	"unratified/rv_xsmallfloat_b" \
-	"unratified/rv_xsmallfloat_vs" \
-	"unratified/rv_xsmallfloat_vh" \
-	"unratified/rv_xsmallfloat_vb" \
-	"unratified/rv_xsmallfloat_spatz" \
-	"unratified/rv_xvfx" \
-	"unratified/rv_xvfwdotp" \
-	"unratified/rv_xnl" \
-	"unratified/rv_xvmxdotp"
+# Standard opcodes
+OPCODES := "rv_i" "rv64_i" "rv_m" "rv64_m" "rv_a" "rv_f" "rv_d" \
+           "rv_zfh" "rv_zfhmin" "rv_d_zfhmin" "rv_zicsr" "rv_zifencei" \
+           "rv_s" "rv_sdext" "rv_system" "rv_v"
+
+# Custom extensions
+OPCODES += "unratified/rv_xdma" "unratified/rv_xrrpost" \
+           "unratified/rv_xsmallfloat_h" "unratified/rv_xsmallfloat_b" \
+           "unratified/rv_xvfx" "unratified/rv_xvfwdotp"
 
 
 # Default target
