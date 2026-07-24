@@ -476,11 +476,11 @@ module spatz_vlsu
 
     // Global byte position of this port's next index inside the index vector
     logic [$bits(vlen_t)-1:0] idx_gbyte;
-    
+
     assign log2_num_el_maxew = MAXEW - mem_spatz_req.vtype.vsew;                       // log2 of the number of SEW elements packed in one MAXEW-wide element
     assign log2_num_idx_maxew_bytes = log2_num_el_maxew + mem_spatz_req.op_mem.ew;
     assign num_idx_maxew_bytes = 1'b1 << log2_num_idx_maxew_bytes;                     // number of index bytes corresponding to one MAXEW-wide element
-    
+
     assign idx_gbyte = (vlen_t'(port) << log2_num_idx_maxew_bytes)
                      + (mem_idx_counter_q[port] & (num_idx_maxew_bytes - 1))
                      + (((mem_idx_counter_q[port] >> log2_num_idx_maxew_bytes) << log2_num_idx_maxew_bytes) * NrMemPorts);
@@ -1082,7 +1082,7 @@ module spatz_vlsu
       vrf_re_o[0] = 1'b1;
 
     vs2_elem_id_d = vs2_elem_id_q;
-    
+
     // Advance to the next index word only when no port that still has indices to consume needs the current one
     if (mem_is_indexed && |mem_idx_vrf_fetch_pending && !(|(mem_idx_vrf_fetch_pending & mem_idx_word_ok)))
       vs2_elem_id_d = vs2_elem_id_q + 1;
