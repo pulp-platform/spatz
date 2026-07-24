@@ -73,7 +73,7 @@ VSIM_FLAGS += -t 1ps
 VSIM_FLAGS += -do "log -r /*; source ${SPATZ_CLUSTER_DIR}/script/vsim/wave.tcl; run -a"
 
 # Fast simulation for command line simulation
-VSIM_FLAGS_SHELL = $(VSIM_FLAGS) -voptargs=+acc
+VSIM_FLAGS_SHELL = $(VSIM_FLAGS) -voptargs=-O5
 # Full signal visibility for GUI simulation
 VSIM_FLAGS_GUI   = $(VSIM_FLAGS) -voptargs=+acc
 
