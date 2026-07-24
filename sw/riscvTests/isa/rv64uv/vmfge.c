@@ -144,7 +144,7 @@ void TEST_CASE2(void) {
   VCLEAR(v8);
   asm volatile("vmfge.vf v8, v2, %[A], v0.t" ::[A] "f"(dscalar_64));
   VSET(1, e8, m1);
-  VCMP_U8(6, v2, 0x2a);
+  VCMP_U8(6, v8, 0x2a);
 #endif
 };
 
@@ -154,7 +154,7 @@ int main(void) {
   enable_fp();
 
   TEST_CASE1();
-  //TEST_CASE2();
+  TEST_CASE2();
 
   EXIT_CHECK();
 }

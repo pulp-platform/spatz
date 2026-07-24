@@ -1,0 +1,12 @@
+// Copyright 2025 ETH Zurich and University of Bologna.
+// Licensed under the Apache License, Version 2.0, see LICENSE for details.
+// SPDX-License-Identifier: Apache-2.0
+
+{
+    kernel: "SpMM"
+    format: "1_to_4"
+    M: 4
+    N: 8
+    P_W: 64
+    seed: 1
+}

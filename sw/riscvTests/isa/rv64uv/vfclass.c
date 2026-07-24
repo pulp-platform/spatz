@@ -22,14 +22,14 @@ void TEST_CASE3() {
   VEC_CMP_U32(1, v2, 64, 2, 64, 2, 64, 2, 64, 2);
 }
 
-// void TEST_CASE2() {
-//   VSET(4,e64,m2);
-//   VLOAD_F64(v4,_d(1).i,_d(-1).i,_d(3.14159265).i,_d(-3.14159265).i);
-//   VLOAD_U64(v0,12,0,0,0);
-//   CLEAR(v2);
-//   __asm__ volatile("vfclass.v v2, v4, v0.t");
-//   VEC_CMP_U64(2,v2,0,0,64,2);
-// }
+void TEST_CASE2() {
+   VSET(4,e64,m2);
+   VLOAD_F64(v4,_d(1).i,_d(-1).i,_d(3.14159265).i,_d(-3.14159265).i);
+   VLOAD_U64(v0,12,0,0,0);
+   CLEAR(v2);
+   __asm__ volatile("vfclass.v v2, v4, v0.t");
+   VEC_CMP_U64(2,v2,0,0,64,2);
+ }
 
 int main(void) {
   INIT_CHECK();
@@ -37,6 +37,6 @@ int main(void) {
   enable_fp();
   TEST_CASE1();
   TEST_CASE3();
-  // TEST_CASE2();
+  TEST_CASE2();
   EXIT_CHECK();
 }

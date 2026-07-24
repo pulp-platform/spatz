@@ -15,20 +15,20 @@ void TEST_CASE1() {
               _f(36.5696602).i);
 }
 
-// void TEST_CASE2() {
-//   VSET(4,e32,m2);
-//   VLOAD_F32(v4,_f(9).i,_f(3).i,_f(3.14159265).i,_f(1337.34).i);
-//   VLOAD_U32(v0,5,0,0,0);
-//   VLOAD_F32(v2,_f(1337).i,_f(1337).i,_f(1337).i,_f(1337).i);
-//   __asm__ volatile("vfsqrt.v v2,v4, v0.t");
-//   VEC_CMP_F32(2,v2,_f(3).i,_f(1337).i,_f(1.7724539).i,_f(1337).i);
-// }
+void TEST_CASE2() {
+  VSET(4,e32,m2);
+  VLOAD_F32(v4,_f(9).i,_f(3).i,_f(3.14159265).i,_f(1337.34).i);
+  VLOAD_U32(v0,5,0,0,0);
+  VLOAD_F32(v2,_f(1337).i,_f(1337).i,_f(1337).i,_f(1337).i);
+  __asm__ volatile("vfsqrt.v v2,v4, v0.t");
+  VEC_CMP_F32(2,v2,_f(3).i,_f(1337).i,_f(1.7724539).i,_f(1337).i);
+}
 
 int main(void) {
   INIT_CHECK();
   enable_vec();
   enable_fp();
   TEST_CASE1();
-  // TEST_CASE2();
+  TEST_CASE2();
   EXIT_CHECK();
 }

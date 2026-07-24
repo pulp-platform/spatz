@@ -1,0 +1,116 @@
+// Copyright 2021 ETH Zurich and University of Bologna.
+// Solderpad Hardware License, Version 0.51, see LICENSE for details.
+// SPDX-License-Identifier: SHL-0.51
+
+#include "vector_macros.h"
+
+//**********Checking functionality of vle16 ********//
+void TEST_CASE1(void) {
+  VSET(16, e16, m1);
+  volatile uint16_t INP1[] = {0xFF00, 0xFF9f, 0xFFe4, 0xFF19, 0xFF20, 0xFF8f, 0xFF2e, 0xFF05,
+                              0xFFe0, 0xFFf9, 0xFFaa, 0xFF71, 0xFFf0, 0xFFc3, 0xFF94, 0xFFbb};
+
+  asm volatile("vle16.v v1, (%0)" ::"r"(INP1));
+  VCMP_U16(1, v1, 0xFF00, 0xFF9f, 0xFFe4, 0xFF19, 0xFF20, 0xFF8f, 0xFF2e, 0xFF05,
+                  0xFFe0, 0xFFf9, 0xFFaa, 0xFF71, 0xFFf0, 0xFFc3, 0xFF94, 0xFFbb);
+}
+
+//*******Checking functionality of vle16 with different values of masking register******//
+void TEST_CASE2(void) {
+  VSET(2, e8, m1);
+  VCLEAR(v0);
+  VLOAD_8(v0, 0xFF, 0xFF);
+
+  VSET(16, e16, m1);
+  volatile uint16_t INP1[] = {0xFFe0, 0xFFd3, 0xFF40, 0xFFd1, 0xFF84, 0xFF48, 0xFF89, 0xFF88,
+                              0xFF88, 0xFFae, 0xFF08, 0xFF91, 0xFF02, 0xFF59, 0xFF11, 0xFF89};
+  VCLEAR(v1);
+  asm volatile("vle16.v v1, (%0), v0.t" ::"r"(INP1));
+  VCMP_U16(2, v1, 0xFFe0, 0xFFd3, 0xFF40, 0xFFd1, 0xFF84, 0xFF48, 0xFF89, 0xFF88,
+                  0xFF88, 0xFFae, 0xFF08, 0xFF91, 0xFF02, 0xFF59, 0xFF11, 0xFF89);
+}
+
+void TEST_CASE3(void) {
+  VSET(2, e8, m1);
+  VCLEAR(v0);
+  VLOAD_8(v0, 0x00, 0x00);
+
+  VSET(16, e16, m1);
+  volatile uint16_t INP1[] = {0xFFe0, 0xFFd3, 0xFF40, 0xFFd1, 0xFF84, 0xFF48, 0xFF89, 0xFF88,
+                              0xFF88, 0xFFae, 0xFF08, 0xFF91, 0xFF02, 0xFF59, 0xFF11, 0xFF89};
+  VLOAD_16(v1, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16);
+  asm volatile("vle16.v v1, (%0), v0.t" ::"r"(INP1));
+  VCMP_U16(3, v1, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16);
+}
+
+void TEST_CASE4(void) {
+  VSET(2, e8, m1);
+  VCLEAR(v0);
+  VLOAD_8(v0, 0xAA, 0xAA);
+
+  VSET(16, e16, m1);
+  volatile uint16_t INP1[] = {0xFFe0, 0xFFd3, 0xFF40, 0xFFd1, 0xFF84, 0xFF48, 0xFF89, 0xFF88,
+                              0xFF88, 0xFFae, 0xFF08, 0xFF91, 0xFF02, 0xFF59, 0xFF11, 0xFF89};
+  VCLEAR(v1);
+  VLOAD_16(v1, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16);
+
+  asm volatile("vle16.v v1, (%0), v0.t" ::"r"(INP1));
+  VCMP_U16(4, v1, 1, 0xFFd3, 3, 0xFFd1, 5, 0xFF48, 7, 0xFF88,
+                  9, 0xFFae, 11, 0xFF91, 13, 0xFF59, 15, 0xFF89);
+}
+
+void TEST_CASE5(void) {
+  VSET(2, e8, m1);
+  VCLEAR(v0);
+  VLOAD_8(v0, 0xAA, 0xAA);
+
+  VSET(16, e16, m8);
+  volatile uint16_t INP1[] = {0xFFe0, 0xFFd3, 0xFF40, 0xFFd1, 0xFF84, 0xFF48, 0xFF89, 0xFF88,
+                              0xFF88, 0xFFae, 0xFF08, 0xFF91, 0xFF02, 0xFF59, 0xFF11, 0xFF89};
+  VCLEAR(v8);
+  VLOAD_16(v8, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16);
+
+  asm volatile("vle16.v v8, (%0), v0.t" ::"r"(INP1));
+  VCMP_U16(5, v8, 1, 0xFFd3, 3, 0xFFd1, 5, 0xFF48, 7, 0xFF88,
+                  9, 0xFFae, 11, 0xFF91, 13, 0xFF59, 15, 0xFF89);
+}
+
+void TEST_CASE6(void) {
+  VSET(8, e8, m1);
+  VCLEAR(v0);
+  VLOAD_8(v0, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA);
+
+  VSET(64, e16, m8);
+  volatile uint16_t INP1[] = {
+        0x0000, 0x0001, 0x0002, 0x0003, 0x0004, 0x0005, 0x0006, 0x0007,
+        0x0008, 0x0009, 0x000A, 0x000B, 0x000C, 0x000D, 0x000E, 0x000F,
+        0x0010, 0x0011, 0x0012, 0x0013, 0x0014, 0x0015, 0x0016, 0x0017,
+        0x0018, 0x0019, 0x001A, 0x001B, 0x001C, 0x001D, 0x001E, 0x001F,
+        0x0020, 0x0021, 0x0022, 0x0023, 0x0024, 0x0025, 0x0026, 0x0027,
+        0x0028, 0x0029, 0x002A, 0x002B, 0x002C, 0x002D, 0x002E, 0x002F,
+        0x0030, 0x0031, 0x0032, 0x0033, 0x0034, 0x0035, 0x0036, 0x0037,
+        0x0038, 0x0039, 0x003A, 0x003B, 0x003C, 0x003D, 0x003E, 0x003F
+};
+  VCLEAR(v8);
+  VLOAD_16(v8,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15, 16,
+               17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32,
+               33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48,
+               49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64);
+
+  asm volatile("vle16.v v8, (%0), v0.t" ::"r"(INP1));
+  VCMP_U16(6, v8,  1, 0x0001,  3, 0x0003,  5, 0x0005,  7, 0x0007,  9, 0x0009, 11, 0x000B, 13, 0x000D, 15, 0x000F,
+                  17, 0x0011, 19, 0x0013, 21, 0x0015, 23, 0x0017, 25, 0x0019,27, 0x001B, 29, 0x001D, 31, 0x001F,
+                  33, 0x0021, 35, 0x0023, 37, 0x0025, 39, 0x0027, 41, 0x0029, 43, 0x002B, 45, 0x002D, 47, 0x002F,
+                  49, 0x0031, 51, 0x0033, 53, 0x0035, 55, 0x0037, 57, 0x0039, 59, 0x003B, 61, 0x003D, 63, 0x003F);
+}
+int main(void) {
+INIT_CHECK();
+enable_vec();
+TEST_CASE1();
+TEST_CASE2();
+TEST_CASE3();
+TEST_CASE4();
+TEST_CASE5();
+TEST_CASE6();
+EXIT_CHECK();
+}

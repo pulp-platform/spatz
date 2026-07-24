@@ -52,11 +52,16 @@ void TEST_CASE1() {
 void TEST_CASE2() {
   uint64_t scalar = 99;
 
-  VSET(32, e8, m8);
-  VLOAD_8(v16, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
-          20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32);
+  // VSET(32, e8, m8);
+  // VLOAD_8(v16, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+  //         20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32);
   VSET(16, e8, m8);
   VLOAD_8(v16, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16);
+  // volatile uint8_t ALIGNED_I8[16];
+  // asm volatile("vse8.v v16, (%0)" ::"r"(ALIGNED_I8));
+  // for(int i = 0; i<16; i++){
+  //   printf("ALIGNED_I8[%d]= %d \n",  i ,ALIGNED_I8[i]);
+  // }
   VLOAD_8(v8, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1);
   VLOAD_8(v0, 0xAA, 0xAA);
   asm volatile("vslide1down.vx v8, v16, %[A], v0.t" ::[A] "r"(scalar));
@@ -100,7 +105,7 @@ int main(void) {
   enable_vec();
 
   TEST_CASE1();
-  // TEST_CASE2();
+  TEST_CASE2();
 
   EXIT_CHECK();
 }

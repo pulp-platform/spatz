@@ -32,6 +32,10 @@ endif
 # Enable additional uA configurations for the spatz core
 DOUBLE_BW := $(shell python3 -c "import jstyleson; print(jstyleson.load(open('$(SPATZ_CLUSTER_CFG_PATH)'))['cluster'].get('double_bw', 0))")
 BUF_FPU := $(shell python3 -c "import jstyleson; print(jstyleson.load(open('$(SPATZ_CLUSTER_CFG_PATH)'))['cluster'].get('buf_fpu', 0))")
+# Ventaglio (VTL) compile-time gate. If the cluster has `ventaglio: true` in the
+# hjson (a Spatz/cluster-level extension), define VENTAGLIO so the RTL `ifdef
+# VENTAGLIO ... `endif blocks pull in the VTL integration.
+SPATZ_CLUSTER_VENTAGLIO := $(shell python3 -c "import jstyleson; f = open('$(SPATZ_CLUSTER_CFG_PATH)'); print(1 if jstyleson.load(f)['cluster'].get('ventaglio', False) else 0)")
 
 ifeq ($(DOUBLE_BW),1)
 	DEFS += -DDOUBLE_BW
@@ -40,6 +44,12 @@ endif
 
 ifeq ($(BUF_FPU),1)
 	DEFS += -DBUF_FPU
+endif
+
+ifeq ($(SPATZ_CLUSTER_VENTAGLIO),1)
+	DEFS += -DVENTAGLIO
+	BENDER_CFG_TARGETS += -t ventaglio
+	SPATZ_CLUSTER_CFG_DEFINES += -DSPATZ_CLUSTER_VENTAGLIO=1
 endif
 
 # Include Makefrag
@@ -118,9 +128,8 @@ spatz.gendata:
 		data_dir="$$benchmark_dir/data"; \
 		if [ -d "$$script_dir" ]; then \
 			json_count=$$(find "$$script_dir" -name '*.json' -type f | wc -l); \
-			data_count=$$(find "$$data_dir" -name 'data*.h' -type f 2>/dev/null | wc -l); \
-			if [ "$$json_count" -ne "$$data_count" ]; then \
-				echo "Generating data for benchmark $$benchmark_dir ($$json_count json configs, $$data_count data files found)"; \
+			if [ "$$json_count" -gt 0 ]; then \
+				echo "Generating data for benchmark $$benchmark_dir ($$json_count json configs)"; \
 				for config in "$$script_dir"/*.json; do \
 					if [ -f "$$config" ]; then \
 						config_path="script/$$(basename $$config)"; \
@@ -128,7 +137,7 @@ spatz.gendata:
 					fi \
 				done \
 			else \
-				echo "Data already present for benchmark $$benchmark_dir ($$json_count data files)"; \
+				echo "No json data configs for benchmark $$benchmark_dir"; \
 			fi \
 		fi \
 	done
@@ -229,7 +238,7 @@ lint: generate lint/tmp/files lint/sdc/func.sdc lint/script/lint.tcl
 
 lint/tmp/files: ${BENDER}
 	mkdir -p lint/tmp
-	${BENDER} script verilator -t rtl -t spatz ${DEFS} > lint/tmp/files
+	${BENDER} script verilator -t rtl -t spatz ${BENDER_CFG_TARGETS} ${DEFS} > lint/tmp/files
 
 ######
 # SW #

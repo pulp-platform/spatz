@@ -30,7 +30,7 @@ void TEST_CASE1() {
   avl = 69;
   __asm__ volatile("vsetvli %[vl], %[avl], e64, m8, ta, ma" : [vl]"=r"(vl) : [avl] "r"(avl));
   XCMP(4, vl, snrt_min(avl, vlenb * 8 / 8));
-#endif 
+#endif
 
   // SEW=128 not supported
   // avl = 69;
