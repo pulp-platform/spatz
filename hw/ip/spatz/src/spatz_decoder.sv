@@ -931,6 +931,7 @@ module spatz_decoder
         riscv_instr::VFSQRT_V,
         riscv_instr::VFDIV_VV,
         riscv_instr::VFDIV_VF,
+        riscv_instr::VFADD_VV,
         riscv_instr::VFADD_VF,
         riscv_instr::VFSUB_VV,
         riscv_instr::VFSUB_VF,
