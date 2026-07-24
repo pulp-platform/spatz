@@ -30,6 +30,19 @@ The Spatz cluster system (hw/system/spatz_cluster) is a fundamental system aroun
 
 In `hw/system/spatz_cluster`:
 
+- DRAMSys
+
+To compile DRAMSys for the simulation, run the following commands _once_ to download and build the DRAMSys library, and install our DDR4/HBM2E configs.
+```bash
+  make dram-init
+  make dram-build
+```
+
+If the DRAM config is changed  in `tb/dram_config/`, the DRAM model need to be re-build with commands:
+```bash
+  make dram-clean && make dram-build
+```
+
 - Compile the software and the binaries:
   - Verilator:
 ```bash

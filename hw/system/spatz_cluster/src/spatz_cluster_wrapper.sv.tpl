@@ -252,6 +252,7 @@ module ${cfg['name']}_wrapper
   input  logic [NumCores-1:0] meip_i,
   input  logic [NumCores-1:0] mtip_i,
   input  logic [NumCores-1:0] msip_i,
+  output logic [3:0]          eoc_o,
 % if not cfg['tie_ports']:
   input  logic [9:0]                    hart_base_id_i,
   input  logic [AxiAddrWidth-1:0]       cluster_base_addr_i,
@@ -546,6 +547,7 @@ module ${cfg['name']}_wrapper
     .meip_i,
     .mtip_i,
     .msip_i,
+    .eoc_o,
 % if cfg['tie_ports']:
     .hart_base_id_i (${to_sv_hex(cfg['cluster_base_hartid'], 10)}),
     .cluster_base_addr_i (${to_sv_hex(cfg['cluster_base_addr'], cfg['addr_width'])}),

@@ -10,6 +10,12 @@ MEMORY
     DRAM (rwxa)  : ORIGIN = @MEM_DRAM_ORIGIN@, LENGTH = @MEM_DRAM_SIZE@
 }
 
+/* Testbench fake UART for printf (see axi_uart in the testharness) */
+SECTIONS
+{
+  fake_uart = 0xA0000000;
+}
+
 SECTIONS
 {
   /* The program code and other data goes into DRAM */

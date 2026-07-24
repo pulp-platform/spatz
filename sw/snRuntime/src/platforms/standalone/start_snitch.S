@@ -29,6 +29,15 @@ _snrt_exit:
     ori       t0, t0, 1
     la        t1, tohost
     sw        t0, 0(t1)
+
+    # Also report end of computation via the cluster peripheral register, for
+    # testbenches that cannot observe `tohost` in memory (e.g. DRAMSys).
+    addi      sp, sp, -8
+    sw        ra, 4(sp)
+    mv        a0, t0
+    call      snrt_set_eoc_and_return_code
+    lw        ra, 4(sp)
+    addi      sp, sp, 8
 1:  ret
 
 # HTIF sections

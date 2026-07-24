@@ -30,6 +30,7 @@ module spatz_cluster_peripheral
   input  addr_t                      tcdm_start_address_i,
   input  addr_t                      tcdm_end_address_i,
   output logic                       icache_prefetch_enable_o,
+  output logic [3:0]                 eoc_o,
   output logic [NrCores-1:0]         cl_clint_o,
   output logic                       cluster_probe_o,
   input  logic [9:0]                 cluster_hart_base_id_i,
@@ -84,6 +85,10 @@ module spatz_cluster_peripheral
 
   // Probe
   assign cluster_probe_o = reg2hw.spatz_status.q;
+
+  // End of computation flag and exit status. The runtime writes retval+1, so
+  // a non-zero value marks completion for the testbench.
+  assign eoc_o = reg2hw.cluster_eoc_exit.q[3:0];
 
   // Continuously assign the perf values.
   for (genvar i = 0; i < NumPerfCounters; i++) begin : gen_perf_assign

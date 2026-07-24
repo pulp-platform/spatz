@@ -6,9 +6,16 @@
 
 SPATZ_DIR := $(shell git rev-parse --show-toplevel 2>/dev/null || echo $$SPATZ_DIR)
 ROOT := ${SPATZ_DIR}
+BENDER ?= bender
 SPATZ_CLUSTER_DIR := ${SPATZ_DIR}/hw/system/spatz_cluster
 MKFILE_PATH := $(abspath $(lastword $(MAKEFILE_LIST)))
 MKFILE_DIR  := $(dir $(MKFILE_PATH))
+# DRAMSys
+DRAMSYS_DIR      := $(shell $(BENDER) path dram_rtl_sim)
+DRAMSYS_PATH     := ${DRAMSYS_DIR}/dramsys_lib/DRAMSys
+DRAMSYS_LIB_PATH := ${DRAMSYS_PATH}/build/lib
+DRAMSYS_RES_PATH := ${DRAMSYS_PATH}/configs
+USE_DRAMSYS ?= 1
 
 # Configuration file
 SPATZ_CLUSTER_CFG         ?= spatz_cluster.default.dram.hjson
@@ -56,9 +63,10 @@ endif
 include $(ROOT)/util/Makefrag
 
 # QuestaSim
-VSIM      = questa-2021.3-kgf vsim
-VLOG      = questa-2021.3-kgf vlog
-VSIM_HOME = /usr/pack/questa-2021.3-kgf/questasim
+QUESTA_VER ?= questa-2025.3
+VSIM        = ${QUESTA_VER} vsim
+VLOG        = ${QUESTA_VER} vlog
+VSIM_HOME   = /usr/pack/${QUESTA_VER}-dz/questasim
 
 VSIM_FLAGS += -t 1ps
 VSIM_FLAGS += -do "log -r /*; source ${SPATZ_CLUSTER_DIR}/script/vsim/wave.tcl; run -a"
@@ -74,6 +82,14 @@ VLOG_FLAGS += -suppress 2583
 VLOG_FLAGS += -suppress 13314
 VLOG_FLAGS += -64
 
+ifeq ($(USE_DRAMSYS),1)
+  VSIM_BENDER += -t DRAMSYS
+  VSIM_FLAGS  += +DRAMSYS_RES=$(DRAMSYS_RES_PATH)
+  VSIM_FLAGS  += -sv_lib $(DRAMSYS_LIB_PATH)/libsystemc
+  VSIM_FLAGS  += -sv_lib $(DRAMSYS_LIB_PATH)/libDRAMSys_Simulator
+  VSIM_FLAGS  += -sv_lib ${MKFILE_DIR}${DPI_LIB}/spatz_dpi
+endif
+
 # Verilated and compiled Spatz system
 VLT_ROOT = ${VERILATOR_INSTALL_DIR}/share/verilator
 VLT_AR   = ${VLT_BUILDDIR}/Vtestharness__ALL.a
@@ -83,6 +99,26 @@ all:
 test: ${VSIM_SOURCES} ${TB_SRCS}
 	echo ${VSIM_SOURCES}
 	touch test
+
+#############
+# DPI Build #
+#############
+SIM_DIR        ?= .
+DPI_PATH       ?= ../../ip/snitch_test/src
+DPI_LIB        ?= work-dpi
+
+dpi_target := $(patsubst ${DPI_PATH}/%.cpp,${SIM_DIR}/${DPI_LIB}/%.o,$(wildcard ${DPI_PATH}/*.cpp))
+
+.PHONY: dpi
+dpi: ${SIM_DIR}/${DPI_LIB}/spatz_dpi.so
+
+${SIM_DIR}/${DPI_LIB}/%.o: ${DPI_PATH}/%.cpp
+	mkdir -p ${SIM_DIR}/${DPI_LIB}
+	$(CXX) -shared -fPIC -std=c++11 -Bsymbolic -c $< -I$(VSIM_HOME)/include -o $@
+
+${SIM_DIR}/${DPI_LIB}/spatz_dpi.so: ${dpi_target}
+	mkdir -p ${SIM_DIR}/${DPI_LIB}
+	$(CXX) -shared -m64 -o ${SIM_DIR}/${DPI_LIB}/spatz_dpi.so $^
 
 ###############
 # C testbench #
@@ -156,6 +192,47 @@ spatz.cleandata:
 	done
 	@echo "All benchmark data cleaned."
 
+## DramSys: download/first build of dram_rtl_sim (run once after clone)
+.PHONY: dram-init
+dram-init:
+	make -C ${DRAMSYS_DIR} -j8 dramsys CXX=$(CXX) CC=$(CC)
+
+## Install the customized DRAM configurations into the DRAMSys config tree
+.PHONY: dram-config
+dram-config:
+	cp tb/dram_config/am_hbm2e_16Gb_pc_brc.json $(DRAMSYS_PATH)/configs/addressmapping/.
+	cp tb/dram_config/mc_hbm2e_fr_fcfs_grp.json $(DRAMSYS_PATH)/configs/mcconfig/.
+	cp tb/dram_config/ms_hbm2e_16Gb_3600.json $(DRAMSYS_PATH)/configs/memspec/.
+	cp tb/dram_config/simconfig_hbm2e.json $(DRAMSYS_PATH)/configs/simconfig/.
+	@if [ -f $(DRAMSYS_PATH)/configs/hbm2-example.json ] && [ ! -f $(DRAMSYS_PATH)/configs/hbm2-example.json.ori ]; then \
+		mv $(DRAMSYS_PATH)/configs/hbm2-example.json \
+		   $(DRAMSYS_PATH)/configs/hbm2-example.json.ori; \
+	fi
+	cp tb/dram_config/HBM2E-3600.json $(DRAMSYS_PATH)/configs/hbm2-example.json
+	cp tb/dram_config/am_ddr4.json $(DRAMSYS_PATH)/configs/addressmapping/.
+	cp tb/dram_config/simconfig_ddr4.json $(DRAMSYS_PATH)/configs/simconfig/.
+	@if [ -f $(DRAMSYS_PATH)/configs/ddr4-example.json ] && [ ! -f $(DRAMSYS_PATH)/configs/ddr4-example.json.ori ]; then \
+		mv $(DRAMSYS_PATH)/configs/ddr4-example.json \
+		   $(DRAMSYS_PATH)/configs/ddr4-example.json.ori; \
+	fi
+	cp tb/dram_config/DDR4-2400.json $(DRAMSYS_PATH)/configs/ddr4-example.json
+
+## Build DRAMSys with the customized configurations
+.PHONY: dram-build
+dram-build: dram-config
+	cd $(DRAMSYS_PATH) && \
+	if [ ! -d "build" ]; then \
+		mkdir build && cd build; \
+		$(CMAKE) -DCMAKE_CXX_FLAGS=-fPIC -DCMAKE_C_FLAGS=-fPIC -D DRAMSYS_WITH_DRAMPOWER=ON .. ; \
+		make -j; \
+	fi
+
+.PHONY: dram-clean
+dram-clean:
+	if [ -d "$(DRAMSYS_PATH)/build" ]; then \
+		rm -rf $(DRAMSYS_PATH)/build; \
+	fi
+
 #############
 # Verilator #
 #############
@@ -199,10 +276,13 @@ clean.vlt:
 ${VSIM_BUILDDIR}/compile.vsim.tcl: test/bootrom.bin $(VSIM_SOURCES) ${TB_SRCS} ${TB_DIR}/rtl_lib.cc ${TB_DIR}/common_lib.cc test/bootdata.cc test/bootrom.bin
 	vlib $(dir $@)
 	${BENDER} script vsim ${VSIM_BENDER} ${DEFS} --vlog-arg="${VLOG_FLAGS} -work $(dir $@) " > $@
-	echo '${VLOG} -work $(dir $@) ${TB_DIR}/rtl_lib.cc ${TB_DIR}/common_lib.cc test/bootdata.cc -ccflags "-std=c++17 -I${MKFILE_DIR}/test -I${MKFILE_DIR}/work/include -I${TB_DIR}"' >> $@
-	echo '${VLOG} -work $(dir $@) test/uartdpi/uartdpi.c -ccflags "-Itest/uartdpi"' >> $@
+	echo '${VLOG} -work $(dir $@) ${TB_DIR}/rtl_lib.cc ${TB_DIR}/common_lib.cc test/bootdata.cc -ccflags "-std=c++17 -I${MKFILE_DIR}/test -I${MKFILE_DIR}/work/include -I${TB_DIR}"  -cpppath "${CXX}"' >> $@
+	echo '${VLOG} -work $(dir $@) test/uartdpi/uartdpi.c -ccflags "-Itest/uartdpi" -cpppath "${CXX}"' >> $@
 	echo 'return 0' >> $@
 
+ifeq ($(USE_DRAMSYS),1)
+bin/spatz_cluster.vsim: dpi
+endif
 bin/spatz_cluster.vsim: ${VSIM_BUILDDIR}/compile.vsim.tcl work/lib/libfesvr_vsim.a
 	mkdir -p bin/logs
 	$(call QUESTASIM,tb_bin)

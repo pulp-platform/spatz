@@ -1,0 +1,15 @@
+diff --git a/src/axi_dram_sim.sv b/src/axi_dram_sim.sv
+index 789c9a0..a3de008 100644
+--- a/src/axi_dram_sim.sv
++++ b/src/axi_dram_sim.sv
+@@ -104,7 +104,9 @@ module axi_dram_sim #(
+         .data_i     (ar_user_in                                     ),
+         .push_i     (dram_axi_req.ar_valid & dram_axi_resp.ar_ready ),
+         .data_o     (ar_user_out                                    ),
+-        .pop_i      (dram_axi_resp.r_valid & dram_axi_req.r_ready   )
++        // Pop once per burst (on the last beat): one AR handshake pushes one
++        // entry, while a burst returns multiple R beats.
++        .pop_i      (dram_axi_resp.r_valid & dram_axi_req.r_ready & dram_axi_resp.r.last)
+     );
+ 
+     fifo_v3 #(

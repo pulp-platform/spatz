@@ -3,10 +3,13 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "snrt.h"
 
-void snrt_putchar(char character);
+// Write characters to the testbench fake UART at 0xA000_0000 (see the
+// `fake_uart` symbol in the linker script). Unlike the HTIF syscall path in
+// snrt_putchar, this also works when main memory is modeled by DRAMSys and
+// the host cannot observe the putchar buffer.
+extern volatile char fake_uart;
 
-// Use snrt_putchar for printf
-#define _putchar snrt_putchar
+void _putchar(char character) { fake_uart = character; }
 
 /// vendor printf settings
 
