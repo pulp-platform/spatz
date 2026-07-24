@@ -1575,6 +1575,10 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
       logic int_fpu_in_valid;
       assign int_fpu_in_valid = spatz_req_valid && operands_ready && (!spatz_req.op_arith.is_scalar || fpu == 0) && is_fpu_insn;
 
+      // Only the FPU0 retires scalar instructions
+      logic int_fpu_out_ready;
+      assign int_fpu_out_ready = result_ready && (!result_tag.wb || fpu == 0);
+
       // Generate an FPU pipeline
       elen_t fpu_operand1_q, fpu_operand2_q, fpu_operand3_q;
       operation_e fpu_op_q;
@@ -1627,7 +1631,7 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
         .rnd_mode_i    (rm_q                                                   ),
         .result_o      (fpu_result[fpu*ELEN +: ELEN]                           ),
         .out_valid_o   (int_fpu_result_valid                                   ),
-        .out_ready_i   (result_ready                                           ),
+        .out_ready_i   (int_fpu_out_ready                                      ),
         .status_o      (fpu_status_d[fpu]                                      ),
         .tag_o         (tag                                                    )
       );
