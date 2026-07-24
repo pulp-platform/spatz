@@ -165,12 +165,8 @@ module snitch_lsu #(
   assign shifted_data = data_rsp_i.p.data >> {laq_out.offset, 3'b000};
   always_comb begin
     unique case (laq_out.size)
-      // NaN-boxing a narrow FP load into a wider FP register is unconditional per
-      // the RISC-V spec, so it must not be gated on sign-extension. The original
-      // (data[msb] | NaNBox) & sign_ext dropped the boxing when sign_ext=0, which
-      // is always so for the FP LSU (fp_lsu_qsigned=0), so flw zero-extended. The
-      // rewritten (data[msb] & sign_ext) | NaNBox is bit-identical for the integer
-      // LSU (NaNBox=0) and forces the upper bits to all-ones for the FP LSU.
+      // Narrow FP loads NaN-box unconditionally (upper bits all 1s) rather than
+      // sign-extend; sign_ext only applies to integer loads (NaNBox = 0).
       2'b00: ld_result = {{56{(shifted_data[7]  & laq_out.sign_ext) | NaNBox}}, shifted_data[7:0]};
       2'b01: ld_result = {{48{(shifted_data[15] & laq_out.sign_ext) | NaNBox}}, shifted_data[15:0]};
       2'b10: ld_result = {{32{(shifted_data[31] & laq_out.sign_ext) | NaNBox}}, shifted_data[31:0]};
