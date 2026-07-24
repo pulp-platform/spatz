@@ -31,8 +31,8 @@ package quadrilatero_pkg;
   localparam tech_e MRF_TECH = FF;
 
   // DataTypes parameters
-  localparam bit EN_FP32     = 1'b1;
-  localparam bit EN_FP16     = 1'b1;
+  localparam bit EN_FP32     = 1'b0;
+  localparam bit EN_FP16     = 1'b0;
   localparam bit EN_FP8      = 1'b1;
   localparam bit EN_INT32    = 1'b1;
   localparam bit EN_INT16    = 1'b1;
