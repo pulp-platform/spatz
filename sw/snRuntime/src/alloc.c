@@ -101,5 +101,5 @@ void snrt_alloc_init(struct snrt_team_root *team, uint32_t l3off) {
  */
 void snrt_l1alloc_reset(void) {
     struct snrt_allocator_inst *alloc = &snrt_current_team()->allocator.l1;
-    alloc->next = alloc->base; 
+    alloc->next = alloc->base;
 }
