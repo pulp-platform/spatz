@@ -553,6 +553,27 @@ module spatz_mempool_cc
   int unsigned sp_fpuc  [SpNId];
   int unsigned sp_memc  [SpNId];
 
+  // ---- PC / raw-instruction correlation (so a trace line can be matched to the .dasm) ----------
+  // The Spatz side has no PC of its own: an offloaded instruction arrives over the acc interface
+  // carrying only data_op. We snapshot (pc, insn) at the OFFLOAD HANDSHAKE, where i_snitch.pc_q is
+  // still the offending instruction's PC, and carry it forward:
+  //   * non-local (vector) ops  -> a small in-order FIFO, popped when the controller assigns an id,
+  //                                then held per-id so ISSUE and RETIRE can both print it.
+  //   * local ops (flw/fsw/fmv) -> held per FP DEST REGISTER, so an out-of-order FP-LSU writeback
+  //                                can still name the instruction that produced it.
+  // CAVEAT: the vector FIFO assumes every accepted non-local op eventually reaches spatz_req_valid_o
+  // exactly once and in order. An ILLEGAL vector instruction is popped by the controller without
+  // asserting spatz_req_valid_o and would desync the PC column (the cycle/op fields stay correct).
+  // Each line also prints the raw insn, so a mismatch is detectable.
+  localparam int unsigned SpPcFifoDepth = 8;
+  logic [31:0] sp_pcf_pc   [SpPcFifoDepth];
+  logic [31:0] sp_pcf_insn [SpPcFifoDepth];
+  int unsigned sp_pcf_wr, sp_pcf_rd;
+  logic [31:0] sp_pc      [SpNId];   // PC of the vector insn occupying each in-flight id
+  logic [31:0] sp_insn    [SpNId];
+  logic [31:0] sp_fpr_pc  [32];      // PC of the insn that will write each FP register
+  logic [31:0] sp_fpr_insn[32];
+
   // verilog_lint: waive-start always-ff-non-blocking
   always_ff @(posedge rst_i) begin
     if (rst_i) begin
@@ -563,11 +584,11 @@ module spatz_mempool_cc
       sp_cyc_f  = $fopen(sp_cyc_fn,  "w");
       sp_fpl_f  = $fopen(sp_fpl_fn,  "w");
       $fwrite(sp_insn_f,
-        "# EVENT cyc id unit op vd vs1 vs2 vl  [RETIRE adds: active stall ipu_cyc fpu_cyc mem_beats]\n");
+        "# ISSUE cyc id unit op pc insn vd vs1 vs2 vl / RETIRE cyc id unit op pc insn active stall ipu_cyc fpu_cyc mem_beats\n");
       $fwrite(sp_cyc_f,
-        "# cyc state reason run_ids ipu_busy ipu_vld fpu_vld vlsu_state mem_req mem_rsp\n");
+        "# cyc state reason(ALL active) run ipu_busy ipu_vld fpu_vld vlsu mem_req mem_rsp vfu_ins vfu_opr vfu_stl sb_deps  |  vfu_ins=1&vfu_opr=0 => VFU WAITING FOR DATA, not computing\n");
       $fwrite(sp_fpl_f,
-        "# scalar FP-LSU (flw/fsw via FPU sequencer, tag=fd). REQ cyc addr tag L|S / RSP cyc tag / STALL cyc reason\n");
+        "# FP sequencer. ISSUE cyc pc insn kind(load|store|move|vector) fd / RETIRE cyc port(fpu|lsu) fd pc insn / REQ cyc addr tag(=fd) L|S / RSP cyc tag / STALL cyc reason(ALL active) pc\n");
       $display("[SpatzTracer] Logging Hart %0d to %s + %s + %s",
                hart_id_i, sp_insn_fn, sp_cyc_fn, sp_fpl_fn);
     end
@@ -594,7 +615,10 @@ module spatz_mempool_cc
       for (int k = 0; k < SpNId; k++) begin
         sp_act[k] = 0; sp_stall[k] = 0; sp_ipuc[k] = 0; sp_fpuc[k] = 0; sp_memc[k] = 0;
         sp_isvfu[k] = 1'b0; sp_islsu[k] = 1'b0; sp_op[k] = "-"; sp_unit[k] = "-";
+        sp_pc[k] = '0; sp_insn[k] = '0;
       end
+      sp_pcf_wr = 0; sp_pcf_rd = 0;
+      for (int k = 0; k < 32; k++) begin sp_fpr_pc[k] = '0; sp_fpr_insn[k] = '0; end
     end else begin
       en      = i_snitch.csr_trace_q || (SpatzTraceOn != 0);
       run_now = i_spatz.i_controller.running_insn_q;
@@ -609,12 +633,18 @@ module spatz_mempool_cc
       mem_rsp_beat = |i_spatz.i_vlsu.spatz_mem_rsp_valid_i;
       any_ipu = |ipu_busy_m;
       any_fpu = |fpu_vld_m;
-      // Issue-stall reason (priority-encoded; matches the controller's stall composition).
-      if      (i_spatz.i_controller.running_insn_full) reason = "idfull";
-      else if (i_spatz.i_controller.vfu_stall)         reason = "vfu";
-      else if (i_spatz.i_controller.vlsu_stall)        reason = "vlsu";
-      else if (i_spatz.i_controller.vsldu_stall)       reason = "vsldu";
-      else                                             reason = "-";
+      // Issue-block reasons. NOTE these are TWO INDEPENDENT mechanisms and must not be conflated:
+      //   stall           = (vfu|vlsu|vsldu)_stall & req_buffer_valid   (spatz_controller.sv:449)
+      //   running_insn_full is a SEPARATE gate on req_buffer_pop        (:469) -- NOT part of stall.
+      // An earlier priority encoder put idfull first and therefore HID which unit actually caused
+      // the stall whenever the id window was also full (which is most of the time on this kernel).
+      // Report every active reason instead, so `state=stall` always names the real unit.
+      reason = "";
+      if (i_spatz.i_controller.vfu_stall)   reason = {reason, "vfu,"};
+      if (i_spatz.i_controller.vlsu_stall)  reason = {reason, "vlsu,"};
+      if (i_spatz.i_controller.vsldu_stall) reason = {reason, "vsldu,"};
+      if (i_spatz.i_controller.running_insn_full) reason = {reason, "idfull,"};
+      if (reason == "") reason = "-,";
 
       // Accumulate per-id lifetime counters (always, so an instruction that spans the trace
       // enable boundary still gets a complete summary; only the emit is gated by `en`).
@@ -641,8 +671,8 @@ module spatz_mempool_cc
       for (int k = 0; k < SpNId; k++) begin
         if (retired[k] && en)
           $fwrite(sp_insn_f,
-                  "RETIRE %0d id=%0d %s %s active=%0d stall=%0d ipu_cyc=%0d fpu_cyc=%0d mem_beats=%0d\n",
-                  sp_cycle, k, sp_unit[k], sp_op[k], sp_act[k], sp_stall[k],
+                  "RETIRE %0d id=%0d %s %s pc=0x%08x insn=0x%08x active=%0d stall=%0d ipu_cyc=%0d fpu_cyc=%0d mem_beats=%0d\n",
+                  sp_cycle, k, sp_unit[k], sp_op[k], sp_pc[k], sp_insn[k], sp_act[k], sp_stall[k],
                   sp_ipuc[k], sp_fpuc[k], sp_memc[k]);
       end
       sp_run_prev = run_now;
@@ -655,21 +685,42 @@ module spatz_mempool_cc
         sp_isvfu[iid] = (sp_unit[iid] == "VFU");
         sp_islsu[iid] = (sp_unit[iid] == "LSU");
         sp_act[iid]   = 0; sp_stall[iid] = 0; sp_ipuc[iid] = 0; sp_fpuc[iid] = 0; sp_memc[iid] = 0;
+        // Take the PC snapshotted at this instruction's offload handshake (in-order FIFO).
+        if (sp_pcf_rd != sp_pcf_wr) begin
+          sp_pc[iid]   = sp_pcf_pc  [sp_pcf_rd % SpPcFifoDepth];
+          sp_insn[iid] = sp_pcf_insn[sp_pcf_rd % SpPcFifoDepth];
+          sp_pcf_rd    = sp_pcf_rd + 1;
+        end else begin
+          sp_pc[iid] = '0; sp_insn[iid] = '0;   // FIFO underflow (should not happen)
+        end
         if (en)
-          $fwrite(sp_insn_f, "ISSUE %0d id=%0d %s %s vd=%0d vs1=%0d vs2=%0d vl=%0d\n",
-                  sp_cycle, iid, sp_unit[iid], sp_op[iid],
+          $fwrite(sp_insn_f, "ISSUE %0d id=%0d %s %s pc=0x%08x insn=0x%08x vd=%0d vs1=%0d vs2=%0d vl=%0d\n",
+                  sp_cycle, iid, sp_unit[iid], sp_op[iid], sp_pc[iid], sp_insn[iid],
                   i_spatz.i_controller.spatz_req_o.vd, i_spatz.i_controller.spatz_req_o.vs1,
                   i_spatz.i_controller.spatz_req_o.vs2, i_spatz.i_controller.spatz_req_o.vl);
       end
 
       // Per-cycle activity stream (only cycles where the core has work or is stalled).
+      // vfu_ins/vfu_opr/vfu_stl make the "is the VFU COMPUTING or WAITING?" question first-class:
+      //   vfu_stall (in `reason`) is really "the VFU's 2-entry operation queue is full", which
+      //   happens both while the VFU is genuinely executing AND while it holds an instruction whose
+      //   operands are not yet in the VRF -- e.g. a vector LOAD is still writing the source
+      //   register (spatz_vfu.sv:130-133 operands_ready <- vrf_rvalid_i, gated by the controller
+      //   scoreboard). Without these fields the two are indistinguishable and memory-wait gets
+      //   misattributed to compute.
+      //     vfu_ins = the VFU holds an instruction   (spatz_vfu.sv:73  spatz_req_valid)
+      //     vfu_opr = its operands are ready         (spatz_vfu.sv:133 operands_ready)
+      //     vfu_stl = VFU-internal FSM stall         (spatz_vfu.sv:123 stall)
+      //   => vfu_ins=1 & vfu_opr=0  ==  VFU occupied but WAITING FOR DATA (not computing).
       if (en && (|run_now || any_ipu || any_fpu || mem_req_beat || mem_rsp_beat ||
                  i_spatz.i_controller.spatz_req_valid_o || cstall))
         $fwrite(sp_cyc_f,
-                "%0d %s reason=%s run=%b ipu_busy=%b ipu_vld=%b fpu_vld=%b vlsu=%s mem_req=%0d mem_rsp=%0d\n",
+                "%0d %s reason=%s run=%b ipu_busy=%b ipu_vld=%b fpu_vld=%b vlsu=%s mem_req=%0d mem_rsp=%0d vfu_ins=%0d vfu_opr=%0d vfu_stl=%0d sb_deps=%b\n",
                 sp_cycle, (cstall ? "stall" : "run"), reason, run_now,
                 ipu_busy_m, ipu_vld_m, fpu_vld_m,
-                i_spatz.i_vlsu.state_q.name(), mem_req_beat, mem_rsp_beat);
+                i_spatz.i_vlsu.state_q.name(), mem_req_beat, mem_rsp_beat,
+                i_spatz.i_vfu.spatz_req_valid, i_spatz.i_vfu.operands_ready,
+                i_spatz.i_vfu.stall, i_spatz.i_controller.sb_port_has_deps_dbg);
 
       // Scalar FP-LSU (flw/fsw via the FPU sequencer i_fp_lsu -- a datapath SEPARATE from the
       // vector controller traced above; the vector streams never see scalar flw/fsw). REQ/RSP give
@@ -677,7 +728,43 @@ module spatz_mempool_cc
       // loads' return ALIGNMENT across cores is directly observable; STALL gives why the sequencer
       // (and thus a scalar-FP-operand-dependent vector offload) is blocked -- 'operands' = the FPR
       // scoreboard waiting on a pending flw.
+      // ---- FP-sequencer instruction stream (offload point => the PC is still available) ----------
+      // ISSUE is logged at the acc handshake, i.e. the cycle Spatz ACCEPTS the instruction from
+      // Snitch. kind=vector means it was forwarded to the vector controller (and its PC is pushed to
+      // the FIFO so the vector stream can name it); load/store/move are executed here.
+      if (acc_req_d_valid && acc_req_d_ready) begin
+        automatic logic        loc = i_spatz.gen_fpu_sequencer.i_fpu_sequencer.is_local;
+        automatic logic [4:0]  d   = i_spatz.gen_fpu_sequencer.i_fpu_sequencer.fd;
+        automatic string       knd =
+            i_spatz.gen_fpu_sequencer.i_fpu_sequencer.is_load  ? "load"  :
+            i_spatz.gen_fpu_sequencer.i_fpu_sequencer.is_store ? "store" :
+            i_spatz.gen_fpu_sequencer.i_fpu_sequencer.is_move  ? "move"  : "vector";
+        if (loc) begin
+          // Local op: remember the PC per DEST REGISTER so an OOO writeback can be named.
+          sp_fpr_pc[d]   = i_snitch.pc_q;
+          sp_fpr_insn[d] = acc_req_d.data_op;
+        end else begin
+          // Vector op: hand the PC to the vector stream, in order.
+          sp_pcf_pc  [sp_pcf_wr % SpPcFifoDepth] = i_snitch.pc_q;
+          sp_pcf_insn[sp_pcf_wr % SpPcFifoDepth] = acc_req_d.data_op;
+          sp_pcf_wr = sp_pcf_wr + 1;
+        end
+        if (en)
+          $fwrite(sp_fpl_f, "ISSUE %0d pc=0x%08x insn=0x%08x kind=%s fd=%0d\n",
+                  sp_cycle, i_snitch.pc_q, acc_req_d.data_op, knd, d);
+      end
+
       if (en) begin
+        // Retirements into the FP register file: port 0 = offloaded-FPU result, port 1 = FP-LSU.
+        // Both name the instruction via the per-register PC captured at ISSUE.
+        for (int unsigned w = 0; w < 2; w++) begin
+          if (i_spatz.gen_fpu_sequencer.i_fpu_sequencer.retire[w]) begin
+            automatic logic [4:0] rd = i_spatz.gen_fpu_sequencer.i_fpu_sequencer.fpr_waddr[w];
+            $fwrite(sp_fpl_f, "RETIRE %0d port=%s fd=%0d pc=0x%08x insn=0x%08x\n",
+                    sp_cycle, (w == 0) ? "fpu" : "lsu", rd, sp_fpr_pc[rd], sp_fpr_insn[rd]);
+          end
+        end
+        // Raw FP-LSU memory beats (match REQ->RSP by tag = the FP dest register).
         if (i_spatz.gen_fpu_sequencer.i_fpu_sequencer.fp_lsu_qvalid &&
             i_spatz.gen_fpu_sequencer.i_fpu_sequencer.fp_lsu_qready)
           $fwrite(sp_fpl_f, "REQ %0d addr=0x%0h tag=%0d %s\n", sp_cycle,
@@ -688,13 +775,23 @@ module spatz_mempool_cc
             i_spatz.gen_fpu_sequencer.i_fpu_sequencer.fp_lsu_pready)
           $fwrite(sp_fpl_f, "RSP %0d tag=%0d\n", sp_cycle,
                   i_spatz.gen_fpu_sequencer.i_fpu_sequencer.fp_lsu_ptag);
+        // Stall: report EVERY active reason, not a priority-encoded winner (the reasons are ORed in
+        // spatz_fpu_sequencer.sv:148, so more than one can hold at once and a priority encoder hides
+        // the others). "offload" = !is_local && !issue_ready_i, i.e. blocked handing the instruction
+        // to the VECTOR side -- the scalar sequencer itself is not out of resources.
         if (i_spatz.gen_fpu_sequencer.i_fpu_sequencer.stall) begin
-          if      (!i_spatz.gen_fpu_sequencer.i_fpu_sequencer.operands_available) fpl_reason = "operands";
-          else if (i_spatz.gen_fpu_sequencer.i_fpu_sequencer.lsu_stall)           fpl_reason = "lsu";
-          else if (i_spatz.gen_fpu_sequencer.i_fpu_sequencer.vlsu_stall)          fpl_reason = "vlsu";
-          else if (i_spatz.gen_fpu_sequencer.i_fpu_sequencer.move_stall)          fpl_reason = "move";
-          else                                                                    fpl_reason = "other";
-          $fwrite(sp_fpl_f, "STALL %0d reason=%s\n", sp_cycle, fpl_reason);
+          fpl_reason = "";
+          if (!i_spatz.gen_fpu_sequencer.i_fpu_sequencer.operands_available)
+            fpl_reason = {fpl_reason, "operands,"};
+          if (i_spatz.gen_fpu_sequencer.i_fpu_sequencer.lsu_stall)  fpl_reason = {fpl_reason, "lsu,"};
+          if (i_spatz.gen_fpu_sequencer.i_fpu_sequencer.vlsu_stall) fpl_reason = {fpl_reason, "vlsu,"};
+          if (i_spatz.gen_fpu_sequencer.i_fpu_sequencer.move_stall) fpl_reason = {fpl_reason, "move,"};
+          if (!i_spatz.gen_fpu_sequencer.i_fpu_sequencer.is_local &&
+              !i_spatz.gen_fpu_sequencer.i_fpu_sequencer.issue_ready_i)
+            fpl_reason = {fpl_reason, "offload,"};
+          if (fpl_reason == "") fpl_reason = "-,";
+          $fwrite(sp_fpl_f, "STALL %0d reason=%s pc=0x%08x\n",
+                  sp_cycle, fpl_reason, i_snitch.pc_q);
         end
       end
 
