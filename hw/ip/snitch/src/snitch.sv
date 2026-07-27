@@ -2751,7 +2751,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           illegal_inst = 1'b1;
         end
       end
-
+`ifdef VENTAGLIO
       riscv_instr::VFXMACC_VRF,
       riscv_instr::VFXMUL_VRF,
       riscv_instr::VVENTCLR: begin
@@ -2764,7 +2764,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           illegal_inst = 1'b1;
         end
       end
-
+`endif
       riscv_instr::VLE8_V,
       riscv_instr::VLE16_V,
       riscv_instr::VLE32_V,
