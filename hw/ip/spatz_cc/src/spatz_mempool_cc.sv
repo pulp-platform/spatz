@@ -522,4 +522,193 @@ module spatz_mempool_cc
   // verilog_lint: waive-stop always-ff-non-blocking
   // pragma translate_on
 
+  ///////////////////////////////
+  //  Spatz vector-core tracer  //
+  ///////////////////////////////
+  // pragma translate_off
+`ifndef VERILATOR
+  // Per-Spatz-core trace, mirroring the Snitch trace_hart_*.dasm workflow (post-processed by
+  // `make spatz-trace` -> hardware/scripts/gen_spatz_trace.py). Two streams per core:
+  //   trace_spatz_insn_hart_0x*.log : one ISSUE + one RETIRE line per vector instruction (what
+  //     ran, when, and a lifetime summary: active/stall cycles + IPU/FPU/mem-beat cycle counts).
+  //   trace_spatz_cyc_hart_0x*.log  : one line per ACTIVE cycle -- per-lane IPU busy/result mask,
+  //     per-FPU result mask, VLSU FSM state + memory beats, and the issue-stall reason.
+  // Gated exactly like the Snitch tracer: the per-core csr_trace_q region OR a SPATZ_TRACE define.
+  // Blocking assignments are intentional (a simulation-only scoreboard with program semantics).
+  localparam int          SpatzTraceOn = `ifdef SPATZ_TRACE `SPATZ_TRACE `else 0 `endif;
+  localparam int unsigned SpNId        = spatz_pkg::NrParallelInstructions;
+
+  int          sp_insn_f, sp_cyc_f, sp_fpl_f;
+  string       sp_insn_fn, sp_cyc_fn, sp_fpl_fn;
+  logic [63:0] sp_cycle;
+  logic [SpNId-1:0] sp_run_prev;
+  // Per-in-flight-id (spatz_id_t) instruction snapshot + lifetime accumulators.
+  string       sp_op    [SpNId];
+  string       sp_unit  [SpNId];
+  logic        sp_isvfu [SpNId];
+  logic        sp_islsu [SpNId];
+  int unsigned sp_act   [SpNId];
+  int unsigned sp_stall [SpNId];
+  int unsigned sp_ipuc  [SpNId];
+  int unsigned sp_fpuc  [SpNId];
+  int unsigned sp_memc  [SpNId];
+
+  // verilog_lint: waive-start always-ff-non-blocking
+  always_ff @(posedge rst_i) begin
+    if (rst_i) begin
+      $sformat(sp_insn_fn, "trace_spatz_insn_hart_0x%08x.log", hart_id_i);
+      $sformat(sp_cyc_fn,  "trace_spatz_cyc_hart_0x%08x.log",  hart_id_i);
+      $sformat(sp_fpl_fn,  "trace_spatz_fplsu_hart_0x%08x.log", hart_id_i);
+      sp_insn_f = $fopen(sp_insn_fn, "w");
+      sp_cyc_f  = $fopen(sp_cyc_fn,  "w");
+      sp_fpl_f  = $fopen(sp_fpl_fn,  "w");
+      $fwrite(sp_insn_f,
+        "# EVENT cyc id unit op vd vs1 vs2 vl  [RETIRE adds: active stall ipu_cyc fpu_cyc mem_beats]\n");
+      $fwrite(sp_cyc_f,
+        "# cyc state reason run_ids ipu_busy ipu_vld fpu_vld vlsu_state mem_req mem_rsp\n");
+      $fwrite(sp_fpl_f,
+        "# scalar FP-LSU (flw/fsw via FPU sequencer, tag=fd). REQ cyc addr tag L|S / RSP cyc tag / STALL cyc reason\n");
+      $display("[SpatzTracer] Logging Hart %0d to %s + %s + %s",
+               hart_id_i, sp_insn_fn, sp_cyc_fn, sp_fpl_fn);
+    end
+  end
+
+  always_ff @(posedge clk_i or posedge rst_i) begin
+    automatic logic                        en;
+    automatic logic [SpNId-1:0]            run_now;
+    automatic logic [SpNId-1:0]            retired;
+    automatic logic [spatz_pkg::N_IPU-1:0] ipu_busy_m;
+    automatic logic [spatz_pkg::N_IPU-1:0] ipu_vld_m;
+    automatic logic [spatz_pkg::N_FPU-1:0] fpu_vld_m;
+    automatic logic                        mem_req_beat;
+    automatic logic                        mem_rsp_beat;
+    automatic logic                        any_ipu;
+    automatic logic                        any_fpu;
+    automatic logic                        cstall;
+    automatic string                       reason;
+    automatic string                       fpl_reason;
+    automatic int unsigned                 iid;
+    if (rst_i) begin
+      sp_cycle    = '0;
+      sp_run_prev = '0;
+      for (int k = 0; k < SpNId; k++) begin
+        sp_act[k] = 0; sp_stall[k] = 0; sp_ipuc[k] = 0; sp_fpuc[k] = 0; sp_memc[k] = 0;
+        sp_isvfu[k] = 1'b0; sp_islsu[k] = 1'b0; sp_op[k] = "-"; sp_unit[k] = "-";
+      end
+    end else begin
+      en      = i_snitch.csr_trace_q || (SpatzTraceOn != 0);
+      run_now = i_spatz.i_controller.running_insn_q;
+      cstall  = i_spatz.i_controller.stall;
+      // Functional-unit activity this cycle (all module-level signals, XMR-accessible).
+      ipu_busy_m = i_spatz.i_vfu.int_ipu_busy;
+      for (int l = 0; l < spatz_pkg::N_IPU; l++)
+        ipu_vld_m[l] = |i_spatz.i_vfu.int_ipu_result_valid[l*spatz_pkg::ELENB +: spatz_pkg::ELENB];
+      for (int l = 0; l < spatz_pkg::N_FPU; l++)
+        fpu_vld_m[l] = |i_spatz.i_vfu.fpu_result_valid[l*spatz_pkg::ELENB +: spatz_pkg::ELENB];
+      mem_req_beat = |(i_spatz.i_vlsu.spatz_mem_req_valid_o & i_spatz.i_vlsu.spatz_mem_req_ready_i);
+      mem_rsp_beat = |i_spatz.i_vlsu.spatz_mem_rsp_valid_i;
+      any_ipu = |ipu_busy_m;
+      any_fpu = |fpu_vld_m;
+      // Issue-stall reason (priority-encoded; matches the controller's stall composition).
+      if      (i_spatz.i_controller.running_insn_full) reason = "idfull";
+      else if (i_spatz.i_controller.vfu_stall)         reason = "vfu";
+      else if (i_spatz.i_controller.vlsu_stall)        reason = "vlsu";
+      else if (i_spatz.i_controller.vsldu_stall)       reason = "vsldu";
+      else                                             reason = "-";
+
+      // Accumulate per-id lifetime counters (always, so an instruction that spans the trace
+      // enable boundary still gets a complete summary; only the emit is gated by `en`).
+      // NOTE: ipu_cyc/fpu_cyc/mem_beats are core-wide FU-busy cycles observed WHILE this id is in
+      // flight, not exclusive per-instruction work -- when two same-unit instructions overlap in
+      // running_insn_q (e.g. one writing back while the next executes, common at LMUL>=2) both are
+      // credited, so their sum can exceed the real FU-busy cycle count. The per-cycle stream is the
+      // authoritative per-lane/per-FPU source; treat these as a per-instruction window aggregate.
+      for (int k = 0; k < SpNId; k++) begin
+        if (run_now[k]) begin
+          sp_act[k] = sp_act[k] + 1;
+          if (cstall)                      sp_stall[k] = sp_stall[k] + 1;
+          if (sp_isvfu[k] && any_ipu)      sp_ipuc[k]  = sp_ipuc[k]  + 1;
+          if (sp_isvfu[k] && any_fpu)      sp_fpuc[k]  = sp_fpuc[k]  + 1;
+          if (sp_islsu[k] && mem_req_beat) sp_memc[k]  = sp_memc[k]  + 1;
+        end
+      end
+
+      // RETIRE: running_insn_q[id] fell 1->0 (edge vs my delayed copy). Emitted BEFORE the ISSUE
+      // block so that a same-cycle id REUSE (an id retiring and being re-issued the same cycle,
+      // which happens routinely when running_insn_full releases one id) reads the retiring
+      // instruction's snapshot, not the new one's -- otherwise the ISSUE reset below would zero it.
+      retired = sp_run_prev & ~run_now;
+      for (int k = 0; k < SpNId; k++) begin
+        if (retired[k] && en)
+          $fwrite(sp_insn_f,
+                  "RETIRE %0d id=%0d %s %s active=%0d stall=%0d ipu_cyc=%0d fpu_cyc=%0d mem_beats=%0d\n",
+                  sp_cycle, k, sp_unit[k], sp_op[k], sp_act[k], sp_stall[k],
+                  sp_ipuc[k], sp_fpuc[k], sp_memc[k]);
+      end
+      sp_run_prev = run_now;
+
+      // ISSUE: a vector instruction is dispatched to a unit this cycle.
+      if (i_spatz.i_controller.spatz_req_valid_o) begin
+        iid           = i_spatz.i_controller.spatz_req_o.id;
+        sp_op[iid]    = i_spatz.i_controller.spatz_req_o.op.name();
+        sp_unit[iid]  = i_spatz.i_controller.spatz_req_o.ex_unit.name();
+        sp_isvfu[iid] = (sp_unit[iid] == "VFU");
+        sp_islsu[iid] = (sp_unit[iid] == "LSU");
+        sp_act[iid]   = 0; sp_stall[iid] = 0; sp_ipuc[iid] = 0; sp_fpuc[iid] = 0; sp_memc[iid] = 0;
+        if (en)
+          $fwrite(sp_insn_f, "ISSUE %0d id=%0d %s %s vd=%0d vs1=%0d vs2=%0d vl=%0d\n",
+                  sp_cycle, iid, sp_unit[iid], sp_op[iid],
+                  i_spatz.i_controller.spatz_req_o.vd, i_spatz.i_controller.spatz_req_o.vs1,
+                  i_spatz.i_controller.spatz_req_o.vs2, i_spatz.i_controller.spatz_req_o.vl);
+      end
+
+      // Per-cycle activity stream (only cycles where the core has work or is stalled).
+      if (en && (|run_now || any_ipu || any_fpu || mem_req_beat || mem_rsp_beat ||
+                 i_spatz.i_controller.spatz_req_valid_o || cstall))
+        $fwrite(sp_cyc_f,
+                "%0d %s reason=%s run=%b ipu_busy=%b ipu_vld=%b fpu_vld=%b vlsu=%s mem_req=%0d mem_rsp=%0d\n",
+                sp_cycle, (cstall ? "stall" : "run"), reason, run_now,
+                ipu_busy_m, ipu_vld_m, fpu_vld_m,
+                i_spatz.i_vlsu.state_q.name(), mem_req_beat, mem_rsp_beat);
+
+      // Scalar FP-LSU (flw/fsw via the FPU sequencer i_fp_lsu -- a datapath SEPARATE from the
+      // vector controller traced above; the vector streams never see scalar flw/fsw). REQ/RSP give
+      // per-load request/return timing (match REQ->RSP by tag = fp dest reg fd) so shared A-word
+      // loads' return ALIGNMENT across cores is directly observable; STALL gives why the sequencer
+      // (and thus a scalar-FP-operand-dependent vector offload) is blocked -- 'operands' = the FPR
+      // scoreboard waiting on a pending flw.
+      if (en) begin
+        if (i_spatz.gen_fpu_sequencer.i_fpu_sequencer.fp_lsu_qvalid &&
+            i_spatz.gen_fpu_sequencer.i_fpu_sequencer.fp_lsu_qready)
+          $fwrite(sp_fpl_f, "REQ %0d addr=0x%0h tag=%0d %s\n", sp_cycle,
+                  i_spatz.gen_fpu_sequencer.i_fpu_sequencer.fp_lsu_qaddr,
+                  i_spatz.gen_fpu_sequencer.i_fpu_sequencer.fp_lsu_qtag,
+                  i_spatz.gen_fpu_sequencer.i_fpu_sequencer.fp_lsu_qwrite ? "S" : "L");
+        if (i_spatz.gen_fpu_sequencer.i_fpu_sequencer.fp_lsu_pvalid &&
+            i_spatz.gen_fpu_sequencer.i_fpu_sequencer.fp_lsu_pready)
+          $fwrite(sp_fpl_f, "RSP %0d tag=%0d\n", sp_cycle,
+                  i_spatz.gen_fpu_sequencer.i_fpu_sequencer.fp_lsu_ptag);
+        if (i_spatz.gen_fpu_sequencer.i_fpu_sequencer.stall) begin
+          if      (!i_spatz.gen_fpu_sequencer.i_fpu_sequencer.operands_available) fpl_reason = "operands";
+          else if (i_spatz.gen_fpu_sequencer.i_fpu_sequencer.lsu_stall)           fpl_reason = "lsu";
+          else if (i_spatz.gen_fpu_sequencer.i_fpu_sequencer.vlsu_stall)          fpl_reason = "vlsu";
+          else if (i_spatz.gen_fpu_sequencer.i_fpu_sequencer.move_stall)          fpl_reason = "move";
+          else                                                                    fpl_reason = "other";
+          $fwrite(sp_fpl_f, "STALL %0d reason=%s\n", sp_cycle, fpl_reason);
+        end
+      end
+
+      sp_cycle = sp_cycle + 1;
+    end
+  end
+  // verilog_lint: waive-stop always-ff-non-blocking
+
+  final begin
+    $fclose(sp_insn_f);
+    $fclose(sp_cyc_f);
+    $fclose(sp_fpl_f);
+  end
+`endif
+  // pragma translate_on
+
 endmodule
