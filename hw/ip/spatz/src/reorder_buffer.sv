@@ -88,10 +88,13 @@ module reorder_buffer
     `ifdef SPATZ_ROB_CNT_IDVALID `SPATZ_ROB_CNT_IDVALID
     `else 0 `endif;
 
-  // Low-order write-pointer bits used by the block-window compare. With BlockWords ==
-  // NumWords/2 this is IdWidth-1. Held at 1 when the feature is absent so the slice stays
-  // legal in the (unelaborated) off branch.
-  localparam int unsigned BlkLoW = (BlockWords > 1) ? (IdWidth - 1) : 1;
+  // Split point of every id for the window compare: i = {i_hi, i_lo} at bit log2(BlockWords).
+  // (IdWidth-1 coincides with idx_width(BlockWords) only when BlockWords == NumWords/2; at
+  // NumWords=64/BlockWords=16 the window is a QUARTER of the ring and the split moves to bit 4.)
+  // Held at 1 when the feature is absent so the slice stays legal in the off branch.
+  localparam int unsigned BlkLoW = (BlockWords > 1) ? idx_width(BlockWords) : 1;
+  // Width of the high ("quadrant") part of an id above the BlkLoW split.
+  localparam int unsigned QSelW  = (BlockWords > 1) ? (IdWidth - BlkLoW) : 1;
 
   /*************
    *  Signals  *
@@ -112,6 +115,11 @@ module reorder_buffer
   logic [NumWords-1:0]   block_mask;
   // Shared thermometer decode for the window mask: blk_lt[j] = (j < write_pointer_q low bits).
   logic [BlockWords-1:0] blk_lt;
+  // Quadrant decomposition of the write pointer and the per-quadrant equality one-hots.
+  // Declared at module level (project convention: no signals inside generate loops).
+  logic [BlkLoW-1:0]   wp_lo;
+  logic [QSelW-1:0]    wp_hi, wp_hi1;
+  logic [2**QSelW-1:0] eq_wp, eq_wp1;
 
   // Memory
   data_t [NumWords-1:0] mem_d, mem_q;
@@ -151,20 +159,42 @@ module reorder_buffer
   assign block_fire   = (BlockWords > 1) && id_req_block_i && room_block_o;
   assign block_mask_o = block_mask;
 
-  // Window mask: block_mask[i] = 1 iff i is in [wp, wp+BlockWords) mod NumWords. With
-  // BlockWords == NumWords/2 that test is exactly "the msb of (i - wp) is 0", i.e.
-  //     i[IdWidth-1] ^ wp[IdWidth-1] ^ (i[BlkLoW-1:0] < wp[BlkLoW-1:0]) == 0,
-  // so ONE shared thermometer decode of the low pointer bits plus one XOR per bit covers
-  // both halves (~2 levels). Deliberately NOT ~({BlockWords{1'b1}} << wp[BlkLoW-1:0]): a
-  // variable left shift is a 4-stage barrel shifter, ~160 GE / 4 levels -- 8x the area of
-  // this form (timing-reviewer correction C1).
+  // Window mask: block_mask[i] = 1 iff i is in [wp, wp+BlockWords) mod NumWords. Split every
+  // id at the BlkLoW bit into {i_hi, i_lo}; then
+  //   (i - wp) mod NumWords < BlockWords
+  //     <=> (i_hi == wp_hi && i_lo >= wp_lo) || (i_hi == wp_hi+1 && i_lo < wp_lo)
+  // (wp_hi1 wraps mod 2^QSelW in the QSelW-bit sum, so the window crosses the ring top for
+  // free). blk_lt is the shared "i_lo < wp_lo" thermometer decode; its complement gives
+  // "i_lo >= wp_lo". At QSelW == 1 (BlockWords == NumWords/2, the legacy 32/16 shape) wp_hi1
+  // == ~wp_hi and this reduces BIT-IDENTICALLY to the shipped msb-XOR form:
+  //   q=0: (eq?~blk_lt:blk_lt) with eq=~wp4, eq1=wp4 -> ~(wp4 ^ blk_lt)
+  //   q=1: (eq?~blk_lt:blk_lt) with eq=wp4, eq1=~wp4 ->  (wp4 ^ blk_lt)
+  // i.e. ~(i_hi ^ wp_hi ^ lt) per id. ~3 levels, and OFF the request cone (only consumers are
+  // burst_odd_expected bookkeeping and an assertion -- grep-verified). Deliberately NOT a
+  // variable left shift: that is a 4-stage barrel shifter, ~160 GE / 4 levels (correction C1).
   if (BlockWords > 1) begin : gen_block_mask
+    assign wp_lo  = write_pointer_q[BlkLoW-1:0];
+    assign wp_hi  = write_pointer_q[IdWidth-1:BlkLoW];
+    assign wp_hi1 = wp_hi + QSelW'(1);
+    for (genvar q = 0; q < 2**QSelW; q++) begin : gen_quad_eq
+      assign eq_wp[q]  = (wp_hi  == QSelW'(q));
+      assign eq_wp1[q] = (wp_hi1 == QSelW'(q));
+    end : gen_quad_eq
     for (genvar j = 0; j < BlockWords; j++) begin : gen_block_mask_bit
-      assign blk_lt[j]                  = (BlkLoW'(j) < write_pointer_q[BlkLoW-1:0]);
-      assign block_mask[j]              = ~(write_pointer_q[IdWidth-1] ^ blk_lt[j]);
-      assign block_mask[j + BlockWords] =  (write_pointer_q[IdWidth-1] ^ blk_lt[j]);
+      assign blk_lt[j] = (BlkLoW'(j) < wp_lo);
     end : gen_block_mask_bit
+    for (genvar q = 0; q < 2**QSelW; q++) begin : gen_quad_mask
+      for (genvar j = 0; j < BlockWords; j++) begin : gen_quad_mask_bit
+        assign block_mask[q*BlockWords + j] = (eq_wp[q]  & ~blk_lt[j]) |
+                                              (eq_wp1[q] &  blk_lt[j]);
+      end : gen_quad_mask_bit
+    end : gen_quad_mask
   end else begin : gen_no_block_mask
+    assign wp_lo      = '0;
+    assign wp_hi      = '0;
+    assign wp_hi1     = '0;
+    assign eq_wp      = '0;
+    assign eq_wp1     = '0;
     assign blk_lt     = '0;
     assign block_mask = '0;
   end
@@ -332,8 +362,12 @@ module reorder_buffer
     $error("NumRdPorts=2 requires power-of-two NumWords (pointer +2 wrap).");
   if (((NumWrPorts > 1) || (NumRdPorts > 1)) && FallThrough)
     $error("FallThrough is not supported with the TwinROB0 extensions.");
-  if ((BlockWords != 1) && (BlockWords != NumWords/2))
-    $error("BlockWords must be 1 (off) or NumWords/2: the window mask uses that identity.");
+  // BlockWords must be a power-of-two PROPER divisor of NumWords (16/32 and 16/64 verified):
+  // the window mask splits each id at log2(BlockWords) and reduces bit-identically to the
+  // legacy msb-XOR form when BlockWords == NumWords/2.
+  if ((BlockWords != 1) &&
+      !((BlockWords > 1) && (NumWords % BlockWords == 0) && (BlockWords == 2**$clog2(BlockWords))))
+    $error("BlockWords must be 1 (off) or a power-of-two divisor of NumWords.");
   if ((BlockWords > 1) && (NumWords != 2**IdWidth))
     $error("BlockWords > 1 requires power-of-two NumWords (write pointer + BlockWords wrap).");
   if ((BlockWords > 1) && FallThrough)
