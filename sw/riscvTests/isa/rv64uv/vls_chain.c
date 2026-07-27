@@ -33,7 +33,7 @@ void TEST_CASE1(void) {
   // v1 = {0x9f, 0x20, 0x05, 0xaa, 0xc3, 0xd3, 0x19, 0x2e}
   VSET(8, e8, m1);
   VLOAD_8(v3, 1, 1, 1, 1, 1, 1, 1, 1);
-  asm volatile("vlse8.v v1, (%0), %1" ::"r"(INP1), "r"(stride));
+  asm volatile("vlse8.v v1, (%0), %1" ::"r"(INP1), "r"(stride) : "memory");
   asm volatile("vadd.vv v2, v1, v3");
   VCMP_U8(1, v2, 0xa0, 0x21, 0x06, 0xab, 0xc4, 0xd4, 0x1a, 0x2f);
 }
@@ -50,7 +50,7 @@ void TEST_CASE2(void) {
   // v1 = {0x9fe4, 0x8f2e, 0xf9aa, 0xc394, 0xa11a, 0xa716, 0x9999, 0xa9f3}
   VSET(8, e16, m1);
   VLOAD_16(v3, 1, 1, 1, 1, 1, 1, 1, 1);
-  asm volatile("vlse16.v v1, (%0), %1" ::"r"(INP1), "r"(stride));
+  asm volatile("vlse16.v v1, (%0), %1" ::"r"(INP1), "r"(stride) : "memory");
   asm volatile("vadd.vv  v2, v1, v3");
   VCMP_U16(2, v2, 0x9fe5, 0x8f2f, 0xf9ab, 0xc395, 0xa11b, 0xa717, 0x999a,
            0xa9f4);
@@ -67,7 +67,7 @@ void TEST_CASE3(void) {
   VSET(8, e8, m1);
   VLOAD_8(v2, 1, 2, 3, 4, 5, 7, 8, 9);
   VLOAD_8(v3, 1, 1, 1, 1, 1, 1, 1, 1);
-  asm volatile("vloxei8.v v1, (%0), v2" ::"r"(INP1));
+  asm volatile("vloxei8.v v1, (%0), v2" ::"r"(INP1) : "memory");
   asm volatile("vadd.vv   v4, v1, v3");
   VCMP_U8(3, v4, 0xd4, 0x41, 0xd2, 0x85, 0x49, 0x89, 0x89, 0xaf);
 }
@@ -83,7 +83,7 @@ void TEST_CASE4(void) {
   VSET(8, e16, m1);
   VLOAD_16(v2, 2, 4, 6, 8, 10, 12, 14, 16);
   VLOAD_16(v3, 1, 1, 1, 1, 1, 1, 1, 1);
-  asm volatile("vloxei16.v v1, (%0), v2" ::"r"(INP1));
+  asm volatile("vloxei16.v v1, (%0), v2" ::"r"(INP1) : "memory");
   asm volatile("vadd.vv    v4, v1, v3");
   VCMP_U16(4, v4, 0xbbd4, 0x3841, 0x8cd2, 0x9385, 0x7549, 0x348a, 0x9389,
            0x8189);

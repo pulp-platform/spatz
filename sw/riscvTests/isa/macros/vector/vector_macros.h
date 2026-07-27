@@ -211,19 +211,25 @@ do {                                                                           \
   } while (0)
 
 // Macro to load a vector register with data from the stack
+// The "memory" clobber makes the preceding memcpy observable by the asm:
+// without it, LLVM's optimizer is free to delete or sink the memcpy (the
+// buffer looks dead — the asm only consumes the pointer value).
 #define VLOAD(datatype, loadtype, vreg, vec...)                                \
   do {                                                                         \
     datatype tmpV##vreg[] = {vec};                                             \
     size_t len = sizeof(tmpV##vreg) / sizeof(datatype);                        \
     datatype *V##vreg = (datatype *)snrt_l1alloc(len * sizeof(datatype));      \
     memcpy(V##vreg, tmpV##vreg, len * sizeof(datatype));                       \
-    asm volatile("vl" #loadtype ".v " #vreg ", (%0)  \n" ::[V] "r"(V##vreg));  \
+    asm volatile("vl" #loadtype ".v " #vreg ", (%0)  \n" ::[V] "r"(V##vreg)    \
+                 : "memory");                                                  \
   } while (0)
 
 // Macro to store a vector register into the pointer vec
+// The "memory" clobber makes the stored data visible to subsequent C code.
 #define VSTORE(T, storetype, vreg, vec)                                        \
   do {                                                                         \
-    asm volatile("vs" #storetype ".v " #vreg ", (%0)\n" : "+r"(vec));          \
+    asm volatile("vs" #storetype ".v " #vreg ", (%0)\n"                        \
+                 : "+r"(vec)::"memory");                                       \
   } while (0)
 
 // Macro to reset the whole register back to zero

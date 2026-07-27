@@ -25,6 +25,14 @@ include_directories(${SNRUNTIME_INCLUDE_DIRS})
 
 add_compile_options(-O3 -g -ffunction-sections)
 
+# These sources contain hand-written RVV inline assembly: opt into the
+# vector march (the toolchain default deliberately omits 'v'; the last
+# -march on the command line wins). Compiler-side vectorization stays
+# disabled through the toolchain-wide kill switches.
+if(DEFINED SPATZ_MARCH_VECTOR)
+    add_compile_options("$<$<COMPILE_LANGUAGE:C,CXX>:-march=${SPATZ_MARCH_VECTOR}>")
+endif()
+
 # Use unrolled spatzBenchmarks
 if (UNROLL)
 add_definitions(-DUNROLL)
