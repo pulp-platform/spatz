@@ -104,6 +104,21 @@ module spatz_vlsu
   // (BlockWords > 1) and const-folds away, leaving the legacy netlist bit-identical.
   localparam int unsigned BlockWords = (BlockAlloc != 0) ? MaxBurstWords : 1;
 
+  // ---------------------------------------------------------------------------
+  // H1 dual-load runahead (docs/spatz_rob64_h1_design_plan.md). MaxInflight=1 (default)
+  // const-folds every added term away -> bit-identical legacy netlist. MaxInflight=2
+  // admits a SECOND burst-safe load while the elder drains. Validated design point:
+  // NrOutstandingLoads=64 (two e32,m2 loads = 2*32 ids exactly fill ROB0).
+  // ---------------------------------------------------------------------------
+  localparam int unsigned MaxInflight =
+    `ifdef SPATZ_VLSU_DUAL_LOAD `SPATZ_VLSU_DUAL_LOAD `else 1 `endif;
+  localparam bit Runahead = (MaxInflight > 1);
+  localparam int unsigned InflWidth = idx_width(MaxInflight + 1);
+
+  logic [InflWidth-1:0] inflight_d, inflight_q;
+  logic                 dual_adv, dual_run, dual_safe, dual_blk, opq_hold, no_older;
+  logic                 opq_ready_int;
+
   //////////////
   // Typedefs //
   //////////////
@@ -127,12 +142,14 @@ module spatz_vlsu
     .clk_i  (clk_i                                          ),
     .rst_ni (rst_ni                                         ),
     .data_i (spatz_req_d                                    ),
-    .valid_i(spatz_req_valid_i && spatz_req_i.ex_unit == LSU),
-    .ready_o(spatz_req_ready_o                              ),
+    .valid_i(spatz_req_valid_i && spatz_req_i.ex_unit == LSU && !opq_hold),
+    .ready_o(opq_ready_int                                  ),
     .data_o (mem_spatz_req                                  ),
     .valid_o(mem_spatz_req_valid                            ),
     .ready_i(mem_spatz_req_ready                            )
   );
+  // H1: hold a third LSU op out of the VLSU while MaxInflight are already in flight.
+  assign spatz_req_ready_o = opq_ready_int && !opq_hold;
 
   // Convert the vl to number of bytes for all element widths
   always_comb begin: proc_spatz_req
@@ -421,7 +438,8 @@ module spatz_vlsu
 
     assign mem_port_finished_q[port] =
         mem_spatz_req_valid &&
-        (mem_port_active[port] ? (mem_counter_q[port] == mem_counter_max[port]) : 1'b1);
+        (mem_port_active[port] ? ((!Runahead || !mem_counter_load[port]) &&
+                                  (mem_counter_q[port] == mem_counter_max[port])) : 1'b1);
   end: gen_mem_counters
 
   // Did the current instruction finished the memory requests?
@@ -461,6 +479,8 @@ module spatz_vlsu
   logic             commit_insn_full;
   logic  [NrMemPorts-1:0] commit_finished_q;
   logic  [NrMemPorts-1:0] commit_finished_d;
+  // Commit-FIFO occupancy for the H1 A5 assertion (sim-only consumer).
+  logic  [idx_width(CommitQDepth):0] commit_usage;
 
   fifo_v3 #(
     .DEPTH       (CommitQDepth          ),
@@ -477,7 +497,7 @@ module spatz_vlsu
     .data_o    (commit_insn_q    ),
     .empty_o   (commit_insn_empty),
     .pop_i     (commit_insn_pop  ),
-    .usage_o   (/* Unused */     )
+    .usage_o   (commit_usage     )
   );
 
   // R2 bound (elaboration time): the FIFO must be able to hold one entry per in-flight
@@ -536,6 +556,12 @@ module spatz_vlsu
     // Advance operation queue only when committed metadata retires.
     if (commit_insn_pop && commit_insn_valid &&
         (commit_insn_q.id == mem_spatz_req.id)) begin
+      mem_spatz_req_ready = 1'b1;
+    end
+    // H1: ... or when the single in-flight burst-safe load has issued ALL its requests
+    // and a burst-safe successor waits at the head. Cap: exactly one extra instruction
+    // (commit_insn_q.id == mem_spatz_req.id inside dual_adv).
+    if (dual_adv) begin
       mem_spatz_req_ready = 1'b1;
     end
     // Retire bookkeeping only when the committed instruction actually pops.
@@ -781,6 +807,63 @@ module spatz_vlsu
   // Do we start at the very fist element
   logic mem_is_vstart_zero;
   assign mem_is_vstart_zero = mem_spatz_req.vstart == 'd0;
+
+  if (Runahead) begin : gen_runahead
+    // Commit-FIFO occupancy: ++ push, -- pop (simultaneous nets 0). Bookkeeping for
+    // D2/opq_hold/A5 only -- the in-flight CAP is the id-equality term in dual_adv.
+    always_comb begin
+      inflight_d = inflight_q;
+      if (commit_insn_push) inflight_d = inflight_d + 1'b1;
+      if (commit_insn_pop)  inflight_d = inflight_d - 1'b1;
+    end
+    `FF(inflight_q, inflight_d, '0)
+
+    // Youngest candidate (op-queue head) vs oldest unretired (commit head): ids differ
+    // <=> two instructions co-resident.
+    assign dual_run  = mem_spatz_req_valid && commit_insn_valid &&
+                       (commit_insn_q.id != mem_spatz_req.id);
+    // Shapes allowed to share ROB0/commit with the elder load (all head-derivable).
+    assign dual_safe = mem_spatz_req.op_mem.is_load && use_port0_burst_req &&
+                       !burst_has_tail_req && mem_is_vstart_zero &&
+                       (state_q == VLSU_RunningLoad) && commit_insn_q.is_load;
+    // Block the request datapath while an UNSAFE younger instruction sits at the head
+    // (store-after-load epilogue, strided/indexed, tailed, vstart!=0): its requests would
+    // otherwise issue at A's addresses through the commit_insn_q.is_load gates.
+    assign dual_blk  = dual_run && !dual_safe;
+    // Hold a third LSU op out of the VLSU: the controller's 4-entry id pool does not
+    // scale with the ROB (naive runahead strands the VFU). Deadlock-free: inflight_q
+    // drops at A's retire, independent of the held instruction.
+    assign opq_hold  = (inflight_q >= InflWidth'(MaxInflight));
+
+    // THE CAP: commit_insn_q.id == mem_spatz_req.id is true IFF exactly ONE instruction
+    // is in flight (FIFO strictly in-order; ids from the controller pool, released at
+    // retire). dual_adv therefore fires only from "1 in flight" -> "2 in flight"; from
+    // "2 in flight" the ids differ and no third advance occurs until A's pop.
+    assign dual_adv  = mem_req_all_issued &&                    // level, !mem_counter_load-guarded (:773-775)
+                       mem_insn_pending_q[mem_spatz_req.id] &&  // head was really admitted
+                       !(|burst_alloc_q) &&                     // never mid-alloc (walk fallback window)
+                       !commit_insn_push && !commit_insn_full &&
+                       commit_insn_valid && (commit_insn_q.id == mem_spatz_req.id) &&
+                       commit_insn_q.is_load && (state_q == VLSU_RunningLoad) &&
+                       use_port0_burst_req && !burst_has_tail_req &&
+                       !burst_tail_phase_q && !switch_to_tail_phase &&
+                       mem_is_vstart_zero;
+
+    // mem_pending blanket-clear is only legal when no OLDER instruction survives the
+    // cycle (FALL_THROUGH FIFO: commit_insn_valid/empty forms are dead branches,
+    // fifo_v3.sv:58 -- the inflight_q form is required). Runahead=0: const 1, the
+    // original behaviour (push implies nothing older).
+    assign no_older  = (inflight_q == '0) ||
+                       ((inflight_q == InflWidth'(1)) && commit_insn_pop);
+  end else begin : gen_no_runahead
+    assign inflight_q = '0;
+    assign dual_adv   = 1'b0;
+    assign dual_run   = 1'b0;
+    assign dual_safe  = 1'b0;
+    assign dual_blk   = 1'b0;
+    assign opq_hold   = 1'b0;
+    assign no_older   = 1'b1;
+  end
 
   // Is the memory address unaligned
   logic mem_is_addr_unaligned;
@@ -1201,8 +1284,11 @@ module spatz_vlsu
     mem_pending_d = mem_pending_q;
 
     // The pending counters are per in-flight memory instruction.
-    // Reset on instruction enqueue to avoid stale carry-over.
-    if (commit_insn_push)
+    // Reset on instruction enqueue to avoid stale carry-over -- but ONLY when nothing
+    // older survives the cycle. H1: B's push must not zero A's in-flight beats; the UNION
+    // count is load-bearing (B's early beats keep mem_pending[0]!=0 after A's charge
+    // drains, blocking the stale-drain arms from popping B's parked data).
+    if (commit_insn_push && (!Runahead || no_older))
       mem_pending_d = '{default: '0};
 
     for (int port = 0; port < NrMemPorts; port++) begin
@@ -1295,7 +1381,7 @@ module spatz_vlsu
       burst_len_issue[port] = burst_len_send;
 
       // Start a new burst allocation when eligible.
-      if (!burst_alloc_q[port] && mem_operation_valid[port] && burst_use[port]) begin
+      if (!burst_alloc_q[port] && mem_operation_valid[port] && burst_use[port] && !dual_blk) begin
         burst_alloc_d[port]     = 1'b1;
         burst_len_d[port]       = burst_len_calc[port];
         burst_alloc_cnt_d[port] = '0;
@@ -1566,10 +1652,16 @@ module spatz_vlsu
           // (~4 levels) and const 0 when the knob is off, so this term folds away.
           end else if ((!burst_mode_req[port] || !burst_use[port]) && !rob_req_block[port] &&
                        !rob_full[port] && !offset_queue_full[port]) begin
+            // !dual_blk: an unsafe younger op at the head (store-after-load, strided,
+            // tailed, vstart!=0) must emit NOTHING until the elder retires -- every
+            // lvalid arm is gated on commit_insn_q.is_load (= the ELDER, a load), so
+            // without this term it would issue LOAD requests at the younger op's
+            // addresses.
             mem_req_lvalid[port] = (!mem_is_indexed || (vrf_rvalid_i[1] && !pending_index[port])) &&
                                    !commit_insn_push &&
                                    rob_id_valid[port] &&
-                                   commit_insn_q.is_load;
+                                   commit_insn_q.is_load &&
+                                   !dual_blk;
             rob_req_id[port]     = spatz_mem_req_ready[port] & mem_req_lvalid[port];
             mem_req_id[port]     = rob_id[port];
             mem_req_last[port]   = mem_operation_last[port];
@@ -1797,15 +1889,18 @@ module spatz_vlsu
   if (1) begin : gen_vperf
     logic        vperf_win_q;
     logic [31:0] c_win, c_insn, c_noinsn, c_pairok, c_single, c_waitbeat, c_vrfbp, c_reqstall, c_ret;
+    logic [31:0] c_dual, c_blkstall;
     wire vperf_win = mempool_tb.csr_trace_any_global;
     always_ff @(posedge clk_i or negedge rst_ni) begin
       if (!rst_ni) begin
         vperf_win_q <= 1'b0;
         {c_win, c_insn, c_noinsn, c_pairok, c_single, c_waitbeat, c_vrfbp, c_reqstall, c_ret} <= '0;
+        {c_dual, c_blkstall} <= '0;
       end else begin
         vperf_win_q <= vperf_win;
         if (vperf_win && !vperf_win_q) begin
           {c_win, c_insn, c_noinsn, c_pairok, c_single, c_waitbeat, c_vrfbp, c_reqstall, c_ret} <= '0;
+        {c_dual, c_blkstall} <= '0;
         end else if (vperf_win) begin
           c_win <= c_win + 1;
           if (commit_insn_valid && commit_insn_q.is_load) c_insn <= c_insn + 1;
@@ -1818,10 +1913,13 @@ module spatz_vlsu
           if (vrf_req_valid_d && !vrf_req_ready_d)        c_vrfbp <= c_vrfbp + 1;
           if (mem_req_lvalid[0] && !spatz_mem_req_ready[0]) c_reqstall <= c_reqstall + 1;
           if (commit_insn_pop)                            c_ret <= c_ret + 1;
+          if (dual_adv)                                   c_dual <= c_dual + 1;
+          if (burst_alloc_q[0] && !burst_block_fire &&
+              mem_operation_valid[0])                     c_blkstall <= c_blkstall + 1;
         end
         if (!vperf_win && vperf_win_q && (c_ret != 0))
-          $display("[VPERF] %m win=%0d insn_act=%0d no_insn=%0d pair_commit=%0d single_commit=%0d wait_beats=%0d vrf_bp=%0d req_stall=%0d insn_ret=%0d",
-                   c_win, c_insn, c_noinsn, c_pairok, c_single, c_waitbeat, c_vrfbp, c_reqstall, c_ret);
+          $display("[VPERF] %m win=%0d insn_act=%0d no_insn=%0d pair_commit=%0d single_commit=%0d wait_beats=%0d vrf_bp=%0d req_stall=%0d insn_ret=%0d dual_adv=%0d blk_stall=%0d",
+                   c_win, c_insn, c_noinsn, c_pairok, c_single, c_waitbeat, c_vrfbp, c_reqstall, c_ret, c_dual, c_blkstall);
       end
     end
   end
@@ -1836,10 +1934,93 @@ module spatz_vlsu
     assert property (@(posedge clk_i) disable iff (!rst_ni)
         (|burst_odd_expected_q) |-> !rob_req_id[1])
       else $fatal(1, "[spatz_vlsu] Native ROB1 allocation while odd burst beats are expected.");
-    // Every expected odd beat must have been consumed by the time its instruction retires.
+    if (Runahead) begin : gen_runahead_asserts
+    // A1: never advance the op queue mid-allocation (the walk-fallback window).
     assert property (@(posedge clk_i) disable iff (!rst_ni)
-        (commit_insn_pop && commit_insn_q.use_port0_burst) |-> !(|burst_odd_expected_d))
-      else $fatal(1, "[spatz_vlsu] Burst instruction retiring with odd-expected bits still set.");
+        (dual_adv && mem_spatz_req_ready) |-> !(|burst_alloc_q))
+      else $fatal(1, "[spatz_vlsu] H1 advance during burst allocation.");
+    // A3: while two instructions are co-resident, no native multi-port ROB traffic
+    // (only ROB0 may allocate; a native ROB1 alloc aliases the parity steering).
+    assert property (@(posedge clk_i) disable iff (!rst_ni)
+        dual_run |-> !(|rob_req_id[NrMemPorts-1:1]))
+      else $fatal(1, "[spatz_vlsu] Native multi-port ROB allocation during dual residency.");
+    // A5: the in-flight cap and the bookkeeping counter agree with the commit FIFO.
+    assert property (@(posedge clk_i) disable iff (!rst_ni)
+        (inflight_q <= InflWidth'(MaxInflight)) &&
+        ((idx_width(CommitQDepth)+1)'(inflight_q) == commit_usage))
+      else $fatal(1, "[spatz_vlsu] H1 inflight bookkeeping diverges from the commit FIFO.");
+    // A6: the union pending count is bounded by the ROB allocation.
+    assert property (@(posedge clk_i) disable iff (!rst_ni)
+        mem_pending_q[0] <= NrOutstandingLoads)
+      else $fatal(1, "[spatz_vlsu] mem_pending[0] exceeds the ROB id space.");
+    // A7: a 2-wide commit pop always has both beats charged.
+    assert property (@(posedge clk_i) disable iff (!rst_ni)
+        (commit_insn_q.is_load && rob_pop_dual[0]) |-> (mem_pending_q[0] >= 2))
+      else $fatal(1, "[spatz_vlsu] Dual ROB pop with fewer than two pending beats.");
+
+    // A9 (fence underflow -- arm FIRST: a lost pulse hangs snitch acc_mem_req_cnt and
+    // wedges the next gbar_sync). Exactly one spatz_mem_req_sent_o pulse per
+    // push->pop interval of every instruction id.
+    logic [NrParallelInstructions-1:0] sent_seen_q, sent_seen_d;
+    always_comb begin
+      sent_seen_d = sent_seen_q;
+      if (commit_insn_push)      sent_seen_d[mem_spatz_req.id] = 1'b0;
+      if (spatz_mem_req_sent_o)  sent_seen_d[mem_spatz_req.id] = 1'b1;
+    end
+    always_ff @(posedge clk_i or negedge rst_ni) begin
+      if (!rst_ni) sent_seen_q <= '0;
+      else         sent_seen_q <= sent_seen_d;
+    end
+    a9_no_double_pulse: assert property (@(posedge clk_i) disable iff (!rst_ni)
+        spatz_mem_req_sent_o |-> !sent_seen_q[mem_spatz_req.id])
+      else $fatal(1, "[spatz_vlsu] H1 fence: two req_sent pulses for one instruction.");
+    a9_pulse_per_insn: assert property (@(posedge clk_i) disable iff (!rst_ni)
+        (commit_insn_pop && commit_insn_q.is_load) |-> sent_seen_q[commit_insn_q.id])
+      else $fatal(1, "[spatz_vlsu] H1 fence: instruction retired without a req_sent pulse.");
+
+    // A10 (positional commit attribution -- the no-id-tagging invariant): the ROB0 pops
+    // attributed to the commit head must equal its word count at retire. Count COMMIT pops
+    // ONLY: the stale-drain arm (rob_pop[0] with !mem_pending[0]) also pops ROB0 to discard
+    // leftover entries from an earlier phase (e.g. warmup leftovers at the start of a load
+    // phase) -- those are not commits and must not inflate the count. In the TwinROB0 pair
+    // branch rob_pop_dual is always a commit pop; in the legacy branch a commit pop has
+    // mem_pending[0] set.
+    logic [15:0] head_pops_q, head_pops_d;
+    always_comb begin
+      head_pops_d = head_pops_q + (rob_pop_dual[0] ? 16'd2 :
+                                   ((rob_pop[0] && mem_pending[0]) ? 16'd1 : 16'd0));
+      if (commit_insn_pop) head_pops_d = '0;
+    end
+    always_ff @(posedge clk_i or negedge rst_ni) begin
+      if (!rst_ni) head_pops_q <= '0;
+      else         head_pops_q <= head_pops_d;
+    end
+    a10_positional: assert property (@(posedge clk_i) disable iff (!rst_ni)
+        (commit_insn_pop && commit_insn_q.is_load && commit_insn_q.use_port0_burst)
+        |-> (head_pops_q + (rob_pop_dual[0] ? 16'd2 :
+                            ((rob_pop[0] && mem_pending[0]) ? 16'd1 : 16'd0)))
+            == (16'(commit_insn_q.vl) >> 2))
+      else $fatal(1, "[spatz_vlsu] H1 positional attribution broken: pops=%0d+%0d != vl_words=%0d at retire.",
+                  head_pops_q,
+                  (rob_pop_dual[0] ? 16'd2 : ((rob_pop[0] && mem_pending[0]) ? 16'd1 : 16'd0)),
+                  (16'(commit_insn_q.vl) >> 2));
+  end
+
+  if (!Runahead) begin : gen_retire_odd_assert
+      // Every expected odd beat must have been consumed by the time its instruction retires.
+      assert property (@(posedge clk_i) disable iff (!rst_ni)
+          (commit_insn_pop && commit_insn_q.use_port0_burst) |-> !(|burst_odd_expected_d))
+        else $fatal(1, "[spatz_vlsu] Burst instruction retiring with odd-expected bits still set.");
+    end else begin : gen_walk_odd_assert
+      // Under dual residency the form above FALSE-POSITIVES (A retires while B's odd bits
+      // legitimately live). Id-scoped sound form: an allocation may never target a live
+      // odd-expected id (blk_odd_clean covers the block path; this is the walk mirror).
+      // Disjoint id windows make aliasing structurally impossible; the native-ROB1
+      // tripwire above stays armed as the F5 backstop.
+      assert property (@(posedge clk_i) disable iff (!rst_ni)
+          burst_alloc_fire[0] |-> !burst_odd_expected_q[rob_id[0]])
+        else $fatal(1, "[spatz_vlsu] Walk allocation into a live odd-expected id.");
+    end
   end
 `endif
 
