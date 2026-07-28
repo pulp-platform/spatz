@@ -14,10 +14,10 @@
 // ===========================================================================
 //
 // CSR addresses for Ventaglio sparse-format configuration.
-//   0x7c3: VTL vreg bitmap (which vregs are mapped to Ventaglio's bank)
-//   0x7c4: index width (encoded: IDXW_1=0, IDXW_2=1, IDXW_4=2, IDXW_8=3)
-//   0x7c5: block size  (encoded: BLK_1=0,  BLK_2=1,  BLK_4=2,  BLK_8=3)
-//   0x7c6: sparsity ratio (encoded: SP_050=1 for 2:4, SP_025=2 for 1:4)
+//   vtlreg   (0x7CA): VTL vreg bitmap (which vregs are mapped to Ventaglio's bank)
+//   vtlidxw  (0x7CB): index width (encoded: IDXW_1=0, IDXW_2=1, IDXW_4=2, IDXW_8=3)
+//   vtlblks  (0x7CC): block size  (encoded: BLK_1=0,  BLK_2=1,  BLK_4=2,  BLK_8=3)
+//   vtlratio (0x7CD): sparsity ratio (encoded: SP_050=1 for 2:4, SP_025=2 for 1:4)
 
 static inline uint32_t bit_if_valid(uint32_t vr) {
   return (vr < 32) ? (1u << vr) : 0u;
@@ -27,7 +27,7 @@ static inline void vtl_cfg(uint32_t vr0, uint32_t vr1, uint32_t vr2,
                            uint32_t vr3) {
   uint32_t bitmap = bit_if_valid(vr0) | bit_if_valid(vr1) | bit_if_valid(vr2) |
                     bit_if_valid(vr3);
-  asm volatile("csrrw x0, 0x7c3, %0" ::"r"(bitmap) : "memory");
+  asm volatile("csrrw x0, vtlreg, %0" ::"r"(bitmap) : "memory");
 }
 
 static inline void sparse_fmt_cfg(uint32_t idx_width, uint32_t m_sparse,
@@ -42,9 +42,9 @@ static inline void sparse_fmt_cfg(uint32_t idx_width, uint32_t m_sparse,
                                        : 3u;
   uint32_t ratio_enc = ((m_sparse / n_sparse) == 2u) ? 1u : 2u;
 
-  asm volatile("csrrw x0, 0x7c4, %0" ::"r"(idx_enc) : "memory");
-  asm volatile("csrrw x0, 0x7c5, %0" ::"r"(blk_enc) : "memory");
-  asm volatile("csrrw x0, 0x7c6, %0" ::"r"(ratio_enc) : "memory");
+  asm volatile("csrrw x0, vtlidxw, %0" ::"r"(idx_enc) : "memory");
+  asm volatile("csrrw x0, vtlblks, %0" ::"r"(blk_enc) : "memory");
+  asm volatile("csrrw x0, vtlratio, %0" ::"r"(ratio_enc) : "memory");
 }
 
 void spmm_ventaglio(float *res, const float *a, const float *w,
