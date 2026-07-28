@@ -52,9 +52,11 @@ sw/toolchain/llvm-project: sw/toolchain/llvm-project.version
 		git checkout `cat ../llvm-project.version` && \
 		git submodule update --init --recursive --jobs=8 .
 
+# Fetched as a release tarball from the kernel.org mirror: sourceware.org
+# rate-limits git clones from CI (HTTP 429).
 sw/toolchain/newlib:
-	mkdir -p sw/toolchain
-	cd sw/toolchain && git clone --depth 1 -b newlib-4.4.0 https://sourceware.org/git/newlib-cygwin.git newlib
+	mkdir -p sw/toolchain/newlib
+	cd sw/toolchain && curl -fL https://mirrors.kernel.org/sourceware/newlib/newlib-4.4.0.20231231.tar.gz | tar xz --strip-components=1 -C newlib
 
 sw/toolchain/riscv-opcodes: sw/toolchain/riscv-opcodes.version
 	mkdir -p sw/toolchain
