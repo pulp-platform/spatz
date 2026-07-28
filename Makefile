@@ -52,6 +52,10 @@ sw/toolchain/llvm-project: sw/toolchain/llvm-project.version
 		git checkout `cat ../llvm-project.version` && \
 		git submodule update --init --recursive --jobs=8 .
 
+sw/toolchain/newlib:
+	mkdir -p sw/toolchain
+	cd sw/toolchain && git clone --depth 1 -b newlib-4.4.0 https://sourceware.org/git/newlib-cygwin.git newlib
+
 sw/toolchain/riscv-opcodes: sw/toolchain/riscv-opcodes.version
 	mkdir -p sw/toolchain
 	cd sw/toolchain && git clone https://github.com/pulp-platform/riscv-opcodes.git
@@ -92,7 +96,12 @@ tc-riscv-gcc: sw/toolchain/riscv-gnu-toolchain
 	sed -i 's/type wget/false/' ../riscv-gcc/contrib/download_prerequisites && \
 	$(MAKE) MAKEINFO=true WERROR_CFLAGS="" -j4
 
-tc-llvm: sw/toolchain/llvm-project
+# Builds the self-contained LLVM 22 toolchain: clang + lld, then newlib
+# (libc/libm) and compiler-rt builtins for riscv32/ilp32d, all installed
+# into $(LLVM_INSTALL_DIR). Mirrors llvm-project's
+# .github/pulp/scripts/build-riscv32-llvm.sh — the sw build links with
+# --rtlib=compiler-rt against these libraries (no external GCC toolchain).
+tc-llvm: sw/toolchain/llvm-project sw/toolchain/newlib
 	mkdir -p $(LLVM_INSTALL_DIR)
 	cd sw/toolchain/llvm-project && mkdir -p build && cd build; \
 	$(CMAKE) \
@@ -109,6 +118,48 @@ tc-llvm: sw/toolchain/llvm-project
 		../llvm && \
 	make -j8 all && \
 	make install
+	rm -rf sw/toolchain/build-newlib32 && mkdir -p sw/toolchain/build-newlib32
+	cd sw/toolchain/build-newlib32 && \
+	../newlib/configure \
+		--target=riscv32-unknown-elf \
+		--prefix=$(LLVM_INSTALL_DIR) \
+		AR_FOR_TARGET=$(LLVM_INSTALL_DIR)/bin/llvm-ar \
+		AS_FOR_TARGET=$(LLVM_INSTALL_DIR)/bin/llvm-as \
+		LD_FOR_TARGET=$(LLVM_INSTALL_DIR)/bin/llvm-ld \
+		RANLIB_FOR_TARGET=$(LLVM_INSTALL_DIR)/bin/llvm-ranlib \
+		CC_FOR_TARGET="$(LLVM_INSTALL_DIR)/bin/clang --target=riscv32 -march=rv32imafd" && \
+	$(MAKE) -j8 && $(MAKE) install
+	rm -rf sw/toolchain/build-compiler-rt32 && mkdir -p sw/toolchain/build-compiler-rt32
+	cd sw/toolchain/build-compiler-rt32 && \
+	$(CMAKE) -G"Unix Makefiles" \
+		-DCMAKE_SYSTEM_NAME=Linux \
+		-DCMAKE_INSTALL_PREFIX=$$($(LLVM_INSTALL_DIR)/bin/clang -print-resource-dir) \
+		-DCMAKE_C_COMPILER=$(LLVM_INSTALL_DIR)/bin/clang \
+		-DCMAKE_CXX_COMPILER=$(LLVM_INSTALL_DIR)/bin/clang \
+		-DCMAKE_AR=$(LLVM_INSTALL_DIR)/bin/llvm-ar \
+		-DCMAKE_NM=$(LLVM_INSTALL_DIR)/bin/llvm-nm \
+		-DCMAKE_RANLIB=$(LLVM_INSTALL_DIR)/bin/llvm-ranlib \
+		-DCMAKE_C_COMPILER_TARGET="riscv32-unknown-elf" \
+		-DCMAKE_CXX_COMPILER_TARGET="riscv32-unknown-elf" \
+		-DCMAKE_ASM_COMPILER_TARGET="riscv32-unknown-elf" \
+		-DCMAKE_C_FLAGS="-march=rv32imafd -mabi=ilp32d" \
+		-DCMAKE_CXX_FLAGS="-march=rv32imafd -mabi=ilp32d" \
+		-DCMAKE_ASM_FLAGS="-march=rv32imafd -mabi=ilp32d" \
+		-DCMAKE_EXE_LINKER_FLAGS="-nostartfiles -nostdlib -fuse-ld=lld" \
+		-DCOMPILER_RT_BAREMETAL_BUILD=ON \
+		-DCOMPILER_RT_BUILD_BUILTINS=ON \
+		-DCOMPILER_RT_BUILD_MEMPROF=OFF \
+		-DCOMPILER_RT_BUILD_LIBFUZZER=OFF \
+		-DCOMPILER_RT_BUILD_PROFILE=OFF \
+		-DCOMPILER_RT_BUILD_SANITIZERS=OFF \
+		-DCOMPILER_RT_BUILD_XRAY=OFF \
+		-DCOMPILER_RT_DEFAULT_TARGET_ONLY=ON \
+		-DCOMPILER_RT_OS_DIR="riscv32-unknown-unknown-elf" \
+		-DLLVM_CONFIG_PATH=$(LLVM_INSTALL_DIR)/bin/llvm-config \
+		../llvm-project/compiler-rt && \
+	$(MAKE) -j8 && $(MAKE) install
+	cp "$$($(LLVM_INSTALL_DIR)/bin/clang --target=riscv32-unknown-elf -print-runtime-dir)/libclang_rt.builtins-riscv32.a" \
+	   "$$($(LLVM_INSTALL_DIR)/bin/clang --target=riscv32-unknown-elf -print-runtime-dir)/libclang_rt.builtins.a"
 
 tc-riscv-isa-sim: sw/toolchain/riscv-isa-sim sw/toolchain/dtc
 	mkdir -p $(SPIKE_INSTALL_DIR)
