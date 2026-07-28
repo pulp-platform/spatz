@@ -295,6 +295,16 @@ module spatz_mempool_cc
     assign data_pready_o[i+1]      = '1;
   end
 
+  // ROB64 width-pairing tripwires: the VLSU ROB id, the wire meta_id and the response
+  // struct id must agree, or ids silently truncate at :285/:291. These are elaboration-time
+  // checks (constant), so they fire at compile, not at runtime.
+  if ($bits(spatz_mem_req[0].id) < snitch_pkg::MetaIdWidth)
+    $error("[spatz_mempool_cc] spatz_mem_req_t.id (%0d) narrower than meta_id_t (%0d) -- request truncation.",
+           $bits(spatz_mem_req[0].id), snitch_pkg::MetaIdWidth);
+  if ($bits(spatz_mem_rsp[0].id) != snitch_pkg::MetaIdWidth)
+    $error("[spatz_mempool_cc] spatz_mem_rsp_t.id (%0d) != MetaIdWidth (%0d) -- response aliasing.",
+           $bits(spatz_mem_rsp[0].id), snitch_pkg::MetaIdWidth);
+
   assign fp_lsu_req = '{
     addr   : fp_lsu_mem_req.addr,
     id     : fp_lsu_mem_req.id,

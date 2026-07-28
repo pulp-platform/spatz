@@ -322,10 +322,15 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   // VLSU //
   //////////
 
+  // ROB64 root (spatz side). Must equal snitch_pkg::RobDepth (same define);
+  // spatz_mempool_cc asserts the pairing at elaboration.
+  localparam int unsigned NrVLSUOutstandingLoads =
+    `ifdef SPATZ_VLSU_ROB_DEPTH `SPATZ_VLSU_ROB_DEPTH `else 32 `endif;
+
   spatz_vlsu #(
     .NrMemPorts        (NrMemPorts        ),
     .NumRespPorts      (NumRespPorts      ),
-    .NrOutstandingLoads(32                ),
+    .NrOutstandingLoads(NrVLSUOutstandingLoads),
     .spatz_mem_req_t   (spatz_mem_req_t   ),
     .spatz_mem_rsp_t   (spatz_mem_rsp_t   )
   ) i_vlsu (
