@@ -12,3 +12,4 @@ vc_hdrs.h
 *fsdb
 *key
 logs
+*.tdb
