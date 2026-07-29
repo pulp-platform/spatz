@@ -201,6 +201,15 @@ extern "C" {
       .mask = SPATZ_CLUSTER_PERIPHERAL_CLUSTER_EOC_EXIT_EOC_EXIT_MASK,         \
       .index = SPATZ_CLUSTER_PERIPHERAL_CLUSTER_EOC_EXIT_EOC_EXIT_OFFSET})
 
+// Free-form benchmark phase marker. Software writes an arbitrary
+#define SPATZ_CLUSTER_PERIPHERAL_BENCHMARK_MARK_REG_OFFSET 0x68
+#define SPATZ_CLUSTER_PERIPHERAL_BENCHMARK_MARK_MARK_MASK 0xffffffff
+#define SPATZ_CLUSTER_PERIPHERAL_BENCHMARK_MARK_MARK_OFFSET 0
+#define SPATZ_CLUSTER_PERIPHERAL_BENCHMARK_MARK_MARK_FIELD                     \
+  ((bitfield_field32_t){                                                       \
+      .mask = SPATZ_CLUSTER_PERIPHERAL_BENCHMARK_MARK_MARK_MASK,               \
+      .index = SPATZ_CLUSTER_PERIPHERAL_BENCHMARK_MARK_MARK_OFFSET})
+
 #ifdef __cplusplus
 } // extern "C"
 #endif

@@ -11,3 +11,6 @@ size_t benchmark_get_cycle();
 
 void start_kernel();
 void stop_kernel();
+
+// Write a free-form benchmark phase marker (observed/timestamped by the TB).
+void benchmark_mark(uint32_t value);

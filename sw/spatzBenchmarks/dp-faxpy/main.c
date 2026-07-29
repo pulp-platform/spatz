@@ -60,6 +60,7 @@ int main() {
   if (cid == 0) {
     *a = axpy_alpha_dram;
 
+    benchmark_mark(1);  // phase 1: DMA-in (load x, y from DRAM)
     snrt_dma_start_1d(x, axpy_X_dram, dim * sizeof(double));
     snrt_dma_start_1d(y, axpy_Y_dram, dim * sizeof(double));
     snrt_dma_wait_all();
@@ -76,8 +77,10 @@ int main() {
   snrt_cluster_hw_barrier();
 
   // Start dump
-  if (cid == 0)
+  if (cid == 0) {
+    benchmark_mark(2);  // phase 2: compute (AXPY on-chip)
     start_kernel();
+  }
 
   // Start timer
   if (cid == 0)
@@ -98,8 +101,10 @@ int main() {
     timer = benchmark_get_cycle() - timer;
 
   // End dump
-  if (cid == 0)
+  if (cid == 0) {
     stop_kernel();
+    benchmark_mark(0);  // phase 0: done
+  }
 
   // Check and display results
   if (cid == 0) {

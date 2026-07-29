@@ -24,3 +24,14 @@ void stop_kernel() {
                    SPATZ_CLUSTER_PERIPHERAL_SPATZ_STATUS_REG_OFFSET);
   *bench = 0;
 }
+
+// Write a free-form phase marker. The testbench prints a timestamped
+// "[PHASE] <t> ns mark=<value>" line on every change, letting a post-processor
+// align DRAM traffic against software phase boundaries. Call from a single core
+// (by convention, core 0) to keep markers ordered.
+void benchmark_mark(uint32_t value) {
+  uint32_t *mark =
+      (uint32_t *)(_snrt_team_current->root->cluster_mem.end +
+                   SPATZ_CLUSTER_PERIPHERAL_BENCHMARK_MARK_REG_OFFSET);
+  *mark = value;
+}
