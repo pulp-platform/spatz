@@ -43,6 +43,7 @@ module testharness (
   logic                cluster_probe;
   logic [NumCores-1:0] debug_req;
   logic [3:0]          eoc;
+  logic [31:0]         benchmark_mark;
 
   spatz_cluster_wrapper i_cluster_wrapper (
     .clk_i           (clk_i                ),
@@ -51,6 +52,7 @@ module testharness (
     .msip_i          ('0                   ),
     .mtip_i          ('0                   ),
     .eoc_o           (eoc                  ),
+    .benchmark_mark_o(benchmark_mark       ),
     .debug_req_i     ( debug_req           ),
     .axi_out_req_o   (axi_from_cluster_req ),
     .axi_out_resp_i  (axi_from_cluster_resp),
@@ -155,6 +157,21 @@ module testharness (
     .axi_req_i (axi_tb_req[TbUart]  ),
     .axi_resp_o(axi_tb_resp[TbUart] )
   );
+
+  /************************
+   *  Benchmark markers   *
+   ************************/
+  // Print a timestamped line whenever software writes a new phase marker.
+  // A post-processing tool aligns DRAM traffic against these boundaries.
+  logic [31:0] benchmark_mark_q;
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (!rst_ni) begin
+      benchmark_mark_q <= '0;
+    end else if (benchmark_mark !== benchmark_mark_q) begin
+      $display("[PHASE] %0t ns mark=%0d", $time / 1000, benchmark_mark);
+      benchmark_mark_q <= benchmark_mark;
+    end
+  end
 
 /**************
  *  VCD Dump  *

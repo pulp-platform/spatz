@@ -152,6 +152,10 @@ package spatz_cluster_peripheral_reg_pkg;
   } spatz_cluster_peripheral_reg2hw_cluster_eoc_exit_reg_t;
 
   typedef struct packed {
+    logic [31:0] q;
+  } spatz_cluster_peripheral_reg2hw_benchmark_mark_reg_t;
+
+  typedef struct packed {
     logic [47:0] d;
   } spatz_cluster_peripheral_hw2reg_perf_counter_mreg_t;
 
@@ -161,16 +165,17 @@ package spatz_cluster_peripheral_reg_pkg;
 
   // Register -> HW type
   typedef struct packed {
-    spatz_cluster_peripheral_reg2hw_perf_counter_enable_mreg_t [1:0] perf_counter_enable; // [343:282]
-    spatz_cluster_peripheral_reg2hw_hart_select_mreg_t [1:0] hart_select; // [281:262]
-    spatz_cluster_peripheral_reg2hw_perf_counter_mreg_t [1:0] perf_counter; // [261:164]
-    spatz_cluster_peripheral_reg2hw_cl_clint_set_reg_t cl_clint_set; // [163:131]
-    spatz_cluster_peripheral_reg2hw_cl_clint_clear_reg_t cl_clint_clear; // [130:98]
-    spatz_cluster_peripheral_reg2hw_hw_barrier_reg_t hw_barrier; // [97:66]
-    spatz_cluster_peripheral_reg2hw_icache_prefetch_enable_reg_t icache_prefetch_enable; // [65:65]
-    spatz_cluster_peripheral_reg2hw_spatz_status_reg_t spatz_status; // [64:64]
-    spatz_cluster_peripheral_reg2hw_cluster_boot_control_reg_t cluster_boot_control; // [63:32]
-    spatz_cluster_peripheral_reg2hw_cluster_eoc_exit_reg_t cluster_eoc_exit; // [31:0]
+    spatz_cluster_peripheral_reg2hw_perf_counter_enable_mreg_t [1:0] perf_counter_enable; // [375:314]
+    spatz_cluster_peripheral_reg2hw_hart_select_mreg_t [1:0] hart_select; // [313:294]
+    spatz_cluster_peripheral_reg2hw_perf_counter_mreg_t [1:0] perf_counter; // [293:196]
+    spatz_cluster_peripheral_reg2hw_cl_clint_set_reg_t cl_clint_set; // [195:163]
+    spatz_cluster_peripheral_reg2hw_cl_clint_clear_reg_t cl_clint_clear; // [162:130]
+    spatz_cluster_peripheral_reg2hw_hw_barrier_reg_t hw_barrier; // [129:98]
+    spatz_cluster_peripheral_reg2hw_icache_prefetch_enable_reg_t icache_prefetch_enable; // [97:97]
+    spatz_cluster_peripheral_reg2hw_spatz_status_reg_t spatz_status; // [96:96]
+    spatz_cluster_peripheral_reg2hw_cluster_boot_control_reg_t cluster_boot_control; // [95:64]
+    spatz_cluster_peripheral_reg2hw_cluster_eoc_exit_reg_t cluster_eoc_exit; // [63:32]
+    spatz_cluster_peripheral_reg2hw_benchmark_mark_reg_t benchmark_mark; // [31:0]
   } spatz_cluster_peripheral_reg2hw_t;
 
   // HW -> register type
@@ -193,6 +198,7 @@ package spatz_cluster_peripheral_reg_pkg;
   parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_SPATZ_STATUS_OFFSET = 7'h 50;
   parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_CLUSTER_BOOT_CONTROL_OFFSET = 7'h 58;
   parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_CLUSTER_EOC_EXIT_OFFSET = 7'h 60;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_BENCHMARK_MARK_OFFSET = 7'h 68;
 
   // Reset values for hwext registers and their fields
   parameter logic [47:0] SPATZ_CLUSTER_PERIPHERAL_PERF_COUNTER_0_RESVAL = 48'h 0;
@@ -215,11 +221,12 @@ package spatz_cluster_peripheral_reg_pkg;
     SPATZ_CLUSTER_PERIPHERAL_ICACHE_PREFETCH_ENABLE,
     SPATZ_CLUSTER_PERIPHERAL_SPATZ_STATUS,
     SPATZ_CLUSTER_PERIPHERAL_CLUSTER_BOOT_CONTROL,
-    SPATZ_CLUSTER_PERIPHERAL_CLUSTER_EOC_EXIT
+    SPATZ_CLUSTER_PERIPHERAL_CLUSTER_EOC_EXIT,
+    SPATZ_CLUSTER_PERIPHERAL_BENCHMARK_MARK
   } spatz_cluster_peripheral_id_e;
 
   // Register width information to check illegal writes
-  parameter logic [3:0] SPATZ_CLUSTER_PERIPHERAL_PERMIT [13] = '{
+  parameter logic [3:0] SPATZ_CLUSTER_PERIPHERAL_PERMIT [14] = '{
     4'b 1111, // index[ 0] SPATZ_CLUSTER_PERIPHERAL_PERF_COUNTER_ENABLE_0
     4'b 1111, // index[ 1] SPATZ_CLUSTER_PERIPHERAL_PERF_COUNTER_ENABLE_1
     4'b 0011, // index[ 2] SPATZ_CLUSTER_PERIPHERAL_HART_SELECT_0
@@ -232,7 +239,8 @@ package spatz_cluster_peripheral_reg_pkg;
     4'b 0001, // index[ 9] SPATZ_CLUSTER_PERIPHERAL_ICACHE_PREFETCH_ENABLE
     4'b 0001, // index[10] SPATZ_CLUSTER_PERIPHERAL_SPATZ_STATUS
     4'b 1111, // index[11] SPATZ_CLUSTER_PERIPHERAL_CLUSTER_BOOT_CONTROL
-    4'b 1111  // index[12] SPATZ_CLUSTER_PERIPHERAL_CLUSTER_EOC_EXIT
+    4'b 1111, // index[12] SPATZ_CLUSTER_PERIPHERAL_CLUSTER_EOC_EXIT
+    4'b 1111  // index[13] SPATZ_CLUSTER_PERIPHERAL_BENCHMARK_MARK
   };
 
 endpackage

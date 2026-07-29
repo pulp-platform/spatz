@@ -126,6 +126,8 @@ module spatz_cluster
     input  logic          [NrCores-1:0]      msip_i,
     /// End of computation flag and exit status.
     output logic          [3:0]              eoc_o,
+    /// Free-form benchmark phase marker (software-written).
+    output logic          [31:0]             benchmark_mark_o,
     /// First hartid of the cluster. Cores of a cluster are monotonically
     /// increasing without a gap, i.e., a cluster with 8 cores and a
     /// `hart_base_id_i` of 5 get the hartids 5 - 12.
@@ -1030,6 +1032,7 @@ module spatz_cluster
     .tcdm_end_address_i       (tcdm_end_address      ),
     .icache_prefetch_enable_o (icache_prefetch_enable),
     .eoc_o                    (eoc_o                 ),
+    .benchmark_mark_o         (benchmark_mark_o      ),
     .cl_clint_o               (cl_interrupt          ),
     .cluster_hart_base_id_i   (hart_base_id_i        ),
     .core_events_i            (core_events           ),

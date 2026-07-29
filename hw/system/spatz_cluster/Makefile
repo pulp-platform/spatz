@@ -233,6 +233,78 @@ dram-clean:
 		rm -rf $(DRAMSYS_PATH)/build; \
 	fi
 
+####################
+# DRAM traffic plot #
+####################
+# Run a test on the vsim model and plot its DRAM channel traffic.
+#   make TEST=<binary-name> plot
+# TEST is the basename of a built binary under sw/build (e.g.
+# test-spatzBenchmarks-dp-faxpy_M1024). Produces plots/${TEST}_dram_plot.png
+# together with the captured transcript and DRAMSys trace snapshot.
+PLOT_DIR  ?= plots
+PLOT_TOOL := $(ROOT)/util/dram_traffic_plot.py
+TRACE_TDB := DRAMSysRecordable0_ddr4_ddr4_ch0.tdb
+TEST      ?= test-spatzBenchmarks-dp-faxpy_M1024
+TEST_BIN   = $(shell find sw/build -type f -name '$(TEST)' 2>/dev/null | head -1)
+# Optional time window (ns) for the plot; full first->last-burst span if unset.
+PLOT_WIN   =
+ifneq ($(START),)
+  PLOT_WIN += --tstart $(START)
+endif
+ifneq ($(END),)
+  PLOT_WIN += --tend $(END)
+endif
+
+.PHONY: plot
+plot:
+	@test -n "$(TEST_BIN)" || { \
+		echo "ERROR: TEST='$(TEST)' not found under sw/build (build SW first: make sw)"; \
+		exit 1; }
+	@test -x bin/spatz_cluster.vsim || { \
+		echo "ERROR: bin/spatz_cluster.vsim missing (build HW first: make bin/spatz_cluster.vsim)"; \
+		exit 1; }
+	@mkdir -p $(PLOT_DIR)
+	./bin/spatz_cluster.vsim $(TEST_BIN) | tee $(PLOT_DIR)/$(TEST).log
+	cp $(TRACE_TDB) $(PLOT_DIR)/$(TEST).tdb
+	$(PYTHON) $(PLOT_TOOL) $(PLOT_DIR)/$(TEST).tdb \
+		--transcript $(PLOT_DIR)/$(TEST).log \
+		--elf $(TEST_BIN) $(PLOT_WIN) \
+		-o $(PLOT_DIR)/$(TEST)_dram_plot.png
+	@echo "Wrote $(PLOT_DIR)/$(TEST)_dram_plot.png"
+
+.PHONY: clean-plot clean_plot
+clean-plot:
+	rm -rf $(PLOT_DIR)
+clean_plot: clean-plot   # backwards-compatible alias
+
+.PHONY: help-plot
+help-plot:
+	@echo "DRAM traffic plotting"
+	@echo "====================="
+	@echo ""
+	@echo "make [TEST=<bin>] [START=<ns>] [END=<ns>] plot"
+	@echo "    Run a test binary on bin/spatz_cluster.vsim, capture its DRAM"
+	@echo "    trace, and write $(PLOT_DIR)/<TEST>_dram_plot.png (+ .log/.tdb"
+	@echo "    snapshots). Requires 'make sw' and 'make bin/spatz_cluster.vsim'."
+	@echo ""
+	@echo "    TEST   basename of a binary under sw/build"
+	@echo "           (default: $(TEST))"
+	@echo "    START  start of the plotted time window in ns (default: first burst)"
+	@echo "    END    end of the plotted time window in ns   (default: last burst)"
+	@echo "           avg / active-avg lines are always over the full run; only"
+	@echo "           the view is windowed."
+	@echo ""
+	@echo "    Examples:"
+	@echo "      make TEST=test-spatzBenchmarks-dp-faxpy_M1024 plot"
+	@echo "      make TEST=test-spatzBenchmarks-dp-faxpy_M1024 START=4000 END=5300 plot"
+	@echo ""
+	@echo "make clean-plot"
+	@echo "    Remove the $(PLOT_DIR)/ directory (generated plots, logs, trace"
+	@echo "    snapshots). These are gitignored."
+	@echo ""
+	@echo "See util/dram_traffic_plot.README.md for the tool, subplots, and how"
+	@echo "the numbers relate to the DRAMSys end-of-run summary."
+
 #############
 # Verilator #
 #############

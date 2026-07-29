@@ -438,6 +438,20 @@
 	    name: "EOC_EXIT",
 	    desc: "Indicates the end of computation and exit status."
 	}]
+     },
+     {
+	name: "BENCHMARK_MARK",
+	desc: '''Free-form benchmark phase marker. Software writes an arbitrary
+	         value to timestamp a phase boundary; the value is exported as a
+	         hardware signal that a testbench monitor can observe.'''
+	swaccess: "rw",
+	hwaccess: "hro",
+	resval: "0",
+	fields: [{
+	    bits: "31:0",
+	    name: "MARK",
+	    desc: "Current benchmark phase marker value."
+	}]
      }
   ]
 }
