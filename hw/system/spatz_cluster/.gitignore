@@ -13,3 +13,5 @@ vc_hdrs.h
 *key
 logs
 *.tdb
+plots
+*_dram_plot.png

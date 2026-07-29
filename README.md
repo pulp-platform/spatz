@@ -85,6 +85,28 @@ make annotate
 make help
 ```
 
+### DRAM Utilization Helper script
+
+To better understand the DRAM channel usage, we provide a script `/util/dram_traffic_plot.py`. In order to use this script, we first save the simulation transcript:
+
+```tcl
+# Run the benchmark, capturing the transcript (the [PHASE] lines live here)
+./bin/spatz_cluster.vsim sw/build/spatzBenchmarks/${TEST} | tee plots/${TEST}.log
+```
+
+Then we snapshot the DRAM trace file:
+
+```tcl
+# Snapshot the DRAM trace (it is overwritten by the NEXT run)
+cp DRAMSysRecordable0_ddr4_ddr4_ch0.tdb plots/${TEST}.tdb
+```
+
+Finally, use the script and the transcripts to generate the plot:
+```tcl
+# Generate the plot
+python3 ../../../util/dram_traffic_plot.py plots/${TEST}.tdb --transcript plots/${TEST}.log -o plots/${TEST}.png
+```
+
 ### Configure the Cluster
 
 To configure the cluster with a different configuration, either edit the configuration files in the `cfg` folder or create a new configuration file and pass it to the Makefile:
