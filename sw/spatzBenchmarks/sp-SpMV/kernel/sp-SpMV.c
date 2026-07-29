@@ -11,10 +11,10 @@
 // ===========================================================================
 //
 // CSR addresses for Ventaglio sparse-format configuration.
-//   vtlreg   (0x7CA): VTL vreg bitmap (which vregs are mapped to Ventaglio's bank)
-//   vtlidxw  (0x7CB): index width (encoded: IDXW_1=0, IDXW_2=1, IDXW_4=2, IDXW_8=3)
-//   vtlblks  (0x7CC): block size  (encoded: BLK_1=0, BLK_2=1, BLK_4=2, BLK_8=3)
-//   vtlratio (0x7CD): sparsity ratio (encoded: SP_050=1 for 2:4, SP_025=2 for 1:4)
+//   vtlreg   (0x7CA): VTL vreg bitmap (vregs mapped to Ventaglio's bank)
+//   vtlidxw  (0x7CB): index width (IDXW_1=0, IDXW_2=1, IDXW_4=2, IDXW_8=3)
+//   vtlblks  (0x7CC): block size (BLK_1=0, BLK_2=1, BLK_4=2, BLK_8=3)
+//   vtlratio (0x7CD): sparsity ratio (SP_050=1 for 2:4, SP_025=2 for 1:4)
 
 static inline uint32_t bit_if_valid(uint32_t vr) {
   return (vr < 32) ? (1u << vr) : 0u;
