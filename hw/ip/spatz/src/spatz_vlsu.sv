@@ -24,6 +24,7 @@ module spatz_vlsu
   ) (
     input  logic                            clk_i,
     input  logic                            rst_ni,
+    input  logic                     [31:0] hart_id_i,
     // Spatz request
     input  spatz_req_t                      spatz_req_i,
     input  logic                            spatz_req_valid_i,
@@ -762,19 +763,27 @@ module spatz_vlsu
   string trace_mem_file;
 
   initial begin
-    trace_vrf_wb_file = "spatz_vlsu_vrf_wb.log";
-    trace_vrf_wb_fd = $fopen(trace_vrf_wb_file, "w");
+    trace_vrf_wb_fd = 0;
+    trace_mem_fd = 0;
+  end
 
-    trace_mem_file = "spatz_vlsu_mem_trace.log";
-    trace_mem_fd = $fopen(trace_mem_file, "w");
+  always @(posedge clk_i) begin
+    if (rst_ni && !$isunknown(hart_id_i) && trace_vrf_wb_fd == 0 && trace_mem_fd == 0) begin
+      trace_vrf_wb_file = $sformatf("spatz_vlsu_vrf_wb_hart%0d.log", hart_id_i);
+      trace_vrf_wb_fd = $fopen(trace_vrf_wb_file, "w");
+
+      trace_mem_file = $sformatf("spatz_vlsu_mem_trace_hart%0d.log", hart_id_i);
+      trace_mem_fd = $fopen(trace_mem_file, "w");
+    end
   end
 
   always_ff @(posedge clk_i) begin
-    if (rst_ni && vrf_req_valid_q && vrf_req_ready_q) begin
-      if (trace_vrf_wb_fd != 0) begin
+    if (rst_ni && trace_vrf_wb_fd != 0) begin
+      if (vrf_we_o && vrf_wvalid_i) begin
         $fdisplay(trace_vrf_wb_fd,
-                  "[spatz_vlsu] vrf_wb id=%0d waddr=0x%0h wbe=0x%0h wdata=0x%0h",
-                  vrf_req_q.rsp.id, vrf_req_q.waddr, vrf_req_q.wbe, vrf_req_q.wdata);
+                  "[spatz_vlsu] vrf_wb id_rsp=%0d id_mem=%0d id_commit=%0d waddr=0x%0h wbe=0x%0h wdata=0x%0h vlsu_rsp_valid=%0d id=%0d intf_id=%0d exc=%0d",
+                  vrf_id_o[2], vrf_id_o[1], vrf_id_o[0], vrf_waddr_o, vrf_wbe_o, vrf_wdata_o,
+                  vlsu_rsp_valid_o, vlsu_rsp_o.id, vlsu_rsp_o.intf_id, vlsu_rsp_o.exc);
       end
     end
   end
@@ -782,15 +791,17 @@ module spatz_vlsu
   always_ff @(posedge clk_i) begin
     if (rst_ni && trace_mem_fd != 0) begin
       for (int unsigned port = 0; port < NrMemPorts; port++) begin
+        automatic int unsigned intf = port / N_FU;
+        automatic int unsigned fu   = port % N_FU;
         if (spatz_mem_req_valid_o[port] && spatz_mem_req_ready_i[port]) begin
           if (spatz_mem_req_o[port].write) begin
             $fdisplay(trace_mem_fd,
-                      "[spatz_vlsu] mem_req port=%0d write=1 addr=0x%0h data=0x%0h",
-                      port, spatz_mem_req_o[port].addr, spatz_mem_req_o[port].data);
+                      "[spatz_vlsu] mem_req port=%0d intf=%0d fu=%0d id=%0d write=1 addr=0x%0h data=0x%0h",
+                      port, intf, fu, mem_req_id[port], spatz_mem_req_o[port].addr, spatz_mem_req_o[port].data);
           end else begin
             $fdisplay(trace_mem_fd,
-                      "[spatz_vlsu] mem_req port=%0d write=0 addr=0x%0h",
-                      port, spatz_mem_req_o[port].addr);
+                      "[spatz_vlsu] mem_req port=%0d intf=%0d fu=%0d id=%0d write=0 addr=0x%0h",
+                      port, intf, fu, mem_req_id[port], spatz_mem_req_o[port].addr);
           end
         end
 
