@@ -92,12 +92,18 @@ int main() {
   if (cid == 0)
     timer = benchmark_get_cycle();
 
-  // Calculate gemv. Only the branch matching T is ever taken; the casts
-  // keep the statically dead branches type-correct.
+    // Calculate gemv. Only the branch matching T is ever taken; the casts
+    // keep the statically dead branches type-correct. The double branch is
+    // preprocessed out on D-free (FLEN=32) builds, where gemv_v64b_m4 does
+    // not exist and T is never double (dp-gemv is ELEN=64 only).
+#if __riscv_flen >= 64
   if (sizeof(T) == 8)
     gemv_v64b_m4((double *)a_core, (double *)b, (double *)result_core, gemv_l.M,
                  m_core, gemv_l.N);
   else if (sizeof(T) == 4)
+#else
+  if (sizeof(T) == 4)
+#endif
     gemv_v32b_m4((float *)a_core, (float *)b, (float *)result_core, gemv_l.M,
                  m_core, gemv_l.N);
   else
