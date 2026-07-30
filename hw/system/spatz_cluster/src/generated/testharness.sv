@@ -168,10 +168,27 @@ module testharness (
     if (!rst_ni) begin
       benchmark_mark_q <= '0;
     end else if (benchmark_mark !== benchmark_mark_q) begin
-      $display("[PHASE] %0t ns mark=%0d", $time / 1000, benchmark_mark);
+      $display("[PHASE] %.3f ns mark=%0d", $realtime / 1ns, benchmark_mark);
       benchmark_mark_q <= benchmark_mark;
     end
   end
+
+  `ifdef TARGET_DRAMSYS
+  // DRAMSys time-base sync. The dram_sim_engine advances DRAMSys time by one
+  // cycle only while rst_ni is high, so DRAMSys t=0 is the first clk edge after
+  // reset. Emit that SV time so the plot can shift DRAMSys trace timestamps
+  // (which start at 0 there) onto the testbench $realtime axis where the
+  // [PHASE]/[DMA] markers live.
+  logic dram_sync_done;
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (!rst_ni) begin
+      dram_sync_done <= 1'b0;
+    end else if (!dram_sync_done) begin
+      $display("[DRAMSYNC] %.3f ns", $realtime / 1ns);
+      dram_sync_done <= 1'b1;
+    end
+  end
+  `endif
 
 /**************
  *  VCD Dump  *
@@ -374,7 +391,7 @@ module testharness (
       @(posedge clk_i);
     wait (eoc != '0);
     // The runtime writes (retval << 1) | 1, HTIF-style.
-    $display("[EOC] Simulation ended at %t (retval = %0d).", $time, eoc >> 1);
+    $display("[EOC] Simulation ended at %.3f ns (retval = %0d).", $realtime / 1ns, eoc >> 1);
     $finish(0);
   end
   `else

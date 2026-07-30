@@ -68,11 +68,53 @@ phase boundary. DMA activity itself needs no marker — it is visible directly i
 the DRAM trace; markers exist to delimit the *compute* phase, which the DRAM
 cannot see. `dp-faxpy` marks `1`=DMA-in, `2`=compute, `0`=done as a pilot.
 
+## DMA core-issue markers
+
+The DMA frontend (`hw/ip/spatz_cc/src/axi_dma_tc_snitch_fe.sv`) prints
+`[DMA] <t> ns issue id=<n> src=0x.. dst=0x.. bytes=<b>` when the core launches a
+transfer (the `twod_req` handshake), and `[DMADONE] <t> ns id=<n>` when it
+completes (the `completed_id` advance). With `--transcript`, issues are drawn as
+**orange downward triangles above every subplot**, labelled `DMA#<id> (<bytes>B)`
+inside the read panel; the issue/done pair also defines the time-gated DMA
+window used to colour DMA traffic. The monitors are simulation-only
+(`pragma translate_off` / `ifndef SYNTHESIS`).
+
+**Timestamps.** All markers (`[PHASE]`, `[DMA]`, `[EOC]`) print
+`$realtime/1ns` — nanoseconds independent of a module's local timeunit. (Do
+*not* hand-divide `$time` by 1000 and format with `%t`: `%t` applies its own
+`$timeformat` scaling, and the combination silently rounds times to bogus
+1000-ns multiples. The clock period is 1 ns; the 1 ps only sets simulation
+resolution.)
+
+**Two time bases — aligned automatically.** The markers use the RTL testbench
+`$realtime`, while the traffic curves come from DRAMSys's *own* trace clock,
+which starts at 0 when the `dram_sim_engine` begins clocking (first edge after
+reset — it only advances `run_ns` while `rst_ni` is high). The testbench emits
+that offset as `[DRAMSYNC] <t> ns` (the SV time of DRAM t=0, ~100 ns for the
+default reset/clock timing); the plot adds it to every DRAMSys timestamp so the
+traffic lands on the same `$realtime` axis as the markers, restoring causal
+ordering. Override with `--dram-time-offset <ns>`; if no `[DRAMSYNC]` line is
+present (old trace) the tool warns and applies 0.
+
+The read curve uses `DataStrobeBegin` (data actually on the DQ bus), so it
+appears well after a DMA-issue line: measured issue->data ~20 ns for a row hit
+(CL only) and ~47 ns for a row miss (on-chip propagation ~6 ns + controller
+scheduling ~14 ns + ACT/RCD+CL ~27 ns). Do not confuse `DataStrobeBegin` with
+the Transactions table's `TimeOfGeneration`, which is only when the request
+*reaches the controller input* (~7 ns after issue) — not when data returns.
+
 ## Subplots
 
-1. **read GB/s** — bus bandwidth of reads. If `--elf` is given, split into
-   `data (DMA)` (blue) and `icache refill` (gray). Icache refills are reads
-   whose address lands in an executable (`.text`) ELF section.
+1. **read GB/s** — bus bandwidth of reads, split into **DMA read** (blue) vs
+   **other read** (gray, = icache refills + core scalar loads). DMA traffic is
+   identified by *time-gated windows*: a read counts as DMA only if it hits a
+   DMA buffer **and** occurs while that transfer is active. The windows are
+   built automatically from the `[DMA]` issue lines (src/dst/bytes) and the
+   `[DMADONE]` completion lines the frontend prints — so no manual setup, and no
+   false positives from core accesses that merely share a cache line with a DMA
+   buffer (a real effect: e.g. pointer globals adjacent to a DMA array). Supply
+   ranges explicitly with `--dma-read-range LO:HI` (address-only, no time gate);
+   without any DMA info, falls back to `--elf`'s code/non-code split.
 2. **write GB/s** — writes. `core/other` (gray) by default; `DMA write`
    (orange) only for addresses in a declared `--dma-write-range` (see caveat).
 3. **ACT / us** — DRAM row **ACTIVATE** commands per microsecond. This is the
@@ -82,8 +124,21 @@ cannot see. `dp-faxpy` marks `1`=DMA-in, `2`=compute, `0`=done as a pilot.
    Colorbar `accesses / window` (magma: black=0, pink=low, yellow=high).
 
 Each bandwidth subplot has three reference lines: **peak** (dashed), **avg**
-(dotted, over the first→last-burst span), and **active avg** (dash-dot, mean of
-non-empty time windows).
+(dotted, over the first→last-burst span), and **active avg** (dash-dot). The
+curves are step (staircase) plots: each series is a saturated step outline over
+a light fill (`--style area`, default) or just the outline (`--style line`).
+The default display bin (≈ span/250) is deliberately coarse so sparse isolated
+accesses (e.g. icache refills) average into a calm low baseline rather than a
+spike forest; a dense DMA burst still stands out as a clean stepped block.
+Plots render at 200 dpi. Tune with `--window-ns`; zooming (`--tstart/--tend`) auto-refines
+the bins. The avg/active-avg numbers are computed on a *fixed* fine reference bin
+(`REF_BIN_NS`, 10 ns), decoupled from the display bin, so they stay stable and
+meaningful when you change the visual granularity or zoom.
+
+Phase boundaries are labelled with the phase **name** (e.g. `dma-in`,
+`compute`, `idle`) rather than the raw mark value. The value->name map defaults
+to the dp-faxpy convention and is overridable with
+`--phase-names "1=load,2=kernel,0=done"`.
 
 ## How bandwidth is computed (and why it never exceeds peak)
 

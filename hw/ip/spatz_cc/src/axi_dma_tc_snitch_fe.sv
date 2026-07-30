@@ -292,6 +292,30 @@ module axi_dma_tc_snitch_fe #(
   assign dma_busy_o = next_id != completed_id;
 
   //--------------------------------------
+  // Simulation-only DMA-issue monitor
+  //--------------------------------------
+  // Emit a timestamped line each time the core launches a DMA transfer (the
+  // twod request handshake, same event that assigns the transfer id). A
+  // post-processor aligns these against DRAM traffic. Same $time scale as the
+  // testbench [PHASE] markers.
+  // pragma translate_off
+  `ifndef SYNTHESIS
+  always_ff @(posedge clk_i) begin
+    if (rst_ni && twod_req_valid && twod_req_ready)
+      // $realtime/1ns = time in ns regardless of this module's timeunit.
+      // src/dst let a post-processor identify DMA traffic in the DRAM trace.
+      $display("[DMA] %.3f ns issue id=%0d src=0x%h dst=0x%h bytes=%0d",
+               $realtime / 1ns, next_id, twod_req_d.src, twod_req_d.dst,
+               twod_req_d.num_bytes);
+    // completion (same event that advances completed_id) gives the exact end
+    // of the transfer's DRAM activity, so a post-processor can time-gate.
+    if (rst_ni && oned_trans_complete && twod_req_last_realigned)
+      $display("[DMADONE] %.3f ns id=%0d", $realtime / 1ns, completed_id);
+  end
+  `endif
+  // pragma translate_on
+
+  //--------------------------------------
   // Performance counters
   //--------------------------------------
   axi_dma_perf_counters #(
