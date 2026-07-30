@@ -559,6 +559,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   ) i_vlsu (
     .clk_i                   (clk_i                                                ),
     .rst_ni                  (rst_ni                                               ),
+    .hart_id_i               (hart_id_i                                            ),
     // Request
     .spatz_req_i             (spatz_req                                            ),
     .spatz_req_valid_i       (spatz_req_valid                                      ),
@@ -598,6 +599,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   ) i_vlsu (
     .clk_i                   (clk_i                                                ),
     .rst_ni                  (rst_ni                                               ),
+    .hart_id_i               (hart_id_i                                            ),
     // Request
     .spatz_req_i             (spatz_req                                            ),
     .spatz_req_valid_i       (spatz_req_valid                                      ),

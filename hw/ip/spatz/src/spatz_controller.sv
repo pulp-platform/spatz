@@ -392,7 +392,7 @@ module spatz_controller
       end
 
       // Enable the VRF port if the dependant instructions wrote in the previous cycle
-      sb_enable_o[port] = sb_enable_i[port] && &(~scoreboard_q[sb_id_i[port]].deps | wrote_result_q[intID] | done_result_q[intID]) && (!(|scoreboard_q[sb_id_i[port]].deps) || !scoreboard_q[sb_id_i[port]].prevent_chaining);
+      sb_enable_o[port] = sb_enable_i[port] && &(~scoreboard_q[sb_id_i[port]].deps | wrote_result_q[intID]) && (!(|scoreboard_q[sb_id_i[port]].deps) || !scoreboard_q[sb_id_i[port]].prevent_chaining);
 `else
       // Enable the VRF port if the dependant instructions wrote in the previous cycle
       // sb_enable_o[port] - scoreboard check if you can use this vrf port

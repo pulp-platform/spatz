@@ -22,9 +22,10 @@
 // DIF Cooley-Tukey algorithm
 // At every iteration, we store indexed
 // todo: simplify the last iteration, which do not require twiddle factors
-void fft_sc(float *s, float *buf, const float *twi, const uint16_t *seq_idx,
-            const uint16_t *rev_idx, const unsigned int nfft,
-            const unsigned int log2_nfft, const unsigned int cid) {
+void fft_sc(float *s, float *buf, float *tmp, const float *twi,
+            const uint16_t *seq_idx, const uint16_t *rev_idx,
+            const unsigned int nfft, const unsigned int log2_nfft,
+            const unsigned int cid) {
 
   // Always run in dual-core mode
   const unsigned int dc = 1;
@@ -57,9 +58,19 @@ void fft_sc(float *s, float *buf, const float *twi, const uint16_t *seq_idx,
       o_buf = (bf & 1) ? s : buf;
     }
 
+    const unsigned int last_stage = bf == (log2_nfft - 1);
+    const unsigned int inplace_stage = last_stage && (i_buf == buf);
+
     // Last iteration
-    if (bf == log2_nfft - 1)
+    if (last_stage)
       o_buf = buf;
+
+    // If the last stage is in-place, we need a temporary buffer to store the
+    // output, which will be copied back to the output buffer at the end of the
+    // fft_sc. In place is only possible if vector length fits within a register
+    // without the need of stripmining.
+    if (inplace_stage)
+      o_buf = tmp;
 
     // Update pointers
     const float *re_u_i = i_buf;
@@ -115,7 +126,7 @@ void fft_sc(float *s, float *buf, const float *twi, const uint16_t *seq_idx,
       // Load the index vector. If last step, it's the bitrev index vector.
       // Otherwise, it's the helper index for the permutations (this is a mask
       // vector)
-      if (bf == log2_nfft - 1) {
+      if (last_stage) {
         asm volatile(
             "vle16.v v24, (%0);" ::"r"(rev_idx)); // v24: bit-reversal indices
         rev_idx += vl;
