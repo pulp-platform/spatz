@@ -4,255 +4,444 @@
 
 #include "vector_macros.h"
 
-#define AXI_DWIDTH 128
+#define INIT 98
 
-// EEW destination == EEW indexes
+// EEW dest = EEW idx  (unmasked)
 void TEST_CASE1(void) {
-
-  volatile uint8_t ALIGNED_I8[] = {0xe0, 0xd3, 0x40, 0xd1, 0x84, 0x48, 0x89, 0x88,
-    0x88, 0xae, 0x08, 0x91, 0x02, 0x59, 0x11, 0x89};
-
-  VSET(2, e8, m1);
-  VLOAD_8(v2, 1, 15);
-  asm volatile("vloxei8.v v1, (%0), v2" ::"r"(&ALIGNED_I8[0]));
-  VCMP_U8(1, v1, 0xd3, 0x89);
-
-  volatile uint16_t ALIGNED_I16[] = {
-        0x05e0, 0xbbd3, 0x3840, 0x8cd1, 0x9384, 0x7548, 0x3489, 0x9388,
-        0x8188, 0x11ae, 0x5808, 0x4891, 0x4902, 0x8759, 0x1111, 0x1989};
-
-  VSET(2, e16, m1);
-  VLOAD_16(v2, 2, 30);
-  asm volatile("vloxei16.v v1, (%0), v2" ::"r"(&ALIGNED_I16[0]));
-  VCMP_U16(2, v1, 0xbbd3, 0x1989);
-
-  volatile uint32_t ALIGNED_I32[] = {
-        0x9fe41920, 0xf9aa71f0, 0xa11a9384, 0x99991348, 0x9fa831c7, 0x38197598,
-        0x18931795, 0x81937598, 0x18747547, 0x3eeeeeee, 0x90139301, 0xab8b9148,
-        0x90318509, 0x31897598, 0x83195999, 0x89139848};
-
-  VSET(2, e32, m1);
-  VLOAD_32(v2, 4, 60);
-  asm volatile("vloxei32.v v1, (%0), v2" ::"r"(&ALIGNED_I32[0]));
-  VCMP_U32(3, v1, 0xf9aa71f0, 0x89139848);
+  { // eew_dest = eew_idx = e8
+    volatile uint8_t BUF[] = {
+      0xd3, 0x40, 0xd1, 0x84, 0x48, 0x88, 0x88, 0xae,
+      0x91, 0x02, 0x59, 0x89, 0x11, 0x22, 0x33, 0x44};
+    VCLEAR(v4);
+    VCLEAR(v8);
+    VSET(12, e8, m4);
+    VLOAD_8(v8, 1, 2, 3, 4, 5, 7, 8, 9, 11, 12, 13, 15);
+    asm volatile("vloxei8.v v4, (%0), v8" ::"r"(&BUF[0]));
+    VCMP_U8(1, v4, 0x40, 0xd1, 0x84, 0x48, 0x88, 0xae, 0x91, 0x02, 0x89, 0x11, 0x22, 0x44);
+  }
+  { // eew_dest = eew_idx = e16
+    volatile uint16_t BUF[] = {
+      0xbbd3, 0x3840, 0x8cd1, 0x9384, 0x7548, 0x9388, 0x8188, 0x11ae,
+      0x4891, 0x4902, 0x8759, 0x1989, 0x1111, 0x2222, 0x3333, 0x4444};
+    VCLEAR(v4);
+    VCLEAR(v8);
+    VSET(12, e16, m4);
+    VLOAD_16(v8, 2, 4, 6, 8, 10, 14, 16, 18, 22, 24, 26, 30);
+    asm volatile("vloxei16.v v4, (%0), v8" ::"r"(&BUF[0]));
+    VCMP_U16(2, v4, 0x3840, 0x8cd1, 0x9384, 0x7548, 0x9388, 0x11ae, 0x4891, 0x4902, 0x1989, 0x1111, 0x2222, 0x4444);
+  }
+  { // eew_dest = eew_idx = e32
+    volatile uint32_t BUF[] = {
+      0xf9aa71f0, 0xa11a9384, 0x99991348, 0x9fa831c7,
+      0x38197598, 0x81937598, 0x18747547, 0x3eeeeeee,
+      0x11111111, 0x22222222, 0x33333333, 0x44444444,
+      0x55555555, 0x66666666, 0x77777777, 0x88888888};
+    VCLEAR(v4);
+    VCLEAR(v8);
+    VSET(8, e32, m4);
+    VLOAD_32(v8, 4, 8, 12, 16, 20, 28, 32, 36);
+    asm volatile("vloxei32.v v4, (%0), v8" ::"r"(&BUF[0]));
+    VCMP_U32(3, v4, 0xa11a9384, 0x99991348, 0x9fa831c7, 0x38197598, 0x81937598, 0x3eeeeeee, 0x11111111, 0x22222222);
+  }
 }
 
-// EEW Destination > EEW indexes
+// EEW dest = EEW idx  (masked)
 void TEST_CASE2(void) {
+  { // eew_dest = eew_idx = e8
+    volatile uint8_t BUF[] = {
+      0xd3, 0x40, 0xd1, 0x84, 0x48, 0x88, 0x88, 0xae,
+      0x91, 0x02, 0x59, 0x89, 0x11, 0x22, 0x33, 0x44};
+    VCLEAR(v0);
+    VCLEAR(v4);
+    VCLEAR(v8);
+    VSET(12, e8, m4);
+    VLOAD_8(v0, 0xaa, 0x0a);
+    VLOAD_8(v8, 1, 2, 3, 4, 5, 7, 8, 9, 11, 12, 13, 15);
+    asm volatile("vloxei8.v v4, (%0), v8, v0.t" ::"r"(&BUF[0]));
+    VCMP_U8(4, v4, 0x00, 0xd1, 0x00, 0x48, 0x00, 0xae, 0x00, 0x02, 0x00, 0x11, 0x00, 0x44);
+  }
+  { // eew_dest = eew_idx = e16
+    volatile uint16_t BUF[] = {
+      0xbbd3, 0x3840, 0x8cd1, 0x9384, 0x7548, 0x9388, 0x8188, 0x11ae,
+      0x4891, 0x4902, 0x8759, 0x1989, 0x1111, 0x2222, 0x3333, 0x4444};
+    VCLEAR(v0);
+    VCLEAR(v4);
+    VCLEAR(v8);
+    VSET(12, e16, m4);
+    VLOAD_8(v0, 0xaa, 0x0a);
+    VLOAD_16(v8, 2, 4, 6, 8, 10, 14, 16, 18, 22, 24, 26, 30);
+    asm volatile("vloxei16.v v4, (%0), v8, v0.t" ::"r"(&BUF[0]));
+    VCMP_U16(5, v4, 0x0000, 0x8cd1, 0x0000, 0x7548, 0x0000, 0x11ae, 0x0000, 0x4902, 0x0000, 0x1111, 0x0000, 0x4444);
+  }
+  { // eew_dest = eew_idx = e32
+    volatile uint32_t BUF[] = {
+      0xf9aa71f0, 0xa11a9384, 0x99991348, 0x9fa831c7,
+      0x38197598, 0x81937598, 0x18747547, 0x3eeeeeee,
+      0x11111111, 0x22222222, 0x33333333, 0x44444444,
+      0x55555555, 0x66666666, 0x77777777, 0x88888888};
+    VCLEAR(v0);
+    VCLEAR(v4);
+    VCLEAR(v8);
+    VSET(12, e32, m4);
+    VLOAD_8(v0, 0xaa, 0x0a);
+    VLOAD_32(v8, 4, 8, 12, 16, 20, 28, 32, 36, 44, 48, 52, 60);
+    asm volatile("vloxei32.v v4, (%0), v8, v0.t" ::"r"(&BUF[0]));
+    VCMP_U32(6, v4, 0x00000000, 0x99991348, 0x00000000, 0x38197598, 0x00000000, 0x3eeeeeee,
+                    0x00000000, 0x22222222, 0x00000000, 0x55555555, 0x00000000, 0x88888888);
+  }
+}
 
-  volatile uint16_t ALIGNED_I16[] = {
-        0x05e0, 0xbbd3, 0x3840, 0x8cd1, 0x9384, 0x7548, 0x3489, 0x9388,
-        0x8188, 0x11ae, 0x5808, 0x4891, 0x4902, 0x8759, 0x1111, 0x1989};
+// EEW dest >  EEW idx  (unmasked)
+void TEST_CASE3(void) {
+  { // eew_dest = e16, eew_idx = e8
+    volatile uint16_t BUF[] = {
+      0xbbd3, 0x3840, 0x8cd1, 0x9384, 0x7548, 0x9388, 0x8188, 0x11ae,
+      0x4891, 0x4902, 0x8759, 0x1989, 0x1111, 0x2222, 0x3333, 0x4444};
+    VCLEAR(v4);
+    VCLEAR(v8);
+    VSET(8, e16, m4);
+    VLOAD_8(v8, 0, 2, 6, 8, 14, 18, 24, 30);
+    asm volatile("vloxei8.v v4, (%0), v8" ::"r"(&BUF[0]));
+    VCMP_U16(7, v4, 0xbbd3, 0x3840, 0x9384, 0x7548, 0x11ae, 0x4902, 0x1111, 0x4444);
+  }
+  { // eew_dest = e32, eew_idx = e8
+    volatile uint32_t BUF[] = {
+      0xf9aa71f0, 0xa11a9384, 0x99991348, 0x9fa831c7,
+      0x38197598, 0x81937598, 0x18747547, 0x3eeeeeee,
+      0x11111111, 0x22222222, 0x33333333, 0x44444444,
+      0x55555555, 0x66666666, 0x77777777, 0x88888888};
+    VCLEAR(v4);
+    VCLEAR(v8);
+    VSET(8, e32, m4);
+    VLOAD_8(v8, 0, 4, 12, 20, 28, 40, 52, 60);
+    asm volatile("vloxei8.v v4, (%0), v8" ::"r"(&BUF[0]));
+    VCMP_U32(8, v4, 0xf9aa71f0, 0xa11a9384, 0x9fa831c7, 0x81937598, 0x3eeeeeee, 0x33333333, 0x66666666, 0x88888888);
+  }
+  { // eew_dest = e32, eew_idx = e16
+    volatile uint32_t BUF[] = {
+      0xf9aa71f0, 0xa11a9384, 0x99991348, 0x9fa831c7,
+      0x38197598, 0x81937598, 0x18747547, 0x3eeeeeee,
+      0x11111111, 0x22222222, 0x33333333, 0x44444444,
+      0x55555555, 0x66666666, 0x77777777, 0x88888888};
+    VCLEAR(v4);
+    VCLEAR(v8);
+    VSET(8, e32, m4);
+    VLOAD_16(v8, 4, 8, 16, 24, 32, 44, 56, 60);
+    asm volatile("vloxei16.v v4, (%0), v8" ::"r"(&BUF[0]));
+    VCMP_U32(9, v4, 0xa11a9384, 0x99991348, 0x38197598, 0x18747547, 0x11111111, 0x44444444, 0x77777777, 0x88888888);
+  }
+}
 
-  VSET(2, e16, m1);
-  VLOAD_8(v2, 2, 30);
-  asm volatile("vloxei8.v v1, (%0), v2" ::"r"(&ALIGNED_I16[0]));
-  VCMP_U16(4, v1, 0xbbd3, 0x1989);
-
-  volatile uint32_t ALIGNED_I32[] = {
-        0x9fe41920, 0xf9aa71f0, 0xa11a9384, 0x99991348, 0x9fa831c7, 0x38197598,
-        0x18931795, 0x81937598, 0x18747547, 0x3eeeeeee, 0x90139301, 0xab8b9148,
-        0x90318509, 0x31897598, 0x83195999, 0x89139848};
-
-  VSET(2, e32, m1);
-  VLOAD_16(v2, 4, 60);
-  asm volatile("vloxei16.v v1, (%0), v2" ::"r"(&ALIGNED_I32[0]));
-  VCMP_U32(5, v1, 0xf9aa71f0, 0x89139848);
-
+// EEW dest >  EEW idx  (unmasked, e64)
+void TEST_CASE4(void) {
 #if ELEN == 64
-  volatile uint64_t ALIGNED_I64[] = {
-        0x9fe419208f2e05e0, 0xf9aa71f0c394bbd3, 0xa11a9384a7163840,
-        0x99991348a9f38cd1, 0x9fa831c7a11a9384, 0x3819759853987548,
-        0x1893179501093489, 0x81937598aa819388, 0x1874754791888188,
-        0x3eeeeeeee33111ae, 0x9013930148815808, 0xab8b914891484891,
-        0x9031850931584902, 0x3189759837598759, 0x8319599991911111,
-        0x8913984898951989};
-
-  VSET(2, e64, m1);
-  VLOAD_32(v2, 8, 120);
-  asm volatile("vloxei32.v v1, (%0), v2" ::"r"(&ALIGNED_I64[0]));
-  VCMP_U64(6, v1, 0xf9aa71f0c394bbd3, 0x8913984898951989);
+  { // eew_dest = e64, eew_idx = e8
+    volatile uint64_t BUF[] = {
+      0xf9aa71f0c394bbd3, 0x8913984898951989, 0x99991348a9f38cd1, 0x9fa831c7a11a9384,
+      0x3819759853987548, 0x1111111111111111, 0x2222222222222222, 0x3333333333333333,
+      0x4444444444444444, 0x5555555555555555, 0x6666666666666666, 0x7777777777777777,
+      0x8888888888888888, 0x9999999999999999, 0xaaaaaaaaaaaaaaaa, 0xbbbbbbbbbbbbbbbb};
+    VCLEAR(v4);
+    VCLEAR(v8);
+    VSET(5, e64, m4);
+    VLOAD_8(v8, 8, 16, 40, 72, 120);
+    asm volatile("vloxei8.v v4, (%0), v8" ::"r"(&BUF[0]));
+    VCMP_U64(10, v4, 0x8913984898951989, 0x99991348a9f38cd1, 0x1111111111111111,
+                     0x5555555555555555, 0xbbbbbbbbbbbbbbbb);
+  }
+  { // eew_dest = e64, eew_idx = e16
+    volatile uint64_t BUF[] = {
+      0xf9aa71f0c394bbd3, 0x8913984898951989, 0x99991348a9f38cd1, 0x9fa831c7a11a9384,
+      0x3819759853987548, 0x1111111111111111, 0x2222222222222222, 0x3333333333333333,
+      0x4444444444444444, 0x5555555555555555, 0x6666666666666666, 0x7777777777777777,
+      0x8888888888888888, 0x9999999999999999, 0xaaaaaaaaaaaaaaaa, 0xbbbbbbbbbbbbbbbb};
+    VCLEAR(v4);
+    VCLEAR(v8);
+    VSET(5, e64, m4);
+    VLOAD_16(v8, 8, 32, 56, 96, 120);
+    asm volatile("vloxei16.v v4, (%0), v8" ::"r"(&BUF[0]));
+    VCMP_U64(11, v4, 0x8913984898951989, 0x3819759853987548, 0x3333333333333333,
+                     0x8888888888888888, 0xbbbbbbbbbbbbbbbb);
+  }
+  { // eew_dest = e64, eew_idx = e32
+    volatile uint64_t BUF[] = {
+      0xf9aa71f0c394bbd3, 0x8913984898951989, 0x99991348a9f38cd1, 0x9fa831c7a11a9384,
+      0x3819759853987548, 0x1111111111111111, 0x2222222222222222, 0x3333333333333333,
+      0x4444444444444444, 0x5555555555555555, 0x6666666666666666, 0x7777777777777777,
+      0x8888888888888888, 0x9999999999999999, 0xaaaaaaaaaaaaaaaa, 0xbbbbbbbbbbbbbbbb};
+    VCLEAR(v4);
+    VCLEAR(v8);
+    VSET(5, e64, m4);
+    VLOAD_32(v8, 8, 24, 48, 88, 120);
+    asm volatile("vloxei32.v v4, (%0), v8" ::"r"(&BUF[0]));
+    VCMP_U64(12, v4, 0x8913984898951989, 0x9fa831c7a11a9384, 0x2222222222222222,
+                     0x7777777777777777, 0xbbbbbbbbbbbbbbbb);
+  }
 #endif
 }
 
-// EEW Destination < EEW indexes
-void TEST_CASE3(void) {
-  volatile uint8_t ALIGNED_I8[] = {0xe0, 0xd3, 0x40, 0xd1, 0x84, 0x48, 0x89, 0x88,
-    0x88, 0xae, 0x08, 0x91, 0x02, 0x59, 0x11, 0x89};
-
-  VSET(2, e8, m1);
-  VLOAD_16(v2, 1, 15);
-  asm volatile("vloxei16.v v1, (%0), v2" ::"r"(&ALIGNED_I8[0]));
-  VCMP_U8(7, v1, 0xd3, 0x89);
-
-  volatile uint16_t ALIGNED_I16[] = {
-        0x05e0, 0xbbd3, 0x3840, 0x8cd1, 0x9384, 0x7548, 0x3489, 0x9388,
-        0x8188, 0x11ae, 0x5808, 0x4891, 0x4902, 0x8759, 0x1111, 0x1989};
-
-  VSET(2, e16, m1);
-  VLOAD_32(v2, 2, 30);
-  asm volatile("vloxei32.v v1, (%0), v2" ::"r"(&ALIGNED_I16[0]));
-  VCMP_U16(8, v1, 0xbbd3, 0x1989);
-
-}
-
-// Naive, masked
-void TEST_CASE4(void) {
-  VSET(1, e8, m1);
-  VCLEAR(v0);
-  VLOAD_8(v0, 0xAA);
-
-  volatile uint8_t ALIGNED_I8[] = {0xe0, 0xd3, 0x40, 0xd1, 0x84, 0x48, 0x89, 0x88,
-    0x88, 0xae, 0x08, 0x91, 0x02, 0x59, 0x11, 0x89};
-
-  VSET(2, e8, m1);
-  VCLEAR(v1);
-  VCLEAR(v2);
-  VLOAD_8(v1, 99, 99);
-  VLOAD_8(v2, 1, 15);
-  asm volatile("vloxei8.v v1, (%0), v2, v0.t" ::"r"(&ALIGNED_I8[0]));
-  VCMP_U8(9, v1, 99, 0x89);
-
-  volatile uint16_t ALIGNED_I16[] = {
-        0x05e0, 0xbbd3, 0x3840, 0x8cd1, 0x9384, 0x7548, 0x3489, 0x9388,
-        0x8188, 0x11ae, 0x5808, 0x4891, 0x4902, 0x8759, 0x1111, 0x1989};
-
-  VSET(2, e16, m1);
-  VCLEAR(v1);
-  VCLEAR(v2);
-  VLOAD_16(v1, 999, 999);
-  VLOAD_16(v2, 2, 30);
-
-  asm volatile("vloxei16.v v1, (%0), v2, v0.t" ::"r"(&ALIGNED_I16[0]));
-  VCMP_U16(10, v1, 999, 0x1989);
-
-  volatile uint32_t ALIGNED_I32[] = {
-        0x9fe41920, 0xf9aa71f0, 0xa11a9384, 0x99991348, 0x9fa831c7, 0x38197598,
-        0x18931795, 0x81937598, 0x18747547, 0x3eeeeeee, 0x90139301, 0xab8b9148,
-        0x90318509, 0x31897598, 0x83195999, 0x89139848};
-
-  VSET(2, e32, m1);
-  VCLEAR(v1);
-  VCLEAR(v2);
-  VLOAD_32(v1, 999, 999);
-  VLOAD_32(v2, 4, 60);
-  asm volatile("vloxei32.v v1, (%0), v2, v0.t" ::"r"(&ALIGNED_I32[0]));
-  VCMP_U32(11, v1, 999, 0x89139848);
-
-/*#if ELEN == 64
-  volatile uint64_t ALIGNED_I64[] = {
-        0x9fe419208f2e05e0, 0xf9aa71f0c394bbd3, 0xa11a9384a7163840,
-        0x99991348a9f38cd1, 0x9fa831c7a11a9384, 0x3819759853987548,
-        0x1893179501093489, 0x81937598aa819388, 0x1874754791888188,
-        0x3eeeeeeee33111ae, 0x9013930148815808, 0xab8b914891484891,
-        0x9031850931584902, 0x3189759837598759, 0x8319599991911111,
-        0x8913984898951989};
-
-  VSET(2, e64, m1);
-  VLOAD_64(v1, 999, 999);
-  VLOAD_64(v2, 8, 120);
-  VLOAD_8(v0, 0xAA);
-  asm volatile("vloxei64.v v1, (%0), v2, v0.t" ::"r"(&ALIGNED_I64[0]));
-  VCMP_U64(12, v1, 999, 0x8913984898951989);
-#endif*/
-}
-
-// EEW destination == EEW indexes, many elements
+// EEW dest >  EEW idx  (masked, v0.t)
 void TEST_CASE5(void) {
-  volatile uint8_t ALIGNED_I8[] = {0xe0, 0xd3, 0x40, 0xd1, 0x84, 0x48, 0x89, 0x88,
-  0x88, 0xae, 0x08, 0x91, 0x02, 0x59, 0x11, 0x89};
-  VSET(12, e8, m1);
-
-  VLOAD_8(v2, 1, 2, 3, 4, 5, 7, 8, 9, 11, 12, 13, 15);
-  asm volatile("vloxei8.v v1, (%0), v2" ::"r"(&ALIGNED_I8[0]));
-  VCMP_U8(13, v1, 0xd3, 0x40, 0xd1, 0x84, 0x48, 0x88, 0x88, 0xae, 0x91, 0x02,
-          0x59, 0x89);
-
-
-  volatile uint16_t ALIGNED_I16[] = {
-        0x05e0, 0xbbd3, 0x3840, 0x8cd1, 0x9384, 0x7548, 0x3489, 0x9388,
-        0x8188, 0x11ae, 0x5808, 0x4891, 0x4902, 0x8759, 0x1111, 0x1989};
-
-  VSET(12, e16, m1);
-  VLOAD_16(v2, 2, 4, 6, 8, 10, 14, 16, 18, 22, 24, 26, 30);
-  asm volatile("vloxei16.v v1, (%0), v2" ::"r"(&ALIGNED_I16[0]));
-  VCMP_U16(14, v1, 0xbbd3, 0x3840, 0x8cd1, 0x9384, 0x7548, 0x9388, 0x8188,
-           0x11ae, 0x4891, 0x4902, 0x8759, 0x1989);
-
-
-  volatile uint32_t ALIGNED_I32[] = {
-        0x9fe41920, 0xf9aa71f0, 0xa11a9384, 0x99991348, 0x9fa831c7, 0x38197598,
-        0x18931795, 0x81937598, 0x18747547, 0x3eeeeeee, 0x90139301, 0xab8b9148,
-        0x90318509, 0x31897598, 0x83195999, 0x89139848};
-
-  /*VSET(12, e32, m1);
-  VLOAD_32(v2, 4, 8, 12, 16, 20, 28, 32, 36, 44, 48, 52, 60);
-  asm volatile("vloxei32.v v1, (%0), v2" ::"r"(&ALIGNED_I32[0]));
-  VCMP_U32(15, v1, 0xf9aa71f0, 0xa11a9384, 0x99991348, 0x9fa831c7, 0x38197598,
-           0x81937598, 0x18747547, 0x3eeeeeee, 0xab8b9148, 0x90318509,
-           0x31897598, 0x89139848);*/
-
-  VSET(8, e32, m1);
-    VLOAD_32(v2, 4, 8, 12, 16, 20, 28, 32, 36);
-    asm volatile("vloxei32.v v1, (%0), v2" ::"r"(&ALIGNED_I32[0]));
-    VCMP_U32(16, v1, 0xf9aa71f0, 0xa11a9384, 0x99991348, 0x9fa831c7, 0x38197598,
-            0x81937598, 0x18747547, 0x3eeeeeee);
+  { // eew_dest = e16, eew_idx = e8
+    volatile uint16_t BUF[] = {
+      0xbbd3, 0x3840, 0x8cd1, 0x9384, 0x7548, 0x9388, 0x8188, 0x11ae,
+      0x4891, 0x4902, 0x8759, 0x1989, 0x1111, 0x2222, 0x3333, 0x4444};
+    VCLEAR(v0);
+    VCLEAR(v4);
+    VCLEAR(v8);
+    VSET(8, e16, m4);
+    VLOAD_8(v0, 0xb6);
+    VLOAD_8(v8, 0, 2, 6, 8, 14, 18, 24, 30);
+    asm volatile("vloxei8.v v4, (%0), v8, v0.t" ::"r"(&BUF[0]));
+    VCMP_U16(13, v4, 0x0000, 0x3840, 0x9384, 0x0000, 0x11ae, 0x4902, 0x0000, 0x4444);
+  }
+  { // eew_dest = e32, eew_idx = e8
+    volatile uint32_t BUF[] = {
+      0xf9aa71f0, 0xa11a9384, 0x99991348, 0x9fa831c7,
+      0x38197598, 0x81937598, 0x18747547, 0x3eeeeeee,
+      0x11111111, 0x22222222, 0x33333333, 0x44444444,
+      0x55555555, 0x66666666, 0x77777777, 0x88888888};
+    VCLEAR(v0);
+    VCLEAR(v4);
+    VCLEAR(v8);
+    VSET(8, e32, m4);
+    VLOAD_8(v0, 0xb6);
+    VLOAD_8(v8, 0, 4, 12, 20, 28, 40, 52, 60);
+    asm volatile("vloxei8.v v4, (%0), v8, v0.t" ::"r"(&BUF[0]));
+    VCMP_U32(14, v4, 0x00000000, 0xa11a9384, 0x9fa831c7, 0x00000000, 0x3eeeeeee, 0x33333333, 0x00000000, 0x88888888);
+  }
+  { // eew_dest = e32, eew_idx = e16
+    volatile uint32_t BUF[] = {
+      0xf9aa71f0, 0xa11a9384, 0x99991348, 0x9fa831c7,
+      0x38197598, 0x81937598, 0x18747547, 0x3eeeeeee,
+      0x11111111, 0x22222222, 0x33333333, 0x44444444,
+      0x55555555, 0x66666666, 0x77777777, 0x88888888};
+    VCLEAR(v0);
+    VCLEAR(v4);
+    VCLEAR(v8);
+    VSET(8, e32, m4);
+    VLOAD_8(v0, 0xb6);
+    VLOAD_16(v8, 4, 8, 16, 24, 32, 44, 56, 60);
+    asm volatile("vloxei16.v v4, (%0), v8, v0.t" ::"r"(&BUF[0]));
+    VCMP_U32(15, v4, 0x00000000, 0x99991348, 0x38197598, 0x00000000, 0x11111111, 0x44444444, 0x00000000, 0x88888888);
+  }
 }
 
-// Test vstart
+// EEW dest >  EEW idx  (masked, e64)
 void TEST_CASE6(void) {
-  volatile uint8_t ALIGNED_I8[] = {0xe0, 0xd3, 0x40, 0xd1, 0x84, 0x48, 0x89, 0x88,
-  0x88, 0xae, 0x08, 0x91, 0x02, 0x59, 0x11, 0x89};
-
-  VSET(-1, e8, m1);
-  VCLEAR(v1);
-  VSET(5, e8, m1);
-  VLOAD_8(v2, 1, 15, 1, 3, 10);
-  // Modify vstart val
-  asm volatile("csrs vstart, %0" ::"r"(1));
-  asm volatile("vloxei8.v v1, (%0), v2" ::"r"(&ALIGNED_I8[0]));
-  VCMP_U8(17, v1, 0, 0x89, 0xd3, 0xd1, 0x08);
-
-
-  volatile uint16_t ALIGNED_I16[] = {
-        0x05e0, 0xbbd3, 0x3840, 0x8cd1, 0x9384, 0x7548, 0x3489, 0x9388,
-        0x8188, 0x11ae, 0x5808, 0x4891, 0x4902, 0x8759, 0x1111, 0x1989};
-
-  VSET(-1, e16, m1);
-  VCLEAR(v1);
-  VSET(16, e16, m1);
-  VLOAD_16(v2, 0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30);
-  asm volatile("csrs vstart, %0" ::"r"(5));
-  asm volatile("vloxei16.v v1, (%0), v2" ::"r"(&ALIGNED_I16[0]));
-  VCMP_U16(18, v1, 0, 0, 0, 0, 0, 0x7548, 0x3489, 0x9388, 0x8188, 0x11ae,
-           0x5808, 0x4891, 0x4902, 0x8759, 0x1111, 0x1989);
-
-
-  volatile uint32_t ALIGNED_I32[] = {
-        0x9fe41920, 0xf9aa71f0, 0xa11a9384, 0x99991348, 0x9fa831c7, 0x38197598,
-        0x18931795, 0x81937598, 0x18747547, 0x3eeeeeee, 0x90139301, 0xab8b9148,
-        0x90318509, 0x31897598, 0x83195999, 0x89139848};
-
-  VSET(-1, e32, m1);
-  VCLEAR(v1);
-  VSET(3, e32, m1);
-  VLOAD_32(v2, 4, 60, 4);
-  asm volatile("csrs vstart, %0" ::"r"(2));
-  asm volatile("vloxei32.v v1, (%0), v2" ::"r"(&ALIGNED_I32[0]));
-  VCMP_U32(19, v1, 0, 0, 0xf9aa71f0);
+#if ELEN == 64
+  { // eew_dest = e64, eew_idx = e8
+    volatile uint64_t BUF[] = {
+      0xf9aa71f0c394bbd3, 0x8913984898951989, 0x99991348a9f38cd1, 0x9fa831c7a11a9384,
+      0x3819759853987548, 0x1111111111111111, 0x2222222222222222, 0x3333333333333333,
+      0x4444444444444444, 0x5555555555555555, 0x6666666666666666, 0x7777777777777777,
+      0x8888888888888888, 0x9999999999999999, 0xaaaaaaaaaaaaaaaa, 0xbbbbbbbbbbbbbbbb};
+    VCLEAR(v0);
+    VCLEAR(v4);
+    VCLEAR(v8);
+    VSET(5, e64, m4);
+    VLOAD_8(v0, 0x16);
+    VLOAD_8(v8, 8, 16, 40, 72, 120);
+    asm volatile("vloxei8.v v4, (%0), v8, v0.t" ::"r"(&BUF[0]));
+    VCMP_U64(16, v4, 0x0000000000000000, 0x99991348a9f38cd1, 0x1111111111111111,
+                     0x0000000000000000, 0xbbbbbbbbbbbbbbbb);
+  }
+  { // eew_dest = e64, eew_idx = e16
+    volatile uint64_t BUF[] = {
+      0xf9aa71f0c394bbd3, 0x8913984898951989, 0x99991348a9f38cd1, 0x9fa831c7a11a9384,
+      0x3819759853987548, 0x1111111111111111, 0x2222222222222222, 0x3333333333333333,
+      0x4444444444444444, 0x5555555555555555, 0x6666666666666666, 0x7777777777777777,
+      0x8888888888888888, 0x9999999999999999, 0xaaaaaaaaaaaaaaaa, 0xbbbbbbbbbbbbbbbb};
+    VCLEAR(v0);
+    VCLEAR(v4);
+    VCLEAR(v8);
+    VSET(5, e64, m4);
+    VLOAD_8(v0, 0x16);
+    VLOAD_16(v8, 8, 32, 56, 96, 120);
+    asm volatile("vloxei16.v v4, (%0), v8, v0.t" ::"r"(&BUF[0]));
+    VCMP_U64(17, v4, 0x0000000000000000, 0x3819759853987548, 0x3333333333333333,
+                     0x0000000000000000, 0xbbbbbbbbbbbbbbbb);
+  }
+  { // eew_dest = e64, eew_idx = e32
+    volatile uint64_t BUF[] = {
+      0xf9aa71f0c394bbd3, 0x8913984898951989, 0x99991348a9f38cd1, 0x9fa831c7a11a9384,
+      0x3819759853987548, 0x1111111111111111, 0x2222222222222222, 0x3333333333333333,
+      0x4444444444444444, 0x5555555555555555, 0x6666666666666666, 0x7777777777777777,
+      0x8888888888888888, 0x9999999999999999, 0xaaaaaaaaaaaaaaaa, 0xbbbbbbbbbbbbbbbb};
+    VCLEAR(v0);
+    VCLEAR(v4);
+    VCLEAR(v8);
+    VSET(5, e64, m4);
+    VLOAD_8(v0, 0x16);
+    VLOAD_32(v8, 8, 24, 48, 88, 120);
+    asm volatile("vloxei32.v v4, (%0), v8, v0.t" ::"r"(&BUF[0]));
+    VCMP_U64(18, v4, 0x0000000000000000, 0x9fa831c7a11a9384, 0x2222222222222222,
+                     0x0000000000000000, 0xbbbbbbbbbbbbbbbb);
+  }
+#endif
 }
+
+
+// EEW dest <  EEW idx  (unmasked)
+void TEST_CASE7(void) {
+  { // eew_dest = e8, eew_idx = e16
+    volatile uint8_t BUF[] = {
+      0xd3, 0x40, 0xd1, 0x84, 0x48, 0x88, 0x88, 0xae,
+      0x91, 0x02, 0x59, 0x89, 0x11, 0x22, 0x33, 0x44};
+    VCLEAR(v4);
+    VCLEAR(v8);
+    VSET(8, e8, m4);
+    VLOAD_16(v8, 0, 1, 3, 5, 8, 11, 13, 15);
+    asm volatile("vloxei16.v v4, (%0), v8" ::"r"(&BUF[0]));
+    VCMP_U8(19, v4, 0xd3, 0x40, 0x84, 0x88, 0x91, 0x89, 0x22, 0x44);
+  }
+  { // eew_dest = e8, eew_idx = e32
+    volatile uint8_t BUF[] = {
+      0xd3, 0x40, 0xd1, 0x84, 0x48, 0x88, 0x88, 0xae,
+      0x91, 0x02, 0x59, 0x89, 0x11, 0x22, 0x33, 0x44};
+    VCLEAR(v4);
+    VCLEAR(v8);
+    VSET(4, e8, m4);
+    VLOAD_32(v8, 1, 5, 10, 15);
+    asm volatile("vloxei32.v v4, (%0), v8" ::"r"(&BUF[0]));
+    VCMP_U8(20, v4, 0x40, 0x88, 0x59, 0x44);
+  }
+  { // eew_dest = e16, eew_idx = e32
+    volatile uint16_t BUF[] = {
+      0xbbd3, 0x3840, 0x8cd1, 0x9384, 0x7548, 0x9388, 0x8188, 0x11ae,
+      0x4891, 0x4902, 0x8759, 0x1989, 0x1111, 0x2222, 0x3333, 0x4444};
+    VCLEAR(v4);
+    VCLEAR(v8);
+    VSET(4, e16, m4);
+    VLOAD_32(v8, 2, 8, 20, 30);
+    asm volatile("vloxei32.v v4, (%0), v8" ::"r"(&BUF[0]));
+    VCMP_U16(21, v4, 0x3840, 0x7548, 0x8759, 0x4444);
+  }
+}
+
+// EEW dest <  EEW idx  (masked, v0.t)
+void TEST_CASE8(void) {
+  { // eew_dest = e8, eew_idx = e16 masked
+    volatile uint8_t BUF[] = {
+      0xd3, 0x40, 0xd1, 0x84, 0x48, 0x88, 0x88, 0xae,
+      0x91, 0x02, 0x59, 0x89, 0x11, 0x22, 0x33, 0x44};
+    VCLEAR(v0);
+    VCLEAR(v4);
+    VCLEAR(v8);
+    VSET(8, e8, m4);
+    VLOAD_8(v0, 0xb6);
+    VLOAD_16(v8, 0, 1, 3, 5, 8, 11, 13, 15);
+    asm volatile("vloxei16.v v4, (%0), v8, v0.t" ::"r"(&BUF[0]));
+    VCMP_U8(22, v4, 0x00, 0x40, 0x84, 0x00, 0x91, 0x89, 0x00, 0x44);
+  }
+  { // eew_dest = e8, eew_idx = e32 masked
+    volatile uint8_t BUF[] = {
+      0xd3, 0x40, 0xd1, 0x84, 0x48, 0x88, 0x88, 0xae,
+      0x91, 0x02, 0x59, 0x89, 0x11, 0x22, 0x33, 0x44};
+    VCLEAR(v0);
+    VCLEAR(v4);
+    VCLEAR(v8);
+    VSET(4, e8, m4);
+    VLOAD_8(v0, 0x0d);
+    VLOAD_32(v8, 1, 5, 10, 15);
+    asm volatile("vloxei32.v v4, (%0), v8, v0.t" ::"r"(&BUF[0]));
+    VCMP_U8(23, v4, 0x40, 0x00, 0x59, 0x44);
+  }
+  { // eew_dest = e16, eew_idx = e32  masked
+    volatile uint16_t BUF[] = {
+      0xbbd3, 0x3840, 0x8cd1, 0x9384, 0x7548, 0x9388, 0x8188, 0x11ae,
+      0x4891, 0x4902, 0x8759, 0x1989, 0x1111, 0x2222, 0x3333, 0x4444};
+    VCLEAR(v0);
+    VCLEAR(v4);
+    VCLEAR(v8);
+    VSET(4, e16, m4);
+    VLOAD_8(v0, 0x0d);
+    VLOAD_32(v8, 2, 8, 20, 30);
+    asm volatile("vloxei32.v v4, (%0), v8, v0.t" ::"r"(&BUF[0]));
+    VCMP_U16(24, v4, 0x3840, 0x0000, 0x8759, 0x4444);
+  }
+}
+
+// VRF word-crossing
+void TEST_CASE9(void) {
+#if ELEN == 64
+  { // tail in 2nd word
+    volatile uint64_t BUF[] = {
+      0xf9aa71f0c394bbd3, 0x8913984898951989, 0x99991348a9f38cd1, 0x9fa831c7a11a9384,
+      0x3819759853987548, 0x1111111111111111, 0x2222222222222222, 0x3333333333333333,
+      0x4444444444444444, 0x5555555555555555, 0x6666666666666666, 0x7777777777777777,
+      0x8888888888888888, 0x9999999999999999, 0xaaaaaaaaaaaaaaaa, 0xbbbbbbbbbbbbbbbb};
+    VCLEAR(v4);
+    VCLEAR(v8);
+    VSET(5, e64, m4);
+    VLOAD_16(v8, 8, 16, 32, 48, 120);
+    asm volatile("vloxei16.v v4, (%0), v8" ::"r"(&BUF[0]));
+    VCMP_U64(25, v4, 0x8913984898951989, 0x99991348a9f38cd1, 0x3819759853987548,
+                     0x2222222222222222, 0xbbbbbbbbbbbbbbbb);
+  }
+  { // vl=9 m2, EEW16 idx stays in 1 VRF word (18B<32B)
+    volatile uint64_t BUF[] = {
+      0xf9aa71f0c394bbd3, 0x8913984898951989, 0x99991348a9f38cd1, 0x9fa831c7a11a9384,
+      0x3819759853987548, 0x1111111111111111, 0x2222222222222222, 0x3333333333333333,
+      0x4444444444444444, 0x5555555555555555, 0x6666666666666666, 0x7777777777777777,
+      0x8888888888888888, 0x9999999999999999, 0xaaaaaaaaaaaaaaaa, 0xbbbbbbbbbbbbbbbb};
+    VCLEAR(v4);
+    VCLEAR(v8);
+    VSET(9, e64, m4);
+    VLOAD_16(v8, 8, 16, 32, 40, 48, 64, 88, 96, 120);
+    asm volatile("vloxei16.v v4, (%0), v8" ::"r"(&BUF[0]));
+    VCMP_U64(26, v4, 0x8913984898951989, 0x99991348a9f38cd1, 0x3819759853987548,
+                     0x1111111111111111, 0x2222222222222222, 0x4444444444444444,
+                     0x7777777777777777, 0x8888888888888888, 0xbbbbbbbbbbbbbbbb);
+  }
+  { // vl=9 m2, EEW32 idx CROSSES VRF word at index 8 (36B>32B)
+    volatile uint64_t BUF[] = {
+      0xf9aa71f0c394bbd3, 0x8913984898951989, 0x99991348a9f38cd1, 0x9fa831c7a11a9384,
+      0x3819759853987548, 0x1111111111111111, 0x2222222222222222, 0x3333333333333333,
+      0x4444444444444444, 0x5555555555555555, 0x6666666666666666, 0x7777777777777777,
+      0x8888888888888888, 0x9999999999999999, 0xaaaaaaaaaaaaaaaa, 0xbbbbbbbbbbbbbbbb};
+    VCLEAR(v4);
+    VCLEAR(v8);
+    VSET(9, e64, m4);
+    VLOAD_32(v8, 8, 16, 24, 32, 40, 48, 56, 64, 120);
+    asm volatile("vloxei32.v v4, (%0), v8" ::"r"(&BUF[0]));
+    VCMP_U64(27, v4, 0x8913984898951989, 0x99991348a9f38cd1, 0x9fa831c7a11a9384,
+                     0x3819759853987548, 0x1111111111111111, 0x2222222222222222,
+                     0x3333333333333333, 0x4444444444444444, 0xbbbbbbbbbbbbbbbb);
+  }
+  { // vl=9 m2, EEW32 idx crossing + masked
+    volatile uint64_t BUF[] = {
+      0xf9aa71f0c394bbd3, 0x8913984898951989, 0x99991348a9f38cd1, 0x9fa831c7a11a9384,
+      0x3819759853987548, 0x1111111111111111, 0x2222222222222222, 0x3333333333333333,
+      0x4444444444444444, 0x5555555555555555, 0x6666666666666666, 0x7777777777777777,
+      0x8888888888888888, 0x9999999999999999, 0xaaaaaaaaaaaaaaaa, 0xbbbbbbbbbbbbbbbb};
+    VCLEAR(v0);
+    VCLEAR(v4);
+    VCLEAR(v8);
+    VSET(9, e64, m4);
+    VLOAD_8(v0, 0xaa, 0x01);
+    VLOAD_32(v8, 8, 16, 24, 32, 40, 48, 56, 64, 120);
+    asm volatile("vloxei32.v v4, (%0), v8, v0.t" ::"r"(&BUF[0]));
+    VCMP_U64(28, v4, 0x0000000000000000, 0x99991348a9f38cd1, 0x0000000000000000,
+                     0x3819759853987548, 0x0000000000000000, 0x2222222222222222,
+                     0x0000000000000000, 0x4444444444444444, 0xbbbbbbbbbbbbbbbb);
+  }
+#endif
+}
+
+
 
 int main(void) {
   INIT_CHECK();
   enable_vec();
-
   TEST_CASE1();
   TEST_CASE2();
   TEST_CASE3();
   TEST_CASE4();
   TEST_CASE5();
-
-  //TEST_CASE6();
-
+  TEST_CASE6();
+  TEST_CASE7();
+  TEST_CASE8();
+  TEST_CASE9();
   EXIT_CHECK();
 }

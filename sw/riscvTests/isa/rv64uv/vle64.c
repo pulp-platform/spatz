@@ -161,6 +161,21 @@ void TEST_CASE8(void) {
       99, 0x000000000000001D, 99, 0x000000000000001F);
 }
 
+void TEST_CASE9(void) {
+  
+  volatile uint64_t BUF[] = {
+      0xf9aa71f0c394bbd3, 0x8913984898951989, 0x99991348a9f38cd1, 0x9fa831c7a11a9384,
+      0x3819759853987548, 0x1111111111111111, 0x2222222222222222, 0x3333333333333333,
+      0x4444444444444444};
+      
+  VSET(9, e64, m4);
+  VCLEAR(v8);
+  asm volatile("vle64.v v8, (%0)" ::"r"(BUF));
+  VCMP_U64(9, v8, 0xf9aa71f0c394bbd3, 0x8913984898951989, 0x99991348a9f38cd1, 0x9fa831c7a11a9384,
+                  0x3819759853987548, 0x1111111111111111, 0x2222222222222222, 0x3333333333333333,
+                  0x4444444444444444);
+}
+
 int main(void) {
   INIT_CHECK();
   enable_vec();
@@ -174,6 +189,7 @@ int main(void) {
   TEST_CASE6();
   TEST_CASE7();
   TEST_CASE8();
+  TEST_CASE9();
 #endif
 
   EXIT_CHECK();

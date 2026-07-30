@@ -27,6 +27,7 @@ module spatz_doublebw_vlsu
   ) (
     input  logic                            clk_i,
     input  logic                            rst_ni,
+    input  logic                     [31:0] hart_id_i,
     // Spatz request
     input  spatz_req_t                      spatz_req_i,
     input  logic                            spatz_req_valid_i,
@@ -252,7 +253,7 @@ module spatz_doublebw_vlsu
   //////////////////////
 
   // Is the memory operation valid and are we at the last one?
-  logic [NrInterfaces-1:0] [N_FU-1:0] mem_operation_valid;
+  logic [NrInterfaces-1:0] [N_FU-1:0] mem_operation_valid, mem_idx_vrf_fetch_pending;
   logic [NrInterfaces-1:0] [N_FU-1:0] mem_operation_last;
 
   // For each memory port we count how many bytes we have already loaded/stored (VLSU <-> MEM).
@@ -441,6 +442,33 @@ module spatz_doublebw_vlsu
     end: gen_vreg_counters_intf_fu
   end: gen_vreg_counters_intf
 
+  /////////////////////
+  // Interface split //
+  /////////////////////
+
+//   for doublebw configuration: SpatzMemBytes = NrMemPorts*ELENB = 8*8B = 64B
+
+//   +----------------+----------------+
+//   | intf 0 (32B)   | intf 1 (32B)   |
+//   +----------------+----------------+
+//   0               32               64
+
+  // split = (SpatzMemBytes/2) * ceil(vl/SpatzMemBytes).
+  // Ex. vl = 9 --> 72B   split = 64B/2 * ceil(72B/64B) = 64B
+  vlen_t mem_split_bytes, commit_split_bytes;
+  assign mem_split_bytes    = ((mem_spatz_req.vl + SpatzMemBytes - 1) >> $clog2(SpatzMemBytes)) << ($clog2(SpatzMemBytes) - 1);
+  assign commit_split_bytes = ((commit_insn_q.vl  + SpatzMemBytes - 1) >> $clog2(SpatzMemBytes)) << ($clog2(SpatzMemBytes) - 1);
+
+  // intf0 = [0, split], intf1 = [split, vl]
+  // Ex. intf0 = [byte0 - byte63]   intf1 = [byte64 - byte71] --> the 64B of intf0 will be elaborated in 2 words (32B=256bit each), the 8B of intf1 in 1 word
+  vlen_t [NrInterfaces-1:0] mem_local_vl, commit_local_vl, commit_local_vstart;
+  assign mem_local_vl[0]    = (mem_spatz_req.vl < mem_split_bytes) ? mem_spatz_req.vl : mem_split_bytes;
+  assign mem_local_vl[1]    = (mem_spatz_req.vl < mem_split_bytes) ? vlen_t'('0)      : mem_spatz_req.vl - mem_split_bytes;
+  assign commit_local_vl[0] = (commit_insn_q.vl < commit_split_bytes) ? commit_insn_q.vl : commit_split_bytes;
+  assign commit_local_vl[1] = (commit_insn_q.vl < commit_split_bytes) ? vlen_t'('0)      : commit_insn_q.vl - commit_split_bytes;
+  assign commit_local_vstart[0] = (commit_insn_q.vstart < commit_split_bytes) ? commit_insn_q.vstart : commit_split_bytes;
+  assign commit_local_vstart[1] = (commit_insn_q.vstart < commit_split_bytes) ? vlen_t'('0)      : commit_insn_q.vstart - commit_split_bytes;
+
   ////////////////////////
   // Address Generation //
   ////////////////////////
@@ -455,32 +483,16 @@ module spatz_doublebw_vlsu
   vreg_elem_t [NrInterfaces-1:0] vs2_elem_id_d, vs2_elem_id_q;
   `FF(vs2_elem_id_q, vs2_elem_id_d, '0)
 
-  // Total bytes of indexes consumed since instruction start per interface.
-  vlen_t [NrInterfaces-1:0] total_idx_bytes_q, total_idx_bytes_d;
-  for (genvar intf = 0; intf < NrInterfaces; intf++) begin: gen_total_idx_bytes
-    `FF(total_idx_bytes_q[intf], total_idx_bytes_d[intf], '0)
-  end: gen_total_idx_bytes
+  // Byte offset of interface 1's first index within the index vector
+  vlen_t idx_split_bytes;
+  assign idx_split_bytes = (mem_spatz_req.vtype.vsew >= mem_spatz_req.op_mem.ew)
+                        ? mem_split_bytes >> (mem_spatz_req.vtype.vsew - int'(mem_spatz_req.op_mem.ew))
+                        : mem_split_bytes << (int'(mem_spatz_req.op_mem.ew) - mem_spatz_req.vtype.vsew);
 
-  logic [NrInterfaces-1:0] fetch_next_idx_global;
-
-  always_comb begin
-    for (int intf = 0; intf < NrInterfaces; intf++) begin
-      total_idx_bytes_d[intf] = total_idx_bytes_q[intf];
-
-      // Reset on new instruction
-      if (mem_spatz_req_ready) begin
-        total_idx_bytes_d[intf] = '0;
-      end else begin
-        for (int unsigned fu = 0; fu < N_FU; fu++) begin
-          if (mem_counter_en[intf][fu])
-            total_idx_bytes_d[intf] = total_idx_bytes_q[intf] + (vlen_t'(1) << mem_spatz_req.op_mem.ew);
-        end
-      end
-
-      // Advance vs2_elem_id[intf] when we cross a VRF word boundary on that interface
-      fetch_next_idx_global[intf] = mem_is_indexed && ((total_idx_bytes_d[intf] >> $clog2(VRFWordBWidth)) != (total_idx_bytes_q[intf] >> $clog2(VRFWordBWidth)));
-    end
-  end
+  vrf_addr_t [NrInterfaces-1:0][N_FU-1:0] idx_needed_addr;
+  logic      [NrInterfaces-1:0][N_FU-1:0] mem_idx_word_ok;   // index readable this cycle
+  logic      [NrInterfaces-1:0][N_FU-1:0] idx_match_own;
+  logic      [NrInterfaces-1:0][N_FU-1:0] idx_needs_higher;
 
   // Calculate the memory address for each memory port
   addr_offset_t [NrInterfaces-1:0] [N_FU-1:0] mem_req_addr_offset;
@@ -492,15 +504,43 @@ module spatz_doublebw_vlsu
       logic [31:0] stride;
       logic [31:0] offset;
 
-      // Pre-shuffling index offset
-      logic [$clog2(8*8):0] idx_offset; // Max index offset (in B) when 8 x 8B (num elements in one MAXEW x index width in bytes for 1 element)
-      assign idx_offset = mem_idx_counter_q[intf][fu];
+      logic [$clog2(VRFWordBWidth)-1:0]   word_index_local;
+      logic [$clog2(2*VRFWordBWidth)-1:0] word_index;
 
       // Calculate shift amount for address normalization
       logic [$bits(vew_e)-1:0] log2_num_el_maxew;
       logic [$bits(vew_e)  :0] log2_num_idx_maxew_bytes;
       logic [2 * MAXEW     :0] num_idx_maxew_bytes;
 
+      // Global byte position of this fu's next index inside the index vector
+      logic [$bits(vlen_t)-1:0] idx_gbyte;
+      assign idx_gbyte = ((intf == 0) ? vlen_t'('0) : idx_split_bytes)
+                       + (vlen_t'(fu) << log2_num_idx_maxew_bytes)
+                       + (mem_idx_counter_q[intf][fu] & (num_idx_maxew_bytes - 1))
+                       + (((mem_idx_counter_q[intf][fu] >> log2_num_idx_maxew_bytes) << log2_num_idx_maxew_bytes) * N_FU);
+
+      // VRF word that holds this index
+      assign idx_needed_addr[intf][fu] = (mem_spatz_req.vs2 << $clog2(NrWordsPerVector))
+                                       + vrf_addr_t'(idx_gbyte >> $clog2(VRFWordBWidth));
+
+      logic match_lo, match_hi, use_upper_fu;
+      assign match_lo = (idx_needed_addr[intf][fu] == vs2_vreg_idx_addr[0]);
+      assign match_hi = (idx_needed_addr[intf][fu] == vs2_vreg_idx_addr[1]);
+
+      // intf0 fetches on its own interface while intf1 can also borrow intf0's word (shared-word case)
+      assign mem_idx_word_ok[intf][fu] = (intf == 0)
+                                       ? (match_lo && vrf_rvalid_i[0][1])
+                                       : ((match_lo && vrf_rvalid_i[0][1]) || (match_hi && vrf_rvalid_i[1][1]));
+      assign use_upper_fu = (intf == 1) && !match_lo && match_hi;
+
+      assign idx_match_own[intf][fu]    = (intf == 0) ? match_lo : match_hi;
+      assign idx_needs_higher[intf][fu] = idx_needed_addr[intf][fu] > vs2_vreg_idx_addr[intf];
+
+
+      // Stream of indexes (indexed load/store)
+      logic [VLEN-1:0] idx_stream;
+
+      assign idx_stream = (state_q == VLSU_RunningLoad || state_q == VLSU_RunningStore) ? {vrf_rdata_i[1][1], vrf_rdata_i[0][1]} : '0;
       assign log2_num_el_maxew = MAXEW - mem_spatz_req.vtype.vsew;                       // Number of elements in MAXEW
       assign log2_num_idx_maxew_bytes = log2_num_el_maxew + mem_spatz_req.op_mem.ew;
       assign num_idx_maxew_bytes = 1'b1 << log2_num_idx_maxew_bytes;                     // Number of indices for MAXEW/SEW elements in bytes
@@ -509,19 +549,12 @@ module spatz_doublebw_vlsu
         stride = mem_is_strided ? mem_spatz_req.rs2 >> mem_spatz_req.vtype.vsew : 'd1;
 
         if (mem_is_indexed) begin
-          // What is the relationship between data and index width?
-          automatic logic [1:0] data_index_width_diff = int'(mem_spatz_req.vtype.vsew) - int'(mem_spatz_req.op_mem.ew);
-
-          // Pointer to index
-          automatic logic [idx_width(N_FU*ELENB)-1:0] word_index = (fu << log2_num_idx_maxew_bytes) +
-                                                                   (idx_offset & (num_idx_maxew_bytes - 1)) +
-                                                                   ((idx_offset >> log2_num_idx_maxew_bytes) << log2_num_idx_maxew_bytes) * N_FU;
-
-          // Index
+          word_index_local = idx_gbyte[$clog2(VRFWordBWidth)-1:0];
+          word_index       = {use_upper_fu, word_index_local};
           unique case (mem_spatz_req.op_mem.ew)
-            EW_8 : offset   = $signed(vrf_rdata_i[intf][1][8 * word_index +: 8]);
-            EW_16: offset   = $signed(vrf_rdata_i[intf][1][8 * word_index +: 16]);
-            default: offset = $signed(vrf_rdata_i[intf][1][8 * word_index +: 32]);
+            EW_8 : offset   = $signed(idx_stream[8 * word_index +: 8]);
+            EW_16: offset   = $signed(idx_stream[8 * word_index +: 16]);
+            default: offset = $signed(idx_stream[8 * word_index +: 32]);
           endcase
         end else begin
           offset = ({mem_counter_q[intf][fu][$bits(vlen_t)-1:MAXEW] << $clog2(N_FU), mem_counter_q[intf][fu][int'(MAXEW)-1:0]} + (fu << MAXEW));
@@ -532,14 +565,13 @@ module spatz_doublebw_vlsu
         // such that they access different superbanks.
         if (!mem_is_indexed && intf == 1) begin
           // Align the vector length with SpatzMemBytes bytes
-          offset += ((mem_spatz_req.vl +  (SpatzMemBytes / 2)) >> $clog2(SpatzMemBytes) << $clog2(SpatzMemBytes)) / 2;
+          offset += mem_split_bytes;
         end
         offset *= stride;
 
         addr                          = mem_spatz_req.rs1 + offset;
         mem_req_addr[intf][fu]        = (addr >> MAXEW) << MAXEW;
         mem_req_addr_offset[intf][fu] = addr[int'(MAXEW)-1:0];
-
       end
     end: gen_mem_req_addr_intf_fu
   end: gen_mem_req_addr_intf
@@ -562,18 +594,26 @@ module spatz_doublebw_vlsu
       vs2_vreg_addr[intf] = (mem_spatz_req.vs2 << $clog2(NrWordsPerVector)) + $unsigned(vs2_elem_id_q[intf]);
       vs2_vreg_idx_addr[intf] = vs2_vreg_addr[intf];
 
-      // The second interface starts from half of the vector to straighten the write-back VRF access pattern
       if (intf == 1) begin
-        vd_vreg_addr[intf] += (commit_insn_q.vl + (SpatzMemBytes / 2)) >> $clog2(SpatzMemBytes);
-        vs2_vreg_idx_addr[intf] += ((((mem_spatz_req.vl + (SpatzMemBytes / 2)) >> $clog2(SpatzMemBytes) << $clog2(SpatzMemBytes)) / 2)
-                                   >> (mem_spatz_req.vtype.vsew - int'(mem_spatz_req.op_mem.ew))) / VRFWordBWidth;
+        vd_vreg_addr[intf]      += commit_split_bytes >> $clog2(VRFWordBWidth);
+        vs2_vreg_idx_addr[intf] += vrf_addr_t'(idx_split_bytes >> $clog2(VRFWordBWidth));
       end
     end
 
-    v0_t_vreg_addr_lo =  vrf_addr_t'(0);   // v0 word 0;
-    v0_t_vreg_addr_hi =  vrf_addr_t'(1);   // v0 word 1;
+    v0_t_vreg_addr_lo =  vrf_addr_t'(0);   // v0 word 0
+    v0_t_vreg_addr_hi =  vrf_addr_t'(1);   // v0 word 1
 
   end
+
+  logic [NrInterfaces-1:0] idx_valid;
+  always_comb begin : idx_valid_proc
+    if (!mem_is_indexed) begin
+      idx_valid = '1;
+    end else begin
+      idx_valid[0] = vrf_rvalid_i[0][1];
+      idx_valid[1] = (vs2_vreg_idx_addr[1] == vs2_vreg_idx_addr[0]) ? vrf_rvalid_i[0][1] : vrf_rvalid_i[1][1];
+    end
+  end : idx_valid_proc
 
   ///////////////
   //  Control  //
@@ -844,7 +884,7 @@ module spatz_doublebw_vlsu
 
   // Check if interface 1 is the interface trying to commit, if so take resp information from interface 1
   // If both interfaces in sync, interface 1 is given priority
-  assign resp_intf = ((vrf_commit_intf_valid [1] == 1'b1) & !vrf_commit_bypass) ? 1'b1 : 1'b0;
+  assign resp_intf = vrf_valid_rsp[1];
 
   // Check is both interfaces has reached to a completion and if the last write to the VRF is also done
   // Assign the instruction id from the interface that completes the last
@@ -855,6 +895,79 @@ module spatz_doublebw_vlsu
   // Check if atleast one interface has a valid (interfaces can send responses asynchronously to the VRF)
   // Set response high when both interfaces have committed and the VRF accepts the final write
   assign vlsu_rsp_valid_o = &vrf_commit_intf_valid && |coalesce_valid_q ? |vrf_wvalid_i : vlsu_finished_req && !commit_insn_q.is_load;
+
+`ifndef TARGET_SYNTHESIS
+`ifdef TRACE
+  // pragma translate_off
+  int trace_vrf_wb_fd;
+  int trace_mem_fd;
+  string trace_vrf_wb_file;
+  string trace_mem_file;
+
+  initial begin
+    trace_vrf_wb_fd = 0;
+    trace_mem_fd = 0;
+  end
+
+  always @(posedge clk_i) begin
+    if (rst_ni && !$isunknown(hart_id_i) && trace_vrf_wb_fd == 0 && trace_mem_fd == 0) begin
+      trace_vrf_wb_file = $sformatf("spatz_doublebw_vlsu_vrf_wb_hart%0d.log", hart_id_i);
+      trace_vrf_wb_fd = $fopen(trace_vrf_wb_file, "w");
+
+      trace_mem_file = $sformatf("spatz_doublebw_vlsu_mem_trace_hart%0d.log", hart_id_i);
+      trace_mem_fd = $fopen(trace_mem_file, "w");
+    end
+  end
+
+  always_ff @(posedge clk_i) begin
+    if (rst_ni && trace_vrf_wb_fd != 0) begin
+      for (int unsigned intf = 0; intf < NrInterfaces; intf++) begin
+        if (vrf_we_o[intf] && vrf_wvalid_i[intf]) begin
+          $fdisplay(trace_vrf_wb_fd,
+                    "[spatz_doublebw_vlsu] vrf_wb intf=%0d id_rsp=%0d id_mem=%0d id_commit=%0d waddr=0x%0h wbe=0x%0h wdata=0x%0h vlsu_rsp_valid=%0d id=%0d intf_id=%0d exc=%0d",
+                    intf, vrf_id_o[intf][2], vrf_id_o[intf][1], vrf_id_o[intf][0], vrf_waddr_o[intf],
+                    vrf_wbe_o[intf], vrf_wdata_o[intf], vlsu_rsp_valid_o, vlsu_rsp_o.id, vlsu_rsp_o.intf_id, vlsu_rsp_o.exc);
+        end
+      end
+    end
+  end
+
+  always_ff @(posedge clk_i) begin
+    if (rst_ni && trace_mem_fd != 0) begin
+      for (int unsigned port = 0; port < NrMemPorts; port++) begin
+        automatic int unsigned intf = port / N_FU;
+        automatic int unsigned fu   = port % N_FU;
+        if (spatz_mem_req_valid_o[port] && spatz_mem_req_ready_i[port]) begin
+          if (spatz_mem_req_o[port].write) begin
+            $fdisplay(trace_mem_fd,
+                      "[spatz_doublebw_vlsu] mem_req port=%0d intf=%0d fu=%0d id=%0d write=1 addr=0x%0h data=0x%0h",
+                      port, intf, fu, mem_req_id[intf][fu], spatz_mem_req_o[port].addr, spatz_mem_req_o[port].data);
+          end else begin
+            $fdisplay(trace_mem_fd,
+                      "[spatz_doublebw_vlsu] mem_req port=%0d intf=%0d fu=%0d id=%0d write=0 addr=0x%0h",
+                      port, intf, fu, mem_req_id[intf][fu], spatz_mem_req_o[port].addr);
+          end
+        end
+
+`ifdef MEMPOOL_SPATZ
+        if (spatz_mem_rsp_valid_i[port]) begin
+          $fdisplay(trace_mem_fd,
+                    "[spatz_doublebw_vlsu] mem_rsp port=%0d write=%0d data=0x%0h",
+                    port, spatz_mem_rsp_i[port].write, spatz_mem_rsp_i[port].data);
+        end
+`else
+        if (spatz_mem_rsp_valid_i[port]) begin
+          $fdisplay(trace_mem_fd,
+                    "[spatz_doublebw_vlsu] mem_rsp port=%0d data=0x%0h",
+                    port, spatz_mem_rsp_i[port].data);
+        end
+`endif
+      end
+    end
+  end
+  // pragma translate_on
+`endif
+`endif
 
   //////////////
   // Counters //
@@ -879,24 +992,23 @@ module spatz_doublebw_vlsu
 
       always_comb begin
         // Default value
-        max_bytes = (commit_insn_q.vl >> $clog2(SpatzMemBytes)) << $clog2(ELENB);
+        max_bytes = (commit_local_vl[intf] >> $clog2(N_FU*ELENB)) << $clog2(ELENB);
 
-        // Full transfer
-        if (commit_insn_q.vl[$clog2(ELENB) +: $clog2(NrMemPorts)] > port)
+        if (commit_local_vl[intf][$clog2(ELENB) +: $clog2(N_FU)] > fu)
           max_bytes += ELENB;
-        else if (commit_insn_q.vl[$clog2(SpatzMemBytes)-1:$clog2(ELENB)] == port)
-          max_bytes += commit_insn_q.vl[$clog2(ELENB)-1:0];
+        else if (commit_local_vl[intf][$clog2(ELENB) +: $clog2(N_FU)] == fu)
+          max_bytes += commit_local_vl[intf][$clog2(ELENB)-1:0];
 
         commit_counter_load[intf][fu] = commit_insn_pop;
-        commit_counter_d[intf][fu]    = (commit_insn_q.vstart >> $clog2(SpatzMemBytes)) << $clog2(ELENB);
-        if (commit_insn_q.vstart[$clog2(SpatzMemBytes)-1:$clog2(ELENB)] > port)
+        commit_counter_d[intf][fu] = (commit_local_vstart[intf] >> $clog2(N_FU*ELENB)) << $clog2(ELENB);
+        if (commit_local_vstart[intf][$clog2(ELENB) +: $clog2(N_FU)] > fu)
           commit_counter_d[intf][fu] += ELENB;
-        else if (commit_insn_q.vstart[idx_width(SpatzMemBytes)-1:$clog2(ELENB)] == port)
-          commit_counter_d[intf][fu] += commit_insn_q.vstart[$clog2(ELENB)-1:0];
+        else if (commit_local_vstart[intf][$clog2(ELENB) +: $clog2(N_FU)] == fu)
+          commit_counter_d[intf][fu] += commit_local_vstart[intf][$clog2(ELENB)-1:0];
         commit_operation_valid[intf][fu] = (state_q == VLSU_RunningLoad || state_q == VLSU_RunningStore) && commit_insn_valid && (commit_counter_q[intf][fu] != max_bytes) && (catchup[intf][fu] || (!catchup[intf][fu] && ~|catchup));
         commit_operation_last[intf][fu]  = commit_operation_valid[intf][fu] && ((max_bytes - commit_counter_q[intf][fu]) <= (commit_is_single_element_operation ? commit_single_element_size : ELENB));
         commit_counter_delta[intf][fu]   = !commit_operation_valid[intf][fu] ? vlen_t'('d0) : commit_is_single_element_operation ? vlen_t'(commit_single_element_size) : commit_operation_last[intf][fu] ? (max_bytes - commit_counter_q[intf][fu]) : vlen_t'(ELENB);
-        commit_counter_en[intf][fu]      = commit_operation_valid[intf][fu] && (commit_insn_q.is_load && vrf_req_valid_d[intf] && vrf_req_ready_d[intf]) || (!commit_insn_q.is_load && vrf_rvalid_i[intf][0] && vrf_re_o[intf][0] && (!mem_is_indexed || vrf_rvalid_i[intf][1]));
+        commit_counter_en[intf][fu]      = commit_operation_valid[intf][fu] && (commit_insn_q.is_load && vrf_req_valid_d[intf] && vrf_req_ready_d[intf]) || (!commit_insn_q.is_load && vrf_rvalid_i[intf][0] && vrf_re_o[intf][0] && (!mem_is_indexed || idx_valid[intf]));
         commit_counter_max[intf][fu]     = max_bytes;
       end
     end
@@ -913,19 +1025,18 @@ module spatz_doublebw_vlsu
       localparam int unsigned port = intf * N_FU + fu;
 
       // The total amount of vector bytes we have to work through
-      vlen_t max_bytes;
+      vlen_t max_bytes, max_idx_bytes;
 
       always_comb begin
-        // Default value
-        max_bytes = (mem_spatz_req.vl >> $clog2(NrMemPorts*MemDataWidthB)) << $clog2(MemDataWidthB);
-
-        if (NrMemPorts == 1)
-          max_bytes = mem_spatz_req.vl;
-        else
-          if (mem_spatz_req.vl[$clog2(MemDataWidthB) +: $clog2(NrMemPorts)] > port)
+        if (N_FU == 1)
+          max_bytes = mem_local_vl[intf];
+        else begin
+          max_bytes = (mem_local_vl[intf] >> $clog2(N_FU*MemDataWidthB)) << $clog2(MemDataWidthB);
+          if (mem_local_vl[intf][$clog2(MemDataWidthB) +: $clog2(N_FU)] > fu)
             max_bytes += MemDataWidthB;
-          else if (mem_spatz_req.vl[$clog2(MemDataWidthB) +: $clog2(NrMemPorts)] == port)
-            max_bytes += mem_spatz_req.vl[$clog2(MemDataWidthB)-1:0];
+          else if (mem_local_vl[intf][$clog2(MemDataWidthB) +: $clog2(N_FU)] == fu)
+            max_bytes += mem_local_vl[intf][$clog2(MemDataWidthB)-1:0];
+        end
 
         mem_operation_valid[intf][fu] = mem_spatz_req_valid && (max_bytes != mem_counter_q[intf][fu]);
         mem_operation_last[intf][fu]  = mem_operation_valid[intf][fu] && ((max_bytes - mem_counter_q[intf][fu]) <= (mem_is_single_element_operation ? mem_single_element_size : MemDataWidthB));
@@ -943,6 +1054,9 @@ module spatz_doublebw_vlsu
         mem_counter_max[intf][fu]   = max_bytes;
 
         // Index counter
+        max_idx_bytes = (max_bytes >> mem_spatz_req.vtype.vsew) << mem_spatz_req.op_mem.ew;
+        mem_idx_vrf_fetch_pending[intf][fu] = mem_spatz_req_valid && (max_idx_bytes != mem_idx_counter_q[intf][fu]);
+
         mem_idx_counter_d[intf][fu]     = mem_counter_d[intf][fu];
         mem_idx_counter_delta[intf][fu] = !mem_operation_valid[intf][fu] ? 'd0 : mem_idx_single_element_size;
       end
@@ -1070,7 +1184,7 @@ module spatz_doublebw_vlsu
         intf_byte_offset[intf] = '0;
       else
         // Valid for intf == 1
-        intf_byte_offset[intf] = ((commit_insn_q.vl + (SpatzMemBytes >> 1)) >> $clog2(SpatzMemBytes) << $clog2(SpatzMemBytes)) >> 1;
+        intf_byte_offset[intf] = commit_split_bytes;
     end
   end
 
@@ -1115,7 +1229,8 @@ module spatz_doublebw_vlsu
   always_comb begin: vs2_elem_id_logic
     vs2_elem_id_d = vs2_elem_id_q;
     for (int intf = 0; intf < NrInterfaces; intf++) begin
-      if (fetch_next_idx_global[intf])
+      // Advance this interface's index word only if some pending fu needs a word beyond it and none still needs the current one
+      if (mem_is_indexed && |(mem_idx_vrf_fetch_pending[intf] & idx_needs_higher[intf]) && !(|(mem_idx_vrf_fetch_pending[intf] & idx_match_own[intf])))
         vs2_elem_id_d[intf] = vs2_elem_id_q[intf] + 1;
     end
     if (mem_spatz_req_ready)
@@ -1252,7 +1367,7 @@ module spatz_doublebw_vlsu
 `endif
           if (!rob_full[intf][fu] && !offset_queue_full[intf][fu] && mem_operation_valid[intf][fu]) begin
             rob_req_id[intf][fu]     = spatz_mem_req_ready[intf][fu] & spatz_mem_req_valid[intf][fu];
-            mem_req_lvalid[intf][fu] = (!mem_is_indexed || vrf_rvalid_i[intf][1]) && mem_spatz_req.op_mem.is_load;
+            mem_req_lvalid[intf][fu] = (!mem_is_indexed || mem_idx_word_ok[intf][fu]) && mem_spatz_req.op_mem.is_load;
             mem_req_id[intf][fu]     = rob_id[intf][fu];
             mem_req_last[intf][fu]   = mem_operation_last[intf][fu];
           end
@@ -1268,7 +1383,7 @@ module spatz_doublebw_vlsu
 
             rob_wdata[intf][fu]  = vrf_rdata_i[intf][0][ELEN*fu +: ELEN];
             rob_wid[intf][fu]    = rob_id[intf][fu];
-            rob_req_id[intf][fu] = vrf_rvalid_i[intf][0] && (!mem_is_indexed || vrf_rvalid_i[intf][1]);
+            rob_req_id[intf][fu] = vrf_rvalid_i[intf][0] && (!mem_is_indexed || idx_valid[intf]);
             rob_push[intf][fu]   = rob_req_id[intf][fu];
           end
         end
@@ -1383,7 +1498,7 @@ module spatz_doublebw_vlsu
                 end
               endcase
 
-            mem_req_svalid[intf][fu] = rob_rvalid[intf][fu] && (!mem_is_indexed || vrf_rvalid_i[intf][1]) && !mem_spatz_req.op_mem.is_load && (commit_insn_q.vm || v0_t_read_done);
+            mem_req_svalid[intf][fu] = rob_rvalid[intf][fu] && (!mem_is_indexed || mem_idx_word_ok[intf][fu]) && !mem_spatz_req.op_mem.is_load && (commit_insn_q.vm || v0_t_read_done);
             mem_req_id[intf][fu]     = rob_rid[intf][fu];
             mem_req_last[intf][fu]   = mem_operation_last[intf][fu];
             rob_pop[intf][fu]        = spatz_mem_req_valid[intf][fu] && spatz_mem_req_ready[intf][fu];

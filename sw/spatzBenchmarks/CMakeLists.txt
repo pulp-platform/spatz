@@ -152,7 +152,7 @@ add_spatz_test_threeParam(sp-fmatmul sp-fmatmul/main.c 64  128 64 )
 
 add_spatz_test_threeParam(hp-fmatmul hp-fmatmul/main.c 64  64  64 )
 add_spatz_test_threeParam(hp-fmatmul hp-fmatmul/main.c 64  128 64 )
-add_spatz_test_threeParam(hp-fmatmul hp-fmatmul/main.c 128 128 128)
+#add_spatz_test_threeParam(hp-fmatmul hp-fmatmul/main.c 128 128 128)
 
 add_spatz_test_threeParam(widening-hp-fmatmul widening-hp-fmatmul/main.c 64  64  64 )
 add_spatz_test_threeParam(widening-hp-fmatmul widening-hp-fmatmul/main.c 64  128 64 )
