@@ -15,10 +15,7 @@ variables:
   RISCV_WARNINGS: '-Werror'
   CC: 'gcc-11.2.0'
   CXX: 'g++-11.2.0'
-  # Use the system cmake by absolute path: the sepp `cmake` wrapper resolves
-  # to a /usr/pack/... binary at configure time and cmake embeds that path
-  # as CMAKE_COMMAND in the generated build files — if that pack is absent
-  # on the executing host, every `cmake -E` helper call fails with Error 127.
+  # Use the system cmake by absolute path: the sepp `cmake` wrapper depends on individual git runner
   CMAKE: '/usr/bin/cmake'
   CTEST: '/usr/bin/ctest'
   VCS: 'vcs-2022.06'

@@ -21,10 +21,12 @@ add_compile_options(-O3 -g -ffunction-sections)
 # These sources contain hand-written RVV inline assembly: opt into the
 # encode-everything march (the toolchain default deliberately omits 'v';
 # the last -march on the command line wins). The rv64uv sources include
-# EEW=64 ops, so unlike the benchmark kernels this needs the full march
-# even on ELEN=32 builds (where these tests compile but never run).
-# Compiler-side vectorization stays disabled through the toolchain-wide
-# kill switches.
+# EEW=64 asm that isn't all `#if ELEN==64`-guarded, so unlike the benchmark
+# kernels they need the full-encoding march even on ELEN=32 builds -- which
+# DO run in CI. This matches the pre-bump toolchain, where riscvTests
+# inherited the full default march on every config; the tests' own
+# `#if ELEN==64` guards handle per-config behavior. Compiler-side
+# vectorization stays disabled through the toolchain-wide kill switches.
 if(DEFINED SPATZ_MARCH_ENCODE_ALL)
     add_compile_options("$<$<COMPILE_LANGUAGE:C,CXX,ASM>:-march=${SPATZ_MARCH_ENCODE_ALL}>")
 elseif(DEFINED SPATZ_MARCH_VECTOR)

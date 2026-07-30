@@ -159,7 +159,7 @@ void TEST_CASE4(void) {
         INIT, INIT, INIT, INIT, INIT, INIT, INIT, INIT,
         INIT, INIT, INIT, INIT, INIT, INIT, INIT, INIT};
       VCLEAR(v4);
-      VCLEAR(v8);    
+      VCLEAR(v8);
       VSET(5, e64, m4);
       VLOAD_64(v4, 0xf9aa71f0c394bbd3, 0x8913984898951989, 0x99991348a9f38cd1, 0x9fa831c7a11a9384, 0x3819759853987548);
       VLOAD_8(v8, 8, 16, 40, 72, 120);
@@ -469,11 +469,11 @@ void TEST_CASE10(void) {
       INIT,   INIT,   0x2010, INIT,   INIT,   INIT,   INIT,   0x2011,
       INIT,   INIT,   INIT,   0x2013, 0x2012, INIT,   INIT,   0x2014);
   }
- 
+
   {
       volatile uint16_t BUF[64];
       for (int i = 0; i < 64; i++) BUF[i] = INIT;
-      
+
       VCLEAR(v0);
       VCLEAR(v4);
       VCLEAR(v8);
@@ -485,7 +485,7 @@ void TEST_CASE10(void) {
       VLOAD_32(v8, 0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30,
                   100, 110, 120, 118, 126, 60, 34, 44, 50);
       asm volatile("vsuxei32.v v4, (%0), v8, v0.t" ::"r"(&BUF[0]) : "memory");
-      
+
       // active elements: 1,3,5,7,9,11,13,15,17,19,21,23
       VVCMP_U16(30, BUF,
       INIT,   0x2001, INIT,   0x2003, INIT,   0x2005, INIT,   0x2007,
@@ -496,7 +496,7 @@ void TEST_CASE10(void) {
       INIT,   INIT,   INIT,   INIT,   INIT,   INIT,   INIT,   INIT,
       INIT,   INIT,   INIT,   INIT,   INIT,   INIT,   INIT,   0x2011,
       INIT,   INIT,   INIT,   0x2013, INIT,   INIT,   INIT,   INIT);
-  } 
+  }
 }
 
 int main(void) {

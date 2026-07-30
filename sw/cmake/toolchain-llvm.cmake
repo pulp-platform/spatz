@@ -1,4 +1,4 @@
-# Copyright 2020 ETH Zurich and University of Bologna.
+# Copyright 2026 ETH Zurich and University of Bologna.
 # Solderpad Hardware License, Version 0.51, see LICENSE for details.
 # SPDX-License-Identifier: SHL-0.51
 
@@ -33,11 +33,15 @@ else()
   set(SPATZ_MARCH_VECTOR rv32imafdv_zfh_xdma_xsmallfloatb_xsmallfloath_xrrpost_xvfx_xvfwdotp)
   set(SPATZ_MABI ilp32d)
 endif()
-# Encode-everything march for riscvTests: their rv64uv sources contain
-# EEW=64 vector ops that zve32f rejects at assembly time. On ELEN=32 those
-# binaries are built but never registered/run (CI ctests only
-# spatzBenchmarks there), so full encoding capability is safe; the ABI tag
-# still follows SPATZ_MABI, keeping the link consistent.
+# Encode-everything march for riscvTests. Their rv64uv sources contain
+# hand-written EEW=64 vector asm, not all of it behind `#if ELEN==64`, so
+# the restricted default march (v-less, or zve32f on ELEN=32) rejects it at
+# assembly time. The pre-bump toolchain gave EVERY config the full
+# rv32imafdvzfh march by default, so these assembled on 32b too and CI runs
+# riscvTests on 32b; this simply restores that ENCODING capability for
+# riscvTests. The ABI still follows SPATZ_MABI (ilp32f on ELEN=32), so no
+# fsd is emitted for compiler-generated code, and the tests' own
+# `#if ELEN==64` guards keep per-config execution identical to main.
 set(SPATZ_MARCH_ENCODE_ALL rv32imafdv_zfh_xdma_xsmallfloatb_xsmallfloath_xrrpost_xvfx_xvfwdotp)
 
 # Look for the precompiled binaries
