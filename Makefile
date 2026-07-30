@@ -162,6 +162,55 @@ tc-llvm: sw/toolchain/llvm-project sw/toolchain/newlib
 	$(MAKE) -j8 && $(MAKE) install
 	cp "$$($(LLVM_INSTALL_DIR)/bin/clang --target=riscv32-unknown-elf -print-runtime-dir)/libclang_rt.builtins-riscv32.a" \
 	   "$$($(LLVM_INSTALL_DIR)/bin/clang --target=riscv32-unknown-elf -print-runtime-dir)/libclang_rt.builtins.a"
+	# --- ilp32f flavor for ELEN=32 (FLEN=32) cluster configs ---------------
+	# The default flavor above is ilp32d. FLEN=32 configs (e.g.
+	# spatz_cluster.32b.dram) must build D-free code with the ilp32f ABI and
+	# lld refuses to mix float ABIs, so we also install ilp32f newlib +
+	# compiler-rt under $(LLVM_INSTALL_DIR)/ilp32f. sw/cmake/toolchain-llvm.cmake
+	# points ELEN=32 builds at these.
+	rm -rf sw/toolchain/build-newlib32-ilp32f && mkdir -p sw/toolchain/build-newlib32-ilp32f
+	cd sw/toolchain/build-newlib32-ilp32f && \
+	../newlib/configure \
+		--target=riscv32-unknown-elf \
+		--prefix=$(LLVM_INSTALL_DIR)/ilp32f \
+		AR_FOR_TARGET=$(LLVM_INSTALL_DIR)/bin/llvm-ar \
+		AS_FOR_TARGET=$(LLVM_INSTALL_DIR)/bin/llvm-as \
+		LD_FOR_TARGET=$(LLVM_INSTALL_DIR)/bin/llvm-ld \
+		RANLIB_FOR_TARGET=$(LLVM_INSTALL_DIR)/bin/llvm-ranlib \
+		CC_FOR_TARGET="$(LLVM_INSTALL_DIR)/bin/clang --target=riscv32 -march=rv32imaf -mabi=ilp32f" && \
+	$(MAKE) -j8 && $(MAKE) install
+	rm -rf sw/toolchain/build-compiler-rt32-ilp32f && mkdir -p sw/toolchain/build-compiler-rt32-ilp32f
+	cd sw/toolchain/build-compiler-rt32-ilp32f && \
+	$(CMAKE) -G"Unix Makefiles" \
+		-DCMAKE_SYSTEM_NAME=Linux \
+		-DCMAKE_INSTALL_PREFIX=$(LLVM_INSTALL_DIR)/ilp32f/compiler-rt \
+		-DCMAKE_C_COMPILER=$(LLVM_INSTALL_DIR)/bin/clang \
+		-DCMAKE_CXX_COMPILER=$(LLVM_INSTALL_DIR)/bin/clang \
+		-DCMAKE_AR=$(LLVM_INSTALL_DIR)/bin/llvm-ar \
+		-DCMAKE_NM=$(LLVM_INSTALL_DIR)/bin/llvm-nm \
+		-DCMAKE_RANLIB=$(LLVM_INSTALL_DIR)/bin/llvm-ranlib \
+		-DCMAKE_C_COMPILER_TARGET="riscv32-unknown-elf" \
+		-DCMAKE_CXX_COMPILER_TARGET="riscv32-unknown-elf" \
+		-DCMAKE_ASM_COMPILER_TARGET="riscv32-unknown-elf" \
+		-DCMAKE_C_FLAGS="-march=rv32imaf -mabi=ilp32f" \
+		-DCMAKE_CXX_FLAGS="-march=rv32imaf -mabi=ilp32f" \
+		-DCMAKE_ASM_FLAGS="-march=rv32imaf -mabi=ilp32f" \
+		-DCMAKE_EXE_LINKER_FLAGS="-nostartfiles -nostdlib -fuse-ld=lld" \
+		-DCOMPILER_RT_BAREMETAL_BUILD=ON \
+		-DCOMPILER_RT_BUILD_BUILTINS=ON \
+		-DCOMPILER_RT_BUILD_MEMPROF=OFF \
+		-DCOMPILER_RT_BUILD_LIBFUZZER=OFF \
+		-DCOMPILER_RT_BUILD_PROFILE=OFF \
+		-DCOMPILER_RT_BUILD_SANITIZERS=OFF \
+		-DCOMPILER_RT_BUILD_XRAY=OFF \
+		-DCOMPILER_RT_DEFAULT_TARGET_ONLY=ON \
+		-DCOMPILER_RT_OS_DIR="riscv32-unknown-unknown-elf" \
+		-DLLVM_CONFIG_PATH=$(LLVM_INSTALL_DIR)/bin/llvm-config \
+		../llvm-project/compiler-rt && \
+	$(MAKE) -j8 && $(MAKE) install
+	mkdir -p $(LLVM_INSTALL_DIR)/ilp32f/lib
+	cp "$(LLVM_INSTALL_DIR)/ilp32f/compiler-rt/lib/riscv32-unknown-unknown-elf/libclang_rt.builtins-riscv32.a" \
+	   "$(LLVM_INSTALL_DIR)/ilp32f/lib/libclang_rt.builtins.a"
 
 tc-riscv-isa-sim: sw/toolchain/riscv-isa-sim sw/toolchain/dtc
 	mkdir -p $(SPIKE_INSTALL_DIR)

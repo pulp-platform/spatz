@@ -19,10 +19,15 @@ endif()
 add_compile_options(-O3 -g -ffunction-sections)
 
 # These sources contain hand-written RVV inline assembly: opt into the
-# vector march (the toolchain default deliberately omits 'v'; the last
-# -march on the command line wins). Compiler-side vectorization stays
-# disabled through the toolchain-wide kill switches.
-if(DEFINED SPATZ_MARCH_VECTOR)
+# encode-everything march (the toolchain default deliberately omits 'v';
+# the last -march on the command line wins). The rv64uv sources include
+# EEW=64 ops, so unlike the benchmark kernels this needs the full march
+# even on ELEN=32 builds (where these tests compile but never run).
+# Compiler-side vectorization stays disabled through the toolchain-wide
+# kill switches.
+if(DEFINED SPATZ_MARCH_ENCODE_ALL)
+    add_compile_options("$<$<COMPILE_LANGUAGE:C,CXX,ASM>:-march=${SPATZ_MARCH_ENCODE_ALL}>")
+elseif(DEFINED SPATZ_MARCH_VECTOR)
     add_compile_options("$<$<COMPILE_LANGUAGE:C,CXX>:-march=${SPATZ_MARCH_VECTOR}>")
 endif()
 add_compile_options(-DELEN=${ELEN})
