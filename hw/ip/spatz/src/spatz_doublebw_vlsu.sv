@@ -454,7 +454,7 @@ module spatz_doublebw_vlsu
 //   0               32               64
 
   // split = (SpatzMemBytes/2) * ceil(vl/SpatzMemBytes).
-  // Ex. vl = 9 --> 72B   split = 64B/2 * ceil(72B/64B) = 64B   
+  // Ex. vl = 9 --> 72B   split = 64B/2 * ceil(72B/64B) = 64B
   vlen_t mem_split_bytes, commit_split_bytes;
   assign mem_split_bytes    = ((mem_spatz_req.vl + SpatzMemBytes - 1) >> $clog2(SpatzMemBytes)) << ($clog2(SpatzMemBytes) - 1);
   assign commit_split_bytes = ((commit_insn_q.vl  + SpatzMemBytes - 1) >> $clog2(SpatzMemBytes)) << ($clog2(SpatzMemBytes) - 1);
@@ -539,7 +539,7 @@ module spatz_doublebw_vlsu
 
       // Stream of indexes (indexed load/store)
       logic [VLEN-1:0] idx_stream;
-      
+
       assign idx_stream = (state_q == VLSU_RunningLoad || state_q == VLSU_RunningStore) ? {vrf_rdata_i[1][1], vrf_rdata_i[0][1]} : '0;
       assign log2_num_el_maxew = MAXEW - mem_spatz_req.vtype.vsew;                       // Number of elements in MAXEW
       assign log2_num_idx_maxew_bytes = log2_num_el_maxew + mem_spatz_req.op_mem.ew;

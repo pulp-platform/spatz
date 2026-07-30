@@ -899,7 +899,7 @@ module spatz_vlsu
       mem_counter_max[port]   = max_elements;
 
       // Index counter
-      
+
       // The following logic is intended to decide if indices need to be fetched from the VRF
       // The logic is as follows:
       // We calculate how many indices are expected to be fetched from the VRF for this port
@@ -909,9 +909,9 @@ module spatz_vlsu
       // port 0 is the only port sending memory requests
       // But index needs to be fetched corresponding to 2 ports - port 0 and port 1
       // This signal is used to decide if we need to fetch next index or not
-      
+
       max_idx_elements = (max_elements >> mem_spatz_req.vtype.vsew) << mem_spatz_req.op_mem.ew;
-      
+
       mem_idx_vrf_fetch_pending[port] = mem_spatz_req_valid && (max_idx_elements != mem_idx_counter_q[port]);
 
       mem_idx_counter_d[port]     = mem_counter_d[port];
