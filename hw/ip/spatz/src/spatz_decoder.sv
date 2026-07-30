@@ -408,7 +408,7 @@ module spatz_decoder
           spatz_req.vd          = arith_d;
           spatz_req.ex_unit     = VFU;
 
-          if (spatz_req.vtype.vill) begin
+          if (decoder_req_i.vtype.vill) begin
             illegal_instr = 1'b1;
           end
 
@@ -922,7 +922,7 @@ module spatz_decoder
           automatic vreg_t arith_s2 = decoder_req_i.instr[24:20];
           automatic vreg_t arith_d  = decoder_req_i.instr[11:7];
 
-          if (spatz_req.vtype.vill) begin
+          if (decoder_req_i.vtype.vill) begin
             illegal_instr = 1'b1;
           end
 
@@ -1043,7 +1043,7 @@ module spatz_decoder
             spatz_req.rm          = fpu_rnd_mode_i;
             spatz_req.fm          = fpu_fmt_mode_i;
 
-            if (spatz_req.vtype.vill) begin
+            if (decoder_req_i.vtype.vill) begin
               illegal_instr = 1'b1;
             end
 
@@ -1491,7 +1491,7 @@ module spatz_decoder
             automatic vreg_t arith_s2 = decoder_req_i.instr[24:20];
             automatic vreg_t arith_d  = decoder_req_i.instr[11:7];
 
-            if (spatz_req.vtype.vill) begin
+            if (decoder_req_i.vtype.vill) begin
               illegal_instr = 1'b1;
             end
 
@@ -1521,7 +1521,7 @@ module spatz_decoder
           spatz_req.vtype.vsew         = EW_32;
           spatz_req.op_arith.is_scalar = 1'b1;
 
-          if (spatz_req.vtype.vill) begin
+          if (decoder_req_i.vtype.vill) begin
             illegal_instr = 1'b1;
           end
 
@@ -1548,7 +1548,7 @@ module spatz_decoder
           spatz_req.vtype.vsew         = EW_32;
           spatz_req.op_arith.is_scalar = 1'b1;
 
-          if (spatz_req.vtype.vill) begin
+          if (decoder_req_i.vtype.vill) begin
             illegal_instr = 1'b1;
           end
 
@@ -1596,7 +1596,7 @@ module spatz_decoder
             spatz_req.fm                 = fpu_fmt_mode_i;
             spatz_req.vtype.vsew         = EW_8;
 
-            if (spatz_req.vtype.vill) begin
+            if (decoder_req_i.vtype.vill) begin
               illegal_instr = 1'b1;
             end
 
@@ -1704,7 +1704,7 @@ module spatz_decoder
             spatz_req.fm                 = fpu_fmt_mode_i;
             spatz_req.vtype.vsew         = EW_16;
 
-            if (spatz_req.vtype.vill) begin
+            if (decoder_req_i.vtype.vill) begin
               illegal_instr = 1'b1;
             end
 
@@ -1813,7 +1813,7 @@ module spatz_decoder
             spatz_req.fm                 = fpu_fmt_mode_i;
             spatz_req.vtype.vsew         = EW_32;
 
-            if (spatz_req.vtype.vill) begin
+            if (decoder_req_i.vtype.vill) begin
               illegal_instr = 1'b1;
             end
 
@@ -1920,7 +1920,7 @@ module spatz_decoder
             spatz_req.fm                 = fpu_fmt_mode_i;
             spatz_req.vtype.vsew         = EW_64;
 
-            if (spatz_req.vtype.vill) begin
+            if (decoder_req_i.vtype.vill) begin
               illegal_instr = 1'b1;
             end
 
