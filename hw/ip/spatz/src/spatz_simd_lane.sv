@@ -218,6 +218,48 @@ module spatz_simd_lane import spatz_pkg::*; import rvv_pkg::vew_e; #(
       unique case (operation_i)
         VADD, VMACC, VMADD, VADC         : simd_result = adder_result[Width-1:0];
         VSUB, VRSUB, VNMSAC, VNMSUB, VSBC: simd_result = subtractor_result[Width-1:0];
+        VSADDU                           : begin
+          simd_result = adder_result[Width] ? '1 : adder_result[Width-1:0];
+          for (int i = 0; i < $clog2(Width/8); i++)
+            if (sew_i == rvv_pkg::vew_e'(i))
+              simd_result = adder_result[8*(2**i)] ? ((Width'(1) << (8*(2**i))) - Width'(1))
+                                                   : adder_result[Width-1:0];
+        end
+        VSADD                           : begin
+          simd_result = (arith_op1[Width-1] == arith_op2[Width-1]) &&
+                        (adder_result[Width-1] != arith_op1[Width-1])
+                      ? (arith_op1[Width-1] ? {1'b1, {Width-1{1'b0}}}
+                                            : {1'b0, {Width-1{1'b1}}})
+                      : adder_result[Width-1:0];
+          for (int i = 0; i < $clog2(Width/8); i++)
+            if (sew_i == rvv_pkg::vew_e'(i))
+              simd_result = (arith_op1[8*(2**i)-1] == arith_op2[8*(2**i)-1]) &&
+                            (adder_result[8*(2**i)-1] != arith_op1[8*(2**i)-1])
+                          ? (arith_op1[8*(2**i)-1] ? ( Width'(1) << (8*(2**i)-1))
+                                                   : ((Width'(1) << (8*(2**i)-1)) - Width'(1)))
+                          : adder_result[Width-1:0];
+        end
+        VSSUBU: begin
+          simd_result = subtractor_result[Width] ? '0 : subtractor_result[Width-1:0];
+          for (int i = 0; i < $clog2(Width/8); i++)
+            if (sew_i == rvv_pkg::vew_e'(i))
+              simd_result = subtractor_result[8*(2**i)] ? '0
+                                                        : subtractor_result[Width-1:0];
+        end
+        VSSUB: begin
+          simd_result = (arith_op2[Width-1] != arith_op1[Width-1]) &&
+                        (subtractor_result[Width-1] != arith_op2[Width-1])
+                      ? (arith_op2[Width-1] ? {1'b1, {Width-1{1'b0}}}     // MIN
+                                            : {1'b0, {Width-1{1'b1}}})    // MAX
+                      : subtractor_result[Width-1:0];
+          for (int i = 0; i < $clog2(Width/8); i++)
+            if (sew_i == rvv_pkg::vew_e'(i))
+              simd_result = (arith_op2[8*(2**i)-1] != arith_op1[8*(2**i)-1]) &&
+                            (subtractor_result[8*(2**i)-1] != arith_op2[8*(2**i)-1])
+                          ? (arith_op2[8*(2**i)-1] ? ( Width'(1) << (8*(2**i)-1))
+                                                   : ((Width'(1) << (8*(2**i)-1)) - Width'(1)))
+                          : subtractor_result[Width-1:0];
+        end
         VMIN, VMINU                      : simd_result = $signed({op_s1_i[Width-1] & is_signed_i, op_s1_i}) <= $signed({op_s2_i[Width-1] & is_signed_i, op_s2_i}) ? op_s1_i : op_s2_i;
         VMAX, VMAXU                      : simd_result = $signed({op_s1_i[Width-1] & is_signed_i, op_s1_i}) > $signed({op_s2_i[Width-1] & is_signed_i, op_s2_i}) ? op_s1_i : op_s2_i;
         VAND, VMAND                      : simd_result = op_s1_i & op_s2_i;
@@ -231,6 +273,11 @@ module spatz_simd_lane import spatz_pkg::*; import rvv_pkg::vew_e; #(
         VSLL                             : simd_result = shift_operand << shift_amount;
         VSRL                             : simd_result = shift_operand >> shift_amount;
         VSRA                             : simd_result = $signed(shift_operand) >>> shift_amount;
+        VMSLT, VMSLTU                    : simd_result = Width'($signed({op_s2_i[Width-1] & is_signed_i, op_s2_i}) <  $signed({op_s1_i[Width-1] & is_signed_i, op_s1_i}));
+        VMSLE, VMSLEU                    : simd_result = Width'($signed({op_s2_i[Width-1] & is_signed_i, op_s2_i}) <= $signed({op_s1_i[Width-1] & is_signed_i, op_s1_i}));
+        VMSGT, VMSGTU                    : simd_result = Width'($signed({op_s2_i[Width-1] & is_signed_i, op_s2_i}) >  $signed({op_s1_i[Width-1] & is_signed_i, op_s1_i}));
+        VMSEQ                            : simd_result = Width'(op_s1_i == op_s2_i);
+        VMSNE                            : simd_result = Width'(op_s1_i != op_s2_i);
         // TODO: Change selection when SEW does not equal Width
         VMUL                             : simd_result = mult_result[Width-1:0];
         VMULH, VMULHU, VMULHSU           : begin
@@ -245,6 +292,7 @@ module spatz_simd_lane import spatz_pkg::*; import rvv_pkg::vew_e; #(
           simd_result    = div_result;
           result_valid_o = div_out_valid;
         end
+        VMERGE: simd_result = op_s1_i;
         default: simd_result = '0;
       endcase // operation_i
     end

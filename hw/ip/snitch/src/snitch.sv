@@ -2506,6 +2506,12 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
       riscv_instr::VWADDU_VV,
       riscv_instr::VWSUB_VV,
       riscv_instr::VWSUBU_VV,
+      riscv_instr::VSADD_VV,
+      riscv_instr::VSADD_VI,
+      riscv_instr::VSADDU_VV,
+      riscv_instr::VSADDU_VI,
+      riscv_instr::VSSUB_VV,
+      riscv_instr::VSSUBU_VV,
       riscv_instr::VAND_VV,
       riscv_instr::VAND_VI,
       riscv_instr::VOR_VV,
@@ -2579,6 +2585,8 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
       riscv_instr::VWMACCSU_VV,
       riscv_instr::VMV_V_V,
       riscv_instr::VMV_V_I,
+      riscv_instr::VMERGE_VVM,
+      riscv_instr::VMERGE_VIM,
       riscv_instr::VFMV_F_S,
       riscv_instr::VSLIDEUP_VI,
       riscv_instr::VSLIDEDOWN_VI: begin
@@ -2655,6 +2663,10 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
       riscv_instr::VWADDU_VX,
       riscv_instr::VWSUB_VX,
       riscv_instr::VWSUBU_VX,
+      riscv_instr::VSADD_VX,
+      riscv_instr::VSADDU_VX,
+      riscv_instr::VSSUB_VX,
+      riscv_instr::VSSUBU_VX,
       riscv_instr::VAND_VX,
       riscv_instr::VOR_VX,
       riscv_instr::VXOR_VX,
@@ -2700,6 +2712,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
       riscv_instr::VWMACCUS_VX,
       riscv_instr::VMV_V_X,
       riscv_instr::VMV_S_X,
+      riscv_instr::VMERGE_VXM,
       riscv_instr::VSLIDEUP_VX,
       riscv_instr::VSLIDEDOWN_VX,
       riscv_instr::VSLIDE1UP_VX,
@@ -2762,7 +2775,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           illegal_inst = 1'b1;
         end
       end
-`ifdef VENTAGLIO
+
       riscv_instr::VFXMACC_VRF,
       riscv_instr::VFXMUL_VRF,
       riscv_instr::VVENTCLR: begin
@@ -2775,7 +2788,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           illegal_inst = 1'b1;
         end
       end
-`endif
+
       riscv_instr::VLE8_V,
       riscv_instr::VLE16_V,
       riscv_instr::VLE32_V,

@@ -267,6 +267,16 @@ module spatz_decoder
         riscv_instr::VWSUB_VX,
         riscv_instr::VWSUBU_VV,
         riscv_instr::VWSUBU_VX,
+        riscv_instr::VSADD_VV,
+        riscv_instr::VSADD_VX,
+        riscv_instr::VSADD_VI,
+        riscv_instr::VSADDU_VV,
+        riscv_instr::VSADDU_VX,
+        riscv_instr::VSADDU_VI,
+        riscv_instr::VSSUB_VV,
+        riscv_instr::VSSUB_VX,
+        riscv_instr::VSSUBU_VV,
+        riscv_instr::VSSUBU_VX,
         riscv_instr::VAND_VV,
         riscv_instr::VAND_VX,
         riscv_instr::VAND_VI,
@@ -475,6 +485,28 @@ module spatz_decoder
               spatz_req.op                 = VSUB;
               spatz_req.op_arith.widen_vs1 = 1'b1;
               spatz_req.op_arith.widen_vs2 = 1'b1;
+            end
+
+            riscv_instr::VSADD_VV,
+            riscv_instr::VSADD_VX,
+            riscv_instr::VSADD_VI: begin
+              spatz_req.op = VSADD;
+            end
+
+            riscv_instr::VSADDU_VV,
+            riscv_instr::VSADDU_VX,
+            riscv_instr::VSADDU_VI: begin
+              spatz_req.op = VSADDU;
+            end
+
+            riscv_instr::VSSUB_VV,
+            riscv_instr::VSSUB_VX: begin
+              spatz_req.op = VSSUB;
+            end
+
+            riscv_instr::VSSUBU_VV,
+            riscv_instr::VSSUBU_VX: begin
+              spatz_req.op = VSSUBU;
             end
 
             // Vector Logic
