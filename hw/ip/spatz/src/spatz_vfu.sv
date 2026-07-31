@@ -1198,9 +1198,9 @@ always_comb begin : vreg_wbe_proc
     end else
       tail_wbe_eff = tail_wbe;
 
-    if ((result_tag.last && &(result_valid | ~pending_results) && reduction_state_q inside {Reduction_NormalExecution, Reduction_Wait}) || reduction_done)
+    if ((result_tag.last && &(result_valid | ~pending_results) && (reduction_state_q inside {Reduction_NormalExecution, Reduction_Wait})) || reduction_done)
       vreg_wb_word_cnt_d = 0;
-    else if (&(result_valid | ~pending_results) && (!spatz_req.op_arith.is_narrowing || narrowing_upper_q))
+    else if (&(result_valid | ~pending_results) && (!spatz_req.op_arith.is_narrowing || result_tag.narrowing_upper))
       vreg_wb_word_cnt_d = vreg_wb_word_cnt_q + 1;
     // Got a new result
     if (&(result_valid | ~pending_results) && !result_tag.reduction) begin
