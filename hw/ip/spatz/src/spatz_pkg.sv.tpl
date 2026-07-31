@@ -143,7 +143,7 @@ package spatz_pkg;
   // Vector operations
   typedef enum logic [6:0] {
     // Arithmetic and logic instructions
-    VADD, VSUB, VADC, VSBC, VRSUB, VMINU, VMIN, VMAXU, VMAX, VAND, VOR, VXOR,
+    VADD, VSUB, VADC, VSBC, VRSUB, VMINU, VMIN, VMAXU, VMAX, VAND, VOR, VXOR, VSADD, VSADDU, VSSUB, VSSUBU,
     // Shifts,
     VSLL, VSRL, VSRA, VNSRL, VNSRA,
     // Merge and Move
