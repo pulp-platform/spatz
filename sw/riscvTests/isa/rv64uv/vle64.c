@@ -10,7 +10,7 @@ void TEST_CASE1(void) {
   volatile uint64_t INP1[] = {0xDEADBEEFCAFE0000, 0xDEADBEEFCAFE009f,
                               0xDEADBEEFCAFE00e4, 0xDEADBEEFCAFE0019};
 
-  asm volatile("vle64.v v1, (%0)" ::"r"(INP1));
+  asm volatile("vle64.v v1, (%0)" ::"r"(INP1) : "memory");
   VCMP_U64(1, v1, 0xDEADBEEFCAFE0000, 0xDEADBEEFCAFE009f,
                   0xDEADBEEFCAFE00e4, 0xDEADBEEFCAFE0019);
 }
@@ -26,7 +26,7 @@ void TEST_CASE2(void) {
                               0xDEADBEEFCAFE0040, 0xDEADBEEFCAFE00d1};
   VCLEAR(v1);
 
-  asm volatile("vle64.v v1, (%0), v0.t" ::"r"(INP1));
+  asm volatile("vle64.v v1, (%0), v0.t" ::"r"(INP1) : "memory");
   VCMP_U64(2, v1, 0xDEADBEEFCAFE00e0, 0xDEADBEEFCAFE00d3,
                   0xDEADBEEFCAFE0040, 0xDEADBEEFCAFE00d1);
 }
@@ -41,7 +41,7 @@ void TEST_CASE3(void) {
                               0xDEADBEEFCAFE0040, 0xDEADBEEFCAFE00d1};
   VCLEAR(v1);
   VLOAD_64(v1, 1, 2, 3, 4);
-  asm volatile("vle64.v v1, (%0), v0.t" ::"r"(INP1));
+  asm volatile("vle64.v v1, (%0), v0.t" ::"r"(INP1) : "memory");
   VCMP_U64(3, v1, 1, 2, 3, 4);
 }
 
@@ -56,7 +56,7 @@ void TEST_CASE4(void) {
   VCLEAR(v1);
   VLOAD_64(v1, 1, 2, 3, 4);
   VSET(4, e64, m1);
-  asm volatile("vle64.v v1, (%0), v0.t" ::"r"(INP1));
+  asm volatile("vle64.v v1, (%0), v0.t" ::"r"(INP1) : "memory");
   VCMP_U64(4, v1, 1, 0xDEADBEEFCAFE00d3, 3, 0xDEADBEEFCAFE00d1);
 }
 
@@ -71,7 +71,7 @@ void TEST_CASE5(void) {
   VCLEAR(v8);
   VLOAD_64(v8, 1, 2, 3, 4);
   VSET(4, e64, m8);
-  asm volatile("vle64.v v8, (%0), v0.t" ::"r"(INP1));
+  asm volatile("vle64.v v8, (%0), v0.t" ::"r"(INP1) : "memory");
   VCMP_U64(5, v8, 1, 0xDEADBEEFCAFE00d3, 3, 0xDEADBEEFCAFE00d1);
 }
 
@@ -84,7 +84,7 @@ void TEST_CASE6(void) {
       0x0000000000000008, 0x0000000000000009, 0x000000000000000A, 0x000000000000000B,
       0x000000000000000C, 0x000000000000000D, 0x000000000000000E, 0x000000000000000F};
 
-  asm volatile("vle64.v v8, (%0)" ::"r"(INP1));
+  asm volatile("vle64.v v8, (%0)" ::"r"(INP1) : "memory");
 
   VCMP_U64(6, v8,
       0x0000000000000000, 0x0000000000000001, 0x0000000000000002, 0x0000000000000003,
@@ -106,7 +106,7 @@ void TEST_CASE7(void) {
       0x0000000000000018, 0x0000000000000019, 0x000000000000001A, 0x000000000000001B,
       0x000000000000001C, 0x000000000000001D, 0x000000000000001E, 0x000000000000001F};
 
-  asm volatile("vle64.v v8, (%0)" ::"r"(INP1));
+  asm volatile("vle64.v v8, (%0)" ::"r"(INP1) : "memory");
 
   VCMP_U64(7, v8,
       0x0000000000000000, 0x0000000000000001, 0x0000000000000002, 0x0000000000000003,
@@ -147,7 +147,7 @@ void TEST_CASE8(void) {
 
   VLOAD_8(v0, 0xAB, 0xAB, 0xAA, 0xAA);
 
-  asm volatile("vle64.v v8, (%0), v0.t" ::"r"(INP1));
+  asm volatile("vle64.v v8, (%0), v0.t" ::"r"(INP1) : "memory");
 
   VCMP_U64(8, v8,
       0x0000000000000000, 0x0000000000000001, 99, 0x0000000000000003,
@@ -162,12 +162,12 @@ void TEST_CASE8(void) {
 }
 
 void TEST_CASE9(void) {
-  
+
   volatile uint64_t BUF[] = {
       0xf9aa71f0c394bbd3, 0x8913984898951989, 0x99991348a9f38cd1, 0x9fa831c7a11a9384,
       0x3819759853987548, 0x1111111111111111, 0x2222222222222222, 0x3333333333333333,
       0x4444444444444444};
-      
+
   VSET(9, e64, m4);
   VCLEAR(v8);
   asm volatile("vle64.v v8, (%0)" ::"r"(BUF));

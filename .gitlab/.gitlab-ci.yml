@@ -15,8 +15,9 @@ variables:
   RISCV_WARNINGS: '-Werror'
   CC: 'gcc-11.2.0'
   CXX: 'g++-11.2.0'
-  CMAKE: 'cmake'
-  CTEST: 'ctest'
+  # Use the system cmake by absolute path: the sepp `cmake` wrapper depends on individual git runner
+  CMAKE: '/usr/bin/cmake'
+  CTEST: '/usr/bin/ctest'
   VCS: 'vcs-2022.06'
   PYTHON: 'python3'
 

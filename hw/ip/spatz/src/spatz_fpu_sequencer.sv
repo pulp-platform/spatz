@@ -331,7 +331,7 @@ module spatz_fpu_sequencer
             illegal_inst = 1'b1;
           end
         end
-        riscv_instr::FMV_X_S: begin
+        riscv_instr::FMV_X_W: begin
           if (RVF) begin
             use_rd  = 1'b1;
             use_fs1 = 1'b1;
@@ -340,7 +340,7 @@ module spatz_fpu_sequencer
             illegal_inst = 1'b1;
           end
         end
-        riscv_instr::FMV_S_X: begin
+        riscv_instr::FMV_W_X: begin
           if (RVF) begin
             use_fd  = 1'b1;
             is_move = 1'b1;
@@ -389,7 +389,7 @@ module spatz_fpu_sequencer
         riscv_instr::FLD: begin
           use_fd = 1'b1;
           casez (issue_req_i.data_op)
-            riscv_instr::FLB: ls_size          = Byte;
+            riscv_instr::FLB: ls_size    = Byte;
             riscv_instr::FLH: ls_size          = HalfWord;
             riscv_instr::FLW: ls_size          = Word;
             riscv_instr::FLD: if (RVD) ls_size = Double;
@@ -404,7 +404,7 @@ module spatz_fpu_sequencer
         riscv_instr::FSD: begin
           use_fs2 = 1'b1;
           casez (issue_req_i.data_op)
-            riscv_instr::FSB: ls_size          = Byte;
+            riscv_instr::FSB: ls_size    = Byte;
             riscv_instr::FSH: ls_size          = HalfWord;
             riscv_instr::FSW: ls_size          = Word;
             riscv_instr::FSD: if (RVD) ls_size = Double;

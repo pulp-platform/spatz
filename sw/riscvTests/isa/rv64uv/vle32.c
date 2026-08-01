@@ -10,7 +10,7 @@ void TEST_CASE1(void) {
   volatile uint32_t INP1[] = {0xDEADBE00, 0xDEADBE9f, 0xDEADBEe4, 0xDEADBE19,
                               0xDEADBE20, 0xDEADBE8f, 0xDEADBE2e, 0xDEADBE05};
 
-  asm volatile("vle32.v v1, (%0)" ::"r"(INP1));
+  asm volatile("vle32.v v1, (%0)" ::"r"(INP1) : "memory");
   VCMP_U32(1, v1, 0xDEADBE00, 0xDEADBE9f, 0xDEADBEe4, 0xDEADBE19,
                   0xDEADBE20, 0xDEADBE8f, 0xDEADBE2e, 0xDEADBE05);
 }
@@ -25,7 +25,7 @@ void TEST_CASE2(void) {
 
   VSET(8, e32, m1);
   VCLEAR(v1);
-  asm volatile("vle32.v v1, (%0), v0.t" ::"r"(INP1));
+  asm volatile("vle32.v v1, (%0), v0.t" ::"r"(INP1) : "memory");
   VCMP_U32(2, v1, 0xDEADBE00, 0xDEADBE9f, 0xDEADBEe4, 0xDEADBE19,
                   0xDEADBE20, 0xDEADBE8f, 0xDEADBE2e, 0xDEADBE05);
 }
@@ -40,7 +40,7 @@ void TEST_CASE3(void) {
   VSET(8, e32, m1);
   VCLEAR(v1);
   VLOAD_32(v1, 1, 2, 3, 4, 5, 6, 7, 8);
-  asm volatile("vle32.v v1, (%0), v0.t" ::"r"(INP1));
+  asm volatile("vle32.v v1, (%0), v0.t" ::"r"(INP1) : "memory");
   VCMP_U32(3, v1, 1, 2, 3, 4, 5, 6, 7, 8);
 }
 
@@ -54,7 +54,7 @@ void TEST_CASE4(void) {
   VSET(8, e32, m1);
   VCLEAR(v1);
   VLOAD_32(v1, 1, 2, 3, 4, 5, 6, 7, 8);
-  asm volatile("vle32.v v1, (%0), v0.t" ::"r"(INP1));
+  asm volatile("vle32.v v1, (%0), v0.t" ::"r"(INP1) : "memory");
   VCMP_U32(4, v1, 1, 0xDEADBEd3, 3, 0xDEADBEd1, 5, 0xDEADBE48, 7, 0xDEADBE88);
 }
 
@@ -68,7 +68,7 @@ void TEST_CASE5(void) {
   VSET(8, e32, m8);
   VCLEAR(v8);
   VLOAD_32(v8, 1, 2, 3, 4, 5, 6, 7, 8);
-  asm volatile("vle32.v v8, (%0), v0.t" ::"r"(INP1));
+  asm volatile("vle32.v v8, (%0), v0.t" ::"r"(INP1) : "memory");
   VCMP_U32(5, v8, 1, 0xDEADBEd3, 3, 0xDEADBEd1, 5, 0xDEADBE48, 7, 0xDEADBE88);
 }
 
@@ -87,7 +87,7 @@ void TEST_CASE6(void) {
       0x0000001C, 0x0000001D, 0x0000001E, 0x0000001F
   };
 
-  asm volatile("vle32.v v8, (%0)" ::"r"(INP1));
+  asm volatile("vle32.v v8, (%0)" ::"r"(INP1) : "memory");
 
   VCMP_U32(6, v8,
               0x00000000, 0x00000001, 0x00000002, 0x00000003,
@@ -125,7 +125,7 @@ void TEST_CASE7(void) {
       0x0000003C, 0x0000003D, 0x0000003E, 0x0000003F
   };
 
-  asm volatile("vle32.v v8, (%0)" ::"r"(INP1));
+  asm volatile("vle32.v v8, (%0)" ::"r"(INP1) : "memory");
 
   VCMP_U32(7, v8,
     0x00000000, 0x00000001, 0x00000002, 0x00000003,
@@ -189,7 +189,7 @@ void TEST_CASE8(void) {
       99,  99,  99,  99,  99,  99,  99,  99,
       99,  99,  99,  99,  99,  99,  99,  99);
 
-  asm volatile("vle32.v v8, (%0), v0.t" ::"r"(INP1));
+  asm volatile("vle32.v v8, (%0), v0.t" ::"r"(INP1) : "memory");
 
   VCMP_U32(8, v8,
       99, 0x00000001, 99, 0x00000003,
