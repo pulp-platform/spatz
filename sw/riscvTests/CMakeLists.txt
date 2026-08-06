@@ -17,6 +17,21 @@ if (CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
 endif()
 
 add_compile_options(-O3 -g -ffunction-sections)
+
+# These sources contain hand-written RVV inline assembly: opt into the
+# encode-everything march (the toolchain default deliberately omits 'v';
+# the last -march on the command line wins). The rv64uv sources include
+# EEW=64 asm that isn't all `#if ELEN==64`-guarded, so unlike the benchmark
+# kernels they need the full-encoding march even on ELEN=32 builds -- which
+# DO run in CI. This matches the pre-bump toolchain, where riscvTests
+# inherited the full default march on every config; the tests' own
+# `#if ELEN==64` guards handle per-config behavior. Compiler-side
+# vectorization stays disabled through the toolchain-wide kill switches.
+if(DEFINED SPATZ_MARCH_ENCODE_ALL)
+    add_compile_options("$<$<COMPILE_LANGUAGE:C,CXX,ASM>:-march=${SPATZ_MARCH_ENCODE_ALL}>")
+elseif(DEFINED SPATZ_MARCH_VECTOR)
+    add_compile_options("$<$<COMPILE_LANGUAGE:C,CXX>:-march=${SPATZ_MARCH_VECTOR}>")
+endif()
 add_compile_options(-DELEN=${ELEN})
 
 include_directories(include)
@@ -142,6 +157,7 @@ add_snitch_test(vfcvt  isa/rv64uv/vfcvt.c)
 add_snitch_test(vfncvt isa/rv64uv/vfncvt.c)
 
 add_snitch_test(vfmv isa/rv64uv/vfmv.c)
+add_snitch_test(fl_narrow isa/rv64uv/fl_narrow.c)
 
 add_snitch_test(invalid isa/rv64uv/invalid.c)
 set_property(TEST ${SNITCH_TEST_PREFIX}rtl-invalid PROPERTY WILL_FAIL TRUE)

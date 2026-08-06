@@ -43,6 +43,56 @@
 #define DM_STATUS_WOULD_BLOCK 3
 
 //================================================================================
+// DMA custom instruction wrappers (Xdma)
+//================================================================================
+// The LLVM 12 based toolchain provided __builtin_sdma_* builtins for these;
+// the unified LLVM 22 toolchain only provides assembler support for the
+// Xdma instructions (generated from riscv-opcodes), so issue them directly.
+
+static inline uint32_t dm_sdma_stat(const uint32_t which) {
+    uint32_t status;
+    asm volatile("dmstati %[status], %[which] \n"
+                 : [ status ] "=r"(status)
+                 : [ which ] "i"(which));
+    return status;
+}
+
+static inline void dm_sdma_start_oned(uint64_t src, uint64_t dst,
+                                      uint32_t size, uint32_t cfg) {
+    uint32_t src_lo = (uint32_t)src, src_hi = (uint32_t)(src >> 32);
+    uint32_t dst_lo = (uint32_t)dst, dst_hi = (uint32_t)(dst >> 32);
+    uint32_t txid;
+    asm volatile(
+        "dmsrc %[src_lo], %[src_hi] \n"
+        "dmdst %[dst_lo], %[dst_hi] \n"
+        "dmcpy %[txid], %[size], %[cfg] \n"
+        : [ txid ] "=r"(txid)
+        : [ src_lo ] "r"(src_lo), [ src_hi ] "r"(src_hi),
+          [ dst_lo ] "r"(dst_lo), [ dst_hi ] "r"(dst_hi), [ size ] "r"(size),
+          [ cfg ] "r"(cfg));
+}
+
+static inline void dm_sdma_start_twod(uint64_t src, uint64_t dst,
+                                      uint32_t size, uint32_t sstrd,
+                                      uint32_t dstrd, uint32_t nreps,
+                                      uint32_t cfg) {
+    uint32_t src_lo = (uint32_t)src, src_hi = (uint32_t)(src >> 32);
+    uint32_t dst_lo = (uint32_t)dst, dst_hi = (uint32_t)(dst >> 32);
+    uint32_t txid;
+    asm volatile(
+        "dmsrc %[src_lo], %[src_hi] \n"
+        "dmdst %[dst_lo], %[dst_hi] \n"
+        "dmstr %[sstrd], %[dstrd] \n"
+        "dmrep %[nreps] \n"
+        "dmcpy %[txid], %[size], %[cfg] \n"
+        : [ txid ] "=r"(txid)
+        : [ src_lo ] "r"(src_lo), [ src_hi ] "r"(src_hi),
+          [ dst_lo ] "r"(dst_lo), [ dst_hi ] "r"(dst_hi),
+          [ sstrd ] "r"(sstrd), [ dstrd ] "r"(dstrd), [ nreps ] "r"(nreps),
+          [ size ] "r"(size), [ cfg ] "r"(cfg));
+}
+
+//================================================================================
 // Types
 //================================================================================
 typedef struct {
@@ -159,18 +209,18 @@ void dm_main(void) {
         /// New transaction to issue?
         if (dm_p->queue_fill) {
             // wait until DMA is ready
-            while (__builtin_sdma_stat(DM_STATUS_WOULD_BLOCK))
+            while (dm_sdma_stat(DM_STATUS_WOULD_BLOCK))
                 ;
 
             t = &dm_p->queue[dm_p->queue_back];
 
             if (t->twod) {
                 DM_PRINTF(10, "start twod\n");
-                __builtin_sdma_start_twod(t->src, t->dst, t->size, t->sstrd,
+                dm_sdma_start_twod(t->src, t->dst, t->size, t->sstrd,
                                           t->dstrd, t->nreps, t->cfg);
             } else {
                 DM_PRINTF(10, "start oned\n");
-                __builtin_sdma_start_oned(t->src, t->dst, t->size, t->cfg);
+                dm_sdma_start_oned(t->src, t->dst, t->size, t->cfg);
             }
 
             // bump
@@ -184,7 +234,7 @@ void dm_main(void) {
                 case STAT_WAIT_IDLE:
                     // check status and set pvalid if DMA is idle and clear
                     // request
-                    if (__builtin_sdma_stat(DM_STATUS_BUSY) == 0) {
+                    if (dm_sdma_stat(DM_STATUS_BUSY) == 0) {
                         DM_PRINTF(50, "idle\n");
                         dm_p->stat_pvalid = 1;
                         dm_p->stat_q = 0;

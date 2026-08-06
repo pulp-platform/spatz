@@ -77,7 +77,7 @@ int main() {
   snrt_cluster_hw_barrier();
 
   // Initialize matrices
-  init_matrix(b, gemm_B_dram, cid * (gemm_l.K / num_cores),
+  init_matrix(b, (const char *)gemm_B_dram, cid * (gemm_l.K / num_cores),
               (cid + 1) * (gemm_l.K / num_cores), gemm_l.N);
   if (cid == 0) {
     snrt_dma_start_1d(a, gemm_A_dram, gemm_l.M * gemm_l.K * sizeof(char));

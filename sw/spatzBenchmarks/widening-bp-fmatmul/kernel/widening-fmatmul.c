@@ -61,7 +61,9 @@ void matmul_2xVL(char *c, const char *a, const char *b,
 
       char *c__ = c_ + m * P;
 
-      double t0, t1;
+      // FPR containers for NaN-boxed flh/flw scalars; float keeps them in
+      // FPRs on D-free (ELEN=32) builds and is register-identical on ELEN=64.
+      float t0, t1;
 
       asm volatile("vsetvli zero, %0, e16, m8, ta, ma" ::"r"(gvl));
 
@@ -144,7 +146,9 @@ void matmul_4xVL(char *c, const char *a, const char *b,
 
       char *c__ = c_ + m * P;
 
-      double t0, t1, t2, t3;
+      // FPR containers for NaN-boxed flh/flw scalars; float keeps them in
+      // FPRs on D-free (ELEN=32) builds and is register-identical on ELEN=64.
+      float t0, t1, t2, t3;
 
       asm volatile("vsetvli zero, %0, e16, m4, ta, ma" ::"r"(gvl));
 
@@ -253,7 +257,9 @@ void matmul_8xVL(char *c, const char *a, const char *b,
 
       char *c__ = c_ + m * P;
 
-      double t0, t1, t2, t3, t4, t5, t6, t7;
+      // FPR containers for NaN-boxed flh/flw scalars; float keeps them in
+      // FPRs on D-free (ELEN=32) builds and is register-identical on ELEN=64.
+      float t0, t1, t2, t3, t4, t5, t6, t7;
 
       asm volatile("vsetvli zero, %0, e16, m2, ta, ma" ::"r"(gvl));
 

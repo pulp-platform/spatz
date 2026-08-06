@@ -19,6 +19,8 @@
 
 #include "sa-gemv.h"
 
+// e64/double kernel: only for ELEN=64 builds (see gemv.c note).
+#if __riscv_flen >= 64
 void gemv_v64b_m4(double *a, double *b, double *c, int M, int M_core, int N) {
   unsigned int vl, avl = M_core;
   double *a_, *a_start = a;
@@ -65,6 +67,7 @@ void gemv_v64b_m4(double *a, double *b, double *c, int M, int M_core, int N) {
     a_start += vl;
   } while (avl > 0);
 }
+#endif // __riscv_flen >= 64
 
 void gemv_v32b_m4(float *a, float *b, float *c, int M, int M_core, int N) {
   unsigned int vl, avl = M_core;
