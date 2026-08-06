@@ -759,6 +759,13 @@ module spatz_controller
             spatz_req.vstart = '0;
           end
 
+          // Cap vl for mask instructions
+          if (spatz_req.op inside {VMAND, VMANDNOT, VMOR, VMXOR,
+                                   VMORNOT, VMNAND, VMNOR, VMXNOR}) begin
+            spatz_req.vl     = (vl_q + (8 << int'(spatz_req.vtype.vsew)) - 1) >> (int'(spatz_req.vtype.vsew) + 3);
+            spatz_req.vstart = '0;
+          end
+
 `ifdef VENTAGLIO
           // Is this a VTL related instruction?
           if (spatz_req.op_vtl.use_vtl) begin
