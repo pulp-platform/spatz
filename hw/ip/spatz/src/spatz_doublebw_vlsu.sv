@@ -1168,8 +1168,7 @@ module spatz_doublebw_vlsu
          (vlsu_ld_rmw_q[intf] == VLSU_LD_RMW), 16'd0)
     always_ff @(posedge clk_i) begin
       if (vlsu_rmw_wait_cycles_q[intf] == 16'd400)
-        $warning("[spatz_doublebw_vlsu] Interface %0d VD RMW read-back has been waiting %0d cycles \
-- possible read-port starvation or vlsu_buf retirement stall", intf, vlsu_rmw_wait_cycles_q[intf]);
+        $warning("[spatz_doublebw_vlsu] Interface %0d VD RMW read-back has been waiting %0d cycles possible read-port starvation or vlsu_buf retirement stall", intf, vlsu_rmw_wait_cycles_q[intf]);
     end
   end
 `endif

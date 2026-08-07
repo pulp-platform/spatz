@@ -434,7 +434,7 @@ module spatz_cluster
   logic [NrCores-1:0] cl_interrupt;
 
   // --------------
-  // Error Monitor 
+  // Error Monitor
   // --------------
 
   localparam int NumTcdmBanks = NrSuperBanks * BanksPerSuperBank;

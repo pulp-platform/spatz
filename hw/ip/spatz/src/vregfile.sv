@@ -126,5 +126,5 @@ module vregfile import spatz_pkg::*; #(
       .gnt_i  (1'b1         )
     );
   end: gen_read_mem
-  
+
 endmodule : vregfile

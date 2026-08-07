@@ -917,8 +917,7 @@ module spatz_vlsu
   // silent full-sim hang.
   always_ff @(posedge clk_i) begin
     if (vlsu_rmw_wait_cycles_q == 16'd400)
-      $warning("[spatz_vlsu] VD RMW read-back has been waiting %0d cycles on VLSU_VD_RD \
-- possible read-port starvation against a higher-priority port", vlsu_rmw_wait_cycles_q);
+      $warning("[spatz_vlsu] VD RMW read-back has been waiting %0d cycles on VLSU_VD_RD possible read-port starvation against a higher-priority port", vlsu_rmw_wait_cycles_q);
   end
 `endif
 

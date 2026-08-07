@@ -17,7 +17,7 @@ package spatz_pkg;
   //////////////////
 
   // Instantiate quadrilatero
-  localparam bit QUADRILATERO = 0;
+  localparam bit QUADRILATERO = 1;
   // Number of IPUs in each VFU (between 1 and 8)
   localparam int unsigned N_IPU = 8;
   // Number of FPUs in each VFU (between 1 and 8)
