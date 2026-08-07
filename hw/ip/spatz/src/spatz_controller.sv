@@ -686,15 +686,20 @@ module spatz_controller
   // Retire CSR instruction and write back result to main core.
   logic retire_csr;
 
+  // Response channel to the core is ready
+  logic rsp_ready_d;
+
   // We stall issuing a new instruction if the corresponding execution unit is
   // not ready yet. Or we have a change in LMUL, for which we need to let all the
   // units finish first before scheduling a new operation (to avoid running into
   // issues with the socreboard).
-  logic stall, vfu_stall, vlsu_stall, vsldu_stall, vtl_stall;
-  assign stall       = (vfu_stall | vlsu_stall | vsldu_stall | vtl_stall)
+  logic stall, vfu_stall, vlsu_stall, vsldu_stall, vtl_stall, csr_stall;
+  assign stall       = (vfu_stall | vlsu_stall | vsldu_stall | vtl_stall | csr_stall)
                        & req_buffer_valid;
   assign vfu_stall   = ~vfu_req_ready_i & (spatz_req.ex_unit == VFU);
   assign vlsu_stall  = ~vlsu_req_ready_i & (spatz_req.ex_unit == LSU);
+  // The CSR response has no other backpressure
+  assign csr_stall   = ~rsp_ready_d & (spatz_req.ex_unit == CON);
 `ifdef VENTAGLIO
   // VSLDU stalls only for true SLD-routed non-VTL ops (the VTL/VSLDU
   // shared-port arbiter routes use_vtl ops through ventaglio instead).
@@ -908,11 +913,11 @@ module spatz_controller
   );
 
   logic       rsp_valid_d;
-  logic       rsp_ready_d;
   spatz_rsp_t rsp_d;
+  // Never bypassed, the CSR issue stall needs a registered ready
   spill_register #(
-    .T     (spatz_rsp_t ),
-    .Bypass(!RegisterRsp)
+    .T     (spatz_rsp_t),
+    .Bypass(1'b0       )
   ) i_spatz_rsp_register (
     .clk_i  (clk_i       ),
     .rst_ni (rst_ni      ),
