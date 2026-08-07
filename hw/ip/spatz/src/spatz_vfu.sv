@@ -275,8 +275,9 @@ module spatz_vfu
         end
         VFU_RunningFPU: begin
           // Only go back to the IPU state once the FPUs are no longer busy
+          // Busy can drop while a result is still emerging, so wait on that too
           if (!is_fpu_insn)
-            if (is_fpu_busy)
+            if (is_fpu_busy || (|fpu_result_valid))
               stall = 1'b1;
             else begin
               state_d = VFU_RunningIPU;
@@ -338,7 +339,8 @@ module spatz_vfu
       fpu_op           = fpnew_pkg::FMADD;
       fpu_op_mode      = 1'b0;
       fpu_vectorial_op = 1'b0;
-      is_fpu_busy      = |fpu_busy_q;
+      // Include fpu_busy_d to catch the cycle busy_o just rose
+      is_fpu_busy      = (|fpu_busy_q) || (|fpu_busy_d);
       fpu_src_fmt      = fpnew_pkg::FP32;
       fpu_dst_fmt      = fpnew_pkg::FP32;
       fpu_int_fmt      = fpnew_pkg::INT32;
