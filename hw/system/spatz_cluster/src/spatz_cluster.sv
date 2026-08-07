@@ -894,7 +894,9 @@ module spatz_cluster
         .RegisterOffloadRsp      (RegisterOffloadRsp         ),
         .RegisterCoreReq         (RegisterCoreReq            ),
         .RegisterCoreRsp         (RegisterCoreRsp            ),
-        .TCDMAddrWidth           (TCDMAddrWidth              )
+        .TCDMAddrWidth           (TCDMAddrWidth              ),
+        .TCDMDataWidth           (DataWidth                  ),  // spatz_pkg::DataWidth = 32
+        .TCDMProtDataWidth       (TCDMProtDataWidth          )   // 39-bit ECC codeword
       ) i_spatz_quadrilatero_cc (
         .clk_i            (clk_i                               ),
         .clk_d2_i         (clk_i                               ),
