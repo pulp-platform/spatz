@@ -310,10 +310,11 @@ module spatz_vfu
 
     // An instruction finished execution
     if ((result_tag.last && &(result_valid | ~pending_results) && (reduction_state_q inside {Reduction_NormalExecution, Reduction_Wait} || ! result_tag.reduction)) || reduction_done) begin
-      vfu_rsp_o.id      = result_tag.id;
+      // On reduction_done the retiring op is spatz_req, and a reduction emits a vector response
+      vfu_rsp_o.id      = reduction_done ? spatz_req.id : result_tag.id;
       vfu_rsp_o.rd      = result_tag.vd_addr[GPRWidth-1:0];
-      vfu_rsp_o.wb      = result_tag.wb;
-      vfu_rsp_o.result  = result_tag.wb ? scalar_result : '0;
+      vfu_rsp_o.wb      = result_tag.wb && !reduction_done;
+      vfu_rsp_o.result  = (result_tag.wb && !reduction_done) ? scalar_result : '0;
       vfu_rsp_valid_o   = 1'b1;
     end
   end: control_proc
