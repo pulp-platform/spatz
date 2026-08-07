@@ -136,12 +136,12 @@ package spatz_pkg;
     // Slide instructions
     VSLIDEUP, VSLIDEDOWN,
     // Load instructions
-    VLE, VLSE, VLXE,
+    VLE, VLSE, VLXE, VLSEG,
     // Ventaglio (VTL) custom load: vlx32.v — indexed load whose index
     // vreg lives in the VTL bank rather than the regular VRF.
     VLX,
     // Store instructions
-    VSE, VSSE, VSXE,
+    VSE, VSSE, VSXE, VSSEG,
     // Config instruction
     VCFG,
     // VCSR
@@ -256,6 +256,7 @@ package spatz_pkg;
     spatz_id_t id;
 
     // Used vector registers
+    logic [2:0] nf;
     vreg_t vs1;
     logic use_vs1;
     vreg_t vs2;

@@ -154,6 +154,23 @@ module spatz_vlsu
   assign mem_is_indexed = mem_spatz_req_valid &&
                           ((mem_spatz_req.op == VLXE) || (mem_spatz_req.op == VSXE));
 
+  // Do we have a segmented memory access
+  logic mem_is_segmented;
+  assign mem_is_segmented = mem_spatz_req_valid &&
+                          ((mem_spatz_req.op == VLSEG) || (mem_spatz_req.op == VSSEG));
+
+  // nf=0 --> mem_seg_nf=1 --> regular load/store
+  logic [3:0] mem_seg_nf;
+  assign mem_seg_nf = {1'b0, mem_spatz_req.nf} + 4'd1;
+
+  // Shared memory and commit signals
+  // segment counter --> it cycles from 0 to nf-1
+  logic [2:0] seg_cnt_d, seg_cnt_q;
+  `FF(seg_cnt_q, seg_cnt_d, 3'd0)
+
+  // mem and commit sides complete current segment
+  logic seg_completed;
+
   /////////////
   //  State  //
   /////////////
@@ -338,6 +355,9 @@ module spatz_vlsu
     logic is_load;
     logic is_strided;
     logic is_indexed;
+    op_e op;
+    logic is_segmented;
+    logic [2:0] nf;
   } commit_metadata_t;
 
   commit_metadata_t commit_insn_d;
@@ -367,19 +387,30 @@ module spatz_vlsu
 
   assign commit_insn_valid = !commit_insn_empty;
   assign commit_insn_d     = '{
-      id        : mem_spatz_req.id,
-      vd        : mem_spatz_req.vd,
-      vsew      : mem_spatz_req.vtype.vsew,
-      vl        : mem_spatz_req.vl,
-      vstart    : mem_spatz_req.vstart,
-      rs1       : mem_spatz_req.rs1[2:0],
-      vm        : mem_spatz_req.op_mem.vm,
-      is_load   : mem_spatz_req.op_mem.is_load,
-      is_strided: mem_is_strided,
-      is_indexed: mem_is_indexed
+      id          : mem_spatz_req.id,
+      vd          : mem_spatz_req.vd,
+      vsew        : mem_spatz_req.vtype.vsew,
+      vl          : mem_spatz_req.vl,
+      vstart      : mem_spatz_req.vstart,
+      rs1         : mem_spatz_req.rs1[2:0],
+      vm          : mem_spatz_req.op_mem.vm,
+      is_load     : mem_spatz_req.op_mem.is_load,
+      is_strided  : mem_is_strided,
+      is_indexed  : mem_is_indexed,
+      op          : mem_spatz_req.op,
+      is_segmented: mem_is_segmented,
+      nf          : mem_spatz_req.nf
   };
 
   assign spatz_req_ready_o = spatz_req_ready & !commit_insn_full;
+
+  // Commit side segment signals
+  logic commit_is_segmented;
+  assign commit_is_segmented = (commit_insn_q.op == VLSEG) || (commit_insn_q.op == VSSEG);
+
+  // nf=0 --> commit_seg_nf=1 --> regular load/store
+  logic [3:0] commit_seg_nf;
+  assign commit_seg_nf = {1'b0, commit_insn_q.nf} + 4'd1;
 
   always_comb begin: queue_control
     // Maintain state
@@ -398,11 +429,22 @@ module spatz_vlsu
       commit_insn_push                     = 1'b1;
     end
 
-    // Did an instruction finished its requests?
+    // Did an instruction finished its requests for the current segment?
     if (&mem_port_finished_q & !write_pending) begin
       mem_insn_finished_d[mem_spatz_req.id] = 1'b1;
-      mem_spatz_req_ready                   = 1'b1;
+      
+      // ready when the last segment has been processed
+      if (!mem_is_segmented || seg_cnt_q == mem_seg_nf[2:0] - 3'd1)
+        mem_spatz_req_ready = 1'b1;
+      else
+        mem_spatz_req_ready = 1'b0;
     end
+
+    // when advancing to the next field mem_insn_finished should be cleared
+    // seg_completed is active when both mem and VRF processed current segment and there are further segments
+    if (seg_completed)
+      mem_insn_finished_d[mem_spatz_req.id] = 1'b0;
+
     // Did we acknowledge the end of an instruction?
     if (vlsu_rsp_valid_o) begin
       mem_insn_finished_d[vlsu_rsp_o.id] = 1'b0;
@@ -467,6 +509,7 @@ module spatz_vlsu
     logic [31:0] addr;
     logic [31:0] stride;
     logic [31:0] offset;
+    logic [31:0] seg_base_addr;
 
     logic [idx_width(N_FU*ELENB)-1:0] word_index;
 
@@ -495,7 +538,18 @@ module spatz_vlsu
       addr = '0;
       stride ='0;
       offset ='0;
-      stride = mem_is_strided ? mem_spatz_req.rs2 >> mem_spatz_req.vtype.vsew : 'd1;
+
+      // consider stride given by the number of segments and base addr expressed for current segment
+      if (mem_is_segmented) begin
+        stride = {28'd0, mem_seg_nf};
+        seg_base_addr = mem_spatz_req.rs1 + ({29'd0, seg_cnt_q} << mem_spatz_req.vtype.vsew);
+      end else if (mem_is_strided) begin
+        stride = mem_spatz_req.rs2 >> mem_spatz_req.vtype.vsew;
+        seg_base_addr = mem_spatz_req.rs1;
+      end else begin
+        stride = 'd1;
+        seg_base_addr = mem_spatz_req.rs1;
+      end
 
       if (mem_is_indexed) begin
         // offset within the currently fetched word
@@ -509,7 +563,7 @@ module spatz_vlsu
         offset = ({mem_counter_q[port][$bits(vlen_t)-1:MAXEW] << $clog2(NrMemPorts), mem_counter_q[port][int'(MAXEW)-1:0]} + (port << MAXEW)) * stride;
       end
 
-      addr                      = mem_spatz_req.rs1 + offset;
+      addr                      = seg_base_addr + offset;
       mem_req_addr[port]        = (addr >> MAXEW) << MAXEW;
       mem_req_addr_offset[port] = addr[int'(MAXEW)-1:0];
     end
@@ -528,8 +582,13 @@ module spatz_vlsu
 
 
   // Calculate the register file address
+  // for segmented instructions destination register is vd + segment
   always_comb begin : gen_vreg_addr
-    vd_vreg_addr  = (commit_insn_q.vd << $clog2(NrWordsPerVector)) + $unsigned(vd_elem_id);
+    if (commit_is_segmented)
+      vd_vreg_addr = ((commit_insn_q.vd + {2'b00, seg_cnt_q}) << $clog2(NrWordsPerVector)) + $unsigned(vd_elem_id);
+    else
+      vd_vreg_addr = (commit_insn_q.vd << $clog2(NrWordsPerVector)) + $unsigned(vd_elem_id);
+
     vs2_vreg_addr = (mem_spatz_req.vs2 << $clog2(NrWordsPerVector)) + $unsigned(vs2_elem_id_q);
 
     v0_t_vreg_addr_lo = vrf_addr_t'(0);   // v0 word 0
@@ -562,13 +621,26 @@ module spatz_vlsu
     // Do not ack anything
     vlsu_finished_req = 1'b0;
 
-    // Finished the execution!
-    if (commit_insn_valid && &commit_finished_q && mem_insn_finished_q[commit_insn_q.id]) begin
-      commit_insn_pop = 1'b1;
-      busy_d          = 1'b0;
+    // Default assignments
+    seg_cnt_d = seg_cnt_q;
+    seg_completed = 1'b0;
 
-      // Acknowledge response when the last load commits to the VRF, or when the store finishes
-      vlsu_finished_req = 1'b1;
+    // Finished the execution of the current segment
+    if (commit_insn_valid && &commit_finished_q && mem_insn_finished_q[commit_insn_q.id]) begin
+      // check if there are further segments to process
+      if (commit_is_segmented && seg_cnt_q < (commit_seg_nf[2:0] - 3'd1)) begin
+        seg_cnt_d = seg_cnt_q + 3'd1;
+        seg_completed = 1'b1;
+      end else begin
+        commit_insn_pop = 1'b1;
+        busy_d = 1'b0;
+        
+        // Acknowledge response when the last load commits to the VRF or when the store finishes
+        vlsu_finished_req = 1'b1;
+
+        // reset counter for next instruction
+        seg_cnt_d = 3'd0;
+      end
     end
     // Do we have a new instruction?
     else if (commit_insn_valid && !busy_d)
@@ -585,8 +657,15 @@ module spatz_vlsu
 
   // Signal when we are finished with with accessing the memory (necessary
   // for the case with more than one memory port)
-  assign spatz_mem_finished_o     = commit_insn_valid && &commit_finished_q && mem_insn_finished_q[commit_insn_q.id];
-  assign spatz_mem_str_finished_o = commit_insn_valid && &commit_finished_q && mem_insn_finished_q[commit_insn_q.id] && !commit_insn_q.is_load;
+  // for segmented instructions this only fires on the last segment
+  always_comb begin : mem_acc_finished
+    if (commit_is_segmented)
+      spatz_mem_finished_o = commit_insn_valid && &commit_finished_q && mem_insn_finished_q[commit_insn_q.id] && (seg_cnt_q == (commit_seg_nf[2:0] - 3'd1));
+    else
+      spatz_mem_finished_o = commit_insn_valid && &commit_finished_q && mem_insn_finished_q[commit_insn_q.id];
+  end
+
+  assign spatz_mem_str_finished_o = spatz_mem_finished_o && !commit_insn_q.is_load;
 
   // Do we start at the very fist element
   logic mem_is_vstart_zero;
@@ -598,7 +677,7 @@ module spatz_vlsu
 
   // Do we have to access every single element on its own
   logic mem_is_single_element_operation;
-  assign mem_is_single_element_operation = mem_is_addr_unaligned || mem_is_strided || mem_is_indexed || !mem_is_vstart_zero;
+  assign mem_is_single_element_operation = mem_is_addr_unaligned || mem_is_strided || mem_is_indexed || mem_is_segmented || !mem_is_vstart_zero;
 
   // How large is a single element (in bytes)
   logic [3:0] mem_single_element_size;
@@ -618,7 +697,7 @@ module spatz_vlsu
 
   // Do we have to access every single element on its own
   logic commit_is_single_element_operation;
-  assign commit_is_single_element_operation = commit_is_addr_unaligned || commit_insn_q.is_strided || commit_insn_q.is_indexed || (commit_insn_q.vstart != '0);
+  assign commit_is_single_element_operation = commit_is_addr_unaligned || commit_insn_q.is_strided || commit_insn_q.is_indexed || commit_insn_q.is_segmented || (commit_insn_q.vstart != '0);
 
   // Size of an element in the VRF
   logic [3:0] commit_single_element_size;
@@ -851,7 +930,8 @@ module spatz_vlsu
       else if (commit_insn_q.vl[$clog2(N_FU*ELENB)-1:$clog2(ELENB)] == fu)
         max_elements += commit_insn_q.vl[$clog2(ELENB)-1:0];
 
-      commit_counter_load[fu] = commit_insn_pop;
+      // reset commit counter for the next segment
+      commit_counter_load[fu] = commit_insn_pop || seg_completed;
       commit_counter_d[fu]    = (commit_insn_q.vstart >> $clog2(N_FU*ELENB)) << $clog2(ELENB);
       if (commit_insn_q.vstart[$clog2(N_FU*ELENB)-1:$clog2(ELENB)] > fu)
         commit_counter_d[fu] += ELENB;
@@ -885,7 +965,8 @@ module spatz_vlsu
 
       mem_operation_valid[port] = mem_spatz_req_valid && (max_elements != mem_counter_q[port]);
       mem_operation_last[port]  = mem_operation_valid[port] && ((max_elements - mem_counter_q[port]) <= (mem_is_single_element_operation ? mem_single_element_size : MemDataWidthB));
-      mem_counter_load[port]    = mem_spatz_req_ready;
+      // reset mem counter for the next segment
+      mem_counter_load[port]    = mem_spatz_req_ready || seg_completed;
       mem_counter_d[port]       = (mem_spatz_req.vstart >> $clog2(NrMemPorts*MemDataWidthB)) << $clog2(MemDataWidthB);
       if (NrMemPorts == 1)
         mem_counter_d[port] = mem_spatz_req.vstart;
@@ -1085,7 +1166,12 @@ module spatz_vlsu
 
     // Propagate request ID
     vrf_req_d.rsp.id    = commit_insn_q.id;
-    vrf_req_d.rsp_valid = commit_insn_valid && &commit_finished_d && mem_insn_finished_d[commit_insn_q.id];
+    
+    // response is valid only on the last segment commit
+    if (commit_is_segmented)
+      vrf_req_d.rsp_valid = commit_insn_valid && &commit_finished_d && mem_insn_finished_d[commit_insn_q.id] && (seg_cnt_q == (commit_seg_nf[2:0] - 3'd1));
+    else
+      vrf_req_d.rsp_valid = commit_insn_valid && &commit_finished_d && mem_insn_finished_d[commit_insn_q.id];
 
     // Request indexes
     vrf_re_o[1] = (state_q == VLSU_ReadingV0_t)? 1'b1:mem_is_indexed; // for indexed load/store we need to read vs2
@@ -1112,14 +1198,14 @@ module spatz_vlsu
 
           // Shift data to correct position if we have an unaligned memory request
           if (MAXEW == EW_32)
-            unique case ((commit_insn_q.is_strided || commit_insn_q.is_indexed) ? vreg_addr_offset[port] : commit_insn_q.rs1[1:0])
+            unique case ((commit_insn_q.is_strided || commit_insn_q.is_indexed || commit_insn_q.is_segmented) ? vreg_addr_offset[port] : commit_insn_q.rs1[1:0])
               2'b01: data   = {data[7:0], data[31:8]};
               2'b10: data   = {data[15:0], data[31:16]};
               2'b11: data   = {data[23:0], data[31:24]};
               default: data = data;
             endcase
           else
-            unique case ((commit_insn_q.is_strided || commit_insn_q.is_indexed) ? vreg_addr_offset[port] : commit_insn_q.rs1[2:0])
+            unique case ((commit_insn_q.is_strided || commit_insn_q.is_indexed || commit_insn_q.is_segmented) ? vreg_addr_offset[port] : commit_insn_q.rs1[2:0])
               3'b001: data  = {data[7:0], data[63:8]};
               3'b010: data  = {data[15:0], data[63:16]};
               3'b011: data  = {data[23:0], data[63:24]};
@@ -1134,7 +1220,7 @@ module spatz_vlsu
           rob_pop[port] = rob_rvalid[port] && vrf_req_valid_d && vrf_req_ready_d && commit_counter_en[port];
 
           // Shift data to correct position if we have a strided memory access
-          if (commit_insn_q.is_strided || commit_insn_q.is_indexed)
+          if (commit_insn_q.is_strided || commit_insn_q.is_indexed || commit_insn_q.is_segmented)
             if (MAXEW == EW_32)
               unique case (commit_counter_q[port][1:0])
                 2'b01: data   = {data[23:0], data[31:24]};
@@ -1222,7 +1308,7 @@ module spatz_vlsu
           automatic logic [63:0] data = rob_rdata[port];
 
           // Shift data to lsb if we have a strided or indexed memory access
-          if (mem_is_strided || mem_is_indexed)
+          if (mem_is_strided || mem_is_indexed || mem_is_segmented)
             if (MAXEW == EW_32)
               unique case (mem_counter_q[port][1:0])
                 2'b01: begin
@@ -1275,7 +1361,7 @@ module spatz_vlsu
 
           // Shift data to correct position if we have an unaligned memory request
           if (MAXEW == EW_32)
-              unique case ((mem_is_strided || mem_is_indexed) ? mem_req_addr_offset[port] : mem_spatz_req.rs1[1:0])
+              unique case ((mem_is_strided || mem_is_indexed || mem_is_segmented) ? mem_req_addr_offset[port] : mem_spatz_req.rs1[1:0])
                 2'b01: begin
                   mem_req_data[port] = {data[23:0], data[31:24]};
                   vm_strb[port]      = {vm_strb[port][2:0], vm_strb[port][3]};
@@ -1291,7 +1377,7 @@ module spatz_vlsu
                 default: mem_req_data[port] = data;
               endcase
           else
-            unique case ((mem_is_strided || mem_is_indexed) ? mem_req_addr_offset[port] : mem_spatz_req.rs1[2:0])
+            unique case ((mem_is_strided || mem_is_indexed || mem_is_segmented) ? mem_req_addr_offset[port] : mem_spatz_req.rs1[2:0])
               3'b001: begin
                 // Reoreder vm_masking along with data
                 mem_req_data[port]  = {data[55:0], data[63:56]};
@@ -1334,7 +1420,7 @@ module spatz_vlsu
 
           // Create byte enable signal for memory request
           if (mem_is_single_element_operation) begin
-            automatic logic [$clog2(ELENB)-1:0] shift = (mem_is_strided || mem_is_indexed) ? mem_req_addr_offset[port] : mem_counter_q[port][$clog2(ELENB)-1:0] + commit_insn_q.rs1[int'(MAXEW)-1:0];
+            automatic logic [$clog2(ELENB)-1:0] shift = (mem_is_strided || mem_is_indexed || mem_is_segmented) ? mem_req_addr_offset[port] : mem_counter_q[port][$clog2(ELENB)-1:0] + commit_insn_q.rs1[int'(MAXEW)-1:0];
             automatic logic [MemDataWidthB-1:0] mask  = '1;
             case (mem_spatz_req.vtype.vsew)
               EW_8 : mask   = 1;

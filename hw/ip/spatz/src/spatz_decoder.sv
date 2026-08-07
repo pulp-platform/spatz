@@ -121,13 +121,24 @@ module spatz_decoder
             riscv_instr::VLE16_V,
             riscv_instr::VLE32_V,
             riscv_instr::VLE64_V: begin
-              spatz_req.op             = VLE;
-              spatz_req.op_mem.is_load = 1'b1;
-              // spatz_req.vd             = ls_vd;
-              spatz_req.op_vtl.old_vd      = ls_vd;
-              spatz_req.use_vd         = 1'b1;
-              spatz_req.rs1            = decoder_req_i.rs1;
-              spatz_req.op_vtl.is_load_idx = 1'b0;
+              if (ls_nf == 3'b000) begin
+                spatz_req.op             = VLE;
+                spatz_req.op_mem.is_load = 1'b1;
+                // spatz_req.vd             = ls_vd;
+                spatz_req.op_vtl.old_vd      = ls_vd;
+                spatz_req.use_vd         = 1'b1;
+                spatz_req.rs1            = decoder_req_i.rs1;
+                spatz_req.op_vtl.is_load_idx = 1'b0;
+              end else begin
+                spatz_req.op             = VLSEG;
+                spatz_req.op_mem.is_load = 1'b1;
+                // spatz_req.vd             = ls_vd;
+                spatz_req.op_vtl.old_vd      = ls_vd;
+                spatz_req.use_vd         = 1'b1;
+                spatz_req.rs1            = decoder_req_i.rs1;
+                spatz_req.op_vtl.is_load_idx = 1'b0;
+                spatz_req.nf             = ls_nf;
+              end              
             end
 
             riscv_instr::VLX8_V,
@@ -195,14 +206,26 @@ module spatz_decoder
             riscv_instr::VSE16_V,
             riscv_instr::VSE32_V,
             riscv_instr::VSE64_V: begin
-              spatz_req.op             = VSE;
-              spatz_req.op_mem.is_load = 1'b0;
-              // spatz_req.vd             = ls_vd;
-              spatz_req.op_vtl.old_vd  = ls_vd;
-              spatz_req.use_vd         = 1'b1;
-              spatz_req.vd_is_src      = 1'b1;
-              spatz_req.rs1            = decoder_req_i.rs1;
-              spatz_req.op_vtl.is_load_idx = 1'b0;
+              if (ls_nf == 3'b000) begin
+                spatz_req.op             = VSE;
+                spatz_req.op_mem.is_load = 1'b0;
+                // spatz_req.vd             = ls_vd;
+                spatz_req.op_vtl.old_vd  = ls_vd;
+                spatz_req.use_vd         = 1'b1;
+                spatz_req.vd_is_src      = 1'b1;
+                spatz_req.rs1            = decoder_req_i.rs1;
+                spatz_req.op_vtl.is_load_idx = 1'b0;
+              end else begin
+                spatz_req.op             = VSSEG;
+                spatz_req.op_mem.is_load = 1'b0;
+                // spatz_req.vd             = ls_vd;
+                spatz_req.op_vtl.old_vd  = ls_vd;
+                spatz_req.use_vd         = 1'b1;
+                spatz_req.vd_is_src      = 1'b1;
+                spatz_req.rs1            = decoder_req_i.rs1;
+                spatz_req.op_vtl.is_load_idx = 1'b0;
+                spatz_req.nf             = ls_nf;
+              end             
             end
 
             riscv_instr::VSSE8_V,
