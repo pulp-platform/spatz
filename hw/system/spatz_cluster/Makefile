@@ -64,29 +64,10 @@ endif
 # Include Makefrag
 include $(ROOT)/util/Makefrag
 
-<<<<<<< HEAD
-<<<<<<< HEAD
 # QuestaSim
-# VSIM      = questa-2021.3-kgf vsim
-# VLOG      = questa-2021.3-kgf vlog
-# VSIM_HOME = /usr/pack/questa-2021.3-kgf/questasim
-
-VSIM      = vsim
-VLOG      = vlog
-VSIM_HOME = /sw/CAD/Siemens/questa/2024.3/questasim
-=======
-QuestaSim
-=======
-#QuestaSim
->>>>>>> b1cbb9dd (Fix CI violation)
 VSIM      = questa-2021.3-kgf vsim
 VLOG      = questa-2021.3-kgf vlog
 VSIM_HOME = /usr/pack/questa-2021.3-kgf/questasim
-
-# VSIM      = vsim
-# VLOG      = vlog
-# VSIM_HOME = /sw/CAD/Siemens/questa/2024.3/questasim
->>>>>>> 02232057 (Fix CI violation)
 
 VSIM_FLAGS += -t 1ps
 VSIM_FLAGS += -do "log -r /*; source ${SPATZ_CLUSTER_DIR}/script/vsim/wave.tcl; run -a"
@@ -281,11 +262,7 @@ clean.vlt:
 
 ${VSIM_BUILDDIR}/compile.vsim.tcl: $(CFG_STAMP) test/bootrom.bin $(VSIM_SOURCES) ${TB_SRCS} ${TB_DIR}/rtl_lib.cc ${TB_DIR}/common_lib.cc test/bootdata.cc test/bootrom.bin $(CURDIR)/src/generated/bootrom.sv
 	vlib $(dir $@)
-	# hmr_unit.sv is pulled in unconditionally by the redundancy_cells dependency
-	# (no Bender target gates it) but is never instantiated in this design; its
-	# `core_in_tmr[i]` generate-if condition is not elaboration-constant, which
-	# vlog rejects even though the module is dead code. Drop it from the compile list.
-	${BENDER} script vsim ${VSIM_BENDER} ${DEFS} --vlog-arg="${VLOG_FLAGS} -work $(dir $@) " | grep -v 'HMR/hmr_unit\.sv' > $@
+	${BENDER} script vsim ${VSIM_BENDER} ${DEFS} --vlog-arg="${VLOG_FLAGS} -work $(dir $@) " > $@
 	echo '${VLOG} -work $(dir $@) ${TB_DIR}/rtl_lib.cc ${TB_DIR}/common_lib.cc test/bootdata.cc -ccflags "-std=c++17 -I${MKFILE_DIR}/test -I${MKFILE_DIR}/work/include -I${TB_DIR}"' >> $@
 	echo '${VLOG} -work $(dir $@) test/uartdpi/uartdpi.c -ccflags "-Itest/uartdpi"' >> $@
 	echo 'return 0' >> $@
