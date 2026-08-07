@@ -17,11 +17,11 @@ package spatz_pkg;
   //////////////////
 
   // Instantiate quadrilatero
-  localparam bit QUADRILATERO = 1;
+  localparam bit QUADRILATERO = 0;
   // Number of IPUs in each VFU (between 1 and 8)
-  localparam int unsigned N_IPU = 8;
+  localparam int unsigned N_IPU = 1;
   // Number of FPUs in each VFU (between 1 and 8)
-  localparam int unsigned N_FPU = 8;
+  localparam int unsigned N_FPU = 4;
   // Number of FUs in each VFU
   localparam int unsigned N_FU  = N_IPU > N_FPU ? N_IPU : N_FPU;
   // FPU support
@@ -29,7 +29,7 @@ package spatz_pkg;
   // Single-precision floating point support
   localparam bit RVF            = 1;
   // Double-precision floating-point support
-  localparam bit RVD            = 0;
+  localparam bit RVD            = 1;
   // Vector support
   localparam bit RVV            = 1;
 
@@ -65,7 +65,7 @@ package spatz_pkg;
   localparam int unsigned NrWordsPerBank   = NrVRFWords / NrVRFBanks;
 
   // Number of VLSU interfaces
-  localparam int unsigned NumVLSUInterfaces = 2;
+  localparam int unsigned NumVLSUInterfaces = 1;
 
   // Width of scalar register file adresses
   // Depends on whether we have a FP regfile or not
@@ -371,34 +371,30 @@ package spatz_pkg;
   // VRF/SB Ports //
   //////////////////
 
-  typedef enum logic [idx_width(4 + 2 * 2):0] {
+  typedef enum logic [idx_width(4 + 2 * 1):0] {
     VFU_VS2_RD,
     VFU_VS1_RD,
     VFU_VD_RD,
-    VLSU_VD_RD0,
-    VLSU_VS2_RD0,
-    VLSU_VD_RD1,
-    VLSU_VS2_RD1,
+    VLSU_VS2_RD,
+    VLSU_VD_RD,
     VSLDU_VS2_RD
   } vreg_port_rd_e;
 
-  typedef enum logic [idx_width(2 + 2):0] {
+  typedef enum logic [idx_width(2 + 1):0] {
     VFU_VD_WD,
-    VLSU_VD_WD[2],
+    VLSU_VD_WD,
     VSLDU_VD_WD
   } vreg_port_wd_e;
 
-  typedef enum logic [idx_width(6 + 3 * 2):0] {
+  typedef enum logic [idx_width(6 + 3 * 1):0] {
     SB_VFU_VS2_RD,
     SB_VFU_VS1_RD,
     SB_VFU_VD_RD,
-    SB_VLSU_VD_RD0,
-    SB_VLSU_VS2_RD0,
-    SB_VLSU_VD_RD1,
-    SB_VLSU_VS2_RD1,
+    SB_VLSU_VS2_RD,
+    SB_VLSU_VD_RD,
     SB_VSLDU_VS2_RD,
     SB_VFU_VD_WD,
-    SB_VLSU_VD_WD[2],
+    SB_VLSU_VD_WD,
     SB_VSLDU_VD_WD
   } sb_port_e;
 
@@ -428,7 +424,7 @@ package spatz_pkg;
     EnableVectors: 1'b1,
     EnableNanBox : 1'b1,
     //              FP32  FP64  FP16  FP8   FP16a FP8a
-    FpFmtMask    : {RVF,  1'b0, 1'b1, 1'b1, 1'b1, 1'b1},
+    FpFmtMask    : {RVF,  1'b0, 1'b1, 1'b1, 1'b0, 1'b0},
     //              INT8  INT16 INT32 INT64
     IntFmtMask   : {1'b1, 1'b1, 1'b1, 1'b0}
   };
