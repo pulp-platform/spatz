@@ -38,7 +38,7 @@ module spatz_doublebw_vlsu
     input  logic                            vlsu_buf_full_i,
     // Interface with the VRF
     output vrf_addr_t      [NrInterfaces-1:0] vrf_waddr_o,
-    output vrf_data_t      [NrInterfaces-1:0] vrf_wdata_o,
+    output logic           [NrInterfaces-1:0]  [N_FU*(ELEN+7)-1:0] vrf_wdata_ecc_o,
     output logic           [NrInterfaces-1:0] vrf_we_o,
     output vrf_be_t        [NrInterfaces-1:0] vrf_wbe_o,
     input  logic           [NrInterfaces-1:0] vrf_wvalid_i,
@@ -46,7 +46,7 @@ module spatz_doublebw_vlsu
     output spatz_id_t      [NrInterfaces-1:0] [2:0] vrf_id_o,
     output vrf_addr_t      [NrInterfaces-1:0] [1:0] vrf_raddr_o,
     output logic           [NrInterfaces-1:0] [1:0] vrf_re_o,
-    input  vrf_data_t      [NrInterfaces-1:0] [1:0] vrf_rdata_i,
+    input  logic           [NrInterfaces-1:0] [1:0] [N_FU*(ELEN+7)-1:0] vrf_rdata_ecc,
     input  logic           [NrInterfaces-1:0] [1:0] vrf_rvalid_i,
     // Memory Request
     output spatz_mem_req_t [NrMemPorts-1:0] spatz_mem_req_o,
@@ -189,11 +189,11 @@ module spatz_doublebw_vlsu
 
   typedef logic [int'(MAXEW)-1:0] addr_offset_t;
 
-  elen_t [NrInterfaces-1:0] [N_FU-1:0] rob_wdata;
+  logic [NrInterfaces-1:0] [N_FU-1:0][ELEN+7-1:0] rob_wdata;
   id_t   [NrInterfaces-1:0] [N_FU-1:0] rob_wid;
   logic  [NrInterfaces-1:0] [N_FU-1:0] rob_push;
   logic  [NrInterfaces-1:0] [N_FU-1:0] rob_rvalid;
-  elen_t [NrInterfaces-1:0] [N_FU-1:0] rob_rdata;
+  logic [NrInterfaces-1:0] [N_FU-1:0][ELEN+7-1:0] rob_rdata;
   logic  [NrInterfaces-1:0] [N_FU-1:0] rob_pop;
   id_t   [NrInterfaces-1:0] [N_FU-1:0] rob_rid;
   logic  [NrInterfaces-1:0] [N_FU-1:0] rob_req_id;
@@ -227,7 +227,7 @@ module spatz_doublebw_vlsu
       );
 `else
       fifo_v3 #(
-        .DATA_WIDTH(ELEN              ),
+        .DATA_WIDTH(ELEN+7              ),
         .DEPTH     (NrOutstandingLoads)
       ) i_reorder_buffer (
         .clk_i     (clk_i               ),
@@ -445,6 +445,34 @@ module spatz_doublebw_vlsu
   // Address Generation //
   ////////////////////////
 
+  // Decoded VS2/indexed-offset word (port 1) and VD/V0.t word (port 0), per
+  // interface, since vrf_rdata_ecc carries the raw 39-bit ECC codeword end-to-
+  // end (mirrors spatz_vlsu.sv's vs2_decoded/vd_rdata_decoded).
+  logic [NrInterfaces-1:0][N_FU*ELEN-1:0] vs2_decoded;
+  logic [NrInterfaces-1:0][N_FU*ELEN-1:0] vd_rdata_decoded;
+  for (genvar intf = 0; intf < NrInterfaces; intf++) begin : gen_vrf_rd_dec_intf
+    for (genvar cut = 0; cut < N_FU; cut++) begin : gen_vrf_rd_dec_cut
+      hsiao_ecc_dec #(
+        .DataWidth(ELEN),
+        .ProtWidth(7)
+      ) i_vs2_idx_dec (
+        .in        (vrf_rdata_ecc[intf][1][(ELEN+7)*cut +: (ELEN+7)]),
+        .out       (vs2_decoded[intf][ELEN*cut +: ELEN]),
+        .syndrome_o(),
+        .err_o     ()
+      );
+      hsiao_ecc_dec #(
+        .DataWidth(ELEN),
+        .ProtWidth(7)
+      ) i_vd_rdata_dec (
+        .in        (vrf_rdata_ecc[intf][0][(ELEN+7)*cut +: (ELEN+7)]),
+        .out       (vd_rdata_decoded[intf][ELEN*cut +: ELEN]),
+        .syndrome_o(),
+        .err_o     ()
+      );
+    end : gen_vrf_rd_dec_cut
+  end : gen_vrf_rd_dec_intf
+
   elen_t [NrInterfaces-1:0] [N_FU-1:0] mem_req_addr;
 
   vrf_addr_t [NrInterfaces-1:0] vd_vreg_addr;
@@ -519,9 +547,9 @@ module spatz_doublebw_vlsu
 
           // Index
           unique case (mem_spatz_req.op_mem.ew)
-            EW_8 : offset   = $signed(vrf_rdata_i[intf][1][8 * word_index +: 8]);
-            EW_16: offset   = $signed(vrf_rdata_i[intf][1][8 * word_index +: 16]);
-            default: offset = $signed(vrf_rdata_i[intf][1][8 * word_index +: 32]);
+            EW_8 : offset   = $signed(vs2_decoded[intf][8 * word_index +: 8]);
+            EW_16: offset   = $signed(vs2_decoded[intf][8 * word_index +: 16]);
+            default: offset = $signed(vs2_decoded[intf][8 * word_index +: 32]);
           endcase
         end else begin
           offset = ({mem_counter_q[intf][fu][$bits(vlen_t)-1:MAXEW] << $clog2(N_FU), mem_counter_q[intf][fu][int'(MAXEW)-1:0]} + (fu << MAXEW));
@@ -549,7 +577,7 @@ module spatz_doublebw_vlsu
 
   // v0 should be read from interface 0 of the vrf
   logic [VLEN-1:0] operand_v0_t, operand_v0_t_q;
-  assign operand_v0_t = (state_q == VLSU_ReadingV0_t) ? {vrf_rdata_i[0][1], vrf_rdata_i[0][0]} : '0;
+  assign operand_v0_t = (state_q == VLSU_ReadingV0_t) ? {vs2_decoded[0], vd_rdata_decoded[0]} : '0; // decoder is attached to the read ports
   // Backup v0.t
   `FFL(operand_v0_t_q, operand_v0_t, v0_t_is_ready, '0)
 
@@ -688,7 +716,7 @@ module spatz_doublebw_vlsu
 
   typedef struct packed {
     vrf_addr_t waddr;
-    vrf_data_t wdata;
+    logic [N_FU*(ELEN+7)-1:0] wdata;
     vrf_be_t wbe;
 
     vlsu_rsp_t rsp;
@@ -724,6 +752,56 @@ module spatz_doublebw_vlsu
   logic both_commit;
   assign both_commit = coalesce_commit[0] & coalesce_commit[1];
 
+  // A cut's codeword bits are not byte-aligned, so accumulating several
+  // partial (single-element) commits into the same VRF word cannot splice
+  // the raw codewords. Decode both the buffered cut and the newly-arriving
+  // cut back to their ELEN-bit payload, splice at byte granularity using the
+  // new write's byte-enable (bytes it doesn't cover keep the buffered
+  // payload instead of being lost), then re-encode. Mirrors the VD RMW merge
+  // below, but merges against this buffer's own not-yet-committed data
+  // rather than the old VD register content.
+  logic [NrInterfaces-1:0][N_FU-1:0][ELEN-1:0]   coalesce_buf_decoded, coalesce_new_decoded;
+  logic [NrInterfaces-1:0][N_FU-1:0][ELEN-1:0]   coalesce_merged_payload;
+  logic [NrInterfaces-1:0][N_FU-1:0][ELEN+7-1:0] coalesce_merged_enc;
+
+  for (genvar intf = 0; intf < NrInterfaces; intf++) begin : gen_coalesce_merge_intf
+    for (genvar fu = 0; fu < N_FU; fu++) begin : gen_coalesce_merge_fu
+      hsiao_ecc_dec #(
+        .DataWidth(ELEN),
+        .ProtWidth(7)
+      ) i_coalesce_buf_ecc_dec (
+        .in        (coalesce_q[intf].wdata[(ELEN+7)*fu +: (ELEN+7)]),
+        .out       (coalesce_buf_decoded[intf][fu]),
+        .syndrome_o(),
+        .err_o     ()
+      );
+
+      hsiao_ecc_dec #(
+        .DataWidth(ELEN),
+        .ProtWidth(7)
+      ) i_coalesce_new_ecc_dec (
+        .in        (vrf_req_q[intf].wdata[(ELEN+7)*fu +: (ELEN+7)]),
+        .out       (coalesce_new_decoded[intf][fu]),
+        .syndrome_o(),
+        .err_o     ()
+      );
+
+      for (genvar b = 0; b < ELENB; b++) begin : gen_coalesce_merge_byte
+        assign coalesce_merged_payload[intf][fu][8*b +: 8] =
+          vrf_req_q[intf].wbe[ELENB*fu + b] ? coalesce_new_decoded[intf][fu][8*b +: 8]
+                                             : coalesce_buf_decoded[intf][fu][8*b +: 8];
+      end : gen_coalesce_merge_byte
+
+      hsiao_ecc_enc #(
+        .DataWidth(ELEN),
+        .ProtWidth(7)
+      ) i_coalesce_merge_ecc_enc (
+        .in  (coalesce_merged_payload[intf][fu]),
+        .out (coalesce_merged_enc[intf][fu])
+      );
+    end : gen_coalesce_merge_fu
+  end : gen_coalesce_merge_intf
+
   for (genvar intf = 0; intf < NrInterfaces; intf++) begin : gen_vrf_req_register_intf
     spill_register #(
       .T(vrf_req_t)
@@ -748,9 +826,13 @@ module spatz_doublebw_vlsu
     // the last write of the instruction, or the next write targets a different address.
     assign coalesce_commit[intf] = coalesce_valid_q[intf] && (&coalesce_q[intf].wbe || coalesce_q[intf].rsp_valid || next_addr_different[intf]);
 
-    assign vrf_waddr_o[intf] = coalesce_q[intf].waddr;
-    assign vrf_wdata_o[intf] = coalesce_q[intf].wdata;
-    assign vrf_wbe_o[intf]   = coalesce_q[intf].wbe;
+    // Drive the VRF write port from the coalescing buffer, still as a raw
+    // 39-bit-per-cut ECC codeword: coalesce_proc below already merges in any
+    // earlier partial commits at the decoded level (see gen_coalesce_merge_intf)
+    // before this word is ever accepted into coalesce_q.
+    assign vrf_waddr_o[intf]     = coalesce_q[intf].waddr;
+    assign vrf_wdata_ecc_o[intf] = coalesce_q[intf].wdata;
+    assign vrf_wbe_o[intf]       = coalesce_q[intf].wbe;
     // Ensure simpler synchronization for commits from both interfaces
     // Writeback:
     // For interface 1, check if interface 0 commit can go through
@@ -789,16 +871,20 @@ module spatz_doublebw_vlsu
       // Accept a new partial write from the spill-register output.
       if (vrf_req_valid_q[intf] && vrf_req_ready_q[intf]) begin
         if (coalesce_valid_q[intf] && !(coalesce_commit[intf] && vrf_wvalid_i[intf])) begin
-          // Merge into the existing accumulation (same VRF word in progress):
-          // OR the byte enables and splice in only the newly-valid data bytes.
-          for (int unsigned i = 0; i < N_FU*ELENB; i++)
-            if (vrf_req_q[intf].wbe[i])
-              coalesce_d[intf].wdata[8*i +: 8] = vrf_req_q[intf].wdata[8*i +: 8];
-          coalesce_d[intf].wbe = coalesce_d[intf].wbe | vrf_req_q[intf].wbe;
-          // Carry the rsp metadata from the last write of the instruction.
-          if (vrf_req_q[intf].rsp_valid) begin
-            coalesce_d[intf].rsp       = vrf_req_q[intf].rsp;
-            coalesce_d[intf].rsp_valid = 1'b1;
+          // Merge into the existing accumulation (same VRF word in progress).
+          // vrf_req_q[intf].wdata is a complete per-cut ECC codeword, and a
+          // codeword's bits aren't byte-aligned, so the new write can't be
+          // spliced into the buffered one directly. gen_coalesce_merge_intf
+          // above already decoded both, spliced at byte granularity using
+          // this write's byte-enable, and re-encoded the result -- use that
+          // instead of letting the newest write blindly supersede (and
+          // silently drop) whatever earlier partial commits had written.
+          coalesce_d[intf]       = vrf_req_q[intf];
+          coalesce_d[intf].wdata = coalesce_merged_enc[intf];
+          coalesce_d[intf].wbe   = coalesce_q[intf].wbe | vrf_req_q[intf].wbe;
+          if (!vrf_req_q[intf].rsp_valid) begin
+            coalesce_d[intf].rsp       = coalesce_q[intf].rsp;
+            coalesce_d[intf].rsp_valid = coalesce_q[intf].rsp_valid;
           end
         end else begin
           // Buffer was empty or just committed — start a fresh accumulation.
@@ -856,6 +942,45 @@ module spatz_doublebw_vlsu
   // Set response high when both interfaces have committed and the VRF accepts the final write
   assign vlsu_rsp_valid_o = &vrf_commit_intf_valid && |coalesce_valid_q ? |vrf_wvalid_i : vlsu_finished_req && !commit_insn_q.is_load;
 
+  ///////////////////////////
+  // VD Read-Modify-Write  //
+  ///////////////////////////
+  //
+  // The VRF is ECC-protected at cut granularity: a write to a cut writes the
+  // full codeword whenever any byte-enable bit in that cut is set. A
+  // masked/narrow-element load's first write to a fresh destination word can
+  // therefore clobber bytes it doesn't actually touch, unless those bytes
+  // are explicitly merged in from the true old VRF value. This mirrors
+  // spatz_vlsu.sv's VD RMW mechanism, replicated independently per
+  // interface since both can need RMW on different words in the same cycle.
+
+  // Tracks whether the CURRENT destination word (vd_vreg_addr[intf]) has
+  // already been committed to once by this instruction, per interface.
+  vrf_addr_t [1:0] vd_prev_commit_waddr_q, vd_prev_commit_waddr_d;
+  logic      [1:0] vd_prev_commit_valid_q, vd_prev_commit_valid_d;
+  for (genvar intf = 0; intf < NrInterfaces; intf++) begin : gen_vd_prev_commit_ff
+    `FF(vd_prev_commit_waddr_q[intf], vd_prev_commit_waddr_d[intf], '0)
+    `FF(vd_prev_commit_valid_q[intf], vd_prev_commit_valid_d[intf], 1'b0)
+  end
+
+  logic [1:0] vd_is_new_word;
+  for (genvar intf = 0; intf < NrInterfaces; intf++) begin : gen_vd_is_new_word
+    assign vd_is_new_word[intf] = !vd_prev_commit_valid_q[intf] || (vd_prev_commit_waddr_q[intf] != vd_vreg_addr[intf]);
+  end
+
+  always_comb begin
+    for (int intf = 0; intf < NrInterfaces; intf++) begin
+      vd_prev_commit_waddr_d[intf] = vd_prev_commit_waddr_q[intf];
+      vd_prev_commit_valid_d[intf] = vd_prev_commit_valid_q[intf];
+      if (commit_insn_pop)
+        vd_prev_commit_valid_d[intf] = 1'b0; // next instruction's first word is "new"
+      else if (vrf_req_valid_d[intf] && vrf_req_ready_d[intf] && commit_insn_q.is_load) begin
+        vd_prev_commit_waddr_d[intf] = vd_vreg_addr[intf];
+        vd_prev_commit_valid_d[intf] = 1'b1;
+      end
+    end
+  end
+
   //////////////
   // Counters //
   //////////////
@@ -907,6 +1032,146 @@ module spatz_doublebw_vlsu
                             ? commit_counter_q[intf][0] >> $clog2(ELENB)
                             : commit_counter_q[intf][3] >> $clog2(ELENB);
   end
+
+  // Does the current commit need an RMW merge against the true old VD word?
+  // Conservative superset of the exact per-cut wbe!=0&&wbe!=all1 check:
+  // masked, OR single-element/narrow/strided/indexed/unaligned/vstart!=0, OR
+  // a genuinely-partial tail (fewer than ELENB bytes left in this cut).
+  logic [NrInterfaces-1:0][N_FU-1:0] commit_tail_partial;
+  for (genvar intf = 0; intf < NrInterfaces; intf++) begin : gen_commit_tail_partial_intf
+    for (genvar fu = 0; fu < N_FU; fu++) begin : gen_commit_tail_partial_fu
+      assign commit_tail_partial[intf][fu] = commit_operation_last[intf][fu] && (commit_counter_delta[intf][fu] != vlen_t'(ELENB));
+    end
+  end
+
+  // "Needed" = this commit's write to its cut(s) may leave some byte
+  // uncovered and therefore needs a byte-level merge -- independent of
+  // whether this is the first or a later touch of the destination word
+  // within this instruction (e.g. two single-byte indexed elements landing
+  // in the same cut on consecutive commits both need merging, or the
+  // second one will clobber the first one's byte via the cut-granular
+  // write). "Read needed" (below) is the narrower condition for actually
+  // kicking off a fresh VRF read-back, which is only required the first
+  // time this word is touched.
+  logic [NrInterfaces-1:0] vlsu_rmw_needed;
+  for (genvar intf = 0; intf < NrInterfaces; intf++) begin : gen_vlsu_rmw_needed
+    assign vlsu_rmw_needed[intf] = commit_insn_valid && commit_insn_q.is_load && (state_q == VLSU_RunningLoad) &&
+                                    |commit_operation_valid[intf] &&
+                                    (!commit_insn_q.vm || commit_is_single_element_operation || |commit_tail_partial[intf]);
+  end
+
+  logic [NrInterfaces-1:0] vlsu_rmw_read_needed;
+  for (genvar intf = 0; intf < NrInterfaces; intf++) begin : gen_vlsu_rmw_read_needed
+    assign vlsu_rmw_read_needed[intf] = vlsu_rmw_needed[intf] && vd_is_new_word[intf];
+  end
+
+  // Wait/capture sub-FSM per interface: read back the old VD word via the
+  // otherwise-idle port 0 (VLSU_VD_RD0/RD1) when RMW is needed, then hold
+  // the decoded result until this word's write has actually RETIRED, not
+  // merely been accepted -- this prevents a second RMW-needing word's
+  // capture from clobbering the data still in use by the first word's
+  // in-flight write.
+  //
+  // Retirement differs per interface: interface 0 has no buffering path, so
+  // vrf_wvalid_i[0] alone means "retired." Interface 1's vrf_wvalid_i[1]
+  // fires as soon as its write is accepted into vlsu_buf (spatz.sv), NOT
+  // when it actually lands in the VRF bank -- that event (vlsu_buf_pop) is
+  // never exposed to this module, so vlsu_buf_empty_i is used as a
+  // conservative proxy: once the buffer is empty, a wvalid pulse really did
+  // just retire.
+  logic [NrInterfaces-1:0] vlsu_rmw_retired;
+  assign vlsu_rmw_retired[0] = vrf_wvalid_i[0];
+  assign vlsu_rmw_retired[1] = vrf_wvalid_i[1] && vlsu_buf_empty_i;
+
+  typedef enum logic { VLSU_LD_NORMAL, VLSU_LD_RMW } vlsu_ld_rmw_e;
+  vlsu_ld_rmw_e [NrInterfaces-1:0] vlsu_ld_rmw_q, vlsu_ld_rmw_d;
+
+  logic      [NrInterfaces-1:0]                 vd_rmw_valid_q,    vd_rmw_valid_d;
+  vrf_addr_t [NrInterfaces-1:0]                 vd_rmw_addr_q,     vd_rmw_addr_d;
+  logic      [NrInterfaces-1:0][N_FU*ELEN-1:0]  vd_rmw_data_q,     vd_rmw_data_d;
+  logic      [NrInterfaces-1:0]                 vd_rmw_inflight_q, vd_rmw_inflight_d;
+  for (genvar intf = 0; intf < NrInterfaces; intf++) begin : gen_vd_rmw_ff
+    `FF(vlsu_ld_rmw_q[intf],    vlsu_ld_rmw_d[intf],    VLSU_LD_NORMAL)
+    `FF(vd_rmw_valid_q[intf],    vd_rmw_valid_d[intf],    1'b0)
+    `FF(vd_rmw_addr_q[intf],     vd_rmw_addr_d[intf],     '0)
+    `FF(vd_rmw_data_q[intf],     vd_rmw_data_d[intf],     '0)
+    `FF(vd_rmw_inflight_q[intf], vd_rmw_inflight_d[intf], 1'b0)
+  end
+
+  logic [NrInterfaces-1:0] vlsu_rmw_have_data, vlsu_rmw_commit_now;
+  for (genvar intf = 0; intf < NrInterfaces; intf++) begin : gen_vlsu_rmw_have_data
+    assign vlsu_rmw_have_data[intf]  = vd_rmw_valid_q[intf] && (vd_rmw_addr_q[intf] == vd_vreg_addr[intf]);
+    assign vlsu_rmw_commit_now[intf] = vlsu_rmw_needed[intf] && vlsu_rmw_have_data[intf] && !vd_rmw_inflight_q[intf];
+  end
+
+  // Declared here (ahead of its assignment further below in
+  // gen_vlsu_rmw_merge_intf) so the FSM below can read it the same cycle it
+  // commits an RMW write, without waiting for retirement.
+  logic [NrInterfaces-1:0][N_FU-1:0][ELEN-1:0] vlsu_rmw_merged_payload;
+
+  always_comb begin : vlsu_ld_rmw_fsm
+    for (int intf = 0; intf < NrInterfaces; intf++) begin
+      vlsu_ld_rmw_d[intf]     = vlsu_ld_rmw_q[intf];
+      vd_rmw_valid_d[intf]    = vd_rmw_valid_q[intf];
+      vd_rmw_addr_d[intf]     = vd_rmw_addr_q[intf];
+      vd_rmw_data_d[intf]     = vd_rmw_data_q[intf];
+      vd_rmw_inflight_d[intf] = vd_rmw_inflight_q[intf];
+
+      unique case (vlsu_ld_rmw_q[intf])
+        VLSU_LD_NORMAL:
+          if (vlsu_rmw_read_needed[intf] && !vd_rmw_inflight_q[intf] && !vlsu_rmw_have_data[intf])
+            vlsu_ld_rmw_d[intf] = VLSU_LD_RMW;
+        VLSU_LD_RMW:
+          // Guard against a v0.t mid-wait redirect of port 0's read address
+          // (only ever live for interface 0 -- interface 1 issues no read
+          // request at all during VLSU_ReadingV0_t -- kept on both for
+          // symmetry/defense).
+          if (vrf_rvalid_i[intf][0] && (state_q == VLSU_RunningLoad)) begin
+            vd_rmw_valid_d[intf] = 1'b1;
+            vd_rmw_addr_d[intf]  = vd_vreg_addr[intf];
+            vd_rmw_data_d[intf]  = vd_rdata_decoded[intf];
+            vlsu_ld_rmw_d[intf]  = VLSU_LD_NORMAL;
+          end
+        default: vlsu_ld_rmw_d[intf] = VLSU_LD_NORMAL;
+      endcase
+
+      if (vlsu_rmw_commit_now[intf] && vrf_req_valid_d[intf] && vrf_req_ready_d[intf]) begin
+        vd_rmw_inflight_d[intf] = 1'b1;
+        // Advance the accumulator to the just-merged state immediately (not
+        // waiting for retirement): this instruction's own next commit to the
+        // same word (e.g. the next single-byte indexed element landing in
+        // the same cut) must merge against what THIS commit is about to
+        // write, not stale data -- otherwise its cut-granular write would
+        // clobber the bytes this commit just placed.
+        vd_rmw_data_d[intf] = vlsu_rmw_merged_payload[intf];
+      end
+      if (vlsu_rmw_retired[intf] && vd_rmw_inflight_q[intf]) begin
+        vd_rmw_inflight_d[intf] = 1'b0;
+        // Do NOT invalidate vd_rmw_valid_q here: it must persist (keyed on
+        // vd_rmw_addr_q matching vd_vreg_addr) so a later commit to the same
+        // word within this instruction reuses/keeps advancing the
+        // accumulator instead of re-triggering a fresh VRF read. It is
+        // invalidated explicitly on commit_insn_pop below instead.
+      end
+      // New instruction: drop any stale accumulator so a coincidentally
+      // matching destination address doesn't reuse a previous instruction's
+      // captured/merged data.
+      if (commit_insn_pop)
+        vd_rmw_valid_d[intf] = 1'b0;
+    end
+  end : vlsu_ld_rmw_fsm
+
+`ifndef SYNTHESIS
+  logic [NrInterfaces-1:0][15:0] vlsu_rmw_wait_cycles_q;
+  for (genvar intf = 0; intf < NrInterfaces; intf++) begin : gen_vlsu_rmw_canary
+    `FFL(vlsu_rmw_wait_cycles_q[intf], (vlsu_ld_rmw_q[intf] == VLSU_LD_RMW) ? (vlsu_rmw_wait_cycles_q[intf] + 16'd1) : 16'd0,
+         (vlsu_ld_rmw_q[intf] == VLSU_LD_RMW), 16'd0)
+    always_ff @(posedge clk_i) begin
+      if (vlsu_rmw_wait_cycles_q[intf] == 16'd400)
+        $warning("[spatz_doublebw_vlsu] Interface %0d VD RMW read-back has been waiting %0d cycles possible read-port starvation or vlsu_buf retirement stall", intf, vlsu_rmw_wait_cycles_q[intf]);
+    end
+  end
+`endif
 
   for (genvar intf = 0; intf < NrInterfaces; intf++) begin: gen_mem_counter_proc_intf
     for (genvar fu = 0; fu < N_FU; fu++) begin: gen_mem_counter_proc_intf_fu
@@ -1007,7 +1272,12 @@ module spatz_doublebw_vlsu
 
   // Memory request signals
   id_t  [NrInterfaces-1:0] [N_FU-1:0]                   mem_req_id;
-  logic [NrInterfaces-1:0] [N_FU-1:0][MemDataWidth-1:0] mem_req_data;
+  // ECC-width to match spatz_mem_req_t.data (mirrors spatz_vlsu.sv's
+  // mem_req_data); shifted-case assignments below produce <=32-bit values
+  // that zero-extend into the upper (parity) bits, same as single-BW -- the
+  // downstream centralized re-encoder in spatz_cc.sv discards and recomputes
+  // them regardless.
+  logic [NrInterfaces-1:0] [N_FU-1:0][ELEN+7-1:0] mem_req_data;
   logic [NrInterfaces-1:0] [N_FU-1:0]                   mem_req_svalid;
   logic [NrInterfaces-1:0] [N_FU-1:0][ELEN/8-1:0]       mem_req_strb;
   logic [NrInterfaces-1:0] [N_FU-1:0]                   mem_req_lvalid;
@@ -1094,6 +1364,9 @@ module spatz_doublebw_vlsu
   // Monitor the vm_wbe selected from vm_masking
   vrf_be_t [NrInterfaces-1:0] vm_wbe;
 
+  // Final load-commit wbe before the RMW override (see vlsu_rmw_commit_now)
+  vrf_be_t [NrInterfaces-1:0] vrf_wbe_pre;
+
   // Select 8-bit masking for each port, before reordering according to rs1
   logic [NrInterfaces-1:0][N_FU-1:0][ELEN/8-1:0] vm_wbe_store;
 
@@ -1121,6 +1394,63 @@ module spatz_doublebw_vlsu
     if (mem_spatz_req_ready)
       vs2_elem_id_d = '0;
   end
+
+  // Load-side ECC decode/re-encode for byte-level data manipulation, per
+  // interface. rob_rdata carries a 39-bit ECC codeword end-to-end; when the
+  // load commit path needs byte-level realignment (unaligned/strided/indexed
+  // rs1 offset), the codeword must not be rotated directly -- decode to the
+  // 32-bit payload, realign the payload, and re-encode. Mirrors
+  // spatz_vlsu.sv's gen_load_rsp_ecc.
+  logic [NrInterfaces-1:0][N_FU-1:0][ELEN-1:0]   load_rsp_data_decoded;
+  logic [NrInterfaces-1:0][N_FU-1:0][ELEN-1:0]   load_rsp_data_aligned;
+  logic [NrInterfaces-1:0][N_FU-1:0][ELEN+7-1:0] load_rsp_data_encoded;
+
+  for (genvar intf = 0; intf < NrInterfaces; intf++) begin : gen_load_rsp_ecc_intf
+    for (genvar fu = 0; fu < N_FU; fu++) begin : gen_load_rsp_ecc_fu
+      hsiao_ecc_dec #(
+        .DataWidth(ELEN),
+        .ProtWidth(7)
+      ) i_load_rsp_ecc_dec (
+        .in        (rob_rdata[intf][fu]),
+        .out       (load_rsp_data_decoded[intf][fu]),
+        .syndrome_o(),
+        .err_o     ()
+      );
+
+      hsiao_ecc_enc #(
+        .DataWidth(ELEN),
+        .ProtWidth(7)
+      ) i_load_rsp_ecc_enc (
+        .in  (load_rsp_data_aligned[intf][fu]),
+        .out (load_rsp_data_encoded[intf][fu])
+      );
+    end
+  end
+
+  // RMW merge: on the first write to a not-yet-touched word that needs it
+  // (masked / narrow-element / partial-tail commit), merge this write's new
+  // bytes with the captured pre-existing decoded VD codeword so bytes not
+  // covered by this write's byte-enable keep their true old value (RVV
+  // mask-undisturbed / tail-undisturbed) instead of being zeroed. Mirrors
+  // spatz_vlsu.sv's gen_vlsu_rmw_merge_ecc, per interface.
+  // (vlsu_rmw_merged_payload is declared earlier, above vlsu_ld_rmw_fsm.)
+  logic [NrInterfaces-1:0][N_FU-1:0][ELEN+7-1:0] vlsu_rmw_merged_enc;
+  for (genvar intf = 0; intf < NrInterfaces; intf++) begin : gen_vlsu_rmw_merge_intf
+    for (genvar fu = 0; fu < N_FU; fu++) begin : gen_vlsu_rmw_merge_fu
+      for (genvar b = 0; b < ELENB; b++) begin : gen_vlsu_rmw_merge_byte
+        assign vlsu_rmw_merged_payload[intf][fu][8*b +: 8] =
+          vrf_wbe_pre[intf][ELENB*fu + b] ? load_rsp_data_aligned[intf][fu][8*b +: 8]
+                                          : vd_rmw_data_q[intf][ELEN*fu + 8*b +: 8];
+      end : gen_vlsu_rmw_merge_byte
+      hsiao_ecc_enc #(
+        .DataWidth(ELEN),
+        .ProtWidth(7)
+      ) i_vlsu_rmw_merge_ecc_enc (
+        .in  (vlsu_rmw_merged_payload[intf][fu]),
+        .out (vlsu_rmw_merged_enc[intf][fu])
+      );
+    end : gen_vlsu_rmw_merge_fu
+  end : gen_vlsu_rmw_merge_intf
 
   // verilator lint_off LATCH
   always_comb begin
@@ -1158,6 +1488,12 @@ module spatz_doublebw_vlsu
       end else begin
         // Normal operation: port 1 reads vs2 for indexed
         vrf_re_o[intf][1] = mem_is_indexed;
+        // RMW read-back of the old VD word (see vlsu_ld_rmw_fsm); mutually
+        // exclusive with the V0.t/store-source uses of port 0 by
+        // construction, since vlsu_rmw_needed requires
+        // state_q==VLSU_RunningLoad.
+        if (vlsu_ld_rmw_q[intf] == VLSU_LD_RMW)
+          vrf_re_o[intf][0] = 1'b1;
       end
 
       if (commit_insn_valid && commit_insn_q.is_load) begin
@@ -1166,12 +1502,21 @@ module spatz_doublebw_vlsu
           // Enable write back from an interface to the VRF if we have a valid element in all
           // the interface buffers that still have to write something back.
           vrf_req_d[intf].waddr = vd_vreg_addr[intf];
-          vrf_req_valid_d[intf] = &(rob_rvalid[intf] | ~mem_pending[intf]) && |mem_pending[intf] && (commit_insn_q.vm || v0_t_read_done);
+          // vlsu_rmw_needed: stall this word's commit until the old VD word
+          // has been read back and captured (vlsu_rmw_commit_now), so the
+          // RMW merge below has real data instead of corrupting untouched
+          // bytes.
+          vrf_req_valid_d[intf] = &(rob_rvalid[intf] | ~mem_pending[intf]) && |mem_pending[intf] && (commit_insn_q.vm || v0_t_read_done) &&
+                                   (!vlsu_rmw_needed[intf] || vlsu_rmw_commit_now[intf]);
 
           for (int unsigned fu = 0; fu < N_FU; fu++) begin
             automatic int unsigned port = intf * N_FU + fu;
 
-            automatic logic [63:0] data = rob_rdata[intf][fu];
+            // Decode the raw codeword to a plain payload before realigning --
+            // rotating codeword bytes directly would invalidate the parity.
+            automatic logic [63:0] data;
+            data = '0;
+            data[ELEN-1:0] = load_rsp_data_decoded[intf][fu];
 
             // Shift data to correct position if we have an unaligned memory request
             if (MAXEW == EW_32)
@@ -1216,7 +1561,10 @@ module spatz_doublebw_vlsu
                   3'b111: data  = {data[7:0], data[63:8]};
                   default: data = data;
                 endcase
-            vrf_req_d[intf].wdata[ELEN*fu +: ELEN] = data;
+            // Re-encode the realigned payload into a valid codeword.
+            load_rsp_data_aligned[intf][fu] = data[ELEN-1:0];
+            vrf_req_d[intf].wdata[(ELEN+7)*fu +: (ELEN+7)] =
+              vlsu_rmw_commit_now[intf] ? vlsu_rmw_merged_enc[intf][fu] : load_rsp_data_encoded[intf][fu];
 
             // Create write byte enable mask for register file
             if (commit_counter_en[intf][fu])
@@ -1237,7 +1585,11 @@ module spatz_doublebw_vlsu
               end
           end
           vm_wbe[intf] = vm_masking[commit_slice_base[intf] +: VRFWordBWidth];
-          vrf_req_d[intf].wbe = load_wbe[intf] & vm_wbe[intf];
+          vrf_wbe_pre[intf] = load_wbe[intf] & vm_wbe[intf];
+          // RMW override: force a full-word write when this commit merges in
+          // the old VD word, so spatz_vrf_ecc.sv's cut-granular write doesn't
+          // leave any byte only partially updated.
+          vrf_req_d[intf].wbe = vlsu_rmw_commit_now[intf] ? {VRFWordBWidth{1'b1}} : vrf_wbe_pre[intf];
         end
 
         for (int unsigned fu = 0; fu < N_FU; fu++) begin
@@ -1266,7 +1618,11 @@ module spatz_doublebw_vlsu
           for (int unsigned fu = 0; fu < N_FU; fu++) begin
             automatic int unsigned port = intf * N_FU + fu;
 
-            rob_wdata[intf][fu]  = vrf_rdata_i[intf][0][ELEN*fu +: ELEN];
+            // Raw codeword, undecoded -- mirrors spatz_vlsu.sv's store-source
+            // read: this data is headed to memory via spatz_cc.sv's
+            // centralized re-encoder, which discards whatever parity we send
+            // and recomputes it, so there is no need to decode here.
+            rob_wdata[intf][fu]  = vrf_rdata_ecc[intf][0][(ELEN+7)*fu +: (ELEN+7)];
             rob_wid[intf][fu]    = rob_id[intf][fu];
             rob_req_id[intf][fu] = vrf_rvalid_i[intf][0] && (!mem_is_indexed || vrf_rvalid_i[intf][1]);
             rob_push[intf][fu]   = rob_req_id[intf][fu];

@@ -145,6 +145,7 @@ sources:
             - hw/ip/ventaglio/ventaglio_scatter_datapath.sv
             - hw/ip/ventaglio/ventaglio_scatter.sv
             - hw/ip/ventaglio/ventaglio_gather.sv
+        - hw/ip/spatz/src/ecc_vregfile.sv
     # Level 3
     - hw/ip/spatz/src/spatz_fpu_sequencer.sv
     - hw/ip/spatz/src/spatz_ipu.sv
@@ -152,6 +153,7 @@ sources:
     - hw/ip/spatz/src/spatz_vlsu.sv
     - hw/ip/spatz/src/spatz_doublebw_vlsu.sv
     - hw/ip/spatz/src/spatz_vrf.sv
+    - hw/ip/spatz/src/spatz_vrf_ecc.sv
     - hw/ip/spatz/src/spatz_vsldu.sv
     - target: ventaglio
       files:
@@ -173,9 +175,14 @@ sources:
       files:
       # Level 0
       - hw/ip/spatz_cc/src/axi_dma_pkg.sv
+      # TMR_voter.sv, TMR_voter_fail.sv: now sourced from the redundancy_cells
+      # bender dependency (see Bender.yml dependencies:) instead of a
+      # copy-pasted local file, so they no longer fail lint-license with the
+      # old Solderpad-style header.
       # Level 1
       - hw/ip/spatz_cc/src/axi_dma_perf_counters.sv
       - hw/ip/spatz_cc/src/axi_dma_twod_ext.sv
+      - hw/ip/spatz_cc/src/spatz_snitch_tmr.sv
       # Level 2
       - hw/ip/spatz_cc/src/axi_dma_tc_snitch_fe.sv
       # Level 3
@@ -195,9 +202,21 @@ sources:
       # Level 0
       - hw/system/spatz_cluster/src/generated/bootrom.sv
       - hw/system/spatz_cluster/src/spatz_amo_shim.sv
+      - hw/system/spatz_cluster/src/spatz_tcdm_ecc_shim.sv
       - hw/system/spatz_cluster/src/spatz_cluster_peripheral/spatz_cluster_peripheral_reg_pkg.sv
       - hw/system/spatz_cluster/src/spatz_tcdm_fc_interconnect.sv
       - hw/system/spatz_cluster/src/spatz_tcdm_interconnect.sv
+      # hsiao_ecc_pkg/enc/dec/cor.sv: now sourced from the redundancy_cells
+      # bender dependency (see Bender.yml dependencies:) instead of a
+      # copy-pasted local file.
+      # ecc_scrubber.sv, ecc_sram.sv: now sourced from the redundancy_cells
+      # bender dependency (see Bender.yml dependencies:) instead of a
+      # copy-pasted local file. Upstream's ecc_sram.sv already wires the
+      # scrubber's bit_corrected_o/uncorrectable_o correctly; its RMW path
+      # intentionally does not double as an on-access error-report checkpoint
+      # (TCDM errors are reported via scrubbing only).
+      - hw/ip/redundancy_cells/scrub_timer.sv
+      - hw/ip/redundancy_cells/spatz_fault_monitor.sv
       # Level 1
       - hw/system/spatz_cluster/src/spatz_barrier.sv
       - hw/system/spatz_cluster/src/spatz_cluster_peripheral/spatz_cluster_peripheral_reg_top.sv

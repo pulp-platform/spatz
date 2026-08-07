@@ -39,55 +39,50 @@ module vregfile import spatz_pkg::*; #(
   logic clk;
 
   // Register file memory
-  logic [NrWords-1:0][WordWidth/8-1:0][7:0] mem;
+  logic [NrWords-1:0][WordWidth/8-1:0][7:0] mem; // NrWords × WordWidth DFFs
+
+  // CMY: ECC encode and decode combinational logic
+  typedef enum logic { NORMAL, READ_MODIFY_WRITE } store_state_e;
+  store_state_e store_state_d, store_state_q;
+
 
   // Write data sampling
-  data_t wdata_q, wdata_d;
+  // data_t wdata_q, wdata_d;
+  data_t wdata_d;
 
   ///////////////////
   // Register File //
   ///////////////////
 
-  // First-level clock gate
-  tc_clk_gating i_first_level_cg (
-    .clk_i    (clk_i     ),
-    .en_i     (|we_i     ),
-    .test_en_i(testmode_i),
-    .clk_o    (clk       )
-  );
-
-  `FF(wdata_q, wdata_d, '0)
   assign wdata_d = wdata_i;
 
 
   // Row decoder. Create a clock for each SCM row
-  logic [NrWords-1:0] row_clk;
-  for (genvar row = 0; row < NrWords; row++) begin: gen_row_decoder
-    // Create latch clock signal
-    logic row_onehot;
-    assign row_onehot = (waddr_i == row);
+  // logic [NrWords-1:0] row_clk;
+  // for (genvar row = 0; row < NrWords; row++) begin: gen_row_decoder
+  //   // Create latch clock signal
+  //   logic row_onehot;
+  //   assign row_onehot = (waddr_i == row);
 
-    // Create a clock for each SCM row
-    tc_clk_gating i_waddr_cg (
-      .clk_i    (clk         ),
-      .en_i     (row_onehot  ),
-      .test_en_i(testmode_i  ),
-      .clk_o    (row_clk[row])
-    );
-  end: gen_row_decoder
+  //   // Create a clock for each SCM row
+  //   tc_clk_gating i_waddr_cg (
+  //     .clk_i    (clk         ),
+  //     .en_i     (row_onehot  ),
+  //     .test_en_i(testmode_i  ),
+  //     .clk_o    (row_clk[row])
+  //   );
+  // end: gen_row_decoder
 
-  // Column decoder. Create a clock for each SCM column
-  logic [NrWords-1:0][WordWidth/8-1:0] col_clk;
-  for (genvar row = 0; row < NrWords; row++) begin: gen_row
-    for (genvar b = 0; b < WordWidth/8; b++) begin: gen_col_decoder
-      tc_clk_gating i_wbe_cg (
-        .clk_i    (row_clk[row]),
-        .en_i     (wbe_i[b]  ),
-        .test_en_i(testmode_i),
-        .clk_o    (col_clk[row][b])
-      );
-    end: gen_col_decoder
-  end: gen_row
+  // // Column decoder. Create a clock for each SCM column
+  // logic [WordWidth/8-1:0] col_clk;
+  // for (genvar b = 0; b < WordWidth/8; b++) begin: gen_col_decoder
+  //   tc_clk_gating i_wbe_cg (
+  //     .clk_i    (clk       ),
+  //     .en_i     (wbe_i[b]  ),
+  //     .test_en_i(testmode_i),
+  //     .clk_o    (col_clk[b])
+  //   );
+  // end: gen_col_decoder
 
   // Select which destination bytes to write into
 
@@ -95,10 +90,16 @@ module vregfile import spatz_pkg::*; #(
   /* verilator lint_off NOLATCH */
   for (genvar vreg = 0; vreg < NrWords; vreg++) begin: gen_write_mem
     for (genvar b = 0; b < WordWidth/8; b++) begin: gen_word
-      always_latch begin
-        if (col_clk[vreg][b])
-          mem[vreg][b] <= wdata_q[b*8 +: 8];
-      end
+
+      logic wr_en;
+      assign wr_en = we_i & (waddr_i == vreg) & wbe_i[b];
+
+      always_ff @(posedge clk_i or negedge rst_ni) begin
+        if (!rst_ni)
+          mem[vreg][b] <= '0;
+        else if(wr_en)
+          mem[vreg][b] <= wdata_d[b*8 +: 8];
+      end // CMY: FF-based VRF
     end: gen_word
   end: gen_write_mem
   /* verilator lint_on NOLATCH */

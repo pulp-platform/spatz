@@ -33,14 +33,14 @@ module spatz_vlsu
     output vlsu_rsp_t                       vlsu_rsp_o,
     // Interface with the VRF
     output vrf_addr_t                       vrf_waddr_o,
-    output vrf_data_t                       vrf_wdata_o,
+    output logic [N_FU*(ELEN+7)-1:0]        vrf_wdata_ecc_o,
     output logic                            vrf_we_o,
     output vrf_be_t                         vrf_wbe_o,
     input  logic                            vrf_wvalid_i,
     output spatz_id_t      [2:0]            vrf_id_o,
     output vrf_addr_t      [1:0]            vrf_raddr_o,
     output logic           [1:0]            vrf_re_o,
-    input  vrf_data_t      [1:0]            vrf_rdata_i,
+    input  logic [1:0][N_FU*(ELEN+7)-1:0]  vrf_rdata_ecc,
     input  logic           [1:0]            vrf_rvalid_i,
     // Memory Request
     output spatz_mem_req_t [NrMemPorts-1:0] spatz_mem_req_o,
@@ -51,7 +51,12 @@ module spatz_vlsu
     input  logic           [NrMemPorts-1:0] spatz_mem_rsp_valid_i,
     // Memory Finished
     output logic                            spatz_mem_finished_o,
-    output logic                            spatz_mem_str_finished_o
+    output logic                            spatz_mem_str_finished_o,
+    // ECC error outputs
+    output logic [N_FU-1:0]                vlsu_vs2_sec_err_o,   // per-cut SEC on VS2 index read
+    output logic [N_FU-1:0]                vlsu_vs2_ded_err_o,   // per-cut DED on VS2 index read
+    output logic                            vlsu_ld_sec_err_o,    // any-port SEC on load response
+    output logic                            vlsu_ld_ded_err_o     // any-port DED on load response
   );
 
 // Include FF
@@ -197,11 +202,11 @@ module spatz_vlsu
 
   typedef logic [int'(MAXEW)-1:0] addr_offset_t;
 
-  elen_t [NrMemPorts-1:0] rob_wdata;
-  id_t   [NrMemPorts-1:0] rob_wid;
-  logic  [NrMemPorts-1:0] rob_push;
-  logic  [NrMemPorts-1:0] rob_rvalid;
-  elen_t [NrMemPorts-1:0] rob_rdata;
+  logic  [NrMemPorts-1:0][ELEN+7-1:0] rob_wdata;
+  id_t   [NrMemPorts-1:0]             rob_wid;
+  logic  [NrMemPorts-1:0]             rob_push;
+  logic  [NrMemPorts-1:0]             rob_rvalid;
+  logic  [NrMemPorts-1:0][ELEN+7-1:0] rob_rdata;
   logic  [NrMemPorts-1:0] rob_pop;
   id_t   [NrMemPorts-1:0] rob_rid;
   logic  [NrMemPorts-1:0] rob_req_id;
@@ -214,7 +219,7 @@ module spatz_vlsu
   for (genvar port = 0; port < NrMemPorts; port++) begin : gen_rob
 `ifdef MEMPOOL_SPATZ
     reorder_buffer #(
-      .DataWidth(ELEN              ),
+      .DataWidth(ELEN+7            ),
       .NumWords (NrOutstandingLoads)
     ) i_reorder_buffer (
       .clk_i    (clk_i           ),
@@ -233,7 +238,7 @@ module spatz_vlsu
     );
 `else
     fifo_v3 #(
-      .DATA_WIDTH(ELEN              ),
+      .DATA_WIDTH(ELEN+7            ),
       .DEPTH     (NrOutstandingLoads)
     ) i_reorder_buffer (
       .clk_i     (clk_i           ),
@@ -445,6 +450,37 @@ module spatz_vlsu
   // Address Generation //
   ////////////////////////
 
+  // Decoded VS2 word for indexed-load address computation (N_FU lanes decoded in parallel)
+  logic [N_FU*ELEN-1:0] vs2_decoded;
+  logic [N_FU-1:0] vs2_idx_sec_err, vs2_idx_ded_err;
+  for (genvar cut = 0; cut < N_FU; cut++) begin : gen_vs2_idx_dec
+    hsiao_ecc_dec #(
+      .DataWidth(ELEN),
+      .ProtWidth(7)
+    ) i_vs2_idx_dec (
+      .in        (vrf_rdata_ecc[1][(ELEN+7)*cut +: (ELEN+7)]),
+      .out       (vs2_decoded[ELEN*cut +: ELEN]),
+      .syndrome_o(),
+      .err_o     ({vs2_idx_ded_err[cut], vs2_idx_sec_err[cut]})
+    );
+  end : gen_vs2_idx_dec
+  assign vlsu_vs2_sec_err_o = vs2_idx_sec_err;
+  assign vlsu_vs2_ded_err_o = vs2_idx_ded_err;
+
+  // Decoded VD/V0.t-low word (port 0), needed since vrf_rdata_ecc carries the raw ECC codeword
+  logic [N_FU*ELEN-1:0] vd_rdata_decoded;
+  for (genvar cut = 0; cut < N_FU; cut++) begin : gen_vd_rdata_dec
+    hsiao_ecc_dec #(
+      .DataWidth(ELEN),
+      .ProtWidth(7)
+    ) i_vd_rdata_dec (
+      .in        (vrf_rdata_ecc[0][(ELEN+7)*cut +: (ELEN+7)]),
+      .out       (vd_rdata_decoded[ELEN*cut +: ELEN]),
+      .syndrome_o(),
+      .err_o     ()
+    );
+  end : gen_vd_rdata_dec
+
   elen_t [NrMemPorts-1:0] mem_req_addr;
 
   vrf_addr_t vd_vreg_addr;
@@ -516,11 +552,11 @@ module spatz_vlsu
                       (idx_offset & (num_idx_maxew_bytes - 1)) +
                       ((idx_offset >> log2_num_idx_maxew_bytes) << log2_num_idx_maxew_bytes) * NrMemPorts;
 
-        // Index
+        // Index — use decoded VS2 word (N_FU decoders above)
         unique case (mem_spatz_req.op_mem.ew)
-          EW_8 : offset   = $signed(vrf_rdata_i[1][8 * word_index +: 8]);
-          EW_16: offset   = $signed(vrf_rdata_i[1][8 * word_index +: 16]);
-          default: offset = $signed(vrf_rdata_i[1][8 * word_index +: 32]);
+          EW_8 : offset   = $signed(vs2_decoded[8 * word_index +: 8]);
+          EW_16: offset   = $signed(vs2_decoded[8 * word_index +: 16]);
+          default: offset = $signed(vs2_decoded[8 * word_index +: 32]);
         endcase
       end else begin
         offset = ({mem_counter_q[port][$bits(vlen_t)-1:MAXEW] << $clog2(NrMemPorts), mem_counter_q[port][int'(MAXEW)-1:0]} + (port << MAXEW)) * stride;
@@ -538,7 +574,7 @@ module spatz_vlsu
 
   // v0 should be read from vrf
   logic [VLEN-1:0]  operand_v0_t,operand_v0_t_q;
-  assign operand_v0_t = (state_q == VLSU_ReadingV0_t)? {vrf_rdata_i[1],vrf_rdata_i[0]}:'0;
+  assign operand_v0_t = (state_q == VLSU_ReadingV0_t)? {vs2_decoded,vd_rdata_decoded}:'0;
 
   // Backup v0.t
   `FFL(operand_v0_t_q, operand_v0_t, v0_t_is_ready, '0)
@@ -669,7 +705,7 @@ module spatz_vlsu
 
   typedef struct packed {
     vrf_addr_t waddr;
-    vrf_data_t wdata;
+    logic [N_FU*(ELEN+7)-1:0] wdata;
     vrf_be_t wbe;
 
     vlsu_rsp_t rsp;
@@ -693,79 +729,65 @@ module spatz_vlsu
     .ready_i(vrf_req_ready_q)
   );
 
-  /////////////////////////
-  //  Coalescing Buffer  //
-  /////////////////////////
+  //////////////////////////
+  //  VRF Write Interface  //
+  //////////////////////////
 
-  // Coalesce the data write to VRF after it construct a full vector word
-  vrf_req_t coalesce_d, coalesce_q;
-  logic     coalesce_valid_d, coalesce_valid_q;
+  // Drive the VRF write port directly from the spill-register output. Each
+  // partial (possibly sub-word) write is forwarded as-is, still encoded as a
+  // 39-bit ECC codeword per FU lane — it is never decoded here. Merging of
+  // successive partial writes that target the same VRF word (byte-level
+  // read-modify-write across cycles) happens downstream, in spatz.sv's
+  // gen_vlsu_vrf_ecc/vlsu_prev_merged_q logic, which is the only place the
+  // codeword is decoded, merged with the accumulated bytes, and re-encoded
+  // before reaching the VRF.
+  assign vrf_waddr_o     = vrf_req_q.waddr;
+  assign vrf_wdata_ecc_o = vrf_req_q.wdata;
+  assign vrf_wbe_o       = vrf_req_q.wbe;
+  assign vrf_we_o        = vrf_req_valid_q;
+  assign vrf_id_o        = {vrf_req_q.rsp.id, mem_spatz_req.id, commit_insn_q.id};
+  assign vrf_req_ready_q = vrf_wvalid_i;
 
-  `FF(coalesce_q, coalesce_d, '0)
-  `FF(coalesce_valid_q, coalesce_valid_d, '0)
+  // Ack when the vector store finishes, or when the load's write commits to the VRF
+  assign vlsu_rsp_o       = vrf_req_q.rsp_valid && vrf_req_valid_q ? vrf_req_q.rsp   : '{id: commit_insn_q.id, default: '0};
+  assign vlsu_rsp_valid_o = vrf_req_q.rsp_valid && vrf_req_valid_q ? vrf_req_ready_q : vlsu_finished_req && !commit_insn_q.is_load;
 
-  // The coalescing buffer is ready to commit when the accumulated byte-enable
-  // covers the full VRF word, or when this is the last write of the instruction.
-  // Force a commit when the next pending write targets a different VRF word address.
-  logic next_addr_different;
-  assign next_addr_different = coalesce_valid_q && vrf_req_valid_q &&
-                               (coalesce_q.waddr != vrf_req_q.waddr);
+  ///////////////////////////
+  // VD Read-Modify-Write  //
+  ///////////////////////////
+  //
+  // The VRF is ECC-protected at cut granularity: a write to a cut writes the
+  // full codeword whenever any byte-enable bit in that cut is set (see
+  // spatz_vrf_ecc.sv). A masked/narrow-element load's first write to a fresh
+  // destination word can therefore clobber bytes it doesn't actually touch,
+  // unless those bytes are explicitly merged in from the true old VRF value.
+  // This section reads back the old VD word (idle port 0 during loads) and
+  // merges it in, mirroring spatz_vfu.sv's VFU_RMW mechanism but scoped so it
+  // only ever engages for instructions that actually need it.
 
-  logic coalesce_commit;
-  assign coalesce_commit = coalesce_valid_q && (&coalesce_q.wbe || coalesce_q.rsp_valid || next_addr_different);
+  // Tracks whether the CURRENT destination word (vd_vreg_addr) has already
+  // been committed to once by this instruction. Mirrors spatz.sv's own
+  // vlsu_prev_waddr_q one stage earlier; since VLSU writes reach spatz.sv
+  // strictly in order (through the spill register below), the two always
+  // agree on "is this a new word" despite the time skew.
+  vrf_addr_t vd_prev_commit_waddr_q, vd_prev_commit_waddr_d;
+  logic      vd_prev_commit_valid_q, vd_prev_commit_valid_d;
+  `FF(vd_prev_commit_waddr_q, vd_prev_commit_waddr_d, '0)
+  `FF(vd_prev_commit_valid_q, vd_prev_commit_valid_d, 1'b0)
 
-  // Drive VRF outputs from the coalescing buffer, not the raw spill-register.
-  assign vrf_waddr_o = coalesce_q.waddr;
-  assign vrf_wdata_o = coalesce_q.wdata;
-  assign vrf_wbe_o   = coalesce_q.wbe;
-  assign vrf_we_o    = coalesce_commit;
-  assign vrf_id_o    = {coalesce_q.rsp.id, mem_spatz_req.id, commit_insn_q.id};
+  logic vd_is_new_word;
+  assign vd_is_new_word = !vd_prev_commit_valid_q || (vd_prev_commit_waddr_q != vd_vreg_addr);
 
-  // The spill register may be popped when the coalescing buffer can accept:
-  //   - buffer is empty, OR
-  //   - buffer is still accumulating (not yet commit-ready), OR
-  //   - buffer is committing this cycle (VRF accepting, freeing a slot)
-  assign vrf_req_ready_q = !coalesce_valid_q || !coalesce_commit || vrf_wvalid_i;
-
-  // Ack when the vector store finishes, or when the load's coalesced write commits to the VRF
-  assign vlsu_rsp_o       = coalesce_q.rsp_valid && coalesce_commit ? coalesce_q.rsp : '{id: commit_insn_q.id, default: '0};
-  assign vlsu_rsp_valid_o = coalesce_q.rsp_valid && coalesce_commit ? vrf_wvalid_i   : vlsu_finished_req && !commit_insn_q.is_load;
-
-  always_comb begin : coalesce_proc
-    coalesce_d       = coalesce_q;
-    coalesce_valid_d = coalesce_valid_q;
-
-    // When the VRF accepts the coalesced write, clear the buffer.
-    if (coalesce_commit && vrf_wvalid_i) begin
-      coalesce_d       = '0;
-      coalesce_valid_d = 1'b0;
+  always_comb begin
+    vd_prev_commit_waddr_d = vd_prev_commit_waddr_q;
+    vd_prev_commit_valid_d = vd_prev_commit_valid_q;
+    if (commit_insn_pop)
+      vd_prev_commit_valid_d = 1'b0; // next instruction's first word is "new"
+    else if (vrf_req_valid_d && vrf_req_ready_d && commit_insn_q.is_load) begin
+      vd_prev_commit_waddr_d = vd_vreg_addr;
+      vd_prev_commit_valid_d = 1'b1;
     end
-
-    // Accept a new partial write from the spill-register output.
-    if (vrf_req_valid_q && vrf_req_ready_q) begin
-      if (coalesce_valid_q && !(coalesce_commit && vrf_wvalid_i)) begin
-        // Merge into the existing accumulation (same VRF word in progress):
-        // OR the byte enables and splice in only the newly-valid data bytes.
-        for (int unsigned i = 0; i < N_FU*ELENB; i++)
-          if (vrf_req_q.wbe[i])
-            coalesce_d.wdata[8*i +: 8] = vrf_req_q.wdata[8*i +: 8];
-        coalesce_d.wbe = coalesce_d.wbe | vrf_req_q.wbe;
-        // Carry the rsp metadata from the last write of the instruction.
-        if (vrf_req_q.rsp_valid) begin
-          coalesce_d.rsp       = vrf_req_q.rsp;
-          coalesce_d.rsp_valid = 1'b1;
-        end
-      end else begin
-        // Buffer was empty or just committed — start a fresh accumulation.
-        coalesce_d.waddr     = vrf_req_q.waddr;
-        coalesce_d.wdata     = vrf_req_q.wdata;
-        coalesce_d.wbe       = vrf_req_q.wbe;
-        coalesce_d.rsp       = vrf_req_q.rsp;
-        coalesce_d.rsp_valid = vrf_req_q.rsp_valid;
-        coalesce_valid_d     = 1'b1;
-      end
-    end
-  end : coalesce_proc
+  end
 
   //////////////
   // Counters //
@@ -808,6 +830,96 @@ module spatz_vlsu
   end
 
   assign vd_elem_id = (commit_counter_q[0] > vreg_start_0) ? commit_counter_q[0] >> $clog2(ELENB) : commit_counter_q[N_FU-1] >> $clog2(ELENB);
+
+  // Does the current commit need an RMW merge against the true old VD word?
+  // Conservative superset of VFU's exact per-cut wbe!=0&&wbe!=all1 check:
+  // masked, OR single-element/narrow/strided/indexed/unaligned/vstart!=0, OR
+  // a genuinely-partial tail (fewer than ELENB bytes left in this cut).
+  // Computed only from signals already known before per-cut wbe is finalized,
+  // so it doesn't require restructuring the load/store commit always_comb.
+  logic [N_FU-1:0] commit_tail_partial;
+  for (genvar fu = 0; fu < N_FU; fu++) begin : gen_commit_tail_partial
+    assign commit_tail_partial[fu] = commit_operation_last[fu] && (commit_counter_delta[fu] != vlen_t'(ELENB));
+  end : gen_commit_tail_partial
+
+  logic vlsu_rmw_needed;
+  assign vlsu_rmw_needed = commit_insn_valid && commit_insn_q.is_load && (state_q == VLSU_RunningLoad) &&
+                            |commit_operation_valid && vd_is_new_word &&
+                            (!commit_insn_q.vm || commit_is_single_element_operation || |commit_tail_partial);
+
+  // Wait/capture sub-FSM: read back the old VD word via the otherwise-idle
+  // port 0 (VLSU_VD_RD) when RMW is needed, then hold the decoded result
+  // until this word's write has actually RETIRED (vrf_wvalid_i), not merely
+  // been accepted into the elastic spill register below — this prevents a
+  // second RMW-needing word's capture from clobbering the data still in use
+  // by the first word's in-flight write.
+  typedef enum logic { VLSU_LD_NORMAL, VLSU_LD_RMW } vlsu_ld_rmw_e;
+  vlsu_ld_rmw_e vlsu_ld_rmw_q, vlsu_ld_rmw_d;
+  `FF(vlsu_ld_rmw_q, vlsu_ld_rmw_d, VLSU_LD_NORMAL)
+
+  logic                 vd_rmw_valid_q,    vd_rmw_valid_d;
+  vrf_addr_t            vd_rmw_addr_q,     vd_rmw_addr_d;
+  logic [N_FU*ELEN-1:0] vd_rmw_data_q,     vd_rmw_data_d;
+  logic                 vd_rmw_inflight_q, vd_rmw_inflight_d;
+  `FF(vd_rmw_valid_q,    vd_rmw_valid_d,    1'b0)
+  `FF(vd_rmw_addr_q,     vd_rmw_addr_d,     '0)
+  `FF(vd_rmw_data_q,     vd_rmw_data_d,     '0)
+  `FF(vd_rmw_inflight_q, vd_rmw_inflight_d, 1'b0)
+
+  logic vlsu_rmw_have_data;
+  assign vlsu_rmw_have_data = vd_rmw_valid_q && (vd_rmw_addr_q == vd_vreg_addr);
+  logic vlsu_rmw_commit_now;
+  assign vlsu_rmw_commit_now = vlsu_rmw_needed && vlsu_rmw_have_data && !vd_rmw_inflight_q;
+
+  always_comb begin : vlsu_ld_rmw_fsm
+    vlsu_ld_rmw_d     = vlsu_ld_rmw_q;
+    vd_rmw_valid_d    = vd_rmw_valid_q;
+    vd_rmw_addr_d     = vd_rmw_addr_q;
+    vd_rmw_data_d     = vd_rmw_data_q;
+    vd_rmw_inflight_d = vd_rmw_inflight_q;
+
+    unique case (vlsu_ld_rmw_q)
+      VLSU_LD_NORMAL:
+        if (vlsu_rmw_needed && !vd_rmw_inflight_q && !vlsu_rmw_have_data)
+          vlsu_ld_rmw_d = VLSU_LD_RMW;
+      VLSU_LD_RMW:
+        // A masked instruction can flip state_q to VLSU_ReadingV0_t mid-wait
+        // (right after being recognized, before its first element commits),
+        // which redirects port 0's read address to the v0.t mask word — any
+        // vrf_rvalid_i[0] pulse seen then belongs to THAT read, not ours.
+        // Require state_q == VLSU_RunningLoad so we only ever accept a
+        // response that was actually addressed at vd_vreg_addr; otherwise
+        // just keep waiting (vrf_re_o[0] keeps re-requesting once the state
+        // returns to VLSU_RunningLoad).
+        if (vrf_rvalid_i[0] && (state_q == VLSU_RunningLoad)) begin
+          vd_rmw_valid_d = 1'b1;
+          vd_rmw_addr_d  = vd_vreg_addr;
+          vd_rmw_data_d  = vd_rdata_decoded;
+          vlsu_ld_rmw_d  = VLSU_LD_NORMAL;
+        end
+      default: vlsu_ld_rmw_d = VLSU_LD_NORMAL;
+    endcase
+
+    if (vlsu_rmw_commit_now && vrf_req_valid_d && vrf_req_ready_d)
+      vd_rmw_inflight_d = 1'b1;
+    if (vrf_wvalid_i && vd_rmw_inflight_q) begin
+      vd_rmw_inflight_d = 1'b0;
+      vd_rmw_valid_d    = 1'b0;
+    end
+  end : vlsu_ld_rmw_fsm
+
+`ifndef SYNTHESIS
+  logic [15:0] vlsu_rmw_wait_cycles_q;
+  `FFL(vlsu_rmw_wait_cycles_q, (vlsu_ld_rmw_q == VLSU_LD_RMW) ? (vlsu_rmw_wait_cycles_q + 16'd1) : 16'd0,
+       (vlsu_ld_rmw_q == VLSU_LD_RMW), 16'd0)
+  // Liveness canary: a repeat of the earlier read-port-starvation deadlock
+  // should show up here as an early, attributable warning instead of a
+  // silent full-sim hang.
+  always_ff @(posedge clk_i) begin
+    if (vlsu_rmw_wait_cycles_q == 16'd400)
+      $warning("[spatz_vlsu] VD RMW read-back has been waiting %0d cycles on VLSU_VD_RD possible read-port starvation against a higher-priority port", vlsu_rmw_wait_cycles_q);
+  end
+`endif
 
   for (genvar port = 0; port < NrMemPorts; port++) begin: gen_mem_counter_proc
     // The total amount of elements we have to work through
@@ -901,7 +1013,7 @@ module spatz_vlsu
 
   // Memory request signals
   id_t  [NrMemPorts-1:0]                   mem_req_id;
-  logic [NrMemPorts-1:0][MemDataWidth-1:0] mem_req_data;
+  logic [NrMemPorts-1:0][ELEN+7-1:0]      mem_req_data;
   logic [NrMemPorts-1:0]                   mem_req_svalid;
   logic [NrMemPorts-1:0][ELEN/8-1:0]       mem_req_strb;
   logic [NrMemPorts-1:0]                   mem_req_lvalid;
@@ -973,6 +1085,9 @@ module spatz_vlsu
   // Monitor the vm_wbe selected from vm_masking
   vrf_be_t vm_wbe;
 
+  // Final load-commit wbe before the RMW override (see vlsu_rmw_commit_now below)
+  vrf_be_t vrf_wbe_pre;
+
   // Select 8-bit masking for each port, before reordering according to rs1
   logic [NrMemPorts-1:0][ELEN/8-1:0] vm_wbe_store;
 
@@ -987,6 +1102,60 @@ module spatz_vlsu
       vm_wbe_store[port] = commit_insn_q.vm ? {ELENB{1'b1}} : vm_masking[mem_slice_base + port*ELENB +: ELENB];
     end
   end
+
+  // Load-side ECC decode/re-encode for byte-level data manipulation.
+  //
+  // rob_rdata stores a 39-bit ECC codeword. When the load commit path needs
+  // byte-level realignment, the codeword must not be rotated directly.
+  // Instead, decode to the 32-bit payload, realign the payload, and re-encode.
+  logic [NrMemPorts-1:0][ELEN-1:0]   load_rsp_data_decoded;
+  logic [NrMemPorts-1:0][ELEN-1:0]   load_rsp_data_aligned;
+  logic [NrMemPorts-1:0][ELEN+7-1:0] load_rsp_data_encoded;
+  logic [NrMemPorts-1:0]              load_rsp_sec_err, load_rsp_ded_err;
+
+  for (genvar port = 0; port < NrMemPorts; port++) begin : gen_load_rsp_ecc
+    hsiao_ecc_dec #(
+      .DataWidth(ELEN),
+      .ProtWidth(7)
+    ) i_load_rsp_ecc_dec (
+      .in        (rob_rdata[port]),
+      .out       (load_rsp_data_decoded[port]),
+      .syndrome_o(),
+      .err_o     ({load_rsp_ded_err[port], load_rsp_sec_err[port]})
+    );
+
+    hsiao_ecc_enc #(
+      .DataWidth(ELEN),
+      .ProtWidth(7)
+    ) i_load_rsp_ecc_enc (
+      .in  (load_rsp_data_aligned[port]),
+      .out (load_rsp_data_encoded[port])
+    );
+  end
+  assign vlsu_ld_sec_err_o = |load_rsp_sec_err;
+  assign vlsu_ld_ded_err_o = |load_rsp_ded_err;
+
+  // RMW merge: on the first write to a not-yet-touched word that needs it
+  // (masked / narrow-element / partial-tail commit), merge this write's new
+  // bytes with the captured pre-existing decoded VD codeword so bytes not
+  // covered by this write's byte-enable keep their true old value (RVV
+  // mask-undisturbed / tail-undisturbed) instead of being zeroed.
+  logic [NrMemPorts-1:0][ELEN-1:0]   vlsu_rmw_merged_payload;
+  logic [NrMemPorts-1:0][ELEN+7-1:0] vlsu_rmw_merged_enc;
+  for (genvar port = 0; port < NrMemPorts; port++) begin : gen_vlsu_rmw_merge_ecc
+    for (genvar b = 0; b < ELENB; b++) begin : gen_vlsu_rmw_merge_byte
+      assign vlsu_rmw_merged_payload[port][8*b +: 8] =
+        vrf_wbe_pre[ELENB*port + b] ? load_rsp_data_aligned[port][8*b +: 8]
+                                     : vd_rmw_data_q[ELEN*port + 8*b +: 8];
+    end : gen_vlsu_rmw_merge_byte
+    hsiao_ecc_enc #(
+      .DataWidth(ELEN),
+      .ProtWidth(7)
+    ) i_vlsu_rmw_merge_ecc_enc (
+      .in  (vlsu_rmw_merged_payload[port]),
+      .out (vlsu_rmw_merged_enc[port])
+    );
+  end : gen_vlsu_rmw_merge_ecc
 
   // verilator lint_off LATCH
   always_comb begin
@@ -1010,6 +1179,8 @@ module spatz_vlsu
     mem_req_lvalid = '0;
     mem_req_last   = '0;
 
+    load_rsp_data_aligned = load_rsp_data_decoded;
+
     // Propagate request ID
     vrf_req_d.rsp.id    = commit_insn_q.id;
     vrf_req_d.rsp_valid = commit_insn_valid && &commit_finished_d && mem_insn_finished_d[commit_insn_q.id];
@@ -1017,6 +1188,11 @@ module spatz_vlsu
     // Request indexes
     vrf_re_o[1] = (state_q == VLSU_ReadingV0_t)? 1'b1:mem_is_indexed; // for indexed load/store we need to read vs2
     if (state_q == VLSU_ReadingV0_t)
+      vrf_re_o[0] = 1'b1;
+    // RMW read-back of the old VD word (see vlsu_ld_rmw_fsm above); mutually
+    // exclusive with the V0.t/store uses of port 0 by construction, since
+    // vlsu_rmw_needed requires state_q == VLSU_RunningLoad.
+    if (vlsu_ld_rmw_q == VLSU_LD_RMW)
       vrf_re_o[0] = 1'b1;
 
     // Count which vs2 element we should load (indexed loads)
@@ -1032,9 +1208,17 @@ module spatz_vlsu
         // Enable write back to the VRF if we have a valid element in all buffers that still have to write something back.
         vrf_req_d.waddr = vd_vreg_addr;
         // rob_rvalid: data is in the rob ready to be written back to VRF
-        vrf_req_valid_d = &(rob_rvalid | ~mem_pending) && |mem_pending && (commit_insn_q.vm || v0_t_read_done);
+        // vlsu_rmw_needed: stall this word's commit until the old VD word has
+        // been read back and captured (vlsu_rmw_commit_now), so the RMW merge
+        // below has real data instead of corrupting untouched bytes.
+        vrf_req_valid_d = &(rob_rvalid | ~mem_pending) && |mem_pending && (commit_insn_q.vm || v0_t_read_done) &&
+                          (!vlsu_rmw_needed || vlsu_rmw_commit_now);
         for (int unsigned port = 0; port < NrMemPorts; port++) begin
-          automatic logic [63:0] data = rob_rdata[port];
+          // automatic logic [63:0] data = rob_rdata[port];
+          automatic logic [63:0] data;
+
+          data = '0;
+          data[ELEN-1:0] = load_rsp_data_decoded[port];
 
           // Shift data to correct position if we have an unaligned memory request
           if (MAXEW == EW_32)
@@ -1079,7 +1263,10 @@ module spatz_vlsu
                 3'b111: data  = {data[7:0], data[63:8]};
                 default: data = data;
               endcase
-          vrf_req_d.wdata[ELEN*port +: ELEN] = data;
+          // vrf_req_d.wdata[(ELEN+7)*port +: (ELEN+7)] = data[ELEN+7-1:0];
+          load_rsp_data_aligned[port] = data[ELEN-1:0];
+          vrf_req_d.wdata[(ELEN+7)*port +: (ELEN+7)] =
+            vlsu_rmw_commit_now ? vlsu_rmw_merged_enc[port] : load_rsp_data_encoded[port];
 
           // Create write byte enable mask for register file
           if (commit_counter_en[port])
@@ -1095,15 +1282,19 @@ module spatz_vlsu
 
               load_wbe[ELENB*port +: ELENB] = (mask << shift);
               vm_wbe = vm_masking[commit_slice_base +: VRFWordBWidth];
-              vrf_req_d.wbe = load_wbe & vm_wbe;
+              vrf_wbe_pre = load_wbe & vm_wbe;
             end
             else begin
               for (int unsigned k = 0; k < ELENB; k++) begin
                 load_wbe[ELENB*port+k] = (k < commit_counter_delta[port]);
-                vrf_req_d.wbe = load_wbe & (commit_insn_q.vm ? {VRFWordBWidth{1'b1}} : vm_masking[commit_slice_base +: VRFWordBWidth]);
+                vrf_wbe_pre = load_wbe & (commit_insn_q.vm ? {VRFWordBWidth{1'b1}} : vm_masking[commit_slice_base +: VRFWordBWidth]);
               end
             end
         end
+        // RMW override: force a full-word write when this commit merges in
+        // the old VD word, so spatz_vrf_ecc.sv's cut-granular write doesn't
+        // leave any byte only partially updated.
+        vrf_req_d.wbe = vlsu_rmw_commit_now ? {VRFWordBWidth{1'b1}} : vrf_wbe_pre;
       end
 
       for (int unsigned port = 0; port < NrMemPorts; port++) begin
@@ -1130,7 +1321,7 @@ module spatz_vlsu
         vrf_re_o[0] = 1'b1;
 
         for (int unsigned port = 0; port < NrMemPorts; port++) begin
-          rob_wdata[port]  = vrf_rdata_i[0][ELEN*port +: ELEN];
+          rob_wdata[port]  = vrf_rdata_ecc[0][(ELEN+7)*port +: (ELEN+7)];
           rob_wid[port]    = rob_id[port];
           rob_req_id[port] = vrf_rvalid_i[0] && (!mem_is_indexed || vrf_rvalid_i[1]);
           rob_push[port]   = rob_req_id[port];
@@ -1328,7 +1519,8 @@ module spatz_vlsu
     $error("[spatz_vlsu] The memory data width needs to be equal to %d.", ELEN);
 
   if (NrMemPorts != N_FU)
-    $error("[spatz_vlsu] The number of memory ports needs to be equal to the number of FUs.");
+    $error("[spatz_vlsu] The number of memory ports needs to be equal to the number of FUs. NrMemPorts=%0d, N_FU=%0d",
+         NrMemPorts, N_FU);
 
   if (NrMemPorts != 2**$clog2(NrMemPorts))
     $error("[spatz_vlsu] The NrMemPorts parameter needs to be a power of two");

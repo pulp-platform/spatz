@@ -20,8 +20,13 @@ module spatz_amo_shim
 #(
   /// Address width.
   parameter int unsigned AddrMemWidth = 32,
-  /// Word width.
+  /// Word width (AMO ALU data width; 32 or 64 bit).
   parameter int unsigned DataWidth    = 64,
+  /// Codeword width for ECC-protected TCDM (≥ DataWidth).
+  /// When ProtDataWidth > DataWidth the shim encodes AMO/SC results internally
+  /// and passes non-AMO codewords through unchanged. Set equal to DataWidth to
+  /// disable ECC mode (original behaviour).
+  parameter int unsigned ProtDataWidth = DataWidth,
   /// Core ID type.
   parameter int unsigned CoreIDWidth  = 1,
   /// Do not override. Derived parameter.
@@ -44,12 +49,13 @@ module spatz_amo_shim
   /// Request is a write. Must be `0` for AMOs.
   input   logic                     write_i,
   /// Data to write, second operand for AMOs.
-  input   logic [DataWidth-1:0]     wdata_i,
+  /// Must be a valid ProtDataWidth-wide ECC codeword when ProtDataWidth > DataWidth.
+  input   logic [ProtDataWidth-1:0] wdata_i,
   /// Write byte mask for AMOs. For AMOs the byte mask must
   /// be all `1` for the 32 bits which are read by the AMO.
   input   logic [StrbWidth-1:0]     wstrb_i,
   /// Read data, first operand for AMOs.
-  output  logic [DataWidth-1:0]     rdata_o,
+  output  logic [ProtDataWidth-1:0] rdata_o,
   /// Core making the request. Only valid if not a DMA transfer.
   /// This is needed for determining if the reservation should be
   /// killed or not.
@@ -64,14 +70,16 @@ module spatz_amo_shim
   output  logic [AddrMemWidth-1:0]  mem_add_o,
   /// 1: Store, 0: Load
   output  logic                     mem_wen_o,
-  /// Write data.
-  output  logic [DataWidth-1:0]     mem_wdata_o,
+  /// Write data (ProtDataWidth-wide codeword to SRAM).
+  output  logic [ProtDataWidth-1:0] mem_wdata_o,
   /// Byte enable.
   output  logic [StrbWidth-1:0]     mem_be_o,
-  /// Read data.
-  input   logic [DataWidth-1:0]     mem_rdata_i,
+  /// Read data (ProtDataWidth-wide codeword from SRAM).
+  input   logic [ProtDataWidth-1:0] mem_rdata_i,
   /// Status signal, AMO clashed with DMA transfer.
-  output  logic                     amo_conflict_o
+  output  logic                     amo_conflict_o,
+  // CMY: input grant signal from ecc_sram
+  input   logic                     ecc_sram_gnt_i
 );
 
   logic idx_q, idx_d;
@@ -82,10 +90,18 @@ module spatz_amo_shim
   logic sc_successful, sc_successful_q;
   logic sc_q;
 
+  // Declared here (before first use in assign rdata_o); driven by gen_prot_enc below.
+  localparam int unsigned ProtWidth = ProtDataWidth - DataWidth;
+  logic [ProtDataWidth-1:0] amo_result_cw;
+  logic [ProtDataWidth-1:0] sc_result_cw;
+  // DMA writes arrive without valid ECC parity (plain 32-bit data in wdata_i[31:0],
+  // garbage in wdata_i[38:32]).  Encode here so SRAM always receives a valid codeword.
+  logic [ProtDataWidth-1:0] dma_wdata_enc;
+
   typedef enum logic [1:0] {
     Idle, DoAMO, WriteBackAMO
   } state_e;
-  state_e state_q, state_d;
+  state_e state_q, state_d; // AMO access FSM
 
   typedef struct packed {
     /// Is the reservation valid.
@@ -106,7 +122,7 @@ module spatz_amo_shim
   logic                    core_ready;
   logic [AddrMemWidth-1:0] core_add;
   logic                    core_wen;
-  logic [DataWidth-1:0]    core_wdata;
+  logic [ProtDataWidth-1:0] core_wdata;
   logic [StrbWidth-1:0]    core_be;
   // Core got access to the memory port.
   logic                    core_arb_ready;
@@ -117,26 +133,26 @@ module spatz_amo_shim
   //  DMA has priority.
   always_comb begin
     mem_req_o = core_valid;
-    ready_o = core_ready;
+    ready_o = core_ready & ecc_sram_gnt_i;
     mem_add_o = core_add;
     mem_wen_o = core_wen;
     mem_wdata_o = core_wdata;
     mem_be_o = core_be;
-    core_arb_ready = 1'b1;
+    core_arb_ready = 1'b1 & ecc_sram_gnt_i;
 
     if (dma_access_i) begin
       mem_req_o = valid_i;
-      ready_o = 1'b1;
+      ready_o = 1'b1 & ecc_sram_gnt_i;
       mem_add_o = addr_i;
       mem_wen_o = write_i;
-      mem_wdata_o = wdata_i;
+      mem_wdata_o = dma_wdata_enc; // encode: DMA provides plain 32-bit data, not a codeword
       mem_be_o = wstrb_i;
-      core_arb_ready = 1'b0;
+      core_arb_ready = 1'b0 & ecc_sram_gnt_i;
     end
   end
 
   // In case of a SC we must forward SC result from the cycle earlier.
-  assign rdata_o = sc_q ? {DataWidth/32{31'h0,~sc_successful_q}} : mem_rdata_i;
+  assign rdata_o = sc_q ? sc_result_cw : mem_rdata_i;
   assign amo_conflict_o = dma_access_i & (state_q != Idle) & (addr_q == addr_i);
 
   // -----
@@ -202,7 +218,7 @@ module spatz_amo_shim
   assign operand_a = mem_rdata_i[32*idx_q+:32];
 
   always_comb begin
-    // pass-through by default
+    // pass-through by default (if it's not AMO access)
     core_valid = valid_i;
     core_ready = 1'b1;
     core_add = addr_i;
@@ -228,7 +244,7 @@ module spatz_amo_shim
         core_wen = 1'b1;
         core_add = addr_q;
         core_be = 'b1111 << (idx_q*4);
-        core_wdata = amo_result_q << (idx_q*32);
+        core_wdata = amo_result_cw;
         if (core_arb_ready) state_d = Idle;
       end
       default:;
@@ -279,12 +295,52 @@ module spatz_amo_shim
      endcase
    end
 
+  // -----------------------------------------------
+  // ECC encode for AMO write-back and SC result
+  // When ProtDataWidth > DataWidth (ECC mode), AMO results and SC status values must
+  // be re-encoded before writing to SRAM. Non-AMO codewords pass through unchanged.
+  // When ProtDataWidth == DataWidth (no ECC), fall through to identity assignments.
+  // -----------------------------------------------
+  if (ProtDataWidth > DataWidth) begin : gen_prot_enc
+    hsiao_ecc_enc #(
+      .DataWidth (DataWidth),
+      .ProtWidth (ProtWidth)
+    ) i_amo_result_enc (
+      .in  (amo_result_q),
+      .out (amo_result_cw)
+    );
+
+    hsiao_ecc_enc #(
+      .DataWidth (DataWidth),
+      .ProtWidth (ProtWidth)
+    ) i_sc_result_enc (
+      .in  ({{(DataWidth-1){1'b0}}, ~sc_successful_q}),
+      .out (sc_result_cw)
+    );
+
+    // DMA transfers plain 32-bit data; wdata_i[38:32] contains garbage bits from
+    // the wide-to-narrow bus extraction in mem_wide_narrow_mux (not valid ECC parity).
+    // Re-encode wdata_i[DataWidth-1:0] so SRAM always receives a valid codeword.
+    hsiao_ecc_enc #(
+      .DataWidth (DataWidth),
+      .ProtWidth (ProtWidth)
+    ) i_dma_wdata_enc (
+      .in  (wdata_i[DataWidth-1:0]),
+      .out (dma_wdata_enc)
+    );
+  end else begin : gen_no_prot
+    assign amo_result_cw = amo_result_q << (idx_q*32);
+    assign sc_result_cw  = {DataWidth/32{31'h0, ~sc_successful_q}};
+    assign dma_wdata_enc = wdata_i; // no ECC: pass through unchanged
+  end
+
   // ----------
   // Assertions
   // ----------
-  // Check that data width is legal (a power of two and at least 32 bit).
-  `ASSERT_INIT(DataWidthCheck,
-    DataWidth >= 32 &&  DataWidth <= 64 && 2**$clog2(DataWidth) == DataWidth)
+  // Check that data width is at least 32 bit and at most 64 bit.
+  `ASSERT_INIT(DataWidthCheck, DataWidth >= 32 && DataWidth <= 64)
+  // ECC mode (ProtDataWidth > DataWidth) is only supported for DataWidth=32.
+  `ASSERT_INIT(ProtDataWidthCheck, ProtDataWidth >= DataWidth && (ProtDataWidth == DataWidth || DataWidth == 32))
   // Make sure that write is never set for AMOs.
   `ASSERT(AMOWriteEnable, valid_i && !amo_i inside {AMONone} |-> !write_i)
   // Make sure DMA transfers are not AMOs.

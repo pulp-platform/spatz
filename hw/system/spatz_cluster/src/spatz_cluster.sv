@@ -37,6 +37,9 @@ module spatz_cluster
     parameter int                     unsigned               AxiUserWidth                       = 1,
     /// Width of narrow AXI port
     parameter int                     unsigned               NarrowAXIDataWidth                 = 64,
+    /// Width of ECC-protected TCDM data word (unprotected width + parity bits).
+    /// Default: spatz_pkg::DataWidth + 7 (Hsiao SEC-DED over 32-bit words).
+    parameter int                     unsigned               TCDMProtDataWidth                  = 39,
     /// Address from which to fetch the first instructions.
     parameter logic                            [31:0]        BootAddr                           = 32'h0,
     /// The total amount of cores.
@@ -162,7 +165,7 @@ module spatz_cluster
   localparam int unsigned NrSuperBanks      = NrBanks / BanksPerSuperBank;
 
   function automatic int unsigned get_tcdm_ports(int unsigned core);
-    return NumSpatzTCDMPorts[core] + 1;
+    return NumSpatzTCDMPorts[core] + 1; // one port per FPU lane (NumSpatzFPUs = 8) +1 Snitch scalar port
   endfunction
 
   function automatic int unsigned get_tcdm_port_offs(int unsigned core_idx);
@@ -235,6 +238,7 @@ module spatz_cluster
   typedef logic [AxiAddrWidth-1:0] addr_t;
   typedef logic [NarrowDataWidth-1:0] data_t;
   typedef logic [NarrowDataWidth/8-1:0] strb_t;
+  typedef logic [TCDMProtDataWidth-1:0] tcdm_data_t; // 39-bit ECC codeword for TCDM/SRAM
   typedef logic [AxiDataWidth-1:0] data_dma_t;
   typedef logic [AxiDataWidth/8-1:0] strb_dma_t;
   typedef logic [NarrowIdWidthIn-1:0] id_mst_t;
@@ -261,10 +265,10 @@ module spatz_cluster
 
   `REQRSP_TYPEDEF_ALL(reqrsp, addr_t, data_t, strb_t)
 
-  `MEM_TYPEDEF_ALL(mem, tcdm_mem_addr_t, data_t, strb_t, tcdm_user_t)
+  `MEM_TYPEDEF_ALL(mem, tcdm_mem_addr_t, tcdm_data_t, strb_t, tcdm_user_t)
   `MEM_TYPEDEF_ALL(mem_dma, tcdm_mem_addr_t, data_dma_t, strb_dma_t, logic)
 
-  `TCDM_TYPEDEF_ALL(tcdm, tcdm_addr_t, data_t, strb_t, tcdm_user_t)
+  `TCDM_TYPEDEF_ALL(tcdm, tcdm_addr_t, tcdm_data_t, strb_t, tcdm_user_t)
   `TCDM_TYPEDEF_ALL(tcdm_dma, tcdm_addr_t, data_dma_t, strb_dma_t, logic)
 
   `REG_BUS_TYPEDEF_ALL(reg, addr_t, data_t, strb_t)
@@ -397,6 +401,9 @@ module spatz_cluster
   // AXI Ports into TCDM (from SoC).
   tcdm_req_t axi_soc_req;
   tcdm_rsp_t axi_soc_rsp;
+  // Pre-shim wires: plain 32-bit data from i_axi_to_tcdm, before ECC encode/decode.
+  tcdm_req_t axi_soc_req_pre;
+  tcdm_rsp_t axi_soc_rsp_pre;
 
   tcdm_req_t [NrTCDMPortsCores-1:0] tcdm_req;
   tcdm_rsp_t [NrTCDMPortsCores-1:0] tcdm_rsp;
@@ -425,6 +432,74 @@ module spatz_cluster
   // 7. Misc. Wires.
   logic               icache_prefetch_enable;
   logic [NrCores-1:0] cl_interrupt;
+
+  // --------------
+  // Error Monitor
+  // --------------
+
+  localparam int NumTcdmBanks = NrSuperBanks * BanksPerSuperBank;
+  localparam int ErrorCounterWidth = 32;
+
+  logic err_monitor_clear;
+
+  logic [NrCores-1:0]  vrf_correctable_fault;
+  logic [NrCores-1:0]  vrf_uncorrectable_fault; // NrCores == NumVrfUnits
+
+  // Per-core whole-core TMR lockstep mismatch.
+  logic [NrCores-1:0]  core_tmr_fault;
+
+  logic [NumTcdmBanks-1:0] tcdm_rd_correctable_fault;
+  logic [NumTcdmBanks-1:0] tcdm_rd_uncorrectable_fault;
+
+  logic [NumTcdmBanks-1:0] tcdm_scrub_correctable_fault;
+  logic [NumTcdmBanks-1:0] tcdm_scrub_uncorrectable_fault;
+
+  logic [NrCores-1:0][ErrorCounterWidth-1:0]  vrf_correctable_count;
+  logic [NrCores-1:0][ErrorCounterWidth-1:0]  vrf_uncorrectable_count;
+
+  logic [NumTcdmBanks-1:0][ErrorCounterWidth-1:0] tcdm_rd_correctable_count;
+  logic [NumTcdmBanks-1:0][ErrorCounterWidth-1:0] tcdm_rd_uncorrectable_count;
+  logic [NumTcdmBanks-1:0][ErrorCounterWidth-1:0] tcdm_scrub_correctable_count;
+  logic [NumTcdmBanks-1:0][ErrorCounterWidth-1:0] tcdm_scrub_uncorrectable_count;
+
+  logic [NrCores-1:0][ErrorCounterWidth-1:0] core_tmr_fault_count;
+
+  spatz_fault_monitor #(
+  .NumVrfUnits  (NrCores),
+  .NumTcdmBanks    (NumTcdmBanks),
+  .NumCores        (NrCores),
+  .CounterWidth    (ErrorCounterWidth),
+  .SaturatingCount (1'b1)
+  ) i_err_monitor (
+  .clk_i  (clk_i                      ),
+  .rst_ni (rst_ni                     ),
+
+  // Tie to 1'b0 if no explicit clear is needed.
+  .clear_i (err_monitor_clear          ),
+
+  // Fault inputs.
+  // Expected to be one-cycle pulses.
+  .vrf_correctable_fault_i (vrf_correctable_fault),
+  .vrf_uncorrectable_fault_i (vrf_uncorrectable_fault),
+
+  .tcdm_rd_correctable_fault_i (tcdm_rd_correctable_fault),
+  .tcdm_rd_uncorrectable_fault_i (tcdm_rd_uncorrectable_fault),
+  .tcdm_scrub_correctable_fault_i (tcdm_scrub_correctable_fault),
+  .tcdm_scrub_uncorrectable_fault_i (tcdm_scrub_uncorrectable_fault),
+
+  .core_tmr_fault_i (core_tmr_fault),
+
+  // Per-source counters.
+  .vrf_correctable_count_o (vrf_correctable_count),
+  .vrf_uncorrectable_count_o(vrf_uncorrectable_count),
+
+  .tcdm_rd_correctable_count_o (tcdm_rd_correctable_count),
+  .tcdm_rd_uncorrectable_count_o (tcdm_rd_uncorrectable_count),
+  .tcdm_scrub_correctable_count_o (tcdm_scrub_correctable_count),
+  .tcdm_scrub_uncorrectable_count_o (tcdm_scrub_uncorrectable_count),
+
+  .core_tmr_fault_count_o (core_tmr_fault_count)
+);
 
   // -------------
   // DMA Subsystem
@@ -571,6 +646,12 @@ module spatz_cluster
   // ----------------
   // Memory Subsystem
   // ----------------
+  logic [NrSuperBanks-1:0] [BanksPerSuperBank-1:0] sram_rd_single_error;
+  logic [NrSuperBanks-1:0] [BanksPerSuperBank-1:0] sram_rd_multi_error;
+
+  logic [NrSuperBanks-1:0] [BanksPerSuperBank-1:0] sram_scrub_single_error;
+  logic [NrSuperBanks-1:0] [BanksPerSuperBank-1:0] sram_scrub_multi_error;
+
   for (genvar i = 0; i < NrSuperBanks; i++) begin : gen_tcdm_super_bank
 
     mem_req_t [BanksPerSuperBank-1:0] amo_req;
@@ -601,70 +682,119 @@ module spatz_cluster
       logic mem_cs, mem_wen;
       tcdm_mem_addr_t mem_add;
       strb_t mem_be;
-      data_t mem_rdata, mem_wdata;
+      tcdm_data_t mem_rdata;     // raw 39-bit codeword from SRAM
+      tcdm_data_t mem_wdata_enc; // 39-bit codeword to SRAM (direct from AMO shim)
+      tcdm_data_t amo_shim_rdata; // 39-bit read response from AMO shim
 
-      tc_sram_impl #(
+      // CMY: replace the SRAM to a ECC_enhanced version w/ inputECC---------------
+      logic ecc_sram_gnt;
+
+      // tc_sram_impl #(
+      //   .NumWords  (TCDMDepth),
+      //   .DataWidth (DataWidth),
+      //   .ByteWidth (8        ),
+      //   .NumPorts  (1        ),
+      //   .Latency   (1        )
+      // ) i_data_mem (
+      //   .clk_i   (clk_i       ),
+      //   .rst_ni  (rst_ni      ),
+      //   .impl_i  ('0          ),
+      //   .impl_o  (/* Unused */),
+      //   .req_i   (mem_cs      ),
+      //   .we_i    (mem_wen     ),
+      //   .addr_i  (mem_add     ),
+      //   .wdata_i (mem_wdata   ),
+      //   .be_i    (mem_be      ),
+      //   .rdata_o (mem_rdata   )
+      // );
+
+      // CMY：perodical scrub_trigger generator----
+      logic scrub_trigger;
+      scrub_timer #(.PERIOD(10_000_000)) i_scrub_timer (
+        .clk_i,
+        .rst_ni,
+        .scrub_trigger_o  (scrub_trigger)
+      );
+      //-------------------------------------------
+
+
+      ecc_sram #(
         .NumWords  (TCDMDepth),
-        .DataWidth (DataWidth),
-        .ByteWidth (8        ),
-        .NumPorts  (1        ),
-        .Latency   (1        )
-      ) i_data_mem (
+        .UnprotectedWidth (DataWidth),
+        .ProtectedWidth   (TCDMProtDataWidth),
+        .InputECC         (1),// 0: encode on input; 1: input is pre-encoded codeword
+        .NumRMWCuts       (0), // Number of cuts in the read-modify-write path
+        .SimInit          ("zeros"), // ("zeros", "ones", "random", "none")
+        .ByteWidth        (8)
+      ) i_ecc_sram (
         .clk_i   (clk_i       ),
         .rst_ni  (rst_ni      ),
-        .impl_i  ('0          ),
-        .impl_o  (/* Unused */),
+
+        .scrub_trigger_i  (scrub_trigger), // Set to 1'b0 to disable scrubber
+        .scrubber_fix_o   (sram_scrub_single_error[i][j]), // Pulse indicating a single-bit error was corrected by the scrubber
+        .scrub_uncorrectable_o  (sram_scrub_multi_error[i][j]), // Pulse indicating a multi-bit error was not corrected by the scrubber
+
+        .wdata_i (mem_wdata_enc),
+        .addr_i  (mem_add     ),
         .req_i   (mem_cs      ),
         .we_i    (mem_wen     ),
-        .addr_i  (mem_add     ),
-        .wdata_i (mem_wdata   ),
         .be_i    (mem_be      ),
-        .rdata_o (mem_rdata   )
-      );
+        .rdata_o (mem_rdata   ),
+        .gnt_o   (ecc_sram_gnt),
 
-      data_t amo_rdata_local;
-
-      // TODO(zarubaf): Share atomic units between mutltiple cuts
+        .single_error_o(sram_rd_single_error[i][j]),
+        .multi_error_o(sram_rd_multi_error[i][j])
+        );
+      // AMO shim: 39-bit native interface. Non-AMO codewords pass through unchanged;
+      // AMO/SC operations decode internally (via Hsiao systematic property on mem_rdata_i),
+      // apply the ALU, and re-encode the result before writing back to SRAM.
       spatz_amo_shim #(
-        .AddrMemWidth ( TCDMMemAddrWidth ),
-        .DataWidth    ( DataWidth        ),
-        .CoreIDWidth  ( CoreIDWidth      )
+        .AddrMemWidth  ( TCDMMemAddrWidth  ),
+        .DataWidth     ( DataWidth         ),  // 32-bit AMO ALU
+        .ProtDataWidth ( TCDMProtDataWidth ),  // 39-bit codeword I/O
+        .CoreIDWidth   ( CoreIDWidth       )
       ) i_amo_shim (
-        .clk_i          (clk_i                     ),
-        .rst_ni         (rst_ni                    ),
-        .valid_i        (amo_req[j].q_valid        ),
-        .ready_o        (amo_rsp[j].q_ready        ),
-        .addr_i         (amo_req[j].q.addr         ),
-        .write_i        (amo_req[j].q.write        ),
-        .wdata_i        (amo_req[j].q.data         ),
-        .wstrb_i        (amo_req[j].q.strb         ),
-        .core_id_i      (amo_req[j].q.user.core_id ),
-        .is_core_i      (amo_req[j].q.user.is_core ),
-        .rdata_o        (amo_rdata_local           ),
-        .amo_i          (amo_req[j].q.amo          ),
-        .mem_req_o      (mem_cs                    ),
-        .mem_add_o      (mem_add                   ),
-        .mem_wen_o      (mem_wen                   ),
-        .mem_wdata_o    (mem_wdata                 ),
-        .mem_be_o       (mem_be                    ),
-        .mem_rdata_i    (mem_rdata                 ),
-        .dma_access_i   (sb_dma_req[i].q_valid     ),
+        .clk_i          (clk_i                ),
+        .rst_ni         (rst_ni               ),
+        .valid_i        (amo_req[j].q_valid   ),
+        .ready_o        (amo_rsp[j].q_ready   ),
+        .addr_i         (amo_req[j].q.addr    ),
+        .write_i        (amo_req[j].q.write   ),
+        .wdata_i        (amo_req[j].q.data    ), // full 39-bit codeword (pre-encoded by requester)
+        .wstrb_i        (amo_req[j].q.strb    ),
+        .core_id_i      (amo_req[j].q.user.core_id),
+        .is_core_i      (amo_req[j].q.user.is_core),
+        .rdata_o        (amo_shim_rdata       ), // 39-bit codeword response
+        .amo_i          (amo_req[j].q.amo     ),
+        .mem_req_o      (mem_cs               ),
+        .mem_add_o      (mem_add              ),
+        .mem_wen_o      (mem_wen              ),
+        .mem_wdata_o    (mem_wdata_enc        ), // 39-bit codeword direct to SRAM
+        .mem_be_o       (mem_be               ),
+        .mem_rdata_i    (mem_rdata            ), // 39-bit codeword from SRAM
+        .dma_access_i   (sb_dma_req[i].q_valid),
         // TODO(zarubaf): Signal AMO conflict somewhere. Socregs?
-        .amo_conflict_o (/* Unused */              )
+        .amo_conflict_o (/* Unused */         ),
+        .ecc_sram_gnt_i (ecc_sram_gnt         )
       );
 
       // Insert a pipeline register at the output of each SRAM.
       shift_reg #(
-        .dtype(data_t                ),
+        .dtype(tcdm_data_t           ),
         .Depth(int'(RegisterTCDMCuts))
       ) i_sram_pipe (
-        .clk_i (clk_i            ),
-        .rst_ni(rst_ni           ),
-        .d_i   (amo_rdata_local  ),
-        .d_o   (amo_rsp[j].p.data)
+        .clk_i (clk_i              ),
+        .rst_ni(rst_ni             ),
+        .d_i   (amo_shim_rdata     ),
+        .d_o   (amo_rsp[j].p.data )
       );
     end
   end
+
+  assign tcdm_rd_correctable_fault = |sram_rd_single_error;
+  assign tcdm_rd_uncorrectable_fault = |sram_rd_multi_error;
+  assign tcdm_scrub_correctable_fault = |sram_scrub_single_error;
+  assign tcdm_scrub_uncorrectable_fault = |sram_scrub_multi_error;
 
   spatz_tcdm_interconnect #(
     .NumInp                (NumTCDMIn           ),
@@ -676,6 +806,7 @@ module spatz_cluster
     .mem_rsp_t             (mem_rsp_t           ),
     .MemAddrWidth          (TCDMMemAddrWidth    ),
     .DataWidth             (DataWidth           ),
+    .ProtDataWidth         (TCDMProtDataWidth   ),
     .user_t                (tcdm_user_t         ),
     .MemoryResponseLatency (1 + RegisterTCDMCuts),
     .AddrMisalign          (AddrMisalign      )
@@ -763,7 +894,9 @@ module spatz_cluster
         .RegisterOffloadRsp      (RegisterOffloadRsp         ),
         .RegisterCoreReq         (RegisterCoreReq            ),
         .RegisterCoreRsp         (RegisterCoreRsp            ),
-        .TCDMAddrWidth           (TCDMAddrWidth              )
+        .TCDMAddrWidth           (TCDMAddrWidth              ),
+        .TCDMDataWidth           (DataWidth                  ),  // spatz_pkg::DataWidth = 32
+        .TCDMProtDataWidth       (TCDMProtDataWidth          )   // 39-bit ECC codeword
       ) i_spatz_quadrilatero_cc (
         .clk_i            (clk_i                               ),
         .clk_d2_i         (clk_i                               ),
@@ -843,7 +976,9 @@ module spatz_cluster
         .RegisterOffloadRsp      (RegisterOffloadRsp         ),
         .RegisterCoreReq         (RegisterCoreReq            ),
         .RegisterCoreRsp         (RegisterCoreRsp            ),
-        .TCDMAddrWidth           (TCDMAddrWidth              )
+        .TCDMAddrWidth           (TCDMAddrWidth              ),
+        .TCDMDataWidth           (DataWidth                  ),  // spatz_pkg::DataWidth = 32
+        .TCDMProtDataWidth       (TCDMProtDataWidth          )   // 39-bit ECC codeword
       ) i_spatz_cc (
         .clk_i            (clk_i                               ),
         .clk_d2_i         (clk_i                               ),
@@ -863,7 +998,11 @@ module spatz_cluster
         .axi_dma_perf_o   (/* Unused */                        ),
         .axi_dma_events_o (dma_core_events                     ),
         .core_events_o    (core_events[i]                      ),
-        .tcdm_addr_base_i (tcdm_start_address                  )
+        .tcdm_addr_base_i (tcdm_start_address                  ),
+        // ECC VRF signals
+        .vrf_single_error_o (vrf_correctable_fault[i]  ),
+        .vrf_multi_error_o (vrf_uncorrectable_fault[i]),
+        .core_tmr_fault_o (core_tmr_fault[i])
       );
       for (genvar j = 0; j < TcdmPorts; j++) begin : gen_tcdm_user
         always_comb begin
@@ -875,7 +1014,6 @@ module spatz_cluster
       end
     end
 
-    if(i==1 &! spatz_pkg::QUADRILATERO) assign quad_tcdm_req = '0;
     if (Xdma[i]) begin : gen_dma_connection
       assign wide_axi_mst_req[SDMAMst] = axi_dma_req;
       assign axi_dma_res               = wide_axi_mst_rsp[SDMAMst];
@@ -884,6 +1022,8 @@ module spatz_cluster
       assign axi_dma_res = '0;
     end
   end
+
+  if (!spatz_pkg::QUADRILATERO) assign quad_tcdm_req = '0;
 
   for (genvar j = 0; j < NrTCDMPortsCores; j++) begin : gen_tcdm_signals
     stream_arbiter #(
@@ -1113,8 +1253,25 @@ module spatz_cluster
     .rst_ni     (rst_ni                  ),
     .axi_req_i  (narrow_axi_slv_req[TCDM]),
     .axi_rsp_o  (narrow_axi_slv_rsp[TCDM]),
-    .tcdm_req_o (axi_soc_req             ),
-    .tcdm_rsp_i (axi_soc_rsp             )
+    .tcdm_req_o (axi_soc_req_pre         ),
+    .tcdm_rsp_i (axi_soc_rsp_pre        )
+  );
+
+  // ECC encode/decode shim between i_axi_to_tcdm (32-bit) and i_tcdm_interconnect (39-bit).
+  // Full-word writes are encoded; reads are decoded back to 32-bit for the AXI side.
+  // Partial writes (byte/halfword) trigger an internal RMW to preserve ECC validity.
+  spatz_tcdm_ecc_shim #(
+    .DataWidth     (DataWidth         ),
+    .ProtDataWidth (TCDMProtDataWidth ),
+    .tcdm_req_t    (tcdm_req_t        ),
+    .tcdm_rsp_t    (tcdm_rsp_t        )
+  ) i_tcdm_ecc_shim (
+    .clk_i     (clk_i          ),
+    .rst_ni    (rst_ni         ),
+    .in_req_i  (axi_soc_req_pre),
+    .in_rsp_o  (axi_soc_rsp_pre),
+    .out_req_o (axi_soc_req    ),
+    .out_rsp_i (axi_soc_rsp    )
   );
 
   // 2. Peripherals
@@ -1162,7 +1319,16 @@ module spatz_cluster
     .tcdm_events_i            (tcdm_events           ),
     .dma_events_i             (dma_events            ),
     .icache_events_i          (icache_events         ),
-    .cluster_probe_o          (cluster_probe_o       )
+    .cluster_probe_o          (cluster_probe_o       ),
+    // Error monitor
+    .err_monitor_clear_o              (err_monitor_clear              ),
+    .vrf_correctable_count_i          (vrf_correctable_count          ),
+    .vrf_uncorrectable_count_i        (vrf_uncorrectable_count        ),
+    .tcdm_rd_correctable_count_i      (tcdm_rd_correctable_count      ),
+    .tcdm_rd_uncorrectable_count_i    (tcdm_rd_uncorrectable_count    ),
+    .tcdm_scrub_correctable_count_i   (tcdm_scrub_correctable_count   ),
+    .tcdm_scrub_uncorrectable_count_i (tcdm_scrub_uncorrectable_count ),
+    .core_tmr_fault_count_i           (core_tmr_fault_count           )
   );
 
   // 3. BootROM
