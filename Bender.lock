@@ -94,7 +94,7 @@ packages:
     revision: 5464da3f7a90fb20e7b9bba8b7cb840b1f2e559c
     version: null
     source:
-      Git: git@iis-git.ee.ethz.ch:quadrilatero/quadrilatero.git
+      Git: https://iis-git.ee.ethz.ch/quadrilatero/quadrilatero.git
     dependencies:
     - common_cells
     - fpnew
