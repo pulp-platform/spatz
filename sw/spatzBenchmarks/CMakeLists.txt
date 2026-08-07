@@ -117,12 +117,6 @@ endif()
 add_library(sp-fmatmul sp-fmatmul/kernel/sp-fmatmul.c)
 add_library(hp-fmatmul hp-fmatmul/kernel/hp-fmatmul.c)
 
-# FP8
-add_library(bp-fmatmul bp-fmatmul/kernel/bp-fmatmul.c)
-
-# BP16
-add_library(bp16-fmatmul bp16-fmatmul/kernel/bp16-fmatmul.c)
-
 add_library(widening-hp-fmatmul widening-hp-fmatmul/kernel/widening-fmatmul.c)
 add_library(widening-bp-fmatmul widening-bp-fmatmul/kernel/widening-fmatmul.c)
 
@@ -160,25 +154,6 @@ add_spatz_test_threeParam(sp-fmatmul sp-fmatmul/main.c 64  128 64 )
 add_spatz_test_threeParam(hp-fmatmul hp-fmatmul/main.c 64  64  64 )
 add_spatz_test_threeParam(hp-fmatmul hp-fmatmul/main.c 64  128 64 )
 add_spatz_test_threeParam(hp-fmatmul hp-fmatmul/main.c 128 128 128)
-
-# FP8
-# Excluded from CI: script/*.json data-gen configs for these sizes aren't committed
-# (see sw/spatzBenchmarks/.gitignore's */data/data*.h rule).
-# add_spatz_test_threeParam(bp-fmatmul bp-fmatmul/main.c 32  32  32 )
-# add_spatz_test_threeParam(bp-fmatmul bp-fmatmul/main.c 64  64 64 )
-# add_spatz_test_threeParam(bp-fmatmul bp-fmatmul/main.c 128 128 128)
-
-# FP8-Alt
-# Excluded from CI: same reason as FP8 above.
-# add_spatz_test_threeParam(bpAlt-fmatmul bpAlt-fmatmul/main.c 32  32  32 )
-# add_spatz_test_threeParam(bpAlt-fmatmul bpAlt-fmatmul/main.c 64  64 64 )
-# add_spatz_test_threeParam(bpAlt-fmatmul bpAlt-fmatmul/main.c 128 128 128)
-
-# BP16
-# Excluded from CI: same reason as FP8 above (script/gen_data.py itself isn't committed either).
-# add_spatz_test_threeParam(bp16-fmatmul bp16-fmatmul/main.c 8   8  8 )
-# add_spatz_test_threeParam(bp16-fmatmul bp16-fmatmul/main.c 64  64 64 )
-# add_spatz_test_threeParam(bp16-fmatmul bp16-fmatmul/main.c 128 128 128)
 
 add_spatz_test_threeParam(widening-hp-fmatmul widening-hp-fmatmul/main.c 64  64  64 )
 add_spatz_test_threeParam(widening-hp-fmatmul widening-hp-fmatmul/main.c 64  128 64 )

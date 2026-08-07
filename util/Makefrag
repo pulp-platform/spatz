@@ -24,9 +24,8 @@ VERILATOR_INSTALL_DIR ?= ${INSTALL_DIR}/verilator
 BENDER ?= ${BENDER_INSTALL_DIR}/bender
 DASM   ?= ${SPIKE_INSTALL_DIR}/bin/spike-dasm
 VLT    ?= ${VERILATOR_INSTALL_DIR}/bin/verilator_bin
-# CMAKE  ?= cmake-3.18.1
 CMAKE  ?= cmake
-PYTHON ?= python3.6
+PYTHON ?= python3
 CC     ?= gcc-11.2.0
 CXX    ?= g++-11.2.0
 
@@ -83,7 +82,7 @@ all:
 # Eventually it could be an option to package this statically using musl libc.
 work/${FESVR_VERSION}_unzip:
 	mkdir -p $(dir $@)
-	wget -O $(dir $@)/${FESVR_VERSION} https://github.com/riscv/riscv-isa-sim/tarball/${FESVR_VERSION}
+	curl -fL -o $(dir $@)/${FESVR_VERSION} https://github.com/riscv/riscv-isa-sim/tarball/${FESVR_VERSION}
 	tar xfm $(dir $@)${FESVR_VERSION} --strip-components=1 -C $(dir $@)
 	touch $@
 
@@ -103,7 +102,7 @@ work/lib/libfesvr_vcs.a: work/${FESVR_VERSION}_unzip
 # and libraries than modelsim/vcs and
 $(VLT_FESVR)/${FESVR_VERSION}_unzip:
 	mkdir -p $(dir $@)
-	wget -O $(dir $@)/${FESVR_VERSION} https://github.com/riscv/riscv-isa-sim/tarball/${FESVR_VERSION}
+	curl -fL -o $(dir $@)/${FESVR_VERSION} https://github.com/riscv/riscv-isa-sim/tarball/${FESVR_VERSION}
 	tar xfm $(dir $@)${FESVR_VERSION} --strip-components=1 -C $(dir $@)
 	touch $@
 
@@ -153,11 +152,7 @@ endef
 #######
 work-vcs/compile.sh: ${VSIM_SOURCES} ${TB_SRCS}
 	mkdir -p work-vcs
-	# hmr_unit.sv is pulled in unconditionally by the redundancy_cells dependency
-	# (no Bender target gates it) but is never instantiated in this design; its
-	# `core_in_tmr[i]` generate-if condition is not elaboration-constant, which
-	# vlogan rejects even though the module is dead code. Drop it from the compile list.
-	${BENDER} script vcs ${VSIM_BENDER} ${DEFS} --vlog-arg="${VLOGAN_FLAGS}" --vcom-arg="${VHDLAN_FLAGS}" | grep -v 'HMR/hmr_unit\.sv' > $@
+	${BENDER} script vcs ${VSIM_BENDER} ${DEFS} --vlog-arg="${VLOGAN_FLAGS}" --vcom-arg="${VHDLAN_FLAGS}" > $@
 	chmod +x $@
 	$@ | tee work-vcs/compile.log
 
