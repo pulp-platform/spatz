@@ -66,6 +66,13 @@ module spatz_vfu
 
     // Is this a reduction?
     logic reduction;
+    // Is this a comparison?
+    logic is_cmp;
+    vlen_t vl;
+    // Is this instruction unmasked?
+    logic vm;
+    // Is this merge instruction?
+    logic merge;
     // valid bytes in this VRF word
     logic [$clog2(VRFWordBWidth+1)-1:0] valid_bytes;
   } vfu_tag_t;
@@ -784,7 +791,7 @@ module spatz_vfu
         word_issued = spatz_req_valid && &(in_ready | ~valid_operations) && operands_ready && !stall;
 
         // Are we ready to accept a result?
-        result_ready = &(result_valid | ~pending_results) && ((result_tag.wb && vfu_rsp_ready_i) || vrf_wvalid_i || (spatz_req.op == VFCMP && !result_tag.last));
+        result_ready = &(result_valid | ~pending_results) && ((result_tag.wb && vfu_rsp_ready_i) || vrf_wvalid_i || (result_tag.is_cmp && !result_tag.last));
 
         // Initialize the pointers
         reduction_pointer_d = '0;
@@ -1072,6 +1079,10 @@ module spatz_vfu
   vrf_addr_t [2:0] vreg_addr_q, vreg_addr_d;
   `FF(vreg_addr_q, vreg_addr_d, '0)
 
+  // The signal to choose comparison instructions  
+  logic is_cmp_req;
+  assign is_cmp_req = (spatz_req.op == VFCMP) || spatz_req.op inside {VMSEQ, VMSNE, VMSLT, VMSLTU, VMSLE, VMSLEU, VMSGT, VMSGTU};
+
   // Calculate new vector register address
   always_comb begin : vreg_addr_proc
     vreg_addr_d = vreg_addr_q;
@@ -1090,6 +1101,10 @@ module spatz_vfu
       narrowing      : spatz_req.op_arith.is_narrowing,
       narrowing_upper: narrowing_upper_q,
       reduction      : spatz_req.op_arith.is_reduction,
+      is_cmp         : is_cmp_req,
+      vl             : spatz_req.vl,
+      vm             : spatz_req.op_arith.vm,
+      merge          : (spatz_req.op == VMERGE),
       valid_bytes    : valid_bytes_wr // count of the number of valid bytes in the VRF word (write side)
     };
 
@@ -1119,12 +1134,12 @@ module spatz_vfu
           if (word_issued) begin
             vreg_addr_d[0] = vreg_addr_d[0] + (!spatz_req.op_arith.widen_vs2 || widening_upper_q);
             vreg_addr_d[1] = vreg_addr_d[1] + (!spatz_req.op_arith.widen_vs1 || widening_upper_q);
-            vreg_addr_d[2] = vreg_addr_d[2] + (!spatz_req.op_arith.is_reduction && (!spatz_req.op_arith.is_narrowing || narrowing_upper_q) && (spatz_req.op != VFCMP));
+            vreg_addr_d[2] = vreg_addr_d[2] + (!spatz_req.op_arith.is_reduction && (!spatz_req.op_arith.is_narrowing || narrowing_upper_q) && !is_cmp_req);
           end
           end else if (spatz_req_valid && vl_q < spatz_req.vl && word_issued) begin
             vreg_addr_d[0] = vreg_addr_q[0] + (!spatz_req.op_arith.widen_vs2 || widening_upper_q);
             vreg_addr_d[1] = vreg_addr_q[1] + (!spatz_req.op_arith.widen_vs1 || widening_upper_q);
-            vreg_addr_d[2] = vreg_addr_q[2] + (!spatz_req.op_arith.is_reduction && (!spatz_req.op_arith.is_narrowing || narrowing_upper_q) && (spatz_req.op != VFCMP));
+            vreg_addr_d[2] = vreg_addr_q[2] + (!spatz_req.op_arith.is_reduction && (!spatz_req.op_arith.is_narrowing || narrowing_upper_q) && !is_cmp_req);
           end
         end
        end
@@ -1158,7 +1173,7 @@ module spatz_vfu
     // Got a new result
     if (&(result_valid | ~pending_results) && !result_tag.reduction) begin
       vreg_we  = !result_tag.wb;
-      if (spatz_req.op == VFCMP) begin
+      if (result_tag.is_cmp) begin
         vreg_we    = result_tag.last;
       end
     end
@@ -1175,7 +1190,7 @@ module spatz_vfu
  vew_e sew_wb;
  logic widening_wb;
  assign widening_wb = spatz_req.op_arith.widen_vs1 || spatz_req.op_arith.widen_vs2;
- assign sew_wb = vew_e'(int'(spatz_req.vtype.vsew) + widening_wb);
+ assign sew_wb = vew_e'(int'(result_tag.vsew) + widening_wb);
 
  vrf_be_t       vreg_wbe_pre;
  logic [VRFWordBWidth-1:0] tail_wbe_eff;
@@ -1200,17 +1215,17 @@ always_comb begin : vreg_wbe_proc
 
     if ((result_tag.last && &(result_valid | ~pending_results) && (reduction_state_q inside {Reduction_NormalExecution, Reduction_Wait})) || reduction_done)
       vreg_wb_word_cnt_d = 0;
-    else if (&(result_valid | ~pending_results) && (!spatz_req.op_arith.is_narrowing || result_tag.narrowing_upper))
+    else if (&(result_valid | ~pending_results) && (!result_tag.narrowing || result_tag.narrowing_upper))
       vreg_wb_word_cnt_d = vreg_wb_word_cnt_q + 1;
     // Got a new result
     if (&(result_valid | ~pending_results) && !result_tag.reduction) begin
       vreg_wbe = '1;
-      if (spatz_req.op == VFCMP) begin
+      if (result_tag.is_cmp) begin
         // every vector element requires 1 bit of wbe --> ceil(vl/8)
         automatic logic [$clog2((MAXVL+7)/8+1)-1:0] mask_bytes;
-        mask_bytes = (spatz_req.vl + 7) >> 3;
+        mask_bytes = (result_tag.vl + 7) >> 3;
         vreg_wbe   = (mask_bytes >= N_FU*ELENB) ? '1 : vrf_be_t'((vrf_be_t'(1) << mask_bytes) - 1);
-      end else if(!spatz_req.op_arith.vm && !spatz_req.op_arith.is_scalar && !result_tag.narrowing) begin //masking the wb results
+      end else if(!result_tag.vm && !result_tag.merge && !spatz_req.op_arith.is_scalar && !result_tag.narrowing) begin //masking the wb results
         unique case (sew_wb) // add widening support
           EW_8:for(int i=0;i<VRFWordBWidth;i=i+1)begin
             vreg_wbe[i*1+:1] = {1{operand_v0_t_q[vreg_wb_word_cnt_q * VRFWordBWidth + i]}};
@@ -1227,7 +1242,7 @@ always_comb begin : vreg_wbe_proc
         endcase
         vreg_wbe &= tail_wbe_eff; // tail-undisturbed + masking (v0.t)
       end else if(result_tag.narrowing) begin
-        if(!spatz_req.op_arith.vm && !spatz_req.op_arith.is_scalar) begin
+        if(!result_tag.vm && !spatz_req.op_arith.is_scalar) begin
           unique case (sew_wb)
             EW_16:for(int i=0;i<VRFWordBWidth/2;i=i+1)begin
               vreg_wbe_pre[i*2+:2] = {2{operand_v0_t_q[vreg_wb_word_cnt_q * (VRFWordBWidth/2) + i]}};
@@ -1263,11 +1278,11 @@ always_comb begin : vreg_wbe_proc
 end:vreg_wbe_proc
 
 logic vfcmp_result_accepted;
-assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pending_results) && result_ready;
+assign vfcmp_result_accepted = result_tag.is_cmp && &(result_valid | ~pending_results) && result_ready;
 
   always_comb begin : VRF_cnt_proc
     word_idx_d = word_idx_q;
-    if (spatz_req.op != VFCMP)
+    if (!result_tag.is_cmp)
       word_idx_d = '0;
     else if (vfcmp_result_accepted) begin
       if (result_tag.last)
@@ -1297,32 +1312,32 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
         default:;
       endcase
 
-    end else if (spatz_req.op == VFCMP) begin
+    end else if (result_tag.is_cmp) begin
       automatic logic v0_bit;
       vreg_wdata = '0;
 
-      unique case (spatz_req.vtype.vsew)
+      unique case (result_tag.vsew)
         EW_8: begin
           for (int i = 0; i < VRFWordWidth/8; i++) begin
-            v0_bit = (spatz_req.op_arith.vm) ? 1'b1 : operand_v0_t_q[i + (VRFWordWidth/8)*word_idx_q];
+            v0_bit = (result_tag.vm) ? 1'b1 : operand_v0_t_q[i + (VRFWordWidth/8)*word_idx_q];
             vreg_wdata[i + (VRFWordWidth/8)*word_idx_q] = result[i*8] & v0_bit;
           end
         end
         EW_16: begin
           for (int i = 0; i < VRFWordWidth/16; i++) begin
-            v0_bit = (spatz_req.op_arith.vm) ? 1'b1 : operand_v0_t_q[i + (VRFWordWidth/16)*word_idx_q];
+            v0_bit = (result_tag.vm) ? 1'b1 : operand_v0_t_q[i + (VRFWordWidth/16)*word_idx_q];
             vreg_wdata[i + (VRFWordWidth/16)*word_idx_q] = result[i*16] & v0_bit;
           end
         end
         EW_32: begin
           for (int i = 0; i < VRFWordWidth/32; i++) begin
-            v0_bit = (spatz_req.op_arith.vm) ? 1'b1 : operand_v0_t_q[i + (VRFWordWidth/32)*word_idx_q];
+            v0_bit = (result_tag.vm) ? 1'b1 : operand_v0_t_q[i + (VRFWordWidth/32)*word_idx_q];
             vreg_wdata[i + (VRFWordWidth/32)*word_idx_q] = result[i*32] & v0_bit;
           end
         end
         EW_64: begin
           for (int i = 0; i < VRFWordWidth/64; i++) begin
-            v0_bit = (spatz_req.op_arith.vm) ? 1'b1 : operand_v0_t_q[i + (VRFWordWidth/64)*word_idx_q];
+            v0_bit = (result_tag.vm) ? 1'b1 : operand_v0_t_q[i + (VRFWordWidth/64)*word_idx_q];
             vreg_wdata[i + (VRFWordWidth/64)*word_idx_q] = result[i*64] & v0_bit;
           end
         end
@@ -1333,7 +1348,7 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
 
   always_comb begin : wdata_proc
     wdata_d = wdata_q;
-    if (spatz_req.op != VFCMP) begin
+    if (!result_tag.is_cmp) begin
       wdata_d = '0;
     end else if (vfcmp_result_accepted) begin
       if (result_tag.last)
@@ -1349,7 +1364,7 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
   assign vrf_re_o    = vreg_r_req;
   assign vrf_we_o    = vreg_we;
   assign vrf_wbe_o   = vreg_wbe;
-  assign vrf_wdata_o = (spatz_req.op == VFCMP) ? (wdata_q | vreg_wdata) : vreg_wdata;
+  assign vrf_wdata_o = result_tag.is_cmp ? (wdata_q | vreg_wdata) : vreg_wdata;
   assign vrf_id_o    = {result_tag.id, {3{spatz_req.id}}};
 
   //////////
