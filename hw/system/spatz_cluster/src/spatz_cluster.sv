@@ -686,29 +686,10 @@ module spatz_cluster
       tcdm_data_t mem_wdata_enc; // 39-bit codeword to SRAM (direct from AMO shim)
       tcdm_data_t amo_shim_rdata; // 39-bit read response from AMO shim
 
-      // CMY: replace the SRAM to a ECC_enhanced version w/ inputECC---------------
+      // replace the SRAM to a ECC_enhanced version w/ inputECC---------------
       logic ecc_sram_gnt;
 
-      // tc_sram_impl #(
-      //   .NumWords  (TCDMDepth),
-      //   .DataWidth (DataWidth),
-      //   .ByteWidth (8        ),
-      //   .NumPorts  (1        ),
-      //   .Latency   (1        )
-      // ) i_data_mem (
-      //   .clk_i   (clk_i       ),
-      //   .rst_ni  (rst_ni      ),
-      //   .impl_i  ('0          ),
-      //   .impl_o  (/* Unused */),
-      //   .req_i   (mem_cs      ),
-      //   .we_i    (mem_wen     ),
-      //   .addr_i  (mem_add     ),
-      //   .wdata_i (mem_wdata   ),
-      //   .be_i    (mem_be      ),
-      //   .rdata_o (mem_rdata   )
-      // );
-
-      // CMY：perodical scrub_trigger generator----
+      // perodical scrub_trigger generator----
       logic scrub_trigger;
       scrub_timer #(.PERIOD(10_000_000)) i_scrub_timer (
         .clk_i,
@@ -786,7 +767,7 @@ module spatz_cluster
         .clk_i (clk_i              ),
         .rst_ni(rst_ni             ),
         .d_i   (amo_shim_rdata     ),
-        .d_o   (amo_rsp[j].p.data )
+        .d_o   (amo_rsp[j].p.data  )
       );
     end
   end
@@ -1303,6 +1284,7 @@ module spatz_cluster
     .reg_rsp_t     (reg_rsp_t     ),
     .tcdm_events_t (tcdm_events_t ),
     .dma_events_t  (dma_events_t  ),
+    .NumTcdmBanks  (NumTcdmBanks  ),
     .NrCores       (NrCores       )
   ) i_snitch_cluster_peripheral (
     .clk_i                    (clk_i                 ),

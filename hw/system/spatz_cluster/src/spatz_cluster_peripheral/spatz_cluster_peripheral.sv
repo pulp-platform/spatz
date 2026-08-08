@@ -16,6 +16,7 @@ module spatz_cluster_peripheral
   parameter type reg_rsp_t = logic,
   parameter type         tcdm_events_t = logic,
   parameter type         dma_events_t = logic,
+  parameter int unsigned NumTcdmBanks = 1,
   // Nr of course in the cluster
   parameter logic [31:0] NrCores       = 0,
   /// Derived parameter *Do not override*
@@ -39,7 +40,7 @@ module spatz_cluster_peripheral
   input  snitch_icache_pkg::icache_l0_events_t [NrCores-1:0] icache_events_i,
 
   // Error monitor interface
-  output logic                                             err_monitor_clear_o,
+  output logic                                            err_monitor_clear_o,
   input  logic [NumVrfUnits-1:0][31:0]                    vrf_correctable_count_i,
   input  logic [NumVrfUnits-1:0][31:0]                    vrf_uncorrectable_count_i,
   input  logic [NumTcdmBanks-1:0][31:0]                   tcdm_rd_correctable_count_i,

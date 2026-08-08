@@ -235,7 +235,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   // VRF //
   /////////
 
-  localparam int unsigned CWWidth = ELEN + 7; // 39-bit SECDED codeword per FU slice
+  localparam int unsigned CWWidth = ELEN + 7;
 
   // Write ports
   vrf_addr_t [NrWritePorts-1:0] vrf_waddr, vrf_waddr_buf;
@@ -301,7 +301,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     .testmode_i      (testmode_i     ),
     // Write Ports
     .waddr_i         (vrf_waddr_buf  ),
-    .wdata_i         (vrf_wdata_ecc   ),
+    .wdata_i         (vrf_wdata_ecc  ),
     .we_i            (vrf_we         ),
     .wbe_i           (vrf_wbe_buf    ),
     .wvalid_o        (vrf_wvalid     ),
@@ -631,8 +631,6 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   // VLSU //
   //////////
 
-
-
 `ifdef DOUBLE_BW
   spatz_doublebw_vlsu #(
     .NrMemPorts      (NrMemPorts      ),
@@ -689,7 +687,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     .vlsu_rsp_o              (vlsu_rsp                                             ),
     // VRF
     .vrf_waddr_o             (vrf_waddr[VLSU_VD_WD]                                         ),
-    .vrf_wdata_ecc_o         (vlsu_wdata_ecc_raw                                              ),
+    .vrf_wdata_ecc_o         (vlsu_wdata_ecc_raw                                            ),
     .vrf_we_o                (sb_we[VLSU_VD_WD]                                             ),
     .vrf_wbe_o               (vrf_wbe[VLSU_VD_WD]                                           ),
     .vrf_wvalid_i            (vrf_wvalid[VLSU_VD_WD]                                        ),
@@ -706,10 +704,10 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     .spatz_mem_rsp_valid_i   (spatz_mem_rsp_valid_i                                ),
     .spatz_mem_finished_o    (spatz_mem_finished                                   ),
     .spatz_mem_str_finished_o(spatz_mem_str_finished                               ),
-    .vlsu_vs2_sec_err_o      (dec_sec_err[VLSU_VS2_RD]                            ),
-    .vlsu_vs2_ded_err_o      (dec_ded_err[VLSU_VS2_RD]                            ),
-    .vlsu_ld_sec_err_o       (vlsu_ld_sec_err                                     ),
-    .vlsu_ld_ded_err_o       (vlsu_ld_ded_err                                     )
+    .vlsu_vs2_sec_err_o      (dec_sec_err[VLSU_VS2_RD]                             ),
+    .vlsu_vs2_ded_err_o      (dec_ded_err[VLSU_VS2_RD]                             ),
+    .vlsu_ld_sec_err_o       (vlsu_ld_sec_err                                      ),
+    .vlsu_ld_ded_err_o       (vlsu_ld_ded_err                                      )
   );
 `endif
 

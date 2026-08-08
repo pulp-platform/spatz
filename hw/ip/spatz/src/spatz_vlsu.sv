@@ -40,7 +40,7 @@ module spatz_vlsu
     output spatz_id_t      [2:0]            vrf_id_o,
     output vrf_addr_t      [1:0]            vrf_raddr_o,
     output logic           [1:0]            vrf_re_o,
-    input  logic [1:0][N_FU*(ELEN+7)-1:0]  vrf_rdata_ecc,
+    input  logic [1:0][N_FU*(ELEN+7)-1:0]   vrf_rdata_ecc,
     input  logic           [1:0]            vrf_rvalid_i,
     // Memory Request
     output spatz_mem_req_t [NrMemPorts-1:0] spatz_mem_req_o,
@@ -53,8 +53,8 @@ module spatz_vlsu
     output logic                            spatz_mem_finished_o,
     output logic                            spatz_mem_str_finished_o,
     // ECC error outputs
-    output logic [N_FU-1:0]                vlsu_vs2_sec_err_o,   // per-cut SEC on VS2 index read
-    output logic [N_FU-1:0]                vlsu_vs2_ded_err_o,   // per-cut DED on VS2 index read
+    output logic [N_FU-1:0]                 vlsu_vs2_sec_err_o,   // per-cut SEC on VS2 index read
+    output logic [N_FU-1:0]                 vlsu_vs2_ded_err_o,   // per-cut DED on VS2 index read
     output logic                            vlsu_ld_sec_err_o,    // any-port SEC on load response
     output logic                            vlsu_ld_ded_err_o     // any-port DED on load response
   );
@@ -1214,7 +1214,6 @@ module spatz_vlsu
         vrf_req_valid_d = &(rob_rvalid | ~mem_pending) && |mem_pending && (commit_insn_q.vm || v0_t_read_done) &&
                           (!vlsu_rmw_needed || vlsu_rmw_commit_now);
         for (int unsigned port = 0; port < NrMemPorts; port++) begin
-          // automatic logic [63:0] data = rob_rdata[port];
           automatic logic [63:0] data;
 
           data = '0;
