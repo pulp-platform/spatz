@@ -45,7 +45,6 @@ module vregfile import spatz_pkg::*; #(
   typedef enum logic { NORMAL, READ_MODIFY_WRITE } store_state_e;
   store_state_e store_state_d, store_state_q;
 
-
   // Write data sampling
   // data_t wdata_q, wdata_d;
   data_t wdata_d;

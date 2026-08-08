@@ -327,33 +327,7 @@ module spatz_vrf_ecc
   // VREG Banks //
   ////////////////
 
-  // for (genvar bank = 0; bank < NrVRFBanks; bank++) begin : gen_reg_banks
-  //   for (genvar cut = 0; cut < N_FU; cut++) begin: gen_vrf_slice
-  //     elen_t [NrReadPortsPerBank-1:0] rdata_int;
-
-  //     for (genvar port = 0; port < NrReadPortsPerBank; port++) begin: gen_rdata_assignment
-  //       assign rdata[bank][port][ELEN*cut +: ELEN] = rdata_int[port];
-  //     end
-
-  //     vregfile #(
-  //       .NrReadPorts(NrReadPortsPerBank),
-  //       .NrWords    (NrWordsPerBank    ),
-  //       .WordWidth  (ELEN              )
-  //     ) i_vregfile (
-  //       .clk_i     (clk_i                        ),
-  //       .rst_ni    (rst_ni                       ),
-  //       .testmode_i(testmode_i                   ),
-  //       .waddr_i   (waddr[bank]                  ),
-  //       .wdata_i   (wdata[bank][ELEN*cut +: ELEN]),
-  //       .we_i      (we[bank]                     ),
-  //       .wbe_i     (wbe[bank][ELENB*cut +: ELENB]),
-  //       .raddr_i   (raddr[bank]                  ),
-  //       .rdata_o   (rdata_int                    )
-  //     );
-  //   end
-  // end
-
-  // VRF Banks – plain 39-bit FF storage (enc/dec handled by spatz.sv) //-----------
+  // VRF Banks – plain 39-bit FF storage (enc/dec handled by spatz.sv)
   //
   // Each FU slice of each bank stores one 39-bit ECC codeword per word.
   // Writes are gated per FU slice by the byte-enable: if any byte of slice c
@@ -391,8 +365,6 @@ module spatz_vrf_ecc
   // ECC error outputs are driven by the decoders in spatz.sv
   assign single_error_o = 1'b0;
   assign multi_error_o  = 1'b0;
-
-  //---------------------------------------------------------------------------------
 
   ////////////////
   // Assertions //

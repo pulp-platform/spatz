@@ -12,7 +12,7 @@
 	{ name: "NumVrfUnits",
 	desc: "Number of VRF units (must equal NrCores in the cluster)",
 	type: "int",
-	default: "1"
+	default: "2"
 	},
 	{ name: "NumTcdmBanks",
 	desc: "Number of TCDM banks (must equal NrSuperBanks*BanksPerSuperBank in the cluster)",

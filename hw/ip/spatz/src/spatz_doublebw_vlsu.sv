@@ -38,7 +38,7 @@ module spatz_doublebw_vlsu
     input  logic                            vlsu_buf_full_i,
     // Interface with the VRF
     output vrf_addr_t      [NrInterfaces-1:0] vrf_waddr_o,
-    output logic           [NrInterfaces-1:0]  [N_FU*(ELEN+7)-1:0] vrf_wdata_ecc_o,
+    output logic           [NrInterfaces-1:0] [N_FU*(ELEN+7)-1:0] vrf_wdata_ecc_o,
     output logic           [NrInterfaces-1:0] vrf_we_o,
     output vrf_be_t        [NrInterfaces-1:0] vrf_wbe_o,
     input  logic           [NrInterfaces-1:0] vrf_wvalid_i,
