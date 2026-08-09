@@ -41,12 +41,11 @@ module vregfile import spatz_pkg::*; #(
   // Register file memory
   logic [NrWords-1:0][WordWidth/8-1:0][7:0] mem; // NrWords × WordWidth DFFs
 
-  // CMY: ECC encode and decode combinational logic
+  // ECC encode and decode combinational logic
   typedef enum logic { NORMAL, READ_MODIFY_WRITE } store_state_e;
   store_state_e store_state_d, store_state_q;
 
   // Write data sampling
-  // data_t wdata_q, wdata_d;
   data_t wdata_d;
 
   ///////////////////
@@ -54,36 +53,6 @@ module vregfile import spatz_pkg::*; #(
   ///////////////////
 
   assign wdata_d = wdata_i;
-
-
-  // Row decoder. Create a clock for each SCM row
-  // logic [NrWords-1:0] row_clk;
-  // for (genvar row = 0; row < NrWords; row++) begin: gen_row_decoder
-  //   // Create latch clock signal
-  //   logic row_onehot;
-  //   assign row_onehot = (waddr_i == row);
-
-  //   // Create a clock for each SCM row
-  //   tc_clk_gating i_waddr_cg (
-  //     .clk_i    (clk         ),
-  //     .en_i     (row_onehot  ),
-  //     .test_en_i(testmode_i  ),
-  //     .clk_o    (row_clk[row])
-  //   );
-  // end: gen_row_decoder
-
-  // // Column decoder. Create a clock for each SCM column
-  // logic [WordWidth/8-1:0] col_clk;
-  // for (genvar b = 0; b < WordWidth/8; b++) begin: gen_col_decoder
-  //   tc_clk_gating i_wbe_cg (
-  //     .clk_i    (clk       ),
-  //     .en_i     (wbe_i[b]  ),
-  //     .test_en_i(testmode_i),
-  //     .clk_o    (col_clk[b])
-  //   );
-  // end: gen_col_decoder
-
-  // Select which destination bytes to write into
 
   // Store new data to memory
   /* verilator lint_off NOLATCH */
