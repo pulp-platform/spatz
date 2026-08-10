@@ -22,6 +22,18 @@ set(CMAKE_TOOLCHAIN_FILE toolchain-llvm CACHE STRING "Toolchain to use")
 # Select to build the tests
 set(BUILD_TESTS OFF CACHE BOOL "Build test executables")
 
+# Select TRACE option
+if(RUNTIME_TRACE)
+    # Enable runtime tracing
+    add_compile_definitions(__SNRT_USE_TRACE)
+endif()
+
+# Select PRINT option
+if(RUNTIME_PRINT)
+    # Enable runtime debugging with printfs
+    add_compile_definitions(__SNRT_USE_PRINT)
+endif()
+
 macro(add_snitch_library name)
     add_library(${ARGV})
     add_custom_command(

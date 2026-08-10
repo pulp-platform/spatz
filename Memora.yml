@@ -14,6 +14,9 @@ artifacts:
   tc-llvm:
     inputs:
       - sw/toolchain/llvm-project.version
+      # The Makefile defines the toolchain build recipe (clang + lld +
+      # newlib + compiler-rt); recipe changes must invalidate the cache.
+      - Makefile
     outputs:
       - install/llvm
 

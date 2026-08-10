@@ -392,7 +392,7 @@ module spatz_controller
       end
 
       // Enable the VRF port if the dependant instructions wrote in the previous cycle
-      sb_enable_o[port] = sb_enable_i[port] && &(~scoreboard_q[sb_id_i[port]].deps | wrote_result_q[intID] | done_result_q[intID]) && (!(|scoreboard_q[sb_id_i[port]].deps) || !scoreboard_q[sb_id_i[port]].prevent_chaining);
+      sb_enable_o[port] = sb_enable_i[port] && &(~scoreboard_q[sb_id_i[port]].deps | wrote_result_q[intID]) && (!(|scoreboard_q[sb_id_i[port]].deps) || !scoreboard_q[sb_id_i[port]].prevent_chaining);
 `else
       // Enable the VRF port if the dependant instructions wrote in the previous cycle
       // sb_enable_o[port] - scoreboard check if you can use this vrf port
@@ -825,7 +825,9 @@ module spatz_controller
     running_insn_d = running_insn_q;
 
     // New instruction!
-    if (spatz_req_valid && spatz_req.ex_unit != CON)
+    // A vl=0 op retires with no response, so tracking it would never clear
+    if (spatz_req_valid && spatz_req.ex_unit != CON &&
+        (spatz_req.vl != '0 || spatz_req.op_arith.is_reduction))
       running_insn_d[next_insn_id] = 1'b1;
 
     // Finished a instruction

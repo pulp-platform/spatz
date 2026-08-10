@@ -66,7 +66,9 @@ void matmul_2xVL(char *c, const char *a, const char *b,
 
       char *c__ = c_ + m * P;
 
-      double t0, t1;
+      // FPR containers for NaN-boxed flh/flw scalars; float keeps them in
+      // FPRs on D-free (ELEN=32) builds and is register-identical on ELEN=64.
+      float t0, t1;
 
       asm volatile("vmv.v.x v0, zero");
       asm volatile("flh %[t], 0(%[a])" : [t] "=f"(t0) : [a] "r"(a__));
@@ -153,7 +155,9 @@ void matmul_4xVL(char *c, const char *a, const char *b,
 
       char *c__ = c_ + m * P;
 
-      double t0, t1, t2, t3;
+      // FPR containers for NaN-boxed flh/flw scalars; float keeps them in
+      // FPRs on D-free (ELEN=32) builds and is register-identical on ELEN=64.
+      float t0, t1, t2, t3;
 
       asm volatile("vmv.v.x v0, zero");
       asm volatile("flh %[t], 0(%[a])" : [t] "=f"(t0) : [a] "r"(a__));
@@ -266,7 +270,9 @@ void matmul_8xVL(char *c, const char *a, const char *b,
 
       char *c__ = c_ + m * P;
 
-      double t0, t1, t2, t3, t4, t5, t6, t7;
+      // FPR containers for NaN-boxed flh/flw scalars; float keeps them in
+      // FPRs on D-free (ELEN=32) builds and is register-identical on ELEN=64.
+      float t0, t1, t2, t3, t4, t5, t6, t7;
 
       asm volatile("vmv.v.x v0, zero");
       asm volatile("flh %[t], 0(%[a])" : [t] "=f"(t0) : [a] "r"(a__));

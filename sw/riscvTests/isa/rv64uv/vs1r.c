@@ -34,12 +34,12 @@ void TEST_CASE1(void) {
   // Initialize register + neighbours to pattern value
   VCLEAR(v26);
   // Load a buffer from memory - whole register load
-  asm volatile("vl1re8.v v26, (%0)" ::"r"(gold_vec_8b));
+  asm volatile("vl1re8.v v26, (%0)" ::"r"(gold_vec_8b) : "memory");
   // Check that the whole register was loaded
-  asm volatile("vs1r.v v26, (%0)" ::"r"(buf_vec_8b));
+  asm volatile("vs1r.v v26, (%0)" ::"r"(buf_vec_8b) : "memory");
   VMCMP(uint8_t, % hhu, 0, buf_vec_8b, gold_vec_8b, VLEN / 8);
   // Check that the neighbour registers are okay
-  asm volatile("vs1r.v v27, (%0)" ::"r"(buf_vec_8b));
+  asm volatile("vs1r.v v27, (%0)" ::"r"(buf_vec_8b) : "memory");
   VMCMP(uint8_t, % hhu, 0, buf_vec_8b, zero_vec_8b, VLEN / 8);
 }
 
@@ -60,12 +60,12 @@ void TEST_CASE2(void) {
   // Initialize register + neighbours to pattern value
   VCLEAR(v26);
   // Load a buffer from memory - whole register load
-  asm volatile("vl2re8.v v26, (%0)" ::"r"(gold_vec_8b));
+  asm volatile("vl2re8.v v26, (%0)" ::"r"(gold_vec_8b) : "memory");
   // Check that the whole register was loaded
-  asm volatile("vs2r.v v26, (%0)" ::"r"(buf_vec_8b));
+  asm volatile("vs2r.v v26, (%0)" ::"r"(buf_vec_8b) : "memory");
   VMCMP(uint8_t, % hhu, 1, buf_vec_8b, gold_vec_8b, VLEN / 8);
   // Check that the neighbour registers are okay
-  asm volatile("vs2r.v v28, (%0)" ::"r"(buf_vec_8b));
+  asm volatile("vs2r.v v28, (%0)" ::"r"(buf_vec_8b) : "memory");
   VMCMP(uint8_t, % hhu, 1, buf_vec_8b, zero_vec_8b, VLEN / 8);
 }
 
@@ -86,12 +86,12 @@ void TEST_CASE3(void) {
   // Initialize register + neighbours to pattern value
   VCLEAR(v26);
   // Load a buffer from memory - whole register load
-  asm volatile("vl4re8.v v26, (%0)" ::"r"(gold_vec_8b));
+  asm volatile("vl4re8.v v26, (%0)" ::"r"(gold_vec_8b) : "memory");
   // Check that the whole register was loaded
-  asm volatile("vs4r.v v26, (%0)" ::"r"(buf_vec_8b));
+  asm volatile("vs4r.v v26, (%0)" ::"r"(buf_vec_8b) : "memory");
   VMCMP(uint8_t, % hhu, 2, buf_vec_8b, gold_vec_8b, VLEN / 8);
   // Check that the neighbour registers are okay
-  asm volatile("vs4r.v v40, (%0)" ::"r"(buf_vec_8b));
+  asm volatile("vs4r.v v40, (%0)" ::"r"(buf_vec_8b) : "memory");
   VMCMP(uint8_t, % hhu, 2, buf_vec_8b, zero_vec_8b, VLEN / 8);
 }
 
@@ -113,12 +113,12 @@ void TEST_CASE4(void) {
   VCLEAR(v26);
   VCLEAR(v44);
   // Load a buffer from memory - whole register load
-  asm volatile("vl8re8.v v26, (%0)" ::"r"(gold_vec_8b));
+  asm volatile("vl8re8.v v26, (%0)" ::"r"(gold_vec_8b) : "memory");
   // Check that the whole register was loaded
-  asm volatile("vs8r.v v26, (%0)" ::"r"(buf_vec_8b));
+  asm volatile("vs8r.v v26, (%0)" ::"r"(buf_vec_8b) : "memory");
   VMCMP(uint8_t, % hhu, 3, buf_vec_8b, gold_vec_8b, VLEN / 8);
   // Check that the neighbour registers are okay
-  asm volatile("vs8r.v v44, (%0)" ::"r"(buf_vec_8b));
+  asm volatile("vs8r.v v44, (%0)" ::"r"(buf_vec_8b) : "memory");
   VMCMP(uint8_t, % hhu, 3, buf_vec_8b, zero_vec_8b, VLEN / 8);
 }
 
@@ -139,12 +139,12 @@ void TEST_CASE5(void) {
   // Initialize register + neighbours to pattern value
   VCLEAR(v26);
   // Load a buffer from memory - whole register load
-  asm volatile("vl1re8.v v26, (%0)" ::"r"(gold_vec_8b));
+  asm volatile("vl1re8.v v26, (%0)" ::"r"(gold_vec_8b) : "memory");
   // Check that the whole register was loaded
-  asm volatile("vs1r.v v26, (%0)" ::"r"(buf_vec_8b));
+  asm volatile("vs1r.v v26, (%0)" ::"r"(buf_vec_8b) : "memory");
   VMCMP(uint8_t, % hhu, 4, buf_vec_8b, gold_vec_8b, VLEN / 8);
   // Check that the neighbour registers are okay
-  asm volatile("vs1r.v v27, (%0)" ::"r"(buf_vec_8b));
+  asm volatile("vs1r.v v27, (%0)" ::"r"(buf_vec_8b) : "memory");
   VMCMP(uint8_t, % hhu, 4, buf_vec_8b, zero_vec_8b, VLEN / 8);
 }
 

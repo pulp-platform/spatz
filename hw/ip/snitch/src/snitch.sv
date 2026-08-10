@@ -2198,17 +2198,6 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
         end
       end
 `endif
-      // FP Sequencer
-      FREP_O,
-      FREP_I: begin
-        if (FP_EN) begin
-          opa_select = Reg;
-          write_rd = 1'b0;
-          acc_qvalid_o = valid_instr;
-        end else begin
-          illegal_inst = 1'b1;
-        end
-      end
       // Floating-Point Load/Store
       // Single Precision Floating-Point
       FLW: begin
@@ -2762,7 +2751,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           illegal_inst = 1'b1;
         end
       end
-
+`ifdef VENTAGLIO
       riscv_instr::VFXMACC_VRF,
       riscv_instr::VFXMUL_VRF,
       riscv_instr::VVENTCLR: begin
@@ -2775,7 +2764,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           illegal_inst = 1'b1;
         end
       end
-
+`endif
       riscv_instr::VLE8_V,
       riscv_instr::VLE16_V,
       riscv_instr::VLE32_V,

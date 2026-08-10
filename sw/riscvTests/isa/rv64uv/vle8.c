@@ -10,7 +10,7 @@ void TEST_CASE1(void) {
   volatile uint8_t INP1[] = {0x00, 0x9f, 0xe4, 0x19, 0x20, 0x8f, 0x2e, 0x05, 0xe0,
                              0xf9, 0xaa, 0x71, 0xf0, 0xc3, 0x94, 0xbb};
 
-  asm volatile("vle8.v v1, (%0)" ::"r"(INP1));
+  asm volatile("vle8.v v1, (%0)" ::"r"(INP1) : "memory");
   VCMP_U8(1, v1, 0x00, 0x9f, 0xe4, 0x19, 0x20, 0x8f, 0x2e, 0x05, 0xe0, 0xf9, 0xaa,
            0x71, 0xf0, 0xc3, 0x94, 0xbb);
 }
@@ -28,7 +28,7 @@ void TEST_CASE2(void) {
                               0x88, 0xae, 0x08, 0x91, 0x02, 0x59, 0x11, 0x89};
   VCLEAR(v1);
 
-  asm volatile("vle8.v v1, (%0), v0.t" ::"r"(INP1));
+  asm volatile("vle8.v v1, (%0), v0.t" ::"r"(INP1) : "memory");
   VCMP_U8(2, v1, 0xe0, 0xd3, 0x40, 0xd1, 0x84, 0x48, 0x89, 0x88, 0x88, 0xae,
           0x08, 0x91, 0x02, 0x59, 0x11, 0x89);
 }
@@ -43,7 +43,7 @@ void TEST_CASE3(void) {
                               0x88, 0xae, 0x08, 0x91, 0x02, 0x59, 0x11, 0x89};
   VLOAD_8(v1, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16);
 
-  asm volatile("vle8.v v1, (%0), v0.t" ::"r"(INP1));
+  asm volatile("vle8.v v1, (%0), v0.t" ::"r"(INP1) : "memory");
   VCMP_U8(3, v1, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16);
 }
 
@@ -58,7 +58,7 @@ void TEST_CASE4(void) {
   VCLEAR(v1);
   VLOAD_8(v1, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16);
 
-  asm volatile("vle8.v v1, (%0), v0.t" ::"r"(INP1));
+  asm volatile("vle8.v v1, (%0), v0.t" ::"r"(INP1) : "memory");
   VCMP_U8(4, v1, 1, 0xd3, 3, 0xd1, 5, 0x48, 7, 0x88, 9, 0xae, 11, 0x91, 13,
           0x59, 15, 0x89);
 }
@@ -74,7 +74,7 @@ void TEST_CASE5(void) {
   VCLEAR(v8);
   VLOAD_8(v8, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16);
 
-  asm volatile("vle8.v v8, (%0), v0.t" ::"r"(INP1));
+  asm volatile("vle8.v v8, (%0), v0.t" ::"r"(INP1) : "memory");
   VCMP_U8(5, v8, 1, 0xd3, 3, 0xd1, 5, 0x48, 7, 0x88, 9, 0xae, 11, 0x91, 13,
           0x59, 15, 0x89);
 }
@@ -99,7 +99,7 @@ void TEST_CASE6(void) {
               33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48,
               49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64);
 
-  asm volatile("vle8.v v8, (%0), v0.t" ::"r"(INP1));
+  asm volatile("vle8.v v8, (%0), v0.t" ::"r"(INP1) : "memory");
   VCMP_U8(6, v8, 1, 0xd3, 3, 0xd1, 5, 0x48, 7, 0x88, 9, 0xae, 11, 0x91, 13, 0x59, 15, 0x89,
                  17, 0xd3, 19, 0xd1, 21, 0x48, 23, 0x88, 25, 0xae, 27, 0x91, 29, 0x59, 31, 0x89,
                  33, 0xd3, 35, 0xd1, 37, 0x48, 39, 0x88, 41, 0xae, 43, 0x91, 45, 0x59, 47, 0x89,

@@ -36,6 +36,11 @@ snrt.crt0.init_fp_registers:
     j 3f
 
 init_dp_reg:
+    # Runtime-gated on the misa D bit (see above): this block never
+    # executes on FLEN=32 configs, but those builds use a D-free
+    # -march, so tell the assembler to encode it anyway.
+    .option push
+    .option arch, +d
     # Clear FP registers
     fcvt.d.w f0, zero
     fcvt.d.w f1, zero
@@ -69,6 +74,7 @@ init_dp_reg:
     fcvt.d.w f29, zero
     fcvt.d.w f30, zero
     fcvt.d.w f31, zero
+    .option pop
     j 3f
 
 init_fp_reg:
@@ -277,6 +283,9 @@ __snrt_crt0_interrupt_handler:
     andi    t0, t0, (1 << 3) # 3: D - single precision float extension
     beqz    t0, 1f
     addi    sp, sp, -256
+    # Runtime-gated on the misa D bit; encode despite a D-free -march.
+    .option push
+    .option arch, +d
     fsd     f0, 248(sp)
     fsd     f1, 240(sp)
     fsd     f2, 232(sp)
@@ -309,6 +318,7 @@ __snrt_crt0_interrupt_handler:
     fsd     f29, 16(sp)
     fsd     f30, 8(sp)
     fsd     f31, 0(sp)
+    .option pop
     # state is stored, can now handle the interrupt
 1:
     call    __snrt_isr
@@ -316,6 +326,9 @@ __snrt_crt0_interrupt_handler:
     csrr    t0, misa
     andi    t0, t0, (1 << 3) # 3: D - single precision float extension
     beqz    t0, 1f
+    # Runtime-gated on the misa D bit; encode despite a D-free -march.
+    .option push
+    .option arch, +d
     fld     f0, 248(sp)
     fld     f1, 240(sp)
     fld     f2, 232(sp)
@@ -348,6 +361,7 @@ __snrt_crt0_interrupt_handler:
     fld     f29, 16(sp)
     fld     f30, 8(sp)
     fld     f31, 0(sp)
+    .option pop
     addi    sp, sp, 256
     # restore integer context
 1:
