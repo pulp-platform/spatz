@@ -233,7 +233,8 @@ module spatz_vfu
   logic                  result_ready;
 
   // it represents the VRF word index
-  logic [$clog2(NrWordsPerVector):0] word_idx_d, word_idx_q;
+  // calculates word index in instruction, LMUL max = 8
+  logic [$clog2(NrWordsPerVector*8):0] word_idx_d, word_idx_q;
   `FF(word_idx_q, word_idx_d, '0)
 
   always_comb begin: control_proc
@@ -514,7 +515,7 @@ module spatz_vfu
   logic v0_t_is_ready;
   assign v0_t_is_ready   = (operand_state_q == READ_V0_t) && vrf_rvalid_i[0] && vrf_rvalid_i[1];
   logic v0_t_read_done;
-  `FFLARNC(v0_t_read_done,1'b1,v0_t_is_ready,vfu_rsp_valid_o,1'b0,clk_i,rst_ni);
+  `FFLARNC(v0_t_read_done,1'b1,v0_t_is_ready,last_request,1'b0,clk_i,rst_ni);
 
   logic switch_to_read_v0t;
   assign switch_to_read_v0t = (operand_state_q == READ_OPERANDS) && spatz_req_valid
@@ -1282,9 +1283,7 @@ assign vfcmp_result_accepted = result_tag.is_cmp && &(result_valid | ~pending_re
 
   always_comb begin : VRF_cnt_proc
     word_idx_d = word_idx_q;
-    if (!result_tag.is_cmp)
-      word_idx_d = '0;
-    else if (vfcmp_result_accepted) begin
+    if (vfcmp_result_accepted) begin
       if (result_tag.last)
         word_idx_d = '0;
       else
@@ -1348,9 +1347,7 @@ assign vfcmp_result_accepted = result_tag.is_cmp && &(result_valid | ~pending_re
 
   always_comb begin : wdata_proc
     wdata_d = wdata_q;
-    if (!result_tag.is_cmp) begin
-      wdata_d = '0;
-    end else if (vfcmp_result_accepted) begin
+    if (vfcmp_result_accepted) begin
       if (result_tag.last)
         wdata_d = '0;
       else
