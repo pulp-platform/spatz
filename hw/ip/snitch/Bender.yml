@@ -10,6 +10,7 @@ package:
 dependencies:
   common_cells:       { git: "https://github.com/pulp-platform/common_cells.git",       version: 1.28.0         }
   tech_cells_generic: { git: "https://github.com/pulp-platform/tech_cells_generic.git", version: 0.2.13         }
+  riscv-dbg:          { git: "https://github.com/pulp-platform/riscv-dbg.git",          version: 0.7.0          }
 
 export_include_dirs:
   - include

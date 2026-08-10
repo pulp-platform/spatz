@@ -127,20 +127,20 @@ packages:
     revision: null
     version: null
     source:
-      Path: .bender/git/checkouts/spatz_core-28853e15c628892a/hw/ip/snitch
+      Path: hw/ip/snitch
     dependencies:
     - common_cells
+    - riscv-dbg
     - tech_cells_generic
   spatz_core:
-    revision: 0446a3474815347ddb9c84d8d8f404316b303eee
+    revision: 63fa9886c721f29ac6f5a35533b2f392ceae9e2d
     version: null
     source:
-      Git: https://github.com/DiyouS/spatz.git
+      Git: git@github.com:pulp-platform/spatz_vpu.git
     dependencies:
     - common_cells
     - fpnew
     - reqrsp_interface
-    - riscv-dbg
     - snitch
     - tech_cells_generic
   tech_cells_generic:

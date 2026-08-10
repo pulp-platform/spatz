@@ -46,7 +46,12 @@ def main():
     outdir = args.outdir / "generated"
     outdir.mkdir(parents=True, exist_ok=True)
 
-    spatzoutdir = outdir / "../../../../ip/spatz/src/generated"
+    # spatz_pkg.sv is owned by the standalone spatz_core package
+    # (spatz_vpu repo); write the generated file into its own hw/src/generated,
+    # matching where its Bender.yml expects it.
+    # TODO: see TODO.md ("spatz_pkg.sv generation") — this should move into
+    # spatz_core's own Makefile instead of being written by the cluster.
+    spatzoutdir = cluster_tb.spatz_core_folder / "src/generated"
     spatzoutdir.mkdir(parents=True, exist_ok=True)
     with open(spatzoutdir / "spatz_pkg.sv", "w") as f:
         f.write(cluster_tb.render_spatzpkg())

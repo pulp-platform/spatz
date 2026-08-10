@@ -19,7 +19,7 @@ dependencies:
   tech_cells_generic: { git: "https://github.com/pulp-platform/tech_cells_generic.git", version: 0.2.13         }
   cluster_icache:     { git: "https://github.com/pulp-platform/cluster_icache.git",     version: 0.2.0          }
   snitch:             { path: "hw/ip/snitch"                                                                    }
-  spatz_core:         { path: "../spatz_vpu"                                                                    }
+  spatz_core:         { git: "git@github.com:pulp-platform/spatz_vpu.git",              rev:     main           }
   reqrsp_interface:   { path: "hw/ip/reqrsp_interface"                                                          }
 
 export_include_dirs:

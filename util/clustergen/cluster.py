@@ -13,6 +13,7 @@ import json
 import re
 import logging as log
 import pathlib
+import subprocess
 
 
 # Fill in default values for config values which do not have a user-defined value.
@@ -46,10 +47,24 @@ class Generator(object):
 // instead."""
 
     file_path = pathlib.Path(__file__).parent
-    spatz_cluster_folder = file_path / "../../hw/system/spatz_cluster"
+    repo_root = file_path / "../.."
+    spatz_cluster_folder = repo_root / "hw/system/spatz_cluster"
+    # spatz core (spatz_pkg.sv.tpl et al.) now lives in the standalone
+    # spatz_core package (spatz_vpu repo); resolve it via bender instead of
+    # hardcoding a path, so this keeps working whether spatz_core is a local
+    # path dependency or a real git dependency.
+    # TODO: this couples clustergen.py to spatz_core's internal hw/src
+    # layout. See TODO.md ("spatz_pkg.sv generation") for the plan to move
+    # this rendering into spatz_core's own Makefile instead.
+    spatz_core_folder = pathlib.Path(
+        subprocess.check_output(["bender", "path", "spatz_core"], cwd=repo_root)
+        .decode()
+        .strip()
+    ) / "hw"
 
     templates = TemplateLookup(
-        directories=[spatz_cluster_folder], output_encoding="utf-8"
+        directories=[spatz_cluster_folder, spatz_core_folder],
+        output_encoding="utf-8",
     )
     """
     Generator class which contains common component to generate different systems.
