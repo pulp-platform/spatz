@@ -704,6 +704,20 @@ module spatz_vlsu
   // authority: room_block_o is its output and it re-checks it internally.
   assign burst_block_fire = rob_req_block[0] && rob_room_block[0];
 
+  // Burst load element/lane tracking (port0 only).
+  //
+  // Declared HERE rather than beside their assigns further down: burst_word_idx is read by
+  // gen_vreg_addr immediately below, and SystemVerilog requires a typed variable to be declared
+  // before use. VCS and QuestaSim accept the forward reference, but Spyglass rejects it outright
+  // -- "Identifier (burst_word_idx) not declared in current scope" was a FATAL that aborted rule
+  // checking for the whole design, so no lint rule ran at all. The assigns stay next to the
+  // burst logic they belong to; only the declarations move.
+  localparam int unsigned LaneIdxWidth = (N_FU > 1) ? $clog2(N_FU) : 1;
+  vreg_elem_t                       burst_elem_idx;
+  logic [LaneIdxWidth-1:0]          burst_lane_idx;
+  vreg_elem_t                       burst_word_idx;
+  logic [ELENB-1:0]                 burst_lane_wbe;
+
   // Calculate the register file address
   always_comb begin : gen_vreg_addr
     if (commit_use_port0_burst)
@@ -978,12 +992,6 @@ module spatz_vlsu
   // Do we need to catch up to reach element idx parity? (Because of non-zero vstart)
   vlen_t vreg_start_0;
   assign vreg_start_0 = vlen_t'(commit_insn_q.vstart[$clog2(ELENB)-1:0]);
-  // Burst load element/lane tracking (port0 only)
-  localparam int unsigned LaneIdxWidth = (N_FU > 1) ? $clog2(N_FU) : 1;
-  vreg_elem_t                       burst_elem_idx;
-  logic [LaneIdxWidth-1:0]          burst_lane_idx;
-  vreg_elem_t                       burst_word_idx;
-  logic [ELENB-1:0]                 burst_lane_wbe;
   assign burst_elem_idx = commit_counter_q[0] >> $clog2(ELENB);
   assign burst_lane_idx = burst_elem_idx[LaneIdxWidth-1:0];
   assign burst_word_idx = burst_elem_idx >> $clog2(N_FU);
