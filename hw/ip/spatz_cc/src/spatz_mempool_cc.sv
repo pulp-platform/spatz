@@ -414,9 +414,40 @@ module spatz_mempool_cc
   logic [63:0] cycle;
   int unsigned stall, stall_ins, stall_raw, stall_lsu, stall_acc;
 
+  // Optional per-GROUP trace filter (diagnostic). Tracing all 1024 cores costs 609 GB at
+  // 67 GB/h, and when the question is about a few specific groups the other 61 are pure cost --
+  // both in disk and in the runtime that decides how long it takes to reach the cycle of
+  // interest. TRACE_GROUP_MASK is a 64-bit mask indexed by group: bit g set == group g traced.
+  //
+  // Defaults reproduce the previous behaviour exactly: with neither define set the divisor is 0,
+  // the select ties high, and every hart traces as before.
+  //
+  // The cores-per-group divisor MUST be supplied, never baked in. hart_id field widths move with
+  // the mesh (16 cores/group here and at 4x4, but 4 at mempool_spatz4_fpu), and a hardcoded
+  // shift is precisely the class of bug that made the group barrier a silent no-op at 8x8.
+  // Up to four group IDs rather than a bit mask: a mask literal would have to cross
+  // make -> shell -> simulator as 64'h..., and the apostrophe does not survive that path
+  // reliably. Plain integers do, and "trace groups 54, 56 and 62" is how the filter is
+  // actually reasoned about anyway. -1 means "slot unused".
+  localparam int TraceCoresPerGroup =
+      `ifdef TRACE_CORES_PER_GROUP `TRACE_CORES_PER_GROUP `else 0 `endif;
+  localparam int TraceG0 = `ifdef TRACE_G0 `TRACE_G0 `else -1 `endif;
+  localparam int TraceG1 = `ifdef TRACE_G1 `TRACE_G1 `else -1 `endif;
+  localparam int TraceG2 = `ifdef TRACE_G2 `TRACE_G2 `else -1 `endif;
+  localparam int TraceG3 = `ifdef TRACE_G3 `TRACE_G3 `else -1 `endif;
+  logic trace_hart_sel;
+  logic [31:0] trace_grp_id;
+  assign trace_grp_id  = (TraceCoresPerGroup == 0) ? 32'd0
+                       : hart_id_i / TraceCoresPerGroup;
+  assign trace_hart_sel = (TraceCoresPerGroup == 0) ? 1'b1
+                        : ((TraceG0 >= 0 && trace_grp_id == unsigned'(TraceG0)) ||
+                           (TraceG1 >= 0 && trace_grp_id == unsigned'(TraceG1)) ||
+                           (TraceG2 >= 0 && trace_grp_id == unsigned'(TraceG2)) ||
+                           (TraceG3 >= 0 && trace_grp_id == unsigned'(TraceG3)));
+
   // verilog_lint: waive-start always-ff-non-blocking
   always_ff @(posedge rst_i) begin
-    if(rst_i) begin
+    if(rst_i && trace_hart_sel) begin
       // Format in hex because vcs and vsim treat decimal differently
       // Format with 8 digits because Verilator does not support anything else
       $sformat(fn, "trace_hart_0x%08x.dasm", hart_id_i);
@@ -428,6 +459,11 @@ module spatz_mempool_cc
 
   typedef enum logic [1:0] {SrcSnitch =  0, SrcFpu = 1, SrcFpuSeq = 2} trace_src_e;
   localparam int SnitchTrace = `ifdef SNITCH_TRACE `SNITCH_TRACE `else 0 `endif;
+  // The tracers are enabled by (csr_trace_q || <define>), so setting the define to 0 does NOT
+  // turn them off once software starts the benchmark region -- which is exactly when they are
+  // most expensive (1024 trace_hart_*.dasm + Spatz streams per run, measured 609 GB / 67 GB/h
+  // across a 27-run fleet). TRACE_FORCE_OFF suppresses both regardless of the CSR.
+  localparam bit TraceForceOff = `ifdef TRACE_FORCE_OFF 1'b1 `else 1'b0 `endif;
 
   // verilog_lint: waive-start always-ff-non-blocking
   always_ff @(posedge clk_i or posedge rst_i) begin
@@ -440,7 +476,7 @@ module spatz_mempool_cc
         // Tracing enabled by CSR register
         // we are not stalled <==> we have issued and processed an instruction (including offloads)
         // OR we are retiring (issuing a writeback from) a load or accelerator instruction
-        if ((i_snitch.csr_trace_q || SnitchTrace) && (!i_snitch.stall || i_snitch.retire_load || i_snitch.retire_acc)) begin
+        if (!TraceForceOff && trace_hart_sel && (i_snitch.csr_trace_q || SnitchTrace) && (!i_snitch.stall || i_snitch.retire_load || i_snitch.retire_acc)) begin
           // Manual loop unrolling for Verilator
           // Data type keys for arrays are currently not supported in Verilator
           extras_str = "{";
@@ -586,7 +622,7 @@ module spatz_mempool_cc
 
   // verilog_lint: waive-start always-ff-non-blocking
   always_ff @(posedge rst_i) begin
-    if (rst_i) begin
+    if (rst_i && trace_hart_sel) begin
       $sformat(sp_insn_fn, "trace_spatz_insn_hart_0x%08x.log", hart_id_i);
       $sformat(sp_cyc_fn,  "trace_spatz_cyc_hart_0x%08x.log",  hart_id_i);
       $sformat(sp_fpl_fn,  "trace_spatz_fplsu_hart_0x%08x.log", hart_id_i);
@@ -630,7 +666,7 @@ module spatz_mempool_cc
       sp_pcf_wr = 0; sp_pcf_rd = 0;
       for (int k = 0; k < 32; k++) begin sp_fpr_pc[k] = '0; sp_fpr_insn[k] = '0; end
     end else begin
-      en      = i_snitch.csr_trace_q || (SpatzTraceOn != 0);
+      en      = !TraceForceOff && trace_hart_sel && (i_snitch.csr_trace_q || (SpatzTraceOn != 0));
       run_now = i_spatz.i_controller.running_insn_q;
       cstall  = i_spatz.i_controller.stall;
       // Functional-unit activity this cycle (all module-level signals, XMR-accessible).
