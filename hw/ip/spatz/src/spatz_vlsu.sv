@@ -480,7 +480,10 @@ module spatz_vlsu
   logic  [NrMemPorts-1:0] commit_finished_q;
   logic  [NrMemPorts-1:0] commit_finished_d;
   // Commit-FIFO occupancy for the H1 A5 assertion (sim-only consumer).
-  logic  [idx_width(CommitQDepth):0] commit_usage;
+  // fifo_v3 drives usage_o as [ADDR_DEPTH-1:0] = idx_width(CommitQDepth) bits. This was one
+  // bit wider, so the MSB was never driven and read as 'x -- Spyglass W110 (Error):
+  // "Incompatible width for port usage_o (width 6 in fifo_v3) ... actual width 7".
+  logic  [idx_width(CommitQDepth)-1:0] commit_usage;
 
   fifo_v3 #(
     .DEPTH       (CommitQDepth          ),
@@ -1955,7 +1958,11 @@ module spatz_vlsu
     // A5: the in-flight cap and the bookkeeping counter agree with the commit FIFO.
     assert property (@(posedge clk_i) disable iff (!rst_ni)
         (inflight_q <= InflWidth'(MaxInflight)) &&
-        ((idx_width(CommitQDepth)+1)'(inflight_q) == commit_usage))
+        // usage_o is the LOW idx_width(CommitQDepth) bits of an (idx_width+1)-bit count, so a
+        // FULL queue reads back as 0. Comparing against it directly was wrong at that boundary
+        // as well as width-mismatched; check the full case explicitly instead.
+        (commit_insn_full ? (inflight_q == InflWidth'(CommitQDepth))
+                          : (idx_width(CommitQDepth)'(inflight_q) == commit_usage)))
       else $fatal(1, "[spatz_vlsu] H1 inflight bookkeeping diverges from the commit FIFO.");
     // A6: the union pending count is bounded by the ROB allocation.
     assert property (@(posedge clk_i) disable iff (!rst_ni)

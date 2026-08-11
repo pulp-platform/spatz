@@ -344,7 +344,9 @@ module spatz_mempool_cc
     );
   end: gen_id_remapper else begin: gen_id_remapper_bypass
     // Bypass the remapper
-    assign data_req_d       = snitch_req;
+    // Scalar requests are always single-word; the core has no burst_len output to connect.
+  assign snitch_req.burst_len = snitch_pkg::BurstLenWidth'(1);
+  assign data_req_d       = snitch_req;
     assign data_req_d_valid = snitch_req_valid;
     assign snitch_req_ready = data_req_d_ready;
 
@@ -395,6 +397,11 @@ module spatz_mempool_cc
   assign data_qdata_o[0]      = data_req_q.data;
   assign data_qstrb_o[0]      = data_req_q.strb;
   assign data_qid_o[0]        = data_req_q.id;
+  // The scalar core has no data_qburst_len_o output, so snitch_req.burst_len had no driver at
+  // all; `assign data_req_d = snitch_req` then copied the undefined field into data_req_q,
+  // propagating an X. Harmless only because this consumer hardcodes the value -- Spyglass
+  // W123 (Error) "Variable 'snitch_req.burst_len' read but never set". Drive it at the
+  // source so the struct copy carries a defined value.
   assign data_qburst_len_o[0] = snitch_pkg::BurstLenWidth'(1);
   assign data_qvalid_o[0]     = data_req_q_valid;
   assign data_req_q_ready     = data_qready_i[0];
