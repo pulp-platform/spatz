@@ -13,6 +13,7 @@ import json
 import re
 import logging as log
 import pathlib
+import subprocess
 
 
 # Fill in default values for config values which do not have a user-defined value.
@@ -46,10 +47,22 @@ class Generator(object):
 // instead."""
 
     file_path = pathlib.Path(__file__).parent
-    spatz_cluster_folder = file_path / "../../hw/system/spatz_cluster"
+    repo_root = file_path / "../.."
+    spatz_cluster_folder = repo_root / "hw/system/spatz_cluster"
+    # spatz_pkg.sv generation is delegated to spatz_vpu's own hw/Makefile
+    # (see render_spatzpkg below), not rendered here; spatz_vpu_folder is
+    # only needed to locate that Makefile, resolved via bender so this keeps
+    # working whether spatz_vpu is a local path dependency or a real git
+    # dependency.
+    spatz_vpu_folder = pathlib.Path(
+        subprocess.check_output(["bender", "path", "spatz_vpu"], cwd=repo_root)
+        .decode()
+        .strip()
+    ) / "hw"
 
     templates = TemplateLookup(
-        directories=[spatz_cluster_folder], output_encoding="utf-8"
+        directories=[spatz_cluster_folder],
+        output_encoding="utf-8",
     )
     """
     Generator class which contains common component to generate different systems.
@@ -155,7 +168,6 @@ class SnitchCluster(Generator):
     """
 
     files = {
-        "spatzpkg": "src/spatz_pkg.sv.tpl",
         "wrapper": "src/spatz_cluster_wrapper.sv.tpl",
         "testbench": "tb/testbench.sv.tpl",
     }
@@ -191,11 +203,17 @@ class SnitchCluster(Generator):
             cfg=self.cfg, to_sv_hex=to_sv_hex, disclaimer=self.DISCLAIMER
         )
 
-    def render_spatzpkg(self):
-        """Render the Spatz PKG"""
-        cfg_template = self.templates.get_template(self.files["spatzpkg"])
-        return cfg_template.render_unicode(
-            cfg=self.cfg, to_sv_hex=to_sv_hex, disclaimer=self.DISCLAIMER
+    def render_spatzpkg(self, cfg_path):
+        """Generate spatz_pkg.sv via spatz_vpu's own hw/Makefile.
+
+        spatz_vpu owns spatz_pkg.sv.tpl; delegate rather than reaching
+        across the dependency boundary to render it here. Writes directly
+        into spatz_vpu's hw/src/generated/spatz_pkg.sv.
+        """
+        subprocess.run(
+            ["make", "-C", str(self.spatz_vpu_folder), "config",
+             f"CFG={cfg_path}"],
+            check=True,
         )
 
     def render_testbench(self):
@@ -400,8 +418,8 @@ class SnitchClusterTB(Generator):
     def render_wrapper(self):
         return self.cluster.render_wrapper()
 
-    def render_spatzpkg(self):
-        return self.cluster.render_spatzpkg()
+    def render_spatzpkg(self, cfg_path):
+        return self.cluster.render_spatzpkg(cfg_path)
 
     def render_testbench(self):
         return self.cluster.render_testbench()
