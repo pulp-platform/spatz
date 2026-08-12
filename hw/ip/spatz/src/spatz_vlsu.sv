@@ -1085,6 +1085,13 @@ module spatz_vlsu
         mem_remaining_bytes[port]          = 0;
         mem_remaining_words[port]          = 0;
         burst_len_calc[port]     = '0;
+        // Assigned on this path too, or the incomplete always_comb infers a latch on
+        // burst_mode_req_reg[1] (Spyglass SYNTH_12608). Functionally a no-op: the only read
+        // reachable from here is `!burst_mode_req[port] || !burst_use[port]` at the burst-issue
+        // arm below, and burst_use[port] is forced to 0 on the very next line, so that
+        // disjunction is 1 either way. The other read sits in the else branch, downstream of a
+        // fresh assignment. Removing the latch is for the netlist (area/DFT/timing), not behaviour.
+        burst_mode_req[port]     = 1'b0;
         burst_use[port]          = 1'b0;
         mem_operation_valid[port]= 1'b0;
         mem_operation_last[port] = 1'b0;
