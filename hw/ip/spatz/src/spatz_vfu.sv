@@ -186,6 +186,10 @@ module spatz_vfu
   // Is this the last request?
   logic last_request;
 
+  // The signal to choose comparison instructions  
+  logic is_cmp_req;
+  assign is_cmp_req = (spatz_req.op == VFCMP) || spatz_req.op inside {VMSEQ, VMSNE, VMSLT, VMSLTU, VMSLE, VMSLEU, VMSGT, VMSGTU};
+
   // Reduction state
   typedef enum logic [3:0] {
     Reduction_NormalExecution,
@@ -516,6 +520,14 @@ module spatz_vfu
   assign v0_t_is_ready   = (operand_state_q == READ_V0_t) && vrf_rvalid_i[0] && vrf_rvalid_i[1];
   logic v0_t_read_done;
   `FFLARNC(v0_t_read_done,1'b1,v0_t_is_ready,last_request,1'b0,clk_i,rst_ni);
+
+  // Back up old vd (mask destination) for comparison instructions — needed for
+  // mask-undisturbed on inactive elements.
+  logic [N_FU*ELEN-1:0] cmp_old_vd_q;
+  `FFL(cmp_old_vd_q, vrf_rdata_i[2], v0_t_is_ready && is_cmp_req, '0)
+  // Save a mask for comparison instructions — needed for mask-undisturbed on inactive elements.
+  logic [N_FU*ELEN-1:0] cmp_v0t_q;
+  `FFL(cmp_v0t_q, {operand_v0_t_hi, operand_v0_t_lo}, v0_t_is_ready && is_cmp_req, '0)
 
   logic switch_to_read_v0t;
   assign switch_to_read_v0t = (operand_state_q == READ_OPERANDS) && spatz_req_valid
@@ -1080,10 +1092,6 @@ module spatz_vfu
   vrf_addr_t [2:0] vreg_addr_q, vreg_addr_d;
   `FF(vreg_addr_q, vreg_addr_d, '0)
 
-  // The signal to choose comparison instructions  
-  logic is_cmp_req;
-  assign is_cmp_req = (spatz_req.op == VFCMP) || spatz_req.op inside {VMSEQ, VMSNE, VMSLT, VMSLTU, VMSLE, VMSLEU, VMSGT, VMSGTU};
-
   // Calculate new vector register address
   always_comb begin : vreg_addr_proc
     vreg_addr_d = vreg_addr_q;
@@ -1147,6 +1155,8 @@ module spatz_vfu
        READ_V0_t: begin
          vreg_addr_d[0] = ( 0 + vstart) << $clog2(NrWordsPerVector);
          vreg_addr_d[1] = ( 1 + vstart) << $clog2(NrWordsPerVector);
+         if (is_cmp_req)
+          vreg_addr_d[2] = (spatz_req.vd + vstart) << $clog2(NrWordsPerVector);
          vrf_raddr_o = vreg_addr_d;
        end
        default:;
@@ -1159,7 +1169,7 @@ module spatz_vfu
     vreg_we    = '0;
 
     unique case(operand_state_q)
-      READ_V0_t: vreg_r_req = 3'b011;
+      READ_V0_t: vreg_r_req = is_cmp_req ? 3'b111 : 3'b011;
       READ_OPERANDS: begin
         if (switch_to_read_v0t) begin
           vreg_r_req = '0;  // avoid unuseful read
@@ -1361,7 +1371,16 @@ assign vfcmp_result_accepted = result_tag.is_cmp && &(result_valid | ~pending_re
   assign vrf_re_o    = vreg_r_req;
   assign vrf_we_o    = vreg_we;
   assign vrf_wbe_o   = vreg_wbe;
-  assign vrf_wdata_o = result_tag.is_cmp ? (wdata_q | vreg_wdata) : vreg_wdata;
+  always_comb begin : vrf_wdata_proc
+    if (result_tag.is_cmp) begin
+      if (result_tag.vm)
+        vrf_wdata_o = wdata_q | vreg_wdata;
+      else
+        vrf_wdata_o = ((wdata_q | vreg_wdata) & cmp_v0t_q) | (cmp_old_vd_q & ~cmp_v0t_q);
+    end else begin
+      vrf_wdata_o = vreg_wdata;
+    end
+  end
   assign vrf_id_o    = {result_tag.id, {3{spatz_req.id}}};
 
   //////////
