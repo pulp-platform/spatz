@@ -142,8 +142,8 @@ module spatz_vfu
   // Do we have the reduction operand?
   logic reduction_operand_ready_d, reduction_operand_ready_q;
 
-  typedef enum logic{
-    READ_OPERANDS, READ_V0_t
+  typedef enum logic [1:0]{
+    READ_OPERANDS, READ_V0_t, READ_OLD_MASK
   } operand_state_t;
    operand_state_t operand_state_d, operand_state_q;
   `FF(operand_state_q, operand_state_d, READ_OPERANDS)
@@ -518,16 +518,34 @@ module spatz_vfu
   // FSM to manage operands between normal calculation and v0.t fetching
   logic v0_t_is_ready;
   assign v0_t_is_ready   = (operand_state_q == READ_V0_t) && vrf_rvalid_i[0] && vrf_rvalid_i[1];
+  logic old_mask_is_ready;
+  assign old_mask_is_ready = (operand_state_q == READ_OLD_MASK) && vrf_rvalid_i[0] && vrf_rvalid_i[1];
   logic v0_t_read_done;
   `FFLARNC(v0_t_read_done,1'b1,v0_t_is_ready,last_request,1'b0,clk_i,rst_ni);
 
   // Back up old vd (mask destination) for comparison instructions — needed for
   // mask-undisturbed on inactive elements.
-  logic [N_FU*ELEN-1:0] cmp_old_vd_q;
-  `FFL(cmp_old_vd_q, vrf_rdata_i[2], v0_t_is_ready && is_cmp_req, '0)
+  logic [VLEN-1:0] cmp_old_vd_q;
+  `FFL(cmp_old_vd_q, {vrf_rdata_i[1], vrf_rdata_i[0]}, old_mask_is_ready, '0)
   // Save a mask for comparison instructions — needed for mask-undisturbed on inactive elements.
-  logic [N_FU*ELEN-1:0] cmp_v0t_q;
+  logic [VLEN-1:0] cmp_v0t_q;
   `FFL(cmp_v0t_q, {operand_v0_t_hi, operand_v0_t_lo}, v0_t_is_ready && is_cmp_req, '0)
+
+  // How many compare blocks in a mask word
+  logic [$clog2(NrWordsPerVector*8):0] cmp_blocks_per_word;
+  assign cmp_blocks_per_word = (8 << result_tag.vsew);
+
+  // Mask word is full
+  logic cmp_word_boundary;
+  assign cmp_word_boundary = (word_idx_q == cmp_blocks_per_word - 1);
+
+  // Signal to indicate writing the result of comparison
+  logic cmp_do_write;
+  assign cmp_do_write = result_tag.is_cmp && (cmp_word_boundary || result_tag.last);
+
+  // The number of the word in a mask for comparison
+  logic [$clog2(NrWordsPerVector):0] cmp_word_num_q, cmp_word_num_d;
+  `FF(cmp_word_num_q, cmp_word_num_d, '0)
 
   logic switch_to_read_v0t;
   assign switch_to_read_v0t = (operand_state_q == READ_OPERANDS) && spatz_req_valid
@@ -538,8 +556,10 @@ module spatz_vfu
     operand_state_d = operand_state_q;
       unique case(operand_state_q)
         READ_V0_t:
-          if(v0_t_is_ready) operand_state_d = READ_OPERANDS;
+          if(v0_t_is_ready) operand_state_d = is_cmp_req ? READ_OLD_MASK : READ_OPERANDS;
           else operand_state_d = operand_state_q;
+        READ_OLD_MASK:
+          operand_state_d = old_mask_is_ready ? READ_OPERANDS : READ_OLD_MASK;
         READ_OPERANDS:
           operand_state_d = switch_to_read_v0t ? READ_V0_t : READ_OPERANDS;
         default: operand_state_d = operand_state_q;
@@ -804,7 +824,7 @@ module spatz_vfu
         word_issued = spatz_req_valid && &(in_ready | ~valid_operations) && operands_ready && !stall;
 
         // Are we ready to accept a result?
-        result_ready = &(result_valid | ~pending_results) && ((result_tag.wb && vfu_rsp_ready_i) || vrf_wvalid_i || (result_tag.is_cmp && !result_tag.last));
+        result_ready = &(result_valid | ~pending_results) && ((result_tag.wb && vfu_rsp_ready_i) || vrf_wvalid_i || (result_tag.is_cmp && !cmp_do_write));
 
         // Initialize the pointers
         reduction_pointer_d = '0;
@@ -1097,7 +1117,7 @@ module spatz_vfu
     vreg_addr_d = vreg_addr_q;
 
     vrf_raddr_o = vreg_addr_d;
-    vrf_waddr_o = vrf_addr_t'(result_tag.vd_addr);
+    vrf_waddr_o = result_tag.is_cmp ? vrf_addr_t'(result_tag.vd_addr + cmp_word_num_q) : vrf_addr_t'(result_tag.vd_addr);
 
     // Tag (propagated with the operations)
     input_tag = '{
@@ -1154,10 +1174,13 @@ module spatz_vfu
        end
        READ_V0_t: begin
          vreg_addr_d[0] = ( 0 + vstart) << $clog2(NrWordsPerVector);
-         vreg_addr_d[1] = ( 1 + vstart) << $clog2(NrWordsPerVector);
-         if (is_cmp_req)
-          vreg_addr_d[2] = (spatz_req.vd + vstart) << $clog2(NrWordsPerVector);
+         vreg_addr_d[1] = ((0 + vstart) << $clog2(NrWordsPerVector)) + 1;
          vrf_raddr_o = vreg_addr_d;
+       end
+       READ_OLD_MASK: begin
+        vreg_addr_d[0] = (spatz_req.vd + vstart) << $clog2(NrWordsPerVector);
+        vreg_addr_d[1] = ((spatz_req.vd + vstart) << $clog2(NrWordsPerVector)) + 1;
+        vrf_raddr_o = vreg_addr_d;
        end
        default:;
    endcase
@@ -1169,7 +1192,8 @@ module spatz_vfu
     vreg_we    = '0;
 
     unique case(operand_state_q)
-      READ_V0_t: vreg_r_req = is_cmp_req ? 3'b111 : 3'b011;
+      READ_V0_t: vreg_r_req = 3'b011;
+      READ_OLD_MASK: vreg_r_req = 3'b011;
       READ_OPERANDS: begin
         if (switch_to_read_v0t) begin
           vreg_r_req = '0;  // avoid unuseful read
@@ -1185,7 +1209,7 @@ module spatz_vfu
     if (&(result_valid | ~pending_results) && !result_tag.reduction) begin
       vreg_we  = !result_tag.wb;
       if (result_tag.is_cmp) begin
-        vreg_we    = result_tag.last;
+        vreg_we    = cmp_do_write;
       end
     end
 
@@ -1234,8 +1258,10 @@ always_comb begin : vreg_wbe_proc
       if (result_tag.is_cmp) begin
         // every vector element requires 1 bit of wbe --> ceil(vl/8)
         automatic logic [$clog2((MAXVL+7)/8+1)-1:0] mask_bytes;
+        automatic logic [$clog2((MAXVL+7)/8+1)-1:0] rem_bytes;
         mask_bytes = (result_tag.vl + 7) >> 3;
-        vreg_wbe   = (mask_bytes >= N_FU*ELENB) ? '1 : vrf_be_t'((vrf_be_t'(1) << mask_bytes) - 1);
+        rem_bytes  = mask_bytes - (cmp_word_num_q * VRFWordBWidth);
+        vreg_wbe   = (rem_bytes >= VRFWordBWidth) ? '1 : vrf_be_t'((vrf_be_t'(1) << rem_bytes) - 1);
       end else if(!result_tag.vm && !result_tag.merge && !spatz_req.op_arith.is_scalar && !result_tag.narrowing) begin //masking the wb results
         unique case (sew_wb) // add widening support
           EW_8:for(int i=0;i<VRFWordBWidth;i=i+1)begin
@@ -1293,11 +1319,17 @@ assign vfcmp_result_accepted = result_tag.is_cmp && &(result_valid | ~pending_re
 
   always_comb begin : VRF_cnt_proc
     word_idx_d = word_idx_q;
+    cmp_word_num_d = cmp_word_num_q;
     if (vfcmp_result_accepted) begin
-      if (result_tag.last)
+      if (result_tag.last) begin
         word_idx_d = '0;
-      else
-        word_idx_d = word_idx_q + 1;
+        cmp_word_num_d = '0;
+      end else if (cmp_word_boundary) begin
+        word_idx_d     = '0;
+        cmp_word_num_d = cmp_word_num_q + 1'b1;
+      end else begin
+        word_idx_d = word_idx_q + 1'b1;
+      end
     end
   end
 
@@ -1322,32 +1354,27 @@ assign vfcmp_result_accepted = result_tag.is_cmp && &(result_valid | ~pending_re
       endcase
 
     end else if (result_tag.is_cmp) begin
-      automatic logic v0_bit;
       vreg_wdata = '0;
 
       unique case (result_tag.vsew)
         EW_8: begin
           for (int i = 0; i < VRFWordWidth/8; i++) begin
-            v0_bit = (result_tag.vm) ? 1'b1 : operand_v0_t_q[i + (VRFWordWidth/8)*word_idx_q];
-            vreg_wdata[i + (VRFWordWidth/8)*word_idx_q] = result[i*8] & v0_bit;
+            vreg_wdata[i + (VRFWordWidth/8)*word_idx_q] = result[i*8];
           end
         end
         EW_16: begin
           for (int i = 0; i < VRFWordWidth/16; i++) begin
-            v0_bit = (result_tag.vm) ? 1'b1 : operand_v0_t_q[i + (VRFWordWidth/16)*word_idx_q];
-            vreg_wdata[i + (VRFWordWidth/16)*word_idx_q] = result[i*16] & v0_bit;
+            vreg_wdata[i + (VRFWordWidth/16)*word_idx_q] = result[i*16];
           end
         end
         EW_32: begin
           for (int i = 0; i < VRFWordWidth/32; i++) begin
-            v0_bit = (result_tag.vm) ? 1'b1 : operand_v0_t_q[i + (VRFWordWidth/32)*word_idx_q];
-            vreg_wdata[i + (VRFWordWidth/32)*word_idx_q] = result[i*32] & v0_bit;
+            vreg_wdata[i + (VRFWordWidth/32)*word_idx_q] = result[i*32];
           end
         end
         EW_64: begin
           for (int i = 0; i < VRFWordWidth/64; i++) begin
-            v0_bit = (result_tag.vm) ? 1'b1 : operand_v0_t_q[i + (VRFWordWidth/64)*word_idx_q];
-            vreg_wdata[i + (VRFWordWidth/64)*word_idx_q] = result[i*64] & v0_bit;
+            vreg_wdata[i + (VRFWordWidth/64)*word_idx_q] = result[i*64];
           end
         end
         default:;
@@ -1358,7 +1385,7 @@ assign vfcmp_result_accepted = result_tag.is_cmp && &(result_valid | ~pending_re
   always_comb begin : wdata_proc
     wdata_d = wdata_q;
     if (vfcmp_result_accepted) begin
-      if (result_tag.last)
+      if (cmp_do_write)
         wdata_d = '0;
       else
         wdata_d = wdata_q | vreg_wdata;
@@ -1373,10 +1400,13 @@ assign vfcmp_result_accepted = result_tag.is_cmp && &(result_valid | ~pending_re
   assign vrf_wbe_o   = vreg_wbe;
   always_comb begin : vrf_wdata_proc
     if (result_tag.is_cmp) begin
+      automatic logic [VRFWordWidth-1:0] v0t_w, oldvd_w;
+      v0t_w = cmp_v0t_q[cmp_word_num_q*VRFWordWidth +: VRFWordWidth];
+      oldvd_w = cmp_old_vd_q[cmp_word_num_q*VRFWordWidth +: VRFWordWidth];
       if (result_tag.vm)
         vrf_wdata_o = wdata_q | vreg_wdata;
       else
-        vrf_wdata_o = ((wdata_q | vreg_wdata) & cmp_v0t_q) | (cmp_old_vd_q & ~cmp_v0t_q);
+        vrf_wdata_o = ((wdata_q | vreg_wdata) & v0t_w) | (oldvd_w & ~v0t_w);
     end else begin
       vrf_wdata_o = vreg_wdata;
     end
