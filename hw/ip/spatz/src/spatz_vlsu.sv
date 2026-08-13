@@ -49,7 +49,9 @@ module spatz_vlsu
     output logic           [NrMemPorts-1:0] spatz_mem_rsp_ready_o,
     // Memory Finished
     output logic                            spatz_mem_finished_o,
-    output logic                            spatz_mem_str_finished_o
+    output logic                            spatz_mem_str_finished_o,
+    // High when every issued store has been acked by memory (for fences)
+    output logic                            spatz_st_rsp_done_o
   );
 
 // Include FF
@@ -140,36 +142,28 @@ module spatz_vlsu
     `FF(port_state_q[port], port_state_d[port], VLSU_RunningLoad)
   end: gen_port_state_q
 
-  id_t [NrMemPorts-1:0] store_count_q;
-  id_t [NrMemPorts-1:0] store_count_d;
-
   // Memory requests
   spatz_mem_req_t [NrMemPorts-1:0] spatz_mem_req;
   logic           [NrMemPorts-1:0] spatz_mem_req_valid;
   logic           [NrMemPorts-1:0] spatz_mem_req_ready;
 
-  for (genvar port = 0; port < NrMemPorts; port++) begin: gen_store_count_q
-    `FF(store_count_q[port], store_count_d[port], '0)
-  end: gen_store_count_q
+  // Per-port count of stores sent but not yet acked, for the fence path only (not used for backpressure).
+  logic [NrMemPorts-1:0][15:0] st_rsp_pending_q, st_rsp_pending_d;
+  for (genvar port = 0; port < NrMemPorts; port++) begin: gen_st_rsp_pending_q
+    `FF(st_rsp_pending_q[port], st_rsp_pending_d[port], '0)
+  end: gen_st_rsp_pending_q
 
-  always_comb begin: proc_store_count
-    // Maintain state
-    store_count_d = store_count_q;
-
+  always_comb begin: proc_st_rsp_pending
+    st_rsp_pending_d = st_rsp_pending_q;
     for (int port = 0; port < NrMemPorts; port++) begin
-      // if (spatz_mem_req_o[port].write && spatz_mem_req_valid_o[port] && spatz_mem_req_ready_i[port])
-      //   // Did we send a store?
-      //   store_count_d[port]++;
-      // We need to count a store once it is sent to reg for correct handling
       if (spatz_mem_req[port].write && spatz_mem_req_valid[port] && spatz_mem_req_ready[port])
-        // Did we send a store?
-        store_count_d[port]++;
-
-      // Did we get the ack of a store?
-      if (store_count_q[port] != '0 && spatz_mem_rsp_valid_i[port] && spatz_mem_rsp_i[port].write)
-        store_count_d[port]--;
+        st_rsp_pending_d[port]++;
+      if (st_rsp_pending_q[port] != '0 && spatz_mem_rsp_valid_i[port] && spatz_mem_rsp_i[port].write)
+        st_rsp_pending_d[port]--;
     end
-  end: proc_store_count
+  end: proc_st_rsp_pending
+
+  assign spatz_st_rsp_done_o = (st_rsp_pending_q == '0);
 
   //////////////////////
   //  Reorder Buffer  //
@@ -989,9 +983,8 @@ module spatz_vlsu
           end else
             for (int unsigned k = 0; k < ELENB; k++)
               mem_req_strb[port][k] = k < mem_counter_delta[port];
-        end else begin
-          spatz_mem_rsp_ready_o[port] = 1'b0;
         end
+        // Idle ports stay ready by default; write-type responses here are store acks and get discarded.
       end
     end
   end
