@@ -94,6 +94,8 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
   input  logic [1:0]    acc_mem_finished_i,
   // Accelerator finished a memory store operation
   input  logic [1:0]    acc_mem_str_finished_i,
+  // High when every Spatz VLSU store has been acked by memory
+  input  logic          acc_st_rsp_done_i,
   /// TCDM Data Interface
   /// Write transactions do not return data on the `P Channel`
   /// Transactions need to be handled strictly in-order.
@@ -463,12 +465,12 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
   // fence.snitch (FENCE_I opcode): stall until Snitch LSU is drained.
   logic fence_snitch_stall;
   assign fence_snitch_stall = valid_instr & (inst_data_i ==? FENCE_SNITCH) & ~lsu_empty;
-  // fence.spatz (SFENCE_VMA opcode): stall until Spatz operations are drained.
+  // fence.spatz (SFENCE_VMA opcode): stall until Spatz operations are drained and all stores acked.
   logic fence_spatz_stall;
-  assign fence_spatz_stall = valid_instr & (inst_data_i ==? FENCE_SPATZ) & (|acc_mem_cnt_q);
-  // Full fence (FENCE opcode): stall until both Snitch LSU and Spatz are drained.
+  assign fence_spatz_stall = valid_instr & (inst_data_i ==? FENCE_SPATZ) & ((|acc_mem_cnt_q) | ~acc_st_rsp_done_i);
+  // Full fence (FENCE opcode): stall until Snitch LSU and Spatz are drained and all stores acked.
   logic fence_stall;
-  assign fence_stall = valid_instr & (inst_data_i ==? FENCE) & (~lsu_empty | (|acc_mem_cnt_q));
+  assign fence_stall = valid_instr & (inst_data_i ==? FENCE) & (~lsu_empty | (|acc_mem_cnt_q) | ~acc_st_rsp_done_i);
   // Stall the stage if we either didn't get a valid instruction or the LSU/Accelerator is not ready
   assign stall = ~valid_instr
                 // The LSU is stalling.

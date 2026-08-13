@@ -53,6 +53,8 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     // Memory Finished
     output logic             [1:0]            spatz_mem_finished_o,
     output logic             [1:0]            spatz_mem_str_finished_o,
+    // High when every VLSU store has been acked by memory (for fences)
+    output logic                              spatz_st_rsp_done_o,
     // FPU memory interface interface
 `ifdef MEMPOOL_SPATZ
     output logic                              fp_lsu_mem_req_valid_o,
@@ -341,7 +343,8 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     .spatz_mem_rsp_valid_i   (spatz_mem_rsp_valid_i                                ),
     .spatz_mem_rsp_ready_o   (spatz_mem_rsp_ready_o                                ),
     .spatz_mem_finished_o    (spatz_mem_finished                                   ),
-    .spatz_mem_str_finished_o(spatz_mem_str_finished                               )
+    .spatz_mem_str_finished_o(spatz_mem_str_finished                               ),
+    .spatz_st_rsp_done_o     (spatz_st_rsp_done_o                                  )
   );
 
   ///////////

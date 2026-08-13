@@ -159,6 +159,7 @@ module spatz_cc
   // Spatz Memory consistency signals
   logic [1:0] spatz_mem_finished;
   logic [1:0] spatz_mem_str_finished;
+  logic       spatz_st_rsp_done;
 
   `SNITCH_VM_TYPEDEF(AddrWidth)
 
@@ -211,6 +212,7 @@ module spatz_cc
     .acc_pready_o          (acc_demux_snitch_ready   ),
     .acc_mem_finished_i    (spatz_mem_finished       ),
     .acc_mem_str_finished_i(spatz_mem_str_finished   ),
+    .acc_st_rsp_done_i     (spatz_st_rsp_done        ),
     .data_req_o            (snitch_dreq_d            ),
     .data_rsp_i            (snitch_drsp_d            ),
     .ptw_valid_o           (hive_req_o.ptw_valid     ),
@@ -332,6 +334,7 @@ module spatz_cc
     .spatz_mem_rsp_ready_o   (spatz_mem_rsp_ready   ),
     .spatz_mem_finished_o    (spatz_mem_finished    ),
     .spatz_mem_str_finished_o(spatz_mem_str_finished),
+    .spatz_st_rsp_done_o     (spatz_st_rsp_done     ),
     .fp_lsu_mem_req_o        (fp_lsu_mem_req        ),
     .fp_lsu_mem_rsp_i        (fp_lsu_mem_rsp        ),
     .fpu_rnd_mode_i          (fpu_rnd_mode          ),

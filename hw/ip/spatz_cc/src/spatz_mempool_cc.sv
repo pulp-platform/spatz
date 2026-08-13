@@ -106,6 +106,7 @@ module spatz_mempool_cc
   // Spatz Memory consistency signals
   logic [1:0] spatz_mem_finished;
   logic [1:0] spatz_mem_str_finished;
+  logic       spatz_st_rsp_done;
 
   // Spatz floating point signals
   fpnew_pkg::roundmode_e fpu_rnd_mode;
@@ -174,6 +175,7 @@ module spatz_mempool_cc
     .acc_qdata_rsp_i        ( acc_req_rsp            ),
     .acc_mem_finished_i     ( spatz_mem_finished     ),
     .acc_mem_str_finished_i ( spatz_mem_str_finished ),
+    .acc_st_rsp_done_i      ( spatz_st_rsp_done      ),
     .data_qaddr_o           ( snitch_req.addr        ),
     .data_qwrite_o          ( snitch_req.write       ),
     .data_qamo_o            ( snitch_req.amo         ),
@@ -244,6 +246,7 @@ module spatz_mempool_cc
     .spatz_mem_rsp_valid_i   ( spatz_mem_rsp_valid   ),// ***notice no ready signal here***
     .spatz_mem_finished_o    ( spatz_mem_finished    ),
     .spatz_mem_str_finished_o( spatz_mem_str_finished),
+    .spatz_st_rsp_done_o     ( spatz_st_rsp_done     ),
     .fp_lsu_mem_req_o        ( fp_lsu_mem_req        ),
     .fp_lsu_mem_req_valid_o  ( fp_lsu_mem_req_valid  ),
     .fp_lsu_mem_req_ready_i  ( fp_lsu_mem_req_ready  ),
