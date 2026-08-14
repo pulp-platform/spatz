@@ -686,16 +686,18 @@ module spatz_cluster
       tcdm_data_t mem_wdata_enc; // 39-bit codeword to SRAM (direct from AMO shim)
       tcdm_data_t amo_shim_rdata; // 39-bit read response from AMO shim
 
-      // ECC_enhanced SRAM w/ inputECC
+      // replace the SRAM to a ECC_enhanced version w/ inputECC---------------
       logic ecc_sram_gnt;
 
-      // perodical scrub_trigger generator
+      // perodical scrub_trigger generator----
       logic scrub_trigger;
       scrub_timer #(.PERIOD(10_000_000)) i_scrub_timer (
         .clk_i,
         .rst_ni,
         .scrub_trigger_o  (scrub_trigger)
       );
+      //-------------------------------------------
+
 
       ecc_sram #(
         .NumWords  (TCDMDepth),

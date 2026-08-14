@@ -1216,6 +1216,7 @@ module spatz_vlsu
                           (!vlsu_rmw_needed || vlsu_rmw_commit_now);
         for (int unsigned port = 0; port < NrMemPorts; port++) begin
           automatic logic [63:0] data;
+
           data = '0;
           data[ELEN-1:0] = load_rsp_data_decoded[port];
 

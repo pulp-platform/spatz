@@ -631,6 +631,8 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   // VLSU //
   //////////
 
+
+
 `ifdef DOUBLE_BW
   spatz_doublebw_vlsu #(
     .NrMemPorts      (NrMemPorts      ),
@@ -695,7 +697,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     .vrf_re_o                ({sb_re[VLSU_VS2_RD],          sb_re[VLSU_VD_RD]        }      ),
     .vrf_rdata_ecc           ({vrf_rdata_ecc[VLSU_VS2_RD],  vrf_rdata_ecc[VLSU_VD_RD]}      ),
     .vrf_rvalid_i            ({vrf_rvalid[VLSU_VS2_RD],     vrf_rvalid[VLSU_VD_RD]   }      ),
-    .vrf_id_o                ({sb_id[SB_VLSU_VD_WD], sb_id[VLSU_VS2_RD], sb_id[VLSU_VD_RD]} ),
+    .vrf_id_o                ({sb_id[SB_VLSU_VD_WD], sb_id[VLSU_VS2_RD], sb_id[VLSU_VD_RD]}),
     // Interface Memory
     .spatz_mem_req_o         (spatz_mem_req_o                                      ),
     .spatz_mem_req_valid_o   (spatz_mem_req_valid_o                                ),
