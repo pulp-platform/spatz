@@ -26,7 +26,11 @@ module spatz_simd_lane import spatz_pkg::*; import rvv_pkg::vew_e; #(
     // Result Output
     output data_t result_o,
     output logic  result_valid_o,
-    input  logic  result_ready_i
+    input  logic  result_ready_i,
+    // TMR fault reporting, passed straight through from the internal
+    // serial divider (spatz_serdiv is the only TMR-protected state in
+    // this lane).
+    output logic  handshake_tmr_fault_o
   );
 
   ////////////////
@@ -200,7 +204,8 @@ module spatz_simd_lane import spatz_pkg::*; import rvv_pkg::vew_e; #(
     .out_vld_o (div_out_valid ),
     .out_rdy_i (result_ready_i),
     .id_o      (/* Unused */  ),
-    .res_o     (div_result    )
+    .res_o     (div_result    ),
+    .handshake_tmr_fault_o(handshake_tmr_fault_o)
   );
 
   ////////////

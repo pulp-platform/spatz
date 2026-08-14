@@ -27,8 +27,13 @@ module spatz_serdiv #(
     output logic               out_vld_o,
     input  logic               out_rdy_i,
     output logic [IdWidth-1:0] id_o,
-    output logic [WIDTH-1:0]   res_o
+    output logic [WIDTH-1:0]   res_o,
+    // TMR fault reporting for the FSM state register
+    output logic               handshake_tmr_fault_o
   );
+
+// Include FF
+`include "common_cells/registers.svh"
 
   import riscv_instr::DIV;
   import riscv_instr::DIVU;
@@ -52,6 +57,27 @@ module spatz_serdiv #(
     IDLE, DIVIDE, FINISH
   } state_t;
   state_t state_d, state_q;
+
+  // FSM state register protected via triplicate + majority vote (TMR)
+  state_t state_q_rep [3];
+  for (genvar t = 0; t < 3; t++) begin : gen_state_rep
+    `FF(state_q_rep[t], state_d, IDLE)
+  end
+  logic state_tmr_fault;
+  logic [$bits(state_t)-1:0] state_q_bits;
+  bitwise_TMR_voter_fail #(
+    .DataWidth ($bits(state_t)),
+    .VoterType (1)
+  ) i_state_voter (
+    .a_i              (state_q_rep[0] ),
+    .b_i              (state_q_rep[1] ),
+    .c_i              (state_q_rep[2] ),
+    .majority_o       (state_q_bits   ),
+    .fault_detected_o (state_tmr_fault)
+  );
+  assign state_q = state_t'(state_q_bits);
+
+  assign handshake_tmr_fault_o = state_tmr_fault;
 
   logic [WIDTH-1:0] res_q, res_d;
   logic [WIDTH-1:0] op_a_q, op_a_d;
@@ -213,7 +239,6 @@ module spatz_serdiv #(
 
   always_ff @(posedge clk_i or negedge rst_ni) begin : p_regs
     if (!rst_ni) begin
-      state_q        <= IDLE;
       op_a_q         <= '0;
       op_b_q         <= '0;
       res_q          <= '0;
@@ -225,7 +250,6 @@ module spatz_serdiv #(
       op_b_zero_q    <= 1'b0;
       div_res_zero_q <= 1'b0;
     end else begin
-      state_q        <= state_d;
       op_a_q         <= op_a_d;
       op_b_q         <= op_b_d;
       res_q          <= res_d;

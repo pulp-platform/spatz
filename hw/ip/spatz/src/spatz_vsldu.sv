@@ -29,7 +29,11 @@ module spatz_vsldu
     output vrf_addr_t        vrf_raddr_o,
     output logic             vrf_re_o,
     input  vrf_data_t        vrf_rdata_i,
-    input  logic             vrf_rvalid_i
+    input  logic             vrf_rvalid_i,
+    // Set when any TMR-protected handshake flag or FSM state register in
+    // this module disagrees across its three replicas. Self-corrected by
+    // the voter the same cycle -- this is diagnostic/counter-only.
+    output logic             handshake_tmr_fault_o
   );
 
 // Include FF
@@ -176,8 +180,27 @@ module spatz_vsldu
     VSLDU_RUNNING,    // Running an instruction
     VSLDU_WAIT_WVALID // Waiting for the last wvalid to acknowledge the instruction
    } state_t;
-   state_t state_q, state_d;
-  `FF(state_q, state_d, VSLDU_RUNNING)
+   state_t state_d;
+  // TMR-protected: triplicated FSM state register; an SEU on the single
+  // state_q bit would otherwise silently corrupt the response FSM.
+  logic [$bits(state_t)-1:0] state_q_rep [3];
+  for (genvar t = 0; t < 3; t++) begin : gen_state_rep
+    `FF(state_q_rep[t], state_d, VSLDU_RUNNING)
+  end
+  logic [$bits(state_t)-1:0] state_q_bits;
+  logic state_tmr_fault;
+  bitwise_TMR_voter_fail #(
+    .DataWidth ($bits(state_t)),
+    .VoterType (1)
+  ) i_state_voter (
+    .a_i              (state_q_rep[0]  ),
+    .b_i              (state_q_rep[1]  ),
+    .c_i              (state_q_rep[2]  ),
+    .majority_o       (state_q_bits    ),
+    .fault_detected_o (state_tmr_fault )
+  );
+  state_t state_q;
+  assign state_q = state_t'(state_q_bits);
 
   // New instruction
   // Initialize the internal state one cycle in advance
@@ -192,8 +215,7 @@ module spatz_vsldu
     VREG_IDLE,
     VREG_WAIT_FIRST_WRITE
   } vreg_operation_first_t;
-  vreg_operation_first_t vreg_operation_first_q, vreg_operation_first_d;
-  `FF(vreg_operation_first_q, vreg_operation_first_d, VREG_IDLE)
+  vreg_operation_first_t vreg_operation_first_d;
 
   // Accept a new operation or clear req register if we are finished
   always_comb begin
@@ -294,6 +316,28 @@ module spatz_vsldu
       endcase
     end
   end
+
+  // TMR-protected: triplicated FSM state register; an SEU on the single
+  // vreg_operation_first_q bit would otherwise silently corrupt the
+  // first/last-operation bookkeeping.
+  logic [$bits(vreg_operation_first_t)-1:0] vreg_operation_first_q_rep [3];
+  for (genvar t = 0; t < 3; t++) begin : gen_vreg_operation_first_rep
+    `FF(vreg_operation_first_q_rep[t], vreg_operation_first_d, VREG_IDLE)
+  end
+  logic [$bits(vreg_operation_first_t)-1:0] vreg_operation_first_q_bits;
+  logic vreg_operation_first_tmr_fault;
+  bitwise_TMR_voter_fail #(
+    .DataWidth ($bits(vreg_operation_first_t)),
+    .VoterType (1)
+  ) i_vreg_operation_first_voter (
+    .a_i              (vreg_operation_first_q_rep[0]  ),
+    .b_i              (vreg_operation_first_q_rep[1]  ),
+    .c_i              (vreg_operation_first_q_rep[2]  ),
+    .majority_o       (vreg_operation_first_q_bits    ),
+    .fault_detected_o (vreg_operation_first_tmr_fault )
+  );
+  vreg_operation_first_t vreg_operation_first_q;
+  assign vreg_operation_first_q = vreg_operation_first_t'(vreg_operation_first_q_bits);
 
   always_comb begin: vsldu_vreg_counter_proc
     // How many elements are left to do
@@ -556,5 +600,11 @@ module spatz_vsldu
     vrf_raddr_o     = (vreg_operation_first_q == VREG_READ_V0_t_lo) ? '0 : (vreg_operation_first_q == VREG_READ_V0_t_hi) ? vrf_addr_t'(1) : base_raddr + vreg_counter_q[$bits(vlen_t)-1:$clog2(VRFWordBWidth)] + sld_offset_rd;
     vrf_req_d.waddr = base_waddr + vreg_counter_q[$bits(vlen_t)-1:$clog2(VRFWordBWidth)];
   end
+
+  ///////////////
+  // TMR Faults //
+  ///////////////
+
+  assign handshake_tmr_fault_o = state_tmr_fault | vreg_operation_first_tmr_fault;
 
 endmodule : spatz_vsldu

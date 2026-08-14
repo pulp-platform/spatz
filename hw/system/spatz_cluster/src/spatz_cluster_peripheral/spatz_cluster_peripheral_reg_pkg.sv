@@ -9,10 +9,10 @@ package spatz_cluster_peripheral_reg_pkg;
   // Param list
   parameter int NumPerfCounters = 2;
   parameter int NumVrfUnits = 1;
-  parameter int NumTcdmBanks = 16;
+  parameter int NumTcdmBanks = 32;
 
   // Address widths within the block
-  parameter int BlockAw = 10;
+  parameter int BlockAw = 11;
 
   ////////////////////////////
   // Typedefs for registers //
@@ -182,6 +182,31 @@ package spatz_cluster_peripheral_reg_pkg;
   } spatz_cluster_peripheral_reg2hw_tcdm_scrub_uncorrectable_count_mreg_t;
 
   typedef struct packed {
+    logic [31:0] q;
+  } spatz_cluster_peripheral_reg2hw_fpu_dup_fault_count_mreg_t;
+
+  typedef struct packed {
+    logic [31:0] q;
+  } spatz_cluster_peripheral_reg2hw_handshake_tmr_count_mreg_t;
+
+  typedef struct packed {
+    logic [31:0] q;
+  } spatz_cluster_peripheral_reg2hw_core_tmr_count_mreg_t;
+
+  typedef struct packed {
+    logic [31:0] q;
+  } spatz_cluster_peripheral_reg2hw_uncorrectable_irq_enable_reg_t;
+
+  typedef struct packed {
+    logic [31:0] q;
+  } spatz_cluster_peripheral_reg2hw_uncorrectable_irq_status_reg_t;
+
+  typedef struct packed {
+    logic [31:0] q;
+    logic        qe;
+  } spatz_cluster_peripheral_reg2hw_uncorrectable_irq_clear_reg_t;
+
+  typedef struct packed {
     logic [47:0] d;
   } spatz_cluster_peripheral_hw2reg_perf_counter_mreg_t;
 
@@ -213,120 +238,216 @@ package spatz_cluster_peripheral_reg_pkg;
     logic [31:0] d;
   } spatz_cluster_peripheral_hw2reg_tcdm_scrub_uncorrectable_count_mreg_t;
 
+  typedef struct packed {
+    logic [31:0] d;
+  } spatz_cluster_peripheral_hw2reg_fpu_dup_fault_count_mreg_t;
+
+  typedef struct packed {
+    logic [31:0] d;
+  } spatz_cluster_peripheral_hw2reg_handshake_tmr_count_mreg_t;
+
+  typedef struct packed {
+    logic [31:0] d;
+  } spatz_cluster_peripheral_hw2reg_core_tmr_count_mreg_t;
+
+  typedef struct packed {
+    logic [31:0] d;
+  } spatz_cluster_peripheral_hw2reg_uncorrectable_irq_status_reg_t;
+
   // Register -> HW type
   typedef struct packed {
-    spatz_cluster_peripheral_reg2hw_perf_counter_enable_mreg_t [1:0] perf_counter_enable; // [2456:2395]
-    spatz_cluster_peripheral_reg2hw_hart_select_mreg_t [1:0] hart_select; // [2394:2375]
-    spatz_cluster_peripheral_reg2hw_perf_counter_mreg_t [1:0] perf_counter; // [2374:2277]
-    spatz_cluster_peripheral_reg2hw_cl_clint_set_reg_t cl_clint_set; // [2276:2244]
-    spatz_cluster_peripheral_reg2hw_cl_clint_clear_reg_t cl_clint_clear; // [2243:2211]
-    spatz_cluster_peripheral_reg2hw_hw_barrier_reg_t hw_barrier; // [2210:2179]
-    spatz_cluster_peripheral_reg2hw_icache_prefetch_enable_reg_t icache_prefetch_enable; // [2178:2178]
-    spatz_cluster_peripheral_reg2hw_spatz_status_reg_t spatz_status; // [2177:2177]
-    spatz_cluster_peripheral_reg2hw_cluster_boot_control_reg_t cluster_boot_control; // [2176:2145]
-    spatz_cluster_peripheral_reg2hw_cluster_eoc_exit_reg_t cluster_eoc_exit; // [2144:2113]
-    spatz_cluster_peripheral_reg2hw_err_monitor_clear_reg_t err_monitor_clear; // [2112:2112]
-    spatz_cluster_peripheral_reg2hw_vrf_correctable_count_mreg_t [0:0] vrf_correctable_count; // [2111:2080]
-    spatz_cluster_peripheral_reg2hw_vrf_uncorrectable_count_mreg_t [0:0] vrf_uncorrectable_count; // [2079:2048]
-    spatz_cluster_peripheral_reg2hw_tcdm_rd_correctable_count_mreg_t [15:0] tcdm_rd_correctable_count; // [2047:1536]
-    spatz_cluster_peripheral_reg2hw_tcdm_rd_uncorrectable_count_mreg_t [15:0] tcdm_rd_uncorrectable_count; // [1535:1024]
-    spatz_cluster_peripheral_reg2hw_tcdm_scrub_correctable_count_mreg_t [15:0] tcdm_scrub_correctable_count; // [1023:512]
-    spatz_cluster_peripheral_reg2hw_tcdm_scrub_uncorrectable_count_mreg_t [15:0] tcdm_scrub_uncorrectable_count; // [511:0]
+    spatz_cluster_peripheral_reg2hw_perf_counter_enable_mreg_t [1:0] perf_counter_enable; // [4697:4636]
+    spatz_cluster_peripheral_reg2hw_hart_select_mreg_t [1:0] hart_select; // [4635:4616]
+    spatz_cluster_peripheral_reg2hw_perf_counter_mreg_t [1:0] perf_counter; // [4615:4518]
+    spatz_cluster_peripheral_reg2hw_cl_clint_set_reg_t cl_clint_set; // [4517:4485]
+    spatz_cluster_peripheral_reg2hw_cl_clint_clear_reg_t cl_clint_clear; // [4484:4452]
+    spatz_cluster_peripheral_reg2hw_hw_barrier_reg_t hw_barrier; // [4451:4420]
+    spatz_cluster_peripheral_reg2hw_icache_prefetch_enable_reg_t icache_prefetch_enable; // [4419:4419]
+    spatz_cluster_peripheral_reg2hw_spatz_status_reg_t spatz_status; // [4418:4418]
+    spatz_cluster_peripheral_reg2hw_cluster_boot_control_reg_t cluster_boot_control; // [4417:4386]
+    spatz_cluster_peripheral_reg2hw_cluster_eoc_exit_reg_t cluster_eoc_exit; // [4385:4354]
+    spatz_cluster_peripheral_reg2hw_err_monitor_clear_reg_t err_monitor_clear; // [4353:4353]
+    spatz_cluster_peripheral_reg2hw_vrf_correctable_count_mreg_t [0:0] vrf_correctable_count; // [4352:4321]
+    spatz_cluster_peripheral_reg2hw_vrf_uncorrectable_count_mreg_t [0:0] vrf_uncorrectable_count; // [4320:4289]
+    spatz_cluster_peripheral_reg2hw_tcdm_rd_correctable_count_mreg_t [31:0] tcdm_rd_correctable_count; // [4288:3265]
+    spatz_cluster_peripheral_reg2hw_tcdm_rd_uncorrectable_count_mreg_t [31:0] tcdm_rd_uncorrectable_count; // [3264:2241]
+    spatz_cluster_peripheral_reg2hw_tcdm_scrub_correctable_count_mreg_t [31:0] tcdm_scrub_correctable_count; // [2240:1217]
+    spatz_cluster_peripheral_reg2hw_tcdm_scrub_uncorrectable_count_mreg_t [31:0] tcdm_scrub_uncorrectable_count; // [1216:193]
+    spatz_cluster_peripheral_reg2hw_fpu_dup_fault_count_mreg_t [0:0] fpu_dup_fault_count; // [192:161]
+    spatz_cluster_peripheral_reg2hw_handshake_tmr_count_mreg_t [0:0] handshake_tmr_count; // [160:129]
+    spatz_cluster_peripheral_reg2hw_core_tmr_count_mreg_t [0:0] core_tmr_count; // [128:97]
+    spatz_cluster_peripheral_reg2hw_uncorrectable_irq_enable_reg_t uncorrectable_irq_enable; // [96:65]
+    spatz_cluster_peripheral_reg2hw_uncorrectable_irq_status_reg_t uncorrectable_irq_status; // [64:33]
+    spatz_cluster_peripheral_reg2hw_uncorrectable_irq_clear_reg_t uncorrectable_irq_clear; // [32:0]
   } spatz_cluster_peripheral_reg2hw_t;
 
   // HW -> register type
   typedef struct packed {
-    spatz_cluster_peripheral_hw2reg_perf_counter_mreg_t [1:0] perf_counter; // [2239:2144]
-    spatz_cluster_peripheral_hw2reg_hw_barrier_reg_t hw_barrier; // [2143:2112]
-    spatz_cluster_peripheral_hw2reg_vrf_correctable_count_mreg_t [0:0] vrf_correctable_count; // [2111:2080]
-    spatz_cluster_peripheral_hw2reg_vrf_uncorrectable_count_mreg_t [0:0] vrf_uncorrectable_count; // [2079:2048]
-    spatz_cluster_peripheral_hw2reg_tcdm_rd_correctable_count_mreg_t [15:0] tcdm_rd_correctable_count; // [2047:1536]
-    spatz_cluster_peripheral_hw2reg_tcdm_rd_uncorrectable_count_mreg_t [15:0] tcdm_rd_uncorrectable_count; // [1535:1024]
-    spatz_cluster_peripheral_hw2reg_tcdm_scrub_correctable_count_mreg_t [15:0] tcdm_scrub_correctable_count; // [1023:512]
-    spatz_cluster_peripheral_hw2reg_tcdm_scrub_uncorrectable_count_mreg_t [15:0] tcdm_scrub_uncorrectable_count; // [511:0]
+    spatz_cluster_peripheral_hw2reg_perf_counter_mreg_t [1:0] perf_counter; // [4415:4320]
+    spatz_cluster_peripheral_hw2reg_hw_barrier_reg_t hw_barrier; // [4319:4288]
+    spatz_cluster_peripheral_hw2reg_vrf_correctable_count_mreg_t [0:0] vrf_correctable_count; // [4287:4256]
+    spatz_cluster_peripheral_hw2reg_vrf_uncorrectable_count_mreg_t [0:0] vrf_uncorrectable_count; // [4255:4224]
+    spatz_cluster_peripheral_hw2reg_tcdm_rd_correctable_count_mreg_t [31:0] tcdm_rd_correctable_count; // [4223:3200]
+    spatz_cluster_peripheral_hw2reg_tcdm_rd_uncorrectable_count_mreg_t [31:0] tcdm_rd_uncorrectable_count; // [3199:2176]
+    spatz_cluster_peripheral_hw2reg_tcdm_scrub_correctable_count_mreg_t [31:0] tcdm_scrub_correctable_count; // [2175:1152]
+    spatz_cluster_peripheral_hw2reg_tcdm_scrub_uncorrectable_count_mreg_t [31:0] tcdm_scrub_uncorrectable_count; // [1151:128]
+    spatz_cluster_peripheral_hw2reg_fpu_dup_fault_count_mreg_t [0:0] fpu_dup_fault_count; // [127:96]
+    spatz_cluster_peripheral_hw2reg_handshake_tmr_count_mreg_t [0:0] handshake_tmr_count; // [95:64]
+    spatz_cluster_peripheral_hw2reg_core_tmr_count_mreg_t [0:0] core_tmr_count; // [63:32]
+    spatz_cluster_peripheral_hw2reg_uncorrectable_irq_status_reg_t uncorrectable_irq_status; // [31:0]
   } spatz_cluster_peripheral_hw2reg_t;
 
   // Register offsets
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_PERF_COUNTER_ENABLE_0_OFFSET = 10'h 0;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_PERF_COUNTER_ENABLE_1_OFFSET = 10'h 8;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_HART_SELECT_0_OFFSET = 10'h 10;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_HART_SELECT_1_OFFSET = 10'h 18;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_PERF_COUNTER_0_OFFSET = 10'h 20;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_PERF_COUNTER_1_OFFSET = 10'h 28;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_CL_CLINT_SET_OFFSET = 10'h 30;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_CL_CLINT_CLEAR_OFFSET = 10'h 38;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_HW_BARRIER_OFFSET = 10'h 40;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_ICACHE_PREFETCH_ENABLE_OFFSET = 10'h 48;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_SPATZ_STATUS_OFFSET = 10'h 50;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_CLUSTER_BOOT_CONTROL_OFFSET = 10'h 58;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_CLUSTER_EOC_EXIT_OFFSET = 10'h 60;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_ERR_MONITOR_CLEAR_OFFSET = 10'h 68;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_VRF_CORRECTABLE_COUNT_OFFSET = 10'h 70;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_VRF_UNCORRECTABLE_COUNT_OFFSET = 10'h 78;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_0_OFFSET = 10'h 80;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_1_OFFSET = 10'h 88;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_2_OFFSET = 10'h 90;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_3_OFFSET = 10'h 98;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_4_OFFSET = 10'h a0;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_5_OFFSET = 10'h a8;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_6_OFFSET = 10'h b0;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_7_OFFSET = 10'h b8;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_8_OFFSET = 10'h c0;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_9_OFFSET = 10'h c8;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_10_OFFSET = 10'h d0;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_11_OFFSET = 10'h d8;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_12_OFFSET = 10'h e0;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_13_OFFSET = 10'h e8;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_14_OFFSET = 10'h f0;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_15_OFFSET = 10'h f8;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_0_OFFSET = 10'h 100;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_1_OFFSET = 10'h 108;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_2_OFFSET = 10'h 110;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_3_OFFSET = 10'h 118;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_4_OFFSET = 10'h 120;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_5_OFFSET = 10'h 128;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_6_OFFSET = 10'h 130;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_7_OFFSET = 10'h 138;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_8_OFFSET = 10'h 140;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_9_OFFSET = 10'h 148;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_10_OFFSET = 10'h 150;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_11_OFFSET = 10'h 158;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_12_OFFSET = 10'h 160;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_13_OFFSET = 10'h 168;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_14_OFFSET = 10'h 170;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_15_OFFSET = 10'h 178;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_0_OFFSET = 10'h 180;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_1_OFFSET = 10'h 188;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_2_OFFSET = 10'h 190;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_3_OFFSET = 10'h 198;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_4_OFFSET = 10'h 1a0;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_5_OFFSET = 10'h 1a8;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_6_OFFSET = 10'h 1b0;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_7_OFFSET = 10'h 1b8;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_8_OFFSET = 10'h 1c0;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_9_OFFSET = 10'h 1c8;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_10_OFFSET = 10'h 1d0;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_11_OFFSET = 10'h 1d8;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_12_OFFSET = 10'h 1e0;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_13_OFFSET = 10'h 1e8;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_14_OFFSET = 10'h 1f0;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_15_OFFSET = 10'h 1f8;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_0_OFFSET = 10'h 200;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_1_OFFSET = 10'h 208;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_2_OFFSET = 10'h 210;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_3_OFFSET = 10'h 218;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_4_OFFSET = 10'h 220;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_5_OFFSET = 10'h 228;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_6_OFFSET = 10'h 230;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_7_OFFSET = 10'h 238;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_8_OFFSET = 10'h 240;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_9_OFFSET = 10'h 248;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_10_OFFSET = 10'h 250;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_11_OFFSET = 10'h 258;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_12_OFFSET = 10'h 260;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_13_OFFSET = 10'h 268;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_14_OFFSET = 10'h 270;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_15_OFFSET = 10'h 278;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_PERF_COUNTER_ENABLE_0_OFFSET = 11'h 0;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_PERF_COUNTER_ENABLE_1_OFFSET = 11'h 8;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_HART_SELECT_0_OFFSET = 11'h 10;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_HART_SELECT_1_OFFSET = 11'h 18;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_PERF_COUNTER_0_OFFSET = 11'h 20;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_PERF_COUNTER_1_OFFSET = 11'h 28;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_CL_CLINT_SET_OFFSET = 11'h 30;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_CL_CLINT_CLEAR_OFFSET = 11'h 38;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_HW_BARRIER_OFFSET = 11'h 40;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_ICACHE_PREFETCH_ENABLE_OFFSET = 11'h 48;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_SPATZ_STATUS_OFFSET = 11'h 50;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_CLUSTER_BOOT_CONTROL_OFFSET = 11'h 58;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_CLUSTER_EOC_EXIT_OFFSET = 11'h 60;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_ERR_MONITOR_CLEAR_OFFSET = 11'h 68;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_VRF_CORRECTABLE_COUNT_OFFSET = 11'h 70;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_VRF_UNCORRECTABLE_COUNT_OFFSET = 11'h 78;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_0_OFFSET = 11'h 80;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_1_OFFSET = 11'h 88;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_2_OFFSET = 11'h 90;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_3_OFFSET = 11'h 98;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_4_OFFSET = 11'h a0;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_5_OFFSET = 11'h a8;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_6_OFFSET = 11'h b0;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_7_OFFSET = 11'h b8;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_8_OFFSET = 11'h c0;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_9_OFFSET = 11'h c8;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_10_OFFSET = 11'h d0;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_11_OFFSET = 11'h d8;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_12_OFFSET = 11'h e0;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_13_OFFSET = 11'h e8;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_14_OFFSET = 11'h f0;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_15_OFFSET = 11'h f8;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_16_OFFSET = 11'h 100;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_17_OFFSET = 11'h 108;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_18_OFFSET = 11'h 110;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_19_OFFSET = 11'h 118;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_20_OFFSET = 11'h 120;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_21_OFFSET = 11'h 128;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_22_OFFSET = 11'h 130;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_23_OFFSET = 11'h 138;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_24_OFFSET = 11'h 140;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_25_OFFSET = 11'h 148;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_26_OFFSET = 11'h 150;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_27_OFFSET = 11'h 158;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_28_OFFSET = 11'h 160;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_29_OFFSET = 11'h 168;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_30_OFFSET = 11'h 170;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_31_OFFSET = 11'h 178;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_0_OFFSET = 11'h 180;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_1_OFFSET = 11'h 188;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_2_OFFSET = 11'h 190;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_3_OFFSET = 11'h 198;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_4_OFFSET = 11'h 1a0;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_5_OFFSET = 11'h 1a8;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_6_OFFSET = 11'h 1b0;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_7_OFFSET = 11'h 1b8;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_8_OFFSET = 11'h 1c0;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_9_OFFSET = 11'h 1c8;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_10_OFFSET = 11'h 1d0;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_11_OFFSET = 11'h 1d8;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_12_OFFSET = 11'h 1e0;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_13_OFFSET = 11'h 1e8;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_14_OFFSET = 11'h 1f0;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_15_OFFSET = 11'h 1f8;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_16_OFFSET = 11'h 200;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_17_OFFSET = 11'h 208;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_18_OFFSET = 11'h 210;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_19_OFFSET = 11'h 218;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_20_OFFSET = 11'h 220;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_21_OFFSET = 11'h 228;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_22_OFFSET = 11'h 230;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_23_OFFSET = 11'h 238;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_24_OFFSET = 11'h 240;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_25_OFFSET = 11'h 248;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_26_OFFSET = 11'h 250;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_27_OFFSET = 11'h 258;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_28_OFFSET = 11'h 260;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_29_OFFSET = 11'h 268;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_30_OFFSET = 11'h 270;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_31_OFFSET = 11'h 278;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_0_OFFSET = 11'h 280;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_1_OFFSET = 11'h 288;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_2_OFFSET = 11'h 290;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_3_OFFSET = 11'h 298;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_4_OFFSET = 11'h 2a0;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_5_OFFSET = 11'h 2a8;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_6_OFFSET = 11'h 2b0;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_7_OFFSET = 11'h 2b8;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_8_OFFSET = 11'h 2c0;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_9_OFFSET = 11'h 2c8;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_10_OFFSET = 11'h 2d0;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_11_OFFSET = 11'h 2d8;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_12_OFFSET = 11'h 2e0;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_13_OFFSET = 11'h 2e8;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_14_OFFSET = 11'h 2f0;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_15_OFFSET = 11'h 2f8;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_16_OFFSET = 11'h 300;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_17_OFFSET = 11'h 308;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_18_OFFSET = 11'h 310;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_19_OFFSET = 11'h 318;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_20_OFFSET = 11'h 320;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_21_OFFSET = 11'h 328;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_22_OFFSET = 11'h 330;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_23_OFFSET = 11'h 338;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_24_OFFSET = 11'h 340;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_25_OFFSET = 11'h 348;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_26_OFFSET = 11'h 350;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_27_OFFSET = 11'h 358;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_28_OFFSET = 11'h 360;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_29_OFFSET = 11'h 368;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_30_OFFSET = 11'h 370;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_31_OFFSET = 11'h 378;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_0_OFFSET = 11'h 380;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_1_OFFSET = 11'h 388;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_2_OFFSET = 11'h 390;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_3_OFFSET = 11'h 398;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_4_OFFSET = 11'h 3a0;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_5_OFFSET = 11'h 3a8;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_6_OFFSET = 11'h 3b0;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_7_OFFSET = 11'h 3b8;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_8_OFFSET = 11'h 3c0;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_9_OFFSET = 11'h 3c8;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_10_OFFSET = 11'h 3d0;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_11_OFFSET = 11'h 3d8;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_12_OFFSET = 11'h 3e0;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_13_OFFSET = 11'h 3e8;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_14_OFFSET = 11'h 3f0;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_15_OFFSET = 11'h 3f8;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_16_OFFSET = 11'h 400;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_17_OFFSET = 11'h 408;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_18_OFFSET = 11'h 410;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_19_OFFSET = 11'h 418;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_20_OFFSET = 11'h 420;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_21_OFFSET = 11'h 428;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_22_OFFSET = 11'h 430;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_23_OFFSET = 11'h 438;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_24_OFFSET = 11'h 440;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_25_OFFSET = 11'h 448;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_26_OFFSET = 11'h 450;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_27_OFFSET = 11'h 458;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_28_OFFSET = 11'h 460;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_29_OFFSET = 11'h 468;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_30_OFFSET = 11'h 470;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_31_OFFSET = 11'h 478;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_FPU_DUP_FAULT_COUNT_OFFSET = 11'h 480;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_HANDSHAKE_TMR_COUNT_OFFSET = 11'h 488;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_CORE_TMR_COUNT_OFFSET = 11'h 490;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_UNCORRECTABLE_IRQ_ENABLE_OFFSET = 11'h 498;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_UNCORRECTABLE_IRQ_STATUS_OFFSET = 11'h 4a0;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_UNCORRECTABLE_IRQ_CLEAR_OFFSET = 11'h 4a8;
 
   // Reset values for hwext registers and their fields
   parameter logic [47:0] SPATZ_CLUSTER_PERIPHERAL_PERF_COUNTER_0_RESVAL = 48'h 0;
@@ -352,6 +473,22 @@ package spatz_cluster_peripheral_reg_pkg;
   parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_13_RESVAL = 32'h 0;
   parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_14_RESVAL = 32'h 0;
   parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_15_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_16_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_17_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_18_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_19_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_20_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_21_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_22_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_23_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_24_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_25_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_26_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_27_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_28_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_29_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_30_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_31_RESVAL = 32'h 0;
   parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_0_RESVAL = 32'h 0;
   parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_1_RESVAL = 32'h 0;
   parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_2_RESVAL = 32'h 0;
@@ -368,6 +505,22 @@ package spatz_cluster_peripheral_reg_pkg;
   parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_13_RESVAL = 32'h 0;
   parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_14_RESVAL = 32'h 0;
   parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_15_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_16_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_17_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_18_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_19_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_20_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_21_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_22_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_23_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_24_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_25_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_26_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_27_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_28_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_29_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_30_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_31_RESVAL = 32'h 0;
   parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_0_RESVAL = 32'h 0;
   parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_1_RESVAL = 32'h 0;
   parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_2_RESVAL = 32'h 0;
@@ -384,6 +537,22 @@ package spatz_cluster_peripheral_reg_pkg;
   parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_13_RESVAL = 32'h 0;
   parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_14_RESVAL = 32'h 0;
   parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_15_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_16_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_17_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_18_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_19_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_20_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_21_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_22_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_23_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_24_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_25_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_26_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_27_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_28_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_29_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_30_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_31_RESVAL = 32'h 0;
   parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_0_RESVAL = 32'h 0;
   parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_1_RESVAL = 32'h 0;
   parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_2_RESVAL = 32'h 0;
@@ -400,6 +569,27 @@ package spatz_cluster_peripheral_reg_pkg;
   parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_13_RESVAL = 32'h 0;
   parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_14_RESVAL = 32'h 0;
   parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_15_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_16_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_17_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_18_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_19_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_20_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_21_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_22_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_23_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_24_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_25_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_26_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_27_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_28_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_29_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_30_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_31_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_FPU_DUP_FAULT_COUNT_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_HANDSHAKE_TMR_COUNT_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_CORE_TMR_COUNT_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_UNCORRECTABLE_IRQ_STATUS_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_UNCORRECTABLE_IRQ_CLEAR_RESVAL = 32'h 0;
 
   // Register index
   typedef enum int {
@@ -435,6 +625,22 @@ package spatz_cluster_peripheral_reg_pkg;
     SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_13,
     SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_14,
     SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_15,
+    SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_16,
+    SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_17,
+    SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_18,
+    SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_19,
+    SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_20,
+    SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_21,
+    SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_22,
+    SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_23,
+    SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_24,
+    SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_25,
+    SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_26,
+    SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_27,
+    SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_28,
+    SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_29,
+    SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_30,
+    SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_31,
     SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_0,
     SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_1,
     SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_2,
@@ -451,6 +657,22 @@ package spatz_cluster_peripheral_reg_pkg;
     SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_13,
     SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_14,
     SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_15,
+    SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_16,
+    SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_17,
+    SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_18,
+    SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_19,
+    SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_20,
+    SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_21,
+    SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_22,
+    SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_23,
+    SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_24,
+    SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_25,
+    SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_26,
+    SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_27,
+    SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_28,
+    SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_29,
+    SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_30,
+    SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_31,
     SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_0,
     SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_1,
     SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_2,
@@ -467,6 +689,22 @@ package spatz_cluster_peripheral_reg_pkg;
     SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_13,
     SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_14,
     SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_15,
+    SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_16,
+    SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_17,
+    SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_18,
+    SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_19,
+    SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_20,
+    SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_21,
+    SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_22,
+    SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_23,
+    SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_24,
+    SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_25,
+    SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_26,
+    SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_27,
+    SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_28,
+    SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_29,
+    SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_30,
+    SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_31,
     SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_0,
     SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_1,
     SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_2,
@@ -482,91 +720,183 @@ package spatz_cluster_peripheral_reg_pkg;
     SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_12,
     SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_13,
     SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_14,
-    SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_15
+    SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_15,
+    SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_16,
+    SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_17,
+    SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_18,
+    SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_19,
+    SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_20,
+    SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_21,
+    SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_22,
+    SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_23,
+    SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_24,
+    SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_25,
+    SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_26,
+    SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_27,
+    SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_28,
+    SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_29,
+    SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_30,
+    SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_31,
+    SPATZ_CLUSTER_PERIPHERAL_FPU_DUP_FAULT_COUNT,
+    SPATZ_CLUSTER_PERIPHERAL_HANDSHAKE_TMR_COUNT,
+    SPATZ_CLUSTER_PERIPHERAL_CORE_TMR_COUNT,
+    SPATZ_CLUSTER_PERIPHERAL_UNCORRECTABLE_IRQ_ENABLE,
+    SPATZ_CLUSTER_PERIPHERAL_UNCORRECTABLE_IRQ_STATUS,
+    SPATZ_CLUSTER_PERIPHERAL_UNCORRECTABLE_IRQ_CLEAR
   } spatz_cluster_peripheral_id_e;
 
   // Register width information to check illegal writes
-  parameter logic [3:0] SPATZ_CLUSTER_PERIPHERAL_PERMIT [80] = '{
-    4'b 1111, // index[ 0] SPATZ_CLUSTER_PERIPHERAL_PERF_COUNTER_ENABLE_0
-    4'b 1111, // index[ 1] SPATZ_CLUSTER_PERIPHERAL_PERF_COUNTER_ENABLE_1
-    4'b 0011, // index[ 2] SPATZ_CLUSTER_PERIPHERAL_HART_SELECT_0
-    4'b 0011, // index[ 3] SPATZ_CLUSTER_PERIPHERAL_HART_SELECT_1
-    4'b 1111, // index[ 4] SPATZ_CLUSTER_PERIPHERAL_PERF_COUNTER_0
-    4'b 1111, // index[ 5] SPATZ_CLUSTER_PERIPHERAL_PERF_COUNTER_1
-    4'b 1111, // index[ 6] SPATZ_CLUSTER_PERIPHERAL_CL_CLINT_SET
-    4'b 1111, // index[ 7] SPATZ_CLUSTER_PERIPHERAL_CL_CLINT_CLEAR
-    4'b 1111, // index[ 8] SPATZ_CLUSTER_PERIPHERAL_HW_BARRIER
-    4'b 0001, // index[ 9] SPATZ_CLUSTER_PERIPHERAL_ICACHE_PREFETCH_ENABLE
-    4'b 0001, // index[10] SPATZ_CLUSTER_PERIPHERAL_SPATZ_STATUS
-    4'b 1111, // index[11] SPATZ_CLUSTER_PERIPHERAL_CLUSTER_BOOT_CONTROL
-    4'b 1111, // index[12] SPATZ_CLUSTER_PERIPHERAL_CLUSTER_EOC_EXIT
-    4'b 0001, // index[13] SPATZ_CLUSTER_PERIPHERAL_ERR_MONITOR_CLEAR
-    4'b 1111, // index[14] SPATZ_CLUSTER_PERIPHERAL_VRF_CORRECTABLE_COUNT
-    4'b 1111, // index[15] SPATZ_CLUSTER_PERIPHERAL_VRF_UNCORRECTABLE_COUNT
-    4'b 1111, // index[16] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_0
-    4'b 1111, // index[17] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_1
-    4'b 1111, // index[18] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_2
-    4'b 1111, // index[19] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_3
-    4'b 1111, // index[20] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_4
-    4'b 1111, // index[21] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_5
-    4'b 1111, // index[22] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_6
-    4'b 1111, // index[23] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_7
-    4'b 1111, // index[24] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_8
-    4'b 1111, // index[25] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_9
-    4'b 1111, // index[26] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_10
-    4'b 1111, // index[27] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_11
-    4'b 1111, // index[28] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_12
-    4'b 1111, // index[29] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_13
-    4'b 1111, // index[30] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_14
-    4'b 1111, // index[31] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_15
-    4'b 1111, // index[32] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_0
-    4'b 1111, // index[33] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_1
-    4'b 1111, // index[34] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_2
-    4'b 1111, // index[35] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_3
-    4'b 1111, // index[36] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_4
-    4'b 1111, // index[37] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_5
-    4'b 1111, // index[38] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_6
-    4'b 1111, // index[39] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_7
-    4'b 1111, // index[40] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_8
-    4'b 1111, // index[41] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_9
-    4'b 1111, // index[42] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_10
-    4'b 1111, // index[43] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_11
-    4'b 1111, // index[44] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_12
-    4'b 1111, // index[45] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_13
-    4'b 1111, // index[46] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_14
-    4'b 1111, // index[47] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_15
-    4'b 1111, // index[48] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_0
-    4'b 1111, // index[49] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_1
-    4'b 1111, // index[50] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_2
-    4'b 1111, // index[51] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_3
-    4'b 1111, // index[52] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_4
-    4'b 1111, // index[53] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_5
-    4'b 1111, // index[54] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_6
-    4'b 1111, // index[55] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_7
-    4'b 1111, // index[56] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_8
-    4'b 1111, // index[57] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_9
-    4'b 1111, // index[58] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_10
-    4'b 1111, // index[59] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_11
-    4'b 1111, // index[60] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_12
-    4'b 1111, // index[61] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_13
-    4'b 1111, // index[62] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_14
-    4'b 1111, // index[63] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_15
-    4'b 1111, // index[64] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_0
-    4'b 1111, // index[65] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_1
-    4'b 1111, // index[66] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_2
-    4'b 1111, // index[67] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_3
-    4'b 1111, // index[68] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_4
-    4'b 1111, // index[69] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_5
-    4'b 1111, // index[70] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_6
-    4'b 1111, // index[71] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_7
-    4'b 1111, // index[72] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_8
-    4'b 1111, // index[73] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_9
-    4'b 1111, // index[74] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_10
-    4'b 1111, // index[75] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_11
-    4'b 1111, // index[76] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_12
-    4'b 1111, // index[77] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_13
-    4'b 1111, // index[78] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_14
-    4'b 1111  // index[79] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_15
+  parameter logic [3:0] SPATZ_CLUSTER_PERIPHERAL_PERMIT [150] = '{
+    4'b 1111, // index[  0] SPATZ_CLUSTER_PERIPHERAL_PERF_COUNTER_ENABLE_0
+    4'b 1111, // index[  1] SPATZ_CLUSTER_PERIPHERAL_PERF_COUNTER_ENABLE_1
+    4'b 0011, // index[  2] SPATZ_CLUSTER_PERIPHERAL_HART_SELECT_0
+    4'b 0011, // index[  3] SPATZ_CLUSTER_PERIPHERAL_HART_SELECT_1
+    4'b 1111, // index[  4] SPATZ_CLUSTER_PERIPHERAL_PERF_COUNTER_0
+    4'b 1111, // index[  5] SPATZ_CLUSTER_PERIPHERAL_PERF_COUNTER_1
+    4'b 1111, // index[  6] SPATZ_CLUSTER_PERIPHERAL_CL_CLINT_SET
+    4'b 1111, // index[  7] SPATZ_CLUSTER_PERIPHERAL_CL_CLINT_CLEAR
+    4'b 1111, // index[  8] SPATZ_CLUSTER_PERIPHERAL_HW_BARRIER
+    4'b 0001, // index[  9] SPATZ_CLUSTER_PERIPHERAL_ICACHE_PREFETCH_ENABLE
+    4'b 0001, // index[ 10] SPATZ_CLUSTER_PERIPHERAL_SPATZ_STATUS
+    4'b 1111, // index[ 11] SPATZ_CLUSTER_PERIPHERAL_CLUSTER_BOOT_CONTROL
+    4'b 1111, // index[ 12] SPATZ_CLUSTER_PERIPHERAL_CLUSTER_EOC_EXIT
+    4'b 0001, // index[ 13] SPATZ_CLUSTER_PERIPHERAL_ERR_MONITOR_CLEAR
+    4'b 1111, // index[ 14] SPATZ_CLUSTER_PERIPHERAL_VRF_CORRECTABLE_COUNT
+    4'b 1111, // index[ 15] SPATZ_CLUSTER_PERIPHERAL_VRF_UNCORRECTABLE_COUNT
+    4'b 1111, // index[ 16] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_0
+    4'b 1111, // index[ 17] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_1
+    4'b 1111, // index[ 18] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_2
+    4'b 1111, // index[ 19] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_3
+    4'b 1111, // index[ 20] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_4
+    4'b 1111, // index[ 21] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_5
+    4'b 1111, // index[ 22] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_6
+    4'b 1111, // index[ 23] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_7
+    4'b 1111, // index[ 24] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_8
+    4'b 1111, // index[ 25] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_9
+    4'b 1111, // index[ 26] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_10
+    4'b 1111, // index[ 27] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_11
+    4'b 1111, // index[ 28] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_12
+    4'b 1111, // index[ 29] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_13
+    4'b 1111, // index[ 30] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_14
+    4'b 1111, // index[ 31] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_15
+    4'b 1111, // index[ 32] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_16
+    4'b 1111, // index[ 33] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_17
+    4'b 1111, // index[ 34] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_18
+    4'b 1111, // index[ 35] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_19
+    4'b 1111, // index[ 36] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_20
+    4'b 1111, // index[ 37] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_21
+    4'b 1111, // index[ 38] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_22
+    4'b 1111, // index[ 39] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_23
+    4'b 1111, // index[ 40] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_24
+    4'b 1111, // index[ 41] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_25
+    4'b 1111, // index[ 42] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_26
+    4'b 1111, // index[ 43] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_27
+    4'b 1111, // index[ 44] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_28
+    4'b 1111, // index[ 45] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_29
+    4'b 1111, // index[ 46] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_30
+    4'b 1111, // index[ 47] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_31
+    4'b 1111, // index[ 48] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_0
+    4'b 1111, // index[ 49] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_1
+    4'b 1111, // index[ 50] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_2
+    4'b 1111, // index[ 51] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_3
+    4'b 1111, // index[ 52] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_4
+    4'b 1111, // index[ 53] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_5
+    4'b 1111, // index[ 54] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_6
+    4'b 1111, // index[ 55] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_7
+    4'b 1111, // index[ 56] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_8
+    4'b 1111, // index[ 57] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_9
+    4'b 1111, // index[ 58] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_10
+    4'b 1111, // index[ 59] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_11
+    4'b 1111, // index[ 60] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_12
+    4'b 1111, // index[ 61] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_13
+    4'b 1111, // index[ 62] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_14
+    4'b 1111, // index[ 63] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_15
+    4'b 1111, // index[ 64] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_16
+    4'b 1111, // index[ 65] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_17
+    4'b 1111, // index[ 66] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_18
+    4'b 1111, // index[ 67] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_19
+    4'b 1111, // index[ 68] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_20
+    4'b 1111, // index[ 69] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_21
+    4'b 1111, // index[ 70] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_22
+    4'b 1111, // index[ 71] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_23
+    4'b 1111, // index[ 72] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_24
+    4'b 1111, // index[ 73] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_25
+    4'b 1111, // index[ 74] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_26
+    4'b 1111, // index[ 75] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_27
+    4'b 1111, // index[ 76] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_28
+    4'b 1111, // index[ 77] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_29
+    4'b 1111, // index[ 78] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_30
+    4'b 1111, // index[ 79] SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_31
+    4'b 1111, // index[ 80] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_0
+    4'b 1111, // index[ 81] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_1
+    4'b 1111, // index[ 82] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_2
+    4'b 1111, // index[ 83] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_3
+    4'b 1111, // index[ 84] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_4
+    4'b 1111, // index[ 85] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_5
+    4'b 1111, // index[ 86] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_6
+    4'b 1111, // index[ 87] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_7
+    4'b 1111, // index[ 88] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_8
+    4'b 1111, // index[ 89] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_9
+    4'b 1111, // index[ 90] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_10
+    4'b 1111, // index[ 91] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_11
+    4'b 1111, // index[ 92] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_12
+    4'b 1111, // index[ 93] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_13
+    4'b 1111, // index[ 94] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_14
+    4'b 1111, // index[ 95] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_15
+    4'b 1111, // index[ 96] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_16
+    4'b 1111, // index[ 97] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_17
+    4'b 1111, // index[ 98] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_18
+    4'b 1111, // index[ 99] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_19
+    4'b 1111, // index[100] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_20
+    4'b 1111, // index[101] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_21
+    4'b 1111, // index[102] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_22
+    4'b 1111, // index[103] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_23
+    4'b 1111, // index[104] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_24
+    4'b 1111, // index[105] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_25
+    4'b 1111, // index[106] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_26
+    4'b 1111, // index[107] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_27
+    4'b 1111, // index[108] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_28
+    4'b 1111, // index[109] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_29
+    4'b 1111, // index[110] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_30
+    4'b 1111, // index[111] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_31
+    4'b 1111, // index[112] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_0
+    4'b 1111, // index[113] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_1
+    4'b 1111, // index[114] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_2
+    4'b 1111, // index[115] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_3
+    4'b 1111, // index[116] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_4
+    4'b 1111, // index[117] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_5
+    4'b 1111, // index[118] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_6
+    4'b 1111, // index[119] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_7
+    4'b 1111, // index[120] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_8
+    4'b 1111, // index[121] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_9
+    4'b 1111, // index[122] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_10
+    4'b 1111, // index[123] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_11
+    4'b 1111, // index[124] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_12
+    4'b 1111, // index[125] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_13
+    4'b 1111, // index[126] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_14
+    4'b 1111, // index[127] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_15
+    4'b 1111, // index[128] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_16
+    4'b 1111, // index[129] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_17
+    4'b 1111, // index[130] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_18
+    4'b 1111, // index[131] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_19
+    4'b 1111, // index[132] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_20
+    4'b 1111, // index[133] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_21
+    4'b 1111, // index[134] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_22
+    4'b 1111, // index[135] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_23
+    4'b 1111, // index[136] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_24
+    4'b 1111, // index[137] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_25
+    4'b 1111, // index[138] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_26
+    4'b 1111, // index[139] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_27
+    4'b 1111, // index[140] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_28
+    4'b 1111, // index[141] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_29
+    4'b 1111, // index[142] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_30
+    4'b 1111, // index[143] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_31
+    4'b 1111, // index[144] SPATZ_CLUSTER_PERIPHERAL_FPU_DUP_FAULT_COUNT
+    4'b 1111, // index[145] SPATZ_CLUSTER_PERIPHERAL_HANDSHAKE_TMR_COUNT
+    4'b 1111, // index[146] SPATZ_CLUSTER_PERIPHERAL_CORE_TMR_COUNT
+    4'b 1111, // index[147] SPATZ_CLUSTER_PERIPHERAL_UNCORRECTABLE_IRQ_ENABLE
+    4'b 1111, // index[148] SPATZ_CLUSTER_PERIPHERAL_UNCORRECTABLE_IRQ_STATUS
+    4'b 1111  // index[149] SPATZ_CLUSTER_PERIPHERAL_UNCORRECTABLE_IRQ_CLEAR
   };
 
 endpackage

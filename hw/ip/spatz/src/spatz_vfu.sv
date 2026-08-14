@@ -42,7 +42,17 @@ module spatz_vfu
     input  vrf_data_t  [2:0] vrf_rdata_i,
     input  logic       [2:0] vrf_rvalid_i,
     // FPU side channel
-    output status_t          fpu_status_o
+    output status_t          fpu_status_o,
+    // FPU duplication (DMR) fault reporting: a per-lane mismatch between
+    // the two fpnew_top copies inside spatz_fpu_dmr. Always uncorrectable
+    // (DMR alone cannot tell which copy is right) -- feeds the cluster's
+    // uncorrectable-fault recovery interrupt.
+    output logic             fpu_dup_fault_o,
+    // TMR (triplicate + majority vote) fault reporting: set whenever any
+    // triplicated persistent flag or FSM state register in this module
+    // disagrees across its three replicas. Self-corrected by the voter
+    // the same cycle -- this is diagnostic/counter-only.
+    output logic             handshake_tmr_fault_o
   );
 
 // Include FF
@@ -104,24 +114,80 @@ module spatz_vfu
   `FF(vl_q, vl_d, '0)
 
   // Are we busy?
-  logic busy_q, busy_d;
-  `FF(busy_q, busy_d, 1'b0)
+  // TMR-protected: this is a persistent single-bit handshake flag, not a
+  // combinational glitch -- an SEU here would silently corrupt control flow
+  // (spuriously busy or spuriously idle) with no other check to catch it.
+  logic busy_d;
+  logic busy_q_rep [3];
+  for (genvar t = 0; t < 3; t++) begin : gen_busy_rep
+    `FF(busy_q_rep[t], busy_d, 1'b0)
+  end
+  logic busy_q;
+  logic busy_tmr_fault;
+  bitwise_TMR_voter_fail #(
+    .DataWidth (1),
+    .VoterType (1)
+  ) i_busy_voter (
+    .a_i              (busy_q_rep[0]  ),
+    .b_i              (busy_q_rep[1]  ),
+    .c_i              (busy_q_rep[2]  ),
+    .majority_o       (busy_q         ),
+    .fault_detected_o (busy_tmr_fault )
+  );
 
   // Number of elements in one VRF word
   logic [$clog2(N_FU*(ELEN/8)):0] nr_elem_word;
   assign nr_elem_word = (N_FU * (1 << (MAXEW - spatz_req.vtype.vsew))) >> spatz_req.op_arith.is_narrowing;
 
   // Are we running integer or floating-point instructions?
+  // TMR-protected: triplicated + voted instead of one-hot-encoded +
+  // parity-checked, so a bit-flip is corrected the same cycle instead of
+  // merely flagged.
   typedef enum logic {
     VFU_RunningIPU, VFU_RunningFPU
    } state_t;
-   state_t state_d, state_q;
-  `FF(state_q, state_d, VFU_RunningFPU)
+   state_t state_d;
+   state_t state_q_rep [3];
+  for (genvar t = 0; t < 3; t++) begin : gen_state_rep
+    `FF(state_q_rep[t], state_d, VFU_RunningFPU)
+  end
+  state_t state_q;
+  logic   state_tmr_fault;
+  logic [$bits(state_t)-1:0] state_q_bits;
+  bitwise_TMR_voter_fail #(
+    .DataWidth ($bits(state_t)),
+    .VoterType (1)
+  ) i_state_voter (
+    .a_i              (state_q_rep[0]  ),
+    .b_i              (state_q_rep[1]  ),
+    .c_i              (state_q_rep[2]  ),
+    .majority_o       (state_q_bits    ),
+    .fault_detected_o (state_tmr_fault )
+  );
+  assign state_q = state_t'(state_q_bits);
 
   // Propagate the tags through the functional units
   vfu_tag_t ipu_result_tag, fpu_result_tag, result_tag, result_buf_tag_d, result_buf_tag_q;
   vfu_tag_t input_tag;
-  logic result_buf_valid_d, result_buf_valid_q;
+  // TMR-protected: persistent single-bit handshake flag, same rationale as
+  // busy_q above.
+  logic result_buf_valid_d;
+  logic result_buf_valid_q_rep [3];
+  for (genvar t = 0; t < 3; t++) begin : gen_result_buf_valid_rep
+    `FF(result_buf_valid_q_rep[t], result_buf_valid_d, 1'b0)
+  end
+  logic result_buf_valid_q;
+  logic result_buf_valid_tmr_fault;
+  bitwise_TMR_voter_fail #(
+    .DataWidth (1),
+    .VoterType (1)
+  ) i_result_buf_valid_voter (
+    .a_i              (result_buf_valid_q_rep[0]  ),
+    .b_i              (result_buf_valid_q_rep[1]  ),
+    .c_i              (result_buf_valid_q_rep[2]  ),
+    .majority_o       (result_buf_valid_q         ),
+    .fault_detected_o (result_buf_valid_tmr_fault )
+  );
 
   assign result_tag = result_buf_valid_q ? result_buf_tag_q : (state_q == VFU_RunningIPU ? ipu_result_tag : fpu_result_tag);
 
@@ -133,7 +199,25 @@ module spatz_vfu
   logic stall;
 
   // Do we have the reduction operand?
-  logic reduction_operand_ready_d, reduction_operand_ready_q;
+  // TMR-protected: persistent single-bit handshake flag, same rationale as
+  // busy_q above.
+  logic reduction_operand_ready_d;
+  logic reduction_operand_ready_q_rep [3];
+  for (genvar t = 0; t < 3; t++) begin : gen_reduction_operand_ready_rep
+    `FF(reduction_operand_ready_q_rep[t], reduction_operand_ready_d, 1'b0)
+  end
+  logic reduction_operand_ready_q;
+  logic reduction_operand_ready_tmr_fault;
+  bitwise_TMR_voter_fail #(
+    .DataWidth (1),
+    .VoterType (1)
+  ) i_reduction_operand_ready_voter (
+    .a_i              (reduction_operand_ready_q_rep[0]  ),
+    .b_i              (reduction_operand_ready_q_rep[1]  ),
+    .c_i              (reduction_operand_ready_q_rep[2]  ),
+    .majority_o       (reduction_operand_ready_q         ),
+    .fault_detected_o (reduction_operand_ready_tmr_fault )
+  );
 
   typedef enum logic{
     READ_OPERANDS, READ_V0_t
@@ -191,8 +275,28 @@ module spatz_vfu
     Reduction_SIMD,
     Reduction_WriteBack
    } reduction_state_t;
-   reduction_state_t reduction_state_d, reduction_state_q;
-  `FF(reduction_state_q, reduction_state_d, Reduction_NormalExecution)
+   reduction_state_t reduction_state_d;
+  // TMR-protected: triplicated + voted instead of one-hot-encoded +
+  // parity-checked (this FSM isn't one-hot to begin with), so a bit-flip
+  // is corrected the same cycle instead of merely flagged.
+  reduction_state_t reduction_state_q_rep [3];
+  for (genvar t = 0; t < 3; t++) begin : gen_reduction_state_rep
+    `FF(reduction_state_q_rep[t], reduction_state_d, Reduction_NormalExecution)
+  end
+  reduction_state_t reduction_state_q;
+  logic             reduction_state_tmr_fault;
+  logic [$bits(reduction_state_t)-1:0] reduction_state_q_bits;
+  bitwise_TMR_voter_fail #(
+    .DataWidth ($bits(reduction_state_t)),
+    .VoterType (1)
+  ) i_reduction_state_voter (
+    .a_i              (reduction_state_q_rep[0]  ),
+    .b_i              (reduction_state_q_rep[1]  ),
+    .c_i              (reduction_state_q_rep[2]  ),
+    .majority_o       (reduction_state_q_bits    ),
+    .fault_detected_o (reduction_state_tmr_fault )
+  );
+  assign reduction_state_q = reduction_state_t'(reduction_state_q_bits);
 
   // Reduction intralane
   vlen_t reduction_pointer_d, reduction_pointer_q;
@@ -203,7 +307,6 @@ module spatz_vfu
   vlen_t v0_word_idx;
   int unsigned v0_shift;
 
-  `FF(result_buf_valid_q, result_buf_valid_d, 1'b0)
   `FF(reduction_pointer_q, reduction_pointer_d, '0)
   `FF(shift_amnt_q, shift_amnt_d, ELEN)
   `FF(result_buf_q, result_buf_d, '0)
@@ -601,8 +704,8 @@ module spatz_vfu
   vlen_t fill_cnt;
   assign fill_cnt = ((spatz_req.vl - 1) >> (MAXEW - spatz_req.vtype.vsew)) >> (is_fpu_insn ? $clog2(N_FPU) : $clog2(N_IPU));
 
-  // Are the reduction operands ready?
-  `FF(reduction_operand_ready_q, reduction_operand_ready_d, 1'b0)
+  // (reduction_operand_ready_q is declared and TMR-protected above, near
+  // its first use.)
 
   // Do we need to request reduction operands?
   logic [1:0] reduction_operand_request;
@@ -1362,6 +1465,7 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
   logic     [N_IPU*ELENB-1:0] int_ipu_result_valid;
   logic                       int_ipu_result_ready;
   logic     [N_IPU-1:0]       int_ipu_busy;
+  logic     [N_IPU-1:0]       int_ipu_handshake_tmr_fault;
 
   assign is_ipu_busy = |int_ipu_busy;
 
@@ -1509,7 +1613,8 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
       .result_valid_o   (int_ipu_result_valid[ipu*ELENB +: ELENB]                                                        ),
       .result_ready_i   (int_ipu_result_ready                                                                            ),
       .tag_o            (int_ipu_result_tag[ipu]                                                                         ),
-      .busy_o           (int_ipu_busy[ipu]                                                                               )
+      .busy_o           (int_ipu_busy[ipu]                                                                               ),
+      .handshake_tmr_fault_o(int_ipu_handshake_tmr_fault[ipu]                                                            )
     );
   end : gen_ipus
 
@@ -1518,6 +1623,11 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
   ////////////
 
   if (FPU) begin: gen_fpu
+    // Per-lane DMR fault pulses from spatz_fpu_dmr, OR-reduced onto this
+    // module's fpu_dup_fault_o port.
+    logic [N_FPU-1:0] fpu_dup_fault;
+    assign fpu_dup_fault_o = |fpu_dup_fault;
+
     logic [N_FPU*ELEN-1:0] wide_operand1, wide_operand2, wide_operand3;
     always_comb begin: gen_widening
       automatic logic [N_FPU*ELEN/2-1:0] shift_operand1 = !widening_upper_q ? operand1[N_FPU*ELEN/2-1:0] : operand1[N_FPU*ELEN-1:N_FPU*ELEN/2];
@@ -1575,33 +1685,13 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
       logic int_fpu_in_valid;
       assign int_fpu_in_valid = spatz_req_valid && operands_ready && (!spatz_req.op_arith.is_scalar || fpu == 0) && is_fpu_insn;
 
-      // Generate an FPU pipeline
-      elen_t fpu_operand1_q, fpu_operand2_q, fpu_operand3_q;
-      operation_e fpu_op_q;
-      fp_format_e fpu_src_fmt_q, fpu_dst_fmt_q;
-      int_format_e fpu_int_fmt_q;
-      logic fpu_op_mode_q;
-      logic fpu_vectorial_op_q;
-      roundmode_e rm_q;
-      vfu_tag_t input_tag_q;
-      logic fpu_in_valid_q;
-      logic fpu_in_ready_d;
-
-      `FFL(fpu_operand1_q, fpu_operand1, int_fpu_in_valid && int_fpu_in_ready, '0)
-      `FFL(fpu_operand2_q, fpu_operand2, int_fpu_in_valid && int_fpu_in_ready, '0)
-      `FFL(fpu_operand3_q, fpu_operand3, int_fpu_in_valid && int_fpu_in_ready, '0)
-      `FFL(fpu_op_q, fpu_op, int_fpu_in_valid && int_fpu_in_ready, fpnew_pkg::FMADD)
-      `FFL(fpu_src_fmt_q, fpu_src_fmt, int_fpu_in_valid && int_fpu_in_ready, fpnew_pkg::FP32)
-      `FFL(fpu_dst_fmt_q, fpu_dst_fmt, int_fpu_in_valid && int_fpu_in_ready, fpnew_pkg::FP32)
-      `FFL(fpu_int_fmt_q, fpu_int_fmt, int_fpu_in_valid && int_fpu_in_ready, fpnew_pkg::INT8)
-      `FFL(fpu_op_mode_q, fpu_op_mode, int_fpu_in_valid && int_fpu_in_ready, 1'b0)
-      `FFL(fpu_vectorial_op_q, fpu_vectorial_op, int_fpu_in_valid && int_fpu_in_ready, 1'b0)
-      `FFL(rm_q, (spatz_req.op == VFCMP && spatz_req.rm == fpnew_pkg::RUP) ? fpnew_pkg::RDN : spatz_req.rm, int_fpu_in_valid && int_fpu_in_ready, fpnew_pkg::RNE)
-      `FFL(input_tag_q, input_tag, int_fpu_in_valid && int_fpu_in_ready, '{vsew: EW_8, default: '0})
-      `FFL(fpu_in_valid_q, int_fpu_in_valid, int_fpu_in_ready, 1'b0)
-      assign int_fpu_in_ready = !fpu_in_valid_q || fpu_in_valid_q && fpu_in_ready_d;
-
-      fpnew_top #(
+      // CW variant: full FPU duplication with flush-and-replay recovery
+      // (spatz_fpu_dmr, two fpnew_top copies + a comparator) in place of
+      // e2e's single fpnew_top + spatz_fpu_shadow_checker. spatz_fpu_dmr
+      // owns its own (doubled) input-staging registers internally, so the
+      // combinational, not-yet-registered operand/opcode/tag signals above
+      // are fed to it directly rather than pre-staged here.
+      spatz_fpu_dmr #(
         .Features                   (FPUFeatures           ),
         .Implementation             (FPUImplementation     ),
         .TagType                    (vfu_tag_t             ),
@@ -1612,24 +1702,26 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
         .hart_id_i     ({hart_id_i[31-$clog2(N_FPU):0], fpu[$clog2(N_FPU)-1:0]}),
         .flush_i       (1'b0                                                   ),
         .busy_o        (fpu_busy_d[fpu]                                        ),
-        .operands_i    ({fpu_operand3_q, fpu_operand2_q, fpu_operand1_q}       ),
+        .operand1_i    (fpu_operand1                                           ),
+        .operand2_i    (fpu_operand2                                           ),
+        .operand3_i    (fpu_operand3                                           ),
         // Only the FPU0 executes scalar instructions
-        .in_valid_i    (fpu_in_valid_q                                         ),
-        .in_ready_o    (fpu_in_ready_d                                         ),
-        .op_i          (fpu_op_q                                               ),
-        .src_fmt_i     (fpu_src_fmt_q                                          ),
-        .dst_fmt_i     (fpu_dst_fmt_q                                          ),
-        .int_fmt_i     (fpu_int_fmt_q                                          ),
-        .vectorial_op_i(fpu_vectorial_op_q                                     ),
-        .op_mod_i      (fpu_op_mode_q                                          ),
-        .tag_i         (input_tag_q                                            ),
-        .simd_mask_i   ('1                                                     ),
-        .rnd_mode_i    (rm_q                                                   ),
+        .in_valid_i    (int_fpu_in_valid                                       ),
+        .in_ready_o    (int_fpu_in_ready                                       ),
+        .op_i          (fpu_op                                                 ),
+        .src_fmt_i     (fpu_src_fmt                                            ),
+        .dst_fmt_i     (fpu_dst_fmt                                            ),
+        .int_fmt_i     (fpu_int_fmt                                            ),
+        .vectorial_op_i(fpu_vectorial_op                                       ),
+        .op_mod_i      (fpu_op_mode                                            ),
+        .tag_i         (input_tag                                              ),
+        .rnd_mode_i    (spatz_req.rm                                           ),
         .result_o      (fpu_result[fpu*ELEN +: ELEN]                           ),
         .out_valid_o   (int_fpu_result_valid                                   ),
         .out_ready_i   (result_ready                                           ),
         .status_o      (fpu_status_d[fpu]                                      ),
-        .tag_o         (tag                                                    )
+        .tag_o         (tag                                                    ),
+        .dup_fault_o   (fpu_dup_fault[fpu]                                     )
       );
 
       if (fpu == 0) begin: gen_fpu_tag
@@ -1643,6 +1735,14 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
     assign fpu_result_valid = '0;
     assign fpu_result_tag   = '0;
     assign fpu_status_o     = '0;
+    assign fpu_dup_fault_o  = 1'b0;
   end: gen_no_fpu
+
+  assign handshake_tmr_fault_o = busy_tmr_fault
+                               | state_tmr_fault
+                               | result_buf_valid_tmr_fault
+                               | reduction_operand_ready_tmr_fault
+                               | reduction_state_tmr_fault
+                               | (|int_ipu_handshake_tmr_fault);
 
 endmodule : spatz_vfu

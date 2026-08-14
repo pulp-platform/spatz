@@ -57,7 +57,10 @@ module spatz_doublebw_vlsu
     input  logic           [NrMemPorts-1:0] spatz_mem_rsp_valid_i,
     // Memory Finished
     output logic                            spatz_mem_finished_o,
-    output logic                            spatz_mem_str_finished_o
+    output logic                            spatz_mem_str_finished_o,
+    // Set when any TMR-protected handshake flag, progress counter, or FSM
+    // state register in this module disagrees across its three replicas.
+    output logic                            handshake_tmr_fault_o
   );
 
 // Include FF
@@ -142,8 +145,27 @@ module spatz_doublebw_vlsu
   typedef enum logic [1:0] {
     VLSU_RunningLoad, VLSU_RunningStore, VLSU_ReadingV0_t
   } state_t;
-  state_t state_d, state_q;
-  `FF(state_q, state_d, VLSU_RunningLoad)
+  state_t state_d;
+  // TMR-protected: triplicated FSM state register; an SEU on the single
+  // state_q bit would otherwise silently corrupt load/store control flow.
+  logic [$bits(state_t)-1:0] state_q_rep [3];
+  for (genvar t = 0; t < 3; t++) begin : gen_state_rep
+    `FF(state_q_rep[t], state_d, VLSU_RunningLoad)
+  end
+  logic [$bits(state_t)-1:0] state_q_bits;
+  logic state_tmr_fault;
+  bitwise_TMR_voter_fail #(
+    .DataWidth ($bits(state_t)),
+    .VoterType (1)
+  ) i_state_voter (
+    .a_i              (state_q_rep[0]  ),
+    .b_i              (state_q_rep[1]  ),
+    .c_i              (state_q_rep[2]  ),
+    .majority_o       (state_q_bits    ),
+    .fault_detected_o (state_tmr_fault )
+  );
+  state_t state_q;
+  assign state_q = state_t'(state_q_bits);
 
   // Memory requests
   spatz_mem_req_t [NrInterfaces-1:0] [N_FU-1:0] spatz_mem_req;
@@ -152,10 +174,29 @@ module spatz_doublebw_vlsu
 
   id_t [NrInterfaces-1:0] [N_FU-1:0] store_count_q;
   id_t [NrInterfaces-1:0] [N_FU-1:0] store_count_d;
+  logic [NrInterfaces-1:0] [N_FU-1:0] store_count_tmr_fault;
 
   for (genvar intf = 0; intf < NrInterfaces; intf++) begin : gen_store_count_q_intf
     for (genvar fu = 0; fu < N_FU; fu++) begin : gen_store_count_q_intf_fu
-      `FF(store_count_q[intf][fu], store_count_d[intf][fu], '0)
+      // TMR-protected: gates rob_push (load/store ordering on this FU) and
+      // write_pending (drain/flush detection) -- an SEU here can silently
+      // corrupt outstanding-store tracking, reordering a load ahead of an
+      // in-flight store to the same lane or hanging a drain. Same rationale
+      // as mem_counter_q/commit_counter_q below.
+      id_t store_count_q_rep [3];
+      for (genvar t = 0; t < 3; t++) begin : gen_store_count_rep
+        `FF(store_count_q_rep[t], store_count_d[intf][fu], '0)
+      end
+      bitwise_TMR_voter_fail #(
+        .DataWidth ($bits(id_t)),
+        .VoterType (1)
+      ) i_store_count_q_voter (
+        .a_i              (store_count_q_rep[0]            ),
+        .b_i              (store_count_q_rep[1]            ),
+        .c_i              (store_count_q_rep[2]            ),
+        .majority_o       (store_count_q[intf][fu]         ),
+        .fault_detected_o (store_count_tmr_fault[intf][fu] )
+      );
     end: gen_store_count_q_intf_fu
   end: gen_store_count_q_intf
 
@@ -269,36 +310,69 @@ module spatz_doublebw_vlsu
   vlen_t [NrInterfaces-1:0] [N_FU-1:0] mem_idx_counter_d;
   vlen_t [NrInterfaces-1:0] [N_FU-1:0] mem_idx_counter_q;
 
+  logic [NrInterfaces-1:0] [N_FU-1:0] mem_counter_tmr_fault;
+  logic [NrInterfaces-1:0] [N_FU-1:0] mem_idx_counter_tmr_fault;
+
   for (genvar intf = 0; intf < NrInterfaces; intf++) begin: gen_mem_counters_intf
     for (genvar fu = 0; fu < N_FU; fu++) begin: gen_mem_counters_intf_fu
-      delta_counter #(
-        .WIDTH($bits(vlen_t))
-      ) i_delta_counter_mem (
-        .clk_i     (clk_i                  ),
-        .rst_ni    (rst_ni                 ),
-        .clear_i   (1'b0                   ),
-        .en_i      (mem_counter_en[intf][fu]   ),
-        .load_i    (mem_counter_load[intf][fu] ),
-        .down_i    (1'b0                   ), // We always count up
-        .delta_i   (mem_counter_delta[intf][fu]),
-        .d_i       (mem_counter_d[intf][fu]    ),
-        .q_o       (mem_counter_q[intf][fu]    ),
-        .overflow_o(/* Unused */           )
+      // TMR-protected: q_o gates mem_port_finished_q/d (memory request
+      // completion detection) -- an SEU here can silently corrupt or hang
+      // the memory request completion sequencing.
+      vlen_t mem_counter_q_rep [3];
+      for (genvar t = 0; t < 3; t++) begin : gen_delta_counter_mem_rep
+        delta_counter #(
+          .WIDTH($bits(vlen_t))
+        ) i_delta_counter_mem (
+          .clk_i     (clk_i                  ),
+          .rst_ni    (rst_ni                 ),
+          .clear_i   (1'b0                   ),
+          .en_i      (mem_counter_en[intf][fu]   ),
+          .load_i    (mem_counter_load[intf][fu] ),
+          .down_i    (1'b0                   ), // We always count up
+          .delta_i   (mem_counter_delta[intf][fu]),
+          .d_i       (mem_counter_d[intf][fu]    ),
+          .q_o       (mem_counter_q_rep[t]       ),
+          .overflow_o(/* Unused */           )
+        );
+      end
+      bitwise_TMR_voter_fail #(
+        .DataWidth ($bits(vlen_t)),
+        .VoterType (1)
+      ) i_mem_counter_q_voter (
+        .a_i              (mem_counter_q_rep[0]              ),
+        .b_i              (mem_counter_q_rep[1]              ),
+        .c_i              (mem_counter_q_rep[2]              ),
+        .majority_o       (mem_counter_q[intf][fu]           ),
+        .fault_detected_o (mem_counter_tmr_fault[intf][fu]   )
       );
 
-      delta_counter #(
-        .WIDTH($bits(vlen_t))
-      ) i_delta_counter_mem_idx (
-        .clk_i     (clk_i                      ),
-        .rst_ni    (rst_ni                     ),
-        .clear_i   (1'b0                       ),
-        .en_i      (mem_counter_en[intf][fu]       ),
-        .load_i    (mem_counter_load[intf][fu]     ),
-        .down_i    (1'b0                       ), // We always count up
-        .delta_i   (mem_idx_counter_delta[intf][fu]),
-        .d_i       (mem_idx_counter_d[intf][fu]    ),
-        .q_o       (mem_idx_counter_q[intf][fu]    ),
-        .overflow_o(/* Unused */               )
+      // TMR-protected; same rationale as mem_counter_q above.
+      vlen_t mem_idx_counter_q_rep [3];
+      for (genvar t = 0; t < 3; t++) begin : gen_delta_counter_mem_idx_rep
+        delta_counter #(
+          .WIDTH($bits(vlen_t))
+        ) i_delta_counter_mem_idx (
+          .clk_i     (clk_i                      ),
+          .rst_ni    (rst_ni                     ),
+          .clear_i   (1'b0                       ),
+          .en_i      (mem_counter_en[intf][fu]       ),
+          .load_i    (mem_counter_load[intf][fu]     ),
+          .down_i    (1'b0                       ), // We always count up
+          .delta_i   (mem_idx_counter_delta[intf][fu]),
+          .d_i       (mem_idx_counter_d[intf][fu]    ),
+          .q_o       (mem_idx_counter_q_rep[t]       ),
+          .overflow_o(/* Unused */               )
+        );
+      end
+      bitwise_TMR_voter_fail #(
+        .DataWidth ($bits(vlen_t)),
+        .VoterType (1)
+      ) i_mem_idx_counter_q_voter (
+        .a_i              (mem_idx_counter_q_rep[0]            ),
+        .b_i              (mem_idx_counter_q_rep[1]            ),
+        .c_i              (mem_idx_counter_q_rep[2]            ),
+        .majority_o       (mem_idx_counter_q[intf][fu]         ),
+        .fault_detected_o (mem_idx_counter_tmr_fault[intf][fu] )
       );
 
       assign mem_port_finished_d[intf][fu] = mem_spatz_req_valid && (mem_counter_q[intf][fu] == mem_counter_max[intf][fu] - mem_counter_delta[intf][fu]);
@@ -307,12 +381,45 @@ module spatz_doublebw_vlsu
   end: gen_mem_counters_intf
 
   // Did the current instruction finished the memory requests?
-  logic [NrParallelInstructions-1:0] mem_insn_finished_q, mem_insn_finished_d;
-  `FF(mem_insn_finished_q, mem_insn_finished_d, '0)
+  // TMR-protected: per-instruction persistent handshake bits; an SEU on any
+  // bit here can silently mark a memory request as (un)finished, corrupting
+  // or hanging instruction retirement.
+  logic [NrParallelInstructions-1:0] mem_insn_finished_d;
+  logic [NrParallelInstructions-1:0] mem_insn_finished_q_rep [3];
+  for (genvar t = 0; t < 3; t++) begin : gen_mem_insn_finished_rep
+    `FF(mem_insn_finished_q_rep[t], mem_insn_finished_d, '0)
+  end
+  logic [NrParallelInstructions-1:0] mem_insn_finished_q;
+  logic mem_insn_finished_tmr_fault;
+  bitwise_TMR_voter_fail #(
+    .DataWidth (NrParallelInstructions),
+    .VoterType (1)
+  ) i_mem_insn_finished_voter (
+    .a_i              (mem_insn_finished_q_rep[0]  ),
+    .b_i              (mem_insn_finished_q_rep[1]  ),
+    .c_i              (mem_insn_finished_q_rep[2]  ),
+    .majority_o       (mem_insn_finished_q         ),
+    .fault_detected_o (mem_insn_finished_tmr_fault )
+  );
 
   // Is the current instruction pending?
-  logic [NrParallelInstructions-1:0] mem_insn_pending_q, mem_insn_pending_d;
-  `FF(mem_insn_pending_q, mem_insn_pending_d, '0)
+  logic [NrParallelInstructions-1:0] mem_insn_pending_d;
+  logic [NrParallelInstructions-1:0] mem_insn_pending_q_rep [3];
+  for (genvar t = 0; t < 3; t++) begin : gen_mem_insn_pending_rep
+    `FF(mem_insn_pending_q_rep[t], mem_insn_pending_d, '0)
+  end
+  logic [NrParallelInstructions-1:0] mem_insn_pending_q;
+  logic mem_insn_pending_tmr_fault;
+  bitwise_TMR_voter_fail #(
+    .DataWidth (NrParallelInstructions),
+    .VoterType (1)
+  ) i_mem_insn_pending_voter (
+    .a_i              (mem_insn_pending_q_rep[0]  ),
+    .b_i              (mem_insn_pending_q_rep[1]  ),
+    .c_i              (mem_insn_pending_q_rep[2]  ),
+    .majority_o       (mem_insn_pending_q         ),
+    .fault_detected_o (mem_insn_pending_tmr_fault )
+  );
 
   // Is there are pending write request to be sent to the memory
   logic write_pending;
@@ -418,21 +525,40 @@ module spatz_doublebw_vlsu
   logic  [NrInterfaces-1:0] [N_FU-1:0] commit_finished_q;
   logic  [NrInterfaces-1:0] [N_FU-1:0] commit_finished_d;
 
+  logic [NrInterfaces-1:0] [N_FU-1:0] commit_counter_tmr_fault;
+
   for (genvar intf = 0; intf < NrInterfaces; intf++) begin : gen_vreg_counters_intf
     for (genvar fu = 0; fu < N_FU; fu++) begin : gen_vreg_counters_intf_fu
-      delta_counter #(
-        .WIDTH($bits(vlen_t))
-      ) i_delta_counter_vreg (
-        .clk_i     (clk_i                         ),
-        .rst_ni    (rst_ni                        ),
-        .clear_i   (1'b0                          ),
-        .en_i      (commit_counter_en[intf][fu]   ),
-        .load_i    (commit_counter_load[intf][fu] ),
-        .down_i    (1'b0                          ), // We always count up
-        .delta_i   (commit_counter_delta[intf][fu]),
-        .d_i       (commit_counter_d[intf][fu]    ),
-        .q_o       (commit_counter_q[intf][fu]    ),
-        .overflow_o(/* Unused */                  )
+      // TMR-protected: q_o gates commit_finished_q/d (vector register
+      // write-back completion detection) -- an SEU here can silently mark a
+      // write-back complete early (dropping trailing elements) or never
+      // finished (hang).
+      vlen_t commit_counter_q_rep [3];
+      for (genvar t = 0; t < 3; t++) begin : gen_delta_counter_vreg_rep
+        delta_counter #(
+          .WIDTH($bits(vlen_t))
+        ) i_delta_counter_vreg (
+          .clk_i     (clk_i                         ),
+          .rst_ni    (rst_ni                        ),
+          .clear_i   (1'b0                          ),
+          .en_i      (commit_counter_en[intf][fu]   ),
+          .load_i    (commit_counter_load[intf][fu] ),
+          .down_i    (1'b0                          ), // We always count up
+          .delta_i   (commit_counter_delta[intf][fu]),
+          .d_i       (commit_counter_d[intf][fu]    ),
+          .q_o       (commit_counter_q_rep[t]       ),
+          .overflow_o(/* Unused */                  )
+        );
+      end
+      bitwise_TMR_voter_fail #(
+        .DataWidth ($bits(vlen_t)),
+        .VoterType (1)
+      ) i_commit_counter_q_voter (
+        .a_i              (commit_counter_q_rep[0]           ),
+        .b_i              (commit_counter_q_rep[1]           ),
+        .c_i              (commit_counter_q_rep[2]           ),
+        .majority_o       (commit_counter_q[intf][fu]        ),
+        .fault_detected_o (commit_counter_tmr_fault[intf][fu])
       );
 
       assign commit_finished_q[intf][fu] = commit_insn_valid && (commit_counter_q[intf][fu] == commit_counter_max[intf][fu]);
@@ -580,8 +706,26 @@ module spatz_doublebw_vlsu
   ///////////////
 
   // Are we busy?
-  logic busy_q, busy_d;
-  `FF(busy_q, busy_d, 1'b0)
+  // TMR-protected: persistent single-bit handshake flag -- an SEU here
+  // would silently corrupt control flow (spuriously busy or idle) with no
+  // other check to catch it.
+  logic busy_d;
+  logic busy_q_rep [3];
+  for (genvar t = 0; t < 3; t++) begin : gen_busy_rep
+    `FF(busy_q_rep[t], busy_d, 1'b0)
+  end
+  logic busy_q;
+  logic busy_tmr_fault;
+  bitwise_TMR_voter_fail #(
+    .DataWidth (1),
+    .VoterType (1)
+  ) i_busy_voter (
+    .a_i              (busy_q_rep[0]  ),
+    .b_i              (busy_q_rep[1]  ),
+    .c_i              (busy_q_rep[2]  ),
+    .majority_o       (busy_q         ),
+    .fault_detected_o (busy_tmr_fault )
+  );
 
   // Did we finish an instruction?
   logic vlsu_finished_req;
@@ -701,6 +845,8 @@ module spatz_doublebw_vlsu
   logic     [NrInterfaces-1:0] vrf_req_valid_q, vrf_req_ready_q;
   logic     [NrInterfaces-1:0] vrf_commit_waiting_d, vrf_commit_waiting_q, vrf_valid_rsp;
   logic     [NrInterfaces-1:0] vrf_commit_intf_valid, vrf_commit_intf_valid_q;
+  logic     [NrInterfaces-1:0] vrf_commit_intf_valid_tmr_fault;
+  logic     [NrInterfaces-1:0] vrf_commit_pending_tmr_fault;
 
   logic vrf_commit_bypass;
 
@@ -735,8 +881,34 @@ module spatz_doublebw_vlsu
     assign vrf_id_o[intf]        = {vrf_req_q[intf].rsp.id, mem_spatz_req.id, commit_insn_q.id};
     assign vrf_req_ready_q[intf] = vrf_wvalid_i[intf];
 
-    `FF(vrf_commit_intf_valid_q[intf], vrf_commit_intf_valid[intf], 1'b0)
-    `FF(vrf_commit_waiting_q[intf], vrf_commit_waiting_d[intf], 1'b0)
+    // TMR-protected: persistent single-bit handshake flags; see busy_q for
+    // the general rationale.
+    logic vrf_commit_intf_valid_q_rep [3];
+    logic vrf_commit_waiting_q_rep [3];
+    for (genvar t = 0; t < 3; t++) begin : gen_vrf_commit_handshake_rep
+      `FF(vrf_commit_intf_valid_q_rep[t], vrf_commit_intf_valid[intf], 1'b0)
+      `FF(vrf_commit_waiting_q_rep[t], vrf_commit_waiting_d[intf], 1'b0)
+    end
+    bitwise_TMR_voter_fail #(
+      .DataWidth (1),
+      .VoterType (1)
+    ) i_vrf_commit_intf_valid_voter (
+      .a_i              (vrf_commit_intf_valid_q_rep[0]        ),
+      .b_i              (vrf_commit_intf_valid_q_rep[1]        ),
+      .c_i              (vrf_commit_intf_valid_q_rep[2]        ),
+      .majority_o       (vrf_commit_intf_valid_q[intf]         ),
+      .fault_detected_o (vrf_commit_intf_valid_tmr_fault[intf] )
+    );
+    bitwise_TMR_voter_fail #(
+      .DataWidth (1),
+      .VoterType (1)
+    ) i_vrf_commit_waiting_voter (
+      .a_i              (vrf_commit_waiting_q_rep[0]        ),
+      .b_i              (vrf_commit_waiting_q_rep[1]        ),
+      .c_i              (vrf_commit_waiting_q_rep[2]        ),
+      .majority_o       (vrf_commit_waiting_q[intf]         ),
+      .fault_detected_o (vrf_commit_pending_tmr_fault[intf] )
+    );
   end
 
   //////////////////////////////////////
@@ -1387,6 +1559,17 @@ module spatz_doublebw_vlsu
 `endif
     end
   end
+
+  //////////////////////////
+  // TMR Fault Aggregation //
+  //////////////////////////
+
+  assign handshake_tmr_fault_o = busy_tmr_fault
+                                | mem_insn_finished_tmr_fault | mem_insn_pending_tmr_fault
+                                | state_tmr_fault
+                                | (|mem_counter_tmr_fault) | (|mem_idx_counter_tmr_fault)
+                                | (|commit_counter_tmr_fault) | (|store_count_tmr_fault)
+                                | (|vrf_commit_intf_valid_tmr_fault) | (|vrf_commit_pending_tmr_fault);
 
   ////////////////
   // Assertions //

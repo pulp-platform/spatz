@@ -78,6 +78,9 @@ module spatz_controller
     // safely fire as soon as the next op's index vreg has no pending write.
     output logic             [NRVREG-1:0]                       vreg_write_pending_o
 `endif
+    ,
+    // TMR fault reporting
+    output logic                                   handshake_tmr_fault_o
   );
 
 // Include FF
@@ -293,8 +296,30 @@ module spatz_controller
     logic prevent_chaining; // Prevent chaining with some "risky" instructions
   } scoreboard_metadata_t;
 
-  scoreboard_metadata_t [NrParallelInstructions-1:0] scoreboard_q, scoreboard_d;
-  `FF(scoreboard_q, scoreboard_d, '0)
+  // TMR-protected: scoreboard_q gates instruction issue (sb_enable_o) via the
+  // deps/prevent_chaining hazard checks below -- an SEU on any bit here can
+  // silently let a dependent instruction issue too early (reading stale
+  // operands) or never issue (hang), with no other check to catch it. Same
+  // rationale/pattern as spatz_vlsu.sv's busy_q/mem_insn_finished_q.
+  scoreboard_metadata_t [NrParallelInstructions-1:0] scoreboard_d;
+  scoreboard_metadata_t [NrParallelInstructions-1:0] scoreboard_q_rep [3];
+  for (genvar t = 0; t < 3; t++) begin : gen_scoreboard_rep
+    `FF(scoreboard_q_rep[t], scoreboard_d, '0)
+  end
+  scoreboard_metadata_t [NrParallelInstructions-1:0] scoreboard_q;
+  logic scoreboard_tmr_fault;
+  bitwise_TMR_voter_fail #(
+    .DataWidth ($bits(scoreboard_metadata_t) * NrParallelInstructions),
+    .VoterType (1)
+  ) i_scoreboard_voter (
+    .a_i              (scoreboard_q_rep[0] ),
+    .b_i              (scoreboard_q_rep[1] ),
+    .c_i              (scoreboard_q_rep[2] ),
+    .majority_o       (scoreboard_q        ),
+    .fault_detected_o (scoreboard_tmr_fault)
+  );
+
+  assign handshake_tmr_fault_o = scoreboard_tmr_fault;
 
 `ifdef VENTAGLIO
   ///////////////

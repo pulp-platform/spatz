@@ -36,6 +36,21 @@ module tb_bin;
     end
   end
 
+  `ifdef TARGET_ZOIX
+    `ifdef TARGET_POST_SYNTHESIS
+      `include "strobe_tb_bin_FS_ps.sv"
+      `include "strobe_tb_bin_FD_ps_full_path.sv"
+    `else
+      `ifdef RECOVERY_EVAL
+        `include "./strobe/strobe_tb_bin_recovery.sv"
+      `else
+        `include "./strobe/strobe_tb_bin_FS.sv"
+        `include "./strobe/strobe_tb_bin_OC_OU.sv"
+        `include "./strobe/strobe_tb_bin_FD.sv"
+      `endif
+    `endif
+  `endif
+
   // Start `fesvr`.
   initial begin
     automatic int exit_code;

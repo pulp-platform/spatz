@@ -45,7 +45,22 @@ module spatz_cluster_peripheral
   input  logic [NumTcdmBanks-1:0][31:0]                   tcdm_rd_correctable_count_i,
   input  logic [NumTcdmBanks-1:0][31:0]                   tcdm_rd_uncorrectable_count_i,
   input  logic [NumTcdmBanks-1:0][31:0]                   tcdm_scrub_correctable_count_i,
-  input  logic [NumTcdmBanks-1:0][31:0]                   tcdm_scrub_uncorrectable_count_i
+  input  logic [NumTcdmBanks-1:0][31:0]                   tcdm_scrub_uncorrectable_count_i,
+  input  logic [NumVrfUnits-1:0][31:0]                    fpu_dup_fault_count_i,
+  input  logic [NumVrfUnits-1:0][31:0]                    handshake_tmr_count_i,
+  input  logic [NumVrfUnits-1:0][31:0]                    core_tmr_count_i,
+
+  // Uncorrectable-fault recovery interrupt interface. Only Class-A
+  // (uncorrectable) fault sources feed this -- correctable ECC events and
+  // every TMR-voter mismatch are counter-only (see the *_count_i ports
+  // above and hw/ip/redundancy_cells/spatz_fault_monitor.sv), since they
+  // self-correct the same cycle they're detected and don't need a kernel
+  // re-execution to recover.
+  input  logic [NumVrfUnits-1:0]                          vrf_uncorrectable_fault_i,
+  input  logic [NumTcdmBanks-1:0]                         tcdm_rd_uncorrectable_fault_i,
+  input  logic [NumTcdmBanks-1:0]                         tcdm_scrub_uncorrectable_fault_i,
+  input  logic [NumVrfUnits-1:0]                          fpu_dup_fault_i,
+  output logic [NumVrfUnits-1:0]                          uncorrectable_irq_o
 );
 
   // Pipeline register to ease timing.
@@ -266,5 +281,41 @@ module spatz_cluster_peripheral
     assign hw2reg.tcdm_scrub_correctable_count[i].d   = tcdm_scrub_correctable_count_i[i];
     assign hw2reg.tcdm_scrub_uncorrectable_count[i].d = tcdm_scrub_uncorrectable_count_i[i];
   end
+
+  for (genvar i = 0; i < NumVrfUnits; i++) begin : gen_cw_count_assign
+    assign hw2reg.fpu_dup_fault_count[i].d = fpu_dup_fault_count_i[i];
+    assign hw2reg.handshake_tmr_count[i].d = handshake_tmr_count_i[i];
+    assign hw2reg.core_tmr_count[i].d      = core_tmr_count_i[i];
+  end
+
+  // Uncorrectable-fault recovery interrupt: a sticky per-hart status bit, set by any Class-A
+  // uncorrectable fault pulse (if enabled for that hart) and cleared by software writing 1
+  // to UNCORRECTABLE_IRQ_CLEAR. A fault arriving in the same cycle as a clear always wins,
+  // so the interrupt can never be silently dropped.
+  logic [31:0] uncorrectable_irq_d, uncorrectable_irq_q;
+
+  // Per-bank TCDM Class-A faults aren't attributable to a single requesting core, so
+  // they're broadcast to every hart's status bit below.
+  logic tcdm_uncorrectable_any;
+  assign tcdm_uncorrectable_any =
+    (|tcdm_rd_uncorrectable_fault_i) | (|tcdm_scrub_uncorrectable_fault_i);
+
+  always_comb begin
+    uncorrectable_irq_d = uncorrectable_irq_q;
+    if (reg2hw.uncorrectable_irq_clear.qe) begin
+      uncorrectable_irq_d &= ~reg2hw.uncorrectable_irq_clear.q;
+    end
+    for (int i = 0; i < NrCores; i++) begin
+      if (reg2hw.uncorrectable_irq_enable.q[i] && (
+            vrf_uncorrectable_fault_i[i] ||
+            fpu_dup_fault_i[i] ||
+            tcdm_uncorrectable_any)) begin
+        uncorrectable_irq_d[i] = 1'b1;
+      end
+    end
+  end
+  `FF(uncorrectable_irq_q, uncorrectable_irq_d, '0, clk_i, rst_ni)
+  assign hw2reg.uncorrectable_irq_status.d = uncorrectable_irq_q;
+  assign uncorrectable_irq_o = uncorrectable_irq_q[NumVrfUnits-1:0];
 
 endmodule

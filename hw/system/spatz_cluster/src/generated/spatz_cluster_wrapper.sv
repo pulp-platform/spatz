@@ -18,7 +18,7 @@ package spatz_cluster_pkg;
   ///////////
 
   // AXI Data Width
-  localparam int unsigned SpatzAxiDataWidth = 256;
+  localparam int unsigned SpatzAxiDataWidth = 512;
   localparam int unsigned SpatzAxiStrbWidth = SpatzAxiDataWidth / 8;
   // AXI Address Width
   localparam int unsigned SpatzAxiAddrWidth = 32;
@@ -58,7 +58,7 @@ package spatz_cluster_pkg;
 
   localparam int unsigned TCDMStartAddr = 32'h100000;
   localparam int unsigned TCDMSize      = 32'h20000;
-  localparam logic AddrMisalign =  1'b0; // 0-aligned, 1-misalign
+  localparam logic AddrMisalign =  1'b1; // 0-aligned, 1-misalign
   localparam int unsigned PeriStartAddr = TCDMStartAddr + TCDMSize;
 
   localparam int unsigned BootAddr      = 32'h1000;
@@ -180,8 +180,8 @@ module spatz_cluster_wrapper
   localparam int unsigned NumIntOutstandingMem     [NumCores] = '{4};
   localparam int unsigned NumSpatzOutstandingLoads [NumCores] = '{4};
   localparam int unsigned NumSpatzFPUs             [NumCores] = '{default: 8};
-  localparam int unsigned NumSpatzIPUs             [NumCores] = '{default: 1};
-  localparam int unsigned NumSpatzTCDMPorts        [NumCores] = '{default: 8};
+  localparam int unsigned NumSpatzIPUs             [NumCores] = '{default: 8};
+  localparam int unsigned NumSpatzTCDMPorts        [NumCores] = '{default: 16};
 
   typedef logic [IwcAxiIdOutWidth-1:0] axi_id_out_iwc_t;
 
@@ -228,9 +228,9 @@ module spatz_cluster_wrapper
     .BootAddr (32'h1000),
     .ClusterPeriphSize (64),
     .NrCores (1),
-    .TCDMDepth (2048),
+    .TCDMDepth (1024),
     .TCDMSize (TCDMSize),
-    .NrBanks (16),
+    .NrBanks (32),
     .ICacheLineWidth (spatz_cluster_pkg::ICacheLineWidth),
     .ICacheLineCount (spatz_cluster_pkg::ICacheLineCount),
     .ICacheWays (spatz_cluster_pkg::ICacheWays),

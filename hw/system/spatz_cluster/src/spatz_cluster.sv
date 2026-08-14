@@ -438,6 +438,17 @@ module spatz_cluster
   logic [NumTcdmBanks-1:0] tcdm_scrub_correctable_fault;
   logic [NumTcdmBanks-1:0] tcdm_scrub_uncorrectable_fault;
 
+  // CW-variant fault sources: FPU duplication (DMR) mismatch (always
+  // uncorrectable-class) and TMR-voter mismatches (Spatz vector-unit
+  // handshake/FSM-state triplication, and the lockstep Snitch core --
+  // both self-corrected by the vote the same cycle, so counter-only).
+  logic [NrCores-1:0] fpu_dup_fault;
+  logic [NrCores-1:0] spatz_handshake_tmr_fault;
+  logic [NrCores-1:0] core_tmr_fault;
+
+  // Per-hart uncorrectable-fault recovery interrupt, ORed onto irq.mcip.
+  logic [NrCores-1:0] uncorrectable_irq;
+
   logic [NrCores-1:0][ErrorCounterWidth-1:0]  vrf_correctable_count;
   logic [NrCores-1:0][ErrorCounterWidth-1:0]  vrf_uncorrectable_count;
 
@@ -445,6 +456,10 @@ module spatz_cluster
   logic [NumTcdmBanks-1:0][ErrorCounterWidth-1:0] tcdm_rd_uncorrectable_count;
   logic [NumTcdmBanks-1:0][ErrorCounterWidth-1:0] tcdm_scrub_correctable_count;
   logic [NumTcdmBanks-1:0][ErrorCounterWidth-1:0] tcdm_scrub_uncorrectable_count;
+
+  logic [NrCores-1:0][ErrorCounterWidth-1:0] fpu_dup_fault_count;
+  logic [NrCores-1:0][ErrorCounterWidth-1:0] handshake_tmr_count;
+  logic [NrCores-1:0][ErrorCounterWidth-1:0] core_tmr_count;
 
   spatz_fault_monitor #(
   .NumVrfUnits  (NrCores),
@@ -468,6 +483,10 @@ module spatz_cluster
   .tcdm_scrub_correctable_fault_i (tcdm_scrub_correctable_fault),
   .tcdm_scrub_uncorrectable_fault_i (tcdm_scrub_uncorrectable_fault),
 
+  .fpu_dup_fault_i (fpu_dup_fault),
+  .handshake_tmr_fault_i (spatz_handshake_tmr_fault),
+  .core_tmr_fault_i (core_tmr_fault),
+
   // Per-source counters.
   .vrf_correctable_count_o (vrf_correctable_count),
   .vrf_uncorrectable_count_o(vrf_uncorrectable_count),
@@ -475,7 +494,11 @@ module spatz_cluster
   .tcdm_rd_correctable_count_o (tcdm_rd_correctable_count),
   .tcdm_rd_uncorrectable_count_o (tcdm_rd_uncorrectable_count),
   .tcdm_scrub_correctable_count_o (tcdm_scrub_correctable_count),
-  .tcdm_scrub_uncorrectable_count_o (tcdm_scrub_uncorrectable_count)
+  .tcdm_scrub_uncorrectable_count_o (tcdm_scrub_uncorrectable_count),
+
+  .fpu_dup_fault_count_o (fpu_dup_fault_count),
+  .handshake_tmr_count_o (handshake_tmr_count),
+  .core_tmr_count_o (core_tmr_count)
 );
 
   // -------------
@@ -812,7 +835,8 @@ module spatz_cluster
     i_sync_mtip (.clk_i, .rst_ni, .serial_i (mtip_i[i]), .serial_o (irq.mtip));
     sync #(.STAGES (2))
     i_sync_msip (.clk_i, .rst_ni, .serial_i (msip_i[i]), .serial_o (irq.msip));
-    assign irq.mcip = cl_interrupt[i];
+    // Per-core uncorrectable-fault recovery interrupt (ORed onto mcip alongside cl_interrupt).
+    assign irq.mcip = cl_interrupt[i] | uncorrectable_irq[i];
 
     tcdm_req_t [TcdmPorts-1:0] tcdm_req_wo_user;
 
@@ -859,7 +883,29 @@ module spatz_cluster
       .IsoCrossing             (1'b0                       ),
       .NumSpatzFPUs            (NumSpatzFPUs[i]            ),
       .NumSpatzIPUs            (NumSpatzIPUs[i]            ),
-      // .NumMemPortsPerSpatz     (NumSpatzTCDMPorts[i]       ), // CMY: comment this parameter passing to avoid unalignment of N_FPU and N_TCDM_port
+      // Re-enabled: with this left unconnected, spatz_cc's
+      // NumMemPortsPerSpatz defaults to NumSpatzFUs (8), so i_spatz only
+      // gets 8 TCDM ports (+1 scalar = 9, 567 bits) while this file's own
+      // outer wiring (tcdm_req_wo_user, sized via get_tcdm_ports(i) =
+      // NumSpatzTCDMPorts[i]+1 = 17, 1071 bits) still expects 16+1 -- a
+      // real width truncation (VCS Lint-[PCWM-L]), not just a lint nag:
+      // spatz_doublebw_vlsu.sv's NrInterfaces = NrMemPorts/N_FU silently
+      // becomes 1 instead of 2, collapsing DOUBLE_BW's double-bandwidth
+      // VLSU down to single-bandwidth internally while spatz_pkg.sv's
+      // generated enums (VLSU_VD_RD0/1, VLSU_VS2_RD0/1, ...) and the rest
+      // of the design still assume 2 interfaces -- half the vector
+      // load/store TCDM ports end up wired to nothing, which is why
+      // kernels using double-bandwidth loads/stores were failing.
+      //
+      // The "unalignment of N_FPU and N_TCDM_port" this was originally
+      // disabled to dodge doesn't reproduce with the current single-core
+      // cfg: NumSpatzTCDMPorts[0]=16 and NumSpatzFPUs[0]=NumSpatzIPUs[0]=8
+      // (see generated/spatz_cluster_wrapper.sv) divide evenly into
+      // NrInterfaces=2, so there's nothing left for it to misalign against.
+      // If this design is ever regenerated with a per-core cfg where
+      // NumSpatzTCDMPorts[i] isn't an integer multiple of
+      // max(NumSpatzFPUs[i], NumSpatzIPUs[i]) for some core, re-check this.
+      .NumMemPortsPerSpatz     (NumSpatzTCDMPorts[i]       ),
       .NumIntOutstandingLoads  (NumIntOutstandingLoads[i]  ),
       .NumIntOutstandingMem    (NumIntOutstandingMem[i]    ),
       .NumSpatzOutstandingLoads(NumSpatzOutstandingLoads[i]),
@@ -890,7 +936,12 @@ module spatz_cluster
       .tcdm_addr_base_i (tcdm_start_address                  ),
       // ECC VRF signals
       .vrf_single_error_o (vrf_correctable_fault[i]  ),
-      .vrf_multi_error_o (vrf_uncorrectable_fault[i])
+      .vrf_multi_error_o (vrf_uncorrectable_fault[i]),
+      // FPU duplication (DMR) fault reporting
+      .fpu_dup_fault_o (fpu_dup_fault[i]),
+      // TMR fault reporting
+      .spatz_handshake_tmr_fault_o (spatz_handshake_tmr_fault[i]),
+      .core_tmr_fault_o (core_tmr_fault[i])
     );
     for (genvar j = 0; j < TcdmPorts; j++) begin : gen_tcdm_user
       always_comb begin
@@ -1156,7 +1207,16 @@ module spatz_cluster
     .tcdm_rd_correctable_count_i      (tcdm_rd_correctable_count      ),
     .tcdm_rd_uncorrectable_count_i    (tcdm_rd_uncorrectable_count    ),
     .tcdm_scrub_correctable_count_i   (tcdm_scrub_correctable_count   ),
-    .tcdm_scrub_uncorrectable_count_i (tcdm_scrub_uncorrectable_count )
+    .tcdm_scrub_uncorrectable_count_i (tcdm_scrub_uncorrectable_count ),
+    .fpu_dup_fault_count_i            (fpu_dup_fault_count            ),
+    .handshake_tmr_count_i            (handshake_tmr_count            ),
+    .core_tmr_count_i                 (core_tmr_count                 ),
+    // Uncorrectable-fault recovery interrupt
+    .vrf_uncorrectable_fault_i        (vrf_uncorrectable_fault        ),
+    .tcdm_rd_uncorrectable_fault_i    (tcdm_rd_uncorrectable_fault    ),
+    .tcdm_scrub_uncorrectable_fault_i (tcdm_scrub_uncorrectable_fault ),
+    .fpu_dup_fault_i                  (fpu_dup_fault                  ),
+    .uncorrectable_irq_o              (uncorrectable_irq              )
   );
 
   // 3. BootROM
