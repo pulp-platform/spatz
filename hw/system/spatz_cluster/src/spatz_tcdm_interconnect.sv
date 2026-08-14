@@ -94,9 +94,19 @@ module spatz_tcdm_interconnect #(
 
       // Request demux
       assign mem_req_o[i].q_valid = !select && ic_mem_req[i].q_valid;
-      assign mem_req_o[i].q  = ic_mem_req[i].q;
+      assign mem_req_o[i].q.addr  = ic_mem_req[i].q.addr[MemAddrWidth-1:0];
+      assign mem_req_o[i].q.write = ic_mem_req[i].q.write;
+      assign mem_req_o[i].q.data  = ic_mem_req[i].q.data;
+      assign mem_req_o[i].q.strb  = ic_mem_req[i].q.strb;
+      assign mem_req_o[i].q.user  = ic_mem_req[i].q.user;
+      assign mem_req_o[i].q.amo   = ic_mem_req[i].q.amo;
       assign mem_req_o[i+BanksPerHyperBank].q_valid = select && ic_mem_req[i].q_valid;
-      assign mem_req_o[i+BanksPerHyperBank].q  = ic_mem_req[i].q;
+      assign mem_req_o[i+BanksPerHyperBank].q.addr  = ic_mem_req[i].q.addr[MemAddrWidth-1:0];
+      assign mem_req_o[i+BanksPerHyperBank].q.write = ic_mem_req[i].q.write;
+      assign mem_req_o[i+BanksPerHyperBank].q.data  = ic_mem_req[i].q.data;
+      assign mem_req_o[i+BanksPerHyperBank].q.strb  = ic_mem_req[i].q.strb;
+      assign mem_req_o[i+BanksPerHyperBank].q.user  = ic_mem_req[i].q.user;
+      assign mem_req_o[i+BanksPerHyperBank].q.amo   = ic_mem_req[i].q.amo;
 
       // Response mux (currently assumes response arrives exactly one cycle after request)
       assign ic_mem_rsp[i].q_ready = select ? mem_rsp_i[i+BanksPerHyperBank].q_ready :
@@ -107,7 +117,12 @@ module spatz_tcdm_interconnect #(
 
       // Demux and mux degenerate to direct one-to-one connections
       assign mem_req_o[i].q_valid  = ic_mem_req[i].q_valid;
-      assign mem_req_o[i].q        = ic_mem_req[i].q      ;
+      assign mem_req_o[i].q.addr   = ic_mem_req[i].q.addr[MemAddrWidth-1:0];
+      assign mem_req_o[i].q.write  = ic_mem_req[i].q.write;
+      assign mem_req_o[i].q.data   = ic_mem_req[i].q.data;
+      assign mem_req_o[i].q.strb   = ic_mem_req[i].q.strb;
+      assign mem_req_o[i].q.user   = ic_mem_req[i].q.user;
+      assign mem_req_o[i].q.amo    = ic_mem_req[i].q.amo;
       assign ic_mem_rsp[i].q_ready = mem_rsp_i[i].q_ready;
       assign ic_mem_rsp[i].p       = mem_rsp_i[i].p;
 

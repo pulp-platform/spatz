@@ -10,7 +10,7 @@
 
 // `SNITCH_ENABLE_PERF Enables mcycle, minstret performance counters (read only)
 
-module snitch import snitch_pkg::*; import riscv_instr::*;#(
+module snitch import snitch_pkg::*; import riscv_instr::*; import quadrilatero_instr_pkg::*;#(
   /// Boot address of core.
   parameter logic [31:0] BootAddr  = 32'h0000_1000,
   /// Physical Address width of the core.
@@ -2892,14 +2892,14 @@ module snitch import snitch_pkg::*; import riscv_instr::*;#(
 /* end of RVV extension */
 /* RMM extension */
 `ifdef TARGET_SPATZ
-      riscv_instr::MMACC   ,
-      riscv_instr::MZERO_M ,
-      riscv_instr::MZERO_A ,
-      riscv_instr::MMAC_DT ,
-      riscv_instr::MMOV_MM ,
-      riscv_instr::MMOV_MA ,
-      riscv_instr::MMOV_AM ,
-      riscv_instr::MMOV_AA : begin
+      quadrilatero_instr_pkg::MMACC   ,
+      quadrilatero_instr_pkg::MZERO_M ,
+      quadrilatero_instr_pkg::MZERO_A ,
+      quadrilatero_instr_pkg::MMACC_DT,
+      quadrilatero_instr_pkg::MMOV_MM ,
+      quadrilatero_instr_pkg::MMOV_MA ,
+      quadrilatero_instr_pkg::MMOV_AM ,
+      quadrilatero_instr_pkg::MMOV_AA : begin
         if (RMM) begin
           write_rd        = 1'b0;
           uses_rd         = 1'b0;
@@ -2912,9 +2912,9 @@ module snitch import snitch_pkg::*; import riscv_instr::*;#(
       end
 
       // 1 source register (rs1) and 1 destination register (rd)
-      riscv_instr::MCFGK,
-      riscv_instr::MCFGM,
-      riscv_instr::MCFGN: begin
+      quadrilatero_instr_pkg::MCFGK,
+      quadrilatero_instr_pkg::MCFGM,
+      quadrilatero_instr_pkg::MCFGN: begin
         if (RMM) begin
           write_rd        = 1'b0;
           uses_rd         = 1'b1;
@@ -2928,8 +2928,8 @@ module snitch import snitch_pkg::*; import riscv_instr::*;#(
       end
 
       // 2 source registers (rs1, rs2)
-      riscv_instr::MLD_LHS,
-      riscv_instr::MLD_RHS: begin
+      quadrilatero_instr_pkg::MLD_LHS,
+      quadrilatero_instr_pkg::MLD_RHS: begin
         if (RMM) begin
           write_rd        = 1'b0;
           uses_rd         = 1'b0;
@@ -2944,7 +2944,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*;#(
       end
 
       // 2 source registers (rs1, rs2) and memory store operation
-      riscv_instr::MST: begin
+      quadrilatero_instr_pkg::MST: begin
         if (RMM) begin
           write_rd        = 1'b0;
           uses_rd         = 1'b0;

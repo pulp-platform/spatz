@@ -235,7 +235,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   // VRF //
   /////////
 
-  localparam int unsigned CWWidth = ELEN + 7; // 39-bit SECDED codeword per FU slice
+  localparam int unsigned CWWidth = ELEN + 7;
 
   // Write ports
   vrf_addr_t [NrWritePorts-1:0] vrf_waddr, vrf_waddr_buf;
@@ -630,8 +630,6 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   //////////
   // VLSU //
   //////////
-
-
 
 `ifdef DOUBLE_BW
   spatz_doublebw_vlsu #(

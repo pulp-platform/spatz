@@ -434,7 +434,7 @@ module spatz_cluster
   logic [NrCores-1:0] cl_interrupt;
 
   // --------------
-  // Error Monitor
+  // Error Monitor 
   // --------------
 
   localparam int NumTcdmBanks = NrSuperBanks * BanksPerSuperBank;
@@ -875,9 +875,7 @@ module spatz_cluster
         .RegisterOffloadRsp      (RegisterOffloadRsp         ),
         .RegisterCoreReq         (RegisterCoreReq            ),
         .RegisterCoreRsp         (RegisterCoreRsp            ),
-        .TCDMAddrWidth           (TCDMAddrWidth              ),
-        .TCDMDataWidth           (DataWidth                  ),  // spatz_pkg::DataWidth = 32
-        .TCDMProtDataWidth       (TCDMProtDataWidth          )   // 39-bit ECC codeword
+        .TCDMAddrWidth           (TCDMAddrWidth              )
       ) i_spatz_quadrilatero_cc (
         .clk_i            (clk_i                               ),
         .clk_d2_i         (clk_i                               ),
