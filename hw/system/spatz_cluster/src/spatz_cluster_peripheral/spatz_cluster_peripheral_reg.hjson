@@ -17,7 +17,7 @@
 	{ name: "NumTcdmBanks",
 	desc: "Number of TCDM banks (must equal NrSuperBanks*BanksPerSuperBank in the cluster)",
 	type: "int",
-	default: "16"
+	default: "32"
 	},
     ],
     name: "spatz_cluster_peripheral",
@@ -562,6 +562,109 @@
 		desc: "Saturating count of uncorrectable scrub ECC errors for this TCDM bank."
 	    }]
 	}
+     },
+     {
+	multireg: {
+	    name: "FPU_DUP_FAULT_COUNT",
+	    desc: "Per-core FPU duplication (DMR) mismatch counter. Always uncorrectable-class (DMR alone cannot tell which of the two fpnew_top copies is right).",
+	    swaccess: "ro",
+	    hwaccess: "hrw",
+	    hwext: "true",
+	    count: "NumVrfUnits",
+	    compact: "false",
+	    cname: "fpu_dup_fault_count",
+	    fields: [{
+		bits: "31:0",
+		name: "COUNT",
+		desc: "Saturating count of FPU duplication mismatches for this core."
+	    }]
+	}
+     },
+     {
+	multireg: {
+	    name: "HANDSHAKE_TMR_COUNT",
+	    desc: "Per-core TMR (triplicate + majority vote) mismatch counter, covering every triplicated persistent flag and FSM state register in that core's Spatz vector unit. Self-corrected by the voter the same cycle -- diagnostic/counter-only, never escalated to the uncorrectable-fault recovery interrupt.",
+	    swaccess: "ro",
+	    hwaccess: "hrw",
+	    hwext: "true",
+	    count: "NumVrfUnits",
+	    compact: "false",
+	    cname: "handshake_tmr_count",
+	    fields: [{
+		bits: "31:0",
+		name: "COUNT",
+		desc: "Saturating count of TMR-voter mismatches for this core's Spatz vector unit."
+	    }]
+	}
+     },
+     {
+	multireg: {
+	    name: "CORE_TMR_COUNT",
+	    desc: "Per-core lockstep (triplicated) Snitch core mismatch counter. Self-corrected by the voter the same cycle -- diagnostic/counter-only, never escalated to the uncorrectable-fault recovery interrupt.",
+	    swaccess: "ro",
+	    hwaccess: "hrw",
+	    hwext: "true",
+	    count: "NumVrfUnits",
+	    compact: "false",
+	    cname: "core_tmr_count",
+	    fields: [{
+		bits: "31:0",
+		name: "COUNT",
+		desc: "Saturating count of lockstep Snitch core replica mismatches for this core."
+	    }]
+	}
+     },
+     {
+	name: "UNCORRECTABLE_IRQ_ENABLE",
+	desc: '''Per-hart enable for the uncorrectable-fault recovery interrupt. Bit i gates whether a
+	Class-A uncorrectable fault attributed to hart i (VRF ECC uncorrectable, TCDM ECC
+	uncorrectable read/scrub (cluster-global, broadcast to every hart), or FPU duplication
+	mismatch) is allowed to set that hart's bit in UNCORRECTABLE_IRQ_STATUS.
+	'''
+	swaccess: "rw",
+	hwaccess: "hro",
+	resval: "4294967295",
+	fields: [{
+	    bits: "31:0",
+	    name: "ENABLE",
+	    desc: "Per-hart uncorrectable-fault recovery-interrupt enable."
+	}]
+     },
+     {
+	name: "UNCORRECTABLE_IRQ_STATUS",
+	desc: '''
+	Sticky per-hart status: bit i is set when hart i has suffered (or, for cluster-global
+	faults such as TCDM ECC, when the cluster as a whole has suffered) a Class-A
+	uncorrectable fault that triggered the recovery interrupt. Cleared by writing 1 to the
+	matching bit in UNCORRECTABLE_IRQ_CLEAR. Software should read this register from the
+	trap handler to distinguish a fault-induced mcip from a regular inter-core IPI, and to
+	identify which hart's kernel needs to be restarted.
+	'''
+	swaccess: "ro",
+	hwaccess: "hrw",
+	hwext: "true",
+	fields: [{
+	    bits: "31:0",
+	    name: "STATUS",
+	    desc: "Per-hart uncorrectable-fault recovery-interrupt status."
+	}]
+     },
+     {
+	name: "UNCORRECTABLE_IRQ_CLEAR",
+	desc: '''
+	Clear bits in UNCORRECTABLE_IRQ_STATUS. Writing a 1 at bit i clears the sticky
+	uncorrectable-fault status of hart i, where i is relative to the first hart in the
+	cluster, ignoring the cluster base hart ID.
+	'''
+	hwext: "true",
+	hwqe: "true",
+	swaccess: "wo",
+	hwaccess: "hro",
+	fields: [{
+	    bits: "31:0",
+	    name: "UNCORRECTABLE_IRQ_CLEAR",
+	    desc: "Clear sticky uncorrectable-fault status of hart i"
+	}]
      }
   ]
 }

@@ -67,7 +67,14 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     output status_t                           fpu_status_o,
     // ECC VRF outputs
     output logic                              vrf_single_error_o,
-    output logic                              vrf_multi_error_o
+    output logic                              vrf_multi_error_o,
+    // FPU duplication (DMR) fault reporting
+    output logic                              fpu_dup_fault_o,
+    // TMR (triplicate + majority vote) fault reporting: set whenever any
+    // triplicated persistent flag or FSM state register anywhere in this
+    // module disagrees across its three replicas. Self-corrected by the
+    // voter the same cycle -- diagnostic/counter-only.
+    output logic                              handshake_tmr_fault_o
   );
 
   ////////////////
@@ -94,6 +101,11 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   logic     vfu_rsp_ready;
   logic     vfu_rsp_valid, vfu_rsp_buf_valid;
   vfu_rsp_t vfu_rsp, vfu_rsp_buf;
+
+  // TMR fault reporting from each execution unit, aggregated onto this
+  // module's own handshake_tmr_fault_o.
+  logic vfu_handshake_tmr_fault, vlsu_handshake_tmr_fault;
+  logic vsldu_handshake_tmr_fault, controller_handshake_tmr_fault;
 
   logic      vlsu_req_ready;
   logic      vlsu_rsp_valid, vlsu_rsp_buf_valid;
@@ -310,7 +322,9 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     .sb_id_i          (sb_buf_id         ),
     .sb_wrote_result_i(vrf_wvalid        ),
     .sb_enable_i      ({sb_we_buf, sb_re}),
-    .sb_enable_o      ({vrf_we, vrf_re}  )
+    .sb_enable_o      ({vrf_we, vrf_re}  ),
+    // TMR fault reporting
+    .handshake_tmr_fault_o(controller_handshake_tmr_fault)
   );
 
   /////////
@@ -479,7 +493,11 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     .vrf_rvalid_i     (vrf_rvalid[VFU_VD_RD:VFU_VS2_RD]                        ),
     .vrf_id_o         ({sb_id[SB_VFU_VD_WD], sb_id[SB_VFU_VD_RD:SB_VFU_VS2_RD]}),
     // FPU side-channel
-    .fpu_status_o     (fpu_status_o                                            )
+    .fpu_status_o     (fpu_status_o                                            ),
+    // FPU duplication (DMR) fault reporting
+    .fpu_dup_fault_o  (fpu_dup_fault_o),
+    // TMR fault reporting
+    .handshake_tmr_fault_o(vfu_handshake_tmr_fault)
   );
 
   //////////
@@ -521,7 +539,9 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     .spatz_mem_rsp_i         (spatz_mem_rsp_i                                      ),
     .spatz_mem_rsp_valid_i   (spatz_mem_rsp_valid_i                                ),
     .spatz_mem_finished_o    (spatz_mem_finished                                   ),
-    .spatz_mem_str_finished_o(spatz_mem_str_finished                               )
+    .spatz_mem_str_finished_o(spatz_mem_str_finished                               ),
+    // TMR fault reporting
+    .handshake_tmr_fault_o   (vlsu_handshake_tmr_fault                             )
   );
 `else
   spatz_vlsu #(
@@ -556,7 +576,9 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     .spatz_mem_rsp_i         (spatz_mem_rsp_i                                      ),
     .spatz_mem_rsp_valid_i   (spatz_mem_rsp_valid_i                                ),
     .spatz_mem_finished_o    (spatz_mem_finished                                   ),
-    .spatz_mem_str_finished_o(spatz_mem_str_finished                               )
+    .spatz_mem_str_finished_o(spatz_mem_str_finished                               ),
+    // TMR fault reporting
+    .handshake_tmr_fault_o   (vlsu_handshake_tmr_fault                             )
   );
 `endif
 
@@ -584,7 +606,9 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     .vrf_re_o         (sb_re[VSLDU_VS2_RD]                            ),
     .vrf_rdata_i      (vrf_rdata[VSLDU_VS2_RD]                        ),
     .vrf_rvalid_i     (vrf_rvalid[VSLDU_VS2_RD]                       ),
-    .vrf_id_o         ({sb_id[SB_VSLDU_VD_WD], sb_id[SB_VSLDU_VS2_RD]})
+    .vrf_id_o         ({sb_id[SB_VSLDU_VD_WD], sb_id[SB_VSLDU_VS2_RD]}),
+    // TMR fault reporting
+    .handshake_tmr_fault_o(vsldu_handshake_tmr_fault)
   );
 
   ////////////////
@@ -605,5 +629,9 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
 
   if (NrMemPorts == 0)
     $error("[spatz] Spatz requires at least one memory port.");
+
+  assign handshake_tmr_fault_o =
+    vfu_handshake_tmr_fault | vlsu_handshake_tmr_fault
+    | vsldu_handshake_tmr_fault | controller_handshake_tmr_fault;
 
 endmodule : spatz

@@ -138,6 +138,7 @@ sources:
     # Level 3
     - hw/ip/spatz/src/spatz_fpu_sequencer.sv
     - hw/ip/spatz/src/spatz_ipu.sv
+    - hw/ip/spatz/src/spatz_fpu_dmr.sv
     - hw/ip/spatz/src/spatz_vfu.sv
     - hw/ip/spatz/src/spatz_vlsu.sv
     - hw/ip/spatz/src/spatz_doublebw_vlsu.sv
@@ -164,6 +165,7 @@ sources:
       - hw/ip/spatz_cc/src/axi_dma_twod_ext.sv
       # Level 2
       - hw/ip/spatz_cc/src/axi_dma_tc_snitch_fe.sv
+      - hw/ip/spatz_cc/src/spatz_snitch_tmr.sv
       # Level 3
       - hw/ip/spatz_cc/src/spatz_cc.sv
 
@@ -182,6 +184,8 @@ sources:
       - hw/ip/redundancy_cells/scrub_timer.sv
       - hw/ip/redundancy_cells/ecc_sram.sv
       - hw/ip/redundancy_cells/spatz_fault_monitor.sv
+      - hw/ip/redundancy_cells/TMR_voter_fail.sv
+      - hw/ip/redundancy_cells/bitwise_TMR_voter_fail.sv
       # Level 1
       - hw/system/spatz_cluster/src/spatz_barrier.sv
       - hw/system/spatz_cluster/src/spatz_cluster_peripheral/spatz_cluster_peripheral_reg_top.sv

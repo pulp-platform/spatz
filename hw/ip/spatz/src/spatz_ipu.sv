@@ -29,7 +29,10 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
     output elenb_t result_valid_o,
     input  logic   result_ready_i,
     output tag_t   tag_o,
-    output logic   busy_o
+    output logic   busy_o,
+    // TMR fault reporting, OR-reduced from every SIMD lane's internal
+    // serial divider (spatz_serdiv).
+    output logic   handshake_tmr_fault_o
   );
 
 // Include FF
@@ -107,6 +110,11 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
   end: gen_pipeline
 
   if (MAXEW == rvv_pkg::EW_32) begin: gen_32b_ipu
+
+    // TMR fault reporting from each lane's internal serial divider.
+    logic lane_tmr_fault_8b_0, lane_tmr_fault_8b_1, lane_tmr_fault_16b_0, lane_tmr_fault_32b_0;
+    assign handshake_tmr_fault_o = lane_tmr_fault_8b_0 | lane_tmr_fault_8b_1
+                                 | lane_tmr_fault_16b_0 | lane_tmr_fault_32b_0;
 
     typedef struct packed {
       logic [1:0][7:0] ew8;
@@ -258,7 +266,8 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
       .sew_i            (sew                               ),
       .result_o         (lane_signal_res.ew8_res[0]        ),
       .result_valid_o   (lane_signal_res_valid.ew8_valid[0]),
-      .result_ready_i   (result_ready_i                    )
+      .result_ready_i   (result_ready_i                    ),
+      .handshake_tmr_fault_o(lane_tmr_fault_8b_0)
     );
 
     spatz_simd_lane #(
@@ -276,7 +285,8 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
       .sew_i            (sew                               ),
       .result_o         (lane_signal_res.ew8_res[1]        ),
       .result_valid_o   (lane_signal_res_valid.ew8_valid[1]),
-      .result_ready_i   (result_ready_i                    )
+      .result_ready_i   (result_ready_i                    ),
+      .handshake_tmr_fault_o(lane_tmr_fault_8b_1)
     );
 
     spatz_simd_lane #(
@@ -294,7 +304,8 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
       .sew_i            (sew                             ),
       .result_o         (lane_signal_res.ew16_res        ),
       .result_valid_o   (lane_signal_res_valid.ew16_valid),
-      .result_ready_i   (result_ready_i                  )
+      .result_ready_i   (result_ready_i                  ),
+      .handshake_tmr_fault_o(lane_tmr_fault_16b_0)
     );
 
     spatz_simd_lane #(
@@ -312,10 +323,20 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
       .sew_i            (sew                             ),
       .result_o         (lane_signal_res.ew32_res        ),
       .result_valid_o   (lane_signal_res_valid.ew32_valid),
-      .result_ready_i   (result_ready_i                  )
+      .result_ready_i   (result_ready_i                  ),
+      .handshake_tmr_fault_o(lane_tmr_fault_32b_0)
     );
 
   end: gen_32b_ipu else if (MAXEW == rvv_pkg::EW_64) begin: gen_64b_ipu
+
+    // TMR fault reporting from each lane's internal serial divider.
+    logic lane_tmr_fault_8b_0, lane_tmr_fault_8b_1, lane_tmr_fault_8b_2, lane_tmr_fault_8b_3;
+    logic lane_tmr_fault_16b_0, lane_tmr_fault_16b_1, lane_tmr_fault_32b_0, lane_tmr_fault_64b_0;
+    assign handshake_tmr_fault_o = lane_tmr_fault_8b_0 | lane_tmr_fault_8b_1
+                                 | lane_tmr_fault_8b_2 | lane_tmr_fault_8b_3
+                                 | lane_tmr_fault_16b_0 | lane_tmr_fault_16b_1
+                                 | lane_tmr_fault_32b_0 | lane_tmr_fault_64b_0;
+
     typedef struct packed {
       logic [3:0][7:0]  ew8;
       logic [1:0][15:0] ew16;
@@ -523,7 +544,8 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
       .sew_i            (sew                               ),
       .result_o         (lane_signal_res.ew8_res[0]        ),
       .result_valid_o   (lane_signal_res_valid.ew8_valid[0]),
-      .result_ready_i   (result_ready_i                    )
+      .result_ready_i   (result_ready_i                    ),
+      .handshake_tmr_fault_o(lane_tmr_fault_8b_0)
     );
 
     spatz_simd_lane #(
@@ -541,7 +563,8 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
       .sew_i            (sew                               ),
       .result_o         (lane_signal_res.ew8_res[1]        ),
       .result_valid_o   (lane_signal_res_valid.ew8_valid[1]),
-      .result_ready_i   (result_ready_i                    )
+      .result_ready_i   (result_ready_i                    ),
+      .handshake_tmr_fault_o(lane_tmr_fault_8b_1)
     );
 
     spatz_simd_lane #(
@@ -559,7 +582,8 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
       .sew_i            (sew                               ),
       .result_o         (lane_signal_res.ew8_res[2]        ),
       .result_valid_o   (lane_signal_res_valid.ew8_valid[2]),
-      .result_ready_i   (result_ready_i                    )
+      .result_ready_i   (result_ready_i                    ),
+      .handshake_tmr_fault_o(lane_tmr_fault_8b_2)
     );
 
     spatz_simd_lane #(
@@ -577,7 +601,8 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
       .sew_i            (sew                               ),
       .result_o         (lane_signal_res.ew8_res[3]        ),
       .result_valid_o   (lane_signal_res_valid.ew8_valid[3]),
-      .result_ready_i   (result_ready_i                    )
+      .result_ready_i   (result_ready_i                    ),
+      .handshake_tmr_fault_o(lane_tmr_fault_8b_3)
     );
 
     spatz_simd_lane #(
@@ -595,7 +620,8 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
       .sew_i            (sew                                ),
       .result_o         (lane_signal_res.ew16_res[0]        ),
       .result_valid_o   (lane_signal_res_valid.ew16_valid[0]),
-      .result_ready_i   (result_ready_i                     )
+      .result_ready_i   (result_ready_i                     ),
+      .handshake_tmr_fault_o(lane_tmr_fault_16b_0)
     );
 
     spatz_simd_lane #(
@@ -613,7 +639,8 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
       .sew_i            (sew                                ),
       .result_o         (lane_signal_res.ew16_res[1]        ),
       .result_valid_o   (lane_signal_res_valid.ew16_valid[1]),
-      .result_ready_i   (result_ready_i                     )
+      .result_ready_i   (result_ready_i                     ),
+      .handshake_tmr_fault_o(lane_tmr_fault_16b_1)
     );
 
     spatz_simd_lane #(
@@ -631,7 +658,8 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
       .sew_i            (sew                             ),
       .result_o         (lane_signal_res.ew32_res        ),
       .result_valid_o   (lane_signal_res_valid.ew32_valid),
-      .result_ready_i   (result_ready_i                  )
+      .result_ready_i   (result_ready_i                  ),
+      .handshake_tmr_fault_o(lane_tmr_fault_32b_0)
     );
 
     spatz_simd_lane #(
@@ -649,11 +677,13 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
       .sew_i            (sew                             ),
       .result_o         (lane_signal_res.ew64_res        ),
       .result_valid_o   (lane_signal_res_valid.ew64_valid),
-      .result_ready_i   (result_ready_i                  )
+      .result_ready_i   (result_ready_i                  ),
+      .handshake_tmr_fault_o(lane_tmr_fault_64b_0)
     );
 
   end: gen_64b_ipu else begin: gen_error
     $error("[spatz_ipu] Spatz' IPU only supports 32b and 64b modes.");
+    assign handshake_tmr_fault_o = 1'b0;
   end: gen_error
 
 endmodule : spatz_ipu

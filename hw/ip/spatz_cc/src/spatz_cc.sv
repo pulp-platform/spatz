@@ -116,7 +116,16 @@ module spatz_cc
     input  addr_t                        tcdm_addr_base_i,
     // ECC VRF outputs
     output logic                         vrf_single_error_o,
-    output logic                         vrf_multi_error_o
+    output logic                         vrf_multi_error_o,
+    // FPU duplication (DMR) fault reporting
+    output logic                         fpu_dup_fault_o,
+    // TMR (triplicate + majority vote) fault reporting: set whenever any
+    // triplicated persistent flag or FSM state register anywhere in the
+    // Spatz vector unit disagrees across its three replicas.
+    output logic                         spatz_handshake_tmr_fault_o,
+    // Set whenever the triplicated lockstep Snitch core's voted outputs
+    // disagree across its three replicas.
+    output logic                         core_tmr_fault_o
   );
 
   // FMA architecture is "merged" -> mulexp and macexp instructions are supported
@@ -149,6 +158,7 @@ module spatz_cc
   fpnew_pkg::status_t fpu_status;
 
   core_events_t snitch_events;
+  logic core_tmr_fault;
 
   // Snitch Integer Core
   dreq_t snitch_dreq_d, snitch_dreq_q, merged_dreq;
@@ -160,7 +170,7 @@ module spatz_cc
 
   `SNITCH_VM_TYPEDEF(AddrWidth)
 
-  snitch #(
+  spatz_snitch_tmr #(
     .AddrWidth              (AddrWidth             ),
     .DataWidth              (DataWidth             ),
     .acc_issue_req_t        (acc_issue_req_t       ),
@@ -219,7 +229,8 @@ module spatz_cc
     .fpu_rnd_mode_o        (fpu_rnd_mode             ),
     .fpu_fmt_mode_o        (fpu_fmt_mode             ),
     .fpu_status_i          (fpu_status               ),
-    .core_events_o         (snitch_events            )
+    .core_events_o         (snitch_events            ),
+    .core_tmr_fault_o      (core_tmr_fault           )
   );
 
   reqrsp_iso #(
@@ -318,8 +329,14 @@ module spatz_cc
     .fpu_status_o            (fpu_status            ),
     // ECC VRF outputs
     .vrf_single_error_o      (vrf_single_error_o    ),
-    .vrf_multi_error_o       (vrf_multi_error_o     )
+    .vrf_multi_error_o       (vrf_multi_error_o     ),
+    // FPU duplication (DMR) fault reporting
+    .fpu_dup_fault_o  (fpu_dup_fault_o),
+    // TMR fault reporting
+    .handshake_tmr_fault_o(spatz_handshake_tmr_fault_o)
   );
+
+  assign core_tmr_fault_o = core_tmr_fault;
 
   for (genvar p = 0; p < NumMemPortsPerSpatz; p++) begin: gen_tcdm_assignment
     assign tcdm_req_o[p] = '{
@@ -507,40 +524,50 @@ module spatz_cc
     automatic snitch_pkg::fpu_trace_port_t extras_fpu;
     automatic snitch_pkg::fpu_sequencer_trace_port_t extras_fpu_seq_out;
 
+    // i_snitch is spatz_snitch_tmr, a TMR wrapper around three replicas of
+    // the plain `snitch` core (see spatz_snitch_tmr.sv's gen_replica[3]).
+    // It only exposes its port list plus per-signal fault flags at its own
+    // scope -- none of the plain-core internals this tracer reads (pc_d,
+    // opa/opb, gpr_rdata, priv_lvl_q, ...) exist there directly anymore.
+    // Simulation-only dasm tracing doesn't need a voted value, so tap
+    // replica 0 directly via gen_replica[0].i_snitch instead. Signals that
+    // ARE actual spatz_snitch_tmr ports (inst_data_i, acc_prsp_i,
+    // acc_qready_i, acc_qvalid_o, acc_qreq_o) are left as i_snitch.* --
+    // those already resolve fine at the wrapper's own scope.
     if (rst_ni) begin
       extras_snitch = '{
         // State
         source      : snitch_pkg::SrcSnitch,
-        stall       : i_snitch.stall,
-        exception   : i_snitch.exception,
+        stall       : i_snitch.gen_replica[0].i_snitch.stall,
+        exception   : i_snitch.gen_replica[0].i_snitch.exception,
         // Decoding
-        rs1         : i_snitch.rs1,
-        rs2         : i_snitch.rs2,
-        rd          : i_snitch.rd,
-        is_load     : i_snitch.is_load,
-        is_store    : i_snitch.is_store,
-        is_branch   : i_snitch.is_branch,
-        pc_d        : i_snitch.pc_d,
+        rs1         : i_snitch.gen_replica[0].i_snitch.rs1,
+        rs2         : i_snitch.gen_replica[0].i_snitch.rs2,
+        rd          : i_snitch.gen_replica[0].i_snitch.rd,
+        is_load     : i_snitch.gen_replica[0].i_snitch.is_load,
+        is_store    : i_snitch.gen_replica[0].i_snitch.is_store,
+        is_branch   : i_snitch.gen_replica[0].i_snitch.is_branch,
+        pc_d        : i_snitch.gen_replica[0].i_snitch.pc_d,
         // Operands
-        opa         : i_snitch.opa,
-        opb         : i_snitch.opb,
-        opa_select  : i_snitch.opa_select,
-        opb_select  : i_snitch.opb_select,
-        write_rd    : i_snitch.write_rd,
+        opa         : i_snitch.gen_replica[0].i_snitch.opa,
+        opb         : i_snitch.gen_replica[0].i_snitch.opb,
+        opa_select  : i_snitch.gen_replica[0].i_snitch.opa_select,
+        opb_select  : i_snitch.gen_replica[0].i_snitch.opb_select,
+        write_rd    : i_snitch.gen_replica[0].i_snitch.write_rd,
         csr_addr    : i_snitch.inst_data_i[31:20],
         // Pipeline writeback
-        writeback   : i_snitch.alu_writeback,
+        writeback   : i_snitch.gen_replica[0].i_snitch.alu_writeback,
         // Load/Store
-        gpr_rdata_1 : i_snitch.gpr_rdata[1],
-        ls_size     : i_snitch.ls_size,
-        ld_result_32: i_snitch.ld_result[31:0],
-        lsu_rd      : i_snitch.lsu_rd,
-        retire_load : i_snitch.retire_load,
-        alu_result  : i_snitch.alu_result,
+        gpr_rdata_1 : i_snitch.gen_replica[0].i_snitch.gpr_rdata[1],
+        ls_size     : i_snitch.gen_replica[0].i_snitch.ls_size,
+        ld_result_32: i_snitch.gen_replica[0].i_snitch.ld_result[31:0],
+        lsu_rd      : i_snitch.gen_replica[0].i_snitch.lsu_rd,
+        retire_load : i_snitch.gen_replica[0].i_snitch.retire_load,
+        alu_result  : i_snitch.gen_replica[0].i_snitch.alu_result,
         // Atomics
-        ls_amo      : i_snitch.ls_amo,
+        ls_amo      : i_snitch.gen_replica[0].i_snitch.ls_amo,
         // Accelerator
-        retire_acc  : i_snitch.retire_acc,
+        retire_acc  : i_snitch.gen_replica[0].i_snitch.retire_acc,
         acc_pid     : i_snitch.acc_prsp_i.id,
         acc_pdata_32: i_snitch.acc_prsp_i.data[31:0],
         // FPU offload
@@ -552,9 +579,11 @@ module spatz_cc
       // Trace snitch iff:
       // we are not stalled <==> we have issued and processed an instruction (including offloads)
       // OR we are retiring (issuing a writeback from) a load or accelerator instruction
-      if (!i_snitch.stall || i_snitch.retire_load || i_snitch.retire_acc) begin
+      if (!i_snitch.gen_replica[0].i_snitch.stall || i_snitch.gen_replica[0].i_snitch.retire_load
+          || i_snitch.gen_replica[0].i_snitch.retire_acc) begin
         $sformat(trace_entry, "%t %1d %8d 0x%h DASM(%h) #; %s\n",
-          $time, cycle, i_snitch.priv_lvl_q, i_snitch.pc_q, i_snitch.inst_data_i,
+          $time, cycle, i_snitch.gen_replica[0].i_snitch.priv_lvl_q,
+          i_snitch.gen_replica[0].i_snitch.pc_q, i_snitch.inst_data_i,
           snitch_pkg::print_snitch_trace(extras_snitch));
         $fwrite(f, trace_entry);
       end
@@ -567,7 +596,7 @@ module spatz_cc
         if (extras_fpu.acc_q_hs || extras_fpu.fpu_out_hs
             || extras_fpu.lsu_q_hs || extras_fpu.fpr_we) begin
           $sformat(trace_entry, "%t %1d %8d 0x%h DASM(%h) #; %s\n",
-            $time, cycle, i_snitch.priv_lvl_q, 32'hz, extras_fpu.op_in,
+            $time, cycle, i_snitch.gen_replica[0].i_snitch.priv_lvl_q, 32'hz, extras_fpu.op_in,
             snitch_pkg::print_fpu_trace(extras_fpu));
           $fwrite(f, trace_entry);
         end

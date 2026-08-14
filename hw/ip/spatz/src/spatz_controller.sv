@@ -54,7 +54,9 @@ module spatz_controller
     input  logic             [NrVregfilePorts-1:0] sb_enable_i,
     input  logic             [NrWritePorts-1:0]    sb_wrote_result_i,
     output logic             [NrVregfilePorts-1:0] sb_enable_o,
-    input  spatz_id_t        [NrVregfilePorts-1:0] sb_id_i
+    input  spatz_id_t        [NrVregfilePorts-1:0] sb_id_i,
+    // TMR fault reporting
+    output logic                                   handshake_tmr_fault_o
   );
 
 // Include FF
@@ -234,8 +236,30 @@ module spatz_controller
     logic prevent_chaining; // Prevent chaining with some "risky" instructions
   } scoreboard_metadata_t;
 
-  scoreboard_metadata_t [NrParallelInstructions-1:0] scoreboard_q, scoreboard_d;
-  `FF(scoreboard_q, scoreboard_d, '0)
+  // TMR-protected: scoreboard_q gates instruction issue (sb_enable_o) via the
+  // deps/prevent_chaining hazard checks below -- an SEU on any bit here can
+  // silently let a dependent instruction issue too early (reading stale
+  // operands) or never issue (hang), with no other check to catch it. Same
+  // rationale/pattern as spatz_vlsu.sv's busy_q/mem_insn_finished_q.
+  scoreboard_metadata_t [NrParallelInstructions-1:0] scoreboard_d;
+  scoreboard_metadata_t [NrParallelInstructions-1:0] scoreboard_q_rep [3];
+  for (genvar t = 0; t < 3; t++) begin : gen_scoreboard_rep
+    `FF(scoreboard_q_rep[t], scoreboard_d, '0)
+  end
+  scoreboard_metadata_t [NrParallelInstructions-1:0] scoreboard_q;
+  logic scoreboard_tmr_fault;
+  bitwise_TMR_voter_fail #(
+    .DataWidth ($bits(scoreboard_metadata_t) * NrParallelInstructions),
+    .VoterType (1)
+  ) i_scoreboard_voter (
+    .a_i              (scoreboard_q_rep[0] ),
+    .b_i              (scoreboard_q_rep[1] ),
+    .c_i              (scoreboard_q_rep[2] ),
+    .majority_o       (scoreboard_q        ),
+    .fault_detected_o (scoreboard_tmr_fault)
+  );
+
+  assign handshake_tmr_fault_o = scoreboard_tmr_fault;
 
   // Did the instruction write to the VRF in the previous cycle?
 `ifdef DOUBLE_BW
