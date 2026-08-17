@@ -64,7 +64,10 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     // FPU side channel
     input  roundmode_e                        fpu_rnd_mode_i,
     input  fmt_mode_t                         fpu_fmt_mode_i,
-    output status_t                           fpu_status_o
+    output status_t                           fpu_status_o,
+    // ECC VRF outputs
+    output logic                              vrf_single_error_o,
+    output logic                              vrf_multi_error_o
   );
 
   ////////////////
@@ -129,7 +132,12 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   vfu_buf_t vfu_buf_data;
 
   typedef struct packed {
-    vrf_data_t wdata;
+    // ECC-width: VLSU (doublebw) interface 1 emits already-encoded codewords
+    // directly (see spatz_doublebw_vlsu.sv), so this buffer must carry the
+    // full codeword through, not the plain payload. CWWidth (=ELEN+7) isn't
+    // declared until later in this file, so spelled out here to avoid a
+    // forward reference.
+    logic [N_FU*(ELEN+7)-1:0] wdata;
     vrf_addr_t waddr;
     vrf_be_t   wbe;
     spatz_id_t wid;
@@ -227,6 +235,8 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   // VRF //
   /////////
 
+  localparam int unsigned CWWidth = ELEN + 7;
+
   // Write ports
   vrf_addr_t [NrWritePorts-1:0] vrf_waddr, vrf_waddr_buf;
   vrf_data_t [NrWritePorts-1:0] vrf_wdata, vrf_wdata_buf;
@@ -239,6 +249,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   // Read ports
   vrf_addr_t [NrReadPorts-1:0]  vrf_raddr;
   logic      [NrReadPorts-1:0]  vrf_re;
+  logic      [NrReadPorts-1:0][N_FU*CWWidth-1:0] vrf_rdata_ecc;
   vrf_data_t [NrReadPorts-1:0]  vrf_rdata;
   logic      [NrReadPorts-1:0]  vrf_rvalid;
 `ifdef VENTAGLIO
@@ -263,28 +274,48 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   logic                         vrf_vtl_rgather_en;
 `endif
 
-  spatz_vrf #(
+  // Encoded write codewords sent to VRF (VFU/VSLDU via encoder; VLSU via decode-merge-encode)
+  logic [NrWritePorts-1:0][N_FU*CWWidth-1:0] vrf_wdata_ecc;
+
+  // Intermediate wires for VLSU VRF write-port byte-merge
+  logic [N_FU*CWWidth-1:0] vlsu_wdata_ecc_raw; // raw encoded codewords from VLSU
+  logic [N_FU*ELEN-1:0]    vlsu_wdata_dec;      // decoded 32-bit per cut
+
+  // Per-port, per-cut ECC decoder error signals aggregated onto module outputs
+  logic [NrReadPorts-1:0][N_FU-1:0] dec_sec_err, dec_ded_err;
+  logic vrf_sec_err_raw, vrf_ded_err_raw;
+  // VLSU errors not tied to a VRF read-port slot: load response and write-path decode
+  logic vlsu_ld_sec_err, vlsu_ld_ded_err;
+  logic vlsu_wr_sec_err, vlsu_wr_ded_err;
+  assign vrf_single_error_o = vrf_sec_err_raw | (|dec_sec_err) | vlsu_ld_sec_err | vlsu_wr_sec_err;
+  assign vrf_multi_error_o  = vrf_ded_err_raw | (|dec_ded_err) | vlsu_ld_ded_err | vlsu_wr_ded_err;
+
+  // spatz_vrf #(
+  spatz_vrf_ecc #(
     .NrReadPorts (NrReadPorts ),
     .NrWritePorts(NrWritePorts),
     .FpuBufDepth (FpuBufDepth )
   ) i_vrf (
-    .clk_i           (clk_i         ),
-    .rst_ni          (rst_ni        ),
-    .testmode_i      (testmode_i    ),
+    .clk_i           (clk_i          ),
+    .rst_ni          (rst_ni         ),
+    .testmode_i      (testmode_i     ),
     // Write Ports
-    .waddr_i         (vrf_waddr_buf ),
-    .wdata_i         (vrf_wdata_buf ),
-    .we_i            (vrf_we        ),
-    .wbe_i           (vrf_wbe_buf   ),
-    .wvalid_o        (vrf_wvalid    ),
+    .waddr_i         (vrf_waddr_buf  ),
+    .wdata_i         (vrf_wdata_ecc  ),
+    .we_i            (vrf_we         ),
+    .wbe_i           (vrf_wbe_buf    ),
+    .wvalid_o        (vrf_wvalid     ),
   `ifdef BUF_FPU
-    .fpu_buf_usage_i (vfu_buf_usage ),
+    .fpu_buf_usage_i (vfu_buf_usage  ),
   `endif
     // Read Ports
     .raddr_i         (vrf_raddr     ),
     .re_i            (vrf_re        ),
-    .rdata_o         (vrf_rdata     ),
-    .rvalid_o        (vrf_rvalid    )
+    .rdata_o         (vrf_rdata_ecc ),
+    .rvalid_o        (vrf_rvalid    ),
+    // ECC outputs (decoders in spatz.sv collect errors; VRF drives raw placeholder)
+    .single_error_o  (vrf_sec_err_raw),
+    .multi_error_o   (vrf_ded_err_raw)
 `ifdef VENTAGLIO
     ,
     .vtl_redirect_write_i (vrf_vtl_redirect_write),
@@ -415,6 +446,15 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   // Buffering of VLSU1 when conflicting with VLSU0
   logic vlsu_buf_en, vlsu_buf_push, vlsu_buf_pop, vrf_vlsu_wvalid, vlsu_buf_full, vlsu_buf_empty;
 
+  // Raw ECC codewords straight from spatz_doublebw_vlsu.sv (it encodes
+  // internally, mirroring spatz_vlsu.sv), indexed [intf]. Interface 0 is
+  // unbuffered and feeds vrf_wdata_ecc[VLSU_VD_WD0] directly; interface 1
+  // is what gets buffered here when it loses write-bank arbitration.
+  logic [1:0][N_FU*(ELEN+7)-1:0] vlsu_doublebw_wdata_ecc_raw;
+  // Interface 1's ECC-width write data actually driven to the VRF this
+  // cycle: either the live output (buffer empty) or the buffered codeword.
+  logic [N_FU*(ELEN+7)-1:0] vlsu_wd1_wdata_ecc;
+
   assign vlsu_buf_en =  sb_we[VLSU_VD_WD1] && (!vrf_wvalid[VLSU_VD_WD1] || (vrf_wvalid[VLSU_VD_WD1] && !vlsu_buf_empty));
   assign vlsu_buf_push = vlsu_buf_en && !vlsu_buf_full;
   assign vlsu_buf_pop = vrf_wvalid[VLSU_VD_WD1] && !vlsu_buf_empty;
@@ -432,7 +472,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     .full_o     (vlsu_buf_full            ),
     .empty_o    (vlsu_buf_empty           ),
     .usage_o    (vlsu_buf_usage           ),
-    .data_i     ({vrf_wdata[VLSU_VD_WD1],
+    .data_i     ({vlsu_doublebw_wdata_ecc_raw[1],
                   vrf_waddr[VLSU_VD_WD1],
                   vrf_wbe  [VLSU_VD_WD1],
                   sb_id [SB_VLSU_VD_WD1],
@@ -443,6 +483,12 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     .pop_i      (vlsu_buf_pop             )
   );
 
+  // VLSU (doublebw) writes ECC codewords directly to the VRF, bypassing the
+  // shared plain-width vrf_wdata_buf/gen_vfu_vrf_wdata_encoder path used by
+  // VFU/VSLDU -- interface 0 has no buffering stage, interface 1 is either
+  // its live output or the buffered codeword (set in the always_comb below).
+  assign vrf_wdata_ecc[VLSU_VD_WD0] = vlsu_doublebw_wdata_ecc_raw[0];
+  assign vrf_wdata_ecc[VLSU_VD_WD1] = vlsu_wd1_wdata_ecc;
 `endif
 `endif
 
@@ -458,6 +504,11 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     vfu_rsp_buf_valid = vfu_rsp_valid;
     vlsu_rsp_buf = vlsu_rsp;
     vlsu_rsp_buf_valid = vlsu_rsp_valid;
+`ifdef DOUBLE_BW
+    // Live (unbuffered) interface-1 codeword by default; overridden below
+    // when the buffer holds an older, not-yet-retired write.
+    vlsu_wd1_wdata_ecc = vlsu_doublebw_wdata_ecc_raw[1];
+`endif
 
     // If the buffering feature is used for the FPU or VLSU,
     // Use the metadata to commit the data to the VRF
@@ -485,7 +536,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
 
     if (!vlsu_buf_empty) begin
       sb_we_buf    [VLSU_VD_WD1] = 1'b1;
-      vrf_wdata_buf[VLSU_VD_WD1] = vlsu_buf_data.wdata;
+      vlsu_wd1_wdata_ecc         = vlsu_buf_data.wdata;
       vrf_waddr_buf[VLSU_VD_WD1] = vlsu_buf_data.waddr;
       vrf_wbe_buf  [VLSU_VD_WD1] = vlsu_buf_data.wbe;
       sb_buf_id    [SB_VLSU_VD_WD1] = vlsu_buf_data.wid;
@@ -510,6 +561,35 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
 `ifdef VENTAGLIO
   logic vfu_vtl_req_ready;
 `endif
+  // ECC decoders for VFU read ports
+  for (genvar vfu_rd_cut = 0; vfu_rd_cut < N_FU; vfu_rd_cut++) begin : gen_vfu_vrf_rd_data_decoder
+    hsiao_ecc_dec #(.DataWidth(ELEN), .ProtWidth(7)) vfu_vd_rd_ecc_dec (
+      .in        (vrf_rdata_ecc[VFU_VD_RD][(ELEN+7)*vfu_rd_cut +: (ELEN+7)]),
+      .out       (vrf_rdata[VFU_VD_RD][ELEN*vfu_rd_cut +: ELEN]),
+      .syndrome_o(),
+      .err_o     ({dec_ded_err[VFU_VD_RD][vfu_rd_cut], dec_sec_err[VFU_VD_RD][vfu_rd_cut]})
+    );
+    hsiao_ecc_dec #(.DataWidth(ELEN), .ProtWidth(7)) vfu_vs1_rd_ecc_dec (
+      .in        (vrf_rdata_ecc[VFU_VS1_RD][(ELEN+7)*vfu_rd_cut +: (ELEN+7)]),
+      .out       (vrf_rdata[VFU_VS1_RD][ELEN*vfu_rd_cut +: ELEN]),
+      .syndrome_o(),
+      .err_o     ({dec_ded_err[VFU_VS1_RD][vfu_rd_cut], dec_sec_err[VFU_VS1_RD][vfu_rd_cut]})
+    );
+    hsiao_ecc_dec #(.DataWidth(ELEN), .ProtWidth(7)) vfu_vs2_rd_ecc_dec (
+      .in        (vrf_rdata_ecc[VFU_VS2_RD][(ELEN+7)*vfu_rd_cut +: (ELEN+7)]),
+      .out       (vrf_rdata[VFU_VS2_RD][ELEN*vfu_rd_cut +: ELEN]),
+      .syndrome_o(),
+      .err_o     ({dec_ded_err[VFU_VS2_RD][vfu_rd_cut], dec_sec_err[VFU_VS2_RD][vfu_rd_cut]})
+    );
+  end : gen_vfu_vrf_rd_data_decoder
+
+  // ECC encoder for VFU write port (encodes post-buffer data)
+  for (genvar vfu_wr_cut = 0; vfu_wr_cut < N_FU; vfu_wr_cut++) begin : gen_vfu_vrf_wdata_encoder
+    hsiao_ecc_enc #(.DataWidth(ELEN), .ProtWidth(7)) vfu_vd_wr_ecc_enc (
+      .in  (vrf_wdata_buf[VFU_VD_WD][ELEN*vfu_wr_cut +: ELEN]),
+      .out (vrf_wdata_ecc [VFU_VD_WD][(ELEN+7)*vfu_wr_cut +: (ELEN+7)])
+    );
+  end : gen_vfu_vrf_wdata_encoder
 
   spatz_vfu #(
     .FPUImplementation(FPUImplementation)
@@ -571,13 +651,13 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     // VRF
     .vrf_wvalid_i            ({vrf_vlsu_wvalid, vrf_wvalid[VLSU_VD_WD0]}           ),
     .vrf_waddr_o             (vrf_waddr[VLSU_VD_WD1:VLSU_VD_WD0]                   ),
-    .vrf_wdata_o             (vrf_wdata[VLSU_VD_WD1:VLSU_VD_WD0]                   ),
+    .vrf_wdata_ecc_o         (vlsu_doublebw_wdata_ecc_raw                          ),
     .vrf_we_o                (sb_we[VLSU_VD_WD1:VLSU_VD_WD0]                       ),
     .vrf_wbe_o               (vrf_wbe[VLSU_VD_WD1:VLSU_VD_WD0]                     ),
     // Read from VRF
     .vrf_raddr_o             (vrf_raddr[VLSU_VS2_RD1:VLSU_VD_RD0]                  ),
     .vrf_re_o                (sb_re[VLSU_VS2_RD1:VLSU_VD_RD0]                      ),
-    .vrf_rdata_i             (vrf_rdata[VLSU_VS2_RD1:VLSU_VD_RD0]                  ),
+    .vrf_rdata_ecc           (vrf_rdata_ecc[VLSU_VS2_RD1:VLSU_VD_RD0]              ),
     .vrf_rvalid_i            (vrf_rvalid[VLSU_VS2_RD1:VLSU_VD_RD0]                 ),
     .vrf_id_o                ({sb_id[SB_VLSU_VD_WD1], sb_id[SB_VLSU_VS2_RD1], sb_id[SB_VLSU_VD_RD1],   // VLSU Interface-1
                                sb_id[SB_VLSU_VD_WD0], sb_id[SB_VLSU_VS2_RD0], sb_id[SB_VLSU_VD_RD0]}), // VLSU Interface-0
@@ -606,16 +686,16 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     .vlsu_rsp_valid_o        (vlsu_rsp_valid                                       ),
     .vlsu_rsp_o              (vlsu_rsp                                             ),
     // VRF
-    .vrf_waddr_o             (vrf_waddr[VLSU_VD_WD]                                ),
-    .vrf_wdata_o             (vrf_wdata[VLSU_VD_WD]                                ),
-    .vrf_we_o                (sb_we[VLSU_VD_WD]                                    ),
-    .vrf_wbe_o               (vrf_wbe[VLSU_VD_WD]                                  ),
-    .vrf_wvalid_i            (vrf_wvalid[VLSU_VD_WD]                               ),
-    .vrf_raddr_o             ({vrf_raddr[VLSU_VS2_RD],  vrf_raddr[VLSU_VD_RD] }    ),
-    .vrf_re_o                ({sb_re[VLSU_VS2_RD],      sb_re[VLSU_VD_RD]     }    ),
-    .vrf_rdata_i             ({vrf_rdata[VLSU_VS2_RD],  vrf_rdata[VLSU_VD_RD] }    ),
-    .vrf_rvalid_i            ({vrf_rvalid[VLSU_VS2_RD], vrf_rvalid[VLSU_VD_RD]}    ),
-    .vrf_id_o                ({sb_id[SB_VLSU_VD_WD],    sb_id[VLSU_VS2_RD],    sb_id[VLSU_VD_RD]}),
+    .vrf_waddr_o             (vrf_waddr[VLSU_VD_WD]                                         ),
+    .vrf_wdata_ecc_o         (vlsu_wdata_ecc_raw                                            ),
+    .vrf_we_o                (sb_we[VLSU_VD_WD]                                             ),
+    .vrf_wbe_o               (vrf_wbe[VLSU_VD_WD]                                           ),
+    .vrf_wvalid_i            (vrf_wvalid[VLSU_VD_WD]                                        ),
+    .vrf_raddr_o             ({vrf_raddr[VLSU_VS2_RD],      vrf_raddr[VLSU_VD_RD]    }      ),
+    .vrf_re_o                ({sb_re[VLSU_VS2_RD],          sb_re[VLSU_VD_RD]        }      ),
+    .vrf_rdata_ecc           ({vrf_rdata_ecc[VLSU_VS2_RD],  vrf_rdata_ecc[VLSU_VD_RD]}      ),
+    .vrf_rvalid_i            ({vrf_rvalid[VLSU_VS2_RD],     vrf_rvalid[VLSU_VD_RD]   }      ),
+    .vrf_id_o                ({sb_id[SB_VLSU_VD_WD], sb_id[VLSU_VS2_RD], sb_id[VLSU_VD_RD]}),
     // Interface Memory
     .spatz_mem_req_o         (spatz_mem_req_o                                      ),
     .spatz_mem_req_valid_o   (spatz_mem_req_valid_o                                ),
@@ -623,8 +703,122 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     .spatz_mem_rsp_i         (spatz_mem_rsp_i                                      ),
     .spatz_mem_rsp_valid_i   (spatz_mem_rsp_valid_i                                ),
     .spatz_mem_finished_o    (spatz_mem_finished                                   ),
-    .spatz_mem_str_finished_o(spatz_mem_str_finished                               )
+    .spatz_mem_str_finished_o(spatz_mem_str_finished                               ),
+    .vlsu_vs2_sec_err_o      (dec_sec_err[VLSU_VS2_RD]                             ),
+    .vlsu_vs2_ded_err_o      (dec_ded_err[VLSU_VS2_RD]                             ),
+    .vlsu_ld_sec_err_o       (vlsu_ld_sec_err                                      ),
+    .vlsu_ld_ded_err_o       (vlsu_ld_ded_err                                      )
   );
+`endif
+
+`ifdef DOUBLE_BW
+  // tie off fault-monitor signals that are otherwise
+  // completely undriven for DOUBLE_BW (the single-BW branch below assigns
+  // these, but references single-BW-only enum members so cannot compile
+  // under DOUBLE_BW).
+  assign vlsu_ld_sec_err = 1'b0;
+  assign vlsu_ld_ded_err = 1'b0;
+  assign vlsu_wr_sec_err = 1'b0;
+  assign vlsu_wr_ded_err = 1'b0;
+  assign dec_sec_err[VLSU_VD_RD0]  = '0;
+  assign dec_ded_err[VLSU_VD_RD0]  = '0;
+  assign dec_sec_err[VLSU_VD_RD1]  = '0;
+  assign dec_ded_err[VLSU_VD_RD1]  = '0;
+  assign dec_sec_err[VLSU_VS2_RD0] = '0;
+  assign dec_ded_err[VLSU_VS2_RD0] = '0;
+  assign dec_sec_err[VLSU_VS2_RD1] = '0;
+  assign dec_ded_err[VLSU_VS2_RD1] = '0;
+`else
+  // VLSU read ports: raw ECC consumed directly inside VLSU; stub decoded data.
+  // VS2_RD errors are now driven by VLSU outputs above; VD_RD is store-source only.
+  assign dec_sec_err[VLSU_VD_RD]  = '0;
+  assign dec_ded_err[VLSU_VD_RD]  = '0;
+  assign vrf_rdata[VLSU_VS2_RD]   = '0;
+  assign vrf_rdata[VLSU_VD_RD]    = '0;
+
+  // Write-through register: accumulates per-byte results across consecutive partial VLSU writes
+  // to the same VRF word so that successive narrow-element commits do not corrupt earlier bytes.
+  logic [N_FU*ELEN-1:0] vlsu_prev_merged_d, vlsu_prev_merged_q;
+  vrf_addr_t            vlsu_prev_waddr_d,  vlsu_prev_waddr_q;
+
+  always_comb begin
+    vlsu_prev_merged_d = vlsu_prev_merged_q; // hold unless a write occurs
+    vlsu_prev_waddr_d  = vlsu_prev_waddr_q;
+    if (vrf_we[VLSU_VD_WD]) begin
+      vlsu_prev_waddr_d = vrf_waddr_buf[VLSU_VD_WD];
+      if (vrf_waddr_buf[VLSU_VD_WD] != vlsu_prev_waddr_q)
+        vlsu_prev_merged_d = '0; // new register word: clear accumulator
+      for (int c = 0; c < N_FU; c++)
+        for (int b = 0; b < ELENB; b++)
+          if (vrf_wbe_buf[VLSU_VD_WD][ELENB*c + b])
+            vlsu_prev_merged_d[ELEN*c + 8*b +: 8] = vlsu_wdata_dec[ELEN*c + 8*b +: 8];
+    end
+  end
+
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (!rst_ni) begin
+      vlsu_prev_merged_q <= '0;
+      vlsu_prev_waddr_q  <= '0;
+    end else begin
+      vlsu_prev_merged_q <= vlsu_prev_merged_d;
+      vlsu_prev_waddr_q  <= vlsu_prev_waddr_d;
+    end
+  end
+
+  // Per-cut: decode VLSU write codeword, merge with accumulated bytes, re-encode for VRF
+  logic [N_FU-1:0] vlsu_wr_sec_err_vec, vlsu_wr_ded_err_vec;
+  assign vlsu_wr_sec_err = |vlsu_wr_sec_err_vec;
+  assign vlsu_wr_ded_err = |vlsu_wr_ded_err_vec;
+  for (genvar vlsu_cut = 0; vlsu_cut < N_FU; vlsu_cut++) begin : gen_vlsu_vrf_ecc
+    hsiao_ecc_dec #(.DataWidth(ELEN), .ProtWidth(7)) vlsu_vd_wr_ecc_dec (
+      .in        (vlsu_wdata_ecc_raw[(ELEN+7)*vlsu_cut +: (ELEN+7)]),
+      .out       (vlsu_wdata_dec[ELEN*vlsu_cut +: ELEN]),
+      .syndrome_o(),
+      .err_o     ({vlsu_wr_ded_err_vec[vlsu_cut], vlsu_wr_sec_err_vec[vlsu_cut]})
+    );
+
+    logic [ELEN-1:0] vlsu_merged_cut;
+    for (genvar b = 0; b < ELENB; b++) begin : gen_vlsu_byte_merge
+      // Gate the entire mux on vrf_we: when VLSU is not writing, feed the encoder a known
+      // value (accumulated register) to prevent X from undriven inputs propagating through
+      // the combinational ECC encoder and corrupting vrf_wdata_ecc[VLSU_VD_WD].
+      assign vlsu_merged_cut[8*b +: 8] =
+        !vrf_we[VLSU_VD_WD] ? vlsu_prev_merged_q[ELEN*vlsu_cut + 8*b +: 8] :
+        vrf_wbe_buf[VLSU_VD_WD][ELENB*vlsu_cut + b] ?
+          vlsu_wdata_dec[ELEN*vlsu_cut + 8*b +: 8] :
+          ((vrf_waddr_buf[VLSU_VD_WD] == vlsu_prev_waddr_q) ?
+           vlsu_prev_merged_q[ELEN*vlsu_cut + 8*b +: 8] : '0);
+    end : gen_vlsu_byte_merge
+
+    hsiao_ecc_enc #(.DataWidth(ELEN), .ProtWidth(7)) vlsu_vd_wr_ecc_enc (
+      .in  (vlsu_merged_cut),
+      .out (vrf_wdata_ecc[VLSU_VD_WD][(ELEN+7)*vlsu_cut +: (ELEN+7)])
+    );
+  end : gen_vlsu_vrf_ecc
+
+  // Should be unreachable now that spatz_vlsu.sv performs its own RMW merge
+  // (vlsu_rmw_needed/vlsu_ld_rmw_fsm) for any load whose first write to a
+  // fresh word could otherwise leave bytes partially updated. Note the
+  // invariant is PER-CUT, not whole-word: a short-vl operation legitimately
+  // leaves many cuts entirely untouched (wbe=='0 for that cut), which is
+  // safe since spatz_vrf_ecc.sv simply doesn't write an all-zero-wbe cut.
+  // Only a cut with SOME-but-not-all bytes set indicates a coverage gap.
+`ifndef SYNTHESIS
+  logic vlsu_new_word_partial_cut;
+  always_comb begin
+    vlsu_new_word_partial_cut = 1'b0;
+    for (int c = 0; c < N_FU; c++)
+      if (vrf_wbe_buf[VLSU_VD_WD][c*ELENB +: ELENB] != '0 &&
+          vrf_wbe_buf[VLSU_VD_WD][c*ELENB +: ELENB] != {ELENB{1'b1}})
+        vlsu_new_word_partial_cut = 1'b1;
+  end
+
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+    !(vrf_we[VLSU_VD_WD] && (vrf_waddr_buf[VLSU_VD_WD] != vlsu_prev_waddr_q) &&
+      vlsu_new_word_partial_cut))
+    else $error("VLSU first-write-to-new-word arrived with a partial-cut wbe — RMW coverage gap: waddr=%0d prev_waddr_q=%0d wbe=%0b",
+                vrf_waddr_buf[VLSU_VD_WD], vlsu_prev_waddr_q, vrf_wbe_buf[VLSU_VD_WD]);
+`endif
 `endif
 
   /////////////////
@@ -754,30 +948,28 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     .vrf_id_o         ({mst_vtl_wid, mst_vtl_rid})
   );
 
-  spatz_vsldu i_vsldu (
-    .clk_i            (clk_i                                          ),
-    .rst_ni           (rst_ni                                         ),
-    // Request
-    .spatz_req_i      (spatz_req                                      ),
-    .spatz_req_valid_i(spatz_req_valid                                ),
-    .spatz_req_ready_o(vsldu_req_ready                                ),
-    // Response
-    .vsldu_rsp_valid_o(vsldu_rsp_valid                                ),
-    .vsldu_rsp_o      (vsldu_rsp                                      ),
-    // VRF (master ports; routed through proc_arbitrate_vtl_vsldu_* muxes)
-    .vrf_waddr_o      (mst_vsldu_waddr                                ),
-    .vrf_wdata_o      (mst_vsldu_wdata                                ),
-    .vrf_we_o         (mst_vsldu_we                                   ),
-    .vrf_wbe_o        (mst_vsldu_wbe                                  ),
-    .vrf_wvalid_i     (mst_vsldu_wvalid                               ),
-    .vrf_raddr_o      (mst_vsldu_raddr                                ),
-    .vrf_re_o         (mst_vsldu_re                                   ),
-    .vrf_rdata_i      (mst_vsldu_rdata                                ),
-    .vrf_rvalid_i     (mst_vsldu_rvalid                               ),
-    .vrf_id_o         ({mst_vsldu_wid, mst_vsldu_rid}                 )
-  );
-
 `else // !VENTAGLIO — vanilla Spatz: VSLDU wires directly to its slot.
+
+  ///////////
+  // VSLDU //
+  ///////////
+  // ECC decoder for VSLDU read port
+  for (genvar vsldu_cut = 0; vsldu_cut < N_FU; vsldu_cut++) begin : gen_vsldu_vrf_rd_data_decoder
+    hsiao_ecc_dec #(.DataWidth(ELEN), .ProtWidth(7)) vsldu_vs2_rd_ecc_dec (
+      .in        (vrf_rdata_ecc[VSLDU_VS2_RD][(ELEN+7)*vsldu_cut +: (ELEN+7)]),
+      .out       (vrf_rdata[VSLDU_VS2_RD][ELEN*vsldu_cut +: ELEN]),
+      .syndrome_o(),
+      .err_o     ({dec_ded_err[VSLDU_VS2_RD][vsldu_cut], dec_sec_err[VSLDU_VS2_RD][vsldu_cut]})
+    );
+  end : gen_vsldu_vrf_rd_data_decoder
+
+  // ECC encoder for VSLDU write port (encodes post-buffer data)
+  for (genvar vsldu_wr_cut = 0; vsldu_wr_cut < N_FU; vsldu_wr_cut++) begin : gen_vsldu_vrf_wdata_encoder
+    hsiao_ecc_enc #(.DataWidth(ELEN), .ProtWidth(7)) vsldu_vd_wr_ecc_enc (
+      .in  (vrf_wdata_buf[VSLDU_VD_WD][ELEN*vsldu_wr_cut +: ELEN]),
+      .out (vrf_wdata_ecc[VSLDU_VD_WD][(ELEN+7)*vsldu_wr_cut +: (ELEN+7)])
+    );
+  end : gen_vsldu_vrf_wdata_encoder
 
   spatz_vsldu i_vsldu (
     .clk_i            (clk_i                                          ),

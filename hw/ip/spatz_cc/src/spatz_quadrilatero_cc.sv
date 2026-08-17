@@ -87,9 +87,11 @@ module spatz_quadrilatero_cc
     /// Insert Pipeline registers into data memory path (response)
     parameter bit                                          RegisterCoreRsp          = 0,
     parameter snitch_pma_pkg::snitch_pma_t                 SnitchPMACfg             = '{default: 0},
+    /// TCDM word width (unprotected; 32 bits for Spatz).
+    parameter int                          unsigned        TCDMDataWidth            = 32,
+    /// TCDM codeword width (ECC-protected; equals TCDMDataWidth when no ECC).
+    parameter int                          unsigned        TCDMProtDataWidth        = TCDMDataWidth,
     /// Derived parameter *Do not override*
-    // parameter int                          unsigned        NumSpatzFUs              = (NumSpatzFPUs > NumSpatzIPUs) ? NumSpatzFPUs : NumSpatzIPUs,
-    // parameter int                          unsigned        NumMemPortsPerSpatz      = NumSpatzFUs,
     parameter int                          unsigned        NumMemPortsQuad          = 4,
     parameter int                          unsigned        TCDMPorts                = NumMemPortsQuad + 1,
     parameter type                                         addr_t                   = logic [AddrWidth-1:0]
@@ -120,8 +122,17 @@ module spatz_quadrilatero_cc
     output dma_events_t                  axi_dma_events_o,
     // Core event strobes
     output core_events_t                 core_events_o,
-    input  addr_t                        tcdm_addr_base_i
+    input  addr_t                        tcdm_addr_base_i,
+    // ECC VRF outputs
+    output logic                         vrf_single_error_o,
+    output logic                         vrf_multi_error_o,
+    // Asserted when the triplicated lockstep core detects a replica mismatch.
+    output logic                         core_tmr_fault_o
   );
+
+  // ECC protection width for TCDM codewords (parity bits only).
+  // Declared here so it's visible in both gen_tcdm_assignment and gen_snitch_wdata_enc.
+  localparam int unsigned SnitchTCDMProtWidth = TCDMProtDataWidth - TCDMDataWidth;
 
   // FMA architecture is "merged" -> mulexp and macexp instructions are supported
   localparam bit FPEn = RVF | RVD | XF16 | XF8;
@@ -166,7 +177,7 @@ module spatz_quadrilatero_cc
 
   `SNITCH_VM_TYPEDEF(AddrWidth)
 
-  snitch #(
+  spatz_snitch_tmr #(
     .AddrWidth              (AddrWidth             ),
     .DataWidth              (DataWidth             ),
     .acc_issue_req_t        (acc_issue_req_t       ),
@@ -226,9 +237,9 @@ module spatz_quadrilatero_cc
     .fpu_rnd_mode_o        (fpu_rnd_mode             ),
     .fpu_fmt_mode_o        (fpu_fmt_mode             ),
     .fpu_status_i          (fpu_status               ),
-    .core_events_o         (snitch_events            )
+    .core_events_o         (snitch_events            ),
+    .core_tmr_fault_o      (core_tmr_fault_o         )
   );
-
 
   reqrsp_iso #(
     .AddrWidth (AddrWidth                       ),
@@ -318,7 +329,10 @@ module spatz_quadrilatero_cc
       .fp_lsu_mem_rsp_i        (fp_lsu_mem_rsp        ),
       .fpu_rnd_mode_i          (fpu_rnd_mode          ),
       .fpu_fmt_mode_i          (fpu_fmt_mode          ),
-      .fpu_status_o            (fpu_status            )
+      .fpu_status_o            (fpu_status            ),
+      // ECC VRF outputs
+      .vrf_single_error_o      (vrf_single_error_o    ),
+      .vrf_multi_error_o       (vrf_multi_error_o     )
     );
   end else begin
     spatz_scalar_only #(
@@ -410,10 +424,35 @@ module spatz_quadrilatero_cc
     .quad_mem_rsp_valid_i   (quad_mem_rsp_valid   )
   );
 
+  // VLSU byte-rotate stores produce a 32-bit rotated value in data[31:0] with
+  // zero parity bits in data[38:32]. Re-encode data[TCDMDataWidth-1:0] to always
+  // produce a valid codeword. For non-rotated stores (already valid), this is the
+  // Hsiao identity: encode(codeword[31:0]) == codeword.
   for (genvar p = 0; p < NumMemPortsQuad; p++) begin: gen_quad_tcdm_assignment
+    logic [TCDMProtDataWidth-1:0] vlsu_enc_data;
+
+    if (TCDMProtDataWidth > TCDMDataWidth) begin : gen_vlsu_enc
+      hsiao_ecc_enc #(
+        .DataWidth (TCDMDataWidth      ),
+        .ProtWidth (SnitchTCDMProtWidth)
+      ) i_vlsu_enc (
+        .in  (quad_mem_req[p].data[TCDMDataWidth-1:0]),
+        .out (vlsu_enc_data)
+      );
+    end else begin : gen_vlsu_no_enc
+      assign vlsu_enc_data = quad_mem_req[p].data;
+    end
+
     assign quad_tcdm_req_o[p] = '{
-        q      : quad_mem_req[p],
-        q_valid: quad_mem_req_valid[p]
+      q: '{
+        addr : quad_mem_req[p].addr,
+        write: quad_mem_req[p].write,
+        amo  : quad_mem_req[p].amo,
+        data : vlsu_enc_data,
+        strb : quad_mem_req[p].strb,
+        user : '0
+      },
+      q_valid: quad_mem_req_valid[p]
       };
     assign quad_mem_req_ready[p] = quad_tcdm_rsp_i[p].q_ready;
 
@@ -477,7 +516,36 @@ module spatz_quadrilatero_cc
     .default_idx_i    ('0                )
   );
 
-  reqrsp_to_tcdm #(
+  // Route Snitch/FP-LSU scalar TCDM through intermediate signals so we can
+  // encode write data and decode read data at the 39-bit TCDM bus boundary.
+  tcdm_req_t snitch_tcdm_req_raw;
+  tcdm_rsp_t snitch_tcdm_rsp_dec;
+
+  // ECC-decode the 39-bit TCDM read response → corrected 32-bit data.
+  // Decoded data is placed in snitch_tcdm_rsp_dec.p.data[TCDMDataWidth-1:0] with
+  // explicit zeros in the upper SnitchTCDMProtWidth bits (parity position).
+  // reqrsp_to_tcdm receives snitch_tcdm_rsp_dec and sees the corrected value
+  // when it extracts p.data[DataWidth-1:0] internally.
+  if (TCDMProtDataWidth > TCDMDataWidth) begin : gen_snitch_rdata_dec
+    logic [TCDMDataWidth-1:0] snitch_rdata_corrected;
+    hsiao_ecc_dec #(
+      .DataWidth (TCDMDataWidth      ),
+      .ProtWidth (SnitchTCDMProtWidth)
+    ) i_snitch_rdata_dec (
+      .in        (quad_tcdm_rsp_i[NumMemPortsQuad].p.data),
+      .out       (snitch_rdata_corrected),
+      .syndrome_o(),
+      .err_o     ()
+    );
+    always_comb begin
+      snitch_tcdm_rsp_dec        = quad_tcdm_rsp_i[NumMemPortsQuad];
+      snitch_tcdm_rsp_dec.p.data = {{SnitchTCDMProtWidth{1'b0}}, snitch_rdata_corrected};
+    end
+  end else begin : gen_snitch_no_rdata_dec
+    assign snitch_tcdm_rsp_dec = quad_tcdm_rsp_i[NumMemPortsQuad];
+  end
+
+  reqrsp_to_tcdm #( // only for cross clock domain decoupling
     .AddrWidth    (AddrWidth ),
     .DataWidth    (DataWidth ),
     .BufDepth     (4         ),
@@ -486,13 +554,40 @@ module spatz_quadrilatero_cc
     .tcdm_req_t   (tcdm_req_t),
     .tcdm_rsp_t   (tcdm_rsp_t)
   ) i_reqrsp_to_tcdm (
-    .clk_i        (clk_i                            ),
-    .rst_ni       (rst_ni                           ),
-    .reqrsp_req_i (data_tcdm_req                    ),
-    .reqrsp_rsp_o (data_tcdm_rsp                    ),
-    .tcdm_req_o   (quad_tcdm_req_o[NumMemPortsQuad]),
-    .tcdm_rsp_i   (quad_tcdm_rsp_i[NumMemPortsQuad])
+    .clk_i        (clk_i              ),
+    .rst_ni       (rst_ni             ),
+    .reqrsp_req_i (data_tcdm_req      ),
+    .reqrsp_rsp_o (data_tcdm_rsp      ),
+    .tcdm_req_o   (snitch_tcdm_req_raw),// 32-bit ata_tcdm_req + 7-bit 0-pad
+    .tcdm_rsp_i   (snitch_tcdm_rsp_dec)
   );
+
+  // ECC-encode Snitch's 32-bit write data → 39-bit codeword for the TCDM bus.
+  logic [TCDMProtDataWidth-1:0] snitch_enc_data;
+
+  if (TCDMProtDataWidth > TCDMDataWidth) begin : gen_snitch_wdata_enc
+    hsiao_ecc_enc #(
+      .DataWidth (TCDMDataWidth      ),
+      .ProtWidth (SnitchTCDMProtWidth)
+    ) i_snitch_wdata_enc (
+      .in  (snitch_tcdm_req_raw.q.data[TCDMDataWidth-1:0]),
+      .out (snitch_enc_data)
+    );
+  end else begin : gen_snitch_no_enc
+    assign snitch_enc_data = snitch_tcdm_req_raw.q.data;
+  end
+
+  assign quad_tcdm_req_o[NumMemPortsQuad] = '{
+    q: '{
+      addr : snitch_tcdm_req_raw.q.addr,
+      write: snitch_tcdm_req_raw.q.write,
+      amo  : snitch_tcdm_req_raw.q.amo,
+      data : snitch_enc_data,
+      strb : snitch_tcdm_req_raw.q.strb,
+      user : snitch_tcdm_req_raw.q.user
+    },
+    q_valid: snitch_tcdm_req_raw.q_valid
+  };
 
   // Core events for performance counters
   assign core_events_o.retired_instr     = snitch_events.retired_instr;
@@ -533,43 +628,46 @@ module spatz_quadrilatero_cc
     automatic snitch_pkg::fpu_sequencer_trace_port_t extras_fpu_seq_out;
 
     if (rst_ni) begin
+
+      cycle = '0;
+
       extras_snitch = '{
         // State
         source      : snitch_pkg::SrcSnitch,
-        stall       : i_snitch.stall,
-        exception   : i_snitch.exception,
+        stall       : i_snitch.gen_replica[0].i_snitch.stall,
+        exception   : i_snitch.gen_replica[0].i_snitch.exception,
         // Decoding
-        rs1         : i_snitch.rs1,
-        rs2         : i_snitch.rs2,
-        rd          : i_snitch.rd,
-        is_load     : i_snitch.is_load,
-        is_store    : i_snitch.is_store,
-        is_branch   : i_snitch.is_branch,
-        pc_d        : i_snitch.pc_d,
+        rs1         : i_snitch.gen_replica[0].i_snitch.rs1,
+        rs2         : i_snitch.gen_replica[0].i_snitch.rs2,
+        rd          : i_snitch.gen_replica[0].i_snitch.rd,
+        is_load     : i_snitch.gen_replica[0].i_snitch.is_load,
+        is_store    : i_snitch.gen_replica[0].i_snitch.is_store,
+        is_branch   : i_snitch.gen_replica[0].i_snitch.is_branch,
+        pc_d        : i_snitch.gen_replica[0].i_snitch.pc_d,
         // Operands
-        opa         : i_snitch.opa,
-        opb         : i_snitch.opb,
-        opa_select  : i_snitch.opa_select,
-        opb_select  : i_snitch.opb_select,
-        write_rd    : i_snitch.write_rd,
-        csr_addr    : i_snitch.inst_data_i[31:20],
+        opa         : i_snitch.gen_replica[0].i_snitch.opa,
+        opb         : i_snitch.gen_replica[0].i_snitch.opb,
+        opa_select  : i_snitch.gen_replica[0].i_snitch.opa_select,
+        opb_select  : i_snitch.gen_replica[0].i_snitch.opb_select,
+        write_rd    : i_snitch.gen_replica[0].i_snitch.write_rd,
+        csr_addr    : i_snitch.gen_replica[0].i_snitch.inst_data_i[31:20],
         // Pipeline writeback
-        writeback   : i_snitch.alu_writeback,
+        writeback   : i_snitch.gen_replica[0].i_snitch.alu_writeback,
         // Load/Store
-        gpr_rdata_1 : i_snitch.gpr_rdata[1],
-        ls_size     : i_snitch.ls_size,
-        ld_result_32: i_snitch.ld_result[31:0],
-        lsu_rd      : i_snitch.lsu_rd,
-        retire_load : i_snitch.retire_load,
-        alu_result  : i_snitch.alu_result,
+        gpr_rdata_1 : i_snitch.gen_replica[0].i_snitch.gpr_rdata[1],
+        ls_size     : i_snitch.gen_replica[0].i_snitch.ls_size,
+        ld_result_32: i_snitch.gen_replica[0].i_snitch.ld_result[31:0],
+        lsu_rd      : i_snitch.gen_replica[0].i_snitch.lsu_rd,
+        retire_load : i_snitch.gen_replica[0].i_snitch.retire_load,
+        alu_result  : i_snitch.gen_replica[0].i_snitch.alu_result,
         // Atomics
-        ls_amo      : i_snitch.ls_amo,
+        ls_amo      : i_snitch.gen_replica[0].i_snitch.ls_amo,
         // Accelerator
-        retire_acc  : i_snitch.retire_acc,
-        acc_pid     : i_snitch.acc_prsp_i.id,
-        acc_pdata_32: i_snitch.acc_prsp_i.data[31:0],
+        retire_acc  : i_snitch.gen_replica[0].i_snitch.retire_acc,
+        acc_pid     : i_snitch.gen_replica[0].i_snitch.acc_prsp_i.id,
+        acc_pdata_32: i_snitch.gen_replica[0].i_snitch.acc_prsp_i.data[31:0],
         // FPU offload
-        fpu_offload : (i_snitch.acc_qready_i && i_snitch.acc_qvalid_o && i_snitch.acc_qreq_o.addr == 0),
+        fpu_offload : (i_snitch.gen_replica[0].i_snitch.acc_qready_i && i_snitch.gen_replica[0].i_snitch.acc_qvalid_o && i_snitch.gen_replica[0].i_snitch.acc_qreq_o.addr == 0),
         is_seq_insn : '0
       };
 
@@ -577,9 +675,9 @@ module spatz_quadrilatero_cc
       // Trace snitch iff:
       // we are not stalled <==> we have issued and processed an instruction (including offloads)
       // OR we are retiring (issuing a writeback from) a load or accelerator instruction
-      if (!i_snitch.stall || i_snitch.retire_load || i_snitch.retire_acc) begin
+      if (!i_snitch.gen_replica[0].i_snitch.stall || i_snitch.gen_replica[0].i_snitch.retire_load || i_snitch.gen_replica[0].i_snitch.retire_acc) begin
         $sformat(trace_entry, "%t %1d %8d 0x%h DASM(%h) #; %s\n",
-          $time, cycle, i_snitch.priv_lvl_q, i_snitch.pc_q, i_snitch.inst_data_i,
+          $time, cycle, i_snitch.gen_replica[0].i_snitch.priv_lvl_q, i_snitch.gen_replica[0].i_snitch.pc_q, i_snitch.gen_replica[0].i_snitch.inst_data_i,
           snitch_pkg::print_snitch_trace(extras_snitch));
         $fwrite(f, trace_entry);
       end
@@ -592,7 +690,7 @@ module spatz_quadrilatero_cc
         if (extras_fpu.acc_q_hs || extras_fpu.fpu_out_hs
             || extras_fpu.lsu_q_hs || extras_fpu.fpr_we) begin
           $sformat(trace_entry, "%t %1d %8d 0x%h DASM(%h) #; %s\n",
-            $time, cycle, i_snitch.priv_lvl_q, 32'hz, extras_fpu.op_in,
+            $time, cycle, i_snitch.gen_replica[0].i_snitch.priv_lvl_q, 32'hz, extras_fpu.op_in,
             snitch_pkg::print_fpu_trace(extras_fpu));
           $fwrite(f, trace_entry);
         end

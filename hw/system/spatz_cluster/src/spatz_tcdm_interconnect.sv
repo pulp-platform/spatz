@@ -33,9 +33,12 @@ module spatz_tcdm_interconnect #(
   /// Address width on the memory side. Must be smaller than the incoming
   /// address width.
   parameter int unsigned MemAddrWidth          = 32,
-  /// Data size of the interconnect. Only the data portion counts. The offsets
-  /// into the address are derived from this.
+  /// Logical data width for address routing (byte-offset and bank-select bits).
+  /// Must equal the unprotected word width (e.g. 32). Do NOT set to ProtDataWidth.
   parameter int unsigned DataWidth             = 32,
+  /// Actual data field width carried in each request/response (may include ECC bits).
+  /// Defaults to DataWidth for backward compatibility.
+  parameter int unsigned ProtDataWidth         = DataWidth,
   /// Additional user payload to route.
   parameter type         user_t                = logic,
   /// Latency of memory response (in cycles)
@@ -66,7 +69,7 @@ module spatz_tcdm_interconnect #(
   localparam int unsigned StrbWidth = DataWidth/8;
   typedef logic [VirtualMemAddrWidth-1:0] virtual_mem_addr_t;
   typedef logic [MemAddrWidth-1:0] addr_t;
-  typedef logic [DataWidth-1:0] data_t;
+  typedef logic [ProtDataWidth-1:0] data_t;
   typedef logic [StrbWidth-1:0] strb_t;
 
   // Define a new datatype to support larger addresses from TCDM interconnect
@@ -121,6 +124,7 @@ module spatz_tcdm_interconnect #(
     .user_t                (user_t               ),
     .MemAddrWidth          (VirtualMemAddrWidth  ),
     .DataWidth             (DataWidth            ),
+    .ProtDataWidth         (ProtDataWidth        ),
     .MemoryResponseLatency (MemoryResponseLatency),
     .AddrMisalign          (AddrMisalign         )
   ) i_fc_interconnect (
