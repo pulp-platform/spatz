@@ -116,6 +116,7 @@ snRuntime-test-vsim:
     # Download bender
     - cd $CI_PROJECT_DIR 
     - make bender
+    - ln -s /home/gitlabci/.cargo/bin/bender $CI_PROJECT_DIR/install/bender/bender
     # Update opcodes
     - make update_opcodes
     # Compile the binaries
@@ -139,6 +140,7 @@ snRuntime-test-vcs:
     # Download bender
     - cd $CI_PROJECT_DIR 
     - make bender
+    - ln -s /home/gitlabci/.cargo/bin/bender $CI_PROJECT_DIR/install/bender/bender
     # Update opcodes
     - make update_opcodes
     # Compile the binaries
@@ -163,6 +165,7 @@ snRuntime-test-vlt:
     # Download bender
     - cd $CI_PROJECT_DIR 
     - make bender
+    - ln -s /home/gitlabci/.cargo/bin/bender $CI_PROJECT_DIR/install/bender/bender
     # Update opcodes
     - make update_opcodes
     # Compile the binaries
@@ -188,6 +191,7 @@ riscvTests-test-vlt:
     # Download bender
     - cd $CI_PROJECT_DIR 
     - make bender
+    - ln -s /home/gitlabci/.cargo/bin/bender $CI_PROJECT_DIR/install/bender/bender
     # Update opcodes
     - make update_opcodes
     # Compile the binaries
@@ -213,6 +217,7 @@ spatzBenchmarks-test-vlt:
     # Download bender
     - cd $CI_PROJECT_DIR 
     - make bender
+    - ln -s /home/gitlabci/.cargo/bin/bender $CI_PROJECT_DIR/install/bender/bender
     # Update opcodes
     - make update_opcodes
     # Compile the binaries
@@ -237,6 +242,7 @@ quadrilateroBenchmarks-test-vlt:
     # Download bender
     - cd $CI_PROJECT_DIR 
     - make bender
+    - ln -s /home/gitlabci/.cargo/bin/bender $CI_PROJECT_DIR/install/bender/bender
     # Update opcodes
     - make update_opcodes
     # Download python dependencies
