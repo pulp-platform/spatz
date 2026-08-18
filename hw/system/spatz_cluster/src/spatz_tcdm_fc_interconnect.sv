@@ -14,6 +14,8 @@ module spatz_tcdm_fc_interconnect #(
   parameter int unsigned NumInp                = 32'd0,
   /// Number of outputs from the interconnect (`> 0`).
   parameter int unsigned NumOut                = 32'd0,
+  /// Adds a spill register stage at each input.
+  parameter bit          InpSpillReg           = 1'b0 ,
   /// Radix of the individual switch points of the network.
   /// Currently supported are `32'd2` and `32'd4`.
   parameter int unsigned Radix                 = 32'd2,
@@ -141,13 +143,14 @@ module spatz_tcdm_fc_interconnect #(
   // potential bank conflicts. Therefore a full arbitration tree is needed.
   if (Topology == snitch_pkg::LogarithmicInterconnect) begin : gen_xbar
     stream_xbar #(
-      .NumInp      ( NumInp    ),
-      .NumOut      ( NumOut    ),
+      .NumInp      ( NumInp         ),
+      .NumOut      ( NumOut         ),
       .payload_t   ( mem_req_chan_t ),
-      .OutSpillReg ( 1'b0      ),
-      .ExtPrio     ( 1'b0      ),
-      .AxiVldRdy   ( 1'b1      ),
-      .LockIn      ( 1'b1      )
+      .InpSpillReg ( InpSpillReg    ),
+      .OutSpillReg ( 1'b0           ),
+      .ExtPrio     ( 1'b0           ),
+      .AxiVldRdy   ( 1'b1           ),
+      .LockIn      ( 1'b1           )
     ) i_stream_xbar (
       .clk_i,
       .rst_ni,

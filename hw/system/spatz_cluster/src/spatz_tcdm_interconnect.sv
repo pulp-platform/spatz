@@ -17,6 +17,8 @@ module spatz_tcdm_interconnect #(
   parameter int unsigned NumInp                = 32'd0,
   /// Number of outputs from the interconnect (`> 0`).
   parameter int unsigned NumOut                = 32'd0,
+  /// Adds a spill register stage at each input.
+  parameter bit          InpSpillReg           = 1'b0 ,
   /// Radix of the individual switch points of the network.
   /// Currently supported are `32'd2` and `32'd4`.
   parameter int unsigned Radix                 = 32'd2,
@@ -90,20 +92,10 @@ module spatz_tcdm_interconnect #(
       assign sel_d = ic_mem_req[i].q_valid && ic_mem_rsp[i].q_ready ? select : sel_q;
 
       // Request demux
-      assign mem_req_o[i].q_valid = !select && ic_mem_req[i].q_valid;
-      assign mem_req_o[i].q.addr  = ic_mem_req[i].q.addr[MemAddrWidth-1:0];
-      assign mem_req_o[i].q.write = ic_mem_req[i].q.write;
-      assign mem_req_o[i].q.data  = ic_mem_req[i].q.data;
-      assign mem_req_o[i].q.strb  = ic_mem_req[i].q.strb;
-      assign mem_req_o[i].q.user  = ic_mem_req[i].q.user;
-      assign mem_req_o[i].q.amo   = ic_mem_req[i].q.amo;
+      assign mem_req_o[i                  ].q_valid = !select && ic_mem_req[i].q_valid;
+      assign mem_req_o[i                  ].q       = ic_mem_req[i].q;
       assign mem_req_o[i+BanksPerHyperBank].q_valid = select && ic_mem_req[i].q_valid;
-      assign mem_req_o[i+BanksPerHyperBank].q.addr  = ic_mem_req[i].q.addr[MemAddrWidth-1:0];
-      assign mem_req_o[i+BanksPerHyperBank].q.write = ic_mem_req[i].q.write;
-      assign mem_req_o[i+BanksPerHyperBank].q.data  = ic_mem_req[i].q.data;
-      assign mem_req_o[i+BanksPerHyperBank].q.strb  = ic_mem_req[i].q.strb;
-      assign mem_req_o[i+BanksPerHyperBank].q.user  = ic_mem_req[i].q.user;
-      assign mem_req_o[i+BanksPerHyperBank].q.amo   = ic_mem_req[i].q.amo;
+      assign mem_req_o[i+BanksPerHyperBank].q       = ic_mem_req[i].q;
 
       // Response mux (currently assumes response arrives exactly one cycle after request)
       assign ic_mem_rsp[i].q_ready = select ? mem_rsp_i[i+BanksPerHyperBank].q_ready :
@@ -124,6 +116,7 @@ module spatz_tcdm_interconnect #(
   spatz_tcdm_fc_interconnect #(
     .NumInp                (NumInp               ),
     .NumOut                (BanksPerHyperBank    ),
+    .InpSpillReg           (InpSpillReg          ),
     .tcdm_req_t            (tcdm_req_t           ),
     .tcdm_rsp_t            (tcdm_rsp_t           ),
     .mem_req_t             (virtual_mem_req_t    ),
