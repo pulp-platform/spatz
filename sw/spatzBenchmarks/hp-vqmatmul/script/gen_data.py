@@ -343,7 +343,7 @@ def emit_VQ_GEMM_layer(name="gemm", **kwargs):
 
     # Kernel assumptions (current RVV kernels use EI8 indices and D in {4,8,16}).
     assert CB0_D == CB1_D, "Both codebooks must use the same block length"
-    assert CB0_D in (4, 8, 16), "VLXBLK benchmark kernels support CB_D in {4,8,16}"
+    assert CB0_D in (4, 8, 16, 32), "VLXBLK benchmark kernels support CB_D in {4,8,16,32}"
     assert CB0_IDX_WIDTH == 1 and CB1_IDX_WIDTH == 1, "Kernel uses EI8 indices (1 byte)"
     assert not kwargs["ta"] and not kwargs["tb"], "Generator assumes no transpose (matches kernel)"
 

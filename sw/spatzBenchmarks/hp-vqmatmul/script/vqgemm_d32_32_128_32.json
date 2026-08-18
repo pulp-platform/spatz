@@ -1,0 +1,18 @@
+{
+  "kernel": "VQ-GEMM",
+  "DATA_TAG": "D32",
+  "M": 32,
+  "N": 128,
+  "K": 32,
+  "alpha": 0,
+  "transpose_A": false,
+  "transpose_B": false,
+  "prec": 16,
+  "expand": 0,
+  "CB0_N": 128,
+  "CB0_D": 32,
+  "CB1_N": 128,
+  "CB1_D": 32,
+  "CB0_IDX_WIDTH": 1,
+  "CB1_IDX_WIDTH": 1
+}

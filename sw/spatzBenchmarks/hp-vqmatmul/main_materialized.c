@@ -33,8 +33,24 @@ __fp16 *b_scales;
 __fp16 *b;
 __fp16 *c;
 
-#ifndef VQ_MATERIALIZED_USE_VLXBLK
-#define VQ_MATERIALIZED_USE_VLXBLK 1
+// Dequantization variant selection (3-way):
+//   0 = rvv    (unit-stride vle16 per block, one m1 register per block)
+//   1 = vlxblk (custom indexed block loads)
+//   2 = vle    (scalar loop of plain vle16 loads; consecutive destination
+//               registers pack full-register blocks, vslideup chains pack
+//               sub-register blocks -- large-block ablation)
+// The legacy VQ_MATERIALIZED_USE_VLXBLK=0/1 definition maps onto the first
+// two variants for backwards compatibility.
+#ifndef VQ_DEQUANT_VARIANT
+#ifdef VQ_MATERIALIZED_USE_VLXBLK
+#if VQ_MATERIALIZED_USE_VLXBLK
+#define VQ_DEQUANT_VARIANT 1
+#else
+#define VQ_DEQUANT_VARIANT 0
+#endif
+#else
+#define VQ_DEQUANT_VARIANT 1
+#endif
 #endif
 
 #ifdef VQ_MATERIALIZED_IS_GEMV
@@ -43,8 +59,10 @@ __fp16 *c;
 #define VQ_MATERIALIZED_OP_NAME "hp vqgemm"
 #endif
 
-#if VQ_MATERIALIZED_USE_VLXBLK
+#if VQ_DEQUANT_VARIANT == 1
 #define VQ_MATERIALIZED_NAME VQ_MATERIALIZED_OP_NAME " vlxblk-materialized"
+#elif VQ_DEQUANT_VARIANT == 2
+#define VQ_MATERIALIZED_NAME VQ_MATERIALIZED_OP_NAME " vle-materialized"
 #else
 #define VQ_MATERIALIZED_NAME VQ_MATERIALIZED_OP_NAME " rvv-materialized"
 #endif
@@ -77,6 +95,7 @@ int main() {
   const unsigned int measure_iterations = 1;
 
   unsigned int timer_start, timer_end, timer;
+  unsigned int timer_dequant_temp, timer_dequant;
 
 #ifdef VQ_MATERIALIZED_IS_GEMV
   const unsigned int p_start = (vq_gemm_l.N * cid) / num_cores;
@@ -117,6 +136,7 @@ int main() {
   }
 
   timer = (unsigned int)-1;
+  timer_dequant = (unsigned int)-1;
 
   snrt_cluster_hw_barrier();
 
@@ -146,15 +166,20 @@ int main() {
     if (cid == 0)
       start_kernel();
 
-#if VQ_MATERIALIZED_USE_VLXBLK
+#if VQ_DEQUANT_VARIANT == 1
     vq_dequantize_vlxblk_materialized(b, b_cb0, b_cb1, b_idx0, b_idx1, b_scales,
                                       k_start, k_end, vq_gemm_l.N);
+#elif VQ_DEQUANT_VARIANT == 2
+    vq_dequantize_vle_materialized(b, b_cb0, b_cb1, b_idx0, b_idx1, b_scales,
+                                   k_start, k_end, vq_gemm_l.N);
 #else
     vq_dequantize_rvv_materialized(b, b_cb0, b_cb1, b_idx0, b_idx1,
                                         b_scales, k_start, k_end, vq_gemm_l.N);
 #endif
 
     snrt_cluster_hw_barrier();
+
+    timer_dequant_temp = benchmark_get_cycle() - timer_start;
 
 #ifdef VQ_MATERIALIZED_IS_GEMV
     vq_dense_gemv_materialized(c, a, b, vq_gemm_l.K, vq_gemm_l.N, p_start,
@@ -173,6 +198,7 @@ int main() {
     unsigned int timer_temp = timer_end - timer_start;
     if ((cid == 0) && (timer_temp < timer)) {
       timer = timer_temp;
+      timer_dequant = timer_dequant_temp;
     }
   }
 
@@ -190,6 +216,8 @@ int main() {
            vq_gemm_l.CB0_D, VQ_MATERIALIZED_NAME);
 #endif
     printf("The execution took %u cycles.\n", timer);
+    printf("The dequantization took %u cycles (matmul: %u cycles).\n",
+           timer_dequant, timer - timer_dequant);
     printf("The performance is %ld OP/1000cycle (%ld%% utilization).\n",
            performance, utilization);
   }

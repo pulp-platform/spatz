@@ -41,6 +41,16 @@ inline void vq_dequantize_vlxblk_materialized(__fp16 *b, const __fp16 *b_cb0,
                                               const unsigned int N)
     __attribute__((always_inline));
 
+inline void vq_dequantize_vle_materialized(__fp16 *b, const __fp16 *b_cb0,
+                                           const __fp16 *b_cb1,
+                                           const uint8_t *b_idx0,
+                                           const uint8_t *b_idx1,
+                                           const __fp16 *b_scales,
+                                           const unsigned int k_start,
+                                           const unsigned int k_end,
+                                           const unsigned int N)
+    __attribute__((always_inline));
+
 inline void vq_dense_matmul_materialized(__fp16 *c, const __fp16 *a,
                                          const __fp16 *b,
                                          const unsigned int m_start,

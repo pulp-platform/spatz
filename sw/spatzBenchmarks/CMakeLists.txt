@@ -132,6 +132,17 @@ macro(add_spatz_test_vqgemv_materialized_variant name use_vlxblk block_len data_
     PUBLIC VQ_MATERIALIZED_USE_VLXBLK=${use_vlxblk} VQ_MATERIALIZED_IS_GEMV=1 VQ_BLOCK_LEN=${block_len})
 endmacro()
 
+# 3-way dequantization variant selection for the materialized GEMM:
+# variant 0 = rvv, 1 = vlxblk, 2 = vle scalar-loop (see main_materialized.c).
+macro(add_spatz_test_vqgemm_dequant_variant name variant block_len data_header param1 param2 param3)
+  add_spatz_test_threeParam_vq_header(${name}
+    hp-vqmatmul/main_materialized.c
+    ${data_header}
+    ${param1} ${param2} ${param3})
+  target_compile_definitions(test-${SNITCH_TEST_PREFIX}${name}_M${param1}_N${param2}_K${param3}
+    PUBLIC VQ_DEQUANT_VARIANT=${variant} VQ_BLOCK_LEN=${block_len})
+endmacro()
+
 macro(add_spatz_test_vqgemm_fused_variant name use_vlxblk block_len data_header param1 param2 param3)
   add_spatz_test_threeParam_vq_header(${name}
     hp-vqmatmul/main.c
@@ -399,6 +410,26 @@ foreach(block_len IN LISTS VQ_EXTRA_BLOCK_LENGTHS)
     add_spatz_test_vq_shape_targets(gemv ${block_len} ${vq_m} ${vq_n} ${vq_k})
   endforeach()
 endforeach()
+
+# large-block ablation: scope-boundary study for VLXBLK at the one-register
+# block size (d*SEW == VLEN). At d=32 (64-B e16 blocks == one m1 register) a
+# scalar loop of plain unit-stride vle16 loads into consecutive destination
+# registers should reach parity with vlxblk (the register number is the
+# packing); at d=8 (16-B quarter-register blocks) the same vle loop needs a
+# vslideup packing chain per block and is expected to collapse.
+# d=32 x {vlxblk, rvv, vle} and d=8 x {vle}, all materialized at 32x128x32.
+add_spatz_test_vqgemm_dequant_variant(hp-vqgemm-vlxblk-materialized-d32 1 32
+  "../hp-vqmatmul/data/data_vq_D32_32_128_32.h"
+  32 128 32)
+add_spatz_test_vqgemm_dequant_variant(hp-vqgemm-rvv-materialized-d32 0 32
+  "../hp-vqmatmul/data/data_vq_D32_32_128_32.h"
+  32 128 32)
+add_spatz_test_vqgemm_dequant_variant(hp-vqgemm-vle-materialized-d32 2 32
+  "../hp-vqmatmul/data/data_vq_D32_32_128_32.h"
+  32 128 32)
+add_spatz_test_vqgemm_dequant_variant(hp-vqgemm-vle-materialized 2 8
+  "../hp-vqmatmul/data/data_vq_32_128_32.h"
+  32 128 32)
 
 foreach(shape IN LISTS VQ_DOTP_D8_SHAPES)
   string(REPLACE "_" ";" dims "${shape}")
