@@ -43,6 +43,7 @@ enable_testing()
 set(SNITCH_TEST_PREFIX riscvTests-)
 
 add_snitch_test(vsetvli isa/rv64uv/vsetvli.c)
+add_snitch_test(vlxblk isa/rv64uv/vlxblk.c)
 
 add_snitch_test(vadd  isa/rv64uv/vadd.c)
 add_snitch_test(vsub  isa/rv64uv/vsub.c)

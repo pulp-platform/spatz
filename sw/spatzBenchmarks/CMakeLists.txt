@@ -38,6 +38,7 @@ if (UNROLL)
 add_definitions(-DUNROLL)
 endif()
 
+
 # Macro to regenerate the golden values and compile a module
 macro(add_spatz_test_oneParam name file param1)
   set(target_name ${name}_M${param1})
@@ -102,6 +103,124 @@ macro(add_spatz_test_spmm name file fmt M N P_W)
   target_compile_definitions(test-${SNITCH_TEST_PREFIX}${target_name} PUBLIC
     DATAHEADER="data/data_spmm_${fmt}_M${M}_N${N}_PW${P_W}.h"
     SNRT_NFPU_PER_CORE=${SNRT_NFPU_PER_CORE})
+macro(add_spatz_test_threeParam_vq_header name file data_header param1 param2 param3)
+  set(target_name ${name}_M${param1}_N${param2}_K${param3})
+  add_snitch_test(${target_name} ${file})
+  target_link_libraries(test-${SNITCH_TEST_PREFIX}${target_name} benchmark ${SNITCH_RUNTIME})
+  target_compile_definitions(test-${SNITCH_TEST_PREFIX}${target_name}
+    PUBLIC DATAHEADER="${data_header}"
+           SNRT_NFPU_PER_CORE=${SNRT_NFPU_PER_CORE})
+endmacro()
+
+macro(add_spatz_test_vqgemm_materialized_variant name use_vlxblk block_len data_header param1 param2 param3)
+  add_spatz_test_threeParam_vq_header(${name}
+    hp-vqmatmul/main_materialized.c
+    ${data_header}
+    ${param1} ${param2} ${param3})
+  target_compile_definitions(test-${SNITCH_TEST_PREFIX}${name}_M${param1}_N${param2}_K${param3}
+    PUBLIC VQ_MATERIALIZED_USE_VLXBLK=${use_vlxblk} VQ_BLOCK_LEN=${block_len})
+endmacro()
+
+macro(add_spatz_test_vqgemv_materialized_variant name use_vlxblk block_len data_header param1 param2 param3)
+  add_spatz_test_threeParam_vq_header(${name}
+    hp-vqmatmul/main_materialized.c
+    ${data_header}
+    ${param1} ${param2} ${param3})
+  target_compile_definitions(test-${SNITCH_TEST_PREFIX}${name}_M${param1}_N${param2}_K${param3}
+    PUBLIC VQ_MATERIALIZED_USE_VLXBLK=${use_vlxblk} VQ_MATERIALIZED_IS_GEMV=1 VQ_BLOCK_LEN=${block_len})
+endmacro()
+
+macro(add_spatz_test_vqgemm_fused_variant name use_vlxblk block_len data_header param1 param2 param3)
+  add_spatz_test_threeParam_vq_header(${name}
+    hp-vqmatmul/main.c
+    ${data_header}
+    ${param1} ${param2} ${param3})
+  target_compile_definitions(test-${SNITCH_TEST_PREFIX}${name}_M${param1}_N${param2}_K${param3}
+    PUBLIC VQGEMM_USE_VLXBLK_FUSED=${use_vlxblk} VQ_BLOCK_LEN=${block_len})
+endmacro()
+
+macro(add_spatz_test_vq_shape_targets op_name block_len param1 param2 param3)
+  if("${block_len}" STREQUAL "8")
+    set(vq_target_suffix "")
+    set(vq_data_header "../hp-vqmatmul/data/data_vq_${param1}_${param2}_${param3}.h")
+  else()
+    set(vq_target_suffix "-d${block_len}")
+    set(vq_data_header "../hp-vqmatmul/data/data_vq_D${block_len}_${param1}_${param2}_${param3}.h")
+  endif()
+
+  if("${op_name}" STREQUAL "gemm")
+    add_spatz_test_vqgemm_materialized_variant(hp-vqgemm-rvv-materialized${vq_target_suffix} 0 ${block_len}
+      ${vq_data_header}
+      ${param1} ${param2} ${param3})
+    add_spatz_test_vqgemm_materialized_variant(hp-vqgemm-vlxblk-materialized${vq_target_suffix} 1 ${block_len}
+      ${vq_data_header}
+      ${param1} ${param2} ${param3})
+    add_spatz_test_vqgemm_fused_variant(hp-vqgemm-rvv-fused${vq_target_suffix} 0 ${block_len}
+      ${vq_data_header}
+      ${param1} ${param2} ${param3})
+    add_spatz_test_vqgemm_fused_variant(hp-vqgemm-vlxblk-fused${vq_target_suffix} 1 ${block_len}
+      ${vq_data_header}
+      ${param1} ${param2} ${param3})
+  else()
+    add_spatz_test_vqgemv_materialized_variant(hp-vqgemv-rvv-materialized${vq_target_suffix} 0 ${block_len}
+      ${vq_data_header}
+      ${param1} ${param2} ${param3})
+    add_spatz_test_vqgemv_materialized_variant(hp-vqgemv-vlxblk-materialized${vq_target_suffix} 1 ${block_len}
+      ${vq_data_header}
+      ${param1} ${param2} ${param3})
+    add_spatz_test_vqgemv_variant(hp-vqgemv-rvv-fused${vq_target_suffix} 0 ${block_len}
+      ${vq_data_header}
+      ${param1} ${param2} ${param3})
+    add_spatz_test_vqgemv_variant(hp-vqgemv-vlxblk-fused${vq_target_suffix} 1 ${block_len}
+      ${vq_data_header}
+      ${param1} ${param2} ${param3})
+  endif()
+endmacro()
+
+macro(add_spatz_test_vqgemv_variant name use_vlxblk block_len data_header param1 param2 param3)
+  add_spatz_test_threeParam_vq_header(${name}
+    hp-vqgemv/main.c
+    ${data_header}
+    ${param1} ${param2} ${param3})
+  target_compile_definitions(test-${SNITCH_TEST_PREFIX}${name}_M${param1}_N${param2}_K${param3}
+    PUBLIC VQGEMV_USE_VLXBLK=${use_vlxblk} VQ_BLOCK_LEN=${block_len})
+endmacro()
+
+macro(add_spatz_test_vqdotp_variant name block_len data_header param1 param2 param3)
+  add_spatz_test_threeParam_vq_header(${name}
+    hp-vqdotp/main.c
+    ${data_header}
+    ${param1} ${param2} ${param3})
+  target_compile_definitions(test-${SNITCH_TEST_PREFIX}${name}_M${param1}_N${param2}_K${param3}
+    PUBLIC VQ_BLOCK_LEN=${block_len})
+endmacro()
+
+macro(add_spatz_test_vqdotp_fused_variant name use_vlxblk block_len data_header param1 param2 param3)
+  add_spatz_test_vqdotp_variant(${name}
+    ${block_len}
+    ${data_header}
+    ${param1} ${param2} ${param3})
+  if("${use_vlxblk}" STREQUAL "1")
+    target_compile_definitions(test-${SNITCH_TEST_PREFIX}${name}_M${param1}_N${param2}_K${param3}
+      PUBLIC VQDOTP_USE_VLXBLK=1 VQDOTP_PRINT_MISMATCHES=0
+             VQDOTP_NAME="hp vqdotp vlxblk-fused")
+  else()
+    target_compile_definitions(test-${SNITCH_TEST_PREFIX}${name}_M${param1}_N${param2}_K${param3}
+      PUBLIC VQDOTP_USE_VLXBLK=0 VQDOTP_PRINT_MISMATCHES=0
+             VQDOTP_NAME="hp vqdotp rvv-fused")
+  endif()
+endmacro()
+
+macro(add_spatz_test_vqdotp_vlxblk_fused_profile_variant name block_len data_header param1 param2 param3)
+  add_spatz_test_vqdotp_variant(${name}
+    ${block_len}
+    ${data_header}
+    ${param1} ${param2} ${param3})
+  target_compile_definitions(test-${SNITCH_TEST_PREFIX}${name}_M${param1}_N${param2}_K${param3}
+    PUBLIC VQDOTP_USE_VLXBLK=1
+           VQDOTP_PRINT_MISMATCHES=0 VQDOTP_PROFILE_REDUCE=1 VQDOTP_SINGLE_CORE=1
+           VQDOTP_NAME="hp vqdotp vlxblk-fused-profile")
+
 endmacro()
 
 # Benchmark library
@@ -123,6 +242,10 @@ endif()
 
 add_library(sp-fmatmul sp-fmatmul/kernel/sp-fmatmul.c)
 add_library(hp-fmatmul hp-fmatmul/kernel/hp-fmatmul.c)
+add_library(hp-vqmatmul-materialized hp-vqmatmul/kernel/hp-vqmatmul-materialized.c)
+add_library(hp-vqgemv hp-vqgemv/kernel/hp-vqgemv.c)
+add_library(hp-vqdotp hp-vqdotp/kernel/hp-vqdotp.c)
+
 
 add_library(widening-hp-fmatmul widening-hp-fmatmul/kernel/widening-fmatmul.c)
 add_library(widening-bp-fmatmul widening-bp-fmatmul/kernel/widening-fmatmul.c)
@@ -209,3 +332,100 @@ if(SPATZ_CLUSTER_VENTAGLIO)
   # add_spatz_test_spmm(sp-SpMM sp-SpMM/main.c 1to4 4 8 64)
   # add_spatz_test_spmm(sp-SpMM sp-SpMM/main.c 2to4 4 8 64)
 endif()
+# VQ GEMM/GEMV targets are generated from the addressing strategy
+# (rvv or VLXBLK) and the algorithm shape (fused or materialized).
+
+set(VQ_GEMM_D8_SHAPES
+  32_32_32
+  32_128_32
+  128_128_128
+  128_256_128)
+set(VQ_GEMM_BLOCK_SHAPES
+  32_128_32
+  128_256_128)
+set(VQ_GEMV_D8_SHAPES
+  1_32_32
+  1_128_32
+  1_128_128
+  1_256_128
+  1_512_128)
+set(VQ_GEMV_BLOCK_SHAPES
+  1_128_32
+  1_256_128)
+set(VQ_EXTRA_BLOCK_LENGTHS 4 16)
+set(VQ_DOTP_D8_SHAPES
+  1_1_32
+  1_32_32
+  1_128_128
+  1_256_128)
+set(VQ_DOTP_BLOCK_SHAPES
+  1_128_128
+  1_256_128)
+
+foreach(shape IN LISTS VQ_GEMM_D8_SHAPES)
+  string(REPLACE "_" ";" dims "${shape}")
+  list(GET dims 0 vq_m)
+  list(GET dims 1 vq_n)
+  list(GET dims 2 vq_k)
+  add_spatz_test_vq_shape_targets(gemm 8 ${vq_m} ${vq_n} ${vq_k})
+endforeach()
+
+foreach(block_len IN LISTS VQ_EXTRA_BLOCK_LENGTHS)
+  foreach(shape IN LISTS VQ_GEMM_BLOCK_SHAPES)
+    string(REPLACE "_" ";" dims "${shape}")
+    list(GET dims 0 vq_m)
+    list(GET dims 1 vq_n)
+    list(GET dims 2 vq_k)
+    add_spatz_test_vq_shape_targets(gemm ${block_len} ${vq_m} ${vq_n} ${vq_k})
+  endforeach()
+endforeach()
+
+foreach(shape IN LISTS VQ_GEMV_D8_SHAPES)
+  string(REPLACE "_" ";" dims "${shape}")
+  list(GET dims 0 vq_m)
+  list(GET dims 1 vq_n)
+  list(GET dims 2 vq_k)
+  add_spatz_test_vq_shape_targets(gemv 8 ${vq_m} ${vq_n} ${vq_k})
+endforeach()
+
+foreach(block_len IN LISTS VQ_EXTRA_BLOCK_LENGTHS)
+  foreach(shape IN LISTS VQ_GEMV_BLOCK_SHAPES)
+    string(REPLACE "_" ";" dims "${shape}")
+    list(GET dims 0 vq_m)
+    list(GET dims 1 vq_n)
+    list(GET dims 2 vq_k)
+    add_spatz_test_vq_shape_targets(gemv ${block_len} ${vq_m} ${vq_n} ${vq_k})
+  endforeach()
+endforeach()
+
+foreach(shape IN LISTS VQ_DOTP_D8_SHAPES)
+  string(REPLACE "_" ";" dims "${shape}")
+  list(GET dims 0 vq_m)
+  list(GET dims 1 vq_n)
+  list(GET dims 2 vq_k)
+  add_spatz_test_vqdotp_fused_variant(hp-vqdotp-rvv-fused 0 8
+    "../hp-vqmatmul/data/data_vq_KBLK_${vq_m}_${vq_n}_${vq_k}.h"
+    ${vq_m} ${vq_n} ${vq_k})
+  add_spatz_test_vqdotp_fused_variant(hp-vqdotp-vlxblk-fused 1 8
+    "../hp-vqmatmul/data/data_vq_KBLK_${vq_m}_${vq_n}_${vq_k}.h"
+    ${vq_m} ${vq_n} ${vq_k})
+  add_spatz_test_vqdotp_vlxblk_fused_profile_variant(hp-vqdotp-vlxblk-fused-profile 8
+    "../hp-vqmatmul/data/data_vq_KBLK_${vq_m}_${vq_n}_${vq_k}.h"
+    ${vq_m} ${vq_n} ${vq_k})
+endforeach()
+
+foreach(block_len IN LISTS VQ_EXTRA_BLOCK_LENGTHS)
+  foreach(shape IN LISTS VQ_DOTP_BLOCK_SHAPES)
+    string(REPLACE "_" ";" dims "${shape}")
+    list(GET dims 0 vq_m)
+    list(GET dims 1 vq_n)
+    list(GET dims 2 vq_k)
+    add_spatz_test_vqdotp_fused_variant(hp-vqdotp-rvv-fused-d${block_len} 0 ${block_len}
+      "../hp-vqmatmul/data/data_vq_KBLK_D${block_len}_${vq_m}_${vq_n}_${vq_k}.h"
+      ${vq_m} ${vq_n} ${vq_k})
+    add_spatz_test_vqdotp_fused_variant(hp-vqdotp-vlxblk-fused-d${block_len} 1 ${block_len}
+      "../hp-vqmatmul/data/data_vq_KBLK_D${block_len}_${vq_m}_${vq_n}_${vq_k}.h"
+      ${vq_m} ${vq_n} ${vq_k})
+  endforeach()
+endforeach()
+
