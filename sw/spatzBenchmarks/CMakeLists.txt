@@ -103,6 +103,8 @@ macro(add_spatz_test_spmm name file fmt M N P_W)
   target_compile_definitions(test-${SNITCH_TEST_PREFIX}${target_name} PUBLIC
     DATAHEADER="data/data_spmm_${fmt}_M${M}_N${N}_PW${P_W}.h"
     SNRT_NFPU_PER_CORE=${SNRT_NFPU_PER_CORE})
+endmacro()
+
 macro(add_spatz_test_threeParam_vq_header name file data_header param1 param2 param3)
   set(target_name ${name}_M${param1}_N${param2}_K${param3})
   add_snitch_test(${target_name} ${file})
