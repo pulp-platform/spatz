@@ -1,0 +1,9 @@
+// Parameters for the sp-mdgather cluster-pair gather benchmark (large shape).
+
+{
+    kernel: "MD-GATHER",
+    NC: 256,
+    LIST: 32,
+    CUT2: 4.5,
+    BOX: 3.0
+}
