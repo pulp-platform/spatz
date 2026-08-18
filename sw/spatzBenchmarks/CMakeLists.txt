@@ -462,3 +462,24 @@ foreach(block_len IN LISTS VQ_EXTRA_BLOCK_LENGTHS)
   endforeach()
 endforeach()
 
+# sp-dictdecode (VLXBLK benchmark)
+# Database dictionary decompression: a column of N codes indexes a
+# dictionary of K fixed-width entries (D=4 x fp32 = 16 B records); decoding
+# materializes the values column. Pure indexed-block-copy engine test:
+# VLXBLK indexed block loads vs. best-effort plain-RVV baseline
+# (vluxei16 lane gathers + strided stores).
+macro(add_spatz_test_dictdecode name use_vlxblk n_codes k)
+  set(target_name ${name}_N${n_codes}_K${k})
+  add_snitch_test(${target_name} sp-dictdecode/main.c)
+  target_link_libraries(test-${SNITCH_TEST_PREFIX}${target_name} benchmark ${SNITCH_RUNTIME})
+  target_compile_definitions(test-${SNITCH_TEST_PREFIX}${target_name} PUBLIC
+    DATAHEADER="data/data_dict_${n_codes}_${k}.h"
+    DICTDECODE_USE_VLXBLK=${use_vlxblk}
+    SNRT_NFPU_PER_CORE=${SNRT_NFPU_PER_CORE})
+endmacro()
+
+add_spatz_test_dictdecode(sp-dictdecode-vlxblk 1 8192 1024)
+add_spatz_test_dictdecode(sp-dictdecode-rvv    0 8192 1024)
+add_spatz_test_dictdecode(sp-dictdecode-vlxblk 1 8192 256)
+add_spatz_test_dictdecode(sp-dictdecode-rvv    0 8192 256)
+
