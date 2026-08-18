@@ -19,8 +19,9 @@
 // Database dictionary decompression benchmark (vectorized analytics:
 // Polychroniou SIGMOD'15 gathers; Lemire's dictionary decoding): a column
 // of N_CODES codes indexes a dictionary of K fixed-width entries
-// (D=4 x fp32 = 16 B records); decoding materializes the values column.
-// Zero FLOPs - throughput (bytes out per cycle) is the metric.
+// (D x fp32 records, 16 B at D=4 up to 128 B at D=32); decoding
+// materializes the values column. Zero FLOPs - throughput (bytes out per
+// cycle) is the metric.
 
 #include <benchmark.h>
 #include <snrt.h>
@@ -30,28 +31,41 @@
 #include DATAHEADER
 #include "kernel/sp-dictdecode.c"
 
-#ifndef DICTDECODE_USE_VLXBLK
-#define DICTDECODE_USE_VLXBLK 1
+// Kernel variant: 0 = plain-RVV element-gather baseline, 1 = VLXBLK
+// indexed block loads, 2 = plain unit-stride vle loop (the large-block
+// alternative). DICTDECODE_USE_VLXBLK is honored for backward
+// compatibility with the original two-variant build definitions.
+#ifndef DICT_VARIANT
+#ifdef DICTDECODE_USE_VLXBLK
+#define DICT_VARIANT DICTDECODE_USE_VLXBLK
+#else
+#define DICT_VARIANT 1
+#endif
 #endif
 
-#if DICTDECODE_USE_VLXBLK
+#if DICT_VARIANT == 1
 #define DICTDECODE_NAME "sp dictdecode vlxblk"
+#define DICTDECODE_KERNEL dictdecode_vlxblk
+#elif DICT_VARIANT == 2
+#define DICTDECODE_NAME "sp dictdecode vle"
+#define DICTDECODE_KERNEL dictdecode_vle
 #else
 #define DICTDECODE_NAME "sp dictdecode rvv"
+#define DICTDECODE_KERNEL dictdecode_rvv
 #endif
 
 // dictdecode_rvv builds 16-bit byte offsets (code * D * 4).
-#if (DICT_K * DICT_D * 4) > 65536
+#if DICT_VARIANT == 0 && (DICT_K * DICT_D * 4) > 65536
 #error "dictdecode_rvv uses 16-bit byte offsets; requires K*D*4 <= 64 KiB"
 #endif
 
-// The fully materialized output column (N_CODES * 16 B = 128 KiB for
-// N_CODES=8192) does not fit in the 128 KiB TCDM next to dict and codes.
-// The timed region therefore decodes into a rotating L1 output tile
-// (identical L1 store traffic to a full materialization); verification
-// re-decodes tile by tile and exact-compares against the DMA'd golden
-// slice, so every output element is checked bit-exactly.
-#define DICT_TILE_CODES 2048
+// The fully materialized output column (N_CODES * D * 4 B) does not fit in
+// the 128 KiB TCDM next to dict and codes. The timed region therefore
+// decodes into a rotating 32 KiB L1 output tile (2048 codes at D=4, 256 at
+// D=32; identical L1 store traffic to a full materialization);
+// verification re-decodes tile by tile and exact-compares against the
+// DMA'd golden slice, so every output element is checked bit-exactly.
+#define DICT_TILE_CODES (32768 / (DICT_D * 4))
 
 float *dict;
 dict_code_t *codes;
@@ -77,10 +91,11 @@ int main() {
   // Allocate the buffers
   if (cid == 0) {
     // VLXBLK requires the dictionary base to be aligned to the block size
-    // (16 B). snrt_l1alloc returns 256 B-aligned chunks already; stay
-    // defensive and over-allocate + align manually to 64 B.
-    void *dict_raw = snrt_l1alloc(dict_l.K * DICT_D * sizeof(float) + 64);
-    dict = (float *)(((uintptr_t)dict_raw + 63) & ~(uintptr_t)63);
+    // (D*4 B, up to 128 B at D=32). snrt_l1alloc returns 256 B-aligned
+    // chunks already; stay defensive and over-allocate + align manually
+    // to 128 B.
+    void *dict_raw = snrt_l1alloc(dict_l.K * DICT_D * sizeof(float) + 128);
+    dict = (float *)(((uintptr_t)dict_raw + 127) & ~(uintptr_t)127);
     codes = (dict_code_t *)snrt_l1alloc(n_codes * sizeof(dict_code_t));
     out_tile = (float *)snrt_l1alloc(tile_codes * DICT_D * sizeof(float));
     golden_tile =
@@ -114,11 +129,7 @@ int main() {
     const dict_code_t *codes_slice =
         codes + t * tile_codes + cid * codes_per_core;
     float *out_slice = out_tile + cid * codes_per_core * DICT_D;
-#if DICTDECODE_USE_VLXBLK
-    dictdecode_vlxblk(out_slice, dict, codes_slice, codes_per_core);
-#else
-    dictdecode_rvv(out_slice, dict, codes_slice, codes_per_core);
-#endif
+    DICTDECODE_KERNEL(out_slice, dict, codes_slice, codes_per_core);
   }
 
   // Wait for all cores to finish
@@ -150,11 +161,7 @@ int main() {
       snrt_dma_start_1d(golden_tile,
                         dict_golden + (size_t)t * tile_codes * DICT_D,
                         tile_codes * DICT_D * sizeof(uint32_t));
-#if DICTDECODE_USE_VLXBLK
-      dictdecode_vlxblk(out_tile, dict, codes + t * tile_codes, tile_codes);
-#else
-      dictdecode_rvv(out_tile, dict, codes + t * tile_codes, tile_codes);
-#endif
+      DICTDECODE_KERNEL(out_tile, dict, codes + t * tile_codes, tile_codes);
       snrt_dma_wait_all();
 
       const uint32_t *out_bits = (const uint32_t *)out_tile;

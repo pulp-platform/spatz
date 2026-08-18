@@ -493,22 +493,36 @@ endforeach()
 
 # sp-dictdecode (VLXBLK benchmark)
 # Database dictionary decompression: a column of N codes indexes a
-# dictionary of K fixed-width entries (D=4 x fp32 = 16 B records); decoding
-# materializes the values column. Pure indexed-block-copy engine test:
-# VLXBLK indexed block loads vs. best-effort plain-RVV baseline
-# (vluxei16 lane gathers + strided stores).
-macro(add_spatz_test_dictdecode name use_vlxblk n_codes k)
+# dictionary of K fixed-width entries (D x fp32 records, 16 B at D=4 up to
+# 128 B at D=32); decoding materializes the values column. Pure
+# indexed-block-copy engine test. Variants: 0 = best-effort plain-RVV
+# baseline (vluxei16 lane gathers + strided stores), 1 = VLXBLK indexed
+# block loads, 2 = plain unit-stride vle32/vse32 loop (large-block
+# alternative). Data headers keep the historical name for D=4 and carry a
+# _d<D> suffix otherwise (see script/gen_data.py).
+macro(add_spatz_test_dictdecode name variant n_codes k d)
   set(target_name ${name}_N${n_codes}_K${k})
   add_snitch_test(${target_name} sp-dictdecode/main.c)
   target_link_libraries(test-${SNITCH_TEST_PREFIX}${target_name} benchmark ${SNITCH_RUNTIME})
+  if(${d} EQUAL 4)
+    set(dict_dataheader "data/data_dict_${n_codes}_${k}.h")
+  else()
+    set(dict_dataheader "data/data_dict_${n_codes}_${k}_d${d}.h")
+  endif()
   target_compile_definitions(test-${SNITCH_TEST_PREFIX}${target_name} PUBLIC
-    DATAHEADER="data/data_dict_${n_codes}_${k}.h"
-    DICTDECODE_USE_VLXBLK=${use_vlxblk}
+    DATAHEADER="${dict_dataheader}"
+    DICT_VARIANT=${variant}
     SNRT_NFPU_PER_CORE=${SNRT_NFPU_PER_CORE})
 endmacro()
 
-add_spatz_test_dictdecode(sp-dictdecode-vlxblk 1 8192 1024)
-add_spatz_test_dictdecode(sp-dictdecode-rvv    0 8192 1024)
-add_spatz_test_dictdecode(sp-dictdecode-vlxblk 1 8192 256)
-add_spatz_test_dictdecode(sp-dictdecode-rvv    0 8192 256)
+add_spatz_test_dictdecode(sp-dictdecode-vlxblk 1 8192 1024 4)
+add_spatz_test_dictdecode(sp-dictdecode-rvv    0 8192 1024 4)
+add_spatz_test_dictdecode(sp-dictdecode-vle    2 8192 1024 4)
+add_spatz_test_dictdecode(sp-dictdecode-vlxblk 1 8192 256 4)
+add_spatz_test_dictdecode(sp-dictdecode-rvv    0 8192 256 4)
+
+# Large-block granularity study: D=32 (128 B slots, TWO vregs per block).
+add_spatz_test_dictdecode(sp-dictdecode-vlxblk-d32 1 2048 256 32)
+add_spatz_test_dictdecode(sp-dictdecode-rvv-d32    0 2048 256 32)
+add_spatz_test_dictdecode(sp-dictdecode-vle-d32    2 2048 256 32)
 

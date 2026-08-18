@@ -21,7 +21,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
-// Elements (fp32) per dictionary entry. Fixed: 4 x fp32 = 16 B block.
+// Elements (fp32) per dictionary entry (power of two, 4..32), i.e. one
+// record slot of D*4 bytes (16 B at D=4 up to 128 B at D=32).
 #ifndef DICT_D
 #define DICT_D 4
 #endif
@@ -40,4 +41,6 @@ typedef uint16_t dict_code_t;
 void dictdecode_vlxblk(float *out, const float *dict, const dict_code_t *codes,
                        unsigned int n_codes);
 void dictdecode_rvv(float *out, const float *dict, const dict_code_t *codes,
+                    unsigned int n_codes);
+void dictdecode_vle(float *out, const float *dict, const dict_code_t *codes,
                     unsigned int n_codes);
