@@ -105,9 +105,6 @@ module spatz_quadrilatero_cc
     // Core data ports
     output dreq_t                        data_req_o,
     input  drsp_t                        data_rsp_i,
-    // // TCDM Streamer Ports
-    // output tcdm_req_t    [TCDMPorts-1:0] spatz_tcdm_req_o,
-    // input  tcdm_rsp_t    [TCDMPorts-1:0] spatz_tcdm_rsp_i,
     // TCDM Streamer Ports
     output tcdm_req_t   [TCDMPorts-1:0] quad_tcdm_req_o,
     input  tcdm_rsp_t   [TCDMPorts-1:0] quad_tcdm_rsp_i,
