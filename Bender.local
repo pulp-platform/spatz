@@ -7,4 +7,4 @@ overrides:
   idma:               { git: "https://github.com/pulp-platform/iDMA.git",               version: 0.6.4          }
   register_interface: { git: "https://github.com/pulp-platform/register_interface.git", version: 0.3.9          }
   cluster_icache:     { git: "https://github.com/pulp-platform/cluster_icache.git",     version: 0.2.0          }
-  common_cells:       { git: "https://github.com/pulp-platform/common_cells.git",       version: 1.38.0         }
+  common_cells:       { git: "https://github.com/pulp-platform/common_cells.git",       rev: 1aff29c            }
