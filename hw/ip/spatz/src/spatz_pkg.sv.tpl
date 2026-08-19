@@ -393,10 +393,13 @@ package spatz_pkg;
     Width        : ELEN,
     EnableVectors: 1'b1,
     EnableNanBox : 1'b1,
-    //              FP32  FP64  FP16  FP8   FP16a FP8a
-    FpFmtMask    : {1'b1, 1'b1, 1'b1, 1'b1, 1'b1, 1'b1},
+    //              FP32  FP64  FP16  FP8   FP16a FP8a  FP6   FP6a  FP4
+    FpFmtMask    : {1'b1, 1'b1, 1'b1, 1'b1, 1'b1, 1'b1, 1'b0, 1'b0, 1'b0},
     //              INT8  INT16 INT32 INT64
-    IntFmtMask   : {1'b1, 1'b1, 1'b1, 1'b1}
+    IntFmtMask   : {1'b1, 1'b1, 1'b1, 1'b1},
+    MxFpFmtMask  : 9'b0,          // MX formats unused
+    MxIntFmtMask : 4'b0,
+    PaceFeatures : '{default: 0}  // PACE unused
   } :
 
 % if cfg['mempool']:
@@ -406,21 +409,30 @@ package spatz_pkg;
     Width        : ELEN,
     EnableVectors: 1'b1,
     EnableNanBox : 1'b1,
-    //              FP32  FP64  FP16  FP8   FP16a FP8a
-    FpFmtMask    : {RVF,  1'b0, 1'b1, 1'b0, 1'b0, 1'b0},
+    // fmt_logic_t is ASCENDING [0:NUM_FP_FORMATS-1] and this is a CONCATENATION, not an
+    // assignment pattern -- so it MUST be written to the full width. cvfpu v0.3.0 took
+    // NUM_FP_FORMATS 6 -> 9; a 6-bit literal here would be zero-padded on the index-0 side,
+    // silently shifting every format by +3 (FP32 off, FP8 on) and hanging the VFU on the
+    // first FP instruction.
+    //              FP32  FP64  FP16  FP8   FP16a FP8a  FP6   FP6a  FP4
+    FpFmtMask    : {RVF,  1'b0, 1'b1, 1'b0, 1'b0, 1'b0, 1'b0, 1'b0, 1'b0},
     //              INT8  INT16 INT32 INT64
-    IntFmtMask   : {1'b0, 1'b1, 1'b1, 1'b0}
+    IntFmtMask   : {1'b0, 1'b1, 1'b1, 1'b0},
+    MxFpFmtMask  : 9'b0,          // MX formats unused
+    MxIntFmtMask : 4'b0,
+    PaceFeatures : '{default: 0}  // PACE unused
   };
 
   localparam fpnew_pkg::fpu_implementation_t MemPoolFPUImpl =
   '{
       // Pipeline stages
-      //              FP32 FP64 FP16 FP8 FP16a FP8a
-      PipeRegs: '{'{  1,   2,   1,   1,   0,   0},    // ADDMUL
-                  '{  1,   1,   1,   1,   1,   1},    // DIVSQRT
-                  '{  1,   1,   1,   1,   1,   1},    // NONCOMP
-                  '{  2,   2,   2,   2,   2,   2},    // CONV
-                  '{  2,   2,   2,   2,   2,   2}},   // DOTP
+      //              FP32 FP64 FP16 FP8 FP16a FP8a FP6 FP6a FP4
+      PipeRegs: '{'{  1,   2,   1,   1,   0,   0,   0,  0,   0},    // ADDMUL
+                  '{  1,   1,   1,   1,   1,   1,   1,  1,   1},    // DIVSQRT
+                  '{  1,   1,   1,   1,   1,   1,   1,  1,   1},    // NONCOMP
+                  '{  2,   2,   2,   2,   2,   2,   2,  2,   2},    // CONV
+                  '{  2,   2,   2,   2,   2,   2,   2,  2,   2},    // DOTP
+                  '{  0,   0,   0,   0,   0,   0,   0,  0,   0}},   // MXDOTP (DISABLED, row unread)
       // MERGED: share one functional unit for all types
       // PARALLEL: multiple functional units
       // DISABLED: turn off
@@ -428,8 +440,15 @@ package spatz_pkg;
                   '{  default: fpnew_pkg::DISABLED},  // DIVSQRT
                   '{  default: fpnew_pkg::PARALLEL},  // NONCOMP
                   '{  default: fpnew_pkg::MERGED},    // CONV
-                  '{  default: fpnew_pkg::DISABLED}}, // SDOTP
-      PipeConfig: fpnew_pkg::BEFORE
+                  '{  default: fpnew_pkg::DISABLED},  // SDOTP
+                  '{  default: fpnew_pkg::DISABLED}}, // MXDOTP -- must stay DISABLED: the MXDOTP
+                                                      // slice asserts width==64 and we are 32
+      // INSIDE, not BEFORE. spatz_vfu.sv registers EVERY fpnew input, so the combinational depth
+      // feeding the FPU is zero and BEFORE puts our single ADDMUL register back-to-back with a
+      // Spatz flop, leaving the whole FMA (multiply -> align -> add -> LZC -> normalise -> round)
+      // as one combinational lump. INSIDE relocates that same register to just after the mantissa
+      // adder, bisecting it. Register COUNT is unchanged, so latency and cycle counts do not move.
+      PipeConfig: fpnew_pkg::INSIDE
   };
 % else :
   // Single Precision FPU
@@ -437,10 +456,16 @@ package spatz_pkg;
     Width        : ELEN,
     EnableVectors: 1'b1,
     EnableNanBox : 1'b1,
-    //              FP32  FP64  FP16  FP8   FP16a FP8a
-    FpFmtMask    : {RVF,  1'b0, 1'b1, 1'b1, 1'b0, 1'b0},
+    // cvfpu v0.3.0 took NUM_FP_FORMATS 6 -> 9. fmt_logic_t is ASCENDING [0:8] and this is a
+    // CONCATENATION, so a 6-element literal is zero-padded on the index-0 side and silently
+    // shifts every format by +3 (FP32 off, FP8 on). It must be written to the full width.
+    //              FP32  FP64  FP16  FP8   FP16a FP8a  FP6   FP6a  FP4
+    FpFmtMask    : {RVF,  1'b0, 1'b1, 1'b1, 1'b0, 1'b0, 1'b0, 1'b0, 1'b0},
     //              INT8  INT16 INT32 INT64
-    IntFmtMask   : {1'b1, 1'b1, 1'b1, 1'b0}
+    IntFmtMask   : {1'b1, 1'b1, 1'b1, 1'b0},
+    MxFpFmtMask  : 9'b0,          // MX formats unused
+    MxIntFmtMask : 4'b0,
+    PaceFeatures : '{default: 0}  // PACE unused
   };
 
 % endif

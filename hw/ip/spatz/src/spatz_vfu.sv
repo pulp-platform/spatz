@@ -1034,6 +1034,10 @@ module spatz_vfu
         .op_mod_i      (fpu_op_mode_q                                          ),
         .tag_i         (input_tag_q                                            ),
         .simd_mask_i   ('1                                                     ),
+        // cvfpu v0.3.0 PACE ports. PaceFeatures is all-zero in spatz_pkg, so PaceParamWidth is 0,
+        // pace_param_i collapses to a single don't-care bit and the PACE FMA is never generated.
+        .pace_param_i  ('0                                                     ),
+        .pace_mode_i   ('0                                                     ),
         .rnd_mode_i    (rm_q                                                   ),
         .result_o      (fpu_result[fpu*ELEN +: ELEN]                           ),
         .out_valid_o   (int_fpu_result_valid                                   ),
