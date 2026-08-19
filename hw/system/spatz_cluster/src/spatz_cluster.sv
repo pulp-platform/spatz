@@ -897,7 +897,11 @@ module spatz_cluster
         .axi_dma_perf_o   (/* Unused */                        ),
         .axi_dma_events_o (dma_core_events                     ),
         .core_events_o    (core_events[i]                      ),
-        .tcdm_addr_base_i (tcdm_start_address                  )
+        .tcdm_addr_base_i (tcdm_start_address                  ),
+        // ECC VRF signals
+        .vrf_single_error_o (vrf_correctable_fault  [i]),
+        .vrf_multi_error_o  (vrf_uncorrectable_fault[i]),
+        .core_tmr_fault_o   (core_tmr_fault         [i])
       );
       for (genvar j = 0; j < TcdmPorts; j++) begin
         always_comb begin
