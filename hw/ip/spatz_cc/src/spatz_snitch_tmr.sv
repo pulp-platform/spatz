@@ -124,7 +124,6 @@ module spatz_snitch_tmr
       .SnitchPMACfg          (SnitchPMACfg          ),
       .NumIntOutstandingLoads(NumIntOutstandingLoads),
       .NumIntOutstandingMem  (NumIntOutstandingMem  ),
-      .VMSupport             (1'b0                  ),
       .RVE                   (RVE                   ),
       .VMSupport             (VMSupport             ),
       .FP_EN                 (FP_EN                 ),

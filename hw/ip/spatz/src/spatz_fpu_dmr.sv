@@ -32,7 +32,29 @@
 // Area cost: this module contains two full fpnew_top instances (roughly
 // 2x the area of a single FPU lane) but, since there is no retry, adds no
 // timing side effects of its own -- latency and throughput are identical
-// to a single fpnew_top in both the fault-free and faulted case.
+// to a single fpnew_top in both the fault-free and faulted case. That "no
+// timing side effects" promise applies specifically to result_o/status_o/
+// tag_o/out_valid_o (the FUNCTIONAL forwarding path) -- see the comment
+// above dup_fault_comb below for why the (diagnostic-only) fault path
+// deliberately does NOT keep that promise, and is pipelined instead.
+//
+// Timing note (pre-empted here rather than discovered after a backend
+// run): a_result/b_result are each the direct output of a full fpnew_top
+// -- i.e. whatever combinational rounding/exception-flag tail logic runs
+// after that instance's own last internal pipeline register. The e2e
+// variant's spatz_fpu_shadow_checker.sv hit a severe backend timing
+// violation from exactly this class of signal (fpnew's live, undeferred
+// tail) reaching a comparator and then its module output with no register
+// in between, on a path that ultimately runs all the way up to the
+// cluster-shared uncorrectable_irq flop in spatz_cluster_peripheral
+// several hierarchy levels above this module (spatz_vfu -> spatz ->
+// spatz_cc -> spatz_cluster -> spatz_cluster_peripheral). This module's
+// own comparator (a full WIDTH-bit equality on TWO live results, plus
+// status_t and tag compares, all stacked in one cycle) is at least as
+// heavy as what tripped that violation, and dup_fault_o has no output
+// register at all by default -- so the same class of violation is
+// pre-emptively fixed here (see dup_fault_comb below) rather than waiting
+// to hit it on this design's own backend run.
 
 module spatz_fpu_dmr
   import fpnew_pkg::*;
@@ -74,10 +96,17 @@ module spatz_fpu_dmr
 
   output logic                   busy_o,
 
-  // Pulses one cycle when the two copies disagree. Always uncorrectable
-  // (DMR alone cannot tell which copy is right) -- feeds the cluster's
+  // Pulses when the two copies disagree. Always uncorrectable (DMR alone
+  // cannot tell which copy is right) -- feeds the cluster's
   // uncorrectable-fault recovery interrupt, same as every other
-  // uncorrectable-class fault in this design.
+  // uncorrectable-class fault in this design. This is a REGISTERED output
+  // (see cmp_q/match_q/dup_fault_q below), pulsing THREE cycles after
+  // out_valid_o/candidate_valid rather than same-cycle -- deliberately, to
+  // break up the comparator + long route to the cluster peripheral into
+  // three clean cycles instead of one combinational one. No consumer
+  // relies on any fixed latency here: it only feeds a diagnostic counter
+  // and a sticky, software-masked interrupt bit (same reasoning as the
+  // e2e variant's fault_o).
   output logic                   dup_fault_o
 );
 
@@ -208,27 +237,119 @@ module spatz_fpu_dmr
   );
 
   // ------------------------------------------------------------------
-  // Compare and forward. No retry: report-only, exactly like the e2e
-  // shadow checker's role, just backed by a full duplicate instead of an
-  // approximate/exact-recompute check.
+  // Forward (functional path). No retry: best-effort forward of
+  // Primary's (i_fpu_a's) result on a mismatch, same-cycle, straight off
+  // the live a_result/b_result -- this MUST stay same-cycle (see the
+  // "no timing side effects" note in the header comment: retiming this
+  // would add a cycle of FP latency to every op, fault or not).
   // ------------------------------------------------------------------
-  logic candidate_valid, match;
+  logic candidate_valid;
 
   assign candidate_valid = a_out_valid || b_out_valid;
-  assign match            = a_out_valid && b_out_valid
-                           && (a_result == b_result)
-                           && (a_status == b_status)
-                           && (a_tag    == b_tag);
-
-  assign out_valid_o = candidate_valid;
-  assign result_o     = a_out_valid ? a_result : b_result;
-  assign status_o     = a_out_valid ? a_status : b_status;
-  assign tag_o        = a_out_valid ? a_tag    : b_tag;
-  assign dup_fault_o  = candidate_valid && !match;
+  assign out_valid_o      = candidate_valid;
+  assign result_o          = a_out_valid ? a_result : b_result;
+  assign status_o          = a_out_valid ? a_status : b_status;
+  assign tag_o             = a_out_valid ? a_tag    : b_tag;
 
   assign a_out_ready = a_out_valid && out_ready_i;
   assign b_out_ready = b_out_valid && out_ready_i;
 
   assign busy_o = a_busy | b_busy;
+
+  // ------------------------------------------------------------------
+  // Compare (diagnostic path, deliberately pipelined -- see the header
+  // comment's "Timing note"). THREE deferred stages -- not two -- so that
+  // no single cycle ever combines more than one "heavy" operation. This is
+  // a stricter split than what closed the equivalent violation in the e2e
+  // variant's spatz_fpu_shadow_checker.sv (which needed two): the FPU here
+  // is the design's own critical path with essentially no slack to begin
+  // with, so this errs toward more/smaller stages rather than relying on
+  // "should just fit":
+  //
+  //   1. cmp_q: pure register copy of {a,b}_{out_valid,result,status,tag}
+  //      -- no logic at all, so this stage's own timing is trivial no
+  //      matter how heavy fpnew_top's own rounding/exception tail is.
+  //      This is what actually breaks the critical path: a_result/
+  //      b_result now reach a register directly, instead of feeding any
+  //      comparator in the same cycle as fpnew's own tail logic.
+  //   2. match_q: three INDEPENDENT sub-compares computed off cmp_q (a
+  //      clean register) and registered in parallel -- result_match_q
+  //      (the one genuinely wide, WIDTH-bit equality, which is why it
+  //      gets a cycle to itself instead of being summed with anything
+  //      else that same cycle), status_match_q and tag_match_q (each much
+  //      narrower), and the valid flags carried forward. Parallel,
+  //      independent registers in the same stage don't stack in depth the
+  //      way series logic would -- each one is only as deep as its own
+  //      (narrow) compare.
+  //   3. dup_fault_q: the final reduction is now just a handful of ANDs
+  //      over already-registered 1-bit flags -- about as cheap as
+  //      combinational logic gets -- registered before dup_fault_o leaves
+  //      this module, so the long route up through spatz_vfu/spatz/
+  //      spatz_cc/spatz_cluster to spatz_cluster_peripheral's
+  //      uncorrectable_irq flop also gets its own clean cycle.
+  //
+  // Net latency: dup_fault_o pulses THREE cycles after candidate_valid/
+  // out_valid_o instead of same-cycle. Safe by the same reasoning as the
+  // e2e variant's fault_o: no consumer of an uncorrectable-fault pulse in
+  // this design relies on any fixed latency relative to the op it
+  // reports on -- it only feeds a diagnostic saturating counter and a
+  // sticky, software-masked interrupt-status bit (see
+  // spatz_fault_monitor.sv and spatz_cluster_peripheral.sv).
+  // ------------------------------------------------------------------
+  typedef struct packed {
+    logic               a_valid;
+    logic               b_valid;
+    logic [WIDTH-1:0]   a_result;
+    logic [WIDTH-1:0]   b_result;
+    fpnew_pkg::status_t a_status;
+    fpnew_pkg::status_t b_status;
+    TagType             a_tag;
+    TagType             b_tag;
+  } dmr_cmp_entry_t;
+
+  dmr_cmp_entry_t cmp_d, cmp_q;
+
+  assign cmp_d = dmr_cmp_entry_t'{
+    a_valid:  a_out_valid,
+    b_valid:  b_out_valid,
+    a_result: a_result,
+    b_result: b_result,
+    a_status: a_status,
+    b_status: b_status,
+    a_tag:    a_tag,
+    b_tag:    b_tag
+  };
+
+  `FF(cmp_q, cmp_d, '0)
+
+  // Stage 2: independent sub-compares, registered in parallel -- see the
+  // comment above for why result_match gets a cycle to itself.
+  logic any_valid_d,    any_valid_q;
+  logic both_valid_d,   both_valid_q;
+  logic result_match_d, result_match_q;
+  logic status_match_d, status_match_q;
+  logic tag_match_d,    tag_match_q;
+
+  assign any_valid_d    = cmp_q.a_valid || cmp_q.b_valid;
+  assign both_valid_d   = cmp_q.a_valid && cmp_q.b_valid;
+  assign result_match_d = (cmp_q.a_result == cmp_q.b_result);
+  assign status_match_d = (cmp_q.a_status == cmp_q.b_status);
+  assign tag_match_d    = (cmp_q.a_tag    == cmp_q.b_tag);
+
+  `FF(any_valid_q,    any_valid_d,    1'b0)
+  `FF(both_valid_q,   both_valid_d,   1'b0)
+  `FF(result_match_q, result_match_d, 1'b0)
+  `FF(status_match_q, status_match_d, 1'b0)
+  `FF(tag_match_q,    tag_match_d,    1'b0)
+
+  // Stage 3: trivial reduction of already-registered 1-bit flags.
+  logic dup_fault_comb, dup_fault_q;
+
+  assign dup_fault_comb = any_valid_q
+                         && !(both_valid_q && result_match_q && status_match_q && tag_match_q);
+
+  `FF(dup_fault_q, dup_fault_comb, 1'b0)
+
+  assign dup_fault_o = dup_fault_q;
 
 endmodule
