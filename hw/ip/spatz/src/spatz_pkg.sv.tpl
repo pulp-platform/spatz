@@ -415,7 +415,7 @@ package spatz_pkg;
     // silently shifting every format by +3 (FP32 off, FP8 on) and hanging the VFU on the
     // first FP instruction.
     //              FP32  FP64  FP16  FP8   FP16a FP8a  FP6   FP6a  FP4
-    FpFmtMask    : {RVF,  1'b0, 1'b1, 1'b0, 1'b0, 1'b0, 1'b0, 1'b0, 1'b0},
+    FpFmtMask    : {RVF,  1'b0, 1'b1, 1'b0, 1'b1, 1'b0, 1'b0, 1'b0, 1'b0},
     //              INT8  INT16 INT32 INT64
     IntFmtMask   : {1'b0, 1'b1, 1'b1, 1'b0},
     MxFpFmtMask  : 9'b0,          // MX formats unused
