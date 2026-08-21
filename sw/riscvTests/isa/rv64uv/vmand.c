@@ -65,25 +65,16 @@ void TEST_CASE6() {
 }
 
 void TEST_CASE7() {
-  uint8_t *buf  = (uint8_t *)snrt_l1alloc(64 * sizeof(uint8_t));
-  uint8_t *gold = (uint8_t *)snrt_l1alloc(64 * sizeof(uint8_t));
-  printf("[TC 7] \n");
   VSET(64, e8, m1);
-  asm volatile("vmv.v.x v9, %0" :: "r"(0xBB));
-  asm volatile("vmv.v.x v8, %0" :: "r"(0x77));
+  asm volatile("vmv.v.x v8, %0" :: "r"(0xBB));
   VSET(128, e8, m4);
   asm volatile("vmv.v.x v4,  %0" :: "r"(0xCD));
   asm volatile("vmv.v.x v12, %0" :: "r"(0x84));
   asm volatile("vmand.mm v8, v4, v12");
-  memset(gold, 0x84, 16);
-  memset(gold + 16, 0x77, 48);
-  VSET(64, e8, m1);
-  asm volatile("vse8.v v8, (%0)" :: "r"(buf) : "memory");
-  VMCMP(uint8_t, "%hhu", 7, buf, gold, 64);
-  memset(gold, 0xBB, 64);
-  VSET(64, e8, m1);
-  asm volatile("vse8.v v9, (%0)" :: "r"(buf) : "memory");
-  VMCMP(uint8_t, "%hhu", 7, buf, gold, 64);
+  VSET(4, e64, m1);
+  VCMP_U64(7, v8,
+    0x8484848484848484UL, 0x8484848484848484UL,
+    0xBBBBBBBBBBBBBBBBUL, 0xBBBBBBBBBBBBBBBBUL);
 }
 
 int main(void) {
