@@ -34,57 +34,12 @@ void vrfload_vlxblk(const float *dict, const dict_code_t *codes,
   asm volatile("vsetblklen %0" ::"r"(DICT_D));
   unsigned int rem = n_codes * DICT_D;
 
-  const unsigned int idx_per_chunk = 128 >> DICT_D_LOG2;
-  while (rem >= 4 * 128) {
-#if DICT_CODE_BYTES == 1
-    asm volatile("vsetvli zero, %[n_idx], e8, m1, ta, ma\n"
-                 "vle8.v v4, (%[c0])\n"
-                 "vle8.v v5, (%[c1])\n"
-                 "vle8.v v6, (%[c2])\n"
-                 "vle8.v v7, (%[c3])\n"
-                 :
-                 : [n_idx] "r"(idx_per_chunk), [c0] "r"(codes),
-                   [c1] "r"(codes + idx_per_chunk),
-                   [c2] "r"(codes + 2 * idx_per_chunk),
-                   [c3] "r"(codes + 3 * idx_per_chunk)
-                 : "v4", "v5", "v6", "v7", "memory");
-#elif DICT_D == 4
-    asm volatile("vsetvli zero, %[n_idx], e16, m4, ta, ma\n"
-                 "vle16.v v4, (%[c0])\n"
-                 :
-                 : [n_idx] "r"(128), [c0] "r"(codes)
-                 : "v4", "v5", "v6", "v7", "memory");
-#else
-    asm volatile("vsetvli zero, %[n_idx], e16, m1, ta, ma\n"
-                 "vle16.v v4, (%[c0])\n"
-                 "vle16.v v5, (%[c1])\n"
-                 "vle16.v v6, (%[c2])\n"
-                 "vle16.v v7, (%[c3])\n"
-                 :
-                 : [n_idx] "r"(idx_per_chunk), [c0] "r"(codes),
-                   [c1] "r"(codes + idx_per_chunk),
-                   [c2] "r"(codes + 2 * idx_per_chunk),
-                   [c3] "r"(codes + 3 * idx_per_chunk)
-                 : "v4", "v5", "v6", "v7", "memory");
-#endif
-    // Four m8 gathers, no stores: WAW reuse of v8 is harmless on the
-    // in-order VLSU.
-    asm volatile("vsetvli zero, %[gvl], e32, m8, ta, ma\n"
-                 "vlxblkei" DICT_CODE_EI ".v v8, (%[dict]), v4\n"
-                 "vlxblkei" DICT_CODE_EI ".v v16, (%[dict]), v5\n"
-                 "vlxblkei" DICT_CODE_EI ".v v24, (%[dict]), v6\n"
-                 "vlxblkei" DICT_CODE_EI ".v v8, (%[dict]), v7\n"
-                 :
-                 : [gvl] "r"(128), [dict] "r"(dict)
-                 : "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15",
-                   "v16", "v17", "v18", "v19", "v20", "v21", "v22", "v23",
-                   "v24", "v25", "v26", "v27", "v28", "v29", "v30", "v31",
-                   "memory");
-
-    codes += 4 * idx_per_chunk;
-    rem -= 512;
-  }
-
+  // VLMAX-dynamic: one full m8 gather per iteration (gvl = min(rem, VLMAX)
+  // at e32/m8 = VLEN/4 elements), so the register-group amortization scales
+  // with the hardware VLEN instead of being pinned to a VLEN=512 literal.
+  // Both instructions are loads, so the 2-slot VLSU buffer streams without
+  // reordering; the scalar bookkeeping hides under the gather. Index vector
+  // fits m1 at e8 / m2 at e16 for every D >= 2 up to VLEN=1024.
   while (rem > 0) {
     size_t gvl;
     asm volatile("vsetvli %[gvl], %[rem], e32, m8, ta, ma"
@@ -94,24 +49,24 @@ void vrfload_vlxblk(const float *dict, const dict_code_t *codes,
 
 #if DICT_CODE_BYTES == 1
     asm volatile("vsetvli zero, %[n_idx], e8, m1, ta, ma\n"
-                 "vle8.v v28, (%[codes])\n"
+                 "vle8.v v4, (%[codes])\n"
                  "vsetvli zero, %[gvl], e32, m8, ta, ma\n"
-                 "vlxblkei8.v v16, (%[dict]), v28\n"
+                 "vlxblkei8.v v8, (%[dict]), v4\n"
                  :
                  : [n_idx] "r"(n_idx), [gvl] "r"(gvl), [codes] "r"(codes),
                    [dict] "r"(dict)
-                 : "v16", "v17", "v18", "v19", "v20", "v21", "v22", "v23",
-                   "v28", "memory");
+                 : "v4", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15",
+                   "memory");
 #else
-    asm volatile("vsetvli zero, %[n_idx], e16, m1, ta, ma\n"
-                 "vle16.v v28, (%[codes])\n"
+    asm volatile("vsetvli zero, %[n_idx], e16, m2, ta, ma\n"
+                 "vle16.v v4, (%[codes])\n"
                  "vsetvli zero, %[gvl], e32, m8, ta, ma\n"
-                 "vlxblkei16.v v16, (%[dict]), v28\n"
+                 "vlxblkei16.v v8, (%[dict]), v4\n"
                  :
                  : [n_idx] "r"(n_idx), [gvl] "r"(gvl), [codes] "r"(codes),
                    [dict] "r"(dict)
-                 : "v16", "v17", "v18", "v19", "v20", "v21", "v22", "v23",
-                   "v28", "memory");
+                 : "v4", "v5", "v8", "v9", "v10", "v11", "v12", "v13", "v14",
+                   "v15", "memory");
 #endif
 
     codes += n_idx;
