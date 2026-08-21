@@ -124,21 +124,27 @@ void dictdecode_vlxblk(float *out, const float *dict, const dict_code_t *codes,
                    [c3] "r"(codes + 3 * idx_per_chunk)
                  : "v4", "v5", "v6", "v7", "memory");
 #endif
+    // The VLSU buffers only two unexecuted instructions and runs in order:
+    // a store issued right after its gather RAW-blocks the buffer head.
+    // Three m8 groups are free (v0's group holds the indices), so issue
+    // three gathers before their stores; only the fourth pair stays
+    // adjacent.
     asm volatile("vsetvli zero, %[gvl], e32, m8, ta, ma\n"
                  "vlxblkei" DICT_CODE_EI ".v v8, (%[dict]), v4\n"
-                 "vse32.v v8, (%[o0])\n"
                  "vlxblkei" DICT_CODE_EI ".v v16, (%[dict]), v5\n"
+                 "vlxblkei" DICT_CODE_EI ".v v24, (%[dict]), v6\n"
+                 "vse32.v v8, (%[o0])\n"
                  "vse32.v v16, (%[o1])\n"
-                 "vlxblkei" DICT_CODE_EI ".v v8, (%[dict]), v6\n"
-                 "vse32.v v8, (%[o2])\n"
-                 "vlxblkei" DICT_CODE_EI ".v v16, (%[dict]), v7\n"
-                 "vse32.v v16, (%[o3])\n"
+                 "vse32.v v24, (%[o2])\n"
+                 "vlxblkei" DICT_CODE_EI ".v v8, (%[dict]), v7\n"
+                 "vse32.v v8, (%[o3])\n"
                  :
                  : [gvl] "r"(128), [dict] "r"(dict), [o0] "r"(out),
                    [o1] "r"(out + 128), [o2] "r"(out + 256),
                    [o3] "r"(out + 384)
                  : "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15",
                    "v16", "v17", "v18", "v19", "v20", "v21", "v22", "v23",
+                   "v24", "v25", "v26", "v27", "v28", "v29", "v30", "v31",
                    "memory");
 
     codes += 4 * idx_per_chunk;
@@ -224,10 +230,10 @@ void dictdecode_rvv(float *out, const float *dict, const dict_code_t *codes,
 #if DICT_D == 4
     asm volatile("vsetvli zero, %[c], e32, m8, ta, ma\n"
                  "vluxei16.v v8,  (%[d0]), v4\n"
-                 "vsse32.v v8,  (%[o0]), %[str]\n"
                  "vluxei16.v v16, (%[d1]), v4\n"
-                 "vsse32.v v16, (%[o1]), %[str]\n"
                  "vluxei16.v v24, (%[d2]), v4\n"
+                 "vsse32.v v8,  (%[o0]), %[str]\n"
+                 "vsse32.v v16, (%[o1]), %[str]\n"
                  "vsse32.v v24, (%[o2]), %[str]\n"
                  "vluxei16.v v8,  (%[d3]), v4\n"
                  "vsse32.v v8,  (%[o3]), %[str]\n"
@@ -245,8 +251,8 @@ void dictdecode_rvv(float *out, const float *dict, const dict_code_t *codes,
     // store into neighboring records and corrupt them.
     asm volatile("vsetvli zero, %[c], e32, m8, ta, ma\n"
                  "vluxei16.v v8,  (%[d0]), v4\n"
-                 "vsse32.v v8,  (%[o0]), %[str]\n"
                  "vluxei16.v v16, (%[d1]), v4\n"
+                 "vsse32.v v8,  (%[o0]), %[str]\n"
                  "vsse32.v v16, (%[o1]), %[str]\n"
                  :
                  : [c] "r"(c), [d0] "r"(dict), [d1] "r"(dict + 1),
@@ -261,10 +267,10 @@ void dictdecode_rvv(float *out, const float *dict, const dict_code_t *codes,
     for (unsigned int j = 0; j < DICT_D; j += 4) {
       asm volatile("vsetvli zero, %[c], e32, m8, ta, ma\n"
                    "vluxei16.v v8,  (%[d0]), v4\n"
-                   "vsse32.v v8,  (%[o0]), %[str]\n"
                    "vluxei16.v v16, (%[d1]), v4\n"
-                   "vsse32.v v16, (%[o1]), %[str]\n"
                    "vluxei16.v v24, (%[d2]), v4\n"
+                   "vsse32.v v8,  (%[o0]), %[str]\n"
+                   "vsse32.v v16, (%[o1]), %[str]\n"
                    "vsse32.v v24, (%[o2]), %[str]\n"
                    "vluxei16.v v8,  (%[d3]), v4\n"
                    "vsse32.v v8,  (%[o3]), %[str]\n"
@@ -302,28 +308,30 @@ void dictdecode_vle(float *out, const float *dict, const dict_code_t *codes,
   asm volatile("vsetvli zero, %[d], e32, m1, ta, ma" ::[d] "r"(DICT_D));
 #endif
 
-  // Unroll x4 with rotating destination registers: consecutive copies have
-  // no vreg dependences, so the scalar core can run ahead and keep the
-  // (in-order) VLSU queue full; rotation avoids spurious WAR stalls.
+  // Unroll x4 with rotating destination registers. Two scheduling rules
+  // (the VLSU buffers only TWO unexecuted instructions, so Snitch stalls
+  // on the third pending one): (1) all four loads issue before any store,
+  // so no store RAW-blocks the buffer head while its load drains; (2) each
+  // scalar address computation sits between two vector issues, turning the
+  // buffer-full stall cycles into useful work. Separate asm blocks keep
+  // that interleave — asm volatile statements are not reordered.
   while (n_codes >= 4) {
     const float *s0 = dict + ((size_t)codes[0] << DICT_D_LOG2);
+    asm volatile("vle32.v v0, (%[s])" ::[s] "r"(s0) : "v0", "v1", "memory");
     const float *s1 = dict + ((size_t)codes[1] << DICT_D_LOG2);
+    asm volatile("vle32.v v8, (%[s])" ::[s] "r"(s1) : "v8", "v9", "memory");
     const float *s2 = dict + ((size_t)codes[2] << DICT_D_LOG2);
+    asm volatile("vle32.v v16, (%[s])" ::[s] "r"(s2) : "v16", "v17", "memory");
     const float *s3 = dict + ((size_t)codes[3] << DICT_D_LOG2);
-    asm volatile("vle32.v v0, (%[s0])\n"
-                 "vse32.v v0, (%[o0])\n"
-                 "vle32.v v8, (%[s1])\n"
-                 "vse32.v v8, (%[o1])\n"
-                 "vle32.v v16, (%[s2])\n"
-                 "vse32.v v16, (%[o2])\n"
-                 "vle32.v v24, (%[s3])\n"
-                 "vse32.v v24, (%[o3])\n"
-                 :
-                 : [s0] "r"(s0), [s1] "r"(s1), [s2] "r"(s2), [s3] "r"(s3),
-                   [o0] "r"(out), [o1] "r"(out + DICT_D),
-                   [o2] "r"(out + 2 * DICT_D), [o3] "r"(out + 3 * DICT_D)
-                 : "v0", "v1", "v8", "v9", "v16", "v17", "v24", "v25",
-                   "memory");
+    asm volatile("vle32.v v24, (%[s])" ::[s] "r"(s3) : "v24", "v25", "memory");
+    float *o0 = out;
+    asm volatile("vse32.v v0, (%[o])" ::[o] "r"(o0) : "memory");
+    float *o1 = out + DICT_D;
+    asm volatile("vse32.v v8, (%[o])" ::[o] "r"(o1) : "memory");
+    float *o2 = out + 2 * DICT_D;
+    asm volatile("vse32.v v16, (%[o])" ::[o] "r"(o2) : "memory");
+    float *o3 = out + 3 * DICT_D;
+    asm volatile("vse32.v v24, (%[o])" ::[o] "r"(o3) : "memory");
     codes += 4;
     out += 4 * DICT_D;
     n_codes -= 4;
