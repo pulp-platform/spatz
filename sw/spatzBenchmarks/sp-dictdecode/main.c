@@ -86,12 +86,21 @@ int main() {
   const unsigned int tile_codes =
       (n_codes < DICT_TILE_CODES) ? n_codes : DICT_TILE_CODES;
   const unsigned int n_tiles = n_codes / tile_codes;
-  const unsigned int codes_per_core = tile_codes / num_cores;
+// DICT_SINGLE_CORE: waveform-study mode — core 0 does all the work, the
+// other cores only participate in barriers. Removes cross-core TCDM bank
+// contention; note one core's port peak is 16 output-B/cycle (read and
+// write share its 32 B/cycle ports), so the printed %-of-32 halves.
+#ifdef DICT_SINGLE_CORE
+  const unsigned int work_cores = 1;
+#else
+  const unsigned int work_cores = num_cores;
+#endif
+  const unsigned int codes_per_core = tile_codes / work_cores;
 
   // Reset timer
   unsigned int timer = (unsigned int)-1;
 
-  if ((n_codes % tile_codes) || (tile_codes % num_cores))
+  if ((n_codes % tile_codes) || (tile_codes % work_cores))
     return -2;
 
   // Allocate the buffers
@@ -129,13 +138,15 @@ int main() {
   if (cid == 0)
     timer = benchmark_get_cycle();
 
-  // Each core decodes its own slice of every tile (disjoint output ranges,
-  // no barriers needed inside the timed region).
-  for (unsigned int t = 0; t < n_tiles; ++t) {
-    const dict_code_t *codes_slice =
-        codes + t * tile_codes + cid * codes_per_core;
-    float *out_slice = out_tile + cid * codes_per_core * DICT_D;
-    DICTDECODE_KERNEL(out_slice, dict, codes_slice, codes_per_core);
+  // Each working core decodes its own slice of every tile (disjoint output
+  // ranges, no barriers needed inside the timed region).
+  if (cid < work_cores) {
+    for (unsigned int t = 0; t < n_tiles; ++t) {
+      const dict_code_t *codes_slice =
+          codes + t * tile_codes + cid * codes_per_core;
+      float *out_slice = out_tile + cid * codes_per_core * DICT_D;
+      DICTDECODE_KERNEL(out_slice, dict, codes_slice, codes_per_core);
+    }
   }
 
   // Wait for all cores to finish

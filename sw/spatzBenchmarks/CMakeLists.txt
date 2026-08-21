@@ -547,3 +547,14 @@ add_spatz_test_dictdecode(sp-dictsweep-vlxblk-d64 1 256 256 64)
 add_spatz_test_dictdecode(sp-dictsweep-rvv-d64 0 256 256 64)
 add_spatz_test_dictdecode(sp-dictsweep-vle-d64 2 256 256 64)
 
+# Single-core waveform-study variants (DICT_SINGLE_CORE: core 0 does all the
+# work; removes cross-core TCDM bank contention; port peak 16 out-B/cycle).
+macro(add_spatz_test_dictdecode_1core name variant n_codes k d)
+  add_spatz_test_dictdecode(${name} ${variant} ${n_codes} ${k} ${d})
+  target_compile_definitions(test-${SNITCH_TEST_PREFIX}${name}_N${n_codes}_K${k} PUBLIC
+    DICT_SINGLE_CORE=1)
+endmacro()
+add_spatz_test_dictdecode_1core(sp-dict1core-vle-d64    2 256 256 64)
+add_spatz_test_dictdecode_1core(sp-dict1core-vlxblk-d64 1 256 256 64)
+add_spatz_test_dictdecode_1core(sp-dict1core-rvv-d64    0 256 256 64)
+
