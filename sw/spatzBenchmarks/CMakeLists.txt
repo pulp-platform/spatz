@@ -558,3 +558,24 @@ add_spatz_test_dictdecode_1core(sp-dict1core-vle-d64    2 256 256 64)
 add_spatz_test_dictdecode_1core(sp-dict1core-vlxblk-d64 1 256 256 64)
 add_spatz_test_dictdecode_1core(sp-dict1core-rvv-d64    0 256 256 64)
 
+# VRF materialization (load-only) benchmark: times just the load stage into
+# the VRF (fused-consumer model, e.g. VQ-LLM dequant); single-core by
+# construction; untimed load+store check stage. Reuses sp-dictdecode data.
+macro(add_spatz_test_vrfload name variant n_codes k d)
+  set(target_name ${name}_N${n_codes}_K${k})
+  add_snitch_test(${target_name} sp-vrfload/main.c)
+  target_link_libraries(test-${SNITCH_TEST_PREFIX}${target_name} benchmark ${SNITCH_RUNTIME})
+  if(${d} EQUAL 4)
+    set(dict_dataheader "../sp-dictdecode/data/data_dict_${n_codes}_${k}.h")
+  else()
+    set(dict_dataheader "../sp-dictdecode/data/data_dict_${n_codes}_${k}_d${d}.h")
+  endif()
+  target_compile_definitions(test-${SNITCH_TEST_PREFIX}${target_name} PUBLIC
+    DATAHEADER="${dict_dataheader}"
+    DICT_VARIANT=${variant}
+    SNRT_NFPU_PER_CORE=${SNRT_NFPU_PER_CORE})
+endmacro()
+add_spatz_test_vrfload(sp-vrfload-vle-d64    2 256 256 64)
+add_spatz_test_vrfload(sp-vrfload-vlxblk-d64 1 256 256 64)
+add_spatz_test_vrfload(sp-vrfload-rvv-d64    0 256 256 64)
+
