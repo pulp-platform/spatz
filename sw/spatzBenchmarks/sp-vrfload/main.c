@@ -66,7 +66,7 @@
 
 // Output tiles are used only by the untimed check stage; sizing matches
 // sp-dictdecode (halved at D=64 so dict + tiles fit the 128 KiB TCDM).
-#if DICT_D == 64
+#if DICT_D >= 64
 #define DICT_TILE_CODES (16384 / (DICT_D * 4))
 #else
 #define DICT_TILE_CODES (32768 / (DICT_D * 4))
@@ -150,8 +150,14 @@ int main() {
   }
 
   // UNTIMED check stage: identical load path, plus store-back, tile by
-  // tile, exact bit compare against the golden reference.
+  // tile, exact bit compare against the golden reference. Compiled out in
+  // fast-sweep builds (VRFLOAD_NO_CHECK): those runs are UNVERIFIED and
+  // must be reproduced with the checked targets before results are final.
   int errors = 0;
+#ifdef VRFLOAD_NO_CHECK
+  if (cid == 0)
+    printf("CHECK SKIPPED (unverified fast-sweep build)\n");
+#else
   if (cid == 0) {
     for (unsigned int t = 0; t < n_tiles; ++t) {
       snrt_dma_start_1d(golden_tile,
@@ -175,6 +181,7 @@ int main() {
     else
       printf("CORRECT!\n");
   }
+#endif
 
   // Wait for core 0 to finish displaying results
   snrt_cluster_hw_barrier();

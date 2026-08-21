@@ -43,7 +43,10 @@
 
 #include "sp-dictdecode.h"
 
-#if DICT_D == 2
+#if DICT_D == 1
+#define DICT_D_LOG2 0
+#define DICT_BLK_SHIFT "2"
+#elif DICT_D == 2
 #define DICT_D_LOG2 1
 #define DICT_BLK_SHIFT "3" // log2(D*4): code -> byte offset, as asm literal
 #elif DICT_D == 4
@@ -61,8 +64,11 @@
 #elif DICT_D == 64
 #define DICT_D_LOG2 6
 #define DICT_BLK_SHIFT "8"
+#elif DICT_D == 128
+#define DICT_D_LOG2 7
+#define DICT_BLK_SHIFT "9"
 #else
-#error "sp-dictdecode kernels support power-of-two DICT_D in {2, 4, 8, 16, 32, 64}"
+#error "sp-dictdecode kernels support power-of-two DICT_D in {1, ..., 128}"
 #endif
 
 // Index EEW suffix of the VLXBLK instruction, matching the code width.
@@ -246,6 +252,16 @@ void dictdecode_rvv(float *out, const float *dict, const dict_code_t *codes,
                    "v16", "v17", "v18", "v19", "v20", "v21", "v22", "v23",
                    "v24", "v25", "v26", "v27", "v28", "v29", "v30", "v31",
                    "memory");
+#elif DICT_D == 1
+    // One element per code: a single gather lane, contiguous output.
+    (void)stride_b;
+    asm volatile("vsetvli zero, %[c], e32, m8, ta, ma\n"
+                 "vluxei16.v v8, (%[d0]), v4\n"
+                 "vse32.v v8, (%[o0])\n"
+                 :
+                 : [c] "r"(c), [d0] "r"(dict), [o0] "r"(out)
+                 : "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15",
+                   "memory");
 #elif DICT_D == 2
     // D = 2: only two record lanes exist; a 4-lane block would strided-
     // store into neighboring records and corrupt them.
@@ -300,7 +316,9 @@ void dictdecode_vle(float *out, const float *dict, const dict_code_t *codes,
   // elements. vl = D is hoisted out of the loop; m2 fits a 128 B slot
   // (D=32) in a single instruction (two vregs per group), m1 suffices for
   // D <= 16.
-#if DICT_D == 64
+#if DICT_D == 128
+  asm volatile("vsetvli zero, %[d], e32, m8, ta, ma" ::[d] "r"(DICT_D));
+#elif DICT_D == 64
   asm volatile("vsetvli zero, %[d], e32, m4, ta, ma" ::[d] "r"(DICT_D));
 #elif DICT_D == 32
   asm volatile("vsetvli zero, %[d], e32, m2, ta, ma" ::[d] "r"(DICT_D));

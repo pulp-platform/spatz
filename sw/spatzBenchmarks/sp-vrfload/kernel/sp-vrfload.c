@@ -145,7 +145,14 @@ void vrfload_rvv(const float *dict, const dict_code_t *codes,
                  : "v4", "v5", "v6", "v7", "memory");
 #endif
 
-#if DICT_D == 2
+#if DICT_D == 1
+    asm volatile("vsetvli zero, %[c], e32, m8, ta, ma\n"
+                 "vluxei16.v v8, (%[d0]), v4\n"
+                 :
+                 : [c] "r"(c), [d0] "r"(dict)
+                 : "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15",
+                   "memory");
+#elif DICT_D == 2
     asm volatile("vsetvli zero, %[c], e32, m8, ta, ma\n"
                  "vluxei16.v v8,  (%[d0]), v4\n"
                  "vluxei16.v v16, (%[d1]), v4\n"
@@ -178,7 +185,9 @@ void vrfload_rvv(const float *dict, const dict_code_t *codes,
 
 void vrfload_vle(const float *dict, const dict_code_t *codes,
                  unsigned int n_codes) {
-#if DICT_D == 64
+#if DICT_D == 128
+  asm volatile("vsetvli zero, %[d], e32, m8, ta, ma" ::[d] "r"(DICT_D));
+#elif DICT_D == 64
   asm volatile("vsetvli zero, %[d], e32, m4, ta, ma" ::[d] "r"(DICT_D));
 #elif DICT_D == 32
   asm volatile("vsetvli zero, %[d], e32, m2, ta, ma" ::[d] "r"(DICT_D));

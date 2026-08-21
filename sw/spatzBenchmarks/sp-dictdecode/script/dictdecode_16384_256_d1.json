@@ -1,0 +1,7 @@
+{
+    "kernel": "DICT-DECODE",
+    "N_CODES": 16384,
+    "K": 256,
+    "D": 1,
+    "CODE_BYTES": 1
+}
