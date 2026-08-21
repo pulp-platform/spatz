@@ -141,7 +141,7 @@ def main():
     d = int(param.get("D", 4))
     code_bytes = int(param.get("CODE_BYTES", 2))
 
-    assert d in (4, 8, 16, 32), "sp-dictdecode kernels support pow2 D in 4..32"
+    assert d in (2, 4, 8, 16, 32, 64), "sp-dictdecode kernels support pow2 D in 2..64"
     assert code_bytes in (1, 2), "CODE_BYTES must be 1 or 2"
     assert k <= (256 if code_bytes == 1 else 65536), "K exceeds code width"
     assert k * d * 4 <= 65536, "RVV baseline uses 16-bit byte offsets"

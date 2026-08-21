@@ -65,7 +65,13 @@
 // D=32; identical L1 store traffic to a full materialization);
 // verification re-decodes tile by tile and exact-compares against the
 // DMA'd golden slice, so every output element is checked bit-exactly.
+// 32 KiB rotating tile, halved at D=64: there the K=256 dictionary is
+// 64 KiB on its own, and dict + out + golden must fit the 128 KiB TCDM.
+#if DICT_D == 64
+#define DICT_TILE_CODES (16384 / (DICT_D * 4))
+#else
 #define DICT_TILE_CODES (32768 / (DICT_D * 4))
+#endif
 
 float *dict;
 dict_code_t *codes;
