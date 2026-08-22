@@ -165,6 +165,76 @@ static void run_bg_case(unsigned int case_id, unsigned int block_len) {
 void TEST_CASE4(void) { run_bg_case(4, 2); }  // 8-B blocks (d2 geometry)
 void TEST_CASE5(void) { run_bg_case(5, 16); } // 64-B blocks
 
+// TC6: the sp-dictdecode check-kernel pattern at scale - the 4-chunk
+// loads-first group (3 gathers, 3 stores, 1 gather, 1 store) repeated many
+// times. TC4/TC5 (one 2-chunk group) pass on the doublebw VLSU while the
+// benchmark check kernel deadlocks, so the hang needs accumulated
+// instruction count / state - this reproduces it at ISA-test runtime.
+#define TC6_ITERS 8
+static uint32_t tc6_out_init[4 * BG_ELEMS];
+
+static void run_tc6(unsigned int case_id, unsigned int block_len) {
+  const unsigned int groups = BG_ELEMS / block_len;
+  uint32_t *bg_dict;
+  uint8_t (*bg_idx)[64];
+  uint32_t *bg_out;
+  uint32_t *bg_gold;
+#ifdef __SPIKE__
+  bg_dict = bg_dict_init; bg_idx = bg_idx_init;
+  bg_out = tc6_out_init; bg_gold = bg_gold_init;
+#else
+  bg_dict = (uint32_t *)snrt_l1alloc(sizeof(bg_dict_init) + 128);
+  bg_dict = (uint32_t *)((((uintptr_t)bg_dict) + 127) & ~(uintptr_t)127);
+  bg_idx = (uint8_t(*)[64])snrt_l1alloc(sizeof(bg_idx_init));
+  bg_out = (uint32_t *)snrt_l1alloc(sizeof(tc6_out_init));
+  bg_gold = (uint32_t *)snrt_l1alloc(sizeof(bg_gold_init));
+#endif
+  for (unsigned int i = 0; i < 64; ++i)
+    bg_dict[i] = 0xB0000000u + i;
+  const unsigned int n_blocks = 64 / block_len;
+  for (unsigned int c = 0; c < 2; ++c)
+    for (unsigned int g = 0; g < 64; ++g)
+      bg_idx[c][g] = (uint8_t)((g * 5 + c) % n_blocks);
+  for (unsigned int c = 0; c < 2; ++c)
+    for (unsigned int g = 0; g < groups; ++g)
+      for (unsigned int i = 0; i < block_len; ++i)
+        bg_gold[c * BG_ELEMS + g * block_len + i] =
+            bg_dict[(unsigned int)bg_idx[c][g] * block_len + i];
+
+  for (unsigned int it = 0; it < TC6_ITERS; ++it) {
+    // Rotate output base so stores hit fresh addresses like the benchmark.
+    uint32_t *out = bg_out + (it % 2) * (2 * BG_ELEMS);
+    memset(out, 0, 2 * BG_ELEMS * sizeof(uint32_t));
+    asm volatile("vsetblklen %[bl]\n"
+                 "vsetvli zero, %[gr], e8, m1, ta, ma\n"
+                 "vle8.v v4, (%[i0])\n"
+                 "vle8.v v5, (%[i1])\n"
+                 "vle8.v v6, (%[i0])\n"
+                 "vle8.v v7, (%[i1])\n"
+                 "vsetvli zero, %[ec], e32, m8, ta, ma\n"
+                 "vlxblkei8.v v8, (%[dict]), v4\n"
+                 "vlxblkei8.v v16, (%[dict]), v5\n"
+                 "vlxblkei8.v v24, (%[dict]), v6\n"
+                 "vse32.v v8, (%[o0])\n"
+                 "vse32.v v16, (%[o1])\n"
+                 "vse32.v v24, (%[o0])\n"
+                 "vlxblkei8.v v8, (%[dict]), v7\n"
+                 "vse32.v v8, (%[o1])\n"
+                 :
+                 : [bl] "r"(block_len), [gr] "r"(groups), [ec] "r"(BG_ELEMS),
+                   [i0] "r"(&bg_idx[0][0]), [i1] "r"(&bg_idx[1][0]),
+                   [dict] "r"(bg_dict), [o0] "r"(out), [o1] "r"(out + BG_ELEMS)
+                 : "v4", "v5", "v6", "v7", "v8", "v16", "v24", "memory");
+  }
+  // Final iteration wrote (idx0->o0 overwritten by idx0 chunk3, idx1->o1):
+  // out0 = gather(idx[0]) [third store overwrote first], out1 = gather(idx[1]).
+  uint32_t *out = bg_out + ((TC6_ITERS - 1) % 2) * (2 * BG_ELEMS);
+  VMCMP(uint32_t, %u, case_id, out, bg_gold, 2 * BG_ELEMS);
+}
+
+void TEST_CASE6(void) { run_tc6(6, 2); }
+void TEST_CASE7(void) { run_tc6(7, 16); }
+
 int main(void) {
   INIT_CHECK();
   enable_vec();
@@ -175,6 +245,8 @@ int main(void) {
   TEST_CASE3();
   TEST_CASE4();
   TEST_CASE5();
+  TEST_CASE6();
+  TEST_CASE7();
 
   EXIT_CHECK();
 }
