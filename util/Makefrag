@@ -59,10 +59,10 @@ VLT_FLAGS    += -Wno-PINMISSING
 VLT_FLAGS    += -Wno-fatal
 VLT_FLAGS    += --unroll-count 1024
 VLT_FLAGS    += --timing
-VLT_FLAGS    += -CFLAGS "-std=c++17 -fcoroutines"
+VLT_FLAGS    += -CFLAGS "-std=gnu++20"
 VLT_BENDER   += -t rtl -t spatz -t spatz_test -t snitch_test ${BENDER_CFG_TARGETS} --define COMMON_CELLS_ASSERTS_OFF
 VLT_SOURCES  := $(shell ${BENDER} script flist ${VLT_BENDER} | ${SED_SRCS})
-VLT_CFLAGS   += -std=c++17 -fcoroutines
+VLT_CFLAGS   += -std=gnu++20
 VLT_CFLAGS   += -I${VLT_BUILDDIR}/riscv-isa-sim -I${VLT_BUILDDIR} -I${VERILATOR_INSTALL_DIR}/share/verilator/include -I${VERILATOR_INSTALL_DIR}/share/verilator/include/vltstd -I${ROOT}/hw/ip/snitch_test/src
 
 VLOGAN_FLAGS := -assert svaext
@@ -107,8 +107,8 @@ $(VLT_FESVR)/${FESVR_VERSION}_unzip:
 	touch $@
 
 $(VLT_BUILDDIR)/lib/libfesvr.a: $(VLT_FESVR)/${FESVR_VERSION}_unzip
-	cd $(dir $<)/ && PATH=${SPIKE_INSTALL_DIR}/bin:${PATH} ./configure --prefix `pwd`
-	$(MAKE) -C $(dir $<) install-config-hdrs install-hdrs libfesvr.a
+	cd $(dir $<)/ && PATH=${SPIKE_INSTALL_DIR}/bin:${PATH} CXXFLAGS="-include cstdint" ./configure --prefix `pwd`
+	$(MAKE) -C $(dir $<) CXXFLAGS="-include cstdint -O2" install-config-hdrs install-hdrs libfesvr.a
 	mkdir -p $(dir $@)
 	cp $(dir $<)libfesvr.a $@
 

@@ -192,7 +192,7 @@ $(VLT_BUILDDIR)/test/%.o: test/%.cc ${VLT_BUILDDIR}/lib/libfesvr.a
 
 $(VLT_BUILDDIR)/test/uartdpi/uartdpi.o: test/uartdpi/uartdpi.c
 	mkdir -p $(dir $@)
-	$(CC) $(CXXFLAGS) $(VLT_CFLAGS) -c $< -o $@
+	$(CC) $(filter-out -std=gnu++20 -std=c++17 -fcoroutines,$(CXXFLAGS) $(VLT_CFLAGS)) -c $< -o $@
 
 # Link verilated archive wich $(VLT_COBJ)
 bin/spatz_cluster.vlt: $(VLT_AR) $(VLT_COBJ) ${VLT_BUILDDIR}/lib/libfesvr.a
