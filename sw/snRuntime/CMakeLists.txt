@@ -25,7 +25,7 @@ endif()
 add_compile_options(-O3 -g -ffunction-sections)
 
 # Platform sources
-if(SPATZ_CLUSTER_CFG MATCHES "^(spatz_cluster\.(default|mempool|smallvrf|32b|doublebw|ventaglio|vlen1024|doublebw1024)\.dram)\.hjson$")
+if(SPATZ_CLUSTER_CFG MATCHES "^(spatz_cluster\.(default|mempool|smallvrf|32b|doublebw|ventaglio|vlen1024|doublebw1024|nfpu8|vlen1024nfpu8)\.dram)\.hjson$")
   set(_plat_folder "standalone")
 elseif("${SPATZ_CLUSTER_CFG}" MATCHES "^spatz_cluster.carfield\\.(l2|dram)\\.hjson$")
   set(_plat_folder "cheshire")
@@ -56,6 +56,10 @@ set(PLATFORM_SOURCE_FOLDER "src/platforms/${_plat_folder}" CACHE STRING "Path to
 # Default memory regions
 set(MEM_SPATZ_CLUSTER_DEFAULT_DRAM_HJSON_ORIGIN  0x80000000)
 set(MEM_SPATZ_CLUSTER_DEFAULT_DRAM_HJSON_SIZE    0x80000000)
+set(MEM_SPATZ_CLUSTER_NFPU8_DRAM_HJSON_ORIGIN 0x80000000)
+set(MEM_SPATZ_CLUSTER_NFPU8_DRAM_HJSON_SIZE    0x80000000)
+set(MEM_SPATZ_CLUSTER_VLEN1024NFPU8_DRAM_HJSON_ORIGIN 0x80000000)
+set(MEM_SPATZ_CLUSTER_VLEN1024NFPU8_DRAM_HJSON_SIZE    0x80000000)
 set(MEM_SPATZ_CLUSTER_VLEN1024_DRAM_HJSON_ORIGIN 0x80000000)
 set(MEM_SPATZ_CLUSTER_VLEN1024_DRAM_HJSON_SIZE    0x80000000)
 set(MEM_SPATZ_CLUSTER_DOUBLEBW1024_DRAM_HJSON_ORIGIN 0x80000000)
