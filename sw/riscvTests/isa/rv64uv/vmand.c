@@ -71,10 +71,10 @@ void TEST_CASE7() {
   asm volatile("vmv.v.x v4,  %0" :: "r"(0xCD));
   asm volatile("vmv.v.x v12, %0" :: "r"(0x84));
   asm volatile("vmand.mm v8, v4, v12");
-  VSET(4, e64, m1);
-  VCMP_U64(7, v8,
-    0x8484848484848484UL, 0x8484848484848484UL,
-    0xBBBBBBBBBBBBBBBBUL, 0xBBBBBBBBBBBBBBBBUL);
+  VSET(8, e32, m1);
+  VCMP_U32(7, v8,
+    0x84848484U, 0x84848484U, 0x84848484U, 0x84848484U,
+    0xBBBBBBBBU, 0xBBBBBBBBU, 0xBBBBBBBBU, 0xBBBBBBBBU);
 }
 
 int main(void) {
