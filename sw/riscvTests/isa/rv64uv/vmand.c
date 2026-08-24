@@ -64,6 +64,19 @@ void TEST_CASE6() {
   VCMP_U8(6, v2, 0, 0, 0, 0, 0, 0, 0, 0);
 }
 
+void TEST_CASE7() {
+  VSET(64, e8, m1);
+  asm volatile("vmv.v.x v8, %0" :: "r"(0xBB));
+  VSET(128, e8, m4);
+  asm volatile("vmv.v.x v4,  %0" :: "r"(0xCD));
+  asm volatile("vmv.v.x v12, %0" :: "r"(0x84));
+  asm volatile("vmand.mm v8, v4, v12");
+  VSET(8, e32, m1);
+  VCMP_U32(7, v8,
+    0x84848484U, 0x84848484U, 0x84848484U, 0x84848484U,
+    0xBBBBBBBBU, 0xBBBBBBBBU, 0xBBBBBBBBU, 0xBBBBBBBBU);
+}
+
 int main(void) {
   INIT_CHECK();
   enable_vec();
@@ -74,6 +87,7 @@ int main(void) {
   TEST_CASE4();
   TEST_CASE5();
   TEST_CASE6();
+  TEST_CASE7();
 
   EXIT_CHECK();
 }
