@@ -461,6 +461,26 @@ void TEST_CASE7(void) {
   CHECK_FFLAGS(NV);
 };
 
+void TEST_CASE8(void) {
+  uint32_t vlenb;
+  asm volatile("csrr %0, vlenb" : "=r"(vlenb));
+  VSET(128, e32, m8);
+  VCLEAR(v1);
+  asm volatile("vmv.v.x v8,  %0" :: "r"(0x40490fdb));
+  asm volatile("vmv.v.x v16, %0" :: "r"(0x40490fdb));
+  asm volatile("vmfeq.vv v1, v8, v16");
+  if (vlenb == 64) {
+    VSET(16, e8, m1);
+    VCMP_U8(23, v1,
+      0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,
+      0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF);
+  } else if (vlenb == 32) {
+    VSET(8, e8, m1);
+    VCMP_U8(23, v1,
+      0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF);
+  }
+}
+
 int main(void) {
   INIT_CHECK();
   enable_vec();
@@ -476,6 +496,7 @@ int main(void) {
 #endif
   TEST_CASE6();
   TEST_CASE7();
+  TEST_CASE8();
 
   EXIT_CHECK();
 }
