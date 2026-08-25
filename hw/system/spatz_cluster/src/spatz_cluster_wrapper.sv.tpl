@@ -531,6 +531,7 @@ module ${cfg['name']}_wrapper
     .RegisterCoreReq (${int(cfg['timing']['register_core_req'])}),
     .RegisterCoreRsp (${int(cfg['timing']['register_core_rsp'])}),
     .RegisterTCDMCuts (${int(cfg['timing']['register_tcdm_cuts'])}),
+    .TCDMLatency (${int(cfg['timing'].get('tcdm_latency', 0))}),
     .RegisterExt (${int(cfg['timing']['register_ext'])}),
     .XbarLatency (axi_pkg::${cfg['timing']['xbar_latency']}),
     .MaxMstTrans (${cfg['trans']}),

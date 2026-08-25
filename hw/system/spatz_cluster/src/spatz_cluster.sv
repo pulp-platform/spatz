@@ -87,6 +87,10 @@ module spatz_cluster
     parameter bit                                            RegisterCoreRsp                    = 1'b0,
     /// Insert Pipeline registers after each memory cut
     parameter bit                                            RegisterTCDMCuts                   = 1'b0,
+    /// Extra TCDM response latency in cycles (full-bandwidth pipeline on
+    /// every bank's response path; emulates deeper memory tiers behind the
+    /// same banked interconnect for sensitivity studies). 0 = today.
+    parameter int                     unsigned               TCDMLatency                        = 0,
     /// Decouple external AXI plug
     parameter bit                                            RegisterExt                        = 1'b0,
     parameter axi_pkg::xbar_latency_e                        XbarLatency                        = axi_pkg::CUT_ALL_PORTS,
@@ -104,7 +108,7 @@ module spatz_cluster
     // value here. This only applies to the TCDM. The instruction cache macros will break!
     // In case you are using the `RegisterTCDMCuts` feature this adds an
     // additional cycle latency, which is taken into account here.
-    parameter int                     unsigned               MemoryMacroLatency                 = 1 + RegisterTCDMCuts
+    parameter int                     unsigned               MemoryMacroLatency                 = 1 + RegisterTCDMCuts + TCDMLatency
   ) (
     /// System clock.
     input  logic                             clk_i,
@@ -649,7 +653,7 @@ module spatz_cluster
       // Insert a pipeline register at the output of each SRAM.
       shift_reg #(
         .dtype(data_t                ),
-        .Depth(int'(RegisterTCDMCuts))
+        .Depth(int'(RegisterTCDMCuts) + TCDMLatency)
       ) i_sram_pipe (
         .clk_i (clk_i            ),
         .rst_ni(rst_ni           ),
@@ -669,7 +673,7 @@ module spatz_cluster
     .MemAddrWidth          (TCDMMemAddrWidth    ),
     .DataWidth             (DataWidth           ),
     .user_t                (tcdm_user_t         ),
-    .MemoryResponseLatency (1 + RegisterTCDMCuts),
+    .MemoryResponseLatency (1 + RegisterTCDMCuts + TCDMLatency),
     .AddrMisalign          (AddrMisalign      )
   ) i_tcdm_interconnect (
     .clk_i     (clk_i                  ),
