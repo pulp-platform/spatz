@@ -485,9 +485,12 @@ module spatz_controller
 
       case (decoder_rsp.spatz_req.ex_unit)
         CON: begin
-          issue_rsp_o.writeback = spatz_req.use_rd;
+          // retire_csr always produces a response, regardless of use_rd.
+          issue_rsp_o.writeback = 1'b1;
         end // CON
         VFU: begin
+          // Matches the wb tag spatz_vfu.sv attaches to the request.
+          issue_rsp_o.writeback = spatz_req.op_arith.is_scalar;
           // vtype is illegal -> illegal instruction
           if (vtype_q.vill) begin
             issue_rsp_o.accept = 1'b0;

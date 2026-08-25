@@ -481,10 +481,12 @@ module spatz_fpu_sequencer
     // Does this instruction write to the FPR?
     issue_req_o.id[5] = use_fd;
 
-    // Forward the response back to Snitch
-    if (!is_local)
+    // use_fd results retire locally (see retire block) and never produce resp_valid_o.
+    if (!is_local) begin
       issue_rsp_o = issue_rsp_i;
-    else
+      if (use_fd)
+        issue_rsp_o.writeback = 1'b0;
+    end else
       issue_rsp_o = spatz_issue_rsp_t'{
         accept   : use_rd,
         writeback: use_rd,
