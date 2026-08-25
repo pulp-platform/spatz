@@ -46,7 +46,11 @@
 #define DICT_VARIANT 1
 #endif
 
-#if DICT_VARIANT == 3
+#if DICT_VARIANT == 4
+#define VRFLOAD_NAME "sp vrfload rvv-swp"
+#define VRFLOAD_KERNEL vrfload_rvv_swp
+#define CHECK_KERNEL dictdecode_rvv
+#elif DICT_VARIANT == 3
 #define VRFLOAD_NAME "sp vrfload vlxblk-swp"
 #define VRFLOAD_KERNEL vrfload_vlxblk_swp
 #define CHECK_KERNEL dictdecode_vlxblk

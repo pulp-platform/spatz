@@ -80,6 +80,44 @@
 
 void dictdecode_vlxblk(float *out, const float *dict, const dict_code_t *codes,
                        unsigned int n_codes) {
+#if DICT_D == 1
+  // One element per block (blk_log2 = 0): raw u8/u16 codes are consumed
+  // natively (no widen/shift byte-offset translation, unlike vluxei).
+  asm volatile("vsetblklen %0" ::"r"(DICT_D));
+  unsigned int rem = n_codes;
+  while (rem > 0) {
+    size_t gvl;
+    asm volatile("vsetvli %[g], %[r], e32, m8, ta, ma"
+                 : [g] "=r"(gvl)
+                 : [r] "r"(rem));
+#if DICT_CODE_BYTES == 1
+    asm volatile("vsetvli zero, %[g], e8, m2, ta, ma\n"
+                 "vle8.v v4, (%[c])\n"
+                 "vsetvli zero, %[g], e32, m8, ta, ma\n"
+                 "vlxblkei8.v v8, (%[dict]), v4\n"
+                 "vse32.v v8, (%[o])\n"
+                 :
+                 : [g] "r"(gvl), [c] "r"(codes), [dict] "r"(dict),
+                   [o] "r"(out)
+                 : "v4", "v5", "v8", "v9", "v10", "v11", "v12", "v13", "v14",
+                   "v15", "memory");
+#else
+    asm volatile("vsetvli zero, %[g], e16, m4, ta, ma\n"
+                 "vle16.v v4, (%[c])\n"
+                 "vsetvli zero, %[g], e32, m8, ta, ma\n"
+                 "vlxblkei16.v v8, (%[dict]), v4\n"
+                 "vse32.v v8, (%[o])\n"
+                 :
+                 : [g] "r"(gvl), [c] "r"(codes), [dict] "r"(dict),
+                   [o] "r"(out)
+                 : "v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12",
+                   "v13", "v14", "v15", "memory");
+#endif
+    codes += gvl;
+    out += gvl;
+    rem -= gvl;
+  }
+#else
   // Block length in elements (power of two). Hoisted out of the chunk loop.
   asm volatile("vsetblklen %0" ::"r"(DICT_D));
 
@@ -193,7 +231,9 @@ void dictdecode_vlxblk(float *out, const float *dict, const dict_code_t *codes,
     out += gvl;
     rem -= gvl;
   }
+#endif // DICT_D == 1
 }
+
 
 #if DICT_D >= 2
 // Layout-matched offset expansion (v2 baselines): expand n_idx codes into

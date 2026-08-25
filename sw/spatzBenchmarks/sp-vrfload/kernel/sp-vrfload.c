@@ -48,15 +48,17 @@ void vrfload_vlxblk(const float *dict, const dict_code_t *codes,
     const size_t n_idx = gvl >> DICT_D_LOG2;
 
 #if DICT_CODE_BYTES == 1
-    asm volatile("vsetvli zero, %[n_idx], e8, m1, ta, ma\n"
+    // d1 note: n_idx == gvl there (one index per element), which exceeds
+    // the e8/m1 VLMAX -- m2 covers it; d >= 2 fits m1 but m2 is harmless.
+    asm volatile("vsetvli zero, %[n_idx], e8, m2, ta, ma\n"
                  "vle8.v v4, (%[codes])\n"
                  "vsetvli zero, %[gvl], e32, m8, ta, ma\n"
                  "vlxblkei8.v v8, (%[dict]), v4\n"
                  :
                  : [n_idx] "r"(n_idx), [gvl] "r"(gvl), [codes] "r"(codes),
                    [dict] "r"(dict)
-                 : "v4", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15",
-                   "memory");
+                 : "v4", "v5", "v8", "v9", "v10", "v11", "v12", "v13", "v14",
+                   "v15", "memory");
 #else
     asm volatile("vsetvli zero, %[n_idx], e16, m2, ta, ma\n"
                  "vle16.v v4, (%[codes])\n"
@@ -74,99 +76,86 @@ void vrfload_vlxblk(const float *dict, const dict_code_t *codes,
   }
 }
 
-// Software-pipelined vlxblk (user proposal, 2026-08-25): break the
-// index-load -> gather RAW by preloading the NEXT chunk's indices before
-// the current gather. Every adjacent VLSU instruction pair becomes
-// independent, so the per-chunk serial term F (~12.5 cyc: the exposed
-// index round trip) should collapse toward the ~1.6-cycle back-to-back
-// handoff. Double-buffered indices v4/v6, gather destinations v8/v16.
+// Software-pipelined vlxblk, flattened (user, 2026-08-25): the hot loop
+// covers TWO chunks with fixed register roles -- no ping-pong flag, no
+// per-gather branches (the branchy first version cost ~2 cyc/chunk of
+// scalar control at 0x80000cc8..cec and LOST 12% at d32). VLSU stream per
+// body: G(v4) L->v4 G(v6) L->v6 -- every adjacent pair independent, and
+// each gather's index operand was loaded two VLSU ops earlier with a full
+// gather in between (RAW fully covered). Preloads in the last body read
+// up to 2*n_idx bytes past codes[] -- harmless TCDM reads, values unused;
+// avoiding them would need the branches this version exists to remove.
+// Requires a uniform even chunk count (all registered geometries: 16384
+// elements = 64 chunks at VLEN=1024); anything else falls back to the
+// plain kernel.
 void vrfload_vlxblk_swp(const float *dict, const dict_code_t *codes,
                         unsigned int n_codes) {
-  asm volatile("vsetblklen %0" ::"r"(DICT_D));
   size_t vlmax;
   asm volatile("vsetvli %0, zero, e32, m8, ta, ma" : "=r"(vlmax));
-  unsigned int rem = n_codes << DICT_D_LOG2;
-
-  // Prologue: indices for chunk 0 into v4.
-  size_t gvl = rem < vlmax ? rem : vlmax;
-  size_t n_idx = gvl >> DICT_D_LOG2;
-#if DICT_CODE_BYTES == 1
-#define VRF_SWP_IDX_LOAD(reg)                                                  \
-  asm volatile("vsetvli zero, %[n], e8, m1, ta, ma\n"                          \
-               "vle8.v " reg ", (%[c])\n"                                      \
-               :                                                               \
-               : [n] "r"(n_idx), [c] "r"(cptr)                                 \
-               : reg, "memory")
-#else
-#define VRF_SWP_IDX_LOAD(reg)                                                  \
-  asm volatile("vsetvli zero, %[n], e16, m1, ta, ma\n"                         \
-               "vle16.v " reg ", (%[c])\n"                                     \
-               :                                                               \
-               : [n] "r"(n_idx), [c] "r"(cptr)                                 \
-               : reg, "memory")
-#endif
-  {
-    const dict_code_t *cptr = codes;
-    VRF_SWP_IDX_LOAD("v4");
+  const unsigned int rem = n_codes << DICT_D_LOG2;
+  const unsigned int nchunks = rem / (unsigned int)vlmax;
+  if ((rem % (unsigned int)vlmax) != 0 || (nchunks & 1) || nchunks < 2) {
+    vrfload_vlxblk(dict, codes, n_codes);
+    return;
   }
+  asm volatile("vsetblklen %0" ::"r"(DICT_D));
+  const size_t n_idx = vlmax >> DICT_D_LOG2;
 
-  unsigned int pong = 0;
-  while (rem > 0) {
-    const size_t cur_gvl = gvl;
-    const dict_code_t *next_c = codes + n_idx;
-    const unsigned int next_rem = rem - (unsigned int)cur_gvl;
-
-    // Preload indices for the NEXT chunk (independent of the gather below;
-    // enters the in-order VLSU first, streams in ~1 cycle, and its drain
-    // overlaps the long gather that follows).
-    if (next_rem > 0) {
-      gvl = next_rem < vlmax ? next_rem : vlmax;
-      n_idx = gvl >> DICT_D_LOG2;
-      const dict_code_t *cptr = next_c;
-      if (pong) {
-        VRF_SWP_IDX_LOAD("v4");
-      } else {
-        VRF_SWP_IDX_LOAD("v6");
-      }
-    }
-
-    // Gather the CURRENT chunk with indices loaded one iteration ago.
+  // Prologue: idx(chunk 0) -> v4, idx(chunk 1) -> v6 (one vsetvli).
 #if DICT_CODE_BYTES == 1
-    if (pong)
-      asm volatile("vsetvli zero, %[g], e32, m8, ta, ma\n"
-                   "vlxblkei8.v v16, (%[dict]), v6\n"
-                   :
-                   : [g] "r"(cur_gvl), [dict] "r"(dict)
-                   : "v16", "v17", "v18", "v19", "v20", "v21", "v22", "v23",
-                     "memory");
-    else
-      asm volatile("vsetvli zero, %[g], e32, m8, ta, ma\n"
-                   "vlxblkei8.v v8, (%[dict]), v4\n"
-                   :
-                   : [g] "r"(cur_gvl), [dict] "r"(dict)
-                   : "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15",
-                     "memory");
+  asm volatile("vsetvli zero, %[n], e8, m2, ta, ma\n"
+               "vle8.v v4, (%[c0])\n"
+               "vle8.v v6, (%[c1])\n"
+               :
+               : [n] "r"(n_idx), [c0] "r"(codes), [c1] "r"(codes + n_idx)
+               : "v4", "v6", "memory");
 #else
-    if (pong)
-      asm volatile("vsetvli zero, %[g], e32, m8, ta, ma\n"
-                   "vlxblkei16.v v16, (%[dict]), v6\n"
-                   :
-                   : [g] "r"(cur_gvl), [dict] "r"(dict)
-                   : "v16", "v17", "v18", "v19", "v20", "v21", "v22", "v23",
-                     "memory");
-    else
-      asm volatile("vsetvli zero, %[g], e32, m8, ta, ma\n"
-                   "vlxblkei16.v v8, (%[dict]), v4\n"
-                   :
-                   : [g] "r"(cur_gvl), [dict] "r"(dict)
-                   : "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15",
-                     "memory");
+  asm volatile("vsetvli zero, %[n], e16, m2, ta, ma\n"
+               "vle16.v v4, (%[c0])\n"
+               "vle16.v v6, (%[c1])\n"
+               :
+               : [n] "r"(n_idx), [c0] "r"(codes), [c1] "r"(codes + n_idx)
+               : "v4", "v5", "v6", "v7", "memory");
 #endif
-    pong ^= 1;
-    codes = next_c;
-    rem = next_rem;
+
+  const dict_code_t *pl = codes + 2 * n_idx; // next preload pointer
+  unsigned int pairs = nchunks >> 1;
+  while (pairs-- > 0) {
+#if DICT_CODE_BYTES == 1
+    asm volatile( // gather chunk 2k (idx in v4), preload idx(2k+2) -> v4
+        "vsetvli zero, %[g], e32, m8, ta, ma\n"
+        "vlxblkei8.v v8, (%[dict]), v4\n"
+        "vsetvli zero, %[n], e8, m2, ta, ma\n"
+        "vle8.v v4, (%[c0])\n"
+        // gather chunk 2k+1 (idx in v6), preload idx(2k+3) -> v6
+        "vsetvli zero, %[g], e32, m8, ta, ma\n"
+        "vlxblkei8.v v16, (%[dict]), v6\n"
+        "vsetvli zero, %[n], e8, m2, ta, ma\n"
+        "vle8.v v6, (%[c1])\n"
+        :
+        : [g] "r"(vlmax), [n] "r"(n_idx), [dict] "r"(dict), [c0] "r"(pl),
+          [c1] "r"(pl + n_idx)
+        : "v4", "v6", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15",
+          "v16", "v17", "v18", "v19", "v20", "v21", "v22", "v23", "memory");
+#else
+    asm volatile(
+        "vsetvli zero, %[g], e32, m8, ta, ma\n"
+        "vlxblkei16.v v8, (%[dict]), v4\n"
+        "vsetvli zero, %[n], e16, m2, ta, ma\n"
+        "vle16.v v4, (%[c0])\n"
+        "vsetvli zero, %[g], e32, m8, ta, ma\n"
+        "vlxblkei16.v v16, (%[dict]), v6\n"
+        "vsetvli zero, %[n], e16, m2, ta, ma\n"
+        "vle16.v v6, (%[c1])\n"
+        :
+        : [g] "r"(vlmax), [n] "r"(n_idx), [dict] "r"(dict), [c0] "r"(pl),
+          [c1] "r"(pl + n_idx)
+        : "v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13",
+          "v14", "v15", "v16", "v17", "v18", "v19", "v20", "v21", "v22",
+          "v23", "memory");
+#endif
+    pl += 2 * n_idx;
   }
-#undef VRF_SWP_IDX_LOAD
 }
 
 void vrfload_rvv(const float *dict, const dict_code_t *codes,
@@ -232,6 +221,134 @@ void vrfload_rvv(const float *dict, const dict_code_t *codes,
 // Bounce buffer for the sub-register packing path; TCDM, allocated and
 // assigned by main.c (VRFLOAD variant 2 only).
 float *vrfload_vle_scratch;
+
+#if DICT_D >= 2 && DICT_CODE_BYTES == 1
+// Software-pipelined rvv (task-1 review, 2026-08-25): the expansion is
+// vector-ALU work (VFU) while the gather is VLSU work -- separate units --
+// so preloading the next chunk's codes and expanding them WHILE the
+// current gather streams converts (expansion + gather) into
+// max(expansion, gather). Two register-disjoint expansion chains avoid
+// WAR against the in-flight gather's index operand:
+//   chain A: codes v2, work v4..v7 / v24..v27, temp v28..v31 (shared)
+//   chain B: codes v3, work v16..v19 / v20..v23, temp v28..v31 (shared)
+//   gather dest: v8..v15 (WAW between consecutive gathers is free on the
+//   in-order single-stream VLSU).
+// Uniform even chunk count required (all registered geometries); anything
+// else falls back to the plain expansion kernel.
+#define RVVP_STEP(SRC, DST)                                                    \
+  asm volatile("vsetvli zero, %[l], e16, m2, ta, ma\n"                         \
+               "vwaddu.vx " DST ", " SRC ", zero\n"                            \
+               "vsetvli zero, %[l], e32, m4, ta, ma\n"                         \
+               "vsll.vi v28, " DST ", 16\n"                                    \
+               "vadd.vv " DST ", " DST ", v28\n"                               \
+               "vadd.vx " DST ", " DST ", %[dh]\n"                             \
+               :                                                               \
+               : [l] "r"(len), [dh] "r"(dhi)                                   \
+               : "v28", "v29", "v30", "v31", "memory")
+
+static inline void rvvp_expand_A(const dict_code_t *codes, size_t n_idx) {
+  asm volatile("vsetvli zero, %[n], e8, m1, ta, ma\n"
+               "vle8.v v2, (%[c])\n"
+               "vwaddu.vx v4, v2, zero\n"
+               "vsetvli zero, %[n], e16, m2, ta, ma\n"
+               "vsll.vi v4, v4, " DICT_BLK_SHIFT "\n"
+               :
+               : [n] "r"(n_idx), [c] "r"(codes)
+               : "v2", "v4", "v5", "memory");
+  size_t len = n_idx;
+  unsigned long delta = (DICT_D * 4) >> 1;
+  for (unsigned int t = 0; t < DICT_D_LOG2; ++t) {
+    const unsigned long dhi = delta << 16;
+    if (!(t & 1)) {
+      RVVP_STEP("v4", "v24");
+      asm volatile("" ::: "v24", "v25", "v26", "v27");
+    } else {
+      RVVP_STEP("v24", "v4");
+      asm volatile("" ::: "v4", "v5", "v6", "v7");
+    }
+    len <<= 1;
+    delta >>= 1;
+  }
+}
+
+static inline void rvvp_expand_B(const dict_code_t *codes, size_t n_idx) {
+  asm volatile("vsetvli zero, %[n], e8, m1, ta, ma\n"
+               "vle8.v v3, (%[c])\n"
+               "vwaddu.vx v16, v3, zero\n"
+               "vsetvli zero, %[n], e16, m2, ta, ma\n"
+               "vsll.vi v16, v16, " DICT_BLK_SHIFT "\n"
+               :
+               : [n] "r"(n_idx), [c] "r"(codes)
+               : "v3", "v16", "v17", "memory");
+  size_t len = n_idx;
+  unsigned long delta = (DICT_D * 4) >> 1;
+  for (unsigned int t = 0; t < DICT_D_LOG2; ++t) {
+    const unsigned long dhi = delta << 16;
+    if (!(t & 1)) {
+      RVVP_STEP("v16", "v20");
+      asm volatile("" ::: "v20", "v21", "v22", "v23");
+    } else {
+      RVVP_STEP("v20", "v16");
+      asm volatile("" ::: "v16", "v17", "v18", "v19");
+    }
+    len <<= 1;
+    delta >>= 1;
+  }
+}
+
+#if (DICT_D_LOG2 & 1)
+#define RVVP_IDX_A "v24"
+#define RVVP_IDX_B "v20"
+#else
+#define RVVP_IDX_A "v4"
+#define RVVP_IDX_B "v16"
+#endif
+
+void vrfload_rvv_swp(const float *dict, const dict_code_t *codes,
+                     unsigned int n_codes) {
+  size_t vlmax;
+  asm volatile("vsetvli %0, zero, e32, m8, ta, ma" : "=r"(vlmax));
+  const unsigned int rem = n_codes << DICT_D_LOG2;
+  const unsigned int nchunks = rem / (unsigned int)vlmax;
+  if ((rem % (unsigned int)vlmax) != 0 || (nchunks & 1) || nchunks < 2) {
+    vrfload_rvv(dict, codes, n_codes);
+    return;
+  }
+  const size_t n_idx = vlmax >> DICT_D_LOG2;
+
+  // Prologue: expand chunk 0 on chain A.
+  rvvp_expand_A(codes, n_idx);
+
+  const dict_code_t *pc = codes + n_idx; // codes of the NEXT chunk to expand
+  unsigned int pairs = nchunks >> 1;
+  while (pairs-- > 0) {
+    // Gather chunk 2k (chain A index), then expand chunk 2k+1 on chain B
+    // while the gather streams.
+    asm volatile("vsetvli zero, %[g], e32, m8, ta, ma\n"
+                 "vluxei16.v v8, (%[dict]), " RVVP_IDX_A "\n"
+                 :
+                 : [g] "r"(vlmax), [dict] "r"(dict)
+                 : "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15",
+                   "memory");
+    rvvp_expand_B(pc, n_idx);
+    pc += n_idx;
+    // Gather chunk 2k+1 (chain B), expand chunk 2k+2 on chain A.
+    asm volatile("vsetvli zero, %[g], e32, m8, ta, ma\n"
+                 "vluxei16.v v8, (%[dict]), " RVVP_IDX_B "\n"
+                 :
+                 : [g] "r"(vlmax), [dict] "r"(dict)
+                 : "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15",
+                   "memory");
+    rvvp_expand_A(pc, n_idx); // last iteration expands past the end:
+    pc += n_idx;              // harmless ALU on stale/garbage codes,
+  }                           // never gathered (loop exits).
+}
+#else
+void vrfload_rvv_swp(const float *dict, const dict_code_t *codes,
+                     unsigned int n_codes) {
+  vrfload_rvv(dict, codes, n_codes);
+}
+#endif // DICT_D >= 2 && DICT_CODE_BYTES == 1
 
 void vrfload_vle(const float *dict, const dict_code_t *codes,
                  unsigned int n_codes) {
