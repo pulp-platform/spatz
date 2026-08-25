@@ -609,6 +609,11 @@ macro(add_spatz_test_vrfload_nc name variant n_codes k d)
   target_compile_definitions(test-${SNITCH_TEST_PREFIX}${name}_N${n_codes}_K${k} PUBLIC
     VRFLOAD_NO_CHECK=1)
 endmacro()
+# Software-pipelined vlxblk demo (variant 3): index preload breaks the RAW.
+add_spatz_test_vrfload(sp-vrfload-vlxblkp-d2 3 8192 256 2)
+add_spatz_test_vrfload(sp-vrfload-vlxblkp-d8 3 2048 256 8)
+add_spatz_test_vrfload_nc(sp-vrfnc-vlxblkp-d2 3 8192 256 2)
+add_spatz_test_vrfload_nc(sp-vrfnc-vlxblkp-d8 3 2048 256 8)
 add_spatz_test_vrfload_nc(sp-vrfnc-vle-d1 2 16384 256 1)
 add_spatz_test_vrfload_nc(sp-vrfnc-rvv-d1 0 16384 256 1)
 add_spatz_test_vrfload_nc(sp-vrfnc-vle-d2 2 8192 256 2)

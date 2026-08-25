@@ -46,7 +46,11 @@
 #define DICT_VARIANT 1
 #endif
 
-#if DICT_VARIANT == 1
+#if DICT_VARIANT == 3
+#define VRFLOAD_NAME "sp vrfload vlxblk-swp"
+#define VRFLOAD_KERNEL vrfload_vlxblk_swp
+#define CHECK_KERNEL dictdecode_vlxblk
+#elif DICT_VARIANT == 1
 #define VRFLOAD_NAME "sp vrfload vlxblk"
 #define VRFLOAD_KERNEL vrfload_vlxblk
 #define CHECK_KERNEL dictdecode_vlxblk
@@ -101,6 +105,17 @@ int main() {
         (uint32_t *)snrt_l1alloc(tile_codes * DICT_D * sizeof(uint32_t));
     if (!dict_raw || !codes || !out_tile || !golden_tile)
       return -3;
+#if DICT_VARIANT == 2
+    {
+      size_t scr_els;
+      asm volatile("vsetvli %0, zero, e32, m8, ta, ma" : "=r"(scr_els));
+      void *scr_raw = snrt_l1alloc(scr_els * sizeof(float) + 128);
+      if (!scr_raw)
+        return -3;
+      vrfload_vle_scratch =
+          (float *)((((uintptr_t)scr_raw) + 127) & ~(uintptr_t)127);
+    }
+#endif
   }
 
   snrt_cluster_hw_barrier();

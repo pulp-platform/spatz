@@ -195,66 +195,101 @@ void dictdecode_vlxblk(float *out, const float *dict, const dict_code_t *codes,
   }
 }
 
+#if DICT_D >= 2
+// Layout-matched offset expansion (v2 baselines): expand n_idx codes into
+// n_idx*D consecutive e16 BYTE offsets -- record base = code << BLK_SHIFT,
+// lanes +4 B apart -- via DICT_D_LOG2 in-register widening-doubling steps
+// ({x} -> {x, x+delta} through an e32 pack). Spatz's VRF is bit-linear, so
+// cross-SEW register aliasing is byte-ordered as the spec requires (on
+// Ara's lane-striped VRF this trick is INVALID and a vrgather construction
+// is used instead). Result: e16 offsets in v4..v7 when DICT_D_LOG2 is
+// even, v24..v27 when odd. Clobbers v2..v7, v24..v31. Requires
+// K*D*4 <= 64 KiB (16-bit offsets, checked in main.c).
+static inline void dict_expand_offsets_e16(const dict_code_t *codes,
+                                           size_t n_idx) {
+#if DICT_CODE_BYTES == 1
+  asm volatile("vsetvli zero, %[n], e8, m1, ta, ma\n"
+               "vle8.v v2, (%[codes])\n"
+               "vwaddu.vx v4, v2, zero\n"
+               "vsetvli zero, %[n], e16, m2, ta, ma\n"
+               "vsll.vi v4, v4, " DICT_BLK_SHIFT "\n"
+               :
+               : [n] "r"(n_idx), [codes] "r"(codes)
+               : "v2", "v3", "v4", "v5", "memory");
+#else
+  asm volatile("vsetvli zero, %[n], e16, m2, ta, ma\n"
+               "vle16.v v4, (%[codes])\n"
+               "vsll.vi v4, v4, " DICT_BLK_SHIFT "\n"
+               :
+               : [n] "r"(n_idx), [codes] "r"(codes)
+               : "v4", "v5", "memory");
+#endif
+  size_t len = n_idx;
+  unsigned long delta = (DICT_D * 4) >> 1;
+  for (unsigned int t = 0; t < DICT_D_LOG2; ++t) {
+    const unsigned long dhi = delta << 16;
+    if (!(t & 1))
+      asm volatile("vsetvli zero, %[l], e16, m2, ta, ma\n"
+                   "vwaddu.vx v24, v4, zero\n"
+                   "vsetvli zero, %[l], e32, m4, ta, ma\n"
+                   "vsll.vi v28, v24, 16\n"
+                   "vadd.vv v24, v24, v28\n"
+                   "vadd.vx v24, v24, %[dh]\n"
+                   :
+                   : [l] "r"(len), [dh] "r"(dhi)
+                   : "v24", "v25", "v26", "v27", "v28", "v29", "v30", "v31");
+    else
+      asm volatile("vsetvli zero, %[l], e16, m2, ta, ma\n"
+                   "vwaddu.vx v4, v24, zero\n"
+                   "vsetvli zero, %[l], e32, m4, ta, ma\n"
+                   "vsll.vi v28, v4, 16\n"
+                   "vadd.vv v4, v4, v28\n"
+                   "vadd.vx v4, v4, %[dh]\n"
+                   :
+                   : [l] "r"(len), [dh] "r"(dhi)
+                   : "v4", "v5", "v6", "v7", "v28", "v29", "v30", "v31");
+    len <<= 1;
+    delta >>= 1;
+  }
+}
+#if (DICT_D_LOG2 & 1)
+#define DICT_EXPANDED_IDX "v24"
+#else
+#define DICT_EXPANDED_IDX "v4"
+#endif
+#endif // DICT_D >= 2
+
 void dictdecode_rvv(float *out, const float *dict, const dict_code_t *codes,
                     unsigned int n_codes) {
-  // Byte stride between consecutive records in the output column.
-  const unsigned int stride_b = DICT_D * sizeof(float); // D*4 B
-
+  // Layout-matched element-gather twin (v2): expand codes to per-element
+  // offsets, gather PACKED records with one vluxei16, store with one
+  // unit-stride vse32. Mirrors vrfload_rvv so the golden check verifies
+  // the expansion arithmetic bit-exactly. Replaces the per-column
+  // decomposition (native vluxseg semantics: deinterleaved SoA image +
+  // strided stores).
+#if DICT_D == 1
   while (n_codes > 0) {
-    // Chunk size = codes per gather column (VLMAX = 128 at e32/m8).
     size_t c;
     asm volatile("vsetvli %[c], %[n], e32, m8, ta, ma"
                  : [c] "=r"(c)
                  : [n] "r"(n_codes));
-
-    // Build 16-bit byte offsets: offs[i] = code[i] * D*4. Requires
-    // K * D * 4 <= 64 KiB (checked at compile time in main.c); at 128 B
-    // slots this caps K at 512, beyond which the construction would need
-    // e32 offsets (double the offset-build work and index traffic).
 #if DICT_CODE_BYTES == 1
     asm volatile("vsetvli zero, %[c], e8, m2, ta, ma\n"
                  "vle8.v v2, (%[codes])\n"
-                 "vwaddu.vx v4, v2, zero\n" // zero-extend u8 -> u16
+                 "vwaddu.vx v4, v2, zero\n"
                  "vsetvli zero, %[c], e16, m4, ta, ma\n"
-                 "vsll.vi v4, v4, " DICT_BLK_SHIFT "\n" // * D*4 B per entry
+                 "vsll.vi v4, v4, " DICT_BLK_SHIFT "\n"
                  :
                  : [c] "r"(c), [codes] "r"(codes)
                  : "v2", "v3", "v4", "v5", "v6", "v7", "memory");
 #else
     asm volatile("vsetvli zero, %[c], e16, m4, ta, ma\n"
                  "vle16.v v4, (%[codes])\n"
-                 "vsll.vi v4, v4, " DICT_BLK_SHIFT "\n" // * D*4 B per entry
+                 "vsll.vi v4, v4, " DICT_BLK_SHIFT "\n"
                  :
                  : [c] "r"(c), [codes] "r"(codes)
                  : "v4", "v5", "v6", "v7", "memory");
 #endif
-
-    // Gather one record lane per vluxei16 (the base pointer absorbs the
-    // lane offset), then interleave via strided stores. Only three m8
-    // register groups exist beside the offsets; reusing v8 for the last
-    // lane is free because the single VLSU executes these in order anyway.
-#if DICT_D == 4
-    asm volatile("vsetvli zero, %[c], e32, m8, ta, ma\n"
-                 "vluxei16.v v8,  (%[d0]), v4\n"
-                 "vluxei16.v v16, (%[d1]), v4\n"
-                 "vluxei16.v v24, (%[d2]), v4\n"
-                 "vsse32.v v8,  (%[o0]), %[str]\n"
-                 "vsse32.v v16, (%[o1]), %[str]\n"
-                 "vsse32.v v24, (%[o2]), %[str]\n"
-                 "vluxei16.v v8,  (%[d3]), v4\n"
-                 "vsse32.v v8,  (%[o3]), %[str]\n"
-                 :
-                 : [c] "r"(c), [d0] "r"(dict), [d1] "r"(dict + 1),
-                   [d2] "r"(dict + 2), [d3] "r"(dict + 3), [o0] "r"(out),
-                   [o1] "r"(out + 1), [o2] "r"(out + 2), [o3] "r"(out + 3),
-                   [str] "r"(stride_b)
-                 : "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15",
-                   "v16", "v17", "v18", "v19", "v20", "v21", "v22", "v23",
-                   "v24", "v25", "v26", "v27", "v28", "v29", "v30", "v31",
-                   "memory");
-#elif DICT_D == 1
-    // One element per code: a single gather lane, contiguous output.
-    (void)stride_b;
     asm volatile("vsetvli zero, %[c], e32, m8, ta, ma\n"
                  "vluxei16.v v8, (%[d0]), v4\n"
                  "vse32.v v8, (%[o0])\n"
@@ -262,53 +297,32 @@ void dictdecode_rvv(float *out, const float *dict, const dict_code_t *codes,
                  : [c] "r"(c), [d0] "r"(dict), [o0] "r"(out)
                  : "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15",
                    "memory");
-#elif DICT_D == 2
-    // D = 2: only two record lanes exist; a 4-lane block would strided-
-    // store into neighboring records and corrupt them.
-    asm volatile("vsetvli zero, %[c], e32, m8, ta, ma\n"
-                 "vluxei16.v v8,  (%[d0]), v4\n"
-                 "vluxei16.v v16, (%[d1]), v4\n"
-                 "vsse32.v v8,  (%[o0]), %[str]\n"
-                 "vsse32.v v16, (%[o1]), %[str]\n"
-                 :
-                 : [c] "r"(c), [d0] "r"(dict), [d1] "r"(dict + 1),
-                   [o0] "r"(out), [o1] "r"(out + 1), [str] "r"(stride_b)
-                 : "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15",
-                   "v16", "v17", "v18", "v19", "v20", "v21", "v22", "v23",
-                   "memory");
-#else
-    // D > 4: same 4-lane block, looped over the D record lanes. The
-    // per-iteration vsetvli/pointer arithmetic is noise next to D gathers
-    // of c elements each.
-    for (unsigned int j = 0; j < DICT_D; j += 4) {
-      asm volatile("vsetvli zero, %[c], e32, m8, ta, ma\n"
-                   "vluxei16.v v8,  (%[d0]), v4\n"
-                   "vluxei16.v v16, (%[d1]), v4\n"
-                   "vluxei16.v v24, (%[d2]), v4\n"
-                   "vsse32.v v8,  (%[o0]), %[str]\n"
-                   "vsse32.v v16, (%[o1]), %[str]\n"
-                   "vsse32.v v24, (%[o2]), %[str]\n"
-                   "vluxei16.v v8,  (%[d3]), v4\n"
-                   "vsse32.v v8,  (%[o3]), %[str]\n"
-                   :
-                   : [c] "r"(c), [d0] "r"(dict + j), [d1] "r"(dict + j + 1),
-                     [d2] "r"(dict + j + 2), [d3] "r"(dict + j + 3),
-                     [o0] "r"(out + j), [o1] "r"(out + j + 1),
-                     [o2] "r"(out + j + 2), [o3] "r"(out + j + 3),
-                     [str] "r"(stride_b)
-                   : "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15",
-                     "v16", "v17", "v18", "v19", "v20", "v21", "v22", "v23",
-                     "v24", "v25", "v26", "v27", "v28", "v29", "v30", "v31",
-                     "memory");
-    }
-#endif
-
     codes += c;
-    out += c * DICT_D;
+    out += c;
     n_codes -= c;
   }
+#else
+  unsigned int rem = n_codes << DICT_D_LOG2;
+  while (rem > 0) {
+    size_t gvl;
+    asm volatile("vsetvli %[g], %[r], e32, m8, ta, ma"
+                 : [g] "=r"(gvl)
+                 : [r] "r"(rem));
+    const size_t n_idx = gvl >> DICT_D_LOG2;
+    dict_expand_offsets_e16(codes, n_idx);
+    asm volatile("vsetvli zero, %[g], e32, m8, ta, ma\n"
+                 "vluxei16.v v8, (%[dict]), " DICT_EXPANDED_IDX "\n"
+                 "vse32.v v8, (%[o0])\n"
+                 :
+                 : [g] "r"(gvl), [dict] "r"(dict), [o0] "r"(out)
+                 : "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15",
+                   "memory");
+    codes += n_idx;
+    out += gvl;
+    rem -= gvl;
+  }
+#endif
 }
-
 void dictdecode_vle(float *out, const float *dict, const dict_code_t *codes,
                     unsigned int n_codes) {
   // The plain unit-stride alternative: per code, scalar-load the code,
