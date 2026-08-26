@@ -305,7 +305,7 @@ module testharness (
 
   localparam int unsigned L2BankWidth    = 512;
   localparam int unsigned L2BankBeWidth  = L2BankWidth / 8;
-  localparam              DramType = "DDR4";
+  localparam              DramType = "HBM2";
 
   typedef struct packed {
     int                           dram_ctrl_id;

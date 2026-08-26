@@ -96,6 +96,17 @@ macro(add_spatz_test_spmm name file fmt M N P_W)
     SNRT_NFPU_PER_CORE=${SNRT_NFPU_PER_CORE})
 endmacro()
 
+# Parametrized indexed-gather variant: (ROWS, DIM, G). Selects data header
+# `data/data_gather_R<ROWS>_D<DIM>_G<G>.h`. Target name suffixed with the shape.
+macro(add_spatz_test_gather name file R D G)
+  set(target_name ${name}_R${R}_D${D}_G${G})
+  add_snitch_test(${target_name} ${file})
+  target_link_libraries(test-${SNITCH_TEST_PREFIX}${target_name} benchmark ${SNITCH_RUNTIME})
+  target_compile_definitions(test-${SNITCH_TEST_PREFIX}${target_name} PUBLIC
+    DATAHEADER="data/data_gather_R${R}_D${D}_G${G}.h"
+    SNRT_NFPU_PER_CORE=${SNRT_NFPU_PER_CORE})
+endmacro()
+
 # Benchmark library
 add_library(benchmark benchmark/benchmark.c)
 
@@ -193,3 +204,10 @@ if(SPATZ_CLUSTER_VENTAGLIO)
   add_spatz_test_spmm(sp-SpMM sp-SpMM/main.c 1to4 4 8 64)
   add_spatz_test_spmm(sp-SpMM sp-SpMM/main.c 2to4 4 8 64)
 endif()
+
+# Indexed gather (KV-cache-like): baseline core-driven scattered 1D DMAs.
+add_spatz_test_gather(gather gather/main.c 2048 128 128)
+# Optimized variant: inlined offload + hoisted invariants (same data header).
+add_spatz_test_gather(gather-opt gather/main.c 2048 128 128)
+target_compile_definitions(test-${SNITCH_TEST_PREFIX}gather-opt_R2048_D128_G128
+  PUBLIC GATHER_OPT)

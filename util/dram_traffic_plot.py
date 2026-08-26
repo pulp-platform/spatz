@@ -97,6 +97,19 @@ def parse_dram_sync(transcript_path):
     return None
 
 
+def parse_peak_gbps(transcript_path):
+    """Extract the DRAM peak bandwidth (GB/s) from the DRAMSys 'MAX BW' banner
+    line, so the peak/y-axis auto-adapts to the memory (DDR4 19.2, HBM2E 57.6,
+    ...). None if not present."""
+    pat = re.compile(r"MAX BW:\s*[\d.]+\s*Gb/s\s*\|\s*([\d.]+)\s*GB/s")
+    with open(transcript_path) as f:
+        for line in f:
+            m = pat.search(line)
+            if m:
+                return float(m.group(1))
+    return None
+
+
 def parse_dma_issues(transcript_path):
     """Return [(time_ns, id, src, dst, bytes)] from [DMA] issue lines emitted by
     the DMA frontend when the core launches a transfer. src/dst are absolute
@@ -283,14 +296,16 @@ def plot_run(axes, tdb_path, phases, dma_issues, phase_names, args, code_ranges,
     ax_act.set_ylabel("ACT / us")
 
     # --- bank occupancy strip: accesses per (bank, window) ---
+    # Bank count is data-driven (DDR4 = 16, HBM2E = 32, ...), min 16.
+    nbanks = max(int(bank.max()) + 1, NUM_BANKS) if len(bank) else NUM_BANKS
     heat, _, _ = np.histogram2d(bank, (t0 + t1) / 2.0,
-                                bins=[np.arange(NUM_BANKS + 1) - 0.5, edges])
+                                bins=[np.arange(nbanks + 1) - 0.5, edges])
     im = ax_bank.imshow(heat, aspect="auto", origin="lower", cmap="magma",
-                        extent=[lo, hi, -0.5, NUM_BANKS - 0.5],
+                        extent=[lo, hi, -0.5, nbanks - 0.5],
                         interpolation="nearest")
     ax_bank.set_ylabel("bank")
     ax_bank.set_xlabel("time (ns)")
-    ax_bank.set_yticks(range(0, NUM_BANKS, 4))
+    ax_bank.set_yticks(range(0, nbanks, 4))
     cbar = ax_bank.figure.colorbar(im, ax=ax_bank, pad=0.01,
                                    fraction=0.03, aspect=10)
     cbar.set_label("accesses / window", fontsize=7)
@@ -360,7 +375,9 @@ def main():
                     help="start of the plotted time window in ns (default: first burst)")
     ap.add_argument("--tend", type=float, default=None,
                     help="end of the plotted time window in ns (default: last burst)")
-    ap.add_argument("--peak-gbps", type=float, default=DEFAULT_PEAK_GBPS)
+    ap.add_argument("--peak-gbps", type=float, default=None,
+                    help="DRAM peak bandwidth GB/s (default: auto from the "
+                    "transcript 'MAX BW' banner, else 19.21)")
     ap.add_argument("--window-ns", type=float, default=None,
                     help="time-bin width (default: span/600)")
     ap.add_argument("--style", choices=("line", "area"), default="area",
@@ -385,6 +402,11 @@ def main():
             print("warning: no [DRAMSYNC] line; DRAM traffic and markers may be "
                   "misaligned (rebuild TB or pass --dram-time-offset)",
                   file=sys.stderr)
+    # Peak bandwidth: explicit flag, else auto from the transcript banner, else default.
+    if args.peak_gbps is None:
+        args.peak_gbps = (parse_peak_gbps(args.transcript) if args.transcript
+                          else None) or DEFAULT_PEAK_GBPS
+
     code_ranges = []
     if args.elf:
         try:

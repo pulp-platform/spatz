@@ -243,7 +243,9 @@ dram-clean:
 # together with the captured transcript and DRAMSys trace snapshot.
 PLOT_DIR  ?= plots
 PLOT_TOOL := $(ROOT)/util/dram_traffic_plot.py
-TRACE_TDB := DRAMSysRecordable0_ddr4_ddr4_ch0.tdb
+# DRAMSys names the trace after the memory (DDR4 -> ..._ddr4_..., HBM2E ->
+# ..._hbm2e_...); pick the freshest one written by the run just done.
+TRACE_TDB  = $$(ls -t DRAMSysRecordable0_*.tdb 2>/dev/null | head -1)
 TEST      ?= test-spatzBenchmarks-dp-faxpy_M1024
 TEST_BIN   = $(shell find sw/build -type f -name '$(TEST)' 2>/dev/null | head -1)
 # Optional time window (ns) for the plot; full first->last-burst span if unset.
