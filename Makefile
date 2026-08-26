@@ -10,7 +10,7 @@
 include util/Makefrag
 
 # Bender version
-BENDER_VERSION = 0.29.1
+BENDER_VERSION = 0.32.1
 
 # Standard opcodes
 OPCODES := "rv_i" "rv64_i" "rv_m" "rv64_m" "rv_a" "rv_f" "rv_d" \

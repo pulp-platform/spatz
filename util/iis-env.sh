@@ -20,6 +20,8 @@ export CXX=g++-11.2.0
 
 export CMAKE=/usr/bin/cmake
 
+export BENDER=/usr/local/bin/bender
+
 python3 -m venv spatz_env
 source spatz_env/bin/activate
 python3 -m pip install --quiet --upgrade pip
