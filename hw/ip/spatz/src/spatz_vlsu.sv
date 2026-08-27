@@ -1682,8 +1682,18 @@ module spatz_vlsu
             vrf_req_d.wbe[ELENB*burst_lane_idx +: ELENB] = burst_lane_wbe;
           end
         end else begin
-          // Only commit load data for ports that actually have pending load beats.
-          vrf_req_valid_d = &(rob_rvalid | ~mem_pending) && |mem_pending;
+          // Gate on the commit-side element counters, NOT on mem_pending: mem_pending
+          // counts *issued* requests, so a port whose last beats have not been issued yet
+          // -- because the request side is stalled behind interconnect backpressure --
+          // reads 0 and was treated as "owes no data". The writeback then fired early with
+          // garbage in that port's lanes, commit_counter advanced for every FU, the
+          // instruction committed while responses were still in flight, and the late
+          // responses were dropped in the store branch (rob_push unreachable), so the
+          // leaked ROB allocations kept &rob_empty low and the FSM wedged in RunningLoad.
+          // commit_finished_q is the authoritative per-port "delivered its quota", and it
+          // is derived from the COMMITTING instruction's counters, so it stays correct
+          // when a younger load is already issuing under dual_adv.
+          vrf_req_valid_d = &(rob_rvalid | commit_finished_q) && !(&commit_finished_q);
 
           for (int unsigned port = 0; port < NrMemPorts; port++) begin
             automatic logic [63:0] data = rob_rdata[port];
