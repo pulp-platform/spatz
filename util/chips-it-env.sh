@@ -26,10 +26,14 @@ VLT_VERSION="5.050"
 echo "Load Verilator $VLT_VERSION environment for Chips-IT"
 GCC_TOOLSET=/opt/rh/gcc-toolset-12
 if [ -f "$GCC_TOOLSET/enable" ]; then
+    echo "Load GCC toolset 12 from $GCC_TOOLSET"
     source "$GCC_TOOLSET/enable"
+else
+    echo "WARNING: $GCC_TOOLSET/enable not found -- using system g++"
 fi
-module load verilator/$VLT_VERSION
-export VERILATOR_INSTALL_DIR=/tools/verilator/${VLT_VERSION}
+echo "  g++      : $(g++ --version | head -1)"
+echo "  libatomic: $(ls /usr/lib64/libatomic.so.1 2>/dev/null || echo MISSING)"
+echo "  LD_LIBRARY_PATH=$LD_LIBRARY_PATH"
 
 # riscv-opcodes requires Python >= 3.9
 export PYTHON=python3.12
