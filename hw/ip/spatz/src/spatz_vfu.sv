@@ -145,7 +145,7 @@ module spatz_vfu
   //
   // Two independent corrections meet on this line.
   //
-  // WIDTH SOURCE (2026-08-19): it must come from result_tag, not from spatz_req. The selector
+  // WIDTH SOURCE: it must come from result_tag, not from spatz_req. The selector
   // below (result_tag.wb) belongs to the instruction whose result is at the FU output, but
   // spatz_req is the LIVE incoming request. spatz_ipu has Pipeline=1, so those are different
   // instructions whenever the pipe is non-empty. Snitch has no multiplier (snitch.sv:1043-1046
@@ -162,9 +162,10 @@ module spatz_vfu
   // every non-EW_32 width as EW_64 and therefore expects 8'hff for an e8/e16 scalar (vmv.x.s,
   // fcvt.h.s), which the IPU never produces -- deadlocking the VFU from the other direction.
   //
-  // Applying only one of the two leaves the other hazard live: the source fix alone still
-  // mis-sizes an e8/e16 scalar, and the predicate fix alone still reads the wrong instruction's
-  // width when the pipe is non-empty and the live request is EW_64.
+  // Applying only one of the two leaves the other hazard live: the source alone still mis-sizes
+  // an e8/e16 scalar, and the predicate alone still reads the wrong instruction's width when the
+  // pipe is non-empty. The two were found independently -- the source fix also lands on
+  // scalar_result and the reduction predicate below, which the one-line form does not reach.
   logic [N_FU*ELENB-1:0] pending_results;
   assign pending_results =
       result_tag.wb ? (result_tag.vsew == EW_64 ? 8'hff : 4'hf) : '1;
