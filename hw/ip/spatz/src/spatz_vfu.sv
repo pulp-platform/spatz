@@ -113,6 +113,12 @@ module spatz_vfu
   vfu_tag_t ipu_result_tag, fpu_result_tag, result_tag;
   vfu_tag_t input_tag;
 
+  // When a short tree reduction retires from the intra-lane buffer, the FU
+  // result bus no longer carries the reduction's tag; the buffered tag is the
+  // authoritative retire metadata in that case. Driven below the reduction
+  // registers it references.
+  vfu_tag_t retire_tag;
+
   assign result_tag = state_q == VFU_RunningIPU ? ipu_result_tag : fpu_result_tag;
 
   // Number of words advanced by vstart
@@ -124,6 +130,9 @@ module spatz_vfu
 
   // Do we have the reduction operand?
   logic reduction_operand_ready_d, reduction_operand_ready_q;
+
+  // Tree-path operand staging handshake (driven in the reduction section).
+  logic tree_accepted, tree_stage_free, reduction_latch;
 
   // Are the VFU operands ready?
   logic op1_is_ready, op2_is_ready, op3_is_ready, operands_ready;
@@ -199,6 +208,9 @@ module spatz_vfu
     Reduction_Wait,
     Reduction_Init,
     Reduction_Reduce,
+    Reduction_IntraLane,
+    Reduction_InterLane,
+    Reduction_SIMD,
     Reduction_WriteBack
    } reduction_state_t;
    reduction_state_t reduction_state_d, reduction_state_q;
@@ -309,9 +321,9 @@ module spatz_vfu
         (reduction_state_q inside {Reduction_NormalExecution, Reduction_Wait} ||
          !result_tag.reduction)) ||
         reduction_done) begin
-      vfu_rsp_o.id      = result_tag.id;
-      vfu_rsp_o.rd      = result_tag.vd_addr[GPRWidth-1:0];
-      vfu_rsp_o.wb      = result_tag.wb;
+      vfu_rsp_o.id      = retire_tag.id;
+      vfu_rsp_o.rd      = retire_tag.vd_addr[GPRWidth-1:0];
+      vfu_rsp_o.wb      = retire_tag.wb;
       vfu_rsp_o.result  = scalar_result;
       vfu_rsp_valid_o   = 1'b1;
     end
@@ -321,9 +333,9 @@ module spatz_vfu
   // Operands //
   //////////////
 
-  // Reduction registers
-  elen_t [1:0] reduction_q, reduction_d;
-  `FFL(reduction_q, reduction_d, reduction_operand_ready_d, '0)
+  // Reduction registers. The tree path stages full VRF words.
+  vrf_data_t [1:0] reduction_q, reduction_d;
+  `FFL(reduction_q, reduction_d, reduction_latch, '0)
 
   // IPU results
   logic [N_FU*ELEN-1:0]  ipu_result;
@@ -387,14 +399,120 @@ module spatz_vfu
   // Do we need to request reduction operands?
   logic [1:0] reduction_operand_request;
 
+  // Tree-reduction bookkeeping (semantics ported from upstream spatz_vpu
+  // 1705213d, without its v0.t masking machinery).
+  vrf_data_t reduction_vector_data, reduction_scalar_data;
+  elen_t reduction_neutral_value;
+  logic [N_FU*ELEN-1:0] mask;
+  vrf_data_t result_buf_d, result_buf_q;
+  `FF(result_buf_q, result_buf_d, '0)
+  vfu_tag_t result_buf_tag_d, result_buf_tag_q;
+  `FF(result_buf_tag_q, result_buf_tag_d, '0)
+  logic result_buf_valid_d, result_buf_valid_q;
+  `FF(result_buf_valid_q, result_buf_valid_d, 1'b0)
+  logic [idx_width(ELEN*N_FU)-1:0] shift_amnt_d, shift_amnt_q;
+  `FF(shift_amnt_q, shift_amnt_d, ELEN)
+  logic [5:0] lat_count_d, lat_count_q;
+  `FF(lat_count_q, lat_count_d, '0)
+  logic [idx_width(N_FU)-1:0] num_inter_lane_iterations_d, num_inter_lane_iterations_q;
+  `FF(num_inter_lane_iterations_q, num_inter_lane_iterations_d, '0)
+
+  assign retire_tag = (reduction_state_q == Reduction_WriteBack && result_buf_valid_q) ? result_buf_tag_q : result_tag;
+
+  // Tree-path operand staging handshake. A VRF read can stall mid-stream (the
+  // scoreboard chains against an in-flight producer), and the FU output cannot
+  // backpressure indefinitely, so the word stream and the result fold must be
+  // decoupled: operands are held until the FU accepts them, and a result that
+  // cannot be folded this cycle is drained into result_buf instead of being
+  // dropped or mis-paired.
+  assign tree_accepted   = reduction_operand_ready_q && operands_ready && (&in_ready) && !stall;
+  assign tree_stage_free = !reduction_operand_ready_q || tree_accepted;
+
+  // Last VRF word the tree has to read for this reduction
+  vlen_t fill_cnt;
+  assign fill_cnt = (spatz_req.vl == '0) ? '0 :
+                    ((spatz_req.vl - 1) >> (MAXEW - spatz_req.vtype.vsew)) >>
+                    (is_fpu_insn ? $clog2(N_FPU) : $clog2(N_IPU));
+
+  // FPU pipeline latency of the running element format (intra-lane drain)
+  fp_format_e el_type;
+  assign el_type = (spatz_req.vtype.vsew) == EW_64 ? fpnew_pkg::FP64 :
+                   (spatz_req.vtype.vsew) == EW_32 ? fpnew_pkg::FP32 :
+                   (spatz_req.vtype.vsew) == EW_16 ? (spatz_req.fm.src ? fpnew_pkg::FP16ALT : fpnew_pkg::FP16) :
+                   (spatz_req.vtype.vsew) == EW_8  ? (spatz_req.fm.src ? fpnew_pkg::FP8ALT : fpnew_pkg::FP8) : fpnew_pkg::FP64;
+  logic [5:0] FPUlatency;
+  assign FPUlatency = FPUImplementation.PipeRegs[ADDMUL][el_type];
+
+  always_comb begin: reduction_neutral_value_selection
+    reduction_neutral_value = '0;
+    if (spatz_req.op_arith.is_reduction == 1'b1) begin
+      unique case (spatz_req.op)
+        VADD: // VREDSUM_VS, VFREDUSUM_VS, VFREDOSUM_VS
+          reduction_neutral_value = '0;
+        VAND: // VREDAND_VS
+          reduction_neutral_value = '1;
+        VOR, // VREDOR_VS
+        VXOR: // VREDXOR_VS
+          reduction_neutral_value = '0;
+        VMINU: // VREDMINU_VS
+          reduction_neutral_value = '1;
+        VMIN: // VREDMIN_VS
+          unique case (spatz_req.vtype.vsew)
+            EW_8:  reduction_neutral_value = {1'b0, 7'h7f};
+            EW_16: reduction_neutral_value = {1'b0, 15'h7fff};
+            EW_32: reduction_neutral_value = {1'b0, 31'h7fffffff};
+            default:
+              if (MAXEW == EW_64) reduction_neutral_value = {1'b0, 63'h7fffffffffffffff};
+          endcase
+        VMAXU: // VREDMAXU_VS
+          reduction_neutral_value = '0;
+        VMAX: // VREDMAX_VS
+          unique case (spatz_req.vtype.vsew)
+            EW_8:  reduction_neutral_value = {1'b1, 7'h0};
+            EW_16: reduction_neutral_value = {1'b1, 15'h0};
+            EW_32: reduction_neutral_value = {1'b1, 31'h0};
+            default:
+              if (MAXEW == EW_64) reduction_neutral_value = {1'b1, 63'h0};
+          endcase
+        VFMINMAX: begin
+          // Reductions are never narrowing/widening, so the running format is
+          // always the plain vsew one.
+          if (spatz_req.rm == fpnew_pkg::RNE) begin // VFREDMIN_VS: +infinity
+            unique case (spatz_req.vtype.vsew)
+              EW_16:   reduction_neutral_value = {1'b0, 5'h1f, 10'h0};
+              EW_32:   reduction_neutral_value = {1'b0, 8'hff, 23'h0};
+              default: if (MAXEW == EW_64) reduction_neutral_value = {1'b0, 11'h7ff, 52'h0};
+            endcase
+          end
+          if (spatz_req.rm == fpnew_pkg::RTZ) begin // VFREDMAX_VS: -infinity
+            unique case (spatz_req.vtype.vsew)
+              EW_16:   reduction_neutral_value = {1'b1, 5'h1f, 10'h0};
+              EW_32:   reduction_neutral_value = {1'b1, 8'hff, 23'h0};
+              default: if (MAXEW == EW_64) reduction_neutral_value = {1'b1, 11'h7ff, 52'h0};
+            endcase
+          end
+        end
+        default: reduction_neutral_value = '0;
+      endcase
+    end
+  end
+
   always_comb begin: proc_reduction
     // Maintain state
     reduction_state_d   = reduction_state_q;
     reduction_pointer_d = reduction_pointer_q;
+    lat_count_d         = lat_count_q;
+    num_inter_lane_iterations_d = num_inter_lane_iterations_q;
+    shift_amnt_d        = shift_amnt_q;
+    result_buf_d        = result_buf_q;
+    result_buf_valid_d  = result_buf_valid_q;
+    result_buf_tag_d    = result_buf_tag_q;
 
     // No operands
     reduction_d               = reduction_q;
-    reduction_operand_ready_d = 1'b0;
+    reduction_latch           = 1'b0;
+    // Hold a staged operand until the FU accepts it.
+    reduction_operand_ready_d = reduction_operand_ready_q && !tree_accepted;
 
     // Did we issue a word to the FUs?
     word_issued = 1'b0;
@@ -408,6 +526,26 @@ module spatz_vfu
     // Only request when initializing the reduction register
     reduction_operand_request[0] = (reduction_state_q == Reduction_Init) || !spatz_req.op_arith.is_reduction;
     reduction_operand_request[1] = (reduction_state_q inside {Reduction_Init, Reduction_Reduce}) || !spatz_req.op_arith.is_reduction;
+
+    // Tail fill for the tree path: only the valid elements of the last word
+    // keep their data; every other (sub-)lane sees the neutral element.
+    mask = '1;
+    if (spatz_req.vl == '0) begin
+      mask = '0;
+    end else if (reduction_pointer_q == fill_cnt) begin
+      automatic logic [$clog2(VRFWordWidth)-1:0] width;
+      width = (spatz_req.vl << spatz_req.vtype.vsew << 3); // valid bits of the vector
+      mask  = (width == 0) ? '1 : (1 << width) - 1;
+    end
+
+    // Vector operand of the tree path, with inactive (sub-)lanes neutralized
+    reduction_scalar_data = '0;
+    unique case (spatz_req.vtype.vsew)
+      EW_8:    reduction_vector_data = (vrf_rdata_i[1] & mask) | ({(N_FU*ELENB){reduction_neutral_value[7:0]}} & ~mask);
+      EW_16:   reduction_vector_data = (vrf_rdata_i[1] & mask) | ({(N_FU*(ELEN/16)){reduction_neutral_value[15:0]}} & ~mask);
+      EW_32:   reduction_vector_data = (vrf_rdata_i[1] & mask) | ({N_FU{reduction_neutral_value[31:0]}} & ~mask);
+      default: reduction_vector_data = (MAXEW == EW_64) ? (vrf_rdata_i[1] & mask) | ({(N_FU/2){reduction_neutral_value}} & ~mask) : '0;
+    endcase
 
     unique case (reduction_state_q)
       Reduction_NormalExecution: begin
@@ -428,112 +566,225 @@ module spatz_vfu
       end
 
       Reduction_Init: begin
-        // Initialize the reduction
-        // verilator lint_off SELRANGE
-        unique case (spatz_req.vtype.vsew)
-          EW_8 : begin
-            reduction_d[0] = $unsigned(vrf_rdata_i[0][7:0]);
-            reduction_d[1] = $unsigned(vrf_rdata_i[1][8*reduction_pointer_q[idx_width(N_FU*ELENB)-1:0] +: 8]);
-          end
-          EW_16: begin
-            reduction_d[0] = $unsigned(vrf_rdata_i[0][15:0]);
-            reduction_d[1] = $unsigned(vrf_rdata_i[1][16*reduction_pointer_q[idx_width(N_FU*ELENB)-2:0] +: 16]);
-          end
-          EW_32: begin
-            reduction_d[0] = $unsigned(vrf_rdata_i[0][31:0]);
-            reduction_d[1] = $unsigned(vrf_rdata_i[1][32*reduction_pointer_q[idx_width(N_FU*ELENB)-3:0] +: 32]);
-          end
-          default: begin
-          `ifdef MEMPOOL_SPATZ
-            reduction_d = '0;
-          `else
-            if (MAXEW == EW_64) begin
-              reduction_d[0] = $unsigned(vrf_rdata_i[0][63:0]);
-              reduction_d[1] = $unsigned(vrf_rdata_i[1][64*reduction_pointer_q[idx_width(N_FU*ELENB)-4:0] +: 64]);
-            end
-          `endif
-          end
-        endcase
-        // verilator lint_on SELRANGE
+        // Initialize the tree reduction with the scalar accumulator. The
+        // zero-identity operations (add/or/xor) feed it through the lowest
+        // (sub-)lane only; operations with a non-zero neutral element
+        // replicate it into every (sub-)lane so the fold stays exact.
+        if (spatz_req.op inside {VFADD, VADD, VXOR}) begin
+          unique case (spatz_req.vtype.vsew)
+            EW_8:    reduction_scalar_data = {{(N_FU*ELEN-8){1'b0}}, vrf_rdata_i[0][7:0]};
+            EW_16:   reduction_scalar_data = {{(N_FU*ELEN-16){1'b0}}, vrf_rdata_i[0][15:0]};
+            EW_32:   reduction_scalar_data = {{(N_FU*ELEN-32){1'b0}}, vrf_rdata_i[0][31:0]};
+            default: if (MAXEW == EW_64) reduction_scalar_data = {{(N_FU*ELEN-64){1'b0}}, vrf_rdata_i[0][63:0]};
+          endcase
+        end else if (spatz_req.op inside {VFMINMAX, VAND, VOR, VMAX, VMAXU, VMIN, VMINU}) begin
+          unique case (spatz_req.vtype.vsew)
+            EW_8:    reduction_scalar_data = {(N_FU*ELENB){vrf_rdata_i[0][7:0]}};
+            EW_16:   reduction_scalar_data = {(N_FU*ELENB/2){vrf_rdata_i[0][15:0]}};
+            EW_32:   reduction_scalar_data = {N_FU{vrf_rdata_i[0][31:0]}};
+            default: if (MAXEW == EW_64) reduction_scalar_data = {(N_FU/2){vrf_rdata_i[0][63:0]}};
+          endcase
+        end
 
-        if (vrf_rvalid_i[0] && vrf_rvalid_i[1]) begin
-          automatic logic [idx_width(N_FU*ELENB)-1:0] pnt;
+        reduction_d[0] = reduction_scalar_data;
+        reduction_d[1] = reduction_vector_data;
 
+        if (vrf_rvalid_i[0] && vrf_rvalid_i[1] && !stall && tree_stage_free) begin
+          automatic logic [$clog2(N_FU)-1:0] pnt;
+
+          // Stage the first word (scalar in operand 0, vector word in 1)
+          reduction_latch           = 1'b1;
           reduction_operand_ready_d = 1'b1;
           reduction_pointer_d       = reduction_pointer_q + 1;
           reduction_state_d         = Reduction_Reduce;
 
           // Request next word
-          pnt = reduction_pointer_d << int'(spatz_req.vtype.vsew);
-          if (!(|pnt))
-            word_issued = 1'b1;
+          pnt = reduction_pointer_d[$clog2(N_FU)-1:0];
+          word_issued = is_fpu_insn ? 1'b1 : (VRFWordWidth == ELEN*N_IPU) ? 1'b1 : !(|pnt);
+          if (reduction_pointer_q == fill_cnt) begin
+            reduction_state_d   = Reduction_IntraLane;
+            reduction_pointer_d = '0;
+          end
         end
       end
 
       Reduction_Reduce: begin
-        // Forward result
+        // Stream the remaining VRF words through all lanes in parallel.
+        // Operand 0 folds the pending per-lane partial: the drained buffer
+        // first, then a live FU result, else the identity. A result that
+        // arrives while no word can be staged (read stall / FU busy) is
+        // drained into result_buf so the pipe never wedges or mis-pairs.
         // verilator lint_off SELRANGE
-        unique case (spatz_req.vtype.vsew)
-          EW_8 : begin
-            reduction_d[0] = $unsigned(result[7:0]);
-            reduction_d[1] = $unsigned(vrf_rdata_i[1][8*reduction_pointer_q[idx_width(N_FU*ELENB)-1:0] +: 8]);
-          end
-          EW_16: begin
-            reduction_d[0] = $unsigned(result[15:0]);
-            reduction_d[1] = $unsigned(vrf_rdata_i[1][16*reduction_pointer_q[idx_width(N_FU*ELENB)-2:0] +: 16]);
-          end
-          EW_32: begin
-            reduction_d[0] = $unsigned(result[31:0]);
-            reduction_d[1] = $unsigned(vrf_rdata_i[1][32*reduction_pointer_q[idx_width(N_FU*ELENB)-3:0] +: 32]);
-          end
-          default: begin
-          `ifdef MEMPOOL_SPATZ
-            reduction_d = '0;
-          `else
-            if (MAXEW == EW_64) begin
-              reduction_d[0] = $unsigned(result[63:0]);
-              reduction_d[1] = $unsigned(vrf_rdata_i[1][64*reduction_pointer_q[idx_width(N_FU*ELENB)-4:0] +: 64]);
-            end
-          `endif
-          end
-        endcase
+        if ((N_IPU > 0) && ~is_fpu_insn) begin
+          // If the IPU datapath is narrower than a VRF word, select the chunk
+          reduction_d[1] = (VRFWordWidth == N_IPU*ELEN) ? $unsigned(reduction_vector_data) :
+                           $unsigned(reduction_vector_data[ELEN*N_IPU*reduction_pointer_q[idx_width(VRFWordWidth/(N_IPU*ELEN))-1:0] +: ELEN*N_IPU]);
+        end else begin
+          reduction_d[1] = $unsigned(reduction_vector_data);
+        end
         // verilator lint_on SELRANGE
+        if (result_buf_valid_q)
+          reduction_d[0] = result_buf_q;
+        else if (result_valid[0] && result_tag.reduction)
+          reduction_d[0] = $unsigned(result);
+        else if (spatz_req.op inside {VFMINMAX, VAND, VOR, VMAX, VMAXU, VMIN, VMINU})
+          reduction_d[0] = reduction_q[0];
+        else
+          reduction_d[0] = '0;
 
-        // Got a result!
-        if (result_valid[0] && result_tag.reduction) begin
-          // Did we get an operand?
-          if (vrf_rvalid_i[1]) begin
-            automatic logic [idx_width(N_FU*ELENB)-1:0] pnt;
+        if (vrf_rvalid_i[1] && !stall && tree_stage_free) begin
+          automatic logic [$clog2(N_FU)-1:0] pnt;
 
-            // Bump pointer
-            reduction_pointer_d = reduction_pointer_q + 1;
+          // Stage the next word, folding the pending partial
+          reduction_latch           = 1'b1;
+          reduction_operand_ready_d = 1'b1;
+          reduction_pointer_d       = reduction_pointer_q + 1;
 
-            // Acknowledge result
+          // Consume the folded source
+          if (result_buf_valid_q)
+            result_buf_valid_d = 1'b0;
+          else if (result_valid[0] && result_tag.reduction)
             result_ready = 1'b1;
 
-            // Trigger a request
-            reduction_operand_ready_d = 1'b1;
-
-            // Request next word
-            pnt = reduction_pointer_d << int'(spatz_req.vtype.vsew);
-            if (!(|pnt))
-              word_issued = 1'b1;
+          // Request next word
+          pnt = reduction_pointer_d[$clog2(N_FU)-1:0];
+          word_issued = is_fpu_insn ? 1'b1 : (VRFWordWidth == ELEN*N_IPU) ? 1'b1 : !(|pnt);
+          if (reduction_pointer_q == fill_cnt) begin
+            reduction_state_d   = Reduction_IntraLane;
+            reduction_pointer_d = '0;
           end
+        end else begin
+          // Drain a live reduction result into the buffer; it folds into the
+          // next staged word.
+          if (~result_buf_valid_q && result_valid[0] && result_tag.reduction) begin
+            result_buf_d       = result;
+            result_buf_tag_d   = result_tag;
+            result_buf_valid_d = 1'b1;
+            result_ready       = 1'b1;
+          end
+        end
+      end
+
+      Reduction_IntraLane: begin
+        // Drain the FU pipeline: every two consecutive results are paired back
+        // into the FU until a single per-lane partial result word remains.
+        reduction_d[0] = (result_valid[0] && result_tag.reduction) ? $unsigned(result) : reduction_q[0];
+        reduction_d[1] = result_buf_valid_q ? result_buf_q : reduction_q[1];
+        lat_count_d    = (result_valid[0] && result_tag.reduction) ? '0 : lat_count_q + 1;
+
+        if (~result_buf_valid_q && result_valid[0] && result_tag.reduction) begin
+          // First result goes into the buffer, together with its tag
+          result_buf_valid_d = 1'b1;
+          result_buf_d       = result;
+          result_buf_tag_d   = result_tag;
+          result_ready       = 1'b1;
+        end else if (result_buf_valid_q && result_valid[0] && result_tag.reduction && tree_stage_free) begin
+          // Pair the buffered result with the new one through the FU
+          reduction_latch           = 1'b1;
+          reduction_operand_ready_d = 1'b1;
+          result_buf_valid_d        = 1'b0;
+          reduction_pointer_d       = reduction_pointer_q + 1;
+          result_ready              = 1'b1;
+        end
+
+        // Are we done? Wait until the FU pipelines are drained
+        if (!(result_valid[0] && result_tag.reduction) && (lat_count_q > (FPUlatency + 1))) begin
+          reduction_state_d = Reduction_InterLane;
+
+          // Number of log-tree iterations across lanes (written for up to 8 lanes)
+          num_inter_lane_iterations_d = (spatz_req.vl << spatz_req.vtype.vsew) <= (ELENB)   ? 0 :
+                                        (spatz_req.vl << spatz_req.vtype.vsew) <= (2*ELENB) ? 1 :
+                                        (spatz_req.vl << spatz_req.vtype.vsew) <= (4*ELENB) ? 2 : 3;
+          num_inter_lane_iterations_d = is_fpu_insn ? (num_inter_lane_iterations_d > $clog2(N_FPU) ? $clog2(N_FPU) : num_inter_lane_iterations_d) :
+                                                      (num_inter_lane_iterations_d > $clog2(N_IPU) ? $clog2(N_IPU) : num_inter_lane_iterations_d);
+
+          // Skip the inter-lane stage when all live data sits in lane 0 already
+          if (num_inter_lane_iterations_d == 0) begin
+            reduction_state_d = (spatz_req.vtype.vsew == MAXEW) ? Reduction_WriteBack :
+                                (spatz_req.vl == 1)             ? Reduction_WriteBack : Reduction_SIMD;
+            shift_amnt_d      = ELEN >> (MAXEW - spatz_req.vtype.vsew);
+          end else begin
+            shift_amnt_d = ELEN;
+          end
+          reduction_pointer_d = '0;
+          lat_count_d         = '0;
+        end
+      end
+
+      Reduction_InterLane: begin
+        // Fold the per-lane partials across the FUs with a log-tree of
+        // shift-and-add passes through the FU.
+        reduction_d[0] = (result_buf_valid_q ? $unsigned(result_buf_q) : $unsigned(result)) >> shift_amnt_q;
+        reduction_d[1] = result_buf_valid_q ? result_buf_q : $unsigned(result);
+
+        if (((result_valid[0] && result_tag.reduction) || result_buf_valid_q) && tree_stage_free) begin
+          // Trigger a request
+          reduction_latch           = 1'b1;
+          reduction_operand_ready_d = 1'b1;
+
+          // Bump pointer
+          reduction_pointer_d = reduction_pointer_q + 1;
+
+          // Acknowledge result
+          result_ready       = result_valid[0] && result_tag.reduction;
+          result_buf_valid_d = 1'b0;
+
+          // Update shift amount
+          shift_amnt_d = shift_amnt_q << 1;
         end
 
         // Are we done?
-        if (reduction_pointer_q == spatz_req.vl) begin
-          reduction_state_d         = Reduction_WriteBack;
-          if (result_tag.reduction)
-            result_ready = 1'b0;
-          reduction_operand_ready_d = 1'b0;
+        if ((reduction_pointer_q == (num_inter_lane_iterations_q - 1)) && (reduction_operand_ready_d == 1'b1)) begin
+          if (spatz_req.vtype.vsew != MAXEW) begin
+            reduction_state_d = Reduction_SIMD;
+          end else begin
+            reduction_state_d = Reduction_WriteBack;
+          end
+          shift_amnt_d                = ELEN >> (MAXEW - spatz_req.vtype.vsew);
+          num_inter_lane_iterations_d = '0;
+          reduction_pointer_d         = '0;
+          result_buf_valid_d          = 1'b0;
+        end
+      end
+
+      Reduction_SIMD: begin
+        // Log-tree fold the sub-lanes inside the surviving ELEN-wide lane.
+        reduction_d[0] = (result_buf_valid_q ? $unsigned(result_buf_q) : $unsigned(result)) >> shift_amnt_q;
+        reduction_d[1] = result_buf_valid_q ? result_buf_q : $unsigned(result);
+
+        if (((result_valid[0] && result_tag.reduction) || result_buf_valid_q) && tree_stage_free) begin
+          result_buf_valid_d = 1'b0;
+
+          // Trigger a request
+          reduction_latch           = 1'b1;
+          reduction_operand_ready_d = 1'b1;
+
+          // Bump pointer
+          reduction_pointer_d = reduction_pointer_q + 1;
+
+          // Acknowledge result
+          result_ready = result_valid[0] && result_tag.reduction;
+
+          // Update shift amount
+          shift_amnt_d = shift_amnt_q << 1;
+        end
+
+        // Are we done?
+        if ((reduction_pointer_q == (MAXEW - spatz_req.vtype.vsew - 1)) && (reduction_operand_ready_d == 1'b1)) begin
+          reduction_state_d   = Reduction_WriteBack;
+          reduction_pointer_d = '0;
+          shift_amnt_d        = ELEN;
         end
       end
 
       Reduction_WriteBack: begin
-        // Acknowledge result
-        if (result_valid[0] && result_tag.reduction && vrf_wvalid_i) begin
-          result_ready = 1'b1;
+        // Acknowledge result; the final value either sits on the FU result bus
+        // or, for short vectors, in the intra-lane buffer.
+        if (vrf_wvalid_i && ((result_valid[0] && result_tag.reduction) || result_buf_valid_q)) begin
+          result_ready       = result_valid[0] && result_tag.reduction;
+          result_buf_valid_d = 1'b0;
+          result_buf_d       = '0;
+          result_buf_tag_d   = '0;
 
           // We are done with the reduction
           reduction_state_d = Reduction_NormalExecution;
@@ -564,7 +815,7 @@ module spatz_vfu
     vreg_addr_d = vreg_addr_q;
 
     vrf_raddr_o = vreg_addr_d;
-    vrf_waddr_o = result_tag.vd_addr;
+    vrf_waddr_o = retire_tag.vd_addr;
 
     // Tag (propagated with the operations)
     input_tag = '{
@@ -607,7 +858,11 @@ module spatz_vfu
     vreg_we    = '0;
     vreg_wbe   = '0;
 
-    if (spatz_req_valid && vl_q < spatz_req.vl)
+    // A vl==0 reduction still reads its scalar source in Init; the tree path
+    // reduces it to op(vs1[0], neutral) = vs1[0].
+    if (spatz_req_valid && (vl_q < spatz_req.vl ||
+        (spatz_req.op_arith.is_reduction && spatz_req.vl == '0 &&
+         reduction_state_q == Reduction_Init)))
       // Request operands
       vreg_r_req = {spatz_req.vd_is_src, spatz_req.use_vs1 && reduction_operand_request[1], spatz_req.use_vs2 && reduction_operand_request[0]};
 
@@ -622,9 +877,10 @@ module spatz_vfu
       end
     end
 
-    // Reduction finished execution
-    if (reduction_state_q == Reduction_WriteBack && result_valid[0] &&
-        result_tag.reduction) begin
+    // Reduction finished execution; short unordered reductions return their
+    // result from the intra-lane buffer instead of the FU result bus.
+    if (reduction_state_q == Reduction_WriteBack &&
+        ((result_valid[0] && result_tag.reduction) || result_buf_valid_q)) begin
       vreg_we = 1'b1;
       unique case (spatz_req.vtype.vsew)
         EW_8 : vreg_wbe = 1'h1;
@@ -637,7 +893,9 @@ module spatz_vfu
 
   logic [N_FU*ELEN-1:0] vreg_wdata;
   always_comb begin: align_result
-    vreg_wdata = result;
+    // The intra-lane buffer only carries the final value in the reduction
+    // writeback; every other write takes the FU result bus.
+    vreg_wdata = (reduction_state_q == Reduction_WriteBack && result_buf_valid_q) ? result_buf_q : result;
 
     // Realign results
     if (result_tag.narrowing) begin
@@ -661,7 +919,7 @@ module spatz_vfu
   assign vrf_we_o    = vreg_we;
   assign vrf_wbe_o   = vreg_wbe;
   assign vrf_wdata_o = vreg_wdata;
-  assign vrf_id_o    = {result_tag.id, {3{spatz_req.id}}};
+  assign vrf_id_o    = {retire_tag.id, {3{spatz_req.id}}};
 
   //////////
   // IPUs //
