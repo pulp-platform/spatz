@@ -54,7 +54,7 @@ module reorder_buffer
   // reused until the generation also wraps, and a stale response is detected and dropped.
   parameter int unsigned IdWidthExt = 0,
   // Dependant parameters. Do not change!
-  parameter IdWidth                 = (IdWidthExt > idx_width(NumWords))
+  parameter int unsigned IdWidth    = (IdWidthExt > idx_width(NumWords))
                                         ? IdWidthExt : idx_width(NumWords),
   parameter type data_t             = logic [DataWidth-1:0],
   parameter type id_t               = logic [IdWidth-1:0]
