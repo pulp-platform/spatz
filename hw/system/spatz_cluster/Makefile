@@ -504,7 +504,7 @@ sw.vlt: $(CFG_STAMP) clean.sw bin/spatz_cluster.vlt spatz.gendata
 
 #if the suite is not passed as a command line argument, reuse the last one (riscvTests by default)
 ifeq ($(origin SUITE),undefined)
-SUITE := $(shell cat $(SUITE_STAMP) 2>/dev/null || echo default)
+SUITE := $(shell cat $(SUITE_STAMP) 2>/dev/null || echo riscvTests)
 endif
 
 CTEST_ARGS ?= --output-on-failure -j4
