@@ -233,6 +233,7 @@ check-bender:
 		fi \
 	fi
 	@$(MAKE) -C $(ROOT_DIR) $(BENDER_INSTALL_DIR)/bender
+	ln -s $$(find "$(ROOT_DIR)/.bender/git/checkouts" -type d -name 'spatz_vpu-*') $(ROOT_DIR)/hw/spatz_vpu
 
 $(BENDER_INSTALL_DIR)/bender:
 	mkdir -p $(BENDER_INSTALL_DIR) && cd $(BENDER_INSTALL_DIR) && \
