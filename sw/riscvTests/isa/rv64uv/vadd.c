@@ -221,6 +221,7 @@ void TEST_CASE7(void) {
 #endif
 }
 
+// The test to verify the sequential execution of masked instructions with long operands
 void TEST_CASE8() {
   VSET(64, e8, m4);
   VLOAD_8(v8,  0,1,2,3,4,5,6,7, 0,1,2,3,4,5,6,7, 0,1,2,3,4,5,6,7, 0,1,2,3,4,5,6,7,
