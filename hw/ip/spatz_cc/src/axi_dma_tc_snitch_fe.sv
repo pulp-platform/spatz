@@ -25,6 +25,10 @@ module axi_dma_tc_snitch_fe #(
     parameter type          axi_res_t          = logic,
     parameter type          acc_resp_t         = logic,
     parameter type          dma_events_t       = logic,
+    /// TCDM request/response types for the index-stream read port (same as the
+    /// cluster's tcdm_req_t/tcdm_rsp_t so it wires straight into the interconnect)
+    parameter type          tcdm_req_t         = logic,
+    parameter type          tcdm_rsp_t         = logic,
     /// Derived parameter *Do not override*
     parameter type          addr_t             = logic [AddrWidth-1:0],
     parameter type          data_t             = logic [DataWidth-1:0]
@@ -60,11 +64,8 @@ module axi_dma_tc_snitch_fe #(
     output dma_events_t            dma_events_o,
 
     // Index-stream read port to L1/TCDM (indexed/gather mode, read-only)
-    output logic                          dma_idx_req_o,
-    output addr_t                         dma_idx_addr_o,
-    input  logic                          dma_idx_gnt_i,
-    input  logic                          dma_idx_rvalid_i,
-    input  logic [IndexTcdmDataWidth-1:0] dma_idx_rdata_i
+    output tcdm_req_t dma_idx_req_o,
+    input  tcdm_rsp_t dma_idx_rsp_i
   );
 
   typedef logic [IdWidth-1:0] id_t;
@@ -302,6 +303,27 @@ module axi_dma_tc_snitch_fe #(
   //--------------------------------------
   // Indexed (gather) Extension
   //--------------------------------------
+  // The engine uses a protocol-neutral req/gnt/rvalid micro-interface; adapt it
+  // here to the cluster's TCDM request/response type (read-only) so it wires
+  // straight into the TCDM interconnect.
+  logic                          idx_req, idx_gnt, idx_rvalid;
+  addr_t                         idx_addr;
+  logic [IndexTcdmDataWidth-1:0] idx_rdata;
+
+  always_comb begin : proc_idx_tcdm_req
+    dma_idx_req_o         = '0;
+    dma_idx_req_o.q.addr  = idx_addr[$bits(dma_idx_req_o.q.addr)-1:0]; // TCDM-relative (truncated)
+    dma_idx_req_o.q.write = 1'b0;
+    dma_idx_req_o.q.amo   = reqrsp_pkg::AMONone;
+    dma_idx_req_o.q.data  = '0;
+    dma_idx_req_o.q.strb  = '0;
+    dma_idx_req_o.q.user  = '0;
+    dma_idx_req_o.q_valid = idx_req;
+  end
+  assign idx_gnt    = dma_idx_rsp_i.q_ready;   // grant = q_ready
+  assign idx_rvalid = dma_idx_rsp_i.p_valid;
+  assign idx_rdata  = dma_idx_rsp_i.p.data;
+
   axi_dma_gather_ext #(
     .ADDR_WIDTH     ( AddrWidth          ),
     .REQ_FIFO_DEPTH ( DMAReqFifoDepth    ),
@@ -318,11 +340,11 @@ module axi_dma_tc_snitch_fe #(
     .gather_req_valid_i ( gather_ext_valid   ),
     .gather_req_ready_o ( gather_ext_ready   ),
     .gather_req_last_o  ( gather_burst_last  ),
-    .idx_req_o          ( dma_idx_req_o      ),
-    .idx_addr_o         ( dma_idx_addr_o     ),
-    .idx_gnt_i          ( dma_idx_gnt_i      ),
-    .idx_rvalid_i       ( dma_idx_rvalid_i   ),
-    .idx_rdata_i        ( dma_idx_rdata_i    )
+    .idx_req_o          ( idx_req            ),
+    .idx_addr_o         ( idx_addr           ),
+    .idx_gnt_i          ( idx_gnt            ),
+    .idx_rvalid_i       ( idx_rvalid         ),
+    .idx_rdata_i        ( idx_rdata          )
   );
 
   //--------------------------------------

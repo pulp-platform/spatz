@@ -359,7 +359,9 @@ module spatz_cc
       .axi_aw_chan_t      (axi_aw_chan_t     ),
       .axi_res_t          (axi_rsp_t         ),
       .acc_resp_t         (acc_rsp_t         ),
-      .dma_events_t       (dma_events_t      )
+      .dma_events_t       (dma_events_t      ),
+      .tcdm_req_t         (tcdm_req_t        ),
+      .tcdm_rsp_t         (tcdm_rsp_t        )
     ) i_axi_dma_tc_snitch_fe (
       .clk_i            ( clk_i                    ),
       .rst_ni           ( rst_ni                   ),
@@ -384,10 +386,7 @@ module spatz_cc
       .dma_events_o     ( axi_dma_events_o         ),
       // Index-stream read port (indexed/gather): tied off until Step 4 wires TCDM
       .dma_idx_req_o    (                          ),
-      .dma_idx_addr_o   (                          ),
-      .dma_idx_gnt_i    ( 1'b0                     ),
-      .dma_idx_rvalid_i ( 1'b0                     ),
-      .dma_idx_rdata_i  ( '0                       )
+      .dma_idx_rsp_i    ( '0                       )
     );
 
   // no DMA instanciated
