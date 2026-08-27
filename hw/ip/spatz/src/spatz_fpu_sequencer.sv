@@ -731,6 +731,13 @@ module spatz_fpu_sequencer
         data   : fpr_rdata[0],
         default: '0
       };
+`ifdef TARGET_MEMPOOL
+      // An FP->int move (e.g. fmv.x.w) writes a scalar GPR; MemPool's Snitch only
+      // retires an accelerator response when acc_pwrite=1, so flag it as a write.
+      // Mirrors the controller's rsp_d.write=1. Without this the move's result is
+      // never written back and a dependent instruction deadlocks the core.
+      fp_move_result_i.write = 1'b1;
+`endif
       fp_move_result_valid_i = 1'b1;
     end
 

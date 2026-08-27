@@ -802,6 +802,11 @@ module spatz_decoder
           spatz_req.vs2                = arith_s2;
           spatz_req.use_vs2            = 1'b1;
           spatz_req.op_arith.is_scalar = 1'b1;
+          // The scalar result is ELEN wide; without this the vsew defaults to
+          // EW_8 and pending_results (8'hff) never matches the 4-byte result the
+          // IPU produces, so result_ready never asserts and the op deadlocks.
+          // Mirrors VFMV_F_S below.
+          spatz_req.vtype.vsew         = (ELEN == 32) ? EW_32 : EW_8;
         end
 
         // Vector floating-point instructions

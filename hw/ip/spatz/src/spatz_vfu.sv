@@ -133,30 +133,40 @@ module spatz_vfu
   assign operands_ready = op1_is_ready && op2_is_ready && op3_is_ready && (!spatz_req.op_arith.is_scalar || vfu_rsp_ready_i) && !stall;
 
   // Valid operations
+  // A scalar op produces one ELEN-wide element (4 bytes for ELEN=32, i.e. 4'hf),
+  // regardless of vsew — so keying the mask off vsew==EW_32 wrongly expects 8'hff
+  // for e8/e16 scalars (e.g. vmv.x.s, fcvt.h.s), which never matches the produced
+  // result and deadlocks the VFU. Only a true EW_64 scalar spans 8 bytes.
   logic [N_FU*ELENB-1:0] valid_operations;
-  assign valid_operations = (spatz_req.op_arith.is_scalar || spatz_req.op_arith.is_reduction) ? (spatz_req.vtype.vsew == EW_32 ? 4'hf : 8'hff) : '1;
+  assign valid_operations = spatz_req.op_arith.is_scalar    ? (spatz_req.vtype.vsew == EW_64 ? 8'hff : 4'hf) :
+                            spatz_req.op_arith.is_reduction ? (spatz_req.vtype.vsew == EW_32 ? 4'hf : 8'hff) : '1;
 
-  // Pending results
+  // Pending results (wb is set only for scalar results written back).
   //
-  // FIX (2026-08-19): the width MUST come from result_tag, not from spatz_req.
-  // The selector below (result_tag.wb) belongs to the instruction whose result is at the FU
-  // output, but spatz_req is the LIVE incoming request. spatz_ipu has Pipeline=1, so those are
-  // different instructions whenever the pipe is non-empty, and the completion mask was being
-  // built from the wrong instruction's element width.
+  // Two independent corrections meet on this line.
   //
-  // The invariant that matters: whatever mask decided which lanes to FEED (valid_operations,
-  // built from spatz_req at issue) must be the same mask that decides when they are all DONE.
-  // result_tag.vsew is exactly that width -- it is captured from spatz_req.vtype.vsew at issue
-  // (:539) and travels with the operands through the pipeline, so this restores the pairing.
-  //
-  // Symptom when it was wrong: Snitch has no multiplier (snitch.sv:1043-1046 offloads MUL), so a
-  // `mul` is a VFU SCALAR op at EW_32 -- mask 4'hf, lane 0 only. With an EW_16 vector op right
-  // behind it, the mul's result was judged against 8'hff, so
+  // WIDTH SOURCE (2026-08-19): it must come from result_tag, not from spatz_req. The selector
+  // below (result_tag.wb) belongs to the instruction whose result is at the FU output, but
+  // spatz_req is the LIVE incoming request. spatz_ipu has Pipeline=1, so those are different
+  // instructions whenever the pipe is non-empty. Snitch has no multiplier (snitch.sv:1043-1046
+  // offloads MUL), so a `mul` is a VFU SCALAR op at EW_32 -- mask 4'hf, lane 0 only. With an
+  // EW_16 vector op right behind it the mul's result was judged against the wrong width and
   //   &(result_valid | ~pending_results) == &(16'h000f | 16'hff00) == 0, forever
-  // and result_ready (:380/:392) plus vfu_rsp_valid_o (:273) never asserted -- VFU wedged, queue
-  // filled, core stopped. fp32 was immune only because vsew never changed, so both reads agreed.
+  // so result_ready (:380/:392) and vfu_rsp_valid_o (:273) never asserted. fp32 was immune only
+  // because vsew never changed, so both reads agreed. result_tag.vsew is captured from
+  // spatz_req.vtype.vsew at issue (:539) and travels with the operands, restoring the pairing:
+  // whatever mask decided which lanes to FEED must decide when they are all DONE.
+  //
+  // PREDICATE: a scalar result is ELEN wide (4 bytes at ELEN=32, i.e. 4'hf) whatever vsew says,
+  // so only a true EW_64 scalar spans 8 bytes. The original `EW_32 ? 4'hf : 8'hff` idiom treats
+  // every non-EW_32 width as EW_64 and therefore expects 8'hff for an e8/e16 scalar (vmv.x.s,
+  // fcvt.h.s), which the IPU never produces -- deadlocking the VFU from the other direction.
+  //
+  // Applying only one of the two leaves the other hazard live: the source fix alone still
+  // mis-sizes an e8/e16 scalar, and the predicate fix alone still reads the wrong instruction's
+  // width when the pipe is non-empty and the live request is EW_64.
   logic [N_FU*ELENB-1:0] pending_results;
-  assign pending_results = result_tag.wb ? (result_tag.vsew == EW_32 ? 4'hf : 8'hff) : '1;
+  assign pending_results = result_tag.wb ? (result_tag.vsew == EW_64 ? 8'hff : 4'hf) : '1;
 
   // Did we issue a microoperation?
   logic word_issued;
