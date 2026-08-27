@@ -29,11 +29,10 @@ if [ -f "$GCC_TOOLSET/enable" ]; then
     echo "Load GCC toolset 12 from $GCC_TOOLSET"
     source "$GCC_TOOLSET/enable"
 else
-    echo "WARNING: $GCC_TOOLSET/enable not found -- using system g++"
+    echo "WARNING: $GCC_TOOLSET/enable not found, using system g++"
 fi
-echo "  g++      : $(g++ --version | head -1)"
-echo "  libatomic: $(ls /usr/lib64/libatomic.so.1 2>/dev/null || echo MISSING)"
-echo "  LD_LIBRARY_PATH=$LD_LIBRARY_PATH"
+module load verilator/$VLT_VERSION
+export VERILATOR_INSTALL_DIR=/tools/verilator/${VLT_VERSION}
 
 # riscv-opcodes requires Python >= 3.9
 export PYTHON=python3.12
