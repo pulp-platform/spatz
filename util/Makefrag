@@ -18,7 +18,6 @@ LLVM_INSTALL_DIR      ?= ${INSTALL_DIR}/llvm
 GCC_INSTALL_DIR       ?= ${INSTALL_DIR}/riscv-gcc
 SPIKE_INSTALL_DIR     ?= ${INSTALL_DIR}/riscv-isa-sim
 BENDER_INSTALL_DIR    ?= ${INSTALL_DIR}/bender
-VERILATOR_INSTALL_DIR ?= ${INSTALL_DIR}/verilator
 
 # Support for local override
 BENDER ?= ${BENDER_INSTALL_DIR}/bender

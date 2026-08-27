@@ -22,6 +22,15 @@ echo "Load Bender $BENDER_VERSION environment for Chips-IT"
 module load bender/$BENDER_VERSION
 export BENDER_INSTALL_DIR=/tools/utils/bender_$BENDER_VERSION
 
+VLT_VERSION="5.050"
+echo "Load Verilator $VLT_VERSION environment for Chips-IT"
+GCC_TOOLSET=/opt/rh/gcc-toolset-12
+if [ -f "$GCC_TOOLSET/enable" ]; then
+    source "$GCC_TOOLSET/enable"
+fi
+module load verilator/$VLT_VERSION
+export VERILATOR_INSTALL_DIR=/tools/verilator/${VLT_VERSION}
+
 # riscv-opcodes requires Python >= 3.9
 export PYTHON=python3.12
 if [[ ! -x ".venv/bin/${PYTHON}" ]]; then
