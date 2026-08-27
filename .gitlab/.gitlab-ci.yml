@@ -20,6 +20,7 @@ variables:
   CTEST: '/usr/bin/ctest'
   VCS: 'vcs-2022.06'
   PYTHON: 'python3'
+  BENDER_INSTALL_DIR: '/usr/local/bin'
 
 workflow:
   rules:
