@@ -305,32 +305,73 @@ module spatz_vlsu
   `FF(burst_tail_phase_q, burst_tail_phase_d, 1'b0)
 
 
-  id_t [NrMemPorts-1:0] store_count_q;
-  id_t [NrMemPorts-1:0] store_count_d;
+  // Store requests are not allocated in the load ROB, so their outstanding
+  // count is not bounded by the load-ID width. Up to NrParallelInstructions
+  // vector stores can be in flight, and an e8,m8 strided/indexed store can emit
+  // MAXVL one-byte requests across the ports.
+  localparam int unsigned MaxStoreRequestsPerPort =
+      NrParallelInstructions * ((MAXVL + NrMemPorts - 1) / NrMemPorts);
+  localparam int unsigned StoreCountWidth = idx_width(MaxStoreRequestsPerPort + 1);
+  typedef logic [StoreCountWidth-1:0] store_count_t;
+
+  store_count_t   [NrMemPorts-1:0] store_count_q;
+  store_count_t   [NrMemPorts-1:0] store_count_d;
+  logic           [NrMemPorts-1:0] store_req_fire;
+  logic           [NrMemPorts-1:0] store_rsp_fire;
+  spatz_mem_req_t [NrMemPorts-1:0] spatz_mem_req;
+  logic           [NrMemPorts-1:0] spatz_mem_req_valid;
+  logic           [NrMemPorts-1:0] spatz_mem_req_ready;
 
   for (genvar port = 0; port < NrMemPorts; port++) begin: gen_store_count_q
     `FF(store_count_q[port], store_count_d[port], '0)
   end: gen_store_count_q
 
   always_comb begin: proc_store_count
-    // Maintain state
     store_count_d = store_count_q;
 
     for (int port = 0; port < NrMemPorts; port++) begin
-      if (spatz_mem_req_o[port].write && spatz_mem_req_valid_o[port] && spatz_mem_req_ready_i[port])
-        // Did we send a store?
-        store_count_d[port]++;
-
-      // Did we get the ack of a store?
-  `ifdef TARGET_MEMPOOL
-      if (store_count_q[port] != '0 && spatz_mem_rsp_valid_i[port] && spatz_mem_rsp_i[port].write)
-        store_count_d[port]--;
-  `else
-      if (store_count_q[port] != '0 && spatz_mem_rsp_valid_i[port])
-        store_count_d[port]--;
-  `endif
+      unique case ({store_req_fire[port], store_rsp_fire[port]})
+        2'b10: store_count_d[port] = store_count_q[port] + 1'b1;
+        2'b01: begin
+          if (store_count_q[port] != '0)
+            store_count_d[port] = store_count_q[port] - 1'b1;
+        end
+        default:;
+      endcase
     end
   end: proc_store_count
+
+  for (genvar port = 0; port < NrMemPorts; port++) begin: gen_store_handshake
+    // Count a request as soon as it enters the output spill register. This
+    // includes buffered requests when the downstream TCDM port is stalled.
+    assign store_req_fire[port] = spatz_mem_req[port].write &&
+                                  spatz_mem_req_valid[port] &&
+                                  spatz_mem_req_ready[port];
+  `ifdef TARGET_MEMPOOL
+    assign store_rsp_fire[port] = spatz_mem_rsp_valid_i[port] &&
+                                  spatz_mem_rsp_i[port].write;
+  `else
+    // Generic HCI responses do not carry a write flag. Preserve the original
+    // assumption that loads and stores do not overlap on a port.
+    assign store_rsp_fire[port] = spatz_mem_rsp_valid_i[port] &&
+                                  (store_count_q[port] != '0);
+  `endif
+  end: gen_store_handshake
+
+`ifndef SYNTHESIS
+  for (genvar port = 0; port < NrMemPorts; port++) begin: gen_store_count_assertions
+    always_ff @(posedge clk_i) begin
+      if (rst_ni) begin
+        assert (!(store_rsp_fire[port] && !store_req_fire[port] &&
+                  (store_count_q[port] == '0)))
+          else $error("Spatz store response arrived with no outstanding request");
+        assert (!(store_req_fire[port] && !store_rsp_fire[port] &&
+                  (store_count_q[port] == store_count_t'(MaxStoreRequestsPerPort))))
+          else $error("Spatz outstanding-store counter overflow");
+      end
+    end
+  end: gen_store_count_assertions
+`endif
 
   //////////////////////
   //  Reorder Buffer  //
@@ -852,9 +893,6 @@ module spatz_vlsu
   logic store_drain_ready;
 
   // Memory requests
-  spatz_mem_req_t [NrMemPorts-1:0] spatz_mem_req;
-  logic           [NrMemPorts-1:0] spatz_mem_req_valid;
-  logic           [NrMemPorts-1:0] spatz_mem_req_ready;
 
 
   always_comb begin: control_proc
