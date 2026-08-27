@@ -287,8 +287,29 @@ package spatz_pkg;
     logic exc;
   } vlsu_rsp_t;
 
+  // Request-side ROB id width. Tracks the ROB depth for the same reason MemRspIdWidth (below)
+  // does: mem_req_id is idx_width(NrOutstandingLoads) wide, and a narrower field would truncate
+  // ids >= 2**width onto low slots, so the memory echoes a truncated tag and the response lands
+  // in the wrong ROB entry.
+  //
+  // This is NOT a silent failure -- spatz_mempool_cc.sv:301 is an elaboration tripwire
+  // ($bits(spatz_mem_req[0].id) < snitch_pkg::MetaIdWidth) that fires at compile time. Before
+  // this parameter existed the field was a fixed $clog2(NRVREG)+1 = 6, which is *coincidentally*
+  // exact at ROB64 (so widening only MemRspIdWidth was enough then) and one bit short at ROB128,
+  // where MetaIdWidth = idx_width(128) = 7. The effect was therefore a BLOCKED BUILD, not bad
+  // data: ROB128 could not elaborate until this width followed. That tripwire is the reason a
+  // whole class of id-width mistakes here is cheap; keep it.
+  //
+  // Take the max, never just the derived value: ROB32 -> max(5,6) = 6 and ROB64 -> max(6,6) = 6,
+  // so every image built to date is bit-identical; only ROB128+ widens.
+  localparam int unsigned MemReqIdWidthDerived =
+    `ifdef SPATZ_VLSU_ROB_DEPTH $clog2(`SPATZ_VLSU_ROB_DEPTH) `else 0 `endif;
+  localparam int unsigned MemReqIdWidth =
+    (MemReqIdWidthDerived > ($clog2(NRVREG) + 1)) ? MemReqIdWidthDerived
+                                                  : ($clog2(NRVREG) + 1);
+
   typedef struct packed {
-    logic [$clog2(NRVREG):0] id;
+    logic [MemReqIdWidth-1:0] id;
     logic [31:0] addr;
     logic [1:0] mode;
     logic [1:0] size;

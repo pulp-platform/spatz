@@ -146,6 +146,32 @@ module spatz_vlsu
   // downstream assumes one-shot allocation (commit_counter_max, burst_odd_expected_q)
   // is exactly what the directed test is for.  Do not ship it on without that evidence.
   // ---------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
+  // ASYMMETRIC ROB DEPTH (docs/spatz_rob_dataless_design.md §14).
+  //
+  // Bursts use ROB0 ONLY: requests are port-0 (ports 1-3 fail burst_addr_aligned, their
+  // first address being rs1 + port*4), and ParityDrain lands even beats from mem port 0
+  // and odd beats from mem port 1 in ROB0's single contiguous id range (:24-26).  ROBs
+  // 1-3 hold no burst data at all -- three quarters of the 4 x NumWords x ELEN storage
+  // exists solely for the NON-burst path (strided, indexed, unaligned, over-ceiling).
+  //
+  // NrOutstandingLoads therefore sizes two different things at once: ROB0's burst window
+  // (which we want large -- it sets the vl ceiling) and ports 1-3's non-burst window
+  // (which need not match).  This knob separates them.
+  //
+  // Unset = NrOutstandingLoads for every port -> bit-identical elaboration.  It composes
+  // with SPATZ_VLSU_ROB_DEPTH: "ROB0 deep, the rest shallow" is
+  // spatz_vlsu_rob_depth=128 + spatz_vlsu_robn_depth=16.
+  //
+  // IdWidth stays derived from NrOutstandingLoads (the max), so the shared id_t is wide
+  // enough for every port and narrow ROBs simply never issue an id above their range --
+  // asserted below.  Shrinking ports 1-3 costs non-burst memory-level parallelism
+  // proportionally; whether that matters is a measurement ([BURSTWHY] reports the
+  // burst/non-burst mix), not an argument.
+  // ---------------------------------------------------------------------------
+  localparam int unsigned RobNDepth =
+    `ifdef SPATZ_VLSU_ROBN_DEPTH `SPATZ_VLSU_ROBN_DEPTH `else NrOutstandingLoads `endif;
+
   localparam bit NoVlCeiling =
     `ifdef SPATZ_VLSU_NO_VL_CEILING (`SPATZ_VLSU_NO_VL_CEILING != 0)
     `else 1'b0 `endif;
@@ -364,7 +390,7 @@ module spatz_vlsu
 `ifdef TARGET_MEMPOOL
     reorder_buffer #(
       .DataWidth (ELEN              ),
-      .NumWords  (NrOutstandingLoads),
+      .NumWords  ((port == 0) ? NrOutstandingLoads : RobNDepth),
       .NumWrPorts((port == 0 && BurstRecvPorts > 1) ? 2 : 1),
       .NumRdPorts((port == 0 && BurstRecvPorts > 1) ? 2 : 1),
       // Only ROB0 ever sees a block reservation (bursts are port-0 only): one instance of the
@@ -2030,6 +2056,28 @@ module spatz_vlsu
     assert property (@(posedge clk_i) disable iff (!rst_ni)
         !(burst_block_fire && burst_alloc_fire[0]))
       else $fatal(1, "[spatz_vlsu] Block reservation and the legacy id walk fired in the same cycle.");
+  end
+
+  // A-TRUNC: the asymmetric-ROB truncation guard.  (Named, not numbered: the A<n> labels in
+  // this file already run as two independent families, so A5/A6/A7 each appear twice.)
+  //
+  // reorder_buffer derives its own IdWidth = idx_width(NumWords), so a RobNDepth-deep ROB
+  // exposes a NARROWER id port than
+  // the VLSU's shared id_t (= idx_width(NrOutstandingLoads)).  Driving .id_i with an id at
+  // or above RobNDepth would SILENTLY TRUNCATE it and write the response into id % RobNDepth
+  // -- wrong data in vd, no error anywhere.  Ids for ports 1-3 all originate from that same
+  // ROB's id_o, so this should hold by construction; it is asserted because the failure is
+  // silent data corruption, and because a future change that computes an id arithmetically
+  // (as the port-0 burst path already does) would break it without any other symptom.
+  if (RobNDepth < NrOutstandingLoads) begin : gen_robn_width_asserts
+    for (genvar port = 1; port < NrMemPorts; port++) begin : gen_port
+      assert property (@(posedge clk_i) disable iff (!rst_ni)
+          rob_push[port] |-> (rob_wid[port] < RobNDepth))
+        else $fatal(1, "[spatz_vlsu] port %0d write id %0d >= RobNDepth %0d: truncated.",
+                    port, rob_wid[port], RobNDepth);
+      // No push2 check: rob_push2 is assigned only for port 0 (:1731) and defaults to '0
+      // (:1578), so ports 1-3 have NumWrPorts=1 and a second-port assertion could never fire.
+    end
   end
 
   if ((BlockWords > 1) && (BurstRecvPorts > 1)) begin : gen_block_odd_asserts
