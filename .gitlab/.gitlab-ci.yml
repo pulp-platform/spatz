@@ -10,8 +10,6 @@ variables:
   APPS: "tests"
   OBJCACHE: ''
   RISCV_WARNINGS: '-Werror'
-  CMAKE: 'cmake'
-  CTEST: 'ctest'
 
 workflow:
   rules:
@@ -46,17 +44,16 @@ code-style:
   stage: test
   script:
     - cd hw/system/spatz_cluster
-    - make ${SW_TARGET} SPATZ_CLUSTER_CFG=${cfg} -B
-    - cd sw/build/${SUITE}
-    - ${CTEST} ${CTEST_ARGS}
+    - make ${TOOL} SPATZ_CLUSTER_CFG=${cfg}
+    - make spatz_cluster.${TOOL}.test SUITE=${SUITE} CTEST_ARGS="${CTEST_ARGS}"
 
 # Runtime tests
 snRuntime-test-vsim:
   extends: .sim-test
   variables:
-    SW_TARGET: sw.vsim
+    TOOL: vsim
     SUITE: snRuntime
-    CTEST_ARGS: '--output-on-failure'
+    CTEST_ARGS: '--output-on-failure -j4'
   parallel:
     matrix:
       - { cfg: [default, smallvrf, doublebw] }
@@ -64,18 +61,28 @@ snRuntime-test-vsim:
 snRuntime-test-vcs:
   extends: .sim-test
   variables:
-    SW_TARGET: sw.vcs
+    TOOL: vcs
     SUITE: snRuntime
-    CTEST_ARGS: '--output-on-failure'
+    CTEST_ARGS: '--output-on-failure -j4'
+  parallel:
+    matrix:
+      - { cfg: [default, smallvrf, doublebw] }
+
+snRuntime-test-vlt:
+  extends: .sim-test
+  variables:
+    TOOL: vlt
+    SUITE: snRuntime
+    CTEST_ARGS: '--output-on-failure -j4'
   parallel:
     matrix:
       - { cfg: [default, smallvrf, doublebw] }
 
 # RISC-V unit tests
-riscvTests-test-vsim:
+riscvTests-test-vlt:
   extends: .sim-test
   variables:
-    SW_TARGET: sw.vsim
+    TOOL: vlt
     SUITE: riscvTests
     CTEST_ARGS: '--output-on-failure -j4'
   parallel:
@@ -83,20 +90,20 @@ riscvTests-test-vsim:
       - { cfg: [default, smallvrf, 32b, doublebw] }
 
 # Spatz tests
-spatzBenchmarks-test-vsim:
+spatzBenchmarks-test-vlt:
   extends: .sim-test
   variables:
-    SW_TARGET: sw.vsim
+    TOOL: vlt
     SUITE: spatzBenchmarks
-    CTEST_ARGS: '--verbose'
+    CTEST_ARGS: '----output-on-failure'
   parallel:
     matrix:
       - { cfg: [default, smallvrf, 32b, doublebw] }
 
-spatzBenchmarks-ventaglio-test-vsim:
+spatzBenchmarks-ventaglio-test-vlt:
   extends: .sim-test
   variables:
-    SW_TARGET: sw.vsim
+    TOOL: vlt
     SUITE: spatzBenchmarks
     CTEST_ARGS: '--verbose -R spatzBenchmarks-rtl-sp-SpM'
   parallel:
