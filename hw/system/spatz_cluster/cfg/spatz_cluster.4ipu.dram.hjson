@@ -28,7 +28,7 @@
         "dma_req_fifo_depth": 3,
         // Spatz parameters
         "vlen": 512,
-        "n_fpu": 1,
+        "n_fpu": 4,
         "n_ipu": 4,
         "spatz_fpu": true,
         "spatz_nports": 4,
