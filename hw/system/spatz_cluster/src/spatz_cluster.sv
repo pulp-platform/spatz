@@ -174,7 +174,8 @@ module spatz_cluster
   endfunction
 
   localparam int   unsigned                    NrTCDMPortsCores = get_tcdm_port_offs(NrCores);
-  localparam int   unsigned                    NumTCDMIn        = NrTCDMPortsCores + 1;
+  // narrow TCDM masters: per-core streamer/core ports + 1 SoC/AXI + 1 DMA index-fetch
+  localparam int   unsigned                    NumTCDMIn        = NrTCDMPortsCores + 1 + 1;
   localparam logic          [AxiAddrWidth-1:0] TCDMMask         = ~(TCDMSize-1);
 
   // Core Request, SoC Request
@@ -399,6 +400,10 @@ module spatz_cluster
   // AXI Ports into TCDM (from SoC).
   tcdm_req_t axi_soc_req;
   tcdm_rsp_t axi_soc_rsp;
+
+  // DMA index-fetch read port into TCDM (from the DMA core's gather engine).
+  tcdm_req_t dma_idx_req;
+  tcdm_rsp_t dma_idx_rsp;
 
   tcdm_req_t [NrTCDMPortsCores-1:0] tcdm_req;
   tcdm_rsp_t [NrTCDMPortsCores-1:0] tcdm_rsp;
@@ -678,8 +683,8 @@ module spatz_cluster
   ) i_tcdm_interconnect (
     .clk_i     (clk_i                  ),
     .rst_ni    (rst_ni                 ),
-    .req_i     ({axi_soc_req, tcdm_req}),
-    .rsp_o     ({axi_soc_rsp, tcdm_rsp}),
+    .req_i     ({dma_idx_req, axi_soc_req, tcdm_req}),
+    .rsp_o     ({dma_idx_rsp, axi_soc_rsp, tcdm_rsp}),
     .mem_req_o (ic_req                 ),
     .mem_rsp_i (ic_rsp                 )
   );
@@ -693,6 +698,9 @@ module spatz_cluster
 
     axi_mst_dma_req_t axi_dma_req;
     axi_mst_dma_resp_t axi_dma_res;
+
+    tcdm_req_t core_idx_req;
+    tcdm_rsp_t core_idx_rsp;
     interrupts_t irq;
     dma_events_t dma_core_events;
 
@@ -778,6 +786,8 @@ module spatz_cluster
       .axi_dma_busy_o   (/* Unused */                        ),
       .axi_dma_perf_o   (/* Unused */                        ),
       .axi_dma_events_o (dma_core_events                     ),
+      .dma_idx_req_o    (core_idx_req                        ),
+      .dma_idx_rsp_i    (core_idx_rsp                        ),
       .core_events_o    (core_events[i]                      ),
       .tcdm_addr_base_i (tcdm_start_address                  )
     );
@@ -793,8 +803,11 @@ module spatz_cluster
       assign wide_axi_mst_req[SDMAMst] = axi_dma_req;
       assign axi_dma_res               = wide_axi_mst_rsp[SDMAMst];
       assign dma_events                = dma_core_events;
+      assign dma_idx_req               = core_idx_req;
+      assign core_idx_rsp              = dma_idx_rsp;
     end else begin: gen_no_dma_connection
-      assign axi_dma_res = '0;
+      assign axi_dma_res  = '0;
+      assign core_idx_rsp = '0;
     end
   end
 
