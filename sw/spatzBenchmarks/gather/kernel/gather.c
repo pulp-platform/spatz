@@ -98,6 +98,7 @@ void gather_hw(__fp16 *dst, const __fp16 *matrix, const uint16_t *idx16,
   asm volatile(".word (0b0000111<<25)|(0b00000<<20)|((5)<<15)|(0b000<<12)|(0b0101011)\n"
                ::"r"(reps));
   // DMCPYI a0 <- a4, imm5=cfg : num_bytes=row_bytes, cfg=is_gather(bit2) -> launch
+  // (decouple_rw=cfg[0] was measured to make no difference for this gather.)
   asm volatile(".word (0b0000010<<25)|((0b00100)<<20)|((14)<<15)|(0b000<<12)|((10)<<7)|(0b0101011)\n"
                : "=r"(txid)
                : "r"(sz));
