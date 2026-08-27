@@ -95,7 +95,7 @@ spatzBenchmarks-test-vlt:
   variables:
     TOOL: vlt
     SUITE: spatzBenchmarks
-    CTEST_ARGS: '----output-on-failure'
+    CTEST_ARGS: '--output-on-failure'
   parallel:
     matrix:
       - { cfg: [default, smallvrf, 32b, doublebw] }
