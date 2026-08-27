@@ -218,6 +218,11 @@ module spatz_vfu
   logic [N_FU*ELEN-1:0]  result;
   logic [N_FU*ELENB-1:0] result_valid;
   logic                  result_ready;
+  logic                  normal_result_ready;
+
+  assign normal_result_ready =
+      !result_tag.reduction && &(result_valid | ~pending_results) &&
+      ((result_tag.wb && vfu_rsp_ready_i) || vrf_wvalid_i);
 
   always_comb begin: control_proc
     // Maintain state
@@ -300,7 +305,8 @@ module spatz_vfu
 
     // An instruction finished execution
     if ((result_tag.last && &(result_valid | ~pending_results) && result_ready &&
-        reduction_state_q inside {Reduction_NormalExecution, Reduction_Wait}) ||
+        (reduction_state_q inside {Reduction_NormalExecution, Reduction_Wait} ||
+         !result_tag.reduction)) ||
         reduction_done) begin
       vfu_rsp_o.id      = result_tag.id;
       vfu_rsp_o.rd      = result_tag.vd_addr[GPRWidth-1:0];
@@ -392,8 +398,8 @@ module spatz_vfu
     // Did we issue a word to the FUs?
     word_issued = 1'b0;
 
-    // Are we ready to accept a result?
-    result_ready = 1'b0;
+    // Drain non-reduction results even after a reduction entered its FSM.
+    result_ready = normal_result_ready;
 
     // Reduction did not finish
     reduction_done = 1'b0;
@@ -407,9 +413,6 @@ module spatz_vfu
         // Did we issue a word to the FUs?
         word_issued = spatz_req_valid && &(in_ready | ~valid_operations) && operands_ready && !stall;
 
-        // Are we ready to accept a result?
-        result_ready = &(result_valid | ~pending_results) && ((result_tag.wb && vfu_rsp_ready_i) || vrf_wvalid_i);
-
         // Initialize the pointers
         reduction_pointer_d = '0;
 
@@ -419,9 +422,6 @@ module spatz_vfu
       end
 
       Reduction_Wait: begin
-        // Are we ready to accept a result?
-        result_ready = &(result_valid | ~pending_results) && ((result_tag.wb && vfu_rsp_ready_i) || vrf_wvalid_i);
-
         if (!is_fpu_busy)
           reduction_state_d = Reduction_Init;
       end
@@ -499,7 +499,7 @@ module spatz_vfu
         // verilator lint_on SELRANGE
 
         // Got a result!
-        if (result_valid[0]) begin
+        if (result_valid[0] && result_tag.reduction) begin
           // Did we get an operand?
           if (vrf_rvalid_i[1]) begin
             automatic logic [idx_width(N_FU*ELENB)-1:0] pnt;
@@ -523,14 +523,15 @@ module spatz_vfu
         // Are we done?
         if (reduction_pointer_q == spatz_req.vl) begin
           reduction_state_d         = Reduction_WriteBack;
-          result_ready              = 1'b0;
+          if (result_tag.reduction)
+            result_ready = 1'b0;
           reduction_operand_ready_d = 1'b0;
         end
       end
 
       Reduction_WriteBack: begin
         // Acknowledge result
-        if (vrf_wvalid_i) begin
+        if (result_valid[0] && result_tag.reduction && vrf_wvalid_i) begin
           result_ready = 1'b1;
 
           // We are done with the reduction
@@ -621,7 +622,8 @@ module spatz_vfu
     end
 
     // Reduction finished execution
-    if (reduction_state_q == Reduction_WriteBack && result_valid[0]) begin
+    if (reduction_state_q == Reduction_WriteBack && result_valid[0] &&
+        result_tag.reduction) begin
       vreg_we = 1'b1;
       unique case (spatz_req.vtype.vsew)
         EW_8 : vreg_wbe = 1'h1;
