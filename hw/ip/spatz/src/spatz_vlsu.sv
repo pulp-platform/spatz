@@ -105,6 +105,33 @@ module spatz_vlsu
   localparam int unsigned BlockWords = (BlockAlloc != 0) ? MaxBurstWords : 1;
 
   // ---------------------------------------------------------------------------
+  // Sub-word burst eligibility (fp16). 0 = LEGACY: only vsew == EW_32 may burst, so a
+  // vle16.v falls back to the 4-port word-interleaved path and never reaches the group
+  // MSHR's burst class -- no burst merge, no ParityDrain, no BlockAlloc. 1 = admit every
+  // element width EXCEPT EW_8.
+  //
+  // THE BURST LENGTH IS UNCHANGED. A burst is MaxBurstWords 32-bit WORDS (64 B) in both
+  // modes; only the number of elements those bytes carry changes (16 fp32 vs 32 fp16).
+  // Everything downstream of this predicate -- mem_counter_* (byte counters),
+  // BurstAlignBits, the tcdm burst expander, the group MSHR, ParityDrain, the NoC -- is
+  // byte/word-granular and therefore sees an IDENTICAL burst stream. No new state, no
+  // new datapath: this knob only widens an eligibility test.
+  //
+  // Area/timing: the legacy test is a 2-bit equality against EW_32. With MAXEW == EW_32,
+  // EW_64 is unreachable, so "not EW_8" is |vsew -- a 2-input OR. The gate gets SMALLER
+  // when this is on, and const-folds back to the exact legacy comparison when it is off.
+  //
+  // ⚠️ vl CEILING. use_port0_burst_req also demands vl <= NrOutstandingLoads*MemDataWidthB
+  // (256 B at ROB64). vl is in BYTES, so the limit is on bytes and not elements: e16,m2 is
+  // 128 B (fine, 2 bursts) and e16,m4 is 256 B (fine, exactly at the ceiling), but e16,m8
+  // is 512 B and SILENTLY drops off the burst path with no error. Keep fp16 kernels at
+  // m4 or below. gen_burst_ew_vl_ceiling below reports the drop in simulation.
+  // ---------------------------------------------------------------------------
+  localparam bit BurstSubWord =
+    `ifdef SPATZ_VLSU_BURST_EW16 (`SPATZ_VLSU_BURST_EW16 != 0)
+    `else 1'b0 `endif;
+
+  // ---------------------------------------------------------------------------
   // H1 dual-load runahead (docs/spatz_rob64_h1_design_plan.md). MaxInflight=1 (default)
   // const-folds every added term away -> bit-identical legacy netlist. MaxInflight=2
   // admits a SECOND burst-safe load while the elder drains. Validated design point:
@@ -197,7 +224,8 @@ module spatz_vlsu
       mem_spatz_req.op_mem.is_load &&
       !mem_is_strided &&
       !mem_is_indexed &&
-      (mem_spatz_req.vtype.vsew == EW_32) &&
+      (BurstSubWord ? (mem_spatz_req.vtype.vsew != EW_8)
+                    : (mem_spatz_req.vtype.vsew == EW_32)) &&
       // At least one full burst (vl is in bytes after proc_spatz_req conversion).
       (mem_spatz_req.vl >= FullBurstBytes) &&
       // Total data must fit in one ROB batch to avoid multi-burst deadlock
@@ -603,6 +631,33 @@ module spatz_vlsu
 
     assign commit_finished_q[fu] = commit_insn_valid && (commit_counter_q[fu] == commit_counter_max[fu]);
     assign commit_finished_d[fu] = commit_insn_valid && ((commit_counter_q[fu] + commit_counter_delta[fu]) == commit_counter_max[fu]);
+
+    // ------------------------------------------------------------------------------
+    // DIAGNOSTIC ONLY (sim-only, pragma translate_off -- no netlist effect, and this does NOT
+    // change the completion condition). The two comparisons above are EXACT EQUALITY. If a
+    // commit ever advances the counter PAST max, neither can ever match again: the load never
+    // completes, mem_finish_ready never asserts, and the destination vector register is never
+    // released -- a permanent stall with the data already returned and nothing outstanding.
+    // That is precisely the fp16 deadlock signature (docs/fp16_matmul_deadlock.md): inflight=0,
+    // every core RAW-stalled on the dependent vfmacc.
+    //
+    // At e32 element size and word size coincide, so every delta divides max evenly and an
+    // overshoot cannot arise. At e16 the delta is element-size dependent
+    // (commit_single_element_size = 1 << vsew) and switch_to_tail_phase re-bases the counter
+    // mid-instruction, so it can. This probe REPORTS the overshoot instead of leaving it as a
+    // silent hang; it is the confirm/refute step for that hypothesis.
+    // ------------------------------------------------------------------------------
+    // pragma translate_off
+`ifndef TARGET_SYNTHESIS
+    always_ff @(posedge clk_i) begin
+      if (rst_ni && commit_insn_valid && (commit_counter_q[fu] > commit_counter_max[fu]))
+        $display("[VLSU OVERSHOOT] t=%0t fu=%0d q=%0d > max=%0d delta=%0d vsew=%0d vl=%0d id=%0d burst=%0b tail=%0b",
+                 $time, fu, commit_counter_q[fu], commit_counter_max[fu],
+                 commit_counter_delta[fu], commit_insn_q.vsew, commit_insn_q.vl,
+                 commit_insn_q.id, commit_use_port0_burst, burst_tail_phase_q);
+    end
+`endif
+    // pragma translate_on
   end: gen_vreg_counters
 
   // TwinROB0 2-wide commit window: pairs only at even element offsets and never across the
@@ -1152,7 +1207,8 @@ module spatz_vlsu
         // the linear-address mode; assertion gen_burst_only_in_port0_mode below is the tripwire.
         burst_mode_req[port] = mem_is_load && !mem_is_single_element_operation &&
                                mem_use_port0_burst &&
-                               (mem_spatz_req.vtype.vsew == EW_32) &&
+                               (BurstSubWord ? (mem_spatz_req.vtype.vsew != EW_8)
+                                             : (mem_spatz_req.vtype.vsew == EW_32)) &&
                                burst_addr_aligned[port] &&
                                (burst_len_eff[port] > 1) &&
                                (burst_len_eff[port] <= NrOutstandingLoads);
@@ -1867,6 +1923,76 @@ module spatz_vlsu
   end
 `endif
 
+  if (BurstSubWord) begin : gen_burst_ew_vl_ceiling
+    // Not a correctness assertion -- a VISIBILITY one. use_port0_burst_req caps a burst-eligible
+    // load at NrOutstandingLoads*MemDataWidthB bytes (256 B at ROB64). A load that satisfies every
+    // other burst condition but exceeds that cap does not fail: it quietly takes the multi-port
+    // word-interleaved path and loses the whole burst-merge benefit, with nothing in the log.
+    // At e16 that boundary lands on m8 (512 B), one LMUL step above the m4 the kernels use, so it
+    // is easy to walk into by editing a vsetvli. Report it once per occurrence instead.
+    // verilog_lint: waive-start
+    // pragma translate_off
+    always_ff @(posedge clk_i) begin
+      if (rst_ni && mem_spatz_req_valid && mem_spatz_req.op_mem.is_load &&
+          !mem_is_strided && !mem_is_indexed &&
+          (mem_spatz_req.vtype.vsew != EW_8) &&
+          (mem_spatz_req.vl >= FullBurstBytes) &&
+          (mem_spatz_req.vl > (NrOutstandingLoads * MemDataWidthB)) &&
+          (mem_spatz_req.rs1[BurstAlignBits-1:0] == '0))
+        $warning("[spatz_vlsu] BURST DROPPED: vl=%0d B exceeds the %0d B burst ceiling (NrOutstandingLoads*%0d); this load takes the non-burst path. Lower LMUL.",
+                 mem_spatz_req.vl, NrOutstandingLoads * MemDataWidthB, MemDataWidthB);
+    end
+    // pragma translate_on
+    // verilog_lint: waive-stop
+  end
+
+  // ---------------------------------------------------------------------------
+  // BURSTWHY -- root-cause probe for "knob is on but every request is bl=1".
+  // use_port0_burst_req is a 5-way AND; when it is 0 the load silently falls back to the
+  // multi-port WORD-INTERLEAVED path, which turns one vector load into vl/4 single-word
+  // requests. At e16,m2 that is 32 requests, so two loads fill a 64-entry ROB and the port
+  // wedges with resp=0. Nothing in the log says which conjunct failed -- this does.
+  // Prints once per NEW load instruction (id change), first BurstWhyMax per core.
+  // ---------------------------------------------------------------------------
+  // verilog_lint: waive-start
+  // pragma translate_off
+`ifndef TARGET_SYNTHESIS
+  if (1) begin : gen_burst_why
+    localparam int unsigned BurstWhyMax = 24;
+    // logic, not int; and NO declaration initialiser -- the reset branch below is the only
+    // place these get their value. A declaration assignment is equivalent to an initial block
+    // (IEEE 1800 10.5), which gives a variable already written by always_ff a SECOND procedural
+    // driver -- illegal per 9.2.2.4 and rejected by VCS as Error-[ICPD_INIT]. It was also
+    // redundant: the reset branch already writes the same values.
+    logic [$clog2(BurstWhyMax+1)-1:0]   burst_why_n;
+    logic [$bits(mem_spatz_req.id)-1:0] burst_why_last_id;
+    logic                               burst_why_seen;
+    always_ff @(posedge clk_i) begin
+      if (!rst_ni) begin
+        burst_why_n <= 0; burst_why_seen <= 1'b0;
+      end else if (mem_spatz_req_valid && mem_spatz_req.op_mem.is_load &&
+                   (!burst_why_seen || (mem_spatz_req.id != burst_why_last_id)) &&
+                   (burst_why_n < BurstWhyMax)) begin
+        burst_why_last_id <= mem_spatz_req.id;
+        burst_why_seen    <= 1'b1;
+        burst_why_n       <= burst_why_n + 1;
+        $display("[BURSTWHY] t=%0t %m id=%0d vsew=%0d vl=%0dB rs1=0x%08x | strided=%0b indexed=%0b ew_ok=%0b vl_ge_%0d=%0b vl_le_%0d=%0b align%0d=%0b => burst=%0b",
+                 $time, mem_spatz_req.id,
+                 mem_spatz_req.vtype.vsew, mem_spatz_req.vl, mem_spatz_req.rs1,
+                 mem_is_strided, mem_is_indexed,
+                 (BurstSubWord ? (mem_spatz_req.vtype.vsew != EW_8)
+                               : (mem_spatz_req.vtype.vsew == EW_32)),
+                 FullBurstBytes,                  (mem_spatz_req.vl >= FullBurstBytes),
+                 (NrOutstandingLoads*MemDataWidthB), (mem_spatz_req.vl <= (NrOutstandingLoads*MemDataWidthB)),
+                 BurstAlignBits,                  (mem_spatz_req.rs1[BurstAlignBits-1:0] == '0),
+                 use_port0_burst_req);
+      end
+    end
+  end
+`endif
+  // pragma translate_on
+  // verilog_lint: waive-stop
+
   if (BlockWords > 1) begin : gen_block_alloc_asserts
     // A5 (the F2 class): a block reservation may only be requested while port 0 is actually
     // running a burst. If the ROB reserved MaxBurstWords ids for a port that then never issues
@@ -1908,19 +2034,68 @@ module spatz_vlsu
     logic        vperf_win_q;
     logic [31:0] c_win, c_insn, c_noinsn, c_pairok, c_single, c_waitbeat, c_vrfbp, c_reqstall, c_ret;
     logic [31:0] c_dual, c_blkstall;
+    // Request B (TeraNoC_gvsoc/docs/rtl_probe_request.md): TIME AVERAGE of inflight_q, which the
+    // existing counters cannot give. TWO denominators are emitted deliberately, because the model
+    // and the RTL could otherwise average over different cycle sets -- the failure mode that
+    // request's own section 4 warns about:
+    //   infl_sum / win     = loads in flight over the WHOLE benchmark window
+    //   infl_sum / act_cyc = over cycles the VLSU actually has work (their stated definition)
+    // L then follows from Little's law with no extra state, because c_ret already counts
+    // commit_insn_pop, which IS their definition of retire:
+    //   throughput X = c_ret/c_win ;  L = N/X = infl_sum/c_ret
+    // So one accumulator yields BOTH L and N, measured on both sides rather than doc-derived.
+    // [VARRIVE] beat ARRIVAL at the core -- policy-immune, unlike words-per-COMMIT-cycle.
+    // A commit stage that waits for a pair reports single_commit==0 at ANY arrival width, so the
+    // commit split cannot distinguish 1-wide from 2-wide arrival. This counts responses actually
+    // landing on the core's memory ports, per cycle, and histograms the width.
+    logic [47:0] c_arr_words;
+    logic [31:0] c_arr_h1, c_arr_h2p, c_arr_cyc;
+    // LOAD-ONLY arrival width. The unfiltered counters above count $countones(spatz_mem_rsp_valid_i),
+    // and STORE ACKS assert that same valid (see the store_count_d ack test, which itself qualifies
+    // on spatz_mem_rsp_i[port].write). The ROB is write-filtered (rob_push excludes .write), so the
+    // unfiltered arrival total counts loads AND store acks while commit counts only loads -- which is
+    // exactly the 1280-vs-1024 discrepancy at 256x32x256 (the 256 are the C stores).
+    // Worse for the histogram: a store ack sharing a cycle with a load is scored as a 2-wide arrival,
+    // so arr_h2p does NOT measure load+load width. These parallel counters apply the same write mask
+    // the ROB uses, and emitting both makes their difference a direct measurement of store traffic.
+    logic [NrMemPorts-1:0] rsp_load_valid;
+    logic [47:0] c_ld_words;
+    logic [31:0] c_ld_h1, c_ld_h2p, c_ld_cyc;
+    always_comb begin
+      for (int unsigned pp = 0; pp < NrMemPorts; pp++)
+        rsp_load_valid[pp] = spatz_mem_rsp_valid_i[pp] && !spatz_mem_rsp_i[pp].write;
+    end
+    logic [47:0] c_inflsum;
+    logic [31:0] c_actcyc;
     wire vperf_win = mempool_tb.csr_trace_any_global;
     always_ff @(posedge clk_i or negedge rst_ni) begin
       if (!rst_ni) begin
         vperf_win_q <= 1'b0;
         {c_win, c_insn, c_noinsn, c_pairok, c_single, c_waitbeat, c_vrfbp, c_reqstall, c_ret} <= '0;
         {c_dual, c_blkstall} <= '0;
+        {c_inflsum, c_actcyc} <= '0;
+        {c_arr_words, c_arr_h1, c_arr_h2p, c_arr_cyc} <= '0;
+        {c_ld_words, c_ld_h1, c_ld_h2p, c_ld_cyc} <= '0;
       end else begin
         vperf_win_q <= vperf_win;
         if (vperf_win && !vperf_win_q) begin
           {c_win, c_insn, c_noinsn, c_pairok, c_single, c_waitbeat, c_vrfbp, c_reqstall, c_ret} <= '0;
         {c_dual, c_blkstall} <= '0;
+        {c_inflsum, c_actcyc} <= '0;
+        {c_arr_words, c_arr_h1, c_arr_h2p, c_arr_cyc} <= '0;
+        {c_ld_words, c_ld_h1, c_ld_h2p, c_ld_cyc} <= '0;
         end else if (vperf_win) begin
           c_win <= c_win + 1;
+          // arrival width this cycle, counted at the core's response ports
+          c_arr_words <= c_arr_words + 48'($countones(spatz_mem_rsp_valid_i));
+          if ($countones(spatz_mem_rsp_valid_i) != 0) c_arr_cyc <= c_arr_cyc + 1;
+          if ($countones(spatz_mem_rsp_valid_i) == 1) c_arr_h1  <= c_arr_h1  + 1;
+          if ($countones(spatz_mem_rsp_valid_i) >  1) c_arr_h2p <= c_arr_h2p + 1;
+          // same histogram, loads only
+          c_ld_words <= c_ld_words + 48'($countones(rsp_load_valid));
+          if ($countones(rsp_load_valid) != 0) c_ld_cyc <= c_ld_cyc + 1;
+          if ($countones(rsp_load_valid) == 1) c_ld_h1  <= c_ld_h1  + 1;
+          if ($countones(rsp_load_valid) >  1) c_ld_h2p <= c_ld_h2p + 1;
           if (commit_insn_valid && commit_insn_q.is_load) c_insn <= c_insn + 1;
           if (!commit_insn_valid)                         c_noinsn <= c_noinsn + 1;
           if (commit_pair_active && vrf_req_valid_d && vrf_req_ready_d) c_pairok <= c_pairok + 1;
@@ -1934,10 +2109,22 @@ module spatz_vlsu
           if (dual_adv)                                   c_dual <= c_dual + 1;
           if (burst_alloc_q[0] && !burst_block_fire &&
               mem_operation_valid[0])                     c_blkstall <= c_blkstall + 1;
+          // inflight_q exists only when Runahead (MaxInflight>1); fall back to the ongoing-insn
+          // indicator so the line stays meaningful at dual_load=1.
+          c_inflsum <= c_inflsum + (Runahead ? 48'(inflight_q) : 48'(commit_insn_valid ? 1 : 0));
+          if (Runahead ? (inflight_q != '0) : commit_insn_valid) c_actcyc <= c_actcyc + 1;
         end
-        if (!vperf_win && vperf_win_q && (c_ret != 0))
-          $display("[VPERF] %m win=%0d insn_act=%0d no_insn=%0d pair_commit=%0d single_commit=%0d wait_beats=%0d vrf_bp=%0d req_stall=%0d insn_ret=%0d dual_adv=%0d blk_stall=%0d",
-                   c_win, c_insn, c_noinsn, c_pairok, c_single, c_waitbeat, c_vrfbp, c_reqstall, c_ret, c_dual, c_blkstall);
+        // begin/end is REQUIRED here: with two $display statements a bare `if` guards only the
+        // first, and the second fires every cycle. That produced 3.8M lines / 1.0 GB before the
+        // window even closed, and indentation made it look guarded.
+        if (!vperf_win && vperf_win_q && (c_ret != 0)) begin
+          $display("[VPERF] %m win=%0d insn_act=%0d no_insn=%0d pair_commit=%0d single_commit=%0d wait_beats=%0d vrf_bp=%0d req_stall=%0d insn_ret=%0d dual_adv=%0d blk_stall=%0d infl_sum=%0d act_cyc=%0d",
+                   c_win, c_insn, c_noinsn, c_pairok, c_single, c_waitbeat, c_vrfbp, c_reqstall, c_ret, c_dual, c_blkstall, c_inflsum, c_actcyc);
+          $display("[VARRIVE] %m win=%0d arr_words=%0d arr_cyc=%0d arr_h1=%0d arr_h2p=%0d ports=%0d",
+                   c_win, c_arr_words, c_arr_cyc, c_arr_h1, c_arr_h2p, NrMemPorts);
+          $display("[VARRIVE-LD] %m win=%0d ld_words=%0d ld_cyc=%0d ld_h1=%0d ld_h2p=%0d ports=%0d",
+                   c_win, c_ld_words, c_ld_cyc, c_ld_h1, c_ld_h2p, NrMemPorts);
+        end
       end
     end
   end
