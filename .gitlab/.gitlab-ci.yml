@@ -200,6 +200,7 @@ riscvTests-test-vlt:
       - { cfg: spatz_cluster.smallvrf.dram }
       - { cfg: spatz_cluster.32b.dram }
       - { cfg: spatz_cluster.doublebw.dram }
+      - { cfg: spatz_cluster.4ipu.dram }
 
 # Spatz tests
 spatzBenchmarks-test-vlt:
