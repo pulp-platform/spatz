@@ -692,9 +692,6 @@ module spatz_fpu_sequencer
   //  Retire  //
   //////////////
 
-  logic outstanding_store_q, outstanding_store_d;
-  `FF(outstanding_store_q, outstanding_store_d, 1'b0)
-
   always_comb begin
     // We are not retiring anything, by default
     retire        = '0;
@@ -709,19 +706,15 @@ module spatz_fpu_sequencer
     fp_move_result_valid_i = 1'b0;
     fp_move_result_ready_i = 1'b0;
 
-    outstanding_store_d = 1'b0;
-
     // Do not forward results to Snitch
     resp_o       = '0;
     resp_valid_o = 1'b0;
     resp_ready_o = 1'b0;
 
-    // Did we just finished writing something?
-    fp_lsu_mem_finished_o     = outstanding_store_q || (fp_lsu_qwrite && fp_lsu_qvalid && fp_lsu_qready);
-    fp_lsu_mem_str_finished_o = outstanding_store_q || (fp_lsu_qwrite && fp_lsu_qvalid && fp_lsu_qready);
-
-    // Was there already a store committing in this cycle?
-    outstanding_store_d = outstanding_store_q && (fp_lsu_qwrite && fp_lsu_qvalid && fp_lsu_qready);
+    // A scalar FP store is complete only when its TCDM acknowledgement is
+    // consumed. Request acceptance merely queues it inside the LSU.
+    fp_lsu_mem_finished_o     = fp_lsu_pwrite;
+    fp_lsu_mem_str_finished_o = fp_lsu_pwrite;
 
     // Is there a move trying to commit during this cycle?
     move_stall = is_move && use_rd && !fp_move_result_ready_o;
@@ -764,16 +757,13 @@ module spatz_fpu_sequencer
     end
 
     // Commit a FP LSU response
-    if (fp_lsu_pvalid && !outstanding_store_q) begin
+    if (fp_lsu_pvalid) begin
       fp_lsu_pready = 1'b1;
       retire[1]     = 1'b1;
 
       fpr_wdata[1] = fp_lsu_pdata;
       fpr_waddr[1] = fp_lsu_ptag;
       fpr_we[1]    = 1'b1;
-
-      // Was there a store being acknowledged in this cycle?
-      outstanding_store_d = fp_lsu_mem_str_finished_o;
 
       // Finished a load
       fp_lsu_mem_finished_o     = 1'b1;
