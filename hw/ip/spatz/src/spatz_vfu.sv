@@ -166,7 +166,8 @@ module spatz_vfu
   // mis-sizes an e8/e16 scalar, and the predicate fix alone still reads the wrong instruction's
   // width when the pipe is non-empty and the live request is EW_64.
   logic [N_FU*ELENB-1:0] pending_results;
-  assign pending_results = result_tag.wb ? (result_tag.vsew == EW_64 ? 8'hff : 4'hf) : '1;
+  assign pending_results =
+      result_tag.wb ? (result_tag.vsew == EW_64 ? 8'hff : 4'hf) : '1;
 
   // Did we issue a microoperation?
   logic word_issued;
@@ -361,7 +362,7 @@ module spatz_vfu
   assign result       = state_q == VFU_RunningIPU ? ipu_result       : fpu_result;
   assign result_valid = state_q == VFU_RunningIPU ? ipu_result_valid : fpu_result_valid;
 
-  assign scalar_result = spatz_req.op_arith.is_scalar ? result[ELEN-1:0] : '0;
+  assign scalar_result = result_tag.wb ? result[ELEN-1:0] : '0;
 
   ///////////////////////
   //  Reduction logic  //
@@ -768,7 +769,7 @@ module spatz_vfu
         int_ipu_result_ready                                            = 1'b1;
 
         // Scalar operation
-        if (ipu_result_tag_d.wb || spatz_req.op_arith.is_reduction)
+        if (ipu_result_tag_d.wb || ipu_result_tag_d.reduction)
           ipu_result_pnt_d = '0;
       end
     end
