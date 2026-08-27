@@ -30,54 +30,57 @@ The Spatz cluster system (hw/system/spatz_cluster) is a fundamental system aroun
 
 In `hw/system/spatz_cluster`:
 
-- Compile the software and choose the configuration in `./cfg`:
+- Build RTL and choose the configuration in `./cfg`:
 ```bash
-    make sw SPATZ_CLUSTER_CFG=choose/the/config
+    make <tool> SPATZ_CLUSTER_CFG=<cfg>
 ```
-- Compile the RTL and specify the binary to run on the simulator:
-
+- Compile the C tests (SW):
+```bash
+    make sw
+```
+- Simulate using the tools:
   - Verilator:
 ```bash
-make sim.vlt TEST=path/to/riscv/binary
+make spatz_cluster.vlt TEST=path/to/riscv/binary
 ```
   - QuestaSim:
 ```bash
 # Headless
-make sim.vsim TEST=path/to/riscv/binary
+make spatz_cluster.vsim TEST=path/to/riscv/binary
 # GUI
-make sim.vsim.gui TEST=path/to/riscv/binary
+make spatz_cluster.vsim.gui TEST=path/to/riscv/binary
 ```
   - VCS:
 ```bash
 # Headless
-make sim.vcs TEST=path/to/riscv/binary
+make spatz_cluster.vcs TEST=path/to/riscv/binary
 # GUI
-make sim.vcs.gui TEST=path/to/riscv/binary
+make spatz_cluster.vcs.gui TEST=path/to/riscv/binary
 ```
   - Xcelium:
 ```bash
 # Headless
-make sim.xrun TEST=path/to/riscv/binary
+make spatz_cluster.xrun TEST=path/to/riscv/binary
 # GUI
-make sim.xrun.gui TEST=path/to/riscv/binary
+make spatz_cluster.xrun.gui TEST=path/to/riscv/binary
 ```
 
 - Given a configuration selected in SW compile phase, the user can run all the tests on a simulator by using:
   - Verilator:
 ```bash
-make sw.test.vlt
+make spatz_cluster.vlt.test SUITE=snRuntime/riscvTests/spatzBenchmarks
 ```
   - QuestaSim:
 ```bash
-make sw.test.vsim
+make spatz_cluster.vsim.test SUITE=snRuntime/riscvTests/spatzBenchmarks
 ```
   - VCS:
 ```bash
-make sw.test.vcs
+make spatz_cluster.vcs.test SUITE=snRuntime/riscvTests/spatzBenchmarks
 ```
   - Xcelium:
 ```bash
-make sw.test.xrun
+make spatz_cluster.xrun.test SUITE=snRuntime/riscvTests/spatzBenchmarks
 ```
 
 - Build the traces in `.logs/trace_hart_X.txt` with the help of `spike-dasm`:
@@ -93,17 +96,18 @@ make annotate
 make help
 ```
 
-### CHIPS-IT simulation flow example with Questasim
+### CHIPS-IT workflow example with Questasim
 ```bash
 source util/chips-it-env.sh
 make init
 cd hw/system/spatz_cluster
 
-make sw SPATZ_CLUSTER_CFG=default  #choose among: default/32b/smallvrf/doublebw
+make vsim SPATZ_CLUSTER_CFG=smallvrf  #choose among: default/32b/smallvrf/doublebw
+make sw
 
-make sim.vsim TEST=./sw/build/riscvTests/test-riscvTests-vls
+make spatz_cluster.vsim TEST=./sw/build/riscvTests/test-riscvTests-vadd
 #alternatively:
-make sim.vsim.gui TEST=./sw/build/riscvTests/test-riscvTests-vls
+make spatz_cluster.vsim.gui TEST=./sw/build/riscvTests/test-riscvTests-vadd
 ```
 
 ## Architecture
