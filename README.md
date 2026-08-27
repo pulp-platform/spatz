@@ -89,7 +89,7 @@ The default config is in `cfg/spatz_cluster.default.hjson`. Alternatively, you c
 ### Spatz cluster
 
 The Spatz cluster architecture consists of two Snitch-Spatz core complexes (CCs) sharing a L1 TCDM. The default L1 TCDM size is 128 KiB split into 16 banks 64-bit wide. The snitch in CC-0 is also a DMA capable to move data in and out of the L1 from L2. Spatz is parametric with several configurations of interest present in the `cfg/` folder. The default configuration is shown below.
- 
+
 ![Spatz cluster](./docs/fig/spatz_cluster.png)
 
 ### Spatz core
@@ -103,7 +103,7 @@ Each Spatz has three functional units:
 Each Spatz core is a 512-bit VLEN vector unit supporting the RVV 1.0 vector ISA specification. The spatz core is present in the repository [spatz_vpu](https://github.com/pulp-platform/spatz_vpu).
 The spatz_vpu is not fully compliant and several instructions are being added at the moment.
 
-Check [Ara](https://github.com/pulp-platform/ara) for an open-source vector processor fully compliant with RVV (and by the same authors!). 
+Check [Ara](https://github.com/pulp-platform/ara) for an open-source vector processor fully compliant with RVV (and by the same authors!).
 Thanks to its small size, Spatz is highly scalable, and we rely on multi-core vector processing to scale up the system.
 
 ![Spatz' architecture](./docs/fig/spatz_arch.png)
@@ -143,8 +143,8 @@ If you want to use Spatz, you can cite us:
 ```bibtex
 @ARTICLE{Spatz2025,
   author  ={Perotti, Matteo and Riedel, Samuel and Cavalcante, Matheus and Benini, Luca},
-  journal ={IEEE Transactions on Computer-Aided Design of Integrated Circuits and Systems}, 
-  title   ={Spatz: Clustering Compact RISC-V-Based Vector Units to Maximize Computing Efficiency}, 
+  journal ={IEEE Transactions on Computer-Aided Design of Integrated Circuits and Systems},
+  title   ={Spatz: Clustering Compact RISC-V-Based Vector Units to Maximize Computing Efficiency},
   year    ={2025},
   volume  ={44},
   number  ={7},
