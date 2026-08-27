@@ -384,14 +384,16 @@ module spatz_fpu_sequencer
           end
         end
 
-        // Floating-Point Load/Store
-        riscv_instr::FLB,
+        // Floating-Point Load/Store. NOTE: FLB/FSB are intentionally excluded -- their
+        // funct3=000 (opcode 0000111/0100111) aliases the RVV unit-stride/indexed byte
+        // loads/stores (VLE8_V/VSE8_V/VLUXEI8/...), which on a Spatz core (RVV on) the vector
+        // unit owns. Claiming them here would mis-route a vector byte load/store as a scalar
+        // FP byte op. The scalar FLB/FSB encoding is decoded only on non-RVV cores (snitch.sv).
         riscv_instr::FLH,
         riscv_instr::FLW,
         riscv_instr::FLD: begin
           use_fd = 1'b1;
           casez (issue_req_i.data_op)
-            riscv_instr::FLB: ls_size          = Byte;
             riscv_instr::FLH: ls_size          = HalfWord;
             riscv_instr::FLW: ls_size          = Word;
             riscv_instr::FLD: if (RVD) ls_size = Double;
@@ -400,13 +402,11 @@ module spatz_fpu_sequencer
           is_load      = 1'b1;
           illegal_inst = !RVD && issue_req_i.data_op inside {riscv_instr::FLD};
         end
-        riscv_instr::FSB,
         riscv_instr::FSH,
         riscv_instr::FSW,
         riscv_instr::FSD: begin
           use_fs2 = 1'b1;
           casez (issue_req_i.data_op)
-            riscv_instr::FSB: ls_size          = Byte;
             riscv_instr::FSH: ls_size          = HalfWord;
             riscv_instr::FSW: ls_size          = Word;
             riscv_instr::FSD: if (RVD) ls_size = Double;
