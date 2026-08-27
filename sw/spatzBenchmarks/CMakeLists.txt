@@ -211,3 +211,7 @@ add_spatz_test_gather(gather gather/main.c 2048 128 128)
 add_spatz_test_gather(gather-opt gather/main.c 2048 128 128)
 target_compile_definitions(test-${SNITCH_TEST_PREFIX}gather-opt_R2048_D128_G128
   PUBLIC GATHER_OPT)
+# Hardware variant: one DMGATHER instruction stream drives the on-chip gather engine.
+add_spatz_test_gather(gather-hw gather/main.c 2048 128 128)
+target_compile_definitions(test-${SNITCH_TEST_PREFIX}gather-hw_R2048_D128_G128
+  PUBLIC GATHER_HW)

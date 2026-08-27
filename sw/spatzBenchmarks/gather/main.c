@@ -21,6 +21,9 @@
 
 static __fp16 *l1_gather;  // G x DIM gathered rows
 static uint32_t *l1_index; // G indices
+#ifdef GATHER_HW
+static uint16_t *l1_index16; // G indices narrowed to 16-bit for the HW engine
+#endif
 
 int main(void) {
   const unsigned int cid = snrt_cluster_core_idx();
@@ -31,12 +34,21 @@ int main(void) {
   if (cid == 0) {
     l1_index = (uint32_t *)snrt_l1alloc(G * sizeof(uint32_t));
     l1_gather = (__fp16 *)snrt_l1alloc((size_t)G * DIM * sizeof(__fp16));
+#ifdef GATHER_HW
+    l1_index16 = (uint16_t *)snrt_l1alloc(G * sizeof(uint16_t));
+#endif
   }
 
   // Bring the index stream on-chip with one contiguous DMA.
   if (cid == 0) {
     snrt_dma_start_1d(l1_index, gather_index_dram, G * sizeof(uint32_t));
     snrt_dma_wait_all();
+#ifdef GATHER_HW
+    // The HW engine consumes 16-bit indices; narrow the on-chip stream once
+    // (setup, not part of the timed gather). Indices fit in 16 bits (rows < 65536).
+    for (uint32_t i = 0; i < G; i++)
+      l1_index16[i] = (uint16_t)l1_index[i];
+#endif
   }
 
   snrt_cluster_hw_barrier();
@@ -46,7 +58,9 @@ int main(void) {
   if (cid == 0) {
     start_kernel();
     timer = benchmark_get_cycle();
-#ifdef GATHER_OPT
+#if defined(GATHER_HW)
+    gather_hw(l1_gather, gather_matrix_dram, l1_index16, G, DIM);
+#elif defined(GATHER_OPT)
     gather_opt(l1_gather, gather_matrix_dram, l1_index, G, DIM);
 #else
     gather_baseline(l1_gather, gather_matrix_dram, l1_index, G, DIM);

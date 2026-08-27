@@ -60,3 +60,48 @@ void gather_opt(__fp16 *dst, const __fp16 *matrix, const uint32_t *index,
   }
   snrt_dma_wait_all();
 }
+
+// Hardware indexed-gather: configure the on-chip gather engine ONCE and launch a
+// single transfer. The engine reads the 16-bit index stream from L1 over its TCDM
+// port and generates G scattered row reads (src = matrix + idx[i]*stride_src),
+// packing them into dst (dst + i*stride_dst). No per-row core loop. The whole
+// gather is a single DMA transfer id, drained by one wait_all.
+//   idx16 : L1 address of the G 16-bit indices (values must fit in 16 bits)
+// stride_src (index scale) = stride_dst (dst pitch) = row_bytes (power of two).
+void gather_hw(__fp16 *dst, const __fp16 *matrix, const uint16_t *idx16,
+               uint32_t G, uint32_t DIM) {
+  const uint32_t row_bytes = DIM * (uint32_t)sizeof(__fp16);
+  register uint32_t s_lo  asm("a2") = (uint32_t)matrix;  // DMSRC low  (DRAM base)
+  register uint32_t s_hi  asm("a3") = 0;                 // DMSRC high (32-bit addr)
+  register uint32_t d_lo  asm("a0") = (uint32_t)dst;     // DMDST low  (L1 base)
+  register uint32_t d_hi  asm("a1") = 0;                 // DMDST high
+  register uint32_t idx   asm("a5") = (uint32_t)idx16;   // DMIDX index-stream base
+  register uint32_t str_s asm("a6") = row_bytes;         // DMSTR stride_src (index scale)
+  register uint32_t str_d asm("a7") = row_bytes;         // DMSTR stride_dst (dst pitch)
+  register uint32_t reps  asm("t0") = G;                 // DMREP index count
+  register uint32_t sz    asm("a4") = row_bytes;         // DMCPYI bytes per gathered row
+  register uint32_t txid  asm("a0");                     // DMCPYI returns the transfer id
+
+  // DMSRC a2,a3 : source base (matrix) in DRAM
+  asm volatile(".word (0b0000000<<25)|((13)<<20)|((12)<<15)|(0b000<<12)|(0b0101011)\n"
+               ::"r"(s_hi), "r"(s_lo));
+  // DMDST a0,a1 : destination base in L1
+  asm volatile(".word (0b0000001<<25)|((11)<<20)|((10)<<15)|(0b000<<12)|(0b0101011)\n"
+               ::"r"(d_hi), "r"(d_lo));
+  // DMIDX a5, imm5=0b00001 : index-stream base (a5), element width = 16-bit
+  asm volatile(".word (0b0001000<<25)|((0b00001)<<20)|((15)<<15)|(0b000<<12)|(0b0101011)\n"
+               ::"r"(idx));
+  // DMSTR a6,a7 : stride_src (a6, rs1) = index scale, stride_dst (a7, rs2) = dst pitch
+  asm volatile(".word (0b0000110<<25)|((17)<<20)|((16)<<15)|(0b000<<12)|(0b0101011)\n"
+               ::"r"(str_s), "r"(str_d));
+  // DMREP t0 : index count G
+  asm volatile(".word (0b0000111<<25)|(0b00000<<20)|((5)<<15)|(0b000<<12)|(0b0101011)\n"
+               ::"r"(reps));
+  // DMCPYI a0 <- a4, imm5=cfg : num_bytes=row_bytes, cfg=is_gather(bit2) -> launch
+  asm volatile(".word (0b0000010<<25)|((0b00100)<<20)|((14)<<15)|(0b000<<12)|((10)<<7)|(0b0101011)\n"
+               : "=r"(txid)
+               : "r"(sz));
+  (void)txid;
+
+  snrt_dma_wait_all();
+}

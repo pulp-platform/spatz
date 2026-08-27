@@ -19,4 +19,9 @@ void gather_baseline(__fp16 *dst, const __fp16 *matrix, const uint32_t *index,
 void gather_opt(__fp16 *dst, const __fp16 *matrix, const uint32_t *index,
                 uint32_t G, uint32_t DIM);
 
+// Hardware variant: one DMGATHER instruction stream configures the on-chip gather
+// engine, which reads the 16-bit index stream from L1 and generates all G reads.
+void gather_hw(__fp16 *dst, const __fp16 *matrix, const uint16_t *idx16,
+               uint32_t G, uint32_t DIM);
+
 #endif // GATHER_H
