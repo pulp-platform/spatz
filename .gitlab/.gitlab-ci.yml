@@ -53,7 +53,7 @@ snRuntime-test-vsim:
   variables:
     TOOL: vsim
     SUITE: snRuntime
-    CTEST_ARGS: '--output-on-failure -j4'
+    CTEST_ARGS: '--output-on-failure'
   parallel:
     matrix:
       - { cfg: [default, smallvrf, doublebw] }
@@ -63,7 +63,7 @@ snRuntime-test-vcs:
   variables:
     TOOL: vcs
     SUITE: snRuntime
-    CTEST_ARGS: '--output-on-failure -j4'
+    CTEST_ARGS: '--output-on-failure'
   parallel:
     matrix:
       - { cfg: [default, smallvrf, doublebw] }
@@ -73,7 +73,7 @@ snRuntime-test-vlt:
   variables:
     TOOL: vlt
     SUITE: snRuntime
-    CTEST_ARGS: '--output-on-failure -j4'
+    CTEST_ARGS: '--output-on-failure'
   parallel:
     matrix:
       - { cfg: [default, smallvrf, doublebw] }
