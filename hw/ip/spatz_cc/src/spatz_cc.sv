@@ -381,7 +381,13 @@ module spatz_cc
       .acc_pready_i     ( dma_pready               ),
       .hart_id_i        ( hart_id_i                ),
       .dma_perf_o       ( axi_dma_perf_o           ),
-      .dma_events_o     ( axi_dma_events_o         )
+      .dma_events_o     ( axi_dma_events_o         ),
+      // Index-stream read port (indexed/gather): tied off until Step 4 wires TCDM
+      .dma_idx_req_o    (                          ),
+      .dma_idx_addr_o   (                          ),
+      .dma_idx_gnt_i    ( 1'b0                     ),
+      .dma_idx_rvalid_i ( 1'b0                     ),
+      .dma_idx_rdata_i  ( '0                       )
     );
 
   // no DMA instanciated

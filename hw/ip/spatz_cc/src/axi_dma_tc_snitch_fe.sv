@@ -17,6 +17,8 @@ module axi_dma_tc_snitch_fe #(
     parameter int  unsigned UserWidth          = 0,
     parameter int  unsigned DMAAxiReqFifoDepth = 3,
     parameter int  unsigned DMAReqFifoDepth    = 3,
+    /// Width of one index-stream read from L1/TCDM (indexed/gather mode)
+    parameter int  unsigned IndexTcdmDataWidth = 64,
     parameter type          axi_req_t          = logic,
     parameter type          axi_ar_chan_t      = logic,
     parameter type          axi_aw_chan_t      = logic,
@@ -55,7 +57,14 @@ module axi_dma_tc_snitch_fe #(
 
     // performance output
     output axi_dma_pkg::dma_perf_t dma_perf_o,
-    output dma_events_t            dma_events_o
+    output dma_events_t            dma_events_o,
+
+    // Index-stream read port to L1/TCDM (indexed/gather mode, read-only)
+    output logic                          dma_idx_req_o,
+    output addr_t                         dma_idx_addr_o,
+    input  logic                          dma_idx_gnt_i,
+    input  logic                          dma_idx_rvalid_i,
+    input  logic [IndexTcdmDataWidth-1:0] dma_idx_rdata_i
   );
 
   typedef logic [IdWidth-1:0] id_t;
@@ -245,21 +254,75 @@ module axi_dma_tc_snitch_fe #(
   logic      twod_req_ready;
   logic      twod_req_last;
 
+  //--------------------------------------
+  // Launch routing: is_gather -> gather engine, else -> 2D engine
+  //--------------------------------------
+  // NOTE (stage 1): SW must not have 1D/2D and gather transfers in flight at the
+  // same time (wait_all between mode switches). Only one engine is ever active,
+  // so the burst-stream mux below never sees both sources valid at once.
+  logic is_gather_launch;
+  logic twod_ext_valid, gather_ext_valid;
+  logic twod_ext_ready, gather_ext_ready;
+
+  assign is_gather_launch = twod_req_d.is_gather;
+  assign twod_ext_valid   = twod_req_valid & ~is_gather_launch;
+  assign gather_ext_valid = twod_req_valid &  is_gather_launch;
+  assign twod_req_ready   = is_gather_launch ? gather_ext_ready : twod_ext_ready;
+
+  // Per-engine burst streams, merged into the single backend request.
+  burst_req_t twod_burst_req,   gather_burst_req;
+  logic       twod_burst_valid, gather_burst_valid;
+  logic       twod_burst_ready, gather_burst_ready;
+  logic       twod_burst_last,  gather_burst_last;
+
+  // gather takes priority if both were ever valid (must not happen — see NOTE)
+  assign burst_req_valid    = twod_burst_valid | gather_burst_valid;
+  assign burst_req          = gather_burst_valid ? gather_burst_req  : twod_burst_req;
+  assign twod_req_last      = gather_burst_valid ? gather_burst_last : twod_burst_last;
+  assign gather_burst_ready = burst_req_ready &  gather_burst_valid;
+  assign twod_burst_ready   = burst_req_ready & ~gather_burst_valid;
+
   axi_dma_twod_ext #(
     .ADDR_WIDTH     ( AddrWidth       ),
     .REQ_FIFO_DEPTH ( DMAReqFifoDepth ),
     .burst_req_t    ( burst_req_t     ),
     .twod_req_t     ( twod_req_t      )
   ) i_axi_dma_twod_ext (
-    .clk_i             ( clk_i           ),
-    .rst_ni            ( rst_ni          ),
-    .twod_req_i        ( twod_req_d      ),
-    .twod_req_valid_i  ( twod_req_valid  ),
-    .twod_req_ready_o  ( twod_req_ready  ),
-    .burst_req_o       ( burst_req       ),
-    .burst_req_valid_o ( burst_req_valid ),
-    .burst_req_ready_i ( burst_req_ready ),
-    .twod_req_last_o   ( twod_req_last   )
+    .clk_i             ( clk_i            ),
+    .rst_ni            ( rst_ni           ),
+    .twod_req_i        ( twod_req_d       ),
+    .twod_req_valid_i  ( twod_ext_valid   ),
+    .twod_req_ready_o  ( twod_ext_ready   ),
+    .burst_req_o       ( twod_burst_req   ),
+    .burst_req_valid_o ( twod_burst_valid ),
+    .burst_req_ready_i ( twod_burst_ready ),
+    .twod_req_last_o   ( twod_burst_last  )
+  );
+
+  //--------------------------------------
+  // Indexed (gather) Extension
+  //--------------------------------------
+  axi_dma_gather_ext #(
+    .ADDR_WIDTH     ( AddrWidth          ),
+    .REQ_FIFO_DEPTH ( DMAReqFifoDepth    ),
+    .TcdmDataWidth  ( IndexTcdmDataWidth ),
+    .burst_req_t    ( burst_req_t        ),
+    .gather_req_t   ( twod_req_t         )
+  ) i_axi_dma_gather_ext (
+    .clk_i              ( clk_i              ),
+    .rst_ni             ( rst_ni             ),
+    .burst_req_o        ( gather_burst_req   ),
+    .burst_req_valid_o  ( gather_burst_valid ),
+    .burst_req_ready_i  ( gather_burst_ready ),
+    .gather_req_i       ( twod_req_d         ),
+    .gather_req_valid_i ( gather_ext_valid   ),
+    .gather_req_ready_o ( gather_ext_ready   ),
+    .gather_req_last_o  ( gather_burst_last  ),
+    .idx_req_o          ( dma_idx_req_o      ),
+    .idx_addr_o         ( dma_idx_addr_o     ),
+    .idx_gnt_i          ( dma_idx_gnt_i      ),
+    .idx_rvalid_i       ( dma_idx_rvalid_i   ),
+    .idx_rdata_i        ( dma_idx_rdata_i    )
   );
 
   //--------------------------------------
