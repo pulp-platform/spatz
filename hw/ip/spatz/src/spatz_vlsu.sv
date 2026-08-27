@@ -132,6 +132,25 @@ module spatz_vlsu
     `else 1'b0 `endif;
 
   // ---------------------------------------------------------------------------
+  // vl CEILING RELAXATION (experiment, docs/spatz_vlsu_ceiling_analysis.md).
+  //
+  // use_port0_burst_req demands vl <= NrOutstandingLoads*MemDataWidthB.  The ROB id
+  // IS the memory response tag, so that rule is "no more outstanding words than
+  // distinct tags" -- exceeding it would make a response unattributable IF the whole
+  // load were issued at once.  But tags are already recycled mid-instruction:
+  // rob_pop frees an entry the cycle its element is accepted into a VRF write, so the
+  // allocator can keep issuing as tags come back.
+  //
+  // 0 (default) = ceiling enforced, netlist bit-identical.  1 = admit the load and let
+  // it stream through the tag pool.  This is a MEASUREMENT knob: whether anything
+  // downstream assumes one-shot allocation (commit_counter_max, burst_odd_expected_q)
+  // is exactly what the directed test is for.  Do not ship it on without that evidence.
+  // ---------------------------------------------------------------------------
+  localparam bit NoVlCeiling =
+    `ifdef SPATZ_VLSU_NO_VL_CEILING (`SPATZ_VLSU_NO_VL_CEILING != 0)
+    `else 1'b0 `endif;
+
+  // ---------------------------------------------------------------------------
   // H1 dual-load runahead (docs/spatz_rob64_h1_design_plan.md). MaxInflight=1 (default)
   // const-folds every added term away -> bit-identical legacy netlist. MaxInflight=2
   // admits a SECOND burst-safe load while the elder drains. Validated design point:
@@ -230,7 +249,8 @@ module spatz_vlsu
       (mem_spatz_req.vl >= FullBurstBytes) &&
       // Total data must fit in one ROB batch to avoid multi-burst deadlock
       // (scoreboard-blocked VRF writes prevent ROB drain between batches).
-      (mem_spatz_req.vl <= (NrOutstandingLoads * MemDataWidthB)) &&
+      // NoVlCeiling=0 (default) const-folds this to the exact legacy comparison.
+      (NoVlCeiling || (mem_spatz_req.vl <= (NrOutstandingLoads * MemDataWidthB))) &&
       (mem_spatz_req.rs1[BurstAlignBits-1:0] == '0);
   assign burst_full_bytes_req    = (mem_spatz_req.vl >> BurstAlignBits) << BurstAlignBits;
   assign burst_full_bytes_commit = (commit_insn_q.vl >> BurstAlignBits) << BurstAlignBits;
