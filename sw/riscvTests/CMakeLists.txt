@@ -182,4 +182,4 @@ add_snitch_test(vse64 isa/rv64uv/vse64.c)
 add_snitch_test(vss isa/rv64uv/vss.c)
 
 add_snitch_test(vill isa/rv64uv/vill.c)
-set_property(TEST ${SNITCH_TEST_PREFIX}rtl-invalid PROPERTY WILL_FAIL TRUE)
+set_property(TEST ${SNITCH_TEST_PREFIX}rtl-vill PROPERTY WILL_FAIL TRUE)
