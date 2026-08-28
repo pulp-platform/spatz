@@ -1693,7 +1693,16 @@ module spatz_vlsu
           // commit_finished_q is the authoritative per-port "delivered its quota", and it
           // is derived from the COMMITTING instruction's counters, so it stays correct
           // when a younger load is already issuing under dual_adv.
-          vrf_req_valid_d = &(rob_rvalid | commit_finished_q) && !(&commit_finished_q);
+          // The |mem_pending qualifier is NOT redundant. The offset queue is pushed on
+          // every issued load request but popped only when mem_pending[port] is set, so a
+          // writeback that fires with no port owing a beat pops the ROB without popping the
+          // offset queue and leaks an entry. The queue is NrOutstandingLoads deep and gates
+          // request issue through !offset_queue_full, so once it fills the request side stops
+          // permanently -- the instruction is credited a fraction of its elements and waits
+          // forever. The original expression carried this term; keying readiness off
+          // commit_finished_q must not drop it.
+          vrf_req_valid_d = &(rob_rvalid | commit_finished_q) && !(&commit_finished_q) &&
+                            |mem_pending;
 
           for (int unsigned port = 0; port < NrMemPorts; port++) begin
             automatic logic [63:0] data = rob_rdata[port];
