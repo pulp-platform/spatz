@@ -1,120 +1,109 @@
 # Sparse-DMA gather — how to reproduce
 
 This branch (`sparse-dma`) extends the Spatz cluster with a **hardware indexed-gather
-DMA engine** and runs it against a **DRAMSys HBM2E** memory model. It lets you reproduce
-the two benchmark settings for an indexed KV-cache gather (2048×128 fp16 matrix in DRAM,
-128 scattered 256 B row reads into L1):
+DMA engine** and runs it against a **DRAMSys HBM2E-3600** memory model. It reproduces the
+two benchmark settings for an indexed KV-cache gather (2048×128 fp16 matrix in DRAM, 128
+scattered 256 B row reads into L1):
 
 1. **Core-issued** disaggregated DMA — the Snitch core computes each row address and
    issues one DMA per row (`gather`, and the optimized `gather-opt`).
 2. **Hardware gather engine** — one `DMGATHER` instruction stream configures the on-chip
    engine, which reads the index stream from L1 and generates all row reads (`gather-hw`).
 
-Everything needed is committed, **including the benchmark data header** (no regeneration
-required). The DRAMSys shared library is the one external artifact you build once.
+> **This flow was verified end-to-end on a fresh clone** (numbers in §7 are what you should
+> get). It targets the IIS toolchains via `util/iis-env.sh` and needs **cmake ≥ 3.28.1**
+> to build DRAMSys. The benchmark data header is committed (no regeneration required).
 
-> Environment: this flow targets the IIS toolchains (QuestaSim, LLVM RISC-V, gcc-11.2)
-> via `util/iis-env.sh`, and needs **cmake ≥ 3.28.1** to build DRAMSys. On a non-IIS
-> machine, provide equivalent tools and adjust `util/iis-env.sh`.
+## 0. Prerequisites — the compiler gotcha (read first)
+
+DRAMSys and QuestaSim's DPI must be built with the **same** host compiler, and it must be
+**gcc-11.2.0-af** (Questa's runtime `libstdc++`). `iis-env.sh` does *not* set this, so
+export it for the whole session, or DRAMSys fails at load with `std::filesystem` symbol
+errors:
+```sh
+export CC=/usr/pack/gcc-11.2.0-af/linux-x64/bin/gcc
+export CXX=/usr/pack/gcc-11.2.0-af/linux-x64/bin/g++
+```
 
 ## 1. Clone and check out the branch
-
 ```sh
 git clone git@github.com:pulp-platform/spatz.git
 cd spatz
 git checkout sparse-dma
+source util/iis-env.sh          # QuestaSim + LLVM RISC-V on PATH
+# (and the CC/CXX exports from §0)
 ```
 
-## 2. Fetch dependencies and build the DRAMSys library (one-time)
-
+## 2. Dependencies
 ```sh
-bender update                                   # fetch dram_rtl_sim, idma, axi, ...
-cd "$(bender path dram_rtl_sim)"                # the DRAMSys co-sim dependency
-make dramsys                                    # builds libsystemc.so + libDRAMSys_Simulator.so (needs cmake>=3.28.1)
-cd -                                            # back to the spatz root
+bender update                   # fetch dram_rtl_sim, idma, axi, ...
 ```
 
-## 3. Source the toolchain environment (every shell)
-
+## 3. Generate `encoding.h` (needed by snRuntime) — WITHOUT clobbering DMIDX
+`sw/toolchain/` is not tracked, so `encoding.h` is missing on a clone. Generate **only**
+it — do **NOT** run `make init` / `make update_opcodes`: those regenerate
+`hw/ip/snitch/src/riscv_instr.sv` from upstream opcodes and would **delete the committed
+`DMIDX` instruction**.
 ```sh
-source util/iis-env.sh                          # QuestaSim + LLVM RISC-V + gcc on PATH
+make sw/toolchain/riscv-opcodes || true      # clone riscv-opcodes (the version-pin
+                                             #   checkout may error; the default branch it
+                                             #   lands on is fine — proceed)
+make sw/toolchain/riscv-opcodes/encoding.h   # generate encoding.h only
+grep DMIDX hw/ip/snitch/src/riscv_instr.sv   # sanity: DMIDX must still be present
 ```
 
-## 4. Build software and hardware
-
+## 4. Build and configure DRAMSys (use the Makefile targets — do NOT `make dramsys` by hand)
 ```sh
 cd hw/system/spatz_cluster
-make generate                                   # regenerate the cluster wrapper from the cfg
-make sw                                         # LLVM RISC-V build -> sw/build/... (data header already committed)
-make bin/spatz_cluster.vsim                     # QuestaSim build of the cluster + DRAMSys DPI
+make dram-init      # builds libDRAMSys_Simulator.so with $(CXX)=gcc-11.2.0-af (from §0)
+make dram-config    # installs the HBM2E-3600 configs into the DRAMSys config tree
+                    #   (replaces the pristine slow default hbm2-example.json)
 ```
 
-The default config is `cfg/spatz_cluster.default.dram.hjson` (HBM2E, 57.55 GB/s peak,
-1 GHz, 512-bit AXI). Relevant DMA/AXI outstanding knobs are `trans` (crossbar
-`MaxMstTrans`) and `dma_axi_req_fifo_depth`/`dma_req_fifo_depth` (iDMA `NumAxInFlight`),
-all = 64 by default. To change them, edit the cfg then rebuild:
+## 5. Build software and hardware
 ```sh
-make -B generate && make clean.vsim && make bin/spatz_cluster.vsim
+make -B generate            # clustergen: wrapper + bootdata_bootrom.cc etc. (-B forces a
+                            #   complete generation; a plain `make generate` can leave gaps)
+make sw                     # LLVM RISC-V build -> sw/build/... (data header already committed)
+make bin/spatz_cluster.vsim # QuestaSim build of the cluster + DRAMSys DPI
 ```
+Default config: `cfg/spatz_cluster.default.dram.hjson` (HBM2E-3600, 57.55 GB/s peak, 1 GHz,
+512-bit AXI; `trans=64`, `dma_*_fifo_depth=64`). To sweep the DMA/AXI outstanding knobs,
+edit the cfg then `make -B generate && make clean.vsim && make bin/spatz_cluster.vsim`.
 
-## 5. Run the two settings
-
-From `hw/system/spatz_cluster`:
-
+## 6. Run the two settings (from `hw/system/spatz_cluster`)
 ```sh
-# (1) core-issued gather
-./bin/spatz_cluster.vsim sw/build/spatzBenchmarks/test-spatzBenchmarks-gather_R2048_D128_G128        # baseline (snrt_dma_start_1d)
-./bin/spatz_cluster.vsim sw/build/spatzBenchmarks/test-spatzBenchmarks-gather-opt_R2048_D128_G128    # optimized inline offload
-
-# (2) hardware gather engine (DMGATHER)
+# (1) core-issued
+./bin/spatz_cluster.vsim sw/build/spatzBenchmarks/test-spatzBenchmarks-gather_R2048_D128_G128
+./bin/spatz_cluster.vsim sw/build/spatzBenchmarks/test-spatzBenchmarks-gather-opt_R2048_D128_G128
+# (2) hardware gather engine
 ./bin/spatz_cluster.vsim sw/build/spatzBenchmarks/test-spatzBenchmarks-gather-hw_R2048_D128_G128
 ```
+Each prints `[DMA] <t0> ns issue id=1 ...`, `[DMADONE] <t1> ns id=1`, `The gather took <N>
+cycles`, and `CORRECT!` (gathered rows match the DRAM matrix bit-for-bit).
 
-Each run prints (via UART):
-```
-[DMA]     <t0> ns issue id=1 src=0x80003600 ...    # gather launch
-[DMADONE] <t1> ns id=1                             # gather complete
-[UART] The gather took <N> cycles (128 scattered DMA requests).
-[UART] CORRECT!
-```
-`CORRECT!` = the gathered rows match the DRAM matrix bit-for-bit.
+## 7. Expected results (verified on a fresh clone; default cfg)
 
-## 6. Reading the results — bandwidth methodology
+| setting | binary | `took` cycles | DMA window `[DMADONE]−[DMA]` | % peak |
+|---|---|---|---|---|
+| (1) core-issued, optimized | `gather-opt` | **1952** | — | — |
+| (2) **HW gather engine** | `gather-hw` | **1236** | **932 ns** (9081→10013) | **~61%** |
 
-The workload moves **32768 bytes** (128 rows × 256 B). Report utilization two ways:
+Bandwidth (§ methodology): workload = 32768 B. **DRAM/transfer utilization** = `32768 /
+(t1−t0[ns])` GB/s, `/57.55` for % peak — use the `[DMA]→[DMADONE]` window (excludes the
+one-time config-offload + `wait_all` startup that inflates the raw cycle count at G=128).
+The HW engine reaches ~61% — matching an ideal AXI master, i.e. near-optimal for this
+scatter. Use the `took` cycles only to compare variants measured the same way.
 
-- **DRAM/transfer utilization (engine efficiency)** — use the DMA-execution window
-  `[DMADONE] − [DMA]` (both printed above), which excludes core-side startup:
-  ```
-  GB/s   = 32768 / (t1 - t0[ns])
-  % peak = GB/s / 57.55
-  ```
-  This is the number to compare against the DRAM ceiling (an ideal AXI master hits ~62%).
-- **End-to-end / variant comparison** — the `took <N> cycles` figure. Consistent across
-  variants (all measured the same way), so use it for speedups. It includes one-time
-  startup (config offloads + first-run icache warmup + `wait_all`), so at G=128 it reads
-  lower than the DMA-window %; do not convert it to "% of peak".
-
-## 7. Expected results (default cfg: `trans=64`, depths=64; HBM2E)
-
-| setting | binary | `took` cycles | DMA-window % peak |
-|---|---|---|---|
-| (1) core-issued, baseline | `gather` | ~3099 | — |
-| (1) core-issued, optimized | `gather-opt` | ~1952 | — |
-| (2) **HW gather engine** | `gather-hw` | ~1236 | **~61%** (≈932 ns window) |
-
-The HW engine is ~1.6× faster than the best software (end-to-end) and drives the DRAM at
-~61% of peak — matching an ideal AXI master, i.e. near-optimal for this scatter pattern.
-
-## 8. Notes & gotchas
-
-- **Data header is committed** (`sw/spatzBenchmarks/gather/data/…`), so results are
-  reproducible without regeneration. To regenerate (e.g. a different shape), edit
-  `sw/spatzBenchmarks/gather/script/*.json` and run `make spatz.gendata`.
-- **RTL/param changes need `make clean.vsim`** before rebuilding — `vlog -incr` can keep
-  stale compiled objects and silently run the old config.
-- **Verify loop is sim-time-heavy** (~hundreds of µs of per-element DRAM reads); the
-  gather itself is ~µs. This does not affect the reported gather cycles/window.
-- The three variants share one source (`gather/main.c`) selected by `-DGATHER_OPT` /
-  `-DGATHER_HW` (see `sw/spatzBenchmarks/CMakeLists.txt`).
+## 8. Notes & gotchas (all hit during fresh-clone verification)
+- **gcc-11.2.0-af for DRAMSys** (§0) — the single most important gotcha.
+- **Don't run `make init`/`update_opcodes`** — regenerates `riscv_instr.sv` and drops
+  `DMIDX`. Generate `encoding.h` only (§3).
+- **`make -B generate`** (force) — a plain `make generate` can leave `bootdata_bootrom.cc`
+  missing and the HW build fails with "No rule to make target 'test/bootdata_bootrom.cc'".
+- **Use `make dram-init` / `make dram-config`**, not a hand-rolled `make dramsys` — the
+  targets set the compiler and install the HBM2E-3600 configs.
+- **RTL/param changes need `make clean.vsim`** before rebuilding (`vlog -incr` staleness).
+- The verify loop is sim-time-heavy (~hundreds of µs); the gather itself is ~µs. Doesn't
+  affect the reported gather cycles/window.
 - Design rationale and the full investigation are in `NOTE.md`.
