@@ -183,3 +183,5 @@ add_snitch_test(vss isa/rv64uv/vss.c)
 
 add_snitch_test(vill isa/rv64uv/vill.c)
 set_property(TEST ${SNITCH_TEST_PREFIX}rtl-vill PROPERTY WILL_FAIL TRUE)
+
+add_snitch_test(scalar isa/rv64uv/scalar.c)
