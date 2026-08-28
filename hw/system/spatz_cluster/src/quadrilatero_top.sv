@@ -16,6 +16,7 @@ module quadrilatero_top import fpnew_pkg::*; import quadrilatero_pkg::*; #(
     // ReqRsp
     parameter type          amo_op_e         = logic,
     parameter amo_op_e      AMONone          = 1'b0 ,
+    parameter int unsigned  MemRspLatency    = 1    ,
     // Derived parameters. DO NOT CHANGE!
     localparam int unsigned DataWidth        = quadrilatero_pkg::DATA_WIDTH,
     localparam int unsigned LLEN             = quadrilatero_pkg::LLEN      ,
@@ -133,7 +134,9 @@ module quadrilatero_top import fpnew_pkg::*; import quadrilatero_pkg::*; #(
   // ------------------
   // Quadrilatero
   // ------------------
-  quadrilatero i_quadrilatero (
+  quadrilatero #(
+      .MemRspLatency        (MemRspLatency     )
+  ) i_quadrilatero (
       .clk_i,
       .rst_ni,
 

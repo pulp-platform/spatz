@@ -68,6 +68,10 @@ module spatz_tcdm_fc_interconnect #(
   typedef logic [SelWidth-1:0] select_t;
   select_t [NumInp-1:0] bank_select;
 
+  localparam int unsigned IdxWidth = cf_math_pkg::idx_width(NumInp);
+  typedef logic [IdxWidth-1:0] idx_t;
+  idx_t [NumOut-1:0] idx_o_flat;
+
   typedef struct packed {
     // Which bank was selected.
     select_t bank_select;
@@ -154,14 +158,14 @@ module spatz_tcdm_fc_interconnect #(
     ) i_stream_xbar (
       .clk_i,
       .rst_ni,
-      .flush_i ( 1'b0 ),
-      .rr_i    ( '0 ),
-      .data_i  ( in_req ),
-      .sel_i   ( bank_select ),
+      .flush_i ( 1'b0             ),
+      .rr_i    ( '0               ),
+      .data_i  ( in_req           ),
+      .sel_i   ( bank_select      ),
       .valid_i ( req_q_valid_flat ),
       .ready_o ( rsp_q_ready_flat ),
-      .data_o  ( out_req ),
-      .idx_o   ( ),
+      .data_o  ( out_req          ),
+      .idx_o   ( idx_o_flat       ),
       .valid_o ( mem_q_valid_flat ),
       .ready_i ( mem_q_ready_flat )
     );
@@ -178,14 +182,14 @@ module spatz_tcdm_fc_interconnect #(
     ) i_stream_omega_net (
       .clk_i,
       .rst_ni,
-      .flush_i ( 1'b0 ),
-      .rr_i    ( '0 ),
-      .data_i  ( in_req ),
-      .sel_i   ( bank_select ),
+      .flush_i ( 1'b0             ),
+      .rr_i    ( '0               ),
+      .data_i  ( in_req           ),
+      .sel_i   ( bank_select      ),
       .valid_i ( req_q_valid_flat ),
       .ready_o ( rsp_q_ready_flat ),
-      .data_o  ( out_req ),
-      .idx_o   ( ),
+      .data_o  ( out_req          ),
+      .idx_o   ( idx_o_flat       ),
       .valid_o ( mem_q_valid_flat ),
       .ready_i ( mem_q_ready_flat )
     );
@@ -197,12 +201,25 @@ module spatz_tcdm_fc_interconnect #(
   // A simple multiplexer is sufficient here.
   for (genvar i = 0; i < NumInp; i++) begin : gen_rsp_mux
     rsp_t out_rsp_mux, in_rsp_mux;
-    assign in_rsp_mux = '{
-      bank_select: bank_select[i],
-      valid: req_i[i].q_valid & rsp_o[i].q_ready
-    };
-    // A this is a fixed latency interconnect a simple shift register is
-    // sufficient to track the arbitration decisions.
+
+    if (InpSpillReg) begin : gen_output_side_tracking
+      always_comb begin
+        in_rsp_mux.valid       = 1'b0;
+        in_rsp_mux.bank_select = '0;
+        for (int unsigned j = 0; j < NumOut; j++) begin
+          if (mem_q_valid_flat[j] && mem_q_ready_flat[j] && (idx_o_flat[j] == idx_t'(i))) begin
+            in_rsp_mux.valid       = 1'b1;
+            in_rsp_mux.bank_select = select_t'(j);
+          end
+        end
+      end
+    end else begin : gen_input_side_tracking
+      assign in_rsp_mux = '{
+        bank_select: bank_select[i],
+        valid: req_i[i].q_valid & rsp_o[i].q_ready
+      };
+    end
+
     shift_reg #(
       .dtype ( rsp_t ),
       .Depth ( MemoryResponseLatency )

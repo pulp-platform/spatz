@@ -666,9 +666,12 @@ module spatz_cluster
     end
   end
 
+  localparam int unsigned InpSpillReg   = (NrTCDMPortsCores > 32);
+  localparam int unsigned MemRspLatency = 1 + RegisterTCDMCuts + InpSpillReg;
   spatz_tcdm_interconnect #(
     .NumInp                (NumTCDMIn           ),
     .NumOut                (NrBanks             ),
+    .InpSpillReg           (InpSpillReg         ),
     .NumHyperBanks         (NumHyperBanks       ),
     .tcdm_req_t            (tcdm_req_t          ),
     .tcdm_rsp_t            (tcdm_rsp_t          ),
@@ -763,7 +766,8 @@ module spatz_cluster
         .RegisterOffloadRsp      (RegisterOffloadRsp         ),
         .RegisterCoreReq         (RegisterCoreReq            ),
         .RegisterCoreRsp         (RegisterCoreRsp            ),
-        .TCDMAddrWidth           (TCDMAddrWidth              )
+        .TCDMAddrWidth           (TCDMAddrWidth              ),
+        .MemRspLatency           (MemRspLatency              )
       ) i_spatz_quadrilatero_cc (
         .clk_i            (clk_i                               ),
         .clk_d2_i         (clk_i                               ),
@@ -885,39 +889,59 @@ module spatz_cluster
     end
   end
 
+  localparam int unsigned NrHetCores = 2;
   for (genvar j = 0; j < NrTCDMPortsCores; j++) begin : gen_tcdm_signals
-    stream_arbiter #(
-      .DATA_T ( tcdm_req_chan_t  ),
-      .N_INP  ( 2                )
-    ) i_stream_arbiter_tcdm (
-      .clk_i       ( clk_i                        ),
-      .rst_ni      ( rst_ni                       ),
-      .inp_data_i  ( {spatz_tcdm_req[j].q      , quad_tcdm_req[j].q       } ),
-      .inp_valid_i ( {spatz_tcdm_req[j].q_valid, quad_tcdm_req[j].q_valid } ),
-      .inp_ready_o ( {spatz_tcdm_rsp[j].q_ready, quad_tcdm_rsp[j].q_ready } ),
-      .oup_data_o  ( tcdm_req[j].q               ),
-      .oup_valid_o ( tcdm_req[j].q_valid         ),
-      .oup_ready_i ( tcdm_rsp[j].q_ready         )
-    );
+    logic[$clog2(NrHetCores)-1:0] tcdm_idx;
+    logic[$clog2(NrHetCores)-1:0] rsp_idx ;
+    logic                      rsp_outstanding;
 
-    shift_reg #(
-      .dtype ( logic ),
-      .Depth ( 1 + RegisterTCDMCuts )
-    ) i_shift_reg_spatz (
+    rr_arb_tree #(
+      .NumIn      ( NrHetCores          ),
+      .DataType   ( tcdm_req_chan_t  ),
+      .ExtPrio    (1'b0),
+      .AxiVldRdy  (1'b1),
+      .LockIn     (1'b1)
+    ) i_arbiter_tcdm (
       .clk_i,
       .rst_ni,
-      .d_i ( spatz_tcdm_req[j].q_valid & spatz_tcdm_rsp[j].q_ready ),
-      .d_o ( spatz_tcdm_rsp[j].p_valid )
+      .flush_i( 1'b0 ),
+      .rr_i   ( '0   ),
+      .req_i  ( {spatz_tcdm_req[j].q_valid, quad_tcdm_req[j].q_valid } ),
+      .gnt_o  ( {spatz_tcdm_rsp[j].q_ready, quad_tcdm_rsp[j].q_ready } ),
+      .data_i ( {spatz_tcdm_req[j].q      , quad_tcdm_req[j].q       } ),
+      .gnt_i  ( tcdm_rsp[j].q_ready         ),
+      .req_o  ( tcdm_req[j].q_valid         ),
+      .data_o ( tcdm_req[j].q               ),
+      .idx_o  ( tcdm_idx )
     );
 
-    shift_reg #(
-      .dtype ( logic ),
-      .Depth ( 1 + RegisterTCDMCuts )
-    ) i_shift_reg_quad (
-      .clk_i,
-      .rst_ni,
-      .d_i ( quad_tcdm_req[j].q_valid & quad_tcdm_rsp[j].q_ready ),
-      .d_o ( quad_tcdm_rsp[j].p_valid )
+    stream_fifo #(
+      .FALL_THROUGH (1'b0              ),
+      .DEPTH        (MemRspLatency+1   ),
+      .DATA_WIDTH   ($clog2(NrHetCores))
+    ) i_tcdm_idx_fifo (
+        .clk_i        (clk_i              ),
+        .rst_ni       (rst_ni             ),
+        .flush_i      (1'b0               ),
+        .testmode_i   (1'b0               ),
+        .usage_o      (                   ),
+        .data_i       (tcdm_idx           ),
+        .valid_i      (tcdm_req[j].q_valid && tcdm_rsp[j].q_ready ),
+        .ready_o      (                   ),
+        .data_o       (rsp_idx            ),
+        .valid_o      (rsp_outstanding    ),
+        .ready_i      (tcdm_rsp[j].p_valid)
+    );
+
+
+    stream_demux #(
+      .N_OUP(NrHetCores)
+    ) i_eu_demux (
+      .inp_valid_i  (rsp_outstanding && tcdm_rsp[j].p_valid),
+      .inp_ready_o  (             ),
+      .oup_sel_i    (rsp_idx      ),
+      .oup_valid_o  ({spatz_tcdm_rsp[j].p_valid, quad_tcdm_rsp[j].p_valid }),
+      .oup_ready_i  ('1           )
     );
 
     assign quad_tcdm_rsp[j].p  =  quad_tcdm_rsp[j].p_valid ? tcdm_rsp[j].p :'0;

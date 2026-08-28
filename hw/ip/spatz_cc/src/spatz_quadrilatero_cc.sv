@@ -87,9 +87,9 @@ module spatz_quadrilatero_cc
     /// Insert Pipeline registers into data memory path (response)
     parameter bit                                          RegisterCoreRsp          = 0,
     parameter snitch_pma_pkg::snitch_pma_t                 SnitchPMACfg             = '{default: 0},
+    /// Latency of Memory response
+    parameter int                          unsigned        MemRspLatency            = 1,
     /// Derived parameter *Do not override*
-    // parameter int                          unsigned        NumSpatzFUs              = (NumSpatzFPUs > NumSpatzIPUs) ? NumSpatzFPUs : NumSpatzIPUs,
-    // parameter int                          unsigned        NumMemPortsPerSpatz      = NumSpatzFUs,
     parameter int                          unsigned        NumMemPortsQuad          = 4,
     parameter int                          unsigned        TCDMPorts                = NumMemPortsQuad + 1,
     parameter type                                         addr_t                   = logic [AddrWidth-1:0]
@@ -389,7 +389,8 @@ module spatz_quadrilatero_cc
     .quad_mem_rsp_t     (tcdm_rsp_chan_t         ),
     .quad_issue_req_t   (acc_issue_req_t         ),
     .quad_issue_rsp_t   (acc_issue_rsp_t         ),
-    .quad_rsp_t         (acc_rsp_t               )
+    .quad_rsp_t         (acc_rsp_t               ),
+    .MemRspLatency      (MemRspLatency           )
   ) i_quadrilatero_top (
     .clk_i                  (clk_i                ),
     .rst_ni                 (rst_ni               ),
