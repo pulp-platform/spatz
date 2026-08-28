@@ -74,6 +74,15 @@ module spatz_vlsu
 
   localparam int unsigned MemDataWidth  = ELEN;
   localparam int unsigned MemDataWidthB = MemDataWidth/8;
+  // Burst emission requires a memory system that EXPANDS a burst_len>1 request into
+  // burst_len responses (tcdm_burst_expander or an MSHR that does the same). Against a
+  // plain word-granular memory the VLSU charges mem_pending by burst_len, receives one
+  // beat, and waits forever: ROB0 keeps its allocated entries, rob_rvalid never asserts
+  // and the instruction never completes. Default 1 preserves the burst-capable
+  // integration; set SPATZ_VLSU_BURST=0 where the memory side cannot expand.
+  localparam bit BurstEn =
+    `ifdef SPATZ_VLSU_BURST `SPATZ_VLSU_BURST `else 1 `endif;
+
   localparam int unsigned MaxBurstWords = spatz_pkg::MaxBurstWords;
   localparam int unsigned BurstLenWidth = spatz_pkg::BurstLenWidth;
   localparam int unsigned BurstAlignBits = $clog2(MaxBurstWords*MemDataWidthB);
@@ -224,6 +233,7 @@ module spatz_vlsu
   logic [NrMemPorts-1:0] mem_port_active;
   logic [N_FU-1:0]       commit_port_active;
   assign use_port0_burst_req =
+      BurstEn &&
       mem_spatz_req.op_mem.is_load &&
       !mem_is_strided &&
       !mem_is_indexed &&
