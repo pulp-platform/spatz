@@ -2128,11 +2128,16 @@ module spatz_vlsu
   // requests. At e16,m2 that is 32 requests, so two loads fill a 64-entry ROB and the port
   // wedges with resp=0. Nothing in the log says which conjunct failed -- this does.
   // Prints once per NEW load instruction (id change), first BurstWhyMax per core.
+  // Off unless SPATZ_BURST_DEBUG is defined: on a 256-core build this is thousands of
+  // lines of transcript that say nothing once the burst path is understood.
   // ---------------------------------------------------------------------------
   // verilog_lint: waive-start
   // pragma translate_off
 `ifndef TARGET_SYNTHESIS
-  if (1) begin : gen_burst_why
+  // Read the VALUE, not just `ifdef: the build defines SPATZ_BURST_DEBUG=0 to mean
+  // off, and a bare `ifdef would be true for that. Same idiom as BurstEn above.
+  localparam bit BurstWhyEn = `ifdef SPATZ_BURST_DEBUG `SPATZ_BURST_DEBUG `else 0 `endif;
+  if (BurstWhyEn) begin : gen_burst_why
     localparam int unsigned BurstWhyMax = 24;
     // logic, not int; and NO declaration initialiser -- the reset branch below is the only
     // place these get their value. A declaration assignment is equivalent to an initial block
