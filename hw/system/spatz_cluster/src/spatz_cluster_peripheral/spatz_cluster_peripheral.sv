@@ -49,23 +49,29 @@ module spatz_cluster_peripheral
   input  logic [NumVrfUnits-1:0][31:0]                    fpu_dup_fault_count_i,
   input  logic [NumVrfUnits-1:0][31:0]                    handshake_tmr_count_i,
   input  logic [NumVrfUnits-1:0][31:0]                    core_tmr_count_i,
-  input  logic [NumVrfUnits-1:0][31:0]                    icache_l0_correctable_count_i,
-  input  logic [NumVrfUnits-1:0][31:0]                    icache_l0_uncorrectable_count_i,
-  input  logic [31:0]                                     icache_l1_correctable_count_i,
-  input  logic [31:0]                                     icache_l1_uncorrectable_count_i,
+  input  logic [NumVrfUnits-1:0][31:0]                    icache_l0_tag_parity_fault_count_i,
+  input  logic [NumVrfUnits-1:0][31:0]                    icache_l0_data_parity_fault_count_i,
+  input  logic [31:0]                                     icache_l1_tag_parity_fault_count_i,
+  input  logic [31:0]                                     icache_l1_data_parity_fault_count_i,
 
   // Uncorrectable-fault recovery interrupt interface. Only Class-A
   // (uncorrectable) fault sources feed this -- correctable ECC events and
   // every TMR-voter mismatch are counter-only (see the *_count_i ports
   // above and hw/ip/redundancy_cells/spatz_fault_monitor.sv), since they
   // self-correct the same cycle they're detected and don't need a kernel
-  // re-execution to recover.
+  // re-execution to recover. Icache tag/data parity faults are the
+  // exception: parity can only detect and invalidate, never correct
+  // in-place, so every parity fault is Class-A and feeds this interrupt too
+  // (the cache itself still recovers transparently via a natural refill --
+  // see snitch_icache_l0.sv / snitch_icache_lookup_serial.sv).
   input  logic [NumVrfUnits-1:0]                          vrf_uncorrectable_fault_i,
   input  logic [NumTcdmBanks-1:0]                         tcdm_rd_uncorrectable_fault_i,
   input  logic [NumTcdmBanks-1:0]                         tcdm_scrub_uncorrectable_fault_i,
   input  logic [NumVrfUnits-1:0]                          fpu_dup_fault_i,
-  input  logic [NumVrfUnits-1:0]                          icache_l0_uncorrectable_fault_i,
-  input  logic                                            icache_l1_uncorrectable_fault_i,
+  input  logic [NumVrfUnits-1:0]                          icache_l0_tag_parity_fault_i,
+  input  logic [NumVrfUnits-1:0]                          icache_l0_data_parity_fault_i,
+  input  logic                                            icache_l1_tag_parity_fault_i,
+  input  logic                                            icache_l1_data_parity_fault_i,
   output logic [NumVrfUnits-1:0]                          uncorrectable_irq_o
 );
 
@@ -292,12 +298,12 @@ module spatz_cluster_peripheral
     assign hw2reg.fpu_dup_fault_count[i].d = fpu_dup_fault_count_i[i];
     assign hw2reg.handshake_tmr_count[i].d = handshake_tmr_count_i[i];
     assign hw2reg.core_tmr_count[i].d      = core_tmr_count_i[i];
-    assign hw2reg.icache_l0_correctable_count[i].d   = icache_l0_correctable_count_i[i];
-    assign hw2reg.icache_l0_uncorrectable_count[i].d = icache_l0_uncorrectable_count_i[i];
+    assign hw2reg.icache_l0_tag_parity_fault_count[i].d  = icache_l0_tag_parity_fault_count_i[i];
+    assign hw2reg.icache_l0_data_parity_fault_count[i].d = icache_l0_data_parity_fault_count_i[i];
   end
 
-  assign hw2reg.icache_l1_correctable_count.d   = icache_l1_correctable_count_i;
-  assign hw2reg.icache_l1_uncorrectable_count.d = icache_l1_uncorrectable_count_i;
+  assign hw2reg.icache_l1_tag_parity_fault_count.d  = icache_l1_tag_parity_fault_count_i;
+  assign hw2reg.icache_l1_data_parity_fault_count.d = icache_l1_data_parity_fault_count_i;
 
   // Uncorrectable-fault recovery interrupt: a sticky per-hart status bit, set by any Class-A
   // uncorrectable fault pulse (if enabled for that hart) and cleared by software writing 1
@@ -308,10 +314,10 @@ module spatz_cluster_peripheral
   // Per-bank TCDM Class-A faults, and the single shared L1 icache, aren't
   // attributable to a single requesting core, so they're broadcast to
   // every hart's status bit below.
-  logic tcdm_uncorrectable_any;
+  logic tcdm_uncorrectable_any, icache_l1_parity_any;
   assign tcdm_uncorrectable_any =
-    (|tcdm_rd_uncorrectable_fault_i) | (|tcdm_scrub_uncorrectable_fault_i)
-    | icache_l1_uncorrectable_fault_i;
+    (|tcdm_rd_uncorrectable_fault_i) | (|tcdm_scrub_uncorrectable_fault_i);
+  assign icache_l1_parity_any = icache_l1_tag_parity_fault_i | icache_l1_data_parity_fault_i;
 
   always_comb begin
     uncorrectable_irq_d = uncorrectable_irq_q;
@@ -322,8 +328,10 @@ module spatz_cluster_peripheral
       if (reg2hw.uncorrectable_irq_enable.q[i] && (
             vrf_uncorrectable_fault_i[i] ||
             fpu_dup_fault_i[i] ||
-            icache_l0_uncorrectable_fault_i[i] ||
-            tcdm_uncorrectable_any)) begin
+            icache_l0_tag_parity_fault_i[i] ||
+            icache_l0_data_parity_fault_i[i] ||
+            tcdm_uncorrectable_any ||
+            icache_l1_parity_any)) begin
         uncorrectable_irq_d[i] = 1'b1;
       end
     end

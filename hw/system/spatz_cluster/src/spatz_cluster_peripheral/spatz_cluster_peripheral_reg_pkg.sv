@@ -195,19 +195,19 @@ package spatz_cluster_peripheral_reg_pkg;
 
   typedef struct packed {
     logic [31:0] q;
-  } spatz_cluster_peripheral_reg2hw_icache_l0_correctable_count_mreg_t;
+  } spatz_cluster_peripheral_reg2hw_icache_l0_tag_parity_fault_count_mreg_t;
 
   typedef struct packed {
     logic [31:0] q;
-  } spatz_cluster_peripheral_reg2hw_icache_l0_uncorrectable_count_mreg_t;
+  } spatz_cluster_peripheral_reg2hw_icache_l0_data_parity_fault_count_mreg_t;
 
   typedef struct packed {
     logic [31:0] q;
-  } spatz_cluster_peripheral_reg2hw_icache_l1_correctable_count_reg_t;
+  } spatz_cluster_peripheral_reg2hw_icache_l1_tag_parity_fault_count_reg_t;
 
   typedef struct packed {
     logic [31:0] q;
-  } spatz_cluster_peripheral_reg2hw_icache_l1_uncorrectable_count_reg_t;
+  } spatz_cluster_peripheral_reg2hw_icache_l1_data_parity_fault_count_reg_t;
 
   typedef struct packed {
     logic [31:0] q;
@@ -268,19 +268,19 @@ package spatz_cluster_peripheral_reg_pkg;
 
   typedef struct packed {
     logic [31:0] d;
-  } spatz_cluster_peripheral_hw2reg_icache_l0_correctable_count_mreg_t;
+  } spatz_cluster_peripheral_hw2reg_icache_l0_tag_parity_fault_count_mreg_t;
 
   typedef struct packed {
     logic [31:0] d;
-  } spatz_cluster_peripheral_hw2reg_icache_l0_uncorrectable_count_mreg_t;
+  } spatz_cluster_peripheral_hw2reg_icache_l0_data_parity_fault_count_mreg_t;
 
   typedef struct packed {
     logic [31:0] d;
-  } spatz_cluster_peripheral_hw2reg_icache_l1_correctable_count_reg_t;
+  } spatz_cluster_peripheral_hw2reg_icache_l1_tag_parity_fault_count_reg_t;
 
   typedef struct packed {
     logic [31:0] d;
-  } spatz_cluster_peripheral_hw2reg_icache_l1_uncorrectable_count_reg_t;
+  } spatz_cluster_peripheral_hw2reg_icache_l1_data_parity_fault_count_reg_t;
 
   typedef struct packed {
     logic [31:0] d;
@@ -308,10 +308,10 @@ package spatz_cluster_peripheral_reg_pkg;
     spatz_cluster_peripheral_reg2hw_fpu_dup_fault_count_mreg_t [0:0] fpu_dup_fault_count; // [320:289]
     spatz_cluster_peripheral_reg2hw_handshake_tmr_count_mreg_t [0:0] handshake_tmr_count; // [288:257]
     spatz_cluster_peripheral_reg2hw_core_tmr_count_mreg_t [0:0] core_tmr_count; // [256:225]
-    spatz_cluster_peripheral_reg2hw_icache_l0_correctable_count_mreg_t [0:0] icache_l0_correctable_count; // [224:193]
-    spatz_cluster_peripheral_reg2hw_icache_l0_uncorrectable_count_mreg_t [0:0] icache_l0_uncorrectable_count; // [192:161]
-    spatz_cluster_peripheral_reg2hw_icache_l1_correctable_count_reg_t icache_l1_correctable_count; // [160:129]
-    spatz_cluster_peripheral_reg2hw_icache_l1_uncorrectable_count_reg_t icache_l1_uncorrectable_count; // [128:97]
+    spatz_cluster_peripheral_reg2hw_icache_l0_tag_parity_fault_count_mreg_t [0:0] icache_l0_tag_parity_fault_count; // [224:193]
+    spatz_cluster_peripheral_reg2hw_icache_l0_data_parity_fault_count_mreg_t [0:0] icache_l0_data_parity_fault_count; // [192:161]
+    spatz_cluster_peripheral_reg2hw_icache_l1_tag_parity_fault_count_reg_t icache_l1_tag_parity_fault_count; // [160:129]
+    spatz_cluster_peripheral_reg2hw_icache_l1_data_parity_fault_count_reg_t icache_l1_data_parity_fault_count; // [128:97]
     spatz_cluster_peripheral_reg2hw_uncorrectable_irq_enable_reg_t uncorrectable_irq_enable; // [96:65]
     spatz_cluster_peripheral_reg2hw_uncorrectable_irq_status_reg_t uncorrectable_irq_status; // [64:33]
     spatz_cluster_peripheral_reg2hw_uncorrectable_irq_clear_reg_t uncorrectable_irq_clear; // [32:0]
@@ -330,10 +330,10 @@ package spatz_cluster_peripheral_reg_pkg;
     spatz_cluster_peripheral_hw2reg_fpu_dup_fault_count_mreg_t [0:0] fpu_dup_fault_count; // [255:224]
     spatz_cluster_peripheral_hw2reg_handshake_tmr_count_mreg_t [0:0] handshake_tmr_count; // [223:192]
     spatz_cluster_peripheral_hw2reg_core_tmr_count_mreg_t [0:0] core_tmr_count; // [191:160]
-    spatz_cluster_peripheral_hw2reg_icache_l0_correctable_count_mreg_t [0:0] icache_l0_correctable_count; // [159:128]
-    spatz_cluster_peripheral_hw2reg_icache_l0_uncorrectable_count_mreg_t [0:0] icache_l0_uncorrectable_count; // [127:96]
-    spatz_cluster_peripheral_hw2reg_icache_l1_correctable_count_reg_t icache_l1_correctable_count; // [95:64]
-    spatz_cluster_peripheral_hw2reg_icache_l1_uncorrectable_count_reg_t icache_l1_uncorrectable_count; // [63:32]
+    spatz_cluster_peripheral_hw2reg_icache_l0_tag_parity_fault_count_mreg_t [0:0] icache_l0_tag_parity_fault_count; // [159:128]
+    spatz_cluster_peripheral_hw2reg_icache_l0_data_parity_fault_count_mreg_t [0:0] icache_l0_data_parity_fault_count; // [127:96]
+    spatz_cluster_peripheral_hw2reg_icache_l1_tag_parity_fault_count_reg_t icache_l1_tag_parity_fault_count; // [95:64]
+    spatz_cluster_peripheral_hw2reg_icache_l1_data_parity_fault_count_reg_t icache_l1_data_parity_fault_count; // [63:32]
     spatz_cluster_peripheral_hw2reg_uncorrectable_irq_status_reg_t uncorrectable_irq_status; // [31:0]
   } spatz_cluster_peripheral_hw2reg_t;
 
@@ -485,10 +485,10 @@ package spatz_cluster_peripheral_reg_pkg;
   parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_FPU_DUP_FAULT_COUNT_OFFSET = 11'h 480;
   parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_HANDSHAKE_TMR_COUNT_OFFSET = 11'h 488;
   parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_CORE_TMR_COUNT_OFFSET = 11'h 490;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_ICACHE_L0_CORRECTABLE_COUNT_OFFSET = 11'h 498;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_ICACHE_L0_UNCORRECTABLE_COUNT_OFFSET = 11'h 4a0;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_ICACHE_L1_CORRECTABLE_COUNT_OFFSET = 11'h 4a8;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_ICACHE_L1_UNCORRECTABLE_COUNT_OFFSET = 11'h 4b0;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_ICACHE_L0_TAG_PARITY_FAULT_COUNT_OFFSET = 11'h 498;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_ICACHE_L0_DATA_PARITY_FAULT_COUNT_OFFSET = 11'h 4a0;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_ICACHE_L1_TAG_PARITY_FAULT_COUNT_OFFSET = 11'h 4a8;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_ICACHE_L1_DATA_PARITY_FAULT_COUNT_OFFSET = 11'h 4b0;
   parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_UNCORRECTABLE_IRQ_ENABLE_OFFSET = 11'h 4b8;
   parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_UNCORRECTABLE_IRQ_STATUS_OFFSET = 11'h 4c0;
   parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_UNCORRECTABLE_IRQ_CLEAR_OFFSET = 11'h 4c8;
@@ -632,10 +632,10 @@ package spatz_cluster_peripheral_reg_pkg;
   parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_FPU_DUP_FAULT_COUNT_RESVAL = 32'h 0;
   parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_HANDSHAKE_TMR_COUNT_RESVAL = 32'h 0;
   parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_CORE_TMR_COUNT_RESVAL = 32'h 0;
-  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_ICACHE_L0_CORRECTABLE_COUNT_RESVAL = 32'h 0;
-  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_ICACHE_L0_UNCORRECTABLE_COUNT_RESVAL = 32'h 0;
-  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_ICACHE_L1_CORRECTABLE_COUNT_RESVAL = 32'h 0;
-  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_ICACHE_L1_UNCORRECTABLE_COUNT_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_ICACHE_L0_TAG_PARITY_FAULT_COUNT_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_ICACHE_L0_DATA_PARITY_FAULT_COUNT_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_ICACHE_L1_TAG_PARITY_FAULT_COUNT_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_ICACHE_L1_DATA_PARITY_FAULT_COUNT_RESVAL = 32'h 0;
   parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_UNCORRECTABLE_IRQ_STATUS_RESVAL = 32'h 0;
   parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_UNCORRECTABLE_IRQ_CLEAR_RESVAL = 32'h 0;
 
@@ -788,10 +788,10 @@ package spatz_cluster_peripheral_reg_pkg;
     SPATZ_CLUSTER_PERIPHERAL_FPU_DUP_FAULT_COUNT,
     SPATZ_CLUSTER_PERIPHERAL_HANDSHAKE_TMR_COUNT,
     SPATZ_CLUSTER_PERIPHERAL_CORE_TMR_COUNT,
-    SPATZ_CLUSTER_PERIPHERAL_ICACHE_L0_CORRECTABLE_COUNT,
-    SPATZ_CLUSTER_PERIPHERAL_ICACHE_L0_UNCORRECTABLE_COUNT,
-    SPATZ_CLUSTER_PERIPHERAL_ICACHE_L1_CORRECTABLE_COUNT,
-    SPATZ_CLUSTER_PERIPHERAL_ICACHE_L1_UNCORRECTABLE_COUNT,
+    SPATZ_CLUSTER_PERIPHERAL_ICACHE_L0_TAG_PARITY_FAULT_COUNT,
+    SPATZ_CLUSTER_PERIPHERAL_ICACHE_L0_DATA_PARITY_FAULT_COUNT,
+    SPATZ_CLUSTER_PERIPHERAL_ICACHE_L1_TAG_PARITY_FAULT_COUNT,
+    SPATZ_CLUSTER_PERIPHERAL_ICACHE_L1_DATA_PARITY_FAULT_COUNT,
     SPATZ_CLUSTER_PERIPHERAL_UNCORRECTABLE_IRQ_ENABLE,
     SPATZ_CLUSTER_PERIPHERAL_UNCORRECTABLE_IRQ_STATUS,
     SPATZ_CLUSTER_PERIPHERAL_UNCORRECTABLE_IRQ_CLEAR
@@ -946,10 +946,10 @@ package spatz_cluster_peripheral_reg_pkg;
     4'b 1111, // index[144] SPATZ_CLUSTER_PERIPHERAL_FPU_DUP_FAULT_COUNT
     4'b 1111, // index[145] SPATZ_CLUSTER_PERIPHERAL_HANDSHAKE_TMR_COUNT
     4'b 1111, // index[146] SPATZ_CLUSTER_PERIPHERAL_CORE_TMR_COUNT
-    4'b 1111, // index[147] SPATZ_CLUSTER_PERIPHERAL_ICACHE_L0_CORRECTABLE_COUNT
-    4'b 1111, // index[148] SPATZ_CLUSTER_PERIPHERAL_ICACHE_L0_UNCORRECTABLE_COUNT
-    4'b 1111, // index[149] SPATZ_CLUSTER_PERIPHERAL_ICACHE_L1_CORRECTABLE_COUNT
-    4'b 1111, // index[150] SPATZ_CLUSTER_PERIPHERAL_ICACHE_L1_UNCORRECTABLE_COUNT
+    4'b 1111, // index[147] SPATZ_CLUSTER_PERIPHERAL_ICACHE_L0_TAG_PARITY_FAULT_COUNT
+    4'b 1111, // index[148] SPATZ_CLUSTER_PERIPHERAL_ICACHE_L0_DATA_PARITY_FAULT_COUNT
+    4'b 1111, // index[149] SPATZ_CLUSTER_PERIPHERAL_ICACHE_L1_TAG_PARITY_FAULT_COUNT
+    4'b 1111, // index[150] SPATZ_CLUSTER_PERIPHERAL_ICACHE_L1_DATA_PARITY_FAULT_COUNT
     4'b 1111, // index[151] SPATZ_CLUSTER_PERIPHERAL_UNCORRECTABLE_IRQ_ENABLE
     4'b 1111, // index[152] SPATZ_CLUSTER_PERIPHERAL_UNCORRECTABLE_IRQ_STATUS
     4'b 1111  // index[153] SPATZ_CLUSTER_PERIPHERAL_UNCORRECTABLE_IRQ_CLEAR

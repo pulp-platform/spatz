@@ -17,7 +17,6 @@ dependencies:
   register_interface: { git: "https://github.com/pulp-platform/register_interface.git", version: 0.3.8          }
   riscv-dbg:          { git: "https://github.com/pulp-platform/riscv-dbg.git",          version: 0.7.0          }
   tech_cells_generic: { git: "https://github.com/pulp-platform/tech_cells_generic.git", version: 0.2.13         }
-  cluster_icache:     { git: "https://github.com/pulp-platform/cluster_icache.git",     version: 0.2.0          }
 
 export_include_dirs:
   - hw/ip/mem_interface/include
@@ -179,6 +178,34 @@ sources:
       - hw/ip/spatz_cc/src/spatz_snitch_tmr.sv
       # Level 3
       - hw/ip/spatz_cc/src/spatz_cc.sv
+
+      ## hw/ip/cluster_icache ##
+      # Vendored unmodified from pulp-platform/cluster_icache (same content
+      # as its own upstream checkout). Parity-based reliability (L0 + L1
+      # data/tag parity, self-healing on error) is a native upstream
+      # feature, enabled via SERIAL_LOOKUP=1 + L0/L1_DATA_PARITY_BITS on the
+      # snitch_icache instantiation below -- see spatz_cluster.sv. Only the
+      # files actually elaborated for that configuration are listed here
+      # (snitch_read_only_cache.sv, pulp_icache_wrap.sv, and ctrl_unit/* are
+      # for a different top-level wrapper this cluster doesn't use). Must
+      # compile before spatz_cluster_peripheral.sv below, which references
+      # snitch_icache_pkg in its own port list -- VCS's single-pass compile
+      # errors if the package isn't seen first (Questa's vlog is lenient
+      # about this, so don't rely on a vsim-only build to catch it).
+      # Level 0
+      - hw/ip/cluster_icache/src/snitch_icache_pkg.sv
+      - hw/ip/cluster_icache/src/riscv_instr_branch.sv
+      - hw/ip/cluster_icache/src/multi_accept_rr_arb.sv
+      # Level 1
+      - hw/ip/cluster_icache/src/snitch_icache_l0.sv
+      - hw/ip/cluster_icache/src/snitch_icache_refill.sv
+      - hw/ip/cluster_icache/src/snitch_icache_lfsr.sv
+      - hw/ip/cluster_icache/src/snitch_icache_lookup_parallel.sv
+      - hw/ip/cluster_icache/src/snitch_icache_lookup_serial.sv
+      # Level 2
+      - hw/ip/cluster_icache/src/snitch_icache_handler.sv
+      # Level 3
+      - hw/ip/cluster_icache/src/snitch_icache.sv
 
       ## system/spatz_cluster ##
 

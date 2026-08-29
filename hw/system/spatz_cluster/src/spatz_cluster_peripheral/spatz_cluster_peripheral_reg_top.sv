@@ -553,14 +553,14 @@ module spatz_cluster_peripheral_reg_top #(
   logic handshake_tmr_count_re;
   logic [31:0] core_tmr_count_qs;
   logic core_tmr_count_re;
-  logic [31:0] icache_l0_correctable_count_qs;
-  logic icache_l0_correctable_count_re;
-  logic [31:0] icache_l0_uncorrectable_count_qs;
-  logic icache_l0_uncorrectable_count_re;
-  logic [31:0] icache_l1_correctable_count_qs;
-  logic icache_l1_correctable_count_re;
-  logic [31:0] icache_l1_uncorrectable_count_qs;
-  logic icache_l1_uncorrectable_count_re;
+  logic [31:0] icache_l0_tag_parity_fault_count_qs;
+  logic icache_l0_tag_parity_fault_count_re;
+  logic [31:0] icache_l0_data_parity_fault_count_qs;
+  logic icache_l0_data_parity_fault_count_re;
+  logic [31:0] icache_l1_tag_parity_fault_count_qs;
+  logic icache_l1_tag_parity_fault_count_re;
+  logic [31:0] icache_l1_data_parity_fault_count_qs;
+  logic icache_l1_data_parity_fault_count_re;
   logic [31:0] uncorrectable_irq_enable_qs;
   logic [31:0] uncorrectable_irq_enable_wd;
   logic uncorrectable_irq_enable_we;
@@ -4608,70 +4608,70 @@ module spatz_cluster_peripheral_reg_top #(
 
 
 
-  // Subregister 0 of Multireg icache_l0_correctable_count
-  // R[icache_l0_correctable_count]: V(True)
+  // Subregister 0 of Multireg icache_l0_tag_parity_fault_count
+  // R[icache_l0_tag_parity_fault_count]: V(True)
 
   prim_subreg_ext #(
     .DW    (32)
-  ) u_icache_l0_correctable_count (
-    .re     (icache_l0_correctable_count_re),
+  ) u_icache_l0_tag_parity_fault_count (
+    .re     (icache_l0_tag_parity_fault_count_re),
     .we     (1'b0),
     .wd     ('0),
-    .d      (hw2reg.icache_l0_correctable_count[0].d),
+    .d      (hw2reg.icache_l0_tag_parity_fault_count[0].d),
     .qre    (),
     .qe     (),
-    .q      (reg2hw.icache_l0_correctable_count[0].q ),
-    .qs     (icache_l0_correctable_count_qs)
+    .q      (reg2hw.icache_l0_tag_parity_fault_count[0].q ),
+    .qs     (icache_l0_tag_parity_fault_count_qs)
   );
 
 
 
-  // Subregister 0 of Multireg icache_l0_uncorrectable_count
-  // R[icache_l0_uncorrectable_count]: V(True)
+  // Subregister 0 of Multireg icache_l0_data_parity_fault_count
+  // R[icache_l0_data_parity_fault_count]: V(True)
 
   prim_subreg_ext #(
     .DW    (32)
-  ) u_icache_l0_uncorrectable_count (
-    .re     (icache_l0_uncorrectable_count_re),
+  ) u_icache_l0_data_parity_fault_count (
+    .re     (icache_l0_data_parity_fault_count_re),
     .we     (1'b0),
     .wd     ('0),
-    .d      (hw2reg.icache_l0_uncorrectable_count[0].d),
+    .d      (hw2reg.icache_l0_data_parity_fault_count[0].d),
     .qre    (),
     .qe     (),
-    .q      (reg2hw.icache_l0_uncorrectable_count[0].q ),
-    .qs     (icache_l0_uncorrectable_count_qs)
+    .q      (reg2hw.icache_l0_data_parity_fault_count[0].q ),
+    .qs     (icache_l0_data_parity_fault_count_qs)
   );
 
 
-  // R[icache_l1_correctable_count]: V(True)
+  // R[icache_l1_tag_parity_fault_count]: V(True)
 
   prim_subreg_ext #(
     .DW    (32)
-  ) u_icache_l1_correctable_count (
-    .re     (icache_l1_correctable_count_re),
+  ) u_icache_l1_tag_parity_fault_count (
+    .re     (icache_l1_tag_parity_fault_count_re),
     .we     (1'b0),
     .wd     ('0),
-    .d      (hw2reg.icache_l1_correctable_count.d),
+    .d      (hw2reg.icache_l1_tag_parity_fault_count.d),
     .qre    (),
     .qe     (),
-    .q      (reg2hw.icache_l1_correctable_count.q ),
-    .qs     (icache_l1_correctable_count_qs)
+    .q      (reg2hw.icache_l1_tag_parity_fault_count.q ),
+    .qs     (icache_l1_tag_parity_fault_count_qs)
   );
 
 
-  // R[icache_l1_uncorrectable_count]: V(True)
+  // R[icache_l1_data_parity_fault_count]: V(True)
 
   prim_subreg_ext #(
     .DW    (32)
-  ) u_icache_l1_uncorrectable_count (
-    .re     (icache_l1_uncorrectable_count_re),
+  ) u_icache_l1_data_parity_fault_count (
+    .re     (icache_l1_data_parity_fault_count_re),
     .we     (1'b0),
     .wd     ('0),
-    .d      (hw2reg.icache_l1_uncorrectable_count.d),
+    .d      (hw2reg.icache_l1_data_parity_fault_count.d),
     .qre    (),
     .qe     (),
-    .q      (reg2hw.icache_l1_uncorrectable_count.q ),
-    .qs     (icache_l1_uncorrectable_count_qs)
+    .q      (reg2hw.icache_l1_data_parity_fault_count.q ),
+    .qs     (icache_l1_data_parity_fault_count_qs)
   );
 
 
@@ -4886,10 +4886,10 @@ module spatz_cluster_peripheral_reg_top #(
     addr_hit[144] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_FPU_DUP_FAULT_COUNT_OFFSET);
     addr_hit[145] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_HANDSHAKE_TMR_COUNT_OFFSET);
     addr_hit[146] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_CORE_TMR_COUNT_OFFSET);
-    addr_hit[147] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_ICACHE_L0_CORRECTABLE_COUNT_OFFSET);
-    addr_hit[148] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_ICACHE_L0_UNCORRECTABLE_COUNT_OFFSET);
-    addr_hit[149] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_ICACHE_L1_CORRECTABLE_COUNT_OFFSET);
-    addr_hit[150] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_ICACHE_L1_UNCORRECTABLE_COUNT_OFFSET);
+    addr_hit[147] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_ICACHE_L0_TAG_PARITY_FAULT_COUNT_OFFSET);
+    addr_hit[148] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_ICACHE_L0_DATA_PARITY_FAULT_COUNT_OFFSET);
+    addr_hit[149] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_ICACHE_L1_TAG_PARITY_FAULT_COUNT_OFFSET);
+    addr_hit[150] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_ICACHE_L1_DATA_PARITY_FAULT_COUNT_OFFSET);
     addr_hit[151] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_UNCORRECTABLE_IRQ_ENABLE_OFFSET);
     addr_hit[152] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_UNCORRECTABLE_IRQ_STATUS_OFFSET);
     addr_hit[153] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_UNCORRECTABLE_IRQ_CLEAR_OFFSET);
@@ -5545,13 +5545,13 @@ module spatz_cluster_peripheral_reg_top #(
 
   assign core_tmr_count_re = addr_hit[146] & reg_re & !reg_error;
 
-  assign icache_l0_correctable_count_re = addr_hit[147] & reg_re & !reg_error;
+  assign icache_l0_tag_parity_fault_count_re = addr_hit[147] & reg_re & !reg_error;
 
-  assign icache_l0_uncorrectable_count_re = addr_hit[148] & reg_re & !reg_error;
+  assign icache_l0_data_parity_fault_count_re = addr_hit[148] & reg_re & !reg_error;
 
-  assign icache_l1_correctable_count_re = addr_hit[149] & reg_re & !reg_error;
+  assign icache_l1_tag_parity_fault_count_re = addr_hit[149] & reg_re & !reg_error;
 
-  assign icache_l1_uncorrectable_count_re = addr_hit[150] & reg_re & !reg_error;
+  assign icache_l1_data_parity_fault_count_re = addr_hit[150] & reg_re & !reg_error;
 
   assign uncorrectable_irq_enable_we = addr_hit[151] & reg_we & !reg_error;
   assign uncorrectable_irq_enable_wd = reg_wdata[31:0];
@@ -6214,19 +6214,19 @@ module spatz_cluster_peripheral_reg_top #(
       end
 
       addr_hit[147]: begin
-        reg_rdata_next[31:0] = icache_l0_correctable_count_qs;
+        reg_rdata_next[31:0] = icache_l0_tag_parity_fault_count_qs;
       end
 
       addr_hit[148]: begin
-        reg_rdata_next[31:0] = icache_l0_uncorrectable_count_qs;
+        reg_rdata_next[31:0] = icache_l0_data_parity_fault_count_qs;
       end
 
       addr_hit[149]: begin
-        reg_rdata_next[31:0] = icache_l1_correctable_count_qs;
+        reg_rdata_next[31:0] = icache_l1_tag_parity_fault_count_qs;
       end
 
       addr_hit[150]: begin
-        reg_rdata_next[31:0] = icache_l1_uncorrectable_count_qs;
+        reg_rdata_next[31:0] = icache_l1_data_parity_fault_count_qs;
       end
 
       addr_hit[151]: begin
