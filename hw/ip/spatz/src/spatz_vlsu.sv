@@ -2107,11 +2107,22 @@ module spatz_vlsu
     assert property (@(posedge clk_i) disable iff (!rst_ni)
         rob_req_block[0] |-> (mem_operation_valid[0] && burst_use[0]))
       else $fatal(1, "[spatz_vlsu] Block ROB reservation requested outside an active port-0 burst.");
-    // A4, VLSU side (the ROB asserts the same on its own inputs): block and single id request
-    // are mutually exclusive -- the ROB serves the block and drops the single silently.
+    // A4, VLSU side (the ROB asserts the same on its own inputs): a block GRANT and a single id
+    // request are mutually exclusive -- the ROB serves the block and drops the single silently,
+    // and its requester then uses an id the ROB never handed out.
+    //
+    // Qualified by burst_block_fire (grant), NOT rob_req_block (request). 2026-08-29: the
+    // unqualified form fired on a back-to-back 512 B burst load. rob_room_block goes low once
+    // ROB0 passes NumWords-BlockWords (112 of 128), which a 512 B load -- 128 words in a
+    // 128-entry ROB -- guarantees; the block is then REFUSED and the per-beat walk takes over,
+    // which :2117 below calls the fallback by name. In that case block_fire is 0, so
+    // reorder_buffer.sv:317 falls through `if (block_fire) ... else if (id_req_i && !full_o)`
+    // and serves the single correctly. Nothing is dropped and no phantom id is used, so the
+    // hazard this guards simply is not present. vector-burst-test never hit it because it issues
+    // one m8 load then a store, letting the ROB drain between bursts.
     assert property (@(posedge clk_i) disable iff (!rst_ni)
-        !(rob_req_block[0] && rob_req_id[0]))
-      else $fatal(1, "[spatz_vlsu] Block and single ROB id request asserted together.");
+        !(burst_block_fire && rob_req_id[0]))
+      else $fatal(1, "[spatz_vlsu] Block GRANT and single ROB id request asserted together.");
     // The reservation and the fallback walk must never both advance one burst.
     assert property (@(posedge clk_i) disable iff (!rst_ni)
         !(burst_block_fire && burst_alloc_fire[0]))

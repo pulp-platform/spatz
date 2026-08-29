@@ -539,12 +539,19 @@ module reorder_buffer
     blk_no_overflow : assert property(
         @(posedge clk_i) disable iff (!rst_ni) (block_fire |-> (status_cnt_d <= NumWords)))
     else $fatal (1, "Block reservation overflows the ROB occupancy counter.");
-    // A4: block and single id request are mutually exclusive. The allocation gives the block
-    // priority, so a coincident single request is silently dropped -- and its requester then
-    // uses an id the ROB never handed out.
+    // A4: a block GRANT and a single id request are mutually exclusive. The allocation gives the
+    // block priority, so a coincident single request would be silently dropped -- and its
+    // requester would then use an id this ROB never handed out.
+    //
+    // The hazard needs block_fire, not id_req_block_i. When a block is REQUESTED but refused for
+    // lack of room (room_block_o low -- guaranteed once status_cnt passes NumWords-BlockWords,
+    // which a vl of NumWords words does), block_fire is 0, the allocation above falls through to
+    // `else if (id_req_i && !full_o)`, and the single is served normally. Asserting on the
+    // request instead of the grant made a legal fallback fatal: measured 2026-08-29 on
+    // back-to-back 512 B burst loads at NumWords=128.
     blk_single_exclusive : assert property(
-        @(posedge clk_i) disable iff (!rst_ni) (!(id_req_block_i && id_req_i)))
-    else $fatal (1, "Block and single ID request asserted in the same cycle.");
+        @(posedge clk_i) disable iff (!rst_ni) (!(block_fire && id_req_i)))
+    else $fatal (1, "Block GRANT and single ID request asserted in the same cycle.");
   end
 
   if (NumWrPorts > 1) begin : gen_wr2_asserts
