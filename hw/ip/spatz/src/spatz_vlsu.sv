@@ -2030,11 +2030,22 @@ module spatz_vlsu
     // threshold I have not measured would be worse than either.
     // verilog_lint: waive-start
     // pragma translate_off
+    // STORES TOO -- the `is_load` term was here and it hid a real wedge (2026-08-29).
+    // use_port0_burst_req demands is_load (:269), so bursts are LOADS ONLY and a store can
+    // NEVER leave this path. Watching only loads therefore watched only the half of the
+    // traffic that has an escape route. Measured: vector-burst-test's m8 case is a
+    // vle32.v/vse32.v pair at 512 B. At ROB0=64 the LOAD had no burst path, tripped this
+    // guard and printed 41,247 warnings; at ROB0=128 the load was rescued onto the burst
+    // path, this guard fell silent, and the 512 B STORE wedged the machine with nothing
+    // said -- every core 100% LSU-stalled, inflight=0, no assertion, no message.
+    // use_port0_burst_req is already 0 for every store, so dropping is_load costs the load
+    // side nothing and makes the store side audible.
     always_ff @(posedge clk_i) begin
-      if (rst_ni && mem_spatz_req_valid && mem_spatz_req.op_mem.is_load &&
+      if (rst_ni && mem_spatz_req_valid &&
           !use_port0_burst_req &&
           ((mem_spatz_req.vl / MemDataWidthB) > RobNDepth))
-        $warning("[spatz_vlsu] NON-BURST OVER CAPACITY: vl=%0d B needs %0d word slots on the non-burst path but ROB1-3 are only %0d deep (SPATZ_VLSU_ROBN_DEPTH). This path wedges. Raise ROBN_DEPTH or keep the load on the burst path.",
+        $warning("[spatz_vlsu] NON-BURST OVER CAPACITY: %0s vl=%0d B needs %0d word slots on the non-burst path but ROB1-3 are only %0d deep (SPATZ_VLSU_ROBN_DEPTH). This path wedges. Raise ROBN_DEPTH; a STORE has no burst path to fall back on (use_port0_burst_req requires is_load).",
+                 mem_spatz_req.op_mem.is_load ? "load" : "store",
                  mem_spatz_req.vl, mem_spatz_req.vl / MemDataWidthB, RobNDepth);
     end
     // pragma translate_on
