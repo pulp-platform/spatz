@@ -10,7 +10,7 @@
 include util/Makefrag
 
 # Bender version
-BENDER_VERSION = 0.29.1
+BENDER_VERSION = 0.32.1
 
 # Standard opcodes
 OPCODES := "rv_i" "rv64_i" "rv_m" "rv64_m" "rv_a" "rv_f" "rv_d" \
@@ -233,6 +233,7 @@ check-bender:
 		fi \
 	fi
 	@$(MAKE) -C $(ROOT_DIR) $(BENDER_INSTALL_DIR)/bender
+	ln -s $$(find "$(ROOT_DIR)/.bender/git/checkouts" -type d -name 'spatz_vpu-*') $(ROOT_DIR)/hw/spatz_vpu
 
 $(BENDER_INSTALL_DIR)/bender:
 	mkdir -p $(BENDER_INSTALL_DIR) && cd $(BENDER_INSTALL_DIR) && \

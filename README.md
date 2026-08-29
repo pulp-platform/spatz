@@ -33,16 +33,18 @@ In `hw/system/spatz_cluster`:
 - Compile the software and the binaries:
   - Verilator:
 ```bash
-    make sw.vlt
+    make sw.vlt -B
 ```
   - QuestaSim:
 ```bash
-    make sw.vsim
+    make sw.vsim -B
 ```
   - VCS:
 ```bash
-    make sw.vcs
+    make sw.vcs -B
 ```
+Note: -B is necessary to force build all spatz config related generated files
+
 - Run a binary on the simulator:
   - Verilator:
 ```bash
@@ -77,7 +79,7 @@ make help
 To configure the cluster with a different configuration, either edit the configuration files in the `cfg` folder or create a new configuration file and pass it to the Makefile:
 
 ```bash
-make bin/spatz_cluster.vlt CFG=cfg/spatz_cluster.default.hjson
+make bin/spatz_cluster.vlt CFG=cfg/spatz_cluster.default.hjson -B
 ```
 
 The default config is in `cfg/spatz_cluster.default.hjson`. Alternatively, you can also set your `CFG` environment variable, the Makefile will pick it up and override the standard config.
@@ -86,18 +88,23 @@ The default config is in `cfg/spatz_cluster.default.hjson`. Alternatively, you c
 
 ### Spatz cluster
 
-Spatz was _not_ designed for full compliance with RVV. Check [Ara](https://github.com/pulp-platform/ara) for an open-source vector processor fully compliant with RVV (and by the same authors!). Instead, Spatz implements some instructions of the vector extension, enough to build a compact and highly efficient embedded vector processor. Thanks to its small size, Spatz is highly scalable, and we rely on multi-core vector processing to scale up the system.
+The Spatz cluster architecture consists of two Snitch-Spatz core complexes (CCs) sharing a L1 TCDM. The default L1 TCDM size is 128 KiB split into 16 banks 64-bit wide. The snitch in CC-0 is also a DMA capable to move data in and out of the L1 from L2. Spatz is parametric with several configurations of interest present in the `cfg/` folder. The default configuration is shown below.
 
 ![Spatz cluster](./docs/fig/spatz_cluster.png)
-
-The default Spatz cluster has two Snitch-Spatz core complexes (CCs), each with 2 KiB of latch-based VRF. Each CC has four [trans-precision FPUs](https://github.com/openhwgroup/cvfpu) with support for Spatz-specific SDOTP extensions for low-precision computing. The two Spatz-based CCs share access to 128 KiB of L1 scratchpad memory, divided into 16 SRAM banks.
 
 ### Spatz core
 
 Each Spatz has three functional units:
-- The Vector Arithmetic Unit (VAU), hosting `F` trans-precision FPUs and an integer computation unit. Each FPU supports fp8, fp16, fp32, and fp64 computation. Each IPU supports 8, 16, 32, and 64-bit computation. All units maintain a throughput of 64 bit/cycle regardless of the current Selected Element Width. The VAU also supports integer and floating-point reductions.
+- The Vector Arithmetic Unit (VFU), hosting `F` trans-precision FPUs and an integer computation unit. Each FPU supports fp8, fp16, fp32, and fp64 computation. Each IPU supports 8, 16, 32, and 64-bit computation. All units maintain a throughput of 64 bit/cycle regardless of the current Selected Element Width. The VFU also supports integer and floating-point reductions. Each CC has four [trans-precision FPUs](https://github.com/openhwgroup/cvfpu) with support for Spatz-specific SDOTP extensions for low-precision computing.
 - The Vector Load/Store Unit (VLSU), with support for unit-strided, constant-strided, and indexed memory accesses. The VLSU supports a parametric number of 64-bit-wide memory interfaces. Thanks to the multiple narrow interfaces, Spatz can accelerate memory operations. By default, the number of 64-bit memory interfaces matches the number of FPUs in the design. **Important**, Spatz' VLSU cannot access the cluster's L2 memory. Ensure that all vector memory requests go to the local L1 memory (we provide the `snrt_l1alloc` and `snrt_dma_start_1d` functions for L1 initialization).
 - The Vector Slide Unit (VSLDU) executes vector permutation instructions. As of now, we support vector slide up/down and vector moves.
+- All functional units can read and write from the Vector Register File (VRF) implemented as a wide-word multi-ported latch based register file of default size 2KiB (VLEN=512-bit)
+
+Each Spatz core is a 512-bit VLEN vector unit supporting the RVV 1.0 vector ISA specification. The spatz core is present in the repository [spatz_vpu](https://github.com/pulp-platform/spatz_vpu).
+The spatz_vpu is not fully compliant and several instructions are being added at the moment.
+
+Check [Ara](https://github.com/pulp-platform/ara) for an open-source vector processor fully compliant with RVV (and by the same authors!).
+Thanks to its small size, Spatz is highly scalable, and we rely on multi-core vector processing to scale up the system.
 
 ![Spatz' architecture](./docs/fig/spatz_arch.png)
 
@@ -134,6 +141,17 @@ The following directories contains third-party sources that come with their lice
 If you want to use Spatz, you can cite us:
 
 ```bibtex
+@ARTICLE{Spatz2025,
+  author  ={Perotti, Matteo and Riedel, Samuel and Cavalcante, Matheus and Benini, Luca},
+  journal ={IEEE Transactions on Computer-Aided Design of Integrated Circuits and Systems},
+  title   ={Spatz: Clustering Compact RISC-V-Based Vector Units to Maximize Computing Efficiency},
+  year    ={2025},
+  volume  ={44},
+  number  ={7},
+  pages   ={2488-2502},
+  keywords={Computer architecture;Registers;Vector processors;Bandwidth;Energy efficiency;Graphics processing units;Memory management;Design automation;Random access memory;Computer architecture;embedded systems-on-chip;machine learning;RISC-V;vector processors},
+  doi     ={10.1109/TCAD.2025.3528349}
+}
 @Article{Spatz2023,
   title         = {Spatz: Clustering Compact RISC-V-Based Vector Units to Maximize Computing Efficiency},
   author        = {Matheus Cavalcante and Matteo Perotti and Samuel Riedel and Luca Benini},
