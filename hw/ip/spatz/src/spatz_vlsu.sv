@@ -2040,13 +2040,25 @@ module spatz_vlsu
     // said -- every core 100% LSU-stalled, inflight=0, no assertion, no message.
     // use_port0_burst_req is already 0 for every store, so dropping is_load costs the load
     // side nothing and makes the store side audible.
+    // RATE LIMIT. Unbounded, this printed 51,390 lines (~20 MB) in ONE 8x128x8192 run: the
+    // condition holds for the whole life of an offending instruction, on all 256 cores, every
+    // cycle. It only became a flood when the guard was widened to cover stores (2026-08-29) --
+    // stores are constant in a GEMM inner loop, where the off-burst LOADS it originally watched
+    // were rare. 8 reports per core is plenty to identify the shape; more is just I/O that slows
+    // the simulation it is attached to. Same reasoning as BurstWhyMax above.
+    localparam int unsigned RobnWarnMax = 8;
+    logic [$clog2(RobnWarnMax+1)-1:0] robn_warn_n;
     always_ff @(posedge clk_i) begin
-      if (rst_ni && mem_spatz_req_valid &&
+      if (!rst_ni) robn_warn_n <= '0;
+      else if (rst_ni && mem_spatz_req_valid &&
           !use_port0_burst_req &&
-          ((mem_spatz_req.vl / MemDataWidthB) > RobNDepth))
+          (robn_warn_n < RobnWarnMax) &&
+          ((mem_spatz_req.vl / MemDataWidthB) > RobNDepth)) begin
         $warning("[spatz_vlsu] NON-BURST OVER CAPACITY: %0s vl=%0d B needs %0d word slots on the non-burst path but ROB1-3 are only %0d deep (SPATZ_VLSU_ROBN_DEPTH). This path wedges. Raise ROBN_DEPTH; a STORE has no burst path to fall back on (use_port0_burst_req requires is_load).",
                  mem_spatz_req.op_mem.is_load ? "load" : "store",
                  mem_spatz_req.vl, mem_spatz_req.vl / MemDataWidthB, RobNDepth);
+        robn_warn_n <= robn_warn_n + 1;
+      end
     end
     // pragma translate_on
     // verilog_lint: waive-stop
