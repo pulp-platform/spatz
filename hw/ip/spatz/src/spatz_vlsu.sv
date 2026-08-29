@@ -391,6 +391,13 @@ module spatz_vlsu
     reorder_buffer #(
       .DataWidth (ELEN              ),
       .NumWords  ((port == 0) ? NrOutstandingLoads : RobNDepth),
+      // Storage shrinks; the ID SPACE MUST NOT. reorder_buffer would otherwise derive its id
+      // width from NumWords, recycling an id every RobNDepth allocations, and a late duplicate
+      // response then lands in whatever request has since taken that number (measured:
+      // orphan/dup_alloc 37 and 79 on the shallow ports, 0 with full-depth ports, kernel wedged).
+      // IdWidth stays idx_width(NrOutstandingLoads) for every port -- the width the request and
+      // response structs already carry, so nothing outside this module widens.
+      .IdWidthExt(IdWidth),
       .NumWrPorts((port == 0 && BurstRecvPorts > 1) ? 2 : 1),
       .NumRdPorts((port == 0 && BurstRecvPorts > 1) ? 2 : 1),
       // Only ROB0 ever sees a block reservation (bursts are port-0 only): one instance of the
@@ -1992,6 +1999,48 @@ module spatz_vlsu
     // verilog_lint: waive-stop
   end
 
+  if (RobNDepth < NrOutstandingLoads) begin : gen_robn_nonburst_capacity
+    // MEASURED 2026-08-28. The non-burst path is what SPATZ_VLSU_ROBN_DEPTH actually endangers,
+    // and nothing above bounds it: the vl ceiling at :279 gates only use_port0_burst_req, so an
+    // over-ceiling load falls through to the multi-port word-interleaved path -- the one the
+    // BURSTWHY comment below already describes as wedging "with resp=0" once a ROB fills. That
+    // ROB is now RobNDepth deep instead of NrOutstandingLoads, so the cliff moved and no check
+    // moved with it.
+    //
+    // Evidence, a clean pair on vector-burst-test (which issues 384 B and 512 B loads
+    // deliberately over the burst ceiling, i.e. straight onto this path):
+    //   ROB1-3 = 64  ->  PASS at 61,000 cycles
+    //   ROB1-3 = 16  ->  HUNG at 659,000-866,000 cycles, no UART, three arms out of three
+    // The 14 GEMM arms could not see it: they are 100% burst (nonburst=0), and bursts are
+    // port-0 only, so they never touch ports 1-3 at all.
+    //
+    // NOTE: the hang this warns about was ROOT-CAUSED on 2026-08-28 and is NOT a capacity
+    // shortfall -- the non-burst path streams one id at a time, so a shortfall would throttle,
+    // not deadlock. It was id REUSE: a 16-entry ROB recycled its id every 16 allocations and a
+    // late duplicate response landed in whatever request had taken that number
+    // (orphan=37 dup_alloc=37 measured). The generation tag in reorder_buffer fixes that. This
+    // warning is kept because the non-burst path is still the one that exercises the shallow
+    // ROBs, so it remains the right place to look first -- but read it as "this path is under
+    // pressure", not as "this load cannot fit".
+    //
+    // $warning, not $fatal, and deliberately: the exact wedge threshold is somewhere between
+    // RobNDepth and NrOutstandingLoads words and has NOT been measured. The bound below is the
+    // conservative one implied by this file's own comment (vl/MemDataWidthB requests against a
+    // single ROB). Firing early and loudly beats a 14-hour silent hang; firing $fatal on a
+    // threshold I have not measured would be worse than either.
+    // verilog_lint: waive-start
+    // pragma translate_off
+    always_ff @(posedge clk_i) begin
+      if (rst_ni && mem_spatz_req_valid && mem_spatz_req.op_mem.is_load &&
+          !use_port0_burst_req &&
+          ((mem_spatz_req.vl / MemDataWidthB) > RobNDepth))
+        $warning("[spatz_vlsu] NON-BURST OVER CAPACITY: vl=%0d B needs %0d word slots on the non-burst path but ROB1-3 are only %0d deep (SPATZ_VLSU_ROBN_DEPTH). This path wedges. Raise ROBN_DEPTH or keep the load on the burst path.",
+                 mem_spatz_req.vl, mem_spatz_req.vl / MemDataWidthB, RobNDepth);
+    end
+    // pragma translate_on
+    // verilog_lint: waive-stop
+  end
+
   // ---------------------------------------------------------------------------
   // BURSTWHY -- root-cause probe for "knob is on but every request is bl=1".
   // use_port0_burst_req is a 5-way AND; when it is 0 the load silently falls back to the
@@ -2058,27 +2107,23 @@ module spatz_vlsu
       else $fatal(1, "[spatz_vlsu] Block reservation and the legacy id walk fired in the same cycle.");
   end
 
-  // A-TRUNC: the asymmetric-ROB truncation guard.  (Named, not numbered: the A<n> labels in
-  // this file already run as two independent families, so A5/A6/A7 each appear twice.)
+  // A-TRUNC: REMOVED 2026-08-28, superseded by the generation tag in reorder_buffer.
   //
-  // reorder_buffer derives its own IdWidth = idx_width(NumWords), so a RobNDepth-deep ROB
-  // exposes a NARROWER id port than
-  // the VLSU's shared id_t (= idx_width(NrOutstandingLoads)).  Driving .id_i with an id at
-  // or above RobNDepth would SILENTLY TRUNCATE it and write the response into id % RobNDepth
-  // -- wrong data in vd, no error anywhere.  Ids for ports 1-3 all originate from that same
-  // ROB's id_o, so this should hold by construction; it is asserted because the failure is
-  // silent data corruption, and because a future change that computes an id arithmetically
-  // (as the port-0 burst path already does) would break it without any other symptom.
-  if (RobNDepth < NrOutstandingLoads) begin : gen_robn_width_asserts
-    for (genvar port = 1; port < NrMemPorts; port++) begin : gen_port
-      assert property (@(posedge clk_i) disable iff (!rst_ni)
-          rob_push[port] |-> (rob_wid[port] < RobNDepth))
-        else $fatal(1, "[spatz_vlsu] port %0d write id %0d >= RobNDepth %0d: truncated.",
-                    port, rob_wid[port], RobNDepth);
-      // No push2 check: rob_push2 is assigned only for port 0 (:1731) and defaults to '0
-      // (:1578), so ports 1-3 have NumWrPorts=1 and a second-port assertion could never fire.
-    end
-  end
+  // It asserted `rob_wid[port] < RobNDepth` on ports 1-3, on the reasoning that a narrow ROB
+  // derives a narrow id from NumWords, so an id at or above RobNDepth could only be a truncated
+  // one. That reasoning died with IdWidthExt: an id now carries GenBits of GENERATION above the
+  // entry index, so id 16 at RobNDepth 16 means generation 1 / entry 0 and is entirely legal.
+  // The assertion fired on the first legal wrap and killed vector-burst-test at cycle 13,798 with
+  //   "[spatz_vlsu] port 1 write id 0 >= RobNDepth 16: truncated."
+  // -- a message whose own numbers contradict it, because the compare used the full id while the
+  // report printed the entry part.
+  //
+  // Worth keeping the lesson rather than the code: A-TRUNC guarded the wrong half of the hazard
+  // from the start. The harm was never ids being TRUNCATED (they round-tripped through the ROB's
+  // own id_o); it was ids being REUSED while a duplicate response was still in flight, which this
+  // assertion could not see. The entry index is now id[EntryAw-1:0] and is in range by
+  // construction, and a stale generation is detected and counted inside reorder_buffer, which
+  // reports it at end of simulation.
 
   if ((BlockWords > 1) && (BurstRecvPorts > 1)) begin : gen_block_odd_asserts
     // A6 (blk_odd_clean): the window a reservation is about to take must carry no LIVE

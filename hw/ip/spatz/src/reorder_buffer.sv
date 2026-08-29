@@ -40,8 +40,22 @@ module reorder_buffer
   // When > 1 it must be exactly NumWords/2: the window mask below exploits that identity
   // to reduce "(i - wp) mod NumWords < BlockWords" to a single msb test (checked below).
   parameter int unsigned BlockWords = 1,
+  // EXTERNAL id width. 0 = derive from NumWords, which is what this module did unconditionally
+  // until 2026-08-28 and which makes the id space exactly the entry count. That is safe only
+  // while every ROB in the design is the same depth. Once ROB1-3 were shrunk to 16 entries the
+  // id narrowed to 4 bits with it, so an id was recycled after 16 allocations instead of 64 --
+  // and a late DUPLICATE response from the memory side (the MSHR can emit one) then landed in
+  // whatever request had since taken that number. Measured: orphan=37 dup_alloc=37 on the
+  // shallow ports, 0/0 with 64-deep ports, and the kernel wedges.
+  //
+  // Set this to the id width the rest of the design already carries -- snitch_pkg::MetaIdWidth
+  // is idx_width(RobDepth) and does NOT shrink with RobNDepth, so the wire is already 6-7 bits.
+  // The extra high bits become a GENERATION tag: storage stays NumWords, but an id is not
+  // reused until the generation also wraps, and a stale response is detected and dropped.
+  parameter int unsigned IdWidthExt = 0,
   // Dependant parameters. Do not change!
-  parameter IdWidth                 = idx_width(NumWords),
+  parameter IdWidth                 = (IdWidthExt > idx_width(NumWords))
+                                        ? IdWidthExt : idx_width(NumWords),
   parameter type data_t             = logic [DataWidth-1:0],
   parameter type id_t               = logic [IdWidth-1:0]
 ) (
@@ -100,14 +114,29 @@ module reorder_buffer
    *  Signals  *
    *************/
 
-  id_t              read_pointer_d, read_pointer_q;
-  id_t              read_next_ptr;
-  id_t              write_pointer_d, write_pointer_q, write_next_ptr;
+  // Entry addressing is SEPARATE from the id now. entry_t indexes the storage (always
+  // NumWords); id_t is what crosses the port boundary and may carry GenBits more.
+  localparam int unsigned EntryAw = idx_width(NumWords);
+  localparam int unsigned GenBits = IdWidth - EntryAw;
+  localparam int unsigned GenW    = (GenBits > 0) ? GenBits : 1;   // 0-width regs are awkward
+  typedef logic [EntryAw-1:0] entry_t;
+
+  entry_t           read_pointer_d, read_pointer_q;
+  entry_t           read_next_ptr;
+  entry_t           write_pointer_d, write_pointer_q, write_next_ptr;
+
+  // Generation counter, and the generation each live entry was allocated in. Both collapse to
+  // nothing when GenBits == 0, which is the default and keeps the legacy build bit-identical.
+  logic [GenW-1:0]                gen_d, gen_q;
+  logic [NumWords-1:0][GenW-1:0]  entry_gen_d, entry_gen_q;
+  entry_t                         push_entry, push2_entry;
+  logic                           push_gen_ok, push2_gen_ok;
+  logic [31:0]                    stale_drop_d, stale_drop_q;   // visibility only
 
   // Used to see which ID is available (legacy form only: not instantiated under CntIdValid)
   logic [NumWords-1:0] id_valid_d, id_valid_q;
   // Keep track of the ROB utilization
-  logic [IdWidth:0] status_cnt_d, status_cnt_q;
+  logic [EntryAw:0] status_cnt_d, status_cnt_q;
 
   // Block reservation: the granted window as a bitmap, and the single fire condition that
   // both the pointer update and the counter fixups are built from.
@@ -128,8 +157,70 @@ module reorder_buffer
   // Status flags
   assign full_o    = (status_cnt_q == NumWords);
   assign empty_o   = (status_cnt_q == 'd0);
-  assign id_o      = write_pointer_q;
-  assign id_read_o = read_pointer_q;
+  // The id handed out, and the id reported for the read head, both carry the generation so a
+  // response can be matched back to the exact allocation rather than merely to the entry.
+  if (GenBits > 0) begin : gen_id_with_generation
+    assign id_o      = {gen_q, write_pointer_q};
+    assign id_read_o = {entry_gen_q[read_pointer_q][GenBits-1:0], read_pointer_q};
+  end else begin : gen_id_legacy
+    assign id_o      = write_pointer_q;
+    assign id_read_o = read_pointer_q;
+  end
+
+  // Decompose an incoming id: which entry, and is it the generation that entry currently holds?
+  //
+  // The compare MUST sit inside a generate. Written as `(GenBits == 0) || (id_i[IdWidth-1:EntryAw]
+  // == ...)` it looks safe -- the short circuit can never evaluate the slice when GenBits is 0 --
+  // but SystemVerilog ELABORATES both operands regardless of the logical short circuit, and with
+  // GenBits an int unsigned, `GenBits-1` underflows to 4294967295. VCS rejects it:
+  // Error-[TCF-CVTL] Constant value too large. The `||` guards the runtime, not the elaboration.
+  assign push_entry   = id_i[EntryAw-1:0];
+  assign push2_entry  = id2_i[EntryAw-1:0];
+  // GENERATION FORWARDING -- required, not an optimisation.
+  //
+  // A STORE allocates and pushes in the SAME cycle (spatz_vlsu.sv:1816-1818 reads the VRF straight
+  // into the entry it is allocating). The stamp for that allocation is in entry_gen_d and does not
+  // reach entry_gen_q until the next edge, so comparing the incoming id against entry_gen_q
+  // compares the NEW generation with the PREVIOUS lap's stored one. On the first store after the
+  // ring wraps that is carried_gen=1 vs entry_gen=0 -- which is exactly the 256 identical drops
+  // measured (id=16 -> entry=0, carried 1, stored 0, all on a shallow port). Loads never hit this:
+  // their push arrives many cycles after allocation.
+  //
+  // So forward the generation being stamped this cycle. alloc_gen_fwd is the value the entry WILL
+  // hold; comparing against it makes a same-cycle allocate+push match, while a genuine late
+  // duplicate (older generation, no allocation this cycle) still mismatches and is still dropped.
+  logic                alloc_fire;
+  logic [NumWords-1:0] alloc_win_mask;
+  logic [GenW-1:0]     gen_of_push, gen_of_push2;
+  assign alloc_fire = block_fire || (id_req_i && !full_o);
+  // The window being allocated THIS cycle, as a bitmap over entries. Deliberately an always_comb
+  // and not a function called from a continuous assign: the first version of this fix used
+  // `function automatic logic in_alloc_window(entry_t e)` inside `assign gen_of_push = ...`, and
+  // the drops SURVIVED it -- with the allocation trace and the drop trace on the SAME edge for the
+  // SAME entry, which is precisely the case the window test exists to accept. A continuous
+  // assignment builds its sensitivity from the operands of the RHS; the signals a called function
+  // reads but does not take as arguments (alloc_fire, block_fire, write_pointer_q) are not
+  // reliably among them, so gen_of_push kept the value it had when push_entry last changed --
+  // computed while alloc_fire was still 0. always_comb has guaranteed implicit sensitivity to
+  // everything it reads, and block_mask is the window the allocator itself uses, so the two can
+  // no longer disagree.
+  always_comb begin
+    alloc_win_mask = '0;
+    if (alloc_fire) begin
+      if (block_fire) alloc_win_mask = block_mask;
+      else            alloc_win_mask[write_pointer_q] = 1'b1;
+    end
+  end
+  if (GenBits > 0) begin : gen_push_generation_check
+    assign gen_of_push  = alloc_win_mask[push_entry ] ? gen_q : entry_gen_q[push_entry ][GenBits-1:0];
+    assign gen_of_push2 = alloc_win_mask[push2_entry] ? gen_q : entry_gen_q[push2_entry][GenBits-1:0];
+    assign push_gen_ok  = (id_i [IdWidth-1:EntryAw] == gen_of_push);
+    assign push2_gen_ok = (id2_i[IdWidth-1:EntryAw] == gen_of_push2);
+  end else begin : gen_push_generation_none
+    // No generation bits: the id IS the entry, exactly as before this change.
+    assign push_gen_ok  = 1'b1;
+    assign push2_gen_ok = 1'b1;
+  end
   assign read_next_ptr  = read_pointer_q + 1;
 
   // "Are the next two ids free?" (the VLSU burst allocator demands two, see its
@@ -208,6 +299,9 @@ module reorder_buffer
     mem_d           = mem_q;
     valid_d         = valid_q;
     id_valid_d      = id_valid_q;
+    gen_d           = gen_q;
+    entry_gen_d     = entry_gen_q;
+    stale_drop_d    = stale_drop_q;
 
     // Output data
     data_o  = mem_q[read_pointer_q];
@@ -224,15 +318,25 @@ module reorder_buffer
       // NumWords is a power of two whenever BlockWords > 1 (checked below), so id_t
       // arithmetic wraps naturally; with BlockWords == NumWords/2 this is one inverter on
       // the pointer msb, cheaper than the +1 incrementer it parallels.
-      write_pointer_d = id_t'(write_pointer_q + BlockWords);
+      write_pointer_d = entry_t'(write_pointer_q + BlockWords);
       // The whole window becomes allocated at once (bitmap removed under CntIdValid).
       if (!CntIdValid) id_valid_d = id_valid_q & ~block_mask;
       status_cnt_d = status_cnt_q + BlockWords;
+      // Stamp every entry the block just took, and advance the generation if the ring wrapped.
+      if (GenBits > 0) begin
+        for (int unsigned b = 0; b < BlockWords; b++)
+          entry_gen_d[entry_t'(write_pointer_q + b)] = gen_q;
+        if ((write_pointer_q + BlockWords) >= NumWords) gen_d = gen_q + 1;
+      end
     // Request an ID.
     end else if (id_req_i && !full_o) begin
-      // Increment the write pointer
+      // Stamp this entry with the generation it is being allocated in, BEFORE the pointer moves.
+      if (GenBits > 0) entry_gen_d[write_pointer_q] = gen_q;
+      // Increment the write pointer, advancing the generation on wrap so the next lap's ids are
+      // distinguishable from this lap's.
       if (write_pointer_q == NumWords-1) begin
         write_pointer_d = 0;
+        if (GenBits > 0) gen_d = gen_q + 1;
       end else begin
         write_pointer_d = write_pointer_q + 1;
       end
@@ -242,24 +346,35 @@ module reorder_buffer
       status_cnt_d = status_cnt_q + 1;
     end
 
-    // Push data
+    // Push data. Indexed by the ENTRY, and accepted only if the id's generation still matches
+    // the one that entry was allocated in. A mismatch is a late duplicate for an allocation that
+    // has already retired -- dropping it is the whole point of this scheme, because writing it
+    // would corrupt whatever request now owns the entry.
     if (push_i) begin
-      mem_d[id_i]   = data_i;
-      valid_d[id_i] = 1'b1;
+      if (push_gen_ok) begin
+        mem_d[push_entry]   = data_i;
+        valid_d[push_entry] = 1'b1;
+      end else begin
+        stale_drop_d = stale_drop_q + 1;
+      end
     end
 
     // Second slot-addressed write port
     if ((NumWrPorts > 1) && push2_i) begin
-      mem_d[id2_i]   = data2_i;
-      valid_d[id2_i] = 1'b1;
+      if (push2_gen_ok) begin
+        mem_d[push2_entry]   = data2_i;
+        valid_d[push2_entry] = 1'b1;
+      end else begin
+        stale_drop_d = stale_drop_q + 1;
+      end
     end
 
     // ROB is in fall-through mode -> do not change the pointers
-    if (FallThrough && push_i && (id_i == read_pointer_q)) begin
+    if (FallThrough && push_i && push_gen_ok && (push_entry == read_pointer_q)) begin
       data_o  = data_i;
       valid_o = 1'b1;
       if (pop_i) begin
-        valid_d[id_i] = 1'b0;
+        valid_d[push_entry] = 1'b0;
       end
     end
 
@@ -323,12 +438,18 @@ module reorder_buffer
       status_cnt_q    <= '0;
       mem_q           <= '0;
       valid_q         <= '0;
+      gen_q           <= '0;
+      entry_gen_q     <= '0;
+      stale_drop_q    <= '0;
     end else begin
       read_pointer_q  <= read_pointer_d;
       write_pointer_q <= write_pointer_d;
       status_cnt_q    <= status_cnt_d;
       mem_q           <= mem_d;
       valid_q         <= valid_d;
+      gen_q           <= gen_d;
+      entry_gen_q     <= entry_gen_d;
+      stale_drop_q    <= stale_drop_d;
     end
   end
 
@@ -442,5 +563,90 @@ module reorder_buffer
   end
   // pragma translate_on
   `endif
+
+`ifndef TARGET_SYNTHESIS
+  // PER-DROP TRACE. The end-of-simulation count told us 86 responses went missing but not WHICH,
+  // and a starved run never reaches that final block at all. Print the id, the entry it decodes
+  // to, the generation carried against the generation the entry holds, and the cycle -- so a
+  // dropped response can be matched to the allocation it belonged to instead of inferred.
+  //
+  // GENERATE, not a runtime `if`. The first version of this block read
+  //     if (rst_ni && (GenBits > 0)) ... id_i[IdWidth-1:EntryAw] ... [GenBits-1:0]
+  // which looks guarded and is not: a runtime condition does not stop ELABORATION, so the slices
+  // are still built, and port 0 always has GenBits == 0 (its NumWords == NrOutstandingLoads), so
+  // GenBits-1 underflows to 4294967295 and VCS rejects it -- Error-[TCF-CVTL]. This is the SAME
+  // trap already documented at the push_gen_ok assigns above; it was walked into a second time in
+  // this file. Only a generate `if` removes the code from elaboration.
+  // ALLOCATION TRACE. The drop trace says a response arrived carrying generation 1 for an entry
+  // holding generation 0 -- i.e. the entry was NOT re-stamped when it was reallocated on the second
+  // lap. Reasoning about the allocation path has produced two wrong answers already; this logs every
+  // event that can move entry_gen or the pointer, so a drop can be matched against the exact
+  // allocation history of its entry instead of inferred from the RTL.
+  // Verbose: every allocation, pop and generation advance. Opt in with
+  // extra_vlog_defs=-DROB_GEN_TRACE when a drop needs to be matched against the exact
+  // allocation history of its entry. Off by default -- it emitted 13,312 lines in a
+  // 30k-cycle 256-core run.
+`ifdef ROB_GEN_TRACE
+  if (GenBits > 0) begin : gen_alloc_trace
+    // pragma translate_off
+    always_ff @(posedge clk_i) begin
+      if (rst_ni) begin
+        if (id_req_i && !full_o && !block_fire)
+          $display("[rob_alloc] t=%0t %m SINGLE entry=%0d stamp_gen=%0d -> id_o=%0d  (wp=%0d gen=%0d cnt=%0d full=%0b)",
+                   $time, write_pointer_q, gen_q, {gen_q, write_pointer_q}, write_pointer_q, gen_q, status_cnt_q, full_o);
+        if (block_fire)
+          $display("[rob_alloc] t=%0t %m BLOCK  base=%0d words=%0d stamp_gen=%0d  (gen=%0d cnt=%0d)",
+                   $time, write_pointer_q, BlockWords, gen_q, gen_q, status_cnt_q);
+        // id_req asserted but REFUSED -- the consumer may still be sampling id_o combinationally
+        if (id_req_i && full_o)
+          $display("[rob_alloc] t=%0t %m REFUSED(full) wp=%0d gen=%0d id_o would be %0d",
+                   $time, write_pointer_q, gen_q, {gen_q, write_pointer_q});
+        if (pop_i && valid_o)
+          $display("[rob_pop] t=%0t %m entry=%0d gen_held=%0d cnt=%0d",
+                   $time, read_pointer_q, entry_gen_q[read_pointer_q][GenBits-1:0], status_cnt_q);
+        if (GenBits > 0 && (gen_d != gen_q))
+          $display("[rob_gen] t=%0t %m generation %0d -> %0d (wp %0d -> %0d)",
+                   $time, gen_q, gen_d, write_pointer_q, write_pointer_d);
+      end
+    end
+    // pragma translate_on
+  end
+
+`endif
+
+  if (GenBits > 0) begin : gen_drop_trace
+    // pragma translate_off
+    always_ff @(posedge clk_i) begin
+      if (rst_ni) begin
+        if (push_i && !push_gen_ok)
+          $display({"[rob_drop] t=%0t %m id=%0d -> entry=%0d carried_gen=%0d entry_gen=%0d ",
+                    "(NumWords=%0d) | why: alloc_fire=%0b block_fire=%0b id_req=%0b full=%0b ",
+                    "wp=%0d gen_q=%0d win=%0b gen_of_push=%0d"},
+                   $time, id_i, push_entry, id_i[IdWidth-1:EntryAw],
+                   entry_gen_q[push_entry][GenBits-1:0], NumWords,
+                   alloc_fire, block_fire, id_req_i, full_o, write_pointer_q, gen_q,
+                   alloc_win_mask[push_entry], gen_of_push);
+        if ((NumWrPorts > 1) && push2_i && !push2_gen_ok)
+          $display("[rob_drop2] t=%0t %m id=%0d -> entry=%0d carried_gen=%0d entry_gen=%0d",
+                   $time, id2_i, push2_entry, id2_i[IdWidth-1:EntryAw],
+                   entry_gen_q[push2_entry][GenBits-1:0]);
+      end
+    end
+    // pragma translate_on
+  end
+
+
+  // Visibility. A non-zero count here means the generation tag EARNED its keep: a late duplicate
+  // response arrived for an allocation that had already retired, and was dropped instead of
+  // corrupting whatever request now owns the entry. Silence means it never happened -- which is
+  // the expected reading whenever IdWidthExt leaves GenBits at 0.
+  // pragma translate_off
+  final begin
+    if (stale_drop_q != 0)
+      $display("[reorder_buffer] %m: dropped %0d stale response(s) on generation mismatch (NumWords=%0d IdWidth=%0d GenBits=%0d)",
+               stale_drop_q, NumWords, IdWidth, GenBits);
+  end
+  // pragma translate_on
+`endif
 
 endmodule: reorder_buffer
