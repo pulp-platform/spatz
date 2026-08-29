@@ -217,6 +217,32 @@ module spatz_vsldu
   } vreg_operation_first_t;
   vreg_operation_first_t vreg_operation_first_d;
 
+  // TMR-protected: triplicated FSM state register; an SEU on the single
+  // vreg_operation_first_q bit would otherwise silently corrupt the
+  // first/last-operation bookkeeping. Declared here (before first use below)
+  // rather than further down where it used to live -- some of the pipe's
+  // downstream logic reads vreg_operation_first_q before this point in the
+  // file, and forward-referencing it from there was rejected as an
+  // undeclared identifier.
+  logic [$bits(vreg_operation_first_t)-1:0] vreg_operation_first_q_rep [3];
+  for (genvar t = 0; t < 3; t++) begin : gen_vreg_operation_first_rep
+    `FF(vreg_operation_first_q_rep[t], vreg_operation_first_d, VREG_IDLE)
+  end
+  logic [$bits(vreg_operation_first_t)-1:0] vreg_operation_first_q_bits;
+  logic vreg_operation_first_tmr_fault;
+  bitwise_TMR_voter_fail #(
+    .DataWidth ($bits(vreg_operation_first_t)),
+    .VoterType (1)
+  ) i_vreg_operation_first_voter (
+    .a_i              (vreg_operation_first_q_rep[0]  ),
+    .b_i              (vreg_operation_first_q_rep[1]  ),
+    .c_i              (vreg_operation_first_q_rep[2]  ),
+    .majority_o       (vreg_operation_first_q_bits    ),
+    .fault_detected_o (vreg_operation_first_tmr_fault )
+  );
+  vreg_operation_first_t vreg_operation_first_q;
+  assign vreg_operation_first_q = vreg_operation_first_t'(vreg_operation_first_q_bits);
+
   // Accept a new operation or clear req register if we are finished
   always_comb begin
     slide_amount_d = slide_amount_q;
@@ -316,28 +342,6 @@ module spatz_vsldu
       endcase
     end
   end
-
-  // TMR-protected: triplicated FSM state register; an SEU on the single
-  // vreg_operation_first_q bit would otherwise silently corrupt the
-  // first/last-operation bookkeeping.
-  logic [$bits(vreg_operation_first_t)-1:0] vreg_operation_first_q_rep [3];
-  for (genvar t = 0; t < 3; t++) begin : gen_vreg_operation_first_rep
-    `FF(vreg_operation_first_q_rep[t], vreg_operation_first_d, VREG_IDLE)
-  end
-  logic [$bits(vreg_operation_first_t)-1:0] vreg_operation_first_q_bits;
-  logic vreg_operation_first_tmr_fault;
-  bitwise_TMR_voter_fail #(
-    .DataWidth ($bits(vreg_operation_first_t)),
-    .VoterType (1)
-  ) i_vreg_operation_first_voter (
-    .a_i              (vreg_operation_first_q_rep[0]  ),
-    .b_i              (vreg_operation_first_q_rep[1]  ),
-    .c_i              (vreg_operation_first_q_rep[2]  ),
-    .majority_o       (vreg_operation_first_q_bits    ),
-    .fault_detected_o (vreg_operation_first_tmr_fault )
-  );
-  vreg_operation_first_t vreg_operation_first_q;
-  assign vreg_operation_first_q = vreg_operation_first_t'(vreg_operation_first_q_bits);
 
   always_comb begin: vsldu_vreg_counter_proc
     // How many elements are left to do

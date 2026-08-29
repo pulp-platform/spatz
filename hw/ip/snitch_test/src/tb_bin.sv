@@ -38,9 +38,9 @@ module tb_bin;
 
   `ifdef TARGET_ZOIX
     `ifdef TARGET_POST_SYNTHESIS
-      `include "strobe_tb_bin_FS_ps.sv"
-      `include "strobe_tb_bin_FD_ps_CW.sv"
-      `include "strobe_tb_bin_OC_OU_ps_CW.sv"
+      // `include "strobe_tb_bin_FS_ps.sv"
+      // `include "strobe_tb_bin_FD_ps_CW.sv"
+      // `include "strobe_tb_bin_OC_OU_ps_CW.sv"
     `else
         `include "./strobe/strobe_tb_bin_FS.sv"
         `include "./strobe/strobe_tb_bin_OC_OU.sv"

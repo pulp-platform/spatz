@@ -615,11 +615,75 @@
 	}
      },
      {
+	multireg: {
+	    name: "ICACHE_L0_CORRECTABLE_COUNT",
+	    desc: "Per-core private L0 icache data-array correctable (single-bit) ECC error counter. Tag arrays are unprotected this round.",
+	    swaccess: "ro",
+	    hwaccess: "hrw",
+	    hwext: "true",
+	    count: "NumVrfUnits",
+	    compact: "false",
+	    cname: "icache_l0_correctable_count",
+	    fields: [{
+		bits: "31:0",
+		name: "COUNT",
+		desc: "Saturating count of correctable L0 icache data-array ECC errors for this core."
+	    }]
+	}
+     },
+     {
+	multireg: {
+	    name: "ICACHE_L0_UNCORRECTABLE_COUNT",
+	    desc: "Per-core private L0 icache data-array uncorrectable (multi-bit) ECC error counter.",
+	    swaccess: "ro",
+	    hwaccess: "hrw",
+	    hwext: "true",
+	    count: "NumVrfUnits",
+	    compact: "false",
+	    cname: "icache_l0_uncorrectable_count",
+	    fields: [{
+		bits: "31:0",
+		name: "COUNT",
+		desc: "Saturating count of uncorrectable L0 icache data-array ECC errors for this core."
+	    }]
+	}
+     },
+     {
+	name: "ICACHE_L1_CORRECTABLE_COUNT",
+	desc: '''Shared L1 icache data-array correctable (single-bit) ECC error counter. L1 is a
+	single cache shared by the whole cluster, not attributable to one core -- unlike the
+	per-core VRF/L0 counters above, this is one scalar counter. Tag arrays are unprotected
+	this round.
+	'''
+	swaccess: "ro",
+	hwaccess: "hrw",
+	hwext: "true",
+	fields: [{
+	    bits: "31:0",
+	    name: "COUNT",
+	    desc: "Saturating count of correctable L1 icache data-array ECC errors."
+	}]
+     },
+     {
+	name: "ICACHE_L1_UNCORRECTABLE_COUNT",
+	desc: "Shared L1 icache data-array uncorrectable (multi-bit) ECC error counter."
+	swaccess: "ro",
+	hwaccess: "hrw",
+	hwext: "true",
+	fields: [{
+	    bits: "31:0",
+	    name: "COUNT",
+	    desc: "Saturating count of uncorrectable L1 icache data-array ECC errors."
+	}]
+     },
+     {
 	name: "UNCORRECTABLE_IRQ_ENABLE",
 	desc: '''Per-hart enable for the uncorrectable-fault recovery interrupt. Bit i gates whether a
 	Class-A uncorrectable fault attributed to hart i (VRF ECC uncorrectable, TCDM ECC
-	uncorrectable read/scrub (cluster-global, broadcast to every hart), or FPU duplication
-	mismatch) is allowed to set that hart's bit in UNCORRECTABLE_IRQ_STATUS.
+	uncorrectable read/scrub (cluster-global, broadcast to every hart), L0 icache
+	data-array uncorrectable, L1 icache data-array uncorrectable (cluster-global,
+	broadcast to every hart), or FPU duplication mismatch) is allowed to set that hart's
+	bit in UNCORRECTABLE_IRQ_STATUS.
 	'''
 	swaccess: "rw",
 	hwaccess: "hro",

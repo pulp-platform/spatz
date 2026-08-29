@@ -499,6 +499,7 @@ module spatz_cc
   // Tracer
   // --------------------------
   // pragma translate_off
+`ifndef TARGET_ZOIX
   int           f;
   string        fn;
   logic  [63:0] cycle;
@@ -612,6 +613,7 @@ module spatz_cc
   final begin
     $fclose(f);
   end
+`endif
   // verilog_lint: waive-stop always-ff-non-blocking
   // pragma translate_on
 

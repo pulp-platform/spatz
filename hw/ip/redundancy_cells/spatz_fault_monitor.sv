@@ -46,6 +46,14 @@ module spatz_fault_monitor #(
   // self-corrected by majority vote; counter-only, same as above.
   input  logic [NumVrfUnits-1:0]  core_tmr_fault_i,
 
+  // Instruction cache ECC faults (data array only this round; tag arrays
+  // are unprotected). L0 is private per core; L1 is a single cluster-wide
+  // shared cache, so it's a scalar fault source, not a per-unit array.
+  input  logic [NumVrfUnits-1:0]  icache_l0_correctable_fault_i,
+  input  logic [NumVrfUnits-1:0]  icache_l0_uncorrectable_fault_i,
+  input  logic                    icache_l1_correctable_fault_i,
+  input  logic                    icache_l1_uncorrectable_fault_i,
+
   // Per-source counters.
   output logic [NumVrfUnits-1:0][CounterWidth-1:0]  vrf_correctable_count_o,
   output logic [NumVrfUnits-1:0][CounterWidth-1:0]  vrf_uncorrectable_count_o,
@@ -58,7 +66,12 @@ module spatz_fault_monitor #(
   output logic [NumVrfUnits-1:0][CounterWidth-1:0]  fpu_dup_fault_count_o,
 
   output logic [NumVrfUnits-1:0][CounterWidth-1:0]  handshake_tmr_count_o,
-  output logic [NumVrfUnits-1:0][CounterWidth-1:0]  core_tmr_count_o
+  output logic [NumVrfUnits-1:0][CounterWidth-1:0]  core_tmr_count_o,
+
+  output logic [NumVrfUnits-1:0][CounterWidth-1:0]  icache_l0_correctable_count_o,
+  output logic [NumVrfUnits-1:0][CounterWidth-1:0]  icache_l0_uncorrectable_count_o,
+  output logic [CounterWidth-1:0]                   icache_l1_correctable_count_o,
+  output logic [CounterWidth-1:0]                   icache_l1_uncorrectable_count_o
 );
 
   always_ff @(posedge clk_i or negedge rst_ni) begin
@@ -72,6 +85,10 @@ module spatz_fault_monitor #(
       fpu_dup_fault_count_o      <= '0;
       handshake_tmr_count_o     <= '0;
       core_tmr_count_o          <= '0;
+      icache_l0_correctable_count_o   <= '0;
+      icache_l0_uncorrectable_count_o <= '0;
+      icache_l1_correctable_count_o   <= '0;
+      icache_l1_uncorrectable_count_o <= '0;
 
     end else if (clear_i) begin
       vrf_correctable_count_o    <= '0;
@@ -83,6 +100,10 @@ module spatz_fault_monitor #(
       fpu_dup_fault_count_o      <= '0;
       handshake_tmr_count_o     <= '0;
       core_tmr_count_o          <= '0;
+      icache_l0_correctable_count_o   <= '0;
+      icache_l0_uncorrectable_count_o <= '0;
+      icache_l1_correctable_count_o   <= '0;
+      icache_l1_uncorrectable_count_o <= '0;
 
     end else begin
       for (int unsigned i = 0; i < NumVrfUnits; i++) begin

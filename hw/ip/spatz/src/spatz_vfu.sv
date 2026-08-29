@@ -332,6 +332,10 @@ module spatz_vfu
   logic [$clog2(NrWordsPerVector):0] word_idx_d, word_idx_q;
   `FF(word_idx_q, word_idx_d, '0)
 
+  // Raw (pre-defer) instruction-complete response; see vfu_rsp_defer below.
+  logic     vfu_rsp_valid_raw;
+  vfu_rsp_t vfu_rsp_o_raw;
+
   always_comb begin: control_proc
     // Maintain state
     vl_d              = vl_q;
@@ -351,8 +355,8 @@ module spatz_vfu
     spatz_req_ready = 1'b0;
 
     // Do not ack anything
-    vfu_rsp_valid_o = 1'b0;
-    vfu_rsp_o       = '0;
+    vfu_rsp_valid_raw = 1'b0;
+    vfu_rsp_o_raw     = '0;
 
     // Change number of remaining elements
     if (word_issued) begin
@@ -413,13 +417,63 @@ module spatz_vfu
 
     // An instruction finished execution
     if ((result_tag.last && &(result_valid | ~pending_results) && reduction_state_q inside {Reduction_NormalExecution, Reduction_Wait}) || reduction_done) begin
-      vfu_rsp_o.id      = result_tag.id;
-      vfu_rsp_o.rd      = result_tag.vd_addr[GPRWidth-1:0];
-      vfu_rsp_o.wb      = result_tag.wb;
-      vfu_rsp_o.result  = result_tag.wb ? scalar_result : '0;
-      vfu_rsp_valid_o   = 1'b1;
+      vfu_rsp_o_raw.id      = result_tag.id;
+      vfu_rsp_o_raw.rd      = result_tag.vd_addr[GPRWidth-1:0];
+      vfu_rsp_o_raw.wb      = result_tag.wb;
+      vfu_rsp_o_raw.result  = result_tag.wb ? scalar_result : '0;
+      vfu_rsp_valid_raw     = 1'b1;
     end
   end: control_proc
+
+  // Defer the "instruction complete" response for a VRF write (!wb) that
+  // hasn't actually landed in the VRF yet this cycle. A masked write's wbe
+  // may be partial, which triggers ecc_vregfile's internal read-modify-write
+  // stall (gnt_o/vrf_wvalid_i low for an extra cycle); firing vfu_rsp_valid_o
+  // before that write retires would let the scoreboard release a dependent
+  // access to vd into a race with the still-in-flight write.
+  logic vfu_rsp_defer;
+  assign vfu_rsp_defer = vfu_rsp_valid_raw && !vfu_rsp_o_raw.wb && !(vrf_we_o && vrf_wvalid_i);
+
+  logic     vfu_rsp_pending_d;
+  vfu_rsp_t vfu_rsp_pending_data_q, vfu_rsp_pending_data_d;
+  // TMR-protected: persistent single-bit handshake flag; see busy_q above
+  // for the rationale.
+  logic vfu_rsp_pending_q_rep [3];
+  for (genvar t = 0; t < 3; t++) begin : gen_vfu_rsp_pending_rep
+    `FF(vfu_rsp_pending_q_rep[t], vfu_rsp_pending_d, 1'b0)
+  end
+  logic vfu_rsp_pending_q;
+  logic vfu_rsp_pending_tmr_fault;
+  bitwise_TMR_voter_fail #(
+    .DataWidth (1),
+    .VoterType (1)
+  ) i_vfu_rsp_pending_voter (
+    .a_i              (vfu_rsp_pending_q_rep[0]  ),
+    .b_i              (vfu_rsp_pending_q_rep[1]  ),
+    .c_i              (vfu_rsp_pending_q_rep[2]  ),
+    .majority_o       (vfu_rsp_pending_q         ),
+    .fault_detected_o (vfu_rsp_pending_tmr_fault )
+  );
+  `FF(vfu_rsp_pending_data_q, vfu_rsp_pending_data_d, '0)
+
+  always_comb begin
+    vfu_rsp_pending_d      = vfu_rsp_pending_q;
+    vfu_rsp_pending_data_d = vfu_rsp_pending_data_q;
+    vfu_rsp_valid_o         = vfu_rsp_valid_raw && !vfu_rsp_defer;
+    vfu_rsp_o               = vfu_rsp_o_raw;
+
+    if (vfu_rsp_defer) begin
+      vfu_rsp_pending_d      = 1'b1;
+      vfu_rsp_pending_data_d = vfu_rsp_o_raw;
+    end
+
+    // Fire the deferred response once the write actually retires.
+    if (vfu_rsp_pending_q && vrf_we_o && vrf_wvalid_i) begin
+      vfu_rsp_valid_o   = 1'b1;
+      vfu_rsp_o         = vfu_rsp_pending_data_q;
+      vfu_rsp_pending_d = 1'b0;
+    end
+  end
 
   //////////////
   // Operands //
@@ -1166,6 +1220,7 @@ module spatz_vfu
   vrf_be_t       vreg_wbe;
   logic          vreg_we;
   logic    [2:0] vreg_r_req;
+  vrf_addr_t     vrf_waddr_pre;
 
   // Address register
   vrf_addr_t [2:0] vreg_addr_q, vreg_addr_d;
@@ -1175,8 +1230,8 @@ module spatz_vfu
   always_comb begin : vreg_addr_proc
     vreg_addr_d = vreg_addr_q;
 
-    vrf_raddr_o = vreg_addr_d;
-    vrf_waddr_o = vrf_addr_t'(result_tag.vd_addr);
+    vrf_raddr_o   = vreg_addr_d;
+    vrf_waddr_pre = vrf_addr_t'(result_tag.vd_addr);
 
     // Tag (propagated with the operations)
     input_tag = '{
@@ -1445,11 +1500,88 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
   `FF(wdata_q, wdata_d, '0)
 
   // Register file signals
-  assign vrf_re_o    = vreg_r_req;
-  assign vrf_we_o    = vreg_we;
-  assign vrf_wbe_o   = vreg_wbe;
-  assign vrf_wdata_o = (spatz_req.op == VFCMP) ? (wdata_q | vreg_wdata) : vreg_wdata;
-  assign vrf_id_o    = {result_tag.id, {3{spatz_req.id}}};
+  assign vrf_re_o = vreg_r_req;
+
+  vrf_data_t       vrf_wdata_pre;
+  spatz_id_t [3:0] vrf_id_pre;
+  assign vrf_wdata_pre = (spatz_req.op == VFCMP) ? (wdata_q | vreg_wdata) : vreg_wdata;
+  assign vrf_id_pre    = {result_tag.id, {3{spatz_req.id}}};
+
+  // Hold a VRF write request stable until it is actually granted, instead
+  // of re-deriving vrf_we_o/vrf_waddr_o/vrf_wdata_o/vrf_wbe_o/vrf_id_o
+  // combinationally every cycle from the current result/operand-pointer
+  // state. A masked/partial write can trip ecc_vregfile's internal RMW
+  // stall (vrf_wvalid_i low for a cycle); vfu_rsp_defer below assumes
+  // vrf_we_o stays asserted on the exact cycle vrf_wvalid_i returns high
+  // for THIS request. Without latching, any upstream timing quirk that
+  // lets the freshly-computed request drift (e.g. onto a different or no
+  // result) between the two cycles means that coincidence never recurs,
+  // vfu_rsp_pending_q never clears, and the instruction never retires --
+  // permanently blocking spatz_controller from accepting new work.
+  logic            vrf_write_pending_d;
+  vrf_addr_t       vrf_waddr_hold_d, vrf_waddr_hold_q;
+  vrf_data_t       vrf_wdata_hold_d, vrf_wdata_hold_q;
+  vrf_be_t         vrf_wbe_hold_d,   vrf_wbe_hold_q;
+  spatz_id_t [3:0] vrf_id_hold_d,    vrf_id_hold_q;
+
+  `FF(vrf_waddr_hold_q, vrf_waddr_hold_d, '0)
+  `FF(vrf_wdata_hold_q, vrf_wdata_hold_d, '0)
+  `FF(vrf_wbe_hold_q,   vrf_wbe_hold_d,   '0)
+  `FF(vrf_id_hold_q,    vrf_id_hold_d,    '0)
+
+  // TMR-protected: persistent single-bit handshake flag, same rationale as
+  // busy_q above.
+  logic vrf_write_pending_q_rep [3];
+  for (genvar t = 0; t < 3; t++) begin : gen_vrf_write_pending_rep
+    `FF(vrf_write_pending_q_rep[t], vrf_write_pending_d, 1'b0)
+  end
+  logic vrf_write_pending_q;
+  logic vrf_write_pending_tmr_fault;
+  bitwise_TMR_voter_fail #(
+    .DataWidth (1),
+    .VoterType (1)
+  ) i_vrf_write_pending_voter (
+    .a_i              (vrf_write_pending_q_rep[0]  ),
+    .b_i              (vrf_write_pending_q_rep[1]  ),
+    .c_i              (vrf_write_pending_q_rep[2]  ),
+    .majority_o       (vrf_write_pending_q         ),
+    .fault_detected_o (vrf_write_pending_tmr_fault )
+  );
+
+  always_comb begin
+    vrf_write_pending_d = vrf_write_pending_q;
+    vrf_waddr_hold_d     = vrf_waddr_hold_q;
+    vrf_wdata_hold_d     = vrf_wdata_hold_q;
+    vrf_wbe_hold_d       = vrf_wbe_hold_q;
+    vrf_id_hold_d        = vrf_id_hold_q;
+
+    if (vrf_write_pending_q) begin
+      // Re-present the latched request, verbatim, until it is granted.
+      vrf_we_o    = 1'b1;
+      vrf_waddr_o = vrf_waddr_hold_q;
+      vrf_wdata_o = vrf_wdata_hold_q;
+      vrf_wbe_o   = vrf_wbe_hold_q;
+      vrf_id_o    = vrf_id_hold_q;
+
+      if (vrf_wvalid_i) vrf_write_pending_d = 1'b0;
+    end else begin
+      vrf_we_o    = vreg_we;
+      vrf_waddr_o = vrf_waddr_pre;
+      vrf_wdata_o = vrf_wdata_pre;
+      vrf_wbe_o   = vreg_wbe;
+      vrf_id_o    = vrf_id_pre;
+
+      // Request not granted this cycle: latch it so it survives whatever
+      // the result/operand pipeline does on the following cycles.
+      if (vreg_we && !vrf_wvalid_i) begin
+        vrf_write_pending_d = 1'b1;
+        vrf_waddr_hold_d    = vrf_waddr_pre;
+        vrf_wdata_hold_d    = vrf_wdata_pre;
+        vrf_wbe_hold_d      = vreg_wbe;
+        vrf_id_hold_d       = vrf_id_pre;
+      end
+    end
+  end
 
   //////////
   // IPUs //
@@ -1743,6 +1875,8 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
                                | result_buf_valid_tmr_fault
                                | reduction_operand_ready_tmr_fault
                                | reduction_state_tmr_fault
+                               | vfu_rsp_pending_tmr_fault
+                               | vrf_write_pending_tmr_fault
                                | (|int_ipu_handshake_tmr_fault);
 
 endmodule : spatz_vfu

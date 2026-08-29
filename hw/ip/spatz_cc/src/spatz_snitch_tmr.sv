@@ -223,9 +223,11 @@ module spatz_snitch_tmr
     .a_i(ptw_ppn_rep[0]), .b_i(ptw_ppn_rep[1]), .c_i(ptw_ppn_rep[2]),
     .majority_o(ptw_ppn_o), .fault_detected_o(fault_ptw_ppn));
 
+  logic [$bits(fpnew_pkg::roundmode_e)-1:0] fpu_rnd_mode_bits;
   bitwise_TMR_voter_fail #(.DataWidth($bits(fpnew_pkg::roundmode_e)), .VoterType(1)) i_fpu_rnd_mode_voter (
     .a_i(fpu_rnd_mode_rep[0]), .b_i(fpu_rnd_mode_rep[1]), .c_i(fpu_rnd_mode_rep[2]),
-    .majority_o(fpu_rnd_mode_o), .fault_detected_o(fault_fpu_rnd_mode));
+    .majority_o(fpu_rnd_mode_bits), .fault_detected_o(fault_fpu_rnd_mode));
+  assign fpu_rnd_mode_o = fpnew_pkg::roundmode_e'(fpu_rnd_mode_bits);
 
   bitwise_TMR_voter_fail #(.DataWidth($bits(fpnew_pkg::fmt_mode_t)), .VoterType(1)) i_fpu_fmt_mode_voter (
     .a_i(fpu_fmt_mode_rep[0]), .b_i(fpu_fmt_mode_rep[1]), .c_i(fpu_fmt_mode_rep[2]),

@@ -73,7 +73,10 @@ module spatz_amo_shim
   /// Status signal, AMO clashed with DMA transfer.
   output  logic                     amo_conflict_o,
   // CMY: input grant signal from ecc_sram
-  input   logic                     ecc_sram_gnt_i
+  input   logic                     ecc_sram_gnt_i,
+  // Set when the TMR-protected AMO-FSM state register disagrees across
+  // its three replicas.
+  output  logic                     handshake_tmr_fault_o
 );
 
   logic idx_q, idx_d;
@@ -190,7 +193,27 @@ module spatz_amo_shim
   logic [63:0] wdata;
   assign wdata = $unsigned(wdata_i);
 
-  `FF(state_q, state_d, Idle)
+  // TMR-protected: triplicated FSM state register; an SEU on the single
+  // state_q bits would otherwise silently corrupt the AMO RMW control flow.
+  logic [$bits(state_e)-1:0] state_q_rep [3];
+  for (genvar t = 0; t < 3; t++) begin : gen_state_rep
+    `FF(state_q_rep[t], state_d, Idle)
+  end
+  logic [$bits(state_e)-1:0] state_q_bits;
+  logic state_tmr_fault;
+  bitwise_TMR_voter_fail #(
+    .DataWidth ($bits(state_e)),
+    .VoterType (1)
+  ) i_state_voter (
+    .a_i              (state_q_rep[0]  ),
+    .b_i              (state_q_rep[1]  ),
+    .c_i              (state_q_rep[2]  ),
+    .majority_o       (state_q_bits    ),
+    .fault_detected_o (state_tmr_fault )
+  );
+  assign state_q = state_e'(state_q_bits);
+  assign handshake_tmr_fault_o = state_tmr_fault;
+
   `FFL(amo_op_q, amo_i, load_amo, AMOAdd)
   `FFL(addr_q, addr_i, load_amo, '0)
   // Which word to pick.

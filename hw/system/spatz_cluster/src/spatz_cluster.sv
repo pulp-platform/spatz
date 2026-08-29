@@ -446,6 +446,14 @@ module spatz_cluster
   logic [NrCores-1:0] spatz_handshake_tmr_fault;
   logic [NrCores-1:0] core_tmr_fault;
 
+  // Icache ECC faults (data array only this round; tag arrays are
+  // unprotected). L0 is private per core; L1 is a single cluster-wide
+  // shared cache, so it's a scalar fault source, not a per-core array.
+  logic [NrCores-1:0] icache_l0_correctable_fault;
+  logic [NrCores-1:0] icache_l0_uncorrectable_fault;
+  logic               icache_l1_correctable_fault;
+  logic               icache_l1_uncorrectable_fault;
+
   // Per-hart uncorrectable-fault recovery interrupt, ORed onto irq.mcip.
   logic [NrCores-1:0] uncorrectable_irq;
 
@@ -460,6 +468,11 @@ module spatz_cluster
   logic [NrCores-1:0][ErrorCounterWidth-1:0] fpu_dup_fault_count;
   logic [NrCores-1:0][ErrorCounterWidth-1:0] handshake_tmr_count;
   logic [NrCores-1:0][ErrorCounterWidth-1:0] core_tmr_count;
+
+  logic [NrCores-1:0][ErrorCounterWidth-1:0] icache_l0_correctable_count;
+  logic [NrCores-1:0][ErrorCounterWidth-1:0] icache_l0_uncorrectable_count;
+  logic [ErrorCounterWidth-1:0]              icache_l1_correctable_count;
+  logic [ErrorCounterWidth-1:0]              icache_l1_uncorrectable_count;
 
   spatz_fault_monitor #(
   .NumVrfUnits  (NrCores),
@@ -487,6 +500,11 @@ module spatz_cluster
   .handshake_tmr_fault_i (spatz_handshake_tmr_fault),
   .core_tmr_fault_i (core_tmr_fault),
 
+  .icache_l0_correctable_fault_i (icache_l0_correctable_fault),
+  .icache_l0_uncorrectable_fault_i (icache_l0_uncorrectable_fault),
+  .icache_l1_correctable_fault_i (icache_l1_correctable_fault),
+  .icache_l1_uncorrectable_fault_i (icache_l1_uncorrectable_fault),
+
   // Per-source counters.
   .vrf_correctable_count_o (vrf_correctable_count),
   .vrf_uncorrectable_count_o(vrf_uncorrectable_count),
@@ -498,7 +516,12 @@ module spatz_cluster
 
   .fpu_dup_fault_count_o (fpu_dup_fault_count),
   .handshake_tmr_count_o (handshake_tmr_count),
-  .core_tmr_count_o (core_tmr_count)
+  .core_tmr_count_o (core_tmr_count),
+
+  .icache_l0_correctable_count_o (icache_l0_correctable_count),
+  .icache_l0_uncorrectable_count_o (icache_l0_uncorrectable_count),
+  .icache_l1_correctable_count_o (icache_l1_correctable_count),
+  .icache_l1_uncorrectable_count_o (icache_l1_uncorrectable_count)
 );
 
   // -------------
@@ -773,7 +796,8 @@ module spatz_cluster
         .dma_access_i   (sb_dma_req[i].q_valid     ),
         // TODO(zarubaf): Signal AMO conflict somewhere. Socregs?
         .amo_conflict_o (/* Unused */              ),
-        .ecc_sram_gnt_i (ecc_sram_gnt              )
+        .ecc_sram_gnt_i (ecc_sram_gnt              ),
+        .handshake_tmr_fault_o (/* Unused */       )
       );
 
       // Insert a pipeline register at the output of each SRAM.
@@ -987,7 +1011,7 @@ module spatz_cluster
     };
   end
 
-  snitch_icache #(
+  snitch_icache_ecc #(
     .NR_FETCH_PORTS     ( NrCores                                            ),
     .L0_LINE_COUNT      ( 8                                                  ),
     .LINE_WIDTH         ( ICacheLineWidth                                    ),
@@ -1023,7 +1047,12 @@ module spatz_cluster
     .sram_cfg_tag_i       ( '0                       ),
     .sram_cfg_data_i      ( '0                       ),
     .axi_req_o            ( wide_axi_mst_req[ICache] ),
-    .axi_rsp_i            ( wide_axi_mst_rsp[ICache] )
+    .axi_rsp_i            ( wide_axi_mst_rsp[ICache] ),
+    // ECC fault reporting (data array only this round)
+    .l0_correctable_error_o  ( icache_l0_correctable_fault   ),
+    .l0_uncorrectable_error_o( icache_l0_uncorrectable_fault ),
+    .l1_correctable_error_o  ( icache_l1_correctable_fault   ),
+    .l1_uncorrectable_error_o( icache_l1_uncorrectable_fault )
   );
 
   // --------
@@ -1211,11 +1240,17 @@ module spatz_cluster
     .fpu_dup_fault_count_i            (fpu_dup_fault_count            ),
     .handshake_tmr_count_i            (handshake_tmr_count            ),
     .core_tmr_count_i                 (core_tmr_count                 ),
+    .icache_l0_correctable_count_i    (icache_l0_correctable_count    ),
+    .icache_l0_uncorrectable_count_i  (icache_l0_uncorrectable_count  ),
+    .icache_l1_correctable_count_i    (icache_l1_correctable_count    ),
+    .icache_l1_uncorrectable_count_i  (icache_l1_uncorrectable_count  ),
     // Uncorrectable-fault recovery interrupt
     .vrf_uncorrectable_fault_i        (vrf_uncorrectable_fault        ),
     .tcdm_rd_uncorrectable_fault_i    (tcdm_rd_uncorrectable_fault    ),
     .tcdm_scrub_uncorrectable_fault_i (tcdm_scrub_uncorrectable_fault ),
     .fpu_dup_fault_i                  (fpu_dup_fault                  ),
+    .icache_l0_uncorrectable_fault_i  (icache_l0_uncorrectable_fault  ),
+    .icache_l1_uncorrectable_fault_i  (icache_l1_uncorrectable_fault  ),
     .uncorrectable_irq_o              (uncorrectable_irq              )
   );
 
