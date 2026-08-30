@@ -17,12 +17,18 @@ module axi_dma_tc_snitch_fe #(
     parameter int  unsigned UserWidth          = 0,
     parameter int  unsigned DMAAxiReqFifoDepth = 3,
     parameter int  unsigned DMAReqFifoDepth    = 3,
+    /// Width of one index-stream read from L1/TCDM (indexed/gather mode)
+    parameter int  unsigned IndexTcdmDataWidth = 64,
     parameter type          axi_req_t          = logic,
     parameter type          axi_ar_chan_t      = logic,
     parameter type          axi_aw_chan_t      = logic,
     parameter type          axi_res_t          = logic,
     parameter type          acc_resp_t         = logic,
     parameter type          dma_events_t       = logic,
+    /// TCDM request/response types for the index-stream read port (same as the
+    /// cluster's tcdm_req_t/tcdm_rsp_t so it wires straight into the interconnect)
+    parameter type          tcdm_req_t         = logic,
+    parameter type          tcdm_rsp_t         = logic,
     /// Derived parameter *Do not override*
     parameter type          addr_t             = logic [AddrWidth-1:0],
     parameter type          data_t             = logic [DataWidth-1:0]
@@ -55,7 +61,11 @@ module axi_dma_tc_snitch_fe #(
 
     // performance output
     output axi_dma_pkg::dma_perf_t dma_perf_o,
-    output dma_events_t            dma_events_o
+    output dma_events_t            dma_events_o,
+
+    // Index-stream read port to L1/TCDM (indexed/gather mode, read-only)
+    output tcdm_req_t dma_idx_req_o,
+    input  tcdm_rsp_t dma_idx_rsp_i
   );
 
   typedef logic [IdWidth-1:0] id_t;
@@ -79,6 +89,12 @@ module axi_dma_tc_snitch_fe #(
     logic decouple_rw;
     logic deburst;
     logic is_twod;
+    // indexed (gather) extension:
+    //   is_gather=1 -> src_addr[i] = src + idx[i]*stride_src, dst_addr[i] = dst + i*stride_dst,
+    //   num_repetitions = index count (G), idx stream read from idx_addr in L1.
+    addr_t      idx_addr;
+    logic [1:0] idx_width;   // 00/01/10/11 -> 8/16/32/64-bit index elements
+    logic       is_gather;
   } twod_req_t;
 
   //--------------------------------------
@@ -239,21 +255,96 @@ module axi_dma_tc_snitch_fe #(
   logic      twod_req_ready;
   logic      twod_req_last;
 
+  //--------------------------------------
+  // Launch routing: is_gather -> gather engine, else -> 2D engine
+  //--------------------------------------
+  // NOTE (stage 1): SW must not have 1D/2D and gather transfers in flight at the
+  // same time (wait_all between mode switches). Only one engine is ever active,
+  // so the burst-stream mux below never sees both sources valid at once.
+  logic is_gather_launch;
+  logic twod_ext_valid, gather_ext_valid;
+  logic twod_ext_ready, gather_ext_ready;
+
+  assign is_gather_launch = twod_req_d.is_gather;
+  assign twod_ext_valid   = twod_req_valid & ~is_gather_launch;
+  assign gather_ext_valid = twod_req_valid &  is_gather_launch;
+  assign twod_req_ready   = is_gather_launch ? gather_ext_ready : twod_ext_ready;
+
+  // Per-engine burst streams, merged into the single backend request.
+  burst_req_t twod_burst_req,   gather_burst_req;
+  logic       twod_burst_valid, gather_burst_valid;
+  logic       twod_burst_ready, gather_burst_ready;
+  logic       twod_burst_last,  gather_burst_last;
+
+  // gather takes priority if both were ever valid (must not happen — see NOTE)
+  assign burst_req_valid    = twod_burst_valid | gather_burst_valid;
+  assign burst_req          = gather_burst_valid ? gather_burst_req  : twod_burst_req;
+  assign twod_req_last      = gather_burst_valid ? gather_burst_last : twod_burst_last;
+  assign gather_burst_ready = burst_req_ready &  gather_burst_valid;
+  assign twod_burst_ready   = burst_req_ready & ~gather_burst_valid;
+
   axi_dma_twod_ext #(
     .ADDR_WIDTH     ( AddrWidth       ),
     .REQ_FIFO_DEPTH ( DMAReqFifoDepth ),
     .burst_req_t    ( burst_req_t     ),
     .twod_req_t     ( twod_req_t      )
   ) i_axi_dma_twod_ext (
-    .clk_i             ( clk_i           ),
-    .rst_ni            ( rst_ni          ),
-    .twod_req_i        ( twod_req_d      ),
-    .twod_req_valid_i  ( twod_req_valid  ),
-    .twod_req_ready_o  ( twod_req_ready  ),
-    .burst_req_o       ( burst_req       ),
-    .burst_req_valid_o ( burst_req_valid ),
-    .burst_req_ready_i ( burst_req_ready ),
-    .twod_req_last_o   ( twod_req_last   )
+    .clk_i             ( clk_i            ),
+    .rst_ni            ( rst_ni           ),
+    .twod_req_i        ( twod_req_d       ),
+    .twod_req_valid_i  ( twod_ext_valid   ),
+    .twod_req_ready_o  ( twod_ext_ready   ),
+    .burst_req_o       ( twod_burst_req   ),
+    .burst_req_valid_o ( twod_burst_valid ),
+    .burst_req_ready_i ( twod_burst_ready ),
+    .twod_req_last_o   ( twod_burst_last  )
+  );
+
+  //--------------------------------------
+  // Indexed (gather) Extension
+  //--------------------------------------
+  // The engine uses a protocol-neutral req/gnt/rvalid micro-interface; adapt it
+  // here to the cluster's TCDM request/response type (read-only) so it wires
+  // straight into the TCDM interconnect.
+  logic                          idx_req, idx_gnt, idx_rvalid;
+  addr_t                         idx_addr;
+  logic [IndexTcdmDataWidth-1:0] idx_rdata;
+
+  always_comb begin : proc_idx_tcdm_req
+    dma_idx_req_o         = '0;
+    dma_idx_req_o.q.addr  = idx_addr[$bits(dma_idx_req_o.q.addr)-1:0]; // TCDM-relative (truncated)
+    dma_idx_req_o.q.write = 1'b0;
+    dma_idx_req_o.q.amo   = reqrsp_pkg::AMONone;
+    dma_idx_req_o.q.data  = '0;
+    dma_idx_req_o.q.strb  = '0;
+    dma_idx_req_o.q.user  = '0;
+    dma_idx_req_o.q_valid = idx_req;
+  end
+  assign idx_gnt    = dma_idx_rsp_i.q_ready;   // grant = q_ready
+  assign idx_rvalid = dma_idx_rsp_i.p_valid;
+  assign idx_rdata  = dma_idx_rsp_i.p.data;
+
+  axi_dma_gather_ext #(
+    .ADDR_WIDTH     ( AddrWidth          ),
+    .REQ_FIFO_DEPTH ( DMAReqFifoDepth    ),
+    .TcdmDataWidth  ( IndexTcdmDataWidth ),
+    .burst_req_t    ( burst_req_t        ),
+    .gather_req_t   ( twod_req_t         )
+  ) i_axi_dma_gather_ext (
+    .clk_i              ( clk_i              ),
+    .rst_ni             ( rst_ni             ),
+    .burst_req_o        ( gather_burst_req   ),
+    .burst_req_valid_o  ( gather_burst_valid ),
+    .burst_req_ready_i  ( gather_burst_ready ),
+    .gather_req_i       ( twod_req_d         ),
+    .gather_req_valid_i ( gather_ext_valid   ),
+    .gather_req_ready_o ( gather_ext_ready   ),
+    .gather_req_last_o  ( gather_burst_last  ),
+    .idx_req_o          ( idx_req            ),
+    .idx_addr_o         ( idx_addr           ),
+    .idx_gnt_i          ( idx_gnt            ),
+    .idx_rvalid_i       ( idx_rvalid         ),
+    .idx_rdata_i        ( idx_rdata          )
   );
 
   //--------------------------------------
@@ -382,9 +473,11 @@ module axi_dma_tc_snitch_fe #(
         // start the DMA
         riscv_instr::DMCPYI,
         riscv_instr::DMCPY : begin
-          automatic logic [1:0] cfg;
+          automatic logic [4:0] cfg;
 
           // Parse the transfer parameters from the register or immediate.
+          // cfg[0]=decouple_rw, cfg[1]=is_twod, cfg[2]=is_gather,
+          // cfg[3]=direction (0=gather/1=scatter, reserved), cfg[4]=reserved.
           cfg = '0;
           unique casez (acc_qdata_op_i)
             riscv_instr::DMCPYI : cfg = acc_qdata_op_i[24:20];
@@ -397,6 +490,7 @@ module axi_dma_tc_snitch_fe #(
           twod_req_d.num_bytes   = acc_qdata_arga_i;
           twod_req_d.decouple_rw = cfg[0];
           twod_req_d.is_twod     = cfg[1];
+          twod_req_d.is_gather   = cfg[2];
 
           // Perform the following sequence:
           // 1. wait for acc response channel to be ready (pready)
@@ -465,6 +559,15 @@ module axi_dma_tc_snitch_fe #(
           acc_qready_o               = 1'b1;
           is_dma_op                  = 1'b1;
           dma_op_name                = "DMREP";
+        end
+
+        // set the index-stream base + element width (indexed/gather mode)
+        riscv_instr::DMIDX : begin
+          twod_req_d.idx_addr   = acc_qdata_arga_i;         // rs1: index stream base in L1
+          twod_req_d.idx_width  = acc_qdata_op_i[21:20];    // imm[1:0]: element width
+          acc_qready_o          = 1'b1;
+          is_dma_op             = 1'b1;
+          dma_op_name           = "DMIDX";
         end
 
         default:;
