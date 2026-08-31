@@ -289,7 +289,15 @@ module spatz_vlsu
       // are distributed one lane per word, so each ROB holds vl/NrMemPorts of them.
       // Four times the old ceiling -- 256 B at depth 16, covering LMUL up to 4.
       (mem_spatz_req.vl <= (NrOutstandingLoads * MemDataWidthB * NrMemPorts)) &&
-      (mem_spatz_req.rs1[BurstAlignBits-1:0] == '0);
+      (mem_spatz_req.rs1[BurstAlignBits-1:0] == '0) &&
+      // vstart must be zero. A word's LANE is its element index mod NrMemPorts
+      // (see the non-burst address generation: word index = n*NrMemPorts + port),
+      // counted from rs1. The burst reply path derives the lane as beat_index %
+      // NrMemPorts, which only equals that when the burst starts at an element index
+      // that is a multiple of NrMemPorts. Full-length bursts from element 0 satisfy
+      // it; a non-zero vstart shifts every element and would silently steer each
+      // beat to the wrong ROB.
+      (mem_spatz_req.vstart == '0);
   assign burst_full_bytes_req    = (mem_spatz_req.vl >> BurstAlignBits) << BurstAlignBits;
   assign burst_full_bytes_commit = (commit_insn_q.vl >> BurstAlignBits) << BurstAlignBits;
   assign burst_has_tail_req      = use_port0_burst_req &&
