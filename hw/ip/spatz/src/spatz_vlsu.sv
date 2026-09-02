@@ -79,6 +79,22 @@ module spatz_vlsu
   localparam int unsigned BurstAlignBits = $clog2(MaxBurstWords*MemDataWidthB);
   localparam int unsigned FullBurstBytes = MaxBurstWords * MemDataWidthB;
 
+  // Share of a burst of `len` words that lands in lane `port`. Beat k goes to lane
+  // k % NrMemPorts, so lane p owns beats p, p+NrMemPorts, ... -- ceil((len-p)/NrMemPorts)
+  // of them, and none once p >= len. The lanes are deliberately allowed to DIFFER:
+  // nothing keeps the reorder buffers' allocation counts equal, because each lane
+  // carries its own base id to the burst adapter. That is what lets a burst be any
+  // length -- a tail included -- and lets MaxBurstWords be a free parameter rather
+  // than a multiple of NrMemPorts.
+  function automatic logic [BurstLenWidth-1:0] burst_port_share
+      (input logic [BurstLenWidth-1:0] len, input int unsigned port);
+    if (len > BurstLenWidth'(port))
+      burst_port_share = BurstLenWidth'((len - BurstLenWidth'(port) +
+                                         BurstLenWidth'(NrMemPorts - 1)) >> $clog2(NrMemPorts));
+    else
+      burst_port_share = '0;
+  endfunction
+
   // R2: commit-metadata FIFO depth. The push in queue_control is gated on
   // !mem_insn_pending_q[mem_spatz_req.id]; mem_insn_pending_q has exactly
   // NrParallelInstructions bits and is indexed by spatz_id_t, the bit is set at the push
@@ -92,14 +108,10 @@ module spatz_vlsu
   localparam int unsigned CommitQDepth = CommitQMin ? NrParallelInstructions
                                                     : NrOutstandingLoads;
 
-  // Block ROB-id reservation (docs/spatz_mlp_design_plan.md §5.1 -- the memory-level-parallelism
+  // Block ROB-id reservation ( -- the memory-level-parallelism
   // lever). 0 = OFF (default): the port-0 burst allocator walks its ROB ids ONE PER CYCLE, so a
   // 16-beat burst needs 18 cycles from becoming eligible to its request handshake (1 decide +
   // 16 walk + 1 send). 1 = ON: ROB0 grants the whole MaxBurstWords-wide id window in a single
-  // cycle and the sequence collapses to decide -> reserve -> send = 3 cycles, i.e. -15 cyc per
-  // burst and -30 cyc per load at vl = two full bursts. Bursts are port-0 only (burst_mode_req
-  // demands mem_use_port0_burst, and ports 1-3 fail burst_addr_aligned because their first
-  // address is rs1 + port*4), so exactly ONE ROB per core carries the block logic.
   localparam int unsigned BlockAlloc =
     `ifdef SPATZ_VLSU_BLOCK_ALLOC `SPATZ_VLSU_BLOCK_ALLOC
     `else 0 `endif;
@@ -107,91 +119,11 @@ module spatz_vlsu
   // (BlockWords > 1) and const-folds away, leaving the legacy netlist bit-identical.
   localparam int unsigned BlockWords = (BlockAlloc != 0) ? MaxBurstWords : 1;
 
-  // A burst is distributed across the ROBs by the ordinary word->port rule, so port p
-  // receives words p, p+4, p+8 ... -- exactly MaxBurstWords/NrMemPorts of them. Bursts
-  // are only ever formed at full length (burst_len_calc is MaxBurstWords or 1), so this
-  // divides exactly and every ROB advances by the same amount, which is what lets one
-  // base id describe every beat.
-  localparam int unsigned BurstShare = MaxBurstWords / NrMemPorts;
 
-  // ---------------------------------------------------------------------------
-  // Sub-word burst eligibility (fp16). 0 = LEGACY: only vsew == EW_32 may burst, so a
-  // vle16.v falls back to the 4-port word-interleaved path and never reaches the group
-  // MSHR's burst class -- no burst merge, no ParityDrain, no BlockAlloc. 1 = admit every
-  // element width EXCEPT EW_8.
-  //
-  // THE BURST LENGTH IS UNCHANGED. A burst is MaxBurstWords 32-bit WORDS (64 B) in both
-  // modes; only the number of elements those bytes carry changes (16 fp32 vs 32 fp16).
-  // Everything downstream of this predicate -- mem_counter_* (byte counters),
-  // BurstAlignBits, the tcdm burst expander, the group MSHR, ParityDrain, the NoC -- is
-  // byte/word-granular and therefore sees an IDENTICAL burst stream. No new state, no
-  // new datapath: this knob only widens an eligibility test.
-  //
-  // Area/timing: the legacy test is a 2-bit equality against EW_32. With MAXEW == EW_32,
-  // EW_64 is unreachable, so "not EW_8" is |vsew -- a 2-input OR. The gate gets SMALLER
-  // when this is on, and const-folds back to the exact legacy comparison when it is off.
-  //
-  // ⚠️ vl CEILING. use_port0_burst_req also demands vl <= NrOutstandingLoads*MemDataWidthB
-  // (256 B at ROB64). vl is in BYTES, so the limit is on bytes and not elements: e16,m2 is
-  // 128 B (fine, 2 bursts) and e16,m4 is 256 B (fine, exactly at the ceiling), but e16,m8
-  // is 512 B and SILENTLY drops off the burst path with no error. Keep fp16 kernels at
-  // m4 or below. gen_burst_ew_vl_ceiling below reports the drop in simulation.
-  // ---------------------------------------------------------------------------
-  localparam bit BurstSubWord =
-    `ifdef SPATZ_VLSU_BURST_EW16 (`SPATZ_VLSU_BURST_EW16 != 0)
-    `else 1'b0 `endif;
-
-  // ---------------------------------------------------------------------------
-  // vl CEILING RELAXATION (experiment, docs/spatz_vlsu_ceiling_analysis.md).
-  //
-  // use_port0_burst_req demands vl <= NrOutstandingLoads*MemDataWidthB.  The ROB id
-  // IS the memory response tag, so that rule is "no more outstanding words than
-  // distinct tags" -- exceeding it would make a response unattributable IF the whole
-  // load were issued at once.  But tags are already recycled mid-instruction:
-  // rob_pop frees an entry the cycle its element is accepted into a VRF write, so the
-  // allocator can keep issuing as tags come back.
-  //
-  // 0 (default) = ceiling enforced, netlist bit-identical.  1 = admit the load and let
-  // it stream through the tag pool.  This is a MEASUREMENT knob: whether anything
-  // downstream assumes one-shot allocation (commit_counter_max, burst_odd_expected_q)
-  // is exactly what the directed test is for.  Do not ship it on without that evidence.
-  // ---------------------------------------------------------------------------
-  // ---------------------------------------------------------------------------
-  // ASYMMETRIC ROB DEPTH (docs/spatz_rob_dataless_design.md §14).
-  //
-  // Bursts use ROB0 ONLY: requests are port-0 (ports 1-3 fail burst_addr_aligned, their
-  // first address being rs1 + port*4), and ParityDrain lands even beats from mem port 0
-  // and odd beats from mem port 1 in ROB0's single contiguous id range (:24-26).  ROBs
-  // 1-3 hold no burst data at all -- three quarters of the 4 x NumWords x ELEN storage
-  // exists solely for the NON-burst path (strided, indexed, unaligned, over-ceiling).
-  //
-  // NrOutstandingLoads therefore sizes two different things at once: ROB0's burst window
-  // (which we want large -- it sets the vl ceiling) and ports 1-3's non-burst window
-  // (which need not match).  This knob separates them.
-  //
-  // Unset = NrOutstandingLoads for every port -> bit-identical elaboration.  It composes
-  // with SPATZ_VLSU_ROB_DEPTH: "ROB0 deep, the rest shallow" is
-  // spatz_vlsu_rob_depth=128 + spatz_vlsu_robn_depth=16.
-  //
-  // IdWidth stays derived from NrOutstandingLoads (the max), so the shared id_t is wide
-  // enough for every port and narrow ROBs simply never issue an id above their range --
-  // asserted below.  Shrinking ports 1-3 costs non-burst memory-level parallelism
-  // proportionally; whether that matters is a measurement ([BURSTWHY] reports the
-  // burst/non-burst mix), not an argument.
-  // ---------------------------------------------------------------------------
-  localparam int unsigned RobNDepth =
-    `ifdef SPATZ_VLSU_ROBN_DEPTH `SPATZ_VLSU_ROBN_DEPTH `else NrOutstandingLoads `endif;
-
-  localparam bit NoVlCeiling =
-    `ifdef SPATZ_VLSU_NO_VL_CEILING (`SPATZ_VLSU_NO_VL_CEILING != 0)
-    `else 1'b0 `endif;
-
-  // ---------------------------------------------------------------------------
-  // H1 dual-load runahead (docs/spatz_rob64_h1_design_plan.md). MaxInflight=1 (default)
+  // H1 dual-load runahead. MaxInflight=1 (default)
   // const-folds every added term away -> bit-identical legacy netlist. MaxInflight=2
   // admits a SECOND burst-safe load while the elder drains. Validated design point:
   // NrOutstandingLoads=64 (two e32,m2 loads = 2*32 ids exactly fill ROB0).
-  // ---------------------------------------------------------------------------
   localparam int unsigned MaxInflight =
     `ifdef SPATZ_VLSU_DUAL_LOAD `SPATZ_VLSU_DUAL_LOAD `else 1 `endif;
   localparam bit Runahead = (MaxInflight > 1);
@@ -279,10 +211,11 @@ module spatz_vlsu
       mem_spatz_req.op_mem.is_load &&
       !mem_is_strided &&
       !mem_is_indexed &&
-      (BurstSubWord ? (mem_spatz_req.vtype.vsew != EW_8)
-                    : (mem_spatz_req.vtype.vsew == EW_32)) &&
-      // At least one full burst (vl is in bytes after proc_spatz_req conversion).
-      (mem_spatz_req.vl >= FullBurstBytes) &&
+      // No element-width restriction. The burst path is WORD granular end to end --
+      // mem_remaining_words is bytes >> clog2(MemDataWidthB) and a word's lane is
+      // its word index mod NrMemPorts (the `port << MAXEW` term in the non-burst
+      // address generation) -- so how many elements sit inside a 32-bit word never
+      (mem_spatz_req.vl >= (2 * MemDataWidthB)) &&
       // Total data must fit in one ROB batch to avoid multi-burst deadlock
       // (scoreboard-blocked VRF writes prevent ROB drain between batches).
       // Capacity is now the WHOLE reorder-buffer set, not ROB0 alone: a burst's beats
@@ -742,21 +675,10 @@ module spatz_vlsu
     assign commit_finished_q[fu] = commit_insn_valid && (commit_counter_q[fu] == commit_counter_max[fu]);
     assign commit_finished_d[fu] = commit_insn_valid && ((commit_counter_q[fu] + commit_counter_delta[fu]) == commit_counter_max[fu]);
 
-    // ------------------------------------------------------------------------------
     // DIAGNOSTIC ONLY (sim-only, pragma translate_off -- no netlist effect, and this does NOT
     // change the completion condition). The two comparisons above are EXACT EQUALITY. If a
     // commit ever advances the counter PAST max, neither can ever match again: the load never
     // completes, mem_finish_ready never asserts, and the destination vector register is never
-    // released -- a permanent stall with the data already returned and nothing outstanding.
-    // That is precisely the fp16 deadlock signature (docs/fp16_matmul_deadlock.md): inflight=0,
-    // every core RAW-stalled on the dependent vfmacc.
-    //
-    // At e32 element size and word size coincide, so every delta divides max evenly and an
-    // overshoot cannot arise. At e16 the delta is element-size dependent
-    // (commit_single_element_size = 1 << vsew) and switch_to_tail_phase re-bases the counter
-    // mid-instruction, so it can. This probe REPORTS the overshoot instead of leaving it as a
-    // silent hang; it is the confirm/refute step for that hypothesis.
-    // ------------------------------------------------------------------------------
     // pragma translate_off
 `ifndef TARGET_SYNTHESIS
     always_ff @(posedge clk_i) begin
@@ -851,9 +773,12 @@ module spatz_vlsu
   // Block reservation state. Bursts are port-0 only, so this is ONE flop per core: set the
   // cycle the ROB grants the window, cleared when the burst request handshakes.
   logic                                     burst_reserved_q, burst_reserved_d;
+  // Total length of the burst being assembled, in words. Distinct from burst_len_q,
+  // which is now each LANE's share of it.
+  logic [BurstLenWidth-1:0]                 burst_total_q, burst_total_d;
   logic                                     burst_block_fire;
 
-  // Block reservation request -- driven ONLY from registers (§5.0 resolution): burst_alloc_q
+  // Block reservation request -- driven ONLY from registers ( resolution): burst_alloc_q
   // (a burst is live), !burst_reserved_q (its window is not reserved yet) and
   // burst_alloc_cnt_q == 0 (nothing has been walked for it -- once the legacy fallback walk
   // has taken even one id this drops for good, so the two allocators can never both serve one
@@ -871,7 +796,6 @@ module spatz_vlsu
   assign burst_block_fire = rob_req_block[0] && rob_room_block[0];
 
   // Burst load element/lane tracking (port0 only).
-  //
   // Declared HERE rather than beside their assigns further down: burst_word_idx is read by
   // gen_vreg_addr immediately below, and SystemVerilog requires a typed variable to be declared
   // before use. VCS and QuestaSim accept the forward reference, but Spyglass rejects it outright
@@ -957,10 +881,6 @@ module spatz_vlsu
   // Pulses when the current vector mem op has issued ALL its request beats: every active
   // port has reached mem_counter_max (equivalently remaining_words==0). This is the UNGATED
   // issue-complete point -- unlike mem_insn_finished (whose mem_spatz_req_valid qualifier +
-  // id-indexed bitmap, cleared only at retire, coupled its rising edge to response-gated
-  // completion) it carries no response term, so it fires at request-issue, ahead of
-  // spatz_mem_finished_o. Fires for both vector loads and stores (balances the snitch's
-  // per-vector-mem-op acc_mem_req_cnt, which increments on load OR store offload).
   logic [NrMemPorts-1:0] mem_port_req_issued;
   logic                  mem_req_all_issued;
   logic                  mem_req_all_issued_q;
@@ -1274,17 +1194,18 @@ module spatz_vlsu
 
         mem_remaining_bytes[port] = mem_max_elements[port] - mem_counter_q[port];
         mem_remaining_words[port] = mem_remaining_bytes[port] >> $clog2(MemDataWidthB);
-        // Only form full-size bursts. Smaller tails fall back to word requests.
-        if (mem_remaining_words[port] >= MaxBurstWords)
-          burst_len_calc[port] = MaxBurstWords[BurstLenWidth-1:0];
-        else
-          burst_len_calc[port] = BurstLenWidth'(1);
+        // As much of what is left as one wide access can carry. A trailing PARTIAL
+        // burst retires the tail; there is no word-request fallback for it. The old
+        // fallback is what broke the lane mapping: tail words were issued serially on
+        // port 0 and therefore all landed in ROB0, regardless of the lane their word
+        burst_len_calc[port] = (mem_remaining_words[port] >= MaxBurstWords)
+                             ? BurstLenWidth'(MaxBurstWords)
+                             : BurstLenWidth'(mem_remaining_words[port]);
 
+        // No collapse-to-what-was-reserved. Every ROB reserves its own share of THIS
+        // length up front and the request only leaves once all of them hold it
+        // (burst_alloc_ready), so a partial reservation can never be issued.
         burst_len_eff[port] = burst_len_calc[port];
-        if (burst_alloc_q[port] && rob_full[port] &&
-            (burst_alloc_cnt_q[port] != '0) &&
-            (burst_alloc_cnt_q[port] < burst_len_calc[port]))
-          burst_len_eff[port] = burst_alloc_cnt_q[port];
 
         // Burst alignment is MaxBurstWords*MemDataWidthB bytes. mem_req_addr is byte-addressed
         // and already word-aligned, so only check the remaining alignment bits above MAXEW.
@@ -1296,17 +1217,8 @@ module spatz_vlsu
         // A burst request is expanded downstream into CONSECUTIVE addresses
         // (tcdm_burst_expander.sv: tgt_addr = base + beat). That is only what this port wants in
         // port-0 burst mode, where address generation is linear (offset = mem_counter_q, :562).
-        // In the multi-port path each port's stream is WORD-INTERLEAVED (offset = 4n+port, :564),
-        // so a burst there fetches the wrong 15 of its 16 words while mem_counter_delta retires
-        // the port's whole share on one handshake (:992-995) -- silent data corruption.
-        // Reachable for aligned unit-stride vle32 with a per-port share >= MaxBurstWords, i.e.
-        // vl >= NrMemPorts*MaxBurstWords*MemDataWidthB = 256 B (LMUL 4/8 at VLEN=512), since
-        // port 0's first address is rs1 itself and so passes burst_addr_aligned. Gate bursts on
-        // the linear-address mode; assertion gen_burst_only_in_port0_mode below is the tripwire.
         burst_mode_req[port] = mem_is_load && !mem_is_single_element_operation &&
                                mem_use_port0_burst &&
-                               (BurstSubWord ? (mem_spatz_req.vtype.vsew != EW_8)
-                                             : (mem_spatz_req.vtype.vsew == EW_32)) &&
                                burst_addr_aligned[port] &&
                                (burst_len_eff[port] > 1) &&
                                (burst_len_eff[port] <= NrOutstandingLoads);
@@ -1413,6 +1325,9 @@ module spatz_vlsu
     `FF(burst_base_id_q[port],    burst_base_id_d[port],    '0  )
   end : gen_burst_state
 
+  // The burst's total length: one per core, independent of the block-reservation knob.
+  `FF(burst_total_q, burst_total_d, '0)
+
   // The block-reservation flop: ONE per core (ROB0 only), not instantiated at all when the
   // knob is off -- the tie-off keeps the net driven for lint and const-folds away.
   if (BlockWords > 1) begin : gen_burst_reserved
@@ -1439,11 +1354,6 @@ module spatz_vlsu
       // ROB takes the window. Deliberately NOT gated on mem_use_port0_burst: the ROB allocates
       // on burst_block_fire alone, and the bitmap must move with the ROB, never on a separate
       // condition (that is the F2 divergence shape).
-      // MASKED write, not |= : the per-beat line above also writes 0 for even beats, so an OR
-      // would be a behavioural downgrade, and it would silently depend on the WHOLE-MODULE
-      // invariant "a free id always has its odd bit clear" -- breakable by a future edit to the
-      // drain paths, with silent wrong data in vd as the only symptom. ~32 AND2/core buys a
-      // LOCAL invariant instead.
       if ((BlockWords > 1) && burst_block_fire)
         burst_odd_expected_d = (burst_odd_expected_d & ~rob_block_mask[0]) |
                                ( rob_block_mask[0] & burst_odd_alt);
@@ -1473,8 +1383,16 @@ module spatz_vlsu
       // each port its share -- not the whole length to port 0. Charging port 0 alone
       // would leave ports 1..3 reading "owes nothing" and dropping their beats.
       if (mem_use_port0_burst) begin
+        // Charge each lane ITS OWN share of the length this request actually carries.
+        // Keying the charge on the MODE instead of on the request was a real defect: a
+        // one-word request issued while in burst mode charged a full share to all four
+        // lanes -- sixteen credits for one returning beat -- and mem_pending never
+        // drained again, so the instruction never retired and the scalar core wedged
+        // behind acc_mem_stall. burst_port_share(1, p) is 1 for lane 0 and 0 elsewhere,
+        // which is exactly where a one-word remainder lands.
         if (spatz_mem_req_valid[0] && spatz_mem_req_ready[0] && mem_req_lvalid[0])
-          mem_pending_d[port] = mem_pending_d[port] + BurstShare;
+          mem_pending_d[port] = mem_pending_d[port] +
+                                burst_port_share(spatz_mem_req[0].burst_len, port);
       end else if (spatz_mem_req_valid[port] && spatz_mem_req_ready[port] &&
                    mem_req_lvalid[port]) begin
         mem_pending_d[port] = mem_pending_d[port] + spatz_mem_req[port].burst_len;
@@ -1530,9 +1448,16 @@ module spatz_vlsu
   always_comb begin : proc_burst_alloc_ready
     burst_alloc_ready = 1'b1;
     for (int port = 0; port < NrMemPorts; port++)
+      // A lane whose share is ZERO is legitimately ready. A burst shorter than
+      // NrMemPorts words has no beat for the high lanes, so demanding a non-zero share
+      // from every port (which a full-burst-only design could) deadlocks every tail of
+      // 2..NrMemPorts-1 words: burst_alloc_ready never rises and the request never
+      // leaves. burst_alloc_q already separates "allocated" from "idle".
       burst_alloc_ready &= burst_alloc_q[port] &&
-                           (burst_alloc_cnt_q[port] == burst_len_q[port]) &&
-                           (burst_len_q[port] != '0);
+                           (burst_alloc_cnt_q[port] == burst_len_q[port]);
+    // ...but the burst must still carry something. burst_total_q is written in the same
+    // cycle as the per-lane shares, so it is non-zero whenever burst_alloc_q is set.
+    burst_alloc_ready &= (burst_total_q != '0);
   end : proc_burst_alloc_ready
 
   always_comb begin : proc_burst_alloc
@@ -1541,6 +1466,7 @@ module spatz_vlsu
     burst_alloc_cnt_d = burst_alloc_cnt_q;
     burst_base_id_d   = burst_base_id_q;
     burst_reserved_d  = burst_reserved_q;
+    burst_total_d     = burst_total_q;
     burst_send        = '0;
     burst_alloc_fire  = '0;
     burst_len_issue   = burst_len_q;
@@ -1571,29 +1497,25 @@ module spatz_vlsu
       // ROB reserves its share (MaxBurstWords/NrMemPorts), but the single request on
       // port 0 still covers the WHOLE burst -- it is what tells the memory side how
       // many beats to return and what advances mem_counter by the full burst. Issuing
-      // the share instead makes the adapter produce a quarter of the beats and the
-      // instruction never reaches vl.
-      burst_len_issue[port] = BurstLenWidth'(MaxBurstWords);
+      burst_len_issue[port] = burst_alloc_q[port] ? burst_total_q : burst_len_calc[0];
 
       // Start a new burst allocation when eligible. The decision is port 0's -- it is
       // the only port that issues the request -- but EVERY port allocates, because
       // every ROB receives a share of the beats.
       if (!burst_alloc_q[port] && mem_operation_valid[0] && burst_use[0] && !dual_blk) begin
         burst_alloc_d[port]     = 1'b1;
-        burst_len_d[port]       = BurstLenWidth'(BurstShare);
+        // This lane's own share of the burst, not a fixed MaxBurstWords/NrMemPorts.
+        // A tail gives the low lanes one beat more than the high ones, and a lane
+        // whose share is zero is trivially ready.
+        burst_len_d[port]       = burst_port_share(burst_len_calc[0], port);
         burst_alloc_cnt_d[port] = '0;
+        burst_total_d           = burst_len_calc[0];
       end
 
-      // Reserve the WHOLE burst's ROB ids in one cycle (§5.1). The condition is the registered
+      // Reserve the WHOLE burst's ROB ids in one cycle (). The condition is the registered
       // rob_req_block AND the ROB's own room_block_o -- i.e. exactly the ROB's internal
       // block_fire, so both sides move together. The legacy one-id-per-cycle walk is kept as
       // the `else` of THIS BLOCK CONDITION, not of a port test (correctness-reviewer correction
-      // 2): whenever the block cannot fire -- knob off, wrong port, or no room for a whole
-      // window -- the burst still makes progress the old way, so no condition that holds
-      // room_block_o low can latch burst_alloc_q[0]=1 forever and make the scalar arm below
-      // unreachable. Once the walk has taken one id (cnt != 0) rob_req_block drops for good,
-      // so a late-arriving room can never stack a block on top of a partial walk.
-      // Allocate one ROB ID per cycle for this port's share of the burst.
       if (burst_alloc_q[port] && (burst_alloc_cnt_q[port] < burst_len_q[port])) begin
         // Burst pre-allocation only needs one free ROB slot per beat.
         // Using rob_id_valid here can deadlock at the last beat because
@@ -1625,6 +1547,7 @@ module spatz_vlsu
         burst_alloc_d[port]     = 1'b0;
         burst_len_d[port]       = '0;
         burst_alloc_cnt_d[port] = '0;
+        burst_total_d           = '0;
         // Cannot collide with the set in the block branch: in the fire cycle cnt_q is still 0
         // while burst_len_issue is MaxBurstWords, so burst_send is low there.
         if ((BlockWords > 1) && (port == 0)) burst_reserved_d = 1'b0;
@@ -1682,21 +1605,6 @@ module spatz_vlsu
           // counts *issued* requests, so a port whose last beats have not been issued yet
           // -- because the request side is stalled behind interconnect backpressure --
           // reads 0 and was treated as "owes no data". The writeback then fired early with
-          // garbage in that port's lanes, commit_counter advanced for every FU, the
-          // instruction committed while responses were still in flight, and the late
-          // responses were dropped in the store branch (rob_push unreachable), so the
-          // leaked ROB allocations kept &rob_empty low and the FSM wedged in RunningLoad.
-          // commit_finished_q is the authoritative per-port "delivered its quota", and it
-          // is derived from the COMMITTING instruction's counters, so it stays correct
-          // when a younger load is already issuing under dual_adv.
-          // The |mem_pending qualifier is NOT redundant. The offset queue is pushed on
-          // every issued load request but popped only when mem_pending[port] is set, so a
-          // writeback that fires with no port owing a beat pops the ROB without popping the
-          // offset queue and leaks an entry. The queue is NrOutstandingLoads deep and gates
-          // request issue through !offset_queue_full, so once it fills the request side stops
-          // permanently -- the instruction is credited a fraction of its elements and waits
-          // forever. The original expression carried this term; keying readiness off
-          // commit_finished_q must not drop it.
           vrf_req_valid_d = &(rob_rvalid | commit_finished_q) && !(&commit_finished_q) &&
                             |mem_pending;
 
@@ -1817,10 +1725,6 @@ module spatz_vlsu
             // (burst_alloc_cnt_q==1 while rob_full): burst_use is false because
             // burst_len_eff==1, but the ROB id is already reserved, so issue it
             // directly -- crucially WITHOUT the !rob_full gate of the scalar
-            // branch below (rob_full is exactly what triggered force_send).
-            // Otherwise the beat never issues, the burst state never clears
-            // (the clear at ~1102 needs mem_req_lvalid), and the port wedges
-            // (stall, deadlock-capable under sustained burst ROB pressure).
             mem_req_lvalid[port] = (!mem_is_indexed || (vrf_rvalid_i[1] && !pending_index[port])) &&
                                    !commit_insn_push &&
                                    commit_insn_q.is_load;
@@ -1946,8 +1850,14 @@ module spatz_vlsu
         end
       end
     end
+
+    // Publish every lane's reorder-buffer base on its OWN port's id line while a burst
+    // is being formed. Only port 0 issues the request, so ports 1..N-1 drive nothing
+    // this cycle and their id lines are free; the tile's burst adapter reads each
+    // lane's base from them (mempool_tile.sv, lane_base_id). Carrying a base per lane
   end
   // verilator lint_on LATCH
+
 
   // Create memory requests
   for (genvar port = 0; port < NrMemPorts; port++) begin : gen_mem_req
@@ -1966,6 +1876,9 @@ module spatz_vlsu
 `ifdef TARGET_MEMPOOL
     // ID is required in Mempool-Spatz
     assign spatz_mem_req[port].id    = mem_req_id[port];
+    // Travels with the request through the spill register, so the tile's burst adapter
+    // sees the bases of the burst it is actually being handed.
+    assign spatz_mem_req[port].burst_base_ids = burst_base_id_q;
     assign spatz_mem_req[port].addr  = mem_req_addr[port];
     assign spatz_mem_req[port].mode  = '0; // Request always uses user privilege level
     assign spatz_mem_req[port].size  = mem_spatz_req.vtype.vsew[1:0];
@@ -2028,104 +1941,17 @@ module spatz_vlsu
   end
 `endif
 
-  if (BurstSubWord) begin : gen_burst_ew_vl_ceiling
-    // Not a correctness assertion -- a VISIBILITY one. use_port0_burst_req caps a burst-eligible
-    // load at NrOutstandingLoads*MemDataWidthB bytes (256 B at ROB64). A load that satisfies every
-    // other burst condition but exceeds that cap does not fail: it quietly takes the multi-port
-    // word-interleaved path and loses the whole burst-merge benefit, with nothing in the log.
-    // At e16 that boundary lands on m8 (512 B), one LMUL step above the m4 the kernels use, so it
-    // is easy to walk into by editing a vsetvli. Report it once per occurrence instead.
-    // verilog_lint: waive-start
-    // pragma translate_off
-    always_ff @(posedge clk_i) begin
-      if (rst_ni && mem_spatz_req_valid && mem_spatz_req.op_mem.is_load &&
-          !mem_is_strided && !mem_is_indexed &&
-          (mem_spatz_req.vtype.vsew != EW_8) &&
-          (mem_spatz_req.vl >= FullBurstBytes) &&
-          (mem_spatz_req.vl > (NrOutstandingLoads * MemDataWidthB)) &&
-          (mem_spatz_req.rs1[BurstAlignBits-1:0] == '0))
-        $warning("[spatz_vlsu] BURST DROPPED: vl=%0d B exceeds the %0d B burst ceiling (NrOutstandingLoads*%0d); this load takes the non-burst path. Lower LMUL.",
-                 mem_spatz_req.vl, NrOutstandingLoads * MemDataWidthB, MemDataWidthB);
-    end
-    // pragma translate_on
-    // verilog_lint: waive-stop
-  end
+  // (gen_burst_ew_vl_ceiling removed. It warned that a load exceeding the burst ceiling
+  // silently took the word path, but tested the OLD single-ROB ceiling
+  // (NrOutstandingLoads*MemDataWidthB) rather than the whole-ROB-set one admission now
+  // uses, so it fired for loads that were in fact bursting -- every cycle the request
+  // was valid, with no edge detection. The BURSTWHY probe below reports the same thing
+  // per conjunct, and is gated behind spatz_burst_debug.)
 
-  if (RobNDepth < NrOutstandingLoads) begin : gen_robn_nonburst_capacity
-    // MEASURED 2026-08-28. The non-burst path is what SPATZ_VLSU_ROBN_DEPTH actually endangers,
-    // and nothing above bounds it: the vl ceiling at :279 gates only use_port0_burst_req, so an
-    // over-ceiling load falls through to the multi-port word-interleaved path -- the one the
-    // BURSTWHY comment below already describes as wedging "with resp=0" once a ROB fills. That
-    // ROB is now RobNDepth deep instead of NrOutstandingLoads, so the cliff moved and no check
-    // moved with it.
-    //
-    // Evidence, a clean pair on vector-burst-test (which issues 384 B and 512 B loads
-    // deliberately over the burst ceiling, i.e. straight onto this path):
-    //   ROB1-3 = 64  ->  PASS at 61,000 cycles
-    //   ROB1-3 = 16  ->  HUNG at 659,000-866,000 cycles, no UART, three arms out of three
-    // The 14 GEMM arms could not see it: they are 100% burst (nonburst=0), and bursts are
-    // port-0 only, so they never touch ports 1-3 at all.
-    //
-    // NOTE: the hang this warns about was ROOT-CAUSED on 2026-08-28 and is NOT a capacity
-    // shortfall -- the non-burst path streams one id at a time, so a shortfall would throttle,
-    // not deadlock. It was id REUSE: a 16-entry ROB recycled its id every 16 allocations and a
-    // late duplicate response landed in whatever request had taken that number
-    // (orphan=37 dup_alloc=37 measured). The generation tag in reorder_buffer fixes that. This
-    // warning is kept because the non-burst path is still the one that exercises the shallow
-    // ROBs, so it remains the right place to look first -- but read it as "this path is under
-    // pressure", not as "this load cannot fit".
-    //
-    // $warning, not $fatal, and deliberately: the exact wedge threshold is somewhere between
-    // RobNDepth and NrOutstandingLoads words and has NOT been measured. The bound below is the
-    // conservative one implied by this file's own comment (vl/MemDataWidthB requests against a
-    // single ROB). Firing early and loudly beats a 14-hour silent hang; firing $fatal on a
-    // threshold I have not measured would be worse than either.
-    // verilog_lint: waive-start
-    // pragma translate_off
-    // STORES TOO -- the `is_load` term was here and it hid a real wedge (2026-08-29).
-    // use_port0_burst_req demands is_load (:269), so bursts are LOADS ONLY and a store can
-    // NEVER leave this path. Watching only loads therefore watched only the half of the
-    // traffic that has an escape route. Measured: vector-burst-test's m8 case is a
-    // vle32.v/vse32.v pair at 512 B. At ROB0=64 the LOAD had no burst path, tripped this
-    // guard and printed 41,247 warnings; at ROB0=128 the load was rescued onto the burst
-    // path, this guard fell silent, and the 512 B STORE wedged the machine with nothing
-    // said -- every core 100% LSU-stalled, inflight=0, no assertion, no message.
-    // use_port0_burst_req is already 0 for every store, so dropping is_load costs the load
-    // side nothing and makes the store side audible.
-    // RATE LIMIT. Unbounded, this printed 51,390 lines (~20 MB) in ONE 8x128x8192 run: the
-    // condition holds for the whole life of an offending instruction, on all 256 cores, every
-    // cycle. It only became a flood when the guard was widened to cover stores (2026-08-29) --
-    // stores are constant in a GEMM inner loop, where the off-burst LOADS it originally watched
-    // were rare. 8 reports per core is plenty to identify the shape; more is just I/O that slows
-    // the simulation it is attached to. Same reasoning as BurstWhyMax above.
-    localparam int unsigned RobnWarnMax = 8;
-    logic [$clog2(RobnWarnMax+1)-1:0] robn_warn_n;
-    always_ff @(posedge clk_i) begin
-      if (!rst_ni) robn_warn_n <= '0;
-      else if (rst_ni && mem_spatz_req_valid &&
-          !use_port0_burst_req &&
-          (robn_warn_n < RobnWarnMax) &&
-          ((mem_spatz_req.vl / MemDataWidthB) > RobNDepth)) begin
-        $warning("[spatz_vlsu] NON-BURST OVER CAPACITY: %0s vl=%0d B needs %0d word slots on the non-burst path but ROB1-3 are only %0d deep (SPATZ_VLSU_ROBN_DEPTH). This path wedges. Raise ROBN_DEPTH; a STORE has no burst path to fall back on (use_port0_burst_req requires is_load).",
-                 mem_spatz_req.op_mem.is_load ? "load" : "store",
-                 mem_spatz_req.vl, mem_spatz_req.vl / MemDataWidthB, RobNDepth);
-        robn_warn_n <= robn_warn_n + 1;
-      end
-    end
-    // pragma translate_on
-    // verilog_lint: waive-stop
-  end
-
-  // ---------------------------------------------------------------------------
   // BURSTWHY -- root-cause probe for "knob is on but every request is bl=1".
   // use_port0_burst_req is a 5-way AND; when it is 0 the load silently falls back to the
   // multi-port WORD-INTERLEAVED path, which turns one vector load into vl/4 single-word
   // requests. At e16,m2 that is 32 requests, so two loads fill a 64-entry ROB and the port
-  // wedges with resp=0. Nothing in the log says which conjunct failed -- this does.
-  // Prints once per NEW load instruction (id change), first BurstWhyMax per core.
-  // Off unless SPATZ_BURST_DEBUG is defined: on a 256-core build this is thousands of
-  // lines of transcript that say nothing once the burst path is understood.
-  // ---------------------------------------------------------------------------
   // verilog_lint: waive-start
   // pragma translate_off
 `ifndef TARGET_SYNTHESIS
@@ -2155,9 +1981,8 @@ module spatz_vlsu
                  $time, mem_spatz_req.id,
                  mem_spatz_req.vtype.vsew, mem_spatz_req.vl, mem_spatz_req.rs1,
                  mem_is_strided, mem_is_indexed,
-                 (BurstSubWord ? (mem_spatz_req.vtype.vsew != EW_8)
-                               : (mem_spatz_req.vtype.vsew == EW_32)),
-                 FullBurstBytes,                  (mem_spatz_req.vl >= FullBurstBytes),
+                 1'b1,  // every element width is burst-eligible
+                 (2*MemDataWidthB),               (mem_spatz_req.vl >= (2*MemDataWidthB)),
                  (NrOutstandingLoads*MemDataWidthB), (mem_spatz_req.vl <= (NrOutstandingLoads*MemDataWidthB)),
                  BurstAlignBits,                  (mem_spatz_req.rs1[BurstAlignBits-1:0] == '0),
                  use_port0_burst_req);
@@ -2238,30 +2063,16 @@ module spatz_vlsu
     logic        vperf_win_q;
     logic [31:0] c_win, c_insn, c_noinsn, c_pairok, c_single, c_waitbeat, c_vrfbp, c_reqstall, c_ret;
     logic [31:0] c_dual, c_blkstall;
-    // Request B (TeraNoC_gvsoc/docs/rtl_probe_request.md): TIME AVERAGE of inflight_q, which the
+    // Request B (TeraNoC_gvsoc/ TIME AVERAGE of inflight_q, which the
     // existing counters cannot give. TWO denominators are emitted deliberately, because the model
     // and the RTL could otherwise average over different cycle sets -- the failure mode that
     // request's own section 4 warns about:
-    //   infl_sum / win     = loads in flight over the WHOLE benchmark window
-    //   infl_sum / act_cyc = over cycles the VLSU actually has work (their stated definition)
-    // L then follows from Little's law with no extra state, because c_ret already counts
-    // commit_insn_pop, which IS their definition of retire:
-    //   throughput X = c_ret/c_win ;  L = N/X = infl_sum/c_ret
-    // So one accumulator yields BOTH L and N, measured on both sides rather than doc-derived.
-    // [VARRIVE] beat ARRIVAL at the core -- policy-immune, unlike words-per-COMMIT-cycle.
-    // A commit stage that waits for a pair reports single_commit==0 at ANY arrival width, so the
-    // commit split cannot distinguish 1-wide from 2-wide arrival. This counts responses actually
-    // landing on the core's memory ports, per cycle, and histograms the width.
     logic [47:0] c_arr_words;
     logic [31:0] c_arr_h1, c_arr_h2p, c_arr_cyc;
     // LOAD-ONLY arrival width. The unfiltered counters above count $countones(spatz_mem_rsp_valid_i),
     // and STORE ACKS assert that same valid (see the store_count_d ack test, which itself qualifies
     // on spatz_mem_rsp_i[port].write). The ROB is write-filtered (rob_push excludes .write), so the
     // unfiltered arrival total counts loads AND store acks while commit counts only loads -- which is
-    // exactly the 1280-vs-1024 discrepancy at 256x32x256 (the 256 are the C stores).
-    // Worse for the histogram: a store ack sharing a cycle with a load is scored as a 2-wide arrival,
-    // so arr_h2p does NOT measure load+load width. These parallel counters apply the same write mask
-    // the ROB uses, and emitting both makes their difference a direct measurement of store traffic.
     logic [NrMemPorts-1:0] rsp_load_valid;
     logic [47:0] c_ld_words;
     logic [31:0] c_ld_h1, c_ld_h2p, c_ld_cyc;
@@ -2439,19 +2250,70 @@ module spatz_vlsu
 
 
 `ifndef SYNTHESIS
-  // The single base id every beat is derived from is only valid while all four ROB
-  // allocators agree. That holds by construction today: in burst mode ports 1..3 issue
-  // nothing of their own, every burst reserves the SAME share in each ROB, and a tail
-  // (which can leave ragged shares) is always issued last and drained before the next
-  // instruction. Enabling dual-load would overlap one instruction's tail with the
-  // next's bursts and break it, so assert rather than assume.
-  assert property (@(posedge clk_i) disable iff (!rst_ni)
-      (|burst_alloc_fire) |-> (burst_base_id_q[0] == burst_base_id_q[1] &&
-                               burst_base_id_q[1] == burst_base_id_q[2] &&
-                               burst_base_id_q[2] == burst_base_id_q[3]) ||
-                              (burst_alloc_cnt_q[0] == '0))
-    else $fatal(1, "[spatz_vlsu] burst ROB allocators diverged (%0d %0d %0d %0d): the single base id every beat is derived from is invalid.",
-                burst_base_id_q[0], burst_base_id_q[1], burst_base_id_q[2], burst_base_id_q[3]);
+  // NOTE: the ROB allocators are deliberately NO LONGER required to agree. Every lane
+  // publishes its own base id to the burst adapter (mem_req_id[1..N-1] above), so beats
+  // are derived per lane. That is what lets a tail reserve ragged shares, and it also
+  // means an earlier op that distributed an uneven element count across the ports --
+  // indexed and strided both do -- can no longer misplace a later burst's beats.
+`endif
+
+
+  // TEMPORARY wedge watchdog (SPATZ_VLSU_WEDGE): dump VLSU completion state when an
+  // in-flight instruction makes no progress for a long time.
+`ifndef SYNTHESIS
+`ifdef SPATZ_VLSU_WEDGE
+  int unsigned wedge_idle_cnt;
+  logic        wedge_fired;
+  // Where do the beats go? Count what the port SEES vs what the ROB accepts.
+  int unsigned c_rsp   [NrMemPorts];
+  int unsigned c_push  [NrMemPorts];
+  int unsigned c_wrack [NrMemPorts];
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (!rst_ni) begin
+      for (int p = 0; p < NrMemPorts; p++) begin
+        c_rsp[p] <= 0; c_push[p] <= 0; c_wrack[p] <= 0;
+      end
+    end else begin
+      for (int p = 0; p < NrMemPorts; p++) begin
+        if (spatz_mem_rsp_valid_i[p]) c_rsp[p]  <= c_rsp[p] + 1;
+        if (rob_push[p])              c_push[p] <= c_push[p] + 1;
+        if (spatz_mem_rsp_valid_i[p] && spatz_mem_rsp_i[p].write)
+                                      c_wrack[p] <= c_wrack[p] + 1;
+      end
+    end
+  end
+  logic        wedge_activity;
+  always_comb begin
+    wedge_activity = 1'b0;
+    for (int p = 0; p < NrMemPorts; p++)
+      if ((spatz_mem_req_valid[p] && spatz_mem_req_ready[p]) || spatz_mem_rsp_valid_i[p])
+        wedge_activity = 1'b1;
+  end
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (!rst_ni) begin
+      wedge_idle_cnt <= 0;
+      wedge_fired    <= 1'b0;
+    end else begin
+      if (wedge_activity || !commit_insn_valid) wedge_idle_cnt <= 0;
+      else                                      wedge_idle_cnt <= wedge_idle_cnt + 1;
+      if ((wedge_idle_cnt > 20000) && !wedge_fired) begin
+        wedge_fired <= 1'b1;
+        $display("[VLSU-WEDGE] %m t=%0t state=%0d is_load=%0b p0burst=%0b vl=%0dB total=%0d IdW=%0d",
+                 $time, state_q, commit_insn_q.is_load, mem_use_port0_burst,
+                 mem_spatz_req.vl, burst_total_q, IdWidth);
+        for (int p = 0; p < NrMemPorts; p++)
+          $display("[VLSU-WEDGE]   port%0d rsp=%0d push=%0d wrack=%0d | pend=%0d robE=%0b robF=%0b cnt=%0d base=%0d nextid=%0d rvalid=%0b",
+                   p, c_rsp[p], c_push[p], c_wrack[p],
+                   mem_pending_q[p], rob_empty[p], rob_full[p], mem_counter_q[p],
+                   burst_base_id_q[p], rob_id[p], rob_rvalid[p]);
+        for (int p = 0; p < NrMemPorts; p++)
+          $display("[VLSU-WEDGE]   port%0d head_id=%0d", p, rob_rid[p]);
+        for (int f = 0; f < N_FU; f++)
+          $display("[VLSU-WEDGE]   fu%0d commit_cnt=%0d", f, commit_counter_q[f]);
+      end
+    end
+  end
+`endif
 `endif
 
 endmodule : spatz_vlsu

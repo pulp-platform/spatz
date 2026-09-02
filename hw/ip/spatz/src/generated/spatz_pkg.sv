@@ -45,7 +45,13 @@ package spatz_pkg;
   // Spatz' strobe width
   localparam int unsigned StrbWidth = ELENB;
   // Burst length (in 32-bit words) for vector loads
-  localparam int unsigned MaxBurstWords = 16;
+  // Words (32 bit) in one vector-load burst. A burst is unpacked from a SINGLE wide
+  // access, so this belongs to the integration, not to Spatz: it must match that
+  // plane's width (WideTcdmDataWidth / 32). It need NOT divide NrMemPorts -- beat k
+  // goes to lane k % NrMemPorts, so a length that is not a whole multiple just gives
+  // the low lanes one beat more than the high ones.
+  localparam int unsigned MaxBurstWords =
+    `ifdef SPATZ_MAX_BURST_WORDS `SPATZ_MAX_BURST_WORDS `else 16 `endif;
   localparam int unsigned BurstLenWidth = $clog2(MaxBurstWords + 1);
 
   // Width of a VRF word
@@ -308,6 +314,12 @@ package spatz_pkg;
     (MemReqIdWidthDerived > ($clog2(NRVREG) + 1)) ? MemReqIdWidthDerived
                                                   : ($clog2(NRVREG) + 1);
 
+  // Response-side ROB id width; tracks the VLSU ROB depth. Legacy = $clog2(NRVREG) = 5
+  // (bit-identical when the knob is off). At ROB64 this MUST be 6, else responses for ROB
+  // ids 32..63 silently alias onto 0..31 at spatz_mempool_cc (wrong ROB slot, no error).
+  localparam int unsigned MemRspIdWidth =
+    `ifdef SPATZ_VLSU_ROB_DEPTH $clog2(`SPATZ_VLSU_ROB_DEPTH) `else $clog2(NRVREG) `endif;
+
   typedef struct packed {
     logic [MemReqIdWidth-1:0] id;
     logic [31:0] addr;
@@ -315,17 +327,17 @@ package spatz_pkg;
     logic [1:0] size;
     logic write;
     logic [BurstLenWidth-1:0] burst_len;
+    // Per-lane reorder-buffer base ids of this burst. Carried ON THE REQUEST, not on a
+    // side channel: spatz_mem_req_o passes through a spill register, so anything read
+    // from a live VLSU register when the request reaches the tile already belongs to a
+    // LATER burst. Only meaningful when burst_len > 1.
+    logic [N_FU-1:0][MemRspIdWidth-1:0] burst_base_ids;
     logic [DataWidth/8-1:0] strb;
     logic [DataWidth-1:0] data;
     logic last;
     logic spec;
   } spatz_mem_req_t;
 
-  // Response-side ROB id width; tracks the VLSU ROB depth. Legacy = $clog2(NRVREG) = 5
-  // (bit-identical when the knob is off). At ROB64 this MUST be 6, else responses for ROB
-  // ids 32..63 silently alias onto 0..31 at spatz_mempool_cc (wrong ROB slot, no error).
-  localparam int unsigned MemRspIdWidth =
-    `ifdef SPATZ_VLSU_ROB_DEPTH $clog2(`SPATZ_VLSU_ROB_DEPTH) `else $clog2(NRVREG) `endif;
 
   typedef struct packed {
     logic [MemRspIdWidth-1:0] id;
