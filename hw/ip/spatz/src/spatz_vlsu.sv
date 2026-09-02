@@ -23,8 +23,11 @@ module spatz_vlsu
     localparam int  unsigned IdWidth            = idx_width(NrOutstandingLoads),
     // Beats of one port-0 burst received per cycle (parity drain: even beats arrive on
     // mem port 0, odd beats on mem port 1; both land in ROB0's single contiguous id range).
-    localparam int  unsigned BurstRecvPorts     = (NumRespPorts > NrMemPorts) ? NrMemPorts
-                                                                              : NumRespPorts
+    // TwinROB0 is gone: burst beats now reach every ROB by the ordinary word->port
+    // rule, so no port needs a second write/read port or parity bookkeeping. Pinned
+    // to 1 so every `BurstRecvPorts > 1` generate const-folds away. NumRespPorts is
+    // kept on the interface but no longer selects a receive datapath.
+    localparam int  unsigned BurstRecvPorts     = 1
   ) (
     input  logic                            clk_i,
     input  logic                            rst_ni,
@@ -103,6 +106,13 @@ module spatz_vlsu
   // Width of one reservation. 1 = feature absent: every added statement is guarded by
   // (BlockWords > 1) and const-folds away, leaving the legacy netlist bit-identical.
   localparam int unsigned BlockWords = (BlockAlloc != 0) ? MaxBurstWords : 1;
+
+  // A burst is distributed across the ROBs by the ordinary word->port rule, so port p
+  // receives words p, p+4, p+8 ... -- exactly MaxBurstWords/NrMemPorts of them. Bursts
+  // are only ever formed at full length (burst_len_calc is MaxBurstWords or 1), so this
+  // divides exactly and every ROB advances by the same amount, which is what lets one
+  // base id describe every beat.
+  localparam int unsigned BurstShare = MaxBurstWords / NrMemPorts;
 
   // ---------------------------------------------------------------------------
   // Sub-word burst eligibility (fp16). 0 = LEGACY: only vsew == EW_32 may burst, so a
@@ -275,8 +285,10 @@ module spatz_vlsu
       (mem_spatz_req.vl >= FullBurstBytes) &&
       // Total data must fit in one ROB batch to avoid multi-burst deadlock
       // (scoreboard-blocked VRF writes prevent ROB drain between batches).
-      // NoVlCeiling=0 (default) const-folds this to the exact legacy comparison.
-      (NoVlCeiling || (mem_spatz_req.vl <= (NrOutstandingLoads * MemDataWidthB))) &&
+      // Capacity is now the WHOLE reorder-buffer set, not ROB0 alone: a burst's beats
+      // are distributed one lane per word, so each ROB holds vl/NrMemPorts of them.
+      // Four times the old ceiling -- 256 B at depth 16, covering LMUL up to 4.
+      (mem_spatz_req.vl <= (NrOutstandingLoads * MemDataWidthB * NrMemPorts)) &&
       (mem_spatz_req.rs1[BurstAlignBits-1:0] == '0);
   assign burst_full_bytes_req    = (mem_spatz_req.vl >> BurstAlignBits) << BurstAlignBits;
   assign burst_full_bytes_commit = (commit_insn_q.vl >> BurstAlignBits) << BurstAlignBits;
@@ -290,8 +302,11 @@ module spatz_vlsu
   logic commit_pair_active;
   assign mem_port_active =
       mem_use_port0_burst ? {{(NrMemPorts-1){1'b0}}, 1'b1} : {NrMemPorts{1'b1}};
-  assign commit_port_active =
-      commit_use_port0_burst ? {{(N_FU-1){1'b0}}, 1'b1} : {N_FU{1'b1}};
+  // A burst is distributed across the ROBs by the ordinary word->port rule, so every
+  // FU participates in its commit exactly as on the non-burst path. Masking down to
+  // FU0 forced a VRF row to be filled by several PARTIAL writes; a consumer reading
+  // between them saw stale lanes, which corrupted every 8th output row.
+  assign commit_port_active = {N_FU{1'b1}};
 
   /////////////
   //  State  //
@@ -431,16 +446,9 @@ module spatz_vlsu
 `ifdef TARGET_MEMPOOL
     reorder_buffer #(
       .DataWidth (ELEN              ),
-      .NumWords  ((port == 0) ? NrOutstandingLoads : RobNDepth),
-      // Storage shrinks; the ID SPACE MUST NOT. reorder_buffer would otherwise derive its id
-      // width from NumWords, recycling an id every RobNDepth allocations, and a late duplicate
-      // response then lands in whatever request has since taken that number (measured:
-      // orphan/dup_alloc 37 and 79 on the shallow ports, 0 with full-depth ports, kernel wedged).
-      // IdWidth stays idx_width(NrOutstandingLoads) for every port -- the width the request and
-      // response structs already carry, so nothing outside this module widens.
-      .IdWidthExt(IdWidth),
-      .NumWrPorts((port == 0 && BurstRecvPorts > 1) ? 2 : 1),
-      .NumRdPorts((port == 0 && BurstRecvPorts > 1) ? 2 : 1),
+      .NumWords  (NrOutstandingLoads),
+      .NumWrPorts(1),
+      .NumRdPorts(1),
       // Only ROB0 ever sees a block reservation (bursts are port-0 only): one instance of the
       // block logic per core, not four.
       .BlockWords((port == 0) ? BlockWords : 1)
@@ -757,9 +765,7 @@ module spatz_vlsu
   // TwinROB0 2-wide commit window: pairs only at even element offsets and never across the
   // burst-region boundary (the tail region commits 1-wide legacy). An odd vstart self-aligns
   // with one single commit. Const-folds to 0 when BurstRecvPorts == 1.
-  assign commit_pair_active = (BurstRecvPorts > 1) && commit_use_port0_burst &&
-      (commit_counter_q[0][$clog2(2*ELENB)-1:0] == '0) &&
-      ((burst_full_bytes_commit - commit_counter_q[0]) >= vlen_t'(2*ELENB));
+  assign commit_pair_active = 1'b0;
 
   ////////////////////////
   // Address Generation //
@@ -872,10 +878,7 @@ module spatz_vlsu
 
   // Calculate the register file address
   always_comb begin : gen_vreg_addr
-    if (commit_use_port0_burst)
-      vd_vreg_addr  = (commit_insn_q.vd << $clog2(NrWordsPerVector)) + $unsigned(burst_word_idx);
-    else
-      vd_vreg_addr  = (commit_insn_q.vd << $clog2(NrWordsPerVector)) + $unsigned(vd_elem_id);
+    vd_vreg_addr  = (commit_insn_q.vd << $clog2(NrWordsPerVector)) + $unsigned(vd_elem_id);
     vs2_vreg_addr = (mem_spatz_req.vs2 << $clog2(NrWordsPerVector)) + $unsigned(vs2_elem_id_q);
   end
 
@@ -1088,7 +1091,7 @@ module spatz_vlsu
       .data_o    (vreg_addr_offset[port]                                               ),
       // Pop only when a real pending load response is consumed.
       .pop_i     (rob_pop[port] && commit_insn_q.is_load &&
-                  mem_pending[port] && !commit_use_port0_burst &&
+                  mem_pending[port] &&
                   !offset_queue_empty[port]                                             ),
       .usage_o   (/* Unused */                                                         )
     );
@@ -1171,13 +1174,10 @@ module spatz_vlsu
     always_comb begin
       burst_tail_base = burst_full_bytes_commit >> $clog2(N_FU);
       // Default value
-      if (commit_use_port0_burst)
-        max_elements = (fu == 0) ? commit_insn_q.vl : vlen_t'('0);
-      else
-        max_elements = (commit_insn_q.vl >> $clog2(N_FU*ELENB)) << $clog2(ELENB);
+      max_elements = (commit_insn_q.vl >> $clog2(N_FU*ELENB)) << $clog2(ELENB);
 
       // Full transfer
-      if (!commit_use_port0_burst) begin
+      begin
         if (commit_insn_q.vl[$clog2(ELENB) +: $clog2(N_FU)] > fu)
           max_elements += ELENB;
         else if (commit_insn_q.vl[$clog2(N_FU*ELENB)-1:$clog2(ELENB)] == fu)
@@ -1210,7 +1210,6 @@ module spatz_vlsu
                                     (commit_is_single_element_operation ? commit_single_element_size : ELENB));
       commit_counter_delta[fu]   = !commit_operation_valid[fu] ? vlen_t'('d0) :
                                    commit_is_single_element_operation ? vlen_t'(commit_single_element_size) :
-                                   ((fu == 0) && commit_pair_active) ? vlen_t'(2*ELENB) :
                                    commit_operation_last[fu] ? (max_elements - commit_counter_q[fu]) : vlen_t'(ELENB);
       commit_counter_en[fu]      = commit_operation_valid[fu] &&
                                    (commit_insn_q.is_load && vrf_req_valid_d && vrf_req_ready_d) ||
@@ -1462,8 +1461,14 @@ module spatz_vlsu
       // New load request accepted into the request spill stage.
       // Use the local load-valid path directly to avoid depending on the
       // packed request write bit during mode transitions.
-      if (spatz_mem_req_valid[port] && spatz_mem_req_ready[port] &&
-          mem_req_lvalid[port]) begin
+      // A burst is ONE request on port 0 that returns beats to every ROB, so it owes
+      // each port its share -- not the whole length to port 0. Charging port 0 alone
+      // would leave ports 1..3 reading "owes nothing" and dropping their beats.
+      if (mem_use_port0_burst) begin
+        if (spatz_mem_req_valid[0] && spatz_mem_req_ready[0] && mem_req_lvalid[0])
+          mem_pending_d[port] = mem_pending_d[port] + BurstShare;
+      end else if (spatz_mem_req_valid[port] && spatz_mem_req_ready[port] &&
+                   mem_req_lvalid[port]) begin
         mem_pending_d[port] = mem_pending_d[port] + spatz_mem_req[port].burst_len;
       end
 
@@ -1512,6 +1517,16 @@ module spatz_vlsu
   end : proc_burst_tail_phase
 
   // Burst ID pre-allocation state (per port)
+  // Every port has reserved its whole share: the burst request can go out.
+  logic burst_alloc_ready;
+  always_comb begin : proc_burst_alloc_ready
+    burst_alloc_ready = 1'b1;
+    for (int port = 0; port < NrMemPorts; port++)
+      burst_alloc_ready &= burst_alloc_q[port] &&
+                           (burst_alloc_cnt_q[port] == burst_len_q[port]) &&
+                           (burst_len_q[port] != '0);
+  end : proc_burst_alloc_ready
+
   always_comb begin : proc_burst_alloc
     burst_alloc_d     = burst_alloc_q;
     burst_len_d       = burst_len_q;
@@ -1538,17 +1553,26 @@ module spatz_vlsu
         burst_alloc_fire[port]  = 1'b0;
         if ((BlockWords > 1) && (port == 0)) burst_reserved_d = 1'b0;
       end else begin
-      force_send = burst_alloc_q[port] && rob_full[port] &&
-                   (burst_alloc_cnt_q[port] != '0) &&
-                   (burst_alloc_cnt_q[port] < burst_len_q[port]);
-      if (force_send)
-        burst_len_send = burst_alloc_cnt_q[port];
-      burst_len_issue[port] = burst_len_send;
+      // No partial bursts. Collapsing a burst to however many ids it managed to
+      // reserve gives the ROBs UNEQUAL shares, which desynchronises their allocators
+      // and invalidates the single base id every beat is derived from. Waiting costs
+      // nothing here: a share is MaxBurstWords/NrMemPorts entries, four times less
+      // than the old whole-burst reservation in one ROB.
+      force_send = 1'b0;
+      // The RESERVATION count and the REQUEST length are different quantities. Each
+      // ROB reserves its share (MaxBurstWords/NrMemPorts), but the single request on
+      // port 0 still covers the WHOLE burst -- it is what tells the memory side how
+      // many beats to return and what advances mem_counter by the full burst. Issuing
+      // the share instead makes the adapter produce a quarter of the beats and the
+      // instruction never reaches vl.
+      burst_len_issue[port] = BurstLenWidth'(MaxBurstWords);
 
-      // Start a new burst allocation when eligible.
-      if (!burst_alloc_q[port] && mem_operation_valid[port] && burst_use[port] && !dual_blk) begin
+      // Start a new burst allocation when eligible. The decision is port 0's -- it is
+      // the only port that issues the request -- but EVERY port allocates, because
+      // every ROB receives a share of the beats.
+      if (!burst_alloc_q[port] && mem_operation_valid[0] && burst_use[0] && !dual_blk) begin
         burst_alloc_d[port]     = 1'b1;
-        burst_len_d[port]       = burst_len_calc[port];
+        burst_len_d[port]       = BurstLenWidth'(BurstShare);
         burst_alloc_cnt_d[port] = '0;
       end
 
@@ -1561,12 +1585,8 @@ module spatz_vlsu
       // room_block_o low can latch burst_alloc_q[0]=1 forever and make the scalar arm below
       // unreachable. Once the walk has taken one id (cnt != 0) rob_req_block drops for good,
       // so a late-arriving room can never stack a block on top of a partial walk.
-      if ((BlockWords > 1) && (port == 0) && burst_block_fire) begin
-        burst_reserved_d        = 1'b1;
-        burst_base_id_d[port]   = rob_id[port];
-        burst_alloc_cnt_d[port] = burst_len_q[port];
-      // Allocate one ROB ID per cycle for the burst.
-      end else if (burst_alloc_q[port] && (burst_alloc_cnt_q[port] < burst_len_q[port])) begin
+      // Allocate one ROB ID per cycle for this port's share of the burst.
+      if (burst_alloc_q[port] && (burst_alloc_cnt_q[port] < burst_len_q[port])) begin
         // Burst pre-allocation only needs one free ROB slot per beat.
         // Using rob_id_valid here can deadlock at the last beat because
         // rob_id_valid requires two available IDs.
@@ -1581,20 +1601,19 @@ module spatz_vlsu
       if (force_send)
         burst_len_d[port] = burst_len_send;
 
-      burst_send[port] = burst_alloc_q[port] &&
-                         (burst_alloc_cnt_q[port] == burst_len_issue[port]) &&
-                         (burst_len_issue[port] != '0);
-      // A reserved window is complete by construction, so "reserved" IS the send condition.
-      // (The count form above already evaluates true then -- the block set cnt to burst_len_q --
-      // so this only makes the intent explicit; it is an override, not a replacement, so the
-      // walk fallback keeps sending through the count form untouched.)
-      if ((BlockWords > 1) && (port == 0) && burst_reserved_q)
-        burst_send[port] = burst_alloc_q[port];
+      // One request covers every port's share, so it may only leave once EVERY ROB
+      // holds its ids -- otherwise beats would arrive for a port with nowhere to put
+      // them. burst_alloc_ready is the all-ports reduction, computed below.
+      burst_send[port] = burst_alloc_ready;
 
       // Clear burst state once the burst request handshake completes.
       // Use the local load-valid intent (not the downstream valid_o path)
       // to keep valid generation independent from ready.
-      if (burst_send[port] && mem_req_lvalid[port] && spatz_mem_req_ready[port]) begin
+      // Clear EVERY port's burst state on the one request's handshake. The handshake
+      // exists only on port 0 -- ports 1..3 issue nothing -- so gating each port on its
+      // own left them latched as allocated: they never reserved for the next burst and
+      // port 0 ran ahead, diverging the allocators the single base id depends on.
+      if (burst_send[0] && mem_req_lvalid[0] && spatz_mem_req_ready[0]) begin
         burst_alloc_d[port]     = 1'b0;
         burst_len_d[port]       = '0;
         burst_alloc_cnt_d[port] = '0;
@@ -1650,38 +1669,7 @@ module spatz_vlsu
         // Enable write back to the VRF if we have a valid element in all buffers that still have to write something back.
         vrf_req_d.waddr = vd_vreg_addr;
 
-        if (commit_use_port0_burst) begin
-          if (commit_pair_active) begin
-            // TwinROB0 2-wide commit: both in-order ROB0 heads (consecutive burst elements)
-            // land in one VRF row. pair_active guarantees an even element offset, so the two
-            // lanes are (0,1) or (2,3) -- burst_lane_idx+1 never wraps the row. Both words are
-            // full (>= 2*ELENB remain in the burst region), so both lanes take the full wbe.
-            vrf_req_valid_d = rob_rvalid[0] && rob_rvalid2[0] && mem_pending[0];
-            rob_pop_dual[0] = vrf_req_valid_d && vrf_req_ready_d && commit_counter_en[0];
-            // If a stale store entry leaks into load state, drop it without touching offset queue.
-            rob_pop[0]      = rob_rvalid[0] && !mem_pending[0];
-
-            vrf_req_d.wdata = '0;
-            vrf_req_d.wdata[ELEN*burst_lane_idx +: ELEN]         = rob_rdata[0];
-            vrf_req_d.wdata[ELEN*(burst_lane_idx + 1) +: ELEN]   = rob_rdata2[0];
-            vrf_req_d.wbe   = '0;
-            vrf_req_d.wbe[ELENB*burst_lane_idx +: ELENB]         = {ELENB{1'b1}};
-            vrf_req_d.wbe[ELENB*(burst_lane_idx + 1) +: ELENB]   = {ELENB{1'b1}};
-          end else begin
-            // Port0-only burst: steer data into the correct lane (legacy 1-wide; also covers
-            // the self-aligning single commit after an odd vstart).
-            vrf_req_valid_d = rob_rvalid[0] && mem_pending[0];
-            // If a stale store entry leaks into load state, drop it without touching offset queue.
-            rob_pop[0]      = rob_rvalid[0] &&
-                              ((!mem_pending[0]) ||
-                               (vrf_req_valid_d && vrf_req_ready_d && commit_counter_en[0]));
-
-            vrf_req_d.wdata = '0;
-            vrf_req_d.wdata[ELEN*burst_lane_idx +: ELEN] = rob_rdata[0];
-            vrf_req_d.wbe   = '0;
-            vrf_req_d.wbe[ELENB*burst_lane_idx +: ELENB] = burst_lane_wbe;
-          end
-        end else begin
+        begin
           // Gate on the commit-side element counters, NOT on mem_pending: mem_pending
           // counts *issued* requests, so a port whose last beats have not been issued yet
           // -- because the request side is stalled behind interconnect backpressure --
@@ -1727,8 +1715,13 @@ module spatz_vlsu
               default: data = data;
             endcase
 
-            // Pop stored element and free space in buffer
-            rob_pop[port] = rob_rvalid[port] &&
+            // Pop stored element and free space in buffer. Guarded on !rob_empty for
+            // the same reason as the drain sites below: rob_rvalid is
+            // valid_q[read_pointer_q], NOT !empty_o, so the stale-entry arm
+            // (!mem_pending) can otherwise pop an empty buffer and wrap status_cnt_q.
+            // Unreachable while a burst funnelled everything into ROB0 -- ports 1..3
+            // never reached this code -- and reachable now that every port commits.
+            rob_pop[port] = !rob_empty[port] && rob_rvalid[port] &&
                             ((!mem_pending[port]) ||
                              (vrf_req_valid_d && vrf_req_ready_d && commit_counter_en[port]));
 
@@ -1789,24 +1782,21 @@ module spatz_vlsu
         // to mem_pending[0], so acceptance follows port 0's pending, not port 1's. Native
         // port-1 traffic (strided/indexed) is untouched: op-queue serialization guarantees no
         // native ROB1 load is outstanding while any odd-expected bit is set (asserted below).
-        if ((BurstRecvPorts > 1) && (port == 1) &&
-            burst_odd_expected_q[spatz_mem_rsp_i[1].id]) begin
-          rob_push[1]   = 1'b0;
-          rob_push2[0]  = spatz_mem_rsp_valid_i[1] &&
-                          (spatz_mem_rsp_i[1].write == '0) &&
-                          ((state_q == VLSU_RunningLoad) || (mem_pending_q[0] != '0));
-          rob_wid2[0]   = spatz_mem_rsp_i[1].id;
-          rob_wdata2[0] = spatz_mem_rsp_i[1].data;
-        end
         `else
         rob_push[port]  = spatz_mem_rsp_valid_i[port] &&
                           ((state_q == VLSU_RunningLoad) || (mem_pending_q[port] != '0)) &&
                           store_count_q[port] == '0;
         `endif
+        // Burst id pre-allocation is NOT gated on this port issuing anything. A burst
+        // is one request on port 0, but every ROB receives a share of its beats and so
+        // must reserve ids -- and ports 1..3 have mem_operation_valid/burst_use masked
+        // off in burst mode. Gating this on them left their allocators idle, so
+        // burst_alloc_ready never asserted and the burst never issued.
+        if (burst_alloc_fire[port])
+          rob_req_id[port] = 1'b1;
+
         if (mem_operation_valid[port]) begin
           if (burst_use[port]) begin
-            // Pre-allocate IDs for each beat and issue the burst once ready.
-            rob_req_id[port] = burst_alloc_fire[port];
             if (burst_send[port]) begin
               mem_req_lvalid[port] = (!mem_is_indexed || (vrf_rvalid_i[1] && !pending_index[port])) &&
                                      !commit_insn_push &&
@@ -2006,9 +1996,6 @@ module spatz_vlsu
   // TwinROB0 (2-wide burst receive) misconfig guards.
   if (NumRespPorts > NrMemPorts)
     $error("[spatz_vlsu] NumRespPorts (%0d) must be <= NrMemPorts (%0d).", NumRespPorts, NrMemPorts);
-  if (BurstRecvPorts > 2)
-    $error("[spatz_vlsu] BurstRecvPorts (%0d) > 2 unsupported: the parity receive datapath is hardwired for 2.",
-           BurstRecvPorts);
 
 `ifndef SYNTHESIS
   for (genvar port = 1; port < NrMemPorts; port++) begin : gen_port0_burst_assert
@@ -2440,6 +2427,23 @@ module spatz_vlsu
         else $fatal(1, "[spatz_vlsu] Walk allocation into a live odd-expected id.");
     end
   end
+`endif
+
+
+`ifndef SYNTHESIS
+  // The single base id every beat is derived from is only valid while all four ROB
+  // allocators agree. That holds by construction today: in burst mode ports 1..3 issue
+  // nothing of their own, every burst reserves the SAME share in each ROB, and a tail
+  // (which can leave ragged shares) is always issued last and drained before the next
+  // instruction. Enabling dual-load would overlap one instruction's tail with the
+  // next's bursts and break it, so assert rather than assume.
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+      (|burst_alloc_fire) |-> (burst_base_id_q[0] == burst_base_id_q[1] &&
+                               burst_base_id_q[1] == burst_base_id_q[2] &&
+                               burst_base_id_q[2] == burst_base_id_q[3]) ||
+                              (burst_alloc_cnt_q[0] == '0))
+    else $fatal(1, "[spatz_vlsu] burst ROB allocators diverged (%0d %0d %0d %0d): the single base id every beat is derived from is invalid.",
+                burst_base_id_q[0], burst_base_id_q[1], burst_base_id_q[2], burst_base_id_q[3]);
 `endif
 
 endmodule : spatz_vlsu
