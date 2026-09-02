@@ -924,6 +924,7 @@ module spatz_cluster
   flamingo_spatz_cache_ctrl #(
     // Core
     .NumPorts         (NrTCDMPortsCores  ),
+    .NumCC            (2                 ),
     .CoalExtFactor    (L1CoalFactor      ),
     .AddrWidth        (L1AddrWidth       ),
     .WordWidth        (DataWidth         ),
