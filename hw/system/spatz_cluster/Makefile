@@ -59,6 +59,7 @@ endif
 
 # Enable additional uA configurations for the spatz core
 DOUBLE_BW := $(shell python3 -c "import jstyleson; print(jstyleson.load(open('$(SPATZ_CLUSTER_CFG_PATH)'))['cluster'].get('double_bw', 0))")
+DIVSQRT_IS_SHARED := $(shell python3 -c "import jstyleson; print(jstyleson.load(open('$(SPATZ_CLUSTER_CFG_PATH)'))['cluster'].get('divsqrt_is_shared', 0))")
 BUF_FPU := $(shell python3 -c "import jstyleson; print(jstyleson.load(open('$(SPATZ_CLUSTER_CFG_PATH)'))['cluster'].get('buf_fpu', 0))")
 # Ventaglio (VTL) compile-time gate. If the cluster has `ventaglio: true` in the
 # hjson (a Spatz/cluster-level extension), define VENTAGLIO so the RTL `ifdef
@@ -72,6 +73,10 @@ endif
 
 ifeq ($(BUF_FPU),1)
 	DEFS += -DBUF_FPU
+endif
+
+ifeq ($(DIVSQRT_IS_SHARED),1)
+	DEFS += -DDIVSQRT_IS_SHARED
 endif
 
 ifeq ($(SPATZ_CLUSTER_VENTAGLIO),1)
