@@ -3,10 +3,9 @@ jsonref
 jsonschema
 jstyleson
 mako
-scipy
+dataclasses
 flake8
-termcolor
-numpy
-# CPU-only torch for data generation scripts (gen_data.py in software/tests/)
 --extra-index-url https://download.pytorch.org/whl/cpu
 torch
+numpy
+scipy
