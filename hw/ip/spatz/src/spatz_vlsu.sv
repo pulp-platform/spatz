@@ -226,10 +226,9 @@ module spatz_vlsu
   logic use_port0_burst_req;
   logic mem_use_port0_burst;
   logic commit_use_port0_burst;
-  logic burst_tail_phase_q, burst_tail_phase_d;
-  logic switch_to_tail_phase;
-  vlen_t burst_full_bytes_req, burst_full_bytes_commit;
-  logic burst_has_tail_req, burst_has_tail_commit;
+  // burst_tail_phase / switch_to_tail_phase are GONE. See the note at mem_use_port0_burst.
+  vlen_t burst_full_bytes_req;
+  logic burst_has_tail_req;
   logic [NrMemPorts-1:0] mem_port_active;
   logic [N_FU-1:0]       commit_port_active;
   assign use_port0_burst_req =
@@ -257,14 +256,26 @@ module spatz_vlsu
       // it; a non-zero vstart shifts every element and would silently steer each
       // beat to the wrong ROB.
       (mem_spatz_req.vstart == '0);
+  // A TAIL IS JUST A SHORTER BURST -- there is no tail PHASE any more.
+  //
+  // burst_len_calc is min(MaxBurstWords, remaining), so the allocator issues full bursts and
+  // then a short one for whatever is left, and tcdm_burst_expander handles any length. The
+  // phase this replaces came from the funnel design, where a burst was MaxBurstWords or
+  // nothing, and it SILENTLY DISABLED the short-burst path it was left sitting in front of:
+  // switch_to_tail_phase's guards were (mem_counter_q[0] >= burst_full_bytes_req) and the
+  // commit equivalent, and burst_full_bytes_req is the 64-BYTE-ALIGNED FLOOR of vl -- so for
+  // any vl that is not a whole multiple of a full burst it is 0, both guards read 0 >= 0, and
+  // the phase engaged on the FIRST CYCLE. Every load shorter than MaxBurstWords therefore went
+  // down the word-interleaved path, and a longer load's remainder went with it.
+  //
+  // The only thing that still stays on the word path is a ONE-WORD remainder: burst_mode_req
+  // requires burst_len_eff > 1. The other lanes take a dummy for it so the buffers stay
+  // aligned (see rob_req_dummy at the word-path arm).
   assign burst_full_bytes_req    = (mem_spatz_req.vl >> BurstAlignBits) << BurstAlignBits;
-  assign burst_full_bytes_commit = (commit_insn_q.vl >> BurstAlignBits) << BurstAlignBits;
   assign burst_has_tail_req      = use_port0_burst_req &&
                                    (burst_full_bytes_req != mem_spatz_req.vl);
-  assign burst_has_tail_commit   = commit_insn_q.use_port0_burst &&
-                                   (burst_full_bytes_commit != commit_insn_q.vl);
-  assign mem_use_port0_burst     = use_port0_burst_req && !burst_tail_phase_q;
-  assign commit_use_port0_burst  = commit_insn_q.use_port0_burst && !burst_tail_phase_q;
+  assign mem_use_port0_burst     = use_port0_burst_req;
+  assign commit_use_port0_burst  = commit_insn_q.use_port0_burst;
   // TwinROB0 2-wide commit window gate (assigned after the commit counters are declared).
   logic commit_pair_active;
   assign mem_port_active =
@@ -284,7 +295,6 @@ module spatz_vlsu
   } state_t;
   state_t state_d, state_q;
   `FF(state_q, state_d, VLSU_RunningLoad)
-  `FF(burst_tail_phase_q, burst_tail_phase_d, 1'b0)
 
 
   // Store requests are not allocated in the load ROB, so their outstanding
@@ -509,7 +519,6 @@ module spatz_vlsu
   // Per-port working values for gen_mem_counter_proc, hoisted out of the generate loop
   // for waveform visibility (RTL convention: no signal declarations inside generate blocks).
   vlen_t [NrMemPorts-1:0] mem_max_elements;
-  vlen_t [NrMemPorts-1:0] mem_burst_tail_base;
   vlen_t [NrMemPorts-1:0] mem_remaining_bytes;
   vlen_t [NrMemPorts-1:0] mem_remaining_words;
 
@@ -727,7 +736,7 @@ module spatz_vlsu
         $display("[VLSU OVERSHOOT] t=%0t fu=%0d q=%0d > max=%0d delta=%0d vsew=%0d vl=%0d id=%0d burst=%0b tail=%0b",
                  $time, fu, commit_counter_q[fu], commit_counter_max[fu],
                  commit_counter_delta[fu], commit_insn_q.vsew, commit_insn_q.vl,
-                 commit_insn_q.id, commit_use_port0_burst, burst_tail_phase_q);
+                 commit_insn_q.id, commit_use_port0_burst, 1'b0);
     end
 `endif
     // pragma translate_on
@@ -997,7 +1006,6 @@ module spatz_vlsu
                        commit_insn_valid && (commit_insn_q.id == mem_spatz_req.id) &&
                        commit_insn_q.is_load && (state_q == VLSU_RunningLoad) &&
                        use_port0_burst_req && !burst_has_tail_req &&
-                       !burst_tail_phase_q && !switch_to_tail_phase &&
                        mem_is_vstart_zero;
 
     // mem_pending blanket-clear is only legal when no OLDER instruction survives the
@@ -1154,10 +1162,8 @@ module spatz_vlsu
   for (genvar fu = 0; fu < N_FU; fu++) begin: gen_vreg_counter_proc
     // The total amount of elements we have to work through
     vlen_t max_elements;
-    vlen_t burst_tail_base;
 
     always_comb begin
-      burst_tail_base = burst_full_bytes_commit >> $clog2(N_FU);
       // Default value
       max_elements = (commit_insn_q.vl >> $clog2(N_FU*ELENB)) << $clog2(ELENB);
 
@@ -1169,22 +1175,18 @@ module spatz_vlsu
           max_elements += commit_insn_q.vl[$clog2(ELENB)-1:0];
       end
 
-      commit_counter_load[fu] = commit_insn_pop || switch_to_tail_phase;
-      if (switch_to_tail_phase) begin
-        // After burst phase, restart per-lane accounting at the equivalent
-        // standard-mode offset so the remaining tail can use all ports.
-        commit_counter_d[fu] = burst_tail_base;
-      end else begin
-        if (commit_use_port0_burst)
-          commit_counter_d[fu] = (fu == 0) ? commit_insn_q.vstart : vlen_t'('0);
-        else
-          commit_counter_d[fu] = (commit_insn_q.vstart >> $clog2(N_FU*ELENB)) << $clog2(ELENB);
-        if (!commit_use_port0_burst) begin
-          if (commit_insn_q.vstart[$clog2(N_FU*ELENB)-1:$clog2(ELENB)] > fu)
-            commit_counter_d[fu] += ELENB;
-          else if (commit_insn_q.vstart[idx_width(N_FU*ELENB)-1:$clog2(ELENB)] == fu)
-            commit_counter_d[fu] += commit_insn_q.vstart[$clog2(ELENB)-1:0];
-        end
+      commit_counter_load[fu] = commit_insn_pop;
+      begin
+        // ONE form for burst and non-burst alike. The burst arm this replaces gave lane 0 the
+        // whole vstart and the others zero -- the funnel's accounting, the same remnant
+        // fe49caa removed from max_elements just above and missed here. Behaviourally
+        // identical today (a burst demands vstart == 0), but it is the shape that would
+        // silently mis-seed every lane the moment that changed.
+        commit_counter_d[fu] = (commit_insn_q.vstart >> $clog2(N_FU*ELENB)) << $clog2(ELENB);
+        if (commit_insn_q.vstart[$clog2(N_FU*ELENB)-1:$clog2(ELENB)] > fu)
+          commit_counter_d[fu] += ELENB;
+        else if (commit_insn_q.vstart[idx_width(N_FU*ELENB)-1:$clog2(ELENB)] == fu)
+          commit_counter_d[fu] += commit_insn_q.vstart[$clog2(ELENB)-1:0];
       end
       commit_operation_valid[fu] = commit_port_active[fu] &&
                                    commit_insn_valid &&
@@ -1206,10 +1208,9 @@ module spatz_vlsu
   assign vd_elem_id = (commit_counter_q[0] > vreg_start_0) ? commit_counter_q[0] >> $clog2(ELENB) : commit_counter_q[N_FU-1] >> $clog2(ELENB);
 
   for (genvar port = 0; port < NrMemPorts; port++) begin: gen_mem_counter_proc
-    // max_elements / burst_tail_base / remaining_bytes / remaining_words are hoisted to
+    // max_elements / remaining_bytes / remaining_words are hoisted to
     // module scope (mem_*) for waveform visibility -- declared near the mem counters above.
     always_comb begin
-      mem_burst_tail_base[port] = burst_full_bytes_req >> $clog2(NrMemPorts);
       if (mem_use_port0_burst && (port != 0)) begin
         mem_max_elements[port]             = '0;
         mem_remaining_bytes[port]          = 0;
@@ -1230,12 +1231,12 @@ module spatz_vlsu
         burst_use[port]          = 1'b0;
         mem_operation_valid[port]= 1'b0;
         mem_operation_last[port] = 1'b0;
-        mem_counter_load[port]   = commit_insn_push || switch_to_tail_phase;
-        mem_counter_d[port]      = switch_to_tail_phase ? mem_burst_tail_base[port] : '0;
+        mem_counter_load[port]   = commit_insn_push;
+        mem_counter_d[port]      = '0;
         mem_counter_delta[port]  = '0;
         mem_counter_en[port]     = 1'b0;
         mem_counter_max[port]    = '0;
-        mem_idx_counter_d[port]  = switch_to_tail_phase ? mem_burst_tail_base[port] : '0;
+        mem_idx_counter_d[port]  = '0;
         mem_idx_counter_delta[port] = '0;
       end else begin
         // Default value
@@ -1303,10 +1304,8 @@ module spatz_vlsu
                                      (burst_use[port] ? (burst_len_issue[port] * MemDataWidthB) : MemDataWidthB)));
         // Load request-side counters when a new instruction is enqueued; this
         // avoids carrying stale per-port offsets across instruction boundaries.
-        mem_counter_load[port]    = commit_insn_push || switch_to_tail_phase;
-        if (switch_to_tail_phase) begin
-          mem_counter_d[port] = mem_burst_tail_base[port];
-        end else begin
+        mem_counter_load[port]    = commit_insn_push;
+        begin
           if (mem_use_port0_burst)
             mem_counter_d[port] = mem_spatz_req.vstart;
           else begin
@@ -1498,34 +1497,7 @@ module spatz_vlsu
     end
   end
 
-  assign switch_to_tail_phase =
-      commit_insn_valid &&
-      burst_has_tail_commit &&
-      !burst_tail_phase_q &&
-      // All full-burst beats must be issued and drained before switching to
-      // multi-port tail mode, to keep ordering simple.
-      (mem_counter_q[0] >= burst_full_bytes_req) &&
-      (commit_counter_q[0] >= burst_full_bytes_commit) &&
-      // ...but only while tail work actually still remains. If port0 has already
-      // drained the whole instruction by itself (counters reached vl), the burst
-      // is finished and there is nothing to switch to. Re-asserting here would
-      // reload burst_tail_base into mem_counter/commit_counter and corrupt the
-      // *next* instruction: mem_counter is reloaded on commit_insn_push but
-      // commit_counter only on commit_insn_pop, so a following store keeps the
-      // stale base and wedges (observed: VL=24 m2 burst+tail load -> store hang).
-      (mem_counter_q[0]    < commit_insn_q.vl) &&
-      (commit_counter_q[0] < commit_insn_q.vl) &&
-      (mem_pending_q[0] == '0);
-
-  always_comb begin : proc_burst_tail_phase
-    burst_tail_phase_d = burst_tail_phase_q;
-
-    // Reset when instruction retires and operation queue advances.
-    if (mem_spatz_req_ready)
-      burst_tail_phase_d = 1'b0;
-    else if (switch_to_tail_phase)
-      burst_tail_phase_d = 1'b1;
-  end : proc_burst_tail_phase
+  // (switch_to_tail_phase and proc_burst_tail_phase removed -- a tail is a shorter burst now.)
 
   // Burst ID pre-allocation state (per port)
   // Every port has reserved its whole share: the burst request can go out.
@@ -2434,8 +2406,13 @@ module spatz_vlsu
   // taking a dummy, and a one-word word-path remainder gives the other lanes a dummy too.
   // The non-burst paths (indexed, strided, stores) do NOT yet pad, so this is the tripwire
   // for that: it fails loudly instead of steering beats into the wrong buffer.
+  // ANTECEDENT COVERS BOTH ALLOCATORS. It used to be (|burst_alloc_fire) alone -- the
+  // per-cycle walk -- so with SPATZ_VLSU_BLOCK_ALLOC=1, which is the shipped default, the
+  // whole guard was silent: the block path allocates through burst_block_fire and never
+  // raises burst_alloc_fire. The invariant it protects is what makes the single base id on
+  // the request valid for all four buffers, so it has to watch the path we actually use.
   assert property (@(posedge clk_i) disable iff (!rst_ni)
-      (|burst_alloc_fire) |-> ((rob_id[0] == rob_id[1]) &&
+      (|burst_alloc_fire || burst_block_fire) |-> ((rob_id[0] == rob_id[1]) &&
                                (rob_id[1] == rob_id[2]) &&
                                (rob_id[2] == rob_id[3])) ||
                               (burst_alloc_cnt_q[0] != '0))
