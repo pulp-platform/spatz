@@ -393,6 +393,12 @@ module spatz_vlsu
 
   // This lane's final id carries no beat: request it as a dummy.
   logic [NrMemPorts-1:0] rob_req_dummy;
+  // Non-burst padding: bytes this lane is short of lane 0 for the current instruction,
+  // the request granularity that retires the shortfall, and the per-lane pad request.
+  logic [NrMemPorts-1:0][idx_width(ELENB+1)-1:0] pad_init;
+  logic [NrMemPorts-1:0][idx_width(ELENB+1)-1:0] pad_bytes_q, pad_bytes_d;
+  logic [idx_width(ELENB+1)-1:0]                 pad_step;
+  logic [NrMemPorts-1:0]                         pad_fire;
   // The head of this lane's buffer is a dummy and must be drained without committing.
   logic [NrMemPorts-1:0] rob_dummy;
 
@@ -1210,6 +1216,9 @@ module spatz_vlsu
               mem_max_elements[port] += mem_spatz_req.vl[$clog2(MemDataWidthB)-1:0];
         end
 
+        // Lane 0 always issues the most: the remainder distribution above gives the extra
+        // element to the LOW ports, so every other lane pads up to lane 0's count.
+        pad_init[port] = (idx_width(ELENB+1))'(mem_max_elements[0] - mem_max_elements[port]);
         mem_remaining_bytes[port] = mem_max_elements[port] - mem_counter_q[port];
         mem_remaining_words[port] = mem_remaining_bytes[port] >> $clog2(MemDataWidthB);
         // As much of what is left as one wide access can carry. A trailing PARTIAL
@@ -1345,6 +1354,26 @@ module spatz_vlsu
 
   // The burst's total length: one per core, independent of the block-reservation knob.
   `FF(burst_total_q, burst_total_d, '0)
+
+  // Non-burst alignment padding. pad_step is how many bytes one request retires, so the
+  // shortfall is counted down in the same units the lanes fell behind in: a
+  // single-element operation (indexed, strided, unaligned, non-zero vstart) moves one
+  // element per request, everything else a whole word.
+  assign pad_step = mem_is_single_element_operation
+                  ? (idx_width(ELENB+1))'(mem_single_element_size)
+                  : (idx_width(ELENB+1))'(ELENB);
+  always_comb begin
+    pad_bytes_d = pad_bytes_q;
+    for (int port = 0; port < NrMemPorts; port++) begin
+      // Reload at the instruction boundary, where mem_max_elements is the new op's.
+      if (mem_counter_load[port])
+        pad_bytes_d[port] = pad_init[port];
+      else if (pad_fire[port])
+        pad_bytes_d[port] = (pad_bytes_q[port] > pad_step) ? (pad_bytes_q[port] - pad_step)
+                                                           : '0;
+    end
+  end
+  `FF(pad_bytes_q, pad_bytes_d, '{default: '0})
 
   // The block-reservation flop: ONE per core (ROB0 only), not instantiated at all when the
   // knob is off -- the tie-off keeps the net driven for lint and const-folds away.
@@ -1587,6 +1616,7 @@ module spatz_vlsu
     rob_pop   = '0;
     rob_req_id = '0;
     rob_req_dummy = '0;
+    pad_fire      = '0;
     rob_wdata2   = '0;
     rob_wid2     = '0;
     rob_push2    = '0;
@@ -1850,7 +1880,11 @@ module spatz_vlsu
               default: mem_req_data[port] = data;
             endcase
 
-          mem_req_svalid[port] = rob_rvalid[port] && (!mem_is_indexed || (vrf_rvalid_i[1] && !pending_index[port])) && !commit_insn_q.is_load;
+          // !rob_dummy: a padding entry carries no store data; sending it would emit a
+          // request with whatever the buffer slot happens to hold.
+          mem_req_svalid[port] = rob_rvalid[port] && !rob_dummy[port] &&
+                                 (!mem_is_indexed || (vrf_rvalid_i[1] && !pending_index[port])) &&
+                                 !commit_insn_q.is_load;
           mem_req_id[port]     = rob_rid[port];
           mem_req_last[port]   = mem_operation_last[port];
           rob_pop[port]        = rob_rvalid[port] && spatz_mem_req_valid[port] && spatz_mem_req_ready[port];
@@ -1882,6 +1916,20 @@ module spatz_vlsu
           rob_pop[port] = 1'b1;
       end
     end
+
+    // Non-burst paths hand the lanes uneven element counts (indexed, strided, and any
+    // unit-stride op that is not burst-eligible -- stores included, which allocate an id
+    // per request just as loads do). They therefore issue different numbers of requests
+    // and the buffers drift apart, which invalidates the single base id a later burst
+    // derives every beat from. Once a lane has issued everything it owes, pad it with
+    // dummies until it has allocated as many ids as lane 0.
+    for (int port = 0; port < NrMemPorts; port++)
+      if (!mem_use_port0_burst && !mem_operation_valid[port] &&
+          (pad_bytes_q[port] != '0) && !rob_full[port] && rob_id_valid[port]) begin
+        pad_fire[port]      = 1'b1;
+        rob_req_id[port]    = 1'b1;
+        rob_req_dummy[port] = 1'b1;
+      end
 
     // A one-word remainder stays on the word path, and that request advances ONLY lane 0.
     // The other lanes must still take an id, or the buffers drift apart and the single base
