@@ -388,7 +388,8 @@ module spatz_vlsu
   // (room_block_o, NON-STRICT <=) so a VLSU-side bug cannot over-allocate its id space;
   // block_mask_o is the granted window [rob_id, rob_id+BlockWords) as a bitmap, consumed here
   // only by the odd-expected bookkeeping. All const 0 when the knob is off.
-  logic  [NrMemPorts-1:0]                         rob_req_block;
+  logic  [NrMemPorts-1:0]                         rob_req_block;   // to the ROBs: the GRANT
+  logic  [NrMemPorts-1:0]                         rob_blk_req;     // per-port REQUEST
   logic  [NrMemPorts-1:0]                         rob_room_block;
   logic  [NrMemPorts-1:0][NrOutstandingLoads-1:0] rob_block_mask;
 
@@ -843,10 +844,21 @@ module spatz_vlsu
     // would stay silent: the failure is a hang, not a diverged base id. A full-length burst
     // consumes the window exactly, and a tail falls back to the walk (at most BlockWords-1
     // cycles, which is what distributing the beats already bought down from MaxBurstWords-1).
-    assign rob_req_block[port] = (BlockWords > 1) &&
-                                 burst_alloc_q[port] && !burst_reserved_q &&
-                                 (burst_alloc_cnt_q[port] == '0) &&
-                                 (burst_total_q == BurstLenWidth'(MaxBurstWords));
+    assign rob_blk_req[port] = (BlockWords > 1) &&
+                               burst_alloc_q[port] && !burst_reserved_q &&
+                               (burst_alloc_cnt_q[port] == '0) &&
+                               (burst_total_q == BurstLenWidth'(MaxBurstWords));
+    // THE ROBs ARE DRIVEN BY THE ALL-PORTS DECISION, NOT BY THEIR OWN REQUEST.
+    //
+    // reorder_buffer computes block_fire = id_req_block_i && room_block_o internally and
+    // allocates on it. Feeding it the per-port request let each buffer decide ALONE: if one
+    // lacked room, the other three still advanced their write pointers by BlockWords while it
+    // did not, and the VLSU -- which correctly required all four -- fell through to the
+    // per-cycle walk and allocated on top. The buffers were then permanently skewed, so the
+    // single base id on the request addressed the wrong slot in the lagging lane: its beats
+    // arrive, valid_q[read_pointer_q] never sets, and the load never commits. Driving them
+    // from the reduction makes "all four or none" structural rather than a promise.
+    assign rob_req_block[port] = burst_block_fire;
   end : gen_rob_req_block
   // Term-for-term the reorder_buffer's own internal block_fire (id_req_block_i && room_block_o),
   // so the VLSU state update and the ROB pointer update commit together or not at all -- the
@@ -855,10 +867,13 @@ module spatz_vlsu
   // ALL ports, not port 0: one request covers every lane's share, so a window that exists
   // in only some buffers is worse than none -- it would hand the burst a base id the other
   // buffers have not reserved behind.
+  // Every port wants the window AND every buffer has room. Both terms come from registers
+  // (rob_blk_req from the allocator flops, room_block_o from status_cnt_q), so feeding this
+  // back into id_req_block_i above is not a loop.
   always_comb begin : proc_burst_block_fire
     burst_block_fire = (BlockWords > 1);
     for (int port = 0; port < NrMemPorts; port++)
-      burst_block_fire &= rob_req_block[port] && rob_room_block[port];
+      burst_block_fire &= rob_blk_req[port] && rob_room_block[port];
   end : proc_burst_block_fire
 
   // Burst load element/lane tracking (port0 only).
@@ -2149,7 +2164,7 @@ module spatz_vlsu
     // off in burst mode -- but the reservation is now requested on EVERY port, so the
     // antecedent has to cover all of them.
     assert property (@(posedge clk_i) disable iff (!rst_ni)
-        (|rob_req_block) |-> (mem_operation_valid[0] && burst_use[0]))
+        (|rob_blk_req) |-> (mem_operation_valid[0] && burst_use[0]))
       else $fatal(1, "[spatz_vlsu] Block ROB reservation requested outside an active port-0 burst.");
     // A4, VLSU side (the ROB asserts the same on its own inputs): a block GRANT and a single id
     // request are mutually exclusive -- the ROB serves the block and drops the single silently,
