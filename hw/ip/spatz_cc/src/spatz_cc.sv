@@ -7,6 +7,7 @@
 `include "common_cells/assertions.svh"
 `include "common_cells/registers.svh"
 `include "snitch_vm/typedef.svh"
+`include "snitch/trace_writer.svh"
 
 /// Spatz Core Complex (CC)
 /// Contains the Snitch Integer Core + Spatz Vector Unit
@@ -476,6 +477,9 @@ module spatz_cc
   // Tracer
   // --------------------------
   // pragma translate_off
+`ifndef SNITCH_TRACE_DISABLE
+  `SNITCH_TRACE_DECLS
+
   int           f;
   string        fn;
   logic  [63:0] cycle;
@@ -488,8 +492,7 @@ module spatz_cc
     @(posedge clk_i);
     /* verilator lint_on STMTDLY */
     $system("mkdir logs -p");
-    $sformat(fn, "logs/trace_hart_%05x.dasm", hart_id_i);
-    f = $fopen(fn, "w");
+    `SNITCH_TRACE_OPEN(f, fn, "logs/trace_hart_%05x.", hart_id_i);
     $display("[Tracer] Logging Hart %d to %s", hart_id_i, fn);
   end
 
@@ -553,7 +556,7 @@ module spatz_cc
         $sformat(trace_entry, "%t %1d %8d 0x%h DASM(%h) #; %s\n",
           $time, cycle, i_snitch.priv_lvl_q, i_snitch.pc_q, i_snitch.inst_data_i,
           snitch_pkg::print_snitch_trace(extras_snitch));
-        $fwrite(f, trace_entry);
+        `SNITCH_TRACE_WRITE(f, trace_entry);
       end
       if (FPEn) begin
         // Trace FPU iff:
@@ -566,7 +569,7 @@ module spatz_cc
           $sformat(trace_entry, "%t %1d %8d 0x%h DASM(%h) #; %s\n",
             $time, cycle, i_snitch.priv_lvl_q, 32'hz, extras_fpu.op_in,
             snitch_pkg::print_fpu_trace(extras_fpu));
-          $fwrite(f, trace_entry);
+          `SNITCH_TRACE_WRITE(f, trace_entry);
         end
       end
     end else begin
@@ -575,9 +578,10 @@ module spatz_cc
   end
 
   final begin
-    $fclose(f);
+    `SNITCH_TRACE_CLOSE(f);
   end
   // verilog_lint: waive-stop always-ff-non-blocking
+`endif // SNITCH_TRACE_DISABLE
   // pragma translate_on
 
   `ASSERT_INIT(BootAddrAligned, BootAddr[1:0] == 2'b00)
