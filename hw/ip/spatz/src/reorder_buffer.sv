@@ -80,6 +80,12 @@ module reorder_buffer
   input  logic  pop_dual_i,
   // ID request
   input  logic  id_req_i,
+  // Allocate this id as a DUMMY: it is marked valid immediately and carries no data, so the
+  // in-order read head passes over it. Used to keep every buffer's allocation count equal
+  // when a burst's last row does not cover every lane, which is what lets one base id
+  // describe the whole burst.
+  input  logic  id_dummy_i,
+  output logic  dummy_o,     // the current head is a dummy: pop it, do not consume it
   output id_t   id_o,
   output logic  id_valid_o,  // is the next id valid?
   output logic  full_o,
@@ -153,6 +159,7 @@ module reorder_buffer
   // Memory
   data_t [NumWords-1:0] mem_d, mem_q;
   logic  [NumWords-1:0] valid_d, valid_q;
+  logic  [NumWords-1:0] dummy_d, dummy_q;
 
   // Status flags
   assign full_o    = (status_cnt_q == NumWords);
@@ -302,10 +309,12 @@ module reorder_buffer
     gen_d           = gen_q;
     entry_gen_d     = entry_gen_q;
     stale_drop_d    = stale_drop_q;
+    dummy_d         = dummy_q;
 
     // Output data
     data_o  = mem_q[read_pointer_q];
     valid_o = valid_q[read_pointer_q];
+    dummy_o = dummy_q[read_pointer_q];
     // Second read head (structurally tied off when NumRdPorts == 1)
     data2_o  = (NumRdPorts > 1) ? mem_q[read_next_ptr]   : '0;
     valid2_o = (NumRdPorts > 1) ? valid_q[read_next_ptr] : 1'b0;
@@ -344,6 +353,11 @@ module reorder_buffer
       if (!CntIdValid) id_valid_d[write_pointer_q] = 1'b0;
       // Increment the overall counter
       status_cnt_d = status_cnt_q + 1;
+      // A dummy needs no response: mark it filled here so the read head can pass it.
+      if (id_dummy_i) begin
+        valid_d[write_pointer_q] = 1'b1;
+        dummy_d[write_pointer_q] = 1'b1;
+      end
     end
 
     // Push data. Indexed by the ENTRY, and accepted only if the id's generation still matches
@@ -354,6 +368,7 @@ module reorder_buffer
       if (push_gen_ok) begin
         mem_d[push_entry]   = data_i;
         valid_d[push_entry] = 1'b1;
+        dummy_d[push_entry] = 1'b0;
       end else begin
         stale_drop_d = stale_drop_q + 1;
       end
@@ -364,6 +379,7 @@ module reorder_buffer
       if (push2_gen_ok) begin
         mem_d[push2_entry]   = data2_i;
         valid_d[push2_entry] = 1'b1;
+        dummy_d[push2_entry] = 1'b0;
       end else begin
         stale_drop_d = stale_drop_q + 1;
       end
@@ -384,6 +400,7 @@ module reorder_buffer
       valid_d[read_pointer_q] = 1'b0;
       // Mark ID as available (bitmap decoder, read side: removed under CntIdValid)
       if (!CntIdValid) id_valid_d[read_pointer_q] = 1'b1;
+      dummy_d[read_pointer_q] = 1'b0;
 
       // Increment the read pointer
       if (read_pointer_q == NumWords-1)
@@ -441,6 +458,7 @@ module reorder_buffer
       gen_q           <= '0;
       entry_gen_q     <= '0;
       stale_drop_q    <= '0;
+      dummy_q         <= '0;
     end else begin
       read_pointer_q  <= read_pointer_d;
       write_pointer_q <= write_pointer_d;
@@ -450,6 +468,7 @@ module reorder_buffer
       gen_q           <= gen_d;
       entry_gen_q     <= entry_gen_d;
       stale_drop_q    <= stale_drop_d;
+      dummy_q         <= dummy_d;
     end
   end
 

@@ -348,11 +348,6 @@ package spatz_pkg;
     logic [1:0] size;
     logic write;
     logic [BurstLenWidth-1:0] burst_len;
-    // Per-lane reorder-buffer base ids of this burst. Carried ON THE REQUEST, not on a
-    // side channel: spatz_mem_req_o passes through a spill register, so anything sampled
-    // from a live VLSU register when the request reaches the tile belongs to a LATER
-    // burst. Only meaningful when burst_len > 1.
-    logic [N_FU-1:0][MemRspIdWidth-1:0] burst_base_ids;
     logic [DataWidth/8-1:0] strb;
     logic [DataWidth-1:0] data;
     logic last;

@@ -86,6 +86,16 @@ module spatz_vlsu
   // carries its own base id to the burst adapter. That is what lets a burst be any
   // length -- a tail included -- and lets MaxBurstWords be a free parameter rather
   // than a multiple of NrMemPorts.
+  // Rows a burst of `len` words occupies: ceil(len/NrMemPorts). EVERY lane allocates this
+  // many ids, so all reorder buffers advance by the same amount and ONE base id describes
+  // the whole burst. Lanes the last row does not reach take a dummy for their final id.
+  function automatic logic [BurstLenWidth-1:0] burst_rows
+      (input logic [BurstLenWidth-1:0] len);
+    burst_rows = BurstLenWidth'((len + BurstLenWidth'(NrMemPorts - 1)) >> $clog2(NrMemPorts));
+  endfunction
+
+  // Real beats lane `port` receives. Differs from burst_rows only on the last row; the
+  // difference is exactly the lane's dummy.
   function automatic logic [BurstLenWidth-1:0] burst_port_share
       (input logic [BurstLenWidth-1:0] len, input int unsigned port);
     if (len > BurstLenWidth'(port))
@@ -381,6 +391,11 @@ module spatz_vlsu
     assign burst_odd_alt[i] = (BlockWords > 1) ? (((i % 2) != 0) ^ rob_id[0][0]) : 1'b0;
   end : gen_burst_odd_alt
 
+  // This lane's final id carries no beat: request it as a dummy.
+  logic [NrMemPorts-1:0] rob_req_dummy;
+  // The head of this lane's buffer is a dummy and must be drained without committing.
+  logic [NrMemPorts-1:0] rob_dummy;
+
   // The reorder buffer decouples the memory side from the register file side.
   // All elements from one side to the other go through it.
   for (genvar port = 0; port < NrMemPorts; port++) begin : gen_rob
@@ -410,6 +425,8 @@ module spatz_vlsu
       .valid2_o (rob_rvalid2[port]),
       .pop_dual_i(rob_pop_dual[port]),
       .id_req_i (rob_req_id[port]),
+      .id_dummy_i(rob_req_dummy[port]),
+      .dummy_o  (rob_dummy[port]  ),
       .id_o     (rob_id[port]    ),
       .id_valid_o(rob_id_valid[port]),
       .full_o   (rob_full[port]  ),
@@ -437,6 +454,7 @@ module spatz_vlsu
     );
     assign rob_rvalid[port] = !rob_empty[port];
     assign rob_id_valid[port] = 1'b1;
+    assign rob_dummy[port]    = 1'b0;   // no dummy allocation without the reorder_buffer
     assign rob_rdata2[port]  = '0;
     assign rob_rvalid2[port] = 1'b0;
     // No block reservation without the reorder_buffer: room stays low, so burst_block_fire is
@@ -1507,7 +1525,7 @@ module spatz_vlsu
         // This lane's own share of the burst, not a fixed MaxBurstWords/NrMemPorts.
         // A tail gives the low lanes one beat more than the high ones, and a lane
         // whose share is zero is trivially ready.
-        burst_len_d[port]       = burst_port_share(burst_len_calc[0], port);
+        burst_len_d[port]       = burst_rows(burst_len_calc[0]);
         burst_alloc_cnt_d[port] = '0;
         burst_total_d           = burst_len_calc[0];
       end
@@ -1568,6 +1586,7 @@ module spatz_vlsu
     rob_push  = '0;
     rob_pop   = '0;
     rob_req_id = '0;
+    rob_req_dummy = '0;
     rob_wdata2   = '0;
     rob_wid2     = '0;
     rob_push2    = '0;
@@ -1710,6 +1729,13 @@ module spatz_vlsu
         // burst_alloc_ready never asserted and the burst never issued.
         if (burst_alloc_fire[port])
           rob_req_id[port] = 1'b1;
+        // The final id of a lane the last row does not reach carries no beat. Allocating it
+        // as a dummy keeps every lane's count at burst_rows(), which is what makes the
+        // single base id valid; it is drained below without reaching the register file.
+        if (burst_alloc_fire[port] &&
+            (burst_alloc_cnt_q[port] == (burst_len_q[port] - BurstLenWidth'(1))) &&
+            (burst_port_share(burst_len_calc[0], port) < burst_len_q[port]))
+          rob_req_dummy[port] = 1'b1;
 
         if (mem_operation_valid[port]) begin
           if (burst_use[port]) begin
@@ -1848,13 +1874,25 @@ module spatz_vlsu
           if (!rob_empty[port])
             rob_pop[port] = rob_rvalid[port];
         end
+
+        // A dummy carries no beat, so no commit will ever consume it. Drain it wherever it
+        // surfaces -- including after this lane's commit has finished, when none of the arms
+        // above run any more -- or it blocks the lane and rob_empty never asserts.
+        if (rob_dummy[port])
+          rob_pop[port] = 1'b1;
       end
     end
 
-    // Publish every lane's reorder-buffer base on its OWN port's id line while a burst
-    // is being formed. Only port 0 issues the request, so ports 1..N-1 drive nothing
-    // this cycle and their id lines are free; the tile's burst adapter reads each
-    // lane's base from them (mempool_tile.sv, lane_base_id). Carrying a base per lane
+    // A one-word remainder stays on the word path, and that request advances ONLY lane 0.
+    // The other lanes must still take an id, or the buffers drift apart and the single base
+    // id every burst beat is derived from stops being valid for the next burst. Give them a
+    // dummy, exactly as a short burst row does.
+    if (mem_use_port0_burst && mem_req_lvalid[0] && !burst_send[0] && spatz_mem_req_ready[0])
+      for (int p = 1; p < NrMemPorts; p++) begin
+        rob_req_id[p]    = 1'b1;
+        rob_req_dummy[p] = 1'b1;
+      end
+
   end
   // verilator lint_on LATCH
 
@@ -1876,9 +1914,6 @@ module spatz_vlsu
 `ifdef TARGET_MEMPOOL
     // ID is required in Mempool-Spatz
     assign spatz_mem_req[port].id    = mem_req_id[port];
-    // Travels with the request through the spill register, so the tile's burst adapter
-    // sees the bases of the burst it is actually being handed.
-    assign spatz_mem_req[port].burst_base_ids = burst_base_id_q;
     assign spatz_mem_req[port].addr  = mem_req_addr[port];
     assign spatz_mem_req[port].mode  = '0; // Request always uses user privilege level
     assign spatz_mem_req[port].size  = mem_spatz_req.vtype.vsew[1:0];
@@ -2250,7 +2285,22 @@ module spatz_vlsu
 
 
 `ifndef SYNTHESIS
-  // NOTE: the ROB allocators are deliberately NO LONGER required to agree. Every lane
+  // The single base id every burst beat is derived from is only valid while all the reorder
+  // buffers agree on their next free id. Equal allocation is what maintains that: a burst
+  // takes ceil(len/NrMemPorts) ids in EVERY lane, the lanes a short row does not reach
+  // taking a dummy, and a one-word word-path remainder gives the other lanes a dummy too.
+  // The non-burst paths (indexed, strided, stores) do NOT yet pad, so this is the tripwire
+  // for that: it fails loudly instead of steering beats into the wrong buffer.
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+      (|burst_alloc_fire) |-> ((rob_id[0] == rob_id[1]) &&
+                               (rob_id[1] == rob_id[2]) &&
+                               (rob_id[2] == rob_id[3])) ||
+                              (burst_alloc_cnt_q[0] != '0))
+    else $fatal(1, "[spatz_vlsu] reorder buffers diverged (%0d %0d %0d %0d): the single burst base id is invalid.",
+                rob_id[0], rob_id[1], rob_id[2], rob_id[3]);
+
+  // NOTE (superseded): the buffers were briefly allowed to diverge, each lane carrying its
+  // own base. Every lane
   // publishes its own base id to the burst adapter (mem_req_id[1..N-1] above), so beats
   // are derived per lane. That is what lets a tail reserve ragged shares, and it also
   // means an earlier op that distributed an uneven element count across the ports --
