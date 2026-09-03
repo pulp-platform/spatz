@@ -515,6 +515,10 @@ module spatz_fpu_sequencer
   logic [DataWidth-1:0] fp_lsu_pdata;
   logic [4:0]           fp_lsu_ptag;
   logic                 fp_lsu_pvalid;
+  // A store acknowledgement was consumed inside the FP LSU this cycle. The write response
+  // never raises lsu_pvalid_o (it is self-acked), so this is the only signal that says the
+  // store has actually landed rather than merely been queued.
+  logic                 fp_lsu_pwrite;
   logic                 fp_lsu_pready;
 
   // TODO: remove hardcoding
@@ -551,6 +555,7 @@ module spatz_fpu_sequencer
     .lsu_ptag_o   (fp_lsu_ptag     ),
     .lsu_perror_o (/* Unused */    ),
     .lsu_pvalid_o (fp_lsu_pvalid   ),
+    .lsu_pwrite_o (fp_lsu_pwrite   ),
     .lsu_pready_i (fp_lsu_pready   ),
     .lsu_empty_o  (/* unused */    ),
     // Memory interface
