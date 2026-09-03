@@ -2084,6 +2084,43 @@ module spatz_vlsu
   // was valid, with no edge detection. The BURSTWHY probe below reports the same thing
   // per conjunct, and is gated behind spatz_burst_debug.)
 
+  // NON-BURST CAPACITY. Replaces gen_robn_nonburst_capacity, which tested the removed
+  // SPATZ_VLSU_ROBN_DEPTH. The depths are uniform now, but the bound still exists and it still
+  // has no gate above it: an op that is not burst-eligible (indexed, strided, unaligned, or the
+  // whole traffic when SPATZ_VLSU_BURST=0) streams down the word-interleaved path, where each
+  // lane needs vl / (MemDataWidthB * NrMemPorts) ids -- and NOTHING checks that against the ROB
+  // depth. A STORE cannot escape onto the burst path at all (use_port0_burst_req demands
+  // is_load), which is what made this audible in the first place: at ROB0=128/ROBN=16 a 512 B
+  // store wedged the machine with every core LSU-stalled, inflight 0, and no message.
+  //
+  // At the shipped ROB32 the bound is 32 * 4 * 4 = 512 B == MAXVL, so nothing can exceed it and
+  // this const-folds away. It is here for the next person who lowers spatz_vlsu_rob_depth.
+  //
+  // $warning, not $fatal: the exact wedge threshold between "throttles" and "deadlocks" has
+  // never been measured, and firing fatally on a threshold I have not measured would be worse
+  // than either. Rate-limited for the same reason as BurstWhyMax below -- the condition holds
+  // for the whole life of an offending instruction, on every core, every cycle.
+  if ((MAXVL / (MemDataWidthB * NrMemPorts)) > NrOutstandingLoads) begin : gen_nonburst_capacity
+    // verilog_lint: waive-start
+    // pragma translate_off
+    localparam int unsigned CapWarnMax = 8;
+    logic [$clog2(CapWarnMax+1)-1:0] cap_warn_n;
+    always_ff @(posedge clk_i) begin
+      if (!rst_ni) cap_warn_n <= '0;
+      else if (mem_spatz_req_valid && !use_port0_burst_req &&
+               (cap_warn_n < CapWarnMax) &&
+               ((mem_spatz_req.vl / (MemDataWidthB * NrMemPorts)) > NrOutstandingLoads)) begin
+        $warning("[spatz_vlsu] NON-BURST OVER CAPACITY: %0s vl=%0d B needs %0d ids per lane on the word-interleaved path but the reorder buffers are %0d deep. Raise SPATZ_VLSU_ROB_DEPTH; a STORE has no burst path to fall back on.",
+                 mem_spatz_req.op_mem.is_load ? "load" : "store",
+                 mem_spatz_req.vl,
+                 mem_spatz_req.vl / (MemDataWidthB * NrMemPorts), NrOutstandingLoads);
+        cap_warn_n <= cap_warn_n + 1;
+      end
+    end
+    // pragma translate_on
+    // verilog_lint: waive-stop
+  end
+
   // BURSTWHY -- root-cause probe for "knob is on but every request is bl=1".
   // use_port0_burst_req is a 5-way AND; when it is 0 the load silently falls back to the
   // multi-port WORD-INTERLEAVED path, which turns one vector load into vl/4 single-word
