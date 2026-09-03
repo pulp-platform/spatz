@@ -1278,7 +1278,22 @@ module spatz_vlsu
 
         // Lane 0 always issues the most: the remainder distribution above gives the extra
         // element to the LOW ports, so every other lane pads up to lane 0's count.
-        pad_init[port] = (idx_width(ELENB+1))'(mem_max_elements[0] - mem_max_elements[port]);
+        //
+        // LOADS ONLY. A STORE allocates its ids from vrf_rvalid_i[0] -- one per VRF read, on
+        // EVERY lane, with no per-lane work term -- so it is already uniform and needs no
+        // padding at all. Loading a store's element-count imbalance here made a lane pad for
+        // an imbalance that never existed: measured on vector-burst-test, lane 3 padded once
+        // legitimately for the load, the store then allocated uniformly four times, and the
+        // stale credit fired a second pad that put lane 3 one id AHEAD of the others. From
+        // there the single base id no longer described all four buffers -- beats landed in
+        // the wrong slots, valid_q[read_pointer_q] never set, and the load never committed
+        // (reorder buffers diverged 16 16 16 17, cyc 9141).
+        //
+        // Zeroing it on the store path also clears any residue the load left, so a credit
+        // can never survive into an instruction that does not need it.
+        pad_init[port] = mem_spatz_req.op_mem.is_load
+                       ? (idx_width(ELENB+1))'(mem_max_elements[0] - mem_max_elements[port])
+                       : '0;
         mem_remaining_bytes[port] = mem_max_elements[port] - mem_counter_q[port];
         mem_remaining_words[port] = mem_remaining_bytes[port] >> $clog2(MemDataWidthB);
         // As much of what is left as one wide access can carry. A trailing PARTIAL
