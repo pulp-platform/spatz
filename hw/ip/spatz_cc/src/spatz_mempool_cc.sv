@@ -2,6 +2,8 @@
 // Solderpad Hardware License, Version 0.51, see LICENSE for details.
 // SPDX-License-Identifier: SHL-0.51
 
+`include "snitch/trace_writer.svh"
+
 module spatz_mempool_cc
   import snitch_pkg::meta_id_t;
 #(
@@ -377,6 +379,9 @@ module spatz_mempool_cc
   // Tracer
   // --------------------------
   // pragma translate_off
+`ifndef SNITCH_TRACE_DISABLE
+  `SNITCH_TRACE_DECLS
+
   int f;
   string fn;
   logic [63:0] cycle;
@@ -387,8 +392,7 @@ module spatz_mempool_cc
     if(rst_i) begin
       // Format in hex because vcs and vsim treat decimal differently
       // Format with 8 digits because Verilator does not support anything else
-      $sformat(fn, "trace_hart_0x%08x.dasm", hart_id_i);
-      f = $fopen(fn, "w");
+      `SNITCH_TRACE_OPEN(f, fn, "trace_hart_0x%08x.", hart_id_i);
       $display("[Tracer] Logging Hart %d to %s", hart_id_i, fn);
     end
   end
@@ -456,7 +460,7 @@ module spatz_mempool_cc
           $timeformat(-9, 0, "", 10);
           $sformat(trace_entry, "%t %8d 0x%h DASM(%h) #; %s\n",
               $time, cycle, i_snitch.pc_q, i_snitch.inst_data_i, extras_str);
-          $fwrite(f, trace_entry);
+          `SNITCH_TRACE_WRITE(f, trace_entry);
         end
 
         // Reset all stalls when we execute an instruction
@@ -495,9 +499,10 @@ module spatz_mempool_cc
     end
 
   final begin
-    $fclose(f);
+    `SNITCH_TRACE_CLOSE(f);
   end
   // verilog_lint: waive-stop always-ff-non-blocking
+`endif // SNITCH_TRACE_DISABLE
   // pragma translate_on
 
 endmodule
