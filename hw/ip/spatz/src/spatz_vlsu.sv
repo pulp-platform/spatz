@@ -420,6 +420,12 @@ module spatz_vlsu
 
   // This lane's final id carries no beat: request it as a dummy.
   logic [NrMemPorts-1:0] rob_req_dummy;
+  // ALLOC-SITE TRACE (SPATZ_ROB_ALLOC_TRACE, sim-only): which arm asked for an id this
+  // cycle. The four buffers must allocate in lockstep or the single burst base id stops
+  // describing them all; when they diverge this says which arm broke step.
+  //   1 burst walk   2 burst-row dummy   3 word/burst request   4 store
+  //   5 non-burst pad   6 one-word-remainder dummy
+  logic [NrMemPorts-1:0][2:0] rob_alloc_site;
   // Non-burst padding: bytes this lane is short of lane 0 for the current instruction,
   // the request granularity that retires the shortfall, and the per-lane pad request.
   logic [NrMemPorts-1:0][idx_width(ELENB+1)-1:0] pad_init;
@@ -1649,6 +1655,7 @@ module spatz_vlsu
     rob_pop   = '0;
     rob_req_id = '0;
     rob_req_dummy = '0;
+    rob_alloc_site = '0;
     pad_fire      = '0;
     rob_wdata2   = '0;
     rob_wid2     = '0;
@@ -1790,15 +1797,19 @@ module spatz_vlsu
         // must reserve ids -- and ports 1..3 have mem_operation_valid/burst_use masked
         // off in burst mode. Gating this on them left their allocators idle, so
         // burst_alloc_ready never asserted and the burst never issued.
-        if (burst_alloc_fire[port])
+        if (burst_alloc_fire[port]) begin
           rob_req_id[port] = 1'b1;
+          rob_alloc_site[port] = 3'd1;
+        end
         // The final id of a lane the last row does not reach carries no beat. Allocating it
         // as a dummy keeps every lane's count at burst_rows(), which is what makes the
         // single base id valid; it is drained below without reaching the register file.
         if (burst_alloc_fire[port] &&
             (burst_alloc_cnt_q[port] == (burst_len_q[port] - BurstLenWidth'(1))) &&
-            (burst_port_share(burst_len_calc[0], port) < burst_len_q[port]))
+            (burst_port_share(burst_len_calc[0], port) < burst_len_q[port])) begin
           rob_req_dummy[port] = 1'b1;
+          rob_alloc_site[port] = 3'd2;
+        end
 
         if (mem_operation_valid[port]) begin
           if (burst_use[port]) begin
@@ -1838,6 +1849,7 @@ module spatz_vlsu
                                    commit_insn_q.is_load &&
                                    !dual_blk;
             rob_req_id[port]     = spatz_mem_req_ready[port] & mem_req_lvalid[port];
+            if (rob_req_id[port]) rob_alloc_site[port] = 3'd3;
             mem_req_id[port]     = rob_id[port];
             mem_req_last[port]   = mem_operation_last[port];
           end
@@ -1863,6 +1875,7 @@ module spatz_vlsu
           rob_wdata[port]  = vrf_rdata_i[0][ELEN*port +: ELEN];
           rob_wid[port]    = rob_id[port];
           rob_req_id[port] = vrf_rvalid_i[0] && (!mem_is_indexed || vrf_rvalid_i[1]) && rob_id_valid[port];
+          if (rob_req_id[port]) rob_alloc_site[port] = 3'd4;
           rob_push[port]   = rob_req_id[port];
         end
       end
@@ -1959,9 +1972,10 @@ module spatz_vlsu
     for (int port = 0; port < NrMemPorts; port++)
       if (!mem_use_port0_burst && !mem_operation_valid[port] &&
           (pad_bytes_q[port] != '0) && !rob_full[port] && rob_id_valid[port]) begin
-        pad_fire[port]      = 1'b1;
-        rob_req_id[port]    = 1'b1;
-        rob_req_dummy[port] = 1'b1;
+        pad_fire[port]       = 1'b1;
+        rob_req_id[port]     = 1'b1;
+        rob_req_dummy[port]  = 1'b1;
+        rob_alloc_site[port] = 3'd5;
       end
 
     // A one-word remainder stays on the word path, and that request advances ONLY lane 0.
@@ -1970,8 +1984,9 @@ module spatz_vlsu
     // dummy, exactly as a short burst row does.
     if (mem_use_port0_burst && mem_req_lvalid[0] && !burst_send[0] && spatz_mem_req_ready[0])
       for (int p = 1; p < NrMemPorts; p++) begin
-        rob_req_id[p]    = 1'b1;
-        rob_req_dummy[p] = 1'b1;
+        rob_req_id[p]     = 1'b1;
+        rob_req_dummy[p]  = 1'b1;
+        rob_alloc_site[p] = 3'd6;
       end
 
   end
@@ -2421,6 +2436,21 @@ module spatz_vlsu
   // taking a dummy, and a one-word word-path remainder gives the other lanes a dummy too.
   // The non-burst paths (indexed, strided, stores) do NOT yet pad, so this is the tripwire
   // for that: it fails loudly instead of steering beats into the wrong buffer.
+`ifndef TARGET_SYNTHESIS
+`ifdef SPATZ_ROB_ALLOC_TRACE
+  // pragma translate_off
+  always_ff @(posedge clk_i) begin
+    if (rst_ni && (|rob_req_id))
+      $display("[ROBALLOC] %m t=%0t site=%0d,%0d,%0d,%0d req=%04b dmy=%04b id=%0d,%0d,%0d,%0d full=%04b empty=%04b idvld=%04b burst=%0b",
+               $time, rob_alloc_site[0], rob_alloc_site[1], rob_alloc_site[2], rob_alloc_site[3],
+               rob_req_id, rob_req_dummy,
+               rob_id[0], rob_id[1], rob_id[2], rob_id[3],
+               rob_full, rob_empty, rob_id_valid, mem_use_port0_burst);
+  end
+  // pragma translate_on
+`endif
+`endif
+
   // ANTECEDENT COVERS BOTH ALLOCATORS. It used to be (|burst_alloc_fire) alone -- the
   // per-cycle walk -- so with SPATZ_VLSU_BLOCK_ALLOC=1, which is the shipped default, the
   // whole guard was silent: the block path allocates through burst_block_fire and never
