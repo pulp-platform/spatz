@@ -15,5 +15,6 @@ include(SnitchUtilities)
 
 enable_testing()
 add_subdirectory(${SNITCH_SOFTWARE_DIR}/snRuntime snRuntime)
-add_subdirectory(${SNITCH_SOFTWARE_DIR}/riscvTests riscvTests)
+#add_subdirectory(${SNITCH_SOFTWARE_DIR}/riscvTests riscvTests)
+add_subdirectory(/data2/riccardo.giunti/spatz/working_dir/spatz_vpu/sw/riscvTests riscvTests)
 add_subdirectory(${SNITCH_SOFTWARE_DIR}/spatzBenchmarks spatzBenchmarks)
