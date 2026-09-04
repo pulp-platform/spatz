@@ -7,8 +7,8 @@
 {
     kernel: "RS_SPMM"
     M: 64
-    K: 512
-    N: 16
+    K: 256
+    N: 64
     nz_rows: 16
     seed: 42
 }

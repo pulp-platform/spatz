@@ -73,7 +73,7 @@ int main() {
 #endif
 
 #if USE_CACHE == 1
-  uint32_t spm_size = 16;
+  uint32_t spm_size = 8;
 #else
   uint32_t spm_size = 120;
 #endif
@@ -99,6 +99,7 @@ int main() {
   if (cid == 0) rs_spmm_setup_error = 0;
 
 #if USE_CACHE == 1
+  // const uint32_t align_word = place_holder;
   // Cache mode: distribute nz_rows across cores.
   const uint32_t nz_start =
       (cid < num_cores_cache)
@@ -108,6 +109,9 @@ int main() {
       (cid < num_cores_cache)
           ? (rs_spmm_l.nz_rows * (cid + 1)) / num_cores_cache
           : 0;
+  if (cid == 0) {
+    printf("Init Addr:%p\n", rs_spmm_dense_a_dram);
+  }
 #else
   // SPM mode: compute tile sizing for double-buffered A rows.
   const size_t resident_bytes =
@@ -179,6 +183,7 @@ int main() {
 #if USE_CACHE == 1
   // Warm-up: touch first non-zero row's A and B data.
   if (cid == 0 && rs_spmm_l.nz_rows > 0) {
+    // printf("Align with cacheline %p\n", align_word);
     const uint32_t first_row = rs_spmm_nz_row_idx_dram[0];
     volatile double warm =
         rs_spmm_dense_a_dram[(size_t)first_row * rs_spmm_l.K] +

@@ -63,10 +63,18 @@ int main() {
   const unsigned int num_fpu = sizeof(T)/2;
 
   if (cid == 0) {
-    // Init the cache
+#if HPDCACHE == 1
+    // l1d_spm_config()'s SPM-size-commit tail crashes QuestaSim (vsim-191)
+    // for some binary layouts on HPDcache builds (see spmv/main.c,
+    // md/main.c for the same fix/root-cause). HPDcache has its own native
+    // ispm mechanism and doesn't need InSitu's spm_size CSR trick anyway.
+    (void)spm_size;
+#else
     l1d_spm_config(spm_size);
+#endif
   }
 
+  // const int measure_iter = 1;
   #if MEAS_1ITER == 1
   const int measure_iter = 1;
   #else

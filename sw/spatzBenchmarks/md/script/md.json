@@ -2,12 +2,14 @@
 // Solderpad Hardware License, Version 0.51, see LICENSE for details.
 // SPDX-License-Identifier: SHL-0.51
 
-// Parameters for row-sparse SpMV data generation.
+// Parameters for MD-LJ (non-bonded, non-Newton) data generation.
 
 {
-    kernel: "RS_SPMV"
-    M: 128
-    K: 512
-    nz_rows: 16
+    kernel: "MD_LJ"
+    M: 64
+    prec: 64
     seed: 42
+    box: 20.0
+    min_per_row: 16
+    max_per_row: 16
 }

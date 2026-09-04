@@ -89,6 +89,11 @@ def emit_gemv_layer(name="gemv", **kwargs):
             + array_to_cstr(result)
             + ";\n"
         )
+        layer_str += (
+            f'static {dtype} {name}_result_golden[{m}] __attribute__((section(".data"))) = '
+            + array_to_cstr(result)
+            + ";\n"
+        )
     else:
         layer_str += (
             f"static {dtype} {name}_A_dram[{m}*{n}] = "
@@ -138,8 +143,6 @@ def rand_data_generator(shape, prec, alt=False):
 
 def gemv(a, b):
     print(a.shape , b.shape)
-    if a.dtype == torch.float16:
-        return torch.matmul(a.float(), b.float()).to(a.dtype)
     return torch.matmul(a, b)
 
 

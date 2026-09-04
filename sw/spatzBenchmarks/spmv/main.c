@@ -35,24 +35,24 @@ enum {
   SPMV_K = (uint32_t)(sizeof(spmv_col_idx_dram) / sizeof(spmv_col_idx_dram[0])),
 };
 
-// SPM footprint: row_ptr(M+1)*4 + col_idx(K)*4 + x_off(K)*4 + val(K)*8
-//              + x(N)*8 + result(M)*8 + alignment padding (6 allocs * 7B)
-#define SPMV_SPM_FOOTPRINT \
-  (((SPMV_M) + 1) * 4 + (SPMV_K) * 4 + (SPMV_K) * 4 + \
-   (SPMV_K) * sizeof(T) + (SPMV_N) * sizeof(T) + (SPMV_M) * sizeof(T) + 42)
-#define SPMV_SPM_CAPACITY (120 * 1024)
-
-#if USE_CACHE == 0
-_Static_assert(SPMV_SPM_FOOTPRINT <= SPMV_SPM_CAPACITY,
-               "SPM mode: arrays exceed L1 SPM capacity (120 KiB)");
-#endif
-
 static T *row_val;
 static T *x_vec;
 static T *result;
 static uint32_t *row_ptr;
 static uint32_t *col_idx;
 static uint32_t *x_off;
+
+// SPM mode only: when the full col_idx/val arrays don't fit in the SPM
+// budget, stream them in row-by-row via DMA instead (low efficiency is
+// acceptable -- this exists purely to get a correct SPM comparison point
+// for working sets that exceed L1 capacity, unlike the cache which handles
+// this transparently). Chunk buffers are sized for the worst case (an
+// entire row, up to N nonzeros) and split one slice per core.
+#define SPMV_SPM_BUDGET_BYTES (96 * 1024)
+static int spmv_stream_nnz;
+static uint32_t *stream_col_base;
+static uint32_t *stream_off_base;
+static T *stream_val_base;
 
 // In cache mode we keep temporary arrays in .data (L2-backed, cacheable).
 static uint32_t x_off_cache[SPMV_K] __attribute__((section(".data"), aligned(8)));
@@ -94,7 +94,16 @@ int main() {
   const uint32_t num_fpu = 4;
 
   if (cid == 0) {
+#if HPDCACHE == 1
+    // l1d_init()'s SPM-size-commit tail (l1d_spm_config's cfg_size/commit
+    // peripheral writes via cluster_mem.end + OFFSET) crashes QuestaSim
+    // (vsim-191) specifically for this binary's layout. HPDcache has its
+    // own native ispm/cache-split mechanism and doesn't need InSitu's
+    // spm_size CSR trick, so just skip the call for HPDcache builds.
+    (void)spm_size;
+#else
     l1d_init(spm_size);
+#endif
   }
   snrt_cluster_hw_barrier();
 
@@ -104,10 +113,9 @@ int main() {
   volatile int measure_iter = 2;
 #endif
 
-  volatile unsigned int timer = (unsigned int)-1;
-  volatile unsigned int timer_best = (unsigned int)-1;
-  volatile unsigned int timer_1iter = (unsigned int)-1;
-  volatile unsigned int timer_dma = 0;
+  unsigned int timer = (unsigned int)-1;
+  unsigned int timer_best = (unsigned int)-1;
+  unsigned int timer_1iter = (unsigned int)-1;
   int ret = 0;
 
   const uint32_t row_start = (cid < num_cores) ? (spmv_l.M * cid) / num_cores : 0;
@@ -128,21 +136,37 @@ int main() {
 #else
   if (cid == 0) {
     row_ptr = (uint32_t *)l1alloc_aligned((spmv_l.M + 1) * sizeof(uint32_t), 8);
-    col_idx = (uint32_t *)l1alloc_aligned(spmv_l.K * sizeof(uint32_t), 8);
-    x_off = (uint32_t *)l1alloc_aligned(spmv_l.K * sizeof(uint32_t), 8);
-    row_val = (T *)l1alloc_aligned(spmv_l.K * sizeof(T), 8);
     x_vec = (T *)l1alloc_aligned(spmv_l.N * sizeof(T), 8);
     result = (T *)l1alloc_aligned(spmv_l.M * sizeof(T), 8);
 
-    timer_dma = benchmark_get_cycle();
     snrt_dma_start_1d(row_ptr, spmv_row_ptr_dram,
                       (spmv_l.M + 1) * sizeof(uint32_t));
-    snrt_dma_start_1d(col_idx, spmv_col_idx_dram, spmv_l.K * sizeof(uint32_t));
-    snrt_dma_start_1d(row_val, spmv_val_dram, spmv_l.K * sizeof(T));
     snrt_dma_start_1d(x_vec, spmv_x_dram, spmv_l.N * sizeof(T));
     snrt_dma_wait_all();
-    timer_dma = benchmark_get_cycle() - timer_dma;
-    build_offsets(x_off, col_idx, spmv_l.K);
+
+    const size_t nnz_bytes =
+        (size_t)spmv_l.K * (sizeof(uint32_t) + sizeof(uint32_t) + sizeof(T));
+    spmv_stream_nnz = (nnz_bytes > SPMV_SPM_BUDGET_BYTES);
+
+    if (!spmv_stream_nnz) {
+      col_idx = (uint32_t *)l1alloc_aligned(spmv_l.K * sizeof(uint32_t), 8);
+      x_off = (uint32_t *)l1alloc_aligned(spmv_l.K * sizeof(uint32_t), 8);
+      row_val = (T *)l1alloc_aligned(spmv_l.K * sizeof(T), 8);
+
+      snrt_dma_start_1d(col_idx, spmv_col_idx_dram, spmv_l.K * sizeof(uint32_t));
+      snrt_dma_start_1d(row_val, spmv_val_dram, spmv_l.K * sizeof(T));
+      snrt_dma_wait_all();
+      build_offsets(x_off, col_idx, spmv_l.K);
+    } else {
+      // Per-row streaming chunk buffers, sized for the worst case (a full
+      // row, up to N nonzeros). Only core 0 has the iDMA front-end wired --
+      // other harts trap with an illegal instruction on the dmsrc/dmdst/
+      // dmcpyi opcodes -- so streaming runs single-core (row_start/row_end
+      // split is bypassed below); low efficiency is acceptable here.
+      stream_col_base = (uint32_t *)l1alloc_aligned(spmv_l.N * sizeof(uint32_t), 8);
+      stream_off_base = (uint32_t *)l1alloc_aligned(spmv_l.N * sizeof(uint32_t), 8);
+      stream_val_base = (T *)l1alloc_aligned(spmv_l.N * sizeof(T), 8);
+    }
   }
 #endif
 
@@ -163,12 +187,33 @@ int main() {
   for (int iter = 0; iter < measure_iter; ++iter) {
     if (cid == 0) {
       start_kernel();
-      // Time the kernel with core 0's mcycle CSR. This is a software-side
-      // measurement, not the hardware Spatz cycle register.
       timer = benchmark_get_cycle();
     }
 
+#if USE_CACHE == 1
     spmv_v64b(row_ptr, x_off, row_val, x_vec, result, row_start, row_end);
+#else
+    if (!spmv_stream_nnz) {
+      spmv_v64b(row_ptr, x_off, row_val, x_vec, result, row_start, row_end);
+    } else if (cid == 0) {
+      // Single-core streaming: only core 0 can issue DMA.
+      for (uint32_t row = 0; row < spmv_l.M; ++row) {
+        uint32_t start = row_ptr[row];
+        uint32_t end = row_ptr[row + 1];
+        uint32_t nnz = end - start;
+        if (nnz > 0) {
+          snrt_dma_start_1d(stream_val_base, spmv_val_dram + start, nnz * sizeof(T));
+          snrt_dma_start_1d(stream_col_base, spmv_col_idx_dram + start,
+                            nnz * sizeof(uint32_t));
+          snrt_dma_wait_all();
+          build_offsets(stream_off_base, stream_col_base, nnz);
+        }
+        uint32_t local_row_ptr[2] = {0, nnz};
+        spmv_v64b(local_row_ptr, stream_off_base, stream_val_base, x_vec,
+                  &result[row], 0, 1);
+      }
+    }
+#endif
 
     snrt_cluster_hw_barrier();
 
@@ -177,14 +222,15 @@ int main() {
       timer = benchmark_get_cycle() - timer;
       if (iter == 0) {
         timer_1iter = timer;
+      } else {
+        timer_best = (timer_best > timer) ? timer : timer_best;
       }
-      timer_best = (timer_best > timer) ? timer : timer_best;
-      // printf("Iteration %d: timer %u cycles, timer_1iter %u cycles, timer_best %u cycles\n", iter, timer, timer_1iter,
-      //        timer_best);
     }
 
     snrt_cluster_hw_barrier();
   }
+
+  if (measure_iter == 1) timer_best = timer_1iter;
 
   if (cid == 0) {
     double checksum = 0.0;
@@ -194,9 +240,13 @@ int main() {
       checksum += result[i];
       if (fp_check(&result[i], &spmv_result[i])) {
         ++errors;
-        printf("Error: row %u result=%f golden=%f\n", i, result[i],
-               spmv_result[i]);
       }
+    }
+
+    // Printf over UART is slow in RTL sim -- only print a summary count,
+    // not one line per mismatch (can be hundreds at larger sizes).
+    if (errors) {
+      printf("Errors: %d / %u rows mismatched\n", errors, spmv_l.M);
     }
 
     if (abs_diff(checksum, spmv_checksum) > 0.001) {
@@ -215,13 +265,8 @@ int main() {
              spmv_l.K);
       printf("LMUL setting: m%d\n", SPMV_LMUL);
       printf("Active cores: %u / %u\n", num_cores, num_cores_hw);
-      printf("DMA transfer took %u cycles.\n", timer_dma);
       printf("The first iter takes %u cycles.\n", timer_1iter);
       printf("The best execution took %u cycles.\n", timer_best);
-      if (timer_dma > 0) {
-        printf("Total (DMA + best kernel) took %u cycles.\n",
-               timer_dma + timer_best);
-      }
       printf("Checksum: %f\n", checksum);
       printf("The performance is %lu OP/1000cycle (%lu%%o utilization).\n",
              performance, utilization);

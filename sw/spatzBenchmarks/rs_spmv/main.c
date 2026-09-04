@@ -73,7 +73,7 @@ int main() {
           : num_cores_hw;
 
 #if USE_CACHE == 1
-  uint32_t spm_size = 16;
+  uint32_t spm_size = 8;
 #else
   uint32_t spm_size = 120;
 #endif
