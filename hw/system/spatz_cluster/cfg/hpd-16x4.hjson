@@ -2,12 +2,19 @@
 // Licensed under the Apache License, Version 2.0, see LICENSE for details.
 // SPDX-License-Identifier: Apache-2.0
 
-// Cluster configuration for a simple system.
+// Cluster configuration for a simple system, using HPDcache as the L1 data
+// cache controller instead of InSitu-Cache. Identical to hpd.hjson apart
+// from the MSHR sweep knobs (hpd_mshr_sets=16, hpd_mshr_ways=4 -> 64
+// entries total) -- one point in the hpd-<sets>x<ways> MSHR sweep, see
+// hpd-benchmark.sh.
 {
     cluster: {
         mempool: 0,
         boot_addr: 4096,               // 0x1000
-        cluster_base_addr: 1358954496, // 0x51000000
+        // Relocated into DRAM -- see hpd.hjson for the full explanation
+        // (HPD is cache-only, spatz_addr_mapper bypassed, stack/heap must
+        // land inside DRAM's mapped range to avoid an OOB-write crash).
+        cluster_base_addr: 4278190080, // 0xFF000000
         cluster_base_offset: 0,        // 0x0
         cluster_base_hartid: 16,
         addr_width: 32,
@@ -31,6 +38,14 @@
         n_fpu: 4,
         n_ipu: 1,
         spatz_fpu: true,
+        // L1 data cache controller: use OpenHW CV-HPDcache instead of the
+        // default InSitu-Cache.
+        l1_cache: "hpdcache",
+        // HPDcache MSHR sizing sweep knobs (total capacity = sets * ways,
+        // must each be a power of 2). Edit here per sweep run instead of
+        // hpd_spatz_cache_ctrl.sv directly.
+        hpd_mshr_sets: 16,
+        hpd_mshr_ways: 4,
         // Timing parameters
         timing: {
             lat_comp_fp32: 2,

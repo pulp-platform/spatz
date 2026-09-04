@@ -45,7 +45,20 @@ package ${cfg['pkg_name']};
   localparam int unsigned SpatzAxiIdTBWidth = SpatzAxiIdOutWidth + 1;
 
   // FIXED AxiIdOutWidth
-  localparam int unsigned IwcAxiIdOutWidth = 6;
+  // Widened 6->9 (spatz_cluster_hpd variant): the wide/DMA crossbar's
+  // per-slave-port ID width is WideIdWidthIn = IwcAxiIdOutWidth -
+  // $clog2(NrWideMasters). HPDcache's L1 DCache master encodes its MSHR
+  // entry identity directly into the memory-side request ID
+  // (mem_req_id = {way, set}, HpdMshrWays=4 x HpdMshrSets=32 -> 7 bits) so
+  // that a refill response can be routed back to the correct MSHR slot.
+  // At width 6 (WideIdWidthIn=4) that ID silently truncates in
+  // hpdcache_mem_to_axi_read.sv's `axi_ar_o.id = req_i.mem_req_id`
+  // assignment, corrupting the ack's decoded {way,set} and pulling
+  // uninitialized (X) data out of a never-written MSHR slot. Widening to 9
+  // (WideIdWidthIn=7) gives an exact fit. Purely additive/backward
+  // compatible for the InSitu path's wide masters (more ID headroom, same
+  // semantics) -- confirmed this is the only consumer of this constant.
+  localparam int unsigned IwcAxiIdOutWidth = 9;
 
   // AXI User Width
   localparam int unsigned SpatzAxiUserWidth = ${cfg['user_width']};
@@ -534,8 +547,17 @@ module ${cfg['name']}_wrapper
 % endif
    );
 
-  // Spatz cluster under test.
+  // Spatz cluster under test. spatz_cluster and spatz_cluster_hpd share an
+  // identical parameter/port list (only the internal L1 controller differs
+  // -- InSitu-Cache vs. HPDcache), so only the module name is conditional.
+  // Selecting 'hpdcache' also requires building with -t hpdcache (see
+  // util/Makefrag), which is what makes the spatz_cluster_hpd module
+  // available in the first place.
+% if cfg['l1_cache'] == 'hpdcache':
+  spatz_cluster_hpd #(
+% else:
   spatz_cluster #(
+% endif
     .AxiAddrWidth (AxiAddrWidth),
     .AxiDataWidth (AxiDataWidth),
     .AxiIdWidthIn (AxiInIdWidth),
@@ -572,7 +594,13 @@ module ${cfg['name']}_wrapper
     .RegisterExt (${int(cfg['timing']['register_ext'])}),
     .XbarLatency (axi_pkg::${cfg['timing']['xbar_latency']}),
     .MaxMstTrans (${cfg['trans']}),
+% if cfg['l1_cache'] == 'hpdcache':
+    .MaxSlvTrans (${cfg['trans']}),
+    .HpdMshrSets (${cfg['hpd_mshr_sets']}),
+    .HpdMshrWays (${cfg['hpd_mshr_ways']})
+% else:
     .MaxSlvTrans (${cfg['trans']})
+% endif
   ) i_cluster (
     .clk_i,
     .rst_ni,

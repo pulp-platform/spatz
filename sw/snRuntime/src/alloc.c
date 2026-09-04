@@ -10,6 +10,14 @@
 
 #define MIN_CHUNK_SIZE 8
 
+#ifdef HPDCACHE
+// Must cover a full HPDcache cacheline (L1LineWidth=512b in
+// spatz_cluster_hpd.sv), not just MIN_CHUNK_SIZE -- the coalescer merges
+// same-cacheline accesses, so a smaller reservation risks the magic trigger
+// word sharing a line with real allocated data and misfiring on it.
+#define HPD_CACHE_INIT_RESERVED_BYTES 64
+#endif
+
 /**
  * @brief Allocate a chunk of memory in the L1 memory
  * @details This currently does not support free-ing of memory
@@ -73,8 +81,17 @@ void snrt_alloc_init(struct snrt_team_root *team, uint32_t l3off) {
     // Allocator in L1 TCDM memory
     team->allocator.l1.base =
         ALIGN_UP((uint32_t)team->cluster_mem.start, MIN_CHUNK_SIZE);
+#ifdef HPDCACHE
+    // Reserve the first full cacheline at cluster_mem.start for the
+    // HPDcache magic-address CMO trigger (see l1cache.c's
+    // l1d_init/l1d_flush) -- never handed out to snrt_l1alloc callers.
+    team->allocator.l1.base += HPD_CACHE_INIT_RESERVED_BYTES;
+#endif
     team->allocator.l1.size =
         (uint32_t)(team->cluster_mem.end - team->cluster_mem.start);
+#ifdef HPDCACHE
+    team->allocator.l1.size -= HPD_CACHE_INIT_RESERVED_BYTES;
+#endif
     team->allocator.l1.next = team->allocator.l1.base;
     // Allocator in L3 shared memory
     extern uint32_t _edram;

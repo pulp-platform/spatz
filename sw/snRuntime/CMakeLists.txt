@@ -90,6 +90,14 @@ if(PRINT_CHECK)
   add_compile_definitions(PRINT_UART=${PRINT_UART})
 endif()
 
+# HPDcache L1 variant: l1cache.c/alloc.c need this to select the
+# magic-address CMO trigger instead of InSitu's peripheral-register path.
+# Auto-set from the cfg's l1_cache field (see util/Makefrag), not something
+# a user should set directly.
+if(HPDCACHE)
+  add_compile_definitions(HPDCACHE)
+endif()
+
 set(standalone_snitch_sources
     src/platforms/standalone/start_snitch.S
     src/platforms/standalone/putchar.c

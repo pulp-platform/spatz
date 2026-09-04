@@ -165,6 +165,25 @@
             "description": "Activate floating point support in Spatz",
             "default": false
         },
+        "l1_cache": {
+            "type": "string",
+            "description": "L1 data cache controller for the Spatzennest cache/SPM hybrid. 'insitu' selects InSitu-Cache (flamingo_spatz_cache_ctrl); 'hpdcache' selects OpenHW CV-HPDcache (hpd_spatz_cache_ctrl). Selecting 'hpdcache' also requires building with the Bender 'hpdcache' target (see util/Makefrag).",
+            "enum": [
+                "insitu",
+                "hpdcache"
+            ],
+            "default": "insitu"
+        },
+        "hpd_mshr_sets": {
+            "type": "number",
+            "description": "Number of MSHR sets for the 'hpdcache' l1_cache variant (ignored otherwise). Total MSHR capacity is hpd_mshr_sets * hpd_mshr_ways. Must be a power of 2. See hpd_spatz_cache_ctrl.sv's HpdMshrSets parameter for sizing tradeoffs (mshrUseRegbank threshold, AXI ID width fit against spatz_cluster_wrapper.sv.tpl's IwcAxiIdOutWidth).",
+            "default": 4
+        },
+        "hpd_mshr_ways": {
+            "type": "number",
+            "description": "Number of MSHR ways for the 'hpdcache' l1_cache variant (ignored otherwise). Must be a power of 2. See hpd_mshr_sets.",
+            "default": 4
+        },
         "timing": {
             "type": "object",
             "title": "Timing and Latency Tuning Parameter",

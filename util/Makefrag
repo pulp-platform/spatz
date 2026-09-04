@@ -33,6 +33,19 @@ SED_SRCS  := sed -e ${MATCH_END} -e ${MATCH_BGN}
 TB_SRCS   := $(wildcard ${ROOT}/hw/ip/snitch_test/*.sv)
 TB_DIR    := ${ROOT}/hw/ip/snitch_test/src
 
+# Auto-select the "hpdcache" Bender target based on the chosen cluster cfg's
+# l1_cache field (default "insitu"). No-op if no cluster cfg is in scope
+# (e.g. Makefrag included outside hw/system/spatz_cluster/).
+ifneq ($(and $(SPATZ_CLUSTER_CFG),$(wildcard $(SPATZ_CLUSTER_CFG))),)
+L1_CACHE := $(shell ${PYTHON} -c "import hjson; \
+print(hjson.load(open('${SPATZ_CLUSTER_CFG}')).get('cluster', {}).get('l1_cache', 'insitu'))" \
+2>/dev/null)
+ifeq (${L1_CACHE},hpdcache)
+VSIM_BENDER += -t hpdcache
+VLT_BENDER  += -t hpdcache
+endif
+endif
+
 VSIM_BENDER   += -t test -t rtl -t simulation -t spatz -t spatz_test -t snitch_test
 VSIM_SOURCES  := $(shell ${BENDER} script flist ${VSIM_BENDER} | ${SED_SRCS})
 VSIM_BUILDDIR := work-vsim

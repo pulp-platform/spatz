@@ -41,7 +41,17 @@ VSIM_HOME   = /usr/pack/${QUESTA_VER}/questasim
 
 VSIM_FLAGS += -t 1ps
 VSIM_FLAGS += -suppress vsim-3999
-VSIM_FLAGS += -do "log -r /*; source ${SPATZ_CLUSTER_DIR}/script/vsim/wave.tcl; run -a"
+# L1_CACHE is set by Makefrag from the active cfg's l1_cache field. wave.tcl
+# points its L1D group at InSitu-Cache's submodule hierarchy
+# (i_insitu_cache_tcdm_wrapper/...), which doesn't exist for the hpdcache
+# variant -- wave_hpd.tcl points the same group at HPDcache's own hierarchy
+# instead (ctrl/miss_handler/mshr/wbuf/rtab/etc).
+ifeq (${L1_CACHE},hpdcache)
+VSIM_WAVE_TCL := ${SPATZ_CLUSTER_DIR}/script/vsim/wave_hpd.tcl
+else
+VSIM_WAVE_TCL := ${SPATZ_CLUSTER_DIR}/script/vsim/wave.tcl
+endif
+VSIM_FLAGS += -do "log -r /*; source ${VSIM_WAVE_TCL}; run -a"
 
 VLOG_FLAGS += -svinputport=compat
 VLOG_FLAGS += -override_timescale 1ns/1ps
@@ -211,7 +221,7 @@ clean.vlt:
 # Modelsim #
 ############
 
-${VSIM_BUILDDIR}/compile.vsim.tcl: test/bootrom.bin ${TB_DIR}/rtl_lib.cc ${TB_DIR}/common_lib.cc test/bootdata.cc test/bootrom.bin
+${VSIM_BUILDDIR}/compile.vsim.tcl: test/bootrom.bin $(CURDIR)/src/generated/bootrom.sv ${TB_DIR}/rtl_lib.cc ${TB_DIR}/common_lib.cc test/bootdata.cc test/bootrom.bin
 	vlib $(dir $@)
 	${BENDER} script vsim ${VSIM_BENDER} ${DEFS} --vlog-arg="${VLOG_FLAGS} -work $(dir $@) " > $@
 	echo '${VLOG} -work $(dir $@) ${TB_DIR}/rtl_lib.cc ${TB_DIR}/common_lib.cc test/bootdata.cc -ccflags "-std=c++17 -I${MKFILE_DIR}/test -I${MKFILE_DIR}/work/include -I${TB_DIR}"  -cpppath "${CXX}"' >> $@
@@ -230,7 +240,7 @@ clean.vsim:
 #######
 # @IIS: vcs-2020.12 make bin/spatz_cluster.vcs
 ## Build compilation script and compile all sources for VCS simulation
-bin/spatz_cluster.vcs: test/bootrom.bin work-vcs/compile.sh work/lib/libfesvr_vcs.a ${TB_DIR}/common_lib.cc test/bootdata.cc test/bootrom.bin test/uartdpi/uartdpi.c
+bin/spatz_cluster.vcs: test/bootrom.bin $(CURDIR)/src/generated/bootrom.sv work-vcs/compile.sh work/lib/libfesvr_vcs.a ${TB_DIR}/common_lib.cc test/bootdata.cc test/bootrom.bin test/uartdpi/uartdpi.c
 	mkdir -p bin
 	vcs -Mlib=work-vcs -Mdir=work-vcs -debug_access+all -fgp -kdb +vcs+fsdbon -o bin/spatz_cluster.vcs -j4 -cc $(CC) -cpp $(CXX) \
 		-assert disable_cover -override_timescale=1ns/1ps -full64 tb_bin ${TB_DIR}/rtl_lib.cc ${TB_DIR}/common_lib.cc test/bootdata.cc test/uartdpi/uartdpi.c \
@@ -258,8 +268,16 @@ lint/tmp/files:
 # SW #
 ######
 
-# Use SPM by default
+# Use SPM by default, except for the "hpdcache" L1 variant, which has no SPM
+# (see spatz_cluster_hpd.sv) -- l1_cache is auto-detected from the cfg by
+# util/Makefrag, included above.
+ifeq (${L1_CACHE},hpdcache)
+USE_CACHE  ?= 1
+HPDCACHE   ?= 1
+else
 USE_CACHE  ?= 0
+HPDCACHE   ?= 0
+endif
 MEAS_1ITER ?= 0
 PRINT_UART ?= 0
 
@@ -267,7 +285,7 @@ PRINT_UART ?= 0
 sw: clean.sw
 	mkdir -p sw/build
 	cd sw/build && ${CMAKE} \
-	-DUSE_CACHE=${USE_CACHE} -DMEAS_1ITER=${MEAS_1ITER} -DPRINT_CHECK=${ENABLE_PRINT} -DPRINT_UART=${PRINT_UART} -DSNRT_LINK=${SNRT_LINK} -DENABLE_FLAMINGO_TESTS=${ENABLE_FLA_TESTS} -DFLA_ROOT=${FLA_ROOT} \
+	-DUSE_CACHE=${USE_CACHE} -DHPDCACHE=${HPDCACHE} -DMEAS_1ITER=${MEAS_1ITER} -DPRINT_CHECK=${ENABLE_PRINT} -DPRINT_UART=${PRINT_UART} -DSNRT_LINK=${SNRT_LINK} -DENABLE_FLAMINGO_TESTS=${ENABLE_FLA_TESTS} -DFLA_ROOT=${FLA_ROOT} \
 	-DLLVM_PATH=${LLVM_INSTALL_DIR} -DGCC_PATH=${GCC_INSTALL_DIR} -DPYTHON=${PYTHON} -DBUILD_TESTS=ON .. && make
 
 # VSIM
@@ -275,7 +293,7 @@ sw: clean.sw
 sw.vsim: clean.sw bin/spatz_cluster.vsim
 	mkdir -p sw/build
 	cd sw/build && ${CMAKE} \
-	-DUSE_CACHE=${USE_CACHE} -DMEAS_1ITER=${MEAS_1ITER} -DPRINT_CHECK=${ENABLE_PRINT} -DPRINT_UART=${PRINT_UART} -DSNRT_LINK=${SNRT_LINK} -DENABLE_FLAMINGO_TESTS=${ENABLE_FLA_TESTS} -DFLA_ROOT=${FLA_ROOT} \
+	-DUSE_CACHE=${USE_CACHE} -DHPDCACHE=${HPDCACHE} -DMEAS_1ITER=${MEAS_1ITER} -DPRINT_CHECK=${ENABLE_PRINT} -DPRINT_UART=${PRINT_UART} -DSNRT_LINK=${SNRT_LINK} -DENABLE_FLAMINGO_TESTS=${ENABLE_FLA_TESTS} -DFLA_ROOT=${FLA_ROOT} \
 	-DLLVM_PATH=${LLVM_INSTALL_DIR} -DGCC_PATH=${GCC_INSTALL_DIR} -DPYTHON=${PYTHON} -DSNITCH_SIMULATOR=../../../../../hw/system/spatz_cluster/bin/spatz_cluster.vsim -DBUILD_TESTS=ON .. && make -j8
 
 ## Build SW and run all tests with Questasim simulator
@@ -287,7 +305,7 @@ sw.test.vsim: sw.vsim
 sw.vcs: clean.sw bin/spatz_cluster.vcs
 	mkdir -p sw/build
 	cd sw/build && ${CMAKE} \
-	-DUSE_CACHE=${USE_CACHE} -DMEAS_1ITER=${MEAS_1ITER} -DPRINT_CHECK=${ENABLE_PRINT} -DPRINT_UART=${PRINT_UART} -DSNRT_LINK=${SNRT_LINK} -DENABLE_FLAMINGO_TESTS=${ENABLE_FLA_TESTS} -DFLA_ROOT=${FLA_ROOT} \
+	-DUSE_CACHE=${USE_CACHE} -DHPDCACHE=${HPDCACHE} -DMEAS_1ITER=${MEAS_1ITER} -DPRINT_CHECK=${ENABLE_PRINT} -DPRINT_UART=${PRINT_UART} -DSNRT_LINK=${SNRT_LINK} -DENABLE_FLAMINGO_TESTS=${ENABLE_FLA_TESTS} -DFLA_ROOT=${FLA_ROOT} \
 	-DLLVM_PATH=${LLVM_INSTALL_DIR} -DGCC_PATH=${GCC_INSTALL_DIR} -DPYTHON=${PYTHON} -DSNITCH_SIMULATOR=../../../../../hw/system/spatz_cluster/bin/spatz_cluster.vcs -DBUILD_TESTS=ON .. && make -j8
 
 ## Build SW and run all tests with VCS simulator
@@ -299,7 +317,7 @@ sw.test.vcs: sw.vcs
 sw.vlt: clean.sw bin/spatz_cluster.vlt
 	mkdir -p sw/build
 	cd sw/build && ${CMAKE} \
-	-DUSE_CACHE=${USE_CACHE} -DMEAS_1ITER=${MEAS_1ITER} -DPRINT_CHECK=${ENABLE_PRINT} -DPRINT_UART=${PRINT_UART} -DSNRT_LINK=${SNRT_LINK} -DENABLE_FLAMINGO_TESTS=${ENABLE_FLA_TESTS} -DFLA_ROOT=${FLA_ROOT} \
+	-DUSE_CACHE=${USE_CACHE} -DHPDCACHE=${HPDCACHE} -DMEAS_1ITER=${MEAS_1ITER} -DPRINT_CHECK=${ENABLE_PRINT} -DPRINT_UART=${PRINT_UART} -DSNRT_LINK=${SNRT_LINK} -DENABLE_FLAMINGO_TESTS=${ENABLE_FLA_TESTS} -DFLA_ROOT=${FLA_ROOT} \
 	-DLLVM_PATH=${LLVM_INSTALL_DIR} -DGCC_PATH=${GCC_INSTALL_DIR} -DPYTHON=${PYTHON} -DSNITCH_SIMULATOR=../../../../../hw/system/spatz_cluster/bin/spatz_cluster.vlt -DBUILD_TESTS=ON .. && make -j8
 
 ## Build SW and run all tests with Verilator simulator
