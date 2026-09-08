@@ -481,6 +481,29 @@ void TEST_CASE8(void) {
   }
 }
 
+// A test to verify mu policy
+void TEST_CASE9(void) {
+  unsigned int vl;
+  asm volatile("vsetvli %[vl], %[A], e16, m1, ta, mu\n"
+             : [vl] "+r"(vl)
+             : [A] "r"(16));
+  //               0.2434,  0.7285,  0.7241, -0.2678,  0.0027, -0.7114,  0.2622,
+  //               0.8701, -0.5786, -0.4229,  0.5981,  0.6968,  0.7217, -0.2842,
+  //               0.1328,  0.1659
+  VLOAD_16(v2, 0x33ca, 0x39d4, 0x39cb, 0xb449, 0x1975, 0xb9b1, 0x3432, 0x3af6,
+           0xb8a1, 0xb6c4, 0x38c9, 0x3993, 0x39c6, 0xb48c, 0x3040, 0x314f);
+  //               0.7319,  0.7285,  0.7593, -0.6606, -0.4758,  0.8530,  0.0453,
+  //               0.0987,  0.1777,  0.3047,  0.2330, -0.3467, -0.4153,  0.7080,
+  //               0.3142, -0.9492
+  VLOAD_16(v3, 0x39db, 0x39d4, 0x3a13, 0xb949, 0xb79d, 0x3ad3, 0x29cc, 0x2e51,
+           0x31b0, 0x34e0, 0x3375, 0xb58c, 0xb6a5, 0x39aa, 0x3507, 0xbb98);
+  VLOAD_8(v0, 0xAA, 0xAA);
+  VCLEAR_AT_ONE(v1);
+  asm volatile("vmfeq.vv v1, v2, v3, v0.t");
+  VSET(1, e16, m1);
+  VCMP_U16(24, v1, 0x5557);
+}
+
 int main(void) {
   INIT_CHECK();
   enable_vec();
@@ -497,6 +520,7 @@ int main(void) {
   TEST_CASE6();
   TEST_CASE7();
   TEST_CASE8();
+  TEST_CASE9();
 
   EXIT_CHECK();
 }
