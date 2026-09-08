@@ -885,7 +885,7 @@ void TEST_CASE2_32_vl4_m_last(void) {
 // Segment-2 for 8-bit, vl = 32 --> 64 bytes
 void TEST_CASE2_8_vl32(void) {
   VSET(32, e8, m1);
- 
+
   volatile uint8_t BUFFER_O8[] = {INIT, INIT, INIT, INIT, INIT, INIT, INIT, INIT,
                                  INIT, INIT, INIT, INIT, INIT, INIT, INIT, INIT,
                                  INIT, INIT, INIT, INIT, INIT, INIT, INIT, INIT,
@@ -894,7 +894,7 @@ void TEST_CASE2_8_vl32(void) {
                                  INIT, INIT, INIT, INIT, INIT, INIT, INIT, INIT,
                                  INIT, INIT, INIT, INIT, INIT, INIT, INIT, INIT,
                                  INIT, INIT, INIT, INIT, INIT, INIT, INIT, INIT};
- 
+
   volatile uint8_t INP1[] = {0x31, 0xda, 0x32, 0x6f, 0xb5, 0x1a, 0xe6, 0xc7,
                              0xc1, 0x73, 0x67, 0x1e, 0xd0, 0xab, 0xbb, 0x46,
                              0x74, 0x2b, 0xa7, 0xf6, 0x50, 0xc3, 0xab, 0xee,
@@ -907,7 +907,7 @@ void TEST_CASE2_8_vl32(void) {
   VCLEAR(v2);
   asm volatile("vlseg2e8.v v1, (%0)" ::"r"(INP1));
   asm volatile("vsseg2e8.v v1, (%0)" ::"r"(BUFFER_O8));
- 
+
   VVCMP_U8(37, BUFFER_O8, 0x31, 0xda, 0x32, 0x6f, 0xb5, 0x1a, 0xe6, 0xc7,
                           0xc1, 0x73, 0x67, 0x1e, 0xd0, 0xab, 0xbb, 0x46,
                           0x74, 0x2b, 0xa7, 0xf6, 0x50, 0xc3, 0xab, 0xee,
@@ -921,7 +921,7 @@ void TEST_CASE2_8_vl32(void) {
 // Segment-2 for 8-bit, vl = 32 --> 64 bytes, mask 0xC3A5F00F
 void TEST_CASE2_8_vl32_m(void) {
   VSET(32, e8, m1);
- 
+
   volatile uint8_t BUFFER_O8[] = {INIT, INIT, INIT, INIT, INIT, INIT, INIT, INIT,
                                  INIT, INIT, INIT, INIT, INIT, INIT, INIT, INIT,
                                  INIT, INIT, INIT, INIT, INIT, INIT, INIT, INIT,
@@ -930,7 +930,7 @@ void TEST_CASE2_8_vl32_m(void) {
                                  INIT, INIT, INIT, INIT, INIT, INIT, INIT, INIT,
                                  INIT, INIT, INIT, INIT, INIT, INIT, INIT, INIT,
                                  INIT, INIT, INIT, INIT, INIT, INIT, INIT, INIT};
- 
+
   volatile uint8_t INP1[] = {0x31, 0xda, 0x32, 0x6f, 0xb5, 0x1a, 0xe6, 0xc7,
                              0xc1, 0x73, 0x67, 0x1e, 0xd0, 0xab, 0xbb, 0x46,
                              0x74, 0x2b, 0xa7, 0xf6, 0x50, 0xc3, 0xab, 0xee,
@@ -947,7 +947,7 @@ void TEST_CASE2_8_vl32_m(void) {
   VCLEAR(v2);
   asm volatile("vlseg2e8.v v1, (%0)" ::"r"(INP1));
   asm volatile("vsseg2e8.v v1, (%0), v0.t" ::"r"(BUFFER_O8));
- 
+
   VVCMP_U8(38, BUFFER_O8, 0x31, 0xda, 0x32, 0x6f, 0xb5, 0x1a, 0xe6, 0xc7,
                           INIT, INIT, INIT, INIT, INIT, INIT, INIT, INIT,
                           INIT, INIT, INIT, INIT, INIT, INIT, INIT, INIT,
