@@ -226,9 +226,8 @@ module spatz_vlsu
   logic use_port0_burst_req;
   logic mem_use_port0_burst;
   logic commit_use_port0_burst;
-  // burst_tail_phase / switch_to_tail_phase are GONE. See the note at mem_use_port0_burst.
-  vlen_t burst_full_bytes_req;
-  logic burst_has_tail_req;
+  // burst_tail_phase / switch_to_tail_phase are GONE, and so are burst_full_bytes_req and
+  // burst_has_tail_req -- their last reader was dual_safe. See the note at mem_use_port0_burst.
   logic [NrMemPorts-1:0] mem_port_active;
   logic [N_FU-1:0]       commit_port_active;
   assign use_port0_burst_req =
@@ -271,9 +270,6 @@ module spatz_vlsu
   // The only thing that still stays on the word path is a ONE-WORD remainder: burst_mode_req
   // requires burst_len_eff > 1. The other lanes take a dummy for it so the buffers stay
   // aligned (see rob_req_dummy at the word-path arm).
-  assign burst_full_bytes_req    = (mem_spatz_req.vl >> BurstAlignBits) << BurstAlignBits;
-  assign burst_has_tail_req      = use_port0_burst_req &&
-                                   (burst_full_bytes_req != mem_spatz_req.vl);
   assign mem_use_port0_burst     = use_port0_burst_req;
   assign commit_use_port0_burst  = commit_insn_q.use_port0_burst;
   // TwinROB0 2-wide commit window gate (assigned after the commit counters are declared).
@@ -1003,12 +999,25 @@ module spatz_vlsu
     // <=> two instructions co-resident.
     assign dual_run  = mem_spatz_req_valid && commit_insn_valid &&
                        (commit_insn_q.id != mem_spatz_req.id);
-    // Shapes allowed to share ROB0/commit with the elder load (all head-derivable).
+    // Shapes allowed to share the buffers/commit with the elder load (all head-derivable).
+    //
+    // !burst_has_tail_req IS GONE. It excluded any load whose vl is not a whole multiple of
+    // a full burst, and it meant something when a tail was a SECOND PHASE of the
+    // instruction: switch_to_tail_phase re-based the counters and swapped the port mask
+    // mid-flight, so overlapping a younger load with that was genuinely unsafe. A tail is
+    // now just a shorter burst from the same allocator, on the same lanes, with the same
+    // accounting -- so the condition guarded nothing and only cost runahead on every loop
+    // whose trip count is not a multiple of the burst length, which is most of them.
+    //
+    // The one-word remainder still leaves the burst path (burst_mode_req needs
+    // burst_len_eff > 1) and gives lanes 1..N-1 a dummy, but dual_adv demands
+    // mem_req_all_issued, so the elder is done issuing -- remainder included -- before the
+    // younger advances.
     assign dual_safe = mem_spatz_req.op_mem.is_load && use_port0_burst_req &&
-                       !burst_has_tail_req && mem_is_vstart_zero &&
+                       mem_is_vstart_zero &&
                        (state_q == VLSU_RunningLoad) && commit_insn_q.is_load;
     // Block the request datapath while an UNSAFE younger instruction sits at the head
-    // (store-after-load epilogue, strided/indexed, tailed, vstart!=0): its requests would
+    // (store-after-load epilogue, strided/indexed, vstart!=0): its requests would
     // otherwise issue at A's addresses through the commit_insn_q.is_load gates.
     assign dual_blk  = dual_run && !dual_safe;
     // Hold a third LSU op out of the VLSU: the controller's 4-entry id pool does not
@@ -1026,7 +1035,7 @@ module spatz_vlsu
                        !commit_insn_push && !commit_insn_full &&
                        commit_insn_valid && (commit_insn_q.id == mem_spatz_req.id) &&
                        commit_insn_q.is_load && (state_q == VLSU_RunningLoad) &&
-                       use_port0_burst_req && !burst_has_tail_req &&
+                       use_port0_burst_req &&
                        mem_is_vstart_zero;
 
     // mem_pending blanket-clear is only legal when no OLDER instruction survives the
