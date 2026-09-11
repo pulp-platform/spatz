@@ -10,7 +10,7 @@
 include util/Makefrag
 
 # Bender version
-BENDER_VERSION = 0.32.1
+BENDER_VERSION = 0.31.0
 
 # Standard opcodes
 OPCODES := "rv_i" "rv64_i" "rv_m" "rv64_m" "rv_a" "rv_f" "rv_d" \
@@ -26,7 +26,7 @@ OPCODES += "unratified/rv_xdma" "unratified/rv_xrrpost" \
 # Default target
 all: bender toolchain update_opcodes
 
-# Target for IIS users
+# Target for IIS/Chips-IT users
 init: bender update_opcodes
 
 ###############
@@ -214,7 +214,7 @@ tc-llvm: sw/toolchain/llvm-project sw/toolchain/newlib
 
 tc-riscv-isa-sim: sw/toolchain/riscv-isa-sim sw/toolchain/dtc
 	mkdir -p $(SPIKE_INSTALL_DIR)
-	cd sw/toolchain/dtc/dtc-1.7.0 && make NO_PYTHON=1 install PREFIX=$(SPIKE_INSTALL_DIR)
+	cd sw/toolchain/dtc/dtc-1.7.0 && make install PREFIX=$(SPIKE_INSTALL_DIR) NO_PYTHON=1
 	cd sw/toolchain/riscv-isa-sim && rm -rf build && mkdir -p build && cd build && \
 	PATH=$(SPIKE_INSTALL_DIR)/bin:$(PATH) ../configure --prefix=$(SPIKE_INSTALL_DIR) && \
 	$(MAKE) MAKEINFO=true -j4 install
@@ -253,8 +253,10 @@ $(VERILATOR_INSTALL_DIR)/bin/verilator: sw/toolchain/verilator sw/toolchain/help
 #############
 #  Opcodes  #
 #############
+clean_opcodes:
+	rm -rf sw/toolochain/riscv-opcodes
 
-update_opcodes: sw/toolchain/riscv-opcodes sw/toolchain/riscv-opcodes/encoding.h hw/ip/snitch/src/riscv_instr.sv
+update_opcodes: clean_opcodes sw/toolchain/riscv-opcodes sw/toolchain/riscv-opcodes/encoding.h hw/ip/snitch/src/riscv_instr.sv
 hw/ip/snitch/src/riscv_instr.sv: sw/toolchain/riscv-opcodes
 	make -C sw/toolchain/riscv-opcodes inst.sverilog EXTENSIONS='$(OPCODES)'
 	mv sw/toolchain/riscv-opcodes/inst.sverilog $@

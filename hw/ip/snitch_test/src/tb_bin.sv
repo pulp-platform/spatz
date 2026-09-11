@@ -36,6 +36,13 @@ module tb_bin;
     end
   end
 
+  initial begin
+  `ifdef FSDB_DUMP
+    $fsdbDumpfile("inter.fsdb");
+    $fsdbDumpvars(0, tb_bin, "+all");
+  `endif
+  end
+
   // Start `fesvr`.
   initial begin
     automatic int exit_code;
