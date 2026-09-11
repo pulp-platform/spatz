@@ -86,7 +86,7 @@ void TEST_CASE2(void) {
   VCLEAR(v1);
   asm volatile("vmfeq.vv v1, v2, v3, v0.t");
   VSET(1, e16, m1);
-  VCMP_U16(4, v1, 0x0002);
+  VCMP_U16(4, v1, 0x5557);
 
   VSET(16, e32, m2);
   //               0x00000000,  0.09933749, -0.34645590, -0.06222415,
@@ -109,7 +109,7 @@ void TEST_CASE2(void) {
   VCLEAR(v8);
   asm volatile("vmfeq.vv v8, v2, v4, v0.t");
   VSET(1, e16, m1);
-  VCMP_U16(5, v8, 0x8000);
+  VCMP_U16(5, v8, 0xD555);
 
 #if ELEN == 64
   VSET(8, e64, m2);
@@ -130,7 +130,7 @@ void TEST_CASE2(void) {
   VCLEAR(v8);
   asm volatile("vmfeq.vv v8, v2, v4, v0.t");
   VSET(1, e8, m1);
-  VCMP_U8(6, v8, 0x0a);
+  VCMP_U8(6, v8, 0x5f);
 #endif
 };
 
@@ -225,7 +225,7 @@ void TEST_CASE4(void) {
   asm volatile("vmfeq.vf v1, v2, %[A], v0.t" ::[A] "f"(fscalar_16));
 #endif
   VSET(1, e16, m1);
-  VCMP_U16(10, v1, 0xaaa0);
+  VCMP_U16(10, v1, 0xFFF5);
 
   VSET(16, e32, m2);
 #if ELEN == 64
@@ -252,7 +252,7 @@ void TEST_CASE4(void) {
   asm volatile("vmfeq.vf v8, v2, %[A], v0.t" ::[A] "f"(fscalar_32));
 #endif
   VSET(1, e16, m1);
-  VCMP_U16(11, v8, 0x0002);
+  VCMP_U16(11, v8, 0x5557);
 
 #if ELEN == 64
   VSET(8, e64, m2);
@@ -270,7 +270,7 @@ void TEST_CASE4(void) {
   VCLEAR(v8);
   asm volatile("vmfeq.vf v8, v2, %[A], v0.t" ::[A] "f"(dscalar_64));
   VSET(1, e8, m1);
-  VCMP_U8(12, v8, 0x08);
+  VCMP_U8(12, v8, 0x5D);
 #endif
 };
 
@@ -358,7 +358,7 @@ void TEST_CASE6(void) {
   VCLEAR(v1);
   asm volatile("vmfeq.vv v0, v2, v3, v0.t");
   VSET(1, e16, m1);
-  VCMP_U16(16, v0, 0x2222);
+  VCMP_U16(16, v0, 0x7777);
 
   VSET(16, e32, m2);
   //               0x00000000,  0.09933749, -0.34645590, -0.06222415,
@@ -380,7 +380,7 @@ void TEST_CASE6(void) {
   VLOAD_8(v0, 0xAA, 0xAA);
   asm volatile("vmfeq.vv v0, v2, v4, v0.t");
   VSET(1, e16, m1);
-  VCMP_U16(17, v0, 0x2222);
+  VCMP_U16(17, v0, 0x7777);
 
 #if ELEN == 64
   VSET(8, e64, m2);
@@ -400,7 +400,7 @@ void TEST_CASE6(void) {
   VLOAD_8(v0, 0xAA, 0xAA);
   asm volatile("vmfeq.vv v0, v2, v4, v0.t");
   VSET(1, e8, m1);
-  VCMP_U8(18, v0, 0x22);
+  VCMP_U8(18, v0, 0x77);
 #endif
 };
 

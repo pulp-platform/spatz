@@ -100,7 +100,7 @@ void TEST_CASE2(void) {
   asm volatile("vmfgt.vf v1, v2, %[A], v0.t" ::[A] "f"(fscalar_16));
 #endif
   VSET(1, e16, m1);
-  VCMP_U16(4, v1, 0x000a);
+  VCMP_U16(4, v1, 0x555f);
 
   VSET(16, e32, m2);
 #if ELEN == 64
@@ -127,7 +127,7 @@ void TEST_CASE2(void) {
   asm volatile("vmfgt.vf v8, v2, %[A], v0.t" ::[A] "f"(fscalar_32));
 #endif
   VSET(1, e16, m1);
-  VCMP_U16(5, v8, 0x0008);
+  VCMP_U16(5, v8, 0x555d);
 #if ELEN == 64
   VSET(8, e64, m2);
   double dscalar_64;
@@ -144,7 +144,7 @@ void TEST_CASE2(void) {
   VCLEAR(v8);
   asm volatile("vmfgt.vf v8, v2, %[A], v0.t" ::[A] "f"(dscalar_64));
   VSET(1, e8, m1);
-  VCMP_U8(6, v8, 0x22);
+  VCMP_U8(6, v8, 0x77);
 #endif
 };
 
