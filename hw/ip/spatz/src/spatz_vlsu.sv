@@ -85,7 +85,15 @@ module spatz_vlsu
 
   localparam int unsigned MaxBurstWords = spatz_pkg::MaxBurstWords;
   localparam int unsigned BurstLenWidth = spatz_pkg::BurstLenWidth;
-  localparam int unsigned BurstAlignBits = $clog2(MaxBurstWords*MemDataWidthB);
+  // The bank stripe is the contiguous region owned by one TCDM tile.
+  localparam int unsigned TileBurstWords =
+    `ifdef SPATZ_TCDM_BANKS_PER_TILE `SPATZ_TCDM_BANKS_PER_TILE
+    `elsif NUM_CORES_PER_TILE
+      `NUM_CORES_PER_TILE * N_FU * `BANKING_FACTOR
+    `else 16 `endif;
+  localparam int unsigned TileBurstBytes = TileBurstWords * MemDataWidthB;
+  localparam int unsigned TileOffsetWidth = $clog2(TileBurstBytes);
+  localparam int unsigned TileCountWidth = $clog2(TileBurstWords + 1);
   localparam int unsigned FullBurstBytes = MaxBurstWords * MemDataWidthB;
 
   // Share of a burst of `len` words that lands in lane `port`. Beat k goes to lane
@@ -222,7 +230,10 @@ module spatz_vlsu
   logic mem_is_indexed;
   assign mem_is_indexed = (mem_spatz_req.op == VLXE) || (mem_spatz_req.op == VSXE);
 
-  // Use only port 0 for aligned unit-stride vector loads (burst path).
+  // Use only port 0 for word-aligned unit-stride vector loads.
+  logic [TileCountWidth-1:0] burst_first_tile_words;
+  assign burst_first_tile_words = TileCountWidth'(TileBurstWords) -
+      TileCountWidth'(mem_spatz_req.rs1[TileOffsetWidth-1:$clog2(MemDataWidthB)]);
   logic use_port0_burst_req;
   logic mem_use_port0_burst;
   logic commit_use_port0_burst;
@@ -246,30 +257,21 @@ module spatz_vlsu
       // are distributed one lane per word, so each ROB holds vl/NrMemPorts of them.
       // Four times the old ceiling -- 256 B at depth 16, covering LMUL up to 4.
       (mem_spatz_req.vl <= (NrOutstandingLoads * MemDataWidthB * NrMemPorts)) &&
-      (mem_spatz_req.rs1[BurstAlignBits-1:0] == '0) &&
-      // vstart must be zero. A word's LANE is its element index mod NrMemPorts
-      // (see the non-burst address generation: word index = n*NrMemPorts + port),
-      // counted from rs1. The burst reply path derives the lane as beat_index %
-      // NrMemPorts, which only equals that when the burst starts at an element index
-      // that is a multiple of NrMemPorts. Full-length bursts from element 0 satisfy
-      // it; a non-zero vstart shifts every element and would silently steer each
-      // beat to the wrong ROB.
+      (mem_spatz_req.rs1[$clog2(MemDataWidthB)-1:0] == '0) &&
+      (mem_spatz_req.vl[$clog2(MemDataWidthB)-1:0] == '0) &&
+      // Internal splits must finish a complete ROB row: each burst starts at lane 0.
+      // A contained load may finish on any lane. Other crossings use the normal
+      // word-interleaved path until the allocator supports carrying partial rows.
+      (((MaxBurstWords % NrMemPorts) == 0) ||
+       (mem_spatz_req.vl <= FullBurstBytes)) &&
+      ((mem_spatz_req.vl <= (burst_first_tile_words * MemDataWidthB)) ||
+       (((mem_spatz_req.rs1 % (NrMemPorts * MemDataWidthB)) == 0) &&
+        ((TileBurstWords % NrMemPorts) == 0) &&
+        ((MaxBurstWords % NrMemPorts) == 0))) &&
+      // The first beat belongs to lane 0. Non-zero vstart needs lane rotation.
       (mem_spatz_req.vstart == '0);
-  // A TAIL IS JUST A SHORTER BURST -- there is no tail PHASE any more.
-  //
-  // burst_len_calc is min(MaxBurstWords, remaining), so the allocator issues full bursts and
-  // then a short one for whatever is left, and tcdm_burst_expander handles any length. The
-  // phase this replaces came from the funnel design, where a burst was MaxBurstWords or
-  // nothing, and it SILENTLY DISABLED the short-burst path it was left sitting in front of:
-  // switch_to_tail_phase's guards were (mem_counter_q[0] >= burst_full_bytes_req) and the
-  // commit equivalent, and burst_full_bytes_req is the 64-BYTE-ALIGNED FLOOR of vl -- so for
-  // any vl that is not a whole multiple of a full burst it is 0, both guards read 0 >= 0, and
-  // the phase engaged on the FIRST CYCLE. Every load shorter than MaxBurstWords therefore went
-  // down the word-interleaved path, and a longer load's remainder went with it.
-  //
-  // The only thing that still stays on the word path is a ONE-WORD remainder: burst_mode_req
-  // requires burst_len_eff > 1. The other lanes take a dummy for it so the buffers stay
-  // aligned (see rob_req_dummy at the word-path arm).
+  // Internal bursts end on complete ROB rows; the final burst may be shorter.
+  // A one-word final remainder uses the word path and pads the other ROB lanes.
   assign mem_use_port0_burst     = use_port0_burst_req;
   assign commit_use_port0_burst  = commit_insn_q.use_port0_burst;
   // TwinROB0 2-wide commit window gate (assigned after the commit counters are declared).
@@ -813,7 +815,11 @@ module spatz_vlsu
   // Burst request tracking (per port)
   logic [NrMemPorts-1:0]                    burst_mode_req;
   logic [NrMemPorts-1:0]                    burst_use;
-  logic [NrMemPorts-1:0]                    burst_addr_aligned;
+  logic [NrMemPorts-1:0][TileCountWidth-1:0] burst_tile_words;
+  for (genvar port = 0; port < NrMemPorts; port++) begin : gen_burst_tile_words
+    assign burst_tile_words[port] = TileCountWidth'(TileBurstWords) -
+        TileCountWidth'(mem_req_addr[port][TileOffsetWidth-1:$clog2(MemDataWidthB)]);
+  end
   logic [NrMemPorts-1:0][BurstLenWidth-1:0] burst_len_calc;
   logic [NrMemPorts-1:0][BurstLenWidth-1:0] burst_len_eff;
   logic [NrMemPorts-1:0][BurstLenWidth-1:0] burst_len_issue;
@@ -1313,24 +1319,20 @@ module spatz_vlsu
                              ? BurstLenWidth'(MaxBurstWords)
                              : BurstLenWidth'(mem_remaining_words[port]);
 
+        // A tile must own every word of the emitted request.
+        if (burst_tile_words[port] < burst_len_calc[port])
+          burst_len_calc[port] = BurstLenWidth'(burst_tile_words[port]);
+
         // No collapse-to-what-was-reserved. Every ROB reserves its own share of THIS
         // length up front and the request only leaves once all of them hold it
         // (burst_alloc_ready), so a partial reservation can never be issued.
         burst_len_eff[port] = burst_len_calc[port];
-
-        // Burst alignment is MaxBurstWords*MemDataWidthB bytes. mem_req_addr is byte-addressed
-        // and already word-aligned, so only check the remaining alignment bits above MAXEW.
-        if (BurstAlignBits > MAXEW)
-          burst_addr_aligned[port] = (mem_req_addr[port][BurstAlignBits-1:MAXEW] == '0);
-        else
-          burst_addr_aligned[port] = 1'b1;
 
         // A burst request is expanded downstream into CONSECUTIVE addresses
         // (tcdm_burst_expander.sv: tgt_addr = base + beat). That is only what this port wants in
         // port-0 burst mode, where address generation is linear (offset = mem_counter_q, :562).
         burst_mode_req[port] = mem_is_load && !mem_is_single_element_operation &&
                                mem_use_port0_burst &&
-                               burst_addr_aligned[port] &&
                                (burst_len_eff[port] > 1) &&
                                (burst_len_eff[port] <= NrOutstandingLoads);
 
@@ -1604,7 +1606,10 @@ module spatz_vlsu
       // Start a new burst allocation when eligible. The decision is port 0's -- it is
       // the only port that issues the request -- but EVERY port allocates, because
       // every ROB receives a share of the beats.
-      if (!burst_alloc_q[port] && mem_operation_valid[0] && burst_use[0] && !dual_blk) begin
+      // The new instruction must have loaded its request counters before reserving:
+      // an older instruction's offset can otherwise select a different tile segment.
+      if (!burst_alloc_q[port] && mem_operation_valid[0] && burst_use[0] && !dual_blk &&
+          !commit_insn_push && mem_insn_pending_q[mem_spatz_req.id]) begin
         burst_alloc_d[port]     = 1'b1;
         // This lane's own share of the burst, not a fixed MaxBurstWords/NrMemPorts.
         // A tail gives the low lanes one beat more than the high ones, and a lane
@@ -2184,7 +2189,7 @@ module spatz_vlsu
                  (2*MemDataWidthB),               (mem_spatz_req.vl >= (2*MemDataWidthB)),
                  (NrOutstandingLoads*MemDataWidthB*NrMemPorts),
                  (mem_spatz_req.vl <= (NrOutstandingLoads*MemDataWidthB*NrMemPorts)),
-                 BurstAlignBits,                  (mem_spatz_req.rs1[BurstAlignBits-1:0] == '0),
+                 $clog2(MemDataWidthB), (mem_spatz_req.rs1[$clog2(MemDataWidthB)-1:0] == '0),
                  use_port0_burst_req);
       end
     end
@@ -2473,6 +2478,14 @@ module spatz_vlsu
   end
   // pragma translate_on
 `endif
+`endif
+
+`ifndef TARGET_SYNTHESIS
+  assert property (@(posedge clk_i) disable iff (!rst_ni)
+      (mem_use_port0_burst && spatz_mem_req_valid[0] && spatz_mem_req_ready[0]) |->
+      (!commit_insn_push &&
+       (spatz_mem_req[0].burst_len <= mem_remaining_words[0])))
+    else $fatal(1, "[spatz_vlsu] Burst exceeds the initialized instruction extent.");
 `endif
 
   // ANTECEDENT COVERS BOTH ALLOCATORS. It used to be (|burst_alloc_fire) alone -- the
