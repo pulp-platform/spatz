@@ -1311,17 +1311,19 @@ module spatz_vlsu
                        : '0;
         mem_remaining_bytes[port] = mem_max_elements[port] - mem_counter_q[port];
         mem_remaining_words[port] = mem_remaining_bytes[port] >> $clog2(MemDataWidthB);
-        // As much of what is left as one wide access can carry. A trailing PARTIAL
-        // burst retires the tail; there is no word-request fallback for it. The old
-        // fallback is what broke the lane mapping: tail words were issued serially on
-        // port 0 and therefore all landed in ROB0, regardless of the lane their word
-        burst_len_calc[port] = (mem_remaining_words[port] >= MaxBurstWords)
-                             ? BurstLenWidth'(MaxBurstWords)
-                             : BurstLenWidth'(mem_remaining_words[port]);
-
-        // A tile must own every word of the emitted request.
-        if (burst_tile_words[port] < burst_len_calc[port])
-          burst_len_calc[port] = BurstLenWidth'(burst_tile_words[port]);
+        // A tile no larger than MaxBurstWords already imposes the burst-length cap.
+        // Select directly between remaining work and tile space, avoiding two serial clamps.
+        if (TileBurstWords <= MaxBurstWords) begin
+          burst_len_calc[port] = (mem_remaining_words[port] >= burst_tile_words[port])
+                                ? BurstLenWidth'(burst_tile_words[port])
+                                : BurstLenWidth'(mem_remaining_words[port]);
+        end else begin
+          burst_len_calc[port] = (mem_remaining_words[port] >= MaxBurstWords)
+                                ? BurstLenWidth'(MaxBurstWords)
+                                : BurstLenWidth'(mem_remaining_words[port]);
+          if (burst_tile_words[port] < burst_len_calc[port])
+            burst_len_calc[port] = BurstLenWidth'(burst_tile_words[port]);
+        end
 
         // No collapse-to-what-was-reserved. Every ROB reserves its own share of THIS
         // length up front and the request only leaves once all of them hold it
