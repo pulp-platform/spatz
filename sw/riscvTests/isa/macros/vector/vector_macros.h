@@ -248,7 +248,7 @@ do {                                                                           \
         "vsetvl zero, %[vl], %[vtype]" ::[vl] "r"(vl), [vtype] "r"(vtype));    \
   } while (0)
 
-#define VCLEAR_AT_ONE(register)                                                                   \
+#define VSET_TO_ONES(register)                                                                   \
   do {                                                                                            \
     uint64_t vtype; uint64_t vl; uint64_t vlmax;                                                  \
     asm volatile("csrr %[vtype], vtype" : [vtype] "=r" (vtype));                                  \
