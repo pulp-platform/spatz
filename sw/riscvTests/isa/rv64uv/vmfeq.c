@@ -498,10 +498,10 @@ void TEST_CASE9(void) {
   VLOAD_16(v3, 0x39db, 0x39d4, 0x3a13, 0xb949, 0xb79d, 0x3ad3, 0x29cc, 0x2e51,
            0x31b0, 0x34e0, 0x3375, 0xb58c, 0xb6a5, 0x39aa, 0x3507, 0xbb98);
   VLOAD_8(v0, 0xAA, 0xAA);
-  VCLEAR_AT_ONE(v1);
+  VCLEAR(v1);
   asm volatile("vmfeq.vv v1, v2, v3, v0.t");
   VSET(1, e16, m1);
-  VCMP_U16(24, v1, 0x5557);
+  VCMP_U16(24, v1, 0x2);
 }
 
 int main(void) {
