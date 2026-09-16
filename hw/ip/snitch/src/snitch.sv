@@ -2879,7 +2879,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
         illegal_inst = 1'b1;
       end
     endcase
-    
+
     // If an instruction issued by accelerator, but resulted in an exception, trigger an illegal instruction
     // Note: same cycle response expected
     if (acc_qvalid_o && acc_qready_i && acc_qrsp_i.exception) begin
