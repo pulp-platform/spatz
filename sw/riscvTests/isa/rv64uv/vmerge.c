@@ -29,12 +29,14 @@ void TEST_CASE1() {
   asm volatile("vmerge.vvm v6, v2, v4, v0");
   VCMP_U32(3, v6, 1, 7, 3, 5, 5, 3, 7, 1, 8, 2, 6, 4, 4, 6, 2, 8);
 
-  VSET(16, e64, m2);
-  VLOAD_64(v2, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
-  VLOAD_64(v4, 8, 7, 6, 5, 4, 3, 2, 1, 8, 7, 6, 5, 4, 3, 2, 1);
-  VLOAD_8(v0, 0xAA, 0x55);
-  asm volatile("vmerge.vvm v6, v2, v4, v0");
-  VCMP_U64(4, v6, 1, 7, 3, 5, 5, 3, 7, 1, 8, 2, 6, 4, 4, 6, 2, 8);
+  #if ELEN == 64
+    VSET(16, e64, m4);
+    VLOAD_64(v4, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
+    VLOAD_64(v8, 8, 7, 6, 5, 4, 3, 2, 1, 8, 7, 6, 5, 4, 3, 2, 1);
+    VLOAD_8(v0, 0xAA, 0x55);
+    asm volatile("vmerge.vvm v12, v4, v8, v0");
+    VCMP_U64(4, v12, 1, 7, 3, 5, 5, 3, 7, 1, 8, 2, 6, 4, 4, 6, 2, 8);
+  #endif
 }
 
 void TEST_CASE2() {
@@ -61,13 +63,14 @@ void TEST_CASE2() {
   VCMP_U32(7, v6, 1, 0xdeadbeef, 3, 0xdeadbeef, 5, 0xdeadbeef, 7, 0xdeadbeef,
            0xdeadbeef, 2, 0xdeadbeef, 4, 0xdeadbeef, 6, 0xdeadbeef, 8);
 
-  VSET(16, e64, m2);
-  VLOAD_64(v2, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
-  VLOAD_8(v0, 0xAA, 0x55);
-  asm volatile("vmerge.vxm v6, v2, %[A], v0" ::[A] "r"(scalar));
-  VCMP_U64(8, v6, 1, 0x00000000deadbeef, 3, 0x00000000deadbeef, 5,
-           0x00000000deadbeef, 7, 0x00000000deadbeef, 0x00000000deadbeef, 2,
-           0x00000000deadbeef, 4, 0x00000000deadbeef, 6, 0x00000000deadbeef, 8);
+  // There are no 64 bit scalars in Snitch at the moment
+  // VSET(16, e64, m2);
+  // VLOAD_64(v2, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
+  // VLOAD_8(v0, 0xAA, 0x55);
+  // asm volatile("vmerge.vxm v6, v2, %[A], v0" ::[A] "r"(scalar));
+  // VCMP_U64(8, v6, 1, 0x00000000deadbeef, 3, 0x00000000deadbeef, 5,
+  //          0x00000000deadbeef, 7, 0x00000000deadbeef, 0x00000000deadbeef, 2,
+  //          0x00000000deadbeef, 4, 0x00000000deadbeef, 6, 0x00000000deadbeef, 8);
 }
 
 void TEST_CASE3() {
@@ -92,13 +95,15 @@ void TEST_CASE3() {
   VCMP_U32(11, v6, 1, 0xffffffff, 3, 0xffffffff, 5, 0xffffffff, 7, 0xffffffff,
            0xffffffff, 2, 0xffffffff, 4, 0xffffffff, 6, 0xffffffff, 8);
 
-  VSET(16, e64, m2);
-  VLOAD_64(v2, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
-  VLOAD_8(v0, 0xAA, 0x55);
-  asm volatile("vmerge.vim v6, v2, -1, v0");
-  VCMP_U64(12, v6, 1, 0xffffffffffffffff, 3, 0xffffffffffffffff, 5,
-           0xffffffffffffffff, 7, 0xffffffffffffffff, 0xffffffffffffffff, 2,
-           0xffffffffffffffff, 4, 0xffffffffffffffff, 6, 0xffffffffffffffff, 8);
+  #if ELEN == 64
+    VSET(16, e64, m4);
+    VLOAD_64(v4, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
+    VLOAD_8(v0, 0xAA, 0x55);
+    asm volatile("vmerge.vim v8, v4, -1, v0");
+    VCMP_U64(12, v8, 1, 0xffffffffffffffff, 3, 0xffffffffffffffff, 5,
+             0xffffffffffffffff, 7, 0xffffffffffffffff, 0xffffffffffffffff, 2,
+             0xffffffffffffffff, 4, 0xffffffffffffffff, 6, 0xffffffffffffffff, 8);
+  #endif
 }
 
 int main(void) {

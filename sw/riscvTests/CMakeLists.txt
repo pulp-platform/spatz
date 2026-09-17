@@ -174,6 +174,8 @@ add_snitch_test(vmornot isa/rv64uv/vmornot.c)
 add_snitch_test(vmxnor isa/rv64uv/vmxnor.c)
 add_snitch_test(vmxor isa/rv64uv/vmxor.c)
 
+add_snitch_test(vmerge isa/rv64uv/vmerge.c)
+
 add_snitch_test(vle8 isa/rv64uv/vle8.c)
 add_snitch_test(vle16 isa/rv64uv/vle16.c)
 add_snitch_test(vle32 isa/rv64uv/vle32.c)
