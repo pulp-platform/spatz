@@ -51,7 +51,7 @@ module spatz_controller
     input  logic                                   ope_req_ready_i,
     input  logic                                   ope_rsp_valid_i,
     output logic                                   ope_rsp_ready_o,
-    input  vfu_rsp_t                               ope_rsp_i,
+    input  ope_rsp_t                               ope_rsp_i,
     // VLSU
     input  logic                                   vlsu_req_ready_i,
     input  logic                                   vlsu_rsp_valid_i,
@@ -99,90 +99,6 @@ module spatz_controller
 `ifdef VENTAGLIO
   logic       spatz_req_vtl_illegal;
 `endif
-
-  logic spatz_req_is_tile;
-  logic buffer_req_is_tile;
-  logic spatz_req_is_mac_tile;
-  logic buffer_req_is_mac_tile;
-
-  assign spatz_req_is_tile =
-      spatz_req.op inside {VTLE, VTSE, VTMV_VT, VTMV_TV, VTZERO, VTDISCARD,
-                          VTFMM, VTFMM_ALT, VTMMU, VTMMS};
-
-  assign buffer_req_is_tile =
-      buffer_spatz_req.op inside {VTLE, VTSE, VTMV_VT, VTMV_TV, VTZERO, VTDISCARD,
-                                  VTFMM, VTFMM_ALT, VTMMU, VTMMS};
-
-  // MAC-family tile ops (VTFMM/VTFMM_ALT/VTMMU/VTMMS): spatz_ope tracks its
-  // own per-destination-tile hazard internally (see tile_inflight_q in
-  // spatz_ope.sv) and can safely have several in flight at once. Non-MAC
-  // tile ops (VTLE/VTSE/VTMV_VT/VTMV_TV/VTZERO/VTDISCARD) still require the
-  // whole tile pipe fully drained (spatz_ope's mac_pipe_idle-gated
-  // path_ready/tile_wready_o/tile_rready_o already assume that), so they
-  // stay serialized against everything else -- only MAC-vs-MAC overlap is
-  // relaxed below.
-  assign spatz_req_is_mac_tile   = spatz_req.op inside {VTFMM, VTFMM_ALT, VTMMU, VTMMS};
-  assign buffer_req_is_mac_tile  = buffer_spatz_req.op inside {VTFMM, VTFMM_ALT, VTMMU, VTMMS};
-
-  // VTSE (tile store, routed through the VLSU): never writes tile_state_q
-  // (pure read via spatz_ope's tile_rdata_proc, then a memory write), and
-  // the VLSU's own tile FSM is a single instance that only ever samples the
-  // next queued request once it returns to Tile_Idle -- so real execution
-  // stays strictly serial/order-preserving regardless of dispatch timing.
-  // Safe to let VTSE-vs-VTSE overlap in dispatch the same way MAC-family
-  // tile ops do above; other non-MAC tile ops keep full serialization.
-  logic spatz_req_is_vtse;
-  logic buffer_req_is_vtse;
-  assign spatz_req_is_vtse  = spatz_req.op == VTSE;
-  assign buffer_req_is_vtse = buffer_spatz_req.op == VTSE;
-
-  logic [NrParallelInstructions-1:0] tile_running_d, tile_running_q;
-  logic [NrParallelInstructions-1:0] tile_running_nonmac_d, tile_running_nonmac_q;
-  logic [NrParallelInstructions-1:0] tile_running_vtse_d, tile_running_vtse_q;
-
-  `FF(tile_running_q, tile_running_d, '0)
-  `FF(tile_running_nonmac_q, tile_running_nonmac_d, '0)
-  `FF(tile_running_vtse_q, tile_running_vtse_d, '0)
-
-  always_comb begin
-    tile_running_d        = tile_running_q;
-    tile_running_nonmac_d = tile_running_nonmac_q;
-    tile_running_vtse_d   = tile_running_vtse_q;
-
-    if (spatz_req_valid && spatz_req.ex_unit != CON && spatz_req_is_tile) begin
-      tile_running_d[spatz_req.id] = 1'b1;
-      if (!spatz_req_is_mac_tile) begin
-        tile_running_nonmac_d[spatz_req.id] = 1'b1;
-      end
-      if (spatz_req_is_vtse) begin
-        tile_running_vtse_d[spatz_req.id] = 1'b1;
-      end
-    end
-
-    if (vfu_rsp_valid_i) begin
-      tile_running_d[vfu_rsp_i.id]        = 1'b0;
-      tile_running_nonmac_d[vfu_rsp_i.id] = 1'b0;
-      tile_running_vtse_d[vfu_rsp_i.id]   = 1'b0;
-    end
-
-    if (vlsu_rsp_valid_i) begin
-      tile_running_d[vlsu_rsp_i.id]        = 1'b0;
-      tile_running_nonmac_d[vlsu_rsp_i.id] = 1'b0;
-      tile_running_vtse_d[vlsu_rsp_i.id]   = 1'b0;
-    end
-
-    if (vsldu_rsp_valid_i) begin
-      tile_running_d[vsldu_rsp_i.id]        = 1'b0;
-      tile_running_nonmac_d[vsldu_rsp_i.id] = 1'b0;
-      tile_running_vtse_d[vsldu_rsp_i.id]   = 1'b0;
-    end
-
-    if (ope_rsp_valid_i) begin
-      tile_running_d[ope_rsp_i.id]        = 1'b0;
-      tile_running_nonmac_d[ope_rsp_i.id] = 1'b0;
-      tile_running_vtse_d[ope_rsp_i.id]   = 1'b0;
-    end
-  end
 
   //////////
   // CSRs //
@@ -301,21 +217,17 @@ module spatz_controller
 
       // Matrix configuration instructions that modify vector CSR state.
       else if (spatz_req.op == VMCFG) begin
-        unique case (spatz_req.op_tile.cfg_sel)
+        unique case (spatz_req.op_ope.cfg_sel)
 
           // msetmtype / msetmtypei: vl = 0, update vtype, calculate matrix LMUL
           2'b00: begin : msetmtype_vcsr
             logic        invalid_vtype;
-            int unsigned sew;
             int unsigned twiden;
-            int unsigned tew;
+            int unsigned tewb;
             int unsigned kmax;
             int unsigned ete;
             int unsigned eve;
-            int unsigned req_lmul;
-            int unsigned sel_lmul;
-            int unsigned max_lmul_k;
-            int unsigned max_lmul_widen;
+            int unsigned lmul_req, lmul_k, lmul_widen;
 
             vtype_d = spatz_req.vtype;
 
@@ -326,46 +238,34 @@ module spatz_controller
                 || (signed'(vtype_d.vlmul) + signed'($clog2(ELEN)) < signed'(vtype_d.vsew));
 
             if (!invalid_vtype && spatz_req.mtype.mtwiden != 2'b00) begin
-              sew = 8 << int'(vtype_d.vsew);
 
-              unique case (spatz_req.mtype.mtwiden)
-                2'b01: twiden = 1;
-                2'b10: twiden = 2;
-                2'b11: twiden = 4;
-                default: twiden = 0;
-              endcase
+              twiden = 1 << (spatz_req.mtype.mtwiden - 1);
+              tewb = (1 << int'(vtype_d.vsew)) * twiden;
 
-              tew = sew * twiden;
-
-              if (tew > ELEN) begin
+              if (tewb != AccElemBytes) begin
                 invalid_vtype = 1'b1;
               end else begin
-                kmax = (vtype_d.vsew == EW_8 ) ? 4 :
-                       (vtype_d.vsew == EW_16) ? 2 : 1;
+                unique case (vtype_d.vsew)
+                  EW_8:    kmax = 4;
+                  EW_16:   kmax = 2;
+                  default: kmax = 1;
+                endcase
 
-                ete = (tew < 64) ? TE : (TE >> 1);
+                ete = (tewb < 8) ? TE : (TE >> 1);
                 eve = VLENB >> int'(vtype_d.vsew);
 
-                req_lmul = (ete + eve - 1) / eve;
+                lmul_req    = (ete + eve - 1) / eve;
+                lmul_k      = 8 / kmax;
+                lmul_widen  = 8 / twiden;
 
-                max_lmul_k     = 8 / kmax;
-                max_lmul_widen = 8 / twiden;
-
-                sel_lmul = req_lmul;
-
-                if (max_lmul_k < sel_lmul) begin
-                  sel_lmul = max_lmul_k;
-                end
-
-                if (max_lmul_widen < sel_lmul) begin
-                  sel_lmul = max_lmul_widen;
-                end
-
-                unique case (sel_lmul)
-                  8:       vtype_d.vlmul = LMUL_8;
-                  4:       vtype_d.vlmul = LMUL_4;
+                lmul_req = (lmul_req < lmul_k) ? lmul_req : lmul_k;
+                lmul_req = (lmul_req < lmul_widen) ? lmul_req : lmul_widen;
+                unique case (lmul_req)
+                  1:       vtype_d.vlmul = LMUL_1;
                   2:       vtype_d.vlmul = LMUL_2;
-                  default: vtype_d.vlmul = LMUL_1;
+                  4:       vtype_d.vlmul = LMUL_4;
+                  8:       vtype_d.vlmul = LMUL_8;
+                  default: invalid_vtype = 1'b1;
                 endcase
 
                 vtype_d.vma = 1'b1;
@@ -383,11 +283,9 @@ module spatz_controller
           //   unconfigured: vl = min(rs1, LMUL * EVE)
           //   configured:   vl = min(rs1, LMUL * EVE, ETE)
           2'b01: begin : msettn_vcsr
-            logic [$clog2(MAXVL):0] lmul_eve;
-            elen_t                  ete;
-            int unsigned            sew;
-            int unsigned            twiden;
-            int unsigned            tew;
+            int unsigned lmul_eve, tmp_tn;
+            int unsigned ete;
+            int unsigned tewb;
 
             if (vtype_q.vill) begin
               vl_d = '0;
@@ -404,26 +302,23 @@ module spatz_controller
               endcase
 
               if (mtype_q.mtwiden == 2'b00) begin
-                vl_d = (spatz_req.rs1 > elen_t'(lmul_eve))
-                       ? vlen_t'(lmul_eve) : vlen_t'(spatz_req.rs1);
+                vl_d = (spatz_req.rs1 > elen_t'(lmul_eve)) ? vlen_t'(lmul_eve) : vlen_t'(spatz_req.rs1);
               end else begin
-                sew = 8 << int'(vtype_q.vsew);
 
-                unique case (mtype_q.mtwiden)
-                  2'b01: twiden = 1;
-                  2'b10: twiden = 2;
-                  2'b11: twiden = 4;
-                  default: twiden = 0;
-                endcase
+                tewb = (1 << int'(vtype_q.vsew)) *
+                       (1 << (mtype_q.mtwiden - 1));
+                ete = (tewb < 8) ? TE : TE >> 1;
 
-                tew = sew * twiden;
-                ete = (tew < 64) ? elen_t'(TE) : elen_t'(TE >> 1);
-
-                vl_d = vlen_t'(min3(elen_t'(spatz_req.rs1), elen_t'(lmul_eve), ete));
+                // clamp tn/vl
+                tmp_tn  = (lmul_eve < ete) ? lmul_eve : ete;
+                vl_d    = (elen_t'(tmp_tn) < spatz_req.rs1) ? vlen_t'(tmp_tn) : vlen_t'(spatz_req.rs1);
               end
             end
           end
-          default: ;
+
+          // msettm / msettk only update mtype in proc_mcsr. They do not modify vector CSR state.
+          2'b10, 2'b11: begin
+          end
         endcase
       end
     end // spatz_req_valid
@@ -434,21 +329,21 @@ module spatz_controller
     mtype_d  = mtype_q;
 
     if (spatz_req_valid) begin
-      if (spatz_req.op == VCFG)
+      // RVV vset[i]vl[i] leaves the matrix unit unconfigured. Software must
+      // execute msetmtype[i] again before issuing another matrix operation.
+      if (spatz_req.op == VCFG) begin
         mtype_d = '0;
-
-      if (spatz_req.op == VMCFG) begin
-        unique case (spatz_req.op_tile.cfg_sel)
+        tn_d    = '0;
+      end else if (spatz_req.op == VMCFG) begin
+        unique case (spatz_req.op_ope.cfg_sel)
 
           // msetmtype / msetmtypei: write spatz_req.mtype with clamped tk/tm
           2'b00: begin : msetmtype_mcsr
-              logic [2:0]             kmax_val;
-              elen_t                  ete;
-              logic [$clog2(MAXVL):0] lmul_eve;
-              logic                   is_ill;
-              int unsigned            sew;
-              int unsigned            twiden;
-              int unsigned            tew;
+              logic [3:0]   kmax_val;
+              int unsigned  ete;
+              int unsigned  lmul_eve, tmp_tm;
+              int unsigned  tewb;
+              int unsigned  twiden;
 
               mtype_d = spatz_req.mtype;
 
@@ -459,18 +354,20 @@ module spatz_controller
                 default: twiden = 0;
               endcase
 
-              sew = 8 << int'(vtype_d.vsew);
-              tew = sew * twiden;
+              tewb = (1 << int'(vtype_d.vsew)) * twiden;
 
-              // clamp tk
-              kmax_val  = (vtype_d.vsew == EW_8 ) ? 3'd4 :
-                          (vtype_d.vsew == EW_16) ? 3'd2 : 3'd1;
+              unique case (vtype_d.vsew)
+                EW_8:    kmax_val = 4;
+                EW_16:   kmax_val = 2;
+                default: kmax_val = 1;
+              endcase
+
               if (mtype_d.tk > kmax_val) begin
                 mtype_d.tk = kmax_val;
               end
 
               // clamp tm using the newly selected matrix LMUL in vtype_d.
-              ete = (tew < 64) ? elen_t'(TE) : elen_t'(TE >> 1);
+              ete = (tewb < 8) ? TE : TE >> 1;
 
               lmul_eve = VLENB >> int'(vtype_d.vsew);
               unique case (vtype_d.vlmul)
@@ -483,13 +380,13 @@ module spatz_controller
                 default: lmul_eve = '0;
               endcase
 
-              mtype_d.tm = 14'(min3(elen_t'(mtype_d.tm), elen_t'(lmul_eve), ete));
+              tmp_tm     = (lmul_eve < ete) ? lmul_eve : ete;
+              mtype_d.tm = (tmp_tm < mtype_d.tm) ? tmp_tm : mtype_d.tm;
 
               // reset vl / tn
               tn_d = '0;
 
-              is_ill = (mtype_d.mtwiden == 2'b00) || vtype_d.vill || (tew > ELEN);
-              mtype_d = is_ill ? '0 : mtype_d;
+              mtype_d = (mtype_d.mtwiden == 2'b00 || vtype_d.vill) ? '0 : mtype_d;
           end
           // msettn: tn mirrors the new vl computed in proc_vcsr
           2'b01: begin
@@ -501,11 +398,9 @@ module spatz_controller
             if (mtype_q.mtwiden == 2'b00) begin
               mtype_d.tm = '0;
             end else begin
-              logic [$clog2(MAXVL):0] lmul_eve;
-              elen_t                  ete;
-              int unsigned            sew;
-              int unsigned            twiden;
-              int unsigned            tew;
+              int unsigned lmul_eve, requested_tm, tmp_tm;
+              int unsigned ete;
+              int unsigned tewb;
 
               lmul_eve = VLENB >> int'(vtype_q.vsew);
               unique case (vtype_q.vlmul)
@@ -518,19 +413,13 @@ module spatz_controller
                 default: lmul_eve = '0;
               endcase
 
-              sew = 8 << int'(vtype_q.vsew);
+              tewb = (1 << int'(vtype_q.vsew)) *
+                     (1 << (mtype_q.mtwiden - 1));
+              ete = (tewb < 8) ? TE : TE >> 1;
 
-              unique case (mtype_q.mtwiden)
-                2'b01: twiden = 1;
-                2'b10: twiden = 2;
-                2'b11: twiden = 4;
-                default: twiden = 0;
-              endcase
-
-              tew = sew * twiden;
-              ete = (tew < 64) ? elen_t'(TE) : elen_t'(TE >> 1);
-
-              mtype_d.tm = 14'(min3(elen_t'(spatz_req.rs1), elen_t'(lmul_eve), ete));
+              requested_tm = int'(spatz_req.rs1);
+              tmp_tm = (lmul_eve < ete) ? lmul_eve : ete;
+              mtype_d.tm = 14'((requested_tm < tmp_tm) ? requested_tm : tmp_tm);
             end
           end
           // msettk: mtype.tk = min(rs1, KMAX)   (0 if unconfigured)
@@ -538,15 +427,16 @@ module spatz_controller
             if (mtype_q.mtwiden == 2'b0) begin
               mtype_d.tk = '0;
             end else begin
-              logic [2:0] kmax_val;
-              kmax_val   = (vtype_q.vsew == EW_8)  ? 3'd4 :
-                           (vtype_q.vsew == EW_16) ? 3'd2 : 3'd1;
+              logic [3:0] kmax_val;
+              unique case (vtype_q.vsew)
+                EW_8:    kmax_val = 4;
+                EW_16:   kmax_val = 2;
+                default: kmax_val = 1;
+              endcase
               mtype_d.tk = (spatz_req.rs1 > elen_t'(kmax_val))
-                           ? kmax_val : 3'(spatz_req.rs1);
+                           ? kmax_val : 4'(spatz_req.rs1);
             end
           end
-
-          default: ;
         endcase
       end
     end
@@ -670,8 +560,11 @@ module spatz_controller
 `ifdef DOUBLE_BW
   logic [NumVLSUInterfaces-1:0] [NrParallelInstructions-1:0] wrote_result_q, wrote_result_d;
 
-  // Following counters are used only by DOUBLE_BW for tracking
+  // Per-interface completion is sticky only after the complete half-vector
+  // has reached the VRF. wrote_result_q remains the one-cycle chaining pulse.
   logic [NumVLSUInterfaces-1:0] [NrParallelInstructions-1:0] done_result_q, done_result_d;
+  vlen_t [NumVLSUInterfaces-1:0] [NrParallelInstructions-1:0]
+      vlsu_vl_cnt_q, vlsu_vl_cnt_d;
 
   // Counter to track the vlen completed for each instruction
   vlen_t [NrParallelInstructions-1:0] vl_cnt_d, vl_cnt_q, vl_max_d, vl_max_q;
@@ -680,6 +573,7 @@ module spatz_controller
   logic [NrParallelInstructions-1:0] narrow_q, narrow_d;
 
   `FF(done_result_q, done_result_d, '0)
+  `FF(vlsu_vl_cnt_q, vlsu_vl_cnt_d, '0)
   `FF(vl_cnt_q, vl_cnt_d, '0)
   `FF(vl_max_q, vl_max_d, '0)
   `FF(narrow_q, narrow_d, '0)
@@ -697,6 +591,13 @@ module spatz_controller
   logic [NrParallelInstructions-1:0] wrote_result_narrowing_q, wrote_result_narrowing_d;
   `FF(wrote_result_narrowing_q, wrote_result_narrowing_d, '0)
 
+  logic [NRVREG-1:0] sb_vd_write_mask;
+  logic [NRVREG-1:0] sb_vd_read_mask;
+  int unsigned       sb_vd_group_regs;
+  int unsigned       sb_vd_read_group_regs;
+  int unsigned       sb_vs_row_stride;
+  int unsigned       sb_vs_rows;
+
   always_comb begin : scoreboard
     // Maintain stated
     read_table_d             = read_table_q;
@@ -704,12 +605,17 @@ module spatz_controller
     scoreboard_d             = scoreboard_q;
     narrow_wide_d            = narrow_wide_q;
     wrote_result_narrowing_d = wrote_result_narrowing_q;
+    sb_vd_write_mask         = '0;
+    sb_vd_read_mask          = '0;
+    sb_vd_group_regs         = 1;
+    sb_vd_read_group_regs    = 1;
+    sb_vs_row_stride         = 8;
+    sb_vs_rows               = 1;
 `ifdef VENTAGLIO
     vtl_table_d              = vtl_table_q;
     sb_vtl_redirect_read_o    = '0;
     sb_vtl_redirect_write_o   = '0;
 `endif
-
 
     // Nobody wrote to the VRF yet
     wrote_result_d = '0;
@@ -717,6 +623,7 @@ module spatz_controller
 
 `ifdef DOUBLE_BW
     done_result_d        = done_result_q;
+    vlsu_vl_cnt_d        = vlsu_vl_cnt_q;
     narrow_d             = narrow_q;
     vl_cnt_d             = vl_cnt_q;
     vl_max_d             = vl_max_q;
@@ -725,7 +632,7 @@ module spatz_controller
     for (int unsigned port = 0; port < NrVregfilePorts; port++) begin
 `ifdef DOUBLE_BW
       // Calculate the load-store interface id to use here for chaining
-      automatic logic intID;
+      logic intID;
 
       // For vlsu ports use the write status of the corresponding interface
       if (port inside {SB_VLSU_VS2_RD0, SB_VLSU_VD_RD0, SB_VLSU_VD_WD0}) begin
@@ -737,8 +644,15 @@ module spatz_controller
         intID = (vl_cnt_q[sb_id_i[port]] < vl_max_d[sb_id_i[port]]) ? 0 : 1;
       end
 
-      // Enable the VRF port if the dependant instructions wrote in the previous cycle
-      sb_enable_o[port] = sb_enable_i[port] && &(~scoreboard_q[sb_id_i[port]].deps | wrote_result_q[intID] | done_result_q[intID]) && (!(|scoreboard_q[sb_id_i[port]].deps) || !scoreboard_q[sb_id_i[port]].prevent_chaining);
+      // Enable the VRF port if dependencies wrote recently. When chaining is
+      // prevented, only a completed dependency may release the port.
+      sb_enable_o[port] = sb_enable_i[port] &&
+                          &(~scoreboard_q[sb_id_i[port]].deps |
+                            wrote_result_q[intID] | done_result_q[intID]) &&
+                          (!scoreboard_q[sb_id_i[port]].prevent_chaining ||
+                           !(|scoreboard_q[sb_id_i[port]].deps) ||
+                           &(~scoreboard_q[sb_id_i[port]].deps |
+                             done_result_q[intID]));
 `else
       // Enable the VRF port if the dependant instructions wrote in the previous cycle
       // sb_enable_o[port] - scoreboard check if you can use this vrf port
@@ -790,8 +704,16 @@ module spatz_controller
         // VLSU: intID is fixed per interface (0 for WD0, 1 for WD1)
         if (port inside {SB_VLSU_VD_WD0, SB_VLSU_VD_WD1}) begin
           automatic int unsigned intID  = port - SB_VLSU_VD_WD0;
+          automatic vlen_t next_vlsu_vl;
           wrote_result_narrowing_d[sb_id_i[port]] = sb_wrote_result_i[port_idx] ^ narrow_wide_q[sb_id_i[port]];
           wrote_result_d[intID][sb_id_i[port]]    = sb_wrote_result_i[port_idx] && (!narrow_wide_q[sb_id_i[port]] || wrote_result_narrowing_q[sb_id_i[port]]);
+          next_vlsu_vl = vlsu_vl_cnt_q[intID][sb_id_i[port]];
+          if (wrote_result_d[intID][sb_id_i[port]]) begin
+            next_vlsu_vl += VRFWordBWidth;
+            vlsu_vl_cnt_d[intID][sb_id_i[port]] = next_vlsu_vl;
+            if (next_vlsu_vl >= vl_max_d[sb_id_i[port]])
+              done_result_d[intID][sb_id_i[port]] = 1'b1;
+          end
         end
       end
     end
@@ -867,6 +789,8 @@ module spatz_controller
       wrote_result_d[1][vlsu_rsp_i.id]        = 1'b0;
       done_result_d[0][vlsu_rsp_i.id]         = 1'b0;
       done_result_d[1][vlsu_rsp_i.id]         = 1'b0;
+      vlsu_vl_cnt_d[0][vlsu_rsp_i.id]         = '0;
+      vlsu_vl_cnt_d[1][vlsu_rsp_i.id]         = '0;
       vl_cnt_d[vlsu_rsp_i.id]                 = '0;
 `endif
       for (int unsigned insn = 0; insn < NrParallelInstructions; insn++)
@@ -917,6 +841,23 @@ module spatz_controller
 
     // Initialize the scoreboard metadata if we have a new instruction issued.
     if (spatz_req_valid && spatz_req.ex_unit != CON) begin
+      // An instruction ID can be reused immediately after a zero-latency or
+      // same-cycle retiring operation. Start from a clean entry, then rebuild
+      // the dependencies for this new instruction below.
+      scoreboard_d[spatz_req.id] = '0;
+      narrow_wide_d[spatz_req.id] = 1'b0;
+      wrote_result_narrowing_d[spatz_req.id] = 1'b0;
+`ifdef DOUBLE_BW
+      narrow_d[spatz_req.id] = 1'b0;
+      wrote_result_d[0][spatz_req.id] = 1'b0;
+      wrote_result_d[1][spatz_req.id] = 1'b0;
+      done_result_d[0][spatz_req.id] = 1'b0;
+      done_result_d[1][spatz_req.id] = 1'b0;
+      vlsu_vl_cnt_d[0][spatz_req.id] = '0;
+      vlsu_vl_cnt_d[1][spatz_req.id] = '0;
+      vl_cnt_d[spatz_req.id] = '0;
+`endif
+
 `ifdef VENTAGLIO
       // VTL forward extension
       vtl_table_d[spatz_req.id] = '{use_vtl: 1'b0, write: '0, read: '0}; // init a table entry
@@ -961,14 +902,41 @@ module spatz_controller
       end
 `endif
 
+      if ((spatz_req.ex_unit == OPE) && spatz_req.op_ope.is_mac) begin
+        unique case (spatz_req.vtype.vsew)
+          EW_8:    sb_vs_row_stride = 2;
+          EW_16:   sb_vs_row_stride = 4;
+          EW_32:   sb_vs_row_stride = 8;
+          default: sb_vs_row_stride = 8;
+        endcase
+
+        sb_vs_rows = int'(spatz_req.op_ope.tk);
+      end
+
       // RAW hazard
       if (spatz_req.use_vs2) begin
-        scoreboard_d[spatz_req.id].deps[write_table_d[spatz_req.vs2].id] |= write_table_d[spatz_req.vs2].valid;
-        read_table_d[spatz_req.vs2] = {spatz_req.id, 1'b1};
+        for (int unsigned row = 0; row < KMAX; row++) begin
+          if ((row < sb_vs_rows) &&
+              ((int'(spatz_req.vs2) + row * sb_vs_row_stride) < NRVREG)) begin
+            scoreboard_d[spatz_req.id].deps[
+                write_table_d[int'(spatz_req.vs2) + row * sb_vs_row_stride].id] |=
+                write_table_d[int'(spatz_req.vs2) + row * sb_vs_row_stride].valid;
+            read_table_d[int'(spatz_req.vs2) + row * sb_vs_row_stride] =
+                {spatz_req.id, 1'b1};
+          end
+        end
       end
       if (spatz_req.use_vs1) begin
-        scoreboard_d[spatz_req.id].deps[write_table_d[spatz_req.vs1].id] |= write_table_d[spatz_req.vs1].valid;
-        read_table_d[spatz_req.vs1] = {spatz_req.id, 1'b1};
+        for (int unsigned row = 0; row < KMAX; row++) begin
+          if ((row < sb_vs_rows) &&
+              ((int'(spatz_req.vs1) + row * sb_vs_row_stride) < NRVREG)) begin
+            scoreboard_d[spatz_req.id].deps[
+                write_table_d[int'(spatz_req.vs1) + row * sb_vs_row_stride].id] |=
+                write_table_d[int'(spatz_req.vs1) + row * sb_vs_row_stride].valid;
+            read_table_d[int'(spatz_req.vs1) + row * sb_vs_row_stride] =
+                {spatz_req.id, 1'b1};
+          end
+        end
       end
       if (spatz_req.vd_is_src) begin
         scoreboard_d[spatz_req.id].deps[write_table_d[spatz_req.vd].id] |= write_table_d[spatz_req.vd].valid;
@@ -1046,8 +1014,10 @@ module spatz_controller
   // not ready yet. Or we have a change in LMUL, for which we need to let all the
   // units finish first before scheduling a new operation (to avoid running into
   // issues with the socreboard).
-  logic stall, vfu_stall, vlsu_stall, vsldu_stall, vtl_stall, ope_stall, tile_stall;
-  assign stall       = ((vfu_stall | vlsu_stall | vsldu_stall | vtl_stall | ope_stall) & req_buffer_valid) || tile_stall;
+  logic stall, vfu_stall, vlsu_stall, vsldu_stall, vtl_stall, ope_stall;
+  assign stall       = (vfu_stall | vlsu_stall | vsldu_stall | vtl_stall |
+                        ope_stall) &
+                       req_buffer_valid;
   assign vfu_stall   = ~vfu_req_ready_i  & (spatz_req.ex_unit == VFU);
   assign vlsu_stall  = ~vlsu_req_ready_i & (spatz_req.ex_unit == LSU);
 `ifdef VENTAGLIO
@@ -1064,15 +1034,6 @@ module spatz_controller
   assign vtl_stall   = 1'b0;
 `endif
   assign ope_stall   = ~ope_req_ready_i  & (spatz_req.ex_unit == OPE);
-  // MAC-family tile ops may overlap other in-flight MAC-family tile ops
-  // (spatz_ope pipelines them). VTSE may overlap other in-flight VTSE ops
-  // (see tile_running_vtse_q comment above). Any other tile op combination
-  // stalls behind whatever's running, since those need the tile pipe fully
-  // drained on both ends.
-  assign tile_stall = req_buffer_valid && buffer_req_is_tile &&
-                       (buffer_req_is_mac_tile ? (|tile_running_nonmac_q) :
-                        buffer_req_is_vtse     ? (|(tile_running_q & ~tile_running_vtse_q)) :
-                                                  (|tile_running_q));
 
   // Running instructions
   logic      [NrParallelInstructions-1:0] running_insn_d, running_insn_q;
@@ -1134,19 +1095,29 @@ module spatz_controller
 
         OPE: begin
           // VME matrix ops: embed current tile dimensions into the request
-          spatz_req.op_tile.tn = tn_q;
-          spatz_req.op_tile.tm = elen_t'(mtype_q.tm);
-          spatz_req.op_tile.tk = elen_t'(mtype_q.tk);
-          // VTMV_VT/VTMV_TV body is [vstart, min(vl, ETE)-1] per spec, so vl
-          // must mirror the live CSR the same way VFU/LSU/SLD do below.
+          spatz_req.vtype      = vtype_q;
+          spatz_req.op_ope.tew = vew_e'(
+              int'(vtype_q.vsew) + int'(mtype_q.mtwiden) - 1);
+          spatz_req.op_ope.tn = tn_q;
+          spatz_req.op_ope.tm = elen_t'(mtype_q.tm);
+          spatz_req.op_ope.tk = elen_t'(mtype_q.tk);
           spatz_req.vl         = vl_q;
           spatz_req.vstart     = '0;
         end
 
         LSU: begin
-          // Overwrite vl and vstart in request (preserve vtype with vsew)
+          // Overwrite vector CSRs in request. The scoreboard uses LMUL to
+          // reserve all destination registers of grouped loads.
+          spatz_req.vtype  = vtype_q;
           spatz_req.vl     = vl_q;
           spatz_req.vstart = vstart_q;
+          if (spatz_req.op_ope.is_mem) begin
+            spatz_req.op_ope.tew = vew_e'(
+                int'(vtype_q.vsew) + int'(mtype_q.mtwiden) - 1);
+            spatz_req.op_ope.tn = tn_q;
+            spatz_req.op_ope.tm = elen_t'(mtype_q.tm);
+            spatz_req.op_ope.tk = elen_t'(mtype_q.tk);
+          end
           // The decoder's load/store branches set `op_vtl.old_vd = ls_vd`
           // unconditionally (the field stays defined regardless of
           // VENTAGLIO), but they comment out the direct `spatz_req.vd = ls_vd`
@@ -1233,7 +1204,7 @@ module spatz_controller
 
       case (decoder_rsp.spatz_req.ex_unit)
         CON: begin
-          issue_rsp_o.writeback = spatz_req.use_rd;
+          issue_rsp_o.writeback = decoder_rsp.spatz_req.use_rd;
         end // CON
         VFU: begin
           // vtype is illegal -> illegal instruction (VME tile ops do not use vtype)
@@ -1243,8 +1214,7 @@ module spatz_controller
         end // VFU
         LSU: begin
           issue_rsp_o.loadstore = 1'b1;
-          // vtype is illegal -> illegal instruction
-          if (vtype_q.vill) begin
+          if (vtype_q.vill || mtype_q.mtwiden == 0) begin
             issue_rsp_o.accept = 1'b0;
           end
         end // LSU
@@ -1257,6 +1227,11 @@ module spatz_controller
         OPE: begin
           // mtype is illegal -> illegal instruction
           if (mtype_q.mtwiden == 0) begin
+            issue_rsp_o.accept = 1'b0;
+          end else if ((decoder_rsp.spatz_req.op_ope.is_vt ||
+                        decoder_rsp.spatz_req.op_ope.is_tv) &&
+                       (!mtype_q.mtwiden != 2'b01)) begin
+            // VTMV requires a valid TSS and a one-to-one SEW-to-active-TEW mapping.
             issue_rsp_o.accept = 1'b0;
           end
         end
@@ -1276,9 +1251,6 @@ module spatz_controller
   vfu_rsp_t vfu_rsp;
   logic     vfu_rsp_valid;
   logic     vfu_rsp_ready;
-  vfu_rsp_t ope_rsp;
-  logic     ope_rsp_valid;
-  logic     ope_rsp_ready;
 
   spill_register #(
     .T(vfu_rsp_t)
@@ -1293,18 +1265,10 @@ module spatz_controller
     .ready_i(vfu_rsp_ready                  )
   );
 
-  spill_register #(
-    .T(vfu_rsp_t)
-  ) i_ope_scalar_response (
-    .clk_i  (clk_i                          ),
-    .rst_ni (rst_ni                         ),
-    .data_i (ope_rsp_i                      ),
-    .valid_i(ope_rsp_valid_i && ope_rsp_i.wb),
-    .ready_o(ope_rsp_ready_o                ),
-    .data_o (ope_rsp                        ),
-    .valid_o(ope_rsp_valid                  ),
-    .ready_i(ope_rsp_ready                  )
-  );
+  // OPE instructions only return a completion ID. OPE owns response buffering
+  // and arbitration, while the controller consumes every completion directly
+  // to release its scoreboard entry.
+  assign ope_rsp_ready_o = 1'b1;
 
   logic       rsp_valid_d;
   logic       rsp_ready_d;
@@ -1330,8 +1294,6 @@ module spatz_controller
     rsp_valid_d = '0;
 
     vfu_rsp_ready = 1'b0;
-    ope_rsp_ready = 1'b0;
-
     if (retire_csr) begin
 `ifdef MEMPOOL_SPATZ
       rsp_d.write = 1'b1;
@@ -1353,15 +1315,17 @@ module spatz_controller
         end
         rsp_d.id    = spatz_req.rd;
         rsp_valid_d = 1'b1;
-      end else if (spatz_req.op == VMCFG && spatz_req.use_rd) begin
-        // VMCFG: return the newly configured tile dimension
+      end else if (spatz_req.op == VMCFG) begin
+        if (spatz_req.use_rd) begin
+          // VMCFG: return the newly configured tile dimension
+          unique case (spatz_req.op_ope.cfg_sel)
+            2'b01: rsp_d.data = elen_t'(tn_d);
+            2'b10: rsp_d.data = elen_t'(mtype_d.tm);
+            2'b11: rsp_d.data = elen_t'(mtype_d.tk);
+            default: rsp_d.data = '0;
+          endcase
+        end
         rsp_d.id = spatz_req.rd;
-        unique case (spatz_req.op_tile.cfg_sel)
-          2'b01: rsp_d.data = elen_t'(tn_d);
-          2'b10: rsp_d.data = elen_t'(mtype_d.tm);
-          2'b11: rsp_d.data = elen_t'(mtype_d.tk);
-          default: rsp_d.data = '0;
-        endcase
         rsp_valid_d = 1'b1;
       end else begin
         // VCFG: change configuration and send back vl
@@ -1377,14 +1341,6 @@ module spatz_controller
 `endif
       rsp_valid_d   = 1'b1;
       vfu_rsp_ready = rsp_ready_d;
-    end else if (ope_rsp_valid) begin
-      rsp_d.id      = vfu_rsp.rd;
-      rsp_d.data    = vfu_rsp.result;
-`ifdef MEMPOOL_SPATZ
-      rsp_d.write   = 1'b1;
-`endif
-      rsp_valid_d   = 1'b1;
-      ope_rsp_ready = rsp_ready_d;
     end
   end // retire
 
@@ -1395,9 +1351,4 @@ module spatz_controller
   assign spatz_req_o       = spatz_req;
   assign spatz_req_valid_o = spatz_req_valid;
 
-// always_ff @(posedge clk_i) begin
-//   if (spatz_req_valid) begin
-//     $display("[CTRL ISSUE ALL] t=%0t op=%0d ex=%0d id=%0d vd=%0d vs1=%0d vs2=%0d use_vs1=%0b use_vs2=%0b use_vd=%0b vd_is_src=%0b running=%b", $time, spatz_req.op, spatz_req.ex_unit, spatz_req.id, spatz_req.vd, spatz_req.vs1, spatz_req.vs2, spatz_req.use_vs1, spatz_req.use_vs2, spatz_req.use_vd, spatz_req.vd_is_src, running_insn_q);
-//   end
-// end
 endmodule : spatz_controller
