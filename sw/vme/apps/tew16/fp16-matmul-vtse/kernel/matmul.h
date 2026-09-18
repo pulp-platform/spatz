@@ -20,6 +20,13 @@
 
 #include <stdint.h>
 
+enum {
+    CE = 8,
+    TE = 16,
+    CHUNK_SIZE = 64,
+    BLOCK_DIM = 2 * TE,
+};
+
 // Read the hardware cycle counter.
 static inline uint32_t get_cycle(void)
 {
@@ -36,6 +43,7 @@ static inline void wait_spatz(void)
     asm volatile("csrr %0, fcsr" : "=r"(fcsr) :: "memory");
 }
 
-// FP16 VME matmul over TE=16 with architectural tk=2.
+// FP16 VME matmul over TE=16 with architectural tk=2. C is a padded
+// M-by-CHUNK_SIZE L1 panel; M and N must not exceed 64.
 void matmul_fp16(const __fp16 *Apack, const __fp16 *Bpack, __fp16 *C,
                  uint32_t M, uint32_t N, uint32_t K);

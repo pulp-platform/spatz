@@ -27,14 +27,13 @@
 
 enum {
     TCDM_BYTES = 128 * 1024,
-    M_CHUNK = 64,
-    N_CHUNK = 64,
-    K_CHUNK = 128,
-    TILE_DIM = 16,
-    TILE_INPUTS = TILE_DIM * K_CHUNK,
+    M_CHUNK = CHUNK_SIZE,
+    N_CHUNK = CHUNK_SIZE,
+    K_CHUNK = CHUNK_SIZE * 2,
+    TILE_INPUTS = TE * K_CHUNK,
     TILE_BYTES = TILE_INPUTS * sizeof(__fp16),
-    A_TILES = M_CHUNK / TILE_DIM,
-    B_TILES = N_CHUNK / TILE_DIM,
+    A_TILES = M_CHUNK / TE,
+    B_TILES = N_CHUNK / TE,
     A_BYTES = A_TILES * TILE_BYTES,
     B_BYTES = B_TILES * TILE_BYTES,
     C_ELEMENTS = M_CHUNK * N_CHUNK,
@@ -43,12 +42,12 @@ enum {
     B_OFFSET = A_OFFSET + A_BYTES,
     C_OFFSET = B_OFFSET + B_BYTES,
     BUFFER_BYTES = C_OFFSET + C_BYTES,
-    BUFFER_COUNT = 2,
-    BUFFER_STRIDE = TCDM_BYTES / BUFFER_COUNT,
-    L1_BYTES = BUFFER_STRIDE + BUFFER_BYTES,
+    L1_BUFFER_COUNT = 2,
+    L1_BUFFER_STRIDE = TCDM_BYTES / L1_BUFFER_COUNT,
+    L1_BYTES = L1_BUFFER_STRIDE + BUFFER_BYTES,
 };
 
-_Static_assert(BUFFER_BYTES <= BUFFER_STRIDE,
+_Static_assert(BUFFER_BYTES <= L1_BUFFER_STRIDE,
                "one M64xN64xK128 TEW16 buffer must fit in 64 KiB");
 _Static_assert(L1_BYTES <= TCDM_BYTES,
                "two matmul buffers exceed the 128 KiB TCDM");
@@ -98,8 +97,8 @@ static snrt_dma_txid_t fill_panel(__fp16 *dst, const __fp16 *src,
     if (valid_tiles == 0 || valid_k == 0)
         return clear_tid;
 
-    const size_t copy_bytes = valid_k * TILE_DIM * sizeof(__fp16);
-    const size_t src_stride = src_tile_k * TILE_DIM * sizeof(__fp16);
+    const size_t copy_bytes = valid_k * TE * sizeof(__fp16);
+    const size_t src_stride = src_tile_k * TE * sizeof(__fp16);
     // The assembly kernel advances between packed tiles by 16 * valid_k
     // elements. Keep the L1 panel compact even though each buffer reserves
     // space for the maximum K_CHUNK.
@@ -110,7 +109,7 @@ static snrt_dma_txid_t fill_panel(__fp16 *dst, const __fp16 *src,
 static snrt_dma_txid_t fill_a(__fp16 *dst, uint32_t mb, uint32_t kb) {
     const uint32_t first_tile = mb * A_TILES;
     const uint32_t tile_count =
-        (matmul_l.M + TILE_DIM - 1) / TILE_DIM;
+        (matmul_l.M + TE - 1) / TE;
     const uint32_t valid_tiles = first_tile < tile_count
                                      ? min_u32(A_TILES,
                                                tile_count - first_tile)
@@ -120,14 +119,14 @@ static snrt_dma_txid_t fill_a(__fp16 *dst, uint32_t mb, uint32_t kb) {
     const __fp16 *src = valid_tiles == 0
                             ? zero_tile_dram
                             : matmul_Apack_dram +
-                                  (first_tile * matmul_l.K + k0) * TILE_DIM;
+                                  (first_tile * matmul_l.K + k0) * TE;
     return fill_panel(dst, src, A_TILES, valid_tiles, valid_k, matmul_l.K);
 }
 
 static snrt_dma_txid_t fill_b(__fp16 *dst, uint32_t nb, uint32_t kb) {
     const uint32_t first_tile = nb * B_TILES;
     const uint32_t tile_count =
-        (matmul_l.N + TILE_DIM - 1) / TILE_DIM;
+        (matmul_l.N + TE - 1) / TE;
     const uint32_t valid_tiles = first_tile < tile_count
                                      ? min_u32(B_TILES,
                                                tile_count - first_tile)
@@ -137,13 +136,13 @@ static snrt_dma_txid_t fill_b(__fp16 *dst, uint32_t nb, uint32_t kb) {
     const __fp16 *src = valid_tiles == 0
                             ? zero_tile_dram
                             : matmul_Bpack_dram +
-                                  (first_tile * matmul_l.K + k0) * TILE_DIM;
+                                  (first_tile * matmul_l.K + k0) * TE;
     return fill_panel(dst, src, B_TILES, valid_tiles, valid_k, matmul_l.K);
 }
 
 static snrt_dma_txid_t fill_buffer(uint32_t buffer, uint32_t mb, uint32_t nb,
                                    uint32_t kb) {
-    uint8_t *base = l1_base + buffer * BUFFER_STRIDE;
+    uint8_t *base = l1_base + buffer * L1_BUFFER_STRIDE;
     fill_a((__fp16 *)(base + A_OFFSET), mb, kb);
     return fill_b((__fp16 *)(base + B_OFFSET), nb, kb);
 }
@@ -172,7 +171,7 @@ int main(void) {
         return 2;
     }
 
-    snrt_dma_txid_t input_tid[BUFFER_COUNT] = {0, 0};
+    snrt_dma_txid_t input_tid[L1_BUFFER_COUNT] = {0, 0};
     uint32_t current_buffer = 0;
 
     input_tid[0] = fill_buffer(0, 0, 0, 0);
@@ -193,7 +192,7 @@ int main(void) {
         const uint32_t valid_m = chunk_extent(matmul_l.M, mb, M_CHUNK);
         const uint32_t valid_n = chunk_extent(matmul_l.N, nb, N_CHUNK);
         const uint32_t valid_k = chunk_extent(matmul_l.K, kb, K_CHUNK);
-        uint8_t *base = l1_base + current_buffer * BUFFER_STRIDE;
+        uint8_t *base = l1_base + current_buffer * L1_BUFFER_STRIDE;
         uint32_t fcsr;
 
         if (iter == 0)
@@ -201,9 +200,9 @@ int main(void) {
         matmul_fp16((const __fp16 *)(base + A_OFFSET),
                     (const __fp16 *)(base + B_OFFSET),
                     (__fp16 *)(base + C_OFFSET), valid_m, valid_n, valid_k);
-        // wait spatz complete
-        wait_spatz();
         end_cycle = cycle_count();
+        // Keep completion synchronization outside the measured kernel window.
+        wait_spatz();
 
         snrt_dma_start_1d(partials + (size_t)iter * C_ELEMENTS,
                           base + C_OFFSET, C_BYTES);
@@ -257,16 +256,20 @@ int main(void) {
             if (delta > max_abs)
                 max_abs = delta;
             if (delta > tolerance) {
+                if (row_errors == 0)
+                    printf("row %u: errors at cols ", row);
+                else
+                    printf(",");
+                printf("%u", col);
                 ++row_errors;
                 ++errors;
             }
         }
         if (row_errors != 0)
-            printf("row %u: %u errors\n", row, row_errors);
+            printf(" (%u errors)\n", row_errors);
     }
 
     const uint32_t cycles = end_cycle - start_cycle;
-    enum { CE = 8 };
     const uint64_t useful_fmas =
         (uint64_t)matmul_l.M * matmul_l.N * matmul_l.K;
     const uint64_t peak_fmas = (uint64_t)cycles * CE * CE;
