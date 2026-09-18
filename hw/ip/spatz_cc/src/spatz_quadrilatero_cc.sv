@@ -389,8 +389,7 @@ module spatz_quadrilatero_cc
     .quad_mem_rsp_t     (tcdm_rsp_chan_t         ),
     .quad_issue_req_t   (acc_issue_req_t         ),
     .quad_issue_rsp_t   (acc_issue_rsp_t         ),
-    .quad_rsp_t         (acc_rsp_t               ),
-    .MemRspLatency      (MemRspLatency           )
+    .quad_rsp_t         (acc_rsp_t               )
   ) i_quadrilatero_top (
     .clk_i                  (clk_i                ),
     .rst_ni                 (rst_ni               ),
