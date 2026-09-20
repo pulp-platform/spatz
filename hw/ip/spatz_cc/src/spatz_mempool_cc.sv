@@ -10,6 +10,7 @@ module spatz_mempool_cc
   parameter bit          RVE        = 0,  // Reduced-register extension
   parameter bit          RVM        = 1,  // Enable IntegerMmultiplication & Division Extension
   parameter bit          RVV        = 0,  // Enable Vector Extension
+  parameter bit EnScalarAccelMemOrdering = 0,
   parameter bit          XFVEC      = 0,
   parameter bit          XFDOTP     = 0,
   parameter bit          XFAUX      = 0,
@@ -143,6 +144,7 @@ module spatz_mempool_cc
     .RVE        ( RVE       ),
     .RVM        ( RVM       ),
     .RVV        ( RVV       ),
+    .EnScalarAccelMemOrdering ( EnScalarAccelMemOrdering ),
     .XFVEC      ( XFVEC     ),
     .XFDOTP     ( XFDOTP    ),
     .XFAUX      ( XFAUX     ),
