@@ -51,7 +51,8 @@ static inline void wait_spatz(void)
 //   mt0/mt4/mt8/mt12  = A0/A1/A2/A3 * B0
 //   mt2/mt6/mt10/mt14 = A0/A1/A2/A3 * B1
 //
-// The kernel evaluates B0 and B1 concurrently with all eight logical tiles.
-// C is a padded M-by-CHUNK_SIZE L1 panel; M and N must not exceed 64.
+// The optimized kernel evaluates B0 and B1 concurrently with all eight logical
+// tiles. It is specialized for M=N=64 and K=64 or K=128; C has a fixed
+// CHUNK_SIZE-element row stride.
 void matmul_fp16(const __fp16 *Apack, const __fp16 *Bpack, __fp16 *C,
                  uint32_t M, uint32_t N, uint32_t K);
