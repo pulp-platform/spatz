@@ -28,6 +28,7 @@ jobs:
           docs/*
           install/*
           hw/ip/snitch/src/riscv_instr.sv
+          hw/system/spatz_cluster/src/spatz_cluster.rdl.tpl
 
   lint-sv:
     runs-on: ubuntu-latest
