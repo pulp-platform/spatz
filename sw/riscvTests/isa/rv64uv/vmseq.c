@@ -1,0 +1,377 @@
+// Copyright 2021 ETH Zurich and University of Bologna.
+// Solderpad Hardware License, Version 0.51, see LICENSE for details.
+// SPDX-License-Identifier: SHL-0.51
+//
+// Author: Matheus Cavalcante <matheusd@iis.ee.ethz.ch>
+//         Basile Bougenot <bbougenot@student.ethz.ch>
+
+#include "vector_macros.h"
+
+void TEST_CASE1(void) {
+  VSET(16, e8, m1);
+  VLOAD_8(v2, 0xff, 0x00, 0xf0, 0x0f, 0xff, 0x00, 0xf0, 0x0f, 0xff, 0x00, 0xf0,
+          0x0f, 0xff, 0x00, 0xf0, 0x0f);
+  VLOAD_8(v3, 0xf2, 0x01, 0xf0, 0x0f, 0xf2, 0x01, 0xf0, 0x0f, 0xf2, 0x01, 0xf0,
+          0x0f, 0xf2, 0x01, 0xf0, 0x0f);
+  VCLEAR(v1);
+  asm volatile("vmseq.vv v1, v2, v3");
+  VSET(2, e8, m1);
+  VCMP_U8(1, v1, 0xcc, 0xcc);
+
+  VSET(16, e16, m1);
+  VLOAD_16(v2, 0xffff, 0x0000, 0xf0f0, 0x0f0f, 0xffff, 0x0000, 0xf0f0, 0x0f0f,
+           0xffff, 0x0000, 0xf0f0, 0x0f0f, 0xffff, 0x0000, 0xf0f0, 0x0f0f);
+  VLOAD_16(v3, 0xf2ff, 0x0100, 0xf0f0, 0x0f0f, 0xf2ff, 0x0100, 0xf0f0, 0x0f0f,
+           0xf2ff, 0x0100, 0xf0f0, 0x0f0f, 0xf2ff, 0x0100, 0xf0f0, 0x0f0f);
+  VCLEAR(v1);
+  asm volatile("vmseq.vv v1, v2, v3");
+  VSET(2, e8, m1);
+  VCMP_U8(2, v1, 0xcc, 0xcc);
+
+  VSET(16, e32, m2);
+  VLOAD_32(v4, 0xffffffff, 0x00000000, 0xf0f0f0f0, 0x0f0f0f0f, 0xffffffff,
+           0x00000000, 0xf0f0f0f0, 0x0f0f0f0f, 0xffffffff, 0x00000000,
+           0xf0f0f0f0, 0x0f0f0f0f, 0xffffffff, 0x00000000, 0xf0f0f0f0,
+           0x0f0f0f0f);
+  VLOAD_32(v6, 0xfff2ffff, 0x01000000, 0xf0f0f0f0, 0x0f0f0f0f, 0xfff2ffff,
+           0x01000000, 0xf0f0f0f0, 0x0f0f0f0f, 0xfff2ffff, 0x01000000,
+           0xf0f0f0f0, 0x0f0f0f0f, 0xfff2ffff, 0x01000000, 0xf0f0f0f0,
+           0x0f0f0f0f);
+  VCLEAR(v2);
+  asm volatile("vmseq.vv v2, v4, v6");
+  VSET(2, e8, m1);
+  VCMP_U8(3, v1, 0xcc, 0xcc);
+
+  #if ELEN == 64
+    VSET(16, e64, m4);
+    VLOAD_64(v4, 0xffffffffffffffff, 0x0000000000000000, 0xf0f0f0f0f0f0f0f0,
+             0x0f0f0f0f0f0f0f0f, 0xffffffffffffffff, 0x0000000000000000,
+             0xf0f0f0f0f0f0f0f0, 0x0f0f0f0f0f0f0f0f, 0xffffffffffffffff,
+             0x0000000000000000, 0xf0f0f0f0f0f0f0f0, 0x0f0f0f0f0f0f0f0f,
+             0xffffffffffffffff, 0x0000000000000000, 0xf0f0f0f0f0f0f0f0,
+             0x0f0f0f0f0f0f0f0f);
+    VLOAD_64(v8, 0xfff2ffffffffffff, 0x0100000000000000, 0xf0f0f0f0f0f0f0f0,
+             0x0f0f0f0f0f0f0f0f, 0xfff2ffffffffffff, 0x0100000000000000,
+             0xf0f0f0f0f0f0f0f0, 0x0f0f0f0f0f0f0f0f, 0xfff2ffffffffffff,
+             0x0100000000000000, 0xf0f0f0f0f0f0f0f0, 0x0f0f0f0f0f0f0f0f,
+             0xfff2ffffffffffff, 0x0100000000000000, 0xf0f0f0f0f0f0f0f0,
+             0x0f0f0f0f0f0f0f0f);
+    VCLEAR(v0);
+    asm volatile("vmseq.vv v0, v4, v8");
+    VSET(2, e8, m1);
+    VCMP_U8(4, v0, 0xcc, 0xcc);
+  #endif
+};
+
+void TEST_CASE2(void) {
+  VSET(16, e8, m1);
+  VLOAD_8(v2, 0xff, 0x00, 0xf0, 0x0f, 0xff, 0x00, 0xf0, 0x0f, 0xff, 0x00, 0xf0,
+          0x0f, 0xff, 0x00, 0xf0, 0x0f);
+  VLOAD_8(v3, 0xf2, 0x01, 0xf0, 0x0f, 0xf2, 0x01, 0xf0, 0x0f, 0xf2, 0x01, 0xf0,
+          0x0f, 0xf2, 0x01, 0xf0, 0x0f);
+  VLOAD_8(v0, 0xaa, 0xaa);
+  VCLEAR(v1);
+  asm volatile("vmseq.vv v1, v2, v3, v0.t");
+  VSET(2, e8, m1);
+  VCMP_U8(5, v1, 0xdd, 0xdd);
+
+  VSET(16, e16, m1);
+  VLOAD_16(v2, 0xffff, 0x0000, 0xf0f0, 0x0f0f, 0xffff, 0x0000, 0xf0f0, 0x0f0f,
+           0xffff, 0x0000, 0xf0f0, 0x0f0f, 0xffff, 0x0000, 0xf0f0, 0x0f0f);
+  VLOAD_16(v3, 0xf2ff, 0x0100, 0xf0f0, 0x0f0f, 0xf2ff, 0x0100, 0xf0f0, 0x0f0f,
+           0xf2ff, 0x0100, 0xf0f0, 0x0f0f, 0xf2ff, 0x0100, 0xf0f0, 0x0f0f);
+  VLOAD_8(v0, 0xaa, 0xaa);
+  VCLEAR(v1);
+  asm volatile("vmseq.vv v1, v2, v3, v0.t");
+  VSET(2, e8, m1);
+  VCMP_U8(6, v1, 0xdd, 0xdd);
+
+  VSET(16, e32, m2);
+  VLOAD_32(v4, 0xffffffff, 0x00000000, 0xf0f0f0f0, 0x0f0f0f0f, 0xffffffff,
+           0x00000000, 0xf0f0f0f0, 0x0f0f0f0f, 0xffffffff, 0x00000000,
+           0xf0f0f0f0, 0x0f0f0f0f, 0xffffffff, 0x00000000, 0xf0f0f0f0,
+           0x0f0f0f0f);
+  VLOAD_32(v6, 0xfff2ffff, 0x01000000, 0xf0f0f0f0, 0x0f0f0f0f, 0xfff2ffff,
+           0x01000000, 0xf0f0f0f0, 0x0f0f0f0f, 0xfff2ffff, 0x01000000,
+           0xf0f0f0f0, 0x0f0f0f0f, 0xfff2ffff, 0x01000000, 0xf0f0f0f0,
+           0x0f0f0f0f);
+  VLOAD_8(v0, 0xaa, 0xaa);
+  VCLEAR(v1);
+  asm volatile("vmseq.vv v1, v4, v6, v0.t");
+  VSET(2, e8, m1);
+  VCMP_U8(7, v1, 0xdd, 0xdd);
+
+  #if ELEN == 64
+    VSET(16, e64, m4);
+    VLOAD_64(v4, 0xffffffffffffffff, 0x0000000000000000, 0xf0f0f0f0f0f0f0f0,
+             0x0f0f0f0f0f0f0f0f, 0xffffffffffffffff, 0x0000000000000000,
+             0xf0f0f0f0f0f0f0f0, 0x0f0f0f0f0f0f0f0f, 0xffffffffffffffff,
+             0x0000000000000000, 0xf0f0f0f0f0f0f0f0, 0x0f0f0f0f0f0f0f0f,
+             0xffffffffffffffff, 0x0000000000000000, 0xf0f0f0f0f0f0f0f0,
+             0x0f0f0f0f0f0f0f0f);
+    VLOAD_64(v8, 0xfff2ffffffffffff, 0x0100000000000000, 0xf0f0f0f0f0f0f0f0,
+             0x0f0f0f0f0f0f0f0f, 0xfff2ffffffffffff, 0x0100000000000000,
+             0xf0f0f0f0f0f0f0f0, 0x0f0f0f0f0f0f0f0f, 0xfff2ffffffffffff,
+             0x0100000000000000, 0xf0f0f0f0f0f0f0f0, 0x0f0f0f0f0f0f0f0f,
+             0xfff2ffffffffffff, 0x0100000000000000, 0xf0f0f0f0f0f0f0f0,
+             0x0f0f0f0f0f0f0f0f);
+    VLOAD_8(v0, 0xaa, 0xaa);
+    VCLEAR(v12);
+    asm volatile("vmseq.vv v12, v4, v8, v0.t");
+    VSET(2, e8, m1);
+    VCMP_U8(8, v12, 0xdd, 0xdd);
+  #endif
+};
+
+void TEST_CASE3(void) {
+  const uint64_t scalar = 0x00000000ffffffff;
+
+  VSET(16, e8, m1);
+  VLOAD_8(v2, 0xff, 0x00, 0xf0, 0x0f, 0xff, 0x00, 0xf0, 0x0f, 0xff, 0x00, 0xf0,
+          0x0f, 0xff, 0x00, 0xf0, 0x0f);
+  VCLEAR(v1);
+  asm volatile("vmseq.vx v1, v2, %[A]" ::[A] "r"(scalar));
+  VSET(2, e8, m1);
+  VCMP_U8(9, v1, 0x11, 0x11);
+
+  VSET(16, e16, m1);
+  VLOAD_16(v2, 0xffff, 0x0000, 0xf0f0, 0x0f0f, 0xffff, 0x0000, 0xf0f0, 0x0f0f,
+           0xffff, 0x0000, 0xf0f0, 0x0f0f, 0xffff, 0x0000, 0xf0f0, 0x0f0f);
+  VCLEAR(v1);
+  asm volatile("vmseq.vx v1, v2, %[A]" ::[A] "r"(scalar));
+  VSET(2, e8, m1);
+  VCMP_U8(10, v1, 0x11, 0x11);
+
+  VSET(16, e32, m2);
+  VLOAD_32(v4, 0xffffffff, 0x00000000, 0xf0f0f0f0, 0x0f0f0f0f, 0xffffffff,
+           0x00000000, 0xf0f0f0f0, 0x0f0f0f0f, 0xffffffff, 0x00000000,
+           0xf0f0f0f0, 0x0f0f0f0f, 0xffffffff, 0x00000000, 0xf0f0f0f0,
+           0x0f0f0f0f);
+  VCLEAR(v2);
+  asm volatile("vmseq.vx v2, v4, %[A]" ::[A] "r"(scalar));
+  VSET(2, e8, m1);
+  VCMP_U8(11, v2, 0x11, 0x11);
+
+//   64bit scalars are not passed correctly by the integer core
+//   VSET(16, e64, m2);
+//   VLOAD_64(v2, 0xffffffffffffffff, 0x0000000000000000, 0xf0f0f0f0f0f0f0f0,
+//            0x0f0f0f0f0f0f0f0f, 0xffffffffffffffff, 0x0000000000000000,
+//            0xf0f0f0f0f0f0f0f0, 0x0f0f0f0f0f0f0f0f, 0xffffffffffffffff,
+//            0x0000000000000000, 0xf0f0f0f0f0f0f0f0, 0x0f0f0f0f0f0f0f0f,
+//            0xffffffffffffffff, 0x0000000000000000, 0xf0f0f0f0f0f0f0f0,
+//            0x0f0f0f0f0f0f0f0f);
+//   VCLEAR(v0);
+//   asm volatile("vmseq.vx v0, v2, %[A]" ::[A] "r"(scalar));
+//   VSET(2, e8, m1);
+//   VCMP_U8(12, v0, 0x00, 0x00);
+};
+
+void TEST_CASE4(void) {
+  const uint64_t scalar = 0x00000000ffffffff;
+
+  VSET(16, e8, m1);
+  VLOAD_8(v2, 0xff, 0x00, 0xf0, 0x0f, 0xff, 0x00, 0xf0, 0x0f, 0xff, 0x00, 0xf0,
+          0x0f, 0xff, 0x00, 0xf0, 0x0f);
+  VLOAD_8(v0, 0x10, 0x10);
+  VCLEAR(v1);
+  asm volatile("vmseq.vx v1, v2, %[A], v0.t" ::[A] "r"(scalar));
+  VSET(2, e8, m1);
+  VCMP_U8(13, v1, 0xff, 0xff);
+
+  VSET(16, e16, m1);
+  VLOAD_16(v2, 0xffff, 0x0000, 0xf0f0, 0x0f0f, 0xffff, 0x0000, 0xf0f0, 0x0f0f,
+           0xffff, 0x0000, 0xf0f0, 0x0f0f, 0xffff, 0x0000, 0xf0f0, 0x0f0f);
+  VLOAD_8(v0, 0x10, 0x10);
+  VCLEAR(v1);
+  asm volatile("vmseq.vx v1, v2, %[A], v0.t" ::[A] "r"(scalar));
+  VSET(2, e8, m1);
+  VCMP_U8(14, v1, 0xff, 0xff);
+
+  VSET(16, e32, m2);
+  VLOAD_32(v4, 0xffffffff, 0x00000000, 0xf0f0f0f0, 0x0f0f0f0f, 0xffffffff,
+           0x00000000, 0xf0f0f0f0, 0x0f0f0f0f, 0xffffffff, 0x00000000,
+           0xf0f0f0f0, 0x0f0f0f0f, 0xffffffff, 0x00000000, 0xf0f0f0f0,
+           0x0f0f0f0f);
+  VLOAD_8(v0, 0x10, 0x10);
+  VCLEAR(v2);
+  asm volatile("vmseq.vx v2, v4, %[A], v0.t" ::[A] "r"(scalar));
+  VSET(2, e8, m1);
+  VCMP_U8(15, v2, 0xff, 0xff);
+
+//   64bit scalars are not passed correctly by the integer core
+//   VSET(16, e64, m2);
+//   VLOAD_64(v2, 0xffffffffffffffff, 0x0000000000000000, 0xf0f0f0f0f0f0f0f0,
+//            0x0f0f0f0f0f0f0f0f, 0xffffffffffffffff, 0x0000000000000000,
+//            0xf0f0f0f0f0f0f0f0, 0x0f0f0f0f0f0f0f0f, 0xffffffffffffffff,
+//            0x0000000000000000, 0xf0f0f0f0f0f0f0f0, 0x0f0f0f0f0f0f0f0f,
+//            0xffffffffffffffff, 0x0000000000000000, 0xf0f0f0f0f0f0f0f0,
+//            0x0f0f0f0f0f0f0f0f);
+//   VLOAD_8(v0, 0x10, 0x10);
+//   VCLEAR(v4);
+//   asm volatile("vmseq.vx v4, v2, %[A], v0.t" ::[A] "r"(scalar));
+//   VSET(2, e8, m1);
+//   VCMP_U8(16, v4, 0x00, 0x00);
+};
+
+void TEST_CASE5(void) {
+  VSET(16, e8, m1);
+  VLOAD_8(v2, 0x0f, 0x00, 0xf0, 0x0f, 0x0f, 0x00, 0xf0, 0x0f, 0x0f, 0x00, 0xf0,
+          0x0f, 0x0f, 0x00, 0xf0, 0x0f);
+  VCLEAR(v1);
+  asm volatile("vmseq.vi v1, v2, 15");
+  VSET(2, e8, m1);
+  VCMP_U8(17, v1, 0x99, 0x99);
+
+  VSET(16, e16, m1);
+  VLOAD_16(v2, 0x000f, 0x0000, 0xf0f0, 0x0f0f, 0x000f, 0x0000, 0xf0f0, 0x0f0f,
+           0x000f, 0x0000, 0xf0f0, 0x0f0f, 0x000f, 0x0000, 0xf0f0, 0x0f0f);
+  VCLEAR(v1);
+  asm volatile("vmseq.vi v1, v2, 15");
+  VSET(2, e8, m1);
+  VCMP_U8(18, v1, 0x11, 0x11);
+
+  VSET(16, e32, m2);
+  VLOAD_32(v4, 0x0000000f, 0x00000000, 0xf0f0f0f0, 0x0f0f0f0f, 0x0000000f,
+           0x00000000, 0xf0f0f0f0, 0x0f0f0f0f, 0x0000000f, 0x00000000,
+           0xf0f0f0f0, 0x0f0f0f0f, 0x0000000f, 0x00000000, 0xf0f0f0f0,
+           0x0f0f0f0f);
+  VCLEAR(v2);
+  asm volatile("vmseq.vi v2, v4, 15");
+  VSET(2, e8, m1);
+  VCMP_U8(19, v2, 0x11, 0x11);
+
+  #if ELEN == 64
+    VSET(16, e64, m4);
+    VLOAD_64(v8, 0x000000000000000f, 0x0000000000000000, 0xf0f0f0f0f0f0f0f0,
+             0x0f0f0f0f0f0f0f0f, 0x000000000000000f, 0x0000000000000000,
+             0xf0f0f0f0f0f0f0f0, 0x0f0f0f0f0f0f0f0f, 0x000000000000000f,
+             0x0000000000000000, 0xf0f0f0f0f0f0f0f0, 0x0f0f0f0f0f0f0f0f,
+             0x000000000000000f, 0x0000000000000000, 0xf0f0f0f0f0f0f0f0,
+             0x0f0f0f0f0f0f0f0f);
+    VCLEAR(v4);
+    asm volatile("vmseq.vi v4, v8, 15");
+    VSET(2, e8, m1);
+    VCMP_U8(20, v4, 0x11, 0x11);
+  #endif
+};
+
+void TEST_CASE6(void) {
+  VSET(16, e8, m1);
+  VLOAD_8(v2, 0x0f, 0x00, 0xf0, 0x0f, 0x0f, 0x00, 0xf0, 0x0f, 0x0f, 0x00, 0xf0,
+          0x0f, 0x0f, 0x00, 0xf0, 0x0f);
+  VLOAD_8(v0, 0x10, 0x10);
+  VCLEAR(v1);
+  asm volatile("vmseq.vi v1, v2, 15, v0.t");
+  VSET(2, e8, m1);
+  VCMP_U8(21, v1, 0xff, 0xff);
+
+  VSET(16, e16, m1);
+  VLOAD_16(v2, 0x000f, 0x0000, 0xf0f0, 0x0f0f, 0x000f, 0x0000, 0xf0f0, 0x0f0f,
+           0x000f, 0x0000, 0xf0f0, 0x0f0f, 0x000f, 0x0000, 0xf0f0, 0x0f0f);
+  VLOAD_8(v0, 0x10, 0x10);
+  VCLEAR(v1);
+  asm volatile("vmseq.vi v1, v2, 15, v0.t");
+  VSET(2, e8, m1);
+  VCMP_U8(22, v1, 0xff, 0xff);
+
+  VSET(16, e32, m2);
+  VLOAD_32(v4, 0x0000000f, 0x00000000, 0xf0f0f0f0, 0x0f0f0f0f, 0x0000000f,
+           0x00000000, 0xf0f0f0f0, 0x0f0f0f0f, 0x0000000f, 0x00000000,
+           0xf0f0f0f0, 0x0f0f0f0f, 0x0000000f, 0x00000000, 0xf0f0f0f0,
+           0x0f0f0f0f);
+  VLOAD_8(v0, 0x10, 0x10);
+  VCLEAR(v2);
+  asm volatile("vmseq.vi v2, v4, 15, v0.t");
+  VSET(2, e8, m1);
+  VCMP_U8(23, v2, 0xff, 0xff);
+
+  #if ELEN == 64
+    VSET(16, e64, m4);
+    VLOAD_64(v4, 0x000000000000000f, 0x0000000000000000, 0xf0f0f0f0f0f0f0f0,
+             0x0f0f0f0f0f0f0f0f, 0x000000000000000f, 0x0000000000000000,
+             0xf0f0f0f0f0f0f0f0, 0x0f0f0f0f0f0f0f0f, 0x000000000000000f,
+             0x0000000000000000, 0xf0f0f0f0f0f0f0f0, 0x0f0f0f0f0f0f0f0f,
+             0x000000000000000f, 0x0000000000000000, 0xf0f0f0f0f0f0f0f0,
+             0x0f0f0f0f0f0f0f0f);
+    VLOAD_8(v0, 0x10, 0x10);
+    VCLEAR(v8);
+    asm volatile("vmseq.vi v8, v4, 15, v0.t");
+    VSET(2, e8, m1);
+    VCMP_U8(24, v8, 0xff, 0xff);
+  #endif
+};
+
+void TEST_CASE7(void) {
+  VSET(16, e8, m1);
+  VLOAD_8(v2, 0xff, 0x00, 0xf0, 0x0f, 0xff, 0x00, 0xf0, 0x0f, 0xff, 0x00, 0xf0,
+          0x0f, 0xff, 0x00, 0xf0, 0x0f);
+  VLOAD_8(v3, 0xf2, 0x01, 0xf0, 0x0f, 0xf2, 0x01, 0xf0, 0x0f, 0xf2, 0x01, 0xf0,
+          0x0f, 0xf2, 0x01, 0xf0, 0x0f);
+  VLOAD_8(v0, 0xaa, 0xaa);
+  VSET_TO_ONES(v1);
+  asm volatile("vmseq.vv v1, v2, v3, v0.t");
+  VSET(2, e8, m1);
+  VCMP_U8(25, v1, 0xdd, 0xdd);
+
+  VSET(16, e16, m1);
+  VLOAD_16(v2, 0xffff, 0x0000, 0xf0f0, 0x0f0f, 0xffff, 0x0000, 0xf0f0, 0x0f0f,
+           0xffff, 0x0000, 0xf0f0, 0x0f0f, 0xffff, 0x0000, 0xf0f0, 0x0f0f);
+  VLOAD_16(v3, 0xf2ff, 0x0100, 0xf0f0, 0x0f0f, 0xf2ff, 0x0100, 0xf0f0, 0x0f0f,
+           0xf2ff, 0x0100, 0xf0f0, 0x0f0f, 0xf2ff, 0x0100, 0xf0f0, 0x0f0f);
+  VLOAD_8(v0, 0xaa, 0xaa);
+  VSET_TO_ONES(v1);
+  asm volatile("vmseq.vv v1, v2, v3, v0.t");
+  VSET(2, e8, m1);
+  VCMP_U8(26, v1, 0xdd, 0xdd);
+
+  VSET(16, e32, m2);
+  VLOAD_32(v4, 0xffffffff, 0x00000000, 0xf0f0f0f0, 0x0f0f0f0f, 0xffffffff,
+           0x00000000, 0xf0f0f0f0, 0x0f0f0f0f, 0xffffffff, 0x00000000,
+           0xf0f0f0f0, 0x0f0f0f0f, 0xffffffff, 0x00000000, 0xf0f0f0f0,
+           0x0f0f0f0f);
+  VLOAD_32(v6, 0xfff2ffff, 0x01000000, 0xf0f0f0f0, 0x0f0f0f0f, 0xfff2ffff,
+           0x01000000, 0xf0f0f0f0, 0x0f0f0f0f, 0xfff2ffff, 0x01000000,
+           0xf0f0f0f0, 0x0f0f0f0f, 0xfff2ffff, 0x01000000, 0xf0f0f0f0,
+           0x0f0f0f0f);
+  VLOAD_8(v0, 0xaa, 0xaa);
+  VSET_TO_ONES(v2);
+  asm volatile("vmseq.vv v2, v4, v6, v0.t");
+  VSET(2, e8, m1);
+  VCMP_U8(27, v1, 0xdd, 0xdd);
+
+  #if ELEN == 64
+    VSET(16, e64, m4);
+    VLOAD_64(v4, 0xffffffffffffffff, 0x0000000000000000, 0xf0f0f0f0f0f0f0f0,
+             0x0f0f0f0f0f0f0f0f, 0xffffffffffffffff, 0x0000000000000000,
+             0xf0f0f0f0f0f0f0f0, 0x0f0f0f0f0f0f0f0f, 0xffffffffffffffff,
+             0x0000000000000000, 0xf0f0f0f0f0f0f0f0, 0x0f0f0f0f0f0f0f0f,
+             0xffffffffffffffff, 0x0000000000000000, 0xf0f0f0f0f0f0f0f0,
+             0x0f0f0f0f0f0f0f0f);
+    VLOAD_64(v8, 0xfff2ffffffffffff, 0x0100000000000000, 0xf0f0f0f0f0f0f0f0,
+             0x0f0f0f0f0f0f0f0f, 0xfff2ffffffffffff, 0x0100000000000000,
+             0xf0f0f0f0f0f0f0f0, 0x0f0f0f0f0f0f0f0f, 0xfff2ffffffffffff,
+             0x0100000000000000, 0xf0f0f0f0f0f0f0f0, 0x0f0f0f0f0f0f0f0f,
+             0xfff2ffffffffffff, 0x0100000000000000, 0xf0f0f0f0f0f0f0f0,
+             0x0f0f0f0f0f0f0f0f);
+    VLOAD_8(v0, 0xaa, 0xaa);
+    VSET_TO_ONES(v12);
+    asm volatile("vmseq.vv v12, v4, v8, v0.t");
+    VSET(2, e8, m1);
+    VCMP_U8(28, v12, 0xdd, 0xdd);
+  #endif
+};
+
+int main(void) {
+  INIT_CHECK();
+  enable_vec();
+
+  TEST_CASE1();
+  TEST_CASE2();
+  TEST_CASE3();
+  TEST_CASE4();
+  TEST_CASE5();
+  TEST_CASE6();
+  TEST_CASE7();
+
+  EXIT_CHECK();
+}
