@@ -94,13 +94,13 @@ static const vme_matmul_layer matmul_l = {{
     .M = {args.m}, .N = {args.n}, .K = {args.k},
 }};
 
-static const float matmul_Cref_dram[{args.m * args.n}]
+static const float Cref_dram[{args.m * args.n}]
     __attribute__((section(".dram"), aligned(64))) = {c_array_f32(cref)};
 
-static const __fp16 matmul_Apack_dram[{m_tiles * TILE_DIM * args.k}]
+static const __fp16 Apack_dram[{m_tiles * TILE_DIM * args.k}]
     __attribute__((section(".dram"), aligned(64))) = {c_array_f16(apack)};
 
-static const __fp16 matmul_Bpack_dram[{args.k * n_tiles * TILE_DIM}]
+static const __fp16 Bpack_dram[{args.k * n_tiles * TILE_DIM}]
     __attribute__((section(".dram"), aligned(64))) = {c_array_f16(bpack)};
 '''
     args.output.parent.mkdir(parents=True, exist_ok=True)

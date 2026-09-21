@@ -118,7 +118,7 @@ static snrt_dma_txid_t fill_a(__fp16 *dst, uint32_t mb, uint32_t kb) {
     const uint32_t k0 = kb * K_CHUNK;
     const __fp16 *src = valid_tiles == 0
                             ? zero_tile_dram
-                            : matmul_Apack_dram +
+                            : Apack_dram +
                                   (first_tile * matmul_l.K + k0) * TE;
     return fill_panel(dst, src, A_TILES, valid_tiles, valid_k, matmul_l.K);
 }
@@ -135,7 +135,7 @@ static snrt_dma_txid_t fill_b(__fp16 *dst, uint32_t nb, uint32_t kb) {
     const uint32_t k0 = kb * K_CHUNK;
     const __fp16 *src = valid_tiles == 0
                             ? zero_tile_dram
-                            : matmul_Bpack_dram +
+                            : Bpack_dram +
                                   (first_tile * matmul_l.K + k0) * TE;
     return fill_panel(dst, src, B_TILES, valid_tiles, valid_k, matmul_l.K);
 }
@@ -242,13 +242,14 @@ int main(void) {
     }
 
     uint32_t errors = 0;
+    uint32_t tile_errors[2][8] = {{0}};
     float max_abs = 0.0f;
     for (uint32_t row = 0; row < matmul_l.M; ++row) {
         uint32_t row_errors = 0;
         for (uint32_t col = 0; col < matmul_l.N; ++col) {
             const size_t index = (size_t)row * matmul_l.N + col;
             const float actual = c_out[index];
-            const float expected = matmul_Cref_dram[index];
+            const float expected = Cref_dram[index];
             const float delta = actual > expected ? actual - expected
                                                   : expected - actual;
             const float tolerance = 0.05f + 0.02f *
@@ -256,6 +257,35 @@ int main(void) {
             if (delta > max_abs)
                 max_abs = delta;
             if (delta > tolerance) {
+                const uint32_t local_row = row % M_CHUNK;
+                const uint32_t local_col = col % N_CHUNK;
+                const uint32_t n_block = local_col / N_BLOCK;
+                const uint32_t tile_row = local_row / TE;
+                const uint32_t tile_col = (local_col % N_BLOCK) / TE;
+                const uint32_t tile_id = tile_row * 4 + tile_col * 2;
+                const uint32_t tile_slot = tile_id / 2;
+                const uint32_t tile_lane = local_col % TE;
+
+                if (tile_errors[n_block][tile_slot] == 0) {
+                    printf("first mismatch nblock=%u tile=mt%u "
+                           "tile_row=%u lane=%u row=%u col=%u "
+                           "actual=0x%08x ref=0x%08x delta=0x%08x\n",
+                           n_block, tile_id, local_row % TE, tile_lane,
+                           row, col, float_bits(actual), float_bits(expected),
+                           float_bits(delta));
+                    for (uint32_t kb = 0; kb < kb_count; ++kb) {
+                        const uint32_t mb = row / M_CHUNK;
+                        const uint32_t nb = col / N_CHUNK;
+                        const uint32_t job = mb * nb_count + nb;
+                        const __fp16 *partial = partials +
+                            (size_t)(job * kb_count + kb) * C_ELEMENTS;
+                        const float partial_value =
+                            partial_at(partial, local_row, local_col);
+                        printf("  kb=%u partial=0x%08x\n", kb,
+                               float_bits(partial_value));
+                    }
+                }
+                ++tile_errors[n_block][tile_slot];
                 if (row_errors == 0)
                     printf("row %u: errors at cols ", row);
                 else
@@ -267,6 +297,15 @@ int main(void) {
         }
         if (row_errors != 0)
             printf(" (%u errors)\n", row_errors);
+    }
+
+    for (uint32_t n_block = 0; n_block < 2; ++n_block) {
+        for (uint32_t tile_slot = 0; tile_slot < 8; ++tile_slot) {
+            if (tile_errors[n_block][tile_slot] != 0) {
+                printf("nblock %u mt%u: %u errors\n", n_block,
+                       tile_slot * 2, tile_errors[n_block][tile_slot]);
+            }
+        }
     }
 
     const uint32_t cycles = end_cycle - start_cycle;
