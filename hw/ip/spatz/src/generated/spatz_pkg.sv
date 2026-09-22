@@ -87,14 +87,28 @@ package spatz_pkg;
   // Encodes both the scalar RD and the VD address in the VRF
   localparam int VFURespAddrWidth  = GPRWidth > $clog2(NrVRFWords) ? GPRWidth : $clog2(NrVRFWords);
 
-  // Number of elements along tile edge (for TEW=32 accumulation)
-  localparam int unsigned TEW    = 32;
-  localparam int unsigned TE     = 8;
-  localparam int unsigned NRTILE = 16;
-  localparam int unsigned NrWordsPerTile = (TEW==32) ? (TE*TE/4) : ((TE==8)? (TE*TE/2) : TE*TE);
+  // Fixed physical accumulator storage width. The active tile element width
+  // is selected by msetmtype and travels with each request as op_ope.tew.
+  localparam int unsigned AccElemWidth = 32;
+  localparam int unsigned AccElemBytes = AccElemWidth >> 3;
+  localparam int unsigned TE     = 16;
+  localparam int unsigned CE     = 8;
+  // Storage width for the largest supported runtime reduction depth.  The
+  // controller further limits tk to 32/SEW, or to one for 64-bit accumulation.
+  localparam int unsigned KMAX   = (AccElemWidth <= 32) ? (32 / 8) : 1;
+  localparam int unsigned NrPhysicalTile = 16;
+  localparam int unsigned NrWordsPerTile = (AccElemWidth == 32) ?
+      (TE*TE/4) : ((TE == 8) ? (TE*TE/2) : TE*TE);
 
-  typedef logic [$clog2(NRTILE)-1:0]          zvt_ptile_t;
-  typedef logic [$clog2(NrWordsPerTile)-1:0]  zvt_word_t;
+  typedef logic [$clog2(TE)-1:0] tile_dim_t;
+  typedef logic [$clog2(TE+1)-1:0] tile_count_t;
+  typedef logic [$clog2(NrPhysicalTile)-1:0]  mt_t;
+  typedef struct packed {
+    logic                     tile_valid;
+    mt_t                      tile_id;
+    logic                     is_row;
+    tile_dim_t                index;
+  } tss_t;
 
   //////////////////////
   // Type Definitions //
@@ -113,14 +127,12 @@ package spatz_pkg;
   typedef logic [ELEN-1:0] elen_t;
   typedef logic [ELENB-1:0] elenb_t;
 
-  // Zvt mtype CSR (address 0xC23) layout
-  // bits[ELEN-1:24] reserved | bits[23:10] tm[13:0] | bits[9:8] reserved
-  // bits[7:5] tk[2:0] | bits[4:2] reserved | bits[1:0] mtwiden[1:0]
+  // mtype CSR layout
   typedef struct packed {
     logic [ELEN-25:0] reserved2; // bits[ELEN-1:24]
     logic [13:0]      tm;        // bits[23:10]: output-row bound (0..ETE)
     logic [1:0]       reserved1; // bits[9:8]
-    logic [2:0]       tk;        // bits[7:5]:  K-dimension bound (0..KMAX)
+    logic [2:0]       tk;        // bits[7:5]: reduction depth (0..KMAX)
     logic [2:0]       reserved0; // bits[4:2]
     logic [1:0]       mtwiden;   // bits[1:0]:  0=unconfigured, 1=x1, 2=x2, 3=x4
   } mtype_t;
@@ -130,6 +142,26 @@ package spatz_pkg;
   typedef logic [VFURespAddrWidth-1:0] vfu_rsp_addr_t;
   typedef logic [N_FU*ELENB-1:0] vrf_be_t;
   typedef logic [N_FU*ELEN-1:0] vrf_data_t;
+
+  // Keep the OPE/VLSU tile datapath independent of the physical tile edge.
+  // Rows wider than this port are transferred over multiple beats.
+  localparam int unsigned TileDataWidth = CE*AccElemWidth;
+  typedef logic [TileDataWidth-1:0] tile_row_t;
+  typedef struct packed {
+    mt_t                    idx;
+    tile_dim_t              row;
+    tile_count_t            elem_offset;
+    tile_count_t            elems;
+    vew_e                    tew;
+  } tile_r_req_t;
+  typedef struct packed {
+    mt_t                    idx;
+    tile_dim_t              row;
+    tile_count_t            elem_offset;
+    tile_count_t            elems;
+    vew_e                    tew;
+    tile_row_t              data;
+  } tile_w_req_t;
 
   // Instruction ID
   typedef logic [$clog2(NrParallelInstructions)-1:0] spatz_id_t;
@@ -287,11 +319,16 @@ package spatz_pkg;
     logic       signed_vs1;
     logic       signed_vs2;
     logic       is_load;
-    vew_e       ew;         // element width for tile load/store
+    logic       is_mem;
+    logic       is_mac;
+    logic       is_vt;
+    logic       is_tv;
+    tss_t       tss;
+    vew_e       tew;        // runtime width: log2(SEW bytes * MTWIDEN)
     elen_t      tn;         // N dimension (output columns)
     elen_t      tm;         // M dimension (output rows)
     elen_t      tk;         // K dimension (reduction depth)
-  } op_tile_t;
+  } op_ope_t;
 
   // Result from decoder
   typedef struct packed {
@@ -306,6 +343,7 @@ package spatz_pkg;
     vreg_t vd;
     logic use_vd;
     logic vd_is_src;
+    mt_t mtd;
 
     // Scalar input values
     elen_t rs1;
@@ -332,7 +370,7 @@ package spatz_pkg;
     op_mem_t op_mem;
     op_sld_t op_sld;
     op_vtl_t op_vtl;
-    op_tile_t op_tile;
+    op_ope_t op_ope;
 
     // Spatz config details
     vtype_t vtype;
@@ -409,6 +447,15 @@ package spatz_pkg;
     // Instruction ID
     spatz_id_t id;
   } vsldu_rsp_t;
+
+  ////////////////////
+  //  OPE Response  //
+  ////////////////////
+
+  typedef struct packed {
+    // Instruction ID
+    spatz_id_t id;
+  } ope_rsp_t;
 
   //////////////////
   // VRF/SB Ports //
@@ -554,30 +601,23 @@ package spatz_pkg;
     tmp = (a < b) ? a : b;
     min3 = (tmp < c) ? tmp : c;
   endfunction
-
-  function automatic void zvt_pun32_te8(
-    input  logic [3:0] tile,
-    input  logic [2:0] row,
-    input  logic [2:0] col,
-    output logic [3:0] ptile,
+/*
+  function automatic void zvt_pun32(
+    input  logic [$clog2(NrPhysicalTile)-1:0] tile,
+    input  tile_dim_t                        row,
+    input  tile_dim_t                        col,
+    output logic [$clog2(NrPhysicalTile)-1:0] ptile,
     output logic [$clog2(NrWordsPerTile)-1:0] word
   );
-    logic [3:0] major_offset;
-    logic [3:0] minor_word;
+    int unsigned minor_offset;
+    int unsigned major_offset;
 
     begin
-      ptile = tile + {2'b00, row[2], 1'b0} + {3'b000, col[1]};
-
-      // spec:
-      // minor_offset = (row % 2) * 8 + (col % 2) * 4;
-      // major_offset = ((row / 2) % 2) * 2 + (col / 4);
-      //
-      // word = (major_offset * 16 + minor_offset) / 4
-      major_offset = {2'b00, row[1], 1'b0} + {3'b000, col[2]};
-      minor_word   = {2'b00, row[0], 1'b0} + {3'b000, col[0]};
-
-      word = major_offset[1:0] * 4 + minor_word[1:0];
+      ptile        = tile + 2 * (row / (TE / 2)) + ((col & 2) >> 1);
+      minor_offset = (row % 2) * 8 + (col % 2) * 4;
+      major_offset = ((row / 2) % (TE / 4)) * (TE / 4) + (col / 4);
+      word         = (major_offset * 16 + minor_offset) / 4;
     end
   endfunction
-  
+*/
 endpackage : spatz_pkg
