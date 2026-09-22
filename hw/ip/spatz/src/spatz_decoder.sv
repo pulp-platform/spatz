@@ -65,14 +65,10 @@ module spatz_decoder
           // instr[11:7] hardwired 0b00000; tile target identified via rs2 (TSS)
           spatz_req.op_ope.is_load    = 1'b1;
           spatz_req.op_ope.is_mem     = 1'b1;
-          spatz_req.op_ope.tss.tile_id   = tile_id_t'(decoder_req_i.rs2[30:27] / NumAccPerTile);
-          spatz_req.op_ope.tss.index  = ($clog2(TE))'(decoder_req_i.rs2[23:0]);
+          spatz_req.op_ope.tss.tile_id   = mt_t'(decoder_req_i.rs2[30:27]);
+          spatz_req.op_ope.tss.index  = tile_dim_t'(decoder_req_i.rs2[23:0]);
           spatz_req.op_ope.tss.is_row = (decoder_req_i.rs2[26:24] == 3'd0);
-          spatz_req.op_ope.tss.tile_valid  = ((decoder_req_i.rs2[30:27] % NumAccPerTile) == 0) &&
-                                         (decoder_req_i.rs2[30:27] < NrPhysicalTile) &&
-                                         ((decoder_req_i.rs2[26:24] == 3'd0) ||
-                                          (decoder_req_i.rs2[26:24] == 3'd1)) &&
-                                         (decoder_req_i.rs2[23:0] < TE);
+          spatz_req.op_ope.tss.tile_valid  = (decoder_req_i.rs2[30:27] < NrPhysicalTile) && (decoder_req_i.rs2[23:0] < TE);
           spatz_req.op_mem.is_load    = 1'b1;
           unique case (decoder_req_i.instr[31:29])
             3'h0: spatz_req.op_mem.ew = EW_8;
@@ -94,15 +90,11 @@ module spatz_decoder
           spatz_req.rs2               = decoder_req_i.rs2; // TSS (Tile Subset Specifier)
           // instr[11:7] hardwired 0b00000; tile source identified via rs2 (TSS)
           spatz_req.op_ope.is_mem     = 1'b1;
-          spatz_req.op_ope.tss.tile_id   = tile_id_t'(decoder_req_i.rs2[30:27] / NumAccPerTile);
-          spatz_req.op_ope.tss.index  = ($clog2(TE))'(decoder_req_i.rs2[23:0]);
+          spatz_req.op_ope.tss.tile_id   = mt_t'(decoder_req_i.rs2[30:27]);
+          spatz_req.op_ope.tss.index  = tile_dim_t'(decoder_req_i.rs2[23:0]);
           // rs2[26:24]: 0 = one row, 1 = one column.
           spatz_req.op_ope.tss.is_row = (decoder_req_i.rs2[26:24] == 3'd0);
-          spatz_req.op_ope.tss.tile_valid  = ((decoder_req_i.rs2[30:27] % NumAccPerTile) == 0) &&
-                                         (decoder_req_i.rs2[30:27] < NrPhysicalTile) &&
-                                         ((decoder_req_i.rs2[26:24] == 3'd0) ||
-                                          (decoder_req_i.rs2[26:24] == 3'd1)) &&
-                                         (decoder_req_i.rs2[23:0] < TE);
+          spatz_req.op_ope.tss.tile_valid  = (decoder_req_i.rs2[30:27] < NrPhysicalTile) && (decoder_req_i.rs2[23:0] < TE);
           spatz_req.op_mem.is_load    = 1'b0;
           unique case (decoder_req_i.instr[31:29])
             3'h0: spatz_req.op_mem.ew = EW_8;
@@ -2176,14 +2168,10 @@ module spatz_decoder
           spatz_req.rs1     = decoder_req_i.rs1; // tile row index (from scalar reg)
           spatz_req.vd      = decoder_req_i.instr[11:7]; // destination vector reg
           spatz_req.use_vd  = 1'b1;
-          spatz_req.op_ope.tss.tile_id   = tile_id_t'(decoder_req_i.rs1[30:27] / NumAccPerTile);
-          spatz_req.op_ope.tss.index  = ($clog2(TE))'(decoder_req_i.rs1[23:0]);
+          spatz_req.op_ope.tss.tile_id   = mt_t'(decoder_req_i.rs1[30:27]);
+          spatz_req.op_ope.tss.index  = tile_dim_t'(decoder_req_i.rs1[23:0]);
           spatz_req.op_ope.tss.is_row = (decoder_req_i.rs1[26:24] == 3'd0);
-          spatz_req.op_ope.tss.tile_valid  = ((decoder_req_i.rs1[30:27] % NumAccPerTile) == 0) &&
-                                    (decoder_req_i.rs1[30:27] < NrPhysicalTile) &&
-                                    ((decoder_req_i.rs1[26:24] == 3'd0) ||
-                                    (decoder_req_i.rs1[26:24] == 3'd1)) &&
-                                    (decoder_req_i.rs1[23:0] < TE);
+          spatz_req.op_ope.tss.tile_valid  = (decoder_req_i.rs1[30:27] < NrPhysicalTile) && (decoder_req_i.rs1[23:0] < TE);
           spatz_req.op_ope.is_vt = 1'b1;
         end
 
@@ -2194,14 +2182,10 @@ module spatz_decoder
           spatz_req.rs1     = decoder_req_i.rs1; // tile row index (from scalar reg)
           spatz_req.vs2     = decoder_req_i.instr[24:20]; // source vector reg
           spatz_req.use_vs2 = 1'b1;
-          spatz_req.op_ope.tss.tile_id   = tile_id_t'(decoder_req_i.rs1[30:27] / NumAccPerTile);
-          spatz_req.op_ope.tss.index  = ($clog2(TE))'(decoder_req_i.rs1[23:0]);
+          spatz_req.op_ope.tss.tile_id   = mt_t'(decoder_req_i.rs1[30:27]);
+          spatz_req.op_ope.tss.index  = tile_dim_t'(decoder_req_i.rs1[23:0]);
           spatz_req.op_ope.tss.is_row = (decoder_req_i.rs1[26:24] == 3'd0);
-          spatz_req.op_ope.tss.tile_valid  = ((decoder_req_i.rs1[30:27] % NumAccPerTile) == 0) &&
-                                    (decoder_req_i.rs1[30:27] < NrPhysicalTile) &&
-                                    ((decoder_req_i.rs1[26:24] == 3'd0) ||
-                                    (decoder_req_i.rs1[26:24] == 3'd1)) &&
-                                    (decoder_req_i.rs1[23:0] < TE);
+          spatz_req.op_ope.tss.tile_valid  = (decoder_req_i.rs1[30:27] < NrPhysicalTile) && (decoder_req_i.rs1[23:0] < TE);
           spatz_req.op_ope.is_tv = 1'b1;
         end
 
@@ -2224,9 +2208,6 @@ module spatz_decoder
 
         default: illegal_instr = 1'b1;
       endcase // Opcodes
-
-      if (spatz_req.op_ope.is_mac || (spatz_req.op == VTZERO))
-        spatz_req.op_ope.tss.tile_id = tile_id_t'(spatz_req.mtd / NumAccPerTile);
 
       // Add correct reset_vstart value
       spatz_req.op_cfg.reset_vstart = illegal_instr ? 1'b0 : reset_vstart;

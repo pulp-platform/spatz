@@ -242,7 +242,7 @@ module spatz_controller
               twiden = 1 << (spatz_req.mtype.mtwiden - 1);
               tewb = (1 << int'(vtype_d.vsew)) * twiden;
 
-              if (tewb != AccElemBytes) begin
+              if ((vtype_d.vsew == EW_8) || (tewb > AccElemBytes)) begin
                 invalid_vtype = 1'b1;
               end else begin
                 unique case (vtype_d.vsew)
@@ -591,10 +591,6 @@ module spatz_controller
   logic [NrParallelInstructions-1:0] wrote_result_narrowing_q, wrote_result_narrowing_d;
   `FF(wrote_result_narrowing_q, wrote_result_narrowing_d, '0)
 
-  logic [NRVREG-1:0] sb_vd_write_mask;
-  logic [NRVREG-1:0] sb_vd_read_mask;
-  int unsigned       sb_vd_group_regs;
-  int unsigned       sb_vd_read_group_regs;
   int unsigned       sb_vs_row_stride;
   int unsigned       sb_vs_rows;
 
@@ -605,10 +601,6 @@ module spatz_controller
     scoreboard_d             = scoreboard_q;
     narrow_wide_d            = narrow_wide_q;
     wrote_result_narrowing_d = wrote_result_narrowing_q;
-    sb_vd_write_mask         = '0;
-    sb_vd_read_mask          = '0;
-    sb_vd_group_regs         = 1;
-    sb_vd_read_group_regs    = 1;
     sb_vs_row_stride         = 8;
     sb_vs_rows               = 1;
 `ifdef VENTAGLIO
@@ -1192,7 +1184,34 @@ module spatz_controller
 
   // Respond to core about the decoded instruction.
   always_comb begin : acc_issue_resp
+    mt_t  issue_tile_id;
+    logic issue_is_tile_op;
+    logic issue_tile_aligned;
+
     issue_rsp_o = '0;
+    issue_tile_id = decoder_rsp.spatz_req.mtd;
+    issue_is_tile_op = 1'b0;
+
+    if ((decoder_rsp.spatz_req.ex_unit == LSU) &&
+        decoder_rsp.spatz_req.op_ope.is_mem) begin
+      issue_tile_id = decoder_rsp.spatz_req.op_ope.tss.tile_id;
+      issue_is_tile_op = 1'b1;
+    end else if (decoder_rsp.spatz_req.ex_unit == OPE) begin
+      issue_is_tile_op = 1'b1;
+      if (decoder_rsp.spatz_req.op_ope.is_vt ||
+          decoder_rsp.spatz_req.op_ope.is_tv)
+        issue_tile_id = decoder_rsp.spatz_req.op_ope.tss.tile_id;
+    end
+
+    issue_tile_aligned = 1'b1;
+    if (issue_is_tile_op) begin
+      if ((vtype_q.vsew == EW_16) && (mtype_q.mtwiden == 2'b01)) begin
+        issue_tile_aligned = !issue_tile_id[0];
+      end else if (((vtype_q.vsew == EW_32) && (mtype_q.mtwiden == 2'b01)) ||
+                   ((vtype_q.vsew == EW_16) && (mtype_q.mtwiden == 2'b10))) begin
+        issue_tile_aligned = !(|issue_tile_id[1:0]);
+      end
+    end
 
     // Is there something running on Spatz? If so, prevent Snitch from reading the fcsr register
     issue_rsp_o.isfloat = |running_insn_q;
@@ -1214,7 +1233,7 @@ module spatz_controller
         end // VFU
         LSU: begin
           issue_rsp_o.loadstore = 1'b1;
-          if (vtype_q.vill || mtype_q.mtwiden == 0) begin
+          if (vtype_q.vill || mtype_q.mtwiden == 0 || !issue_tile_aligned) begin
             issue_rsp_o.accept = 1'b0;
           end
         end // LSU
@@ -1228,9 +1247,11 @@ module spatz_controller
           // mtype is illegal -> illegal instruction
           if (mtype_q.mtwiden == 0) begin
             issue_rsp_o.accept = 1'b0;
+          end else if (!issue_tile_aligned) begin
+            issue_rsp_o.accept = 1'b0;
           end else if ((decoder_rsp.spatz_req.op_ope.is_vt ||
                         decoder_rsp.spatz_req.op_ope.is_tv) &&
-                       (!mtype_q.mtwiden != 2'b01)) begin
+                       (mtype_q.mtwiden != 2'b01)) begin
             // VTMV requires a valid TSS and a one-to-one SEW-to-active-TEW mapping.
             issue_rsp_o.accept = 1'b0;
           end
