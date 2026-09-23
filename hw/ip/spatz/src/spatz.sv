@@ -678,7 +678,13 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
 
   assign vlsu_buf_en =  sb_we[VLSU_VD_WD1] && (!vrf_wvalid[VLSU_VD_WD1] || (vrf_wvalid[VLSU_VD_WD1] && !vlsu_buf_empty));
   assign vlsu_buf_push = vlsu_buf_en && !vlsu_buf_full;
-  assign vlsu_buf_pop = vrf_wvalid[VLSU_VD_WD1] && !vlsu_buf_empty;
+  // A direct VLSU completion and a buffered interface-1 completion can occur
+  // in the same cycle, while the controller has only one response input. Keep
+  // the buffered entry queued until the direct completion has been delivered.
+  assign vlsu_direct_rsp_valid =
+      vlsu_rsp_valid && !((vlsu_rsp.intf_id == 1'b1) && vlsu_buf_push);
+  assign vlsu_buf_drain = !vlsu_buf_empty && !vlsu_direct_rsp_valid;
+  assign vlsu_buf_pop = vrf_wvalid[VLSU_VD_WD1] && vlsu_buf_drain;
   assign vrf_vlsu_wvalid = sb_we[VLSU_VD_WD1] && !vlsu_buf_full;
 
   fifo_v3 #(
@@ -745,14 +751,18 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
       vlsu_rsp_buf_valid = 1'b0;
 
     if (!vlsu_buf_empty) begin
-      sb_we_buf    [VLSU_VD_WD1] = 1'b1;
-      vrf_wdata_buf[VLSU_VD_WD1] = vlsu_buf_data.wdata;
-      vrf_waddr_buf[VLSU_VD_WD1] = vlsu_buf_data.waddr;
-      vrf_wbe_buf  [VLSU_VD_WD1] = vlsu_buf_data.wbe;
-      sb_buf_id    [SB_VLSU_VD_WD1] = vlsu_buf_data.wid;
-      if (vlsu_buf_data.rsp_valid) begin
-        vlsu_rsp_buf = vlsu_buf_data.rsp;
-        vlsu_rsp_buf_valid = vrf_wvalid[VLSU_VD_WD1];
+      // Do not expose a newer interface-1 write while the FIFO head is held.
+      sb_we_buf[VLSU_VD_WD1] = 1'b0;
+      if (vlsu_buf_drain) begin
+        sb_we_buf    [VLSU_VD_WD1] = 1'b1;
+        vrf_wdata_buf[VLSU_VD_WD1] = vlsu_buf_data.wdata;
+        vrf_waddr_buf[VLSU_VD_WD1] = vlsu_buf_data.waddr;
+        vrf_wbe_buf  [VLSU_VD_WD1] = vlsu_buf_data.wbe;
+        sb_buf_id    [SB_VLSU_VD_WD1] = vlsu_buf_data.wid;
+        if (vlsu_buf_data.rsp_valid) begin
+          vlsu_rsp_buf = vlsu_buf_data.rsp;
+          vlsu_rsp_buf_valid = vrf_wvalid[VLSU_VD_WD1];
+        end
       end
     end else begin
       // If the buffer is being enabled in this cycle, don't send the response now
@@ -867,7 +877,10 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     .vlsu_rsp_valid_o        (vlsu_rsp_valid                                       ),
     .vlsu_rsp_o              (vlsu_rsp                                             ),
     .vlsu_buf_full_i         (vlsu_buf_full                                        ),
-    .vlsu_buf_empty_i        (vlsu_buf_empty                                       ),
+    // A same-cycle interface-1 enqueue is pending even while the FIFO's
+    // registered empty flag is still high. Keep load retirement behind that
+    // write so the controller never releases a VRF dependency early.
+    .vlsu_buf_empty_i        (vlsu_buf_empty && !vlsu_buf_push                     ),
     // VRF
     .vrf_wvalid_i            ({vrf_vlsu_wvalid, vrf_wvalid[VLSU_VD_WD0]}           ),
     .vrf_waddr_o             (vrf_waddr[VLSU_VD_WD1:VLSU_VD_WD0]                   ),
