@@ -245,7 +245,7 @@ void TEST_CASE4_32_vl4(void) {
 void TEST_CASE8_32_vl2(void) {
   VSET(2, e32, m1);
   volatile uint32_t BUFFER_O32[] = {INIT, INIT, INIT, INIT, INIT, INIT, INIT, INIT,
-                                  INIT, INIT, INIT, INIT, INIT, INIT, INIT, INIT}; 
+                                  INIT, INIT, INIT, INIT, INIT, INIT, INIT, INIT};
 
   volatile uint32_t INP1[] = {0x9fe41920, 0x8f2e05e0, 0xf9aa71f0, 0xc394bbd3,
                               0x12345678, 0x9abcdef0, 0x13572468, 0x369b48ac,
@@ -273,7 +273,7 @@ void TEST_CASE2_64_vl4(void) {
 #if ELEN == 64
   VSET(4, e64, m1);
   volatile uint64_t BUFFER_O64[] = {INIT, INIT, INIT, INIT, INIT, INIT, INIT, INIT,
-                                  INIT, INIT, INIT, INIT, INIT, INIT, INIT, INIT}; 
+                                  INIT, INIT, INIT, INIT, INIT, INIT, INIT, INIT};
   volatile uint64_t INP1[] = {
       0x9fe419208f2e05e0, 0xf9aa71f0c394bbd3, 0x123456789abcdef0,
       0x13572468369b48ac, 0xdeadbeefcafebabe, 0x0123456789abcdef, 0x55aa55aa77889900,
@@ -298,7 +298,7 @@ void TEST_CASE3_64_vl4(void) {
 #if ELEN == 64
   VSET(4, e64, m1);
   volatile uint64_t BUFFER_O64[] = {INIT, INIT, INIT, INIT, INIT, INIT, INIT, INIT,
-                                  INIT, INIT, INIT, INIT, INIT, INIT, INIT, INIT}; 
+                                  INIT, INIT, INIT, INIT, INIT, INIT, INIT, INIT};
   volatile uint64_t INP1[] = {
       0x9fe419208f2e05e0, 0xf9aa71f0c394bbd3, 0x123456789abcdef0,
       0x13572468369b48ac, 0xdeadbeefcafebabe, 0x0123456789abcdef, 0x55aa55aa77889900,
@@ -324,7 +324,7 @@ void TEST_CASE4_64_vl4(void) {
 #if ELEN == 64
   VSET(4, e64, m1);
   volatile uint64_t BUFFER_O64[] = {INIT, INIT, INIT, INIT, INIT, INIT, INIT, INIT,
-                                  INIT, INIT, INIT, INIT, INIT, INIT, INIT, INIT}; 
+                                  INIT, INIT, INIT, INIT, INIT, INIT, INIT, INIT};
   volatile uint64_t INP1[] = {
       0x9fe419208f2e05e0, 0xf9aa71f0c394bbd3, 0x123456789abcdef0,
       0x13572468369b48ac, 0xdeadbeefcafebabe, 0x0123456789abcdef, 0x55aa55aa77889900,
@@ -351,7 +351,7 @@ void TEST_CASE8_64_vl2(void) {
 #if ELEN == 64
   VSET(2, e64, m1);
   volatile uint64_t BUFFER_O64[] = {INIT, INIT, INIT, INIT, INIT, INIT, INIT, INIT,
-                                  INIT, INIT, INIT, INIT, INIT, INIT, INIT, INIT}; 
+                                  INIT, INIT, INIT, INIT, INIT, INIT, INIT, INIT};
   volatile uint64_t INP1[] = {
       0x9fe419208f2e05e0, 0xf9aa71f0c394bbd3, 0x123456789abcdef0,
       0x13572468369b48ac, 0xdeadbeefcafebabe, 0x0123456789abcdef, 0x55aa55aa77889900,

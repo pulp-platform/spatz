@@ -265,7 +265,7 @@ void TEST_CASE3(void) {
            0xc0587ffa39725bce, 0xc0517f63bbf188ac, 0xc05a1ada84ea4b00,
            0x40558510354c6bc9, 0x4053ca3dfc6ae106, 0x4020c9287f66b6b2,
            0xc0595957f2bf0c64);
-#endif           
+#endif
 };
 
 // Simple random test with similar values (vector-scalar) (masked)
@@ -357,7 +357,7 @@ void TEST_CASE5(void) {
            0x3f0ed079, 0xbe87cde5, 0xbd3e2597, 0xbf2d3d68, 0x3f24dfc3,
            0x3d8809bb, 0x3e87e8ab, 0xbb13c97d, 0x3e8cb036, 0x3f43dcf9,
            0x3eb95064);
-  
+
   VCLEAR(v8);
 
   VSET(13, e32, m8);
@@ -366,7 +366,7 @@ void TEST_CASE5(void) {
            0xbfb12b5e, 0xbfcb3846, 0xc18efd46, 0x3eec42f2, 0x3f88d884,
            0xc12fc40a, 0x3ed125d4, 0x432a78dd);
 
-  
+
   VSET(16, e32, m8);
   VCMP_U32(14, v8, 0xbf8b2ed5, 0xbc68f04d, 0xbe0bf09b, 0xbedaa462, 0xbf21e8ea,
            0xbfb12b5e, 0xbfcb3846, 0xc18efd46, 0x3eec42f2, 0x3f88d884,
