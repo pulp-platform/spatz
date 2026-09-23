@@ -52,6 +52,8 @@ module spatz_cluster
     parameter int                     unsigned               DMAAxiReqFifoDepth                 = 3,
     /// Size of DMA request fifo.
     parameter int                     unsigned               DMAReqFifoDepth                    = 3,
+    /// Select per-core rolling instruction buffers instead of the shared cache.
+    parameter bit                                           UseInstructionBuffer               = 1'b1,
     /// Width of a single icache line.
     parameter                         unsigned               ICacheLineWidth                    = 0,
     /// Number of icache lines per set.
@@ -822,44 +824,74 @@ module spatz_cluster
     };
   end
 
-  snitch_icache #(
-    .NR_FETCH_PORTS     ( NrCores                                            ),
-    .L0_LINE_COUNT      ( 8                                                  ),
-    .LINE_WIDTH         ( ICacheLineWidth                                    ),
-    .LINE_COUNT         ( ICacheLineCount                                    ),
-    .WAY_COUNT          ( ICacheWays                                         ),
-    .FETCH_AW           ( AxiAddrWidth                                       ),
-    .FETCH_DW           ( 32                                                 ),
-    .FILL_AW            ( AxiAddrWidth                                       ),
-    .FILL_DW            ( AxiDataWidth                                       ),
-    .SERIAL_LOOKUP      ( 0                                                  ),
-    .L1_TAG_SCM         ( 0                                                  ),
-    .NUM_AXI_OUTSTANDING( 2                                                  ),
-    .EARLY_LATCH        ( 0                                                  ),
-    .L0_EARLY_TAG_WIDTH ( snitch_pkg::PAGE_SHIFT - $clog2(ICacheLineWidth/8) ),
-    .ISO_CROSSING       ( 1'b0                                               ),
-    .axi_req_t          ( axi_mst_dma_req_t                                  ),
-    .axi_rsp_t          ( axi_mst_dma_resp_t                                 )
-  ) i_snitch_icache (
-    .clk_i                ( clk_i                    ),
-    .clk_d2_i             ( clk_i                    ),
-    .rst_ni               ( rst_ni                   ),
-    .enable_prefetching_i ( icache_prefetch_enable   ),
-    .icache_l0_events_o   ( icache_events            ),
-    .icache_l1_events_o   (                          ),
-    .flush_valid_i        ( flush_valid              ),
-    .flush_ready_o        ( flush_ready              ),
-    .inst_addr_i          ( inst_addr                ),
-    .inst_cacheable_i     ( inst_cacheable           ),
-    .inst_data_o          ( inst_data                ),
-    .inst_valid_i         ( inst_valid               ),
-    .inst_ready_o         ( inst_ready               ),
-    .inst_error_o         ( inst_error               ),
-    .sram_cfg_tag_i       ( '0                       ),
-    .sram_cfg_data_i      ( '0                       ),
-    .axi_req_o            ( wide_axi_mst_req[ICache] ),
-    .axi_rsp_i            ( wide_axi_mst_rsp[ICache] )
-  );
+  if (!UseInstructionBuffer) begin : gen_icache
+    snitch_icache #(
+      .NR_FETCH_PORTS     ( NrCores                                            ),
+      .L0_LINE_COUNT      ( 8                                                  ),
+      .LINE_WIDTH         ( ICacheLineWidth                                    ),
+      .LINE_COUNT         ( ICacheLineCount                                    ),
+      .WAY_COUNT          ( ICacheWays                                         ),
+      .FETCH_AW           ( AxiAddrWidth                                       ),
+      .FETCH_DW           ( 32                                                 ),
+      .FILL_AW            ( AxiAddrWidth                                       ),
+      .FILL_DW            ( AxiDataWidth                                       ),
+      .SERIAL_LOOKUP      ( 0                                                  ),
+      .L1_TAG_SCM         ( 0                                                  ),
+      .NUM_AXI_OUTSTANDING( 2                                                  ),
+      .EARLY_LATCH        ( 0                                                  ),
+      .L0_EARLY_TAG_WIDTH ( snitch_pkg::PAGE_SHIFT - $clog2(ICacheLineWidth/8) ),
+      .ISO_CROSSING       ( 1'b0                                               ),
+      .axi_req_t          ( axi_mst_dma_req_t                                  ),
+      .axi_rsp_t          ( axi_mst_dma_resp_t                                 )
+    ) i_snitch_icache (
+      .clk_i                ( clk_i                    ),
+      .clk_d2_i             ( clk_i                    ),
+      .rst_ni               ( rst_ni                   ),
+      .enable_prefetching_i ( icache_prefetch_enable   ),
+      .icache_l0_events_o   ( icache_events            ),
+      .icache_l1_events_o   (                          ),
+      .flush_valid_i        ( flush_valid              ),
+      .flush_ready_o        ( flush_ready              ),
+      .inst_addr_i          ( inst_addr                ),
+      .inst_cacheable_i     ( inst_cacheable           ),
+      .inst_data_o          ( inst_data                ),
+      .inst_valid_i         ( inst_valid               ),
+      .inst_ready_o         ( inst_ready               ),
+      .inst_error_o         ( inst_error               ),
+      .sram_cfg_tag_i       ( '0                       ),
+      .sram_cfg_data_i      ( '0                       ),
+      .axi_req_o            ( wide_axi_mst_req[ICache] ),
+      .axi_rsp_i            ( wide_axi_mst_rsp[ICache] )
+    );
+
+  end else begin : gen_ibuffer
+    // Cache-specific performance events are not generated by the buffer.
+    assign icache_events = '0;
+    snitch_ibuffer #(
+      .NR_FETCH_PORTS     ( NrCores                                            ),
+      .DEPTH              ( 32                                                 ),
+      .FETCH_AW           ( AxiAddrWidth                                       ),
+      .FETCH_DW           ( 32                                                 ),
+      .FILL_AW            ( AxiAddrWidth                                       ),
+      .FILL_DW            ( AxiDataWidth                                       ),
+      .axi_req_t          ( axi_mst_dma_req_t                                  ),
+      .axi_rsp_t          ( axi_mst_dma_resp_t                                 )
+    ) i_snitch_ibuffer (
+      .clk_i                ( clk_i                    ),
+      .rst_ni               ( rst_ni                   ),
+      .enable_prefetching_i ( icache_prefetch_enable   ),
+      .flush_valid_i        ( flush_valid              ),
+      .flush_ready_o        ( flush_ready              ),
+      .inst_addr_i          ( inst_addr                ),
+      .inst_cacheable_i     ( inst_cacheable           ),
+      .inst_data_o          ( inst_data                ),
+      .inst_valid_i         ( inst_valid               ),
+      .inst_ready_o         ( inst_ready               ),
+      .inst_error_o         ( inst_error               ),
+      .axi_req_o            ( wide_axi_mst_req[ICache] ),
+      .axi_rsp_i            ( wide_axi_mst_rsp[ICache] )
+    );
+  end
 
   // --------
   // Cores SoC
