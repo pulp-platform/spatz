@@ -120,7 +120,8 @@ add_snitch_test(vfadd  isa/rv64uv/vfadd.c)
 add_snitch_test(vfsub  isa/rv64uv/vfsub.c)
 add_snitch_test(vfrsub isa/rv64uv/vfrsub.c)
 add_snitch_test(vfdiv  isa/rv64uv/vfdiv.c)
-add_snitch_test(vfsqrt isa/rv64uv/vfsqrt.c)
+#TODO: add this test after migrating to Verilator 5.050 and GCC-12
+#add_snitch_test(vfsqrt isa/rv64uv/vfsqrt.c)
 
 add_snitch_test(vfmin isa/rv64uv/vfmin.c)
 add_snitch_test(vfmax isa/rv64uv/vfmax.c)
