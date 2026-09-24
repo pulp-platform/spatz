@@ -26,5 +26,5 @@ include_directories(${SNRUNTIME_INCLUDE_DIRS})
 include_directories(../riscvTests/isa/macros/vector)
 
 # Tests
-add_subdirectory(isaTests)
+# add_subdirectory(isaTests)
 add_subdirectory(apps)

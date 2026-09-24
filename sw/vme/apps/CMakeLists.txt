@@ -12,13 +12,8 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/data)
 
 enable_testing()
 
-macro(add_vme_fp_test name file param_m param_n param_k)
-    set(_target ${name}_M${param_m}_N${param_n}_K${param_k})
-    add_snitch_test(${_target} ${file})
-    target_compile_definitions(test-${SNITCH_TEST_PREFIX}${_target} PUBLIC
-        DATAHEADER="data/data_${param_m}_${param_n}_${param_k}.h")
-endmacro()
-
 set(SNITCH_TEST_PREFIX vme-)
 
-add_vme_fp_test(fp-gemm fp-gemm/main.c 64 64 64)
+# Register the FP32 VTMV/VSE variants directly from the VME apps level.
+# The variant CMake file assigns the requested test-fp32-* target names.
+add_subdirectory(tew32/fp32-matmul-vtse)
