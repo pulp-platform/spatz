@@ -26,10 +26,10 @@
 #include "kernel/matmul.c"
 
 enum {
-    TCDM_BYTES = 128 * 1024,
+    TCDM_BYTES = 256 * 1024,
     M_CHUNK = CHUNK_SIZE,
     N_CHUNK = CHUNK_SIZE,
-    K_CHUNK = CHUNK_SIZE,
+    K_CHUNK = 4 * CHUNK_SIZE,
     TILE_INPUTS = TE * K_CHUNK,
     TILE_BYTES = TILE_INPUTS * sizeof(float),
     A_TILES = M_CHUNK / TE,
@@ -42,15 +42,12 @@ enum {
     B_OFFSET = A_OFFSET + A_BYTES,
     C_OFFSET = B_OFFSET + B_BYTES,
     BUFFER_BYTES = C_OFFSET + C_BYTES,
-    L1_BUFFER_COUNT = 2,    // 2
-    L1_BUFFER_STRIDE = TCDM_BYTES / L1_BUFFER_COUNT,
-    L1_BYTES = L1_BUFFER_STRIDE + BUFFER_BYTES,
+    L1_BUFFER_COUNT = 1,
+    L1_BYTES = BUFFER_BYTES,
 };
 
-_Static_assert(BUFFER_BYTES <= L1_BUFFER_STRIDE,
-               "one M64xN64xK64 TEW32 buffer must fit in 64 KiB");
 _Static_assert(L1_BYTES <= TCDM_BYTES,
-               "two matmul buffers exceed the 128 KiB TCDM");
+               "one M64xN64xK256 TEW32 buffer exceeds the 256 KiB TCDM");
 
 static const float zero_tile_dram[TILE_INPUTS]
     __attribute__((section(".dram"), aligned(64))) = {0};
@@ -142,7 +139,7 @@ static snrt_dma_txid_t fill_b(float *dst, uint32_t nb, uint32_t kb) {
 
 static snrt_dma_txid_t fill_buffer(uint32_t buffer, uint32_t mb, uint32_t nb,
                                    uint32_t kb) {
-    uint8_t *base = l1_base + buffer * L1_BUFFER_STRIDE;
+    uint8_t *base = l1_base + buffer * BUFFER_BYTES;
     fill_a((float *)(base + A_OFFSET), mb, kb);
     return fill_b((float *)(base + B_OFFSET), nb, kb);
 }
@@ -167,20 +164,11 @@ int main(void) {
     c_out = (float *)snrt_l3alloc((size_t)matmul_l.M * matmul_l.N *
                                   sizeof(float));
     if (l1_base == 0 || partials == 0 || c_out == 0) {
-        printf("fp16 matmul allocation failure\n");
+        printf("fp32 matmul allocation failure\n");
         return 2;
     }
 
-    snrt_dma_txid_t input_tid[L1_BUFFER_COUNT] = {0, 0};
-    uint32_t current_buffer = 0;
-
-    input_tid[0] = fill_buffer(0, 0, 0, 0);
-    snrt_dma_wait(input_tid[0]);
-    if (iterations > 1) {
-        const uint32_t next_job = 1 / kb_count;
-        input_tid[1] = fill_buffer(1, next_job / nb_count,
-                                   next_job % nb_count, 1 % kb_count);
-    }
+    snrt_dma_wait(fill_buffer(0, 0, 0, 0));
 
     uint32_t start_cycle = 0;
     uint32_t end_cycle = 0;
@@ -192,7 +180,7 @@ int main(void) {
         const uint32_t valid_m = chunk_extent(matmul_l.M, mb, M_CHUNK);
         const uint32_t valid_n = chunk_extent(matmul_l.N, nb, N_CHUNK);
         const uint32_t valid_k = chunk_extent(matmul_l.K, kb, K_CHUNK);
-        uint8_t *base = l1_base + current_buffer * L1_BUFFER_STRIDE;
+        uint8_t *base = l1_base;
         uint32_t fcsr;
 
         if (iter == 0)
@@ -204,22 +192,15 @@ int main(void) {
         // Keep completion synchronization outside the measured kernel window.
         wait_spatz();
 
-        snrt_dma_start_1d(partials + (size_t)iter * C_ELEMENTS,
-                          base + C_OFFSET, C_BYTES);
+        snrt_dma_wait(snrt_dma_start_1d(
+            partials + (size_t)iter * C_ELEMENTS, base + C_OFFSET, C_BYTES));
 
         const uint32_t next_iter = iter + 1;
         if (next_iter < iterations) {
-            const uint32_t next_buffer = current_buffer ^ 1;
-            snrt_dma_wait(input_tid[next_buffer]);
-
-            const uint32_t refill_iter = iter + 2;
-            if (refill_iter < iterations) {
-                const uint32_t refill_job = refill_iter / kb_count;
-                input_tid[current_buffer] = fill_buffer(
-                    current_buffer, refill_job / nb_count,
-                    refill_job % nb_count, refill_iter % kb_count);
-            }
-            current_buffer = next_buffer;
+            const uint32_t next_job = next_iter / kb_count;
+            snrt_dma_wait(fill_buffer(0, next_job / nb_count,
+                                      next_job % nb_count,
+                                      next_iter % kb_count));
         }
     }
     snrt_dma_wait_all();
