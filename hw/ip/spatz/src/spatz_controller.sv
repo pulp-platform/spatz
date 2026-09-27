@@ -42,6 +42,8 @@ module spatz_controller
     // Spatz request
     output logic                                   spatz_req_valid_o,
     output spatz_req_t                             spatz_req_o,
+    // Per-instruction permission to start a queued matrix operation.
+    output logic [NrParallelInstructions-1:0]        matrix_enable_o,
     // VFU
     input  logic                                   vfu_req_ready_i,
     input  logic                                   vfu_rsp_valid_i,
@@ -518,6 +520,7 @@ module spatz_controller
     spatz_id_t id;
     logic valid;
   } [NRVREG-1:0] table_t;
+  typedef logic [$clog2(NRVREG):0] vreg_group_idx_t;
   table_t read_table_d, read_table_q, write_table_d, write_table_q;
 
   `FF(read_table_q, read_table_d, '{default: '0})
@@ -593,6 +596,7 @@ module spatz_controller
 
   int unsigned       sb_vs_row_stride;
   int unsigned       sb_vs_rows;
+  logic [3:0]        lmul_vreg_group;
 
   always_comb begin : scoreboard
     // Maintain stated
@@ -603,6 +607,13 @@ module spatz_controller
     wrote_result_narrowing_d = wrote_result_narrowing_q;
     sb_vs_row_stride         = 8;
     sb_vs_rows               = 1;
+    lmul_vreg_group          = 4'd1;
+    unique case (spatz_req.vtype.vlmul)
+      LMUL_2: lmul_vreg_group = 4'd2;
+      LMUL_4: lmul_vreg_group = 4'd4;
+      LMUL_8: lmul_vreg_group = 4'd8;
+      default: lmul_vreg_group = 4'd1;
+    endcase
 `ifdef VENTAGLIO
     vtl_table_d              = vtl_table_q;
     sb_vtl_redirect_read_o    = '0;
@@ -931,8 +942,23 @@ module spatz_controller
         end
       end
       if (spatz_req.vd_is_src) begin
-        scoreboard_d[spatz_req.id].deps[write_table_d[spatz_req.vd].id] |= write_table_d[spatz_req.vd].valid;
-        read_table_d[spatz_req.vd] = {spatz_req.id, 1'b1};
+        if ((spatz_req.ex_unit == LSU) && !spatz_req.op_mem.is_load) begin
+          // Vector stores encode their data source in vd (architectural vs3).
+          // Reserve every physical register in the current LMUL group.
+          for (int unsigned group_idx = 0; group_idx < 8; group_idx++) begin
+            automatic vreg_group_idx_t group_vreg =
+                {1'b0, spatz_req.vd} + vreg_group_idx_t'(group_idx);
+            if ((group_idx < lmul_vreg_group) && (group_vreg < NRVREG)) begin
+              scoreboard_d[spatz_req.id].deps[write_table_d[group_vreg].id] |=
+                  write_table_d[group_vreg].valid;
+              read_table_d[group_vreg] = {spatz_req.id, 1'b1};
+            end
+          end
+        end else begin
+          scoreboard_d[spatz_req.id].deps[write_table_d[spatz_req.vd].id] |=
+              write_table_d[spatz_req.vd].valid;
+          read_table_d[spatz_req.vd] = {spatz_req.id, 1'b1};
+        end
       end
 
 `ifdef VENTAGLIO
@@ -945,13 +971,32 @@ module spatz_controller
 `endif
 
       // WAW and WAR hazards
-      if (spatz_req.use_vd) begin
-        scoreboard_d[spatz_req.id].deps[write_table_d[spatz_req.vd].id] |= write_table_d[spatz_req.vd].valid;
-        scoreboard_d[spatz_req.id].deps[read_table_d[spatz_req.vd].id] |= read_table_d[spatz_req.vd].valid;
+      if (spatz_req.use_vd &&
+          !((spatz_req.ex_unit == LSU) && !spatz_req.op_mem.is_load)) begin
+        if ((spatz_req.ex_unit == LSU) && spatz_req.op_mem.is_load) begin
+          // Vector loads write the complete LMUL register group, not only the
+          // aligned architectural base register encoded by vd.
+          for (int unsigned group_idx = 0; group_idx < 8; group_idx++) begin
+            automatic vreg_group_idx_t group_vreg =
+                {1'b0, spatz_req.vd} + vreg_group_idx_t'(group_idx);
+            if ((group_idx < lmul_vreg_group) && (group_vreg < NRVREG)) begin
+              scoreboard_d[spatz_req.id].deps[write_table_d[group_vreg].id] |=
+                  write_table_d[group_vreg].valid;
+              scoreboard_d[spatz_req.id].deps[read_table_d[group_vreg].id] |=
+                  read_table_d[group_vreg].valid;
+              write_table_d[group_vreg] = {spatz_req.id, 1'b1};
+            end
+          end
+        end else begin
+          scoreboard_d[spatz_req.id].deps[write_table_d[spatz_req.vd].id] |=
+              write_table_d[spatz_req.vd].valid;
+          scoreboard_d[spatz_req.id].deps[read_table_d[spatz_req.vd].id] |=
+              read_table_d[spatz_req.vd].valid;
+          write_table_d[spatz_req.vd] = {spatz_req.id, 1'b1};
+        end
         if (spatz_req.op inside {VLX}) begin
           scoreboard_d[spatz_req.id].deps = '0;
         end
-        write_table_d[spatz_req.vd] = {spatz_req.id, 1'b1};
       end
 
       // Is this a risky instruction which should not chain?
@@ -1006,10 +1051,109 @@ module spatz_controller
   // not ready yet. Or we have a change in LMUL, for which we need to let all the
   // units finish first before scheduling a new operation (to avoid running into
   // issues with the socreboard).
+  // Snapshot older matrix dependencies at dispatch, then grant execution by ID.
+  // Keep every reader until retire; a later writer must wait for all of them.
+  typedef logic [NrPhysicalTile-1:0] matrix_mask_t;
+  typedef struct packed {
+    matrix_mask_t mask;
+    logic reads;
+    logic writes;
+    logic is_mac;
+    logic is_lsu;
+    logic [NrParallelInstructions-1:0] deps;
+  } matrix_claim_t;
+  matrix_claim_t [NrParallelInstructions-1:0] matrix_table_q, matrix_table_d;
+  matrix_claim_t matrix_issue;
+  matrix_mask_t matrix_issue_mask;
+  mt_t matrix_issue_tile;
+  logic [NrParallelInstructions-1:0] matrix_issue_deps, matrix_retire;
+  `FF(matrix_table_q, matrix_table_d, '0)
+
+  always_comb begin : matrix_decode
+    matrix_issue = matrix_claim_t'(0);
+    // memory and move instruction uses Tile Subset Specifier (TSS)
+    matrix_issue_tile = (buffer_spatz_req.op_ope.is_mac)  ? 
+                          buffer_spatz_req.mtd : buffer_spatz_req.op_ope.tss.tile_id;
+
+    // mt0 with tew=32 overlaps both mt0 and mt2 with tew=16
+    case (vew_e'(vtype_q.vsew + mtype_q.mtwiden - 1'b1))  // = tew
+      EW_8: matrix_issue_mask  = matrix_mask_t'(1'b1) << matrix_issue_tile;
+      EW_16: matrix_issue_mask = matrix_mask_t'(2'b11) << matrix_issue_tile;
+      EW_32: matrix_issue_mask = matrix_mask_t'(4'b1111) << matrix_issue_tile;
+      default: matrix_issue_mask = '1;
+    endcase
+
+    if (buffer_spatz_req.ex_unit == LSU && buffer_spatz_req.op_ope.is_mem) begin
+      matrix_issue.mask = matrix_issue_mask;
+      matrix_issue.is_lsu = 1'b1;
+      if (buffer_spatz_req.op_mem.is_load)
+        matrix_issue.writes = 1'b1;
+      else
+        matrix_issue.reads = 1'b1;
+    end else if (buffer_spatz_req.ex_unit == OPE) begin
+      matrix_issue.mask = matrix_issue_mask;
+      case (buffer_spatz_req.op)
+        VTMMU, VTMMS, VTFMM, VTFMM_ALT: begin
+          matrix_issue.reads = 1'b1;
+          matrix_issue.writes = 1'b1;
+          matrix_issue.is_mac = 1'b1;
+        end
+        VTMV_VT: matrix_issue.reads = 1'b1;
+        VTMV_TV, VTZERO: matrix_issue.writes = 1'b1;
+        VTDISCARD: begin
+          matrix_issue.mask = matrix_mask_t'(1);
+          matrix_issue.writes = 1'b1;
+        end
+        default: ;
+      endcase
+    end
+  end
+
+  always_comb begin : matrix_hazards
+    matrix_issue_deps = '0;
+    for (int unsigned insn = 0; insn < NrParallelInstructions; insn++) begin
+      // skip data hazard checking for mac instructions if they store to the same tile
+      // becuase OPE forwards their results internally to FMA (won't drain to accumulators)
+      if (!(matrix_issue.is_mac && matrix_table_q[insn].is_mac)) begin
+        matrix_issue_deps[insn] =
+          (|(matrix_issue.mask & matrix_table_q[insn].mask)) &&
+          // Read during Write
+          ((matrix_issue.reads && matrix_table_q[insn].writes) ||
+          // Write during Read or Write during Write
+            (matrix_issue.writes && (matrix_table_q[insn].reads || matrix_table_q[insn].writes)));
+      end
+    end
+  end
+
+  always_comb begin : matrix_retirement
+    matrix_retire = '0;
+    if (vlsu_rsp_valid_i && matrix_table_q[vlsu_rsp_i.id].is_lsu)
+      matrix_retire[vlsu_rsp_i.id] = 1'b1;
+    if (ope_rsp_valid_i && !matrix_table_q[ope_rsp_i.id].is_lsu)
+      matrix_retire[ope_rsp_i.id] = 1'b1;
+  end
+
+  always_comb begin : matrix_tracking
+    matrix_table_d = matrix_table_q;
+    for (int unsigned insn = 0; insn < NrParallelInstructions; insn++) begin
+      matrix_table_d[insn].deps = matrix_table_q[insn].deps & ~matrix_retire;
+      if (matrix_retire[insn]) matrix_table_d[insn] = '0;
+    end
+    if (spatz_req_valid && spatz_req.ex_unit != CON) begin
+      matrix_table_d[spatz_req.id] = matrix_issue;
+      matrix_table_d[spatz_req.id].deps = matrix_issue_deps & ~matrix_retire;
+      matrix_table_d[spatz_req.id].deps[spatz_req.id] = 1'b0;
+    end
+  end
+
+  // Registered dependencies avoid a completion -> ready -> issue loop.
+  // Unit input queues are non-fall-through, so the entry exists before use.
+  for (genvar insn = 0; insn < NrParallelInstructions; insn++) begin : gen_matrix_enable
+    assign matrix_enable_o[insn] = !(|matrix_table_q[insn].deps);
+  end
+
   logic stall, vfu_stall, vlsu_stall, vsldu_stall, vtl_stall, ope_stall;
-  assign stall       = (vfu_stall | vlsu_stall | vsldu_stall | vtl_stall |
-                        ope_stall) &
-                       req_buffer_valid;
+  assign stall       = vfu_stall | vlsu_stall | vsldu_stall | vtl_stall | ope_stall;
   assign vfu_stall   = ~vfu_req_ready_i  & (spatz_req.ex_unit == VFU);
   assign vlsu_stall  = ~vlsu_req_ready_i & (spatz_req.ex_unit == LSU);
 `ifdef VENTAGLIO

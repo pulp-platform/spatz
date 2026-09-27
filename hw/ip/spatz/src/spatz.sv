@@ -99,12 +99,11 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   logic     ope_rsp_valid;
   logic     ope_rsp_ready;
   ope_rsp_t ope_rsp;
+  logic [NrParallelInstructions-1:0] matrix_enable;
 
   // Tile interface between VLSU and OPE
   logic                       tile_wvalid, tile_wready;
   tile_w_req_t                tile_w_req;
-  logic                       tile_load_pending;
-  mt_t                        tile_load_idx;
   logic                       tile_rvalid, tile_rready;
   tile_r_req_t                tile_r_req;
   tile_row_t                  tile_rdata;
@@ -308,7 +307,6 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   vrf_addr_t [2:0] ope_raddr_s;
   logic      [2:0] ope_re_s;
   spatz_id_t [3:0] ope_id_s;
-  vrf_data_t [2:0] ope_rdata_s;
 
   vrf_addr_t ope_waddr_s;
   vrf_data_t ope_wdata_s;
@@ -325,124 +323,96 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   // Shared VRF arbitration
   // ---------------------------------------------------------------------------
 
-  typedef enum logic {
-    SharedOwnerVFU,
-    SharedOwnerOPE
-  } shared_owner_e;
+  typedef struct packed {
+    vrf_addr_t [2:0] addr;
+    logic      [2:0] re;
+    spatz_id_t [2:0] id;
+  } shared_vrf_read_t;
+  typedef struct packed {
+    vrf_addr_t addr;
+    vrf_data_t data;
+    vrf_be_t   be;
+    spatz_id_t id;
+    logic      we;
+  } shared_vrf_write_t;
 
-  shared_owner_e shared_rd_owner_d, shared_rd_owner_q;
-  shared_owner_e shared_wr_owner_d, shared_wr_owner_q;
-  logic shared_rd_vfu_req, shared_rd_ope_req;
-  logic shared_wr_vfu_req, shared_wr_ope_req;
-  logic shared_rd_vfu_grant, shared_rd_ope_grant;
-  logic shared_wr_vfu_grant, shared_wr_ope_grant;
-  logic [2:0] vfu_rvalid_s;
-  logic [2:0] ope_rvalid_s;
-  logic       vfu_wvalid_s;
-  logic       ope_wvalid_s;
+  shared_vrf_read_t [1:0] shared_rd_in;
+  shared_vrf_read_t shared_rd_out;
+  shared_vrf_write_t [1:0] shared_wr_in;
+  shared_vrf_write_t shared_wr_out;
+  logic [1:0] shared_rd_req, shared_rd_gnt;
+  logic [1:0] shared_wr_req, shared_wr_gnt;
+  logic shared_rd_valid, shared_wr_valid;
+  logic shared_rd_vfu_gnt, shared_rd_ope_gnt;
+  logic shared_wr_vfu_gnt, shared_wr_ope_gnt;
 
 `ifdef BUF_FPU
   // Buffering of VFU writes to VRF to hide shared write-port conflicts.
   logic vfu_buf_en, vfu_buf_push, vfu_buf_pop, vrf_vfu_wvalid, vfu_buf_full, vfu_buf_empty;
 `endif
 
-  assign shared_rd_vfu_req = |vfu_re_s;
-  assign shared_rd_ope_req = |ope_re_s;
+  assign shared_rd_in[0] = '{addr: vfu_raddr_s, re: vfu_re_s, id: vfu_id_s[2:0]};
+  assign shared_rd_in[1] = '{addr: ope_raddr_s, re: ope_re_s, id: ope_id_s[2:0]};
+  assign shared_rd_req = {|ope_re_s, |vfu_re_s};
+
+  stream_arbiter #(
+    .DATA_T   (shared_vrf_read_t),
+    .N_INP    (2),
+    .ARBITER  ("rr")
+  ) i_shared_read_arb (
+    .clk_i        (clk_i),
+    .rst_ni       (rst_ni),
+    .inp_data_i   (shared_rd_in),
+    .inp_valid_i  (shared_rd_req),
+    .inp_ready_o  (shared_rd_gnt),
+    .oup_data_o   (shared_rd_out),
+    .oup_valid_o  (shared_rd_valid),
+    .oup_ready_i  (1'b1)
+  );
+
+  assign shared_wr_in[0] = '{addr: vfu_waddr_s, data: vfu_wdata_s,
+                             be: vfu_wbe_s, id: vfu_id_s[3], we: vfu_we_s};
+  assign shared_wr_in[1] = '{addr: ope_waddr_s, data: ope_wdata_s,
+                             be: ope_wbe_s, id: ope_id_s[3], we: ope_we_s};
 `ifdef BUF_FPU
-  assign shared_wr_vfu_req = vfu_we_s || !vfu_buf_empty;
+  assign shared_wr_req = {ope_we_s, vfu_we_s || !vfu_buf_empty};
 `else
-  assign shared_wr_vfu_req = vfu_we_s;
+  assign shared_wr_req = {ope_we_s, vfu_we_s};
 `endif
-  assign shared_wr_ope_req = ope_we_s;
 
-  `FF(shared_rd_owner_q, shared_rd_owner_d, SharedOwnerVFU)
-  `FF(shared_wr_owner_q, shared_wr_owner_d, SharedOwnerVFU)
+  stream_arbiter #(
+    .DATA_T   (shared_vrf_write_t),
+    .N_INP    (2),
+    .ARBITER  ("rr")
+  ) i_shared_write_arb (
+    .clk_i        (clk_i),
+    .rst_ni       (rst_ni),
+    .inp_data_i   (shared_wr_in),
+    .inp_valid_i  (shared_wr_req),
+    .inp_ready_o  (shared_wr_gnt),
+    .oup_data_o   (shared_wr_out),
+    .oup_valid_o  (shared_wr_valid),
+    .oup_ready_i  (1'b1)
+  );
 
-  always_comb begin : shared_read_arbitration
-    shared_rd_owner_d  = shared_rd_owner_q;
-    shared_rd_vfu_grant = 1'b0;
-    shared_rd_ope_grant = 1'b0;
-
-    if (shared_rd_vfu_req && shared_rd_ope_req) begin
-      if (shared_rd_owner_q == SharedOwnerVFU) begin
-        shared_rd_ope_grant = 1'b1;
-        shared_rd_owner_d   = SharedOwnerOPE;
-      end else begin
-        shared_rd_vfu_grant = 1'b1;
-        shared_rd_owner_d   = SharedOwnerVFU;
-      end
-    end else if (shared_rd_vfu_req) begin
-      shared_rd_vfu_grant = 1'b1;
-      shared_rd_owner_d   = SharedOwnerVFU;
-    end else if (shared_rd_ope_req) begin
-      shared_rd_ope_grant = 1'b1;
-      shared_rd_owner_d   = SharedOwnerOPE;
-    end
-  end
-
-  always_comb begin : shared_write_arbitration
-    shared_wr_owner_d  = shared_wr_owner_q;
-    shared_wr_vfu_grant = 1'b0;
-    shared_wr_ope_grant = 1'b0;
-
-    if (shared_wr_vfu_req && shared_wr_ope_req) begin
-      if (shared_wr_owner_q == SharedOwnerVFU) begin
-        shared_wr_ope_grant = 1'b1;
-        shared_wr_owner_d   = SharedOwnerOPE;
-      end else begin
-        shared_wr_vfu_grant = 1'b1;
-        shared_wr_owner_d   = SharedOwnerVFU;
-      end
-    end else if (shared_wr_vfu_req) begin
-      shared_wr_vfu_grant = 1'b1;
-      shared_wr_owner_d   = SharedOwnerVFU;
-    end else if (shared_wr_ope_req) begin
-      shared_wr_ope_grant = 1'b1;
-      shared_wr_owner_d   = SharedOwnerOPE;
-    end
-  end
+  assign shared_rd_vfu_gnt = shared_rd_req[0] && shared_rd_gnt[0];
+  assign shared_rd_ope_gnt = shared_rd_req[1] && shared_rd_gnt[1];
+  assign shared_wr_vfu_gnt = shared_wr_req[0] && shared_wr_gnt[0];
+  assign shared_wr_ope_gnt = shared_wr_req[1] && shared_wr_gnt[1];
 
   // ---------------------------------------------------------------------------
   // Shared read-port MUX
   // ---------------------------------------------------------------------------
 
   always_comb begin
-    vrf_raddr[VFU_VS2_RD]    = '0;
-    vrf_raddr[VFU_VS1_RD]    = '0;
-    vrf_raddr[VFU_VD_RD]     = '0;
+      vrf_raddr[VFU_VD_RD: VFU_VS2_RD]        = vrf_addr_t'(0);
+      sb_re    [VFU_VD_RD: VFU_VS2_RD]        = 3'b0;
+      sb_id    [SB_VFU_VD_RD: SB_VFU_VS2_RD]  = spatz_id_t'(0);
 
-    sb_re    [VFU_VS2_RD]    = 1'b0;
-    sb_re    [VFU_VS1_RD]    = 1'b0;
-    sb_re    [VFU_VD_RD]     = 1'b0;
-
-    sb_id    [SB_VFU_VS2_RD] = '0;
-    sb_id    [SB_VFU_VS1_RD] = '0;
-    sb_id    [SB_VFU_VD_RD]  = '0;
-
-    if (shared_rd_vfu_grant) begin
-      vrf_raddr[VFU_VS2_RD]    = vfu_raddr_s[0];
-      vrf_raddr[VFU_VS1_RD]    = vfu_raddr_s[1];
-      vrf_raddr[VFU_VD_RD]     = vfu_raddr_s[2];
-
-      sb_re    [VFU_VS2_RD]    = vfu_re_s[0];
-      sb_re    [VFU_VS1_RD]    = vfu_re_s[1];
-      sb_re    [VFU_VD_RD]     = vfu_re_s[2];
-
-      sb_id    [SB_VFU_VS2_RD] = vfu_id_s[0];
-      sb_id    [SB_VFU_VS1_RD] = vfu_id_s[1];
-      sb_id    [SB_VFU_VD_RD]  = vfu_id_s[2];
-    end else if (shared_rd_ope_grant) begin
-      vrf_raddr[VFU_VS2_RD]    = ope_raddr_s[0];
-      vrf_raddr[VFU_VS1_RD]    = ope_raddr_s[1];
-      vrf_raddr[VFU_VD_RD]     = ope_raddr_s[2];
-
-      sb_re    [VFU_VS2_RD]    = ope_re_s[0];
-      sb_re    [VFU_VS1_RD]    = ope_re_s[1];
-      sb_re    [VFU_VD_RD]     = ope_re_s[2];
-
-      sb_id    [SB_VFU_VS2_RD] = ope_id_s[0];
-      sb_id    [SB_VFU_VS1_RD] = ope_id_s[1];
-      sb_id    [SB_VFU_VD_RD]  = ope_id_s[2];
+    if (shared_rd_valid) begin
+      vrf_raddr[VFU_VD_RD: VFU_VS2_RD]        = shared_rd_out.addr;
+      sb_re    [VFU_VD_RD: VFU_VS2_RD]        = shared_rd_out.re;
+      sb_id    [SB_VFU_VD_RD: SB_VFU_VS2_RD]  = shared_rd_out.id;
     end
   end
 
@@ -451,43 +421,20 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   // ---------------------------------------------------------------------------
 
   always_comb begin
-    vrf_waddr[VFU_VD_WD]    = '0;
-    vrf_wdata[VFU_VD_WD]    = '0;
-    vrf_wbe  [VFU_VD_WD]    = '0;
-
+    vrf_waddr[VFU_VD_WD]    = vrf_addr_t'(0);
+    vrf_wdata[VFU_VD_WD]    = vrf_data_t'(0);
+    vrf_wbe  [VFU_VD_WD]    = vrf_be_t'(0);
     sb_we    [VFU_VD_WD]    = 1'b0;
-    sb_id    [SB_VFU_VD_WD] = '0;
+    sb_id    [SB_VFU_VD_WD] = spatz_id_t'(0);
 
-    if (shared_wr_vfu_grant) begin
-      vrf_waddr[VFU_VD_WD]    = vfu_waddr_s;
-      vrf_wdata[VFU_VD_WD]    = vfu_wdata_s;
-      vrf_wbe  [VFU_VD_WD]    = vfu_wbe_s;
-
-      sb_we    [VFU_VD_WD]    = vfu_we_s;
-      sb_id    [SB_VFU_VD_WD] = vfu_id_s[3];
-    end else if (shared_wr_ope_grant) begin
-      vrf_waddr[VFU_VD_WD]    = ope_waddr_s;
-      vrf_wdata[VFU_VD_WD]    = ope_wdata_s;
-      vrf_wbe  [VFU_VD_WD]    = ope_wbe_s;
-
-      sb_we    [VFU_VD_WD]    = ope_we_s;
-      sb_id    [SB_VFU_VD_WD] = ope_id_s[3];
+    if (shared_wr_valid) begin
+      vrf_waddr[VFU_VD_WD]    = shared_wr_out.addr;
+      vrf_wdata[VFU_VD_WD]    = shared_wr_out.data;
+      vrf_wbe  [VFU_VD_WD]    = shared_wr_out.be;
+      sb_we    [VFU_VD_WD]    = shared_wr_out.we;
+      sb_id    [SB_VFU_VD_WD] = shared_wr_out.id;
     end
   end
-
-  assign vfu_rvalid_s = shared_rd_vfu_grant ? vrf_rvalid[VFU_VD_RD:VFU_VS2_RD] : '0;
-  assign ope_rdata_s[0] = vrf_rdata[VFU_VS2_RD];
-  assign ope_rdata_s[1] = vrf_rdata[VFU_VS1_RD];
-  assign ope_rdata_s[2] = vrf_rdata[VFU_VD_RD];
-  assign ope_rvalid_s = shared_rd_ope_grant ? {vrf_rvalid[VFU_VD_RD],
-                                               vrf_rvalid[VFU_VS1_RD],
-                                               vrf_rvalid[VFU_VS2_RD]} : '0;
-`ifdef BUF_FPU
-  assign vfu_wvalid_s = vrf_vfu_wvalid;
-`else
-  assign vfu_wvalid_s = (shared_wr_vfu_grant && vfu_we_s) ? vrf_wvalid[VFU_VD_WD] : 1'b0;
-`endif
-  assign ope_wvalid_s = (shared_wr_ope_grant && ope_we_s) ? vrf_wvalid[VFU_VD_WD] : 1'b0;
 
 `ifdef DOUBLE_BW
   always_comb begin : vlsu_read_ports
@@ -619,7 +566,8 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     .sb_id_i          (sb_buf_id         ),
     .sb_wrote_result_i(vrf_wvalid        ),
     .sb_enable_i      ({sb_we_buf, sb_re}),
-    .sb_enable_o      ({vrf_we, vrf_re}  )
+    .sb_enable_o      ({vrf_we, vrf_re}  ),
+    .matrix_enable_o  (matrix_enable     )
 `ifdef VENTAGLIO
     .sb_vtl_redirect_read_o  (vrf_vtl_redirect_read ),
     .sb_vtl_redirect_write_o (vrf_vtl_redirect_write),
@@ -635,17 +583,17 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
 `ifdef BUF_FPU
   // If a VFU result cannot write the shared port directly, put it in the buffer.
   // The buffer itself arbitrates for the shared write port through
-  // shared_wr_vfu_req.
+  // shared_wr_req[0].
   assign vfu_buf_en = vfu_we_s &&
-                      (!shared_wr_vfu_grant || !vrf_wvalid[VFU_VD_WD] ||
+                      (!shared_wr_vfu_gnt || !vrf_wvalid[VFU_VD_WD] ||
                        !vfu_buf_empty);
   assign vfu_buf_push = vfu_buf_en && !vfu_buf_full;
-  assign vfu_buf_pop = shared_wr_vfu_grant && vrf_wvalid[VFU_VD_WD] &&
+  assign vfu_buf_pop = shared_wr_vfu_gnt && vrf_wvalid[VFU_VD_WD] &&
                        !vfu_buf_empty;
 
   // Ack 1'b1 to the VFU as long as the buffer is not full
   assign vrf_vfu_wvalid =
-      vfu_we_s && ((shared_wr_vfu_grant && vfu_buf_empty &&
+      vfu_we_s && ((shared_wr_vfu_gnt && vfu_buf_empty &&
                     vrf_wvalid[VFU_VD_WD]) || !vfu_buf_full);
 
   fifo_v3 #(
@@ -729,7 +677,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     // If the buffering feature is used for the FPU or VLSU,
     // Use the metadata to commit the data to the VRF
 `ifdef BUF_FPU
-    if (shared_wr_vfu_grant && !vfu_buf_empty) begin
+    if (shared_wr_vfu_gnt && !vfu_buf_empty) begin
       sb_we_buf    [VFU_VD_WD] = 1'b1;
       vrf_wdata_buf[VFU_VD_WD] = vfu_buf_data.wdata;
       vrf_waddr_buf[VFU_VD_WD] = vfu_buf_data.waddr;
@@ -805,15 +753,15 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     .vrf_we_o         (vfu_we_s                                                ),
     .vrf_wbe_o        (vfu_wbe_s                                               ),
 `ifdef BUF_FPU
-    .vrf_wvalid_i     (vfu_wvalid_s                                            ),
+    .vrf_wvalid_i     (vrf_vfu_wvalid                                          ),
 `else
-    .vrf_wvalid_i     (vfu_wvalid_s                                            ),
+    .vrf_wvalid_i     ((shared_wr_vfu_gnt && vfu_we_s) && vrf_wvalid[VFU_VD_WD]),
 `endif
     .vrf_id_o         (vfu_id_s                                                ),
     .vrf_raddr_o      (vfu_raddr_s                                             ),
     .vrf_re_o         (vfu_re_s                                                ),
     .vrf_rdata_i      (vrf_rdata[VFU_VD_RD:VFU_VS2_RD]                         ),
-    .vrf_rvalid_i     (vfu_rvalid_s                                            ),
+    .vrf_rvalid_i     ({3{shared_rd_vfu_gnt}} & vrf_rvalid[VFU_VD_RD:VFU_VS2_RD]),
     // FPU side-channel
     .fpu_status_o     (fpu_status_o                                            )
   );
@@ -829,6 +777,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     .spatz_req_i      (spatz_req                                                ),
     .spatz_req_valid_i(spatz_req_valid && (spatz_req.ex_unit == OPE)),
     .spatz_req_ready_o(ope_req_ready                                            ),
+    .matrix_enable_i  (matrix_enable                                            ),
     // Response
     .ope_rsp_valid_o  (ope_rsp_valid                                            ),
     .ope_rsp_ready_i  (ope_rsp_ready                                            ),
@@ -838,19 +787,17 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     .vrf_wdata_o      (ope_wdata_s                                             ),
     .vrf_we_o         (ope_we_s                                                ),
     .vrf_wbe_o        (ope_wbe_s                                               ),
-    .vrf_wvalid_i     (ope_wvalid_s                                            ),
-    // VRF read ports: [0]=MAC vs2, [1]=MAC vs1, [2]=TV source.
+    .vrf_wvalid_i     ((shared_wr_ope_gnt && ope_we_s) && vrf_wvalid[VFU_VD_WD]),
+    // VRF read ports: [0]=MAC vs2, [1]=MAC vs1, [2]=MOVE source.
     .vrf_id_o         (ope_id_s                                                ),
     .vrf_raddr_o      (ope_raddr_s                                             ),
     .vrf_re_o         (ope_re_s                                                ),
-    .vrf_rdata_i      (ope_rdata_s                                             ),
-    .vrf_rvalid_i     (ope_rvalid_s                                            ),
+    .vrf_rdata_i      (vrf_rdata[VFU_VD_RD:VFU_VS2_RD]                         ),
+    .vrf_rvalid_i     ({3{shared_rd_ope_gnt}} & vrf_rvalid[VFU_VD_RD:VFU_VS2_RD]),
     // Tile interface to VLSU
     .tile_wvalid_i    (tile_wvalid                                             ),
     .tile_w_req_i     (tile_w_req                                              ),
     .tile_wready_o    (tile_wready                                             ),
-    .tile_load_pending_i(tile_load_pending                                     ),
-    .tile_load_idx_i  (tile_load_idx                                           ),
     .tile_rvalid_i    (tile_rvalid                                             ),
     .tile_r_req_i     (tile_r_req                                              ),
     .tile_rdata_o     (tile_rdata                                              ),
@@ -873,6 +820,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     .spatz_req_i             (spatz_req                                            ),
     .spatz_req_valid_i       (spatz_req_valid                                      ),
     .spatz_req_ready_o       (vlsu_req_ready                                       ),
+    .matrix_enable_i         (matrix_enable                                       ),
     // Response
     .vlsu_rsp_valid_o        (vlsu_rsp_valid                                       ),
     .vlsu_rsp_o              (vlsu_rsp                                             ),
@@ -905,8 +853,6 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     .tile_wvalid_o           (tile_wvalid                                          ),
     .tile_w_req_o            (tile_w_req                                           ),
     .tile_wready_i           (tile_wready                                          ),
-    .tile_load_pending_o     (tile_load_pending                                     ),
-    .tile_load_idx_o         (tile_load_idx                                         ),
     .tile_rvalid_o           (tile_rvalid                                          ),
     .tile_r_req_o            (tile_r_req                                           ),
     .tile_rdata_i            (tile_rdata                                           ),
@@ -915,8 +861,6 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
 `else
   assign tile_wvalid = 1'b0;
   assign tile_w_req  = '0;
-  assign tile_load_pending = 1'b0;
-  assign tile_load_idx = '0;
   assign tile_rvalid = 1'b0;
   assign tile_r_req  = '0;
   spatz_vlsu #(
