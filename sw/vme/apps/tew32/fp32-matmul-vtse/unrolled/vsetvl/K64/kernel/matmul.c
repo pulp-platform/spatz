@@ -16,7 +16,7 @@
 //
 // Author: Pei-Yu Lin <peilin@ethz.ch>
 
-// fp32 optimal GEMM kernel for TE=16, CE=8, and four accumulator tiles.
+// fp32 optimal kernel for TE=16, CE=8, and four accumulator tiles.
 
 
 #include "matmul.h"
@@ -25,8 +25,6 @@ __attribute__((noinline, aligned(64))) void matmul_fp32(
     const float *Apack, const float *Bpack, float *C,
     uint32_t M, uint32_t N, uint32_t K)
 {
-    // const uint32_t col_blocks = (N + BLOCK_DIM - 1) / BLOCK_DIM;
-    // const uint32_t row_blocks = (M + BLOCK_DIM - 1) / BLOCK_DIM;
     const uint32_t tile_stride = TE * K;
     uintptr_t a0p = (uintptr_t)Apack;
     uintptr_t a1p = (uintptr_t)(Apack + tile_stride);
@@ -38,8 +36,6 @@ __attribute__((noinline, aligned(64))) void matmul_fp32(
     uintptr_t c01 = c00 + operand_bytes;
     uintptr_t c10 = (uintptr_t)(C + TE * CHUNK_SIZE);
     uintptr_t c11 = (uintptr_t)(C + TE * CHUNK_SIZE + TE);
-    // uintptr_t block_counter = (uintptr_t)row_blocks * col_blocks;
-    // uintptr_t col_counter = (uintptr_t)col_blocks;
     uintptr_t loop_counter;
     uintptr_t vl_counter;
     const uintptr_t c_stride = CHUNK_SIZE * sizeof(float);
@@ -47,46 +43,46 @@ __attribute__((noinline, aligned(64))) void matmul_fp32(
     const uintptr_t matrix_vtype = 0xD0;  // e32, m1, ta, ma
 
     asm volatile(
-        
+                
         // Block 1, K-Group 1
-        "vsetvli %[loop], x0, e32, m8, ta, ma\n"
+        "vsetvli %[vl], x0, e32, m8, ta, ma\n"
         "msetmtype %[mtype], %[vtype]\n"  // set sew=32, set tm=TE, tk=1, twiden=1
-        "msettn x0, %[loop]\n"              // msetmtype resets tn, so set full tn=TE
-        // we dont need preload
+        "msettn x0, %[vl]\n"              // msetmtype resets tn, so set full tn=TE
+
         "vle32.v v0,  (%[a0p])\n" "add %[a0p], %[a0p], %[operand_bytes]\n"
         "vle32.v v16,  (%[b0p])\n" "add %[b0p], %[b0p], %[operand_bytes]\n"
         "vle32.v v1,  (%[a0p])\n" "add %[a0p], %[a0p], %[operand_bytes]\n"
         "vle32.v v17,  (%[b0p])\n" "add %[b0p], %[b0p], %[operand_bytes]\n"
         "vle32.v v2,  (%[a0p])\n" "add %[a0p], %[a0p], %[operand_bytes]\n"
         "vle32.v v18,  (%[b0p])\n" "add %[b0p], %[b0p], %[operand_bytes]\n"
-        "vle32.v v3,  (%[a0p])\n" "add %[a0p], %[a0p], %[operand_bytes]\n"
-        "vle32.v v19,  (%[b0p])\n" "add %[b0p], %[b0p], %[operand_bytes]\n"
-        "vle32.v v4,  (%[a0p])\n" "add %[a0p], %[a0p], %[operand_bytes]\n"
-        "vle32.v v20,  (%[b0p])\n" "add %[b0p], %[b0p], %[operand_bytes]\n"
-        "vle32.v v5,  (%[a0p])\n" "add %[a0p], %[a0p], %[operand_bytes]\n"
         "vtzero mt0\n"
         
         // vtfmm mt0
         "vtfmm.tvv mt0, v0, v16\n"  // mt0 += v0*v16
-        "vle32.v v21,  (%[b0p])\n" "add %[b0p], %[b0p], %[operand_bytes]\n"
+        "vle32.v v3,  (%[a0p])\n" "add %[a0p], %[a0p], %[operand_bytes]\n"
+        "vle32.v v19,  (%[b0p])\n" "add %[b0p], %[b0p], %[operand_bytes]\n"
         "vtfmm.tvv mt0, v1, v17\n"  // mt0 += v1*v17
-        "vle32.v v6,  (%[a0p])\n" "add %[a0p], %[a0p], %[operand_bytes]\n"
+        "vle32.v v4,  (%[a0p])\n" "add %[a0p], %[a0p], %[operand_bytes]\n"
+        "vle32.v v20,  (%[b0p])\n" "add %[b0p], %[b0p], %[operand_bytes]\n"
         "vtfmm.tvv mt0, v2, v18\n"  // mt0 += v2*v18
-        "vle32.v v22,  (%[b0p])\n" "add %[b0p], %[b0p], %[operand_bytes]\n"
+        "vle32.v v5,  (%[a0p])\n" "add %[a0p], %[a0p], %[operand_bytes]\n"
         "vtfmm.tvv mt0, v3, v19\n"  // mt0 += v3*v19
-        "vle32.v v7,  (%[a0p])\n" "add %[a0p], %[a0p], %[operand_bytes]\n"
+        "vle32.v v21,  (%[b0p])\n" "add %[b0p], %[b0p], %[operand_bytes]\n"
+        "vle32.v v6,  (%[a0p])\n" "add %[a0p], %[a0p], %[operand_bytes]\n"
         "vtfmm.tvv mt0, v4, v20\n"  // mt0 += v4*v20
-        "vle32.v v23,  (%[b0p])\n" "add %[b0p], %[b0p], %[operand_bytes]\n"
+        "vle32.v v22,  (%[b0p])\n" "add %[b0p], %[b0p], %[operand_bytes]\n"
         "vtfmm.tvv mt0, v5, v21\n"  // mt0 += v5*v21
-        "vle32.v v24,  (%[b1p])\n" "add %[b1p], %[b1p], %[operand_bytes]\n"
+        "vle32.v v7,  (%[a0p])\n" "add %[a0p], %[a0p], %[operand_bytes]\n"
+        "vle32.v v23,  (%[b0p])\n" "add %[b0p], %[b0p], %[operand_bytes]\n"
         "vtfmm.tvv mt0, v6, v22\n"  // mt0 += v6*v22
-        "vle32.v v25,  (%[b1p])\n" "add %[b1p], %[b1p], %[operand_bytes]\n"
+        "vle32.v v24,  (%[b1p])\n" "add %[b1p], %[b1p], %[operand_bytes]\n"
         "vtfmm.tvv mt0, v7, v23\n"  // mt0 += v7*v23
-        "vle32.v v26,  (%[b1p])\n" "add %[b1p], %[b1p], %[operand_bytes]\n"
+        "vle32.v v25,  (%[b1p])\n" "add %[b1p], %[b1p], %[operand_bytes]\n"
         "vtzero mt4\n"
 
         // vtfmm mt4
         "vtfmm.tvv mt4, v0, v24\n"  // mt4 += v0*v24
+        "vle32.v v26,  (%[b1p])\n" "add %[b1p], %[b1p], %[operand_bytes]\n"
         "vle32.v v27,  (%[b1p])\n" "add %[b1p], %[b1p], %[operand_bytes]\n"
         "vtfmm.tvv mt4, v1, v25\n"  // mt4 += v1*v25
         "vle32.v v28,  (%[b1p])\n" "add %[b1p], %[b1p], %[operand_bytes]\n"
