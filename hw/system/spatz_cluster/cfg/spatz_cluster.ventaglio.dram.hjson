@@ -33,6 +33,7 @@
         "spatz_fpu": true,
         "spatz_nports": 4,
         "double_bw": 0,
+        "divsqrt_is_shared": 0,
         "ventaglio": true,
         "buf_fpu": 1,
         // Timing parameters

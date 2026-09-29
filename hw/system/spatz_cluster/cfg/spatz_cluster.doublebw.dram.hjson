@@ -33,6 +33,7 @@
         "spatz_fpu": true,
         "spatz_nports": 8,
         "double_bw": 1,
+        "divsqrt_is_shared": 0,
         "buf_fpu": 1,
         // Timing parameters
         "timing": {

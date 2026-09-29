@@ -119,6 +119,9 @@ add_snitch_test(vremu isa/rv64uv/vremu.c)
 add_snitch_test(vfadd  isa/rv64uv/vfadd.c)
 add_snitch_test(vfsub  isa/rv64uv/vfsub.c)
 add_snitch_test(vfrsub isa/rv64uv/vfrsub.c)
+add_snitch_test(vfdiv  isa/rv64uv/vfdiv.c)
+#TODO: add this test after migrating to Verilator 5.050 and GCC-12
+#add_snitch_test(vfsqrt isa/rv64uv/vfsqrt.c)
 
 add_snitch_test(vfmin isa/rv64uv/vfmin.c)
 add_snitch_test(vfmax isa/rv64uv/vfmax.c)
@@ -175,6 +178,14 @@ add_snitch_test(vmxnor isa/rv64uv/vmxnor.c)
 add_snitch_test(vmxor isa/rv64uv/vmxor.c)
 
 add_snitch_test(vmerge isa/rv64uv/vmerge.c)
+add_snitch_test(vmseq isa/rv64uv/vmseq.c)
+add_snitch_test(vmsgt isa/rv64uv/vmsgt.c)
+add_snitch_test(vmsgtu isa/rv64uv/vmsgtu.c)
+add_snitch_test(vmsle isa/rv64uv/vmsle.c)
+add_snitch_test(vmsleu isa/rv64uv/vmsleu.c)
+add_snitch_test(vmslt isa/rv64uv/vmslt.c)
+add_snitch_test(vmsltu isa/rv64uv/vmsltu.c)
+add_snitch_test(vmsne isa/rv64uv/vmsne.c)
 
 add_snitch_test(vle8 isa/rv64uv/vle8.c)
 add_snitch_test(vle16 isa/rv64uv/vle16.c)
@@ -187,4 +198,6 @@ add_snitch_test(vse64 isa/rv64uv/vse64.c)
 add_snitch_test(vss isa/rv64uv/vss.c)
 
 add_snitch_test(vill isa/rv64uv/vill.c)
-set_property(TEST ${SNITCH_TEST_PREFIX}rtl-invalid PROPERTY WILL_FAIL TRUE)
+set_property(TEST ${SNITCH_TEST_PREFIX}rtl-vill PROPERTY WILL_FAIL TRUE)
+
+add_snitch_test(scalar isa/rv64uv/scalar.c)

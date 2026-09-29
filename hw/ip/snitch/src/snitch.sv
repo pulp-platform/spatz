@@ -2582,6 +2582,8 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           illegal_inst = 1'b1;
         end
       end
+      riscv_instr::VFSQRT_V,
+      riscv_instr::VFDIV_VV,
       riscv_instr::VFADD_VV,
       riscv_instr::VFSUB_VV,
       riscv_instr::VFMIN_VV,
@@ -2706,6 +2708,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           illegal_inst = 1'b1;
         end
       end
+      riscv_instr::VFDIV_VF,
       riscv_instr::VFADD_VF,
       riscv_instr::VFSUB_VF,
       riscv_instr::VFMIN_VF,
@@ -2883,10 +2886,15 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
       end
     endcase
 
+    // If an instruction issued by accelerator, but resulted in an exception, trigger an illegal instruction
+    // Note: same cycle response expected
+    if (acc_qvalid_o && acc_qready_i && acc_qrsp_i.exception) begin
+      illegal_inst = 1'b1;
+    end
+
     // Sanitize illegal instructions so that they don't exert any side-effects.
     if (exception) begin
      write_rd = 1'b0;
-     acc_qvalid_o = 1'b0;
      next_pc = Exception;
     end
   end
