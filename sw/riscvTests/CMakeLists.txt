@@ -186,6 +186,11 @@ add_snitch_test(vmslt isa/rv64uv/vmslt.c)
 add_snitch_test(vmsltu isa/rv64uv/vmsltu.c)
 add_snitch_test(vmsne isa/rv64uv/vmsne.c)
 
+add_snitch_test(vsadd isa/rv64uv/vsadd.c)
+add_snitch_test(vsaddu isa/rv64uv/vsaddu.c)
+add_snitch_test(vssub isa/rv64uv/vssub.c)
+add_snitch_test(vssubu isa/rv64uv/vssubu.c)
+
 add_snitch_test(vle8 isa/rv64uv/vle8.c)
 add_snitch_test(vle16 isa/rv64uv/vle16.c)
 add_snitch_test(vle32 isa/rv64uv/vle32.c)
