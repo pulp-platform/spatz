@@ -18,7 +18,7 @@
         "cluster_default_axi_user": 1,
         "axi_cdc_enable": false,
         "tcdm": {
-            "size": 128,
+            "size": 512,
             "banks": 16,
             "misalign": true
         },
@@ -82,6 +82,7 @@
             }
         ],
         "icache": {
+            "use_instruction_buffer": true,
             "size": 4, // total instruction cache size in kByte
             "ways": 2, // number of ways
             "cacheline": 256 // word size in bits

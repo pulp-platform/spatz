@@ -57,7 +57,7 @@ package spatz_cluster_pkg;
   localparam int unsigned ICacheWays = 2;
 
   localparam int unsigned TCDMStartAddr = 32'h100000;
-  localparam int unsigned TCDMSize      = 32'h20000;
+  localparam int unsigned TCDMSize      = 32'h80000;
   localparam logic AddrMisalign =  1'b1; // 0-aligned, 1-misalign
   localparam int unsigned PeriStartAddr = TCDMStartAddr + TCDMSize;
 
@@ -290,7 +290,7 @@ module spatz_cluster_wrapper
     .BootAddr (32'h1000),
     .ClusterPeriphSize (64),
     .NrCores (2),
-    .TCDMDepth (1024),
+    .TCDMDepth (4096),
     .TCDMSize (TCDMSize),
     .NrBanks (16),
     .ICacheLineWidth (spatz_cluster_pkg::ICacheLineWidth),

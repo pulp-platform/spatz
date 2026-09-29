@@ -14,6 +14,5 @@ enable_testing()
 
 set(SNITCH_TEST_PREFIX vme-)
 
-# Register the FP32 VTMV/VSE variants directly from the VME apps level.
-# The variant CMake file assigns the requested test-fp32-* target names.
+# Register the FP32 VTSE variants directly from the VME apps level.
 add_subdirectory(tew32/fp32-matmul-vtse)
