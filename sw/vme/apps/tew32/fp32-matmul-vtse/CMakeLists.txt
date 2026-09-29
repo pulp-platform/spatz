@@ -3,12 +3,6 @@
 
 find_package(Python3 COMPONENTS Interpreter REQUIRED)
 
-# Keep the executable names exactly as requested for this experiment. The
-# surrounding VME applications use the vme- prefix, but these variants are
-# intentionally named test-fp32-matmul-vtse-*.
-set(_fp32_vtse_saved_prefix "${SNITCH_TEST_PREFIX}")
-set(SNITCH_TEST_PREFIX "")
-
 set(_fp32_vtse_shapes
     "64x64x64"
     "64x64x128"
@@ -35,10 +29,9 @@ function(add_fp32_vtse_variant variant source_dir)
         list(GET _dims 1 _n)
         list(GET _dims 2 _k)
 
-        set(_k_chunk 64)
+        set(_k_chunk ${_k})
         set(_buffer_count 2)
         if(variant MATCHES "^unrolled-")
-            set(_k_chunk ${_k})
             if(_k EQUAL 256)
                 set(_buffer_count 1)
             endif()
@@ -92,9 +85,12 @@ function(add_fp32_vtse_variant variant source_dir)
 endfunction()
 
 # Rolled kernels continue to build all three K shapes from one source.
-add_subdirectory(rolled/store-afterK)
-add_subdirectory(rolled/store-interleave)
-add_subdirectory(rolled/vsetvl)
+add_fp32_vtse_variant(rolled-store-afterK
+    "${CMAKE_CURRENT_SOURCE_DIR}/rolled/store-afterK")
+add_fp32_vtse_variant(rolled-store-interleave
+    "${CMAKE_CURRENT_SOURCE_DIR}/rolled/store-interleave")
+add_fp32_vtse_variant(rolled-vsetvl
+    "${CMAKE_CURRENT_SOURCE_DIR}/rolled/vsetvl")
 
 # Unrolled kernels are specialized by K within each scheduling variant.
 foreach(_k IN ITEMS 64 128 256)
@@ -105,5 +101,3 @@ foreach(_k IN ITEMS 64 128 256)
     add_fp32_vtse_variant(unrolled-vsetvl
         "${CMAKE_CURRENT_SOURCE_DIR}/unrolled/vsetvl/K${_k}" "64x64x${_k}")
 endforeach()
-
-set(SNITCH_TEST_PREFIX "${_fp32_vtse_saved_prefix}")
