@@ -115,18 +115,21 @@ package spatz_pkg;
   // Fixed physical accumulator storage width. The active tile element width
   // is selected by msetmtype and travels with each request as op_ope.tew.
   localparam int unsigned AccElemWidth = 32;
-  localparam int unsigned AccElemBytes = AccElemWidth >> 3;
-  localparam int unsigned TE     = 16;
-  localparam int unsigned CE     = 8;
-  // Storage width for the largest supported runtime reduction depth.  The
-  // controller further limits tk to 32/SEW, or to one for 64-bit accumulation.
-  localparam int unsigned KMAX   = (AccElemWidth <= 32) ? (32 / 8) : 1;
+  localparam int unsigned AccElemBytes = AccElemWidth / 8;
+  // Architecture Matrix Tile State: mt0, mt1, ..., mt15.
   localparam int unsigned NrPhysicalTile = 16;
-  localparam int unsigned NrWordsPerTile = (AccElemWidth == 32) ?
-      (TE*TE/4) : ((TE == 8) ? (TE*TE/2) : TE*TE);
+  // Tile Dimension
+  localparam int unsigned TileEdge = 16;
+  // The ratio of Tile Dimension and OPE FMA array size
+  localparam int unsigned NrAccPerComputeElem = 2;
+  localparam int unsigned OPEComputeEdge = TileEdge / NrAccPerComputeElem;
+  // The controller further limits tk to 32/SEW, or to one for 64-bit accumulation.
+  localparam int unsigned KMAX   = (AccElemWidth <= 32) ? (32 / 8) : 1;
+  // Datapath between VLSU and OPE
+  localparam int unsigned TileDataWidth = TileEdge*AccElemWidth;
 
-  typedef logic [$clog2(TE)-1:0] tile_dim_t;
-  typedef logic [$clog2(TE+1)-1:0] tile_count_t;
+  typedef logic [$clog2(TileEdge)-1:0] tile_dim_t;
+  typedef logic [$clog2(TileEdge+1)-1:0] tile_count_t;
   typedef logic [$clog2(NrPhysicalTile)-1:0]  mt_t;
   typedef struct packed {
     logic                     tile_valid;
@@ -168,21 +171,16 @@ package spatz_pkg;
   typedef logic [N_FU*ELENB-1:0] vrf_be_t;
   typedef logic [N_FU*ELEN-1:0] vrf_data_t;
 
-  // Keep the OPE/VLSU tile datapath independent of the physical tile edge.
-  // Rows wider than this port are transferred over multiple beats.
-  localparam int unsigned TileDataWidth = CE*AccElemWidth;
   typedef logic [TileDataWidth-1:0] tile_row_t;
   typedef struct packed {
     mt_t                    idx;
     tile_dim_t              row;
-    tile_count_t            elem_offset;
     tile_count_t            elems;
     vew_e                   tew;
   } tile_r_req_t;
   typedef struct packed {
     mt_t                    idx;
     tile_dim_t              row;
-    tile_count_t            elem_offset;
     tile_count_t            elems;
     vew_e                   tew;
     tile_row_t              data;
@@ -348,6 +346,8 @@ package spatz_pkg;
     logic       is_mac;
     logic       is_vt;
     logic       is_tv;
+    logic       is_zero_tile;
+    logic       is_discard;
     tss_t       tss;
     vew_e       tew;        // runtime width: log2(SEW bytes * MTWIDEN)
     elen_t      tn;         // N dimension (output columns)

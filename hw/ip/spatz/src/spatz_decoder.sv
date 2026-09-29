@@ -68,7 +68,7 @@ module spatz_decoder
           spatz_req.op_ope.tss.tile_id   = mt_t'(decoder_req_i.rs2[30:27]);
           spatz_req.op_ope.tss.index  = tile_dim_t'(decoder_req_i.rs2[23:0]);
           spatz_req.op_ope.tss.is_row = (decoder_req_i.rs2[26:24] == 3'd0);
-          spatz_req.op_ope.tss.tile_valid  = (decoder_req_i.rs2[30:27] < NrPhysicalTile) && (decoder_req_i.rs2[23:0] < TE);
+          spatz_req.op_ope.tss.tile_valid  = (decoder_req_i.rs2[30:27] < NrPhysicalTile) && (decoder_req_i.rs2[23:0] < TileEdge);
           spatz_req.op_mem.is_load    = 1'b1;
           unique case (decoder_req_i.instr[31:29])
             3'h0: spatz_req.op_mem.ew = EW_8;
@@ -94,7 +94,7 @@ module spatz_decoder
           spatz_req.op_ope.tss.index  = tile_dim_t'(decoder_req_i.rs2[23:0]);
           // rs2[26:24]: 0 = one row, 1 = one column.
           spatz_req.op_ope.tss.is_row = (decoder_req_i.rs2[26:24] == 3'd0);
-          spatz_req.op_ope.tss.tile_valid  = (decoder_req_i.rs2[30:27] < NrPhysicalTile) && (decoder_req_i.rs2[23:0] < TE);
+          spatz_req.op_ope.tss.tile_valid  = (decoder_req_i.rs2[30:27] < NrPhysicalTile) && (decoder_req_i.rs2[23:0] < TileEdge);
           spatz_req.op_mem.is_load    = 1'b0;
           unique case (decoder_req_i.instr[31:29])
             3'h0: spatz_req.op_mem.ew = EW_8;
@@ -2171,7 +2171,7 @@ module spatz_decoder
           spatz_req.op_ope.tss.tile_id   = mt_t'(decoder_req_i.rs1[30:27]);
           spatz_req.op_ope.tss.index  = tile_dim_t'(decoder_req_i.rs1[23:0]);
           spatz_req.op_ope.tss.is_row = (decoder_req_i.rs1[26:24] == 3'd0);
-          spatz_req.op_ope.tss.tile_valid  = (decoder_req_i.rs1[30:27] < NrPhysicalTile) && (decoder_req_i.rs1[23:0] < TE);
+          spatz_req.op_ope.tss.tile_valid  = (decoder_req_i.rs1[30:27] < NrPhysicalTile) && (decoder_req_i.rs1[23:0] < TileEdge);
           spatz_req.op_ope.is_vt = 1'b1;
         end
 
@@ -2185,13 +2185,14 @@ module spatz_decoder
           spatz_req.op_ope.tss.tile_id   = mt_t'(decoder_req_i.rs1[30:27]);
           spatz_req.op_ope.tss.index  = tile_dim_t'(decoder_req_i.rs1[23:0]);
           spatz_req.op_ope.tss.is_row = (decoder_req_i.rs1[26:24] == 3'd0);
-          spatz_req.op_ope.tss.tile_valid  = (decoder_req_i.rs1[30:27] < NrPhysicalTile) && (decoder_req_i.rs1[23:0] < TE);
+          spatz_req.op_ope.tss.tile_valid  = (decoder_req_i.rs1[30:27] < NrPhysicalTile) && (decoder_req_i.rs1[23:0] < TileEdge);
           spatz_req.op_ope.is_tv = 1'b1;
         end
 
         // --- Tile zero and context discard ---
         // vtzero — zero all accumulators of a tile register
         riscv_instr::VTZERO: begin
+          spatz_req.op_ope.is_zero_tile = 1'b1;
           spatz_req.op     = VTZERO;
           spatz_req.ex_unit = OPE;
           spatz_req.mtd    = mt_t'(decoder_req_i.instr[11:8]);
@@ -2199,6 +2200,7 @@ module spatz_decoder
 
         // vtdiscard — invalidate all tile state (no data path needed)
         riscv_instr::VTDISCARD: begin
+          spatz_req.op_ope.is_discard = 1'b1;
           spatz_req.op                    = VTDISCARD;
           spatz_req.ex_unit               = OPE;
         end

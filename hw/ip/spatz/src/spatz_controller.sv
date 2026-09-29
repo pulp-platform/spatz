@@ -244,7 +244,8 @@ module spatz_controller
               twiden = 1 << (spatz_req.mtype.mtwiden - 1);
               tewb = (1 << int'(vtype_d.vsew)) * twiden;
 
-              if ((vtype_d.vsew == EW_8) || (tewb > AccElemBytes)) begin
+              // SEW8 is valid for byte tile storage/moves, not FP8 arithmetic or widening yet.
+              if (((vtype_d.vsew == EW_8) && (spatz_req.mtype.mtwiden != 2'b01)) || (tewb > AccElemBytes)) begin
                 invalid_vtype = 1'b1;
               end else begin
                 unique case (vtype_d.vsew)
@@ -253,7 +254,7 @@ module spatz_controller
                   default: kmax = 1;
                 endcase
 
-                ete = (tewb < 8) ? TE : (TE >> 1);
+                ete = (tewb < 8) ? TileEdge : (TileEdge >> 1);
                 eve = VLENB >> int'(vtype_d.vsew);
 
                 lmul_req    = (ete + eve - 1) / eve;
@@ -309,7 +310,7 @@ module spatz_controller
 
                 tewb = (1 << int'(vtype_q.vsew)) *
                        (1 << (mtype_q.mtwiden - 1));
-                ete = (tewb < 8) ? TE : TE >> 1;
+                ete = (tewb < 8) ? TileEdge : TileEdge >> 1;
 
                 // clamp tn/vl
                 tmp_tn  = (lmul_eve < ete) ? lmul_eve : ete;
@@ -369,7 +370,7 @@ module spatz_controller
               end
 
               // clamp tm using the newly selected matrix LMUL in vtype_d.
-              ete = (tewb < 8) ? TE : TE >> 1;
+              ete = (tewb < 8) ? TileEdge : TileEdge >> 1;
 
               lmul_eve = VLENB >> int'(vtype_d.vsew);
               unique case (vtype_d.vlmul)
@@ -417,7 +418,7 @@ module spatz_controller
 
               tewb = (1 << int'(vtype_q.vsew)) *
                      (1 << (mtype_q.mtwiden - 1));
-              ete = (tewb < 8) ? TE : TE >> 1;
+              ete = (tewb < 8) ? TileEdge : TileEdge >> 1;
 
               requested_tm = int'(spatz_req.rs1);
               tmp_tm = (lmul_eve < ete) ? lmul_eve : ete;
@@ -1071,9 +1072,10 @@ module spatz_controller
 
   always_comb begin : matrix_decode
     matrix_issue = matrix_claim_t'(0);
-    // memory and move instruction uses Tile Subset Specifier (TSS)
-    matrix_issue_tile = (buffer_spatz_req.op_ope.is_mac)  ? 
-                          buffer_spatz_req.mtd : buffer_spatz_req.op_ope.tss.tile_id;
+    // MAC and VTZERO address mtd; tile memory/move instructions use TSS.
+    matrix_issue_tile = (buffer_spatz_req.op_ope.is_mac ||
+                         buffer_spatz_req.op == VTZERO) ?
+                        buffer_spatz_req.mtd : buffer_spatz_req.op_ope.tss.tile_id;
 
     // mt0 with tew=32 overlaps both mt0 and mt2 with tew=16
     case (vew_e'(vtype_q.vsew + mtype_q.mtwiden - 1'b1))  // = tew
@@ -1101,7 +1103,8 @@ module spatz_controller
         VTMV_VT: matrix_issue.reads = 1'b1;
         VTMV_TV, VTZERO: matrix_issue.writes = 1'b1;
         VTDISCARD: begin
-          matrix_issue.mask = matrix_mask_t'(1);
+          // Global accumulator flush conflicts with every tile reader and writer.
+          matrix_issue.mask = matrix_mask_t'({NrPhysicalTile{1'b1}});
           matrix_issue.writes = 1'b1;
         end
         default: ;
@@ -1392,6 +1395,9 @@ module spatz_controller
           if (mtype_q.mtwiden == 0) begin
             issue_rsp_o.accept = 1'b0;
           end else if (!issue_tile_aligned) begin
+            issue_rsp_o.accept = 1'b0;
+          end else if (decoder_rsp.spatz_req.op_ope.is_mac && (vtype_q.vsew == EW_8)) begin
+            // No FP8 compute lane is instantiated; reject instead of waiting for a missing result.
             issue_rsp_o.accept = 1'b0;
           end else if ((decoder_rsp.spatz_req.op_ope.is_vt ||
                         decoder_rsp.spatz_req.op_ope.is_tv) &&
