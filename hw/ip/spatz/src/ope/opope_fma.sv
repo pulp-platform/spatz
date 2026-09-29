@@ -1,9 +1,9 @@
-// Copyright 2025 ETH Zurich and University of Bologna.
+// Copyright 2026 ETH Zurich and University of Bologna.
 // Solderpad Hardware License, Version 0.51, see LICENSE for details.
 // SPDX-License-Identifier: SHL-0.51
 //
 // Danilo Cammarata <dcammarata@iis.ee.ethz.ch>
-//
+// Pei-Yu Lin       <peilin@ethz.ch>
 
 `include "common_cells/registers.svh"
 
@@ -13,12 +13,15 @@ module opope_fma #(
   parameter fpnew_pkg::pipe_config_t PipeConfig  = fpnew_pkg::BEFORE,
   parameter logic                    Stallable   = 1'b0,
 
-  localparam int unsigned WIDTH = fpnew_pkg::fp_width(FpFormat) // do not change
+  localparam int unsigned WIDTH = fpnew_pkg::FP_ENCODINGS[FpFormat].exp_bits +
+                                 fpnew_pkg::FP_ENCODINGS[FpFormat].man_bits + 1 // do not change
 ) (
   input logic                      clk_i,
   input logic                      rst_ni,
   // Input signals
-  input logic [2:0][WIDTH-1:0]     operands_i, // 3 operands
+  input logic [1:0][WIDTH-1:0]     operands_i, // multiplicands, raw in input_format_i
+  input logic [WIDTH-1:0]          addend_i,   // accumulator/addend, always FpFormat
+  input fpnew_pkg::fp_format_e     input_format_i,
   input  logic                  valid_i,
   output logic                  ready_o,
   input logic                      reg_enable_i,
@@ -31,9 +34,9 @@ module opope_fma #(
   // ----------
   // Constants
   // ----------
-  localparam int unsigned EXP_BITS = fpnew_pkg::exp_bits(FpFormat);
-  localparam int unsigned MAN_BITS = fpnew_pkg::man_bits(FpFormat);
-  localparam int unsigned BIAS     = fpnew_pkg::bias(FpFormat);
+  localparam int unsigned EXP_BITS = fpnew_pkg::FP_ENCODINGS[FpFormat].exp_bits;
+  localparam int unsigned MAN_BITS = fpnew_pkg::FP_ENCODINGS[FpFormat].man_bits;
+  localparam int unsigned BIAS     = 2**(EXP_BITS-1)-1;
   // Precision bits 'p' include the implicit bit
   localparam int unsigned PRECISION_BITS = MAN_BITS + 1;
   // The lower 2p+3 bits of the internal FMA result will be needed for leading-zero detection
@@ -42,7 +45,7 @@ module opope_fma #(
   // Internal exponent width of FMA must accomodate all meaningful exponent values in order to avoid
   // datapath leakage. This is either given by the exponent bits or the width of the LZC result.
   // In most reasonable FP formats the internal exponent will be wider than the LZC result.
-  localparam int unsigned EXP_WIDTH = unsigned'(fpnew_pkg::maximum(EXP_BITS + 2, LZC_RESULT_WIDTH));
+  localparam int unsigned EXP_WIDTH = (EXP_BITS + 2 > LZC_RESULT_WIDTH) ? EXP_BITS + 2 : LZC_RESULT_WIDTH;
   // Shift amount width: maximum internal mantissa size is 3p+3 bits
   localparam int unsigned SHIFT_AMOUNT_WIDTH = $clog2(3 * PRECISION_BITS + 3);
   // Pipelines
@@ -65,6 +68,58 @@ module opope_fma #(
   localparam int unsigned PIPE_LATENCY = NUM_INP_REGS + NUM_MID_REGS + NUM_OUT_REGS;
 
   logic pipe_enable;
+  logic [2:0][WIDTH-1:0] operands_wide;
+
+  assign operands_wide[2] = addend_i;
+
+  for (genvar operand = 0; operand < 2; operand++) begin : gen_input_widen
+    if (FpFormat == fpnew_pkg::FP32) begin : gen_fp32
+      always_comb begin : input_widen
+        logic [4:0] exponent;
+        logic [9:0] mantissa;
+        logic [7:0] wide_exponent;
+        logic [22:0] wide_mantissa;
+        logic [9:0] normalized_mantissa;
+        logic [3:0] shift_count;
+
+        exponent = operands_i[operand][14:10];
+        mantissa = operands_i[operand][9:0];
+        normalized_mantissa = mantissa;
+        shift_count = 4'd0;
+        wide_exponent = 8'd0;
+        wide_mantissa = 23'd0;
+        operands_wide[operand] = operands_i[operand];
+
+        unique case (input_format_i)
+          fpnew_pkg::FP16: begin
+            if (exponent == 5'd0) begin
+              if (mantissa != 10'd0) begin
+                for (int unsigned bit_idx = 0; bit_idx < 10; bit_idx++) begin
+                  if (!normalized_mantissa[9]) begin
+                    normalized_mantissa = normalized_mantissa << 1;
+                    shift_count = shift_count + 4'd1;
+                  end
+                end
+                wide_exponent = 8'd112 - {4'b0000, shift_count};
+                wide_mantissa = {normalized_mantissa[8:0], 14'd0};
+              end
+            end else if (exponent == 5'h1f) begin
+              wide_exponent = 8'hff;
+              wide_mantissa = {mantissa, 13'd0};
+            end else begin
+              wide_exponent = {3'b000, exponent} + 8'd112;
+              wide_mantissa = {mantissa, 13'd0};
+            end
+            operands_wide[operand] = {operands_i[operand][15], wide_exponent, wide_mantissa};
+          end
+          fpnew_pkg::FP16ALT: operands_wide[operand] = {operands_i[operand][15:0], 16'd0};
+          default: operands_wide[operand] = operands_i[operand];
+        endcase
+      end
+    end else begin : gen_passthrough
+      assign operands_wide[operand] = operands_i[operand];
+    end
+  end
 
   if (PIPE_LATENCY == 0) begin : gen_zero_latency_valid
     assign ready_o        = result_ready_i;
@@ -75,7 +130,10 @@ module opope_fma #(
     logic [PIPE_LATENCY-1:0] valid_pipe_q;
 
     assign ready_o        = Stallable ? (result_ready_i || !valid_pipe_q[PIPE_LATENCY-1]) : 1'b1;
-    assign pipe_enable    = Stallable ? ready_o : 1'b1;
+    // The OPE has parallel FP16/FP32 datapaths and one shared tag pipeline.
+    // The parent combines both ready signals and drives reg_enable_i so every
+    // data pipeline advances in lockstep with its tag.
+    assign pipe_enable    = Stallable ? reg_enable_i : 1'b1;
     assign result_valid_o = valid_pipe_q[PIPE_LATENCY-1];
 
     always_comb begin
@@ -115,7 +173,7 @@ module opope_fma #(
   logic                  [0:NUM_INP_REGS][2:0][WIDTH-1:0] inp_pipe_operands_q;
 
   // Input stage: First element of pipeline is taken from inputs
-  assign inp_pipe_operands_q[0] = operands_i;
+  assign inp_pipe_operands_q[0] = operands_wide;
   // Generate the register stages
   for (genvar i = 0; i < NUM_INP_REGS; i++) begin : gen_input_pipeline
     // Internal register enable for this stage
