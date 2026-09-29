@@ -20,6 +20,18 @@
 
 #include <stdint.h>
 
+#ifndef MATMUL_K_CHUNK
+#define MATMUL_K_CHUNK 64
+#endif
+#ifndef MATMUL_BUFFER_COUNT
+#define MATMUL_BUFFER_COUNT 2
+#endif
+
+_Static_assert(MATMUL_K_CHUNK == 64 || MATMUL_K_CHUNK == 128 ||
+               MATMUL_K_CHUNK == 256, "unsupported matmul K chunk");
+_Static_assert(MATMUL_BUFFER_COUNT == 1 || MATMUL_BUFFER_COUNT == 2,
+               "matmul supports one or two L1 buffers");
+
 enum {
     CE = 8,
     TE = 16,
@@ -27,7 +39,6 @@ enum {
     BLOCK_DIM = 2 * TE,
 };
 
-// Read the hardware cycle counter.
 static inline uint32_t get_cycle(void)
 {
     uint32_t c;
@@ -35,15 +46,11 @@ static inline uint32_t get_cycle(void)
     return c;
 }
 
-// Reading fcsr stalls Snitch while any Spatz scoreboard entry is live. Use it
-// to turn an asynchronous kernel return into an architectural completion point.
 static inline void wait_spatz(void)
 {
     uint32_t fcsr;
     asm volatile("csrr %0, fcsr" : "=r"(fcsr) :: "memory");
 }
 
-// FP16 VME matmul over TE=16 with architectural tk=2. C is a padded
-// M-by-CHUNK_SIZE L1 panel; M and N must not exceed 64.
 void matmul_fp32(const float *Apack, const float *Bpack, float *C,
                  uint32_t M, uint32_t N, uint32_t K);
