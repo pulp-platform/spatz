@@ -1120,7 +1120,7 @@ module spatz_vlsu
       .data_o    (vreg_addr_offset[port]                                               ),
       // Pop only when a real pending load response is consumed.
       .pop_i     (rob_pop[port] && commit_insn_q.is_load &&
-                  mem_pending[port] &&
+                  mem_pending[port] && !rob_dummy[port] &&
                   !offset_queue_empty[port]                                             ),
       .usage_o   (/* Unused */                                                         )
     );
@@ -1306,9 +1306,19 @@ module spatz_vlsu
         //
         // Zeroing it on the store path also clears any residue the load left, so a credit
         // can never survive into an instruction that does not need it.
-        pad_init[port] = mem_spatz_req.op_mem.is_load
-                       ? (idx_width(ELENB+1))'(mem_max_elements[0] - mem_max_elements[port])
-                       : '0;
+        pad_init[port] = '0;
+        if (mem_spatz_req.op_mem.is_load) begin
+          if (mem_is_single_element_operation)
+            pad_init[port] = (idx_width(ELENB+1))'
+                            (mem_max_elements[0] - mem_max_elements[port]);
+          else
+            // A partial memory word still allocates one ROB entry. Round each
+            // lane's extent before comparing request counts, not the shortfall.
+            pad_init[port] = (idx_width(ELENB+1))'
+                ((((mem_max_elements[0] + MemDataWidthB - 1) >> $clog2(MemDataWidthB)) -
+                  ((mem_max_elements[port] + MemDataWidthB - 1) >> $clog2(MemDataWidthB))) *
+                 MemDataWidthB);
+        end
         mem_remaining_bytes[port] = mem_max_elements[port] - mem_counter_q[port];
         mem_remaining_words[port] = mem_remaining_bytes[port] >> $clog2(MemDataWidthB);
         // A tile no larger than MaxBurstWords already imposes the burst-length cap.
@@ -1534,7 +1544,7 @@ module spatz_vlsu
       // Response used
       // Decrement only for beats that were already pending before this cycle.
       // This avoids stale ROB cleanup pops canceling freshly-issued load beats.
-      if (commit_insn_q.is_load && rob_rvalid[port] && rob_pop[port] &&
+      if (commit_insn_q.is_load && rob_rvalid[port] && rob_pop[port] && !rob_dummy[port] &&
           (mem_pending_q[port] != '0))
         mem_pending_d[port]--;
 
@@ -1725,8 +1735,9 @@ module spatz_vlsu
           // counts *issued* requests, so a port whose last beats have not been issued yet
           // -- because the request side is stalled behind interconnect backpressure --
           // reads 0 and was treated as "owes no data". The writeback then fired early with
-          vrf_req_valid_d = &(rob_rvalid | commit_finished_q) && !(&commit_finished_q) &&
-                            |mem_pending;
+          // Padding entries carry no data, even when a younger load is pending.
+          vrf_req_valid_d = &((rob_rvalid & ~rob_dummy) | commit_finished_q) &&
+                            !(&commit_finished_q) && |mem_pending;
 
           for (int unsigned port = 0; port < NrMemPorts; port++) begin
             automatic logic [63:0] data = rob_rdata[port];
@@ -1986,13 +1997,14 @@ module spatz_vlsu
             rob_pop[port] = rob_rvalid[port];
         end
 
-        // A dummy carries no beat, so no commit will ever consume it. Drain it wherever it
-        // surfaces -- including after this lane's commit has finished, when none of the arms
-        // above run any more -- or it blocks the lane and rob_empty never asserts.
-        if (rob_dummy[port])
-          rob_pop[port] = 1'b1;
       end
     end
+
+    // Padding can reach the head while a younger load is already pending.
+    // Drain it in both modes without consuming a memory beat or a VRF byte.
+    for (int port = 0; port < NrMemPorts; port++)
+      if (!rob_empty[port] && rob_dummy[port])
+        rob_pop[port] = 1'b1;
 
     // Non-burst paths hand the lanes uneven element counts (indexed, strided, and any
     // unit-stride op that is not burst-eligible -- stores included, which allocate an id
