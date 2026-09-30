@@ -94,7 +94,7 @@ void TEST_CASE7(void) {
   check_vxsat(7, vxsat, 1);
   reset_vxsat;
 }
- 
+
 // csrc vxsat, rs1: vxsat &= ~rs1[0]
 void TEST_CASE8(void) {
   uint32_t vxsat;
@@ -104,7 +104,7 @@ void TEST_CASE8(void) {
   check_vxsat(8, vxsat, 0);
   reset_vxsat;
 }
- 
+
 // csrsi vxsat, imm: vxsat |= imm[0]
 void TEST_CASE9(void) {
   uint32_t vxsat;
@@ -114,7 +114,7 @@ void TEST_CASE9(void) {
   check_vxsat(9, vxsat, 1);
   reset_vxsat;
 }
- 
+
 // csrci vxsat, imm: vxsat &= ~imm[0]
 void TEST_CASE10(void) {
   uint32_t vxsat;
