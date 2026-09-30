@@ -597,7 +597,17 @@ module spatz_controller
 
   int unsigned       sb_vs_row_stride;
   int unsigned       sb_vs_rows;
-  logic [3:0]        lmul_vreg_group;
+  logic [3:0]        vreg_group_count;
+  logic [3:0]        sb_vs_group_count;
+
+  always_comb begin : decode_vreg_group_count
+    unique case (spatz_req.vtype.vlmul)
+      LMUL_2:  vreg_group_count = 4'd2;
+      LMUL_4:  vreg_group_count = 4'd4;
+      LMUL_8:  vreg_group_count = 4'd8;
+      default: vreg_group_count = 4'd1;
+    endcase
+  end : decode_vreg_group_count
 
   always_comb begin : scoreboard
     // Maintain stated
@@ -608,13 +618,7 @@ module spatz_controller
     wrote_result_narrowing_d = wrote_result_narrowing_q;
     sb_vs_row_stride         = 8;
     sb_vs_rows               = 1;
-    lmul_vreg_group          = 4'd1;
-    unique case (spatz_req.vtype.vlmul)
-      LMUL_2: lmul_vreg_group = 4'd2;
-      LMUL_4: lmul_vreg_group = 4'd4;
-      LMUL_8: lmul_vreg_group = 4'd8;
-      default: lmul_vreg_group = 4'd1;
-    endcase
+    sb_vs_group_count        = 4'd1;
 `ifdef VENTAGLIO
     vtl_table_d              = vtl_table_q;
     sb_vtl_redirect_read_o    = '0;
@@ -915,30 +919,37 @@ module spatz_controller
         endcase
 
         sb_vs_rows = int'(spatz_req.op_ope.tk);
+        sb_vs_group_count = vreg_group_count;
       end
 
       // RAW hazard
       if (spatz_req.use_vs2) begin
         for (int unsigned row = 0; row < KMAX; row++) begin
-          if ((row < sb_vs_rows) &&
-              ((int'(spatz_req.vs2) + row * sb_vs_row_stride) < NRVREG)) begin
-            scoreboard_d[spatz_req.id].deps[
-                write_table_d[int'(spatz_req.vs2) + row * sb_vs_row_stride].id] |=
-                write_table_d[int'(spatz_req.vs2) + row * sb_vs_row_stride].valid;
-            read_table_d[int'(spatz_req.vs2) + row * sb_vs_row_stride] =
-                {spatz_req.id, 1'b1};
+          for (int unsigned group_idx = 0; group_idx < 8; group_idx++) begin
+            automatic vreg_group_idx_t group_vreg =
+                {1'b0, spatz_req.vs2} + vreg_group_idx_t'(row * sb_vs_row_stride + group_idx);
+            if ((row < sb_vs_rows) &&
+                (group_idx < sb_vs_group_count) &&
+                (group_vreg < NRVREG)) begin
+              scoreboard_d[spatz_req.id].deps[write_table_d[group_vreg].id] |=
+                  write_table_d[group_vreg].valid;
+              read_table_d[group_vreg] = {spatz_req.id, 1'b1};
+            end
           end
         end
       end
       if (spatz_req.use_vs1) begin
         for (int unsigned row = 0; row < KMAX; row++) begin
-          if ((row < sb_vs_rows) &&
-              ((int'(spatz_req.vs1) + row * sb_vs_row_stride) < NRVREG)) begin
-            scoreboard_d[spatz_req.id].deps[
-                write_table_d[int'(spatz_req.vs1) + row * sb_vs_row_stride].id] |=
-                write_table_d[int'(spatz_req.vs1) + row * sb_vs_row_stride].valid;
-            read_table_d[int'(spatz_req.vs1) + row * sb_vs_row_stride] =
-                {spatz_req.id, 1'b1};
+          for (int unsigned group_idx = 0; group_idx < 8; group_idx++) begin
+            automatic vreg_group_idx_t group_vreg =
+                {1'b0, spatz_req.vs1} + vreg_group_idx_t'(row * sb_vs_row_stride + group_idx);
+            if ((row < sb_vs_rows) &&
+                (group_idx < sb_vs_group_count) &&
+                (group_vreg < NRVREG)) begin
+              scoreboard_d[spatz_req.id].deps[write_table_d[group_vreg].id] |=
+                  write_table_d[group_vreg].valid;
+              read_table_d[group_vreg] = {spatz_req.id, 1'b1};
+            end
           end
         end
       end
@@ -949,7 +960,7 @@ module spatz_controller
           for (int unsigned group_idx = 0; group_idx < 8; group_idx++) begin
             automatic vreg_group_idx_t group_vreg =
                 {1'b0, spatz_req.vd} + vreg_group_idx_t'(group_idx);
-            if ((group_idx < lmul_vreg_group) && (group_vreg < NRVREG)) begin
+            if ((group_idx < vreg_group_count) && (group_vreg < NRVREG)) begin
               scoreboard_d[spatz_req.id].deps[write_table_d[group_vreg].id] |=
                   write_table_d[group_vreg].valid;
               read_table_d[group_vreg] = {spatz_req.id, 1'b1};
@@ -980,7 +991,7 @@ module spatz_controller
           for (int unsigned group_idx = 0; group_idx < 8; group_idx++) begin
             automatic vreg_group_idx_t group_vreg =
                 {1'b0, spatz_req.vd} + vreg_group_idx_t'(group_idx);
-            if ((group_idx < lmul_vreg_group) && (group_vreg < NRVREG)) begin
+            if ((group_idx < vreg_group_count) && (group_vreg < NRVREG)) begin
               scoreboard_d[spatz_req.id].deps[write_table_d[group_vreg].id] |=
                   write_table_d[group_vreg].valid;
               scoreboard_d[spatz_req.id].deps[read_table_d[group_vreg].id] |=
