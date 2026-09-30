@@ -1272,11 +1272,9 @@ module spatz_doublebw_vlsu
 
   // Memory request signals
   id_t  [NrInterfaces-1:0] [N_FU-1:0]                   mem_req_id;
-  // ECC-width to match spatz_mem_req_t.data (mirrors spatz_vlsu.sv's
-  // mem_req_data); shifted-case assignments below produce <=32-bit values
-  // that zero-extend into the upper (parity) bits, same as single-BW -- the
-  // downstream centralized re-encoder in spatz_cc.sv discards and recomputes
-  // them regardless.
+  // Byte-rotated/shifted store payload, decoded-domain (plain, no parity).
+  logic [NrInterfaces-1:0] [N_FU-1:0][ELEN-1:0]   mem_req_data_plain;
+  // ECC-width to match spatz_mem_req_t.data
   logic [NrInterfaces-1:0] [N_FU-1:0][ELEN+7-1:0] mem_req_data;
   logic [NrInterfaces-1:0] [N_FU-1:0]                   mem_req_svalid;
   logic [NrInterfaces-1:0] [N_FU-1:0][ELEN/8-1:0]       mem_req_strb;
@@ -1427,6 +1425,24 @@ module spatz_doublebw_vlsu
     end
   end
 
+  // Store-side ECC decode for byte-level data manipulation, per interface.
+  logic [NrInterfaces-1:0][N_FU-1:0][ELEN-1:0] store_data_decoded;
+  logic [NrInterfaces-1:0][N_FU-1:0]           store_data_sec_err, store_data_ded_err;
+
+  for (genvar intf = 0; intf < NrInterfaces; intf++) begin : gen_store_data_ecc_intf
+    for (genvar fu = 0; fu < N_FU; fu++) begin : gen_store_data_ecc_fu
+      hsiao_ecc_dec #(
+        .DataWidth(ELEN),
+        .ProtWidth(7)
+      ) i_store_data_ecc_dec (
+        .in        (rob_rdata[intf][fu]),
+        .out       (store_data_decoded[intf][fu]),
+        .syndrome_o(),
+        .err_o     ({store_data_ded_err[intf][fu], store_data_sec_err[intf][fu]})
+      );
+    end
+  end
+
   // RMW merge: on the first write to a not-yet-touched word that needs it
   // (masked / narrow-element / partial-tail commit), merge this write's new
   // bytes with the captured pre-existing decoded VD codeword so bytes not
@@ -1468,12 +1484,12 @@ module spatz_doublebw_vlsu
       rob_pop[intf]    = '0;
       rob_req_id[intf] = '0;
 
-      mem_req_id[intf]     = '0;
-      mem_req_data[intf]   = '0;
-      mem_req_strb[intf]   = '0;
-      mem_req_svalid[intf] = '0;
-      mem_req_lvalid[intf] = '0;
-      mem_req_last[intf]   = '0;
+      mem_req_id[intf]         = '0;
+      mem_req_data_plain[intf] = '0;
+      mem_req_strb[intf]       = '0;
+      mem_req_svalid[intf]     = '0;
+      mem_req_lvalid[intf]     = '0;
+      mem_req_last[intf]       = '0;
 
       // Propagate request ID
       vrf_req_d[intf].rsp.id    = commit_insn_q.id;
@@ -1633,7 +1649,7 @@ module spatz_doublebw_vlsu
           vm_strb[intf][fu] = vm_wbe_store[intf][fu];
           // Read element from buffer and execute memory request
           if (mem_operation_valid[intf][fu]) begin
-            automatic logic [63:0] data = rob_rdata[intf][fu];
+            automatic logic [63:0] data = store_data_decoded[intf][fu];
 
             // Shift data to lsb if we have a strided or indexed memory access
             if (mem_is_strided || mem_is_indexed)
@@ -1690,51 +1706,51 @@ module spatz_doublebw_vlsu
             if (MAXEW == EW_32)
               unique case ((mem_is_strided || mem_is_indexed) ? mem_req_addr_offset[intf][fu] : mem_spatz_req.rs1[1:0])
                 2'b01: begin
-                  mem_req_data[intf][fu]   = {data[23:0], data[31:24]};
+                  mem_req_data_plain[intf][fu]   = {data[23:0], data[31:24]};
                   vm_strb[intf][fu]      = {vm_strb[intf][fu][2:0], vm_strb[intf][fu][3]};
                 end
                 2'b10: begin
-                  mem_req_data[intf][fu]   = {data[15:0], data[31:16]};
+                  mem_req_data_plain[intf][fu]   = {data[15:0], data[31:16]};
                   vm_strb[intf][fu]      = {vm_strb[intf][fu][1:0], vm_strb[intf][fu][3:2]};
                 end
                 2'b11: begin
-                  mem_req_data[intf][fu]   = {data[7:0], data[31:8]};
+                  mem_req_data_plain[intf][fu]   = {data[7:0], data[31:8]};
                   vm_strb[intf][fu]      = {vm_strb[intf][fu][0], vm_strb[intf][fu][3:1]};
                 end
-                default: mem_req_data[intf][fu] = data;
+                default: mem_req_data_plain[intf][fu] = data;
               endcase
             else
               unique case ((mem_is_strided || mem_is_indexed) ? mem_req_addr_offset[intf][fu] : mem_spatz_req.rs1[2:0])
                 3'b001: begin
-                  mem_req_data[intf][fu]  = {data[55:0], data[63:56]};
+                  mem_req_data_plain[intf][fu]  = {data[55:0], data[63:56]};
                   vm_strb[intf][fu] = {vm_strb[intf][fu][6:0],vm_strb[intf][fu][7]};
                 end
                 3'b010: begin
-                  mem_req_data[intf][fu]  = {data[47:0], data[63:48]};
+                  mem_req_data_plain[intf][fu]  = {data[47:0], data[63:48]};
                   vm_strb[intf][fu] = {vm_strb[intf][fu][5:0],vm_strb[intf][fu][7:6]};
                 end
                 3'b011: begin
-                  mem_req_data[intf][fu]  = {data[39:0], data[63:40]};
+                  mem_req_data_plain[intf][fu]  = {data[39:0], data[63:40]};
                   vm_strb[intf][fu] = {vm_strb[intf][fu][4:0],vm_strb[intf][fu][7:5]};
                 end
                 3'b100: begin
-                  mem_req_data[intf][fu]  = {data[31:0], data[63:32]};
+                  mem_req_data_plain[intf][fu]  = {data[31:0], data[63:32]};
                   vm_strb[intf][fu] = {vm_strb[intf][fu][3:0],vm_strb[intf][fu][7:4]};
                 end
                 3'b101: begin
-                  mem_req_data[intf][fu]  = {data[23:0], data[63:24]};
+                  mem_req_data_plain[intf][fu]  = {data[23:0], data[63:24]};
                   vm_strb[intf][fu] = {vm_strb[intf][fu][2:0],vm_strb[intf][fu][7:3]};
                 end
                 3'b110: begin
-                  mem_req_data[intf][fu]  = {data[15:0], data[63:16]};
+                  mem_req_data_plain[intf][fu]  = {data[15:0], data[63:16]};
                   vm_strb[intf][fu] = {vm_strb[intf][fu][1:0],vm_strb[intf][fu][7:2]};
                 end
                 3'b111: begin
-                  mem_req_data[intf][fu]  = {data[7:0], data[63:8]};
+                  mem_req_data_plain[intf][fu]  = {data[7:0], data[63:8]};
                   vm_strb[intf][fu] = {vm_strb[intf][fu][0],vm_strb[intf][fu][7:1]};
                 end
                 default: begin
-                  mem_req_data[intf][fu] = data;
+                  mem_req_data_plain[intf][fu] = data;
                   vm_strb[intf][fu] = vm_strb[intf][fu];
                 end
               endcase
@@ -1773,6 +1789,19 @@ module spatz_doublebw_vlsu
     end
   end
   // verilator lint_on LATCH
+
+  // Re-encode the byte-rotated store payload right after rotation
+  for (genvar intf = 0; intf < NrInterfaces; intf++) begin : gen_mem_req_data_ecc_enc_intf
+    for (genvar fu = 0; fu < N_FU; fu++) begin : gen_mem_req_data_ecc_enc_fu
+      hsiao_ecc_enc #(
+        .DataWidth(ELEN),
+        .ProtWidth(7)
+      ) i_mem_req_data_ecc_enc (
+        .in  (mem_req_data_plain[intf][fu]),
+        .out (mem_req_data[intf][fu])
+      );
+    end : gen_mem_req_data_ecc_enc_fu
+  end : gen_mem_req_data_ecc_enc_intf
 
   // Create memory requests
   for (genvar intf = 0; intf < NrInterfaces; intf++) begin : gen_mem_req_intf

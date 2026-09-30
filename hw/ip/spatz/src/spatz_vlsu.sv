@@ -1013,6 +1013,7 @@ module spatz_vlsu
 
   // Memory request signals
   id_t  [NrMemPorts-1:0]                   mem_req_id;
+  logic [NrMemPorts-1:0][ELEN-1:0]         mem_req_data_plain;
   logic [NrMemPorts-1:0][ELEN+7-1:0]      mem_req_data;
   logic [NrMemPorts-1:0]                   mem_req_svalid;
   logic [NrMemPorts-1:0][ELEN/8-1:0]       mem_req_strb;
@@ -1135,6 +1136,24 @@ module spatz_vlsu
   assign vlsu_ld_sec_err_o = |load_rsp_sec_err;
   assign vlsu_ld_ded_err_o = |load_rsp_ded_err;
 
+  // Store-side ECC decode for byte-level data manipulation.
+  logic [NrMemPorts-1:0][ELEN-1:0] store_data_decoded;
+  logic [NrMemPorts-1:0]           store_data_sec_err, store_data_ded_err;
+
+  for (genvar port = 0; port < NrMemPorts; port++) begin : gen_store_data_ecc
+    hsiao_ecc_dec #(
+      .DataWidth(ELEN),
+      .ProtWidth(7)
+    ) i_store_data_ecc_dec (
+      .in        (rob_rdata[port]),
+      .out       (store_data_decoded[port]),
+      .syndrome_o(),
+      .err_o     ({store_data_ded_err[port], store_data_sec_err[port]})
+    );
+  end
+  assign vlsu_st_sec_err_o = |store_data_sec_err;
+  assign vlsu_st_ded_err_o = |store_data_ded_err;
+
   // RMW merge: on the first write to a not-yet-touched word that needs it
   // (masked / narrow-element / partial-tail commit), merge this write's new
   // bytes with the captured pre-existing decoded VD codeword so bytes not
@@ -1172,12 +1191,12 @@ module spatz_vlsu
     rob_pop   = '0;
     rob_req_id = '0;
 
-    mem_req_id     = '0;
-    mem_req_data   = '0;
-    mem_req_strb   = '0;
-    mem_req_svalid = '0;
-    mem_req_lvalid = '0;
-    mem_req_last   = '0;
+    mem_req_id         = '0;
+    mem_req_data_plain = '0;
+    mem_req_strb       = '0;
+    mem_req_svalid     = '0;
+    mem_req_lvalid     = '0;
+    mem_req_last       = '0;
 
     load_rsp_data_aligned = load_rsp_data_decoded;
 
@@ -1331,7 +1350,7 @@ module spatz_vlsu
         vm_strb[port] = vm_wbe_store[port];
         // Read element from buffer and execute memory request
         if (mem_operation_valid[port]) begin
-          automatic logic [63:0] data = rob_rdata[port];
+          automatic logic [63:0] data = store_data_decoded[port];
 
           // Shift data to lsb if we have a strided or indexed memory access
           if (mem_is_strided || mem_is_indexed)
@@ -1389,52 +1408,52 @@ module spatz_vlsu
           if (MAXEW == EW_32)
               unique case ((mem_is_strided || mem_is_indexed) ? mem_req_addr_offset[port] : mem_spatz_req.rs1[1:0])
                 2'b01: begin
-                  mem_req_data[port] = {data[23:0], data[31:24]};
+                  mem_req_data_plain[port] = {data[23:0], data[31:24]};
                   vm_strb[port]      = {vm_strb[port][2:0], vm_strb[port][3]};
                 end
                 2'b10: begin
-                  mem_req_data[port] = {data[15:0], data[31:16]};
+                  mem_req_data_plain[port] = {data[15:0], data[31:16]};
                   vm_strb[port]      = {vm_strb[port][1:0], vm_strb[port][3:2]};
                 end
                 2'b11: begin
-                  mem_req_data[port] = {data[7:0], data[31:8]};
+                  mem_req_data_plain[port] = {data[7:0], data[31:8]};
                   vm_strb[port]      = {vm_strb[port][0], vm_strb[port][3:1]};
                 end
-                default: mem_req_data[port] = data;
+                default: mem_req_data_plain[port] = data;
               endcase
           else
             unique case ((mem_is_strided || mem_is_indexed) ? mem_req_addr_offset[port] : mem_spatz_req.rs1[2:0])
               3'b001: begin
                 // Reoreder vm_masking along with data
-                mem_req_data[port]  = {data[55:0], data[63:56]};
+                mem_req_data_plain[port]  = {data[55:0], data[63:56]};
                 vm_strb[port] = {vm_strb[port][6:0],vm_strb[port][7]};
               end
               3'b010: begin
-                mem_req_data[port]  = {data[47:0], data[63:48]};
+                mem_req_data_plain[port]  = {data[47:0], data[63:48]};
                 vm_strb[port] = {vm_strb[port][5:0],vm_strb[port][7:6]};
               end
               3'b011: begin
-                mem_req_data[port]  = {data[39:0], data[63:40]};
+                mem_req_data_plain[port]  = {data[39:0], data[63:40]};
                 vm_strb[port] = {vm_strb[port][4:0],vm_strb[port][7:5]};
               end
               3'b100: begin
-                mem_req_data[port]  = {data[31:0], data[63:32]};
+                mem_req_data_plain[port]  = {data[31:0], data[63:32]};
                 vm_strb[port] = {vm_strb[port][3:0],vm_strb[port][7:4]};
               end
               3'b101: begin
-                mem_req_data[port]  = {data[23:0], data[63:24]};
+                mem_req_data_plain[port]  = {data[23:0], data[63:24]};
                 vm_strb[port] = {vm_strb[port][2:0],vm_strb[port][7:3]};
               end
               3'b110: begin
-                mem_req_data[port]  = {data[15:0], data[63:16]};
+                mem_req_data_plain[port]  = {data[15:0], data[63:16]};
                 vm_strb[port] = {vm_strb[port][1:0],vm_strb[port][7:2]};
               end
               3'b111: begin
-                mem_req_data[port]  = {data[7:0], data[63:8]};
+                mem_req_data_plain[port]  = {data[7:0], data[63:8]};
                 vm_strb[port] = {vm_strb[port][0],vm_strb[port][7:1]};
               end
               default: begin
-                mem_req_data[port] = data;
+                mem_req_data_plain[port] = data;
                 vm_strb[port] = vm_strb[port];
               end
             endcase
@@ -1472,6 +1491,17 @@ module spatz_vlsu
     end
   end
   // verilator lint_on LATCH
+
+  // Re-encode the byte-rotated store payload right after rotation
+  for (genvar port = 0; port < NrMemPorts; port++) begin : gen_mem_req_data_ecc_enc
+    hsiao_ecc_enc #(
+      .DataWidth(ELEN),
+      .ProtWidth(7)
+    ) i_mem_req_data_ecc_enc (
+      .in  (mem_req_data_plain[port]),
+      .out (mem_req_data[port])
+    );
+  end : gen_mem_req_data_ecc_enc
 
   // Create memory requests
   for (genvar port = 0; port < NrMemPorts; port++) begin : gen_mem_req
