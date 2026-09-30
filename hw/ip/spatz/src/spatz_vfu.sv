@@ -1100,6 +1100,11 @@ module spatz_vfu
     logic [N_FPU-1:0] fpu_busy_d, fpu_busy_q;
     `FF(fpu_busy_q, fpu_busy_d, '0)
 
+    // An accepted word is already in flight while it waits in the input
+    // register, before fpnew's registered busy indication reaches the VFU.
+    // Keep its result path selected until both the input and FPU have drained.
+    logic [N_FPU-1:0] fpu_input_valid;
+
     status_t [N_FPU-1:0] fpu_status_d, fpu_status_q;
     `FF(fpu_status_q, fpu_status_d, '0)
 
@@ -1107,7 +1112,7 @@ module spatz_vfu
       fpu_op           = fpnew_pkg::FMADD;
       fpu_op_mode      = 1'b0;
       fpu_vectorial_op = 1'b0;
-      is_fpu_busy      = |fpu_busy_q;
+      is_fpu_busy      = (|fpu_busy_q) || (|fpu_input_valid);
       fpu_src_fmt      = fpnew_pkg::FP32;
       fpu_dst_fmt      = fpnew_pkg::FP32;
       fpu_int_fmt      = fpnew_pkg::INT32;
@@ -1257,7 +1262,11 @@ module spatz_vfu
       assign fpu_operand3 = (fpu_op == fpnew_pkg::ADD || spatz_req.op_arith.switch_rs1_rd) ? wide_operand1[fpu*ELEN +: ELEN] : wide_operand3[fpu*ELEN +: ELEN];
 
       logic int_fpu_in_valid;
-      assign int_fpu_in_valid = spatz_req_valid && operands_ready && (!spatz_req.op_arith.is_scalar || fpu == 0) && is_fpu_insn;
+      // Accept a word atomically across its participating lanes. Scalar work
+      // can leave lane 0 backpressured while the other input registers are free.
+      assign int_fpu_in_valid = spatz_req_valid && operands_ready &&
+                                (!spatz_req.op_arith.is_scalar || fpu == 0) &&
+                                is_fpu_insn && &(fpu_in_ready | ~valid_operations);
 
       // Generate an FPU pipeline
       elen_t fpu_operand1_q, fpu_operand2_q, fpu_operand3_q;
@@ -1270,6 +1279,8 @@ module spatz_vfu
       vfu_tag_t input_tag_q;
       logic fpu_in_valid_q;
       logic fpu_in_ready_d;
+
+      assign fpu_input_valid[fpu] = fpu_in_valid_q;
 
       `FFL(fpu_operand1_q, fpu_operand1, int_fpu_in_valid && int_fpu_in_ready, '0)
       `FFL(fpu_operand2_q, fpu_operand2, int_fpu_in_valid && int_fpu_in_ready, '0)
@@ -1315,7 +1326,8 @@ module spatz_vfu
         .rnd_mode_i    (rm_q                                                   ),
         .result_o      (fpu_result[fpu*ELEN +: ELEN]                           ),
         .out_valid_o   (int_fpu_result_valid                                   ),
-        .out_ready_i   (result_ready                                           ),
+        // Retiring a scalar must not consume a younger vector's other lanes.
+        .out_ready_i   (result_ready && (|pending_results[fpu*ELENB +: ELENB])   ),
         .status_o      (fpu_status_d[fpu]                                      ),
         .tag_o         (tag                                                    )
       );
