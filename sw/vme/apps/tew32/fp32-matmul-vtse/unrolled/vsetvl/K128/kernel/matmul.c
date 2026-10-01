@@ -4629,18 +4629,20 @@ __attribute__((noinline, aligned(64))) void matmul_fp32(
         "vle32.v v15,  (%[a1p])\n" "add %[a1p], %[a1p], %[operand_bytes]\n"
         "vtfmm.tvv mt8, v12,  v20\n"  // mt8 += v12*v20
         "vtfmm.tvv mt8, v13,  v21\n"  // mt8 += v13*v21
-        "vsetvli %[vl], x0, e32, m8, ta, ma\n"
-        "vle32.v v0,  (%[a0p])\n" "addi %[a0p], %[a0p], 512\n"
-        "vle32.v v16,  (%[b0p])\n" "addi %[b0p], %[b0p], 512\n"
-        "msetmtype %[mtype], %[vtype]\n" "msettn x0, %[vl]\n"
         "vtfmm.tvv mt8, v14,  v22\n"  // mt8 += v14*v22
         "vtfmm.tvv mt8, v15,  v23\n"  // mt8 += v15*v23
+        "vsetvli %[vl], x0, e32, m8, ta, ma\n"
+        "vle32.v v0,  (%[a0p])\n" "addi %[a0p], %[a0p], 512\n"
+        "msetmtype %[mtype], %[vtype]\n" "msettn x0, %[vl]\n"
 
         // vtfmm mt12
         "vtfmm.tvv mt12, v8,  v24\n"
         "vtfmm.tvv mt12, v9,  v25\n"
         "vtfmm.tvv mt12, v10, v26\n"
         "vtfmm.tvv mt12, v11, v27\n"
+        "vsetvli %[vl], x0, e32, m8, ta, ma\n"
+        "vle32.v v16,  (%[b0p])\n" "addi %[b0p], %[b0p], 512\n"
+        "msetmtype %[mtype], %[vtype]\n" "msettn x0, %[vl]\n"
         "vtfmm.tvv mt12, v12, v28\n"
         "vtfmm.tvv mt12, v13, v29\n"
         "vtfmm.tvv mt12, v14, v30\n"
