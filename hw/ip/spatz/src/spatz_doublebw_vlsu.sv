@@ -1,4 +1,4 @@
-// Copyright 2023 ETH Zurich and University of Bologna.
+// Copyright 2026 ETH Zurich and University of Bologna.
 // Licensed under the Apache License, Version 2.0, see LICENSE for details.
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -28,6 +28,7 @@ module spatz_doublebw_vlsu
     input  spatz_req_t                      spatz_req_i,
     input  logic                            spatz_req_valid_i,
     output logic                            spatz_req_ready_o,
+    input  logic [NrParallelInstructions-1:0] matrix_enable_i,
     // VLSU response
     output logic                            vlsu_rsp_valid_o,
     output vlsu_rsp_t                       vlsu_rsp_o,
@@ -54,8 +55,6 @@ module spatz_doublebw_vlsu
     output tile_r_req_t tile_r_req_o,
     input  tile_row_t   tile_rdata_i,
     input  logic        tile_rready_i,
-    output logic        tile_store_complete_valid_o,
-    output logic [$clog2(TE)-1:0] tile_store_complete_row_o,
     // Memory Request
     output spatz_mem_req_t [NrMemPorts-1:0] spatz_mem_req_o,
     output logic           [NrMemPorts-1:0] spatz_mem_req_valid_o,
@@ -96,19 +95,24 @@ module spatz_doublebw_vlsu
   logic       mem_spatz_req_valid;
   logic       mem_spatz_req_ready;
 
-  logic spatz_req_ready, spatz_req_accept_gate, tile_req_ready;
+  logic spatz_req_ready, tile_req_ready;
 
-  spill_register #(
-    .T(spatz_req_t)
+  stream_fifo #(
+    .FALL_THROUGH(1'b0       ),
+    .DEPTH       (4          ),
+    .T           (spatz_req_t)
   ) i_operation_queue (
-    .clk_i  (clk_i                                          ),
-    .rst_ni (rst_ni                                         ),
-    .data_i (spatz_req_d                                    ),
-    .valid_i(spatz_req_valid_i && spatz_req_i.ex_unit == LSU && spatz_req_accept_gate),
-    .ready_o(spatz_req_ready                                ),
-    .data_o (mem_spatz_req                                  ),
-    .valid_o(mem_spatz_req_valid                            ),
-    .ready_i(mem_spatz_req_ready                            )
+    .clk_i     (clk_i                                          ),
+    .rst_ni    (rst_ni                                         ),
+    .flush_i   (1'b0                                           ),
+    .testmode_i(1'b0                                           ),
+    .usage_o   (/* Unused */                                   ),
+    .data_i    (spatz_req_d                                    ),
+    .valid_i   (spatz_req_valid_i && spatz_req_i.ex_unit == LSU),
+    .ready_o   (spatz_req_ready                                ),
+    .data_o    (mem_spatz_req                                  ),
+    .valid_o   (mem_spatz_req_valid                            ),
+    .ready_i   (mem_spatz_req_ready                            )
   );
 
   // Convert vl to bytes for address generation.
@@ -122,10 +126,6 @@ module spatz_doublebw_vlsu
   // Tile requests use the tile datapath instead of the VRF datapath.
   logic mem_is_tile_mem;
   assign mem_is_tile_mem = mem_spatz_req_valid && mem_spatz_req.op_ope.is_mem;
-  logic mem_is_tile_store;
-  assign mem_is_tile_store = mem_is_tile_mem && !mem_spatz_req.op_mem.is_load;
-  logic mem_is_vrf_store;
-  assign mem_is_vrf_store = mem_spatz_req_valid && !mem_is_tile_mem && !mem_spatz_req.op_mem.is_load;
 
   // Strided accesses use the scalar stride operand.
   logic mem_is_strided;
@@ -153,31 +153,25 @@ module spatz_doublebw_vlsu
   id_t [NrInterfaces-1:0] [N_FU-1:0] store_count_q;
   id_t [NrInterfaces-1:0] [N_FU-1:0] store_count_d;
 
-  tile_r_req_t tile_tss_req;
-  // Map an architectural tile to its first physical accumulator.
-  assign tile_tss_req.idx = mt_t'(mem_spatz_req.op_ope.tss.tile_id * NumAccPerTile);
-  assign tile_tss_req.row = mem_spatz_req.op_ope.tss.index;
+  /*------------------------------------------------------------*/
+  /*                Tile Memory Types and State                 */
+  /*------------------------------------------------------------*/
 
-  logic [3:0] tile_elem_bytes;
-  assign tile_elem_bytes = 4'(1 << mem_spatz_req.op_mem.ew);
-
-  ////////////////////////////////
-  //  Tile memory (VTLE/VTSE)   //
-  ////////////////////////////////
-
-  localparam int unsigned TileRowBytes = TE * TEWB;
+  localparam int unsigned TileRowBytes = TileEdge * AccElemBytes;
   localparam int unsigned TileMaxChunks = (TileRowBytes + 2 * MemDataWidthB - 2) / MemDataWidthB;
-  localparam int unsigned TilePortOutstanding = (TileMaxChunks + NrMemPorts - 1) / NrMemPorts;
   typedef logic [$clog2(TileRowBytes+1)-1:0] tile_byte_cnt_t;
   typedef logic [$clog2(TileMaxChunks+1)-1:0] tile_chunk_cnt_t;
+  typedef logic [$clog2(TileMaxChunks+NrMemPorts+1)-1:0] tile_chunk_idx_t;
+  typedef logic signed [$clog2(TileRowBytes+(NrMemPorts+2)*MemDataWidthB+1):0]
+      tile_stream_offset_t;
 
   typedef struct packed {
     spatz_req_t              req;
     tile_r_req_t             access;
-    logic [$clog2(TE)-1:0]   iter;
-    logic                    col;
+    tile_dim_t               row_idx;
+    tile_count_t             elems;
+    logic                    is_col;
     tile_byte_cnt_t          bytes;
-    tile_byte_cnt_t          byte_off;
     tile_chunk_cnt_t         chunk_sent;
     tile_row_t               packed_data;
     tile_row_t               row_buf;
@@ -199,6 +193,11 @@ module spatz_doublebw_vlsu
     tile_chunk_cnt_t chunk;
   } mem_req_tag_t;
 
+  typedef struct packed {
+    logic            valid;
+    tile_chunk_cnt_t remaining;
+  } tile_store_completion_t;
+
   localparam int unsigned MemByteOffW = $clog2(MemDataWidthB);
 
   typedef enum logic [3:0] {
@@ -212,36 +211,37 @@ module spatz_doublebw_vlsu
   } tile_state_e;
 
   tile_state_e tile_state_d, tile_state_q;
-  `FF(tile_state_q, tile_state_d, Tile_Idle)
-
   tile_ctx_t tile_ctx_d, tile_ctx_q;
-  `FF(tile_ctx_q, tile_ctx_d, '0)
+  tile_store_completion_t [NrParallelInstructions-1:0] tile_store_completion_d;
+  tile_store_completion_t [NrParallelInstructions-1:0] tile_store_completion_q;
+  tile_r_req_t tile_tss_req;
+  logic [3:0] tile_elem_bytes;
   logic [NrMemPorts-1:0] tile_load_pending_d, tile_load_pending_q;
-  `FF(tile_load_pending_q, tile_load_pending_d, '0)
   tile_chunk_cnt_t tile_store_req_count_d, tile_store_req_count_q;
-  `FF(tile_store_req_count_q, tile_store_req_count_d, '0)
-
-  typedef struct packed {
-    logic            valid;
-    logic [$clog2(TE)-1:0] row;
-    tile_chunk_cnt_t expected;
-    tile_chunk_cnt_t acked;
-  } tile_store_completion_t;
-
-  tile_store_completion_t [NrParallelInstructions-1:0] tile_store_completion_d,
-                                                          tile_store_completion_q;
-  `FF(tile_store_completion_q, tile_store_completion_d, '0)
-
   logic tile_mem_busy;
-  assign tile_mem_busy = (tile_state_q != Tile_Idle);
-
-  logic tile_rsp_valid, tile_load_rsp_valid, tile_store_rsp_valid, vrf_rsp_valid;
+  logic tile_req_accept;
+  logic tile_load_rsp_valid, tile_store_rsp_valid, vrf_rsp_valid;
   logic vrf_mem_finished, vrf_store_finished;
   spatz_id_t tile_store_rsp_id;
 
-  logic tile_req_accept;
+  `FF(tile_state_q, tile_state_d, Tile_Idle)
+  `FF(tile_ctx_q, tile_ctx_d, '0)
+  `FF(tile_load_pending_q, tile_load_pending_d, '0)
+  `FF(tile_store_req_count_q, tile_store_req_count_d, '0)
+  `FF(tile_store_completion_q, tile_store_completion_d, '0)
 
-  // Issue one tile row across all required TCDM ports as an atomic wave.
+  assign tile_elem_bytes = 4'(1 << ((tile_state_q == Tile_Idle) ? mem_spatz_req.op_ope.tew : tile_ctx_q.access.tew));
+  assign tile_mem_busy = (tile_state_q != Tile_Idle);
+
+  /*------------------------------------------------------------*/
+  /*                   Tile Request Geometry                    */
+  /*------------------------------------------------------------*/
+
+  // Map an architectural tile to its first physical accumulator.
+  assign tile_tss_req.idx = mem_spatz_req.op_ope.tss.tile_id;
+  assign tile_tss_req.row = mem_spatz_req.op_ope.tss.index;
+  assign tile_tss_req.tew = mem_spatz_req.op_ope.tew;
+
   logic [31:0]            tile_mem_base_aligned;
   logic [MemByteOffW-1:0] tile_mem_head;
   tile_chunk_cnt_t        tile_num_chunks;
@@ -249,9 +249,12 @@ module spatz_doublebw_vlsu
   assign tile_mem_head         = tile_ctx_q.req.rs1[MemByteOffW-1:0];
   assign tile_mem_base_aligned = {tile_ctx_q.req.rs1[31:MemByteOffW],
                                     {MemByteOffW{1'b0}}};
-  assign tile_num_chunks         =
-      tile_chunk_cnt_t'((int'(tile_ctx_q.bytes) + int'(tile_mem_head) +
-                         MemDataWidthB - 1) / MemDataWidthB);
+  assign tile_num_chunks = tile_chunk_cnt_t'(
+      (tile_ctx_q.bytes + tile_mem_head + MemDataWidthB - 1) / MemDataWidthB);
+
+  /*------------------------------------------------------------*/
+  /*                Tile TCDM Request Generation                */
+  /*------------------------------------------------------------*/
 
   tile_mem_req_t [NrMemPorts-1:0] tile_mem_req;
   logic [NrMemPorts-1:0] tile_mem_req_mask;
@@ -260,29 +263,29 @@ module spatz_doublebw_vlsu
   logic vrf_mem_req_valid;
 
   always_comb begin : proc_tile_mem_req
-    tile_mem_req = '0;
-    tile_mem_req_mask = '0;
+    tile_mem_req = tile_mem_req_t'(0);
+    tile_mem_req_mask = {NrMemPorts{1'b0}};
     tile_mem_req_ready = 1'b1;
-    tile_mem_req_count = '0;
+    tile_mem_req_count = tile_chunk_cnt_t'(0);
 
     for (int unsigned p = 0; p < NrMemPorts; p++) begin
-      int unsigned chunk_idx;
+      tile_chunk_idx_t chunk_idx;
       logic [31:0] aligned_addr;
-      chunk_idx    = int'(tile_ctx_q.chunk_sent) + p;
+      chunk_idx    = tile_chunk_idx_t'(tile_ctx_q.chunk_sent + p);
       aligned_addr = tile_mem_base_aligned + (chunk_idx * MemDataWidthB);
 
-      if (chunk_idx < int'(tile_num_chunks)) begin
+      if (chunk_idx < tile_num_chunks) begin
         tile_mem_req[p].active = 1'b1;
         tile_mem_req_mask[p] = 1'b1;
         tile_mem_req[p].addr = aligned_addr;
-        tile_mem_req[p].last = (chunk_idx == (int'(tile_num_chunks) - 1));
+        tile_mem_req[p].last = (chunk_idx == tile_chunk_idx_t'(tile_num_chunks - 1'b1));
         tile_mem_req_count = tile_mem_req_count + 1'b1;
         if (!spatz_mem_req_ready[p / N_FU][p % N_FU]) tile_mem_req_ready = 1'b0;
         for (int unsigned b = 0; b < MemDataWidthB; b++) begin
-          int signed stream_byte_idx;
-          stream_byte_idx = int'(aligned_addr) + int'(b) -
-                            int'(tile_ctx_q.req.rs1[31:0]);
-          if ((stream_byte_idx >= 0) && (stream_byte_idx < int'(tile_ctx_q.bytes))) begin
+          tile_stream_offset_t stream_byte_idx;
+          stream_byte_idx = tile_stream_offset_t'(chunk_idx * MemDataWidthB + b) -
+                            tile_stream_offset_t'(tile_mem_head);
+          if ((stream_byte_idx >= 0) && (stream_byte_idx < tile_stream_offset_t'(tile_ctx_q.bytes))) begin
             tile_mem_req[p].data[b*8 +: 8] = tile_ctx_q.packed_data[stream_byte_idx*8 +: 8];
             tile_mem_req[p].strb[b] = 1'b1;
           end
@@ -294,137 +297,103 @@ module spatz_doublebw_vlsu
   logic tile_store_req_last;
   assign tile_store_req_last = (tile_ctx_q.chunk_sent + tile_mem_req_count) >= tile_num_chunks;
   assign tile_load_req_fire = (tile_state_q == Tile_MemReq) && tile_ctx_q.req.op_mem.is_load &&
-                               (tile_ctx_q.chunk_sent < tile_num_chunks) && tile_mem_req_ready && !vrf_mem_req_valid;
+      (tile_ctx_q.chunk_sent < tile_num_chunks) && tile_mem_req_ready && !vrf_mem_req_valid;
   assign tile_store_req_fire = (tile_state_q == Tile_MemReq) && !tile_ctx_q.req.op_mem.is_load &&
-                                (tile_ctx_q.chunk_sent < tile_num_chunks) && tile_mem_req_ready;
+      (tile_ctx_q.chunk_sent < tile_num_chunks) && tile_mem_req_ready;
 
+  // Hold a dependent request in the operation queue. In particular, a younger
+  // VTSE must not assert tile_rvalid_o and block an older MAC before it retires.
   assign tile_req_accept = mem_spatz_req_valid && mem_is_tile_mem && tile_req_ready &&
-                       mem_spatz_req.op_ope.tss.tile_valid;
+      matrix_enable_i[mem_spatz_req.id] && mem_spatz_req.op_ope.tss.tile_valid;
 
-  // Reserve each tile-owned port until its response returns.
-  logic [NrMemPorts-1:0] [2:0] tile_store_pending_d, tile_store_pending_q;
-  `FF(tile_store_pending_q, tile_store_pending_d, '0)
-
-  logic [NrMemPorts-1:0] tile_mem_req_valid, tile_load_req_valid, tile_store_req_valid;
-  logic [NrMemPorts-1:0] tile_mem_port_owned, tile_mem_port_busy;
+  logic [NrMemPorts-1:0] tile_mem_req_valid;
+  logic [NrMemPorts-1:0] tile_mem_port_busy;
 
   always_comb begin : proc_tile_port_masks
     for (int unsigned p = 0; p < NrMemPorts; p++) begin
-      tile_mem_port_owned[p] = tile_load_pending_q[p] || (tile_store_pending_q[p] != '0);
-      tile_load_req_valid[p] = tile_load_req_fire && tile_mem_req[p].active;
-      tile_store_req_valid[p] = tile_store_req_fire && tile_mem_req[p].active;
-      tile_mem_req_valid[p] = tile_load_req_valid[p] || tile_store_req_valid[p];
+      tile_mem_req_valid[p] = (tile_load_req_fire || tile_store_req_fire) && tile_mem_req[p].active;
       tile_mem_port_busy[p] = tile_mem_req_valid[p] || tile_load_pending_q[p] ||
           ((tile_state_q == Tile_MemReq) && !tile_ctx_q.req.op_mem.is_load && tile_mem_req[p].active);
     end
   end
 
+  /*------------------------------------------------------------*/
+  /*               Tile and VRF Response Metadata               */
+  /*------------------------------------------------------------*/
+
   // Tag in-order TCDM responses with their owner and access type.
-  logic [NrMemPorts-1:0] tag_fifo_empty, tag_fifo_full;
-  mem_req_tag_t [NrMemPorts-1:0] tag_fifo_head;
+  logic [NrMemPorts-1:0] tag_empty, tag_full;
+  mem_req_tag_t [NrMemPorts-1:0] tag_head;
   logic [NrMemPorts-1:0] rsp_tile_mem, rsp_vrf_load, rsp_vrf_store;
   mem_req_tag_t [NrMemPorts-1:0] spatz_mem_req_tag_o;
   logic [NrMemPorts-1:0] mem_out_fire;
-  for (genvar p = 0; p < NrMemPorts; p++) begin : gen_tile_tag_fifo
-    fifo_v3 #(
-      .DATA_WIDTH($bits(mem_req_tag_t)  ),
-      .DEPTH     (NrOutstandingLoads + TilePortOutstanding)
-    ) i_tile_tag_fifo (
-      .clk_i     (clk_i            ),
-      .rst_ni    (rst_ni           ),
-      .flush_i   (1'b0             ),
-      .testmode_i(1'b0             ),
-      .empty_o   (tag_fifo_empty[p]),
-      .full_o    (tag_fifo_full[p]),
-      .push_i    (mem_out_fire[p]   ),
-      .data_i    (spatz_mem_req_tag_o[p]),
-      .data_o    (tag_fifo_head[p] ),
-      .pop_i     (spatz_mem_rsp_valid_i[p]),
-      .usage_o   (/* Unused */     )
-    );
+  for (genvar p = 0; p < NrMemPorts; p++) begin : gen_mem_tag
+    mem_req_tag_t tag_q;
+    logic tag_valid_q;
+
+    always_ff @(posedge clk_i or negedge rst_ni) begin
+      if (!rst_ni) begin
+        tag_q       <= mem_req_tag_t'(0);
+        tag_valid_q <= 1'b0;
+      end else begin
+        if (mem_out_fire[p]) begin
+          tag_q       <= spatz_mem_req_tag_o[p];
+          tag_valid_q <= 1'b1;
+        end else if (spatz_mem_rsp_valid_i[p]) begin
+          tag_valid_q <= 1'b0;
+        end
+      end
+    end
+
+    assign tag_head[p]  = tag_q;
+    assign tag_empty[p] = !tag_valid_q;
+    assign tag_full[p]  = tag_valid_q;
+
     // Empty means no outstanding request; keep all decodes low.
-    assign rsp_tile_mem[p]  = !tag_fifo_empty[p] && tag_fifo_head[p].tile_owned;
-    assign rsp_vrf_load[p] = !tag_fifo_empty[p] && !tag_fifo_head[p].tile_owned && !tag_fifo_head[p].write;
-    assign rsp_vrf_store[p] = !tag_fifo_empty[p] && !tag_fifo_head[p].tile_owned && tag_fifo_head[p].write;
+    assign rsp_tile_mem[p] = !tag_empty[p] && tag_head[p].tile_owned;
+    assign rsp_vrf_load[p] = !tag_empty[p] && !tag_head[p].tile_owned && !tag_head[p].write;
+    assign rsp_vrf_store[p] = !tag_empty[p] && !tag_head[p].tile_owned && tag_head[p].write;
   end
 
-  // Count tile-store acknowledgments independently on each port.
-  logic [NrMemPorts-1:0] tile_store_ack_fire;
-  tile_chunk_cnt_t tile_store_req_fire_count;
-  always_comb begin : proc_tile_store_ack
-    logic sent, rcvd;
+  /*------------------------------------------------------------*/
+  /*               Tile Accumulator Data Shaping                */
+  /*------------------------------------------------------------*/
 
-    tile_store_pending_d  = tile_store_pending_q;
-    tile_store_ack_fire = '0;
-    tile_store_req_fire_count = '0;
-    for (int unsigned p = 0; p < NrMemPorts; p++) begin
-      sent = mem_out_fire[p] && spatz_mem_req_tag_o[p].tile_owned &&
-             spatz_mem_req_tag_o[p].write;
-      rcvd = spatz_mem_rsp_valid_i[p] && rsp_tile_mem[p] && tag_fifo_head[p].write;
-      tile_store_ack_fire[p] = rcvd;
-      tile_store_pending_d[p] = tile_store_pending_q[p] + (sent ? 3'd1 : 3'd0) - (rcvd ? 3'd1 : 3'd0);
-      if (sent) tile_store_req_fire_count = tile_store_req_fire_count + 1'b1;
-    end
-  end
-
-  tile_row_t tile_row_from_stream;
-  always_comb begin
-    tile_row_from_stream = '0;
-
-    for (int unsigned elem = 0; elem < TE; elem++) begin
-      unique case (tile_ctx_q.req.op_mem.ew)
-        EW_8:    tile_row_from_stream[elem*TEW +: TEW] = {{(TEW-8){1'b0}}, tile_ctx_q.packed_data[elem*8 +: 8]};
-        EW_16:   tile_row_from_stream[elem*TEW +: TEW] = {{(TEW-16){1'b0}}, tile_ctx_q.packed_data[elem*16 +: 16]};
-        EW_32:   tile_row_from_stream[elem*TEW +: TEW] = tile_ctx_q.packed_data[elem*32 +: TEW];
-        default: tile_row_from_stream[elem*TEW +: TEW] = tile_ctx_q.packed_data[elem*TEW +: TEW];
-      endcase
-    end
-  end
+  // One tile-port handshake transfers the whole selected row. A column
+  // request reads full physical rows so its fixed column index is present.
+  tile_count_t tile_req_elems;
+  assign tile_req_elems = tile_ctx_q.is_col ? tile_count_t'(TileEdge) : tile_ctx_q.elems;
 
   tile_row_t tile_col_write_row;
   always_comb begin
+    tile_byte_cnt_t dst_byte;
+
     tile_col_write_row = tile_ctx_q.row_buf;
-
-    unique case (tile_ctx_q.req.op_mem.ew)
-      EW_8: begin
-        tile_col_write_row[int'(tile_ctx_q.access.row)*TEW +: TEW] =
-            {{(TEW-8){1'b0}}, tile_ctx_q.packed_data[int'(tile_ctx_q.iter)*8 +: 8]};
+    dst_byte = tile_byte_cnt_t'(tile_ctx_q.access.row * tile_elem_bytes);
+    for (int unsigned byte_idx = 0; byte_idx < AccElemBytes; byte_idx++) begin
+      if (byte_idx < tile_elem_bytes) begin
+        tile_col_write_row[(dst_byte+byte_idx)*8 +: 8] = tile_ctx_q.packed_data[(tile_ctx_q.row_idx*tile_elem_bytes+byte_idx)*8 +: 8];
       end
-      EW_16: begin
-        tile_col_write_row[int'(tile_ctx_q.access.row)*TEW +: TEW] =
-            {{(TEW-16){1'b0}}, tile_ctx_q.packed_data[int'(tile_ctx_q.iter)*16 +: 16]};
-      end
-      EW_32: begin
-        tile_col_write_row[int'(tile_ctx_q.access.row)*TEW +: TEW] =
-            tile_ctx_q.packed_data[int'(tile_ctx_q.iter)*32 +: TEW];
-      end
-      default: begin
-        tile_col_write_row[int'(tile_ctx_q.access.row)*TEW +: TEW] =
-            tile_ctx_q.packed_data[int'(tile_ctx_q.iter)*TEW +: TEW];
-      end
-    endcase
+    end
   end
 
+  tile_count_t head_tile_elems;
   tile_byte_cnt_t head_tile_bytes;
-  assign head_tile_bytes = tile_byte_cnt_t'(TE * tile_elem_bytes);
+  always_comb begin : proc_head_tile_elems
+    elen_t active_dim;
 
-  /////////////////////////////
-  //  Tile hazards / accept  //
-  /////////////////////////////
-
-  logic [NrMemPorts-1:0] tile_load_rsp_fire;
-  for (genvar p = 0; p < NrMemPorts; p++) begin : gen_tile_load_rsp
-    assign tile_load_rsp_fire[p] = spatz_mem_rsp_valid_i[p] && rsp_tile_mem[p] &&
-                                   !tag_fifo_head[p].write;
+    active_dim = mem_spatz_req.op_ope.tss.is_row ? mem_spatz_req.op_ope.tn : mem_spatz_req.op_ope.tm;
+    head_tile_elems = (active_dim < TileEdge) ? tile_count_t'(active_dim) : tile_count_t'(TileEdge);
   end
+  assign tile_tss_req.elems = head_tile_elems;
+  assign head_tile_bytes = tile_byte_cnt_t'(head_tile_elems * tile_elem_bytes);
 
-  /////////////////////
-  //  Tile FSM       //
-  /////////////////////
+  /*------------------------------------------------------------*/
+  /*           Tile Accumulator and TCDM Transfer FSM           */
+  /*------------------------------------------------------------*/
 
   always_comb begin : tile_fsm
-    int signed stream_byte_idx;
-    int unsigned byte_idx;
+    tile_stream_offset_t stream_byte_idx;
 
     tile_state_d = tile_state_q;
     tile_ctx_d   = tile_ctx_q;
@@ -432,16 +401,19 @@ module spatz_doublebw_vlsu
 
     tile_wvalid_o    = 1'b0;
     tile_w_req_o.idx = tile_ctx_q.access.idx;
-    tile_w_req_o.row = tile_ctx_q.col ? tile_ctx_q.iter : tile_ctx_q.access.row;
-    tile_w_req_o.data = tile_ctx_q.col ? tile_col_write_row : tile_row_from_stream;
+    tile_w_req_o.row = tile_ctx_q.is_col ? tile_ctx_q.row_idx : tile_ctx_q.access.row;
+    tile_w_req_o.elems = tile_req_elems;
+    tile_w_req_o.tew = tile_ctx_q.access.tew;
+    tile_w_req_o.data = tile_ctx_q.is_col ? tile_col_write_row : tile_ctx_q.packed_data;
 
     tile_rvalid_o    = 1'b0;
     tile_r_req_o.idx = tile_ctx_q.access.idx;
-    tile_r_req_o.row = tile_ctx_q.col ? tile_ctx_q.iter : tile_ctx_q.access.row;
+    tile_r_req_o.row = tile_ctx_q.is_col ? tile_ctx_q.row_idx : tile_ctx_q.access.row;
+    tile_r_req_o.elems = tile_req_elems;
+    tile_r_req_o.tew = tile_ctx_q.access.tew;
 
     // Snapshot a row before issuing its memory requests.
-    if (tile_req_accept && !mem_spatz_req.op_mem.is_load &&
-        mem_spatz_req.op_ope.tss.is_row) begin
+    if (tile_req_accept && !mem_spatz_req.op_mem.is_load && mem_spatz_req.op_ope.tss.is_row) begin
       tile_rvalid_o    = 1'b1;
       tile_r_req_o = tile_tss_req;
     end
@@ -450,7 +422,7 @@ module spatz_doublebw_vlsu
 
     if (tile_store_req_fire) begin
       if (tile_store_req_last)
-        tile_ctx_d.chunk_sent = '0;
+        tile_ctx_d.chunk_sent = tile_chunk_idx_t'(0);
       else
         tile_ctx_d.chunk_sent = tile_ctx_q.chunk_sent + tile_mem_req_count;
     end
@@ -466,26 +438,21 @@ module spatz_doublebw_vlsu
         if (tile_req_accept) begin
           tile_ctx_d.req     = mem_spatz_req;
           tile_ctx_d.access  = tile_tss_req;
-          tile_ctx_d.iter    = '0;
-          tile_ctx_d.col     = !mem_spatz_req.op_ope.tss.is_row;
+          // TSS selects one row or column. Only a column walks physical rows.
+          tile_ctx_d.row_idx = tile_dim_t'(0);
+          tile_ctx_d.elems   = head_tile_elems;
+          tile_ctx_d.is_col     = !mem_spatz_req.op_ope.tss.is_row;
           tile_ctx_d.bytes   = tile_byte_cnt_t'(head_tile_bytes);
-          tile_ctx_d.byte_off    = '0;
-          tile_ctx_d.chunk_sent = '0;
-          tile_ctx_d.packed_data = '0;
-          tile_ctx_d.row_buf = '0;
-          tile_load_pending_d = '0;
-          if (mem_spatz_req.op_mem.is_load) begin
+          tile_ctx_d.chunk_sent   = tile_chunk_idx_t'(0);
+          tile_ctx_d.packed_data  = tile_row_t'(0);
+          tile_ctx_d.row_buf      = tile_row_t'(0);
+          tile_load_pending_d     = {NrMemPorts{1'b0}};
+          if (head_tile_elems == tile_count_t'(0)) begin
+            tile_state_d = mem_spatz_req.op_mem.is_load ? Tile_Done : Tile_Idle;
+          end else if (mem_spatz_req.op_mem.is_load) begin
             tile_state_d = Tile_MemReq;
           end else if (mem_spatz_req.op_ope.tss.is_row && tile_rready_i) begin
-            for (int unsigned elem = 0; elem < TE; elem++) begin
-              unique case (mem_spatz_req.op_mem.ew)
-                EW_8:    tile_ctx_d.packed_data[elem*8 +: 8] = tile_rdata_i[elem*TEW +: 8];
-                EW_16:   tile_ctx_d.packed_data[elem*16 +: 16] = tile_rdata_i[elem*TEW +: 16];
-                EW_32:   tile_ctx_d.packed_data[elem*32 +: 32] = tile_rdata_i[elem*TEW +: 32];
-                default: tile_ctx_d.packed_data[elem*TEW +: TEW] = tile_rdata_i[elem*TEW +: TEW];
-              endcase
-            end
-            tile_ctx_d.chunk_sent = '0;
+            tile_ctx_d.packed_data = tile_rdata_i;
             tile_state_d = Tile_MemReq;
           end else begin
             tile_state_d = Tile_GatherRead;
@@ -496,56 +463,21 @@ module spatz_doublebw_vlsu
       Tile_GatherRead: begin
         tile_rvalid_o = 1'b1;
         if (tile_rready_i) begin
-          if (tile_ctx_q.col) begin
-            unique case (tile_ctx_q.req.op_mem.ew)
-              EW_8: begin
-                tile_ctx_d.packed_data[int'(tile_ctx_q.iter)*8 +: 8] =
-                    tile_rdata_i[int'(tile_ctx_q.access.row)*TEW +: 8];
+          if (tile_ctx_q.is_col) begin
+            for (int unsigned byte_idx = 0; byte_idx < AccElemBytes; byte_idx++) begin
+              if (byte_idx < tile_elem_bytes) begin
+                tile_ctx_d.packed_data[
+                    (tile_ctx_q.row_idx*tile_elem_bytes+byte_idx)*8 +: 8] =
+                    tile_rdata_i[(tile_ctx_q.access.row*tile_elem_bytes+byte_idx)*8 +: 8];
               end
-              EW_16: begin
-                tile_ctx_d.packed_data[int'(tile_ctx_q.iter)*16 +: 16] =
-                    tile_rdata_i[int'(tile_ctx_q.access.row)*TEW +: 16];
-              end
-              EW_32: begin
-                tile_ctx_d.packed_data[int'(tile_ctx_q.iter)*32 +: 32] =
-                    tile_rdata_i[int'(tile_ctx_q.access.row)*TEW +: 32];
-              end
-              default: begin
-                tile_ctx_d.packed_data[int'(tile_ctx_q.iter)*TEW +: TEW] =
-                    tile_rdata_i[int'(tile_ctx_q.access.row)*TEW +: TEW];
-              end
-            endcase
+            end
 
-            if (tile_ctx_q.iter == (TE-1)) begin
-              tile_ctx_d.byte_off = '0;
-              tile_ctx_d.chunk_sent = '0;
+            if ((tile_count_t'(tile_ctx_q.row_idx) + 1'b1) >= tile_ctx_q.elems)
               tile_state_d = Tile_MemReq;
-            end else begin
-              tile_ctx_d.iter = tile_ctx_q.iter + 1'b1;
-            end
+            else
+              tile_ctx_d.row_idx = tile_ctx_q.row_idx + 1'b1;
           end else begin
-            for (int unsigned elem = 0; elem < TE; elem++) begin
-              unique case (tile_ctx_q.req.op_mem.ew)
-                EW_8: begin
-                  tile_ctx_d.packed_data[elem*8 +: 8] =
-                      tile_rdata_i[elem*TEW +: 8];
-                end
-                EW_16: begin
-                  tile_ctx_d.packed_data[elem*16 +: 16] =
-                      tile_rdata_i[elem*TEW +: 16];
-                end
-                EW_32: begin
-                  tile_ctx_d.packed_data[elem*32 +: 32] =
-                      tile_rdata_i[elem*TEW +: 32];
-                end
-                default: begin
-                  tile_ctx_d.packed_data[elem*TEW +: TEW] =
-                      tile_rdata_i[elem*TEW +: TEW];
-                end
-              endcase
-            end
-            tile_ctx_d.byte_off = '0;
-            tile_ctx_d.chunk_sent = '0;
+            tile_ctx_d.packed_data = tile_rdata_i;
             tile_state_d = Tile_MemReq;
           end
         end
@@ -558,7 +490,7 @@ module spatz_doublebw_vlsu
         end else begin
           if (tile_store_req_fire && tile_store_req_last) begin
             // Wait for acknowledgments after the final request wave.
-            tile_ctx_d.chunk_sent = '0;
+            tile_ctx_d.chunk_sent = tile_chunk_cnt_t'(0);
             tile_state_d          = Tile_MemWaitRsp;
           end
         end
@@ -567,16 +499,14 @@ module spatz_doublebw_vlsu
       Tile_MemWaitRsp: begin
         if (tile_ctx_q.req.op_mem.is_load) begin
           for (int unsigned p = 0; p < NrMemPorts; p++) begin
-            if (tile_load_rsp_fire[p]) begin
+            if (spatz_mem_rsp_valid_i[p] && rsp_tile_mem[p] && !tag_head[p].write) begin
               tile_load_pending_d[p] = 1'b0;
               for (int unsigned b = 0; b < MemDataWidthB; b++) begin
-                stream_byte_idx = int'(tile_mem_base_aligned) +
-                    (int'(tag_fifo_head[p].chunk) * MemDataWidthB) + int'(b) -
-                    int'(tile_ctx_q.req.rs1[31:0]);
+                stream_byte_idx = tile_stream_offset_t'(
+                    tag_head[p].chunk * MemDataWidthB + b - tile_mem_head);
 
-                if ((stream_byte_idx >= 0) && (stream_byte_idx < int'(tile_ctx_q.bytes))) begin
-                  byte_idx = stream_byte_idx;
-                  tile_ctx_d.packed_data[byte_idx*8 +: 8] = spatz_mem_rsp_i[p].data[b*8 +: 8];
+                if ((stream_byte_idx >= 0) && (stream_byte_idx < tile_stream_offset_t'(tile_ctx_q.bytes))) begin
+                  tile_ctx_d.packed_data[stream_byte_idx*8 +: 8] = spatz_mem_rsp_i[p].data[b*8 +: 8];
                 end
               end
             end
@@ -584,9 +514,8 @@ module spatz_doublebw_vlsu
 
           if ((tile_load_pending_q != '0) && (tile_load_pending_d == '0)) begin
             if (tile_ctx_q.chunk_sent >= tile_num_chunks) begin
-              tile_ctx_d.iter = '0;
-              tile_state_d =
-                  tile_ctx_q.col ? Tile_CommitRead : Tile_CommitWrite;
+              tile_ctx_d.row_idx = tile_dim_t'(0);
+              tile_state_d = tile_ctx_q.is_col ? Tile_CommitRead : Tile_CommitWrite;
             end else begin
               tile_state_d = Tile_MemReq;
             end
@@ -609,8 +538,8 @@ module spatz_doublebw_vlsu
       Tile_CommitWrite: begin
         tile_wvalid_o = 1'b1;
         if (tile_wready_i) begin
-          if (tile_ctx_q.col && (tile_ctx_q.iter != (TE-1))) begin
-            tile_ctx_d.iter  = tile_ctx_q.iter + 1'b1;
+          if (tile_ctx_q.is_col && ((tile_count_t'(tile_ctx_q.row_idx) + 1'b1) < tile_ctx_q.elems)) begin
+            tile_ctx_d.row_idx = tile_ctx_q.row_idx + 1'b1;
             tile_state_d = Tile_CommitRead;
           end else if (!vrf_mem_finished && !vrf_rsp_valid) begin
             tile_load_rsp_valid = 1'b1;
@@ -632,31 +561,31 @@ module spatz_doublebw_vlsu
     endcase
   end
 
+  /*------------------------------------------------------------*/
+  /*            Tile Store Completion and Retirement            */
+  /*------------------------------------------------------------*/
+
   always_comb begin : proc_tile_store_completion
     tile_store_completion_d = tile_store_completion_q;
     tile_store_rsp_valid = 1'b0;
-    tile_store_rsp_id = '0;
+    tile_store_rsp_id = spatz_id_t'(0);
 
     if (tile_req_accept && !mem_spatz_req.op_mem.is_load) begin
       tile_store_completion_d[mem_spatz_req.id].valid = 1'b1;
-      tile_store_completion_d[mem_spatz_req.id].row = mem_spatz_req.op_ope.tss.index;
-      tile_store_completion_d[mem_spatz_req.id].expected = tile_chunk_cnt_t'(
-          (int'(head_tile_bytes) + int'(mem_spatz_req.rs1[MemByteOffW-1:0]) +
+      tile_store_completion_d[mem_spatz_req.id].remaining = tile_chunk_cnt_t'(
+          (head_tile_bytes + mem_spatz_req.rs1[MemByteOffW-1:0] +
            MemDataWidthB - 1) / MemDataWidthB);
-      tile_store_completion_d[mem_spatz_req.id].acked = '0;
     end
 
     for (int unsigned p = 0; p < NrMemPorts; p++) begin
-      if (tile_store_ack_fire[p]) begin
-        tile_store_completion_d[tag_fifo_head[p].id].acked =
-            tile_store_completion_d[tag_fifo_head[p].id].acked + 1'b1;
+      if (spatz_mem_rsp_valid_i[p] && rsp_tile_mem[p] && tag_head[p].write) begin
+        tile_store_completion_d[tag_head[p].id].remaining = tile_store_completion_d[tag_head[p].id].remaining - 1'b1;
       end
     end
 
     for (int unsigned id = 0; id < NrParallelInstructions; id++) begin
       if (!tile_store_rsp_valid && tile_store_completion_q[id].valid &&
-          (tile_store_completion_d[id].acked == tile_store_completion_q[id].expected) &&
-          !vrf_mem_finished && !vrf_rsp_valid && !tile_load_rsp_valid) begin
+          (tile_store_completion_d[id].remaining == '0) && !vrf_mem_finished && !vrf_rsp_valid && !tile_load_rsp_valid) begin
         tile_store_rsp_valid = 1'b1;
         tile_store_rsp_id = spatz_id_t'(id);
         tile_store_completion_d[id].valid = 1'b0;
@@ -664,92 +593,14 @@ module spatz_doublebw_vlsu
     end
   end
 
-  assign tile_rsp_valid = tile_load_rsp_valid || tile_store_rsp_valid;
-  assign tile_store_complete_valid_o = tile_store_rsp_valid;
-  assign tile_store_complete_row_o = tile_store_completion_q[tile_store_rsp_id].row;
-
   always_comb begin : proc_tile_store_count
     tile_store_req_count_d = tile_store_req_count_q;
-
-    if (tile_store_req_fire_count != '0) begin
-      tile_store_req_count_d =
-          tile_store_req_count_q + tile_store_req_fire_count;
+    for (int unsigned p = 0; p < NrMemPorts; p++) begin
+      if (mem_out_fire[p] && spatz_mem_req_tag_o[p].tile_owned && spatz_mem_req_tag_o[p].write)
+        tile_store_req_count_d = tile_store_req_count_d + 1'b1;
     end
-
-    if (tile_req_accept) tile_store_req_count_d = '0;
+    if (tile_req_accept) tile_store_req_count_d = tile_chunk_cnt_t'(0);
   end
-
-`ifdef TARGET_SIMULATION
-  always_ff @(posedge clk_i) begin : assert_vlsu_tile_ownership
-    if (rst_ni) begin
-      if (tile_req_accept && !mem_spatz_req.op_ope.is_mem)
-        $fatal(1, "[spatz_doublebw_vlsu] tile FSM accepted a non VTLE/VTSE op");
-
-      if (tile_req_accept && ((8 << int'(mem_spatz_req.op_mem.ew)) > TEW))
-        $fatal(1, "[spatz_doublebw_vlsu] tile memory EW exceeds TEW ew=%0d tew=%0d",
-               mem_spatz_req.op_mem.ew, TEW);
-
-      if (mem_spatz_req_valid && mem_is_tile_mem && !mem_spatz_req.op_ope.tss.tile_valid)
-        $fatal(1,
-               "[spatz_doublebw_vlsu] invalid VTLE/VTSE tile subset op=%0d rs2=0x%08h ew=%0d tss.tile_valid=%0b tss.tile_id=%0d tss.index=%0d tss.is_row=%0b",
-               mem_spatz_req.op, mem_spatz_req.rs2, mem_spatz_req.op_mem.ew,
-               mem_spatz_req.op_ope.tss.tile_valid, mem_spatz_req.op_ope.tss.tile_id,
-               mem_spatz_req.op_ope.tss.index, mem_spatz_req.op_ope.tss.is_row);
-
-      if (tile_mem_busy && !tile_ctx_q.req.op_ope.is_mem)
-        $fatal(1, "[spatz_doublebw_vlsu] tile FSM is busy with a non VTLE/VTSE op");
-
-      if (tile_wvalid_o && (tile_state_q != Tile_CommitWrite))
-        $fatal(1, "[spatz_doublebw_vlsu] tile write valid outside VTLE commit-write state");
-
-      if (tile_wvalid_o && !tile_ctx_q.req.op_mem.is_load)
-        $fatal(1, "[spatz_doublebw_vlsu] VTSE attempted to write the accumulator tile port");
-
-      if (tile_rvalid_o && !(((tile_state_q == Tile_GatherRead) && !tile_ctx_q.req.op_mem.is_load) ||
-                             ((tile_state_q == Tile_CommitRead) && tile_ctx_q.req.op_mem.is_load &&
-                              tile_ctx_q.col) ||
-                             (tile_req_accept && !mem_spatz_req.op_mem.is_load &&
-                              mem_spatz_req.op_ope.tss.is_row)))
-        $fatal(1, "[spatz_doublebw_vlsu] tile read valid from an illegal tile FSM state");
-
-      if ((tile_state_q == Tile_GatherRead) && tile_ctx_q.req.op_mem.is_load)
-        $fatal(1, "[spatz_doublebw_vlsu] VTLE entered VTSE gather-read state");
-
-      if (((tile_state_q == Tile_CommitRead) || (tile_state_q == Tile_CommitWrite)) &&
-          !tile_ctx_q.req.op_mem.is_load)
-        $fatal(1, "[spatz_doublebw_vlsu] VTSE entered VTLE commit state");
-
-      if (tile_rvalid_o && tile_wvalid_o)
-        $fatal(1, "[spatz_doublebw_vlsu] tile read and write ports are both valid");
-
-      for (int unsigned p = 0; p < NrMemPorts; p++) begin
-        if (spatz_mem_rsp_valid_i[p] && tag_fifo_empty[p])
-          $fatal(1, "[spatz_doublebw_vlsu] response without request tag on port %0d", p);
-
-        if (tag_fifo_full[p] && spatz_mem_req_valid[p / N_FU][p % N_FU] &&
-            spatz_mem_req_ready[p / N_FU][p % N_FU])
-          $fatal(1, "[spatz_doublebw_vlsu] request tag FIFO overflow on port %0d", p);
-      end
-
-      if ((tile_state_q == Tile_MemWaitRsp) && !tile_ctx_q.req.op_mem.is_load) begin
-        if (tile_store_req_count_q > tile_num_chunks)
-          $fatal(1, "[spatz_doublebw_vlsu] VTSE request count overflow req=%0d chunks=%0d",
-                 tile_store_req_count_q, tile_num_chunks);
-      end
-
-      if (tile_req_accept && !mem_spatz_req.op_mem.is_load &&
-          tile_store_completion_q[mem_spatz_req.id].valid)
-        $fatal(1, "[spatz_doublebw_vlsu] VTSE accepted while completion entry is occupied");
-
-      for (int unsigned id = 0; id < NrParallelInstructions; id++) begin
-        if (tile_store_completion_q[id].acked > tile_store_completion_q[id].expected)
-          $fatal(1, "[spatz_doublebw_vlsu] VTSE completion ack overflow id=%0d ack=%0d expected=%0d",
-                 id, tile_store_completion_q[id].acked, tile_store_completion_q[id].expected);
-      end
-    end
-  end
-
-`endif
 
   for (genvar intf = 0; intf < NrInterfaces; intf++) begin : gen_store_count_q_intf
     for (genvar fu = 0; fu < N_FU; fu++) begin : gen_store_count_q_intf_fu
@@ -772,12 +623,10 @@ module spatz_doublebw_vlsu
 
         // Drain VRF-store responses even while another port serves a tile request.
 `ifdef MEMPOOL_SPATZ
-        if (store_count_q[intf][fu] != '0 && spatz_mem_rsp_valid_i[port] &&
-            spatz_mem_rsp_i[port].write && rsp_vrf_store[port])
+        if (store_count_q[intf][fu] != '0 && spatz_mem_rsp_valid_i[port] && spatz_mem_rsp_i[port].write && rsp_vrf_store[port])
           store_count_d[intf][fu]--;
 `else
-        if (store_count_q[intf][fu] != '0 && spatz_mem_rsp_valid_i[port] &&
-            rsp_vrf_store[port])
+        if (store_count_q[intf][fu] != '0 && spatz_mem_rsp_valid_i[port] && rsp_vrf_store[port])
           store_count_d[intf][fu]--;
 `endif
       end
@@ -794,6 +643,7 @@ module spatz_doublebw_vlsu
   id_t   [NrInterfaces-1:0] [N_FU-1:0] rob_wid;
   logic  [NrInterfaces-1:0] [N_FU-1:0] rob_push;
   logic  [NrInterfaces-1:0] [N_FU-1:0] rob_rvalid;
+  logic  [NrInterfaces-1:0] [N_FU-1:0] rob_commit_valid;
   elen_t [NrInterfaces-1:0] [N_FU-1:0] rob_rdata;
   logic  [NrInterfaces-1:0] [N_FU-1:0] rob_pop;
   id_t   [NrInterfaces-1:0] [N_FU-1:0] rob_rid;
@@ -824,6 +674,7 @@ module spatz_doublebw_vlsu
         .full_o   (rob_full[intf][fu]  ),
         .empty_o  (rob_empty[intf][fu] )
       );
+      assign rob_commit_valid[intf][fu] = rob_rvalid[intf][fu];
 `else
       fifo_v3 #(
         .DATA_WIDTH(ELEN              ),
@@ -842,6 +693,7 @@ module spatz_doublebw_vlsu
         .usage_o   (/* Unused */        )
       );
       assign rob_rvalid[intf][fu] = !rob_empty[intf][fu];
+      assign rob_commit_valid[intf][fu] = rob_rvalid[intf][fu];
 `endif
     end: gen_rob_intf_fu
   end: gen_rob_intf
@@ -907,14 +759,10 @@ module spatz_doublebw_vlsu
         .overflow_o(/* Unused */               )
       );
 
-      assign mem_port_finished_d[intf][fu] =
-          mem_spatz_req_valid &&
-          (!mem_port_active[intf][fu] ||
-           (mem_counter_q[intf][fu] == mem_counter_max[intf][fu] - mem_counter_delta[intf][fu]));
-      assign mem_port_finished_q[intf][fu] =
-          mem_spatz_req_valid &&
-          (!mem_port_active[intf][fu] ||
-           (mem_counter_q[intf][fu] == mem_counter_max[intf][fu]));
+      assign mem_port_finished_d[intf][fu] = mem_spatz_req_valid &&
+          (!mem_port_active[intf][fu] || (mem_counter_q[intf][fu] == mem_counter_max[intf][fu] - mem_counter_delta[intf][fu]));
+      assign mem_port_finished_q[intf][fu] = mem_spatz_req_valid &&
+          (!mem_port_active[intf][fu] || (mem_counter_q[intf][fu] == mem_counter_max[intf][fu]));
     end: gen_mem_counters_intf_fu
   end: gen_mem_counters_intf
 
@@ -925,6 +773,11 @@ module spatz_doublebw_vlsu
   // Is the current instruction pending?
   logic [NrParallelInstructions-1:0] mem_insn_pending_q, mem_insn_pending_d;
   `FF(mem_insn_pending_q, mem_insn_pending_d, '0)
+
+  // A VRF memory instruction may issue requests only after its commit
+  // metadata has been queued. Otherwise a full commit FIFO can leave orphan
+  // responses in the per-port ROBs with no matching commit instruction.
+  logic mem_vrf_insn_tracked;
 
   // Keep stores pending until TCDM accepts them.
   logic write_pending;
@@ -986,6 +839,8 @@ module spatz_doublebw_vlsu
       is_indexed: mem_is_indexed
   };
 
+  assign mem_vrf_insn_tracked = mem_spatz_req_valid && !mem_is_tile_mem && (mem_insn_pending_q[mem_spatz_req.id] || commit_insn_push);
+
   always_comb begin: queue_control
     // Maintain state
     mem_insn_finished_d = mem_insn_finished_q;
@@ -998,14 +853,14 @@ module spatz_doublebw_vlsu
     commit_insn_push = 1'b0;
 
     // Did we start a new instruction?
-      if (mem_spatz_req_valid && !mem_is_tile_mem && !commit_insn_full &&
-          !(tile_mem_busy && tile_ctx_q.req.op_mem.is_load) && !mem_insn_pending_q[mem_spatz_req.id]) begin
+    if (mem_spatz_req_valid && !mem_is_tile_mem && !commit_insn_full &&
+        !(tile_mem_busy && tile_ctx_q.req.op_mem.is_load) && !mem_insn_pending_q[mem_spatz_req.id]) begin
       mem_insn_pending_d[mem_spatz_req.id] = 1'b1;
       commit_insn_push                     = 1'b1;
     end
 
     // Did an instruction finished its requests?
-    if (!mem_is_tile_mem && &(mem_port_finished_q | (mem_port_finished_d & mem_counter_en)) & !write_pending) begin
+    if (mem_vrf_insn_tracked && &(mem_port_finished_q | (mem_port_finished_d & mem_counter_en)) && !write_pending) begin
       mem_insn_finished_d[mem_spatz_req.id] = 1'b1;
       mem_spatz_req_ready                   = 1'b1;
     end
@@ -1015,8 +870,7 @@ module spatz_doublebw_vlsu
       mem_insn_pending_d[vlsu_rsp_o.id]  = 1'b0;
     end
     // Clear stale bookkeeping when all memory paths are idle.
-    if (!mem_spatz_req_valid && commit_insn_empty && (&rob_empty) &&
-        !write_pending && !tile_mem_busy) begin
+    if (!mem_spatz_req_valid && commit_insn_empty && (&rob_empty) && !write_pending && !tile_mem_busy) begin
       for (int unsigned id_idx = 0; id_idx < NrParallelInstructions; id_idx++) begin
         mem_insn_finished_d[id_idx] = 1'b0;
         mem_insn_pending_d[id_idx]  = 1'b0;
@@ -1055,8 +909,7 @@ module spatz_doublebw_vlsu
         .overflow_o(/* Unused */                  )
       );
 
-    assign commit_finished_q[intf][fu] = commit_insn_valid &&
-        (commit_counter_q[intf][fu] == commit_counter_max[intf][fu]);
+    assign commit_finished_q[intf][fu] = commit_insn_valid && (commit_counter_q[intf][fu] == commit_counter_max[intf][fu]);
     assign commit_finished_d[intf][fu] = commit_insn_valid &&
         ((commit_counter_q[intf][fu] + commit_counter_delta[intf][fu]) == commit_counter_max[intf][fu]);
     end: gen_vreg_counters_intf_fu
@@ -1090,7 +943,8 @@ module spatz_doublebw_vlsu
       logic [31:0] offset;
 
       // Pre-shuffling index offset
-      logic [$clog2(8*8):0] idx_offset; // Max index offset (in B) when 8 x 8B (num elements in one MAXEW x index width in bytes for 1 element)
+      // Maximum byte offset for eight MAXEW elements with an eight-byte index width.
+      logic [$clog2(8*8):0] idx_offset;
       assign idx_offset = mem_idx_counter_q[intf][fu];
 
       // Calculate shift amount for address normalization
@@ -1098,9 +952,11 @@ module spatz_doublebw_vlsu
       logic [$bits(vew_e)  :0] log2_num_idx_maxew_bytes;
       logic [2 * MAXEW     :0] num_idx_maxew_bytes;
 
-      assign log2_num_el_maxew = MAXEW - mem_spatz_req.vtype.vsew;                       // Number of elements in MAXEW
+      // Number of selected elements contained in one MAXEW element.
+      assign log2_num_el_maxew = MAXEW - mem_spatz_req.vtype.vsew;
       assign log2_num_idx_maxew_bytes = log2_num_el_maxew + mem_spatz_req.op_mem.ew;
-      assign num_idx_maxew_bytes = 1'b1 << log2_num_idx_maxew_bytes;                     // Number of indices for MAXEW/SEW elements in bytes
+      // Byte footprint of the indices associated with one MAXEW data element.
+      assign num_idx_maxew_bytes = 1'b1 << log2_num_idx_maxew_bytes;
 
       always_comb begin
         stride = mem_is_strided ? mem_spatz_req.rs2 >> mem_spatz_req.vtype.vsew : 'd1;
@@ -1110,9 +966,11 @@ module spatz_doublebw_vlsu
           automatic logic [1:0] data_index_width_diff = int'(mem_spatz_req.vtype.vsew) - int'(mem_spatz_req.op_mem.ew);
 
           // Pointer to index
-          automatic logic [idx_width(N_FU*ELENB)-1:0] word_index = (fu << log2_num_idx_maxew_bytes) +
-                                                                   (idx_offset & (num_idx_maxew_bytes - 1)) +
-                                                                   ((idx_offset >> log2_num_idx_maxew_bytes) << log2_num_idx_maxew_bytes) * N_FU;
+          automatic logic [idx_width(N_FU*ELENB)-1:0] word_index =
+              (fu << log2_num_idx_maxew_bytes) +
+              (idx_offset & (num_idx_maxew_bytes - 1)) +
+              ((idx_offset >> log2_num_idx_maxew_bytes) << log2_num_idx_maxew_bytes) *
+              N_FU;
 
           // Index
           unique case (mem_spatz_req.op_mem.ew)
@@ -1121,13 +979,18 @@ module spatz_doublebw_vlsu
             default: offset = $signed(vrf_rdata_i[intf][1][8 * word_index +: 32]);
           endcase
         end else begin
-          offset = ({mem_counter_q[intf][fu][$bits(vlen_t)-1:MAXEW] << $clog2(N_FU), mem_counter_q[intf][fu][int'(MAXEW)-1:0]} + (fu << MAXEW));
+          offset = {
+              mem_counter_q[intf][fu][$bits(vlen_t)-1:MAXEW] << $clog2(N_FU),
+              mem_counter_q[intf][fu][int'(MAXEW)-1:0]
+          } + (fu << MAXEW);
         end
 
         // Split interfaces across vector halves and TCDM superbanks to reduce conflicts.
         if (!mem_is_indexed && intf == 1) begin
           // Align the vector length with SpatzMemBytes bytes
-          offset += ((mem_spatz_req.vl +  (SpatzMemBytes / 2)) >> $clog2(SpatzMemBytes) << $clog2(SpatzMemBytes)) / 2;
+          offset +=
+              ((mem_spatz_req.vl + (SpatzMemBytes / 2)) >> $clog2(SpatzMemBytes) <<
+               $clog2(SpatzMemBytes)) / 2;
         end
         offset *= stride;
 
@@ -1135,7 +998,10 @@ module spatz_doublebw_vlsu
         mem_req_addr[intf][fu]        = (addr >> MAXEW) << MAXEW;
         mem_req_addr_offset[intf][fu] = addr[int'(MAXEW)-1:0];
 
-        fetch_next_idx[intf][fu] = (mem_idx_counter_q[intf][fu][$clog2(NrWordsPerVector*ELENB)-1:0] == (num_idx_maxew_bytes - (1'b1 << mem_spatz_req.op_mem.ew))) && mem_counter_en[intf][fu];
+        fetch_next_idx[intf][fu] =
+            (mem_idx_counter_q[intf][fu][$clog2(NrWordsPerVector*ELENB)-1:0] ==
+             (num_idx_maxew_bytes - (1'b1 << mem_spatz_req.op_mem.ew))) &&
+            mem_counter_en[intf][fu];
       end
     end: gen_mem_req_addr_intf_fu
   end: gen_mem_req_addr_intf
@@ -1143,16 +1009,19 @@ module spatz_doublebw_vlsu
   // Calculate the register file addresses
   always_comb begin : gen_vreg_addr
     for (int intf = 0; intf < NrInterfaces; intf++) begin : gen_vreg_addr_intf
-      vd_vreg_addr[intf]  = (commit_insn_q.vd << $clog2(NrWordsPerVector)) + $unsigned(vd_elem_id[intf]);
+      vd_vreg_addr[intf] = (commit_insn_q.vd << $clog2(NrWordsPerVector)) + $unsigned(vd_elem_id[intf]);
 
       // For indices for indexed operations
       vs2_vreg_addr[intf] = (mem_spatz_req.vs2 << $clog2(NrWordsPerVector)) + $unsigned(vs2_elem_id_q[intf]);
       vs2_vreg_idx_addr[intf] = vs2_vreg_addr[intf];
 
-      // Start the second interface at the upper vector half for balanced VRF writes.
+	      // Start the second interface at the upper vector half for balanced VRF writes.
 	      if (intf == 1) begin
 	        vd_vreg_addr[intf] += (commit_insn_q.vl + (SpatzMemBytes / 2)) >> $clog2(SpatzMemBytes);
-	        vs2_vreg_idx_addr[intf] += ((mem_spatz_req.vl >> (mem_spatz_req.vtype.vsew - int'(mem_spatz_req.op_mem.ew))) / (SpatzMemBytes));
+	        vs2_vreg_idx_addr[intf] +=
+              (mem_spatz_req.vl >>
+               (mem_spatz_req.vtype.vsew - int'(mem_spatz_req.op_mem.ew))) /
+              SpatzMemBytes;
 	      end
 
     end
@@ -1168,6 +1037,7 @@ module spatz_doublebw_vlsu
 
   // Did we finish an instruction?
   logic vlsu_finished_req;
+  logic load_rsp_ready;
 
   always_comb begin: control_proc
     // Maintain state
@@ -1179,8 +1049,11 @@ module spatz_doublebw_vlsu
     // Do not ack anything
     vlsu_finished_req = 1'b0;
 
-    // Finished the execution!
-    if (commit_insn_valid && &(commit_finished_q | (commit_finished_d & commit_counter_en)) && mem_insn_finished_q[commit_insn_q.id]) begin
+    // A store may retire as soon as memory finishes.  A load must keep its
+    // commit metadata until the final writes from all active VRF interfaces
+    // have joined the memory-completion event in vrf_rsp_valid.
+    if (commit_insn_valid &&
+        (commit_insn_q.is_load ? load_rsp_ready : vrf_store_finished)) begin
       commit_insn_pop = 1'b1;
       busy_d          = 1'b0;
 
@@ -1202,12 +1075,18 @@ module spatz_doublebw_vlsu
 
   // Signal when we are finished with with accessing the memory (necessary
   // for the case with more than one memory port)
-  assign vrf_mem_finished = commit_insn_valid && &(commit_finished_q | (commit_finished_d & commit_counter_en)) && mem_insn_finished_q[commit_insn_q.id];
-  assign vrf_store_finished = commit_insn_valid && &(commit_finished_q | (commit_finished_d & commit_counter_en)) && mem_insn_finished_q[commit_insn_q.id] && !commit_insn_q.is_load;
+  assign vrf_mem_finished = commit_insn_valid && &(commit_finished_q | (commit_finished_d & commit_counter_en)) &&
+      mem_insn_finished_q[commit_insn_q.id];
+  assign vrf_store_finished = commit_insn_valid && &(commit_finished_q | (commit_finished_d & commit_counter_en)) &&
+      mem_insn_finished_q[commit_insn_q.id] && !commit_insn_q.is_load;
 
-  // Snitch uses these events to track outstanding accelerator memory operations.
-  assign spatz_mem_finished_o     = vrf_mem_finished | tile_rsp_valid;
-  assign spatz_mem_str_finished_o = vrf_store_finished | tile_store_rsp_valid;
+  // Snitch and the FPU sequencer consume these as one-cycle completion events,
+  // not as levels.  A load can keep vrf_mem_finished asserted while waiting
+  // for the final VRF interface, so report it only when the joined operation
+  // retires from the commit queue.
+  assign spatz_mem_finished_o = vlsu_finished_req | tile_load_rsp_valid | tile_store_rsp_valid;
+  assign spatz_mem_str_finished_o = (vlsu_finished_req && commit_insn_valid && !commit_insn_q.is_load) |
+      tile_store_rsp_valid;
 
   // Do we start at the very fist element
   logic mem_is_vstart_zero;
@@ -1235,7 +1114,8 @@ module spatz_doublebw_vlsu
 
   // Do we have to access every single element on its own
   logic commit_is_single_element_operation;
-  assign commit_is_single_element_operation = commit_is_addr_unaligned || commit_insn_q.is_strided || commit_insn_q.is_indexed || (commit_insn_q.vstart != '0);
+  assign commit_is_single_element_operation = commit_is_addr_unaligned || commit_insn_q.is_strided ||
+      commit_insn_q.is_indexed || (commit_insn_q.vstart != '0);
 
   // Size of an element in the VRF
   logic [3:0] commit_single_element_size;
@@ -1279,52 +1159,29 @@ module spatz_doublebw_vlsu
     vrf_data_t wdata;
     vrf_be_t wbe;
 
-    vlsu_rsp_t rsp;
-    logic rsp_valid;
-    vlen_t commit_vl;
+    spatz_id_t id;
+    logic last;
   } vrf_req_t;
 
   vrf_req_t [NrInterfaces-1:0] vrf_req_d, vrf_req_q;
   logic     [NrInterfaces-1:0] vrf_req_valid_d, vrf_req_ready_d;
   logic     [NrInterfaces-1:0] vrf_req_valid_q, vrf_req_ready_q;
-  logic     [NrInterfaces-1:0] vrf_commit_waiting_d, vrf_commit_waiting_q, vrf_valid_rsp;
-  logic     [NrInterfaces-1:0] vrf_commit_intf_valid, vrf_commit_intf_valid_q;
-  logic vrf_commit_bypass;
-  logic [NrInterfaces-1:0] vrf_full_follow_write;
-  logic [NrInterfaces-1:0] vrf_full_sync_write;
-  logic [NrInterfaces-1:0] vrf_full_single_write;
-
-  assign vrf_full_sync_write[0] = (&vrf_req_valid_q);
-  assign vrf_full_sync_write[1] = (&vrf_req_valid_q);
-  assign vrf_full_follow_write[0] =
-      vrf_req_valid_q[0] && (vrf_commit_bypass || vrf_commit_waiting_q[1]) && vlsu_buf_empty_i;
-  assign vrf_full_follow_write[1] =
-      vrf_req_valid_q[1] && vrf_commit_waiting_q[0] && vlsu_buf_empty_i;
-  assign vrf_full_single_write[0] =
-      vrf_req_valid_q[0] && !vrf_req_valid_q[1] && vlsu_buf_empty_i;
-  assign vrf_full_single_write[1] =
-      vrf_req_valid_q[1] && !vrf_req_valid_q[0] && vlsu_buf_empty_i;
+  logic     [NrInterfaces-1:0] load_vrf_done_d, load_vrf_done_q;
+  logic     [NrInterfaces-1:0] load_vrf_done;
+  logic     [NrInterfaces-1:0] load_vrf_required;
+  logic     [NrInterfaces-1:0] vrf_write_fire;
 
 	  logic vrf_path_idle, vrf_store_active, vrf_full_mode_active;
   logic [NrParallelInstructions-1:0] vrf_full_mode_pending;
   assign vrf_path_idle = commit_insn_empty && (&rob_empty) && !busy_q && !write_pending && !(|vrf_req_valid_q);
-  assign vrf_store_active =
-	      (state_q == VLSU_RunningStore) || write_pending ||
-	      (commit_insn_valid && !commit_insn_q.is_load) ||
-	      (mem_spatz_req_valid && !mem_is_tile_mem && !mem_spatz_req.op_mem.is_load);
+  assign vrf_store_active = (state_q == VLSU_RunningStore) || write_pending ||
+	      (commit_insn_valid && !commit_insn_q.is_load) || (mem_spatz_req_valid && !mem_is_tile_mem && !mem_spatz_req.op_mem.is_load);
   assign vrf_full_mode_pending = mem_insn_pending_q;
-  assign vrf_full_mode_active =
-      (|vrf_full_mode_pending) ||
-      (commit_insn_valid && commit_insn_q.is_load) ||
-      vrf_req_valid_q[0] ||
-      vrf_req_valid_q[1];
-  assign tile_req_ready = mem_is_tile_store ?
-                          ((tile_state_q == Tile_Idle) &&
-                           !tile_store_completion_q[mem_spatz_req.id].valid) :
-                          (vrf_path_idle && !tile_mem_busy);
-  assign spatz_req_accept_gate =  (!commit_insn_full && !(tile_mem_busy && tile_ctx_q.req.op_mem.is_load));
-
-  assign spatz_req_ready_o = spatz_req_ready & spatz_req_accept_gate;
+  assign vrf_full_mode_active = (|vrf_full_mode_pending) || (commit_insn_valid && commit_insn_q.is_load) ||
+      vrf_req_valid_q[0] || vrf_req_valid_q[1];
+  assign tile_req_ready = !mem_spatz_req.op_mem.is_load ?
+      ((tile_state_q == Tile_Idle) && !tile_store_completion_q[mem_spatz_req.id].valid) : (vrf_path_idle && !tile_mem_busy);
+  assign spatz_req_ready_o = spatz_req_ready;
 
   for (genvar intf = 0; intf < NrInterfaces; intf++) begin : gen_vrf_req_register_intf
     spill_register #(
@@ -1343,89 +1200,53 @@ module spatz_doublebw_vlsu
     assign vrf_waddr_o[intf]     = vrf_req_q[intf].waddr;
     assign vrf_wdata_o[intf]     = vrf_req_q[intf].wdata;
     assign vrf_wbe_o[intf]       = vrf_req_q[intf].wbe;
-    // Synchronize both VRF interfaces before retiring the instruction.
-    assign vrf_we_o[intf]        = (vrf_full_sync_write[intf] || vrf_full_follow_write[intf] ||
-                                    vrf_full_single_write[intf]) &
-                                   ((intf==1) ?
-                                    ((vrf_wvalid_i[0] && (vrf_req_q[1].rsp.id == vrf_req_q[0].rsp.id)) ||
-                                     vrf_commit_waiting_q[0] ||
-                                     vrf_full_single_write[intf]) :
-                                    1'b1) &
-                                   !vlsu_buf_full_i;
-    assign vrf_id_o[intf]        = {vrf_req_q[intf].rsp.id, mem_spatz_req.id, commit_insn_q.id};
+    // Each interface is an independent ready/valid channel. Interface 1 may
+    // be accepted into the external conflict FIFO, while interface 0 writes
+    // the VRF directly; coupling them here can deadlock when DMA contention
+    // separates their completion timing.
+    assign vrf_we_o[intf] = vrf_req_valid_q[intf] && ((intf == 1) ? !vlsu_buf_full_i : 1'b1);
+    assign vrf_id_o[intf]        = {vrf_req_q[intf].id, mem_spatz_req.id, commit_insn_q.id};
     assign vrf_req_ready_q[intf] = vrf_we_o[intf] && vrf_wvalid_i[intf];
-
-    `FF(vrf_commit_intf_valid_q[intf], vrf_commit_intf_valid[intf], 1'b0)
-    `FF(vrf_commit_waiting_q[intf], vrf_commit_waiting_d[intf], 1'b0)
   end
-
-  //////////////////////////////////////
-  //  VLSU Interface Synchronization  //
-  //////////////////////////////////////
-
-  logic [NrInterfaces-1:0] vrf_write_fire;
 
   for (genvar intf = 0; intf < NrInterfaces; intf++) begin
-    assign vrf_write_fire[intf] =
-        vrf_we_o[intf] && vrf_wvalid_i[intf];
+    assign vrf_write_fire[intf] = vrf_req_ready_q[intf];
   end
+
+  // A completion event from either interface may arrive many cycles before
+  // the other one. Keep both events until the load at the commit head retires.
   always_comb begin
-    vrf_valid_rsp = '0;
-    vrf_commit_intf_valid = vrf_commit_intf_valid_q;
-    vrf_commit_waiting_d = vrf_commit_waiting_q;
-
-    // Bypass the unused upper interface for short vectors.
-    vrf_commit_bypass = vrf_req_valid_q[0] ? ((vrf_req_q[0].commit_vl <= ( SpatzMemBytes / 2)) ? 1'b1 : 1'b0) : 1'b0;
-
+    load_vrf_done_d = load_vrf_done_q;
     for (int intf = 0; intf < NrInterfaces; intf++) begin
-      // Track the final VRF response per interface.
-      vrf_valid_rsp[intf] = (vrf_req_valid_q[intf] & vrf_req_q[intf].rsp_valid);
-
-      // Latch completion until both interfaces can retire.
-      // vrf_commit_intf_valid[intf] = ((vrf_valid_rsp[intf] & vrf_wvalid_i[intf]) | vrf_commit_waiting_q[intf]) | (intf == 1 ? vrf_commit_bypass : 1'b0);
-
-      vrf_commit_intf_valid[intf] =
-        ((vrf_valid_rsp[intf] & vrf_wvalid_i[intf]) |
-        vrf_commit_waiting_q[intf]) |
-        (intf == 1 ? vrf_commit_bypass : 1'b0);
-      // Hold a completed interface while the other interface drains.
-      vrf_commit_waiting_d[intf] = vrf_commit_intf_valid[intf] ? (vlsu_rsp_valid_o ? 1'b0 : 1'b1) : 1'b0;
+      if (vrf_write_fire[intf] && vrf_req_q[intf].last)
+        load_vrf_done_d[intf] = 1'b1;
     end
+    if (commit_insn_pop)
+      load_vrf_done_d = '0;
   end
+  `FF(load_vrf_done_q, load_vrf_done_d, '0)
+
+  always_comb begin : proc_load_vrf_done
+    load_vrf_done = load_vrf_done_q;
+    for (int intf = 0; intf < NrInterfaces; intf++)
+      load_vrf_done[intf] |= vrf_write_fire[intf] && vrf_req_q[intf].last;
+  end
+
+  // Short vectors use only interface 0. This mask is derived from stable
+  // commit metadata rather than the instantaneous output-valid pattern.
+  assign load_vrf_required[0] = commit_insn_valid && commit_insn_q.is_load && (commit_insn_q.vl != '0);
+  assign load_vrf_required[1] = commit_insn_valid && commit_insn_q.is_load && (commit_insn_q.vl > (SpatzMemBytes / 2));
 
   ////////////////////////////
   // Response to Controller //
   ////////////////////////////
 
-  // Retire after a store finishes or all load interfaces commit to the VRF.
-
-	  // Prefer interface 1 when both interfaces complete together.
-	  logic [NrInterfaces-1:0] vrf_rsp_intf_active;
-	  logic                    vrf_rsp_commit_done;
-	  logic                    vrf_rsp_req_valid;
-
-  always_comb begin : proc_vrf_rsp_intf_active
-    vrf_rsp_intf_active = 2'b11;
-    if (vrf_req_valid_q[1] && !vrf_req_valid_q[0] && (&commit_finished_q[0])) begin
-      vrf_rsp_intf_active = 2'b10;
-    end else if (vrf_req_valid_q[0] && !vrf_req_valid_q[1] && (&commit_finished_q[1])) begin
-      vrf_rsp_intf_active = 2'b01;
-    end
-  end
-	  assign vrf_rsp_commit_done = &((~vrf_rsp_intf_active) | vrf_commit_intf_valid);
-	  assign vrf_rsp_req_valid   = |(vrf_req_valid_q & vrf_rsp_intf_active);
-	  assign resp_intf = (vrf_rsp_intf_active[1] && (vrf_commit_intf_valid[1] == 1'b1) &&
-	                      !vrf_commit_bypass) ? 1'b1 : 1'b0;
-
-  // Use the response from the interface that completes last.
   vlsu_rsp_t vrf_rsp;
-	  assign vrf_rsp = vrf_rsp_commit_done && vrf_rsp_req_valid ? vrf_req_q[resp_intf].rsp   : '{id: commit_insn_q.id, default: '0};
+  assign vrf_rsp = '{id: commit_insn_q.id, default: '0};
 
-  // Respond only after the final VRF write is accepted.
-  assign vrf_rsp_valid =
-      vrf_rsp_commit_done && vrf_rsp_req_valid ?
-          |(vrf_write_fire & vrf_rsp_intf_active) :
-          vlsu_finished_req && !commit_insn_q.is_load;
+  assign load_rsp_ready = commit_insn_valid && commit_insn_q.is_load && vrf_mem_finished &&
+      &((~load_vrf_required) | load_vrf_done) && vlsu_buf_empty_i;
+  assign vrf_rsp_valid = load_rsp_ready || vrf_store_finished;
 
   always_comb begin : proc_vlsu_response
     vlsu_rsp_o       = '0;
@@ -1453,7 +1274,9 @@ module spatz_doublebw_vlsu
   logic [NrInterfaces-1:0] [N_FU-1:0] catchup;
   for (genvar intf = 0; intf < NrInterfaces; intf++) begin: gen_catchup_intf
     for (genvar fu = 0; fu < N_FU; fu++) begin: gen_catchup_intf_fu
-      assign catchup[intf][fu] = (commit_counter_q[intf][fu] < vreg_start_0) & (commit_counter_max[intf][fu] != commit_counter_q[intf][fu]);
+      assign catchup[intf][fu] =
+          (commit_counter_q[intf][fu] < vreg_start_0) &
+          (commit_counter_max[intf][fu] != commit_counter_q[intf][fu]);
     end: gen_catchup_intf_fu
   end: gen_catchup_intf
 
@@ -1481,12 +1304,17 @@ module spatz_doublebw_vlsu
 	          commit_counter_d[intf][fu] += ELENB;
 	        else if (commit_insn_q.vstart[idx_width(SpatzMemBytes)-1:$clog2(ELENB)] == port)
 	          commit_counter_d[intf][fu] += commit_insn_q.vstart[$clog2(ELENB)-1:0];
-	        commit_operation_valid[intf][fu] = commit_insn_valid &&
-	                                           (commit_counter_q[intf][fu] != max_bytes) &&
+	        commit_operation_valid[intf][fu] = commit_insn_valid && (commit_counter_q[intf][fu] != max_bytes) &&
 	                                           (catchup[intf][fu] || (!catchup[intf][fu] && ~|catchup));
-        commit_operation_last[intf][fu]  = commit_operation_valid[intf][fu] && ((max_bytes - commit_counter_q[intf][fu]) <= (commit_is_single_element_operation ? commit_single_element_size : ELENB));
-        commit_counter_delta[intf][fu]   = !commit_operation_valid[intf][fu] ? vlen_t'('d0) : commit_is_single_element_operation ? vlen_t'(commit_single_element_size) : commit_operation_last[intf][fu] ? (max_bytes - commit_counter_q[intf][fu]) : vlen_t'(ELENB);
-        commit_counter_en[intf][fu]      = commit_operation_valid[intf][fu] && (commit_insn_q.is_load && vrf_req_valid_d[intf] && vrf_req_ready_d[intf]) || (!commit_insn_q.is_load && vrf_rvalid_i[intf][0] && vrf_re_o[intf][0] && (!mem_is_indexed || vrf_rvalid_i[intf][1]));
+        commit_operation_last[intf][fu] = commit_operation_valid[intf][fu] &&
+            ((max_bytes - commit_counter_q[intf][fu]) <=
+             (commit_is_single_element_operation ? commit_single_element_size : ELENB));
+        commit_counter_delta[intf][fu] = !commit_operation_valid[intf][fu] ? vlen_t'('d0) :
+            commit_is_single_element_operation ? vlen_t'(commit_single_element_size) :
+            commit_operation_last[intf][fu] ? (max_bytes - commit_counter_q[intf][fu]) : vlen_t'(ELENB);
+        commit_counter_en[intf][fu] =
+            (commit_operation_valid[intf][fu] && commit_insn_q.is_load && vrf_req_valid_d[intf] && vrf_req_ready_d[intf]) ||
+            (!commit_insn_q.is_load && vrf_rvalid_i[intf][0] && vrf_re_o[intf][0] && (!mem_is_indexed || vrf_rvalid_i[intf][1]));
         commit_counter_max[intf][fu]     = max_bytes;
       end
     end
@@ -1517,13 +1345,16 @@ module spatz_doublebw_vlsu
 	          else if (mem_spatz_req.vl[$clog2(MemDataWidthB) +: $clog2(NrMemPorts)] == port)
 	            max_bytes += mem_spatz_req.vl[$clog2(MemDataWidthB)-1:0];
 
-		        mem_operation_valid[intf][fu] = mem_spatz_req_valid && !mem_is_tile_mem &&
-		                                        mem_port_active[intf][fu] &&
-		                                        (max_bytes != mem_counter_q[intf][fu]);
-	        mem_operation_last[intf][fu]  = mem_operation_valid[intf][fu] && ((max_bytes - mem_counter_q[intf][fu]) <= (mem_is_single_element_operation ? mem_single_element_size : MemDataWidthB));
+        mem_operation_valid[intf][fu] = mem_vrf_insn_tracked && mem_port_active[intf][fu] && (max_bytes != mem_counter_q[intf][fu]);
+	        mem_operation_last[intf][fu] =
+              mem_operation_valid[intf][fu] &&
+              ((max_bytes - mem_counter_q[intf][fu]) <=
+               (mem_is_single_element_operation ? mem_single_element_size : MemDataWidthB));
 	        mem_counter_load[intf][fu]    = mem_spatz_req_ready;
 	        mem_counter_d[intf][fu]       = '0;
-	        mem_counter_d[intf][fu] = (mem_spatz_req.vstart >> $clog2(NrMemPorts*MemDataWidthB)) << $clog2(MemDataWidthB);
+	        mem_counter_d[intf][fu] =
+              (mem_spatz_req.vstart >> $clog2(NrMemPorts*MemDataWidthB)) <<
+              $clog2(MemDataWidthB);
 	        if (NrMemPorts == 1)
 	          mem_counter_d[intf][fu] = mem_spatz_req.vstart;
 	        else
@@ -1531,10 +1362,12 @@ module spatz_doublebw_vlsu
 	            mem_counter_d[intf][fu] += MemDataWidthB;
 	          else if (mem_spatz_req.vstart[$clog2(MemDataWidthB) +: $clog2(NrMemPorts)] == port)
 	            mem_counter_d[intf][fu] += mem_spatz_req.vstart[$clog2(MemDataWidthB)-1:0];
-        mem_counter_delta[intf][fu] = !mem_operation_valid[intf][fu] ? 'd0 : mem_is_single_element_operation ? mem_single_element_size : mem_operation_last[intf][fu] ? (max_bytes - mem_counter_q[intf][fu]) : MemDataWidthB;
-        mem_counter_en[intf][fu]    = spatz_mem_req_ready[intf][fu] &&
-                                      spatz_mem_req_valid[intf][fu] &&
-                                      !tile_mem_req_valid[port];
+        mem_counter_delta[intf][fu] =
+            !mem_operation_valid[intf][fu] ? 'd0 :
+            mem_is_single_element_operation ? mem_single_element_size :
+            mem_operation_last[intf][fu] ?
+                (max_bytes - mem_counter_q[intf][fu]) : MemDataWidthB;
+        mem_counter_en[intf][fu] = spatz_mem_req_ready[intf][fu] && spatz_mem_req_valid[intf][fu] && !tile_mem_req_valid[port];
         mem_counter_max[intf][fu]   = max_bytes;
 
         // Index counter
@@ -1598,589 +1431,6 @@ module spatz_doublebw_vlsu
   logic [NrInterfaces-1:0] [N_FU-1:0] mem_pending;
   `FF(mem_pending_q, mem_pending_d, '{default: '0})
 
-`ifdef TARGET_SIMULATION
-  always_ff @(posedge clk_i) begin : assert_vlsu_response
-    if (rst_ni) begin
-      assert ($onehot0({vrf_rsp_valid, tile_store_rsp_valid, tile_load_rsp_valid}))
-        else $fatal(1, "[spatz_doublebw_vlsu] multiple VLSU response sources selected");
-      assert (vlsu_rsp_valid_o == (vrf_rsp_valid || tile_store_rsp_valid || tile_load_rsp_valid))
-        else $fatal(1, "[spatz_doublebw_vlsu] VLSU response valid mismatch");
-
-      for (int unsigned id = 0; id < NrParallelInstructions; id++) begin
-        if (tile_store_completion_q[id].valid &&
-            (tile_store_completion_d[id].acked == tile_store_completion_q[id].expected) &&
-            (vrf_mem_finished || vrf_rsp_valid)) begin
-          assert (tile_store_completion_d[id].valid)
-            else $fatal(1, "[spatz_doublebw_vlsu] VTSE completion lost while VRF response has priority id=%0d", id);
-          assert (tile_store_completion_d[id].acked == tile_store_completion_q[id].expected)
-            else $fatal(1, "[spatz_doublebw_vlsu] VTSE ack changed while response is deferred id=%0d", id);
-          assert (tile_store_completion_d[id].expected == tile_store_completion_q[id].expected)
-            else $fatal(1, "[spatz_doublebw_vlsu] VTSE expected count changed while response is deferred id=%0d", id);
-        end
-      end
-    end
-  end
-
-  logic [63:0] prof_vtle_cnt_q;
-  logic [63:0] prof_tile_store_cnt_q;
-  logic [63:0] prof_tile_busy_q;
-  logic [63:0] prof_tile_memreq_fire_q;
-  logic [63:0] prof_tile_wready_stall_q;
-  logic [63:0] prof_tile_rready_stall_q;
-  logic [63:0] prof_vrf_blocked_by_tile_q;
-  // VRF-vs-tile serialization attribution (who blocks whom at the accept gate)
-  logic [63:0] prof_ser_tile_store_wait_tilefsm_q;   // VTSE offered, blocked by tile FSM busy (tile-vs-tile)
-  logic [63:0] prof_ser_tile_store_wait_vrf_store_q; // VTSE offered, tile idle, blocked by VRF store in flight
-  logic [63:0] prof_ser_tile_store_wait_vrf_full_q;  // VTSE offered, tile idle, blocked by normal full-mode load/store
-  logic [63:0] prof_ser_vtle_wait_vrf_idle_q;  // VTLE offered, blocked waiting for VRF path fully idle
-  logic [63:0] prof_ser_vrf_store_wait_tile_q; // VRF store offered, blocked by tile store busy
-  logic [63:0] prof_ser_vrf_wait_cmtfull_q;   // VRF op offered, blocked by commit_insn queue full
-  logic [63:0] prof_tile_store_active_q;
-  logic [63:0] prof_tile_store_gather_q;
-  logic [63:0] prof_tile_store_gather_wait_q;
-  logic [63:0] prof_tile_store_memreq_q;
-  logic [63:0] prof_tile_store_memreq_wait_q;
-  logic [63:0] prof_tile_store_done_q;
-  logic [63:0] prof_tile_store_done_wait_q;
-  logic [63:0] prof_tile_store_memreq_fire_q;
-  logic [63:0] prof_tile_store_rsp_fire_q;
-  logic [63:0] prof_tile_store_req_beat_q;
-  logic [63:0] prof_tile_store_ack_beat_q;
-  logic [63:0] prof_tile_store_slice_done_q;
-  logic [8:0][63:0] prof_tile_mem_req_count_q;
-  // Attribute VRF-load commit stalls by cause.
-  logic [63:0] prof_cmt_active_q;
-  logic [63:0] prof_cmt_prog_q;
-  logic [63:0] prof_cmt_wait_data_q;
-  logic [63:0] prof_cmt_wait_vrf_q;
-  logic [63:0] prof_cmt_sync_q;
-  logic [63:0] prof_ld_req_fire_q;
-  logic [63:0] prof_ld_rsp_push_q;
-  logic [63:0] prof_ld_rob_pop_q;
-  logic [63:0] prof_ld_vrf_req_fire_q;
-  logic [63:0] prof_cmt_wait_no_pending_q;
-  logic [63:0] prof_cmt_wait_no_rob_q;
-  logic [63:0] prof_cmt_wait_partial_rob_q;
-  logic [NrInterfaces-1:0][63:0] prof_vrf_in_req_q;
-  logic [NrInterfaces-1:0][63:0] prof_vrf_in_stall_q;
-  logic [NrInterfaces-1:0][63:0] prof_vrf_out_valid_q;
-  logic [NrInterfaces-1:0][63:0] prof_vrf_out_sync_stall_q;
-  logic [NrInterfaces-1:0][63:0] prof_vrf_out_port_stall_q;
-  logic [NrInterfaces-1:0][63:0] prof_vrf_out_fire_q;
-  logic [63:0] prof_vrf_dual_out_valid_q;
-  logic [63:0] prof_vrf_dual_out_fire_q;
-  logic [63:0] prof_vrf_internal_finished_and_tile_rsp_q;
-  logic [63:0] prof_vrf_rsp_and_tile_rsp_q;
-  logic [63:0] prof_vrf_rsp_delays_vtse_q;
-  logic [63:0] prof_vtse_completion_pending_cycles_q;
-  logic [63:0] prof_vtse_completion_deferred_count_q;
-  logic [63:0] prof_tile_load_completion_deferred_count_q;
-  logic [63:0] prof_vlsu_rsp_vrf_count_q;
-  logic [63:0] prof_vlsu_rsp_vtse_count_q;
-  logic [63:0] prof_vlsu_rsp_vtle_count_q;
-  logic [NrParallelInstructions-1:0] prof_vtse_deferred_q;
-
-  logic prof_cmt_has_pending;
-  logic prof_cmt_has_rob;
-  logic prof_cmt_wait_data;
-  logic [63:0] prof_ld_req_fire_incr;
-  logic [63:0] prof_ld_rsp_push_incr;
-  logic [63:0] prof_ld_rob_pop_incr;
-  logic [63:0] prof_ld_vrf_req_fire_incr;
-  always_comb begin : proc_prof_vlsu_cmt_state
-    prof_cmt_has_pending  = 1'b0;
-    prof_cmt_has_rob      = 1'b0;
-    prof_cmt_wait_data    = commit_insn_valid && commit_insn_q.is_load &&
-                            !(|commit_counter_en) && !(|vrf_req_valid_d);
-    prof_ld_req_fire_incr     = '0;
-    prof_ld_rsp_push_incr     = '0;
-    prof_ld_rob_pop_incr      = '0;
-    prof_ld_vrf_req_fire_incr = '0;
-
-    for (int intf = 0; intf < NrInterfaces; intf++) begin
-      if (vrf_req_valid_d[intf] && vrf_req_ready_d[intf])
-        prof_ld_vrf_req_fire_incr = prof_ld_vrf_req_fire_incr + 64'd1;
-      for (int fu = 0; fu < N_FU; fu++) begin
-        int unsigned port;
-        port = intf * N_FU + fu;
-        prof_cmt_has_pending |= (mem_pending_q[intf][fu] != '0);
-        prof_cmt_has_rob     |= rob_rvalid[intf][fu];
-        if (spatz_mem_req_valid_o[port] && spatz_mem_req_ready_i[port] &&
-            !spatz_mem_req_tag_o[port].tile_owned && !spatz_mem_req_tag_o[port].write)
-          prof_ld_req_fire_incr = prof_ld_req_fire_incr + 64'd1;
-        if (commit_insn_q.is_load && rob_push[intf][fu])
-          prof_ld_rsp_push_incr = prof_ld_rsp_push_incr + 64'd1;
-        if (commit_insn_q.is_load && rob_pop[intf][fu])
-          prof_ld_rob_pop_incr = prof_ld_rob_pop_incr + 64'd1;
-      end
-    end
-  end
-
-  always_ff @(posedge clk_i or negedge rst_ni) begin
-    if (!rst_ni) begin
-      prof_vtle_cnt_q               <= '0;
-      prof_tile_store_cnt_q               <= '0;
-      prof_tile_busy_q              <= '0;
-      prof_tile_memreq_fire_q       <= '0;
-      prof_tile_wready_stall_q      <= '0;
-      prof_tile_rready_stall_q      <= '0;
-      prof_vrf_blocked_by_tile_q <= '0;
-      prof_ser_tile_store_wait_tilefsm_q   <= '0;
-      prof_ser_tile_store_wait_vrf_store_q <= '0;
-      prof_ser_tile_store_wait_vrf_full_q  <= '0;
-      prof_ser_vtle_wait_vrf_idle_q  <= '0;
-      prof_ser_vrf_store_wait_tile_q <= '0;
-      prof_ser_vrf_wait_cmtfull_q   <= '0;
-      prof_tile_store_active_q             <= '0;
-      prof_tile_store_gather_q             <= '0;
-      prof_tile_store_gather_wait_q        <= '0;
-      prof_tile_store_memreq_q             <= '0;
-      prof_tile_store_memreq_wait_q        <= '0;
-      prof_tile_store_done_q               <= '0;
-      prof_tile_store_done_wait_q          <= '0;
-      prof_tile_store_memreq_fire_q        <= '0;
-      prof_tile_store_rsp_fire_q           <= '0;
-      prof_tile_store_req_beat_q           <= '0;
-      prof_tile_store_ack_beat_q           <= '0;
-      prof_tile_store_slice_done_q         <= '0;
-      prof_tile_mem_req_count_q          <= '0;
-      prof_cmt_active_q             <= '0;
-      prof_cmt_prog_q               <= '0;
-      prof_cmt_wait_data_q          <= '0;
-      prof_cmt_wait_vrf_q           <= '0;
-      prof_cmt_sync_q               <= '0;
-      prof_ld_req_fire_q            <= '0;
-      prof_ld_rsp_push_q            <= '0;
-      prof_ld_rob_pop_q             <= '0;
-      prof_ld_vrf_req_fire_q        <= '0;
-      prof_cmt_wait_no_pending_q    <= '0;
-      prof_cmt_wait_no_rob_q        <= '0;
-      prof_cmt_wait_partial_rob_q   <= '0;
-      prof_vrf_in_req_q             <= '0;
-      prof_vrf_in_stall_q           <= '0;
-      prof_vrf_out_valid_q          <= '0;
-      prof_vrf_out_sync_stall_q     <= '0;
-      prof_vrf_out_port_stall_q     <= '0;
-      prof_vrf_out_fire_q           <= '0;
-      prof_vrf_dual_out_valid_q     <= '0;
-      prof_vrf_dual_out_fire_q      <= '0;
-      prof_vrf_internal_finished_and_tile_rsp_q <= '0;
-      prof_vrf_rsp_and_tile_rsp_q   <= '0;
-      prof_vrf_rsp_delays_vtse_q    <= '0;
-      prof_vtse_completion_pending_cycles_q <= '0;
-      prof_vtse_completion_deferred_count_q <= '0;
-      prof_tile_load_completion_deferred_count_q <= '0;
-      prof_vlsu_rsp_vrf_count_q     <= '0;
-      prof_vlsu_rsp_vtse_count_q    <= '0;
-      prof_vlsu_rsp_vtle_count_q    <= '0;
-      prof_vtse_deferred_q          <= '0;
-    end else begin
-      if (vrf_mem_finished && tile_rsp_valid)
-        prof_vrf_internal_finished_and_tile_rsp_q <= prof_vrf_internal_finished_and_tile_rsp_q + 64'd1;
-      if (vrf_rsp_valid && tile_rsp_valid)
-        prof_vrf_rsp_and_tile_rsp_q <= prof_vrf_rsp_and_tile_rsp_q + 64'd1;
-      if ((vrf_mem_finished || vrf_rsp_valid) &&
-          (((tile_state_q == Tile_CommitWrite) && tile_wvalid_o && tile_wready_i) ||
-           (tile_state_q == Tile_Done)))
-        prof_tile_load_completion_deferred_count_q <= prof_tile_load_completion_deferred_count_q + 64'd1;
-      if (vrf_rsp_valid)
-        prof_vlsu_rsp_vrf_count_q <= prof_vlsu_rsp_vrf_count_q + 64'd1;
-      else if (tile_store_rsp_valid)
-        prof_vlsu_rsp_vtse_count_q <= prof_vlsu_rsp_vtse_count_q + 64'd1;
-      else if (tile_load_rsp_valid)
-        prof_vlsu_rsp_vtle_count_q <= prof_vlsu_rsp_vtle_count_q + 64'd1;
-
-      for (int unsigned id = 0; id < NrParallelInstructions; id++) begin
-        if (!tile_store_completion_q[id].valid || tile_store_rsp_valid && (tile_store_rsp_id == id))
-          prof_vtse_deferred_q[id] <= 1'b0;
-        if (tile_store_completion_q[id].valid &&
-            (tile_store_completion_d[id].acked == tile_store_completion_q[id].expected)) begin
-          prof_vtse_completion_pending_cycles_q <= prof_vtse_completion_pending_cycles_q + 64'd1;
-          if (vrf_mem_finished || vrf_rsp_valid) begin
-            prof_vrf_rsp_delays_vtse_q <= prof_vrf_rsp_delays_vtse_q + 64'd1;
-            if (!prof_vtse_deferred_q[id]) begin
-              prof_vtse_completion_deferred_count_q <= prof_vtse_completion_deferred_count_q + 64'd1;
-              prof_vtse_deferred_q[id] <= 1'b1;
-              $display("[SPATZ_TRACE][VLSU_DEFER][%m] time=%0t vrf_mem_finished=%0b vrf_store_finished=%0b vrf_rsp_valid=%0b vrf_rsp_id=%0d vtse_id=%0d vlsu_rsp_valid=%0b vlsu_rsp_id=%0d commit_valid=%0b commit_id=%0d commit_load=%0b acked=%0d expected=%0d",
-                       $time, vrf_mem_finished, vrf_store_finished, vrf_rsp_valid,
-                       vrf_rsp.id, id, vlsu_rsp_valid_o, vlsu_rsp_o.id,
-                       commit_insn_valid, commit_insn_q.id, commit_insn_q.is_load,
-                       tile_store_completion_d[id].acked,
-                       tile_store_completion_q[id].expected);
-            end
-          end
-        end
-      end
-
-      if (commit_insn_valid && commit_insn_q.is_load) begin
-        prof_cmt_active_q <= prof_cmt_active_q + 64'd1;
-        if (|commit_counter_en)
-          prof_cmt_prog_q <= prof_cmt_prog_q + 64'd1;
-        else if (!(|vrf_req_valid_d))
-          prof_cmt_wait_data_q <= prof_cmt_wait_data_q + 64'd1;
-        else
-          prof_cmt_wait_vrf_q <= prof_cmt_wait_vrf_q + 64'd1;
-        if (|vrf_commit_waiting_q)
-          prof_cmt_sync_q <= prof_cmt_sync_q + 64'd1;
-      end
-      if (prof_cmt_wait_data && !prof_cmt_has_pending)
-        prof_cmt_wait_no_pending_q <= prof_cmt_wait_no_pending_q + 64'd1;
-      if (prof_cmt_wait_data && prof_cmt_has_pending && !prof_cmt_has_rob)
-        prof_cmt_wait_no_rob_q <= prof_cmt_wait_no_rob_q + 64'd1;
-      if (prof_cmt_wait_data && prof_cmt_has_pending && prof_cmt_has_rob)
-        prof_cmt_wait_partial_rob_q <= prof_cmt_wait_partial_rob_q + 64'd1;
-      if (tile_req_accept && (mem_spatz_req.op == VTLE))
-        prof_vtle_cnt_q <= prof_vtle_cnt_q + 64'd1;
-
-      if (tile_req_accept && mem_is_tile_store)
-        prof_tile_store_cnt_q <= prof_tile_store_cnt_q + 64'd1;
-
-      if (tile_mem_busy)
-        prof_tile_busy_q <= prof_tile_busy_q + 64'd1;
-
-      if (spatz_mem_req_valid[0][0] && spatz_mem_req_ready[0][0] && tile_mem_busy)
-        prof_tile_memreq_fire_q <= prof_tile_memreq_fire_q + 64'd1;
-
-      if (tile_wvalid_o && !tile_wready_i)
-        prof_tile_wready_stall_q <= prof_tile_wready_stall_q + 64'd1;
-
-      if (tile_rvalid_o && !tile_rready_i)
-        prof_tile_rready_stall_q <= prof_tile_rready_stall_q + 64'd1;
-
-      if (tile_mem_busy && (mem_req_svalid[0][0] || mem_req_lvalid[0][0]))
-        prof_vrf_blocked_by_tile_q <= prof_vrf_blocked_by_tile_q + 64'd1;
-
-      if (tile_mem_busy && !tile_ctx_q.req.op_mem.is_load) begin
-        prof_tile_store_active_q <= prof_tile_store_active_q + 64'd1;
-        unique case (tile_state_q)
-          Tile_GatherRead: begin
-            prof_tile_store_gather_q <= prof_tile_store_gather_q + 64'd1;
-            if (!tile_rready_i)
-              prof_tile_store_gather_wait_q <= prof_tile_store_gather_wait_q + 64'd1;
-          end
-          Tile_MemReq: begin
-            prof_tile_store_memreq_q <= prof_tile_store_memreq_q + 64'd1;
-            if (!tile_store_req_fire)
-              prof_tile_store_memreq_wait_q <= prof_tile_store_memreq_wait_q + 64'd1;
-          end
-          Tile_Done: begin
-            prof_tile_store_done_q <= prof_tile_store_done_q + 64'd1;
-            if (vrf_rsp_valid)
-              prof_tile_store_done_wait_q <= prof_tile_store_done_wait_q + 64'd1;
-          end
-          default: ;
-        endcase
-      end
-
-      if (tile_store_req_fire) begin
-        prof_tile_store_memreq_fire_q <= prof_tile_store_memreq_fire_q + 64'd1;
-        prof_tile_store_req_beat_q    <= prof_tile_store_req_beat_q + 64'(tile_mem_req_count);
-        for (int size_idx = 0; size_idx <= 8; size_idx++) begin
-          if (int'(tile_mem_req_count) == size_idx)
-            prof_tile_mem_req_count_q[size_idx] <= prof_tile_mem_req_count_q[size_idx] + 64'd1;
-        end
-      end
-      if (tile_store_ack_fire != '0)
-        prof_tile_store_ack_beat_q <= prof_tile_store_ack_beat_q + 64'($countones(tile_store_ack_fire));
-      if (tile_store_rsp_valid)
-        prof_tile_store_slice_done_q <= prof_tile_store_slice_done_q + 64'd1;
-      if (tile_store_rsp_valid)
-        prof_tile_store_rsp_fire_q <= prof_tile_store_rsp_fire_q + 64'd1;
-
-	      // Serialization attribution for the registered LSU request at the
-	      // spill output. All LSU scheduling decisions below this point use
-	      // mem_spatz_req, not the incoming spatz_req_i.
-	      if (mem_spatz_req_valid && !mem_spatz_req_ready) begin
-	        if (mem_is_tile_store) begin
-	          if (tile_state_q != Tile_Idle)
-	            prof_ser_tile_store_wait_tilefsm_q   <= prof_ser_tile_store_wait_tilefsm_q + 64'd1;
-	          else if (vrf_store_active)
-	            prof_ser_tile_store_wait_vrf_store_q <= prof_ser_tile_store_wait_vrf_store_q + 64'd1;
-	          else if (vrf_full_mode_active)
-	            prof_ser_tile_store_wait_vrf_full_q  <= prof_ser_tile_store_wait_vrf_full_q + 64'd1;
-	        end else if (mem_is_tile_mem) begin // VTLE
-	          if (!vrf_path_idle)
-	            prof_ser_vtle_wait_vrf_idle_q  <= prof_ser_vtle_wait_vrf_idle_q + 64'd1;
-	        end else begin // VRF load/store
-	          if (mem_is_vrf_store && tile_mem_busy && !tile_ctx_q.req.op_mem.is_load)
-	            prof_ser_vrf_store_wait_tile_q <= prof_ser_vrf_store_wait_tile_q + 64'd1;
-	          else if (commit_insn_full)
-	            prof_ser_vrf_wait_cmtfull_q   <= prof_ser_vrf_wait_cmtfull_q + 64'd1;
-        end
-      end
-
-      prof_ld_req_fire_q     <= prof_ld_req_fire_q + prof_ld_req_fire_incr;
-      prof_ld_rsp_push_q     <= prof_ld_rsp_push_q + prof_ld_rsp_push_incr;
-      prof_ld_rob_pop_q      <= prof_ld_rob_pop_q + prof_ld_rob_pop_incr;
-      prof_ld_vrf_req_fire_q <= prof_ld_vrf_req_fire_q + prof_ld_vrf_req_fire_incr;
-
-      for (int intf = 0; intf < NrInterfaces; intf++) begin
-        if (vrf_req_valid_d[intf])
-          prof_vrf_in_req_q[intf] <= prof_vrf_in_req_q[intf] + 64'd1;
-        if (vrf_req_valid_d[intf] && !vrf_req_ready_d[intf])
-          prof_vrf_in_stall_q[intf] <= prof_vrf_in_stall_q[intf] + 64'd1;
-        if (vrf_req_valid_q[intf])
-          prof_vrf_out_valid_q[intf] <= prof_vrf_out_valid_q[intf] + 64'd1;
-        if (vrf_req_valid_q[intf] && !vrf_we_o[intf])
-          prof_vrf_out_sync_stall_q[intf] <= prof_vrf_out_sync_stall_q[intf] + 64'd1;
-        if (vrf_we_o[intf] && !vrf_wvalid_i[intf])
-          prof_vrf_out_port_stall_q[intf] <= prof_vrf_out_port_stall_q[intf] + 64'd1;
-        if (vrf_we_o[intf] && vrf_wvalid_i[intf])
-          prof_vrf_out_fire_q[intf] <= prof_vrf_out_fire_q[intf] + 64'd1;
-      end
-      if (&vrf_req_valid_q)
-        prof_vrf_dual_out_valid_q <= prof_vrf_dual_out_valid_q + 64'd1;
-      if (&(vrf_we_o & vrf_wvalid_i))
-        prof_vrf_dual_out_fire_q <= prof_vrf_dual_out_fire_q + 64'd1;
-    end
-  end
-
-  logic [63:0] dbg_cmt_stuck_cnt_q;
-  logic [63:0] dbg_tile_store_req_stuck_cnt_q;
-  logic [63:0] dbg_tile_store_stuck_cnt_q;
-  logic [63:0] dbg_vlsu_ready_stuck_cnt_q;
-  always_ff @(posedge clk_i or negedge rst_ni) begin : dbg_vlsu_cmt_stuck
-    if (!rst_ni) begin
-      dbg_cmt_stuck_cnt_q <= '0;
-      dbg_tile_store_req_stuck_cnt_q <= '0;
-      dbg_tile_store_stuck_cnt_q <= '0;
-      dbg_vlsu_ready_stuck_cnt_q <= '0;
-    end else begin
-      if (commit_insn_valid && commit_insn_q.is_load && !vrf_rsp_valid &&
-          !tile_rsp_valid) begin
-        dbg_cmt_stuck_cnt_q <= dbg_cmt_stuck_cnt_q + 64'd1;
-`ifdef SPATZ_VLSU_TRACE
-        if (dbg_cmt_stuck_cnt_q[5:0] == 6'h3f) begin
-          $display("[SPATZ_TRACE][VLSU_CMT_WAIT] cyc=%0t id=%0d vd=%0d vl=%0d state=%0d busy=%0b mem_done=%0b rsp=%0b done=%0b reqv=%0b resp_intf=%0b",
-                   $time,
-                   commit_insn_q.id,
-                   commit_insn_q.vd,
-                   commit_insn_q.vl,
-                   state_q,
-                   busy_q,
-                   mem_insn_finished_q[commit_insn_q.id],
-                   vrf_rsp_valid,
-                   vrf_rsp_commit_done,
-                   vrf_rsp_req_valid,
-                   resp_intf);
-          $display("[SPATZ_TRACE][VLSU_CMT_WAIT] pending=%b rob=%b rob_empty=%b c_en=%b c_done_q=%b c_done_d=%b vrf_d=%b vrf_d_rdy=%b vrf_q=%b vrf_we=%b vrf_wvalid=%b wait=%b active=%b",
-                   mem_pending,
-                   rob_rvalid,
-                   rob_empty,
-                   commit_counter_en,
-                   commit_finished_q,
-                   commit_finished_d,
-                   vrf_req_valid_d,
-                   vrf_req_ready_d,
-                   vrf_req_valid_q,
-                   vrf_we_o,
-                   vrf_wvalid_i,
-                   vrf_commit_waiting_q,
-                   vrf_rsp_intf_active);
-          $display("[SPATZ_TRACE][VLSU_CMT_WAIT] c0=%0d/%0d %0d/%0d %0d/%0d %0d/%0d c1=%0d/%0d %0d/%0d %0d/%0d %0d/%0d",
-                   commit_counter_q[0][0], commit_counter_max[0][0],
-                   commit_counter_q[0][1], commit_counter_max[0][1],
-                   commit_counter_q[0][2], commit_counter_max[0][2],
-                   commit_counter_q[0][3], commit_counter_max[0][3],
-                   commit_counter_q[1][0], commit_counter_max[1][0],
-                   commit_counter_q[1][1], commit_counter_max[1][1],
-                   commit_counter_q[1][2], commit_counter_max[1][2],
-                   commit_counter_q[1][3], commit_counter_max[1][3]);
-        end
-`endif
-      end else begin
-        dbg_cmt_stuck_cnt_q <= '0;
-      end
-	      if (mem_is_tile_store && !mem_spatz_req_ready) begin
-	        dbg_tile_store_req_stuck_cnt_q <= dbg_tile_store_req_stuck_cnt_q + 64'd1;
-`ifdef SPATZ_VLSU_TRACE
-	        if (dbg_tile_store_req_stuck_cnt_q[5:0] == 6'h3f) begin
-	          $display("[SPATZ_TRACE][VLSU_VTSE_WAIT] cyc=%0t cnt=%0d ready_o=%0b mem_ready=%0b spill_ready=%0b tile_state=%0d req=%0d chunks=%0d norm_store=%0b norm_full=%0b norm_idle=%0b cmt_v=%0b cmt_load=%0b busy=%0b wr_pend=%0b vrf_v=%b mem_pend=%b",
-	                   $time,
-	                   dbg_tile_store_req_stuck_cnt_q,
-	                   spatz_req_ready_o,
-	                   mem_spatz_req_ready,
-	                   spatz_req_ready,
-	                   tile_state_q,
-	                   tile_store_req_count_q,
-	                   tile_num_chunks,
-                   vrf_store_active,
-                   vrf_full_mode_active,
-                   vrf_path_idle,
-                   commit_insn_valid,
-                   commit_insn_q.is_load,
-                   busy_q,
-                   write_pending,
-                   vrf_req_valid_q,
-                   mem_insn_pending_q);
-        end
-`endif
-      end else begin
-        dbg_tile_store_req_stuck_cnt_q <= '0;
-      end
-      if (tile_mem_busy && !tile_ctx_q.req.op_mem.is_load && !tile_rsp_valid) begin
-        dbg_tile_store_stuck_cnt_q <= dbg_tile_store_stuck_cnt_q + 64'd1;
-`ifdef SPATZ_VLSU_TRACE
-        if (dbg_tile_store_stuck_cnt_q[5:0] == 6'h3f) begin
-          $display("[SPATZ_TRACE][VLSU_TILE_STORE_WAIT] cyc=%0t cnt=%0d state=%0d id=%0d tile=%0d row=%0d col=%0b bytes=%0d byte=%0d sent=%0d chunks=%0d req=%0d wave_ready=%0b wave_fire=%0b wave_size=%0d pactive=%b mem_v=%b mem_r=%b tile_r=%0b/%0b tile_w=%0b/%0b rsp=%0b norm_rsp=%0b",
-                   $time,
-                   dbg_tile_store_stuck_cnt_q,
-                   tile_state_q,
-                   tile_ctx_q.req.id,
-                   tile_ctx_q.access.idx,
-                   tile_ctx_q.access.row,
-                   tile_ctx_q.col,
-                   tile_ctx_q.bytes,
-                   tile_ctx_q.byte_off,
-                   tile_ctx_q.chunk_sent,
-                   tile_num_chunks,
-                   tile_store_req_count_q,
-                   tile_mem_req_ready,
-                   tile_store_req_fire,
-                   tile_mem_req_count,
-                   tile_mem_req_mask,
-                   spatz_mem_req_valid_o,
-                   spatz_mem_req_ready_i,
-                   tile_rvalid_o,
-                   tile_rready_i,
-                   tile_wvalid_o,
-                   tile_wready_i,
-                   tile_rsp_valid,
-                   vrf_rsp_valid);
-        end
-`endif
-      end else begin
-        dbg_tile_store_stuck_cnt_q <= '0;
-      end
-	      if (!spatz_req_ready_o || (mem_spatz_req_valid && !mem_spatz_req_ready)) begin
-	        dbg_vlsu_ready_stuck_cnt_q <= dbg_vlsu_ready_stuck_cnt_q + 64'd1;
-`ifdef SPATZ_VLSU_TRACE
-	        if (dbg_vlsu_ready_stuck_cnt_q[5:0] == 6'h3f) begin
-	          $display("[SPATZ_TRACE][VLSU_READY_WAIT] cyc=%0t cnt=%0d ready_o=%0b spill_ready=%0b mem_ready=%0b req_i_v=%0b req_i_op=%0d mem_req_v=%0b mem_req_op=%0d mem_tile=%0b mem_vtse=%0b tile_ready=%0b normal_ready=%0b cmt_empty=%0b cmt_full=%0b cmt_v=%0b cmt_load=%0b rob_empty=%b busy=%0b wr_pend=%0b vrf_v=%b norm_store=%0b norm_full=%0b norm_pending=%b tile_state=%0d req=%0d tile_busy=%0b",
-	                   $time,
-	                   dbg_vlsu_ready_stuck_cnt_q,
-	                   spatz_req_ready_o,
-	                   spatz_req_ready,
-	                   mem_spatz_req_ready,
-	                   spatz_req_valid_i,
-	                   spatz_req_i.op,
-	                   mem_spatz_req_valid,
-	                   mem_spatz_req.op,
-	                   mem_is_tile_mem,
-	                   mem_is_tile_store,
-	                   tile_req_ready,
-	                   !commit_insn_full && !(tile_mem_busy && tile_ctx_q.req.op_mem.is_load),
-                   commit_insn_empty,
-                   commit_insn_full,
-                   commit_insn_valid,
-                   commit_insn_q.is_load,
-                   rob_empty,
-                   busy_q,
-                   write_pending,
-                   vrf_req_valid_q,
-                   vrf_store_active,
-                   vrf_full_mode_active,
-                   vrf_full_mode_pending,
-                   tile_state_q,
-                   tile_store_req_count_q,
-                   tile_mem_busy);
-        end
-`endif
-      end else begin
-        dbg_vlsu_ready_stuck_cnt_q <= '0;
-      end
-    end
-  end
-
-  final begin
-    $display("[SPATZ_PROF][VLSU_TILE][%m] vtle=%0d vtse=%0d tile_busy=%0d tile_memreq_fire=%0d tile_wready_stall=%0d tile_rready_stall=%0d normal_blocked_by_tile=%0d",
-             prof_vtle_cnt_q,
-             prof_tile_store_cnt_q,
-             prof_tile_busy_q,
-             prof_tile_memreq_fire_q,
-             prof_tile_wready_stall_q,
-             prof_tile_rready_stall_q,
-             prof_vrf_blocked_by_tile_q);
-    $display("[SPATZ_PROF][VLSU_SER][%m] vtse_wait_tilefsm=%0d vtse_wait_normstore=%0d vtse_wait_normfull=%0d vtle_wait_normidle=%0d normstore_wait_tile=%0d norm_wait_cmtfull=%0d",
-             prof_ser_tile_store_wait_tilefsm_q,
-             prof_ser_tile_store_wait_vrf_store_q,
-             prof_ser_tile_store_wait_vrf_full_q,
-             prof_ser_vtle_wait_vrf_idle_q,
-             prof_ser_vrf_store_wait_tile_q,
-             prof_ser_vrf_wait_cmtfull_q);
-    $display("[SPATZ_PROF][VTSE_FSM][%m] active=%0d gather=%0d gather_wait=%0d memreq=%0d memreq_wait=%0d done=%0d done_wait=%0d memreq_fire=%0d rsp_fire=%0d",
-             prof_tile_store_active_q,
-             prof_tile_store_gather_q,
-             prof_tile_store_gather_wait_q,
-             prof_tile_store_memreq_q,
-             prof_tile_store_memreq_wait_q,
-             prof_tile_store_done_q,
-             prof_tile_store_done_wait_q,
-             prof_tile_store_memreq_fire_q,
-             prof_tile_store_rsp_fire_q);
-    $display("[SPATZ_PROF][VTSE_WAVE][%m] size0=%0d size1=%0d size2=%0d size3=%0d size4=%0d size5=%0d size6=%0d size7=%0d size8=%0d",
-             prof_tile_mem_req_count_q[0],
-             prof_tile_mem_req_count_q[1],
-             prof_tile_mem_req_count_q[2],
-             prof_tile_mem_req_count_q[3],
-             prof_tile_mem_req_count_q[4],
-             prof_tile_mem_req_count_q[5],
-             prof_tile_mem_req_count_q[6],
-             prof_tile_mem_req_count_q[7],
-             prof_tile_mem_req_count_q[8]);
-    $display("[SPATZ_PROF][VTSE_BEAT][%m] req_beat=%0d ack_beat=%0d slice_done=%0d",
-             prof_tile_store_req_beat_q,
-             prof_tile_store_ack_beat_q,
-             prof_tile_store_slice_done_q);
-    $display("[SPATZ_PROF][VLSU_CMT][%m] cmt_active=%0d prog=%0d wait_data=%0d wait_vrf=%0d sync=%0d",
-             prof_cmt_active_q,
-             prof_cmt_prog_q,
-             prof_cmt_wait_data_q,
-             prof_cmt_wait_vrf_q,
-             prof_cmt_sync_q);
-    $display("[SPATZ_PROF][VLSU_LDPIPE][%m] req_fire=%0d rsp_push=%0d rob_pop=%0d vrf_req_fire=%0d wait_no_pending=%0d wait_no_rob=%0d wait_partial_rob=%0d",
-             prof_ld_req_fire_q,
-             prof_ld_rsp_push_q,
-             prof_ld_rob_pop_q,
-             prof_ld_vrf_req_fire_q,
-             prof_cmt_wait_no_pending_q,
-             prof_cmt_wait_no_rob_q,
-             prof_cmt_wait_partial_rob_q);
-    $display("[SPATZ_PROF][VLSU_VRF][%m] in_req0=%0d in_stall0=%0d out_valid0=%0d out_sync_stall0=%0d out_port_stall0=%0d out_fire0=%0d in_req1=%0d in_stall1=%0d out_valid1=%0d out_sync_stall1=%0d out_port_stall1=%0d out_fire1=%0d dual_valid=%0d dual_fire=%0d",
-             prof_vrf_in_req_q[0],
-             prof_vrf_in_stall_q[0],
-             prof_vrf_out_valid_q[0],
-             prof_vrf_out_sync_stall_q[0],
-             prof_vrf_out_port_stall_q[0],
-             prof_vrf_out_fire_q[0],
-             prof_vrf_in_req_q[1],
-             prof_vrf_in_stall_q[1],
-             prof_vrf_out_valid_q[1],
-             prof_vrf_out_sync_stall_q[1],
-             prof_vrf_out_port_stall_q[1],
-             prof_vrf_out_fire_q[1],
-             prof_vrf_dual_out_valid_q,
-             prof_vrf_dual_out_fire_q);
-    $display("[SPATZ_PROF][VLSU_RSP][%m] internal_collision=%0d actual_collision=%0d vrf_delays_vtse=%0d vtse_pending_cycles=%0d vtse_deferred=%0d vtle_deferred=%0d rsp_vrf=%0d rsp_vtse=%0d rsp_vtle=%0d",
-             prof_vrf_internal_finished_and_tile_rsp_q,
-             prof_vrf_rsp_and_tile_rsp_q,
-             prof_vrf_rsp_delays_vtse_q,
-             prof_vtse_completion_pending_cycles_q,
-             prof_vtse_completion_deferred_count_q,
-             prof_tile_load_completion_deferred_count_q,
-             prof_vlsu_rsp_vrf_count_q,
-             prof_vlsu_rsp_vtse_count_q,
-             prof_vlsu_rsp_vtle_count_q);
-    $display("[SPATZ_PROF][VLSU_END][%m] commit_empty=%0b rob_empty=%b tag_empty=%b vtse_valid=%b rsp_pending=%0b",
-             commit_insn_empty,
-             rob_empty,
-             tag_fifo_empty,
-             {tile_store_completion_q[3].valid, tile_store_completion_q[2].valid,
-              tile_store_completion_q[1].valid, tile_store_completion_q[0].valid},
-             vlsu_rsp_valid_o);
-  end
-`endif
-
   always_comb begin
     // Maintain state
     mem_pending_d = mem_pending_q;
@@ -2201,10 +1451,8 @@ module spatz_doublebw_vlsu
           mem_pending_d[intf][fu]--;
 
         // Drop a pending bit when no request or response can clear it later.
-        if (commit_insn_valid && commit_insn_q.is_load &&
-            (mem_pending_d[intf][fu] != '0) && tag_fifo_empty[port] &&
-            !spatz_mem_req_valid_o[port] && !spatz_mem_rsp_valid_i[port] &&
-            rob_empty[intf][fu]) begin
+        if (commit_insn_valid && commit_insn_q.is_load && (mem_pending_d[intf][fu] != '0) && tag_empty[port] &&
+            !spatz_mem_req_valid_o[port] && !spatz_mem_rsp_valid_i[port] && rob_empty[intf][fu]) begin
           mem_pending_d[intf][fu] = '0;
         end
       end
@@ -2233,10 +1481,8 @@ module spatz_doublebw_vlsu
       mem_req_last[intf]   = '0;
 
       // Propagate request ID
-      vrf_req_d[intf].rsp.id    = commit_insn_q.id;
-      vrf_req_d[intf].rsp.intf_id = intf;
-      vrf_req_d[intf].rsp_valid = commit_insn_valid && &commit_finished_d[intf] && mem_insn_finished_d[commit_insn_q.id];
-      vrf_req_d[intf].commit_vl = commit_insn_q.vl;
+      vrf_req_d[intf].id   = commit_insn_q.id;
+      vrf_req_d[intf].last = commit_insn_valid && &commit_finished_d[intf];
 
       // Request indexes
       vrf_re_o[intf][1] = mem_is_indexed;
@@ -2256,7 +1502,7 @@ module spatz_doublebw_vlsu
           // Enable write back from an interface to the VRF if we have a valid element in all
           // the interface buffers that still have to write something back.
           vrf_req_d[intf].waddr = vd_vreg_addr[intf];
-          vrf_req_valid_d[intf] = &(rob_rvalid[intf] | ~mem_pending[intf]) && |mem_pending[intf];
+          vrf_req_valid_d[intf] = &(rob_commit_valid[intf] | ~commit_operation_valid[intf]) && |commit_operation_valid[intf];
 
 	          for (int unsigned fu = 0; fu < N_FU; fu++) begin
 	            int unsigned port;
@@ -2269,14 +1515,18 @@ module spatz_doublebw_vlsu
 
             // Shift data to correct position if we have an unaligned memory request
             if (MAXEW == EW_32)
-              unique case ((commit_insn_q.is_strided || commit_insn_q.is_indexed) ? vreg_addr_offset[intf][fu] : commit_insn_q.rs1[1:0])
+              unique case (
+                  (commit_insn_q.is_strided || commit_insn_q.is_indexed) ?
+                  vreg_addr_offset[intf][fu] : commit_insn_q.rs1[1:0])
                 2'b01: data   = {data[7:0], data[31:8]};
                 2'b10: data   = {data[15:0], data[31:16]};
                 2'b11: data   = {data[23:0], data[31:24]};
                 default: data = data;
               endcase
             else
-              unique case ((commit_insn_q.is_strided || commit_insn_q.is_indexed) ? vreg_addr_offset[intf][fu] : commit_insn_q.rs1[2:0])
+              unique case (
+                  (commit_insn_q.is_strided || commit_insn_q.is_indexed) ?
+                  vreg_addr_offset[intf][fu] : commit_insn_q.rs1[2:0])
                 3'b001: data  = {data[7:0], data[63:8]};
                 3'b010: data  = {data[15:0], data[63:16]};
                 3'b011: data  = {data[23:0], data[63:24]};
@@ -2288,7 +1538,7 @@ module spatz_doublebw_vlsu
               endcase
 
             // Pop stored element and free space in buffer
-            rob_pop[intf][fu] = rob_rvalid[intf][fu] && vrf_req_valid_d[intf] && vrf_req_ready_d[intf] && commit_counter_en[intf][fu];
+            rob_pop[intf][fu] = rob_commit_valid[intf][fu] && vrf_req_valid_d[intf] && vrf_req_ready_d[intf] && commit_counter_en[intf][fu];
 
             // Shift data to correct position if we have a strided memory access
             if (commit_insn_q.is_strided || commit_insn_q.is_indexed)
@@ -2340,12 +1590,10 @@ module spatz_doublebw_vlsu
 `ifdef MEMPOOL_SPATZ
           rob_wid[intf][fu]   = spatz_mem_rsp_i[port].id;
           // Need to consider out-of-order memory response
-          rob_push[intf][fu]  = rsp_vrf_load[port] && spatz_mem_rsp_valid_i[port] &&
-                                (state_q == VLSU_RunningLoad) &&
-                                spatz_mem_rsp_i[port].write == '0;
+          rob_push[intf][fu] = rsp_vrf_load[port] && spatz_mem_rsp_valid_i[port] &&
+                               (state_q == VLSU_RunningLoad) && spatz_mem_rsp_i[port].write == '0;
 `else
-          rob_push[intf][fu]  = rsp_vrf_load[port] && spatz_mem_rsp_valid_i[port] &&
-                                (state_q == VLSU_RunningLoad);
+          rob_push[intf][fu] = rsp_vrf_load[port] && spatz_mem_rsp_valid_i[port] && (state_q == VLSU_RunningLoad);
 `endif
           if (!rob_full[intf][fu] && !offset_queue_full[intf][fu] && mem_operation_valid[intf][fu]) begin
             rob_req_id[intf][fu]     = spatz_mem_req_ready[intf][fu] &
@@ -2426,13 +1674,12 @@ module spatz_doublebw_vlsu
             mem_req_svalid[intf][fu] = rob_rvalid[intf][fu] && (!mem_is_indexed || vrf_rvalid_i[intf][1]) && !mem_spatz_req.op_mem.is_load;
             mem_req_id[intf][fu]     = rob_rid[intf][fu];
             mem_req_last[intf][fu]   = mem_operation_last[intf][fu];
-            rob_pop[intf][fu]        = spatz_mem_req_valid[intf][fu] &&
-                                       spatz_mem_req_ready[intf][fu] &&
-                                       !tile_mem_req_valid[intf * N_FU + fu];
+            rob_pop[intf][fu] = spatz_mem_req_valid[intf][fu] && spatz_mem_req_ready[intf][fu] && !tile_mem_req_valid[intf * N_FU + fu];
 
 	            // Create byte enable signal for memory request
 	            if (mem_is_single_element_operation) begin
-	              shift = (mem_is_strided || mem_is_indexed) ? mem_req_addr_offset[intf][fu] : mem_counter_q[intf][fu][$clog2(ELENB)-1:0] + commit_insn_q.rs1[int'(MAXEW)-1:0];
+	              shift = (mem_is_strided || mem_is_indexed) ? mem_req_addr_offset[intf][fu] :
+                      mem_counter_q[intf][fu][$clog2(ELENB)-1:0] + commit_insn_q.rs1[int'(MAXEW)-1:0];
 	              mask  = '1;
 	              case (mem_spatz_req.vtype.vsew)
 	                EW_8 : mask   = 1;
@@ -2459,17 +1706,15 @@ module spatz_doublebw_vlsu
   for (genvar intf = 0; intf < NrInterfaces; intf++) begin : gen_mem_req
     for (genvar fu = 0; fu < N_FU; fu++) begin : gen_mem_req
       localparam int unsigned port = intf * N_FU + fu;
-      logic tile_mem_port_req_valid;
       logic mem_drv_ready;
       logic mem_drv_valid;
       logic tag_drv_ready;
       logic tag_drv_valid;
       mem_req_tag_t tag_drv;
 
-      assign tile_mem_port_req_valid = tile_mem_req_valid[port];
-      assign tag_drv = '{tile_owned: tile_mem_port_req_valid,
+      assign tag_drv = '{tile_owned: tile_mem_req_valid[port],
                          write:      spatz_mem_req[intf][fu].write,
-                         id:         tile_mem_port_req_valid ? tile_ctx_q.req.id : mem_spatz_req.id,
+                         id:         tile_mem_req_valid[port] ? tile_ctx_q.req.id : mem_spatz_req.id,
                          chunk:      tile_chunk_cnt_t'(tile_ctx_q.chunk_sent + port)};
 
       spill_register #(
@@ -2482,8 +1727,7 @@ module spatz_doublebw_vlsu
         .ready_o (mem_drv_ready            ),
         .data_o  (spatz_mem_req_o[port]    ),
         .valid_o (mem_drv_valid            ),
-        .ready_i (spatz_mem_req_ready_i[port] && tag_drv_valid &&
-                  !tag_fifo_full[port])
+        .ready_i (spatz_mem_req_ready_i[port] && tag_drv_valid && !tag_full[port])
       );
 
       spill_register #(
@@ -2496,49 +1740,37 @@ module spatz_doublebw_vlsu
         .ready_o (tag_drv_ready            ),
         .data_o  (spatz_mem_req_tag_o[port]),
         .valid_o (tag_drv_valid            ),
-        .ready_i (spatz_mem_req_ready_i[port] && mem_drv_valid &&
-                  !tag_fifo_full[port])
+        .ready_i (spatz_mem_req_ready_i[port] && mem_drv_valid && !tag_full[port])
       );
 
       assign spatz_mem_req_ready[intf][fu] = mem_drv_ready && tag_drv_ready;
-      assign spatz_mem_req_valid_o[port] = mem_drv_valid && tag_drv_valid &&
-                                           !tag_fifo_full[port];
-      assign mem_out_fire[port]          = spatz_mem_req_valid_o[port] &&
-                                           spatz_mem_req_ready_i[port];
+      assign spatz_mem_req_valid_o[port] = mem_drv_valid && tag_drv_valid && !tag_full[port];
+      assign mem_out_fire[port] = spatz_mem_req_valid_o[port] && spatz_mem_req_ready_i[port];
 
 `ifdef MEMPOOL_SPATZ
       // ID is required in Mempool-Spatz
-      assign spatz_mem_req[intf][fu].id    = tile_mem_port_req_valid ? '0 :  mem_req_id[intf][fu];
-      assign spatz_mem_req[intf][fu].addr  = tile_mem_port_req_valid ?
-          tile_mem_req[port].addr :
-          mem_req_addr[intf][fu];
+      assign spatz_mem_req[intf][fu].id    = tile_mem_req_valid[port] ? '0 :  mem_req_id[intf][fu];
+      assign spatz_mem_req[intf][fu].addr = tile_mem_req_valid[port] ? tile_mem_req[port].addr : mem_req_addr[intf][fu];
       assign spatz_mem_req[intf][fu].mode  = '0; // Request always uses user privilege level
-      assign spatz_mem_req[intf][fu].size  = tile_mem_port_req_valid ?
-          (tile_load_req_valid[port] ? tile_ctx_q.req.op_mem.ew[1:0] :
-                                   tile_ctx_q.req.op_mem.ew[1:0]) :
-          mem_spatz_req.vtype.vsew[1:0];
-      assign spatz_mem_req[intf][fu].write = tile_mem_port_req_valid ? tile_store_req_valid[port] :
-                                                              !mem_is_load;
-      assign spatz_mem_req[intf][fu].strb  = tile_mem_port_req_valid ?
-          (tile_load_req_valid[port] ? '0 : tile_mem_req[port].strb) : mem_req_strb[intf][fu];
-      assign spatz_mem_req[intf][fu].data  = tile_mem_port_req_valid ? tile_mem_req[port].data : mem_req_data[intf][fu];
-      assign spatz_mem_req[intf][fu].last  = tile_mem_port_req_valid ?
-          tile_mem_req[port].last :
-          mem_req_last[intf][fu];
+      assign spatz_mem_req[intf][fu].size = tile_mem_req_valid[port] ? tile_ctx_q.req.op_mem.ew[1:0] : mem_spatz_req.vtype.vsew[1:0];
+      assign spatz_mem_req[intf][fu].write = tile_mem_req_valid[port] ? !tile_ctx_q.req.op_mem.is_load : !mem_is_load;
+      assign spatz_mem_req[intf][fu].strb  = tile_mem_req_valid[port] ?
+          (tile_ctx_q.req.op_mem.is_load ? '0 : tile_mem_req[port].strb) : mem_req_strb[intf][fu];
+      assign spatz_mem_req[intf][fu].data = tile_mem_req_valid[port] ? tile_mem_req[port].data : mem_req_data[intf][fu];
+      assign spatz_mem_req[intf][fu].last = tile_mem_req_valid[port] ? tile_mem_req[port].last : mem_req_last[intf][fu];
       assign spatz_mem_req[intf][fu].spec  = 1'b0; // Request is never speculative
-      assign spatz_mem_req_valid[intf][fu] = tile_mem_port_req_valid ? 1'b1 : (!tile_mem_port_busy[port] && (mem_req_svalid[intf][fu] || mem_req_lvalid[intf][fu]));
+      assign spatz_mem_req_valid[intf][fu] = tile_mem_req_valid[port] ? 1'b1 :
+          (!tile_mem_port_busy[port] && (mem_req_svalid[intf][fu] || mem_req_lvalid[intf][fu]));
 `else
-      assign spatz_mem_req[intf][fu].addr  = tile_mem_port_req_valid ?
-          tile_mem_req[port].addr :
-          mem_req_addr[intf][fu];
-      assign spatz_mem_req[intf][fu].write = tile_mem_port_req_valid ? tile_store_req_valid[port] :
-                                                              !mem_is_load;
+      assign spatz_mem_req[intf][fu].addr = tile_mem_req_valid[port] ? tile_mem_req[port].addr : mem_req_addr[intf][fu];
+      assign spatz_mem_req[intf][fu].write = tile_mem_req_valid[port] ? !tile_ctx_q.req.op_mem.is_load : !mem_is_load;
       assign spatz_mem_req[intf][fu].amo   = reqrsp_pkg::AMONone;
-      assign spatz_mem_req[intf][fu].data  = tile_mem_port_req_valid ? tile_mem_req[port].data : mem_req_data[intf][fu];
-      assign spatz_mem_req[intf][fu].strb  = tile_mem_port_req_valid ?
-          (tile_load_req_valid[port] ? '0 : tile_mem_req[port].strb) : mem_req_strb[intf][fu];
+      assign spatz_mem_req[intf][fu].data = tile_mem_req_valid[port] ? tile_mem_req[port].data : mem_req_data[intf][fu];
+      assign spatz_mem_req[intf][fu].strb = tile_mem_req_valid[port] ?
+          (tile_ctx_q.req.op_mem.is_load ? '0 : tile_mem_req[port].strb) : mem_req_strb[intf][fu];
       assign spatz_mem_req[intf][fu].user  = '0;
-      assign spatz_mem_req_valid[intf][fu] = tile_mem_port_req_valid ? 1'b1 : (!tile_mem_port_busy[port] && (mem_req_svalid[intf][fu] || mem_req_lvalid[intf][fu]));
+      assign spatz_mem_req_valid[intf][fu] = tile_mem_req_valid[port] ? 1'b1 :
+          (!tile_mem_port_busy[port] && (mem_req_svalid[intf][fu] || mem_req_lvalid[intf][fu]));
 `endif
     end
   end

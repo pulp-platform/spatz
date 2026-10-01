@@ -69,9 +69,9 @@ module spatz_ope
   // Capacity bound for maximum LMUL=8; the number of VRF words is independent of TEW.
   localparam MaxVtGroupWords = 8 * NrWordsPerVector;
 
-  ////////////////////////////////////////////////////////////////////////
-  ////                  Shared Types and Signals                      ////
-  ////////////////////////////////////////////////////////////////////////
+  /*------------------------------------------------------------*/
+  /*                  Shared Types and Signals                  */
+  /*------------------------------------------------------------*/
 
   typedef logic [$clog2(GroupsPerEdge+1)-1:0] group_count_t;
   typedef logic [$clog2(MaxVtGroupWords+1)-1:0] vt_word_count_t;
@@ -233,9 +233,9 @@ module spatz_ope
   logic [NrPhysicalTile-1:0] tile_read_pipe_conflict, tile_write_pipe_conflict;
   logic tile_write_mac_conflict, tile_write_zero_conflict;
 
-  ////////////////////////////////////////////////////////////////////////
-  ////                 Request Queues and Arbitration                 ////
-  ////////////////////////////////////////////////////////////////////////
+  /*------------------------------------------------------------*/
+  /*               Request Queues and Arbitration               */
+  /*------------------------------------------------------------*/
 
   // A blocked queue head must neither execute nor win arbitration over an
   // older operation in another queue. Matrix grants describe older IDs only.
@@ -244,7 +244,8 @@ module spatz_ope
   assign vt_req_valid = vt_queue_valid && matrix_enable_i[spatz_req_vt.id];
   assign clean_req_valid = clean_queue_valid && matrix_enable_i[spatz_req_clean.id];
 
-  stream_fifo #( .FALL_THROUGH(1'b0       ),
+  stream_fifo #(
+    .FALL_THROUGH(1'b0       ),
     .DEPTH       (4          ),
     .T           (spatz_req_t)
   ) i_op_mac_queue ( 
@@ -297,17 +298,11 @@ module spatz_ope
 
   // Shared Request Arbitration
   always_comb begin : req_ready_proc
-
     mac_req_ready    = 1'b0;
     vt_req_ready     = 1'b0;
     tv_req_ready     = 1'b0;
     clean_req_ready = 1'b0;
-
-    /*
-    * Preserve OPE command ordering.
-    * Simple commands such as VTZERO/VTDISCARD must complete
-    * before a younger MAC may start.
-    */
+    // Simple commands such as VTZERO/VTDISCARD must complete before a younger MAC may start.
     if (clean_req_valid)
       clean_req_ready = clean_commit_ready && clean_acc_ready;
     else if (vt_req_valid)
@@ -364,7 +359,8 @@ module spatz_ope
     if (fma_pipe_result_valid && !fma_pipe_tag_q[NumPipeRegs-1].write_acc) begin
       result_match  = (fma_pipe_tag_q[NumPipeRegs-1].tile == mac_op_current_q.op.tile) &&
                       (fma_pipe_tag_q[NumPipeRegs-1].beat == mac_beat_q);
-      result_switch =  resident_valid_q && !resident_drain_valid_q && (fma_pipe_tag_q[NumPipeRegs-1].tile == resident_tile_q) &&
+      result_switch = resident_valid_q && !resident_drain_valid_q &&
+                      (fma_pipe_tag_q[NumPipeRegs-1].tile == resident_tile_q) &&
                       (mac_op_current_q.op.tile != resident_tile_q);
     end
     tile_hazard = fma_pipe_tile_busy[mac_op_current_q.op.tile][mac_beat_q] && !result_match;
@@ -408,7 +404,8 @@ module spatz_ope
   end : mac_op_empty_dimension
 
   always_comb begin : mac_op_has_more
-    mac_op_has_more_spatial = (({1'b0, mac_group_col} + 1'b1) < mac_n_groups) || (({1'b0, mac_group_row} + 1'b1) < mac_m_groups);
+    mac_op_has_more_spatial = (({1'b0, mac_group_col} + 1'b1) < mac_n_groups) ||
+                              (({1'b0, mac_group_row} + 1'b1) < mac_m_groups);
     mac_op_has_more_reductions = (({1'b0, mac_reduction_idx} + 1'b1) < mac_op_exec.tk);
     mac_op_has_more_beats = mac_op_has_more_spatial || mac_op_has_more_reductions;
   end : mac_op_has_more
@@ -493,9 +490,9 @@ module spatz_ope
    `FF(mac_beat_q, mac_beat_d, $bits(mac_beat_q)'(0))
    `FF(mac_reduction_q, mac_reduction_d, $bits(mac_reduction_q)'(0))
 
-  ////----------------------------------------------------------------////
-  ////                     Resident Tile State                        ////
-  ////----------------------------------------------------------------////
+  /*------------------------------------------------------------*/
+  /*                    Resident Tile State                     */
+  /*------------------------------------------------------------*/
 
   assign resident_start_fire = mac_fire && !resident_valid_q && (mac_op_beat == SpatialBeatW'(0));
   // A queued MAC must be able to drain a mismatching resident result before
@@ -531,8 +528,8 @@ module spatz_ope
       end else if (!mac_op_current_d.valid && !mac_op_next_d.valid &&
                    clean_req_valid && (spatz_req_clean.op_ope.is_discard)) begin
         start_drain = 1'b1;
-      end else if (!mac_op_current_d.valid && !mac_op_next_d.valid && clean_req_valid && (spatz_req_clean.op_ope.is_zero_tile) &&
-                   (spatz_req_clean.mtd == resident_tile_q)) begin
+      end else if (!mac_op_current_d.valid && !mac_op_next_d.valid && clean_req_valid &&
+                   spatz_req_clean.op_ope.is_zero_tile && (spatz_req_clean.mtd == resident_tile_q)) begin
         start_drain = 1'b1;
       end else if (!mac_op_current_d.valid && !mac_op_next_d.valid &&
                    tile_wvalid_i && (tile_w_req_i.idx == resident_tile_q)) begin
@@ -578,9 +575,9 @@ module spatz_ope
    `FF(resident_drain_tile_q, resident_drain_tile_d, mt_t'(0))
    `FF(resident_drain_writeback_q, resident_drain_writeback_d, 1'b0)
 
-  ////----------------------------------------------------------------////
-  ////                         FMA Pipeline                           ////
-  ////----------------------------------------------------------------////
+  /*------------------------------------------------------------*/
+  /*                        FMA Pipeline                        */
+  /*------------------------------------------------------------*/
 
   assign fma_pipe_ready   = (&fma16_ready) && (&fma32_ready);
   assign fma_pipe_advance = (mac_fire || (|fma_pipe_valid)) && fma_pipe_ready;
@@ -629,8 +626,9 @@ module spatz_ope
   assign fma_pipe_continue_ready = mac_op_exec_valid && &vrf_rvalid_i[1:0] &&
       (fma_pipe_tag_q[NumPipeRegs-1].tile == mac_op_exec.tile) && (fma_pipe_tag_q[NumPipeRegs-1].beat == mac_op_beat);
 
-  assign fma_pipe_result_ready = ((resident_drain_valid_q && (fma_pipe_tag_q[NumPipeRegs-1].tile == resident_drain_tile_q)) ||
-       fma_pipe_drain) ? 1'b1 : (fma_pipe_tag_q[NumPipeRegs-1].write_acc ? mac_commit_ready : fma_pipe_continue_ready);
+  assign fma_pipe_result_ready =
+      ((resident_drain_valid_q && (fma_pipe_tag_q[NumPipeRegs-1].tile == resident_drain_tile_q)) || fma_pipe_drain) ?
+      1'b1 : (fma_pipe_tag_q[NumPipeRegs-1].write_acc ? mac_commit_ready : fma_pipe_continue_ready);
   assign fma_pipe_result_fire = fma_pipe_result_valid && fma_pipe_result_ready;
   assign fma_pipe_result_forward = mac_fire && fma_pipe_result_fire && !resident_drain_valid_q && !fma_pipe_drain &&
       (fma_pipe_tag_q[NumPipeRegs-1].tile == mac_op_exec.tile) && (fma_pipe_tag_q[NumPipeRegs-1].beat == mac_op_beat) &&
@@ -657,7 +655,8 @@ module spatz_ope
       default: vt_elems_per_word = vrf_elem_count_t'(VRFWordWidth / AccElemWidth);
     endcase
     vt_line_elems = (vt_req_q.op_ope.tss.is_row ? vt_req_q.op_ope.tn : vt_req_q.op_ope.tm) > TE ?
-                    tile_count_t'(TE) : tile_count_t'(vt_req_q.op_ope.tss.is_row ? vt_req_q.op_ope.tn : vt_req_q.op_ope.tm);
+                    tile_count_t'(TE) :
+                    tile_count_t'(vt_req_q.op_ope.tss.is_row ? vt_req_q.op_ope.tn : vt_req_q.op_ope.tm);
     vt_line_words = (vt_line_elems + vt_elems_per_word - 1) / vt_elems_per_word;
 
     unique case (vt_req_q.vtype.vlmul)
@@ -686,7 +685,8 @@ module spatz_ope
           tile_count_t'((vt_req_q.vl + vt_line_elems - 1'b1) / vt_line_elems);
 
     if ((vt_line_words != 0) && (requested_lines != 0)) begin
-      vt_active_lines = (group_words / vt_line_words > TE) ? tile_count_t'(TE) : tile_count_t'(group_words / vt_line_words);
+      vt_active_lines = (group_words / vt_line_words > TE) ?
+                        tile_count_t'(TE) : tile_count_t'(group_words / vt_line_words);
       if (vt_active_lines > requested_lines)
         vt_active_lines = requested_lines;
       if (vt_active_lines > remaining_lines)
@@ -744,7 +744,8 @@ module spatz_ope
       default: tv_elems_per_word = vrf_elem_count_t'(VRFWordWidth / AccElemWidth);
     endcase
     tv_line_elems = (tv_req_q.op_ope.tss.is_row ? tv_req_q.op_ope.tn : tv_req_q.op_ope.tm) > TE ?
-                    tile_count_t'(TE) : tile_count_t'(tv_req_q.op_ope.tss.is_row ? tv_req_q.op_ope.tn : tv_req_q.op_ope.tm);
+                    tile_count_t'(TE) :
+                    tile_count_t'(tv_req_q.op_ope.tss.is_row ? tv_req_q.op_ope.tn : tv_req_q.op_ope.tm);
     tv_line_words = (tv_line_elems + tv_elems_per_word - 1) / tv_elems_per_word;
 
     unique case (tv_req_q.vtype.vlmul)
@@ -772,7 +773,8 @@ module spatz_ope
           tile_count_t'((tv_req_q.vl + tv_line_elems - 1'b1) / tv_line_elems);
 
     if ((tv_line_words != 0) && (requested_lines != 0)) begin
-      tv_active_lines = (group_words / tv_line_words > TE) ? tile_count_t'(TE) : tile_count_t'(group_words / tv_line_words);
+      tv_active_lines = (group_words / tv_line_words > TE) ?
+                        tile_count_t'(TE) : tile_count_t'(group_words / tv_line_words);
       if (tv_active_lines > requested_lines)
         tv_active_lines = requested_lines;
       if (tv_active_lines > remaining_lines)
@@ -842,9 +844,9 @@ module spatz_ope
                          !tile_rvalid_i && !tile_wvalid_i;
   end : clean_acc_ready_proc
 
-  ////////////////////////////////////////////////////////////////////////
-  ////                        VRF Port Access                         ////
-  ////////////////////////////////////////////////////////////////////////
+  /*------------------------------------------------------------*/
+  /*                      VRF Port Access                       */
+  /*------------------------------------------------------------*/
 
   // Read ports [0:1] feed MAC vs2/vs1; read port [2] feeds TV.
   // ID [3] accompanies the independent VT write port.
@@ -855,9 +857,9 @@ module spatz_ope
     vrf_id_o[3] = vt_req_q.id;
   end
 
-  ////////////////////////////////////////////////////////////////////////
-  ////                      VRF -> Tile Read   Ports                  ////
-  ////////////////////////////////////////////////////////////////////////
+  /*------------------------------------------------------------*/
+  /*                   VRF -> Tile Read Ports                   */
+  /*------------------------------------------------------------*/
 
   always_comb begin : vrf_re_proc
     logic [3:0] row_stride_regs;
@@ -905,9 +907,9 @@ module spatz_ope
     end
   end
 
-  ////////////////////////////////////////////////////////////////////////
-  ////                      Tile -> VRF Write Port                    ////
-  ////////////////////////////////////////////////////////////////////////
+  /*------------------------------------------------------------*/
+  /*                   Tile -> VRF Write Port                   */
+  /*------------------------------------------------------------*/
 
   always_comb begin : vrf_wr_proc
     tile_dim_t idx;
@@ -984,9 +986,9 @@ module spatz_ope
     end
   end
 
-  ////----------------------------------------------------------------////
-  ////       Shared Accumulator Access and Tile Slice Selection       ////
-  ////----------------------------------------------------------------////
+  /*------------------------------------------------------------*/
+  /*     Shared Accumulator Access and Tile Slice Selection     */
+  /*------------------------------------------------------------*/
 
   typedef struct packed {
     logic [AccTileIdxW-1:0]  tile;
@@ -1182,7 +1184,8 @@ module spatz_ope
         line_word_idx = tile_dim_t'(tv_word_idx_q % tv_line_words);
       end
       idx        = tv_req_q.op_ope.tss.index + line_idx;
-      bank_row   = tv_req_q.op_ope.tss.is_row ? GroupIdxW'(idx / CE) : GroupIdxW'((line_word_idx * tv_elems_per_word) / CE);
+      bank_row = tv_req_q.op_ope.tss.is_row ?
+                 GroupIdxW'(idx / CE) : GroupIdxW'((line_word_idx * tv_elems_per_word) / CE);
 
       acc_vrf_waddr = acc_vrf_raddr;
       for (int row = 0; row < CE; row++) begin
@@ -1214,7 +1217,8 @@ module spatz_ope
           if (tv_req_q.op_ope.tew == EW_8)
             acc_vrf_wdata[row_i % CE][col_i % CE][col_i / CE][tv_acc_sel.byte_offset*8 +: 8] = tv_vrf_data[lane*8 +: 8];
           else if (tv_req_q.op_ope.tew == EW_16)
-            acc_vrf_wdata[row_i % CE][col_i % CE][col_i / CE][tv_acc_sel.byte_offset*8 +: 16] = tv_vrf_data[lane*16 +: 16];
+            acc_vrf_wdata[row_i % CE][col_i % CE][col_i / CE][tv_acc_sel.byte_offset*8 +: 16] =
+                tv_vrf_data[lane*16 +: 16];
           else
             acc_vrf_wdata[row_i % CE][col_i % CE][col_i / CE] = tv_vrf_data[lane*AccElemWidth +: AccElemWidth];
         end
@@ -1247,7 +1251,8 @@ module spatz_ope
             acc_vlsu_wdata[tile_w_req_i.row % CE][col_i % CE][col_i / CE][tile_w_acc_sel.byte_offset*8 +: 16] =
                 tile_w_req_i.data[i*16 +: 16];
           else
-            acc_vlsu_wdata[tile_w_req_i.row % CE][col_i % CE][col_i / CE] = tile_w_req_i.data[i*AccElemWidth +: AccElemWidth];
+            acc_vlsu_wdata[tile_w_req_i.row % CE][col_i % CE][col_i / CE] =
+                tile_w_req_i.data[i*AccElemWidth +: AccElemWidth];
         end
       end
     end
@@ -1363,9 +1368,9 @@ module spatz_ope
     end : gen_acc_col
   end : gen_acc_row
 
-  ////////////////////////////////////////////////////////////////////////
-  ////     FMA Datapath: Operands, Addend and Compute Array           ////
-  ////////////////////////////////////////////////////////////////////////
+  /*------------------------------------------------------------*/
+  /*      FMA Datapath: Operands, Addend and Compute Array      */
+  /*------------------------------------------------------------*/
   
   // FMA operand datapath and clock.
   logic fma_clk;
@@ -1499,9 +1504,9 @@ module spatz_ope
     end : gen_fma_col
   end : gen_fma_row
 
-  ////////////////////////////////////////////////////////////////////////
-  ////                             Commit                             ////
-  ////////////////////////////////////////////////////////////////////////
+  /*------------------------------------------------------------*/
+  /*                           Commit                           */
+  /*------------------------------------------------------------*/
 
   // Response buffers retain IDs under backpressure; the output arbiter selects one completion.
   always_comb begin : mac_commit_rsp_proc
@@ -1606,9 +1611,9 @@ module spatz_ope
     .oup_ready_i (ope_rsp_ready_i )
   );
 
-  ////////////////////////////////////////////////////////////////////////
-  ////              Move and Accumulator State Registers              ////
-  ////////////////////////////////////////////////////////////////////////
+  /*------------------------------------------------------------*/
+  /*            Move and Accumulator State Registers            */
+  /*------------------------------------------------------------*/
 
   always_ff @(posedge clk_i or negedge rst_ni) begin : seq_block
     if (!rst_ni) begin
@@ -1648,9 +1653,9 @@ module spatz_ope
     end
   end : seq_block
 
-  ////////////////////////////////////////////////////////////////////////
-  ////                        Parameter Checks                        ////
-  ////////////////////////////////////////////////////////////////////////
+  /*------------------------------------------------------------*/
+  /*                      Parameter Checks                      */
+  /*------------------------------------------------------------*/
 
   if ((TE == 0) || ((TE & (TE-1)) != 0)) $error("[OPE] TE must be power of 2.");
   if ((CE == 0) || ((CE & (CE-1)) != 0)) $error("[OPE] CE must be power of 2.");
