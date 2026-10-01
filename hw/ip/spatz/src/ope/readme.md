@@ -23,14 +23,16 @@ Decoder + Controller
         |       |                      +-- forward-+              |
         |       |                      ^           | drain/write  |
         |       |                      |           v              |
-        |       +--> TV spill --> VRF read [2] --> Accumulator     |
-        |       +--> VT spill <-- Accumulator --> VRF write        |
+        |       +--> TV spill --> VRF read [2] --> VRF-side port   |
+        |       +--> VT spill <-- VRF-side port --> VRF write      |
         |       +--> Clean spill --> zero metadata / flush         |
         |                                                         |
-        +-- LSU request --> VLSU <--- tile read/write ---> Accumulator
+        +-- LSU request --> VLSU <--> VLSU-side accumulator port
                               |
                               v
                            L1 TCDM
+
+FMA pipeline <--> FMA-side accumulator port
 
 MAC/VT/TV/Clean completion --> response buffers --> arbiter --> Controller
 VLSU completion --------------------------------------------> Controller
@@ -64,6 +66,7 @@ Internal request selection prioritizes Clean, VT, TV, then MAC; active datapaths
 | `TE = TileEdge` | 16 | Maximum logical tile edge |
 | `CE = OPEComputeEdge` | 8 | Outer-product compute edge per beat |
 | `AccElemWidth` | 32 bits | Fixed physical accumulator word width |
+| `VRFWordWidth` | 256 bits | Width of each VRF read/write port |
 | `NumPipeRegs` | 4 | FMA pipeline register stages |
 | `SpatialBeats = (TE / CE)^2` | 4 | Spatial beats for a full tile |
 | `AccDepth` | 16 | Accumulator entries per compute lane |
@@ -141,7 +144,8 @@ An earlier MAC response alone does not prove the storage already contains the la
 TV reads VRF port [2] and maps its data into tile rows/columns using TSS and its word counter.
 `tv_data_latched_q` retains an available VRF word when accumulator access stalls.
 The TEW/tile-ID mux and read-modify-write path preserve bytes and elements outside the selected update.
-Accumulator access must avoid FMA writeback, VT and external tile-port conflicts.
+TV uses the VRF-side accumulator read/write interface. It can overlap an FMA writeback or VLSU transfer to another tile,
+but VT and TV still share the VRF-side grouped read path and same-target dependencies must serialize.
 TV completes after the final accumulator word is written; TEW==SEW is required here too.
 
 ### Clean: `vtzero` and `vtdiscard`
@@ -169,12 +173,14 @@ VTZERO initializes one logical tile; VTDISCARD clears all tile state and must no
 ### Data and Tags
 
 Each `opope_fma` has four distributed register stages. The FP16/FP32 ready signals are aggregated into `fma_pipe_ready`.
-`fma_pipe_advance` advances computation and tag state together. Tags contain tile ID, TEW, spatial beat, lane mask,
-instruction ID and `write_acc`. A single core still has multiple outstanding instructions, so instruction IDs remain necessary.
+`fma_pipe_advance` advances computation and tag state together. Tags contain valid, tile ID, TEW, spatial beat, lane mask and `write_acc`.
+FMA results do not need an instruction ID because MAC completion is generated at issue. Request and response queues still retain IDs
+because one core can have multiple outstanding instructions.
 
-`fma_pipe_count_q` tracks in-flight beats; `fma_pipe_tile_busy_q[tile][beat]` tracks outstanding work per tile/beat.
-Simultaneous issue and result consumption can leave the total count unchanged.
-Consequently, draining one old tile cannot require the entire pipeline count to become zero.
+Each FMA tag stage includes a valid bit. Pipeline empty/full uses OR/AND reductions of the valid vector, while
+`fma_pipe_tile_busy[tile][beat]` is decoded from the four tags. No duplicate occupancy flip-flops or popcount are required.
+Multiple stages with the same tile/beat still reduce to busy. Draining one old tile therefore uses its next-state busy map
+rather than requiring the entire pipeline to become empty.
 
 ### Forwarding
 
@@ -194,6 +200,8 @@ Overlap is permitted only when operand, busy and FMA-ready conditions allow it.
 
 External VTSE/VTLE, VT/TV or clean operations that need resident state trigger a drain.
 Drain completion uses the old tile's next-state busy map, not global pipeline emptiness; successor work may remain in flight.
+Drain state stores only `resident_drain_writeback_q`: VTSE, VTLE and VT/TV preserve old results, while VTZERO and VTDISCARD
+supersede them and can discard the drained values. A full drain-reason enum is therefore unnecessary.
 An external same-tile read can trigger draining even with a younger MAC queued. That younger MAC waits for the read.
 Requiring every queued MAC to disappear first could create a circular wait between VTSE and MAC.
 
@@ -222,20 +230,50 @@ acc_address   = physical_slot * SpatialBeats + spatial_beat
 TEW8 allows all 16 mt IDs, TEW16 requires even IDs, and TEW32 requires multiples of four.
 The same 4 KiB stores 16, 8 or 4 full logical tiles respectively. The physical word width remains 32 bits.
 
-The scalar read port supplies the selected lane/beat addend. Grouped ports support VT/TV and external tile accesses.
+### Three-Side Port Organization
+
+Each lane's `opope_accumulator` exposes three named clients. These are independent address/data paths, not three names for
+one muxed port:
+
+| Side | Read purpose | Write purpose | Transfer organization |
+| --- | --- | --- | --- |
+| FMA | Read one selected lane/beat as the addend | Write one retired FMA result | One 32-bit word per lane |
+| VRF | VT tile-to-vector read and TV read-modify-write | TV vector-to-tile update | Grouped words feeding a `VRFWordWidth` move |
+| VLSU | VTSE tile-row read and VTLE read-modify-write | VTLE memory-to-tile update | `TileDataWidth`, currently 512 bits |
+
+The FMA side uses `fma_raddr_i/fma_rdata_o` and `fma_waddr_i/fma_wdata_i/fma_wen_i`.
+The VRF and VLSU sides each have independent grouped read and write addresses, data and byte enables.
+Consequently, accesses to non-conflicting accumulator locations can occur in the same cycle: for example, an FMA result may
+write one tile while TV updates another and VTSE reads a third.
+
+`RD_PORTS` and `WR_PORTS` do **not** count independent clients. They specify how many consecutive physical accumulator words
+one grouped VRF/VLSU access transfers from a common aligned base address. With TE=16 and CE=8, `GroupsPerEdge=2`; across the
+eight compute columns, two 32-bit words per lane form one 512-bit tile row:
+
+```text
+CE * GroupsPerEdge * AccElemWidth = 8 * 2 * 32 = 512 bits
+```
+
+The implementation derives `AddrWidth`, `RdPortIdxWidth` and `WrPortIdxWidth` from `DEPTH`, `RD_PORTS` and `WR_PORTS`.
+Grouped base addresses are aligned to the corresponding number of consecutive words.
+
+Independent ports do not remove data dependencies. Two writes must serialize when they target an overlapping physical
+tile/beat/byte footprint. Different logical tile IDs can still share a physical 32-bit word under TEW8 or TEW16, so conflict
+decisions must consider the physical slot and byte enables, not only equality of architectural IDs. Read/write behavior for
+the same physical entry must likewise be resolved by the scoreboard, resident drain or explicit forwarding rather than by
+procedural assignment order.
+
 Writes place data into the selected byte/half/word and use byte write enables to preserve sibling tiles.
 TEW8 reads pack selected bytes contiguously, without leaving 32-bit gaps between elements.
 Zero metadata uses the same physical-slot/beat/byte mapping.
 Move elements-per-word counters use `vrf_elem_count_t` so VRFWordWidth/8 fits even when it exceeds TE.
 
-TV, external writes and FMA writeback share the accumulator write mux. FMA writeback is handled last in `acc_access_proc`;
-handshakes must exclude conflicting accepted accesses. Procedural assignment priority alone does not make concurrent requests safe.
-
 ## 5. External Tile Path: VLSU
 
 VTLE/VTSE run in the VLSU, not in the OPE's four request queues.
 VLSU owns TSS interpretation, memory addressing, byte strobes, transactions and completion.
-OPE owns accumulator access, byte selection and resident/busy protection.
+OPE owns accumulator access, byte selection and resident/busy protection. The VLSU-facing read/write path is independent of
+the FMA and VRF-move accumulator paths; this independence is an OPE storage-port property and is separate from TCDM port count.
 
 ### VTSE: Tile to Memory
 
@@ -280,6 +318,63 @@ Scoreboard retirement therefore complements, rather than replaces, resident and 
 In particular, MAC response can precede the final accumulator write.
 
 ## 7. Matrix Scoreboard
+
+### Vector-Register LMUL and TK Tracking
+
+The vector scoreboard separately protects VRF operands. `vreg_group_count` decodes the request's LMUL as one, two, four or
+eight architectural vector registers. Fractional and reserved LMUL encodings conservatively use one register here; legality
+is checked by the configuration path.
+
+For memory operations, a vector load claims every register in its destination LMUL group in `write_table`, while a vector
+store claims every register in its data-source LMUL group in `read_table`. This prevents a consumer from observing only the
+first completed register of a grouped load and prevents a younger writer from overwriting any register still needed by a
+grouped store. Index and other independently encoded operands retain their own dependency handling.
+
+For `vtfmm`, both `vs1` and `vs2` are registered as readers across the complete LMUL group for every active K row. The K-row
+base stride is selected from SEW:
+
+| SEW | K-row register stride |
+| --- | --- |
+| 8 | 2 registers |
+| 16 | 4 registers |
+| 32 | 8 registers |
+
+For example, FP32 with LMUL=2 and `tk=2` records `{v0,v1,v8,v9}` for a source based at v0 and
+`{v16,v17,v24,v25}` for a source based at v16. Each listed register contributes its outstanding writer dependency and is
+entered in `read_table` for WAR protection.
+
+LMUL expands the VRF footprint protected by the scoreboard; it does not independently add OPE MAC steps. MAC execution is
+still controlled by `tm`, `tn` and `tk`: spatial beat address generation crosses vector-register boundaries naturally, while
+`tk` selects the separately strided K rows.
+
+### Address-Aware VRF Chaining in `DOUBLE_BW`
+
+VRF operand availability has three separate meanings which must not be collapsed into one signal:
+
+1. The controller scoreboard decides whether an older producer has written the exact VRF word requested by the consumer.
+2. The shared-read arbiter decides whether OPE owns the physical VRF read ports in the current cycle.
+3. `vrf_rvalid_i` confirms that the read request accepted by those ports produced valid data in the current cycle.
+
+Consequently, OPE must retain `vrf_rvalid_i[0] && vrf_rvalid_i[1]` in `mac_fire`. A low value can mean that OPE did not receive
+the shared-port grant or that the VRF did not accept the read; it does not prove that the architectural register has never been
+written. Likewise, forcing read-valid from an address comparison would be unsafe because the VRF read-during-write behavior may
+return an old or undefined value.
+
+The previous `DOUBLE_BW` chaining gate used the instruction-level `wrote_result_q` pulse. A grouped load can remain in flight
+after writing some of its words, so an already-written A or B word could become inaccessible whenever the same load was writing
+a different word. This unnecessarily stalled `vtfmm` even though its requested operands were resident in the VRF.
+
+The controller now keeps a sticky `vrf_word_ready_q[instruction_id][word_address]` bitmap for outstanding vector loads. The bit
+is set only when the physical VRF write port accepts that exact address. Load metadata records the destination LMUL group's base
+and exclusive word limit. For each consumer port, a load dependency blocks access only when the requested address lies inside
+that producer's range and its corresponding ready bit is clear. Dependencies on non-load producers retain the previous
+instruction-level wrote/done behavior. This also lets one MAC depend on separate A and B loads without requiring either load to
+claim the other operand's address.
+
+The read gate deliberately observes the registered bitmap, not its same-cycle next state. A read of an address written in the
+same cycle waits until the following cycle. Supporting that case without a bubble requires an explicit VLSU-write-to-OPE-read
+forwarding path; asserting valid early is not equivalent. The bitmap is cleared when the load retires or its instruction ID is
+reused. This address-aware mechanism is compiled only for `DOUBLE_BW`; the non-double-bandwidth scoreboard remains unchanged.
 
 `matrix_table_q` records outstanding instruction dependencies, not matrix data.
 Each entry contains a footprint mask, read/write classification, MAC/LSU classification and older instruction dependencies.

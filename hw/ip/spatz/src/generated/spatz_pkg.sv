@@ -78,7 +78,7 @@ package spatz_pkg;
 `ifdef VENTAGLIO
   localparam int unsigned NrParallelInstructions = 8;
 `else
-  localparam int unsigned NrParallelInstructions = 4;
+  localparam int unsigned NrParallelInstructions = 8; // VME use 8, default is 4
 `endif
 
   // Largest element width that Spatz supports

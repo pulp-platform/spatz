@@ -3606,7 +3606,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
                                       & ~(ld_addr_misaligned | st_addr_misaligned);
 
   // we can retire if we are not stalling and if the instruction is writing a register
-  assign retire_i = write_rd & valid_instr & (rd != 0);
+  assign retire_i = write_rd & valid_instr & !stall & (rd != 0);
   assign retire_postinc = is_postinc_rrpost
                         & acc_qvalid_o
                         & acc_qready_i
