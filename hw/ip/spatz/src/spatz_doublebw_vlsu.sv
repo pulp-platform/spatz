@@ -247,10 +247,8 @@ module spatz_doublebw_vlsu
   tile_chunk_cnt_t        tile_num_chunks;
 
   assign tile_mem_head         = tile_ctx_q.req.rs1[MemByteOffW-1:0];
-  assign tile_mem_base_aligned = {tile_ctx_q.req.rs1[31:MemByteOffW],
-                                    {MemByteOffW{1'b0}}};
-  assign tile_num_chunks = tile_chunk_cnt_t'(
-      (tile_ctx_q.bytes + tile_mem_head + MemDataWidthB - 1) / MemDataWidthB);
+  assign tile_mem_base_aligned = {tile_ctx_q.req.rs1[31:MemByteOffW], {MemByteOffW{1'b0}}};
+  assign tile_num_chunks = tile_chunk_cnt_t'((tile_ctx_q.bytes + tile_mem_head + MemDataWidthB - 1) / MemDataWidthB);
 
   /*------------------------------------------------------------*/
   /*                Tile TCDM Request Generation                */

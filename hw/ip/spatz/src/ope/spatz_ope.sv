@@ -305,12 +305,12 @@ module spatz_ope
     // Simple commands such as VTZERO/VTDISCARD must complete before a younger MAC may start.
     if (clean_req_valid)
       clean_req_ready = clean_commit_ready && clean_acc_ready;
-    else if (vt_req_valid)
-      vt_req_ready = !vt_busy_q && !resident_drain_valid_q && (!mac_tile_busy[spatz_req_vt.op_ope.tss.tile_id]) &&
-                  (!resident_valid_q || (spatz_req_vt.op_ope.tss.tile_id != resident_tile_q));
-    else if (tv_req_valid)
-      tv_req_ready = !tv_busy_q && !resident_drain_valid_q && (!mac_tile_busy[spatz_req_tv.op_ope.tss.tile_id]) &&
-                  (!resident_valid_q || (spatz_req_tv.op_ope.tss.tile_id != resident_tile_q));
+    else if (vt_req_valid && !vt_busy_q && !resident_drain_valid_q && !mac_tile_busy[spatz_req_vt.op_ope.tss.tile_id] &&
+             (!resident_valid_q || (spatz_req_vt.op_ope.tss.tile_id != resident_tile_q)))
+      vt_req_ready = 1'b1;
+    else if (tv_req_valid && !tv_busy_q && !resident_drain_valid_q && !mac_tile_busy[spatz_req_tv.op_ope.tss.tile_id] &&
+             (!resident_valid_q || (spatz_req_tv.op_ope.tss.tile_id != resident_tile_q)))
+      tv_req_ready = 1'b1;
     else if (mac_req_valid)
       mac_req_ready = mac_op_queue_ready && !resident_drain_valid_q && !(tile_rvalid_i &&
             (tile_r_req_i.idx == spatz_req_mac.mtd));
