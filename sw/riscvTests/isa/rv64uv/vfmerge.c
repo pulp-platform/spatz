@@ -51,6 +51,7 @@ void TEST_CASE1(void) {
            0x3f46050b, 0xbf75e762, 0xbe80fb14, 0xbf75e762, 0x3f4dd62f,
            0xbf75e762);
 
+#if ELEN == 64
   VSET(16, e64, m2);
   //               -0.3488917150781869, -0.4501495513738740, 0.8731197104152684,
   //               0.3256432550932964,  0.6502591178769535, -0.3169358689246526,
@@ -82,9 +83,11 @@ void TEST_CASE1(void) {
            0x3fed25da5d7296fe, 0x3fd6cfb5ac55edec, 0x3fed25da5d7296fe,
            0x3fe50f1ca5268668, 0x3fed25da5d7296fe, 0x3fc68b25c63dcaf0,
            0x3fed25da5d7296fe);
+#endif
 };
 
 int main(void) {
+  INIT_CHECK();
   enable_vec();
   enable_fp();
 

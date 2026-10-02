@@ -2713,6 +2713,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
       riscv_instr::VFSUB_VF,
       riscv_instr::VFMIN_VF,
       riscv_instr::VFMAX_VF,
+      riscv_instr::VFMERGE_VFM,
       riscv_instr::VMFEQ_VF,
       riscv_instr::VMFNE_VF,
       riscv_instr::VMFLT_VF,
