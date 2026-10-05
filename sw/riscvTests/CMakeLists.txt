@@ -110,6 +110,7 @@ add_snitch_test(vslide1down isa/rv64uv/vslide1down.c)
 add_snitch_test(vslidedown  isa/rv64uv/vslidedown.c)
 add_snitch_test(vfslide1down  isa/rv64uv/vfslide1down.c)
 add_snitch_test(vfslide1up  isa/rv64uv/vfslide1up.c)
+add_snitch_test(vcompress  isa/rv64uv/vcompress.c)
 
 add_snitch_test(vdiv  isa/rv64uv/vdiv.c)
 add_snitch_test(vdivu isa/rv64uv/vdivu.c)
