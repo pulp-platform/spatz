@@ -19,15 +19,14 @@ module opope_fma #(
   input logic                      clk_i,
   input logic                      rst_ni,
   // Input signals
-  input logic [1:0][WIDTH-1:0]     operands_i, // multiplicands, raw in input_format_i
+  input logic [1:0][WIDTH-1:0]     operands_i, // multiplicands, both encoded as FpFormat
   input logic [WIDTH-1:0]          addend_i,   // accumulator/addend, always FpFormat
-  input fpnew_pkg::fp_format_e     input_format_i,
-  input  logic                  valid_i,
-  output logic                  ready_o,
+  input  logic                     valid_i,
+  output logic                     ready_o,
   input logic                      reg_enable_i,
   // Output signals
-  output logic                  result_valid_o,
-  input  logic                  result_ready_i,
+  output logic                     result_valid_o,
+  input  logic                     result_ready_i,
   output logic [WIDTH-1:0]         result_o
 );
 
@@ -70,56 +69,8 @@ module opope_fma #(
   logic pipe_enable;
   logic [2:0][WIDTH-1:0] operands_wide;
 
+  assign operands_wide[1:0] = operands_i;
   assign operands_wide[2] = addend_i;
-
-  for (genvar operand = 0; operand < 2; operand++) begin : gen_input_widen
-    if (FpFormat == fpnew_pkg::FP32) begin : gen_fp32
-      always_comb begin : input_widen
-        logic [4:0] exponent;
-        logic [9:0] mantissa;
-        logic [7:0] wide_exponent;
-        logic [22:0] wide_mantissa;
-        logic [9:0] normalized_mantissa;
-        logic [3:0] shift_count;
-
-        exponent = operands_i[operand][14:10];
-        mantissa = operands_i[operand][9:0];
-        normalized_mantissa = mantissa;
-        shift_count = 4'd0;
-        wide_exponent = 8'd0;
-        wide_mantissa = 23'd0;
-        operands_wide[operand] = operands_i[operand];
-
-        unique case (input_format_i)
-          fpnew_pkg::FP16: begin
-            if (exponent == 5'd0) begin
-              if (mantissa != 10'd0) begin
-                for (int unsigned bit_idx = 0; bit_idx < 10; bit_idx++) begin
-                  if (!normalized_mantissa[9]) begin
-                    normalized_mantissa = normalized_mantissa << 1;
-                    shift_count = shift_count + 4'd1;
-                  end
-                end
-                wide_exponent = 8'd112 - {4'b0000, shift_count};
-                wide_mantissa = {normalized_mantissa[8:0], 14'd0};
-              end
-            end else if (exponent == 5'h1f) begin
-              wide_exponent = 8'hff;
-              wide_mantissa = {mantissa, 13'd0};
-            end else begin
-              wide_exponent = {3'b000, exponent} + 8'd112;
-              wide_mantissa = {mantissa, 13'd0};
-            end
-            operands_wide[operand] = {operands_i[operand][15], wide_exponent, wide_mantissa};
-          end
-          fpnew_pkg::FP16ALT: operands_wide[operand] = {operands_i[operand][15:0], 16'd0};
-          default: operands_wide[operand] = operands_i[operand];
-        endcase
-      end
-    end else begin : gen_passthrough
-      assign operands_wide[operand] = operands_i[operand];
-    end
-  end
 
   if (PIPE_LATENCY == 0) begin : gen_zero_latency_valid
     assign ready_o        = result_ready_i;

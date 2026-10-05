@@ -12,7 +12,8 @@ module spatz_ope
   import fpnew_pkg::*;
 #(
   parameter int unsigned CE = OPEComputeEdge,
-  parameter int unsigned TE = TileEdge
+  parameter int unsigned TE = TileEdge,
+  parameter bit EnableTEW16 = 1'b0
 ) ( 
   input  logic             clk_i              ,
   input  logic             rst_ni             ,
@@ -147,6 +148,8 @@ module spatz_ope
   // FMA pipeline and MAC completion.
   logic [CE-1:0][CE-1:0] fma16_ready;
   logic [CE-1:0][CE-1:0] fma32_ready;
+  logic [CE-1:0][CE-1:0] sdotp16_ready;
+  logic [CE-1:0][CE-1:0] sdotp16alt_ready;
   logic                  fma_pipe_ready;
   logic fma_pipe_result_valid;
   logic fma_pipe_result_fire;
@@ -579,7 +582,8 @@ module spatz_ope
   /*                        FMA Pipeline                        */
   /*------------------------------------------------------------*/
 
-  assign fma_pipe_ready   = (&fma16_ready) && (&fma32_ready);
+  assign fma_pipe_ready   = (&fma16_ready) && (&fma32_ready) &&
+                            (&sdotp16_ready) && (&sdotp16alt_ready);
   assign fma_pipe_advance = (mac_fire || (|fma_pipe_valid)) && fma_pipe_ready;
   assign fma_pipe_tag_in = mac_fire ? '{valid: 1'b1, tile: mac_op_exec.tile, tew: mac_op_exec.tew, beat: mac_op_beat,
         lane_active: mac_lane_active, write_acc: 1'b0} : fma_pipe_tag_t'(0);
@@ -1375,7 +1379,17 @@ module spatz_ope
   // FMA operand datapath and clock.
   logic fma_clk;
   logic [CE-1:0][AccElemWidth-1:0] fma_x_operand, fma_w_operand;
-  fpnew_pkg::fp_format_e mac_input_format;
+  logic [SpatialBeats-1:0][CE-1:0][15:0] sdotp16_x_first_q;
+  logic [SpatialBeats-1:0][CE-1:0][15:0] sdotp16_w_first_q;
+  logic mac_sdotp16_pair;
+
+  // An FP16 widening dot product consumes two K rows per architectural
+  // VTFMM.  The two VRF ports fetch one A/B row pair per cycle, so retain
+  // reduction 0 for every spatial beat and combine it with reduction 1 at
+  // the SDOTP input.  Only reduction 1 launches a result transaction.
+  assign mac_sdotp16_pair = (mac_op_exec.ew == EW_16) &&
+                            (mac_op_exec.tew == EW_32) &&
+                            (mac_op_exec.tk == 3'd2);
 
   tc_clk_gating i_fma_clk_gate ( 
     .clk_i     (clk_i       ),
@@ -1383,15 +1397,6 @@ module spatz_ope
     .test_en_i (1'b0          ),
     .clk_o     (fma_clk     )
   );
-
-  always_comb begin : proc_mac_input_format
-    mac_input_format = fpnew_pkg::FP32;
-    unique case (mac_op_exec.ew)
-      EW_16: mac_input_format = mac_op_exec.is_alt ? fpnew_pkg::FP16ALT : fpnew_pkg::FP16;
-      EW_8:  mac_input_format = mac_op_exec.is_alt ? fpnew_pkg::FP8ALT  : fpnew_pkg::FP8;
-      default: mac_input_format = fpnew_pkg::FP32;
-    endcase
-  end
 
   always_comb begin : fma_operand_select
     operand_width_t operand_bits;
@@ -1430,6 +1435,18 @@ module spatz_ope
     endcase
   end : fma_operand_select
 
+  always_ff @(posedge fma_clk or negedge rst_ni) begin : sdotp16_first_operand_stage
+    if (!rst_ni) begin
+      sdotp16_x_first_q <= '0;
+      sdotp16_w_first_q <= '0;
+    end else if (mac_fire && mac_sdotp16_pair && (mac_reduction_idx == ReductionIdxW'(0))) begin
+      for (int unsigned el = 0; el < CE; el++) begin
+        sdotp16_x_first_q[mac_op_beat][el] <= fma_x_operand[el][15:0];
+        sdotp16_w_first_q[mac_op_beat][el] <= fma_w_operand[el][15:0];
+      end
+    end
+  end
+
   always_comb begin : fma_addend_proc
     logic [AccElemBytes-1:0] zero_bytes;
 
@@ -1457,30 +1474,48 @@ module spatz_ope
     for (genvar col = 0; col < CE; col++) begin : gen_fma_col
 
       logic        fma16_valid, fma32_valid;
+      logic        sdotp16_valid, sdotp16alt_valid;
       logic [15:0] fma16_result;
       logic [31:0] fma32_result;
+      logic [31:0] sdotp16_result, sdotp16alt_result;
 
-      assign fma_result_valid[row][col] = fma16_valid || fma32_valid;
-      assign fma_result[row][col] = fma16_valid ? {{(AccElemWidth-16){1'b0}}, fma16_result} : fma32_result;
+      assign fma_result_valid[row][col] =
+          fma16_valid || fma32_valid || sdotp16_valid || sdotp16alt_valid;
 
-      opope_fma #( 
-        .FpFormat    (fpnew_pkg::FP16       ),
-        .NumPipeRegs (NumPipeRegs           ),
-        .PipeConfig  (fpnew_pkg::DISTRIBUTED),
-        .Stallable   (1'b1                  )
-      ) i_fma16 ( 
-        .clk_i          (fma_clk                                              ),
-        .rst_ni         (rst_ni                                               ),
-        .operands_i     ({fma_w_operand[col][15:0], fma_x_operand[row][15:0]} ),
-        .addend_i       (fma_addend[row][col][15:0]                           ),
-        .input_format_i (fpnew_pkg::FP16                                      ),
-        .valid_i        (mac_fire && mac_lane_active[row][col] && (mac_op_exec.tew == EW_16)),
-        .ready_o        (fma16_ready[row][col]                                ),
-        .reg_enable_i   (fma_pipe_advance                                     ),
-        .result_valid_o (fma16_valid                                          ),
-        .result_ready_i (fma_pipe_result_ready                                ),
-        .result_o       (fma16_result                                         )
-      );
+      always_comb begin : result_select
+        fma_result[row][col] = fma32_result;
+        if (fma16_valid)
+          fma_result[row][col] = {{(AccElemWidth-16){1'b0}}, fma16_result};
+        else if (sdotp16_valid)
+          fma_result[row][col] = sdotp16_result;
+        else if (sdotp16alt_valid)
+          fma_result[row][col] = sdotp16alt_result;
+      end
+
+      if (EnableTEW16) begin : gen_fma16
+        opope_fma #(
+          .FpFormat    (fpnew_pkg::FP16       ),
+          .NumPipeRegs (NumPipeRegs           ),
+          .PipeConfig  (fpnew_pkg::DISTRIBUTED),
+          .Stallable   (1'b1                  )
+        ) i_fma16 (
+          .clk_i          (fma_clk                                              ),
+          .rst_ni         (rst_ni                                               ),
+          .operands_i     ({fma_w_operand[col][15:0], fma_x_operand[row][15:0]} ),
+          .addend_i       (fma_addend[row][col][15:0]                           ),
+          .valid_i        (mac_fire && mac_lane_active[row][col] &&
+                           (mac_op_exec.ew == EW_16) && (mac_op_exec.tew == EW_16)),
+          .ready_o        (fma16_ready[row][col]                                ),
+          .reg_enable_i   (fma_pipe_advance                                     ),
+          .result_valid_o (fma16_valid                                          ),
+          .result_ready_i (fma_pipe_result_ready                                ),
+          .result_o       (fma16_result                                         )
+        );
+      end else begin : gen_no_fma16
+        assign fma16_ready[row][col] = 1'b1;
+        assign fma16_valid           = 1'b0;
+        assign fma16_result          = '0;
+      end
 
       opope_fma #( 
         .FpFormat    (fpnew_pkg::FP32       ),
@@ -1492,13 +1527,73 @@ module spatz_ope
         .rst_ni         (rst_ni                                               ),
         .operands_i     ({fma_w_operand[col], fma_x_operand[row]}             ),
         .addend_i       (fma_addend[row][col]                                 ),
-        .input_format_i (mac_input_format                                     ),
-        .valid_i        (mac_fire && mac_lane_active[row][col] && (mac_op_exec.tew == EW_32)),
+        .valid_i        (mac_fire && mac_lane_active[row][col] &&
+                         (mac_op_exec.ew == EW_32) && (mac_op_exec.tew == EW_32)),
         .ready_o        (fma32_ready[row][col]                                ),
         .reg_enable_i   (fma_pipe_advance                                     ),
         .result_valid_o (fma32_valid                                          ),
         .result_ready_i (fma_pipe_result_ready                                ),
         .result_o       (fma32_result                                         )
+      );
+
+      opope_sdotp_wrapper #(
+        .LaneWidth    (AccElemWidth                       ),
+        .FpFmtConfig  (fpnew_pkg::fmt_logic_t'(6'b101000)),
+        .NumPipeRegs  (NumPipeRegs                        ),
+        .PipeConfig   (fpnew_pkg::DISTRIBUTED             ),
+        .Stallable    (1'b1                               )
+      ) i_sdotp16 (
+        .clk_i          (fma_clk                                                ),
+        .rst_ni         (rst_ni                                                 ),
+        .operands_i     ({fma_addend[row][col],
+                          mac_sdotp16_pair ?
+                            {fma_w_operand[col][15:0],
+                             sdotp16_w_first_q[mac_op_beat][col]} :
+                            fma_w_operand[col],
+                          mac_sdotp16_pair ?
+                            {fma_x_operand[row][15:0],
+                             sdotp16_x_first_q[mac_op_beat][row]} :
+                            fma_x_operand[row]}                                  ),
+        .valid_i        (mac_fire && mac_lane_active[row][col] &&
+                         (mac_op_exec.ew == EW_16) && (mac_op_exec.tew == EW_32) &&
+                         (!mac_sdotp16_pair ||
+                          (mac_reduction_idx == ReductionIdxW'(1))) &&
+                         !mac_op_exec.is_alt                                     ),
+        .ready_o        (sdotp16_ready[row][col]                                ),
+        .reg_enable_i   (fma_pipe_advance                                       ),
+        .result_valid_o (sdotp16_valid                                          ),
+        .result_ready_i (fma_pipe_result_ready                                  ),
+        .result_o       (sdotp16_result                                         )
+      );
+
+      opope_sdotp_wrapper #(
+        .LaneWidth    (AccElemWidth                       ),
+        .FpFmtConfig  (fpnew_pkg::fmt_logic_t'(6'b100010)),
+        .NumPipeRegs  (NumPipeRegs                        ),
+        .PipeConfig   (fpnew_pkg::DISTRIBUTED             ),
+        .Stallable    (1'b1                               )
+      ) i_sdotp16alt (
+        .clk_i          (fma_clk                                                ),
+        .rst_ni         (rst_ni                                                 ),
+        .operands_i     ({fma_addend[row][col],
+                          mac_sdotp16_pair ?
+                            {fma_w_operand[col][15:0],
+                             sdotp16_w_first_q[mac_op_beat][col]} :
+                            fma_w_operand[col],
+                          mac_sdotp16_pair ?
+                            {fma_x_operand[row][15:0],
+                             sdotp16_x_first_q[mac_op_beat][row]} :
+                            fma_x_operand[row]}                                  ),
+        .valid_i        (mac_fire && mac_lane_active[row][col] &&
+                         (mac_op_exec.ew == EW_16) && (mac_op_exec.tew == EW_32) &&
+                         (!mac_sdotp16_pair ||
+                          (mac_reduction_idx == ReductionIdxW'(1))) &&
+                         mac_op_exec.is_alt                                      ),
+        .ready_o        (sdotp16alt_ready[row][col]                             ),
+        .reg_enable_i   (fma_pipe_advance                                       ),
+        .result_valid_o (sdotp16alt_valid                                       ),
+        .result_ready_i (fma_pipe_result_ready                                  ),
+        .result_o       (sdotp16alt_result                                      )
       );
 
     end : gen_fma_col
