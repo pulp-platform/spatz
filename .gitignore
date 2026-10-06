@@ -26,3 +26,21 @@ mems
 install
 .projectBender.lock
 spatz_env
+# Local development artifacts
+.codex/
+.agents/
+AGENTS.md
+CLAUDE.md
+CODEX.md
+graphify-out/
+.graphifyignore
+.vscode/
+logs/
+results/
+__pycache__/
+*.pyc
+*.log
+*.vcd
+*.fst
+Bender.local
+/sw/riscvTests/RESNET.md

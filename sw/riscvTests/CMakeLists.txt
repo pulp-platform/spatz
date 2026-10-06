@@ -199,3 +199,82 @@ add_snitch_test(vill isa/rv64uv/vill.c)
 set_property(TEST ${SNITCH_TEST_PREFIX}rtl-vill PROPERTY WILL_FAIL TRUE)
 
 add_snitch_test(scalar isa/rv64uv/scalar.c)
+
+# DIMC tests require the DIMC cluster configuration (VLEN=1024).
+option(SPATZ_DIMC_TESTS "Build DIMC instruction regressions" OFF)
+if(BUILD_TESTS AND SPATZ_DIMC_TESTS)
+    add_snitch_test(sfvqmmacc isa/rv64uv/sfvqmmacc.c)
+endif()
+
+option(SPATZ_DIMC_VMVM_TESTS "Build DIMC matrix scheduling regressions" OFF)
+if(BUILD_TESTS AND SPATZ_DIMC_VMVM_TESTS)
+    find_package(Python3 COMPONENTS Interpreter REQUIRED)
+    set(DIMC_MATRIX_HEADER "${CMAKE_CURRENT_BINARY_DIR}/dimc_test_matrices.h")
+    execute_process(COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/gen_dimc_test_matrices.py ${DIMC_MATRIX_HEADER}
+        RESULT_VARIABLE DIMC_GENERATOR_STATUS)
+    if(NOT DIMC_GENERATOR_STATUS EQUAL 0)
+        message(FATAL_ERROR "DIMC test matrix generation failed")
+    endif()
+    foreach(dimc_matrix_target vmvm_resnet_overlap vmvm_resnet_transition vmvm_resnet_b8)
+        if(dimc_matrix_target STREQUAL "vmvm_resnet_overlap")
+            set(dimc_matrix_source vmvm_resnet_overlap)
+        else()
+            set(dimc_matrix_source vmvm_resnet_transition)
+        endif()
+        add_snitch_test(${dimc_matrix_target}_check isa/rv64uv/${dimc_matrix_source}.c)
+        target_compile_definitions(test-riscvTests-${dimc_matrix_target}_check PRIVATE
+            RESNET_OVERLAP_HEADER="${DIMC_MATRIX_HEADER}" RESNET_OVERLAP_CHECK=1)
+    endforeach()
+    target_compile_definitions(test-riscvTests-vmvm_resnet_b8_check PRIVATE RESNET_PSUM_B8_GENERAL=1)
+
+endif()
+
+# The existing ResNet workload suite consists of five convolution shapes and
+# the final fully connected layer. These are GEMM tests, not full inference.
+option(SPATZ_DIMC_RESNET_TESTS "Build all six existing ResNet DIMC workloads" OFF)
+set(DIMC_RESNET_RUN_ROWS "0" CACHE STRING "Rows to check per convolution (0 means all)")
+if(BUILD_TESTS AND SPATZ_DIMC_RESNET_TESTS)
+    find_package(Python3 COMPONENTS Interpreter REQUIRED)
+    if(NOT DIMC_RESNET_RUN_ROWS MATCHES "^[0-9]+$")
+        message(FATAL_ERROR "DIMC_RESNET_RUN_ROWS must be a non-negative integer")
+    endif()
+    math(EXPR dimc_resnet_tail "${DIMC_RESNET_RUN_ROWS} % 8")
+    if(NOT dimc_resnet_tail EQUAL 0)
+        message(FATAL_ERROR "DIMC_RESNET_RUN_ROWS must be 0 or a multiple of 8 for the B8 register schedule")
+    endif()
+    set(dimc_resnet_layers Conv1 Conv2 Conv3 Conv4 Conv5 FinalFC)
+    set(dimc_resnet_rows 12544 3136 784 196 49 1)
+    set(dimc_resnet_logical_k 147 576 1152 2304 4608 2048)
+    set(dimc_resnet_padded_k 256 640 1152 2304 4608 2048)
+    set(dimc_resnet_cols 64 64 128 256 512 1000)
+    foreach(index RANGE 0 5)
+        list(GET dimc_resnet_layers ${index} layer)
+        list(GET dimc_resnet_rows ${index} rows)
+        list(GET dimc_resnet_logical_k ${index} logical_k)
+        list(GET dimc_resnet_padded_k ${index} padded_k)
+        list(GET dimc_resnet_cols ${index} cols)
+        set(header "${CMAKE_CURRENT_BINARY_DIR}/dimc_resnet_${layer}.h")
+        execute_process(COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/gen_dimc_test_matrices.py ${header}
+            --rows ${rows} --k ${padded_k} --logical-k ${logical_k} --cols ${cols}
+            RESULT_VARIABLE generator_status)
+        if(NOT generator_status EQUAL 0)
+            message(FATAL_ERROR "DIMC ${layer} matrix generation failed")
+        endif()
+        set(target vmvm_resnet_${layer}_check)
+        add_snitch_test(${target} isa/rv64uv/vmvm_resnet_transition.c)
+        target_compile_definitions(test-riscvTests-${target} PRIVATE
+            RESNET_OVERLAP_HEADER="${header}" RESNET_OVERLAP_CHECK=1
+            RESNET_PSUM_B8_GENERAL=1)
+        if(DIMC_RESNET_RUN_ROWS GREATER 0 AND NOT layer STREQUAL "FinalFC")
+            if(DIMC_RESNET_RUN_ROWS LESS rows)
+                set(run_rows ${DIMC_RESNET_RUN_ROWS})
+            else()
+                set(run_rows ${rows})
+            endif()
+            target_compile_definitions(test-riscvTests-${target} PRIVATE
+                RESNET_RUN_ROWS=${run_rows})
+        endif()
+    endforeach()
+endif()
