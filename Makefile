@@ -65,11 +65,6 @@ sw/toolchain/riscv-isa-sim: sw/toolchain/riscv-isa-sim.version
 		git checkout `cat ../riscv-isa-sim.version` && \
 		git submodule update --init --recursive --jobs=8 .
 
-sw/toolchain/help2man:
-	mkdir -p sw/toolchain/help2man
-	cd sw/toolchain/help2man && curl -fLO https://ftp.gnu.org/gnu/help2man/help2man-1.49.3.tar.xz
-	cd sw/toolchain/help2man && tar xf help2man-1.49.3.tar.xz
-
 sw/toolchain/dtc:
 	mkdir -p sw/toolchain/dtc
 	cd sw/toolchain/dtc && curl -fLO https://git.kernel.org/pub/scm/utils/dtc/dtc.git/snapshot/dtc-1.7.0.tar.gz
@@ -133,7 +128,8 @@ $(BENDER_INSTALL_DIR)/bender:
 ###############
 
 verilator: $(VERILATOR_INSTALL_DIR)/bin/verilator
-$(VERILATOR_INSTALL_DIR)/bin/verilator: sw/toolchain/verilator sw/toolchain/help2man Makefile
+$(VERILATOR_INSTALL_DIR)/bin/verilator: sw/toolchain/verilator Makefile
+	cd sw/toolchain/help2man && tar xf help2man-1.49.3.tar.xz
 	cd sw/toolchain/help2man/help2man-1.49.3 && ./configure --prefix=$(VERILATOR_INSTALL_DIR) && make && make install
 	cd $<; unset VERILATOR_ROOT; \
 	autoconf && CC=$(CC) CXX=$(CXX) ./configure --prefix=$(VERILATOR_INSTALL_DIR) $(VERILATOR_CI) && \
