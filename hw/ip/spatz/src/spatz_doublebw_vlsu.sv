@@ -97,6 +97,12 @@ module spatz_doublebw_vlsu
 
   logic spatz_req_ready, tile_req_ready;
 
+  // For indexed operations op_mem.ew is the index EEW and the data EEW is
+  // VSEW.  For all other memory operations op_mem.ew is the data EEW decoded
+  // from the instruction.
+  vew_e req_data_ew;
+  assign req_data_ew = (spatz_req_i.op inside {VLXE, VSXE}) ? spatz_req_i.vtype.vsew : spatz_req_i.op_mem.ew;
+
   stream_fifo #(
     .FALL_THROUGH(1'b0       ),
     .DEPTH       (4          ),
@@ -115,12 +121,11 @@ module spatz_doublebw_vlsu
     .ready_i   (mem_spatz_req_ready                            )
   );
 
-  // Convert vl to bytes for address generation.
+  // Convert vl to bytes for address generation using the memory data EEW.
   always_comb begin: proc_spatz_req
     spatz_req_d = spatz_req_i;
-    // vsew encodes log2(bytes per element).
-    spatz_req_d.vl     = spatz_req_i.vl << spatz_req_i.vtype.vsew;
-    spatz_req_d.vstart = spatz_req_i.vstart << spatz_req_i.vtype.vsew;
+    spatz_req_d.vl     = spatz_req_i.vl << req_data_ew;
+    spatz_req_d.vstart = spatz_req_i.vstart << req_data_ew;
   end: proc_spatz_req
 
   // Tile requests use the tile datapath instead of the VRF datapath.
@@ -134,6 +139,9 @@ module spatz_doublebw_vlsu
   // Indexed accesses use the vector index operand.
   logic mem_is_indexed;
   assign mem_is_indexed = mem_spatz_req_valid && !mem_is_tile_mem && ((mem_spatz_req.op == VLXE) || (mem_spatz_req.op == VSXE));
+
+  vew_e mem_data_ew;
+  assign mem_data_ew = mem_is_indexed ? mem_spatz_req.vtype.vsew : mem_spatz_req.op_mem.ew;
 
   /////////////
   //  State  //
@@ -828,7 +836,7 @@ module spatz_doublebw_vlsu
   assign commit_insn_d     = '{
       id        : mem_spatz_req.id,
       vd        : mem_spatz_req.vd,
-      vsew      : mem_spatz_req.vtype.vsew,
+      vsew      : mem_data_ew,
       vl        : mem_spatz_req.vl,
       vstart    : mem_spatz_req.vstart,
       rs1       : mem_spatz_req.rs1[2:0],
@@ -951,13 +959,13 @@ module spatz_doublebw_vlsu
       logic [2 * MAXEW     :0] num_idx_maxew_bytes;
 
       // Number of selected elements contained in one MAXEW element.
-      assign log2_num_el_maxew = MAXEW - mem_spatz_req.vtype.vsew;
+      assign log2_num_el_maxew = MAXEW - mem_data_ew;
       assign log2_num_idx_maxew_bytes = log2_num_el_maxew + mem_spatz_req.op_mem.ew;
       // Byte footprint of the indices associated with one MAXEW data element.
       assign num_idx_maxew_bytes = 1'b1 << log2_num_idx_maxew_bytes;
 
       always_comb begin
-        stride = mem_is_strided ? mem_spatz_req.rs2 >> mem_spatz_req.vtype.vsew : 'd1;
+        stride = mem_is_strided ? mem_spatz_req.rs2 >> mem_data_ew : 'd1;
 
         if (mem_is_indexed) begin
           // What is the relationship between data and index width?
@@ -1100,7 +1108,7 @@ module spatz_doublebw_vlsu
 
   // How large is a single element (in bytes)
   logic [3:0] mem_single_element_size;
-  assign mem_single_element_size = 1'b1 << mem_spatz_req.vtype.vsew;
+  assign mem_single_element_size = 1'b1 << mem_data_ew;
 
   // How large is an index element (in bytes)
   logic [3:0] mem_idx_single_element_size;
@@ -1679,7 +1687,7 @@ module spatz_doublebw_vlsu
 	              shift = (mem_is_strided || mem_is_indexed) ? mem_req_addr_offset[intf][fu] :
                       mem_counter_q[intf][fu][$clog2(ELENB)-1:0] + commit_insn_q.rs1[int'(MAXEW)-1:0];
 	              mask  = '1;
-	              case (mem_spatz_req.vtype.vsew)
+	              case (mem_data_ew)
 	                EW_8 : mask   = 1;
 	                EW_16: mask   = 3;
                 EW_32: mask   = 15;
@@ -1750,7 +1758,8 @@ module spatz_doublebw_vlsu
       assign spatz_mem_req[intf][fu].id    = tile_mem_req_valid[port] ? '0 :  mem_req_id[intf][fu];
       assign spatz_mem_req[intf][fu].addr = tile_mem_req_valid[port] ? tile_mem_req[port].addr : mem_req_addr[intf][fu];
       assign spatz_mem_req[intf][fu].mode  = '0; // Request always uses user privilege level
-      assign spatz_mem_req[intf][fu].size = tile_mem_req_valid[port] ? tile_ctx_q.req.op_mem.ew[1:0] : mem_spatz_req.vtype.vsew[1:0];
+      assign spatz_mem_req[intf][fu].size = tile_mem_req_valid[port] ?
+          tile_ctx_q.req.op_mem.ew[1:0] : mem_data_ew[1:0];
       assign spatz_mem_req[intf][fu].write = tile_mem_req_valid[port] ? !tile_ctx_q.req.op_mem.is_load : !mem_is_load;
       assign spatz_mem_req[intf][fu].strb  = tile_mem_req_valid[port] ?
           (tile_ctx_q.req.op_mem.is_load ? '0 : tile_mem_req[port].strb) : mem_req_strb[intf][fu];

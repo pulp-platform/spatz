@@ -160,6 +160,7 @@ module spatz_decoder
           endcase
 
           spatz_req.op_mem.vm = ls_vm;
+          spatz_req.op_mem.ew = spatz_req.vtype.vsew;
           spatz_req.ex_unit   = LSU;
 
           // Illegal width?

@@ -221,6 +221,7 @@ module spatz_ope
   logic [CE-1:0][CE-1:0][AccElemWidth-1:0] fma_addend;
   logic [CE-1:0][CE-1:0][AccElemWidth-1:0] fma_result;
   logic [CE-1:0][CE-1:0] fma_result_valid;
+  logic mac_use_sdotp;
   logic [CE-1:0][CE-1:0][AccElemWidth-1:0] acc_fma_rdata, acc_fma_wdata;
   logic [CE-1:0][CE-1:0][AccElemBytes-1:0] acc_fma_wen;
   logic [CE-1:0][CE-1:0][GroupsPerEdge-1:0][AccElemWidth-1:0] acc_vrf_rdata, acc_vrf_wdata;
@@ -359,6 +360,8 @@ module spatz_ope
     logic tile_hazard;
     logic current_ready;
 
+    result_match = 1'b0;
+    result_switch = 1'b0;
     if (fma_pipe_result_valid && !fma_pipe_tag_q[NumPipeRegs-1].write_acc) begin
       result_match  = (fma_pipe_tag_q[NumPipeRegs-1].tile == mac_op_current_q.op.tile) &&
                       (fma_pipe_tag_q[NumPipeRegs-1].beat == mac_beat_q);
@@ -409,19 +412,20 @@ module spatz_ope
   always_comb begin : mac_op_has_more
     mac_op_has_more_spatial = (({1'b0, mac_group_col} + 1'b1) < mac_n_groups) ||
                               (({1'b0, mac_group_row} + 1'b1) < mac_m_groups);
-    mac_op_has_more_reductions = (({1'b0, mac_reduction_idx} + 1'b1) < mac_op_exec.tk);
+    mac_op_has_more_reductions = !mac_use_sdotp &&
+        (({1'b0, mac_reduction_idx} + 1'b1) < mac_op_exec.tk);
     mac_op_has_more_beats = mac_op_has_more_spatial || mac_op_has_more_reductions;
   end : mac_op_has_more
 
   always_comb begin : mac_op_fire
-    mac_nonfma_ready  = &vrf_rvalid_i[1:0] && (mac_op_has_more_beats || mac_commit_ready);
+    mac_nonfma_ready  = (&vrf_rvalid_i[1:0]) && (mac_op_has_more_beats || mac_commit_ready);
     mac_step_fire = (mac_op_empty && mac_commit_ready) ||
                     (mac_op_exec_valid && !mac_op_empty && fma_pipe_ready && mac_nonfma_ready);
     mac_fire          = mac_op_exec_valid && !mac_op_empty && fma_pipe_ready && mac_nonfma_ready;
   end : mac_op_fire
 
   assign mac_commit_valid = mac_op_empty ||
-      (mac_op_exec_valid && !mac_op_empty && !mac_op_has_more_beats && fma_pipe_ready && &vrf_rvalid_i[1:0]);
+      (mac_op_exec_valid && !mac_op_empty && !mac_op_has_more_beats && fma_pipe_ready && (&vrf_rvalid_i[1:0]));
   assign mac_idle = !mac_op_current_q.valid && !mac_op_next_q.valid && !(|fma_pipe_valid);
   assign mac_op_queue_ready = !mac_op_next_q.valid || (mac_commit_valid && mac_commit_ready);
 
@@ -585,7 +589,8 @@ module spatz_ope
   assign fma_pipe_ready   = (&fma16_ready) && (&fma32_ready) &&
                             (&sdotp16_ready) && (&sdotp16alt_ready);
   assign fma_pipe_advance = (mac_fire || (|fma_pipe_valid)) && fma_pipe_ready;
-  assign fma_pipe_tag_in = mac_fire ? '{valid: 1'b1, tile: mac_op_exec.tile, tew: mac_op_exec.tew, beat: mac_op_beat,
+  assign fma_pipe_tag_in = mac_fire ?
+      '{valid: 1'b1, tile: mac_op_exec.tile, tew: mac_op_exec.tew, beat: mac_op_beat,
         lane_active: mac_lane_active, write_acc: 1'b0} : fma_pipe_tag_t'(0);
 
   always_comb begin : fma_pipe_tag_update
@@ -627,7 +632,7 @@ module spatz_ope
       (resident_drain_valid_q && resident_drain_writeback_q &&
        (fma_pipe_tag_q[NumPipeRegs-1].tile == resident_drain_tile_q));
 
-  assign fma_pipe_continue_ready = mac_op_exec_valid && &vrf_rvalid_i[1:0] &&
+  assign fma_pipe_continue_ready = mac_op_exec_valid && (&vrf_rvalid_i[1:0]) &&
       (fma_pipe_tag_q[NumPipeRegs-1].tile == mac_op_exec.tile) && (fma_pipe_tag_q[NumPipeRegs-1].beat == mac_op_beat);
 
   assign fma_pipe_result_ready =
@@ -895,9 +900,10 @@ module spatz_ope
           row_stride_regs = 4'd8;
         end
       endcase
-      // vs1/vs2 name the first K row. mtype.tk selects subsequent rows;
-      // tm/tn select the 256-bit spatial word. LMUL does not add MAC steps.
-      reduction_word_offset = vrf_addr_t'(mac_reduction_idx) * row_stride_regs * NrWordsPerVector;
+      // SDOTP reads packed TEW elements; only FMA uses K-row offsets.
+      if (mac_use_sdotp) operand_bits = 6'(8 << int'(mac_op_exec.tew));
+      reduction_word_offset = mac_use_sdotp ? '0 :
+          vrf_addr_t'(mac_reduction_idx) * row_stride_regs * NrWordsPerVector;
       row_word_offset = vrf_addr_t'((mac_group_row * CE * operand_bits) / VRFWordWidth);
       col_word_offset = vrf_addr_t'((mac_group_col * CE * operand_bits) / VRFWordWidth);
       vrf_re_o[1:0] = 2'b11;
@@ -1378,18 +1384,10 @@ module spatz_ope
   
   // FMA operand datapath and clock.
   logic fma_clk;
-  logic [CE-1:0][AccElemWidth-1:0] fma_x_operand, fma_w_operand;
-  logic [SpatialBeats-1:0][CE-1:0][15:0] sdotp16_x_first_q;
-  logic [SpatialBeats-1:0][CE-1:0][15:0] sdotp16_w_first_q;
-  logic mac_sdotp16_pair;
 
-  // An FP16 widening dot product consumes two K rows per architectural
-  // VTFMM.  The two VRF ports fetch one A/B row pair per cycle, so retain
-  // reduction 0 for every spatial beat and combine it with reduction 1 at
-  // the SDOTP input.  Only reduction 1 launches a result transaction.
-  assign mac_sdotp16_pair = (mac_op_exec.ew == EW_16) &&
-                            (mac_op_exec.tew == EW_32) &&
-                            (mac_op_exec.tk == 3'd2);
+  logic [CE-1:0][AccElemWidth-1:0] fma_x_operand, fma_w_operand;
+  // Widening operations consume packed K lanes in each base-vector element.
+  assign mac_use_sdotp = (mac_op_exec.ew != mac_op_exec.tew);
 
   tc_clk_gating i_fma_clk_gate ( 
     .clk_i     (clk_i       ),
@@ -1411,9 +1409,22 @@ module spatz_ope
       EW_16:   operand_bits = 6'd16;
       default: operand_bits = 6'd32;
     endcase
+    if (mac_use_sdotp) operand_bits = 6'(8 << int'(mac_op_exec.tew));
     x_bit_offset = vrf_bit_offset_t'((mac_group_row * CE * operand_bits) % VRFWordWidth);
     w_bit_offset = vrf_bit_offset_t'((mac_group_col * CE * operand_bits) % VRFWordWidth);
-    unique case (mac_op_exec.ew)
+    if (mac_use_sdotp) begin
+      for (int unsigned el = 0; el < CE; el++) begin
+        // Memory: {even K, odd K}. SDOTP lane 0 is the low halfword.
+        fma_x_operand[el] = {vrf_rdata_i[0][x_bit_offset + el*32 +: 16],
+                            vrf_rdata_i[0][x_bit_offset + el*32 + 16 +: 16]};
+        fma_w_operand[el] = {vrf_rdata_i[1][w_bit_offset + el*32 +: 16],
+                            vrf_rdata_i[1][w_bit_offset + el*32 + 16 +: 16]};
+        if (mac_op_exec.tk < 2) begin
+          fma_x_operand[el][31:16] = '0;
+          fma_w_operand[el][31:16] = '0;
+        end
+      end
+    end else unique case (mac_op_exec.ew)
       EW_16: begin
         for (int unsigned el = 0; el < CE; el++) begin
           fma_x_operand[el][15:0] = vrf_rdata_i[0][x_bit_offset + el*16 +: 16];
@@ -1434,18 +1445,6 @@ module spatz_ope
       end
     endcase
   end : fma_operand_select
-
-  always_ff @(posedge fma_clk or negedge rst_ni) begin : sdotp16_first_operand_stage
-    if (!rst_ni) begin
-      sdotp16_x_first_q <= '0;
-      sdotp16_w_first_q <= '0;
-    end else if (mac_fire && mac_sdotp16_pair && (mac_reduction_idx == ReductionIdxW'(0))) begin
-      for (int unsigned el = 0; el < CE; el++) begin
-        sdotp16_x_first_q[mac_op_beat][el] <= fma_x_operand[el][15:0];
-        sdotp16_w_first_q[mac_op_beat][el] <= fma_w_operand[el][15:0];
-      end
-    end
-  end
 
   always_comb begin : fma_addend_proc
     logic [AccElemBytes-1:0] zero_bytes;
@@ -1478,6 +1477,10 @@ module spatz_ope
       logic [15:0] fma16_result;
       logic [31:0] fma32_result;
       logic [31:0] sdotp16_result, sdotp16alt_result;
+      logic [31:0] sdotp16_x_operand, sdotp16_w_operand;
+
+      assign sdotp16_x_operand = fma_x_operand[row];
+      assign sdotp16_w_operand = fma_w_operand[col];
 
       assign fma_result_valid[row][col] =
           fma16_valid || fma32_valid || sdotp16_valid || sdotp16alt_valid;
@@ -1504,7 +1507,7 @@ module spatz_ope
           .operands_i     ({fma_w_operand[col][15:0], fma_x_operand[row][15:0]} ),
           .addend_i       (fma_addend[row][col][15:0]                           ),
           .valid_i        (mac_fire && mac_lane_active[row][col] &&
-                           (mac_op_exec.ew == EW_16) && (mac_op_exec.tew == EW_16)),
+                           !mac_use_sdotp && (mac_op_exec.tew == EW_16)),
           .ready_o        (fma16_ready[row][col]                                ),
           .reg_enable_i   (fma_pipe_advance                                     ),
           .result_valid_o (fma16_valid                                          ),
@@ -1528,7 +1531,7 @@ module spatz_ope
         .operands_i     ({fma_w_operand[col], fma_x_operand[row]}             ),
         .addend_i       (fma_addend[row][col]                                 ),
         .valid_i        (mac_fire && mac_lane_active[row][col] &&
-                         (mac_op_exec.ew == EW_32) && (mac_op_exec.tew == EW_32)),
+                         !mac_use_sdotp && (mac_op_exec.tew == EW_32)),
         .ready_o        (fma32_ready[row][col]                                ),
         .reg_enable_i   (fma_pipe_advance                                     ),
         .result_valid_o (fma32_valid                                          ),
@@ -1545,19 +1548,11 @@ module spatz_ope
       ) i_sdotp16 (
         .clk_i          (fma_clk                                                ),
         .rst_ni         (rst_ni                                                 ),
-        .operands_i     ({fma_addend[row][col],
-                          mac_sdotp16_pair ?
-                            {fma_w_operand[col][15:0],
-                             sdotp16_w_first_q[mac_op_beat][col]} :
-                            fma_w_operand[col],
-                          mac_sdotp16_pair ?
-                            {fma_x_operand[row][15:0],
-                             sdotp16_x_first_q[mac_op_beat][row]} :
-                            fma_x_operand[row]}                                  ),
+        .operands_i     ({fma_addend[row][col], sdotp16_w_operand,
+                          sdotp16_x_operand}                                     ),
         .valid_i        (mac_fire && mac_lane_active[row][col] &&
                          (mac_op_exec.ew == EW_16) && (mac_op_exec.tew == EW_32) &&
-                         (!mac_sdotp16_pair ||
-                          (mac_reduction_idx == ReductionIdxW'(1))) &&
+                         mac_use_sdotp &&
                          !mac_op_exec.is_alt                                     ),
         .ready_o        (sdotp16_ready[row][col]                                ),
         .reg_enable_i   (fma_pipe_advance                                       ),
@@ -1575,19 +1570,11 @@ module spatz_ope
       ) i_sdotp16alt (
         .clk_i          (fma_clk                                                ),
         .rst_ni         (rst_ni                                                 ),
-        .operands_i     ({fma_addend[row][col],
-                          mac_sdotp16_pair ?
-                            {fma_w_operand[col][15:0],
-                             sdotp16_w_first_q[mac_op_beat][col]} :
-                            fma_w_operand[col],
-                          mac_sdotp16_pair ?
-                            {fma_x_operand[row][15:0],
-                             sdotp16_x_first_q[mac_op_beat][row]} :
-                            fma_x_operand[row]}                                  ),
+        .operands_i     ({fma_addend[row][col], sdotp16_w_operand,
+                          sdotp16_x_operand}                                     ),
         .valid_i        (mac_fire && mac_lane_active[row][col] &&
                          (mac_op_exec.ew == EW_16) && (mac_op_exec.tew == EW_32) &&
-                         (!mac_sdotp16_pair ||
-                          (mac_reduction_idx == ReductionIdxW'(1))) &&
+                         mac_use_sdotp &&
                          mac_op_exec.is_alt                                      ),
         .ready_o        (sdotp16alt_ready[row][col]                             ),
         .reg_enable_i   (fma_pipe_advance                                       ),

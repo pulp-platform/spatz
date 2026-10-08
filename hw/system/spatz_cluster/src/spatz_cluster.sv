@@ -53,7 +53,7 @@ module spatz_cluster
     /// Size of DMA request fifo.
     parameter int                     unsigned               DMAReqFifoDepth                    = 3,
     /// Select per-core rolling instruction buffers instead of the shared cache.
-    parameter bit                                           UseInstructionBuffer               = 1'b1,
+    parameter bit                                           UseInstructionBuffer               = 1'b0,
     /// Width of a single icache line.
     parameter                         unsigned               ICacheLineWidth                    = 0,
     /// Number of icache lines per set.

@@ -119,10 +119,10 @@ package spatz_pkg;
   // Architecture Matrix Tile State: mt0, mt1, ..., mt15.
   localparam int unsigned NrPhysicalTile = 16;
   // Tile Dimension
-  localparam int unsigned TileEdge = 16;
+  localparam int unsigned OPEComputeEdge = 8;
   // The ratio of Tile Dimension and OPE FMA array size
-  localparam int unsigned NrAccPerComputeElem = 2;
-  localparam int unsigned OPEComputeEdge = TileEdge / NrAccPerComputeElem;
+  localparam int unsigned NrAccPerComputeElem = 4;
+  localparam int unsigned TileEdge = OPEComputeEdge * NrAccPerComputeElem;
   // The controller further limits tk to 32/SEW, or to one for 64-bit accumulation.
   localparam int unsigned KMAX   = (AccElemWidth <= 32) ? (32 / 8) : 1;
   // Datapath between VLSU and OPE
