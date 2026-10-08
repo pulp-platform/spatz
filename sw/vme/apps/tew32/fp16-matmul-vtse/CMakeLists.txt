@@ -9,7 +9,6 @@ set(_fp16_vtse_te16_shapes
     "64x64x512")
 
 set(_fp16_vtse_te32_shapes
-    "128x128x64"
     "128x128x128"
     "128x128x256")
 
@@ -102,10 +101,10 @@ endfunction()
 foreach(_precision IN ITEMS te16 te32)
     if(_precision STREQUAL "te32")
         set(_precision_shapes ${_fp16_vtse_te32_shapes})
-        set(_unrolled_ks 64 128 256)
+        set(_unrolled_ks 128 256)
     else()
         set(_precision_shapes ${_fp16_vtse_te16_shapes})
-        set(_unrolled_ks 64 128 256)
+        set(_unrolled_ks 128 256 512)
     endif()
 
     # Rolled kernels continue to build all three K shapes from one source.

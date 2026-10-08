@@ -121,7 +121,7 @@ package spatz_pkg;
   // Tile Dimension
   localparam int unsigned OPEComputeEdge = 8;
   // The ratio of Tile Dimension and OPE FMA array size
-  localparam int unsigned NrAccPerComputeElem = 4;
+  localparam int unsigned NrAccPerComputeElem = 2;
   localparam int unsigned TileEdge = OPEComputeEdge * NrAccPerComputeElem;
   // The controller further limits tk to 32/SEW, or to one for 64-bit accumulation.
   localparam int unsigned KMAX   = (AccElemWidth <= 32) ? (32 / 8) : 1;
