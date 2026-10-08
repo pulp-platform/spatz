@@ -27,5 +27,4 @@ enum {
     BLOCK_DIM = 2 * TE,
 };
 
-void matmul_fp32(const float *Apack, const float *Bpack, float *C,
-                 uint32_t M, uint32_t N, uint32_t K);
+void matmul_fp32(const float *At, const float *B, float *C, uint32_t M, uint32_t N, uint32_t K);

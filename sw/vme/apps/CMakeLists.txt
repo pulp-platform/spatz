@@ -14,6 +14,6 @@ enable_testing()
 
 set(SNITCH_TEST_PREFIX vme-)
 
-# Register the FP32 matrix variants directly from the VME apps level.
-add_subdirectory(tew32/fp32-matmul-vtse)
-add_subdirectory(tew32/fp32-matmul-vse)
+add_subdirectory(tew32/fp32-matmul-vtse fp32-matmul-vtse)
+add_subdirectory(tew32/fp32-matmul-vse fp32-matmul-vse)
+add_subdirectory(tew32/fp16-matmul-vtse fp16-matmul-vtse)

@@ -183,9 +183,7 @@ int main(void) {
 
         if (iter == 0)
             start_cycle = get_cycle();
-        matmul_fp32((const float *)(base + A_OFFSET),
-                    (const float *)(base + B_OFFSET),
-                    (float *)(base + C_OFFSET), valid_m, valid_n, valid_k);
+        matmul_fp32((const float *)(base + A_OFFSET), (const float *)(base + B_OFFSET), (float *)(base + C_OFFSET), valid_m, valid_n, valid_k);
         end_cycle = get_cycle();
 
         const snrt_dma_txid_t output_tid = snrt_dma_start_1d(

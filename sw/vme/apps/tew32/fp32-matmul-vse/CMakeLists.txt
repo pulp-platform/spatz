@@ -111,6 +111,22 @@ foreach(_precision IN ITEMS te16 te32)
         add_fp32_vse_variant(${_precision} rolled-vsetvl
             "${CMAKE_CURRENT_SOURCE_DIR}/${_precision}/rolled/vsetvl"
             ${_fp32_vse_te16_shapes})
+
+        # The te16 unrolled kernels are specialized by K.  Keep their
+        # existing source hierarchy and expose the same K64/K128/K256 ELF
+        # matrix as the corresponding VTSE unrolled targets.
+        foreach(_k IN ITEMS 64 128 256)
+            set(_unrolled_shape "64x64x${_k}")
+            add_fp32_vse_variant(${_precision} unrolled-store-afterK
+                "${CMAKE_CURRENT_SOURCE_DIR}/${_precision}/unrolled/store_afterK/K${_k}"
+                "${_unrolled_shape}")
+            add_fp32_vse_variant(${_precision} unrolled-store-interleave
+                "${CMAKE_CURRENT_SOURCE_DIR}/${_precision}/unrolled/store_interleave/K${_k}"
+                "${_unrolled_shape}")
+            add_fp32_vse_variant(${_precision} unrolled-vsetvl
+                "${CMAKE_CURRENT_SOURCE_DIR}/${_precision}/unrolled/vsetvl/K${_k}"
+                "${_unrolled_shape}")
+        endforeach()
     else()
         # Build all te32 LMUL=2 scheduling variants.
         add_fp32_vse_variant(${_precision} rolled-store-afterK

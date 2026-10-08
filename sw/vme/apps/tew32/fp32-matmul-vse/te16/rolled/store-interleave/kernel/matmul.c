@@ -16,19 +16,19 @@
 //
 // Author: Pei-Yu Lin, ETH Zürich
 
+// fp32 optimal kernel for TE=16, CE=8, and four accumulator tiles.
+
 #include "matmul.h"
 
-__attribute__((noinline, aligned(64))) void matmul_fp32(
-    const float *Apack, const float *Bpack, float *C,
-    uint32_t M, uint32_t N, uint32_t K)
+__attribute__((noinline, aligned(64))) void matmul_fp32(const float *At, const float *B, float *C, uint32_t M, uint32_t N, uint32_t K)
 {
     const uint32_t col_blocks = (N + BLOCK_DIM - 1) / BLOCK_DIM;
     const uint32_t row_blocks = (M + BLOCK_DIM - 1) / BLOCK_DIM;
     const uint32_t tile_stride = TE * K;
-    uintptr_t a0p = (uintptr_t)Apack;
-    uintptr_t a1p = (uintptr_t)(Apack + tile_stride);
-    uintptr_t b0p = (uintptr_t)Bpack;
-    uintptr_t b1p = (uintptr_t)(Bpack + tile_stride);
+    uintptr_t a0p = (uintptr_t)At;
+    uintptr_t a1p = (uintptr_t)(At + tile_stride);
+    uintptr_t b0p = (uintptr_t)B;
+    uintptr_t b1p = (uintptr_t)(B + tile_stride);
     uintptr_t tss;
     const uintptr_t operand_bytes = sizeof(float) * TE;
     uintptr_t c00 = (uintptr_t)(C);
@@ -595,19 +595,19 @@ __attribute__((noinline, aligned(64))) void matmul_fp32(
         "vtmv.v.t v7, %[tss]\n"  "addi %[tss], %[tss], 1\n"
         "vtfmm.tvv mt12, v11,  v27\n"
         "vse32.v v7,  (%[c10])\n" "add %[c10], %[c10], %[c_stride]\n"
+        "vtfmm.tvv mt12, v14,  v30\n"
         "vle32.v v0,  (%[a0p])\n" "add %[a0p], %[a0p], %[operand_bytes]\n"
         "vle32.v v1,  (%[a0p])\n" "add %[a0p], %[a0p], %[operand_bytes]\n"
+        "vtfmm.tvv mt12, v13,  v29\n"
         "vle32.v v2,  (%[a0p])\n" "add %[a0p], %[a0p], %[operand_bytes]\n"
         "vle32.v v3,  (%[a0p])\n" "add %[a0p], %[a0p], %[operand_bytes]\n"
-        "vle32.v v4,  (%[a0p])\n" "add %[a0p], %[a0p], %[operand_bytes]\n"
-        "vle32.v v5,  (%[a0p])\n" "add %[a0p], %[a0p], %[operand_bytes]\n"
-        "vtfmm.tvv mt12, v13,  v29\n"
-        "vtfmm.tvv mt12, v14,  v30\n"
         "vtfmm.tvv mt12, v15,  v31\n"
 
         // vtfmm mt8
         "vtzero mt8\n"
         "vtfmm.tvv mt8, v8,  v16\n"
+        "vle32.v v4,  (%[a0p])\n" "add %[a0p], %[a0p], %[operand_bytes]\n"
+        "vle32.v v5,  (%[a0p])\n" "add %[a0p], %[a0p], %[operand_bytes]\n"
         "vtfmm.tvv mt8, v9,  v17\n"
         "sub %[c00], %[c00], %[loop]\n"
         "sub %[c01], %[c01], %[loop]\n"
@@ -616,13 +616,13 @@ __attribute__((noinline, aligned(64))) void matmul_fp32(
         "sub %[c10], %[c10], %[loop]\n"
         "sub %[c11], %[c11], %[loop]\n"
         "vtfmm.tvv mt8, v12, v20\n"
-        "vtfmm.tvv mt8, v13, v21\n"
-        "vtfmm.tvv mt8, v14, v22\n"
-        "vtfmm.tvv mt8, v15, v23\n"
         "vle32.v v16,  (%[b0p])\n" "add %[b0p], %[b0p], %[operand_bytes]\n"
         "vle32.v v17,  (%[b0p])\n" "add %[b0p], %[b0p], %[operand_bytes]\n"
+        "vtfmm.tvv mt8, v13, v21\n"
         "vle32.v v18,  (%[b0p])\n" "add %[b0p], %[b0p], %[operand_bytes]\n"
+        "vtfmm.tvv mt8, v14, v22\n"
         "vle32.v v19,  (%[b0p])\n" "add %[b0p], %[b0p], %[operand_bytes]\n"
+        "vtfmm.tvv mt8, v15, v23\n"
         "vle32.v v20,  (%[b0p])\n" "add %[b0p], %[b0p], %[operand_bytes]\n"
         "j 9b\n"
 

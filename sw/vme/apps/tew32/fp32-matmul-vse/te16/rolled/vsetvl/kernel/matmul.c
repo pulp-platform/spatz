@@ -16,19 +16,19 @@
 //
 // Author: Pei-Yu Lin, ETH Zürich
 
+// fp32 optimal kernel for TE=16, CE=8, and four accumulator tiles.
+
 #include "matmul.h"
 
-__attribute__((noinline, aligned(64))) void matmul_fp32(
-    const float *Apack, const float *Bpack, float *C,
-    uint32_t M, uint32_t N, uint32_t K)
+__attribute__((noinline, aligned(64))) void matmul_fp32(const float *At, const float *B, float *C, uint32_t M, uint32_t N, uint32_t K)
 {
     const uint32_t col_blocks = (N + BLOCK_DIM - 1) / BLOCK_DIM;
     const uint32_t row_blocks = (M + BLOCK_DIM - 1) / BLOCK_DIM;
     const uint32_t tile_stride = TE * K;
-    uintptr_t a0p = (uintptr_t)Apack;
-    uintptr_t a1p = (uintptr_t)(Apack + tile_stride);
-    uintptr_t b0p = (uintptr_t)Bpack;
-    uintptr_t b1p = (uintptr_t)(Bpack + tile_stride);
+    uintptr_t a0p = (uintptr_t)At;
+    uintptr_t a1p = (uintptr_t)(At + tile_stride);
+    uintptr_t b0p = (uintptr_t)B;
+    uintptr_t b1p = (uintptr_t)(B + tile_stride);
     uintptr_t tss;
     const uintptr_t operand_bytes = sizeof(float) * TE;
     uintptr_t c00 = (uintptr_t)(C);
@@ -512,8 +512,6 @@ __attribute__((noinline, aligned(64))) void matmul_fp32(
         "vtzero mt8\n"
         "vtfmm.tvv mt8, v8,  v16\n"
         "vtfmm.tvv mt8, v9,  v17\n"
-        // "slli %[loop], %[c_stride], 4\n"
-        // "addi %[loop], %[loop], -128\n"
         "sub %[c00], %[c00], %[loop]\n"
         "sub %[c01], %[c01], %[loop]\n"
         "vtfmm.tvv mt8, v10, v18\n"

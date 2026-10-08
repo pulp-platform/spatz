@@ -197,9 +197,7 @@ int main(void) {
 
         if (iter == 0)
             start_cycle = cycle_count();
-        matmul_fp32((const float *)(base + A_OFFSET),
-                    (const float *)(base + B_OFFSET),
-                    (float *)(base + C_OFFSET), valid_m, valid_n, valid_k);
+        matmul_fp32((const float *)(base + A_OFFSET), (const float *)(base + B_OFFSET), (float *)(base + C_OFFSET), valid_m, valid_n, valid_k);
         end_cycle = cycle_count();
 
         snrt_dma_start_1d(partials + (size_t)iter * C_ELEMENTS,

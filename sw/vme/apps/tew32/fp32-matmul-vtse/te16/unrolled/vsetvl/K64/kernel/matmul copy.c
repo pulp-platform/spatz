@@ -52,9 +52,10 @@ __attribute__((noinline, aligned(64))) void matmul_fp32(
         "vle32.v v16,  (%[b0p])\n" "addi %[b0p], %[b0p], 512\n"
         "msetmtype %[mtype], %[vtype]\n"
         "msettn x0, %[vl]\n"
+
         // Block 1, K-Group 1
-        "vtzero mt0\n"
         // vtfmm mt0
+        "vtzero mt0\n"
         "vtfmm.tvv mt0, v0, v16\n"  // mt0 += v0*v16
         "vtfmm.tvv mt0, v1, v17\n"  // mt0 += v1*v17
         "vtfmm.tvv mt0, v2, v18\n"  // mt0 += v2*v18
@@ -76,16 +77,14 @@ __attribute__((noinline, aligned(64))) void matmul_fp32(
         "vtfmm.tvv mt4, v3, v27\n"  // mt4 += v3*v27
         "vsetvli %[vl], x0, e32, m8, ta, ma\n"
         "vle32.v v8,  (%[a1p])\n" "addi %[a1p], %[a1p], 512\n"
-        "msetmtype %[mtype], %[vtype]\n"
-        "msettn x0, %[vl]\n"
+        "msetmtype %[mtype], %[vtype]\n" "msettn x0, %[vl]\n"
         "vtfmm.tvv mt4, v4, v28\n"  // mt4 += v4*v28
         "vtfmm.tvv mt4, v5, v29\n"  // mt4 += v5*v29
         "vtfmm.tvv mt4, v6, v30\n"  // mt4 += v6*v30
         "vtfmm.tvv mt4, v7, v31\n"  // mt4 += v7*v31
         "vsetvli %[vl], x0, e32, m8, ta, ma\n"
         "vle32.v v0,  (%[a0p])\n" "addi %[a0p], %[a0p], 512\n"
-        "msetmtype %[mtype], %[vtype]\n"
-        "msettn x0, %[vl]\n"
+        "msetmtype %[mtype], %[vtype]\n" "msettn x0, %[vl]\n"
         "vtzero mt8\n"
         
         // vtfmm mt8

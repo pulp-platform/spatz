@@ -5,7 +5,6 @@
 #
 # Author: Pei-Yu Lin <peilin@ethz.ch>
 #
-# gen_data.py — generate fp32 VME GEMM data header.
 #
 # Usage:
 #   python3 script/gen_data.py -c script/gemm_64_64_64.json

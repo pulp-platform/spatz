@@ -29,5 +29,4 @@ enum {
 
 // FP32 matmul over TE=16 and a 256-element K chunk. C is a padded
 // M-by-CHUNK_SIZE L1 panel; M and N must not exceed 64.
-void matmul_fp32(const float *Apack, const float *Bpack, float *C,
-                 uint32_t M, uint32_t N, uint32_t K);
+void matmul_fp32(const float *At, const float *B, float *C, uint32_t M, uint32_t N, uint32_t K);
