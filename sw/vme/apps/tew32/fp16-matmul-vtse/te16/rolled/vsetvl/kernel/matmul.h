@@ -25,10 +25,7 @@ enum {
     TE = 16,
     CHUNK_SIZE = 4 * TE,
     BLOCK_DIM = 2 * TE,
-    // VLEN=512: one FP16 K row occupies the low half of a register.
-    INPUT_ROW_ELEMENTS = 2 * TE,
-    INPUT_ROW_BYTES = INPUT_ROW_ELEMENTS * sizeof(__fp16),
 };
 
-void matmul_fp16_fp32(const __fp16 *Apack, const __fp16 *Bpack, float *C,
-                      uint32_t M, uint32_t N, uint32_t K);
+// A/B are packed FP16 halfwords; K counts pairs, C is FP32.
+void matmul_fp16_fp32(const __fp16 *Atpack, const __fp16 *Bpack, float *C, uint32_t M, uint32_t N, uint32_t K);

@@ -27,5 +27,5 @@ enum {
     BLOCK_DIM = 2 * TE,
 };
 
-void matmul_fp16_fp32(const __fp16 *Apack, const __fp16 *Bpack, float *C,
-                      uint32_t M, uint32_t N, uint32_t K);
+// A/B are packed FP16 halfwords; K counts pairs, C is FP32.
+void matmul_fp16_fp32(const __fp16 *Atpack, const __fp16 *Bpack, float *C, uint32_t M, uint32_t N, uint32_t K);

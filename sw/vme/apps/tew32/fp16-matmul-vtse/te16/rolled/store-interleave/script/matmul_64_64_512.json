@@ -1,0 +1,11 @@
+// Copyright 2026 ETH Zurich and University of Bologna.
+// SPDX-License-Identifier: Apache-2.0
+{
+    kernel: "MatMul",
+    M: 64,
+    N: 64,
+    K: 512,
+    TM: 16,
+    TN: 16,
+    seed: 42
+}
