@@ -2366,6 +2366,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
       // DMA instructions
       DMSRC,
       DMDST,
+      DMIDX,
       DMSTR: begin
         if (Xdma) begin
           acc_qreq_o.addr  = DMA_SS;

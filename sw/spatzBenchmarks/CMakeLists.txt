@@ -60,6 +60,17 @@ macro(add_spatz_test_threeParam name file param1 param2 param3)
   target_compile_definitions(test-${SNITCH_TEST_PREFIX}${target_name} PUBLIC DATAHEADER="data/data_${param1}_${param2}_${param3}.h" SNRT_NFPU_PER_CORE=${SNRT_NFPU_PER_CORE})
 endmacro()
 
+# Indexed-gather variant: (ROWS, DIM, G). Selects data header
+# data/data_gather_R<ROWS>_D<DIM>_G<G>.h. Target suffixed with the shape.
+macro(add_spatz_test_gather name file R D G)
+  set(target_name ${name}_R${R}_D${D}_G${G})
+  add_snitch_test(${target_name} ${file})
+  target_link_libraries(test-${SNITCH_TEST_PREFIX}${target_name} benchmark ${SNITCH_RUNTIME})
+  target_compile_definitions(test-${SNITCH_TEST_PREFIX}${target_name} PUBLIC
+    DATAHEADER="data/data_gather_R${R}_D${D}_G${G}.h"
+    SNRT_NFPU_PER_CORE=${SNRT_NFPU_PER_CORE})
+endmacro()
+
 # Use data type as another parameter
 macro(add_spatz_test_oneParam_type name file param1 type)
   set(target_name ${name}_M${param1})
@@ -154,6 +165,16 @@ if (ELEN EQUAL 64)
   add_spatz_test_twoParam(dp-fft dp-fft/main.c 128 2)
 
 endif()
+
+# Indexed gather (KV-cache-like): baseline core-driven scattered 1D DMAs,
+# optimized inline offload, and the hardware indexed-gather engine (DMGATHER).
+add_spatz_test_gather(gather gather/main.c 2048 128 128)
+add_spatz_test_gather(gather-opt gather/main.c 2048 128 128)
+target_compile_definitions(test-${SNITCH_TEST_PREFIX}gather-opt_R2048_D128_G128
+  PUBLIC GATHER_OPT)
+add_spatz_test_gather(gather-hw gather/main.c 2048 128 128)
+target_compile_definitions(test-${SNITCH_TEST_PREFIX}gather-hw_R2048_D128_G128
+  PUBLIC GATHER_HW)
 
 add_spatz_test_threeParam(sp-fmatmul sp-fmatmul/main.c 64  64  64 )
 add_spatz_test_threeParam(sp-fmatmul sp-fmatmul/main.c 64  128 64 )
