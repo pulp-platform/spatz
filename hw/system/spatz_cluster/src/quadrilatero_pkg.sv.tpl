@@ -261,7 +261,7 @@ package quadrilatero_pkg;
     src_reg_t    operand_reg;
     id_t         id         ;
     logic        is_store   ;
-    logic        zero       ;
+    logic [3:0]  zero_mask  ;
     logic        is_rhs     ;
     acc_reg_t    cmul       ;
     acc_reg_t    rmul       ;
