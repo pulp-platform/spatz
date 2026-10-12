@@ -40,17 +40,19 @@ module spatz_tcdm_fc_interconnect #(
   /// Actual data field width carried in each request/response (may include
   /// ECC bits). Defaults to DataWidth for backward compatibility.
   parameter int unsigned ProtDataWidth         = DataWidth,
-  /// Plaintext width of the {write, amo, strb} bundle protected together by out_wctrl_ecc_o
-  localparam int unsigned WCtrlWidth           = 1 + $bits(reqrsp_pkg::amo_op_e) + DataWidth/8,
-  /// Codeword width of out_wctrl_ecc_o (WCtrlWidth plus Hsiao parity bits).
-  localparam int unsigned WCtrlEccWidth        = WCtrlWidth + hsiao_ecc_pkg::min_ecc(WCtrlWidth),
   /// Additional user payload to route.
   parameter type         user_t                = logic,
   /// Latency of memory response (in cycles)
   parameter int unsigned MemoryResponseLatency = 1,
   parameter snitch_pkg::topo_e Topology        = snitch_pkg::LogarithmicInterconnect,
   // Misalign rows of the TCDM
-  parameter logic              AddrMisalign    = 1'b0
+  parameter logic              AddrMisalign    = 1'b0,
+  /// Plaintext width of the {write, amo, strb} bundle protected together by out_wctrl_ecc_o
+  /// Derived. *Do not override*
+  localparam int unsigned WCtrlWidth           = 1 + $bits(reqrsp_pkg::amo_op_e) + DataWidth/8,
+  /// Codeword width of out_wctrl_ecc_o (WCtrlWidth plus Hsiao parity bits).
+  /// Derived. *Do not override*
+  localparam int unsigned WCtrlEccWidth        = WCtrlWidth + hsiao_ecc_pkg::min_ecc(WCtrlWidth)
 ) (
   /// Clock, positive edge triggered.
   input  logic                             clk_i,
