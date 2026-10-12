@@ -95,15 +95,9 @@ package spatz_pkg;
   localparam int unsigned NrPhysicalTile = 16;
   // Tile Dimension
   localparam int unsigned OPEComputeEdge = 8;
-<<<<<<< HEAD
   // The ratio of Tile Dimension and OPE FMA array size
   localparam int unsigned NrAccPerComputeElem = 2;
   localparam int unsigned TileEdge = OPEComputeEdge * NrAccPerComputeElem;
-=======
-  // Number of compute-edge groups along one tile edge
-  localparam int unsigned NrComputeGroupsPerTileEdge = 4;
-  localparam int unsigned TileEdge = OPEComputeEdge * NrComputeGroupsPerTileEdge;
->>>>>>> aefe9fd0 ([hw] doublebw_vlsu, OPE: add segmented logical tile-row transfers)
   // The controller further limits tk to 32/SEW, or to one for 64-bit accumulation.
   localparam int unsigned KMAX   = (AccElemWidth <= 32) ? (32 / 8) : 1;
   // Maximum storage required for one complete Tile row, in bytes.
@@ -156,9 +150,12 @@ package spatz_pkg;
 
   typedef logic [8*TileRowBWidth-1:0] tile_row_t;
   typedef logic [8*TileWordBWidth-1:0] tile_word_t;
+  typedef logic [8*TileRowBWidth-1:0] tile_row_t;
+  typedef logic [8*TileWordBWidth-1:0] tile_word_t;
   typedef struct packed {
     mt_t                    idx;
     tile_dim_t              row;
+    tile_dim_t              col;
     tile_dim_t              col;
     tile_count_t            elems;
     vew_e                   tew;
@@ -167,8 +164,10 @@ package spatz_pkg;
     mt_t                    idx;
     tile_dim_t              row;
     tile_dim_t              col;
+    tile_dim_t              col;
     tile_count_t            elems;
     vew_e                   tew;
+    tile_word_t             data;
     tile_word_t             data;
   } tile_w_req_t;
 
