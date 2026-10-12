@@ -155,16 +155,16 @@ __attribute__((noinline, aligned(64))) void matmul_fp16_fp32(const __fp16 *Atpac
         // vtfmm mt0
         "vtfmm.tvv mt0, v0, v16\n"  // accumulate both packed FP16 products
         "vle32.v v8,  (%[a0p])\n" "add %[a0p], %[a0p], %[operand_bytes]\n"
-        "vtfmm.tvv mt0, v1, v17\n"  // accumulate both packed FP16 products
         "vle32.v v24,  (%[b0p])\n" "add %[b0p], %[b0p], %[operand_bytes]\n"
-        "vtfmm.tvv mt0, v2, v18\n"  // accumulate both packed FP16 products
+        "vtfmm.tvv mt0, v1, v17\n"  // accumulate both packed FP16 products
         "vle32.v v9,  (%[a0p])\n" "add %[a0p], %[a0p], %[operand_bytes]\n"
-        "vtfmm.tvv mt0, v3, v19\n"  // accumulate both packed FP16 products
+        "vtfmm.tvv mt0, v2, v18\n"  // accumulate both packed FP16 products
         "vle32.v v25,  (%[b0p])\n" "add %[b0p], %[b0p], %[operand_bytes]\n"
         "vle32.v v10,  (%[a0p])\n" "add %[a0p], %[a0p], %[operand_bytes]\n"
+        "vtfmm.tvv mt0, v3, v19\n"  // accumulate both packed FP16 products
         "vle32.v v26,  (%[b0p])\n" "add %[b0p], %[b0p], %[operand_bytes]\n"
-        "vle32.v v11,  (%[a0p])\n" "add %[a0p], %[a0p], %[operand_bytes]\n"
         "vtfmm.tvv mt0, v8, v24\n"
+        "vle32.v v11,  (%[a0p])\n" "add %[a0p], %[a0p], %[operand_bytes]\n"
         "vle32.v v27,  (%[b0p])\n" "add %[b0p], %[b0p], %[operand_bytes]\n"
         "vtfmm.tvv mt0, v9, v25\n"
         "vle32.v v16,  (%[b1p])\n" "add %[b1p], %[b1p], %[operand_bytes]\n"
@@ -377,14 +377,14 @@ __attribute__((noinline, aligned(64))) void matmul_fp16_fp32(const __fp16 *Atpac
         "vtfmm.tvv mt8, v8, v16\n"
         "sub %[c00], %[c00], %[loop]\n"
         "sub %[c01], %[c01], %[loop]\n"
-        "vtfmm.tvv mt8, v9, v17\n"
         "sub %[c10], %[c10], %[loop]\n"
         "sub %[c11], %[c11], %[loop]\n"
-        "vtfmm.tvv mt8, v10, v18\n"
+        "vtfmm.tvv mt8, v9, v17\n"
         "vle32.v v16, (%[b0p])\n" "add %[b0p], %[b0p], %[operand_bytes]\n"
-        "vtfmm.tvv mt8, v11, v19\n"
         "vle32.v v17, (%[b0p])\n" "add %[b0p], %[b0p], %[operand_bytes]\n"
+        "vtfmm.tvv mt8, v10, v18\n"
         "vle32.v v18, (%[b0p])\n" "add %[b0p], %[b0p], %[operand_bytes]\n"
+        "vtfmm.tvv mt8, v11, v19\n"
         "vle32.v v19, (%[b0p])\n" "add %[b0p], %[b0p], %[operand_bytes]\n"
         "j 9b\n"
 

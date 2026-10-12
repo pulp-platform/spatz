@@ -98,7 +98,7 @@ def main():
         "",
         "",
         "// A_pack[m_tile][K/2][32]: word[31:16]=even K, word[15:0]=odd K.",
-        "// vle32 with VL=16 transfers one 512-bit packed K pair.",
+        "// vle32 with VL=32 transfers one 1024-bit packed K pair across two registers.",
         f'static uint32_t Apack_dram[{K//2}*{M}] __attribute__((section(".data"), aligned(64))) =',
         array_to_cstr_u32(A_pack) + ";",
         "",

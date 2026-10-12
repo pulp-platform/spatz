@@ -121,7 +121,7 @@ package spatz_pkg;
   // Tile Dimension
   localparam int unsigned OPEComputeEdge = 8;
   // Number of compute-edge groups along one tile edge
-  localparam int unsigned NrComputeGroupsPerTileEdge = 4;
+  localparam int unsigned NrComputeGroupsPerTileEdge = 2;
   localparam int unsigned TileEdge = OPEComputeEdge * NrComputeGroupsPerTileEdge;
   // The controller further limits tk to 32/SEW, or to one for 64-bit accumulation.
   localparam int unsigned KMAX   = (AccElemWidth <= 32) ? (32 / 8) : 1;
