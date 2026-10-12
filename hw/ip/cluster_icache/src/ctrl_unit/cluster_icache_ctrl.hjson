@@ -1,0 +1,146 @@
+// Copyright 2024 ETH Zurich and University of Bologna.
+// Solderpad Hardware License, Version 0.51, see LICENSE for details.
+// SPDX-License-Identifier: SHL-0.51
+
+{
+  name: "cluster_icache_ctrl",
+  clock_primary: "clk_i",
+  reset_primary: "rst_ni",
+  bus_interfaces: [
+    { protocol: "reg_iface",
+      direction: "device"
+    }
+  ],
+
+  param_list: [
+    { name: "NumCores",
+      desc: "Number of cores",
+      default: "8"
+    },
+    { name: "NumL0Events",
+      desc: "Number of L0 events",
+      default: "7"
+    },
+    { name: "NumL1Events",
+      desc: "Number of L1 events",
+      default: "6"
+    },
+    { name: "NumAvailableCounters",
+      desc: "Number of available counters",
+      default: "62" // NumL1Events + NumCores * NumL0Events
+    },
+  ],
+
+  regwidth: "32",
+  registers: [
+    { name: "enable",
+      desc: "",
+      swaccess: "rw",
+      hwaccess: "hro",
+      fields: [
+        { bits: "0",
+          name: "enable",
+          desc: "",
+          resval: 0x1
+        }
+      ]
+    },
+    { name: "flush",
+      desc: "Flush all levels of the cache",
+      swaccess: "rw",
+      hwaccess: "hrw",
+      hwqe: "true",
+      hwext: "true",
+      fields: [
+        { bits: "0",
+          name: "flush",
+          desc: "",
+          resval: 0x0
+        }
+      ]
+    },
+    { name: "flush_l1_only",
+      desc: "not yet functional",
+      swaccess: "rw",
+      hwaccess: "hrw",
+      hwext: "true",
+      hwqe: "true",
+      fields: [
+        { bits: "0",
+          name: "flush",
+          desc: "",
+          resval: 0x0
+        }
+      ]
+    },
+    { name: "sel_flush_icache",
+      desc: "flush specified L0 banks (and currently the complete L1)",
+      swaccess: "rw",
+      hwaccess: "hrw",
+      hwext: "true",
+      hwqe: "true",
+      fields: [
+        { bits: "NumCores-1:0",
+          name: "flush",
+          desc: "",
+          resval: 0x0000_0000
+        }
+      ]
+    },
+    { name: "clear_counters",
+      desc: "Clear all performance counters",
+      swaccess: "rw",
+      hwaccess: "hrw",
+      hwqe: "true",
+      hwext: "true",
+      fields: [
+        { bits: "0",
+          name: "clear",
+          desc: "",
+          resval: 0x0
+        }
+      ]
+    },
+    { name: "enable_counters",
+      desc: "Enable performance counters",
+      swaccess: "rw",
+      hwaccess: "hro",
+      fields: [
+        { bits: "0",
+          name: "enable",
+          desc: "",
+          resval: 0x1
+        }
+      ]
+    },
+    { skipto: "0x1C" },
+    { name: "enable_prefetch",
+      desc: "Enable prefetching",
+      swaccess: "rw",
+      hwaccess: "hro",
+      fields: [
+        { bits: "0",
+          name: "enable",
+          desc: "",
+          resval: 0x1
+        }
+      ]
+    },
+    { multireg: {
+        name: "counters",
+        desc: "Performance counters",
+        count: "NumAvailableCounters",
+        cname: "id",
+        swaccess: "rw0c",
+        hwaccess: "hrw",
+        fields: [
+          { bits: "31:0",
+            name: "counter",
+            desc: "",
+            resval: 0x0000_0000
+          }
+        ]
+      }
+    },
+  ],
+}
