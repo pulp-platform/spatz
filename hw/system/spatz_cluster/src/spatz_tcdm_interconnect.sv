@@ -59,15 +59,44 @@ module spatz_tcdm_interconnect #(
   /// Request.
   output mem_req_t            [NumOut-1:0] mem_req_o,
   /// Response.
-  input  mem_rsp_t            [NumOut-1:0] mem_rsp_i
+  input  mem_rsp_t            [NumOut-1:0] mem_rsp_i,
+  /// Passthrough of i_fc_interconnect's rsp_valid_tmr_fault_o.
+  output logic                             rsp_valid_tmr_fault_o,
+  /// Passthrough of i_fc_interconnect's xbar_handshake_tmr_fault_o.
+  output logic                             xbar_handshake_tmr_fault_o,
+  /// Passthrough of i_fc_interconnect's xbar_idx_voter_output_fault_o.
+  output logic                             xbar_idx_voter_output_fault_o,
+  /// Set when this module's own valid-replica vote (gating sel_d/sel_q in
+  /// gen_hyperbank_demux) disagrees, OR'd across all hyperbank-demux banks.
+  output logic                             ic_mem_valid_rep_tmr_fault_o,
+  /// Set when this module's own ready-replica vote (gating sel_d/sel_q in
+  /// gen_hyperbank_demux) disagrees, OR'd across all hyperbank-demux banks.
+  output logic                             ic_mem_ready_rep_tmr_fault_o,
+  /// Passthrough of i_fc_interconnect's req_valid_rep_i
+  input  logic [2:0]                       req_valid_rep_i [NumInp],
+  /// Passthrough of i_fc_interconnect's req_ready_rep_o.
+  output logic [2:0]                       req_ready_rep_o [NumInp],
+  /// Three replicas of "is mem_req_o[k] valid"
+  output logic [2:0]                       mem_valid_rep_o [NumOut],
+  /// Three replicas of "is mem_req_o[k]'s downstream ready", muxed the
+  /// same way ic_mem_rsp[i].q_ready itself is muxed below, before being fed
+  /// back into i_fc_interconnect's mem_ready_rep_i.
+  input  logic [2:0]                       mem_ready_rep_i [NumOut]
 );
 
   localparam int unsigned BanksPerHyperBank = NumOut / NumHyperBanks;
   localparam int unsigned VirtualMemAddrWidth = MemAddrWidth + $clog2(NumHyperBanks);
+  // Address ECC (Hsiao) applied to the address as it crosses
+  // i_fc_interconnect's internal crossbar mux
+  localparam int unsigned VirtualMemAddrEccWidth =
+    VirtualMemAddrWidth + hsiao_ecc_pkg::min_ecc(VirtualMemAddrWidth);
 
   localparam int unsigned ByteOffset = $clog2(DataWidth/8);
   localparam int unsigned StrbWidth = DataWidth/8;
-  typedef logic [VirtualMemAddrWidth-1:0] virtual_mem_addr_t;
+  // Matches spatz_tcdm_fc_interconnect.sv's own WCtrlWidth/WCtrlEccWidth
+  localparam int unsigned WCtrlWidth = 1 + $bits(reqrsp_pkg::amo_op_e) + DataWidth/8;
+  localparam int unsigned WCtrlEccWidth = WCtrlWidth + hsiao_ecc_pkg::min_ecc(WCtrlWidth);
+  typedef logic [VirtualMemAddrEccWidth-1:0] virtual_mem_addr_t;
   typedef logic [MemAddrWidth-1:0] addr_t;
   typedef logic [ProtDataWidth-1:0] data_t;
   typedef logic [StrbWidth-1:0] strb_t;
@@ -79,9 +108,48 @@ module spatz_tcdm_interconnect #(
   `MEM_TYPEDEF_REQ_T(virtual_mem_req_t, mem_req_chan_t);
   virtual_mem_req_t [BanksPerHyperBank-1:0] ic_mem_req;
   mem_rsp_t         [BanksPerHyperBank-1:0] ic_mem_rsp;
+  logic [2:0]                                ic_mem_valid_rep [BanksPerHyperBank];
+  logic [2:0]                                ic_mem_ready_rep [BanksPerHyperBank];
+  // i_fc_interconnect's {write, amo, strb} ECC codeword
+  logic [WCtrlEccWidth-1:0]                  ic_wctrl_ecc [BanksPerHyperBank];
+  // Per-bank voter-disagreement flags for sel_d's own valid/ready vote
+  logic [BanksPerHyperBank-1:0]              ic_mem_valid_rep_tmr_fault;
+  logic [BanksPerHyperBank-1:0]              ic_mem_ready_rep_tmr_fault;
 
   // Instantiate one demux per bank in the hyperbank
   for (genvar i = 0; i < BanksPerHyperBank; i++) begin : gen_bank_connection
+
+    // Decode the address codeword right here, before any routing decision
+    logic [VirtualMemAddrWidth-1:0] ic_mem_req_addr_dec;
+    logic [1:0]                     ic_mem_req_addr_err; // [0]: correctable, [1]: uncorrectable
+
+    hsiao_ecc_dec #(
+      .DataWidth (VirtualMemAddrWidth)
+    ) i_ic_addr_dec (
+      .in         (ic_mem_req[i].q.addr),
+      .out        (ic_mem_req_addr_dec ),
+      .syndrome_o (                    ),
+      .err_o      (ic_mem_req_addr_err )
+    );
+
+    // Decode i_fc_interconnect's {write, amo, strb} codeword the same way
+    // and at the same point as the address above
+    logic [WCtrlWidth-1:0] ic_wctrl_dec;
+    logic [1:0]            ic_wctrl_err; // [0]: correctable, [1]: uncorrectable
+    logic                  ic_write_dec;
+    reqrsp_pkg::amo_op_e   ic_amo_dec;
+    strb_t                 ic_strb_dec;
+
+    hsiao_ecc_dec #(
+      .DataWidth (WCtrlWidth)
+    ) i_ic_wctrl_dec (
+      .in         (ic_wctrl_ecc[i]),
+      .out        (ic_wctrl_dec   ),
+      .syndrome_o (               ),
+      .err_o      (ic_wctrl_err   )
+    );
+    assign {ic_strb_dec, ic_amo_dec, ic_write_dec} = ic_wctrl_dec;
+
     if (NumHyperBanks > 1) begin : gen_hyperbank_demux
 
       logic select, sel_q, sel_d;
@@ -89,30 +157,91 @@ module spatz_tcdm_interconnect #(
       `FF(sel_q, sel_d, '0, clk_i, rst_ni)
 
       // Demux select signal is determined by the MSB of the request address
-      assign select = ic_mem_req[i].q.addr[VirtualMemAddrWidth-1];
-      assign sel_d = ic_mem_req[i].q_valid && ic_mem_rsp[i].q_ready ? select : sel_q;
+      assign select = ic_mem_req_addr_dec[VirtualMemAddrWidth-1];
+      logic ic_mem_valid_voted, ic_mem_ready_voted;
 
-      // Request demux
-      assign mem_req_o[i].q_valid = !select && ic_mem_req[i].q_valid;
-      assign mem_req_o[i].q  = ic_mem_req[i].q;
-      assign mem_req_o[i+BanksPerHyperBank].q_valid = select && ic_mem_req[i].q_valid;
-      assign mem_req_o[i+BanksPerHyperBank].q  = ic_mem_req[i].q;
+      bitwise_TMR_voter_fail #(
+        .DataWidth (1),
+        .VoterType (1)
+      ) i_ic_mem_valid_voter (
+        .a_i              (ic_mem_valid_rep[i][0]       ),
+        .b_i              (ic_mem_valid_rep[i][1]       ),
+        .c_i              (ic_mem_valid_rep[i][2]       ),
+        .majority_o       (ic_mem_valid_voted           ),
+        .fault_detected_o (ic_mem_valid_rep_tmr_fault[i])
+      );
+      bitwise_TMR_voter_fail #(
+        .DataWidth (1),
+        .VoterType (1)
+      ) i_ic_mem_ready_voter (
+        .a_i              (ic_mem_ready_rep[i][0]       ),
+        .b_i              (ic_mem_ready_rep[i][1]       ),
+        .c_i              (ic_mem_ready_rep[i][2]       ),
+        .majority_o       (ic_mem_ready_voted           ),
+        .fault_detected_o (ic_mem_ready_rep_tmr_fault[i])
+      );
+      assign sel_d = ic_mem_valid_voted && ic_mem_ready_voted ? select : sel_q;
+
+      // Request demux (data/address -- single-instance, content)
+      // decoded control and address
+      assign mem_req_o[i].q.addr  = ic_mem_req_addr_dec[MemAddrWidth-1:0];
+      assign mem_req_o[i].q.write = ic_write_dec;
+      assign mem_req_o[i].q.data  = ic_mem_req[i].q.data;
+      assign mem_req_o[i].q.strb  = ic_strb_dec;
+      assign mem_req_o[i].q.user  = ic_mem_req[i].q.user;
+      assign mem_req_o[i].q.amo   = ic_amo_dec;
+      assign mem_req_o[i+BanksPerHyperBank].q.addr  = ic_mem_req_addr_dec[MemAddrWidth-1:0];
+      assign mem_req_o[i+BanksPerHyperBank].q.write = ic_write_dec;
+      assign mem_req_o[i+BanksPerHyperBank].q.data  = ic_mem_req[i].q.data;
+      assign mem_req_o[i+BanksPerHyperBank].q.strb  = ic_strb_dec;
+      assign mem_req_o[i+BanksPerHyperBank].q.user  = ic_mem_req[i].q.user;
+      assign mem_req_o[i+BanksPerHyperBank].q.amo   = ic_amo_dec;
+
+      // Request demux (handshake -- all three replicas demuxed identically
+      // by the same single `select`, keeping each replica independent).
+      for (genvar t = 0; t < 3; t++) begin : gen_valid_demux_rep
+        assign mem_valid_rep_o[i][t]                  = !select && ic_mem_valid_rep[i][t];
+        assign mem_valid_rep_o[i+BanksPerHyperBank][t] = select && ic_mem_valid_rep[i][t];
+      end : gen_valid_demux_rep
+      // A placeholder for mem_req_o[*].q_valid -- replica 0. Only read by assertions.
+      assign mem_req_o[i].q_valid                  = mem_valid_rep_o[i][0];
+      assign mem_req_o[i+BanksPerHyperBank].q_valid = mem_valid_rep_o[i+BanksPerHyperBank][0];
 
       // Response mux (currently assumes response arrives exactly one cycle after request)
-      assign ic_mem_rsp[i].q_ready = select ? mem_rsp_i[i+BanksPerHyperBank].q_ready :
-        mem_rsp_i[i].q_ready;
+      for (genvar t = 0; t < 3; t++) begin : gen_ready_mux_rep
+        assign ic_mem_ready_rep[i][t] = select ? mem_ready_rep_i[i+BanksPerHyperBank][t]
+                                                : mem_ready_rep_i[i][t];
+      end : gen_ready_mux_rep
+      assign ic_mem_rsp[i].q_ready = ic_mem_ready_rep[i][0];
       assign ic_mem_rsp[i].p = sel_q ? mem_rsp_i[i+BanksPerHyperBank].p : mem_rsp_i[i].p;
 
     end else begin : gen_no_demux
 
       // Demux and mux degenerate to direct one-to-one connections
-      assign mem_req_o[i].q_valid  = ic_mem_req[i].q_valid;
-      assign mem_req_o[i].q        = ic_mem_req[i].q      ;
-      assign ic_mem_rsp[i].q_ready = mem_rsp_i[i].q_ready;
+      assign mem_req_o[i].q.addr   = ic_mem_req_addr_dec[MemAddrWidth-1:0];
+      assign mem_req_o[i].q.write  = ic_write_dec;
+      assign mem_req_o[i].q.data   = ic_mem_req[i].q.data;
+      assign mem_req_o[i].q.strb   = ic_strb_dec;
+      assign mem_req_o[i].q.user   = ic_mem_req[i].q.user;
+      assign mem_req_o[i].q.amo    = ic_amo_dec;
+
+      assign mem_valid_rep_o[i] = ic_mem_valid_rep[i];
+      assign mem_req_o[i].q_valid = mem_valid_rep_o[i][0];
+
+      assign ic_mem_ready_rep[i] = mem_ready_rep_i[i];
+      assign ic_mem_rsp[i].q_ready = ic_mem_ready_rep[i][0];
       assign ic_mem_rsp[i].p       = mem_rsp_i[i].p;
+
+      // No sel_d/sel_q vote exists in this branch (NumHyperBanks == 1, so
+      // there's nothing to demux), so nothing to flag.
+      assign ic_mem_valid_rep_tmr_fault[i] = 1'b0;
+      assign ic_mem_ready_rep_tmr_fault[i] = 1'b0;
 
     end
   end
+
+  assign ic_mem_valid_rep_tmr_fault_o = |ic_mem_valid_rep_tmr_fault;
+  assign ic_mem_ready_rep_tmr_fault_o = |ic_mem_ready_rep_tmr_fault;
 
   spatz_tcdm_fc_interconnect #(
     .NumInp                (NumInp               ),
@@ -123,6 +252,7 @@ module spatz_tcdm_interconnect #(
     .mem_rsp_t             (mem_rsp_t            ),
     .user_t                (user_t               ),
     .MemAddrWidth          (VirtualMemAddrWidth  ),
+    .ProtMemAddrWidth      (VirtualMemAddrEccWidth),
     .DataWidth             (DataWidth            ),
     .ProtDataWidth         (ProtDataWidth        ),
     .MemoryResponseLatency (MemoryResponseLatency),
@@ -133,7 +263,15 @@ module spatz_tcdm_interconnect #(
     .req_i     (req_i     ),
     .rsp_o     (rsp_o     ),
     .mem_req_o (ic_mem_req),
-    .mem_rsp_i (ic_mem_rsp)
+    .mem_rsp_i (ic_mem_rsp),
+    .rsp_valid_tmr_fault_o      (rsp_valid_tmr_fault_o     ),
+    .xbar_handshake_tmr_fault_o (xbar_handshake_tmr_fault_o),
+    .xbar_idx_voter_output_fault_o (xbar_idx_voter_output_fault_o),
+    .req_valid_rep_i (req_valid_rep_i ),
+    .req_ready_rep_o (req_ready_rep_o ),
+    .mem_valid_rep_o (ic_mem_valid_rep),
+    .mem_ready_rep_i (ic_mem_ready_rep),
+    .out_wctrl_ecc_o (ic_wctrl_ecc    )
   );
 
 endmodule
