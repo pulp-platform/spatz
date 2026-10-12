@@ -106,7 +106,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   tile_w_req_t                tile_w_req;
   logic                       tile_rvalid, tile_rready;
   tile_r_req_t                tile_r_req;
-  tile_row_t                  tile_rdata;
+  tile_word_t                 tile_rdata;
 
   logic      vlsu_req_ready;
   logic      vlsu_rsp_valid, vlsu_rsp_buf_valid;
