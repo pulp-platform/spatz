@@ -182,6 +182,27 @@ void TEST_CASE5(void) {
 #endif
 }
 
+// To check for FPU to IPU FSM transition in VFU
+void TEST_CASE6(void) {
+#if ELEN == 64
+  VSET(4, e64, m8);
+  VLOAD_64(v16, 0x0000000000000000, 0x1000000000000001, 0x0000000000000000,
+           0x0000000000000000);
+  VLOAD_64(v8, 0x0000000000000007);
+  asm volatile("vfadd.vv v0, v16, v8");
+  asm volatile("vredsum.vs v24, v16, v8");
+  VSET(1, e64, m1);
+  VCMP_U64(21, v24, 0x1000000000000008);
+
+  VSET(4, e64, m8);
+  VCLEAR(v24);
+  asm volatile("vredsum.vs v24, v16, v8");
+  asm volatile("vfadd.vv v0, v16, v8");
+  VSET(1, e64, m1);
+  VCMP_U64(22, v24, 0x1000000000000008);
+#endif
+}
+
 int main(void) {
   INIT_CHECK();
   enable_vec();
@@ -191,6 +212,7 @@ int main(void) {
   TEST_CASE3();
   TEST_CASE4();
   TEST_CASE5();
+  TEST_CASE6();
 
   EXIT_CHECK();
 }
