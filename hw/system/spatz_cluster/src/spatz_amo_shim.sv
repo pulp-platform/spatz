@@ -117,36 +117,14 @@ module spatz_amo_shim
     DoAMO       = 3'b010,
     WriteBackAMO = 3'b100
   } state_e;
-  // TMR-protected: this is the only flop that gates the multi-cycle
-  // ready_o/mem_req_o/mem_wen_o/core_arb_ready handshake decision (Idle/
-  // DoAMO/WriteBackAMO)
+  // This is the only flop that gates the multi-cycle ready_o/mem_req_o/
+  // mem_wen_o/core_arb_ready handshake decision (Idle/DoAMO/WriteBackAMO).
+  // Not TMR-voted: the one-hot encoding above makes a single-bit-flip SEU
+  // detectable directly via state_illegal below, so a vote-and-correct
+  // triplication isn't needed on top of that.
   state_e state_d;
-  state_e state_q_rep [3];
-  for (genvar t = 0; t < 3; t++) begin : gen_state_rep
-    `FF(state_q_rep[t], state_d, Idle)
-  end
   state_e state_q;
-  // Vote the triplicated state register down to the single `state_q` every
-  // combinational consumer below (including the FSM's own next-state logic
-  // in gen_ctrl_rep) reads -- without this, state_q is never driven and the
-  // FSM can never reach DoAMO/WriteBackAMO.
-  logic   state_q_tmr_fault;
-  // majority_o is a plain logic vector port (bitwise_TMR_voter_fail is not
-  // enum-aware); Questa rejects a direct port connection into an enum-typed
-  // variable ((vsim-8386) "Illegal assignment ... from type 'reg[2:0]'"), so
-  // route through a plain vector and cast it into state_e explicitly.
-  logic [$bits(state_e)-1:0] state_q_voted;
-  bitwise_TMR_voter_fail #(
-    .DataWidth ($bits(state_e)),
-    .VoterType (1)
-  ) i_state_q_voter (
-    .a_i              (state_q_rep[0]   ),
-    .b_i              (state_q_rep[1]   ),
-    .c_i              (state_q_rep[2]   ),
-    .majority_o       (state_q_voted    ),
-    .fault_detected_o (state_q_tmr_fault)
-  );
-  assign state_q = state_e'(state_q_voted);
+  `FF(state_q, state_d, Idle)
   logic state_illegal;
   assign state_illegal = ~(^state_q);
 
@@ -366,11 +344,11 @@ module spatz_amo_shim
     .fault_detected_o (ctrl_tmr_fault)
   );
 
-  assign handshake_tmr_fault_o = ctrl_tmr_fault | state_q_tmr_fault;
+  assign handshake_tmr_fault_o = ctrl_tmr_fault;
 
   // state_d is enum-typed; a concatenation assignment can't cast one of its
   // own slices, so unpack into a plain vector first and cast separately
-  // (same (vsim-8386) issue as state_q_voted above).
+  // ((vsim-8386) "Illegal assignment ... from type 'reg[2:0]'" otherwise).
   logic [$bits(state_e)-1:0] state_d_raw;
   assign {state_d_raw, mem_req_o, ready_o, mem_wen_o, core_arb_ready} = ctrl_voted;
   assign state_d = state_e'(state_d_raw);
