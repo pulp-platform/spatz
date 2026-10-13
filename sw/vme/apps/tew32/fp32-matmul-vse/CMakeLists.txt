@@ -110,6 +110,9 @@ foreach(_precision IN ITEMS te16 te32)
         add_fp32_vse_variant(${_precision} rolled-vsetvl
             "${CMAKE_CURRENT_SOURCE_DIR}/${_precision}/rolled/vsetvl"
             ${_fp32_vse_te16_shapes})
+        add_fp32_vse_variant(${_precision} rolled-store-group
+            "${CMAKE_CURRENT_SOURCE_DIR}/${_precision}/rolled/store-group"
+            ${_fp32_vse_te16_shapes})
 
         # The te16 unrolled kernels are specialized by K.  Keep their
         # existing source hierarchy and expose the same K64/K128/K256 ELF
