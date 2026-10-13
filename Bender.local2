@@ -1,0 +1,10 @@
+# Copyright 2023 ETH Zurich and University of Bologna.
+# Licensed under the Apache License, Version 2.0, see LICENSE for details.
+# SPDX-License-Identifier: Apache-2.0
+
+overrides:
+  riscv-dbg:          { git: "https://github.com/pulp-platform/riscv-dbg.git",          version: 0.10.0     }
+  axi:                { git: "https://github.com/pulp-platform/axi.git",                version: =0.39.11   }
+  common_cells:       { git: "https://github.com/pulp-platform/common_cells.git",       version: 1.40.0     }
+  quadrilatero:       { path: "/scratch/dcammarata/spatz_quadrilatero/dora/quadrilatero_ft",           }
+  redundancy_cells:       { path: "/scratch/dcammarata/spatz_quadrilatero/dora/redundancy_cells",           }
