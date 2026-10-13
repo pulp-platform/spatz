@@ -1288,8 +1288,9 @@ module spatz_cluster
 
   if (!spatz_pkg::QUADRILATERO) assign quad_tcdm_req = '0;
 
-  // Per-TCDM-port TMR fault from i_shift_reg_spatz_voter; OR-reduced onto tcdm_shift_reg_tmr_fault further down.
+  // Per-TCDM-port TMR fault from i_shift_reg_spatz_voter/i_shift_reg_quad_voter; OR-reduced onto tcdm_shift_reg_tmr_fault further down.
   logic [NrTCDMPortsCores-1:0] spatz_tcdm_p_valid_tmr_fault;
+  logic [NrTCDMPortsCores-1:0] quad_tcdm_p_valid_tmr_fault;
   logic [NrTCDMPortsCores-1:0] tcdm_arb_tmr_fault;
 
   // End-to-end handshake TMR: three replicas of "is tcdm_req[j] valid" /
@@ -1413,21 +1414,36 @@ module spatz_cluster
       .fault_detected_o (spatz_tcdm_p_valid_tmr_fault[j])
     );
 
-    shift_reg #(
-      .dtype ( logic ),
-      .Depth ( 1 + RegisterTCDMCuts )
-    ) i_shift_reg_quad (
-      .clk_i,
-      .rst_ni,
-      .d_i ( quad_tcdm_req[j].q_valid & quad_tcdm_rsp[j].q_ready ),
-      .d_o ( quad_tcdm_rsp[j].p_valid )
+    // TMR-protected, mirroring gen_shift_reg_spatz_rep above for the quad side.
+    logic quad_tcdm_p_valid_rep [3];
+    for (genvar t = 0; t < 3; t++) begin : gen_shift_reg_quad_rep
+      shift_reg #(
+        .dtype ( logic ),
+        .Depth ( 1 + RegisterTCDMCuts )
+      ) i_shift_reg_quad (
+        .clk_i,
+        .rst_ni,
+        .d_i ( quad_tcdm_req[j].q_valid & quad_tcdm_rsp[j].q_ready ),
+        .d_o ( quad_tcdm_p_valid_rep[t] )
+      );
+    end
+    bitwise_TMR_voter_fail #(
+      .DataWidth (1),
+      .VoterType (1)
+    ) i_shift_reg_quad_voter (
+      .a_i              (quad_tcdm_p_valid_rep[0] ),
+      .b_i              (quad_tcdm_p_valid_rep[1] ),
+      .c_i              (quad_tcdm_p_valid_rep[2] ),
+      .majority_o       (quad_tcdm_rsp[j].p_valid ),
+      .fault_detected_o (quad_tcdm_p_valid_tmr_fault[j])
     );
 
     assign quad_tcdm_rsp[j].p  =  quad_tcdm_rsp[j].p_valid ? tcdm_rsp[j].p :'0;
     assign spatz_tcdm_rsp[j].p = spatz_tcdm_rsp[j].p_valid ? tcdm_rsp[j].p :'0;
   end
 
-  assign tcdm_shift_reg_tmr_fault = |spatz_tcdm_p_valid_tmr_fault | |tcdm_arb_tmr_fault;
+  assign tcdm_shift_reg_tmr_fault = |spatz_tcdm_p_valid_tmr_fault | |quad_tcdm_p_valid_tmr_fault
+                                   | |tcdm_arb_tmr_fault;
 
   // ----------------
   // Instruction Cache

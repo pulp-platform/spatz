@@ -126,6 +126,21 @@ module spatz_amo_shim
     `FF(state_q_rep[t], state_d, Idle)
   end
   state_e state_q;
+  // Vote the triplicated state register down to the single `state_q` every
+  // combinational consumer below (including the FSM's own next-state logic
+  // in gen_ctrl_rep) reads -- without this, state_q is never driven and the
+  // FSM can never reach DoAMO/WriteBackAMO.
+  logic   state_q_tmr_fault;
+  bitwise_TMR_voter_fail #(
+    .DataWidth ($bits(state_e)),
+    .VoterType (1)
+  ) i_state_q_voter (
+    .a_i              (state_q_rep[0]   ),
+    .b_i              (state_q_rep[1]   ),
+    .c_i              (state_q_rep[2]   ),
+    .majority_o       (state_q          ),
+    .fault_detected_o (state_q_tmr_fault)
+  );
   logic state_illegal;
   assign state_illegal = ~(^state_q);
 
@@ -333,16 +348,19 @@ module spatz_amo_shim
                            mem_wen_rep[t], core_arb_ready_rep[t]};
   end : gen_ctrl_bundle
 
+  logic ctrl_tmr_fault;
   bitwise_TMR_voter_fail #(
     .DataWidth (CtrlWidth),
     .VoterType (1)
   ) i_ctrl_voter (
-    .a_i              (ctrl_rep[0]           ),
-    .b_i              (ctrl_rep[1]           ),
-    .c_i              (ctrl_rep[2]           ),
-    .majority_o       (ctrl_voted            ),
-    .fault_detected_o (handshake_tmr_fault_o )
+    .a_i              (ctrl_rep[0]   ),
+    .b_i              (ctrl_rep[1]   ),
+    .c_i              (ctrl_rep[2]   ),
+    .majority_o       (ctrl_voted    ),
+    .fault_detected_o (ctrl_tmr_fault)
   );
+
+  assign handshake_tmr_fault_o = ctrl_tmr_fault | state_q_tmr_fault;
 
   assign {state_d, mem_req_o, ready_o, mem_wen_o, core_arb_ready} = ctrl_voted;
 
