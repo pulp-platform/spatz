@@ -47,9 +47,10 @@ module spatz_tcdm_fc_interconnect #(
   parameter snitch_pkg::topo_e Topology        = snitch_pkg::LogarithmicInterconnect,
   // Misalign rows of the TCDM
   parameter logic              AddrMisalign    = 1'b0,
-  /// Plaintext width of the {write, amo, strb} bundle protected together by out_wctrl_ecc_o
+  /// Plaintext width of the {user, write, amo, strb} bundle protected together by out_wctrl_ecc_o
   /// Derived. *Do not override*
-  localparam int unsigned WCtrlWidth           = 1 + $bits(reqrsp_pkg::amo_op_e) + DataWidth/8,
+  localparam int unsigned WCtrlWidth           = 1 + $bits(reqrsp_pkg::amo_op_e) + DataWidth/8
+                                                + $bits(user_t),
   /// Codeword width of out_wctrl_ecc_o (WCtrlWidth plus Hsiao parity bits).
   /// Derived. *Do not override*
   localparam int unsigned WCtrlEccWidth        = WCtrlWidth + hsiao_ecc_pkg::min_ecc(WCtrlWidth)
@@ -170,13 +171,15 @@ module spatz_tcdm_fc_interconnect #(
     hsiao_ecc_enc #(
       .DataWidth (WCtrlWidth)
     ) i_in_wctrl_enc (
-      .in  ({req_i[i].q.strb, req_i[i].q.amo, req_i[i].q.write}),
-      .out (in_req_wctrl_ecc[i]                                )
+      .in  ({req_i[i].q.user, req_i[i].q.strb, req_i[i].q.amo, req_i[i].q.write}),
+      .out (in_req_wctrl_ecc[i]                                                 )
     );
 
-  // .data/.user are the real, consumed payload, muxed through as-is by
-  // gen_xbar_data_mux/gen_omega_data_mux below. 
-  // .write/.amo/.strb are simple placeholder
+  // .data is the real, consumed payload, muxed through as-is by
+  // gen_xbar_data_mux/gen_omega_data_mux below.
+  // .write/.amo/.strb/.user are simple placeholders here -- the real values
+  // are carried ECC-protected in in_req_wctrl_ecc/out_wctrl_ecc_o and decoded
+  // back out at the far end (spatz_tcdm_interconnect.sv's i_ic_wctrl_dec).
     assign in_req[i].write = req_i[i].q.write;
     assign in_req[i].amo   = req_i[i].q.amo;
     assign in_req[i].data  = req_i[i].q.data;

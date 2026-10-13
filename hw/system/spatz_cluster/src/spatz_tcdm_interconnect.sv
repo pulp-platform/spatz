@@ -94,7 +94,8 @@ module spatz_tcdm_interconnect #(
   localparam int unsigned ByteOffset = $clog2(DataWidth/8);
   localparam int unsigned StrbWidth = DataWidth/8;
   // Matches spatz_tcdm_fc_interconnect.sv's own WCtrlWidth/WCtrlEccWidth
-  localparam int unsigned WCtrlWidth = 1 + $bits(reqrsp_pkg::amo_op_e) + DataWidth/8;
+  localparam int unsigned WCtrlWidth = 1 + $bits(reqrsp_pkg::amo_op_e) + DataWidth/8
+                                      + $bits(user_t);
   localparam int unsigned WCtrlEccWidth = WCtrlWidth + hsiao_ecc_pkg::min_ecc(WCtrlWidth);
   typedef logic [VirtualMemAddrEccWidth-1:0] virtual_mem_addr_t;
   typedef logic [MemAddrWidth-1:0] addr_t;
@@ -132,13 +133,14 @@ module spatz_tcdm_interconnect #(
       .err_o      (ic_mem_req_addr_err )
     );
 
-    // Decode i_fc_interconnect's {write, amo, strb} codeword the same way
-    // and at the same point as the address above
+    // Decode i_fc_interconnect's {user, write, amo, strb} codeword the same
+    // way and at the same point as the address above
     logic [WCtrlWidth-1:0] ic_wctrl_dec;
     logic [1:0]            ic_wctrl_err; // [0]: correctable, [1]: uncorrectable
     logic                  ic_write_dec;
     reqrsp_pkg::amo_op_e   ic_amo_dec;
     strb_t                 ic_strb_dec;
+    user_t                 ic_user_dec;
 
     hsiao_ecc_dec #(
       .DataWidth (WCtrlWidth)
@@ -148,7 +150,7 @@ module spatz_tcdm_interconnect #(
       .syndrome_o (               ),
       .err_o      (ic_wctrl_err   )
     );
-    assign {ic_strb_dec, ic_amo_dec, ic_write_dec} = ic_wctrl_dec;
+    assign {ic_user_dec, ic_strb_dec, ic_amo_dec, ic_write_dec} = ic_wctrl_dec;
 
     if (NumHyperBanks > 1) begin : gen_hyperbank_demux
 
@@ -188,13 +190,13 @@ module spatz_tcdm_interconnect #(
       assign mem_req_o[i].q.write = ic_write_dec;
       assign mem_req_o[i].q.data  = ic_mem_req[i].q.data;
       assign mem_req_o[i].q.strb  = ic_strb_dec;
-      assign mem_req_o[i].q.user  = ic_mem_req[i].q.user;
+      assign mem_req_o[i].q.user  = ic_user_dec;
       assign mem_req_o[i].q.amo   = ic_amo_dec;
       assign mem_req_o[i+BanksPerHyperBank].q.addr  = ic_mem_req_addr_dec[MemAddrWidth-1:0];
       assign mem_req_o[i+BanksPerHyperBank].q.write = ic_write_dec;
       assign mem_req_o[i+BanksPerHyperBank].q.data  = ic_mem_req[i].q.data;
       assign mem_req_o[i+BanksPerHyperBank].q.strb  = ic_strb_dec;
-      assign mem_req_o[i+BanksPerHyperBank].q.user  = ic_mem_req[i].q.user;
+      assign mem_req_o[i+BanksPerHyperBank].q.user  = ic_user_dec;
       assign mem_req_o[i+BanksPerHyperBank].q.amo   = ic_amo_dec;
 
       // Request demux (handshake -- all three replicas demuxed identically
@@ -222,7 +224,7 @@ module spatz_tcdm_interconnect #(
       assign mem_req_o[i].q.write  = ic_write_dec;
       assign mem_req_o[i].q.data   = ic_mem_req[i].q.data;
       assign mem_req_o[i].q.strb   = ic_strb_dec;
-      assign mem_req_o[i].q.user   = ic_mem_req[i].q.user;
+      assign mem_req_o[i].q.user   = ic_user_dec;
       assign mem_req_o[i].q.amo    = ic_amo_dec;
 
       assign mem_valid_rep_o[i] = ic_mem_valid_rep[i];
