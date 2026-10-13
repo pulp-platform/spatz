@@ -3,8 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 overrides:
-  axi:                { git: "https://github.com/pulp-platform/axi.git",                version: =0.39.1-beta   }
-  idma:               { git: "https://github.com/pulp-platform/iDMA.git",               version: 0.6.4          }
-  register_interface: { git: "https://github.com/pulp-platform/register_interface.git", version: 0.3.9          }
-  cluster_icache:     { git: "https://github.com/pulp-platform/cluster_icache.git",     version: 0.2.0          }
-  common_cells:       { git: "https://github.com/pulp-platform/common_cells.git",       version: 1.38.0         }
+  riscv-dbg:          { git: "https://github.com/pulp-platform/riscv-dbg.git",          version: 0.10.0     }
+  axi:                { git: "https://github.com/pulp-platform/axi.git",                version: =0.39.11   }
+  common_cells:       { git: "https://github.com/pulp-platform/common_cells.git",       version: 1.40.0     }
+  redundancy_cells:   { git: "https://github.com/pulp-platform/redundancy_cells.git",   rev: 9af84af        }

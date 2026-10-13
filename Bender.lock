@@ -7,8 +7,8 @@ packages:
     dependencies:
     - common_cells
   axi:
-    revision: da423834b45f2e1878ecb28a11dc5b72b437f9c1
-    version: 0.39.1-beta
+    revision: 42ca270ebd8bbbc1c64ddc0ca712e722eb9e3f06
+    version: 0.39.11
     source:
       Git: https://github.com/pulp-platform/axi.git
     dependencies:
@@ -91,15 +91,16 @@ packages:
     - common_cells
     - common_verification
   quadrilatero:
-    revision: 5464da3f7a90fb20e7b9bba8b7cb840b1f2e559c
+    revision: eaedf7bbbf73b111c7fbc6ff7a6bb57896c4aeca
     version: null
     source:
-      Git: https://iis-git.ee.ethz.ch/quadrilatero/quadrilatero.git
+      Git: git@iis-git.ee.ethz.ch:quadrilatero/quadrilatero.git
     dependencies:
     - common_cells
     - fpnew
+    - redundancy_cells
   redundancy_cells:
-    revision: 2e84face0d1401f0468a70a44c490ec89ef94e9e
+    revision: 0d4ca29a2e06d3d8c5b752c3adc8a80ba7a62dfd
     version: null
     source:
       Git: https://github.com/pulp-platform/redundancy_cells.git
@@ -109,17 +110,18 @@ packages:
     - register_interface
     - tech_cells_generic
   register_interface:
-    revision: 146501d80052b61475cdc333d3aab4cd769fd5dc
-    version: 0.3.9
+    revision: d6e1d4cdaab7870f4faf3f88a1c788eaf5ac129d
+    version: 0.4.7
     source:
       Git: https://github.com/pulp-platform/register_interface.git
     dependencies:
     - apb
     - axi
     - common_cells
+    - common_verification
   riscv-dbg:
-    revision: 122510063a02e0d012f0497ffdbafca53d4e716b
-    version: 0.7.0
+    revision: deed17e18c0d61ce8dc554300bb4dd5c39be2a13
+    version: 0.10.1
     source:
       Git: https://github.com/pulp-platform/riscv-dbg.git
     dependencies:

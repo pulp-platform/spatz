@@ -36,13 +36,13 @@ module spatz_scalar_only import spatz_pkg::*; import rvv_pkg::*; import fpnew_pk
     input  logic                              testmode_i,
     input  logic             [31:0]           hart_id_i,
     // Snitch Interface
-    input  logic                              issue_valid_i,
-    output logic                              issue_ready_o,
-    input  spatz_issue_req_t                  issue_req_i,
-    output spatz_issue_rsp_t                  issue_rsp_o,
-    output logic                              rsp_valid_o,
-    input  logic                              rsp_ready_i,
-    output spatz_rsp_t                        rsp_o,
+    input  logic             [2:0]            issue_valid_i,
+    output logic             [2:0]            issue_ready_o,
+    input  spatz_issue_req_t [2:0]            issue_req_i,
+    output spatz_issue_rsp_t [2:0]            issue_rsp_o,
+    output logic             [2:0]            rsp_valid_o,
+    input  logic             [2:0]            rsp_ready_i,
+    output spatz_rsp_t       [2:0]            rsp_o,
     // Memory Request
     output spatz_mem_req_t   [NrMemPorts-1:0] spatz_mem_req_o,
     output logic             [NrMemPorts-1:0] spatz_mem_req_valid_o,
@@ -61,102 +61,92 @@ module spatz_scalar_only import spatz_pkg::*; import rvv_pkg::*; import fpnew_pk
     output status_t                           fpu_status_o
   );
 
-  /////////////
-  // Signals //
-  /////////////
-
-  // Spatz request
-  spatz_req_t spatz_req;
-  logic       spatz_req_valid;
-
-  logic     vfu_req_ready;
-  logic     vfu_rsp_ready;
-  logic     vfu_rsp_valid;
-  vfu_rsp_t vfu_rsp;
-
   /////////////////////
   //  FPU sequencer  //
   /////////////////////
 
   // X Interface
-  spatz_issue_req_t issue_req;
-  logic             issue_valid;
-  logic             issue_ready;
-  spatz_issue_rsp_t issue_rsp;
-  spatz_rsp_t       resp;
-  logic             resp_valid;
-  logic             resp_ready;
+  spatz_issue_req_t [2:0] issue_req;
+  logic             [2:0] issue_valid;
+  logic             [2:0] issue_ready;
+  spatz_issue_rsp_t [2:0] issue_rsp;
+  spatz_rsp_t       [2:0] resp;
+  logic             [2:0] resp_valid;
+  logic             [2:0] resp_ready;
+
+  status_t [2:0] fpu_status;
+  assign fpu_status_o = fpu_status[0];
 
   // Did we finish a memory request?
-  logic fp_lsu_mem_finished;
-  logic fp_lsu_mem_str_finished;
+  logic  [2:0] fp_lsu_mem_finished    ;
+  logic  [2:0] fp_lsu_mem_str_finished;
+  dreq_t [2:0] fp_lsu_mem_req         ;
   assign spatz_mem_req_o = '0;
   assign spatz_mem_req_valid_o = '0;
-  assign spatz_mem_finished_o     = {1'b0, fp_lsu_mem_finished};
-  assign spatz_mem_str_finished_o = {1'b0, fp_lsu_mem_str_finished};
+  assign fp_lsu_mem_req_o         = fp_lsu_mem_req[0];
+  assign spatz_mem_finished_o     = {1'b0, fp_lsu_mem_finished[0]};
+  assign spatz_mem_str_finished_o = {1'b0, fp_lsu_mem_str_finished[0]};
 
-  spatz_fpu_sequencer #(
-    .dreq_t             (dreq_t              ),
-    .drsp_t             (drsp_t              ),
-    .spatz_issue_req_t  (spatz_issue_req_t   ),
-    .spatz_issue_rsp_t  (spatz_issue_rsp_t   ),
-    .spatz_rsp_t        (spatz_rsp_t         ),
-    .NumOutstandingLoads(NumOutstandingLoads )
-  ) i_fpu_sequencer (
-    .clk_i                    ( clk_i                  ),
-    .rst_ni                   ( rst_ni                 ),
-    // Snitch interface
-    .issue_req_i              ( issue_req_i            ),
-    .issue_valid_i            ( issue_valid_i          ),
-    .issue_ready_o            ( issue_ready_o          ),
-    .issue_rsp_o              ( issue_rsp_o            ),
-    .resp_o                   ( rsp_o                  ),
-    .resp_valid_o             ( rsp_valid_o            ),
-    .resp_ready_i             ( rsp_ready_i            ),
-    // Spatz interface
-    .issue_req_o              ( issue_req              ),
-    .issue_valid_o            ( issue_valid            ),
-    .issue_ready_i            ( issue_ready            ),
-    .issue_rsp_i              ( issue_rsp              ),
-    .resp_i                   ( resp                   ),
-    .resp_valid_i             ( resp_valid             ),
-    .resp_ready_o             ( resp_ready             ),
-    // Memory interface
-    .fp_lsu_mem_req_o         ( fp_lsu_mem_req_o       ),
-    .fp_lsu_mem_rsp_i         ( fp_lsu_mem_rsp_i       ),
-    .fp_lsu_mem_finished_o    ( fp_lsu_mem_finished    ),
-    .fp_lsu_mem_str_finished_o( fp_lsu_mem_str_finished),
-    // Spatz VLSU side channel
-    .spatz_mem_finished_i     ( 1'b0                   ),
-    .spatz_mem_str_finished_i ( 1'b0                   )
-  );
+  for(genvar i=0; i<3; i++) begin
+    spatz_scalar_sequencer #(
+      .dreq_t             (dreq_t              ),
+      .drsp_t             (drsp_t              ),
+      .spatz_issue_req_t  (spatz_issue_req_t   ),
+      .spatz_issue_rsp_t  (spatz_issue_rsp_t   ),
+      .spatz_rsp_t        (spatz_rsp_t         ),
+      .NumOutstandingLoads(NumOutstandingLoads )
+    ) i_fpu_sequencer (
+      .clk_i                    ( clk_i                  ),
+      .rst_ni                   ( rst_ni                 ),
+      // Snitch interface
+      .issue_req_i              ( issue_req_i            [i]),
+      .issue_valid_i            ( issue_valid_i          [i]),
+      .issue_ready_o            ( issue_ready_o          [i]),
+      .issue_rsp_o              ( issue_rsp_o            [i]),
+      .resp_o                   ( rsp_o                  [i]),
+      .resp_valid_o             ( rsp_valid_o            [i]),
+      .resp_ready_i             ( rsp_ready_i            [i]),
+      // Spatz interface
+      .issue_req_o              ( issue_req              [i]),
+      .issue_valid_o            ( issue_valid            [i]),
+      .issue_ready_i            ( issue_ready            [i]),
+      .issue_rsp_i              ( issue_rsp              [i]),
+      .resp_i                   ( resp                   [i]),
+      .resp_valid_i             ( resp_valid             [i]),
+      .resp_ready_o             ( resp_ready             [i]),
+      // Memory interface
+      .fp_lsu_mem_req_o         ( fp_lsu_mem_req         [i]),
+      .fp_lsu_mem_rsp_i         ( fp_lsu_mem_rsp_i          ),
+      .fp_lsu_mem_finished_o    ( fp_lsu_mem_finished    [i]),
+      .fp_lsu_mem_str_finished_o( fp_lsu_mem_str_finished[i]),
+      // Spatz VLSU side channel
+      .spatz_mem_finished_i     ( 1'b0                      ),
+      .spatz_mem_str_finished_i ( 1'b0                      )
+    );
 
-  ////////////////
-  // Controller //
-  ////////////////
-
-  spatz_scalar_unit #(
-    .RegisterRsp      (RegisterRsp             ),
-    .spatz_issue_req_t(spatz_issue_req_t       ),
-    .spatz_issue_rsp_t(spatz_issue_rsp_t       ),
-    .spatz_rsp_t      (spatz_rsp_t             ),
-    .FPUImplementation(FPUImplementation)
-  ) i_scalar (
-    .clk_i            (clk_i           ),
-    .rst_ni           (rst_ni          ),
-    .hart_id_i        (hart_id_i      ),
-    // X-intf
-    .issue_valid_i    (issue_valid     ),
-    .issue_ready_o    (issue_ready     ),
-    .issue_req_i      (issue_req       ),
-    .issue_rsp_o      (issue_rsp       ),
-    .rsp_valid_o      (resp_valid      ),
-    .rsp_ready_i      (resp_ready      ),
-    .rsp_o            (resp            ),
-    // FPU side channel
-    .fpu_rnd_mode_i   (fpu_rnd_mode_i  ),
-    .fpu_fmt_mode_i   (fpu_fmt_mode_i  ),
-    .fpu_status_o     (fpu_status_o    )
-  );
+    spatz_scalar_unit #(
+      .RegisterRsp      (RegisterRsp             ),
+      .spatz_issue_req_t(spatz_issue_req_t       ),
+      .spatz_issue_rsp_t(spatz_issue_rsp_t       ),
+      .spatz_rsp_t      (spatz_rsp_t             ),
+      .FPUImplementation(FPUImplementation)
+    ) i_scalar (
+      .clk_i            (clk_i              ),
+      .rst_ni           (rst_ni             ),
+      .hart_id_i        (hart_id_i          ),
+      // X-intf
+      .issue_valid_i    (issue_valid     [i]),
+      .issue_ready_o    (issue_ready     [i]),
+      .issue_req_i      (issue_req       [i]),
+      .issue_rsp_o      (issue_rsp       [i]),
+      .rsp_valid_o      (resp_valid      [i]),
+      .rsp_ready_i      (resp_ready      [i]),
+      .rsp_o            (resp            [i]),
+      // FPU side channel
+      .fpu_rnd_mode_i   (fpu_rnd_mode_i     ),
+      .fpu_fmt_mode_i   (fpu_fmt_mode_i     ),
+      .fpu_status_o     (fpu_status      [i])
+    );
+  end
 
 endmodule : spatz_scalar_only
