@@ -131,6 +131,11 @@ module spatz_amo_shim
   // in gen_ctrl_rep) reads -- without this, state_q is never driven and the
   // FSM can never reach DoAMO/WriteBackAMO.
   logic   state_q_tmr_fault;
+  // majority_o is a plain logic vector port (bitwise_TMR_voter_fail is not
+  // enum-aware); Questa rejects a direct port connection into an enum-typed
+  // variable ((vsim-8386) "Illegal assignment ... from type 'reg[2:0]'"), so
+  // route through a plain vector and cast it into state_e explicitly.
+  logic [$bits(state_e)-1:0] state_q_voted;
   bitwise_TMR_voter_fail #(
     .DataWidth ($bits(state_e)),
     .VoterType (1)
@@ -138,9 +143,10 @@ module spatz_amo_shim
     .a_i              (state_q_rep[0]   ),
     .b_i              (state_q_rep[1]   ),
     .c_i              (state_q_rep[2]   ),
-    .majority_o       (state_q          ),
+    .majority_o       (state_q_voted    ),
     .fault_detected_o (state_q_tmr_fault)
   );
+  assign state_q = state_e'(state_q_voted);
   logic state_illegal;
   assign state_illegal = ~(^state_q);
 
@@ -362,7 +368,12 @@ module spatz_amo_shim
 
   assign handshake_tmr_fault_o = ctrl_tmr_fault | state_q_tmr_fault;
 
-  assign {state_d, mem_req_o, ready_o, mem_wen_o, core_arb_ready} = ctrl_voted;
+  // state_d is enum-typed; a concatenation assignment can't cast one of its
+  // own slices, so unpack into a plain vector first and cast separately
+  // (same (vsim-8386) issue as state_q_voted above).
+  logic [$bits(state_e)-1:0] state_d_raw;
+  assign {state_d_raw, mem_req_o, ready_o, mem_wen_o, core_arb_ready} = ctrl_voted;
+  assign state_d = state_e'(state_d_raw);
 
    // ----------------
    // AMO ALU

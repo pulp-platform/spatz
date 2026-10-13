@@ -184,7 +184,7 @@ module spatz_tcdm_fc_interconnect #(
     assign in_req[i].amo   = req_i[i].q.amo;
     assign in_req[i].data  = req_i[i].q.data;
     assign in_req[i].strb  = req_i[i].q.strb;
-    assign in_req[i].user  = req_i[i].q.user;
+    assign in_req[i].user  = '0;
   end
 
   for (genvar i = 0; i < NumOut; i++) begin : gen_flat_oup
