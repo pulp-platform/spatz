@@ -13,7 +13,7 @@
 #   data/data_{M}_{N}_{K}.h
 #
 # The config JSON must provide: M, N, K.
-# Required fields: TM, TN; optional field: seed (default 42).
+# Required fields: TM, TN; optional fields: scaler (default 0.5), seed (default 42).
 
 import argparse
 import pathlib
@@ -30,7 +30,7 @@ def array_to_cstr_u32(arr: np.ndarray) -> str:
     return "{" + ", ".join(f"0x{int(x):08x}u" for x in arr.flat) + "}"
 
 def pack_pairs(a, b, te):
-    """Word high half = even K, low half = odd K; matches FP16 VTSE packing."""
+    """Pack adjacent K positions into the two FP16 halves of one word."""
     m, k = a.shape
     n = b.shape[1]
     abits = a.view(np.uint16).astype(np.uint32)
@@ -42,7 +42,7 @@ def pack_pairs(a, b, te):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Generate packed FP16-to-FP32 VME GEMM benchmark data header"
+        description="Generate packed FP16-to-FP32 scaled GEMM data"
     )
     parser.add_argument(
         "-c", "--cfg",
@@ -60,21 +60,28 @@ def main():
     K    = int(param["K"])
     TM   = int(param["TM"])
     TN   = int(param["TN"])
-    seed = int(param.get("seed", 42))
+    scaler = np.float32(param.get("scaler", 0.5))
+    seed   = int(param.get("seed", 42))
 
-    if M != 64 or N != 64 or K not in (64, 128) or (TM, TN) != (16, 16):
-        parser.error("this test targets M64_N64_K64 or M64_N64_K128 with TE=16")
+    if M != 64 or N != 64 or K not in (128, 256, 512) or (TM, TN) != (16, 16):
+        parser.error("this test targets M64_N64_K128, K256, or K512 with TE=16")
 
     torch.manual_seed(seed)
+
     A = torch.randn((M, K), dtype=torch.float32).to(torch.float16).numpy()
     B = torch.randn((K, N), dtype=torch.float32).to(torch.float16).numpy()
-    Caddend = torch.randn((M, N), dtype=torch.float32).numpy()
-    # Quantize the inputs first, then accumulate each K pair into FP32.
-    C = Caddend.copy()
+    bias = torch.randn((M, N), dtype=torch.float32).numpy()
+
+    # Match SDOTP: each adjacent K pair is reduced and accumulated into FP32.
+    product = np.zeros((M, N), dtype=np.float32)
     for k in range(0, K, 2):
         pair = (A[:, k, None].astype(np.float64) * B[None, k, :].astype(np.float64)
-                + A[:, k+1, None].astype(np.float64) * B[None, k+1, :].astype(np.float64))
-        C = (C.astype(np.float64) + pair).astype(np.float32)
+                + A[:, k + 1, None].astype(np.float64) * B[None, k + 1, :].astype(np.float64))
+        product = (product.astype(np.float64) + pair).astype(np.float32)
+
+    # Model the FP32 vfmacc.vf: one final rounding of bias + scaler * product.
+    C = (bias.astype(np.float64)
+         + np.float64(scaler) * product.astype(np.float64)).astype(np.float32)
     A_pack, B_pack = pack_pairs(A, B, TM)
 
     lines = [
@@ -94,14 +101,18 @@ def main():
         f"    .K  = {K},",
         "};",
         "",
-        "// FP32 golden reference: Cresult = A*B + Caddend",
+        "// FP32 scalar alpha in C = alpha * (A*B) + bias.",
+        "static float scaler_dram __attribute__((section(\".data\"), aligned(4))) =",
+        f"    {repr(float(scaler))}f;",
+        "",
+        "// FP32 golden reference: C = scaler * (A*B) + bias.",
         f'static float Cref_dram[{M}*{N}] __attribute__((section(".data"))) =',
         array_to_cstr_f32(C) + ";",
         "",
         "",
-        "// FP32 initial C, with an independent addend for every output element.",
+        "// FP32 bias, with one independent value per output element.",
         f'static float Caddend_dram[{M}*{N}] __attribute__((section(".data"), aligned(64))) =',
-        array_to_cstr_f32(Caddend) + ";",
+        array_to_cstr_f32(bias) + ";",
         "",
         "// Atpack[m_tile][K/2][TE]: high half even K, low half odd K.",
         f'static uint32_t Atpack_dram[{K//2}*{M}] __attribute__((section(".data"), aligned(64))) =',

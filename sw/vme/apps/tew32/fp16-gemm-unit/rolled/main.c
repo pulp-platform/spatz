@@ -39,8 +39,8 @@ int main(void) {
         return 0;
 
     if (gemm_l.M != 64 || gemm_l.N != 64 ||
-        (gemm_l.K != 64 && gemm_l.K != 128)) {
-        printf("Unsupported GEMM shape: expected M64_N64_K64 or M64_N64_K128\n");
+        (gemm_l.K != 128 && gemm_l.K != 256 && gemm_l.K != 512)) {
+        printf("Unsupported GEMM shape: expected M64_N64_K128, K256, or K512\n");
         return 2;
     }
     enum {
@@ -64,7 +64,7 @@ int main(void) {
     snrt_dma_wait_all();
 
     const uint32_t start = get_cycle();
-    simple_gemm_fp16_fp32_vle(Atpack, Bpack, C);
+    gemm_fp16_fp32_unit_vle(Atpack, Bpack, C);
     const uint32_t cycles = get_cycle() - start;
 
     uint32_t errors = 0;
@@ -93,7 +93,7 @@ int main(void) {
     const uint64_t useful_macs = (uint64_t)gemm_l.M * gemm_l.N * gemm_l.K;
     const uint64_t peak_macs = (uint64_t)cycles * CE * CE * 2;
     const uint32_t utilization = peak_macs ? useful_macs * 10000 / peak_macs : 0;
-    printf("\n=== TEW32 FP16 GEMM M%u_N%u_K%u (TE=16, 1 core) ===\n",
+    printf("\n=== TEW32 FP16 unit-scaled GEMM M%u_N%u_K%u (TE=16, 1 core) ===\n",
            gemm_l.M, gemm_l.N, gemm_l.K);
     printf("Cycles: %u\nUtilization: %u.%02u%%\n", cycles, utilization / 100, utilization % 100);
     printf("MaxAbsErr: 0x%08x\nErrors: %u\nStatus: %s\n",

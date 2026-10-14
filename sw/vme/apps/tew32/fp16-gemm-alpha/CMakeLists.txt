@@ -5,8 +5,8 @@ find_package(Python3 COMPONENTS Interpreter REQUIRED)
 
 set(_source "${CMAKE_CURRENT_SOURCE_DIR}")
 
-foreach(_k IN ITEMS 64 128)
-    set(_target "fp16-simple-gemm_M64_N64_K${_k}")
+foreach(_k IN ITEMS 128 256 512)
+    set(_target "fp16-gemm-alpha_M64_N64_K${_k}")
     set(_config "${_source}/script/gemm_64_64_${_k}.json")
     set(_header "${_source}/data/data_64_64_${_k}.h")
 

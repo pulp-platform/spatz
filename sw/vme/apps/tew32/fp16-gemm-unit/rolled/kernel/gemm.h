@@ -29,5 +29,5 @@ enum {
 
 void gemm_fp16_fp32_no_crossblock(const __fp16 *Atpack, const __fp16 *Bpack, float *C, uint32_t M, uint32_t N, uint32_t K);
 void gemm_fp16_fp32_crossblock(const __fp16 *Atpack, const __fp16 *Bpack, float *C, uint32_t M, uint32_t N, uint32_t K);
-void simple_gemm_fp16_fp32_vle(const __fp16 *Atpack, const __fp16 *Bpack,
-                               float *C);
+void gemm_fp16_fp32_unit_vle(const __fp16 *Atpack, const __fp16 *Bpack,
+                             float *C);

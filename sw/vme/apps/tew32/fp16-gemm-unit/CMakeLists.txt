@@ -10,7 +10,7 @@ set(_source "${CMAKE_CURRENT_SOURCE_DIR}")
 function(add_fp16_simple_gemm_unrolled variant)
     foreach(_k IN ITEMS 128 256 512)
         set(_dir "${_source}/unrolled/${variant}/K${_k}")
-        set(_target "fp16-simple-gemm-unrolled-${variant}_M64_N64_K${_k}")
+        set(_target "fp16-gemm-unit-unrolled-${variant}_M64_N64_K${_k}")
         set(_config "${_dir}/script/matmul_64_64_${_k}.json")
         set(_header "${_dir}/data/data_64_64_${_k}.h")
 

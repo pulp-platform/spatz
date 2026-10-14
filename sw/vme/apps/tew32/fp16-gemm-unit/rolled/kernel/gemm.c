@@ -19,7 +19,7 @@
 #include "gemm.h"
 // FP16-to-FP32 GEMM with interleaved bias loads; variants with and without cross-block overlap.
 
-__attribute__((noinline, aligned(64))) void simple_gemm_fp16_fp32_vtle_no_crossblock(const __fp16 *Atpack, const __fp16 *Bpack, float *C, uint32_t M, uint32_t N, uint32_t K)
+__attribute__((noinline, aligned(64))) void gemm_fp16_fp32_unit_vtle_no_crossblock(const __fp16 *Atpack, const __fp16 *Bpack, float *C, uint32_t M, uint32_t N, uint32_t K)
 {
     // Full 32x32 blocks; K is the real FP16 extent, >=24 and divisible by 8.
     for (uint32_t mb = 0; mb < M; mb += BLOCK_DIM) {
@@ -341,7 +341,7 @@ __attribute__((noinline, aligned(64))) void simple_gemm_fp16_fp32_vtle_no_crossb
     }
 }
 
-__attribute__((noinline, aligned(64))) void simple_gemm_fp16_fp32_vtle_crossblock(const __fp16 *Atpack, const __fp16 *Bpack, float *C, uint32_t M, uint32_t N, uint32_t K)
+__attribute__((noinline, aligned(64))) void gemm_fp16_fp32_unit_crossblock(const __fp16 *Atpack, const __fp16 *Bpack, float *C, uint32_t M, uint32_t N, uint32_t K)
 {
     // Full 32x32 blocks; K is the real FP16 extent, >=24 and divisible by 8.
     const uint32_t col_blocks = N / BLOCK_DIM;
@@ -842,7 +842,7 @@ __attribute__((noinline, aligned(64))) void simple_gemm_fp16_fp32_vtle_crossbloc
         : "memory");
 }
 
-__attribute__((noinline, aligned(64))) void simple_gemm_fp16_fp32_vle(
+__attribute__((noinline, aligned(64))) void gemm_fp16_fp32_unit_vle(
     const __fp16 *Atpack, const __fp16 *Bpack, float *C)
 {
   const uintptr_t c_stride = 128 * sizeof(float);
@@ -853,6 +853,7 @@ __attribute__((noinline, aligned(64))) void simple_gemm_fp16_fp32_vle(
   const uintptr_t tile_vl = TE;
   const uintptr_t group_vl = 4 * TE;
   const uintptr_t bias_vl = 8 * TE; // m8: two contiguous 64-element FP32 rows
+  const uintptr_t operand_vector_bytes = TE * sizeof(uint32_t);
   const uintptr_t operand_group_bytes = 4 * TE * sizeof(uint32_t);
 
   // Process each 16-row output block independently; no state crosses blocks.
@@ -872,56 +873,67 @@ __attribute__((noinline, aligned(64))) void simple_gemm_fp16_fp32_vle(
       uintptr_t tss8 = 0x40000000u;
       uintptr_t tss12 = 0x60000000u;
 
-      asm volatile("vsetvli x0, %0, e32, m4, ta, ma" : : "r"(group_vl) : "memory");
-      asm volatile("vle32.v v0, (%0)" : : "r"(a0p) : "v0", "v1", "v2", "v3", "memory"); a0p += operand_group_bytes;
-      asm volatile("vle32.v v16, (%0)" : : "r"(b0p) : "v16", "v17", "v18", "v19", "memory"); b0p += operand_group_bytes;
       asm volatile("msetmtype %0, %1\n" "msettn x0, %2" : : "r"(mtype), "r"(vtype), "r"(tile_vl) : "memory");
+      asm volatile("vle32.v v0, (%0)\naddi %0, %0, %1" : "+r"(a0p) : "i"(operand_vector_bytes) : "v0", "memory");
+      asm volatile("vle32.v v1, (%0)\naddi %0, %0, %1" : "+r"(a0p) : "i"(operand_vector_bytes) : "v1", "memory");
+      asm volatile("vle32.v v16, (%0)\naddi %0, %0, %1" : "+r"(b0p) : "i"(operand_vector_bytes) : "v16", "memory");
+      asm volatile("vle32.v v17, (%0)\naddi %0, %0, %1" : "+r"(b0p) : "i"(operand_vector_bytes) : "v17", "memory");
       asm volatile("vtzero mt0" : : : "memory");
       asm volatile("vtzero mt4" : : : "memory");
       asm volatile("vtzero mt8" : : : "memory");
       asm volatile("vtzero mt12" : : : "memory");
 
-      for (uint32_t kg = 0; kg + 1 < K_CHUNK / 8; ++kg) {
+      // Use the already-advanced A pointer as the loop induction variable.
+      const uintptr_t a_middle_end = a0p + (K_CHUNK / 8 - 1) * operand_group_bytes;
+      while (a0p != a_middle_end) {
       asm volatile("vtfmm.tvv mt0, v0, v16" : : : "memory");
+      asm volatile("vle32.v v2, (%0)\naddi %0, %0, %1" : "+r"(a0p) : "i"(operand_vector_bytes) : "v2", "memory");
+      asm volatile("vle32.v v3, (%0)\naddi %0, %0, %1" : "+r"(a0p) : "i"(operand_vector_bytes) : "v3", "memory");
       asm volatile("vtfmm.tvv mt0, v1, v17" : : : "memory");
+      asm volatile("vle32.v v18, (%0)\naddi %0, %0, %1" : "+r"(b0p) : "i"(operand_vector_bytes) : "v18", "memory");
+      asm volatile("vle32.v v19, (%0)\naddi %0, %0, %1" : "+r"(b0p) : "i"(operand_vector_bytes) : "v19", "memory");
+      asm volatile("vtfmm.tvv mt0, v2, v18" : : : "memory");
       asm volatile("vsetvli x0, %0, e32, m4, ta, ma" : : "r"(group_vl) : "memory");
       asm volatile("vle32.v v24, (%0)" : : "r"(b1p) : "v24", "v25", "v26", "v27", "memory"); b1p += operand_group_bytes;
       asm volatile("msetmtype %0, %1\n" "msettn x0, %2" : : "r"(mtype), "r"(vtype), "r"(tile_vl) : "memory");
-      asm volatile("vtfmm.tvv mt0, v2, v18" : : : "memory");
       asm volatile("vtfmm.tvv mt0, v3, v19" : : : "memory");
       asm volatile("vtfmm.tvv mt4, v0, v24" : : : "memory");
+      asm volatile("vtfmm.tvv mt4, v1, v25" : : : "memory");
       asm volatile("vsetvli x0, %0, e32, m4, ta, ma" : : "r"(group_vl) : "memory");
       asm volatile("vle32.v v16, (%0)" : : "r"(b2p) : "v16", "v17", "v18", "v19", "memory"); b2p += operand_group_bytes;
       asm volatile("msetmtype %0, %1\n" "msettn x0, %2" : : "r"(mtype), "r"(vtype), "r"(tile_vl) : "memory");
-      asm volatile("vtfmm.tvv mt4, v1, v25" : : : "memory");
       asm volatile("vtfmm.tvv mt4, v2, v26" : : : "memory");
       asm volatile("vtfmm.tvv mt4, v3, v27" : : : "memory");
       asm volatile("vtfmm.tvv mt8, v0, v16" : : : "memory");
+      asm volatile("vtfmm.tvv mt8, v1, v17" : : : "memory");
       asm volatile("vsetvli x0, %0, e32, m4, ta, ma" : : "r"(group_vl) : "memory");
       asm volatile("vle32.v v24, (%0)" : : "r"(b3p) : "v24", "v25", "v26", "v27", "memory"); b3p += operand_group_bytes;
       asm volatile("msetmtype %0, %1\n" "msettn x0, %2" : : "r"(mtype), "r"(vtype), "r"(tile_vl) : "memory");
-      asm volatile("vtfmm.tvv mt8, v1, v17" : : : "memory");
       asm volatile("vtfmm.tvv mt8, v2, v18" : : : "memory");
       asm volatile("vtfmm.tvv mt8, v3, v19" : : : "memory");
+      asm volatile("vle32.v v16, (%0)\naddi %0, %0, %1" : "+r"(b0p) : "i"(operand_vector_bytes) : "v16", "memory");
+      asm volatile("vle32.v v17, (%0)\naddi %0, %0, %1" : "+r"(b0p) : "i"(operand_vector_bytes) : "v17", "memory");
       asm volatile("vtfmm.tvv mt12, v0, v24" : : : "memory");
-      asm volatile("vsetvli x0, %0, e32, m4, ta, ma" : : "r"(group_vl) : "memory");
-      asm volatile("vle32.v v16, (%0)" : : "r"(b0p) : "v16", "v17", "v18", "v19", "memory"); b0p += operand_group_bytes;
-      asm volatile("msetmtype %0, %1\n" "msettn x0, %2" : : "r"(mtype), "r"(vtype), "r"(tile_vl) : "memory");
       asm volatile("vtfmm.tvv mt12, v1, v25" : : : "memory");
       asm volatile("vtfmm.tvv mt12, v2, v26" : : : "memory");
+      asm volatile("vle32.v v0, (%0)\naddi %0, %0, %1" : "+r"(a0p) : "i"(operand_vector_bytes) : "v0", "memory");
+      asm volatile("vle32.v v1, (%0)\naddi %0, %0, %1" : "+r"(a0p) : "i"(operand_vector_bytes) : "v1", "memory");
       asm volatile("vtfmm.tvv mt12, v3, v27" : : : "memory");
-      asm volatile("vsetvli x0, %0, e32, m4, ta, ma" : : "r"(group_vl) : "memory");
-      asm volatile("vle32.v v0, (%0)" : : "r"(a0p) : "v0", "v1", "v2", "v3", "memory"); a0p += operand_group_bytes;
-      asm volatile("msetmtype %0, %1\n" "msettn x0, %2" : : "r"(mtype), "r"(vtype), "r"(tile_vl) : "memory");
+      // Keep the pointer comparison; otherwise Clang adds a separate countdown.
+      asm volatile("" : "+r"(a0p));
       }
 
       // Final K group: move each completed tile row to the vector registers.
       asm volatile("vtfmm.tvv mt0, v0, v16" : : : "memory");
+      asm volatile("vle32.v v2, (%0)\naddi %0, %0, %1" : "+r"(a0p) : "i"(operand_vector_bytes) : "v2", "memory");
+      asm volatile("vle32.v v3, (%0)\naddi %0, %0, %1" : "+r"(a0p) : "i"(operand_vector_bytes) : "v3", "memory");
       asm volatile("vtfmm.tvv mt0, v1, v17" : : : "memory");
+      asm volatile("vle32.v v18, (%0)\naddi %0, %0, %1" : "+r"(b0p) : "i"(operand_vector_bytes) : "v18", "memory");
+      asm volatile("vle32.v v19, (%0)\naddi %0, %0, %1" : "+r"(b0p) : "i"(operand_vector_bytes) : "v19", "memory");
+      asm volatile("vtfmm.tvv mt0, v2, v18" : : : "memory");
       asm volatile("vsetvli x0, %0, e32, m4, ta, ma" : : "r"(group_vl) : "memory");
       asm volatile("vle32.v v24, (%0)" : : "r"(b1p) : "v24", "v25", "v26", "v27", "memory"); b1p += operand_group_bytes;
       asm volatile("msetmtype %0, %1\n" "msettn x0, %2" : : "r"(mtype), "r"(vtype), "r"(tile_vl) : "memory");
-      asm volatile("vtfmm.tvv mt0, v2, v18" : : : "memory");
       asm volatile("vtfmm.tvv mt0, v3, v19" : : : "memory");
       asm volatile("vtfmm.tvv mt4, v0, v24" : : : "memory");
       asm volatile("vsetvli x0, %0, e32, m4, ta, ma" : : "r"(group_vl) : "memory");
@@ -969,13 +981,13 @@ __attribute__((noinline, aligned(64))) void simple_gemm_fp16_fp32_vle(
       asm volatile("vtmv.v.t v23, %0" : : "r"(tss12) : "v23", "memory"); ++tss12;
       asm volatile("vsetvli x0, %0, e32, m8, ta, ma" : : "r"(bias_vl) : "memory");
       asm volatile("vfadd.vv v8, v8, v0" : : : "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "memory");
-      asm volatile("vse32.v v8, (%0)\n" "addi %0, %0, %1" : "+r"(ptr) : "i"(c_stride) : "memory");
       asm volatile("vfadd.vv v16, v16, v24" : : : "v16", "v17", "v18", "v19", "v20", "v21", "v22", "v23", "memory");
+      asm volatile("vse32.v v8, (%0)\n" "addi %0, %0, %1" : "+r"(ptr) : "i"(c_stride) : "memory");
       asm volatile("vse32.v v16, (%0)\n" "addi %0, %0, %1" : "+r"(ptr) : "i"(c_stride) : "memory");
 
       // Rows 4-15: two contiguous 64-element rows per batch.
       // Keep the store epilogue compact for the instruction cache.
-      for (uint32_t row = 4; row < TE; row += 2) {
+      for (uint32_t row = 4; row < TE; row += 4) {
       asm volatile("vle32.v v0, (%0)\n" "addi %0, %0, %1" : "+r"(bias_ptr) : "i"(c_stride) : "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7", "memory");
       asm volatile("msetmtype %0, %1\n" "msettn x0, %2" : : "r"(store_mtype), "r"(store_vtype), "r"(tile_vl) : "memory");
       asm volatile("vtmv.v.t v8, %0" : : "r"(tss0) : "v8", "memory"); ++tss0;
@@ -988,7 +1000,20 @@ __attribute__((noinline, aligned(64))) void simple_gemm_fp16_fp32_vle(
       asm volatile("vtmv.v.t v15, %0" : : "r"(tss12) : "v15", "memory"); ++tss12;
       asm volatile("vsetvli x0, %0, e32, m8, ta, ma" : : "r"(bias_vl) : "memory");
       asm volatile("vfadd.vv v8, v8, v0" : : : "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "memory");
+      asm volatile("vle32.v v24, (%0)\n" "addi %0, %0, %1" : "+r"(bias_ptr) : "i"(c_stride) : "v24", "v25", "v26", "v27", "v28", "v29", "v30", "v31", "memory");
+      asm volatile("msetmtype %0, %1\n" "msettn x0, %2" : : "r"(store_mtype), "r"(store_vtype), "r"(tile_vl) : "memory");
+      asm volatile("vtmv.v.t v16, %0" : : "r"(tss0) : "v8", "memory"); ++tss0;
+      asm volatile("vtmv.v.t v20, %0" : : "r"(tss0) : "v12", "memory"); ++tss0;
+      asm volatile("vtmv.v.t v17, %0" : : "r"(tss4) : "v9", "memory"); ++tss4;
+      asm volatile("vtmv.v.t v21, %0" : : "r"(tss4) : "v13", "memory"); ++tss4;
+      asm volatile("vtmv.v.t v18, %0" : : "r"(tss8) : "v10", "memory"); ++tss8;
+      asm volatile("vtmv.v.t v22, %0" : : "r"(tss8) : "v14", "memory"); ++tss8;
+      asm volatile("vtmv.v.t v19, %0" : : "r"(tss12) : "v11", "memory"); ++tss12;
+      asm volatile("vtmv.v.t v23, %0" : : "r"(tss12) : "v15", "memory"); ++tss12;
+      asm volatile("vsetvli x0, %0, e32, m8, ta, ma" : : "r"(bias_vl) : "memory");
+      asm volatile("vfadd.vv v16, v16, v24" : : : "v16", "v17", "v18", "v19", "v20", "v21", "v22", "v23", "memory");
       asm volatile("vse32.v v8, (%0)\n" "addi %0, %0, %1" : "+r"(ptr) : "i"(c_stride) : "memory");
+      asm volatile("vse32.v v16, (%0)\n" "addi %0, %0, %1" : "+r"(ptr) : "i"(c_stride) : "memory");
       }
     }
   }
