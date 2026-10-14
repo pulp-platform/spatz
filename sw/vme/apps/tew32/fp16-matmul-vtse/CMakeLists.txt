@@ -83,21 +83,18 @@ function(add_fp16_vtse_variant precision variant source_dir)
             add_custom_target(generate-${_target} DEPENDS "${_header}")
             add_snitch_test(${_target} "${source_dir}/main.c")
             add_dependencies(${_test_target} generate-${_target})
-            set_target_properties(${_test_target} PROPERTIES
-                RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/vme/apps")
             target_include_directories(${_test_target} PRIVATE
                 "${source_dir}"
                 "${source_dir}/kernel"
                 "${source_dir}/data")
             target_compile_definitions(${_test_target} PRIVATE
-                MATMUL_K_CHUNK=${_k_chunk}
                 MATMUL_BUFFER_COUNT=${_buffer_count}
                 DATAHEADER="${_data_header}")
         endif()
     endforeach()
 endfunction()
 
-foreach(_precision IN ITEMS te16 te32)
+foreach(_precision IN ITEMS ${VME_TILE_VARIANT})
     if(_precision STREQUAL "te32")
         set(_precision_shapes ${_fp16_vtse_te32_shapes})
         set(_unrolled_ks 128 256)
