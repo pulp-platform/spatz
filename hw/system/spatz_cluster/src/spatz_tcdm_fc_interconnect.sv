@@ -148,6 +148,7 @@ module spatz_tcdm_fc_interconnect #(
   // Address ECC: encode the payload address right here, before it enters
   // in_req/i_stream_xbar's data path.
   logic [MemAddrWidth-1:0] in_req_addr_plain [NumInp-1:0];
+  addr_prot_t in_req_addr_enc [NumInp-1:0];
   // {write, amo, strb} bundle, ECC-protected across the crossbar's internal mux
   logic [WCtrlEccWidth-1:0] in_req_wctrl_ecc [NumInp-1:0];
 
@@ -162,10 +163,10 @@ module spatz_tcdm_fc_interconnect #(
         .ProtWidth (ProtMemAddrWidth - MemAddrWidth)
       ) i_in_addr_enc (
         .in  (in_req_addr_plain[i]),
-        .out (in_req[i].addr)
+        .out (in_req_addr_enc[i])
       );
     end else begin : gen_addr_no_ecc
-      assign in_req[i].addr = in_req_addr_plain[i];
+      assign in_req_addr_enc[i] = in_req_addr_plain[i];
     end
 
     hsiao_ecc_enc #(
@@ -180,11 +181,14 @@ module spatz_tcdm_fc_interconnect #(
   // .write/.amo/.strb/.user are simple placeholders here -- the real values
   // are carried ECC-protected in in_req_wctrl_ecc/out_wctrl_ecc_o and decoded
   // back out at the far end (spatz_tcdm_interconnect.sv's i_ic_wctrl_dec).
-    assign in_req[i].write = req_i[i].q.write;
-    assign in_req[i].amo   = req_i[i].q.amo;
-    assign in_req[i].data  = req_i[i].q.data;
-    assign in_req[i].strb  = req_i[i].q.strb;
-    assign in_req[i].user  = '0;
+    assign in_req[i] = '{
+      addr:  in_req_addr_enc[i],
+      write: req_i[i].q.write,
+      amo:   req_i[i].q.amo,
+      data:  req_i[i].q.data,
+      strb:  req_i[i].q.strb,
+      user: req_i[i].q.user
+    };
   end
 
   for (genvar i = 0; i < NumOut; i++) begin : gen_flat_oup
