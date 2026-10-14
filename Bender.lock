@@ -91,7 +91,7 @@ packages:
     - common_cells
     - common_verification
   quadrilatero:
-    revision: eaedf7bbbf73b111c7fbc6ff7a6bb57896c4aeca
+    revision: 9f0ef6d62aacb790a0055ec02bf864000c24dc73
     version: null
     source:
       Git: https://iis-git.ee.ethz.ch/quadrilatero/quadrilatero.git
