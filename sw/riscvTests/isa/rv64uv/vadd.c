@@ -248,6 +248,20 @@ void TEST_CASE8() {
     0x08000400U, 0x10000C00U, 0x08000400U, 0x10000C00U);
 }
 
+void TEST_CASE_MF8() {
+#if ELEN == 64
+  VSET(4, e8, mf8); // VLMAX = VLEN/64 >= 4 (VLEN >= 256)
+#else
+  VSET(4, e8, mf4); // ELEN=32: mf8 illegal for e8, mf4 is the smallest legal LMUL
+#endif
+  VLOAD_8(v1, 1, 2, 3, 4);
+  VLOAD_8(v2, 10, 10, 10, 10);
+  asm volatile("vadd.vv v3, v1, v2");
+  VCMP_U8(27, v3, 11, 12, 13, 14);
+}
+
+
+
 int main(void) {
   INIT_CHECK();
   enable_vec();
@@ -260,6 +274,7 @@ int main(void) {
   TEST_CASE6();
   TEST_CASE7();
   TEST_CASE8();
+  TEST_CASE_MF8();
 
   EXIT_CHECK();
 }
