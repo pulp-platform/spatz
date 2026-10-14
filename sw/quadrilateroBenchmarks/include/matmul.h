@@ -278,7 +278,8 @@ void __attribute__ ((noinline)) FUNC_NAME(void* addrA,void* addrB, void* addrC, 
         // Update cfgK for next iteration's block A
         "mcfgk t5, t2                 \n\t"
         "bgtz t2, 1b         \n\t"
-
+        "j 2b                         \n\t"
+              
         "9: \n\t"
         "mcfgn s11, s11, %[cmul]      \n\t"   // restore old n for store
         "mcfgm  t6,  t6, %[rmul]      \n\t"   // restore old n for store
