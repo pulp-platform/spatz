@@ -124,12 +124,10 @@ __attribute__((noinline, aligned(64))) void matmul_fp16_fp32(
       asm volatile("vtmv.v.t v13, %0" : : "r"(tss4) : "v13", "memory"); ++tss4;
       asm volatile("msetmtype %0, %1\n" "msettn x0, %2" : : "r"(mtype), "r"(vtype), "r"(tile_vl) : "memory");
       asm volatile("vtfmm.tvv mt12, v0, v24" : : : "memory");
+      asm volatile("vtfmm.tvv mt12, v1, v25" : : : "memory");
       asm volatile("msetmtype %0, %1\n" "msettn x0, %2" : : "r"(store_mtype), "r"(store_vtype), "r"(tile_vl) : "memory");
       asm volatile("vtmv.v.t v5, %0" : : "r"(tss4) : "v5", "memory"); ++tss4;
       asm volatile("vtmv.v.t v21, %0" : : "r"(tss4) : "v21", "memory"); ++tss4;
-      asm volatile("msetmtype %0, %1\n" "msettn x0, %2" : : "r"(mtype), "r"(vtype), "r"(tile_vl) : "memory");
-      asm volatile("vtfmm.tvv mt12, v1, v25" : : : "memory");
-      asm volatile("msetmtype %0, %1\n" "msettn x0, %2" : : "r"(store_mtype), "r"(store_vtype), "r"(tile_vl) : "memory");
       asm volatile("vtmv.v.t v10, %0" : : "r"(tss8) : "v10", "memory"); ++tss8;
       asm volatile("vtmv.v.t v14, %0" : : "r"(tss8) : "v14", "memory"); ++tss8;
       asm volatile("msetmtype %0, %1\n" "msettn x0, %2" : : "r"(mtype), "r"(vtype), "r"(tile_vl) : "memory");
