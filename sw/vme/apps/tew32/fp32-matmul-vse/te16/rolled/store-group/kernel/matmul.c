@@ -20,10 +20,9 @@
 
 #include "matmul.h"
 
-__attribute__((noinline, aligned(64))) void matmul_fp32(const float *At, const float *B, float *C, uint32_t M, uint32_t N, uint32_t K)
+__attribute__((noinline, aligned(64))) void matmul_fp32_crossblock(
+    const float *At, const float *B, float *C)
 {
-  (void)M;
-  (void)N;
   const uintptr_t c_stride = 64 * sizeof(float);
   const uintptr_t mtype = (TE << 10) | (2u << 5) | 1u;
   const uintptr_t vtype = 0xD0; // e32, m1: one vector per tile row
@@ -31,9 +30,6 @@ __attribute__((noinline, aligned(64))) void matmul_fp32(const float *At, const f
   const uintptr_t group_vl = 4 * TE;
   const uintptr_t operand_bytes = TE * sizeof(float);
   const uintptr_t operand_group_bytes = 4 * TE * sizeof(float);
-
-  // K is a multiple of four and at least eight; the head/tail consume two groups.
-  const uint32_t middle_k_groups = K / 4 - 2;
 
   // Keep pointer updates inside each asm region to avoid scalar spills and tail merging.
   // Pair rows 0/16, then rows 32/48. No generic block-coordinate division.
@@ -43,11 +39,11 @@ __attribute__((noinline, aligned(64))) void matmul_fp32(const float *At, const f
     uintptr_t old_c_ptr;
     {
       // First block: complete rows0-11 and retain rows12-15.
-      uintptr_t a0p = (uintptr_t)(At + mb0 * K);
+      uintptr_t a0p = (uintptr_t)(At + mb0 * K_CHUNK);
       uintptr_t b0p = (uintptr_t)B;
-      uintptr_t b1p = (uintptr_t)(B + TE * K);
-      uintptr_t b2p = (uintptr_t)(B + 2 * TE * K);
-      uintptr_t b3p = (uintptr_t)(B + 3 * TE * K);
+      uintptr_t b1p = (uintptr_t)(B + TE * K_CHUNK);
+      uintptr_t b2p = (uintptr_t)(B + 2 * TE * K_CHUNK);
+      uintptr_t b3p = (uintptr_t)(B + 3 * TE * K_CHUNK);
       uintptr_t ptr = (uintptr_t)(C + mb0 * 64);
       uintptr_t tss0 = 0x00000000u;
       uintptr_t tss4 = 0x20000000u;
@@ -113,7 +109,8 @@ __attribute__((noinline, aligned(64))) void matmul_fp32(const float *At, const f
         : "memory", "v0", "v1", "v2", "v3", "v16", "v17", "v18", "v19", "v20", "v21", "v22", "v23", "v24", "v25", "v26", "v27", "v28", "v29", "v30", "v31");
 
       #pragma clang loop unroll(disable)
-      for (uint32_t remaining = middle_k_groups; remaining != 0; --remaining) {
+      for (uint32_t remaining = K_CHUNK / 4 - 2;
+           remaining != 0; --remaining) {
       asm volatile(
         "vtfmm.tvv mt0, v0, v16\n"
         "vtfmm.tvv mt0, v1, v17\n"
@@ -281,11 +278,11 @@ __attribute__((noinline, aligned(64))) void matmul_fp32(const float *At, const f
       // Second block: alternate paired operand loads / paired tile moves with m1 stores.
       // Retain four old rows per tile until they are captured before vtzero.
       const uint32_t mb1 = (nb + 1) * TE;
-      uintptr_t a0p = (uintptr_t)(At + mb1 * K);
+      uintptr_t a0p = (uintptr_t)(At + mb1 * K_CHUNK);
       uintptr_t b0p = (uintptr_t)B;
-      uintptr_t b1p = (uintptr_t)(B + TE * K);
-      uintptr_t b2p = (uintptr_t)(B + 2 * TE * K);
-      uintptr_t b3p = (uintptr_t)(B + 3 * TE * K);
+      uintptr_t b1p = (uintptr_t)(B + TE * K_CHUNK);
+      uintptr_t b2p = (uintptr_t)(B + 2 * TE * K_CHUNK);
+      uintptr_t b3p = (uintptr_t)(B + 3 * TE * K_CHUNK);
       uintptr_t ptr = (uintptr_t)(C + mb1 * 64);
       uintptr_t tss0 = 0x00000000u;
       uintptr_t tss4 = 0x20000000u;
@@ -431,7 +428,8 @@ __attribute__((noinline, aligned(64))) void matmul_fp32(const float *At, const f
         : "memory", "v0", "v16", "v1", "v17", "v2", "v18", "v3", "v19");
 
       #pragma clang loop unroll(disable)
-      for (uint32_t remaining = middle_k_groups; remaining != 0; --remaining) {
+      for (uint32_t remaining = K_CHUNK / 4 - 2;
+           remaining != 0; --remaining) {
       asm volatile(
         "vtfmm.tvv mt0, v0, v16\n"
         "vtfmm.tvv mt0, v1, v17\n"
@@ -596,10 +594,9 @@ __attribute__((noinline, aligned(64))) void matmul_fp32(const float *At, const f
   }
 }
 
-__attribute__((noinline, aligned(64))) void matmul_fp32_nocrossblock(const float *At, const float *B, float *C, uint32_t M, uint32_t N, uint32_t K)
+__attribute__((noinline, aligned(64))) void matmul_fp32(
+    const float *At, const float *B, float *C)
 {
-  (void)M;
-  (void)N;
   const uintptr_t c_stride = 64 * sizeof(float);
   const uintptr_t mtype = (TE << 10) | (2u << 5) | 1u;
   const uintptr_t vtype = 0xD0; // e32, m1: one vector per tile row
@@ -607,17 +604,16 @@ __attribute__((noinline, aligned(64))) void matmul_fp32_nocrossblock(const float
   const uintptr_t group_vl = 4 * TE;
   const uintptr_t operand_group_bytes = 4 * TE * sizeof(float);
 
-  // Pair rows 0/16, then rows 32/48. No generic block-coordinate division.
+  // Process each 16-row output block independently; no state crosses blocks.
   for (uint32_t nb = 0; nb < 4; nb += 1) {
     const uint32_t mb0 = nb * TE;
-    uintptr_t old_c_ptr;
     {
-      // First block: complete rows0-11 and retain rows12-15.
-      uintptr_t a0p = (uintptr_t)(At + mb0 * K);
+      // Initialize and compute one complete 16-row output block.
+      uintptr_t a0p = (uintptr_t)(At + mb0 * K_CHUNK);
       uintptr_t b0p = (uintptr_t)B;
-      uintptr_t b1p = (uintptr_t)(B + TE * K);
-      uintptr_t b2p = (uintptr_t)(B + 2 * TE * K);
-      uintptr_t b3p = (uintptr_t)(B + 3 * TE * K);
+      uintptr_t b1p = (uintptr_t)(B + TE * K_CHUNK);
+      uintptr_t b2p = (uintptr_t)(B + 2 * TE * K_CHUNK);
+      uintptr_t b3p = (uintptr_t)(B + 3 * TE * K_CHUNK);
       uintptr_t ptr = (uintptr_t)(C + mb0 * 64);
       uintptr_t tss0 = 0x00000000u;
       uintptr_t tss4 = 0x20000000u;
@@ -632,38 +628,8 @@ __attribute__((noinline, aligned(64))) void matmul_fp32_nocrossblock(const float
       asm volatile("vtzero mt4" : : : "memory");
       asm volatile("vtzero mt8" : : : "memory");
       asm volatile("vtzero mt12" : : : "memory");
-      asm volatile("vtfmm.tvv mt0, v0, v16" : : : "memory");
-      asm volatile("vtfmm.tvv mt0, v1, v17" : : : "memory");
-      asm volatile("vsetvli x0, %0, e32, m4, ta, ma" : : "r"(group_vl) : "memory");
-      asm volatile("vle32.v v20, (%0)" : : "r"(b1p) : "v20", "v21", "v22", "v23", "memory"); b1p += operand_group_bytes;
-      asm volatile("msetmtype %0, %1\n" "msettn x0, %2" : : "r"(mtype), "r"(vtype), "r"(tile_vl) : "memory");
-      asm volatile("vtfmm.tvv mt0, v2, v18" : : : "memory");
-      asm volatile("vtfmm.tvv mt0, v3, v19" : : : "memory");
-      asm volatile("vtfmm.tvv mt4, v0, v20" : : : "memory");
-      asm volatile("vtfmm.tvv mt4, v1, v21" : : : "memory");
-      asm volatile("vsetvli x0, %0, e32, m4, ta, ma" : : "r"(group_vl) : "memory");
-      asm volatile("vle32.v v24, (%0)" : : "r"(b2p) : "v24", "v25", "v26", "v27", "memory"); b2p += operand_group_bytes;
-      asm volatile("msetmtype %0, %1\n" "msettn x0, %2" : : "r"(mtype), "r"(vtype), "r"(tile_vl) : "memory");
-      asm volatile("vtfmm.tvv mt4, v2, v22" : : : "memory");
-      asm volatile("vtfmm.tvv mt4, v3, v23" : : : "memory");
-      asm volatile("vtfmm.tvv mt8, v0, v24" : : : "memory");
-      asm volatile("vtfmm.tvv mt8, v1, v25" : : : "memory");
-      asm volatile("vsetvli x0, %0, e32, m4, ta, ma" : : "r"(group_vl) : "memory");
-      asm volatile("vle32.v v28, (%0)" : : "r"(b3p) : "v28", "v29", "v30", "v31", "memory"); b3p += operand_group_bytes;
-      asm volatile("vle32.v v16, (%0)" : : "r"(b0p) : "v16", "v17", "v18", "v19", "memory"); b0p += operand_group_bytes;
-      asm volatile("msetmtype %0, %1\n" "msettn x0, %2" : : "r"(mtype), "r"(vtype), "r"(tile_vl) : "memory");
-      asm volatile("vtfmm.tvv mt8, v2, v26" : : : "memory");
-      asm volatile("vtfmm.tvv mt8, v3, v27" : : : "memory");
-      asm volatile("vtfmm.tvv mt12, v0, v28" : : : "memory");
-      asm volatile("vtfmm.tvv mt12, v1, v29" : : : "memory");
-      asm volatile("vtfmm.tvv mt12, v2, v30" : : : "memory");
-      asm volatile("vtfmm.tvv mt12, v3, v31" : : : "memory");
-      // v0-v3 can be replaced only after all four tiles consume them.
-      asm volatile("vsetvli x0, %0, e32, m4, ta, ma" : : "r"(group_vl) : "memory");
-      asm volatile("vle32.v v0, (%0)" : : "r"(a0p) : "v0", "v1", "v2", "v3", "memory"); a0p += operand_group_bytes;
-      asm volatile("msetmtype %0, %1\n" "msettn x0, %2" : : "r"(mtype), "r"(vtype), "r"(tile_vl) : "memory");
 
-      for (uint32_t kg = 1; kg + 1 < K / 4; ++kg) {
+      for (uint32_t kg = 0; kg + 1 < K_CHUNK / 4; ++kg) {
       asm volatile("vtfmm.tvv mt0, v0, v16" : : : "memory");
       asm volatile("vtfmm.tvv mt0, v1, v17" : : : "memory");
       asm volatile("vsetvli x0, %0, e32, m4, ta, ma" : : "r"(group_vl) : "memory");
@@ -696,7 +662,7 @@ __attribute__((noinline, aligned(64))) void matmul_fp32_nocrossblock(const float
       asm volatile("msetmtype %0, %1\n" "msettn x0, %2" : : "r"(mtype), "r"(vtype), "r"(tile_vl) : "memory");
       }
 
-      // Final K group: move completed tiles while the next tile computes.
+      // Final K group: move each completed tile row to the vector registers.
       asm volatile("vtfmm.tvv mt0, v0, v16" : : : "memory");
       asm volatile("vtfmm.tvv mt0, v1, v17" : : : "memory");
       asm volatile("vsetvli x0, %0, e32, m4, ta, ma" : : "r"(group_vl) : "memory");
@@ -741,6 +707,7 @@ __attribute__((noinline, aligned(64))) void matmul_fp32_nocrossblock(const float
       asm volatile("vse32.v v16, (%0)" : : "r"(ptr) : "memory"); ptr += c_stride;
 
       // Rows 4-15: four contiguous 64-element rows per batch.
+      // Keep the store epilogue compact for the instruction cache.
       for (uint32_t row = 4; row < TE; row += 4) {
       asm volatile("msetmtype %0, %1\n" "msettn x0, %2" : : "r"(mtype), "r"(vtype), "r"(tile_vl) : "memory");
       asm volatile("vtmv.v.t v4, %0" : : "r"(tss0) : "v4", "memory"); ++tss0;
@@ -752,8 +719,9 @@ __attribute__((noinline, aligned(64))) void matmul_fp32_nocrossblock(const float
       asm volatile("vtmv.v.t v10, %0" : : "r"(tss8) : "v10", "memory"); ++tss8;
       asm volatile("vtmv.v.t v11, %0" : : "r"(tss12) : "v11", "memory"); ++tss12;
       asm volatile("vsetvli x0, %0, e32, m4, ta, ma" : : "r"(group_vl) : "memory");
-      asm volatile("vse32.v v4, (%0)" : : "r"(ptr) : "memory"); ptr += c_stride;
-      asm volatile("vse32.v v8, (%0)" : : "r"(ptr) : "memory"); ptr += c_stride;
+      asm volatile("vse32.v v4, (%0)\n" "addi %0, %0, %1\n"
+                   "vse32.v v8, (%0)\n" "addi %0, %0, %1\n"
+                   : "+r"(ptr) : "i"(c_stride) : "memory");
       asm volatile("msetmtype %0, %1\n" "msettn x0, %2" : : "r"(mtype), "r"(vtype), "r"(tile_vl) : "memory");
       asm volatile("vtmv.v.t v12, %0" : : "r"(tss0) : "v12", "memory"); ++tss0;
       asm volatile("vtmv.v.t v13, %0" : : "r"(tss4) : "v13", "memory"); ++tss4;
@@ -764,8 +732,9 @@ __attribute__((noinline, aligned(64))) void matmul_fp32_nocrossblock(const float
       asm volatile("vtmv.v.t v18, %0" : : "r"(tss8) : "v18", "memory"); ++tss8;
       asm volatile("vtmv.v.t v19, %0" : : "r"(tss12) : "v19", "memory"); ++tss12;
       asm volatile("vsetvli x0, %0, e32, m4, ta, ma" : : "r"(group_vl) : "memory");
-      asm volatile("vse32.v v12, (%0)" : : "r"(ptr) : "memory"); ptr += c_stride;
-      asm volatile("vse32.v v16, (%0)" : : "r"(ptr) : "memory"); ptr += c_stride;
+      asm volatile("vse32.v v12, (%0)\n" "addi %0, %0, %1\n"
+                   "vse32.v v16, (%0)\n" "addi %0, %0, %1\n"
+                   : "+r"(ptr) : "i"(c_stride) : "memory");
       }
     }
   }

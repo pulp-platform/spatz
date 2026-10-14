@@ -1,4 +1,3 @@
-
 option(VME_GEMM_SINGLE_CORE
        "Run general VME GEMM kernels on one compute core" OFF)
 
@@ -67,3 +66,5 @@ foreach(_shape IN LISTS _vme_gemm_build_shapes)
         endif()
     endif()
 endforeach()
+find_package(Python3 COMPONENTS Interpreter REQUIRED)
+

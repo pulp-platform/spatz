@@ -20,29 +20,26 @@
 
 #include "matmul.h"
 
-__attribute__((noinline, aligned(64))) void matmul_fp32(const float *At, const float *B, float *C, uint32_t M, uint32_t N, uint32_t K)
+__attribute__((noinline, aligned(64))) void matmul_fp32(const float *At, const float *B, float *C)
 {
-    const uint32_t col_blocks = (N + BLOCK_DIM - 1) / BLOCK_DIM;
-    const uint32_t row_blocks = (M + BLOCK_DIM - 1) / BLOCK_DIM;
-    const uint32_t tile_stride = TE * K;
     uintptr_t a0p = (uintptr_t)At;
-    uintptr_t a1p = (uintptr_t)(At + tile_stride);
+    uintptr_t a1p = (uintptr_t)(At + TILE_STRIDE);
     uintptr_t b0p = (uintptr_t)B;
-    uintptr_t b1p = (uintptr_t)(B + tile_stride);
+    uintptr_t b1p = (uintptr_t)(B + TILE_STRIDE);
     uintptr_t tss;
     const uintptr_t operand_bytes = sizeof(float) * TE;
     uintptr_t c00 = (uintptr_t)(C);
     uintptr_t c01 = c00 + operand_bytes;
     uintptr_t c10 = (uintptr_t)(C + TE * CHUNK_SIZE);
     uintptr_t c11 = (uintptr_t)(C + TE * CHUNK_SIZE + TE);
-    uintptr_t block_counter = (uintptr_t)row_blocks * col_blocks;
-    uintptr_t col_counter = (uintptr_t)col_blocks;
+    uintptr_t block_counter = (uintptr_t)ROW_BLOCKS * COL_BLOCKS;
+    uintptr_t col_counter = (uintptr_t)COL_BLOCKS;
     uintptr_t loop_counter;
     const uintptr_t c_stride = CHUNK_SIZE * sizeof(float);
     const uintptr_t matrix_mtype = (TE << 10) | (2u << 5) | 1u;
     const uintptr_t matrix_vtype = 0xD0;  // e32, m1, ta, ma
     const uintptr_t rewind_b0_bytes = operand_bytes * TE;
-    const uintptr_t middle_k_groups = (uintptr_t)K / 8 - 3;
+    const uintptr_t middle_k_groups = (uintptr_t)K_CHUNK / 8 - 3;
 
     asm volatile(
         ".Lmatmul_block_%=:\n"
@@ -447,14 +444,14 @@ __attribute__((noinline, aligned(64))) void matmul_fp32(const float *At, const f
         "sub %[cols], %[b1p], %[b0p]\n"
         "add %[a0p], %[a0p], %[cols]\n"
         "add %[a1p], %[a1p], %[cols]\n"
-        "slli %[loop], %[col_blocks], 1\n"
+        "slli %[loop], %[COL_BLOCKS], 1\n"
         "addi %[loop], %[loop], -1\n"
         "6:\n"
         "sub %[b0p], %[b0p], %[cols]\n"
         "sub %[b1p], %[b1p], %[cols]\n"
         "addi %[loop], %[loop], -1\n"
         "bnez %[loop], 6b\n"
-        "mv %[cols], %[col_blocks]\n"
+        "mv %[cols], %[COL_BLOCKS]\n"
         "slli %[loop], %[c_stride], 4\n"
         "addi %[loop], %[loop], -128\n"
         "sub %[loop], x0, %[loop]\n"
@@ -606,6 +603,6 @@ __attribute__((noinline, aligned(64))) void matmul_fp32(const float *At, const f
           [vtype] "r"(matrix_vtype),
           [rewind_b0_bytes] "r"(rewind_b0_bytes),
           [middle_k_groups] "r"(middle_k_groups),
-          [col_blocks] "r"((uintptr_t)col_blocks)
+          [COL_BLOCKS] "r"((uintptr_t)COL_BLOCKS)
         : "memory");
 }

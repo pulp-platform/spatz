@@ -83,21 +83,18 @@ function(add_fp32_vse_variant precision variant source_dir)
             add_custom_target(generate-${_target} DEPENDS "${_header}")
             add_snitch_test(${_target} "${source_dir}/main.c")
             add_dependencies(${_test_target} generate-${_target})
-            set_target_properties(${_test_target} PROPERTIES
-                RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/vme/apps")
             target_include_directories(${_test_target} PRIVATE
                 "${source_dir}"
                 "${source_dir}/kernel"
                 "${source_dir}/data")
             target_compile_definitions(${_test_target} PRIVATE
-                MATMUL_K_CHUNK=${_k}
                 MATMUL_BUFFER_COUNT=${_buffer_count}
                 DATAHEADER="${_data_header}")
         endif()
     endforeach()
 endfunction()
 
-foreach(_precision IN ITEMS te16 te32)
+foreach(_precision IN ITEMS ${VME_TILE_VARIANT})
     if(_precision STREQUAL "te16")
         # te16 is the active validation target. Keep all rolled scheduling
         # variants aligned with the passing VTSE target matrix.
