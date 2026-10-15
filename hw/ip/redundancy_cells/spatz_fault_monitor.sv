@@ -27,6 +27,9 @@ module spatz_fault_monitor #(
 
   // Per-core whole-core TMR lockstep replica-mismatch fault.
   input  logic [NumCores-1:0]     core_tmr_fault_i,
+  // Per-core ICache parity/TMR faults from the reliability-hardened cluster_icache
+  input  logic                    icache_correctable_fault_i,
+  input  logic                    icache_uncorrectable_fault_i,
 
   // Per-source counters.
   output logic [NumVrfUnits-1:0][CounterWidth-1:0]  vrf_correctable_count_o,
@@ -37,7 +40,9 @@ module spatz_fault_monitor #(
   output logic [NumTcdmBanks-1:0][CounterWidth-1:0] tcdm_scrub_correctable_count_o,
   output logic [NumTcdmBanks-1:0][CounterWidth-1:0] tcdm_scrub_uncorrectable_count_o,
 
-  output logic [NumCores-1:0][CounterWidth-1:0]     core_tmr_fault_count_o
+  output logic [NumCores-1:0][CounterWidth-1:0]     core_tmr_fault_count_o,
+  output logic [CounterWidth-1:0]                   icache_correctable_count_o,
+  output logic [CounterWidth-1:0]                   icache_uncorrectable_count_o
 );
 
 
@@ -50,6 +55,8 @@ module spatz_fault_monitor #(
       tcdm_scrub_correctable_count_o   <= '0;
       tcdm_scrub_uncorrectable_count_o <= '0;
       core_tmr_fault_count_o <= '0;
+      icache_correctable_count_o <= '0;
+      icache_uncorrectable_count_o <= '0;
 
     end else if (clear_i) begin
       vrf_correctable_count_o    <= '0;
@@ -59,7 +66,9 @@ module spatz_fault_monitor #(
       tcdm_scrub_correctable_count_o   <= '0;
       tcdm_scrub_uncorrectable_count_o <= '0;
       core_tmr_fault_count_o <= '0;
-
+      icache_correctable_count_o <= '0;
+      icache_uncorrectable_count_o <= '0;
+  
     end else begin
       for (int unsigned i = 0; i < NumVrfUnits; i++) begin
         if (vrf_correctable_fault_i[i]) begin
@@ -106,6 +115,18 @@ module spatz_fault_monitor #(
           if (!SaturatingCount || !(&core_tmr_fault_count_o[i])) begin
             core_tmr_fault_count_o[i] <= core_tmr_fault_count_o[i] + 1'b1;
           end
+        end
+      end
+
+      if (icache_correctable_fault_i) begin
+        if (!SaturatingCount || !(&icache_correctable_count_o)) begin
+          icache_correctable_count_o <= icache_correctable_count_o + 1'b1;
+        end
+      end
+
+      if (icache_uncorrectable_fault_i) begin
+        if (!SaturatingCount || !(&icache_uncorrectable_count_o)) begin
+          icache_uncorrectable_count_o <= icache_uncorrectable_count_o + 1'b1;
         end
       end
     end
