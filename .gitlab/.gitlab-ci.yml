@@ -114,7 +114,7 @@ snRuntime-test-vsim:
     - $CI_PROJECT_DIR/util/memora_retry.sh get tc-riscv-gcc
     - $CI_PROJECT_DIR/util/memora_retry.sh get python-deps
     # Download bender
-    - cd $CI_PROJECT_DIR 
+    - cd $CI_PROJECT_DIR
     - make bender
     - ln -s /home/gitlabci/.cargo/bin/bender $CI_PROJECT_DIR/install/bender/bender
     # Update opcodes
@@ -138,7 +138,7 @@ snRuntime-test-vcs:
     - $CI_PROJECT_DIR/util/memora_retry.sh get tc-riscv-gcc
     - $CI_PROJECT_DIR/util/memora_retry.sh get python-deps
     # Download bender
-    - cd $CI_PROJECT_DIR 
+    - cd $CI_PROJECT_DIR
     - make bender
     - ln -s /home/gitlabci/.cargo/bin/bender $CI_PROJECT_DIR/install/bender/bender
     # Update opcodes
@@ -163,7 +163,7 @@ snRuntime-test-vlt:
     - $CI_PROJECT_DIR/util/memora_retry.sh get verilator
     - $CI_PROJECT_DIR/util/memora_retry.sh get python-deps
     # Download bender
-    - cd $CI_PROJECT_DIR 
+    - cd $CI_PROJECT_DIR
     - make bender
     - ln -s /home/gitlabci/.cargo/bin/bender $CI_PROJECT_DIR/install/bender/bender
     # Update opcodes
@@ -189,7 +189,7 @@ riscvTests-test-vlt:
     - $CI_PROJECT_DIR/util/memora_retry.sh get verilator
     - $CI_PROJECT_DIR/util/memora_retry.sh get python-deps
     # Download bender
-    - cd $CI_PROJECT_DIR 
+    - cd $CI_PROJECT_DIR
     - make bender
     - ln -s /home/gitlabci/.cargo/bin/bender $CI_PROJECT_DIR/install/bender/bender
     # Update opcodes
@@ -215,13 +215,13 @@ spatzBenchmarks-test-vlt-widening-hp:
     - $CI_PROJECT_DIR/util/memora_retry.sh get verilator
     - $CI_PROJECT_DIR/util/memora_retry.sh get python-deps
     # Download bender
-    - cd $CI_PROJECT_DIR 
+    - cd $CI_PROJECT_DIR
     - make bender
     - ln -s /home/gitlabci/.cargo/bin/bender $CI_PROJECT_DIR/install/bender/bender
     # Update opcodes
     - make update_opcodes
     # Extend simulation time
-    - sed -i 's/"1800"/"3600"/g' sw/cmake/SnitchUtilities.cmake
+    - sed -i 's/"1800"/"7200"/g' sw/cmake/SnitchUtilities.cmake
     # Compile the binaries
     - cd hw/system/spatz_cluster
     - ${VCS} make sw.vlt SPATZ_CLUSTER_CFG=${cfg}.hjson -B
@@ -243,13 +243,13 @@ spatzBenchmarks-test-vlt-widening-bp:
     - $CI_PROJECT_DIR/util/memora_retry.sh get verilator
     - $CI_PROJECT_DIR/util/memora_retry.sh get python-deps
     # Download bender
-    - cd $CI_PROJECT_DIR 
+    - cd $CI_PROJECT_DIR
     - make bender
     - ln -s /home/gitlabci/.cargo/bin/bender $CI_PROJECT_DIR/install/bender/bender
     # Update opcodes
     - make update_opcodes
     # Extend simulation time
-    - sed -i 's/"1800"/"3600"/g' sw/cmake/SnitchUtilities.cmake
+    - sed -i 's/"1800"/"7200"/g' sw/cmake/SnitchUtilities.cmake
     # Compile the binaries
     - cd hw/system/spatz_cluster
     - ${VCS} make sw.vlt SPATZ_CLUSTER_CFG=${cfg}.hjson -B
@@ -271,13 +271,13 @@ spatzBenchmarks-test-vlt-sdotp-hp:
     - $CI_PROJECT_DIR/util/memora_retry.sh get verilator
     - $CI_PROJECT_DIR/util/memora_retry.sh get python-deps
     # Download bender
-    - cd $CI_PROJECT_DIR 
+    - cd $CI_PROJECT_DIR
     - make bender
     - ln -s /home/gitlabci/.cargo/bin/bender $CI_PROJECT_DIR/install/bender/bender
     # Update opcodes
     - make update_opcodes
     # Extend simulation time
-    - sed -i 's/"1800"/"3600"/g' sw/cmake/SnitchUtilities.cmake
+    - sed -i 's/"1800"/"7200"/g' sw/cmake/SnitchUtilities.cmake
     # Compile the binaries
     - cd hw/system/spatz_cluster
     - ${VCS} make sw.vlt SPATZ_CLUSTER_CFG=${cfg}.hjson -B
@@ -299,13 +299,13 @@ spatzBenchmarks-test-vlt-sdotp-bp:
     - $CI_PROJECT_DIR/util/memora_retry.sh get verilator
     - $CI_PROJECT_DIR/util/memora_retry.sh get python-deps
     # Download bender
-    - cd $CI_PROJECT_DIR 
+    - cd $CI_PROJECT_DIR
     - make bender
     - ln -s /home/gitlabci/.cargo/bin/bender $CI_PROJECT_DIR/install/bender/bender
     # Update opcodes
     - make update_opcodes
     # Extend simulation time
-    - sed -i 's/"1800"/"3600"/g' sw/cmake/SnitchUtilities.cmake
+    - sed -i 's/"1800"/"7200"/g' sw/cmake/SnitchUtilities.cmake
     # Compile the binaries
     - cd hw/system/spatz_cluster
     - ${VCS} make sw.vlt SPATZ_CLUSTER_CFG=${cfg}.hjson -B
@@ -327,13 +327,13 @@ spatzBenchmarks-test-vlt-sp:
     - $CI_PROJECT_DIR/util/memora_retry.sh get verilator
     - $CI_PROJECT_DIR/util/memora_retry.sh get python-deps
     # Download bender
-    - cd $CI_PROJECT_DIR 
+    - cd $CI_PROJECT_DIR
     - make bender
     - ln -s /home/gitlabci/.cargo/bin/bender $CI_PROJECT_DIR/install/bender/bender
     # Update opcodes
     - make update_opcodes
     # Extend simulation time
-    - sed -i 's/"1800"/"3600"/g' sw/cmake/SnitchUtilities.cmake
+    - sed -i 's/"1800"/"7200"/g' sw/cmake/SnitchUtilities.cmake
     # Compile the binaries
     - cd hw/system/spatz_cluster
     - ${VCS} make sw.vlt SPATZ_CLUSTER_CFG=${cfg}.hjson -B
@@ -355,13 +355,13 @@ spatzBenchmarks-test-vlt-hp:
     - $CI_PROJECT_DIR/util/memora_retry.sh get verilator
     - $CI_PROJECT_DIR/util/memora_retry.sh get python-deps
     # Download bender
-    - cd $CI_PROJECT_DIR 
+    - cd $CI_PROJECT_DIR
     - make bender
     - ln -s /home/gitlabci/.cargo/bin/bender $CI_PROJECT_DIR/install/bender/bender
     # Update opcodes
     - make update_opcodes
     # Extend simulation time
-    - sed -i 's/"1800"/"3600"/g' sw/cmake/SnitchUtilities.cmake
+    - sed -i 's/"1800"/"7200"/g' sw/cmake/SnitchUtilities.cmake
     # Compile the binaries
     - cd hw/system/spatz_cluster
     - ${VCS} make sw.vlt SPATZ_CLUSTER_CFG=${cfg}.hjson -B
@@ -382,7 +382,7 @@ quadrilateroBenchmarks-test-vlt:
     - $CI_PROJECT_DIR/util/memora_retry.sh get tc-riscv-gcc
     - $CI_PROJECT_DIR/util/memora_retry.sh get verilator
     # Download bender
-    - cd $CI_PROJECT_DIR 
+    - cd $CI_PROJECT_DIR
     - make bender
     - ln -s /home/gitlabci/.cargo/bin/bender $CI_PROJECT_DIR/install/bender/bender
     # Update opcodes
