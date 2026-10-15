@@ -42,10 +42,10 @@ module testharness (
   localparam int unsigned AsyncAxiOutRWidth  = (2**SpatzLogDepth) * axi_pkg::r_width  ( SpatzAxiDataWidth,  SpatzAxiIdOutWidth, SpatzAxiUserWidth );
 
   localparam int unsigned AsyncAxiInAwWidth = (2**SpatzLogDepth) * axi_pkg::aw_width ( SpatzAxiAddrWidth, SpatzAxiIdInWidth, SpatzAxiUserWidth );
-  localparam int unsigned AsyncAxiInWWidth  = (2**SpatzLogDepth) * axi_pkg::w_width  ( DataWidth,         SpatzAxiUserWidth );
+  localparam int unsigned AsyncAxiInWWidth  = (2**SpatzLogDepth) * axi_pkg::w_width  ( SpatzNarrowAxiDataWidth, SpatzAxiUserWidth );
   localparam int unsigned AsyncAxiInBWidth  = (2**SpatzLogDepth) * axi_pkg::b_width  ( SpatzAxiIdInWidth, SpatzAxiUserWidth );
   localparam int unsigned AsyncAxiInArWidth = (2**SpatzLogDepth) * axi_pkg::ar_width ( SpatzAxiAddrWidth, SpatzAxiIdInWidth, SpatzAxiUserWidth );
-  localparam int unsigned AsyncAxiInRWidth  = (2**SpatzLogDepth) * axi_pkg::r_width  ( DataWidth,         SpatzAxiIdInWidth, SpatzAxiUserWidth );
+  localparam int unsigned AsyncAxiInRWidth  = (2**SpatzLogDepth) * axi_pkg::r_width  ( SpatzNarrowAxiDataWidth, SpatzAxiIdInWidth, SpatzAxiUserWidth );
 
   // AXI Master
   logic [AsyncAxiOutAwWidth-1:0]   async_axi_out_aw_data_o;
