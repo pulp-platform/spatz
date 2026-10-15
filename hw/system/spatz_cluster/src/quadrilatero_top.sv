@@ -42,8 +42,8 @@ module quadrilatero_top import fpnew_pkg::*; import quadrilatero_pkg::*; #(
   // ------------------
   // XIF Signals
   // ------------------
-  logic                  [2:0]  quad_result_valid; 
-  logic                  [2:0]  quad_result_ready; 
+  logic                  [2:0]  quad_result_valid;
+  logic                  [2:0]  quad_result_ready;
   xif_pkg::x_issue_req_t [2:0]  quad_issue_req   ;
   xif_pkg::x_issue_resp_t[2:0]  quad_issue_resp  ;
   xif_pkg::x_commit_t    [2:0]  quad_commit      ;
@@ -60,7 +60,7 @@ module quadrilatero_top import fpnew_pkg::*; import quadrilatero_pkg::*; #(
 
       // ID Conversion
       id_cnt_d[i]   = id_cnt_q[i] + (issue_valid_i[i] & issue_ready_o[i]);
-        
+
       // XIF Issue Request
       quad_issue_req[i].instr     = issue_req_i[i].data_op;
       quad_issue_req[i].mode      = 2'b11;

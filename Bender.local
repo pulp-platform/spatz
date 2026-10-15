@@ -6,4 +6,4 @@ overrides:
   riscv-dbg:          { git: "https://github.com/pulp-platform/riscv-dbg.git",          version: 0.10.0     }
   axi:                { git: "https://github.com/pulp-platform/axi.git",                version: =0.39.11   }
   common_cells:       { git: "https://github.com/pulp-platform/common_cells.git",       version: 1.40.0     }
-  redundancy_cells:   { git: "https://github.com/pulp-platform/redundancy_cells.git",   rev: 9af84af        }
+  redundancy_cells:   { git: "https://github.com/pulp-platform/redundancy_cells.git",   rev: 0d4ca29        }

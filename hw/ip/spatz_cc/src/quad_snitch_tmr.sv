@@ -211,7 +211,7 @@ module quad_snitch_tmr
   // concatenation, no typedef struct) and majority-vote it in a single
   // bitwise_TMR_voter_fail instance.
   logic core_tmr_fault;
-  logic [NumReplicas] acc_fault;
+  logic [NumReplicas-1:0] acc_fault ;
   localparam int unsigned OutWidth =
       1 +                                  // flush_i_valid
       1 +                                  // inst_valid
