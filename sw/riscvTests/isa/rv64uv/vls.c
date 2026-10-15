@@ -366,10 +366,11 @@ void TEST_CASE22(void) {
 void TEST_CASE_D24a(void) {
   VSET(6, e16, m1);
   // [e4 9f 20 19 2e 8f e0 05] [aa) f9 f0 71 94 c3 d3 (bb] [fe) ca 11 11 22 22 33 33] [44 44 55 55]
-  volatile uint16_t INP1[] = {0x9fe4, 0x1920, 0x8f2e, 0x05e0,
-                              0xf9aa, 0x71f0, 0xc394, 0xbbd3,
-                              0xcafe, 0x1111, 0x2222, 0x3333,
-                              0x4444, 0x5555};
+  // memory is handled in 8 byte blocks
+  volatile uint16_t INP1[] = {0x9fe4, 0x1920, 0x8f2e, 0x05e0, // block 1
+                              0xf9aa, 0x71f0, 0xc394, 0xbbd3, // block 2
+                              0xcafe, 0x1111, 0x2222, 0x3333, // block 3
+                              0x4444, 0x5555}; // block 4
   uint64_t stride = 5;
   asm volatile("vlse16.v v1, (%0), %1" ::"r"(INP1), "r"(stride) : "memory");
   VCMP_U16(23, v1, 0x9fe4, 0xe08f, 0x71f0, 0xfebb, 0x2222, 0x5544);
@@ -402,41 +403,6 @@ void TEST_CASE_D24d(void) {
   uint64_t stride = 7;
   asm volatile("vlse16.v v1, (%0), %1" ::"r"(INP1), "r"(stride) : "memory");
   VCMP_U16(26, v1, 0x9fe4, 0xaa05, 0xbbd3, 0x3322);
-}
-
-void TEST_CASE_D25a(void) {
-  VSET(3, e64, m1);
-  // e0 05 2e 8f 20 19 e4 9f
-  // d3 bb 94 c3 f0 71 f9 40
-  // 38 16 a7 84 93 1a a1 40
-  // 38 16 71 f0 aa f9 d3 c3
-  volatile uint64_t INP1[] = {0x9fe419208f2e05e0, 0xf9aa71f0c394bbd3,
-                              0xa11a9384a7163840, 0x99991348a9f38cd1};
-  uint64_t stride = 8;
-  asm volatile("vlse64.v v1, (%0), %1" ::"r"((volatile uint64_t *)INP1 + 4), "r"(stride) : "memory");
-  VCMP_U64(27, v1, 0xc394bbd39fe41920, 0xa7163840f9aa71f0, 0xa9f38cd1a11a9384);
-}
-
-void TEST_CASE_D25b(void) {
-  VSET(3, e64, m1);
-  
-  // Expanded array to safely support an offset of +2 and a vector length of 3 
-  // (requires elements up to index 4)
-  volatile uint64_t INP1[] = {
-    0x9fe419208f2e05e0, // Index 0 (skipped by offset)
-    0xf9aa71f0c394bbd3, // Index 1 (skipped by offset)
-    0xa11a9384a7163840, // Index 2 (New Index 0)
-    0x99991348a9f38cd1, // Index 3 (New Index 1)
-    0x1234567887654321  // Index 4 (New Index 2 - added to prevent out-of-bounds)
-  };
-  
-  uint64_t stride = 8;
-  
-  // Apply an element offset of +2 using pointer arithmetic (INP1 + 2)
-  asm volatile("vlse64.v v1, (%0), %1" :: "r"(INP1 + 2), "r"(stride) : "memory");
-  
-  // Update the comparison macro with the values starting from index 2
-  VCMP_U64(28, v1, 0xa11a9384a7163840, 0x99991348a9f38cd1, 0x1234567887654321);
 }
 
 int main(void) {
@@ -483,10 +449,6 @@ int main(void) {
   TEST_CASE_D24b();
   TEST_CASE_D24c();
   TEST_CASE_D24d();
-
-  //Bug test
-  //TEST_CASE_D25a();
-  TEST_CASE_D25b();
 
   EXIT_CHECK();
 }

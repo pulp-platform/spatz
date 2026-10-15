@@ -813,6 +813,33 @@ void TEST_CASE2_8_vl32_m(void) {
                    0x2b, 0xf6, 0x00, 0x00, 0x00, 0x00, 0xab, 0x46);
 }
 
+void TEST_CASE_D26(void) {
+  // e32, m2 (EMUL=2)
+  VSET(0x04, e32, m2);
+  
+  volatile uint32_t MEM[] = {0x0a, 0x14, 0x1e, 0x28, 0x32, 0x3c, 0x46, 0x50};
+  
+  // Pre-fill v2, v3, v4 with distinct patterns to detect clobbering
+  asm volatile(
+    "vmv.v.i v2, 2\n\t"
+    "vmv.v.i v3, 3\n\t"
+    "vmv.v.i v4, 4\n\t"
+  );
+  
+  // Segmented load of 2 fields. 
+  // Should write to v2 (EMUL=2 means it takes v2, v3) 
+  // and v4 (takes v4, v5).
+  asm volatile(
+    "vlseg2e32.v v2, (%0)\n\t" 
+    :: "r"(MEM) : "memory"
+  );
+  
+  // If bug exists, v4 will still hold '0x04' (unmodified), 
+  // and v3 will incorrectly hold the second segment data.
+  // Correct behavior: v4 holds the second segment {0x14, 0x28, 0x3c, 0x50}
+  VCMP_U32(165, v4, 0x14, 0x28, 0x3c, 0x50); 
+}
+
 int main(void) {
   INIT_CHECK();
   enable_vec();
@@ -869,6 +896,8 @@ int main(void) {
   TEST_CASE2_32_vl4_m_undist();
   TEST_CASE2_8_vl32();
   TEST_CASE2_8_vl32_m();
+
+  TEST_CASE_D26();
 
   EXIT_CHECK();
 }

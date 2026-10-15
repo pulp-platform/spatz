@@ -106,6 +106,29 @@ void TEST_CASE6(void) {
                  49, 0xd3, 51, 0xd1, 53, 0x48, 55, 0x88, 57, 0xae, 59, 0x91, 61, 0x59, 63, 0x89);
 }
 
+void TEST_CASE_D22(void) {
+  VSET(4, e32, m1);
+  // Allocate a larger array. We will point the base to the middle.
+  volatile uint32_t MEM[256] = {0}; 
+  MEM[128 - 128] = 0xBAD0BAD0; // Expected if sign-extended (-128)
+  MEM[128 + 128] = 0x600D600D; // Expected if zero-extended (+128)
+  MEM[128 + 129] = 0x12345678;
+  
+  // 8-bit indices: 128 and 129 (MSB is 1)
+  uint8_t indices[] = {128, 129, 0, 0}; 
+  
+  uint32_t *base = (uint32_t*)&MEM[128];
+  
+  asm volatile(
+    "vle8.v v2, (%1)\n\t"        // Load 8-bit indices into v2
+    "vluxei8.v v1, (%0), v2\n\t" // Unordered indexed load
+    :: "r"(base), "r"(indices) : "memory"
+  );
+  
+  // If bug exists, v1 gets 0xBAD0BAD0. If correct, gets 0x600D600D.
+  VCMP_U32(7, v1, 0x600D600D, 0x12345678, 0, 0); 
+}
+
 int main(void) {
   INIT_CHECK();
   enable_vec();
@@ -116,6 +139,7 @@ int main(void) {
   TEST_CASE4();
   TEST_CASE5();
   TEST_CASE6();
-
+  TEST_CASE_D22();
+  
   EXIT_CHECK();
 }

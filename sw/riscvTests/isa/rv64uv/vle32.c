@@ -213,7 +213,116 @@ void TEST_CASE8(void) {
       99, 0x0000003D, 99, 0x0000003F);
 }
 
+void TEST_CASE_D23(void) {
+  VSET(4, e32, m1);
+  volatile uint32_t MEM[4] = {0, 0, 0, 0};
+  
+  // All indices point to offset 0 (MEM[0])
+  uint32_t indices[] = {0, 0, 0, 0};
+  
+  // Data to write: 1, 2, 3, 4
+  uint32_t data[] = {0x01, 0x02, 0x03, 0x04};
+  
+  asm volatile(
+    "vle32.v v2, (%1)\n\t"        // v2 = indices (0, 0, 0, 0)
+    "vle32.v v3, (%2)\n\t"        // v3 = data (1, 2, 3, 4)
+    "vsoxei32.v v3, (%0), v2\n\t" // Ordered indexed store
+    :: "r"(MEM), "r"(indices), "r"(data) : "memory"
+  );
+  
+  // Load the memory back into a vector register to check it
+  asm volatile("vle32.v v4, (%0)" :: "r"(MEM) : "memory");
+  
+  // Since order is preserved, the last element (4) MUST be the final value in MEM[0].
+  // MEM[1], MEM[2], and MEM[3] should remain 0.
+  VCMP_U32(9, v4, 0x04, 0, 0, 0); 
+}
 
+void TEST_CASE_D25(void) {
+  VSET(2, e32, m1);
+  volatile uint8_t MEM[] __attribute__((aligned(8))) = {
+      0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
+      0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff
+  };
+  
+  uint32_t *unaligned_base = (uint32_t*)&MEM[6];
+  asm volatile("vle32.v v1, (%0)" :: "r"(unaligned_base) : "memory");
+
+  VCMP_U32(10, v1, 0x99887766, 0xddccbbaa);
+}
+
+void TEST_CASE_D27(void) {
+  VSET(8, e32, m1);
+  
+  // Initialize memory with 0s. 
+  volatile uint32_t MEM[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+  
+  // Data we want to write
+  uint32_t data[] = {0x0a, 0x0a, 0x0a, 0x0a, 0x32, 0x3c, 0x46, 0x50};
+  
+  // Elements 0, 1, 2, 3 hit index 0 to force uneven backpressure.
+  // Elements 4, 5, 6, 7 point to independent addresses.
+  uint32_t indices[] = {0, 0, 0, 0, 0x04, 0x05, 0x06, 0x07};
+  
+  // MASK in v0: 10100111 in binary (0xA7)
+  // Elements 4, 5, 6, 7 masks: 0, 1, 0, 1
+  uint8_t mask = 0xA7; 
+  
+  asm volatile(
+    "vle32.v v1, (%1)\n\t"              // Load data into v1
+    "vle32.v v2, (%2)\n\t"              // Load indices into v2
+    "vle8.v  v0, (%3)\n\t"              // Load mask into v0
+    "vsuxei32.v v1, (%0), v2, v0.t\n\t" // Masked indexed store
+    :: "r"(MEM), "r"(data), "r"(indices), "r"(&mask) : "memory"
+  );
+  
+  asm volatile("vle32.v v4, (%0)" :: "r"(MEM) : "memory");
+  // Expected for MEM[4..7]: 0x28 masked (0), 0x3c written, 0x46 masked (0), 0x50 written
+  VCMP_U32(11, v4, 0x0a, 0, 0, 0, 0, 0x3c, 0, 0x50);
+}
+
+void TEST_CASE_D28(void) {
+  volatile uint32_t MEM[] = {0x111, 0x222, 0x333, 0x444};
+  
+  // Set vl = 0
+  asm volatile("vsetvli zero, zero, e32, m1, ta, ma");
+  
+  // This load has vl=0. Spatz controller doesn't get a response.
+  asm volatile("vle32.v v1, (%0)" :: "r"(MEM) : "memory");
+  
+  // Set vl = 4
+  VSET(4, e32, m1);
+  
+  // If bug D28 is present, Spatz deadlocks here waiting for the previous LSU op
+  asm volatile("vle32.v v2, (%0)" :: "r"(MEM) : "memory");
+  
+  VCMP_U32(12, v2, 0x111, 0x222, 0x333, 0x444);
+}
+
+void TEST_CASE_D29(void) {
+  VSET(4, e32, m1);
+  volatile uint32_t MEM[] = {0x01, 0x02, 0x03, 0x04};
+  
+  // Clear v1
+  asm volatile("vmv.v.i v1, 0");
+  
+  // Set vstart to 2.
+  // Correct behavior: the VERY NEXT vector instruction skips elements 0 and 1.
+  asm volatile("csrw vstart, 2");
+  
+  // Load MEM. Elements 0 and 1 should NOT be updated (should remain 0).
+  // Elements 2 and 3 should be loaded with MEM[2] and MEM[3].
+  asm volatile("vle32.v v1, (%0)" :: "r"(MEM) : "memory");
+  
+  // Clear vstart for subsequent tests
+  asm volatile("csrw vstart, 0");
+  
+  // If bug D29 is present, this load started at vstart=0 (from the instruction before csrw)
+  // and v1 will be {0x01, 0x02, 0x03, 0x04}.
+  // If correct, v1 is {0, 0, 0x03, 0x04}.
+  // IDX 0 AND IDX 1 ARE NOT OVERWRITTEN, AND DUE TO THE PREVIOUS TEST,THEY REMAIN 0X111 AND 0X222
+  VCMP_U32(13, v1, 0, 0, 0x03, 0x04);
+}
 
 int main(void) {
   INIT_CHECK();
@@ -227,6 +336,11 @@ int main(void) {
   TEST_CASE6();
   TEST_CASE7();
   TEST_CASE8();
+  TEST_CASE_D23();
+  TEST_CASE_D25();
+  TEST_CASE_D27();
+  TEST_CASE_D28();
+  TEST_CASE_D29();
 
   EXIT_CHECK();
 }
