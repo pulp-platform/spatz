@@ -1,0 +1,14 @@
+// Copyright 2026 ETH Zurich and University of Bologna.
+// Solderpad Hardware License, Version 0.51, see LICENSE for details.
+// SPDX-License-Identifier: SHL-0.51
+
+// Indexed (gather) load: a ROWS x DIM fp16 DRAM matrix (KV-cache-like) and an
+// index stream of G unique, sorted indices selecting the rows to gather.
+
+{
+    kernel: "GATHER",
+    ROWS: 2048,
+    DIM: 128,
+    G: 128,
+    seed: 42,
+}
