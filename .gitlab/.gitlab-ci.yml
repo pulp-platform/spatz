@@ -205,8 +205,8 @@ riscvTests-test-vlt:
     matrix:
       - { cfg: spatz_quadrilatero.dora.dram }
 
-# Spatz tests
-spatzBenchmarks-test-vlt:
+# Spatz tests: widening-hp
+spatzBenchmarks-test-vlt-widening-hp:
   stage: benchmark
   script:
     # Download LLVM, GCC, Verilator, and Python deps
@@ -220,18 +220,160 @@ spatzBenchmarks-test-vlt:
     - ln -s /home/gitlabci/.cargo/bin/bender $CI_PROJECT_DIR/install/bender/bender
     # Update opcodes
     - make update_opcodes
+    # Extend simulation time
+    - sed -i 's/"1800"/"3600"/g' sw/cmake/SnitchUtilities.cmake
     # Compile the binaries
     - cd hw/system/spatz_cluster
     - ${VCS} make sw.vlt SPATZ_CLUSTER_CFG=${cfg}.hjson -B
     # Run the test
     - cd sw/build/spatzBenchmarks
-    - ${CTEST} --verbose
+    - ${CTEST} -R spatzBenchmarks-rtl-widening-hp*
   needs: ["tc-llvm", "tc-gcc", "verilator", "python-deps"]
   parallel:
     matrix:
       - { cfg: spatz_quadrilatero.dora.dram }
 
-  # Quadrilatero tests
+# Spatz tests: widening-bp
+spatzBenchmarks-test-vlt-widening-bp:
+  stage: benchmark
+  script:
+    # Download LLVM, GCC, Verilator, and Python deps
+    - $CI_PROJECT_DIR/util/memora_retry.sh get tc-llvm
+    - $CI_PROJECT_DIR/util/memora_retry.sh get tc-riscv-gcc
+    - $CI_PROJECT_DIR/util/memora_retry.sh get verilator
+    - $CI_PROJECT_DIR/util/memora_retry.sh get python-deps
+    # Download bender
+    - cd $CI_PROJECT_DIR 
+    - make bender
+    - ln -s /home/gitlabci/.cargo/bin/bender $CI_PROJECT_DIR/install/bender/bender
+    # Update opcodes
+    - make update_opcodes
+    # Extend simulation time
+    - sed -i 's/"1800"/"3600"/g' sw/cmake/SnitchUtilities.cmake
+    # Compile the binaries
+    - cd hw/system/spatz_cluster
+    - ${VCS} make sw.vlt SPATZ_CLUSTER_CFG=${cfg}.hjson -B
+    # Run the test
+    - cd sw/build/spatzBenchmarks
+    - ${CTEST} -R spatzBenchmarks-rtl-widening-bp*
+  needs: ["tc-llvm", "tc-gcc", "verilator", "python-deps"]
+  parallel:
+    matrix:
+      - { cfg: spatz_quadrilatero.dora.dram }
+
+# Spatz tests: sdotp-hp
+spatzBenchmarks-test-vlt-sdotp-hp:
+  stage: benchmark
+  script:
+    # Download LLVM, GCC, Verilator, and Python deps
+    - $CI_PROJECT_DIR/util/memora_retry.sh get tc-llvm
+    - $CI_PROJECT_DIR/util/memora_retry.sh get tc-riscv-gcc
+    - $CI_PROJECT_DIR/util/memora_retry.sh get verilator
+    - $CI_PROJECT_DIR/util/memora_retry.sh get python-deps
+    # Download bender
+    - cd $CI_PROJECT_DIR 
+    - make bender
+    - ln -s /home/gitlabci/.cargo/bin/bender $CI_PROJECT_DIR/install/bender/bender
+    # Update opcodes
+    - make update_opcodes
+    # Extend simulation time
+    - sed -i 's/"1800"/"3600"/g' sw/cmake/SnitchUtilities.cmake
+    # Compile the binaries
+    - cd hw/system/spatz_cluster
+    - ${VCS} make sw.vlt SPATZ_CLUSTER_CFG=${cfg}.hjson -B
+    # Run the test
+    - cd sw/build/spatzBenchmarks
+    - ${CTEST} -R spatzBenchmarks-rtl-sdotp-hp*
+  needs: ["tc-llvm", "tc-gcc", "verilator", "python-deps"]
+  parallel:
+    matrix:
+      - { cfg: spatz_quadrilatero.dora.dram }
+
+# Spatz tests: sdotp-bp
+spatzBenchmarks-test-vlt-sdotp-bp:
+  stage: benchmark
+  script:
+    # Download LLVM, GCC, Verilator, and Python deps
+    - $CI_PROJECT_DIR/util/memora_retry.sh get tc-llvm
+    - $CI_PROJECT_DIR/util/memora_retry.sh get tc-riscv-gcc
+    - $CI_PROJECT_DIR/util/memora_retry.sh get verilator
+    - $CI_PROJECT_DIR/util/memora_retry.sh get python-deps
+    # Download bender
+    - cd $CI_PROJECT_DIR 
+    - make bender
+    - ln -s /home/gitlabci/.cargo/bin/bender $CI_PROJECT_DIR/install/bender/bender
+    # Update opcodes
+    - make update_opcodes
+    # Extend simulation time
+    - sed -i 's/"1800"/"3600"/g' sw/cmake/SnitchUtilities.cmake
+    # Compile the binaries
+    - cd hw/system/spatz_cluster
+    - ${VCS} make sw.vlt SPATZ_CLUSTER_CFG=${cfg}.hjson -B
+    # Run the test
+    - cd sw/build/spatzBenchmarks
+    - ${CTEST} -R spatzBenchmarks-rtl-sdotp-bp*
+  needs: ["tc-llvm", "tc-gcc", "verilator", "python-deps"]
+  parallel:
+    matrix:
+      - { cfg: spatz_quadrilatero.dora.dram }
+
+# Spatz tests: sp
+spatzBenchmarks-test-vlt-sp:
+  stage: benchmark
+  script:
+    # Download LLVM, GCC, Verilator, and Python deps
+    - $CI_PROJECT_DIR/util/memora_retry.sh get tc-llvm
+    - $CI_PROJECT_DIR/util/memora_retry.sh get tc-riscv-gcc
+    - $CI_PROJECT_DIR/util/memora_retry.sh get verilator
+    - $CI_PROJECT_DIR/util/memora_retry.sh get python-deps
+    # Download bender
+    - cd $CI_PROJECT_DIR 
+    - make bender
+    - ln -s /home/gitlabci/.cargo/bin/bender $CI_PROJECT_DIR/install/bender/bender
+    # Update opcodes
+    - make update_opcodes
+    # Extend simulation time
+    - sed -i 's/"1800"/"3600"/g' sw/cmake/SnitchUtilities.cmake
+    # Compile the binaries
+    - cd hw/system/spatz_cluster
+    - ${VCS} make sw.vlt SPATZ_CLUSTER_CFG=${cfg}.hjson -B
+    # Run the test
+    - cd sw/build/spatzBenchmarks
+    - ${CTEST} -R spatzBenchmarks-rtl-sp-*
+  needs: ["tc-llvm", "tc-gcc", "verilator", "python-deps"]
+  parallel:
+    matrix:
+      - { cfg: spatz_quadrilatero.dora.dram }
+
+# Spatz tests: hp
+spatzBenchmarks-test-vlt-hp:
+  stage: benchmark
+  script:
+    # Download LLVM, GCC, Verilator, and Python deps
+    - $CI_PROJECT_DIR/util/memora_retry.sh get tc-llvm
+    - $CI_PROJECT_DIR/util/memora_retry.sh get tc-riscv-gcc
+    - $CI_PROJECT_DIR/util/memora_retry.sh get verilator
+    - $CI_PROJECT_DIR/util/memora_retry.sh get python-deps
+    # Download bender
+    - cd $CI_PROJECT_DIR 
+    - make bender
+    - ln -s /home/gitlabci/.cargo/bin/bender $CI_PROJECT_DIR/install/bender/bender
+    # Update opcodes
+    - make update_opcodes
+    # Extend simulation time
+    - sed -i 's/"1800"/"3600"/g' sw/cmake/SnitchUtilities.cmake
+    # Compile the binaries
+    - cd hw/system/spatz_cluster
+    - ${VCS} make sw.vlt SPATZ_CLUSTER_CFG=${cfg}.hjson -B
+    # Run the test
+    - cd sw/build/spatzBenchmarks
+    - ${CTEST} -R spatzBenchmarks-rtl-hp-*
+  needs: ["tc-llvm", "tc-gcc", "verilator", "python-deps"]
+  parallel:
+    matrix:
+      - { cfg: spatz_quadrilatero.dora.dram }
+
+# Quadrilatero tests
 quadrilateroBenchmarks-test-vlt:
   stage: benchmark
   script:
