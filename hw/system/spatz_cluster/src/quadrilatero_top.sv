@@ -17,20 +17,20 @@ module quadrilatero_top import fpnew_pkg::*; import quadrilatero_pkg::*; #(
     parameter type          amo_op_e         = logic,
     parameter amo_op_e      AMONone          = 1'b0 ,
     // Derived parameters. DO NOT CHANGE!
-    localparam int unsigned DataWidth        = quadrilatero_pkg::DATA_WIDTH,
+    localparam int unsigned DataWidth        = quadrilatero_pkg::DATA_WIDTH + hsiao_ecc_pkg::min_ecc(quadrilatero_pkg::DATA_WIDTH),
     localparam int unsigned LLEN             = quadrilatero_pkg::LLEN      ,
     localparam int unsigned LSU_PORTS        = quadrilatero_pkg::LSU_PORTS 
   ) (
     input  logic                              clk_i,
     input  logic                              rst_ni,
     // Snitch Interface
-    input  logic                              issue_valid_i,
-    output logic                              issue_ready_o,
-    input  quad_issue_req_t                   issue_req_i,
-    output quad_issue_rsp_t                   issue_rsp_o,
-    output logic                              rsp_valid_o,
-    input  logic                              rsp_ready_i,
-    output quad_rsp_t                         rsp_o,
+    input  logic           [2:0]              issue_valid_i,
+    output logic           [2:0]              issue_ready_o,
+    input  quad_issue_req_t[2:0]              issue_req_i,
+    output quad_issue_rsp_t[2:0]              issue_rsp_o,
+    output logic           [2:0]              rsp_valid_o,
+    input  logic           [2:0]              rsp_ready_i,
+    output quad_rsp_t      [2:0]              rsp_o,
     // Memory Request
     output quad_mem_req_t   [NrMemPorts-1:0] quad_mem_req_o,
     output logic            [NrMemPorts-1:0] quad_mem_req_valid_o,
@@ -42,50 +42,55 @@ module quadrilatero_top import fpnew_pkg::*; import quadrilatero_pkg::*; #(
   // ------------------
   // XIF Signals
   // ------------------
-  logic                    quad_result_valid; 
-  logic                    quad_result_ready; 
-  xif_pkg::x_issue_req_t   quad_issue_req   ;
-  xif_pkg::x_issue_resp_t  quad_issue_resp  ;
-  xif_pkg::x_commit_t      quad_commit      ;
-  logic                    quad_commit_valid;
-  xif_pkg::x_result_t      quad_result      ;
+  logic                  [2:0]  quad_result_valid;
+  logic                  [2:0]  quad_result_ready;
+  xif_pkg::x_issue_req_t [2:0]  quad_issue_req   ;
+  xif_pkg::x_issue_resp_t[2:0]  quad_issue_resp  ;
+  xif_pkg::x_commit_t    [2:0]  quad_commit      ;
+  logic                  [2:0]  quad_commit_valid;
+  xif_pkg::x_result_t    [2:0]  quad_result      ;
 
-  logic[xif_pkg::X_ID_WIDTH-1 : 0] id_cnt_d, id_cnt_q;
+  logic[xif_pkg::X_ID_WIDTH-1 : 0] id_cnt_d [2:0];
+  logic[xif_pkg::X_ID_WIDTH-1 : 0] id_cnt_q [2:0];
+  logic[xif_pkg::X_ID_WIDTH-1 : 0] seq_cnt_q[2:0];
+  logic[xif_pkg::X_ID_WIDTH-1 : 0] voter_q  [2:0];
 
-  always_comb begin: xif_signals
+  for(genvar i=0; i<3; i++) begin
+    always_comb begin: xif_signals
 
-    // ID Conversion
-    id_cnt_d   = id_cnt_q + (issue_valid_i & issue_ready_o);
-      
-    // XIF Issue Request
-    quad_issue_req.instr     = issue_req_i.data_op;
-    quad_issue_req.mode      = 2'b11;
-    quad_issue_req.id        = id_cnt_q;
-    quad_issue_req.rs[0]     = issue_req_i.data_arga;
-    quad_issue_req.rs[1]     = issue_req_i.data_argb;
-    quad_issue_req.rs[2]     = issue_req_i.data_argc;
-    quad_issue_req.rs_valid  = '1  ;
-    quad_issue_req.ecs       = '0  ;
-    quad_issue_req.ecs_valid = 1'b1;
+      // ID Conversion
+      id_cnt_d[i]   = id_cnt_q[i] + (issue_valid_i[i] & issue_ready_o[i]);
 
-    // XIF Issue Response
-    issue_rsp_o.accept    = quad_issue_resp.accept;
-    issue_rsp_o.writeback = quad_issue_resp.writeback;
-    issue_rsp_o.loadstore = quad_issue_resp.loadstore;
-    issue_rsp_o.exception = quad_issue_resp.exc;
-    issue_rsp_o.isfloat   = 1'b0;
+      // XIF Issue Request
+      quad_issue_req[i].instr     = issue_req_i[i].data_op;
+      quad_issue_req[i].mode      = 2'b11;
+      quad_issue_req[i].id        = id_cnt_q[i];
+      quad_issue_req[i].rs[0]     = issue_req_i[i].data_arga;
+      quad_issue_req[i].rs[1]     = issue_req_i[i].data_argb;
+      quad_issue_req[i].rs[2]     = issue_req_i[i].data_argc;
+      quad_issue_req[i].rs_valid  = '1  ;
+      quad_issue_req[i].ecs       = '0  ;
+      quad_issue_req[i].ecs_valid = 1'b1;
 
-    // XIF Commit
-    quad_commit_valid        = issue_valid_i;
-    quad_commit.id           = id_cnt_q   ;
-    quad_commit.commit_kill  = 1'b0;
+      // XIF Issue Response
+      issue_rsp_o[i].accept    = quad_issue_resp[i].accept;
+      issue_rsp_o[i].writeback = quad_issue_resp[i].writeback;
+      issue_rsp_o[i].loadstore = quad_issue_resp[i].loadstore;
+      issue_rsp_o[i].exception = quad_issue_resp[i].exc;
+      issue_rsp_o[i].isfloat   = 1'b0;
 
-    // XIF Result
-    rsp_o.id      = quad_result.rd  ;
-    rsp_o.error   = quad_result.err ;
-    rsp_o.data    = quad_result.data;
-    rsp_valid_o   = quad_result.we & quad_result_valid;
-    quad_result_ready = !rsp_valid_o | rsp_ready_i;
+      // XIF Commit
+      quad_commit_valid[i]        = issue_valid_i[i];
+      quad_commit[i].id           = id_cnt_q[i]   ;
+      quad_commit[i].commit_kill  = 1'b0;
+
+      // XIF Result
+      rsp_o[i].id      = quad_result[i].rd  ;
+      rsp_o[i].error   = quad_result[i].err ;
+      rsp_o[i].data    = quad_result[i].data;
+      rsp_valid_o[i]   = quad_result[i].we & quad_result_valid[i];
+      quad_result_ready[i] = !rsp_valid_o[i] | rsp_ready_i[i];
+    end
   end
   
   // ------------------
@@ -102,7 +107,7 @@ module quadrilatero_top import fpnew_pkg::*; import quadrilatero_pkg::*; #(
 
   for (genvar lsu = 0; lsu < LSU_PORTS; lsu++) begin
     for (genvar port = 0; port < NrMemPorts/LSU_PORTS; port++) begin
-      if(port < LLEN/LSU_PORTS/DataWidth) begin
+      if(port < LLEN/LSU_PORTS/quadrilatero_pkg::DATA_WIDTH) begin
         // TCDM request
         assign quad_mem_req_valid_o[port+lsu*NrMemPorts/LSU_PORTS] = quad_obi_req  [lsu][port];
         assign quad_mem_req_o[port+lsu*NrMemPorts/LSU_PORTS].write = quad_obi_we   [lsu][port];
@@ -180,12 +185,25 @@ module quadrilatero_top import fpnew_pkg::*; import quadrilatero_pkg::*; #(
   );
 
   // Sequential block
-  always_ff @(negedge rst_ni, posedge clk_i) begin : seq_block
-    if (!rst_ni) begin
-      id_cnt_q   <= '0;
-    end else begin
-      id_cnt_q   <= id_cnt_d;
+  for(genvar i=0; i<3; i++) begin
+    always_ff @(negedge rst_ni, posedge clk_i) begin : seq_block
+      if (!rst_ni) begin
+        seq_cnt_q[i]   <= '0;
+      end else begin
+        seq_cnt_q[i]   <= id_cnt_d[i];
+      end
     end
-  end 
+    bitwise_TMR_voter_fail #(
+      .DataWidth(xif_pkg::X_ID_WIDTH),
+      .VoterType(1)
+    ) i_seq_vote (
+      .a_i             (seq_cnt_q  [0]),
+      .b_i             (seq_cnt_q  [1]),
+      .c_i             (seq_cnt_q  [2]),
+      .majority_o      (voter_q    [i]),
+      .fault_detected_o()
+    );
+    assign id_cnt_q[i] = voter_q[i];
+  end
   
 endmodule

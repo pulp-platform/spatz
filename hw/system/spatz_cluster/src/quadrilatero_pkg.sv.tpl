@@ -101,10 +101,10 @@ package quadrilatero_pkg;
     logic                             simd_mask   ;
     logic                             is_signed   ;
     logic[$clog2(NUM_MAC_UNITS)-1:0]  unit        ;
+    logic                             first_iteration;
   } cfg_fpu_t;
   typedef struct packed {
-    logic finished       ;
-    logic first_iteration;
+    logic wen;
   } ctrl_fpu_t;
   typedef struct packed {
     // logic     wen      ;
@@ -112,6 +112,7 @@ package quadrilatero_pkg;
     // acc_reg_t acc_waddr;
     acc_reg_t acc_raddr;
     row_t     row      ;
+    logic finished       ;
   } ctrl_acc_t;
   typedef struct packed {
     acc_reg_t cmul   ;

@@ -143,23 +143,29 @@ module spatz_quadrilatero_cc
   XF8 ? 8   : // Xf8 ext.
   0;          // Unused in case of no FP
 
-  acc_issue_req_t acc_snitch_req;
-  acc_issue_req_t acc_snitch_demux;
-  acc_issue_rsp_t acc_snitch_resp;
-  acc_issue_rsp_t spatz_snitch_resp;
-  acc_issue_rsp_t quad_snitch_resp;
+  acc_issue_req_t [2:0] acc_snitch_req;
+  acc_issue_req_t [2:0] acc_snitch_demux;
+  acc_issue_rsp_t [2:0] acc_snitch_resp;
+  acc_issue_rsp_t [2:0] spatz_snitch_resp;
+  acc_issue_rsp_t [2:0] quad_snitch_resp;
 
-  acc_rsp_t acc_demux_snitch;
-  acc_rsp_t spatz_resp;
-  acc_rsp_t quad_resp;
+  acc_rsp_t [2:0] acc_demux_snitch;
+  acc_rsp_t [2:0] spatz_resp;
+  acc_rsp_t [2:0] quad_resp;
 
-  logic acc_snitch_demux_qvalid, acc_snitch_demux_qready;
-  logic spatz_qvalid, spatz_qready;
-  logic quad_qvalid, quad_qready;
+  logic [2:0] acc_snitch_demux_qvalid;
+  logic [2:0] acc_snitch_demux_qready;
+  logic [2:0] spatz_qvalid;
+  logic [2:0] spatz_qready;
+  logic [2:0] quad_qvalid;
+  logic [2:0] quad_qready;
 
-  logic spatz_pvalid, spatz_pready;
-  logic quad_pvalid, quad_pready;
-  logic acc_demux_snitch_valid, acc_demux_snitch_ready;
+  logic [2:0] spatz_pvalid;
+  logic [2:0] spatz_pready;
+  logic [2:0] quad_pvalid;
+  logic [2:0] quad_pready;
+  logic [2:0] acc_demux_snitch_valid;
+  logic [2:0] acc_demux_snitch_ready;
 
   fpnew_pkg::roundmode_e fpu_rnd_mode;
   fpnew_pkg::fmt_mode_t fpu_fmt_mode;
@@ -177,7 +183,7 @@ module spatz_quadrilatero_cc
 
   `SNITCH_VM_TYPEDEF(AddrWidth)
 
-  spatz_snitch_tmr #(
+  quad_snitch_tmr #(
     .AddrWidth              (AddrWidth             ),
     .DataWidth              (DataWidth             ),
     .acc_issue_req_t        (acc_issue_req_t       ),
@@ -260,119 +266,79 @@ module spatz_quadrilatero_cc
   );
 
   // Accelerator Demux Port
-  stream_demux #(
-    .N_OUP ( 2 )
-  ) i_stream_demux_offload (
-    .inp_valid_i (acc_snitch_demux_qvalid             ),
-    .inp_ready_o (acc_snitch_demux_qready             ),
-    .oup_sel_i   (acc_snitch_demux.addr[$clog2(2)-1:0]),
-    .oup_valid_o ({quad_qvalid, spatz_qvalid}            ),
-    .oup_ready_i ({quad_qready, spatz_qready}            )
-  );
+  for(genvar i=0; i<3; i++) begin
+    stream_demux #(
+      .N_OUP ( 2 )
+    ) i_stream_demux_offload (
+      .inp_valid_i (acc_snitch_demux_qvalid[i]             ),
+      .inp_ready_o (acc_snitch_demux_qready[i]             ),
+      .oup_sel_i   (acc_snitch_demux[i].addr[$clog2(2)-1:0]),
+      .oup_valid_o ({quad_qvalid[i], spatz_qvalid[i]}      ),
+      .oup_ready_i ({quad_qready[i], spatz_qready[i]}      )
+    );
+    assign acc_snitch_req  [i] = acc_snitch_demux[i];
+    assign acc_snitch_resp [i] = quad_qvalid[i] ? quad_snitch_resp[i] : spatz_snitch_resp[i];
+
+    stream_arbiter #(
+      .DATA_T ( acc_rsp_t ),
+      .N_INP  ( 2         )
+    ) i_stream_arbiter_offload (
+      .clk_i       ( clk_i                             ),
+      .rst_ni      ( rst_ni                            ),
+      .inp_data_i  ( {quad_resp  [i], spatz_resp  [i]} ),
+      .inp_valid_i ( {quad_pvalid[i], spatz_pvalid[i]} ),
+      .inp_ready_o ( {quad_pready[i], spatz_pready[i]} ),
+      .oup_data_o  ( acc_demux_snitch      [i]         ),
+      .oup_valid_o ( acc_demux_snitch_valid[i]         ),
+      .oup_ready_i ( acc_demux_snitch_ready[i]         )
+    );
+  end
 
   // There is no shared muldiv in this configuration
   assign hive_req_o.acc_qvalid = 1'b0;
   assign hive_req_o.acc_pready = 1'b0;
   assign hive_req_o.acc_req    = '0;
-  assign acc_snitch_req        = acc_snitch_demux;
-
-  stream_arbiter #(
-    .DATA_T ( acc_rsp_t ),
-    .N_INP  ( 2         )
-  ) i_stream_arbiter_offload (
-    .clk_i       ( clk_i                        ),
-    .rst_ni      ( rst_ni                       ),
-    .inp_data_i  ( {quad_resp  , spatz_resp }   ),
-    .inp_valid_i ( {quad_pvalid, spatz_pvalid } ),
-    .inp_ready_o ( {quad_pready, spatz_pready } ),
-    .oup_data_o  ( acc_demux_snitch             ),
-    .oup_valid_o ( acc_demux_snitch_valid       ),
-    .oup_ready_i ( acc_demux_snitch_ready       )
-  );
 
   dreq_t fp_lsu_mem_req;
   drsp_t fp_lsu_mem_rsp;
 
-  if(RVV) begin
-    spatz #(
-      .NrMemPorts         (16     ),
-      .NumOutstandingLoads(NumSpatzOutstandingLoads),
-      .FPUImplementation  (FPUImplementation       ),
-      .RegisterRsp        (RegisterOffloadRsp      ),
-      .dreq_t             (dreq_t                  ),
-      .drsp_t             (drsp_t                  ),
-      .spatz_mem_req_t    (tcdm_req_chan_t         ),
-      .spatz_mem_rsp_t    (tcdm_rsp_chan_t         ),
-      .spatz_issue_req_t  (acc_issue_req_t         ),
-      .spatz_issue_rsp_t  (acc_issue_rsp_t         ),
-      .spatz_rsp_t        (acc_rsp_t               )
-    ) i_spatz (
-      .clk_i                   (clk_i                 ),
-      .rst_ni                  (rst_ni                ),
-      .testmode_i              (testmode_i            ),
-      .hart_id_i               (hart_id_i             ),
-      .issue_valid_i           (spatz_qvalid          ),
-      .issue_ready_o           (spatz_qready          ),
-      .issue_req_i             (acc_snitch_req        ),
-      .issue_rsp_o             (spatz_snitch_resp     ),
-      .rsp_valid_o             (spatz_pvalid          ),
-      .rsp_ready_i             (spatz_pready          ),
-      .rsp_o                   (spatz_resp            ),
-      .spatz_mem_req_o         (                      ),
-      .spatz_mem_req_valid_o   (                      ),
-      .spatz_mem_req_ready_i   ('0                    ),
-      .spatz_mem_rsp_i         ('0                    ),
-      .spatz_mem_rsp_valid_i   ('0                    ),
-      .spatz_mem_finished_o    (spatz_mem_finished    ),
-      .spatz_mem_str_finished_o(spatz_mem_str_finished),
-      .fp_lsu_mem_req_o        (fp_lsu_mem_req        ),
-      .fp_lsu_mem_rsp_i        (fp_lsu_mem_rsp        ),
-      .fpu_rnd_mode_i          (fpu_rnd_mode          ),
-      .fpu_fmt_mode_i          (fpu_fmt_mode          ),
-      .fpu_status_o            (fpu_status            ),
-      // ECC VRF outputs
-      .vrf_single_error_o      (vrf_single_error_o    ),
-      .vrf_multi_error_o       (vrf_multi_error_o     )
-    );
-  end else begin
-    spatz_scalar_only #(
-      .NrMemPorts         (16     ),
-      .NumOutstandingLoads(NumSpatzOutstandingLoads),
-      .FPUImplementation  (FPUImplementation       ),
-      .RegisterRsp        (RegisterOffloadRsp      ),
-      .dreq_t             (dreq_t                  ),
-      .drsp_t             (drsp_t                  ),
-      .spatz_mem_req_t    (tcdm_req_chan_t         ),
-      .spatz_mem_rsp_t    (tcdm_rsp_chan_t         ),
-      .spatz_issue_req_t  (acc_issue_req_t         ),
-      .spatz_issue_rsp_t  (acc_issue_rsp_t         ),
-      .spatz_rsp_t        (acc_rsp_t               )
-    ) i_spatz (
-      .clk_i                   (clk_i                 ),
-      .rst_ni                  (rst_ni                ),
-      .testmode_i              (testmode_i            ),
-      .hart_id_i               (hart_id_i             ),
-      .issue_valid_i           (spatz_qvalid          ),
-      .issue_ready_o           (spatz_qready          ),
-      .issue_req_i             (acc_snitch_req        ),
-      .issue_rsp_o             (spatz_snitch_resp     ),
-      .rsp_valid_o             (spatz_pvalid          ),
-      .rsp_ready_i             (spatz_pready          ),
-      .rsp_o                   (spatz_resp            ),
-      .spatz_mem_req_o         (                      ),
-      .spatz_mem_req_valid_o   (                      ),
-      .spatz_mem_req_ready_i   ('0                    ),
-      .spatz_mem_rsp_i         ('0                    ),
-      .spatz_mem_rsp_valid_i   ('0                    ),
-      .spatz_mem_finished_o    (spatz_mem_finished    ),
-      .spatz_mem_str_finished_o(spatz_mem_str_finished),
-      .fp_lsu_mem_req_o        (fp_lsu_mem_req        ),
-      .fp_lsu_mem_rsp_i        (fp_lsu_mem_rsp        ),
-      .fpu_rnd_mode_i          (fpu_rnd_mode          ),
-      .fpu_fmt_mode_i          (fpu_fmt_mode          ),
-      .fpu_status_o            (fpu_status            )
-    );
-  end
+  spatz_scalar_only #(
+    .NrMemPorts         (16     ),
+    .NumOutstandingLoads(NumSpatzOutstandingLoads),
+    .FPUImplementation  (FPUImplementation       ),
+    .RegisterRsp        (RegisterOffloadRsp      ),
+    .dreq_t             (dreq_t                  ),
+    .drsp_t             (drsp_t                  ),
+    .spatz_mem_req_t    (tcdm_req_chan_t         ),
+    .spatz_mem_rsp_t    (tcdm_rsp_chan_t         ),
+    .spatz_issue_req_t  (acc_issue_req_t         ),
+    .spatz_issue_rsp_t  (acc_issue_rsp_t         ),
+    .spatz_rsp_t        (acc_rsp_t               )
+  ) i_spatz (
+    .clk_i                   (clk_i                 ),
+    .rst_ni                  (rst_ni                ),
+    .testmode_i              (testmode_i            ),
+    .hart_id_i               (hart_id_i             ),
+    .issue_valid_i           (spatz_qvalid          ),
+    .issue_ready_o           (spatz_qready          ),
+    .issue_req_i             (acc_snitch_req        ),
+    .issue_rsp_o             (spatz_snitch_resp     ),
+    .rsp_valid_o             (spatz_pvalid          ),
+    .rsp_ready_i             (spatz_pready          ),
+    .rsp_o                   (spatz_resp            ),
+    .spatz_mem_req_o         (                      ),
+    .spatz_mem_req_valid_o   (                      ),
+    .spatz_mem_req_ready_i   ('0                    ),
+    .spatz_mem_rsp_i         ('0                    ),
+    .spatz_mem_rsp_valid_i   ('0                    ),
+    .spatz_mem_finished_o    (spatz_mem_finished    ),
+    .spatz_mem_str_finished_o(spatz_mem_str_finished),
+    .fp_lsu_mem_req_o        (fp_lsu_mem_req        ),
+    .fp_lsu_mem_rsp_i        (fp_lsu_mem_rsp        ),
+    .fpu_rnd_mode_i          (fpu_rnd_mode          ),
+    .fpu_fmt_mode_i          (fpu_fmt_mode          ),
+    .fpu_status_o            (fpu_status            )
+  );
 
   reqrsp_mux #(
     .NrPorts     (2           ),
@@ -424,31 +390,13 @@ module spatz_quadrilatero_cc
     .quad_mem_rsp_valid_i   (quad_mem_rsp_valid   )
   );
 
-  // VLSU byte-rotate stores produce a 32-bit rotated value in data[31:0] with
-  // zero parity bits in data[38:32]. Re-encode data[TCDMDataWidth-1:0] to always
-  // produce a valid codeword. For non-rotated stores (already valid), this is the
-  // Hsiao identity: encode(codeword[31:0]) == codeword.
   for (genvar p = 0; p < NumMemPortsQuad; p++) begin: gen_quad_tcdm_assignment
-    logic [TCDMProtDataWidth-1:0] vlsu_enc_data;
-
-    if (TCDMProtDataWidth > TCDMDataWidth) begin : gen_vlsu_enc
-      hsiao_ecc_enc #(
-        .DataWidth (TCDMDataWidth      ),
-        .ProtWidth (SnitchTCDMProtWidth)
-      ) i_vlsu_enc (
-        .in  (quad_mem_req[p].data[TCDMDataWidth-1:0]),
-        .out (vlsu_enc_data)
-      );
-    end else begin : gen_vlsu_no_enc
-      assign vlsu_enc_data = quad_mem_req[p].data;
-    end
-
     assign quad_tcdm_req_o[p] = '{
       q: '{
         addr : quad_mem_req[p].addr,
         write: quad_mem_req[p].write,
         amo  : quad_mem_req[p].amo,
-        data : vlsu_enc_data,
+        data : quad_mem_req[p].data,
         strb : quad_mem_req[p].strb,
         user : '0
       },
@@ -460,7 +408,6 @@ module spatz_quadrilatero_cc
     assign quad_mem_rsp_valid[p] = quad_tcdm_rsp_i[p].p_valid;
   end
 
-  assign acc_snitch_resp    = quad_qvalid ? quad_snitch_resp : spatz_snitch_resp;
 
   // tie-off DMA unused signals
   assign axi_dma_req_o  = '0;

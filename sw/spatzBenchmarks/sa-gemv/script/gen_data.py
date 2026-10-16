@@ -152,7 +152,7 @@ def rand_data_generator(shape, prec, alt=False):
 
 
 def gemv(a, b):
-    print(a.shape, b.shape)
+    # print(a.shape, b.shape)
     # Upcast to float32 for CPU math, then downcast back to the original dtype
     return torch.matmul(a.float(), b.float()).to(a.dtype)
 

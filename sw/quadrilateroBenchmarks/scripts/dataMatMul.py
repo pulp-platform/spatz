@@ -56,7 +56,7 @@ os.makedirs(args.inc_dir, exist_ok=True)
 
 # Validate bfloat resolution
 if args.dtype == 'bfloat' and args.bits != 16:
-    print("Warning: bfloat must be 16 bits. Forcing --bits 16.")
+    # print("Warning: bfloat must be 16 bits. Forcing --bits 16.")
     args.bits = 16
 
 # ---------------------------------------------------------
@@ -65,15 +65,15 @@ if args.dtype == 'bfloat' and args.bits != 16:
 A_math, B_math = None, None 
 A_mem, B_mem = None, None   
 
-print(f"\nGenerating MatMul: A({args.M}x{args.K}) * B({args.K}x{args.N}) -> C({args.M}x{args.N})")
-if args.dtype == 'float':
-    print(f"Format: FLOAT {args.bits}-bit" + (f" ({args.fp8_fmt.upper()})" if args.bits == 8 else ""))
-elif args.dtype == 'bfloat':
-    print("Format: BFLOAT 16-bit")
-elif args.dtype == 'uint':
-    print(f"Format: UINT {args.bits}-bit")
-else:
-    print(f"Format: INT {args.bits}-bit")
+# print(f"\nGenerating MatMul: A({args.M}x{args.K}) * B({args.K}x{args.N}) -> C({args.M}x{args.N})")
+# if args.dtype == 'float':
+#     print(f"Format: FLOAT {args.bits}-bit" + (f" ({args.fp8_fmt.upper()})" if args.bits == 8 else ""))
+# elif args.dtype == 'bfloat':
+#     print("Format: BFLOAT 16-bit")
+# elif args.dtype == 'uint':
+#     print(f"Format: UINT {args.bits}-bit")
+# else:
+#     print(f"Format: INT {args.bits}-bit")
 
 # --- FLOAT TYPES ---
 if args.dtype == 'float':
@@ -256,4 +256,4 @@ with open(filepath, "w") as f:
     f.write(f"static const float gemm_checksum[{args.M}] = {{\n")
     f.write(array_to_float_string(C_checksum) + "\n};\n")
 
-print(f"\nFile successfully generated: {filepath}")
+# print(f"\nFile successfully generated: {filepath}")

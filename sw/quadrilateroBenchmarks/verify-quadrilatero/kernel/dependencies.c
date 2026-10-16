@@ -631,91 +631,91 @@ void __attribute__ ((noinline)) test_dep_waw_mmov_mzero_sp (float* addrA, float*
 
 void verify_dependencies (float* addrA, float* addrB, float* addrC, int K)
 {
-  printf("--- RAW: mld -> fmmacc (back-to-back) ---\n");
+  PRINTF("--- RAW: mld -> fmmacc (back-to-back) ---\n");
   test_dep_raw_mld_fmmacc_bb(addrA, addrB, addrC, K);
-  printf("PASSED\n");
+  PRINTF("PASSED\n");
 
-  printf("--- RAW: mld -> fmmacc (spaced) ---\n");
+  PRINTF("--- RAW: mld -> fmmacc (spaced) ---\n");
   test_dep_raw_mld_fmmacc_sp(addrA, addrB, addrC, K);
-  printf("PASSED\n");
+  PRINTF("PASSED\n");
 
-  printf("--- RAW: fmmacc -> mst (back-to-back) ---\n");
+  PRINTF("--- RAW: fmmacc -> mst (back-to-back) ---\n");
   test_dep_raw_fmmacc_mst_bb(addrA, addrB, addrC, K);
-  printf("PASSED\n");
+  PRINTF("PASSED\n");
 
-  printf("--- RAW: fmmacc -> mst (spaced) ---\n");
+  PRINTF("--- RAW: fmmacc -> mst (spaced) ---\n");
   test_dep_raw_fmmacc_mst_sp(addrA, addrB, addrC, K);
-  printf("PASSED\n");
+  PRINTF("PASSED\n");
 
-  printf("--- RAW: mmov.am -> fmmacc (back-to-back) ---\n");
+  PRINTF("--- RAW: mmov.am -> fmmacc (back-to-back) ---\n");
   test_dep_raw_mmov_fmmacc_bb(addrA, addrB, addrC, K);
-  printf("PASSED\n");
+  PRINTF("PASSED\n");
 
-  printf("--- RAW: mmov.am -> fmmacc (spaced) ---\n");
+  PRINTF("--- RAW: mmov.am -> fmmacc (spaced) ---\n");
   test_dep_raw_mmov_fmmacc_sp(addrA, addrB, addrC, K);
-  printf("PASSED\n");
+  PRINTF("PASSED\n");
 
-  printf("--- RAW: mzero.m -> mld (back-to-back) ---\n");
+  PRINTF("--- RAW: mzero.m -> mld (back-to-back) ---\n");
   test_dep_raw_mzero_mld_bb(addrA, addrB, addrC, K);
-  printf("PASSED\n");
+  PRINTF("PASSED\n");
 
-  printf("--- RAW: mzero.m -> mld (spaced) ---\n");
+  PRINTF("--- RAW: mzero.m -> mld (spaced) ---\n");
   test_dep_raw_mzero_mld_sp(addrA, addrB, addrC, K);
-  printf("PASSED\n");
+  PRINTF("PASSED\n");
 
-  printf("--- RAW: mzero.a -> fmmacc (back-to-back) ---\n");
+  PRINTF("--- RAW: mzero.a -> fmmacc (back-to-back) ---\n");
   test_dep_raw_mzero_fmmacc_bb(addrA, addrB, addrC, K);
-  printf("PASSED\n");
+  PRINTF("PASSED\n");
 
-  printf("--- RAW: mzero.a -> fmmacc (spaced) ---\n");
+  PRINTF("--- RAW: mzero.a -> fmmacc (spaced) ---\n");
   test_dep_raw_mzero_fmmacc_sp(addrA, addrB, addrC, K);
-  printf("PASSED\n");
+  PRINTF("PASSED\n");
 
-  printf("--- WAR: fmmacc -> mld (back-to-back) ---\n");
+  PRINTF("--- WAR: fmmacc -> mld (back-to-back) ---\n");
   test_dep_war_fmmacc_mld_bb(addrA, addrB, addrC, K);
-  printf("PASSED\n");
+  PRINTF("PASSED\n");
 
-  printf("--- WAR: fmmacc -> mld (spaced) ---\n");
+  PRINTF("--- WAR: fmmacc -> mld (spaced) ---\n");
   test_dep_war_fmmacc_mld_sp(addrA, addrB, addrC, K);
-  printf("PASSED\n");
+  PRINTF("PASSED\n");
 
-  printf("--- WAR: mst -> mzero.m (back-to-back) ---\n");
+  PRINTF("--- WAR: mst -> mzero.m (back-to-back) ---\n");
   test_dep_war_mst_mzero_bb(addrA, addrB, addrC, K);
-  printf("PASSED\n");
+  PRINTF("PASSED\n");
 
-  printf("--- WAR: mst -> mzero.m (spaced) ---\n");
+  PRINTF("--- WAR: mst -> mzero.m (spaced) ---\n");
   test_dep_war_mst_mzero_sp(addrA, addrB, addrC, K);
-  printf("PASSED\n");
+  PRINTF("PASSED\n");
 
-  printf("--- WAR: mmov.am -> mzero.a (back-to-back) ---\n");
+  PRINTF("--- WAR: mmov.am -> mzero.a (back-to-back) ---\n");
   test_dep_war_mmov_mzero_bb(addrA, addrB, addrC, K);
-  printf("PASSED\n");
+  PRINTF("PASSED\n");
 
-  printf("--- WAR: mmov.am -> mzero.a (spaced) ---\n");
+  PRINTF("--- WAR: mmov.am -> mzero.a (spaced) ---\n");
   test_dep_war_mmov_mzero_sp(addrA, addrB, addrC, K);
-  printf("PASSED\n");
+  PRINTF("PASSED\n");
 
-  printf("--- WAW: mld -> mld (back-to-back) ---\n");
+  PRINTF("--- WAW: mld -> mld (back-to-back) ---\n");
   test_dep_waw_mld_mld_bb(addrA, addrB, addrC, K);
-  printf("PASSED\n");
+  PRINTF("PASSED\n");
 
-  printf("--- WAW: mld -> mld (spaced) ---\n");
+  PRINTF("--- WAW: mld -> mld (spaced) ---\n");
   test_dep_waw_mld_mld_sp(addrA, addrB, addrC, K);
-  printf("PASSED\n");
+  PRINTF("PASSED\n");
 
-  printf("--- WAW: fmmacc -> fmmacc (back-to-back) ---\n");
+  PRINTF("--- WAW: fmmacc -> fmmacc (back-to-back) ---\n");
   test_dep_waw_fmmacc_fmmacc_bb(addrA, addrB, addrC, K);
-  printf("PASSED\n");
+  PRINTF("PASSED\n");
 
-  printf("--- WAW: fmmacc -> fmmacc (spaced) ---\n");
+  PRINTF("--- WAW: fmmacc -> fmmacc (spaced) ---\n");
   test_dep_waw_fmmacc_fmmacc_sp(addrA, addrB, addrC, K);
-  printf("PASSED\n");
+  PRINTF("PASSED\n");
 
-  printf("--- WAW: mmov.am -> mzero.m (back-to-back) ---\n");
+  PRINTF("--- WAW: mmov.am -> mzero.m (back-to-back) ---\n");
   test_dep_waw_mmov_mzero_bb(addrA, addrB, addrC, K);
-  printf("PASSED\n");
+  PRINTF("PASSED\n");
 
-  printf("--- WAW: mmov.am -> mzero.m (spaced) ---\n");
+  PRINTF("--- WAW: mmov.am -> mzero.m (spaced) ---\n");
   test_dep_waw_mmov_mzero_sp(addrA, addrB, addrC, K);
-  printf("PASSED\n");
+  PRINTF("PASSED\n");
 }

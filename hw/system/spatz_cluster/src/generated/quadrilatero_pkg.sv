@@ -11,9 +11,9 @@ package quadrilatero_pkg;
   localparam int unsigned REG_PER_CE =  4;
 
   // Quadrilatero Sizes
-  localparam int unsigned RLEN = 128;
+  localparam int unsigned RLEN = 256;
   localparam int unsigned ALEN = RLEN;
-  localparam int unsigned LLEN = 256;
+  localparam int unsigned LLEN = 512;
 
   // Unit Parameters
   localparam int unsigned NUM_EXEC_UNITS =   4;
@@ -31,10 +31,10 @@ package quadrilatero_pkg;
   localparam tech_e MRF_TECH = FF;
 
   // DataTypes parameters
-  localparam bit EN_FP32     = 1'b1;
+  localparam bit EN_FP32     = 1'b0;
   localparam bit EN_FP16     = 1'b1;
   localparam bit EN_FP8      = 1'b1;
-  localparam bit EN_INT32    = 1'b1;
+  localparam bit EN_INT32    = 1'b0;
   localparam bit EN_INT16    = 1'b1;
   localparam bit EN_INT8     = 1'b1;
   localparam bit EN_SIGNED   = 1'b1;
@@ -101,10 +101,10 @@ package quadrilatero_pkg;
     logic                             simd_mask   ;
     logic                             is_signed   ;
     logic[$clog2(NUM_MAC_UNITS)-1:0]  unit        ;
+    logic                             first_iteration;
   } cfg_fpu_t;
   typedef struct packed {
-    logic finished       ;
-    logic first_iteration;
+    logic wen;
   } ctrl_fpu_t;
   typedef struct packed {
     // logic     wen      ;
@@ -112,6 +112,7 @@ package quadrilatero_pkg;
     // acc_reg_t acc_waddr;
     acc_reg_t acc_raddr;
     row_t     row      ;
+    logic finished       ;
   } ctrl_acc_t;
   typedef struct packed {
     acc_reg_t cmul   ;

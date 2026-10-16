@@ -21,6 +21,7 @@
 #include <quadrilatero.h>
 #include <snrt.h>
 #include <stdio.h>
+#include <debug.h>
 
 #include DATAHEADER
 
@@ -138,9 +139,9 @@ int main() {
     long unsigned int utilization =
         performance / (2 * QUAD_RLEN/32 * QUAD_RLEN/32 *2);
 
-    printf("\n----- (%dx%dx%d) FP16 -> FP32 matmul -----\n", gemm_l.M, gemm_l.K,gemm_l.N);
-    printf("The execution took %u cycles.\n", timer);
-    printf("The performance is %ld OP/1000cycle (%ld%%o utilization).\n",
+    PRINTF("\n----- (%dx%dx%d) FP16 -> FP32 matmul -----\n", gemm_l.M, gemm_l.K,gemm_l.N);
+    PRINTF("The execution took %u cycles.\n", timer);
+    PRINTF("The performance is %ld OP/1000cycle (%ld%%o utilization).\n",
            performance, utilization);
   }
 
@@ -149,7 +150,7 @@ int main() {
       check_results(c, (const float *)gemm_C_dram, gemm_l.M, gemm_l.N);
 
     if (error != 0) {
-      printf("Error core %d: c[%d]=%u\n", cid, error, (uint32_t)c[error]);
+      PRINTF("Error core %d: c[%d]=%u\n", cid, error, (uint32_t)c[error]);
       return error;
     }
   }

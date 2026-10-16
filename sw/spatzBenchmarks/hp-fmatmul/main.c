@@ -39,7 +39,7 @@ int verify_matrix_elementwise(__fp16 *matrix, const __fp16 *expected,
           (computed - ref) > 0 ? (computed - ref) : (ref - computed);
       float abs_ref = ref > 0 ? ref : -ref;
       if ((abs_error > 0.05f * abs_ref) && (abs_error > 0.1f)) {
-        printf("Error at [%u][%u]: got %f, expected %f, abs_error=%f\n", i, j,
+        PRINTF("Error at [%u][%u]: got %f, expected %f, abs_error=%f\n", i, j,
                computed, ref, abs_error);
         return -1;
       }
