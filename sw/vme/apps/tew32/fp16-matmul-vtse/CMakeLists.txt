@@ -40,17 +40,18 @@ function(add_fp16_vtse_variant precision variant source_dir)
             set(_tile_edge 16)
         endif()
 
-        # Use double buffering only when both input panels fit in the
-        # 512-KiB TCDM.  Larger panels use a single buffer and are refilled
-        # synchronously by main.c.
+        # Generate only variants whose two input panels fit in TCDM.
         math(EXPR _panel_bytes
-             "32 * ${_tile_edge} * ${_k} + 64 * ${_tile_edge} * ${_tile_edge}")
+             "16 * ${_tile_edge} * ${_k} + 64 * ${_tile_edge} * ${_tile_edge}")
         math(EXPR _double_buffer_bytes "2 * ${_panel_bytes}")
-        if(_double_buffer_bytes GREATER 524288)
-            set(_buffer_count 1)
-        else()
-            set(_buffer_count 2)
+        if(_double_buffer_bytes GREATER SNRT_TCDM_SIZE)
+            message(STATUS
+                "Skipping FP16 VTSE ${precision}/${variant} M${_m} N${_n} K${_k}: "
+                "double buffering requires ${_double_buffer_bytes} bytes, "
+                "but TCDM provides ${SNRT_TCDM_SIZE} bytes")
+            continue()
         endif()
+        set(_buffer_count 2)
 
         set(_variant_build_dir
             "${CMAKE_CURRENT_BINARY_DIR}/generated/${precision}/${variant}/K${_k}")
@@ -83,21 +84,18 @@ function(add_fp16_vtse_variant precision variant source_dir)
             add_custom_target(generate-${_target} DEPENDS "${_header}")
             add_snitch_test(${_target} "${source_dir}/main.c")
             add_dependencies(${_test_target} generate-${_target})
-            set_target_properties(${_test_target} PROPERTIES
-                RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/vme/apps")
             target_include_directories(${_test_target} PRIVATE
                 "${source_dir}"
                 "${source_dir}/kernel"
                 "${source_dir}/data")
             target_compile_definitions(${_test_target} PRIVATE
-                MATMUL_K_CHUNK=${_k_chunk}
                 MATMUL_BUFFER_COUNT=${_buffer_count}
                 DATAHEADER="${_data_header}")
         endif()
     endforeach()
 endfunction()
 
-foreach(_precision IN ITEMS te16 te32)
+foreach(_precision IN ITEMS ${VME_TILE_VARIANT})
     if(_precision STREQUAL "te32")
         set(_precision_shapes ${_fp16_vtse_te32_shapes})
         set(_unrolled_ks 128 256)

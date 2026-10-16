@@ -1,4 +1,3 @@
-
 set(VME_GEMM_SHAPES
     "64x64x64;64x64x32" CACHE STRING
     "Semicolon-separated MxNxK shapes for the general FP32 GEMM tests")
@@ -52,3 +51,5 @@ foreach(_shape IN LISTS _vme_gemm_build_shapes)
             KERNELHEADER="kernel/gemm.c")
     endif()
 endforeach()
+find_package(Python3 COMPONENTS Interpreter REQUIRED)
+
