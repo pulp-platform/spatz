@@ -68,7 +68,7 @@ module spatz_fault_monitor #(
       core_tmr_fault_count_o <= '0;
       icache_correctable_count_o <= '0;
       icache_uncorrectable_count_o <= '0;
-  
+
     end else begin
       for (int unsigned i = 0; i < NumVrfUnits; i++) begin
         if (vrf_correctable_fault_i[i]) begin
