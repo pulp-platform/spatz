@@ -6,7 +6,11 @@ find_package(Python3 COMPONENTS Interpreter REQUIRED)
 set(_source "${CMAKE_CURRENT_SOURCE_DIR}")
 
 foreach(_k IN ITEMS 128 256 512)
-    math(EXPR _required_tcdm_bytes "2 * 64 * ${_k} * 2 + 64 * 64 * 4")
+    math(EXPR _a_bytes "64 * ${_k} * 2")
+    math(EXPR _b_bytes "${_k} * 64 * 2")
+    math(EXPR _c_bytes "64 * 64 * 4")
+    math(EXPR _required_tcdm_bytes
+         "${_a_bytes} + ${_b_bytes} + ${_c_bytes}")
     if(_required_tcdm_bytes GREATER SNRT_TCDM_SIZE)
         message(STATUS
             "Skipping fp16-gemm-alpha M64 N64 K${_k}: requires "

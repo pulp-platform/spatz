@@ -9,8 +9,12 @@ set(_source "${CMAKE_CURRENT_SOURCE_DIR}")
 
 function(add_fp16_simple_gemm_unrolled variant)
     foreach(_k IN ITEMS 128 256 512)
-        # Unrolled kernels retain two complete packed-input/output buffers.
-        math(EXPR _buffer_bytes "2 * 64 * ${_k} * 2 + 64 * 64 * 4")
+        # Packing two FP16 values into one word preserves the original byte size.
+        math(EXPR _a_bytes "64 * ${_k} * 2")
+        math(EXPR _b_bytes "${_k} * 64 * 2")
+        math(EXPR _c_bytes "64 * 64 * 4")
+        math(EXPR _buffer_bytes
+             "${_a_bytes} + ${_b_bytes} + ${_c_bytes}")
         math(EXPR _required_tcdm_bytes "2 * ${_buffer_bytes}")
         if(_required_tcdm_bytes GREATER SNRT_TCDM_SIZE)
             message(STATUS

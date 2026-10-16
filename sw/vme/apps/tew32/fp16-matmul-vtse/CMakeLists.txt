@@ -42,7 +42,7 @@ function(add_fp16_vtse_variant precision variant source_dir)
 
         # Generate only variants whose two input panels fit in TCDM.
         math(EXPR _panel_bytes
-             "32 * ${_tile_edge} * ${_k} + 64 * ${_tile_edge} * ${_tile_edge}")
+             "16 * ${_tile_edge} * ${_k} + 64 * ${_tile_edge} * ${_tile_edge}")
         math(EXPR _double_buffer_bytes "2 * ${_panel_bytes}")
         if(_double_buffer_bytes GREATER SNRT_TCDM_SIZE)
             message(STATUS
