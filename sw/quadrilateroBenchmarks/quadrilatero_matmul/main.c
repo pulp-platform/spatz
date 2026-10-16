@@ -83,9 +83,9 @@ uint32_t check_results(int K, int N, int M);
 
 /* Select print mode */
 #if TARGET_SIM && PRINTF_IN_SIM
-        #define PRINTF(fmt, ...)    printf(fmt, ## __VA_ARGS__)
+        #define PRINTF(fmt, ...)    PRINTF(fmt, ## __VA_ARGS__)
 #elif TARGET_PYNQ_Z2 && PRINTF_IN_FPGA
-    #define PRINTF(fmt, ...)    printf(fmt, ## __VA_ARGS__)
+    #define PRINTF(fmt, ...)    PRINTF(fmt, ## __VA_ARGS__)
 #else
     #define PRINTF(...)
 #endif

@@ -1854,80 +1854,80 @@ void __attribute__ ((noinline)) test_macc_adv(float* addrA,float* addrB,float* a
 
 void verify_quadrilatero (float* addrA,float* addrB,float* addrC, int K)
 {
-  printf("Start!\n");
+  PRINTF("Start!\n");
   
-  printf("Matrix Cfg   Test   started: ");
+  PRINTF("Matrix Cfg   Test   started: ");
   test_cfg();
-  printf("[SUCCESS]\n");
+  PRINTF("[SUCCESS]\n");
 
-  printf("Matrix Load  Test 1 started: ");
+  PRINTF("Matrix Load  Test 1 started: ");
   test_load_1x1 (addrA, K);
-  printf("[SUCCESS]\n");
-  printf("Matrix Load  Test 2 started: ");
+  PRINTF("[SUCCESS]\n");
+  PRINTF("Matrix Load  Test 2 started: ");
   test_load_1x2 (addrA, K);
-  printf("[SUCCESS]\n");
-  printf("Matrix Load  Test 3 started: ");
+  PRINTF("[SUCCESS]\n");
+  PRINTF("Matrix Load  Test 3 started: ");
   test_load_1x4 (addrA, K);
-  printf("[SUCCESS]\n");
-  printf("Matrix Load  Test 4 started: ");
+  PRINTF("[SUCCESS]\n");
+  PRINTF("Matrix Load  Test 4 started: ");
   test_load_2x1 (addrA, K);
-  printf("[SUCCESS]\n");
-  printf("Matrix Load  Test 5 started: ");
+  PRINTF("[SUCCESS]\n");
+  PRINTF("Matrix Load  Test 5 started: ");
   test_load_4x1 (addrA, K);
-  printf("[SUCCESS]\n");
-  printf("Matrix Load  Test 6 started: ");
+  PRINTF("[SUCCESS]\n");
+  PRINTF("Matrix Load  Test 6 started: ");
   test_load_2x2 (addrA, K);
-  printf("[SUCCESS]\n");
+  PRINTF("[SUCCESS]\n");
 
-  printf("Matrix Store Test 1 started: ");
+  PRINTF("Matrix Store Test 1 started: ");
   test_store_1x1 (addrA, addrC, K);
-  printf("[SUCCESS]\n");
-  printf("Matrix Store Test 2 started: ");
+  PRINTF("[SUCCESS]\n");
+  PRINTF("Matrix Store Test 2 started: ");
   test_store_1x2 (addrA, addrC, K);
-  printf("[SUCCESS]\n");
-  printf("Matrix Store Test 3 started: ");
+  PRINTF("[SUCCESS]\n");
+  PRINTF("Matrix Store Test 3 started: ");
   test_store_1x4 (addrA, addrC, K);
-  printf("[SUCCESS]\n");
-  printf("Matrix Store Test 4 started: ");
+  PRINTF("[SUCCESS]\n");
+  PRINTF("Matrix Store Test 4 started: ");
   test_store_2x1 (addrA, addrC, K);
-  printf("[SUCCESS]\n");
-  printf("Matrix Store Test 5 started: ");
+  PRINTF("[SUCCESS]\n");
+  PRINTF("Matrix Store Test 5 started: ");
   test_store_4x1 (addrA, addrC, K);
-  printf("[SUCCESS]\n");
-  printf("Matrix Store Test 6 started: ");
+  PRINTF("[SUCCESS]\n");
+  PRINTF("Matrix Store Test 6 started: ");
   test_store_2x2 (addrA, addrC, K);
-  printf("[SUCCESS]\n");
+  PRINTF("[SUCCESS]\n");
 
-  printf("Matrix Mem   Test 1 started: ");
+  PRINTF("Matrix Mem   Test 1 started: ");
   test_load_store_1x1 (addrA, addrC, K);
-  printf("[SUCCESS]\n");
-  printf("Matrix Mem   Test 2 started: ");
+  PRINTF("[SUCCESS]\n");
+  PRINTF("Matrix Mem   Test 2 started: ");
   test_load_store_1x2 (addrA, addrC, K);
-  printf("[SUCCESS]\n");
-  printf("Matrix Mem   Test 3 started: ");
+  PRINTF("[SUCCESS]\n");
+  PRINTF("Matrix Mem   Test 3 started: ");
   test_load_store_1x4 (addrA, addrC, K);
-  printf("[SUCCESS]\n");
-  printf("Matrix Mem   Test 4 started: ");
+  PRINTF("[SUCCESS]\n");
+  PRINTF("Matrix Mem   Test 4 started: ");
   test_load_store_2x1 (addrA, addrC, K);
-  printf("[SUCCESS]\n");
-  printf("Matrix Mem   Test 5 started: ");
+  PRINTF("[SUCCESS]\n");
+  PRINTF("Matrix Mem   Test 5 started: ");
   test_load_store_4x1 (addrA, addrC, K);
-  printf("[SUCCESS]\n");
-  printf("Matrix Mem   Test 6 started: ");
+  PRINTF("[SUCCESS]\n");
+  PRINTF("Matrix Mem   Test 6 started: ");
   test_load_store_2x2 (addrA, addrC, K);
-  printf("[SUCCESS]\n");
+  PRINTF("[SUCCESS]\n");
 
-  printf("Matrix MACC  Test 1 started: ");
+  PRINTF("Matrix MACC  Test 1 started: ");
   test_macc (addrA,addrB,addrC, K);
-  printf("[SUCCESS]\n");
+  PRINTF("[SUCCESS]\n");
 
-  printf("Matrix MACC  Test 2 started: ");
+  PRINTF("Matrix MACC  Test 2 started: ");
   test_macc (addrA,addrB,addrC, K);
-  printf("[SUCCESS]\n");
+  PRINTF("[SUCCESS]\n");
 
-  // printf("Verify Dependencies Test started\n");
+  // PRINTF("Verify Dependencies Test started\n");
   // verify_dependencies (addrA,addrB,addrC, K);
-  // printf("MVerify Dependencies Test completed successfully\n");
+  // PRINTF("MVerify Dependencies Test completed successfully\n");
 }
 
 // void __attribute__ ((noinline)) test_cfg (){
