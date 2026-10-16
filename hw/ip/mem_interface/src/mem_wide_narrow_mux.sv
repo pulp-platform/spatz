@@ -39,7 +39,14 @@ module mem_wide_narrow_mux #(
   parameter type mem_wide_rsp_t          = logic,
   /// Derived. *Do not override*
   /// Number of narrow inputs.
-  parameter int unsigned NrPorts = WideDataWidth / NarrowDataWidth
+  parameter int unsigned NrPorts = WideDataWidth / NarrowDataWidth,
+  /// Width of the opaque per-port signal muxed alongside .q's {write, amo,
+  /// strb} fields by in_narrow_wctrl_ecc_i/in_wide_wctrl_ecc_i/
+  /// out_wctrl_ecc_o below -- this module has no idea it's an ECC codeword,
+  /// it just muxes it exactly like .q.strb itself (same sel_wide_i, same
+  /// per-port granularity already required of the wide side's strb
+  /// slicing).
+  parameter int unsigned WCtrlEccWidth = 1
 ) (
   input  logic                          clk_i,
   input  logic                          rst_ni,
@@ -53,8 +60,28 @@ module mem_wide_narrow_mux #(
   // Multiplexed output.
   output mem_narrow_req_t [NrPorts-1:0] out_req_o,
   input  mem_narrow_rsp_t [NrPorts-1:0] out_rsp_i,
-  /// `0`: Use narrow port, `1`: Use wide port
-  input  logic                          sel_wide_i
+  /// `0`: Use narrow port, `1`: Use wide port. Representative single value
+  /// (replica 0 of in_wide_valid_rep_i) -- only used to steer the single,
+  /// un-replicated data mux below (which port's .q content wins); the real
+  /// wide-vs-narrow handshake decision is per-replica, see
+  /// in_wide_valid_rep_i.
+  input  logic                          sel_wide_i,
+  /// End-to-end handshake TMR: three independently-computed replicas of
+  /// "is in_narrow_req_i[k] valid", fed in from the caller
+  input  logic [2:0]                    in_narrow_valid_rep_i [NrPorts],
+  /// Three replicas of "is in_narrow_req_i[k] granted"
+  output logic [2:0]                    in_narrow_ready_rep_o [NrPorts],
+  /// Three replicas of "is in_wide_req_i valid"
+  input  logic [2:0]                    in_wide_valid_rep_i,
+  /// Three replicas of "is in_wide_req_i granted"
+  output logic [2:0]                    in_wide_ready_rep_o,
+  /// Three replicas of "is out_req_o[k] valid"
+  output logic [2:0]                    out_valid_rep_o [NrPorts],
+  /// Opaque per-port signal muxed by sel_wide_i alongside .q's {write, amo,
+  /// strb} fields
+  input  logic [WCtrlEccWidth-1:0]      in_narrow_wctrl_ecc_i [NrPorts],
+  input  logic [WCtrlEccWidth-1:0]      in_wide_wctrl_ecc_i [NrPorts],
+  output logic [WCtrlEccWidth-1:0]      out_wctrl_ecc_o [NrPorts]
 );
 
   localparam int unsigned NarrowStrbWidth = NarrowDataWidth/8;
@@ -63,7 +90,11 @@ module mem_wide_narrow_mux #(
     // ----------------
     // Backward Channel
     // ----------------
-    in_narrow_rsp_o = out_rsp_i;
+    // Content only (.p) -- .q_ready is handled by the triplicated
+    // handshake logic below.
+    for (int i = 0; i < NrPorts; i++) begin
+      in_narrow_rsp_o[i].p = out_rsp_i[i].p;
+    end
     // Broadcast data from all banks.
     for (int i = 0; i < NrPorts; i++) begin
       in_wide_rsp_o.p[i*NarrowDataWidth+:NarrowDataWidth] = out_rsp_i[i].p.data;
@@ -72,17 +103,16 @@ module mem_wide_narrow_mux #(
     // ---------------
     // Forward Channel
     // ---------------
-    // By default feed through narrow requests.
-    out_req_o = in_narrow_req_i;
-    // Tie-off wide by default.
-    in_wide_rsp_o.q_ready = 1'b0;
+    // Content only (.q) -- .q_valid is handled by the triplicated
+    // handshake logic below. By default feed through narrow requests.
+    for (int i = 0; i < NrPorts; i++) begin
+      out_req_o[i].q = in_narrow_req_i[i].q;
+      out_wctrl_ecc_o[i] = in_narrow_wctrl_ecc_i[i];
+    end
 
     // The wide port is selected.
     if (sel_wide_i) begin
       for (int i = 0; i < NrPorts; i++) begin
-        out_req_o[i].q_valid = in_wide_req_i.q_valid;
-        // Block access from narrow ports.
-        in_narrow_rsp_o[i].q_ready = 1'b0;
         out_req_o[i].q = '{
           addr: in_wide_req_i.q.addr,
           write: in_wide_req_i.q.write,
@@ -91,12 +121,31 @@ module mem_wide_narrow_mux #(
           strb: in_wide_req_i.q.strb[i*NarrowStrbWidth+:NarrowStrbWidth],
           user: in_wide_req_i.q.user
         };
-        // The protocol requires that the response is always granted
-        // immediately (at least when `sel_wide_i` is high).
-        in_wide_rsp_o.q_ready = 1'b1;
+        out_wctrl_ecc_o[i] = in_wide_wctrl_ecc_i[i];
       end
     end
   end
+
+  // End-to-end handshake TMR: each replica's valid/ready is computed from
+  // its OWN incoming rail
+  for (genvar t = 0; t < 3; t++) begin : gen_handshake_rep
+    for (genvar i = 0; i < NrPorts; i++) begin : gen_bits
+      assign out_valid_rep_o[i][t]        = in_wide_valid_rep_i[t] ? in_wide_valid_rep_i[t]
+                                                                    : in_narrow_valid_rep_i[i][t];
+      assign in_narrow_ready_rep_o[i][t]  = in_wide_valid_rep_i[t] ? 1'b0 : out_rsp_i[i].q_ready;
+    end : gen_bits
+    // The protocol requires that the response is always granted
+    // immediately (at least when this replica's wide valid is high); tied
+    // off otherwise.
+    assign in_wide_ready_rep_o[t] = in_wide_valid_rep_i[t];
+  end : gen_handshake_rep
+
+  // Placeholder single values for the mem_narrow_req_t/mem_wide_rsp_t
+  for (genvar i = 0; i < NrPorts; i++) begin : gen_handshake_assign
+    assign out_req_o[i].q_valid       = out_valid_rep_o[i][0];
+    assign in_narrow_rsp_o[i].q_ready = in_narrow_ready_rep_o[i][0];
+  end : gen_handshake_assign
+  assign in_wide_rsp_o.q_ready = in_wide_ready_rep_o[0];
 
   // ----------
   // Assertions
