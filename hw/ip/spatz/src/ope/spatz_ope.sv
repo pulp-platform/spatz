@@ -114,6 +114,7 @@ module spatz_ope
   spatz_req_t spatz_req_mac ;
   logic       mac_req_valid ;
   logic       mac_req_ready ;
+  logic       mac_req_eligible;
   spatz_req_t spatz_req_tv ;
   logic       tv_req_valid ;
   logic       tv_req_ready ;
@@ -313,7 +314,7 @@ module spatz_ope
 
   // Shared Request Arbitration
   always_comb begin : req_ready_proc
-    mac_req_ready    = 1'b0;
+    mac_req_eligible = 1'b0;
     vt_req_ready     = 1'b0;
     tv_req_ready     = 1'b0;
     clean_req_ready = 1'b0;
@@ -327,9 +328,10 @@ module spatz_ope
              (!resident_valid_q || (spatz_req_tv.op_ope.tss.tile_id != resident_tile_q)))
       tv_req_ready = 1'b1;
     else if (mac_req_valid)
-      mac_req_ready = mac_op_queue_ready && !resident_drain_valid_q && !(tile_rvalid_i &&
-            (tile_r_req_i.idx == spatz_req_mac.mtd));
+      mac_req_eligible = !resident_drain_valid_q && !(tile_rvalid_i && (tile_r_req_i.idx == spatz_req_mac.mtd));
   end : req_ready_proc
+
+  assign mac_req_ready = mac_req_eligible && mac_op_queue_ready;
 
   assign spatz_req_ready_o = (~mac_in_ready || ~tv_in_ready || ~vt_in_ready || ~clean_in_ready) ? 1'b0 : 1'b1;
 
@@ -367,7 +369,7 @@ module spatz_ope
   end : mac_active_shape
 
   always_comb begin : mac_op_scheduler
-    logic result_match, result_switch;
+    logic result_match, result_switch, result_can_drain;
     logic tile_hazard;
     logic current_ready;
 
@@ -381,10 +383,12 @@ module spatz_ope
                       (mac_op_current_q.op.tile != resident_tile_q);
     end
     tile_hazard = fma_pipe_tile_busy[mac_op_current_q.op.tile][mac_beat_q] && !result_match;
+    result_can_drain = fma_pipe_result_valid && fma_pipe_drain;
     current_ready = mac_op_current_q.valid && (mac_current_empty || (!resident_drain_valid_q && !tile_hazard &&
           !(tile_rvalid_i && (tile_r_req_i.idx == mac_op_current_q.op.tile)) &&
-          ((!(&fma_pipe_valid)) || result_match || result_switch || fma_pipe_result_fire)));
-    mac_op_bypass = !mac_op_current_q.valid && mac_req_valid && mac_op_queue_ready && mac_req_ready && !mac_req_empty;
+          ((!(&fma_pipe_valid)) || result_match || result_switch || result_can_drain)));
+    mac_op_bypass = !mac_op_current_q.valid && !mac_op_next_q.valid &&
+                    mac_req_valid && mac_req_eligible && !mac_req_empty;
     mac_op_exec_valid = current_ready || mac_op_bypass;
   end : mac_op_scheduler
 
@@ -933,6 +937,8 @@ module spatz_ope
   /*------------------------------------------------------------*/
 
   always_comb begin : vrf_wr_proc
+    logic [VtMaxElemsPerWord-1:0][AccElemWidth-1:0] lane_data;
+    logic [VtMaxElemsPerWord-1:0] lane_valid;
     tile_dim_t idx;
     tile_dim_t row_i;
     tile_dim_t col_i;
@@ -947,6 +953,8 @@ module spatz_ope
     vrf_we_o    = 1'b0;
     vrf_wbe_o = vrf_be_t'(0);
     vrf_wdata_o = vrf_data_t'(0);
+    lane_data = '0;
+    lane_valid = '0;
 
     row_i = tile_dim_t'(0);
     col_i = tile_dim_t'(0);
@@ -988,23 +996,37 @@ module spatz_ope
             if (acc_zero_q[vt_acc_sel.tile][(row_i / CE) * NrAccPerComputeElem + (col_i / CE)][byte_idx])
               acc_word[byte_idx*8 +: 8] = 8'd0;
           end
-          unique case (vt_req_q.op_ope.tew)
-            EW_8: begin
-              vrf_wdata_o[lane*8 +: 8] = acc_word[vt_acc_sel.byte_offset*8 +: 8];
-              vrf_wbe_o[lane] = 1'b1;
-            end
-            EW_16: begin
-              vrf_wdata_o[lane*16 +: 16] = acc_word[vt_acc_sel.byte_offset*8 +: 16];
-              vrf_wbe_o[lane*2 +: 2] = 2'b11;
-            end
-            default: begin
-              vrf_wdata_o[lane*AccElemWidth +: AccElemWidth] = acc_word;
-              vrf_wbe_o[lane*AccElemBytes +: AccElemBytes] = AccFullMask;
-            end
-          endcase
+          lane_data[lane] = acc_word;
+          lane_valid[lane] = 1'b1;
         end
       end
     end
+    unique case (vt_req_q.op_ope.tew)
+      EW_8: begin
+        for (int lane = 0; lane < VRFWordWidth / 8; lane++) begin
+          if (lane_valid[lane]) begin
+            vrf_wdata_o[lane*8 +: 8] = lane_data[lane][vt_acc_sel.byte_offset*8 +: 8];
+            vrf_wbe_o[lane] = 1'b1;
+          end
+        end
+      end
+      EW_16: begin
+        for (int lane = 0; lane < VRFWordWidth / 16; lane++) begin
+          if (lane_valid[lane]) begin
+            vrf_wdata_o[lane*16 +: 16] = lane_data[lane][vt_acc_sel.byte_offset*8 +: 16];
+            vrf_wbe_o[lane*2 +: 2] = 2'b11;
+          end
+        end
+      end
+      default: begin
+        for (int lane = 0; lane < VRFWordWidth / AccElemWidth; lane++) begin
+          if (lane_valid[lane]) begin
+            vrf_wdata_o[lane*AccElemWidth +: AccElemWidth] = lane_data[lane];
+            vrf_wbe_o[lane*AccElemBytes +: AccElemBytes] = AccFullMask;
+          end
+        end
+      end
+    endcase
   end
 
   /*------------------------------------------------------------*/
@@ -1229,9 +1251,9 @@ module spatz_ope
             acc_vrf_wdata[row_i % CE][col_i % CE][col_i / CE][tv_acc_sel.byte_offset*8 +: 8] = tv_vrf_data[lane*8 +: 8];
           else if (tv_req_q.op_ope.tew == EW_16)
             acc_vrf_wdata[row_i % CE][col_i % CE][col_i / CE][tv_acc_sel.byte_offset*8 +: 16] =
-                tv_vrf_data[lane*16 +: 16];
+                16'(tv_vrf_data >> (lane * 16));
           else
-            acc_vrf_wdata[row_i % CE][col_i % CE][col_i / CE] = tv_vrf_data[lane*AccElemWidth +: AccElemWidth];
+            acc_vrf_wdata[row_i % CE][col_i % CE][col_i / CE] = AccElemWidth'(tv_vrf_data >> (lane * AccElemWidth));
         end
       end
     end
