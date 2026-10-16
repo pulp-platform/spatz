@@ -707,6 +707,8 @@ module spatz_vlsu
         VLSU_RunningStore: begin
           if (spatz_mem_req_valid_o[port])
             port_state_d[port] = spatz_mem_req_o[port].write ? VLSU_RunningStore : VLSU_RunningLoad;
+          else if (commit_insn_valid && commit_insn_q.is_load && rob_empty[port])
+            port_state_d[port] = VLSU_RunningLoad;
         end
 
         default:;
@@ -817,7 +819,7 @@ module spatz_vlsu
         // Enable write back to the VRF if we have a valid element in all buffers that still have to write something back.
         vrf_req_d.waddr = vd_vreg_addr;
         // Here, we do not enable the writing to ROB unless all ports are in loading mode (avoid racing in ports)
-        vrf_req_valid_d = &(rob_rvalid | (~mem_pending && port_state_load)) && |mem_pending;
+        vrf_req_valid_d = &(rob_rvalid | ~commit_operation_valid) && |commit_operation_valid && &port_state_load;
 
         for (int unsigned port = 0; port < NrMemPorts; port++) begin
           automatic logic [63:0] data = rob_rdata[port];
@@ -913,7 +915,7 @@ module spatz_vlsu
         for (int unsigned port = 0; port < NrMemPorts; port++) begin
           rob_wdata[port]  = vrf_rdata_i[0][ELEN*port +: ELEN];
           rob_wid[port]    = rob_id[port];
-          rob_req_id[port] = vrf_rvalid_i[0] && (!mem_is_indexed || vrf_rvalid_i[1]);
+          rob_req_id[port] = vrf_rvalid_i[0] && (!mem_is_indexed || vrf_rvalid_i[1]) && commit_operation_valid[port];
           rob_push[port]   = rob_req_id[port];
         end
       end
