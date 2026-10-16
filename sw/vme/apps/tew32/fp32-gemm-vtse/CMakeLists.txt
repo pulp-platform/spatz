@@ -1,4 +1,3 @@
-find_package(Python3 COMPONENTS Interpreter REQUIRED)
 
 set(VME_GEMM_SHAPES
     "64x64x64;64x64x128;64x128x64;64x128x128;128x64x64;128x64x128;128x128x64;128x128x128" CACHE STRING
@@ -51,7 +50,7 @@ foreach(_shape IN LISTS _vme_gemm_build_shapes)
     add_custom_command(
         OUTPUT ${_header}
         COMMAND ${CMAKE_COMMAND} -E make_directory ${_generated_dir}/data
-        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/script/gen_data.py
+        COMMAND ${PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/script/gen_data.py
                 --m ${_m} --n ${_n} --k ${_k} --output ${_header}
         DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/script/gen_data.py
                 ${CMAKE_CURRENT_SOURCE_DIR}/data/layer.h

@@ -25,3 +25,5 @@ mems
 *.o
 install
 .projectBender.lock
+sw/vme/apps/tew32/*/*/*/*/*/data*.h
+sw/vme/apps/tew32/*/*/*/*/*/*/data*.h

@@ -1,4 +1,3 @@
-find_package(Python3 COMPONENTS Interpreter REQUIRED)
 
 option(VME_GEMM_SINGLE_CORE
        "Run general VME GEMM kernels on one compute core" OFF)
@@ -45,7 +44,7 @@ foreach(_shape IN LISTS _vme_gemm_build_shapes)
     add_custom_command(
         OUTPUT ${_header}
         COMMAND ${CMAKE_COMMAND} -E make_directory ${_generated_dir}/data
-        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/script/gen_data.py
+        COMMAND ${PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/script/gen_data.py
                 --m ${_m} --n ${_n} --k ${_k} --output ${_header}
         DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/script/gen_data.py
                 ${CMAKE_CURRENT_SOURCE_DIR}/data/layer.h

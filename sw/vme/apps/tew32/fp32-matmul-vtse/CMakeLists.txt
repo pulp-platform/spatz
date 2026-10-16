@@ -1,7 +1,6 @@
 # Copyright 2026 ETH Zurich and University of Bologna.
 # SPDX-License-Identifier: Apache-2.0
 
-find_package(Python3 COMPONENTS Interpreter REQUIRED)
 
 set(_fp32_vtse_te16_shapes
     "64x64x64"
@@ -76,7 +75,7 @@ function(add_fp32_vtse_variant precision variant source_dir)
         add_custom_command(
             OUTPUT "${_header}"
             COMMAND ${CMAKE_COMMAND} -E make_directory "${_variant_data_dir}"
-            COMMAND ${Python3_EXECUTABLE} "${_variant_script}" -c "${_config}"
+            COMMAND ${PYTHON} "${_variant_script}" -c "${_config}"
             DEPENDS "${_variant_script}" "${_config}"
                     "${source_dir}/data/layer.h"
             VERBATIM)
