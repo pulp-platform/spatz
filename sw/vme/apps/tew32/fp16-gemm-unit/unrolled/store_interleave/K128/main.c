@@ -31,7 +31,6 @@ static inline uint32_t get_cycle(void)
 }
 
 enum {
-    TCDM_BYTES = 512 * 1024,
     M_CHUNK = CHUNK_SIZE,
     N_CHUNK = CHUNK_SIZE,
     // K_CHUNK and all valid_k values count the original FP16 K dimension.
@@ -49,7 +48,7 @@ enum {
     C_OFFSET = B_OFFSET + B_BYTES,
     BUFFER_BYTES = C_OFFSET + C_BYTES,
     L1_BUFFER_COUNT = MATMUL_BUFFER_COUNT,
-    L1_BUFFER_STRIDE = TCDM_BYTES / L1_BUFFER_COUNT,
+    L1_BUFFER_STRIDE = SNRT_TCDM_SIZE / L1_BUFFER_COUNT,
     L1_BYTES = (L1_BUFFER_COUNT - 1) * L1_BUFFER_STRIDE + BUFFER_BYTES,
 };
 
@@ -57,8 +56,8 @@ _Static_assert(MATMUL_K_CHUNK % 8 == 0, "packed kernel requires K divisible by 8
 
 _Static_assert(BUFFER_BYTES <= L1_BUFFER_STRIDE,
                "matmul panel exceeds its L1 buffer partition");
-_Static_assert(L1_BYTES <= TCDM_BYTES,
-               "matmul buffers exceed the 512 KiB TCDM");
+_Static_assert(L1_BYTES <= SNRT_TCDM_SIZE,
+               "matmul buffers exceed the configured TCDM capacity");
 
 static const uint32_t zero_tile_dram[TILE_INPUTS]
     __attribute__((section(".dram"), aligned(64))) = {0};

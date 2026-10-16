@@ -6,6 +6,13 @@
 
 cmake_minimum_required(VERSION 3.13)
 
+# VME binaries require a configured TCDM capacity for buffer sizing.
+if(NOT DEFINED SNRT_TCDM_SIZE OR NOT SNRT_TCDM_SIZE GREATER 0)
+    message(STATUS "Skipping VME apps: SNRT_TCDM_SIZE is not configured")
+    return()
+endif()
+add_compile_definitions(SNRT_TCDM_SIZE=${SNRT_TCDM_SIZE})
+
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/kernel)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/data)

@@ -32,8 +32,8 @@ static inline uint32_t get_cycle(void)
 
 _Static_assert(BUFFER_BYTES <= L1_BUFFER_STRIDE,
                "matmul panel exceeds its L1 buffer partition");
-_Static_assert(L1_BYTES <= TCDM_BYTES,
-               "matmul buffers exceed the 512 KiB TCDM");
+_Static_assert(L1_BYTES <= SNRT_TCDM_SIZE,
+               "matmul buffers exceed the configured TCDM capacity");
 
 static const float zero_tile_dram[TILE_INPUTS]
     __attribute__((section(".dram"), aligned(64))) = {0};

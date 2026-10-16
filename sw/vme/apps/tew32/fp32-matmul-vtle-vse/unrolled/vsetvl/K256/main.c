@@ -26,7 +26,6 @@
 #include "kernel/matmul.c"
 
 enum {
-    TCDM_BYTES = 256 * 1024,
     M_CHUNK = CHUNK_SIZE,
     N_CHUNK = CHUNK_SIZE,
     K_CHUNK = 4 * CHUNK_SIZE,
@@ -46,7 +45,7 @@ enum {
     L1_BYTES = BUFFER_BYTES,
 };
 
-_Static_assert(L1_BYTES <= TCDM_BYTES,
+_Static_assert(L1_BYTES <= SNRT_TCDM_SIZE,
                "one M64xN64xK256 TEW32 buffer exceeds the 256 KiB TCDM");
 
 static const float zero_tile_dram[TILE_INPUTS]

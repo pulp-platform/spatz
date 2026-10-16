@@ -44,13 +44,12 @@ int main(void) {
         return 2;
     }
     enum {
-        TCDM_BYTES = 512 * 1024,
         A_BYTES = sizeof(Atpack_dram),
         B_BYTES = sizeof(Bpack_dram),
         C_BYTES = sizeof(Caddend_dram),
         BUFFER_BYTES = A_BYTES + B_BYTES + C_BYTES
     };
-    _Static_assert(BUFFER_BYTES <= TCDM_BYTES, "GEMM buffers exceed TCDM");
+    _Static_assert(BUFFER_BYTES <= SNRT_TCDM_SIZE, "GEMM buffers exceed TCDM");
     uint8_t *const buffer = (uint8_t *)snrt_l1alloc(BUFFER_BYTES);
     if (buffer == 0)
         return 2;

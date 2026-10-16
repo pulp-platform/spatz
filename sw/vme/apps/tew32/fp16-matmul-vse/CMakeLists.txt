@@ -42,16 +42,18 @@ function(add_fp16_vse_variant precision variant source_dir)
         list(GET _dims 1 _n)
         list(GET _dims 2 _k)
 
-        # main.c reserves two input panels when they fit in the 512-KiB TCDM.
-        # This is computed per shape so te32/K256 can fall back to one panel.
+        # Generate only variants whose two input panels fit in TCDM.
         math(EXPR _panel_bytes
              "16 * ${_tile_edge} * ${_k} + 64 * ${_tile_edge} * ${_tile_edge}")
         math(EXPR _double_buffer_bytes "2 * ${_panel_bytes}")
-        if(_double_buffer_bytes GREATER 524288)
-            set(_buffer_count 1)
-        else()
-            set(_buffer_count 2)
+        if(_double_buffer_bytes GREATER SNRT_TCDM_SIZE)
+            message(STATUS
+                "Skipping FP16 VSE ${precision}/${variant} M${_m} N${_n} K${_k}: "
+                "double buffering requires ${_double_buffer_bytes} bytes, "
+                "but TCDM provides ${SNRT_TCDM_SIZE} bytes")
+            continue()
         endif()
+        set(_buffer_count 2)
 
         set(_variant_build_dir
             "${CMAKE_CURRENT_BINARY_DIR}/generated/${precision}/${variant}/K${_k}")

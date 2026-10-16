@@ -26,7 +26,6 @@
 #include "kernel/matmul.c"
 
 enum {
-    TCDM_BYTES = 128 * 1024,
     M_CHUNK = CHUNK_SIZE,
     N_CHUNK = CHUNK_SIZE,
     K_CHUNK = CHUNK_SIZE * 2,
@@ -43,14 +42,14 @@ enum {
     C_OFFSET = B_OFFSET + B_BYTES,
     BUFFER_BYTES = C_OFFSET + C_BYTES,
     L1_BUFFER_COUNT = 2,
-    L1_BUFFER_STRIDE = TCDM_BYTES / L1_BUFFER_COUNT,
+    L1_BUFFER_STRIDE = SNRT_TCDM_SIZE / L1_BUFFER_COUNT,
     L1_BYTES = L1_BUFFER_STRIDE + BUFFER_BYTES,
 };
 
 _Static_assert(BUFFER_BYTES <= L1_BUFFER_STRIDE,
                "one M64xN64xK128 TEW16 buffer must fit in 64 KiB");
-_Static_assert(L1_BYTES <= TCDM_BYTES,
-               "two matmul buffers exceed the 128 KiB TCDM");
+_Static_assert(L1_BYTES <= SNRT_TCDM_SIZE,
+               "two matmul buffers exceed the configured TCDM capacity");
 
 static const __fp16 zero_tile_dram[TILE_INPUTS]
     __attribute__((section(".dram"), aligned(64))) = {0};

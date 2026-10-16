@@ -9,6 +9,17 @@ set(_source "${CMAKE_CURRENT_SOURCE_DIR}")
 
 function(add_fp16_simple_gemm_unrolled variant)
     foreach(_k IN ITEMS 128 256 512)
+        # Unrolled kernels retain two complete packed-input/output buffers.
+        math(EXPR _buffer_bytes "2 * 64 * ${_k} * 2 + 64 * 64 * 4")
+        math(EXPR _required_tcdm_bytes "2 * ${_buffer_bytes}")
+        if(_required_tcdm_bytes GREATER SNRT_TCDM_SIZE)
+            message(STATUS
+                "Skipping fp16-gemm-unit unrolled ${variant} M64 N64 K${_k}: "
+                "double buffering requires ${_required_tcdm_bytes} TCDM bytes, "
+                "but only ${SNRT_TCDM_SIZE} are configured")
+            continue()
+        endif()
+
         set(_dir "${_source}/unrolled/${variant}/K${_k}")
         set(_target "fp16-gemm-unit-unrolled-${variant}_M64_N64_K${_k}")
         set(_config "${_dir}/script/matmul_64_64_${_k}.json")
