@@ -485,9 +485,20 @@ module spatz_doublebw_vlsu
           tile_ctx_d.packed_data  = tile_row_t'(0);
           tile_ctx_d.row_buf      = tile_word_t'(0);
           tile_load_pending_d     = {NrMemPorts{1'b0}};
+          if (!mem_spatz_req.op_mem.is_load && mem_spatz_req.op_ope.tss.is_row &&
+              (head_tile_bytes <= tile_byte_cnt_t'(TileWordBWidth))) begin
+            tile_rvalid_o = 1'b1;
+            tile_r_req_o = tile_tss_req;
+          end
+
           if (head_tile_elems == tile_count_t'(0)) begin
             tile_state_d = mem_spatz_req.op_mem.is_load ? Tile_Done : Tile_Idle;
           end else if (mem_spatz_req.op_mem.is_load) begin
+            tile_state_d = Tile_MemReq;
+          end else if (mem_spatz_req.op_ope.tss.is_row &&
+                       (head_tile_bytes <= tile_byte_cnt_t'(TileWordBWidth)) &&
+                       tile_rready_i) begin
+            tile_ctx_d.packed_data = tile_row_t'(tile_rdata_i);
             tile_state_d = Tile_MemReq;
           end else begin
             tile_state_d = Tile_GatherRead;

@@ -53,8 +53,8 @@ module spatz_ope
 `include "common_cells/registers.svh"
 
   localparam NumPipeRegs = 4;
-  localparam SpatialBeats = NrComputeGroupsPerTileEdge * NrComputeGroupsPerTileEdge;
-  localparam GroupIdxW = (NrComputeGroupsPerTileEdge > 1) ? $clog2(NrComputeGroupsPerTileEdge) : 1;
+  localparam SpatialBeats = NrAccPerComputeElem * NrAccPerComputeElem;
+  localparam GroupIdxW = (NrAccPerComputeElem > 1) ? $clog2(NrAccPerComputeElem) : 1;
   localparam SpatialBeatW = (SpatialBeats > 1) ? $clog2(SpatialBeats) : 1;
   localparam ReductionIdxW = (KMAX > 1) ? $clog2(KMAX) : 1;
   localparam NrAccumulatorTiles = NrPhysicalTile / AccElemBytes;
@@ -73,7 +73,7 @@ module spatz_ope
   /*                  Shared Types and Signals                  */
   /*------------------------------------------------------------*/
 
-  typedef logic [$clog2(NrComputeGroupsPerTileEdge+1)-1:0] group_count_t;
+  typedef logic [$clog2(NrAccPerComputeElem+1)-1:0] group_count_t;
   typedef logic [$clog2(MaxVtGroupWords+1)-1:0] vt_word_count_t;
   typedef logic [$clog2(VtMaxElemsPerWord+1)-1:0] vrf_elem_count_t;
   typedef logic [3:0] vreg_group_count_t;
@@ -223,9 +223,9 @@ module spatz_ope
   logic mac_use_sdotp;
   logic [CE-1:0][CE-1:0][AccElemWidth-1:0] acc_fma_rdata, acc_fma_wdata;
   logic [CE-1:0][CE-1:0][AccElemBytes-1:0] acc_fma_wen;
-  logic [CE-1:0][CE-1:0][NrComputeGroupsPerTileEdge-1:0][AccElemWidth-1:0] acc_vrf_rdata, acc_vrf_wdata;
+  logic [CE-1:0][CE-1:0][NrAccPerComputeElem-1:0][AccElemWidth-1:0] acc_vrf_rdata, acc_vrf_wdata;
   logic [CE-1:0][CE-1:0][AccElemBytes-1:0] acc_vrf_wen;
-  logic [CE-1:0][CE-1:0][NrComputeGroupsPerTileEdge-1:0][AccElemWidth-1:0] acc_vlsu_rdata, acc_vlsu_wdata;
+  logic [CE-1:0][CE-1:0][NrAccPerComputeElem-1:0][AccElemWidth-1:0] acc_vlsu_rdata, acc_vlsu_wdata;
   logic [CE-1:0][CE-1:0][AccElemBytes-1:0] acc_vlsu_wen;
   logic [AccAddrW-1:0] acc_fma_raddr, acc_fma_waddr;
   logic [AccAddrW-1:0] acc_vrf_raddr, acc_vrf_waddr;
@@ -330,8 +330,8 @@ module spatz_ope
   // active instruction and one look-ahead instruction instead of indexing a
   // context slot by every architectural tile.
 
-  assign mac_group_row = GroupIdxW'(mac_op_beat / NrComputeGroupsPerTileEdge);
-  assign mac_group_col = GroupIdxW'(mac_op_beat % NrComputeGroupsPerTileEdge);
+  assign mac_group_row = GroupIdxW'(mac_op_beat / NrAccPerComputeElem);
+  assign mac_group_col = GroupIdxW'(mac_op_beat % NrAccPerComputeElem);
 
   always_comb begin : mac_active_shape
     mac_active_tm = (mac_op_exec.tm < TE) ? mac_op_exec.tm : tile_count_t'(TE);
@@ -343,7 +343,7 @@ module spatz_ope
     if (({1'b0, mac_group_col} + 1'b1) < mac_n_groups)
       mac_next_spatial_beat = mac_op_beat + 1'b1;
     else
-      mac_next_spatial_beat = SpatialBeatW'(({1'b0, mac_group_row} + 1'b1) * NrComputeGroupsPerTileEdge);
+      mac_next_spatial_beat = SpatialBeatW'(({1'b0, mac_group_row} + 1'b1) * NrAccPerComputeElem);
 
     mac_lane_active = $bits(mac_lane_active)'(0);
     for (int unsigned row = 0; row < CE; row++) begin
@@ -973,7 +973,7 @@ module spatz_ope
 
           acc_word = acc_vrf_rdata[row_i % CE][col_i % CE][col_i / CE];
           for (int unsigned byte_idx = 0; byte_idx < AccElemBytes; byte_idx++) begin
-            if (acc_zero_q[vt_acc_sel.tile][(row_i / CE) * NrComputeGroupsPerTileEdge + (col_i / CE)][byte_idx])
+            if (acc_zero_q[vt_acc_sel.tile][(row_i / CE) * NrAccPerComputeElem + (col_i / CE)][byte_idx])
               acc_word[byte_idx*8 +: 8] = 8'd0;
           end
           unique case (vt_req_q.op_ope.tew)
@@ -1131,7 +1131,7 @@ module spatz_ope
       end
       bank_row = vt_req_q.op_ope.tss.is_row ? GroupIdxW'((vt_req_q.op_ope.tss.index + line_idx) / CE) :
           GroupIdxW'((line_word_idx * vt_elems_per_word) / CE);
-      acc_vrf_raddr = AccAddrW'(vt_acc_sel.tile * SpatialBeats + bank_row * NrComputeGroupsPerTileEdge);
+      acc_vrf_raddr = AccAddrW'(vt_acc_sel.tile * SpatialBeats + bank_row * NrAccPerComputeElem);
     end else if (tv_busy_q) begin
       if (tv_line_words != 0) begin
         line_idx = tile_dim_t'(tv_word_idx_q / tv_line_words);
@@ -1139,15 +1139,15 @@ module spatz_ope
       end
       bank_row = tv_req_q.op_ope.tss.is_row ? GroupIdxW'((tv_req_q.op_ope.tss.index + line_idx) / CE) :
           GroupIdxW'((line_word_idx * tv_elems_per_word) / CE);
-      acc_vrf_raddr = AccAddrW'(tv_acc_sel.tile * SpatialBeats + bank_row * NrComputeGroupsPerTileEdge);
+      acc_vrf_raddr = AccAddrW'(tv_acc_sel.tile * SpatialBeats + bank_row * NrAccPerComputeElem);
     end
 
     if (tile_rvalid_i && tile_rready_o) begin
       bank_row = GroupIdxW'(tile_r_req_i.row / CE);
-      acc_vlsu_raddr = AccAddrW'(tile_r_acc_sel.tile * SpatialBeats + bank_row * NrComputeGroupsPerTileEdge);
+      acc_vlsu_raddr = AccAddrW'(tile_r_acc_sel.tile * SpatialBeats + bank_row * NrAccPerComputeElem);
     end else if (tile_wvalid_i && tile_wready_o) begin
       bank_row = GroupIdxW'(tile_w_req_i.row / CE);
-      acc_vlsu_raddr = AccAddrW'(tile_w_acc_sel.tile * SpatialBeats + bank_row * NrComputeGroupsPerTileEdge);
+      acc_vlsu_raddr = AccAddrW'(tile_w_acc_sel.tile * SpatialBeats + bank_row * NrAccPerComputeElem);
     end
   end : acc_read_addr_proc
 
@@ -1203,10 +1203,10 @@ module spatz_ope
       acc_vrf_waddr = acc_vrf_raddr;
       for (int row = 0; row < CE; row++) begin
         for (int col = 0; col < CE; col++) begin
-          for (int beat = 0; beat < NrComputeGroupsPerTileEdge; beat++) begin
+          for (int beat = 0; beat < NrAccPerComputeElem; beat++) begin
             acc_vrf_wdata[row][col][beat] = acc_vrf_rdata[row][col][beat];
             for (int byte_idx = 0; byte_idx < AccElemBytes; byte_idx++) begin
-              if (acc_zero_q[tv_acc_sel.tile][bank_row * NrComputeGroupsPerTileEdge + beat][byte_idx])
+              if (acc_zero_q[tv_acc_sel.tile][bank_row * NrAccPerComputeElem + beat][byte_idx])
                 acc_vrf_wdata[row][col][beat][byte_idx*8 +: 8] = 8'd0;
             end
           end
@@ -1243,10 +1243,10 @@ module spatz_ope
       acc_vlsu_waddr = acc_vlsu_raddr;
       for (int row = 0; row < CE; row++) begin
         for (int col = 0; col < CE; col++) begin
-          for (int beat = 0; beat < NrComputeGroupsPerTileEdge; beat++) begin
+          for (int beat = 0; beat < NrAccPerComputeElem; beat++) begin
             acc_vlsu_wdata[row][col][beat] = acc_vlsu_rdata[row][col][beat];
             for (int byte_idx = 0; byte_idx < AccElemBytes; byte_idx++) begin
-              if (acc_zero_q[tile_w_acc_sel.tile][bank_row * NrComputeGroupsPerTileEdge + beat][byte_idx])
+              if (acc_zero_q[tile_w_acc_sel.tile][bank_row * NrAccPerComputeElem + beat][byte_idx])
                 acc_vlsu_wdata[row][col][beat][byte_idx*8 +: 8] = 8'd0;
             end
           end
@@ -1302,7 +1302,7 @@ module spatz_ope
           group_col = GroupIdxW'(col_i / CE);
           acc_word = acc_vlsu_rdata[tile_r_req_i.row % CE][bank_col][group_col];
           for (int unsigned acc_byte_idx = 0; acc_byte_idx < AccElemBytes; acc_byte_idx++) begin
-            if (acc_zero_q[tile_r_acc_sel.tile][bank_row * NrComputeGroupsPerTileEdge + group_col][acc_byte_idx])
+            if (acc_zero_q[tile_r_acc_sel.tile][bank_row * NrAccPerComputeElem + group_col][acc_byte_idx])
               acc_word[acc_byte_idx*8 +: 8] = 8'd0;
           end
           tile_rdata_o[byte_idx*8 +: 8] =
@@ -1339,13 +1339,13 @@ module spatz_ope
         end
         bank_row = tv_req_q.op_ope.tss.is_row ? GroupIdxW'((tv_req_q.op_ope.tss.index + line_idx) / CE) :
             GroupIdxW'((line_word_idx * tv_elems_per_word) / CE);
-        for (int beat = 0; beat < NrComputeGroupsPerTileEdge; beat++)
-          acc_zero_d[tv_acc_sel.tile][bank_row * NrComputeGroupsPerTileEdge + beat] &= ~tv_acc_sel.byte_enable;
+        for (int beat = 0; beat < NrAccPerComputeElem; beat++)
+          acc_zero_d[tv_acc_sel.tile][bank_row * NrAccPerComputeElem + beat] &= ~tv_acc_sel.byte_enable;
       end
       if (tile_wvalid_i && tile_wready_o) begin
         bank_row = GroupIdxW'(tile_w_req_i.row / CE);
-        for (int beat = 0; beat < NrComputeGroupsPerTileEdge; beat++)
-          acc_zero_d[tile_w_acc_sel.tile][bank_row * NrComputeGroupsPerTileEdge + beat] &= ~tile_w_acc_sel.byte_enable;
+        for (int beat = 0; beat < NrAccPerComputeElem; beat++)
+          acc_zero_d[tile_w_acc_sel.tile][bank_row * NrAccPerComputeElem + beat] &= ~tile_w_acc_sel.byte_enable;
       end
     end
   end : acc_zero_update
@@ -1355,8 +1355,8 @@ module spatz_ope
       opope_accumulator #(
         .DATA_WIDTH(AccElemWidth         ),
         .DEPTH     (AccDepth    ),
-        .RD_PORTS  (NrComputeGroupsPerTileEdge),
-        .WR_PORTS  (NrComputeGroupsPerTileEdge)
+        .RD_PORTS  (NrAccPerComputeElem),
+        .WR_PORTS  (NrAccPerComputeElem)
       ) i_accumulator ( 
         .clk_i             (clk_i              ),
         .rst_ni            (rst_ni             ),

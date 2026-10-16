@@ -121,16 +121,8 @@ package spatz_pkg;
   // Tile Dimension
   localparam int unsigned OPEComputeEdge = 8;
   // Number of compute-edge groups along one tile edge
-<<<<<<< HEAD
-<<<<<<< HEAD
-  localparam int unsigned NrComputeGroupsPerTileEdge = 2;
-=======
-  localparam int unsigned NrComputeGroupsPerTileEdge = 4;
->>>>>>> aefe9fd0c455 ([hw] doublebw_vlsu, OPE: add segmented logical tile-row transfers)
-=======
-  localparam int unsigned NrComputeGroupsPerTileEdge = 2;
->>>>>>> 67ec454e0ab8 ([sw] fp16 matmul vtse: remove TE32 row-stride operand)
-  localparam int unsigned TileEdge = OPEComputeEdge * NrComputeGroupsPerTileEdge;
+  localparam int unsigned NrAccPerComputeElem = 2;
+  localparam int unsigned TileEdge = OPEComputeEdge * NrAccPerComputeElem;
   // The controller further limits tk to 32/SEW, or to one for 64-bit accumulation.
   localparam int unsigned KMAX   = (AccElemWidth <= 32) ? (32 / 8) : 1;
   // Maximum storage required for one complete Tile row, in bytes.

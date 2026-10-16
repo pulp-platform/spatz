@@ -1022,9 +1022,9 @@ module spatz_controller
 `ifdef DOUBLE_BW
       narrow_d[spatz_req.id] = spatz_req.op_arith.is_narrowing;
 
-      // Track request vl for vector chaining, used only for DOUBLE_BW
-      // Default spatz uses 1-bit credit counter using wrote_result_q for chaining
-      vl_max_d[spatz_req.id] = (spatz_req.vl >> 1) << spatz_req.vtype.vsew;
+      // Track the byte extent of each half-vector. Vector memory operations use their encoded EEW, 
+      // which may differ from SEW for both loads and stores; arithmetic operations use the configured SEW.
+      vl_max_d[spatz_req.id] = (spatz_req.vl >> 1) << ((spatz_req.ex_unit == LSU) ? spatz_req.op_mem.ew : spatz_req.vtype.vsew);
       vl_cnt_d[spatz_req.id] = '0;
 `endif
     end
