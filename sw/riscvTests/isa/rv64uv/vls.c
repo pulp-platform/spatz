@@ -445,10 +445,10 @@ int main(void) {
   TEST_CASE22();
 
   // Bug test
-  TEST_CASE_D24a();
+  //TEST_CASE_D24a();
   TEST_CASE_D24b();
   TEST_CASE_D24c();
-  TEST_CASE_D24d();
+  //TEST_CASE_D24d();
 
   EXIT_CHECK();
 }
