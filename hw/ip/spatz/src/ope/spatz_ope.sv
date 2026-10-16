@@ -81,6 +81,11 @@ module spatz_ope
   typedef logic [5:0] operand_width_t;
   typedef logic [$clog2(VRFWordWidth)-1:0] vrf_bit_offset_t;
   typedef struct packed {
+    logic [AccTileIdxW-1:0]  tile;
+    logic [AccByteIdxW-1:0]  byte_offset;
+    logic [AccElemBytes-1:0] byte_enable;
+  } acc_sel_t;
+  typedef struct packed {
     spatz_id_t     id;
     vreg_t         vs1;
     vreg_t         vs2;
@@ -218,6 +223,13 @@ module spatz_ope
 
   // Accumulator datapath and access arbitration.
   logic [CE-1:0][CE-1:0][AccElemWidth-1:0] fma_addend;
+  acc_sel_t mac_acc_sel;
+  acc_sel_t fma_acc_sel;
+  acc_sel_t tv_acc_sel;
+  acc_sel_t vt_acc_sel;
+  acc_sel_t tile_r_acc_sel;
+  acc_sel_t tile_w_acc_sel;
+  acc_sel_t clean_acc_sel;
   logic [CE-1:0][CE-1:0][AccElemWidth-1:0] fma_result;
   logic [CE-1:0][CE-1:0] fma_result_valid;
   logic mac_use_sdotp;
@@ -999,21 +1011,7 @@ module spatz_ope
   /*     Shared Accumulator Access and Tile Slice Selection     */
   /*------------------------------------------------------------*/
 
-  typedef struct packed {
-    logic [AccTileIdxW-1:0]  tile;
-    logic [AccByteIdxW-1:0]  byte_offset;
-    logic [AccElemBytes-1:0] byte_enable;
-  } acc_sel_t;
-  
   // Accumulator slice selection.
-  acc_sel_t mac_acc_sel;
-  acc_sel_t fma_acc_sel;
-  acc_sel_t tv_acc_sel;
-  acc_sel_t vt_acc_sel;
-  acc_sel_t tile_r_acc_sel;
-  acc_sel_t tile_w_acc_sel;
-  acc_sel_t clean_acc_sel;
-  
   // Decode each architectural tile exactly once. The physical accumulator is
   // 32 bits wide; TEW8 selects a byte, TEW16 a half-word, and TEW32 the full word.
   always_comb begin : acc_select_proc
