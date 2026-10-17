@@ -268,6 +268,17 @@ module spatz_cluster
   `MEM_TYPEDEF_ALL(mem, tcdm_mem_addr_t, tcdm_data_t, strb_t, tcdm_user_t)
   `MEM_TYPEDEF_ALL(mem_dma, tcdm_mem_addr_t, data_dma_t, strb_dma_t, logic)
 
+  // ECC-protected address for the core/DMA -> per-bank address path (mux +
+  // amo_shim only). The crossbar's own bank-select routing logic upstream
+  // of this is untouched and keeps using the plain address
+  localparam int unsigned TCDMAddrProtWidth   = hsiao_ecc_pkg::min_ecc(TCDMMemAddrWidth);
+  localparam int unsigned TCDMMemAddrEccWidth = TCDMMemAddrWidth + TCDMAddrProtWidth;
+  typedef logic [TCDMMemAddrEccWidth-1:0] tcdm_mem_addr_ecc_t;
+  `MEM_TYPEDEF_REQ_CHAN_T(mem_req_ecc_chan_t, tcdm_mem_addr_ecc_t, tcdm_data_t, strb_t, tcdm_user_t)
+  `MEM_TYPEDEF_REQ_T(mem_req_ecc_t, mem_req_ecc_chan_t)
+  `MEM_TYPEDEF_REQ_CHAN_T(mem_dma_req_ecc_chan_t, tcdm_mem_addr_ecc_t, data_dma_t, strb_dma_t, logic)
+  `MEM_TYPEDEF_REQ_T(mem_dma_req_ecc_t, mem_dma_req_ecc_chan_t)
+
   `TCDM_TYPEDEF_ALL(tcdm, tcdm_addr_t, tcdm_data_t, strb_t, tcdm_user_t)
   `TCDM_TYPEDEF_ALL(tcdm_dma, tcdm_addr_t, data_dma_t, strb_dma_t, logic)
 
@@ -416,6 +427,7 @@ module spatz_cluster
   tcdm_events_t               tcdm_events;
   dma_events_t                dma_events;
   snitch_icache_pkg::icache_l0_events_t [NrCores-1:0] icache_events;
+  snitch_icache_pkg::icache_l1_events_t               icache_l1_events;
 
   // 4. Memory Subsystem (Core side).
   reqrsp_req_t [NrCores-1:0] core_req, filtered_core_req;
@@ -462,7 +474,18 @@ module spatz_cluster
   logic [NumTcdmBanks-1:0][ErrorCounterWidth-1:0] tcdm_scrub_correctable_count;
   logic [NumTcdmBanks-1:0][ErrorCounterWidth-1:0] tcdm_scrub_uncorrectable_count;
 
+  logic [ErrorCounterWidth-1:0] tcdm_interconnect_correctable_count;
+  logic [ErrorCounterWidth-1:0] tcdm_interconnect_uncorrectable_count;
+
   logic [NrCores-1:0][ErrorCounterWidth-1:0] core_tmr_fault_count;
+
+  // OR of every TCDM interconnect fault
+  logic tcdm_interconnect_correctable_fault_any;
+  logic tcdm_interconnect_uncorrectable_fault_any;
+  // OR of every ICache parity fault
+  logic icache_parity_fault_any;
+  // OR of every ICache TMR fault
+  logic icache_tmr_fault_any;
 
   spatz_fault_monitor #(
   .NumVrfUnits  (NrCores),
@@ -481,13 +504,19 @@ module spatz_cluster
   // Expected to be one-cycle pulses.
   .vrf_correctable_fault_i (vrf_correctable_fault),
   .vrf_uncorrectable_fault_i (vrf_uncorrectable_fault),
-
+  // tcdm faults
   .tcdm_rd_correctable_fault_i (tcdm_rd_correctable_fault),
   .tcdm_rd_uncorrectable_fault_i (tcdm_rd_uncorrectable_fault),
   .tcdm_scrub_correctable_fault_i (tcdm_scrub_correctable_fault),
   .tcdm_scrub_uncorrectable_fault_i (tcdm_scrub_uncorrectable_fault),
-
+  // tcdm interconnect faults
+  .tcdm_interconnect_correctable_fault_i (tcdm_interconnect_correctable_fault_any),
+  .tcdm_interconnect_uncorrectable_fault_i (tcdm_interconnect_uncorrectable_fault_any),
+  // snitch core TMR faults
   .core_tmr_fault_i (core_tmr_fault),
+  // cluster_icache parity/TMR faults
+  .icache_correctable_fault_i (icache_tmr_fault_any),
+  .icache_uncorrectable_fault_i (icache_parity_fault_any),
 
   // Per-source counters.
   .vrf_correctable_count_o (vrf_correctable_count),
@@ -497,6 +526,9 @@ module spatz_cluster
   .tcdm_rd_uncorrectable_count_o (tcdm_rd_uncorrectable_count),
   .tcdm_scrub_correctable_count_o (tcdm_scrub_correctable_count),
   .tcdm_scrub_uncorrectable_count_o (tcdm_scrub_uncorrectable_count),
+
+  .tcdm_interconnect_correctable_count_o (tcdm_interconnect_correctable_count),
+  .tcdm_interconnect_uncorrectable_count_o (tcdm_interconnect_uncorrectable_count),
 
   .core_tmr_fault_count_o (core_tmr_fault_count)
 );
@@ -621,6 +653,21 @@ module spatz_cluster
   assign ext_dma_req.q.amo  = reqrsp_pkg::AMONone;
   assign ext_dma_req.q.user = '0;
 
+  logic dma_ic_rsp_valid_tmr_fault, dma_ic_xbar_handshake_tmr_fault;
+  logic tcdm_ic_rsp_valid_tmr_fault, tcdm_ic_xbar_handshake_tmr_fault;
+  logic dma_ic_xbar_idx_voter_output_fault, tcdm_ic_xbar_idx_voter_output_fault;
+  // i_tcdm_interconnect's/i_dma_interconnect's own gen_hyperbank_demux vote
+  logic dma_ic_hbank_sel_valid_tmr_fault, dma_ic_hbank_sel_ready_tmr_fault;
+  logic tcdm_ic_hbank_sel_valid_tmr_fault, tcdm_ic_hbank_sel_ready_tmr_fault;
+
+  // i_dma_interconnect's memory-side ready reps
+  logic [2:0] dma_ic_mem_valid_rep [NrSuperBanks];
+  logic [2:0] dma_ic_mem_ready_rep [NrSuperBanks];
+  // Single-input port (NumInp=1) -- wrap the one fanned-out q_valid in a
+  // 1-element unpacked array to match req_valid_rep_i's (unpacked) type.
+  logic [2:0] dma_req_valid_rep_in [1];
+  assign dma_req_valid_rep_in[0] = {3{ext_dma_req.q_valid}};
+
   spatz_tcdm_interconnect #(
     .NumInp                (1                 ),
     .NumOut                (NrSuperBanks      ),
@@ -640,7 +687,17 @@ module spatz_cluster
     .req_i     (ext_dma_req),
     .rsp_o     (ext_dma_rsp),
     .mem_req_o (sb_dma_req ),
-    .mem_rsp_i (sb_dma_rsp )
+    .mem_rsp_i (sb_dma_rsp ),
+    .rsp_valid_tmr_fault_o      (dma_ic_rsp_valid_tmr_fault     ),
+    .xbar_handshake_tmr_fault_o (dma_ic_xbar_handshake_tmr_fault),
+    .xbar_idx_voter_output_fault_o (dma_ic_xbar_idx_voter_output_fault),
+    .ic_mem_valid_rep_tmr_fault_o (dma_ic_hbank_sel_valid_tmr_fault),
+    .ic_mem_ready_rep_tmr_fault_o (dma_ic_hbank_sel_ready_tmr_fault),
+    // single input port: fan the one q_valid out, same as axi_soc_req above.
+    .req_valid_rep_i (dma_req_valid_rep_in                         ),
+    .req_ready_rep_o (/* unused -- ext_dma_rsp.q_ready via rsp_o */),
+    .mem_valid_rep_o (dma_ic_mem_valid_rep                         ),
+    .mem_ready_rep_i (dma_ic_mem_ready_rep                         )
   );
 
   // ----------------
@@ -652,51 +709,181 @@ module spatz_cluster
   logic [NrSuperBanks-1:0] [BanksPerSuperBank-1:0] sram_scrub_single_error;
   logic [NrSuperBanks-1:0] [BanksPerSuperBank-1:0] sram_scrub_multi_error;
 
+  // One-hot control-FSM illegal-state flags, per per-bank AMO shim.
+  logic [NrSuperBanks-1:0] [BanksPerSuperBank-1:0] amo_shim_fsm_illegal_state;
+
+  // Per-bank AMO shim handshake TMR fault: set when the triplicated
+  // state_q flop inside spatz_amo_shim disagrees
+  // across its three replicas
+  logic [NrSuperBanks-1:0] [BanksPerSuperBank-1:0] amo_shim_handshake_tmr_fault;
+
+  // Per-bank address ECC (mux -> amo_shim -> here) correctable/uncorrectable flags;
+  logic [NrSuperBanks-1:0] [BanksPerSuperBank-1:0] tcdm_addr_correctable_fault;
+  logic [NrSuperBanks-1:0] [BanksPerSuperBank-1:0] tcdm_addr_uncorrectable_fault;
+  logic [NrSuperBanks-1:0] [BanksPerSuperBank-1:0] tcdm_wctrl_correctable_fault;
+  logic [NrSuperBanks-1:0] [BanksPerSuperBank-1:0] tcdm_wctrl_uncorrectable_fault;
+  logic [NrSuperBanks-1:0] [BanksPerSuperBank-1:0] tcdm_be_correctable_fault;
+  logic [NrSuperBanks-1:0] [BanksPerSuperBank-1:0] tcdm_be_uncorrectable_fault;
+
+  // Encode the per-bank/DMA request address into a Hsiao codeword before it
+  // enters the mux+amo_shim leg.
+  mem_req_ecc_t     [NrSuperBanks-1:0][BanksPerSuperBank-1:0] ic_req_addr_ecc;
+  mem_dma_req_ecc_t [NrSuperBanks-1:0]                        sb_dma_req_addr_ecc;
+
+  // Same idea, for {write, amo, strb}
+  localparam int unsigned WCtrlWidth = 1 + $bits(reqrsp_pkg::amo_op_e) + DataWidth/8;
+  localparam int unsigned WCtrlEccWidth = WCtrlWidth + hsiao_ecc_pkg::min_ecc(WCtrlWidth);
+  // Matches spatz_amo_shim.sv's own internal StrbEccWidth (both derive the
+  // same width from DataWidth/8) -- sizes mem_be_ecc/i_mem_be_dec below.
+  localparam int unsigned StrbEccWidth = DataWidth/8 + hsiao_ecc_pkg::min_ecc(DataWidth/8);
+  logic [WCtrlEccWidth-1:0] ic_req_wctrl_ecc     [NrSuperBanks][BanksPerSuperBank];
+  logic [WCtrlEccWidth-1:0] sb_dma_req_wctrl_ecc [NrSuperBanks][BanksPerSuperBank];
+
+  for (genvar i = 0; i < NrSuperBanks; i++) begin : gen_ic_addr_ecc
+    for (genvar j = 0; j < BanksPerSuperBank; j++) begin : gen_ic_addr_ecc_bank
+      hsiao_ecc_enc #(
+        .DataWidth (TCDMMemAddrWidth)
+      ) i_ic_addr_enc (
+        .in  (ic_req[i][j].q.addr         ),
+        .out (ic_req_addr_ecc[i][j].q.addr)
+      );
+      assign ic_req_addr_ecc[i][j].q.write = ic_req[i][j].q.write;
+      assign ic_req_addr_ecc[i][j].q.amo   = ic_req[i][j].q.amo;
+      assign ic_req_addr_ecc[i][j].q.data  = ic_req[i][j].q.data;
+      assign ic_req_addr_ecc[i][j].q.strb  = ic_req[i][j].q.strb;
+      assign ic_req_addr_ecc[i][j].q.user  = ic_req[i][j].q.user;
+      assign ic_req_addr_ecc[i][j].q_valid = ic_req[i][j].q_valid;
+
+      hsiao_ecc_enc #(
+        .DataWidth (WCtrlWidth)
+      ) i_ic_wctrl_enc (
+        .in  ({ic_req[i][j].q.strb, ic_req[i][j].q.amo, ic_req[i][j].q.write}),
+        .out (ic_req_wctrl_ecc[i][j]                                        )
+      );
+    end
+
+    hsiao_ecc_enc #(
+      .DataWidth (TCDMMemAddrWidth)
+    ) i_dma_addr_enc (
+      .in  (sb_dma_req[i].q.addr         ),
+      .out (sb_dma_req_addr_ecc[i].q.addr)
+    );
+    assign sb_dma_req_addr_ecc[i].q.write = sb_dma_req[i].q.write;
+    assign sb_dma_req_addr_ecc[i].q.amo   = sb_dma_req[i].q.amo;
+    assign sb_dma_req_addr_ecc[i].q.data  = sb_dma_req[i].q.data;
+    assign sb_dma_req_addr_ecc[i].q.strb  = sb_dma_req[i].q.strb;
+    assign sb_dma_req_addr_ecc[i].q.user  = sb_dma_req[i].q.user;
+    assign sb_dma_req_addr_ecc[i].q_valid = sb_dma_req[i].q_valid;
+
+    // Per-bank slice of the wide DMA request's {write, amo, strb} --
+    // mirrors mem_wide_narrow_mux's own wide-side content mux exactly.
+    for (genvar j = 0; j < BanksPerSuperBank; j++) begin : gen_dma_wctrl_enc
+      hsiao_ecc_enc #(
+        .DataWidth (WCtrlWidth)
+      ) i_dma_wctrl_enc (
+        .in  ({sb_dma_req[i].q.strb[j*(DataWidth/8)+:DataWidth/8],
+               reqrsp_pkg::AMONone, sb_dma_req[i].q.write}),
+        .out (sb_dma_req_wctrl_ecc[i][j])
+      );
+    end
+  end
+
+  // i_tcdm_interconnect's memory-side handshake reps, consumed by
+  // i_tcdm_mux and populated by the gen_tcdm_ic_mem_rep_sb/bank
+  // reshape loop near i_tcdm_interconnect's own instantiation further down
+  logic [2:0] tcdm_ic_mem_valid_rep_flat [NrBanks];
+  logic [2:0] tcdm_ic_mem_ready_rep_flat [NrBanks];
+  logic [2:0] tcdm_ic_mem_valid_rep [NrSuperBanks][BanksPerSuperBank];
+  logic [2:0] tcdm_ic_mem_ready_rep [NrSuperBanks][BanksPerSuperBank];
+
   for (genvar i = 0; i < NrSuperBanks; i++) begin : gen_tcdm_super_bank
 
-    mem_req_t [BanksPerSuperBank-1:0] amo_req;
-    mem_rsp_t [BanksPerSuperBank-1:0] amo_rsp;
+    mem_req_ecc_t [BanksPerSuperBank-1:0] amo_req;
+    mem_rsp_t     [BanksPerSuperBank-1:0] amo_rsp;
+    // i_tcdm_mux's muxed {write, amo, strb} codeword -- decoded right
+    // before i_amo_shim's write_i/amo_i/wstrb_i below.
+    logic [WCtrlEccWidth-1:0] amo_req_wctrl_ecc [BanksPerSuperBank];
+
+    // End-to-end handshake TMR: mem_valid_rep_o/mem_ready_rep_i (from/to
+    // i_tcdm_interconnect and i_dma_interconnect, populated back at their
+    // own instantiations) and out_valid_rep_o (to spatz_amo_shim, the
+    // final vote point) keep the three handshake rails independent through
+    // this mux
+    logic [2:0] amo_req_valid_rep [BanksPerSuperBank];
 
     mem_wide_narrow_mux #(
-      .NarrowDataWidth  (NarrowDataWidth),
-      .WideDataWidth    (AxiDataWidth   ),
-      .mem_narrow_req_t (mem_req_t      ),
-      .mem_narrow_rsp_t (mem_rsp_t      ),
-      .mem_wide_req_t   (mem_dma_req_t  ),
-      .mem_wide_rsp_t   (mem_dma_rsp_t  )
+      .NarrowDataWidth  (NarrowDataWidth  ),
+      .WideDataWidth    (AxiDataWidth     ),
+      .mem_narrow_req_t (mem_req_ecc_t    ),
+      .mem_narrow_rsp_t (mem_rsp_t        ),
+      .mem_wide_req_t   (mem_dma_req_ecc_t),
+      .mem_wide_rsp_t   (mem_dma_rsp_t    ),
+      .WCtrlEccWidth    (WCtrlEccWidth    )
     ) i_tcdm_mux (
-      .clk_i           (clk_i                ),
-      .rst_ni          (rst_ni               ),
-      .in_narrow_req_i (ic_req [i]           ),
-      .in_narrow_rsp_o (ic_rsp [i]           ),
-      .in_wide_req_i   (sb_dma_req [i]       ),
-      .in_wide_rsp_o   (sb_dma_rsp [i]       ),
-      .out_req_o       (amo_req              ),
-      .out_rsp_i       (amo_rsp              ),
-      .sel_wide_i      (sb_dma_req[i].q_valid)
+      .clk_i           (clk_i                    ),
+      .rst_ni          (rst_ni                   ),
+      .in_narrow_req_i (ic_req_addr_ecc [i]      ),
+      .in_narrow_rsp_o (ic_rsp [i]               ),
+      .in_wide_req_i   (sb_dma_req_addr_ecc [i]  ),
+      .in_wide_rsp_o   (sb_dma_rsp [i]           ),
+      .out_req_o       (amo_req                  ),
+      .out_rsp_i       (amo_rsp                  ),
+      .sel_wide_i      (sb_dma_req[i].q_valid    ),
+      .in_narrow_valid_rep_i (tcdm_ic_mem_valid_rep[i]),
+      .in_narrow_ready_rep_o (tcdm_ic_mem_ready_rep[i]),
+      .in_wide_valid_rep_i   (dma_ic_mem_valid_rep[i] ),
+      .in_wide_ready_rep_o   (dma_ic_mem_ready_rep[i] ),
+      .out_valid_rep_o       (amo_req_valid_rep       ),
+      .in_narrow_wctrl_ecc_i (ic_req_wctrl_ecc[i]     ),
+      .in_wide_wctrl_ecc_i   (sb_dma_req_wctrl_ecc[i] ),
+      .out_wctrl_ecc_o       (amo_req_wctrl_ecc       )
     );
 
     // generate banks of the superbank
     for (genvar j = 0; j < BanksPerSuperBank; j++) begin : gen_tcdm_bank
 
       logic mem_cs, mem_wen;
-      tcdm_mem_addr_t mem_add;
+      tcdm_mem_addr_ecc_t mem_add;      // codeword out of amo_shim
+      tcdm_mem_addr_t     mem_add_dec;  // corrected address fed to the SRAM
+      logic [1:0]         mem_addr_err; // [0]: correctable, [1]: uncorrectable
       strb_t mem_be;
+      logic [StrbEccWidth-1:0] mem_be_ecc; // amo_shim's freshly-encoded mem_be_o
+      strb_t mem_be_dec;                   // corrected byte-enable fed to the SRAM
+      logic [1:0] mem_be_err; // [0]: correctable, [1]: uncorrectable
       tcdm_data_t mem_rdata;     // raw 39-bit codeword from SRAM
       tcdm_data_t mem_wdata_enc; // 39-bit codeword to SRAM (direct from AMO shim)
       tcdm_data_t amo_shim_rdata; // 39-bit read response from AMO shim
 
-      // replace the SRAM to a ECC_enhanced version w/ inputECC---------------
+      // Decode i_tcdm_mux's {write, amo, strb} codeword right before
+      // i_amo_shim needs them in the clear.
+      logic [WCtrlWidth-1:0] amo_wctrl_dec;
+      logic [1:0]            amo_wctrl_err; // [0]: correctable, [1]: uncorrectable
+      logic                  amo_write_dec;
+      reqrsp_pkg::amo_op_e   amo_amo_dec;
+      strb_t                 amo_wstrb_dec;
+
+      hsiao_ecc_dec #(
+        .DataWidth (WCtrlWidth)
+      ) i_amo_wctrl_dec (
+        .in         (amo_req_wctrl_ecc[j]),
+        .out        (amo_wctrl_dec       ),
+        .syndrome_o (                    ),
+        .err_o      (amo_wctrl_err       )
+      );
+      assign tcdm_wctrl_correctable_fault[i][j]   = amo_wctrl_err[0];
+      assign tcdm_wctrl_uncorrectable_fault[i][j] = amo_wctrl_err[1];
+      assign {amo_wstrb_dec, amo_amo_dec, amo_write_dec} = amo_wctrl_dec;
+
+      // Replace the SRAM to a ECC_enhanced version w/ inputECC
       logic ecc_sram_gnt;
 
-      // perodical scrub_trigger generator----
+      // Perodical scrub_trigger generator
       logic scrub_trigger;
-      scrub_timer #(.PERIOD(10_000_000)) i_scrub_timer (
+      scrub_timer #(.PERIOD(1_000_000)) i_scrub_timer (
         .clk_i,
         .rst_ni,
         .scrub_trigger_o  (scrub_trigger)
       );
-      //-------------------------------------------
 
 
       ecc_sram #(
@@ -716,47 +903,80 @@ module spatz_cluster
         .scrub_uncorrectable_o  (sram_scrub_multi_error[i][j]), // Pulse indicating a multi-bit error was not corrected by the scrubber
 
         .wdata_i (mem_wdata_enc),
-        .addr_i  (mem_add     ),
+        .addr_i  (mem_add_dec ),
         .req_i   (mem_cs      ),
         .we_i    (mem_wen     ),
-        .be_i    (mem_be      ),
+        .be_i    (mem_be_dec  ),
         .rdata_o (mem_rdata   ),
         .gnt_o   (ecc_sram_gnt),
 
         .single_error_o(sram_rd_single_error[i][j]),
         .multi_error_o(sram_rd_multi_error[i][j])
         );
+
+      // Decode/correct the address codeword right before it's used to index
+      // the SRAM -- this is the far end of the mux->amo_shim address leg
+      // that gen_ic_addr_ecc encoded on the way in.
+      hsiao_ecc_dec #(
+        .DataWidth (TCDMMemAddrWidth)
+      ) i_addr_dec (
+        .in         (mem_add         ),
+        .out        (mem_add_dec     ),
+        .syndrome_o (                ),
+        .err_o      (mem_addr_err    )
+      );
+      assign tcdm_addr_correctable_fault[i][j]   = mem_addr_err[0];
+      assign tcdm_addr_uncorrectable_fault[i][j] = mem_addr_err[1];
+
+      // Decode mem_be_ecc right before the SRAM
+      hsiao_ecc_dec #(
+        .DataWidth ($bits(strb_t))
+      ) i_mem_be_dec (
+        .in         (mem_be_ecc  ),
+        .out        (mem_be_dec  ),
+        .syndrome_o (            ),
+        .err_o      (mem_be_err  )
+      );
+      assign tcdm_be_correctable_fault[i][j]   = mem_be_err[0];
+      assign tcdm_be_uncorrectable_fault[i][j] = mem_be_err[1];
       // AMO shim: 39-bit native interface. Non-AMO codewords pass through unchanged;
       // AMO/SC operations decode internally (via Hsiao systematic property on mem_rdata_i),
       // apply the ALU, and re-encode the result before writing back to SRAM.
       spatz_amo_shim #(
-        .AddrMemWidth  ( TCDMMemAddrWidth  ),
+        // Widened to carry the address ECC codeword through unchanged: this
+        // module never inspects/computes on the address (pure pass-through/
+        // register/equality-compare), so treating it as an opaque wider
+        // value here.
+        .AddrMemWidth  ( TCDMMemAddrEccWidth ),
         .DataWidth     ( DataWidth         ),  // 32-bit AMO ALU
         .ProtDataWidth ( TCDMProtDataWidth ),  // 39-bit codeword I/O
         .CoreIDWidth   ( CoreIDWidth       )
       ) i_amo_shim (
         .clk_i          (clk_i                ),
         .rst_ni         (rst_ni               ),
-        .valid_i        (amo_req[j].q_valid   ),
+        .valid_rep_i    (amo_req_valid_rep[j] ),
         .ready_o        (amo_rsp[j].q_ready   ),
         .addr_i         (amo_req[j].q.addr    ),
-        .write_i        (amo_req[j].q.write   ),
+        .write_i        (amo_write_dec        ),
         .wdata_i        (amo_req[j].q.data    ), // full 39-bit codeword (pre-encoded by requester)
-        .wstrb_i        (amo_req[j].q.strb    ),
+        .wstrb_i        (amo_wstrb_dec        ),
         .core_id_i      (amo_req[j].q.user.core_id),
         .is_core_i      (amo_req[j].q.user.is_core),
         .rdata_o        (amo_shim_rdata       ), // 39-bit codeword response
-        .amo_i          (amo_req[j].q.amo     ),
+        .amo_i          (amo_amo_dec          ),
         .mem_req_o      (mem_cs               ),
         .mem_add_o      (mem_add              ),
         .mem_wen_o      (mem_wen              ),
         .mem_wdata_o    (mem_wdata_enc        ), // 39-bit codeword direct to SRAM
         .mem_be_o       (mem_be               ),
+        .mem_be_ecc_o   (mem_be_ecc           ),
         .mem_rdata_i    (mem_rdata            ), // 39-bit codeword from SRAM
         .dma_access_i   (sb_dma_req[i].q_valid),
         // TODO(zarubaf): Signal AMO conflict somewhere. Socregs?
         .amo_conflict_o (/* Unused */         ),
-        .ecc_sram_gnt_i (ecc_sram_gnt         )
+        .ecc_sram_gnt_i (ecc_sram_gnt         ),
+        .fsm_illegal_state_o (amo_shim_fsm_illegal_state[i][j]),
+        .handshake_tmr_fault_o (amo_shim_handshake_tmr_fault[i][j])
       );
 
       // Insert a pipeline register at the output of each SRAM.
@@ -767,15 +987,75 @@ module spatz_cluster
         .clk_i (clk_i              ),
         .rst_ni(rst_ni             ),
         .d_i   (amo_shim_rdata     ),
-        .d_o   (amo_rsp[j].p.data  )
+        .d_o   (amo_rsp[j].p.data )
       );
     end
   end
 
-  assign tcdm_rd_correctable_fault = |sram_rd_single_error;
-  assign tcdm_rd_uncorrectable_fault = |sram_rd_multi_error;
-  assign tcdm_scrub_correctable_fault = |sram_scrub_single_error;
-  assign tcdm_scrub_uncorrectable_fault = |sram_scrub_multi_error;
+  // Per-bank fault flags below are reshaped from the genuinely 2D
+  // [NrSuperBanks][BanksPerSuperBank] arrays into the flat [NumTcdmBanks]
+  // vectors spatz_fault_monitor's per-bank counters expect.
+  // Dedicated TCDM address-ECC fault.
+  logic [NumTcdmBanks-1:0] tcdm_addr_ecc_correctable_fault;
+  logic [NumTcdmBanks-1:0] tcdm_addr_ecc_uncorrectable_fault;
+  // Same idea, for the mux->amo_shim leg's {write, amo, strb} ECC
+  logic [NumTcdmBanks-1:0] tcdm_wctrl_ecc_correctable_fault;
+  logic [NumTcdmBanks-1:0] tcdm_wctrl_ecc_uncorrectable_fault;
+  logic [NumTcdmBanks-1:0] tcdm_be_ecc_correctable_fault;
+  logic [NumTcdmBanks-1:0] tcdm_be_ecc_uncorrectable_fault;
+
+  // OR of amo_shim_handshake_tmr_fault (per-bank AMO shim handshake TMR,
+  // see its declaration below) across every bank.
+  logic amo_shim_handshake_tmr_fault_any;
+  // OR of every TMR-voter disagreement anywhere in the tcdm/dma interconnect chain
+  logic tcdm_ic_handshake_tmr_fault_any;
+  for (genvar i = 0; i < NrSuperBanks; i++) begin : gen_tcdm_fault_flat_sb
+    for (genvar j = 0; j < BanksPerSuperBank; j++) begin : gen_tcdm_fault_flat_bank
+      localparam int unsigned k = i*BanksPerSuperBank + j;
+      assign tcdm_rd_correctable_fault[k]         = sram_rd_single_error[i][j];
+      assign tcdm_rd_uncorrectable_fault[k]       = sram_rd_multi_error[i][j];
+      assign tcdm_scrub_correctable_fault[k]       = sram_scrub_single_error[i][j];
+      assign tcdm_scrub_uncorrectable_fault[k]     = sram_scrub_multi_error[i][j];
+      // TCDM address ECC
+      assign tcdm_addr_ecc_correctable_fault[k]   = tcdm_addr_correctable_fault[i][j];
+      assign tcdm_addr_ecc_uncorrectable_fault[k] = tcdm_addr_uncorrectable_fault[i][j];
+      assign tcdm_wctrl_ecc_correctable_fault[k]   = tcdm_wctrl_correctable_fault[i][j];
+      assign tcdm_wctrl_ecc_uncorrectable_fault[k] = tcdm_wctrl_uncorrectable_fault[i][j];
+      assign tcdm_be_ecc_correctable_fault[k]       = tcdm_be_correctable_fault[i][j];
+      assign tcdm_be_ecc_uncorrectable_fault[k]     = tcdm_be_uncorrectable_fault[i][j];
+    end
+  end
+
+  assign amo_shim_handshake_tmr_fault_any = |amo_shim_handshake_tmr_fault;
+  assign tcdm_ic_handshake_tmr_fault_any =
+    tcdm_ic_rsp_valid_tmr_fault | dma_ic_rsp_valid_tmr_fault
+    | tcdm_ic_xbar_handshake_tmr_fault | dma_ic_xbar_handshake_tmr_fault
+    | tcdm_ic_xbar_idx_voter_output_fault | dma_ic_xbar_idx_voter_output_fault
+    | tcdm_ic_hbank_sel_valid_tmr_fault | dma_ic_hbank_sel_valid_tmr_fault
+    | tcdm_ic_hbank_sel_ready_tmr_fault | dma_ic_hbank_sel_ready_tmr_fault;
+
+  // Three replicas of "is tcdm_req[j] valid"/"is tcdm_req[j] granted",
+  // populated by gen_tcdm_signals's arbiter further below and consumed
+  // right here
+  logic [2:0] tcdm_req_valid_rep [NrTCDMPortsCores];
+  logic [2:0] tcdm_req_ready_rep [NrTCDMPortsCores];
+
+  // i_tcdm_interconnect's request-side handshake reps
+  logic [2:0] tcdm_ic_req_valid_rep [NumTCDMIn];
+  logic [2:0] tcdm_ic_req_ready_rep [NumTCDMIn];
+  assign tcdm_ic_req_valid_rep[NrTCDMPortsCores] = {3{axi_soc_req.q_valid}};
+  for (genvar j = 0; j < NrTCDMPortsCores; j++) begin : gen_tcdm_ic_req_valid_rep
+    assign tcdm_ic_req_valid_rep[j] = tcdm_req_valid_rep[j];
+    assign tcdm_req_ready_rep[j]    = tcdm_ic_req_ready_rep[j];
+  end : gen_tcdm_ic_req_valid_rep
+
+  // i_tcdm_interconnect's memory-side reps
+  for (genvar i = 0; i < NrSuperBanks; i++) begin : gen_tcdm_ic_mem_rep_sb
+    for (genvar j = 0; j < BanksPerSuperBank; j++) begin : gen_tcdm_ic_mem_rep_bank
+      assign tcdm_ic_mem_valid_rep[i][j]                   = tcdm_ic_mem_valid_rep_flat[i*BanksPerSuperBank+j];
+      assign tcdm_ic_mem_ready_rep_flat[i*BanksPerSuperBank+j] = tcdm_ic_mem_ready_rep[i][j];
+    end : gen_tcdm_ic_mem_rep_bank
+  end : gen_tcdm_ic_mem_rep_sb
 
   spatz_tcdm_interconnect #(
     .NumInp                (NumTCDMIn           ),
@@ -797,7 +1077,18 @@ module spatz_cluster
     .req_i     ({axi_soc_req, tcdm_req}),
     .rsp_o     ({axi_soc_rsp, tcdm_rsp}),
     .mem_req_o (ic_req                 ),
-    .mem_rsp_i (ic_rsp                 )
+    .mem_rsp_i (ic_rsp                 ),
+    .rsp_valid_tmr_fault_o      (tcdm_ic_rsp_valid_tmr_fault     ),
+    .xbar_handshake_tmr_fault_o (tcdm_ic_xbar_handshake_tmr_fault),
+    .xbar_idx_voter_output_fault_o (tcdm_ic_xbar_idx_voter_output_fault),
+    .ic_mem_valid_rep_tmr_fault_o (tcdm_ic_hbank_sel_valid_tmr_fault),
+    .ic_mem_ready_rep_tmr_fault_o (tcdm_ic_hbank_sel_ready_tmr_fault),
+    // axi_soc_req has no genuinely triplicated source of its own, 
+    // so its single q_valid is just fanned out into all three slots.
+    .req_valid_rep_i (tcdm_ic_req_valid_rep     ),
+    .req_ready_rep_o (tcdm_ic_req_ready_rep     ),
+    .mem_valid_rep_o (tcdm_ic_mem_valid_rep_flat),
+    .mem_ready_rep_i (tcdm_ic_mem_ready_rep_flat)
   );
 
   hive_req_t [NrCores-1:0] hive_req;
@@ -1010,44 +1301,171 @@ module spatz_cluster
 
   if (!spatz_pkg::QUADRILATERO) assign quad_tcdm_req = '0;
 
+  // Per-TCDM-port TMR fault from i_shift_reg_spatz_voter/i_shift_reg_quad_voter; OR-reduced onto tcdm_shift_reg_tmr_fault further down.
+  logic [NrTCDMPortsCores-1:0] spatz_tcdm_p_valid_tmr_fault;
+  logic [NrTCDMPortsCores-1:0] quad_tcdm_p_valid_tmr_fault;
+  logic [NrTCDMPortsCores-1:0] tcdm_arb_tmr_fault;
+
+  // End-to-end handshake TMR: three replicas of "is tcdm_req[j] valid" /
+  // "is tcdm_req[j] granted", kept independent (NOT voted here) all the
+  // way into i_tcdm_interconnect
   for (genvar j = 0; j < NrTCDMPortsCores; j++) begin : gen_tcdm_signals
-    stream_arbiter #(
-      .DATA_T ( tcdm_req_chan_t  ),
-      .N_INP  ( 2                )
-    ) i_stream_arbiter_tcdm (
-      .clk_i       ( clk_i                        ),
-      .rst_ni      ( rst_ni                       ),
-      .inp_data_i  ( {spatz_tcdm_req[j].q      , quad_tcdm_req[j].q       } ),
-      .inp_valid_i ( {spatz_tcdm_req[j].q_valid, quad_tcdm_req[j].q_valid } ),
-      .inp_ready_o ( {spatz_tcdm_rsp[j].q_ready, quad_tcdm_rsp[j].q_ready } ),
-      .oup_data_o  ( tcdm_req[j].q               ),
-      .oup_valid_o ( tcdm_req[j].q_valid         ),
-      .oup_ready_i ( tcdm_rsp[j].q_ready         )
+    // Each replica's req_o/gnt_o still comes from a genuinely independent
+    // rr_arb_tree instance, and each replica uses a dummy 1-bit
+    // DataType, so its own internal data mux is trivial/never wired to the
+    // real payload: the actual tcdm_req_chan_t mux is built once,
+    // externally, selected by the (locally voted) winner index.
+    // gnt_i is now per-replica, so a fault
+    // anywhere downstream in one rail stays confined to that rail here too.
+    logic [1:0] arb_gnt_rep [3];
+    logic       arb_req_rep [3];
+    logic       arb_idx_rep [3];
+
+    for (genvar t = 0; t < 3; t++) begin : gen_arb_rep
+      rr_arb_tree #(
+        .NumIn     (2      ),
+        .DataType  (logic  ),
+        .ExtPrio   (1'b0   ),
+        .AxiVldRdy (1'b1   ),
+        .LockIn    (1'b1   )
+      ) i_arbiter (
+        .clk_i  (clk_i                                                  ),
+        .rst_ni (rst_ni                                                 ),
+        .flush_i(1'b0                                                   ),
+        .rr_i   ('0                                                     ),
+        .req_i  ({spatz_tcdm_req[j].q_valid, quad_tcdm_req[j].q_valid } ),
+        .gnt_o  (arb_gnt_rep[t]                                         ),
+        .data_i ('0                                                     ),
+        .gnt_i  (tcdm_req_ready_rep[j][t]                               ),
+        .req_o  (arb_req_rep[t]                                         ),
+        .data_o (                                                       ),
+        .idx_o  (arb_idx_rep[t]                                         )
+      );
+      assign tcdm_req_valid_rep[j][t] = arb_req_rep[t];
+    end
+
+    logic tcdm_arb_spatz_ready_tmr_fault, tcdm_arb_quad_ready_tmr_fault;
+    logic tcdm_arb_idx_tmr_fault;
+    logic tcdm_arb_idx;
+
+    // Local vote: this is the arbiter's OWN grant back to spatz/quad, not
+    // part of the deferred chain into i_tcdm_interconnect.
+    bitwise_TMR_voter_fail #(
+      .DataWidth (1),
+      .VoterType (1)
+    ) i_arb_spatz_ready_voter (
+      .a_i              (arb_gnt_rep[0][1]             ),
+      .b_i              (arb_gnt_rep[1][1]             ),
+      .c_i              (arb_gnt_rep[2][1]             ),
+      .majority_o       (spatz_tcdm_rsp[j].q_ready     ),
+      .fault_detected_o (tcdm_arb_spatz_ready_tmr_fault)
     );
 
-    shift_reg #(
-      .dtype ( logic ),
-      .Depth ( 1 + RegisterTCDMCuts )
-    ) i_shift_reg_spatz (
-      .clk_i,
-      .rst_ni,
-      .d_i ( spatz_tcdm_req[j].q_valid & spatz_tcdm_rsp[j].q_ready ),
-      .d_o ( spatz_tcdm_rsp[j].p_valid )
+    bitwise_TMR_voter_fail #(
+      .DataWidth (1),
+      .VoterType (1)
+    ) i_arb_quad_ready_voter (
+      .a_i              (arb_gnt_rep[0][0]            ),
+      .b_i              (arb_gnt_rep[1][0]            ),
+      .c_i              (arb_gnt_rep[2][0]            ),
+      .majority_o       (quad_tcdm_rsp[j].q_ready     ),
+      .fault_detected_o (tcdm_arb_quad_ready_tmr_fault)
     );
 
-    shift_reg #(
-      .dtype ( logic ),
-      .Depth ( 1 + RegisterTCDMCuts )
-    ) i_shift_reg_quad (
-      .clk_i,
-      .rst_ni,
-      .d_i ( quad_tcdm_req[j].q_valid & quad_tcdm_rsp[j].q_ready ),
-      .d_o ( quad_tcdm_rsp[j].p_valid )
+    // idx_o is the mux-select source: it reflects the
+    // arbiter's current winner as soon as arbitration is decided, and stays
+    // stable while LockIn holds it -- independent of gnt_i. gnt_o is
+    // additionally ANDed with gnt_i, so it collapses to all-zero on any
+    // downstream stall regardless of which input actually won; using it as
+    // a mux select would silently swap in the other input's address/data/
+    // amo whenever the interconnect stalls for a cycle while spatz/VLSU (or
+    // quad) is the locked-in winner. Voted locally -- it only selects
+    // the single un-replicated payload mux below, not part of the deferred
+    // chain either.
+    bitwise_TMR_voter_fail #(
+      .DataWidth (1),
+      .VoterType (1)
+    ) i_arb_idx_voter (
+      .a_i              (arb_idx_rep[0]        ),
+      .b_i              (arb_idx_rep[1]        ),
+      .c_i              (arb_idx_rep[2]        ),
+      .majority_o       (tcdm_arb_idx          ),
+      .fault_detected_o (tcdm_arb_idx_tmr_fault)
+    );
+
+    assign tcdm_arb_tmr_fault[j] = tcdm_arb_idx_tmr_fault
+                                  | tcdm_arb_spatz_ready_tmr_fault | tcdm_arb_quad_ready_tmr_fault;
+
+    // Single, unreplicated payload mux, selected by the voted winner index
+    assign tcdm_req[j].q = tcdm_arb_idx ? spatz_tcdm_req[j].q : quad_tcdm_req[j].q;
+    // Placeholder single value for tcdm_req[j].q_valid -- replica 0
+    assign tcdm_req[j].q_valid = arb_req_rep[0];
+
+    // TMR-protected: this shift register delays the Spatz-side request/grant
+    // pulse by the fixed TCDM response latency to tell this port whether a
+    // response is due this cycle.
+    logic spatz_tcdm_p_valid_rep [3];
+    for (genvar t = 0; t < 3; t++) begin : gen_shift_reg_spatz_rep
+      shift_reg #(
+        .dtype ( logic ),
+        .Depth ( 1 + RegisterTCDMCuts )
+      ) i_shift_reg_spatz (
+        .clk_i,
+        .rst_ni,
+        .d_i ( spatz_tcdm_req[j].q_valid & spatz_tcdm_rsp[j].q_ready ),
+        .d_o ( spatz_tcdm_p_valid_rep[t] )
+      );
+    end
+    bitwise_TMR_voter_fail #(
+      .DataWidth (1),
+      .VoterType (1)
+    ) i_shift_reg_spatz_voter (
+      .a_i              (spatz_tcdm_p_valid_rep[0] ),
+      .b_i              (spatz_tcdm_p_valid_rep[1] ),
+      .c_i              (spatz_tcdm_p_valid_rep[2] ),
+      .majority_o       (spatz_tcdm_rsp[j].p_valid ),
+      .fault_detected_o (spatz_tcdm_p_valid_tmr_fault[j])
+    );
+
+    // TMR-protected, mirroring gen_shift_reg_spatz_rep above for the quad side.
+    logic quad_tcdm_p_valid_rep [3];
+    for (genvar t = 0; t < 3; t++) begin : gen_shift_reg_quad_rep
+      shift_reg #(
+        .dtype ( logic ),
+        .Depth ( 1 + RegisterTCDMCuts )
+      ) i_shift_reg_quad (
+        .clk_i,
+        .rst_ni,
+        .d_i ( quad_tcdm_req[j].q_valid & quad_tcdm_rsp[j].q_ready ),
+        .d_o ( quad_tcdm_p_valid_rep[t] )
+      );
+    end
+    bitwise_TMR_voter_fail #(
+      .DataWidth (1),
+      .VoterType (1)
+    ) i_shift_reg_quad_voter (
+      .a_i              (quad_tcdm_p_valid_rep[0] ),
+      .b_i              (quad_tcdm_p_valid_rep[1] ),
+      .c_i              (quad_tcdm_p_valid_rep[2] ),
+      .majority_o       (quad_tcdm_rsp[j].p_valid ),
+      .fault_detected_o (quad_tcdm_p_valid_tmr_fault[j])
     );
 
     assign quad_tcdm_rsp[j].p  =  quad_tcdm_rsp[j].p_valid ? tcdm_rsp[j].p :'0;
     assign spatz_tcdm_rsp[j].p = spatz_tcdm_rsp[j].p_valid ? tcdm_rsp[j].p :'0;
   end
+
+  // TMR-handshake/arbiter faults from the TCDM interconnect protection logic
+  logic tcdm_shift_reg_tmr_fault;
+  assign tcdm_shift_reg_tmr_fault = |spatz_tcdm_p_valid_tmr_fault | |quad_tcdm_p_valid_tmr_fault
+                                   | |tcdm_arb_tmr_fault;
+
+  assign tcdm_interconnect_correctable_fault_any   = |tcdm_addr_ecc_correctable_fault | |tcdm_wctrl_ecc_correctable_fault
+                                              | |tcdm_be_ecc_correctable_fault | tcdm_shift_reg_tmr_fault
+                                              | amo_shim_handshake_tmr_fault_any | tcdm_ic_handshake_tmr_fault_any;
+  assign tcdm_interconnect_uncorrectable_fault_any   = |tcdm_addr_ecc_uncorrectable_fault | |tcdm_wctrl_ecc_uncorrectable_fault
+                                                | |tcdm_be_ecc_uncorrectable_fault;
+
   // ----------------
   // Instruction Cache
   // ----------------
@@ -1075,18 +1493,28 @@ module spatz_cluster
     };
   end
 
+  // icache L0/L1 parity + TMR faults from the reliability-hardened cluster_icache
+  logic [NrCores-1:0] icache_l0_tag_parity_fault;
+  logic [NrCores-1:0] icache_l0_data_parity_fault;
+  logic icache_l1_tag_parity_fault;
+  logic icache_l1_data_parity_fault;
+  logic icache_l1_tag_meta_tmr_fault;
+  logic icache_l1_fifo_tmr_fault;
+
   snitch_icache #(
     .NR_FETCH_PORTS     ( NrCores                                            ),
     .L0_LINE_COUNT      ( 8                                                  ),
     .LINE_WIDTH         ( ICacheLineWidth                                    ),
     .LINE_COUNT         ( ICacheLineCount                                    ),
-    .WAY_COUNT          ( ICacheWays                                         ),
+    .SET_COUNT          ( ICacheWays                                         ),
     .FETCH_AW           ( AxiAddrWidth                                       ),
     .FETCH_DW           ( 32                                                 ),
     .FILL_AW            ( AxiAddrWidth                                       ),
     .FILL_DW            ( AxiDataWidth                                       ),
-    .SERIAL_LOOKUP      ( 0                                                  ),
+    .SERIAL_LOOKUP      ( 1                                                  ),
     .L1_TAG_SCM         ( 0                                                  ),
+    .L0_DATA_PARITY_BITS(ICacheLineWidth / 32                                ),
+    .L1_DATA_PARITY_BITS(ICacheLineWidth / 32                                ),
     .NUM_AXI_OUTSTANDING( 2                                                  ),
     .EARLY_LATCH        ( 0                                                  ),
     .L0_EARLY_TAG_WIDTH ( snitch_pkg::PAGE_SHIFT - $clog2(ICacheLineWidth/8) ),
@@ -1099,7 +1527,7 @@ module spatz_cluster
     .rst_ni               ( rst_ni                   ),
     .enable_prefetching_i ( icache_prefetch_enable   ),
     .icache_l0_events_o   ( icache_events            ),
-    .icache_l1_events_o   (                          ),
+    .icache_l1_events_o   ( icache_l1_events         ),
     .flush_valid_i        ( flush_valid              ),
     .flush_ready_o        ( flush_ready              ),
     .inst_addr_i          ( inst_addr                ),
@@ -1111,9 +1539,22 @@ module spatz_cluster
     .sram_cfg_tag_i       ( '0                       ),
     .sram_cfg_data_i      ( '0                       ),
     .axi_req_o            ( wide_axi_mst_req[ICache] ),
-    .axi_rsp_i            ( wide_axi_mst_rsp[ICache] )
+    .axi_rsp_i            ( wide_axi_mst_rsp[ICache] ),
+    .fifo_tmr_fault_o     ( icache_l1_fifo_tmr_fault )
   );
 
+  for (genvar i = 0; i < NrCores; i++) begin : gen_icache_fault_unpack
+    assign icache_l0_tag_parity_fault[i]  = icache_events[i].l0_tag_parity_error;
+    assign icache_l0_data_parity_fault[i] = icache_events[i].l0_data_parity_error;
+  end
+
+  assign icache_l1_tag_parity_fault   = icache_l1_events.l1_tag_parity_error;
+  assign icache_l1_data_parity_fault  = icache_l1_events.l1_data_parity_error;
+  assign icache_l1_tag_meta_tmr_fault = icache_l1_events.l1_tag_meta_tmr_error;
+
+  assign icache_parity_fault_any = |icache_l0_tag_parity_fault | |icache_l0_data_parity_fault
+                                   | icache_l1_tag_parity_fault | icache_l1_data_parity_fault;
+  assign icache_tmr_fault_any = icache_l1_tag_meta_tmr_fault | icache_l1_fifo_tmr_fault;
   // --------
   // Cores SoC
   // --------
@@ -1314,7 +1755,9 @@ module spatz_cluster
     .tcdm_rd_uncorrectable_count_i    (tcdm_rd_uncorrectable_count    ),
     .tcdm_scrub_correctable_count_i   (tcdm_scrub_correctable_count   ),
     .tcdm_scrub_uncorrectable_count_i (tcdm_scrub_uncorrectable_count ),
-    .core_tmr_fault_count_i           (core_tmr_fault_count           )
+    .core_tmr_fault_count_i           (core_tmr_fault_count           ),
+    .tcdm_interconnect_correctable_count_i   (tcdm_interconnect_correctable_count   ),
+    .tcdm_interconnect_uncorrectable_count_i (tcdm_interconnect_uncorrectable_count )
   );
 
   // 3. BootROM
