@@ -1083,7 +1083,7 @@ module spatz_cluster
     .xbar_idx_voter_output_fault_o (tcdm_ic_xbar_idx_voter_output_fault),
     .ic_mem_valid_rep_tmr_fault_o (tcdm_ic_hbank_sel_valid_tmr_fault),
     .ic_mem_ready_rep_tmr_fault_o (tcdm_ic_hbank_sel_ready_tmr_fault),
-    // axi_soc_req has no genuinely triplicated source of its own, 
+    // axi_soc_req has no genuinely triplicated source of its own,
     // so its single q_valid is just fanned out into all three slots.
     .req_valid_rep_i (tcdm_ic_req_valid_rep     ),
     .req_ready_rep_o (tcdm_ic_req_ready_rep     ),
