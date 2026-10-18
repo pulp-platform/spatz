@@ -424,25 +424,7 @@ module spatz_quadrilatero_cc
     .quad_mem_rsp_valid_i   (quad_mem_rsp_valid   )
   );
 
-  // VLSU byte-rotate stores produce a 32-bit rotated value in data[31:0] with
-  // zero parity bits in data[38:32]. Re-encode data[TCDMDataWidth-1:0] to always
-  // produce a valid codeword. For non-rotated stores (already valid), this is the
-  // Hsiao identity: encode(codeword[31:0]) == codeword.
   for (genvar p = 0; p < NumMemPortsQuad; p++) begin: gen_quad_tcdm_assignment
-    logic [TCDMProtDataWidth-1:0] vlsu_enc_data;
-
-    if (TCDMProtDataWidth > TCDMDataWidth) begin : gen_vlsu_enc
-      hsiao_ecc_enc #(
-        .DataWidth (TCDMDataWidth      ),
-        .ProtWidth (SnitchTCDMProtWidth)
-      ) i_vlsu_enc (
-        .in  (quad_mem_req[p].data[TCDMDataWidth-1:0]),
-        .out (vlsu_enc_data)
-      );
-    end else begin : gen_vlsu_no_enc
-      assign vlsu_enc_data = quad_mem_req[p].data;
-    end
-
     assign quad_tcdm_req_o[p] = '{
       q: '{
         addr : quad_mem_req[p].addr,
