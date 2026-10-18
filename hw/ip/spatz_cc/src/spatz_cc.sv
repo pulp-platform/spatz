@@ -335,25 +335,7 @@ module spatz_cc
     .vrf_multi_error_o       (vrf_multi_error_o     )
   );
 
-  // VLSU byte-rotate stores produce a 32-bit rotated value in data[31:0] with
-  // zero parity bits in data[38:32]. Re-encode data[TCDMDataWidth-1:0] to always
-  // produce a valid codeword. For non-rotated stores (already valid), this is the
-  // Hsiao identity: encode(codeword[31:0]) == codeword.
   for (genvar p = 0; p < NumMemPortsPerSpatz; p++) begin: gen_tcdm_assignment
-    logic [TCDMProtDataWidth-1:0] vlsu_enc_data;
-
-    if (TCDMProtDataWidth > TCDMDataWidth) begin : gen_vlsu_enc
-      hsiao_ecc_enc #(
-        .DataWidth (TCDMDataWidth      ),
-        .ProtWidth (SnitchTCDMProtWidth)
-      ) i_vlsu_enc (
-        .in  (spatz_mem_req[p].data[TCDMDataWidth-1:0]),
-        .out (vlsu_enc_data)
-      );
-    end else begin : gen_vlsu_no_enc
-      assign vlsu_enc_data = spatz_mem_req[p].data;
-    end
-
     assign tcdm_req_o[p] = '{
       q: '{
         addr : spatz_mem_req[p].addr,
