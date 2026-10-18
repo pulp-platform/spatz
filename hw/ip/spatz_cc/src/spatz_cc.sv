@@ -341,7 +341,7 @@ module spatz_cc
         addr : spatz_mem_req[p].addr,
         write: spatz_mem_req[p].write,
         amo  : spatz_mem_req[p].amo,
-        data : vlsu_enc_data,
+        data : spatz_mem_req[p].data,
         strb : spatz_mem_req[p].strb,
         user : '0
       },
