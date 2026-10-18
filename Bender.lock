@@ -31,6 +31,16 @@ packages:
       Git: https://github.com/pulp-platform/axi_stream.git
     dependencies:
     - common_cells
+  cluster_icache:
+    revision: 05a08069e7e4e29d86dcadcddd68a02a8ca87a55
+    version: null
+    source:
+      Git: https://github.com/pulp-platform/cluster_icache.git
+    dependencies:
+    - axi
+    - common_cells
+    - scm
+    - tech_cells_generic
   common_cells:
     revision: 1281545696eb3fcba50ec5b4275993476a3c710e
     version: 1.40.0
