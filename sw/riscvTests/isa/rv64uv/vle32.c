@@ -238,7 +238,7 @@ void TEST_CASE9(void) {
   VCMP_U32(9, v4, 0x04, 0, 0, 0); 
 }
 
-void TEST_CASE_D25(void) {
+void TEST_CASE10(void) {
   VSET(2, e32, m1);
   volatile uint8_t MEM[] __attribute__((aligned(8))) = {
       0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
@@ -337,7 +337,7 @@ int main(void) {
   TEST_CASE7();
   TEST_CASE8();
   TEST_CASE9();
-  //TEST_CASE_D25();
+  TEST_CASE10();
   TEST_CASE11();
   TEST_CASE12();
   TEST_CASE13();
