@@ -233,6 +233,8 @@ module spatz_controller
             int unsigned eve;
             int unsigned lmul_req, lmul_k, lmul_widen;
 
+            // Both configuration forms supply altfmt through the decoded vtype.
+            // Keep it while deriving matrix LMUL and the agnostic policy bits.
             vtype_d = spatz_req.vtype;
 
             invalid_vtype =
@@ -246,8 +248,8 @@ module spatz_controller
               twiden = 1 << (spatz_req.mtype.mtwiden - 1);
               tewb = (1 << int'(vtype_d.vsew)) * twiden;
 
-              // SEW8 is valid for byte tile storage/moves, not FP8 arithmetic or widening yet.
-              if (((vtype_d.vsew == EW_8) && (spatz_req.mtype.mtwiden != 2'b01)) || (tewb > AccElemBytes)) begin
+              // The configured tile element must fit in one accumulator element.
+              if (tewb > AccElemBytes) begin
                 invalid_vtype = 1'b1;
               end else begin
                 unique case (vtype_d.vsew)
@@ -1417,7 +1419,7 @@ module spatz_controller
           end else if (!issue_tile_aligned) begin
             issue_rsp_o.accept = 1'b0;
           end else if (decoder_rsp.spatz_req.op_ope.is_mac && (vtype_q.vsew == EW_8)) begin
-            // No FP8 compute lane is instantiated; reject instead of waiting for a missing result.
+            // No 8-bit MAC lane is instantiated; reject instead of waiting for a missing result.
             issue_rsp_o.accept = 1'b0;
           end else if ((decoder_rsp.spatz_req.op_ope.is_vt ||
                         decoder_rsp.spatz_req.op_ope.is_tv) &&

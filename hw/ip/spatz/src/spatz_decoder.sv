@@ -2120,23 +2120,27 @@ module spatz_decoder
         // VME (Vector Matrix Extension) Instructions
         // -------------------------------------------------------
 
-        riscv_instr::MSETMTYPE,
-        riscv_instr::MSETMTYPEI: begin
+        riscv_instr::MSETMTYPE: begin
           spatz_req.op                = VMCFG;
           spatz_req.ex_unit           = CON;
           spatz_req.use_rd            = 1'b0;
           spatz_req.op_ope.cfg_sel = 2'b00;
-          if (decoder_req_i.instr[25]) begin
-            // register form: msetmtype
-            spatz_req.mtype = mtype_t'(decoder_req_i.rs1);
-            spatz_req.vtype = vtype_t'(decoder_req_i.rs2);
-          end else begin
-            // immediate form: msetmtypei
-            spatz_req.mtype = '0;
-            spatz_req.mtype[4:0] = decoder_req_i.instr[19:15];
-            spatz_req.vtype = '0;
-            spatz_req.vtype.vsew = vew_e'(decoder_req_i.instr[24:22]);
-          end
+          spatz_req.mtype             = mtype_t'(decoder_req_i.rs1);
+          // Register form carries altfmt in vtype bit 8; higher bits are reserved.
+          spatz_req.vtype             = vtype_t'({1'b0, decoder_req_i.rs2[8:0]});
+          spatz_req.vtype.vill        = |decoder_req_i.rs2[$bits(decoder_req_i.rs2)-1:9];
+        end
+
+        riscv_instr::MSETMTYPEI: begin
+          spatz_req.op                = VMCFG;
+          spatz_req.ex_unit           = CON;
+          spatz_req.use_rd            = 1'b0;
+          spatz_req.op_ope.cfg_sel    = 2'b00;
+          spatz_req.mtype             = '0;
+          spatz_req.mtype.mtwiden     = decoder_req_i.instr[16:15];
+          spatz_req.vtype             = '0;
+          spatz_req.vtype.vsew        = vew_e'({1'b0, decoder_req_i.instr[24:23]});
+          spatz_req.vtype.altfmt      = decoder_req_i.instr[28];
         end
 
         riscv_instr::MSETTN,
