@@ -299,7 +299,7 @@ void TEST_CASE12(void) {
   VCMP_U32(12, v2, 0x111, 0x222, 0x333, 0x444);
 }
 
-void TEST_CASE_D29(void) {
+void TEST_CASE13(void) {
   VSET(4, e32, m1);
   volatile uint32_t MEM[] = {0x01, 0x02, 0x03, 0x04};
   
@@ -340,7 +340,7 @@ int main(void) {
   //TEST_CASE_D25();
   TEST_CASE11();
   TEST_CASE12();
-  //TEST_CASE_D29();
+  TEST_CASE13();
 
   EXIT_CHECK();
 }
