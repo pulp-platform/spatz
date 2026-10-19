@@ -95,13 +95,15 @@ package spatz_pkg;
   localparam int unsigned NrPhysicalTile = 16;
   // Tile Dimension
   localparam int unsigned OPEComputeEdge = 8;
-  // The ratio of Tile Dimension and OPE FMA array size
+  // Number of compute-edge groups along one tile edge
   localparam int unsigned NrAccPerComputeElem = 2;
   localparam int unsigned TileEdge = OPEComputeEdge * NrAccPerComputeElem;
   // The controller further limits tk to 32/SEW, or to one for 64-bit accumulation.
   localparam int unsigned KMAX   = (AccElemWidth <= 32) ? (32 / 8) : 1;
-  // Datapath between VLSU and OPE
-  localparam int unsigned TileDataWidth = TileEdge*AccElemWidth;
+  // Maximum storage required for one complete Tile row, in bytes.
+  localparam int unsigned TileRowBWidth = TileEdge * AccElemBytes;
+  // Fixed word width of the datapath between VLSU and OPE, in bytes.
+  localparam int unsigned TileWordBWidth = TileEdge * AccElemBytes;
 
   typedef logic [$clog2(TileEdge)-1:0] tile_dim_t;
   typedef logic [$clog2(TileEdge+1)-1:0] tile_count_t;
@@ -146,19 +148,22 @@ package spatz_pkg;
   typedef logic [N_FU*ELENB-1:0] vrf_be_t;
   typedef logic [N_FU*ELEN-1:0] vrf_data_t;
 
-  typedef logic [TileDataWidth-1:0] tile_row_t;
+  typedef logic [8*TileRowBWidth-1:0] tile_row_t;
+  typedef logic [8*TileWordBWidth-1:0] tile_word_t;
   typedef struct packed {
     mt_t                    idx;
     tile_dim_t              row;
+    tile_dim_t              col;
     tile_count_t            elems;
     vew_e                   tew;
   } tile_r_req_t;
   typedef struct packed {
     mt_t                    idx;
     tile_dim_t              row;
+    tile_dim_t              col;
     tile_count_t            elems;
     vew_e                   tew;
-    tile_row_t              data;
+    tile_word_t             data;
   } tile_w_req_t;
 
   // Instruction ID

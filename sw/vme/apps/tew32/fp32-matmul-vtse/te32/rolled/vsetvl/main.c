@@ -19,43 +19,20 @@
 #include <snrt.h>
 #include <printf.h>
 
-#include "matmul.h"
 #include DATAHEADER
+#include "matmul.h"
 #include "kernel/matmul.c"
 
-static inline uint32_t get_cycle(void)
-{
-    uint32_t c;
-    asm volatile("csrr %0, mcycle" : "=r"(c));
-    return c;
+static inline uint32_t get_cycle(void) {
+    uint32_t cycle;
+    asm volatile("csrr %0, mcycle" : "=r"(cycle));
+    return cycle;
 }
-
-enum {
-    TCDM_BYTES = 512 * 1024,
-    M_CHUNK = CHUNK_SIZE,
-    N_CHUNK = CHUNK_SIZE,
-    K_CHUNK = MATMUL_K_CHUNK,
-    TILE_INPUTS = TE * K_CHUNK,
-    TILE_BYTES = TILE_INPUTS * sizeof(float),
-    A_TILES = M_CHUNK / TE,
-    B_TILES = N_CHUNK / TE,
-    A_BYTES = A_TILES * TILE_BYTES,
-    B_BYTES = B_TILES * TILE_BYTES,
-    C_ELEMENTS = M_CHUNK * N_CHUNK,
-    C_BYTES = C_ELEMENTS * sizeof(float),
-    A_OFFSET = 0,
-    B_OFFSET = A_OFFSET + A_BYTES,
-    C_OFFSET = B_OFFSET + B_BYTES,
-    BUFFER_BYTES = C_OFFSET + C_BYTES,
-    L1_BUFFER_COUNT = MATMUL_BUFFER_COUNT,
-    L1_BUFFER_STRIDE = TCDM_BYTES / L1_BUFFER_COUNT,
-    L1_BYTES = (L1_BUFFER_COUNT - 1) * L1_BUFFER_STRIDE + BUFFER_BYTES,
-};
 
 _Static_assert(BUFFER_BYTES <= L1_BUFFER_STRIDE,
                "matmul panel exceeds its L1 buffer partition");
-_Static_assert(L1_BYTES <= TCDM_BYTES,
-               "matmul buffers exceed the 512 KiB TCDM");
+_Static_assert(L1_BYTES <= SNRT_TCDM_SIZE,
+               "matmul buffers exceed the configured TCDM capacity");
 
 static const float zero_tile_dram[TILE_INPUTS]
     __attribute__((section(".dram"), aligned(64))) = {0};
@@ -78,15 +55,12 @@ static inline uint32_t float_bits(float value) {
     return bits.u;
 }
 
-static snrt_dma_txid_t fill_panel(float *dst, const float *src,
-                                  uint32_t panel_tiles,
-                                  uint32_t valid_tiles,
-                                  uint32_t valid_k,
-                                  uint32_t src_tile_k) {
+static inline __attribute__((always_inline)) snrt_dma_txid_t fill_panel(
+    float *dst, const float *src, uint32_t panel_tiles, uint32_t valid_tiles,
+    uint32_t valid_k, uint32_t src_tile_k) {
     if (valid_tiles == panel_tiles && valid_k == K_CHUNK &&
-        src_tile_k == K_CHUNK) {
+        src_tile_k == K_CHUNK)
         return snrt_dma_start_1d(dst, src, panel_tiles * TILE_BYTES);
-    }
 
     const snrt_dma_txid_t clear_tid = snrt_dma_start_2d(
         dst, zero_tile_dram, TILE_BYTES, TILE_BYTES, 0, panel_tiles);
@@ -99,45 +73,37 @@ static snrt_dma_txid_t fill_panel(float *dst, const float *src,
                              valid_tiles);
 }
 
-static snrt_dma_txid_t fill_a(float *dst, uint32_t mb, uint32_t kb) {
-    const uint32_t first_tile = mb * A_TILES;
-    const uint32_t tile_count =
-        (matmul_l.M + TE - 1) / TE;
-    const uint32_t valid_tiles = first_tile < tile_count
-                                     ? min_u32(A_TILES,
-                                               tile_count - first_tile)
-                                     : 0;
-    const uint32_t valid_k = chunk_extent(matmul_l.K, kb, K_CHUNK);
-    const uint32_t k0 = kb * K_CHUNK;
-    const float *src = valid_tiles == 0
-                            ? zero_tile_dram
-                            : Apack_dram +
-                                  (first_tile * matmul_l.K + k0) * TE;
-    return fill_panel(dst, src, A_TILES, valid_tiles, valid_k, matmul_l.K);
-}
-
-static snrt_dma_txid_t fill_b(float *dst, uint32_t nb, uint32_t kb) {
-    const uint32_t first_tile = nb * B_TILES;
-    const uint32_t tile_count =
-        (matmul_l.N + TE - 1) / TE;
-    const uint32_t valid_tiles = first_tile < tile_count
-                                     ? min_u32(B_TILES,
-                                               tile_count - first_tile)
-                                     : 0;
-    const uint32_t valid_k = chunk_extent(matmul_l.K, kb, K_CHUNK);
-    const uint32_t k0 = kb * K_CHUNK;
-    const float *src = valid_tiles == 0
-                            ? zero_tile_dram
-                            : Bpack_dram +
-                                  (first_tile * matmul_l.K + k0) * TE;
-    return fill_panel(dst, src, B_TILES, valid_tiles, valid_k, matmul_l.K);
-}
-
-static snrt_dma_txid_t fill_buffer(uint8_t *l1_base, uint32_t buffer,
-                                  uint32_t mb, uint32_t nb, uint32_t kb) {
+static inline __attribute__((always_inline)) snrt_dma_txid_t fill_buffer(
+    uint8_t *l1_base, uint32_t buffer, uint32_t mb, uint32_t nb,
+    uint32_t kb) {
     uint8_t *base = l1_base + buffer * L1_BUFFER_STRIDE;
-    fill_a((float *)(base + A_OFFSET), mb, kb);
-    return fill_b((float *)(base + B_OFFSET), nb, kb);
+    const uint32_t a_first_tile = mb * A_TILES;
+    const uint32_t b_first_tile = nb * B_TILES;
+    const uint32_t a_tile_count = (matmul_l.M + TE - 1) / TE;
+    const uint32_t b_tile_count = (matmul_l.N + TE - 1) / TE;
+    const uint32_t a_valid_tiles =
+        a_first_tile < a_tile_count
+            ? min_u32(A_TILES, a_tile_count - a_first_tile)
+            : 0;
+    const uint32_t b_valid_tiles =
+        b_first_tile < b_tile_count
+            ? min_u32(B_TILES, b_tile_count - b_first_tile)
+            : 0;
+    const uint32_t valid_k = chunk_extent(matmul_l.K, kb, K_CHUNK);
+    const uint32_t k0 = kb * K_CHUNK;
+    const float *a_src =
+        a_valid_tiles == 0
+            ? zero_tile_dram
+            : Apack_dram + (a_first_tile * (matmul_l.K) + k0) * TE;
+    const float *b_src =
+        b_valid_tiles == 0
+            ? zero_tile_dram
+            : Bpack_dram + (b_first_tile * (matmul_l.K) + k0) * TE;
+
+    fill_panel((float *)(base + A_OFFSET), a_src, A_TILES,
+               a_valid_tiles, valid_k, matmul_l.K);
+    return fill_panel((float *)(base + B_OFFSET), b_src, B_TILES,
+                      b_valid_tiles, valid_k, matmul_l.K);
 }
 
 int main(void) {
@@ -172,18 +138,11 @@ int main(void) {
     uint32_t start_cycle = 0;
     uint32_t end_cycle = 0;
     for (uint32_t iter = 0; iter < iterations; ++iter) {
-        const uint32_t job = iter / kb_count;
-        const uint32_t mb = job / nb_count;
-        const uint32_t nb = job % nb_count;
-        const uint32_t kb = iter % kb_count;
-        const uint32_t valid_m = chunk_extent(matmul_l.M, mb, M_CHUNK);
-        const uint32_t valid_n = chunk_extent(matmul_l.N, nb, N_CHUNK);
-        const uint32_t valid_k = chunk_extent(matmul_l.K, kb, K_CHUNK);
         uint8_t *base = l1_base + current_buffer * L1_BUFFER_STRIDE;
 
         if (iter == 0)
             start_cycle = get_cycle();
-        matmul_fp32((const float *)(base + A_OFFSET), (const float *)(base + B_OFFSET), (float *)(base + C_OFFSET), valid_m, valid_n, valid_k);
+        matmul_fp32((const float *)(base + A_OFFSET), (const float *)(base + B_OFFSET), (float *)(base + C_OFFSET));
         end_cycle = get_cycle();
 
         const snrt_dma_txid_t output_tid = snrt_dma_start_1d(
