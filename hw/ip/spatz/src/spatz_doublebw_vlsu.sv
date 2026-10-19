@@ -759,6 +759,8 @@ module spatz_doublebw_vlsu
       );
       assign rob_rvalid[intf][fu] = !rob_empty[intf][fu];
       assign rob_commit_valid[intf][fu] = rob_rvalid[intf][fu];
+      assign rob_id[intf][fu] = '0;
+      assign rob_rid[intf][fu] = '0;
 `endif
     end: gen_rob_intf_fu
   end: gen_rob_intf
@@ -1007,36 +1009,29 @@ module spatz_doublebw_vlsu
       logic [31:0] stride;
       logic [31:0] offset;
 
-      // Pre-shuffling index offset
-      // Maximum byte offset for eight MAXEW elements with an eight-byte index width.
-      logic [$clog2(8*8):0] idx_offset;
-      assign idx_offset = mem_idx_counter_q[intf][fu];
-
       // Calculate shift amount for address normalization
       logic [$bits(vew_e)-1:0] log2_num_el_maxew;
       logic [$bits(vew_e)  :0] log2_num_idx_maxew_bytes;
       logic [2 * MAXEW     :0] num_idx_maxew_bytes;
+      logic [$bits(vlen_t)-1:0] idx_gbyte;
+      logic [idx_width(N_FU*ELENB)-1:0] word_index;
 
       // Number of selected elements contained in one MAXEW element.
       assign log2_num_el_maxew = MAXEW - mem_data_ew;
       assign log2_num_idx_maxew_bytes = log2_num_el_maxew + mem_spatz_req.op_mem.ew;
       // Byte footprint of the indices associated with one MAXEW data element.
       assign num_idx_maxew_bytes = 1'b1 << log2_num_idx_maxew_bytes;
+      assign idx_gbyte =
+          (vlen_t'(fu) << log2_num_idx_maxew_bytes) +
+          (mem_idx_counter_q[intf][fu] & (num_idx_maxew_bytes - 1)) +
+          (((mem_idx_counter_q[intf][fu] >> log2_num_idx_maxew_bytes) <<
+            log2_num_idx_maxew_bytes) * N_FU);
 
       always_comb begin
+        word_index = idx_gbyte[idx_width(N_FU*ELENB)-1:0];
         stride = mem_is_strided ? mem_spatz_req.rs2 >> mem_data_ew : 'd1;
 
         if (mem_is_indexed) begin
-          // What is the relationship between data and index width?
-          automatic logic [1:0] data_index_width_diff = int'(mem_spatz_req.vtype.vsew) - int'(mem_spatz_req.op_mem.ew);
-
-          // Pointer to index
-          automatic logic [idx_width(N_FU*ELENB)-1:0] word_index =
-              (fu << log2_num_idx_maxew_bytes) +
-              (idx_offset & (num_idx_maxew_bytes - 1)) +
-              ((idx_offset >> log2_num_idx_maxew_bytes) << log2_num_idx_maxew_bytes) *
-              N_FU;
-
           // Index
           unique case (mem_spatz_req.op_mem.ew)
             EW_8 : offset   = $signed(vrf_rdata_i[intf][1][8 * word_index +: 8]);
