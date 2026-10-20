@@ -13,16 +13,18 @@ ROOT_DIR  ?= ${SPATZ_DIR}
 
 # Binaries
 INSTALL_PREFIX        ?= install
-INSTALL_DIR           ?= ${ROOT_DIR}/${INSTALL_PREFIX}
+INSTALL_DIR_BENDER           ?= ${ROOT_DIR}/${INSTALL_PREFIX}
+INSTALL_DIR           ?= /usr/pack/riscv-1.0-kgf/riscv-isa-sim-for-cva6
 LLVM_INSTALL_DIR      ?= ${INSTALL_DIR}/llvm
 GCC_INSTALL_DIR       ?= ${INSTALL_DIR}/riscv-gcc
 SPIKE_INSTALL_DIR     ?= ${INSTALL_DIR}/riscv-isa-sim
-BENDER_INSTALL_DIR    ?= ${INSTALL_DIR}/bender
+BENDER_INSTALL_DIR    ?= ${INSTALL_DIR_BENDER}/bender
 VERILATOR_INSTALL_DIR ?= ${INSTALL_DIR}/verilator
 
 # Support for local override
 BENDER ?= ${BENDER_INSTALL_DIR}/bender
-DASM   ?= ${SPIKE_INSTALL_DIR}/bin/spike-dasm
+# DASM   ?= ${SPIKE_INSTALL_DIR}/bin/spike-dasm
+DASM   ?= ${SPIKE_INSTALL_DIR}/spike-dasm
 VLT    ?= ${VERILATOR_INSTALL_DIR}/bin/verilator_bin
 CMAKE  ?= cmake-3.18.1
 PYTHON ?= python3.6

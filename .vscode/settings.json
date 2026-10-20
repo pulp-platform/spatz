@@ -1,0 +1,28 @@
+{
+    "files.associations": {
+        "data2.h": "c",
+        "data.h": "c",
+        "plp_exp.h": "c",
+        "gold.h": "c",
+        "array": "c",
+        "bitset": "c",
+        "string_view": "c",
+        "initializer_list": "c",
+        "regex": "c",
+        "utility": "c",
+        "random": "c",
+        "stdio.h": "c",
+        "stdbool.h": "c",
+        "stdlib.h": "c",
+        "time.h": "c",
+        "cstdlib": "c",
+        "chrono": "c",
+        "cinttypes": "c",
+        "cmath": "c",
+        "complex": "c",
+        "numeric": "c",
+        "ratio": "c",
+        "math.h": "c",
+        "data3.h": "c"
+    }
+}

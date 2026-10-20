@@ -420,7 +420,7 @@ module spatz_vsldu
 
         // Insert rs1 element at the first position
         if (spatz_req.op_sld.insert && !spatz_req.op_sld.vmv && vreg_operation_first && spatz_req.vstart == 'd0)
-          vrf_req_d.wdata = vrf_req_d.wdata | vrf_data_t'(spatz_req.rs1);
+          vrf_req_d.wdata = vrf_req_d.wdata | vrf_data_t'(spatz_req.rs1 & elen_t'('1) >> (ELEN - (8 << spatz_req.vtype.vsew)));
       end else begin
         vrf_req_d.wdata = data_out;
       end

@@ -362,6 +362,7 @@ module spatz_vlsu
     end
 
     // Did an instruction finished its requests?
+    // if (&mem_port_finished_q && !vlsu_rsp_valid_o) begin
     if (&mem_port_finished_q) begin
       mem_insn_finished_d[mem_spatz_req.id] = 1'b1;
       mem_spatz_req_ready                   = 1'b1;
