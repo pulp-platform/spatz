@@ -242,18 +242,28 @@ class SnitchCluster(Generator):
 
     def memory_cfg(self):
         # Add TCDMs
-        self.add_mem(self.cfg["tcdm"]["depth"], self.cfg["data_width"], desc="tcdm")
+        self.add_mem(self.cfg["tcdm"]["depth"], self.cfg["data_width"] + 7, desc="tcdm") # +7 for ECC
         # Add instruction cache
+        # (snitch_icache_lookup_serial.sv's i_data: NumWords = LINE_COUNT*SET_COUNT),
+        # each word widened by one parity bit per 32-bit sub-word.
+        l1_data_parity_bits = self.cfg["icache"]["cacheline"] // 32
         self.add_mem(
-            self.cfg["icache"]["depth"],
-            self.cfg["icache"]["cacheline"],
+            self.cfg["icache"]["depth"] * self.cfg["icache"]["ways"],
+            self.cfg["icache"]["cacheline"] + l1_data_parity_bits,
             desc="icache data",
             byte_enable=True,
         )
-
+        # Instruction cache L1 tag SRAM: one word per line, packing all ways'
+        # entries side by side (i_tag: NumWords = LINE_COUNT,
+        # DataWidth = TagEntryWidth*SET_COUNT). Each way's entry is
+        # tag + valid + error + 1 parity bit + 4 TMR replica bits
+        # (snitch_icache_lookup_serial.sv's TagEntryWidth).
+        tag_parity_bits = 1 if l1_data_parity_bits > 0 else 0
+        tag_meta_tmr_width = 4
+        tag_entry_width = self.tag_width + 2 + tag_parity_bits + tag_meta_tmr_width
         self.add_mem(
             self.cfg["icache"]["depth"],
-            self.tag_width,
+            tag_entry_width * self.cfg["icache"]["ways"],
             desc="icache tag",
             byte_enable=False,
         )
@@ -292,7 +302,6 @@ class SnitchCluster(Generator):
             self.cfg["addr_width"]
             - clog2(self.cfg["icache"]["cacheline"] // 8)
             - clog2(self.cfg["icache"]["depth"])
-            + 3
         )
 
     def parse_pma_cfg(self, pma_cfg):
