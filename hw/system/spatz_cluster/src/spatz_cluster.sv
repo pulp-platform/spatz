@@ -515,8 +515,8 @@ module spatz_cluster
   // snitch core TMR faults
   .core_tmr_fault_i (core_tmr_fault),
   // cluster_icache parity/TMR faults
-  .icache_correctable_fault_i (icache_tmr_fault_any),
-  .icache_uncorrectable_fault_i (icache_parity_fault_any),
+  .icache_correctable_fault_i (icache_tmr_fault_any | icache_parity_fault_any),
+  .icache_uncorrectable_fault_i (1'b0), // no uncorrectable faults in the ICache
 
   // Per-source counters.
   .vrf_correctable_count_o (vrf_correctable_count),
