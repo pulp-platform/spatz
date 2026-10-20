@@ -47,7 +47,9 @@ module spatz_cluster_peripheral
   input  logic [NumTcdmBanks-1:0][31:0]                   tcdm_rd_uncorrectable_count_i,
   input  logic [NumTcdmBanks-1:0][31:0]                   tcdm_scrub_correctable_count_i,
   input  logic [NumTcdmBanks-1:0][31:0]                   tcdm_scrub_uncorrectable_count_i,
-  input  logic [NumVrfUnits-1:0][31:0]                    core_tmr_fault_count_i
+  input  logic [NumVrfUnits-1:0][31:0]                    core_tmr_fault_count_i,
+  input  logic [31:0]                                     tcdm_interconnect_correctable_count_i,
+  input  logic [31:0]                                     tcdm_interconnect_uncorrectable_count_i
 );
 
   // Pipeline register to ease timing.
@@ -269,5 +271,8 @@ module spatz_cluster_peripheral
     assign hw2reg.tcdm_scrub_correctable_count[i].d   = tcdm_scrub_correctable_count_i[i];
     assign hw2reg.tcdm_scrub_uncorrectable_count[i].d = tcdm_scrub_uncorrectable_count_i[i];
   end
+
+  assign hw2reg.tcdm_interconnect_correctable_count.d = tcdm_interconnect_correctable_count_i;
+  assign hw2reg.tcdm_interconnect_uncorrectable_count.d = tcdm_interconnect_uncorrectable_count_i;
 
 endmodule
