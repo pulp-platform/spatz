@@ -457,6 +457,9 @@ module spatz_cluster
   logic [NrCores-1:0]  vrf_correctable_fault;
   logic [NrCores-1:0]  vrf_uncorrectable_fault; // NrCores == NumVrfUnits
 
+  logic [NrCores-1:0]  vlsu_correctable_fault;
+  logic [NrCores-1:0]  vlsu_uncorrectable_fault;
+
   // Per-core whole-core TMR lockstep mismatch.
   logic [NrCores-1:0]  core_tmr_fault;
 
@@ -466,17 +469,6 @@ module spatz_cluster
   logic [NumTcdmBanks-1:0] tcdm_scrub_correctable_fault;
   logic [NumTcdmBanks-1:0] tcdm_scrub_uncorrectable_fault;
 
-  // Dedicated TCDM address-ECC fault. Not yet wired into spatz_fault_monitor
-  // (it has no port for this yet) -- kept here as the genuine detection
-  // output of the mux->amo_shim address-ECC decode further down.
-  logic [NumTcdmBanks-1:0] tcdm_addr_ecc_correctable_fault;
-  logic [NumTcdmBanks-1:0] tcdm_addr_ecc_uncorrectable_fault;
-  // Same idea, for the mux->amo_shim leg's {write, amo, strb} ECC
-  logic [NumTcdmBanks-1:0] tcdm_wctrl_ecc_correctable_fault;
-  logic [NumTcdmBanks-1:0] tcdm_wctrl_ecc_uncorrectable_fault;
-  logic [NumTcdmBanks-1:0] tcdm_be_ecc_correctable_fault;
-  logic [NumTcdmBanks-1:0] tcdm_be_ecc_uncorrectable_fault;
-
   logic [NrCores-1:0][ErrorCounterWidth-1:0]  vrf_correctable_count;
   logic [NrCores-1:0][ErrorCounterWidth-1:0]  vrf_uncorrectable_count;
 
@@ -485,18 +477,14 @@ module spatz_cluster
   logic [NumTcdmBanks-1:0][ErrorCounterWidth-1:0] tcdm_scrub_correctable_count;
   logic [NumTcdmBanks-1:0][ErrorCounterWidth-1:0] tcdm_scrub_uncorrectable_count;
 
+  logic [ErrorCounterWidth-1:0] tcdm_interconnect_correctable_count;
+  logic [ErrorCounterWidth-1:0] tcdm_interconnect_uncorrectable_count;
+
   logic [NrCores-1:0][ErrorCounterWidth-1:0] core_tmr_fault_count;
 
-  // TMR-handshake/arbiter faults from the TCDM protection logic further
-  // down. Not yet wired into spatz_fault_monitor (it has no ports for these
-  // yet) -- kept here as the genuine detection outputs of already-merged
-  // TCDM interconnect/amo_shim TMR logic.
-  logic tcdm_shift_reg_tmr_fault;
-  // OR of amo_shim_handshake_tmr_fault (per-bank AMO shim handshake TMR,
-  // see its declaration below) across every bank.
-  logic amo_shim_handshake_tmr_fault_any;
-  // OR of every TMR-voter disagreement anywhere in the tcdm/dma interconnect chain
-  logic tcdm_ic_handshake_tmr_fault_any;
+  // OR of every TCDM interconnect fault
+  logic tcdm_interconnect_correctable_fault_any;
+  logic tcdm_interconnect_uncorrectable_fault_any;
   // OR of every ICache parity fault
   logic icache_parity_fault_any;
   // OR of every ICache TMR fault
@@ -519,16 +507,21 @@ module spatz_cluster
   // Expected to be one-cycle pulses.
   .vrf_correctable_fault_i (vrf_correctable_fault),
   .vrf_uncorrectable_fault_i (vrf_uncorrectable_fault),
-
+  .vlsu_correctable_fault_i (vlsu_correctable_fault),
+  .vlsu_uncorrectable_fault_i (vlsu_uncorrectable_fault),
+  // tcdm faults
   .tcdm_rd_correctable_fault_i (tcdm_rd_correctable_fault),
   .tcdm_rd_uncorrectable_fault_i (tcdm_rd_uncorrectable_fault),
   .tcdm_scrub_correctable_fault_i (tcdm_scrub_correctable_fault),
   .tcdm_scrub_uncorrectable_fault_i (tcdm_scrub_uncorrectable_fault),
-
+  // tcdm interconnect faults
+  .tcdm_interconnect_correctable_fault_i (tcdm_interconnect_correctable_fault_any),
+  .tcdm_interconnect_uncorrectable_fault_i (tcdm_interconnect_uncorrectable_fault_any),
+  // snitch core TMR faults
   .core_tmr_fault_i (core_tmr_fault),
   // cluster_icache parity/TMR faults
-  .icache_correctable_fault_i (icache_parity_fault_any),
-  .icache_uncorrectable_fault_i (icache_tmr_fault_any),
+  .icache_correctable_fault_i (icache_tmr_fault_any | icache_parity_fault_any),
+  .icache_uncorrectable_fault_i (1'b0),
 
   // Per-source counters.
   .vrf_correctable_count_o (vrf_correctable_count),
@@ -538,6 +531,9 @@ module spatz_cluster
   .tcdm_rd_uncorrectable_count_o (tcdm_rd_uncorrectable_count),
   .tcdm_scrub_correctable_count_o (tcdm_scrub_correctable_count),
   .tcdm_scrub_uncorrectable_count_o (tcdm_scrub_uncorrectable_count),
+
+  .tcdm_interconnect_correctable_count_o (tcdm_interconnect_correctable_count),
+  .tcdm_interconnect_uncorrectable_count_o (tcdm_interconnect_uncorrectable_count),
 
   .core_tmr_fault_count_o (core_tmr_fault_count)
 );
@@ -1004,6 +1000,20 @@ module spatz_cluster
   // Per-bank fault flags below are reshaped from the genuinely 2D
   // [NrSuperBanks][BanksPerSuperBank] arrays into the flat [NumTcdmBanks]
   // vectors spatz_fault_monitor's per-bank counters expect.
+  // Dedicated TCDM address-ECC fault.
+  logic [NumTcdmBanks-1:0] tcdm_addr_ecc_correctable_fault;
+  logic [NumTcdmBanks-1:0] tcdm_addr_ecc_uncorrectable_fault;
+  // Same idea, for the mux->amo_shim leg's {write, amo, strb} ECC
+  logic [NumTcdmBanks-1:0] tcdm_wctrl_ecc_correctable_fault;
+  logic [NumTcdmBanks-1:0] tcdm_wctrl_ecc_uncorrectable_fault;
+  logic [NumTcdmBanks-1:0] tcdm_be_ecc_correctable_fault;
+  logic [NumTcdmBanks-1:0] tcdm_be_ecc_uncorrectable_fault;
+
+  // OR of amo_shim_handshake_tmr_fault (per-bank AMO shim handshake TMR,
+  // see its declaration below) across every bank.
+  logic amo_shim_handshake_tmr_fault_any;
+  // OR of every TMR-voter disagreement anywhere in the tcdm/dma interconnect chain
+  logic tcdm_ic_handshake_tmr_fault_any;
   for (genvar i = 0; i < NrSuperBanks; i++) begin : gen_tcdm_fault_flat_sb
     for (genvar j = 0; j < BanksPerSuperBank; j++) begin : gen_tcdm_fault_flat_bank
       localparam int unsigned k = i*BanksPerSuperBank + j;
@@ -1273,6 +1283,9 @@ module spatz_cluster
         // ECC VRF signals
         .vrf_single_error_o (vrf_correctable_fault[i]  ),
         .vrf_multi_error_o (vrf_uncorrectable_fault[i]),
+        // VLSU fault signals
+        .vlsu_correctable_error_o (vlsu_correctable_fault[i]),
+        .vlsu_uncorrectable_error_o (vlsu_uncorrectable_fault[i]),
         .core_tmr_fault_o (core_tmr_fault[i])
       );
       for (genvar j = 0; j < TcdmPorts; j++) begin : gen_tcdm_user
@@ -1450,8 +1463,16 @@ module spatz_cluster
     assign spatz_tcdm_rsp[j].p = spatz_tcdm_rsp[j].p_valid ? tcdm_rsp[j].p :'0;
   end
 
+  // TMR-handshake/arbiter faults from the TCDM interconnect protection logic
+  logic tcdm_shift_reg_tmr_fault;
   assign tcdm_shift_reg_tmr_fault = |spatz_tcdm_p_valid_tmr_fault | |quad_tcdm_p_valid_tmr_fault
                                    | |tcdm_arb_tmr_fault;
+
+  assign tcdm_interconnect_correctable_fault_any   = |tcdm_addr_ecc_correctable_fault | |tcdm_wctrl_ecc_correctable_fault
+                                              | |tcdm_be_ecc_correctable_fault | tcdm_shift_reg_tmr_fault
+                                              | amo_shim_handshake_tmr_fault_any | tcdm_ic_handshake_tmr_fault_any;
+  assign tcdm_interconnect_uncorrectable_fault_any   = |tcdm_addr_ecc_uncorrectable_fault | |tcdm_wctrl_ecc_uncorrectable_fault
+                                                | |tcdm_be_ecc_uncorrectable_fault;
 
   // ----------------
   // Instruction Cache
@@ -1742,7 +1763,9 @@ module spatz_cluster
     .tcdm_rd_uncorrectable_count_i    (tcdm_rd_uncorrectable_count    ),
     .tcdm_scrub_correctable_count_i   (tcdm_scrub_correctable_count   ),
     .tcdm_scrub_uncorrectable_count_i (tcdm_scrub_uncorrectable_count ),
-    .core_tmr_fault_count_i           (core_tmr_fault_count           )
+    .core_tmr_fault_count_i           (core_tmr_fault_count           ),
+    .tcdm_interconnect_correctable_count_i   (tcdm_interconnect_correctable_count   ),
+    .tcdm_interconnect_uncorrectable_count_i (tcdm_interconnect_uncorrectable_count )
   );
 
   // 3. BootROM
