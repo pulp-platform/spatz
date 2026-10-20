@@ -2,157 +2,68 @@
 // Solderpad Hardware License, Version 0.51, see LICENSE for details.
 // SPDX-License-Identifier: SHL-0.51
 //
-// Authors: Pei-Yu Lin (peilin@ethz.ch)
+// Author: Pei-Yu Lin, ETH Zürich
 //
-// msettm — Set tile M dimension (tm = number of output rows)
+// Test cases:
+//   For every supported SEW/TWIDEN pair, check TM requests below, at, and above
+//   LMUL * EVE and TE, including a zero source and preserved matrix/vector state.
 
 #include <stdint.h>
 #include "vector_macros.h"
+#define VME_DIMENSION_TEST
 #include "vector_matrix_macros.h"
 
-static inline uintptr_t min3(uintptr_t a, uintptr_t b, uintptr_t c) {
-    uintptr_t tmp;
-    tmp = (a < b) ? a : b;
-    return (tmp < c) ? tmp : c;
-}
+// Each case checks one request independently of previous test state.
+static void check_request(const vme_test_config_t *cfg, uintptr_t vlenb,
+                          uintptr_t request, unsigned id, int zero_source) {
+    uintptr_t rd, mtype, vtype, vl;
+    uintptr_t expected = vme_test_min(request, vme_test_capacity(cfg, vlenb));
+    uintptr_t initial_mtype = MTYPE(cfg->mtwiden, 1, 1);
+    vme_test_setup(cfg);
+    asm volatile("csrr %0, vtype" : "=r"(vtype));
+    XCMP(id, vtype, vme_test_vtype(cfg, vlenb));
+    asm volatile("csrr %0, 0xC23" : "=r"(mtype));
+    XCMP(id + 1, mtype, initial_mtype);
 
-void TEST_CASE1(void) {
-    uintptr_t rd_val, mtype_val;
-    uintptr_t req_tm   = 4;
-    uintptr_t expected;
-    uintptr_t vlenb, vlen_bits, tew_bits;
-    uintptr_t lmul_eve, ete;
+    // Preserve a nonzero VL so an accidental clear is observable.
+    uintptr_t seed_vl = 1;
+    asm volatile("msettn zero, %0" :: "r"(seed_vl) : "memory");
+    asm volatile("csrr %0, vl" : "=r"(vl));
+    XCMP(id + 8, vl, seed_vl);
 
-    asm volatile("csrr %0, vlenb" : "=r"(vlenb));
-    vlen_bits = vlenb * 8u;
-    tew_bits  = 8u * 4u;      // SEW=e8, TWIDEN=4 => TEW=32
-    lmul_eve  = vlen_bits / tew_bits;
-    ete       = (vlen_bits / 2u) / tew_bits;
-    expected  = min3(req_tm, lmul_eve, ete);
+    if (zero_source)
+        asm volatile("msettm %0, zero" : "=r"(rd) :: "memory");
+    else
+        asm volatile("msettm %0, %1" : "=r"(rd) : "r"(request) : "memory");
+    asm volatile("csrr %0, 0xC23" : "=r"(mtype));
+    asm volatile("csrr %0, vl" : "=r"(vl));
+    asm volatile("csrr %0, vtype" : "=r"(vtype));
+    XCMP(id + 2, rd, expected);
+    XCMP(id + 3, MTYPE_TM(mtype), expected);
+    XCMP(id + 4, (mtype & ~((uintptr_t)0x3FFF << 10)), (initial_mtype & ~((uintptr_t)0x3FFF << 10)));
+    XCMP(id + 5, vtype, vme_test_vtype(cfg, vlenb));
+    XCMP(id + 6, vl, seed_vl);
 
-    asm volatile("msetmtypei 0x3, 0x0" ::: "memory");
-    asm volatile("msettm %[rd], %[tm]" : [rd]"=r"(rd_val) : [tm]"r"(req_tm) : "memory");
-    asm volatile("csrr %[B], 0xC23" : [B]"=r"(mtype_val));
-
-    XCMP(1, rd_val, expected);
-    XCMP(2, MTYPE_TM(mtype_val), expected);
-    XCMP(3, MTYPE_TM(mtype_val), rd_val);
-}
-
-void TEST_CASE2(void) {
-    uintptr_t rd_val, mtype_val;
-    uintptr_t req_tm   = (uintptr_t)-1;
-    uintptr_t expected;
-    uintptr_t vlenb, vlen_bits, tew_bits;
-    uintptr_t lmul_eve, ete;
-
-    asm volatile("csrr %0, vlenb" : "=r"(vlenb));
-    vlen_bits = vlenb * 8u;
-    tew_bits  = 8u * 4u;      // SEW=e8, TWIDEN=4 => TEW=32
-    lmul_eve  = vlen_bits / tew_bits;
-    ete       = (vlen_bits / 2u) / tew_bits;
-    expected  = min3(req_tm, lmul_eve, ete);
-
-    asm volatile("msetmtypei 0x3, 0x0" ::: "memory");
-    asm volatile("msettm %[rd], %[tm]" : [rd]"=r"(rd_val) : [tm]"r"(req_tm) : "memory");
-    asm volatile("csrr %[B], 0xC23" : [B]"=r"(mtype_val));
-
-    XCMP(4, rd_val, expected);
-    XCMP(5, MTYPE_TM(mtype_val), expected);
-    XCMP(6, MTYPE_TM(mtype_val), rd_val);
-}
-
-void TEST_CASE3(void) {
-    uintptr_t rd_val, mtype_val;
-    uintptr_t req_tm   = 0;
-    uintptr_t expected;
-    uintptr_t vlenb, vlen_bits, tew_bits;
-    uintptr_t lmul_eve, ete;
-
-    asm volatile("csrr %0, vlenb" : "=r"(vlenb));
-    vlen_bits = vlenb * 8u;
-    tew_bits  = 8u * 4u;      // SEW=e8, TWIDEN=4 => TEW=32
-    lmul_eve  = vlen_bits / tew_bits;
-    ete       = (vlen_bits / 2u) / tew_bits;
-    expected  = min3(req_tm, lmul_eve, ete);
-
-    asm volatile("msetmtypei 0x3, 0x0" ::: "memory");
-    asm volatile("msettm %[rd], %[tm]" : [rd]"=r"(rd_val) : [tm]"r"(req_tm) : "memory");
-    asm volatile("csrr %[B], 0xC23" : [B]"=r"(mtype_val));
-
-    XCMP(7, rd_val, expected);
-    XCMP(8, MTYPE_TM(mtype_val), expected);
-    XCMP(9, MTYPE_TM(mtype_val), rd_val);
-}
-
-void TEST_CASE4(void) {
-    uintptr_t rd_val, mtype_val;
-    uintptr_t req_tm   = 4;
-    uintptr_t expected = 0;
-
-    asm volatile("msetmtypei 0x0, 0x0" ::: "memory");
-    asm volatile("msettm %[rd], %[tm]" : [rd]"=r"(rd_val) : [tm]"r"(req_tm) : "memory");
-    asm volatile("csrr %[B], 0xC23" : [B]"=r"(mtype_val));
-
-    XCMP(10, rd_val, expected);
-    XCMP(11, MTYPE_TM(mtype_val), expected);
-    XCMP(12, MTYPE_TM(mtype_val), rd_val);
-}
-
-void TEST_CASE5(void) {
-    uintptr_t rd_val, mtype_val;
-    uintptr_t req_tm   = 4;
-    uintptr_t expected;
-    uintptr_t vlenb, vlen_bits, tew_bits;
-    uintptr_t lmul_eve, ete;
-
-    asm volatile("csrr %0, vlenb" : "=r"(vlenb));
-    vlen_bits = vlenb * 8u;
-    tew_bits  = 8u * 4u;      // SEW=e8, TWIDEN=4 => TEW=32
-    lmul_eve  = vlen_bits / tew_bits;
-    ete       = (vlen_bits / 2u) / tew_bits;
-    expected  = min3(req_tm, lmul_eve, ete);
-
-    asm volatile("msetmtypei 0x3, 0x0" ::: "memory");
-    asm volatile("msettm %[rd], %[tm]" : [rd]"=r"(rd_val) : [tm]"r"(req_tm) : "memory");
-    asm volatile("csrr %[B], 0xC23" : [B]"=r"(mtype_val));
-
-    XCMP(13, rd_val, expected);
-    XCMP(14, MTYPE_TM(mtype_val), expected);
-    XCMP(15, MTYPE_TM(mtype_val), rd_val);
-}
-
-void TEST_CASE6(void) {
-    uintptr_t rd_val, mtype_val;
-    uintptr_t vl_before, vl_after;
-    uintptr_t req_tm   = 4;
-    uintptr_t expected = 0;
-
-    asm volatile("msetmtypei 0x0, 0x0" ::: "memory");
-    asm volatile("vsetivli x0, 7, e8, m1, ta, ma" ::: "memory");
-    asm volatile("csrr %[BUF], vl" : [BUF]"=r"(vl_before));
-
-    asm volatile("msettm %[rd], %[tm]" : [rd]"=r"(rd_val) : [tm]"r"(req_tm) : "memory");
-    asm volatile("csrr %[B], 0xC23" : [B]"=r"(mtype_val));
-    asm volatile("csrr %[BUF], vl" : [BUF]"=r"(vl_after));
-
-    XCMP(16, rd_val, expected);
-    XCMP(17, MTYPE_TM(mtype_val), expected);
-    XCMP(18, MTYPE_TM(mtype_val), rd_val);
-    XCMP(19, vl_after, vl_before);
+    // rd=x0 discards the result but must still update the destination CSR.
+    vme_test_setup(cfg);
+    asm volatile("msettm zero, %0" :: "r"(request) : "memory");
+    asm volatile("csrr %0, 0xC23" : "=r"(mtype));
+    asm volatile("csrr %0, vl" : "=r"(vl));
+    XCMP(id + 7, MTYPE_TM(mtype), expected);
 }
 
 int main(void) {
     INIT_CHECK();
-    enable_vec();
-    enable_vme();
-
-    TEST_CASE1();
-    TEST_CASE2();
-    TEST_CASE3();
-    TEST_CASE4();
-    TEST_CASE5();
-    TEST_CASE6();
-
+    uintptr_t vlenb;
+    asm volatile("csrr %0, vlenb" : "=r"(vlenb));
+    for (unsigned c = 0; c < sizeof(vme_test_configs) / sizeof(vme_test_configs[0]); ++c) {
+        const vme_test_config_t *cfg = &vme_test_configs[c];
+        uintptr_t limit = vme_test_capacity(cfg, vlenb);
+        uintptr_t requests[] = {0, 1, limit - 1, limit, limit + 1, UINTPTR_MAX, 0};
+        printf("msettm: SEW=%u TWIDEN=%u TE=%u capacity=%u\n",
+               cfg->sew, cfg->twiden, VME_TEST_TE, (unsigned)limit);
+        for (unsigned r = 0; r < sizeof(requests) / sizeof(requests[0]); ++r)
+            check_request(cfg, vlenb, requests[r], 100 * (c + 1) + 10 * r, r == 6);
+    }
     EXIT_CHECK();
 }
