@@ -242,7 +242,7 @@ class SnitchCluster(Generator):
 
     def memory_cfg(self):
         # Add TCDMs
-        self.add_mem(self.cfg["tcdm"]["depth"], self.cfg["data_width"] + 7, desc="tcdm") # +7 for ECC
+        self.add_mem(self.cfg["tcdm"]["depth"], self.cfg["data_width"] + 7, desc="tcdm")  # +7 for ECC
         # Add instruction cache
         # (snitch_icache_lookup_serial.sv's i_data: NumWords = LINE_COUNT*SET_COUNT),
         # each word widened by one parity bit per 32-bit sub-word.
