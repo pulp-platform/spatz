@@ -466,6 +466,17 @@ module spatz_cluster
   logic [NumTcdmBanks-1:0] tcdm_scrub_correctable_fault;
   logic [NumTcdmBanks-1:0] tcdm_scrub_uncorrectable_fault;
 
+  // Dedicated TCDM address-ECC fault. Not yet wired into spatz_fault_monitor
+  // (it has no port for this yet) -- kept here as the genuine detection
+  // output of the mux->amo_shim address-ECC decode further down.
+  logic [NumTcdmBanks-1:0] tcdm_addr_ecc_correctable_fault;
+  logic [NumTcdmBanks-1:0] tcdm_addr_ecc_uncorrectable_fault;
+  // Same idea, for the mux->amo_shim leg's {write, amo, strb} ECC
+  logic [NumTcdmBanks-1:0] tcdm_wctrl_ecc_correctable_fault;
+  logic [NumTcdmBanks-1:0] tcdm_wctrl_ecc_uncorrectable_fault;
+  logic [NumTcdmBanks-1:0] tcdm_be_ecc_correctable_fault;
+  logic [NumTcdmBanks-1:0] tcdm_be_ecc_uncorrectable_fault;
+
   logic [NrCores-1:0][ErrorCounterWidth-1:0]  vrf_correctable_count;
   logic [NrCores-1:0][ErrorCounterWidth-1:0]  vrf_uncorrectable_count;
 
@@ -486,6 +497,16 @@ module spatz_cluster
   logic icache_parity_fault_any;
   // OR of every ICache TMR fault
   logic icache_tmr_fault_any;
+  // TMR-handshake/arbiter faults from the TCDM protection logic further
+  // down. Not yet wired into spatz_fault_monitor (it has no ports for these
+  // yet) -- kept here as the genuine detection outputs of already-merged
+  // TCDM interconnect/amo_shim TMR logic.
+  logic tcdm_shift_reg_tmr_fault;
+  // OR of amo_shim_handshake_tmr_fault (per-bank AMO shim handshake TMR,
+  // see its declaration below) across every bank.
+  logic amo_shim_handshake_tmr_fault_any;
+  // OR of every TMR-voter disagreement anywhere in the tcdm/dma interconnect chain
+  logic tcdm_ic_handshake_tmr_fault_any;
 
   spatz_fault_monitor #(
   .NumVrfUnits  (NrCores),
@@ -1083,7 +1104,7 @@ module spatz_cluster
     .xbar_idx_voter_output_fault_o (tcdm_ic_xbar_idx_voter_output_fault),
     .ic_mem_valid_rep_tmr_fault_o (tcdm_ic_hbank_sel_valid_tmr_fault),
     .ic_mem_ready_rep_tmr_fault_o (tcdm_ic_hbank_sel_ready_tmr_fault),
-    // axi_soc_req has no genuinely triplicated source of its own,
+    // axi_soc_req has no genuinely triplicated source of its own, 
     // so its single q_valid is just fanned out into all three slots.
     .req_valid_rep_i (tcdm_ic_req_valid_rep     ),
     .req_ready_rep_o (tcdm_ic_req_ready_rep     ),
