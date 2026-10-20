@@ -107,6 +107,7 @@ package spatz_pkg;
 
   typedef logic [$clog2(TileEdge)-1:0] tile_dim_t;
   typedef logic [$clog2(TileEdge+1)-1:0] tile_count_t;
+  typedef logic [$clog2(TileWordBWidth)-1:0] tile_word_elem_idx_t;
   typedef logic [$clog2(NrPhysicalTile)-1:0]  mt_t;
   typedef struct packed {
     logic                     tile_valid;

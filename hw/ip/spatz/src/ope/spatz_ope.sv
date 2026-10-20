@@ -387,8 +387,11 @@ module spatz_ope
     current_ready = mac_op_current_q.valid && (mac_current_empty || (!resident_drain_valid_q && !tile_hazard &&
           !(tile_rvalid_i && (tile_r_req_i.idx == mac_op_current_q.op.tile)) &&
           ((!(&fma_pipe_valid)) || result_match || result_switch || result_can_drain)));
+    // A dependent MAC must wait in the registered scheduler until the prior
+    // result reaches the forwarding stage.
     mac_op_bypass = !mac_op_current_q.valid && !mac_op_next_q.valid &&
-                    mac_req_valid && mac_req_eligible && !mac_req_empty;
+                    mac_req_valid && mac_req_eligible && !mac_req_empty &&
+                    !fma_pipe_tile_busy[spatz_req_mac.mtd][SpatialBeatW'(0)];
     mac_op_exec_valid = current_ready || mac_op_bypass;
   end : mac_op_scheduler
 
@@ -1274,10 +1277,10 @@ module spatz_ope
         end
       end
       for (int unsigned byte_idx = 0; byte_idx < TileWordBWidth; byte_idx++) begin
-        tile_count_t elem_idx_in_word;
+        tile_word_elem_idx_t elem_idx_in_word;
         logic [2:0] elem_byte_idx;
 
-        elem_idx_in_word = tile_count_t'(byte_idx / tile_w_elem_bytes);
+        elem_idx_in_word = tile_word_elem_idx_t'(byte_idx / tile_w_elem_bytes);
         elem_byte_idx = 3'(byte_idx % tile_w_elem_bytes);
         if (elem_idx_in_word < tile_w_req_i.elems) begin
           col_i = tile_dim_t'(tile_w_req_i.col + elem_idx_in_word);
@@ -1307,10 +1310,10 @@ module spatz_ope
     if (tile_rvalid_i && tile_rready_o) begin
       bank_row = GroupIdxW'(tile_r_req_i.row / CE);
       for (int unsigned byte_idx = 0; byte_idx < TileWordBWidth; byte_idx++) begin
-        tile_count_t elem_idx_in_word;
+        tile_word_elem_idx_t elem_idx_in_word;
         logic [2:0] elem_byte_idx;
 
-        elem_idx_in_word = tile_count_t'(byte_idx / tile_r_elem_bytes);
+        elem_idx_in_word = tile_word_elem_idx_t'(byte_idx / tile_r_elem_bytes);
         elem_byte_idx = 3'(byte_idx % tile_r_elem_bytes);
         if (elem_idx_in_word < tile_r_req_i.elems) begin
           logic [$clog2(CE)-1:0] bank_col;
