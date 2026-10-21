@@ -235,10 +235,10 @@ module ${cfg['name']}_wrapper
 
   // AXI Slave
   parameter int unsigned AsyncAxiInAwWidth = (2**LogDepth) * axi_pkg::aw_width(SpatzAxiAddrWidth, SpatzAxiIdInWidth, SpatzAxiUserWidth),
-  parameter int unsigned AsyncAxiInWWidth  = (2**LogDepth) * axi_pkg::w_width (SpatzAxiDataWidth, SpatzAxiUserWidth),
+  parameter int unsigned AsyncAxiInWWidth  = (2**LogDepth) * axi_pkg::w_width (SpatzNarrowAxiDataWidth, SpatzAxiUserWidth),
   parameter int unsigned AsyncAxiInBWidth  = (2**LogDepth) * axi_pkg::b_width (SpatzAxiIdInWidth, SpatzAxiUserWidth),
   parameter int unsigned AsyncAxiInArWidth = (2**LogDepth) * axi_pkg::ar_width(SpatzAxiAddrWidth, SpatzAxiIdInWidth, SpatzAxiUserWidth),
-  parameter int unsigned AsyncAxiInRWidth  = (2**LogDepth) * axi_pkg::r_width (SpatzAxiDataWidth, SpatzAxiIdInWidth, SpatzAxiUserWidth)
+  parameter int unsigned AsyncAxiInRWidth  = (2**LogDepth) * axi_pkg::r_width (SpatzNarrowAxiDataWidth, SpatzAxiIdInWidth, SpatzAxiUserWidth)
 % else:
   parameter type axi_out_req_t  = spatz_axi_out_req_t
 % endif
