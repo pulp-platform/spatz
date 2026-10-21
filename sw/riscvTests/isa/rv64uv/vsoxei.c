@@ -601,6 +601,73 @@ void TEST_CASE12(void) {
     }
 }
 
+void TEST_CASE13(void) {
+  // We will write to 4 distinct memory locations
+  volatile uint32_t MEM[4] = {0, 0, 0, 0};
+
+  uint32_t indices[32];
+  uint32_t data[32];
+
+  // Create an overlapping pattern:
+  // Indices map to byte offsets: 0, 4, 8, 12, 0, 4, 8, 12...
+  // Data is the element index + 1 (1 to 32)
+  for(int i = 0; i < 32; i++) {
+      indices[i] = (i % 4) * 4;
+      data[i] = i + 1;
+  }
+
+  // 1. Use LMUL=8 to generate a massive stream of accesses (32 elements).
+  // This guarantees elements are spread across all Spatz memory ports.
+  VSET(32, e32, m8);
+
+  asm volatile(
+    "vle32.v v8, (%1)\n\t"        // Load indices into v8-v15
+    "vle32.v v16, (%2)\n\t"       // Load data into v16-v23
+    "vsoxei32.v v16, (%0), v8\n\t" // Ordered store (should preserve order)
+    :: "r"(MEM), "r"(indices), "r"(data) : "memory"
+  );
+
+  // 2. Read back the 4 memory locations to verify the final written values.
+  VSET(4, e32, m1);
+  asm volatile("vle32.v v1, (%0)" :: "r"(MEM) : "memory");
+
+  // 3. Because it's an ordered store (vsoxei), the LAST element written to
+  // each address MUST be the final value left in memory.
+  // MEM[0] last written by i=28 -> data = 29
+  // MEM[1] last written by i=29 -> data = 30
+  // MEM[2] last written by i=30 -> data = 31
+  // MEM[3] last written by i=31 -> data = 32
+  //
+  // If the bug is present, the independent ports will write out of order,
+  // and these final values will be random earlier data (e.g., 1, 5, 9...).
+  VCMP_U32(35, v1, 29, 30, 31, 32);
+}
+
+void TEST_CASE14(void) {
+  VSET(4, e32, m1);
+  volatile uint32_t MEM[4] = {0, 0, 0, 0};
+
+  // All indices point to offset 0 (MEM[0])
+  uint32_t indices[] = {0, 0, 0, 0};
+
+  // Data to write: 1, 2, 3, 4
+  uint32_t data[] = {0x01, 0x02, 0x03, 0x04};
+
+  asm volatile(
+    "vle32.v v2, (%1)\n\t"        // v2 = indices (0, 0, 0, 0)
+    "vle32.v v3, (%2)\n\t"        // v3 = data (1, 2, 3, 4)
+    "vsoxei32.v v3, (%0), v2\n\t" // Ordered indexed store
+    :: "r"(MEM), "r"(indices), "r"(data) : "memory"
+  );
+
+  // Load the memory back into a vector register to check it
+  asm volatile("vle32.v v4, (%0)" :: "r"(MEM) : "memory");
+
+  // Since order is preserved, the last element (4) MUST be the final value in MEM[0].
+  // MEM[1], MEM[2], and MEM[3] should remain 0.
+  VCMP_U32(36, v4, 0x04, 0, 0, 0);
+}
+
 int main(void) {
   INIT_CHECK();
   enable_vec();
@@ -615,6 +682,8 @@ int main(void) {
   TEST_CASE9();
   TEST_CASE10();
   TEST_CASE11();
-  //TEST_CASE12();
+  TEST_CASE12();
+  TEST_CASE13();
+  TEST_CASE14();
   EXIT_CHECK();
 }
