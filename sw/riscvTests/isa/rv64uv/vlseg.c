@@ -816,50 +816,50 @@ void TEST_CASE2_8_vl32_m(void) {
 void TEST_CASE_D26(void) {
   // e32, m2 (EMUL=2)
   VSET(0x04, e32, m2);
-  
+
   volatile uint32_t MEM[] = {0x0a, 0x14, 0x1e, 0x28, 0x32, 0x3c, 0x46, 0x50};
-  
+
   // Pre-fill v2, v3, v4 with distinct patterns to detect clobbering
   asm volatile(
     "vmv.v.i v2, 2\n\t"
     "vmv.v.i v3, 3\n\t"
     "vmv.v.i v4, 4\n\t"
   );
-  
-  // Segmented load of 2 fields. 
-  // Should write to v2 (EMUL=2 means it takes v2, v3) 
+
+  // Segmented load of 2 fields.
+  // Should write to v2 (EMUL=2 means it takes v2, v3)
   // and v4 (takes v4, v5).
   asm volatile(
-    "vlseg2e32.v v2, (%0)\n\t" 
+    "vlseg2e32.v v2, (%0)\n\t"
     :: "r"(MEM) : "memory"
   );
-  
-  // If bug exists, v4 will still hold '0x04' (unmodified), 
+
+  // If bug exists, v4 will still hold '0x04' (unmodified),
   // and v3 will incorrectly hold the second segment data.
   // Correct behavior: v4 holds the second segment {0x14, 0x28, 0x3c, 0x50}
-  VCMP_U32(165, v4, 0x14, 0x28, 0x3c, 0x50); 
+  VCMP_U32(165, v4, 0x14, 0x28, 0x3c, 0x50);
 }
 
 void TEST_CASE_D26_strided_segment(void) {
   VSET(2, e32, m1);
-  
+
   // Memory interleaved layout: [Field0_elem0, Field1_elem0, Field0_elem1, Field1_elem1]
   volatile uint32_t MEM[] = {10, 20, 30, 40};
   uint32_t stride = 8; // Distance between elements of the same field is 8 bytes
-  
+
   // Pre-fill destination registers with known garbage to detect missing field data
   asm volatile(
     "vmv.v.i v2, 0\n\t"
     "vmv.v.i v3, 0\n\t"
   );
-  
+
   // Strided segmented load with 2 fields (nf = 1)
   asm volatile(
     "vlsseg2e32.v v2, (%0), %1\n\t"
     :: "r"(MEM), "r"(stride) : "memory"
   );
-  
-  // Correct behavior: 
+
+  // Correct behavior:
   // Field 0 (v2) gets {10, 30}
   // Field 1 (v3) gets {20, 40}
   // If bug D26 is present, nf is ignored and v3 will remain 0 (or contain incorrect stride data).
@@ -867,23 +867,23 @@ void TEST_CASE_D26_strided_segment(void) {
 }
 
 void TEST_CASE_D26_scoreboard_hazard(void) {
-  // e32, m2 -> EMUL = 2. 
+  // e32, m2 -> EMUL = 2.
   // vlseg2e32 writes to 4 registers total: v2, v3 (Field 0) and v4, v5 (Field 1)
   VSET(2, e32, m2);
-  
+
   volatile uint32_t MEM[] = {10, 20, 30, 40};
-  
+
   asm volatile(
     // Segmented load starting at v2 with EMUL=2
     "vlseg2e32.v v2, (%0)\n\t"
-    
+
     // Immediately use v3. v3 is an intermediate register belonging to Field 0's allocation range.
-    // If the scoreboard fails to track registers beyond base 'v2', this vadd 
+    // If the scoreboard fails to track registers beyond base 'v2', this vadd
     // will execute prematurely, reading stale or half-written data from v3.
     "vadd.vv v6, v3, v3\n\t"
     :: "r"(MEM) : "memory"
   );
-  
+
   // Field 0 element 0 is 10. v3 should hold field data, so v6 should be element * 2 = 20 (or matching v3+v3).
   // If the scoreboard bug is present, v6 will contain corrupt/stale data.
   // Assuming v3 gets {20, 40} based on previous layout, v3[0] = 20 -> v6[0] = 40.
