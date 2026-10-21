@@ -166,8 +166,7 @@ __attribute__((noinline, aligned(64))) void gemm_fp16_fp32_alpha_vle(
       asm volatile("vse32.v v0, (%0)\n" "addi %0, %0, %1" : "+r"(ptr) : "i"(c_stride) : "memory");
       asm volatile("vse32.v v24, (%0)\n" "addi %0, %0, %1" : "+r"(ptr) : "i"(c_stride) : "memory");
 
-      // Rows 4-15: two contiguous 64-element rows per batch.
-      // Keep the store epilogue compact for the instruction cache.
+      // Rows 4-15
       for (uint32_t row = 4; row < TE; row += 4) {
       asm volatile("vle32.v v0, (%0)\n" "addi %0, %0, %1" : "+r"(bias_ptr) : "i"(c_stride) : "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7", "memory");
       asm volatile("msetmtype %0, %1\n" "msettn x0, %2" : : "r"(store_mtype), "r"(store_vtype), "r"(tile_vl) : "memory");

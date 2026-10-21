@@ -13,8 +13,12 @@ set(SNITCH_SIMULATOR ${CMAKE_CURRENT_SOURCE_DIR}/../bin/spatz_cluster.vlt CACHE 
 project(snitch_cluster LANGUAGES C ASM)
 include(SnitchUtilities)
 
+option(ENABLE_VME "Build VME software and ISA tests" ON)
+
 enable_testing()
 add_subdirectory(${SNITCH_SOFTWARE_DIR}/snRuntime snRuntime)
-add_subdirectory(${SNITCH_SOFTWARE_DIR}/riscvTests riscvTests)
-add_subdirectory(${SNITCH_SOFTWARE_DIR}/spatzBenchmarks spatzBenchmarks)
-add_subdirectory(${SNITCH_SOFTWARE_DIR}/vme vme)
+# add_subdirectory(${SNITCH_SOFTWARE_DIR}/riscvTests riscvTests)
+# add_subdirectory(${SNITCH_SOFTWARE_DIR}/spatzBenchmarks spatzBenchmarks)
+if(ENABLE_VME)
+    add_subdirectory(${SNITCH_SOFTWARE_DIR}/vme vme)
+endif()

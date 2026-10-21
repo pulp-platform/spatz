@@ -141,6 +141,7 @@ __attribute__((noinline, aligned(64))) void gemm_fp16_fp32_beta_vle(
       asm volatile("msetmtype %0, %1\n" "msettn x0, %2" : : "r"(store_mtype), "r"(store_vtype), "r"(tile_vl) : "memory");
       asm volatile("vtmv.v.t v16, %0\naddi %0, %0, 1" : "+r"(tss0) : : "v16", "memory");
       asm volatile("vtmv.v.t v20, %0\naddi %0, %0, 1" : "+r"(tss0) : : "v20", "memory");
+      // mt0 has been moved
       asm volatile("vtmv.v.t v9, %0\naddi %0, %0, 1" : "+r"(tss4) : : "v9", "memory");
       asm volatile("vtmv.v.t v13, %0\naddi %0, %0, 1" : "+r"(tss4) : : "v13", "memory");
       asm volatile("msetmtype %0, %1\n" "msettn x0, %2" : : "r"(mtype), "r"(vtype), "r"(tile_vl) : "memory");
@@ -149,6 +150,7 @@ __attribute__((noinline, aligned(64))) void gemm_fp16_fp32_beta_vle(
       asm volatile("msetmtype %0, %1\n" "msettn x0, %2" : : "r"(store_mtype), "r"(store_vtype), "r"(tile_vl) : "memory");
       asm volatile("vtmv.v.t v17, %0\naddi %0, %0, 1" : "+r"(tss4) : : "v17", "memory");
       asm volatile("vtmv.v.t v21, %0\naddi %0, %0, 1" : "+r"(tss4) : : "v21", "memory");
+      // mt4 has been moved
       asm volatile("vtmv.v.t v10, %0\naddi %0, %0, 1" : "+r"(tss8) : : "v10", "memory");
       asm volatile("vtmv.v.t v14, %0\naddi %0, %0, 1" : "+r"(tss8) : : "v14", "memory");
       asm volatile("msetmtype %0, %1\n" "msettn x0, %2" : : "r"(mtype), "r"(vtype), "r"(tile_vl) : "memory");
@@ -156,24 +158,24 @@ __attribute__((noinline, aligned(64))) void gemm_fp16_fp32_beta_vle(
       asm volatile("vtfmm.tvv mt12, v3, v27" : : : "memory");
       asm volatile("vsetvli x0, %0, e32, m8, ta, ma" : : "r"(bias_vl) : "memory");
       asm volatile("vle32.v v0, (%0)\n" "addi %0, %0, %1" : "+r"(bias_ptr) : "i"(c_stride) : "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7", "memory");
-      asm volatile("vle32.v v24, (%0)\n" "addi %0, %0, %1" : "+r"(bias_ptr) : "i"(c_stride) : "v24", "v25", "v26", "v27", "v28", "v29", "v30", "v31", "memory");
       asm volatile("msetmtype %0, %1\n" "msettn x0, %2" : : "r"(store_mtype), "r"(store_vtype), "r"(tile_vl) : "memory");
       asm volatile("vtmv.v.t v18, %0\naddi %0, %0, 1" : "+r"(tss8) : : "v18", "memory");
       asm volatile("vtmv.v.t v22, %0\naddi %0, %0, 1" : "+r"(tss8) : : "v22", "memory");
+      // mt8 has been moved
       asm volatile("vtmv.v.t v11, %0\naddi %0, %0, 1" : "+r"(tss12) : : "v11", "memory");
       asm volatile("vtmv.v.t v15, %0\naddi %0, %0, 1" : "+r"(tss12) : : "v15", "memory");
       asm volatile("vtmv.v.t v19, %0\naddi %0, %0, 1" : "+r"(tss12) : : "v19", "memory");
       asm volatile("vtmv.v.t v23, %0\naddi %0, %0, 1" : "+r"(tss12) : : "v23", "memory");
+      // mt12 has been moved
       asm volatile("vsetvli x0, %0, e32, m8, ta, ma" : : "r"(bias_vl) : "memory");
       asm volatile("vfmul.vf v0, v0, %0" : : "f"(beta_ft1) : "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7", "memory");
       asm volatile("vfmacc.vf v0, %0, v8" : : "f"(alpha_ft0) : "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7", "memory");
+      asm volatile("vle32.v v24, (%0)\n" "addi %0, %0, %1" : "+r"(bias_ptr) : "i"(c_stride) : "v24", "v25", "v26", "v27", "v28", "v29", "v30", "v31", "memory");
+      asm volatile("vse32.v v0, (%0)\n" "addi %0, %0, %1" : "+r"(ptr) : "i"(c_stride) : "memory");
       asm volatile("vfmul.vf v24, v24, %0" : : "f"(beta_ft1) : "v24", "v25", "v26", "v27", "v28", "v29", "v30", "v31", "memory");
       asm volatile("vfmacc.vf v24, %0, v16" : : "f"(alpha_ft0) : "v24", "v25", "v26", "v27", "v28", "v29", "v30", "v31", "memory");
-      asm volatile("vse32.v v0, (%0)\n" "addi %0, %0, %1" : "+r"(ptr) : "i"(c_stride) : "memory");
-      asm volatile("vse32.v v24, (%0)\n" "addi %0, %0, %1" : "+r"(ptr) : "i"(c_stride) : "memory");
 
-      // Rows 4-15: two contiguous 64-element rows per batch.
-      // Keep the store epilogue compact for the instruction cache.
+      // Rows 4-15
       for (uint32_t row = 4; row < TE; row += 4) {
       asm volatile("vle32.v v0, (%0)\n" "addi %0, %0, %1" : "+r"(bias_ptr) : "i"(c_stride) : "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7", "memory");
       asm volatile("msetmtype %0, %1\n" "msettn x0, %2" : : "r"(store_mtype), "r"(store_vtype), "r"(tile_vl) : "memory");
@@ -186,6 +188,7 @@ __attribute__((noinline, aligned(64))) void gemm_fp16_fp32_beta_vle(
       asm volatile("vtmv.v.t v11, %0\naddi %0, %0, 1" : "+r"(tss12) : : "v11", "memory");
       asm volatile("vtmv.v.t v15, %0\naddi %0, %0, 1" : "+r"(tss12) : : "v15", "memory");
       asm volatile("vsetvli x0, %0, e32, m8, ta, ma" : : "r"(bias_vl) : "memory");
+      asm volatile("vse32.v v24, (%0)\n" "addi %0, %0, %1" : "+r"(ptr) : "i"(c_stride) : "memory");
       asm volatile("vfmul.vf v0, v0, %0" : : "f"(beta_ft1) : "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7", "memory");
       asm volatile("vfmacc.vf v0, %0, v8" : : "f"(alpha_ft0) : "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7", "memory");
       asm volatile("vle32.v v24, (%0)\n" "addi %0, %0, %1" : "+r"(bias_ptr) : "i"(c_stride) : "v24", "v25", "v26", "v27", "v28", "v29", "v30", "v31", "memory");
@@ -199,11 +202,11 @@ __attribute__((noinline, aligned(64))) void gemm_fp16_fp32_beta_vle(
       asm volatile("vtmv.v.t v19, %0\naddi %0, %0, 1" : "+r"(tss12) : : "v19", "memory");
       asm volatile("vtmv.v.t v23, %0\naddi %0, %0, 1" : "+r"(tss12) : : "v23", "memory");
       asm volatile("vsetvli x0, %0, e32, m8, ta, ma" : : "r"(bias_vl) : "memory");
+      asm volatile("vse32.v v0, (%0)\n" "addi %0, %0, %1" : "+r"(ptr) : "i"(c_stride) : "memory");
       asm volatile("vfmul.vf v24, v24, %0" : : "f"(beta_ft1) : "v24", "v25", "v26", "v27", "v28", "v29", "v30", "v31", "memory");
       asm volatile("vfmacc.vf v24, %0, v16" : : "f"(alpha_ft0) : "v24", "v25", "v26", "v27", "v28", "v29", "v30", "v31", "memory");
-      asm volatile("vse32.v v0, (%0)\n" "addi %0, %0, %1" : "+r"(ptr) : "i"(c_stride) : "memory");
-      asm volatile("vse32.v v24, (%0)\n" "addi %0, %0, %1" : "+r"(ptr) : "i"(c_stride) : "memory");
       }
+      asm volatile("vse32.v v24, (%0)\n" "addi %0, %0, %1" : "+r"(ptr) : "i"(c_stride) : "memory");
     }
   }
 }

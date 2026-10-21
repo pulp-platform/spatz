@@ -14,7 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// Author: Pei-Yu Lin <peilin@ethz.ch>
+// Author: Pei-Yu Lin, ETH Zürich
 
 // main.c - fp16 x fp16 = fp16 VME GEMM functional check
 
@@ -47,7 +47,7 @@ enum {
 };
 
 _Static_assert(BUFFER_BYTES <= L1_BUFFER_STRIDE,
-               "one M64xN64xK128 TEW16 buffer must fit in 64 KiB");
+               "one M64xN64xK128 TEW16 buffer must fit in 128 KiB");
 _Static_assert(L1_BYTES <= SNRT_TCDM_SIZE,
                "two matmul buffers exceed the configured TCDM capacity");
 
@@ -200,8 +200,6 @@ int main(void) {
                     (const __fp16 *)(base + B_OFFSET),
                     (__fp16 *)(base + C_OFFSET), valid_m, valid_n, valid_k);
         end_cycle = cycle_count();
-        // Keep completion synchronization outside the measured kernel window.
-        wait_spatz();
 
         snrt_dma_start_1d(partials + (size_t)iter * C_ELEMENTS,
                           base + C_OFFSET, C_BYTES);

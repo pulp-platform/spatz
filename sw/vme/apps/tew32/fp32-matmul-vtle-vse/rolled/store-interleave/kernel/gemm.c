@@ -67,7 +67,7 @@ __attribute__((noinline, aligned(64))) void gemm_fp32(
         // K-Group 0
         // vle A0
         // vle B0
-        "msetmtypei 1, 2\n"
+        "msetmtypei 1, 2, 0\n"
         "msettn x0, %[tile_dim]\n"
         "vsetvli %[loop], x0, e32, m8, ta, ma\n"
         "vle32.v v0,  (%[a0p])\n"
