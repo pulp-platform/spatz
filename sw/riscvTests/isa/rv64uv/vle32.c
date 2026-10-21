@@ -284,16 +284,35 @@ void TEST_CASE11(void) {
 void TEST_CASE12(void) {
   volatile uint32_t MEM[] = {0x111, 0x222, 0x333, 0x444};
   
-  // Set vl = 0
-  asm volatile("vsetvli zero, zero, e32, m1, ta, ma");
+  // 1. Enable the Vector Coprocessor in mstatus (VS field = bits 14:13)
+   // This prevents the illegal instruction exception when running alone.
+  asm volatile(
+    "li t0, (3 << 13)\n\t"
+    "csrs mstatus, t0\n\t"
+    :: : "t0"
+  );
   
-  // This load has vl=0. Spatz controller doesn't get a response.
+  // 2. Configure vector length vl = 0 and valid vtype (e32, m1)
+  int zero_val = 0;
+  asm volatile(
+    "mv t0, %0\n\t"
+    "vsetvli zero, t0, e32, m1, ta, ma"
+    :: "r"(zero_val) : "t0", "memory"
+  );
+  
+  // 3. Issue the vl = 0 load (Triggers Bug D28)
   asm volatile("vle32.v v1, (%0)" :: "r"(MEM) : "memory");
   
-  // Set vl = 4
-  VSET(4, e32, m1);
+  // 4. Set vl = 4 for normal execution
+  int len_val = 4;
+  asm volatile(
+    "mv t0, %0\n\t"
+    "vsetvli zero, t0, e32, m1, ta, ma"
+    :: "r"(len_val) : "t0", "memory"
+  );
   
-  // If bug D28 is present, Spatz deadlocks here waiting for the previous LSU op
+  // 5. Execute a subsequent load. 
+  // With Bug D28 present, the stuck ID causes this to hang the core.
   asm volatile("vle32.v v2, (%0)" :: "r"(MEM) : "memory");
   
   VCMP_U32(12, v2, 0x111, 0x222, 0x333, 0x444);
@@ -320,8 +339,49 @@ void TEST_CASE13(void) {
   // If bug D29 is present, this load started at vstart=0 (from the instruction before csrw)
   // and v1 will be {0x01, 0x02, 0x03, 0x04}.
   // If correct, v1 is {0, 0, 0x03, 0x04}.
-  // IDX 0 AND IDX 1 ARE NOT OVERWRITTEN, AND DUE TO THE PREVIOUS TEST,THEY REMAIN 0X111 AND 0X222
   VCMP_U32(13, v1, 0, 0, 0x03, 0x04);
+}
+
+void TEST_CASE_D23_Aggressive(void) {
+  // We will write to 4 distinct memory locations
+  volatile uint32_t MEM[4] = {0, 0, 0, 0};
+  
+  uint32_t indices[32];
+  uint32_t data[32];
+  
+  // Create an overlapping pattern: 
+  // Indices map to byte offsets: 0, 4, 8, 12, 0, 4, 8, 12...
+  // Data is the element index + 1 (1 to 32)
+  for(int i = 0; i < 32; i++) {
+      indices[i] = (i % 4) * 4; 
+      data[i] = i + 1;
+  }
+  
+  // 1. Use LMUL=8 to generate a massive stream of accesses (32 elements).
+  // This guarantees elements are spread across all Spatz memory ports.
+  VSET(32, e32, m8);
+  
+  asm volatile(
+    "vle32.v v8, (%1)\n\t"        // Load indices into v8-v15
+    "vle32.v v16, (%2)\n\t"       // Load data into v16-v23
+    "vsoxei32.v v16, (%0), v8\n\t" // Ordered store (should preserve order)
+    :: "r"(MEM), "r"(indices), "r"(data) : "memory"
+  );
+  
+  // 2. Read back the 4 memory locations to verify the final written values.
+  VSET(4, e32, m1);
+  asm volatile("vle32.v v1, (%0)" :: "r"(MEM) : "memory");
+  
+  // 3. Because it's an ordered store (vsoxei), the LAST element written to 
+  // each address MUST be the final value left in memory.
+  // MEM[0] last written by i=28 -> data = 29
+  // MEM[1] last written by i=29 -> data = 30
+  // MEM[2] last written by i=30 -> data = 31
+  // MEM[3] last written by i=31 -> data = 32
+  //
+  // If the bug is present, the independent ports will write out of order, 
+  // and these final values will be random earlier data (e.g., 1, 5, 9...).
+  VCMP_U32(14, v1, 29, 30, 31, 32); 
 }
 
 int main(void) {
@@ -341,6 +401,7 @@ int main(void) {
   TEST_CASE11();
   TEST_CASE12();
   TEST_CASE13();
+  //TEST_CASE_D23_Aggressive();
 
   EXIT_CHECK();
 }

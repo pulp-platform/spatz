@@ -106,6 +106,59 @@ void TEST_CASE6(void) {
                  49, 0xd3, 51, 0xd1, 53, 0x48, 55, 0x88, 57, 0xae, 59, 0x91, 61, 0x59, 63, 0x89);
 }
 
+void TEST_CASE_D27(void) {
+    VSET(32, e8, m1);
+
+    volatile uint8_t INP[32] __attribute__((aligned(8))) = {
+        0x10, 0x11, 0x12, 0x13,
+        0x14, 0x15, 0x16, 0x17,
+        0x18, 0x19, 0x1a, 0x1b,
+        0x1c, 0x1d, 0x1e, 0x1f,
+        0x20, 0x21, 0x22, 0x23,
+        0x24, 0x25, 0x26, 0x27,
+        0x28, 0x29, 0x2a, 0x2b,
+        0x2c, 0x2d, 0x2e, 0x2f
+    };
+
+    volatile uint8_t MASK_SRC[32] __attribute__((aligned(8))) = {
+        1, 0, 0, 1, 1, 0, 0, 1,
+        1, 0, 0, 1, 1, 0, 0, 1,
+        1, 0, 0, 1, 1, 0, 0, 1,
+        1, 0, 0, 1, 1, 0, 0, 1
+    };
+
+    volatile uint8_t OUT[32] __attribute__((aligned(8))) = {
+        [0 ... 31] = 0xa5
+    };
+
+    asm volatile("vle8.v v1, (%0)"
+                 :: "r"(INP) : "memory");
+
+    // Create v0 from per-element comparisons.
+    asm volatile("vle8.v v2, (%0)"
+                 :: "r"(MASK_SRC) : "memory");
+
+    asm volatile("vmsne.vi v0, v2, 0"
+                 ::: "memory");
+
+    asm volatile("vse8.v v1, (%0), v0.t"
+                 :: "r"(OUT) : "memory");
+
+    asm volatile("vle8.v v3, (%0)"
+                 :: "r"(OUT) : "memory");
+
+    VCMP_U8(27, v3,
+        0x10, 0xa5, 0xa5, 0x13,
+        0x14, 0xa5, 0xa5, 0x17,
+        0x18, 0xa5, 0xa5, 0x1b,
+        0x1c, 0xa5, 0xa5, 0x1f,
+        0x20, 0xa5, 0xa5, 0x23,
+        0x24, 0xa5, 0xa5, 0x27,
+        0x28, 0xa5, 0xa5, 0x2b,
+        0x2c, 0xa5, 0xa5, 0x2f
+    );
+}
+
 int main(void) {
   INIT_CHECK();
   enable_vec();
@@ -116,6 +169,7 @@ int main(void) {
   TEST_CASE4();
   TEST_CASE5();
   TEST_CASE6();
+  //TEST_CASE_D27();
   
   EXIT_CHECK();
 }
