@@ -19,6 +19,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     // Memory request (VLSU)
     parameter type                          spatz_mem_req_t     = logic,
     parameter type                          spatz_mem_rsp_t     = logic,
+    parameter int unsigned                  TCDMAddrWidth       = 0,
     // Memory request (FP Sequencer)
     parameter type                          dreq_t              = logic,
     parameter type                          drsp_t              = logic,
@@ -67,7 +68,10 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     output status_t                           fpu_status_o,
     // ECC VRF outputs
     output logic                              vrf_single_error_o,
-    output logic                              vrf_multi_error_o
+    output logic                              vrf_multi_error_o,
+    // VLSU error outputs
+    output logic                              vlsu_correctable_error_o,
+    output logic                              vlsu_uncorrectable_error_o
   );
 
   ////////////////
@@ -290,7 +294,6 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   assign vrf_single_error_o = vrf_sec_err_raw | (|dec_sec_err) | vlsu_ld_sec_err | vlsu_wr_sec_err;
   assign vrf_multi_error_o  = vrf_ded_err_raw | (|dec_ded_err) | vlsu_ld_ded_err | vlsu_wr_ded_err;
 
-  // spatz_vrf #(
   spatz_vrf_ecc #(
     .NrReadPorts (NrReadPorts ),
     .NrWritePorts(NrWritePorts),
@@ -460,10 +463,16 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   assign vlsu_buf_pop = vrf_wvalid[VLSU_VD_WD1] && !vlsu_buf_empty;
   assign vrf_vlsu_wvalid = sb_we[VLSU_VD_WD1] && !vlsu_buf_full;
 
-  fifo_v3 #(
-    .FALL_THROUGH (1'b0         ),
-    .dtype        (vlsu_buf_t   ),
-    .DEPTH        (VlsuBufDepth )
+  // rel_fifo (redundancy_cells) has no dtype parameter -- only a plain DataWidth --
+  // so pack/unpack vlsu_buf_t to flat bits at this boundary. data_i is already a
+  // concatenation (flat bits), so only data_o needs an explicit cast back.
+  localparam int unsigned VlsuBufWidth = $bits(vlsu_buf_t);
+  logic [VlsuBufWidth-1:0] vlsu_buf_data_bits;
+  assign vlsu_buf_data = vlsu_buf_t'(vlsu_buf_data_bits);
+  rel_fifo #(
+    .FallThrough (1'b0         ),
+    .DataWidth   (VlsuBufWidth ),
+    .Depth       (VlsuBufDepth )
   ) i_vlsu_buf (
     .clk_i      (clk_i                    ),
     .rst_ni     (rst_ni                   ),
@@ -479,8 +488,9 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
                   vlsu_rsp,
                   vlsu_rsp_valid}         ),
     .push_i     (vlsu_buf_push            ),
-    .data_o     (vlsu_buf_data            ),
-    .pop_i      (vlsu_buf_pop             )
+    .data_o     (vlsu_buf_data_bits       ),
+    .pop_i      (vlsu_buf_pop             ),
+    .fault_o    (vlsu_buf_fault           ) // correctable fault
   );
 
   // VLSU (doublebw) writes ECC codewords directly to the VRF, bypassing the
@@ -630,12 +640,13 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   //////////
   // VLSU //
   //////////
-
+ logic vlsu_correctable_error_internel;
 `ifdef DOUBLE_BW
   spatz_doublebw_vlsu #(
     .NrMemPorts      (NrMemPorts      ),
     .spatz_mem_req_t (spatz_mem_req_t ),
-    .spatz_mem_rsp_t (spatz_mem_rsp_t )
+    .spatz_mem_rsp_t (spatz_mem_rsp_t ),
+    .TCDMAddrWidth   (TCDMAddrWidth   )
   ) i_vlsu (
     .clk_i                   (clk_i                                                ),
     .rst_ni                  (rst_ni                                               ),
@@ -668,7 +679,9 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     .spatz_mem_rsp_i         (spatz_mem_rsp_i                                      ),
     .spatz_mem_rsp_valid_i   (spatz_mem_rsp_valid_i                                ),
     .spatz_mem_finished_o    (spatz_mem_finished                                   ),
-    .spatz_mem_str_finished_o(spatz_mem_str_finished                               )
+    .spatz_mem_str_finished_o(spatz_mem_str_finished                               ),
+    .vlsu_correctable_error_o (vlsu_correctable_error_internal                     ),
+    .vlsu_uncorrectable_error_o (vlsu_uncorrectable_error_o                        )
   );
 `else
   spatz_vlsu #(
@@ -710,6 +723,8 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     .vlsu_ld_ded_err_o       (vlsu_ld_ded_err                                      )
   );
 `endif
+
+assign vlsu_correctable_error_o = vlsu_correctable_error_internal | vlsu_buf_fault;
 
 `ifdef DOUBLE_BW
   // tie off fault-monitor signals that are otherwise

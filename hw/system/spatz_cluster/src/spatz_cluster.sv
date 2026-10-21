@@ -271,16 +271,21 @@ module spatz_cluster
   // ECC-protected address for the core/DMA -> per-bank address path (mux +
   // amo_shim only). The crossbar's own bank-select routing logic upstream
   // of this is untouched and keeps using the plain address
-  localparam int unsigned TCDMAddrProtWidth   = hsiao_ecc_pkg::min_ecc(TCDMMemAddrWidth);
-  localparam int unsigned TCDMMemAddrEccWidth = TCDMMemAddrWidth + TCDMAddrProtWidth;
+  localparam int unsigned TCDMMemAddrProtWidth   = hsiao_ecc_pkg::min_ecc(TCDMMemAddrWidth);
+  localparam int unsigned TCDMMemAddrEccWidth = TCDMMemAddrWidth + TCDMMemAddrProtWidth;
   typedef logic [TCDMMemAddrEccWidth-1:0] tcdm_mem_addr_ecc_t;
   `MEM_TYPEDEF_REQ_CHAN_T(mem_req_ecc_chan_t, tcdm_mem_addr_ecc_t, tcdm_data_t, strb_t, tcdm_user_t)
   `MEM_TYPEDEF_REQ_T(mem_req_ecc_t, mem_req_ecc_chan_t)
   `MEM_TYPEDEF_REQ_CHAN_T(mem_dma_req_ecc_chan_t, tcdm_mem_addr_ecc_t, data_dma_t, strb_dma_t, logic)
   `MEM_TYPEDEF_REQ_T(mem_dma_req_ecc_t, mem_dma_req_ecc_chan_t)
-
-  `TCDM_TYPEDEF_ALL(tcdm, tcdm_addr_t, tcdm_data_t, strb_t, tcdm_user_t)
-  `TCDM_TYPEDEF_ALL(tcdm_dma, tcdm_addr_t, data_dma_t, strb_dma_t, logic)
+    
+  // Full request-address ECC (before the crossbar). Unlike tcdm_mem_addr_ecc_t,
+  // this covers the whole TCDMAddrWidth address that the crossbar routes on.
+  localparam int unsigned TCDMAddrProtWidth = hsiao_ecc_pkg::min_ecc(TCDMAddrWidth);
+  localparam int unsigned TCDMAddrEccWidth  = TCDMAddrWidth + TCDMAddrProtWidth;
+  typedef logic [TCDMAddrEccWidth-1:0] tcdm_addr_ecc_t;
+  `TCDM_TYPEDEF_ALL(tcdm, tcdm_addr_ecc_t, tcdm_data_t, strb_t, tcdm_user_t)
+  `TCDM_TYPEDEF_ALL(tcdm_dma, tcdm_addr_ecc_t, data_dma_t, strb_dma_t, logic) // DMA request address is encoded at the boundary
 
   `REG_BUS_TYPEDEF_ALL(reg, addr_t, data_t, strb_t)
   `REG_BUS_TYPEDEF_ALL(reg_dma, addr_t, data_dma_t, strb_dma_t)
@@ -427,6 +432,7 @@ module spatz_cluster
   tcdm_events_t               tcdm_events;
   dma_events_t                dma_events;
   snitch_icache_pkg::icache_l0_events_t [NrCores-1:0] icache_events;
+  snitch_icache_pkg::icache_l1_events_t               icache_l1_events;
 
   // 4. Memory Subsystem (Core side).
   reqrsp_req_t [NrCores-1:0] core_req, filtered_core_req;
@@ -456,6 +462,9 @@ module spatz_cluster
   logic [NrCores-1:0]  vrf_correctable_fault;
   logic [NrCores-1:0]  vrf_uncorrectable_fault; // NrCores == NumVrfUnits
 
+  logic [NrCores-1:0]  vlsu_correctable_fault;
+  logic [NrCores-1:0]  vlsu_uncorrectable_fault;
+
   // Per-core whole-core TMR lockstep mismatch.
   logic [NrCores-1:0]  core_tmr_fault;
 
@@ -465,17 +474,6 @@ module spatz_cluster
   logic [NumTcdmBanks-1:0] tcdm_scrub_correctable_fault;
   logic [NumTcdmBanks-1:0] tcdm_scrub_uncorrectable_fault;
 
-  // Dedicated TCDM address-ECC fault. Not yet wired into spatz_fault_monitor
-  // (it has no port for this yet) -- kept here as the genuine detection
-  // output of the mux->amo_shim address-ECC decode further down.
-  logic [NumTcdmBanks-1:0] tcdm_addr_ecc_correctable_fault;
-  logic [NumTcdmBanks-1:0] tcdm_addr_ecc_uncorrectable_fault;
-  // Same idea, for the mux->amo_shim leg's {write, amo, strb} ECC
-  logic [NumTcdmBanks-1:0] tcdm_wctrl_ecc_correctable_fault;
-  logic [NumTcdmBanks-1:0] tcdm_wctrl_ecc_uncorrectable_fault;
-  logic [NumTcdmBanks-1:0] tcdm_be_ecc_correctable_fault;
-  logic [NumTcdmBanks-1:0] tcdm_be_ecc_uncorrectable_fault;
-
   logic [NrCores-1:0][ErrorCounterWidth-1:0]  vrf_correctable_count;
   logic [NrCores-1:0][ErrorCounterWidth-1:0]  vrf_uncorrectable_count;
 
@@ -484,18 +482,18 @@ module spatz_cluster
   logic [NumTcdmBanks-1:0][ErrorCounterWidth-1:0] tcdm_scrub_correctable_count;
   logic [NumTcdmBanks-1:0][ErrorCounterWidth-1:0] tcdm_scrub_uncorrectable_count;
 
+  logic [ErrorCounterWidth-1:0] tcdm_interconnect_correctable_count;
+  logic [ErrorCounterWidth-1:0] tcdm_interconnect_uncorrectable_count;
+
   logic [NrCores-1:0][ErrorCounterWidth-1:0] core_tmr_fault_count;
 
-  // TMR-handshake/arbiter faults from the TCDM protection logic further
-  // down. Not yet wired into spatz_fault_monitor (it has no ports for these
-  // yet) -- kept here as the genuine detection outputs of already-merged
-  // TCDM interconnect/amo_shim TMR logic.
-  logic tcdm_shift_reg_tmr_fault;
-  // OR of amo_shim_handshake_tmr_fault (per-bank AMO shim handshake TMR,
-  // see its declaration below) across every bank.
-  logic amo_shim_handshake_tmr_fault_any;
-  // OR of every TMR-voter disagreement anywhere in the tcdm/dma interconnect chain
-  logic tcdm_ic_handshake_tmr_fault_any;
+  // OR of every TCDM interconnect fault
+  logic tcdm_interconnect_correctable_fault_any;
+  logic tcdm_interconnect_uncorrectable_fault_any;
+  // OR of every ICache parity fault
+  logic icache_parity_fault_any;
+  // OR of every ICache TMR fault
+  logic icache_tmr_fault_any;
 
   spatz_fault_monitor #(
   .NumVrfUnits  (NrCores),
@@ -514,13 +512,21 @@ module spatz_cluster
   // Expected to be one-cycle pulses.
   .vrf_correctable_fault_i (vrf_correctable_fault),
   .vrf_uncorrectable_fault_i (vrf_uncorrectable_fault),
-
+  .vlsu_correctable_fault_i (vlsu_correctable_fault),
+  .vlsu_uncorrectable_fault_i (vlsu_uncorrectable_fault),
+  // tcdm faults
   .tcdm_rd_correctable_fault_i (tcdm_rd_correctable_fault),
   .tcdm_rd_uncorrectable_fault_i (tcdm_rd_uncorrectable_fault),
   .tcdm_scrub_correctable_fault_i (tcdm_scrub_correctable_fault),
   .tcdm_scrub_uncorrectable_fault_i (tcdm_scrub_uncorrectable_fault),
-
+  // tcdm interconnect faults
+  .tcdm_interconnect_correctable_fault_i (tcdm_interconnect_correctable_fault_any),
+  .tcdm_interconnect_uncorrectable_fault_i (tcdm_interconnect_uncorrectable_fault_any),
+  // snitch core TMR faults
   .core_tmr_fault_i (core_tmr_fault),
+  // cluster_icache parity/TMR faults
+  .icache_correctable_fault_i (icache_tmr_fault_any | icache_parity_fault_any),
+  .icache_uncorrectable_fault_i (1'b0),
 
   // Per-source counters.
   .vrf_correctable_count_o (vrf_correctable_count),
@@ -530,6 +536,9 @@ module spatz_cluster
   .tcdm_rd_uncorrectable_count_o (tcdm_rd_uncorrectable_count),
   .tcdm_scrub_correctable_count_o (tcdm_scrub_correctable_count),
   .tcdm_scrub_uncorrectable_count_o (tcdm_scrub_uncorrectable_count),
+
+  .tcdm_interconnect_correctable_count_o (tcdm_interconnect_correctable_count),
+  .tcdm_interconnect_uncorrectable_count_o (tcdm_interconnect_uncorrectable_count),
 
   .core_tmr_fault_count_o (core_tmr_fault_count)
 );
@@ -650,7 +659,13 @@ module spatz_cluster
     .mem_rdata_i  (ext_dma_rsp.p.data                    )
   );
 
-  assign ext_dma_req.q.addr = tcdm_addr_t'(ext_dma_req_q_addr_nontrunc);
+  // DMA request address is encoded before the DMA crossbar, as for the TCDM masters.
+  hsiao_ecc_enc #(
+    .DataWidth (TCDMAddrWidth)
+  ) i_ext_dma_addr_enc (
+    .in  (tcdm_addr_t'(ext_dma_req_q_addr_nontrunc)),
+    .out (ext_dma_req.q.addr)
+  );
   assign ext_dma_req.q.amo  = reqrsp_pkg::AMONone;
   assign ext_dma_req.q.user = '0;
 
@@ -669,6 +684,8 @@ module spatz_cluster
   logic [2:0] dma_req_valid_rep_in [1];
   assign dma_req_valid_rep_in[0] = {3{ext_dma_req.q_valid}};
 
+  logic [1:0] dma_tcdm_req_addr_ecc_o;
+
   spatz_tcdm_interconnect #(
     .NumInp                (1                 ),
     .NumOut                (NrSuperBanks      ),
@@ -678,6 +695,7 @@ module spatz_cluster
     .mem_req_t             (mem_dma_req_t     ),
     .mem_rsp_t             (mem_dma_rsp_t     ),
     .user_t                (logic             ),
+    .ReqAddrWidth          (TCDMAddrWidth     ),
     .MemAddrWidth          (TCDMMemAddrWidth  ),
     .DataWidth             (AxiDataWidth      ),
     .MemoryResponseLatency (MemoryMacroLatency),
@@ -698,7 +716,8 @@ module spatz_cluster
     .req_valid_rep_i (dma_req_valid_rep_in                         ),
     .req_ready_rep_o (/* unused -- ext_dma_rsp.q_ready via rsp_o */),
     .mem_valid_rep_o (dma_ic_mem_valid_rep                         ),
-    .mem_ready_rep_i (dma_ic_mem_ready_rep                         )
+    .mem_ready_rep_i (dma_ic_mem_ready_rep                         ),
+    .tcdm_req_addr_ecc_o(dma_tcdm_req_addr_ecc_o                   )
   );
 
   // ----------------
@@ -880,7 +899,7 @@ module spatz_cluster
 
       // Perodical scrub_trigger generator
       logic scrub_trigger;
-      scrub_timer #(.PERIOD(1_000_000)) i_scrub_timer (
+      scrub_timer #(.PERIOD(100_000)) i_scrub_timer (
         .clk_i,
         .rst_ni,
         .scrub_trigger_o  (scrub_trigger)
@@ -996,6 +1015,20 @@ module spatz_cluster
   // Per-bank fault flags below are reshaped from the genuinely 2D
   // [NrSuperBanks][BanksPerSuperBank] arrays into the flat [NumTcdmBanks]
   // vectors spatz_fault_monitor's per-bank counters expect.
+  // Dedicated TCDM address-ECC fault.
+  logic [NumTcdmBanks-1:0] tcdm_addr_ecc_correctable_fault;
+  logic [NumTcdmBanks-1:0] tcdm_addr_ecc_uncorrectable_fault;
+  // Same idea, for the mux->amo_shim leg's {write, amo, strb} ECC
+  logic [NumTcdmBanks-1:0] tcdm_wctrl_ecc_correctable_fault;
+  logic [NumTcdmBanks-1:0] tcdm_wctrl_ecc_uncorrectable_fault;
+  logic [NumTcdmBanks-1:0] tcdm_be_ecc_correctable_fault;
+  logic [NumTcdmBanks-1:0] tcdm_be_ecc_uncorrectable_fault;
+
+  // OR of amo_shim_handshake_tmr_fault (per-bank AMO shim handshake TMR,
+  // see its declaration below) across every bank.
+  logic amo_shim_handshake_tmr_fault_any;
+  // OR of every TMR-voter disagreement anywhere in the tcdm/dma interconnect chain
+  logic tcdm_ic_handshake_tmr_fault_any;
   for (genvar i = 0; i < NrSuperBanks; i++) begin : gen_tcdm_fault_flat_sb
     for (genvar j = 0; j < BanksPerSuperBank; j++) begin : gen_tcdm_fault_flat_bank
       localparam int unsigned k = i*BanksPerSuperBank + j;
@@ -1044,6 +1077,8 @@ module spatz_cluster
     end : gen_tcdm_ic_mem_rep_bank
   end : gen_tcdm_ic_mem_rep_sb
 
+  logic [1:0] tcdm_req_addr_ecc_o;
+
   spatz_tcdm_interconnect #(
     .NumInp                (NumTCDMIn           ),
     .NumOut                (NrBanks             ),
@@ -1052,6 +1087,7 @@ module spatz_cluster
     .tcdm_rsp_t            (tcdm_rsp_t          ),
     .mem_req_t             (mem_req_t           ),
     .mem_rsp_t             (mem_rsp_t           ),
+    .ReqAddrWidth          (TCDMAddrWidth       ),
     .MemAddrWidth          (TCDMMemAddrWidth    ),
     .DataWidth             (DataWidth           ),
     .ProtDataWidth         (TCDMProtDataWidth   ),
@@ -1070,12 +1106,13 @@ module spatz_cluster
     .xbar_idx_voter_output_fault_o (tcdm_ic_xbar_idx_voter_output_fault),
     .ic_mem_valid_rep_tmr_fault_o (tcdm_ic_hbank_sel_valid_tmr_fault),
     .ic_mem_ready_rep_tmr_fault_o (tcdm_ic_hbank_sel_ready_tmr_fault),
-    // axi_soc_req has no genuinely triplicated source of its own,
+    // axi_soc_req has no genuinely triplicated source of its own, 
     // so its single q_valid is just fanned out into all three slots.
     .req_valid_rep_i (tcdm_ic_req_valid_rep     ),
     .req_ready_rep_o (tcdm_ic_req_ready_rep     ),
     .mem_valid_rep_o (tcdm_ic_mem_valid_rep_flat),
-    .mem_ready_rep_i (tcdm_ic_mem_ready_rep_flat)
+    .mem_ready_rep_i (tcdm_ic_mem_ready_rep_flat),
+    .tcdm_req_addr_ecc_o(tcdm_req_addr_ecc_o)
   );
 
   hive_req_t [NrCores-1:0] hive_req;
@@ -1182,8 +1219,18 @@ module spatz_cluster
         .core_tmr_fault_o   (core_tmr_fault         [i])
       );
       for (genvar j = 0; j < TcdmPorts; j++) begin
+        // Quadrilatero request address ECC, encoded per port before the crossbar mux.
+         tcdm_addr_ecc_t quad_addr_enc;
+         hsiao_ecc_enc #(
+           .DataWidth (TCDMAddrWidth),
+           .ProtWidth (TCDMAddrProtWidth)
+         ) i_quad_addr_enc (
+           .in  (quad_tcdm_req_wo_user[j].q.addr[TCDMAddrWidth-1:0]),
+           .out (quad_addr_enc)
+         );
         always_comb begin
           quad_tcdm_req[j].q              = quad_tcdm_req_wo_user[j].q;
+          quad_tcdm_req[j].q.addr         = quad_addr_enc;
           quad_tcdm_req[j].q.user.core_id = i[CoreIDWidth-1:0];
           quad_tcdm_req[j].q.user.is_core = 1;
           quad_tcdm_req[j].q_valid        = quad_tcdm_req_wo_user[j].q_valid;
@@ -1265,6 +1312,9 @@ module spatz_cluster
         // ECC VRF signals
         .vrf_single_error_o (vrf_correctable_fault[i]  ),
         .vrf_multi_error_o (vrf_uncorrectable_fault[i]),
+        // VLSU fault signals
+        .vlsu_correctable_error_o (vlsu_correctable_fault[i]),
+        .vlsu_uncorrectable_error_o (vlsu_uncorrectable_fault[i]),
         .core_tmr_fault_o (core_tmr_fault[i])
       );
       for (genvar j = 0; j < TcdmPorts; j++) begin : gen_tcdm_user
@@ -1442,8 +1492,18 @@ module spatz_cluster
     assign spatz_tcdm_rsp[j].p = spatz_tcdm_rsp[j].p_valid ? tcdm_rsp[j].p :'0;
   end
 
+  // TMR-handshake/arbiter faults from the TCDM interconnect protection logic
+  logic tcdm_shift_reg_tmr_fault;
   assign tcdm_shift_reg_tmr_fault = |spatz_tcdm_p_valid_tmr_fault | |quad_tcdm_p_valid_tmr_fault
                                    | |tcdm_arb_tmr_fault;
+
+  assign tcdm_interconnect_correctable_fault_any   = |tcdm_addr_ecc_correctable_fault | |tcdm_wctrl_ecc_correctable_fault
+                                              | |tcdm_be_ecc_correctable_fault | tcdm_shift_reg_tmr_fault
+                                              | amo_shim_handshake_tmr_fault_any | tcdm_ic_handshake_tmr_fault_any
+                                              | tcdm_req_addr_ecc_o[0] | dma_tcdm_req_addr_ecc_o[0];
+  assign tcdm_interconnect_uncorrectable_fault_any   = |tcdm_addr_ecc_uncorrectable_fault | |tcdm_wctrl_ecc_uncorrectable_fault
+                                                | |tcdm_be_ecc_uncorrectable_fault
+                                                | tcdm_req_addr_ecc_o[1] | dma_tcdm_req_addr_ecc_o[1];
 
   // ----------------
   // Instruction Cache
@@ -1472,18 +1532,28 @@ module spatz_cluster
     };
   end
 
+  // icache L0/L1 parity + TMR faults from the reliability-hardened cluster_icache
+  logic [NrCores-1:0] icache_l0_tag_parity_fault;
+  logic [NrCores-1:0] icache_l0_data_parity_fault;
+  logic icache_l1_tag_parity_fault;
+  logic icache_l1_data_parity_fault;
+  logic icache_l1_tag_meta_tmr_fault;
+  logic icache_l1_fifo_tmr_fault;
+
   snitch_icache #(
     .NR_FETCH_PORTS     ( NrCores                                            ),
     .L0_LINE_COUNT      ( 8                                                  ),
     .LINE_WIDTH         ( ICacheLineWidth                                    ),
     .LINE_COUNT         ( ICacheLineCount                                    ),
-    .WAY_COUNT          ( ICacheWays                                         ),
+    .SET_COUNT          ( ICacheWays                                         ),
     .FETCH_AW           ( AxiAddrWidth                                       ),
     .FETCH_DW           ( 32                                                 ),
     .FILL_AW            ( AxiAddrWidth                                       ),
     .FILL_DW            ( AxiDataWidth                                       ),
-    .SERIAL_LOOKUP      ( 0                                                  ),
+    .SERIAL_LOOKUP      ( 1                                                  ),
     .L1_TAG_SCM         ( 0                                                  ),
+    .L0_DATA_PARITY_BITS(ICacheLineWidth / 32                                ),
+    .L1_DATA_PARITY_BITS(ICacheLineWidth / 32                                ),
     .NUM_AXI_OUTSTANDING( 2                                                  ),
     .EARLY_LATCH        ( 0                                                  ),
     .L0_EARLY_TAG_WIDTH ( snitch_pkg::PAGE_SHIFT - $clog2(ICacheLineWidth/8) ),
@@ -1496,7 +1566,7 @@ module spatz_cluster
     .rst_ni               ( rst_ni                   ),
     .enable_prefetching_i ( icache_prefetch_enable   ),
     .icache_l0_events_o   ( icache_events            ),
-    .icache_l1_events_o   (                          ),
+    .icache_l1_events_o   ( icache_l1_events         ),
     .flush_valid_i        ( flush_valid              ),
     .flush_ready_o        ( flush_ready              ),
     .inst_addr_i          ( inst_addr                ),
@@ -1508,9 +1578,22 @@ module spatz_cluster
     .sram_cfg_tag_i       ( '0                       ),
     .sram_cfg_data_i      ( '0                       ),
     .axi_req_o            ( wide_axi_mst_req[ICache] ),
-    .axi_rsp_i            ( wide_axi_mst_rsp[ICache] )
+    .axi_rsp_i            ( wide_axi_mst_rsp[ICache] ),
+    .fifo_tmr_fault_o     ( icache_l1_fifo_tmr_fault )
   );
 
+  for (genvar i = 0; i < NrCores; i++) begin : gen_icache_fault_unpack
+    assign icache_l0_tag_parity_fault[i]  = icache_events[i].l0_tag_parity_error;
+    assign icache_l0_data_parity_fault[i] = icache_events[i].l0_data_parity_error;
+  end
+
+  assign icache_l1_tag_parity_fault   = icache_l1_events.l1_tag_parity_error;
+  assign icache_l1_data_parity_fault  = icache_l1_events.l1_data_parity_error;
+  assign icache_l1_tag_meta_tmr_fault = icache_l1_events.l1_tag_meta_tmr_error;
+
+  assign icache_parity_fault_any = |icache_l0_tag_parity_fault | |icache_l0_data_parity_fault
+                                   | icache_l1_tag_parity_fault | icache_l1_data_parity_fault;
+  assign icache_tmr_fault_any = icache_l1_tag_meta_tmr_fault | icache_l1_fifo_tmr_fault;
   // --------
   // Cores SoC
   // --------
@@ -1639,9 +1722,26 @@ module spatz_cluster
     .tcdm_rsp_i (axi_soc_rsp_pre        )
   );
 
-  // ECC encode/decode shim between i_axi_to_tcdm (32-bit) and i_tcdm_interconnect (39-bit).
+  // SoC request address ECC, encoded before the ECC shim (the shim's RMW path
+  // replays the incoming request, so it needs the codeword already in place).
+  tcdm_req_t axi_soc_req_pre_enc;
+  tcdm_addr_ecc_t axi_soc_addr_enc;
+  hsiao_ecc_enc #(
+    .DataWidth (TCDMAddrWidth),
+    .ProtWidth (TCDMAddrProtWidth)
+  ) i_axi_soc_addr_enc (
+    .in  (axi_soc_req_pre.q.addr[TCDMAddrWidth-1:0]),
+    .out (axi_soc_addr_enc)
+  );
+  always_comb begin : gen_axi_soc_req_pre_enc
+    axi_soc_req_pre_enc         = axi_soc_req_pre;
+    axi_soc_req_pre_enc.q.addr  = axi_soc_addr_enc;
+  end
+
+  // soc data ECC encode/decode shim between i_axi_to_tcdm (32-bit) and i_tcdm_interconnect (39-bit).
   // Full-word writes are encoded; reads are decoded back to 32-bit for the AXI side.
   // Partial writes (byte/halfword) trigger an internal RMW to preserve ECC validity.
+  // addr is encoded before the shim and passed through, so the shim can use it for RMWs without decoding it.
   spatz_tcdm_ecc_shim #(
     .DataWidth     (DataWidth         ),
     .ProtDataWidth (TCDMProtDataWidth ),
@@ -1650,7 +1750,7 @@ module spatz_cluster
   ) i_tcdm_ecc_shim (
     .clk_i     (clk_i          ),
     .rst_ni    (rst_ni         ),
-    .in_req_i  (axi_soc_req_pre),
+    .in_req_i  (axi_soc_req_pre_enc),
     .in_rsp_o  (axi_soc_rsp_pre),
     .out_req_o (axi_soc_req    ),
     .out_rsp_i (axi_soc_rsp    )
@@ -1711,7 +1811,9 @@ module spatz_cluster
     .tcdm_rd_uncorrectable_count_i    (tcdm_rd_uncorrectable_count    ),
     .tcdm_scrub_correctable_count_i   (tcdm_scrub_correctable_count   ),
     .tcdm_scrub_uncorrectable_count_i (tcdm_scrub_uncorrectable_count ),
-    .core_tmr_fault_count_i           (core_tmr_fault_count           )
+    .core_tmr_fault_count_i           (core_tmr_fault_count           ),
+    .tcdm_interconnect_correctable_count_i   (tcdm_interconnect_correctable_count   ),
+    .tcdm_interconnect_uncorrectable_count_i (tcdm_interconnect_uncorrectable_count )
   );
 
   // 3. BootROM

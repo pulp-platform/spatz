@@ -19,6 +19,8 @@ module spatz_doublebw_vlsu
     parameter int unsigned   NrOutstandingLoads = 16,
     // Memory request
     parameter  type          spatz_mem_req_t    = logic,
+    /// Plain TCDM request address width. The request address is encoded to this width before the spill register.
+    parameter  int unsigned  TCDMAddrWidth      = 0,
     parameter  type          spatz_mem_rsp_t    = logic,
     // Dependant parameters. DO NOT CHANGE!
     localparam int  unsigned NrInterfaces       = NrMemPorts / spatz_pkg::N_FU,
@@ -38,7 +40,7 @@ module spatz_doublebw_vlsu
     input  logic                            vlsu_buf_full_i,
     // Interface with the VRF
     output vrf_addr_t      [NrInterfaces-1:0] vrf_waddr_o,
-    output logic           [NrInterfaces-1:0] [N_FU*(ELEN+7)-1:0] vrf_wdata_ecc_o,
+    output logic           [NrInterfaces-1:0]  [N_FU*(ELEN+7)-1:0] vrf_wdata_ecc_o,
     output logic           [NrInterfaces-1:0] vrf_we_o,
     output vrf_be_t        [NrInterfaces-1:0] vrf_wbe_o,
     input  logic           [NrInterfaces-1:0] vrf_wvalid_i,
@@ -57,12 +59,41 @@ module spatz_doublebw_vlsu
     input  logic           [NrMemPorts-1:0] spatz_mem_rsp_valid_i,
     // Memory Finished
     output logic                            spatz_mem_finished_o,
-    output logic                            spatz_mem_str_finished_o
+    output logic                            spatz_mem_str_finished_o,
+    // error outputs
+    output logic                            vlsu_correctable_error_o,
+    output logic                            vlsu_uncorrectable_error_o
+    // // ECC error outputs
+    // output logic                            vlsu_st_sec_err_o,    // any-port SEC on outgoing store data
+    // output logic                            vlsu_st_ded_err_o,    // any-port DED on outgoing store data
+    // output logic                            vlsu_ld_sec_err_o,    // any-port SEC on load response
+    // output logic                            vlsu_ld_ded_err_o,    // any-port DED on load response
+    // output logic                            vlsu_wr_sec_err_o,    // any-port SEC on coalesce-buffer write-merge
+    // output logic                            vlsu_wr_ded_err_o,    // any-port DED on coalesce-buffer write-merge
+    // output logic [NrInterfaces-1:0]         vlsu_vd_sec_err_o,    // per-interface SEC on VD/V0.t read
+    // output logic [NrInterfaces-1:0]         vlsu_vd_ded_err_o,    // per-interface DED on VD/V0.t read
+    // output logic [NrInterfaces-1:0]         vlsu_vs2_sec_err_o,   // per-interface SEC on VS2 index read
+    // output logic [NrInterfaces-1:0]         vlsu_vs2_ded_err_o,   // per-interface DED on VS2 index read
+    // // Set when any one-hot control FSM in this module lands on an illegal
+    // // (non-one-hot) code -- detection only, single-bit-flip fault model.
+    // output logic                            fsm_illegal_state_o,
+    // // Set when any TMR-protected handshake flag or progress counter in this
+    // // module disagrees across its three replicas.
+    // output logic                            handshake_tmr_fault_o,
+    // // Set when any of this module's rel_fifo/rel_spill_register instances
+    // // (i_reorder_buffer, i_fifo_commit_insn, i_offset_queue) TMR-corrects a fault.
+    // output logic                            datapath_tmr_fault_o
   );
 
 // Include FF
 `include "common_cells/registers.svh"
 
+  // rel_fifo/rel_spill_register TMR-correction flags, aggregated onto
+  // datapath_tmr_fault_o (declared here, ahead of any use, to avoid implicit
+  // net inference at the port-connection sites below).
+  logic operation_queue_fault, commit_insn_fifo_fault;
+  logic [NrInterfaces-1:0] vrf_req_register_fault;
+  logic [NrInterfaces-1:0][N_FU-1:0] reorder_buffer_fault, offset_queue_fault, mem_req_register_fault;
 
   ////////////////
   // Parameters //
@@ -78,6 +109,21 @@ module spatz_doublebw_vlsu
   typedef logic [IdWidth-1:0] id_t;
   typedef logic [$clog2(NrWordsPerVector*8)-1:0] vreg_elem_t;
 
+  // Error signals
+  logic                            vlsu_st_sec_err_o;    // any-port SEC on outgoing store data
+  logic                            vlsu_st_ded_err_o;    // any-port DED on outgoing store data
+  logic                            vlsu_ld_sec_err_o;    // any-port SEC on load response
+  logic                            vlsu_ld_ded_err_o;    // any-port DED on load response
+  logic                            vlsu_wr_sec_err_o;    // any-port SEC on coalesce-buffer write-merge
+  logic                            vlsu_wr_ded_err_o;    // any-port DED on coalesce-buffer write-merge
+  logic [NrInterfaces-1:0]         vlsu_vd_sec_err_o;    // per-interface SEC on VD/V0.t read
+  logic [NrInterfaces-1:0]         vlsu_vd_ded_err_o;    // per-interface DED on VD/V0.t read
+  logic [NrInterfaces-1:0]         vlsu_vs2_sec_err_o;   // per-interface SEC on VS2 index read
+  logic [NrInterfaces-1:0]         vlsu_vs2_ded_err_o;   // per-interface DED on VS2 index read
+
+  logic                            fsm_illegal_state_o;
+  logic                            handshake_tmr_fault_o;
+  logic                            datapath_tmr_fault_o;
   ///////////////////////
   //  Operation queue  //
   ///////////////////////
@@ -90,8 +136,9 @@ module spatz_doublebw_vlsu
 
   logic spatz_req_ready;
 
-  spill_register #(
-    .T(spatz_req_t)
+  rel_spill_register #(
+    .T(spatz_req_t),
+    .TmrHandshake (1'b0)
   ) i_operation_queue (
     .clk_i  (clk_i                                          ),
     .rst_ni (rst_ni                                         ),
@@ -100,7 +147,10 @@ module spatz_doublebw_vlsu
     .ready_o(spatz_req_ready                                ),
     .data_o (mem_spatz_req                                  ),
     .valid_o(mem_spatz_req_valid                            ),
-    .ready_i(mem_spatz_req_ready                            )
+    .ready_i(mem_spatz_req_ready                            ),
+    .fault_o ( operation_queue_fault ),
+    .data_corrector_o ( ),
+    .data_corrected_i ( '0 )
   );
 
   // Convert the vl to number of bytes for all element widths
@@ -139,11 +189,17 @@ module spatz_doublebw_vlsu
   //  State  //
   /////////////
 
-  typedef enum logic [1:0] {
-    VLSU_RunningLoad, VLSU_RunningStore, VLSU_ReadingV0_t
+  // One-hot encoded: under a single-bit-flip fault model, any SEU on state_q
+  // flips its parity (odd weight-1 -> even), so `^state_q` alone catches it.
+  typedef enum logic [2:0] {
+    VLSU_RunningLoad  = 3'b001,
+    VLSU_RunningStore = 3'b010,
+    VLSU_ReadingV0_t  = 3'b100
   } state_t;
   state_t state_d, state_q;
   `FF(state_q, state_d, VLSU_RunningLoad)
+  logic state_illegal;
+  assign state_illegal = ~(^state_q);
 
   // Memory requests
   spatz_mem_req_t [NrInterfaces-1:0] [N_FU-1:0] spatz_mem_req;
@@ -152,10 +208,29 @@ module spatz_doublebw_vlsu
 
   id_t [NrInterfaces-1:0] [N_FU-1:0] store_count_q;
   id_t [NrInterfaces-1:0] [N_FU-1:0] store_count_d;
+  logic [NrInterfaces-1:0] [N_FU-1:0] store_count_tmr_fault;
 
   for (genvar intf = 0; intf < NrInterfaces; intf++) begin : gen_store_count_q_intf
     for (genvar fu = 0; fu < N_FU; fu++) begin : gen_store_count_q_intf_fu
-      `FF(store_count_q[intf][fu], store_count_d[intf][fu], '0)
+      // TMR-protected: gates rob_push (load/store ordering on this FU) and
+      // write_pending (drain/flush detection) -- an SEU here can silently
+      // corrupt outstanding-store tracking, reordering a load ahead of an
+      // in-flight store to the same lane or hanging a drain. Same rationale
+      // as mem_counter_q/commit_counter_q above.
+      id_t store_count_q_rep [3];
+      for (genvar t = 0; t < 3; t++) begin : gen_store_count_rep
+        `FF(store_count_q_rep[t], store_count_d[intf][fu], '0)
+      end
+      bitwise_TMR_voter_fail #(
+        .DataWidth ($bits(id_t)),
+        .VoterType (1)
+      ) i_store_count_q_voter (
+        .a_i              (store_count_q_rep[0]            ),
+        .b_i              (store_count_q_rep[1]            ),
+        .c_i              (store_count_q_rep[2]            ),
+        .majority_o       (store_count_q[intf][fu]         ),
+        .fault_detected_o (store_count_tmr_fault[intf][fu] )
+      );
     end: gen_store_count_q_intf_fu
   end: gen_store_count_q_intf
 
@@ -226,9 +301,9 @@ module spatz_doublebw_vlsu
         .empty_o  (rob_empty[intf][fu] )
       );
 `else
-      fifo_v3 #(
-        .DATA_WIDTH(ELEN+7              ),
-        .DEPTH     (NrOutstandingLoads)
+      rel_fifo #(
+        .DataWidth (ELEN+7              ),
+        .Depth     (NrOutstandingLoads)
       ) i_reorder_buffer (
         .clk_i     (clk_i               ),
         .rst_ni    (rst_ni              ),
@@ -240,7 +315,8 @@ module spatz_doublebw_vlsu
         .pop_i     (rob_pop[intf][fu]   ),
         .full_o    (rob_full[intf][fu]  ),
         .empty_o   (rob_empty[intf][fu] ),
-        .usage_o   (/* Unused */        )
+        .usage_o   (/* Unused */        ),
+        .fault_o   (reorder_buffer_fault[intf][fu])
       );
       assign rob_rvalid[intf][fu] = !rob_empty[intf][fu];
 `endif
@@ -269,36 +345,69 @@ module spatz_doublebw_vlsu
   vlen_t [NrInterfaces-1:0] [N_FU-1:0] mem_idx_counter_d;
   vlen_t [NrInterfaces-1:0] [N_FU-1:0] mem_idx_counter_q;
 
+  logic [NrInterfaces-1:0] [N_FU-1:0] mem_counter_tmr_fault;
+  logic [NrInterfaces-1:0] [N_FU-1:0] mem_idx_counter_tmr_fault;
+
   for (genvar intf = 0; intf < NrInterfaces; intf++) begin: gen_mem_counters_intf
     for (genvar fu = 0; fu < N_FU; fu++) begin: gen_mem_counters_intf_fu
-      delta_counter #(
-        .WIDTH($bits(vlen_t))
-      ) i_delta_counter_mem (
-        .clk_i     (clk_i                  ),
-        .rst_ni    (rst_ni                 ),
-        .clear_i   (1'b0                   ),
-        .en_i      (mem_counter_en[intf][fu]   ),
-        .load_i    (mem_counter_load[intf][fu] ),
-        .down_i    (1'b0                   ), // We always count up
-        .delta_i   (mem_counter_delta[intf][fu]),
-        .d_i       (mem_counter_d[intf][fu]    ),
-        .q_o       (mem_counter_q[intf][fu]    ),
-        .overflow_o(/* Unused */           )
+      // TMR-protected: q_o gates mem_port_finished_q/d (memory request
+      // completion detection) -- an SEU here can silently corrupt or hang
+      // the memory request completion sequencing.
+      vlen_t mem_counter_q_rep [3];
+      for (genvar t = 0; t < 3; t++) begin : gen_delta_counter_mem_rep
+        delta_counter #(
+          .WIDTH($bits(vlen_t))
+        ) i_delta_counter_mem (
+          .clk_i     (clk_i                      ),
+          .rst_ni    (rst_ni                     ),
+          .clear_i   (1'b0                       ),
+          .en_i      (mem_counter_en[intf][fu]   ),
+          .load_i    (mem_counter_load[intf][fu] ),
+          .down_i    (1'b0                       ), // We always count up
+          .delta_i   (mem_counter_delta[intf][fu]),
+          .d_i       (mem_counter_d[intf][fu]    ),
+          .q_o       (mem_counter_q_rep[t]       ),
+          .overflow_o(/* Unused */               )
+        );
+      end
+      bitwise_TMR_voter_fail #(
+        .DataWidth ($bits(vlen_t)),
+        .VoterType (1)
+      ) i_mem_counter_q_voter (
+        .a_i              (mem_counter_q_rep[0]              ),
+        .b_i              (mem_counter_q_rep[1]              ),
+        .c_i              (mem_counter_q_rep[2]              ),
+        .majority_o       (mem_counter_q[intf][fu]           ),
+        .fault_detected_o (mem_counter_tmr_fault[intf][fu]   )
       );
 
-      delta_counter #(
-        .WIDTH($bits(vlen_t))
-      ) i_delta_counter_mem_idx (
-        .clk_i     (clk_i                      ),
-        .rst_ni    (rst_ni                     ),
-        .clear_i   (1'b0                       ),
-        .en_i      (mem_counter_en[intf][fu]       ),
-        .load_i    (mem_counter_load[intf][fu]     ),
-        .down_i    (1'b0                       ), // We always count up
-        .delta_i   (mem_idx_counter_delta[intf][fu]),
-        .d_i       (mem_idx_counter_d[intf][fu]    ),
-        .q_o       (mem_idx_counter_q[intf][fu]    ),
-        .overflow_o(/* Unused */               )
+      // TMR-protected; same rationale as mem_counter_q above.
+      vlen_t mem_idx_counter_q_rep [3];
+      for (genvar t = 0; t < 3; t++) begin : gen_delta_counter_mem_idx_rep
+        delta_counter #(
+          .WIDTH($bits(vlen_t))
+        ) i_delta_counter_mem_idx (
+          .clk_i     (clk_i                          ),
+          .rst_ni    (rst_ni                         ),
+          .clear_i   (1'b0                           ),
+          .en_i      (mem_counter_en[intf][fu]       ),
+          .load_i    (mem_counter_load[intf][fu]     ),
+          .down_i    (1'b0                           ), // We always count up
+          .delta_i   (mem_idx_counter_delta[intf][fu]),
+          .d_i       (mem_idx_counter_d[intf][fu]    ),
+          .q_o       (mem_idx_counter_q_rep[t]       ),
+          .overflow_o(/* Unused */                   )
+        );
+      end
+      bitwise_TMR_voter_fail #(
+        .DataWidth ($bits(vlen_t)),
+        .VoterType (1)
+      ) i_mem_idx_counter_q_voter (
+        .a_i              (mem_idx_counter_q_rep[0]            ),
+        .b_i              (mem_idx_counter_q_rep[1]            ),
+        .c_i              (mem_idx_counter_q_rep[2]            ),
+        .majority_o       (mem_idx_counter_q[intf][fu]         ),
+        .fault_detected_o (mem_idx_counter_tmr_fault[intf][fu] )
       );
 
       assign mem_port_finished_d[intf][fu] = mem_spatz_req_valid && (mem_counter_q[intf][fu] == mem_counter_max[intf][fu] - mem_counter_delta[intf][fu]);
@@ -307,12 +416,45 @@ module spatz_doublebw_vlsu
   end: gen_mem_counters_intf
 
   // Did the current instruction finished the memory requests?
-  logic [NrParallelInstructions-1:0] mem_insn_finished_q, mem_insn_finished_d;
-  `FF(mem_insn_finished_q, mem_insn_finished_d, '0)
+  // TMR-protected: per-instruction persistent handshake bits; an SEU on any
+  // bit here can silently mark a memory request as (un)finished, corrupting
+  // or hanging instruction retirement.
+  logic [NrParallelInstructions-1:0] mem_insn_finished_d;
+  logic [NrParallelInstructions-1:0] mem_insn_finished_q_rep [3];
+  for (genvar t = 0; t < 3; t++) begin : gen_mem_insn_finished_rep
+    `FF(mem_insn_finished_q_rep[t], mem_insn_finished_d, '0)
+  end
+  logic [NrParallelInstructions-1:0] mem_insn_finished_q;
+  logic mem_insn_finished_tmr_fault;
+  bitwise_TMR_voter_fail #(
+    .DataWidth (NrParallelInstructions),
+    .VoterType (1)
+  ) i_mem_insn_finished_voter (
+    .a_i              (mem_insn_finished_q_rep[0]  ),
+    .b_i              (mem_insn_finished_q_rep[1]  ),
+    .c_i              (mem_insn_finished_q_rep[2]  ),
+    .majority_o       (mem_insn_finished_q         ),
+    .fault_detected_o (mem_insn_finished_tmr_fault )
+  );
 
   // Is the current instruction pending?
-  logic [NrParallelInstructions-1:0] mem_insn_pending_q, mem_insn_pending_d;
-  `FF(mem_insn_pending_q, mem_insn_pending_d, '0)
+  logic [NrParallelInstructions-1:0] mem_insn_pending_d;
+  logic [NrParallelInstructions-1:0] mem_insn_pending_q_rep [3];
+  for (genvar t = 0; t < 3; t++) begin : gen_mem_insn_pending_rep
+    `FF(mem_insn_pending_q_rep[t], mem_insn_pending_d, '0)
+  end
+  logic [NrParallelInstructions-1:0] mem_insn_pending_q;
+  logic mem_insn_pending_tmr_fault;
+  bitwise_TMR_voter_fail #(
+    .DataWidth (NrParallelInstructions),
+    .VoterType (1)
+  ) i_mem_insn_pending_voter (
+    .a_i              (mem_insn_pending_q_rep[0]  ),
+    .b_i              (mem_insn_pending_q_rep[1]  ),
+    .c_i              (mem_insn_pending_q_rep[2]  ),
+    .majority_o       (mem_insn_pending_q         ),
+    .fault_detected_o (mem_insn_pending_tmr_fault )
+  );
 
   // Is there are pending write request to be sent to the memory
   logic write_pending;
@@ -343,22 +485,30 @@ module spatz_doublebw_vlsu
   logic             commit_insn_empty, commit_insn_full;
   logic             commit_insn_valid;
 
-  fifo_v3 #(
-    .DEPTH       (3                ),
-    .FALL_THROUGH(1'b1             ),
-    .dtype       (commit_metadata_t)
+  // rel_fifo (redundancy_cells) has no dtype parameter -- only a plain DataWidth --
+  // so pack/unpack commit_metadata_t to flat bits at this boundary.
+  localparam int unsigned CommitMetadataWidth = $bits(commit_metadata_t);
+  logic [CommitMetadataWidth-1:0] commit_insn_d_bits, commit_insn_q_bits;
+  assign commit_insn_d_bits = commit_insn_d;
+  assign commit_insn_q = commit_metadata_t'(commit_insn_q_bits);
+
+  rel_fifo #(
+    .Depth       (3                ),
+    .FallThrough (1'b1             ),
+    .DataWidth   (CommitMetadataWidth)
   ) i_fifo_commit_insn (
     .clk_i     (clk_i            ),
     .rst_ni    (rst_ni           ),
     .flush_i   (1'b0             ),
     .testmode_i(1'b0             ),
-    .data_i    (commit_insn_d    ),
+    .data_i    (commit_insn_d_bits    ),
     .push_i    (commit_insn_push ),
     .full_o    (commit_insn_full ),
-    .data_o    (commit_insn_q    ),
+    .data_o    (commit_insn_q_bits    ),
     .empty_o   (commit_insn_empty),
     .pop_i     (commit_insn_pop  ),
-    .usage_o   (/* Unused */     )
+    .usage_o   (/* Unused */     ),
+    .fault_o   (commit_insn_fifo_fault)
   );
 
   assign spatz_req_ready_o = spatz_req_ready & !commit_insn_full;
@@ -418,21 +568,41 @@ module spatz_doublebw_vlsu
   logic  [NrInterfaces-1:0] [N_FU-1:0] commit_finished_q;
   logic  [NrInterfaces-1:0] [N_FU-1:0] commit_finished_d;
 
+  logic [NrInterfaces-1:0] [N_FU-1:0] commit_counter_tmr_fault;
+
   for (genvar intf = 0; intf < NrInterfaces; intf++) begin : gen_vreg_counters_intf
     for (genvar fu = 0; fu < N_FU; fu++) begin : gen_vreg_counters_intf_fu
-      delta_counter #(
-        .WIDTH($bits(vlen_t))
-      ) i_delta_counter_vreg (
-        .clk_i     (clk_i                         ),
-        .rst_ni    (rst_ni                        ),
-        .clear_i   (1'b0                          ),
-        .en_i      (commit_counter_en[intf][fu]   ),
-        .load_i    (commit_counter_load[intf][fu] ),
-        .down_i    (1'b0                          ), // We always count up
-        .delta_i   (commit_counter_delta[intf][fu]),
-        .d_i       (commit_counter_d[intf][fu]    ),
-        .q_o       (commit_counter_q[intf][fu]    ),
-        .overflow_o(/* Unused */                  )
+      // TMR-protected: q_o gates commit_finished_q/d (vector register
+      // write-back completion detection) -- an SEU here can silently mark a
+      // write-back complete early (dropping trailing elements) or never
+      // finished (hang). This is exactly the fault class flagged for
+      // counter_q[6] on this instance.
+      vlen_t commit_counter_q_rep [3];
+      for (genvar t = 0; t < 3; t++) begin : gen_delta_counter_vreg_rep
+        delta_counter #(
+          .WIDTH($bits(vlen_t))
+        ) i_delta_counter_vreg (
+          .clk_i     (clk_i                         ),
+          .rst_ni    (rst_ni                        ),
+          .clear_i   (1'b0                          ),
+          .en_i      (commit_counter_en[intf][fu]   ),
+          .load_i    (commit_counter_load[intf][fu] ),
+          .down_i    (1'b0                          ), // We always count up
+          .delta_i   (commit_counter_delta[intf][fu]),
+          .d_i       (commit_counter_d[intf][fu]    ),
+          .q_o       (commit_counter_q_rep[t]       ),
+          .overflow_o(/* Unused */                  )
+        );
+      end
+      bitwise_TMR_voter_fail #(
+        .DataWidth ($bits(vlen_t)),
+        .VoterType (1)
+      ) i_commit_counter_q_voter (
+        .a_i              (commit_counter_q_rep[0]           ),
+        .b_i              (commit_counter_q_rep[1]           ),
+        .c_i              (commit_counter_q_rep[2]           ),
+        .majority_o       (commit_counter_q[intf][fu]        ),
+        .fault_detected_o (commit_counter_tmr_fault[intf][fu])
       );
 
       assign commit_finished_q[intf][fu] = commit_insn_valid && (commit_counter_q[intf][fu] == commit_counter_max[intf][fu]);
@@ -450,6 +620,12 @@ module spatz_doublebw_vlsu
   // end (mirrors spatz_vlsu.sv's vs2_decoded/vd_rdata_decoded).
   logic [NrInterfaces-1:0][N_FU*ELEN-1:0] vs2_decoded;
   logic [NrInterfaces-1:0][N_FU*ELEN-1:0] vd_rdata_decoded;
+  // Per-cut ECC decoder error flags for the two VRF read ports above, reduced
+  // per-interface onto vlsu_vs2_sec_err_o/vlsu_vd_sec_err_o (and DED variants)
+  // below -- these are the sole checkpoint for these VRF read ports under
+  // DOUBLE_BW (spatz_vrf_ecc only drives a raw placeholder; see spatz.sv).
+  logic [NrInterfaces-1:0][N_FU-1:0] vs2_idx_sec_err, vs2_idx_ded_err;
+  logic [NrInterfaces-1:0][N_FU-1:0] vd_rdata_sec_err, vd_rdata_ded_err;
   for (genvar intf = 0; intf < NrInterfaces; intf++) begin : gen_vrf_rd_dec_intf
     for (genvar cut = 0; cut < N_FU; cut++) begin : gen_vrf_rd_dec_cut
       hsiao_ecc_dec #(
@@ -459,7 +635,7 @@ module spatz_doublebw_vlsu
         .in        (vrf_rdata_ecc[intf][1][(ELEN+7)*cut +: (ELEN+7)]),
         .out       (vs2_decoded[intf][ELEN*cut +: ELEN]),
         .syndrome_o(),
-        .err_o     ()
+        .err_o     ({vs2_idx_ded_err[intf][cut], vs2_idx_sec_err[intf][cut]})
       );
       hsiao_ecc_dec #(
         .DataWidth(ELEN),
@@ -468,10 +644,17 @@ module spatz_doublebw_vlsu
         .in        (vrf_rdata_ecc[intf][0][(ELEN+7)*cut +: (ELEN+7)]),
         .out       (vd_rdata_decoded[intf][ELEN*cut +: ELEN]),
         .syndrome_o(),
-        .err_o     ()
+        .err_o     ({vd_rdata_ded_err[intf][cut], vd_rdata_sec_err[intf][cut]})
       );
     end : gen_vrf_rd_dec_cut
   end : gen_vrf_rd_dec_intf
+
+  for (genvar intf = 0; intf < NrInterfaces; intf++) begin : gen_vrf_rd_err_reduce
+    assign vlsu_vs2_sec_err_o[intf] = |vs2_idx_sec_err[intf];
+    assign vlsu_vs2_ded_err_o[intf] = |vs2_idx_ded_err[intf];
+    assign vlsu_vd_sec_err_o[intf]  = |vd_rdata_sec_err[intf];
+    assign vlsu_vd_ded_err_o[intf]  = |vd_rdata_ded_err[intf];
+  end : gen_vrf_rd_err_reduce
 
   elen_t [NrInterfaces-1:0] [N_FU-1:0] mem_req_addr;
 
@@ -608,8 +791,26 @@ module spatz_doublebw_vlsu
   ///////////////
 
   // Are we busy?
-  logic busy_q, busy_d;
-  `FF(busy_q, busy_d, 1'b0)
+  // TMR-protected: persistent single-bit handshake flag -- an SEU here
+  // would silently corrupt control flow (spuriously busy or idle) with no
+  // other check to catch it.
+  logic busy_d;
+  logic busy_q_rep [3];
+  for (genvar t = 0; t < 3; t++) begin : gen_busy_rep
+    `FF(busy_q_rep[t], busy_d, 1'b0)
+  end
+  logic busy_q;
+  logic busy_tmr_fault;
+  bitwise_TMR_voter_fail #(
+    .DataWidth (1),
+    .VoterType (1)
+  ) i_busy_voter (
+    .a_i              (busy_q_rep[0]  ),
+    .b_i              (busy_q_rep[1]  ),
+    .c_i              (busy_q_rep[2]  ),
+    .majority_o       (busy_q         ),
+    .fault_detected_o (busy_tmr_fault )
+  );
 
   // Did we finish an instruction?
   logic vlsu_finished_req;
@@ -691,9 +892,9 @@ module spatz_doublebw_vlsu
   logic [NrInterfaces-1:0] [N_FU-1:0] offset_queue_full;
   for (genvar intf = 0; intf < NrInterfaces; intf++) begin : gen_offset_queue_intf
     for (genvar fu = 0; fu < N_FU; fu++) begin : gen_offset_queue_intf_fu
-      fifo_v3 #(
-        .DATA_WIDTH(int'(MAXEW)       ),
-        .DEPTH     (NrOutstandingLoads)
+      rel_fifo #(
+        .DataWidth (int'(MAXEW)       ),
+        .Depth     (NrOutstandingLoads)
       ) i_offset_queue (
         .clk_i     (clk_i                                                                    ),
         .rst_ni    (rst_ni                                                                   ),
@@ -705,7 +906,8 @@ module spatz_doublebw_vlsu
         .data_i    (mem_req_addr_offset[intf][fu]                                            ),
         .data_o    (vreg_addr_offset[intf][fu]                                               ),
         .pop_i     (rob_pop[intf][fu] && commit_insn_q.is_load                               ),
-        .usage_o   (/* Unused */                                                             )
+        .usage_o   (/* Unused */                                                             ),
+        .fault_o   (offset_queue_fault[intf][fu]                                             )
       );
     end: gen_offset_queue_intf_fu
   end: gen_offset_queue_intf
@@ -740,6 +942,12 @@ module spatz_doublebw_vlsu
   // committing to the VRF, preventing premature chaining on partial VRF words.
   vrf_req_t [NrInterfaces-1:0] coalesce_d, coalesce_q;
   logic     [NrInterfaces-1:0] coalesce_valid_d, coalesce_valid_q;
+  logic     [NrInterfaces-1:0] coalesce_valid_tmr_fault;
+  logic     [NrInterfaces-1:0] vrf_commit_intf_valid_tmr_fault;
+  logic     [NrInterfaces-1:0] vrf_commit_waiting_tmr_fault;
+  logic     [1:0]              vd_prev_commit_valid_tmr_fault;
+  logic     [NrInterfaces-1:0] vd_rmw_valid_tmr_fault;
+  logic     [NrInterfaces-1:0] vd_rmw_inflight_tmr_fault;
   logic     [NrInterfaces-1:0] coalesce_commit;
 
   // Force a commit when the next pending write targets a different VRF word address.
@@ -763,6 +971,10 @@ module spatz_doublebw_vlsu
   logic [NrInterfaces-1:0][N_FU-1:0][ELEN-1:0]   coalesce_buf_decoded, coalesce_new_decoded;
   logic [NrInterfaces-1:0][N_FU-1:0][ELEN-1:0]   coalesce_merged_payload;
   logic [NrInterfaces-1:0][N_FU-1:0][ELEN+7-1:0] coalesce_merged_enc;
+  // Per-cut ECC decoder error flags for the coalesce-buffer write-merge path,
+  // reduced onto vlsu_wr_sec_err_o/vlsu_wr_ded_err_o below.
+  logic [NrInterfaces-1:0][N_FU-1:0] coalesce_buf_sec_err, coalesce_buf_ded_err;
+  logic [NrInterfaces-1:0][N_FU-1:0] coalesce_new_sec_err, coalesce_new_ded_err;
 
   for (genvar intf = 0; intf < NrInterfaces; intf++) begin : gen_coalesce_merge_intf
     for (genvar fu = 0; fu < N_FU; fu++) begin : gen_coalesce_merge_fu
@@ -773,7 +985,7 @@ module spatz_doublebw_vlsu
         .in        (coalesce_q[intf].wdata[(ELEN+7)*fu +: (ELEN+7)]),
         .out       (coalesce_buf_decoded[intf][fu]),
         .syndrome_o(),
-        .err_o     ()
+        .err_o     ({coalesce_buf_ded_err[intf][fu], coalesce_buf_sec_err[intf][fu]})
       );
 
       hsiao_ecc_dec #(
@@ -783,7 +995,7 @@ module spatz_doublebw_vlsu
         .in        (vrf_req_q[intf].wdata[(ELEN+7)*fu +: (ELEN+7)]),
         .out       (coalesce_new_decoded[intf][fu]),
         .syndrome_o(),
-        .err_o     ()
+        .err_o     ({coalesce_new_ded_err[intf][fu], coalesce_new_sec_err[intf][fu]})
       );
 
       for (genvar b = 0; b < ELENB; b++) begin : gen_coalesce_merge_byte
@@ -801,10 +1013,13 @@ module spatz_doublebw_vlsu
       );
     end : gen_coalesce_merge_fu
   end : gen_coalesce_merge_intf
+  assign vlsu_wr_sec_err_o = |coalesce_buf_sec_err | |coalesce_new_sec_err;
+  assign vlsu_wr_ded_err_o = |coalesce_buf_ded_err | |coalesce_new_ded_err;
 
   for (genvar intf = 0; intf < NrInterfaces; intf++) begin : gen_vrf_req_register_intf
-    spill_register #(
-      .T(vrf_req_t)
+    rel_spill_register #(
+      .T(vrf_req_t),
+      .TmrHandshake (1'b0)
     ) i_vrf_req_register (
       .clk_i  (clk_i                ),
       .rst_ni (rst_ni               ),
@@ -813,11 +1028,30 @@ module spatz_doublebw_vlsu
       .ready_o(vrf_req_ready_d[intf]),
       .data_o (vrf_req_q[intf]      ),
       .valid_o(vrf_req_valid_q[intf]),
-      .ready_i(vrf_req_ready_q[intf])
+      .ready_i(vrf_req_ready_q[intf]),
+      .fault_o ( vrf_req_register_fault[intf] ),
+      .data_corrector_o ( ),
+      .data_corrected_i ( '0 )
     );
 
     `FF(coalesce_q[intf], coalesce_d[intf], '0)
-    `FF(coalesce_valid_q[intf], coalesce_valid_d[intf], '0)
+    // TMR-protected: persistent single-bit handshake flag gating whether
+    // the coalescing buffer holds a pending VRF write; see busy_q for the
+    // general rationale.
+    logic coalesce_valid_q_rep [3];
+    for (genvar t = 0; t < 3; t++) begin : gen_coalesce_valid_rep
+      `FF(coalesce_valid_q_rep[t], coalesce_valid_d[intf], '0)
+    end
+    bitwise_TMR_voter_fail #(
+      .DataWidth (1),
+      .VoterType (1)
+    ) i_coalesce_valid_voter (
+      .a_i              (coalesce_valid_q_rep[0]           ),
+      .b_i              (coalesce_valid_q_rep[1]           ),
+      .c_i              (coalesce_valid_q_rep[2]           ),
+      .majority_o       (coalesce_valid_q[intf]            ),
+      .fault_detected_o (coalesce_valid_tmr_fault[intf]    )
+    );
 
     assign next_addr_different[intf] = coalesce_valid_q[intf] && vrf_req_valid_q[intf] &&
                                        (coalesce_q[intf].waddr != vrf_req_q[intf].waddr);
@@ -855,8 +1089,34 @@ module spatz_doublebw_vlsu
     //   - buffer is committing this cycle (VRF accepting, freeing a slot)
     assign vrf_req_ready_q[intf] = !coalesce_valid_q[intf] || !coalesce_commit[intf] || vrf_wvalid_i[intf];
 
-    `FF(vrf_commit_intf_valid_q[intf], vrf_commit_intf_valid[intf], 1'b0)
-    `FF(vrf_commit_waiting_q[intf], vrf_commit_waiting_d[intf], 1'b0)
+    // TMR-protected: persistent single-bit handshake flags; see busy_q for
+    // the general rationale.
+    logic vrf_commit_intf_valid_q_rep [3];
+    logic vrf_commit_waiting_q_rep [3];
+    for (genvar t = 0; t < 3; t++) begin : gen_vrf_commit_handshake_rep
+      `FF(vrf_commit_intf_valid_q_rep[t], vrf_commit_intf_valid[intf], 1'b0)
+      `FF(vrf_commit_waiting_q_rep[t], vrf_commit_waiting_d[intf], 1'b0)
+    end
+    bitwise_TMR_voter_fail #(
+      .DataWidth (1),
+      .VoterType (1)
+    ) i_vrf_commit_intf_valid_voter (
+      .a_i              (vrf_commit_intf_valid_q_rep[0]        ),
+      .b_i              (vrf_commit_intf_valid_q_rep[1]        ),
+      .c_i              (vrf_commit_intf_valid_q_rep[2]        ),
+      .majority_o       (vrf_commit_intf_valid_q[intf]         ),
+      .fault_detected_o (vrf_commit_intf_valid_tmr_fault[intf] )
+    );
+    bitwise_TMR_voter_fail #(
+      .DataWidth (1),
+      .VoterType (1)
+    ) i_vrf_commit_waiting_voter (
+      .a_i              (vrf_commit_waiting_q_rep[0]        ),
+      .b_i              (vrf_commit_waiting_q_rep[1]        ),
+      .c_i              (vrf_commit_waiting_q_rep[2]        ),
+      .majority_o       (vrf_commit_waiting_q[intf]         ),
+      .fault_detected_o (vrf_commit_waiting_tmr_fault[intf] )
+    );
 
     always_comb begin : coalesce_proc
       coalesce_d[intf]       = coalesce_q[intf];
@@ -960,7 +1220,22 @@ module spatz_doublebw_vlsu
   logic      [1:0] vd_prev_commit_valid_q, vd_prev_commit_valid_d;
   for (genvar intf = 0; intf < NrInterfaces; intf++) begin : gen_vd_prev_commit_ff
     `FF(vd_prev_commit_waddr_q[intf], vd_prev_commit_waddr_d[intf], '0)
-    `FF(vd_prev_commit_valid_q[intf], vd_prev_commit_valid_d[intf], 1'b0)
+    // TMR-protected: persistent single-bit handshake flag; see busy_q for
+    // the general rationale.
+    logic vd_prev_commit_valid_q_rep [3];
+    for (genvar t = 0; t < 3; t++) begin : gen_vd_prev_commit_valid_rep
+      `FF(vd_prev_commit_valid_q_rep[t], vd_prev_commit_valid_d[intf], 1'b0)
+    end
+    bitwise_TMR_voter_fail #(
+      .DataWidth (1),
+      .VoterType (1)
+    ) i_vd_prev_commit_valid_voter (
+      .a_i              (vd_prev_commit_valid_q_rep[0]        ),
+      .b_i              (vd_prev_commit_valid_q_rep[1]        ),
+      .c_i              (vd_prev_commit_valid_q_rep[2]        ),
+      .majority_o       (vd_prev_commit_valid_q[intf]         ),
+      .fault_detected_o (vd_prev_commit_valid_tmr_fault[intf] )
+    );
   end
 
   logic [1:0] vd_is_new_word;
@@ -1083,8 +1358,13 @@ module spatz_doublebw_vlsu
   assign vlsu_rmw_retired[0] = vrf_wvalid_i[0];
   assign vlsu_rmw_retired[1] = vrf_wvalid_i[1] && vlsu_buf_empty_i;
 
-  typedef enum logic { VLSU_LD_NORMAL, VLSU_LD_RMW } vlsu_ld_rmw_e;
+  // One-hot encoded; see state_illegal above for the parity-check rationale.
+  typedef enum logic [1:0] { VLSU_LD_NORMAL = 2'b01, VLSU_LD_RMW = 2'b10 } vlsu_ld_rmw_e;
   vlsu_ld_rmw_e [NrInterfaces-1:0] vlsu_ld_rmw_q, vlsu_ld_rmw_d;
+  logic [NrInterfaces-1:0] vlsu_ld_rmw_illegal;
+  for (genvar intf = 0; intf < NrInterfaces; intf++) begin : gen_vlsu_ld_rmw_illegal
+    assign vlsu_ld_rmw_illegal[intf] = ~(^vlsu_ld_rmw_q[intf]);
+  end
 
   logic      [NrInterfaces-1:0]                 vd_rmw_valid_q,    vd_rmw_valid_d;
   vrf_addr_t [NrInterfaces-1:0]                 vd_rmw_addr_q,     vd_rmw_addr_d;
@@ -1092,10 +1372,36 @@ module spatz_doublebw_vlsu
   logic      [NrInterfaces-1:0]                 vd_rmw_inflight_q, vd_rmw_inflight_d;
   for (genvar intf = 0; intf < NrInterfaces; intf++) begin : gen_vd_rmw_ff
     `FF(vlsu_ld_rmw_q[intf],    vlsu_ld_rmw_d[intf],    VLSU_LD_NORMAL)
-    `FF(vd_rmw_valid_q[intf],    vd_rmw_valid_d[intf],    1'b0)
     `FF(vd_rmw_addr_q[intf],     vd_rmw_addr_d[intf],     '0)
     `FF(vd_rmw_data_q[intf],     vd_rmw_data_d[intf],     '0)
-    `FF(vd_rmw_inflight_q[intf], vd_rmw_inflight_d[intf], 1'b0)
+    // TMR-protected: persistent single-bit handshake flags gating the RMW
+    // read-back accumulator; see busy_q for the general rationale.
+    logic vd_rmw_valid_q_rep [3];
+    logic vd_rmw_inflight_q_rep [3];
+    for (genvar t = 0; t < 3; t++) begin : gen_vd_rmw_handshake_rep
+      `FF(vd_rmw_valid_q_rep[t], vd_rmw_valid_d[intf], 1'b0)
+      `FF(vd_rmw_inflight_q_rep[t], vd_rmw_inflight_d[intf], 1'b0)
+    end
+    bitwise_TMR_voter_fail #(
+      .DataWidth (1),
+      .VoterType (1)
+    ) i_vd_rmw_valid_voter (
+      .a_i              (vd_rmw_valid_q_rep[0]        ),
+      .b_i              (vd_rmw_valid_q_rep[1]        ),
+      .c_i              (vd_rmw_valid_q_rep[2]        ),
+      .majority_o       (vd_rmw_valid_q[intf]         ),
+      .fault_detected_o (vd_rmw_valid_tmr_fault[intf] )
+    );
+    bitwise_TMR_voter_fail #(
+      .DataWidth (1),
+      .VoterType (1)
+    ) i_vd_rmw_inflight_voter (
+      .a_i              (vd_rmw_inflight_q_rep[0]        ),
+      .b_i              (vd_rmw_inflight_q_rep[1]        ),
+      .c_i              (vd_rmw_inflight_q_rep[2]        ),
+      .majority_o       (vd_rmw_inflight_q[intf]         ),
+      .fault_detected_o (vd_rmw_inflight_tmr_fault[intf] )
+    );
   end
 
   logic [NrInterfaces-1:0] vlsu_rmw_have_data, vlsu_rmw_commit_now;
@@ -1168,7 +1474,8 @@ module spatz_doublebw_vlsu
          (vlsu_ld_rmw_q[intf] == VLSU_LD_RMW), 16'd0)
     always_ff @(posedge clk_i) begin
       if (vlsu_rmw_wait_cycles_q[intf] == 16'd400)
-        $warning("[spatz_doublebw_vlsu] Interface %0d VD RMW read-back has been waiting %0d cycles possible read-port starvation or vlsu_buf retirement stall", intf, vlsu_rmw_wait_cycles_q[intf]);
+        $warning("[spatz_doublebw_vlsu] Interface %0d VD RMW read-back has been waiting %0d cycles \
+- possible read-port starvation or vlsu_buf retirement stall", intf, vlsu_rmw_wait_cycles_q[intf]);
     end
   end
 `endif
@@ -1219,10 +1526,26 @@ module spatz_doublebw_vlsu
   ///////////
 
   logic vlsu_rsp_valid_q; // register the instruction finish signal
-  logic v0_t_is_ready_q;
   logic v0_t_read_done;
   `FFLARNC(v0_t_read_done,1'b1,v0_t_is_ready,vlsu_rsp_valid_o,1'b0,clk_i,rst_ni);
-  `FF(v0_t_is_ready_q,v0_t_is_ready,'0);
+  // TMR-protected: persistent single-bit handshake flag; see busy_q above
+  // for the rationale.
+  logic v0_t_is_ready_q_rep [3];
+  for (genvar t = 0; t < 3; t++) begin : gen_v0_t_is_ready_rep
+    `FF(v0_t_is_ready_q_rep[t], v0_t_is_ready, '0)
+  end
+  logic v0_t_is_ready_q;
+  logic v0_t_is_ready_tmr_fault;
+  bitwise_TMR_voter_fail #(
+    .DataWidth (1),
+    .VoterType (1)
+  ) i_v0_t_is_ready_voter (
+    .a_i              (v0_t_is_ready_q_rep[0]  ),
+    .b_i              (v0_t_is_ready_q_rep[1]  ),
+    .c_i              (v0_t_is_ready_q_rep[2]  ),
+    .majority_o       (v0_t_is_ready_q         ),
+    .fault_detected_o (v0_t_is_ready_tmr_fault )
+  );
 
   always_comb begin: p_state
     // Maintain state
@@ -1274,7 +1597,8 @@ module spatz_doublebw_vlsu
   id_t  [NrInterfaces-1:0] [N_FU-1:0]                   mem_req_id;
   // Byte-rotated/shifted store payload, decoded-domain (plain, no parity).
   logic [NrInterfaces-1:0] [N_FU-1:0][ELEN-1:0]   mem_req_data_plain;
-  // ECC-width to match spatz_mem_req_t.data
+  // ECC-width to match spatz_mem_req_t.data. Driven by gen_mem_req_data_ecc_enc
+  // below, not directly by the rotate case-statements.
   logic [NrInterfaces-1:0] [N_FU-1:0][ELEN+7-1:0] mem_req_data;
   logic [NrInterfaces-1:0] [N_FU-1:0]                   mem_req_svalid;
   logic [NrInterfaces-1:0] [N_FU-1:0][ELEN/8-1:0]       mem_req_strb;
@@ -1402,6 +1726,11 @@ module spatz_doublebw_vlsu
   logic [NrInterfaces-1:0][N_FU-1:0][ELEN-1:0]   load_rsp_data_decoded;
   logic [NrInterfaces-1:0][N_FU-1:0][ELEN-1:0]   load_rsp_data_aligned;
   logic [NrInterfaces-1:0][N_FU-1:0][ELEN+7-1:0] load_rsp_data_encoded;
+  // Per-cut ECC decoder error flags for the load-response path -- the sole
+  // checkpoint that observes a fault injected anywhere in the TCDM SRAM
+  // content array (gen_tcdm_super_bank) once it is actually read back;
+  // reduced onto vlsu_ld_sec_err_o/vlsu_ld_ded_err_o below.
+  logic [NrInterfaces-1:0][N_FU-1:0] load_rsp_sec_err, load_rsp_ded_err;
 
   for (genvar intf = 0; intf < NrInterfaces; intf++) begin : gen_load_rsp_ecc_intf
     for (genvar fu = 0; fu < N_FU; fu++) begin : gen_load_rsp_ecc_fu
@@ -1412,7 +1741,7 @@ module spatz_doublebw_vlsu
         .in        (rob_rdata[intf][fu]),
         .out       (load_rsp_data_decoded[intf][fu]),
         .syndrome_o(),
-        .err_o     ()
+        .err_o     ({load_rsp_ded_err[intf][fu], load_rsp_sec_err[intf][fu]})
       );
 
       hsiao_ecc_enc #(
@@ -1424,8 +1753,19 @@ module spatz_doublebw_vlsu
       );
     end
   end
+  assign vlsu_ld_sec_err_o = |load_rsp_sec_err;
+  assign vlsu_ld_ded_err_o = |load_rsp_ded_err;
 
   // Store-side ECC decode for byte-level data manipulation, per interface.
+  // rob_rdata also carries the store-source VRF read as a 39-bit ECC
+  // codeword; the byte-rotate logic further below (for unaligned/strided/
+  // indexed stores) manipulates raw bits and does not preserve codeword
+  // validity -- an SEU anywhere between the VRF read and this point would
+  // otherwise silently ride through the rotate logic and be re-encoded into
+  // a fresh, self-consistent (but wrong) codeword downstream in spatz_cc.sv,
+  // which only ever re-encodes the low ELEN bits without ever decoding/
+  // verifying them. Decode (and correct single-bit errors) here, before
+  // rotation. Mirrors spatz_vlsu.sv's gen_store_data_ecc.
   logic [NrInterfaces-1:0][N_FU-1:0][ELEN-1:0] store_data_decoded;
   logic [NrInterfaces-1:0][N_FU-1:0]           store_data_sec_err, store_data_ded_err;
 
@@ -1442,6 +1782,8 @@ module spatz_doublebw_vlsu
       );
     end
   end
+  assign vlsu_st_sec_err_o = |store_data_sec_err;
+  assign vlsu_st_ded_err_o = |store_data_ded_err;
 
   // RMW merge: on the first write to a not-yet-touched word that needs it
   // (masked / narrow-element / partial-tail commit), merge this write's new
@@ -1486,10 +1828,10 @@ module spatz_doublebw_vlsu
 
       mem_req_id[intf]         = '0;
       mem_req_data_plain[intf] = '0;
-      mem_req_strb[intf]       = '0;
-      mem_req_svalid[intf]     = '0;
-      mem_req_lvalid[intf]     = '0;
-      mem_req_last[intf]       = '0;
+      mem_req_strb[intf]   = '0;
+      mem_req_svalid[intf] = '0;
+      mem_req_lvalid[intf] = '0;
+      mem_req_last[intf]   = '0;
 
       // Propagate request ID
       vrf_req_d[intf].rsp.id    = commit_insn_q.id;
@@ -1790,7 +2132,12 @@ module spatz_doublebw_vlsu
   end
   // verilator lint_on LATCH
 
-  // Re-encode the byte-rotated store payload right after rotation
+  // Re-encode the byte-rotated store payload right after rotation, with no
+  // register in between -- mirrors the load path's decode -> realign ->
+  // re-encode sequencing (i_load_rsp_ecc_dec / i_vlsu_rmw_merge_ecc_enc
+  // above). This makes mem_req_data a valid codeword *before* it reaches
+  // i_spatz_mem_req_register below, so the spill register now holds
+  // ECC-protected data end-to-end instead of a zero-parity plain value.
   for (genvar intf = 0; intf < NrInterfaces; intf++) begin : gen_mem_req_data_ecc_enc_intf
     for (genvar fu = 0; fu < N_FU; fu++) begin : gen_mem_req_data_ecc_enc_fu
       hsiao_ecc_enc #(
@@ -1803,13 +2150,31 @@ module spatz_doublebw_vlsu
     end : gen_mem_req_data_ecc_enc_fu
   end : gen_mem_req_data_ecc_enc_intf
 
+  // Request address ECC: encode the plain TCDM address before the spill register,
+  // mirroring the store-data encoder above. It is decoded at the spatz_tcdm_interconnect input.
+  localparam int unsigned TCDMAddrProtWidth = hsiao_ecc_pkg::min_ecc(TCDMAddrWidth);
+  localparam int unsigned TCDMAddrEccWidth  = TCDMAddrWidth + TCDMAddrProtWidth;
+  logic [NrInterfaces-1:0][N_FU-1:0][TCDMAddrEccWidth-1:0] mem_req_addr_ecc;
+  for (genvar intf = 0; intf < NrInterfaces; intf++) begin : gen_mem_req_addr_ecc_enc_intf
+    for (genvar fu = 0; fu < N_FU; fu++) begin : gen_mem_req_addr_ecc_enc_fu
+      hsiao_ecc_enc #(
+        .DataWidth (TCDMAddrWidth),
+        .ProtWidth (TCDMAddrProtWidth)
+      ) i_mem_req_addr_ecc_enc (
+        .in  (mem_req_addr[intf][fu][TCDMAddrWidth-1:0]),
+        .out (mem_req_addr_ecc[intf][fu])
+      );
+    end
+  end
+
   // Create memory requests
   for (genvar intf = 0; intf < NrInterfaces; intf++) begin : gen_mem_req_intf
     for (genvar fu = 0; fu < N_FU; fu++) begin : gen_mem_req_intf_fu
       localparam int unsigned port = intf * N_FU + fu;
 
-      spill_register #(
-        .T(spatz_mem_req_t)
+      rel_spill_register #(
+        .T(spatz_mem_req_t),
+        .TmrHandshake (1'b0)
       ) i_spatz_mem_req_register (
         .clk_i   (clk_i                          ),
         .rst_ni  (rst_ni                         ),
@@ -1818,12 +2183,15 @@ module spatz_doublebw_vlsu
         .ready_o (spatz_mem_req_ready[intf][fu]  ),
         .data_o  (spatz_mem_req_o[port]          ),
         .valid_o (spatz_mem_req_valid_o[port]    ),
-        .ready_i (spatz_mem_req_ready_i[port]    )
+        .ready_i (spatz_mem_req_ready_i[port]    ),
+        .fault_o ( mem_req_register_fault[intf][fu] ),
+        .data_corrector_o ( ),
+        .data_corrected_i ( '0 )
       );
 `ifdef MEMPOOL_SPATZ
       // ID is required in Mempool-Spatz
       assign spatz_mem_req[intf][fu].id    = mem_req_id[intf][fu];
-      assign spatz_mem_req[intf][fu].addr  = mem_req_addr[intf][fu];
+      assign spatz_mem_req[intf][fu].addr  = mem_req_addr_ecc[intf][fu];
       assign spatz_mem_req[intf][fu].mode  = '0; // Request always uses user privilege level
       assign spatz_mem_req[intf][fu].size  = mem_spatz_req.vtype.vsew[1:0];
       assign spatz_mem_req[intf][fu].write = !mem_is_load;
@@ -1833,7 +2201,7 @@ module spatz_doublebw_vlsu
       assign spatz_mem_req[intf][fu].spec  = 1'b0; // Request is never speculative
       assign spatz_mem_req_valid[intf][fu] = mem_req_svalid[intf][fu] || mem_req_lvalid[intf][fu];
 `else
-      assign spatz_mem_req[intf][fu].addr  = mem_req_addr[intf][fu];
+      assign spatz_mem_req[intf][fu].addr  = mem_req_addr_ecc[intf][fu];
       assign spatz_mem_req[intf][fu].write = !mem_is_load;
       assign spatz_mem_req[intf][fu].amo   = reqrsp_pkg::AMONone;
       assign spatz_mem_req[intf][fu].data  = mem_req_data[intf][fu];
@@ -1856,4 +2224,24 @@ module spatz_doublebw_vlsu
   if (NrMemPorts != 2**$clog2(NrMemPorts))
     $error("[spatz_vlsu] The NrMemPorts parameter needs to be a power of two");
 
+  assign fsm_illegal_state_o = state_illegal | (|vlsu_ld_rmw_illegal);
+
+  assign handshake_tmr_fault_o = busy_tmr_fault | v0_t_is_ready_tmr_fault
+                                | mem_insn_finished_tmr_fault | mem_insn_pending_tmr_fault
+                                | (|coalesce_valid_tmr_fault) | (|vrf_commit_intf_valid_tmr_fault)
+                                | (|vrf_commit_waiting_tmr_fault) | (|vd_prev_commit_valid_tmr_fault)
+                                | (|vd_rmw_valid_tmr_fault) | (|vd_rmw_inflight_tmr_fault)
+                                | (|mem_counter_tmr_fault) | (|mem_idx_counter_tmr_fault)
+                                | (|commit_counter_tmr_fault) | (|store_count_tmr_fault);
+
+  assign datapath_tmr_fault_o = operation_queue_fault | commit_insn_fifo_fault
+                               | (|vrf_req_register_fault) | (|reorder_buffer_fault)
+                               | (|offset_queue_fault) | (|mem_req_register_fault);
+
+  assign vlsu_correctable_error_o = vlsu_st_sec_err_o | vlsu_ld_sec_err_o | vlsu_wr_sec_err_o
+                                   | |vlsu_vd_sec_err_o | |vlsu_vs2_sec_err_o
+                                   | handshake_tmr_fault_o | datapath_tmr_fault_o;
+  assign vlsu_uncorrectable_error_o = vlsu_st_ded_err_o | vlsu_ld_ded_err_o | vlsu_wr_ded_err_o
+                                    | |vlsu_vd_ded_err_o | |vlsu_vs2_ded_err_o
+                                    | fsm_illegal_state_o;
 endmodule : spatz_doublebw_vlsu
