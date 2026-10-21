@@ -271,16 +271,21 @@ module spatz_cluster
   // ECC-protected address for the core/DMA -> per-bank address path (mux +
   // amo_shim only). The crossbar's own bank-select routing logic upstream
   // of this is untouched and keeps using the plain address
-  localparam int unsigned TCDMAddrProtWidth   = hsiao_ecc_pkg::min_ecc(TCDMMemAddrWidth);
-  localparam int unsigned TCDMMemAddrEccWidth = TCDMMemAddrWidth + TCDMAddrProtWidth;
+  localparam int unsigned TCDMMemAddrProtWidth   = hsiao_ecc_pkg::min_ecc(TCDMMemAddrWidth);
+  localparam int unsigned TCDMMemAddrEccWidth = TCDMMemAddrWidth + TCDMMemAddrProtWidth;
   typedef logic [TCDMMemAddrEccWidth-1:0] tcdm_mem_addr_ecc_t;
   `MEM_TYPEDEF_REQ_CHAN_T(mem_req_ecc_chan_t, tcdm_mem_addr_ecc_t, tcdm_data_t, strb_t, tcdm_user_t)
   `MEM_TYPEDEF_REQ_T(mem_req_ecc_t, mem_req_ecc_chan_t)
   `MEM_TYPEDEF_REQ_CHAN_T(mem_dma_req_ecc_chan_t, tcdm_mem_addr_ecc_t, data_dma_t, strb_dma_t, logic)
   `MEM_TYPEDEF_REQ_T(mem_dma_req_ecc_t, mem_dma_req_ecc_chan_t)
-
-  `TCDM_TYPEDEF_ALL(tcdm, tcdm_addr_t, tcdm_data_t, strb_t, tcdm_user_t)
-  `TCDM_TYPEDEF_ALL(tcdm_dma, tcdm_addr_t, data_dma_t, strb_dma_t, logic)
+    
+  // Full request-address ECC (before the crossbar). Unlike tcdm_mem_addr_ecc_t,
+  // this covers the whole TCDMAddrWidth address that the crossbar routes on.
+  localparam int unsigned TCDMAddrProtWidth = hsiao_ecc_pkg::min_ecc(TCDMAddrWidth);
+  localparam int unsigned TCDMAddrEccWidth  = TCDMAddrWidth + TCDMAddrProtWidth;
+  typedef logic [TCDMAddrEccWidth-1:0] tcdm_addr_ecc_t;
+  `TCDM_TYPEDEF_ALL(tcdm, tcdm_addr_ecc_t, tcdm_data_t, strb_t, tcdm_user_t)
+  `TCDM_TYPEDEF_ALL(tcdm_dma, tcdm_addr_ecc_t, data_dma_t, strb_dma_t, logic) // DMA request address is encoded at the boundary
 
   `REG_BUS_TYPEDEF_ALL(reg, addr_t, data_t, strb_t)
   `REG_BUS_TYPEDEF_ALL(reg_dma, addr_t, data_dma_t, strb_dma_t)
@@ -654,7 +659,13 @@ module spatz_cluster
     .mem_rdata_i  (ext_dma_rsp.p.data                    )
   );
 
-  assign ext_dma_req.q.addr = tcdm_addr_t'(ext_dma_req_q_addr_nontrunc);
+  // DMA request address is encoded before the DMA crossbar, as for the TCDM masters.
+  hsiao_ecc_enc #(
+    .DataWidth (TCDMAddrWidth)
+  ) i_ext_dma_addr_enc (
+    .in  (tcdm_addr_t'(ext_dma_req_q_addr_nontrunc)),
+    .out (ext_dma_req.q.addr)
+  );
   assign ext_dma_req.q.amo  = reqrsp_pkg::AMONone;
   assign ext_dma_req.q.user = '0;
 
@@ -673,6 +684,8 @@ module spatz_cluster
   logic [2:0] dma_req_valid_rep_in [1];
   assign dma_req_valid_rep_in[0] = {3{ext_dma_req.q_valid}};
 
+  logic [1:0] dma_tcdm_req_addr_ecc_o;
+
   spatz_tcdm_interconnect #(
     .NumInp                (1                 ),
     .NumOut                (NrSuperBanks      ),
@@ -682,6 +695,7 @@ module spatz_cluster
     .mem_req_t             (mem_dma_req_t     ),
     .mem_rsp_t             (mem_dma_rsp_t     ),
     .user_t                (logic             ),
+    .ReqAddrWidth          (TCDMAddrWidth     ),
     .MemAddrWidth          (TCDMMemAddrWidth  ),
     .DataWidth             (AxiDataWidth      ),
     .MemoryResponseLatency (MemoryMacroLatency),
@@ -702,7 +716,8 @@ module spatz_cluster
     .req_valid_rep_i (dma_req_valid_rep_in                         ),
     .req_ready_rep_o (/* unused -- ext_dma_rsp.q_ready via rsp_o */),
     .mem_valid_rep_o (dma_ic_mem_valid_rep                         ),
-    .mem_ready_rep_i (dma_ic_mem_ready_rep                         )
+    .mem_ready_rep_i (dma_ic_mem_ready_rep                         ),
+    .tcdm_req_addr_ecc_o(dma_tcdm_req_addr_ecc_o                   )
   );
 
   // ----------------
@@ -884,7 +899,7 @@ module spatz_cluster
 
       // Perodical scrub_trigger generator
       logic scrub_trigger;
-      scrub_timer #(.PERIOD(1_000_000)) i_scrub_timer (
+      scrub_timer #(.PERIOD(100_000)) i_scrub_timer (
         .clk_i,
         .rst_ni,
         .scrub_trigger_o  (scrub_trigger)
@@ -1062,6 +1077,8 @@ module spatz_cluster
     end : gen_tcdm_ic_mem_rep_bank
   end : gen_tcdm_ic_mem_rep_sb
 
+  logic [1:0] tcdm_req_addr_ecc_o;
+
   spatz_tcdm_interconnect #(
     .NumInp                (NumTCDMIn           ),
     .NumOut                (NrBanks             ),
@@ -1070,6 +1087,7 @@ module spatz_cluster
     .tcdm_rsp_t            (tcdm_rsp_t          ),
     .mem_req_t             (mem_req_t           ),
     .mem_rsp_t             (mem_rsp_t           ),
+    .ReqAddrWidth          (TCDMAddrWidth       ),
     .MemAddrWidth          (TCDMMemAddrWidth    ),
     .DataWidth             (DataWidth           ),
     .ProtDataWidth         (TCDMProtDataWidth   ),
@@ -1093,7 +1111,8 @@ module spatz_cluster
     .req_valid_rep_i (tcdm_ic_req_valid_rep     ),
     .req_ready_rep_o (tcdm_ic_req_ready_rep     ),
     .mem_valid_rep_o (tcdm_ic_mem_valid_rep_flat),
-    .mem_ready_rep_i (tcdm_ic_mem_ready_rep_flat)
+    .mem_ready_rep_i (tcdm_ic_mem_ready_rep_flat),
+    .tcdm_req_addr_ecc_o(tcdm_req_addr_ecc_o)
   );
 
   hive_req_t [NrCores-1:0] hive_req;
@@ -1200,8 +1219,18 @@ module spatz_cluster
         .core_tmr_fault_o   (core_tmr_fault         [i])
       );
       for (genvar j = 0; j < TcdmPorts; j++) begin
+        // Quadrilatero request address ECC, encoded per port before the crossbar mux.
+         tcdm_addr_ecc_t quad_addr_enc;
+         hsiao_ecc_enc #(
+           .DataWidth (TCDMAddrWidth),
+           .ProtWidth (TCDMAddrProtWidth)
+         ) i_quad_addr_enc (
+           .in  (quad_tcdm_req_wo_user[j].q.addr[TCDMAddrWidth-1:0]),
+           .out (quad_addr_enc)
+         );
         always_comb begin
           quad_tcdm_req[j].q              = quad_tcdm_req_wo_user[j].q;
+          quad_tcdm_req[j].q.addr         = quad_addr_enc;
           quad_tcdm_req[j].q.user.core_id = i[CoreIDWidth-1:0];
           quad_tcdm_req[j].q.user.is_core = 1;
           quad_tcdm_req[j].q_valid        = quad_tcdm_req_wo_user[j].q_valid;
@@ -1470,9 +1499,11 @@ module spatz_cluster
 
   assign tcdm_interconnect_correctable_fault_any   = |tcdm_addr_ecc_correctable_fault | |tcdm_wctrl_ecc_correctable_fault
                                               | |tcdm_be_ecc_correctable_fault | tcdm_shift_reg_tmr_fault
-                                              | amo_shim_handshake_tmr_fault_any | tcdm_ic_handshake_tmr_fault_any;
+                                              | amo_shim_handshake_tmr_fault_any | tcdm_ic_handshake_tmr_fault_any
+                                              | tcdm_req_addr_ecc_o[0] | dma_tcdm_req_addr_ecc_o[0];
   assign tcdm_interconnect_uncorrectable_fault_any   = |tcdm_addr_ecc_uncorrectable_fault | |tcdm_wctrl_ecc_uncorrectable_fault
-                                                | |tcdm_be_ecc_uncorrectable_fault;
+                                                | |tcdm_be_ecc_uncorrectable_fault
+                                                | tcdm_req_addr_ecc_o[1] | dma_tcdm_req_addr_ecc_o[1];
 
   // ----------------
   // Instruction Cache
@@ -1691,9 +1722,26 @@ module spatz_cluster
     .tcdm_rsp_i (axi_soc_rsp_pre        )
   );
 
-  // ECC encode/decode shim between i_axi_to_tcdm (32-bit) and i_tcdm_interconnect (39-bit).
+  // SoC request address ECC, encoded before the ECC shim (the shim's RMW path
+  // replays the incoming request, so it needs the codeword already in place).
+  tcdm_req_t axi_soc_req_pre_enc;
+  tcdm_addr_ecc_t axi_soc_addr_enc;
+  hsiao_ecc_enc #(
+    .DataWidth (TCDMAddrWidth),
+    .ProtWidth (TCDMAddrProtWidth)
+  ) i_axi_soc_addr_enc (
+    .in  (axi_soc_req_pre.q.addr[TCDMAddrWidth-1:0]),
+    .out (axi_soc_addr_enc)
+  );
+  always_comb begin : gen_axi_soc_req_pre_enc
+    axi_soc_req_pre_enc         = axi_soc_req_pre;
+    axi_soc_req_pre_enc.q.addr  = axi_soc_addr_enc;
+  end
+
+  // soc data ECC encode/decode shim between i_axi_to_tcdm (32-bit) and i_tcdm_interconnect (39-bit).
   // Full-word writes are encoded; reads are decoded back to 32-bit for the AXI side.
   // Partial writes (byte/halfword) trigger an internal RMW to preserve ECC validity.
+  // addr is encoded before the shim and passed through, so the shim can use it for RMWs without decoding it.
   spatz_tcdm_ecc_shim #(
     .DataWidth     (DataWidth         ),
     .ProtDataWidth (TCDMProtDataWidth ),
@@ -1702,7 +1750,7 @@ module spatz_cluster
   ) i_tcdm_ecc_shim (
     .clk_i     (clk_i          ),
     .rst_ni    (rst_ni         ),
-    .in_req_i  (axi_soc_req_pre),
+    .in_req_i  (axi_soc_req_pre_enc),
     .in_rsp_o  (axi_soc_rsp_pre),
     .out_req_o (axi_soc_req    ),
     .out_rsp_i (axi_soc_rsp    )

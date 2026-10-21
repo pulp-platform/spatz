@@ -306,6 +306,7 @@ module spatz_cc
     .drsp_t             (drsp_t                  ),
     .spatz_mem_req_t    (tcdm_req_chan_t         ),
     .spatz_mem_rsp_t    (tcdm_rsp_chan_t         ),
+    .TCDMAddrWidth      (TCDMAddrWidth           ),
     .spatz_issue_req_t  (acc_issue_req_t         ),
     .spatz_issue_rsp_t  (acc_issue_rsp_t         ),
     .spatz_rsp_t        (acc_rsp_t               )
@@ -541,9 +542,20 @@ module spatz_cc
     assign snitch_enc_data = snitch_tcdm_req_raw.q.data;
   end
 
+   // Snitch TCDM request address ECC, mirroring the data encoder above.
+   localparam int unsigned SnitchTCDMAddrProtWidth = hsiao_ecc_pkg::min_ecc(TCDMAddrWidth);
+   logic [TCDMAddrWidth+SnitchTCDMAddrProtWidth-1:0] snitch_enc_addr;
+   hsiao_ecc_enc #(
+     .DataWidth (TCDMAddrWidth),
+     .ProtWidth (SnitchTCDMAddrProtWidth)
+   ) i_snitch_addr_enc (
+     .in  (snitch_tcdm_req_raw.q.addr[TCDMAddrWidth-1:0]),
+     .out (snitch_enc_addr)
+   );
+
   assign tcdm_req_o[NumMemPortsPerSpatz] = '{
     q: '{
-      addr : snitch_tcdm_req_raw.q.addr,
+      addr : snitch_enc_addr,
       write: snitch_tcdm_req_raw.q.write,
       amo  : snitch_tcdm_req_raw.q.amo,
       data : snitch_enc_data,
@@ -566,6 +578,7 @@ module spatz_cc
   // Tracer
   // --------------------------
   // pragma translate_off
+`ifndef TARGET_ZOIX
   int           f;
   string        fn;
   logic  [63:0] cycle;
@@ -667,6 +680,7 @@ module spatz_cc
   final begin
     $fclose(f);
   end
+`endif
   // verilog_lint: waive-stop always-ff-non-blocking
   // pragma translate_on
 

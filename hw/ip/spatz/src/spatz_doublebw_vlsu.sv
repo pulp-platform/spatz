@@ -19,6 +19,8 @@ module spatz_doublebw_vlsu
     parameter int unsigned   NrOutstandingLoads = 16,
     // Memory request
     parameter  type          spatz_mem_req_t    = logic,
+    /// Plain TCDM request address width. The request address is encoded to this width before the spill register.
+    parameter  int unsigned  TCDMAddrWidth      = 0,
     parameter  type          spatz_mem_rsp_t    = logic,
     // Dependant parameters. DO NOT CHANGE!
     localparam int  unsigned NrInterfaces       = NrMemPorts / spatz_pkg::N_FU,
@@ -2148,6 +2150,23 @@ module spatz_doublebw_vlsu
     end : gen_mem_req_data_ecc_enc_fu
   end : gen_mem_req_data_ecc_enc_intf
 
+  // Request address ECC: encode the plain TCDM address before the spill register,
+  // mirroring the store-data encoder above. It is decoded at the spatz_tcdm_interconnect input.
+  localparam int unsigned TCDMAddrProtWidth = hsiao_ecc_pkg::min_ecc(TCDMAddrWidth);
+  localparam int unsigned TCDMAddrEccWidth  = TCDMAddrWidth + TCDMAddrProtWidth;
+  logic [NrInterfaces-1:0][N_FU-1:0][TCDMAddrEccWidth-1:0] mem_req_addr_ecc;
+  for (genvar intf = 0; intf < NrInterfaces; intf++) begin : gen_mem_req_addr_ecc_enc_intf
+    for (genvar fu = 0; fu < N_FU; fu++) begin : gen_mem_req_addr_ecc_enc_fu
+      hsiao_ecc_enc #(
+        .DataWidth (TCDMAddrWidth),
+        .ProtWidth (TCDMAddrProtWidth)
+      ) i_mem_req_addr_ecc_enc (
+        .in  (mem_req_addr[intf][fu][TCDMAddrWidth-1:0]),
+        .out (mem_req_addr_ecc[intf][fu])
+      );
+    end
+  end
+
   // Create memory requests
   for (genvar intf = 0; intf < NrInterfaces; intf++) begin : gen_mem_req_intf
     for (genvar fu = 0; fu < N_FU; fu++) begin : gen_mem_req_intf_fu
@@ -2172,7 +2191,7 @@ module spatz_doublebw_vlsu
 `ifdef MEMPOOL_SPATZ
       // ID is required in Mempool-Spatz
       assign spatz_mem_req[intf][fu].id    = mem_req_id[intf][fu];
-      assign spatz_mem_req[intf][fu].addr  = mem_req_addr[intf][fu];
+      assign spatz_mem_req[intf][fu].addr  = mem_req_addr_ecc[intf][fu];
       assign spatz_mem_req[intf][fu].mode  = '0; // Request always uses user privilege level
       assign spatz_mem_req[intf][fu].size  = mem_spatz_req.vtype.vsew[1:0];
       assign spatz_mem_req[intf][fu].write = !mem_is_load;
@@ -2182,7 +2201,7 @@ module spatz_doublebw_vlsu
       assign spatz_mem_req[intf][fu].spec  = 1'b0; // Request is never speculative
       assign spatz_mem_req_valid[intf][fu] = mem_req_svalid[intf][fu] || mem_req_lvalid[intf][fu];
 `else
-      assign spatz_mem_req[intf][fu].addr  = mem_req_addr[intf][fu];
+      assign spatz_mem_req[intf][fu].addr  = mem_req_addr_ecc[intf][fu];
       assign spatz_mem_req[intf][fu].write = !mem_is_load;
       assign spatz_mem_req[intf][fu].amo   = reqrsp_pkg::AMONone;
       assign spatz_mem_req[intf][fu].data  = mem_req_data[intf][fu];
