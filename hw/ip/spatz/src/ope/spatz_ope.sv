@@ -179,6 +179,7 @@ module spatz_ope
   logic        vt_done_valid , vt_done_ready  ;
   logic [$clog2(MaxVtGroupWords)-1:0] vt_word_idx_d, vt_word_idx_q;
   logic        vt_word_fire;
+  logic        vt_finishing;
   vt_word_count_t vt_active_words;
   vlen_t          vt_active_elems;
   tile_count_t    vt_active_lines;
@@ -193,6 +194,7 @@ module spatz_ope
   ope_rsp_t    tv_commit_rsp, tv_done_rsp      ;
   logic        tv_done_valid , tv_done_ready  ;
   logic [$clog2(MaxVtGroupWords)-1:0] tv_word_idx_d, tv_word_idx_q;
+  logic        tv_finishing;
   vt_word_count_t tv_active_words;
   vlen_t          tv_active_elems;
   tile_count_t    tv_active_lines;
@@ -321,10 +323,12 @@ module spatz_ope
     // Simple commands such as VTZERO/VTDISCARD must complete before a younger MAC may start.
     if (clean_req_valid)
       clean_req_ready = clean_commit_ready && clean_acc_ready;
-    else if (vt_req_valid && !vt_busy_q && !resident_drain_valid_q && !mac_tile_busy[spatz_req_vt.op_ope.tss.tile_id] &&
+    else if (vt_req_valid && (!vt_busy_q || (vt_finishing && vt_commit_ready)) &&
+             !resident_drain_valid_q && !mac_tile_busy[spatz_req_vt.op_ope.tss.tile_id] &&
              (!resident_valid_q || (spatz_req_vt.op_ope.tss.tile_id != resident_tile_q)))
       vt_req_ready = 1'b1;
-    else if (tv_req_valid && !tv_busy_q && !resident_drain_valid_q && !mac_tile_busy[spatz_req_tv.op_ope.tss.tile_id] &&
+    else if (tv_req_valid && (!tv_busy_q || (tv_finishing && tv_commit_ready)) &&
+             !resident_drain_valid_q && !mac_tile_busy[spatz_req_tv.op_ope.tss.tile_id] &&
              (!resident_valid_q || (spatz_req_tv.op_ope.tss.tile_id != resident_tile_q)))
       tv_req_ready = 1'b1;
     else if (mac_req_valid)
@@ -726,27 +730,24 @@ module spatz_ope
   end
 
   assign vt_word_fire = vt_busy_q && vt_req_q.use_vd && vrf_wvalid_i;
+  assign vt_finishing = vt_busy_q && ((vt_active_words == 0) ||
+      (vt_word_fire && (({1'b0, vt_word_idx_q} + 1'b1) >= vt_active_words)));
 
   always_comb begin : vt_handler
     vt_busy_d        = vt_busy_q;
     vt_word_idx_d    = vt_word_idx_q;
-    vt_commit_valid  = 1'b0;
-    if (vt_req_valid && vt_req_ready) begin
-      vt_busy_d = 1'b1;
+    vt_commit_valid  = vt_finishing;
+
+    if (vt_word_fire && !vt_finishing)
+      vt_word_idx_d = vt_word_idx_q + 1'b1;
+
+    if (vt_finishing && vt_commit_ready) begin
+      // Retire the current move and accept the next one in the same cycle.
+      // This keeps vrf_we_o asserted across back-to-back VTMV_V_T moves.
+      vt_busy_d = vt_req_valid && vt_req_ready;
       vt_word_idx_d = $bits(vt_word_idx_d)'(0);
-    end
-
-    if (vt_busy_q && (vt_active_words == 0)) begin
-      vt_commit_valid = 1'b1;
-    end else if (vt_word_fire) begin
-      if (({1'b0, vt_word_idx_q} + 1'b1) >= vt_active_words)
-        vt_commit_valid = 1'b1;
-      else
-        vt_word_idx_d = vt_word_idx_q + 1'b1;
-    end
-
-    if (vt_commit_valid && vt_commit_ready) begin
-      vt_busy_d = 1'b0;
+    end else if (!vt_busy_q && vt_req_valid && vt_req_ready) begin
+      vt_busy_d = 1'b1;
       vt_word_idx_d = $bits(vt_word_idx_d)'(0);
     end
   end : vt_handler
@@ -818,27 +819,24 @@ module spatz_ope
   assign tv_vrf_data  = tv_data_latched_q ? tv_data_q : vrf_rdata_i[2];
 
   assign tv_acc_wen = tv_busy_q && tv_vrf_avail && !vt_busy_q;
+  assign tv_finishing = tv_busy_q && ((tv_active_words == 0) ||
+      (tv_acc_wen && (({1'b0, tv_word_idx_q} + 1'b1) >= tv_active_words)));
 
   always_comb begin : tv_handler
     tv_busy_d        = tv_busy_q;
     tv_word_idx_d    = tv_word_idx_q;
-    tv_commit_valid  = 1'b0;
-    if (tv_req_valid && tv_req_ready) begin
-      tv_busy_d = 1'b1;
+    tv_commit_valid  = tv_finishing;
+
+    if (tv_acc_wen && !tv_finishing)
+      tv_word_idx_d = tv_word_idx_q + 1'b1;
+
+    if (tv_finishing && tv_commit_ready) begin
+      // Retire the current move and accept the next one in the same cycle.
+      // This keeps the VRF read path active across back-to-back VTMV_T_V moves.
+      tv_busy_d = tv_req_valid && tv_req_ready;
       tv_word_idx_d = $bits(tv_word_idx_d)'(0);
-    end
-
-    if (tv_busy_q && (tv_active_words == vt_word_count_t'(0)))
-      tv_commit_valid = 1'b1;
-    else if (tv_acc_wen) begin
-      if (({1'b0, tv_word_idx_q} + 1'b1) >= tv_active_words)
-        tv_commit_valid = 1'b1;
-      else
-        tv_word_idx_d = tv_word_idx_q + 1'b1;
-    end
-
-    if (tv_commit_valid && tv_commit_ready) begin
-      tv_busy_d = 1'b0;
+    end else if (!tv_busy_q && tv_req_valid && tv_req_ready) begin
+      tv_busy_d = 1'b1;
       tv_word_idx_d = $bits(tv_word_idx_d)'(0);
     end
   end : tv_handler
