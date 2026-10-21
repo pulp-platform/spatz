@@ -506,17 +506,17 @@ void TEST_CASE11(void) {
     VCLEAR(v4);
     VCLEAR(v8);
     VSET(4, e8, m4);
-    
+
     // Data vector: distinct values to track which one survives
     VLOAD_8(v4, 0x11, 0x22, 0x33, 0x44);
-    
-    // Index vector: The 2nd and 3rd elements BOTH write to offset 2. 
+
+    // Index vector: The 2nd and 3rd elements BOTH write to offset 2.
     // Element 4 writes to offset 0.
-    VLOAD_8(v8, 1, 2, 2, 0); 
-    
+    VLOAD_8(v8, 1, 2, 2, 0);
+
     // Execute ordered store
     asm volatile("vsoxei8.v v4, (%0), v8" ::"r"(&BUF[0]) : "memory");
-    
+
     // VERIFICATION: Offset 2 must contain 0x33 (the later element), not 0x22.
     // Offset 0 must contain 0x44. Offset 1 must contain 0x11.
     VVCMP_U8(31, BUF, 0x44, 0x11, 0x33, INIT, INIT, INIT, INIT, INIT);
@@ -531,19 +531,19 @@ void TEST_CASE12(void) {
       VCLEAR(v4);
       VCLEAR(v8);
       VSET(4, e8, m1);
-      
+
       // Mask: binary 0101 (0x05) -> elements 0 and 2 are active, 1 and 3 are masked.
-      VLOAD_8(v0, 0x05); 
-      
+      VLOAD_8(v0, 0x05);
+
       // Data vector
       VLOAD_8(v4, 0x11, 0x22, 0x33, 0x44);
-      
+
       // Index vector: All elements attempt to write to offset 2
       VLOAD_8(v8, 2, 2, 2, 2);
-      
+
       // Execute ordered store with mask
       asm volatile("vsoxei8.v v4, (%0), v8, v0.t" ::"r"(&BUF[0]) : "memory");
-      
+
       // Verification: Element 3 (0x44) is masked. Element 2 (0x33) is the highest active.
       VVCMP_U8(32, BUF, INIT, INIT, 0x33, INIT, INIT, INIT, INIT, INIT);
     }
@@ -554,20 +554,20 @@ void TEST_CASE12(void) {
         INIT, INIT, INIT, INIT, INIT, INIT, INIT, INIT};
       VCLEAR(v4);
       VCLEAR(v8);
-      
+
       // Vector length set to 2. Elements 2 and 3 become "tail" elements.
       VSET(2, e8, m1);
-      
+
       // Data vector
       VLOAD_8(v4, 0x11, 0x22, 0x33, 0x44);
-      
+
       // Index vector: All elements target offset 4
       VLOAD_8(v8, 4, 4, 4, 4);
-      
+
       // Execute ordered store (unmasked)
       asm volatile("vsoxei8.v v4, (%0), v8" ::"r"(&BUF[0]) : "memory");
-      
-      // Verification: Element 1 (0x22) is the highest ACTIVE element (vl=2). 
+
+      // Verification: Element 1 (0x22) is the highest ACTIVE element (vl=2).
       // Elements 2 and 3 must not write.
       VVCMP_U8(33, BUF, INIT, INIT, INIT, INIT, 0x22, INIT, INIT, INIT);
     }
@@ -579,22 +579,22 @@ void TEST_CASE12(void) {
         INIT, INIT, INIT, INIT, INIT, INIT, INIT, INIT};
       VCLEAR(v4);
       VCLEAR(v8);
-      
+
       // Using m4 to ensure we cross physical register boundaries
       VSET(12, e8, m4);
-      
+
       // Data vector (12 distinct elements)
       VLOAD_8(v4, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C);
-      
-      // Index vector: 
+
+      // Index vector:
       // Elements 0, 4, and 8 write to offset 0.
       // Elements 3, 7, and 11 write to offset 5.
       VLOAD_8(v8, 0, 1, 2, 5, 0, 3, 4, 5, 0, 6, 7, 5);
-      
+
       // Execute ordered store
       asm volatile("vsoxei8.v v4, (%0), v8" ::"r"(&BUF[0]) : "memory");
-      
-      // Verification: 
+
+      // Verification:
       // Offset 0 collision winners: element 0 (0x01) vs 4 (0x05) vs 8 (0x09). Winner: 0x09.
       // Offset 5 collision winners: element 3 (0x04) vs 7 (0x08) vs 11 (0x0C). Winner: 0x0C.
       VVCMP_U8(34, BUF, 0x09, 0x02, 0x03, 0x06, 0x07, 0x0C, 0x0A, 0x0B, INIT, INIT, INIT, INIT, INIT, INIT, INIT, INIT);

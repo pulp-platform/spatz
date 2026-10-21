@@ -432,31 +432,31 @@ void TEST_CASE9(void) {
 void TEST_CASE10(void) {
   VSET(4, e32, m1);
   // Allocate array and zero it out
-  volatile uint32_t MEM[256] = {0}; 
-  
+  volatile uint32_t MEM[256] = {0};
+
   // Base points to the middle of the array
   uint32_t *base = (uint32_t*)&MEM[128];
-  
+
   // Set the values at the BYTE offsets (128 bytes = 32 elements)
   MEM[128 - 32] = 0xBAD0BAD0; // Expected if sign-extended (-128 bytes)
   MEM[128 + 32] = 0x600D600D; // Expected if zero-extended (+128 bytes)
-  
+
   // Set the value for the second index (132 bytes = 33 elements)
   MEM[128 - 31] = 0xDEADBEEF; // Expected if sign-extended (-124 bytes)
   MEM[128 + 33] = 0x12345678; // Expected if zero-extended (+132 bytes)
-  
+
   // 8-bit indices: 128 (0x80) and 132 (0x84)
-  uint8_t indices[] = {128, 132, 0, 0}; 
-  
+  uint8_t indices[] = {128, 132, 0, 0};
+
   asm volatile(
     "vle8.v v2, (%1)\n\t"        // Load 8-bit byte-indices into v2
     "vluxei8.v v1, (%0), v2\n\t" // Unordered indexed load
     :: "r"(base), "r"(indices) : "memory"
   );
-  
+
   // If Spatz has bug D22, v1 gets {0xBAD0BAD0, 0xDEADBEEF}
   // If Spatz is fixed, v1 gets {0x600D600D, 0x12345678}
-  VCMP_U32(29, v1, 0x600D600D, 0x12345678, 0, 0); 
+  VCMP_U32(29, v1, 0x600D600D, 0x12345678, 0, 0);
 }
 
 
