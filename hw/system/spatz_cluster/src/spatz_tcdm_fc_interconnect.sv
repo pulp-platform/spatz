@@ -32,6 +32,10 @@ module spatz_tcdm_fc_interconnect #(
   /// Actual address field width carried in in_req/out_req/mem_req_o
   /// Defaults to MemAddrWidth (no ECC, backward compatible).
   parameter int unsigned ProtMemAddrWidth      = MemAddrWidth,
+  /// Address width from the request side.
+  /// Plain request address width on req_i. req_i[].q.addr carries a Hsiao
+  /// codeword of this width plus its parity bits.
+  parameter int unsigned ReqAddrWidth         = MemAddrWidth,
   /// Data size of the interconnect. Only the data portion counts. The offsets
   /// into the address are derived from this. Must equal the unprotected word
   /// width (e.g. 32) -- used for byte-offset/strobe sizing only. Do NOT set
@@ -85,7 +89,9 @@ module spatz_tcdm_fc_interconnect #(
   /// Three replicas of "is mem_req_o[k]'s downstream ready"
   input  logic [2:0]                       mem_ready_rep_i [NumOut],
   /// ECC codeword protecting mem_req_o[k].q's {write, amo, strb} fields
-  output logic [WCtrlEccWidth-1:0]         out_wctrl_ecc_o [NumOut]
+  output logic [WCtrlEccWidth-1:0]         out_wctrl_ecc_o [NumOut],
+  /// ECC codeword protecting mem_req_o[k].q's addr field ecc decoding errors
+  output logic [1:0]                       tcdm_req_addr_ecc_o
 );
 
   localparam int unsigned ByteOffset = $clog2(DataWidth/8);
@@ -118,7 +124,35 @@ module spatz_tcdm_fc_interconnect #(
   //                        row4 : Block-6       Block-7
 
   localparam int unsigned ROWSIZE = $clog2(DataWidth * NumOut / 8);
-  localparam int unsigned ADDRWIDTH = $bits(req_i[0].q.addr);
+  // Request-side address ECC: decode the codeword on req_i before any routing
+  // decision. The routing logic below will read these decoded addresses.
+  localparam int unsigned ReqAddrProtWidth = hsiao_ecc_pkg::min_ecc(ReqAddrWidth);
+  logic [ReqAddrWidth-1:0] in_req_addr_dec [NumInp-1:0];
+  logic [1:0]             in_req_addr_err [NumInp-1:0];
+  for (genvar i = 0; i < NumInp; i++) begin : gen_in_req_addr_dec
+    hsiao_ecc_dec #(
+      .DataWidth (ReqAddrWidth),
+      .ProtWidth (ReqAddrProtWidth)
+    ) i_in_req_addr_dec (
+      .in         (req_i[i].q.addr[ReqAddrWidth+ReqAddrProtWidth-1:0]),
+      .out        (in_req_addr_dec[i]),
+      .syndrome_o (),
+      .err_o      (in_req_addr_err[i])
+    );
+  end
+
+  // Address decoder errors over all inputs, counting only valid requests.
+  // Bit 0: correctable (-> OC), bit 1: uncorrectable (-> OU).
+  always_comb begin : gen_req_addr_err_reduce
+    tcdm_req_addr_ecc_o = '0;
+    for (int i = 0; i < NumInp; i++) begin
+      tcdm_req_addr_ecc_o[0] |= in_req_addr_err[i][0];
+      tcdm_req_addr_ecc_o[1] |= in_req_addr_err[i][1];
+    end
+  end
+
+
+  localparam int unsigned ADDRWIDTH = ReqAddrWidth;
   addr_t [NumInp-1:0] row;
   logic [NumInp-1:0] [ROWSIZE-1:0] addr_shift;
   logic [NumInp-1:0] [ADDRWIDTH-1:0] addr_misaligned;
@@ -128,16 +162,16 @@ module spatz_tcdm_fc_interconnect #(
     addr_shift = '0;
     addr_misaligned = '0;
     for (int i = 0; i < NumInp; i++) begin
-      row[i] = req_i[i].q.addr[ADDRWIDTH-1 : ROWSIZE];
+      row[i] = in_req_addr_dec[i][ADDRWIDTH-1 : ROWSIZE];
       addr_shift[i] = (row[i][1:0] == 2'b00) || (row[i][1:0] == 2'b11) ? 0 : (DataWidth * NumOut / 8) / 2;
-      addr_misaligned[i] = req_i[i].q.addr + addr_shift[i];
-      addr_misaligned[i][ADDRWIDTH-1 : ROWSIZE] = req_i[i].q.addr[ADDRWIDTH-1 : ROWSIZE];
+      addr_misaligned[i] = in_req_addr_dec[i] + addr_shift[i];
+      addr_misaligned[i][ADDRWIDTH-1 : ROWSIZE] = in_req_addr_dec[i][ADDRWIDTH-1 : ROWSIZE];
     end
   end
 
   for (genvar i = 0; i < NumInp; i++) begin : gen_bank_select
     assign bank_select[i] = AddrMisalign ? NumOut == 1 ? 1'b0 : addr_misaligned[i][ByteOffset+:SelWidth]
-                                         : NumOut == 1 ? 1'b0 : req_i[i].q.addr[ByteOffset+:SelWidth];
+                                         : NumOut == 1 ? 1'b0 : in_req_addr_dec[i][ByteOffset+:SelWidth];
   end
 
   mem_req_chan_t [NumInp-1:0] in_req;
@@ -155,7 +189,7 @@ module spatz_tcdm_fc_interconnect #(
   for (genvar i = 0; i < NumInp; i++) begin : gen_flat_inp
     assign in_req_addr_plain[i] = AddrMisalign
       ? addr_misaligned[i][ByteOffset+$clog2(NumOut)+:MemAddrWidth]
-      : req_i[i].q.addr[ByteOffset+$clog2(NumOut)+:MemAddrWidth];
+      : in_req_addr_dec[i][ByteOffset+$clog2(NumOut)+:MemAddrWidth];
 
     if (ProtMemAddrWidth > MemAddrWidth) begin : gen_addr_enc
       hsiao_ecc_enc #(
