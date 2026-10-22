@@ -71,7 +71,7 @@ Disassembly of section .rodata:
     10e2:	0000                	unimp
     10e4:	0000                	unimp
     10e6:	0000                	unimp
-    10e8:	0002                	0x2
+    10e8:	0001                	nop
 	...
     10fa:	0010                	addi	a2,sp,0
     10fc:	0000                	unimp
