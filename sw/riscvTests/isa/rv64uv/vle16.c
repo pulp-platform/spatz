@@ -103,6 +103,52 @@ void TEST_CASE6(void) {
                   33, 0x0021, 35, 0x0023, 37, 0x0025, 39, 0x0027, 41, 0x0029, 43, 0x002B, 45, 0x002D, 47, 0x002F,
                   49, 0x0031, 51, 0x0033, 53, 0x0035, 55, 0x0037, 57, 0x0039, 59, 0x003B, 61, 0x003D, 63, 0x003F);
 }
+
+void TEST_CASE7(void) {
+  // Initialize destination memory to 0
+  volatile uint16_t OUT1[32] = {0};
+  
+  // Data array with distinct blocks to easily identify what was written
+  volatile uint16_t INP1[32] = {
+    // Elements 0-15
+    0x1111, 0x1111, 0x1111, 0x1111, 0x1111, 0x1111, 0x1111, 0x1111,
+    0x2222, 0x2222, 0x2222, 0x2222, 0x2222, 0x2222, 0x2222, 0x2222,
+    // Elements 16-31
+    0x3333, 0x3333, 0x3333, 0x3333, 0x3333, 0x3333, 0x3333, 0x3333,
+    0x4444, 0x4444, 0x4444, 0x4444, 0x4444, 0x4444, 0x4444, 0x4444
+  };
+                               
+  // Asymmetrical Mask: 
+  // Byte 0 (Elements 0-7): 0xFF (ON)
+  // Byte 1 (Elements 8-15): 0x00 (OFF)
+  // Byte 2 (Elements 16-23): 0x00 (OFF)
+  // Byte 3 (Elements 24-31): 0xFF (ON)
+  uint8_t MASK[4] = {0xFF, 0x00, 0x00, 0xFF}; 
+
+  // Load the 4 bytes of the mask into v0
+  VSET(4, e8, m1);
+  asm volatile("vle8.v v0, (%0)" :: "r"(MASK) : "memory");
+
+  // Perform the 32-element masked store
+  VSET(32, e16, m1);
+  asm volatile(
+    "vle16.v v1, (%0)\n"
+    "vse16.v v1, (%1), v0.t\n"
+    "vle16.v v2, (%1)\n"
+    :: "r"(INP1), "r"(OUT1) : "memory"
+  );
+
+  // Assert expected output: Middle 16 elements should be 0.
+  // If the bug shifts the mask, Port 1 will incorrectly mask out 1111/4444.
+  // To verify, use QuestaSim and force spatz_mem_req_ready_i[1] to 0 for some clock cycles (i did 50) when the masked store happens
+  VCMP_U16(7, v2, 
+           0x1111, 0x1111, 0x1111, 0x1111, 0x1111, 0x1111, 0x1111, 0x1111, // Elements 0-7 (Mask ON)
+           0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, // Elements 8-15 (Mask OFF)
+           0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, // Elements 16-23 (Mask OFF)
+           0x4444, 0x4444, 0x4444, 0x4444, 0x4444, 0x4444, 0x4444, 0x4444  // Elements 24-31 (Mask ON)
+  );
+}
+
 int main(void) {
 INIT_CHECK();
 enable_vec();
@@ -112,5 +158,6 @@ TEST_CASE3();
 TEST_CASE4();
 TEST_CASE5();
 TEST_CASE6();
+TEST_CASE7();
 EXIT_CHECK();
 }
