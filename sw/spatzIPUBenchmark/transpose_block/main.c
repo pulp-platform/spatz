@@ -26,13 +26,6 @@ void check_result(int8_t *x, int r){
         if(i%1000 == 0)
             // printf("i = %d\n",i);
             snrt_cluster_hw_barrier();
-            // snrt_cluster_hw_barrier();
-            // snrt_cluster_hw_barrier();
-            // snrt_cluster_hw_barrier();
-            // snrt_cluster_hw_barrier();
-            // snrt_cluster_hw_barrier();
-            // snrt_cluster_hw_barrier();
-            // snrt_cluster_hw_barrier();
         if(x[i] != golden[i]){
             err++;
             printf("Error at index %d:\t expected %d\t real %d\n", i, golden[i], x[i]);
@@ -200,8 +193,8 @@ int main() {  // ASSUME ONE COL FIT IN L1 (COLS * BLOCK_BYTES < 24 KB)
       snrt_dma_start_2d(src2, src_dram + (i+1) * L1_rows * SRC_PITCH, COLS * BLOCK_BYTES * sizeof(int8_t), COLS * BLOCK_BYTES * sizeof(int8_t), SRC_PITCH, rows2);//is the ROWS correct?
 
       // transpose_blocks(src1, dst1, L1_rows, COLS, BLOCK_BYTES, SRC_PITCH, DST_PITCH, vl);
-    //   transpose_blocks2(src1, dst1, L1_rows, COLS, BLOCK_BYTES, SRC_PITCH, DST_PITCH, vl);
-      transpose_blocks_scalar(src1, dst1, L1_rows, COLS, BLOCK_BYTES, SRC_PITCH, DST_PITCH);
+      transpose_blocks2(src1, dst1, L1_rows, COLS, BLOCK_BYTES, SRC_PITCH, DST_PITCH, vl);
+      // transpose_blocks_scalar(src1, dst1, L1_rows, COLS, BLOCK_BYTES, SRC_PITCH, DST_PITCH);
 
       snrt_dma_wait_all();
 
@@ -216,8 +209,8 @@ int main() {  // ASSUME ONE COL FIT IN L1 (COLS * BLOCK_BYTES < 24 KB)
         snrt_dma_start_2d(src1, src_dram + (i+2) * L1_rows * SRC_PITCH, COLS * BLOCK_BYTES * sizeof(int8_t), COLS * BLOCK_BYTES * sizeof(int8_t), SRC_PITCH, next_rows);//is the ROWS correct?
       }
       // transpose_blocks(src2, dst2, rows2, COLS, BLOCK_BYTES, SRC_PITCH, DST_PITCH, vl);
-    //   transpose_blocks2(src2, dst2, rows2, COLS, BLOCK_BYTES, SRC_PITCH, DST_PITCH, vl);
-      transpose_blocks_scalar(src2, dst2, rows2, COLS, BLOCK_BYTES, SRC_PITCH, DST_PITCH);
+      transpose_blocks2(src2, dst2, rows2, COLS, BLOCK_BYTES, SRC_PITCH, DST_PITCH, vl);
+      // transpose_blocks_scalar(src2, dst2, rows2, COLS, BLOCK_BYTES, SRC_PITCH, DST_PITCH);
 
       snrt_dma_wait_all();
 
@@ -229,8 +222,8 @@ int main() {  // ASSUME ONE COL FIT IN L1 (COLS * BLOCK_BYTES < 24 KB)
       rem_rows=ROWS-(L1_rows)*i;
 
       // transpose_blocks(src1, dst1, rem_rows, COLS, BLOCK_BYTES, SRC_PITCH, DST_PITCH, vl);
-    //   transpose_blocks2(src1, dst1, rem_rows, COLS, BLOCK_BYTES, SRC_PITCH, DST_PITCH, vl);
-      transpose_blocks_scalar(src1, dst1, rem_rows, COLS, BLOCK_BYTES, SRC_PITCH, DST_PITCH);
+      transpose_blocks2(src1, dst1, rem_rows, COLS, BLOCK_BYTES, SRC_PITCH, DST_PITCH, vl);
+      // transpose_blocks_scalar(src1, dst1, rem_rows, COLS, BLOCK_BYTES, SRC_PITCH, DST_PITCH);
 
       snrt_dma_start_2d(dst_dram + i* L1_rows * BLOCK_BYTES, dst1, rem_rows * BLOCK_BYTES * sizeof(int8_t), DST_PITCH, rem_rows * BLOCK_BYTES * sizeof(int8_t), COLS);
     }
