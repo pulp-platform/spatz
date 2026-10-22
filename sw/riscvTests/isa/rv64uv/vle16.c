@@ -107,7 +107,7 @@ void TEST_CASE6(void) {
 void TEST_CASE7(void) {
   // Initialize destination memory to 0
   volatile uint16_t OUT1[32] = {0};
-  
+
   // Data array with distinct blocks to easily identify what was written
   volatile uint16_t INP1[32] = {
     // Elements 0-15
@@ -117,13 +117,13 @@ void TEST_CASE7(void) {
     0x3333, 0x3333, 0x3333, 0x3333, 0x3333, 0x3333, 0x3333, 0x3333,
     0x4444, 0x4444, 0x4444, 0x4444, 0x4444, 0x4444, 0x4444, 0x4444
   };
-                               
-  // Asymmetrical Mask: 
+
+  // Asymmetrical Mask:
   // Byte 0 (Elements 0-7): 0xFF (ON)
   // Byte 1 (Elements 8-15): 0x00 (OFF)
   // Byte 2 (Elements 16-23): 0x00 (OFF)
   // Byte 3 (Elements 24-31): 0xFF (ON)
-  uint8_t MASK[4] = {0xFF, 0x00, 0x00, 0xFF}; 
+  uint8_t MASK[4] = {0xFF, 0x00, 0x00, 0xFF};
 
   // Load the 4 bytes of the mask into v0
   VSET(4, e8, m1);
@@ -141,7 +141,7 @@ void TEST_CASE7(void) {
   // Assert expected output: Middle 16 elements should be 0.
   // If the bug shifts the mask, Port 1 will incorrectly mask out 1111/4444.
   // To verify, use QuestaSim and force spatz_mem_req_ready_i[1] to 0 for some clock cycles (i did 50) when the masked store happens
-  VCMP_U16(7, v2, 
+  VCMP_U16(7, v2,
            0x1111, 0x1111, 0x1111, 0x1111, 0x1111, 0x1111, 0x1111, 0x1111, // Elements 0-7 (Mask ON)
            0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, // Elements 8-15 (Mask OFF)
            0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, // Elements 16-23 (Mask OFF)
