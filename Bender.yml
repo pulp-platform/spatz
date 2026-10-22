@@ -18,6 +18,7 @@ dependencies:
   riscv-dbg:          { git: "https://github.com/pulp-platform/riscv-dbg.git",          version: 0.7.0          }
   tech_cells_generic: { git: "https://github.com/pulp-platform/tech_cells_generic.git", version: 0.2.13         }
   cluster_icache:     { git: "https://github.com/pulp-platform/cluster_icache.git",     version: 0.2.0          }
+  opope:              { path: "/usr/scratch/rivoli/dcammarataspatz_quadrilatero/DAC_VME/opope",                 }
 
 export_include_dirs:
   - hw/ip/mem_interface/include
