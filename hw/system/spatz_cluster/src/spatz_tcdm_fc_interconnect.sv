@@ -77,8 +77,8 @@ module spatz_tcdm_fc_interconnect #(
   output logic                             rsp_valid_tmr_fault_o,
   /// Set when the triplicated switch-network idx_o vote's three replicas disagree
   output logic                             xbar_handshake_tmr_fault_o,
-  /// Set when the vote's own OUTPUT wirediverges from a second, 
-  /// independent vote on the same three replicas 
+  /// Set when the vote's own OUTPUT wirediverges from a second,
+  /// independent vote on the same three replicas
   output logic                             xbar_idx_voter_output_fault_o,
   /// Three independently-computed replicas of "is req_i[k] valid"
   input  logic [2:0]                       req_valid_rep_i [NumInp],

@@ -278,7 +278,7 @@ module spatz_cluster
   `MEM_TYPEDEF_REQ_T(mem_req_ecc_t, mem_req_ecc_chan_t)
   `MEM_TYPEDEF_REQ_CHAN_T(mem_dma_req_ecc_chan_t, tcdm_mem_addr_ecc_t, data_dma_t, strb_dma_t, logic)
   `MEM_TYPEDEF_REQ_T(mem_dma_req_ecc_t, mem_dma_req_ecc_chan_t)
-    
+
   // Full request-address ECC (before the crossbar). Unlike tcdm_mem_addr_ecc_t,
   // this covers the whole TCDMAddrWidth address that the crossbar routes on.
   localparam int unsigned TCDMAddrProtWidth = hsiao_ecc_pkg::min_ecc(TCDMAddrWidth);
@@ -1106,7 +1106,7 @@ module spatz_cluster
     .xbar_idx_voter_output_fault_o (tcdm_ic_xbar_idx_voter_output_fault),
     .ic_mem_valid_rep_tmr_fault_o (tcdm_ic_hbank_sel_valid_tmr_fault),
     .ic_mem_ready_rep_tmr_fault_o (tcdm_ic_hbank_sel_ready_tmr_fault),
-    // axi_soc_req has no genuinely triplicated source of its own, 
+    // axi_soc_req has no genuinely triplicated source of its own,
     // so its single q_valid is just fanned out into all three slots.
     .req_valid_rep_i (tcdm_ic_req_valid_rep     ),
     .req_ready_rep_o (tcdm_ic_req_ready_rep     ),
