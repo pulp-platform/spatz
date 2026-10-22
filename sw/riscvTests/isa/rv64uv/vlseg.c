@@ -897,14 +897,14 @@ void TEST_CASE_D26_illegal_segment_simple(void) {
   // e32, m2 configures EMUL = 2
   VSET(8, e32, m2);
   volatile uint32_t MEM[16] = {0};
-  
+
   // Execute vlseg8e32.v (NFIELDS = 8)
   // 2 (EMUL) * 8 (NFIELDS) = 16 (Violates the <= 8 rule!)
   asm volatile(
     "vlseg8e32.v v2, (%0)\n\t"
     :: "r"(MEM) : "memory"
   );
-  
+
   // If the fix works, the simulation will crash before reaching here.
 }
 
