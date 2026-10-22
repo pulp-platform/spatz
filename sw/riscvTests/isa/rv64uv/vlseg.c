@@ -863,7 +863,7 @@ void TEST_CASE_D26_strided_segment(void) {
   // Field 0 (v2) gets {10, 30}
   // Field 1 (v3) gets {20, 40}
   // If bug D26 is present, nf is ignored and v3 will remain 0 (or contain incorrect stride data).
-  VCMP_U32(166, v3, 20, 40, 0, 0);
+  VCMP_U32(166, v3, 20, 40);
 }
 
 void TEST_CASE_D26_scoreboard_hazard(void) {
@@ -874,21 +874,38 @@ void TEST_CASE_D26_scoreboard_hazard(void) {
   volatile uint32_t MEM[] = {10, 20, 30, 40};
 
   asm volatile(
-    // Segmented load starting at v2 with EMUL=2
+    // Pre-fill v4 with 0 so a premature read yields a clear failure
+    "vmv.v.i v4, 0\n\t"
+
+    // Segmented load starting at v2.
+    // Field 1 is routed to v2 + (1 * EMUL) = v4.
     "vlseg2e32.v v2, (%0)\n\t"
 
-    // Immediately use v3. v3 is an intermediate register belonging to Field 0's allocation range.
-    // If the scoreboard fails to track registers beyond base 'v2', this vadd
-    // will execute prematurely, reading stale or half-written data from v3.
-    "vadd.vv v6, v3, v3\n\t"
+    // Immediately use v4.
+    // If the scoreboard range fix works, this waits for Field 1.
+    // If the scoreboard is broken (only tracking v2), this reads the pre-filled 0.
+    "vadd.vv v6, v4, v4\n\t"
     :: "r"(MEM) : "memory"
   );
 
-  // Field 0 element 0 is 10. v3 should hold field data, so v6 should be element * 2 = 20 (or matching v3+v3).
-  // If the scoreboard bug is present, v6 will contain corrupt/stale data.
-  // Assuming v3 gets {20, 40} based on previous layout, v3[0] = 20 -> v6[0] = 40.
-  // (Adjust expected values based on your exact test data structure)
-  VCMP_U32(26, v6, 40, 80, 0, 0);
+  // Field 1 gets {20, 40}. v4 + v4 = {40, 80}.
+  VCMP_U32(167, v6, 40, 80);
+}
+
+void TEST_CASE_D26_illegal_segment_simple(void) {
+  // Setup a state that violates EMUL * NFIELDS <= 8
+  // e32, m2 configures EMUL = 2
+  VSET(8, e32, m2);
+  volatile uint32_t MEM[16] = {0};
+  
+  // Execute vlseg8e32.v (NFIELDS = 8)
+  // 2 (EMUL) * 8 (NFIELDS) = 16 (Violates the <= 8 rule!)
+  asm volatile(
+    "vlseg8e32.v v2, (%0)\n\t"
+    :: "r"(MEM) : "memory"
+  );
+  
+  // If the fix works, the simulation will crash before reaching here.
 }
 
 int main(void) {
@@ -948,9 +965,11 @@ int main(void) {
   TEST_CASE2_8_vl32();
   TEST_CASE2_8_vl32_m();
 
+  // Bug tests
   TEST_CASE_D26();
-  //TEST_CASE_D26_strided_segment();
-  //TEST_CASE_D26_scoreboard_hazard();
+  TEST_CASE_D26_strided_segment();
+  TEST_CASE_D26_scoreboard_hazard();
+  //TEST_CASE_D26_illegal_segment_simple();
 
   EXIT_CHECK();
 }

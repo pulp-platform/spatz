@@ -517,6 +517,28 @@ void TEST_CASE8(void) {
 #endif
 };
 
+void TEST_CASE9(void) {
+  volatile uint16_t LO[32], HI[32];
+  for (int i = 0; i < 32; i += 2) {
+    LO[i] = 0x0000; LO[i+1] = 0x4040;            // fp32 3.0
+    HI[i] = 0x0000; HI[i+1] = 0x4040;            // fp32 3.0
+  }
+  uint32_t narrow = 0x3C00;                      // fp16 1.0
+  uint32_t fill   = 0x5555;                      // wrong, nonzero pre-fill for v5
+
+  VSET(32, e16, m1);
+  asm volatile(
+    "vmv.v.x v2, %2\n\t"
+    "vmv.v.x v5, %3\n\t"                         // pre-fill upper half of wide vs2
+    "vle16.v v4, (%0)\n\t"
+    "vle16.v v5, (%1)\n\t"
+    "vfwsub.wv v8, v4, v2\n\t"                   // wide vs2 = v4,v5
+    :: "r"(LO), "r"(HI), "r"(narrow), "r"(fill) : "memory");
+
+  VSET(4, e32, m1);
+  VCMP_U32(17, v9, 0x40000000, 0x40000000, 0x40000000, 0x40000000);   // 2.0
+}
+
 int main(void) {
   INIT_CHECK();
   enable_vec();
@@ -531,6 +553,7 @@ int main(void) {
   TEST_CASE6();
   TEST_CASE7();
   TEST_CASE8();
+  TEST_CASE9();
 
   EXIT_CHECK();
 }
