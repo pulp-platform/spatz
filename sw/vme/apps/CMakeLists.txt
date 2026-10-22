@@ -37,3 +37,5 @@ add_subdirectory(tew32/fp16-matmul-vse fp16-matmul-vse)
 add_subdirectory(tew32/fp16-gemm-unit fp16-gemm-unit)
 add_subdirectory(tew32/fp16-gemm-alpha fp16-gemm-alpha)
 add_subdirectory(tew32/fp16-gemm-beta fp16-gemm-beta)
+
+# add_subdirectory(tew32/fp16-vq-gemm fp16-vq-gemm)

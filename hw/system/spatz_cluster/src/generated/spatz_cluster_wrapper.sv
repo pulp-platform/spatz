@@ -231,6 +231,7 @@ module spatz_cluster_wrapper
     .TCDMDepth (1024),
     .TCDMSize (TCDMSize),
     .NrBanks (16),
+    .UseInstructionBuffer (0),
     .ICacheLineWidth (spatz_cluster_pkg::ICacheLineWidth),
     .ICacheLineCount (spatz_cluster_pkg::ICacheLineCount),
     .ICacheWays (spatz_cluster_pkg::ICacheWays),

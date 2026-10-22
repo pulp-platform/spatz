@@ -37,28 +37,16 @@ __attribute__((noinline, aligned(64))) void matmul_fp16_fp32(const __fp16 *Atpac
     const uintptr_t c_stride = CHUNK_SIZE * sizeof(float);
     const uintptr_t matrix_mtype = (TE << 10) | (2u << 5) | 2u;
     const uintptr_t matrix_vtype = 0xC8;  // e16, m1, ta, ma
-<<<<<<< HEAD
     const uintptr_t tile_bytes = operand_bytes * (K_CHUNK / 2);
-=======
-    const uintptr_t tile_bytes = operand_bytes * (K / 2);
->>>>>>> 67ec454e0ab8 ([sw] fp16 matmul vtse: remove TE32 row-stride operand)
     const uintptr_t rewind_b0_bytes = 4 * operand_bytes;
     const uintptr_t store_rows_bytes = TE * c_stride;
     const uintptr_t col_c_back = store_rows_bytes - 2 * operand_bytes;
     const uintptr_t row_c_advance =
-<<<<<<< HEAD
         store_rows_bytes - (COL_BLOCKS - 1) * 2 * operand_bytes;
     const uintptr_t row_b_rewind = (2 * COL_BLOCKS - 1) * tile_bytes;
     // Each group consumes two packed pairs (four original FP16 K rows).
     // The first and final two groups are unrolled.
     const uintptr_t middle_k_groups = (uintptr_t)K_CHUNK / 4 - 3;
-=======
-        store_rows_bytes - (col_blocks - 1) * 2 * operand_bytes;
-    const uintptr_t row_b_rewind = (2 * col_blocks - 1) * tile_bytes;
-    // Each group consumes two packed pairs (four original FP16 K rows).
-    // The first and final two groups are unrolled.
-    const uintptr_t middle_k_groups = (uintptr_t)K / 4 - 3;
->>>>>>> 67ec454e0ab8 ([sw] fp16 matmul vtse: remove TE32 row-stride operand)
 
     // Each packed A/B word contains two FP16 K rows.
     asm volatile(

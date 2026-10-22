@@ -44,11 +44,7 @@ __attribute__((noinline, aligned(64))) void matmul_fp16_fp32(const __fp16 *Atpac
     const uintptr_t rewind_b0_bytes = 4 * operand_bytes;
     // Each group consumes two packed pairs (four original FP16 K rows).
     // The first and final two groups are unrolled.
-<<<<<<< HEAD
     const uintptr_t middle_k_groups = (uintptr_t)K_CHUNK / 4 - 3;
-=======
-    const uintptr_t middle_k_groups = (uintptr_t)K / 4 - 3;
->>>>>>> 67ec454e0ab8 ([sw] fp16 matmul vtse: remove TE32 row-stride operand)
 
     asm volatile(
         "msetmtype %[mtype], %[vtype]\n"
