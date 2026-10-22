@@ -459,7 +459,34 @@ void TEST_CASE10(void) {
   VCMP_U32(29, v1, 0x600D600D, 0x12345678, 0, 0);
 }
 
+void TEST_CASE11(void) {
+  volatile uint16_t IDX_LO[32], IDX_HI[32], DATA[4];
+  for (int i = 0; i < 32; i += 2) {
+    IDX_LO[i] = 0; IDX_LO[i+1] = 0;              // index 0
+    IDX_HI[i] = 4; IDX_HI[i+1] = 0;              // index 4 bytes -> DATA[2]
+  }
+  DATA[0] = 0x1111; DATA[1] = 0; DATA[2] = 0x2222; DATA[3] = 0;
 
+  VSET(32, e16, m1);
+  asm volatile(
+    "vmv.v.i v7, 0\n\t"                          // zero for the dummy adds
+    "vmv.v.i v5, 0\n\t"                          // wrong index (0) until the final add
+    "vle16.v v4, (%0)\n\t"                       // index low half
+    "vle16.v v6, (%1)\n\t"                       // final index values for the upper half
+    "vadd.vv v9, v6, v7\n\t"                     // starts only once the v6 load is done
+    ".rept 32\n\t"
+    "vadd.vv v9, v9, v7\n\t"                     // dependent VFU chain: delays the final add
+    ".endr\n\t"
+    "vadd.vv v5, v5, v9\n\t"                     // v5 becomes (4,0) pairs, late
+    "vluxei32.v v8, (%2), v4\n\t"                // vs2 = v4,v5 (index EMUL = 2)
+    :: "r"(IDX_LO), "r"(IDX_HI), "r"(DATA) : "memory");
+
+  for (volatile int w = 0; w < 1000; w++) {}     // finish vluxei before sliding
+  asm volatile("vslidedown.vi v12, v8, 16\n\t"); // elements 16..31 -> 0..15
+
+  VSET(8, e16, m1);
+  VCMP_U16(30, v12, 0x2222, 0x2222, 0x2222, 0x2222, 0x2222, 0x2222, 0x2222, 0x2222);
+}
 
 int main(void) {
   INIT_CHECK();
@@ -474,5 +501,6 @@ int main(void) {
   TEST_CASE8();
   TEST_CASE9();
   TEST_CASE10();
+  TEST_CASE11();
   EXIT_CHECK();
 }

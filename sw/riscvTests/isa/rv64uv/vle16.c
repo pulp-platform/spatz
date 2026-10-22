@@ -130,7 +130,7 @@ void TEST_CASE7(void) {
   asm volatile("vle8.v v0, (%0)" :: "r"(MASK) : "memory");
 
   // Perform the 32-element masked store
-  VSET(32, e16, m1);
+  VSET(32, e16, m2);
   asm volatile(
     "vle16.v v1, (%0)\n"
     "vse16.v v1, (%1), v0.t\n"
