@@ -563,6 +563,30 @@
 	    }]
 	}
      },
+	 {
+	name: "TCDM_INTERCONNECT_CORRECTABLE_COUNT",
+	desc: "Aggregated correctable TCDM interconnect error counter.",
+	swaccess: "ro",
+	hwaccess: "hrw",
+	hwext: "true",
+	fields: [{
+	    bits: "31:0",
+	    name: "COUNT",
+	    desc: "Saturating count of aggregated correctable TCDM interconnect errors for this cluster."
+	}]
+    },
+    {
+	name: "TCDM_INTERCONNECT_UNCORRECTABLE_COUNT",
+	desc: "Aggregated uncorrectable TCDM interconnect error counter.",
+	swaccess: "ro",
+	hwaccess: "hrw",
+	hwext: "true",
+	fields: [{
+	    bits: "31:0",
+	    name: "COUNT",
+	    desc: "Saturating count of aggregated uncorrectable TCDM interconnect errors for this cluster."
+	}]
+    },
      {
 	multireg: {
 	    name: "CORE_TMR_FAULT_COUNT",

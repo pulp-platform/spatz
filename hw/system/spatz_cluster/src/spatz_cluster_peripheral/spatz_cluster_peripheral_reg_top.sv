@@ -423,6 +423,10 @@ module spatz_cluster_peripheral_reg_top #(
   logic tcdm_scrub_uncorrectable_count_14_re;
   logic [31:0] tcdm_scrub_uncorrectable_count_15_qs;
   logic tcdm_scrub_uncorrectable_count_15_re;
+  logic [31:0] tcdm_interconnect_correctable_count_qs;
+  logic tcdm_interconnect_correctable_count_re;
+  logic [31:0] tcdm_interconnect_uncorrectable_count_qs;
+  logic tcdm_interconnect_uncorrectable_count_re;
   logic [31:0] core_tmr_fault_count_0_qs;
   logic core_tmr_fault_count_0_re;
   logic [31:0] core_tmr_fault_count_1_qs;
@@ -3420,6 +3424,38 @@ module spatz_cluster_peripheral_reg_top #(
   );
 
 
+  // R[tcdm_interconnect_correctable_count]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_tcdm_interconnect_correctable_count (
+    .re     (tcdm_interconnect_correctable_count_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.tcdm_interconnect_correctable_count.d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.tcdm_interconnect_correctable_count.q ),
+    .qs     (tcdm_interconnect_correctable_count_qs)
+  );
+
+
+  // R[tcdm_interconnect_uncorrectable_count]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_tcdm_interconnect_uncorrectable_count (
+    .re     (tcdm_interconnect_uncorrectable_count_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.tcdm_interconnect_uncorrectable_count.d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.tcdm_interconnect_uncorrectable_count.q ),
+    .qs     (tcdm_interconnect_uncorrectable_count_qs)
+  );
+
+
 
   // Subregister 0 of Multireg core_tmr_fault_count
   // R[core_tmr_fault_count_0]: V(True)
@@ -3456,7 +3492,7 @@ module spatz_cluster_peripheral_reg_top #(
 
 
 
-  logic [83:0] addr_hit;
+  logic [85:0] addr_hit;
   always_comb begin
     addr_hit = '0;
     addr_hit[ 0] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_PERF_COUNTER_ENABLE_0_OFFSET);
@@ -3541,8 +3577,10 @@ module spatz_cluster_peripheral_reg_top #(
     addr_hit[79] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_13_OFFSET);
     addr_hit[80] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_14_OFFSET);
     addr_hit[81] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_15_OFFSET);
-    addr_hit[82] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_CORE_TMR_FAULT_COUNT_0_OFFSET);
-    addr_hit[83] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_CORE_TMR_FAULT_COUNT_1_OFFSET);
+    addr_hit[82] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_INTERCONNECT_CORRECTABLE_COUNT_OFFSET);
+    addr_hit[83] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_INTERCONNECT_UNCORRECTABLE_COUNT_OFFSET);
+    addr_hit[84] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_CORE_TMR_FAULT_COUNT_0_OFFSET);
+    addr_hit[85] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_CORE_TMR_FAULT_COUNT_1_OFFSET);
   end
 
   assign addrmiss = (reg_re || reg_we) ? ~|addr_hit : 1'b0 ;
@@ -3633,7 +3671,9 @@ module spatz_cluster_peripheral_reg_top #(
                (addr_hit[80] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[80] & ~reg_be))) |
                (addr_hit[81] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[81] & ~reg_be))) |
                (addr_hit[82] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[82] & ~reg_be))) |
-               (addr_hit[83] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[83] & ~reg_be)))));
+               (addr_hit[83] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[83] & ~reg_be))) |
+               (addr_hit[84] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[84] & ~reg_be))) |
+               (addr_hit[85] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[85] & ~reg_be)))));
   end
 
   assign perf_counter_enable_0_cycle_0_we = addr_hit[0] & reg_we & !reg_error;
@@ -3995,9 +4035,13 @@ module spatz_cluster_peripheral_reg_top #(
 
   assign tcdm_scrub_uncorrectable_count_15_re = addr_hit[81] & reg_re & !reg_error;
 
-  assign core_tmr_fault_count_0_re = addr_hit[82] & reg_re & !reg_error;
+  assign tcdm_interconnect_correctable_count_re = addr_hit[82] & reg_re & !reg_error;
 
-  assign core_tmr_fault_count_1_re = addr_hit[83] & reg_re & !reg_error;
+  assign tcdm_interconnect_uncorrectable_count_re = addr_hit[83] & reg_re & !reg_error;
+
+  assign core_tmr_fault_count_0_re = addr_hit[84] & reg_re & !reg_error;
+
+  assign core_tmr_fault_count_1_re = addr_hit[85] & reg_re & !reg_error;
 
   // Read data return
   always_comb begin
@@ -4392,10 +4436,18 @@ module spatz_cluster_peripheral_reg_top #(
       end
 
       addr_hit[82]: begin
-        reg_rdata_next[31:0] = core_tmr_fault_count_0_qs;
+        reg_rdata_next[31:0] = tcdm_interconnect_correctable_count_qs;
       end
 
       addr_hit[83]: begin
+        reg_rdata_next[31:0] = tcdm_interconnect_uncorrectable_count_qs;
+      end
+
+      addr_hit[84]: begin
+        reg_rdata_next[31:0] = core_tmr_fault_count_0_qs;
+      end
+
+      addr_hit[85]: begin
         reg_rdata_next[31:0] = core_tmr_fault_count_1_qs;
       end
 
@@ -4468,5 +4520,3 @@ module spatz_cluster_peripheral_reg_top_intf
   );
   
 endmodule
-
-
