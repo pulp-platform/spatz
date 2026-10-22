@@ -18,7 +18,7 @@ dependencies:
   riscv-dbg:          { git: "https://github.com/pulp-platform/riscv-dbg.git",          version: 0.7.0          }
   tech_cells_generic: { git: "https://github.com/pulp-platform/tech_cells_generic.git", version: 0.2.13         }
   cluster_icache:     { git: "https://github.com/pulp-platform/cluster_icache.git",     version: 0.2.0          }
-  opope:              { path: "/usr/scratch/rivoli/dcammarataspatz_quadrilatero/DAC_VME/opope",                 }
+  opope:              { path: "/usr/scratch/rivoli/dcammarata/spatz_quadrilatero/DAC_VME/opope",                 }
 
 export_include_dirs:
   - hw/ip/mem_interface/include
@@ -193,6 +193,16 @@ sources:
       - hw/system/spatz_cluster/src/spatz_cluster.sv
       # Level 4
       - hw/system/spatz_cluster/src/generated/spatz_cluster_wrapper.sv
+
+      # Spatz cluster with the OPOPE HWPE attached
+      - target: spatz_hwpe
+        files:
+        # Level 0
+        - hw/system/spatz_cluster/src/spatz_tcdm_aligner.sv
+        # Level 1
+        - hw/system/spatz_cluster/src/opope_hwpe_subsystem.sv
+        # Level 2
+        - hw/system/spatz_cluster/src/spatz_hwpe_cluster.sv
 
       - target: spatz_test
         files:

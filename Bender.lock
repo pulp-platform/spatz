@@ -41,9 +41,16 @@ packages:
     - common_cells
     - scm
     - tech_cells_generic
+  cluster_interconnect:
+    revision: 1284def6c0b7f7e9355eb093d00883ad9dead1b7
+    version: null
+    source:
+      Git: https://github.com/pulp-platform/cluster_interconnect.git
+    dependencies:
+    - common_cells
   common_cells:
-    revision: 9afda9abb565971649c2aa0985639c096f351171
-    version: 1.38.0
+    revision: 1281545696eb3fcba50ec5b4275993476a3c710e
+    version: 1.40.0
     source:
       Git: https://github.com/pulp-platform/common_cells.git
     dependencies:
@@ -54,6 +61,21 @@ packages:
     version: 0.2.5
     source:
       Git: https://github.com/pulp-platform/common_verification.git
+    dependencies: []
+  cv32e40p:
+    revision: 800a09d97a1e9418e127e8bbf1763c1d1097c92f
+    version: null
+    source:
+      Git: https://github.com/pulp-platform/cv32e40p.git
+    dependencies:
+    - common_cells
+    - fpnew
+    - tech_cells_generic
+  cv32e40x:
+    revision: baba1eeb3b845306c45be714f677ff786753f136
+    version: null
+    source:
+      Git: https://github.com/pulp-platform/cv32e40x.git
     dependencies: []
   fpnew:
     revision: a8e0cba6dd50f357ece73c2c955d96efc3c6c315
@@ -70,9 +92,39 @@ packages:
       Git: https://github.com/pulp-platform/fpu_div_sqrt_mvp.git
     dependencies:
     - common_cells
+  hci:
+    revision: 90d55999bf357df6af153d20fc2786fc35167c59
+    version: 2.1.2
+    source:
+      Git: https://github.com/pulp-platform/hci.git
+    dependencies:
+    - cluster_interconnect
+    - hwpe-stream
+    - l2_tcdm_hybrid_interco
+  hwpe-ctrl:
+    revision: 2e7f41c55284b502e5deb019ceae904702d06494
+    version: 2.1.0
+    source:
+      Git: https://github.com/pulp-platform/hwpe-ctrl.git
+    dependencies:
+    - tech_cells_generic
+  hwpe-stream:
+    revision: 05cb8303693065812e9d6bfe10976220fb455666
+    version: 1.10.0
+    source:
+      Git: https://github.com/pulp-platform/hwpe-stream.git
+    dependencies:
+    - tech_cells_generic
+  ibex:
+    revision: b18f7ef178ed07f5085051f96042c670a919fd5c
+    version: null
+    source:
+      Git: https://github.com/pulp-platform/ibex.git
+    dependencies:
+    - tech_cells_generic
   idma:
-    revision: ff5d56fffb3767814db88d6bf8f381974ea33aa5
-    version: 0.6.4
+    revision: 28a36e5e07705549e59fc33db96ab681bc1ca88e
+    version: 0.6.5
     source:
       Git: https://github.com/pulp-platform/iDMA.git
     dependencies:
@@ -82,6 +134,12 @@ packages:
     - common_verification
     - obi
     - register_interface
+  l2_tcdm_hybrid_interco:
+    revision: fa55e72859dcfb117a2788a77352193bef94ff2b
+    version: 1.0.0
+    source:
+      Git: https://github.com/pulp-platform/L2_tcdm_hybrid_interco.git
+    dependencies: []
   obi:
     revision: 0155fc34e900c7c884e081c0a1114a247937ff69
     version: 0.1.7
@@ -90,6 +148,21 @@ packages:
     dependencies:
     - common_cells
     - common_verification
+  opope:
+    revision: null
+    version: null
+    source:
+      Path: /usr/scratch/rivoli/dcammarata/spatz_quadrilatero/DAC_VME/opope
+    dependencies:
+    - common_cells
+    - cv32e40p
+    - cv32e40x
+    - fpnew
+    - hci
+    - hwpe-ctrl
+    - hwpe-stream
+    - ibex
+    - tech_cells_generic
   register_interface:
     revision: 146501d80052b61475cdc333d3aab4cd769fd5dc
     version: 0.3.9
@@ -108,15 +181,15 @@ packages:
     - common_cells
     - tech_cells_generic
   scm:
-    revision: 472f99affe44ff7b282b519c047a3cfeb35b16c6
-    version: 1.2.0
+    revision: 1976c7efb4979271eee2abe262fde0f9a20e2557
+    version: 1.2.1
     source:
       Git: https://github.com/pulp-platform/scm.git
     dependencies:
     - tech_cells_generic
   tech_cells_generic:
-    revision: 7968dd6e6180df2c644636bc6d2908a49f2190cf
-    version: 0.2.13
+    revision: 3a3de73632a06826b1bd9c65a0a2e92b32016845
+    version: 0.2.14
     source:
       Git: https://github.com/pulp-platform/tech_cells_generic.git
     dependencies:
