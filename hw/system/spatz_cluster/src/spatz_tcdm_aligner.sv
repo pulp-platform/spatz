@@ -1,11 +1,8 @@
 // Copyright 2025 ETH Zurich and University of Bologna.
 // Solderpad Hardware License, Version 0.51, see LICENSE for details.
 // SPDX-License-Identifier: SHL-0.51
-
-// Authors: Sergio Mazzola <smazzola@iis.ee.ethz.ch>
-//          Cyrill Durrer <cdurrer@iis.ee.ethz.ch>
 //
-// Adapted from `konark_tcdm_aligner` for the Spatz cluster.
+// Authors: Danilo Cammarata <dcammarata@iis.ee.ethz.ch>
 
 
 module spatz_tcdm_aligner
