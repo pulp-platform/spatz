@@ -19,25 +19,42 @@ module spatz_fault_monitor #(
   // Expected to be one-cycle pulses.
   input  logic [NumVrfUnits-1:0]  vrf_correctable_fault_i,
   input  logic [NumVrfUnits-1:0]  vrf_uncorrectable_fault_i,
+  input  logic [NumCores-1:0]     vlsu_correctable_fault_i,
+  input  logic [NumCores-1:0]     vlsu_uncorrectable_fault_i,
 
   input  logic [NumTcdmBanks-1:0] tcdm_rd_correctable_fault_i,
   input  logic [NumTcdmBanks-1:0] tcdm_rd_uncorrectable_fault_i,
   input  logic [NumTcdmBanks-1:0] tcdm_scrub_correctable_fault_i,
   input  logic [NumTcdmBanks-1:0] tcdm_scrub_uncorrectable_fault_i,
 
-  // Per-core whole-core TMR lockstep replica-mismatch fault.
-  input  logic [NumCores-1:0]     core_tmr_fault_i,
+  input  logic                    tcdm_interconnect_correctable_fault_i,
+  input  logic                    tcdm_interconnect_uncorrectable_fault_i,
+
+  // snitch fault.
+  input  logic [NumCores-1:0]     snitch_correctable_fault_i,
+  input  logic [NumCores-1:0]     snitch_uncorrectable_fault_i,
+  // Per-core ICache parity/TMR faults from the reliability-hardened cluster_icache
+  input  logic                    icache_correctable_fault_i,
+  input  logic                    icache_uncorrectable_fault_i,
 
   // Per-source counters.
   output logic [NumVrfUnits-1:0][CounterWidth-1:0]  vrf_correctable_count_o,
   output logic [NumVrfUnits-1:0][CounterWidth-1:0]  vrf_uncorrectable_count_o,
+  output logic [NumCores-1:0][CounterWidth-1:0]  vlsu_correctable_count_o,
+  output logic [NumCores-1:0][CounterWidth-1:0]  vlsu_uncorrectable_count_o,
 
   output logic [NumTcdmBanks-1:0][CounterWidth-1:0] tcdm_rd_correctable_count_o,
   output logic [NumTcdmBanks-1:0][CounterWidth-1:0] tcdm_rd_uncorrectable_count_o,
   output logic [NumTcdmBanks-1:0][CounterWidth-1:0] tcdm_scrub_correctable_count_o,
   output logic [NumTcdmBanks-1:0][CounterWidth-1:0] tcdm_scrub_uncorrectable_count_o,
 
-  output logic [NumCores-1:0][CounterWidth-1:0]     core_tmr_fault_count_o
+  output logic [CounterWidth-1:0]                   tcdm_interconnect_correctable_count_o,
+  output logic [CounterWidth-1:0]                   tcdm_interconnect_uncorrectable_count_o,
+
+  output logic [NumCores-1:0][CounterWidth-1:0]     snitch_correctable_fault_count_o,
+  output logic [NumCores-1:0][CounterWidth-1:0]     snitch_uncorrectable_fault_count_o,
+  output logic [CounterWidth-1:0]                   icache_correctable_count_o,
+  output logic [CounterWidth-1:0]                   icache_uncorrectable_count_o
 );
 
 
@@ -45,20 +62,34 @@ module spatz_fault_monitor #(
     if (!rst_ni) begin
       vrf_correctable_count_o    <= '0;
       vrf_uncorrectable_count_o  <= '0;
+      vlsu_correctable_count_o   <= '0;
+      vlsu_uncorrectable_count_o <= '0;
       tcdm_rd_correctable_count_o   <= '0;
       tcdm_rd_uncorrectable_count_o <= '0;
       tcdm_scrub_correctable_count_o   <= '0;
       tcdm_scrub_uncorrectable_count_o <= '0;
-      core_tmr_fault_count_o <= '0;
+      tcdm_interconnect_correctable_count_o <= '0;
+      tcdm_interconnect_uncorrectable_count_o <= '0;
+      snitch_correctable_fault_count_o <= '0;
+      snitch_uncorrectable_fault_count_o <= '0;
+      icache_correctable_count_o <= '0;
+      icache_uncorrectable_count_o <= '0;
 
     end else if (clear_i) begin
       vrf_correctable_count_o    <= '0;
       vrf_uncorrectable_count_o  <= '0;
+      vlsu_correctable_count_o   <= '0;
+      vlsu_uncorrectable_count_o <= '0;
       tcdm_rd_correctable_count_o   <= '0;
       tcdm_rd_uncorrectable_count_o <= '0;
       tcdm_scrub_correctable_count_o   <= '0;
       tcdm_scrub_uncorrectable_count_o <= '0;
-      core_tmr_fault_count_o <= '0;
+      tcdm_interconnect_correctable_count_o <= '0;
+      tcdm_interconnect_uncorrectable_count_o <= '0;
+      snitch_correctable_fault_count_o <= '0;
+      snitch_uncorrectable_fault_count_o <= '0;
+      icache_correctable_count_o <= '0;
+      icache_uncorrectable_count_o <= '0;
 
     end else begin
       for (int unsigned i = 0; i < NumVrfUnits; i++) begin
@@ -71,6 +102,20 @@ module spatz_fault_monitor #(
         if (vrf_uncorrectable_fault_i[i]) begin
           if (!SaturatingCount || !(&vrf_uncorrectable_count_o[i])) begin
             vrf_uncorrectable_count_o[i] <= vrf_uncorrectable_count_o[i] + 1'b1;
+          end
+        end
+      end
+
+      for (int unsigned i = 0; i < NumCores; i++) begin
+        if (vlsu_correctable_fault_i[i]) begin
+          if (!SaturatingCount || !(&vlsu_correctable_count_o[i])) begin
+            vlsu_correctable_count_o[i] <= vlsu_correctable_count_o[i] + 1'b1;
+          end
+        end
+
+        if (vlsu_uncorrectable_fault_i[i]) begin
+          if (!SaturatingCount || !(&vlsu_uncorrectable_count_o[i])) begin
+            vlsu_uncorrectable_count_o[i] <= vlsu_uncorrectable_count_o[i] + 1'b1;
           end
         end
       end
@@ -102,10 +147,40 @@ module spatz_fault_monitor #(
       end
 
       for (int unsigned i = 0; i < NumCores; i++) begin
-        if (core_tmr_fault_i[i]) begin
-          if (!SaturatingCount || !(&core_tmr_fault_count_o[i])) begin
-            core_tmr_fault_count_o[i] <= core_tmr_fault_count_o[i] + 1'b1;
+        if (snitch_correctable_fault_i[i]) begin
+          if (!SaturatingCount || !(&snitch_correctable_fault_count_o[i])) begin
+            snitch_correctable_fault_count_o[i] <= snitch_correctable_fault_count_o[i] + 1'b1;
           end
+        end
+
+        if (snitch_uncorrectable_fault_i[i]) begin
+          if (!SaturatingCount || !(&snitch_uncorrectable_fault_count_o[i])) begin
+            snitch_uncorrectable_fault_count_o[i] <= snitch_uncorrectable_fault_count_o[i] + 1'b1;
+          end
+        end
+      end
+
+      if (icache_correctable_fault_i) begin
+        if (!SaturatingCount || !(&icache_correctable_count_o)) begin
+          icache_correctable_count_o <= icache_correctable_count_o + 1'b1;
+        end
+      end
+
+      if (icache_uncorrectable_fault_i) begin
+        if (!SaturatingCount || !(&icache_uncorrectable_count_o)) begin
+          icache_uncorrectable_count_o <= icache_uncorrectable_count_o + 1'b1;
+        end
+      end
+
+      if (tcdm_interconnect_correctable_fault_i) begin
+        if (!SaturatingCount || !(&tcdm_interconnect_correctable_count_o)) begin
+          tcdm_interconnect_correctable_count_o <= tcdm_interconnect_correctable_count_o + 1'b1;
+        end
+      end
+
+      if (tcdm_interconnect_uncorrectable_fault_i) begin
+        if (!SaturatingCount || !(&tcdm_interconnect_uncorrectable_count_o)) begin
+          tcdm_interconnect_uncorrectable_count_o <= tcdm_interconnect_uncorrectable_count_o + 1'b1;
         end
       end
     end
