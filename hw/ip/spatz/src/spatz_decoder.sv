@@ -49,7 +49,9 @@ module spatz_decoder
     // We have a new instruction that need to be decoded
     if (decoder_req_valid_i) begin
       // Retrieve the opcode
-      automatic logic [6:0] opcode = decoder_req_i.instr[6:0];
+      logic [6:0] opcode;
+
+      opcode = decoder_req_i.instr[6:0];
 
       unique casez (decoder_req_i.instr)
         // --- Tile load/store (memory ↔ tile accumulators via LSU) ---
@@ -141,14 +143,23 @@ module spatz_decoder
         riscv_instr::VSOXEI16_V,
         riscv_instr::VSOXEI32_V,
         riscv_instr::VSOXEI64_V: begin
-          automatic vreg_t ls_vd         = decoder_req_i.instr[11:7];
-          automatic vreg_t ls_rs1        = decoder_req_i.instr[19:15];
-          automatic vreg_t ls_s2         = decoder_req_i.instr[24:20];
-          automatic logic [2:0] ls_width = decoder_req_i.instr[14:12];
-          automatic logic ls_vm          = decoder_req_i.instr[25];
-          automatic logic [1:0] ls_mop   = decoder_req_i.instr[27:26];
-          automatic logic ls_mew         = decoder_req_i.instr[28];
-          automatic logic [2:0] ls_nf    = decoder_req_i.instr[31:29];
+          vreg_t ls_vd;
+          vreg_t ls_rs1;
+          vreg_t ls_s2;
+          logic [2:0] ls_width;
+          logic ls_vm;
+          logic [1:0] ls_mop;
+          logic ls_mew;
+          logic [2:0] ls_nf;
+
+          ls_vd = decoder_req_i.instr[11:7];
+          ls_rs1 = decoder_req_i.instr[19:15];
+          ls_s2 = decoder_req_i.instr[24:20];
+          ls_width = decoder_req_i.instr[14:12];
+          ls_vm = decoder_req_i.instr[25];
+          ls_mop = decoder_req_i.instr[27:26];
+          ls_mew = decoder_req_i.instr[28];
+          ls_nf = decoder_req_i.instr[31:29];
 
           // Retrieve VSEW
           unique case ({ls_mew, ls_width})
@@ -438,11 +449,17 @@ module spatz_decoder
         riscv_instr::VSLIDEDOWN_VX,
         riscv_instr::VSLIDEDOWN_VI,
         riscv_instr::VSLIDE1DOWN_VX: begin
-          automatic opcodev_func3_e func3 = opcodev_func3_e'(decoder_req_i.instr[14:12]);
-          automatic vreg_t arith_s1       = decoder_req_i.instr[19:15];
-          automatic vreg_t arith_s2       = decoder_req_i.instr[24:20];
-          automatic vreg_t arith_d        = decoder_req_i.instr[11:7];
-          automatic logic arith_vm        = decoder_req_i.instr[25];
+          opcodev_func3_e func3;
+          vreg_t arith_s1;
+          vreg_t arith_s2;
+          vreg_t arith_d;
+          logic arith_vm;
+
+          func3 = opcodev_func3_e'(decoder_req_i.instr[14:12]);
+          arith_s1 = decoder_req_i.instr[19:15];
+          arith_s2 = decoder_req_i.instr[24:20];
+          arith_d = decoder_req_i.instr[11:7];
+          arith_vm = decoder_req_i.instr[25];
 
           spatz_req.op_arith.vm = arith_vm;
           spatz_req.op_sld.vm   = arith_vm;
@@ -927,8 +944,11 @@ module spatz_decoder
 
         // Move to the scalar RF
         riscv_instr::VMV_X_S: begin
-          automatic vreg_t arith_s2 = decoder_req_i.instr[24:20];
-          automatic vreg_t arith_d  = decoder_req_i.instr[11:7];
+          vreg_t arith_s2;
+          vreg_t arith_d;
+
+          arith_s2 = decoder_req_i.instr[24:20];
+          arith_d = decoder_req_i.instr[11:7];
 
           spatz_req.op                 = VADD;
           spatz_req.ex_unit            = VFU;
@@ -1031,11 +1051,17 @@ module spatz_decoder
         riscv_instr::VFSLIDE1UP_VF,
         riscv_instr::VFSLIDE1DOWN_VF: begin
           if (spatz_pkg::FPU) begin
-            automatic opcodev_func3_e func3 = opcodev_func3_e'(decoder_req_i.instr[14:12]);
-            automatic vreg_t arith_s1       = decoder_req_i.instr[19:15];
-            automatic vreg_t arith_s2       = decoder_req_i.instr[24:20];
-            automatic vreg_t arith_d        = decoder_req_i.instr[11:7];
-            automatic logic arith_vm        = decoder_req_i.instr[25];
+            opcodev_func3_e func3;
+            vreg_t arith_s1;
+            vreg_t arith_s2;
+            vreg_t arith_d;
+            logic arith_vm;
+
+            func3 = opcodev_func3_e'(decoder_req_i.instr[14:12]);
+            arith_s1 = decoder_req_i.instr[19:15];
+            arith_s2 = decoder_req_i.instr[24:20];
+            arith_d = decoder_req_i.instr[11:7];
+            arith_vm = decoder_req_i.instr[25];
 
             spatz_req.op_arith.vm = arith_vm;
             spatz_req.op_sld.vm   = arith_vm;
@@ -1385,11 +1411,17 @@ module spatz_decoder
 
 `ifdef VENTAGLIO
         riscv_instr::VFXMACC_VRF: begin
-          automatic vreg_t       vd_field  = decoder_req_i.instr[11:7];
-          automatic logic [4:0]  rs1_field = decoder_req_i.instr[19:15];   // FP scalar reg id
-          automatic vreg_t       vs2_field = decoder_req_i.instr[24:20];   // weight vreg
-          automatic vreg_t       vs1_field = decoder_req_i.instr[31:27];   // index vreg
-          automatic logic [1:0]  funct2    = decoder_req_i.instr[26:25];
+          vreg_t vd_field;
+          logic [4:0] rs1_field;   // FP scalar reg id
+          vreg_t vs2_field;   // weight vreg
+          vreg_t vs1_field;   // index vreg
+          logic [1:0] funct2;
+
+          vd_field = decoder_req_i.instr[11:7];
+          rs1_field = decoder_req_i.instr[19:15];
+          vs2_field = decoder_req_i.instr[24:20];
+          vs1_field = decoder_req_i.instr[31:27];
+          funct2 = decoder_req_i.instr[26:25];
 
           // Only fp32 for now; reserve other funct2 codes
           if (funct2 != 2'b00) illegal_instr = 1'b1;
@@ -1420,10 +1452,15 @@ module spatz_decoder
         end
 
         riscv_instr::VFXMUL_VRF: begin
-          automatic vreg_t       vd_field  = decoder_req_i.instr[11:7];
-          automatic vreg_t       vs2_field = decoder_req_i.instr[24:20];   // weight
-          automatic vreg_t       vs1_field = decoder_req_i.instr[31:27];   // index
-          automatic logic [1:0]  funct2    = decoder_req_i.instr[26:25];
+          vreg_t vd_field;
+          vreg_t vs2_field;   // weight
+          vreg_t vs1_field;   // index
+          logic [1:0] funct2;
+
+          vd_field = decoder_req_i.instr[11:7];
+          vs2_field = decoder_req_i.instr[24:20];
+          vs1_field = decoder_req_i.instr[31:27];
+          funct2 = decoder_req_i.instr[26:25];
 
           // funct2=01 reserved for vfxmul (this op); other values illegal for now
           if (funct2 != 2'b01) illegal_instr = 1'b1;
@@ -1459,7 +1496,9 @@ module spatz_decoder
         // walks every bank cell and writes 0. Routed via ex_unit=SLD so it
         // bypasses the VFU and retires through ventaglio's vtl_rsp_o.
         riscv_instr::VVENTCLR: begin
-          automatic logic [1:0] funct2 = decoder_req_i.instr[26:25];
+          logic [1:0] funct2;
+
+          funct2 = decoder_req_i.instr[26:25];
 
           if (funct2 != 2'b11) illegal_instr = 1'b1;
 
@@ -1479,8 +1518,11 @@ module spatz_decoder
         // Move to the scalar FP RF
         riscv_instr::VFMV_F_S: begin
           if (spatz_pkg::FPU) begin
-            automatic vreg_t arith_s2 = decoder_req_i.instr[24:20];
-            automatic vreg_t arith_d  = decoder_req_i.instr[11:7];
+            vreg_t arith_s2;
+            vreg_t arith_d;
+
+            arith_s2 = decoder_req_i.instr[24:20];
+            arith_d = decoder_req_i.instr[11:7];
 
             spatz_req.op                 = VADD;
             spatz_req.ex_unit            = VFU;
@@ -1955,10 +1997,15 @@ module spatz_decoder
         riscv_instr::CSRRWI,
         riscv_instr::CSRRSI,
         riscv_instr::CSRRCI: begin
-          automatic logic [11:0] csr_addr = decoder_req_i.instr[31:20];
-          automatic vreg_t csr_rd         = decoder_req_i.instr[11:7];
-          automatic vreg_t csr_rs1        = decoder_req_i.instr[19:15];
-          automatic logic csr_is_imm      = decoder_req_i.instr[14];
+          logic [11:0] csr_addr;
+          vreg_t csr_rd;
+          vreg_t csr_rs1;
+          logic csr_is_imm;
+
+          csr_addr = decoder_req_i.instr[31:20];
+          csr_rd = decoder_req_i.instr[11:7];
+          csr_rs1 = decoder_req_i.instr[19:15];
+          csr_is_imm = decoder_req_i.instr[14];
 
           spatz_req.op      = VCSR;
           spatz_req.ex_unit = CON;
@@ -2038,8 +2085,11 @@ module spatz_decoder
         riscv_instr::VSETVL,
         riscv_instr::VSETVLI,
         riscv_instr::VSETIVLI: begin
-          automatic vreg_t setvl_rs1 = decoder_req_i.instr[19:15];
-          automatic vreg_t setvl_rd  = decoder_req_i.instr[11:7];
+          vreg_t setvl_rs1;
+          vreg_t setvl_rd;
+
+          setvl_rs1 = decoder_req_i.instr[19:15];
+          setvl_rd = decoder_req_i.instr[11:7];
 
           spatz_req.rd      = setvl_rd;
           spatz_req.use_rd  = 1'b1;
@@ -2070,23 +2120,27 @@ module spatz_decoder
         // VME (Vector Matrix Extension) Instructions
         // -------------------------------------------------------
 
-        riscv_instr::MSETMTYPE,
-        riscv_instr::MSETMTYPEI: begin
+        riscv_instr::MSETMTYPE: begin
           spatz_req.op                = VMCFG;
           spatz_req.ex_unit           = CON;
           spatz_req.use_rd            = 1'b0;
           spatz_req.op_ope.cfg_sel = 2'b00;
-          if (decoder_req_i.instr[25]) begin
-            // register form: msetmtype
-            spatz_req.mtype = mtype_t'(decoder_req_i.rs1);
-            spatz_req.vtype = vtype_t'(decoder_req_i.rs2);
-          end else begin
-            // immediate form: msetmtypei
-            spatz_req.mtype = '0;
-            spatz_req.mtype[4:0] = decoder_req_i.instr[19:15];
-            spatz_req.vtype = '0;
-            spatz_req.vtype.vsew = vew_e'(decoder_req_i.instr[24:22]);
-          end
+          spatz_req.mtype             = mtype_t'(decoder_req_i.rs1);
+          // Register form carries altfmt in vtype bit 8; higher bits are reserved.
+          spatz_req.vtype             = vtype_t'({1'b0, decoder_req_i.rs2[8:0]});
+          spatz_req.vtype.vill        = |decoder_req_i.rs2[$bits(decoder_req_i.rs2)-1:9];
+        end
+
+        riscv_instr::MSETMTYPEI: begin
+          spatz_req.op                = VMCFG;
+          spatz_req.ex_unit           = CON;
+          spatz_req.use_rd            = 1'b0;
+          spatz_req.op_ope.cfg_sel    = 2'b00;
+          spatz_req.mtype             = '0;
+          spatz_req.mtype.mtwiden     = decoder_req_i.instr[16:15];
+          spatz_req.vtype             = '0;
+          spatz_req.vtype.vsew        = vew_e'({1'b0, decoder_req_i.instr[24:23]});
+          spatz_req.vtype.altfmt      = decoder_req_i.instr[28];
         end
 
         riscv_instr::MSETTN,

@@ -2,18 +2,12 @@
 // Solderpad Hardware License, Version 0.51, see LICENSE for details.
 // SPDX-License-Identifier: SHL-0.51
 //
-// Authors: Pei-Yu Lin (peilin@ethz.ch)
+// Author: Pei-Yu Lin, ETH Zürich
 //
-// msetmtypei — Immediate matrix-type configuration
-//
-// -------------------------------------------------------
 // Test cases:
-//   TC1: msetmtypei 0x3, 0x0  →  mtwiden=3, vsew=e8
-//   TC2: msetmtypei 0x2, 0x1  →  mtwiden=2, vsew=e16
-//   TC3: msetmtypei 0x1, 0x2  →  mtwiden=1, vsew=e32
-//   TC4: msetmtypei 0x0, 0x0  →  mtwiden=0, vsew=e8  (no widening)
-//   TC5: Overwrite — write twice, CSR reflects last write only
-//   TC6: vl is reset to 0 after msetmtypei
+//   TC1-TC4: configure each supported MTWIDEN/VSEW combination and disable it.
+//   TC5: replace prior TM, TK, and altfmt state with immediate configuration.
+//   TC6: reset vl to zero after immediate configuration.
 
 #include <stdint.h>
 #include "vector_macros.h"
@@ -22,7 +16,7 @@
 void TEST_CASE1(void) {
     uintptr_t mtype_val, vtype_val, vl_val;
 
-    asm volatile("msetmtypei 0x3, 0x0" ::: "memory");
+    asm volatile("msetmtypei 0x3, 0x0, 0" ::: "memory");
     asm volatile("csrr %[B], 0xC23" : [B]"=r"(mtype_val));
     asm volatile("csrr %[BUF], vtype" : [BUF]"=r"(vtype_val));
     asm volatile("csrr %[BUF], vl" : [BUF]"=r"(vl_val));
@@ -35,7 +29,7 @@ void TEST_CASE1(void) {
 void TEST_CASE2(void) {
     uintptr_t mtype_val, vtype_val, vl_val;
 
-    asm volatile("msetmtypei 0x2, 0x1" ::: "memory");
+    asm volatile("msetmtypei 0x2, 0x1, 0" ::: "memory");
     asm volatile("csrr %[B], 0xC23" : [B]"=r"(mtype_val));
     asm volatile("csrr %[BUF], vtype" : [BUF]"=r"(vtype_val));
     asm volatile("csrr %[BUF], vl" : [BUF]"=r"(vl_val));
@@ -48,7 +42,7 @@ void TEST_CASE2(void) {
 void TEST_CASE3(void) {
     uintptr_t mtype_val, vtype_val, vl_val;
 
-    asm volatile("msetmtypei 0x1, 0x2" ::: "memory");
+    asm volatile("msetmtypei 0x1, 0x2, 0" ::: "memory");
     asm volatile("csrr %[B], 0xC23" : [B]"=r"(mtype_val));
     asm volatile("csrr %[BUF], vtype" : [BUF]"=r"(vtype_val));
     asm volatile("csrr %[BUF], vl" : [BUF]"=r"(vl_val));
@@ -61,7 +55,7 @@ void TEST_CASE3(void) {
 void TEST_CASE4(void) {
     uintptr_t mtype_val, vtype_val, vl_val;
 
-    asm volatile("msetmtypei 0x0, 0x0" ::: "memory");
+    asm volatile("msetmtypei 0x0, 0x0, 0" ::: "memory");
     asm volatile("csrr %[B], 0xC23" : [B]"=r"(mtype_val));
     asm volatile("csrr %[BUF], vtype" : [BUF]"=r"(vtype_val));
     asm volatile("csrr %[BUF], vl" : [BUF]"=r"(vl_val));
@@ -71,24 +65,25 @@ void TEST_CASE4(void) {
     XCMP(12, vl_val,    0);
 }
 
-// -------------------------------------------------------
-// TC5: Overwrite
-//   First write: mtwiden=2, vsew=e16 → mtype=0x02
-//   Second write: mtwiden=3, vsew=e8 → mtype=0x03
-//   CSR must reflect LAST write only
-// -------------------------------------------------------
+// Immediate configuration clears previous TM/TK and replaces altfmt.
 void TEST_CASE5(void) {
     uintptr_t mtype_val, vtype_val;
+    uintptr_t n = 4, k = KMAX(16, 2);
 
-    asm volatile("msetmtypei 0x2, 0x1" ::: "memory");
-    asm volatile("csrr %[B], 0xC23" : [B]"=r"(mtype_val));
-    XCMP(13, mtype_val, 2u);
+    asm volatile("msetmtypei 2, 1, 1" ::: "memory");
+    asm volatile("msettm zero, %0" :: "r"(n) : "memory");
+    asm volatile("msettk zero, %0" :: "r"(k) : "memory");
+    asm volatile("csrr %0, 0xC23" : "=r"(mtype_val));
+    asm volatile("csrr %0, vtype" : "=r"(vtype_val));
+    XCMP(13, MTYPE_TM(mtype_val), n);
+    XCMP(14, MTYPE_TK(mtype_val), k);
+    XCMP(15, ((vtype_val >> 8) & 1), 1);
 
-    asm volatile("msetmtypei 0x3, 0x0" ::: "memory");
-    asm volatile("csrr %[B], 0xC23" : [B]"=r"(mtype_val));
-    asm volatile("csrr %[BUF], vtype" : [BUF]"=r"(vtype_val));
-    XCMP(14, mtype_val, 3u);
-    XCMP(15, vtype_val, 0xC0u);
+    asm volatile("msetmtypei 3, 0, 0" ::: "memory");
+    asm volatile("csrr %0, 0xC23" : "=r"(mtype_val));
+    asm volatile("csrr %0, vtype" : "=r"(vtype_val));
+    XCMP(16, mtype_val, 3u);
+    XCMP(17, ((vtype_val >> 8) & 1), 0);
 }
 
 // -------------------------------------------------------
@@ -102,17 +97,15 @@ void TEST_CASE6(void) {
 
     asm volatile("vsetvli x0, %[avl], e8, m1, ta, ma" :: [avl] "r"(avl) : "memory");
     asm volatile("csrr %[BUF], vl" : [BUF]"=r"(vl_val));
-    XCMP(16, vl_val, 8);
+    XCMP(18, vl_val, 8);
 
-    asm volatile("msetmtypei 0x3, 0x0" ::: "memory");
+    asm volatile("msetmtypei 0x3, 0x0, 0" ::: "memory");
     asm volatile("csrr %[BUF], vl" : [BUF]"=r"(vl_val));
-    XCMP(17, vl_val, 0);
+    XCMP(19, vl_val, 0);
 }
 
 int main(void) {
     INIT_CHECK();
-    enable_vec();
-    enable_vme();
 
     TEST_CASE1();
     TEST_CASE2();

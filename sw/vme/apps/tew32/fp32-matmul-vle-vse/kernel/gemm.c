@@ -65,7 +65,7 @@ __attribute__((noinline, aligned(64))) void gemm_fp32(
         // Every block enters the same bias-load and first-K-group schedule.
         "10:\n"
         // K-Group 0
-        "msetmtypei 1, 2\n"
+        "msetmtypei 1, 2, 0\n"
         "msettn x0, %[tile_dim]\n"
         "msettm x0, %[tile_dim]\n"
         "msettk x0, %[tk]\n"

@@ -106,7 +106,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   tile_w_req_t                tile_w_req;
   logic                       tile_rvalid, tile_rready;
   tile_r_req_t                tile_r_req;
-  tile_row_t                  tile_rdata;
+  tile_word_t                 tile_rdata;
 
   logic      vlsu_req_ready;
   logic      vlsu_rsp_valid, vlsu_rsp_buf_valid;
@@ -668,17 +668,10 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
 `ifdef DOUBLE_BW
   // Buffering of VLSU1 when conflicting with VLSU0
   logic vlsu_buf_en, vlsu_buf_push, vlsu_buf_pop, vrf_vlsu_wvalid, vlsu_buf_full, vlsu_buf_empty;
-  logic vlsu_direct_rsp_valid, vlsu_buf_drain;
 
   assign vlsu_buf_en =  sb_we[VLSU_VD_WD1] && (!vrf_wvalid[VLSU_VD_WD1] || (vrf_wvalid[VLSU_VD_WD1] && !vlsu_buf_empty));
   assign vlsu_buf_push = vlsu_buf_en && !vlsu_buf_full;
-  // A direct VLSU completion and a buffered interface-1 completion can occur
-  // in the same cycle, while the controller has only one response input. Keep
-  // the buffered entry queued until the direct completion has been delivered.
-  assign vlsu_direct_rsp_valid =
-      vlsu_rsp_valid && !((vlsu_rsp.intf_id == 1'b1) && vlsu_buf_push);
-  assign vlsu_buf_drain = !vlsu_buf_empty && !vlsu_direct_rsp_valid;
-  assign vlsu_buf_pop = vrf_wvalid[VLSU_VD_WD1] && vlsu_buf_drain;
+  assign vlsu_buf_pop = vrf_wvalid[VLSU_VD_WD1] && !vlsu_buf_empty;
   assign vrf_vlsu_wvalid = sb_we[VLSU_VD_WD1] && !vlsu_buf_full;
 
   fifo_v3 #(
@@ -697,8 +690,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
                   vrf_waddr[VLSU_VD_WD1],
                   vrf_wbe  [VLSU_VD_WD1],
                   sb_id [SB_VLSU_VD_WD1],
-                  vlsu_rsp,
-                  vlsu_rsp_valid}         ),
+                  vlsu_rsp_t'('0), 1'b0}  ),
     .push_i     (vlsu_buf_push            ),
     .data_o     (vlsu_buf_data            ),
     .pop_i      (vlsu_buf_pop             )
@@ -739,30 +731,12 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     end
 
 `ifdef DOUBLE_BW
-    // VLSU1 buffering
-    // Check if interface 1 response is being buffered, if so do not send response now
-    if (vlsu_rsp_valid && (vlsu_rsp.intf_id == 1'b1) && vlsu_buf_push)
-      vlsu_rsp_buf_valid = 1'b0;
-
     if (!vlsu_buf_empty) begin
-      // Do not expose a newer interface-1 write while the FIFO head is held.
-      sb_we_buf[VLSU_VD_WD1] = 1'b0;
-      if (vlsu_buf_drain) begin
-        sb_we_buf    [VLSU_VD_WD1] = 1'b1;
-        vrf_wdata_buf[VLSU_VD_WD1] = vlsu_buf_data.wdata;
-        vrf_waddr_buf[VLSU_VD_WD1] = vlsu_buf_data.waddr;
-        vrf_wbe_buf  [VLSU_VD_WD1] = vlsu_buf_data.wbe;
-        sb_buf_id    [SB_VLSU_VD_WD1] = vlsu_buf_data.wid;
-        if (vlsu_buf_data.rsp_valid) begin
-          vlsu_rsp_buf = vlsu_buf_data.rsp;
-          vlsu_rsp_buf_valid = vrf_wvalid[VLSU_VD_WD1];
-        end
-      end
-    end else begin
-      // If the buffer is being enabled in this cycle, don't send the response now
-      if (vlsu_buf_en) begin
-        vlsu_rsp_buf_valid = 1'b0;
-      end
+      sb_we_buf    [VLSU_VD_WD1] = 1'b1;
+      vrf_wdata_buf[VLSU_VD_WD1] = vlsu_buf_data.wdata;
+      vrf_waddr_buf[VLSU_VD_WD1] = vlsu_buf_data.waddr;
+      vrf_wbe_buf  [VLSU_VD_WD1] = vlsu_buf_data.wbe;
+      sb_buf_id    [SB_VLSU_VD_WD1] = vlsu_buf_data.wid;
     end
 `endif
 `endif

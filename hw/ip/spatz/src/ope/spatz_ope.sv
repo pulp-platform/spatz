@@ -46,16 +46,15 @@ module spatz_ope
   output logic             tile_wready_o      ,
   input  logic             tile_rvalid_i      ,
   input  tile_r_req_t      tile_r_req_i       ,
-  output tile_row_t        tile_rdata_o       ,
+  output tile_word_t       tile_rdata_o       ,
   output logic             tile_rready_o
 );
 
 `include "common_cells/registers.svh"
 
   localparam NumPipeRegs = 4;
-  localparam GroupsPerEdge = TE / CE; // TE & CE should be power of 2
-  localparam SpatialBeats = GroupsPerEdge * GroupsPerEdge;
-  localparam GroupIdxW = (GroupsPerEdge > 1) ? $clog2(GroupsPerEdge) : 1;
+  localparam SpatialBeats = NrAccPerComputeElem * NrAccPerComputeElem;
+  localparam GroupIdxW = (NrAccPerComputeElem > 1) ? $clog2(NrAccPerComputeElem) : 1;
   localparam SpatialBeatW = (SpatialBeats > 1) ? $clog2(SpatialBeats) : 1;
   localparam ReductionIdxW = (KMAX > 1) ? $clog2(KMAX) : 1;
   localparam NrAccumulatorTiles = NrPhysicalTile / AccElemBytes;
@@ -74,13 +73,18 @@ module spatz_ope
   /*                  Shared Types and Signals                  */
   /*------------------------------------------------------------*/
 
-  typedef logic [$clog2(GroupsPerEdge+1)-1:0] group_count_t;
+  typedef logic [$clog2(NrAccPerComputeElem+1)-1:0] group_count_t;
   typedef logic [$clog2(MaxVtGroupWords+1)-1:0] vt_word_count_t;
   typedef logic [$clog2(VtMaxElemsPerWord+1)-1:0] vrf_elem_count_t;
   typedef logic [3:0] vreg_group_count_t;
   typedef logic [$clog2((TE<<1)+1)-1:0] tile_sum_t;
   typedef logic [5:0] operand_width_t;
   typedef logic [$clog2(VRFWordWidth)-1:0] vrf_bit_offset_t;
+  typedef struct packed {
+    logic [AccTileIdxW-1:0]  tile;
+    logic [AccByteIdxW-1:0]  byte_offset;
+    logic [AccElemBytes-1:0] byte_enable;
+  } acc_sel_t;
   typedef struct packed {
     spatz_id_t     id;
     vreg_t         vs1;
@@ -110,6 +114,7 @@ module spatz_ope
   spatz_req_t spatz_req_mac ;
   logic       mac_req_valid ;
   logic       mac_req_ready ;
+  logic       mac_req_eligible;
   spatz_req_t spatz_req_tv ;
   logic       tv_req_valid ;
   logic       tv_req_ready ;
@@ -174,6 +179,7 @@ module spatz_ope
   logic        vt_done_valid , vt_done_ready  ;
   logic [$clog2(MaxVtGroupWords)-1:0] vt_word_idx_d, vt_word_idx_q;
   logic        vt_word_fire;
+  logic        vt_finishing;
   vt_word_count_t vt_active_words;
   vlen_t          vt_active_elems;
   tile_count_t    vt_active_lines;
@@ -188,6 +194,7 @@ module spatz_ope
   ope_rsp_t    tv_commit_rsp, tv_done_rsp      ;
   logic        tv_done_valid , tv_done_ready  ;
   logic [$clog2(MaxVtGroupWords)-1:0] tv_word_idx_d, tv_word_idx_q;
+  logic        tv_finishing;
   vt_word_count_t tv_active_words;
   vlen_t          tv_active_elems;
   tile_count_t    tv_active_lines;
@@ -219,14 +226,21 @@ module spatz_ope
 
   // Accumulator datapath and access arbitration.
   logic [CE-1:0][CE-1:0][AccElemWidth-1:0] fma_addend;
+  acc_sel_t mac_acc_sel;
+  acc_sel_t fma_acc_sel;
+  acc_sel_t tv_acc_sel;
+  acc_sel_t vt_acc_sel;
+  acc_sel_t tile_r_acc_sel;
+  acc_sel_t tile_w_acc_sel;
+  acc_sel_t clean_acc_sel;
   logic [CE-1:0][CE-1:0][AccElemWidth-1:0] fma_result;
   logic [CE-1:0][CE-1:0] fma_result_valid;
   logic mac_use_sdotp;
   logic [CE-1:0][CE-1:0][AccElemWidth-1:0] acc_fma_rdata, acc_fma_wdata;
   logic [CE-1:0][CE-1:0][AccElemBytes-1:0] acc_fma_wen;
-  logic [CE-1:0][CE-1:0][GroupsPerEdge-1:0][AccElemWidth-1:0] acc_vrf_rdata, acc_vrf_wdata;
+  logic [CE-1:0][CE-1:0][NrAccPerComputeElem-1:0][AccElemWidth-1:0] acc_vrf_rdata, acc_vrf_wdata;
   logic [CE-1:0][CE-1:0][AccElemBytes-1:0] acc_vrf_wen;
-  logic [CE-1:0][CE-1:0][GroupsPerEdge-1:0][AccElemWidth-1:0] acc_vlsu_rdata, acc_vlsu_wdata;
+  logic [CE-1:0][CE-1:0][NrAccPerComputeElem-1:0][AccElemWidth-1:0] acc_vlsu_rdata, acc_vlsu_wdata;
   logic [CE-1:0][CE-1:0][AccElemBytes-1:0] acc_vlsu_wen;
   logic [AccAddrW-1:0] acc_fma_raddr, acc_fma_waddr;
   logic [AccAddrW-1:0] acc_vrf_raddr, acc_vrf_waddr;
@@ -302,23 +316,26 @@ module spatz_ope
 
   // Shared Request Arbitration
   always_comb begin : req_ready_proc
-    mac_req_ready    = 1'b0;
+    mac_req_eligible = 1'b0;
     vt_req_ready     = 1'b0;
     tv_req_ready     = 1'b0;
     clean_req_ready = 1'b0;
     // Simple commands such as VTZERO/VTDISCARD must complete before a younger MAC may start.
     if (clean_req_valid)
       clean_req_ready = clean_commit_ready && clean_acc_ready;
-    else if (vt_req_valid && !vt_busy_q && !resident_drain_valid_q && !mac_tile_busy[spatz_req_vt.op_ope.tss.tile_id] &&
+    else if (vt_req_valid && (!vt_busy_q || (vt_finishing && vt_commit_ready)) &&
+             !resident_drain_valid_q && !mac_tile_busy[spatz_req_vt.op_ope.tss.tile_id] &&
              (!resident_valid_q || (spatz_req_vt.op_ope.tss.tile_id != resident_tile_q)))
       vt_req_ready = 1'b1;
-    else if (tv_req_valid && !tv_busy_q && !resident_drain_valid_q && !mac_tile_busy[spatz_req_tv.op_ope.tss.tile_id] &&
+    else if (tv_req_valid && (!tv_busy_q || (tv_finishing && tv_commit_ready)) &&
+             !resident_drain_valid_q && !mac_tile_busy[spatz_req_tv.op_ope.tss.tile_id] &&
              (!resident_valid_q || (spatz_req_tv.op_ope.tss.tile_id != resident_tile_q)))
       tv_req_ready = 1'b1;
     else if (mac_req_valid)
-      mac_req_ready = mac_op_queue_ready && !resident_drain_valid_q && !(tile_rvalid_i &&
-            (tile_r_req_i.idx == spatz_req_mac.mtd));
+      mac_req_eligible = !resident_drain_valid_q && !(tile_rvalid_i && (tile_r_req_i.idx == spatz_req_mac.mtd));
   end : req_ready_proc
+
+  assign mac_req_ready = mac_req_eligible && mac_op_queue_ready;
 
   assign spatz_req_ready_o = (~mac_in_ready || ~tv_in_ready || ~vt_in_ready || ~clean_in_ready) ? 1'b0 : 1'b1;
 
@@ -331,8 +348,8 @@ module spatz_ope
   // active instruction and one look-ahead instruction instead of indexing a
   // context slot by every architectural tile.
 
-  assign mac_group_row = GroupIdxW'(mac_op_beat / GroupsPerEdge);
-  assign mac_group_col = GroupIdxW'(mac_op_beat % GroupsPerEdge);
+  assign mac_group_row = GroupIdxW'(mac_op_beat / NrAccPerComputeElem);
+  assign mac_group_col = GroupIdxW'(mac_op_beat % NrAccPerComputeElem);
 
   always_comb begin : mac_active_shape
     mac_active_tm = (mac_op_exec.tm < TE) ? mac_op_exec.tm : tile_count_t'(TE);
@@ -344,7 +361,7 @@ module spatz_ope
     if (({1'b0, mac_group_col} + 1'b1) < mac_n_groups)
       mac_next_spatial_beat = mac_op_beat + 1'b1;
     else
-      mac_next_spatial_beat = SpatialBeatW'(({1'b0, mac_group_row} + 1'b1) * GroupsPerEdge);
+      mac_next_spatial_beat = SpatialBeatW'(({1'b0, mac_group_row} + 1'b1) * NrAccPerComputeElem);
 
     mac_lane_active = $bits(mac_lane_active)'(0);
     for (int unsigned row = 0; row < CE; row++) begin
@@ -356,7 +373,7 @@ module spatz_ope
   end : mac_active_shape
 
   always_comb begin : mac_op_scheduler
-    logic result_match, result_switch;
+    logic result_match, result_switch, result_can_drain;
     logic tile_hazard;
     logic current_ready;
 
@@ -370,10 +387,15 @@ module spatz_ope
                       (mac_op_current_q.op.tile != resident_tile_q);
     end
     tile_hazard = fma_pipe_tile_busy[mac_op_current_q.op.tile][mac_beat_q] && !result_match;
+    result_can_drain = fma_pipe_result_valid && fma_pipe_drain;
     current_ready = mac_op_current_q.valid && (mac_current_empty || (!resident_drain_valid_q && !tile_hazard &&
           !(tile_rvalid_i && (tile_r_req_i.idx == mac_op_current_q.op.tile)) &&
-          ((!(&fma_pipe_valid)) || result_match || result_switch || fma_pipe_result_fire)));
-    mac_op_bypass = !mac_op_current_q.valid && mac_req_valid && mac_op_queue_ready && mac_req_ready && !mac_req_empty;
+          ((!(&fma_pipe_valid)) || result_match || result_switch || result_can_drain)));
+    // A dependent MAC must wait in the registered scheduler until the prior
+    // result reaches the forwarding stage.
+    mac_op_bypass = !mac_op_current_q.valid && !mac_op_next_q.valid &&
+                    mac_req_valid && mac_req_eligible && !mac_req_empty &&
+                    !fma_pipe_tile_busy[spatz_req_mac.mtd][SpatialBeatW'(0)];
     mac_op_exec_valid = current_ready || mac_op_bypass;
   end : mac_op_scheduler
 
@@ -708,27 +730,24 @@ module spatz_ope
   end
 
   assign vt_word_fire = vt_busy_q && vt_req_q.use_vd && vrf_wvalid_i;
+  assign vt_finishing = vt_busy_q && ((vt_active_words == 0) ||
+      (vt_word_fire && (({1'b0, vt_word_idx_q} + 1'b1) >= vt_active_words)));
 
   always_comb begin : vt_handler
     vt_busy_d        = vt_busy_q;
     vt_word_idx_d    = vt_word_idx_q;
-    vt_commit_valid  = 1'b0;
-    if (vt_req_valid && vt_req_ready) begin
-      vt_busy_d = 1'b1;
+    vt_commit_valid  = vt_finishing;
+
+    if (vt_word_fire && !vt_finishing)
+      vt_word_idx_d = vt_word_idx_q + 1'b1;
+
+    if (vt_finishing && vt_commit_ready) begin
+      // Retire the current move and accept the next one in the same cycle.
+      // This keeps vrf_we_o asserted across back-to-back VTMV_V_T moves.
+      vt_busy_d = vt_req_valid && vt_req_ready;
       vt_word_idx_d = $bits(vt_word_idx_d)'(0);
-    end
-
-    if (vt_busy_q && (vt_active_words == 0)) begin
-      vt_commit_valid = 1'b1;
-    end else if (vt_word_fire) begin
-      if (({1'b0, vt_word_idx_q} + 1'b1) >= vt_active_words)
-        vt_commit_valid = 1'b1;
-      else
-        vt_word_idx_d = vt_word_idx_q + 1'b1;
-    end
-
-    if (vt_commit_valid && vt_commit_ready) begin
-      vt_busy_d = 1'b0;
+    end else if (!vt_busy_q && vt_req_valid && vt_req_ready) begin
+      vt_busy_d = 1'b1;
       vt_word_idx_d = $bits(vt_word_idx_d)'(0);
     end
   end : vt_handler
@@ -800,27 +819,24 @@ module spatz_ope
   assign tv_vrf_data  = tv_data_latched_q ? tv_data_q : vrf_rdata_i[2];
 
   assign tv_acc_wen = tv_busy_q && tv_vrf_avail && !vt_busy_q;
+  assign tv_finishing = tv_busy_q && ((tv_active_words == 0) ||
+      (tv_acc_wen && (({1'b0, tv_word_idx_q} + 1'b1) >= tv_active_words)));
 
   always_comb begin : tv_handler
     tv_busy_d        = tv_busy_q;
     tv_word_idx_d    = tv_word_idx_q;
-    tv_commit_valid  = 1'b0;
-    if (tv_req_valid && tv_req_ready) begin
-      tv_busy_d = 1'b1;
+    tv_commit_valid  = tv_finishing;
+
+    if (tv_acc_wen && !tv_finishing)
+      tv_word_idx_d = tv_word_idx_q + 1'b1;
+
+    if (tv_finishing && tv_commit_ready) begin
+      // Retire the current move and accept the next one in the same cycle.
+      // This keeps the VRF read path active across back-to-back VTMV_T_V moves.
+      tv_busy_d = tv_req_valid && tv_req_ready;
       tv_word_idx_d = $bits(tv_word_idx_d)'(0);
-    end
-
-    if (tv_busy_q && (tv_active_words == vt_word_count_t'(0)))
-      tv_commit_valid = 1'b1;
-    else if (tv_acc_wen) begin
-      if (({1'b0, tv_word_idx_q} + 1'b1) >= tv_active_words)
-        tv_commit_valid = 1'b1;
-      else
-        tv_word_idx_d = tv_word_idx_q + 1'b1;
-    end
-
-    if (tv_commit_valid && tv_commit_ready) begin
-      tv_busy_d = 1'b0;
+    end else if (!tv_busy_q && tv_req_valid && tv_req_ready) begin
+      tv_busy_d = 1'b1;
       tv_word_idx_d = $bits(tv_word_idx_d)'(0);
     end
   end : tv_handler
@@ -922,6 +938,8 @@ module spatz_ope
   /*------------------------------------------------------------*/
 
   always_comb begin : vrf_wr_proc
+    logic [VtMaxElemsPerWord-1:0][AccElemWidth-1:0] lane_data;
+    logic [VtMaxElemsPerWord-1:0] lane_valid;
     tile_dim_t idx;
     tile_dim_t row_i;
     tile_dim_t col_i;
@@ -936,6 +954,8 @@ module spatz_ope
     vrf_we_o    = 1'b0;
     vrf_wbe_o = vrf_be_t'(0);
     vrf_wdata_o = vrf_data_t'(0);
+    lane_data = '0;
+    lane_valid = '0;
 
     row_i = tile_dim_t'(0);
     col_i = tile_dim_t'(0);
@@ -974,47 +994,47 @@ module spatz_ope
 
           acc_word = acc_vrf_rdata[row_i % CE][col_i % CE][col_i / CE];
           for (int unsigned byte_idx = 0; byte_idx < AccElemBytes; byte_idx++) begin
-            if (acc_zero_q[vt_acc_sel.tile][(row_i / CE) * GroupsPerEdge + (col_i / CE)][byte_idx])
+            if (acc_zero_q[vt_acc_sel.tile][(row_i / CE) * NrAccPerComputeElem + (col_i / CE)][byte_idx])
               acc_word[byte_idx*8 +: 8] = 8'd0;
           end
-          unique case (vt_req_q.op_ope.tew)
-            EW_8: begin
-              vrf_wdata_o[lane*8 +: 8] = acc_word[vt_acc_sel.byte_offset*8 +: 8];
-              vrf_wbe_o[lane] = 1'b1;
-            end
-            EW_16: begin
-              vrf_wdata_o[lane*16 +: 16] = acc_word[vt_acc_sel.byte_offset*8 +: 16];
-              vrf_wbe_o[lane*2 +: 2] = 2'b11;
-            end
-            default: begin
-              vrf_wdata_o[lane*AccElemWidth +: AccElemWidth] = acc_word;
-              vrf_wbe_o[lane*AccElemBytes +: AccElemBytes] = AccFullMask;
-            end
-          endcase
+          lane_data[lane] = acc_word;
+          lane_valid[lane] = 1'b1;
         end
       end
     end
+    unique case (vt_req_q.op_ope.tew)
+      EW_8: begin
+        for (int lane = 0; lane < VRFWordWidth / 8; lane++) begin
+          if (lane_valid[lane]) begin
+            vrf_wdata_o[lane*8 +: 8] = lane_data[lane][vt_acc_sel.byte_offset*8 +: 8];
+            vrf_wbe_o[lane] = 1'b1;
+          end
+        end
+      end
+      EW_16: begin
+        for (int lane = 0; lane < VRFWordWidth / 16; lane++) begin
+          if (lane_valid[lane]) begin
+            vrf_wdata_o[lane*16 +: 16] = lane_data[lane][vt_acc_sel.byte_offset*8 +: 16];
+            vrf_wbe_o[lane*2 +: 2] = 2'b11;
+          end
+        end
+      end
+      default: begin
+        for (int lane = 0; lane < VRFWordWidth / AccElemWidth; lane++) begin
+          if (lane_valid[lane]) begin
+            vrf_wdata_o[lane*AccElemWidth +: AccElemWidth] = lane_data[lane];
+            vrf_wbe_o[lane*AccElemBytes +: AccElemBytes] = AccFullMask;
+          end
+        end
+      end
+    endcase
   end
 
   /*------------------------------------------------------------*/
   /*     Shared Accumulator Access and Tile Slice Selection     */
   /*------------------------------------------------------------*/
 
-  typedef struct packed {
-    logic [AccTileIdxW-1:0]  tile;
-    logic [AccByteIdxW-1:0]  byte_offset;
-    logic [AccElemBytes-1:0] byte_enable;
-  } acc_sel_t;
-  
   // Accumulator slice selection.
-  acc_sel_t mac_acc_sel;
-  acc_sel_t fma_acc_sel;
-  acc_sel_t tv_acc_sel;
-  acc_sel_t vt_acc_sel;
-  acc_sel_t tile_r_acc_sel;
-  acc_sel_t tile_w_acc_sel;
-  acc_sel_t clean_acc_sel;
-  
   // Decode each architectural tile exactly once. The physical accumulator is
   // 32 bits wide; TEW8 selects a byte, TEW16 a half-word, and TEW32 the full word.
   always_comb begin : acc_select_proc
@@ -1132,7 +1152,7 @@ module spatz_ope
       end
       bank_row = vt_req_q.op_ope.tss.is_row ? GroupIdxW'((vt_req_q.op_ope.tss.index + line_idx) / CE) :
           GroupIdxW'((line_word_idx * vt_elems_per_word) / CE);
-      acc_vrf_raddr = AccAddrW'(vt_acc_sel.tile * SpatialBeats + bank_row * GroupsPerEdge);
+      acc_vrf_raddr = AccAddrW'(vt_acc_sel.tile * SpatialBeats + bank_row * NrAccPerComputeElem);
     end else if (tv_busy_q) begin
       if (tv_line_words != 0) begin
         line_idx = tile_dim_t'(tv_word_idx_q / tv_line_words);
@@ -1140,15 +1160,15 @@ module spatz_ope
       end
       bank_row = tv_req_q.op_ope.tss.is_row ? GroupIdxW'((tv_req_q.op_ope.tss.index + line_idx) / CE) :
           GroupIdxW'((line_word_idx * tv_elems_per_word) / CE);
-      acc_vrf_raddr = AccAddrW'(tv_acc_sel.tile * SpatialBeats + bank_row * GroupsPerEdge);
+      acc_vrf_raddr = AccAddrW'(tv_acc_sel.tile * SpatialBeats + bank_row * NrAccPerComputeElem);
     end
 
     if (tile_rvalid_i && tile_rready_o) begin
       bank_row = GroupIdxW'(tile_r_req_i.row / CE);
-      acc_vlsu_raddr = AccAddrW'(tile_r_acc_sel.tile * SpatialBeats + bank_row * GroupsPerEdge);
+      acc_vlsu_raddr = AccAddrW'(tile_r_acc_sel.tile * SpatialBeats + bank_row * NrAccPerComputeElem);
     end else if (tile_wvalid_i && tile_wready_o) begin
       bank_row = GroupIdxW'(tile_w_req_i.row / CE);
-      acc_vlsu_raddr = AccAddrW'(tile_w_acc_sel.tile * SpatialBeats + bank_row * GroupsPerEdge);
+      acc_vlsu_raddr = AccAddrW'(tile_w_acc_sel.tile * SpatialBeats + bank_row * NrAccPerComputeElem);
     end
   end : acc_read_addr_proc
 
@@ -1162,6 +1182,8 @@ module spatz_ope
     vlen_t flat_elem_idx;
     tile_dim_t line_idx;
     tile_dim_t line_word_idx;
+    logic [2:0] tile_w_elem_bytes;
+    logic [2:0] tile_r_elem_bytes;
 
     acc_fma_wdata = $bits(acc_fma_wdata)'(0);
     acc_fma_wen = $bits(acc_fma_wen)'(0);
@@ -1173,7 +1195,7 @@ module spatz_ope
     acc_vlsu_wen = $bits(acc_vlsu_wen)'(0);
     acc_vlsu_waddr = AccAddrW'(0);
     acc_flush = 1'b0;
-    tile_rdata_o = tile_row_t'(0);
+    tile_rdata_o = tile_word_t'(0);
 
     idx = tile_dim_t'(0);
     row_i = tile_dim_t'(0);
@@ -1183,6 +1205,8 @@ module spatz_ope
     flat_elem_idx = vlen_t'(0);
     line_idx = tile_dim_t'(0);
     line_word_idx = tile_dim_t'(0);
+    tile_w_elem_bytes = 3'(1 << int'(tile_w_req_i.tew));
+    tile_r_elem_bytes = 3'(1 << int'(tile_r_req_i.tew));
 
     if (clean_req_valid && clean_req_ready && (spatz_req_clean.op_ope.is_discard)) begin
       acc_flush = 1'b1;
@@ -1200,10 +1224,10 @@ module spatz_ope
       acc_vrf_waddr = acc_vrf_raddr;
       for (int row = 0; row < CE; row++) begin
         for (int col = 0; col < CE; col++) begin
-          for (int beat = 0; beat < GroupsPerEdge; beat++) begin
+          for (int beat = 0; beat < NrAccPerComputeElem; beat++) begin
             acc_vrf_wdata[row][col][beat] = acc_vrf_rdata[row][col][beat];
             for (int byte_idx = 0; byte_idx < AccElemBytes; byte_idx++) begin
-              if (acc_zero_q[tv_acc_sel.tile][bank_row * GroupsPerEdge + beat][byte_idx])
+              if (acc_zero_q[tv_acc_sel.tile][bank_row * NrAccPerComputeElem + beat][byte_idx])
                 acc_vrf_wdata[row][col][beat][byte_idx*8 +: 8] = 8'd0;
             end
           end
@@ -1228,9 +1252,9 @@ module spatz_ope
             acc_vrf_wdata[row_i % CE][col_i % CE][col_i / CE][tv_acc_sel.byte_offset*8 +: 8] = tv_vrf_data[lane*8 +: 8];
           else if (tv_req_q.op_ope.tew == EW_16)
             acc_vrf_wdata[row_i % CE][col_i % CE][col_i / CE][tv_acc_sel.byte_offset*8 +: 16] =
-                tv_vrf_data[lane*16 +: 16];
+                16'(tv_vrf_data >> (lane * 16));
           else
-            acc_vrf_wdata[row_i % CE][col_i % CE][col_i / CE] = tv_vrf_data[lane*AccElemWidth +: AccElemWidth];
+            acc_vrf_wdata[row_i % CE][col_i % CE][col_i / CE] = AccElemWidth'(tv_vrf_data >> (lane * AccElemWidth));
         end
       end
     end
@@ -1240,29 +1264,27 @@ module spatz_ope
       acc_vlsu_waddr = acc_vlsu_raddr;
       for (int row = 0; row < CE; row++) begin
         for (int col = 0; col < CE; col++) begin
-          for (int beat = 0; beat < GroupsPerEdge; beat++) begin
+          for (int beat = 0; beat < NrAccPerComputeElem; beat++) begin
             acc_vlsu_wdata[row][col][beat] = acc_vlsu_rdata[row][col][beat];
             for (int byte_idx = 0; byte_idx < AccElemBytes; byte_idx++) begin
-              if (acc_zero_q[tile_w_acc_sel.tile][bank_row * GroupsPerEdge + beat][byte_idx])
+              if (acc_zero_q[tile_w_acc_sel.tile][bank_row * NrAccPerComputeElem + beat][byte_idx])
                 acc_vlsu_wdata[row][col][beat][byte_idx*8 +: 8] = 8'd0;
             end
           end
           acc_vlsu_wen[row][col] = tile_w_acc_sel.byte_enable;
         end
       end
-      for (int i = 0; i < TE; i++) begin
-        col_i = tile_dim_t'(i);
-        if (i < tile_w_req_i.elems) begin
+      for (int unsigned byte_idx = 0; byte_idx < TileWordBWidth; byte_idx++) begin
+        tile_word_elem_idx_t elem_idx_in_word;
+        logic [2:0] elem_byte_idx;
+
+        elem_idx_in_word = tile_word_elem_idx_t'(byte_idx / tile_w_elem_bytes);
+        elem_byte_idx = 3'(byte_idx % tile_w_elem_bytes);
+        if (elem_idx_in_word < tile_w_req_i.elems) begin
+          col_i = tile_dim_t'(tile_w_req_i.col + elem_idx_in_word);
           acc_vlsu_wen[tile_w_req_i.row % CE][col_i % CE] = tile_w_acc_sel.byte_enable;
-          if (tile_w_req_i.tew == EW_8)
-            acc_vlsu_wdata[tile_w_req_i.row % CE][col_i % CE][col_i / CE][tile_w_acc_sel.byte_offset*8 +: 8] =
-                tile_w_req_i.data[i*8 +: 8];
-          else if (tile_w_req_i.tew == EW_16)
-            acc_vlsu_wdata[tile_w_req_i.row % CE][col_i % CE][col_i / CE][tile_w_acc_sel.byte_offset*8 +: 16] =
-                tile_w_req_i.data[i*16 +: 16];
-          else
-            acc_vlsu_wdata[tile_w_req_i.row % CE][col_i % CE][col_i / CE] =
-                tile_w_req_i.data[i*AccElemWidth +: AccElemWidth];
+          acc_vlsu_wdata[tile_w_req_i.row % CE][col_i % CE][col_i / CE]
+              [(tile_w_acc_sel.byte_offset+elem_byte_idx)*8 +: 8] = tile_w_req_i.data[byte_idx*8 +: 8];
         end
       end
     end
@@ -1285,25 +1307,27 @@ module spatz_ope
 
     if (tile_rvalid_i && tile_rready_o) begin
       bank_row = GroupIdxW'(tile_r_req_i.row / CE);
-      for (int i = 0; i < TE; i++) begin
-        logic [$clog2(CE)-1:0] bank_col;
-        logic [GroupIdxW-1:0] group_col;
+      for (int unsigned byte_idx = 0; byte_idx < TileWordBWidth; byte_idx++) begin
+        tile_word_elem_idx_t elem_idx_in_word;
+        logic [2:0] elem_byte_idx;
 
-        bank_col = $clog2(CE)'(i % CE);
-        group_col = GroupIdxW'(i / CE);
-        if (i < tile_r_req_i.elems) begin
+        elem_idx_in_word = tile_word_elem_idx_t'(byte_idx / tile_r_elem_bytes);
+        elem_byte_idx = 3'(byte_idx % tile_r_elem_bytes);
+        if (elem_idx_in_word < tile_r_req_i.elems) begin
+          logic [$clog2(CE)-1:0] bank_col;
+          logic [GroupIdxW-1:0] group_col;
           logic [AccElemWidth-1:0] acc_word;
 
+          col_i = tile_dim_t'(tile_r_req_i.col + elem_idx_in_word);
+          bank_col = $clog2(CE)'(col_i % CE);
+          group_col = GroupIdxW'(col_i / CE);
           acc_word = acc_vlsu_rdata[tile_r_req_i.row % CE][bank_col][group_col];
-          for (int unsigned byte_idx = 0; byte_idx < AccElemBytes; byte_idx++) begin
-            if (acc_zero_q[tile_r_acc_sel.tile][bank_row * GroupsPerEdge + group_col][byte_idx])
-              acc_word[byte_idx*8 +: 8] = 8'd0;
+          for (int unsigned acc_byte_idx = 0; acc_byte_idx < AccElemBytes; acc_byte_idx++) begin
+            if (acc_zero_q[tile_r_acc_sel.tile][bank_row * NrAccPerComputeElem + group_col][acc_byte_idx])
+              acc_word[acc_byte_idx*8 +: 8] = 8'd0;
           end
-          unique case (tile_r_req_i.tew)
-            EW_8: tile_rdata_o[i*8 +: 8] = acc_word[tile_r_acc_sel.byte_offset*8 +: 8];
-            EW_16: tile_rdata_o[i*16 +: 16] = acc_word[tile_r_acc_sel.byte_offset*8 +: 16];
-            default: tile_rdata_o[i*AccElemWidth +: AccElemWidth] = acc_word;
-          endcase
+          tile_rdata_o[byte_idx*8 +: 8] =
+              acc_word[(tile_r_acc_sel.byte_offset+elem_byte_idx)*8 +: 8];
         end
       end
     end
@@ -1336,13 +1360,13 @@ module spatz_ope
         end
         bank_row = tv_req_q.op_ope.tss.is_row ? GroupIdxW'((tv_req_q.op_ope.tss.index + line_idx) / CE) :
             GroupIdxW'((line_word_idx * tv_elems_per_word) / CE);
-        for (int beat = 0; beat < GroupsPerEdge; beat++)
-          acc_zero_d[tv_acc_sel.tile][bank_row * GroupsPerEdge + beat] &= ~tv_acc_sel.byte_enable;
+        for (int beat = 0; beat < NrAccPerComputeElem; beat++)
+          acc_zero_d[tv_acc_sel.tile][bank_row * NrAccPerComputeElem + beat] &= ~tv_acc_sel.byte_enable;
       end
       if (tile_wvalid_i && tile_wready_o) begin
         bank_row = GroupIdxW'(tile_w_req_i.row / CE);
-        for (int beat = 0; beat < GroupsPerEdge; beat++)
-          acc_zero_d[tile_w_acc_sel.tile][bank_row * GroupsPerEdge + beat] &= ~tile_w_acc_sel.byte_enable;
+        for (int beat = 0; beat < NrAccPerComputeElem; beat++)
+          acc_zero_d[tile_w_acc_sel.tile][bank_row * NrAccPerComputeElem + beat] &= ~tile_w_acc_sel.byte_enable;
       end
     end
   end : acc_zero_update
@@ -1352,8 +1376,8 @@ module spatz_ope
       opope_accumulator #(
         .DATA_WIDTH(AccElemWidth         ),
         .DEPTH     (AccDepth    ),
-        .RD_PORTS  (GroupsPerEdge),
-        .WR_PORTS  (GroupsPerEdge)
+        .RD_PORTS  (NrAccPerComputeElem),
+        .WR_PORTS  (NrAccPerComputeElem)
       ) i_accumulator ( 
         .clk_i             (clk_i              ),
         .rst_ni            (rst_ni             ),
