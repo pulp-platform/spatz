@@ -278,7 +278,7 @@ module spatz_cluster
   `MEM_TYPEDEF_REQ_T(mem_req_ecc_t, mem_req_ecc_chan_t)
   `MEM_TYPEDEF_REQ_CHAN_T(mem_dma_req_ecc_chan_t, tcdm_mem_addr_ecc_t, data_dma_t, strb_dma_t, logic)
   `MEM_TYPEDEF_REQ_T(mem_dma_req_ecc_t, mem_dma_req_ecc_chan_t)
-
+    
   // Full request-address ECC (before the crossbar). Unlike tcdm_mem_addr_ecc_t,
   // this covers the whole TCDMAddrWidth address that the crossbar routes on.
   localparam int unsigned TCDMAddrProtWidth = hsiao_ecc_pkg::min_ecc(TCDMAddrWidth);
@@ -466,7 +466,8 @@ module spatz_cluster
   logic [NrCores-1:0]  vlsu_uncorrectable_fault;
 
   // Per-core whole-core TMR lockstep mismatch.
-  logic [NrCores-1:0]  core_tmr_fault;
+  logic [NrCores-1:0]  snitch_correctable_fault;
+  logic [NrCores-1:0]  snitch_uncorrectable_fault;
 
   logic [NumTcdmBanks-1:0] tcdm_rd_correctable_fault;
   logic [NumTcdmBanks-1:0] tcdm_rd_uncorrectable_fault;
@@ -485,7 +486,8 @@ module spatz_cluster
   logic [ErrorCounterWidth-1:0] tcdm_interconnect_correctable_count;
   logic [ErrorCounterWidth-1:0] tcdm_interconnect_uncorrectable_count;
 
-  logic [NrCores-1:0][ErrorCounterWidth-1:0] core_tmr_fault_count;
+  logic [NrCores-1:0][ErrorCounterWidth-1:0] snitch_correctable_fault_count;
+  logic [NrCores-1:0][ErrorCounterWidth-1:0] snitch_uncorrectable_fault_count;
 
   // OR of every TCDM interconnect fault
   logic tcdm_interconnect_correctable_fault_any;
@@ -522,8 +524,9 @@ module spatz_cluster
   // tcdm interconnect faults
   .tcdm_interconnect_correctable_fault_i (tcdm_interconnect_correctable_fault_any),
   .tcdm_interconnect_uncorrectable_fault_i (tcdm_interconnect_uncorrectable_fault_any),
-  // snitch core TMR faults
-  .core_tmr_fault_i (core_tmr_fault),
+  // snitch core faults
+  .snitch_correctable_fault_i (snitch_correctable_fault),
+  .snitch_uncorrectable_fault_i (snitch_uncorrectable_fault),
   // cluster_icache parity/TMR faults
   .icache_correctable_fault_i (icache_tmr_fault_any | icache_parity_fault_any),
   .icache_uncorrectable_fault_i (1'b0),
@@ -540,7 +543,8 @@ module spatz_cluster
   .tcdm_interconnect_correctable_count_o (tcdm_interconnect_correctable_count),
   .tcdm_interconnect_uncorrectable_count_o (tcdm_interconnect_uncorrectable_count),
 
-  .core_tmr_fault_count_o (core_tmr_fault_count)
+  .snitch_correctable_fault_count_o (snitch_correctable_fault_count),
+  .snitch_uncorrectable_fault_count_o (snitch_uncorrectable_fault_count)
 );
 
   // -------------
@@ -1106,7 +1110,7 @@ module spatz_cluster
     .xbar_idx_voter_output_fault_o (tcdm_ic_xbar_idx_voter_output_fault),
     .ic_mem_valid_rep_tmr_fault_o (tcdm_ic_hbank_sel_valid_tmr_fault),
     .ic_mem_ready_rep_tmr_fault_o (tcdm_ic_hbank_sel_ready_tmr_fault),
-    // axi_soc_req has no genuinely triplicated source of its own,
+    // axi_soc_req has no genuinely triplicated source of its own, 
     // so its single q_valid is just fanned out into all three slots.
     .req_valid_rep_i (tcdm_ic_req_valid_rep     ),
     .req_ready_rep_o (tcdm_ic_req_ready_rep     ),
@@ -1216,7 +1220,8 @@ module spatz_cluster
         // ECC VRF signals
         .vrf_single_error_o (vrf_correctable_fault  [i]),
         .vrf_multi_error_o  (vrf_uncorrectable_fault[i]),
-        .core_tmr_fault_o   (core_tmr_fault         [i])
+        .snitch_correctable_error_o (snitch_correctable_fault[i]),
+        .snitch_uncorrectable_error_o (snitch_uncorrectable_fault[i])
       );
       for (genvar j = 0; j < TcdmPorts; j++) begin
         // Quadrilatero request address ECC, encoded per port before the crossbar mux.
@@ -1315,7 +1320,10 @@ module spatz_cluster
         // VLSU fault signals
         .vlsu_correctable_error_o (vlsu_correctable_fault[i]),
         .vlsu_uncorrectable_error_o (vlsu_uncorrectable_fault[i]),
-        .core_tmr_fault_o (core_tmr_fault[i])
+        // .core_tmr_fault_o (core_tmr_fault[i])
+        // Snitch error outputs
+        .snitch_correctable_error_o (snitch_correctable_fault[i]),
+        .snitch_uncorrectable_error_o (snitch_uncorrectable_fault[i])
       );
       for (genvar j = 0; j < TcdmPorts; j++) begin : gen_tcdm_user
         always_comb begin
@@ -1811,9 +1819,8 @@ module spatz_cluster
     .tcdm_rd_uncorrectable_count_i    (tcdm_rd_uncorrectable_count    ),
     .tcdm_scrub_correctable_count_i   (tcdm_scrub_correctable_count   ),
     .tcdm_scrub_uncorrectable_count_i (tcdm_scrub_uncorrectable_count ),
-    .core_tmr_fault_count_i           (core_tmr_fault_count           ),
-    .tcdm_interconnect_correctable_count_i   (tcdm_interconnect_correctable_count   ),
-    .tcdm_interconnect_uncorrectable_count_i (tcdm_interconnect_uncorrectable_count )
+    .snitch_correctable_fault_count_i (snitch_correctable_fault_count ),
+    .snitch_uncorrectable_fault_count_i (snitch_uncorrectable_fault_count )
   );
 
   // 3. BootROM

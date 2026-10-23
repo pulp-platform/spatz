@@ -30,8 +30,9 @@ module spatz_fault_monitor #(
   input  logic                    tcdm_interconnect_correctable_fault_i,
   input  logic                    tcdm_interconnect_uncorrectable_fault_i,
 
-  // Per-core whole-core TMR lockstep replica-mismatch fault.
-  input  logic [NumCores-1:0]     core_tmr_fault_i,
+  // snitch fault.
+  input  logic [NumCores-1:0]     snitch_correctable_fault_i,
+  input  logic [NumCores-1:0]     snitch_uncorrectable_fault_i,
   // Per-core ICache parity/TMR faults from the reliability-hardened cluster_icache
   input  logic                    icache_correctable_fault_i,
   input  logic                    icache_uncorrectable_fault_i,
@@ -50,7 +51,8 @@ module spatz_fault_monitor #(
   output logic [CounterWidth-1:0]                   tcdm_interconnect_correctable_count_o,
   output logic [CounterWidth-1:0]                   tcdm_interconnect_uncorrectable_count_o,
 
-  output logic [NumCores-1:0][CounterWidth-1:0]     core_tmr_fault_count_o,
+  output logic [NumCores-1:0][CounterWidth-1:0]     snitch_correctable_fault_count_o,
+  output logic [NumCores-1:0][CounterWidth-1:0]     snitch_uncorrectable_fault_count_o,
   output logic [CounterWidth-1:0]                   icache_correctable_count_o,
   output logic [CounterWidth-1:0]                   icache_uncorrectable_count_o
 );
@@ -68,7 +70,8 @@ module spatz_fault_monitor #(
       tcdm_scrub_uncorrectable_count_o <= '0;
       tcdm_interconnect_correctable_count_o <= '0;
       tcdm_interconnect_uncorrectable_count_o <= '0;
-      core_tmr_fault_count_o <= '0;
+      snitch_correctable_fault_count_o <= '0;
+      snitch_uncorrectable_fault_count_o <= '0;
       icache_correctable_count_o <= '0;
       icache_uncorrectable_count_o <= '0;
 
@@ -83,7 +86,8 @@ module spatz_fault_monitor #(
       tcdm_scrub_uncorrectable_count_o <= '0;
       tcdm_interconnect_correctable_count_o <= '0;
       tcdm_interconnect_uncorrectable_count_o <= '0;
-      core_tmr_fault_count_o <= '0;
+      snitch_correctable_fault_count_o <= '0;
+      snitch_uncorrectable_fault_count_o <= '0;
       icache_correctable_count_o <= '0;
       icache_uncorrectable_count_o <= '0;
 
@@ -143,9 +147,15 @@ module spatz_fault_monitor #(
       end
 
       for (int unsigned i = 0; i < NumCores; i++) begin
-        if (core_tmr_fault_i[i]) begin
-          if (!SaturatingCount || !(&core_tmr_fault_count_o[i])) begin
-            core_tmr_fault_count_o[i] <= core_tmr_fault_count_o[i] + 1'b1;
+        if (snitch_correctable_fault_i[i]) begin
+          if (!SaturatingCount || !(&snitch_correctable_fault_count_o[i])) begin
+            snitch_correctable_fault_count_o[i] <= snitch_correctable_fault_count_o[i] + 1'b1;
+          end
+        end
+
+        if (snitch_uncorrectable_fault_i[i]) begin
+          if (!SaturatingCount || !(&snitch_uncorrectable_fault_count_o[i])) begin
+            snitch_uncorrectable_fault_count_o[i] <= snitch_uncorrectable_fault_count_o[i] + 1'b1;
           end
         end
       end

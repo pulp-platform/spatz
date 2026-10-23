@@ -126,8 +126,9 @@ module spatz_cc
     // VLSU error outputs
     output logic                         vlsu_correctable_error_o,
     output logic                         vlsu_uncorrectable_error_o,
-    // Asserted when the triplicated lockstep core detects a replica mismatch.
-    output logic                         core_tmr_fault_o
+    // Snitch error outputs
+    output logic                         snitch_correctable_error_o,
+    output logic                         snitch_uncorrectable_error_o
   );
 
   // ECC protection width for TCDM codewords (parity bits only).
@@ -172,6 +173,8 @@ module spatz_cc
   // Spatz Memory consistency signals
   logic [1:0] spatz_mem_finished;
   logic [1:0] spatz_mem_str_finished;
+
+  logic core_tmr_fault_o;
 
   `SNITCH_VM_TYPEDEF(AddrWidth)
 
@@ -491,6 +494,7 @@ module spatz_cc
   // explicit zeros in the upper SnitchTCDMProtWidth bits (parity position).
   // reqrsp_to_tcdm receives snitch_tcdm_rsp_dec and sees the corrected value
   // when it extracts p.data[DataWidth-1:0] internally.
+  logic [1:0] snitch_tcdm_rsp_err;
   if (TCDMProtDataWidth > TCDMDataWidth) begin : gen_snitch_rdata_dec
     logic [TCDMDataWidth-1:0] snitch_rdata_corrected;
     hsiao_ecc_dec #(
@@ -500,7 +504,7 @@ module spatz_cc
       .in        (tcdm_rsp_i[NumMemPortsPerSpatz].p.data),
       .out       (snitch_rdata_corrected),
       .syndrome_o(),
-      .err_o     ()
+      .err_o     (snitch_tcdm_rsp_err)
     );
     always_comb begin
       snitch_tcdm_rsp_dec        = tcdm_rsp_i[NumMemPortsPerSpatz];
@@ -509,6 +513,9 @@ module spatz_cc
   end else begin : gen_snitch_no_rdata_dec
     assign snitch_tcdm_rsp_dec = tcdm_rsp_i[NumMemPortsPerSpatz];
   end
+
+  assign snitch_correctable_error_o   = core_tmr_fault_o | snitch_tcdm_rsp_err[0];
+  assign snitch_uncorrectable_error_o = snitch_tcdm_rsp_err[1];
 
   reqrsp_to_tcdm #( // only for cross clock domain decoupling
     .AddrWidth    (AddrWidth ),

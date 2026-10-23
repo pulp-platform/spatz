@@ -12,12 +12,12 @@
 	{ name: "NumVrfUnits",
 	desc: "Number of VRF units (must equal NrCores in the cluster)",
 	type: "int",
-	default: "2"
+	default: "1"
 	},
 	{ name: "NumTcdmBanks",
 	desc: "Number of TCDM banks (must equal NrSuperBanks*BanksPerSuperBank in the cluster)",
 	type: "int",
-	default: "16"
+	default: "32"
 	},
     ],
     name: "spatz_cluster_peripheral",
@@ -502,7 +502,7 @@
 	    swaccess: "ro",
 	    hwaccess: "hrw",
 	    hwext: "true",
-	    count: "NumCores",
+	    count: "NumVrfUnits",
 	    compact: "false",
 	    cname: "vlsu_correctable_count",
 	    fields: [{
@@ -519,7 +519,7 @@
 	    swaccess: "ro",
 	    hwaccess: "hrw",
 	    hwext: "true",
-	    count: "NumCores",
+	    count: "NumVrfUnits",
 	    compact: "false",
 	    cname: "vlsu_uncorrectable_count",
 	    fields: [{
@@ -623,18 +623,35 @@
     },
      {
 	multireg: {
-	    name: "CORE_TMR_FAULT_COUNT",
-	    desc: "Per-core whole-core TMR lockstep replica-mismatch counter.",
+	    name: "SNITCH_CORRECTABLE_FAULT_COUNT",
+	    desc: "snitch scalar core correctable fault counter.",
 	    swaccess: "ro",
 	    hwaccess: "hrw",
 	    hwext: "true",
 	    count: "NumVrfUnits",
 	    compact: "false",
-	    cname: "core_tmr_fault_count",
+	    cname: "snitch_correctable_fault_count",
 	    fields: [{
 		bits: "31:0",
 		name: "COUNT",
-		desc: "Saturating count of whole-core TMR replica mismatches for this core."
+		desc: "Saturating count of snitch scalar core corretable faults."
+	    }]
+	}
+     },
+     {
+	multireg: {
+	    name: "SNITCH_UNCORRECTABLE_FAULT_COUNT",
+	    desc: "snitch scalar core uncorrectable fault counter.",
+	    swaccess: "ro",
+	    hwaccess: "hrw",
+	    hwext: "true",
+	    count: "NumVrfUnits",
+	    compact: "false",
+	    cname: "snitch_uncorrectable_fault_count",
+	    fields: [{
+		bits: "31:0",
+		name: "COUNT",
+		desc: "Saturating count of snitch scalar core uncorretable faults."
 	    }]
 	}
      }
