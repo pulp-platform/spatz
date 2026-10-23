@@ -161,28 +161,28 @@ __attribute__((noinline, aligned(64))) void matmul_fp16_fp32(
       // Keep the store epilogue compact for the instruction cache.
       for (uint32_t row = 4; row < TE; row += 4) {
       asm volatile("msetmtype %0, %1\n" "msettn x0, %2" : : "r"(store_mtype), "r"(store_vtype), "r"(tile_vl) : "memory");
+      asm volatile("vtmv.v.t v8, %0\naddi %0, %0, 1" : "+r"(tss0) : : "v8", "memory");
       asm volatile("vtmv.v.t v12, %0\naddi %0, %0, 1" : "+r"(tss0) : : "v12", "memory");
+      asm volatile("vtmv.v.t v9, %0\naddi %0, %0, 1" : "+r"(tss4) : : "v9", "memory");
       asm volatile("vtmv.v.t v13, %0\naddi %0, %0, 1" : "+r"(tss4) : : "v13", "memory");
+      asm volatile("vtmv.v.t v10, %0\naddi %0, %0, 1" : "+r"(tss8) : : "v10", "memory");
       asm volatile("vtmv.v.t v14, %0\naddi %0, %0, 1" : "+r"(tss8) : : "v14", "memory");
+      asm volatile("vtmv.v.t v11, %0\naddi %0, %0, 1" : "+r"(tss12) : : "v11", "memory");
       asm volatile("vtmv.v.t v15, %0\naddi %0, %0, 1" : "+r"(tss12) : : "v15", "memory");
-      asm volatile("vtmv.v.t v16, %0\naddi %0, %0, 1" : "+r"(tss0) : : "v16", "memory");
-      asm volatile("vtmv.v.t v17, %0\naddi %0, %0, 1" : "+r"(tss4) : : "v17", "memory");
-      asm volatile("vtmv.v.t v18, %0\naddi %0, %0, 1" : "+r"(tss8) : : "v18", "memory");
-      asm volatile("vtmv.v.t v19, %0\naddi %0, %0, 1" : "+r"(tss12) : : "v19", "memory");
       asm volatile("vsetvli x0, %0, e32, m8, ta, ma" : : "r"(bias_vl) : "memory");
-      asm volatile("vse32.v v12, (%0)\n" "addi %0, %0, %1\n"
+      asm volatile("vse32.v v8, (%0)\n" "addi %0, %0, %1\n"
                    : "+r"(ptr) : "i"(c_stride) : "memory");
       asm volatile("msetmtype %0, %1\n" "msettn x0, %2" : : "r"(store_mtype), "r"(store_vtype), "r"(tile_vl) : "memory");
-      asm volatile("vtmv.v.t v4, %0\naddi %0, %0, 1" : "+r"(tss0) : : "v4", "memory");
-      asm volatile("vtmv.v.t v5, %0\naddi %0, %0, 1" : "+r"(tss4) : : "v5", "memory");
-      asm volatile("vtmv.v.t v6, %0\naddi %0, %0, 1" : "+r"(tss8) : : "v6", "memory");
-      asm volatile("vtmv.v.t v7, %0\naddi %0, %0, 1" : "+r"(tss12) : : "v7", "memory");
-      asm volatile("vtmv.v.t v8, %0\naddi %0, %0, 1" : "+r"(tss0) : : "v8", "memory");
-      asm volatile("vtmv.v.t v9, %0\naddi %0, %0, 1" : "+r"(tss4) : : "v9", "memory");
-      asm volatile("vtmv.v.t v10, %0\naddi %0, %0, 1" : "+r"(tss8) : : "v10", "memory");
-      asm volatile("vtmv.v.t v11, %0\naddi %0, %0, 1" : "+r"(tss12) : : "v11", "memory");
+      asm volatile("vtmv.v.t v16, %0\naddi %0, %0, 1" : "+r"(tss0) : : "v16", "memory");
+      asm volatile("vtmv.v.t v20, %0\naddi %0, %0, 1" : "+r"(tss0) : : "v20", "memory");
+      asm volatile("vtmv.v.t v17, %0\naddi %0, %0, 1" : "+r"(tss4) : : "v17", "memory");
+      asm volatile("vtmv.v.t v21, %0\naddi %0, %0, 1" : "+r"(tss4) : : "v21", "memory");
+      asm volatile("vtmv.v.t v18, %0\naddi %0, %0, 1" : "+r"(tss8) : : "v18", "memory");
+      asm volatile("vtmv.v.t v22, %0\naddi %0, %0, 1" : "+r"(tss8) : : "v22", "memory");
+      asm volatile("vtmv.v.t v19, %0\naddi %0, %0, 1" : "+r"(tss12) : : "v19", "memory");
+      asm volatile("vtmv.v.t v23, %0\naddi %0, %0, 1" : "+r"(tss12) : : "v23", "memory");
       asm volatile("vsetvli x0, %0, e32, m8, ta, ma" : : "r"(bias_vl) : "memory");
-      asm volatile("vse32.v v4, (%0)\n" "addi %0, %0, %1\n"
+      asm volatile("vse32.v v16, (%0)\n" "addi %0, %0, %1\n"
                    : "+r"(ptr) : "i"(c_stride) : "memory");
       }
     }
