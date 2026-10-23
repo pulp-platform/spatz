@@ -32,7 +32,7 @@ packages:
     dependencies:
     - common_cells
   cluster_icache:
-    revision: 05a08069e7e4e29d86dcadcddd68a02a8ca87a55
+    revision: 231e79689b1556b4cffb6fc2e23bd13abeb29f08
     version: null
     source:
       Git: https://github.com/pulp-platform/cluster_icache.git
