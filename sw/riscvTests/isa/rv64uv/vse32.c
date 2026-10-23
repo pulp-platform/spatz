@@ -90,7 +90,7 @@ void TEST_CASE5(void) {
            0x38197598, 0x18931795, 0x81937598, 0x18747547, 0x3eeeeeee,
            0x90139301, 0xab8b9148, 0x90318509, 0x31897598, 0x83195999,
            0x89139848);
-  VSET(16, e8, m8); // ? uncertain
+  // VSET(16, e8, m8); // ? uncertain
   asm volatile("vse32.v v8, (%0)" ::"r"(ALIGNED_I32) : "memory");
   VCLEAR(v8);
   VVCMP_U32(5, ALIGNED_I32, 0x9fe41920, 0xf9aa71f0, 0xa11a9384, 0x99991348,
