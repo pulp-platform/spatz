@@ -1,0 +1,15 @@
+// Copyright 2025 ETH Zurich and University of Bologna.
+// Solderpad Hardware License, Version 0.51, see LICENSE for details.
+// SPDX-License-Identifier: SHL-0.51
+
+// Parameters for an O-POPE GEMM: Z = Y + X*W  (X: MxN, W: NxK, Y/Z: MxK)
+
+{
+    kernel: "GEMM"
+    M: 64,
+    N: 64,
+    K: 64,
+    comp_fmt: "FP32",
+    mem_fmt: "FP32",
+    transpose_X: true
+}
