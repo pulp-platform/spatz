@@ -1,0 +1,6 @@
+// P6: GeMM -> softmax (logits)
+{
+    C: 64,
+    T: 32,
+    V: 128
+}

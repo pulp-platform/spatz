@@ -1,0 +1,7 @@
+// P10: embedding -> LN -> GeMM
+{
+    C: 64,
+    T: 32,
+    V: 128,
+    COUT: 64
+}

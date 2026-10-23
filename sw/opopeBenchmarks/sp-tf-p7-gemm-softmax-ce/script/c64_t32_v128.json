@@ -1,0 +1,6 @@
+// P7: GeMM -> softmax -> cross-entropy (LM head loss)
+{
+    C: 64,
+    T: 32,
+    V: 128
+}

@@ -1,0 +1,6 @@
+// P2: GeMM -> GELU (MLP up-projection)
+{
+    C: 64,
+    T: 64,
+    COUT: 128
+}

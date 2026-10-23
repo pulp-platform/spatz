@@ -1,0 +1,7 @@
+// Large size that fits the 128 kB TCDM (~106 kB of buffers). Slow: run manually.
+{
+    kernel: "CMATMUL"
+    M: 48,
+    N: 56,
+    K: 56
+}

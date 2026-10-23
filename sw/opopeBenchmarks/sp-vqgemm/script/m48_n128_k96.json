@@ -1,0 +1,10 @@
+// Large size that fits the 128 kB TCDM (~100 kB of buffers). Slow: run manually.
+{
+    kernel: "VQGEMM"
+    M: 48,
+    N: 128,
+    K: 96,
+    CB_D: 16,
+    CBN: 64,
+    NCB: 2
+}

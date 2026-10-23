@@ -1,0 +1,13 @@
+// Vector-quantised GeMM: the weights W[NxK] are stored as 16-bit codebook indices (one code per
+// group of CB_D consecutive columns of a row) + NCB residual codebooks + a per-row scale:
+//   W[n][g*CB_D + j] = scale[n] * sum_c codebook_c[ idx_c[n][g] ][j]
+// Spatz decodes W, O-POPE computes Z = X*W (Y = 0).  M multiple of 16, K multiple of CB_D.
+{
+    kernel: "VQGEMM"
+    M: 32,
+    N: 64,
+    K: 64,
+    CB_D: 16,
+    CBN: 64,
+    NCB: 2
+}

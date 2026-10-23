@@ -1,0 +1,10 @@
+// Flash-attention head (online softmax over key tiles): Tq queries (<= 64), T keys processed in
+// tiles of Bc, head dim d (GeMM1 contraction), value dim dv (multiple of 16), Bc multiple of 16.
+{
+    kernel: "FLASHATTN"
+    Tq: 64,
+    T: 64,
+    d: 32,
+    dv: 32,
+    Bc: 32
+}

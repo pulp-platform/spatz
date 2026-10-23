@@ -1,0 +1,12 @@
+// Dequantised-weight GeMM (hp-dqmatmul, CB_D=8 / 16-bit index / 2 additive codebooks, no scale):
+//   W[n][g*CB_D + j] = codebook_0[idx_0[n][g]][j] + codebook_1[idx_1[n][g]][j]
+// Spatz decodes W, O-POPE computes Z = X*W (Y = 0).  M multiple of 16, K multiple of CB_D.
+{
+    kernel: "DQGEMM"
+    M: 32,
+    N: 64,
+    K: 64,
+    CB_D: 8,
+    CBN: 256,
+    NCB: 2
+}

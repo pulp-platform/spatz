@@ -1,0 +1,6 @@
+// P1: LayerNorm -> GeMM (QKV-like projection)
+{
+    C: 64,
+    T: 64,
+    COUT: 128
+}

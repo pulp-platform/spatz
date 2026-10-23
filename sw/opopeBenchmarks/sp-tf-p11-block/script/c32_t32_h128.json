@@ -1,0 +1,6 @@
+// P11: transformer block, single head
+{
+    C: 32,
+    T: 32,
+    HID: 128
+}

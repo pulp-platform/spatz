@@ -1,0 +1,12 @@
+// GCN layer (mean aggregation incl. self loop): gather-sum of the neighbour features, scaled by
+// 1/(deg+1) -> GeMM with the layer weights + bias -> ReLU.  R = B = number of nodes,
+// L = deg + 1 lookups per node (self loop first), D = input features, Dout = output features.
+{
+    kernel: "GATHERMLP"
+    mode: "gcn",
+    R: 64,
+    D: 32,
+    B: 64,
+    L: 8,
+    Dout: 32
+}

@@ -1,0 +1,6 @@
+// P3: LayerNorm -> GeMM -> GELU (full MLP up-projection)
+{
+    C: 64,
+    T: 64,
+    COUT: 128
+}

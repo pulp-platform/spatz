@@ -1,0 +1,5 @@
+// P4a: GeMM with the residual folded into Y
+{
+    C: 64,
+    T: 64
+}

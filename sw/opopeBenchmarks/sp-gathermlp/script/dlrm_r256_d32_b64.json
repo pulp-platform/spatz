@@ -1,0 +1,12 @@
+// DLRM-style: embedding-bag (gather + sum pooling) -> MLP layer (GeMM + bias) -> ReLU.
+//   R table rows of D features (feature-major in memory), B bags of L lookups each,
+//   Dout MLP outputs (multiple of 16).
+{
+    kernel: "GATHERMLP"
+    mode: "dlrm",
+    R: 256,
+    D: 32,
+    B: 64,
+    L: 8,
+    Dout: 32
+}

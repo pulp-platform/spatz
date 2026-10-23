@@ -1,0 +1,9 @@
+// Large size that fits the 128 kB TCDM (~113 kB of buffers). Slow: run manually.
+{
+    kernel: "FLASHATTN"
+    Tq: 64,
+    T: 128,
+    d: 64,
+    dv: 64,
+    Bc: 64
+}

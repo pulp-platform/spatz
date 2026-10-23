@@ -1,0 +1,8 @@
+// Complex GeMM C[MxK] = A[MxN] * B[NxK] on O-POPE (4 real GeMMs), data interleaved (Re, Im).
+// M must be a multiple of 16 (O-POPE), M, N, K even.
+{
+    kernel: "CMATMUL"
+    M: 32,
+    N: 32,
+    K: 32
+}

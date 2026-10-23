@@ -1,0 +1,12 @@
+// CNN layer on O-POPE: valid 3x3 convolution + bias + ReLU as im2col -> GeMM -> ReLU.
+//   M = Ho*W (output rows, incl. kw-1 unused columns per image row), N = Cin*KH*KW, K = Cout.
+// W must be a multiple of 16 so that M is a multiple of 16 (O-POPE constraint).
+{
+    kernel: "CONV"
+    Cin: 8,
+    H: 10,
+    W: 16,
+    Cout: 32,
+    KH: 3,
+    KW: 3
+}

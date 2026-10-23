@@ -1,0 +1,7 @@
+// Rectangular, non-power-of-two sizes (M multiple of 16).
+{
+    kernel: "CMATMUL"
+    M: 48,
+    N: 40,
+    K: 56
+}

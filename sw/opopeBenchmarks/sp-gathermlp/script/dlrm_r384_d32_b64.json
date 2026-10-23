@@ -1,0 +1,10 @@
+// Large size that fits the 128 kB TCDM (table = 48 kB, ~100 kB total). Slow: run manually.
+{
+    kernel: "GATHERMLP"
+    mode: "dlrm",
+    R: 384,
+    D: 32,
+    B: 64,
+    L: 8,
+    Dout: 32
+}
