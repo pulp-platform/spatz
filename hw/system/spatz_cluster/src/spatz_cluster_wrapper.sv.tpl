@@ -17,6 +17,15 @@ ${int(c[prop])}\
   % endfor
 </%def>\
 
+<%
+  # Optional external (HWPE) connections. All disabled by default.
+  narrow_ext_expose  = cfg.get('narrow_axi_port_expose', False)
+  ext_mem_size       = cfg.get('ext_mem_size', 0) if narrow_ext_expose else 0
+  num_exp_wide_ports = cfg.get('num_exposed_wide_tcdm_ports', 0)
+  # Keep at least one (tied-off) port, as in the Snitch cluster wrapper
+  actual_num_exp_wide_ports = max(num_exp_wide_ports, 1)
+%>
+
 <%def name="core_isa(isa)">\
 ${cfg['nr_cores']}'b\
   % for c in cfg['cores'][::-1]:
@@ -25,6 +34,7 @@ ${int(getattr(c['isa_parsed'], isa))}\
 </%def>\
 
 `include "axi/typedef.svh"
+`include "tcdm_interface/typedef.svh"
 
 // verilog_lint: waive-start package-filename
 package ${cfg['pkg_name']};
@@ -87,6 +97,19 @@ package ${cfg['pkg_name']};
   localparam logic AddrMisalign =  1'b0; // 0-aligned, 1-misalign
 %endif
   localparam int unsigned PeriStartAddr = TCDMStartAddr + TCDMSize;
+
+  // External (HWPE) interfaces of the cluster
+  localparam int unsigned ExtMemorySize = ${ext_mem_size}; // kB
+  localparam int unsigned NumExpWideTcdmPorts = ${actual_num_exp_wide_ports};
+
+  // Externally-exposed internal narrow AXI plug (id: one more bit than the cluster's in id)
+  localparam int unsigned SpatzNarrowExtIdWidth = SpatzAxiIdInWidth + 1;
+  typedef logic [SpatzNarrowExtIdWidth-1:0] narrow_ext_id_t;
+  `AXI_TYPEDEF_ALL(spatz_axi_narrow_ext, axi_addr_t, narrow_ext_id_t, narrow_axi_data_t, narrow_axi_strb_t, axi_user_t)
+
+  // External wide (superbank-wide) TCDM ports
+  typedef logic [$clog2(TCDMSize)-1:0] tcdm_ext_addr_t;
+  `TCDM_TYPEDEF_ALL(spatz_tcdm_ext, tcdm_ext_addr_t, axi_data_t, axi_strb_t, logic)
 
   localparam int unsigned BootAddr      = ${to_sv_hex(cfg['boot_addr'], cfg['addr_width'])};
 
@@ -258,6 +281,14 @@ module ${cfg['name']}_wrapper
   input  logic [AxiUserWidth-1:0]       axi_core_default_user_i,
 % endif
   output logic                          cluster_probe_o,
+% if narrow_ext_expose:
+  output spatz_axi_narrow_ext_req_t     narrow_ext_req_o,
+  input  spatz_axi_narrow_ext_resp_t    narrow_ext_resp_i,
+% endif
+% if num_exp_wide_ports > 0:
+  input  spatz_tcdm_ext_req_t [NumExpWideTcdmPorts-1:0] tcdm_ext_req_i,
+  output spatz_tcdm_ext_rsp_t [NumExpWideTcdmPorts-1:0] tcdm_ext_resp_o,
+% endif
 % if cfg['axi_isolate_enable']:
   input  logic axi_isolate_i,
   output logic axi_isolated_o,
@@ -524,6 +555,12 @@ module ${cfg['name']}_wrapper
     .axi_in_resp_t (axi_in_resp_t),
     .axi_out_req_t (spatz_axi_iwc_out_req_t),
     .axi_out_resp_t (spatz_axi_iwc_out_resp_t),
+    .ExtMemorySize (ExtMemorySize),
+    .NumExpWideTcdmPorts (NumExpWideTcdmPorts),
+    .axi_ext_req_t (spatz_axi_narrow_ext_req_t),
+    .axi_ext_resp_t (spatz_axi_narrow_ext_resp_t),
+    .tcdm_ext_req_t (spatz_tcdm_ext_req_t),
+    .tcdm_ext_rsp_t (spatz_tcdm_ext_rsp_t),
     .Xdma (${core_cfg_flat('xdma')}),
     .DMAAxiReqFifoDepth (${cfg['dma_axi_req_fifo_depth']}),
     .DMAReqFifoDepth (${cfg['dma_req_fifo_depth']}),
@@ -566,7 +603,21 @@ module ${cfg['name']}_wrapper
 % endif
     // AXI Master Port
     .axi_out_req_o  ( axi_from_cluster_iwc_req ),
-    .axi_out_resp_i ( axi_from_cluster_iwc_resp )
+    .axi_out_resp_i ( axi_from_cluster_iwc_resp ),
+% if narrow_ext_expose:
+    .narrow_ext_req_o,
+    .narrow_ext_resp_i,
+% else:
+    .narrow_ext_req_o (),
+    .narrow_ext_resp_i (spatz_axi_narrow_ext_resp_t'('0)),
+% endif
+% if num_exp_wide_ports > 0:
+    .tcdm_ext_req_i,
+    .tcdm_ext_resp_o
+% else:
+    .tcdm_ext_req_i ('{default: spatz_tcdm_ext_req_t'('0)}),
+    .tcdm_ext_resp_o ()
+% endif
   );
 
 endmodule

@@ -48,6 +48,18 @@ module mem_wide_narrow_mux_tb #(
 
   MEM_BUS #(
     .ADDR_WIDTH ( AW ),
+    .DATA_WIDTH ( DW_WIDE ),
+    .user_t (logic)
+  ) master_ext ();
+
+  MEM_BUS_DV #(
+    .ADDR_WIDTH ( AW ),
+    .DATA_WIDTH ( DW_WIDE ),
+    .user_t (logic)
+  ) master_ext_dv (clk);
+
+  MEM_BUS #(
+    .ADDR_WIDTH ( AW ),
     .DATA_WIDTH ( DW_NARROW ),
     .user_t (logic)
   ) slave [NrPorts] ();
@@ -69,8 +81,8 @@ module mem_wide_narrow_mux_tb #(
     .rst_ni (rst_n),
     .in_narrow (master_narrow),
     .in_wide (master_wide),
-    .out (slave),
-    .sel_wide_i (master_wide.q_valid)
+    .in_ext (master_ext),
+    .out (slave)
   );
 
 
@@ -79,6 +91,7 @@ module mem_wide_narrow_mux_tb #(
     `MEM_ASSIGN(master_narrow[i], master_narrow_dv[i])
   end
   `MEM_ASSIGN(master_wide, master_wide_dv)
+  `MEM_ASSIGN(master_ext, master_ext_dv)
 
   // ----------------
   // Clock generation
@@ -128,6 +141,15 @@ module mem_wide_narrow_mux_tb #(
     rand_mem_master_wide.reset();
     @(posedge rst_n);
     rand_mem_master_wide.run(NrRandomTransactions);
+    repeat(1000) @(posedge clk);
+    $finish;
+  end
+
+  mem_rand_master_wide_t rand_mem_master_ext  = new (master_ext_dv);
+  initial begin
+    rand_mem_master_ext.reset();
+    @(posedge rst_n);
+    rand_mem_master_ext.run(NrRandomTransactions);
     repeat(1000) @(posedge clk);
     $finish;
   end

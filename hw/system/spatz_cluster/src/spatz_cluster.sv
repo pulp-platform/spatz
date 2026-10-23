@@ -48,6 +48,12 @@ module spatz_cluster
     parameter int                     unsigned               ClusterPeriphSize                  = 64,
     /// Number of TCDM Banks.
     parameter int                     unsigned               NrBanks                            = 2 * NrCores,
+    /// External (exposed) memory address region size (in kB). This is the address region
+    /// mapped to the `narrow_ext` port, placed right after the cluster peripherals.
+    /// `0` disables the region.
+    parameter int                     unsigned               ExtMemorySize                      = 0,
+    /// Number of exposed wide (superbank-wide) TCDM ports.
+    parameter int                     unsigned               NumExpWideTcdmPorts                = 1,
     /// Size of DMA AXI buffer.
     parameter int                     unsigned               DMAAxiReqFifoDepth                 = 3,
     /// Size of DMA request fifo.
@@ -99,6 +105,12 @@ module spatz_cluster
     parameter type                                           axi_in_resp_t                      = logic,
     parameter type                                           axi_out_req_t                      = logic,
     parameter type                                           axi_out_resp_t                     = logic,
+    /// Externally-exposed internal (narrow) AXI plug
+    parameter type                                           axi_ext_req_t                      = logic,
+    parameter type                                           axi_ext_resp_t                     = logic,
+    /// External wide TCDM ports
+    parameter type                                           tcdm_ext_req_t                     = logic,
+    parameter type                                           tcdm_ext_rsp_t                     = logic,
     // Memory latency parameter. Most of the memories have a read latency of 1. In
     // case you have memory macros which are pipelined you want to adjust this
     // value here. This only applies to the TCDM. The instruction cache macros will break!
@@ -142,7 +154,14 @@ module spatz_cluster
     output axi_in_resp_t                     axi_in_resp_o,
     /// AXI Core cluster out-port.
     output axi_out_req_t                     axi_out_req_o,
-    input  axi_out_resp_t                    axi_out_resp_i
+    input  axi_out_resp_t                    axi_out_resp_i,
+    /// Externally-exposed internal AXI plug (e.g. to the control interface of an external
+    /// accelerator). Its address space extends the cluster address space.
+    output axi_ext_req_t                     narrow_ext_req_o,
+    input  axi_ext_resp_t                    narrow_ext_resp_i,
+    /// External wide TCDM ports (e.g. from an external accelerator)
+    input  tcdm_ext_req_t [NumExpWideTcdmPorts-1:0] tcdm_ext_req_i,
+    output tcdm_ext_rsp_t [NumExpWideTcdmPorts-1:0] tcdm_ext_resp_o
   );
   // ---------
   // Imports
@@ -182,9 +201,11 @@ module spatz_cluster
   localparam int unsigned NarrowDataWidth  = NarrowAXIDataWidth;
   localparam int unsigned NarrowUserWidth  = AxiUserWidth;
 
-  // TCDM, Peripherals, SoC Request
-  localparam int unsigned NrNarrowSlaves = 3;
-  localparam int unsigned NrNarrowRules  = NrNarrowSlaves - 1;
+  // TCDM, Peripherals, SoC Request, External plug
+  localparam int unsigned NrNarrowSlaves = 4;
+  // The ExtSlave address rule only exists if the external region is non-empty (an empty rule is
+  // rejected by the address decoder).
+  localparam int unsigned NrNarrowRules  = (ExtMemorySize != 0) ? NrNarrowSlaves - 1 : NrNarrowSlaves - 2;
 
   // Core Request, DMA, Instruction cache
   localparam int unsigned NrWideMasters  = 3;
@@ -366,6 +387,10 @@ module spatz_cluster
   assign cluster_periph_start_address = tcdm_end_address;
   assign cluster_periph_end_address   = tcdm_end_address + ClusterPeriphSize * 1024;
 
+  addr_t ext_mem_start_address, ext_mem_end_address;
+  assign ext_mem_start_address = cluster_periph_end_address;
+  assign ext_mem_end_address   = ext_mem_start_address + ExtMemorySize * 1024;
+
   // ----------------
   // Wire Definitions
   // ----------------
@@ -387,6 +412,9 @@ module spatz_cluster
 
   mem_dma_req_t [NrSuperBanks-1:0] sb_dma_req;
   mem_dma_rsp_t [NrSuperBanks-1:0] sb_dma_rsp;
+
+  mem_dma_req_t [NrSuperBanks-1:0] sb_ext_req;
+  mem_dma_rsp_t [NrSuperBanks-1:0] sb_ext_rsp;
 
   // 3. Memory Subsystem (Interconnect)
   tcdm_dma_req_t ext_dma_req;
@@ -561,6 +589,28 @@ module spatz_cluster
     .mem_rsp_i (sb_dma_rsp )
   );
 
+  // External wide TCDM ports
+  spatz_tcdm_interconnect #(
+    .NumInp                (NumExpWideTcdmPorts),
+    .NumOut                (NrSuperBanks       ),
+    .tcdm_req_t            (tcdm_ext_req_t     ),
+    .tcdm_rsp_t            (tcdm_ext_rsp_t     ),
+    .mem_req_t             (mem_dma_req_t      ),
+    .mem_rsp_t             (mem_dma_rsp_t      ),
+    .user_t                (logic              ),
+    .MemAddrWidth          (TCDMMemAddrWidth   ),
+    .DataWidth             (AxiDataWidth       ),
+    .MemoryResponseLatency (MemoryMacroLatency ),
+    .AddrMisalign          (AddrMisalign       )
+  ) i_ext_interconnect (
+    .clk_i     (clk_i          ),
+    .rst_ni    (rst_ni         ),
+    .req_i     (tcdm_ext_req_i ),
+    .rsp_o     (tcdm_ext_resp_o ),
+    .mem_req_o (sb_ext_req     ),
+    .mem_rsp_i (sb_ext_rsp     )
+  );
+
   // ----------------
   // Memory Subsystem
   // ----------------
@@ -583,9 +633,10 @@ module spatz_cluster
       .in_narrow_rsp_o (ic_rsp [i]           ),
       .in_wide_req_i   (sb_dma_req [i]       ),
       .in_wide_rsp_o   (sb_dma_rsp [i]       ),
+      .in_ext_req_i    (sb_ext_req [i]       ),
+      .in_ext_rsp_o    (sb_ext_rsp [i]       ),
       .out_req_o       (amo_req              ),
-      .out_rsp_i       (amo_rsp              ),
-      .sel_wide_i      (sb_dma_req[i].q_valid)
+      .out_rsp_i       (amo_rsp              )
     );
 
     // generate banks of the superbank
@@ -641,7 +692,7 @@ module spatz_cluster
         .mem_wdata_o    (mem_wdata                 ),
         .mem_be_o       (mem_be                    ),
         .mem_rdata_i    (mem_rdata                 ),
-        .dma_access_i   (sb_dma_req[i].q_valid     ),
+        .dma_access_i   (sb_dma_req[i].q_valid | sb_ext_req[i].q_valid),
         // TODO(zarubaf): Signal AMO conflict somewhere. Socregs?
         .amo_conflict_o (/* Unused */              )
       );
@@ -918,9 +969,15 @@ module spatz_cluster
     .axi_rsp_i    (narrow_axi_mst_rsp[CoreReq])
   );
 
-  xbar_rule_t [NrNarrowRules-1:0] cluster_xbar_rules;
+  xbar_rule_t [NrNarrowSlaves-2:0] cluster_xbar_rules_all;
+  xbar_rule_t [NrNarrowRules-1:0]  cluster_xbar_rules;
 
-  assign cluster_xbar_rules = '{
+  assign cluster_xbar_rules_all = '{
+    '{
+      idx       : ExtSlave,
+      start_addr: ext_mem_start_address,
+      end_addr  : ext_mem_end_address
+    },
     '{
       idx       : TCDM,
       start_addr: tcdm_start_address,
@@ -932,6 +989,9 @@ module spatz_cluster
       end_addr  : cluster_periph_end_address
     }
   };
+
+  // Rules [1:0] are TCDM and peripherals (as in the original rule order); rule [2] (ExtSlave) is dropped if the region is empty
+  assign cluster_xbar_rules = cluster_xbar_rules_all[NrNarrowRules-1:0];
 
   localparam bit   [ClusterXbarCfg.NoSlvPorts-1:0]                                                        ClusterEnableDefaultMstPort = '1;
   localparam logic [ClusterXbarCfg.NoSlvPorts-1:0][cf_math_pkg::idx_width(ClusterXbarCfg.NoMstPorts)-1:0] ClusterXbarDefaultPort      = '{default: SoC};
@@ -1036,7 +1096,27 @@ module spatz_cluster
     .cluster_probe_o          (cluster_probe_o       )
   );
 
-  // 3. BootROM
+  // 3. External plug
+  // Optionally decouple the externally-exposed internal AXI plug.
+  axi_cut #(
+    .Bypass     (!RegisterExt     ),
+    .aw_chan_t  (axi_slv_aw_chan_t),
+    .w_chan_t   (axi_slv_w_chan_t ),
+    .b_chan_t   (axi_slv_b_chan_t ),
+    .ar_chan_t  (axi_slv_ar_chan_t),
+    .r_chan_t   (axi_slv_r_chan_t ),
+    .axi_req_t  (axi_slv_req_t    ),
+    .axi_resp_t (axi_slv_resp_t   )
+  ) i_cut_ext_narrow_mst (
+    .clk_i      (clk_i                       ),
+    .rst_ni     (rst_ni                      ),
+    .slv_req_i  (narrow_axi_slv_req[ExtSlave]),
+    .slv_resp_o (narrow_axi_slv_rsp[ExtSlave]),
+    .mst_req_o  (narrow_ext_req_o               ),
+    .mst_resp_i (narrow_ext_resp_i              )
+  );
+
+  // 4. BootROM
   axi_to_reg #(
     .ADDR_WIDTH         (AxiAddrWidth      ),
     .DATA_WIDTH         (AxiDataWidth      ),

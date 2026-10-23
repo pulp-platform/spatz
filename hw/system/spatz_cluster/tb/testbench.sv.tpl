@@ -158,7 +158,11 @@ module testharness (
   logic                cluster_probe;
   logic [NumCores-1:0] debug_req;
 
+`ifdef TARGET_SPATZ_HWPE
+  spatz_hwpe_cluster i_cluster_wrapper (
+`else
   spatz_cluster_wrapper i_cluster_wrapper (
+`endif
     .clk_i           (clk_i                ),
     .rst_ni          (rst_ni               ),
     .meip_i          ('0                   ),

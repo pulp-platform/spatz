@@ -37,6 +37,13 @@ BUF_FPU := $(shell python3 -c "import jstyleson; print(jstyleson.load(open('$(SP
 # VENTAGLIO ... `endif blocks pull in the VTL integration.
 SPATZ_CLUSTER_VENTAGLIO := $(shell python3 -c "import jstyleson; f = open('$(SPATZ_CLUSTER_CFG_PATH)'); print(1 if jstyleson.load(f)['cluster'].get('ventaglio', False) else 0)")
 
+# OPOPE HWPE attached to the cluster through the exposed ports: use `spatz_hwpe_cluster` as DUT.
+SPATZ_CLUSTER_HWPE := $(shell python3 -c "import jstyleson; f = open('$(SPATZ_CLUSTER_CFG_PATH)'); print(1 if jstyleson.load(f)['cluster'].get('narrow_axi_port_expose', False) else 0)")
+
+ifeq ($(SPATZ_CLUSTER_HWPE),1)
+	BENDER_CFG_TARGETS += -t spatz_hwpe -t opope_hwpe
+endif
+
 ifeq ($(DOUBLE_BW),1)
 	DEFS += -DDOUBLE_BW
 	SPATZ_CLUSTER_CFG_DEFINES += -DUNROLL=1
@@ -141,6 +148,17 @@ spatz.gendata:
 			fi \
 		fi \
 	done
+	@for benchmark_dir in $(ROOT)/sw/opopeBenchmarks/*/; do \
+		script_dir="$$benchmark_dir/script"; \
+		if [ -d "$$script_dir" ]; then \
+			for config in "$$script_dir"/*.json; do \
+				if [ -f "$$config" ]; then \
+					echo "Generating O-POPE data for $$benchmark_dir ($$config)"; \
+					(cd "$$benchmark_dir" && ${PYTHON} script/gen_data.py -c "script/$$(basename $$config)") || true; \
+				fi \
+			done \
+		fi \
+	done
 
 .PHONY: spatz.cleandata
 spatz.cleandata:
@@ -154,6 +172,7 @@ spatz.cleandata:
 			fi \
 		fi \
 	done
+	@rm -f $(ROOT)/sw/opopeBenchmarks/*/data/data*.h
 	@echo "All benchmark data cleaned."
 
 #############
