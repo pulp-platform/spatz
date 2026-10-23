@@ -1,3 +1,7 @@
+// Copyright 2025 ETH Zurich and University of Bologna.
+// Licensed under the Apache License, Version 2.0, see LICENSE for details.
+// SPDX-License-Identifier: Apache-2.0
+
 // Large size that fits the 128 kB TCDM (~100 kB of buffers). Slow: run manually.
 {
     kernel: "VQGEMM"

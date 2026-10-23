@@ -1,0 +1,15 @@
+// Copyright 2025 ETH Zurich and University of Bologna.
+// Licensed under the Apache License, Version 2.0, see LICENSE for details.
+// SPDX-License-Identifier: Apache-2.0
+
+// DLRM-style (FP16 -> FP32): embedding-bag (gather + sum pooling in FP16) -> MLP layer (widening GeMM + bias) -> ReLU.
+//   R table rows of D=64 features, B bags of L lookups each, Dout MLP outputs (multiple of 16).
+{
+    kernel: "GATHERMLP"
+    mode: "dlrm",
+    R: 256,
+    D: 64,
+    B: 128,
+    L: 8,
+    Dout: 64
+}

@@ -1,3 +1,7 @@
+// Copyright 2025 ETH Zurich and University of Bologna.
+// Licensed under the Apache License, Version 2.0, see LICENSE for details.
+// SPDX-License-Identifier: Apache-2.0
+
 // DLRM-style: embedding-bag (gather + sum pooling) -> MLP layer (GeMM + bias) -> ReLU.
 //   R table rows of D features (feature-major in memory), B bags of L lookups each,
 //   Dout MLP outputs (multiple of 16).

@@ -1,0 +1,14 @@
+// Copyright 2025 ETH Zurich and University of Bologna.
+// Licensed under the Apache License, Version 2.0, see LICENSE for details.
+// SPDX-License-Identifier: Apache-2.0
+
+// Flash-attention head (online softmax over key tiles), FP16 Q/K/V -> FP32 output: Tq queries (<= 64), T keys
+// processed in tiles of Bc, head dim d (GeMM1 contraction, even), value dim dv (multiple of 16), Bc multiple of 16.
+{
+    kernel: "FLASHATTN"
+    Tq: 64,
+    T: 256,
+    d: 64,
+    dv: 64,
+    Bc: 64
+}

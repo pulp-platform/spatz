@@ -1,3 +1,7 @@
+// Copyright 2025 ETH Zurich and University of Bologna.
+// Licensed under the Apache License, Version 2.0, see LICENSE for details.
+// SPDX-License-Identifier: Apache-2.0
+
 // GCN layer (mean aggregation incl. self loop): gather-sum of the neighbour features, scaled by
 // 1/(deg+1) -> GeMM with the layer weights + bias -> ReLU.  R = B = number of nodes,
 // L = deg + 1 lookups per node (self loop first), D = input features, Dout = output features.

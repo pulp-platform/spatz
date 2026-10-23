@@ -32,6 +32,17 @@ def words(t):
     return np.ascontiguousarray(np.asarray(t, dtype=np.float32)).view(np.uint32).flatten()
 
 
+def halves(t):
+    """FP16-quantised array-like -> flat uint16 bit patterns."""
+    return np.ascontiguousarray(np.asarray(t, dtype=np.float16)).view(np.uint16).flatten()
+
+
+def pack_pairs(h16):
+    """uint16 [A][B] -> uint32 [A/2][B]: word (p, j) = row 2p (bits 15:0) | row 2p+1 (bits 31:16)"""
+    a = np.asarray(h16).astype(np.uint32)
+    return a[0::2, :] | (a[1::2, :] << 16)
+
+
 def carray(name, vals, ctype="uint32_t"):
     body = ", ".join(str(int(v)) if ctype != "uint32_t" else "0x{:08x}".format(int(v))
                      for v in vals)

@@ -81,6 +81,24 @@ static inline void opope_gemm(const float *xT, const float *w, float *y, unsigne
   snrt_interrupt_disable(IRQ_M_EXT);
 }
 
+// Widening FP16 -> FP32 GeMM on O-POPE (SDOTP datapath): Z = Y + X*W with FP16 X (MxN) and W (NxK) and
+// FP32 Y/Z (MxK). Two FP16 values are packed per 32-bit word ALONG N (N must be even):
+//   xT[p][m] = { X[m][2p] (bits 15:0), X[m][2p+1] (bits 31:16) }   p = 0..N/2-1  ([N/2][M] words)
+//   w [p][j] = { W[2p][j], W[2p+1][j] }                                          ([N/2][K] words)
+static inline void opope_gemm_fp16(const void *xT, const void *w, float *y, unsigned int m,
+                                   unsigned int n, unsigned int k) {
+  opope_vsync(xT);
+  hwpe_soft_clear();
+  while (hwpe_acquire_job() < 0)
+    ;
+  snrt_interrupt_enable(IRQ_M_EXT);
+  opope_cfg((unsigned int)xT, (unsigned int)w, (unsigned int)y, m, n, k, (uint8_t)GEMM,
+            (uint8_t)Float16, (uint8_t)Float32);
+  hwpe_trigger_job();
+  while (hwpe_get_status() != 0) snrt_wfi();
+  snrt_interrupt_disable(IRQ_M_EXT);
+}
+
 // O-POPE constraint (observed): M must be a multiple of 16. Otherwise the job processes M rounded up
 // to a multiple of 16 and also WRITES the extra rows past the end of Z (garbage), corrupting
 // whatever follows Z in memory (N and K may be any size >= 16). Use the assert in the data
@@ -96,7 +114,9 @@ static inline int opope_check_fp32(const float *actual, const float *golden, uns
     float g = golden[i] < 0 ? -golden[i] : golden[i];
     if (!(d <= abs_tol + rel_tol * g)) {  // also catches NaN
       if (errors == 0 || (errors < 8 && OPOPE_VERBOSE_CHECK))
-        PRINTF("Mismatch @ %u: got %f, expected %f\n", i, (double)actual[i], (double)golden[i]);
+        // (no FP division on this cluster, so printf("%f") would trap: print the raw bits)
+        PRINTF("Mismatch @ %u: got 0x%x, expected 0x%x\n", i, ((const uint32_t *)actual)[i],
+               ((const uint32_t *)golden)[i]);
       errors++;
     }
   }

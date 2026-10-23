@@ -1,0 +1,12 @@
+// Copyright 2025 ETH Zurich and University of Bologna.
+// Licensed under the Apache License, Version 2.0, see LICENSE for details.
+// SPDX-License-Identifier: Apache-2.0
+
+// Complex GeMM C[MxK] = A[MxN] * B[NxK] on O-POPE (FP16 -> FP32), complex data interleaved (Re, Im).
+// One widening GeMM of M x 2N x 2K real operations (see main.c). M must be a multiple of 16.
+{
+    kernel: "CMATMUL"
+    M: 64,
+    N: 64,
+    K: 64
+}
