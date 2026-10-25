@@ -908,6 +908,30 @@ void TEST_CASE_D26_illegal_segment_simple(void) {
   // If the fix works, the simulation will crash before reaching here.
 }
 
+void TEST_CASE_vlseg_eew_ne_sew_fields(void) {
+  volatile uint16_t MEM[128];          // interleaved: MEM[2*i] = field 0, MEM[2*i+1] = field 1
+  for (int i = 0; i < 64; i++) {
+    MEM[2*i]   = 0xA000 + i;
+    MEM[2*i+1] = 0xB000 + i;
+  }
+  uint32_t sentinel = 0xDEAD;
+
+  VSET(64, e16, m2);                   // pre-fill v2..v5 with a sentinel
+  asm volatile(
+    "vmv.v.x v2, %0\n\t"
+    "vmv.v.x v4, %0\n\t"
+    :: "r"(sentinel));
+  for (volatile int w = 0; w < 1000; w++) {}
+
+  VSET(64, e8, m1);                    // SEW = 8, LMUL = 1, vl = 64 elements of EEW = 16
+  asm volatile("vlseg2e16.v v2, (%0)\n\t" :: "r"(MEM) : "memory");
+  for (volatile int w = 0; w < 1000; w++) {}
+
+  VSET(8, e16, m1);
+  VCMP_U16(168, v3, 0xA020, 0xA021, 0xA022, 0xA023, 0xA024, 0xA025, 0xA026, 0xA027);  // field 0, upper half
+  VCMP_U16(169, v4, 0xB000, 0xB001, 0xB002, 0xB003, 0xB004, 0xB005, 0xB006, 0xB007);  // field 1, lower half
+}
+
 int main(void) {
   INIT_CHECK();
   enable_vec();
@@ -970,6 +994,7 @@ int main(void) {
   TEST_CASE_D26_strided_segment();
   TEST_CASE_D26_scoreboard_hazard();
   //TEST_CASE_D26_illegal_segment_simple();
+  TEST_CASE_vlseg_eew_ne_sew_fields();
 
   EXIT_CHECK();
 }
