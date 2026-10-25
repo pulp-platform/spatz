@@ -161,6 +161,22 @@ void TEST_CASE4() {
 #endif
 }
 
+void TEST_CASE5(void) {
+  volatile uint32_t SRC[16];
+  for (int i = 0; i < 16; i++) SRC[i] = 100 + i;
+  uint32_t fill = 0xDEAD;
+
+  VSET(16, e32, m1);
+  asm volatile(
+    "vmv.v.x v8, %1\n\t"                  // pre-fill
+    "vle32.v v8, (%0)\n\t"                // slow producer (VLSU)
+    "vslidedown.vi v12, v8, 8\n\t"        // needs elements 8..15 of v8
+    :: "r"(SRC), "r"(fill) : "memory");
+
+  VSET(4, e32, m1);
+  VCMP_U32(17, v12, 108, 109, 110, 111);
+}
+
 int main(void) {
   INIT_CHECK();
   enable_vec();
@@ -169,6 +185,7 @@ int main(void) {
   TEST_CASE2();
   TEST_CASE3();
   TEST_CASE4();
+  TEST_CASE5();
 
   EXIT_CHECK();
 }

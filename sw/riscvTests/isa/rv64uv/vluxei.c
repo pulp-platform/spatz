@@ -460,6 +460,34 @@ void TEST_CASE10(void) {
 }
 
 void TEST_CASE11(void) {
+  volatile uint32_t IDX[32];
+  volatile uint16_t SRC[32], OUT[64];
+  for (int i = 0; i < 32; i++) {
+    IDX[i] = 2 * i;                              // byte offset of OUT[i]
+    SRC[i] = 0x1000 + i;
+  }
+  for (int i = 0; i < 64; i++) OUT[i] = 0;
+
+  // Index group v4,v5: 32 x 32-bit indices
+  VSET(32, e32, m2);
+  asm volatile("vle32.v v4, (%0)\n\t" :: "r"(IDX) : "memory");
+  for (volatile int w = 0; w < 1000; w++) {}     // indices fully loaded
+
+  VSET(32, e16, m1);
+  asm volatile(
+    "vle16.v v8, (%0)\n\t"                       // store data, loaded via the VLSU so the store starts late
+    "vsuxei32.v v8, (%1), v4\n\t"                // 32-bit indices under e16: index EMUL = 2 (v4,v5)
+    "vmv.v.i v5, 0\n\t"                          // WAR on v5: must wait until the store has read it
+    :: "r"(SRC), "r"(OUT) : "memory");
+
+  for (volatile int w = 0; w < 1000; w++) {}     // let the store finish before reloading
+
+  asm volatile("vle16.v v12, (%0)\n\t" :: "r"(OUT + 16) : "memory");   // OUT[16..47]
+  VSET(8, e16, m1);
+  VCMP_U16(30, v12, 0x1010, 0x1011, 0x1012, 0x1013, 0x1014, 0x1015, 0x1016, 0x1017);
+}
+
+void TEST_CASE12(void) {
   uint32_t vlenb;
   asm volatile("csrr %0, vlenb" : "=r"(vlenb));
 
@@ -477,7 +505,7 @@ void TEST_CASE11(void) {
     DUMMY[i] = 9999;      // Distinct dummy pre-fill data
   }
 
-  // 1. Pre-fill v2/v3 with 9999, and v4/v5 with offsets.
+  // Pre-fill v2/v3 with 9999, and v4/v5 with offsets.
   // Using vle32.v guarantees the whole register group is written correctly.
   VSET(vl_m2, e32, m2);
   asm volatile(
@@ -486,10 +514,10 @@ void TEST_CASE11(void) {
     :: "r"(DUMMY), "r"(IDX) : "memory"
   );
 
-  // 2. Hard barrier to ensure the pre-fill is entirely committed to the VRF
+  // Hard barrier to ensure the pre-fill is entirely committed to the VRF
   for (volatile int w = 0; w < 1000; w++) {}
 
-  // 3. Trigger the Hazard
+  // Trigger the Hazard
   asm volatile(
     "vsetvli zero, %2, e32, m2, ta, ma\n\t"
     "vluxei32.v v2, (%0), v4\n\t"
@@ -500,14 +528,13 @@ void TEST_CASE11(void) {
     :: "r"(MEM), "r"(IDX), "r"(vl_m2) : "memory"
   );
 
-  // 4. Wait loop to ensure final resolution
+  // Wait loop to ensure final resolution
   for (volatile int w = 0; w < 1000; w++) {}
 
-  // 5. Verify
   // - If FIXED: vadd correctly waited for vluxei to finish writing to v3. v6 gets 1285.
   // - If BROKEN: vadd bypassed the scoreboard lock on v3. v6 reads the early pre-fill of 9999.
   VSET(4, e32, m1);
-  VCMP_U32(30, v6, 1285, 1285, 1285, 1285);
+  VCMP_U32(31, v6, 1285, 1285, 1285, 1285);
 }
 
 int main(void) {
@@ -523,6 +550,7 @@ int main(void) {
   TEST_CASE8();
   TEST_CASE9();
   TEST_CASE10();
-  //TEST_CASE11();
+  TEST_CASE11();
+  TEST_CASE12();
   EXIT_CHECK();
 }
