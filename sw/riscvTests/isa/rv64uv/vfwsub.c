@@ -539,6 +539,30 @@ void TEST_CASE9(void) {
   VCMP_U32(17, v9, 0x40000000, 0x40000000, 0x40000000, 0x40000000);   // 2.0
 }
 
+void TEST_CASE10(void) {
+  uint32_t a = 0x4200, b = 0x3C00, fill = 0x11111111;   // fp16 3.0, fp16 1.0
+  volatile uint32_t OUT[16];
+  for (int i = 0; i < 16; i++) OUT[i] = 0;
+
+  VSET(32, e16, m1);
+  asm volatile("vmv.v.x v2, %0\n\t" "vmv.v.x v3, %1\n\t" :: "r"(a), "r"(b));
+  VSET(32, e32, m2);
+  asm volatile("vmv.v.x v8, %0\n\t" :: "r"(fill));      // pre-fill v8,v9
+  for (volatile int w = 0; w < 1000; w++) {}
+
+  VSET(32, e16, m1);
+  asm volatile(
+    "vfwsub.vv v8, v2, v3\n\t"                           // writes v8,v9 (3.0 - 1.0 = 2.0)
+    "vsetivli zero, 16, e32, m1, ta, ma\n\t"
+    "vse32.v v9, (%0)\n\t"                               // reads the upper destination register
+    :: "r"(OUT) : "memory");
+  for (volatile int w = 0; w < 1000; w++) {}
+
+  asm volatile("vle32.v v12, (%0)\n\t" :: "r"(OUT) : "memory");
+  VSET(4, e32, m1);
+  VCMP_U32(18, v12, 0x40000000, 0x40000000, 0x40000000, 0x40000000);
+}
+
 int main(void) {
   INIT_CHECK();
   enable_vec();
@@ -554,6 +578,7 @@ int main(void) {
   TEST_CASE7();
   TEST_CASE8();
   TEST_CASE9();
+  TEST_CASE10();
 
   EXIT_CHECK();
 }
