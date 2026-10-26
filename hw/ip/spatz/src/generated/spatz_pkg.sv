@@ -15,13 +15,13 @@ package spatz_pkg;
   // Number of IPUs in each VFU (between 1 and 8)
   localparam int unsigned N_IPU = 4;
   // Number of FPUs in each VFU (between 1 and 8)
-  localparam int unsigned N_FPU = 0;
+  localparam int unsigned N_FPU = 4;
   // Number of FUs in each VFU
   localparam int unsigned N_FU  = N_IPU > N_FPU ? N_IPU : N_FPU;
   // FPU support
   localparam bit FPU            = N_FPU != 0;
   // Single-precision floating point support
-  localparam bit RVF            = 0;
+  localparam bit RVF            = 1;
   // Double-precision floating-point support
   localparam bit RVD            = 0;
   // Vector support
@@ -63,7 +63,7 @@ package spatz_pkg;
   localparam int GPRWidth = FPU ? 6 : 5;
 
   // Number of parallel vector instructions
-  localparam int unsigned NrParallelInstructions = 4;
+  localparam int unsigned NrParallelInstructions = 8;
 
   // Largest element width that Spatz supports
   localparam vew_e MAXEW = RVD ? EW_64 : EW_32;
