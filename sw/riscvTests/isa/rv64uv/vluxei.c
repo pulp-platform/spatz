@@ -6,6 +6,12 @@
 
 #define INIT 98
 
+static inline uint32_t get_vlenb_hw(void) {
+  uint32_t vl;
+  asm volatile("vsetvli %0, %1, e8, m1, ta, ma" : "=r"(vl) : "r"(1024));
+  return vl;                       // 32 on smallvrf, 64 on standard
+}
+
 // EEW dest = EEW idx  (unmasked)
 void TEST_CASE1(void) {
   { // eew_dest = eew_idx = e8
@@ -460,34 +466,44 @@ void TEST_CASE10(void) {
 }
 
 void TEST_CASE11(void) {
-  const uint32_t N = get_vlenb() / 2;          // e16 m1 elements: 32 or 16
+  const int small = (get_vlenb_hw() == 32);
   volatile uint32_t IDX[32];
   volatile uint16_t SRC[32], OUT[64];
   for (int i = 0; i < 32; i++) {
-    IDX[i] = 2 * i;
+    IDX[i] = 2 * i;                              // byte offset of OUT[i]
     SRC[i] = 0x1000 + i;
   }
   for (int i = 0; i < 64; i++) OUT[i] = 0;
 
-  // Index group v4,v5: N x 32-bit indices (always exactly 2 registers)
-  VSET(N, e32, m2);
-  asm volatile("vle32.v v4, (%0)\n\t" :: "r"(IDX) : "memory");
-  for (volatile int w = 0; w < 1000; w++) {}
+  if (small) {
+    VSET(32, e32, m4);
+    asm volatile("vle32.v v4, (%0)\n\t" :: "r"(IDX) : "memory");
+    for (volatile int w = 0; w < 1000; w++) {}
+    VSET(32, e16, m2);
+    asm volatile(
+      "vle16.v v8, (%0)\n\t"
+      "vsuxei32.v v8, (%1), v4\n\t"
+      "vmv.v.i v6, 0\n\t"
+      :: "r"(SRC), "r"(OUT) : "memory");
+  } else {
+    // Index group v4,v5: 32 x 32-bit indices
+    VSET(32, e32, m2);
+    asm volatile("vle32.v v4, (%0)\n\t" :: "r"(IDX) : "memory");
+    for (volatile int w = 0; w < 1000; w++) {}     // indices fully loaded
 
-  VSET(N, e16, m1);
-  asm volatile(
-    "vle16.v v8, (%0)\n\t"
-    "vsuxei32.v v8, (%1), v4\n\t"
-    "vmv.v.i v5, 0\n\t"
-    :: "r"(SRC), "r"(OUT) : "memory");
+    VSET(32, e16, m1);
+    asm volatile(
+      "vle16.v v8, (%0)\n\t"                       // store data, loaded via the VLSU so the store starts late
+      "vsuxei32.v v8, (%1), v4\n\t"                // 32-bit indices under e16: index EMUL = 2 (v4,v5)
+      "vmv.v.i v5, 0\n\t"                          // WAR on v5: must wait until the store has read it
+      :: "r"(SRC), "r"(OUT) : "memory");
+  }
 
-  for (volatile int w = 0; w < 1000; w++) {}
+  for (volatile int w = 0; w < 1000; w++) {}     // let the store finish before reloading
 
-  // Reload starting at the middle of what was written: OUT[N/2 .. N/2+N-1]
-  asm volatile("vle16.v v12, (%0)\n\t" :: "r"(OUT + N / 2) : "memory");
+  asm volatile("vle16.v v12, (%0)\n\t" :: "r"(OUT + 16) : "memory");   // OUT[16..47]
   VSET(8, e16, m1);
-  const uint16_t b = 0x1000 + N / 2;           // 0x1010 (std) or 0x1008 (small)
-  VCMP_U16(30, v12, b, b+1, b+2, b+3, b+4, b+5, b+6, b+7);
+  VCMP_U16(30, v12, 0x1010, 0x1011, 0x1012, 0x1013, 0x1014, 0x1015, 0x1016, 0x1017);
 }
 
 void TEST_CASE12(void) {
