@@ -2205,7 +2205,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           opa_select = Reg;
           opb_select = IImmediate;
           write_rd = 1'b0;
-          acc_qvalid_o = valid_instr & trans_ready;
+          acc_qvalid_o = valid_instr & trans_ready & ~acc_mem_stall;
           ls_size = Word;
           is_fp_load = 1'b1;
         end else begin
@@ -2218,7 +2218,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           opb_select       = Reg;               // rs2 increment
           alu_op           = Add;               // ALU computes post-inc = rs1 + rs2
           write_rd         = 1'b0;              // FP rd handled by accelerator
-          acc_qvalid_o     = valid_instr & trans_ready;
+          acc_qvalid_o     = valid_instr & trans_ready & ~acc_mem_stall;
           ls_size          = Word;
           is_fp_load       = 1'b1;
           is_fp_load_rrpost= 1'b1;
@@ -2233,7 +2233,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           opa_select = Reg;
           opb_select = SFImmediate;
           write_rd = 1'b0;
-          acc_qvalid_o = valid_instr & trans_ready;
+          acc_qvalid_o = valid_instr & trans_ready & ~acc_mem_stall;
           ls_size = Word;
           is_fp_store = 1'b1;
         end else begin
@@ -2246,7 +2246,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           opa_select = Reg;
           opb_select = IImmediate;
           write_rd = 1'b0;
-          acc_qvalid_o = valid_instr & trans_ready;
+          acc_qvalid_o = valid_instr & trans_ready & ~acc_mem_stall;
           ls_size = Double;
           is_fp_load = 1'b1;
         end else begin
@@ -2259,7 +2259,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           opb_select       = Reg;
           alu_op           = Add;
           write_rd         = 1'b0;
-          acc_qvalid_o     = valid_instr & trans_ready;
+          acc_qvalid_o     = valid_instr & trans_ready & ~acc_mem_stall;
           ls_size          = Double;
           is_fp_load       = 1'b1;
           is_fp_load_rrpost= 1'b1;
@@ -2274,7 +2274,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           opa_select = Reg;
           opb_select = SFImmediate;
           write_rd = 1'b0;
-          acc_qvalid_o = valid_instr & trans_ready;
+          acc_qvalid_o = valid_instr & trans_ready & ~acc_mem_stall;
           ls_size = Double;
           is_fp_store = 1'b1;
         end else begin
@@ -2287,7 +2287,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           opa_select = Reg;
           opb_select = IImmediate;
           write_rd = 1'b0;
-          acc_qvalid_o = valid_instr & trans_ready;
+          acc_qvalid_o = valid_instr & trans_ready & ~acc_mem_stall;
           ls_size = HalfWord;
           is_fp_load = 1'b1;
         end else begin
@@ -2300,7 +2300,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           opb_select       = Reg;
           alu_op           = Add;
           write_rd         = 1'b0;
-          acc_qvalid_o     = valid_instr & trans_ready;
+          acc_qvalid_o     = valid_instr & trans_ready & ~acc_mem_stall;
           ls_size          = HalfWord;
           is_fp_load       = 1'b1;
           is_fp_load_rrpost= 1'b1;
@@ -2315,7 +2315,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           opa_select = Reg;
           opb_select = SFImmediate;
           write_rd = 1'b0;
-          acc_qvalid_o = valid_instr & trans_ready;
+          acc_qvalid_o = valid_instr & trans_ready & ~acc_mem_stall;
           ls_size = HalfWord;
           is_fp_store = 1'b1;
         end else begin
@@ -2328,7 +2328,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           opa_select = Reg;
           opb_select = IImmediate;
           write_rd = 1'b0;
-          acc_qvalid_o = valid_instr & trans_ready;
+          acc_qvalid_o = valid_instr & trans_ready & ~acc_mem_stall;
           ls_size = Byte;
           is_fp_load = 1'b1;
         end else begin
@@ -2341,7 +2341,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           opb_select       = Reg;
           alu_op           = Add;
           write_rd         = 1'b0;
-          acc_qvalid_o     = valid_instr & trans_ready;
+          acc_qvalid_o     = valid_instr & trans_ready & ~acc_mem_stall;
           ls_size          = Byte;
           is_fp_load       = 1'b1;
           is_fp_load_rrpost= 1'b1;
@@ -2356,7 +2356,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           opa_select = Reg;
           opb_select = SFImmediate;
           write_rd = 1'b0;
-          acc_qvalid_o = valid_instr & trans_ready;
+          acc_qvalid_o = valid_instr & trans_ready & ~acc_mem_stall;
           ls_size = Byte;
           is_fp_store = 1'b1;
         end else begin
@@ -3158,28 +3158,28 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
             if (FP_EN) begin
               csr_rvalue = {27'b0, fcsr_q.fflags};
               read_fcsr  = 1'b1;
-              if (!exception) fcsr_d.fflags = fpnew_pkg::status_t'(alu_result[4:0]);
+              if (!exception && !acc_qrsp_i.isfloat) fcsr_d.fflags = fpnew_pkg::status_t'(alu_result[4:0]);
             end else illegal_csr = 1'b1;
           end
           CSR_FRM: begin
             if (FP_EN) begin
               csr_rvalue = {29'b0, fcsr_q.frm};
               read_fcsr  = 1'b1;
-              if (!exception) fcsr_d.frm = fpnew_pkg::roundmode_e'(alu_result[2:0]);
+              if (!exception && !acc_qrsp_i.isfloat) fcsr_d.frm = fpnew_pkg::roundmode_e'(alu_result[2:0]);
             end else illegal_csr = 1'b1;
           end
           CSR_FMODE: begin
             if (FP_EN) begin
               csr_rvalue = {30'b0, fcsr_q.fmode};
               read_fcsr  = 1'b1;
-              if (!exception) fcsr_d.fmode = fpnew_pkg::fmt_mode_t'(alu_result[1:0]);
+              if (!exception && !acc_qrsp_i.isfloat) fcsr_d.fmode = fpnew_pkg::fmt_mode_t'(alu_result[1:0]);
             end else illegal_csr = 1'b1;
           end
           CSR_FCSR: begin
             if (FP_EN) begin
               csr_rvalue = {22'b0, fcsr_q};
               read_fcsr  = 1'b1;
-              if (!exception) fcsr_d = fcsr_t'(alu_result[9:0]);
+              if (!exception && !acc_qrsp_i.isfloat) fcsr_d = fcsr_t'(alu_result[9:0]);
             end else illegal_csr = 1'b1;
           end
           default: csr_rvalue = '0;
@@ -3506,7 +3506,13 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
   logic [2:0] acc_mem_str_cnt_q, acc_mem_str_cnt_d;
   `FFAR(acc_mem_str_cnt_q, acc_mem_str_cnt_d, '0, clk_i, rst_i)
 
-  assign acc_mem_stall = (is_store && acc_mem_cnt_q != '0) || (is_load && acc_mem_str_cnt_q != 0) || acc_mem_cnt_q == '1;
+  // A full counter only holds back the FP and vector loads/stores (LOAD-FP,
+  // STORE-FP and the custom-3 RRPOST loads) that would overflow it. Any other
+  // instruction would be valid in every stalled cycle and write rd or offload
+  // again in each one.
+  assign acc_mem_stall = (is_store && acc_mem_cnt_q != '0) || (is_load && acc_mem_str_cnt_q != 0)
+                      || (inst_data_i[6:0] inside {7'b0000111, 7'b0100111, 7'b1111011}
+                          && acc_mem_cnt_q == '1);
 
   always_comb begin
     acc_mem_cnt_d = acc_mem_cnt_q;
@@ -3532,6 +3538,16 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
 
   `ASSERT(MemoryStoreOperationCounterRollover,
       acc_mem_str_cnt_q == '0 |=> acc_mem_str_cnt_q != '1, clk_i, rst_i)
+
+  `ASSERT(MemoryOperationCounterOverflow,
+      acc_mem_cnt_q == '1 |=> acc_mem_cnt_q != '0, clk_i, rst_i)
+
+  `ASSERT(MemoryStoreOperationCounterOverflow,
+      acc_mem_str_cnt_q == '1 |=> acc_mem_str_cnt_q != '0, clk_i, rst_i)
+
+  // A stalled instruction is valid in every stalled cycle. Only FP CSR reads
+  // may write rd then: they wait for Spatz and do not change fcsr meanwhile.
+  `ASSERT(NoRegisterWriteWhileStalled, retire_i && stall |-> read_fcsr, clk_i, rst_i)
 
   // -----------------------
   // Unaligned Address Check
