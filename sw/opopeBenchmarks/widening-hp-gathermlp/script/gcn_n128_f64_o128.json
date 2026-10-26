@@ -1,7 +1,6 @@
 // Copyright 2025 ETH Zurich and University of Bologna.
 // Licensed under the Apache License, Version 2.0, see LICENSE for details.
 // SPDX-License-Identifier: Apache-2.0
-
 // GCN layer (FP16 -> FP32; mean aggregation incl. self loop): gather-sum of the neighbour features (FP16),
 // scaled by 1/(deg+1) -> widening GeMM with the layer weights + bias -> ReLU.  R = B = number of nodes,
 // L = deg + 1 lookups per node (self loop first), D = input features, Dout = output features.
@@ -12,5 +11,5 @@
     D: 64,
     B: 128,
     L: 8,
-    Dout: 64
+    Dout: 128
 }

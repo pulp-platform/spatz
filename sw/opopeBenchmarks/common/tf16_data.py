@@ -75,7 +75,8 @@ def p_resid(app_dir, tag, p):
     z = lin(w, h(h16), bias) + res
     emit(app_dir, tag, {"C_SIZE": C, "T_SIZE": T},
          {"hpk": pk(h16), "res": res, "w": pk(w), "bias": bias, "golden": f32(z)},
-         fp(hpk=(C // 2) * T, res=C * T, w=(C // 2) * C, z=C * T, bias=C))
+         fp(hpk=(C // 2) * T, **({} if "fused" in app_dir.name else {"res": C * T}),
+            w=(C // 2) * C, z=C * T, bias=C))
 
 
 def p_softmax(app_dir, tag, p, ce):

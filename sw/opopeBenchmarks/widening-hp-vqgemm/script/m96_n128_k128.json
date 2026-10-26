@@ -1,14 +1,13 @@
 // Copyright 2025 ETH Zurich and University of Bologna.
 // Licensed under the Apache License, Version 2.0, see LICENSE for details.
 // SPDX-License-Identifier: Apache-2.0
-
 // Vector-quantised GeMM (FP16 -> FP32): the weights W[NxK] are stored as 16-bit codebook indices (one code per
 // group of CB_D consecutive columns of a row) + NCB residual FP16 codebooks + a per-row FP16 scale:
 //   W[n][g*CB_D + j] = scale[n] * sum_c codebook_c[ idx_c[n][g] ][j]      (FP16 arithmetic on Spatz)
 // Spatz decodes W straight into the packed operand, O-POPE computes Z = X*W (Y = 0).  M multiple of 16.
 {
     kernel: "VQGEMM"
-    M: 64,
+    M: 96,
     N: 128,
     K: 128,
     CB_D: 16,

@@ -1,7 +1,6 @@
 // Copyright 2025 ETH Zurich and University of Bologna.
 // Licensed under the Apache License, Version 2.0, see LICENSE for details.
 // SPDX-License-Identifier: Apache-2.0
-
 // CNN layer on O-POPE (FP16 -> FP32): valid 3x3 convolution + bias + ReLU as im2col -> GeMM -> ReLU.
 //   M = Ho*W (output rows, incl. kw-1 unused columns per image row), N = Cin*KH*KW, K = Cout.
 {
@@ -9,7 +8,7 @@
     Cin: 16,
     H: 14,
     W: 16,
-    Cout: 32,
+    Cout: 48,
     KH: 3,
     KW: 3
 }
