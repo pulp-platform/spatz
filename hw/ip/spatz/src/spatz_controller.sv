@@ -134,7 +134,9 @@ module spatz_controller
 
 
   always_comb begin : proc_vcsr
-    automatic logic [$clog2(MAXVL):0] vlmax = 0;
+    logic [$clog2(MAXVL):0] vlmax;
+
+    vlmax = '0;
 
     vstart_d   = vstart_q;
     vl_d       = vl_q;
@@ -231,6 +233,8 @@ module spatz_controller
             int unsigned eve;
             int unsigned lmul_req, lmul_k, lmul_widen;
 
+            // Both configuration forms supply altfmt through the decoded vtype.
+            // Keep it while deriving matrix LMUL and the agnostic policy bits.
             vtype_d = spatz_req.vtype;
 
             invalid_vtype =
@@ -244,8 +248,8 @@ module spatz_controller
               twiden = 1 << (spatz_req.mtype.mtwiden - 1);
               tewb = (1 << int'(vtype_d.vsew)) * twiden;
 
-              // SEW8 is valid for byte tile storage/moves, not FP8 arithmetic or widening yet.
-              if (((vtype_d.vsew == EW_8) && (spatz_req.mtype.mtwiden != 2'b01)) || (tewb > AccElemBytes)) begin
+              // The configured tile element must fit in one accumulator element.
+              if (tewb > AccElemBytes) begin
                 invalid_vtype = 1'b1;
               end else begin
                 unique case (vtype_d.vsew)
@@ -693,12 +697,17 @@ module spatz_controller
 `ifdef DOUBLE_BW
     // Store the decisions
     for (int unsigned port = 0; port < NrVregfilePorts; port++) begin
-      automatic int unsigned port_idx = port - SB_VFU_VD_WD;
+      int unsigned port_idx;
+
+      port_idx = port - SB_VFU_VD_WD;
       if (sb_enable_o[port]) begin
         // VFU and VSLDU: intID derived from vl_cnt progress, vl_cnt updated every successful write
         if (port inside {SB_VFU_VD_WD, SB_VSLDU_VD_WD}) begin
-          automatic logic  intID  = (vl_cnt_q[sb_id_i[port]] < vl_max_d[sb_id_i[port]]) ? 0 : 1;
-          automatic int VRFWriteSize = narrow_q[sb_id_i[port]] ? VRFWordBWidth >> 1 : VRFWordBWidth;
+          logic intID;
+          int VRFWriteSize;
+
+          intID = (vl_cnt_q[sb_id_i[port]] < vl_max_d[sb_id_i[port]]) ? 0 : 1;
+          VRFWriteSize = narrow_q[sb_id_i[port]] ? VRFWordBWidth >> 1 : VRFWordBWidth;
 
           // Update vl_cnt if actually written into the VRF
           if (sb_wrote_result_i[port_idx])
@@ -711,8 +720,10 @@ module spatz_controller
         end
         // VLSU: intID is fixed per interface (0 for WD0, 1 for WD1)
         if (port inside {SB_VLSU_VD_WD0, SB_VLSU_VD_WD1}) begin
-          automatic int unsigned intID  = port - SB_VLSU_VD_WD0;
-          automatic vlen_t next_vlsu_vl;
+          int unsigned intID;
+          vlen_t next_vlsu_vl;
+
+          intID = port - SB_VLSU_VD_WD0;
           wrote_result_narrowing_d[sb_id_i[port]] = sb_wrote_result_i[port_idx] ^ narrow_wide_q[sb_id_i[port]];
           wrote_result_d[intID][sb_id_i[port]]    = sb_wrote_result_i[port_idx] && (!narrow_wide_q[sb_id_i[port]] || wrote_result_narrowing_q[sb_id_i[port]]);
           next_vlsu_vl = vlsu_vl_cnt_q[intID][sb_id_i[port]];
@@ -729,7 +740,9 @@ module spatz_controller
     // Store the decisions for all write-destination ports: VFU, VLSU, VSLDU
     for (int unsigned port = 0; port < NrVregfilePorts; port++) begin
       if (sb_enable_o[port] && (port inside {SB_VFU_VD_WD, SB_VLSU_VD_WD, SB_VSLDU_VD_WD})) begin
-        automatic int unsigned port_idx = port - SB_VFU_VD_WD;
+        int unsigned port_idx;
+
+        port_idx = port - SB_VFU_VD_WD;
         wrote_result_narrowing_d[sb_id_i[port]] = sb_wrote_result_i[port_idx] ^ narrow_wide_q[sb_id_i[port]];
         wrote_result_d[sb_id_i[port]]           = sb_wrote_result_i[port_idx] && (!narrow_wide_q[sb_id_i[port]] || wrote_result_narrowing_q[sb_id_i[port]]);
       end
@@ -926,8 +939,8 @@ module spatz_controller
       if (spatz_req.use_vs2) begin
         for (int unsigned row = 0; row < KMAX; row++) begin
           for (int unsigned group_idx = 0; group_idx < 8; group_idx++) begin
-            automatic vreg_group_idx_t group_vreg =
-                {1'b0, spatz_req.vs2} + vreg_group_idx_t'(row * sb_vs_row_stride + group_idx);
+            vreg_group_idx_t group_vreg;
+            group_vreg = {1'b0, spatz_req.vs2} + vreg_group_idx_t'(row * sb_vs_row_stride + group_idx);
             if ((row < sb_vs_rows) &&
                 (group_idx < sb_vs_group_count) &&
                 (group_vreg < NRVREG)) begin
@@ -941,13 +954,12 @@ module spatz_controller
       if (spatz_req.use_vs1) begin
         for (int unsigned row = 0; row < KMAX; row++) begin
           for (int unsigned group_idx = 0; group_idx < 8; group_idx++) begin
-            automatic vreg_group_idx_t group_vreg =
-                {1'b0, spatz_req.vs1} + vreg_group_idx_t'(row * sb_vs_row_stride + group_idx);
+            vreg_group_idx_t group_vreg;
+            group_vreg = {1'b0, spatz_req.vs1} + vreg_group_idx_t'(row * sb_vs_row_stride + group_idx);
             if ((row < sb_vs_rows) &&
                 (group_idx < sb_vs_group_count) &&
                 (group_vreg < NRVREG)) begin
-              scoreboard_d[spatz_req.id].deps[write_table_d[group_vreg].id] |=
-                  write_table_d[group_vreg].valid;
+              scoreboard_d[spatz_req.id].deps[write_table_d[group_vreg].id] |= write_table_d[group_vreg].valid;
               read_table_d[group_vreg] = {spatz_req.id, 1'b1};
             end
           end
@@ -958,17 +970,16 @@ module spatz_controller
           // Vector stores encode their data source in vd (architectural vs3).
           // Reserve every physical register in the current LMUL group.
           for (int unsigned group_idx = 0; group_idx < 8; group_idx++) begin
-            automatic vreg_group_idx_t group_vreg =
-                {1'b0, spatz_req.vd} + vreg_group_idx_t'(group_idx);
+            vreg_group_idx_t group_vreg;
+
+            group_vreg = {1'b0, spatz_req.vd} + vreg_group_idx_t'(group_idx);
             if ((group_idx < vreg_group_count) && (group_vreg < NRVREG)) begin
-              scoreboard_d[spatz_req.id].deps[write_table_d[group_vreg].id] |=
-                  write_table_d[group_vreg].valid;
+              scoreboard_d[spatz_req.id].deps[write_table_d[group_vreg].id] |= write_table_d[group_vreg].valid;
               read_table_d[group_vreg] = {spatz_req.id, 1'b1};
             end
           end
         end else begin
-          scoreboard_d[spatz_req.id].deps[write_table_d[spatz_req.vd].id] |=
-              write_table_d[spatz_req.vd].valid;
+          scoreboard_d[spatz_req.id].deps[write_table_d[spatz_req.vd].id] |= write_table_d[spatz_req.vd].valid;
           read_table_d[spatz_req.vd] = {spatz_req.id, 1'b1};
         end
       end
@@ -989,8 +1000,8 @@ module spatz_controller
           // Vector loads write the complete LMUL register group, not only the
           // aligned architectural base register encoded by vd.
           for (int unsigned group_idx = 0; group_idx < 8; group_idx++) begin
-            automatic vreg_group_idx_t group_vreg =
-                {1'b0, spatz_req.vd} + vreg_group_idx_t'(group_idx);
+            vreg_group_idx_t group_vreg;
+            group_vreg = {1'b0, spatz_req.vd} + vreg_group_idx_t'(group_idx);
             if ((group_idx < vreg_group_count) && (group_vreg < NRVREG)) begin
               scoreboard_d[spatz_req.id].deps[write_table_d[group_vreg].id] |=
                   write_table_d[group_vreg].valid;
@@ -1022,9 +1033,9 @@ module spatz_controller
 `ifdef DOUBLE_BW
       narrow_d[spatz_req.id] = spatz_req.op_arith.is_narrowing;
 
-      // Track request vl for vector chaining, used only for DOUBLE_BW
-      // Default spatz uses 1-bit credit counter using wrote_result_q for chaining
-      vl_max_d[spatz_req.id] = (spatz_req.vl >> 1) << spatz_req.vtype.vsew;
+      // Track the byte extent of each half-vector. Vector memory operations use their encoded EEW, 
+      // which may differ from SEW for both loads and stores; arithmetic operations use the configured SEW.
+      vl_max_d[spatz_req.id] = (spatz_req.vl >> 1) << ((spatz_req.ex_unit == LSU) ? spatz_req.op_mem.ew : spatz_req.vtype.vsew);
       vl_cnt_d[spatz_req.id] = '0;
 `endif
     end
@@ -1408,7 +1419,7 @@ module spatz_controller
           end else if (!issue_tile_aligned) begin
             issue_rsp_o.accept = 1'b0;
           end else if (decoder_rsp.spatz_req.op_ope.is_mac && (vtype_q.vsew == EW_8)) begin
-            // No FP8 compute lane is instantiated; reject instead of waiting for a missing result.
+            // No 8-bit MAC lane is instantiated; reject instead of waiting for a missing result.
             issue_rsp_o.accept = 1'b0;
           end else if ((decoder_rsp.spatz_req.op_ope.is_vt ||
                         decoder_rsp.spatz_req.op_ope.is_tv) &&
