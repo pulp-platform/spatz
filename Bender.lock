@@ -133,7 +133,7 @@ packages:
     - riscv-dbg
     - tech_cells_generic
   spatz_vpu:
-    revision: 71f53a97ea5311f7f419a44a5c000bb1ad257237
+    revision: 90a965d3540ca62ebcdaf52a8d3011cae03db6dd
     version: null
     source:
       Git: https://github.com/FondazioneChipsIT/spatz_vpu.git
