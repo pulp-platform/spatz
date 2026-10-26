@@ -4,6 +4,12 @@
 
 #include "vector_macros.h"
 
+static inline uint32_t get_vlenb_hw(void) {
+  uint32_t vl;
+  asm volatile("vsetvli %0, %1, e8, m1, ta, ma" : "=r"(vl) : "r"(1024));
+  return vl;                       // 32 on smallvrf, 64 on standard
+}
+
 // Segment-2 for 8-bit, vl = 4 --> 8 bytes
 void TEST_CASE2_8_vl4(void) {
   VSET(4, e8, m1);
@@ -909,7 +915,7 @@ void TEST_CASE_D26_illegal_segment_simple(void) {
 }
 
 void TEST_CASE_vlseg_eew_ne_sew_fields(void) {
-  const uint32_t N = get_vlenb();              // e8 m1 elements: 64 or 32 (= elements per field)
+  const int small = (get_vlenb_hw() == 32);
   volatile uint16_t MEM[128];
   for (int i = 0; i < 64; i++) {
     MEM[2*i]   = 0xA000 + i;
@@ -917,21 +923,36 @@ void TEST_CASE_vlseg_eew_ne_sew_fields(void) {
   }
   uint32_t sentinel = 0xDEAD;
 
-  VSET(64, e16, m2);                           // clamps to VLMAX; fills v2..v5 in both configs
-  asm volatile(
-    "vmv.v.x v2, %0\n\t"
-    "vmv.v.x v4, %0\n\t"
-    :: "r"(sentinel));
-  for (volatile int w = 0; w < 1000; w++) {}
+  if (small) {
+    // 256-bit VRF: 64 e16 elements per field = 4 registers, EMUL = 4, NF = 2 -> v8..v15
+    VSET(128, e16, m8);                // fills v8..v15 with the sentinel in one instruction
+    asm volatile("vmv.v.x v8, %0\n\t" :: "r"(sentinel));
+    for (volatile int w = 0; w < 1000; w++) {}
 
-  VSET(N, e8, m1);
-  asm volatile("vlseg2e16.v v2, (%0)\n\t" :: "r"(MEM) : "memory");
-  for (volatile int w = 0; w < 1000; w++) {}
+    VSET(64, e8, m2);                  // EMUL = 16/8 * 2 = 4
+    asm volatile("vlseg2e16.v v8, (%0)\n\t" :: "r"(MEM) : "memory");
+    for (volatile int w = 0; w < 1000; w++) {}
 
-  VSET(8, e16, m1);
-  const uint16_t a = 0xA000 + N / 2;           // 0xA020 (std) or 0xA010 (small)
-  VCMP_U16(168, v3, a, a+1, a+2, a+3, a+4, a+5, a+6, a+7);                              // field 0, upper half
-  VCMP_U16(169, v4, 0xB000, 0xB001, 0xB002, 0xB003, 0xB004, 0xB005, 0xB006, 0xB007);   // field 1, lower half
+    VSET(8, e16, m1);
+    VCMP_U16(168, v10, 0xA020, 0xA021, 0xA022, 0xA023, 0xA024, 0xA025, 0xA026, 0xA027);  // field 0, elements 32..39
+    VCMP_U16(169, v12, 0xB000, 0xB001, 0xB002, 0xB003, 0xB004, 0xB005, 0xB006, 0xB007);  // field 1, elements 0..7
+  } else {
+    // original standard-config code, unchanged
+    VSET(64, e16, m2);
+    asm volatile(
+      "vmv.v.x v2, %0\n\t"
+      "vmv.v.x v4, %0\n\t"
+      :: "r"(sentinel));
+    for (volatile int w = 0; w < 1000; w++) {}
+
+    VSET(64, e8, m1);
+    asm volatile("vlseg2e16.v v2, (%0)\n\t" :: "r"(MEM) : "memory");
+    for (volatile int w = 0; w < 1000; w++) {}
+
+    VSET(8, e16, m1);
+    VCMP_U16(168, v3, 0xA020, 0xA021, 0xA022, 0xA023, 0xA024, 0xA025, 0xA026, 0xA027);
+    VCMP_U16(169, v4, 0xB000, 0xB001, 0xB002, 0xB003, 0xB004, 0xB005, 0xB006, 0xB007);
+  }
 }
 
 int main(void) {

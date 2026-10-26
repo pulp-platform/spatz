@@ -166,14 +166,14 @@ void TEST_CASE5(void) {
   for (int i = 0; i < 16; i++) SRC[i] = 100 + i;
   uint32_t fill = 0xDEAD;
 
-  VSET(16, e32, m8);
+  VSET(16, e32, m2);                     // v8,v9 group; fits 16 elements in both configs
   asm volatile(
-    "vmv.v.x v8, %1\n\t"                  // pre-fill
-    "vle32.v v8, (%0)\n\t"                // slow producer (VLSU)
-    "vslidedown.vi v12, v8, 8\n\t"        // needs elements 8..15 of v8
+    "vmv.v.x v8, %1\n\t"
+    "vle32.v v8, (%0)\n\t"
+    "vslidedown.vi v12, v8, 8\n\t"       // v12,v13: aligned, no overlap with v8,v9
     :: "r"(SRC), "r"(fill) : "memory");
 
-  VSET(4, e32, m8);
+  VSET(4, e32, m1);                      // compare at m1 so v12 is a legal single-register operand
   VCMP_U32(17, v12, 108, 109, 110, 111);
 }
 
