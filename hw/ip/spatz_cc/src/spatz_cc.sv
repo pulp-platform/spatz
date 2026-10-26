@@ -111,6 +111,9 @@ module spatz_cc
     output logic                         axi_dma_busy_o,
     output dma_perf_t                    axi_dma_perf_o,
     output dma_events_t                  axi_dma_events_o,
+    // DMA index-stream read port into TCDM (indexed/gather engine, read-only)
+    output tcdm_req_t                    dma_idx_req_o,
+    input  tcdm_rsp_t                    dma_idx_rsp_i,
     // Core event strobes
     output core_events_t                 core_events_o,
     input  addr_t                        tcdm_addr_base_i
@@ -359,7 +362,9 @@ module spatz_cc
       .axi_aw_chan_t      (axi_aw_chan_t     ),
       .axi_res_t          (axi_rsp_t         ),
       .acc_resp_t         (acc_rsp_t         ),
-      .dma_events_t       (dma_events_t      )
+      .dma_events_t       (dma_events_t      ),
+      .tcdm_req_t         (tcdm_req_t        ),
+      .tcdm_rsp_t         (tcdm_rsp_t        )
     ) i_axi_dma_tc_snitch_fe (
       .clk_i            ( clk_i                    ),
       .rst_ni           ( rst_ni                   ),
@@ -381,13 +386,17 @@ module spatz_cc
       .acc_pready_i     ( dma_pready               ),
       .hart_id_i        ( hart_id_i                ),
       .dma_perf_o       ( axi_dma_perf_o           ),
-      .dma_events_o     ( axi_dma_events_o         )
+      .dma_events_o     ( axi_dma_events_o         ),
+      // Index-stream read port (indexed/gather) -> cluster TCDM interconnect
+      .dma_idx_req_o    ( dma_idx_req_o            ),
+      .dma_idx_rsp_i    ( dma_idx_rsp_i            )
     );
 
   // no DMA instanciated
   end else begin : gen_no_dma
     // tie-off unused signals
     assign axi_dma_req_o  = '0;
+    assign dma_idx_req_o  = '0;
     assign axi_dma_busy_o = 1'b0;
 
     assign dma_qready = '0;
