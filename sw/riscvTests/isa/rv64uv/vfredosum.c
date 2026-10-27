@@ -8,6 +8,12 @@
 #include "float_macros.h"
 #include "vector_macros.h"
 
+static inline uint32_t get_vlenb_hw(void) {
+  uint32_t vl;
+  asm volatile("vsetvli %0, %1, e8, m1, ta, ma" : "=r"(vl) : "r"(1024));
+  return vl;                       // 32 on smallvrf, 64 on standard
+}
+
 // Naive test
 void TEST_CASE1(void) {
   VSET(16, e16, m8);
@@ -407,14 +413,28 @@ void TEST_CASE9(void) {
   ord_buf[ORD_VL - 1] = 0xe800;                 // -2048.0
   // very 1.0 is absorbed by the running 2048 in an ordered chain, so the result is 0.
 
-  VSET(ORD_VL, e16, m2);
-  asm volatile("vle16.v v16, (%0)" ::"r"(ord_buf) : "memory");
-  VSET(1, e16, m1);
-  VLOAD_16(v24, 0x0000);                        // init = 0.0
-  VSET(ORD_VL, e16, m2);
-  asm volatile("vfredosum.vs v8, v16, v24");
-  VSET(1, e16, m1);
-  VCMP_U16(21, v8, 0x0000);
+  const int small = (get_vlenb_hw() == 32);
+
+  if (small) {
+    // Bumped LMUL to m4 to fit ORD_VL = 40 elements (m2 only holds 32 elements here)
+    VSET(ORD_VL, e16, m4);
+    asm volatile("vle16.v v16, (%0)" ::"r"(ord_buf) : "memory");
+    VSET(1, e16, m1);
+    VLOAD_16(v24, 0x0000);                        // init = 0.0
+    VSET(ORD_VL, e16, m4);
+    asm volatile("vfredosum.vs v8, v16, v24");
+    VSET(1, e16, m1);
+    VCMP_U16(21, v8, 0x0000);
+  } else {
+    VSET(ORD_VL, e16, m2);
+    asm volatile("vle16.v v16, (%0)" ::"r"(ord_buf) : "memory");
+    VSET(1, e16, m1);
+    VLOAD_16(v24, 0x0000);                        // init = 0.0
+    VSET(ORD_VL, e16, m2);
+    asm volatile("vfredosum.vs v8, v16, v24");
+    VSET(1, e16, m1);
+    VCMP_U16(21, v8, 0x0000);
+  }
 }
 
 void TEST_CASE10(void) {

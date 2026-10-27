@@ -126,7 +126,7 @@ void TEST_CASE4 () {
 }
 
 void TEST_CASE5() {
-  int32_t res; // Using int32_t to match XCMP's %d format 
+  int32_t res; // Using int32_t to match XCMP's %d format
 
   // SEW=8, Positive Value
   VSET(16, e8, m8);
