@@ -7,6 +7,12 @@
 
 #include "vector_macros.h"
 
+static inline uint32_t get_vlenb_hw(void) {
+  uint32_t vl;
+  asm volatile("vsetvli %0, %1, e8, m1, ta, ma" : "=r"(vl) : "r"(1024));
+  return vl;                       // 32 on smallvrf, 64 on standard
+}
+
 void TEST_CASE1(void) {
   VSET(16, e8, m2);
   VLOAD_8(v2, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
@@ -29,12 +35,23 @@ void TEST_CASE1(void) {
   asm volatile("vsbc.vvm v6, v2, v4, v0");
   VCMP_U32(3, v6, -7, -6, -3, -2, 1, 2, 5, 6, 0, -1, 0, -1, 0, -1, 0, -1);
 
-  VSET(16, e64, m2);
-  VLOAD_64(v2, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
-  VLOAD_64(v4, 8, 7, 6, 5, 4, 3, 2, 1, 1, 2, 3, 4, 5, 6, 7, 8);
-  VLOAD_8(v0, 0xAA, 0xAA);
-  asm volatile("vsbc.vvm v6, v2, v4, v0");
-  VCMP_U64(4, v6, -7, -6, -3, -2, 1, 2, 5, 6, 0, -1, 0, -1, 0, -1, 0, -1);
+  const int small = (get_vlenb_hw() == 32);
+
+  if (small) {
+    VSET(16, e64, m4);
+    VLOAD_64(v4, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
+    VLOAD_64(v8, 8, 7, 6, 5, 4, 3, 2, 1, 1, 2, 3, 4, 5, 6, 7, 8);
+    VLOAD_8(v0, 0xAA, 0xAA);
+    asm volatile("vsbc.vvm v12, v4, v8, v0");
+    VCMP_U64(4, v12, -7, -6, -3, -2, 1, 2, 5, 6, 0, -1, 0, -1, 0, -1, 0, -1);
+  } else {
+    VSET(16, e64, m2);
+    VLOAD_64(v2, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
+    VLOAD_64(v4, 8, 7, 6, 5, 4, 3, 2, 1, 1, 2, 3, 4, 5, 6, 7, 8);
+    VLOAD_8(v0, 0xAA, 0xAA);
+    asm volatile("vsbc.vvm v6, v2, v4, v0");
+    VCMP_U64(4, v6, -7, -6, -3, -2, 1, 2, 5, 6, 0, -1, 0, -1, 0, -1, 0, -1);
+  }
 };
 
 void TEST_CASE2(void) {
@@ -58,11 +75,21 @@ void TEST_CASE2(void) {
   asm volatile("vsbc.vxm v6, v2, %[A], v0" ::[A] "r"(scalar));
   VCMP_U32(7, v6, -4, -4, -2, -2, 0, 0, 2, 2, -4, -4, -2, -2, 0, 0, 2, 2);
 
-  VSET(16, e64, m2);
-  VLOAD_64(v2, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
-  VLOAD_8(v0, 0xAA, 0xAA);
-  asm volatile("vsbc.vxm v6, v2, %[A], v0" ::[A] "r"(scalar));
-  VCMP_U64(8, v6, -4, -4, -2, -2, 0, 0, 2, 2, -4, -4, -2, -2, 0, 0, 2, 2);
+  const int small = (get_vlenb_hw() == 32);
+
+  if (small) {
+    VSET(16, e64, m4);
+    VLOAD_64(v4, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
+    VLOAD_8(v0, 0xAA, 0xAA);
+    asm volatile("vsbc.vxm v12, v4, %[A], v0" ::[A] "r"(scalar));
+    VCMP_U64(8, v12, -4, -4, -2, -2, 0, 0, 2, 2, -4, -4, -2, -2, 0, 0, 2, 2);
+  } else {
+     VSET(16, e64, m2);
+     VLOAD_64(v2, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
+     VLOAD_8(v0, 0xAA, 0xAA);
+     asm volatile("vsbc.vxm v6, v2, %[A], v0" ::[A] "r"(scalar));
+     VCMP_U64(8, v6, -4, -4, -2, -2, 0, 0, 2, 2, -4, -4, -2, -2, 0, 0, 2, 2);
+  }
 };
 
 void TEST_CASE3(void) {

@@ -76,7 +76,7 @@ void TEST_CASE2(void) {
 void TEST_CASE3(void) {
   VSET(16, e8, m8);
   VLOAD_8(v8, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
-  VLOAD_8(v0, 0xAA, 0xAA); 
+  VLOAD_8(v0, 0xAA, 0xAA);
   VCLEAR(v24);
   asm volatile("vadc.vim v24, v8, 5, v0");
   // Index: 0 (+5), 1 (+6), 2 (+5), 3 (+6)...
@@ -113,12 +113,12 @@ void TEST_CASE4(void) {
   VLOAD_8(v8, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250);
   VLOAD_8(v0, 0xAA, 0xAA); // 10101010
   VCLEAR(v24);
-  asm volatile("vadc.vim v24, v8, 5, v0"); 
+  asm volatile("vadc.vim v24, v8, 5, v0");
   // Even elements: 250 + 5 + 0 = 255
   // Odd elements: 250 + 5 + 1 = 256 (rolls over to 0 for 8-bit)
   VCMP_U8(13, v24, 255, 0, 255, 0, 255, 0, 255, 0, 255, 0, 255, 0, 255, 0, 255, 0);
-  
-  // Note: Only included e8 here to keep it concise, but the pattern mimics the other cases. 
+
+  // Note: Only included e8 here to keep it concise, but the pattern mimics the other cases.
 }
 
 void TEST_CASE5(void) {
