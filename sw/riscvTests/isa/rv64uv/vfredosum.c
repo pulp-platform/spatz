@@ -347,6 +347,86 @@ void TEST_CASE5(void) {
 #endif
 }
 
+void TEST_CASE6(void) {
+  // Set vector length to 3 elements, e16, m1
+  VSET(4, e16, m1);
+
+  // Enable all elements via mask
+  VLOAD_8(v0, 0x0f);
+
+  // [2048, 1, 1, -2048]
+  VLOAD_16(v16, 0x6800, 0x3c00, 0x3c00, 0xe800);
+  VLOAD_16(v24, 0x0000);
+
+  // v8 initial baseline load
+  VLOAD_16(v8, 0x0000);
+
+  // Execute ordered reduction: v8[0] = v24[0] + v16[0] + v16[1] + v16[2]
+  asm volatile("vfredosum.vs v8, v16, v24, v0.t");
+
+  // Strict ordered result MUST be 0.0 (0x0000).
+  // If the core runs unordered reduction, it will yield 1.0 (0x3c00).
+  VCMP_U16(18, v8, 0x0000); // ordered → 0x0000, unordered tree → 0x3c00
+}
+
+void TEST_CASE7(void) {
+  // Masked: inactive elements must be skipped (not added, not neutral)
+  VSET(4, e16, m1);
+  // mask = 0b1101 -> elements 0,2,3 active
+  VLOAD_8(v0, 0x0d);
+  // 0x6800 = 2048.0, 0x63d0 = 1000.0, 0x3c00 = 1.0, 0xe800 = -2048.0
+  VLOAD_16(v16, 0x6800, 0x63d0, 0x3c00, 0xe800);
+  VLOAD_16(v24, 0x0000);
+  // Ordered: ((0+2048)+1)+(-2048) = 0
+  // If the masked 1000.0 leaked in: 2048+1000=3048, +1 -> 3048, -2048 = 1000
+  asm volatile("vfredosum.vs v8, v16, v24, v0.t");
+  VSET(1, e16, m1);
+  VCMP_U16(19, v8, 0x0000);
+}
+
+void TEST_CASE8(void) {
+  // Everything masked off: vd[0] must equal the scalar init (1.0)
+  VSET(4, e16, m1);
+  VLOAD_8(v0, 0x00);
+  VLOAD_16(v16, 0x6800, 0x3c00, 0x3c00, 0xe800);
+  VLOAD_16(v24, 0x3c00);                 // init = 1.0
+  asm volatile("vfredosum.vs v8, v16, v24, v0.t");
+  VSET(1, e16, m1);
+  VCMP_U16(20, v8, 0x3c00);
+}
+
+#define ORD_VL 40
+void TEST_CASE9(void) {
+  // Multi-word vl and LMUL=2
+  volatile uint16_t ord_buf[ORD_VL] __attribute__((aligned(32)));
+
+  // v = [2048, 1, 1, ..., 1, -2048], init 0
+  ord_buf[0] = 0x6800;                          //  2048.0
+  for (int i = 1; i < ORD_VL - 1; i++)
+    ord_buf[i] = 0x3c00;                        //  1.0
+  ord_buf[ORD_VL - 1] = 0xe800;                 // -2048.0
+  // very 1.0 is absorbed by the running 2048 in an ordered chain, so the result is 0.
+
+  VSET(ORD_VL, e16, m2);
+  asm volatile("vle16.v v16, (%0)" ::"r"(ord_buf) : "memory");
+  VSET(1, e16, m1);
+  VLOAD_16(v24, 0x0000);                        // init = 0.0
+  VSET(ORD_VL, e16, m2);
+  asm volatile("vfredosum.vs v8, v16, v24");
+  VSET(1, e16, m1);
+  VCMP_U16(21, v8, 0x0000);
+}
+
+void TEST_CASE10(void) {
+  // Signed zero: all -0.0 and init -0.0 must give -0.0
+  VSET(4, e16, m1);
+  VLOAD_16(v16, 0x8000, 0x8000, 0x8000, 0x8000);
+  VLOAD_16(v24, 0x8000);
+  asm volatile("vfredosum.vs v8, v16, v24");
+  VSET(1, e16, m1);
+  VCMP_U16(22, v8, 0x8000);
+}
+
 int main(void) {
   INIT_CHECK();
   enable_vec();
@@ -357,6 +437,11 @@ int main(void) {
   TEST_CASE3();
   TEST_CASE4();
   TEST_CASE5();
+  TEST_CASE6();
+  TEST_CASE7();
+  TEST_CASE8();
+  TEST_CASE9();
+  TEST_CASE10();
 
   EXIT_CHECK();
 }

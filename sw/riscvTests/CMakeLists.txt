@@ -46,6 +46,7 @@ add_snitch_test(vsetvli isa/rv64uv/vsetvli.c)
 add_snitch_test(vsetivli isa/rv64uv/vsetivli.c)
 add_snitch_test(vsetvl isa/rv64uv/vsetvl.c)
 
+add_snitch_test(vadc  isa/rv64uv/vadc.c)
 add_snitch_test(vadd  isa/rv64uv/vadd.c)
 add_snitch_test(vsub  isa/rv64uv/vsub.c)
 add_snitch_test(vrsub isa/rv64uv/vrsub.c)
