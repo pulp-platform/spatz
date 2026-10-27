@@ -223,6 +223,77 @@ void TEST_CASE6(void) {
   VCMP_U8(24, v6, 0x22, 0x22);
 };
 
+void TEST_CASE7(void) {
+  const uint32_t scalar = 1;
+
+  // --- vmadc.vv (no carry-in) ---
+  VSET(16, e8, m8);
+  // vs2: 255 (will overflow if +1), 10 (will not)
+  VLOAD_8(v8,  255, 10, 255, 10, 255, 10, 255, 10, 255, 10, 255, 10, 255, 10, 255, 10);
+  VLOAD_8(v16,   1,  1,   1,  1,   1,  1,   1,  1,   1,  1,   1,  1,   1,  1,   1,  1);
+  VCLEAR(v24);
+  asm volatile("vmadc.vv v24, v8, v16");
+  // Expected mask: Even indices carry out (1), odd indices do not (0) -> 0x55 (01010101)
+  VCMP_U8(25, v24, 0x55, 0x55, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+
+  // --- vmadc.vvm (with carry-in) ---
+  VSET(16, e8, m8);
+  // vs2: 254 (needs carry-in=1 to overflow with vs1=1)
+  VLOAD_8(v8,  254, 254, 254, 254, 254, 254, 254, 254, 254, 254, 254, 254, 254, 254, 254, 254);
+  VLOAD_8(v16,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1);
+  VLOAD_8(v0,  0xAA, 0xAA); // Carry-in on odd elements (10101010)
+  VCLEAR(v24);
+  asm volatile("vmadc.vvm v24, v8, v16, v0");
+  // Expected mask: Only odd elements carry out (254 + 1 + 1 = 256) -> 0xAA
+  VCMP_U8(26, v24, 0xAA, 0xAA, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+
+  // --- vmadc.vx (no carry-in) ---
+  VSET(16, e16, m8);
+  VLOAD_16(v8, 65535, 10, 65535, 10, 65535, 10, 65535, 10, 65535, 10, 65535, 10, 65535, 10, 65535, 10);
+  VCLEAR(v24);
+  asm volatile("vmadc.vx v24, v8, %[A]" ::[A] "r"(scalar));
+  VCMP_U8(27, v24, 0x55, 0x55, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+
+  // --- vmadc.vxm (with carry-in) ---
+  VSET(16, e16, m8);
+  VLOAD_16(v8, 65534, 65534, 65534, 65534, 65534, 65534, 65534, 65534, 65534, 65534, 65534, 65534, 65534, 65534, 65534, 65534);
+  VLOAD_8(v0, 0xAA, 0xAA);
+  VCLEAR(v24);
+  asm volatile("vmadc.vxm v24, v8, %[A], v0" ::[A] "r"(scalar));
+  VCMP_U8(28, v24, 0xAA, 0xAA, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+
+  // --- vmadc.vi (no carry-in) ---
+  VSET(16, e32, m8);
+  VLOAD_32(v8, 0xFFFFFFFFU, 10, 0xFFFFFFFFU, 10, 0xFFFFFFFFU, 10, 0xFFFFFFFFU, 10,
+               0xFFFFFFFFU, 10, 0xFFFFFFFFU, 10, 0xFFFFFFFFU, 10, 0xFFFFFFFFU, 10);
+  VCLEAR(v24);
+  asm volatile("vmadc.vi v24, v8, 1");
+  VCMP_U8(29, v24, 0x55, 0x55, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+
+  // --- vmadc.vim (with carry-in) ---
+  VSET(16, e32, m8);
+  VLOAD_32(v8, 0xFFFFFFFEU, 0xFFFFFFFEU, 0xFFFFFFFEU, 0xFFFFFFFEU, 0xFFFFFFFEU, 0xFFFFFFFEU, 0xFFFFFFFEU, 0xFFFFFFFEU,
+               0xFFFFFFFEU, 0xFFFFFFFEU, 0xFFFFFFFEU, 0xFFFFFFFEU, 0xFFFFFFFEU, 0xFFFFFFFEU, 0xFFFFFFFEU, 0xFFFFFFFEU);
+  VLOAD_8(v0, 0xAA, 0xAA);
+  VCLEAR(v24);
+  asm volatile("vmadc.vim v24, v8, 1, v0");
+  VCMP_U8(30, v24, 0xAA, 0xAA, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+
+#if ELEN == 64
+  // --- vmadc.vvm (e64) ---
+  VSET(16, e64, m8);
+  VLOAD_64(v8, 0xFFFFFFFFFFFFFFFFULL, 10, 0xFFFFFFFFFFFFFFFFULL, 10,
+               0xFFFFFFFFFFFFFFFFULL, 10, 0xFFFFFFFFFFFFFFFFULL, 10,
+               0xFFFFFFFFFFFFFFFFULL, 10, 0xFFFFFFFFFFFFFFFFULL, 10,
+               0xFFFFFFFFFFFFFFFFULL, 10, 0xFFFFFFFFFFFFFFFFULL, 10);
+  VLOAD_64(v16, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1);
+  VLOAD_8(v0, 0x00, 0x00);
+  VCLEAR(v24);
+  asm volatile("vmadc.vvm v24, v8, v16, v0");
+  VCMP_U8(31, v24, 0x55, 0x55, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+#endif
+}
+
 int main(void) {
   INIT_CHECK();
   enable_vec();
@@ -233,6 +304,7 @@ int main(void) {
   TEST_CASE4();
   TEST_CASE5();
   TEST_CASE6();
+  TEST_CASE7();
 
   EXIT_CHECK();
 }
