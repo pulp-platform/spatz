@@ -37,6 +37,7 @@ void TEST_CASE1(void) {
   VSET(2, e8, m2);
   VCMP_U8(3, v6, 0xAA, 0xAA);
 
+#if ELEN == 64
   VSET(16, e64, m2);
   VLOAD_64(v2, 16, 0xffffffffffffffff, 8, 0x8000000000000001, 16,
            0xffffffffffffffff, 8, 0x8000000000000001, 16, 0xffffffffffffffff, 8,
@@ -47,7 +48,8 @@ void TEST_CASE1(void) {
   asm volatile("vmadc.vvm v6, v2, v4, v0");
   VSET(2, e8, m2);
   VCMP_U8(4, v6, 0xAA, 0xAA);
-};
+#endif
+}
 
 void TEST_CASE2(void) {
   VSET(16, e8, m2);
@@ -76,6 +78,7 @@ void TEST_CASE2(void) {
   VSET(2, e8, m2);
   VCMP_U8(7, v6, 0xAA, 0xAA);
 
+#if ELEN == 64
   VSET(16, e64, m2);
   VLOAD_64(v2, 16, 0xffffffffffffffff, 8, 0x8000000000000001, 16,
            0xffffffffffffffff, 8, 0x8000000000000001, 16, 0xffffffffffffffff, 8,
@@ -85,6 +88,7 @@ void TEST_CASE2(void) {
   asm volatile("vmadc.vv v6, v2, v4");
   VSET(2, e8, m2);
   VCMP_U8(8, v6, 0xAA, 0xAA);
+#endif
 };
 
 void TEST_CASE3(void) {
@@ -114,6 +118,8 @@ void TEST_CASE3(void) {
   VSET(2, e8, m2);
   VCMP_U8(11, v6, 0xAA, 0xAA);
 
+
+#if ELEN == 64
   VSET(16, e64, m2);
   VLOAD_64(v2, 16, 0xffffffffffffffff, 8, 0x8000000000000001, 16,
            0xffffffffffffffff, 8, 0x8000000000000001, 16, 0xffffffffffffffff, 8,
@@ -122,6 +128,7 @@ void TEST_CASE3(void) {
   asm volatile("vmadc.vxm v6, v2, %[A], v0" ::[A] "r"(scalar));
   VSET(2, e8, m2);
   VCMP_U8(12, v6, 0xAA, 0xAA);
+#endif
 };
 
 void TEST_CASE4(void) {
@@ -148,6 +155,7 @@ void TEST_CASE4(void) {
   VSET(2, e8, m2);
   VCMP_U8(15, v6, 0xAA, 0xAA);
 
+#if ELEN == 64
   VSET(16, e64, m2);
   VLOAD_64(v2, 16, 0xffffffffffffffff, 8, 0x8000000000000001, 16,
            0xffffffffffffffff, 8, 0x8000000000000001, 16, 0xffffffffffffffff, 8,
@@ -155,6 +163,7 @@ void TEST_CASE4(void) {
   asm volatile("vmadc.vx v6, v2, %[A]" ::[A] "r"(scalar));
   VSET(2, e8, m2);
   VCMP_U8(16, v6, 0xAA, 0xAA);
+#endif
 };
 
 void TEST_CASE5(void) {
@@ -182,6 +191,7 @@ void TEST_CASE5(void) {
   VSET(2, e8, m2);
   VCMP_U8(19, v6, 0x22, 0x22);
 
+#if ELEN == 64
   VSET(16, e64, m2);
   VLOAD_64(v2, 16, 0xffffffffffffffff, 8, 0x8000000000000001, 16,
            0xffffffffffffffff, 8, 0x8000000000000001, 16, 0xffffffffffffffff, 8,
@@ -190,6 +200,7 @@ void TEST_CASE5(void) {
   asm volatile("vmadc.vim v6, v2, 10, v0");
   VSET(2, e8, m2);
   VCMP_U8(20, v6, 0x22, 0x22);
+#endif
 };
 
 void TEST_CASE6(void) {
@@ -214,6 +225,7 @@ void TEST_CASE6(void) {
   VSET(2, e8, m2);
   VCMP_U8(23, v6, 0x22, 0x22);
 
+#if ELEN == 64
   VSET(16, e64, m2);
   VLOAD_64(v2, 16, 0xffffffffffffffff, 8, 0x8000000000000001, 16,
            0xffffffffffffffff, 8, 0x8000000000000001, 16, 0xffffffffffffffff, 8,
@@ -221,6 +233,7 @@ void TEST_CASE6(void) {
   asm volatile("vmadc.vi v6, v2, 10");
   VSET(2, e8, m2);
   VCMP_U8(24, v6, 0x22, 0x22);
+#endif
 };
 
 void TEST_CASE7(void) {
