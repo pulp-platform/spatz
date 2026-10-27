@@ -91,7 +91,7 @@ packages:
     - common_cells
     - common_verification
   quadrilatero:
-    revision: 9f0ef6d62aacb790a0055ec02bf864000c24dc73
+    revision: 01164ef99c21e89cc56b41fd3c8894a45ebf07f7
     version: null
     source:
       Git: https://iis-git.ee.ethz.ch/quadrilatero/quadrilatero.git
@@ -100,7 +100,7 @@ packages:
     - fpnew
     - redundancy_cells
   redundancy_cells:
-    revision: 0d4ca29a2e06d3d8c5b752c3adc8a80ba7a62dfd
+    revision: 255e0782a62a86e4172862a0efd23ddbd96a6047
     version: null
     source:
       Git: https://github.com/pulp-platform/redundancy_cells.git

@@ -3088,6 +3088,8 @@ module snitch import snitch_pkg::*; import riscv_instr::*;#(
                               | (0   << 20)
                               // V - Vector extension implemented
                               | (RVV << 21)
+                              // RMM - Matrix extension implemented
+                              | (RMM << 22)
                               // X - Non-standard extensions present
                               | (((NSX & FP_EN) | Xdma | Xssr) << 23)
                               // RV32
