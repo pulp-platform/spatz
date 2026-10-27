@@ -38,6 +38,7 @@ void TEST_CASE1(void) {
   VSET(2, e8, m2);
   VCMP_U8(3, v6, 0x44, 0x44);
 
+#if ELEN == 64
   VSET(16, e64, m2);
   VLOAD_64(v2, 16, 0xdeadbeefdeadbeef, 10, 0xffffffffffffffff, 16,
            0xdeadbeefdeadbeef, 10, 0xffffffffffffffff, 16, 0xdeadbeefdeadbeef,
@@ -51,6 +52,7 @@ void TEST_CASE1(void) {
   asm volatile("vmsbc.vvm v6, v2, v4, v0");
   VSET(2, e8, m2);
   VCMP_U8(4, v6, 0x44, 0x44);
+#endif
 };
 
 void TEST_CASE2(void) {
@@ -81,6 +83,7 @@ void TEST_CASE2(void) {
   VSET(2, e8, m2);
   VCMP_U8(7, v6, 0x44, 0x44);
 
+#if ELEN == 64
   VSET(16, e64, m2);
   VLOAD_64(v2, 16, 0xdeadbeefdeadbeef, 10, 0xffffffffffffffff, 16,
            0xdeadbeefdeadbeef, 10, 0xffffffffffffffff, 16, 0xdeadbeefdeadbeef,
@@ -93,6 +96,7 @@ void TEST_CASE2(void) {
   asm volatile("vmsbc.vv v6, v2, v4");
   VSET(2, e8, m2);
   VCMP_U8(8, v6, 0x44, 0x44);
+#endif
 };
 
 void TEST_CASE3(void) {
@@ -119,12 +123,14 @@ void TEST_CASE3(void) {
   VSET(2, e8, m2);
   VCMP_U8(11, v6, 0x22, 0x22);
 
+#if ELEN == 64
   VSET(16, e64, m2);
   VLOAD_64(v2, 20, 10, 30, 25, 20, 10, 30, 25, 20, 10, 30, 25, 20, 10, 30, 25);
   VLOAD_64(v0, 8, 0, 0, 0, 8, 0, 0, 0, 8, 0, 0, 0, 8, 0, 0, 0);
   asm volatile("vmsbc.vxm v6, v2, %[A], v0" ::[A] "r"(scalar));
   VSET(2, e8, m2);
   VCMP_U8(12, v6, 0x22, 0x22);
+#endif
 };
 
 void TEST_CASE4(void) {
@@ -148,11 +154,13 @@ void TEST_CASE4(void) {
   VSET(2, e8, m2);
   VCMP_U8(15, v6, 0x22, 0x22);
 
+#if ELEN == 64
   VSET(16, e64, m2);
   VLOAD_64(v2, 20, 10, 30, 25, 20, 10, 30, 25, 20, 10, 30, 25, 20, 10, 30, 25);
   asm volatile("vmsbc.vx v6, v2, %[A]" ::[A] "r"(scalar));
   VSET(2, e8, m2);
   VCMP_U8(16, v6, 0x22, 0x22);
+#endif
 };
 
 void TEST_CASE5(void) {

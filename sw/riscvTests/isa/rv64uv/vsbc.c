@@ -35,6 +35,7 @@ void TEST_CASE1(void) {
   asm volatile("vsbc.vvm v6, v2, v4, v0");
   VCMP_U32(3, v6, -7, -6, -3, -2, 1, 2, 5, 6, 0, -1, 0, -1, 0, -1, 0, -1);
 
+#if ELEN == 64
   const int small = (get_vlenb_hw() == 32);
 
   if (small) {
@@ -52,6 +53,7 @@ void TEST_CASE1(void) {
     asm volatile("vsbc.vvm v6, v2, v4, v0");
     VCMP_U64(4, v6, -7, -6, -3, -2, 1, 2, 5, 6, 0, -1, 0, -1, 0, -1, 0, -1);
   }
+#endif
 };
 
 void TEST_CASE2(void) {
@@ -75,6 +77,7 @@ void TEST_CASE2(void) {
   asm volatile("vsbc.vxm v6, v2, %[A], v0" ::[A] "r"(scalar));
   VCMP_U32(7, v6, -4, -4, -2, -2, 0, 0, 2, 2, -4, -4, -2, -2, 0, 0, 2, 2);
 
+#if ELEN == 64
   const int small = (get_vlenb_hw() == 32);
 
   if (small) {
@@ -90,6 +93,7 @@ void TEST_CASE2(void) {
      asm volatile("vsbc.vxm v6, v2, %[A], v0" ::[A] "r"(scalar));
      VCMP_U64(8, v6, -4, -4, -2, -2, 0, 0, 2, 2, -4, -4, -2, -2, 0, 0, 2, 2);
   }
+#endif
 };
 
 void TEST_CASE3(void) {
