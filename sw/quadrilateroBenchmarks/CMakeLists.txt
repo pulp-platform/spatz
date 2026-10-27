@@ -42,11 +42,29 @@ macro(add_quadrilatero_test_threeParam name file param1 param2 param3)
   target_compile_definitions(test-${SNITCH_TEST_PREFIX}${target_name} PUBLIC DATAHEADER="data/data_${param1}_${param2}_${param3}.h" SNRT_NFPU_PER_CORE=${SNRT_NFPU_PER_CORE} QUAD_RLEN=${QUAD_RLEN})
 endmacro()
 
+macro(add_quadrilatero_ldst name file mm mn)
+  set(target_name ${name}_${mm}x${mn})
+  add_snitch_test(${target_name} ${file})
+  target_link_libraries(test-${SNITCH_TEST_PREFIX}${target_name} ${SNITCH_RUNTIME})
+  target_compile_definitions(test-${SNITCH_TEST_PREFIX}${target_name} PUBLIC
+      SHAPE_M=${mm} SHAPE_N=${mn}
+      QUAD_RLEN=${QUAD_RLEN} SNRT_NFPU_PER_CORE=${SNRT_NFPU_PER_CORE})
+  # Keep printf as printf: clang -O3 turns printf("text\n") into puts(), which is not in snRuntime
+  target_compile_options(test-${SNITCH_TEST_PREFIX}${target_name} PRIVATE -fno-builtin-printf)
+endmacro()
+
+macro(add_quadrilatero_isa name file)
+  add_snitch_test(${name} ${file})
+  target_link_libraries(test-${SNITCH_TEST_PREFIX}${name} ${SNITCH_RUNTIME})
+  target_compile_definitions(test-${SNITCH_TEST_PREFIX}${name} PUBLIC QUAD_RLEN=${QUAD_RLEN})
+  target_compile_options(test-${SNITCH_TEST_PREFIX}${name} PRIVATE -fno-builtin-printf)
+endmacro()
+
 # Benchmark library
 add_library(benchmark-quadrilatero kernels/benchmark.c)
 
 # Kernels
-add_library(matmul kernels/matmul.c)
+add_library(matmul kernels/matmul.c kernels/matmul_simple.c)
 
 # # Tests
 enable_testing()
@@ -66,3 +84,25 @@ add_quadrilatero_test_threeParam(widening4x-bp-fmatmul-quadrilatero matmul/widen
 
 add_quadrilatero_test_threeParam(widening2x-hp-altfmatmul-quadrilatero matmul/widening2x-hp-altfmatmul-quadrilatero/main.c 64 64 128)
 add_quadrilatero_test_threeParam(widening4x-bp-altfmatmul-quadrilatero matmul/widening4x-bp-altfmatmul-quadrilatero/main.c 64 64 256)
+
+foreach(shape "1;1" "1;2" "1;4" "2;1" "4;1" "2;2")
+  list(GET shape 0 mm)
+  list(GET shape 1 mn)
+  add_quadrilatero_ldst(ldst-quadrilatero ldst-quadrilatero/main.c ${mm} ${mn})
+endforeach()
+
+foreach(t mcfg mzero mld mst mmov mmacc)
+  add_quadrilatero_isa(quad-${t} quadrilatero_rv64uv/${t}.c)
+endforeach()
+
+# Transposed loads/store (mldt.lhs, mldt.rhs, mstt)
+foreach(shape "1;1" "1;2" "1;4" "2;1" "4;1" "2;2")
+  list(GET shape 0 mm)
+  list(GET shape 1 mn)
+  add_quadrilatero_ldst(trans-quadrilatero trans-quadrilatero/main.c ${mm} ${mn})
+  add_quadrilatero_ldst(trans-stride trans-stride/main.c ${mm} ${mn})
+endforeach()
+
+# Simple (non-pipelined) INT32 matmul: normal and transposed
+add_quadrilatero_test_threeParam(sp-matmul-simple-quadrilatero       matmul/sp-matmul-simple-quadrilatero/main.c       64 64 64)
+add_quadrilatero_test_threeParam(sp-matmul-simple-trans-quadrilatero matmul/sp-matmul-simple-trans-quadrilatero/main.c 64 64 64)
