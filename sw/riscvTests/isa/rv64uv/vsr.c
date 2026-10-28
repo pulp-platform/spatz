@@ -7,7 +7,14 @@
 
 #include "vector_macros.h"
 
+static inline uint32_t get_vlenb_hw(void) {
+  uint32_t vl;
+  asm volatile("vsetvli %0, %1, e8, m1, ta, ma" : "=r"(vl) : "r"(1024));
+  return vl;                       // 32 on smallvrf, 64 on standard
+}
+
 void TEST_CASE1(void) {
+  uint32_t vlenb = get_vlenb_hw();
   VSET(16, e8, m1);
   volatile uint8_t INP[2 * 64] __attribute__((aligned(64)));
   volatile uint8_t OUT[2 * 64] __attribute__((aligned(64)));
@@ -25,10 +32,15 @@ void TEST_CASE1(void) {
   );
 
   VCMP_U8(1, v4, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15);
-  VCMP_U8(2, v5, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79);
+  if (vlenb == 32) {
+    VCMP_U8(2, v5, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47);
+  } else {
+    VCMP_U8(2, v5, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79);
+  }
 }
 
 void TEST_CASE2(void) {
+  uint32_t vlenb = get_vlenb_hw();
   VSET(16, e8, m1);
   volatile uint8_t INP[2 * 64] __attribute__((aligned(64)));
   volatile uint8_t OUT[2 * 64] __attribute__((aligned(64)));
@@ -41,15 +53,19 @@ void TEST_CASE2(void) {
   asm volatile("vl2re8.v v8, (%0)" :: "r"(OUT) : "memory", "v8", "v9");
 
   VCMP_U8(3, v8, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15);
-  VCMP_U8(4, v9, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79);
+  if (vlenb == 32) {
+    VCMP_U8(4, v9, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47);
+  } else {
+    VCMP_U8(4, v9, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79);
+  }
 }
 
 void TEST_CASE3(void) {
   VSET(16, e8, m1);
   volatile uint8_t INP[2 * 64] __attribute__((aligned(64)));
   // Allocate an extra 64 bytes for guard region
-  volatile uint8_t OUT[3 * 64] __attribute__((aligned(64))); 
-  
+  volatile uint8_t OUT[3 * 64] __attribute__((aligned(64)));
+
   for (int i = 0; i < 2 * 64; i++) INP[i] = i;
   for (int i = 0; i < 3 * 64; i++) OUT[i] = 170; // 0xAA guard pattern
 
@@ -66,6 +82,7 @@ void TEST_CASE3(void) {
 }
 
 void TEST_CASE4(void) {
+  uint32_t vlenb = get_vlenb_hw();
   VSET(16, e8, m1);
   volatile uint8_t INP[2 * 64] __attribute__((aligned(64)));
   volatile uint8_t OUT[2 * 64] __attribute__((aligned(64)));
@@ -83,10 +100,15 @@ void TEST_CASE4(void) {
   );
 
   VCMP_U8(6, v14, 255, 254, 253, 252, 251, 250, 249, 248, 247, 246, 245, 244);
-  VCMP_U8(7, v15, 191, 190, 189, 188, 187, 186, 185, 184, 183, 182, 181, 180);
+  if (get_vlenb_hw() == 32) {
+    VCMP_U8(7, v15, 223, 222, 221, 220, 219, 218, 217, 216, 215, 214, 213, 212);
+  } else {
+    VCMP_U8(7, v15, 191, 190, 189, 188, 187, 186, 185, 184, 183, 182, 181, 180);
+  }
 }
 
 void TEST_CASE5(void) {
+  uint32_t vlenb = get_vlenb_hw();
   VSET(16, e8, m1);
   volatile uint8_t INP[4 * 64] __attribute__((aligned(64)));
   volatile uint8_t OUT[4 * 64] __attribute__((aligned(64)));
@@ -94,7 +116,7 @@ void TEST_CASE5(void) {
 
   // Offset 60 means a 128-byte load spans three 64-byte cache lines:
   // Bytes 0-3 in Line 1, Bytes 4-67 in Line 2, Bytes 68-127 in Line 3.
-  int off = 60; 
+  int off = 60;
 
   asm volatile(
     "vl2re8.v v2, (%0)\n\t"
@@ -105,7 +127,11 @@ void TEST_CASE5(void) {
 
   // Assert the first and last few bytes explicitly
   VCMP_U8(8, v4, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75);
-  VCMP_U8(9, v5, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139);
+  if (get_vlenb_hw() == 32) {
+    VCMP_U8(9, v5, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107);
+  } else {
+    VCMP_U8(9, v5, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139);
+  }
 }
 
 void TEST_CASE6(void) {
@@ -126,15 +152,16 @@ void TEST_CASE6(void) {
   const uint8_t expected_scalar[] = { 11 };
   VCMP(uint8_t, "%d", 10, expected_scalar, scalar_check);
 
-  // 2. Scalar Store followed immediately by Vector Load 
+  // 2. Scalar Store followed immediately by Vector Load
   // Write 0x99 to MEM[1], then do a whole register load to see if it picks it up
-  MEM[1] = 0x99; 
+  MEM[1] = 0x99;
   asm volatile("vl1re8.v v8, (%0)" :: "r"(MEM) : "memory", "v8");
-  
+
   VCMP_U8(11, v8, 11, 0x99, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11);
 }
 
 void TEST_CASE7(void) {
+  uint32_t vlenb = get_vlenb_hw();
   VSET(16, e8, m1);
   volatile uint8_t INP[2 * 64] __attribute__((aligned(64)));
   volatile uint8_t OUT[2 * 64] __attribute__((aligned(64)));
@@ -150,7 +177,11 @@ void TEST_CASE7(void) {
 
   // If the LSU accidentally respected v0, these would be 0.
   VCMP_U8(12, v12, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15);
-  VCMP_U8(13, v13, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79);
+  if (vlenb == 32) {
+    VCMP_U8(13, v13, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47);
+  } else {
+    VCMP_U8(13, v13, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79);
+  }
 }
 
 int main(void) {
