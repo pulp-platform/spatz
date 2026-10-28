@@ -7,7 +7,14 @@
 
 #include "vector_macros.h"
 
+static inline uint32_t get_vlenb_hw(void) {
+  uint32_t vl;
+  asm volatile("vsetvli %0, %1, e8, m1, ta, ma" : "=r"(vl) : "r"(1024));
+  return vl;                       // 32 on smallvrf, 64 on standard
+}
+
 void TEST_CASE1(void) {
+  uint32_t vlenb = get_vlenb_hw();
   VSET(16, e8, m1);
   volatile uint8_t INP[2 * 64] __attribute__((aligned(64)));
   for (int i = 0; i < 2 * 64; i++) INP[i] = i;
@@ -15,10 +22,15 @@ void TEST_CASE1(void) {
   asm volatile("vl2re8.v v2, (%0)" :: "r"(INP) : "memory", "v2", "v3");
 
   VCMP_U8(1, v2, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15);
-  VCMP_U8(2, v3, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79);
+  if (vlenb == 32) {
+    VCMP_U8(2, v3, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47);
+  } else {
+    VCMP_U8(2, v3, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79);
+  }
 }
 
 void TEST_CASE2(void) {
+  uint32_t vlenb = get_vlenb_hw();
   VSET(16, e8, m1);
   volatile uint8_t INP[4 * 64] __attribute__((aligned(64)));
   for (int i = 0; i < 4 * 64; i++) INP[i] = i;   // wraps at 256, fine for uint8_t
@@ -26,12 +38,19 @@ void TEST_CASE2(void) {
   asm volatile("vl4re32.v v4, (%0)" :: "r"(INP) : "memory", "v4", "v5", "v6", "v7");
 
   VCMP_U8(3, v4, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15);
-  VCMP_U8(4, v5, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79);
-  VCMP_U8(5, v6, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143);
-  VCMP_U8(6, v7, 192, 193, 194, 195, 196, 197, 198, 199, 200, 201, 202, 203, 204, 205, 206, 207);
+  if (vlenb == 32) {
+    VCMP_U8(4, v5, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47);
+    VCMP_U8(5, v6, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79);
+    VCMP_U8(6, v7, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111);
+  } else {
+    VCMP_U8(4, v5, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79);
+    VCMP_U8(5, v6, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143);
+    VCMP_U8(6, v7, 192, 193, 194, 195, 196, 197, 198, 199, 200, 201, 202, 203, 204, 205, 206, 207);
+  }
 }
 
 void TEST_CASE3(void) {
+  uint32_t vlenb = get_vlenb_hw();
   VSET(16, e8, m1);
   volatile uint8_t INP[2 * 64] __attribute__((aligned(64)));
   volatile uint8_t OUT[2 * 64] __attribute__((aligned(64)));
@@ -50,14 +69,23 @@ void TEST_CASE3(void) {
 
   // Check the load worked
   VCMP_U8(7, v4, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15);
-  VCMP_U8(8, v5, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79);
-  
+  if (vlenb == 32) {
+    VCMP_U8(8, v5, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47);
+  } else {
+    VCMP_U8(8, v5, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79);
+  }
+
   // Check the store worked (by verifying the load-back registers)
   VCMP_U8(9, v6, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15);
-  VCMP_U8(10, v7, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79);
+  if (vlenb == 32) {
+    VCMP_U8(10, v7, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47);
+  } else {
+    VCMP_U8(10, v7, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79);
+  }
 }
 
 void TEST_CASE4(void) {
+  uint32_t vlenb = get_vlenb_hw();
   VSET(16, e8, m1);
   volatile uint8_t INP[2 * 64] __attribute__((aligned(64)));
   for (int i = 0; i < 2 * 64; i++) INP[i] = i;
@@ -66,10 +94,15 @@ void TEST_CASE4(void) {
   asm volatile("vl2re32.v v8, (%0)" :: "r"(INP) : "memory", "v8", "v9");
 
   VCMP_U8(11, v8, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15);
-  VCMP_U8(12, v9, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79);
+  if (vlenb == 32) {
+    VCMP_U8(12, v9, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47);
+  } else {
+    VCMP_U8(12, v9, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79);
+  }
 }
 
 void TEST_CASE5(void) {
+  uint32_t vlenb = get_vlenb_hw();
   VSET(1, e32, m8);  // Set a tiny VL and odd vtype
   volatile uint8_t INP[2 * 64] __attribute__((aligned(64)));
   for (int i = 0; i < 2 * 64; i++) INP[i] = i;
@@ -79,10 +112,15 @@ void TEST_CASE5(void) {
   VSET(16, e8, m1);
   // Even with vl=1, whole register load must move all 64 bytes per register
   VCMP_U8(13, v10, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15);
-  VCMP_U8(14, v11, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79);
+  if (vlenb == 32) {
+    VCMP_U8(14, v11, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47);
+  } else {
+    VCMP_U8(14, v11, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79);
+  }
 }
 
 void TEST_CASE6(void) {
+  uint32_t vlenb = get_vlenb_hw();
   VSET(16, e8, m1);
   volatile uint8_t INP[2 * 64] __attribute__((aligned(64)));
   for (int i = 0; i < 2 * 64; i++) INP[i] = 255 - i; // reverse to differentiate
@@ -90,10 +128,15 @@ void TEST_CASE6(void) {
   asm volatile("vl2re8.v v30, (%0)" :: "r"(INP) : "memory", "v30", "v31");
 
   VCMP_U8(15, v30, 255, 254, 253, 252, 251, 250, 249, 248, 247, 246, 245, 244);
-  VCMP_U8(16, v31, 191, 190, 189, 188, 187, 186, 185, 184, 183, 182, 181, 180);
+  if (get_vlenb_hw() == 32) {
+    VCMP_U8(16, v31, 223, 222, 221, 220, 219, 218, 217, 216, 215, 214, 213, 212);
+  } else {
+    VCMP_U8(16, v31, 191, 190, 189, 188, 187, 186, 185, 184, 183, 182, 181, 180);
+  }
 }
 
 void TEST_CASE7(void) {
+  uint32_t vlenb = get_vlenb_hw();
   VSET(16, e8, m1);
   volatile uint8_t INP[2 * 64] __attribute__((aligned(64)));
   for (int i = 0; i < 2 * 64; i++) INP[i] = i;
@@ -103,14 +146,17 @@ void TEST_CASE7(void) {
   asm volatile(
     "vmv.v.x v13, %1\n\t"
     "vmv.v.x v16, %1\n\t"
-    "vl2re8.v v14, (%0)" 
+    "vl2re8.v v14, (%0)"
     :: "r"(INP), "r"(guard_val) : "memory", "v13", "v14", "v15", "v16"
   );
 
   // v13 and v14 should contain the loaded data
   VCMP_U8(17, v14, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15);
-  VCMP_U8(18, v15, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79);
-  
+  if (vlenb == 32) {
+    VCMP_U8(18, v15, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47);
+  } else {
+    VCMP_U8(18, v15, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79);
+  }
   // Neighbours v12 and v15 must remain untouched
   VCMP_U8(19, v13, 170, 170, 170, 170, 170, 170, 170, 170, 170, 170, 170, 170);
   VCMP_U8(20, v16, 170, 170, 170, 170, 170, 170, 170, 170, 170, 170, 170, 170);
@@ -135,6 +181,7 @@ void TEST_CASE8(void) {
 }
 
 void TEST_CASE9(void) {
+  uint32_t vlenb = get_vlenb_hw();
   VSET(16, e8, m1);
   volatile uint8_t INP[2 * 64 + 4] __attribute__((aligned(64)));
   for (int i = 0; i < 2 * 64 + 4; i++) INP[i] = i; // 0..131
@@ -144,7 +191,11 @@ void TEST_CASE9(void) {
 
   // Everything shifts by +1
   VCMP_U8(23, v16, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16);
-  VCMP_U8(24, v17, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80);
+  if (get_vlenb_hw() == 32) {
+    VCMP_U8(24, v17, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48);
+  } else {
+    VCMP_U8(24, v17, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80);
+  }
 }
 
 int main(void) {
