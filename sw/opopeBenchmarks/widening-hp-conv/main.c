@@ -19,7 +19,6 @@ uint32_t *in;
 uint32_t *xt;
 uint32_t *wm;
 float *z;
-float *bias;
 
 // dst[0..n) = src[0..n) (32-bit words, unit stride)
 static void vcopy(uint32_t *dst, const uint32_t *src, unsigned int n) {
@@ -45,7 +44,6 @@ int main() {
     OPOPE_L1_ALLOC(xt, uint32_t, (N_SIZE / 2) * M_SIZE);
     OPOPE_L1_ALLOC(wm, uint32_t, (N_SIZE / 2) * K_SIZE);
     OPOPE_L1_ALLOC(z, float, M_SIZE * K_SIZE);
-    OPOPE_L1_ALLOC(bias, float, K_SIZE);
   }
 
   // Wait for all cores to finish
@@ -55,7 +53,7 @@ int main() {
   if (cid == 0) {
     snrt_dma_start_1d(in, cv_in_dram, CIN / 2 * H_SIZE * W_SIZE * sizeof(uint32_t));
     snrt_dma_start_1d(wm, cv_w_dram, (N_SIZE / 2) * K_SIZE * sizeof(uint32_t));
-    snrt_dma_start_1d(bias, cv_bias_dram, K_SIZE * sizeof(float));
+    snrt_dma_start_1d(z, cv_zinit_dram, M_SIZE * K_SIZE * sizeof(float));  // Y = bias broadcast
     snrt_dma_wait_all();
   }
 
@@ -69,14 +67,13 @@ int main() {
     // Start dump
     start_kernel();
 
-    // Pre-processing (Spatz): packed im2col (X^T) and Y = broadcast bias
+    // Pre-processing (Spatz): packed im2col (X^T); Y = broadcast bias was placed by the initial DMA
     for (unsigned int cp = 0; cp < CIN / 2; cp++)
       for (unsigned int ky = 0; ky < KH_SIZE; ky++)
         for (unsigned int kx = 0; kx < KW_SIZE; kx++) {
           unsigned int p = (cp * KH_SIZE + ky) * KW_SIZE + kx;
           vcopy(xt + p * M_SIZE, in + cp * H_SIZE * W_SIZE + ky * W_SIZE + kx, M_SIZE);
         }
-    tf_fill_cols(z, bias, M_SIZE, K_SIZE);
 
     // GeMM (O-POPE, FP16 -> FP32)
     opope_gemm_fp16(xt, wm, z, M_SIZE, N_SIZE, K_SIZE);

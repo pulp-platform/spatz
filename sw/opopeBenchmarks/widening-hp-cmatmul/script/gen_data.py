@@ -39,10 +39,15 @@ def main():
     C = A.astype(np.complex128) @ B.astype(np.complex128)
     cgold = od.words(np.stack([C.real, C.imag], axis=-1))  # [M][K][2]
 
-    od.check_footprint({"a_t": 4 * N * M, "b": 4 * N * K, "w": 4 * N * 2 * K, "c": 4 * M * 2 * K})
+    od.check_footprint({"a_t": 4 * N * M, "w": 4 * N * 2 * K, "c": 4 * M * 2 * K})
 
     defines = {"M_SIZE": M, "N_SIZE": N, "K_SIZE": K}
-    arrays = [od.carray("cm_at_dram", cwords(A.T.copy())), od.carray("cm_b_dram", cwords(B)),
+    # W operand of the single GeMM: wp[2i] = {Br, -Bi}, wp[2i+1] = {Bi, Br} for every word i of B (row-major [N][K])
+    bw = cwords(B)
+    wp = np.empty(2 * bw.size, dtype=np.uint32)
+    wp[0::2] = bw ^ np.uint32(0x80000000)
+    wp[1::2] = (bw << np.uint32(16)) | (bw >> np.uint32(16))
+    arrays = [od.carray("cm_at_dram", cwords(A.T.copy())), od.carray("cm_w_dram", wp),
               od.carray("cm_golden", cgold)]
     od.write_header(pathlib.Path(__file__).resolve().parents[1], tag, defines, arrays)
 

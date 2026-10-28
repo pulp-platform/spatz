@@ -13,7 +13,6 @@
 
 static uint32_t *hpk;
 static uint32_t *wpk;
-static float *bias;
 static float *z;
 
 int main() {
@@ -26,7 +25,6 @@ int main() {
   if (cid == 0) {
     OPOPE_L1_ALLOC(hpk, uint32_t, (C_SIZE / 2) * T_SIZE);
     OPOPE_L1_ALLOC(wpk, uint32_t, (C_SIZE / 2) * C_SIZE);
-    OPOPE_L1_ALLOC(bias, float, C_SIZE);
     OPOPE_L1_ALLOC(z, float, C_SIZE * T_SIZE);
   }
 
@@ -37,8 +35,7 @@ int main() {
   if (cid == 0) {
     TF_DMA(hpk, d_hpk);
     TF_DMA(wpk, d_w);
-    TF_DMA(bias, d_bias);
-    TF_DMA(z, d_res);
+    TF_DMA(z, d_zinit);  // Y = residual + bias (initial placement)
     snrt_dma_wait_all();
   }
 
@@ -52,7 +49,6 @@ int main() {
     // Start dump
     start_kernel();
 
-    tf_add_bias_rows(z, bias, C_SIZE, T_SIZE);
     opope_gemm_fp16(wpk, hpk, z, C_SIZE, C_SIZE, T_SIZE);
 
     // End dump

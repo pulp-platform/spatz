@@ -13,10 +13,12 @@
 
 static uint32_t *xpk;
 static uint32_t *wpk;
-static float *bias;
 static float *z;
 static uint32_t *tok;
 static float *loss;
+static float *tgt;    // target logits
+static float *cmax;   // per-token max logit
+static float *csum;   // per-token sum of exp(logit - max)
 
 int main() {
   const unsigned int cid = snrt_cluster_core_idx();
@@ -28,10 +30,12 @@ int main() {
   if (cid == 0) {
     OPOPE_L1_ALLOC(xpk, uint32_t, (C_SIZE / 2) * T_SIZE);
     OPOPE_L1_ALLOC(wpk, uint32_t, (C_SIZE / 2) * V_SIZE);
-    OPOPE_L1_ALLOC(bias, float, V_SIZE);
     OPOPE_L1_ALLOC(z, float, V_SIZE * T_SIZE);
     OPOPE_L1_ALLOC(tok, uint32_t, T_SIZE);
     OPOPE_L1_ALLOC(loss, float, T_SIZE);
+    OPOPE_L1_ALLOC(tgt, float, T_SIZE);
+    OPOPE_L1_ALLOC(cmax, float, T_SIZE);
+    OPOPE_L1_ALLOC(csum, float, T_SIZE);
   }
 
   // Wait for all cores to finish
@@ -41,8 +45,8 @@ int main() {
   if (cid == 0) {
     TF_DMA(xpk, d_xpk);
     TF_DMA(wpk, d_w);
-    TF_DMA(bias, d_bias);
     TF_DMA(tok, d_tok);
+    TF_DMA(z, d_zinit);  // Y = bias broadcast (initial placement)
     snrt_dma_wait_all();
   }
 
@@ -56,12 +60,16 @@ int main() {
     // Start dump
     start_kernel();
 
-    tf_fill_rows(z, bias, V_SIZE, T_SIZE);
     opope_gemm_fp16(wpk, xpk, z, V_SIZE, C_SIZE, T_SIZE);
-    tf_softmax_cols(z, V_SIZE, T_SIZE, 1.0f, 0);
-    // Cross-entropy (Spatz scalar): loss[t] = -log(p[target[t]][t]); drain the vector stores first.
+    // Cross entropy through the log-softmax identity: loss[t] = log(sum_t) + max_t - logit[tok[t]][t].
+    // Gather the target logits (scalar loads, the GeMM has completed), then softmax (it also returns max_t and
+    // sum_t) and one vectorised log: no scalar log, no per-token probability gather.
     opope_vsync(z);
-    for (unsigned int t = 0; t < T_SIZE; t++) loss[t] = -tf_logf(z[tok[t] * T_SIZE + t]);
+    for (unsigned int t = 0; t < T_SIZE; t++) tgt[t] = z[tok[t] * T_SIZE + t];
+    opope_vsync(tgt + T_SIZE - 1);
+    tf16_softmax_cols(z, V_SIZE, T_SIZE, cmax, csum);
+    tf16_ce_loss(loss, csum, cmax, tgt, T_SIZE);
+    opope_vsync(loss);
 
     // End dump
     stop_kernel();

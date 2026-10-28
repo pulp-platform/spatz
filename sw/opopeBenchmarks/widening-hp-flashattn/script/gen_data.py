@@ -34,6 +34,7 @@ def main():
     k = rng.uniform(-1, 1, (T, d)).astype(np.float16)
     v = rng.uniform(-1, 1, (T, dv)).astype(np.float16)
     scale = 1.0 / np.sqrt(d)
+    q = (q.astype(np.float64) * scale).astype(np.float16)  # 1/sqrt(d) folded into Q (exact for d = 4^k)
 
     # online-softmax golden (float64 math, FP16 P)
     m = np.full(Tq, -1e30)
@@ -42,8 +43,8 @@ def main():
     for t in range(NT):
         s = q.astype(np.float64) @ k[t * Bc:(t + 1) * Bc].astype(np.float64).T  # [Tq][Bc]
         mn = np.maximum(m, s.max(axis=1))
-        alpha = np.exp((m - mn) * scale)
-        pr = np.exp((s - mn[:, None]) * scale)
+        alpha = np.exp(m - mn)
+        pr = np.exp(s - mn[:, None])
         l = l * alpha + pr.sum(axis=1)
         p16 = pr.astype(np.float16).astype(np.float64)
         o = o * alpha[:, None] + p16 @ v[t * Bc:(t + 1) * Bc].astype(np.float64)
@@ -61,9 +62,10 @@ def main():
                         "pw": 4 * (Bc // 2) * Tq, "oT": 4 * dv * Tq, "m": 4 * Tq, "l": 4 * Tq})
 
     defines = {"TQ": Tq, "T_SIZE": T, "D_SIZE": d, "DV_SIZE": dv, "BC": Bc, "NT": NT,
-               "SCALE_F": "%.9ff" % scale}
+               }
     arrays = [od.carray("fa_qw_dram", qw.flatten()), od.carray("fa_kw_dram", kw.flatten()),
-              od.carray("fa_vw_dram", vw.flatten()), od.carray("fa_golden", od.words(o.T.copy()))]
+              od.carray("fa_vw_dram", vw.flatten()), od.carray("fa_golden", od.words(o.T.copy())),
+              od.carray("fa_m_dram", od.words(np.full(Tq, -1e30, np.float32)))]
     od.write_header(pathlib.Path(__file__).resolve().parents[1], tag, defines, arrays)
 
 

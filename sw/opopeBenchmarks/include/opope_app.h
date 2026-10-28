@@ -139,4 +139,18 @@ static inline void opope_vzero(float *dst, unsigned int n) {
   }
 }
 
+
+// Zero-fill a TCDM buffer with the cluster DMA (initial data placement: call it before start_kernel(), exactly
+// like the other operand transfers). Y of a plain GeMM (Z = X*W) is such a buffer.
+static uint32_t opope_zero_src[256] __attribute__((section(".data"))) = {0};
+static inline void opope_dma_zero(void *dst, unsigned int bytes) {
+  uint8_t *d = (uint8_t *)dst;
+  while (bytes > 0) {
+    unsigned int n = bytes < sizeof(opope_zero_src) ? bytes : (unsigned int)sizeof(opope_zero_src);
+    snrt_dma_start_1d(d, opope_zero_src, n);
+    d += n;
+    bytes -= n;
+  }
+}
+
 #endif  // OPOPE_APP_H

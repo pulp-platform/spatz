@@ -18,11 +18,12 @@
 
 #include DATAHEADER
 
+_Static_assert(L_SIZE == 8, "gather_pool is unrolled for 8 lookups per bag");
+
 uint16_t *table;
 uint32_t *idx;
 uint32_t *pool;  // packed W operand [D/2][B]
 uint32_t *w1;    // packed X^T operand [D/2][Dout]
-float *bias;
 float *z;
 
 // pool word column b <- sum over the lookups of the FP16 rows. VLEN = 512: a pooled row (D = 64
@@ -31,13 +32,28 @@ static void gather_pool(void) {
   unsigned int vl;
   const unsigned int stride = B_SIZE * sizeof(uint32_t);
   for (unsigned int b = 0; b < B_SIZE; b++) {
+    // the 8 row addresses of the bag are loaded first (no vector access in flight), then the 8 row loads are issued
+    // back to back; the sum keeps the sequential order ((r0 + r1) + r2) + ...
+    const uint16_t *r0 = table + idx[b * L_SIZE + 0] * D_SIZE, *r1 = table + idx[b * L_SIZE + 1] * D_SIZE;
+    const uint16_t *r2 = table + idx[b * L_SIZE + 2] * D_SIZE, *r3 = table + idx[b * L_SIZE + 3] * D_SIZE;
+    const uint16_t *r4 = table + idx[b * L_SIZE + 4] * D_SIZE, *r5 = table + idx[b * L_SIZE + 5] * D_SIZE;
+    const uint16_t *r6 = table + idx[b * L_SIZE + 6] * D_SIZE, *r7 = table + idx[b * L_SIZE + 7] * D_SIZE;
     asm volatile("vsetvli %0, %1, e16, m2, ta, ma" : "=r"(vl) : "r"(D_SIZE));  // D = 64
-    asm volatile("vmv.v.i v0, 0");
-    for (unsigned int l = 0; l < L_SIZE; l++) {
-      const uint16_t *row = table + idx[b * L_SIZE + l] * D_SIZE;
-      asm volatile("vle16.v v4, (%0)" ::"r"(row) : "memory");
-      asm volatile("vfadd.vv v0, v0, v4");
-    }
+    asm volatile("vle16.v v0, (%0)" ::"r"(r0) : "memory");
+    asm volatile("vle16.v v4, (%0)" ::"r"(r1) : "memory");
+    asm volatile("vle16.v v8, (%0)" ::"r"(r2) : "memory");
+    asm volatile("vle16.v v12, (%0)" ::"r"(r3) : "memory");
+    asm volatile("vle16.v v16, (%0)" ::"r"(r4) : "memory");
+    asm volatile("vle16.v v20, (%0)" ::"r"(r5) : "memory");
+    asm volatile("vle16.v v24, (%0)" ::"r"(r6) : "memory");
+    asm volatile("vle16.v v28, (%0)" ::"r"(r7) : "memory");
+    asm volatile("vfadd.vv v0, v0, v4");
+    asm volatile("vfadd.vv v0, v0, v8");
+    asm volatile("vfadd.vv v0, v0, v12");
+    asm volatile("vfadd.vv v0, v0, v16");
+    asm volatile("vfadd.vv v0, v0, v20");
+    asm volatile("vfadd.vv v0, v0, v24");
+    asm volatile("vfadd.vv v0, v0, v28");
 #if MODE_GCN
     {
       uint16_t sbits = SCALE_F16_BITS;
@@ -64,7 +80,6 @@ int main() {
     OPOPE_L1_ALLOC(idx, uint32_t, B_SIZE * L_SIZE);
     OPOPE_L1_ALLOC(pool, uint32_t, (D_SIZE / 2) * B_SIZE);
     OPOPE_L1_ALLOC(w1, uint32_t, (D_SIZE / 2) * DOUT_SIZE);
-    OPOPE_L1_ALLOC(bias, float, DOUT_SIZE);
     OPOPE_L1_ALLOC(z, float, DOUT_SIZE * B_SIZE);
   }
 
@@ -76,7 +91,7 @@ int main() {
     snrt_dma_start_1d(table, gm_table_dram, R_SIZE * D_SIZE * sizeof(uint16_t));
     snrt_dma_start_1d(idx, gm_idx_dram, B_SIZE * L_SIZE * sizeof(uint32_t));
     snrt_dma_start_1d(w1, gm_w1_dram, (D_SIZE / 2) * DOUT_SIZE * sizeof(uint32_t));
-    snrt_dma_start_1d(bias, gm_bias_dram, DOUT_SIZE * sizeof(float));
+    snrt_dma_start_1d(z, gm_zinit_dram, DOUT_SIZE * B_SIZE * sizeof(float));  // Y = bias broadcast
     snrt_dma_wait_all();
   }
 
@@ -92,7 +107,6 @@ int main() {
 
     // Pre-processing (Spatz): gather + pool straight into the packed operand, Y = bias
     gather_pool();
-    tf_fill_rows(z, bias, DOUT_SIZE, B_SIZE);
 
     // GeMM (O-POPE, FP16 -> FP32): Z[Dout][B] = Y + W1^T * pooled^T
     opope_gemm_fp16(w1, pool, z, DOUT_SIZE, D_SIZE, B_SIZE);

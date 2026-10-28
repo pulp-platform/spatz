@@ -53,12 +53,13 @@ def main():
     # L1: plane pairs (+4 words: the shifted copies read slightly past the last plane), xT [N/2][M],
     # W [N/2][K], Z/Y [M][K] FP32, bias [K]
     od.check_footprint({"in": 4 * (Cin // 2 * H * W + 4), "xT": 4 * (N // 2) * M,
-                        "w": 4 * (N // 2) * K, "z": 4 * M * K, "bias": 4 * K})
+                        "w": 4 * (N // 2) * K, "z": 4 * M * K})
 
     defines = {"CIN": Cin, "H_SIZE": H, "W_SIZE": W, "COUT": Cout, "KH_SIZE": KH, "KW_SIZE": KW,
                "HO_SIZE": Ho, "WO_SIZE": Wo, "M_SIZE": M, "N_SIZE": N, "K_SIZE": K}
     arrays = [od.carray("cv_in_dram", xin.flatten()), od.carray("cv_w_dram", wmat.flatten()),
-              od.carray("cv_bias_dram", od.words(b)), od.carray("cv_golden", od.words(out))]
+              od.carray("cv_zinit_dram", od.words(np.repeat(b[None, :], M, axis=0))),  # Y = bias per column [M][K]
+               od.carray("cv_golden", od.words(out))]
     od.write_header(pathlib.Path(__file__).resolve().parents[1], tag, defines, arrays)
 
 

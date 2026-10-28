@@ -10,8 +10,8 @@
 //   Ci += Ar*Bi + Ai*Br     = dot({Ar,Ai}, {Bi,  Br})
 // X^T is A^T as stored (no processing at all); the W operand is [N][2K] words whose columns alternate
 // {Br,-Bi} (even, real part) and {Bi,Br} (odd, imaginary part), so the O-POPE output [M][2K] is directly
-// the interleaved complex C. Spatz builds the W operand from B: sign flip of the imaginary half
-// (xor) and half-word swap (shifts + or), written with two stride-8 B stores. The accumulation over
+// the interleaved complex C. The W operand is supplied by the header (the sign flip of the imaginary half
+// and the half-word swap of B are done offline: no processing on the device). The accumulation over
 // N complex terms is a single job of 2N real terms (n_size = 2N FP16 elements).
 
 #include "opope_app.h"
@@ -19,31 +19,8 @@
 #include DATAHEADER
 
 uint32_t *at;  // A^T [N][M] words
-uint32_t *bw;  // B [N][K] words
 uint32_t *wp;  // W operand [N][2K] words
 float *c;      // C [M][2K] FP32 = [M][K] complex interleaved
-
-// wp[2i] = b[i] ^ 0x80000000 = {Br, -Bi},  wp[2i+1] = swap halves(b[i]) = {Bi, Br}
-static void build_w_operand(void) {
-  unsigned int n = N_SIZE * K_SIZE, vl;
-  const uint32_t *src = bw;
-  uint32_t *dst = wp;
-  while (n > 0) {
-    asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(n));
-    asm volatile("vle32.v v0, (%0)" ::"r"(src) : "memory");
-    asm volatile("vxor.vx v8, v0, %0" ::"r"(0x80000000u));
-    asm volatile("vsll.vi v16, v0, 16");
-    asm volatile("vsrl.vi v24, v0, 16");
-    asm volatile("vor.vv v16, v16, v24");
-    asm volatile("vsse32.v v8, (%0), %1" ::"r"(dst), "r"(8) : "memory");
-    opope_vsync(wp);  // one strided access in flight at a time
-    asm volatile("vsse32.v v16, (%0), %1" ::"r"(dst + 1), "r"(8) : "memory");
-    opope_vsync(wp);
-    src += vl;
-    dst += 2 * vl;
-    n -= vl;
-  }
-}
 
 int main() {
   const unsigned int cid = snrt_cluster_core_idx();
@@ -53,7 +30,6 @@ int main() {
 
   if (cid == 0) {
     OPOPE_L1_ALLOC(at, uint32_t, N_SIZE * M_SIZE);
-    OPOPE_L1_ALLOC(bw, uint32_t, N_SIZE * K_SIZE);
     OPOPE_L1_ALLOC(wp, uint32_t, N_SIZE * 2 * K_SIZE);
     OPOPE_L1_ALLOC(c, float, M_SIZE * 2 * K_SIZE);
   }
@@ -64,7 +40,8 @@ int main() {
   // Initialize matrices (complex FP16 data)
   if (cid == 0) {
     snrt_dma_start_1d(at, cm_at_dram, N_SIZE * M_SIZE * sizeof(uint32_t));
-    snrt_dma_start_1d(bw, cm_b_dram, N_SIZE * K_SIZE * sizeof(uint32_t));
+    snrt_dma_start_1d(wp, cm_w_dram, N_SIZE * 2 * K_SIZE * sizeof(uint32_t));  // W' = {Br,-Bi},{Bi,Br} (layout prepared offline)
+    opope_dma_zero(c, M_SIZE * 2 * K_SIZE * sizeof(float));                      // Y = 0
     snrt_dma_wait_all();
   }
 
@@ -78,10 +55,7 @@ int main() {
     // Start dump
     start_kernel();
 
-    // Pre-processing (Spatz): W operand from B, Y = 0
-    build_w_operand();
-    opope_vzero(c, M_SIZE * 2 * K_SIZE);
-
+    
     // One complex GeMM = one widening GeMM of M x 2N x 2K (O-POPE)
     opope_gemm_fp16(at, wp, c, M_SIZE, 2 * N_SIZE, 2 * K_SIZE);
 

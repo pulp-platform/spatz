@@ -13,7 +13,7 @@
 //   O-POPE  : O^T += V_t^T * P^T           (FP16 -> FP32; M=dv, N=Bc, K=Tq; Y = O^T rescaled, FP32)
 // and at the end O^T *= 1/l (no divider on this cluster: bit-trick + Newton-Raphson reciprocal).
 
-#include "opope_transformer.h"
+#include "opope_tf16.h"
 
 #include DATAHEADER
 
@@ -43,8 +43,7 @@ static void softmax_update(void) {
   asm volatile("vfmax.vv v24, v16, v0");
   asm volatile("vse32.v v24, (%0)" ::"r"(mrow) : "memory");
   asm volatile("vfsub.vv v0, v16, v24");
-  asm volatile("vfmul.vf v0, v0, %0" ::"f"(SCALE_F));
-  TF_EXP("v0", "v8");
+  TF16_EXP_NEG("v0", "v8");
   asm volatile("vmv.v.v v20, v0");
 
   // P^T = exp((S^T - m_new) * scale), column sums (v28), narrowed + packed into pw
@@ -52,8 +51,7 @@ static void softmax_update(void) {
   for (unsigned int r = 0; r < BC; r++) {
     asm volatile("vle32.v v4, (%0)" ::"r"(st + r * TQ) : "memory");
     asm volatile("vfsub.vv v4, v4, v24");
-    asm volatile("vfmul.vf v4, v4, %0" ::"f"(SCALE_F));
-    TF_EXP("v4", "v8");
+    TF16_EXP_NEG("v4", "v8");
     asm volatile("vfadd.vv v28, v28, v4");
     asm volatile("vsetvli zero, %0, e16, m2, ta, ma" ::"r"(vl));
     asm volatile("vfncvt.f.f.w v12, v4");
@@ -90,18 +88,6 @@ static void normalize(void) {
   }
 }
 
-// dst[0..n) = value
-static void vfill(float *dst, unsigned int n, float value) {
-  unsigned int vl;
-  while (n > 0) {
-    asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(n));
-    asm volatile("vfmv.v.f v0, %0" ::"f"(value));
-    asm volatile("vse32.v v0, (%0)" ::"r"(dst) : "memory");
-    dst += vl;
-    n -= vl;
-  }
-}
-
 int main() {
   const unsigned int cid = snrt_cluster_core_idx();
 
@@ -127,6 +113,9 @@ int main() {
     snrt_dma_start_1d(qw, fa_qw_dram, (D_SIZE / 2) * TQ * sizeof(uint32_t));
     snrt_dma_start_1d(kw, fa_kw_dram, NT * (D_SIZE / 2) * BC * sizeof(uint32_t));
     snrt_dma_start_1d(vw, fa_vw_dram, NT * (BC / 2) * DV_SIZE * sizeof(uint32_t));
+    snrt_dma_start_1d(mrow, fa_m_dram, TQ * sizeof(float));  // m = -inf
+    opope_dma_zero(lrow, TQ * sizeof(float));                  // l = 0
+    opope_dma_zero(ot, DV_SIZE * TQ * sizeof(float));          // O = 0 (Y of the first PV job)
     snrt_dma_wait_all();
   }
 
@@ -140,10 +129,7 @@ int main() {
     // Start dump
     start_kernel();
 
-    // Initial state: m = -inf, l = 0, O = 0
-    vfill(mrow, TQ, -1e30f);
-    vfill(lrow, TQ, 0.0f);
-    vfill(ot, DV_SIZE * TQ, 0.0f);
+    // Initial state (m = -inf, l = 0, O = 0) was placed by the initial DMA
 
     for (unsigned int t = 0; t < NT; t++) {
       // S^T = K_t * Q^T  (Y = 0)

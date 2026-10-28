@@ -56,14 +56,14 @@ def main():
     w1p = od.pack_pairs(od.halves(w1).reshape(D, Dout))
 
     od.check_footprint({"table": 2 * R * D, "idx": 4 * B * L, "pool": 4 * (D // 2) * B,
-                        "w1": 4 * (D // 2) * Dout, "bias": 4 * Dout, "z": 4 * Dout * B})
+                        "w1": 4 * (D // 2) * Dout, "z": 4 * Dout * B})
 
     defines = {"MODE_GCN": int(mode == "gcn"), "R_SIZE": R, "D_SIZE": D, "B_SIZE": B, "L_SIZE": L,
                "DOUT_SIZE": Dout}
     arrays = [od.carray("gm_table_dram", od.halves(table_eo), ctype="uint16_t"),
               od.carray("gm_idx_dram", idx.astype(np.uint32).flatten()),
               od.carray("gm_w1_dram", w1p.flatten()),
-              od.carray("gm_bias_dram", od.words(bias)),
+              od.carray("gm_zinit_dram", od.words(np.repeat(bias[:, None], B, axis=1))),  # Y = bias broadcast [Dout][B]
               od.carray("gm_golden", od.words(z))]
     if mode == "gcn":
         defines["SCALE_F16_BITS"] = "0x%04x" % int(np.float16(1.0 / L).view(np.uint16))

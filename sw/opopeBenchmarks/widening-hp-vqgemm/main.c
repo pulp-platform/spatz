@@ -23,26 +23,43 @@ uint16_t *idx;
 _Float16 *scale;
 
 // Decode W[n][g*CB_D .. +CB_D) = scale[n] * sum_c cb[c][idx[c][n][g]][0..CB_D) into the packed layout
+// The even row 2p and the odd row 2p+1 of a pair are decoded together: their codewords are zero-extended to 32 bit
+// (widening add with x0), the odd ones shifted into the high half and OR-ed, giving for each codebook ONE vector of
+// words {even, odd}; one FP16 add on these vectors (SEW = 16, 2*CB_D lanes) then sums the codebooks of both rows at
+// once and the result is already the packed word. One unit-stride store, no strided accesses, no drains.
+// (The four codeword loads are separated by compute instructions: four back-to-back vector loads hang this cluster.)
 static void decode_weights(void) {
   unsigned int vl;
-  asm volatile("vsetvli %0, %1, e16, m1, ta, ma" : "=r"(vl) : "r"(CB_D));  // CB_D = 16
+  const uint16_t *const cbl = cb, *const idl = idx;
+  uint32_t *const wdl = wd;
   for (unsigned int p = 0; p < N_SIZE / 2; p++) {
+    // per-row scales of the pair as one word {scale[2p] (lo), scale[2p+1] (hi)}, splatted into v12
+    const uint32_t scpair = (uint32_t)((const uint16_t *)scale)[2 * p] | ((uint32_t)((const uint16_t *)scale)[2 * p + 1] << 16);
+    asm volatile("vsetvli zero, %0, e32, m2, ta, ma" ::"r"(CB_D));
+    asm volatile("vmv.v.x v12, %0" ::"r"(scpair));
     for (unsigned int g = 0; g < GROUPS; g++) {
-      for (unsigned int par = 0; par < 2; par++) {
-        const unsigned int n = 2 * p + par;
-        const uint16_t *e0 = cb + (idx[n * GROUPS + g]) * CB_D;
-        asm volatile("vle16.v v0, (%0)" ::"r"(e0) : "memory");
-#if NCB == 2
-        const uint16_t *e1 = cb + (CBN + idx[N_SIZE * GROUPS + n * GROUPS + g]) * CB_D;
-        asm volatile("vle16.v v1, (%0)" ::"r"(e1) : "memory");
-        asm volatile("vfadd.vv v0, v0, v1");
-#endif
-        asm volatile("vfmul.vf v0, v0, %0" ::"f"(scale[n]));
-        asm volatile("vsse16.v v0, (%0), %1"
-                     ::"r"((uint16_t *)(wd + p * K_SIZE + g * CB_D) + par), "r"(4)
-                     : "memory");
-        opope_vsync(wd);  // one strided access in flight at a time
-      }
+      const uint16_t *a0 = cbl + (idl[(2 * p) * GROUPS + g]) * CB_D;
+      const uint16_t *a1 = cbl + (CBN + idl[N_SIZE * GROUPS + (2 * p) * GROUPS + g]) * CB_D;
+      const uint16_t *b0 = cbl + (idl[(2 * p + 1) * GROUPS + g]) * CB_D;
+      const uint16_t *b1 = cbl + (CBN + idl[N_SIZE * GROUPS + (2 * p + 1) * GROUPS + g]) * CB_D;
+      asm volatile("vsetvli %0, %1, e16, m1, ta, ma" : "=r"(vl) : "r"(CB_D));
+      asm volatile("vle16.v v0, (%0)" ::"r"(a0) : "memory");
+      asm volatile("vle16.v v1, (%0)" ::"r"(b0) : "memory");
+      asm volatile("vwaddu.vx v4, v0, zero");
+      asm volatile("vwaddu.vx v6, v1, zero");
+      asm volatile("vle16.v v2, (%0)" ::"r"(a1) : "memory");
+      asm volatile("vle16.v v3, (%0)" ::"r"(b1) : "memory");
+      asm volatile("vwaddu.vx v8, v2, zero");
+      asm volatile("vwaddu.vx v10, v3, zero");
+      asm volatile("vsetvli %0, %1, e32, m2, ta, ma" : "=r"(vl) : "r"(CB_D));
+      asm volatile("vsll.vi v6, v6, 16");
+      asm volatile("vsll.vi v10, v10, 16");
+      asm volatile("vor.vv v4, v4, v6");
+      asm volatile("vor.vv v8, v8, v10");
+      asm volatile("vsetvli %0, %1, e16, m2, ta, ma" : "=r"(vl) : "r"(2 * CB_D));
+      asm volatile("vfadd.vv v4, v4, v8");
+      asm volatile("vfmul.vv v4, v4, v12");   // (a0 + a1) * scale[2p] in the low halves, (b0 + b1) * scale[2p+1] in the high halves
+      asm volatile("vse16.v v4, (%0)" ::"r"((uint16_t *)(wdl + p * K_SIZE + g * CB_D)) : "memory");
     }
   }
 }
@@ -71,6 +88,7 @@ int main() {
     snrt_dma_start_1d(cb, vq_cb_dram, NCB * CBN * CB_D * sizeof(uint16_t));
     snrt_dma_start_1d(idx, vq_idx_dram, NCB * N_SIZE * GROUPS * sizeof(uint16_t));
     snrt_dma_start_1d(scale, vq_scale_dram, N_SIZE * sizeof(uint16_t));
+    opope_dma_zero(z, M_SIZE * K_SIZE * sizeof(float));  // Y = 0
     snrt_dma_wait_all();
   }
 
@@ -84,9 +102,8 @@ int main() {
     // Start dump
     start_kernel();
 
-    // Pre-processing (Spatz, FP16): decode W into the packed operand, Y = 0
+    // Pre-processing (Spatz, FP16): decode W into the packed operand (Y = 0 was placed by the initial DMA)
     decode_weights();
-    opope_vzero(z, M_SIZE * K_SIZE);
 
     // GeMM (O-POPE, FP16 -> FP32)
     opope_gemm_fp16(xt, wd, z, M_SIZE, N_SIZE, K_SIZE);
