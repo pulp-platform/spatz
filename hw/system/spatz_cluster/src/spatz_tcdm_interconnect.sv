@@ -33,6 +33,9 @@ module spatz_tcdm_interconnect #(
   /// Address width on the memory side. Must be smaller than the incoming
   /// address width.
   parameter int unsigned MemAddrWidth          = 32,
+  /// Plain request address width on the request port (TCDMAddrWidth for the TCDM
+  /// crossbar). The request address on req_i is a Hsiao codeword of this width.
+  parameter int unsigned ReqAddrWidth         = MemAddrWidth,
   /// Logical data width for address routing (byte-offset and bank-select bits).
   /// Must equal the unprotected word width (e.g. 32). Do NOT set to ProtDataWidth.
   parameter int unsigned DataWidth             = 32,
@@ -81,7 +84,9 @@ module spatz_tcdm_interconnect #(
   /// Three replicas of "is mem_req_o[k]'s downstream ready", muxed the
   /// same way ic_mem_rsp[i].q_ready itself is muxed below, before being fed
   /// back into i_fc_interconnect's mem_ready_rep_i.
-  input  logic [2:0]                       mem_ready_rep_i [NumOut]
+  input  logic [2:0]                       mem_ready_rep_i [NumOut],
+  /// ECC codeword protecting mem_req_o[k].q's addr field ecc decoding errors
+  output logic [1:0]                       tcdm_req_addr_ecc_o
 );
 
   localparam int unsigned BanksPerHyperBank = NumOut / NumHyperBanks;
@@ -253,6 +258,7 @@ module spatz_tcdm_interconnect #(
     .mem_req_t             (virtual_mem_req_t    ),
     .mem_rsp_t             (mem_rsp_t            ),
     .user_t                (user_t               ),
+    .ReqAddrWidth          (ReqAddrWidth         ),
     .MemAddrWidth          (VirtualMemAddrWidth  ),
     .ProtMemAddrWidth      (VirtualMemAddrEccWidth),
     .DataWidth             (DataWidth            ),
@@ -273,7 +279,8 @@ module spatz_tcdm_interconnect #(
     .req_ready_rep_o (req_ready_rep_o ),
     .mem_valid_rep_o (ic_mem_valid_rep),
     .mem_ready_rep_i (ic_mem_ready_rep),
-    .out_wctrl_ecc_o (ic_wctrl_ecc    )
+    .out_wctrl_ecc_o (ic_wctrl_ecc    ),
+    .tcdm_req_addr_ecc_o (tcdm_req_addr_ecc_o)
   );
 
 endmodule
