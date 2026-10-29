@@ -125,6 +125,51 @@ void TEST_CASE4 () {
 #endif
 }
 
+void TEST_CASE5() {
+  int32_t res; // Using int32_t to match XCMP's %d format
+
+  // SEW=8, Positive Value
+  VSET(16, e8, m8);
+  VLOAD_8(v8, 42, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
+  asm volatile("vmv.x.s %0, v8" : "=r"(res));
+  XCMP(17, res, 42); // XCMP checks scalar results
+
+  // SEW=8, Negative Value (Validates sign-extension to XLEN)
+  VLOAD_8(v8, -15, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
+  asm volatile("vmv.x.s %0, v8" : "=r"(res));
+  XCMP(18, res, -15);
+
+  // SEW=16, Positive Value
+  VSET(16, e16, m8);
+  VLOAD_16(v8, 1024, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
+  asm volatile("vmv.x.s %0, v8" : "=r"(res));
+  XCMP(19, res, 1024);
+
+  // SEW=16, Negative Value
+  VLOAD_16(v8, -2048, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
+  asm volatile("vmv.x.s %0, v8" : "=r"(res));
+  XCMP(20, res, -2048);
+
+  // SEW=32, Positive Value
+  VSET(16, e32, m8);
+  VLOAD_32(v8, 100000, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
+  asm volatile("vmv.x.s %0, v8" : "=r"(res));
+  XCMP(21, res, 100000);
+
+  // SEW=32, Negative Value
+  VLOAD_32(v8, -100000, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
+  asm volatile("vmv.x.s %0, v8" : "=r"(res));
+  XCMP(22, res, -100000);
+
+#if ELEN == 64
+  // SEW=64
+  VSET(16, e64, m8);
+  VLOAD_64(v8, 8000000000LL, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
+  asm volatile("vmv.x.s %0, v8" : "=r"(res));
+  XCMP(23, res, (int32_t)8000000000LL); // Cast to int32_t to match XLEN & XCMP
+#endif
+}
+
 int main(void) {
   INIT_CHECK();
   enable_vec();
@@ -133,6 +178,7 @@ int main(void) {
   TEST_CASE2();
   TEST_CASE3();
   TEST_CASE4();
+  TEST_CASE5();
 
   EXIT_CHECK();
 }
