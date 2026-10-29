@@ -273,6 +273,53 @@ void TEST_CASE4(void) {
 #endif
 };
 
+///////////////////////
+// CHECK FFLAGS TEST //
+///////////////////////
+// RVV 1.0: only active body elements may raise FP flags. Tail elements
+// (i >= vl) and inactive elements (vm = 0, v0[i] = 0) must not.
+// Every check is: CLEAR_FFLAGS -> op -> VCMP_* -> CHECK_FFLAGS.
+// VCMP comes before CHECK_FFLAGS on purpose: it waits for the result, so
+// frflags runs with Spatz idle. A frflags right after the vector op is
+// stalled by Snitch and drops the flags arriving during the stall, so it
+// would read 0 and pass even on a broken RTL.
+// The checks named "ctrl" make the bad element active: they prove that the
+// data does raise the flag, so the check next to them is meaningful.
+#define F32_1 0x3f800000
+#define F32_2 0x40000000
+
+// Inactive elements (vm = 0, v0[i] = 0) on the compare path (NONCOMP, mask
+// result). Element 6 (FPU3 lane 0) = sNaN < 2.0 -> false with NV. Active
+// elements: 1.0 < 2.0 -> true. With mask-agnostic (ma) the inactive result
+// bits are written as 1.
+void TEST_CASE5(void) {
+  VSET(8, e32, m2);
+  VLOAD_32(v8, F32_1, F32_1, F32_1, F32_1, F32_1, F32_1, sNaNf, F32_1);
+  VLOAD_32(v10, F32_2, F32_2, F32_2, F32_2, F32_2, F32_2, F32_2, F32_2);
+
+  // ctrl: element 6 active -> NV, result bit 6 = 0
+  VSET(2, e8, m1);
+  VLOAD_8(v0, 0xFF, 0xFF);
+  VSET(8, e32, m2);
+  VCLEAR(v12);
+  CLEAR_FFLAGS;
+  asm volatile("vmflt.vv v12, v8, v10, v0.t");
+  VSET(1, e8, m1);
+  VCMP_U8(13, v12, 0xBF);
+  CHECK_FFLAGS(NV);
+
+  // element 6 inactive
+  VSET(2, e8, m1);
+  VLOAD_8(v0, 0xBF, 0xFF);
+  VSET(8, e32, m2);
+  VCLEAR(v12);
+  CLEAR_FFLAGS;
+  asm volatile("vmflt.vv v12, v8, v10, v0.t");
+  VSET(1, e8, m1);
+  VCMP_U8(14, v12, 0xFF);
+  CHECK_FFLAGS(0);
+};
+
 int main(void) {
   INIT_CHECK();
   enable_vec();
@@ -282,6 +329,8 @@ int main(void) {
   TEST_CASE2();
   TEST_CASE3();
   TEST_CASE4();
+  // CHECK FFLAGS
+  TEST_CASE5();
 
   EXIT_CHECK();
 }
