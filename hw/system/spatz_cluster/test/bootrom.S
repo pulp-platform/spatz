@@ -62,8 +62,20 @@ _start:
   // Wait for the wakeup interrupt
   wfi
 
+  // Find the index of this cluster, as the runtime does in start.S.in:
+  // (mhartid - hartid_base) / core_count
+  csrr    t0, mhartid
+  lw      t1, 16(a1)
+  sub     t0, t0, t1
+  lw      t1, 8(a1)
+  divu    t0, t0, t1
+
   // Load the start address of the TCDM
   lw      t2, 24(a1)
+  // Move it to this cluster's TCDM: add index * tcdm_offset
+  lw      t1, 40(a1)
+  mul     t0, t0, t1
+  add     t2, t2, t0
   // Load the size of the TCDM
   lw      t3, 32(a1)
   // Final address of the TCDM
