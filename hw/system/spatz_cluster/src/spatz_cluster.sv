@@ -465,6 +465,9 @@ module spatz_cluster
   logic [NrCores-1:0]  vlsu_correctable_fault;
   logic [NrCores-1:0]  vlsu_uncorrectable_fault;
 
+  logic [NrCores-1:0]  fpu_sequencer_correctable_fault;
+  logic [NrCores-1:0]  fpu_sequencer_uncorrectable_fault;
+
   // Per-core whole-core TMR lockstep mismatch.
   logic [NrCores-1:0]  snitch_correctable_fault;
   logic [NrCores-1:0]  snitch_uncorrectable_fault;
@@ -516,6 +519,8 @@ module spatz_cluster
   .vrf_uncorrectable_fault_i (vrf_uncorrectable_fault),
   .vlsu_correctable_fault_i (vlsu_correctable_fault),
   .vlsu_uncorrectable_fault_i (vlsu_uncorrectable_fault),
+  .fpu_sequencer_correctable_fault_i (fpu_sequencer_correctable_fault),
+  .fpu_sequencer_uncorrectable_fault_i (fpu_sequencer_uncorrectable_fault),
   // tcdm faults
   .tcdm_rd_correctable_fault_i (tcdm_rd_correctable_fault),
   .tcdm_rd_uncorrectable_fault_i (tcdm_rd_uncorrectable_fault),
@@ -1320,7 +1325,9 @@ module spatz_cluster
         // VLSU fault signals
         .vlsu_correctable_error_o (vlsu_correctable_fault[i]),
         .vlsu_uncorrectable_error_o (vlsu_uncorrectable_fault[i]),
-        // .core_tmr_fault_o (core_tmr_fault[i])
+        // fpu_sequencer error outputs
+        .fpu_sequencer_correctable_error_o (fpu_sequencer_correctable_fault[i]),
+        .fpu_sequencer_uncorrectable_error_o (fpu_sequencer_uncorrectable_fault[i]),
         // Snitch error outputs
         .snitch_correctable_error_o (snitch_correctable_fault[i]),
         .snitch_uncorrectable_error_o (snitch_uncorrectable_fault[i])
