@@ -8,6 +8,8 @@
 #include "float_macros.h"
 #include "vector_macros.h"
 
+#define F32_2 0x40000000
+
 // We assume RNE rounding when not specified by the encoding
 
 ////////////////
@@ -832,6 +834,40 @@ void TEST_CASE12(void) {
 #endif
 };
 
+///////////////////////
+// CHECK FFLAGS TEST //
+///////////////////////
+// RVV 1.0: only active body elements may raise FP flags. Tail elements
+// (i >= vl) and inactive elements (vm = 0, v0[i] = 0) must not.
+
+// Inactive elements (vm = 0, v0[i] = 0) on the CONV unit. Element 7
+// (FPU3 lane 1) = qNaN -> int: 0x7fffffff with NV. Active elements:
+// 2.0 -> 2 (exact). Inactive elements keep the old vd value (cleared to 0).
+
+void TEST_CASE13(void) {
+  VSET(8, e32, m2);
+  VLOAD_32(v8, F32_2, F32_2, F32_2, F32_2, F32_2, F32_2, F32_2, qNaNf);
+
+  // ctrl: element 7 active -> NV
+  VSET(2, e8, m1);
+  VLOAD_8(v0, 0xFF, 0xFF);
+  VSET(8, e32, m2);
+  CLEAR_FFLAGS;
+  asm volatile("vfcvt.x.f.v v12, v8, v0.t");
+  VCMP_U32(37, v12, 2, 2, 2, 2, 2, 2, 2, 0x7fffffff);
+  CHECK_FFLAGS(NV);
+
+  // element 7 inactive
+  VSET(2, e8, m1);
+  VLOAD_8(v0, 0x7F, 0xFF);
+  VSET(8, e32, m2);
+  VCLEAR(v12);
+  CLEAR_FFLAGS;
+  asm volatile("vfcvt.x.f.v v12, v8, v0.t");
+  VCMP_U32(38, v12, 2, 2, 2, 2, 2, 2, 2, 0x0);
+  CHECK_FFLAGS(0);
+};
+
 int main(void) {
   INIT_CHECK();
   enable_vec();
@@ -854,6 +890,8 @@ int main(void) {
 
   TEST_CASE11();
   TEST_CASE12();
+  // CHECK FFLAGS
+  TEST_CASE13();
 
   EXIT_CHECK();
 }

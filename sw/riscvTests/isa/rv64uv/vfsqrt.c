@@ -269,6 +269,59 @@ void TEST_CASE5(void) {
            0x42e484e0, 0x0, 0x433b42ae, 0x0, 0x432003a9, 0x0, 0x0, 0x0, 0x0);
 };
 
+///////////////////////
+// CHECK FFLAGS TEST //
+///////////////////////
+// RVV 1.0: only active body elements may raise FP flags. Tail elements
+// (i >= vl) and inactive elements (vm = 0, v0[i] = 0) must not.
+// Every check is: CLEAR_FFLAGS -> op -> VCMP_* -> CHECK_FFLAGS.
+// VCMP comes before CHECK_FFLAGS on purpose: it waits for the result, so
+// frflags runs with Spatz idle. A frflags right after the vector op is
+// stalled by Snitch and drops the flags arriving during the stall, so it
+// would read 0 and pass even on a broken RTL.
+// The checks named "ctrl" make the bad element active: they prove that the
+// data does raise the flag, so the check next to them is meaningful.
+#define F32_2 0x40000000
+#define F32_4 0x40800000
+#define F32_M4 0xc0800000
+
+// Unused FP32 divsqrt lanes: lanes 2,3 compute sqrt(0) = 0, which raises
+// nothing. Reference for the vfdiv check (expected clean also before the fix).
+void TEST_CASE6(void) {
+  VSET(8, e32, m2);
+  VLOAD_32(v8, F32_4, F32_4, F32_4, F32_4, F32_4, F32_4, F32_4, F32_4);
+  CLEAR_FFLAGS;
+  asm volatile("vfsqrt.v v12, v8");
+  VCMP_U32(17, v12, F32_2, F32_2, F32_2, F32_2, F32_2, F32_2, F32_2, F32_2);
+  CHECK_FFLAGS(0);
+};
+
+// Inactive elements: element 3 = sqrt(-4) -> NV.
+// Inactive elements keep the old vd value (cleared to 0).
+void TEST_CASE7(void) {
+  VSET(8, e32, m2);
+  VLOAD_32(v8, F32_4, F32_4, F32_4, F32_M4, F32_4, F32_4, F32_4, F32_4);
+
+  // ctrl: element 3 active -> NV
+  VSET(2, e8, m1);
+  VLOAD_8(v0, 0xFF, 0xFF);
+  VSET(8, e32, m2);
+  CLEAR_FFLAGS;
+  asm volatile("vfsqrt.v v12, v8, v0.t");
+  VCMP_U32(18, v12, F32_2, F32_2, F32_2, qNaNf, F32_2, F32_2, F32_2, F32_2);
+  CHECK_FFLAGS(NV);
+
+  // element 3 inactive
+  VSET(2, e8, m1);
+  VLOAD_8(v0, 0xF7, 0xFF);
+  VSET(8, e32, m2);
+  VCLEAR(v12);
+  CLEAR_FFLAGS;
+  asm volatile("vfsqrt.v v12, v8, v0.t");
+  VCMP_U32(19, v12, F32_2, F32_2, F32_2, 0x0, F32_2, F32_2, F32_2, F32_2);
+  CHECK_FFLAGS(0);
+};
+
 int main(void) {
   INIT_CHECK();
   enable_vec();
@@ -280,6 +333,9 @@ int main(void) {
   TEST_CASE3();
   TEST_CASE4();
   TEST_CASE5();
+  // CHECK FFLAGS
+  TEST_CASE6();
+  TEST_CASE7();
 
   EXIT_CHECK();
 }

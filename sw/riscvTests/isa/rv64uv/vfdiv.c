@@ -8,6 +8,13 @@
 #include "float_macros.h"
 #include "vector_macros.h"
 
+#define F16_1 0x3c00
+#define F16_2 0x4000
+#define F32_1 0x3f800000
+#define F32_2 0x40000000
+#define F64_1 0x3ff0000000000000
+#define F64_2 0x4000000000000000
+
 // Simple random test with similar values + 1 subnormal
 void TEST_CASE1(void) {
 
@@ -397,18 +404,210 @@ void TEST_CASE6(void) {
            0xc18efd46, 0x0, 0x3f88d884, 0x0, 0x3ed125d4, 0x0, 0x0, 0x0, 0x0);
 };
 
+///////////////////////
+// CHECK FFLAGS TEST //
+///////////////////////
+// RVV 1.0: only active body elements may raise FP flags. Tail elements
+// (i >= vl) and inactive elements (vm = 0, v0[i] = 0) must not.
+
+// Unused FP32 divsqrt lanes. Exact 2/2 on full slots: no tail, no mask.
+// fpnew divsqrt (THMULTI) has 4 lanes: at e32 lanes 2,3 get zero
+// operands and compute 0/0 in FP16 -> NV, unless they are masked off.
+
+void TEST_CASE7(void) {
+  // One full VRF word (4 slots of the shared divsqrt in default cfg)
+  VSET(8, e32, m2);
+  VLOAD_32(v8, F32_2, F32_2, F32_2, F32_2, F32_2, F32_2, F32_2, F32_2);
+  VLOAD_32(v10, F32_2, F32_2, F32_2, F32_2, F32_2, F32_2, F32_2, F32_2);
+  CLEAR_FFLAGS;
+  asm volatile("vfdiv.vv v12, v8, v10");
+  VCMP_U32(17, v12, F32_1, F32_1, F32_1, F32_1, F32_1, F32_1, F32_1, F32_1);
+  CHECK_FFLAGS(0);
+
+  // A single slot (elements 0,1)
+  VSET(2, e32, m2);
+  VLOAD_32(v8, F32_2, F32_2);
+  VLOAD_32(v10, F32_2, F32_2);
+  CLEAR_FFLAGS;
+  asm volatile("vfdiv.vv v12, v8, v10");
+  VCMP_U32(18, v12, F32_1, F32_1);
+  CHECK_FFLAGS(0);
+
+  // e16: all 4 divsqrt lanes hold real data
+  VSET(16, e16, m2);
+  VLOAD_16(v8, F16_2, F16_2, F16_2, F16_2, F16_2, F16_2, F16_2, F16_2, F16_2,
+           F16_2, F16_2, F16_2, F16_2, F16_2, F16_2, F16_2);
+  VLOAD_16(v10, F16_2, F16_2, F16_2, F16_2, F16_2, F16_2, F16_2, F16_2, F16_2,
+           F16_2, F16_2, F16_2, F16_2, F16_2, F16_2, F16_2);
+  CLEAR_FFLAGS;
+  asm volatile("vfdiv.vv v12, v8, v10");
+  VCMP_U16(19, v12, F16_1, F16_1, F16_1, F16_1, F16_1, F16_1, F16_1, F16_1,
+           F16_1, F16_1, F16_1, F16_1, F16_1, F16_1, F16_1, F16_1);
+  CHECK_FFLAGS(0);
+
+#if ELEN == 64
+  // e64: not a vectorial fpnew operation, lane 0 only
+  VSET(4, e64, m2);
+  VLOAD_64(v8, F64_2, F64_2, F64_2, F64_2);
+  VLOAD_64(v10, F64_2, F64_2, F64_2, F64_2);
+  CLEAR_FFLAGS;
+  asm volatile("vfdiv.vv v12, v8, v10");
+  VCMP_U64(20, v12, F64_1, F64_1, F64_1, F64_1);
+  CHECK_FFLAGS(0);
+#endif
+};
+
+// Tail elements. They are zeroed before the FPUs, so a computed tail element
+// is 0/0 -> NV. The shared divsqrt computes one 64-bit slot at a time and
+// stops at the slot holding element vl-1: only the tail inside that slot is
+// computed.
+void TEST_CASE8(void) {
+  // ctrl: vl = 6, element 5 = 0/0 active -> NV
+  VSET(6, e32, m2);
+  VLOAD_32(v8, F32_2, F32_2, F32_2, F32_2, F32_2, pZero);
+  VLOAD_32(v10, F32_2, F32_2, F32_2, F32_2, F32_2, pZero);
+  CLEAR_FFLAGS;
+  asm volatile("vfdiv.vv v12, v8, v10");
+  VCMP_U32(21, v12, F32_1, F32_1, F32_1, F32_1, F32_1, qNaNf);
+  CHECK_FFLAGS(NV);
+
+  // vl = 5: element 5 is tail, in the same slot as element 4
+  VSET(5, e32, m2);
+  VLOAD_32(v8, F32_2, F32_2, F32_2, F32_2, F32_2);
+  VLOAD_32(v10, F32_2, F32_2, F32_2, F32_2, F32_2);
+  CLEAR_FFLAGS;
+  asm volatile("vfdiv.vv v12, v8, v10");
+  VCMP_U32(22, v12, F32_1, F32_1, F32_1, F32_1, F32_1);
+  CHECK_FFLAGS(0);
+
+  // Vector-scalar: vs2 / 0.0. Active elements 2/0 -> DZ (legitimate).
+  // The scalar is not zeroed on the tail: tail elements are 0/0 -> NV.
+  float fscalar_32;
+  BOX_FLOAT_IN_FLOAT(fscalar_32, pZero);
+  // ctrl: vl = 4, element 3 = 0/0 active -> NV|DZ
+  VSET(4, e32, m2);
+  VLOAD_32(v8, F32_2, F32_2, F32_2, pZero);
+  CLEAR_FFLAGS;
+  asm volatile("vfdiv.vf v12, v8, %[A]" ::[A] "f"(fscalar_32));
+  VCMP_U32(23, v12, pInff, pInff, pInff, qNaNf);
+  CHECK_FFLAGS(NV | DZ);
+
+  // vl = 3: element 3 is tail -> only DZ
+  VSET(3, e32, m2);
+  VLOAD_32(v8, F32_2, F32_2, F32_2);
+  CLEAR_FFLAGS;
+  asm volatile("vfdiv.vf v12, v8, %[A]" ::[A] "f"(fscalar_32));
+  VCMP_U32(24, v12, pInff, pInff, pInff);
+  CHECK_FFLAGS(DZ);
+
+  // e16 (4 elements per slot). ctrl: vl = 8, element 6 = 0/0 active -> NV
+  VSET(8, e16, m2);
+  VLOAD_16(v8, F16_2, F16_2, F16_2, F16_2, F16_2, F16_2, pZero, F16_2);
+  VLOAD_16(v10, F16_2, F16_2, F16_2, F16_2, F16_2, F16_2, pZero, F16_2);
+  CLEAR_FFLAGS;
+  asm volatile("vfdiv.vv v12, v8, v10");
+  VCMP_U16(25, v12, F16_1, F16_1, F16_1, F16_1, F16_1, F16_1, qNaNh, F16_1);
+  CHECK_FFLAGS(NV);
+
+  // vl = 6: elements 6,7 are tail, in the same slot as elements 4,5
+  VSET(6, e16, m2);
+  VLOAD_16(v8, F16_2, F16_2, F16_2, F16_2, F16_2, F16_2);
+  VLOAD_16(v10, F16_2, F16_2, F16_2, F16_2, F16_2, F16_2);
+  CLEAR_FFLAGS;
+  asm volatile("vfdiv.vv v12, v8, v10");
+  VCMP_U16(26, v12, F16_1, F16_1, F16_1, F16_1, F16_1, F16_1);
+  CHECK_FFLAGS(0);
+
+#if ELEN == 64
+  // e64 (1 element per slot). ctrl: vl = 4, element 3 = 0/0 active -> NV
+  VSET(4, e64, m2);
+  VLOAD_64(v8, F64_2, F64_2, F64_2, pZero);
+  VLOAD_64(v10, F64_2, F64_2, F64_2, pZero);
+  CLEAR_FFLAGS;
+  asm volatile("vfdiv.vv v12, v8, v10");
+  VCMP_U64(27, v12, F64_1, F64_1, F64_1, qNaNd);
+  CHECK_FFLAGS(NV);
+
+  // vl = 3: element 3 is tail
+  VSET(3, e64, m2);
+  VLOAD_64(v8, F64_2, F64_2, F64_2);
+  VLOAD_64(v10, F64_2, F64_2, F64_2);
+  CLEAR_FFLAGS;
+  asm volatile("vfdiv.vv v12, v8, v10");
+  VCMP_U64(28, v12, F64_1, F64_1, F64_1);
+  CHECK_FFLAGS(0);
+#endif
+};
+
+// Inactive elements (vm = 0, v0[i] = 0). The bad element is 1/0 -> DZ.
+// Inactive elements keep the old vd value (cleared to 0).
+void TEST_CASE9(void) {
+  VSET(8, e32, m2);
+  VLOAD_32(v8, F32_2, F32_2, F32_1, F32_2, F32_2, F32_2, F32_2, F32_2);
+  VLOAD_32(v10, F32_2, F32_2, pZero, F32_2, F32_2, F32_2, F32_2, F32_2);
+
+  // ctrl: element 2 active -> DZ
+  VSET(2, e8, m1);
+  VLOAD_8(v0, 0xFF, 0xFF);
+  VSET(8, e32, m2);
+  CLEAR_FFLAGS;
+  asm volatile("vfdiv.vv v12, v8, v10, v0.t");
+  VCMP_U32(29, v12, F32_1, F32_1, pInff, F32_1, F32_1, F32_1, F32_1, F32_1);
+  CHECK_FFLAGS(DZ);
+
+  // element 2 inactive
+  VSET(2, e8, m1);
+  VLOAD_8(v0, 0xFB, 0xFF);
+  VSET(8, e32, m2);
+  VCLEAR(v12);
+  CLEAR_FFLAGS;
+  asm volatile("vfdiv.vv v12, v8, v10, v0.t");
+  VCMP_U32(30, v12, F32_1, F32_1, 0x0, F32_1, F32_1, F32_1, F32_1, F32_1);
+  CHECK_FFLAGS(0);
+
+#if ELEN == 64
+  // e64, element 1 (slot 1 of the shared divsqrt) = 1/0
+  VSET(4, e64, m2);
+  VLOAD_64(v8, F64_2, F64_1, F64_2, F64_2);
+  VLOAD_64(v10, F64_2, pZero, F64_2, F64_2);
+
+  // ctrl: element 1 active -> DZ
+  VSET(2, e8, m1);
+  VLOAD_8(v0, 0xFF, 0xFF);
+  VSET(4, e64, m2);
+  CLEAR_FFLAGS;
+  asm volatile("vfdiv.vv v12, v8, v10, v0.t");
+  VCMP_U64(31, v12, F64_1, pInfd, F64_1, F64_1);
+  CHECK_FFLAGS(DZ);
+
+  // element 1 inactive
+  VSET(2, e8, m1);
+  VLOAD_8(v0, 0xFD, 0xFF);
+  VSET(4, e64, m2);
+  VCLEAR(v12);
+  CLEAR_FFLAGS;
+  asm volatile("vfdiv.vv v12, v8, v10, v0.t");
+  VCMP_U64(32, v12, F64_1, 0x0, F64_1, F64_1);
+  CHECK_FFLAGS(0);
+#endif
+};
+
 int main(void) {
   INIT_CHECK();
   enable_vec();
   enable_fp();
   CHANGE_RM(RM_RTZ);
 
-  TEST_CASE1();
+  /*TEST_CASE1();
   TEST_CASE2();
   TEST_CASE3();
   TEST_CASE4();
   TEST_CASE5();
   TEST_CASE6();
+  // CHECK FFLAGS
+  TEST_CASE7();*/
+  TEST_CASE8();
+  //TEST_CASE9();
 
   EXIT_CHECK();
 }

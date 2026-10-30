@@ -8,6 +8,13 @@
 #include "float_macros.h"
 #include "vector_macros.h"
 
+#define F16_1 0x3c00
+#define F16_2 0x4000
+#define F32_1 0x3f800000
+#define F32_2 0x40000000
+#define F64_1 0x3ff0000000000000
+#define F64_2 0x4000000000000000
+
 // Simple random test with similar values + 1 subnormal
 void TEST_CASE1(void) {
   VSET(16, e16, m8);
@@ -343,6 +350,98 @@ void TEST_CASE4(void) {
 #endif
 };
 
+///////////////////////
+// CHECK FFLAGS TEST //
+///////////////////////
+// RVV 1.0: only active body elements may raise FP flags. Tail elements
+// (i >= vl) and inactive elements (vm = 0, v0[i] = 0) must not.
+
+// Inactive elements (vm = 0, v0[i] = 0). vfmin is NONCOMP, a PARALLEL unit
+// in fpnew: it reads the SIMD mask with a stride. The bad element is
+// min(sNaN, 1.0) = 1.0 with NV (min/max raise NV only for a signaling NaN).
+// Inactive elements keep the old vd value (cleared to 0).
+
+void TEST_CASE5(void) {
+  // e32, element 1 (FPU0 lane 1)
+  VSET(8, e32, m2);
+  VLOAD_32(v8, F32_2, sNaNf, F32_2, F32_2, F32_2, F32_2, F32_2, F32_2);
+  VLOAD_32(v10, F32_2, F32_1, F32_2, F32_2, F32_2, F32_2, F32_2, F32_2);
+
+  // ctrl: element 1 active -> NV
+  VSET(2, e8, m1);
+  VLOAD_8(v0, 0xFF, 0xFF);
+  VSET(8, e32, m2);
+  CLEAR_FFLAGS;
+  asm volatile("vfmin.vv v12, v8, v10, v0.t");
+  VCMP_U32(13, v12, F32_2, F32_1, F32_2, F32_2, F32_2, F32_2, F32_2, F32_2);
+  CHECK_FFLAGS(NV);
+
+  // element 1 inactive
+  VSET(2, e8, m1);
+  VLOAD_8(v0, 0xFD, 0xFF);
+  VSET(8, e32, m2);
+  VCLEAR(v12);
+  CLEAR_FFLAGS;
+  asm volatile("vfmin.vv v12, v8, v10, v0.t");
+  VCMP_U32(14, v12, F32_2, 0x0, F32_2, F32_2, F32_2, F32_2, F32_2, F32_2);
+  CHECK_FFLAGS(0);
+
+  // e16, element 2 (FPU0 lane 2). In FP16 the two fpnew mask conventions
+  // disagree: a MERGED unit reads mask bit 2 for lane 2, NONCOMP reads bit 4.
+  VSET(16, e16, m2);
+  VLOAD_16(v8, F16_2, F16_2, sNaNh, F16_2, F16_2, F16_2, F16_2, F16_2, F16_2,
+           F16_2, F16_2, F16_2, F16_2, F16_2, F16_2, F16_2);
+  VLOAD_16(v10, F16_2, F16_2, F16_1, F16_2, F16_2, F16_2, F16_2, F16_2, F16_2,
+           F16_2, F16_2, F16_2, F16_2, F16_2, F16_2, F16_2);
+
+  // ctrl: element 2 active -> NV
+  VSET(2, e8, m1);
+  VLOAD_8(v0, 0xFF, 0xFF);
+  VSET(16, e16, m2);
+  CLEAR_FFLAGS;
+  asm volatile("vfmin.vv v12, v8, v10, v0.t");
+  VCMP_U16(15, v12, F16_2, F16_2, F16_1, F16_2, F16_2, F16_2, F16_2, F16_2,
+           F16_2, F16_2, F16_2, F16_2, F16_2, F16_2, F16_2, F16_2);
+  CHECK_FFLAGS(NV);
+
+  // element 2 inactive
+  VSET(2, e8, m1);
+  VLOAD_8(v0, 0xFB, 0xFF);
+  VSET(16, e16, m2);
+  VCLEAR(v12);
+  CLEAR_FFLAGS;
+  asm volatile("vfmin.vv v12, v8, v10, v0.t");
+  VCMP_U16(16, v12, F16_2, F16_2, 0x0, F16_2, F16_2, F16_2, F16_2, F16_2,
+           F16_2, F16_2, F16_2, F16_2, F16_2, F16_2, F16_2, F16_2);
+  CHECK_FFLAGS(0);
+
+#if ELEN == 64
+  // e64, element 1 (the whole of FPU1)
+  VSET(4, e64, m2);
+  VLOAD_64(v8, F64_2, sNaNd, F64_2, F64_2);
+  VLOAD_64(v10, F64_2, F64_1, F64_2, F64_2);
+
+  // ctrl: element 1 active -> NV
+  VSET(2, e8, m1);
+  VLOAD_8(v0, 0xFF, 0xFF);
+  VSET(4, e64, m2);
+  CLEAR_FFLAGS;
+  asm volatile("vfmin.vv v12, v8, v10, v0.t");
+  VCMP_U64(17, v12, F64_2, F64_1, F64_2, F64_2);
+  CHECK_FFLAGS(NV);
+
+  // element 1 inactive
+  VSET(2, e8, m1);
+  VLOAD_8(v0, 0xFD, 0xFF);
+  VSET(4, e64, m2);
+  VCLEAR(v12);
+  CLEAR_FFLAGS;
+  asm volatile("vfmin.vv v12, v8, v10, v0.t");
+  VCMP_U64(18, v12, F64_2, 0x0, F64_2, F64_2);
+  CHECK_FFLAGS(0);
+#endif
+};
+
 int main(void) {
   INIT_CHECK();
   enable_vec();
@@ -352,6 +451,8 @@ int main(void) {
   TEST_CASE2();
   TEST_CASE3();
   TEST_CASE4();
+  // CHECK FFLAGS
+  TEST_CASE5();
 
   EXIT_CHECK();
 }

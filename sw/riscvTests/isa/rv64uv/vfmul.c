@@ -8,6 +8,14 @@
 #include "float_macros.h"
 #include "vector_macros.h"
 
+#define F16_1 0x3c00
+#define F16_2 0x4000
+#define F16_4 0x4400
+#define F32_1 0x3f800000
+#define F32_2 0x40000000
+#define F32_4 0x40800000
+#define F64_1 0x3ff0000000000000
+
 // Simple random test with similar values + 1 subnormal
 void TEST_CASE1(void) {
   VSET(16, e16, m8);
@@ -345,6 +353,142 @@ void TEST_CASE4(void) {
 #endif
 };
 
+///////////////////////
+// CHECK FFLAGS TEST //
+///////////////////////
+// RVV 1.0: only active body elements may raise FP flags. Tail elements
+// (i >= vl) and inactive elements (vm = 0, v0[i] = 0) must not.
+
+// Tail elements. vd = vs2 * (+inf): active elements 1.0 * inf = inf (exact).
+// Tail elements are zeroed before the FPUs, but the scalar is not: a
+// computed tail element is 0 * inf -> NV. vfmul runs on all 4 FPUs, so the
+// whole rest of the last VRF word is computed.
+
+void TEST_CASE5(void) {
+  float fscalar_32;
+  BOX_FLOAT_IN_FLOAT(fscalar_32, pInff);
+  // ctrl: vl = 8 (full word), element 5 = 0 active -> NV
+  VSET(8, e32, m2);
+  VLOAD_32(v8, F32_1, F32_1, F32_1, F32_1, F32_1, pZero, F32_1, F32_1);
+  CLEAR_FFLAGS;
+  asm volatile("vfmul.vf v12, v8, %[A]" ::[A] "f"(fscalar_32));
+  VCMP_U32(13, v12, pInff, pInff, pInff, pInff, pInff, qNaNf, pInff, pInff);
+  CHECK_FFLAGS(NV);
+
+  // vl = 5: elements 5..7 are tail
+  VSET(5, e32, m2);
+  VLOAD_32(v8, F32_1, F32_1, F32_1, F32_1, F32_1);
+  CLEAR_FFLAGS;
+  asm volatile("vfmul.vf v12, v8, %[A]" ::[A] "f"(fscalar_32));
+  VCMP_U32(14, v12, pInff, pInff, pInff, pInff, pInff);
+  CHECK_FFLAGS(0);
+
+  // vl = 1: FPU1..FPU3 work on tail elements only
+  VSET(1, e32, m2);
+  VLOAD_32(v8, F32_1);
+  CLEAR_FFLAGS;
+  asm volatile("vfmul.vf v12, v8, %[A]" ::[A] "f"(fscalar_32));
+  VCMP_U32(15, v12, pInff);
+  CHECK_FFLAGS(0);
+
+  float fscalar_16;
+  BOX_HALF_IN_FLOAT(fscalar_16, pInfh);
+  // e16 ctrl: vl = 16 (full word), element 3 = 0 active -> NV
+  VSET(16, e16, m2);
+  VLOAD_16(v8, F16_1, F16_1, F16_1, pZero, F16_1, F16_1, F16_1, F16_1, F16_1,
+           F16_1, F16_1, F16_1, F16_1, F16_1, F16_1, F16_1);
+  CLEAR_FFLAGS;
+  asm volatile("vfmul.vf v12, v8, %[A]" ::[A] "f"(fscalar_16));
+  VCMP_U16(16, v12, pInfh, pInfh, pInfh, qNaNh, pInfh, pInfh, pInfh, pInfh,
+           pInfh, pInfh, pInfh, pInfh, pInfh, pInfh, pInfh, pInfh);
+  CHECK_FFLAGS(NV);
+
+  // vl = 3: element 3 (FPU0 lane 3) and FPU1..FPU3 are tail
+  VSET(3, e16, m2);
+  VLOAD_16(v8, F16_1, F16_1, F16_1);
+  CLEAR_FFLAGS;
+  asm volatile("vfmul.vf v12, v8, %[A]" ::[A] "f"(fscalar_16));
+  VCMP_U16(17, v12, pInfh, pInfh, pInfh);
+  CHECK_FFLAGS(0);
+
+#if ELEN == 64
+  double dscalar_64;
+  BOX_DOUBLE_IN_DOUBLE(dscalar_64, pInfd);
+  // e64 ctrl: vl = 4 (full word), element 1 = 0 active -> NV
+  VSET(4, e64, m2);
+  VLOAD_64(v8, F64_1, pZero, F64_1, F64_1);
+  CLEAR_FFLAGS;
+  asm volatile("vfmul.vf v12, v8, %[A]" ::[A] "f"(dscalar_64));
+  VCMP_U64(18, v12, pInfd, qNaNd, pInfd, pInfd);
+  CHECK_FFLAGS(NV);
+
+  // vl = 1: FPU1..FPU3 work on tail elements only
+  VSET(1, e64, m2);
+  VLOAD_64(v8, F64_1);
+  CLEAR_FFLAGS;
+  asm volatile("vfmul.vf v12, v8, %[A]" ::[A] "f"(dscalar_64));
+  VCMP_U64(19, v12, pInfd);
+  CHECK_FFLAGS(0);
+#endif
+};
+
+// Inactive elements (vm = 0, v0[i] = 0). The bad element is 0 * inf -> NV.
+// Inactive elements keep the old vd value (cleared to 0).
+void TEST_CASE6(void) {
+  // e32, element 5 (FPU2 lane 1)
+  VSET(8, e32, m2);
+  VLOAD_32(v8, F32_2, F32_2, F32_2, F32_2, F32_2, pZero, F32_2, F32_2);
+  VLOAD_32(v10, F32_2, F32_2, F32_2, F32_2, F32_2, pInff, F32_2, F32_2);
+
+  // ctrl: element 5 active -> NV
+  VSET(2, e8, m1);
+  VLOAD_8(v0, 0xFF, 0xFF);
+  VSET(8, e32, m2);
+  CLEAR_FFLAGS;
+  asm volatile("vfmul.vv v12, v8, v10, v0.t");
+  VCMP_U32(20, v12, F32_4, F32_4, F32_4, F32_4, F32_4, qNaNf, F32_4, F32_4);
+  CHECK_FFLAGS(NV);
+
+  // element 5 inactive
+  VSET(2, e8, m1);
+  VLOAD_8(v0, 0xDF, 0xFF);
+  VSET(8, e32, m2);
+  VCLEAR(v12);
+  CLEAR_FFLAGS;
+  asm volatile("vfmul.vv v12, v8, v10, v0.t");
+  VCMP_U32(21, v12, F32_4, F32_4, F32_4, F32_4, F32_4, 0x0, F32_4, F32_4);
+  CHECK_FFLAGS(0);
+
+  // e16, element 2 (FPU0 lane 2). Same lane as the vfmin e16 check, other
+  // fpnew mask convention (ADDMUL is MERGED, vfmin is PARALLEL).
+  VSET(16, e16, m2);
+  VLOAD_16(v8, F16_2, F16_2, pZero, F16_2, F16_2, F16_2, F16_2, F16_2, F16_2,
+           F16_2, F16_2, F16_2, F16_2, F16_2, F16_2, F16_2);
+  VLOAD_16(v10, F16_2, F16_2, pInfh, F16_2, F16_2, F16_2, F16_2, F16_2, F16_2,
+           F16_2, F16_2, F16_2, F16_2, F16_2, F16_2, F16_2);
+
+  // ctrl: element 2 active -> NV
+  VSET(2, e8, m1);
+  VLOAD_8(v0, 0xFF, 0xFF);
+  VSET(16, e16, m2);
+  CLEAR_FFLAGS;
+  asm volatile("vfmul.vv v12, v8, v10, v0.t");
+  VCMP_U16(22, v12, F16_4, F16_4, qNaNh, F16_4, F16_4, F16_4, F16_4, F16_4,
+           F16_4, F16_4, F16_4, F16_4, F16_4, F16_4, F16_4, F16_4);
+  CHECK_FFLAGS(NV);
+
+  // element 2 inactive
+  VSET(2, e8, m1);
+  VLOAD_8(v0, 0xFB, 0xFF);
+  VSET(16, e16, m2);
+  VCLEAR(v12);
+  CLEAR_FFLAGS;
+  asm volatile("vfmul.vv v12, v8, v10, v0.t");
+  VCMP_U16(23, v12, F16_4, F16_4, 0x0, F16_4, F16_4, F16_4, F16_4, F16_4,
+           F16_4, F16_4, F16_4, F16_4, F16_4, F16_4, F16_4, F16_4);
+  CHECK_FFLAGS(0);
+};
+
 int main(void) {
   INIT_CHECK();
   enable_vec();
@@ -354,6 +498,9 @@ int main(void) {
   TEST_CASE2();
   TEST_CASE3();
   TEST_CASE4();
+  // CHECK FFLAGS
+  TEST_CASE5();
+  TEST_CASE6();
 
   EXIT_CHECK();
 }
