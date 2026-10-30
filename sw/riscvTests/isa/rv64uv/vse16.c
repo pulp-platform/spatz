@@ -120,6 +120,30 @@ void TEST_CASE7(void) {
     0xFFFF, 50, 0xFFFF, 52, 0xFFFF, 54, 0xFFFF, 56, 0xFFFF, 58, 0xFFFF, 60, 0xFFFF, 62, 0xFFFF, 64);
 }
 
+void TEST_CASE8(void) {
+  uint32_t vlenb;
+  asm volatile("csrr %0, vlenb" : "=r"(vlenb));
+  volatile uint16_t SRC[128], DST[128];
+  for (uint32_t i = 0; i < vlenb; i++) {
+    SRC[i] = (i < vlenb / 2) ? 0x0000 : 0x0505;
+    DST[i] = 0xFFFF;
+  }
+
+  VSET(vlenb, e8, m1);
+  asm volatile("vle16.v v2, (%0)\n\t" :: "r"(SRC) : "memory");
+  for (volatile int w = 0; w < 1000; w++) {}   // v2/v3 fully loaded
+  asm volatile(
+    "vse16.v v2, (%0)\n\t"                     // reads v2 and v3
+    "vmv.v.i v3, 7\n\t"                        // WAR on v3
+    :: "r"(DST) : "memory");
+  for (volatile int w = 0; w < 1000; w++) {}   // store must have finished
+  asm volatile("vle16.v v10, (%0)\n\t" :: "r"(DST) : "memory");
+  for (volatile int w = 0; w < 1000; w++) {}   // let the load finish before reloading
+
+  VSET(4, e32, m1);
+  VCMP_U32(8, v11, 0x05050505, 0x05050505, 0x05050505, 0x05050505);
+}
+
 int main(void) {
   INIT_CHECK();
   enable_vec();
@@ -131,6 +155,7 @@ int main(void) {
   TEST_CASE5();
   TEST_CASE6();
   TEST_CASE7();
+  TEST_CASE8();
 
   EXIT_CHECK();
 }

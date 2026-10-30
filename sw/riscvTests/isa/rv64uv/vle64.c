@@ -176,6 +176,43 @@ void TEST_CASE9(void) {
                   0x4444444444444444);
 }
 
+void TEST_CASE10(void) {
+  uint32_t vlenb;
+  asm volatile("csrr %0, vlenb" : "=r"(vlenb));
+  volatile uint16_t MEM[128];
+  for (uint32_t i = 0; i < vlenb; i++)
+    MEM[i] = (i < vlenb / 2) ? 0x0000 : 0x0505;
+
+  VSET(vlenb, e8, m1);
+  asm volatile(
+    "vmv.v.i v3, 0\n\t"
+    "vle16.v v2, (%0)\n\t"
+    "vadd.vv v6, v3, v3\n\t"
+    :: "r"(MEM) : "memory");
+
+  VSET(4, e32, m1);
+  VCMP_U32(10, v6, 0x0A0A0A0A, 0x0A0A0A0A, 0x0A0A0A0A, 0x0A0A0A0A);
+}
+
+void TEST_CASE11(void) {
+  uint32_t vlenb;
+  asm volatile("csrr %0, vlenb" : "=r"(vlenb));
+  volatile uint16_t MEM[128];
+  for (uint32_t i = 0; i < vlenb; i++)
+    MEM[i] = (i < vlenb / 2) ? 0x0000 : 0x0505;
+  uint32_t stride = 2;
+
+  VSET(vlenb, e8, m1);
+  asm volatile(
+    "vmv.v.i v3, 0\n\t"
+    "vlse16.v v2, (%0), %1\n\t"
+    "vadd.vv v6, v3, v3\n\t"
+    :: "r"(MEM), "r"(stride) : "memory");
+
+  VSET(4, e32, m1);
+  VCMP_U32(11, v6, 0x0A0A0A0A, 0x0A0A0A0A, 0x0A0A0A0A, 0x0A0A0A0A);
+}
+
 int main(void) {
   INIT_CHECK();
   enable_vec();
@@ -190,6 +227,8 @@ int main(void) {
   TEST_CASE7();
   TEST_CASE8();
   TEST_CASE9();
+  TEST_CASE10();
+  TEST_CASE11();
 #endif
 
   EXIT_CHECK();

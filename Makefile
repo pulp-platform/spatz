@@ -10,7 +10,7 @@
 include util/Makefrag
 
 # Bender version
-BENDER_VERSION = 0.32.1
+BENDER_VERSION = 0.31.0
 
 # Standard opcodes
 OPCODES := "rv_i" "rv64_i" "rv_m" "rv64_m" "rv_a" "rv_f" "rv_d" \
@@ -26,7 +26,7 @@ OPCODES += "unratified/rv_xdma" "unratified/rv_xrrpost" \
 # Default target
 all: bender toolchain update_opcodes
 
-# Target for IIS users
+# Target for IIS/Chips-IT users
 init: bender update_opcodes
 
 ###############
@@ -214,7 +214,7 @@ tc-llvm: sw/toolchain/llvm-project sw/toolchain/newlib
 
 tc-riscv-isa-sim: sw/toolchain/riscv-isa-sim sw/toolchain/dtc
 	mkdir -p $(SPIKE_INSTALL_DIR)
-	cd sw/toolchain/dtc/dtc-1.7.0 && make NO_PYTHON=1 install PREFIX=$(SPIKE_INSTALL_DIR)
+	cd sw/toolchain/dtc/dtc-1.7.0 && make install PREFIX=$(SPIKE_INSTALL_DIR) NO_PYTHON=1
 	cd sw/toolchain/riscv-isa-sim && rm -rf build && mkdir -p build && cd build && \
 	PATH=$(SPIKE_INSTALL_DIR)/bin:$(PATH) ../configure --prefix=$(SPIKE_INSTALL_DIR) && \
 	$(MAKE) MAKEINFO=true -j4 install
@@ -233,11 +233,13 @@ check-bender:
 		fi \
 	fi
 	@$(MAKE) -C $(ROOT_DIR) $(BENDER_INSTALL_DIR)/bender
-	ln -s $$(find "$(ROOT_DIR)/.bender/git/checkouts" -type d -name 'spatz_vpu-*') $(ROOT_DIR)/hw/spatz_vpu
-
-$(BENDER_INSTALL_DIR)/bender:
-	mkdir -p $(BENDER_INSTALL_DIR) && cd $(BENDER_INSTALL_DIR) && \
-	curl --proto '=https' --tlsv1.2 https://pulp-platform.github.io/bender/init -sSf | sh -s -- $(BENDER_VERSION)
+	# Check out all dependencies at the revisions in Bender.lock
+	cd $(ROOT_DIR) && $(BENDER) checkout
+	# Link hw/spatz_vpu to the sources Bender actually uses (checkout or Bender.local override)
+	@if [ -e $(ROOT_DIR)/hw/spatz_vpu ] && [ ! -L $(ROOT_DIR)/hw/spatz_vpu ]; then \
+		echo "ERROR: hw/spatz_vpu exists and is not a symlink, not overwriting it"; exit 1; \
+	fi
+	ln -sfn $$(cd $(ROOT_DIR) && $(BENDER) path spatz_vpu) $(ROOT_DIR)/hw/spatz_vpu
 
 ###############
 #  Verilator  #
@@ -253,8 +255,11 @@ $(VERILATOR_INSTALL_DIR)/bin/verilator: sw/toolchain/verilator sw/toolchain/help
 #############
 #  Opcodes  #
 #############
+.PHONY: clean_opcodes update_opcodes
+clean_opcodes:
+	rm -rf sw/toolchain/riscv-opcodes
 
-update_opcodes: sw/toolchain/riscv-opcodes sw/toolchain/riscv-opcodes/encoding.h hw/ip/snitch/src/riscv_instr.sv
+update_opcodes: clean_opcodes sw/toolchain/riscv-opcodes sw/toolchain/riscv-opcodes/encoding.h hw/ip/snitch/src/riscv_instr.sv
 hw/ip/snitch/src/riscv_instr.sv: sw/toolchain/riscv-opcodes
 	make -C sw/toolchain/riscv-opcodes inst.sverilog EXTENSIONS='$(OPCODES)'
 	mv sw/toolchain/riscv-opcodes/inst.sverilog $@

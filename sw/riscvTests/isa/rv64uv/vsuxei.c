@@ -499,6 +499,57 @@ void TEST_CASE10(void) {
   }
 }
 
+void TEST_CASE11(void) {
+  VSET(8, e32, m1);
+
+  // Initialize memory with 0s.
+  volatile uint32_t MEM[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+
+  // Data we want to write
+  uint32_t data[] = {0x0a, 0x0a, 0x0a, 0x0a, 0x32, 0x3c, 0x46, 0x50};
+
+  // Elements 0, 1, 2, 3 hit byte offset 0 to force uneven backpressure.
+  // Elements 4, 5, 6, 7 point to independent addresses.
+  uint32_t indices[] = {0, 0, 0, 0, 0x10, 0x14, 0x18, 0x1c};
+
+  // MASK in v0: 10100111 in binary (0xA7)
+  // Elements 4, 5, 6, 7 masks: 0, 1, 0, 1
+  uint8_t mask = 0xA7;
+
+  asm volatile(
+    "vle32.v v1, (%1)\n\t"              // Load data into v1
+    "vle32.v v2, (%2)\n\t"              // Load indices into v2
+    "vle8.v  v0, (%3)\n\t"              // Load mask into v0
+    "vsuxei32.v v1, (%0), v2, v0.t\n\t" // Masked indexed store
+    :: "r"(MEM), "r"(data), "r"(indices), "r"(&mask) : "memory"
+  );
+
+  asm volatile("vle32.v v4, (%0)" :: "r"(MEM) : "memory");
+  // Expected for MEM[4..7]: 0x28 masked (0), 0x3c written, 0x46 masked (0), 0x50 written
+  VCMP_U32(31, v4, 0x0a, 0, 0, 0, 0, 0x3c, 0, 0x50);
+}
+
+void TEST_CASE12(void) {
+  volatile uint32_t IDX[16], SRC[16], OUT[16];
+  for (int i = 0; i < 16; i++) { IDX[i] = 4 * i; SRC[i] = 0x100 + i; OUT[i] = 0; }
+
+  VSET(16, e32, m1);
+  asm volatile("vle32.v v5, (%0)\n\t" :: "r"(IDX) : "memory");   // index register
+  for (volatile int w = 0; w < 1000; w++) {}
+
+  asm volatile(
+    "vle32.v v8, (%0)\n\t"                // store data via the VLSU: the store below waits for it
+    "vsuxei32.v v8, (%1), v5\n\t"         // reader 1 of v5: slow, VLSU
+    "vadd.vv v12, v5, v5\n\t"             // reader 2 of v5: fast, VFU; replaces reader 1 in the old table
+    "vmv.v.i v5, 0\n\t"                   // writer: must wait for both readers
+    :: "r"(SRC), "r"(OUT) : "memory");
+  for (volatile int w = 0; w < 1000; w++) {}
+
+  asm volatile("vle32.v v13, (%0)\n\t" :: "r"(OUT) : "memory");
+  VSET(4, e32, m1);
+  VCMP_U32(32, v13, 0x100, 0x101, 0x102, 0x103);
+}
+
 int main(void) {
   INIT_CHECK();
   enable_vec();
@@ -512,5 +563,7 @@ int main(void) {
   TEST_CASE8();
   TEST_CASE9();
   TEST_CASE10();
+  TEST_CASE11();
+  TEST_CASE12();
   EXIT_CHECK();
 }

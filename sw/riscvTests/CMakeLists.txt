@@ -52,8 +52,10 @@ add_snitch_test(vrsub isa/rv64uv/vrsub.c)
 
 add_snitch_test(vls       isa/rv64uv/vls.c)
 add_snitch_test(vloxei    isa/rv64uv/vloxei.c)
+add_snitch_test(vluxei    isa/rv64uv/vluxei.c)
 add_snitch_test(vls_chain isa/rv64uv/vls_chain.c)
-add_snitch_test(vsuxei isa/rv64uv/vsuxei.c)
+add_snitch_test(vsoxei    isa/rv64uv/vsoxei.c)
+add_snitch_test(vsuxei    isa/rv64uv/vsuxei.c)
 
 add_snitch_test(vlseg    isa/rv64uv/vlseg.c)
 add_snitch_test(vsseg    isa/rv64uv/vsseg.c)

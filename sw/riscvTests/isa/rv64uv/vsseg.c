@@ -958,6 +958,25 @@ void TEST_CASE2_8_vl32_m(void) {
                           INIT, INIT, INIT, INIT, 0xa0, 0xab, 0x4b, 0x46);
 }
 
+void TEST_CASE_D26(void) {
+  volatile uint32_t SRC[2] = {1, 1};
+  volatile uint32_t MEM[4] = {0, 0, 0, 0};
+
+  VSET(2, e32, m2);
+  asm volatile(
+    "vmv.v.i v4, 2\n\t"                 // field 1 value
+    "vle32.v v2, (%0)\n\t"              // field 0 from memory: the store must wait for it (RAW)
+    "vsseg2e32.v v2, (%1)\n\t"          // reads v4 only after v2 is loaded
+    "vmv.v.i v4, 9\n\t"                 // WAR on v4: must wait for the store
+    :: "r"(SRC), "r"(MEM) : "memory");
+
+  for (volatile int w = 0; w < 1000; w++) {}   // let the store finish before reloading
+
+  VSET(4, e32, m1);
+  asm volatile("vle32.v v8, (%0)\n\t" :: "r"(MEM) : "memory");
+  VCMP_U32(39, v8, 1, 2, 1, 2);        // 1,9,1,9 if the WAR is missed
+}
+
 int main(void) {
   INIT_CHECK();
   enable_vec();
@@ -1010,6 +1029,9 @@ int main(void) {
   TEST_CASE2_32_vl4_m_last();
   TEST_CASE2_8_vl32();
   TEST_CASE2_8_vl32_m();
+
+  // Bug test
+  TEST_CASE_D26();
 
   EXIT_CHECK();
 }
