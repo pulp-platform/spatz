@@ -67,7 +67,10 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     output status_t                           fpu_status_o,
     // ECC VRF outputs
     output logic                              vrf_single_error_o,
-    output logic                              vrf_multi_error_o
+    output logic                              vrf_multi_error_o,
+    // fpu_sequencer error outputs
+    output logic                              fpu_sequencer_correctable_error_o,
+    output logic                              fpu_sequencer_uncorrectable_error_o
   );
 
   ////////////////
@@ -227,7 +230,9 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
       .fp_lsu_mem_str_finished_o( fp_lsu_mem_str_finished),
       // Spatz VLSU side channel
       .spatz_mem_finished_i     ( spatz_mem_finished     ),
-      .spatz_mem_str_finished_i ( spatz_mem_str_finished )
+      .spatz_mem_str_finished_i ( spatz_mem_str_finished ),
+      .fpu_sequencer_correctable_fault_o    (fpu_sequencer_correctable_error_o),
+      .fpu_sequencer_uncorrectable_fault_o    (fpu_sequencer_uncorrectable_error_o)
     );
   end: gen_fpu_sequencer
 

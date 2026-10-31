@@ -57,7 +57,10 @@ module spatz_fpu_sequencer
     output logic             fp_lsu_mem_str_finished_o,
     // Spatz VLSU side channel
     input  logic             spatz_mem_finished_i,
-    input  logic             spatz_mem_str_finished_i
+    input  logic             spatz_mem_str_finished_i,
+    // fault output signal
+    output logic            fpu_sequencer_correctable_fault_o,
+    output logic            fpu_sequencer_uncorrectable_fault_o
   );
 
 `include "common_cells/registers.svh"
@@ -94,19 +97,40 @@ module spatz_fpu_sequencer
 
   assign fpr_raddr = {fs3, fs2, fs1};
 
-  snitch_regfile #(
+  logic fpr_tmr_fault;
+  logic [NrReadPorts-1:0][FLEN-1:0] fpr_rdataA,fpr_rdataB,fpr_rdataC;
+  snitch_regfileTMR #(
     .DATA_WIDTH    (FLEN        ),
     .ADDR_WIDTH    (FPRRegWidth ),
     .NR_READ_PORTS (NrReadPorts ),
     .NR_WRITE_PORTS(NrWritePorts),
     .ZERO_REG_ZERO (0           )
-  ) i_fpr (
-    .clk_i  (clk_i    ),
-    .raddr_i(fpr_raddr),
-    .rdata_o(fpr_rdata),
-    .waddr_i(fpr_waddr),
-    .wdata_i(fpr_wdata),
-    .we_i   (fpr_we   )
+  )i_fpr (
+    .clk_i(clk_i),
+    .raddr_iA(fpr_raddr),
+    .raddr_iB(fpr_raddr),
+    .raddr_iC(fpr_raddr),
+    .rdata_oA(fpr_rdataA),
+    .rdata_oB(fpr_rdataB),
+    .rdata_oC(fpr_rdataC),
+    .waddr_iA(fpr_waddr),
+    .waddr_iB(fpr_waddr),
+    .waddr_iC(fpr_waddr),
+    .wdata_iA(fpr_wdata),
+    .wdata_iB(fpr_wdata),
+    .wdata_iC(fpr_wdata),
+    .we_iA(fpr_we),
+    .we_iB(fpr_we),
+    .we_iC(fpr_we),
+    .snitch_regfile_tmr_fault_o(fpr_tmr_fault)
+  );
+
+  majorityVoter #(.WIDTH(NrReadPorts*FLEN)) fpr_rdataVoter (
+    .inA(fpr_rdataA),
+    .inB(fpr_rdataB),
+    .inC(fpr_rdataC),
+    .out(fpr_rdata),
+    .tmrErr(fpr_rdataTmrError)
   );
 
   //////////////////
@@ -535,7 +559,13 @@ module spatz_fpu_sequencer
   logic                 mem_perror;
   logic [IdWidth-1:0]   mem_pid;
 
-  snitch_lsu #(
+  logic fp_lsu_qreadyA,fp_lsu_qreadyB,fp_lsu_qreadyC;
+  logic [DataWidth-1:0] fp_lsu_pdataA,fp_lsu_pdataB,fp_lsu_pdataC;
+  logic [4:0]           fp_lsu_ptagA,fp_lsu_ptagB,fp_lsu_ptagC;
+  logic                 fp_lsu_pvalidA,fp_lsu_pvalidB,fp_lsu_pvalidC;
+  dreq_t            fp_lsu_mem_req_oA,fp_lsu_mem_req_oB,fp_lsu_mem_req_oC;
+
+snitch_lsuTMR #(
     .NaNBox             (1                  ),
     .dreq_t             (dreq_t             ),
     .drsp_t             (drsp_t             ),
@@ -543,44 +573,108 @@ module spatz_fpu_sequencer
     .NumOutstandingMem  (NumOutstandingLoads),
     .NumOutstandingLoads(NumOutstandingLoads)
   ) i_fp_lsu (
-    .clk_i        (clk_i           ),
-    .rst_i        (~rst_ni         ),
+    .clk_iA(clk_i),
+    .clk_iB(clk_i),
+    .clk_iC(clk_i),
+    .rst_iA(~rst_ni),
+    .rst_iB(~rst_ni),
+    .rst_iC(~rst_ni),
     // Request interface
-    .lsu_qtag_i   (fp_lsu_qtag     ),
-    .lsu_qwrite_i (fp_lsu_qwrite   ),
-    .lsu_qsigned_i(fp_lsu_qsigned  ),
-    .lsu_qaddr_i  (fp_lsu_qaddr    ),
-    .lsu_qdata_i  (fp_lsu_qdata    ),
-    .lsu_qsize_i  (fp_lsu_qsize    ),
-    .lsu_qamo_i   (fp_lsu_qamo     ),
-    .lsu_qvalid_i (fp_lsu_qvalid   ),
-    .lsu_qready_o (fp_lsu_qready   ),
+    .lsu_qtag_iA   (fp_lsu_qtag     ),
+    .lsu_qtag_iB   (fp_lsu_qtag     ),
+    .lsu_qtag_iC   (fp_lsu_qtag     ),
+    .lsu_qwrite_iA (fp_lsu_qwrite   ),
+    .lsu_qwrite_iB (fp_lsu_qwrite   ),
+    .lsu_qwrite_iC (fp_lsu_qwrite   ),
+    .lsu_qsigned_iA(fp_lsu_qsigned  ),
+    .lsu_qsigned_iB(fp_lsu_qsigned  ),
+    .lsu_qsigned_iC(fp_lsu_qsigned  ),
+    .lsu_qaddr_iA  (fp_lsu_qaddr    ),
+    .lsu_qaddr_iB  (fp_lsu_qaddr    ),
+    .lsu_qaddr_iC  (fp_lsu_qaddr    ),
+    .lsu_qdata_iA  (fp_lsu_qdata    ),
+    .lsu_qdata_iB  (fp_lsu_qdata    ),
+    .lsu_qdata_iC  (fp_lsu_qdata    ),
+    .lsu_qsize_iA  (fp_lsu_qsize    ),
+    .lsu_qsize_iB  (fp_lsu_qsize    ),
+    .lsu_qsize_iC  (fp_lsu_qsize    ),
+    .lsu_qamo_iA   (fp_lsu_qamo     ),
+    .lsu_qamo_iB   (fp_lsu_qamo     ),
+    .lsu_qamo_iC   (fp_lsu_qamo     ),
+    .lsu_qvalid_iA (fp_lsu_qvalid   ),
+    .lsu_qvalid_iB (fp_lsu_qvalid   ),
+    .lsu_qvalid_iC (fp_lsu_qvalid   ),
+    .lsu_qready_oA (fp_lsu_qreadyA   ),
+    .lsu_qready_oB (fp_lsu_qreadyB   ),
+    .lsu_qready_oC (fp_lsu_qreadyC   ),
     // Response interface
-    .lsu_pdata_o  (fp_lsu_pdata    ),
-    .lsu_ptag_o   (fp_lsu_ptag     ),
-    .lsu_perror_o (/* Unused */    ),
-    .lsu_pvalid_o (fp_lsu_pvalid   ),
-    .lsu_pready_i (fp_lsu_pready   ),
-    // Memory interface
-`ifdef MEMPOOL_SPATZ
-    .data_qaddr_o (mem_qaddr              ),
-    .data_qwrite_o(mem_qwrite             ),
-    .data_qamo_o  (/* Unused */           ),
-    .data_qdata_o (mem_qdata              ),
-    .data_qstrb_o (mem_qstrb              ),
-    .data_qid_o   (mem_qid                ),
-    .data_qvalid_o(fp_lsu_mem_req_valid_o ),
-    .data_qready_i(fp_lsu_mem_req_ready_i ),
-    .data_pdata_i (mem_pdata              ),
-    .data_perror_i(mem_perror             ),
-    .data_pid_i   (mem_pid                ),
-    .data_pvalid_i(fp_lsu_mem_rsp_valid_i ),
-    .data_pready_o(fp_lsu_mem_rsp_ready_o )
-`else
-    .data_req_o   (fp_lsu_mem_req_o),
-    .data_rsp_i   (fp_lsu_mem_rsp_i)
-`endif
+    .lsu_pdata_oA  (fp_lsu_pdataA    ),
+    .lsu_pdata_oB  (fp_lsu_pdataB    ),
+    .lsu_pdata_oC  (fp_lsu_pdataC    ),
+    .lsu_ptag_oA   (fp_lsu_ptagA     ),
+    .lsu_ptag_oB   (fp_lsu_ptagB     ),
+    .lsu_ptag_oC   (fp_lsu_ptagC     ),
+    .lsu_perror_oA (/* Unused */    ),
+    .lsu_perror_oB (/* Unused */    ),
+    .lsu_perror_oC (/* Unused */    ),
+    .lsu_pvalid_oA (fp_lsu_pvalidA   ),
+    .lsu_pvalid_oB (fp_lsu_pvalidB   ),
+    .lsu_pvalid_oC (fp_lsu_pvalidC   ),
+    .lsu_pready_iA (fp_lsu_pready   ),
+    .lsu_pready_iB (fp_lsu_pready   ),
+    .lsu_pready_iC (fp_lsu_pready   ),
+    .data_req_oA   (fp_lsu_mem_req_oA),
+    .data_req_oB   (fp_lsu_mem_req_oB),
+    .data_req_oC   (fp_lsu_mem_req_oC),
+    .data_rsp_iA   (fp_lsu_mem_rsp_i),
+    .data_rsp_iB   (fp_lsu_mem_rsp_i),
+    .data_rsp_iC   (fp_lsu_mem_rsp_i)
   );
+
+  majorityVoter #(.WIDTH(1)) fp_lsu_qreadyVoter (
+    .inA(fp_lsu_qreadyA),
+    .inB(fp_lsu_qreadyB),
+    .inC(fp_lsu_qreadyC),
+    .out(fp_lsu_qready),
+    .tmrErr(fp_lsu_qreadyTmrError)
+  );
+
+  majorityVoter #(.WIDTH(DataWidth)) fp_lsu_pdataVoter (
+    .inA(fp_lsu_pdataA),
+    .inB(fp_lsu_pdataB),
+    .inC(fp_lsu_pdataC),
+    .out(fp_lsu_pdata),
+    .tmrErr(fp_lsu_pdataTmrError)
+  );
+
+  majorityVoter #(.WIDTH(5)) fp_lsu_ptagVoter (
+    .inA(fp_lsu_ptagA),
+    .inB(fp_lsu_ptagB),
+    .inC(fp_lsu_ptagC),
+    .out(fp_lsu_ptag),
+    .tmrErr(fp_lsu_ptagTmrError)
+  );
+
+  majorityVoter #(.WIDTH(1)) fp_lsu_pvalidVoter (
+    .inA(fp_lsu_pvalidA),
+    .inB(fp_lsu_pvalidB),
+    .inC(fp_lsu_pvalidC),
+    .out(fp_lsu_pvalid),
+    .tmrErr(fp_lsu_pvalidTmrError)
+  );
+
+  majorityVoter #(.WIDTH($bits(dreq_t))) fp_lsu_mem_req_oVoter (
+    .inA(fp_lsu_mem_req_oA),
+    .inB(fp_lsu_mem_req_oB),
+    .inC(fp_lsu_mem_req_oC),
+    .out(fp_lsu_mem_req_o),
+    .tmrErr(fp_lsu_mem_req_oTmrError)
+  );
+
+  assign fpu_sequencer_correctable_fault_o = fpr_tmr_fault | fpr_rdataTmrError
+                                          | fp_lsu_qreadyTmrError | fp_lsu_pdataTmrError
+                                          | fp_lsu_ptagTmrError | fp_lsu_pvalidTmrError
+                                          | fp_lsu_mem_req_oTmrError;
 
   // Number of memory operations in the accelerator
   logic [2:0] acc_mem_cnt_q, acc_mem_cnt_d;

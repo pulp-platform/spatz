@@ -19,6 +19,8 @@ module spatz_fault_monitor #(
   // Expected to be one-cycle pulses.
   input  logic [NumVrfUnits-1:0]  vrf_correctable_fault_i,
   input  logic [NumVrfUnits-1:0]  vrf_uncorrectable_fault_i,
+  input  logic [NumCores-1:0]     fpu_sequencer_correctable_fault_i,
+  input  logic [NumCores-1:0]     fpu_sequencer_uncorrectable_fault_i,
 
   input  logic [NumTcdmBanks-1:0] tcdm_rd_correctable_fault_i,
   input  logic [NumTcdmBanks-1:0] tcdm_rd_uncorrectable_fault_i,
@@ -31,6 +33,8 @@ module spatz_fault_monitor #(
   // Per-source counters.
   output logic [NumVrfUnits-1:0][CounterWidth-1:0]  vrf_correctable_count_o,
   output logic [NumVrfUnits-1:0][CounterWidth-1:0]  vrf_uncorrectable_count_o,
+  output logic [NumCores-1:0][CounterWidth-1:0]  fpu_sequencer_correctable_count_o,
+  output logic [NumCores-1:0][CounterWidth-1:0]  fpu_sequencer_uncorrectable_count_o,
 
   output logic [NumTcdmBanks-1:0][CounterWidth-1:0] tcdm_rd_correctable_count_o,
   output logic [NumTcdmBanks-1:0][CounterWidth-1:0] tcdm_rd_uncorrectable_count_o,
@@ -45,6 +49,8 @@ module spatz_fault_monitor #(
     if (!rst_ni) begin
       vrf_correctable_count_o    <= '0;
       vrf_uncorrectable_count_o  <= '0;
+      fpu_sequencer_correctable_count_o   <= '0;
+      fpu_sequencer_uncorrectable_count_o <= '0;
       tcdm_rd_correctable_count_o   <= '0;
       tcdm_rd_uncorrectable_count_o <= '0;
       tcdm_scrub_correctable_count_o   <= '0;
@@ -54,6 +60,8 @@ module spatz_fault_monitor #(
     end else if (clear_i) begin
       vrf_correctable_count_o    <= '0;
       vrf_uncorrectable_count_o  <= '0;
+      fpu_sequencer_correctable_count_o   <= '0;
+      fpu_sequencer_uncorrectable_count_o <= '0;
       tcdm_rd_correctable_count_o   <= '0;
       tcdm_rd_uncorrectable_count_o <= '0;
       tcdm_scrub_correctable_count_o   <= '0;
@@ -71,6 +79,20 @@ module spatz_fault_monitor #(
         if (vrf_uncorrectable_fault_i[i]) begin
           if (!SaturatingCount || !(&vrf_uncorrectable_count_o[i])) begin
             vrf_uncorrectable_count_o[i] <= vrf_uncorrectable_count_o[i] + 1'b1;
+          end
+        end
+      end
+
+      for (int unsigned i = 0; i < NumCores; i++) begin
+        if (fpu_sequencer_correctable_fault_i[i]) begin
+          if (!SaturatingCount || !(&fpu_sequencer_correctable_count_o[i])) begin
+            fpu_sequencer_correctable_count_o[i] <= fpu_sequencer_correctable_count_o[i] + 1'b1;
+          end
+        end
+
+        if (fpu_sequencer_uncorrectable_fault_i[i]) begin
+          if (!SaturatingCount || !(&fpu_sequencer_uncorrectable_count_o[i])) begin
+            fpu_sequencer_uncorrectable_count_o[i] <= fpu_sequencer_uncorrectable_count_o[i] + 1'b1;
           end
         end
       end
