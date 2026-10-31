@@ -125,6 +125,8 @@ module spatz_fpu_sequencer
     .snitch_regfile_tmr_fault_o(fpr_tmr_fault)
   );
 
+  logic fpr_rdataTmrError;
+
   majorityVoter #(.WIDTH(NrReadPorts*FLEN)) fpr_rdataVoter (
     .inA(fpr_rdataA),
     .inB(fpr_rdataB),
@@ -631,6 +633,8 @@ snitch_lsuTMR #(
     .data_rsp_iC   (fp_lsu_mem_rsp_i)
   );
 
+  logic fp_lsu_qreadyTmrError;
+
   majorityVoter #(.WIDTH(1)) fp_lsu_qreadyVoter (
     .inA(fp_lsu_qreadyA),
     .inB(fp_lsu_qreadyB),
@@ -638,6 +642,8 @@ snitch_lsuTMR #(
     .out(fp_lsu_qready),
     .tmrErr(fp_lsu_qreadyTmrError)
   );
+
+  logic fp_lsu_pdataTmrError;
 
   majorityVoter #(.WIDTH(DataWidth)) fp_lsu_pdataVoter (
     .inA(fp_lsu_pdataA),
@@ -647,6 +653,8 @@ snitch_lsuTMR #(
     .tmrErr(fp_lsu_pdataTmrError)
   );
 
+  logic fp_lsu_ptagTmrError;
+
   majorityVoter #(.WIDTH(5)) fp_lsu_ptagVoter (
     .inA(fp_lsu_ptagA),
     .inB(fp_lsu_ptagB),
@@ -655,6 +663,8 @@ snitch_lsuTMR #(
     .tmrErr(fp_lsu_ptagTmrError)
   );
 
+  logic fp_lsu_pvalidTmrError;
+
   majorityVoter #(.WIDTH(1)) fp_lsu_pvalidVoter (
     .inA(fp_lsu_pvalidA),
     .inB(fp_lsu_pvalidB),
@@ -662,6 +672,8 @@ snitch_lsuTMR #(
     .out(fp_lsu_pvalid),
     .tmrErr(fp_lsu_pvalidTmrError)
   );
+
+  logic fp_lsu_mem_req_oTmrError;
 
   majorityVoter #(.WIDTH($bits(dreq_t))) fp_lsu_mem_req_oVoter (
     .inA(fp_lsu_mem_req_oA),
