@@ -20,10 +20,16 @@
 
 #include <stdint.h>
 
+#ifndef MATMUL_C_STRIDE
+#define MATMUL_C_STRIDE N_CHUNK
+#endif
+
 enum {
-    CE = 8,
     TE = 16,
-    CHUNK_SIZE = 4 * TE,
+    // Output leading dimension of this compiled kernel instance.  It is 64
+    // for the original 1x4 workload, but must follow N_CHUNK for wider
+    // application panels (for example VQ-GEMM M96xN128).
+    CHUNK_SIZE = MATMUL_C_STRIDE,
     BLOCK_DIM = 2 * TE,
     ROW_BLOCKS = (M_CHUNK + BLOCK_DIM - 1) / BLOCK_DIM,
     COL_BLOCKS = (N_CHUNK + BLOCK_DIM - 1) / BLOCK_DIM,
@@ -49,4 +55,8 @@ enum {
 };
 
 // A/B are packed FP16 halfwords; K counts pairs, C is FP32.
-void matmul_fp16_fp32(const __fp16 *Atpack, const __fp16 *Bpack, float *C);
+#ifndef MATMUL_API
+#define MATMUL_API
+#endif
+MATMUL_API void matmul_fp16_fp32(const __fp16 *Atpack,
+                                 const __fp16 *Bpack, float *C);

@@ -214,21 +214,12 @@ int main(void) {
     }
 
     const uint32_t cycles = end_cycle - start_cycle;
-    const uint64_t useful_fmas =
-        (uint64_t)matmul_l.M * matmul_l.N * matmul_l.K;
-    const uint64_t peak_fmas = (uint64_t)cycles * CE * CE * 2;
-    const uint32_t utilization_bp =
-        peak_fmas != 0
-            ? (uint32_t)((useful_fmas * 10000u) / peak_fmas)
-            : 0;
 
     printf("\n=== TEW32 FP16xFP16->FP32 matmul %ux%ux%u "
            "(M%uxN%uxK%u chunks, %u buffers, 1 core) ===\n",
            matmul_l.M, matmul_l.N, matmul_l.K,
            M_CHUNK, N_CHUNK, K_CHUNK, L1_BUFFER_COUNT);
     printf("Cycles:    %u\n", cycles);
-    printf("Utilization: %u.%02u%%\n", utilization_bp / 100,
-           utilization_bp % 100);
     printf("MaxAbsErr: 0x%08x\n", float_bits(max_abs));
     printf("Errors:    %u\n", errors);
     printf("Status:    %s\n", errors ? "FAIL" : "PASS");

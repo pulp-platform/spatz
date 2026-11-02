@@ -64,56 +64,56 @@ __attribute__((noinline, aligned(64))) void matmul_fp16_fp32(const __fp16 *Atpac
 
         "vle32.v v0,  (%[a0p])\n" "add %[a0p], %[a0p], %[operand_bytes]\n"
         "vle32.v v16,  (%[b0p])\n" "add %[b0p], %[b0p], %[operand_bytes]\n"
-        "vle32.v v1,  (%[a0p])\n" "add %[a0p], %[a0p], %[operand_bytes]\n"
-        "vle32.v v17,  (%[b0p])\n" "add %[b0p], %[b0p], %[operand_bytes]\n"
         "vle32.v v2,  (%[a0p])\n" "add %[a0p], %[a0p], %[operand_bytes]\n"
         "vle32.v v18,  (%[b0p])\n" "add %[b0p], %[b0p], %[operand_bytes]\n"
+        "vle32.v v4,  (%[a0p])\n" "add %[a0p], %[a0p], %[operand_bytes]\n"
+        "vle32.v v20,  (%[b0p])\n" "add %[b0p], %[b0p], %[operand_bytes]\n"
         "vtzero mt0\n"
 
         // vtfmm mt0
         "vtfmm.tvv mt0, v0, v16\n"  // mt0 += v0*v16
-        "vle32.v v3,  (%[a0p])\n" "add %[a0p], %[a0p], %[operand_bytes]\n"
-        "vle32.v v19,  (%[b0p])\n" "add %[b0p], %[b0p], %[operand_bytes]\n"
-        "vtfmm.tvv mt0, v1, v17\n"  // mt0 += v1*v17
+        "vle32.v v6,  (%[a0p])\n" "add %[a0p], %[a0p], %[operand_bytes]\n"
+        "vle32.v v22,  (%[b0p])\n" "add %[b0p], %[b0p], %[operand_bytes]\n"
         "vtfmm.tvv mt0, v2, v18\n"  // mt0 += v2*v18
-        "vtfmm.tvv mt0, v3, v19\n"  // mt0 += v3*v19
+        "vtfmm.tvv mt0, v4, v20\n"  // mt0 += v4*v20
+        "vtfmm.tvv mt0, v6, v22\n"  // mt0 += v6*v22
         "vle32.v v24,  (%[b1p])\n" "add %[b1p], %[b1p], %[operand_bytes]\n"
-        "vle32.v v25,  (%[b1p])\n" "add %[b1p], %[b1p], %[operand_bytes]\n"
+        "vle32.v v26,  (%[b1p])\n" "add %[b1p], %[b1p], %[operand_bytes]\n"
         "vtzero mt4\n"
 
         // vtfmm mt4
         "vtfmm.tvv mt4, v0, v24\n"  // mt4 += v0*v24
-        "vle32.v v26,  (%[b1p])\n" "add %[b1p], %[b1p], %[operand_bytes]\n"
-        "vle32.v v27,  (%[b1p])\n" "add %[b1p], %[b1p], %[operand_bytes]\n"
-        "vtfmm.tvv mt4, v1, v25\n"  // mt4 += v1*v25
+        "vle32.v v28,  (%[b1p])\n" "add %[b1p], %[b1p], %[operand_bytes]\n"
+        "vle32.v v30,  (%[b1p])\n" "add %[b1p], %[b1p], %[operand_bytes]\n"
         "vtfmm.tvv mt4, v2, v26\n"  // mt4 += v2*v26
-        "vtfmm.tvv mt4, v3, v27\n"  // mt4 += v3*v27
+        "vtfmm.tvv mt4, v4, v28\n"  // mt4 += v4*v28
+        "vtfmm.tvv mt4, v6, v30\n"  // mt4 += v6*v30
         "vle32.v v8,  (%[a1p])\n" "add %[a1p], %[a1p], %[operand_bytes]\n"
-        "vle32.v v9,  (%[a1p])\n" "add %[a1p], %[a1p], %[operand_bytes]\n"
         "vle32.v v10,  (%[a1p])\n" "add %[a1p], %[a1p], %[operand_bytes]\n"
+        "vle32.v v12,  (%[a1p])\n" "add %[a1p], %[a1p], %[operand_bytes]\n"
         "vtzero mt8\n"
 
         // vtfmm mt8
         "vtfmm.tvv mt8, v8,  v16\n"  // mt8 += v8*v16
-        "vle32.v v11,  (%[a1p])\n" "add %[a1p], %[a1p], %[operand_bytes]\n"
-        "vtfmm.tvv mt8, v9,  v17\n"  // mt8 += v9*v17
+        "vle32.v v14,  (%[a1p])\n" "add %[a1p], %[a1p], %[operand_bytes]\n"
         "vtfmm.tvv mt8, v10,  v18\n"  // mt8 += v10*v18
-        "vtfmm.tvv mt8, v11,  v19\n"  // mt8 += v11*v19
+        "vtfmm.tvv mt8, v12,  v20\n"  // mt8 += v12*v20
+        "vtfmm.tvv mt8, v14,  v22\n"  // mt8 += v14*v22
         "vle32.v v0,  (%[a0p])\n" "add %[a0p], %[a0p], %[operand_bytes]\n"
         "vle32.v v16,  (%[b0p])\n" "add %[b0p], %[b0p], %[operand_bytes]\n"
-        "vle32.v v1,  (%[a0p])\n" "add %[a0p], %[a0p], %[operand_bytes]\n"
-        "vle32.v v17,  (%[b0p])\n" "add %[b0p], %[b0p], %[operand_bytes]\n"
+        "vle32.v v2,  (%[a0p])\n" "add %[a0p], %[a0p], %[operand_bytes]\n"
+        "vle32.v v18,  (%[b0p])\n" "add %[b0p], %[b0p], %[operand_bytes]\n"
         "vtzero mt12\n"
 
         // vtfmm mt12
         "vtfmm.tvv mt12, v8,  v24\n"
-        "vle32.v v2,  (%[a0p])\n" "add %[a0p], %[a0p], %[operand_bytes]\n"
-        "vtfmm.tvv mt12, v9,  v25\n"
-        "vle32.v v18,  (%[b0p])\n" "add %[b0p], %[b0p], %[operand_bytes]\n"
-        "vtfmm.tvv mt12, v10, v26\n"
-        "vle32.v v3,  (%[a0p])\n" "add %[a0p], %[a0p], %[operand_bytes]\n"
-        "vtfmm.tvv mt12, v11, v27\n"
-        "vle32.v v19,  (%[b0p])\n" "add %[b0p], %[b0p], %[operand_bytes]\n"
+        "vle32.v v4,  (%[a0p])\n" "add %[a0p], %[a0p], %[operand_bytes]\n"
+        "vtfmm.tvv mt12, v10,  v26\n"
+        "vle32.v v20,  (%[b0p])\n" "add %[b0p], %[b0p], %[operand_bytes]\n"
+        "vtfmm.tvv mt12, v12, v28\n"
+        "vle32.v v6,  (%[a0p])\n" "add %[a0p], %[a0p], %[operand_bytes]\n"
+        "vtfmm.tvv mt12, v14, v30\n"
+        "vle32.v v22,  (%[b0p])\n" "add %[b0p], %[b0p], %[operand_bytes]\n"
 
         "9:\n"
         "mv %[loop], %[middle_k_groups]\n"
@@ -122,43 +122,43 @@ __attribute__((noinline, aligned(64))) void matmul_fp16_fp32(const __fp16 *Atpac
         // vtfmm mt0
         "msetmtype %[mtype], %[vtype]\n" "msettn x0, %[tile_n]\n"
         "vtfmm.tvv mt0, v0, v16\n"  // mt0 += v0*v16
-        "vtfmm.tvv mt0, v1, v17\n"  // mt0 += v1*v17
         "vtfmm.tvv mt0, v2, v18\n"  // mt0 += v2*v18
-        "vtfmm.tvv mt0, v3, v19\n"  // mt0 += v3*v19
+        "vtfmm.tvv mt0, v4, v20\n"  // mt0 += v4*v20
+        "vtfmm.tvv mt0, v6, v22\n"  // mt0 += v6*v22
         "vle32.v v24,  (%[b1p])\n" "add %[b1p], %[b1p], %[operand_bytes]\n"
-        "vle32.v v25,  (%[b1p])\n" "add %[b1p], %[b1p], %[operand_bytes]\n"
         "vle32.v v26,  (%[b1p])\n" "add %[b1p], %[b1p], %[operand_bytes]\n"
+        "vle32.v v28,  (%[b1p])\n" "add %[b1p], %[b1p], %[operand_bytes]\n"
 
         // vtfmm mt4
         "vtfmm.tvv mt4, v0, v24\n"  // mt4 += v0*v24
-        "vle32.v v27,  (%[b1p])\n" "add %[b1p], %[b1p], %[operand_bytes]\n"
-        "vtfmm.tvv mt4, v1, v25\n"  // mt4 += v1*v25
+        "vle32.v v30,  (%[b1p])\n" "add %[b1p], %[b1p], %[operand_bytes]\n"
         "vtfmm.tvv mt4, v2, v26\n"  // mt4 += v2*v26
-        "vtfmm.tvv mt4, v3, v27\n"  // mt4 += v3*v27
+        "vtfmm.tvv mt4, v4, v28\n"  // mt4 += v4*v28
+        "vtfmm.tvv mt4, v6, v30\n"  // mt4 += v6*v30
         "vle32.v v8,  (%[a1p])\n" "add %[a1p], %[a1p], %[operand_bytes]\n"
-        "vle32.v v9,  (%[a1p])\n" "add %[a1p], %[a1p], %[operand_bytes]\n"
         "vle32.v v10,  (%[a1p])\n" "add %[a1p], %[a1p], %[operand_bytes]\n"
+        "vle32.v v12,  (%[a1p])\n" "add %[a1p], %[a1p], %[operand_bytes]\n"
 
         // vtfmm mt8
         "vtfmm.tvv mt8, v8,  v16\n"  // mt8 += v8*v16
-        "vle32.v v11,  (%[a1p])\n" "add %[a1p], %[a1p], %[operand_bytes]\n"
-        "vtfmm.tvv mt8, v9,  v17\n"  // mt8 += v9*v17
+        "vle32.v v14,  (%[a1p])\n" "add %[a1p], %[a1p], %[operand_bytes]\n"
         "vtfmm.tvv mt8, v10,  v18\n"  // mt8 += v10*v18
-        "vtfmm.tvv mt8, v11,  v19\n"  // mt8 += v11*v19
+        "vtfmm.tvv mt8, v12,  v20\n"  // mt8 += v12*v20
+        "vtfmm.tvv mt8, v14,  v22\n"  // mt8 += v14*v22
         "vle32.v v0,  (%[a0p])\n" "add %[a0p], %[a0p], %[operand_bytes]\n"
         "vle32.v v16,  (%[b0p])\n" "add %[b0p], %[b0p], %[operand_bytes]\n"
-        "vle32.v v1,  (%[a0p])\n" "add %[a0p], %[a0p], %[operand_bytes]\n"
-        "vle32.v v17,  (%[b0p])\n" "add %[b0p], %[b0p], %[operand_bytes]\n"
+        "vle32.v v2,  (%[a0p])\n" "add %[a0p], %[a0p], %[operand_bytes]\n"
+        "vle32.v v18,  (%[b0p])\n" "add %[b0p], %[b0p], %[operand_bytes]\n"
 
         // vtfmm mt12
         "vtfmm.tvv mt12, v8,  v24\n"
-        "vle32.v v2,  (%[a0p])\n" "add %[a0p], %[a0p], %[operand_bytes]\n"
-        "vtfmm.tvv mt12, v9,  v25\n"
-        "vle32.v v18,  (%[b0p])\n" "add %[b0p], %[b0p], %[operand_bytes]\n"
-        "vtfmm.tvv mt12, v10, v26\n"
-        "vle32.v v3,  (%[a0p])\n" "add %[a0p], %[a0p], %[operand_bytes]\n"
-        "vtfmm.tvv mt12, v11, v27\n"
-        "vle32.v v19,  (%[b0p])\n" "add %[b0p], %[b0p], %[operand_bytes]\n"
+        "vle32.v v4,  (%[a0p])\n" "add %[a0p], %[a0p], %[operand_bytes]\n"
+        "vtfmm.tvv mt12, v10,  v26\n"
+        "vle32.v v20,  (%[b0p])\n" "add %[b0p], %[b0p], %[operand_bytes]\n"
+        "vtfmm.tvv mt12, v12, v28\n"
+        "vle32.v v6,  (%[a0p])\n" "add %[a0p], %[a0p], %[operand_bytes]\n"
+        "vtfmm.tvv mt12, v14, v30\n"
+        "vle32.v v22,  (%[b0p])\n" "add %[b0p], %[b0p], %[operand_bytes]\n"
         "addi %[loop], %[loop], -1\n"
         "bnez %[loop], 1b\n"
         "3:\n"
@@ -167,76 +167,76 @@ __attribute__((noinline, aligned(64))) void matmul_fp16_fp32(const __fp16 *Atpac
         // vtfmm mt0
         "msetmtype %[mtype], %[vtype]\n" "msettn x0, %[tile_n]\n"
         "vtfmm.tvv mt0, v0, v16\n"  // mt0 += v0*v16
-        "vtfmm.tvv mt0, v1, v17\n"  // mt0 += v1*v17
         "vtfmm.tvv mt0, v2, v18\n"  // mt0 += v2*v18
-        "vtfmm.tvv mt0, v3, v19\n"  // mt0 += v3*v19
+        "vtfmm.tvv mt0, v4, v20\n"  // mt0 += v4*v20
+        "vtfmm.tvv mt0, v6, v22\n"  // mt0 += v6*v22
         "vle32.v v8,  (%[a0p])\n" "add %[a0p], %[a0p], %[operand_bytes]\n"
         "vle32.v v24,  (%[b0p])\n" "add %[b0p], %[b0p], %[operand_bytes]\n"
-        "vle32.v v9,  (%[a0p])\n" "add %[a0p], %[a0p], %[operand_bytes]\n"
-        "vle32.v v25,  (%[b0p])\n" "add %[b0p], %[b0p], %[operand_bytes]\n"
         "vle32.v v10,  (%[a0p])\n" "add %[a0p], %[a0p], %[operand_bytes]\n"
         "vle32.v v26,  (%[b0p])\n" "add %[b0p], %[b0p], %[operand_bytes]\n"
-        "vle32.v v11,  (%[a0p])\n" "add %[a0p], %[a0p], %[operand_bytes]\n"
+        "vle32.v v12,  (%[a0p])\n" "add %[a0p], %[a0p], %[operand_bytes]\n"
+        "vle32.v v28,  (%[b0p])\n" "add %[b0p], %[b0p], %[operand_bytes]\n"
+        "vle32.v v14,  (%[a0p])\n" "add %[a0p], %[a0p], %[operand_bytes]\n"
         "vtfmm.tvv mt0, v8, v24\n"
-        "vle32.v v27,  (%[b0p])\n" "add %[b0p], %[b0p], %[operand_bytes]\n"
-        "vtfmm.tvv mt0, v9, v25\n"
+        "vle32.v v30,  (%[b0p])\n" "add %[b0p], %[b0p], %[operand_bytes]\n"
         "vtfmm.tvv mt0, v10, v26\n"
-        "vtfmm.tvv mt0, v11, v27\n"
+        "vtfmm.tvv mt0, v12, v28\n"
+        "vtfmm.tvv mt0, v14, v30\n"
         "vle32.v v16,  (%[b1p])\n" "add %[b1p], %[b1p], %[operand_bytes]\n"
-        "vle32.v v17,  (%[b1p])\n" "add %[b1p], %[b1p], %[operand_bytes]\n"
+        "vle32.v v18,  (%[b1p])\n" "add %[b1p], %[b1p], %[operand_bytes]\n"
 
         // vtfmm mt4
-        "vle32.v v18,  (%[b1p])\n" "add %[b1p], %[b1p], %[operand_bytes]\n"
+        "vle32.v v20,  (%[b1p])\n" "add %[b1p], %[b1p], %[operand_bytes]\n"
         "vtfmm.tvv mt4, v0, v16\n"
-        "vle32.v v19,  (%[b1p])\n" "add %[b1p], %[b1p], %[operand_bytes]\n"
-        "vtfmm.tvv mt4, v1, v17\n"
+        "vle32.v v22,  (%[b1p])\n" "add %[b1p], %[b1p], %[operand_bytes]\n"
         "vtfmm.tvv mt4, v2, v18\n"
-        "vtfmm.tvv mt4, v3, v19\n"
+        "vtfmm.tvv mt4, v4, v20\n"
+        "vtfmm.tvv mt4, v6, v22\n"
         "vle32.v v24,  (%[b1p])\n" "add %[b1p], %[b1p], %[operand_bytes]\n"
-        "vle32.v v25,  (%[b1p])\n" "add %[b1p], %[b1p], %[operand_bytes]\n"
         "vle32.v v26,  (%[b1p])\n" "add %[b1p], %[b1p], %[operand_bytes]\n"
+        "vle32.v v28,  (%[b1p])\n" "add %[b1p], %[b1p], %[operand_bytes]\n"
         "vtfmm.tvv mt4, v8, v24\n"
-        "vle32.v v27,  (%[b1p])\n" "add %[b1p], %[b1p], %[operand_bytes]\n"
-        "vtfmm.tvv mt4, v9, v25\n"
+        "vle32.v v30,  (%[b1p])\n" "add %[b1p], %[b1p], %[operand_bytes]\n"
         "vtfmm.tvv mt4, v10, v26\n"
-        "vtfmm.tvv mt4, v11, v27\n"
+        "vtfmm.tvv mt4, v12, v28\n"
+        "vtfmm.tvv mt4, v14, v30\n"
         "vle32.v v0,  (%[a1p])\n" "add %[a1p], %[a1p], %[operand_bytes]\n"
-        "vle32.v v1,  (%[a1p])\n" "add %[a1p], %[a1p], %[operand_bytes]\n"
+        "vle32.v v2,  (%[a1p])\n" "add %[a1p], %[a1p], %[operand_bytes]\n"
 
         // vtfmm mt12
-        "vle32.v v2,  (%[a1p])\n" "add %[a1p], %[a1p], %[operand_bytes]\n"
+        "vle32.v v4,  (%[a1p])\n" "add %[a1p], %[a1p], %[operand_bytes]\n"
         "vtfmm.tvv mt12, v0,  v16\n"
-        "vle32.v v3,  (%[a1p])\n" "add %[a1p], %[a1p], %[operand_bytes]\n"
-        "vtfmm.tvv mt12, v1,  v17\n"
+        "vle32.v v6,  (%[a1p])\n" "add %[a1p], %[a1p], %[operand_bytes]\n"
         "vtfmm.tvv mt12, v2,  v18\n"
-        "vtfmm.tvv mt12, v3,  v19\n"
+        "vtfmm.tvv mt12, v4,  v20\n"
+        "vtfmm.tvv mt12, v6,  v22\n"
         "vle32.v v8,  (%[a1p])\n" "add %[a1p], %[a1p], %[operand_bytes]\n"
-        "vle32.v v9,  (%[a1p])\n" "add %[a1p], %[a1p], %[operand_bytes]\n"
         "vle32.v v10,  (%[a1p])\n" "add %[a1p], %[a1p], %[operand_bytes]\n"
+        "vle32.v v12,  (%[a1p])\n" "add %[a1p], %[a1p], %[operand_bytes]\n"
         "vtfmm.tvv mt12, v8,  v24\n"
-        "vle32.v v11,  (%[a1p])\n" "add %[a1p], %[a1p], %[operand_bytes]\n"
-        "vtfmm.tvv mt12, v9,  v25\n"
+        "vle32.v v14,  (%[a1p])\n" "add %[a1p], %[a1p], %[operand_bytes]\n"
         "vtfmm.tvv mt12, v10,  v26\n"
-        "vtfmm.tvv mt12, v11,  v27\n"
+        "vtfmm.tvv mt12, v12,  v28\n"
+        "vtfmm.tvv mt12, v14,  v30\n"
         "addi %[b0p], %[b0p], -512\n"
         "vle32.v v16,  (%[b0p])\n" "add %[b0p], %[b0p], %[operand_bytes]\n"
-        "vle32.v v17,  (%[b0p])\n" "add %[b0p], %[b0p], %[operand_bytes]\n"
+        "vle32.v v18,  (%[b0p])\n" "add %[b0p], %[b0p], %[operand_bytes]\n"
 
         // vtfmm mt8
-        "vle32.v v18,  (%[b0p])\n" "add %[b0p], %[b0p], %[operand_bytes]\n"
+        "vle32.v v20,  (%[b0p])\n" "add %[b0p], %[b0p], %[operand_bytes]\n"
         "vtfmm.tvv mt8, v0,  v16\n"
-        "vle32.v v19,  (%[b0p])\n" "add %[b0p], %[b0p], %[operand_bytes]\n"
-        "vtfmm.tvv mt8, v1,  v17\n"
+        "vle32.v v22,  (%[b0p])\n" "add %[b0p], %[b0p], %[operand_bytes]\n"
         "vtfmm.tvv mt8, v2,  v18\n"
-        "vtfmm.tvv mt8, v3,  v19\n"
+        "vtfmm.tvv mt8, v4,  v20\n"
+        "vtfmm.tvv mt8, v6,  v22\n"
         "vle32.v v24,  (%[b0p])\n" "add %[b0p], %[b0p], %[operand_bytes]\n"
-        "vle32.v v25,  (%[b0p])\n" "add %[b0p], %[b0p], %[operand_bytes]\n"
         "vle32.v v26,  (%[b0p])\n" "add %[b0p], %[b0p], %[operand_bytes]\n"
+        "vle32.v v28,  (%[b0p])\n" "add %[b0p], %[b0p], %[operand_bytes]\n"
         "vtfmm.tvv mt8, v8,  v24\n"
-        "vle32.v v27,  (%[b0p])\n" "add %[b0p], %[b0p], %[operand_bytes]\n"
-        "vtfmm.tvv mt8, v9,  v25\n"
+        "vle32.v v30,  (%[b0p])\n" "add %[b0p], %[b0p], %[operand_bytes]\n"
         "vtfmm.tvv mt8, v10,  v26\n"
-        "vtfmm.tvv mt8, v11,  v27\n"
+        "vtfmm.tvv mt8, v12,  v28\n"
+        "vtfmm.tvv mt8, v14,  v30\n"
 
         // Store the completed 32x32 block only after all K-groups finish.
         // The tile order is mt0, mt4, mt12, mt8.

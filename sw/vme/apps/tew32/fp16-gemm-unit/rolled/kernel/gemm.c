@@ -17,6 +17,7 @@
 // Author: Pei-Yu Lin, ETH Zürich
 
 #include "gemm.h"
+#include "gemm_macro.h"
 // FP16-to-FP32 GEMM with interleaved bias loads; variants with and without cross-block overlap.
 
 __attribute__((noinline, aligned(64))) void gemm_fp16_fp32_unit_vtle_no_crossblock(const __fp16 *Atpack, const __fp16 *Bpack, float *C, uint32_t M, uint32_t N, uint32_t K)
@@ -886,42 +887,9 @@ __attribute__((noinline, aligned(64))) void gemm_fp16_fp32_unit_vle(
       // Use the already-advanced A pointer as the loop induction variable.
       const uintptr_t a_middle_end = a0p + (K_CHUNK / 8 - 1) * operand_group_bytes;
       while (a0p != a_middle_end) {
-      asm volatile("vtfmm.tvv mt0, v0, v16" : : : "memory");
-      asm volatile("vle32.v v2, (%0)\naddi %0, %0, %1" : "+r"(a0p) : "i"(operand_vector_bytes) : "v2", "memory");
-      asm volatile("vtfmm.tvv mt0, v1, v17" : : : "memory");
-      asm volatile("vle32.v v18, (%0)\naddi %0, %0, %1" : "+r"(b0p) : "i"(operand_vector_bytes) : "v18", "memory");
-      asm volatile("vle32.v v3, (%0)\naddi %0, %0, %1" : "+r"(a0p) : "i"(operand_vector_bytes) : "v3", "memory");
-      asm volatile("vtfmm.tvv mt0, v2, v18" : : : "memory");
-      asm volatile("vle32.v v19, (%0)\naddi %0, %0, %1" : "+r"(b0p) : "i"(operand_vector_bytes) : "v19", "memory");
-      asm volatile("vtfmm.tvv mt0, v3, v19" : : : "memory");
-      asm volatile("vle32.v v24, (%0)\naddi %0, %0, %1" : "+r"(b1p) : "i"(operand_vector_bytes) : "v24", "memory");
-      asm volatile("vle32.v v25, (%0)\naddi %0, %0, %1" : "+r"(b1p) : "i"(operand_vector_bytes) : "v25", "memory");
-      asm volatile("vtfmm.tvv mt4, v0, v24" : : : "memory");
-      asm volatile("vle32.v v26, (%0)\naddi %0, %0, %1" : "+r"(b1p) : "i"(operand_vector_bytes) : "v26", "memory");
-      asm volatile("vtfmm.tvv mt4, v1, v25" : : : "memory");
-      asm volatile("vle32.v v27, (%0)\naddi %0, %0, %1" : "+r"(b1p) : "i"(operand_vector_bytes) : "v27", "memory");
-      asm volatile("vtfmm.tvv mt4, v2, v26" : : : "memory");
-      asm volatile("vtfmm.tvv mt4, v3, v27" : : : "memory");
-      asm volatile("vsetvli x0, %0, e32, m4, ta, ma" : : "r"(group_vl) : "memory");
-      asm volatile("vle32.v v16, (%0)" : : "r"(b2p) : "v16", "v17", "v18", "v19", "memory"); b2p += operand_group_bytes;
-      asm volatile("vle32.v v24, (%0)" : : "r"(b3p) : "v24", "v25", "v26", "v27", "memory"); b3p += operand_group_bytes;
-      asm volatile("msetmtype %0, %1\n" "msettn x0, %2" : : "r"(mtype), "r"(vtype), "r"(tile_vl) : "memory");
-      asm volatile("vtfmm.tvv mt8, v0, v16" : : : "memory");
-      asm volatile("vtfmm.tvv mt8, v1, v17" : : : "memory");
-      asm volatile("vtfmm.tvv mt8, v2, v18" : : : "memory");
-      asm volatile("vle32.v v16, (%0)\naddi %0, %0, %1" : "+r"(b0p) : "i"(operand_vector_bytes) : "v16", "memory");
-      asm volatile("vtfmm.tvv mt8, v3, v19" : : : "memory");
-      asm volatile("vle32.v v17, (%0)\naddi %0, %0, %1" : "+r"(b0p) : "i"(operand_vector_bytes) : "v17", "memory");
-      asm volatile("vtfmm.tvv mt12, v0, v24" : : : "memory");
-      asm volatile("vtfmm.tvv mt12, v1, v25" : : : "memory");
-      asm volatile("vle32.v v0, (%0)\naddi %0, %0, %1" : "+r"(a0p) : "i"(operand_vector_bytes) : "v0", "memory");
-      asm volatile("vtfmm.tvv mt12, v2, v26" : : : "memory");
-      asm volatile("vle32.v v1, (%0)\naddi %0, %0, %1" : "+r"(a0p) : "i"(operand_vector_bytes) : "v1", "memory");
-      asm volatile("vtfmm.tvv mt12, v3, v27" : : : "memory");
-      // Keep the pointer comparison; otherwise Clang adds a separate countdown.
-      asm volatile("" : "+r"(a0p));
+        MIDDLE_K_1x4_MATMUL(a0p, a_middle_end);
+        asm volatile("" : "+r"(a0p)); // Preserve pointer comparison as induction.
       }
-
       // Final K group: move each completed tile row to the vector registers.
       asm volatile("vtfmm.tvv mt0, v0, v16" : : : "memory");
       asm volatile("vle32.v v2, (%0)\naddi %0, %0, %1" : "+r"(a0p) : "i"(operand_vector_bytes) : "v2", "memory");

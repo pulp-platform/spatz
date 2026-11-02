@@ -23,7 +23,11 @@
 // VL=64 and fills four consecutive vector registers; msetmtype then restores
 // the unchanged e16/tk=2/twiden=2 matrix configuration.
 
-__attribute__((noinline, aligned(64))) void matmul_fp16_fp32(const __fp16 *Atpack, const __fp16 *Bpack, float *C)
+#ifndef MATMUL_ATTR
+#define MATMUL_ATTR __attribute__((noinline, aligned(64)))
+#endif
+MATMUL_ATTR void matmul_fp16_fp32(const __fp16 *Atpack,
+                                  const __fp16 *Bpack, float *C)
 {
     uintptr_t a0p = (uintptr_t)Atpack;
     uintptr_t a1p = (uintptr_t)(Atpack + TILE_STRIDE);

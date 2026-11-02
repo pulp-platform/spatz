@@ -7,7 +7,6 @@
 #include <stdint.h>
 
 enum {
-    CE = 8,
     TE = 16,
     CHUNK_SIZE = 4 * TE,
     BLOCK_DIM = 2 * TE,

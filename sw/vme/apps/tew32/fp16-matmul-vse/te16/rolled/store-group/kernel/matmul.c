@@ -52,9 +52,13 @@ __attribute__((noinline, aligned(64))) void matmul_fp16_fp32(
 
       asm volatile("msetmtype %0, %1\n" "msettn x0, %2" : : "r"(mtype), "r"(vtype), "r"(tile_vl) : "memory");
       asm volatile("vle32.v v0, (%0)\naddi %0, %0, %1" : "+r"(a0p) : "i"(operand_vector_bytes) : "v0", "memory");
+      asm volatile("vsetvli x0, %0, e32, m1, ta, ma" : : "r"(tile_vl) : "memory");
       asm volatile("vle32.v v1, (%0)\naddi %0, %0, %1" : "+r"(a0p) : "i"(operand_vector_bytes) : "v1", "memory");
+      asm volatile("msetmtype %0, %1\n" "msettn x0, %2" : : "r"(mtype), "r"(vtype), "r"(tile_vl) : "memory");
       asm volatile("vle32.v v16, (%0)\naddi %0, %0, %1" : "+r"(b0p) : "i"(operand_vector_bytes) : "v16", "memory");
+      asm volatile("vsetvli x0, %0, e32, m1, ta, ma" : : "r"(tile_vl) : "memory");
       asm volatile("vle32.v v17, (%0)\naddi %0, %0, %1" : "+r"(b0p) : "i"(operand_vector_bytes) : "v17", "memory");
+      asm volatile("msetmtype %0, %1\n" "msettn x0, %2" : : "r"(mtype), "r"(vtype), "r"(tile_vl) : "memory");
       asm volatile("vtzero mt0" : : : "memory");
       asm volatile("vtzero mt4" : : : "memory");
       asm volatile("vtzero mt8" : : : "memory");
@@ -65,10 +69,14 @@ __attribute__((noinline, aligned(64))) void matmul_fp16_fp32(
       while (a0p != a_middle_end) {
       asm volatile("vtfmm.tvv mt0, v0, v16" : : : "memory");
       asm volatile("vle32.v v2, (%0)\naddi %0, %0, %1" : "+r"(a0p) : "i"(operand_vector_bytes) : "v2", "memory");
+      asm volatile("vsetvli x0, %0, e32, m1, ta, ma" : : "r"(tile_vl) : "memory");
       asm volatile("vle32.v v3, (%0)\naddi %0, %0, %1" : "+r"(a0p) : "i"(operand_vector_bytes) : "v3", "memory");
+      asm volatile("msetmtype %0, %1\n" "msettn x0, %2" : : "r"(mtype), "r"(vtype), "r"(tile_vl) : "memory");
       asm volatile("vtfmm.tvv mt0, v1, v17" : : : "memory");
       asm volatile("vle32.v v18, (%0)\naddi %0, %0, %1" : "+r"(b0p) : "i"(operand_vector_bytes) : "v18", "memory");
+      asm volatile("vsetvli x0, %0, e32, m1, ta, ma" : : "r"(tile_vl) : "memory");
       asm volatile("vle32.v v19, (%0)\naddi %0, %0, %1" : "+r"(b0p) : "i"(operand_vector_bytes) : "v19", "memory");
+      asm volatile("msetmtype %0, %1\n" "msettn x0, %2" : : "r"(mtype), "r"(vtype), "r"(tile_vl) : "memory");
       asm volatile("vtfmm.tvv mt0, v2, v18" : : : "memory");
       asm volatile("vsetvli x0, %0, e32, m4, ta, ma" : : "r"(group_vl) : "memory");
       asm volatile("vle32.v v24, (%0)" : : "r"(b1p) : "v24", "v25", "v26", "v27", "memory"); b1p += operand_group_bytes;
@@ -89,12 +97,16 @@ __attribute__((noinline, aligned(64))) void matmul_fp16_fp32(
       asm volatile("vtfmm.tvv mt8, v2, v18" : : : "memory");
       asm volatile("vtfmm.tvv mt8, v3, v19" : : : "memory");
       asm volatile("vle32.v v16, (%0)\naddi %0, %0, %1" : "+r"(b0p) : "i"(operand_vector_bytes) : "v16", "memory");
+      asm volatile("vsetvli x0, %0, e32, m1, ta, ma" : : "r"(tile_vl) : "memory");
       asm volatile("vle32.v v17, (%0)\naddi %0, %0, %1" : "+r"(b0p) : "i"(operand_vector_bytes) : "v17", "memory");
+      asm volatile("msetmtype %0, %1\n" "msettn x0, %2" : : "r"(mtype), "r"(vtype), "r"(tile_vl) : "memory");
       asm volatile("vtfmm.tvv mt12, v0, v24" : : : "memory");
       asm volatile("vtfmm.tvv mt12, v1, v25" : : : "memory");
       asm volatile("vtfmm.tvv mt12, v2, v26" : : : "memory");
       asm volatile("vle32.v v0, (%0)\naddi %0, %0, %1" : "+r"(a0p) : "i"(operand_vector_bytes) : "v0", "memory");
+      asm volatile("vsetvli x0, %0, e32, m1, ta, ma" : : "r"(tile_vl) : "memory");
       asm volatile("vle32.v v1, (%0)\naddi %0, %0, %1" : "+r"(a0p) : "i"(operand_vector_bytes) : "v1", "memory");
+      asm volatile("msetmtype %0, %1\n" "msettn x0, %2" : : "r"(mtype), "r"(vtype), "r"(tile_vl) : "memory");
       asm volatile("vtfmm.tvv mt12, v3, v27" : : : "memory");
       // Keep the pointer comparison; otherwise Clang adds a separate countdown.
       asm volatile("" : "+r"(a0p));
@@ -103,10 +115,14 @@ __attribute__((noinline, aligned(64))) void matmul_fp16_fp32(
       // Final K group: move each completed tile row to the vector registers.
       asm volatile("vtfmm.tvv mt0, v0, v16" : : : "memory");
       asm volatile("vle32.v v2, (%0)\naddi %0, %0, %1" : "+r"(a0p) : "i"(operand_vector_bytes) : "v2", "memory");
+      asm volatile("vsetvli x0, %0, e32, m1, ta, ma" : : "r"(tile_vl) : "memory");
       asm volatile("vle32.v v3, (%0)\naddi %0, %0, %1" : "+r"(a0p) : "i"(operand_vector_bytes) : "v3", "memory");
+      asm volatile("msetmtype %0, %1\n" "msettn x0, %2" : : "r"(mtype), "r"(vtype), "r"(tile_vl) : "memory");
       asm volatile("vtfmm.tvv mt0, v1, v17" : : : "memory");
       asm volatile("vle32.v v18, (%0)\naddi %0, %0, %1" : "+r"(b0p) : "i"(operand_vector_bytes) : "v18", "memory");
+      asm volatile("vsetvli x0, %0, e32, m1, ta, ma" : : "r"(tile_vl) : "memory");
       asm volatile("vle32.v v19, (%0)\naddi %0, %0, %1" : "+r"(b0p) : "i"(operand_vector_bytes) : "v19", "memory");
+      asm volatile("msetmtype %0, %1\n" "msettn x0, %2" : : "r"(mtype), "r"(vtype), "r"(tile_vl) : "memory");
       asm volatile("vtfmm.tvv mt0, v2, v18" : : : "memory");
       asm volatile("vsetvli x0, %0, e32, m4, ta, ma" : : "r"(group_vl) : "memory");
       asm volatile("vle32.v v24, (%0)" : : "r"(b1p) : "v24", "v25", "v26", "v27", "memory"); b1p += operand_group_bytes;

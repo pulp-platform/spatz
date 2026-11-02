@@ -88,18 +88,12 @@ int main(void) {
             printf(" (%u errors)\n", row_errors);
     }
 
-    const uint64_t useful_macs =
-        (uint64_t)gemm_l.M * gemm_l.N * gemm_l.K;
-    const uint64_t peak_macs = (uint64_t)cycles * CE * CE * 2;
-    const uint32_t utilization =
-        peak_macs ? useful_macs * 10000 / peak_macs : 0;
     printf("\n=== TEW32 FP16 alpha-beta GEMM M%u_N%u_K%u "
            "(TE=16, 1 core) ===\n",
            gemm_l.M, gemm_l.N, gemm_l.K);
     printf("Alpha: 0x%08x\nBeta: 0x%08x\n",
            float_bits(*alpha), float_bits(*beta));
-    printf("Cycles: %u\nUtilization: %u.%02u%%\n",
-           cycles, utilization / 100, utilization % 100);
+    printf("Cycles: %u\n", cycles);
     printf("MaxAbsErr: 0x%08x\nErrors: %u\nStatus: %s\n",
            float_bits(max_abs), errors, errors ? "FAIL" : "PASS");
     return errors ? 1 : 0;
