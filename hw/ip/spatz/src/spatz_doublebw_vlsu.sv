@@ -1034,7 +1034,7 @@ module spatz_doublebw_vlsu
       .ready_i(vrf_req_ready_q[intf]),
       .data_corrector_o ( ),
       .data_corrected_i ( '0 ),
-      .err_o ( vrf_req_register_fault[intf] ),
+      .err_o ( vrf_req_register_fault[intf] )
     );
 
     `FF(coalesce_q[intf], coalesce_d[intf], '0)
