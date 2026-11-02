@@ -602,6 +602,8 @@ void TEST_CASE9(void) {
              0xbf80, 0x40b0, 0xbf80, 0x4104, 0x4080, 0x0000, 0x4150, 0x4000,
              0x4000);
   #endif
+};
+
 void TEST_CASE10(void) {
   volatile uint16_t LO[32], HI[32];
   for (int i = 0; i < 32; i += 2) {
