@@ -9,70 +9,88 @@
 #ifndef __VECTOR_MATRIX_MACROS_H__
 #define __VECTOR_MATRIX_MACROS_H__
 
-#include "dataset.h"
-#include "encoding.h"
 #include <stdint.h>
-#include <string.h>
 
-// -------------------------------------------------------
-// TSS (Tile Subset Specifier) — VME Spec §1.5
-//   bits[30:27] = tile index  (0–15)
-//   bits[26:24] = pattern     (0 = row, 1 = col)
-//   bits[23:0]  = row / col index
-// -------------------------------------------------------
-#define TSS_ROW(tile, row) \
+// Tile subset specifier: tile[30:27], pattern[26:24], index[23:0].
+#define TSS(tile, pattern, index) \
     (((uintptr_t)((tile) & 0xF) << 27) | \
-     (uintptr_t)((row)  & 0xFFFFFF))
+     ((uintptr_t)((pattern) & 0x7) << 24) | \
+     (uintptr_t)((index) & 0xFFFFFF))
+#define TSS_ROW(tile, row) TSS(tile, 0, row)
+#define TSS_COL(tile, col) TSS(tile, 1, col)
 
-#define TSS_COL(tile, col) \
-    (((uintptr_t)((tile) & 0xF) << 27) | \
-     ((uintptr_t)1 << 24)               | \
-     (uintptr_t)((col)  & 0xFFFFFF))
-
-// -------------------------------------------------------
-// mtype CSR (0xC23) field extractors
-// -------------------------------------------------------
+// mtype and vtype constructors and field extractors.
+#define MTYPE(mtwiden, tk, tm) \
+    ((uintptr_t)(((mtwiden) & 0x3) | (((tk) & 0x7) << 5) | \
+                 (((tm) & 0x3FFF) << 10)))
+#define VTYPE(vsew, vlmul, vta, vma, altfmt) \
+    ((uintptr_t)(((vlmul) & 0x7) | (((vsew) & 0x7) << 3) | \
+                 (((vta) & 0x1) << 6) | (((vma) & 0x1) << 7) | \
+                 (((altfmt) & 0x1) << 8)))
 #define MTYPE_MTWIDEN(mtype) (((mtype) >>  0) & 0x3)
 #define MTYPE_TK(mtype)      (((mtype) >>  5) & 0x7)
 #define MTYPE_TM(mtype)      (((mtype) >> 10) & 0x3FFF)
 
-#define KMAX 4
+// Zvt v0.4 KMAX dictionary, keyed by SEW and TWIDEN (not their encodings).
+#define KMAX_8_1 4
+#define KMAX_8_2 4
+#define KMAX_8_4 4
+#define KMAX_16_1 2
+#define KMAX_16_2 2
+#define KMAX_16_4 2
+#define KMAX_32_1 1
+#define KMAX_32_2 1
+#define KMAX_64_1 1
+#define KMAX_LOOKUP(sew, twiden) KMAX_##sew##_##twiden
+#define KMAX(sew, twiden) KMAX_LOOKUP(sew, twiden)
 
-// -------------------------------------------------------
-// Expected mtype / vtype values (for msetmtype* tests)
-//
-//   mtype = uimm5 & 0x1F
-//   vtype = (vsew << 3) | (mtwiden != 0 ? 0xC0 : 0x00)
-//           where vsew = uimm3, mtwiden = uimm5 & 0x3
-// -------------------------------------------------------
-#define MTYPE_EXP(uimm5) \
-    ((uintptr_t)((uimm5) & 0x1Fu))
+#ifdef VME_DIMENSION_TEST
+// Independent configuration model for the dimension ISA tests.
+// The current Spatz package sets TileEdge to 8 * 2 elements.
+#define VME_TEST_TE 16
+typedef struct {
+    unsigned sew, twiden, vsew, mtwiden, kmax;
+} vme_test_config_t;
 
-#define VTYPE_EXP(uimm5, uimm3) \
-    ((uintptr_t)(((uimm3) & 0x7u) << 3) | \
-     (((uimm5) & 0x3u) ? (uintptr_t)0xC0u : (uintptr_t)0u))
+#define VME_CONFIG(sew, twiden, vsew, mtwiden) \
+    {sew, twiden, vsew, mtwiden, KMAX(sew, twiden)}
+static const vme_test_config_t vme_test_configs[] = {
+    VME_CONFIG(8, 1, 0, 1), VME_CONFIG(8, 2, 0, 2),
+    VME_CONFIG(8, 4, 0, 3), VME_CONFIG(16, 1, 1, 1),
+    VME_CONFIG(16, 2, 1, 2), VME_CONFIG(32, 1, 2, 1),
+};
 
-#define VME_VTYPE(vsew_enc) \
-    ((uintptr_t)(((vsew_enc) & 0x7u) << 3) | 0xC0u)
+static inline uintptr_t vme_test_min(uintptr_t a, uintptr_t b) {
+    return a < b ? a : b;
+}
 
-#define MTYPE_VAL(mtwiden) \
-    ((uintptr_t)((mtwiden) & 0x3u))
+static inline uintptr_t vme_test_lmul(const vme_test_config_t *cfg,
+                                      uintptr_t vlenb) {
+    uintptr_t ete = cfg->sew * cfg->twiden < 64 ? VME_TEST_TE : VME_TEST_TE / 2;
+    uintptr_t eve = vlenb * 8 / cfg->sew;
+    return vme_test_min((ete + eve - 1) / eve,
+                       vme_test_min(8 / cfg->kmax, 8 / cfg->twiden));
+}
 
-// -------------------------------------------------------
-// enable_vme — set mstatus.MS = Initial (01b)
-//
-//   mstatus.MS = bits[30:29]  (MSTATUS_MS = 0x60000000)
-//   Initial state = 01b → set bit 29 only
-//   Same pattern as enable_vec() / enable_fp().
-// -------------------------------------------------------
-#ifndef MSTATUS_MS
-#define MSTATUS_MS 0x60000000UL
+static inline uintptr_t vme_test_capacity(const vme_test_config_t *cfg,
+                                          uintptr_t vlenb) {
+    uintptr_t ete = cfg->sew * cfg->twiden < 64 ? VME_TEST_TE : VME_TEST_TE / 2;
+    return vme_test_min(ete, vme_test_lmul(cfg, vlenb) * (vlenb * 8 / cfg->sew));
+}
+
+static inline uintptr_t vme_test_vtype(const vme_test_config_t *cfg,
+                                       uintptr_t vlenb) {
+    uintptr_t lmul = vme_test_lmul(cfg, vlenb), enc = 0;
+    while (lmul > 1) { lmul >>= 1; ++enc; }
+    return VTYPE(cfg->vsew, enc, 1, 1, 0);
+}
+
+// Seed all dimensions without relying on another dimension-setting instruction.
+static inline void vme_test_setup(const vme_test_config_t *cfg) {
+    uintptr_t mtype = MTYPE(cfg->mtwiden, 1, 1);
+    uintptr_t vtype = VTYPE(cfg->vsew, 0, 0, 0, 0);
+    asm volatile("msetmtype %0, %1" :: "r"(mtype), "r"(vtype) : "memory");
+}
 #endif
-
-#define enable_vme() \
-    do { \
-        asm volatile("csrs mstatus, %[bits]" \
-                     :: [bits]"r"(MSTATUS_MS & (MSTATUS_MS >> 1))); \
-    } while (0)
 
 #endif // __VECTOR_MATRIX_MACROS_H__

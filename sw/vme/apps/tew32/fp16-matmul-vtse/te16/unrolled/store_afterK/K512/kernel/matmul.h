@@ -25,7 +25,28 @@ enum {
     TE = 16,
     CHUNK_SIZE = 4 * TE,
     BLOCK_DIM = 2 * TE,
+    ROW_BLOCKS = (M_CHUNK + BLOCK_DIM - 1) / BLOCK_DIM,
+    COL_BLOCKS = (N_CHUNK + BLOCK_DIM - 1) / BLOCK_DIM,
+    TILE_STRIDE = TE * K_CHUNK,
+};
+
+enum {
+    TILE_INPUTS = TE * (K_CHUNK / 2),
+    TILE_BYTES = TILE_INPUTS * sizeof(uint32_t),
+    A_TILES = M_CHUNK / TE,
+    B_TILES = N_CHUNK / TE,
+    A_BYTES = A_TILES * TILE_BYTES,
+    B_BYTES = B_TILES * TILE_BYTES,
+    C_ELEMENTS = M_CHUNK * N_CHUNK,
+    C_BYTES = C_ELEMENTS * sizeof(float),
+    A_OFFSET = 0,
+    B_OFFSET = A_OFFSET + A_BYTES,
+    C_OFFSET = B_OFFSET + B_BYTES,
+    BUFFER_BYTES = C_OFFSET + C_BYTES,
+    L1_BUFFER_COUNT = MATMUL_BUFFER_COUNT,
+    L1_BUFFER_STRIDE = SNRT_TCDM_SIZE / L1_BUFFER_COUNT,
+    L1_BYTES = (L1_BUFFER_COUNT - 1) * L1_BUFFER_STRIDE + BUFFER_BYTES,
 };
 
 // A/B are packed FP16 halfwords; K counts original FP16 rows, C is FP32.
-void matmul_fp16_fp32(const __fp16 *Atpack, const __fp16 *Bpack, float *C, uint32_t M, uint32_t N, uint32_t K);
+void matmul_fp16_fp32(const __fp16 *Atpack, const __fp16 *Bpack, float *C);

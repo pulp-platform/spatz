@@ -134,7 +134,9 @@ module spatz_controller
 
 
   always_comb begin : proc_vcsr
-    automatic logic [$clog2(MAXVL):0] vlmax = 0;
+    logic [$clog2(MAXVL):0] vlmax;
+
+    vlmax = '0;
 
     vstart_d   = vstart_q;
     vl_d       = vl_q;
@@ -231,6 +233,8 @@ module spatz_controller
             int unsigned eve;
             int unsigned lmul_req, lmul_k, lmul_widen;
 
+            // Both configuration forms supply altfmt through the decoded vtype.
+            // Keep it while deriving matrix LMUL and the agnostic policy bits.
             vtype_d = spatz_req.vtype;
 
             invalid_vtype =
@@ -244,8 +248,8 @@ module spatz_controller
               twiden = 1 << (spatz_req.mtype.mtwiden - 1);
               tewb = (1 << int'(vtype_d.vsew)) * twiden;
 
-              // SEW8 is valid for byte tile storage/moves, not FP8 arithmetic or widening yet.
-              if (((vtype_d.vsew == EW_8) && (spatz_req.mtype.mtwiden != 2'b01)) || (tewb > AccElemBytes)) begin
+              // The configured tile element must fit in one accumulator element.
+              if (tewb > AccElemBytes) begin
                 invalid_vtype = 1'b1;
               end else begin
                 unique case (vtype_d.vsew)
@@ -522,6 +526,20 @@ module spatz_controller
     logic valid;
   } [NRVREG-1:0] table_t;
   typedef logic [$clog2(NRVREG):0] vreg_group_idx_t;
+  typedef struct packed {
+    logic       valid;
+    logic       aligned;
+    logic [3:0] regs;
+  } emul_group_t;
+  typedef struct packed {
+    vew_e        data_eew;
+    emul_group_t data;
+    emul_group_t index;
+  } memory_emul_t;
+
+  memory_emul_t request_memory_emul, issue_memory_emul;
+  logic signed [4:0] request_data_emul_exp, request_index_emul_exp;
+  logic signed [4:0] issue_data_emul_exp, issue_index_emul_exp;
   table_t read_table_d, read_table_q, write_table_d, write_table_q;
 
   `FF(read_table_q, read_table_d, '{default: '0})
@@ -598,7 +616,90 @@ module spatz_controller
   int unsigned       sb_vs_row_stride;
   int unsigned       sb_vs_rows;
   logic [3:0]        vreg_group_count;
+  logic [3:0]        mem_data_group_count;
+  logic [3:0]        mem_index_group_count;
   logic [3:0]        sb_vs_group_count;
+
+  // Decode EMUL metadata without an automatic function.  The controller owns
+  // the architectural footprint because issue legality and the centralized
+  // scoreboard both need it before a request reaches the VLSU.
+  always_comb begin : decode_memory_emul
+    request_memory_emul = '0;
+    issue_memory_emul = '0;
+
+    request_memory_emul.data_eew = (spatz_req.op inside {VLXE, VSXE}) ?
+        spatz_req.vtype.vsew : spatz_req.op_mem.ew;
+    issue_memory_emul.data_eew = (decoder_rsp.spatz_req.op inside {VLXE, VSXE}) ?
+        vtype_q.vsew : decoder_rsp.spatz_req.op_mem.ew;
+
+    request_data_emul_exp = $signed(spatz_req.vtype.vlmul) +
+        $signed({1'b0, request_memory_emul.data_eew}) -
+        $signed({1'b0, spatz_req.vtype.vsew});
+    request_index_emul_exp = $signed(spatz_req.vtype.vlmul) +
+        $signed({1'b0, spatz_req.op_mem.ew}) -
+        $signed({1'b0, spatz_req.vtype.vsew});
+    issue_data_emul_exp = $signed(vtype_q.vlmul) +
+        $signed({1'b0, issue_memory_emul.data_eew}) -
+        $signed({1'b0, vtype_q.vsew});
+    issue_index_emul_exp = $signed(vtype_q.vlmul) +
+        $signed({1'b0, decoder_rsp.spatz_req.op_mem.ew}) -
+        $signed({1'b0, vtype_q.vsew});
+
+    unique case (request_data_emul_exp)
+      -5'sd3, -5'sd2, -5'sd1, 5'sd0: request_memory_emul.data.regs = 4'd1;
+      5'sd1: request_memory_emul.data.regs = 4'd2;
+      5'sd2: request_memory_emul.data.regs = 4'd4;
+      5'sd3: request_memory_emul.data.regs = 4'd8;
+      default: request_memory_emul.data.regs = 4'd0;
+    endcase
+    unique case (request_index_emul_exp)
+      -5'sd3, -5'sd2, -5'sd1, 5'sd0: request_memory_emul.index.regs = 4'd1;
+      5'sd1: request_memory_emul.index.regs = 4'd2;
+      5'sd2: request_memory_emul.index.regs = 4'd4;
+      5'sd3: request_memory_emul.index.regs = 4'd8;
+      default: request_memory_emul.index.regs = 4'd0;
+    endcase
+    unique case (issue_data_emul_exp)
+      -5'sd3, -5'sd2, -5'sd1, 5'sd0: issue_memory_emul.data.regs = 4'd1;
+      5'sd1: issue_memory_emul.data.regs = 4'd2;
+      5'sd2: issue_memory_emul.data.regs = 4'd4;
+      5'sd3: issue_memory_emul.data.regs = 4'd8;
+      default: issue_memory_emul.data.regs = 4'd0;
+    endcase
+    unique case (issue_index_emul_exp)
+      -5'sd3, -5'sd2, -5'sd1, 5'sd0: issue_memory_emul.index.regs = 4'd1;
+      5'sd1: issue_memory_emul.index.regs = 4'd2;
+      5'sd2: issue_memory_emul.index.regs = 4'd4;
+      5'sd3: issue_memory_emul.index.regs = 4'd8;
+      default: issue_memory_emul.index.regs = 4'd0;
+    endcase
+
+    request_memory_emul.data.valid = (spatz_req.vtype.vlmul != LMUL_RES) &&
+        (request_memory_emul.data.regs != 0);
+    request_memory_emul.index.valid = (spatz_req.vtype.vlmul != LMUL_RES) &&
+        (request_memory_emul.index.regs != 0);
+    issue_memory_emul.data.valid = (vtype_q.vlmul != LMUL_RES) &&
+        (issue_memory_emul.data.regs != 0);
+    issue_memory_emul.index.valid = (vtype_q.vlmul != LMUL_RES) &&
+        (issue_memory_emul.index.regs != 0);
+
+    request_memory_emul.data.aligned = request_memory_emul.data.valid &&
+        ((spatz_req.vd & vreg_t'(request_memory_emul.data.regs - 1'b1)) == '0) &&
+        (({1'b0, spatz_req.vd} + request_memory_emul.data.regs) <= NRVREG);
+    request_memory_emul.index.aligned = request_memory_emul.index.valid &&
+        ((spatz_req.vs2 & vreg_t'(request_memory_emul.index.regs - 1'b1)) == '0) &&
+        (({1'b0, spatz_req.vs2} + request_memory_emul.index.regs) <= NRVREG);
+    issue_memory_emul.data.aligned = issue_memory_emul.data.valid &&
+        ((decoder_rsp.spatz_req.vd &
+          vreg_t'(issue_memory_emul.data.regs - 1'b1)) == '0) &&
+        (({1'b0, decoder_rsp.spatz_req.vd} +
+          issue_memory_emul.data.regs) <= NRVREG);
+    issue_memory_emul.index.aligned = issue_memory_emul.index.valid &&
+        ((decoder_rsp.spatz_req.vs2 &
+          vreg_t'(issue_memory_emul.index.regs - 1'b1)) == '0) &&
+        (({1'b0, decoder_rsp.spatz_req.vs2} +
+          issue_memory_emul.index.regs) <= NRVREG);
+  end : decode_memory_emul
 
   always_comb begin : decode_vreg_group_count
     unique case (spatz_req.vtype.vlmul)
@@ -607,9 +708,16 @@ module spatz_controller
       LMUL_8:  vreg_group_count = 4'd8;
       default: vreg_group_count = 4'd1;
     endcase
+
+    // Indexed operations encode the index EEW in op_mem.ew; their data EEW
+    // remains SEW.  Other memory operations encode the data EEW directly.
+    mem_data_group_count = request_memory_emul.data.regs;
+    mem_index_group_count = request_memory_emul.index.regs;
   end : decode_vreg_group_count
 
   always_comb begin : scoreboard
+    logic [NrParallelInstructions-1:0] chainable_writer;
+
     // Maintain stated
     read_table_d             = read_table_q;
     write_table_d            = write_table_q;
@@ -628,6 +736,9 @@ module spatz_controller
     // Nobody wrote to the VRF yet
     wrote_result_d = '0;
     sb_enable_o    = '0;
+
+    for (int unsigned id = 0; id < NrParallelInstructions; id++)
+      chainable_writer[id] = !scoreboard_q[id].prevent_chaining;
 
 `ifdef DOUBLE_BW
     done_result_d        = done_result_q;
@@ -656,7 +767,8 @@ module spatz_controller
       // prevented, only a completed dependency may release the port.
       sb_enable_o[port] = sb_enable_i[port] &&
                           &(~scoreboard_q[sb_id_i[port]].deps |
-                            wrote_result_q[intID] | done_result_q[intID]) &&
+                            ((wrote_result_q[intID] | done_result_q[intID]) &
+                             chainable_writer)) &&
                           (!scoreboard_q[sb_id_i[port]].prevent_chaining ||
                            !(|scoreboard_q[sb_id_i[port]].deps) ||
                            &(~scoreboard_q[sb_id_i[port]].deps |
@@ -668,7 +780,11 @@ module spatz_controller
       // sb_id_i[port] - the instruction ID that is using this port
       // &(~scoreboard_q[sb_id_i[port]].deps | wrote_result_q) - we either do not care about the other instructions, or they have wrote to vrf
       //                                                         in words: All dependencies must have written their results in the previous cycle
-      sb_enable_o[port] = sb_enable_i[port] && &(~scoreboard_q[sb_id_i[port]].deps | wrote_result_q) && (!(|scoreboard_q[sb_id_i[port]].deps) || !scoreboard_q[sb_id_i[port]].prevent_chaining);
+      sb_enable_o[port] = sb_enable_i[port] &&
+                          &(~scoreboard_q[sb_id_i[port]].deps |
+                            (wrote_result_q & chainable_writer)) &&
+                          (!(|scoreboard_q[sb_id_i[port]].deps) ||
+                           !scoreboard_q[sb_id_i[port]].prevent_chaining);
 `endif
 
 `ifdef VENTAGLIO
@@ -693,12 +809,17 @@ module spatz_controller
 `ifdef DOUBLE_BW
     // Store the decisions
     for (int unsigned port = 0; port < NrVregfilePorts; port++) begin
-      automatic int unsigned port_idx = port - SB_VFU_VD_WD;
+      int unsigned port_idx;
+
+      port_idx = port - SB_VFU_VD_WD;
       if (sb_enable_o[port]) begin
         // VFU and VSLDU: intID derived from vl_cnt progress, vl_cnt updated every successful write
         if (port inside {SB_VFU_VD_WD, SB_VSLDU_VD_WD}) begin
-          automatic logic  intID  = (vl_cnt_q[sb_id_i[port]] < vl_max_d[sb_id_i[port]]) ? 0 : 1;
-          automatic int VRFWriteSize = narrow_q[sb_id_i[port]] ? VRFWordBWidth >> 1 : VRFWordBWidth;
+          logic intID;
+          int VRFWriteSize;
+
+          intID = (vl_cnt_q[sb_id_i[port]] < vl_max_d[sb_id_i[port]]) ? 0 : 1;
+          VRFWriteSize = narrow_q[sb_id_i[port]] ? VRFWordBWidth >> 1 : VRFWordBWidth;
 
           // Update vl_cnt if actually written into the VRF
           if (sb_wrote_result_i[port_idx])
@@ -711,8 +832,10 @@ module spatz_controller
         end
         // VLSU: intID is fixed per interface (0 for WD0, 1 for WD1)
         if (port inside {SB_VLSU_VD_WD0, SB_VLSU_VD_WD1}) begin
-          automatic int unsigned intID  = port - SB_VLSU_VD_WD0;
-          automatic vlen_t next_vlsu_vl;
+          int unsigned intID;
+          vlen_t next_vlsu_vl;
+
+          intID = port - SB_VLSU_VD_WD0;
           wrote_result_narrowing_d[sb_id_i[port]] = sb_wrote_result_i[port_idx] ^ narrow_wide_q[sb_id_i[port]];
           wrote_result_d[intID][sb_id_i[port]]    = sb_wrote_result_i[port_idx] && (!narrow_wide_q[sb_id_i[port]] || wrote_result_narrowing_q[sb_id_i[port]]);
           next_vlsu_vl = vlsu_vl_cnt_q[intID][sb_id_i[port]];
@@ -729,7 +852,9 @@ module spatz_controller
     // Store the decisions for all write-destination ports: VFU, VLSU, VSLDU
     for (int unsigned port = 0; port < NrVregfilePorts; port++) begin
       if (sb_enable_o[port] && (port inside {SB_VFU_VD_WD, SB_VLSU_VD_WD, SB_VSLDU_VD_WD})) begin
-        automatic int unsigned port_idx = port - SB_VFU_VD_WD;
+        int unsigned port_idx;
+
+        port_idx = port - SB_VFU_VD_WD;
         wrote_result_narrowing_d[sb_id_i[port]] = sb_wrote_result_i[port_idx] ^ narrow_wide_q[sb_id_i[port]];
         wrote_result_d[sb_id_i[port]]           = sb_wrote_result_i[port_idx] && (!narrow_wide_q[sb_id_i[port]] || wrote_result_narrowing_q[sb_id_i[port]]);
       end
@@ -849,6 +974,11 @@ module spatz_controller
 
     // Initialize the scoreboard metadata if we have a new instruction issued.
     if (spatz_req_valid && spatz_req.ex_unit != CON) begin
+      table_t prior_read_table;
+
+      // Source and destination can overlap (for example vfadd v8, v8, v12).
+      // Preserve earlier readers before this instruction claims its sources.
+      prior_read_table = read_table_d;
       // An instruction ID can be reused immediately after a zero-latency or
       // same-cycle retiring operation. Start from a clean entry, then rebuild
       // the dependencies for this new instruction below.
@@ -918,16 +1048,27 @@ module spatz_controller
           default: sb_vs_row_stride = 8;
         endcase
 
-        sb_vs_rows = int'(spatz_req.op_ope.tk);
+        // The supported FP16->FP32 SDOTP path packs both active K rows into
+        // each 32-bit element of the explicit base register.  Its datapath
+        // therefore reads no implicit base+row_stride register.  Tracking
+        // tk=2 here would create false RAW/WAR dependencies on v4/v20.
+        // Same-width MACs retain the architectural row-stride footprint.
+        sb_vs_rows = (spatz_req.vtype.vsew != spatz_req.op_ope.tew)
+                         ? 1
+                         : int'(spatz_req.op_ope.tk);
         sb_vs_group_count = vreg_group_count;
+      end else if ((spatz_req.ex_unit == LSU) &&
+                   (spatz_req.op inside {VLXE, VSXE})) begin
+        // Indexed memory operations read their index vector through vs2.
+        sb_vs_group_count = mem_index_group_count;
       end
 
       // RAW hazard
       if (spatz_req.use_vs2) begin
         for (int unsigned row = 0; row < KMAX; row++) begin
           for (int unsigned group_idx = 0; group_idx < 8; group_idx++) begin
-            automatic vreg_group_idx_t group_vreg =
-                {1'b0, spatz_req.vs2} + vreg_group_idx_t'(row * sb_vs_row_stride + group_idx);
+            vreg_group_idx_t group_vreg;
+            group_vreg = {1'b0, spatz_req.vs2} + vreg_group_idx_t'(row * sb_vs_row_stride + group_idx);
             if ((row < sb_vs_rows) &&
                 (group_idx < sb_vs_group_count) &&
                 (group_vreg < NRVREG)) begin
@@ -941,13 +1082,12 @@ module spatz_controller
       if (spatz_req.use_vs1) begin
         for (int unsigned row = 0; row < KMAX; row++) begin
           for (int unsigned group_idx = 0; group_idx < 8; group_idx++) begin
-            automatic vreg_group_idx_t group_vreg =
-                {1'b0, spatz_req.vs1} + vreg_group_idx_t'(row * sb_vs_row_stride + group_idx);
+            vreg_group_idx_t group_vreg;
+            group_vreg = {1'b0, spatz_req.vs1} + vreg_group_idx_t'(row * sb_vs_row_stride + group_idx);
             if ((row < sb_vs_rows) &&
                 (group_idx < sb_vs_group_count) &&
                 (group_vreg < NRVREG)) begin
-              scoreboard_d[spatz_req.id].deps[write_table_d[group_vreg].id] |=
-                  write_table_d[group_vreg].valid;
+              scoreboard_d[spatz_req.id].deps[write_table_d[group_vreg].id] |= write_table_d[group_vreg].valid;
               read_table_d[group_vreg] = {spatz_req.id, 1'b1};
             end
           end
@@ -956,19 +1096,18 @@ module spatz_controller
       if (spatz_req.vd_is_src) begin
         if ((spatz_req.ex_unit == LSU) && !spatz_req.op_mem.is_load) begin
           // Vector stores encode their data source in vd (architectural vs3).
-          // Reserve every physical register in the current LMUL group.
+          // Reserve every physical register in the data EMUL group.
           for (int unsigned group_idx = 0; group_idx < 8; group_idx++) begin
-            automatic vreg_group_idx_t group_vreg =
-                {1'b0, spatz_req.vd} + vreg_group_idx_t'(group_idx);
-            if ((group_idx < vreg_group_count) && (group_vreg < NRVREG)) begin
-              scoreboard_d[spatz_req.id].deps[write_table_d[group_vreg].id] |=
-                  write_table_d[group_vreg].valid;
+            vreg_group_idx_t group_vreg;
+
+            group_vreg = {1'b0, spatz_req.vd} + vreg_group_idx_t'(group_idx);
+            if ((group_idx < mem_data_group_count) && (group_vreg < NRVREG)) begin
+              scoreboard_d[spatz_req.id].deps[write_table_d[group_vreg].id] |= write_table_d[group_vreg].valid;
               read_table_d[group_vreg] = {spatz_req.id, 1'b1};
             end
           end
         end else begin
-          scoreboard_d[spatz_req.id].deps[write_table_d[spatz_req.vd].id] |=
-              write_table_d[spatz_req.vd].valid;
+          scoreboard_d[spatz_req.id].deps[write_table_d[spatz_req.vd].id] |= write_table_d[spatz_req.vd].valid;
           read_table_d[spatz_req.vd] = {spatz_req.id, 1'b1};
         end
       end
@@ -986,24 +1125,24 @@ module spatz_controller
       if (spatz_req.use_vd &&
           !((spatz_req.ex_unit == LSU) && !spatz_req.op_mem.is_load)) begin
         if ((spatz_req.ex_unit == LSU) && spatz_req.op_mem.is_load) begin
-          // Vector loads write the complete LMUL register group, not only the
+          // Vector loads write the complete EMUL register group, not only the
           // aligned architectural base register encoded by vd.
           for (int unsigned group_idx = 0; group_idx < 8; group_idx++) begin
-            automatic vreg_group_idx_t group_vreg =
-                {1'b0, spatz_req.vd} + vreg_group_idx_t'(group_idx);
-            if ((group_idx < vreg_group_count) && (group_vreg < NRVREG)) begin
+            vreg_group_idx_t group_vreg;
+            group_vreg = {1'b0, spatz_req.vd} + vreg_group_idx_t'(group_idx);
+            if ((group_idx < mem_data_group_count) && (group_vreg < NRVREG)) begin
               scoreboard_d[spatz_req.id].deps[write_table_d[group_vreg].id] |=
                   write_table_d[group_vreg].valid;
-              scoreboard_d[spatz_req.id].deps[read_table_d[group_vreg].id] |=
-                  read_table_d[group_vreg].valid;
+              scoreboard_d[spatz_req.id].deps[prior_read_table[group_vreg].id] |=
+                  prior_read_table[group_vreg].valid;
               write_table_d[group_vreg] = {spatz_req.id, 1'b1};
             end
           end
         end else begin
           scoreboard_d[spatz_req.id].deps[write_table_d[spatz_req.vd].id] |=
               write_table_d[spatz_req.vd].valid;
-          scoreboard_d[spatz_req.id].deps[read_table_d[spatz_req.vd].id] |=
-              read_table_d[spatz_req.vd].valid;
+          scoreboard_d[spatz_req.id].deps[prior_read_table[spatz_req.vd].id] |=
+              prior_read_table[spatz_req.vd].valid;
           write_table_d[spatz_req.vd] = {spatz_req.id, 1'b1};
         end
         if (spatz_req.op inside {VLX}) begin
@@ -1022,9 +1161,9 @@ module spatz_controller
 `ifdef DOUBLE_BW
       narrow_d[spatz_req.id] = spatz_req.op_arith.is_narrowing;
 
-      // Track request vl for vector chaining, used only for DOUBLE_BW
-      // Default spatz uses 1-bit credit counter using wrote_result_q for chaining
-      vl_max_d[spatz_req.id] = (spatz_req.vl >> 1) << spatz_req.vtype.vsew;
+      // Track the byte extent of each half-vector. Vector memory operations use their encoded EEW, 
+      // which may differ from SEW for both loads and stores; arithmetic operations use the configured SEW.
+      vl_max_d[spatz_req.id] = (spatz_req.vl >> 1) << ((spatz_req.ex_unit == LSU) ? spatz_req.op_mem.ew : spatz_req.vtype.vsew);
       vl_cnt_d[spatz_req.id] = '0;
 `endif
     end
@@ -1345,10 +1484,15 @@ module spatz_controller
     mt_t  issue_tile_id;
     logic issue_is_tile_op;
     logic issue_tile_aligned;
+    logic memory_groups_aligned;
 
     issue_rsp_o = '0;
     issue_tile_id = decoder_rsp.spatz_req.mtd;
     issue_is_tile_op = 1'b0;
+    memory_groups_aligned = issue_memory_emul.data.aligned;
+    if (decoder_rsp.spatz_req.op inside {VLXE, VSXE}) begin
+      memory_groups_aligned &= issue_memory_emul.index.aligned;
+    end
 
     if ((decoder_rsp.spatz_req.ex_unit == LSU) &&
         decoder_rsp.spatz_req.op_ope.is_mem) begin
@@ -1391,7 +1535,16 @@ module spatz_controller
         end // VFU
         LSU: begin
           issue_rsp_o.loadstore = 1'b1;
-          if (vtype_q.vill || mtype_q.mtwiden == 0 || !issue_tile_aligned) begin
+          if (vtype_q.vill) begin
+            issue_rsp_o.accept = 1'b0;
+          end else if (decoder_rsp.spatz_req.op_ope.is_mem &&
+                       ((mtype_q.mtwiden == 0) || !issue_tile_aligned)) begin
+            // Tile loads/stores require an active matrix configuration.
+            issue_rsp_o.accept = 1'b0;
+          end else if (!decoder_rsp.spatz_req.op_ope.is_mem &&
+                       !memory_groups_aligned) begin
+            // Regular RVV memory operations use EMUL, not LMUL, for register
+            // alignment and register-file bounds.
             issue_rsp_o.accept = 1'b0;
           end
         end // LSU
@@ -1408,7 +1561,7 @@ module spatz_controller
           end else if (!issue_tile_aligned) begin
             issue_rsp_o.accept = 1'b0;
           end else if (decoder_rsp.spatz_req.op_ope.is_mac && (vtype_q.vsew == EW_8)) begin
-            // No FP8 compute lane is instantiated; reject instead of waiting for a missing result.
+            // No 8-bit MAC lane is instantiated; reject instead of waiting for a missing result.
             issue_rsp_o.accept = 1'b0;
           end else if ((decoder_rsp.spatz_req.op_ope.is_vt ||
                         decoder_rsp.spatz_req.op_ope.is_tv) &&

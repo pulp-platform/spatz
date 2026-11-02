@@ -508,6 +508,7 @@ module ${cfg['name']}_wrapper
     .TCDMDepth (${cfg['tcdm']['depth']}),
     .TCDMSize (TCDMSize),
     .NrBanks (${cfg['tcdm']['banks']}),
+    .UseInstructionBuffer (${int(cfg['icache']['use_instruction_buffer'])}),
     .ICacheLineWidth (${cfg['pkg_name']}::ICacheLineWidth),
     .ICacheLineCount (${cfg['pkg_name']}::ICacheLineCount),
     .ICacheWays (${cfg['pkg_name']}::ICacheWays),

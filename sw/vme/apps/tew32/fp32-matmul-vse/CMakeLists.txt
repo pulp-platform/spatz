@@ -42,16 +42,18 @@ function(add_fp32_vse_variant precision variant source_dir)
         list(GET _dims 1 _n)
         list(GET _dims 2 _k)
 
-        # main.c reserves two input panels when they fit in the 512-KiB TCDM.
-        # This is computed per shape so te32/K256 can fall back to one panel.
+        # Generate only variants whose two input panels fit in TCDM.
         math(EXPR _panel_bytes
              "32 * ${_tile_edge} * ${_k} + 64 * ${_tile_edge} * ${_tile_edge}")
         math(EXPR _double_buffer_bytes "2 * ${_panel_bytes}")
-        if(_double_buffer_bytes GREATER 524288)
-            set(_buffer_count 1)
-        else()
-            set(_buffer_count 2)
+        if(_double_buffer_bytes GREATER SNRT_TCDM_SIZE)
+            message(STATUS
+                "Skipping FP32 VSE ${precision}/${variant} M${_m} N${_n} K${_k}: "
+                "double buffering requires ${_double_buffer_bytes} bytes, "
+                "but TCDM provides ${SNRT_TCDM_SIZE} bytes")
+            continue()
         endif()
+        set(_buffer_count 2)
 
         set(_variant_build_dir
             "${CMAKE_CURRENT_BINARY_DIR}/generated/${precision}/${variant}/K${_k}")
@@ -83,21 +85,18 @@ function(add_fp32_vse_variant precision variant source_dir)
             add_custom_target(generate-${_target} DEPENDS "${_header}")
             add_snitch_test(${_target} "${source_dir}/main.c")
             add_dependencies(${_test_target} generate-${_target})
-            set_target_properties(${_test_target} PROPERTIES
-                RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/vme/apps")
             target_include_directories(${_test_target} PRIVATE
                 "${source_dir}"
                 "${source_dir}/kernel"
                 "${source_dir}/data")
             target_compile_definitions(${_test_target} PRIVATE
-                MATMUL_K_CHUNK=${_k}
                 MATMUL_BUFFER_COUNT=${_buffer_count}
                 DATAHEADER="${_data_header}")
         endif()
     endforeach()
 endfunction()
 
-foreach(_precision IN ITEMS te16 te32)
+foreach(_precision IN ITEMS ${VME_TILE_VARIANT})
     if(_precision STREQUAL "te16")
         # te16 is the active validation target. Keep all rolled scheduling
         # variants aligned with the passing VTSE target matrix.
@@ -109,6 +108,9 @@ foreach(_precision IN ITEMS te16 te32)
             ${_fp32_vse_te16_shapes})
         add_fp32_vse_variant(${_precision} rolled-vsetvl
             "${CMAKE_CURRENT_SOURCE_DIR}/${_precision}/rolled/vsetvl"
+            ${_fp32_vse_te16_shapes})
+        add_fp32_vse_variant(${_precision} rolled-store-group
+            "${CMAKE_CURRENT_SOURCE_DIR}/${_precision}/rolled/store-group"
             ${_fp32_vse_te16_shapes})
 
         # The te16 unrolled kernels are specialized by K.  Keep their

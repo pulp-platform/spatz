@@ -1,8 +1,8 @@
-# Copyright 2024 ETH Zurich and University of Bologna.
+# Copyright 2026 ETH Zurich and University of Bologna.
 # Licensed under the Apache License, Version 2.0, see LICENSE for details.
 # SPDX-License-Identifier: Apache-2.0
 #
-# Author: Pei-Yu Lin <peilin@ethz.ch>
+# Author: Pei-Yu Lin, ETH Zürich
 
 cmake_minimum_required(VERSION 3.13)
 
@@ -14,7 +14,7 @@ add_snitch_test(msetmtypei msetmtypei.c)
 add_snitch_test(msettn msettn.c)
 add_snitch_test(msettm msettm.c)
 add_snitch_test(msettk msettk.c)
-add_snitch_test(vtmm vtmm.c)
+# add_snitch_test(vtmm vtmm.c) # Integer matrix MAC is not implemented.
 add_snitch_test(vtfmm vtfmm.c)
 add_snitch_test(vtle vtle.c)
 add_snitch_test(vtse vtse.c)

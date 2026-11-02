@@ -2,17 +2,13 @@
 // Solderpad Hardware License, Version 0.51, see LICENSE for details.
 // SPDX-License-Identifier: SHL-0.51
 //
-// Authors: Pei-Yu Lin (peilin@ethz.ch)
+// Author: Pei-Yu Lin, ETH Zürich
 //
-// vtmv.t.v — Move vector registers → tile subset
-// vtmv.v.t — Move tile subset → vector registers
-//
-// -------------------------------------------------------
 // Test cases:
-//    TC1: vtmv.t.v (vector → tile row) then vtmv.v.t read-back → verify round-trip
-//    TC2: vtmv.t.v into multiple rows of same tile → verify row independence
-//    TC3: vtmv.t.v into two different tile registers → verify tile independence
-//    TC4: vtmv.t.v 2x2 tile round-trip with TEW=32
+//   TC1: round-trip all rows of a 4x4 tile.
+//   TC2: preserve zeroed rows while updating non-consecutive rows.
+//   TC3: keep two tile registers independent.
+//   TC4: round-trip a 2x2 tile.
 
 #include <stdint.h>
 #include "vector_macros.h"
@@ -28,7 +24,7 @@ void TEST_CASE1(void) {
     VLOAD_32(v12, 11, 22, 33, 44,  0,0,0,0,  0,0,0,0,  0,0,0,0);
     VLOAD_32(v14, 55, 66, 77, 88,  0,0,0,0,  0,0,0,0,  0,0,0,0);
 
-    asm volatile("msetmtypei 1, 2" ::: "memory");
+    asm volatile("msetmtypei 1, 2, 0" ::: "memory");
     asm volatile("msettn x0, %0" :: "r"(TN) : "memory");
     asm volatile("msettm x0, %0" :: "r"(TM) : "memory");
     asm volatile("vtzero mt0" ::: "memory");
@@ -39,7 +35,7 @@ void TEST_CASE1(void) {
     tss = TSS_ROW(0, 2); asm volatile("vtmv.t.v %[tss], v12" :: [tss]"r"(tss) : "memory");
     tss = TSS_ROW(0, 3); asm volatile("vtmv.t.v %[tss], v14" :: [tss]"r"(tss) : "memory");
 
-    VSET(4, e32, m1);
+    // Preserve matrix configuration while reading the tile back.
     tss = TSS_ROW(0, 0); asm volatile("vtmv.v.t v1, %[tss]" :: [tss]"r"(tss) : "memory");
     tss = TSS_ROW(0, 1); asm volatile("vtmv.v.t v2, %[tss]" :: [tss]"r"(tss) : "memory");
     tss = TSS_ROW(0, 2); asm volatile("vtmv.v.t v3, %[tss]" :: [tss]"r"(tss) : "memory");
@@ -61,7 +57,7 @@ void TEST_CASE2(void) {
     VLOAD_32(v8,  1, 2, 3, 4,  0,0,0,0,  0,0,0,0,  0,0,0,0);
     VLOAD_32(v10, 9,10,11,12,  0,0,0,0,  0,0,0,0,  0,0,0,0);
 
-    asm volatile("msetmtypei 1, 2" ::: "memory");
+    asm volatile("msetmtypei 1, 2, 0" ::: "memory");
     asm volatile("msettn x0, %0" :: "r"(TN) : "memory");
     asm volatile("msettm x0, %0" :: "r"(TM) : "memory");
     asm volatile("vtzero mt0" ::: "memory");
@@ -70,7 +66,7 @@ void TEST_CASE2(void) {
     tss = TSS_ROW(0, 0); asm volatile("vtmv.t.v %[tss], v8"  :: [tss]"r"(tss) : "memory");
     tss = TSS_ROW(0, 2); asm volatile("vtmv.t.v %[tss], v10" :: [tss]"r"(tss) : "memory");
 
-    VSET(4, e32, m1);
+    // Preserve matrix configuration while reading the tile back.
     tss = TSS_ROW(0, 0); asm volatile("vtmv.v.t v1, %[tss]" :: [tss]"r"(tss) : "memory");
     tss = TSS_ROW(0, 1); asm volatile("vtmv.v.t v2, %[tss]" :: [tss]"r"(tss) : "memory");
     tss = TSS_ROW(0, 2); asm volatile("vtmv.v.t v3, %[tss]" :: [tss]"r"(tss) : "memory");
@@ -92,7 +88,7 @@ void TEST_CASE3(void) {
     VLOAD_32(v8,  0xA, 0xB, 0xC, 0xD,  0,0,0,0,  0,0,0,0,  0,0,0,0);
     VLOAD_32(v10, 0x1, 0x2, 0x3, 0x4,  0,0,0,0,  0,0,0,0,  0,0,0,0);
 
-    asm volatile("msetmtypei 1, 2" ::: "memory");
+    asm volatile("msetmtypei 1, 2, 0" ::: "memory");
     asm volatile("msettn x0, %0" :: "r"(TN) : "memory");
     asm volatile("msettm x0, %0" :: "r"(TM) : "memory");
     asm volatile("vtzero mt0" ::: "memory");
@@ -120,7 +116,7 @@ void TEST_CASE4(void) {
     VLOAD_32(v8,  100, 200,  0,0,0,0,0,0,0,0,0,0,0,0,0,0);
     VLOAD_32(v10, 300, 400,  0,0,0,0,0,0,0,0,0,0,0,0,0,0);
 
-    asm volatile("msetmtypei 1, 2" ::: "memory");
+    asm volatile("msetmtypei 1, 2, 0" ::: "memory");
     asm volatile("msettn x0, %0" :: "r"(TN) : "memory");
     asm volatile("msettm x0, %0" :: "r"(TM) : "memory");
     asm volatile("vtzero mt0" ::: "memory");
@@ -141,8 +137,6 @@ void TEST_CASE4(void) {
 
 int main(void) {
     INIT_CHECK();
-    enable_vec();
-    enable_vme();
 
     TEST_CASE1();
     TEST_CASE2();

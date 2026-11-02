@@ -2,16 +2,13 @@
 // Solderpad Hardware License, Version 0.51, see LICENSE for details.
 // SPDX-License-Identifier: SHL-0.51
 //
-// Authors: Pei-Yu Lin (peilin@ethz.ch)
+// Author: Pei-Yu Lin, ETH Zürich
 //
-// vtzero.c — ISA tests for vtzero
-//
-// -------------------------------------------------------
 // Test cases:
-//    TC1: FP32, TEW=32, 4×4 — vtfmm then vtzero → zeros
-//    TC2: FP32, TEW=32, two tiles — vtzero mt0 only, mt4 stays intact
-//    TC3: FP32, TEW=32, 4×4 — pre-fill with vtfmm, vtzero → zeros
-//    TC4: FP32, TEW=32, 4×4 — I*I then vtzero → zeros
+//   TC1: clear a populated tile.
+//   TC2: clear one tile while preserving another tile.
+//   TC3: clear a tile populated with repeated rows.
+//   TC4: clear a tile populated by an identity product.
 
 #include <stdint.h>
 #include "vector_macros.h"
@@ -37,7 +34,7 @@
 
 // TC1: FP32/TEW=32, 4×4 — vtfmm.tvv then vtzero → all zeros
 void TEST_CASE1(void) {
-    const uintptr_t TN = 4, TM = 4, TK = 1;
+    const uintptr_t TN = 4, TM = 4, TK = KMAX(32, 1);
     VSET(4, e32, m1);
 
     VLOAD_32(v8,  F32_1,  F32_5,  F32_9,  F32_13);
@@ -50,7 +47,7 @@ void TEST_CASE1(void) {
     VLOAD_32(v20, F32_0, F32_0, F32_1, F32_0);
     VLOAD_32(v22, F32_0, F32_0, F32_0, F32_1);
 
-    asm volatile("msetmtypei 1, 2" ::: "memory");
+    asm volatile("msetmtypei 1, 2, 0" ::: "memory");
     asm volatile("msettn x0, %0" :: "r"(TN) : "memory");
     asm volatile("msettm x0, %0" :: "r"(TM) : "memory");
     asm volatile("msettk x0, %0" :: "r"(TK) : "memory");
@@ -58,7 +55,7 @@ void TEST_CASE1(void) {
     asm volatile("vtfmm.tvv mt0, v8, v16" ::: "memory");
     asm volatile("vtzero mt0" ::: "memory");
 
-    asm volatile("msetmtypei 1, 2" ::: "memory");
+    asm volatile("msetmtypei 1, 2, 0" ::: "memory");
     asm volatile("msettn x0, %0" :: "r"(TN) : "memory");
     asm volatile("msettm x0, %0" :: "r"(TM) : "memory");
 
@@ -73,7 +70,7 @@ void TEST_CASE1(void) {
 
 // TC2: FP32/TEW=32, two tiles — vtzero mt0 only, mt4 stays intact
 void TEST_CASE2(void) {
-    const uintptr_t TN = 4, TM = 4, TK = 1;
+    const uintptr_t TN = 4, TM = 4, TK = KMAX(32, 1);
     VSET(4, e32, m1);
 
     VLOAD_32(v8,  F32_1,  F32_5,  F32_9,  F32_13);
@@ -86,7 +83,7 @@ void TEST_CASE2(void) {
     VLOAD_32(v20, F32_0, F32_0, F32_1, F32_0);
     VLOAD_32(v22, F32_0, F32_0, F32_0, F32_1);
 
-    asm volatile("msetmtypei 1, 2" ::: "memory");
+    asm volatile("msetmtypei 1, 2, 0" ::: "memory");
     asm volatile("msettn x0, %0" :: "r"(TN) : "memory");
     asm volatile("msettm x0, %0" :: "r"(TM) : "memory");
     asm volatile("msettk x0, %0" :: "r"(TK) : "memory");
@@ -95,7 +92,7 @@ void TEST_CASE2(void) {
     asm volatile("vtfmm.tvv mt4, v8, v16" ::: "memory");
     asm volatile("vtzero mt0" ::: "memory");
 
-    asm volatile("msetmtypei 1, 2" ::: "memory");
+    asm volatile("msetmtypei 1, 2, 0" ::: "memory");
     asm volatile("msettn x0, %0" :: "r"(TN) : "memory");
     asm volatile("msettm x0, %0" :: "r"(TM) : "memory");
 
@@ -115,7 +112,7 @@ void TEST_CASE2(void) {
 
 // TC3: FP32/TEW=32, 4×4 — pre-fill with vtfmm, vtzero → zeros
 void TEST_CASE3(void) {
-    const uintptr_t TN = 4, TM = 4, TK = 1;
+    const uintptr_t TN = 4, TM = 4, TK = KMAX(32, 1);
     VSET(4, e32, m1);
 
     VLOAD_32(v8,  F32_1, F32_2, F32_3, F32_4);
@@ -128,7 +125,7 @@ void TEST_CASE3(void) {
     VLOAD_32(v20, F32_0, F32_0, F32_1, F32_0);
     VLOAD_32(v22, F32_0, F32_0, F32_0, F32_1);
 
-    asm volatile("msetmtypei 1, 2" ::: "memory");
+    asm volatile("msetmtypei 1, 2, 0" ::: "memory");
     asm volatile("msettn x0, %0" :: "r"(TN) : "memory");
     asm volatile("msettm x0, %0" :: "r"(TM) : "memory");
     asm volatile("msettk x0, %0" :: "r"(TK) : "memory");
@@ -136,7 +133,7 @@ void TEST_CASE3(void) {
     asm volatile("vtfmm.tvv mt0, v8, v16" ::: "memory");
     asm volatile("vtzero mt0" ::: "memory");
 
-    asm volatile("msetmtypei 1, 2" ::: "memory");
+    asm volatile("msetmtypei 1, 2, 0" ::: "memory");
     asm volatile("msettn x0, %0" :: "r"(TN) : "memory");
     asm volatile("msettm x0, %0" :: "r"(TM) : "memory");
 
@@ -151,7 +148,7 @@ void TEST_CASE3(void) {
 
 // TC4: FP32/TEW=32, 4×4 — vtfmm I*I then vtzero → all zeros
 void TEST_CASE4(void) {
-    const uintptr_t TN = 4, TM = 4, TK = 1;
+    const uintptr_t TN = 4, TM = 4, TK = KMAX(32, 1);
     VSET(4, e32, m1);
 
     VLOAD_32(v8,  F32_1, F32_0, F32_0, F32_0);
@@ -164,7 +161,7 @@ void TEST_CASE4(void) {
     VLOAD_32(v20, F32_0, F32_0, F32_1, F32_0);
     VLOAD_32(v22, F32_0, F32_0, F32_0, F32_1);
 
-    asm volatile("msetmtypei 1, 2" ::: "memory");
+    asm volatile("msetmtypei 1, 2, 0" ::: "memory");
     asm volatile("msettn x0, %0" :: "r"(TN) : "memory");
     asm volatile("msettm x0, %0" :: "r"(TM) : "memory");
     asm volatile("msettk x0, %0" :: "r"(TK) : "memory");
@@ -183,8 +180,6 @@ void TEST_CASE4(void) {
 
 int main(void) {
     INIT_CHECK();
-    enable_vec();
-    enable_vme();
 
     TEST_CASE1();
     TEST_CASE2();

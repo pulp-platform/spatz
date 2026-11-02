@@ -20,13 +20,12 @@
 
 #include "matmul.h"
 
-__attribute__((noinline, aligned(64))) void matmul_fp32(const float *At, const float *B, float *C, uint32_t M, uint32_t N, uint32_t K)
+__attribute__((noinline, aligned(64))) void matmul_fp32(const float *At, const float *B, float *C)
 {
-    const uint32_t tile_stride = TE * K;
     uintptr_t a0p = (uintptr_t)At;
-    uintptr_t a1p = (uintptr_t)(At + tile_stride);
+    uintptr_t a1p = (uintptr_t)(At + TILE_STRIDE);
     uintptr_t b0p = (uintptr_t)B;
-    uintptr_t b1p = (uintptr_t)(B + tile_stride);
+    uintptr_t b1p = (uintptr_t)(B + TILE_STRIDE);
     uintptr_t tss;
     const uintptr_t operand_bytes = sizeof(float) * TE;
     uintptr_t c00 = (uintptr_t)(C);
@@ -9507,6 +9506,6 @@ __attribute__((noinline, aligned(64))) void matmul_fp32(const float *At, const f
           [vtype] "r"(matrix_vtype)
           // [rewind_b0_bytes] "r"(rewind_b0_bytes),
           // [middle_k_groups] "r"(middle_k_groups),
-          // [col_blocks] "r"((uintptr_t)col_blocks)
+          // [COL_BLOCKS] "r"((uintptr_t)COL_BLOCKS)
         : "memory");
 }

@@ -20,13 +20,12 @@
 
 #include "matmul.h"
 
-__attribute__((noinline, aligned(64))) void matmul_fp16_fp32(const __fp16 *Atpack, const __fp16 *Bpack, float *C, uint32_t M, uint32_t N, uint32_t K)
+__attribute__((noinline, aligned(64))) void matmul_fp16_fp32(const __fp16 *Atpack, const __fp16 *Bpack, float *C)
 {
-    const uint32_t tile_stride = TE * K;
     uintptr_t a0p = (uintptr_t)Atpack;
-    uintptr_t a1p = (uintptr_t)(Atpack + tile_stride);
+    uintptr_t a1p = (uintptr_t)(Atpack + TILE_STRIDE);
     uintptr_t b0p = (uintptr_t)Bpack;
-    uintptr_t b1p = (uintptr_t)(Bpack + tile_stride);
+    uintptr_t b1p = (uintptr_t)(Bpack + TILE_STRIDE);
     uintptr_t tss;
     const uintptr_t operand_bytes = 2 * sizeof(__fp16) * TE;
     uintptr_t c00 = (uintptr_t)(C);
@@ -4590,14 +4589,14 @@ __attribute__((noinline, aligned(64))) void matmul_fp16_fp32(const __fp16 *Atpac
         // "sub %[cols], %[b1p], %[b0p]\n"
         // "add %[a0p], %[a0p], %[cols]\n"
         // "add %[a1p], %[a1p], %[cols]\n"
-        // "slli %[loop], %[col_blocks], 1\n"
+        // "slli %[loop], %[COL_BLOCKS], 1\n"
         // "addi %[loop], %[loop], -1\n"
         // "6:\n"
         // "sub %[b0p], %[b0p], %[cols]\n"
         // "sub %[b1p], %[b1p], %[cols]\n"
         // "addi %[loop], %[loop], -1\n"
         // "bnez %[loop], 6b\n"
-        // "mv %[cols], %[col_blocks]\n"
+        // "mv %[cols], %[COL_BLOCKS]\n"
         // "slli %[loop], %[c_stride], 4\n"
         // "addi %[loop], %[loop], -128\n"
         // "sub %[loop], x0, %[loop]\n"
@@ -6163,6 +6162,6 @@ __attribute__((noinline, aligned(64))) void matmul_fp16_fp32(const __fp16 *Atpac
           [vtype] "r"(matrix_vtype)
           // [rewind_b0_bytes] "r"(rewind_b0_bytes),
           // [middle_k_groups] "r"(middle_k_groups),
-          // [col_blocks] "r"((uintptr_t)col_blocks)
+          // [COL_BLOCKS] "r"((uintptr_t)COL_BLOCKS)
         : "memory");
 }
