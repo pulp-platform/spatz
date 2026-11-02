@@ -58,7 +58,7 @@ static void softmax_update(void) {
     asm volatile("vsse16.v v12, (%0), %1"
                  ::"r"((uint16_t *)(pw + (r >> 1) * TQ) + (r & 1)), "r"(4)
                  : "memory");
-    opope_vsync(pw);  // one strided access in flight at a time
+    // (no per-row drain: the stride-4 pack stores overlap the next row; the PV GeMM drains them before it starts)
     asm volatile("vsetvli zero, %0, e32, m4, ta, ma" ::"r"(vl));
   }
 
@@ -68,12 +68,10 @@ static void softmax_update(void) {
   asm volatile("vfadd.vv v0, v0, v28");
   asm volatile("vse32.v v0, (%0)" ::"r"(lrow) : "memory");
 
-  // O^T *= alpha
-  for (unsigned int j = 0; j < DV_SIZE; j++) {
-    asm volatile("vle32.v v0, (%0)" ::"r"(ot + j * TQ) : "memory");
-    asm volatile("vfmul.vv v0, v0, v20");
-    asm volatile("vse32.v v0, (%0)" ::"r"(ot + j * TQ) : "memory");
-  }
+  // O^T *= alpha: O^T [DV][TQ] is scanned flat, two rows (128 words) per vector; alpha (64 lanes in v20) is copied twice into v24..v31
+  asm volatile("vmv.v.v v24, v20");
+  asm volatile("vmv.v.v v28, v20");
+  tf16_scale_flat(ot, DV_SIZE * TQ);
 }
 
 // O^T[j][q] *= 1/l[q] (1 <= l <= T)
@@ -81,11 +79,9 @@ static void normalize(void) {
   tf_vsetvl(TQ);
   asm volatile("vle32.v v8, (%0)" ::"r"(lrow) : "memory");
   TF_RECIP("v8", "v12", "v16");
-  for (unsigned int j = 0; j < DV_SIZE; j++) {
-    asm volatile("vle32.v v0, (%0)" ::"r"(ot + j * TQ) : "memory");
-    asm volatile("vfmul.vv v0, v0, v12");
-    asm volatile("vse32.v v0, (%0)" ::"r"(ot + j * TQ) : "memory");
-  }
+  asm volatile("vmv.v.v v24, v12");
+  asm volatile("vmv.v.v v28, v12");
+  tf16_scale_flat(ot, DV_SIZE * TQ);
 }
 
 int main() {
@@ -133,7 +129,7 @@ int main() {
 
     for (unsigned int t = 0; t < NT; t++) {
       // S^T = K_t * Q^T  (Y = 0)
-      opope_vzero(st, BC * TQ);
+      tf16_zero(st, BC * TQ);
       opope_gemm_fp16(kw + t * (D_SIZE / 2) * BC, qw, st, BC, D_SIZE, TQ);
 
       // Online softmax (Spatz): P^T FP16 packed in pw, O^T rescaled

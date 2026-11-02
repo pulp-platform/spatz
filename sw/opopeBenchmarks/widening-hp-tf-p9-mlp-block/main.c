@@ -3,7 +3,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // P9: MLP block (LN -> GeMM1 -> GELU -> GeMM2 + residual)
-// Spatz (FP32): LN -> FP16; O-POPE: GeMM1 (Y0 = bias1); Spatz (FP32): GELU -> FP16; O-POPE: GeMM2 (Y0 = residual + bias2, z holds the FP32 input).
+// Spatz (FP32): LN -> FP16; O-POPE: GeMM1 (Y0 = bias1); Spatz (FP32): GELU -> FP16; O-POPE: GeMM2 (Y0 = the FP32 input = residual;
+// bias2 is an extra reduction row pair: hpk row HID/2 = {1.0, 0}, w2 row HID/2 = {bias2, 0}, N = HID + 2).
 // FP16 GeMM inputs / FP32 outputs; feature-major activations, pair-packed GeMM operands (see
 // include/opope_tf16.h). O-POPE job: Z^T[Cout][T] = Y + W^T * A^T (SDOTP, FP16 -> FP32).
 
@@ -17,7 +18,6 @@ static uint32_t *w1;
 static float *h;
 static uint32_t *hpk;
 static uint32_t *w2;
-static float *b2;
 
 int main() {
   const unsigned int cid = snrt_cluster_core_idx();
@@ -31,9 +31,8 @@ int main() {
     OPOPE_L1_ALLOC(lnpk, uint32_t, (C_SIZE / 2) * T_SIZE);
     OPOPE_L1_ALLOC(w1, uint32_t, (C_SIZE / 2) * HID_SIZE);
     OPOPE_L1_ALLOC(h, float, HID_SIZE * T_SIZE);
-    OPOPE_L1_ALLOC(hpk, uint32_t, (HID_SIZE / 2) * T_SIZE);
-    OPOPE_L1_ALLOC(w2, uint32_t, (HID_SIZE / 2) * C_SIZE);
-    OPOPE_L1_ALLOC(b2, float, C_SIZE);
+    OPOPE_L1_ALLOC(hpk, uint32_t, (HID_SIZE / 2 + 1) * T_SIZE);
+    OPOPE_L1_ALLOC(w2, uint32_t, (HID_SIZE / 2 + 1) * C_SIZE);
   }
 
   // Wait for all cores to finish
@@ -45,7 +44,7 @@ int main() {
     TF_DMA(w1, d_w1);
     TF_DMA(h, d_hinit);  // Y of GeMM1 = bias1' broadcast (initial placement)
     TF_DMA(w2, d_w2);
-    TF_DMA(b2, d_b2);
+    TF_DMA(hpk + (HID_SIZE / 2) * T_SIZE, d_hone);  // constant row {1.0, 0} of the bias reduction
     snrt_dma_wait_all();
   }
 
@@ -62,8 +61,7 @@ int main() {
     tf16_layernorm_pack(lnpk, z, C_SIZE, 1.0f / C_SIZE, T_SIZE);
     opope_gemm_fp16(w1, lnpk, h, HID_SIZE, C_SIZE, T_SIZE);
     tf16_gelu_pack(hpk, h, HID_SIZE, T_SIZE);
-    tf_add_bias_rows(z, b2, C_SIZE, T_SIZE);  // Y0 = residual + bias2
-    opope_gemm_fp16(w2, hpk, z, C_SIZE, HID_SIZE, T_SIZE);
+    opope_gemm_fp16(w2, hpk, z, C_SIZE, HID_SIZE + 2, T_SIZE);  // Z = residual + W2^T h + bias2
 
     // End dump
     stop_kernel();

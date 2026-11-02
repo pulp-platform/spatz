@@ -2,36 +2,22 @@
 // Licensed under the Apache License, Version 2.0, see LICENSE for details.
 // SPDX-License-Identifier: Apache-2.0
 
-// CNN layer (valid KHxKW convolution + bias + ReLU) as im2col -> O-POPE widening GeMM -> ReLU,
-// FP16 activations/weights, FP32 accumulation/output.
-//   Z[M][K] = Y + X*W,  M = Ho*W output positions (the KW-1 last columns of every image row
-//   are computed but unused), N = Cin*KH*KW, K = Cout.
-// The input is stored as channel-pair planes (two FP16 channels per word), so every packed row of the
-// X^T operand, xT[p][0..M) with p = (cp*KH + ky)*KW + kx, is ONE unit-stride word copy of the
-// plane pair shifted by ky*W + kx: no per-element packing is needed on the device. The packed
-// weights [N/2][K] are prepared offline, Y is initialised with the broadcast FP32 bias.
+// CNN layer (valid KHxKW convolution + bias + ReLU) as KH*KW accumulating O-POPE widening GeMMs -> ReLU,
+// FP16 activations/weights, FP32 accumulation/output. No im2col buffer and no copy:
+//   Z[M][K] += X_tap * W_tap for each tap (ky,kx), M = H*W output positions (the positions with y >= Ho or x >= Wo are
+//   computed but unused), N = Cin, K = Cout.
+// The input is stored as channel-pair planes (two FP16 channels per word) of H*W words, i.e. the pitch of the planes equals
+// M, the pitch the O-POPE expects between the rows of the X^T operand [N/2][M]: the operand of the tap (ky,kx) is simply
+// the input at the word address ky*W + kx, read in place by the engine. The packed per-tap weights are prepared offline,
+// Y is initialised with the broadcast FP32 bias and every tap job accumulates into Z in place.
 
-#include "opope_transformer.h"
+#include "opope_tf16.h"
 
 #include DATAHEADER
 
 uint32_t *in;
-uint32_t *xt;
 uint32_t *wm;
 float *z;
-
-// dst[0..n) = src[0..n) (32-bit words, unit stride)
-static void vcopy(uint32_t *dst, const uint32_t *src, unsigned int n) {
-  unsigned int vl;
-  while (n > 0) {
-    asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(n));
-    asm volatile("vle32.v v0, (%0)" ::"r"(src) : "memory");
-    asm volatile("vse32.v v0, (%0)" ::"r"(dst) : "memory");
-    src += vl;
-    dst += vl;
-    n -= vl;
-  }
-}
 
 int main() {
   const unsigned int cid = snrt_cluster_core_idx();
@@ -40,9 +26,8 @@ int main() {
   int errors = 0;
 
   if (cid == 0) {
-    OPOPE_L1_ALLOC(in, uint32_t, CIN / 2 * H_SIZE * W_SIZE + 4);
-    OPOPE_L1_ALLOC(xt, uint32_t, (N_SIZE / 2) * M_SIZE);
-    OPOPE_L1_ALLOC(wm, uint32_t, (N_SIZE / 2) * K_SIZE);
+    OPOPE_L1_ALLOC(in, uint32_t, CIN / 2 * H_SIZE * W_SIZE + IN_PAD);
+    OPOPE_L1_ALLOC(wm, uint32_t, KH_SIZE * KW_SIZE * (CIN / 2) * K_SIZE);
     OPOPE_L1_ALLOC(z, float, M_SIZE * K_SIZE);
   }
 
@@ -51,8 +36,8 @@ int main() {
 
   // Initialize data
   if (cid == 0) {
-    snrt_dma_start_1d(in, cv_in_dram, CIN / 2 * H_SIZE * W_SIZE * sizeof(uint32_t));
-    snrt_dma_start_1d(wm, cv_w_dram, (N_SIZE / 2) * K_SIZE * sizeof(uint32_t));
+    snrt_dma_start_1d(in, cv_in_dram, (CIN / 2 * H_SIZE * W_SIZE + IN_PAD) * sizeof(uint32_t));
+    snrt_dma_start_1d(wm, cv_w_dram, KH_SIZE * KW_SIZE * (CIN / 2) * K_SIZE * sizeof(uint32_t));
     snrt_dma_start_1d(z, cv_zinit_dram, M_SIZE * K_SIZE * sizeof(float));  // Y = bias broadcast
     snrt_dma_wait_all();
   }
@@ -67,19 +52,14 @@ int main() {
     // Start dump
     start_kernel();
 
-    // Pre-processing (Spatz): packed im2col (X^T); Y = broadcast bias was placed by the initial DMA
-    for (unsigned int cp = 0; cp < CIN / 2; cp++)
-      for (unsigned int ky = 0; ky < KH_SIZE; ky++)
-        for (unsigned int kx = 0; kx < KW_SIZE; kx++) {
-          unsigned int p = (cp * KH_SIZE + ky) * KW_SIZE + kx;
-          vcopy(xt + p * M_SIZE, in + cp * H_SIZE * W_SIZE + ky * W_SIZE + kx, M_SIZE);
-        }
-
-    // GeMM (O-POPE, FP16 -> FP32)
-    opope_gemm_fp16(xt, wm, z, M_SIZE, N_SIZE, K_SIZE);
+    // GeMM (O-POPE, FP16 -> FP32): one job per filter tap, accumulating into Z in place; the operand is the input at the
+    // shifted address (no im2col, no copy). Y = broadcast bias was placed by the initial DMA.
+    for (unsigned int ky = 0; ky < KH_SIZE; ky++)
+      for (unsigned int kx = 0; kx < KW_SIZE; kx++)
+        opope_gemm_fp16(in + ky * W_SIZE + kx, wm + (ky * KW_SIZE + kx) * (CIN / 2) * K_SIZE, z, M_SIZE, N_SIZE, K_SIZE);
 
     // Post-processing (Spatz, FP32): ReLU
-    tf_relu(z, M_SIZE * K_SIZE);
+    tf16_relu(z, HO_SIZE * W_SIZE * K_SIZE);  // only the valid rows
 
     // End dump
     stop_kernel();

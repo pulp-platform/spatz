@@ -157,12 +157,16 @@ def p_mlp(app_dir, tag, p):
     w1 = wgt(rng, C, H).astype(np.float16); b1 = 0.1 * rnd(rng, H)
     w2 = wgt(rng, H, C).astype(np.float16); b2 = 0.1 * rnd(rng, C)
     w1, b1 = fold_ln(w1, g, b, b1)
+    # The second bias is one more reduction row of GeMM2: hpk gets a constant row {1.0, 0} (placed by the initial DMA, the GELU
+    # stage never writes it) and w2 the row {bias2 (FP16), 0}; N = HID + 2, the O-POPE adds bias2 for free (no device pass).
+    b2 = b2.astype(np.float16).astype(np.float64)  # FP16 bias (a GeMM input)
     z = x + lin(w2, h(gelu(lin(w1, h(ln_na(x)), b1))), b2)
+    w2ext = np.concatenate([pk(w2).reshape(H // 2, C), b2.astype(np.float16).view(np.uint16).astype(np.uint32)[None, :]], axis=0)
+    hone = np.full(T, 0x3C00, dtype=np.uint32)
     emit(app_dir, tag, {"C_SIZE": C, "T_SIZE": T, "HID_SIZE": H},
-         {"x": x, "w1": pk(w1), "hinit": rows_init(b1, T), "w2": pk(w2), "b2": b2,
+         {"x": x, "w1": pk(w1), "hinit": rows_init(b1, T), "w2": w2ext.flatten(), "hone": hone,
           "golden": f32(z)},
-         fp(z=C * T, lnpk=(C // 2) * T, w1=(C // 2) * H, h=H * T, hpk=(H // 2) * T, w2=(H // 2) * C,
-            b2=C))
+         fp(z=C * T, lnpk=(C // 2) * T, w1=(C // 2) * H, h=H * T, hpk=(H // 2 + 1) * T, w2=(H // 2 + 1) * C))
 
 
 def p_embed(app_dir, tag, p):
@@ -207,15 +211,18 @@ def p_block(app_dir, tag, p):
     v = h(a.T @ np.asarray(wv, np.float64) + bv.astype(np.float64))  # [T][C] token-major
     _, att = attn_core(q, k, v, 1.0)
     z1 = x + lin(wp, h(att), bp)
+    bm2 = bm2.astype(np.float16).astype(np.float64)  # FP16 bias: one more reduction row of GeMM2 (see p_mlp)
     z2 = z1 + lin(w2, h(gelu(lin(w1, h(ln_na(z1)), bm1))), bm2)
+    w2ext = np.concatenate([pk(w2).reshape(H // 2, C), bm2.astype(np.float16).view(np.uint16).astype(np.uint32)[None, :]], axis=0)
+    hone = np.full(T, 0x3C00, dtype=np.uint32)
     arrays = {"x": x, "wq": pk(wq), "wk": pk(wk), "wv": pk(wv), "wp": pk(wp),
               "qinit": rows_init(bq, T), "kinit": rows_init(bk, T),
               "vinit": np.repeat(bv[None, :], T, axis=0), "mask": causal_mask(T),
               "zinit": f32(x + bp[:, None]), "w1": pk(w1), "hinit": rows_init(bm1, T),
-              "w2": pk(w2), "bm2": bm2, "golden": f32(z2)}
+              "w2": w2ext.flatten(), "hone": hone, "golden": f32(z2)}
     emit(app_dir, tag, {"C_SIZE": C, "T_SIZE": T, "HID_SIZE": H},
          arrays,
          fp(x=C * T, lnpk=(C // 2) * T, wq=(C // 2) * C, wk=(C // 2) * C, wv=(C // 2) * C,
             wp=(C // 2) * C, q=C * T, k=C * T, v=T * C, qpk=(C // 2) * T, kpk=(C // 2) * T,
             vpk=(T // 2) * C, s=T * T, ppk=(T // 2) * T, att=C * T, attpk=(C // 2) * T, z=C * T,
-            w1=(C // 2) * H, h=H * T, hpk=(H // 2) * T, w2=(H // 2) * C, bm2=C))
+            w1=(C // 2) * H, h=H * T, hpk=(H // 2 + 1) * T, w2=(H // 2 + 1) * C))

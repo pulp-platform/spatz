@@ -35,7 +35,6 @@ static uint32_t *w1;
 static float *h;
 static uint32_t *hpk;
 static uint32_t *w2;
-static float *bm2;
 
 int main() {
   const unsigned int cid = snrt_cluster_core_idx();
@@ -64,9 +63,8 @@ int main() {
     OPOPE_L1_ALLOC(z, float, C_SIZE * T_SIZE);
     OPOPE_L1_ALLOC(w1, uint32_t, (C_SIZE / 2) * HID_SIZE);
     OPOPE_L1_ALLOC(h, float, HID_SIZE * T_SIZE);
-    OPOPE_L1_ALLOC(hpk, uint32_t, (HID_SIZE / 2) * T_SIZE);
-    OPOPE_L1_ALLOC(w2, uint32_t, (HID_SIZE / 2) * C_SIZE);
-    OPOPE_L1_ALLOC(bm2, float, C_SIZE);
+    OPOPE_L1_ALLOC(hpk, uint32_t, (HID_SIZE / 2 + 1) * T_SIZE);
+    OPOPE_L1_ALLOC(w2, uint32_t, (HID_SIZE / 2 + 1) * C_SIZE);
   }
 
   // Wait for all cores to finish
@@ -88,7 +86,7 @@ int main() {
     TF_DMA(wp, d_wp);
     TF_DMA(w1, d_w1);
     TF_DMA(w2, d_w2);
-    TF_DMA(bm2, d_bm2);
+    TF_DMA(hpk + (HID_SIZE / 2) * T_SIZE, d_hone);  // constant row {1.0, 0} of the bias2 reduction
     snrt_dma_wait_all();
   }
 
@@ -118,12 +116,11 @@ int main() {
     tf_pack_rows(attpk, att, C_SIZE, T_SIZE);
     // projection + residual (Y0 = x + bp from the header)
     opope_gemm_fp16(wp, attpk, z, C_SIZE, C_SIZE, T_SIZE);
-    // MLP: LN2 -> GeMM1 + GELU -> GeMM2 + residual (Y0 = z + bm2)
+    // MLP: LN2 -> GeMM1 + GELU -> GeMM2 + residual (Y0 = z; bias2 = one more reduction row pair, N = HID + 2)
     tf16_layernorm_pack(lnpk, z, C_SIZE, 1.0f / C_SIZE, T_SIZE);
     opope_gemm_fp16(w1, lnpk, h, HID_SIZE, C_SIZE, T_SIZE);
     tf16_gelu_pack_t32(hpk, h, HID_SIZE);
-    tf_add_bias_rows(z, bm2, C_SIZE, T_SIZE);
-    opope_gemm_fp16(w2, hpk, z, C_SIZE, HID_SIZE, T_SIZE);
+    opope_gemm_fp16(w2, hpk, z, C_SIZE, HID_SIZE + 2, T_SIZE);
 
     // End dump
     stop_kernel();

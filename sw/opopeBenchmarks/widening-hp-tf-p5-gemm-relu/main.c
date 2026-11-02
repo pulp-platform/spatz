@@ -50,7 +50,7 @@ int main() {
     start_kernel();
 
     opope_gemm_fp16(wpk, actpk, z, COUT_SIZE, C_SIZE, T_SIZE);
-    tf_relu(z, COUT_SIZE * T_SIZE);
+    tf16_relu(z, COUT_SIZE * T_SIZE);
 
     // End dump
     stop_kernel();

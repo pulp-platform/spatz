@@ -6,7 +6,7 @@
 // One widening GeMM of M x 2N x 2K real operations (see main.c). M must be a multiple of 16.
 {
     kernel: "CMATMUL"
-    M: 64,
-    N: 64,
+    M: 96,
+    N: 80,
     K: 64
 }

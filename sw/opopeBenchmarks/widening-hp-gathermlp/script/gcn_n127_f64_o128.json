@@ -7,9 +7,9 @@
 {
     kernel: "GATHERMLP"
     mode: "gcn",
-    R: 128,
+    R: 127,
     D: 64,
-    B: 128,
+    B: 127,
     L: 8,
     Dout: 128
 }

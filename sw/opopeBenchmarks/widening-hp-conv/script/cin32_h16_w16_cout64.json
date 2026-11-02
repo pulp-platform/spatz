@@ -5,10 +5,10 @@
 //   M = Ho*W (output rows, incl. kw-1 unused columns per image row), N = Cin*KH*KW, K = Cout.
 {
     kernel: "CONV"
-    Cin: 16,
-    H: 14,
+    Cin: 32,
+    H: 16,
     W: 16,
-    Cout: 48,
+    Cout: 64,
     KH: 3,
     KW: 3
 }
