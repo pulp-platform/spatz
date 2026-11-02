@@ -469,6 +469,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   localparam int unsigned VlsuBufWidth = $bits(vlsu_buf_t);
   logic [VlsuBufWidth-1:0] vlsu_buf_data_bits;
   assign vlsu_buf_data = vlsu_buf_t'(vlsu_buf_data_bits);
+  logic vlsu_buf_fault; // correctable fault
   rel_fifo #(
     .FallThrough (1'b0         ),
     .DataWidth   (VlsuBufWidth ),
@@ -640,7 +641,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   //////////
   // VLSU //
   //////////
- logic vlsu_correctable_error_internel;
+ logic vlsu_correctable_error_internal;
 `ifdef DOUBLE_BW
   spatz_doublebw_vlsu #(
     .NrMemPorts      (NrMemPorts      ),

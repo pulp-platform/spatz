@@ -1019,7 +1019,10 @@ module spatz_doublebw_vlsu
   for (genvar intf = 0; intf < NrInterfaces; intf++) begin : gen_vrf_req_register_intf
     rel_spill_register #(
       .T(vrf_req_t),
-      .TmrHandshake (1'b0)
+      .Bypass(1'b0),
+      .TmrHandshake (1'b1),
+      .DataCorrector(1'b0),
+      .ExtDataCorrector(1'b1)
     ) i_vrf_req_register (
       .clk_i  (clk_i                ),
       .rst_ni (rst_ni               ),
@@ -1029,9 +1032,9 @@ module spatz_doublebw_vlsu
       .data_o (vrf_req_q[intf]      ),
       .valid_o(vrf_req_valid_q[intf]),
       .ready_i(vrf_req_ready_q[intf]),
-      .fault_o ( vrf_req_register_fault[intf] ),
       .data_corrector_o ( ),
-      .data_corrected_i ( '0 )
+      .data_corrected_i ( '0 ),
+      .err_o ( vrf_req_register_fault[intf] ),
     );
 
     `FF(coalesce_q[intf], coalesce_d[intf], '0)
