@@ -802,18 +802,18 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     .ope_rsp_valid_o  (ope_rsp_valid                                            ),
     .ope_rsp_ready_i  (ope_rsp_ready                                            ),
     .ope_rsp_o        (ope_rsp                                                  ),
-    // VRF write port (VTMV_VT: z_output → vd)
+    // VRF one write port: Tile->Vector Move
     .vrf_waddr_o      (ope_waddr_s                                             ),
     .vrf_wdata_o      (ope_wdata_s                                             ),
     .vrf_we_o         (ope_we_s                                                ),
     .vrf_wbe_o        (ope_wbe_s                                               ),
     .vrf_wvalid_i     ((shared_wr_ope_gnt && ope_we_s) && vrf_wvalid[VFU_VD_WD]),
-    // VRF read ports: [0]=MAC vs2, [1]=MAC vs1, [2]=MOVE source.
-    .vrf_id_o         (ope_id_s                                                ),
+    // VRF three read ports: [0]=MAC vs2, [1]=MAC vs1, [2]=Vector->Tile Move
     .vrf_raddr_o      (ope_raddr_s                                             ),
     .vrf_re_o         (ope_re_s                                                ),
     .vrf_rdata_i      (vrf_rdata[VFU_VD_RD:VFU_VS2_RD]                         ),
     .vrf_rvalid_i     (shared_rd_ope_gnt & vrf_rvalid[VFU_VD_RD:VFU_VS2_RD]),
+    .vrf_id_o         (ope_id_s                                                ),
     // Tile interface to VLSU
     .tile_wvalid_i    (tile_wvalid                                             ),
     .tile_w_req_i     (tile_w_req                                              ),

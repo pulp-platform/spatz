@@ -16,12 +16,12 @@ module opope_accumulator
   input  logic                                rst_ni             ,
   input  logic                                flush_i            ,
   input  logic                                iteration_change_i ,
-  // interface with FMA Unit within OPE
-  input  logic [DATA_WIDTH-1:0]               fma_wdata_i        ,
-  input  logic [(DATA_WIDTH >> 3)-1:0]        fma_wen_i          ,
-  input  logic [$clog2(DEPTH)-1:0]            fma_waddr_i        ,
-  input  logic [$clog2(DEPTH)-1:0]            fma_raddr_i        ,
-  output logic [DATA_WIDTH-1:0]               fma_rdata_o        ,
+  // interface with FPU Array within OPE
+  input  logic [DATA_WIDTH-1:0]               fpu_wdata_i        ,
+  input  logic [(DATA_WIDTH >> 3)-1:0]        fpu_wen_i          ,
+  input  logic [$clog2(DEPTH)-1:0]            fpu_waddr_i        ,
+  input  logic [$clog2(DEPTH)-1:0]            fpu_raddr_i        ,
+  output logic [DATA_WIDTH-1:0]               fpu_rdata_o        ,
   // interface with VRF
   input  logic [WR_PORTS-1:0][DATA_WIDTH-1:0] vrf_wdata_i        ,
   input  logic [(DATA_WIDTH >> 3)-1:0]        vrf_wen_i          ,
@@ -76,7 +76,7 @@ module opope_accumulator
       vlsu_raddr_base = {vlsu_raddr_i[AddrWidth-1:RdPortIdxWidth], {RdPortIdxWidth{1'b0}}};
   end
 
-  assign fma_rdata_o  = mem[fma_raddr_i];
+  assign fpu_rdata_o  = mem[fpu_raddr_i];
   assign vrf_rdata_o  = mem[vrf_raddr_base +: RD_PORTS];
   assign vlsu_rdata_o = mem[vlsu_raddr_base +: RD_PORTS];
 
@@ -87,8 +87,8 @@ module opope_accumulator
       mem <= '0;
     end else begin
       for (int unsigned byte_idx = 0; byte_idx < DATA_WIDTH >> 3; byte_idx++) begin
-        if (fma_wen_i[byte_idx])
-          mem[fma_waddr_i][byte_idx << 3 +: 8] <= fma_wdata_i[byte_idx << 3 +: 8];
+        if (fpu_wen_i[byte_idx])
+          mem[fpu_waddr_i][byte_idx << 3 +: 8] <= fpu_wdata_i[byte_idx << 3 +: 8];
       end
       for (int unsigned port = 0; port < WR_PORTS; port++) begin
         for (int unsigned byte_idx = 0; byte_idx < DATA_WIDTH >> 3; byte_idx++) begin

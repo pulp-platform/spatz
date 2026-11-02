@@ -2159,31 +2159,15 @@ module spatz_decoder
           endcase
         end
 
-        // --- Integer matrix multiply (outer-product accumulate) ---
-        // vtmmu.tvv — unsigned
+        // Integer matrix arithmetic is not implemented by this FP16->FP32
+        // OPE.  Reject the reserved Zvt encodings at decode so they trap as
+        // illegal instructions instead of reaching a partial datapath.
         riscv_instr::VTMMU_TVV: begin
-          spatz_req.op       = VTMMU;
-          spatz_req.ex_unit  = OPE;
-          spatz_req.vs1      = decoder_req_i.instr[19:15]; // B row    (w_input)
-          spatz_req.use_vs1  = 1'b1;
-          spatz_req.vs2      = decoder_req_i.instr[24:20]; // A column (x_input)
-          spatz_req.use_vs2  = 1'b1;
-          spatz_req.mtd      = mt_t'(decoder_req_i.instr[11:8]);
-          spatz_req.op_ope.is_mac   = 1'b1;
+          illegal_instr = 1'b1;
         end
 
-        // vtmms.tvv — signed
         riscv_instr::VTMMS_TVV: begin
-          spatz_req.op                   = VTMMS;
-          spatz_req.ex_unit              = OPE;
-          spatz_req.vs1                  = decoder_req_i.instr[19:15];
-          spatz_req.use_vs1              = 1'b1;
-          spatz_req.vs2                  = decoder_req_i.instr[24:20];
-          spatz_req.use_vs2              = 1'b1;
-          spatz_req.mtd                  = mt_t'(decoder_req_i.instr[11:8]);
-          spatz_req.op_ope.signed_vs1 = 1'b1;
-          spatz_req.op_ope.signed_vs2 = 1'b1;
-          spatz_req.op_ope.is_mac     = 1'b1;
+          illegal_instr = 1'b1;
         end
 
         // --- FP matrix multiply (outer-product accumulate) ---
@@ -2201,18 +2185,11 @@ module spatz_decoder
           spatz_req.op_ope.is_mac   = 1'b1;
         end
 
-        // vtfmm.alt.tvv — alternate accumulate (BF16 input path)
+        // Alternate floating-point matrix inputs are not implemented.  Keep
+        // the encoding explicitly illegal instead of silently executing the
+        // normal FP16->FP32 datapath.
         riscv_instr::VTFMM_ALT_TVV: begin
-          spatz_req.op               = VTFMM_ALT;
-          spatz_req.ex_unit          = OPE;
-          spatz_req.vs1              = decoder_req_i.instr[19:15];
-          spatz_req.use_vs1          = 1'b1;
-          spatz_req.vs2              = decoder_req_i.instr[24:20];
-          spatz_req.use_vs2          = 1'b1;
-          spatz_req.mtd              = mt_t'(decoder_req_i.instr[11:8]);
-          spatz_req.rm               = fpu_rnd_mode_i;
-          spatz_req.fm               = fpu_fmt_mode_i;
-          spatz_req.op_ope.is_mac   = 1'b1;
+          illegal_instr = 1'b1;
         end
 
         // --- Move tile ↔ vector register ---
