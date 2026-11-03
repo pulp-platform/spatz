@@ -910,6 +910,7 @@ module spatz_cluster
         .be_i    (mem_be_dec  ),
         .rdata_o (mem_rdata   ),
         .gnt_o   (ecc_sram_gnt),
+        .accum_i ( '0         ),
 
         .single_error_o(sram_rd_single_error[i][j]),
         .multi_error_o(sram_rd_multi_error[i][j])
