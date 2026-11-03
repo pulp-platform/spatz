@@ -24,7 +24,7 @@
 
 // Single-core
 inline void fft_sc(float *s, float *buf, const float *twi,
-                   const uint16_t *seq_idx, const uint16_t *rev_idx,
+                   const uint32_t *seq_idx, const uint32_t *rev_idx,
                    const unsigned int nfft, const unsigned int log2_nfft,
                    const unsigned int cid) __attribute__((always_inline));
 
