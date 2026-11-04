@@ -321,6 +321,8 @@ module spatz_doublebw_vlsu
         .fault_o   (reorder_buffer_fault[intf][fu])
       );
       assign rob_rvalid[intf][fu] = !rob_empty[intf][fu];
+      assign rob_rid[intf][fu]    = '0;
+      assign rob_id[intf][fu]     = '0;
 `endif
     end: gen_rob_intf_fu
   end: gen_rob_intf
@@ -726,9 +728,10 @@ module spatz_doublebw_vlsu
           automatic logic [1:0] data_index_width_diff = int'(mem_spatz_req.vtype.vsew) - int'(mem_spatz_req.op_mem.ew);
 
           // Pointer to index
-          automatic logic [idx_width(N_FU*ELENB)-1:0] word_index = (fu << log2_num_idx_maxew_bytes) +
-                                                                   (idx_offset & (num_idx_maxew_bytes - 1)) +
-                                                                   ((idx_offset >> log2_num_idx_maxew_bytes) << log2_num_idx_maxew_bytes) * N_FU;
+          automatic logic [idx_width(N_FU*ELENB)-1:0] word_index;
+          word_index = (fu << log2_num_idx_maxew_bytes) +
+                       (idx_offset & (num_idx_maxew_bytes - 1)) +
+                       ((idx_offset >> log2_num_idx_maxew_bytes) << log2_num_idx_maxew_bytes) * N_FU;
 
           // Index
           unique case (mem_spatz_req.op_mem.ew)
@@ -1819,6 +1822,8 @@ module spatz_doublebw_vlsu
   always_comb begin
     for (int intf = 0; intf < NrInterfaces; intf++) begin
       load_wbe[intf] = '0;
+      load_rsp_data_aligned[intf] = '0;
+      vrf_wbe_pre[intf] = '0;
 
       vrf_raddr_o[intf] = (state_q == VLSU_ReadingV0_t) ? ((intf == 0) ? {v0_t_vreg_addr_hi, v0_t_vreg_addr_lo} : '0) : {vs2_vreg_idx_addr[intf], vd_vreg_addr[intf]};
       vrf_re_o[intf]        = '0;

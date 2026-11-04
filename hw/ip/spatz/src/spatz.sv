@@ -744,6 +744,8 @@ assign vlsu_correctable_error_o = vlsu_correctable_error_internal | vlsu_buf_fau
   assign dec_ded_err[VLSU_VS2_RD0] = '0;
   assign dec_sec_err[VLSU_VS2_RD1] = '0;
   assign dec_ded_err[VLSU_VS2_RD1] = '0;
+  assign vrf_wdata[VLSU_VD_WD0]    = '0;
+  assign vrf_wdata[VLSU_VD_WD1]    = '0;
 `else
   // VLSU read ports: raw ECC consumed directly inside VLSU; stub decoded data.
   // VS2_RD errors are now driven by VLSU outputs above; VD_RD is store-source only.

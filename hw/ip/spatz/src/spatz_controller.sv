@@ -429,8 +429,10 @@ module spatz_controller
       if (sb_enable_o[port]) begin
         // VFU and VSLDU: intID derived from vl_cnt progress, vl_cnt updated every successful write
         if (port inside {SB_VFU_VD_WD, SB_VSLDU_VD_WD}) begin
-          automatic logic  intID  = (vl_cnt_q[sb_id_i[port]] < vl_max_d[sb_id_i[port]]) ? 0 : 1; // vl_max_d: halfway mark
-          automatic int VRFWriteSize = narrow_q[sb_id_i[port]] ? VRFWordBWidth >> 1 : VRFWordBWidth;
+          automatic logic intID;
+          automatic int VRFWriteSize;
+          intID        = (vl_cnt_q[sb_id_i[port]] < vl_max_d[sb_id_i[port]]) ? 0 : 1; // vl_max_d: halfway mark
+          VRFWriteSize = narrow_q[sb_id_i[port]] ? VRFWordBWidth >> 1 : VRFWordBWidth;
 
           // Update vl_cnt if actually written into the VRF
           if (sb_wrote_result_i[port_idx])
