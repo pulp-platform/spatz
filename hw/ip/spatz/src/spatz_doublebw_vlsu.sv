@@ -91,9 +91,11 @@ module spatz_doublebw_vlsu
   // rel_fifo/rel_spill_register TMR-correction flags, aggregated onto
   // datapath_tmr_fault_o (declared here, ahead of any use, to avoid implicit
   // net inference at the port-connection sites below).
-  logic operation_queue_fault, commit_insn_fifo_fault;
-  logic [NrInterfaces-1:0] vrf_req_register_fault;
-  logic [NrInterfaces-1:0][N_FU-1:0] reorder_buffer_fault, offset_queue_fault, mem_req_register_fault;
+  logic [1:0] operation_queue_fault;
+  logic commit_insn_fifo_fault;
+  logic [NrInterfaces-1:0][1:0] vrf_req_register_fault;
+  logic [NrInterfaces-1:0][N_FU-1:0] reorder_buffer_fault, offset_queue_fault;
+  logic [NrInterfaces-1:0][N_FU-1:0][1:0] mem_req_register_fault;
 
   ////////////////
   // Parameters //
@@ -148,7 +150,7 @@ module spatz_doublebw_vlsu
     .data_o (mem_spatz_req                                  ),
     .valid_o(mem_spatz_req_valid                            ),
     .ready_i(mem_spatz_req_ready                            ),
-    .fault_o ( operation_queue_fault ),
+    .err_o ( operation_queue_fault ),
     .data_corrector_o ( ),
     .data_corrected_i ( '0 )
   );
@@ -1020,9 +1022,9 @@ module spatz_doublebw_vlsu
     rel_spill_register #(
       .T(vrf_req_t),
       .Bypass(1'b0),
-      .TmrHandshake (1'b1),
+      .TmrHandshake (1'b0),
       .DataCorrector(1'b0),
-      .ExtDataCorrector(1'b1)
+      .ExtDataCorrector(1'b0)
     ) i_vrf_req_register (
       .clk_i  (clk_i                ),
       .rst_ni (rst_ni               ),
@@ -2187,7 +2189,7 @@ module spatz_doublebw_vlsu
         .data_o  (spatz_mem_req_o[port]          ),
         .valid_o (spatz_mem_req_valid_o[port]    ),
         .ready_i (spatz_mem_req_ready_i[port]    ),
-        .fault_o ( mem_req_register_fault[intf][fu] ),
+        .err_o ( mem_req_register_fault[intf][fu] ),
         .data_corrector_o ( ),
         .data_corrected_i ( '0 )
       );
@@ -2237,7 +2239,7 @@ module spatz_doublebw_vlsu
                                 | (|mem_counter_tmr_fault) | (|mem_idx_counter_tmr_fault)
                                 | (|commit_counter_tmr_fault) | (|store_count_tmr_fault);
 
-  assign datapath_tmr_fault_o = operation_queue_fault | commit_insn_fifo_fault
+  assign datapath_tmr_fault_o = (|operation_queue_fault) | commit_insn_fifo_fault
                                | (|vrf_req_register_fault) | (|reorder_buffer_fault)
                                | (|offset_queue_fault) | (|mem_req_register_fault);
 

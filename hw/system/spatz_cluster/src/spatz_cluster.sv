@@ -544,7 +544,11 @@ module spatz_cluster
   .tcdm_interconnect_uncorrectable_count_o (tcdm_interconnect_uncorrectable_count),
 
   .snitch_correctable_fault_count_o (snitch_correctable_fault_count),
-  .snitch_uncorrectable_fault_count_o (snitch_uncorrectable_fault_count)
+  .snitch_uncorrectable_fault_count_o (snitch_uncorrectable_fault_count),
+  .vlsu_correctable_count_o (),
+  .vlsu_uncorrectable_count_o (),
+  .icache_correctable_count_o (),
+  .icache_uncorrectable_count_o ()
 );
 
   // -------------
@@ -1814,14 +1818,16 @@ module spatz_cluster
     .cluster_probe_o          (cluster_probe_o       ),
     // Error monitor
     .err_monitor_clear_o              (err_monitor_clear              ),
-    .vrf_correctable_count_i          (vrf_correctable_count          ),
-    .vrf_uncorrectable_count_i        (vrf_uncorrectable_count        ),
+    .vrf_correctable_count_i          (vrf_correctable_count[0]       ),
+    .vrf_uncorrectable_count_i        (vrf_uncorrectable_count[0]     ),
     .tcdm_rd_correctable_count_i      (tcdm_rd_correctable_count      ),
     .tcdm_rd_uncorrectable_count_i    (tcdm_rd_uncorrectable_count    ),
     .tcdm_scrub_correctable_count_i   (tcdm_scrub_correctable_count   ),
     .tcdm_scrub_uncorrectable_count_i (tcdm_scrub_uncorrectable_count ),
     .snitch_correctable_fault_count_i (snitch_correctable_fault_count ),
-    .snitch_uncorrectable_fault_count_i (snitch_uncorrectable_fault_count )
+    .snitch_uncorrectable_fault_count_i (snitch_uncorrectable_fault_count ),
+    .tcdm_interconnect_correctable_count_i (tcdm_interconnect_correctable_count ),
+    .tcdm_interconnect_uncorrectable_count_i (tcdm_interconnect_uncorrectable_count )
   );
 
   // 3. BootROM
