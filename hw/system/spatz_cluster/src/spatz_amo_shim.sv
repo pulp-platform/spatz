@@ -282,6 +282,8 @@ module spatz_amo_shim
       core_valid_rep = valid_rep_i[t];
       core_ready_rep = 1'b1;
       core_wen_rep   = write_i | (sc_successful & (amo_i == AMOSC));
+      //DMA has priority.
+      core_arb_ready_rep[t] = ecc_sram_gnt_i & ~dma_access_i;
 
       state_d_rep[t] = state_q;
 
@@ -308,13 +310,11 @@ module spatz_amo_shim
       mem_req_rep[t]        = core_valid_rep;
       ready_rep[t]          = core_ready_rep & ecc_sram_gnt_i;
       mem_wen_rep[t]        = core_wen_rep;
-      core_arb_ready_rep[t] = 1'b1 & ecc_sram_gnt_i;
 
       if (dma_access_i) begin
         mem_req_rep[t]        = valid_rep_i[t];
         ready_rep[t]          = 1'b1 & ecc_sram_gnt_i;
         mem_wen_rep[t]        = write_i;
-        core_arb_ready_rep[t] = 1'b0 & ecc_sram_gnt_i;
       end
     end
 

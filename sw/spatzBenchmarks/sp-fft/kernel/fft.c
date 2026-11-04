@@ -22,8 +22,8 @@
 // DIF Cooley-Tukey algorithm
 // At every iteration, we store indexed
 // todo: simplify the last iteration, which do not require twiddle factors
-void fft_sc(float *s, float *buf, const float *twi, const uint16_t *seq_idx,
-            const uint16_t *rev_idx, const unsigned int nfft,
+void fft_sc(float *s, float *buf, const float *twi, const uint32_t *seq_idx,
+            const uint32_t *rev_idx, const unsigned int nfft,
             const unsigned int log2_nfft, const unsigned int cid) {
 
   // Always run in dual-core mode
@@ -117,7 +117,7 @@ void fft_sc(float *s, float *buf, const float *twi, const uint16_t *seq_idx,
       // vector)
       if (bf == log2_nfft - 1) {
         asm volatile(
-            "vle16.v v24, (%0);" ::"r"(rev_idx)); // v24: bit-reversal indices
+            "vle32.v v24, (%0);" ::"r"(rev_idx)); // v24: bit-reversal indices
         rev_idx += vl;
         if (dc) {
           if (!cid) {
@@ -139,7 +139,7 @@ void fft_sc(float *s, float *buf, const float *twi, const uint16_t *seq_idx,
         }
       } else {
         // Load the sequential indices dirctly
-        asm volatile("vle16.v v24, (%0)" ::"r"(seq_idx)); // v24: index vector
+        asm volatile("vle32.v v24, (%0)" ::"r"(seq_idx)); // v24: index vector
         seq_idx += vl;
         re_u_o = o_buf;
         im_u_o = dc ? o_buf + 2 * nfft : o_buf + nfft;
@@ -147,10 +147,29 @@ void fft_sc(float *s, float *buf, const float *twi, const uint16_t *seq_idx,
         im_l_o = im_u_o + (nfft >> 2);
       }
 
-      asm volatile("vsuxei16.v v16, (%0), v24" ::"r"(re_u_o));
-      asm volatile("vsuxei16.v v0, (%0), v24" ::"r"(im_u_o));
-      asm volatile("vsuxei16.v v8, (%0), v24" ::"r"(re_l_o));
-      asm volatile("vsuxei16.v v12, (%0), v24" ::"r"(im_l_o));
+      const uint32_t *idx_c =
+          (bf == log2_nfft - 1) ? rev_idx - vl : seq_idx - vl;
+      asm volatile("vsetvli zero, %0, e32, m1, ta, ma" ::"r"(16));
+      asm volatile("vle32.v v24, (%0)" ::"r"(idx_c + 0) : "memory");
+      asm volatile("vsuxei32.v v16, (%0), v24" ::"r"(re_u_o) : "memory");
+      asm volatile("vsuxei32.v v0, (%0), v24" ::"r"(im_u_o) : "memory");
+      asm volatile("vsuxei32.v v8, (%0), v24" ::"r"(re_l_o) : "memory");
+      asm volatile("vsuxei32.v v12, (%0), v24" ::"r"(im_l_o) : "memory");
+      asm volatile("vle32.v v24, (%0)" ::"r"(idx_c + 16) : "memory");
+      asm volatile("vsuxei32.v v17, (%0), v24" ::"r"(re_u_o) : "memory");
+      asm volatile("vsuxei32.v v1, (%0), v24" ::"r"(im_u_o) : "memory");
+      asm volatile("vsuxei32.v v9, (%0), v24" ::"r"(re_l_o) : "memory");
+      asm volatile("vsuxei32.v v13, (%0), v24" ::"r"(im_l_o) : "memory");
+      asm volatile("vle32.v v24, (%0)" ::"r"(idx_c + 32) : "memory");
+      asm volatile("vsuxei32.v v18, (%0), v24" ::"r"(re_u_o) : "memory");
+      asm volatile("vsuxei32.v v2, (%0), v24" ::"r"(im_u_o) : "memory");
+      asm volatile("vsuxei32.v v10, (%0), v24" ::"r"(re_l_o) : "memory");
+      asm volatile("vsuxei32.v v14, (%0), v24" ::"r"(im_l_o) : "memory");
+      asm volatile("vle32.v v24, (%0)" ::"r"(idx_c + 48) : "memory");
+      asm volatile("vsuxei32.v v19, (%0), v24" ::"r"(re_u_o) : "memory");
+      asm volatile("vsuxei32.v v3, (%0), v24" ::"r"(im_u_o) : "memory");
+      asm volatile("vsuxei32.v v11, (%0), v24" ::"r"(re_l_o) : "memory");
+      asm volatile("vsuxei32.v v15, (%0), v24" ::"r"(im_l_o) : "memory");
     }
   }
 }
