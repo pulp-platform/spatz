@@ -12,12 +12,12 @@
 	{ name: "NumVrfUnits",
 	desc: "Number of VRF units (must equal NrCores in the cluster)",
 	type: "int",
-	default: "2"
+	default: "1"
 	},
 	{ name: "NumTcdmBanks",
 	desc: "Number of TCDM banks (must equal NrSuperBanks*BanksPerSuperBank in the cluster)",
 	type: "int",
-	default: "16"
+	default: "32"
 	},
     ],
     name: "spatz_cluster_peripheral",
@@ -497,6 +497,40 @@
      },
      {
 	multireg: {
+	    name: "VLSU_CORRECTABLE_COUNT",
+	    desc: "Per-VLSU-unit correctable (single-bit) error counter.",
+	    swaccess: "ro",
+	    hwaccess: "hrw",
+	    hwext: "true",
+	    count: "NumVrfUnits",
+	    compact: "false",
+	    cname: "vlsu_correctable_count",
+	    fields: [{
+		bits: "31:0",
+		name: "COUNT",
+		desc: "Saturating count of correctable errors for this VLSU unit."
+	    }]
+	}
+     },
+     {
+	multireg: {
+	    name: "VLSU_UNCORRECTABLE_COUNT",
+	    desc: "Per-VLSU-unit uncorrectable error counter.",
+	    swaccess: "ro",
+	    hwaccess: "hrw",
+	    hwext: "true",
+	    count: "NumVrfUnits",
+	    compact: "false",
+	    cname: "vlsu_uncorrectable_count",
+	    fields: [{
+		bits: "31:0",
+		name: "COUNT",
+		desc: "Saturating count of uncorrectable errors for this VLSU unit."
+	    }]
+	}
+     },
+     {
+	multireg: {
 	    name: "TCDM_RD_CORRECTABLE_COUNT",
 	    desc: "Per-TCDM-bank correctable read ECC error counter.",
 	    swaccess: "ro",
@@ -563,20 +597,61 @@
 	    }]
 	}
      },
+    {
+	name: "TCDM_INTERCONNECT_CORRECTABLE_COUNT",
+	desc: "Aggregated correctable TCDM interconnect error counter.",
+	swaccess: "ro",
+	hwaccess: "hrw",
+	hwext: "true",
+	fields: [{
+	    bits: "31:0",
+	    name: "COUNT",
+	    desc: "Saturating count of aggregated correctable TCDM interconnect errors for this cluster."
+	}]
+    },
+    {
+	name: "TCDM_INTERCONNECT_UNCORRECTABLE_COUNT",
+	desc: "Aggregated uncorrectable TCDM interconnect error counter.",
+	swaccess: "ro",
+	hwaccess: "hrw",
+	hwext: "true",
+	fields: [{
+	    bits: "31:0",
+	    name: "COUNT",
+	    desc: "Saturating count of aggregated uncorrectable TCDM interconnect errors for this cluster."
+	}]
+    },
      {
 	multireg: {
-	    name: "CORE_TMR_FAULT_COUNT",
-	    desc: "Per-core whole-core TMR lockstep replica-mismatch counter.",
+	    name: "SNITCH_CORRECTABLE_FAULT_COUNT",
+	    desc: "snitch scalar core correctable fault counter.",
 	    swaccess: "ro",
 	    hwaccess: "hrw",
 	    hwext: "true",
 	    count: "NumVrfUnits",
 	    compact: "false",
-	    cname: "core_tmr_fault_count",
+	    cname: "snitch_correctable_fault_count",
 	    fields: [{
 		bits: "31:0",
 		name: "COUNT",
-		desc: "Saturating count of whole-core TMR replica mismatches for this core."
+		desc: "Saturating count of snitch scalar core corretable faults."
+	    }]
+	}
+     },
+     {
+	multireg: {
+	    name: "SNITCH_UNCORRECTABLE_FAULT_COUNT",
+	    desc: "snitch scalar core uncorrectable fault counter.",
+	    swaccess: "ro",
+	    hwaccess: "hrw",
+	    hwext: "true",
+	    count: "NumVrfUnits",
+	    compact: "false",
+	    cname: "snitch_uncorrectable_fault_count",
+	    fields: [{
+		bits: "31:0",
+		name: "COUNT",
+		desc: "Saturating count of snitch scalar core uncorretable faults."
 	    }]
 	}
      }

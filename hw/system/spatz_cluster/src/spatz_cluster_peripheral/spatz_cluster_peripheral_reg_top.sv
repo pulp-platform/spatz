@@ -10,7 +10,7 @@
 module spatz_cluster_peripheral_reg_top #(
   parameter type reg_req_t = logic,
   parameter type reg_rsp_t = logic,
-  parameter int AW = 10
+  parameter int AW = 11
 ) (
   input logic clk_i,
   input logic rst_ni,
@@ -287,14 +287,14 @@ module spatz_cluster_peripheral_reg_top #(
   logic err_monitor_clear_qs;
   logic err_monitor_clear_wd;
   logic err_monitor_clear_we;
-  logic [31:0] vrf_correctable_count_0_qs;
-  logic vrf_correctable_count_0_re;
-  logic [31:0] vrf_correctable_count_1_qs;
-  logic vrf_correctable_count_1_re;
-  logic [31:0] vrf_uncorrectable_count_0_qs;
-  logic vrf_uncorrectable_count_0_re;
-  logic [31:0] vrf_uncorrectable_count_1_qs;
-  logic vrf_uncorrectable_count_1_re;
+  logic [31:0] vrf_correctable_count_qs;
+  logic vrf_correctable_count_re;
+  logic [31:0] vrf_uncorrectable_count_qs;
+  logic vrf_uncorrectable_count_re;
+  logic [31:0] vlsu_correctable_count_qs;
+  logic vlsu_correctable_count_re;
+  logic [31:0] vlsu_uncorrectable_count_qs;
+  logic vlsu_uncorrectable_count_re;
   logic [31:0] tcdm_rd_correctable_count_0_qs;
   logic tcdm_rd_correctable_count_0_re;
   logic [31:0] tcdm_rd_correctable_count_1_qs;
@@ -327,6 +327,38 @@ module spatz_cluster_peripheral_reg_top #(
   logic tcdm_rd_correctable_count_14_re;
   logic [31:0] tcdm_rd_correctable_count_15_qs;
   logic tcdm_rd_correctable_count_15_re;
+  logic [31:0] tcdm_rd_correctable_count_16_qs;
+  logic tcdm_rd_correctable_count_16_re;
+  logic [31:0] tcdm_rd_correctable_count_17_qs;
+  logic tcdm_rd_correctable_count_17_re;
+  logic [31:0] tcdm_rd_correctable_count_18_qs;
+  logic tcdm_rd_correctable_count_18_re;
+  logic [31:0] tcdm_rd_correctable_count_19_qs;
+  logic tcdm_rd_correctable_count_19_re;
+  logic [31:0] tcdm_rd_correctable_count_20_qs;
+  logic tcdm_rd_correctable_count_20_re;
+  logic [31:0] tcdm_rd_correctable_count_21_qs;
+  logic tcdm_rd_correctable_count_21_re;
+  logic [31:0] tcdm_rd_correctable_count_22_qs;
+  logic tcdm_rd_correctable_count_22_re;
+  logic [31:0] tcdm_rd_correctable_count_23_qs;
+  logic tcdm_rd_correctable_count_23_re;
+  logic [31:0] tcdm_rd_correctable_count_24_qs;
+  logic tcdm_rd_correctable_count_24_re;
+  logic [31:0] tcdm_rd_correctable_count_25_qs;
+  logic tcdm_rd_correctable_count_25_re;
+  logic [31:0] tcdm_rd_correctable_count_26_qs;
+  logic tcdm_rd_correctable_count_26_re;
+  logic [31:0] tcdm_rd_correctable_count_27_qs;
+  logic tcdm_rd_correctable_count_27_re;
+  logic [31:0] tcdm_rd_correctable_count_28_qs;
+  logic tcdm_rd_correctable_count_28_re;
+  logic [31:0] tcdm_rd_correctable_count_29_qs;
+  logic tcdm_rd_correctable_count_29_re;
+  logic [31:0] tcdm_rd_correctable_count_30_qs;
+  logic tcdm_rd_correctable_count_30_re;
+  logic [31:0] tcdm_rd_correctable_count_31_qs;
+  logic tcdm_rd_correctable_count_31_re;
   logic [31:0] tcdm_rd_uncorrectable_count_0_qs;
   logic tcdm_rd_uncorrectable_count_0_re;
   logic [31:0] tcdm_rd_uncorrectable_count_1_qs;
@@ -359,6 +391,38 @@ module spatz_cluster_peripheral_reg_top #(
   logic tcdm_rd_uncorrectable_count_14_re;
   logic [31:0] tcdm_rd_uncorrectable_count_15_qs;
   logic tcdm_rd_uncorrectable_count_15_re;
+  logic [31:0] tcdm_rd_uncorrectable_count_16_qs;
+  logic tcdm_rd_uncorrectable_count_16_re;
+  logic [31:0] tcdm_rd_uncorrectable_count_17_qs;
+  logic tcdm_rd_uncorrectable_count_17_re;
+  logic [31:0] tcdm_rd_uncorrectable_count_18_qs;
+  logic tcdm_rd_uncorrectable_count_18_re;
+  logic [31:0] tcdm_rd_uncorrectable_count_19_qs;
+  logic tcdm_rd_uncorrectable_count_19_re;
+  logic [31:0] tcdm_rd_uncorrectable_count_20_qs;
+  logic tcdm_rd_uncorrectable_count_20_re;
+  logic [31:0] tcdm_rd_uncorrectable_count_21_qs;
+  logic tcdm_rd_uncorrectable_count_21_re;
+  logic [31:0] tcdm_rd_uncorrectable_count_22_qs;
+  logic tcdm_rd_uncorrectable_count_22_re;
+  logic [31:0] tcdm_rd_uncorrectable_count_23_qs;
+  logic tcdm_rd_uncorrectable_count_23_re;
+  logic [31:0] tcdm_rd_uncorrectable_count_24_qs;
+  logic tcdm_rd_uncorrectable_count_24_re;
+  logic [31:0] tcdm_rd_uncorrectable_count_25_qs;
+  logic tcdm_rd_uncorrectable_count_25_re;
+  logic [31:0] tcdm_rd_uncorrectable_count_26_qs;
+  logic tcdm_rd_uncorrectable_count_26_re;
+  logic [31:0] tcdm_rd_uncorrectable_count_27_qs;
+  logic tcdm_rd_uncorrectable_count_27_re;
+  logic [31:0] tcdm_rd_uncorrectable_count_28_qs;
+  logic tcdm_rd_uncorrectable_count_28_re;
+  logic [31:0] tcdm_rd_uncorrectable_count_29_qs;
+  logic tcdm_rd_uncorrectable_count_29_re;
+  logic [31:0] tcdm_rd_uncorrectable_count_30_qs;
+  logic tcdm_rd_uncorrectable_count_30_re;
+  logic [31:0] tcdm_rd_uncorrectable_count_31_qs;
+  logic tcdm_rd_uncorrectable_count_31_re;
   logic [31:0] tcdm_scrub_correctable_count_0_qs;
   logic tcdm_scrub_correctable_count_0_re;
   logic [31:0] tcdm_scrub_correctable_count_1_qs;
@@ -391,6 +455,38 @@ module spatz_cluster_peripheral_reg_top #(
   logic tcdm_scrub_correctable_count_14_re;
   logic [31:0] tcdm_scrub_correctable_count_15_qs;
   logic tcdm_scrub_correctable_count_15_re;
+  logic [31:0] tcdm_scrub_correctable_count_16_qs;
+  logic tcdm_scrub_correctable_count_16_re;
+  logic [31:0] tcdm_scrub_correctable_count_17_qs;
+  logic tcdm_scrub_correctable_count_17_re;
+  logic [31:0] tcdm_scrub_correctable_count_18_qs;
+  logic tcdm_scrub_correctable_count_18_re;
+  logic [31:0] tcdm_scrub_correctable_count_19_qs;
+  logic tcdm_scrub_correctable_count_19_re;
+  logic [31:0] tcdm_scrub_correctable_count_20_qs;
+  logic tcdm_scrub_correctable_count_20_re;
+  logic [31:0] tcdm_scrub_correctable_count_21_qs;
+  logic tcdm_scrub_correctable_count_21_re;
+  logic [31:0] tcdm_scrub_correctable_count_22_qs;
+  logic tcdm_scrub_correctable_count_22_re;
+  logic [31:0] tcdm_scrub_correctable_count_23_qs;
+  logic tcdm_scrub_correctable_count_23_re;
+  logic [31:0] tcdm_scrub_correctable_count_24_qs;
+  logic tcdm_scrub_correctable_count_24_re;
+  logic [31:0] tcdm_scrub_correctable_count_25_qs;
+  logic tcdm_scrub_correctable_count_25_re;
+  logic [31:0] tcdm_scrub_correctable_count_26_qs;
+  logic tcdm_scrub_correctable_count_26_re;
+  logic [31:0] tcdm_scrub_correctable_count_27_qs;
+  logic tcdm_scrub_correctable_count_27_re;
+  logic [31:0] tcdm_scrub_correctable_count_28_qs;
+  logic tcdm_scrub_correctable_count_28_re;
+  logic [31:0] tcdm_scrub_correctable_count_29_qs;
+  logic tcdm_scrub_correctable_count_29_re;
+  logic [31:0] tcdm_scrub_correctable_count_30_qs;
+  logic tcdm_scrub_correctable_count_30_re;
+  logic [31:0] tcdm_scrub_correctable_count_31_qs;
+  logic tcdm_scrub_correctable_count_31_re;
   logic [31:0] tcdm_scrub_uncorrectable_count_0_qs;
   logic tcdm_scrub_uncorrectable_count_0_re;
   logic [31:0] tcdm_scrub_uncorrectable_count_1_qs;
@@ -423,10 +519,46 @@ module spatz_cluster_peripheral_reg_top #(
   logic tcdm_scrub_uncorrectable_count_14_re;
   logic [31:0] tcdm_scrub_uncorrectable_count_15_qs;
   logic tcdm_scrub_uncorrectable_count_15_re;
-  logic [31:0] core_tmr_fault_count_0_qs;
-  logic core_tmr_fault_count_0_re;
-  logic [31:0] core_tmr_fault_count_1_qs;
-  logic core_tmr_fault_count_1_re;
+  logic [31:0] tcdm_scrub_uncorrectable_count_16_qs;
+  logic tcdm_scrub_uncorrectable_count_16_re;
+  logic [31:0] tcdm_scrub_uncorrectable_count_17_qs;
+  logic tcdm_scrub_uncorrectable_count_17_re;
+  logic [31:0] tcdm_scrub_uncorrectable_count_18_qs;
+  logic tcdm_scrub_uncorrectable_count_18_re;
+  logic [31:0] tcdm_scrub_uncorrectable_count_19_qs;
+  logic tcdm_scrub_uncorrectable_count_19_re;
+  logic [31:0] tcdm_scrub_uncorrectable_count_20_qs;
+  logic tcdm_scrub_uncorrectable_count_20_re;
+  logic [31:0] tcdm_scrub_uncorrectable_count_21_qs;
+  logic tcdm_scrub_uncorrectable_count_21_re;
+  logic [31:0] tcdm_scrub_uncorrectable_count_22_qs;
+  logic tcdm_scrub_uncorrectable_count_22_re;
+  logic [31:0] tcdm_scrub_uncorrectable_count_23_qs;
+  logic tcdm_scrub_uncorrectable_count_23_re;
+  logic [31:0] tcdm_scrub_uncorrectable_count_24_qs;
+  logic tcdm_scrub_uncorrectable_count_24_re;
+  logic [31:0] tcdm_scrub_uncorrectable_count_25_qs;
+  logic tcdm_scrub_uncorrectable_count_25_re;
+  logic [31:0] tcdm_scrub_uncorrectable_count_26_qs;
+  logic tcdm_scrub_uncorrectable_count_26_re;
+  logic [31:0] tcdm_scrub_uncorrectable_count_27_qs;
+  logic tcdm_scrub_uncorrectable_count_27_re;
+  logic [31:0] tcdm_scrub_uncorrectable_count_28_qs;
+  logic tcdm_scrub_uncorrectable_count_28_re;
+  logic [31:0] tcdm_scrub_uncorrectable_count_29_qs;
+  logic tcdm_scrub_uncorrectable_count_29_re;
+  logic [31:0] tcdm_scrub_uncorrectable_count_30_qs;
+  logic tcdm_scrub_uncorrectable_count_30_re;
+  logic [31:0] tcdm_scrub_uncorrectable_count_31_qs;
+  logic tcdm_scrub_uncorrectable_count_31_re;
+  logic [31:0] tcdm_interconnect_correctable_count_qs;
+  logic tcdm_interconnect_correctable_count_re;
+  logic [31:0] tcdm_interconnect_uncorrectable_count_qs;
+  logic tcdm_interconnect_uncorrectable_count_re;
+  logic [31:0] snitch_correctable_fault_count_qs;
+  logic snitch_correctable_fault_count_re;
+  logic [31:0] snitch_uncorrectable_fault_count_qs;
+  logic snitch_uncorrectable_fault_count_re;
 
   // Register instances
 
@@ -2322,69 +2454,73 @@ module spatz_cluster_peripheral_reg_top #(
 
 
   // Subregister 0 of Multireg vrf_correctable_count
-  // R[vrf_correctable_count_0]: V(True)
+  // R[vrf_correctable_count]: V(True)
 
   prim_subreg_ext #(
     .DW    (32)
-  ) u_vrf_correctable_count_0 (
-    .re     (vrf_correctable_count_0_re),
+  ) u_vrf_correctable_count (
+    .re     (vrf_correctable_count_re),
     .we     (1'b0),
     .wd     ('0),
     .d      (hw2reg.vrf_correctable_count[0].d),
     .qre    (),
     .qe     (),
     .q      (reg2hw.vrf_correctable_count[0].q ),
-    .qs     (vrf_correctable_count_0_qs)
-  );
-
-  // Subregister 1 of Multireg vrf_correctable_count
-  // R[vrf_correctable_count_1]: V(True)
-
-  prim_subreg_ext #(
-    .DW    (32)
-  ) u_vrf_correctable_count_1 (
-    .re     (vrf_correctable_count_1_re),
-    .we     (1'b0),
-    .wd     ('0),
-    .d      (hw2reg.vrf_correctable_count[1].d),
-    .qre    (),
-    .qe     (),
-    .q      (reg2hw.vrf_correctable_count[1].q ),
-    .qs     (vrf_correctable_count_1_qs)
+    .qs     (vrf_correctable_count_qs)
   );
 
 
 
   // Subregister 0 of Multireg vrf_uncorrectable_count
-  // R[vrf_uncorrectable_count_0]: V(True)
+  // R[vrf_uncorrectable_count]: V(True)
 
   prim_subreg_ext #(
     .DW    (32)
-  ) u_vrf_uncorrectable_count_0 (
-    .re     (vrf_uncorrectable_count_0_re),
+  ) u_vrf_uncorrectable_count (
+    .re     (vrf_uncorrectable_count_re),
     .we     (1'b0),
     .wd     ('0),
     .d      (hw2reg.vrf_uncorrectable_count[0].d),
     .qre    (),
     .qe     (),
     .q      (reg2hw.vrf_uncorrectable_count[0].q ),
-    .qs     (vrf_uncorrectable_count_0_qs)
+    .qs     (vrf_uncorrectable_count_qs)
   );
 
-  // Subregister 1 of Multireg vrf_uncorrectable_count
-  // R[vrf_uncorrectable_count_1]: V(True)
+
+
+  // Subregister 0 of Multireg vlsu_correctable_count
+  // R[vlsu_correctable_count]: V(True)
 
   prim_subreg_ext #(
     .DW    (32)
-  ) u_vrf_uncorrectable_count_1 (
-    .re     (vrf_uncorrectable_count_1_re),
+  ) u_vlsu_correctable_count (
+    .re     (vlsu_correctable_count_re),
     .we     (1'b0),
     .wd     ('0),
-    .d      (hw2reg.vrf_uncorrectable_count[1].d),
+    .d      (hw2reg.vlsu_correctable_count[0].d),
     .qre    (),
     .qe     (),
-    .q      (reg2hw.vrf_uncorrectable_count[1].q ),
-    .qs     (vrf_uncorrectable_count_1_qs)
+    .q      (reg2hw.vlsu_correctable_count[0].q ),
+    .qs     (vlsu_correctable_count_qs)
+  );
+
+
+
+  // Subregister 0 of Multireg vlsu_uncorrectable_count
+  // R[vlsu_uncorrectable_count]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_vlsu_uncorrectable_count (
+    .re     (vlsu_uncorrectable_count_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.vlsu_uncorrectable_count[0].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.vlsu_uncorrectable_count[0].q ),
+    .qs     (vlsu_uncorrectable_count_qs)
   );
 
 
@@ -2645,6 +2781,262 @@ module spatz_cluster_peripheral_reg_top #(
     .qs     (tcdm_rd_correctable_count_15_qs)
   );
 
+  // Subregister 16 of Multireg tcdm_rd_correctable_count
+  // R[tcdm_rd_correctable_count_16]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_tcdm_rd_correctable_count_16 (
+    .re     (tcdm_rd_correctable_count_16_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.tcdm_rd_correctable_count[16].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.tcdm_rd_correctable_count[16].q ),
+    .qs     (tcdm_rd_correctable_count_16_qs)
+  );
+
+  // Subregister 17 of Multireg tcdm_rd_correctable_count
+  // R[tcdm_rd_correctable_count_17]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_tcdm_rd_correctable_count_17 (
+    .re     (tcdm_rd_correctable_count_17_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.tcdm_rd_correctable_count[17].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.tcdm_rd_correctable_count[17].q ),
+    .qs     (tcdm_rd_correctable_count_17_qs)
+  );
+
+  // Subregister 18 of Multireg tcdm_rd_correctable_count
+  // R[tcdm_rd_correctable_count_18]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_tcdm_rd_correctable_count_18 (
+    .re     (tcdm_rd_correctable_count_18_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.tcdm_rd_correctable_count[18].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.tcdm_rd_correctable_count[18].q ),
+    .qs     (tcdm_rd_correctable_count_18_qs)
+  );
+
+  // Subregister 19 of Multireg tcdm_rd_correctable_count
+  // R[tcdm_rd_correctable_count_19]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_tcdm_rd_correctable_count_19 (
+    .re     (tcdm_rd_correctable_count_19_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.tcdm_rd_correctable_count[19].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.tcdm_rd_correctable_count[19].q ),
+    .qs     (tcdm_rd_correctable_count_19_qs)
+  );
+
+  // Subregister 20 of Multireg tcdm_rd_correctable_count
+  // R[tcdm_rd_correctable_count_20]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_tcdm_rd_correctable_count_20 (
+    .re     (tcdm_rd_correctable_count_20_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.tcdm_rd_correctable_count[20].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.tcdm_rd_correctable_count[20].q ),
+    .qs     (tcdm_rd_correctable_count_20_qs)
+  );
+
+  // Subregister 21 of Multireg tcdm_rd_correctable_count
+  // R[tcdm_rd_correctable_count_21]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_tcdm_rd_correctable_count_21 (
+    .re     (tcdm_rd_correctable_count_21_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.tcdm_rd_correctable_count[21].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.tcdm_rd_correctable_count[21].q ),
+    .qs     (tcdm_rd_correctable_count_21_qs)
+  );
+
+  // Subregister 22 of Multireg tcdm_rd_correctable_count
+  // R[tcdm_rd_correctable_count_22]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_tcdm_rd_correctable_count_22 (
+    .re     (tcdm_rd_correctable_count_22_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.tcdm_rd_correctable_count[22].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.tcdm_rd_correctable_count[22].q ),
+    .qs     (tcdm_rd_correctable_count_22_qs)
+  );
+
+  // Subregister 23 of Multireg tcdm_rd_correctable_count
+  // R[tcdm_rd_correctable_count_23]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_tcdm_rd_correctable_count_23 (
+    .re     (tcdm_rd_correctable_count_23_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.tcdm_rd_correctable_count[23].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.tcdm_rd_correctable_count[23].q ),
+    .qs     (tcdm_rd_correctable_count_23_qs)
+  );
+
+  // Subregister 24 of Multireg tcdm_rd_correctable_count
+  // R[tcdm_rd_correctable_count_24]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_tcdm_rd_correctable_count_24 (
+    .re     (tcdm_rd_correctable_count_24_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.tcdm_rd_correctable_count[24].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.tcdm_rd_correctable_count[24].q ),
+    .qs     (tcdm_rd_correctable_count_24_qs)
+  );
+
+  // Subregister 25 of Multireg tcdm_rd_correctable_count
+  // R[tcdm_rd_correctable_count_25]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_tcdm_rd_correctable_count_25 (
+    .re     (tcdm_rd_correctable_count_25_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.tcdm_rd_correctable_count[25].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.tcdm_rd_correctable_count[25].q ),
+    .qs     (tcdm_rd_correctable_count_25_qs)
+  );
+
+  // Subregister 26 of Multireg tcdm_rd_correctable_count
+  // R[tcdm_rd_correctable_count_26]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_tcdm_rd_correctable_count_26 (
+    .re     (tcdm_rd_correctable_count_26_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.tcdm_rd_correctable_count[26].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.tcdm_rd_correctable_count[26].q ),
+    .qs     (tcdm_rd_correctable_count_26_qs)
+  );
+
+  // Subregister 27 of Multireg tcdm_rd_correctable_count
+  // R[tcdm_rd_correctable_count_27]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_tcdm_rd_correctable_count_27 (
+    .re     (tcdm_rd_correctable_count_27_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.tcdm_rd_correctable_count[27].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.tcdm_rd_correctable_count[27].q ),
+    .qs     (tcdm_rd_correctable_count_27_qs)
+  );
+
+  // Subregister 28 of Multireg tcdm_rd_correctable_count
+  // R[tcdm_rd_correctable_count_28]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_tcdm_rd_correctable_count_28 (
+    .re     (tcdm_rd_correctable_count_28_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.tcdm_rd_correctable_count[28].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.tcdm_rd_correctable_count[28].q ),
+    .qs     (tcdm_rd_correctable_count_28_qs)
+  );
+
+  // Subregister 29 of Multireg tcdm_rd_correctable_count
+  // R[tcdm_rd_correctable_count_29]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_tcdm_rd_correctable_count_29 (
+    .re     (tcdm_rd_correctable_count_29_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.tcdm_rd_correctable_count[29].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.tcdm_rd_correctable_count[29].q ),
+    .qs     (tcdm_rd_correctable_count_29_qs)
+  );
+
+  // Subregister 30 of Multireg tcdm_rd_correctable_count
+  // R[tcdm_rd_correctable_count_30]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_tcdm_rd_correctable_count_30 (
+    .re     (tcdm_rd_correctable_count_30_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.tcdm_rd_correctable_count[30].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.tcdm_rd_correctable_count[30].q ),
+    .qs     (tcdm_rd_correctable_count_30_qs)
+  );
+
+  // Subregister 31 of Multireg tcdm_rd_correctable_count
+  // R[tcdm_rd_correctable_count_31]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_tcdm_rd_correctable_count_31 (
+    .re     (tcdm_rd_correctable_count_31_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.tcdm_rd_correctable_count[31].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.tcdm_rd_correctable_count[31].q ),
+    .qs     (tcdm_rd_correctable_count_31_qs)
+  );
+
 
 
   // Subregister 0 of Multireg tcdm_rd_uncorrectable_count
@@ -2901,6 +3293,262 @@ module spatz_cluster_peripheral_reg_top #(
     .qe     (),
     .q      (reg2hw.tcdm_rd_uncorrectable_count[15].q ),
     .qs     (tcdm_rd_uncorrectable_count_15_qs)
+  );
+
+  // Subregister 16 of Multireg tcdm_rd_uncorrectable_count
+  // R[tcdm_rd_uncorrectable_count_16]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_tcdm_rd_uncorrectable_count_16 (
+    .re     (tcdm_rd_uncorrectable_count_16_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.tcdm_rd_uncorrectable_count[16].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.tcdm_rd_uncorrectable_count[16].q ),
+    .qs     (tcdm_rd_uncorrectable_count_16_qs)
+  );
+
+  // Subregister 17 of Multireg tcdm_rd_uncorrectable_count
+  // R[tcdm_rd_uncorrectable_count_17]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_tcdm_rd_uncorrectable_count_17 (
+    .re     (tcdm_rd_uncorrectable_count_17_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.tcdm_rd_uncorrectable_count[17].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.tcdm_rd_uncorrectable_count[17].q ),
+    .qs     (tcdm_rd_uncorrectable_count_17_qs)
+  );
+
+  // Subregister 18 of Multireg tcdm_rd_uncorrectable_count
+  // R[tcdm_rd_uncorrectable_count_18]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_tcdm_rd_uncorrectable_count_18 (
+    .re     (tcdm_rd_uncorrectable_count_18_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.tcdm_rd_uncorrectable_count[18].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.tcdm_rd_uncorrectable_count[18].q ),
+    .qs     (tcdm_rd_uncorrectable_count_18_qs)
+  );
+
+  // Subregister 19 of Multireg tcdm_rd_uncorrectable_count
+  // R[tcdm_rd_uncorrectable_count_19]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_tcdm_rd_uncorrectable_count_19 (
+    .re     (tcdm_rd_uncorrectable_count_19_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.tcdm_rd_uncorrectable_count[19].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.tcdm_rd_uncorrectable_count[19].q ),
+    .qs     (tcdm_rd_uncorrectable_count_19_qs)
+  );
+
+  // Subregister 20 of Multireg tcdm_rd_uncorrectable_count
+  // R[tcdm_rd_uncorrectable_count_20]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_tcdm_rd_uncorrectable_count_20 (
+    .re     (tcdm_rd_uncorrectable_count_20_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.tcdm_rd_uncorrectable_count[20].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.tcdm_rd_uncorrectable_count[20].q ),
+    .qs     (tcdm_rd_uncorrectable_count_20_qs)
+  );
+
+  // Subregister 21 of Multireg tcdm_rd_uncorrectable_count
+  // R[tcdm_rd_uncorrectable_count_21]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_tcdm_rd_uncorrectable_count_21 (
+    .re     (tcdm_rd_uncorrectable_count_21_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.tcdm_rd_uncorrectable_count[21].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.tcdm_rd_uncorrectable_count[21].q ),
+    .qs     (tcdm_rd_uncorrectable_count_21_qs)
+  );
+
+  // Subregister 22 of Multireg tcdm_rd_uncorrectable_count
+  // R[tcdm_rd_uncorrectable_count_22]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_tcdm_rd_uncorrectable_count_22 (
+    .re     (tcdm_rd_uncorrectable_count_22_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.tcdm_rd_uncorrectable_count[22].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.tcdm_rd_uncorrectable_count[22].q ),
+    .qs     (tcdm_rd_uncorrectable_count_22_qs)
+  );
+
+  // Subregister 23 of Multireg tcdm_rd_uncorrectable_count
+  // R[tcdm_rd_uncorrectable_count_23]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_tcdm_rd_uncorrectable_count_23 (
+    .re     (tcdm_rd_uncorrectable_count_23_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.tcdm_rd_uncorrectable_count[23].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.tcdm_rd_uncorrectable_count[23].q ),
+    .qs     (tcdm_rd_uncorrectable_count_23_qs)
+  );
+
+  // Subregister 24 of Multireg tcdm_rd_uncorrectable_count
+  // R[tcdm_rd_uncorrectable_count_24]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_tcdm_rd_uncorrectable_count_24 (
+    .re     (tcdm_rd_uncorrectable_count_24_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.tcdm_rd_uncorrectable_count[24].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.tcdm_rd_uncorrectable_count[24].q ),
+    .qs     (tcdm_rd_uncorrectable_count_24_qs)
+  );
+
+  // Subregister 25 of Multireg tcdm_rd_uncorrectable_count
+  // R[tcdm_rd_uncorrectable_count_25]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_tcdm_rd_uncorrectable_count_25 (
+    .re     (tcdm_rd_uncorrectable_count_25_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.tcdm_rd_uncorrectable_count[25].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.tcdm_rd_uncorrectable_count[25].q ),
+    .qs     (tcdm_rd_uncorrectable_count_25_qs)
+  );
+
+  // Subregister 26 of Multireg tcdm_rd_uncorrectable_count
+  // R[tcdm_rd_uncorrectable_count_26]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_tcdm_rd_uncorrectable_count_26 (
+    .re     (tcdm_rd_uncorrectable_count_26_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.tcdm_rd_uncorrectable_count[26].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.tcdm_rd_uncorrectable_count[26].q ),
+    .qs     (tcdm_rd_uncorrectable_count_26_qs)
+  );
+
+  // Subregister 27 of Multireg tcdm_rd_uncorrectable_count
+  // R[tcdm_rd_uncorrectable_count_27]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_tcdm_rd_uncorrectable_count_27 (
+    .re     (tcdm_rd_uncorrectable_count_27_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.tcdm_rd_uncorrectable_count[27].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.tcdm_rd_uncorrectable_count[27].q ),
+    .qs     (tcdm_rd_uncorrectable_count_27_qs)
+  );
+
+  // Subregister 28 of Multireg tcdm_rd_uncorrectable_count
+  // R[tcdm_rd_uncorrectable_count_28]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_tcdm_rd_uncorrectable_count_28 (
+    .re     (tcdm_rd_uncorrectable_count_28_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.tcdm_rd_uncorrectable_count[28].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.tcdm_rd_uncorrectable_count[28].q ),
+    .qs     (tcdm_rd_uncorrectable_count_28_qs)
+  );
+
+  // Subregister 29 of Multireg tcdm_rd_uncorrectable_count
+  // R[tcdm_rd_uncorrectable_count_29]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_tcdm_rd_uncorrectable_count_29 (
+    .re     (tcdm_rd_uncorrectable_count_29_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.tcdm_rd_uncorrectable_count[29].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.tcdm_rd_uncorrectable_count[29].q ),
+    .qs     (tcdm_rd_uncorrectable_count_29_qs)
+  );
+
+  // Subregister 30 of Multireg tcdm_rd_uncorrectable_count
+  // R[tcdm_rd_uncorrectable_count_30]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_tcdm_rd_uncorrectable_count_30 (
+    .re     (tcdm_rd_uncorrectable_count_30_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.tcdm_rd_uncorrectable_count[30].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.tcdm_rd_uncorrectable_count[30].q ),
+    .qs     (tcdm_rd_uncorrectable_count_30_qs)
+  );
+
+  // Subregister 31 of Multireg tcdm_rd_uncorrectable_count
+  // R[tcdm_rd_uncorrectable_count_31]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_tcdm_rd_uncorrectable_count_31 (
+    .re     (tcdm_rd_uncorrectable_count_31_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.tcdm_rd_uncorrectable_count[31].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.tcdm_rd_uncorrectable_count[31].q ),
+    .qs     (tcdm_rd_uncorrectable_count_31_qs)
   );
 
 
@@ -3161,6 +3809,262 @@ module spatz_cluster_peripheral_reg_top #(
     .qs     (tcdm_scrub_correctable_count_15_qs)
   );
 
+  // Subregister 16 of Multireg tcdm_scrub_correctable_count
+  // R[tcdm_scrub_correctable_count_16]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_tcdm_scrub_correctable_count_16 (
+    .re     (tcdm_scrub_correctable_count_16_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.tcdm_scrub_correctable_count[16].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.tcdm_scrub_correctable_count[16].q ),
+    .qs     (tcdm_scrub_correctable_count_16_qs)
+  );
+
+  // Subregister 17 of Multireg tcdm_scrub_correctable_count
+  // R[tcdm_scrub_correctable_count_17]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_tcdm_scrub_correctable_count_17 (
+    .re     (tcdm_scrub_correctable_count_17_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.tcdm_scrub_correctable_count[17].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.tcdm_scrub_correctable_count[17].q ),
+    .qs     (tcdm_scrub_correctable_count_17_qs)
+  );
+
+  // Subregister 18 of Multireg tcdm_scrub_correctable_count
+  // R[tcdm_scrub_correctable_count_18]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_tcdm_scrub_correctable_count_18 (
+    .re     (tcdm_scrub_correctable_count_18_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.tcdm_scrub_correctable_count[18].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.tcdm_scrub_correctable_count[18].q ),
+    .qs     (tcdm_scrub_correctable_count_18_qs)
+  );
+
+  // Subregister 19 of Multireg tcdm_scrub_correctable_count
+  // R[tcdm_scrub_correctable_count_19]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_tcdm_scrub_correctable_count_19 (
+    .re     (tcdm_scrub_correctable_count_19_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.tcdm_scrub_correctable_count[19].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.tcdm_scrub_correctable_count[19].q ),
+    .qs     (tcdm_scrub_correctable_count_19_qs)
+  );
+
+  // Subregister 20 of Multireg tcdm_scrub_correctable_count
+  // R[tcdm_scrub_correctable_count_20]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_tcdm_scrub_correctable_count_20 (
+    .re     (tcdm_scrub_correctable_count_20_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.tcdm_scrub_correctable_count[20].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.tcdm_scrub_correctable_count[20].q ),
+    .qs     (tcdm_scrub_correctable_count_20_qs)
+  );
+
+  // Subregister 21 of Multireg tcdm_scrub_correctable_count
+  // R[tcdm_scrub_correctable_count_21]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_tcdm_scrub_correctable_count_21 (
+    .re     (tcdm_scrub_correctable_count_21_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.tcdm_scrub_correctable_count[21].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.tcdm_scrub_correctable_count[21].q ),
+    .qs     (tcdm_scrub_correctable_count_21_qs)
+  );
+
+  // Subregister 22 of Multireg tcdm_scrub_correctable_count
+  // R[tcdm_scrub_correctable_count_22]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_tcdm_scrub_correctable_count_22 (
+    .re     (tcdm_scrub_correctable_count_22_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.tcdm_scrub_correctable_count[22].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.tcdm_scrub_correctable_count[22].q ),
+    .qs     (tcdm_scrub_correctable_count_22_qs)
+  );
+
+  // Subregister 23 of Multireg tcdm_scrub_correctable_count
+  // R[tcdm_scrub_correctable_count_23]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_tcdm_scrub_correctable_count_23 (
+    .re     (tcdm_scrub_correctable_count_23_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.tcdm_scrub_correctable_count[23].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.tcdm_scrub_correctable_count[23].q ),
+    .qs     (tcdm_scrub_correctable_count_23_qs)
+  );
+
+  // Subregister 24 of Multireg tcdm_scrub_correctable_count
+  // R[tcdm_scrub_correctable_count_24]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_tcdm_scrub_correctable_count_24 (
+    .re     (tcdm_scrub_correctable_count_24_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.tcdm_scrub_correctable_count[24].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.tcdm_scrub_correctable_count[24].q ),
+    .qs     (tcdm_scrub_correctable_count_24_qs)
+  );
+
+  // Subregister 25 of Multireg tcdm_scrub_correctable_count
+  // R[tcdm_scrub_correctable_count_25]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_tcdm_scrub_correctable_count_25 (
+    .re     (tcdm_scrub_correctable_count_25_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.tcdm_scrub_correctable_count[25].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.tcdm_scrub_correctable_count[25].q ),
+    .qs     (tcdm_scrub_correctable_count_25_qs)
+  );
+
+  // Subregister 26 of Multireg tcdm_scrub_correctable_count
+  // R[tcdm_scrub_correctable_count_26]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_tcdm_scrub_correctable_count_26 (
+    .re     (tcdm_scrub_correctable_count_26_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.tcdm_scrub_correctable_count[26].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.tcdm_scrub_correctable_count[26].q ),
+    .qs     (tcdm_scrub_correctable_count_26_qs)
+  );
+
+  // Subregister 27 of Multireg tcdm_scrub_correctable_count
+  // R[tcdm_scrub_correctable_count_27]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_tcdm_scrub_correctable_count_27 (
+    .re     (tcdm_scrub_correctable_count_27_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.tcdm_scrub_correctable_count[27].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.tcdm_scrub_correctable_count[27].q ),
+    .qs     (tcdm_scrub_correctable_count_27_qs)
+  );
+
+  // Subregister 28 of Multireg tcdm_scrub_correctable_count
+  // R[tcdm_scrub_correctable_count_28]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_tcdm_scrub_correctable_count_28 (
+    .re     (tcdm_scrub_correctable_count_28_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.tcdm_scrub_correctable_count[28].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.tcdm_scrub_correctable_count[28].q ),
+    .qs     (tcdm_scrub_correctable_count_28_qs)
+  );
+
+  // Subregister 29 of Multireg tcdm_scrub_correctable_count
+  // R[tcdm_scrub_correctable_count_29]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_tcdm_scrub_correctable_count_29 (
+    .re     (tcdm_scrub_correctable_count_29_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.tcdm_scrub_correctable_count[29].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.tcdm_scrub_correctable_count[29].q ),
+    .qs     (tcdm_scrub_correctable_count_29_qs)
+  );
+
+  // Subregister 30 of Multireg tcdm_scrub_correctable_count
+  // R[tcdm_scrub_correctable_count_30]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_tcdm_scrub_correctable_count_30 (
+    .re     (tcdm_scrub_correctable_count_30_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.tcdm_scrub_correctable_count[30].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.tcdm_scrub_correctable_count[30].q ),
+    .qs     (tcdm_scrub_correctable_count_30_qs)
+  );
+
+  // Subregister 31 of Multireg tcdm_scrub_correctable_count
+  // R[tcdm_scrub_correctable_count_31]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_tcdm_scrub_correctable_count_31 (
+    .re     (tcdm_scrub_correctable_count_31_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.tcdm_scrub_correctable_count[31].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.tcdm_scrub_correctable_count[31].q ),
+    .qs     (tcdm_scrub_correctable_count_31_qs)
+  );
+
 
 
   // Subregister 0 of Multireg tcdm_scrub_uncorrectable_count
@@ -3419,130 +4323,486 @@ module spatz_cluster_peripheral_reg_top #(
     .qs     (tcdm_scrub_uncorrectable_count_15_qs)
   );
 
-
-
-  // Subregister 0 of Multireg core_tmr_fault_count
-  // R[core_tmr_fault_count_0]: V(True)
+  // Subregister 16 of Multireg tcdm_scrub_uncorrectable_count
+  // R[tcdm_scrub_uncorrectable_count_16]: V(True)
 
   prim_subreg_ext #(
     .DW    (32)
-  ) u_core_tmr_fault_count_0 (
-    .re     (core_tmr_fault_count_0_re),
+  ) u_tcdm_scrub_uncorrectable_count_16 (
+    .re     (tcdm_scrub_uncorrectable_count_16_re),
     .we     (1'b0),
     .wd     ('0),
-    .d      (hw2reg.core_tmr_fault_count[0].d),
+    .d      (hw2reg.tcdm_scrub_uncorrectable_count[16].d),
     .qre    (),
     .qe     (),
-    .q      (reg2hw.core_tmr_fault_count[0].q ),
-    .qs     (core_tmr_fault_count_0_qs)
+    .q      (reg2hw.tcdm_scrub_uncorrectable_count[16].q ),
+    .qs     (tcdm_scrub_uncorrectable_count_16_qs)
   );
 
-  // Subregister 1 of Multireg core_tmr_fault_count
-  // R[core_tmr_fault_count_1]: V(True)
+  // Subregister 17 of Multireg tcdm_scrub_uncorrectable_count
+  // R[tcdm_scrub_uncorrectable_count_17]: V(True)
 
   prim_subreg_ext #(
     .DW    (32)
-  ) u_core_tmr_fault_count_1 (
-    .re     (core_tmr_fault_count_1_re),
+  ) u_tcdm_scrub_uncorrectable_count_17 (
+    .re     (tcdm_scrub_uncorrectable_count_17_re),
     .we     (1'b0),
     .wd     ('0),
-    .d      (hw2reg.core_tmr_fault_count[1].d),
+    .d      (hw2reg.tcdm_scrub_uncorrectable_count[17].d),
     .qre    (),
     .qe     (),
-    .q      (reg2hw.core_tmr_fault_count[1].q ),
-    .qs     (core_tmr_fault_count_1_qs)
+    .q      (reg2hw.tcdm_scrub_uncorrectable_count[17].q ),
+    .qs     (tcdm_scrub_uncorrectable_count_17_qs)
+  );
+
+  // Subregister 18 of Multireg tcdm_scrub_uncorrectable_count
+  // R[tcdm_scrub_uncorrectable_count_18]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_tcdm_scrub_uncorrectable_count_18 (
+    .re     (tcdm_scrub_uncorrectable_count_18_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.tcdm_scrub_uncorrectable_count[18].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.tcdm_scrub_uncorrectable_count[18].q ),
+    .qs     (tcdm_scrub_uncorrectable_count_18_qs)
+  );
+
+  // Subregister 19 of Multireg tcdm_scrub_uncorrectable_count
+  // R[tcdm_scrub_uncorrectable_count_19]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_tcdm_scrub_uncorrectable_count_19 (
+    .re     (tcdm_scrub_uncorrectable_count_19_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.tcdm_scrub_uncorrectable_count[19].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.tcdm_scrub_uncorrectable_count[19].q ),
+    .qs     (tcdm_scrub_uncorrectable_count_19_qs)
+  );
+
+  // Subregister 20 of Multireg tcdm_scrub_uncorrectable_count
+  // R[tcdm_scrub_uncorrectable_count_20]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_tcdm_scrub_uncorrectable_count_20 (
+    .re     (tcdm_scrub_uncorrectable_count_20_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.tcdm_scrub_uncorrectable_count[20].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.tcdm_scrub_uncorrectable_count[20].q ),
+    .qs     (tcdm_scrub_uncorrectable_count_20_qs)
+  );
+
+  // Subregister 21 of Multireg tcdm_scrub_uncorrectable_count
+  // R[tcdm_scrub_uncorrectable_count_21]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_tcdm_scrub_uncorrectable_count_21 (
+    .re     (tcdm_scrub_uncorrectable_count_21_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.tcdm_scrub_uncorrectable_count[21].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.tcdm_scrub_uncorrectable_count[21].q ),
+    .qs     (tcdm_scrub_uncorrectable_count_21_qs)
+  );
+
+  // Subregister 22 of Multireg tcdm_scrub_uncorrectable_count
+  // R[tcdm_scrub_uncorrectable_count_22]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_tcdm_scrub_uncorrectable_count_22 (
+    .re     (tcdm_scrub_uncorrectable_count_22_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.tcdm_scrub_uncorrectable_count[22].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.tcdm_scrub_uncorrectable_count[22].q ),
+    .qs     (tcdm_scrub_uncorrectable_count_22_qs)
+  );
+
+  // Subregister 23 of Multireg tcdm_scrub_uncorrectable_count
+  // R[tcdm_scrub_uncorrectable_count_23]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_tcdm_scrub_uncorrectable_count_23 (
+    .re     (tcdm_scrub_uncorrectable_count_23_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.tcdm_scrub_uncorrectable_count[23].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.tcdm_scrub_uncorrectable_count[23].q ),
+    .qs     (tcdm_scrub_uncorrectable_count_23_qs)
+  );
+
+  // Subregister 24 of Multireg tcdm_scrub_uncorrectable_count
+  // R[tcdm_scrub_uncorrectable_count_24]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_tcdm_scrub_uncorrectable_count_24 (
+    .re     (tcdm_scrub_uncorrectable_count_24_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.tcdm_scrub_uncorrectable_count[24].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.tcdm_scrub_uncorrectable_count[24].q ),
+    .qs     (tcdm_scrub_uncorrectable_count_24_qs)
+  );
+
+  // Subregister 25 of Multireg tcdm_scrub_uncorrectable_count
+  // R[tcdm_scrub_uncorrectable_count_25]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_tcdm_scrub_uncorrectable_count_25 (
+    .re     (tcdm_scrub_uncorrectable_count_25_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.tcdm_scrub_uncorrectable_count[25].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.tcdm_scrub_uncorrectable_count[25].q ),
+    .qs     (tcdm_scrub_uncorrectable_count_25_qs)
+  );
+
+  // Subregister 26 of Multireg tcdm_scrub_uncorrectable_count
+  // R[tcdm_scrub_uncorrectable_count_26]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_tcdm_scrub_uncorrectable_count_26 (
+    .re     (tcdm_scrub_uncorrectable_count_26_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.tcdm_scrub_uncorrectable_count[26].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.tcdm_scrub_uncorrectable_count[26].q ),
+    .qs     (tcdm_scrub_uncorrectable_count_26_qs)
+  );
+
+  // Subregister 27 of Multireg tcdm_scrub_uncorrectable_count
+  // R[tcdm_scrub_uncorrectable_count_27]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_tcdm_scrub_uncorrectable_count_27 (
+    .re     (tcdm_scrub_uncorrectable_count_27_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.tcdm_scrub_uncorrectable_count[27].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.tcdm_scrub_uncorrectable_count[27].q ),
+    .qs     (tcdm_scrub_uncorrectable_count_27_qs)
+  );
+
+  // Subregister 28 of Multireg tcdm_scrub_uncorrectable_count
+  // R[tcdm_scrub_uncorrectable_count_28]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_tcdm_scrub_uncorrectable_count_28 (
+    .re     (tcdm_scrub_uncorrectable_count_28_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.tcdm_scrub_uncorrectable_count[28].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.tcdm_scrub_uncorrectable_count[28].q ),
+    .qs     (tcdm_scrub_uncorrectable_count_28_qs)
+  );
+
+  // Subregister 29 of Multireg tcdm_scrub_uncorrectable_count
+  // R[tcdm_scrub_uncorrectable_count_29]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_tcdm_scrub_uncorrectable_count_29 (
+    .re     (tcdm_scrub_uncorrectable_count_29_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.tcdm_scrub_uncorrectable_count[29].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.tcdm_scrub_uncorrectable_count[29].q ),
+    .qs     (tcdm_scrub_uncorrectable_count_29_qs)
+  );
+
+  // Subregister 30 of Multireg tcdm_scrub_uncorrectable_count
+  // R[tcdm_scrub_uncorrectable_count_30]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_tcdm_scrub_uncorrectable_count_30 (
+    .re     (tcdm_scrub_uncorrectable_count_30_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.tcdm_scrub_uncorrectable_count[30].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.tcdm_scrub_uncorrectable_count[30].q ),
+    .qs     (tcdm_scrub_uncorrectable_count_30_qs)
+  );
+
+  // Subregister 31 of Multireg tcdm_scrub_uncorrectable_count
+  // R[tcdm_scrub_uncorrectable_count_31]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_tcdm_scrub_uncorrectable_count_31 (
+    .re     (tcdm_scrub_uncorrectable_count_31_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.tcdm_scrub_uncorrectable_count[31].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.tcdm_scrub_uncorrectable_count[31].q ),
+    .qs     (tcdm_scrub_uncorrectable_count_31_qs)
+  );
+
+
+  // R[tcdm_interconnect_correctable_count]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_tcdm_interconnect_correctable_count (
+    .re     (tcdm_interconnect_correctable_count_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.tcdm_interconnect_correctable_count.d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.tcdm_interconnect_correctable_count.q ),
+    .qs     (tcdm_interconnect_correctable_count_qs)
+  );
+
+
+  // R[tcdm_interconnect_uncorrectable_count]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_tcdm_interconnect_uncorrectable_count (
+    .re     (tcdm_interconnect_uncorrectable_count_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.tcdm_interconnect_uncorrectable_count.d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.tcdm_interconnect_uncorrectable_count.q ),
+    .qs     (tcdm_interconnect_uncorrectable_count_qs)
+  );
+
+
+
+  // Subregister 0 of Multireg snitch_correctable_fault_count
+  // R[snitch_correctable_fault_count]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_snitch_correctable_fault_count (
+    .re     (snitch_correctable_fault_count_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.snitch_correctable_fault_count[0].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.snitch_correctable_fault_count[0].q ),
+    .qs     (snitch_correctable_fault_count_qs)
+  );
+
+
+
+  // Subregister 0 of Multireg snitch_uncorrectable_fault_count
+  // R[snitch_uncorrectable_fault_count]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_snitch_uncorrectable_fault_count (
+    .re     (snitch_uncorrectable_fault_count_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.snitch_uncorrectable_fault_count[0].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.snitch_uncorrectable_fault_count[0].q ),
+    .qs     (snitch_uncorrectable_fault_count_qs)
   );
 
 
 
 
-  logic [83:0] addr_hit;
+  logic [149:0] addr_hit;
   always_comb begin
     addr_hit = '0;
-    addr_hit[ 0] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_PERF_COUNTER_ENABLE_0_OFFSET);
-    addr_hit[ 1] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_PERF_COUNTER_ENABLE_1_OFFSET);
-    addr_hit[ 2] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_HART_SELECT_0_OFFSET);
-    addr_hit[ 3] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_HART_SELECT_1_OFFSET);
-    addr_hit[ 4] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_PERF_COUNTER_0_OFFSET);
-    addr_hit[ 5] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_PERF_COUNTER_1_OFFSET);
-    addr_hit[ 6] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_CL_CLINT_SET_OFFSET);
-    addr_hit[ 7] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_CL_CLINT_CLEAR_OFFSET);
-    addr_hit[ 8] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_HW_BARRIER_OFFSET);
-    addr_hit[ 9] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_ICACHE_PREFETCH_ENABLE_OFFSET);
-    addr_hit[10] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_SPATZ_STATUS_OFFSET);
-    addr_hit[11] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_CLUSTER_BOOT_CONTROL_OFFSET);
-    addr_hit[12] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_CLUSTER_EOC_EXIT_OFFSET);
-    addr_hit[13] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_ERR_MONITOR_CLEAR_OFFSET);
-    addr_hit[14] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_VRF_CORRECTABLE_COUNT_0_OFFSET);
-    addr_hit[15] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_VRF_CORRECTABLE_COUNT_1_OFFSET);
-    addr_hit[16] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_VRF_UNCORRECTABLE_COUNT_0_OFFSET);
-    addr_hit[17] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_VRF_UNCORRECTABLE_COUNT_1_OFFSET);
-    addr_hit[18] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_0_OFFSET);
-    addr_hit[19] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_1_OFFSET);
-    addr_hit[20] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_2_OFFSET);
-    addr_hit[21] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_3_OFFSET);
-    addr_hit[22] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_4_OFFSET);
-    addr_hit[23] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_5_OFFSET);
-    addr_hit[24] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_6_OFFSET);
-    addr_hit[25] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_7_OFFSET);
-    addr_hit[26] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_8_OFFSET);
-    addr_hit[27] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_9_OFFSET);
-    addr_hit[28] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_10_OFFSET);
-    addr_hit[29] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_11_OFFSET);
-    addr_hit[30] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_12_OFFSET);
-    addr_hit[31] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_13_OFFSET);
-    addr_hit[32] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_14_OFFSET);
-    addr_hit[33] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_15_OFFSET);
-    addr_hit[34] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_0_OFFSET);
-    addr_hit[35] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_1_OFFSET);
-    addr_hit[36] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_2_OFFSET);
-    addr_hit[37] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_3_OFFSET);
-    addr_hit[38] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_4_OFFSET);
-    addr_hit[39] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_5_OFFSET);
-    addr_hit[40] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_6_OFFSET);
-    addr_hit[41] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_7_OFFSET);
-    addr_hit[42] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_8_OFFSET);
-    addr_hit[43] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_9_OFFSET);
-    addr_hit[44] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_10_OFFSET);
-    addr_hit[45] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_11_OFFSET);
-    addr_hit[46] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_12_OFFSET);
-    addr_hit[47] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_13_OFFSET);
-    addr_hit[48] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_14_OFFSET);
-    addr_hit[49] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_15_OFFSET);
-    addr_hit[50] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_0_OFFSET);
-    addr_hit[51] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_1_OFFSET);
-    addr_hit[52] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_2_OFFSET);
-    addr_hit[53] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_3_OFFSET);
-    addr_hit[54] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_4_OFFSET);
-    addr_hit[55] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_5_OFFSET);
-    addr_hit[56] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_6_OFFSET);
-    addr_hit[57] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_7_OFFSET);
-    addr_hit[58] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_8_OFFSET);
-    addr_hit[59] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_9_OFFSET);
-    addr_hit[60] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_10_OFFSET);
-    addr_hit[61] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_11_OFFSET);
-    addr_hit[62] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_12_OFFSET);
-    addr_hit[63] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_13_OFFSET);
-    addr_hit[64] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_14_OFFSET);
-    addr_hit[65] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_15_OFFSET);
-    addr_hit[66] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_0_OFFSET);
-    addr_hit[67] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_1_OFFSET);
-    addr_hit[68] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_2_OFFSET);
-    addr_hit[69] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_3_OFFSET);
-    addr_hit[70] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_4_OFFSET);
-    addr_hit[71] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_5_OFFSET);
-    addr_hit[72] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_6_OFFSET);
-    addr_hit[73] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_7_OFFSET);
-    addr_hit[74] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_8_OFFSET);
-    addr_hit[75] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_9_OFFSET);
-    addr_hit[76] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_10_OFFSET);
-    addr_hit[77] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_11_OFFSET);
-    addr_hit[78] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_12_OFFSET);
-    addr_hit[79] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_13_OFFSET);
-    addr_hit[80] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_14_OFFSET);
-    addr_hit[81] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_15_OFFSET);
-    addr_hit[82] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_CORE_TMR_FAULT_COUNT_0_OFFSET);
-    addr_hit[83] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_CORE_TMR_FAULT_COUNT_1_OFFSET);
+    addr_hit[  0] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_PERF_COUNTER_ENABLE_0_OFFSET);
+    addr_hit[  1] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_PERF_COUNTER_ENABLE_1_OFFSET);
+    addr_hit[  2] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_HART_SELECT_0_OFFSET);
+    addr_hit[  3] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_HART_SELECT_1_OFFSET);
+    addr_hit[  4] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_PERF_COUNTER_0_OFFSET);
+    addr_hit[  5] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_PERF_COUNTER_1_OFFSET);
+    addr_hit[  6] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_CL_CLINT_SET_OFFSET);
+    addr_hit[  7] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_CL_CLINT_CLEAR_OFFSET);
+    addr_hit[  8] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_HW_BARRIER_OFFSET);
+    addr_hit[  9] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_ICACHE_PREFETCH_ENABLE_OFFSET);
+    addr_hit[ 10] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_SPATZ_STATUS_OFFSET);
+    addr_hit[ 11] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_CLUSTER_BOOT_CONTROL_OFFSET);
+    addr_hit[ 12] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_CLUSTER_EOC_EXIT_OFFSET);
+    addr_hit[ 13] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_ERR_MONITOR_CLEAR_OFFSET);
+    addr_hit[ 14] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_VRF_CORRECTABLE_COUNT_OFFSET);
+    addr_hit[ 15] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_VRF_UNCORRECTABLE_COUNT_OFFSET);
+    addr_hit[ 16] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_VLSU_CORRECTABLE_COUNT_OFFSET);
+    addr_hit[ 17] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_VLSU_UNCORRECTABLE_COUNT_OFFSET);
+    addr_hit[ 18] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_0_OFFSET);
+    addr_hit[ 19] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_1_OFFSET);
+    addr_hit[ 20] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_2_OFFSET);
+    addr_hit[ 21] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_3_OFFSET);
+    addr_hit[ 22] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_4_OFFSET);
+    addr_hit[ 23] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_5_OFFSET);
+    addr_hit[ 24] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_6_OFFSET);
+    addr_hit[ 25] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_7_OFFSET);
+    addr_hit[ 26] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_8_OFFSET);
+    addr_hit[ 27] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_9_OFFSET);
+    addr_hit[ 28] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_10_OFFSET);
+    addr_hit[ 29] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_11_OFFSET);
+    addr_hit[ 30] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_12_OFFSET);
+    addr_hit[ 31] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_13_OFFSET);
+    addr_hit[ 32] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_14_OFFSET);
+    addr_hit[ 33] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_15_OFFSET);
+    addr_hit[ 34] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_16_OFFSET);
+    addr_hit[ 35] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_17_OFFSET);
+    addr_hit[ 36] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_18_OFFSET);
+    addr_hit[ 37] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_19_OFFSET);
+    addr_hit[ 38] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_20_OFFSET);
+    addr_hit[ 39] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_21_OFFSET);
+    addr_hit[ 40] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_22_OFFSET);
+    addr_hit[ 41] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_23_OFFSET);
+    addr_hit[ 42] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_24_OFFSET);
+    addr_hit[ 43] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_25_OFFSET);
+    addr_hit[ 44] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_26_OFFSET);
+    addr_hit[ 45] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_27_OFFSET);
+    addr_hit[ 46] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_28_OFFSET);
+    addr_hit[ 47] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_29_OFFSET);
+    addr_hit[ 48] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_30_OFFSET);
+    addr_hit[ 49] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_CORRECTABLE_COUNT_31_OFFSET);
+    addr_hit[ 50] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_0_OFFSET);
+    addr_hit[ 51] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_1_OFFSET);
+    addr_hit[ 52] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_2_OFFSET);
+    addr_hit[ 53] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_3_OFFSET);
+    addr_hit[ 54] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_4_OFFSET);
+    addr_hit[ 55] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_5_OFFSET);
+    addr_hit[ 56] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_6_OFFSET);
+    addr_hit[ 57] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_7_OFFSET);
+    addr_hit[ 58] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_8_OFFSET);
+    addr_hit[ 59] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_9_OFFSET);
+    addr_hit[ 60] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_10_OFFSET);
+    addr_hit[ 61] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_11_OFFSET);
+    addr_hit[ 62] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_12_OFFSET);
+    addr_hit[ 63] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_13_OFFSET);
+    addr_hit[ 64] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_14_OFFSET);
+    addr_hit[ 65] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_15_OFFSET);
+    addr_hit[ 66] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_16_OFFSET);
+    addr_hit[ 67] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_17_OFFSET);
+    addr_hit[ 68] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_18_OFFSET);
+    addr_hit[ 69] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_19_OFFSET);
+    addr_hit[ 70] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_20_OFFSET);
+    addr_hit[ 71] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_21_OFFSET);
+    addr_hit[ 72] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_22_OFFSET);
+    addr_hit[ 73] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_23_OFFSET);
+    addr_hit[ 74] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_24_OFFSET);
+    addr_hit[ 75] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_25_OFFSET);
+    addr_hit[ 76] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_26_OFFSET);
+    addr_hit[ 77] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_27_OFFSET);
+    addr_hit[ 78] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_28_OFFSET);
+    addr_hit[ 79] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_29_OFFSET);
+    addr_hit[ 80] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_30_OFFSET);
+    addr_hit[ 81] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_RD_UNCORRECTABLE_COUNT_31_OFFSET);
+    addr_hit[ 82] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_0_OFFSET);
+    addr_hit[ 83] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_1_OFFSET);
+    addr_hit[ 84] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_2_OFFSET);
+    addr_hit[ 85] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_3_OFFSET);
+    addr_hit[ 86] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_4_OFFSET);
+    addr_hit[ 87] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_5_OFFSET);
+    addr_hit[ 88] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_6_OFFSET);
+    addr_hit[ 89] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_7_OFFSET);
+    addr_hit[ 90] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_8_OFFSET);
+    addr_hit[ 91] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_9_OFFSET);
+    addr_hit[ 92] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_10_OFFSET);
+    addr_hit[ 93] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_11_OFFSET);
+    addr_hit[ 94] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_12_OFFSET);
+    addr_hit[ 95] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_13_OFFSET);
+    addr_hit[ 96] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_14_OFFSET);
+    addr_hit[ 97] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_15_OFFSET);
+    addr_hit[ 98] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_16_OFFSET);
+    addr_hit[ 99] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_17_OFFSET);
+    addr_hit[100] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_18_OFFSET);
+    addr_hit[101] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_19_OFFSET);
+    addr_hit[102] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_20_OFFSET);
+    addr_hit[103] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_21_OFFSET);
+    addr_hit[104] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_22_OFFSET);
+    addr_hit[105] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_23_OFFSET);
+    addr_hit[106] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_24_OFFSET);
+    addr_hit[107] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_25_OFFSET);
+    addr_hit[108] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_26_OFFSET);
+    addr_hit[109] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_27_OFFSET);
+    addr_hit[110] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_28_OFFSET);
+    addr_hit[111] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_29_OFFSET);
+    addr_hit[112] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_30_OFFSET);
+    addr_hit[113] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_CORRECTABLE_COUNT_31_OFFSET);
+    addr_hit[114] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_0_OFFSET);
+    addr_hit[115] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_1_OFFSET);
+    addr_hit[116] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_2_OFFSET);
+    addr_hit[117] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_3_OFFSET);
+    addr_hit[118] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_4_OFFSET);
+    addr_hit[119] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_5_OFFSET);
+    addr_hit[120] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_6_OFFSET);
+    addr_hit[121] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_7_OFFSET);
+    addr_hit[122] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_8_OFFSET);
+    addr_hit[123] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_9_OFFSET);
+    addr_hit[124] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_10_OFFSET);
+    addr_hit[125] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_11_OFFSET);
+    addr_hit[126] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_12_OFFSET);
+    addr_hit[127] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_13_OFFSET);
+    addr_hit[128] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_14_OFFSET);
+    addr_hit[129] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_15_OFFSET);
+    addr_hit[130] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_16_OFFSET);
+    addr_hit[131] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_17_OFFSET);
+    addr_hit[132] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_18_OFFSET);
+    addr_hit[133] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_19_OFFSET);
+    addr_hit[134] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_20_OFFSET);
+    addr_hit[135] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_21_OFFSET);
+    addr_hit[136] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_22_OFFSET);
+    addr_hit[137] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_23_OFFSET);
+    addr_hit[138] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_24_OFFSET);
+    addr_hit[139] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_25_OFFSET);
+    addr_hit[140] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_26_OFFSET);
+    addr_hit[141] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_27_OFFSET);
+    addr_hit[142] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_28_OFFSET);
+    addr_hit[143] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_29_OFFSET);
+    addr_hit[144] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_30_OFFSET);
+    addr_hit[145] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_31_OFFSET);
+    addr_hit[146] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_INTERCONNECT_CORRECTABLE_COUNT_OFFSET);
+    addr_hit[147] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_INTERCONNECT_UNCORRECTABLE_COUNT_OFFSET);
+    addr_hit[148] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_SNITCH_CORRECTABLE_FAULT_COUNT_OFFSET);
+    addr_hit[149] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_SNITCH_UNCORRECTABLE_FAULT_COUNT_OFFSET);
   end
 
   assign addrmiss = (reg_re || reg_we) ? ~|addr_hit : 1'b0 ;
@@ -3550,90 +4810,156 @@ module spatz_cluster_peripheral_reg_top #(
   // Check sub-word write is permitted
   always_comb begin
     wr_err = (reg_we &
-              ((addr_hit[ 0] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 0] & ~reg_be))) |
-               (addr_hit[ 1] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 1] & ~reg_be))) |
-               (addr_hit[ 2] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 2] & ~reg_be))) |
-               (addr_hit[ 3] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 3] & ~reg_be))) |
-               (addr_hit[ 4] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 4] & ~reg_be))) |
-               (addr_hit[ 5] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 5] & ~reg_be))) |
-               (addr_hit[ 6] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 6] & ~reg_be))) |
-               (addr_hit[ 7] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 7] & ~reg_be))) |
-               (addr_hit[ 8] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 8] & ~reg_be))) |
-               (addr_hit[ 9] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 9] & ~reg_be))) |
-               (addr_hit[10] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[10] & ~reg_be))) |
-               (addr_hit[11] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[11] & ~reg_be))) |
-               (addr_hit[12] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[12] & ~reg_be))) |
-               (addr_hit[13] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[13] & ~reg_be))) |
-               (addr_hit[14] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[14] & ~reg_be))) |
-               (addr_hit[15] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[15] & ~reg_be))) |
-               (addr_hit[16] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[16] & ~reg_be))) |
-               (addr_hit[17] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[17] & ~reg_be))) |
-               (addr_hit[18] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[18] & ~reg_be))) |
-               (addr_hit[19] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[19] & ~reg_be))) |
-               (addr_hit[20] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[20] & ~reg_be))) |
-               (addr_hit[21] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[21] & ~reg_be))) |
-               (addr_hit[22] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[22] & ~reg_be))) |
-               (addr_hit[23] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[23] & ~reg_be))) |
-               (addr_hit[24] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[24] & ~reg_be))) |
-               (addr_hit[25] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[25] & ~reg_be))) |
-               (addr_hit[26] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[26] & ~reg_be))) |
-               (addr_hit[27] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[27] & ~reg_be))) |
-               (addr_hit[28] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[28] & ~reg_be))) |
-               (addr_hit[29] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[29] & ~reg_be))) |
-               (addr_hit[30] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[30] & ~reg_be))) |
-               (addr_hit[31] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[31] & ~reg_be))) |
-               (addr_hit[32] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[32] & ~reg_be))) |
-               (addr_hit[33] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[33] & ~reg_be))) |
-               (addr_hit[34] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[34] & ~reg_be))) |
-               (addr_hit[35] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[35] & ~reg_be))) |
-               (addr_hit[36] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[36] & ~reg_be))) |
-               (addr_hit[37] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[37] & ~reg_be))) |
-               (addr_hit[38] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[38] & ~reg_be))) |
-               (addr_hit[39] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[39] & ~reg_be))) |
-               (addr_hit[40] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[40] & ~reg_be))) |
-               (addr_hit[41] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[41] & ~reg_be))) |
-               (addr_hit[42] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[42] & ~reg_be))) |
-               (addr_hit[43] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[43] & ~reg_be))) |
-               (addr_hit[44] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[44] & ~reg_be))) |
-               (addr_hit[45] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[45] & ~reg_be))) |
-               (addr_hit[46] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[46] & ~reg_be))) |
-               (addr_hit[47] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[47] & ~reg_be))) |
-               (addr_hit[48] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[48] & ~reg_be))) |
-               (addr_hit[49] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[49] & ~reg_be))) |
-               (addr_hit[50] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[50] & ~reg_be))) |
-               (addr_hit[51] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[51] & ~reg_be))) |
-               (addr_hit[52] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[52] & ~reg_be))) |
-               (addr_hit[53] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[53] & ~reg_be))) |
-               (addr_hit[54] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[54] & ~reg_be))) |
-               (addr_hit[55] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[55] & ~reg_be))) |
-               (addr_hit[56] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[56] & ~reg_be))) |
-               (addr_hit[57] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[57] & ~reg_be))) |
-               (addr_hit[58] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[58] & ~reg_be))) |
-               (addr_hit[59] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[59] & ~reg_be))) |
-               (addr_hit[60] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[60] & ~reg_be))) |
-               (addr_hit[61] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[61] & ~reg_be))) |
-               (addr_hit[62] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[62] & ~reg_be))) |
-               (addr_hit[63] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[63] & ~reg_be))) |
-               (addr_hit[64] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[64] & ~reg_be))) |
-               (addr_hit[65] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[65] & ~reg_be))) |
-               (addr_hit[66] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[66] & ~reg_be))) |
-               (addr_hit[67] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[67] & ~reg_be))) |
-               (addr_hit[68] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[68] & ~reg_be))) |
-               (addr_hit[69] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[69] & ~reg_be))) |
-               (addr_hit[70] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[70] & ~reg_be))) |
-               (addr_hit[71] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[71] & ~reg_be))) |
-               (addr_hit[72] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[72] & ~reg_be))) |
-               (addr_hit[73] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[73] & ~reg_be))) |
-               (addr_hit[74] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[74] & ~reg_be))) |
-               (addr_hit[75] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[75] & ~reg_be))) |
-               (addr_hit[76] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[76] & ~reg_be))) |
-               (addr_hit[77] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[77] & ~reg_be))) |
-               (addr_hit[78] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[78] & ~reg_be))) |
-               (addr_hit[79] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[79] & ~reg_be))) |
-               (addr_hit[80] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[80] & ~reg_be))) |
-               (addr_hit[81] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[81] & ~reg_be))) |
-               (addr_hit[82] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[82] & ~reg_be))) |
-               (addr_hit[83] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[83] & ~reg_be)))));
+              ((addr_hit[  0] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[  0] & ~reg_be))) |
+               (addr_hit[  1] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[  1] & ~reg_be))) |
+               (addr_hit[  2] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[  2] & ~reg_be))) |
+               (addr_hit[  3] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[  3] & ~reg_be))) |
+               (addr_hit[  4] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[  4] & ~reg_be))) |
+               (addr_hit[  5] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[  5] & ~reg_be))) |
+               (addr_hit[  6] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[  6] & ~reg_be))) |
+               (addr_hit[  7] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[  7] & ~reg_be))) |
+               (addr_hit[  8] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[  8] & ~reg_be))) |
+               (addr_hit[  9] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[  9] & ~reg_be))) |
+               (addr_hit[ 10] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 10] & ~reg_be))) |
+               (addr_hit[ 11] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 11] & ~reg_be))) |
+               (addr_hit[ 12] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 12] & ~reg_be))) |
+               (addr_hit[ 13] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 13] & ~reg_be))) |
+               (addr_hit[ 14] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 14] & ~reg_be))) |
+               (addr_hit[ 15] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 15] & ~reg_be))) |
+               (addr_hit[ 16] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 16] & ~reg_be))) |
+               (addr_hit[ 17] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 17] & ~reg_be))) |
+               (addr_hit[ 18] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 18] & ~reg_be))) |
+               (addr_hit[ 19] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 19] & ~reg_be))) |
+               (addr_hit[ 20] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 20] & ~reg_be))) |
+               (addr_hit[ 21] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 21] & ~reg_be))) |
+               (addr_hit[ 22] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 22] & ~reg_be))) |
+               (addr_hit[ 23] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 23] & ~reg_be))) |
+               (addr_hit[ 24] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 24] & ~reg_be))) |
+               (addr_hit[ 25] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 25] & ~reg_be))) |
+               (addr_hit[ 26] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 26] & ~reg_be))) |
+               (addr_hit[ 27] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 27] & ~reg_be))) |
+               (addr_hit[ 28] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 28] & ~reg_be))) |
+               (addr_hit[ 29] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 29] & ~reg_be))) |
+               (addr_hit[ 30] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 30] & ~reg_be))) |
+               (addr_hit[ 31] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 31] & ~reg_be))) |
+               (addr_hit[ 32] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 32] & ~reg_be))) |
+               (addr_hit[ 33] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 33] & ~reg_be))) |
+               (addr_hit[ 34] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 34] & ~reg_be))) |
+               (addr_hit[ 35] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 35] & ~reg_be))) |
+               (addr_hit[ 36] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 36] & ~reg_be))) |
+               (addr_hit[ 37] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 37] & ~reg_be))) |
+               (addr_hit[ 38] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 38] & ~reg_be))) |
+               (addr_hit[ 39] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 39] & ~reg_be))) |
+               (addr_hit[ 40] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 40] & ~reg_be))) |
+               (addr_hit[ 41] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 41] & ~reg_be))) |
+               (addr_hit[ 42] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 42] & ~reg_be))) |
+               (addr_hit[ 43] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 43] & ~reg_be))) |
+               (addr_hit[ 44] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 44] & ~reg_be))) |
+               (addr_hit[ 45] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 45] & ~reg_be))) |
+               (addr_hit[ 46] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 46] & ~reg_be))) |
+               (addr_hit[ 47] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 47] & ~reg_be))) |
+               (addr_hit[ 48] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 48] & ~reg_be))) |
+               (addr_hit[ 49] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 49] & ~reg_be))) |
+               (addr_hit[ 50] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 50] & ~reg_be))) |
+               (addr_hit[ 51] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 51] & ~reg_be))) |
+               (addr_hit[ 52] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 52] & ~reg_be))) |
+               (addr_hit[ 53] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 53] & ~reg_be))) |
+               (addr_hit[ 54] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 54] & ~reg_be))) |
+               (addr_hit[ 55] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 55] & ~reg_be))) |
+               (addr_hit[ 56] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 56] & ~reg_be))) |
+               (addr_hit[ 57] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 57] & ~reg_be))) |
+               (addr_hit[ 58] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 58] & ~reg_be))) |
+               (addr_hit[ 59] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 59] & ~reg_be))) |
+               (addr_hit[ 60] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 60] & ~reg_be))) |
+               (addr_hit[ 61] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 61] & ~reg_be))) |
+               (addr_hit[ 62] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 62] & ~reg_be))) |
+               (addr_hit[ 63] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 63] & ~reg_be))) |
+               (addr_hit[ 64] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 64] & ~reg_be))) |
+               (addr_hit[ 65] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 65] & ~reg_be))) |
+               (addr_hit[ 66] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 66] & ~reg_be))) |
+               (addr_hit[ 67] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 67] & ~reg_be))) |
+               (addr_hit[ 68] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 68] & ~reg_be))) |
+               (addr_hit[ 69] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 69] & ~reg_be))) |
+               (addr_hit[ 70] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 70] & ~reg_be))) |
+               (addr_hit[ 71] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 71] & ~reg_be))) |
+               (addr_hit[ 72] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 72] & ~reg_be))) |
+               (addr_hit[ 73] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 73] & ~reg_be))) |
+               (addr_hit[ 74] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 74] & ~reg_be))) |
+               (addr_hit[ 75] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 75] & ~reg_be))) |
+               (addr_hit[ 76] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 76] & ~reg_be))) |
+               (addr_hit[ 77] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 77] & ~reg_be))) |
+               (addr_hit[ 78] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 78] & ~reg_be))) |
+               (addr_hit[ 79] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 79] & ~reg_be))) |
+               (addr_hit[ 80] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 80] & ~reg_be))) |
+               (addr_hit[ 81] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 81] & ~reg_be))) |
+               (addr_hit[ 82] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 82] & ~reg_be))) |
+               (addr_hit[ 83] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 83] & ~reg_be))) |
+               (addr_hit[ 84] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 84] & ~reg_be))) |
+               (addr_hit[ 85] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 85] & ~reg_be))) |
+               (addr_hit[ 86] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 86] & ~reg_be))) |
+               (addr_hit[ 87] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 87] & ~reg_be))) |
+               (addr_hit[ 88] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 88] & ~reg_be))) |
+               (addr_hit[ 89] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 89] & ~reg_be))) |
+               (addr_hit[ 90] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 90] & ~reg_be))) |
+               (addr_hit[ 91] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 91] & ~reg_be))) |
+               (addr_hit[ 92] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 92] & ~reg_be))) |
+               (addr_hit[ 93] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 93] & ~reg_be))) |
+               (addr_hit[ 94] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 94] & ~reg_be))) |
+               (addr_hit[ 95] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 95] & ~reg_be))) |
+               (addr_hit[ 96] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 96] & ~reg_be))) |
+               (addr_hit[ 97] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 97] & ~reg_be))) |
+               (addr_hit[ 98] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 98] & ~reg_be))) |
+               (addr_hit[ 99] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[ 99] & ~reg_be))) |
+               (addr_hit[100] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[100] & ~reg_be))) |
+               (addr_hit[101] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[101] & ~reg_be))) |
+               (addr_hit[102] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[102] & ~reg_be))) |
+               (addr_hit[103] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[103] & ~reg_be))) |
+               (addr_hit[104] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[104] & ~reg_be))) |
+               (addr_hit[105] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[105] & ~reg_be))) |
+               (addr_hit[106] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[106] & ~reg_be))) |
+               (addr_hit[107] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[107] & ~reg_be))) |
+               (addr_hit[108] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[108] & ~reg_be))) |
+               (addr_hit[109] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[109] & ~reg_be))) |
+               (addr_hit[110] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[110] & ~reg_be))) |
+               (addr_hit[111] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[111] & ~reg_be))) |
+               (addr_hit[112] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[112] & ~reg_be))) |
+               (addr_hit[113] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[113] & ~reg_be))) |
+               (addr_hit[114] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[114] & ~reg_be))) |
+               (addr_hit[115] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[115] & ~reg_be))) |
+               (addr_hit[116] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[116] & ~reg_be))) |
+               (addr_hit[117] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[117] & ~reg_be))) |
+               (addr_hit[118] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[118] & ~reg_be))) |
+               (addr_hit[119] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[119] & ~reg_be))) |
+               (addr_hit[120] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[120] & ~reg_be))) |
+               (addr_hit[121] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[121] & ~reg_be))) |
+               (addr_hit[122] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[122] & ~reg_be))) |
+               (addr_hit[123] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[123] & ~reg_be))) |
+               (addr_hit[124] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[124] & ~reg_be))) |
+               (addr_hit[125] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[125] & ~reg_be))) |
+               (addr_hit[126] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[126] & ~reg_be))) |
+               (addr_hit[127] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[127] & ~reg_be))) |
+               (addr_hit[128] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[128] & ~reg_be))) |
+               (addr_hit[129] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[129] & ~reg_be))) |
+               (addr_hit[130] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[130] & ~reg_be))) |
+               (addr_hit[131] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[131] & ~reg_be))) |
+               (addr_hit[132] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[132] & ~reg_be))) |
+               (addr_hit[133] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[133] & ~reg_be))) |
+               (addr_hit[134] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[134] & ~reg_be))) |
+               (addr_hit[135] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[135] & ~reg_be))) |
+               (addr_hit[136] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[136] & ~reg_be))) |
+               (addr_hit[137] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[137] & ~reg_be))) |
+               (addr_hit[138] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[138] & ~reg_be))) |
+               (addr_hit[139] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[139] & ~reg_be))) |
+               (addr_hit[140] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[140] & ~reg_be))) |
+               (addr_hit[141] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[141] & ~reg_be))) |
+               (addr_hit[142] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[142] & ~reg_be))) |
+               (addr_hit[143] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[143] & ~reg_be))) |
+               (addr_hit[144] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[144] & ~reg_be))) |
+               (addr_hit[145] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[145] & ~reg_be))) |
+               (addr_hit[146] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[146] & ~reg_be))) |
+               (addr_hit[147] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[147] & ~reg_be))) |
+               (addr_hit[148] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[148] & ~reg_be))) |
+               (addr_hit[149] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[149] & ~reg_be)))));
   end
 
   assign perf_counter_enable_0_cycle_0_we = addr_hit[0] & reg_we & !reg_error;
@@ -3859,13 +5185,13 @@ module spatz_cluster_peripheral_reg_top #(
   assign err_monitor_clear_we = addr_hit[13] & reg_we & !reg_error;
   assign err_monitor_clear_wd = reg_wdata[0];
 
-  assign vrf_correctable_count_0_re = addr_hit[14] & reg_re & !reg_error;
+  assign vrf_correctable_count_re = addr_hit[14] & reg_re & !reg_error;
 
-  assign vrf_correctable_count_1_re = addr_hit[15] & reg_re & !reg_error;
+  assign vrf_uncorrectable_count_re = addr_hit[15] & reg_re & !reg_error;
 
-  assign vrf_uncorrectable_count_0_re = addr_hit[16] & reg_re & !reg_error;
+  assign vlsu_correctable_count_re = addr_hit[16] & reg_re & !reg_error;
 
-  assign vrf_uncorrectable_count_1_re = addr_hit[17] & reg_re & !reg_error;
+  assign vlsu_uncorrectable_count_re = addr_hit[17] & reg_re & !reg_error;
 
   assign tcdm_rd_correctable_count_0_re = addr_hit[18] & reg_re & !reg_error;
 
@@ -3899,105 +5225,237 @@ module spatz_cluster_peripheral_reg_top #(
 
   assign tcdm_rd_correctable_count_15_re = addr_hit[33] & reg_re & !reg_error;
 
-  assign tcdm_rd_uncorrectable_count_0_re = addr_hit[34] & reg_re & !reg_error;
+  assign tcdm_rd_correctable_count_16_re = addr_hit[34] & reg_re & !reg_error;
 
-  assign tcdm_rd_uncorrectable_count_1_re = addr_hit[35] & reg_re & !reg_error;
+  assign tcdm_rd_correctable_count_17_re = addr_hit[35] & reg_re & !reg_error;
 
-  assign tcdm_rd_uncorrectable_count_2_re = addr_hit[36] & reg_re & !reg_error;
+  assign tcdm_rd_correctable_count_18_re = addr_hit[36] & reg_re & !reg_error;
 
-  assign tcdm_rd_uncorrectable_count_3_re = addr_hit[37] & reg_re & !reg_error;
+  assign tcdm_rd_correctable_count_19_re = addr_hit[37] & reg_re & !reg_error;
 
-  assign tcdm_rd_uncorrectable_count_4_re = addr_hit[38] & reg_re & !reg_error;
+  assign tcdm_rd_correctable_count_20_re = addr_hit[38] & reg_re & !reg_error;
 
-  assign tcdm_rd_uncorrectable_count_5_re = addr_hit[39] & reg_re & !reg_error;
+  assign tcdm_rd_correctable_count_21_re = addr_hit[39] & reg_re & !reg_error;
 
-  assign tcdm_rd_uncorrectable_count_6_re = addr_hit[40] & reg_re & !reg_error;
+  assign tcdm_rd_correctable_count_22_re = addr_hit[40] & reg_re & !reg_error;
 
-  assign tcdm_rd_uncorrectable_count_7_re = addr_hit[41] & reg_re & !reg_error;
+  assign tcdm_rd_correctable_count_23_re = addr_hit[41] & reg_re & !reg_error;
 
-  assign tcdm_rd_uncorrectable_count_8_re = addr_hit[42] & reg_re & !reg_error;
+  assign tcdm_rd_correctable_count_24_re = addr_hit[42] & reg_re & !reg_error;
 
-  assign tcdm_rd_uncorrectable_count_9_re = addr_hit[43] & reg_re & !reg_error;
+  assign tcdm_rd_correctable_count_25_re = addr_hit[43] & reg_re & !reg_error;
 
-  assign tcdm_rd_uncorrectable_count_10_re = addr_hit[44] & reg_re & !reg_error;
+  assign tcdm_rd_correctable_count_26_re = addr_hit[44] & reg_re & !reg_error;
 
-  assign tcdm_rd_uncorrectable_count_11_re = addr_hit[45] & reg_re & !reg_error;
+  assign tcdm_rd_correctable_count_27_re = addr_hit[45] & reg_re & !reg_error;
 
-  assign tcdm_rd_uncorrectable_count_12_re = addr_hit[46] & reg_re & !reg_error;
+  assign tcdm_rd_correctable_count_28_re = addr_hit[46] & reg_re & !reg_error;
 
-  assign tcdm_rd_uncorrectable_count_13_re = addr_hit[47] & reg_re & !reg_error;
+  assign tcdm_rd_correctable_count_29_re = addr_hit[47] & reg_re & !reg_error;
 
-  assign tcdm_rd_uncorrectable_count_14_re = addr_hit[48] & reg_re & !reg_error;
+  assign tcdm_rd_correctable_count_30_re = addr_hit[48] & reg_re & !reg_error;
 
-  assign tcdm_rd_uncorrectable_count_15_re = addr_hit[49] & reg_re & !reg_error;
+  assign tcdm_rd_correctable_count_31_re = addr_hit[49] & reg_re & !reg_error;
 
-  assign tcdm_scrub_correctable_count_0_re = addr_hit[50] & reg_re & !reg_error;
+  assign tcdm_rd_uncorrectable_count_0_re = addr_hit[50] & reg_re & !reg_error;
 
-  assign tcdm_scrub_correctable_count_1_re = addr_hit[51] & reg_re & !reg_error;
+  assign tcdm_rd_uncorrectable_count_1_re = addr_hit[51] & reg_re & !reg_error;
 
-  assign tcdm_scrub_correctable_count_2_re = addr_hit[52] & reg_re & !reg_error;
+  assign tcdm_rd_uncorrectable_count_2_re = addr_hit[52] & reg_re & !reg_error;
 
-  assign tcdm_scrub_correctable_count_3_re = addr_hit[53] & reg_re & !reg_error;
+  assign tcdm_rd_uncorrectable_count_3_re = addr_hit[53] & reg_re & !reg_error;
 
-  assign tcdm_scrub_correctable_count_4_re = addr_hit[54] & reg_re & !reg_error;
+  assign tcdm_rd_uncorrectable_count_4_re = addr_hit[54] & reg_re & !reg_error;
 
-  assign tcdm_scrub_correctable_count_5_re = addr_hit[55] & reg_re & !reg_error;
+  assign tcdm_rd_uncorrectable_count_5_re = addr_hit[55] & reg_re & !reg_error;
 
-  assign tcdm_scrub_correctable_count_6_re = addr_hit[56] & reg_re & !reg_error;
+  assign tcdm_rd_uncorrectable_count_6_re = addr_hit[56] & reg_re & !reg_error;
 
-  assign tcdm_scrub_correctable_count_7_re = addr_hit[57] & reg_re & !reg_error;
+  assign tcdm_rd_uncorrectable_count_7_re = addr_hit[57] & reg_re & !reg_error;
 
-  assign tcdm_scrub_correctable_count_8_re = addr_hit[58] & reg_re & !reg_error;
+  assign tcdm_rd_uncorrectable_count_8_re = addr_hit[58] & reg_re & !reg_error;
 
-  assign tcdm_scrub_correctable_count_9_re = addr_hit[59] & reg_re & !reg_error;
+  assign tcdm_rd_uncorrectable_count_9_re = addr_hit[59] & reg_re & !reg_error;
 
-  assign tcdm_scrub_correctable_count_10_re = addr_hit[60] & reg_re & !reg_error;
+  assign tcdm_rd_uncorrectable_count_10_re = addr_hit[60] & reg_re & !reg_error;
 
-  assign tcdm_scrub_correctable_count_11_re = addr_hit[61] & reg_re & !reg_error;
+  assign tcdm_rd_uncorrectable_count_11_re = addr_hit[61] & reg_re & !reg_error;
 
-  assign tcdm_scrub_correctable_count_12_re = addr_hit[62] & reg_re & !reg_error;
+  assign tcdm_rd_uncorrectable_count_12_re = addr_hit[62] & reg_re & !reg_error;
 
-  assign tcdm_scrub_correctable_count_13_re = addr_hit[63] & reg_re & !reg_error;
+  assign tcdm_rd_uncorrectable_count_13_re = addr_hit[63] & reg_re & !reg_error;
 
-  assign tcdm_scrub_correctable_count_14_re = addr_hit[64] & reg_re & !reg_error;
+  assign tcdm_rd_uncorrectable_count_14_re = addr_hit[64] & reg_re & !reg_error;
 
-  assign tcdm_scrub_correctable_count_15_re = addr_hit[65] & reg_re & !reg_error;
+  assign tcdm_rd_uncorrectable_count_15_re = addr_hit[65] & reg_re & !reg_error;
 
-  assign tcdm_scrub_uncorrectable_count_0_re = addr_hit[66] & reg_re & !reg_error;
+  assign tcdm_rd_uncorrectable_count_16_re = addr_hit[66] & reg_re & !reg_error;
 
-  assign tcdm_scrub_uncorrectable_count_1_re = addr_hit[67] & reg_re & !reg_error;
+  assign tcdm_rd_uncorrectable_count_17_re = addr_hit[67] & reg_re & !reg_error;
 
-  assign tcdm_scrub_uncorrectable_count_2_re = addr_hit[68] & reg_re & !reg_error;
+  assign tcdm_rd_uncorrectable_count_18_re = addr_hit[68] & reg_re & !reg_error;
 
-  assign tcdm_scrub_uncorrectable_count_3_re = addr_hit[69] & reg_re & !reg_error;
+  assign tcdm_rd_uncorrectable_count_19_re = addr_hit[69] & reg_re & !reg_error;
 
-  assign tcdm_scrub_uncorrectable_count_4_re = addr_hit[70] & reg_re & !reg_error;
+  assign tcdm_rd_uncorrectable_count_20_re = addr_hit[70] & reg_re & !reg_error;
 
-  assign tcdm_scrub_uncorrectable_count_5_re = addr_hit[71] & reg_re & !reg_error;
+  assign tcdm_rd_uncorrectable_count_21_re = addr_hit[71] & reg_re & !reg_error;
 
-  assign tcdm_scrub_uncorrectable_count_6_re = addr_hit[72] & reg_re & !reg_error;
+  assign tcdm_rd_uncorrectable_count_22_re = addr_hit[72] & reg_re & !reg_error;
 
-  assign tcdm_scrub_uncorrectable_count_7_re = addr_hit[73] & reg_re & !reg_error;
+  assign tcdm_rd_uncorrectable_count_23_re = addr_hit[73] & reg_re & !reg_error;
 
-  assign tcdm_scrub_uncorrectable_count_8_re = addr_hit[74] & reg_re & !reg_error;
+  assign tcdm_rd_uncorrectable_count_24_re = addr_hit[74] & reg_re & !reg_error;
 
-  assign tcdm_scrub_uncorrectable_count_9_re = addr_hit[75] & reg_re & !reg_error;
+  assign tcdm_rd_uncorrectable_count_25_re = addr_hit[75] & reg_re & !reg_error;
 
-  assign tcdm_scrub_uncorrectable_count_10_re = addr_hit[76] & reg_re & !reg_error;
+  assign tcdm_rd_uncorrectable_count_26_re = addr_hit[76] & reg_re & !reg_error;
 
-  assign tcdm_scrub_uncorrectable_count_11_re = addr_hit[77] & reg_re & !reg_error;
+  assign tcdm_rd_uncorrectable_count_27_re = addr_hit[77] & reg_re & !reg_error;
 
-  assign tcdm_scrub_uncorrectable_count_12_re = addr_hit[78] & reg_re & !reg_error;
+  assign tcdm_rd_uncorrectable_count_28_re = addr_hit[78] & reg_re & !reg_error;
 
-  assign tcdm_scrub_uncorrectable_count_13_re = addr_hit[79] & reg_re & !reg_error;
+  assign tcdm_rd_uncorrectable_count_29_re = addr_hit[79] & reg_re & !reg_error;
 
-  assign tcdm_scrub_uncorrectable_count_14_re = addr_hit[80] & reg_re & !reg_error;
+  assign tcdm_rd_uncorrectable_count_30_re = addr_hit[80] & reg_re & !reg_error;
 
-  assign tcdm_scrub_uncorrectable_count_15_re = addr_hit[81] & reg_re & !reg_error;
+  assign tcdm_rd_uncorrectable_count_31_re = addr_hit[81] & reg_re & !reg_error;
 
-  assign core_tmr_fault_count_0_re = addr_hit[82] & reg_re & !reg_error;
+  assign tcdm_scrub_correctable_count_0_re = addr_hit[82] & reg_re & !reg_error;
 
-  assign core_tmr_fault_count_1_re = addr_hit[83] & reg_re & !reg_error;
+  assign tcdm_scrub_correctable_count_1_re = addr_hit[83] & reg_re & !reg_error;
+
+  assign tcdm_scrub_correctable_count_2_re = addr_hit[84] & reg_re & !reg_error;
+
+  assign tcdm_scrub_correctable_count_3_re = addr_hit[85] & reg_re & !reg_error;
+
+  assign tcdm_scrub_correctable_count_4_re = addr_hit[86] & reg_re & !reg_error;
+
+  assign tcdm_scrub_correctable_count_5_re = addr_hit[87] & reg_re & !reg_error;
+
+  assign tcdm_scrub_correctable_count_6_re = addr_hit[88] & reg_re & !reg_error;
+
+  assign tcdm_scrub_correctable_count_7_re = addr_hit[89] & reg_re & !reg_error;
+
+  assign tcdm_scrub_correctable_count_8_re = addr_hit[90] & reg_re & !reg_error;
+
+  assign tcdm_scrub_correctable_count_9_re = addr_hit[91] & reg_re & !reg_error;
+
+  assign tcdm_scrub_correctable_count_10_re = addr_hit[92] & reg_re & !reg_error;
+
+  assign tcdm_scrub_correctable_count_11_re = addr_hit[93] & reg_re & !reg_error;
+
+  assign tcdm_scrub_correctable_count_12_re = addr_hit[94] & reg_re & !reg_error;
+
+  assign tcdm_scrub_correctable_count_13_re = addr_hit[95] & reg_re & !reg_error;
+
+  assign tcdm_scrub_correctable_count_14_re = addr_hit[96] & reg_re & !reg_error;
+
+  assign tcdm_scrub_correctable_count_15_re = addr_hit[97] & reg_re & !reg_error;
+
+  assign tcdm_scrub_correctable_count_16_re = addr_hit[98] & reg_re & !reg_error;
+
+  assign tcdm_scrub_correctable_count_17_re = addr_hit[99] & reg_re & !reg_error;
+
+  assign tcdm_scrub_correctable_count_18_re = addr_hit[100] & reg_re & !reg_error;
+
+  assign tcdm_scrub_correctable_count_19_re = addr_hit[101] & reg_re & !reg_error;
+
+  assign tcdm_scrub_correctable_count_20_re = addr_hit[102] & reg_re & !reg_error;
+
+  assign tcdm_scrub_correctable_count_21_re = addr_hit[103] & reg_re & !reg_error;
+
+  assign tcdm_scrub_correctable_count_22_re = addr_hit[104] & reg_re & !reg_error;
+
+  assign tcdm_scrub_correctable_count_23_re = addr_hit[105] & reg_re & !reg_error;
+
+  assign tcdm_scrub_correctable_count_24_re = addr_hit[106] & reg_re & !reg_error;
+
+  assign tcdm_scrub_correctable_count_25_re = addr_hit[107] & reg_re & !reg_error;
+
+  assign tcdm_scrub_correctable_count_26_re = addr_hit[108] & reg_re & !reg_error;
+
+  assign tcdm_scrub_correctable_count_27_re = addr_hit[109] & reg_re & !reg_error;
+
+  assign tcdm_scrub_correctable_count_28_re = addr_hit[110] & reg_re & !reg_error;
+
+  assign tcdm_scrub_correctable_count_29_re = addr_hit[111] & reg_re & !reg_error;
+
+  assign tcdm_scrub_correctable_count_30_re = addr_hit[112] & reg_re & !reg_error;
+
+  assign tcdm_scrub_correctable_count_31_re = addr_hit[113] & reg_re & !reg_error;
+
+  assign tcdm_scrub_uncorrectable_count_0_re = addr_hit[114] & reg_re & !reg_error;
+
+  assign tcdm_scrub_uncorrectable_count_1_re = addr_hit[115] & reg_re & !reg_error;
+
+  assign tcdm_scrub_uncorrectable_count_2_re = addr_hit[116] & reg_re & !reg_error;
+
+  assign tcdm_scrub_uncorrectable_count_3_re = addr_hit[117] & reg_re & !reg_error;
+
+  assign tcdm_scrub_uncorrectable_count_4_re = addr_hit[118] & reg_re & !reg_error;
+
+  assign tcdm_scrub_uncorrectable_count_5_re = addr_hit[119] & reg_re & !reg_error;
+
+  assign tcdm_scrub_uncorrectable_count_6_re = addr_hit[120] & reg_re & !reg_error;
+
+  assign tcdm_scrub_uncorrectable_count_7_re = addr_hit[121] & reg_re & !reg_error;
+
+  assign tcdm_scrub_uncorrectable_count_8_re = addr_hit[122] & reg_re & !reg_error;
+
+  assign tcdm_scrub_uncorrectable_count_9_re = addr_hit[123] & reg_re & !reg_error;
+
+  assign tcdm_scrub_uncorrectable_count_10_re = addr_hit[124] & reg_re & !reg_error;
+
+  assign tcdm_scrub_uncorrectable_count_11_re = addr_hit[125] & reg_re & !reg_error;
+
+  assign tcdm_scrub_uncorrectable_count_12_re = addr_hit[126] & reg_re & !reg_error;
+
+  assign tcdm_scrub_uncorrectable_count_13_re = addr_hit[127] & reg_re & !reg_error;
+
+  assign tcdm_scrub_uncorrectable_count_14_re = addr_hit[128] & reg_re & !reg_error;
+
+  assign tcdm_scrub_uncorrectable_count_15_re = addr_hit[129] & reg_re & !reg_error;
+
+  assign tcdm_scrub_uncorrectable_count_16_re = addr_hit[130] & reg_re & !reg_error;
+
+  assign tcdm_scrub_uncorrectable_count_17_re = addr_hit[131] & reg_re & !reg_error;
+
+  assign tcdm_scrub_uncorrectable_count_18_re = addr_hit[132] & reg_re & !reg_error;
+
+  assign tcdm_scrub_uncorrectable_count_19_re = addr_hit[133] & reg_re & !reg_error;
+
+  assign tcdm_scrub_uncorrectable_count_20_re = addr_hit[134] & reg_re & !reg_error;
+
+  assign tcdm_scrub_uncorrectable_count_21_re = addr_hit[135] & reg_re & !reg_error;
+
+  assign tcdm_scrub_uncorrectable_count_22_re = addr_hit[136] & reg_re & !reg_error;
+
+  assign tcdm_scrub_uncorrectable_count_23_re = addr_hit[137] & reg_re & !reg_error;
+
+  assign tcdm_scrub_uncorrectable_count_24_re = addr_hit[138] & reg_re & !reg_error;
+
+  assign tcdm_scrub_uncorrectable_count_25_re = addr_hit[139] & reg_re & !reg_error;
+
+  assign tcdm_scrub_uncorrectable_count_26_re = addr_hit[140] & reg_re & !reg_error;
+
+  assign tcdm_scrub_uncorrectable_count_27_re = addr_hit[141] & reg_re & !reg_error;
+
+  assign tcdm_scrub_uncorrectable_count_28_re = addr_hit[142] & reg_re & !reg_error;
+
+  assign tcdm_scrub_uncorrectable_count_29_re = addr_hit[143] & reg_re & !reg_error;
+
+  assign tcdm_scrub_uncorrectable_count_30_re = addr_hit[144] & reg_re & !reg_error;
+
+  assign tcdm_scrub_uncorrectable_count_31_re = addr_hit[145] & reg_re & !reg_error;
+
+  assign tcdm_interconnect_correctable_count_re = addr_hit[146] & reg_re & !reg_error;
+
+  assign tcdm_interconnect_uncorrectable_count_re = addr_hit[147] & reg_re & !reg_error;
+
+  assign snitch_correctable_fault_count_re = addr_hit[148] & reg_re & !reg_error;
+
+  assign snitch_uncorrectable_fault_count_re = addr_hit[149] & reg_re & !reg_error;
 
   // Read data return
   always_comb begin
@@ -4120,19 +5578,19 @@ module spatz_cluster_peripheral_reg_top #(
       end
 
       addr_hit[14]: begin
-        reg_rdata_next[31:0] = vrf_correctable_count_0_qs;
+        reg_rdata_next[31:0] = vrf_correctable_count_qs;
       end
 
       addr_hit[15]: begin
-        reg_rdata_next[31:0] = vrf_correctable_count_1_qs;
+        reg_rdata_next[31:0] = vrf_uncorrectable_count_qs;
       end
 
       addr_hit[16]: begin
-        reg_rdata_next[31:0] = vrf_uncorrectable_count_0_qs;
+        reg_rdata_next[31:0] = vlsu_correctable_count_qs;
       end
 
       addr_hit[17]: begin
-        reg_rdata_next[31:0] = vrf_uncorrectable_count_1_qs;
+        reg_rdata_next[31:0] = vlsu_uncorrectable_count_qs;
       end
 
       addr_hit[18]: begin
@@ -4200,203 +5658,467 @@ module spatz_cluster_peripheral_reg_top #(
       end
 
       addr_hit[34]: begin
-        reg_rdata_next[31:0] = tcdm_rd_uncorrectable_count_0_qs;
+        reg_rdata_next[31:0] = tcdm_rd_correctable_count_16_qs;
       end
 
       addr_hit[35]: begin
-        reg_rdata_next[31:0] = tcdm_rd_uncorrectable_count_1_qs;
+        reg_rdata_next[31:0] = tcdm_rd_correctable_count_17_qs;
       end
 
       addr_hit[36]: begin
-        reg_rdata_next[31:0] = tcdm_rd_uncorrectable_count_2_qs;
+        reg_rdata_next[31:0] = tcdm_rd_correctable_count_18_qs;
       end
 
       addr_hit[37]: begin
-        reg_rdata_next[31:0] = tcdm_rd_uncorrectable_count_3_qs;
+        reg_rdata_next[31:0] = tcdm_rd_correctable_count_19_qs;
       end
 
       addr_hit[38]: begin
-        reg_rdata_next[31:0] = tcdm_rd_uncorrectable_count_4_qs;
+        reg_rdata_next[31:0] = tcdm_rd_correctable_count_20_qs;
       end
 
       addr_hit[39]: begin
-        reg_rdata_next[31:0] = tcdm_rd_uncorrectable_count_5_qs;
+        reg_rdata_next[31:0] = tcdm_rd_correctable_count_21_qs;
       end
 
       addr_hit[40]: begin
-        reg_rdata_next[31:0] = tcdm_rd_uncorrectable_count_6_qs;
+        reg_rdata_next[31:0] = tcdm_rd_correctable_count_22_qs;
       end
 
       addr_hit[41]: begin
-        reg_rdata_next[31:0] = tcdm_rd_uncorrectable_count_7_qs;
+        reg_rdata_next[31:0] = tcdm_rd_correctable_count_23_qs;
       end
 
       addr_hit[42]: begin
-        reg_rdata_next[31:0] = tcdm_rd_uncorrectable_count_8_qs;
+        reg_rdata_next[31:0] = tcdm_rd_correctable_count_24_qs;
       end
 
       addr_hit[43]: begin
-        reg_rdata_next[31:0] = tcdm_rd_uncorrectable_count_9_qs;
+        reg_rdata_next[31:0] = tcdm_rd_correctable_count_25_qs;
       end
 
       addr_hit[44]: begin
-        reg_rdata_next[31:0] = tcdm_rd_uncorrectable_count_10_qs;
+        reg_rdata_next[31:0] = tcdm_rd_correctable_count_26_qs;
       end
 
       addr_hit[45]: begin
-        reg_rdata_next[31:0] = tcdm_rd_uncorrectable_count_11_qs;
+        reg_rdata_next[31:0] = tcdm_rd_correctable_count_27_qs;
       end
 
       addr_hit[46]: begin
-        reg_rdata_next[31:0] = tcdm_rd_uncorrectable_count_12_qs;
+        reg_rdata_next[31:0] = tcdm_rd_correctable_count_28_qs;
       end
 
       addr_hit[47]: begin
-        reg_rdata_next[31:0] = tcdm_rd_uncorrectable_count_13_qs;
+        reg_rdata_next[31:0] = tcdm_rd_correctable_count_29_qs;
       end
 
       addr_hit[48]: begin
-        reg_rdata_next[31:0] = tcdm_rd_uncorrectable_count_14_qs;
+        reg_rdata_next[31:0] = tcdm_rd_correctable_count_30_qs;
       end
 
       addr_hit[49]: begin
-        reg_rdata_next[31:0] = tcdm_rd_uncorrectable_count_15_qs;
+        reg_rdata_next[31:0] = tcdm_rd_correctable_count_31_qs;
       end
 
       addr_hit[50]: begin
-        reg_rdata_next[31:0] = tcdm_scrub_correctable_count_0_qs;
+        reg_rdata_next[31:0] = tcdm_rd_uncorrectable_count_0_qs;
       end
 
       addr_hit[51]: begin
-        reg_rdata_next[31:0] = tcdm_scrub_correctable_count_1_qs;
+        reg_rdata_next[31:0] = tcdm_rd_uncorrectable_count_1_qs;
       end
 
       addr_hit[52]: begin
-        reg_rdata_next[31:0] = tcdm_scrub_correctable_count_2_qs;
+        reg_rdata_next[31:0] = tcdm_rd_uncorrectable_count_2_qs;
       end
 
       addr_hit[53]: begin
-        reg_rdata_next[31:0] = tcdm_scrub_correctable_count_3_qs;
+        reg_rdata_next[31:0] = tcdm_rd_uncorrectable_count_3_qs;
       end
 
       addr_hit[54]: begin
-        reg_rdata_next[31:0] = tcdm_scrub_correctable_count_4_qs;
+        reg_rdata_next[31:0] = tcdm_rd_uncorrectable_count_4_qs;
       end
 
       addr_hit[55]: begin
-        reg_rdata_next[31:0] = tcdm_scrub_correctable_count_5_qs;
+        reg_rdata_next[31:0] = tcdm_rd_uncorrectable_count_5_qs;
       end
 
       addr_hit[56]: begin
-        reg_rdata_next[31:0] = tcdm_scrub_correctable_count_6_qs;
+        reg_rdata_next[31:0] = tcdm_rd_uncorrectable_count_6_qs;
       end
 
       addr_hit[57]: begin
-        reg_rdata_next[31:0] = tcdm_scrub_correctable_count_7_qs;
+        reg_rdata_next[31:0] = tcdm_rd_uncorrectable_count_7_qs;
       end
 
       addr_hit[58]: begin
-        reg_rdata_next[31:0] = tcdm_scrub_correctable_count_8_qs;
+        reg_rdata_next[31:0] = tcdm_rd_uncorrectable_count_8_qs;
       end
 
       addr_hit[59]: begin
-        reg_rdata_next[31:0] = tcdm_scrub_correctable_count_9_qs;
+        reg_rdata_next[31:0] = tcdm_rd_uncorrectable_count_9_qs;
       end
 
       addr_hit[60]: begin
-        reg_rdata_next[31:0] = tcdm_scrub_correctable_count_10_qs;
+        reg_rdata_next[31:0] = tcdm_rd_uncorrectable_count_10_qs;
       end
 
       addr_hit[61]: begin
-        reg_rdata_next[31:0] = tcdm_scrub_correctable_count_11_qs;
+        reg_rdata_next[31:0] = tcdm_rd_uncorrectable_count_11_qs;
       end
 
       addr_hit[62]: begin
-        reg_rdata_next[31:0] = tcdm_scrub_correctable_count_12_qs;
+        reg_rdata_next[31:0] = tcdm_rd_uncorrectable_count_12_qs;
       end
 
       addr_hit[63]: begin
-        reg_rdata_next[31:0] = tcdm_scrub_correctable_count_13_qs;
+        reg_rdata_next[31:0] = tcdm_rd_uncorrectable_count_13_qs;
       end
 
       addr_hit[64]: begin
-        reg_rdata_next[31:0] = tcdm_scrub_correctable_count_14_qs;
+        reg_rdata_next[31:0] = tcdm_rd_uncorrectable_count_14_qs;
       end
 
       addr_hit[65]: begin
-        reg_rdata_next[31:0] = tcdm_scrub_correctable_count_15_qs;
+        reg_rdata_next[31:0] = tcdm_rd_uncorrectable_count_15_qs;
       end
 
       addr_hit[66]: begin
-        reg_rdata_next[31:0] = tcdm_scrub_uncorrectable_count_0_qs;
+        reg_rdata_next[31:0] = tcdm_rd_uncorrectable_count_16_qs;
       end
 
       addr_hit[67]: begin
-        reg_rdata_next[31:0] = tcdm_scrub_uncorrectable_count_1_qs;
+        reg_rdata_next[31:0] = tcdm_rd_uncorrectable_count_17_qs;
       end
 
       addr_hit[68]: begin
-        reg_rdata_next[31:0] = tcdm_scrub_uncorrectable_count_2_qs;
+        reg_rdata_next[31:0] = tcdm_rd_uncorrectable_count_18_qs;
       end
 
       addr_hit[69]: begin
-        reg_rdata_next[31:0] = tcdm_scrub_uncorrectable_count_3_qs;
+        reg_rdata_next[31:0] = tcdm_rd_uncorrectable_count_19_qs;
       end
 
       addr_hit[70]: begin
-        reg_rdata_next[31:0] = tcdm_scrub_uncorrectable_count_4_qs;
+        reg_rdata_next[31:0] = tcdm_rd_uncorrectable_count_20_qs;
       end
 
       addr_hit[71]: begin
-        reg_rdata_next[31:0] = tcdm_scrub_uncorrectable_count_5_qs;
+        reg_rdata_next[31:0] = tcdm_rd_uncorrectable_count_21_qs;
       end
 
       addr_hit[72]: begin
-        reg_rdata_next[31:0] = tcdm_scrub_uncorrectable_count_6_qs;
+        reg_rdata_next[31:0] = tcdm_rd_uncorrectable_count_22_qs;
       end
 
       addr_hit[73]: begin
-        reg_rdata_next[31:0] = tcdm_scrub_uncorrectable_count_7_qs;
+        reg_rdata_next[31:0] = tcdm_rd_uncorrectable_count_23_qs;
       end
 
       addr_hit[74]: begin
-        reg_rdata_next[31:0] = tcdm_scrub_uncorrectable_count_8_qs;
+        reg_rdata_next[31:0] = tcdm_rd_uncorrectable_count_24_qs;
       end
 
       addr_hit[75]: begin
-        reg_rdata_next[31:0] = tcdm_scrub_uncorrectable_count_9_qs;
+        reg_rdata_next[31:0] = tcdm_rd_uncorrectable_count_25_qs;
       end
 
       addr_hit[76]: begin
-        reg_rdata_next[31:0] = tcdm_scrub_uncorrectable_count_10_qs;
+        reg_rdata_next[31:0] = tcdm_rd_uncorrectable_count_26_qs;
       end
 
       addr_hit[77]: begin
-        reg_rdata_next[31:0] = tcdm_scrub_uncorrectable_count_11_qs;
+        reg_rdata_next[31:0] = tcdm_rd_uncorrectable_count_27_qs;
       end
 
       addr_hit[78]: begin
-        reg_rdata_next[31:0] = tcdm_scrub_uncorrectable_count_12_qs;
+        reg_rdata_next[31:0] = tcdm_rd_uncorrectable_count_28_qs;
       end
 
       addr_hit[79]: begin
-        reg_rdata_next[31:0] = tcdm_scrub_uncorrectable_count_13_qs;
+        reg_rdata_next[31:0] = tcdm_rd_uncorrectable_count_29_qs;
       end
 
       addr_hit[80]: begin
-        reg_rdata_next[31:0] = tcdm_scrub_uncorrectable_count_14_qs;
+        reg_rdata_next[31:0] = tcdm_rd_uncorrectable_count_30_qs;
       end
 
       addr_hit[81]: begin
-        reg_rdata_next[31:0] = tcdm_scrub_uncorrectable_count_15_qs;
+        reg_rdata_next[31:0] = tcdm_rd_uncorrectable_count_31_qs;
       end
 
       addr_hit[82]: begin
-        reg_rdata_next[31:0] = core_tmr_fault_count_0_qs;
+        reg_rdata_next[31:0] = tcdm_scrub_correctable_count_0_qs;
       end
 
       addr_hit[83]: begin
-        reg_rdata_next[31:0] = core_tmr_fault_count_1_qs;
+        reg_rdata_next[31:0] = tcdm_scrub_correctable_count_1_qs;
+      end
+
+      addr_hit[84]: begin
+        reg_rdata_next[31:0] = tcdm_scrub_correctable_count_2_qs;
+      end
+
+      addr_hit[85]: begin
+        reg_rdata_next[31:0] = tcdm_scrub_correctable_count_3_qs;
+      end
+
+      addr_hit[86]: begin
+        reg_rdata_next[31:0] = tcdm_scrub_correctable_count_4_qs;
+      end
+
+      addr_hit[87]: begin
+        reg_rdata_next[31:0] = tcdm_scrub_correctable_count_5_qs;
+      end
+
+      addr_hit[88]: begin
+        reg_rdata_next[31:0] = tcdm_scrub_correctable_count_6_qs;
+      end
+
+      addr_hit[89]: begin
+        reg_rdata_next[31:0] = tcdm_scrub_correctable_count_7_qs;
+      end
+
+      addr_hit[90]: begin
+        reg_rdata_next[31:0] = tcdm_scrub_correctable_count_8_qs;
+      end
+
+      addr_hit[91]: begin
+        reg_rdata_next[31:0] = tcdm_scrub_correctable_count_9_qs;
+      end
+
+      addr_hit[92]: begin
+        reg_rdata_next[31:0] = tcdm_scrub_correctable_count_10_qs;
+      end
+
+      addr_hit[93]: begin
+        reg_rdata_next[31:0] = tcdm_scrub_correctable_count_11_qs;
+      end
+
+      addr_hit[94]: begin
+        reg_rdata_next[31:0] = tcdm_scrub_correctable_count_12_qs;
+      end
+
+      addr_hit[95]: begin
+        reg_rdata_next[31:0] = tcdm_scrub_correctable_count_13_qs;
+      end
+
+      addr_hit[96]: begin
+        reg_rdata_next[31:0] = tcdm_scrub_correctable_count_14_qs;
+      end
+
+      addr_hit[97]: begin
+        reg_rdata_next[31:0] = tcdm_scrub_correctable_count_15_qs;
+      end
+
+      addr_hit[98]: begin
+        reg_rdata_next[31:0] = tcdm_scrub_correctable_count_16_qs;
+      end
+
+      addr_hit[99]: begin
+        reg_rdata_next[31:0] = tcdm_scrub_correctable_count_17_qs;
+      end
+
+      addr_hit[100]: begin
+        reg_rdata_next[31:0] = tcdm_scrub_correctable_count_18_qs;
+      end
+
+      addr_hit[101]: begin
+        reg_rdata_next[31:0] = tcdm_scrub_correctable_count_19_qs;
+      end
+
+      addr_hit[102]: begin
+        reg_rdata_next[31:0] = tcdm_scrub_correctable_count_20_qs;
+      end
+
+      addr_hit[103]: begin
+        reg_rdata_next[31:0] = tcdm_scrub_correctable_count_21_qs;
+      end
+
+      addr_hit[104]: begin
+        reg_rdata_next[31:0] = tcdm_scrub_correctable_count_22_qs;
+      end
+
+      addr_hit[105]: begin
+        reg_rdata_next[31:0] = tcdm_scrub_correctable_count_23_qs;
+      end
+
+      addr_hit[106]: begin
+        reg_rdata_next[31:0] = tcdm_scrub_correctable_count_24_qs;
+      end
+
+      addr_hit[107]: begin
+        reg_rdata_next[31:0] = tcdm_scrub_correctable_count_25_qs;
+      end
+
+      addr_hit[108]: begin
+        reg_rdata_next[31:0] = tcdm_scrub_correctable_count_26_qs;
+      end
+
+      addr_hit[109]: begin
+        reg_rdata_next[31:0] = tcdm_scrub_correctable_count_27_qs;
+      end
+
+      addr_hit[110]: begin
+        reg_rdata_next[31:0] = tcdm_scrub_correctable_count_28_qs;
+      end
+
+      addr_hit[111]: begin
+        reg_rdata_next[31:0] = tcdm_scrub_correctable_count_29_qs;
+      end
+
+      addr_hit[112]: begin
+        reg_rdata_next[31:0] = tcdm_scrub_correctable_count_30_qs;
+      end
+
+      addr_hit[113]: begin
+        reg_rdata_next[31:0] = tcdm_scrub_correctable_count_31_qs;
+      end
+
+      addr_hit[114]: begin
+        reg_rdata_next[31:0] = tcdm_scrub_uncorrectable_count_0_qs;
+      end
+
+      addr_hit[115]: begin
+        reg_rdata_next[31:0] = tcdm_scrub_uncorrectable_count_1_qs;
+      end
+
+      addr_hit[116]: begin
+        reg_rdata_next[31:0] = tcdm_scrub_uncorrectable_count_2_qs;
+      end
+
+      addr_hit[117]: begin
+        reg_rdata_next[31:0] = tcdm_scrub_uncorrectable_count_3_qs;
+      end
+
+      addr_hit[118]: begin
+        reg_rdata_next[31:0] = tcdm_scrub_uncorrectable_count_4_qs;
+      end
+
+      addr_hit[119]: begin
+        reg_rdata_next[31:0] = tcdm_scrub_uncorrectable_count_5_qs;
+      end
+
+      addr_hit[120]: begin
+        reg_rdata_next[31:0] = tcdm_scrub_uncorrectable_count_6_qs;
+      end
+
+      addr_hit[121]: begin
+        reg_rdata_next[31:0] = tcdm_scrub_uncorrectable_count_7_qs;
+      end
+
+      addr_hit[122]: begin
+        reg_rdata_next[31:0] = tcdm_scrub_uncorrectable_count_8_qs;
+      end
+
+      addr_hit[123]: begin
+        reg_rdata_next[31:0] = tcdm_scrub_uncorrectable_count_9_qs;
+      end
+
+      addr_hit[124]: begin
+        reg_rdata_next[31:0] = tcdm_scrub_uncorrectable_count_10_qs;
+      end
+
+      addr_hit[125]: begin
+        reg_rdata_next[31:0] = tcdm_scrub_uncorrectable_count_11_qs;
+      end
+
+      addr_hit[126]: begin
+        reg_rdata_next[31:0] = tcdm_scrub_uncorrectable_count_12_qs;
+      end
+
+      addr_hit[127]: begin
+        reg_rdata_next[31:0] = tcdm_scrub_uncorrectable_count_13_qs;
+      end
+
+      addr_hit[128]: begin
+        reg_rdata_next[31:0] = tcdm_scrub_uncorrectable_count_14_qs;
+      end
+
+      addr_hit[129]: begin
+        reg_rdata_next[31:0] = tcdm_scrub_uncorrectable_count_15_qs;
+      end
+
+      addr_hit[130]: begin
+        reg_rdata_next[31:0] = tcdm_scrub_uncorrectable_count_16_qs;
+      end
+
+      addr_hit[131]: begin
+        reg_rdata_next[31:0] = tcdm_scrub_uncorrectable_count_17_qs;
+      end
+
+      addr_hit[132]: begin
+        reg_rdata_next[31:0] = tcdm_scrub_uncorrectable_count_18_qs;
+      end
+
+      addr_hit[133]: begin
+        reg_rdata_next[31:0] = tcdm_scrub_uncorrectable_count_19_qs;
+      end
+
+      addr_hit[134]: begin
+        reg_rdata_next[31:0] = tcdm_scrub_uncorrectable_count_20_qs;
+      end
+
+      addr_hit[135]: begin
+        reg_rdata_next[31:0] = tcdm_scrub_uncorrectable_count_21_qs;
+      end
+
+      addr_hit[136]: begin
+        reg_rdata_next[31:0] = tcdm_scrub_uncorrectable_count_22_qs;
+      end
+
+      addr_hit[137]: begin
+        reg_rdata_next[31:0] = tcdm_scrub_uncorrectable_count_23_qs;
+      end
+
+      addr_hit[138]: begin
+        reg_rdata_next[31:0] = tcdm_scrub_uncorrectable_count_24_qs;
+      end
+
+      addr_hit[139]: begin
+        reg_rdata_next[31:0] = tcdm_scrub_uncorrectable_count_25_qs;
+      end
+
+      addr_hit[140]: begin
+        reg_rdata_next[31:0] = tcdm_scrub_uncorrectable_count_26_qs;
+      end
+
+      addr_hit[141]: begin
+        reg_rdata_next[31:0] = tcdm_scrub_uncorrectable_count_27_qs;
+      end
+
+      addr_hit[142]: begin
+        reg_rdata_next[31:0] = tcdm_scrub_uncorrectable_count_28_qs;
+      end
+
+      addr_hit[143]: begin
+        reg_rdata_next[31:0] = tcdm_scrub_uncorrectable_count_29_qs;
+      end
+
+      addr_hit[144]: begin
+        reg_rdata_next[31:0] = tcdm_scrub_uncorrectable_count_30_qs;
+      end
+
+      addr_hit[145]: begin
+        reg_rdata_next[31:0] = tcdm_scrub_uncorrectable_count_31_qs;
+      end
+
+      addr_hit[146]: begin
+        reg_rdata_next[31:0] = tcdm_interconnect_correctable_count_qs;
+      end
+
+      addr_hit[147]: begin
+        reg_rdata_next[31:0] = tcdm_interconnect_uncorrectable_count_qs;
+      end
+
+      addr_hit[148]: begin
+        reg_rdata_next[31:0] = snitch_correctable_fault_count_qs;
+      end
+
+      addr_hit[149]: begin
+        reg_rdata_next[31:0] = snitch_uncorrectable_fault_count_qs;
       end
 
       default: begin
@@ -4421,7 +6143,7 @@ endmodule
 
 module spatz_cluster_peripheral_reg_top_intf
 #(
-  parameter int AW = 10,
+  parameter int AW = 11,
   localparam int DW = 64
 ) (
   input logic clk_i,
@@ -4468,5 +6190,3 @@ module spatz_cluster_peripheral_reg_top_intf
   );
   
 endmodule
-
-
