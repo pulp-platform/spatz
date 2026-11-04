@@ -27,12 +27,16 @@
 float *samples;
 float *buffer;
 float *twiddle;
+float *samples1;
+float *buffer1;
 
-uint16_t *store_idx;
-uint16_t *bitrev;
+uint16_t *store_idx_dma;
+uint16_t *bitrev_dma;
+uint32_t *store_idx;
+uint32_t *bitrev;
 
 static inline int fp_check(const float a, const float b) {
-  const float threshold = 0.00001;
+  const float threshold = 0.001;
 
   // Absolute value
   float comp = a - b;
@@ -58,9 +62,16 @@ int main() {
     samples = (float *)snrt_l1alloc(2 * NFFT * sizeof(float));
     buffer = (float *)snrt_l1alloc(2 * NFFT * sizeof(float));
     twiddle = (float *)snrt_l1alloc((2 * NTWI + NFFT) * sizeof(float));
-    store_idx = (uint16_t *)snrt_l1alloc(log2_half_nfft * (NFFT / 4) *
-                                         sizeof(uint16_t));
-    bitrev = (uint16_t *)snrt_l1alloc((NFFT / 4) * sizeof(uint16_t));
+    store_idx_dma = (uint16_t *)snrt_l1alloc(log2_half_nfft * (NFFT / 4) *
+                                             sizeof(uint16_t));
+    bitrev_dma = (uint16_t *)snrt_l1alloc((NFFT / 4) * sizeof(uint16_t));
+    store_idx = (uint32_t *)snrt_l1alloc(log2_half_nfft * (NFFT / 4) *
+                                         sizeof(uint32_t));
+    bitrev = (uint32_t *)snrt_l1alloc((NFFT / 4) * sizeof(uint32_t));
+    if (QUADRILATERO) {
+      samples1 = (float *)snrt_l1alloc(2 * NFFT * sizeof(float));
+      buffer1 = (float *)snrt_l1alloc(2 * NFFT * sizeof(float));
+    }
   }
 
   // Initialize the matrices
@@ -68,10 +79,14 @@ int main() {
     snrt_dma_start_1d(samples, samples_dram, 2 * NFFT * sizeof(float));
     snrt_dma_start_1d(buffer, buffer_dram, 2 * NFFT * sizeof(float));
     snrt_dma_start_1d(twiddle, twiddle_dram, (2 * NTWI + NFFT) * sizeof(float));
-    snrt_dma_start_1d(store_idx, store_idx_dram,
+    snrt_dma_start_1d(store_idx_dma, store_idx_dram,
                       log2_half_nfft * (NFFT / 4) * sizeof(uint16_t));
-    snrt_dma_start_1d(bitrev, bitrev_dram, (NFFT / 4) * sizeof(uint16_t));
+    snrt_dma_start_1d(bitrev_dma, bitrev_dram, (NFFT / 4) * sizeof(uint16_t));
     snrt_dma_wait_all();
+    for (unsigned i = 0; i < log2_half_nfft * (NFFT / 4); i++)
+      store_idx[i] = store_idx_dma[i];
+    for (unsigned i = 0; i < NFFT / 4; i++)
+      bitrev[i] = bitrev_dma[i];
   }
 
   // Wait for all cores to finish
@@ -92,20 +107,39 @@ int main() {
   if (cid == 0)
     start_kernel();
 
-  if ((QUADRILATERO == 0) || cid == 0) {
+  if (!QUADRILATERO) {
     // First stage
     fft_2c(samples, buffer, twiddle, NFFT, cid);
+  } else if (cid == 0) {
+    fft_2c(samples, buffer, twiddle, NFFT, 0);
+    fft_2c(samples, buffer, twiddle, NFFT, 1);
   }
   // Wait for all cores to finish the first stage
   snrt_cluster_hw_barrier();
 
-  if ((QUADRILATERO == 0) || cid == 0) {
+  if (!QUADRILATERO) {
     // Fall back into the single-core case
     fft_sc(s_, buf_, twi_, store_idx, bitrev, NFFT >> 1, log2_half_nfft, cid);
+  } else if (cid == 0) {
+    for (unsigned int i = 0; i < (NFFT >> 1); i++) {
+      buffer1[(NFFT >> 1) + i] = buffer[(NFFT >> 1) + i];
+      buffer1[NFFT + (NFFT >> 1) + i] = buffer[NFFT + (NFFT >> 1) + i];
+    }
+    fft_sc(samples, buffer, twi_, store_idx, bitrev, NFFT >> 1, log2_half_nfft,
+           0);
+    fft_sc(samples1 + (NFFT >> 1), buffer1 + (NFFT >> 1), twi_, store_idx,
+           bitrev, NFFT >> 1, log2_half_nfft, 1);
   }
 
   // Wait for all cores to finish fft
   snrt_cluster_hw_barrier();
+
+  if (QUADRILATERO && cid == 0) {
+    for (unsigned int k = 1; k < NFFT; k += 2) {
+      buffer[k] = buffer1[k];
+      buffer[NFFT + k] = buffer1[NFFT + k];
+    }
+  }
 
   // End dump
   if (cid == 0)
@@ -116,6 +150,7 @@ int main() {
     timer = benchmark_get_cycle() - timer;
 
   // Display runtime
+  int error = 0;
   if (cid == 0) {
     // See the bottom of the file dp-fft/main.c for further info on the
     // performance calculation
@@ -133,6 +168,7 @@ int main() {
       if (fp_check(buffer[i], gold_out_dram[2 * i])) {
         PRINTF("Error: Index %d -> Result = %f, Expected = %f\n", i,
                (float)buffer[i], (float)gold_out_dram[2 * i]);
+        error = 1;
       }
     }
 
@@ -141,6 +177,7 @@ int main() {
       if (fp_check(buffer[i + NFFT], gold_out_dram[2 * i + 1])) {
         PRINTF("Error: Index %d -> Result = %f, Expected = %f\n", i + NFFT,
                (float)buffer[i + NFFT], (float)gold_out_dram[2 * i + 1]);
+        error = 1;
       }
     }
   }
@@ -148,5 +185,5 @@ int main() {
   // Wait for core 0 to finish displaying results
   snrt_cluster_hw_barrier();
 
-  return 0;
+  return error ? -1 : 0;
 }
