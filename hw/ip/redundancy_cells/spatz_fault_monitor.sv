@@ -124,6 +124,9 @@ module spatz_fault_monitor #(
         if (fpu_sequencer_uncorrectable_fault_i[i]) begin
           if (!SaturatingCount || !(&fpu_sequencer_uncorrectable_count_o[i])) begin
             fpu_sequencer_uncorrectable_count_o[i] <= fpu_sequencer_uncorrectable_count_o[i] + 1'b1;
+          end
+        end
+
         if (vlsu_correctable_fault_i[i]) begin
           if (!SaturatingCount || !(&vlsu_correctable_count_o[i])) begin
             vlsu_correctable_count_o[i] <= vlsu_correctable_count_o[i] + 1'b1;

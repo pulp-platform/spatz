@@ -2483,6 +2483,12 @@ else
     assign itlb_page_faultA = 1'b0;
     assign itlb_page_faultB = 1'b0;
     assign itlb_page_faultC = 1'b0;
+    assign ptw_valid_oA[0] = 1'b0;
+    assign ptw_valid_oB[0] = 1'b0;
+    assign ptw_valid_oC[0] = 1'b0;
+    assign ptw_va_oA[0] = '0;
+    assign ptw_va_oB[0] = '0;
+    assign ptw_va_oC[0] = '0;
     // assign ptw_valid_o[0] = 1'b0;
     // assign ptw_va_o[0] = '0;
   end
@@ -9326,6 +9332,12 @@ else
     assign dtlb_page_faultA = 1'b0;
     assign dtlb_page_faultB = 1'b0;
     assign dtlb_page_faultC = 1'b0;
+    assign ptw_valid_oA[1] = 1'b0;
+    assign ptw_valid_oB[1] = 1'b0;
+    assign ptw_valid_oC[1] = 1'b0;
+    assign ptw_va_oA[1] = '0;
+    assign ptw_va_oB[1] = '0;
+    assign ptw_va_oC[1] = '0;
     // assign ptw_valid_o[1] = 1'b0;
     // assign ptw_va_o[1] = '0;
   end
@@ -9931,7 +9943,7 @@ majorityVoter #(.WIDTH(32)) opbVoter (
   );
 
 va_t [1:0] tlb_ptw_va_voted;
-majorityVoter #(.WIDTH( (($size(ptw_va_oA))*2) )) ptw_va_oVoter (
+majorityVoter #(.WIDTH($bits(ptw_va_oA))) ptw_va_oVoter (
     .inA(ptw_va_oA),
     .inB(ptw_va_oB),
     .inC(ptw_va_oC),
@@ -10813,7 +10825,7 @@ fanout #(.WIDTH(2)) ptw_is_4mega_iFanout (
     .outC(ptw_is_4mega_iC)
   );
 
-fanout #(.WIDTH( (($size(ptw_pte_iA))*2) )) ptw_pte_iFanout (
+fanout #(.WIDTH($bits(ptw_pte_iA))) ptw_pte_iFanout (
     .in(ptw_pte_i),
     .outA(ptw_pte_iA),
     .outB(ptw_pte_iB),

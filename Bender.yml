@@ -86,9 +86,11 @@ sources:
     - hw/ip/snitchTMR/src/snitch_pkg.sv
     # Level 2:
     - hw/ip/snitchTMR/src/snitch_regfile_ffTMR.sv
+    - hw/ip/snitch/src/snitch_regfile_ff.sv
     # - hw/ip/snitch/src/snitch_regfile_fpga.sv
     # - hw/ip/snitch/src/snitch_regfile_latch.sv
     - hw/ip/snitchTMR/src/snitch_lsuTMR.sv
+    - hw/ip/snitch/src/snitch_lsu.sv
     - hw/ip/snitchTMR/src/snitch_l0_tlbTMR.sv
     # Level 1:
     - target: not(disable_pmcs)

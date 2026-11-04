@@ -625,6 +625,9 @@ snitch_lsuTMR #(
     .lsu_pready_iA (fp_lsu_pready   ),
     .lsu_pready_iB (fp_lsu_pready   ),
     .lsu_pready_iC (fp_lsu_pready   ),
+    .lsu_empty_oA  (                ),
+    .lsu_empty_oB  (                ),
+    .lsu_empty_oC  (                ),
     .data_req_oA   (fp_lsu_mem_req_oA),
     .data_req_oB   (fp_lsu_mem_req_oB),
     .data_req_oC   (fp_lsu_mem_req_oC),
@@ -687,6 +690,7 @@ snitch_lsuTMR #(
                                           | fp_lsu_qreadyTmrError | fp_lsu_pdataTmrError
                                           | fp_lsu_ptagTmrError | fp_lsu_pvalidTmrError
                                           | fp_lsu_mem_req_oTmrError;
+  assign fpu_sequencer_uncorrectable_fault_o = 1'b0;
 
   // Number of memory operations in the accelerator
   logic [2:0] acc_mem_cnt_q, acc_mem_cnt_d;

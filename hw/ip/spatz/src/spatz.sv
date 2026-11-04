@@ -71,7 +71,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     output logic                              vrf_multi_error_o,
     // fpu_sequencer error outputs
     output logic                              fpu_sequencer_correctable_error_o,
-    output logic                              fpu_sequencer_uncorrectable_error_o
+    output logic                              fpu_sequencer_uncorrectable_error_o,
     // VLSU error outputs
     output logic                              vlsu_correctable_error_o,
     output logic                              vlsu_uncorrectable_error_o
@@ -194,6 +194,8 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
 `endif
     assign fp_lsu_mem_finished     = 1'b0;
     assign fp_lsu_mem_str_finished = 1'b0;
+    assign fpu_sequencer_correctable_error_o   = 1'b0;
+    assign fpu_sequencer_uncorrectable_error_o = 1'b0;
   end: gen_no_fpu_sequencer else begin: gen_fpu_sequencer
     spatz_fpu_sequencer #(
       .dreq_t             (dreq_t              ),

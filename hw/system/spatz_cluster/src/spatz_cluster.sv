@@ -549,6 +549,8 @@ module spatz_cluster
 
   .snitch_correctable_fault_count_o (snitch_correctable_fault_count),
   .snitch_uncorrectable_fault_count_o (snitch_uncorrectable_fault_count),
+  .fpu_sequencer_correctable_count_o (),
+  .fpu_sequencer_uncorrectable_count_o (),
   .vlsu_correctable_count_o (),
   .vlsu_uncorrectable_count_o (),
   .icache_correctable_count_o (),
@@ -1229,11 +1231,6 @@ module spatz_cluster
         // ECC VRF signals
         .vrf_single_error_o (vrf_correctable_fault  [i]),
         .vrf_multi_error_o  (vrf_uncorrectable_fault[i]),
-        // fpu_sequencer error outputs
-        .fpu_sequencer_correctable_error_o (fpu_sequencer_correctable_fault[i]),
-        .fpu_sequencer_uncorrectable_error_o (fpu_sequencer_uncorrectable_fault[i])
-      );
-      for (genvar j = 0; j < TcdmPorts; j++) begin : gen_quad_tcdm_user
         .snitch_correctable_error_o (snitch_correctable_fault[i]),
         .snitch_uncorrectable_error_o (snitch_uncorrectable_fault[i])
       );
@@ -1334,6 +1331,8 @@ module spatz_cluster
         // VLSU fault signals
         .vlsu_correctable_error_o (vlsu_correctable_fault[i]),
         .vlsu_uncorrectable_error_o (vlsu_uncorrectable_fault[i]),
+        .fpu_sequencer_correctable_error_o (fpu_sequencer_correctable_fault[i]),
+        .fpu_sequencer_uncorrectable_error_o (fpu_sequencer_uncorrectable_fault[i]),
         // .core_tmr_fault_o (core_tmr_fault[i])
         // Snitch error outputs
         .snitch_correctable_error_o (snitch_correctable_fault[i]),

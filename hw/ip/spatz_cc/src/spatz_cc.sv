@@ -126,6 +126,8 @@ module spatz_cc
     // VLSU error outputs
     output logic                         vlsu_correctable_error_o,
     output logic                         vlsu_uncorrectable_error_o,
+    output logic                         fpu_sequencer_correctable_error_o,
+    output logic                         fpu_sequencer_uncorrectable_error_o,
     // Snitch error outputs
     output logic                         snitch_correctable_error_o,
     output logic                         snitch_uncorrectable_error_o
@@ -342,7 +344,9 @@ module spatz_cc
     .vrf_multi_error_o       (vrf_multi_error_o     ),
     // VLSU error outputs
     .vlsu_correctable_error_o (vlsu_correctable_error_o),
-    .vlsu_uncorrectable_error_o (vlsu_uncorrectable_error_o)
+    .vlsu_uncorrectable_error_o (vlsu_uncorrectable_error_o),
+    .fpu_sequencer_correctable_error_o (fpu_sequencer_correctable_error_o),
+    .fpu_sequencer_uncorrectable_error_o (fpu_sequencer_uncorrectable_error_o)
   );
 
   for (genvar p = 0; p < NumMemPortsPerSpatz; p++) begin: gen_tcdm_assignment
