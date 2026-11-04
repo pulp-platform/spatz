@@ -4596,22 +4596,6 @@ module spatz_cluster_peripheral_reg_top #(
   );
 
 
-  // R[tcdm_interconnect_correctable_count]: V(True)
-
-  prim_subreg_ext #(
-    .DW    (32)
-  ) u_tcdm_interconnect_correctable_count (
-    .re     (tcdm_interconnect_correctable_count_re),
-    .we     (1'b0),
-    .wd     ('0),
-    .d      (hw2reg.tcdm_interconnect_correctable_count.d),
-    .qre    (),
-    .qe     (),
-    .q      (reg2hw.tcdm_interconnect_correctable_count.q ),
-    .qs     (tcdm_interconnect_correctable_count_qs)
-  );
-
-
   // R[tcdm_interconnect_uncorrectable_count]: V(True)
 
   prim_subreg_ext #(

@@ -278,7 +278,7 @@ module spatz_cluster
   `MEM_TYPEDEF_REQ_T(mem_req_ecc_t, mem_req_ecc_chan_t)
   `MEM_TYPEDEF_REQ_CHAN_T(mem_dma_req_ecc_chan_t, tcdm_mem_addr_ecc_t, data_dma_t, strb_dma_t, logic)
   `MEM_TYPEDEF_REQ_T(mem_dma_req_ecc_t, mem_dma_req_ecc_chan_t)
-  
+
   // Full request-address ECC (before the crossbar). Unlike tcdm_mem_addr_ecc_t,
   // this covers the whole TCDMAddrWidth address that the crossbar routes on.
   localparam int unsigned TCDMAddrProtWidth = hsiao_ecc_pkg::min_ecc(TCDMAddrWidth);
