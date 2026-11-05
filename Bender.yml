@@ -24,7 +24,7 @@ dependencies:
 
 export_include_dirs:
   - hw/ip/mem_interface/include
-  - hw/ip/snitch/include
+  - hw/ip/snitchTMR/include
   - hw/ip/reqrsp_interface/include
   - hw/ip/tcdm_interface/include
 
@@ -77,25 +77,27 @@ sources:
         - hw/ip/tcdm_interface/test/reqrsp_to_tcdm_tb.sv
         - hw/ip/tcdm_interface/test/tcdm_mux_tb.sv
 
-    ## hw/ip/snitch ##
+    ## hw/ip/snitchTMR ##
 
     # Level 0:
-    - hw/ip/snitch/src/snitch_pma_pkg.sv
-    - hw/ip/snitch/src/riscv_instr.sv
+    - hw/ip/snitchTMR/src/snitch_pma_pkg.sv
+    - hw/ip/snitchTMR/src/riscv_instr.sv
     # Level 1:
-    - hw/ip/snitch/src/snitch_pkg.sv
+    - hw/ip/snitchTMR/src/snitch_pkg.sv
     # Level 2:
+    - hw/ip/snitchTMR/src/snitch_regfile_ffTMR.sv
     - hw/ip/snitch/src/snitch_regfile_ff.sv
     # - hw/ip/snitch/src/snitch_regfile_fpga.sv
     # - hw/ip/snitch/src/snitch_regfile_latch.sv
+    - hw/ip/snitchTMR/src/snitch_lsuTMR.sv
     - hw/ip/snitch/src/snitch_lsu.sv
-    - hw/ip/snitch/src/snitch_l0_tlb.sv
+    - hw/ip/snitchTMR/src/snitch_l0_tlbTMR.sv
     # Level 1:
     - target: not(disable_pmcs)
       defines:
         SNITCH_ENABLE_PERF:
       files:
-        - hw/ip/snitch/src/snitch.sv
+        - hw/ip/snitchTMR/src/snitchTMR.sv
     # Disable the performance monitoring counters to save area.
     - target: disable_pmcs
       files:
@@ -183,7 +185,6 @@ sources:
       # Level 1
       - hw/ip/spatz_cc/src/axi_dma_perf_counters.sv
       - hw/ip/spatz_cc/src/axi_dma_twod_ext.sv
-      - hw/ip/spatz_cc/src/spatz_snitch_tmr.sv
       - hw/ip/spatz_cc/src/quad_snitch_tmr.sv
       # Level 2
       - hw/ip/spatz_cc/src/axi_dma_tc_snitch_fe.sv

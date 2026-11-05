@@ -462,6 +462,8 @@ module spatz_cluster
   logic [NrCores-1:0]  vrf_correctable_fault;
   logic [NrCores-1:0]  vrf_uncorrectable_fault; // NrCores == NumVrfUnits
 
+  logic [NrCores-1:0]  fpu_sequencer_correctable_fault;
+  logic [NrCores-1:0]  fpu_sequencer_uncorrectable_fault;
   logic [NrCores-1:0]  vlsu_correctable_fault;
   logic [NrCores-1:0]  vlsu_uncorrectable_fault;
 
@@ -534,6 +536,8 @@ module spatz_cluster
   // Per-source counters.
   .vrf_correctable_count_o (vrf_correctable_count),
   .vrf_uncorrectable_count_o(vrf_uncorrectable_count),
+  .fpu_sequencer_correctable_fault_i (fpu_sequencer_correctable_fault),
+  .fpu_sequencer_uncorrectable_fault_i (fpu_sequencer_uncorrectable_fault),
 
   .tcdm_rd_correctable_count_o (tcdm_rd_correctable_count),
   .tcdm_rd_uncorrectable_count_o (tcdm_rd_uncorrectable_count),
@@ -545,6 +549,8 @@ module spatz_cluster
 
   .snitch_correctable_fault_count_o (snitch_correctable_fault_count),
   .snitch_uncorrectable_fault_count_o (snitch_uncorrectable_fault_count),
+  .fpu_sequencer_correctable_count_o (),
+  .fpu_sequencer_uncorrectable_count_o (),
   .vlsu_correctable_count_o (),
   .vlsu_uncorrectable_count_o (),
   .icache_correctable_count_o (),
@@ -1040,18 +1046,18 @@ module spatz_cluster
   logic tcdm_ic_handshake_tmr_fault_any;
   for (genvar i = 0; i < NrSuperBanks; i++) begin : gen_tcdm_fault_flat_sb
     for (genvar j = 0; j < BanksPerSuperBank; j++) begin : gen_tcdm_fault_flat_bank
-      localparam int unsigned k = i*BanksPerSuperBank + j;
-      assign tcdm_rd_correctable_fault[k]         = sram_rd_single_error[i][j];
-      assign tcdm_rd_uncorrectable_fault[k]       = sram_rd_multi_error[i][j];
-      assign tcdm_scrub_correctable_fault[k]       = sram_scrub_single_error[i][j];
-      assign tcdm_scrub_uncorrectable_fault[k]     = sram_scrub_multi_error[i][j];
+      localparam int unsigned Idx = i*BanksPerSuperBank + j;
+      assign tcdm_rd_correctable_fault[Idx]         = sram_rd_single_error[i][j];
+      assign tcdm_rd_uncorrectable_fault[Idx]       = sram_rd_multi_error[i][j];
+      assign tcdm_scrub_correctable_fault[Idx]       = sram_scrub_single_error[i][j];
+      assign tcdm_scrub_uncorrectable_fault[Idx]     = sram_scrub_multi_error[i][j];
       // TCDM address ECC
-      assign tcdm_addr_ecc_correctable_fault[k]   = tcdm_addr_correctable_fault[i][j];
-      assign tcdm_addr_ecc_uncorrectable_fault[k] = tcdm_addr_uncorrectable_fault[i][j];
-      assign tcdm_wctrl_ecc_correctable_fault[k]   = tcdm_wctrl_correctable_fault[i][j];
-      assign tcdm_wctrl_ecc_uncorrectable_fault[k] = tcdm_wctrl_uncorrectable_fault[i][j];
-      assign tcdm_be_ecc_correctable_fault[k]       = tcdm_be_correctable_fault[i][j];
-      assign tcdm_be_ecc_uncorrectable_fault[k]     = tcdm_be_uncorrectable_fault[i][j];
+      assign tcdm_addr_ecc_correctable_fault[Idx]   = tcdm_addr_correctable_fault[i][j];
+      assign tcdm_addr_ecc_uncorrectable_fault[Idx] = tcdm_addr_uncorrectable_fault[i][j];
+      assign tcdm_wctrl_ecc_correctable_fault[Idx]   = tcdm_wctrl_correctable_fault[i][j];
+      assign tcdm_wctrl_ecc_uncorrectable_fault[Idx] = tcdm_wctrl_uncorrectable_fault[i][j];
+      assign tcdm_be_ecc_correctable_fault[Idx]       = tcdm_be_correctable_fault[i][j];
+      assign tcdm_be_ecc_uncorrectable_fault[Idx]     = tcdm_be_uncorrectable_fault[i][j];
     end
   end
 
@@ -1325,6 +1331,8 @@ module spatz_cluster
         // VLSU fault signals
         .vlsu_correctable_error_o (vlsu_correctable_fault[i]),
         .vlsu_uncorrectable_error_o (vlsu_uncorrectable_fault[i]),
+        .fpu_sequencer_correctable_error_o (fpu_sequencer_correctable_fault[i]),
+        .fpu_sequencer_uncorrectable_error_o (fpu_sequencer_uncorrectable_fault[i]),
         // .core_tmr_fault_o (core_tmr_fault[i])
         // Snitch error outputs
         .snitch_correctable_error_o (snitch_correctable_fault[i]),

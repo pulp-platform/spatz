@@ -183,9 +183,16 @@ module spatz_quadrilatero_cc
 
   logic core_tmr_fault_o;
 
+  acc_issue_req_t acc_snitch_qreq;
+  acc_issue_rsp_t acc_snitch_qrsp;
+  acc_rsp_t       acc_snitch_prsp;
+  logic acc_snitch_qvalid, acc_snitch_qready;
+  logic acc_snitch_pvalid, acc_snitch_pready;
+  logic acc_rsp_tmr_fault;
+
   `SNITCH_VM_TYPEDEF(AddrWidth)
 
-  quad_snitch_tmr #(
+  snitchTMR #(
     .AddrWidth              (AddrWidth             ),
     .DataWidth              (DataWidth             ),
     .acc_issue_req_t        (acc_issue_req_t       ),
@@ -225,13 +232,13 @@ module spatz_quadrilatero_cc
     .inst_data_i           (hive_rsp_i.inst_data     ),
     .inst_valid_o          (hive_req_o.inst_valid    ),
     .inst_ready_i          (hive_rsp_i.inst_ready    ),
-    .acc_qreq_o            (acc_snitch_demux         ),
-    .acc_qrsp_i            (acc_snitch_resp          ),
-    .acc_qvalid_o          (acc_snitch_demux_qvalid  ),
-    .acc_qready_i          (acc_snitch_demux_qready  ),
-    .acc_prsp_i            (acc_demux_snitch         ),
-    .acc_pvalid_i          (acc_demux_snitch_valid   ),
-    .acc_pready_o          (acc_demux_snitch_ready   ),
+    .acc_qreq_o            (acc_snitch_qreq          ),
+    .acc_qrsp_i            (acc_snitch_qrsp          ),
+    .acc_qvalid_o          (acc_snitch_qvalid        ),
+    .acc_qready_i          (acc_snitch_qready        ),
+    .acc_prsp_i            (acc_snitch_prsp          ),
+    .acc_pvalid_i          (acc_snitch_pvalid        ),
+    .acc_pready_o          (acc_snitch_pready        ),
     .acc_mem_finished_i    (spatz_mem_finished       ),
     .acc_mem_str_finished_i(spatz_mem_str_finished   ),
     .data_req_o            (snitch_dreq_d            ),
@@ -247,6 +254,27 @@ module spatz_quadrilatero_cc
     .fpu_status_i          (fpu_status               ),
     .core_events_o         (snitch_events            ),
     .core_tmr_fault_o      (core_tmr_fault_o         )
+  );
+
+  assign acc_snitch_demux        = {3{acc_snitch_qreq}};
+  assign acc_snitch_demux_qvalid = {3{acc_snitch_qvalid}};
+  assign acc_demux_snitch_ready  = {3{acc_snitch_pready}};
+
+  localparam int unsigned AccRspWidth = $bits({acc_snitch_qrsp,acc_snitch_qready,acc_snitch_prsp,acc_snitch_pvalid});
+  logic [AccRspWidth-1:0] acc_rsp_rep [3];
+  for (genvar t = 0; t < 3; t++) begin : gen_acc_rsp_bundle
+    assign acc_rsp_rep[t] = {acc_snitch_resp[t],acc_snitch_demux_qready[t],acc_demux_snitch[t],acc_demux_snitch_valid[t]};
+  end
+
+  bitwise_TMR_voter_fail #(
+    .DataWidth (AccRspWidth),
+    .VoterType (1)
+  ) i_acc_rsp_voter (
+    .a_i              (acc_rsp_rep[0]   ),
+    .b_i              (acc_rsp_rep[1]   ),
+    .c_i              (acc_rsp_rep[2]   ),
+    .majority_o       ({acc_snitch_qrsp,acc_snitch_qready,acc_snitch_prsp,acc_snitch_pvalid}),
+    .fault_detected_o (acc_rsp_tmr_fault)
   );
 
   reqrsp_iso #(
@@ -495,7 +523,7 @@ module spatz_quadrilatero_cc
     assign snitch_tcdm_rsp_dec = quad_tcdm_rsp_i[NumMemPortsQuad];
   end
 
-  assign snitch_correctable_error_o   = core_tmr_fault_o | snitch_tcdm_rsp_err[0];
+  assign snitch_correctable_error_o   = core_tmr_fault_o | acc_rsp_tmr_fault | snitch_tcdm_rsp_err[0];
   assign snitch_uncorrectable_error_o = snitch_tcdm_rsp_err[1];
 
   reqrsp_to_tcdm #( // only for cross clock domain decoupling
@@ -587,40 +615,40 @@ module spatz_quadrilatero_cc
       extras_snitch = '{
         // State
         source      : snitch_pkg::SrcSnitch,
-        stall       : i_snitch.gen_replica[0].i_snitch.stall,
-        exception   : i_snitch.gen_replica[0].i_snitch.exception,
+        stall       : i_snitch.stallA,
+        exception   : i_snitch.exceptionA,
         // Decoding
-        rs1         : i_snitch.gen_replica[0].i_snitch.rs1,
-        rs2         : i_snitch.gen_replica[0].i_snitch.rs2,
-        rd          : i_snitch.gen_replica[0].i_snitch.rd,
-        is_load     : i_snitch.gen_replica[0].i_snitch.is_load,
-        is_store    : i_snitch.gen_replica[0].i_snitch.is_store,
-        is_branch   : i_snitch.gen_replica[0].i_snitch.is_branch,
-        pc_d        : i_snitch.gen_replica[0].i_snitch.pc_d,
+        rs1         : i_snitch.rs1A,
+        rs2         : i_snitch.rs2A,
+        rd          : i_snitch.rdA,
+        is_load     : i_snitch.is_loadA,
+        is_store    : i_snitch.is_storeA,
+        is_branch   : i_snitch.is_branchA,
+        pc_d        : i_snitch.pc_dA,
         // Operands
-        opa         : i_snitch.gen_replica[0].i_snitch.opa,
-        opb         : i_snitch.gen_replica[0].i_snitch.opb,
-        opa_select  : i_snitch.gen_replica[0].i_snitch.opa_select,
-        opb_select  : i_snitch.gen_replica[0].i_snitch.opb_select,
-        write_rd    : i_snitch.gen_replica[0].i_snitch.write_rd,
-        csr_addr    : i_snitch.gen_replica[0].i_snitch.inst_data_i[31:20],
+        opa         : i_snitch.opaA,
+        opb         : i_snitch.opbA,
+        opa_select  : i_snitch.opa_selectA,
+        opb_select  : i_snitch.opb_selectA,
+        write_rd    : i_snitch.write_rdA,
+        csr_addr    : i_snitch.inst_data_iA[31:20],
         // Pipeline writeback
-        writeback   : i_snitch.gen_replica[0].i_snitch.alu_writeback,
+        writeback   : i_snitch.alu_writebackA,
         // Load/Store
-        gpr_rdata_1 : i_snitch.gen_replica[0].i_snitch.gpr_rdata[1],
-        ls_size     : i_snitch.gen_replica[0].i_snitch.ls_size,
-        ld_result_32: i_snitch.gen_replica[0].i_snitch.ld_result[31:0],
-        lsu_rd      : i_snitch.gen_replica[0].i_snitch.lsu_rd,
-        retire_load : i_snitch.gen_replica[0].i_snitch.retire_load,
-        alu_result  : i_snitch.gen_replica[0].i_snitch.alu_result,
+        gpr_rdata_1 : i_snitch.gpr_rdataA[1],
+        ls_size     : i_snitch.ls_sizeA,
+        ld_result_32: i_snitch.ld_resultA[31:0],
+        lsu_rd      : i_snitch.lsu_rdA,
+        retire_load : i_snitch.retire_loadA,
+        alu_result  : i_snitch.alu_resultA,
         // Atomics
-        ls_amo      : i_snitch.gen_replica[0].i_snitch.ls_amo,
-        // Accelerator
-        retire_acc  : i_snitch.gen_replica[0].i_snitch.retire_acc,
-        acc_pid     : i_snitch.gen_replica[0].i_snitch.acc_prsp_i.id,
-        acc_pdata_32: i_snitch.gen_replica[0].i_snitch.acc_prsp_i.data[31:0],
+        ls_amo      : i_snitch.ls_amoA,
+        // Accelerato
+        retire_acc  : i_snitch.retire_accA,
+        acc_pid     : i_snitch.acc_prsp_iA.id,
+        acc_pdata_32: i_snitch.acc_prsp_iA.data[31:0],
         // FPU offload
-        fpu_offload : (i_snitch.gen_replica[0].i_snitch.acc_qready_i && i_snitch.gen_replica[0].i_snitch.acc_qvalid_o && i_snitch.gen_replica[0].i_snitch.acc_qreq_o.addr == 0),
+        fpu_offload : (i_snitch.acc_qready_iA && i_snitch.acc_qvalid_o && i_snitch.acc_qreq_o.addr == 0),
         is_seq_insn : '0
       };
 
@@ -628,9 +656,9 @@ module spatz_quadrilatero_cc
       // Trace snitch iff:
       // we are not stalled <==> we have issued and processed an instruction (including offloads)
       // OR we are retiring (issuing a writeback from) a load or accelerator instruction
-      if (!i_snitch.gen_replica[0].i_snitch.stall || i_snitch.gen_replica[0].i_snitch.retire_load || i_snitch.gen_replica[0].i_snitch.retire_acc) begin
+      if (!i_snitch.stallA || i_snitch.retire_loadA ||i_snitch.retire_accA) begin
         $sformat(trace_entry, "%t %1d %8d 0x%h DASM(%h) #; %s\n",
-          $time, cycle, i_snitch.gen_replica[0].i_snitch.priv_lvl_q, i_snitch.gen_replica[0].i_snitch.pc_q, i_snitch.gen_replica[0].i_snitch.inst_data_i,
+          $time, cycle, i_snitch.priv_lvl_qA, i_snitch.pc_qA, i_snitch.inst_data_iA,
           snitch_pkg::print_snitch_trace(extras_snitch));
         $fwrite(f, trace_entry);
       end
@@ -643,7 +671,7 @@ module spatz_quadrilatero_cc
         if (extras_fpu.acc_q_hs || extras_fpu.fpu_out_hs
             || extras_fpu.lsu_q_hs || extras_fpu.fpr_we) begin
           $sformat(trace_entry, "%t %1d %8d 0x%h DASM(%h) #; %s\n",
-            $time, cycle, i_snitch.gen_replica[0].i_snitch.priv_lvl_q, 32'hz, extras_fpu.op_in,
+            $time, cycle, i_snitch.priv_lvl_qA, 32'hz, extras_fpu.op_in,
             snitch_pkg::print_fpu_trace(extras_fpu));
           $fwrite(f, trace_entry);
         end
