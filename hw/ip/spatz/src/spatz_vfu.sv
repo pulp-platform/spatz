@@ -42,7 +42,10 @@ module spatz_vfu
     input  vrf_data_t  [2:0] vrf_rdata_i,
     input  logic       [2:0] vrf_rvalid_i,
     // FPU side channel
-    output status_t          fpu_status_o
+    output status_t          fpu_status_o,
+    // redundancy signals
+    output logic             vfu_correctable_fault_o,
+    output logic             vfu_uncorrectable_fault_o
   );
 
 // Include FF
@@ -1463,8 +1466,14 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
   logic     [N_IPU*ELENB-1:0] int_ipu_result_valid;
   logic                       int_ipu_result_ready;
   logic     [N_IPU-1:0]       int_ipu_busy;
+  // redundancy signals
+  logic                       ipu_dup_fault;  
+  logic     [N_IPU-1:0]       int_ipu_dup_fault; 
 
   assign is_ipu_busy = |int_ipu_busy;
+  assign ipu_dup_fault = |int_ipu_dup_fault;
+  assign vfu_uncorrectable_fault_o = ipu_dup_fault;
+  assign vfu_correctable_fault_o = 1'b0;
 
   logic [N_FU*ELEN-1:0] ipu_wide_operand1, ipu_wide_operand2, ipu_wide_operand3;
   always_comb begin: gen_ipu_widening
@@ -1590,7 +1599,7 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
     vew_e sew;
     assign sew = vew_e'(int'(spatz_req.vtype.vsew) + is_widening);
 
-    spatz_ipu #(
+    spatz_ipu_dmr #(
       .tag_t(vfu_tag_t)
     ) i_ipu (
       .clk_i            (clk_i                                                                                           ),
@@ -1610,7 +1619,8 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
       .result_valid_o   (int_ipu_result_valid[ipu*ELENB +: ELENB]                                                        ),
       .result_ready_i   (int_ipu_result_ready                                                                            ),
       .tag_o            (int_ipu_result_tag[ipu]                                                                         ),
-      .busy_o           (int_ipu_busy[ipu]                                                                               )
+      .busy_o           (int_ipu_busy[ipu]                                                                               ),
+      .dup_fault_o      (int_ipu_dup_fault[ipu]                                                                          )
     );
   end : gen_ipus
 

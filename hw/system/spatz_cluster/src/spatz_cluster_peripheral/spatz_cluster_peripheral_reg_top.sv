@@ -555,10 +555,18 @@ module spatz_cluster_peripheral_reg_top #(
   logic tcdm_interconnect_correctable_count_re;
   logic [31:0] tcdm_interconnect_uncorrectable_count_qs;
   logic tcdm_interconnect_uncorrectable_count_re;
-  logic [31:0] snitch_correctable_fault_count_qs;
-  logic snitch_correctable_fault_count_re;
-  logic [31:0] snitch_uncorrectable_fault_count_qs;
-  logic snitch_uncorrectable_fault_count_re;
+  logic [31:0] snitch_correctable_count_qs;
+  logic snitch_correctable_count_re;
+  logic [31:0] fpu_sequencer_correctable_count_qs;
+  logic fpu_sequencer_correctable_count_re;
+  logic [31:0] fpu_sequencer_uncorrectable_count_qs;
+  logic fpu_sequencer_uncorrectable_count_re;
+  logic [31:0] vfu_correctable_count_qs;
+  logic vfu_correctable_count_re;
+  logic [31:0] vfu_uncorrectable_count_qs;
+  logic vfu_uncorrectable_count_re;
+  logic [31:0] snitch_uncorrectable_count_qs;
+  logic snitch_uncorrectable_count_re;
 
   // Register instances
 
@@ -4613,44 +4621,116 @@ module spatz_cluster_peripheral_reg_top #(
 
 
 
-  // Subregister 0 of Multireg snitch_correctable_fault_count
-  // R[snitch_correctable_fault_count]: V(True)
+  // Subregister 0 of Multireg snitch_correctable_count
+  // R[snitch_correctable_count]: V(True)
 
   prim_subreg_ext #(
     .DW    (32)
-  ) u_snitch_correctable_fault_count (
-    .re     (snitch_correctable_fault_count_re),
+  ) u_snitch_correctable_count (
+    .re     (snitch_correctable_count_re),
     .we     (1'b0),
     .wd     ('0),
-    .d      (hw2reg.snitch_correctable_fault_count[0].d),
+    .d      (hw2reg.snitch_correctable_count[0].d),
     .qre    (),
     .qe     (),
-    .q      (reg2hw.snitch_correctable_fault_count[0].q ),
-    .qs     (snitch_correctable_fault_count_qs)
+    .q      (reg2hw.snitch_correctable_count[0].q ),
+    .qs     (snitch_correctable_count_qs)
   );
 
 
 
-  // Subregister 0 of Multireg snitch_uncorrectable_fault_count
-  // R[snitch_uncorrectable_fault_count]: V(True)
+  // Subregister 0 of Multireg fpu_sequencer_correctable_count
+  // R[fpu_sequencer_correctable_count]: V(True)
 
   prim_subreg_ext #(
     .DW    (32)
-  ) u_snitch_uncorrectable_fault_count (
-    .re     (snitch_uncorrectable_fault_count_re),
+  ) u_fpu_sequencer_correctable_count (
+    .re     (fpu_sequencer_correctable_count_re),
     .we     (1'b0),
     .wd     ('0),
-    .d      (hw2reg.snitch_uncorrectable_fault_count[0].d),
+    .d      (hw2reg.fpu_sequencer_correctable_count[0].d),
     .qre    (),
     .qe     (),
-    .q      (reg2hw.snitch_uncorrectable_fault_count[0].q ),
-    .qs     (snitch_uncorrectable_fault_count_qs)
+    .q      (reg2hw.fpu_sequencer_correctable_count[0].q ),
+    .qs     (fpu_sequencer_correctable_count_qs)
+  );
+
+
+
+  // Subregister 0 of Multireg fpu_sequencer_uncorrectable_count
+  // R[fpu_sequencer_uncorrectable_count]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_fpu_sequencer_uncorrectable_count (
+    .re     (fpu_sequencer_uncorrectable_count_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.fpu_sequencer_uncorrectable_count[0].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.fpu_sequencer_uncorrectable_count[0].q ),
+    .qs     (fpu_sequencer_uncorrectable_count_qs)
+  );
+
+
+
+  // Subregister 0 of Multireg vfu_correctable_count
+  // R[vfu_correctable_count]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_vfu_correctable_count (
+    .re     (vfu_correctable_count_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.vfu_correctable_count[0].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.vfu_correctable_count[0].q ),
+    .qs     (vfu_correctable_count_qs)
+  );
+
+
+
+  // Subregister 0 of Multireg vfu_uncorrectable_count
+  // R[vfu_uncorrectable_count]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_vfu_uncorrectable_count (
+    .re     (vfu_uncorrectable_count_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.vfu_uncorrectable_count[0].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.vfu_uncorrectable_count[0].q ),
+    .qs     (vfu_uncorrectable_count_qs)
+  );
+
+
+
+  // Subregister 0 of Multireg snitch_uncorrectable_count
+  // R[snitch_uncorrectable_count]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_snitch_uncorrectable_count (
+    .re     (snitch_uncorrectable_count_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.snitch_uncorrectable_count[0].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.snitch_uncorrectable_count[0].q ),
+    .qs     (snitch_uncorrectable_count_qs)
   );
 
 
 
 
-  logic [149:0] addr_hit;
+  logic [153:0] addr_hit;
   always_comb begin
     addr_hit = '0;
     addr_hit[  0] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_PERF_COUNTER_ENABLE_0_OFFSET);
@@ -4801,8 +4881,12 @@ module spatz_cluster_peripheral_reg_top #(
     addr_hit[145] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_31_OFFSET);
     addr_hit[146] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_INTERCONNECT_CORRECTABLE_COUNT_OFFSET);
     addr_hit[147] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_INTERCONNECT_UNCORRECTABLE_COUNT_OFFSET);
-    addr_hit[148] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_SNITCH_CORRECTABLE_FAULT_COUNT_OFFSET);
-    addr_hit[149] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_SNITCH_UNCORRECTABLE_FAULT_COUNT_OFFSET);
+    addr_hit[148] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_SNITCH_CORRECTABLE_COUNT_OFFSET);
+    addr_hit[149] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_FPU_SEQUENCER_CORRECTABLE_COUNT_OFFSET);
+    addr_hit[150] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_FPU_SEQUENCER_UNCORRECTABLE_COUNT_OFFSET);
+    addr_hit[151] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_VFU_CORRECTABLE_COUNT_OFFSET);
+    addr_hit[152] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_VFU_UNCORRECTABLE_COUNT_OFFSET);
+    addr_hit[153] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_SNITCH_UNCORRECTABLE_COUNT_OFFSET);
   end
 
   assign addrmiss = (reg_re || reg_we) ? ~|addr_hit : 1'b0 ;
@@ -4959,7 +5043,11 @@ module spatz_cluster_peripheral_reg_top #(
                (addr_hit[146] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[146] & ~reg_be))) |
                (addr_hit[147] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[147] & ~reg_be))) |
                (addr_hit[148] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[148] & ~reg_be))) |
-               (addr_hit[149] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[149] & ~reg_be)))));
+               (addr_hit[149] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[149] & ~reg_be))) |
+               (addr_hit[150] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[150] & ~reg_be))) |
+               (addr_hit[151] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[151] & ~reg_be))) |
+               (addr_hit[152] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[152] & ~reg_be))) |
+               (addr_hit[153] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[153] & ~reg_be)))));
   end
 
   assign perf_counter_enable_0_cycle_0_we = addr_hit[0] & reg_we & !reg_error;
@@ -5453,9 +5541,17 @@ module spatz_cluster_peripheral_reg_top #(
 
   assign tcdm_interconnect_uncorrectable_count_re = addr_hit[147] & reg_re & !reg_error;
 
-  assign snitch_correctable_fault_count_re = addr_hit[148] & reg_re & !reg_error;
+  assign snitch_correctable_count_re = addr_hit[148] & reg_re & !reg_error;
 
-  assign snitch_uncorrectable_fault_count_re = addr_hit[149] & reg_re & !reg_error;
+  assign fpu_sequencer_correctable_count_re = addr_hit[149] & reg_re & !reg_error;
+
+  assign fpu_sequencer_uncorrectable_count_re = addr_hit[150] & reg_re & !reg_error;
+
+  assign vfu_correctable_count_re = addr_hit[151] & reg_re & !reg_error;
+
+  assign vfu_uncorrectable_count_re = addr_hit[152] & reg_re & !reg_error;
+
+  assign snitch_uncorrectable_count_re = addr_hit[153] & reg_re & !reg_error;
 
   // Read data return
   always_comb begin
@@ -6114,11 +6210,27 @@ module spatz_cluster_peripheral_reg_top #(
       end
 
       addr_hit[148]: begin
-        reg_rdata_next[31:0] = snitch_correctable_fault_count_qs;
+        reg_rdata_next[31:0] = snitch_correctable_count_qs;
       end
 
       addr_hit[149]: begin
-        reg_rdata_next[31:0] = snitch_uncorrectable_fault_count_qs;
+        reg_rdata_next[31:0] = fpu_sequencer_correctable_count_qs;
+      end
+
+      addr_hit[150]: begin
+        reg_rdata_next[31:0] = fpu_sequencer_uncorrectable_count_qs;
+      end
+
+      addr_hit[151]: begin
+        reg_rdata_next[31:0] = vfu_correctable_count_qs;
+      end
+
+      addr_hit[152]: begin
+        reg_rdata_next[31:0] = vfu_uncorrectable_count_qs;
+      end
+
+      addr_hit[153]: begin
+        reg_rdata_next[31:0] = snitch_uncorrectable_count_qs;
       end
 
       default: begin
