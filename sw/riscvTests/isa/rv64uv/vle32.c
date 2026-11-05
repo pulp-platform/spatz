@@ -213,7 +213,79 @@ void TEST_CASE8(void) {
       99, 0x0000003D, 99, 0x0000003F);
 }
 
+void TEST_CASE9(void) {
+  VSET(2, e32, m1);
+  volatile uint8_t MEM[] __attribute__((aligned(8))) = {
+      0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
+      0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff
+  };
 
+  uint32_t *unaligned_base = (uint32_t*)&MEM[6];
+  asm volatile("vle32.v v1, (%0)" :: "r"(unaligned_base) : "memory");
+
+  VCMP_U32(9, v1, 0x99887766, 0xddccbbaa);
+}
+
+void TEST_CASE10(void) {
+  volatile uint32_t MEM[] = {0x111, 0x222, 0x333, 0x444};
+
+  // 1. Enable the Vector Coprocessor in mstatus (VS field = bits 14:13)
+   // This prevents the illegal instruction exception when running alone.
+  asm volatile(
+    "li t0, (3 << 13)\n\t"
+    "csrs mstatus, t0\n\t"
+    :: : "t0"
+  );
+
+  // 2. Configure vector length vl = 0 and valid vtype (e32, m1)
+  int zero_val = 0;
+  asm volatile(
+    "mv t0, %0\n\t"
+    "vsetvli zero, t0, e32, m1, ta, ma"
+    :: "r"(zero_val) : "t0", "memory"
+  );
+
+  // 3. Issue the vl = 0 load (Triggers Bug D28)
+  asm volatile("vle32.v v1, (%0)" :: "r"(MEM) : "memory");
+
+  // 4. Set vl = 4 for normal execution
+  int len_val = 4;
+  asm volatile(
+    "mv t0, %0\n\t"
+    "vsetvli zero, t0, e32, m1, ta, ma"
+    :: "r"(len_val) : "t0", "memory"
+  );
+
+  // 5. Execute a subsequent load.
+  // With Bug D28 present, the stuck ID causes this to hang the core.
+  asm volatile("vle32.v v2, (%0)" :: "r"(MEM) : "memory");
+
+  VCMP_U32(10, v2, 0x111, 0x222, 0x333, 0x444);
+}
+
+void TEST_CASE11(void) {
+  VSET(4, e32, m1);
+  volatile uint32_t MEM[] = {0x01, 0x02, 0x03, 0x04};
+
+  // Clear v1
+  asm volatile("vmv.v.i v1, 0");
+
+  // Set vstart to 2.
+  // Correct behavior: the VERY NEXT vector instruction skips elements 0 and 1.
+  asm volatile("csrw vstart, 2");
+
+  // Load MEM. Elements 0 and 1 should NOT be updated (should remain 0).
+  // Elements 2 and 3 should be loaded with MEM[2] and MEM[3].
+  asm volatile("vle32.v v1, (%0)" :: "r"(MEM) : "memory");
+
+  // Clear vstart for subsequent tests
+  asm volatile("csrw vstart, 0");
+
+  // If bug D29 is present, this load started at vstart=0 (from the instruction before csrw)
+  // and v1 will be {0x01, 0x02, 0x03, 0x04}.
+  // If correct, v1 is {0, 0, 0x03, 0x04}.
+  VCMP_U32(11, v1, 0, 0, 0x03, 0x04);
+}
 
 int main(void) {
   INIT_CHECK();
@@ -227,6 +299,9 @@ int main(void) {
   TEST_CASE6();
   TEST_CASE7();
   TEST_CASE8();
+  TEST_CASE9();
+  TEST_CASE10();
+  TEST_CASE11();
 
   EXIT_CHECK();
 }

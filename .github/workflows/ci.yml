@@ -8,14 +8,14 @@ on: [ push, pull_request, workflow_dispatch ]
 
 jobs:
   lint-license:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
     -
       name: Checkout
       uses: actions/checkout@v3
     -
       name: Check license
-      uses: pulp-platform/pulp-actions/lint-license@v2
+      uses: pulp-platform/pulp-actions/lint-license@v2.5.1
       with:
         license: |
           Copyright (\d{4}(-\d{4})?\s)?(ETH Zurich and University of Bologna|lowRISC contributors).
@@ -51,7 +51,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check Gitlab CI
-        uses: pulp-platform/pulp-actions/gitlab-ci@v2
+        uses: pulp-platform/pulp-actions/gitlab-ci@v2.5.1
         # Skip on forks or pull requests from forks due to missing secrets.
         if: github.repository == 'pulp-platform/spatz' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
         with:

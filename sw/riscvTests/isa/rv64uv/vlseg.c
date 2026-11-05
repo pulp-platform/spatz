@@ -4,6 +4,12 @@
 
 #include "vector_macros.h"
 
+static inline uint32_t get_vlenb_hw(void) {
+  uint32_t vl;
+  asm volatile("vsetvli %0, %1, e8, m1, ta, ma" : "=r"(vl) : "r"(1024));
+  return vl;                       // 32 on smallvrf, 64 on standard
+}
+
 // Segment-2 for 8-bit, vl = 4 --> 8 bytes
 void TEST_CASE2_8_vl4(void) {
   VSET(4, e8, m1);
@@ -813,6 +819,142 @@ void TEST_CASE2_8_vl32_m(void) {
                    0x2b, 0xf6, 0x00, 0x00, 0x00, 0x00, 0xab, 0x46);
 }
 
+void TEST_CASE_D26(void) {
+  // e32, m2 (EMUL=2)
+  VSET(0x04, e32, m2);
+
+  volatile uint32_t MEM[] = {0x0a, 0x14, 0x1e, 0x28, 0x32, 0x3c, 0x46, 0x50};
+
+  // Pre-fill v2, v3, v4 with distinct patterns to detect clobbering
+  asm volatile(
+    "vmv.v.i v2, 2\n\t"
+    "vmv.v.i v3, 3\n\t"
+    "vmv.v.i v4, 4\n\t"
+  );
+
+  // Segmented load of 2 fields.
+  // Should write to v2 (EMUL=2 means it takes v2, v3)
+  // and v4 (takes v4, v5).
+  asm volatile(
+    "vlseg2e32.v v2, (%0)\n\t"
+    :: "r"(MEM) : "memory"
+  );
+
+  // If bug exists, v4 will still hold '0x04' (unmodified),
+  // and v3 will incorrectly hold the second segment data.
+  // Correct behavior: v4 holds the second segment {0x14, 0x28, 0x3c, 0x50}
+  VCMP_U32(165, v4, 0x14, 0x28, 0x3c, 0x50);
+}
+
+void TEST_CASE_D26_strided_segment(void) {
+  VSET(2, e32, m1);
+
+  // Memory interleaved layout: [Field0_elem0, Field1_elem0, Field0_elem1, Field1_elem1]
+  volatile uint32_t MEM[] = {10, 20, 30, 40};
+  uint32_t stride = 8; // Distance between elements of the same field is 8 bytes
+
+  // Pre-fill destination registers with known garbage to detect missing field data
+  asm volatile(
+    "vmv.v.i v2, 0\n\t"
+    "vmv.v.i v3, 0\n\t"
+  );
+
+  // Strided segmented load with 2 fields (nf = 1)
+  asm volatile(
+    "vlsseg2e32.v v2, (%0), %1\n\t"
+    :: "r"(MEM), "r"(stride) : "memory"
+  );
+
+  // Correct behavior:
+  // Field 0 (v2) gets {10, 30}
+  // Field 1 (v3) gets {20, 40}
+  // If bug D26 is present, nf is ignored and v3 will remain 0 (or contain incorrect stride data).
+  VCMP_U32(166, v3, 20, 40);
+}
+
+void TEST_CASE_D26_scoreboard_hazard(void) {
+  // e32, m2 -> EMUL = 2.
+  // vlseg2e32 writes to 4 registers total: v2, v3 (Field 0) and v4, v5 (Field 1)
+  VSET(2, e32, m2);
+
+  volatile uint32_t MEM[] = {10, 20, 30, 40};
+
+  asm volatile(
+    // Pre-fill v4 with 0 so a premature read yields a clear failure
+    "vmv.v.i v4, 0\n\t"
+
+    // Segmented load starting at v2.
+    // Field 1 is routed to v2 + (1 * EMUL) = v4.
+    "vlseg2e32.v v2, (%0)\n\t"
+
+    // Immediately use v4.
+    // If the scoreboard range fix works, this waits for Field 1.
+    // If the scoreboard is broken (only tracking v2), this reads the pre-filled 0.
+    "vadd.vv v6, v4, v4\n\t"
+    :: "r"(MEM) : "memory"
+  );
+
+  // Field 1 gets {20, 40}. v4 + v4 = {40, 80}.
+  VCMP_U32(167, v6, 40, 80);
+}
+
+void TEST_CASE_D26_illegal_segment_simple(void) {
+  // Setup a state that violates EMUL * NFIELDS <= 8
+  // e32, m2 configures EMUL = 2
+  VSET(8, e32, m2);
+  volatile uint32_t MEM[16] = {0};
+
+  // Execute vlseg8e32.v (NFIELDS = 8)
+  // 2 (EMUL) * 8 (NFIELDS) = 16 (Violates the <= 8 rule!)
+  asm volatile(
+    "vlseg8e32.v v2, (%0)\n\t"
+    :: "r"(MEM) : "memory"
+  );
+
+  // If the fix works, the simulation will crash before reaching here.
+}
+
+void TEST_CASE_vlseg_eew_ne_sew_fields(void) {
+  const int small = (get_vlenb_hw() == 32);
+  volatile uint16_t MEM[128];
+  for (int i = 0; i < 64; i++) {
+    MEM[2*i]   = 0xA000 + i;
+    MEM[2*i+1] = 0xB000 + i;
+  }
+  uint32_t sentinel = 0xDEAD;
+
+  if (small) {
+    // 256-bit VRF: 64 e16 elements per field = 4 registers, EMUL = 4, NF = 2 -> v8..v15
+    VSET(128, e16, m8);                // fills v8..v15 with the sentinel in one instruction
+    asm volatile("vmv.v.x v8, %0\n\t" :: "r"(sentinel));
+    for (volatile int w = 0; w < 1000; w++) {}
+
+    VSET(64, e8, m2);                  // EMUL = 16/8 * 2 = 4
+    asm volatile("vlseg2e16.v v8, (%0)\n\t" :: "r"(MEM) : "memory");
+    for (volatile int w = 0; w < 1000; w++) {}
+
+    VSET(8, e16, m1);
+    VCMP_U16(168, v10, 0xA020, 0xA021, 0xA022, 0xA023, 0xA024, 0xA025, 0xA026, 0xA027);  // field 0, elements 32..39
+    VCMP_U16(169, v12, 0xB000, 0xB001, 0xB002, 0xB003, 0xB004, 0xB005, 0xB006, 0xB007);  // field 1, elements 0..7
+  } else {
+    // original standard-config code, unchanged
+    VSET(64, e16, m2);
+    asm volatile(
+      "vmv.v.x v2, %0\n\t"
+      "vmv.v.x v4, %0\n\t"
+      :: "r"(sentinel));
+    for (volatile int w = 0; w < 1000; w++) {}
+
+    VSET(64, e8, m1);
+    asm volatile("vlseg2e16.v v2, (%0)\n\t" :: "r"(MEM) : "memory");
+    for (volatile int w = 0; w < 1000; w++) {}
+
+    VSET(8, e16, m1);
+    VCMP_U16(168, v3, 0xA020, 0xA021, 0xA022, 0xA023, 0xA024, 0xA025, 0xA026, 0xA027);
+    VCMP_U16(169, v4, 0xB000, 0xB001, 0xB002, 0xB003, 0xB004, 0xB005, 0xB006, 0xB007);
+  }
+}
+
 int main(void) {
   INIT_CHECK();
   enable_vec();
@@ -869,6 +1011,13 @@ int main(void) {
   TEST_CASE2_32_vl4_m_undist();
   TEST_CASE2_8_vl32();
   TEST_CASE2_8_vl32_m();
+
+  // Bug tests
+  TEST_CASE_D26();
+  TEST_CASE_D26_strided_segment();
+  TEST_CASE_D26_scoreboard_hazard();
+  //TEST_CASE_D26_illegal_segment_simple();
+  TEST_CASE_vlseg_eew_ne_sew_fields();
 
   EXIT_CHECK();
 }

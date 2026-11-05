@@ -362,6 +362,49 @@ void TEST_CASE22(void) {
 #endif
 }
 
+// Bug test
+void TEST_CASE23(void) {
+  VSET(6, e16, m1);
+  // [e4 9f 20 19 2e 8f e0 05] [aa) f9 f0 71 94 c3 d3 (bb] [fe) ca 11 11 22 22 33 33] [44 44 55 55]
+  // memory is handled in 8 byte blocks
+  volatile uint16_t INP1[] = {0x9fe4, 0x1920, 0x8f2e, 0x05e0, // block 1
+                              0xf9aa, 0x71f0, 0xc394, 0xbbd3, // block 2
+                              0xcafe, 0x1111, 0x2222, 0x3333, // block 3
+                              0x4444, 0x5555}; // block 4
+  uint64_t stride = 5;
+  asm volatile("vlse16.v v1, (%0), %1" ::"r"(INP1), "r"(stride) : "memory");
+  VCMP_U16(23, v1, 0x9fe4, 0xe08f, 0x71f0, 0xfebb, 0x2222, 0x5544);
+ }
+
+void TEST_CASE24(void) {
+  VSET(4, e16, m1);
+  volatile uint16_t INP1[] = {0x9fe4, 0x1920, 0x8f2e, 0x05e0,
+                              0xf9aa, 0x71f0, 0xc394, 0xbbd3,
+                              0xcafe};
+  uint64_t stride = 6;
+  asm volatile("vlse16.v v1, (%0), %1" ::"r"(INP1), "r"(stride) : "memory");
+  VCMP_U16(24, v1, 0x9fe4, 0x05e0, 0xc394);
+ }
+
+void TEST_CASE25(void) {
+  VSET(9, e16, m2);
+  volatile uint16_t INP1[] = {0x9fe4, 0x1920, 0x8f2e, 0x05e0,
+                              0xf9aa, 0x71f0, 0xc394, 0xbbd3, 0xcafe};
+  uint64_t stride = 2;
+  asm volatile("vlse16.v v1, (%0), %1" ::"r"(INP1), "r"(stride) : "memory");
+  VCMP_U16(25, v1, 0x9fe4, 0x1920, 0x8f2e, 0x05e0, 0xf9aa, 0x71f0, 0xc394, 0xbbd3, 0xcafe);
+ }
+
+void TEST_CASE26(void) {
+  VSET(4, e16, m1);
+  volatile uint16_t INP1[] = {0x9fe4, 0x1920, 0x8f2e, 0x05e0,
+                              0xf9aa, 0x71f0, 0xc394, 0xbbd3,
+                              0xcafe, 0x1111, 0x2222, 0x3333};
+  uint64_t stride = 7;
+  asm volatile("vlse16.v v1, (%0), %1" ::"r"(INP1), "r"(stride) : "memory");
+  VCMP_U16(26, v1, 0x9fe4, 0xaa05, 0xbbd3, 0x3322);
+}
+
 int main(void) {
   INIT_CHECK();
   enable_vec();
@@ -400,6 +443,12 @@ int main(void) {
   TEST_CASE20();
   TEST_CASE21();
   TEST_CASE22();
+
+  // Stride not aligned to element size
+  TEST_CASE23();
+  TEST_CASE24();
+  TEST_CASE25();
+  TEST_CASE26();
 
   EXIT_CHECK();
 }
