@@ -548,8 +548,6 @@ module spatz_cluster
   .fpu_sequencer_uncorrectable_fault_i (fpu_sequencer_uncorrectable_fault),
   .vfu_correctable_fault_i (vfu_correctable_fault),
   .vfu_uncorrectable_fault_i (vfu_uncorrectable_fault),
-  .vlsu_correctable_fault_i (vlsu_correctable_fault),
-  .vlsu_uncorrectable_fault_i (vlsu_uncorrectable_fault),
 
   .tcdm_rd_correctable_count_o (tcdm_rd_correctable_count),
   .tcdm_rd_uncorrectable_count_o (tcdm_rd_uncorrectable_count),

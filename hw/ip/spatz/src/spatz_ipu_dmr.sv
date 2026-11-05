@@ -92,50 +92,13 @@ module spatz_ipu_dmr import spatz_pkg::*; import rvv_pkg::vew_e; #(
     );
 
   assign operation_ready_o    = a_operation_ready && b_operation_ready;
-
-  // ------------------------------------------------------------------
-  // Forward (functional path). No retry: best-effort forward of
-  // Primary's (i_ipu_a's) result on a mismatch, same-cycle, straight off
-  // the live a_result/b_result -- this MUST stay same-cycle.
-  // ------------------------------------------------------------------
   assign result_valid_o    = a_out_valid;
   assign result_o          = a_result;
   assign tag_o             = a_tag;
 
   assign busy_o = a_busy | b_busy;
 
-  // ------------------------------------------------------------------
-  // Compare (diagnostic path, deliberately pipelined -- see the header
-  // comment's "Timing note").
-  // ------------------------------------------------------------------
-  // typedef struct packed {
-  //   elenb_t           a_out_valid;
-  //   elenb_t           b_out_valid;
-  //   elen_t            a_result;
-  //   elen_t            b_result;
-  //   tag_t             a_tag;
-  //   tag_t             b_tag;
-  //   logic             a_operation_ready;
-  //   logic             b_operation_ready;
-  // } dmr_cmp_entry_t;
-
-  // dmr_cmp_entry_t cmp_d, cmp_q;
-
-  // assign cmp_d = dmr_cmp_entry_t'{
-  //   a_out_valid:  a_out_valid,
-  //   b_out_valid:  b_out_valid,
-  //   a_operation_ready:  a_operation_ready,
-  //   b_operation_ready:  b_operation_ready,
-  //   a_result: a_result,
-  //   b_result: b_result,
-  //   a_tag:    a_tag,
-  //   b_tag:    b_tag
-  // };
-
-  // `FF(cmp_q, cmp_d, '0)
-
-  // Stage 2: independent sub-compares, registered in parallel -- see the
-  // comment above for why result_match gets a cycle to itself.
+  // Independent sub-compares, registered in parallel
   logic any_valid_d,    any_valid_q;
   logic both_valid_d,   both_valid_q;
   logic result_match_d, result_match_q;
@@ -156,8 +119,8 @@ module spatz_ipu_dmr import spatz_pkg::*; import rvv_pkg::vew_e; #(
   `FF(tag_match_q,    tag_match_d,    1'b0)
   `FF(ready_match_q,  ready_match_d,  1'b0)
   `FF(busy_match_q,   busy_match_d,  1'b0)
-  
-  // Stage 3: trivial reduction of already-registered 1-bit flags,
+
+  // Trivial reduction of already-registered 1-bit flags,
   // edge-detected so one fault yields one pulse even across VFU stalls.
   logic mismatch_comb, mismatch_q, dup_fault_q;
 

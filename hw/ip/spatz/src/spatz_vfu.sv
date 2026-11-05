@@ -1467,8 +1467,8 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
   logic                       int_ipu_result_ready;
   logic     [N_IPU-1:0]       int_ipu_busy;
   // redundancy signals
-  logic                       ipu_dup_fault;  
-  logic     [N_IPU-1:0]       int_ipu_dup_fault; 
+  logic                       ipu_dup_fault;
+  logic     [N_IPU-1:0]       int_ipu_dup_fault;
 
   assign is_ipu_busy = |int_ipu_busy;
   assign ipu_dup_fault = |int_ipu_dup_fault;
