@@ -279,7 +279,7 @@ module spatz_cluster_peripheral
     assign hw2reg.vlsu_correctable_count[i].d   = vlsu_correctable_count_i[i];
     assign hw2reg.vlsu_uncorrectable_count[i].d = vlsu_uncorrectable_count_i[i];
     assign hw2reg.vfu_correctable_count[i].d   = vfu_correctable_count_i[i];
-    assign hw2reg.vfu_uncorrectable_count[i].d = vfu_uncorrectable_count_i[i];  
+    assign hw2reg.vfu_uncorrectable_count[i].d = vfu_uncorrectable_count_i[i];
   end
 
   for (genvar i = 0; i < NumTcdmBanks; i++) begin : gen_tcdm_count_assign
