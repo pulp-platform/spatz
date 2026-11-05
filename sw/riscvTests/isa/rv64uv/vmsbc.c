@@ -155,6 +155,59 @@ void TEST_CASE4(void) {
   VCMP_U8(16, v6, 0x22, 0x22);
 };
 
+void TEST_CASE5(void) {
+  const uint32_t scalar = 5;
+
+  // --- vmsbc.vv (no borrow-in) ---
+  VSET(16, e8, m8);
+  // vs2 < vs1 causes borrow: (0 < 1) -> 1, (10 < 5) -> 0
+  VLOAD_8(v8,  0, 10, 0, 10, 0, 10, 0, 10, 0, 10, 0, 10, 0, 10, 0, 10);
+  VLOAD_8(v16, 1,  5, 1,  5, 1,  5, 1,  5, 1,  5, 1,  5, 1,  5, 1,  5);
+  VCLEAR(v24);
+  asm volatile("vmsbc.vv v24, v8, v16");
+  // Even elements borrow (1), odd do not (0) -> 0x55
+  VCMP_U8(17, v24, 0x55, 0x55, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+
+  // --- vmsbc.vvm (with borrow-in) ---
+  VSET(16, e8, m8);
+  // vs2 == vs1. Borrow occurs only if borrow-in is 1.
+  VLOAD_8(v8,  5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5);
+  VLOAD_8(v16, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5);
+  VLOAD_8(v0, 0xAA, 0xAA); // Borrow-in on odd elements
+  VCLEAR(v24);
+  asm volatile("vmsbc.vvm v24, v8, v16, v0");
+  // 5 < 5 + 0 (false), 5 < 5 + 1 (true -> borrow) -> 0xAA
+  VCMP_U8(18, v24, 0xAA, 0xAA, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+
+  // --- vmsbc.vx (no borrow-in) ---
+  VSET(16, e16, m8);
+  // vs2 < scalar(5): (2 < 5) -> borrow, (10 < 5) -> no borrow
+  VLOAD_16(v8, 2, 10, 2, 10, 2, 10, 2, 10, 2, 10, 2, 10, 2, 10, 2, 10);
+  VCLEAR(v24);
+  asm volatile("vmsbc.vx v24, v8, %[A]" ::[A] "r"(scalar));
+  VCMP_U8(19, v24, 0x55, 0x55, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+
+  // --- vmsbc.vxm (with borrow-in) ---
+  VSET(16, e32, m8);
+  // vs2 == scalar(5). Borrow occurs on odd elements where borrow-in = 1.
+  VLOAD_32(v8, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5);
+  VLOAD_8(v0, 0xAA, 0xAA);
+  VCLEAR(v24);
+  asm volatile("vmsbc.vxm v24, v8, %[A], v0" ::[A] "r"(scalar));
+  VCMP_U8(20, v24, 0xAA, 0xAA, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+
+#if ELEN == 64
+  // --- vmsbc.vvm (e64) ---
+  VSET(16, e64, m8);
+  VLOAD_64(v8,  0, 10, 0, 10, 0, 10, 0, 10, 0, 10, 0, 10, 0, 10, 0, 10);
+  VLOAD_64(v16, 1,  5, 1,  5, 1,  5, 1,  5, 1,  5, 1,  5, 1,  5, 1,  5);
+  VLOAD_8(v0, 0x00, 0x00);
+  VCLEAR(v24);
+  asm volatile("vmsbc.vvm v24, v8, v16, v0");
+  VCMP_U8(21, v24, 0x55, 0x55, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+#endif
+}
+
 int main(void) {
   INIT_CHECK();
   enable_vec();
@@ -163,6 +216,7 @@ int main(void) {
   TEST_CASE2();
   TEST_CASE3();
   TEST_CASE4();
+  TEST_CASE5();
 
   EXIT_CHECK();
 }
