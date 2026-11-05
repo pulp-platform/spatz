@@ -623,14 +623,14 @@
     },
      {
 	multireg: {
-	    name: "SNITCH_CORRECTABLE_FAULT_COUNT",
+	    name: "SNITCH_CORRECTABLE_COUNT",
 	    desc: "snitch scalar core correctable fault counter.",
 	    swaccess: "ro",
 	    hwaccess: "hrw",
 	    hwext: "true",
 	    count: "NumVrfUnits",
 	    compact: "false",
-	    cname: "snitch_correctable_fault_count",
+	    cname: "snitch_correctable_count",
 	    fields: [{
 		bits: "31:0",
 		name: "COUNT",
@@ -638,16 +638,84 @@
 	    }]
 	}
      },
+	 {
+	multireg: {
+	    name: "FPU_SEQUENCER_CORRECTABLE_COUNT",
+	    desc: "fpu sequencer correctable fault counter.",
+	    swaccess: "ro",
+	    hwaccess: "hrw",
+	    hwext: "true",
+	    count: "NumVrfUnits",
+	    compact: "false",
+	    cname: "fpu_sequencer_correctable_count",
+	    fields: [{
+		bits: "31:0",
+		name: "COUNT",
+		desc: "Saturating count of fpu sequencer corretable faults."
+	    }]
+	}
+     },
+	{
+	multireg: {
+	    name: "FPU_SEQUENCER_UNCORRECTABLE_COUNT",
+	    desc: "fpu sequencer uncorrectable fault counter.",
+	    swaccess: "ro",
+	    hwaccess: "hrw",
+	    hwext: "true",
+	    count: "NumVrfUnits",
+	    compact: "false",
+	    cname: "fpu_sequencer_uncorrectable_count",
+	    fields: [{
+		bits: "31:0",
+		name: "COUNT",
+		desc: "Saturating count of fpu sequencer uncorretable faults."
+	    }]
+	}
+     },
+	{
+	multireg: {
+	    name: "VFU_CORRECTABLE_COUNT",
+	    desc: "vfu correctable fault counter.",
+	    swaccess: "ro",
+	    hwaccess: "hrw",
+	    hwext: "true",
+	    count: "NumVrfUnits",
+	    compact: "false",
+	    cname: "vfu_correctable_count",
+	    fields: [{
+		bits: "31:0",
+		name: "COUNT",
+		desc: "Saturating count of vfu corretable faults."
+	    }]
+	}
+     },
+	{
+	multireg: {
+	    name: "VFU_UNCORRECTABLE_COUNT",
+	    desc: "vfu uncorrectable fault counter.",
+	    swaccess: "ro",
+	    hwaccess: "hrw",
+	    hwext: "true",
+	    count: "NumVrfUnits",
+	    compact: "false",
+	    cname: "vfu_uncorrectable_count",
+	    fields: [{
+		bits: "31:0",
+		name: "COUNT",
+		desc: "Saturating count of vfu uncorretable faults."
+	    }]
+	}
+     },
      {
 	multireg: {
-	    name: "SNITCH_UNCORRECTABLE_FAULT_COUNT",
+	    name: "SNITCH_UNCORRECTABLE_COUNT",
 	    desc: "snitch scalar core uncorrectable fault counter.",
 	    swaccess: "ro",
 	    hwaccess: "hrw",
 	    hwext: "true",
 	    count: "NumVrfUnits",
 	    compact: "false",
-	    cname: "snitch_uncorrectable_fault_count",
+	    cname: "snitch_uncorrectable_count",
 	    fields: [{
 		bits: "31:0",
 		name: "COUNT",

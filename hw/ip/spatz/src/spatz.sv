@@ -74,7 +74,10 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     output logic                              vlsu_uncorrectable_error_o,
     // fpu_sequencer error outputs
     output logic                              fpu_sequencer_correctable_error_o,
-    output logic                              fpu_sequencer_uncorrectable_error_o
+    output logic                              fpu_sequencer_uncorrectable_error_o,
+    // VFU error outputs
+    output logic                              vfu_correctable_error_o,
+    output logic                              vfu_uncorrectable_error_o
   );
 
   ////////////////
@@ -639,13 +642,15 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     .vrf_rvalid_i     (vrf_rvalid[VFU_VD_RD:VFU_VS2_RD]                        ),
     .vrf_id_o         ({sb_id[SB_VFU_VD_WD], sb_id[SB_VFU_VD_RD:SB_VFU_VS2_RD]}),
     // FPU side-channel
-    .fpu_status_o     (fpu_status_o                                            )
+    .fpu_status_o     (fpu_status_o                                            ),
+    .vfu_correctable_fault_o      (vfu_correctable_error_o                     ),
+    .vfu_uncorrectable_fault_o    (vfu_uncorrectable_error_o                   )
   );
 
   //////////
   // VLSU //
   //////////
- logic vlsu_correctable_error_internel;
+ logic vlsu_correctable_error_internal;
 `ifdef DOUBLE_BW
   spatz_doublebw_vlsu #(
     .NrMemPorts      (NrMemPorts      ),

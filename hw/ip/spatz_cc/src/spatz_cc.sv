@@ -129,6 +129,9 @@ module spatz_cc
     // fpu_sequencer error outputs
     output logic                              fpu_sequencer_correctable_error_o,
     output logic                              fpu_sequencer_uncorrectable_error_o,
+    // vfu error outputs
+    output logic                              vfu_correctable_error_o,
+    output logic                              vfu_uncorrectable_error_o,
     // Snitch error outputs
     output logic                         snitch_correctable_error_o,
     output logic                         snitch_uncorrectable_error_o
@@ -349,7 +352,10 @@ module spatz_cc
     .vlsu_uncorrectable_error_o (vlsu_uncorrectable_error_o),
     // fpu_sequencer error outputs
     .fpu_sequencer_correctable_error_o (fpu_sequencer_correctable_error_o),
-    .fpu_sequencer_uncorrectable_error_o (fpu_sequencer_uncorrectable_error_o)
+    .fpu_sequencer_uncorrectable_error_o (fpu_sequencer_uncorrectable_error_o),
+    // vfu error outputs
+    .vfu_correctable_error_o (vfu_correctable_error_o),
+    .vfu_uncorrectable_error_o (vfu_uncorrectable_error_o)
   );
 
   for (genvar p = 0; p < NumMemPortsPerSpatz; p++) begin: gen_tcdm_assignment

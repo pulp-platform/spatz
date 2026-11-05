@@ -5,7 +5,7 @@
 # Noah Huetter <huettern@iis.ee.ethz.ch>
 
 REGTOOL=`../../../../../install/bender/bender path register_interface`/vendor/lowrisc_opentitan/util/regtool.py
-PYTHON3=$(shell which python)
+PYTHON3=$(shell which python3)
 CLANG_FORMAT=$(shell which clang-format-10.0.1)
 
 SCHEMA=spatz_cluster_peripheral_reg.hjson
