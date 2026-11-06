@@ -559,6 +559,25 @@ module spatz_cluster_peripheral_reg_top #(
   logic snitch_correctable_fault_count_re;
   logic [31:0] snitch_uncorrectable_fault_count_qs;
   logic snitch_uncorrectable_fault_count_re;
+  logic [31:0] quad_correctable_count_0_qs;
+  logic quad_correctable_count_0_re;
+  logic [31:0] quad_correctable_count_1_qs;
+  logic quad_correctable_count_1_re;
+  logic [31:0] quad_correctable_count_2_qs;
+  logic quad_correctable_count_2_re;
+  logic [31:0] quad_correctable_count_3_qs;
+  logic quad_correctable_count_3_re;
+  logic [31:0] quad_uncorrectable_count_0_qs;
+  logic quad_uncorrectable_count_0_re;
+  logic [31:0] quad_uncorrectable_count_1_qs;
+  logic quad_uncorrectable_count_1_re;
+  logic [31:0] quad_uncorrectable_count_2_qs;
+  logic quad_uncorrectable_count_2_re;
+  logic [31:0] quad_uncorrectable_count_3_qs;
+  logic quad_uncorrectable_count_3_re;
+  logic [31:0] quad_cfg_array_qs;
+  logic [31:0] quad_cfg_array_wd;
+  logic quad_cfg_array_we;
 
   // Register instances
 
@@ -4649,8 +4668,167 @@ module spatz_cluster_peripheral_reg_top #(
 
 
 
+  // Subregister 0 of Multireg quad_correctable_count
+  // R[quad_correctable_count_0]: V(True)
 
-  logic [149:0] addr_hit;
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_quad_correctable_count_0 (
+    .re     (quad_correctable_count_0_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.quad_correctable_count[0].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.quad_correctable_count[0].q ),
+    .qs     (quad_correctable_count_0_qs)
+  );
+
+  // Subregister 1 of Multireg quad_correctable_count
+  // R[quad_correctable_count_1]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_quad_correctable_count_1 (
+    .re     (quad_correctable_count_1_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.quad_correctable_count[1].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.quad_correctable_count[1].q ),
+    .qs     (quad_correctable_count_1_qs)
+  );
+
+  // Subregister 2 of Multireg quad_correctable_count
+  // R[quad_correctable_count_2]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_quad_correctable_count_2 (
+    .re     (quad_correctable_count_2_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.quad_correctable_count[2].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.quad_correctable_count[2].q ),
+    .qs     (quad_correctable_count_2_qs)
+  );
+
+  // Subregister 3 of Multireg quad_correctable_count
+  // R[quad_correctable_count_3]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_quad_correctable_count_3 (
+    .re     (quad_correctable_count_3_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.quad_correctable_count[3].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.quad_correctable_count[3].q ),
+    .qs     (quad_correctable_count_3_qs)
+  );
+
+
+
+  // Subregister 0 of Multireg quad_uncorrectable_count
+  // R[quad_uncorrectable_count_0]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_quad_uncorrectable_count_0 (
+    .re     (quad_uncorrectable_count_0_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.quad_uncorrectable_count[0].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.quad_uncorrectable_count[0].q ),
+    .qs     (quad_uncorrectable_count_0_qs)
+  );
+
+  // Subregister 1 of Multireg quad_uncorrectable_count
+  // R[quad_uncorrectable_count_1]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_quad_uncorrectable_count_1 (
+    .re     (quad_uncorrectable_count_1_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.quad_uncorrectable_count[1].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.quad_uncorrectable_count[1].q ),
+    .qs     (quad_uncorrectable_count_1_qs)
+  );
+
+  // Subregister 2 of Multireg quad_uncorrectable_count
+  // R[quad_uncorrectable_count_2]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_quad_uncorrectable_count_2 (
+    .re     (quad_uncorrectable_count_2_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.quad_uncorrectable_count[2].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.quad_uncorrectable_count[2].q ),
+    .qs     (quad_uncorrectable_count_2_qs)
+  );
+
+  // Subregister 3 of Multireg quad_uncorrectable_count
+  // R[quad_uncorrectable_count_3]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_quad_uncorrectable_count_3 (
+    .re     (quad_uncorrectable_count_3_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.quad_uncorrectable_count[3].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.quad_uncorrectable_count[3].q ),
+    .qs     (quad_uncorrectable_count_3_qs)
+  );
+
+
+  // R[quad_cfg_array]: V(False)
+
+  prim_subreg #(
+    .DW      (32),
+    .SWACCESS("RW"),
+    .RESVAL  (32'h0)
+  ) u_quad_cfg_array (
+    .clk_i   (clk_i    ),
+    .rst_ni  (rst_ni  ),
+
+    // from register interface
+    .we     (quad_cfg_array_we),
+    .wd     (quad_cfg_array_wd),
+
+    // from internal hardware
+    .de     (1'b0),
+    .d      ('0  ),
+
+    // to internal hardware
+    .qe     (),
+    .q      (reg2hw.quad_cfg_array.q ),
+
+    // to register interface (read)
+    .qs     (quad_cfg_array_qs)
+  );
+
+
+
+
+  logic [158:0] addr_hit;
   always_comb begin
     addr_hit = '0;
     addr_hit[  0] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_PERF_COUNTER_ENABLE_0_OFFSET);
@@ -4803,6 +4981,15 @@ module spatz_cluster_peripheral_reg_top #(
     addr_hit[147] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_TCDM_INTERCONNECT_UNCORRECTABLE_COUNT_OFFSET);
     addr_hit[148] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_SNITCH_CORRECTABLE_FAULT_COUNT_OFFSET);
     addr_hit[149] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_SNITCH_UNCORRECTABLE_FAULT_COUNT_OFFSET);
+    addr_hit[150] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_QUAD_CORRECTABLE_COUNT_0_OFFSET);
+    addr_hit[151] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_QUAD_CORRECTABLE_COUNT_1_OFFSET);
+    addr_hit[152] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_QUAD_CORRECTABLE_COUNT_2_OFFSET);
+    addr_hit[153] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_QUAD_CORRECTABLE_COUNT_3_OFFSET);
+    addr_hit[154] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_QUAD_UNCORRECTABLE_COUNT_0_OFFSET);
+    addr_hit[155] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_QUAD_UNCORRECTABLE_COUNT_1_OFFSET);
+    addr_hit[156] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_QUAD_UNCORRECTABLE_COUNT_2_OFFSET);
+    addr_hit[157] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_QUAD_UNCORRECTABLE_COUNT_3_OFFSET);
+    addr_hit[158] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_QUAD_CFG_ARRAY_OFFSET);
   end
 
   assign addrmiss = (reg_re || reg_we) ? ~|addr_hit : 1'b0 ;
@@ -4959,7 +5146,16 @@ module spatz_cluster_peripheral_reg_top #(
                (addr_hit[146] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[146] & ~reg_be))) |
                (addr_hit[147] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[147] & ~reg_be))) |
                (addr_hit[148] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[148] & ~reg_be))) |
-               (addr_hit[149] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[149] & ~reg_be)))));
+               (addr_hit[149] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[149] & ~reg_be))) |
+               (addr_hit[150] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[150] & ~reg_be))) |
+               (addr_hit[151] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[151] & ~reg_be))) |
+               (addr_hit[152] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[152] & ~reg_be))) |
+               (addr_hit[153] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[153] & ~reg_be))) |
+               (addr_hit[154] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[154] & ~reg_be))) |
+               (addr_hit[155] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[155] & ~reg_be))) |
+               (addr_hit[156] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[156] & ~reg_be))) |
+               (addr_hit[157] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[157] & ~reg_be))) |
+               (addr_hit[158] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[158] & ~reg_be)))));
   end
 
   assign perf_counter_enable_0_cycle_0_we = addr_hit[0] & reg_we & !reg_error;
@@ -5456,6 +5652,25 @@ module spatz_cluster_peripheral_reg_top #(
   assign snitch_correctable_fault_count_re = addr_hit[148] & reg_re & !reg_error;
 
   assign snitch_uncorrectable_fault_count_re = addr_hit[149] & reg_re & !reg_error;
+
+  assign quad_correctable_count_0_re = addr_hit[150] & reg_re & !reg_error;
+
+  assign quad_correctable_count_1_re = addr_hit[151] & reg_re & !reg_error;
+
+  assign quad_correctable_count_2_re = addr_hit[152] & reg_re & !reg_error;
+
+  assign quad_correctable_count_3_re = addr_hit[153] & reg_re & !reg_error;
+
+  assign quad_uncorrectable_count_0_re = addr_hit[154] & reg_re & !reg_error;
+
+  assign quad_uncorrectable_count_1_re = addr_hit[155] & reg_re & !reg_error;
+
+  assign quad_uncorrectable_count_2_re = addr_hit[156] & reg_re & !reg_error;
+
+  assign quad_uncorrectable_count_3_re = addr_hit[157] & reg_re & !reg_error;
+
+  assign quad_cfg_array_we = addr_hit[158] & reg_we & !reg_error;
+  assign quad_cfg_array_wd = reg_wdata[31:0];
 
   // Read data return
   always_comb begin
@@ -6119,6 +6334,42 @@ module spatz_cluster_peripheral_reg_top #(
 
       addr_hit[149]: begin
         reg_rdata_next[31:0] = snitch_uncorrectable_fault_count_qs;
+      end
+
+      addr_hit[150]: begin
+        reg_rdata_next[31:0] = quad_correctable_count_0_qs;
+      end
+
+      addr_hit[151]: begin
+        reg_rdata_next[31:0] = quad_correctable_count_1_qs;
+      end
+
+      addr_hit[152]: begin
+        reg_rdata_next[31:0] = quad_correctable_count_2_qs;
+      end
+
+      addr_hit[153]: begin
+        reg_rdata_next[31:0] = quad_correctable_count_3_qs;
+      end
+
+      addr_hit[154]: begin
+        reg_rdata_next[31:0] = quad_uncorrectable_count_0_qs;
+      end
+
+      addr_hit[155]: begin
+        reg_rdata_next[31:0] = quad_uncorrectable_count_1_qs;
+      end
+
+      addr_hit[156]: begin
+        reg_rdata_next[31:0] = quad_uncorrectable_count_2_qs;
+      end
+
+      addr_hit[157]: begin
+        reg_rdata_next[31:0] = quad_uncorrectable_count_3_qs;
+      end
+
+      addr_hit[158]: begin
+        reg_rdata_next[31:0] = quad_cfg_array_qs;
       end
 
       default: begin

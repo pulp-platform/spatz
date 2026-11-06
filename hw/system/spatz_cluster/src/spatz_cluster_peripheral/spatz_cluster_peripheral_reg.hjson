@@ -19,6 +19,11 @@
 	type: "int",
 	default: "32"
 	},
+	{ name: "NumQuadUnits",
+	desc: "Number of Quadrilatero error sources (systolic array, LSU, MRF, controller)",
+	type: "int",
+	default: "4"
+	},
     ],
     name: "spatz_cluster_peripheral",
     clock_primary: "clk_i",
@@ -654,6 +659,52 @@
 		desc: "Saturating count of snitch scalar core uncorretable faults."
 	    }]
 	}
+     },
+     {
+	multireg: {
+	    name: "QUAD_CORRECTABLE_COUNT",
+	    desc: "Per-source Quadrilatero correctable error counter (0: systolic array, 1: LSU, 2: MRF, 3: controller).",
+	    swaccess: "ro",
+	    hwaccess: "hrw",
+	    hwext: "true",
+	    count: "NumQuadUnits",
+	    compact: "false",
+	    cname: "quad_correctable_count",
+	    fields: [{
+		bits: "31:0",
+		name: "COUNT",
+		desc: "Saturating count of correctable errors for this Quadrilatero source."
+	    }]
+	}
+     },
+     {
+	multireg: {
+	    name: "QUAD_UNCORRECTABLE_COUNT",
+	    desc: "Per-source Quadrilatero uncorrectable error counter (0: systolic array, 1: LSU, 2: MRF, 3: controller).",
+	    swaccess: "ro",
+	    hwaccess: "hrw",
+	    hwext: "true",
+	    count: "NumQuadUnits",
+	    compact: "false",
+	    cname: "quad_uncorrectable_count",
+	    fields: [{
+		bits: "31:0",
+		name: "COUNT",
+		desc: "Saturating count of uncorrectable errors for this Quadrilatero source."
+	    }]
+	}
+     },
+     {
+	name: "QUAD_CFG_ARRAY",
+	desc: "Quadrilatero spare-row configuration: 4 bits per lane select the disabled physical row.",
+	swaccess: "rw",
+	hwaccess: "hro",
+	resval: "0",
+	fields: [{
+	    bits: "31:0",
+	    name: "CFG_ARRAY",
+	    desc: "Disabled physical row of lane i in bits [4*i+3:4*i]."
+	}]
      }
   ]
 }

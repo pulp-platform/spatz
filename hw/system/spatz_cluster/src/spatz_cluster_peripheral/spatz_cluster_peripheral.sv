@@ -50,7 +50,10 @@ module spatz_cluster_peripheral
   input  logic [NrCores-1:0][31:0]                    snitch_correctable_fault_count_i,
   input  logic [NrCores-1:0][31:0]                    snitch_uncorrectable_fault_count_i,
   input  logic [31:0]                                     tcdm_interconnect_correctable_count_i,
-  input  logic [31:0]                                     tcdm_interconnect_uncorrectable_count_i
+  input  logic [31:0]                                     tcdm_interconnect_uncorrectable_count_i,
+  input  logic [NumQuadUnits-1:0][31:0]                   quad_correctable_count_i,
+  input  logic [NumQuadUnits-1:0][31:0]                   quad_uncorrectable_count_i,
+  output logic [31:0]                                     quad_cfg_array_o
 );
 
   // Pipeline register to ease timing.
@@ -276,5 +279,12 @@ module spatz_cluster_peripheral
 
   assign hw2reg.tcdm_interconnect_correctable_count.d = tcdm_interconnect_correctable_count_i;
   assign hw2reg.tcdm_interconnect_uncorrectable_count.d = tcdm_interconnect_uncorrectable_count_i;
+
+  for (genvar i = 0; i < NumQuadUnits; i++) begin : gen_quad_count_assign
+    assign hw2reg.quad_correctable_count[i].d   = quad_correctable_count_i[i];
+    assign hw2reg.quad_uncorrectable_count[i].d = quad_uncorrectable_count_i[i];
+  end
+
+  assign quad_cfg_array_o = reg2hw.quad_cfg_array.q;
 
 endmodule

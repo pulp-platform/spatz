@@ -39,6 +39,7 @@ packages:
     dependencies:
     - axi
     - common_cells
+    - register_interface
     - scm
     - tech_cells_generic
   common_cells:
@@ -91,7 +92,7 @@ packages:
     - common_cells
     - common_verification
   quadrilatero:
-    revision: 01164ef99c21e89cc56b41fd3c8894a45ebf07f7
+    revision: ed01a94a98f445f2842be84541068ab71441b12e
     version: null
     source:
       Git: https://iis-git.ee.ethz.ch/quadrilatero/quadrilatero.git
@@ -100,7 +101,7 @@ packages:
     - fpnew
     - redundancy_cells
   redundancy_cells:
-    revision: f2919f98d8d2fd5f494799ea89e6b07501f53b3f
+    revision: c960e197cc85fe70be800e8f8c690ddc432f8a8c
     version: null
     source:
       Git: https://github.com/pulp-platform/redundancy_cells.git

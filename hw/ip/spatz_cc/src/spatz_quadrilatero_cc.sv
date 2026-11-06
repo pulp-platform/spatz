@@ -113,6 +113,11 @@ module spatz_quadrilatero_cc
     // TCDM Streamer Ports
     output tcdm_req_t   [TCDMPorts-1:0] quad_tcdm_req_o,
     input  tcdm_rsp_t   [TCDMPorts-1:0] quad_tcdm_rsp_i,
+    output logic        [TCDMPorts-1:0][2:0] quad_tcdm_req_valid_rep_o,
+    input  logic        [TCDMPorts-1:0][2:0] quad_tcdm_req_ready_rep_i,
+    input  logic        [TCDMPorts-1:0][2:0] quad_tcdm_rsp_valid_rep_i,
+    input  logic        [2:0][31:0]          quad_cfg_array_i,
+    output logic        [3:0][1:0]           quad_error_o,
     // Accelerator Offload port
     // DMA ports
     output axi_req_t                     axi_dma_req_o,
@@ -390,12 +395,10 @@ module spatz_quadrilatero_cc
   );
 
   tcdm_req_chan_t [NumMemPortsQuad-1:0] quad_mem_req;
-  logic           [NumMemPortsQuad-1:0] quad_mem_req_valid;
-  logic           [NumMemPortsQuad-1:0] quad_mem_req_ready;
   tcdm_rsp_chan_t [NumMemPortsQuad-1:0] quad_mem_rsp;
-  logic           [NumMemPortsQuad-1:0] quad_mem_rsp_valid;
   quadrilatero_top #(
     .NrMemPorts         (NumMemPortsQuad         ),
+    .TCDMAddrWidth      (TCDMAddrWidth           ),
     .amo_op_e           (reqrsp_pkg::amo_op_e    ),
     .AMONone            (reqrsp_pkg::AMONone     ),
     .quad_mem_req_t     (tcdm_req_chan_t         ),
@@ -413,11 +416,13 @@ module spatz_quadrilatero_cc
     .rsp_valid_o            (quad_pvalid          ),
     .rsp_ready_i            (quad_pready          ),
     .rsp_o                  (quad_resp            ),
-    .quad_mem_req_o         (quad_mem_req         ),
-    .quad_mem_req_valid_o   (quad_mem_req_valid   ),
-    .quad_mem_req_ready_i   (quad_mem_req_ready   ),
-    .quad_mem_rsp_i         (quad_mem_rsp         ),
-    .quad_mem_rsp_valid_i   (quad_mem_rsp_valid   )
+    .quad_mem_req_o         (quad_mem_req                                        ),
+    .quad_mem_req_valid_o   (quad_tcdm_req_valid_rep_o[NumMemPortsQuad-1:0]      ),
+    .quad_mem_req_ready_i   (quad_tcdm_req_ready_rep_i[NumMemPortsQuad-1:0]      ),
+    .quad_mem_rsp_i         (quad_mem_rsp                                        ),
+    .quad_mem_rsp_valid_i   (quad_tcdm_rsp_valid_rep_i[NumMemPortsQuad-1:0]      ),
+    .cfg_array_i            (quad_cfg_array_i                                    ),
+    .error_o                (quad_error_o                                        )
   );
 
   for (genvar p = 0; p < NumMemPortsQuad; p++) begin: gen_quad_tcdm_assignment
@@ -430,12 +435,9 @@ module spatz_quadrilatero_cc
         strb : quad_mem_req[p].strb,
         user : '0
       },
-      q_valid: quad_mem_req_valid[p]
+      q_valid: 1'b0
       };
-    assign quad_mem_req_ready[p] = quad_tcdm_rsp_i[p].q_ready;
-
     assign quad_mem_rsp[p]       = quad_tcdm_rsp_i[p].p;
-    assign quad_mem_rsp_valid[p] = quad_tcdm_rsp_i[p].p_valid;
   end
 
 
@@ -558,9 +560,18 @@ module spatz_quadrilatero_cc
     assign snitch_enc_data = snitch_tcdm_req_raw.q.data;
   end
 
+  logic [$bits(snitch_tcdm_req_raw.q.addr)-1:0] snitch_enc_addr;
+
+  hsiao_ecc_enc #(
+    .DataWidth (TCDMAddrWidth)
+  ) i_snitch_addr_enc (
+    .in  (snitch_tcdm_req_raw.q.addr[TCDMAddrWidth-1:0]),
+    .out (snitch_enc_addr                              )
+  );
+
   assign quad_tcdm_req_o[NumMemPortsQuad] = '{
     q: '{
-      addr : snitch_tcdm_req_raw.q.addr,
+      addr : snitch_enc_addr,
       write: snitch_tcdm_req_raw.q.write,
       amo  : snitch_tcdm_req_raw.q.amo,
       data : snitch_enc_data,
@@ -569,6 +580,7 @@ module spatz_quadrilatero_cc
     },
     q_valid: snitch_tcdm_req_raw.q_valid
   };
+  assign quad_tcdm_req_valid_rep_o[NumMemPortsQuad] = {3{snitch_tcdm_req_raw.q_valid}};
 
   // Core events for performance counters
   assign core_events_o.retired_instr     = snitch_events.retired_instr;
