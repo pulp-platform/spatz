@@ -195,6 +195,12 @@ add_snitch_test(fence_i tests/fence_i.c)
 add_snitch_test(interrupt-local tests/interrupt-local.c)
 add_snitch_test(printf_simple tests/printf_simple.c)
 add_snitch_test(l3alloc tests/l3alloc.c)
+add_snitch_test(stall-replay tests/stall-replay.c)
+# stall-replay has hand-written RVV inline asm: opt into the vector march.
+if(DEFINED SPATZ_MARCH_VECTOR)
+    set_source_files_properties(tests/stall-replay.c PROPERTIES
+        COMPILE_OPTIONS "-march=${SPATZ_MARCH_VECTOR}")
+endif()
 
 # RTL only tests
 if(SNITCH_RUNTIME STREQUAL "snRuntime-cluster")
