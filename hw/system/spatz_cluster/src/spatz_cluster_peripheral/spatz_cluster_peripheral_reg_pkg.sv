@@ -337,8 +337,8 @@ package spatz_cluster_peripheral_reg_pkg;
     spatz_cluster_peripheral_reg2hw_tcdm_scrub_uncorrectable_count_mreg_t [31:0] tcdm_scrub_uncorrectable_count; // [1439:416]
     spatz_cluster_peripheral_reg2hw_tcdm_interconnect_correctable_count_reg_t tcdm_interconnect_correctable_count; // [415:384]
     spatz_cluster_peripheral_reg2hw_tcdm_interconnect_uncorrectable_count_reg_t tcdm_interconnect_uncorrectable_count; // [383:352]
-    spatz_cluster_peripheral_reg2hw_snitch_correctable_fault_count_mreg_t [0:0] snitch_correctable_fault_count; // [351:320]
-    spatz_cluster_peripheral_reg2hw_snitch_uncorrectable_fault_count_mreg_t [0:0] snitch_uncorrectable_fault_count; // [319:288]
+    spatz_cluster_peripheral_reg2hw_snitch_correctable_count_mreg_t [0:0] snitch_correctable_count; // [351:320]
+    spatz_cluster_peripheral_reg2hw_snitch_uncorrectable_count_mreg_t [0:0] snitch_uncorrectable_count; // [319:288]
     spatz_cluster_peripheral_reg2hw_quad_correctable_count_mreg_t [3:0] quad_correctable_count; // [287:160]
     spatz_cluster_peripheral_reg2hw_quad_uncorrectable_count_mreg_t [3:0] quad_uncorrectable_count; // [159:32]
     spatz_cluster_peripheral_reg2hw_quad_cfg_array_reg_t quad_cfg_array; // [31:0]
@@ -358,8 +358,8 @@ package spatz_cluster_peripheral_reg_pkg;
     spatz_cluster_peripheral_hw2reg_tcdm_scrub_uncorrectable_count_mreg_t [31:0] tcdm_scrub_uncorrectable_count; // [1407:384]
     spatz_cluster_peripheral_hw2reg_tcdm_interconnect_correctable_count_reg_t tcdm_interconnect_correctable_count; // [383:352]
     spatz_cluster_peripheral_hw2reg_tcdm_interconnect_uncorrectable_count_reg_t tcdm_interconnect_uncorrectable_count; // [351:320]
-    spatz_cluster_peripheral_hw2reg_snitch_correctable_fault_count_mreg_t [0:0] snitch_correctable_fault_count; // [319:288]
-    spatz_cluster_peripheral_hw2reg_snitch_uncorrectable_fault_count_mreg_t [0:0] snitch_uncorrectable_fault_count; // [287:256]
+    spatz_cluster_peripheral_hw2reg_snitch_correctable_count_mreg_t [0:0] snitch_correctable_count; // [319:288]
+    spatz_cluster_peripheral_hw2reg_snitch_uncorrectable_count_mreg_t [0:0] snitch_uncorrectable_count; // [287:256]
     spatz_cluster_peripheral_hw2reg_quad_correctable_count_mreg_t [3:0] quad_correctable_count; // [255:128]
     spatz_cluster_peripheral_hw2reg_quad_uncorrectable_count_mreg_t [3:0] quad_uncorrectable_count; // [127:0]
   } spatz_cluster_peripheral_hw2reg_t;
@@ -513,8 +513,8 @@ package spatz_cluster_peripheral_reg_pkg;
   parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_31_OFFSET = 11'h 488;
   parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_INTERCONNECT_CORRECTABLE_COUNT_OFFSET = 11'h 490;
   parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_INTERCONNECT_UNCORRECTABLE_COUNT_OFFSET = 11'h 498;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_SNITCH_CORRECTABLE_FAULT_COUNT_OFFSET = 11'h 4a0;
-  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_SNITCH_UNCORRECTABLE_FAULT_COUNT_OFFSET = 11'h 4a8;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_SNITCH_CORRECTABLE_COUNT_OFFSET = 11'h 4a0;
+  parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_SNITCH_UNCORRECTABLE_COUNT_OFFSET = 11'h 4a8;
   parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_QUAD_CORRECTABLE_COUNT_0_OFFSET = 11'h 4b0;
   parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_QUAD_CORRECTABLE_COUNT_1_OFFSET = 11'h 4b8;
   parameter logic [BlockAw-1:0] SPATZ_CLUSTER_PERIPHERAL_QUAD_CORRECTABLE_COUNT_2_OFFSET = 11'h 4c0;
@@ -665,8 +665,8 @@ package spatz_cluster_peripheral_reg_pkg;
   parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_31_RESVAL = 32'h 0;
   parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_INTERCONNECT_CORRECTABLE_COUNT_RESVAL = 32'h 0;
   parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_TCDM_INTERCONNECT_UNCORRECTABLE_COUNT_RESVAL = 32'h 0;
-  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_SNITCH_CORRECTABLE_FAULT_COUNT_RESVAL = 32'h 0;
-  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_SNITCH_UNCORRECTABLE_FAULT_COUNT_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_SNITCH_CORRECTABLE_COUNT_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_SNITCH_UNCORRECTABLE_COUNT_RESVAL = 32'h 0;
   parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_QUAD_CORRECTABLE_COUNT_0_RESVAL = 32'h 0;
   parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_QUAD_CORRECTABLE_COUNT_1_RESVAL = 32'h 0;
   parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_QUAD_CORRECTABLE_COUNT_2_RESVAL = 32'h 0;
@@ -826,8 +826,8 @@ package spatz_cluster_peripheral_reg_pkg;
     SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_31,
     SPATZ_CLUSTER_PERIPHERAL_TCDM_INTERCONNECT_CORRECTABLE_COUNT,
     SPATZ_CLUSTER_PERIPHERAL_TCDM_INTERCONNECT_UNCORRECTABLE_COUNT,
-    SPATZ_CLUSTER_PERIPHERAL_SNITCH_CORRECTABLE_FAULT_COUNT,
-    SPATZ_CLUSTER_PERIPHERAL_SNITCH_UNCORRECTABLE_FAULT_COUNT,
+    SPATZ_CLUSTER_PERIPHERAL_SNITCH_CORRECTABLE_COUNT,
+    SPATZ_CLUSTER_PERIPHERAL_SNITCH_UNCORRECTABLE_COUNT,
     SPATZ_CLUSTER_PERIPHERAL_QUAD_CORRECTABLE_COUNT_0,
     SPATZ_CLUSTER_PERIPHERAL_QUAD_CORRECTABLE_COUNT_1,
     SPATZ_CLUSTER_PERIPHERAL_QUAD_CORRECTABLE_COUNT_2,
@@ -989,8 +989,8 @@ package spatz_cluster_peripheral_reg_pkg;
     4'b 1111, // index[145] SPATZ_CLUSTER_PERIPHERAL_TCDM_SCRUB_UNCORRECTABLE_COUNT_31
     4'b 1111, // index[146] SPATZ_CLUSTER_PERIPHERAL_TCDM_INTERCONNECT_CORRECTABLE_COUNT
     4'b 1111, // index[147] SPATZ_CLUSTER_PERIPHERAL_TCDM_INTERCONNECT_UNCORRECTABLE_COUNT
-    4'b 1111, // index[148] SPATZ_CLUSTER_PERIPHERAL_SNITCH_CORRECTABLE_FAULT_COUNT
-    4'b 1111, // index[149] SPATZ_CLUSTER_PERIPHERAL_SNITCH_UNCORRECTABLE_FAULT_COUNT
+    4'b 1111, // index[148] SPATZ_CLUSTER_PERIPHERAL_SNITCH_CORRECTABLE_COUNT
+    4'b 1111, // index[149] SPATZ_CLUSTER_PERIPHERAL_SNITCH_UNCORRECTABLE_COUNT
     4'b 1111, // index[150] SPATZ_CLUSTER_PERIPHERAL_QUAD_CORRECTABLE_COUNT_0
     4'b 1111, // index[151] SPATZ_CLUSTER_PERIPHERAL_QUAD_CORRECTABLE_COUNT_1
     4'b 1111, // index[152] SPATZ_CLUSTER_PERIPHERAL_QUAD_CORRECTABLE_COUNT_2
