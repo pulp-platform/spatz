@@ -971,4 +971,3 @@ package spatz_cluster_peripheral_reg_pkg;
   };
 
 endpackage
-
