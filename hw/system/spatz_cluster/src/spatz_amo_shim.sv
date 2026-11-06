@@ -305,7 +305,8 @@ module spatz_amo_shim
         end
         default:;
       endcase
-
+    end
+    always_comb begin
       // Priority arbiter decision. DMA has priority.
       mem_req_rep[t]        = core_valid_rep;
       ready_rep[t]          = core_ready_rep & ecc_sram_gnt_i;

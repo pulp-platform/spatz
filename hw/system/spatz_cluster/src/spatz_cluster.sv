@@ -427,6 +427,11 @@ module spatz_cluster
   tcdm_rsp_t [NrTCDMPortsCores-1:0] spatz_tcdm_rsp;
   tcdm_req_t [NrTCDMPortsCores-1:0] quad_tcdm_req ;
   tcdm_rsp_t [NrTCDMPortsCores-1:0] quad_tcdm_rsp ;
+  logic      [NrTCDMPortsCores-1:0][2:0] quad_tcdm_req_valid_rep;
+  logic      [NrTCDMPortsCores-1:0][2:0] quad_tcdm_req_ready_rep;
+  logic      [NrTCDMPortsCores-1:0][2:0] quad_tcdm_rsp_valid_rep;
+  logic      [31:0]                      quad_cfg_array;
+  logic      [spatz_cluster_peripheral_reg_pkg::NumQuadUnits-1:0][1:0] quad_error;
 
   core_events_t [NrCores-1:0] core_events;
   tcdm_events_t               tcdm_events;
@@ -491,6 +496,9 @@ module spatz_cluster
   logic [NrCores-1:0][ErrorCounterWidth-1:0] snitch_correctable_fault_count;
   logic [NrCores-1:0][ErrorCounterWidth-1:0] snitch_uncorrectable_fault_count;
 
+  logic [spatz_cluster_peripheral_reg_pkg::NumQuadUnits-1:0][ErrorCounterWidth-1:0] quad_correctable_count;
+  logic [spatz_cluster_peripheral_reg_pkg::NumQuadUnits-1:0][ErrorCounterWidth-1:0] quad_uncorrectable_count;
+
   // OR of every TCDM interconnect fault
   logic tcdm_interconnect_correctable_fault_any;
   logic tcdm_interconnect_uncorrectable_fault_any;
@@ -503,6 +511,7 @@ module spatz_cluster
   .NumVrfUnits  (NrCores),
   .NumTcdmBanks    (NumTcdmBanks),
   .NumCores        (NrCores),
+  .NumQuadUnits    (spatz_cluster_peripheral_reg_pkg::NumQuadUnits),
   .CounterWidth    (ErrorCounterWidth),
   .SaturatingCount (1'b1)
   ) i_err_monitor (
@@ -532,6 +541,8 @@ module spatz_cluster
   // cluster_icache parity/TMR faults
   .icache_correctable_fault_i (icache_tmr_fault_any | icache_parity_fault_any),
   .icache_uncorrectable_fault_i (1'b0),
+  .quad_correctable_fault_i   ({quad_error[3][0], quad_error[2][0], quad_error[1][0], quad_error[0][0]}),
+  .quad_uncorrectable_fault_i ({quad_error[3][1], quad_error[2][1], quad_error[1][1], quad_error[0][1]}),
 
   // Per-source counters.
   .vrf_correctable_count_o (vrf_correctable_count),
@@ -554,7 +565,9 @@ module spatz_cluster
   .vlsu_correctable_count_o (),
   .vlsu_uncorrectable_count_o (),
   .icache_correctable_count_o (),
-  .icache_uncorrectable_count_o ()
+  .icache_uncorrectable_count_o (),
+  .quad_correctable_count_o   (quad_correctable_count),
+  .quad_uncorrectable_count_o (quad_uncorrectable_count)
 );
 
   // -------------
@@ -1221,6 +1234,11 @@ module spatz_cluster
         .data_rsp_i       (core_rsp[i]                         ),
         .quad_tcdm_req_o  (quad_tcdm_req_wo_user               ),
         .quad_tcdm_rsp_i  (quad_tcdm_rsp                       ),
+        .quad_tcdm_req_valid_rep_o (quad_tcdm_req_valid_rep    ),
+        .quad_tcdm_req_ready_rep_i (quad_tcdm_req_ready_rep    ),
+        .quad_tcdm_rsp_valid_rep_i (quad_tcdm_rsp_valid_rep    ),
+        .quad_cfg_array_i          ({3{quad_cfg_array}}        ),
+        .quad_error_o              (quad_error                 ),
         .axi_dma_req_o    (axi_dma_req                         ),
         .axi_dma_res_i    (axi_dma_res                         ),
         .axi_dma_busy_o   (/* Unused */                        ),
@@ -1235,18 +1253,8 @@ module spatz_cluster
         .snitch_uncorrectable_error_o (snitch_uncorrectable_fault[i])
       );
       for (genvar j = 0; j < TcdmPorts; j++) begin
-        // Quadrilatero request address ECC, encoded per port before the crossbar mux.
-         tcdm_addr_ecc_t quad_addr_enc;
-         hsiao_ecc_enc #(
-           .DataWidth (TCDMAddrWidth),
-           .ProtWidth (TCDMAddrProtWidth)
-         ) i_quad_addr_enc (
-           .in  (quad_tcdm_req_wo_user[j].q.addr[TCDMAddrWidth-1:0]),
-           .out (quad_addr_enc)
-         );
         always_comb begin
           quad_tcdm_req[j].q              = quad_tcdm_req_wo_user[j].q;
-          quad_tcdm_req[j].q.addr         = quad_addr_enc;
           quad_tcdm_req[j].q.user.core_id = i[CoreIDWidth-1:0];
           quad_tcdm_req[j].q.user.is_core = 1;
           quad_tcdm_req[j].q_valid        = quad_tcdm_req_wo_user[j].q_valid;
@@ -1391,7 +1399,7 @@ module spatz_cluster
         .rst_ni (rst_ni                                                 ),
         .flush_i(1'b0                                                   ),
         .rr_i   ('0                                                     ),
-        .req_i  ({spatz_tcdm_req[j].q_valid, quad_tcdm_req[j].q_valid } ),
+        .req_i  ({spatz_tcdm_req[j].q_valid, quad_tcdm_req_valid_rep[j][t]}),
         .gnt_o  (arb_gnt_rep[t]                                         ),
         .data_i ('0                                                     ),
         .gnt_i  (tcdm_req_ready_rep[j][t]                               ),
@@ -1399,7 +1407,8 @@ module spatz_cluster
         .data_o (                                                       ),
         .idx_o  (arb_idx_rep[t]                                         )
       );
-      assign tcdm_req_valid_rep[j][t] = arb_req_rep[t];
+      assign tcdm_req_valid_rep[j][t]      = arb_req_rep[t];
+      assign quad_tcdm_req_ready_rep[j][t] = arb_gnt_rep[t][0];
     end
 
     logic tcdm_arb_spatz_ready_tmr_fault, tcdm_arb_quad_ready_tmr_fault;
@@ -1486,7 +1495,6 @@ module spatz_cluster
     );
 
     // TMR-protected, mirroring gen_shift_reg_spatz_rep above for the quad side.
-    logic quad_tcdm_p_valid_rep [3];
     for (genvar t = 0; t < 3; t++) begin : gen_shift_reg_quad_rep
       shift_reg #(
         .dtype ( logic ),
@@ -1494,17 +1502,17 @@ module spatz_cluster
       ) i_shift_reg_quad (
         .clk_i,
         .rst_ni,
-        .d_i ( quad_tcdm_req[j].q_valid & quad_tcdm_rsp[j].q_ready ),
-        .d_o ( quad_tcdm_p_valid_rep[t] )
+        .d_i ( quad_tcdm_req_valid_rep[j][t] & quad_tcdm_req_ready_rep[j][t] ),
+        .d_o ( quad_tcdm_rsp_valid_rep[j][t] )
       );
     end
     bitwise_TMR_voter_fail #(
       .DataWidth (1),
       .VoterType (1)
     ) i_shift_reg_quad_voter (
-      .a_i              (quad_tcdm_p_valid_rep[0] ),
-      .b_i              (quad_tcdm_p_valid_rep[1] ),
-      .c_i              (quad_tcdm_p_valid_rep[2] ),
+      .a_i              (quad_tcdm_rsp_valid_rep[j][0] ),
+      .b_i              (quad_tcdm_rsp_valid_rep[j][1] ),
+      .c_i              (quad_tcdm_rsp_valid_rep[j][2] ),
       .majority_o       (quad_tcdm_rsp[j].p_valid ),
       .fault_detected_o (quad_tcdm_p_valid_tmr_fault[j])
     );
@@ -1824,6 +1832,7 @@ module spatz_cluster
     .dma_events_i             (dma_events            ),
     .icache_events_i          (icache_events         ),
     .cluster_probe_o          (cluster_probe_o       ),
+    .quad_cfg_array_o         (quad_cfg_array        ),
     // Error monitor
     .err_monitor_clear_o              (err_monitor_clear              ),
     .vrf_correctable_count_i          (vrf_correctable_count[0]       ),
@@ -1835,7 +1844,9 @@ module spatz_cluster
     .snitch_correctable_fault_count_i (snitch_correctable_fault_count ),
     .snitch_uncorrectable_fault_count_i (snitch_uncorrectable_fault_count ),
     .tcdm_interconnect_correctable_count_i (tcdm_interconnect_correctable_count ),
-    .tcdm_interconnect_uncorrectable_count_i (tcdm_interconnect_uncorrectable_count )
+    .tcdm_interconnect_uncorrectable_count_i (tcdm_interconnect_uncorrectable_count ),
+    .quad_correctable_count_i         (quad_correctable_count         ),
+    .quad_uncorrectable_count_i       (quad_uncorrectable_count       )
   );
 
   // 3. BootROM
