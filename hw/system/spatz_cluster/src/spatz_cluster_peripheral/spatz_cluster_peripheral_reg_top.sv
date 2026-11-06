@@ -555,10 +555,10 @@ module spatz_cluster_peripheral_reg_top #(
   logic tcdm_interconnect_correctable_count_re;
   logic [31:0] tcdm_interconnect_uncorrectable_count_qs;
   logic tcdm_interconnect_uncorrectable_count_re;
-  logic [31:0] snitch_correctable_fault_count_qs;
-  logic snitch_correctable_fault_count_re;
-  logic [31:0] snitch_uncorrectable_fault_count_qs;
-  logic snitch_uncorrectable_fault_count_re;
+  logic [31:0] snitch_correctable_count_qs;
+  logic snitch_correctable_count_re;
+  logic [31:0] snitch_uncorrectable_count_qs;
+  logic snitch_uncorrectable_count_re;
   logic [31:0] quad_correctable_count_0_qs;
   logic quad_correctable_count_0_re;
   logic [31:0] quad_correctable_count_1_qs;
