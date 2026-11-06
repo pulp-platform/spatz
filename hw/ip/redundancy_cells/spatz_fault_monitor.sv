@@ -6,6 +6,7 @@ module spatz_fault_monitor #(
   parameter int unsigned NumVrfUnits     = 1,
   parameter int unsigned NumTcdmBanks    = 1,
   parameter int unsigned NumCores        = 1,
+  parameter int unsigned NumQuadUnits    = 1,
   parameter int unsigned CounterWidth    = 32,
   parameter bit          SaturatingCount = 1'b1
 ) (
@@ -40,6 +41,8 @@ module spatz_fault_monitor #(
   // Per-core ICache parity/TMR faults from the reliability-hardened cluster_icache
   input  logic                    icache_correctable_fault_i,
   input  logic                    icache_uncorrectable_fault_i,
+  input  logic [NumQuadUnits-1:0] quad_correctable_fault_i,
+  input  logic [NumQuadUnits-1:0] quad_uncorrectable_fault_i,
 
   // Per-source counters.
   output logic [NumVrfUnits-1:0][CounterWidth-1:0]  vrf_correctable_count_o,
@@ -62,7 +65,9 @@ module spatz_fault_monitor #(
   output logic [NumCores-1:0][CounterWidth-1:0]     snitch_correctable_count_o,
   output logic [NumCores-1:0][CounterWidth-1:0]     snitch_uncorrectable_count_o,
   output logic [CounterWidth-1:0]                   icache_correctable_count_o,
-  output logic [CounterWidth-1:0]                   icache_uncorrectable_count_o
+  output logic [CounterWidth-1:0]                   icache_uncorrectable_count_o,
+  output logic [NumQuadUnits-1:0][CounterWidth-1:0] quad_correctable_count_o,
+  output logic [NumQuadUnits-1:0][CounterWidth-1:0] quad_uncorrectable_count_o
 );
 
 
@@ -86,6 +91,8 @@ module spatz_fault_monitor #(
       snitch_uncorrectable_count_o <= '0;
       icache_correctable_count_o <= '0;
       icache_uncorrectable_count_o <= '0;
+      quad_correctable_count_o <= '0;
+      quad_uncorrectable_count_o <= '0;
 
     end else if (clear_i) begin
       vrf_correctable_count_o    <= '0;
@@ -106,6 +113,8 @@ module spatz_fault_monitor #(
       snitch_uncorrectable_count_o <= '0;
       icache_correctable_count_o <= '0;
       icache_uncorrectable_count_o <= '0;
+      quad_correctable_count_o <= '0;
+      quad_uncorrectable_count_o <= '0;
 
     end else begin
       for (int unsigned i = 0; i < NumVrfUnits; i++) begin
@@ -223,6 +232,20 @@ module spatz_fault_monitor #(
       if (tcdm_interconnect_uncorrectable_fault_i) begin
         if (!SaturatingCount || !(&tcdm_interconnect_uncorrectable_count_o)) begin
           tcdm_interconnect_uncorrectable_count_o <= tcdm_interconnect_uncorrectable_count_o + 1'b1;
+        end
+      end
+
+      for (int unsigned i = 0; i < NumQuadUnits; i++) begin
+        if (quad_correctable_fault_i[i]) begin
+          if (!SaturatingCount || !(&quad_correctable_count_o[i])) begin
+            quad_correctable_count_o[i] <= quad_correctable_count_o[i] + 1'b1;
+          end
+        end
+
+        if (quad_uncorrectable_fault_i[i]) begin
+          if (!SaturatingCount || !(&quad_uncorrectable_count_o[i])) begin
+            quad_uncorrectable_count_o[i] <= quad_uncorrectable_count_o[i] + 1'b1;
+          end
         end
       end
     end
