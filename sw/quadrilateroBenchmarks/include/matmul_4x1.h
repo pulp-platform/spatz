@@ -112,6 +112,8 @@ void __attribute__ ((noinline)) FUNC_NAME(void* addrA,void* addrB, void* addrC, 
         // If only one block total: mmacc it, issue store, skip to done
         "blez t2, 4f  \n\t"
 
+        // Update cfgK for block B before loading it (t2 = remaining K after block A)
+        "mcfgk t5, t2                 \n\t"
         // Load block B
         "mld.lhs m4, (s6), s0 \n\t"
         "mld.rhs m9, (s7), t0 \n\t"
@@ -124,8 +126,7 @@ void __attribute__ ((noinline)) FUNC_NAME(void* addrA,void* addrB, void* addrC, 
         "add  t6, s9, s9              \n\t"
         "add  s5, s5, t6              \n\t"
 
-        // Update cfgK for block B, consume it
-        "mcfgk t5, t2                 \n\t"
+        // Consume block B (cfgK already set before its loads)
         "sub  t2, t2, t5              \n\t"
 
         // Update cfgK for next block A
