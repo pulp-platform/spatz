@@ -471,6 +471,8 @@ module spatz_cluster
   logic [NrCores-1:0]  fpu_sequencer_uncorrectable_fault;
   logic [NrCores-1:0]  vlsu_correctable_fault;
   logic [NrCores-1:0]  vlsu_uncorrectable_fault;
+  logic [NrCores-1:0]  vfu_correctable_fault;
+  logic [NrCores-1:0]  vfu_uncorrectable_fault;
 
   // Per-core whole-core TMR lockstep mismatch.
   logic [NrCores-1:0]  snitch_correctable_fault;
@@ -484,6 +486,12 @@ module spatz_cluster
 
   logic [NrCores-1:0][ErrorCounterWidth-1:0]  vrf_correctable_count;
   logic [NrCores-1:0][ErrorCounterWidth-1:0]  vrf_uncorrectable_count;
+  logic [NrCores-1:0][ErrorCounterWidth-1:0]  fpu_sequencer_correctable_count;
+  logic [NrCores-1:0][ErrorCounterWidth-1:0]  fpu_sequencer_uncorrectable_count;
+  logic [NrCores-1:0][ErrorCounterWidth-1:0]  vlsu_correctable_count;
+  logic [NrCores-1:0][ErrorCounterWidth-1:0]  vlsu_uncorrectable_count;
+  logic [NrCores-1:0][ErrorCounterWidth-1:0]  vfu_correctable_count;
+  logic [NrCores-1:0][ErrorCounterWidth-1:0]  vfu_uncorrectable_count;
 
   logic [NumTcdmBanks-1:0][ErrorCounterWidth-1:0] tcdm_rd_correctable_count;
   logic [NumTcdmBanks-1:0][ErrorCounterWidth-1:0] tcdm_rd_uncorrectable_count;
@@ -493,8 +501,11 @@ module spatz_cluster
   logic [ErrorCounterWidth-1:0] tcdm_interconnect_correctable_count;
   logic [ErrorCounterWidth-1:0] tcdm_interconnect_uncorrectable_count;
 
-  logic [NrCores-1:0][ErrorCounterWidth-1:0] snitch_correctable_fault_count;
-  logic [NrCores-1:0][ErrorCounterWidth-1:0] snitch_uncorrectable_fault_count;
+  logic [NrCores-1:0][ErrorCounterWidth-1:0] snitch_correctable_count;
+  logic [NrCores-1:0][ErrorCounterWidth-1:0] snitch_uncorrectable_count;
+
+  logic [ErrorCounterWidth-1:0] icache_correctable_count;
+  logic [ErrorCounterWidth-1:0] icache_uncorrectable_count;
 
   logic [spatz_cluster_peripheral_reg_pkg::NumQuadUnits-1:0][ErrorCounterWidth-1:0] quad_correctable_count;
   logic [spatz_cluster_peripheral_reg_pkg::NumQuadUnits-1:0][ErrorCounterWidth-1:0] quad_uncorrectable_count;
@@ -549,6 +560,8 @@ module spatz_cluster
   .vrf_uncorrectable_count_o(vrf_uncorrectable_count),
   .fpu_sequencer_correctable_fault_i (fpu_sequencer_correctable_fault),
   .fpu_sequencer_uncorrectable_fault_i (fpu_sequencer_uncorrectable_fault),
+  .vfu_correctable_fault_i (vfu_correctable_fault),
+  .vfu_uncorrectable_fault_i (vfu_uncorrectable_fault),
 
   .tcdm_rd_correctable_count_o (tcdm_rd_correctable_count),
   .tcdm_rd_uncorrectable_count_o (tcdm_rd_uncorrectable_count),
@@ -558,14 +571,16 @@ module spatz_cluster
   .tcdm_interconnect_correctable_count_o (tcdm_interconnect_correctable_count),
   .tcdm_interconnect_uncorrectable_count_o (tcdm_interconnect_uncorrectable_count),
 
-  .snitch_correctable_fault_count_o (snitch_correctable_fault_count),
-  .snitch_uncorrectable_fault_count_o (snitch_uncorrectable_fault_count),
-  .fpu_sequencer_correctable_count_o (),
-  .fpu_sequencer_uncorrectable_count_o (),
-  .vlsu_correctable_count_o (),
-  .vlsu_uncorrectable_count_o (),
-  .icache_correctable_count_o (),
-  .icache_uncorrectable_count_o (),
+  .snitch_correctable_count_o (snitch_correctable_count),
+  .snitch_uncorrectable_count_o (snitch_uncorrectable_count),
+  .fpu_sequencer_correctable_count_o (fpu_sequencer_correctable_count),
+  .fpu_sequencer_uncorrectable_count_o (fpu_sequencer_uncorrectable_count),
+  .vfu_correctable_count_o (vfu_correctable_count),
+  .vfu_uncorrectable_count_o (vfu_uncorrectable_count),
+  .vlsu_correctable_count_o (vlsu_correctable_count),
+  .vlsu_uncorrectable_count_o (vlsu_uncorrectable_count),
+  .icache_correctable_count_o (icache_correctable_count),
+  .icache_uncorrectable_count_o (icache_uncorrectable_count),
   .quad_correctable_count_o   (quad_correctable_count),
   .quad_uncorrectable_count_o (quad_uncorrectable_count)
 );
@@ -1341,6 +1356,9 @@ module spatz_cluster
         .vlsu_uncorrectable_error_o (vlsu_uncorrectable_fault[i]),
         .fpu_sequencer_correctable_error_o (fpu_sequencer_correctable_fault[i]),
         .fpu_sequencer_uncorrectable_error_o (fpu_sequencer_uncorrectable_fault[i]),
+        // vfu error outputs
+        .vfu_correctable_error_o (vfu_correctable_fault[i]),
+        .vfu_uncorrectable_error_o (vfu_uncorrectable_fault[i]),
         // .core_tmr_fault_o (core_tmr_fault[i])
         // Snitch error outputs
         .snitch_correctable_error_o (snitch_correctable_fault[i]),
@@ -1837,12 +1855,20 @@ module spatz_cluster
     .err_monitor_clear_o              (err_monitor_clear              ),
     .vrf_correctable_count_i          (vrf_correctable_count[0]       ),
     .vrf_uncorrectable_count_i        (vrf_uncorrectable_count[0]     ),
+    .fpu_sequencer_correctable_count_i (fpu_sequencer_correctable_count[0]),
+    .fpu_sequencer_uncorrectable_count_i (fpu_sequencer_uncorrectable_count[0]),
+    .vlsu_correctable_count_i         (vlsu_correctable_count[0]),
+    .vlsu_uncorrectable_count_i       (vlsu_uncorrectable_count[0]),
+    .vfu_correctable_count_i          (vfu_correctable_count[0]),
+    .vfu_uncorrectable_count_i        (vfu_uncorrectable_count[0]),
     .tcdm_rd_correctable_count_i      (tcdm_rd_correctable_count      ),
     .tcdm_rd_uncorrectable_count_i    (tcdm_rd_uncorrectable_count    ),
     .tcdm_scrub_correctable_count_i   (tcdm_scrub_correctable_count   ),
     .tcdm_scrub_uncorrectable_count_i (tcdm_scrub_uncorrectable_count ),
-    .snitch_correctable_fault_count_i (snitch_correctable_fault_count ),
-    .snitch_uncorrectable_fault_count_i (snitch_uncorrectable_fault_count ),
+    .snitch_correctable_count_i (snitch_correctable_count[0]),
+    .snitch_uncorrectable_count_i (snitch_uncorrectable_count[0]),
+    .icache_correctable_count_i (icache_correctable_count ),
+    .icache_uncorrectable_count_i (icache_uncorrectable_count ),
     .tcdm_interconnect_correctable_count_i (tcdm_interconnect_correctable_count ),
     .tcdm_interconnect_uncorrectable_count_i (tcdm_interconnect_uncorrectable_count ),
     .quad_correctable_count_i         (quad_correctable_count         ),
