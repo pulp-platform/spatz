@@ -584,11 +584,9 @@ module spatz_cluster_peripheral_reg_top #(
   logic [31:0] quad_uncorrectable_count_3_qs;
   logic quad_uncorrectable_count_3_re;
   logic [31:0] icache_correctable_count_qs;
-  logic [31:0] icache_correctable_count_wd;
-  logic icache_correctable_count_we;
+  logic icache_correctable_count_re;
   logic [31:0] icache_uncorrectable_count_qs;
-  logic [31:0] icache_uncorrectable_count_wd;
-  logic icache_uncorrectable_count_we;
+  logic icache_uncorrectable_count_re;
   logic [31:0] quad_cfg_array_qs;
   logic [31:0] quad_cfg_array_wd;
   logic quad_cfg_array_we;
@@ -4885,56 +4883,34 @@ module spatz_cluster_peripheral_reg_top #(
   );
 
 
-  // R[icache_correctable_count]: V(False)
+  // R[icache_correctable_count]: V(True)
 
-  prim_subreg #(
-    .DW      (32),
-    .SWACCESS("RW"),
-    .RESVAL  (32'h0)
+  prim_subreg_ext #(
+    .DW    (32)
   ) u_icache_correctable_count (
-    .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
-
-    // from register interface
-    .we     (icache_correctable_count_we),
-    .wd     (icache_correctable_count_wd),
-
-    // from internal hardware
-    .de     (1'b0),
-    .d      ('0  ),
-
-    // to internal hardware
+    .re     (icache_correctable_count_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.icache_correctable_count.d),
+    .qre    (),
     .qe     (),
     .q      (reg2hw.icache_correctable_count.q ),
-
-    // to register interface (read)
     .qs     (icache_correctable_count_qs)
   );
 
 
-  // R[icache_uncorrectable_count]: V(False)
+  // R[icache_uncorrectable_count]: V(True)
 
-  prim_subreg #(
-    .DW      (32),
-    .SWACCESS("RW"),
-    .RESVAL  (32'h0)
+  prim_subreg_ext #(
+    .DW    (32)
   ) u_icache_uncorrectable_count (
-    .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
-
-    // from register interface
-    .we     (icache_uncorrectable_count_we),
-    .wd     (icache_uncorrectable_count_wd),
-
-    // from internal hardware
-    .de     (1'b0),
-    .d      ('0  ),
-
-    // to internal hardware
+    .re     (icache_uncorrectable_count_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.icache_uncorrectable_count.d),
+    .qre    (),
     .qe     (),
     .q      (reg2hw.icache_uncorrectable_count.q ),
-
-    // to register interface (read)
     .qs     (icache_uncorrectable_count_qs)
   );
 
@@ -5829,11 +5805,9 @@ module spatz_cluster_peripheral_reg_top #(
 
   assign quad_uncorrectable_count_3_re = addr_hit[161] & reg_re & !reg_error;
 
-  assign icache_correctable_count_we = addr_hit[162] & reg_we & !reg_error;
-  assign icache_correctable_count_wd = reg_wdata[31:0];
+  assign icache_correctable_count_re = addr_hit[162] & reg_re & !reg_error;
 
-  assign icache_uncorrectable_count_we = addr_hit[163] & reg_we & !reg_error;
-  assign icache_uncorrectable_count_wd = reg_wdata[31:0];
+  assign icache_uncorrectable_count_re = addr_hit[163] & reg_re & !reg_error;
 
   assign quad_cfg_array_we = addr_hit[164] & reg_we & !reg_error;
   assign quad_cfg_array_wd = reg_wdata[31:0];

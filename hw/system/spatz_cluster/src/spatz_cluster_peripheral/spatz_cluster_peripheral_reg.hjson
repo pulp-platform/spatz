@@ -765,9 +765,9 @@
 	 {
 	name: "ICACHE_CORRECTABLE_COUNT",
 	desc: "icache correctable error counter.",
-	swaccess: "rw",
-	hwaccess: "hro",
-	resval: "0",
+	swaccess: "ro",
+	hwaccess: "hrw",
+	hwext: "true",
 	fields: [{
 	    bits: "31:0",
 	    name: "COUNT",
@@ -777,9 +777,9 @@
 	 {
 	name: "ICACHE_UNCORRECTABLE_COUNT",
 	desc: "icache uncorrectable error counter.",
-	swaccess: "rw",
-	hwaccess: "hro",
-	resval: "0",
+	swaccess: "ro",
+	hwaccess: "hrw",
+	hwext: "true",
 	fields: [{
 	    bits: "31:0",
 	    name: "COUNT",

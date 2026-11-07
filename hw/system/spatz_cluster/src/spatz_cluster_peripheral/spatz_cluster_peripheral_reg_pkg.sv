@@ -322,6 +322,14 @@ package spatz_cluster_peripheral_reg_pkg;
     logic [31:0] d;
   } spatz_cluster_peripheral_hw2reg_quad_uncorrectable_count_mreg_t;
 
+  typedef struct packed {
+    logic [31:0] d;
+  } spatz_cluster_peripheral_hw2reg_icache_correctable_count_reg_t;
+
+  typedef struct packed {
+    logic [31:0] d;
+  } spatz_cluster_peripheral_hw2reg_icache_uncorrectable_count_reg_t;
+
   // Register -> HW type
   typedef struct packed {
     spatz_cluster_peripheral_reg2hw_perf_counter_enable_mreg_t [1:0] perf_counter_enable; // [5176:5115]
@@ -360,26 +368,28 @@ package spatz_cluster_peripheral_reg_pkg;
 
   // HW -> register type
   typedef struct packed {
-    spatz_cluster_peripheral_hw2reg_perf_counter_mreg_t [1:0] perf_counter; // [4863:4768]
-    spatz_cluster_peripheral_hw2reg_hw_barrier_reg_t hw_barrier; // [4767:4736]
-    spatz_cluster_peripheral_hw2reg_vrf_correctable_count_mreg_t [0:0] vrf_correctable_count; // [4735:4704]
-    spatz_cluster_peripheral_hw2reg_vrf_uncorrectable_count_mreg_t [0:0] vrf_uncorrectable_count; // [4703:4672]
-    spatz_cluster_peripheral_hw2reg_vlsu_correctable_count_mreg_t [0:0] vlsu_correctable_count; // [4671:4640]
-    spatz_cluster_peripheral_hw2reg_vlsu_uncorrectable_count_mreg_t [0:0] vlsu_uncorrectable_count; // [4639:4608]
-    spatz_cluster_peripheral_hw2reg_tcdm_rd_correctable_count_mreg_t [31:0] tcdm_rd_correctable_count; // [4607:3584]
-    spatz_cluster_peripheral_hw2reg_tcdm_rd_uncorrectable_count_mreg_t [31:0] tcdm_rd_uncorrectable_count; // [3583:2560]
-    spatz_cluster_peripheral_hw2reg_tcdm_scrub_correctable_count_mreg_t [31:0] tcdm_scrub_correctable_count; // [2559:1536]
-    spatz_cluster_peripheral_hw2reg_tcdm_scrub_uncorrectable_count_mreg_t [31:0] tcdm_scrub_uncorrectable_count; // [1535:512]
-    spatz_cluster_peripheral_hw2reg_tcdm_interconnect_correctable_count_reg_t tcdm_interconnect_correctable_count; // [511:480]
-    spatz_cluster_peripheral_hw2reg_tcdm_interconnect_uncorrectable_count_reg_t tcdm_interconnect_uncorrectable_count; // [479:448]
-    spatz_cluster_peripheral_hw2reg_snitch_correctable_count_mreg_t [0:0] snitch_correctable_count; // [447:416]
-    spatz_cluster_peripheral_hw2reg_snitch_uncorrectable_count_mreg_t [0:0] snitch_uncorrectable_count; // [415:384]
-    spatz_cluster_peripheral_hw2reg_fpu_sequencer_correctable_count_mreg_t [0:0] fpu_sequencer_correctable_count; // [383:352]
-    spatz_cluster_peripheral_hw2reg_fpu_sequencer_uncorrectable_count_mreg_t [0:0] fpu_sequencer_uncorrectable_count; // [351:320]
-    spatz_cluster_peripheral_hw2reg_vfu_correctable_count_mreg_t [0:0] vfu_correctable_count; // [319:288]
-    spatz_cluster_peripheral_hw2reg_vfu_uncorrectable_count_mreg_t [0:0] vfu_uncorrectable_count; // [287:256]
-    spatz_cluster_peripheral_hw2reg_quad_correctable_count_mreg_t [3:0] quad_correctable_count; // [255:128]
-    spatz_cluster_peripheral_hw2reg_quad_uncorrectable_count_mreg_t [3:0] quad_uncorrectable_count; // [127:0]
+    spatz_cluster_peripheral_hw2reg_perf_counter_mreg_t [1:0] perf_counter; // [4927:4832]
+    spatz_cluster_peripheral_hw2reg_hw_barrier_reg_t hw_barrier; // [4831:4800]
+    spatz_cluster_peripheral_hw2reg_vrf_correctable_count_mreg_t [0:0] vrf_correctable_count; // [4799:4768]
+    spatz_cluster_peripheral_hw2reg_vrf_uncorrectable_count_mreg_t [0:0] vrf_uncorrectable_count; // [4767:4736]
+    spatz_cluster_peripheral_hw2reg_vlsu_correctable_count_mreg_t [0:0] vlsu_correctable_count; // [4735:4704]
+    spatz_cluster_peripheral_hw2reg_vlsu_uncorrectable_count_mreg_t [0:0] vlsu_uncorrectable_count; // [4703:4672]
+    spatz_cluster_peripheral_hw2reg_tcdm_rd_correctable_count_mreg_t [31:0] tcdm_rd_correctable_count; // [4671:3648]
+    spatz_cluster_peripheral_hw2reg_tcdm_rd_uncorrectable_count_mreg_t [31:0] tcdm_rd_uncorrectable_count; // [3647:2624]
+    spatz_cluster_peripheral_hw2reg_tcdm_scrub_correctable_count_mreg_t [31:0] tcdm_scrub_correctable_count; // [2623:1600]
+    spatz_cluster_peripheral_hw2reg_tcdm_scrub_uncorrectable_count_mreg_t [31:0] tcdm_scrub_uncorrectable_count; // [1599:576]
+    spatz_cluster_peripheral_hw2reg_tcdm_interconnect_correctable_count_reg_t tcdm_interconnect_correctable_count; // [575:544]
+    spatz_cluster_peripheral_hw2reg_tcdm_interconnect_uncorrectable_count_reg_t tcdm_interconnect_uncorrectable_count; // [543:512]
+    spatz_cluster_peripheral_hw2reg_snitch_correctable_count_mreg_t [0:0] snitch_correctable_count; // [511:480]
+    spatz_cluster_peripheral_hw2reg_snitch_uncorrectable_count_mreg_t [0:0] snitch_uncorrectable_count; // [479:448]
+    spatz_cluster_peripheral_hw2reg_fpu_sequencer_correctable_count_mreg_t [0:0] fpu_sequencer_correctable_count; // [447:416]
+    spatz_cluster_peripheral_hw2reg_fpu_sequencer_uncorrectable_count_mreg_t [0:0] fpu_sequencer_uncorrectable_count; // [415:384]
+    spatz_cluster_peripheral_hw2reg_vfu_correctable_count_mreg_t [0:0] vfu_correctable_count; // [383:352]
+    spatz_cluster_peripheral_hw2reg_vfu_uncorrectable_count_mreg_t [0:0] vfu_uncorrectable_count; // [351:320]
+    spatz_cluster_peripheral_hw2reg_quad_correctable_count_mreg_t [3:0] quad_correctable_count; // [319:192]
+    spatz_cluster_peripheral_hw2reg_quad_uncorrectable_count_mreg_t [3:0] quad_uncorrectable_count; // [191:64]
+    spatz_cluster_peripheral_hw2reg_icache_correctable_count_reg_t icache_correctable_count; // [63:32]
+    spatz_cluster_peripheral_hw2reg_icache_uncorrectable_count_reg_t icache_uncorrectable_count; // [31:0]
   } spatz_cluster_peripheral_hw2reg_t;
 
   // Register offsets
@@ -703,6 +713,8 @@ package spatz_cluster_peripheral_reg_pkg;
   parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_QUAD_UNCORRECTABLE_COUNT_1_RESVAL = 32'h 0;
   parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_QUAD_UNCORRECTABLE_COUNT_2_RESVAL = 32'h 0;
   parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_QUAD_UNCORRECTABLE_COUNT_3_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_ICACHE_CORRECTABLE_COUNT_RESVAL = 32'h 0;
+  parameter logic [31:0] SPATZ_CLUSTER_PERIPHERAL_ICACHE_UNCORRECTABLE_COUNT_RESVAL = 32'h 0;
 
   // Register index
   typedef enum int {
