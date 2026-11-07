@@ -643,6 +643,23 @@
 	    }]
 	}
      },
+	{
+	multireg: {
+	    name: "SNITCH_UNCORRECTABLE_COUNT",
+	    desc: "snitch scalar core uncorrectable fault counter.",
+	    swaccess: "ro",
+	    hwaccess: "hrw",
+	    hwext: "true",
+	    count: "NumVrfUnits",
+	    compact: "false",
+	    cname: "snitch_uncorrectable_count",
+	    fields: [{
+		bits: "31:0",
+		name: "COUNT",
+		desc: "Saturating count of snitch scalar core uncorretable faults."
+	    }]
+	}
+     },
 	 {
 	multireg: {
 	    name: "FPU_SEQUENCER_CORRECTABLE_COUNT",
@@ -713,23 +730,6 @@
      },
      {
 	multireg: {
-	    name: "SNITCH_UNCORRECTABLE_COUNT",
-	    desc: "snitch scalar core uncorrectable fault counter.",
-	    swaccess: "ro",
-	    hwaccess: "hrw",
-	    hwext: "true",
-	    count: "NumVrfUnits",
-	    compact: "false",
-	    cname: "snitch_uncorrectable_count",
-	    fields: [{
-		bits: "31:0",
-		name: "COUNT",
-		desc: "Saturating count of snitch scalar core uncorretable faults."
-	    }]
-	}
-     },
-     {
-	multireg: {
 	    name: "QUAD_CORRECTABLE_COUNT",
 	    desc: "Per-source Quadrilatero correctable error counter (0: systolic array, 1: LSU, 2: MRF, 3: controller).",
 	    swaccess: "ro",
@@ -761,6 +761,30 @@
 		desc: "Saturating count of uncorrectable errors for this Quadrilatero source."
 	    }]
 	}
+     },
+	 {
+	name: "ICACHE_CORRECTABLE_COUNT",
+	desc: "icache correctable error counter.",
+	swaccess: "rw",
+	hwaccess: "hro",
+	resval: "0",
+	fields: [{
+	    bits: "31:0",
+	    name: "COUNT",
+	    desc: "Saturating count of correctable errors for icache."
+	}]
+     },
+	 {
+	name: "ICACHE_UNCORRECTABLE_COUNT",
+	desc: "icache uncorrectable error counter.",
+	swaccess: "rw",
+	hwaccess: "hro",
+	resval: "0",
+	fields: [{
+	    bits: "31:0",
+	    name: "COUNT",
+	    desc: "Saturating count of uncorrectable errors for icache."
+	}]
      },
      {
 	name: "QUAD_CFG_ARRAY",
