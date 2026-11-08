@@ -478,7 +478,7 @@ module spatz_cluster
   logic [NrCores-1:0]  snitch_correctable_fault;
   logic [NrCores-1:0]  snitch_uncorrectable_fault;
   // Per-cluster icache fault output
-  logic icache_correctable_fault, icache_uncorrectable_fault
+  logic icache_correctable_fault, icache_uncorrectable_fault;
 
   logic [NumTcdmBanks-1:0] tcdm_rd_correctable_fault;
   logic [NumTcdmBanks-1:0] tcdm_rd_uncorrectable_fault;
