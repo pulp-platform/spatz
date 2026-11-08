@@ -477,6 +477,8 @@ module spatz_cluster
   // Per-core whole-core TMR lockstep mismatch.
   logic [NrCores-1:0]  snitch_correctable_fault;
   logic [NrCores-1:0]  snitch_uncorrectable_fault;
+  // Per-cluster icache fault output
+  logic icache_correctable_fault, icache_uncorrectable_fault
 
   logic [NumTcdmBanks-1:0] tcdm_rd_correctable_fault;
   logic [NumTcdmBanks-1:0] tcdm_rd_uncorrectable_fault;
@@ -550,8 +552,8 @@ module spatz_cluster
   .snitch_correctable_fault_i (snitch_correctable_fault),
   .snitch_uncorrectable_fault_i (snitch_uncorrectable_fault),
   // cluster_icache parity/TMR faults
-  .icache_correctable_fault_i (icache_tmr_fault_any | icache_parity_fault_any),
-  .icache_uncorrectable_fault_i (1'b0),
+  .icache_correctable_fault_i (icache_correctable_fault),
+  .icache_uncorrectable_fault_i (icache_uncorrectable_fault),
   .quad_correctable_fault_i   ({quad_error[3][0], quad_error[2][0], quad_error[1][0], quad_error[0][0]}),
   .quad_uncorrectable_fault_i ({quad_error[3][1], quad_error[2][1], quad_error[1][1], quad_error[0][1]}),
 
@@ -1587,7 +1589,7 @@ module spatz_cluster
   logic icache_l1_tag_meta_tmr_fault;
   logic icache_l1_fifo_tmr_fault;
 
-  snitch_icache #(
+  snitch_icacheTMR #(
     .NR_FETCH_PORTS     ( NrCores                                            ),
     .L0_LINE_COUNT      ( 8                                                  ),
     .LINE_WIDTH         ( ICacheLineWidth                                    ),
@@ -1626,21 +1628,10 @@ module spatz_cluster
     .sram_cfg_data_i      ( '0                       ),
     .axi_req_o            ( wide_axi_mst_req[ICache] ),
     .axi_rsp_i            ( wide_axi_mst_rsp[ICache] ),
-    .fifo_tmr_fault_o     ( icache_l1_fifo_tmr_fault )
+    .icache_correctable_error_o     ( icache_correctable_fault ),
+    .icache_uncorrectable_error_o   ( icache_uncorrectable_fault  )
   );
 
-  for (genvar i = 0; i < NrCores; i++) begin : gen_icache_fault_unpack
-    assign icache_l0_tag_parity_fault[i]  = icache_events[i].l0_tag_parity_error;
-    assign icache_l0_data_parity_fault[i] = icache_events[i].l0_data_parity_error;
-  end
-
-  assign icache_l1_tag_parity_fault   = icache_l1_events.l1_tag_parity_error;
-  assign icache_l1_data_parity_fault  = icache_l1_events.l1_data_parity_error;
-  assign icache_l1_tag_meta_tmr_fault = icache_l1_events.l1_tag_meta_tmr_error;
-
-  assign icache_parity_fault_any = |icache_l0_tag_parity_fault | |icache_l0_data_parity_fault
-                                   | icache_l1_tag_parity_fault | icache_l1_data_parity_fault;
-  assign icache_tmr_fault_any = icache_l1_tag_meta_tmr_fault | icache_l1_fifo_tmr_fault;
   // --------
   // Cores SoC
   // --------
