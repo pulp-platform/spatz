@@ -138,22 +138,53 @@ module spatz_doublebw_vlsu
 
   logic spatz_req_ready;
 
+  // ECC-protected operation queue: encode -> rel_spill_register -> decode
+  localparam int unsigned OpqDataWidth  = $bits(spatz_req_t);
+  localparam int unsigned OpqProtWidth  = hsiao_ecc_pkg::min_ecc(OpqDataWidth);
+  localparam int unsigned OpqTotalWidth = OpqDataWidth + OpqProtWidth;
+  typedef logic [OpqTotalWidth-1:0] opq_ecc_t;
+
+  opq_ecc_t                opq_enc_data, opq_data;
+  logic [OpqDataWidth-1:0] opq_dec_data;
+  logic [OpqProtWidth-1:0] opq_dec_syndrome;
+  logic [1:0]              opq_dec_err;
+
+  hsiao_ecc_enc #(
+    .DataWidth(OpqDataWidth),
+    .ProtWidth(OpqProtWidth)
+  ) i_operation_queue_ecc_enc (
+    .in (spatz_req_d),
+    .out(opq_enc_data)
+  );
+
   rel_spill_register #(
-    .T(spatz_req_t),
+    .T(opq_ecc_t),
     .TmrHandshake (1'b0)
   ) i_operation_queue (
     .clk_i  (clk_i                                          ),
     .rst_ni (rst_ni                                         ),
-    .data_i (spatz_req_d                                    ),
+    .data_i (opq_enc_data                                   ),
     .valid_i(spatz_req_valid_i && spatz_req_i.ex_unit == LSU),
     .ready_o(spatz_req_ready                                ),
-    .data_o (mem_spatz_req                                  ),
+    .data_o (opq_data                                       ),
     .valid_o(mem_spatz_req_valid                            ),
     .ready_i(mem_spatz_req_ready                            ),
     .err_o ( operation_queue_fault ),
     .data_corrector_o ( ),
     .data_corrected_i ( '0 )
   );
+
+  hsiao_ecc_dec #(
+    .DataWidth(OpqDataWidth),
+    .ProtWidth(OpqProtWidth)
+  ) i_operation_queue_ecc_dec (
+    .in        (opq_data        ),
+    .out       (opq_dec_data    ),
+    .syndrome_o(opq_dec_syndrome),
+    .err_o     (opq_dec_err     )
+  );
+
+  assign mem_spatz_req = spatz_req_t'(opq_dec_data);
 
   // Convert the vl to number of bytes for all element widths
   always_comb begin: proc_spatz_req
@@ -2250,8 +2281,10 @@ module spatz_doublebw_vlsu
 
   assign vlsu_correctable_error_o = vlsu_st_sec_err_o | vlsu_ld_sec_err_o | vlsu_wr_sec_err_o
                                    | |vlsu_vd_sec_err_o | |vlsu_vs2_sec_err_o
-                                   | handshake_tmr_fault_o | datapath_tmr_fault_o;
+                                   | handshake_tmr_fault_o | datapath_tmr_fault_o
+                                   | (mem_spatz_req_valid & opq_dec_err[0]);
   assign vlsu_uncorrectable_error_o = vlsu_st_ded_err_o | vlsu_ld_ded_err_o | vlsu_wr_ded_err_o
                                     | |vlsu_vd_ded_err_o | |vlsu_vs2_ded_err_o
-                                    | fsm_illegal_state_o;
+                                    | fsm_illegal_state_o
+                                    | (mem_spatz_req_valid & opq_dec_err[1]);
 endmodule : spatz_doublebw_vlsu

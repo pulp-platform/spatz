@@ -49,6 +49,8 @@ module spatz_cluster_peripheral
   input  logic [NumVrfUnits-1:0][31:0]                       vlsu_uncorrectable_count_i,
   input  logic [NumVrfUnits-1:0][31:0]                       vfu_correctable_count_i,
   input  logic [NumVrfUnits-1:0][31:0]                       vfu_uncorrectable_count_i,
+  input  logic [NumVrfUnits-1:0][31:0]                       controller_correctable_count_i,
+  input  logic [NumVrfUnits-1:0][31:0]                       controller_uncorrectable_count_i,
   input  logic [NumTcdmBanks-1:0][31:0]                   tcdm_rd_correctable_count_i,
   input  logic [NumTcdmBanks-1:0][31:0]                   tcdm_rd_uncorrectable_count_i,
   input  logic [NumTcdmBanks-1:0][31:0]                   tcdm_scrub_correctable_count_i,
@@ -289,6 +291,8 @@ module spatz_cluster_peripheral
     assign hw2reg.vlsu_uncorrectable_count[i].d = vlsu_uncorrectable_count_i[i];
     assign hw2reg.vfu_correctable_count[i].d   = vfu_correctable_count_i[i];
     assign hw2reg.vfu_uncorrectable_count[i].d = vfu_uncorrectable_count_i[i];
+    assign hw2reg.controller_correctable_count[i].d   = controller_correctable_count_i[i];
+    assign hw2reg.controller_uncorrectable_count[i].d = controller_uncorrectable_count_i[i];
   end
 
   for (genvar i = 0; i < NumTcdmBanks; i++) begin : gen_tcdm_count_assign

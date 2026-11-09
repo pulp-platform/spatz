@@ -45,7 +45,8 @@ module spatz_vsldu
   logic       spatz_req_valid;
   logic       spatz_req_ready;
 
-  spill_register #(
+  rel_spill_register #(
+    .TmrHandshake(1'b0),
     .T(spatz_req_t)
   ) i_operation_queue (
     .clk_i  (clk_i                                          ),
@@ -55,7 +56,10 @@ module spatz_vsldu
     .ready_o(spatz_req_ready_o                              ),
     .data_o (spatz_req                                      ),
     .valid_o(spatz_req_valid                                ),
-    .ready_i(spatz_req_ready                                )
+    .ready_i(spatz_req_ready                                ),
+    .err_o            (),
+    .data_corrector_o (),
+    .data_corrected_i ('0)
   );
 
 
@@ -118,7 +122,8 @@ module spatz_vsldu
   logic     vrf_req_valid_d, vrf_req_ready_d;
   logic     vrf_req_valid_q, vrf_req_ready_q;
 
-  spill_register #(
+  rel_spill_register #(
+    .TmrHandshake(1'b0),
     .T(vrf_req_t)
   ) i_vrf_req_register (
     .clk_i  (clk_i          ),
@@ -128,7 +133,10 @@ module spatz_vsldu
     .ready_o(vrf_req_ready_d),
     .data_o (vrf_req_q      ),
     .valid_o(vrf_req_valid_q),
-    .ready_i(vrf_req_ready_q)
+    .ready_i(vrf_req_ready_q),
+    .err_o            (),
+    .data_corrector_o (),
+    .data_corrected_i ('0)
   );
 
   // Per-cut RMW needed: fires when any cut has a mixed byte enable (0 < wbe[cut] < all-1).

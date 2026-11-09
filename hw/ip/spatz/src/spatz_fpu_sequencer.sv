@@ -98,6 +98,7 @@ module spatz_fpu_sequencer
   assign fpr_raddr = {fs3, fs2, fs1};
 
   logic fpr_tmr_fault;
+  logic [1:0] fp_move_register_err;
   logic [NrReadPorts-1:0][FLEN-1:0] fpr_rdataA,fpr_rdataB,fpr_rdataC;
   snitch_regfileTMR #(
     .DATA_WIDTH    (FLEN        ),
@@ -689,8 +690,9 @@ snitch_lsuTMR #(
   assign fpu_sequencer_correctable_fault_o = fpr_tmr_fault | fpr_rdataTmrError
                                           | fp_lsu_qreadyTmrError | fp_lsu_pdataTmrError
                                           | fp_lsu_ptagTmrError | fp_lsu_pvalidTmrError
-                                          | fp_lsu_mem_req_oTmrError;
-  assign fpu_sequencer_uncorrectable_fault_o = 1'b0;
+                                          | fp_lsu_mem_req_oTmrError
+                                          | fp_move_register_err[0];
+  assign fpu_sequencer_uncorrectable_fault_o = fp_move_register_err[1];
 
   // Number of memory operations in the accelerator
   logic [2:0] acc_mem_cnt_q, acc_mem_cnt_d;
@@ -783,7 +785,8 @@ snitch_lsuTMR #(
   logic       fp_move_result_valid_o;
   logic       fp_move_result_ready_i;
 
-  spill_register #(
+  rel_spill_register #(
+    .TmrHandshake(1'b0),
     .T(spatz_rsp_t)
   ) i_fp_move_register (
     .clk_i     (clk_i                 ),
@@ -793,7 +796,10 @@ snitch_lsuTMR #(
     .ready_o   (fp_move_result_ready_o),
     .data_o    (fp_move_result_o      ),
     .valid_o   (fp_move_result_valid_o),
-    .ready_i   (fp_move_result_ready_i)
+    .ready_i   (fp_move_result_ready_i),
+    .err_o            (fp_move_register_err),
+    .data_corrector_o (),
+    .data_corrected_i ('0)
   );
 
   //////////////

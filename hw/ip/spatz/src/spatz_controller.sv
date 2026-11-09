@@ -30,6 +30,8 @@ module spatz_controller
     input  logic                                   rst_ni,
     // Snitch Issue
     input  logic                                   issue_valid_i,
+    output logic                                   controller_correctable_fault_o,
+    output logic                                   controller_uncorrectable_fault_o,
     output logic                                   issue_ready_o,
     input  spatz_issue_req_t                       issue_req_i,
     output spatz_issue_rsp_t                       issue_rsp_o,
@@ -915,7 +917,9 @@ module spatz_controller
   logic     vfu_rsp_valid;
   logic     vfu_rsp_ready;
 
-  spill_register #(
+  logic [1:0] vfu_scalar_response_err;
+  rel_spill_register #(
+    .TmrHandshake(1'b0),
     .T(vfu_rsp_t)
   ) i_vfu_scalar_response (
     .clk_i  (clk_i                          ),
@@ -925,13 +929,18 @@ module spatz_controller
     .ready_o(vfu_rsp_ready_o                ),
     .data_o (vfu_rsp                        ),
     .valid_o(vfu_rsp_valid                  ),
-    .ready_i(vfu_rsp_ready                  )
+    .ready_i(vfu_rsp_ready                  ),
+    .err_o            (vfu_scalar_response_err),
+    .data_corrector_o (),
+    .data_corrected_i ('0)
   );
 
   logic       rsp_valid_d;
   logic       rsp_ready_d;
   spatz_rsp_t rsp_d;
-  spill_register #(
+  logic [1:0] spatz_rsp_register_err;
+  rel_spill_register #(
+    .TmrHandshake(1'b0),
     .T     (spatz_rsp_t ),
     .Bypass(!RegisterRsp)
   ) i_spatz_rsp_register (
@@ -942,7 +951,10 @@ module spatz_controller
     .ready_o(rsp_ready_d ),
     .data_o (rsp_o       ),
     .valid_o(rsp_valid_o ),
-    .ready_i(rsp_ready_i )
+    .ready_i(rsp_ready_i ),
+    .err_o            (spatz_rsp_register_err),
+    .data_corrector_o (),
+    .data_corrected_i ('0)
   );
 
   // Retire an operation/instruction and write back result to core
@@ -996,5 +1008,8 @@ module spatz_controller
   // Send request off to execution units
   assign spatz_req_o       = spatz_req;
   assign spatz_req_valid_o = spatz_req_valid;
+
+  assign controller_correctable_fault_o   = vfu_scalar_response_err[0] | spatz_rsp_register_err[0];
+  assign controller_uncorrectable_fault_o = vfu_scalar_response_err[1] | spatz_rsp_register_err[1];
 
 endmodule : spatz_controller

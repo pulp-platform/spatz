@@ -26,6 +26,8 @@ module spatz_fault_monitor #(
   input  logic [NumCores-1:0]     vlsu_uncorrectable_fault_i,
   input  logic [NumCores-1:0]     vfu_correctable_fault_i,
   input  logic [NumCores-1:0]     vfu_uncorrectable_fault_i,
+  input  logic [NumCores-1:0]     controller_correctable_fault_i,
+  input  logic [NumCores-1:0]     controller_uncorrectable_fault_i,
 
   input  logic [NumTcdmBanks-1:0] tcdm_rd_correctable_fault_i,
   input  logic [NumTcdmBanks-1:0] tcdm_rd_uncorrectable_fault_i,
@@ -53,6 +55,8 @@ module spatz_fault_monitor #(
   output logic [NumCores-1:0][CounterWidth-1:0]  vlsu_uncorrectable_count_o,
   output logic [NumCores-1:0][CounterWidth-1:0]  vfu_correctable_count_o,
   output logic [NumCores-1:0][CounterWidth-1:0]  vfu_uncorrectable_count_o,
+  output logic [NumCores-1:0][CounterWidth-1:0]  controller_correctable_count_o,
+  output logic [NumCores-1:0][CounterWidth-1:0]  controller_uncorrectable_count_o,
 
   output logic [NumTcdmBanks-1:0][CounterWidth-1:0] tcdm_rd_correctable_count_o,
   output logic [NumTcdmBanks-1:0][CounterWidth-1:0] tcdm_rd_uncorrectable_count_o,
@@ -81,6 +85,8 @@ module spatz_fault_monitor #(
       vlsu_uncorrectable_count_o <= '0;
       vfu_correctable_count_o   <= '0;
       vfu_uncorrectable_count_o <= '0;
+      controller_correctable_count_o   <= '0;
+      controller_uncorrectable_count_o <= '0;
       tcdm_rd_correctable_count_o   <= '0;
       tcdm_rd_uncorrectable_count_o <= '0;
       tcdm_scrub_correctable_count_o   <= '0;
@@ -103,6 +109,8 @@ module spatz_fault_monitor #(
       vlsu_uncorrectable_count_o <= '0;
       vfu_correctable_count_o   <= '0;
       vfu_uncorrectable_count_o <= '0;
+      controller_correctable_count_o   <= '0;
+      controller_uncorrectable_count_o <= '0;
       tcdm_rd_correctable_count_o   <= '0;
       tcdm_rd_uncorrectable_count_o <= '0;
       tcdm_scrub_correctable_count_o   <= '0;
@@ -167,6 +175,20 @@ module spatz_fault_monitor #(
         if (vfu_uncorrectable_fault_i[i]) begin
           if (!SaturatingCount || !(&vfu_uncorrectable_count_o[i])) begin
             vfu_uncorrectable_count_o[i] <= vfu_uncorrectable_count_o[i] + 1'b1;
+          end
+        end
+      end
+
+      for (int unsigned i = 0; i < NumCores; i++) begin
+        if (controller_correctable_fault_i[i]) begin
+          if (!SaturatingCount || !(&controller_correctable_count_o[i])) begin
+            controller_correctable_count_o[i] <= controller_correctable_count_o[i] + 1'b1;
+          end
+        end
+
+        if (controller_uncorrectable_fault_i[i]) begin
+          if (!SaturatingCount || !(&controller_uncorrectable_count_o[i])) begin
+            controller_uncorrectable_count_o[i] <= controller_uncorrectable_count_o[i] + 1'b1;
           end
         end
       end

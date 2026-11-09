@@ -2250,6 +2250,44 @@ extern "C" {
       .mask = SPATZ_CLUSTER_PERIPHERAL_QUAD_CFG_ARRAY_CFG_ARRAY_MASK,          \
       .index = SPATZ_CLUSTER_PERIPHERAL_QUAD_CFG_ARRAY_CFG_ARRAY_OFFSET})
 
+// controller correctable fault counter. (common parameters)
+#define SPATZ_CLUSTER_PERIPHERAL_CONTROLLER_CORRECTABLE_COUNT_COUNT_FIELD_WIDTH \
+  32
+#define SPATZ_CLUSTER_PERIPHERAL_CONTROLLER_CORRECTABLE_COUNT_COUNT_FIELDS_PER_REG \
+  2
+#define SPATZ_CLUSTER_PERIPHERAL_CONTROLLER_CORRECTABLE_COUNT_MULTIREG_COUNT 1
+
+// controller correctable fault counter.
+#define SPATZ_CLUSTER_PERIPHERAL_CONTROLLER_CORRECTABLE_COUNT_REG_OFFSET 0x528
+#define SPATZ_CLUSTER_PERIPHERAL_CONTROLLER_CORRECTABLE_COUNT_COUNT_0_MASK     \
+  0xffffffff
+#define SPATZ_CLUSTER_PERIPHERAL_CONTROLLER_CORRECTABLE_COUNT_COUNT_0_OFFSET 0
+#define SPATZ_CLUSTER_PERIPHERAL_CONTROLLER_CORRECTABLE_COUNT_COUNT_0_FIELD    \
+  ((bitfield_field32_t){                                                       \
+      .mask =                                                                  \
+          SPATZ_CLUSTER_PERIPHERAL_CONTROLLER_CORRECTABLE_COUNT_COUNT_0_MASK,  \
+      .index =                                                                 \
+          SPATZ_CLUSTER_PERIPHERAL_CONTROLLER_CORRECTABLE_COUNT_COUNT_0_OFFSET})
+
+// controller uncorrectable fault counter. (common parameters)
+#define SPATZ_CLUSTER_PERIPHERAL_CONTROLLER_UNCORRECTABLE_COUNT_COUNT_FIELD_WIDTH \
+  32
+#define SPATZ_CLUSTER_PERIPHERAL_CONTROLLER_UNCORRECTABLE_COUNT_COUNT_FIELDS_PER_REG \
+  2
+#define SPATZ_CLUSTER_PERIPHERAL_CONTROLLER_UNCORRECTABLE_COUNT_MULTIREG_COUNT 1
+
+// controller uncorrectable fault counter.
+#define SPATZ_CLUSTER_PERIPHERAL_CONTROLLER_UNCORRECTABLE_COUNT_REG_OFFSET 0x530
+#define SPATZ_CLUSTER_PERIPHERAL_CONTROLLER_UNCORRECTABLE_COUNT_COUNT_0_MASK   \
+  0xffffffff
+#define SPATZ_CLUSTER_PERIPHERAL_CONTROLLER_UNCORRECTABLE_COUNT_COUNT_0_OFFSET 0
+#define SPATZ_CLUSTER_PERIPHERAL_CONTROLLER_UNCORRECTABLE_COUNT_COUNT_0_FIELD   \
+  ((bitfield_field32_t){                                                        \
+      .mask =                                                                   \
+          SPATZ_CLUSTER_PERIPHERAL_CONTROLLER_UNCORRECTABLE_COUNT_COUNT_0_MASK, \
+      .index =                                                                  \
+          SPATZ_CLUSTER_PERIPHERAL_CONTROLLER_UNCORRECTABLE_COUNT_COUNT_0_OFFSET})
+
 #ifdef __cplusplus
 } // extern "C"
 #endif

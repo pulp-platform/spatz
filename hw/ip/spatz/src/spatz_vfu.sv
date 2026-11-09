@@ -85,18 +85,54 @@ module spatz_vfu
   assign      vfu_vtl_req_ready_o = spatz_req_ready;
 `endif
 
-  spill_register #(
-    .T(spatz_req_t)
+  logic [1:0] operation_queue_err;
+  // ECC-protected operation queue: encode -> rel_spill_register -> decode
+  localparam int unsigned OpqDataWidth  = $bits(spatz_req_t);
+  localparam int unsigned OpqProtWidth  = hsiao_ecc_pkg::min_ecc(OpqDataWidth);
+  localparam int unsigned OpqTotalWidth = OpqDataWidth + OpqProtWidth;
+  typedef logic [OpqTotalWidth-1:0] opq_ecc_t;
+
+  opq_ecc_t                opq_enc_data, opq_data;
+  logic [OpqDataWidth-1:0] opq_dec_data;
+  logic [OpqProtWidth-1:0] opq_dec_syndrome;
+  logic [1:0]              opq_dec_err;
+
+  hsiao_ecc_enc #(
+    .DataWidth(OpqDataWidth),
+    .ProtWidth(OpqProtWidth)
+  ) i_operation_queue_ecc_enc (
+    .in (spatz_req_i),
+    .out(opq_enc_data)
+  );
+
+  rel_spill_register #(
+    .TmrHandshake(1'b0),
+    .T(opq_ecc_t)
   ) i_operation_queue (
     .clk_i  (clk_i                                          ),
     .rst_ni (rst_ni                                         ),
-    .data_i (spatz_req_i                                    ),
+    .data_i (opq_enc_data                                   ),
     .valid_i(spatz_req_valid_i && spatz_req_i.ex_unit == VFU),
     .ready_o(spatz_req_ready_o                              ),
-    .data_o (spatz_req                                      ),
+    .data_o (opq_data                                       ),
     .valid_o(spatz_req_valid                                ),
-    .ready_i(spatz_req_ready                                )
+    .ready_i(spatz_req_ready                                ),
+    .err_o            (operation_queue_err),
+    .data_corrector_o (),
+    .data_corrected_i ('0)
   );
+
+  hsiao_ecc_dec #(
+    .DataWidth(OpqDataWidth),
+    .ProtWidth(OpqProtWidth)
+  ) i_operation_queue_ecc_dec (
+    .in        (opq_data        ),
+    .out       (opq_dec_data    ),
+    .syndrome_o(opq_dec_syndrome),
+    .err_o     (opq_dec_err     )
+  );
+
+  assign spatz_req = spatz_req_t'(opq_dec_data);
 
   ///////////////
   //  Control  //
@@ -1472,8 +1508,8 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
 
   assign is_ipu_busy = |int_ipu_busy;
   assign ipu_dup_fault = |int_ipu_dup_fault;
-  assign vfu_uncorrectable_fault_o = ipu_dup_fault;
-  assign vfu_correctable_fault_o = 1'b0;
+  assign vfu_uncorrectable_fault_o = ipu_dup_fault | operation_queue_err[1] | (spatz_req_valid & opq_dec_err[1]);
+  assign vfu_correctable_fault_o = operation_queue_err[0] | (spatz_req_valid & opq_dec_err[0]);
 
   logic [N_FU*ELEN-1:0] ipu_wide_operand1, ipu_wide_operand2, ipu_wide_operand3;
   always_comb begin: gen_ipu_widening

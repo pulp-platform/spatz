@@ -33,6 +33,8 @@ module spatz_scalar_unit
     input  logic [31:0]                            hart_id_i,
     // Snitch Issue
     input  logic                                   issue_valid_i,
+    output logic                                   scalar_correctable_fault_o,
+    output logic                                   scalar_uncorrectable_fault_o,
     output logic                                   issue_ready_o,
     input  spatz_issue_req_t                       issue_req_i,
     output spatz_issue_rsp_t                       issue_rsp_o,
@@ -207,7 +209,9 @@ module spatz_scalar_unit
   //////////////
 
 
-  spill_register #(
+  logic [1:0] vfu_scalar_response_err;
+  rel_spill_register #(
+    .TmrHandshake(1'b0),
     .T(vfu_rsp_t)
   ) i_vfu_scalar_response (
     .clk_i  (clk_i                          ),
@@ -217,10 +221,15 @@ module spatz_scalar_unit
     .ready_o(vfu_rsp_ready                  ),
     .data_o (spatz_rsp                      ),
     .valid_o(rsp_valid_d                    ),
-    .ready_i(rsp_ready_d                    )
+    .ready_i(rsp_ready_d                    ),
+    .err_o            (vfu_scalar_response_err),
+    .data_corrector_o (),
+    .data_corrected_i ('0)
   );
 
-  spill_register #(
+  logic [1:0] spatz_rsp_register_err;
+  rel_spill_register #(
+    .TmrHandshake(1'b0),
     .T     (spatz_rsp_t ),
     .Bypass(!RegisterRsp)
   ) i_spatz_rsp_register (
@@ -231,7 +240,10 @@ module spatz_scalar_unit
     .ready_o(rsp_ready_d ),
     .data_o (rsp_o       ),
     .valid_o(rsp_valid_o ),
-    .ready_i(rsp_ready_i )
+    .ready_i(rsp_ready_i ),
+    .err_o            (spatz_rsp_register_err),
+    .data_corrector_o (),
+    .data_corrected_i ('0)
   );
 
   // Retire an operation/instruction and write back result to core
@@ -270,7 +282,9 @@ module spatz_scalar_unit
   logic       spatz_req_valid;
   logic       spatz_req_ready;
 
-  spill_register #(
+  logic [1:0] operation_queue_err;
+  rel_spill_register #(
+    .TmrHandshake(1'b0),
     .T(spatz_req_t)
   ) i_operation_queue (
     .clk_i  (clk_i          ),
@@ -280,7 +294,10 @@ module spatz_scalar_unit
     .ready_o(vfu_req_ready  ),
     .data_o (spatz_req      ),
     .valid_o(spatz_req_valid),
-    .ready_i(spatz_req_ready)
+    .ready_i(spatz_req_ready),
+    .err_o            (operation_queue_err),
+    .data_corrector_o (),
+    .data_corrected_i ('0)
   );
 
   ///////////////
@@ -850,5 +867,8 @@ module spatz_scalar_unit
     assign fpu_status_o     = '0;
   end: gen_no_fpu
 
+
+  assign scalar_correctable_fault_o   = vfu_scalar_response_err[0] | spatz_rsp_register_err[0] | operation_queue_err[0];
+  assign scalar_uncorrectable_fault_o = vfu_scalar_response_err[1] | spatz_rsp_register_err[1] | operation_queue_err[1];
 
 endmodule : spatz_scalar_unit
