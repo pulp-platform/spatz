@@ -16,7 +16,7 @@ dependencies:
   FPnew:              { git: "https://github.com/pulp-platform/cvfpu.git",               rev:     pulp-v0.1.3    }
   idma:               { git: "https://github.com/pulp-platform/iDMA.git",                version: 0.6.4          }
   register_interface: { git: "https://github.com/pulp-platform/register_interface.git",  version: 0.4.7          }
-  cluster_icache:     { git: "https://github.com/pulp-platform/cluster_icache.git",      rev:     maoyuan/relICache}
+  cluster_icache:     { git: "https://github.com/pulp-platform/cluster_icache.git",      rev:     maoyuan/parity_tmr_icache}
   riscv-dbg:          { git: "https://github.com/pulp-platform/riscv-dbg.git",           version: 0.10.0         }
   tech_cells_generic: { git: "https://github.com/pulp-platform/tech_cells_generic.git",  version: 0.2.13         }
   redundancy_cells  : { git: "https://github.com/pulp-platform/redundancy_cells.git",    rev:     dora           }
@@ -151,6 +151,7 @@ sources:
     # Level 3
     - hw/ip/spatz/src/spatz_fpu_sequencer.sv
     - hw/ip/spatz/src/spatz_ipu.sv
+    - hw/ip/spatz/src/spatz_ipu_dmr.sv
     - hw/ip/spatz/src/spatz_vfu.sv
     - hw/ip/spatz/src/spatz_vlsu.sv
     - hw/ip/spatz/src/spatz_doublebw_vlsu.sv
