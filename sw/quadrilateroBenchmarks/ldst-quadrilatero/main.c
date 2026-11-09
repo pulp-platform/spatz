@@ -3,8 +3,8 @@
 
 // ---- Test Suite Summary ----------------------------------------------------------------
 // 1. Basic Load/Store & Zero (per register in REGS):
-//   rhs+mst, lhs+mst : mld.{rhs|lhs} + mst, compare C with source data.
-//   zero+mst         : mzero.m + mst, C must be all zeros.
+//   rhs+mst.rw, lhs+mst.rw : mld.{rhs|lhs} + mst.rw, compare C with source data.
+//   zero+mst.rw         : mzero.m + mst.rw, C must be all zeros.
 //
 // 2. Sequential & Bug checks (post-zero behavior):
 //   seq:mz->ld       : mzero.m -> load + mst. Control test: checks if mzero alone breaks loads.
@@ -19,8 +19,8 @@
 // 4. Group & Mixed-State Tests (m0 group, checks RTL hangs/scoreboard leaks):
 //   mix:A            : m0 loaded, m1 zeroed -> mst. 
 //   mix:B            : m0 zeroed, others loaded -> mst. Asserts [0 | data] 
-//   mix:C            : mzero -> mld.lhs (writes base only) -> mst. Realistic mixed group 
-//   mpart:M=<m>      : Group loaded -> mst of M rows. Tests LSU rmul decoding 
+//   mix:C            : mzero -> mld.cw.lhs (writes base only) -> mst. Realistic mixed group 
+//   mpart:M=<m>      : Group loaded -> mst.rw of M rows. Tests LSU rmul decoding 
 //   mpart:follow     : 16 loads after mpart. Detects stale/leaked scoreboard entries 
 
 
@@ -61,7 +61,7 @@ int main() {
       const unsigned words_c   = M * pitch_c + GUARD_WORDS;
 
       uint32_t *S = (uint32_t *)snrt_l1alloc(words_s * 4);       // source
-      uint32_t *C = (uint32_t *)snrt_l1alloc(words_c * 4);       // written by mst
+      uint32_t *C = (uint32_t *)snrt_l1alloc(words_c * 4);       // written by mst.rw
       uint32_t *X = (uint32_t *)snrt_l1alloc(words_c * 4);       // expected C (only for DUMP)
       uint32_t *Z = (uint32_t *)snrt_l1alloc(ROWS * ROWS * 4);   // zeros
       fill_src(S, words_s);
@@ -117,18 +117,18 @@ int main() {
 
 #define DO_LOADS(reg)                                                             \
       RESET_STATE();                                                              \
-      LDST_TEST(LD_RHS, "rhs+mst", reg, pitch_rhs, N)                             \
+      LDST_TEST(LD_RHS, "rhs+mst.rw", reg, pitch_rhs, N)                             \
       RESET_STATE();                                                              \
-      LDST_TEST(LD_LHS, "lhs+mst", reg, pitch_lhs, M)
+      LDST_TEST(LD_LHS, "lhs+mst.rw", reg, pitch_lhs, M)
 
 #define DO_ZST(reg)                                                               \
       {                                                                           \
         unsigned bad = 0;                                                         \
         RESET_STATE();                                                            \
         prep_C(C, words_c);                                                       \
-        printf("START op=zero+mst reg=" #reg "\n");                               \
+        printf("START op=zero+mst.rw reg=" #reg "\n");                               \
         ZERO_STORE(reg);                                                          \
-        n_err += report("zero+mst", #reg, check_copy(NULL, C, M, N, pitch_c, words_c, &bad), bad, 0); \
+        n_err += report("zero+mst.rw", #reg, check_copy(NULL, C, M, N, pitch_c, words_c, &bad), bad, 0); \
       }
 
 #define DO_MZ(reg)                                                                \
@@ -149,7 +149,7 @@ int main() {
       if (SHAPE_M == 1) LDST_TEST(LD_RHS, "seq:zst->rhs", reg, pitch_rhs, N)      \
       else              LDST_TEST(LD_LHS, "seq:zst->lhs", reg, pitch_lhs, M)
 
-      // partial: load + mst of m0, both with partial M/N/K at data type dt 
+      // partial: load + mst.rw of m0, both with partial M/N/K at data type dt 
 #define DO_PART(LD, opname, dt, sz, reqM, reqN, reqK, pitch_src, W, is_lhs)       \
       {                                                                           \
         unsigned bad = 0, mm, nn, kk;                                             \
@@ -254,7 +254,7 @@ int main() {
         GROUP_ST_CHECK("mix:B", 1u, M)                                            \
       }
 
-      // mpart:  full group loaded, mst of only reqM rows
+      // mpart:  full group loaded, mst.rw of only reqM rows
 #define DO_MPART(reqM)                                                            \
       {                                                                           \
         unsigned mm, nn, kk;                                                      \

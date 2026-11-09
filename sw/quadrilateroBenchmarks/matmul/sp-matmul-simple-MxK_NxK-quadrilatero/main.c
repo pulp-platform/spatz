@@ -30,7 +30,7 @@
 #define B_OFF_W 0   // offset of Bt in L1, in words (bank-conflict experiments, e.g. QUAD_RLEN/32)
 #endif
 
-// Simple (non-pipelined) INT32 matmul, transposed loads/store (include/matmul_simple_t.h): Ct = (A*B)^T
+// Simple (non-pipelined) INT32 matmul, transposed loads/store (include/matmul_simple_MxK_NxK.h): Ct = (A*B)^T
 // Data generated with --transA 0 --transB 1: gemm_A_dram = A (M x K), gemm_B_dram = Bt (N x K),
 // gemm_C_dram = C (M x N, not transposed): the check compares Ct with C^T.
 void matmul_simple_t_INT32_INT32_INT32(void *addrA, void *addrBt, void *addrCt, int K, int N, int M, int widening);

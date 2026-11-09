@@ -40,9 +40,9 @@
                : "r"(reqM), "r"(reqN), "r"(reqK), "i"(ENC(mm)), "i"(ENC(mn)))
 
 // ---- Load / store / zero (stride in bytes) -----------------------------------
-#define LD_LHS(reg, src, st) asm volatile("mld.lhs " #reg ", (%0), %1" :: "r"(src), "r"(st) : "memory")
-#define LD_RHS(reg, src, st) asm volatile("mld.rhs " #reg ", (%0), %1" :: "r"(src), "r"(st) : "memory")
-#define ST(reg, dst, st)     asm volatile("mst "     #reg ", (%0), %1" :: "r"(dst), "r"(st) : "memory")
+#define LD_LHS(reg, src, st) asm volatile("mld.cw.lhs " #reg ", (%0), %1" :: "r"(src), "r"(st) : "memory")
+#define LD_RHS(reg, src, st) asm volatile("mld.rw.rhs " #reg ", (%0), %1" :: "r"(src), "r"(st) : "memory")
+#define ST(reg, dst, st)     asm volatile("mst.rw "     #reg ", (%0), %1" :: "r"(dst), "r"(st) : "memory")
 #define MZERO(reg)           asm volatile("mzero.m " #reg ::: "memory")   // zeroes a whole group
 #define FENCE()              asm volatile("fence" ::: "memory")           
 

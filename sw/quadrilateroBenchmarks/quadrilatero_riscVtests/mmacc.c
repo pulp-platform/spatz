@@ -62,8 +62,8 @@ static void range_dt(unsigned d) {
   qput(pa, 4, d, 0, 0, a);
   qput(pb, 4, d, 0, 0, b);
   asm volatile("fence" ::: "memory");
-  MLD_LHS(m0, pa, 16);
-  MLD_RHS(m4, pb, 16);
+  MLD_CW_LHS(m0, pa, 16);
+  MLD_RW_RHS(m4, pb, 16);
   MCLEAR_ACC();
   asm volatile("mmacc acc0, m4, m0");
   qfill(qe, 16, 0);
@@ -121,8 +121,8 @@ void TEST_CASE4(void) {
       qe[m * QN + n] =
           (uint32_t)((int32_t)QK * ((int32_t)(m % 3) + 1) * ((int32_t)(n % 5) - 2));
   asm volatile("fence" ::: "memory");
-  MLD_LHS(m0, qa, QM * 4);
-  MLD_RHS(m4, qb, QN * 4);
+  MLD_CW_LHS(m0, qa, QM * 4);
+  MLD_RW_RHS(m4, qb, QN * 4);
   MCLEAR_ACC();
   asm volatile("mmacc acc0, m4, m0");
   MMOV_AM(m12, acc0);

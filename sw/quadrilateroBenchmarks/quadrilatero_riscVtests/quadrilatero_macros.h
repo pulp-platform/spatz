@@ -4,8 +4,8 @@
 //
 // Macros for the quadrilatero ISA tests (isa/quadrilatero), as vector_macros.h.
 // Only core 1 is connected to quadrilatero: the other cores wait at a barrier.
-// Memory layout (as the matmul kernels): mld.lhs reads A transposed (K x M), mld.rhs reads
-// B (K x N), mst writes C (M x N); elements narrower than 32 bit are packed along K.
+// Memory layout (as the matmul kernels): mld.cw.lhs reads A transposed (K x M), mld.rw.rhs reads
+// B (K x N), mst.rw writes C (M x N); elements narrower than 32 bit are packed along K.
 
 #ifndef __QUADRILATERO_MACROS_H__
 #define __QUADRILATERO_MACROS_H__
@@ -80,12 +80,12 @@ uint32_t *qa, *qb, *qc, *qe;
 #define MZERO_A(acc) asm volatile("mzero.a " #acc ::: "memory")
 
 // Load / store (stride in bytes)
-#define MLD_LHS(md, addr, stride)                                              \
-  asm volatile("mld.lhs " #md ", (%0), %1" ::"r"(addr), "r"(stride) : "memory")
-#define MLD_RHS(md, addr, stride)                                              \
-  asm volatile("mld.rhs " #md ", (%0), %1" ::"r"(addr), "r"(stride) : "memory")
-#define MST(ms, addr, stride)                                                  \
-  asm volatile("mst " #ms ", (%0), %1" ::"r"(addr), "r"(stride) : "memory")
+#define MLD_CW_LHS(md, addr, stride)                                              \
+  asm volatile("mld.cw.lhs " #md ", (%0), %1" ::"r"(addr), "r"(stride) : "memory")
+#define MLD_RW_RHS(md, addr, stride)                                              \
+  asm volatile("mld.rw.rhs " #md ", (%0), %1" ::"r"(addr), "r"(stride) : "memory")
+#define MST_RW(ms, addr, stride)                                                  \
+  asm volatile("mst.rw " #ms ", (%0), %1" ::"r"(addr), "r"(stride) : "memory")
 
 // Move / multiply-accumulate
 #define MMOV_AM(md, acc) asm volatile("mmov.am " #md ", " #acc ::: "memory")
@@ -100,7 +100,7 @@ uint32_t *qa, *qb, *qc, *qe;
     MCFGK(QK, k);                                                              \
   } while (0)
 
-// Before reading memory written by mst: fence does not wait for quadrilatero stores
+// Before reading memory written by mst.rw: fence does not wait for quadrilatero stores
 // (the XIF decoder answers loadstore = 0), so QFENCE also waits QUAD_ST_WAIT cycles
 #ifndef QUAD_ST_WAIT
 #define QUAD_ST_WAIT 1000
@@ -261,7 +261,7 @@ static inline void qput(uint32_t *buf, unsigned W, unsigned d, unsigned k, unsig
 #define MLOAD_RHS_32(md, ...)                                                  \
   do {                                                                         \
     QDATA_32(_src, __VA_ARGS__);                                               \
-    MLD_RHS(md, _src, QN * 4);                                                 \
+    MLD_RW_RHS(md, _src, QN * 4);                                                 \
   } while (0)
 
 // Load A (QM x QK, row-major) in data type QD into md
@@ -274,7 +274,7 @@ static inline void qput(uint32_t *buf, unsigned W, unsigned d, unsigned k, unsig
       for (unsigned _k = 0; _k < QK; _k++)                                     \
         qput(_p, QM, QD, _k, _m, _a[_m * QK + _k]);                            \
     asm volatile("fence" ::: "memory");                                        \
-    MLD_LHS(md, _p, QM * 4);                                                   \
+    MLD_CW_LHS(md, _p, QM * 4);                                                   \
   } while (0)
 
 // Load B (QK x QN, row-major) in data type QD into md
@@ -287,7 +287,7 @@ static inline void qput(uint32_t *buf, unsigned W, unsigned d, unsigned k, unsig
       for (unsigned _n = 0; _n < QN; _n++)                                     \
         qput(_p, QN, QD, _k, _n, _b[_k * QN + _n]);                            \
     asm volatile("fence" ::: "memory");                                        \
-    MLD_RHS(md, _p, QN * 4);                                                   \
+    MLD_RW_RHS(md, _p, QN * 4);                                                   \
   } while (0)
 
 // Reset the accumulators
@@ -299,14 +299,14 @@ static inline void qload_regs(unsigned n, const uint32_t *G) {
   qset(QSHAPE_1X1, QDT_INT32, QMAX, QMAX, QMAX);
   asm volatile("fence" ::: "memory");
   switch (n) {
-  case 8: MLD_RHS(m7, G + 7 * R * R, R * 4); /* fall through */
-  case 7: MLD_RHS(m6, G + 6 * R * R, R * 4); /* fall through */
-  case 6: MLD_RHS(m5, G + 5 * R * R, R * 4); /* fall through */
-  case 5: MLD_RHS(m4, G + 4 * R * R, R * 4); /* fall through */
-  case 4: MLD_RHS(m3, G + 3 * R * R, R * 4); /* fall through */
-  case 3: MLD_RHS(m2, G + 2 * R * R, R * 4); /* fall through */
-  case 2: MLD_RHS(m1, G + 1 * R * R, R * 4); /* fall through */
-  case 1: MLD_RHS(m0, G + 0 * R * R, R * 4); /* fall through */
+  case 8: MLD_RW_RHS(m7, G + 7 * R * R, R * 4); /* fall through */
+  case 7: MLD_RW_RHS(m6, G + 6 * R * R, R * 4); /* fall through */
+  case 6: MLD_RW_RHS(m5, G + 5 * R * R, R * 4); /* fall through */
+  case 5: MLD_RW_RHS(m4, G + 4 * R * R, R * 4); /* fall through */
+  case 4: MLD_RW_RHS(m3, G + 3 * R * R, R * 4); /* fall through */
+  case 3: MLD_RW_RHS(m2, G + 2 * R * R, R * 4); /* fall through */
+  case 2: MLD_RW_RHS(m1, G + 1 * R * R, R * 4); /* fall through */
+  case 1: MLD_RW_RHS(m0, G + 0 * R * R, R * 4); /* fall through */
   default: break;
   }
 }
@@ -393,7 +393,7 @@ static inline void qload_regs(unsigned n, const uint32_t *G) {
   do {                                                                         \
     qfill(qc, QM * QN, QSENTINEL);                                             \
     asm volatile("fence" ::: "memory");                                        \
-    MST(ms, qc, QN * 4);                                                       \
+    MST_RW(ms, qc, QN * 4);                                                       \
     QFENCE();                                                                  \
     QCMP_INT32(casenum, qc, exp_ptr, QM * QN);                                 \
   } while (0)

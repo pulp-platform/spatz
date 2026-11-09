@@ -5,7 +5,7 @@
 #define DTB __INT8__
 #define DTC __INT32__
 #define FUNC_NAME MATMUL_NAME(INT8,INT8,INT32)
-#include <matmul.h>
+#include <matmul_2x2_KxM_KxN.h>
 #undef FUNC_NAME
 #undef DTA
 #undef DTB
@@ -16,7 +16,7 @@
 #define DTB __INT16__
 #define DTC __INT32__
 #define FUNC_NAME MATMUL_NAME(INT16,INT16,INT32)
-#include <matmul.h>
+#include <matmul_2x2_KxM_KxN.h>
 #undef FUNC_NAME
 #undef DTA
 #undef DTB
@@ -27,7 +27,7 @@
 #define DTB __INT32__
 #define DTC __INT32__
 #define FUNC_NAME MATMUL_NAME(INT32,INT32,INT32)
-#include <matmul.h>
+#include <matmul_2x2_KxM_KxN.h>
 #undef FUNC_NAME
 #undef DTA
 #undef DTB
@@ -38,7 +38,7 @@
 #define DTB __FP8__
 #define DTC __FP32__
 #define FUNC_NAME MATMUL_NAME(FP8,FP8,FP32)
-#include <matmul.h>
+#include <matmul_2x2_KxM_KxN.h>
 #undef FUNC_NAME
 #undef DTA
 #undef DTB
@@ -49,7 +49,7 @@
 #define DTB __FP16__
 #define DTC __FP32__
 #define FUNC_NAME MATMUL_NAME(FP16,FP16,FP32)
-#include <matmul.h>
+#include <matmul_2x2_KxM_KxN.h>
 #undef FUNC_NAME
 #undef DTA
 #undef DTB
@@ -60,7 +60,7 @@
 #define DTB __FP32__
 #define DTC __FP32__
 #define FUNC_NAME MATMUL_NAME(FP32,FP32,FP32)
-#include <matmul.h>
+#include <matmul_2x2_KxM_KxN.h>
 #undef FUNC_NAME
 #undef DTA
 #undef DTB
@@ -71,7 +71,7 @@
 #define DTB __UINT8__
 #define DTC __UINT32__
 #define FUNC_NAME MATMUL_NAME(UINT8,UINT8,UINT32)
-#include <matmul.h>
+#include <matmul_2x2_KxM_KxN.h>
 #undef FUNC_NAME
 #undef DTA
 #undef DTB
@@ -82,7 +82,7 @@
 #define DTB __UINT16__
 #define DTC __UINT32__
 #define FUNC_NAME MATMUL_NAME(UINT16,UINT16,UINT32)
-#include <matmul.h>
+#include <matmul_2x2_KxM_KxN.h>
 #undef FUNC_NAME
 #undef DTA
 #undef DTB
@@ -93,7 +93,7 @@
 #define DTB __UINT32__
 #define DTC __UINT32__
 #define FUNC_NAME MATMUL_NAME(UINT32,UINT32,UINT32)
-#include <matmul.h>
+#include <matmul_2x2_KxM_KxN.h>
 #undef FUNC_NAME
 #undef DTA
 #undef DTB
@@ -104,7 +104,7 @@
 #define DTB __FP8ALT__
 #define DTC __FP32__
 #define FUNC_NAME MATMUL_NAME(FP8ALT,FP8ALT,FP32)
-#include <matmul.h>
+#include <matmul_2x2_KxM_KxN.h>
 #undef FUNC_NAME
 #undef DTA
 #undef DTB
@@ -115,7 +115,7 @@
 #define DTB __FP16ALT__
 #define DTC __FP32__
 #define FUNC_NAME MATMUL_NAME(BF16,BF16,FP32)
-#include <matmul.h>
+#include <matmul_2x2_KxM_KxN.h>
 #undef FUNC_NAME
 #undef DTA
 #undef DTB

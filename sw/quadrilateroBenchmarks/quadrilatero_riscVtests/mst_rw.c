@@ -13,7 +13,7 @@ static void st_shape(unsigned s) {
                    0x1570a74b, 0xe02d935f, 0xb439670c, 0xdf841a46);
   qfill(qc, 16, QSENTINEL);
   asm volatile("fence" ::: "memory");
-  asm volatile("mst m0, (%0), %1" ::"r"(qc), "r"(16) : "memory");
+  asm volatile("mst.rw m0, (%0), %1" ::"r"(qc), "r"(16) : "memory");
   QFENCE();
   QCMP_32(1 + (int)s, qc, 0x3d7ca152, 0xf30b86c9, 0x4e17da63, 0x952f71b8,
                           0x08e53a6d, 0xc4905b27, 0xfe441379, 0xabd6611c,
@@ -39,7 +39,7 @@ void TEST_CASE2(void) {
                    0x1570a74b, 0xe02d935f, 0xb439670c, 0xdf841a46);
   qfill(qc, 24, QSENTINEL);
   asm volatile("fence" ::: "memory");
-  asm volatile("mst m0, (%0), %1" ::"r"(qc), "r"(24) : "memory");
+  asm volatile("mst.rw m0, (%0), %1" ::"r"(qc), "r"(24) : "memory");
   QFENCE();
   QCMP_32(7, qc, 0x3d7ca152, 0xf30b86c9, 0x4e17da63, 0x952f71b8, QSENTINEL, QSENTINEL,
                  0x08e53a6d, 0xc4905b27, 0xfe441379, 0xabd6611c, QSENTINEL, QSENTINEL,
@@ -57,7 +57,7 @@ void TEST_CASE3(void) {
   QSET(QSHAPE_1X1, QDT_INT32, 2, 3, 4);
   qfill(qc, 16, QSENTINEL);
   asm volatile("fence" ::: "memory");
-  asm volatile("mst m0, (%0), %1" ::"r"(qc), "r"(16) : "memory");
+  asm volatile("mst.rw m0, (%0), %1" ::"r"(qc), "r"(16) : "memory");
   QFENCE();
   QCMP_32(8, qc, 0x3d7ca152, 0xf30b86c9, 0x4e17da63, QSENTINEL,
                  0x08e53a6d, 0xc4905b27, 0xfe441379, QSENTINEL,
@@ -76,7 +76,7 @@ void TEST_CASE4(void) {
       qe[r * P + c] = c < QN ? QGROUP_WORD(qa, 0, 2, r, c) : QSENTINEL;
   qfill(qc, QM * P, QSENTINEL);
   asm volatile("fence" ::: "memory");
-  asm volatile("mst m0, (%0), %1" ::"r"(qc), "r"(P * 4) : "memory");
+  asm volatile("mst.rw m0, (%0), %1" ::"r"(qc), "r"(P * 4) : "memory");
   QFENCE();
   QCMP_INT32(9, qc, qe, QM * P);
 }

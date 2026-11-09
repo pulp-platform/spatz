@@ -29,7 +29,7 @@
 #define B_OFF_W 0   // offset of B in L1, in words (bank-conflict experiments, e.g. QUAD_RLEN/32)
 #endif
 
-// Simple (non-pipelined) INT32 matmul, normal loads/store (include/matmul_simple.h)
+// Simple (non-pipelined) INT32 matmul, normal loads/store (include/matmul_simple_KxM_KxN.h)
 void matmul_simple_INT32_INT32_INT32(void *addrA, void *addrB, void *addrC, int K, int N, int M, int widening);
 
 void *a;

@@ -45,8 +45,8 @@ void TEST_CASE3(void) {
   qfill(qa, (QK / 2) * QM, 0x00010001);
   qfill(qb, (QK / 2) * QN, 0x00010001);
   asm volatile("fence" ::: "memory");
-  MLD_LHS(m0, qa, QM * 4);
-  MLD_RHS(m4, qb, QN * 4);
+  MLD_CW_LHS(m0, qa, QM * 4);
+  MLD_RW_RHS(m4, qb, QN * 4);
   MCLEAR_ACC();
   MMACC(acc0, m4, m0);
   asm volatile("mzero.a acc0");

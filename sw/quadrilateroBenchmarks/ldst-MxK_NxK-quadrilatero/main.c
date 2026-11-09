@@ -1,10 +1,10 @@
-// Transposed loads/store (mldt.lhs, mldt.rhs, mstt) against the normal ones (mld.lhs, mld.rhs, mst)
+// Transposed loads/store (mld.rw.lhs, mld.cw.rhs, mst.cw) against the normal ones (mld.cw.lhs, mld.rw.rhs, mst.rw)
 // on one tile of shape SHAPE_M x SHAPE_N (from CMake): M = SHAPE_M*L, N = SHAPE_N*L, K = 4L int8,
 // L = RLEN/32. Only loads and stores.
 //
 // Isolated (IDLE_CYC idle cycles between two instructions, no TCDM traffic):
-//   trans:  mldt.lhs A, mldt.rhs Bt (data not checked); mldt.rhs S -> m8.., mstt -> Ct;   check Ct == S
-//   normal: mld.lhs Ap, mld.rhs Bp  (data not checked); mld.rhs S2 -> m12.., mst -> C;    check C == S2
+//   trans:  mld.rw.lhs A, mld.cw.rhs Bt (data not checked); mld.cw.rhs S -> m8.., mst.cw -> Ct;   check Ct == S
+//   normal: mld.cw.lhs Ap, mld.rw.rhs Bp  (data not checked); mld.rw.rhs S2 -> m12.., mst.rw -> C;    check C == S2
 // Noise (back to back, no idle):
 //   N1: lhs + rhs load together (both LSU ports)
 //   N2: store right after its loads;                                             check Ct2 == S, C2 == S2
@@ -29,12 +29,12 @@
 // Loads/stores by mnemonic (md = matrix register number)
 #define STR(x) #x
 #define XSTR(x) STR(x)
-#define LDT_LHS(md, src, st) asm volatile("mldt.lhs m" XSTR(md) ", (%0), %1" :: "r"(src), "r"(st) : "memory")
-#define LDT_RHS(md, src, st) asm volatile("mldt.rhs m" XSTR(md) ", (%0), %1" :: "r"(src), "r"(st) : "memory")
-#define STT(md, dst, st)     asm volatile("mstt m"     XSTR(md) ", (%0), %1" :: "r"(dst), "r"(st) : "memory")
-#define MLD_LHS(md, src, st) asm volatile("mld.lhs m"  XSTR(md) ", (%0), %1" :: "r"(src), "r"(st) : "memory")
-#define MLD_RHS(md, src, st) asm volatile("mld.rhs m"  XSTR(md) ", (%0), %1" :: "r"(src), "r"(st) : "memory")
-#define MST(md, dst, st)     asm volatile("mst m"      XSTR(md) ", (%0), %1" :: "r"(dst), "r"(st) : "memory")
+#define LDT_LHS(md, src, st) asm volatile("mld.rw.lhs m" XSTR(md) ", (%0), %1" :: "r"(src), "r"(st) : "memory")
+#define LDT_RHS(md, src, st) asm volatile("mld.cw.rhs m" XSTR(md) ", (%0), %1" :: "r"(src), "r"(st) : "memory")
+#define STT(md, dst, st)     asm volatile("mst.cw m"     XSTR(md) ", (%0), %1" :: "r"(dst), "r"(st) : "memory")
+#define MLD_CW_LHS(md, src, st) asm volatile("mld.cw.lhs m"  XSTR(md) ", (%0), %1" :: "r"(src), "r"(st) : "memory")
+#define MLD_RW_RHS(md, src, st) asm volatile("mld.rw.rhs m"  XSTR(md) ", (%0), %1" :: "r"(src), "r"(st) : "memory")
+#define MST_RW(md, dst, st)     asm volatile("mst.rw m"      XSTR(md) ", (%0), %1" :: "r"(dst), "r"(st) : "memory")
 
 #define IDLE  idle(IDLE_CYC);
 #define NOGAP
@@ -43,18 +43,18 @@
 // P = pitch in words, GAP = IDLE or NOGAP after every load
 #if SHAPE_M == 1
   #define FILL_T(P, GAP) LDT_RHS(8, S, (P) * 4); GAP
-  #define FILL_N(P, GAP) MLD_RHS(12, S2, (P) * 4); GAP
+  #define FILL_N(P, GAP) MLD_RW_RHS(12, S2, (P) * 4); GAP
 #elif SHAPE_M == 2 && SHAPE_N == 1
   #define FILL_T(P, GAP) LDT_RHS(8, S, (P) * 4); GAP LDT_RHS(9, S + LANES, (P) * 4); GAP
-  #define FILL_N(P, GAP) MLD_RHS(12, S2, (P) * 4); GAP MLD_RHS(13, S2 + LANES * (P), (P) * 4); GAP
+  #define FILL_N(P, GAP) MLD_RW_RHS(12, S2, (P) * 4); GAP MLD_RW_RHS(13, S2 + LANES * (P), (P) * 4); GAP
 #elif SHAPE_M == 2 && SHAPE_N == 2
   #define FILL_T(P, GAP) LDT_RHS(8, S, (P) * 4); GAP LDT_RHS(10, S + LANES, (P) * 4); GAP
-  #define FILL_N(P, GAP) MLD_RHS(12, S2, (P) * 4); GAP MLD_RHS(14, S2 + LANES * (P), (P) * 4); GAP
+  #define FILL_N(P, GAP) MLD_RW_RHS(12, S2, (P) * 4); GAP MLD_RW_RHS(14, S2 + LANES * (P), (P) * 4); GAP
 #else  /* 4x1 */
   #define FILL_T(P, GAP) LDT_RHS(8, S, (P) * 4); GAP LDT_RHS(9, S + LANES, (P) * 4); GAP \
                          LDT_RHS(10, S + 2 * LANES, (P) * 4); GAP LDT_RHS(11, S + 3 * LANES, (P) * 4); GAP
-  #define FILL_N(P, GAP) MLD_RHS(12, S2, (P) * 4); GAP MLD_RHS(13, S2 + LANES * (P), (P) * 4); GAP \
-                         MLD_RHS(14, S2 + 2 * LANES * (P), (P) * 4); GAP MLD_RHS(15, S2 + 3 * LANES * (P), (P) * 4); GAP
+  #define FILL_N(P, GAP) MLD_RW_RHS(12, S2, (P) * 4); GAP MLD_RW_RHS(13, S2 + LANES * (P), (P) * 4); GAP \
+                         MLD_RW_RHS(14, S2 + 2 * LANES * (P), (P) * 4); GAP MLD_RW_RHS(15, S2 + 3 * LANES * (P), (P) * 4); GAP
 #endif
 
 static volatile int g_err = 0;
@@ -126,20 +126,20 @@ int main() {
       STT(8, Ct, M * 4);           IDLE
 
       // ---- Part 1: isolated, normal ----
-      MLD_LHS(0, Ap, M * 4);       IDLE      // benchmark
-      MLD_RHS(4, Bp, N * 4);       IDLE      // benchmark
+      MLD_CW_LHS(0, Ap, M * 4);       IDLE      // benchmark
+      MLD_RW_RHS(4, Bp, N * 4);       IDLE      // benchmark
       FILL_N(N, IDLE)
-      MST(12, C, N * 4);           IDLE
+      MST_RW(12, C, N * 4);           IDLE
 
       // ---- Part 2: noise, back to back, no idle inside a group ----
       LDT_LHS(0, A,  LANES * 4);             // N1 trans
       LDT_RHS(4, Bt, LANES * 4);   IDLE
       FILL_T(M, NOGAP)                       // N2 trans
       STT(8, Ct2, M * 4);          IDLE
-      MLD_LHS(0, Ap, M * 4);                 // N1 normal
-      MLD_RHS(4, Bp, N * 4);       IDLE
+      MLD_CW_LHS(0, Ap, M * 4);                 // N1 normal
+      MLD_RW_RHS(4, Bp, N * 4);       IDLE
       FILL_N(N, NOGAP)                       // N2 normal
-      MST(12, C2, N * 4);          IDLE
+      MST_RW(12, C2, N * 4);          IDLE
 
       int n_err = check_eq("Ct=S", Ct, S, N * M) + check_eq("C=S2", C, S2, M * N)
                 + check_eq("Ct2=S", Ct2, S, N * M) + check_eq("C2=S2", C2, S2, M * N);

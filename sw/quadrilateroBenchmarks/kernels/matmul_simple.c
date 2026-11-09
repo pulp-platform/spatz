@@ -7,11 +7,11 @@
 #define DTC __INT32__
 
 #define FUNC_NAME matmul_simple_INT32_INT32_INT32
-#include <matmul_simple.h>
+#include <matmul_simple_KxM_KxN.h>
 #undef FUNC_NAME
 
 #define FUNC_NAME matmul_simple_t_INT32_INT32_INT32
-#include <matmul_simple_t.h>
+#include <matmul_simple_MxK_NxK.h>
 #undef FUNC_NAME
 
 #undef DTA

@@ -1,9 +1,9 @@
-// Transposed loads/store (mldt.lhs, mldt.rhs, mstt) with different row pitches P (in words) on one
+// Transposed loads/store (mld.rw.lhs, mld.cw.rhs, mst.cw) with different row pitches P (in words) on one
 // tile of shape SHAPE_M x SHAPE_N (from CMake): M = SHAPE_M*L, N = SHAPE_N*L, K = 4L int8,
 // L = RLEN/32. Tests the stride-dependent rotation (rot_k from stride[3:2]).
 //
 // For every P >= M in {L, L+1, L+2, L+3, 2L-1, 2L, 2L+1, 3L, 4L} (4L skipped with SKIP_4L):
-//   isolated: mldt.lhs A, mldt.rhs Bt (data not checked); mldt.rhs S -> m8.., mstt -> Ct;   check Ct == S
+//   isolated: mld.rw.lhs A, mld.cw.rhs Bt (data not checked); mld.cw.rhs S -> m8.., mst.cw -> Ct;   check Ct == S
 //   N1: lhs + rhs load together, Bt at the base of A        (P % B == 0: same banks)
 //   N1: the same with Bt shifted by L words
 // "STRIDE P=<p> off=<o>" marks each block in the log.
@@ -35,9 +35,9 @@
 // Loads/stores by mnemonic (md = matrix register number)
 #define STR(x) #x
 #define XSTR(x) STR(x)
-#define LDT_LHS(md, src, st) asm volatile("mldt.lhs m" XSTR(md) ", (%0), %1" :: "r"(src), "r"(st) : "memory")
-#define LDT_RHS(md, src, st) asm volatile("mldt.rhs m" XSTR(md) ", (%0), %1" :: "r"(src), "r"(st) : "memory")
-#define STT(md, dst, st)     asm volatile("mstt m"     XSTR(md) ", (%0), %1" :: "r"(dst), "r"(st) : "memory")
+#define LDT_LHS(md, src, st) asm volatile("mld.rw.lhs m" XSTR(md) ", (%0), %1" :: "r"(src), "r"(st) : "memory")
+#define LDT_RHS(md, src, st) asm volatile("mld.cw.rhs m" XSTR(md) ", (%0), %1" :: "r"(src), "r"(st) : "memory")
+#define STT(md, dst, st)     asm volatile("mst.cw m"     XSTR(md) ", (%0), %1" :: "r"(dst), "r"(st) : "memory")
 
 #define IDLE  idle(IDLE_CYC);
 #define NOGAP
@@ -98,7 +98,7 @@ int main() {
       printf("FAILURE unexpected configuration\n");
       g_err = 1;
     } else {
-      // S: max(M, N) rows of pitch MAXP (mldt.lhs reads M rows, mldt.rhs N rows) + LANES words
+      // S: max(M, N) rows of pitch MAXP (mld.rw.lhs reads M rows, mld.cw.rhs N rows) + LANES words
       // for the shifted Bt;  Ct: N rows of pitch MAXP.
       // The benchmark loads (A, Bt) do not check data, so they read from S.
       const unsigned rows = (N > M ? N : M);
