@@ -54,8 +54,12 @@ void TEST_CASE3(void) {
 
 int main(void) {
     INIT_CHECK();
+#if VME_TEST_SUPPORTS_TEW(16, 2)
     TEST_CASE1();
+#endif
+#if VME_TEST_SUPPORTS_TEW(32, 1)
     TEST_CASE2();
+#endif
     TEST_CASE3();
     EXIT_CHECK();
 }

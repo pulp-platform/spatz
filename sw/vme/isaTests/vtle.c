@@ -147,11 +147,17 @@ static void TEST_CASE6(void) {
 
 int main(void) {
     INIT_CHECK();
+#if VME_TEST_SUPPORTS_TEW(8, 1)
     TEST_CASE1();
     TEST_CASE2();
+#endif
+#if VME_TEST_SUPPORTS_TEW(16, 1)
     TEST_CASE3();
     TEST_CASE4();
+#endif
+#if VME_TEST_SUPPORTS_TEW(32, 1)
     TEST_CASE5();
     TEST_CASE6();
+#endif
     EXIT_CHECK();
 }

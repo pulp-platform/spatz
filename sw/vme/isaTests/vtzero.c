@@ -181,10 +181,12 @@ void TEST_CASE4(void) {
 int main(void) {
     INIT_CHECK();
 
+#if VME_TEST_SUPPORTS_TEW(32, 1) && VME_TEST_ENABLE_FMA32
     TEST_CASE1();
     TEST_CASE2();
     TEST_CASE3();
     TEST_CASE4();
+#endif
 
     EXIT_CHECK();
 }

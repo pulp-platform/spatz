@@ -663,6 +663,7 @@ void TEST_CASE18(void) {
 int main(void) {
     INIT_CHECK();
 
+#if VME_TEST_SUPPORTS_TEW(32, 1) && VME_TEST_ENABLE_FMA32
     // FP32 -> FP32.
     TEST_CASE1();   // Known product.
     TEST_CASE2();   // Accumulation by two.
@@ -671,12 +672,15 @@ int main(void) {
     TEST_CASE5();   // Interleaved tile accumulation.
     TEST_CASE6();   // Identity from two K steps.
     // TEST_CASE7();   // Full 8x8 tile; enable after hardware validation.
+#endif
 
+#if VME_TEST_SUPPORTS_TEW(16, 2)
     // FP16 -> FP32.
     TEST_CASE8();   // Identity product.
     TEST_CASE9();   // Known product.
     TEST_CASE10();  // Accumulation by two.
     TEST_CASE11();  // Packed K lanes across the compute-edge boundary.
+#endif
 
     // Additional Zvt v0.4 formats; enable with matching hardware support.
     // TEST_CASE12();  // BF16 identity product.

@@ -11,6 +11,24 @@
 
 #include <stdint.h>
 
+// Match the OPE's enabled tile-element widths in the ISA-test build.
+#ifndef VME_TEST_ENABLE_TEW8
+#define VME_TEST_ENABLE_TEW8 0
+#endif
+#ifndef VME_TEST_ENABLE_TEW16
+#define VME_TEST_ENABLE_TEW16 0
+#endif
+#ifndef VME_TEST_ENABLE_TEW32
+#define VME_TEST_ENABLE_TEW32 1
+#endif
+#ifndef VME_TEST_ENABLE_FMA32
+#define VME_TEST_ENABLE_FMA32 1
+#endif
+#define VME_TEST_SUPPORTS_TEW(sew, twiden) \
+    ((((sew) * (twiden) == 8) && VME_TEST_ENABLE_TEW8) || \
+     (((sew) * (twiden) == 16) && VME_TEST_ENABLE_TEW16) || \
+     (((sew) * (twiden) == 32) && VME_TEST_ENABLE_TEW32))
+
 // Tile subset specifier: tile[30:27], pattern[26:24], index[23:0].
 #define TSS(tile, pattern, index) \
     (((uintptr_t)((tile) & 0xF) << 27) | \
@@ -55,9 +73,24 @@ typedef struct {
 #define VME_CONFIG(sew, twiden, vsew, mtwiden) \
     {sew, twiden, vsew, mtwiden, KMAX(sew, twiden)}
 static const vme_test_config_t vme_test_configs[] = {
-    VME_CONFIG(8, 1, 0, 1), VME_CONFIG(8, 2, 0, 2),
-    VME_CONFIG(8, 4, 0, 3), VME_CONFIG(16, 1, 1, 1),
-    VME_CONFIG(16, 2, 1, 2), VME_CONFIG(32, 1, 2, 1),
+#if VME_TEST_SUPPORTS_TEW(8, 1)
+    VME_CONFIG(8, 1, 0, 1),
+#endif
+#if VME_TEST_SUPPORTS_TEW(8, 2)
+    VME_CONFIG(8, 2, 0, 2),
+#endif
+#if VME_TEST_SUPPORTS_TEW(8, 4)
+    VME_CONFIG(8, 4, 0, 3),
+#endif
+#if VME_TEST_SUPPORTS_TEW(16, 1)
+    VME_CONFIG(16, 1, 1, 1),
+#endif
+#if VME_TEST_SUPPORTS_TEW(16, 2)
+    VME_CONFIG(16, 2, 1, 2),
+#endif
+#if VME_TEST_SUPPORTS_TEW(32, 1)
+    VME_CONFIG(32, 1, 2, 1),
+#endif
 };
 
 static inline uintptr_t vme_test_min(uintptr_t a, uintptr_t b) {
