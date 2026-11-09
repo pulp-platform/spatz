@@ -355,6 +355,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   shared_vrf_operand_read_t shared_operand_rd_out;
   shared_vrf_read_t [1:0] shared_move_rd_in;
   shared_vrf_read_t shared_move_rd_out;
+  shared_vrf_read_t ope_move_rd_d, ope_move_rd_q;
   shared_vrf_write_t [1:0] shared_wr_in;
   shared_vrf_write_t shared_wr_out;
   logic [1:0] shared_operand_rd_req, shared_operand_rd_gnt;
@@ -362,6 +363,9 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   logic [1:0] shared_wr_req, shared_wr_gnt;
   logic shared_operand_rd_valid, shared_move_rd_valid, shared_wr_valid;
   logic [2:0] shared_rd_vfu_gnt, shared_rd_ope_gnt;
+  logic [2:0] shared_rd_ope_accept;
+  logic ope_move_rd_pending_d, ope_move_rd_pending_q;
+  logic ope_move_rd_capture;
   logic shared_wr_vfu_gnt, shared_wr_ope_gnt;
 
 `ifdef BUF_FPU
@@ -407,13 +411,31 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     .inp_ready_o (shared_move_rd_gnt  ),
     .oup_data_o  (shared_move_rd_out  ),
     .oup_valid_o (shared_move_rd_valid),
-    .oup_ready_i (1'b1                )
+    .oup_ready_i (!ope_move_rd_pending_q)
   );
 
   assign shared_rd_vfu_gnt[1:0] = {2{shared_operand_rd_req[0] && shared_operand_rd_gnt[0]}} & vfu_re_s[1:0];
   assign shared_rd_ope_gnt[1:0] = {2{shared_operand_rd_req[1] && shared_operand_rd_gnt[1]}} & ope_re_s[1:0];
-  assign shared_rd_vfu_gnt[2] = shared_move_rd_req[0] && shared_move_rd_gnt[0];
-  assign shared_rd_ope_gnt[2] = shared_move_rd_req[1] && shared_move_rd_gnt[1];
+  assign ope_move_rd_capture = shared_move_rd_req[1] && shared_move_rd_gnt[1];
+  assign shared_rd_vfu_gnt[2] = !ope_move_rd_pending_q &&
+                                 shared_move_rd_req[0] && shared_move_rd_gnt[0];
+  assign shared_rd_ope_gnt[2] = ope_move_rd_pending_q;
+  assign shared_rd_ope_accept = {ope_move_rd_capture,
+      {2{shared_operand_rd_req[1] && shared_operand_rd_gnt[1]}} & ope_re_s[1:0]};
+
+  always_comb begin : ope_move_read_pipeline
+    ope_move_rd_d = ope_move_rd_q;
+    ope_move_rd_pending_d = ope_move_rd_pending_q;
+    if (ope_move_rd_pending_q && vrf_rvalid[VFU_VD_RD])
+      ope_move_rd_pending_d = 1'b0;
+    else if (!ope_move_rd_pending_q && ope_move_rd_capture) begin
+      ope_move_rd_d = shared_move_rd_out;
+      ope_move_rd_pending_d = 1'b1;
+    end
+  end
+
+  `FF(ope_move_rd_q, ope_move_rd_d, shared_vrf_read_t'(0))
+  `FF(ope_move_rd_pending_q, ope_move_rd_pending_d, 1'b0)
 
   assign shared_wr_in[0] = '{addr: vfu_waddr_s, data: vfu_wdata_s,
                              be: vfu_wbe_s, id: vfu_id_s[3], we: vfu_we_s};
@@ -466,7 +488,11 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
       sb_re[VFU_VS1_RD] = shared_operand_rd_out.vs1.re;
       sb_id[SB_VFU_VS1_RD] = shared_operand_rd_out.vs1.id;
     end
-    if (shared_move_rd_valid) begin
+    if (ope_move_rd_pending_q) begin
+      vrf_raddr[VFU_VD_RD] = ope_move_rd_q.addr;
+      sb_re[VFU_VD_RD] = ope_move_rd_q.re;
+      sb_id[SB_VFU_VD_RD] = ope_move_rd_q.id;
+    end else if (shared_move_rd_valid && shared_move_rd_gnt[0]) begin
       vrf_raddr[VFU_VD_RD] = shared_move_rd_out.addr;
       sb_re[VFU_VD_RD] = shared_move_rd_out.re;
       sb_id[SB_VFU_VD_RD] = shared_move_rd_out.id;
@@ -820,6 +846,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     // VRF three read ports: [0]=MAC vs2, [1]=MAC vs1, [2]=Vector->Tile Move
     .vrf_raddr_o      (ope_raddr_s                                             ),
     .vrf_re_o         (ope_re_s                                                ),
+    .vrf_rgnt_i       (shared_rd_ope_accept                                    ),
     .vrf_rdata_i      (vrf_rdata[VFU_VD_RD:VFU_VS2_RD]                         ),
     .vrf_rvalid_i     (shared_rd_ope_gnt & vrf_rvalid[VFU_VD_RD:VFU_VS2_RD]),
     .vrf_id_o         (ope_id_s                                                ),

@@ -43,6 +43,7 @@ module spatz_ope
 
   output vrf_addr_t  [2:0] vrf_raddr_o        ,
   output logic       [2:0] vrf_re_o           ,
+  input  logic       [2:0] vrf_rgnt_i         ,
   input  vrf_data_t  [2:0] vrf_rdata_i        ,
   input  logic       [2:0] vrf_rvalid_i       ,
   output spatz_id_t  [3:0] vrf_id_o           ,
@@ -201,6 +202,7 @@ module spatz_ope
   move_shape_t tv_shape_d, tv_shape_q;
   vrf_data_t tv_data_d, tv_data_q;
   logic      tv_data_latched_d, tv_data_latched_q;
+  logic      tv_vrf_outstanding_d, tv_vrf_outstanding_q;
   vrf_data_t tv_vrf_data;
   logic      tv_vrf_avail;
   logic tv_acc_wen;
@@ -248,6 +250,9 @@ module spatz_ope
   logic [NrPhysicalTile-1:0] tile_read_pipe_conflict, tile_write_pipe_conflict;
   logic tile_write_mac_conflict, tile_write_zero_conflict;
 
+  spatz_req_t spatz_req_ingress;
+  logic spatz_req_ingress_valid, spatz_req_ingress_ready;
+
   /*------------------------------------------------------------*/
   /*               Request Queues and Arbitration               */
   /*------------------------------------------------------------*/
@@ -258,8 +263,21 @@ module spatz_ope
   assign tv_req_valid = tv_pending_valid_q && matrix_enable_i[tv_pending_req_q.id];
   assign vt_req_valid = vt_queue_valid && matrix_enable_i[spatz_req_vt.id];
   assign clean_req_valid = clean_queue_valid && matrix_enable_i[spatz_req_clean.id];
-  assign input_is_tile_to_vreg = spatz_req_i.op_ope.tss.tile_valid && spatz_req_i.use_vd;
-  assign input_is_vreg_to_tile = spatz_req_i.op_ope.tss.tile_valid && spatz_req_i.use_vs2;
+  assign input_is_tile_to_vreg = spatz_req_ingress.op_ope.tss.tile_valid &&
+                                 spatz_req_ingress.use_vd;
+  assign input_is_vreg_to_tile = spatz_req_ingress.op_ope.tss.tile_valid &&
+                                 spatz_req_ingress.use_vs2;
+
+  spill_register #(.T(spatz_req_t)) i_op_ingress_queue (
+    .clk_i  (clk_i                   ),
+    .rst_ni (rst_ni                  ),
+    .data_i (spatz_req_i             ),
+    .valid_i(spatz_req_valid_i       ),
+    .ready_o(spatz_req_ready_o       ),
+    .data_o (spatz_req_ingress       ),
+    .valid_o(spatz_req_ingress_valid ),
+    .ready_i(spatz_req_ingress_ready )
+  );
 
   stream_fifo #(
     .FALL_THROUGH(1'b0       ),
@@ -271,8 +289,8 @@ module spatz_ope
     .flush_i   (1'b0                                                    ),
     .testmode_i(1'b0                                                    ),
     .usage_o   (/* Unused */                                            ),
-    .data_i    (spatz_req_i                                             ),
-    .valid_i   (spatz_req_valid_i && spatz_req_i.op_ope.is_mac),
+    .data_i    (spatz_req_ingress                                       ),
+    .valid_i   (spatz_req_ingress_valid && spatz_req_ingress.op_ope.is_mac),
     .ready_o   (mac_in_ready                                             ),
     .data_o    (spatz_req_mac                                            ),
     .valid_o   (mac_queue_valid                                          ),
@@ -282,8 +300,8 @@ module spatz_ope
   spill_register #(.T(spatz_req_t)) i_op_tv_queue ( 
     .clk_i  (clk_i                                                   ),
     .rst_ni (rst_ni                                                  ),
-    .data_i (spatz_req_i                                             ),
-    .valid_i(spatz_req_valid_i && input_is_vreg_to_tile),
+    .data_i (spatz_req_ingress                                       ),
+    .valid_i(spatz_req_ingress_valid && input_is_vreg_to_tile),
     .ready_o(tv_in_ready                                                ),
     .data_o (spatz_req_tv_queue                                         ),
     .valid_o(tv_queue_valid                                             ),
@@ -306,8 +324,8 @@ module spatz_ope
   spill_register #(.T(spatz_req_t)) i_op_vt_queue ( 
     .clk_i  (clk_i                                                   ),
     .rst_ni (rst_ni                                                  ),
-    .data_i (spatz_req_i                                             ),
-    .valid_i(spatz_req_valid_i && input_is_tile_to_vreg),
+    .data_i (spatz_req_ingress                                       ),
+    .valid_i(spatz_req_ingress_valid && input_is_tile_to_vreg),
     .ready_o(vt_in_ready                                                ),
     .data_o (spatz_req_vt                                               ),
     .valid_o(vt_queue_valid                                             ),
@@ -317,8 +335,9 @@ module spatz_ope
   spill_register #(.T(spatz_req_t)) i_op_clean_queue ( 
     .clk_i  (clk_i                                                   ),
     .rst_ni (rst_ni                                                  ),
-    .data_i (spatz_req_i                                             ),
-    .valid_i(spatz_req_valid_i && (spatz_req_i.op_ope.is_zero_tile || spatz_req_i.op_ope.is_discard)),
+    .data_i (spatz_req_ingress                                       ),
+    .valid_i(spatz_req_ingress_valid &&
+             (spatz_req_ingress.op_ope.is_zero_tile || spatz_req_ingress.op_ope.is_discard)),
     .ready_o(clean_in_ready                                                ),
     .data_o (spatz_req_clean                                               ),
     .valid_o(clean_queue_valid                                             ),
@@ -352,15 +371,15 @@ module spatz_ope
   // all four queues to be ready would let an unrelated full queue block an
   // otherwise independent OPE operation.
   always_comb begin : selected_request_ready
-    spatz_req_ready_o = 1'b0;
-    if (spatz_req_i.op_ope.is_mac)
-      spatz_req_ready_o = mac_in_ready;
+    spatz_req_ingress_ready = 1'b0;
+    if (spatz_req_ingress.op_ope.is_mac)
+      spatz_req_ingress_ready = mac_in_ready;
     else if (input_is_vreg_to_tile)
-      spatz_req_ready_o = tv_in_ready;
+      spatz_req_ingress_ready = tv_in_ready;
     else if (input_is_tile_to_vreg)
-      spatz_req_ready_o = vt_in_ready;
-    else if (spatz_req_i.op_ope.is_zero_tile || spatz_req_i.op_ope.is_discard)
-      spatz_req_ready_o = clean_in_ready;
+      spatz_req_ingress_ready = vt_in_ready;
+    else if (spatz_req_ingress.op_ope.is_zero_tile || spatz_req_ingress.op_ope.is_discard)
+      spatz_req_ingress_ready = clean_in_ready;
   end : selected_request_ready
 
   ////////////////////////////////////////////////////////////////////////
@@ -903,7 +922,7 @@ module spatz_ope
       vrf_raddr_o[1] = vrf_addr_t'(mac_op_exec.vs1) * NrWordsPerVector + reduction_word_offset + col_word_offset;
     end
 
-    if (tv_busy_q && !tv_data_latched_q) begin
+    if (tv_busy_q && !tv_data_latched_q && !tv_vrf_outstanding_q) begin
       vrf_re_o[2]    = 1'b1;
       vrf_raddr_o[2] = (vrf_addr_t'(tv_req_q.vs2) << $clog2(NrWordsPerVector)) + vrf_addr_t'(tv_word_idx_q);
     end
@@ -1669,6 +1688,15 @@ module spatz_ope
   end
   `FF(tv_data_q, tv_data_d, vrf_data_t'(0))
   `FF(tv_data_latched_q, tv_data_latched_d, 1'b0)
+
+  always_comb begin : tv_vrf_outstanding_state
+    tv_vrf_outstanding_d = tv_vrf_outstanding_q;
+    if (!tv_busy_q || vrf_rvalid_i[2])
+      tv_vrf_outstanding_d = 1'b0;
+    else if (vrf_rgnt_i[2])
+      tv_vrf_outstanding_d = 1'b1;
+  end
+  `FF(tv_vrf_outstanding_q, tv_vrf_outstanding_d, 1'b0)
 
   // The accumulator data array is unreset; its validity mask starts at zero.
   `FF(acc_zero_q, acc_zero_d, '1)
