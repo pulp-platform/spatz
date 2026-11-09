@@ -348,8 +348,6 @@ package spatz_pkg;
     logic       is_load;
     logic       is_mem;
     logic       is_mac;
-    logic       is_vt;
-    logic       is_tv;
     logic       is_zero_tile;
     logic       is_discard;
     tss_t       tss;

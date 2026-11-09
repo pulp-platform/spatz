@@ -2204,7 +2204,6 @@ module spatz_decoder
           spatz_req.op_ope.tss.index  = tile_dim_t'(decoder_req_i.rs1[23:0]);
           spatz_req.op_ope.tss.is_row = (decoder_req_i.rs1[26:24] == 3'd0);
           spatz_req.op_ope.tss.tile_valid  = (decoder_req_i.rs1[30:27] < NrPhysicalTile) && (decoder_req_i.rs1[23:0] < TileEdge);
-          spatz_req.op_ope.is_vt = 1'b1;
         end
 
         // vtmv.t.v — vector register → tile row  (rs1 = tile row selector)
@@ -2218,7 +2217,6 @@ module spatz_decoder
           spatz_req.op_ope.tss.index  = tile_dim_t'(decoder_req_i.rs1[23:0]);
           spatz_req.op_ope.tss.is_row = (decoder_req_i.rs1[26:24] == 3'd0);
           spatz_req.op_ope.tss.tile_valid  = (decoder_req_i.rs1[30:27] < NrPhysicalTile) && (decoder_req_i.rs1[23:0] < TileEdge);
-          spatz_req.op_ope.is_tv = 1'b1;
         end
 
         // --- Tile zero and context discard ---

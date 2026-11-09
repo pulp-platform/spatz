@@ -1635,12 +1635,8 @@ module spatz_doublebw_vlsu
           vrf_req_valid_d[intf] = &(rob_commit_valid[intf] | ~commit_operation_valid[intf]) && |commit_operation_valid[intf];
 
 	          for (int unsigned fu = 0; fu < N_FU; fu++) begin
-	            int unsigned port;
 	            logic [63:0] data;
-	            logic [$clog2(ELENB)-1:0] shift;
-	            logic [ELENB-1:0] mask;
 
-	            port = intf * N_FU + fu;
 	            data = rob_rdata[intf][fu];
 
             // Shift data to correct position if we have an unaligned memory request
@@ -1741,9 +1737,6 @@ module spatz_doublebw_vlsu
           vrf_re_o[intf][0] = 1'b1;
 
           for (int unsigned fu = 0; fu < N_FU; fu++) begin
-            int unsigned port;
-            port = intf * N_FU + fu;
-
             rob_wdata[intf][fu]  = vrf_rdata_i[intf][0][ELEN*fu +: ELEN];
             rob_wid[intf][fu]    = rob_id[intf][fu];
             rob_req_id[intf][fu] = vrf_rvalid_i[intf][0] && (!mem_is_indexed || vrf_rvalid_i[intf][1]);
@@ -1755,6 +1748,10 @@ module spatz_doublebw_vlsu
 	          logic [63:0] data;
 	          logic [$clog2(ELENB)-1:0] shift;
 	          logic [MemDataWidthB-1:0] mask;
+
+	          data = '0;
+	          shift = '0;
+	          mask = '0;
 
 	          // Read element from buffer and execute memory request
 	          if (mem_operation_valid[intf][fu]) begin

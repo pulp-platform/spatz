@@ -248,8 +248,9 @@ module spatz_controller
               twiden = 1 << (spatz_req.mtype.mtwiden - 1);
               tewb = (1 << int'(vtype_d.vsew)) * twiden;
 
-              // The configured tile element must fit in one accumulator element.
-              if (tewb > AccElemBytes) begin
+              // OPE's fixed tile-element width equals the package-level
+              // accumulator element width outside the OPE boundary.
+              if (tewb != AccElemBytes) begin
                 invalid_vtype = 1'b1;
               end else begin
                 unique case (vtype_d.vsew)
@@ -316,7 +317,6 @@ module spatz_controller
                        (1 << (mtype_q.mtwiden - 1));
                 ete = (tewb < 8) ? TileEdge : TileEdge >> 1;
 
-                // clamp tn/vl
                 tmp_tn  = (lmul_eve < ete) ? lmul_eve : ete;
                 vl_d    = (elen_t'(tmp_tn) < spatz_req.rs1) ? vlen_t'(tmp_tn) : vlen_t'(spatz_req.rs1);
               end
@@ -373,7 +373,6 @@ module spatz_controller
                 mtype_d.tk = kmax_val;
               end
 
-              // clamp tm using the newly selected matrix LMUL in vtype_d.
               ete = (tewb < 8) ? TileEdge : TileEdge >> 1;
 
               lmul_eve = VLENB >> int'(vtype_d.vsew);
@@ -717,6 +716,17 @@ module spatz_controller
 
   always_comb begin : scoreboard
     logic [NrParallelInstructions-1:0] chainable_writer;
+    logic [NrParallelInstructions-1:0] retired_mask;
+
+    // Clear completed owners from every dependency row.
+    retired_mask = '0;
+    if (vfu_rsp_valid_i)   retired_mask[vfu_rsp_i.id] = 1'b1;
+    if (ope_rsp_valid_i)   retired_mask[ope_rsp_i.id] = 1'b1;
+    if (vlsu_rsp_valid_i)  retired_mask[vlsu_rsp_i.id] = 1'b1;
+    if (vsldu_rsp_valid_i) retired_mask[vsldu_rsp_i.id] = 1'b1;
+`ifdef VENTAGLIO
+    if (vtl_rsp_valid_i)   retired_mask[vtl_rsp_i.id] = 1'b1;
+`endif
 
     // Maintain stated
     read_table_d             = read_table_q;
@@ -885,8 +895,6 @@ module spatz_controller
       done_result_d[1][vfu_rsp_i.id]         = 1'b0;
       vl_cnt_d[vfu_rsp_i.id]                 = '0;
 `endif
-      for (int unsigned insn = 0; insn < NrParallelInstructions; insn++)
-        scoreboard_d[insn].deps[vfu_rsp_i.id] = 1'b0;
     end
     if (ope_rsp_valid_i) begin
       for (int unsigned vreg = 0; vreg < NRVREG; vreg++) begin
@@ -900,8 +908,6 @@ module spatz_controller
       narrow_wide_d[ope_rsp_i.id] = 1'b0;
       wrote_result_narrowing_d[ope_rsp_i.id] = 1'b0;
 
-      for (int unsigned insn = 0; insn < NrParallelInstructions; insn++)
-        scoreboard_d[insn].deps[ope_rsp_i.id] = 1'b0;
     end
     if (vlsu_rsp_valid_i) begin
       for (int unsigned vreg = 0; vreg < NRVREG; vreg++) begin
@@ -926,8 +932,6 @@ module spatz_controller
       vlsu_vl_cnt_d[1][vlsu_rsp_i.id]         = '0;
       vl_cnt_d[vlsu_rsp_i.id]                 = '0;
 `endif
-      for (int unsigned insn = 0; insn < NrParallelInstructions; insn++)
-        scoreboard_d[insn].deps[vlsu_rsp_i.id] = 1'b0;
     end
     if (vsldu_rsp_valid_i) begin
       for (int unsigned vreg = 0; vreg < NRVREG; vreg++) begin
@@ -951,8 +955,6 @@ module spatz_controller
       done_result_d[1][vsldu_rsp_i.id]         = 1'b0;
       vl_cnt_d[vsldu_rsp_i.id]                 = '0;
 `endif
-      for (int unsigned insn = 0; insn < NrParallelInstructions; insn++)
-        scoreboard_d[insn].deps[vsldu_rsp_i.id] = 1'b0;
     end
 `ifdef VENTAGLIO
     if (vtl_rsp_valid_i) begin
@@ -967,21 +969,15 @@ module spatz_controller
       narrow_wide_d[vtl_rsp_i.id]            = 1'b0;
       wrote_result_narrowing_d[vtl_rsp_i.id] = 1'b0;
       vtl_table_d[vtl_rsp_i.id]              = '0;
-      for (int unsigned insn = 0; insn < NrParallelInstructions; insn++)
-        scoreboard_d[insn].deps[vtl_rsp_i.id] = 1'b0;
     end
 `endif
 
+    for (int unsigned insn = 0; insn < NrParallelInstructions; insn++)
+      scoreboard_d[insn].deps &= ~retired_mask;
+
     // Initialize the scoreboard metadata if we have a new instruction issued.
     if (spatz_req_valid && spatz_req.ex_unit != CON) begin
-      table_t prior_read_table;
-
-      // Source and destination can overlap (for example vfadd v8, v8, v12).
-      // Preserve earlier readers before this instruction claims its sources.
-      prior_read_table = read_table_d;
-      // An instruction ID can be reused immediately after a zero-latency or
-      // same-cycle retiring operation. Start from a clean entry, then rebuild
-      // the dependencies for this new instruction below.
+      // Read registered ownership; mask same-cycle completions after collection.
       scoreboard_d[spatz_req.id] = '0;
       narrow_wide_d[spatz_req.id] = 1'b0;
       wrote_result_narrowing_d[spatz_req.id] = 1'b0;
@@ -1057,6 +1053,9 @@ module spatz_controller
                          ? 1
                          : int'(spatz_req.op_ope.tk);
         sb_vs_group_count = vreg_group_count;
+      end else if ((spatz_req.ex_unit == OPE) &&
+                   spatz_req.op_ope.tss.tile_valid && spatz_req.use_vs2) begin
+        sb_vs_group_count = vreg_group_count;
       end else if ((spatz_req.ex_unit == LSU) &&
                    (spatz_req.op inside {VLXE, VSXE})) begin
         // Indexed memory operations read their index vector through vs2.
@@ -1072,8 +1071,8 @@ module spatz_controller
             if ((row < sb_vs_rows) &&
                 (group_idx < sb_vs_group_count) &&
                 (group_vreg < NRVREG)) begin
-              scoreboard_d[spatz_req.id].deps[write_table_d[group_vreg].id] |=
-                  write_table_d[group_vreg].valid;
+              scoreboard_d[spatz_req.id].deps[write_table_q[group_vreg].id] |=
+                  write_table_q[group_vreg].valid;
               read_table_d[group_vreg] = {spatz_req.id, 1'b1};
             end
           end
@@ -1087,7 +1086,7 @@ module spatz_controller
             if ((row < sb_vs_rows) &&
                 (group_idx < sb_vs_group_count) &&
                 (group_vreg < NRVREG)) begin
-              scoreboard_d[spatz_req.id].deps[write_table_d[group_vreg].id] |= write_table_d[group_vreg].valid;
+              scoreboard_d[spatz_req.id].deps[write_table_q[group_vreg].id] |= write_table_q[group_vreg].valid;
               read_table_d[group_vreg] = {spatz_req.id, 1'b1};
             end
           end
@@ -1102,12 +1101,12 @@ module spatz_controller
 
             group_vreg = {1'b0, spatz_req.vd} + vreg_group_idx_t'(group_idx);
             if ((group_idx < mem_data_group_count) && (group_vreg < NRVREG)) begin
-              scoreboard_d[spatz_req.id].deps[write_table_d[group_vreg].id] |= write_table_d[group_vreg].valid;
+              scoreboard_d[spatz_req.id].deps[write_table_q[group_vreg].id] |= write_table_q[group_vreg].valid;
               read_table_d[group_vreg] = {spatz_req.id, 1'b1};
             end
           end
         end else begin
-          scoreboard_d[spatz_req.id].deps[write_table_d[spatz_req.vd].id] |= write_table_d[spatz_req.vd].valid;
+          scoreboard_d[spatz_req.id].deps[write_table_q[spatz_req.vd].id] |= write_table_q[spatz_req.vd].valid;
           read_table_d[spatz_req.vd] = {spatz_req.id, 1'b1};
         end
       end
@@ -1115,8 +1114,8 @@ module spatz_controller
 `ifdef VENTAGLIO
       // RAW hazard on the explicit index vreg used by vfxmacc.vrf
       if (spatz_req.op_vtl.use_vtl) begin
-        scoreboard_d[spatz_req.id].deps[write_table_d[spatz_req.op_vtl.idx_vreg].id] |=
-            write_table_d[spatz_req.op_vtl.idx_vreg].valid;
+        scoreboard_d[spatz_req.id].deps[write_table_q[spatz_req.op_vtl.idx_vreg].id] |=
+            write_table_q[spatz_req.op_vtl.idx_vreg].valid;
         read_table_d[spatz_req.op_vtl.idx_vreg] = {spatz_req.id, 1'b1};
       end
 `endif
@@ -1131,18 +1130,31 @@ module spatz_controller
             vreg_group_idx_t group_vreg;
             group_vreg = {1'b0, spatz_req.vd} + vreg_group_idx_t'(group_idx);
             if ((group_idx < mem_data_group_count) && (group_vreg < NRVREG)) begin
-              scoreboard_d[spatz_req.id].deps[write_table_d[group_vreg].id] |=
-                  write_table_d[group_vreg].valid;
-              scoreboard_d[spatz_req.id].deps[prior_read_table[group_vreg].id] |=
-                  prior_read_table[group_vreg].valid;
+              scoreboard_d[spatz_req.id].deps[write_table_q[group_vreg].id] |=
+                  write_table_q[group_vreg].valid;
+              scoreboard_d[spatz_req.id].deps[read_table_q[group_vreg].id] |=
+                  read_table_q[group_vreg].valid;
+              write_table_d[group_vreg] = {spatz_req.id, 1'b1};
+            end
+          end
+        end else if ((spatz_req.ex_unit == OPE) &&
+                     spatz_req.op_ope.tss.tile_valid && spatz_req.use_vd) begin
+          for (int unsigned group_idx = 0; group_idx < 8; group_idx++) begin
+            vreg_group_idx_t group_vreg;
+            group_vreg = {1'b0, spatz_req.vd} + vreg_group_idx_t'(group_idx);
+            if ((group_idx < vreg_group_count) && (group_vreg < NRVREG)) begin
+              scoreboard_d[spatz_req.id].deps[write_table_q[group_vreg].id] |=
+                  write_table_q[group_vreg].valid;
+              scoreboard_d[spatz_req.id].deps[read_table_q[group_vreg].id] |=
+                  read_table_q[group_vreg].valid;
               write_table_d[group_vreg] = {spatz_req.id, 1'b1};
             end
           end
         end else begin
-          scoreboard_d[spatz_req.id].deps[write_table_d[spatz_req.vd].id] |=
-              write_table_d[spatz_req.vd].valid;
-          scoreboard_d[spatz_req.id].deps[prior_read_table[spatz_req.vd].id] |=
-              prior_read_table[spatz_req.vd].valid;
+          scoreboard_d[spatz_req.id].deps[write_table_q[spatz_req.vd].id] |=
+              write_table_q[spatz_req.vd].valid;
+          scoreboard_d[spatz_req.id].deps[read_table_q[spatz_req.vd].id] |=
+              read_table_q[spatz_req.vd].valid;
           write_table_d[spatz_req.vd] = {spatz_req.id, 1'b1};
         end
         if (spatz_req.op inside {VLX}) begin
@@ -1166,6 +1178,8 @@ module spatz_controller
       vl_max_d[spatz_req.id] = (spatz_req.vl >> 1) << ((spatz_req.ex_unit == LSU) ? spatz_req.op_mem.ew : spatz_req.vtype.vsew);
       vl_cnt_d[spatz_req.id] = '0;
 `endif
+      // Do not retain a dependency on an owner that retires this cycle.
+      scoreboard_d[spatz_req.id].deps &= ~retired_mask;
     end
 
     // An instruction never depends on itself
@@ -1222,10 +1236,9 @@ module spatz_controller
 
   always_comb begin : matrix_decode
     matrix_issue = matrix_claim_t'(0);
-    // MAC and VTZERO address mtd; tile memory/move instructions use TSS.
-    matrix_issue_tile = (buffer_spatz_req.op_ope.is_mac ||
-                         buffer_spatz_req.op == VTZERO) ?
-                        buffer_spatz_req.mtd : buffer_spatz_req.op_ope.tss.tile_id;
+    // Subset operations carry their tile in TSS; full-tile operations use mtd.
+    matrix_issue_tile = buffer_spatz_req.op_ope.tss.tile_valid ?
+                        buffer_spatz_req.op_ope.tss.tile_id : buffer_spatz_req.mtd;
 
     // mt0 with tew=32 overlaps both mt0 and mt2 with tew=16
     case (vew_e'(vtype_q.vsew + mtype_q.mtwiden - 1'b1))  // = tew
@@ -1244,21 +1257,20 @@ module spatz_controller
         matrix_issue.reads = 1'b1;
     end else if (buffer_spatz_req.ex_unit == OPE) begin
       matrix_issue.mask = matrix_issue_mask;
-      case (buffer_spatz_req.op)
-        VTMMU, VTMMS, VTFMM, VTFMM_ALT: begin
-          matrix_issue.reads = 1'b1;
-          matrix_issue.writes = 1'b1;
-          matrix_issue.is_mac = 1'b1;
-        end
-        VTMV_VT: matrix_issue.reads = 1'b1;
-        VTMV_TV, VTZERO: matrix_issue.writes = 1'b1;
-        VTDISCARD: begin
-          // Global accumulator flush conflicts with every tile reader and writer.
-          matrix_issue.mask = matrix_mask_t'({NrPhysicalTile{1'b1}});
-          matrix_issue.writes = 1'b1;
-        end
-        default: ;
-      endcase
+      matrix_issue.is_mac = buffer_spatz_req.op_ope.is_mac;
+      matrix_issue.reads = buffer_spatz_req.op_ope.is_mac ||
+                           (buffer_spatz_req.op_ope.tss.tile_valid &&
+                            buffer_spatz_req.use_vd);
+      matrix_issue.writes = buffer_spatz_req.op_ope.is_mac ||
+                            buffer_spatz_req.op_ope.is_zero_tile ||
+                            (buffer_spatz_req.op_ope.tss.tile_valid &&
+                             buffer_spatz_req.use_vs2);
+
+      if (buffer_spatz_req.op_ope.is_discard) begin
+        // A global accumulator-state flush conflicts with every tile access.
+        matrix_issue.mask = matrix_mask_t'({NrPhysicalTile{1'b1}});
+        matrix_issue.writes = 1'b1;
+      end
     end
   end
 
@@ -1485,10 +1497,28 @@ module spatz_controller
     logic issue_is_tile_op;
     logic issue_tile_aligned;
     logic memory_groups_aligned;
+    logic issue_uses_vreg_group;
+    logic [3:0] issue_vreg_group_regs;
+    vreg_t issue_vreg_group_base;
+    logic issue_vreg_group_aligned;
 
     issue_rsp_o = '0;
     issue_tile_id = decoder_rsp.spatz_req.mtd;
     issue_is_tile_op = 1'b0;
+    unique case (vtype_q.vlmul)
+      LMUL_2:  issue_vreg_group_regs = 4'd2;
+      LMUL_4:  issue_vreg_group_regs = 4'd4;
+      LMUL_8:  issue_vreg_group_regs = 4'd8;
+      default: issue_vreg_group_regs = 4'd1;
+    endcase
+    issue_uses_vreg_group = (decoder_rsp.spatz_req.ex_unit == OPE) &&
+                            decoder_rsp.spatz_req.op_ope.tss.tile_valid &&
+                            (decoder_rsp.spatz_req.use_vd || decoder_rsp.spatz_req.use_vs2);
+    issue_vreg_group_base = decoder_rsp.spatz_req.use_vd ?
+                            decoder_rsp.spatz_req.vd : decoder_rsp.spatz_req.vs2;
+    issue_vreg_group_aligned =
+        ((issue_vreg_group_base & vreg_t'(issue_vreg_group_regs - 1'b1)) == '0) &&
+        (({1'b0, issue_vreg_group_base} + issue_vreg_group_regs) <= NRVREG);
     memory_groups_aligned = issue_memory_emul.data.aligned;
     if (decoder_rsp.spatz_req.op inside {VLXE, VSXE}) begin
       memory_groups_aligned &= issue_memory_emul.index.aligned;
@@ -1500,8 +1530,7 @@ module spatz_controller
       issue_is_tile_op = 1'b1;
     end else if (decoder_rsp.spatz_req.ex_unit == OPE) begin
       issue_is_tile_op = 1'b1;
-      if (decoder_rsp.spatz_req.op_ope.is_vt ||
-          decoder_rsp.spatz_req.op_ope.is_tv)
+      if (decoder_rsp.spatz_req.op_ope.tss.tile_valid)
         issue_tile_id = decoder_rsp.spatz_req.op_ope.tss.tile_id;
     end
 
@@ -1563,10 +1592,13 @@ module spatz_controller
           end else if (decoder_rsp.spatz_req.op_ope.is_mac && (vtype_q.vsew == EW_8)) begin
             // No 8-bit MAC lane is instantiated; reject instead of waiting for a missing result.
             issue_rsp_o.accept = 1'b0;
-          end else if ((decoder_rsp.spatz_req.op_ope.is_vt ||
-                        decoder_rsp.spatz_req.op_ope.is_tv) &&
+          end else if (issue_uses_vreg_group &&
                        (mtype_q.mtwiden != 2'b01)) begin
-            // VTMV requires a valid TSS and a one-to-one SEW-to-active-TEW mapping.
+            // Register-group tile transfers require a one-to-one SEW/TEW mapping.
+            issue_rsp_o.accept = 1'b0;
+          end else if (issue_uses_vreg_group && !issue_vreg_group_aligned) begin
+            // Vector-register group specifiers must be divisible by LMUL
+            // and the complete group must remain within the architectural VRF.
             issue_rsp_o.accept = 1'b0;
           end
         end

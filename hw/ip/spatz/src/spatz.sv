@@ -112,6 +112,17 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   logic      vlsu_rsp_valid, vlsu_rsp_buf_valid;
   vlsu_rsp_t vlsu_rsp, vlsu_rsp_buf;
 
+  // Register VLSU completion before the controller scoreboard.
+  always_ff @(posedge clk_i or negedge rst_ni) begin : vlsu_rsp_register
+    if (!rst_ni) begin
+      vlsu_rsp_buf       <= '0;
+      vlsu_rsp_buf_valid <= 1'b0;
+    end else begin
+      vlsu_rsp_buf       <= vlsu_rsp;
+      vlsu_rsp_buf_valid <= vlsu_rsp_valid;
+    end
+  end
+
   logic       vsldu_req_ready;
   logic       vsldu_rsp_valid;
   vsldu_rsp_t vsldu_rsp;
@@ -709,8 +720,6 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     // Responses
     vfu_rsp_buf = vfu_rsp;
     vfu_rsp_buf_valid = vfu_rsp_valid;
-    vlsu_rsp_buf = vlsu_rsp;
-    vlsu_rsp_buf_valid = vlsu_rsp_valid;
 
     // If the buffering feature is used for the FPU or VLSU,
     // Use the metadata to commit the data to the VRF
