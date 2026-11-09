@@ -37,6 +37,10 @@ module spatz_fault_monitor #(
   input  logic                    tcdm_interconnect_correctable_fault_i,
   input  logic                    tcdm_interconnect_uncorrectable_fault_i,
 
+  // AXI interconnect faults (core-to-AXI mux, ...)
+  input  logic                    axi_interconnect_correctable_fault_i,
+  input  logic                    axi_interconnect_uncorrectable_fault_i,
+
   // snitch fault.
   input  logic [NumCores-1:0]     snitch_correctable_fault_i,
   input  logic [NumCores-1:0]     snitch_uncorrectable_fault_i,
@@ -66,6 +70,9 @@ module spatz_fault_monitor #(
   output logic [CounterWidth-1:0]                   tcdm_interconnect_correctable_count_o,
   output logic [CounterWidth-1:0]                   tcdm_interconnect_uncorrectable_count_o,
 
+  output logic [CounterWidth-1:0]                   axi_interconnect_correctable_count_o,
+  output logic [CounterWidth-1:0]                   axi_interconnect_uncorrectable_count_o,
+
   output logic [NumCores-1:0][CounterWidth-1:0]     snitch_correctable_count_o,
   output logic [NumCores-1:0][CounterWidth-1:0]     snitch_uncorrectable_count_o,
   output logic [CounterWidth-1:0]                   icache_correctable_count_o,
@@ -93,6 +100,8 @@ module spatz_fault_monitor #(
       tcdm_scrub_uncorrectable_count_o <= '0;
       tcdm_interconnect_correctable_count_o <= '0;
       tcdm_interconnect_uncorrectable_count_o <= '0;
+      axi_interconnect_correctable_count_o <= '0;
+      axi_interconnect_uncorrectable_count_o <= '0;
       snitch_correctable_count_o <= '0;
       snitch_uncorrectable_count_o <= '0;
       icache_correctable_count_o <= '0;
@@ -117,6 +126,8 @@ module spatz_fault_monitor #(
       tcdm_scrub_uncorrectable_count_o <= '0;
       tcdm_interconnect_correctable_count_o <= '0;
       tcdm_interconnect_uncorrectable_count_o <= '0;
+      axi_interconnect_correctable_count_o <= '0;
+      axi_interconnect_uncorrectable_count_o <= '0;
       snitch_correctable_count_o <= '0;
       snitch_uncorrectable_count_o <= '0;
       icache_correctable_count_o <= '0;
@@ -254,6 +265,18 @@ module spatz_fault_monitor #(
       if (tcdm_interconnect_uncorrectable_fault_i) begin
         if (!SaturatingCount || !(&tcdm_interconnect_uncorrectable_count_o)) begin
           tcdm_interconnect_uncorrectable_count_o <= tcdm_interconnect_uncorrectable_count_o + 1'b1;
+        end
+      end
+
+      if (axi_interconnect_correctable_fault_i) begin
+        if (!SaturatingCount || !(&axi_interconnect_correctable_count_o)) begin
+          axi_interconnect_correctable_count_o <= axi_interconnect_correctable_count_o + 1'b1;
+        end
+      end
+
+      if (axi_interconnect_uncorrectable_fault_i) begin
+        if (!SaturatingCount || !(&axi_interconnect_uncorrectable_count_o)) begin
+          axi_interconnect_uncorrectable_count_o <= axi_interconnect_uncorrectable_count_o + 1'b1;
         end
       end
 

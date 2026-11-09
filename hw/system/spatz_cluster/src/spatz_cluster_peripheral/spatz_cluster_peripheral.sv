@@ -61,6 +61,8 @@ module spatz_cluster_peripheral
   input  logic [31:0]                                     icache_uncorrectable_count_i,
   input  logic [31:0]                                     tcdm_interconnect_correctable_count_i,
   input  logic [31:0]                                     tcdm_interconnect_uncorrectable_count_i,
+  input  logic [31:0]                                     axi_interconnect_correctable_count_i,
+  input  logic [31:0]                                     axi_interconnect_uncorrectable_count_i,
   input  logic [NumQuadUnits-1:0][31:0]                   quad_correctable_count_i,
   input  logic [NumQuadUnits-1:0][31:0]                   quad_uncorrectable_count_i,
   output logic [31:0]                                     quad_cfg_array_o
@@ -304,6 +306,8 @@ module spatz_cluster_peripheral
 
   assign hw2reg.tcdm_interconnect_correctable_count.d = tcdm_interconnect_correctable_count_i;
   assign hw2reg.tcdm_interconnect_uncorrectable_count.d = tcdm_interconnect_uncorrectable_count_i;
+  assign hw2reg.axi_interconnect_correctable_count.d = axi_interconnect_correctable_count_i;
+  assign hw2reg.axi_interconnect_uncorrectable_count.d = axi_interconnect_uncorrectable_count_i;
 
   for (genvar i = 0; i < NumQuadUnits; i++) begin : gen_quad_count_assign
     assign hw2reg.quad_correctable_count[i].d   = quad_correctable_count_i[i];

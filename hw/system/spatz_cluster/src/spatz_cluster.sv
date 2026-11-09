@@ -510,6 +510,8 @@ module spatz_cluster
   logic [NrCores-1:0][ErrorCounterWidth-1:0] snitch_correctable_count;
   logic [NrCores-1:0][ErrorCounterWidth-1:0] snitch_uncorrectable_count;
 
+  logic [ErrorCounterWidth-1:0] axi_interconnect_correctable_count;
+  logic [ErrorCounterWidth-1:0] axi_interconnect_uncorrectable_count;
   logic [ErrorCounterWidth-1:0] icache_correctable_count;
   logic [ErrorCounterWidth-1:0] icache_uncorrectable_count;
 
@@ -519,6 +521,11 @@ module spatz_cluster
   // OR of every TCDM interconnect fault
   logic tcdm_interconnect_correctable_fault_any;
   logic tcdm_interconnect_uncorrectable_fault_any;
+  // AXI interconnect faults: core-to-AXI reqrsp mux response FIFO (correctable);
+  // no uncorrectable source yet.
+  logic axi_interconnect_correctable_fault_any;
+  logic axi_interconnect_uncorrectable_fault_any;
+  logic core_axi_mux_fault;
   // OR of every ICache parity fault
   logic icache_parity_fault_any;
   // OR of every ICache TMR fault
@@ -552,6 +559,9 @@ module spatz_cluster
   // tcdm interconnect faults
   .tcdm_interconnect_correctable_fault_i (tcdm_interconnect_correctable_fault_any),
   .tcdm_interconnect_uncorrectable_fault_i (tcdm_interconnect_uncorrectable_fault_any),
+  // axi interconnect faults
+  .axi_interconnect_correctable_fault_i (axi_interconnect_correctable_fault_any),
+  .axi_interconnect_uncorrectable_fault_i (axi_interconnect_uncorrectable_fault_any),
   // snitch core faults
   .snitch_correctable_fault_i (snitch_correctable_fault),
   .snitch_uncorrectable_fault_i (snitch_uncorrectable_fault),
@@ -578,6 +588,9 @@ module spatz_cluster
 
   .tcdm_interconnect_correctable_count_o (tcdm_interconnect_correctable_count),
   .tcdm_interconnect_uncorrectable_count_o (tcdm_interconnect_uncorrectable_count),
+
+  .axi_interconnect_correctable_count_o (axi_interconnect_correctable_count),
+  .axi_interconnect_uncorrectable_count_o (axi_interconnect_uncorrectable_count),
 
   .snitch_correctable_count_o (snitch_correctable_count),
   .snitch_uncorrectable_count_o (snitch_uncorrectable_count),
@@ -1681,8 +1694,12 @@ module spatz_cluster
     .slv_rsp_o (filtered_core_rsp),
     .mst_req_o (core_to_axi_req  ),
     .mst_rsp_i (core_to_axi_rsp  ),
-    .idx_o     (/*unused*/       )
+    .idx_o     (/*unused*/       ),
+    .fault_o   (core_axi_mux_fault)
   );
+
+  assign axi_interconnect_correctable_fault_any   = core_axi_mux_fault;
+  assign axi_interconnect_uncorrectable_fault_any = 1'b0;
 
   reqrsp_to_axi #(
     .DataWidth    (NarrowDataWidth),
@@ -1875,6 +1892,8 @@ module spatz_cluster
     .icache_uncorrectable_count_i (icache_uncorrectable_count ),
     .tcdm_interconnect_correctable_count_i (tcdm_interconnect_correctable_count ),
     .tcdm_interconnect_uncorrectable_count_i (tcdm_interconnect_uncorrectable_count ),
+    .axi_interconnect_correctable_count_i   (axi_interconnect_correctable_count  ),
+    .axi_interconnect_uncorrectable_count_i (axi_interconnect_uncorrectable_count),
     .quad_correctable_count_i         (quad_correctable_count         ),
     .quad_uncorrectable_count_i       (quad_uncorrectable_count       )
   );

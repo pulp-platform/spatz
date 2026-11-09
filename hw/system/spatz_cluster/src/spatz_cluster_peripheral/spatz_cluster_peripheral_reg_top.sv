@@ -594,6 +594,10 @@ module spatz_cluster_peripheral_reg_top #(
   logic controller_correctable_count_re;
   logic [31:0] controller_uncorrectable_count_qs;
   logic controller_uncorrectable_count_re;
+  logic [31:0] axi_interconnect_correctable_count_qs;
+  logic axi_interconnect_correctable_count_re;
+  logic [31:0] axi_interconnect_uncorrectable_count_qs;
+  logic axi_interconnect_uncorrectable_count_re;
 
   // Register instances
 
@@ -4982,9 +4986,41 @@ module spatz_cluster_peripheral_reg_top #(
   );
 
 
+  // R[axi_interconnect_correctable_count]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_axi_interconnect_correctable_count (
+    .re     (axi_interconnect_correctable_count_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.axi_interconnect_correctable_count.d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.axi_interconnect_correctable_count.q ),
+    .qs     (axi_interconnect_correctable_count_qs)
+  );
 
 
-  logic [166:0] addr_hit;
+  // R[axi_interconnect_uncorrectable_count]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_axi_interconnect_uncorrectable_count (
+    .re     (axi_interconnect_uncorrectable_count_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.axi_interconnect_uncorrectable_count.d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.axi_interconnect_uncorrectable_count.q ),
+    .qs     (axi_interconnect_uncorrectable_count_qs)
+  );
+
+
+
+
+  logic [168:0] addr_hit;
   always_comb begin
     addr_hit = '0;
     addr_hit[  0] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_PERF_COUNTER_ENABLE_0_OFFSET);
@@ -5154,6 +5190,8 @@ module spatz_cluster_peripheral_reg_top #(
     addr_hit[164] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_QUAD_CFG_ARRAY_OFFSET);
     addr_hit[165] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_CONTROLLER_CORRECTABLE_COUNT_OFFSET);
     addr_hit[166] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_CONTROLLER_UNCORRECTABLE_COUNT_OFFSET);
+    addr_hit[167] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_AXI_INTERCONNECT_CORRECTABLE_COUNT_OFFSET);
+    addr_hit[168] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_AXI_INTERCONNECT_UNCORRECTABLE_COUNT_OFFSET);
   end
 
   assign addrmiss = (reg_re || reg_we) ? ~|addr_hit : 1'b0 ;
@@ -5327,7 +5365,9 @@ module spatz_cluster_peripheral_reg_top #(
                (addr_hit[163] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[163] & ~reg_be))) |
                (addr_hit[164] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[164] & ~reg_be))) |
                (addr_hit[165] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[165] & ~reg_be))) |
-               (addr_hit[166] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[166] & ~reg_be)))));
+               (addr_hit[166] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[166] & ~reg_be))) |
+               (addr_hit[167] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[167] & ~reg_be))) |
+               (addr_hit[168] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[168] & ~reg_be)))));
   end
 
   assign perf_counter_enable_0_cycle_0_we = addr_hit[0] & reg_we & !reg_error;
@@ -5859,6 +5899,10 @@ module spatz_cluster_peripheral_reg_top #(
   assign controller_correctable_count_re = addr_hit[165] & reg_re & !reg_error;
 
   assign controller_uncorrectable_count_re = addr_hit[166] & reg_re & !reg_error;
+
+  assign axi_interconnect_correctable_count_re = addr_hit[167] & reg_re & !reg_error;
+
+  assign axi_interconnect_uncorrectable_count_re = addr_hit[168] & reg_re & !reg_error;
 
   // Read data return
   always_comb begin
@@ -6590,6 +6634,14 @@ module spatz_cluster_peripheral_reg_top #(
 
       addr_hit[166]: begin
         reg_rdata_next[31:0] = controller_uncorrectable_count_qs;
+      end
+
+      addr_hit[167]: begin
+        reg_rdata_next[31:0] = axi_interconnect_correctable_count_qs;
+      end
+
+      addr_hit[168]: begin
+        reg_rdata_next[31:0] = axi_interconnect_uncorrectable_count_qs;
       end
 
       default: begin

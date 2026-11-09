@@ -33,7 +33,9 @@ module reqrsp_mux #(
     output rsp_t [NrPorts-1:0]  slv_rsp_o,
     output req_t                mst_req_o,
     input  rsp_t                mst_rsp_i,
-    output logic [IdxWidth-1:0] idx_o
+    output logic [IdxWidth-1:0] idx_o,
+    /// Correctable (TMR-masked) fault reported by the response-routing FIFO.
+    output logic                fault_o
 );
 
   typedef logic [AddrWidth-1:0] addr_t;
@@ -105,6 +107,7 @@ module reqrsp_mux #(
   if (NrPorts == 1) begin : gen_single_port
     assign idx_rsp = 0;
     assign full = 1'b0;
+    assign fault_o = 1'b0;
   end else begin : gen_multi_port
     // For the "normal" case we need to safe the arbitration decision. We so by
     // converting the handshake into a binary signal which we save for response
@@ -116,9 +119,10 @@ module reqrsp_mux #(
       .bin    (idx)
     );
     // Safe the arbitration decision.
-    fifo_v3 #(
-      .DATA_WIDTH (LogNrPorts),
-      .DEPTH (RespDepth)
+    rel_fifo #(
+      .FallThrough (1'b0),
+      .DataWidth (LogNrPorts),
+      .Depth (RespDepth)
     ) i_resp_fifo (
       .clk_i,
       .rst_ni,
@@ -130,7 +134,8 @@ module reqrsp_mux #(
       .data_i (idx),
       .push_i (mst_req_o.q_valid & mst_rsp_i.q_ready),
       .data_o (idx_rsp),
-      .pop_i (mst_req_o.p_ready & mst_rsp_i.p_valid)
+      .pop_i (mst_req_o.p_ready & mst_rsp_i.p_valid),
+      .fault_o (fault_o)
     );
   end
 
@@ -199,7 +204,8 @@ module reqrsp_mux_intf #(
     .slv_rsp_o (reqrsp_slv_rsp),
     .mst_req_o (reqrsp_mst_req),
     .mst_rsp_i (reqrsp_mst_rsp),
-    .idx_o (idx_o)
+    .idx_o (idx_o),
+    .fault_o ()
   );
 
   for (genvar i = 0; i < NrPorts; i++) begin : gen_interface_assignment
