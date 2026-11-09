@@ -17,7 +17,8 @@ module spatz_ope
 #(
   parameter int unsigned CE = OPEComputeEdge,
   parameter int unsigned TE = TileEdge,
-  parameter bit EnableTEW16 = 1'b0
+  parameter bit EnableFMA16 = 1'b0,
+  parameter bit EnableFMA32 = 1'b0
 ) ( 
   input  logic             clk_i              ,
   input  logic             rst_ni             ,
@@ -32,7 +33,7 @@ module spatz_ope
   input  logic             ope_rsp_ready_i    ,
   output ope_rsp_t         ope_rsp_o          ,
 
-  // interface with VLSU
+  // interface with VRF
   output vrf_addr_t        vrf_waddr_o        ,
   output vrf_data_t        vrf_wdata_o        ,
   output logic             vrf_we_o           ,
@@ -45,6 +46,7 @@ module spatz_ope
   input  logic       [2:0] vrf_rvalid_i       ,
   output spatz_id_t  [3:0] vrf_id_o           ,
 
+  // interface with VLSU
   input  logic             tile_wvalid_i      ,
   input  tile_w_req_t      tile_w_req_i       ,
   output logic             tile_wready_o      ,
@@ -56,28 +58,30 @@ module spatz_ope
 
 `include "common_cells/registers.svh"
 
-  localparam NumPipeRegs = 4;
-  localparam SpatialBeats = NrAccPerComputeElem * NrAccPerComputeElem;
-  localparam GroupIdxW = (NrAccPerComputeElem > 1) ? $clog2(NrAccPerComputeElem) : 1;
-  localparam SpatialBeatW = (SpatialBeats > 1) ? $clog2(SpatialBeats) : 1;
-  localparam ReductionIdxW = (KMAX > 1) ? $clog2(KMAX) : 1;
-  localparam NrAccumulatorTiles = NrPhysicalTile / AccElemBytes;
-  localparam AccDepth = NrAccumulatorTiles * SpatialBeats;
-  localparam AccAddrW = (AccDepth > 1) ? $clog2(AccDepth) : 1;
-  localparam AccTileIdxW = (NrAccumulatorTiles > 1) ? $clog2(NrAccumulatorTiles) : 1;
-  localparam AccByteIdxW = (AccElemBytes > 1) ? $clog2(AccElemBytes) : 1;
+  localparam int unsigned NumPipeRegs = 4;
+  localparam int unsigned NumFpuPipeRegs = NumPipeRegs - 1;
+  localparam int unsigned AccDepthPerCE = (CE > 0) ? (TE / CE) : 0;
+  localparam int unsigned SpatialBeats = AccDepthPerCE * AccDepthPerCE;
+  localparam int unsigned GroupIdxW = (AccDepthPerCE > 1) ? $clog2(AccDepthPerCE) : 1;
+  localparam int unsigned SpatialBeatW = (SpatialBeats > 1) ? $clog2(SpatialBeats) : 1;
+  localparam int unsigned ReductionIdxW = (KMAX > 1) ? $clog2(KMAX) : 1;
+  localparam int unsigned NrAccumulatorTiles = NrPhysicalTile / AccElemBytes;
+  localparam int unsigned AccDepth = NrAccumulatorTiles * SpatialBeats;
+  localparam int unsigned AccAddrW = (AccDepth > 1) ? $clog2(AccDepth) : 1;
+  localparam int unsigned AccTileIdxW = (NrAccumulatorTiles > 1) ? $clog2(NrAccumulatorTiles) : 1;
+  localparam int unsigned AccByteIdxW = (AccElemBytes > 1) ? $clog2(AccElemBytes) : 1;
   localparam logic [AccElemBytes-1:0] AccHalfMask = {{(AccElemBytes-2){1'b0}}, 2'b11};
   localparam logic [AccElemBytes-1:0] AccFullMask = {AccElemBytes{1'b1}};
   // Capacity bound for TEW8/TEW16/TEW32; runtime TEW selects the active element count.
-  localparam VtMaxElemsPerWord = VRFWordWidth / 8;
+  localparam int unsigned VtMaxElemsPerWord = VRFWordWidth / 8;
   // Capacity bound for maximum LMUL=8; the number of VRF words is independent of TEW.
-  localparam MaxVtGroupWords = 8 * NrWordsPerVector;
+  localparam int unsigned MaxVtGroupWords = 8 * NrWordsPerVector;
 
   /*------------------------------------------------------------*/
   /*                  Shared Types and Signals                  */
   /*------------------------------------------------------------*/
 
-  typedef logic [$clog2(NrAccPerComputeElem+1)-1:0] group_count_t;
+  typedef logic [$clog2(AccDepthPerCE+1)-1:0] group_count_t;
   typedef logic [$clog2(MaxVtGroupWords+1)-1:0] vt_word_count_t;
   typedef logic [$clog2(VtMaxElemsPerWord+1)-1:0] vrf_elem_count_t;
   typedef logic [3:0] vreg_group_count_t;
@@ -239,16 +243,16 @@ module spatz_ope
   logic mac_use_sdotp;
   logic [CE-1:0][CE-1:0][AccElemWidth-1:0] acc_fpu_rdata, acc_fpu_wdata;
   logic [CE-1:0][CE-1:0][AccElemBytes-1:0] acc_fpu_wen;
-  logic [CE-1:0][CE-1:0][NrAccPerComputeElem-1:0][AccElemWidth-1:0] acc_vrf_rdata, acc_vrf_wdata;
+  logic [CE-1:0][CE-1:0][AccDepthPerCE-1:0][AccElemWidth-1:0] acc_vrf_rdata, acc_vrf_wdata;
   logic [CE-1:0][CE-1:0][AccElemBytes-1:0] acc_vrf_wen;
-  logic [CE-1:0][CE-1:0][NrAccPerComputeElem-1:0][AccElemWidth-1:0] acc_vlsu_rdata, acc_vlsu_wdata;
+  logic [CE-1:0][CE-1:0][AccDepthPerCE-1:0][AccElemWidth-1:0] acc_vlsu_rdata, acc_vlsu_wdata;
   logic [CE-1:0][CE-1:0][AccElemBytes-1:0] acc_vlsu_wen;
   logic [AccAddrW-1:0] acc_fpu_raddr, acc_fpu_waddr;
   logic [AccAddrW-1:0] acc_vrf_raddr, acc_vrf_waddr;
   logic [AccAddrW-1:0] acc_vlsu_raddr, acc_vlsu_waddr;
   logic acc_flush;
   logic [NrAccumulatorTiles-1:0][SpatialBeats-1:0][AccElemBytes-1:0] acc_zero_d, acc_zero_q;
-  logic tile_access_blocked;
+  logic tile_read_drain_blocked, tile_write_drain_blocked;
   logic [NrPhysicalTile-1:0] tile_read_pipe_conflict, tile_write_pipe_conflict;
   logic tile_write_mac_conflict, tile_write_zero_conflict;
 
@@ -358,8 +362,8 @@ module spatz_ope
 
   // The MAC scheduler only executes instructions in issue order.
 
-  assign mac_group_row = GroupIdxW'(mac_op_beat / NrAccPerComputeElem);
-  assign mac_group_col = GroupIdxW'(mac_op_beat % NrAccPerComputeElem);
+  assign mac_group_row = GroupIdxW'(mac_op_beat / AccDepthPerCE);
+  assign mac_group_col = GroupIdxW'(mac_op_beat % AccDepthPerCE);
 
   always_comb begin : mac_active_shape
     mac_active_tm = (mac_op_exec.tm < TE) ? mac_op_exec.tm : tile_count_t'(TE);
@@ -371,7 +375,7 @@ module spatz_ope
     if (({1'b0, mac_group_col} + 1'b1) < mac_n_groups)
       mac_next_spatial_beat = mac_op_beat + 1'b1;
     else
-      mac_next_spatial_beat = SpatialBeatW'(({1'b0, mac_group_row} + 1'b1) * NrAccPerComputeElem);
+      mac_next_spatial_beat = SpatialBeatW'(({1'b0, mac_group_row} + 1'b1) * AccDepthPerCE);
 
     mac_lane_active = $bits(mac_lane_active)'(0);
     for (int unsigned row = 0; row < CE; row++) begin
@@ -1029,7 +1033,7 @@ module spatz_ope
 
           acc_word = acc_vrf_rdata[row_i % CE][col_i % CE][col_i / CE];
           for (int unsigned byte_idx = 0; byte_idx < AccElemBytes; byte_idx++) begin
-            if (acc_zero_q[vt_acc_sel.tile][(row_i / CE) * NrAccPerComputeElem + (col_i / CE)][byte_idx])
+            if (acc_zero_q[vt_acc_sel.tile][(row_i / CE) * AccDepthPerCE + (col_i / CE)][byte_idx])
               acc_word[byte_idx*8 +: 8] = 8'd0;
           end
           lane_data[lane] = acc_word;
@@ -1143,7 +1147,13 @@ module spatz_ope
     assign tile_write_pipe_conflict[tile] = (tile_w_req_i.idx == mt_t'(tile)) && (|fpu_pipe_tile_busy[tile]);
   end
 
-  assign tile_access_blocked = resident_drain_valid_q;
+  // The resident FPU result uses its own accumulator write port.  A VLSU
+  // transfer of another tile can therefore proceed while that result drains.
+  // Transfers of the draining tile must wait until its result is committed.
+  assign tile_read_drain_blocked = resident_drain_valid_q &&
+      (tile_r_req_i.idx == resident_drain_tile_q);
+  assign tile_write_drain_blocked = resident_drain_valid_q &&
+      (tile_w_req_i.idx == resident_drain_tile_q);
   assign tile_write_mac_conflict =
       (mac_op_current_q.valid && (mac_op_current_q.op.tile == tile_w_req_i.idx)) ||
       (mac_op_next_q.valid && (mac_op_next_q.op.tile == tile_w_req_i.idx)) ||
@@ -1157,11 +1167,11 @@ module spatz_ope
   // A valid tile read already blocks matching MAC issue/bypass and VTZERO in their own arbitration.
   // Do not block on queued MACs here: an older tile read must be able to complete ahead of them.
   // The registered busy bits include the final FMA result until its retirement edge.
-  assign tile_rready_o = !tile_access_blocked && !(|tile_read_pipe_conflict) &&
+  assign tile_rready_o = !tile_read_drain_blocked && !(|tile_read_pipe_conflict) &&
       !(resident_valid_q && (resident_tile_q == tile_r_req_i.idx)) &&
       !(tv_busy_q && tv_vrf_avail && (tv_req_q.op_ope.tss.tile_id == tile_r_req_i.idx));
 
-  assign tile_wready_o = !tile_access_blocked && !tile_rvalid_i && !(|tile_write_pipe_conflict) &&
+  assign tile_wready_o = !tile_write_drain_blocked && !tile_rvalid_i && !(|tile_write_pipe_conflict) &&
       !tile_write_mac_conflict && !tile_write_zero_conflict &&
       !(resident_valid_q && (resident_tile_q == tile_w_req_i.idx)) &&
       !(vt_busy_q && (vt_req_q.op_ope.tss.tile_id == tile_w_req_i.idx)) &&
@@ -1187,7 +1197,7 @@ module spatz_ope
       end
       bank_row = vt_req_q.op_ope.tss.is_row ? GroupIdxW'((vt_req_q.op_ope.tss.index + line_idx) / CE) :
           GroupIdxW'((line_word_idx * vt_elems_per_word) / CE);
-      acc_vrf_raddr = AccAddrW'(vt_acc_sel.tile * SpatialBeats + bank_row * NrAccPerComputeElem);
+      acc_vrf_raddr = AccAddrW'(vt_acc_sel.tile * SpatialBeats + bank_row * AccDepthPerCE);
     end else if (tv_busy_q) begin
       if (tv_line_words != 0) begin
         line_idx = tile_dim_t'(tv_word_idx_q / tv_line_words);
@@ -1195,15 +1205,15 @@ module spatz_ope
       end
       bank_row = tv_req_q.op_ope.tss.is_row ? GroupIdxW'((tv_req_q.op_ope.tss.index + line_idx) / CE) :
           GroupIdxW'((line_word_idx * tv_elems_per_word) / CE);
-      acc_vrf_raddr = AccAddrW'(tv_acc_sel.tile * SpatialBeats + bank_row * NrAccPerComputeElem);
+      acc_vrf_raddr = AccAddrW'(tv_acc_sel.tile * SpatialBeats + bank_row * AccDepthPerCE);
     end
 
     if (tile_rvalid_i && tile_rready_o) begin
       bank_row = GroupIdxW'(tile_r_req_i.row / CE);
-      acc_vlsu_raddr = AccAddrW'(tile_r_acc_sel.tile * SpatialBeats + bank_row * NrAccPerComputeElem);
+      acc_vlsu_raddr = AccAddrW'(tile_r_acc_sel.tile * SpatialBeats + bank_row * AccDepthPerCE);
     end else if (tile_wvalid_i && tile_wready_o) begin
       bank_row = GroupIdxW'(tile_w_req_i.row / CE);
-      acc_vlsu_raddr = AccAddrW'(tile_w_acc_sel.tile * SpatialBeats + bank_row * NrAccPerComputeElem);
+      acc_vlsu_raddr = AccAddrW'(tile_w_acc_sel.tile * SpatialBeats + bank_row * AccDepthPerCE);
     end
   end : acc_read_addr_proc
 
@@ -1259,10 +1269,10 @@ module spatz_ope
       acc_vrf_waddr = acc_vrf_raddr;
       for (int row = 0; row < CE; row++) begin
         for (int col = 0; col < CE; col++) begin
-          for (int beat = 0; beat < NrAccPerComputeElem; beat++) begin
+          for (int beat = 0; beat < AccDepthPerCE; beat++) begin
             acc_vrf_wdata[row][col][beat] = acc_vrf_rdata[row][col][beat];
             for (int byte_idx = 0; byte_idx < AccElemBytes; byte_idx++) begin
-              if (acc_zero_q[tv_acc_sel.tile][bank_row * NrAccPerComputeElem + beat][byte_idx])
+              if (acc_zero_q[tv_acc_sel.tile][bank_row * AccDepthPerCE + beat][byte_idx])
                 acc_vrf_wdata[row][col][beat][byte_idx*8 +: 8] = 8'd0;
             end
           end
@@ -1299,10 +1309,10 @@ module spatz_ope
       acc_vlsu_waddr = acc_vlsu_raddr;
       for (int row = 0; row < CE; row++) begin
         for (int col = 0; col < CE; col++) begin
-          for (int beat = 0; beat < NrAccPerComputeElem; beat++) begin
+          for (int beat = 0; beat < AccDepthPerCE; beat++) begin
             acc_vlsu_wdata[row][col][beat] = acc_vlsu_rdata[row][col][beat];
             for (int byte_idx = 0; byte_idx < AccElemBytes; byte_idx++) begin
-              if (acc_zero_q[tile_w_acc_sel.tile][bank_row * NrAccPerComputeElem + beat][byte_idx])
+              if (acc_zero_q[tile_w_acc_sel.tile][bank_row * AccDepthPerCE + beat][byte_idx])
                 acc_vlsu_wdata[row][col][beat][byte_idx*8 +: 8] = 8'd0;
             end
           end
@@ -1358,7 +1368,7 @@ module spatz_ope
           group_col = GroupIdxW'(col_i / CE);
           acc_word = acc_vlsu_rdata[tile_r_req_i.row % CE][bank_col][group_col];
           for (int unsigned acc_byte_idx = 0; acc_byte_idx < AccElemBytes; acc_byte_idx++) begin
-            if (acc_zero_q[tile_r_acc_sel.tile][bank_row * NrAccPerComputeElem + group_col][acc_byte_idx])
+            if (acc_zero_q[tile_r_acc_sel.tile][bank_row * AccDepthPerCE + group_col][acc_byte_idx])
               acc_word[acc_byte_idx*8 +: 8] = 8'd0;
           end
           tile_rdata_o[byte_idx*8 +: 8] =
@@ -1395,13 +1405,13 @@ module spatz_ope
         end
         bank_row = tv_req_q.op_ope.tss.is_row ? GroupIdxW'((tv_req_q.op_ope.tss.index + line_idx) / CE) :
             GroupIdxW'((line_word_idx * tv_elems_per_word) / CE);
-        for (int beat = 0; beat < NrAccPerComputeElem; beat++)
-          acc_zero_d[tv_acc_sel.tile][bank_row * NrAccPerComputeElem + beat] &= ~tv_acc_sel.byte_enable;
+        for (int beat = 0; beat < AccDepthPerCE; beat++)
+          acc_zero_d[tv_acc_sel.tile][bank_row * AccDepthPerCE + beat] &= ~tv_acc_sel.byte_enable;
       end
       if (tile_wvalid_i && tile_wready_o) begin
         bank_row = GroupIdxW'(tile_w_req_i.row / CE);
-        for (int beat = 0; beat < NrAccPerComputeElem; beat++)
-          acc_zero_d[tile_w_acc_sel.tile][bank_row * NrAccPerComputeElem + beat] &= ~tile_w_acc_sel.byte_enable;
+        for (int beat = 0; beat < AccDepthPerCE; beat++)
+          acc_zero_d[tile_w_acc_sel.tile][bank_row * AccDepthPerCE + beat] &= ~tile_w_acc_sel.byte_enable;
       end
     end
   end : acc_zero_update
@@ -1411,8 +1421,8 @@ module spatz_ope
       opope_accumulator #(
         .DATA_WIDTH(AccElemWidth         ),
         .DEPTH     (AccDepth    ),
-        .RD_PORTS  (NrAccPerComputeElem),
-        .WR_PORTS  (NrAccPerComputeElem)
+        .RD_PORTS  (AccDepthPerCE),
+        .WR_PORTS  (AccDepthPerCE)
       ) i_accumulator ( 
         .clk_i             (clk_i              ),
         .rst_ni            (rst_ni             ),
@@ -1445,6 +1455,11 @@ module spatz_ope
   logic fpu_clk;
 
   logic [CE-1:0][AccElemWidth-1:0] fpu_x_operand, fpu_w_operand;
+  logic [CE-1:0][AccElemWidth-1:0] fpu_x_operand_q, fpu_w_operand_q;
+  logic [CE-1:0][CE-1:0][AccElemWidth-1:0] fpu_addend_q;
+  logic [CE-1:0][CE-1:0] fpu_lane_active_q;
+  logic fpu_input_valid_q, fpu_input_sdotp_q;
+  vew_e fpu_input_ew_q, fpu_input_tew_q;
   // Widening FP16 operations consume a packed K pair from each e32 word.
   assign mac_use_sdotp = (mac_op_exec.ew != mac_op_exec.tew);
 
@@ -1525,6 +1540,29 @@ module spatz_ope
     end
   end
 
+  // One stage at the A/B/C interface; three stages remain inside FPnew.
+  always_ff @(posedge fpu_clk or negedge rst_ni) begin : fpu_input_register
+    if (!rst_ni) begin
+      fpu_x_operand_q   <= '0;
+      fpu_w_operand_q   <= '0;
+      fpu_addend_q      <= '0;
+      fpu_lane_active_q <= '0;
+      fpu_input_valid_q <= 1'b0;
+      fpu_input_sdotp_q <= 1'b0;
+      fpu_input_ew_q    <= EW_16;
+      fpu_input_tew_q   <= EW_32;
+    end else if (fpu_pipe_advance) begin
+      fpu_x_operand_q   <= fpu_x_operand;
+      fpu_w_operand_q   <= fpu_w_operand;
+      fpu_addend_q      <= fpu_addend;
+      fpu_lane_active_q <= mac_lane_active;
+      fpu_input_valid_q <= mac_fire;
+      fpu_input_sdotp_q <= mac_use_sdotp;
+      fpu_input_ew_q    <= mac_op_exec.ew;
+      fpu_input_tew_q   <= mac_op_exec.tew;
+    end
+  end
+
   for (genvar row = 0; row < CE; row++) begin : gen_fpu_row
     for (genvar col = 0; col < CE; col++) begin : gen_fpu_col
 
@@ -1535,8 +1573,8 @@ module spatz_ope
       logic [31:0] sdotp16_result;
       logic [31:0] sdotp16_x_operand, sdotp16_w_operand;
 
-      assign sdotp16_x_operand = fpu_x_operand[row];
-      assign sdotp16_w_operand = fpu_w_operand[col];
+      assign sdotp16_x_operand = fpu_x_operand_q[row];
+      assign sdotp16_w_operand = fpu_w_operand_q[col];
 
       assign fpu_result_valid[row][col] =
           fma16_valid || fma32_valid || sdotp16_valid;
@@ -1549,19 +1587,19 @@ module spatz_ope
           fpu_result[row][col] = sdotp16_result;
       end
 
-      if (EnableTEW16) begin : gen_fma16
+      if (EnableFMA16) begin : gen_fma16
         opope_fma #(
           .FpFormat    (fpnew_pkg::FP16       ),
-          .NumPipeRegs (NumPipeRegs           ),
+          .NumPipeRegs (NumFpuPipeRegs        ),
           .PipeConfig  (fpnew_pkg::DISTRIBUTED),
           .Stallable   (1'b1                  )
         ) i_fma16 (
           .clk_i          (fpu_clk                                              ),
           .rst_ni         (rst_ni                                               ),
-          .operands_i     ({fpu_w_operand[col][15:0], fpu_x_operand[row][15:0]} ),
-          .addend_i       (fpu_addend[row][col][15:0]                           ),
-          .valid_i        (mac_fire && mac_lane_active[row][col] &&
-                           !mac_use_sdotp && (mac_op_exec.tew == EW_16)),
+          .operands_i     ({fpu_w_operand_q[col][15:0], fpu_x_operand_q[row][15:0]} ),
+          .addend_i       (fpu_addend_q[row][col][15:0]                         ),
+          .valid_i        (fpu_input_valid_q && fpu_lane_active_q[row][col] &&
+                           !fpu_input_sdotp_q && (fpu_input_tew_q == EW_16)),
           .ready_o        (fma16_ready[row][col]                                ),
           .reg_enable_i   (fpu_pipe_advance                                     ),
           .result_valid_o (fma16_valid                                          ),
@@ -1574,29 +1612,35 @@ module spatz_ope
         assign fma16_result          = '0;
       end
 
-      opope_fma #( 
+      if (EnableFMA32) begin : gen_fma32
+      opope_fma #(
         .FpFormat    (fpnew_pkg::FP32       ),
-        .NumPipeRegs (NumPipeRegs           ),
+        .NumPipeRegs (NumFpuPipeRegs        ),
         .PipeConfig  (fpnew_pkg::DISTRIBUTED),
         .Stallable   (1'b1                  )
       ) i_fma32 ( 
         .clk_i          (fpu_clk                                              ),
         .rst_ni         (rst_ni                                               ),
-        .operands_i     ({fpu_w_operand[col], fpu_x_operand[row]}             ),
-        .addend_i       (fpu_addend[row][col]                                 ),
-        .valid_i        (mac_fire && mac_lane_active[row][col] &&
-                         !mac_use_sdotp && (mac_op_exec.tew == EW_32)),
+        .operands_i     ({fpu_w_operand_q[col], fpu_x_operand_q[row]}         ),
+        .addend_i       (fpu_addend_q[row][col]                               ),
+        .valid_i        (fpu_input_valid_q && fpu_lane_active_q[row][col] &&
+                         !fpu_input_sdotp_q && (fpu_input_tew_q == EW_32)),
         .ready_o        (fma32_ready[row][col]                                ),
         .reg_enable_i   (fpu_pipe_advance                                     ),
         .result_valid_o (fma32_valid                                          ),
         .result_ready_i (fpu_pipe_result_ready                                ),
         .result_o       (fma32_result                                         )
       );
+      end else begin : gen_no_fma32
+        assign fma32_ready[row][col] = 1'b1;
+        assign fma32_valid = 1'b0;
+        assign fma32_result = '0;
+      end
 
       opope_sdotp #(
         .SrcDotpFpFmtConfig (fpnew_pkg::fmt_logic_t'(6'b001000)),
         .DstDotpFpFmtConfig (fpnew_pkg::fmt_logic_t'(6'b100000)),
-        .NumPipeRegs        (NumPipeRegs                        ),
+        .NumPipeRegs        (NumFpuPipeRegs                     ),
         .PipeConfig         (fpnew_pkg::DISTRIBUTED             ),
         .Stallable          (1'b1                               )
       ) i_sdotp16 (
@@ -1606,10 +1650,10 @@ module spatz_ope
         .operand_b_i    (sdotp16_w_operand[15:0]                               ),
         .operand_c_i    ({{16{1'b0}}, sdotp16_x_operand[31:16]}                 ),
         .operand_d_i    (sdotp16_w_operand[31:16]                              ),
-        .dst_operands_i (fpu_addend[row][col]                                  ),
-        .valid_i        (mac_fire && mac_lane_active[row][col] &&
-                         (mac_op_exec.ew == EW_16) && (mac_op_exec.tew == EW_32) &&
-                         mac_use_sdotp                                            ),
+        .dst_operands_i (fpu_addend_q[row][col]                                ),
+        .valid_i        (fpu_input_valid_q && fpu_lane_active_q[row][col] &&
+                         fpu_input_sdotp_q && (fpu_input_ew_q == EW_16) &&
+                         (fpu_input_tew_q == EW_32)),
         .ready_o        (sdotp16_ready[row][col]                                ),
         .reg_enable_i   (fpu_pipe_advance                                       ),
         .result_valid_o (sdotp16_valid                                          ),
@@ -1775,5 +1819,15 @@ module spatz_ope
 
   if ((TE == 0) || ((TE & (TE-1)) != 0)) $error("[OPE] TE must be power of 2.");
   if ((CE == 0) || ((CE & (CE-1)) != 0)) $error("[OPE] CE must be power of 2.");
+  if (TE < CE) $error("[OPE] TE must be greater than or equal to CE.");
+  if ((CE != 0) && ((TE % CE) != 0)) $error("[OPE] TE must be an integer multiple of CE.");
+`ifndef SYNTHESIS
+  if (!EnableFMA32) begin : gen_fma32_disabled_check
+    always @(posedge clk_i) begin
+      if (rst_ni && mac_fire && !mac_use_sdotp && (mac_op_exec.tew == EW_32))
+        $fatal(1, "[OPE] FP32 VTFMM requires EnableFMA32=1");
+    end
+  end
+`endif
 
 endmodule : spatz_ope

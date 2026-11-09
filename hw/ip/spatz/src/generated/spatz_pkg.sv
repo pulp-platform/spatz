@@ -93,11 +93,9 @@ package spatz_pkg;
   localparam int unsigned AccElemBytes = AccElemWidth / 8;
   // Architecture Matrix Tile State: mt0, mt1, ..., mt15.
   localparam int unsigned NrPhysicalTile = 16;
-  // Tile Dimension
+  // Physical compute-array and architectural tile dimensions.
   localparam int unsigned OPEComputeEdge = 8;
-  // Number of compute-edge groups along one tile edge
-  localparam int unsigned NrAccPerComputeElem = 2;
-  localparam int unsigned TileEdge = OPEComputeEdge * NrAccPerComputeElem;
+  localparam int unsigned TileEdge = 16;
   // The controller further limits tk to 32/SEW, or to one for 64-bit accumulation.
   localparam int unsigned KMAX   = (AccElemWidth <= 32) ? (32 / 8) : 1;
   // Maximum storage required for one complete Tile row, in bytes.
