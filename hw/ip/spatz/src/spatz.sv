@@ -80,7 +80,9 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     output logic                              vfu_uncorrectable_error_o,
     // controller errors
     output logic                              controller_correctable_error_o,
-    output logic                              controller_uncorrectable_error_o
+    output logic                              controller_uncorrectable_error_o,
+    output logic                              vsldu_correctable_error_o,
+    output logic                              vsldu_uncorrectable_error_o
   );
 
   ////////////////
@@ -755,7 +757,8 @@ logic vfu_correctable_error_internal;
   );
 `endif
 
-assign vlsu_correctable_error_o = vlsu_correctable_error_internal | vlsu_buf_fault;
+logic [1:0] vlsu_prev_tmr_fault;
+assign vlsu_correctable_error_o = vlsu_correctable_error_internal | vlsu_buf_fault | (|vlsu_prev_tmr_fault);
 assign vfu_correctable_error_o = vfu_correctable_error_internal | vfu_buf_fault;
 
 `ifdef DOUBLE_BW
@@ -804,15 +807,26 @@ assign vfu_correctable_error_o = vfu_correctable_error_internal | vfu_buf_fault;
     end
   end
 
-  always_ff @(posedge clk_i or negedge rst_ni) begin
-    if (!rst_ni) begin
-      vlsu_prev_merged_q <= '0;
-      vlsu_prev_waddr_q  <= '0;
-    end else begin
-      vlsu_prev_merged_q <= vlsu_prev_merged_d;
-      vlsu_prev_waddr_q  <= vlsu_prev_waddr_d;
+  // TMR: vlsu_prev_merged_q / vlsu_prev_waddr_q hold the voted value, copies hold the state
+  logic [N_FU*ELEN-1:0] vlsu_prev_merged_q_c [3];
+  vrf_addr_t            vlsu_prev_waddr_q_c  [3];
+  for (genvar t = 0; t < 3; t++) begin : gen_vlsu_prev_rep
+    always_ff @(posedge clk_i or negedge rst_ni) begin
+      if (!rst_ni) begin
+        vlsu_prev_merged_q_c[t] <= '0;
+        vlsu_prev_waddr_q_c[t]  <= '0;
+      end else begin
+        vlsu_prev_merged_q_c[t] <= vlsu_prev_merged_d;
+        vlsu_prev_waddr_q_c[t]  <= vlsu_prev_waddr_d;
+      end
     end
   end
+  bitwise_TMR_voter_fail #(.DataWidth($bits(vlsu_prev_merged_q)), .VoterType(1)) i_vlsu_prev_merged_voter (
+    .a_i(vlsu_prev_merged_q_c[0]), .b_i(vlsu_prev_merged_q_c[1]), .c_i(vlsu_prev_merged_q_c[2]),
+    .majority_o(vlsu_prev_merged_q), .fault_detected_o(vlsu_prev_tmr_fault[0]));
+  bitwise_TMR_voter_fail #(.DataWidth($bits(vlsu_prev_waddr_q)), .VoterType(1)) i_vlsu_prev_waddr_voter (
+    .a_i(vlsu_prev_waddr_q_c[0]), .b_i(vlsu_prev_waddr_q_c[1]), .c_i(vlsu_prev_waddr_q_c[2]),
+    .majority_o(vlsu_prev_waddr_q), .fault_detected_o(vlsu_prev_tmr_fault[1]));
 
   // Per-cut: decode VLSU write codeword, merge with accumulated bytes, re-encode for VRF
   logic [N_FU-1:0] vlsu_wr_sec_err_vec, vlsu_wr_ded_err_vec;
@@ -1040,7 +1054,9 @@ assign vfu_correctable_error_o = vfu_correctable_error_internal | vfu_buf_fault;
     .vrf_re_o         (sb_re[VSLDU_VS2_RD]                            ),
     .vrf_rdata_i      (vrf_rdata[VSLDU_VS2_RD]                        ),
     .vrf_rvalid_i     (vrf_rvalid[VSLDU_VS2_RD]                       ),
-    .vrf_id_o         ({sb_id[SB_VSLDU_VD_WD], sb_id[SB_VSLDU_VS2_RD]})
+    .vrf_id_o         ({sb_id[SB_VSLDU_VD_WD], sb_id[SB_VSLDU_VS2_RD]}),
+    .vsldu_correctable_fault_o  (vsldu_correctable_error_o  ),
+    .vsldu_uncorrectable_fault_o(vsldu_uncorrectable_error_o)
   );
 `endif // VENTAGLIO
 

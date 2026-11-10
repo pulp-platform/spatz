@@ -134,6 +134,8 @@ module spatz_cc
     // controller error outputs
     output logic                              controller_correctable_error_o,
     output logic                              controller_uncorrectable_error_o,
+    output logic                              vsldu_correctable_error_o,
+    output logic                              vsldu_uncorrectable_error_o,
     // Snitch error outputs
     output logic                         snitch_correctable_error_o,
     output logic                         snitch_uncorrectable_error_o
@@ -358,7 +360,9 @@ module spatz_cc
     .vfu_uncorrectable_error_o (vfu_uncorrectable_error_o),
     // controller error outputs
     .controller_correctable_error_o (controller_correctable_error_o),
-    .controller_uncorrectable_error_o (controller_uncorrectable_error_o)
+    .controller_uncorrectable_error_o (controller_uncorrectable_error_o),
+    .vsldu_correctable_error_o (vsldu_correctable_error_o),
+    .vsldu_uncorrectable_error_o (vsldu_uncorrectable_error_o)
   );
 
   for (genvar p = 0; p < NumMemPortsPerSpatz; p++) begin: gen_tcdm_assignment

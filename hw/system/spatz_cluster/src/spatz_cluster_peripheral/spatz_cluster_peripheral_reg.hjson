@@ -855,6 +855,40 @@
 	    name: "COUNT",
 	    desc: "Saturating count of aggregated uncorrectable AXI interconnect errors for this cluster."
 	}]
-    }
+    },
+     {
+	multireg: {
+	    name: "VSLDU_CORRECTABLE_COUNT",
+	    desc: "vsldu correctable fault counter.",
+	    swaccess: "ro",
+	    hwaccess: "hrw",
+	    hwext: "true",
+	    count: "NumVrfUnits",
+	    compact: "false",
+	    cname: "vsldu_correctable_count",
+	    fields: [{
+		bits: "31:0",
+		name: "COUNT",
+		desc: "Saturating count of vsldu correctable faults."
+	    }]
+	}
+     },
+     {
+	multireg: {
+	    name: "VSLDU_UNCORRECTABLE_COUNT",
+	    desc: "vsldu uncorrectable fault counter.",
+	    swaccess: "ro",
+	    hwaccess: "hrw",
+	    hwext: "true",
+	    count: "NumVrfUnits",
+	    compact: "false",
+	    cname: "vsldu_uncorrectable_count",
+	    fields: [{
+		bits: "31:0",
+		name: "COUNT",
+		desc: "Saturating count of vsldu uncorrectable faults."
+	    }]
+	}
+     }
   ]
 }

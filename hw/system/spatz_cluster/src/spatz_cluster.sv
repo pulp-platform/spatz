@@ -475,6 +475,8 @@ module spatz_cluster
   logic [NrCores-1:0]  vfu_uncorrectable_fault;
   logic [NrCores-1:0]  controller_correctable_fault;
   logic [NrCores-1:0]  controller_uncorrectable_fault;
+  logic [NrCores-1:0]  vsldu_correctable_fault;
+  logic [NrCores-1:0]  vsldu_uncorrectable_fault;
 
   // Per-core whole-core TMR lockstep mismatch.
   logic [NrCores-1:0]  snitch_correctable_fault;
@@ -498,6 +500,8 @@ module spatz_cluster
   logic [NrCores-1:0][ErrorCounterWidth-1:0]  vfu_uncorrectable_count;
   logic [NrCores-1:0][ErrorCounterWidth-1:0]  controller_correctable_count;
   logic [NrCores-1:0][ErrorCounterWidth-1:0]  controller_uncorrectable_count;
+  logic [NrCores-1:0][ErrorCounterWidth-1:0]  vsldu_correctable_count;
+  logic [NrCores-1:0][ErrorCounterWidth-1:0]  vsldu_uncorrectable_count;
 
   logic [NumTcdmBanks-1:0][ErrorCounterWidth-1:0] tcdm_rd_correctable_count;
   logic [NumTcdmBanks-1:0][ErrorCounterWidth-1:0] tcdm_rd_uncorrectable_count;
@@ -580,6 +584,8 @@ module spatz_cluster
   .vfu_uncorrectable_fault_i (vfu_uncorrectable_fault),
   .controller_correctable_fault_i (controller_correctable_fault),
   .controller_uncorrectable_fault_i (controller_uncorrectable_fault),
+  .vsldu_correctable_fault_i (vsldu_correctable_fault),
+  .vsldu_uncorrectable_fault_i (vsldu_uncorrectable_fault),
 
   .tcdm_rd_correctable_count_o (tcdm_rd_correctable_count),
   .tcdm_rd_uncorrectable_count_o (tcdm_rd_uncorrectable_count),
@@ -600,6 +606,8 @@ module spatz_cluster
   .vfu_uncorrectable_count_o (vfu_uncorrectable_count),
   .controller_correctable_count_o (controller_correctable_count),
   .controller_uncorrectable_count_o (controller_uncorrectable_count),
+  .vsldu_correctable_count_o (vsldu_correctable_count),
+  .vsldu_uncorrectable_count_o (vsldu_uncorrectable_count),
   .vlsu_correctable_count_o (vlsu_correctable_count),
   .vlsu_uncorrectable_count_o (vlsu_uncorrectable_count),
   .icache_correctable_count_o (icache_correctable_count),
@@ -1385,6 +1393,8 @@ module spatz_cluster
         // controller error outputs
         .controller_correctable_error_o (controller_correctable_fault[i]),
         .controller_uncorrectable_error_o (controller_uncorrectable_fault[i]),
+        .vsldu_correctable_error_o (vsldu_correctable_fault[i]),
+        .vsldu_uncorrectable_error_o (vsldu_uncorrectable_fault[i]),
         // .core_tmr_fault_o (core_tmr_fault[i])
         // Snitch error outputs
         .snitch_correctable_error_o (snitch_correctable_fault[i]),
@@ -1882,6 +1892,8 @@ module spatz_cluster
     .vfu_uncorrectable_count_i        (vfu_uncorrectable_count[0]),
     .controller_correctable_count_i   (controller_correctable_count[0]),
     .controller_uncorrectable_count_i (controller_uncorrectable_count[0]),
+    .vsldu_correctable_count_i   (vsldu_correctable_count[0]),
+    .vsldu_uncorrectable_count_i (vsldu_uncorrectable_count[0]),
     .tcdm_rd_correctable_count_i      (tcdm_rd_correctable_count      ),
     .tcdm_rd_uncorrectable_count_i    (tcdm_rd_uncorrectable_count    ),
     .tcdm_scrub_correctable_count_i   (tcdm_scrub_correctable_count   ),

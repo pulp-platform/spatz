@@ -85,6 +85,11 @@ module spatz_doublebw_vlsu
     // output logic                            datapath_tmr_fault_o
   );
 
+  // TMR fault flags of the triplicated FFs
+  logic [5-1:0] ff_tmr_err_0;
+  logic ff_tmr_fault_any;
+  assign ff_tmr_fault_any = (|ff_tmr_err_0);
+
 // Include FF
 `include "common_cells/registers.svh"
 
@@ -230,7 +235,15 @@ module spatz_doublebw_vlsu
     VLSU_ReadingV0_t  = 3'b100
   } state_t;
   state_t state_d, state_q;
-  `FF(state_q, state_d, VLSU_RunningLoad)
+  // TMR: state_q (voted value in state_q, copies state_q0..2)
+  state_t state_q0, state_q1, state_q2;
+  `FF(state_q0, state_d, VLSU_RunningLoad)
+  `FF(state_q1, state_d, VLSU_RunningLoad)
+  `FF(state_q2, state_d, VLSU_RunningLoad)
+  logic [$bits(state_q)-1:0] state_q_vote;
+  bitwise_TMR_voter_fail #(.DataWidth($bits(state_q)), .VoterType(1)) i_state_q_voter (
+    .a_i(state_q0), .b_i(state_q1), .c_i(state_q2), .majority_o(state_q_vote), .fault_detected_o(ff_tmr_err_0[0]));
+  assign state_q = state_t'(state_q_vote);
   logic state_illegal;
   assign state_illegal = ~(^state_q);
 
@@ -699,12 +712,28 @@ module spatz_doublebw_vlsu
   // Current element index and byte index that are being accessed at the register file
   vreg_elem_t [NrInterfaces-1:0] vd_elem_id;
   vreg_elem_t [NrInterfaces-1:0] vs2_elem_id_d, vs2_elem_id_q;
-  `FF(vs2_elem_id_q, vs2_elem_id_d, '0)
+  // TMR: vs2_elem_id_q (voted value in vs2_elem_id_q, copies vs2_elem_id_q0..2)
+  vreg_elem_t [NrInterfaces-1:0] vs2_elem_id_q0, vs2_elem_id_q1, vs2_elem_id_q2;
+  `FF(vs2_elem_id_q0, vs2_elem_id_d, '0)
+  `FF(vs2_elem_id_q1, vs2_elem_id_d, '0)
+  `FF(vs2_elem_id_q2, vs2_elem_id_d, '0)
+  logic [$bits(vs2_elem_id_q)-1:0] vs2_elem_id_q_vote;
+  bitwise_TMR_voter_fail #(.DataWidth($bits(vs2_elem_id_q)), .VoterType(1)) i_vs2_elem_id_q_voter (
+    .a_i(vs2_elem_id_q0), .b_i(vs2_elem_id_q1), .c_i(vs2_elem_id_q2), .majority_o(vs2_elem_id_q_vote), .fault_detected_o(ff_tmr_err_0[1]));
+  assign vs2_elem_id_q = (vs2_elem_id_q_vote);
 
   // Total bytes of indexes consumed since instruction start per interface.
+  // TMR fault flags of the triplicated per-interface FFs
+  logic [NrInterfaces*6-1:0] ff_tmr_err_idx;
   vlen_t [NrInterfaces-1:0] total_idx_bytes_q, total_idx_bytes_d;
   for (genvar intf = 0; intf < NrInterfaces; intf++) begin: gen_total_idx_bytes
-    `FF(total_idx_bytes_q[intf], total_idx_bytes_d[intf], '0)
+    // TMR: total_idx_bytes_q[intf] (voted value in total_idx_bytes_q, copies total_idx_bytes_q_c0..2)
+    logic [$bits(total_idx_bytes_q[intf])-1:0] total_idx_bytes_q_c0, total_idx_bytes_q_c1, total_idx_bytes_q_c2;
+    `FF(total_idx_bytes_q_c0, total_idx_bytes_d[intf], '0)
+    `FF(total_idx_bytes_q_c1, total_idx_bytes_d[intf], '0)
+    `FF(total_idx_bytes_q_c2, total_idx_bytes_d[intf], '0)
+    bitwise_TMR_voter_fail #(.DataWidth($bits(total_idx_bytes_q[intf])), .VoterType(1)) i_total_idx_bytes_q_voter (
+      .a_i(total_idx_bytes_q_c0), .b_i(total_idx_bytes_q_c1), .c_i(total_idx_bytes_q_c2), .majority_o(total_idx_bytes_q[intf]), .fault_detected_o(ff_tmr_err_idx[intf*6+0]));
   end: gen_total_idx_bytes
 
   logic [NrInterfaces-1:0] fetch_next_idx_global;
@@ -798,7 +827,13 @@ module spatz_doublebw_vlsu
   logic [VLEN-1:0] operand_v0_t, operand_v0_t_q;
   assign operand_v0_t = (state_q == VLSU_ReadingV0_t) ? {vs2_decoded[0], vd_rdata_decoded[0]} : '0; // decoder is attached to the read ports
   // Backup v0.t
-  `FFL(operand_v0_t_q, operand_v0_t, v0_t_is_ready, '0)
+  // TMR: operand_v0_t_q (voted value in operand_v0_t_q, copies operand_v0_t_q0..2)
+  logic [VLEN-1:0] operand_v0_t_q0, operand_v0_t_q1, operand_v0_t_q2;
+  `FFL(operand_v0_t_q0, operand_v0_t, v0_t_is_ready, '0)
+  `FFL(operand_v0_t_q1, operand_v0_t, v0_t_is_ready, '0)
+  `FFL(operand_v0_t_q2, operand_v0_t, v0_t_is_ready, '0)
+  bitwise_TMR_voter_fail #(.DataWidth($bits(operand_v0_t_q)), .VoterType(1)) i_operand_v0_t_q_voter (
+    .a_i(operand_v0_t_q0), .b_i(operand_v0_t_q1), .c_i(operand_v0_t_q2), .majority_o(operand_v0_t_q), .fault_detected_o(ff_tmr_err_0[2]));
 
   // Calculate the register file addresses
   always_comb begin : gen_vreg_addr
@@ -1073,7 +1108,19 @@ module spatz_doublebw_vlsu
       .err_o ( vrf_req_register_fault[intf] )
     );
 
-    `FF(coalesce_q[intf], coalesce_d[intf], '0)
+    // TMR: coalesce_q[intf] (voted value in coalesce_q, copies coalesce_q_c0..2)
+
+    logic [$bits(coalesce_q[intf])-1:0] coalesce_q_c0, coalesce_q_c1, coalesce_q_c2;
+
+    `FF(coalesce_q_c0, coalesce_d[intf], '0)
+
+    `FF(coalesce_q_c1, coalesce_d[intf], '0)
+
+    `FF(coalesce_q_c2, coalesce_d[intf], '0)
+
+    bitwise_TMR_voter_fail #(.DataWidth($bits(coalesce_q[intf])), .VoterType(1)) i_coalesce_q_voter (
+
+      .a_i(coalesce_q_c0), .b_i(coalesce_q_c1), .c_i(coalesce_q_c2), .majority_o(coalesce_q[intf]), .fault_detected_o(ff_tmr_err_idx[intf*6+1]));
     // TMR-protected: persistent single-bit handshake flag gating whether
     // the coalescing buffer holds a pending VRF write; see busy_q for the
     // general rationale.
@@ -1258,7 +1305,13 @@ module spatz_doublebw_vlsu
   vrf_addr_t [1:0] vd_prev_commit_waddr_q, vd_prev_commit_waddr_d;
   logic      [1:0] vd_prev_commit_valid_q, vd_prev_commit_valid_d;
   for (genvar intf = 0; intf < NrInterfaces; intf++) begin : gen_vd_prev_commit_ff
-    `FF(vd_prev_commit_waddr_q[intf], vd_prev_commit_waddr_d[intf], '0)
+    // TMR: vd_prev_commit_waddr_q[intf] (voted value in vd_prev_commit_waddr_q, copies vd_prev_commit_waddr_q_c0..2)
+    logic [$bits(vd_prev_commit_waddr_q[intf])-1:0] vd_prev_commit_waddr_q_c0, vd_prev_commit_waddr_q_c1, vd_prev_commit_waddr_q_c2;
+    `FF(vd_prev_commit_waddr_q_c0, vd_prev_commit_waddr_d[intf], '0)
+    `FF(vd_prev_commit_waddr_q_c1, vd_prev_commit_waddr_d[intf], '0)
+    `FF(vd_prev_commit_waddr_q_c2, vd_prev_commit_waddr_d[intf], '0)
+    bitwise_TMR_voter_fail #(.DataWidth($bits(vd_prev_commit_waddr_q[intf])), .VoterType(1)) i_vd_prev_commit_waddr_q_voter (
+      .a_i(vd_prev_commit_waddr_q_c0), .b_i(vd_prev_commit_waddr_q_c1), .c_i(vd_prev_commit_waddr_q_c2), .majority_o(vd_prev_commit_waddr_q[intf]), .fault_detected_o(ff_tmr_err_idx[intf*6+2]));
     // TMR-protected: persistent single-bit handshake flag; see busy_q for
     // the general rationale.
     logic vd_prev_commit_valid_q_rep [3];
@@ -1410,9 +1463,29 @@ module spatz_doublebw_vlsu
   logic      [NrInterfaces-1:0][N_FU*ELEN-1:0]  vd_rmw_data_q,     vd_rmw_data_d;
   logic      [NrInterfaces-1:0]                 vd_rmw_inflight_q, vd_rmw_inflight_d;
   for (genvar intf = 0; intf < NrInterfaces; intf++) begin : gen_vd_rmw_ff
-    `FF(vlsu_ld_rmw_q[intf],    vlsu_ld_rmw_d[intf],    VLSU_LD_NORMAL)
-    `FF(vd_rmw_addr_q[intf],     vd_rmw_addr_d[intf],     '0)
-    `FF(vd_rmw_data_q[intf],     vd_rmw_data_d[intf],     '0)
+    // TMR: vlsu_ld_rmw_q[intf] (voted value in vlsu_ld_rmw_q, copies vlsu_ld_rmw_q_c0..2)
+    logic [$bits(vlsu_ld_rmw_q[intf])-1:0] vlsu_ld_rmw_q_vote;
+    logic [$bits(vlsu_ld_rmw_q[intf])-1:0] vlsu_ld_rmw_q_c0, vlsu_ld_rmw_q_c1, vlsu_ld_rmw_q_c2;
+    `FF(vlsu_ld_rmw_q_c0, vlsu_ld_rmw_d[intf], VLSU_LD_NORMAL)
+    `FF(vlsu_ld_rmw_q_c1, vlsu_ld_rmw_d[intf], VLSU_LD_NORMAL)
+    `FF(vlsu_ld_rmw_q_c2, vlsu_ld_rmw_d[intf], VLSU_LD_NORMAL)
+    bitwise_TMR_voter_fail #(.DataWidth($bits(vlsu_ld_rmw_q[intf])), .VoterType(1)) i_vlsu_ld_rmw_q_voter (
+      .a_i(vlsu_ld_rmw_q_c0), .b_i(vlsu_ld_rmw_q_c1), .c_i(vlsu_ld_rmw_q_c2), .majority_o(vlsu_ld_rmw_q_vote), .fault_detected_o(ff_tmr_err_idx[intf*6+3]));
+    assign vlsu_ld_rmw_q[intf] = vlsu_ld_rmw_e'(vlsu_ld_rmw_q_vote);
+    // TMR: vd_rmw_addr_q[intf] (voted value in vd_rmw_addr_q, copies vd_rmw_addr_q_c0..2)
+    logic [$bits(vd_rmw_addr_q[intf])-1:0] vd_rmw_addr_q_c0, vd_rmw_addr_q_c1, vd_rmw_addr_q_c2;
+    `FF(vd_rmw_addr_q_c0, vd_rmw_addr_d[intf], '0)
+    `FF(vd_rmw_addr_q_c1, vd_rmw_addr_d[intf], '0)
+    `FF(vd_rmw_addr_q_c2, vd_rmw_addr_d[intf], '0)
+    bitwise_TMR_voter_fail #(.DataWidth($bits(vd_rmw_addr_q[intf])), .VoterType(1)) i_vd_rmw_addr_q_voter (
+      .a_i(vd_rmw_addr_q_c0), .b_i(vd_rmw_addr_q_c1), .c_i(vd_rmw_addr_q_c2), .majority_o(vd_rmw_addr_q[intf]), .fault_detected_o(ff_tmr_err_idx[intf*6+4]));
+    // TMR: vd_rmw_data_q[intf] (voted value in vd_rmw_data_q, copies vd_rmw_data_q_c0..2)
+    logic [$bits(vd_rmw_data_q[intf])-1:0] vd_rmw_data_q_c0, vd_rmw_data_q_c1, vd_rmw_data_q_c2;
+    `FF(vd_rmw_data_q_c0, vd_rmw_data_d[intf], '0)
+    `FF(vd_rmw_data_q_c1, vd_rmw_data_d[intf], '0)
+    `FF(vd_rmw_data_q_c2, vd_rmw_data_d[intf], '0)
+    bitwise_TMR_voter_fail #(.DataWidth($bits(vd_rmw_data_q[intf])), .VoterType(1)) i_vd_rmw_data_q_voter (
+      .a_i(vd_rmw_data_q_c0), .b_i(vd_rmw_data_q_c1), .c_i(vd_rmw_data_q_c2), .majority_o(vd_rmw_data_q[intf]), .fault_detected_o(ff_tmr_err_idx[intf*6+5]));
     // TMR-protected: persistent single-bit handshake flags gating the RMW
     // read-back accumulator; see busy_q for the general rationale.
     logic vd_rmw_valid_q_rep [3];
@@ -1566,7 +1639,13 @@ module spatz_doublebw_vlsu
 
   logic vlsu_rsp_valid_q; // register the instruction finish signal
   logic v0_t_read_done;
-  `FFLARNC(v0_t_read_done,1'b1,v0_t_is_ready,vlsu_rsp_valid_o,1'b0,clk_i,rst_ni);
+  // TMR: v0_t_read_done (voted value in v0_t_read_done, copies v0_t_read_done0..2)
+  logic v0_t_read_done0, v0_t_read_done1, v0_t_read_done2;
+  `FFLARNC(v0_t_read_done0, 1'b1, v0_t_is_ready, vlsu_rsp_valid_o, 1'b0, clk_i, rst_ni)
+  `FFLARNC(v0_t_read_done1, 1'b1, v0_t_is_ready, vlsu_rsp_valid_o, 1'b0, clk_i, rst_ni)
+  `FFLARNC(v0_t_read_done2, 1'b1, v0_t_is_ready, vlsu_rsp_valid_o, 1'b0, clk_i, rst_ni)
+  bitwise_TMR_voter_fail #(.DataWidth($bits(v0_t_read_done)), .VoterType(1)) i_v0_t_read_done_voter (
+    .a_i(v0_t_read_done0), .b_i(v0_t_read_done1), .c_i(v0_t_read_done2), .majority_o(v0_t_read_done), .fault_detected_o(ff_tmr_err_0[3]));
   // TMR-protected: persistent single-bit handshake flag; see busy_q above
   // for the rationale.
   logic v0_t_is_ready_q_rep [3];
@@ -1647,7 +1726,13 @@ module spatz_doublebw_vlsu
   // Number of pending requests
   logic [NrInterfaces-1:0] [N_FU-1:0][idx_width(NrOutstandingLoads):0] mem_pending_d, mem_pending_q;
   logic [NrInterfaces-1:0] [N_FU-1:0] mem_pending;
-  `FF(mem_pending_q, mem_pending_d, '{default: '0})
+  // TMR: mem_pending_q (voted value in mem_pending_q, copies mem_pending_q0..2)
+  logic [NrInterfaces-1:0] [N_FU-1:0][idx_width(NrOutstandingLoads):0] mem_pending_q0, mem_pending_q1, mem_pending_q2;
+  `FF(mem_pending_q0, mem_pending_d, '{default: '0})
+  `FF(mem_pending_q1, mem_pending_d, '{default: '0})
+  `FF(mem_pending_q2, mem_pending_d, '{default: '0})
+  bitwise_TMR_voter_fail #(.DataWidth($bits(mem_pending_q)), .VoterType(1)) i_mem_pending_q_voter (
+    .a_i(mem_pending_q0), .b_i(mem_pending_q1), .c_i(mem_pending_q2), .majority_o(mem_pending_q), .fault_detected_o(ff_tmr_err_0[4]));
   always_comb begin
     // Maintain state
     mem_pending_d = mem_pending_q;
@@ -2282,7 +2367,8 @@ module spatz_doublebw_vlsu
   assign vlsu_correctable_error_o = vlsu_st_sec_err_o | vlsu_ld_sec_err_o | vlsu_wr_sec_err_o
                                    | |vlsu_vd_sec_err_o | |vlsu_vs2_sec_err_o
                                    | handshake_tmr_fault_o | datapath_tmr_fault_o
-                                   | (mem_spatz_req_valid & opq_dec_err[0]);
+                                   | (mem_spatz_req_valid & opq_dec_err[0])
+                                   | ff_tmr_fault_any | (|ff_tmr_err_idx);
   assign vlsu_uncorrectable_error_o = vlsu_st_ded_err_o | vlsu_ld_ded_err_o | vlsu_wr_ded_err_o
                                     | |vlsu_vd_ded_err_o | |vlsu_vs2_ded_err_o
                                     | fsm_illegal_state_o
