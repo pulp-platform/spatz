@@ -114,7 +114,7 @@ void __attribute__ ((noinline)) test_load_1x1 (float* addrA, int K)
   // --------------------------------------------------------------------------
   asm volatile("slli        t3,  %0  ,  2 " :: "r" (K)    );  // t3  = K*4;
   asm volatile("addi        t1,  %0  ,  0 " :: "r" (addrA));
-  asm volatile("mld.lhs     m0, (t1) , t3 "   );
+  asm volatile("mld.cw.lhs     m0, (t1) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("mzero.m     m0            "   );
   asm volatile("slli        t3,  %0  ,  2 " :: "r" (K)    );  // t3  = K*4;
@@ -122,67 +122,67 @@ void __attribute__ ((noinline)) test_load_1x1 (float* addrA, int K)
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  zero,  0 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.rhs     m0, (t0) , t3 "   );
+  asm volatile("mld.rw.rhs     m0, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.lhs     m1, (t0) , t3 "   );
+  asm volatile("mld.cw.lhs     m1, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.rhs     m2, (t0) , t3 "   );
+  asm volatile("mld.rw.rhs     m2, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.lhs     m3, (t0) , t3 "   );
+  asm volatile("mld.cw.lhs     m3, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.rhs     m4, (t0) , t3 "   );
+  asm volatile("mld.rw.rhs     m4, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.lhs     m5, (t0) , t3 "   );
+  asm volatile("mld.cw.lhs     m5, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.rhs     m6, (t0) , t3 "   );
+  asm volatile("mld.rw.rhs     m6, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.lhs     m7, (t0) , t3 "   );
+  asm volatile("mld.cw.lhs     m7, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  zero,  0 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.rhs     m8, (t0) , t3 "   );
+  asm volatile("mld.rw.rhs     m8, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.lhs     m9, (t0) , t3 "   );
+  asm volatile("mld.cw.lhs     m9, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.rhs    m10, (t0) , t3 "   );
+  asm volatile("mld.rw.rhs    m10, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.lhs    m11, (t0) , t3 "   );
+  asm volatile("mld.cw.lhs    m11, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.rhs    m12, (t0) , t3 "   );
+  asm volatile("mld.rw.rhs    m12, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.lhs    m13, (t0) , t3 "   );
+  asm volatile("mld.cw.lhs    m13, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.rhs    m14, (t0) , t3 "   );
+  asm volatile("mld.rw.rhs    m14, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.lhs    m15, (t0) , t3 "   );
+  asm volatile("mld.cw.lhs    m15, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("mzero.m     m0            "   );
   asm volatile("mzero.m     m1            "   );
@@ -211,7 +211,7 @@ void __attribute__ ((noinline)) test_load_1x2 (float* addrA, int K)
   // --------------------------------------------------------------------------
   asm volatile("slli        t3,  %0  ,  2 " :: "r" (K)    );  // t3  = K*4;
   asm volatile("addi        t1,  %0  ,  0 " :: "r" (addrA));
-  asm volatile("mld.lhs     m0, (t1) , t3 "   );
+  asm volatile("mld.cw.lhs     m0, (t1) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("mzero.m     m0            "   );
   asm volatile("slli        t3,  %0  ,  2 " :: "r" (K)    );  // t3  = K*4;
@@ -219,51 +219,51 @@ void __attribute__ ((noinline)) test_load_1x2 (float* addrA, int K)
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  zero,  0 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.rhs     m0, (t0) , t3 "   );
+  asm volatile("mld.rw.rhs     m0, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.lhs     m2, (t0) , t3 "   );
+  asm volatile("mld.cw.lhs     m2, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.lhs     m3, (t0) , t3 "   );
+  asm volatile("mld.cw.lhs     m3, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.rhs     m4, (t0) , t3 "   );
+  asm volatile("mld.rw.rhs     m4, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.lhs     m6, (t0) , t3 "   );
+  asm volatile("mld.cw.lhs     m6, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.lhs     m7, (t0) , t3 "   );
+  asm volatile("mld.cw.lhs     m7, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  zero,  0 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.rhs     m8, (t0) , t3 "   );
+  asm volatile("mld.rw.rhs     m8, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.lhs    m10, (t0) , t3 "   );
+  asm volatile("mld.cw.lhs    m10, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.lhs    m11, (t0) , t3 "   );
+  asm volatile("mld.cw.lhs    m11, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.rhs    m12, (t0) , t3 "   );
+  asm volatile("mld.rw.rhs    m12, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.lhs    m14, (t0) , t3 "   );
+  asm volatile("mld.cw.lhs    m14, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.lhs    m15, (t0) , t3 "   );
+  asm volatile("mld.cw.lhs    m15, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("mzero.m     m0            "   );
   asm volatile("mzero.m     m2            "   );
@@ -284,7 +284,7 @@ void __attribute__ ((noinline)) test_load_1x4 (float* addrA, int K)
   // --------------------------------------------------------------------------
   asm volatile("slli        t3,  %0  ,  2 " :: "r" (K)    );  // t3  = K*4;
   asm volatile("addi        t1,  %0  ,  0 " :: "r" (addrA));
-  asm volatile("mld.lhs     m0, (t1) , t3 "   );
+  asm volatile("mld.cw.lhs     m0, (t1) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("mzero.m     m0            "   );
   asm volatile("slli        t3,  %0  ,  2 " :: "r" (K)    );  // t3  = K*4;
@@ -292,43 +292,43 @@ void __attribute__ ((noinline)) test_load_1x4 (float* addrA, int K)
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  zero,  0 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.rhs     m0, (t0) , t3 "   );
+  asm volatile("mld.rw.rhs     m0, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.lhs     m4, (t0) , t3 "   );
+  asm volatile("mld.cw.lhs     m4, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.lhs     m5, (t0) , t3 "   );
+  asm volatile("mld.cw.lhs     m5, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.lhs     m6, (t0) , t3 "   );
+  asm volatile("mld.cw.lhs     m6, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.lhs     m7, (t0) , t3 "   );
+  asm volatile("mld.cw.lhs     m7, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  zero,  0 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.rhs     m8, (t0) , t3 "   );
+  asm volatile("mld.rw.rhs     m8, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.lhs    m12, (t0) , t3 "   );
+  asm volatile("mld.cw.lhs    m12, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.lhs    m13, (t0) , t3 "   );
+  asm volatile("mld.cw.lhs    m13, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.lhs    m14, (t0) , t3 "   );
+  asm volatile("mld.cw.lhs    m14, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.lhs    m15, (t0) , t3 "   );
+  asm volatile("mld.cw.lhs    m15, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("mzero.m     m0            "   );
   asm volatile("mzero.m     m4            "   );
@@ -345,7 +345,7 @@ void __attribute__ ((noinline)) test_load_2x1 (float* addrA, int K)
   // --------------------------------------------------------------------------
   asm volatile("slli        t3,  %0  ,  2 " :: "r" (K)    );  // t3  = K*4;
   asm volatile("addi        t1,  %0  ,  0 " :: "r" (addrA));
-  asm volatile("mld.lhs     m0, (t1) , t3 "   );
+  asm volatile("mld.cw.lhs     m0, (t1) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("mzero.m     m0            "   );
   asm volatile("slli        t3,  %0  ,  2 " :: "r" (K)    );  // t3  = K*4;
@@ -353,51 +353,51 @@ void __attribute__ ((noinline)) test_load_2x1 (float* addrA, int K)
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  zero,  0 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.lhs     m0, (t0) , t3 "   );
+  asm volatile("mld.cw.lhs     m0, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.rhs     m2, (t0) , t3 "   );
+  asm volatile("mld.rw.rhs     m2, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.rhs     m3, (t0) , t3 "   );
+  asm volatile("mld.rw.rhs     m3, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.lhs     m4, (t0) , t3 "   );
+  asm volatile("mld.cw.lhs     m4, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.rhs     m6, (t0) , t3 "   );
+  asm volatile("mld.rw.rhs     m6, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.rhs     m7, (t0) , t3 "   );
+  asm volatile("mld.rw.rhs     m7, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  zero,  0 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.lhs     m8, (t0) , t3 "   );
+  asm volatile("mld.cw.lhs     m8, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.rhs    m10, (t0) , t3 "   );
+  asm volatile("mld.rw.rhs    m10, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.rhs    m11, (t0) , t3 "   );
+  asm volatile("mld.rw.rhs    m11, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.lhs    m12, (t0) , t3 "   );
+  asm volatile("mld.cw.lhs    m12, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.rhs    m14, (t0) , t3 "   );
+  asm volatile("mld.rw.rhs    m14, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.rhs    m15, (t0) , t3 "   );
+  asm volatile("mld.rw.rhs    m15, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("mzero.m     m0            "   );
   asm volatile("mzero.m     m2            "   );
@@ -418,7 +418,7 @@ void __attribute__ ((noinline)) test_load_4x1 (float* addrA, int K)
   // --------------------------------------------------------------------------
   asm volatile("slli        t3,  %0  ,  2 " :: "r" (K)    );  // t3  = K*4;
   asm volatile("addi        t1,  %0  ,  0 " :: "r" (addrA));
-  asm volatile("mld.rhs     m0, (t1) , t3 "   );
+  asm volatile("mld.rw.rhs     m0, (t1) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("mzero.m     m0            "   );
   asm volatile("slli        t3,  %0  ,  2 " :: "r" (K)    );  // t3  = K*4;
@@ -426,43 +426,43 @@ void __attribute__ ((noinline)) test_load_4x1 (float* addrA, int K)
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  zero,  0 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.lhs     m0, (t0) , t3 "   );
+  asm volatile("mld.cw.lhs     m0, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.rhs     m4, (t0) , t3 "   );
+  asm volatile("mld.rw.rhs     m4, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.rhs     m5, (t0) , t3 "   );
+  asm volatile("mld.rw.rhs     m5, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.rhs     m6, (t0) , t3 "   );
+  asm volatile("mld.rw.rhs     m6, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.rhs     m7, (t0) , t3 "   );
+  asm volatile("mld.rw.rhs     m7, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  zero,  0 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.lhs     m8, (t0) , t3 "   );
+  asm volatile("mld.cw.lhs     m8, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.rhs    m12, (t0) , t3 "   );
+  asm volatile("mld.rw.rhs    m12, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.rhs    m13, (t0) , t3 "   );
+  asm volatile("mld.rw.rhs    m13, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.rhs    m14, (t0) , t3 "   );
+  asm volatile("mld.rw.rhs    m14, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.rhs    m15, (t0) , t3 "   );
+  asm volatile("mld.rw.rhs    m15, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("mzero.m     m0            "   );
   asm volatile("mzero.m     m4            "   );
@@ -479,7 +479,7 @@ void __attribute__ ((noinline)) test_load_2x2 (float* addrA, int K)
   // --------------------------------------------------------------------------
   asm volatile("slli        t3,  %0  ,  2 " :: "r" (K)    );  // t3  = K*4;
   asm volatile("addi        t1,  %0  ,  0 " :: "r" (addrA));
-  asm volatile("mld.lhs     m0, (t1) , t3 "   );
+  asm volatile("mld.cw.lhs     m0, (t1) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("mzero.m     m0            "   );
   asm volatile("slli        t3,  %0  ,  2 " :: "r" (K)    );  // t3  = K*4;
@@ -487,35 +487,35 @@ void __attribute__ ((noinline)) test_load_2x2 (float* addrA, int K)
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  zero,  0 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.rhs     m0, (t0) , t3 "   );
+  asm volatile("mld.rw.rhs     m0, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.lhs     m2, (t0) , t3 "   );
+  asm volatile("mld.cw.lhs     m2, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.rhs     m4, (t0) , t3 "   );
+  asm volatile("mld.rw.rhs     m4, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.lhs     m6, (t0) , t3 "   );
+  asm volatile("mld.cw.lhs     m6, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  zero,  0 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.rhs     m8, (t0) , t3 "   );
+  asm volatile("mld.rw.rhs     m8, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.lhs    m10, (t0) , t3 "   );
+  asm volatile("mld.cw.lhs    m10, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.rhs    m12, (t0) , t3 "   );
+  asm volatile("mld.rw.rhs    m12, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.lhs    m14, (t0) , t3 "   );
+  asm volatile("mld.cw.lhs    m14, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("mzero.m     m0            "   );
   asm volatile("mzero.m     m4            "   );
@@ -534,8 +534,8 @@ void __attribute__ ((noinline)) test_store_1x1 (float* addrA, float* addrC, int 
   asm volatile("slli        t3,  %0  ,  2 " :: "r" (K)    );  // t3  = K*4;
   asm volatile("addi        t1,  %0  ,  0 " :: "r" (addrA));
   asm volatile("addi        t4,  %0 ,  0 " :: "r" (addrC));
-  asm volatile("mld.lhs     m0, (t1) , t3 "   );
-  asm volatile("mst         m0, (t4) , t3 "   );
+  asm volatile("mld.cw.lhs     m0, (t1) , t3 "   );
+  asm volatile("mst.rw         m0, (t4) , t3 "   );
   asm volatile("mzero.m     m0            "   );
   // --------------------------------------------------------------------------
   // --------------------------------------------------------------------------
@@ -549,19 +549,19 @@ void __attribute__ ((noinline)) test_store_1x1 (float* addrA, float* addrC, int 
   
   asm volatile("addi        t2,  zero,  0 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.lhs     m0, (t0) , t3 "   );
+  asm volatile("mld.cw.lhs     m0, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.lhs     m4, (t0) , t3 "   );
+  asm volatile("mld.cw.lhs     m4, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  zero,  0 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.lhs     m8, (t0) , t3 "   );
+  asm volatile("mld.cw.lhs     m8, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.lhs    m12, (t0) , t3 "   );
+  asm volatile("mld.cw.lhs    m12, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   // --------------------------------------------------------------------------
   asm volatile("li t1,  4");
@@ -572,67 +572,67 @@ void __attribute__ ((noinline)) test_store_1x1 (float* addrA, float* addrC, int 
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  zero,  0 "   );
   asm volatile("add         t0,  t4  , t2 "   );
-  asm volatile("mst         m0, (t0) , t3 "   );
+  asm volatile("mst.rw         m0, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t4  , t2 "   );
-  asm volatile("mst         m1, (t0) , t3 "   );
+  asm volatile("mst.rw         m1, (t0) , t3 "   );
   // -------------------------------------------------------------------------- 
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t4  , t2 "   );
-  asm volatile("mst         m2, (t0) , t3 "   );
+  asm volatile("mst.rw         m2, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t4  , t2 "   );
-  asm volatile("mst         m3, (t0) , t3 "   );
+  asm volatile("mst.rw         m3, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t4  , t2 "   );
-  asm volatile("mst         m4, (t0) , t3 "   );
+  asm volatile("mst.rw         m4, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t4  , t2 "   );
-  asm volatile("mst         m5, (t0) , t3 "   );
+  asm volatile("mst.rw         m5, (t0) , t3 "   );
   // -------------------------------------------------------------------------- 
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t4  , t2 "   );
-  asm volatile("mst         m6, (t0) , t3 "   );
+  asm volatile("mst.rw         m6, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t4  , t2 "   );
-  asm volatile("mst         m7, (t0) , t3 "   );
+  asm volatile("mst.rw         m7, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  zero,  0 "   );
   asm volatile("add         t0,  t4  , t2 "   );
-  asm volatile("mst         m8, (t0) , t3 "   );
+  asm volatile("mst.rw         m8, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t4  , t2 "   );
-  asm volatile("mst         m9, (t0) , t3 "   );
+  asm volatile("mst.rw         m9, (t0) , t3 "   );
   // -------------------------------------------------------------------------- 
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t4  , t2 "   );
-  asm volatile("mst        m10, (t0) , t3 "   );
+  asm volatile("mst.rw        m10, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t4  , t2 "   );
-  asm volatile("mst        m11, (t0) , t3 "   );
+  asm volatile("mst.rw        m11, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t4  , t2 "   );
-  asm volatile("mst        m12, (t0) , t3 "   );
+  asm volatile("mst.rw        m12, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t4  , t2 "   );
-  asm volatile("mst        m13, (t0) , t3 "   );
+  asm volatile("mst.rw        m13, (t0) , t3 "   );
   // -------------------------------------------------------------------------- 
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t4  , t2 "   );
-  asm volatile("mst        m14, (t0) , t3 "   );
+  asm volatile("mst.rw        m14, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t4  , t2 "   );
-  asm volatile("mst        m15, (t0) , t3 "   );
+  asm volatile("mst.rw        m15, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("mzero.m     m0            "   );
   asm volatile("mzero.m     m1            "   );
@@ -662,9 +662,9 @@ void __attribute__ ((noinline)) test_store_1x2 (float* addrA, float* addrC, int 
   asm volatile("slli        t3,  %0  ,  2 " :: "r" (K)    );  // t3  = K*4;
   asm volatile("addi        t1,  %0  ,  0 " :: "r" (addrA));
   asm volatile("addi        t4,  %0 ,  0 " :: "r" (addrC));
-  asm volatile("mld.lhs     m0, (t1) , t3 "   );
-  asm volatile("mld.lhs     m1, (t1) , t3 "   );
-  asm volatile("mst         m0, (t4) , t3 "   );
+  asm volatile("mld.cw.lhs     m0, (t1) , t3 "   );
+  asm volatile("mld.cw.lhs     m1, (t1) , t3 "   );
+  asm volatile("mst.rw         m0, (t4) , t3 "   );
   asm volatile("mzero.m     m0            "   );
   // --------------------------------------------------------------------------
   // --------------------------------------------------------------------------
@@ -678,19 +678,19 @@ void __attribute__ ((noinline)) test_store_1x2 (float* addrA, float* addrC, int 
   
   asm volatile("addi        t2,  zero,  0 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.lhs     m0, (t0) , t3 "   );
+  asm volatile("mld.cw.lhs     m0, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.lhs     m4, (t0) , t3 "   );
+  asm volatile("mld.cw.lhs     m4, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  zero,  0 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.lhs     m8, (t0) , t3 "   );
+  asm volatile("mld.cw.lhs     m8, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.lhs    m12, (t0) , t3 "   );
+  asm volatile("mld.cw.lhs    m12, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   // --------------------------------------------------------------------------
   asm volatile("li t1,  16");
@@ -701,35 +701,35 @@ void __attribute__ ((noinline)) test_store_1x2 (float* addrA, float* addrC, int 
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  zero,  0 "   );
   asm volatile("add         t0,  t4  , t2 "   );
-  asm volatile("mst         m0, (t0) , t3 "   );
+  asm volatile("mst.rw         m0, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t4  , t2 "   );
-  asm volatile("mst         m2, (t0) , t3 "   );
+  asm volatile("mst.rw         m2, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t4  , t2 "   );
-  asm volatile("mst         m4, (t0) , t3 "   );
+  asm volatile("mst.rw         m4, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t4  , t2 "   );
-  asm volatile("mst         m6, (t0) , t3 "   );
+  asm volatile("mst.rw         m6, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  zero,  0 "   );
   asm volatile("add         t0,  t4  , t2 "   );
-  asm volatile("mst         m8, (t0) , t3 "   );
+  asm volatile("mst.rw         m8, (t0) , t3 "   );
   // -------------------------------------------------------------------------- 
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t4  , t2 "   );
-  asm volatile("mst        m10, (t0) , t3 "   );
+  asm volatile("mst.rw        m10, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t4  , t2 "   );
-  asm volatile("mst        m12, (t0) , t3 "   );
+  asm volatile("mst.rw        m12, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t4  , t2 "   );
-  asm volatile("mst        m14, (t0) , t3 "   );
+  asm volatile("mst.rw        m14, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("mzero.m     m0            "   );
   asm volatile("mzero.m     m2            "   );
@@ -751,11 +751,11 @@ void __attribute__ ((noinline)) test_store_1x4 (float* addrA, float* addrC, int 
   asm volatile("slli        t3,  %0  ,  2 " :: "r" (K)    );  // t3  = K*4;
   asm volatile("addi        t1,  %0  ,  0 " :: "r" (addrA));
   asm volatile("addi        t4,  %0 ,  0 " :: "r" (addrC));
-  asm volatile("mld.lhs     m0, (t1) , t3 "   );
-  asm volatile("mld.lhs     m1, (t1) , t3 "   );
-  asm volatile("mld.lhs     m2, (t1) , t3 "   );
-  asm volatile("mld.lhs     m3, (t1) , t3 "   );
-  asm volatile("mst         m0, (t4) , t3 "   );
+  asm volatile("mld.cw.lhs     m0, (t1) , t3 "   );
+  asm volatile("mld.cw.lhs     m1, (t1) , t3 "   );
+  asm volatile("mld.cw.lhs     m2, (t1) , t3 "   );
+  asm volatile("mld.cw.lhs     m3, (t1) , t3 "   );
+  asm volatile("mst.rw         m0, (t4) , t3 "   );
   asm volatile("mzero.m     m0            "   );
   // --------------------------------------------------------------------------
   // --------------------------------------------------------------------------
@@ -769,19 +769,19 @@ void __attribute__ ((noinline)) test_store_1x4 (float* addrA, float* addrC, int 
   
   asm volatile("addi        t2,  zero,  0 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.lhs     m0, (t0) , t3 "   );
+  asm volatile("mld.cw.lhs     m0, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.lhs     m4, (t0) , t3 "   );
+  asm volatile("mld.cw.lhs     m4, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  zero,  0 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.lhs     m8, (t0) , t3 "   );
+  asm volatile("mld.cw.lhs     m8, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.lhs    m12, (t0) , t3 "   );
+  asm volatile("mld.cw.lhs    m12, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   // --------------------------------------------------------------------------
   asm volatile("li t1,  16");
@@ -792,19 +792,19 @@ void __attribute__ ((noinline)) test_store_1x4 (float* addrA, float* addrC, int 
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  zero,  0 "   );
   asm volatile("add         t0,  t4  , t2 "   );
-  asm volatile("mst         m0, (t0) , t3 "   );
+  asm volatile("mst.rw         m0, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t4  , t2 "   );
-  asm volatile("mst         m4, (t0) , t3 "   );
+  asm volatile("mst.rw         m4, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  zero,  0 "   );
   asm volatile("add         t0,  t4  , t2 "   );
-  asm volatile("mst         m8, (t0) , t3 "   );
+  asm volatile("mst.rw         m8, (t0) , t3 "   );
   // -------------------------------------------------------------------------- 
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t4  , t2 "   );
-  asm volatile("mst        m12, (t0) , t3 "   );
+  asm volatile("mst.rw        m12, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("mzero.m     m0            "   );
   asm volatile("mzero.m     m4            "   );
@@ -822,8 +822,8 @@ void __attribute__ ((noinline)) test_store_2x1 (float* addrA, float* addrC, int 
   asm volatile("slli        t3,  %0  ,  2 " :: "r" (K)    );  // t3  = K*4;
   asm volatile("addi        t1,  %0  ,  0 " :: "r" (addrA));
   asm volatile("addi        t4,  %0 ,  0 " :: "r" (addrC));
-  asm volatile("mld.lhs     m0, (t1) , t3 "   );
-  asm volatile("mst         m0, (t4) , t3 "   );
+  asm volatile("mld.cw.lhs     m0, (t1) , t3 "   );
+  asm volatile("mst.rw         m0, (t4) , t3 "   );
   asm volatile("mzero.m     m0            "   );
   // --------------------------------------------------------------------------
   // --------------------------------------------------------------------------
@@ -837,19 +837,19 @@ void __attribute__ ((noinline)) test_store_2x1 (float* addrA, float* addrC, int 
   
   asm volatile("addi        t2,  zero,  0 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.lhs     m0, (t0) , t3 "   );
+  asm volatile("mld.cw.lhs     m0, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.lhs     m4, (t0) , t3 "   );
+  asm volatile("mld.cw.lhs     m4, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  zero,  0 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.lhs     m8, (t0) , t3 "   );
+  asm volatile("mld.cw.lhs     m8, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.lhs    m12, (t0) , t3 "   );
+  asm volatile("mld.cw.lhs    m12, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   // --------------------------------------------------------------------------
   asm volatile("li t1,  16");
@@ -860,35 +860,35 @@ void __attribute__ ((noinline)) test_store_2x1 (float* addrA, float* addrC, int 
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  zero,  0 "   );
   asm volatile("add         t0,  t4  , t2 "   );
-  asm volatile("mst         m0, (t0) , t3 "   );
+  asm volatile("mst.rw         m0, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t4  , t2 "   );
-  asm volatile("mst         m2, (t0) , t3 "   );
+  asm volatile("mst.rw         m2, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t4  , t2 "   );
-  asm volatile("mst         m4, (t0) , t3 "   );
+  asm volatile("mst.rw         m4, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t4  , t2 "   );
-  asm volatile("mst         m6, (t0) , t3 "   );
+  asm volatile("mst.rw         m6, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  zero,  0 "   );
   asm volatile("add         t0,  t4  , t2 "   );
-  asm volatile("mst         m8, (t0) , t3 "   );
+  asm volatile("mst.rw         m8, (t0) , t3 "   );
   // -------------------------------------------------------------------------- 
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t4  , t2 "   );
-  asm volatile("mst        m10, (t0) , t3 "   );
+  asm volatile("mst.rw        m10, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t4  , t2 "   );
-  asm volatile("mst        m12, (t0) , t3 "   );
+  asm volatile("mst.rw        m12, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t4  , t2 "   );
-  asm volatile("mst        m14, (t0) , t3 "   );
+  asm volatile("mst.rw        m14, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("mzero.m     m0            "   );
   asm volatile("mzero.m     m2            "   );
@@ -910,8 +910,8 @@ void __attribute__ ((noinline)) test_store_4x1 (float* addrA, float* addrC, int 
   asm volatile("slli        t3,  %0  ,  2 " :: "r" (K)    );  // t3  = K*4;
   asm volatile("addi        t1,  %0  ,  0 " :: "r" (addrA));
   asm volatile("addi        t4,  %0 ,  0 " :: "r" (addrC));
-  asm volatile("mld.lhs     m0, (t1) , t3 "   );
-  asm volatile("mst         m0, (t4) , t3 "   );
+  asm volatile("mld.cw.lhs     m0, (t1) , t3 "   );
+  asm volatile("mst.rw         m0, (t4) , t3 "   );
   asm volatile("mzero.m     m0            "   );
   // --------------------------------------------------------------------------
   // --------------------------------------------------------------------------
@@ -925,19 +925,19 @@ void __attribute__ ((noinline)) test_store_4x1 (float* addrA, float* addrC, int 
   
   asm volatile("addi        t2,  zero,  0 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.lhs     m0, (t0) , t3 "   );
+  asm volatile("mld.cw.lhs     m0, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.lhs     m4, (t0) , t3 "   );
+  asm volatile("mld.cw.lhs     m4, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  zero,  0 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.lhs     m8, (t0) , t3 "   );
+  asm volatile("mld.cw.lhs     m8, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.lhs    m12, (t0) , t3 "   );
+  asm volatile("mld.cw.lhs    m12, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   // --------------------------------------------------------------------------
   asm volatile("li t1,  16");
@@ -948,19 +948,19 @@ void __attribute__ ((noinline)) test_store_4x1 (float* addrA, float* addrC, int 
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  zero,  0 "   );
   asm volatile("add         t0,  t4  , t2 "   );
-  asm volatile("mst         m0, (t0) , t3 "   );
+  asm volatile("mst.rw         m0, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t4  , t2 "   );
-  asm volatile("mst         m4, (t0) , t3 "   );
+  asm volatile("mst.rw         m4, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  zero,  0 "   );
   asm volatile("add         t0,  t4  , t2 "   );
-  asm volatile("mst         m8, (t0) , t3 "   );
+  asm volatile("mst.rw         m8, (t0) , t3 "   );
   // -------------------------------------------------------------------------- 
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t4  , t2 "   );
-  asm volatile("mst        m12, (t0) , t3 "   );
+  asm volatile("mst.rw        m12, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("mzero.m     m0            "   );
   asm volatile("mzero.m     m4            "   );
@@ -978,9 +978,9 @@ void __attribute__ ((noinline)) test_store_2x2 (float* addrA, float* addrC, int 
   asm volatile("slli        t3,  %0  ,  2 " :: "r" (K)    );  // t3  = K*4;
   asm volatile("addi        t1,  %0  ,  0 " :: "r" (addrA));
   asm volatile("addi        t4,  %0 ,  0 " :: "r" (addrC));
-  asm volatile("mld.lhs     m0, (t1) , t3 "   );
-  asm volatile("mld.rhs     m2, (t1) , t3 "   );
-  asm volatile("mst         m0, (t4) , t3 "   );
+  asm volatile("mld.cw.lhs     m0, (t1) , t3 "   );
+  asm volatile("mld.rw.rhs     m2, (t1) , t3 "   );
+  asm volatile("mst.rw         m0, (t4) , t3 "   );
   asm volatile("mzero.m     m0            "   );
   // --------------------------------------------------------------------------
   // --------------------------------------------------------------------------
@@ -994,19 +994,19 @@ void __attribute__ ((noinline)) test_store_2x2 (float* addrA, float* addrC, int 
   
   asm volatile("addi        t2,  zero,  0 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.lhs     m0, (t0) , t3 "   );
+  asm volatile("mld.cw.lhs     m0, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.lhs     m4, (t0) , t3 "   );
+  asm volatile("mld.cw.lhs     m4, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  zero,  0 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.lhs     m8, (t0) , t3 "   );
+  asm volatile("mld.cw.lhs     m8, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t1  , t2 "   );
-  asm volatile("mld.lhs    m12, (t0) , t3 "   );
+  asm volatile("mld.cw.lhs    m12, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   // --------------------------------------------------------------------------
   asm volatile("li t1,  16");
@@ -1017,19 +1017,19 @@ void __attribute__ ((noinline)) test_store_2x2 (float* addrA, float* addrC, int 
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  zero,  0 "   );
   asm volatile("add         t0,  t4  , t2 "   );
-  asm volatile("mst         m0, (t0) , t3 "   );
+  asm volatile("mst.rw         m0, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t4  , t2 "   );
-  asm volatile("mst         m4, (t0) , t3 "   );
+  asm volatile("mst.rw         m4, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi        t2,  zero,  0 "   );
   asm volatile("add         t0,  t4  , t2 "   );
-  asm volatile("mst         m8, (t0) , t3 "   );
+  asm volatile("mst.rw         m8, (t0) , t3 "   );
   // -------------------------------------------------------------------------- 
   asm volatile("addi        t2,  t2  , 16 "   );
   asm volatile("add         t0,  t4  , t2 "   );
-  asm volatile("mst        m12, (t0) , t3 "   );
+  asm volatile("mst.rw        m12, (t0) , t3 "   );
   // --------------------------------------------------------------------------
   asm volatile("mzero.m     m0            "   );
   asm volatile("mzero.m     m4            "   );
@@ -1072,14 +1072,14 @@ void __attribute__ ((noinline)) test_load_store_1x1 (float* addrA, float* addrC,
   asm volatile("addi    t6,  t5  , 16 "   );
   asm volatile("addi    s6,  s5  , 16 "   );
   // --------------------------------------------------------------------------
-  asm volatile("mld.lhs   m0, (t0) , t3 "   );
-  asm volatile("mst       m0, (s0) , t3 "   );
-  asm volatile("mld.lhs   m1, (t2) , t3 "   );
-  asm volatile("mst       m1, (s2) , t3 "   );
-  asm volatile("mld.lhs   m2, (t5) , t3 "   );
-  asm volatile("mst       m2, (s5) , t3 "   );
-  asm volatile("mld.lhs   m3, (t6) , t3 "   );
-  asm volatile("mst       m3, (s6) , t3 "   );
+  asm volatile("mld.cw.lhs   m0, (t0) , t3 "   );
+  asm volatile("mst.rw       m0, (s0) , t3 "   );
+  asm volatile("mld.cw.lhs   m1, (t2) , t3 "   );
+  asm volatile("mst.rw       m1, (s2) , t3 "   );
+  asm volatile("mld.cw.lhs   m2, (t5) , t3 "   );
+  asm volatile("mst.rw       m2, (s5) , t3 "   );
+  asm volatile("mld.cw.lhs   m3, (t6) , t3 "   );
+  asm volatile("mst.rw       m3, (s6) , t3 "   );
   // --------------------------------------------------------------------------
   // --------------------------------------------------------------------------
   asm volatile("addi    t0,  t6  , 16 "   );
@@ -1091,14 +1091,14 @@ void __attribute__ ((noinline)) test_load_store_1x1 (float* addrA, float* addrC,
   asm volatile("addi    t6,  t5  , 16 "   );
   asm volatile("addi    s6,  s5  , 16 "   );
   // --------------------------------------------------------------------------
-  asm volatile("mld.lhs   m4, (t0) , t3 "   );
-  asm volatile("mld.lhs   m5, (t2) , t3 "   );
-  asm volatile("mld.lhs   m6, (t5) , t3 "   );
-  asm volatile("mld.lhs   m7, (t6) , t3 "   );
-  asm volatile("mst   m4, (s0) , t3 "   );
-  asm volatile("mst   m5, (s2) , t3 "   );
-  asm volatile("mst   m6, (s5) , t3 "   );
-  asm volatile("mst   m7, (s6) , t3 "   );
+  asm volatile("mld.cw.lhs   m4, (t0) , t3 "   );
+  asm volatile("mld.cw.lhs   m5, (t2) , t3 "   );
+  asm volatile("mld.cw.lhs   m6, (t5) , t3 "   );
+  asm volatile("mld.cw.lhs   m7, (t6) , t3 "   );
+  asm volatile("mst.rw   m4, (s0) , t3 "   );
+  asm volatile("mst.rw   m5, (s2) , t3 "   );
+  asm volatile("mst.rw   m6, (s5) , t3 "   );
+  asm volatile("mst.rw   m7, (s6) , t3 "   );
   // --------------------------------------------------------------------------
   // --------------------------------------------------------------------------
   asm volatile("addi    t0,  t6  , 16 "   );
@@ -1110,14 +1110,14 @@ void __attribute__ ((noinline)) test_load_store_1x1 (float* addrA, float* addrC,
   asm volatile("addi    t6,  t5  , 16 "   );
   asm volatile("addi    s6,  s5  , 16 "   );
   // --------------------------------------------------------------------------
-  asm volatile("mld.lhs   m8, (t0) , t3 "   );
-  asm volatile("mld.lhs   m9, (t2) , t3 "   );
-  asm volatile("mst   m8, (s0) , t3 "   );
-  asm volatile("mst   m9, (s2) , t3 "   );
-  asm volatile("mld.lhs  m10, (t5) , t3 "   );
-  asm volatile("mld.lhs  m11, (t6) , t3 "   );
-  asm volatile("mst  m10, (s5) , t3 "   );
-  asm volatile("mst  m11, (s6) , t3 "   );
+  asm volatile("mld.cw.lhs   m8, (t0) , t3 "   );
+  asm volatile("mld.cw.lhs   m9, (t2) , t3 "   );
+  asm volatile("mst.rw   m8, (s0) , t3 "   );
+  asm volatile("mst.rw   m9, (s2) , t3 "   );
+  asm volatile("mld.cw.lhs  m10, (t5) , t3 "   );
+  asm volatile("mld.cw.lhs  m11, (t6) , t3 "   );
+  asm volatile("mst.rw  m10, (s5) , t3 "   );
+  asm volatile("mst.rw  m11, (s6) , t3 "   );
   // --------------------------------------------------------------------------
   // --------------------------------------------------------------------------
   asm volatile("addi    t0,  t6  , 16 "   );
@@ -1129,14 +1129,14 @@ void __attribute__ ((noinline)) test_load_store_1x1 (float* addrA, float* addrC,
   asm volatile("addi    t6,  t5  , 16 "   );
   asm volatile("addi    s6,  s5  , 16 "   );
   // --------------------------------------------------------------------------
-  asm volatile("mld.lhs  m12, (t0) , t3 "   );
-  asm volatile("mst  m12, (s0) , t3 "   );
-  asm volatile("mld.lhs  m13, (t2) , t3 "   );
-  asm volatile("mld.lhs  m14, (t5) , t3 "   );
-  asm volatile("mst  m13, (s2) , t3 "   );
-  asm volatile("mld.lhs  m15, (t6) , t3 "   );
-  asm volatile("mst  m14, (s5) , t3 "   );
-  asm volatile("mst  m15, (s6) , t3 "   );
+  asm volatile("mld.cw.lhs  m12, (t0) , t3 "   );
+  asm volatile("mst.rw  m12, (s0) , t3 "   );
+  asm volatile("mld.cw.lhs  m13, (t2) , t3 "   );
+  asm volatile("mld.cw.lhs  m14, (t5) , t3 "   );
+  asm volatile("mst.rw  m13, (s2) , t3 "   );
+  asm volatile("mld.cw.lhs  m15, (t6) , t3 "   );
+  asm volatile("mst.rw  m14, (s5) , t3 "   );
+  asm volatile("mst.rw  m15, (s6) , t3 "   );
   // --------------------------------------------------------------------------
   // --------------------------------------------------------------------------
   asm volatile("li t1, 16");
@@ -1195,10 +1195,10 @@ void __attribute__ ((noinline)) test_load_store_1x2 (float* addrA, float* addrC,
   asm volatile("addi    t6,  t5  , 16 "   );
   asm volatile("addi    s6,  s5  , 16 "   );
   // --------------------------------------------------------------------------
-  asm volatile("mld.rhs   m0, (t0) , t3 "   );
-  asm volatile("mst       m0, (s0) , t3 "   );
-  asm volatile("mld.rhs   m2, (t5) , t3 "   );
-  asm volatile("mst       m2, (s5) , t3 "   );
+  asm volatile("mld.rw.rhs   m0, (t0) , t3 "   );
+  asm volatile("mst.rw       m0, (s0) , t3 "   );
+  asm volatile("mld.rw.rhs   m2, (t5) , t3 "   );
+  asm volatile("mst.rw       m2, (s5) , t3 "   );
   // --------------------------------------------------------------------------
   // --------------------------------------------------------------------------
   asm volatile("addi    t0,  t6  , 16 "   );
@@ -1210,10 +1210,10 @@ void __attribute__ ((noinline)) test_load_store_1x2 (float* addrA, float* addrC,
   asm volatile("addi    t6,  t5  , 16 "   );
   asm volatile("addi    s6,  s5  , 16 "   );
   // --------------------------------------------------------------------------
-  asm volatile("mld.rhs   m4, (t0) , t3 "   );
-  asm volatile("mld.rhs   m6, (t5) , t3 "   );
-  asm volatile("mst   m4, (s0) , t3 "   );
-  asm volatile("mst   m6, (s5) , t3 "   );
+  asm volatile("mld.rw.rhs   m4, (t0) , t3 "   );
+  asm volatile("mld.rw.rhs   m6, (t5) , t3 "   );
+  asm volatile("mst.rw   m4, (s0) , t3 "   );
+  asm volatile("mst.rw   m6, (s5) , t3 "   );
   // --------------------------------------------------------------------------
   // --------------------------------------------------------------------------
   asm volatile("addi    t0,  t6  , 16 "   );
@@ -1225,10 +1225,10 @@ void __attribute__ ((noinline)) test_load_store_1x2 (float* addrA, float* addrC,
   asm volatile("addi    t6,  t5  , 16 "   );
   asm volatile("addi    s6,  s5  , 16 "   );
   // --------------------------------------------------------------------------
-  asm volatile("mld.rhs   m8, (t0) , t3 "   );
-  asm volatile("mst   m8, (s0) , t3 "   );
-  asm volatile("mld.rhs  m10, (t5) , t3 "   );
-  asm volatile("mst  m10, (s5) , t3 "   );
+  asm volatile("mld.rw.rhs   m8, (t0) , t3 "   );
+  asm volatile("mst.rw   m8, (s0) , t3 "   );
+  asm volatile("mld.rw.rhs  m10, (t5) , t3 "   );
+  asm volatile("mst.rw  m10, (s5) , t3 "   );
   // --------------------------------------------------------------------------
   // --------------------------------------------------------------------------
   asm volatile("addi    t0,  t6  , 16 "   );
@@ -1240,10 +1240,10 @@ void __attribute__ ((noinline)) test_load_store_1x2 (float* addrA, float* addrC,
   asm volatile("addi    t6,  t5  , 16 "   );
   asm volatile("addi    s6,  s5  , 16 "   );
   // --------------------------------------------------------------------------
-  asm volatile("mld.rhs  m12, (t0) , t3 "   );
-  asm volatile("mld.rhs  m14, (t5) , t3 "   );
-  asm volatile("mst  m12, (s0) , t3 "   );
-  asm volatile("mst  m14, (s5) , t3 "   );
+  asm volatile("mld.rw.rhs  m12, (t0) , t3 "   );
+  asm volatile("mld.rw.rhs  m14, (t5) , t3 "   );
+  asm volatile("mst.rw  m12, (s0) , t3 "   );
+  asm volatile("mst.rw  m14, (s5) , t3 "   );
   // --------------------------------------------------------------------------
   // --------------------------------------------------------------------------
   asm volatile("li t1, 16");
@@ -1302,14 +1302,14 @@ void __attribute__ ((noinline)) test_load_store_1x4 (float* addrA, float* addrC,
   asm volatile("addi    t6,  t5  , 64 "   );
   asm volatile("addi    s6,  s5  , 64 "   );
   // --------------------------------------------------------------------------
-  asm volatile("mld.rhs   m0, (t0) , t3 "   );
-  asm volatile("mld.rhs   m4, (t2) , t3 "   );
-  asm volatile("mst       m0, (s0) , t3 "   );
-  asm volatile("mld.rhs   m8, (t5) , t3 "   );
-  asm volatile("mst       m4, (s2) , t3 "   );
-  asm volatile("mst       m8, (s5) , t3 "   );
-  asm volatile("mld.rhs  m12, (t6) , t3 "   );
-  asm volatile("mst      m12, (s6) , t3 "   );
+  asm volatile("mld.rw.rhs   m0, (t0) , t3 "   );
+  asm volatile("mld.rw.rhs   m4, (t2) , t3 "   );
+  asm volatile("mst.rw       m0, (s0) , t3 "   );
+  asm volatile("mld.rw.rhs   m8, (t5) , t3 "   );
+  asm volatile("mst.rw       m4, (s2) , t3 "   );
+  asm volatile("mst.rw       m8, (s5) , t3 "   );
+  asm volatile("mld.rw.rhs  m12, (t6) , t3 "   );
+  asm volatile("mst.rw      m12, (s6) , t3 "   );
   // --------------------------------------------------------------------------
   // --------------------------------------------------------------------------
   asm volatile("li t1, 16");
@@ -1368,10 +1368,10 @@ void __attribute__ ((noinline)) test_load_store_2x1 (float* addrA, float* addrC,
   asm volatile("addi    t6,  t5  , 16 "   );
   asm volatile("addi    s6,  s5  , 16 "   );
   // --------------------------------------------------------------------------
-  asm volatile("mld.lhs   m0, (t0) , t3 "   );
-  asm volatile("mst       m0, (s0) , t3 "   );
-  asm volatile("mld.lhs   m2, (t5) , t3 "   );
-  asm volatile("mst       m2, (s5) , t3 "   );
+  asm volatile("mld.cw.lhs   m0, (t0) , t3 "   );
+  asm volatile("mst.rw       m0, (s0) , t3 "   );
+  asm volatile("mld.cw.lhs   m2, (t5) , t3 "   );
+  asm volatile("mst.rw       m2, (s5) , t3 "   );
   // --------------------------------------------------------------------------
   // --------------------------------------------------------------------------
   asm volatile("addi    t0,  t6  , 16 "   );
@@ -1383,10 +1383,10 @@ void __attribute__ ((noinline)) test_load_store_2x1 (float* addrA, float* addrC,
   asm volatile("addi    t6,  t5  , 16 "   );
   asm volatile("addi    s6,  s5  , 16 "   );
   // --------------------------------------------------------------------------
-  asm volatile("mld.lhs   m4, (t0) , t3 "   );
-  asm volatile("mld.lhs   m6, (t5) , t3 "   );
-  asm volatile("mst   m4, (s0) , t3 "   );
-  asm volatile("mst   m6, (s5) , t3 "   );
+  asm volatile("mld.cw.lhs   m4, (t0) , t3 "   );
+  asm volatile("mld.cw.lhs   m6, (t5) , t3 "   );
+  asm volatile("mst.rw   m4, (s0) , t3 "   );
+  asm volatile("mst.rw   m6, (s5) , t3 "   );
   // --------------------------------------------------------------------------
   // --------------------------------------------------------------------------
   asm volatile("addi    t0,  t6  , 16 "   );
@@ -1398,10 +1398,10 @@ void __attribute__ ((noinline)) test_load_store_2x1 (float* addrA, float* addrC,
   asm volatile("addi    t6,  t5  , 16 "   );
   asm volatile("addi    s6,  s5  , 16 "   );
   // --------------------------------------------------------------------------
-  asm volatile("mld.lhs   m8, (t0) , t3 "   );
-  asm volatile("mst   m8, (s0) , t3 "   );
-  asm volatile("mld.lhs  m10, (t5) , t3 "   );
-  asm volatile("mst  m10, (s5) , t3 "   );
+  asm volatile("mld.cw.lhs   m8, (t0) , t3 "   );
+  asm volatile("mst.rw   m8, (s0) , t3 "   );
+  asm volatile("mld.cw.lhs  m10, (t5) , t3 "   );
+  asm volatile("mst.rw  m10, (s5) , t3 "   );
   // --------------------------------------------------------------------------
   // --------------------------------------------------------------------------
   asm volatile("addi    t0,  t6  , 16 "   );
@@ -1413,10 +1413,10 @@ void __attribute__ ((noinline)) test_load_store_2x1 (float* addrA, float* addrC,
   asm volatile("addi    t6,  t5  , 16 "   );
   asm volatile("addi    s6,  s5  , 16 "   );
   // --------------------------------------------------------------------------
-  asm volatile("mld.lhs  m12, (t0) , t3 "   );
-  asm volatile("mld.lhs  m14, (t5) , t3 "   );
-  asm volatile("mst  m12, (s0) , t3 "   );
-  asm volatile("mst  m14, (s5) , t3 "   );
+  asm volatile("mld.cw.lhs  m12, (t0) , t3 "   );
+  asm volatile("mld.cw.lhs  m14, (t5) , t3 "   );
+  asm volatile("mst.rw  m12, (s0) , t3 "   );
+  asm volatile("mst.rw  m14, (s5) , t3 "   );
   // --------------------------------------------------------------------------
   // --------------------------------------------------------------------------
   asm volatile("li t1, 16");
@@ -1475,14 +1475,14 @@ void __attribute__ ((noinline)) test_load_store_4x1 (float* addrA, float* addrC,
   asm volatile("addi    t6,  t5  , 64 "   );
   asm volatile("addi    s6,  s5  , 64 "   );
   // --------------------------------------------------------------------------
-  asm volatile("mld.lhs   m0, (t0) , t3 "   );
-  asm volatile("mld.lhs   m4, (t2) , t3 "   );
-  asm volatile("mst       m0, (s0) , t3 "   );
-  asm volatile("mld.lhs   m8, (t5) , t3 "   );
-  asm volatile("mst       m4, (s2) , t3 "   );
-  asm volatile("mst       m8, (s5) , t3 "   );
-  asm volatile("mld.lhs  m12, (t6) , t3 "   );
-  asm volatile("mst      m12, (s6) , t3 "   );
+  asm volatile("mld.cw.lhs   m0, (t0) , t3 "   );
+  asm volatile("mld.cw.lhs   m4, (t2) , t3 "   );
+  asm volatile("mst.rw       m0, (s0) , t3 "   );
+  asm volatile("mld.cw.lhs   m8, (t5) , t3 "   );
+  asm volatile("mst.rw       m4, (s2) , t3 "   );
+  asm volatile("mst.rw       m8, (s5) , t3 "   );
+  asm volatile("mld.cw.lhs  m12, (t6) , t3 "   );
+  asm volatile("mst.rw      m12, (s6) , t3 "   );
   // --------------------------------------------------------------------------
   // --------------------------------------------------------------------------
   asm volatile("li t1, 16");
@@ -1541,18 +1541,18 @@ void __attribute__ ((noinline)) test_load_store_2x2 (float* addrA, float* addrC,
   asm volatile("addi    t6,  t5  , 64 "   );
   asm volatile("addi    s6,  s5  , 64 "   );
   // --------------------------------------------------------------------------
-  asm volatile("mld.rhs   m6, (t2) , t3 "   );
-  asm volatile("mld.lhs   m0, (t0) , t3 "   );
-  asm volatile("mld.lhs   m4, (t2) , t3 "   );
-  asm volatile("mld.rhs   m2, (t0) , t3 "   );
-  asm volatile("mst       m0, (s0) , t3 "   );
-  asm volatile("mld.lhs   m8, (t5) , t3 "   );
-  asm volatile("mld.rhs  m10, (t5) , t3 "   );
-  asm volatile("mld.lhs  m12, (t6) , t3 "   );
-  asm volatile("mst       m4, (s2) , t3 "   );
-  asm volatile("mst       m8, (s5) , t3 "   );
-  asm volatile("mld.rhs  m14, (t6) , t3 "   );
-  asm volatile("mst      m12, (s6) , t3 "   );
+  asm volatile("mld.rw.rhs   m6, (t2) , t3 "   );
+  asm volatile("mld.cw.lhs   m0, (t0) , t3 "   );
+  asm volatile("mld.cw.lhs   m4, (t2) , t3 "   );
+  asm volatile("mld.rw.rhs   m2, (t0) , t3 "   );
+  asm volatile("mst.rw       m0, (s0) , t3 "   );
+  asm volatile("mld.cw.lhs   m8, (t5) , t3 "   );
+  asm volatile("mld.rw.rhs  m10, (t5) , t3 "   );
+  asm volatile("mld.cw.lhs  m12, (t6) , t3 "   );
+  asm volatile("mst.rw       m4, (s2) , t3 "   );
+  asm volatile("mst.rw       m8, (s5) , t3 "   );
+  asm volatile("mld.rw.rhs  m14, (t6) , t3 "   );
+  asm volatile("mst.rw      m12, (s6) , t3 "   );
   // --------------------------------------------------------------------------
   // --------------------------------------------------------------------------
   asm volatile("li t1, 16");
@@ -1618,14 +1618,14 @@ void __attribute__ ((noinline)) test_macc(float* addrA,float* addrB,float* addrC
   // --------------------------------------------------------------------------
   asm volatile("mzero.a acc0          "   );
   // --------------------------------------------------------------------------
-  asm volatile("mld.lhs   m0, (t3) , s7 "   );
-  asm volatile("mld.lhs   m1, (t4) , s7 "   );
-  asm volatile("mld.lhs   m2, (t5) , s7 "   );
-  asm volatile("mld.lhs   m3, (t6) , s7 "   );
-  asm volatile("mld.rhs   m4, (s3) , s7 "   );
-  asm volatile("mld.rhs   m5, (s4) , s7 "   );
-  asm volatile("mld.rhs   m6, (s5) , s7 "   );
-  asm volatile("mld.rhs   m7, (s6) , s7 "   );
+  asm volatile("mld.cw.lhs   m0, (t3) , s7 "   );
+  asm volatile("mld.cw.lhs   m1, (t4) , s7 "   );
+  asm volatile("mld.cw.lhs   m2, (t5) , s7 "   );
+  asm volatile("mld.cw.lhs   m3, (t6) , s7 "   );
+  asm volatile("mld.rw.rhs   m4, (s3) , s7 "   );
+  asm volatile("mld.rw.rhs   m5, (s4) , s7 "   );
+  asm volatile("mld.rw.rhs   m6, (s5) , s7 "   );
+  asm volatile("mld.rw.rhs   m7, (s6) , s7 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi    t3,  t1  , 16 "   );
   asm volatile("addi    s3,  s1  , 16 "   );
@@ -1639,25 +1639,25 @@ void __attribute__ ((noinline)) test_macc(float* addrA,float* addrB,float* addrC
   asm volatile("mmacc acc0,  m4  , m0 " ); // CMUL=2, RMUL=2
   asm volatile("mmacc acc0,  m6  , m2 " ); // CMUL=2, RMUL=2
   // --------------------------------------------------------------------------
-  asm volatile("mld.lhs   m0, (t3) , s7 "   );
-  asm volatile("mld.lhs   m1, (t4) , s7 "   );
-  asm volatile("mld.lhs   m2, (t5) , s7 "   );
-  asm volatile("mld.lhs   m3, (t6) , s7 "   );
-  asm volatile("mld.rhs   m4, (s3) , s7 "   );
-  asm volatile("mld.rhs   m5, (s4) , s7 "   );
-  asm volatile("mld.rhs   m6, (s5) , s7 "   );
-  asm volatile("mld.rhs   m7, (s6) , s7 "   );
+  asm volatile("mld.cw.lhs   m0, (t3) , s7 "   );
+  asm volatile("mld.cw.lhs   m1, (t4) , s7 "   );
+  asm volatile("mld.cw.lhs   m2, (t5) , s7 "   );
+  asm volatile("mld.cw.lhs   m3, (t6) , s7 "   );
+  asm volatile("mld.rw.rhs   m4, (s3) , s7 "   );
+  asm volatile("mld.rw.rhs   m5, (s4) , s7 "   );
+  asm volatile("mld.rw.rhs   m6, (s5) , s7 "   );
+  asm volatile("mld.rw.rhs   m7, (s6) , s7 "   );
   // --------------------------------------------------------------------------
   asm volatile("mmacc acc0,  m4  , m0 " ); // CMUL=2, RMUL=2
   asm volatile("mmacc acc0,  m6  , m2 " ); // CMUL=2, RMUL=2
   // --------------------------------------------------------------------------
   asm volatile("mmov.am   m4 ,  acc0     " );
-  asm volatile("mst     m4 , (s8) , s7 " :: "r" (addrC));
+  asm volatile("mst.rw     m4 , (s8) , s7 " :: "r" (addrC));
   asm volatile("addi      s8 ,  s8  , 16 " );
-  asm volatile("mst     m6 , (s9) , s7 " :: "r" (addrC));
+  asm volatile("mst.rw     m6 , (s9) , s7 " :: "r" (addrC));
   asm volatile("addi      s9 ,  s9  , 16 " );
-  asm volatile("mst     m5 , (s8) , s7 " :: "r" (addrC));
-  asm volatile("mst     m7 , (s9) , s7 " :: "r" (addrC));
+  asm volatile("mst.rw     m5 , (s8) , s7 " :: "r" (addrC));
+  asm volatile("mst.rw     m7 , (s9) , s7 " :: "r" (addrC));
   // --------------------------------------------------------------------------
   asm volatile("mzero.m  m0            "   );
   asm volatile("mzero.m  m1            "   );
@@ -1700,10 +1700,10 @@ void __attribute__ ((noinline)) test_macc(float* addrA,float* addrB,float* addrC
   // asm volatile("mzero.a acc0");
   // asm volatile("mld.b m1, (t0), t4");
   // asm volatile("mld.h m1, (t0), t4");
-  // asm volatile("mld.lhs m1, (t0), t4");
+  // asm volatile("mld.cw.lhs m1, (t0), t4");
   // asm volatile("mst.b m1, (t0), t4");
   // asm volatile("mst.h m1, (t0), t4");
-  // asm volatile("mst m1, (t0), t4");
+  // asm volatile("mst.rw m1, (t0), t4");
 }
 void __attribute__ ((noinline)) test_macc_adv(float* addrA,float* addrB,float* addrC, int K)
 {   
@@ -1740,14 +1740,14 @@ void __attribute__ ((noinline)) test_macc_adv(float* addrA,float* addrB,float* a
   asm volatile("addi    t6,  t5  , 16 "   );
   asm volatile("addi    s6,  s5  , 16 "   );
   // --------------------------------------------------------------------------
-  asm volatile("mld.lhs   m0, (t3) , s7 "   );
-  asm volatile("mld.lhs   m1, (t4) , s7 "   );
-  asm volatile("mld.lhs   m2, (t5) , s7 "   );
-  asm volatile("mld.lhs   m3, (t6) , s7 "   );
-  asm volatile("mld.rhs   m4, (s3) , s7 "   );
-  asm volatile("mld.rhs   m5, (s4) , s7 "   );
-  asm volatile("mld.rhs   m6, (s5) , s7 "   );
-  asm volatile("mld.rhs   m7, (s6) , s7 "   );
+  asm volatile("mld.cw.lhs   m0, (t3) , s7 "   );
+  asm volatile("mld.cw.lhs   m1, (t4) , s7 "   );
+  asm volatile("mld.cw.lhs   m2, (t5) , s7 "   );
+  asm volatile("mld.cw.lhs   m3, (t6) , s7 "   );
+  asm volatile("mld.rw.rhs   m4, (s3) , s7 "   );
+  asm volatile("mld.rw.rhs   m5, (s4) , s7 "   );
+  asm volatile("mld.rw.rhs   m6, (s5) , s7 "   );
+  asm volatile("mld.rw.rhs   m7, (s6) , s7 "   );
   // --------------------------------------------------------------------------
   asm volatile("addi    t3,  t1  , 16 "   );
   asm volatile("addi    s3,  s1  , 16 "   );
@@ -1763,45 +1763,45 @@ void __attribute__ ((noinline)) test_macc_adv(float* addrA,float* addrB,float* a
   asm volatile("mmacc acc0,  m4  , m0 " ); // CMUL=2, RMUL=2
   asm volatile("mmacc acc0,  m6  , m2 " ); // CMUL=2, RMUL=2
   // --------------------------------------------------------------------------
-  asm volatile("mld.lhs   m0, (t3) , s7 "   );
-  asm volatile("mld.lhs   m1, (t4) , s7 "   );
-  asm volatile("mld.rhs   m4, (s3) , s7 "   );
-  asm volatile("mld.rhs   m5, (s4) , s7 "   );
+  asm volatile("mld.cw.lhs   m0, (t3) , s7 "   );
+  asm volatile("mld.cw.lhs   m1, (t4) , s7 "   );
+  asm volatile("mld.rw.rhs   m4, (s3) , s7 "   );
+  asm volatile("mld.rw.rhs   m5, (s4) , s7 "   );
   // --------------------------------------------------------------------------
   asm volatile("mmacc acc0,  m4  , m0 " ); // CMUL=2, RMUL=2
   // --------------------------------------------------------------------------
-  asm volatile("mld.lhs   m2, (t5) , s7 "   );
-  asm volatile("mld.lhs   m3, (t6) , s7 "   );
-  asm volatile("mld.rhs   m6, (s5) , s7 "   );
-  asm volatile("mld.rhs   m7, (s6) , s7 "   );
+  asm volatile("mld.cw.lhs   m2, (t5) , s7 "   );
+  asm volatile("mld.cw.lhs   m3, (t6) , s7 "   );
+  asm volatile("mld.rw.rhs   m6, (s5) , s7 "   );
+  asm volatile("mld.rw.rhs   m7, (s6) , s7 "   );
   // --------------------------------------------------------------------------
   asm volatile("mmacc acc0,  m6  , m2 " ); // CMUL=2, RMUL=2
   // --------------------------------------------------------------------------
-  asm volatile("mld.lhs   m0, (t3) , s7 "   );
-  asm volatile("mld.lhs   m1, (t4) , s7 "   );
-  asm volatile("mld.rhs   m4, (s3) , s7 "   );
-  asm volatile("mld.rhs   m5, (s4) , s7 "   );
+  asm volatile("mld.cw.lhs   m0, (t3) , s7 "   );
+  asm volatile("mld.cw.lhs   m1, (t4) , s7 "   );
+  asm volatile("mld.rw.rhs   m4, (s3) , s7 "   );
+  asm volatile("mld.rw.rhs   m5, (s4) , s7 "   );
   // --------------------------------------------------------------------------
   asm volatile("mmacc acc0,  m4  , m0 " ); // CMUL=2, RMUL=2
   // --------------------------------------------------------------------------
-  asm volatile("mld.lhs   m2, (t5) , s7 "   );
-  asm volatile("mld.lhs   m3, (t6) , s7 "   );
-  asm volatile("mld.rhs   m6, (s5) , s7 "   );
-  asm volatile("mld.rhs   m7, (s6) , s7 "   );
+  asm volatile("mld.cw.lhs   m2, (t5) , s7 "   );
+  asm volatile("mld.cw.lhs   m3, (t6) , s7 "   );
+  asm volatile("mld.rw.rhs   m6, (s5) , s7 "   );
+  asm volatile("mld.rw.rhs   m7, (s6) , s7 "   );
   // --------------------------------------------------------------------------
   asm volatile("mmacc acc0,  m6  , m2 " ); // CMUL=2, RMUL=2
   // --------------------------------------------------------------------------
-  asm volatile("mld.lhs   m0, (t3) , s7 "   );
-  asm volatile("mld.lhs   m1, (t4) , s7 "   );
-  asm volatile("mld.rhs   m4, (s3) , s7 "   );
-  asm volatile("mld.rhs   m5, (s4) , s7 "   );
+  asm volatile("mld.cw.lhs   m0, (t3) , s7 "   );
+  asm volatile("mld.cw.lhs   m1, (t4) , s7 "   );
+  asm volatile("mld.rw.rhs   m4, (s3) , s7 "   );
+  asm volatile("mld.rw.rhs   m5, (s4) , s7 "   );
   // --------------------------------------------------------------------------
   asm volatile("mmacc acc0,  m4  , m0 " ); // CMUL=2, RMUL=2
   // --------------------------------------------------------------------------
-  asm volatile("mld.lhs   m2, (t5) , s7 "   );
-  asm volatile("mld.lhs   m3, (t6) , s7 "   );
-  asm volatile("mld.rhs   m6, (s5) , s7 "   );
-  asm volatile("mld.rhs   m7, (s6) , s7 "   );
+  asm volatile("mld.cw.lhs   m2, (t5) , s7 "   );
+  asm volatile("mld.cw.lhs   m3, (t6) , s7 "   );
+  asm volatile("mld.rw.rhs   m6, (s5) , s7 "   );
+  asm volatile("mld.rw.rhs   m7, (s6) , s7 "   );
   // --------------------------------------------------------------------------
   asm volatile("mmacc acc0,  m6  , m2 " ); // CMUL=2, RMUL=2
   // --------------------------------------------------------------------------
@@ -1817,12 +1817,12 @@ void __attribute__ ((noinline)) test_macc_adv(float* addrA,float* addrB,float* a
   // --------------------------------------------------------------------------
   asm volatile("mmov.am   m4 ,  acc0     " );
   asm volatile("mzero.a  acc0          "   );
-  asm volatile("mst     m4 , (s8) , s7 " :: "r" (addrC));
+  asm volatile("mst.rw     m4 , (s8) , s7 " :: "r" (addrC));
   asm volatile("addi      s8 ,  s8  , 16 " );
-  asm volatile("mst     m6 , (s9) , s7 " :: "r" (addrC));
+  asm volatile("mst.rw     m6 , (s9) , s7 " :: "r" (addrC));
   asm volatile("addi      s9 ,  s9  , 16 " );
-  asm volatile("mst     m5 , (s8) , s7 " :: "r" (addrC));
-  asm volatile("mst     m7 , (s9) , s7 " :: "r" (addrC));
+  asm volatile("mst.rw     m5 , (s8) , s7 " :: "r" (addrC));
+  asm volatile("mst.rw     m7 , (s9) , s7 " :: "r" (addrC));
   asm volatile("mmacc acc0,  m4  , m0 " ); // CMUL=2, RMUL=2
   asm volatile("mmacc acc0,  m6  , m2 " ); // CMUL=2, RMUL=2
   // --------------------------------------------------------------------------
@@ -1949,10 +1949,10 @@ void verify_quadrilatero (float* addrA,float* addrB,float* addrC, int K)
 //   asm volatile("mzero.a acc0");
 //   asm volatile("mld.b m1, (t0), t4");
 //   asm volatile("mld.h m1, (t0), t4");
-//   asm volatile("mld.lhs m1, (t0), t4");
+//   asm volatile("mld.cw.lhs m1, (t0), t4");
 //   asm volatile("mst.b m1, (t0), t4");
 //   asm volatile("mst.h m1, (t0), t4");
-//   asm volatile("mst m1, (t0), t4");
+//   asm volatile("mst.rw m1, (t0), t4");
 
 //   // ==========================================
 //   // Zvame: Attached Matrix Extension

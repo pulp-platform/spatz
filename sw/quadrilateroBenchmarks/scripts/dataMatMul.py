@@ -177,8 +177,15 @@ def pack_vertical(tensor, bits):
         b3 = t_grouped[:, 3, :] & 0xFF
         return (b0 | (b1 << 8) | (b2 << 16) | (b3 << 24)).to(torch.int32)
 
-A_packed = pack_vertical(A_mem, args.bits)
-B_packed = pack_vertical(B_mem, args.bits)
+def pack_horizontal(tensor, bits):
+    """
+    Used for column-wise tests, practically it leaves the tensor unchanged but pads K to a whole word multiple
+    """
+    return pack_vertical(tensor.T, bits).T.contiguous()
+
+# K is the row index for A^T (transA=1) and B (transB=0), the column index for A (transA=0) and Bt (transB=1)
+A_packed = pack_vertical(A_mem, args.bits) if args.transA == 1 else pack_horizontal(A_mem, args.bits)
+B_packed = pack_vertical(B_mem, args.bits) if args.transB == 0 else pack_horizontal(B_mem, args.bits)
 
 # Prepare C and always treat it as 32-bit uint for memory layout consistency
 C_packed = C_math.contiguous()

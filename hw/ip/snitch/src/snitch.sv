@@ -2928,8 +2928,10 @@ module snitch import snitch_pkg::*; import riscv_instr::*;#(
       end
 
       // 2 source registers (rs1, rs2)
-      riscv_instr::MLD_LHS,
-      riscv_instr::MLD_RHS: begin
+      riscv_instr::MLD_CW_LHS,
+      riscv_instr::MLD_RW_RHS,
+      riscv_instr::MLD_RW_LHS,
+      riscv_instr::MLD_CW_RHS: begin
         if (RMM) begin
           write_rd        = 1'b0;
           uses_rd         = 1'b0;
@@ -2944,7 +2946,8 @@ module snitch import snitch_pkg::*; import riscv_instr::*;#(
       end
 
       // 2 source registers (rs1, rs2) and memory store operation
-      riscv_instr::MST: begin
+      riscv_instr::MST_RW,
+      riscv_instr::MST_CW:begin
         if (RMM) begin
           write_rd        = 1'b0;
           uses_rd         = 1'b0;
