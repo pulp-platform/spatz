@@ -112,6 +112,7 @@ module spatz_fpu_sequencer
   //   .we_i   (fpr_we   )
   // );
 logic fpr_tmr_fault;
+logic fp_move_register_fault;
 logic [NrReadPorts-1:0][FLEN-1:0] fpr_rdataA,fpr_rdataB,fpr_rdataC;
   snitch_regfileTMR #(
     .DATA_WIDTH    (FLEN        ),
@@ -139,6 +140,8 @@ logic [NrReadPorts-1:0][FLEN-1:0] fpr_rdataA,fpr_rdataB,fpr_rdataC;
     .snitch_regfile_tmr_fault_o(fpr_tmr_fault)
   );
 
+  logic fpr_rdataTmrError;
+
   majorityVoter #(.WIDTH(NrReadPorts*FLEN)) fpr_rdataVoter (
     .inA(fpr_rdataA),
     .inB(fpr_rdataB),
@@ -152,8 +155,20 @@ logic [NrReadPorts-1:0][FLEN-1:0] fpr_rdataA,fpr_rdataB,fpr_rdataC;
   //////////////////
 
   // Scoreboard
-  logic [NrFPReg-1:0] sb_d, sb_q;
-  `FF(sb_q, sb_d, '0)
+  logic [NrFPReg-1:0] sb_d, sb_q0, sb_q1, sb_q2, sb_qVoted;
+  logic               sb_qTmrError;
+  `FF(sb_q0, sb_d, '0)
+  `FF(sb_q1, sb_d, '0)
+  `FF(sb_q2, sb_d, '0)
+  bitwise_TMR_voter_fail #(
+    .DataWidth (NrFPReg)
+  ) i_sb_qVoter (
+    .a_i(sb_q0),
+    .b_i(sb_q1),
+    .c_i(sb_q2),
+    .majority_o(sb_qVoted),
+    .fault_detected_o(sb_qTmrError)
+  );
 
   // Are we using the registers?
   logic use_fs1, use_fs2, use_fs3, use_fd;
@@ -163,7 +178,7 @@ logic [NrReadPorts-1:0][FLEN-1:0] fpr_rdataA,fpr_rdataB,fpr_rdataC;
 
   // Are the operands available?
   logic operands_available;
-  assign operands_available = !((use_fs1 && sb_q[fs1]) || (use_fs2 && sb_q[fs2]) || (use_fs3 && sb_q[fs3]) || (use_fd && sb_q[fd]));
+  assign operands_available = !((use_fs1 && sb_qVoted[fs1]) || (use_fs2 && sb_qVoted[fs2]) || (use_fs3 && sb_qVoted[fs3]) || (use_fd && sb_qVoted[fd]));
 
   // Is this a move instruction between GPR and FPR?
   logic is_move;
@@ -191,7 +206,7 @@ logic [NrReadPorts-1:0][FLEN-1:0] fpr_rdataA,fpr_rdataB,fpr_rdataC;
 
   always_comb begin
     // Maintain state
-    sb_d = sb_q;
+    sb_d = sb_qVoted;
     if (use_fd && !is_move && !stall)
       sb_d[fd] = 1'b1;
     if (retire[0])
@@ -692,6 +707,8 @@ snitch_lsuTMR #(
     .data_rsp_iC   (fp_lsu_mem_rsp_i)
   );
 
+  logic fp_lsu_qreadyTmrError;
+  
   majorityVoter #(.WIDTH(1)) fp_lsu_qreadyVoter (
     .inA(fp_lsu_qreadyA),
     .inB(fp_lsu_qreadyB),
@@ -699,6 +716,8 @@ snitch_lsuTMR #(
     .out(fp_lsu_qready),
     .tmrErr(fp_lsu_qreadyTmrError)
   );
+
+  logic fp_lsu_pdataTmrError;
 
   majorityVoter #(.WIDTH(DataWidth)) fp_lsu_pdataVoter (
     .inA(fp_lsu_pdataA),
@@ -708,6 +727,8 @@ snitch_lsuTMR #(
     .tmrErr(fp_lsu_pdataTmrError)
   );
 
+  logic fp_lsu_ptagTmrError;
+
   majorityVoter #(.WIDTH(5)) fp_lsu_ptagVoter (
     .inA(fp_lsu_ptagA),
     .inB(fp_lsu_ptagB),
@@ -715,6 +736,8 @@ snitch_lsuTMR #(
     .out(fp_lsu_ptag),
     .tmrErr(fp_lsu_ptagTmrError)
   );
+
+  logic fp_lsu_pvalidTmrError;
 
   majorityVoter #(.WIDTH(1)) fp_lsu_pvalidVoter (
     .inA(fp_lsu_pvalidA),
@@ -724,6 +747,8 @@ snitch_lsuTMR #(
     .tmrErr(fp_lsu_pvalidTmrError)
   );
 
+  logic fp_lsu_mem_req_oTmrError;
+
   majorityVoter #(.WIDTH($bits(dreq_t))) fp_lsu_mem_req_oVoter (
     .inA(fp_lsu_mem_req_oA),
     .inB(fp_lsu_mem_req_oB),
@@ -732,18 +757,39 @@ snitch_lsuTMR #(
     .tmrErr(fp_lsu_mem_req_oTmrError)
   );
 
-  assign fpu_sequencer_correctable_fault_o = fpr_tmr_fault | fpr_rdataTmrError 
-                                          | fp_lsu_qreadyTmrError | fp_lsu_pdataTmrError
-                                          | fp_lsu_ptagTmrError | fp_lsu_pvalidTmrError
-                                          | fp_lsu_mem_req_oTmrError;
+  assign fpu_sequencer_uncorrectable_fault_o = '0;
 
   // Number of memory operations in the accelerator
-  logic [2:0] acc_mem_cnt_q, acc_mem_cnt_d;
-  `FFARN(acc_mem_cnt_q, acc_mem_cnt_d, '0, clk_i, rst_ni)
+  logic [2:0] acc_mem_cnt_d, acc_mem_cnt_q0, acc_mem_cnt_q1, acc_mem_cnt_q2, acc_mem_cnt_qVoted;
+  logic       acc_mem_cnt_qTmrError;
+  `FFARN(acc_mem_cnt_q0, acc_mem_cnt_d, '0, clk_i, rst_ni)
+  `FFARN(acc_mem_cnt_q1, acc_mem_cnt_d, '0, clk_i, rst_ni)
+  `FFARN(acc_mem_cnt_q2, acc_mem_cnt_d, '0, clk_i, rst_ni)
+  bitwise_TMR_voter_fail #(
+    .DataWidth (3)
+  ) i_acc_mem_cnt_qVoter (
+    .a_i(acc_mem_cnt_q0),
+    .b_i(acc_mem_cnt_q1),
+    .c_i(acc_mem_cnt_q2),
+    .majority_o(acc_mem_cnt_qVoted),
+    .fault_detected_o(acc_mem_cnt_qTmrError)
+  );
 
   // Number of store operations in the accelerator
-  logic [2:0] acc_mem_str_cnt_q, acc_mem_str_cnt_d;
-  `FFARN(acc_mem_str_cnt_q, acc_mem_str_cnt_d, '0, clk_i, rst_ni)
+  logic [2:0] acc_mem_str_cnt_d, acc_mem_str_cnt_q0, acc_mem_str_cnt_q1, acc_mem_str_cnt_q2, acc_mem_str_cnt_qVoted;
+  logic       acc_mem_str_cnt_qTmrError;
+  `FFARN(acc_mem_str_cnt_q0, acc_mem_str_cnt_d, '0, clk_i, rst_ni)
+  `FFARN(acc_mem_str_cnt_q1, acc_mem_str_cnt_d, '0, clk_i, rst_ni)
+  `FFARN(acc_mem_str_cnt_q2, acc_mem_str_cnt_d, '0, clk_i, rst_ni)
+  bitwise_TMR_voter_fail #(
+    .DataWidth (3)
+  ) i_acc_mem_str_cnt_qVoter (
+    .a_i(acc_mem_str_cnt_q0),
+    .b_i(acc_mem_str_cnt_q1),
+    .c_i(acc_mem_str_cnt_q2),
+    .majority_o(acc_mem_str_cnt_qVoted),
+    .fault_detected_o(acc_mem_str_cnt_qTmrError)
+  );
 
   // Is the current instruction a vector load?
   logic is_vector_load;
@@ -763,7 +809,7 @@ snitch_lsuTMR #(
     riscv_instr::VSUXEI8_V, riscv_instr::VSUXEI16_V, riscv_instr::VSUXEI32_V, riscv_instr::VSUXEI64_V};
 
   // Do we need to delay is load/store because of the VLSU?
-  assign vlsu_stall = (is_store && acc_mem_cnt_q != '0) || (is_load && acc_mem_str_cnt_q != '0) || acc_mem_cnt_q == '1;
+  assign vlsu_stall = (is_store && acc_mem_cnt_qVoted != '0) || (is_load && acc_mem_str_cnt_qVoted != '0) || acc_mem_cnt_qVoted == '1;
 
   always_comb begin
     // Default values
@@ -781,8 +827,8 @@ snitch_lsuTMR #(
     fp_lsu_qamo    = AMONone;
     fp_lsu_qvalid  = (is_load || is_store) && operands_available && !vlsu_stall;
 
-    acc_mem_cnt_d     = acc_mem_cnt_q;
-    acc_mem_str_cnt_d = acc_mem_str_cnt_q;
+    acc_mem_cnt_d     = acc_mem_cnt_qVoted;
+    acc_mem_str_cnt_d = acc_mem_str_cnt_qVoted;
 
     // Is the LSU stalling?
     lsu_stall = fp_lsu_qvalid && !fp_lsu_qready;
@@ -828,7 +874,8 @@ snitch_lsuTMR #(
   logic       fp_move_result_valid_o;
   logic       fp_move_result_ready_i;
 
-  spill_register #(
+  rel_spill_register #(
+    .TmrHandshake(1'b0),
     .T(spatz_rsp_t)
   ) i_fp_move_register (
     .clk_i     (clk_i                 ),
@@ -838,15 +885,34 @@ snitch_lsuTMR #(
     .ready_o   (fp_move_result_ready_o),
     .data_o    (fp_move_result_o      ),
     .valid_o   (fp_move_result_valid_o),
-    .ready_i   (fp_move_result_ready_i)
+    .ready_i   (fp_move_result_ready_i),
+    .fault_o          (fp_move_register_fault),
+    .data_corrector_o (),
+    .data_corrected_i ('0)
   );
 
   //////////////
   //  Retire  //
   //////////////
 
-  logic outstanding_store_q, outstanding_store_d;
-  `FF(outstanding_store_q, outstanding_store_d, 1'b0)
+  // logic outstanding_store_q, outstanding_store_d;
+  logic outstanding_store_d;
+  logic outstanding_store_q0, outstanding_store_q1, outstanding_store_q2;
+  logic outstanding_store_qVoted;
+  // `FF(outstanding_store_q, outstanding_store_d, 1'b0)
+  `FF(outstanding_store_q0, outstanding_store_d, 1'b0)
+  `FF(outstanding_store_q1, outstanding_store_d, 1'b0)
+  `FF(outstanding_store_q2, outstanding_store_d, 1'b0)
+  logic outstanding_store_qTmrError;
+  bitwise_TMR_voter_fail #(
+  .DataWidth (1)
+  ) i_outstanding_store_qVoter(
+  .a_i(outstanding_store_q0),
+  .b_i(outstanding_store_q1),
+  .c_i(outstanding_store_q2),
+  .majority_o(outstanding_store_qVoted),
+  .fault_detected_o(outstanding_store_qTmrError)
+);
 
   always_comb begin
     // We are not retiring anything, by default
@@ -870,11 +936,11 @@ snitch_lsuTMR #(
     resp_ready_o = 1'b0;
 
     // Did we just finished writing something?
-    fp_lsu_mem_finished_o     = outstanding_store_q || (fp_lsu_qwrite && fp_lsu_qvalid && fp_lsu_qready);
-    fp_lsu_mem_str_finished_o = outstanding_store_q || (fp_lsu_qwrite && fp_lsu_qvalid && fp_lsu_qready);
+    fp_lsu_mem_finished_o     = outstanding_store_qVoted || (fp_lsu_qwrite && fp_lsu_qvalid && fp_lsu_qready);
+    fp_lsu_mem_str_finished_o = outstanding_store_qVoted || (fp_lsu_qwrite && fp_lsu_qvalid && fp_lsu_qready);
 
     // Was there already a store committing in this cycle?
-    outstanding_store_d = outstanding_store_q && (fp_lsu_qwrite && fp_lsu_qvalid && fp_lsu_qready);
+    outstanding_store_d = outstanding_store_qVoted &&(fp_lsu_qwrite && fp_lsu_qvalid && fp_lsu_qready);
 
     // Is there a move trying to commit during this cycle?
     move_stall = is_move && use_rd && !fp_move_result_ready_o;
@@ -910,7 +976,7 @@ snitch_lsuTMR #(
     end
 
     // Commit a FP LSU response
-    if (fp_lsu_pvalid && !outstanding_store_q) begin
+    if (fp_lsu_pvalid && !outstanding_store_qVoted) begin
       fp_lsu_pready = 1'b1;
       retire[1]     = 1'b1;
 
@@ -940,9 +1006,21 @@ snitch_lsuTMR #(
   //////////////////
 
   `ASSERT(MemoryOperationCounterRollover,
-    acc_mem_cnt_q == '0 |=> acc_mem_cnt_q != '1, clk_i, !rst_ni)
+    acc_mem_cnt_qVoted == '0 |=> acc_mem_cnt_qVoted != '1, clk_i, !rst_ni)
 
   `ASSERT(MemoryStoreOperationCounterRollover,
-    acc_mem_str_cnt_q == '0 |=> acc_mem_str_cnt_q != '1, clk_i, !rst_ni)
+    acc_mem_str_cnt_qVoted == '0 |=> acc_mem_str_cnt_qVoted != '1, clk_i, !rst_ni)
+
+
+  // All TMR fault flags are declared above
+  assign fpu_sequencer_correctable_fault_o = fpr_tmr_fault | fpr_rdataTmrError 
+                                          | fp_lsu_qreadyTmrError | fp_lsu_pdataTmrError
+                                          | fp_lsu_ptagTmrError | fp_lsu_pvalidTmrError
+                                          | fp_lsu_mem_req_oTmrError
+                                          | fp_move_register_fault
+                                          | outstanding_store_qTmrError
+                                          | sb_qTmrError
+                                          | acc_mem_cnt_qTmrError
+                                          | acc_mem_str_cnt_qTmrError;
 
 endmodule: spatz_fpu_sequencer
