@@ -26,7 +26,7 @@ foreach(_k IN ITEMS 128 256 512)
 
     add_custom_command(
         OUTPUT "${_header}"
-        COMMAND ${Python3_EXECUTABLE} "${_source}/script/gen_data.py"
+        COMMAND ${PYTHON} "${_source}/script/gen_data.py"
                 -c "${_config}"
         DEPENDS "${_source}/script/gen_data.py"
                 "${_config}"

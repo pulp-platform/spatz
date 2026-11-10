@@ -76,7 +76,7 @@ function(add_fp32_vse_variant precision variant source_dir)
         add_custom_command(
             OUTPUT "${_header}"
             COMMAND ${CMAKE_COMMAND} -E make_directory "${_variant_data_dir}"
-            COMMAND ${Python3_EXECUTABLE} "${_variant_script}" -c "${_config}"
+            COMMAND ${PYTHON} "${_variant_script}" -c "${_config}"
             DEPENDS "${_variant_script}" "${_config}"
                     "${source_dir}/data/layer.h"
             VERBATIM)

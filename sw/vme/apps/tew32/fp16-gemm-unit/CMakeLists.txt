@@ -31,7 +31,7 @@ function(add_fp16_simple_gemm_unrolled variant)
 
         add_custom_command(
             OUTPUT "${_header}"
-            COMMAND ${Python3_EXECUTABLE} "${_dir}/script/gen_data.py"
+            COMMAND ${PYTHON} "${_dir}/script/gen_data.py"
                     -c "${_config}"
             DEPENDS "${_dir}/script/gen_data.py"
                     "${_config}"
