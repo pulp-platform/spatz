@@ -356,17 +356,18 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   shared_vrf_read_t [1:0] shared_move_rd_in;
   shared_vrf_read_t shared_move_rd_out;
   shared_vrf_read_t ope_move_rd_d, ope_move_rd_q;
-  shared_vrf_write_t [1:0] shared_wr_in;
   shared_vrf_write_t shared_wr_out;
   logic [1:0] shared_operand_rd_req, shared_operand_rd_gnt;
   logic [1:0] shared_move_rd_req, shared_move_rd_gnt;
-  logic [1:0] shared_wr_req, shared_wr_gnt;
+  logic [1:0] shared_wr_req;
   logic shared_operand_rd_valid, shared_move_rd_valid, shared_wr_valid;
   logic [2:0] shared_rd_vfu_gnt, shared_rd_ope_gnt;
   logic [2:0] shared_rd_ope_accept;
   logic ope_move_rd_pending_d, ope_move_rd_pending_q;
   logic ope_move_rd_capture;
   logic shared_wr_vfu_gnt, shared_wr_ope_gnt;
+  logic ope_wr_turn_d, ope_wr_turn_q;
+  logic vfu_wr_active_d, vfu_wr_active_q;
 
 `ifdef BUF_FPU
   // Buffering of VFU writes to VRF to hide shared write-port conflicts.
@@ -437,33 +438,32 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   `FF(ope_move_rd_q, ope_move_rd_d, shared_vrf_read_t'(0))
   `FF(ope_move_rd_pending_q, ope_move_rd_pending_d, 1'b0)
 
-  assign shared_wr_in[0] = '{addr: vfu_waddr_s, data: vfu_wdata_s,
-                             be: vfu_wbe_s, id: vfu_id_s[3], we: vfu_we_s};
-  assign shared_wr_in[1] = '{addr: ope_waddr_s, data: ope_wdata_s,
-                             be: ope_wbe_s, id: ope_id_s[3], we: ope_we_s};
 `ifdef BUF_FPU
   assign shared_wr_req = {ope_we_s, vfu_we_s || !vfu_buf_empty};
 `else
   assign shared_wr_req = {ope_we_s, vfu_we_s};
 `endif
+  assign vfu_wr_active_d = shared_wr_req[0];
+  assign ope_wr_turn_d = (shared_wr_req == 2'b11) ? !shared_wr_ope_gnt : ope_wr_turn_q;
+  `FF(vfu_wr_active_q, vfu_wr_active_d, 1'b0)
+  `FF(ope_wr_turn_q, ope_wr_turn_d, 1'b0)
 
-  stream_arbiter #(
-    .DATA_T   (shared_vrf_write_t),
-    .N_INP    (2),
-    .ARBITER  ("rr")
-  ) i_shared_write_arb (
-    .clk_i        (clk_i),
-    .rst_ni       (rst_ni),
-    .inp_data_i   (shared_wr_in),
-    .inp_valid_i  (shared_wr_req),
-    .inp_ready_o  (shared_wr_gnt),
-    .oup_data_o   (shared_wr_out),
-    .oup_valid_o  (shared_wr_valid),
-    .oup_ready_i  (1'b1)
-  );
+  assign shared_wr_ope_gnt = ope_we_s && (ope_wr_turn_q || !vfu_wr_active_q);
+  assign shared_wr_vfu_gnt = shared_wr_req[0] && !shared_wr_ope_gnt;
+  assign shared_wr_valid = shared_wr_ope_gnt || shared_wr_vfu_gnt;
 
-  assign shared_wr_vfu_gnt = shared_wr_req[0] && shared_wr_gnt[0];
-  assign shared_wr_ope_gnt = shared_wr_req[1] && shared_wr_gnt[1];
+  always_comb begin : shared_write_select
+    shared_wr_out = '{addr: vfu_waddr_s, data: vfu_wdata_s,
+                       be: vfu_wbe_s, id: vfu_id_s[3], we: vfu_we_s};
+`ifdef BUF_FPU
+    if (!vfu_buf_empty)
+      shared_wr_out = '{addr: vfu_buf_data.waddr, data: vfu_buf_data.wdata,
+                         be: vfu_buf_data.wbe, id: vfu_buf_data.wid, we: 1'b1};
+`endif
+    if (shared_wr_ope_gnt)
+      shared_wr_out = '{addr: ope_waddr_s, data: ope_wdata_s,
+                         be: ope_wbe_s, id: ope_id_s[3], we: ope_we_s};
+  end
 
   // ---------------------------------------------------------------------------
   // Shared read-port MUX
@@ -504,19 +504,11 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   // ---------------------------------------------------------------------------
 
   always_comb begin
-    vrf_waddr[VFU_VD_WD]    = vrf_addr_t'(0);
-    vrf_wdata[VFU_VD_WD]    = vrf_data_t'(0);
-    vrf_wbe  [VFU_VD_WD]    = vrf_be_t'(0);
-    sb_we    [VFU_VD_WD]    = 1'b0;
-    sb_id    [SB_VFU_VD_WD] = spatz_id_t'(0);
-
-    if (shared_wr_valid) begin
-      vrf_waddr[VFU_VD_WD]    = shared_wr_out.addr;
-      vrf_wdata[VFU_VD_WD]    = shared_wr_out.data;
-      vrf_wbe  [VFU_VD_WD]    = shared_wr_out.be;
-      sb_we    [VFU_VD_WD]    = shared_wr_out.we;
-      sb_id    [SB_VFU_VD_WD] = shared_wr_out.id;
-    end
+    vrf_waddr[VFU_VD_WD]    = shared_wr_out.addr;
+    vrf_wdata[VFU_VD_WD]    = shared_wr_out.data;
+    vrf_wbe  [VFU_VD_WD]    = shared_wr_out.be;
+    sb_we    [VFU_VD_WD]    = shared_wr_valid && shared_wr_out.we;
+    sb_id    [SB_VFU_VD_WD] = shared_wr_out.id;
   end
 
 `ifdef DOUBLE_BW
@@ -675,9 +667,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
                        !vfu_buf_empty;
 
   // Ack 1'b1 to the VFU as long as the buffer is not full
-  assign vrf_vfu_wvalid =
-      vfu_we_s && ((shared_wr_vfu_gnt && vfu_buf_empty &&
-                    vrf_wvalid[VFU_VD_WD]) || !vfu_buf_full);
+  assign vrf_vfu_wvalid = vfu_we_s && !vfu_buf_full;
 
   fifo_v3 #(
     .FALL_THROUGH (1'b0        ),
@@ -751,11 +741,6 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     // Use the metadata to commit the data to the VRF
 `ifdef BUF_FPU
     if (shared_wr_vfu_gnt && !vfu_buf_empty) begin
-      sb_we_buf    [VFU_VD_WD] = 1'b1;
-      vrf_wdata_buf[VFU_VD_WD] = vfu_buf_data.wdata;
-      vrf_waddr_buf[VFU_VD_WD] = vfu_buf_data.waddr;
-      vrf_wbe_buf  [VFU_VD_WD] = vfu_buf_data.wbe;
-      sb_buf_id    [SB_VFU_VD_WD] = vfu_buf_data.wid;
       vfu_rsp_buf = vfu_buf_data.rsp;
       vfu_rsp_buf_valid = vfu_buf_data.rsp_valid & vrf_wvalid[VFU_VD_WD];
     end else begin

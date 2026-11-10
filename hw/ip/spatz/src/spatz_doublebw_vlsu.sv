@@ -420,24 +420,25 @@ module spatz_doublebw_vlsu
   tile_word_t tile_col_write_word;
   always_comb begin : proc_tile_write_word
     tile_count_t local_col;
+    int unsigned row_start_byte;
+    int unsigned col_start_byte;
+    int unsigned packed_row_byte;
 
     tile_row_write_word = tile_word_t'(0);
     tile_col_write_word = tile_ctx_q.row_buf;
     local_col = tile_count_t'(tile_ctx_q.access.row - tile_req_col);
+    row_start_byte = unsigned'(tile_req_col) << tile_ctx_q.access.tew;
+    col_start_byte = unsigned'(local_col) << tile_ctx_q.access.tew;
+    packed_row_byte = unsigned'(tile_ctx_q.row_idx) << tile_ctx_q.access.tew;
 
-    for (int unsigned elem = 0; elem < TileEdge; elem++) begin
-      for (int unsigned byte_idx = 0; byte_idx < AccElemBytes; byte_idx++) begin
-        if ((elem < tile_req_elems) && (byte_idx < tile_elem_bytes)) begin
-          tile_row_write_word[(elem*tile_elem_bytes+byte_idx)*8 +: 8] =
-              tile_ctx_q.packed_data[((tile_req_col+elem)*tile_elem_bytes+byte_idx)*8 +: 8];
-        end
+    for (int unsigned d = 0; d < TileWordBWidth; d++) begin
+      if (d < (unsigned'(tile_req_elems) << tile_ctx_q.access.tew)) begin
+        tile_row_write_word[d*8 +: 8] =
+            tile_ctx_q.packed_data[(row_start_byte+d)*8 +: 8];
       end
-    end
-
-    for (int unsigned byte_idx = 0; byte_idx < AccElemBytes; byte_idx++) begin
-      if (byte_idx < tile_elem_bytes) begin
-        tile_col_write_word[(local_col*tile_elem_bytes+byte_idx)*8 +: 8] =
-            tile_ctx_q.packed_data[(tile_ctx_q.row_idx*tile_elem_bytes+byte_idx)*8 +: 8];
+      if ((d >= col_start_byte) && (d < col_start_byte + unsigned'(tile_elem_bytes))) begin
+        tile_col_write_word[d*8 +: 8] =
+            tile_ctx_q.packed_data[(packed_row_byte+d-col_start_byte)*8 +: 8];
       end
     end
   end
@@ -458,7 +459,6 @@ module spatz_doublebw_vlsu
   /*------------------------------------------------------------*/
 
   always_comb begin : tile_fsm
-    tile_stream_offset_t stream_byte_idx;
 
     tile_state_d = tile_state_q;
     tile_ctx_d   = tile_ctx_q;
@@ -535,12 +535,16 @@ module spatz_doublebw_vlsu
         if (tile_rready_i) begin
           if (tile_ctx_q.is_col) begin
             tile_count_t local_col;
+            int unsigned packed_start_byte;
+            int unsigned source_start_byte;
             local_col = tile_count_t'(tile_ctx_q.access.row - tile_req_col);
-            for (int unsigned byte_idx = 0; byte_idx < AccElemBytes; byte_idx++) begin
-              if (byte_idx < tile_elem_bytes) begin
-                tile_ctx_d.packed_data[
-                    (tile_ctx_q.row_idx*tile_elem_bytes+byte_idx)*8 +: 8] =
-                    tile_rdata_i[(local_col*tile_elem_bytes+byte_idx)*8 +: 8];
+            packed_start_byte = unsigned'(tile_ctx_q.row_idx) << tile_ctx_q.access.tew;
+            source_start_byte = unsigned'(local_col) << tile_ctx_q.access.tew;
+            for (int unsigned d = 0; d < TileRowBytes; d++) begin
+              if ((d >= packed_start_byte) &&
+                  (d < packed_start_byte + unsigned'(tile_elem_bytes))) begin
+                tile_ctx_d.packed_data[d*8 +: 8] =
+                    tile_rdata_i[(source_start_byte+d-packed_start_byte)*8 +: 8];
               end
             end
 
@@ -549,13 +553,14 @@ module spatz_doublebw_vlsu
             else
               tile_ctx_d.row_idx = tile_ctx_q.row_idx + 1'b1;
           end else begin
-            for (int unsigned elem = 0; elem < TileEdge; elem++) begin
-              for (int unsigned byte_idx = 0; byte_idx < AccElemBytes; byte_idx++) begin
-                if ((elem < tile_req_elems) && (byte_idx < tile_elem_bytes)) begin
-                  tile_ctx_d.packed_data[
-                      ((tile_req_col+elem)*tile_elem_bytes+byte_idx)*8 +: 8] =
-                      tile_rdata_i[(elem*tile_elem_bytes+byte_idx)*8 +: 8];
-                end
+            for (int unsigned d = 0; d < TileRowBytes; d++) begin
+              int unsigned first_byte;
+              int unsigned source_byte;
+              first_byte = unsigned'(tile_req_col) << tile_ctx_q.access.tew;
+              source_byte = d - first_byte;
+              if ((d >= first_byte) &&
+                  (source_byte < (unsigned'(tile_req_elems) << tile_ctx_q.access.tew))) begin
+                tile_ctx_d.packed_data[d*8 +: 8] = tile_rdata_i[source_byte*8 +: 8];
               end
             end
             if ((tile_count_t'(tile_ctx_q.word_col) + tile_req_elems) >= tile_ctx_q.elems) begin
@@ -586,13 +591,21 @@ module spatz_doublebw_vlsu
           for (int unsigned p = 0; p < NrMemPorts; p++) begin
             if (spatz_mem_rsp_valid_i[p] && rsp_tile_mem[p] && !tag_head[p].write) begin
               tile_load_pending_d[p] = 1'b0;
-              for (int unsigned b = 0; b < MemDataWidthB; b++) begin
-                stream_byte_idx = tile_stream_offset_t'(
-                    tag_head[p].chunk * MemDataWidthB + b - tile_mem_head);
-
-                if ((stream_byte_idx >= 0) && (stream_byte_idx < tile_stream_offset_t'(tile_ctx_q.bytes))) begin
-                  tile_ctx_d.packed_data[stream_byte_idx*8 +: 8] = spatz_mem_rsp_i[p].data[b*8 +: 8];
-                end
+            end
+          end
+          for (int unsigned d = 0; d < TileRowBytes; d++) begin
+            tile_stream_offset_t stream_byte;
+            tile_stream_offset_t stream_chunk;
+            tile_stream_offset_t chunk_byte;
+            stream_byte = tile_stream_offset_t'(d) + tile_stream_offset_t'(tile_mem_head);
+            stream_chunk = stream_byte >> $clog2(MemDataWidthB);
+            chunk_byte = stream_byte & tile_stream_offset_t'(MemDataWidthB - 1);
+            for (int unsigned p = 0; p < NrMemPorts; p++) begin
+              if (spatz_mem_rsp_valid_i[p] && rsp_tile_mem[p] && !tag_head[p].write &&
+                  (d < tile_ctx_q.bytes) &&
+                  (stream_chunk == tile_stream_offset_t'(tag_head[p].chunk))) begin
+                tile_ctx_d.packed_data[d*8 +: 8] =
+                    spatz_mem_rsp_i[p].data[chunk_byte*8 +: 8];
               end
             end
           end

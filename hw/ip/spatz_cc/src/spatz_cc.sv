@@ -133,6 +133,7 @@ module spatz_cc
 
   acc_rsp_t acc_demux_snitch;
   acc_rsp_t acc_resp;
+  acc_rsp_t spatz_acc_resp;
   acc_rsp_t dma_resp;
 
   logic acc_snitch_demux_qvalid, acc_snitch_demux_qready;
@@ -140,6 +141,7 @@ module spatz_cc
   logic dma_qvalid, dma_qready;
 
   logic acc_pvalid, acc_pready;
+  logic spatz_acc_pvalid, spatz_acc_pready;
   logic dma_pvalid, dma_pready;
   logic acc_demux_snitch_valid, acc_demux_snitch_ready;
 
@@ -271,6 +273,19 @@ module spatz_cc
     .oup_ready_i ( acc_demux_snitch_ready    )
   );
 
+  spill_register #(
+    .T(acc_rsp_t)
+  ) i_spatz_offload_rsp_buffer (
+    .clk_i   (clk_i            ),
+    .rst_ni  (rst_ni           ),
+    .data_i  (spatz_acc_resp   ),
+    .valid_i (spatz_acc_pvalid ),
+    .ready_o (spatz_acc_pready ),
+    .data_o  (acc_resp         ),
+    .valid_o (acc_pvalid       ),
+    .ready_i (acc_pready       )
+  );
+
   dreq_t fp_lsu_mem_req;
   drsp_t fp_lsu_mem_rsp;
 
@@ -301,9 +316,9 @@ module spatz_cc
     .issue_ready_o           (acc_qready            ),
     .issue_req_i             (acc_snitch_req        ),
     .issue_rsp_o             (acc_snitch_resp       ),
-    .rsp_valid_o             (acc_pvalid            ),
-    .rsp_ready_i             (acc_pready            ),
-    .rsp_o                   (acc_resp              ),
+    .rsp_valid_o             (spatz_acc_pvalid      ),
+    .rsp_ready_i             (spatz_acc_pready      ),
+    .rsp_o                   (spatz_acc_resp        ),
     .spatz_mem_req_o         (spatz_mem_req         ),
     .spatz_mem_req_valid_o   (spatz_mem_req_valid   ),
     .spatz_mem_req_ready_i   (spatz_mem_req_ready   ),

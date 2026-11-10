@@ -101,6 +101,8 @@ module spatz_ope
     spatz_id_t     id;
     vreg_t         vs1;
     vreg_t         vs2;
+    vrf_addr_t     vs1_base;
+    vrf_addr_t     vs2_base;
     vew_e          sew;
     mt_t           tile;
     tile_count_t   tm;
@@ -116,7 +118,6 @@ module spatz_ope
     mt_t  tile;
     logic [SpatialBeatW-1:0] beat;
     logic [CE-1:0][CE-1:0]   lane_active;
-    logic                    write_acc;
   } fpu_pipe_tag_t;
 
   // Request queues and arbitration.
@@ -144,12 +145,13 @@ module spatz_ope
   logic [SpatialBeatW-1:0] mac_beat_d, mac_beat_q;
   logic [ReductionIdxW-1:0] mac_reduction_d, mac_reduction_q;
   logic         mac_op_exec_valid;
-  logic         mac_op_bypass;
-  logic mac_req_empty, mac_current_empty, mac_op_empty;
+  logic mac_current_empty, mac_op_empty;
   logic mac_op_has_more_spatial, mac_op_has_more_reductions, mac_op_has_more_beats;
   mac_op_t mac_op_exec;
   logic [SpatialBeatW-1:0] mac_op_beat;
   logic [ReductionIdxW-1:0] mac_reduction_idx;
+  logic mac_rd_valid_d, mac_rd_valid_q;
+  vrf_addr_t [1:0] mac_rd_addr_d, mac_rd_addr_q;
   logic [GroupIdxW-1:0] mac_group_row, mac_group_col;
   group_count_t mac_m_groups, mac_n_groups;
   tile_count_t mac_active_tm, mac_active_tn;
@@ -161,22 +163,12 @@ module spatz_ope
   logic mac_idle;
 
   // FPU pipeline and MAC completion.
-  logic [CE-1:0][CE-1:0] fma16_ready;
-  logic [CE-1:0][CE-1:0] fma32_ready;
-  logic [CE-1:0][CE-1:0] sdotp16_ready;
-  logic                  fpu_pipe_ready;
-  logic fpu_pipe_result_valid;
   logic fpu_pipe_result_fire;
   logic fpu_pipe_result_forward;
-  logic fpu_pipe_result_ready;
-  logic fpu_pipe_continue_ready;
-  logic [NrPhysicalTile-1:0][SpatialBeats-1:0] fpu_pipe_tile_busy, fpu_pipe_tile_busy_next;
-  logic [NumPipeRegs-1:0] fpu_pipe_valid, fpu_pipe_valid_next;
+  logic [NrPhysicalTile-1:0][SpatialBeats-1:0] fpu_pipe_tile_busy;
+  logic [NumPipeRegs-1:0] fpu_pipe_valid;
   fpu_pipe_tag_t [NumPipeRegs-1:0] fpu_pipe_tag_d, fpu_pipe_tag_q;
   fpu_pipe_tag_t                   fpu_pipe_tag_in;
-  logic                            fpu_pipe_advance;
-  logic                            fpu_pipe_drain;
-  logic                            fpu_pipe_write_acc;
   ope_rsp_t mac_commit_rsp, mac_done_rsp;
   logic     mac_done_valid, mac_done_ready;
 
@@ -214,15 +206,6 @@ module spatz_ope
   logic     clean_acc_ready                     ;
   logic [NrPhysicalTile-1:0] mac_tile_busy;
 
-  // Resident tile and drain state.
-  logic            resident_valid_d, resident_valid_q;
-  mt_t             resident_tile_d, resident_tile_q;
-  mt_t             resident_drain_tile_d, resident_drain_tile_q;
-  logic            resident_drain_valid_d, resident_drain_valid_q;
-  logic            resident_drain_writeback_d, resident_drain_writeback_q;
-  logic            resident_start_fire;
-  logic            resident_switch_req, resident_switch_fire;
-  logic            resident_beat_mismatch;
 
   // Accumulator datapath and access arbitration.
   logic [CE-1:0][CE-1:0][AccElemWidth-1:0] fpu_addend;
@@ -234,7 +217,6 @@ module spatz_ope
   acc_sel_t tile_w_acc_sel;
   acc_sel_t clean_acc_sel;
   logic [CE-1:0][CE-1:0][AccElemWidth-1:0] fpu_result;
-  logic [CE-1:0][CE-1:0] fpu_result_valid;
   logic mac_use_sdotp;
   logic [CE-1:0][CE-1:0][AccElemWidth-1:0] acc_fpu_rdata, acc_fpu_wdata;
   logic [CE-1:0][CE-1:0][AccMaskWidth-1:0] acc_fpu_wen;
@@ -246,7 +228,6 @@ module spatz_ope
   logic [AccAddrW-1:0] acc_vrf_raddr, acc_vrf_waddr;
   logic [AccAddrW-1:0] acc_vlsu_raddr, acc_vlsu_waddr;
   logic [NrAccumulatorTiles-1:0][SpatialBeats-1:0][AccMaskWidth-1:0] acc_zero_d, acc_zero_q;
-  logic tile_read_drain_blocked, tile_write_drain_blocked;
   logic [NrPhysicalTile-1:0] tile_read_pipe_conflict, tile_write_pipe_conflict;
   logic tile_write_mac_conflict, tile_write_zero_conflict;
 
@@ -354,15 +335,13 @@ module spatz_ope
     if (clean_req_valid)
       clean_req_ready = clean_commit_ready && clean_acc_ready;
     else if (vt_req_valid && (!vt_busy_q || (vt_finishing && vt_commit_ready)) &&
-             !resident_drain_valid_q && !mac_tile_busy[spatz_req_vt.op_ope.tss.tile_id] &&
-             (!resident_valid_q || (spatz_req_vt.op_ope.tss.tile_id != resident_tile_q)))
+             !mac_tile_busy[spatz_req_vt.op_ope.tss.tile_id])
       vt_req_ready = 1'b1;
     else if (tv_req_valid && (!tv_busy_q || (tv_finishing && tv_commit_ready)) &&
-             !resident_drain_valid_q && !mac_tile_busy[tv_pending_req_q.op_ope.tss.tile_id] &&
-             (!resident_valid_q || (tv_pending_req_q.op_ope.tss.tile_id != resident_tile_q)))
+             !mac_tile_busy[tv_pending_req_q.op_ope.tss.tile_id])
       tv_req_ready = 1'b1;
     else if (mac_req_valid)
-      mac_req_eligible = !resident_drain_valid_q && !(tile_rvalid_i && (tile_r_req_i.idx == spatz_req_mac.mtd));
+      mac_req_eligible = !(tile_rvalid_i && (tile_r_req_i.idx == spatz_req_mac.mtd));
   end : req_ready_proc
 
   assign mac_req_ready = mac_req_eligible && (!mac_op_next_q.valid || (mac_commit_valid && mac_commit_ready));
@@ -413,80 +392,34 @@ module spatz_ope
   end : mac_active_shape
 
   always_comb begin : mac_op_scheduler
-    logic result_match, result_switch, result_can_drain;
+    logic result_match;
     logic tile_hazard;
     logic current_ready;
 
-    result_match = 1'b0;
-    result_switch = 1'b0;
-
-    if (fpu_pipe_result_valid && !fpu_pipe_tag_q[NumPipeRegs-1].write_acc) begin
-      // Same tile/beat: forward the pipeline result into the dependent MAC.
-      result_match  = (fpu_pipe_tag_q[NumPipeRegs-1].tile == mac_op_current_q.op.tile) &&
-                      (fpu_pipe_tag_q[NumPipeRegs-1].beat == mac_beat_q);
-      // A result for the resident tile may switch ownership without first
-      // writing the accumulator, provided no drain is already pending.
-      result_switch = resident_valid_q && !resident_drain_valid_q &&
-                      (fpu_pipe_tag_q[NumPipeRegs-1].tile == resident_tile_q) &&
-                      (mac_op_current_q.op.tile != resident_tile_q);
-    end
+    result_match = fpu_pipe_tag_q[NumPipeRegs-1].valid &&
+                   (fpu_pipe_tag_q[NumPipeRegs-1].tile == mac_op_current_q.op.tile) &&
+                   (fpu_pipe_tag_q[NumPipeRegs-1].beat == mac_beat_q);
 
     // A busy tile/beat is unavailable until its exact result reaches the
     // forwarding stage.  Results for another beat cannot satisfy the hazard.
     tile_hazard = fpu_pipe_tile_busy[mac_op_current_q.op.tile][mac_beat_q] && !result_match;
-    result_can_drain = fpu_pipe_result_valid && fpu_pipe_drain;
-
     current_ready = mac_op_current_q.valid && (mac_current_empty ||
-                      (!resident_drain_valid_q && !tile_hazard &&
-                        !(tile_rvalid_i && (tile_r_req_i.idx == mac_op_current_q.op.tile)) &&
-                          ((!(&fpu_pipe_valid)) || result_match || result_switch || result_can_drain)));
+                      (!tile_hazard &&
+                       !(tile_rvalid_i && (tile_r_req_i.idx == mac_op_current_q.op.tile))));
 
-    // Bypass is legal only with no registered MAC.  A dependent request stays
-    // registered until the prior result reaches the forwarding stage.
-    mac_op_bypass = !mac_op_current_q.valid && !mac_op_next_q.valid &&
-                    mac_req_valid && mac_req_eligible && !mac_req_empty &&
-                    !fpu_pipe_tile_busy[spatz_req_mac.mtd][SpatialBeatW'(0)];
-
-    // Execute either the ready registered head or an independent empty-queue
-    // request through the combinational bypass.
-    mac_op_exec_valid = current_ready || mac_op_bypass;
+    mac_op_exec_valid = current_ready;
 
   end : mac_op_scheduler
 
-  assign mac_op_beat = mac_op_bypass ? SpatialBeatW'(0) : mac_beat_q;
-  assign mac_reduction_idx = mac_op_bypass ? ReductionIdxW'(0) : mac_reduction_q;
+  assign mac_op_beat = mac_beat_q;
+  assign mac_reduction_idx = mac_reduction_q;
+  assign mac_op_exec = mac_op_current_q.op;
 
-  always_comb begin : mac_op_select
-    // Keep selection independent of valid to avoid adding a gate to the MAC
-    // critical path; downstream enables are qualified by mac_op_exec_valid.
-    mac_op_exec = mac_op_current_q.op;
-    if (mac_op_bypass) begin
-      mac_op_exec = '{
-        tile     : spatz_req_mac.mtd,
-        id       : spatz_req_mac.id,
-        vs1      : spatz_req_mac.vs1,
-        vs2      : spatz_req_mac.vs2,
-        sew      : spatz_req_mac.vtype.vsew,
-        // Dimensions are snapshotted with the request. tm/tn are clamped to
-        // the physical tile edge; tk is already bounded by msettk/KMAX.
-        tk       : spatz_req_mac.op_ope.tk,
-        tm       : (spatz_req_mac.op_ope.tm > TE) ? tile_count_t'(TE) : tile_count_t'(spatz_req_mac.op_ope.tm),
-        tn       : (spatz_req_mac.op_ope.tn > TE) ? tile_count_t'(TE) : tile_count_t'(spatz_req_mac.op_ope.tn)
-      };
-    end
-  end : mac_op_select
-
-  // Empty requests are rare control cases.  Keep their detection off the
-  // active-shape/group arithmetic and never send them through combinational
-  // bypass, so normal MAC enables only depend on registered dimensions.
   always_comb begin : mac_op_empty_dimension
-    mac_req_empty = (spatz_req_mac.op_ope.tm == elen_t'(0)) ||
-                    (spatz_req_mac.op_ope.tn == elen_t'(0)) ||
-                    (spatz_req_mac.op_ope.tk == elen_t'(0));
     mac_current_empty = (mac_op_current_q.op.tm == tile_count_t'(0)) ||
                         (mac_op_current_q.op.tn == tile_count_t'(0)) ||
                         (mac_op_current_q.op.tk == 3'd0);
-    mac_op_empty = mac_op_exec_valid && !mac_op_bypass && mac_current_empty;
+    mac_op_empty = mac_op_exec_valid && mac_current_empty;
   end : mac_op_empty_dimension
 
   always_comb begin : mac_op_has_more
@@ -500,13 +433,13 @@ module spatz_ope
   always_comb begin : mac_op_fire
     mac_nonfpu_ready  = (&vrf_rvalid_i[1:0]) && (mac_op_has_more_beats || mac_commit_ready);
     mac_step_fire = (mac_op_empty && mac_commit_ready) ||
-                    (mac_op_exec_valid && !mac_op_empty && fpu_pipe_ready && mac_nonfpu_ready);
-    mac_fire = mac_op_exec_valid && !mac_op_empty && fpu_pipe_ready && mac_nonfpu_ready;
+                    (mac_op_exec_valid && !mac_op_empty && mac_nonfpu_ready);
+    mac_fire = mac_op_exec_valid && !mac_op_empty && mac_nonfpu_ready;
   end : mac_op_fire
 
   assign mac_commit_valid = mac_op_empty ||
                             (mac_op_exec_valid && !mac_op_empty && !mac_op_has_more_beats
-                            && fpu_pipe_ready && (&vrf_rvalid_i[1:0]));
+                            && (&vrf_rvalid_i[1:0]));
   assign mac_idle = !mac_op_current_q.valid && !mac_op_next_q.valid && !(|fpu_pipe_valid);
 
   always_comb begin : mac_op_update
@@ -515,7 +448,7 @@ module spatz_ope
     mac_beat_d       = mac_beat_q;
     mac_reduction_d  = mac_reduction_q;
 
-    if (mac_step_fire && !mac_op_bypass) begin
+    if (mac_step_fire) begin
       if (mac_op_empty) begin
         mac_op_current_d = mac_op_next_q;
         mac_op_next_d = mac_op_slot_t'(0);
@@ -541,6 +474,8 @@ module spatz_ope
         id     : spatz_req_mac.id,
         vs1    : spatz_req_mac.vs1,
         vs2    : spatz_req_mac.vs2,
+        vs1_base: vrf_addr_t'(spatz_req_mac.vs1) * NrWordsPerVector,
+        vs2_base: vrf_addr_t'(spatz_req_mac.vs2) * NrWordsPerVector,
         sew    : spatz_req_mac.vtype.vsew,
         tk     : spatz_req_mac.op_ope.tk,
         tm     : (spatz_req_mac.op_ope.tm > TE) ? tile_count_t'(TE) : tile_count_t'(spatz_req_mac.op_ope.tm),
@@ -549,13 +484,7 @@ module spatz_ope
 
       if (!mac_op_current_q.valid) begin
         mac_op_current_d.op    = new_op;
-        mac_op_current_d.valid = !(mac_op_bypass && mac_commit_valid && mac_commit_ready);
-
-        if (mac_op_bypass && mac_step_fire) begin
-          mac_beat_d = (mac_op_has_more_spatial) ? mac_next_spatial_beat : SpatialBeatW'(0);
-          mac_reduction_d = (!mac_op_has_more_spatial && mac_op_has_more_reductions) ?
-                            mac_reduction_idx + 1'b1 : ReductionIdxW'(0);
-        end
+        mac_op_current_d.valid = 1'b1;
 
       end else if (mac_commit_valid && mac_commit_ready && !mac_op_next_q.valid) begin
         mac_op_current_d.op    = new_op;
@@ -576,149 +505,28 @@ module spatz_ope
    `FF(mac_reduction_q, mac_reduction_d, $bits(mac_reduction_q)'(0))
 
   /*------------------------------------------------------------*/
-  /*                    Resident Tile State                     */
-  /*------------------------------------------------------------*/
-
-  assign resident_start_fire = mac_fire && !resident_valid_q && (mac_op_beat == SpatialBeatW'(0));
-  // A queued MAC must be able to drain a mismatching resident result before
-  // it becomes executable.  Qualifying these conditions with exec_valid made
-  // tile_hazard and result_ready wait on each other when the pipeline was full.
-  assign resident_switch_req = (mac_op_current_q.valid || mac_op_bypass) && resident_valid_q &&
-      !resident_drain_valid_q && (mac_op_exec.tile != resident_tile_q);
-  assign resident_switch_fire = resident_switch_req && mac_fire;
-  assign resident_beat_mismatch = (mac_op_current_q.valid || mac_op_bypass) && resident_valid_q &&
-      !resident_drain_valid_q && fpu_pipe_result_valid && (mac_op_exec.tile == resident_tile_q) &&
-      (fpu_pipe_tag_q[NumPipeRegs-1].tile == resident_tile_q) && (fpu_pipe_tag_q[NumPipeRegs-1].beat != mac_op_beat);
-
-  always_comb begin : resident_state_update
-    logic start_drain;
-    logic start_writeback;
-
-    resident_valid_d       = resident_valid_q;
-    resident_tile_d        = resident_tile_q;
-    resident_drain_valid_d = resident_drain_valid_q;
-    resident_drain_tile_d  = resident_drain_tile_q;
-    resident_drain_writeback_d = resident_drain_writeback_q;
-
-    start_drain = 1'b0;
-    start_writeback = 1'b0;
-
-    if (resident_valid_q && !resident_drain_valid_q && (|fpu_pipe_valid_next)) begin
-      // VTSE is already older than any MAC sitting in the OPE queues.  Drain
-      // the resident FPU state even when a younger same-tile MAC is queued;
-      // that MAC remains blocked by tile_rvalid_i until the read completes.
-      if (tile_rvalid_i && (tile_r_req_i.idx == resident_tile_q)) begin
-        start_drain = 1'b1;
-        start_writeback = 1'b1;
-      end else if (!mac_op_current_d.valid && !mac_op_next_d.valid &&
-                   clean_req_valid && (spatz_req_clean.op_ope.is_discard)) begin
-        start_drain = 1'b1;
-      end else if (!mac_op_current_d.valid && !mac_op_next_d.valid && clean_req_valid &&
-                   spatz_req_clean.op_ope.is_zero_tile && (spatz_req_clean.mtd == resident_tile_q)) begin
-        start_drain = 1'b1;
-      end else if (!mac_op_current_d.valid && !mac_op_next_d.valid &&
-                   tile_wvalid_i && (tile_w_req_i.idx == resident_tile_q)) begin
-        start_drain = 1'b1;
-        start_writeback = 1'b1;
-      end else if (!mac_op_current_d.valid && !mac_op_next_d.valid && vt_req_valid &&
-                   (spatz_req_vt.op_ope.tss.tile_id == resident_tile_q)) begin
-        start_drain = 1'b1;
-        start_writeback = 1'b1;
-      end else if (!mac_op_current_d.valid && !mac_op_next_d.valid && tv_req_valid &&
-                   (tv_pending_req_q.op_ope.tss.tile_id == resident_tile_q)) begin
-        start_drain = 1'b1;
-        start_writeback = 1'b1;
-      end
-    end
-
-    if (start_drain) begin
-      resident_drain_valid_d = 1'b1;
-      resident_drain_tile_d = resident_tile_q;
-      resident_drain_writeback_d = start_writeback;
-    end
-
-    if (resident_start_fire) begin
-      resident_valid_d = 1'b1;
-      resident_tile_d = mac_op_exec.tile;
-    end
-    if (resident_switch_fire) begin
-      resident_valid_d = 1'b1;
-      resident_tile_d = mac_op_exec.tile;
-    end
-
-    if (resident_drain_valid_q && !(|fpu_pipe_tile_busy_next[resident_drain_tile_q])) begin
-      if (resident_valid_q && (resident_tile_q == resident_drain_tile_q))
-        resident_valid_d = 1'b0;
-      resident_drain_valid_d = 1'b0;
-      resident_drain_writeback_d = 1'b0;
-    end
-  end : resident_state_update
-
-   `FF(resident_valid_q, resident_valid_d, 1'b0)
-   `FF(resident_tile_q, resident_tile_d, mt_t'(0))
-   `FF(resident_drain_valid_q, resident_drain_valid_d, 1'b0)
-   `FF(resident_drain_tile_q, resident_drain_tile_d, mt_t'(0))
-   `FF(resident_drain_writeback_q, resident_drain_writeback_d, 1'b0)
-
-  /*------------------------------------------------------------*/
   /*                        FPU Pipeline                        */
   /*------------------------------------------------------------*/
 
-  assign fpu_pipe_ready   = (&fma16_ready) && (&fma32_ready) && (&sdotp16_ready);
-  assign fpu_pipe_advance = (mac_fire || (|fpu_pipe_valid)) && fpu_pipe_ready;
   assign fpu_pipe_tag_in = mac_fire ?
       '{valid: 1'b1, tile: mac_op_exec.tile, beat: mac_op_beat,
-        lane_active: mac_lane_active, write_acc: 1'b0} : fpu_pipe_tag_t'(0);
+        lane_active: mac_lane_active} : fpu_pipe_tag_t'(0);
+  assign fpu_pipe_tag_d = {fpu_pipe_tag_q[NumPipeRegs-2:0], fpu_pipe_tag_in};
 
-  always_comb begin : fpu_pipe_tag_update
-    fpu_pipe_tag_d = fpu_pipe_tag_q;
-    if (resident_switch_fire) begin
-      for (int unsigned stage = 0; stage < NumPipeRegs; stage++)
-        fpu_pipe_tag_d[stage].write_acc = 1'b1;
-    end
-    if (fpu_pipe_advance) begin
-      fpu_pipe_tag_d = {fpu_pipe_tag_d[NumPipeRegs-2:0], fpu_pipe_tag_in};
-    end
-  end : fpu_pipe_tag_update
-
-  // Occupancy is already encoded by the tag pipeline. Derive empty/full and
-  // the per-tile beat map instead of storing a second copy in flip-flops.
   always_comb begin : fpu_pipe_occupancy
-    fpu_pipe_tile_busy      = '0;
-    fpu_pipe_tile_busy_next = '0;
-    fpu_pipe_valid          = '0;
-    fpu_pipe_valid_next     = '0;
+    fpu_pipe_tile_busy = '0;
+    fpu_pipe_valid = '0;
     for (int unsigned stage = 0; stage < NumPipeRegs; stage++) begin
       fpu_pipe_valid[stage] = fpu_pipe_tag_q[stage].valid;
-      fpu_pipe_valid_next[stage] = fpu_pipe_tag_d[stage].valid;
-      if (fpu_pipe_tag_q[stage].valid) begin
+      if (fpu_pipe_tag_q[stage].valid)
         fpu_pipe_tile_busy[fpu_pipe_tag_q[stage].tile][fpu_pipe_tag_q[stage].beat] = 1'b1;
-      end
-      if (fpu_pipe_tag_d[stage].valid) begin
-        fpu_pipe_tile_busy_next[fpu_pipe_tag_d[stage].tile][fpu_pipe_tag_d[stage].beat] = 1'b1;
-      end
     end
-  end : fpu_pipe_occupancy
+  end
 
-  // Result handshake, drain and forwarding.
-  assign fpu_pipe_result_valid = fpu_result_valid[0][0];
-
-  assign fpu_pipe_drain = fpu_pipe_tag_q[NumPipeRegs-1].write_acc || (fpu_pipe_result_valid && ((resident_switch_req &&
-         (fpu_pipe_tag_q[NumPipeRegs-1].tile != mac_op_exec.tile)) || resident_beat_mismatch));
-  assign fpu_pipe_write_acc = fpu_pipe_drain ||
-      (resident_drain_valid_q && resident_drain_writeback_q &&
-       (fpu_pipe_tag_q[NumPipeRegs-1].tile == resident_drain_tile_q));
-
-  assign fpu_pipe_continue_ready = mac_op_exec_valid && (&vrf_rvalid_i[1:0]) &&
-      (fpu_pipe_tag_q[NumPipeRegs-1].tile == mac_op_exec.tile) && (fpu_pipe_tag_q[NumPipeRegs-1].beat == mac_op_beat);
-
-  assign fpu_pipe_result_ready =
-      ((resident_drain_valid_q && (fpu_pipe_tag_q[NumPipeRegs-1].tile == resident_drain_tile_q)) || fpu_pipe_drain) ?
-      1'b1 : (fpu_pipe_tag_q[NumPipeRegs-1].write_acc ? mac_commit_ready : fpu_pipe_continue_ready);
-  assign fpu_pipe_result_fire = fpu_pipe_result_valid && fpu_pipe_result_ready;
-  assign fpu_pipe_result_forward = mac_fire && fpu_pipe_result_fire && !resident_drain_valid_q && !fpu_pipe_drain &&
-      (fpu_pipe_tag_q[NumPipeRegs-1].tile == mac_op_exec.tile) && (fpu_pipe_tag_q[NumPipeRegs-1].beat == mac_op_beat) &&
-      !fpu_pipe_tag_q[NumPipeRegs-1].write_acc;
+  assign fpu_pipe_result_fire = fpu_pipe_tag_q[NumPipeRegs-1].valid;
+  assign fpu_pipe_result_forward = fpu_pipe_result_fire &&
+      (fpu_pipe_tag_q[NumPipeRegs-1].tile == mac_op_exec.tile) &&
+      (fpu_pipe_tag_q[NumPipeRegs-1].beat == mac_op_beat);
 
   `FF(fpu_pipe_tag_q, fpu_pipe_tag_d, '0)
 
@@ -849,17 +657,14 @@ module spatz_ope
     // malformed request ever asserts both command bits.  It waits for every
     // producer/consumer of accumulator state to become idle.
     if (spatz_req_clean.op_ope.is_discard)
-      clean_acc_ready = !resident_valid_q && !resident_drain_valid_q &&
-                        !mac_op_current_q.valid && !mac_op_next_q.valid &&
+      clean_acc_ready = !mac_op_current_q.valid && !mac_op_next_q.valid &&
                         !(|fpu_pipe_valid) && !vt_busy_q && !tv_busy_q &&
                         !tile_rvalid_i && !tile_wvalid_i;
     // Zero only touches its selected tile and may proceed while unrelated
     // tiles are active, provided no reader/writer owns that tile.
     else if (spatz_req_clean.op_ope.is_zero_tile)
-      clean_acc_ready = !resident_drain_valid_q
-                        && !mac_tile_busy[spatz_req_clean.mtd]
-                        && !(tile_rvalid_i && (tile_r_req_i.idx == spatz_req_clean.mtd))
-                        && (!resident_valid_q || (spatz_req_clean.mtd != resident_tile_q));
+      clean_acc_ready = !mac_tile_busy[spatz_req_clean.mtd]
+                        && !(tile_rvalid_i && (tile_r_req_i.idx == spatz_req_clean.mtd));
   end : clean_acc_ready_proc
 
   /*------------------------------------------------------------*/
@@ -869,11 +674,8 @@ module spatz_ope
   // Read ports [0:1] feed MAC vs2/vs1; read port [2] feeds TV.
   // ID [3] accompanies the independent VT write port.
   always_comb begin : sb_ids
-    // The bypass can only execute when there is no registered MAC. Select
-    // the scoreboard ID from that registered occupancy bit instead of the
-    // combinational bypass grant, which also depends on tile drain state.
-    vrf_id_o[0] = mac_op_current_q.valid ? mac_op_current_q.op.id : spatz_req_mac.id;
-    vrf_id_o[1] = mac_op_current_q.valid ? mac_op_current_q.op.id : spatz_req_mac.id;
+    vrf_id_o[0] = mac_op_current_q.op.id;
+    vrf_id_o[1] = mac_op_current_q.op.id;
     vrf_id_o[2] = tv_req_q.id;
     vrf_id_o[3] = vt_req_q.id;
   end
@@ -883,43 +685,12 @@ module spatz_ope
   /*------------------------------------------------------------*/
 
   always_comb begin : vrf_re_proc
-    logic [3:0] row_stride_regs;
-    operand_width_t operand_bits;
-    vrf_addr_t reduction_word_offset;
-    vrf_addr_t row_word_offset;
-    vrf_addr_t col_word_offset;
-
     vrf_re_o = $bits(vrf_re_o)'(0);
     vrf_raddr_o = $bits(vrf_raddr_o)'(0);
-    row_stride_regs = 4'(1);
-    operand_bits = operand_width_t'(0);
-    reduction_word_offset = vrf_addr_t'(0);
-    row_word_offset = vrf_addr_t'(0);
-    col_word_offset = vrf_addr_t'(0);
 
-    if (mac_op_exec_valid) begin
-      unique case (mac_op_exec.sew)
-        EW_8: begin
-          operand_bits = 6'd8;
-          row_stride_regs = 4'd2;
-        end
-        EW_16: begin
-          operand_bits = 6'd16;
-          row_stride_regs = 4'd4;
-        end
-        default: begin
-          operand_bits = 6'd32;
-          row_stride_regs = 4'd8;
-        end
-      endcase
-      if (mac_use_sdotp) operand_bits = 6'(TEWB << 3);
-      reduction_word_offset = mac_use_sdotp ? '0 :
-                        vrf_addr_t'(mac_reduction_idx) * row_stride_regs * NrWordsPerVector;
-      row_word_offset = vrf_addr_t'((mac_group_row * CE * operand_bits) / VRFWordWidth);
-      col_word_offset = vrf_addr_t'((mac_group_col * CE * operand_bits) / VRFWordWidth);
+    if (mac_rd_valid_q) begin
       vrf_re_o[1:0] = 2'b11;
-      vrf_raddr_o[0] = vrf_addr_t'(mac_op_exec.vs2) * NrWordsPerVector + reduction_word_offset + row_word_offset;
-      vrf_raddr_o[1] = vrf_addr_t'(mac_op_exec.vs1) * NrWordsPerVector + reduction_word_offset + col_word_offset;
+      vrf_raddr_o[1:0] = mac_rd_addr_q;
     end
 
     if (tv_busy_q && !tv_data_latched_q && !tv_vrf_outstanding_q) begin
@@ -927,6 +698,55 @@ module spatz_ope
       vrf_raddr_o[2] = (vrf_addr_t'(tv_req_q.vs2) << $clog2(NrWordsPerVector)) + vrf_addr_t'(tv_word_idx_q);
     end
   end
+
+  always_comb begin : mac_read_lookahead
+    logic [3:0] next_row_stride_regs;
+    operand_width_t next_operand_bits;
+    vrf_addr_t next_reduction_word_offset;
+    vrf_addr_t next_row_word_offset;
+    vrf_addr_t next_col_word_offset;
+    logic [GroupIdxW-1:0] next_group_row, next_group_col;
+    logic next_use_sdotp;
+
+    mac_rd_valid_d = mac_op_current_d.valid &&
+        (mac_op_current_d.op.tm != tile_count_t'(0)) &&
+        (mac_op_current_d.op.tn != tile_count_t'(0)) &&
+        (mac_op_current_d.op.tk != 3'd0);
+    mac_rd_addr_d = '0;
+    next_row_stride_regs = 4'd1;
+    next_operand_bits = operand_width_t'(0);
+    next_reduction_word_offset = '0;
+    next_row_word_offset = '0;
+    next_col_word_offset = '0;
+    next_group_row = GroupIdxW'(mac_beat_d / AccDepthPerCE);
+    next_group_col = GroupIdxW'(mac_beat_d % AccDepthPerCE);
+    next_use_sdotp = ((8 << int'(mac_op_current_d.op.sew)) != (TEWB << 3));
+    if (mac_rd_valid_d) begin
+      unique case (mac_op_current_d.op.sew)
+        EW_8: begin
+          next_operand_bits = 6'd8;
+          next_row_stride_regs = 4'd2;
+        end
+        EW_16: begin
+          next_operand_bits = 6'd16;
+          next_row_stride_regs = 4'd4;
+        end
+        default: begin
+          next_operand_bits = 6'd32;
+          next_row_stride_regs = 4'd8;
+        end
+      endcase
+      if (next_use_sdotp) next_operand_bits = 6'(TEWB << 3);
+      next_reduction_word_offset = next_use_sdotp ? '0 :
+          vrf_addr_t'(mac_reduction_d) * next_row_stride_regs * NrWordsPerVector;
+      next_row_word_offset = vrf_addr_t'((next_group_row * CE * next_operand_bits) / VRFWordWidth);
+      next_col_word_offset = vrf_addr_t'((next_group_col * CE * next_operand_bits) / VRFWordWidth);
+      mac_rd_addr_d[0] = mac_op_current_d.op.vs2_base + next_reduction_word_offset + next_row_word_offset;
+      mac_rd_addr_d[1] = mac_op_current_d.op.vs1_base + next_reduction_word_offset + next_col_word_offset;
+    end
+  end
+  `FF(mac_rd_valid_q, mac_rd_valid_d, 1'b0)
+  `FF(mac_rd_addr_q, mac_rd_addr_d, '0)
 
   /*------------------------------------------------------------*/
   /*                   Tile -> VRF Write Port                   */
@@ -1064,19 +884,11 @@ module spatz_ope
     assign tile_write_pipe_conflict[tile] = (tile_w_req_i.idx == mt_t'(tile)) && (|fpu_pipe_tile_busy[tile]);
   end
 
-  // The resident FPU result uses its own accumulator write port.  A VLSU
-  // transfer of another tile can therefore proceed while that result drains.
-  // Transfers of the draining tile must wait until its result is committed.
-  assign tile_read_drain_blocked = resident_drain_valid_q &&
-      (tile_r_req_i.idx == resident_drain_tile_q);
-  assign tile_write_drain_blocked = resident_drain_valid_q &&
-      (tile_w_req_i.idx == resident_drain_tile_q);
   assign tile_write_mac_conflict =
       (mac_op_current_q.valid && (mac_op_current_q.op.tile == tile_w_req_i.idx)) ||
-      (mac_op_next_q.valid && (mac_op_next_q.op.tile == tile_w_req_i.idx)) ||
-      (mac_op_bypass && (spatz_req_mac.mtd == tile_w_req_i.idx));
+      (mac_op_next_q.valid && (mac_op_next_q.op.tile == tile_w_req_i.idx));
 
-  // When write-ready can be high, drain/resident/MAC conflicts and tile_rvalid_i are already excluded.
+  // When write-ready can be high, MAC conflicts and tile_rvalid_i are already excluded.
   // For a matching VTZERO these are precisely the clean_acc_ready conditions, so no ready feedback is needed.
   assign tile_write_zero_conflict = clean_req_valid && spatz_req_clean.op_ope.is_zero_tile &&
                                    clean_commit_ready && (spatz_req_clean.mtd == tile_w_req_i.idx);
@@ -1084,13 +896,11 @@ module spatz_ope
   // A valid tile read already blocks matching MAC issue/bypass and VTZERO in their own arbitration.
   // Do not block on queued MACs here: an older tile read must be able to complete ahead of them.
   // The registered busy bits include the final FMA result until its retirement edge.
-  assign tile_rready_o = !tile_read_drain_blocked && !(|tile_read_pipe_conflict) &&
-      !(resident_valid_q && (resident_tile_q == tile_r_req_i.idx)) &&
+  assign tile_rready_o = !(|tile_read_pipe_conflict) &&
       !(tv_busy_q && tv_vrf_avail && (tv_req_q.op_ope.tss.tile_id == tile_r_req_i.idx));
 
-  assign tile_wready_o = !tile_write_drain_blocked && !tile_rvalid_i && !(|tile_write_pipe_conflict) &&
+  assign tile_wready_o = !tile_rvalid_i && !(|tile_write_pipe_conflict) &&
       !tile_write_mac_conflict && !tile_write_zero_conflict &&
-      !(resident_valid_q && (resident_tile_q == tile_w_req_i.idx)) &&
       !(vt_busy_q && (vt_req_q.op_ope.tss.tile_id == tile_w_req_i.idx)) &&
       !(tv_busy_q && tv_vrf_avail && (tv_req_q.op_ope.tss.tile_id == tile_w_req_i.idx));
 
@@ -1117,10 +927,10 @@ module spatz_ope
       acc_vrf_raddr = AccAddrW'(tv_acc_sel.tile * SpatialBeats + bank_row * AccDepthPerCE);
     end
 
-    if (tile_rvalid_i && tile_rready_o) begin
+    if (tile_rvalid_i) begin
       bank_row = GroupIdxW'(tile_r_req_i.row / CE);
       acc_vlsu_raddr = AccAddrW'(tile_r_acc_sel.tile * SpatialBeats + bank_row * AccDepthPerCE);
-    end else if (tile_wvalid_i && tile_wready_o) begin
+    end else if (tile_wvalid_i) begin
       bank_row = GroupIdxW'(tile_w_req_i.row / CE);
       acc_vlsu_raddr = AccAddrW'(tile_w_acc_sel.tile * SpatialBeats + bank_row * AccDepthPerCE);
     end
@@ -1128,12 +938,9 @@ module spatz_ope
 
   always_comb begin : acc_access_proc
     tile_dim_t idx;
-    tile_dim_t row_i;
     tile_dim_t col_i;
 
     logic [GroupIdxW-1:0] bank_row;
-    tile_sum_t elem_idx;
-    vlen_t flat_elem_idx;
     tile_dim_t line_word_idx;
 
     acc_fpu_wdata = $bits(acc_fpu_wdata)'(0);
@@ -1148,11 +955,8 @@ module spatz_ope
     tile_rdata_o = tile_word_t'(0);
 
     idx = tile_dim_t'(0);
-    row_i = tile_dim_t'(0);
     col_i = tile_dim_t'(0);
     bank_row = GroupIdxW'(0);
-    elem_idx = tile_sum_t'(0);
-    flat_elem_idx = vlen_t'(0);
     line_word_idx = tile_dim_t'(tv_word_idx_q);
 
     if (tv_acc_wen) begin
@@ -1174,26 +978,36 @@ module spatz_ope
         end
       end
 
-      for (int lane = 0; lane < VRFWordBWidth; lane++) begin
-        elem_idx = line_word_idx * MoveElemsPerWord + lane;
-        flat_elem_idx = elem_idx;
-        if ((flat_elem_idx >= tv_req_q.vstart) && (flat_elem_idx < tv_shape_q.elems) &&
-            (elem_idx < tv_shape_q.line_elems) && (lane < MoveElemsPerWord)) begin
-          if (tv_req_q.op_ope.tss.is_row) begin
-            row_i = idx;
-            col_i = elem_idx[$clog2(TE)-1:0];
-          end else begin
-            row_i = elem_idx[$clog2(TE)-1:0];
-            col_i = idx;
+      for (int row = 0; row < CE; row++) begin
+        for (int col = 0; col < CE; col++) begin
+          for (int beat = 0; beat < AccDepthPerCE; beat++) begin
+            int unsigned dest_elem;
+            int unsigned source_lane;
+            logic dest_match;
+            if (tv_req_q.op_ope.tss.is_row) begin
+              dest_elem = beat * CE + col;
+              dest_match = (unsigned'(idx) % CE) == row;
+            end else begin
+              dest_elem = unsigned'(bank_row) * CE + row;
+              dest_match = ((unsigned'(idx) % CE) == col) &&
+                           ((unsigned'(idx) / CE) == beat);
+            end
+            source_lane = dest_elem - unsigned'(line_word_idx) * MoveElemsPerWord;
+            if (dest_match && (dest_elem >= unsigned'(line_word_idx) * MoveElemsPerWord) &&
+                (source_lane < MoveElemsPerWord) && (dest_elem >= unsigned'(tv_req_q.vstart)) &&
+                (dest_elem < unsigned'(tv_shape_q.elems)) &&
+                (dest_elem < unsigned'(tv_shape_q.line_elems))) begin
+              if (TEWB == 1)
+                acc_vrf_wdata[row][col][beat][tv_acc_sel.byte_offset*8 +: 8] =
+                    tv_vrf_data[source_lane*8 +: 8];
+              else if (TEWB == 2)
+                acc_vrf_wdata[row][col][beat][tv_acc_sel.byte_offset*8 +: 16] =
+                    tv_vrf_data[source_lane*16 +: 16];
+              else
+                acc_vrf_wdata[row][col][beat] =
+                    tv_vrf_data[source_lane*AccElemWidth +: AccElemWidth];
+            end
           end
-          acc_vrf_wen[row_i % CE][col_i % CE] = tv_acc_sel.mask_enable;
-          if (TEWB == 1)
-            acc_vrf_wdata[row_i % CE][col_i % CE][col_i / CE][tv_acc_sel.byte_offset*8 +: 8] = tv_vrf_data[lane*8 +: 8];
-          else if (TEWB == 2)
-            acc_vrf_wdata[row_i % CE][col_i % CE][col_i / CE][tv_acc_sel.byte_offset*8 +: 16] =
-                16'(tv_vrf_data >> (lane * 16));
-          else
-            acc_vrf_wdata[row_i % CE][col_i % CE][col_i / CE] = AccElemWidth'(tv_vrf_data >> (lane * AccElemWidth));
         end
       end
     end
@@ -1213,33 +1027,43 @@ module spatz_ope
           acc_vlsu_wen[row][col] = tile_w_acc_sel.mask_enable;
         end
       end
-      for (int unsigned byte_idx = 0; byte_idx < TileWordBWidth; byte_idx++) begin
-        tile_word_elem_idx_t elem_idx_in_word;
-        logic [2:0] elem_byte_idx;
-
-        elem_idx_in_word = tile_word_elem_idx_t'(byte_idx / TEWB);
-        elem_byte_idx = 3'(byte_idx % TEWB);
-        if (elem_idx_in_word < tile_w_req_i.elems) begin
-          col_i = tile_dim_t'(tile_w_req_i.col + elem_idx_in_word);
-          acc_vlsu_wen[tile_w_req_i.row % CE][col_i % CE] = tile_w_acc_sel.mask_enable;
-          acc_vlsu_wdata[tile_w_req_i.row % CE][col_i % CE][col_i / CE]
-              [(tile_w_acc_sel.byte_offset+elem_byte_idx)*8 +: 8] = tile_w_req_i.data[byte_idx*8 +: 8];
+      for (int row = 0; row < CE; row++) begin
+        for (int col = 0; col < CE; col++) begin
+          for (int beat = 0; beat < AccDepthPerCE; beat++) begin
+            int unsigned dest_col;
+            int unsigned source_elem;
+            dest_col = beat * CE + col;
+            source_elem = dest_col - unsigned'(tile_w_req_i.col);
+            if ((unsigned'(tile_w_req_i.row) % CE == row) &&
+                (dest_col >= unsigned'(tile_w_req_i.col)) &&
+                (source_elem < unsigned'(tile_w_req_i.elems))) begin
+              acc_vlsu_wdata[row][col][beat]
+                  [tile_w_acc_sel.byte_offset*8 +: TEWB*8] =
+                  tile_w_req_i.data[source_elem*TEWB*8 +: TEWB*8];
+            end
+          end
         end
       end
     end
 
-    if (fpu_pipe_result_fire && fpu_pipe_write_acc) begin
+    if (fpu_pipe_result_fire) begin
+      logic zero_pending;
+      zero_pending = |(acc_zero_q[fpu_acc_sel.tile][fpu_pipe_tag_q[NumPipeRegs-1].beat] &
+                       fpu_acc_sel.mask_enable);
       acc_fpu_waddr = AccAddrW'(fpu_acc_sel.tile * SpatialBeats + fpu_pipe_tag_q[NumPipeRegs-1].beat);
       for (int row = 0; row < CE; row++) begin
         for (int col = 0; col < CE; col++) begin
-          acc_fpu_wen[row][col] = fpu_pipe_tag_q[NumPipeRegs-1].lane_active[row][col] ?
+          acc_fpu_wen[row][col] = (fpu_pipe_tag_q[NumPipeRegs-1].lane_active[row][col] || zero_pending) ?
               fpu_acc_sel.mask_enable : AccMaskWidth'(0);
           if (TEWB == 1)
-            acc_fpu_wdata[row][col][fpu_acc_sel.byte_offset*8 +: 8] = fpu_result[row][col][7:0];
+            acc_fpu_wdata[row][col][fpu_acc_sel.byte_offset*8 +: 8] =
+                fpu_pipe_tag_q[NumPipeRegs-1].lane_active[row][col] ? fpu_result[row][col][7:0] : '0;
           else if (TEWB == 2)
-            acc_fpu_wdata[row][col][fpu_acc_sel.byte_offset*8 +: 16] = fpu_result[row][col][15:0];
+            acc_fpu_wdata[row][col][fpu_acc_sel.byte_offset*8 +: 16] =
+                fpu_pipe_tag_q[NumPipeRegs-1].lane_active[row][col] ? fpu_result[row][col][15:0] : '0;
           else
-            acc_fpu_wdata[row][col] = fpu_result[row][col];
+            acc_fpu_wdata[row][col] =
+                fpu_pipe_tag_q[NumPipeRegs-1].lane_active[row][col] ? fpu_result[row][col] : '0;
         end
       end
     end
@@ -1290,7 +1114,7 @@ module spatz_ope
           acc_zero_d[clean_acc_sel.tile][beat] |= clean_acc_sel.mask_enable;
         end
       end
-      if (fpu_pipe_result_fire && fpu_pipe_write_acc)
+      if (fpu_pipe_result_fire)
         acc_zero_d[fpu_acc_sel.tile][fpu_pipe_tag_q[NumPipeRegs-1].beat] &= ~fpu_acc_sel.mask_enable;
       if (tv_acc_wen) begin
         line_word_idx = tile_dim_t'(tv_word_idx_q);
@@ -1340,8 +1164,16 @@ module spatz_ope
   /*      FMA Datapath: Operands, Addend and Compute Array      */
   /*------------------------------------------------------------*/
   
-  // FMA operand datapath and clock.
+  // Clock the FPU while a registered MAC request or pipeline result is live.
+  // VRF grant and mac_fire do not feed the clock-gate enable.
   logic fpu_clk;
+  tc_clk_gating i_fpu_clk_gate (
+    .clk_i     (clk_i),
+    .en_i      (mac_queue_valid || mac_op_current_q.valid ||
+                mac_op_next_q.valid || (|fpu_pipe_valid)),
+    .test_en_i (1'b0),
+    .clk_o     (fpu_clk)
+  );
 
   logic [CE-1:0][AccElemWidth-1:0] fpu_x_operand, fpu_w_operand;
   logic [CE-1:0][AccElemWidth-1:0] fpu_x_operand_q, fpu_w_operand_q;
@@ -1351,13 +1183,6 @@ module spatz_ope
   vew_e fpu_input_sew_q;
   // Widening FP16 operations consume a packed K pair from each e32 word.
   assign mac_use_sdotp = ((8 << int'(mac_op_exec.sew)) != (TEWB << 3));
-
-  tc_clk_gating i_fpu_clk_gate (
-    .clk_i     (clk_i       ),
-    .en_i      (mac_fire || (|fpu_pipe_valid)),
-    .test_en_i (1'b0          ),
-    .clk_o     (fpu_clk     )
-  );
 
   always_comb begin : fpu_operand_select
     operand_width_t operand_bits;
@@ -1439,7 +1264,7 @@ module spatz_ope
       fpu_input_valid_q <= 1'b0;
       fpu_input_sdotp_q <= 1'b0;
       fpu_input_sew_q   <= EW_16;
-    end else if (fpu_pipe_advance) begin
+    end else begin
       fpu_x_operand_q   <= fpu_x_operand;
       fpu_w_operand_q   <= fpu_w_operand;
       fpu_addend_q      <= fpu_addend;
@@ -1454,7 +1279,6 @@ module spatz_ope
     for (genvar col = 0; col < CE; col++) begin : gen_fpu_col
 
       logic        fma16_valid, fma32_valid;
-      logic        sdotp16_valid;
       logic [15:0] fma16_result;
       logic [31:0] fma32_result;
       logic [31:0] sdotp16_result;
@@ -1463,15 +1287,12 @@ module spatz_ope
       assign sdotp16_x_operand = fpu_x_operand_q[row];
       assign sdotp16_w_operand = fpu_w_operand_q[col];
 
-      assign fpu_result_valid[row][col] =
-          fma16_valid || fma32_valid || sdotp16_valid;
-
       always_comb begin : result_select
-        fpu_result[row][col] = fma32_result;
+        fpu_result[row][col] = sdotp16_result;
         if (fma16_valid)
           fpu_result[row][col] = {{(AccElemWidth-16){1'b0}}, fma16_result};
-        else if (sdotp16_valid)
-          fpu_result[row][col] = sdotp16_result;
+        else if (fma32_valid)
+          fpu_result[row][col] = fma32_result;
       end
 
       if (EnableFMA16) begin : gen_fma16
@@ -1488,14 +1309,13 @@ module spatz_ope
           .valid_i        (fpu_input_valid_q && fpu_lane_active_q[row][col] &&
                            !fpu_input_sdotp_q && (TEWB == 2) &&
                            (fpu_input_sew_q == EW_16)),
-          .ready_o        (fma16_ready[row][col]                                ),
-          .reg_enable_i   (fpu_pipe_advance                                     ),
+          .ready_o        (                                                       ),
+          .reg_enable_i   (1'b1                                                   ),
           .result_valid_o (fma16_valid                                          ),
-          .result_ready_i (fpu_pipe_result_ready                                ),
+          .result_ready_i (1'b1                                                   ),
           .result_o       (fma16_result                                         )
         );
       end else begin : gen_no_fma16
-        assign fma16_ready[row][col] = 1'b1;
         assign fma16_valid           = 1'b0;
         assign fma16_result          = '0;
       end
@@ -1514,14 +1334,13 @@ module spatz_ope
         .valid_i        (fpu_input_valid_q && fpu_lane_active_q[row][col] &&
                          !fpu_input_sdotp_q && (TEWB == 4) &&
                          (fpu_input_sew_q == EW_32)),
-        .ready_o        (fma32_ready[row][col]                                ),
-        .reg_enable_i   (fpu_pipe_advance                                     ),
+        .ready_o        (                                                       ),
+        .reg_enable_i   (1'b1                                                   ),
         .result_valid_o (fma32_valid                                          ),
-        .result_ready_i (fpu_pipe_result_ready                                ),
+        .result_ready_i (1'b1                                                   ),
         .result_o       (fma32_result                                         )
       );
       end else begin : gen_no_fma32
-        assign fma32_ready[row][col] = 1'b1;
         assign fma32_valid = 1'b0;
         assign fma32_result = '0;
       end
@@ -1540,13 +1359,7 @@ module spatz_ope
         .operand_c_i    ({{16{1'b0}}, sdotp16_x_operand[31:16]}                 ),
         .operand_d_i    (sdotp16_w_operand[31:16]                              ),
         .dst_operands_i (fpu_addend_q[row][col]                                ),
-        .valid_i        (fpu_input_valid_q && fpu_lane_active_q[row][col] &&
-                         fpu_input_sdotp_q && (fpu_input_sew_q == EW_16) &&
-                         (TEWB == 4)),
-        .ready_o        (sdotp16_ready[row][col]                                ),
-        .reg_enable_i   (fpu_pipe_advance                                       ),
-        .result_valid_o (sdotp16_valid                                          ),
-        .result_ready_i (fpu_pipe_result_ready                                  ),
+        .reg_enable_i   (1'b1                                                   ),
         .result_o       (sdotp16_result                                         )
       );
 

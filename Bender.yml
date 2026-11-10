@@ -148,6 +148,9 @@ sources:
         - hw/ip/spatz/src/ope/opope_accumulator.sv
         - hw/ip/spatz/src/ope/opope_fma.sv
         - hw/ip/spatz/src/ope/opope_sdotp.sv
+        - hw/ip/spatz/src/ope/opope_sdotp_legacy.sv
+        - hw/ip/spatz/src/ope/opope_sdotp_multi_modules.sv
+        - hw/ip/spatz/src/ope/opope_sdotp_multi.sv
     # Level 3
     - hw/ip/spatz/src/spatz_fpu_sequencer.sv
     - hw/ip/spatz/src/spatz_ipu.sv

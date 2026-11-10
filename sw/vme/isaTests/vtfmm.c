@@ -660,6 +660,48 @@ void TEST_CASE18(void) {
     asm volatile("vtdiscard" ::: "memory");
 }
 
+// Partial FP16 MAC must materialize zero in every inactive lane before the
+// lazy-zero flag for its accumulator beat is cleared.
+void TEST_CASE19(void) {
+    const uintptr_t active = 5, full = 16, tk = KMAX(16, 2);
+    uint32_t *packed = snrt_l1alloc(full * sizeof(*packed));
+    uint32_t *output = snrt_l1alloc(full * full * sizeof(*output));
+    for (unsigned i = 0; i < full; ++i) packed[i] = 0x00003c00;
+    for (unsigned i = 0; i < full * full; ++i) output[i] = 0xdeadbeef;
+
+    VSET(16, e32, m1);
+    asm volatile("vle32.v v8, (%0)" :: "r"(packed) : "v8", "memory");
+    asm volatile("vle32.v v16, (%0)" :: "r"(packed) : "v16", "memory");
+    asm volatile("msetmtypei 2, 1, 0" ::: "memory");
+    asm volatile("msettn x0, %0" :: "r"(active) : "memory");
+    asm volatile("msettm x0, %0" :: "r"(active) : "memory");
+    asm volatile("msettk x0, %0" :: "r"(tk) : "memory");
+    asm volatile("vtzero mt0" ::: "memory");
+    asm volatile("vtfmm.tvv mt0, v8, v16" ::: "memory");
+
+    asm volatile("msettn x0, %0" :: "r"(full) : "memory");
+    asm volatile("msettm x0, %0" :: "r"(full) : "memory");
+    for (unsigned row = 0; row < full; ++row) {
+        uintptr_t tss = TSS_ROW(0, row);
+        asm volatile("vtse32 %0, (%1)" :: "r"(tss), "r"(output + row * full) : "memory");
+    }
+    asm volatile("fence rw, rw" ::: "memory");
+    unsigned errors = 0;
+    for (unsigned row = 0; row < full; ++row) {
+        for (unsigned col = 0; col < full; ++col) {
+            uint32_t expected = (row < active && col < active) ? 0x3f800000 : 0;
+            if (output[row * full + col] != expected) ++errors;
+        }
+    }
+    if (errors) {
+        printf("[TC 19] FAILED: %u partial-lane errors.\n", errors);
+        ++num_failed;
+    } else {
+        printf("[TC 19] PASSED.\n");
+    }
+    asm volatile("vtdiscard" ::: "memory");
+}
+
 int main(void) {
     INIT_CHECK();
 
@@ -680,6 +722,7 @@ int main(void) {
     TEST_CASE9();   // Known product.
     TEST_CASE10();  // Accumulation by two.
     TEST_CASE11();  // Packed K lanes across the compute-edge boundary.
+    TEST_CASE19();  // Partial-lane lazy-zero writeback.
 #endif
 
     // Additional Zvt v0.4 formats; enable with matching hardware support.
