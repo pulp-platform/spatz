@@ -13,7 +13,6 @@ set(SNITCH_TEST_PREFIX vme-)
 set(VME_TEST_ENABLE_TEW8 0 CACHE STRING "Whether OPE supports TEW8")
 set(VME_TEST_ENABLE_TEW16 0 CACHE STRING "Whether OPE supports TEW16")
 set(VME_TEST_ENABLE_TEW32 1 CACHE STRING "Whether OPE supports TEW32")
-set(VME_TEST_ENABLE_FMA32 0 CACHE STRING "Whether the OPE instantiates FP32 FMA")
 
 add_snitch_test(msetmtype msetmtype.c)
 add_snitch_test(msetmtypei msetmtypei.c)
@@ -33,6 +32,6 @@ if(BUILD_TESTS)
             VME_TEST_ENABLE_TEW8=${VME_TEST_ENABLE_TEW8}
             VME_TEST_ENABLE_TEW16=${VME_TEST_ENABLE_TEW16}
             VME_TEST_ENABLE_TEW32=${VME_TEST_ENABLE_TEW32}
-            VME_TEST_ENABLE_FMA32=${VME_TEST_ENABLE_FMA32})
+            VME_TEST_ENABLE_FMA32=${VME_ENABLE_FMA32})
     endforeach()
 endif()
