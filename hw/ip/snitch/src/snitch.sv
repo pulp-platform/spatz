@@ -1146,7 +1146,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
         opa_select = Reg;
         opb_select = Reg;
       end
-      // Off-load to Spatz
+      // Off-load to the integer mul/div unit
       MUL,
       MULH,
       MULHSU,
@@ -1166,7 +1166,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
         opa_select = Reg;
         opb_select = Reg;
         acc_register_rd = 1'b1;
-        acc_qreq_o.addr = SPATZ;
+        acc_qreq_o.addr = IPU;
       end
       // Offload FP-FP Instructions - fire and forget
       // TODO (smach): Check legal rounding modes and issue illegal isn if needed

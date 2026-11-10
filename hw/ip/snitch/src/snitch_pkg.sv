@@ -32,7 +32,10 @@ package snitch_pkg;
 
   typedef enum logic [31:0] {
     SPATZ = 0,
-    DMA_SS = 1
+    DMA_SS = 1,
+    // Integer mul/div unit next to the core; bit 0 clear, so a cc that splits on addr[0] still
+    // routes it to Spatz
+    IPU = 2
   } acc_addr_e;
 
   typedef enum logic [1:0] {
