@@ -1006,7 +1006,22 @@ module spatz_controller
   assign issue_ready_o = req_buffer_ready;
 
   // Send request off to execution units
-  assign spatz_req_o       = spatz_req;
+  // Simulation only: unused scalar operands (e.g. rs2 of an FP convert) can
+  // arrive as X from the core. The operation queues protect the whole
+  // spatz_req_t with one Hsiao codeword, so a single X bit would turn the
+  // entire decoded request into X. Replace X operand bits by 0 on the way out.
+  spatz_req_t spatz_req_clean;
+  always_comb begin
+    spatz_req_clean = spatz_req;
+`ifndef TARGET_SYNTHESIS
+    for (int unsigned b = 0; b < $bits(spatz_req.rs1); b++) begin
+      if ($isunknown(spatz_req.rs1[b])) spatz_req_clean.rs1[b] = 1'b0;
+      if ($isunknown(spatz_req.rs2[b])) spatz_req_clean.rs2[b] = 1'b0;
+      if ($isunknown(spatz_req.rsd[b])) spatz_req_clean.rsd[b] = 1'b0;
+    end
+`endif
+  end
+  assign spatz_req_o       = spatz_req_clean;
   assign spatz_req_valid_o = spatz_req_valid;
 
   assign controller_correctable_fault_o   = vfu_scalar_response_err[0] | spatz_rsp_register_err[0];
