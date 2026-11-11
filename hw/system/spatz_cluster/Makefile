@@ -59,6 +59,26 @@ endif
 # Include Makefrag
 include $(ROOT)/util/Makefrag
 
+# RTL instruction-trace sink, selected at elaboration time. Distinct from the
+# TRACE knob above, which controls snRuntime software tracing.
+#   plain (default)  $fwrite into an uncompressed bin/logs/*.dasm
+#   gz               DPI writer (hw/ip/snitch_test/src/trace_dpi.c) into
+#                    bin/logs/*.dasm.gz. A worker thread does the deflate, so
+#                    the per-write cost is *below* plain $fwrite, and traces
+#                    come out ~32x smaller. Choose the backend at run time
+#                    with +trace_mode=<mode>; the default is thr:gz6.
+#   off              no tracer instantiated at all
+RTL_TRACE ?= plain
+ifeq ($(RTL_TRACE),gz)
+	DEFS += -DSNITCH_TRACE_GZ
+	TRACE_DPI_SRC := ${TB_DIR}/trace_dpi.c
+	TRACE_LDFLAGS := -lz
+else ifeq ($(RTL_TRACE),off)
+	DEFS += -DSNITCH_TRACE_DISABLE
+else ifneq ($(RTL_TRACE),plain)
+$(error RTL_TRACE must be one of: plain, gz, off (got '$(RTL_TRACE)'))
+endif
+
 # QuestaSim
 VSIM      = questa-2021.3-kgf vsim
 VLOG      = questa-2021.3-kgf vlog
@@ -98,6 +118,9 @@ VLT_COBJ += $(VLT_BUILDDIR)/tb/verilator_lib.o
 VLT_COBJ += $(VLT_BUILDDIR)/tb/tb_bin.o
 VLT_COBJ += $(VLT_BUILDDIR)/test/uartdpi/uartdpi.o
 VLT_COBJ += $(VLT_BUILDDIR)/test/bootdata.o
+ifeq ($(RTL_TRACE),gz)
+VLT_COBJ += $(VLT_BUILDDIR)/tb/trace_dpi.o
+endif
 # Sources from verilator root
 VLT_COBJ += $(VLT_BUILDDIR)/vlt/verilated.o
 VLT_COBJ += $(VLT_BUILDDIR)/vlt/verilated_timing.o
@@ -165,7 +188,7 @@ spatz.cleandata:
 # Verilator #
 #############
 
-${VLT_AR}: ${VLT_SOURCES} ${TB_SRCS}
+${VLT_AR}: ${VLT_SOURCES} ${TB_SRCS} ${SVH_SRCS}
 	$(call VERILATE,testharness)
 
 # Quick sanity check, not really meant for simulation.
@@ -186,10 +209,14 @@ $(VLT_BUILDDIR)/test/uartdpi/uartdpi.o: test/uartdpi/uartdpi.c
 	mkdir -p $(dir $@)
 	$(CC) $(CXXFLAGS) $(VLT_CFLAGS) -c $< -o $@
 
+$(VLT_BUILDDIR)/tb/trace_dpi.o: $(TB_DIR)/trace_dpi.c
+	mkdir -p $(dir $@)
+	$(CC) $(CXXFLAGS) $(VLT_CFLAGS) -c $< -o $@
+
 # Link verilated archive wich $(VLT_COBJ)
 bin/spatz_cluster.vlt: $(VLT_AR) $(VLT_COBJ) ${VLT_BUILDDIR}/lib/libfesvr.a
 	mkdir -p $(dir $@)
-	$(CXX) $(LDFLAGS) -L ${VLT_BUILDDIR}/lib -o $@ $(VLT_COBJ) $(VLT_AR) -lpthread -lfesvr -lutil -latomic
+	$(CXX) $(LDFLAGS) -L ${VLT_BUILDDIR}/lib -o $@ $(VLT_COBJ) $(VLT_AR) -lpthread -lfesvr -lutil -latomic ${TRACE_LDFLAGS}
 
 # Clean all build directories and temporary files for Verilator simulation
 .PHONY: clean.vlt
@@ -201,11 +228,14 @@ clean.vlt:
 # Modelsim #
 ############
 
-${VSIM_BUILDDIR}/compile.vsim.tcl: test/bootrom.bin $(VSIM_SOURCES) ${TB_SRCS} ${TB_DIR}/rtl_lib.cc ${TB_DIR}/common_lib.cc test/bootdata.cc test/bootrom.bin
+${VSIM_BUILDDIR}/compile.vsim.tcl: test/bootrom.bin $(VSIM_SOURCES) ${TB_SRCS} ${TB_DIR}/rtl_lib.cc ${TB_DIR}/common_lib.cc test/bootdata.cc test/bootrom.bin ${TRACE_DPI_SRC} ${SVH_SRCS}
 	vlib $(dir $@)
 	${BENDER} script vsim ${VSIM_BENDER} ${DEFS} --vlog-arg="${VLOG_FLAGS} -work $(dir $@) " > $@
 	echo '${VLOG} -work $(dir $@) ${TB_DIR}/rtl_lib.cc ${TB_DIR}/common_lib.cc test/bootdata.cc -ccflags "-std=c++17 -I${MKFILE_DIR}/test -I${MKFILE_DIR}/work/include -I${TB_DIR}"' >> $@
 	echo '${VLOG} -work $(dir $@) test/uartdpi/uartdpi.c -ccflags "-Itest/uartdpi"' >> $@
+ifeq ($(RTL_TRACE),gz)
+	echo '${VLOG} -work $(dir $@) ${TB_DIR}/trace_dpi.c -ccflags "-O2"' >> $@
+endif
 	echo 'return 0' >> $@
 
 bin/spatz_cluster.vsim: ${VSIM_BUILDDIR}/compile.vsim.tcl work/lib/libfesvr_vsim.a
@@ -220,12 +250,12 @@ clean.vsim:
 #######
 # @IIS: vcs-2020.12 make bin/spatz_cluster.vcs
 ## Build compilation script and compile all sources for VCS simulation
-bin/spatz_cluster.vcs: test/bootrom.bin work-vcs/compile.sh work/lib/libfesvr_vcs.a ${TB_DIR}/common_lib.cc test/bootdata.cc test/bootrom.bin test/uartdpi/uartdpi.c
+bin/spatz_cluster.vcs: test/bootrom.bin work-vcs/compile.sh work/lib/libfesvr_vcs.a ${TB_DIR}/common_lib.cc test/bootdata.cc test/bootrom.bin test/uartdpi/uartdpi.c ${TRACE_DPI_SRC}
 	mkdir -p bin
 	# Default to fast simulation flags, use `-debug_access+all +vcs+fsdbon` for waveform debugging
 	vcs -Mlib=work-vcs -Mdir=work-vcs -O2 -debug_access=r -debug_region=1,tb_bin -kdb -o $@ -j4 -cc $(CC) -cpp $(CXX) \
-		-assert disable_cover -override_timescale=1ns/1ps -full64 tb_bin ${TB_DIR}/rtl_lib.cc ${TB_DIR}/common_lib.cc test/bootdata.cc test/uartdpi/uartdpi.c \
-		-CFLAGS "-I${MKFILE_DIR} -I${MKFILE_DIR}/test -I${FESVR}/include -I${TB_DIR} -Itest/uartdpi" -LDFLAGS "-L${FESVR}/lib" -lfesvr_vcs -lutil
+		-assert disable_cover -override_timescale=1ns/1ps -full64 tb_bin ${TB_DIR}/rtl_lib.cc ${TB_DIR}/common_lib.cc test/bootdata.cc test/uartdpi/uartdpi.c ${TRACE_DPI_SRC} \
+		-CFLAGS "-I${MKFILE_DIR} -I${MKFILE_DIR}/test -I${FESVR}/include -I${TB_DIR} -Itest/uartdpi" -LDFLAGS "-L${FESVR}/lib" -lfesvr_vcs -lutil ${TRACE_LDFLAGS}
 
 ## Clean all build directories and temporary files for VCS simulation
 clean.vcs:

@@ -17,6 +17,9 @@ obj_dir/*
 *.dasm
 build/
 trace_*
+# ...but the tracer sources are not generated artefacts.
+!hw/ip/snitch/include/snitch/trace_writer.svh
+!hw/ip/snitch_test/src/trace_dpi.c
 mems
 *log
 .bender

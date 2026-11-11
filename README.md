@@ -74,6 +74,69 @@ make annotate
 make help
 ```
 
+#### Instruction traces
+
+Pick the trace sink when building the RTL with `RTL_TRACE` (not to be confused
+with `TRACE`, which controls snRuntime software tracing):
+
+| | Output | Notes |
+|---|---|---|
+| `RTL_TRACE=plain` | `bin/logs/trace_hart_X.dasm` | default |
+| `RTL_TRACE=gz` | `bin/logs/trace_hart_X.dasm.gz` | ~32x smaller, and faster than `plain` |
+| `RTL_TRACE=off` | none | no tracer instantiated |
+
+```bash
+make bin/spatz_cluster.vsim RTL_TRACE=gz
+```
+
+`make traces` and `make annotate` accept either extension. To read a compressed
+trace yourself, `gzip -dc` it; in Python, `gzip.open(path, 'rt')`.
+
+With an `RTL_TRACE=gz` build, the backend can be changed per run without
+rebuilding, and the file extension follows it:
+
+```bash
+bin/spatz_cluster.vsim +trace_mode=thr:gz1 path/to/binary   # faster, larger
+bin/spatz_cluster.vsim +trace_mode=plain   path/to/binary   # writes .dasm
+bin/spatz_cluster.vsim +trace_mode=null    path/to/binary   # discard
+TW_MODE=thr:gz1 bin/spatz_cluster.vsim path/to/binary       # same, via env
+```
+
+| Mode | Effect |
+|---|---|
+| `thr:gz<1-9>` | worker thread deflates; **default is `thr:gz6`** |
+| `thr:plain` | worker thread, no compression |
+| `gz<1-9>` | deflate inline on the simulator thread — stalls it, avoid |
+| `plain` | plain `fwrite` |
+| `null` | discard |
+
+Environment knobs: `TW_MODE` (backend, overrides `+trace_mode`), `TW_BLKSZ` and
+`TW_NBLK` (handoff ring, default 256 KiB x 4 = 1 MiB per traced hart), `TW_LAT=1`
+(print per-write latency percentiles at exit).
+
+The defaults are sized for a real simulation and rarely need changing: an RTL
+sim emits only ~2 MB/s of trace per hart, some 50x below what the writer can
+absorb, so the tracer costs about 0.03% of run time either way. Tune only if you
+are memory-constrained or care about what a crash loses.
+
+| | Default | What it controls |
+|---|---|---|
+| `TW_BLKSZ` | 256 KiB | Handoff efficiency. **Do not shrink** - at 32 KiB the mean per-write cost goes from 9 ns to 1334 ns, worse than plain `$fwrite`. |
+| `TW_NBLK` | 2 | Burst headroom, 512 KiB/hart. Real traces measure no worse at 2 than at 4; raise it only if a workload traces in large bursts. |
+| `TW_GZBUF` | 64 KiB | How much trace a crash loses. No measurable cost at any size. |
+| `TW_MODE` | `thr:gz6` | Backend, same values as `+trace_mode`. |
+| `TW_LAT` | off | `=1` prints per-write latency percentiles at exit. |
+
+If memory is tight the lever is `TW_NBLK`, never a smaller `TW_BLKSZ`.
+
+**Crash behaviour.** If the simulator is killed, the `.gz` is still readable -
+`gzip -dc` reports "unexpected end of file", exits non-zero, and prints
+everything up to the cut. Every complete line before that point is intact and in
+order; only the final line is cut mid-way. Measured at the real trace rate, a
+`SIGKILL` loses ~900 KB with `thr:gz6` against ~690 KB for plain `$fwrite`,
+which buffers too. `TW_GZBUF` is the only knob that moves this - the ring does
+not, since it stays nearly empty at realistic rates.
+
 ### Configure the Cluster
 
 To configure the cluster with a different configuration, either edit the configuration files in the `cfg` folder or create a new configuration file and pass it to the Makefile:
