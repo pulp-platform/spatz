@@ -43,6 +43,8 @@ module spatz_fault_monitor #(
   input  logic                    icache_uncorrectable_fault_i,
   input  logic [NumQuadUnits-1:0] quad_correctable_fault_i,
   input  logic [NumQuadUnits-1:0] quad_uncorrectable_fault_i,
+  input  logic                    dma_correctable_fault_i,
+  input  logic                    dma_uncorrectable_fault_i,
 
   // Per-source counters.
   output logic [NumVrfUnits-1:0][CounterWidth-1:0]  vrf_correctable_count_o,
@@ -67,7 +69,9 @@ module spatz_fault_monitor #(
   output logic [CounterWidth-1:0]                   icache_correctable_count_o,
   output logic [CounterWidth-1:0]                   icache_uncorrectable_count_o,
   output logic [NumQuadUnits-1:0][CounterWidth-1:0] quad_correctable_count_o,
-  output logic [NumQuadUnits-1:0][CounterWidth-1:0] quad_uncorrectable_count_o
+  output logic [NumQuadUnits-1:0][CounterWidth-1:0] quad_uncorrectable_count_o,
+  output logic [CounterWidth-1:0]                   dma_correctable_count_o,
+  output logic [CounterWidth-1:0]                   dma_uncorrectable_count_o
 );
 
 
@@ -93,6 +97,8 @@ module spatz_fault_monitor #(
       icache_uncorrectable_count_o <= '0;
       quad_correctable_count_o <= '0;
       quad_uncorrectable_count_o <= '0;
+      dma_correctable_count_o <= '0;
+      dma_uncorrectable_count_o <= '0;
 
     end else if (clear_i) begin
       vrf_correctable_count_o    <= '0;
@@ -115,6 +121,8 @@ module spatz_fault_monitor #(
       icache_uncorrectable_count_o <= '0;
       quad_correctable_count_o <= '0;
       quad_uncorrectable_count_o <= '0;
+      dma_correctable_count_o <= '0;
+      dma_uncorrectable_count_o <= '0;
 
     end else begin
       for (int unsigned i = 0; i < NumVrfUnits; i++) begin
@@ -220,6 +228,18 @@ module spatz_fault_monitor #(
       if (icache_uncorrectable_fault_i) begin
         if (!SaturatingCount || !(&icache_uncorrectable_count_o)) begin
           icache_uncorrectable_count_o <= icache_uncorrectable_count_o + 1'b1;
+        end
+      end
+
+      if (dma_correctable_fault_i) begin
+        if (!SaturatingCount || !(&dma_correctable_count_o)) begin
+          dma_correctable_count_o <= dma_correctable_count_o + 1'b1;
+        end
+      end
+
+      if (dma_uncorrectable_fault_i) begin
+        if (!SaturatingCount || !(&dma_uncorrectable_count_o)) begin
+          dma_uncorrectable_count_o <= dma_uncorrectable_count_o + 1'b1;
         end
       end
 

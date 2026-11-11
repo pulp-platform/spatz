@@ -590,6 +590,10 @@ module spatz_cluster_peripheral_reg_top #(
   logic [31:0] quad_cfg_array_qs;
   logic [31:0] quad_cfg_array_wd;
   logic quad_cfg_array_we;
+  logic [31:0] dma_correctable_count_qs;
+  logic dma_correctable_count_re;
+  logic [31:0] dma_uncorrectable_count_qs;
+  logic dma_uncorrectable_count_re;
 
   // Register instances
 
@@ -4942,9 +4946,41 @@ module spatz_cluster_peripheral_reg_top #(
   );
 
 
+  // R[dma_correctable_count]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_dma_correctable_count (
+    .re     (dma_correctable_count_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.dma_correctable_count.d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.dma_correctable_count.q ),
+    .qs     (dma_correctable_count_qs)
+  );
 
 
-  logic [164:0] addr_hit;
+  // R[dma_uncorrectable_count]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_dma_uncorrectable_count (
+    .re     (dma_uncorrectable_count_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.dma_uncorrectable_count.d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.dma_uncorrectable_count.q ),
+    .qs     (dma_uncorrectable_count_qs)
+  );
+
+
+
+
+  logic [166:0] addr_hit;
   always_comb begin
     addr_hit = '0;
     addr_hit[  0] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_PERF_COUNTER_ENABLE_0_OFFSET);
@@ -5112,6 +5148,8 @@ module spatz_cluster_peripheral_reg_top #(
     addr_hit[162] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_ICACHE_CORRECTABLE_COUNT_OFFSET);
     addr_hit[163] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_ICACHE_UNCORRECTABLE_COUNT_OFFSET);
     addr_hit[164] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_QUAD_CFG_ARRAY_OFFSET);
+    addr_hit[165] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_DMA_CORRECTABLE_COUNT_OFFSET);
+    addr_hit[166] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_DMA_UNCORRECTABLE_COUNT_OFFSET);
   end
 
   assign addrmiss = (reg_re || reg_we) ? ~|addr_hit : 1'b0 ;
@@ -5283,7 +5321,9 @@ module spatz_cluster_peripheral_reg_top #(
                (addr_hit[161] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[161] & ~reg_be))) |
                (addr_hit[162] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[162] & ~reg_be))) |
                (addr_hit[163] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[163] & ~reg_be))) |
-               (addr_hit[164] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[164] & ~reg_be)))));
+               (addr_hit[164] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[164] & ~reg_be))) |
+               (addr_hit[165] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[165] & ~reg_be))) |
+               (addr_hit[166] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[166] & ~reg_be)))));
   end
 
   assign perf_counter_enable_0_cycle_0_we = addr_hit[0] & reg_we & !reg_error;
@@ -5811,6 +5851,10 @@ module spatz_cluster_peripheral_reg_top #(
 
   assign quad_cfg_array_we = addr_hit[164] & reg_we & !reg_error;
   assign quad_cfg_array_wd = reg_wdata[31:0];
+
+  assign dma_correctable_count_re = addr_hit[165] & reg_re & !reg_error;
+
+  assign dma_uncorrectable_count_re = addr_hit[166] & reg_re & !reg_error;
 
   // Read data return
   always_comb begin
@@ -6534,6 +6578,14 @@ module spatz_cluster_peripheral_reg_top #(
 
       addr_hit[164]: begin
         reg_rdata_next[31:0] = quad_cfg_array_qs;
+      end
+
+      addr_hit[165]: begin
+        reg_rdata_next[31:0] = dma_correctable_count_qs;
+      end
+
+      addr_hit[166]: begin
+        reg_rdata_next[31:0] = dma_uncorrectable_count_qs;
       end
 
       default: begin

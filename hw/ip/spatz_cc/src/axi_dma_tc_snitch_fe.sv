@@ -55,7 +55,9 @@ module axi_dma_tc_snitch_fe #(
 
     // performance output
     output axi_dma_pkg::dma_perf_t dma_perf_o,
-    output dma_events_t            dma_events_o
+    output dma_events_t            dma_events_o,
+    output logic                   dma_correctable_error_o,
+    output logic                   dma_uncorrectable_error_o
   );
 
   typedef logic [IdWidth-1:0] id_t;
@@ -188,7 +190,12 @@ module axi_dma_tc_snitch_fe #(
     .HardwareLegalizer    ( 1                           ),
     .RejectZeroTransfers  ( 1                           ),
     .MemSysDepth          ( 0                           ),
-    .ErrorCap             ( idma_pkg::NO_ERROR_HANDLING ),
+    .ErrorCap             ( idma_pkg::ERROR_HANDLING    ),
+    .LegalizerCap         ( idma_pkg::TMR_LEGALIZER     ),
+    .HammingEccCap        ( idma_pkg::HAMMING_ECC       ),
+    .RetransmitMode       ( idma_pkg::RETRANSMIT_WORD   ),
+    .DatapathTmrCap       ( idma_pkg::DATAPATH_TMR      ),
+    .CtrlTmrCap           ( idma_pkg::CTRL_TMR          ),
     .idma_req_t           ( idma_req_t                  ),
     .idma_rsp_t           ( idma_rsp_t                  ),
     .idma_eh_req_t        ( idma_pkg::idma_eh_req_t     ),
@@ -200,7 +207,6 @@ module axi_dma_tc_snitch_fe #(
   ) i_idma_backend (
     .clk_i           ( clk_i               ),
     .rst_ni          ( rst_ni              ),
-    .testmode_i      ( 1'b0                ),
     .idma_req_i      ( idma_req            ),
     .req_valid_i     ( burst_req_valid     ),
     .req_ready_o     ( burst_req_ready     ),
@@ -214,7 +220,9 @@ module axi_dma_tc_snitch_fe #(
     .axi_read_rsp_i  ( axi_read_rsp        ),
     .axi_write_req_o ( axi_write_req       ),
     .axi_write_rsp_i ( axi_write_rsp       ),
-    .busy_o          ( idma_busy           )
+    .busy_o                ( idma_busy                 ),
+    .corrected_fault_o     ( dma_correctable_error_o   ),
+    .uncorrectable_fault_o ( dma_uncorrectable_error_o )
   );
 
   axi_rw_join #(

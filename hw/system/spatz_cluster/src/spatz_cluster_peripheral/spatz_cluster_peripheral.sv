@@ -61,6 +61,8 @@ module spatz_cluster_peripheral
   input  logic [31:0]                                     tcdm_interconnect_uncorrectable_count_i,
   input  logic [NumQuadUnits-1:0][31:0]                   quad_correctable_count_i,
   input  logic [NumQuadUnits-1:0][31:0]                   quad_uncorrectable_count_i,
+  input  logic [31:0]                                     dma_correctable_count_i,
+  input  logic [31:0]                                     dma_uncorrectable_count_i,
   output logic [31:0]                                     quad_cfg_array_o
 );
 
@@ -279,6 +281,8 @@ module spatz_cluster_peripheral
   // generate icache count assign
   assign hw2reg.icache_correctable_count.d     = icache_correctable_count_i;
   assign hw2reg.icache_uncorrectable_count.d     = icache_uncorrectable_count_i;
+  assign hw2reg.dma_correctable_count.d     = dma_correctable_count_i;
+  assign hw2reg.dma_uncorrectable_count.d     = dma_uncorrectable_count_i;
 
   for (genvar i = 0; i < NumVrfUnits; i++) begin : gen_inner_spatz_count_assign
     assign hw2reg.vrf_correctable_count[i].d   = vrf_correctable_count_i[i];
