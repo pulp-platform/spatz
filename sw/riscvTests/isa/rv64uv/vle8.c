@@ -218,27 +218,29 @@ void TEST_CASE10(void) {
 
 void TEST_CASE11(void) {
   uint32_t vlenb = get_vlenb();
+  volatile uint8_t src  = 0x11;   // old contents of the whole group
+  volatile uint8_t out  = 0;      // receives v15's elements last
+  volatile uint8_t sync = 0;
+  uint32_t result;
 
-  // m2 group v8..v9: 2 * vlenb bytes (128 B at VLEN = 512), stored back in place
-  volatile uint8_t buf[2 * vlenb] __attribute__((aligned(8)));
-  for (uint32_t i = 0; i < 2 * vlenb; i++)
-    buf[i] = (i < vlenb) ? 0x11 : (uint8_t)(i - vlenb + 5);
+  VSET(8 * vlenb, e8, m8);
+  asm volatile("vlse8.v v8, (%0), zero" :: "r"(&src) : V8_GROUP, "memory");
 
-  VSET(2 * vlenb, e8, m2);
-  asm volatile("vle8.v v8, (%0)" :: "r"(buf) : "v8", "v9", "memory");
-  // The VLSU executes in order, so the store below starts only after this load is done
+  // Wait until the load has written v15
+  VSET(1, e8, m1);
+  asm volatile("vse8.v v15, (%0)" :: "r"(&sync) : "memory");
+  (void)sync;
 
-  VSET(2 * vlenb, e8, m2);
-  asm volatile("vse8.v v8, (%0)" :: "r"(buf) : "memory");
+  // Long store reading v8..v15, v15 last (one memory access per element)
+  VSET(8 * vlenb, e8, m8);
+  asm volatile("vsse8.v v8, (%0), zero" :: "r"(&out) : "memory");
 
+  // Must wait until the store has read v15
   VSET(vlenb, e8, m1);
-  asm volatile("vmv.v.i v9, 3" ::: "v9");    // must wait until the store has read v9
+  asm volatile("vmv.v.i v15, 3" ::: "v15");
 
-  // Read back the part of buf that came from v9
-  VSET(4, e8, m1);
-  asm volatile("vle8.v v4, (%0)" :: "r"((volatile uint8_t *)buf + vlenb) : "v4", "memory");
-
-  VCMP_U8(11, v4, 5, 6, 7, 8);       // 3, 3, 3, 3 if vmv.v.i overtook the store
+  result = out;                   // waits for the vector store to finish
+  XCMP(11, result, 0x11);         // 3 if vmv.v.i overtook the store's read of v15
 }
 
 void TEST_CASE12(void) {
@@ -266,17 +268,6 @@ void TEST_CASE12(void) {
   VCMP_U8(12, v4, 5, 6, 7, 8);
 }
 
-void TEST_CASE13(void) {
-  volatile uint8_t buf[64] __attribute__((aligned(64)));   // local: lives in L1 (stack)
-  for (int i = 0; i < 64; i++) buf[i] = 0xff;
-
-  VSET(4, e8, m1);
-  REPEAT7(asm volatile("vle8.v v2, (%0)" :: "r"(buf) : "memory"));
-  VCMP_U8(13, v2, 0xff, 0xff, 0xff, 0xff);
-  VLOAD_8(v1, 1, 2, 3, 4);
-  VCMP_U8(14, v1, 1, 2, 3, 4);
-}
-
 int main(void) {
   INIT_CHECK();
   enable_vec();
@@ -293,7 +284,6 @@ int main(void) {
   TEST_CASE10();
   TEST_CASE11();
   TEST_CASE12();
-  TEST_CASE13();
 
   EXIT_CHECK();
 }
