@@ -2810,7 +2810,8 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
       riscv_instr::VL8RE8_V,
       riscv_instr::VL8RE16_V,
       riscv_instr::VL8RE32_V,
-      riscv_instr::VL8RE64_V: begin
+      riscv_instr::VL8RE64_V,
+      riscv_instr::VLM_V: begin
         if (RVV) begin
           write_rd        = 1'b0;
           uses_rd         = 1'b0;
@@ -2861,7 +2862,8 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
       riscv_instr::VS1R_V,
       riscv_instr::VS2R_V,
       riscv_instr::VS4R_V,
-      riscv_instr::VS8R_V: begin
+      riscv_instr::VS8R_V,
+      riscv_instr::VSM_V: begin
         if (RVV) begin
           write_rd        = 1'b0;
           uses_rd         = 1'b0;
