@@ -159,20 +159,20 @@ void TEST_CASE8(void) {
   uint32_t vlenb = get_vlenb();
   uint32_t n     = 2 * vlenb;      // VLMAX for e8/m2
   uint32_t first = 3 * vlenb / 2;  // first EEW16 element that lands in v11
- 
+
   volatile uint16_t buf[2 * vlenb] __attribute__((aligned(8)));
   for (uint32_t i = 0; i < n; i++)
     buf[i] = (i < first) ? 0x1111 : (uint16_t)(i - first + 5);
- 
+
   VSET(vlenb / 2, e16, m1);
   asm volatile("vmv.v.i v11, -1" ::: "v11");
- 
+
   VSET(n, e8, m2);
   asm volatile("vle16.v v8, (%0)" :: "r"(buf) : "v8", "v9", "v10", "v11", "memory");
- 
+
   VSET(4, e16, m1);
   asm volatile("vadd.vi v4, v11, 0" ::: "v4");
- 
+
   VCMP_U16(7, v4, 5, 6, 7, 8);
 }
 
