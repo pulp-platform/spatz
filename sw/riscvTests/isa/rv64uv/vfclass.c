@@ -22,7 +22,7 @@ void TEST_CASE1(void) {
            CLASS_mInf, CLASS_pInf, CLASS_qNAN, CLASS_sNAN, CLASS_pNorm,
            CLASS_mNorm);
 
-  VSET(16, e32, m1);
+  VSET(16, e32, m2);
   VLOAD_32(v4, mInff, pInff, qNaNf, sNaNf, 0x3f738772, 0xbdef32e4, pZero,
            mZerof, 0x80000075, 0x000000c5, mInff, pInff, qNaNf, sNaNf,
            0x3f738772, 0xbdef32e4);
@@ -33,7 +33,7 @@ void TEST_CASE1(void) {
            CLASS_mNorm);
 
 #if ELEN == 64
-  VSET(16, e64, m2);
+  VSET(16, e64, m4);
   VLOAD_64(v4, mInfd, pInfd, qNaNd, sNaNd, 0x3def3136584672de,
            0xbdef3136584672de, pZero, mZerod, 0x8000000000000075,
            0x0000000000000c5, mInfd, pInfd, qNaNd, sNaNd, 0x3def313584672de4,
@@ -57,7 +57,7 @@ void TEST_CASE2(void) {
   VCMP_U16(4, v8, 0, CLASS_pInf, 0, CLASS_sNAN, 0, CLASS_mNorm, 0, CLASS_mZero,
            0, CLASS_pSub, 0, CLASS_pInf, 0, CLASS_sNAN, 0, CLASS_mNorm);
 
-  VSET(16, e32, m1);
+  VSET(16, e32, m2);
   VLOAD_32(v4, mInff, pInff, qNaNf, sNaNf, 0x3f738772, 0xbdef32e4, pZero,
            mZerof, 0x80000075, 0x000000c5, mInff, pInff, qNaNf, sNaNf,
            0x3f738772, 0xbdef32e4);
@@ -68,7 +68,7 @@ void TEST_CASE2(void) {
            0, CLASS_pSub, 0, CLASS_pInf, 0, CLASS_sNAN, 0, CLASS_mNorm);
 
 #if ELEN == 64
-  VSET(16, e64, m2);
+  VSET(16, e64, m4);
   VLOAD_64(v4, mInfd, pInfd, qNaNd, sNaNd, 0x3def313584672de4,
            0xbdef313658467de4, pZero, mZerod, 0x8000000000000075,
            0x0000000000000c5, mInfd, pInfd, qNaNd, sNaNd, 0x3def313658672de4,
