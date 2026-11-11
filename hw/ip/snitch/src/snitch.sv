@@ -3606,7 +3606,7 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
                                       & ~(ld_addr_misaligned | st_addr_misaligned);
 
   // we can retire if we are not stalling and if the instruction is writing a register
-  assign retire_i = write_rd & valid_instr & !stall & (rd != 0);
+  // retire_i: see below the accelerator memory counters.
   assign retire_postinc = is_postinc_rrpost
                         & acc_qvalid_o
                         & acc_qready_i
@@ -3622,6 +3622,23 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
   `FFAR(acc_mem_str_cnt_q, acc_mem_str_cnt_d, '0, clk_i, rst_i)
 
   assign acc_mem_stall = (is_store && acc_mem_cnt_q != '0) || (is_load && acc_mem_str_cnt_q != 0) || acc_mem_cnt_q == '1;
+
+  // Instructions that write rd through the ALU never use the accelerator or
+  // LSU request ports (asserted below), so of all stall sources only these can
+  // hold them. Equivalent to `!stall`, without the accelerator/LSU ready inputs.
+  assign retire_i = write_rd & valid_instr & (rd != 0)
+                  & ~(acc_mem_cnt_q == '1)
+                  & ~(read_fcsr && acc_qrsp_i.isfloat)
+                  & ~(flush_i_valid_o & ~flush_i_ready_i)
+                  & ~((inst_data_i ==? FENCE) & ~lsu_empty);
+
+`ifndef SYNTHESIS
+  always_ff @(posedge clk_i) begin : check_retire_i_ports
+    if (rst_i == 1'b0 && write_rd && valid_instr)
+      assert (!acc_qvalid_o && !lsu_tlb_qvalid)
+        else $error("ALU write-back instruction uses the accelerator or LSU port");
+  end
+`endif
 
   always_comb begin
     acc_mem_cnt_d = acc_mem_cnt_q;

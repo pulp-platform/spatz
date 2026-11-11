@@ -381,39 +381,44 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
                                       vs1: '{addr: ope_raddr_s[1], re: ope_re_s[1], id: ope_id_s[1]}};
   assign shared_operand_rd_req = {|ope_re_s[1:0], |vfu_re_s[1:0]};
 
-  stream_arbiter #(
-    .DATA_T  (shared_vrf_operand_read_t),
-    .N_INP   (2                        ),
-    .ARBITER ("rr"                     )
-  ) i_shared_operand_read_arb (
-    .clk_i       (clk_i                  ),
-    .rst_ni      (rst_ni                 ),
-    .inp_data_i  (shared_operand_rd_in   ),
-    .inp_valid_i (shared_operand_rd_req  ),
-    .inp_ready_o (shared_operand_rd_gnt  ),
-    .oup_data_o  (shared_operand_rd_out  ),
-    .oup_valid_o (shared_operand_rd_valid),
-    .oup_ready_i (1'b1                   )
-  );
+  // Round-robin between VFU [0] and OPE [1], always ready downstream.
+  // Same decisions as a 2-input rr stream_arbiter, written out so that only
+  // one select level sits between the VFU read enable and the operand mux.
+  logic shared_operand_rd_sel, shared_operand_rd_turn_d, shared_operand_rd_turn_q;
+  assign shared_operand_rd_sel    = !shared_operand_rd_req[0] ||
+                                    (shared_operand_rd_req[1] && shared_operand_rd_turn_q);
+  assign shared_operand_rd_gnt    = {shared_operand_rd_sel, !shared_operand_rd_sel};
+  assign shared_operand_rd_valid  = |shared_operand_rd_req;
+  assign shared_operand_rd_out    = shared_operand_rd_sel ? shared_operand_rd_in[1] :
+                                                            shared_operand_rd_in[0];
+  assign shared_operand_rd_turn_d = shared_operand_rd_valid ?
+      (shared_operand_rd_req[1] && !(shared_operand_rd_req[0] && shared_operand_rd_turn_q)) :
+      shared_operand_rd_turn_q;
+  `FF(shared_operand_rd_turn_q, shared_operand_rd_turn_d, 1'b0)
 
   assign shared_move_rd_in[0] = '{addr: vfu_raddr_s[2], re: vfu_re_s[2], id: vfu_id_s[2]};
   assign shared_move_rd_in[1] = '{addr: ope_raddr_s[2], re: ope_re_s[2], id: ope_id_s[2]};
   assign shared_move_rd_req   = {ope_re_s[2], vfu_re_s[2]};
 
-  stream_arbiter #(
-    .DATA_T  (shared_vrf_read_t),
-    .N_INP   (2                ),
-    .ARBITER ("rr"             )
-  ) i_shared_move_read_arb (
-    .clk_i       (clk_i               ),
-    .rst_ni      (rst_ni              ),
-    .inp_data_i  (shared_move_rd_in   ),
-    .inp_valid_i (shared_move_rd_req  ),
-    .inp_ready_o (shared_move_rd_gnt  ),
-    .oup_data_o  (shared_move_rd_out  ),
-    .oup_valid_o (shared_move_rd_valid),
-    .oup_ready_i (!ope_move_rd_pending_q)
-  );
+  // Round-robin with lock-in between VFU [0] and OPE [1] for the VD read port.
+  // Same decisions as a 2-input rr stream_arbiter (LockIn, fair), written out
+  // to keep only one select level in front of the address mux.
+  logic [1:0] shared_move_rd_req_d, shared_move_rd_req_q;
+  logic       shared_move_rd_lock_q, shared_move_rd_turn_q, shared_move_rd_turn_d;
+  logic       shared_move_rd_sel, shared_move_rd_ready;
+  assign shared_move_rd_ready  = !ope_move_rd_pending_q;
+  assign shared_move_rd_req_d  = shared_move_rd_lock_q ? shared_move_rd_req_q : shared_move_rd_req;
+  assign shared_move_rd_sel    = !shared_move_rd_req_d[0] ||
+                                 (shared_move_rd_req_d[1] && shared_move_rd_turn_q);
+  assign shared_move_rd_valid  = |shared_move_rd_req_d;
+  assign shared_move_rd_gnt    = {2{shared_move_rd_ready}} & {shared_move_rd_sel, !shared_move_rd_sel};
+  assign shared_move_rd_out    = shared_move_rd_sel ? shared_move_rd_in[1] : shared_move_rd_in[0];
+  assign shared_move_rd_turn_d = (shared_move_rd_valid && shared_move_rd_ready) ?
+      (shared_move_rd_req_d[1] && !(shared_move_rd_req_d[0] && shared_move_rd_turn_q)) :
+      shared_move_rd_turn_q;
+  `FF(shared_move_rd_req_q, shared_move_rd_req_d, '0)
+  `FF(shared_move_rd_lock_q, shared_move_rd_valid && !shared_move_rd_ready, 1'b0)
+  `FF(shared_move_rd_turn_q, shared_move_rd_turn_d, 1'b0)
 
   assign shared_rd_vfu_gnt[1:0] = {2{shared_operand_rd_req[0] && shared_operand_rd_gnt[0]}} & vfu_re_s[1:0];
   assign shared_rd_ope_gnt[1:0] = {2{shared_operand_rd_req[1] && shared_operand_rd_gnt[1]}} & ope_re_s[1:0];
@@ -452,18 +457,28 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   assign shared_wr_vfu_gnt = shared_wr_req[0] && !shared_wr_ope_gnt;
   assign shared_wr_valid = shared_wr_ope_gnt || shared_wr_vfu_gnt;
 
-  always_comb begin : shared_write_select
-    shared_wr_out = '{addr: vfu_waddr_s, data: vfu_wdata_s,
-                       be: vfu_wbe_s, id: vfu_id_s[3], we: vfu_we_s};
+  // One-hot AND-OR of the three write sources (one mux level). The selects
+  // are computed in parallel from the OPE grant and the buffer state.
+  shared_vrf_write_t shared_wr_vfu_in, shared_wr_buf_in, shared_wr_ope_in;
+  logic shared_wr_sel_vfu, shared_wr_sel_buf, shared_wr_sel_ope;
+  assign shared_wr_vfu_in = '{addr: vfu_waddr_s, data: vfu_wdata_s,
+                              be: vfu_wbe_s, id: vfu_id_s[3], we: vfu_we_s};
+  assign shared_wr_ope_in = '{addr: ope_waddr_s, data: ope_wdata_s,
+                              be: ope_wbe_s, id: ope_id_s[3], we: ope_we_s};
 `ifdef BUF_FPU
-    if (!vfu_buf_empty)
-      shared_wr_out = '{addr: vfu_buf_data.waddr, data: vfu_buf_data.wdata,
-                         be: vfu_buf_data.wbe, id: vfu_buf_data.wid, we: 1'b1};
+  assign shared_wr_buf_in  = '{addr: vfu_buf_data.waddr, data: vfu_buf_data.wdata,
+                               be: vfu_buf_data.wbe, id: vfu_buf_data.wid, we: 1'b1};
+  assign shared_wr_sel_buf = !shared_wr_ope_gnt && !vfu_buf_empty;
+  assign shared_wr_sel_vfu = !shared_wr_ope_gnt && vfu_buf_empty;
+`else
+  assign shared_wr_buf_in  = '0;
+  assign shared_wr_sel_buf = 1'b0;
+  assign shared_wr_sel_vfu = !shared_wr_ope_gnt;
 `endif
-    if (shared_wr_ope_gnt)
-      shared_wr_out = '{addr: ope_waddr_s, data: ope_wdata_s,
-                         be: ope_wbe_s, id: ope_id_s[3], we: ope_we_s};
-  end
+  assign shared_wr_sel_ope = shared_wr_ope_gnt;
+  assign shared_wr_out = ({$bits(shared_vrf_write_t){shared_wr_sel_vfu}} & shared_wr_vfu_in) |
+                         ({$bits(shared_vrf_write_t){shared_wr_sel_buf}} & shared_wr_buf_in) |
+                         ({$bits(shared_vrf_write_t){shared_wr_sel_ope}} & shared_wr_ope_in);
 
   // ---------------------------------------------------------------------------
   // Shared read-port MUX

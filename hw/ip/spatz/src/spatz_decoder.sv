@@ -46,8 +46,10 @@ module spatz_decoder
     spatz_req     = '0;
     reset_vstart  = 1'b1;
 
-    // We have a new instruction that need to be decoded
-    if (decoder_req_valid_i) begin
+    // Decode unconditionally: the outputs are only used with decoder_rsp_valid_o
+    // (instr_illegal is qualified below), so the request valid stays off the
+    // decoded data path.
+    begin
       // Retrieve the opcode
       logic [6:0] opcode;
 

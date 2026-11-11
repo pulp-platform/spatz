@@ -145,6 +145,50 @@ module spatz_doublebw_vlsu
     .ready_i   (mem_spatz_req_ready                            )
   );
 
+  // Per-instruction address-generation constants, computed once when the
+  // request enters the queue and kept in a FIFO in lockstep with it, so they
+  // are registered instead of being recomputed from the queue head every cycle.
+  typedef struct packed {
+    vlen_t       idx_split_bytes; // byte offset of the second interface's indices
+    vew_e        data_ew;         // data EEW (SEW for indexed accesses)
+    logic [31:0] stride;          // element stride (1 unless strided)
+    logic [$bits(vew_e):0] idx_shift; // log2 of the index bytes per MAXEW data element
+  } mem_req_meta_t;
+  mem_req_meta_t req_meta_d, mem_meta;
+
+  always_comb begin : proc_req_meta
+    logic req_is_indexed, req_is_strided;
+    vlen_t split_base;
+    req_is_indexed = !spatz_req_i.op_ope.is_mem && (spatz_req_i.op inside {VLXE, VSXE});
+    req_is_strided = !spatz_req_i.op_ope.is_mem && (spatz_req_i.op inside {VLSE, VSSE});
+    req_meta_d.data_ew = req_is_indexed ? spatz_req_i.vtype.vsew : spatz_req_i.op_mem.ew;
+    req_meta_d.stride  = req_is_strided ? (spatz_req_i.rs2 >> req_meta_d.data_ew) : 32'd1;
+    req_meta_d.idx_shift = ($bits(vew_e)+1)'(MAXEW - req_meta_d.data_ew) + spatz_req_i.op_mem.ew;
+    split_base = ((spatz_req_d.vl + (SpatzMemBytes / 2)) >> $clog2(SpatzMemBytes)) <<
+                 ($clog2(SpatzMemBytes) - 1);
+    req_meta_d.idx_split_bytes = (spatz_req_d.vtype.vsew >= spatz_req_d.op_mem.ew) ?
+        split_base >> (spatz_req_d.vtype.vsew - int'(spatz_req_d.op_mem.ew)) :
+        split_base << (int'(spatz_req_d.op_mem.ew) - spatz_req_d.vtype.vsew);
+  end : proc_req_meta
+
+  stream_fifo #(
+    .FALL_THROUGH(1'b0          ),
+    .DEPTH       (4             ),
+    .T           (mem_req_meta_t)
+  ) i_operation_meta_queue (
+    .clk_i     (clk_i                                          ),
+    .rst_ni    (rst_ni                                         ),
+    .flush_i   (1'b0                                           ),
+    .testmode_i(1'b0                                           ),
+    .usage_o   (/* Unused */                                   ),
+    .data_i    (req_meta_d                                     ),
+    .valid_i   (spatz_req_valid_i && spatz_req_i.ex_unit == LSU),
+    .ready_o   (/* In lockstep with i_operation_queue */        ),
+    .data_o    (mem_meta                                       ),
+    .valid_o   (/* In lockstep with i_operation_queue */        ),
+    .ready_i   (mem_spatz_req_ready                            )
+  );
+
   // Convert vl to bytes for address generation using the memory data EEW.
   always_comb begin: proc_spatz_req
     spatz_req_d = spatz_req_i;
@@ -165,7 +209,7 @@ module spatz_doublebw_vlsu
   assign mem_is_indexed = mem_spatz_req_valid && !mem_is_tile_mem && ((mem_spatz_req.op == VLXE) || (mem_spatz_req.op == VSXE));
 
   vew_e mem_data_ew;
-  assign mem_data_ew = mem_is_indexed ? mem_spatz_req.vtype.vsew : mem_spatz_req.op_mem.ew;
+  assign mem_data_ew = mem_meta.data_ew;
 
   /////////////
   //  State  //
@@ -253,6 +297,12 @@ module spatz_doublebw_vlsu
   tile_chunk_cnt_t tile_store_req_count_d, tile_store_req_count_q;
   logic tile_mem_busy;
   logic tile_req_accept;
+  // A tile request is still waiting in a port output register. A new tile
+  // operation waits for it, so tile accesses leave in program order.
+  logic [NrMemPorts-1:0] tile_out_pending_port, vrf_out_pending_port;
+  logic tile_out_pending, vrf_out_pending;
+  assign tile_out_pending = |tile_out_pending_port;
+  assign vrf_out_pending  = |vrf_out_pending_port;
   logic tile_load_rsp_valid, tile_store_rsp_valid, vrf_rsp_valid;
   logic vrf_mem_finished, vrf_store_finished;
   spatz_id_t tile_store_rsp_id;
@@ -263,7 +313,15 @@ module spatz_doublebw_vlsu
   `FF(tile_store_req_count_q, tile_store_req_count_d, '0)
   `FF(tile_store_completion_q, tile_store_completion_d, '0)
 
-  assign tile_elem_bytes = 4'(1 << ((tile_state_q == Tile_Idle) ? mem_spatz_req.op_ope.tew : tile_ctx_q.access.tew));
+  // Tile moves are only legal with TEW equal to the accumulator element width
+  // (msetmtype rejects every other configuration), so TEW is a constant and all
+  // tile byte offsets below reduce to wiring.
+  localparam int unsigned TileTew = $clog2(AccElemBytes);
+  // A Tile word holds a complete tile line: no row is split across words.
+  localparam bit TileSingleWord = (TileWordBWidth >> TileTew) >= TileEdge;
+  logic [2:0] tile_tew;
+  assign tile_tew = 3'(TileTew);
+  assign tile_elem_bytes = 4'(1) << tile_tew;
   assign tile_mem_busy = (tile_state_q != Tile_Idle);
 
   /*------------------------------------------------------------*/
@@ -298,7 +356,6 @@ module spatz_doublebw_vlsu
     tile_mem_req = tile_mem_req_t'(0);
     tile_mem_req_mask = {NrMemPorts{1'b0}};
     tile_mem_req_ready = 1'b1;
-    tile_mem_req_count = tile_chunk_cnt_t'(0);
 
     for (int unsigned p = 0; p < NrMemPorts; p++) begin
       tile_chunk_idx_t chunk_idx;
@@ -311,7 +368,6 @@ module spatz_doublebw_vlsu
         tile_mem_req_mask[p] = 1'b1;
         tile_mem_req[p].addr = aligned_addr;
         tile_mem_req[p].last = (chunk_idx == tile_chunk_idx_t'(tile_num_chunks - 1'b1));
-        tile_mem_req_count = tile_mem_req_count + 1'b1;
         if (!spatz_mem_req_ready[p / N_FU][p % N_FU]) tile_mem_req_ready = 1'b0;
         for (int unsigned b = 0; b < MemDataWidthB; b++) begin
           tile_stream_offset_t stream_byte_idx;
@@ -326,16 +382,34 @@ module spatz_doublebw_vlsu
     end
   end
 
+  // Number of ports with an active chunk (parallel count)
+  logic [$clog2(NrMemPorts+1)-1:0] tile_mem_req_popcnt;
+  popcount #(.INPUT_WIDTH(NrMemPorts)) i_tile_mem_req_cnt (
+    .data_i    (tile_mem_req_mask  ),
+    .popcount_o(tile_mem_req_popcnt)
+  );
+  assign tile_mem_req_count = tile_chunk_cnt_t'(tile_mem_req_popcnt);
+
   logic tile_store_req_last;
   assign tile_store_req_last = (tile_ctx_q.chunk_sent + tile_mem_req_count) >= tile_num_chunks;
+  // A tile load is accepted only with an idle VRF path, and no VRF memory
+  // instruction is started while it is busy, so VRF requests cannot compete
+  // here (checked by the assertion below).
   assign tile_load_req_fire = (tile_state_q == Tile_MemReq) && tile_ctx_q.req.op_mem.is_load &&
-      (tile_ctx_q.chunk_sent < tile_num_chunks) && tile_mem_req_ready && !vrf_mem_req_valid;
+      (tile_ctx_q.chunk_sent < tile_num_chunks) && tile_mem_req_ready;
   assign tile_store_req_fire = (tile_state_q == Tile_MemReq) && !tile_ctx_q.req.op_mem.is_load &&
       (tile_ctx_q.chunk_sent < tile_num_chunks) && tile_mem_req_ready;
 
   // Hold a dependent request in the operation queue. In particular, a younger
   // VTSE must not assert tile_rvalid_o and block an older MAC before it retires.
   assign tile_req_accept = mem_spatz_req_valid && mem_is_tile_mem && tile_req_ready &&
+      matrix_enable_i[mem_spatz_req.id] && mem_spatz_req.op_ope.tss.tile_valid;
+  // Store-only accept (register-driven terms only), used for the OPE read
+  // request and the completion counter so the load-branch terms do not reach them.
+  logic tile_store_accept;
+  assign tile_store_accept = mem_spatz_req_valid && mem_is_tile_mem && !mem_spatz_req.op_mem.is_load &&
+      (tile_state_q == Tile_Idle) && !tile_store_completion_q[mem_spatz_req.id].valid &&
+      !tile_out_pending && !vrf_out_pending &&
       matrix_enable_i[mem_spatz_req.id] && mem_spatz_req.op_ope.tss.tile_valid;
 
   logic [NrMemPorts-1:0] tile_mem_req_valid;
@@ -359,27 +433,33 @@ module spatz_doublebw_vlsu
   logic [NrMemPorts-1:0] rsp_tile_mem, rsp_vrf_load, rsp_vrf_store;
   mem_req_tag_t [NrMemPorts-1:0] spatz_mem_req_tag_o;
   logic [NrMemPorts-1:0] mem_out_fire;
+  // TCDM responses return in order with a fixed latency, so a small FIFO per
+  // port tracks every outstanding request. This keeps one request per cycle
+  // in flight on each port (a single tag register halved the bandwidth).
+  localparam int unsigned NrOutstandingTags = 4;
   for (genvar p = 0; p < NrMemPorts; p++) begin : gen_mem_tag
-    mem_req_tag_t tag_q;
-    logic tag_valid_q;
+    logic tag_fifo_empty, tag_fifo_full;
 
-    always_ff @(posedge clk_i or negedge rst_ni) begin
-      if (!rst_ni) begin
-        tag_q       <= mem_req_tag_t'(0);
-        tag_valid_q <= 1'b0;
-      end else begin
-        if (mem_out_fire[p]) begin
-          tag_q       <= spatz_mem_req_tag_o[p];
-          tag_valid_q <= 1'b1;
-        end else if (spatz_mem_rsp_valid_i[p]) begin
-          tag_valid_q <= 1'b0;
-        end
-      end
-    end
+    fifo_v3 #(
+      .FALL_THROUGH(1'b0             ),
+      .DEPTH       (NrOutstandingTags),
+      .dtype       (mem_req_tag_t    )
+    ) i_tag_fifo (
+      .clk_i     (clk_i                                       ),
+      .rst_ni    (rst_ni                                      ),
+      .flush_i   (1'b0                                        ),
+      .testmode_i(1'b0                                        ),
+      .full_o    (tag_fifo_full                               ),
+      .empty_o   (tag_fifo_empty                              ),
+      .usage_o   (/* Unused */                                ),
+      .data_i    (spatz_mem_req_tag_o[p]                      ),
+      .push_i    (mem_out_fire[p]                             ),
+      .data_o    (tag_head[p]                                 ),
+      .pop_i     (spatz_mem_rsp_valid_i[p] && !tag_fifo_empty)
+    );
 
-    assign tag_head[p]  = tag_q;
-    assign tag_empty[p] = !tag_valid_q;
-    assign tag_full[p]  = tag_valid_q;
+    assign tag_empty[p] = tag_fifo_empty;
+    assign tag_full[p]  = tag_fifo_full;
 
     // Empty means no outstanding request; keep all decodes low.
     assign rsp_tile_mem[p] = !tag_empty[p] && tag_head[p].tile_owned;
@@ -398,15 +478,25 @@ module spatz_doublebw_vlsu
   tile_count_t tile_req_elems;
   tile_dim_t   tile_req_col;
 
+  // Elements per Tile word: min(TileWordBWidth >> tew, TileEdge). Both bounds are
+  // powers of two, so the capacity is a shift and the word holding a column is
+  // a mask of the row index (no dividers or multipliers by runtime values).
+  localparam int unsigned TileWordBytesLog2 = $clog2(TileWordBWidth);
+  localparam int unsigned TileEdgeLog2      = $clog2(TileEdge);
+  logic [$clog2(TileEdgeLog2+1)-1:0] tile_cap_log2;
+
   always_comb begin : proc_tile_word_geometry
     tile_count_t remaining_elems;
-    int unsigned word_capacity;
 
-    word_capacity = TileWordBWidth / tile_elem_bytes;
-    tile_word_capacity = (word_capacity > TileEdge) ? tile_count_t'(TileEdge) : tile_count_t'(word_capacity);
+    tile_cap_log2 = ((TileWordBytesLog2 - tile_tew) > TileEdgeLog2) ?
+                    TileEdgeLog2 : (TileWordBytesLog2 - tile_tew);
+    tile_word_capacity = tile_count_t'(1) << tile_cap_log2;
 
-    if (tile_ctx_q.is_col) begin
-      tile_req_col = tile_dim_t'((tile_ctx_q.access.row / tile_word_capacity) * tile_word_capacity);
+    if (TileSingleWord) begin
+      tile_req_col = tile_dim_t'(0);
+      remaining_elems = tile_ctx_q.is_col ? tile_count_t'(TileEdge) : tile_ctx_q.elems;
+    end else if (tile_ctx_q.is_col) begin
+      tile_req_col = tile_ctx_q.access.row & ~tile_dim_t'(tile_word_capacity - 1'b1);
       remaining_elems = tile_count_t'(TileEdge - tile_req_col);
     end else begin
       tile_req_col = tile_ctx_q.word_col;
@@ -427,12 +517,12 @@ module spatz_doublebw_vlsu
     tile_row_write_word = tile_word_t'(0);
     tile_col_write_word = tile_ctx_q.row_buf;
     local_col = tile_count_t'(tile_ctx_q.access.row - tile_req_col);
-    row_start_byte = unsigned'(tile_req_col) << tile_ctx_q.access.tew;
-    col_start_byte = unsigned'(local_col) << tile_ctx_q.access.tew;
-    packed_row_byte = unsigned'(tile_ctx_q.row_idx) << tile_ctx_q.access.tew;
+    row_start_byte = unsigned'(tile_req_col) << TileTew;
+    col_start_byte = unsigned'(local_col) << TileTew;
+    packed_row_byte = unsigned'(tile_ctx_q.row_idx) << TileTew;
 
     for (int unsigned d = 0; d < TileWordBWidth; d++) begin
-      if (d < (unsigned'(tile_req_elems) << tile_ctx_q.access.tew)) begin
+      if (d < (unsigned'(tile_req_elems) << TileTew)) begin
         tile_row_write_word[d*8 +: 8] =
             tile_ctx_q.packed_data[(row_start_byte+d)*8 +: 8];
       end
@@ -452,7 +542,7 @@ module spatz_doublebw_vlsu
     head_tile_elems = (active_dim < TileEdge) ? tile_count_t'(active_dim) : tile_count_t'(TileEdge);
   end
   assign tile_tss_req.elems = head_tile_elems;
-  assign head_tile_bytes = tile_byte_cnt_t'(head_tile_elems * tile_elem_bytes);
+  assign head_tile_bytes = tile_byte_cnt_t'(head_tile_elems) << TileTew;
 
   /*------------------------------------------------------------*/
   /*           Tile Accumulator and TCDM Transfer FSM           */
@@ -496,33 +586,43 @@ module spatz_doublebw_vlsu
     unique case (tile_state_q)
 
       Tile_Idle: begin
-        if (tile_req_accept) begin
-          tile_ctx_d.req     = mem_spatz_req;
-          tile_ctx_d.access  = tile_tss_req;
+        logic fast_row_store;
+        // A single-word row store reads the accumulator in the accept cycle.
+        fast_row_store = !mem_spatz_req.op_mem.is_load && mem_spatz_req.op_ope.tss.is_row &&
+                         (head_tile_bytes <= tile_byte_cnt_t'(TileWordBWidth));
+
+        // The context is unused while Idle: load the head request whenever it is a
+        // tile operation (register-driven enable), so the wide context registers
+        // and the read request do not depend on the late tile_req_accept.
+        tile_r_req_o = tile_tss_req;
+        if (mem_is_tile_mem) begin
+          tile_ctx_d.req         = mem_spatz_req;
+          tile_ctx_d.access      = tile_tss_req;
           // TSS selects one row or column. Only a column walks physical rows.
-          tile_ctx_d.row_idx = tile_dim_t'(0);
-          tile_ctx_d.elems   = head_tile_elems;
-          tile_ctx_d.is_col     = !mem_spatz_req.op_ope.tss.is_row;
-          tile_ctx_d.word_col   = tile_dim_t'(0);
-          tile_ctx_d.bytes   = tile_byte_cnt_t'(head_tile_bytes);
-          tile_ctx_d.chunk_sent   = tile_chunk_idx_t'(0);
-          tile_ctx_d.packed_data  = tile_row_t'(0);
-          tile_ctx_d.row_buf      = tile_word_t'(0);
-          tile_load_pending_d     = {NrMemPorts{1'b0}};
-          if (!mem_spatz_req.op_mem.is_load && mem_spatz_req.op_ope.tss.is_row &&
-              (head_tile_bytes <= tile_byte_cnt_t'(TileWordBWidth))) begin
-            tile_rvalid_o = 1'b1;
-            tile_r_req_o = tile_tss_req;
-          end
+          tile_ctx_d.row_idx     = tile_dim_t'(0);
+          tile_ctx_d.elems       = head_tile_elems;
+          tile_ctx_d.is_col      = !mem_spatz_req.op_ope.tss.is_row;
+          tile_ctx_d.word_col    = tile_dim_t'(0);
+          tile_ctx_d.bytes       = tile_byte_cnt_t'(head_tile_bytes);
+          tile_ctx_d.chunk_sent  = tile_chunk_idx_t'(0);
+          tile_ctx_d.packed_data = (fast_row_store && tile_rready_i) ? tile_row_t'(tile_rdata_i) :
+                                                                       tile_row_t'(0);
+          tile_ctx_d.row_buf     = tile_word_t'(0);
+        end
+
+        // fast_row_store implies a store: use the store-only accept
+        if (tile_store_accept && fast_row_store)
+          tile_rvalid_o = 1'b1;
+
+        if (tile_req_accept) begin
+          tile_load_pending_d = {NrMemPorts{1'b0}};
+
 
           if (head_tile_elems == tile_count_t'(0)) begin
             tile_state_d = mem_spatz_req.op_mem.is_load ? Tile_Done : Tile_Idle;
           end else if (mem_spatz_req.op_mem.is_load) begin
             tile_state_d = Tile_MemReq;
-          end else if (mem_spatz_req.op_ope.tss.is_row &&
-                       (head_tile_bytes <= tile_byte_cnt_t'(TileWordBWidth)) &&
-                       tile_rready_i) begin
-            tile_ctx_d.packed_data = tile_row_t'(tile_rdata_i);
+          end else if (fast_row_store && tile_rready_i) begin
             tile_state_d = Tile_MemReq;
           end else begin
             tile_state_d = Tile_GatherRead;
@@ -538,8 +638,8 @@ module spatz_doublebw_vlsu
             int unsigned packed_start_byte;
             int unsigned source_start_byte;
             local_col = tile_count_t'(tile_ctx_q.access.row - tile_req_col);
-            packed_start_byte = unsigned'(tile_ctx_q.row_idx) << tile_ctx_q.access.tew;
-            source_start_byte = unsigned'(local_col) << tile_ctx_q.access.tew;
+            packed_start_byte = unsigned'(tile_ctx_q.row_idx) << TileTew;
+            source_start_byte = unsigned'(local_col) << TileTew;
             for (int unsigned d = 0; d < TileRowBytes; d++) begin
               if ((d >= packed_start_byte) &&
                   (d < packed_start_byte + unsigned'(tile_elem_bytes))) begin
@@ -556,10 +656,10 @@ module spatz_doublebw_vlsu
             for (int unsigned d = 0; d < TileRowBytes; d++) begin
               int unsigned first_byte;
               int unsigned source_byte;
-              first_byte = unsigned'(tile_req_col) << tile_ctx_q.access.tew;
+              first_byte = unsigned'(tile_req_col) << TileTew;
               source_byte = d - first_byte;
               if ((d >= first_byte) &&
-                  (source_byte < (unsigned'(tile_req_elems) << tile_ctx_q.access.tew))) begin
+                  (source_byte < (unsigned'(tile_req_elems) << TileTew))) begin
                 tile_ctx_d.packed_data[d*8 +: 8] = tile_rdata_i[source_byte*8 +: 8];
               end
             end
@@ -579,9 +679,11 @@ module spatz_doublebw_vlsu
             tile_state_d = Tile_MemWaitRsp;
         end else begin
           if (tile_store_req_fire && tile_store_req_last) begin
-            // Wait for acknowledgments after the final request wave.
+            // The output spill registers hold their own copy of data and tag, so
+            // the context is free once the final wave is accepted. Completion is
+            // tracked per instruction by tile_store_completion.
             tile_ctx_d.chunk_sent = tile_chunk_cnt_t'(0);
-            tile_state_d          = Tile_MemWaitRsp;
+            tile_state_d          = Tile_Idle;
           end
         end
       end
@@ -600,12 +702,17 @@ module spatz_doublebw_vlsu
             stream_byte = tile_stream_offset_t'(d) + tile_stream_offset_t'(tile_mem_head);
             stream_chunk = stream_byte >> $clog2(MemDataWidthB);
             chunk_byte = stream_byte & tile_stream_offset_t'(MemDataWidthB - 1);
-            for (int unsigned p = 0; p < NrMemPorts; p++) begin
-              if (spatz_mem_rsp_valid_i[p] && rsp_tile_mem[p] && !tag_head[p].write &&
-                  (d < tile_ctx_q.bytes) &&
-                  (stream_chunk == tile_stream_offset_t'(tag_head[p].chunk))) begin
+            // Chunk c of a load wave is requested on port c % NrMemPorts, so the
+            // source port and byte follow from the registered head offset; the
+            // response handshake only enables the write.
+            begin
+              int unsigned src_port;
+              src_port = unsigned'(stream_chunk) % NrMemPorts;
+              if (spatz_mem_rsp_valid_i[src_port] && rsp_tile_mem[src_port] &&
+                  !tag_head[src_port].write && (d < tile_ctx_q.bytes) &&
+                  (stream_chunk == tile_stream_offset_t'(tag_head[src_port].chunk))) begin
                 tile_ctx_d.packed_data[d*8 +: 8] =
-                    spatz_mem_rsp_i[p].data[chunk_byte*8 +: 8];
+                    spatz_mem_rsp_i[src_port].data[chunk_byte*8 +: 8];
               end
             end
           end
@@ -620,9 +727,8 @@ module spatz_doublebw_vlsu
             end
           end
         end else begin
-          // Release row data after every request leaves the output registers.
-          if (tile_store_req_count_d == tile_num_chunks)
-            tile_state_d = Tile_Idle;
+          // Stores leave Tile_MemReq directly to Idle (not reached).
+          tile_state_d = Tile_Idle;
         end
       end
 
@@ -667,40 +773,78 @@ module spatz_doublebw_vlsu
   /*            Tile Store Completion and Retirement            */
   /*------------------------------------------------------------*/
 
-  always_comb begin : proc_tile_store_completion
-    tile_store_completion_d = tile_store_completion_q;
-    tile_store_rsp_valid = 1'b0;
-    tile_store_rsp_id = spatz_id_t'(0);
+  // Store acknowledgments are counted per instruction in parallel (popcount of
+  // the ports acknowledging that ID), and compared against the registered
+  // remaining count. No dynamic-index read-modify-write chain across ports.
+  tile_chunk_cnt_t tile_store_init_chunks;
+  logic [NrParallelInstructions-1:0] tile_store_done, tile_store_init;
+  logic [NrParallelInstructions-1:0][$clog2(NrMemPorts+1)-1:0] tile_store_ack_cnt;
+  // An empty tile store sends nothing and completes immediately.
+  assign tile_store_init_chunks = (head_tile_elems == tile_count_t'(0)) ? tile_chunk_cnt_t'(0) :
+      tile_chunk_cnt_t'((head_tile_bytes + mem_spatz_req.rs1[MemByteOffW-1:0] +
+                         MemDataWidthB - 1) >> MemByteOffW);
 
-    if (tile_req_accept && !mem_spatz_req.op_mem.is_load) begin
-      tile_store_completion_d[mem_spatz_req.id].valid = 1'b1;
-      tile_store_completion_d[mem_spatz_req.id].remaining = tile_chunk_cnt_t'(
-          (head_tile_bytes + mem_spatz_req.rs1[MemByteOffW-1:0] +
-           MemDataWidthB - 1) / MemDataWidthB);
-    end
+  for (genvar id = 0; id < NrParallelInstructions; id++) begin : gen_tile_store_cnt
+    logic [NrMemPorts-1:0] ack;
+    tile_chunk_cnt_t remaining;
 
-    for (int unsigned p = 0; p < NrMemPorts; p++) begin
-      if (spatz_mem_rsp_valid_i[p] && rsp_tile_mem[p] && tag_head[p].write) begin
-        tile_store_completion_d[tag_head[p].id].remaining = tile_store_completion_d[tag_head[p].id].remaining - 1'b1;
-      end
+    for (genvar p = 0; p < NrMemPorts; p++) begin : gen_ack
+      assign ack[p] = spatz_mem_rsp_valid_i[p] && rsp_tile_mem[p] && tag_head[p].write &&
+                      (tag_head[p].id == spatz_id_t'(id));
     end
+    popcount #(.INPUT_WIDTH(NrMemPorts)) i_ack_cnt (.data_i(ack), .popcount_o(tile_store_ack_cnt[id]));
 
-    for (int unsigned id = 0; id < NrParallelInstructions; id++) begin
-      if (!tile_store_rsp_valid && tile_store_completion_q[id].valid &&
-          (tile_store_completion_d[id].remaining == '0) && !vrf_mem_finished && !vrf_rsp_valid && !tile_load_rsp_valid) begin
-        tile_store_rsp_valid = 1'b1;
-        tile_store_rsp_id = spatz_id_t'(id);
-        tile_store_completion_d[id].valid = 1'b0;
-      end
-    end
+    assign tile_store_init[id] = tile_store_accept && (mem_spatz_req.id == spatz_id_t'(id));
+    // An entry being initialized is not valid yet, so the registered count suffices.
+    assign remaining = tile_store_completion_q[id].remaining;
+    assign tile_store_done[id] = tile_store_completion_q[id].valid &&
+                                 (remaining == tile_chunk_cnt_t'(tile_store_ack_cnt[id]));
   end
 
-  always_comb begin : proc_tile_store_count
-    tile_store_req_count_d = tile_store_req_count_q;
-    for (int unsigned p = 0; p < NrMemPorts; p++) begin
-      if (mem_out_fire[p] && spatz_mem_req_tag_o[p].tile_owned && spatz_mem_req_tag_o[p].write)
-        tile_store_req_count_d = tile_store_req_count_d + 1'b1;
+  always_comb begin : proc_tile_store_completion
+    logic store_rsp_free;
+    logic found;
+
+    tile_store_completion_d = tile_store_completion_q;
+    for (int unsigned id = 0; id < NrParallelInstructions; id++) begin
+      if (tile_store_init[id]) begin
+        tile_store_completion_d[id].valid     = 1'b1;
+        tile_store_completion_d[id].remaining = tile_store_init_chunks - tile_chunk_cnt_t'(tile_store_ack_cnt[id]);
+      end else begin
+        tile_store_completion_d[id].remaining = tile_store_completion_q[id].remaining -
+                                                tile_chunk_cnt_t'(tile_store_ack_cnt[id]);
+      end
     end
+
+    // Retire the lowest finished ID when the response port is free
+    store_rsp_free = !vrf_mem_finished && !vrf_rsp_valid && !tile_load_rsp_valid;
+    found = 1'b0;
+    tile_store_rsp_id = spatz_id_t'(0);
+    for (int unsigned id = 0; id < NrParallelInstructions; id++) begin
+      if (!found && tile_store_done[id]) begin
+        found = 1'b1;
+        tile_store_rsp_id = spatz_id_t'(id);
+      end
+    end
+    tile_store_rsp_valid = found && store_rsp_free;
+    if (tile_store_rsp_valid)
+      tile_store_completion_d[tile_store_rsp_id].valid = 1'b0;
+  end
+
+  // Tile store requests leaving the output registers this cycle (parallel count)
+  logic [NrMemPorts-1:0] tile_store_req_out;
+  logic [$clog2(NrMemPorts+1)-1:0] tile_store_req_out_cnt;
+  for (genvar p = 0; p < NrMemPorts; p++) begin : gen_tile_store_req_out
+    assign tile_store_req_out[p] = mem_out_fire[p] && spatz_mem_req_tag_o[p].tile_owned &&
+                                   spatz_mem_req_tag_o[p].write;
+  end
+  popcount #(.INPUT_WIDTH(NrMemPorts)) i_tile_store_req_cnt (
+    .data_i    (tile_store_req_out    ),
+    .popcount_o(tile_store_req_out_cnt)
+  );
+
+  always_comb begin : proc_tile_store_count
+    tile_store_req_count_d = tile_store_req_count_q + tile_chunk_cnt_t'(tile_store_req_out_cnt);
     if (tile_req_accept) tile_store_req_count_d = tile_chunk_cnt_t'(0);
   end
 
@@ -885,6 +1029,8 @@ module spatz_doublebw_vlsu
 
   // Keep stores pending until TCDM accepts them.
   logic write_pending;
+  logic idle_write_pending;  // registered-only form, see proc_idle_write_pending
+  logic mem_is_load;
 
   ///////////////////
   //  VRF request  //
@@ -958,23 +1104,27 @@ module spatz_doublebw_vlsu
 
     // Did we start a new instruction?
     if (mem_spatz_req_valid && !mem_is_tile_mem && !commit_insn_full &&
-        !(tile_mem_busy && tile_ctx_q.req.op_mem.is_load) && !mem_insn_pending_q[mem_spatz_req.id]) begin
+        !tile_mem_busy && !tile_out_pending && !mem_insn_pending_q[mem_spatz_req.id]) begin
       mem_insn_pending_d[mem_spatz_req.id] = 1'b1;
       commit_insn_push                     = 1'b1;
     end
 
     // Did an instruction finished its requests?
-    if (mem_vrf_insn_tracked && &(mem_port_finished_q | (mem_port_finished_d & mem_counter_en)) && !write_pending) begin
+    // Equivalent to "... && !write_pending": a store port finishing this cycle
+    // sends a request (so the original waits anyway), and loads never add stores.
+    // This keeps the request handshake out of the ready (checked below).
+    if (mem_vrf_insn_tracked && !idle_write_pending &&
+        &(mem_port_finished_q | (mem_operation_last & mem_counter_en & {N_FU*NrInterfaces{mem_is_load}}))) begin
       mem_insn_finished_d[mem_spatz_req.id] = 1'b1;
       mem_spatz_req_ready                   = 1'b1;
     end
     // Did we acknowledge the end of an instruction?
     if (vrf_rsp_valid) begin
-      mem_insn_finished_d[vlsu_rsp_o.id] = 1'b0;
-      mem_insn_pending_d[vlsu_rsp_o.id]  = 1'b0;
+      mem_insn_finished_d[commit_insn_q.id] = 1'b0;  // == vlsu_rsp_o.id when vrf_rsp_valid
+      mem_insn_pending_d[commit_insn_q.id]  = 1'b0;
     end
     // Clear stale bookkeeping when all memory paths are idle.
-    if (!mem_spatz_req_valid && commit_insn_empty && (&rob_empty) && !write_pending && !tile_mem_busy) begin
+    if (!mem_spatz_req_valid && commit_insn_empty && (&rob_empty) && !idle_write_pending && !tile_mem_busy) begin
       for (int unsigned id_idx = 0; id_idx < NrParallelInstructions; id_idx++) begin
         mem_insn_finished_d[id_idx] = 1'b0;
         mem_insn_pending_d[id_idx]  = 1'b0;
@@ -1034,17 +1184,12 @@ module spatz_doublebw_vlsu
   `FF(vs2_elem_id_q, vs2_elem_id_d, '0)
 
   // Each memory port may be at a different index-word boundary.
-  vrf_addr_t [NrInterfaces-1:0] [N_FU-1:0] idx_needed_addr;
+  vrf_addr_t [NrInterfaces-1:0] [N_FU-1:0] idx_needed_addr, idx_needed_rel;
+  vrf_addr_t [NrInterfaces-1:0] idx_cursor_rel;
   logic [NrInterfaces-1:0] [N_FU-1:0] idx_word_valid;
   logic [NrInterfaces-1:0] idx_word_read_needed;
   vlen_t idx_split_bytes;
-  assign idx_split_bytes = (mem_spatz_req.vtype.vsew >= mem_spatz_req.op_mem.ew) ?
-      (((mem_spatz_req.vl + (SpatzMemBytes / 2)) >> $clog2(SpatzMemBytes)) <<
-       ($clog2(SpatzMemBytes) - 1)) >>
-          (mem_spatz_req.vtype.vsew - int'(mem_spatz_req.op_mem.ew)) :
-      (((mem_spatz_req.vl + (SpatzMemBytes / 2)) >> $clog2(SpatzMemBytes)) <<
-       ($clog2(SpatzMemBytes) - 1)) <<
-          (int'(mem_spatz_req.op_mem.ew) - mem_spatz_req.vtype.vsew);
+  assign idx_split_bytes = mem_meta.idx_split_bytes;
 
   // Calculate the memory address for each memory port
   addr_offset_t [NrInterfaces-1:0] [N_FU-1:0] mem_req_addr_offset;
@@ -1068,39 +1213,44 @@ module spatz_doublebw_vlsu
       assign log2_num_idx_maxew_bytes = log2_num_el_maxew + mem_spatz_req.op_mem.ew;
       // Byte footprint of the indices associated with one MAXEW data element.
       assign num_idx_maxew_bytes = 1'b1 << log2_num_idx_maxew_bytes;
+      // Byte address of this port's next index. The counter's low bits, the port
+      // number and the counter's high bits (scaled by N_FU) occupy disjoint bit
+      // fields, so they are combined with an OR; the shift comes from the meta FIFO.
+      vlen_t idx_mask;
+      assign idx_mask  = (vlen_t'(1) << mem_meta.idx_shift) - 1'b1;
       assign idx_gbyte =
           ((intf == 0) ? vlen_t'('0) : idx_split_bytes) +
-          (vlen_t'(fu) << log2_num_idx_maxew_bytes) +
-          (mem_idx_counter_q[intf][fu] & (num_idx_maxew_bytes - 1)) +
-          (((mem_idx_counter_q[intf][fu] >> log2_num_idx_maxew_bytes) <<
-            log2_num_idx_maxew_bytes) * N_FU);
+          ((mem_idx_counter_q[intf][fu] & idx_mask) |
+           (vlen_t'(fu) << mem_meta.idx_shift) |
+           ((mem_idx_counter_q[intf][fu] & ~idx_mask) * N_FU));
 
       always_comb begin
+        logic [31:0] idx_offset, lin_offset;
         word_index = idx_gbyte[$clog2($bits(vrf_data_t)/8)-1:0];
-        stride = mem_is_strided ? mem_spatz_req.rs2 >> mem_data_ew : 'd1;
+        stride = mem_meta.stride;
 
-        if (mem_is_indexed) begin
-          // Index
-          unique case (mem_spatz_req.op_mem.ew)
-            EW_8 : offset   = $signed(vrf_rdata_i[intf][1][8 * word_index +: 8]);
-            EW_16: offset   = $signed(vrf_rdata_i[intf][1][8 * word_index +: 16]);
-            default: offset = $signed(vrf_rdata_i[intf][1][8 * word_index +: 32]);
-          endcase
-        end else begin
-          offset = {
-              mem_counter_q[intf][fu][$bits(vlen_t)-1:MAXEW] << $clog2(N_FU),
-              mem_counter_q[intf][fu][int'(MAXEW)-1:0]
-          } + (fu << MAXEW);
-        end
+        // Index offset (from VRF data); the stride is 1 for indexed accesses, so
+        // the index data does not go through the stride multiplier.
+        unique case (mem_spatz_req.op_mem.ew)
+          EW_8 : idx_offset   = $signed(vrf_rdata_i[intf][1][8 * word_index +: 8]);
+          EW_16: idx_offset   = $signed(vrf_rdata_i[intf][1][8 * word_index +: 16]);
+          default: idx_offset = $signed(vrf_rdata_i[intf][1][8 * word_index +: 32]);
+        endcase
 
+        // Linear offset (from registers only)
+        lin_offset = {
+            mem_counter_q[intf][fu][$bits(vlen_t)-1:MAXEW] << $clog2(N_FU),
+            mem_counter_q[intf][fu][int'(MAXEW)-1:0]
+        } + (fu << MAXEW);
         // Split interfaces across vector halves and TCDM superbanks to reduce conflicts.
-        if (!mem_is_indexed && intf == 1) begin
+        if (intf == 1) begin
           // Align the vector length with SpatzMemBytes bytes
-          offset +=
+          lin_offset +=
               ((mem_spatz_req.vl + (SpatzMemBytes / 2)) >> $clog2(SpatzMemBytes) <<
                $clog2(SpatzMemBytes)) / 2;
         end
-        offset *= stride;
+
+        offset = mem_is_indexed ? idx_offset : (lin_offset * stride);
 
         addr                          = mem_spatz_req.rs1 + offset;
         mem_req_addr[intf][fu]        = (addr >> MAXEW) << MAXEW;
@@ -1110,8 +1260,10 @@ module spatz_doublebw_vlsu
       assign idx_needed_addr[intf][fu] =
           (mem_spatz_req.vs2 << $clog2(NrWordsPerVector)) +
           vrf_addr_t'(idx_gbyte >> $clog2($bits(vrf_data_t)/8));
+      // Word index relative to vs2: the common vs2 base cancels in the compares.
+      assign idx_needed_rel[intf][fu] = vrf_addr_t'(idx_gbyte >> $clog2($bits(vrf_data_t)/8));
       assign idx_word_valid[intf][fu] =
-          (idx_needed_addr[intf][fu] == vs2_vreg_idx_addr[intf]) &&
+          (idx_needed_rel[intf][fu] == idx_cursor_rel[intf]) &&
           vrf_rvalid_i[intf][1];
     end: gen_mem_req_addr_intf_fu
   end: gen_mem_req_addr_intf
@@ -1134,6 +1286,27 @@ module spatz_doublebw_vlsu
     end
   end
 
+  for (genvar intf = 0; intf < NrInterfaces; intf++) begin : gen_idx_cursor_rel
+    assign idx_cursor_rel[intf] = vrf_addr_t'($unsigned(vs2_elem_id_q[intf])) +
+        ((intf == 1) ? vrf_addr_t'(idx_split_bytes >> $clog2($bits(vrf_data_t)/8)) : vrf_addr_t'(0));
+  end
+
+`ifndef SYNTHESIS
+  always_ff @(posedge clk_i) begin : check_idx_rel_equiv
+    if (rst_ni && mem_is_indexed)
+      for (int intf = 0; intf < NrInterfaces; intf++)
+        for (int fu = 0; fu < N_FU; fu++)
+          if (mem_operation_valid[intf][fu]) begin
+            assert ((idx_needed_rel[intf][fu] == idx_cursor_rel[intf]) ==
+                    (idx_needed_addr[intf][fu] == vs2_vreg_idx_addr[intf]))
+              else $error("Index word compare differs");
+            assert ((idx_needed_rel[intf][fu] <= idx_cursor_rel[intf]) ==
+                    (idx_needed_addr[intf][fu] <= vs2_vreg_idx_addr[intf]))
+              else $error("Index cursor compare differs");
+          end
+  end
+`endif
+
   always_comb begin : gen_index_word_cursor
     vs2_elem_id_d = vs2_elem_id_q;
     idx_word_read_needed = '0;
@@ -1145,9 +1318,9 @@ module spatz_doublebw_vlsu
       for (int fu = 0; fu < N_FU; fu++) begin
         if (mem_operation_valid[intf][fu]) begin
           has_pending_port = 1'b1;
-          if (idx_needed_addr[intf][fu] == vs2_vreg_idx_addr[intf])
+          if (idx_needed_rel[intf][fu] == idx_cursor_rel[intf])
             idx_word_read_needed[intf] = 1'b1;
-          if (idx_needed_addr[intf][fu] <= vs2_vreg_idx_addr[intf])
+          if (idx_needed_rel[intf][fu] <= idx_cursor_rel[intf])
             all_ports_need_next_word = 1'b0;
         end
       end
@@ -1201,7 +1374,6 @@ module spatz_doublebw_vlsu
   logic [NrInterfaces-1:0] [N_FU-1:0] commit_operation_last;
 
   // Is instruction a load?
-  logic mem_is_load;
   assign mem_is_load = mem_spatz_req.op_mem.is_load;
 
   // Signal when we are finished with with accessing the memory (necessary
@@ -1304,20 +1476,65 @@ module spatz_doublebw_vlsu
 
 	  logic vrf_path_idle, vrf_store_active, vrf_full_mode_active;
   logic [NrParallelInstructions-1:0] vrf_full_mode_pending;
-  assign vrf_path_idle = commit_insn_empty && (&rob_empty) && !busy_q && !write_pending && !(|vrf_req_valid_q);
+  // With an empty commit queue no VRF store request can leave this cycle, so the
+  // outstanding-store check only needs the registered counters and this cycle's
+  // acknowledgments (not the request handshake).
+  always_comb begin : proc_idle_write_pending
+    idle_write_pending = 1'b0;
+    for (int intf = 0; intf < NrInterfaces; intf++) begin
+      for (int fu = 0; fu < N_FU; fu++) begin
+        int unsigned port;
+        port = intf * N_FU + fu;
+        if ((store_count_q[intf][fu] != '0) &&
+            !((store_count_q[intf][fu] == id_t'(1)) && spatz_mem_rsp_valid_i[port] && rsp_vrf_store[port]))
+          idle_write_pending = 1'b1;
+      end
+    end
+  end
+  assign vrf_path_idle = commit_insn_empty && (&rob_empty) && !busy_q && !idle_write_pending && !(|vrf_req_valid_q);
   assign vrf_store_active = (state_q == VLSU_RunningStore) || write_pending ||
 	      (commit_insn_valid && !commit_insn_q.is_load) || (mem_spatz_req_valid && !mem_is_tile_mem && !mem_spatz_req.op_mem.is_load);
   assign vrf_full_mode_pending = mem_insn_pending_q;
   assign vrf_full_mode_active = (|vrf_full_mode_pending) || (commit_insn_valid && commit_insn_q.is_load) ||
       vrf_req_valid_q[0] || vrf_req_valid_q[1];
-  assign tile_req_ready = !mem_spatz_req.op_mem.is_load ?
-      ((tile_state_q == Tile_Idle) && !tile_store_completion_q[mem_spatz_req.id].valid) : (vrf_path_idle && !tile_mem_busy);
+  // Tile accesses leave in program order: wait for earlier tile requests, and a
+  // tile store also for earlier VRF requests, still in the output registers.
+  assign tile_req_ready = !tile_out_pending && (!mem_spatz_req.op_mem.is_load ?
+      ((tile_state_q == Tile_Idle) && !tile_store_completion_q[mem_spatz_req.id].valid && !vrf_out_pending) :
+      (vrf_path_idle && !tile_mem_busy));
   assign spatz_req_ready_o = spatz_req_ready;
 
 `ifndef SYNTHESIS
   // The controller rejects illegal EMUL groups before they reach the VLSU.
   // Keep this contract local to the address datapath as well: its linear
   // vd-based addressing already crosses physical registers as required.
+  // The queue-ready term uses the port's last flag instead of the counter
+  // compare after the increment (checked equivalent whenever the counter moves).
+  always_ff @(posedge clk_i) begin : check_mem_last_equiv
+    if (rst_ni)
+      assert ((mem_port_finished_d & mem_counter_en) == (mem_operation_last & mem_counter_en))
+        else $error("mem finished/last mismatch");
+  end
+
+  always_ff @(posedge clk_i) begin : check_queue_ready_equiv
+    if (rst_ni)
+      assert ((mem_vrf_insn_tracked && !idle_write_pending &&
+               &(mem_port_finished_q | (mem_port_finished_d & mem_counter_en & {N_FU*NrInterfaces{mem_is_load}}))) ==
+              (mem_vrf_insn_tracked && &(mem_port_finished_q | (mem_port_finished_d & mem_counter_en)) && !write_pending))
+        else $error("Queue ready differs from the write_pending formulation");
+  end
+
+  always_ff @(posedge clk_i) begin : check_tile_tew
+    if (rst_ni && tile_req_accept)
+      assert (mem_spatz_req.op_ope.tew == vew_e'(TileTew))
+        else $error("Tile access with TEW different from the accumulator element width");
+  end
+
+  always_ff @(posedge clk_i) begin : check_tile_load_exclusive
+    if (rst_ni && tile_load_req_fire)
+      assert (!vrf_mem_req_valid) else $error("VRF memory request during a tile load wave");
+  end
+
   always_ff @(posedge clk_i) begin : check_memory_emul_contract
     if (rst_ni && spatz_req_valid_i && spatz_req_ready_o &&
         (spatz_req_i.ex_unit == LSU) && !spatz_req_i.op_ope.is_mem) begin
@@ -1556,7 +1773,10 @@ module spatz_doublebw_vlsu
       VLSU_RunningStore: begin
         if (commit_insn_valid && commit_insn_q.is_load)
           if (&rob_empty)
-            if (!write_pending)
+            // Registered terms only: outstanding stores, or a VRF store still at
+            // the head of the operation queue.
+            if (!idle_write_pending &&
+                !(mem_spatz_req_valid && !mem_is_tile_mem && !mem_spatz_req.op_mem.is_load))
               state_d = VLSU_RunningLoad;
       end
 
@@ -1637,7 +1857,9 @@ module spatz_doublebw_vlsu
       vrf_req_d[intf].last = commit_insn_valid && &commit_finished_d[intf];
 
       // Request indexes
-      vrf_re_o[intf][1] = mem_is_indexed && idx_word_read_needed[intf];
+      // Read the index word whenever an indexed access is active (registered
+      // state only); idx_word_valid checks that the returned word is the needed one.
+      vrf_re_o[intf][1] = mem_is_indexed;
 
       if (commit_insn_valid && commit_insn_q.is_load) begin
         // If we have a valid element in the buffer, store it back to the register file
@@ -1884,6 +2106,24 @@ module spatz_doublebw_vlsu
       );
 
       assign spatz_mem_req_ready[intf][fu] = mem_drv_ready && tag_drv_ready;
+      // Occupancy of the output registers by tile and by VRF requests (0..2).
+      logic [1:0] tile_out_cnt_q, vrf_out_cnt_q;
+      logic out_push, out_push_tile, out_pop_tile;
+      assign out_push      = spatz_mem_req_valid[intf][fu] && spatz_mem_req_ready[intf][fu];
+      assign out_push_tile = out_push && tile_mem_req_valid[port];
+      assign out_pop_tile  = mem_out_fire[port] && spatz_mem_req_tag_o[port].tile_owned;
+      always_ff @(posedge clk_i or negedge rst_ni) begin : p_out_cnt
+        if (!rst_ni) begin
+          tile_out_cnt_q <= '0;
+          vrf_out_cnt_q  <= '0;
+        end else begin
+          tile_out_cnt_q <= tile_out_cnt_q + out_push_tile - out_pop_tile;
+          vrf_out_cnt_q  <= vrf_out_cnt_q + (out_push && !out_push_tile) -
+                            (mem_out_fire[port] && !spatz_mem_req_tag_o[port].tile_owned);
+        end
+      end
+      assign tile_out_pending_port[port] = (tile_out_cnt_q != '0);
+      assign vrf_out_pending_port[port]  = (vrf_out_cnt_q != '0);
       assign spatz_mem_req_valid_o[port] = mem_drv_valid && tag_drv_valid && !tag_full[port];
       assign mem_out_fire[port] = spatz_mem_req_valid_o[port] && spatz_mem_req_ready_i[port];
 
