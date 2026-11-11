@@ -71,18 +71,6 @@ packages:
       Git: https://github.com/pulp-platform/fpu_div_sqrt_mvp.git
     dependencies:
     - common_cells
-  idma:
-    revision: 28a36e5e07705549e59fc33db96ab681bc1ca88e
-    version: 0.6.5
-    source:
-      Git: https://github.com/pulp-platform/iDMA.git
-    dependencies:
-    - axi
-    - axi_stream
-    - common_cells
-    - common_verification
-    - obi
-    - register_interface
   obi:
     revision: 0155fc34e900c7c884e081c0a1114a247937ff69
     version: 0.1.7
@@ -120,6 +108,18 @@ packages:
     - axi
     - common_cells
     - common_verification
+  relidma:
+    revision: 58525aac1fc9f6002e726ca7fc4dd6045700d398
+    version: null
+    source:
+      Git: https://iis-git.ee.ethz.ch/space-pulp/relidma.git
+    dependencies:
+    - apb
+    - axi
+    - axi_stream
+    - common_cells
+    - common_verification
+    - obi
   riscv-dbg:
     revision: deed17e18c0d61ce8dc554300bb4dd5c39be2a13
     version: 0.10.1
