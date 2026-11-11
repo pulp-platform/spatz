@@ -129,6 +129,7 @@ add_snitch_test(vfsqrt isa/rv64uv/vfsqrt.c)
 
 add_snitch_test(vfmin isa/rv64uv/vfmin.c)
 add_snitch_test(vfmax isa/rv64uv/vfmax.c)
+add_snitch_test(vfclass isa/rv64uv/vfclass.c)
 
 add_snitch_test(vmfeq isa/rv64uv/vmfeq.c)
 add_snitch_test(vmfne isa/rv64uv/vmfne.c)
