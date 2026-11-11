@@ -109,14 +109,14 @@ void TEST_CASE8(void) {
   reset_vxsat;
   asm volatile("vsaddu.vv v3, v1, v2" ::: "v3");
   read_vxsat(out_vxsat);
-  XCMP(30, out_vxsat, 1);   // bug: reads 0 (read overtakes the saturation)
+  XCMP(8, out_vxsat, 1);   // bug: reads 0 (read overtakes the saturation)
 
   // Case 31: a clear must not be undone by an older saturation
   reset_vxsat;
   asm volatile("vsaddu.vv v3, v1, v2" ::: "v3");
   reset_vxsat;
   read_vxsat(out_vxsat);
-  XCMP(8, out_vxsat, 0);   // bug: reads 1 (late saturation sets it again)
+  XCMP(9, out_vxsat, 0);   // bug: reads 1 (late saturation sets it again)
 }
 
 int main(void) {
