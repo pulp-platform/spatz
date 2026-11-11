@@ -2348,6 +2348,24 @@ extern "C" {
       .index =                                                                 \
           SPATZ_CLUSTER_PERIPHERAL_VSLDU_UNCORRECTABLE_COUNT_COUNT_0_OFFSET})
 
+// dma correctable error counter.
+#define SPATZ_CLUSTER_PERIPHERAL_DMA_CORRECTABLE_COUNT_REG_OFFSET 0x558
+#define SPATZ_CLUSTER_PERIPHERAL_DMA_CORRECTABLE_COUNT_COUNT_MASK 0xffffffff
+#define SPATZ_CLUSTER_PERIPHERAL_DMA_CORRECTABLE_COUNT_COUNT_OFFSET 0
+#define SPATZ_CLUSTER_PERIPHERAL_DMA_CORRECTABLE_COUNT_COUNT_FIELD             \
+  ((bitfield_field32_t){                                                       \
+      .mask = SPATZ_CLUSTER_PERIPHERAL_DMA_CORRECTABLE_COUNT_COUNT_MASK,       \
+      .index = SPATZ_CLUSTER_PERIPHERAL_DMA_CORRECTABLE_COUNT_COUNT_OFFSET})
+
+// dma uncorrectable error counter.
+#define SPATZ_CLUSTER_PERIPHERAL_DMA_UNCORRECTABLE_COUNT_REG_OFFSET 0x560
+#define SPATZ_CLUSTER_PERIPHERAL_DMA_UNCORRECTABLE_COUNT_COUNT_MASK 0xffffffff
+#define SPATZ_CLUSTER_PERIPHERAL_DMA_UNCORRECTABLE_COUNT_COUNT_OFFSET 0
+#define SPATZ_CLUSTER_PERIPHERAL_DMA_UNCORRECTABLE_COUNT_COUNT_FIELD           \
+  ((bitfield_field32_t){                                                       \
+      .mask = SPATZ_CLUSTER_PERIPHERAL_DMA_UNCORRECTABLE_COUNT_COUNT_MASK,     \
+      .index = SPATZ_CLUSTER_PERIPHERAL_DMA_UNCORRECTABLE_COUNT_COUNT_OFFSET})
+
 #ifdef __cplusplus
 } // extern "C"
 #endif
