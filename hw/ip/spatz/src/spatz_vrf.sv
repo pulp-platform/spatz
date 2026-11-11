@@ -10,11 +10,15 @@ module spatz_vrf
   import spatz_pkg::*;
   #(
     parameter int unsigned NrReadPorts  = 5,
-    parameter int unsigned NrWritePorts = 3
+    parameter int unsigned NrWritePorts = 3,
+    parameter bit          DualThread   = 1'b0
   ) (
     input  logic                         clk_i,
     input  logic                         rst_ni,
     input  logic                         testmode_i,
+    // Dual-thread layout, and the thread whose half of the VRF is accessed
+    input  logic                         dual_mode_i,
+    input  logic                         thid_i,
     // Write ports
     input  vrf_addr_t [NrWritePorts-1:0] waddr_i,
     input  vrf_data_t [NrWritePorts-1:0] wdata_i,
@@ -42,13 +46,22 @@ module spatz_vrf
 
   typedef logic [$bits(vrf_addr_t)-$clog2(NrVRFBanks)-1:0] vregfile_addr_t;
 
-  function automatic logic [$clog2(NrWordsPerBank)-1:0] f_vreg(vrf_addr_t addr);
-    f_vreg = addr[$clog2(NrVRFWords)-1:$clog2(NrVRFBanks)];
+  // Single-thread layout: addr = {vreg, word}, the row is the vreg.
+  // Dual-thread layout: addr = {vreg, word[0]} (half as many words per vreg); thread t owns the
+  // rows [t*NrWordsPerBank/2, (t+1)*NrWordsPerBank/2), and each row holds two vregs of one thread.
+  //   row  = {thid, vreg[4:1]}   bank = {vreg[0], word[0]} + vreg[4:3]
+  function automatic logic [$clog2(NrWordsPerBank)-1:0] f_vreg(vrf_addr_t addr, logic dual,
+                                                               logic thid);
+    if (dual)
+      f_vreg = {thid, addr[$clog2(NrVRFWords)-2:$clog2(NrVRFBanks)]};
+    else
+      f_vreg = addr[$clog2(NrVRFWords)-1:$clog2(NrVRFBanks)];
   endfunction: f_vreg
 
-  function automatic logic [$clog2(NrVRFBanks)-1:0] f_bank(vrf_addr_t addr);
+  function automatic logic [$clog2(NrVRFBanks)-1:0] f_bank(vrf_addr_t addr, logic dual);
     // Is this vreg divisible by eight?
-    automatic logic [1:0] vreg8 = addr[$clog2(8*NrWordsPerVector) +: 2];
+    automatic logic [1:0] vreg8 = dual ? addr[$clog2(4*NrWordsPerVector) +: 2] :
+                                         addr[$clog2(8*NrWordsPerVector) +: 2];
 
     // Barber's pole. Advance the starting bank of each vector by one every eight vector registers.
     f_bank = addr[$clog2(NrVRFBanks)-1:0] + vreg8;
@@ -76,7 +89,7 @@ module spatz_vrf
   always_comb begin: gen_write_request
     for (int bank = 0; bank < NrVRFBanks; bank++) begin
       for (int port = 0; port < NrWritePorts; port++) begin
-        write_request[bank][port] = we_i[port] && f_bank(waddr_i[port]) == bank;
+        write_request[bank][port] = we_i[port] && f_bank(waddr_i[port], dual_mode_i) == bank;
       end
     end
   end: gen_write_request
@@ -93,19 +106,19 @@ module spatz_vrf
     for (int unsigned bank = 0; bank < NrVRFBanks; bank++) begin
       // Bank write port 0 - Priority: vd (0) -> lsu (round-robin) <-> sld (round-robin)
       if (write_request[bank][VFU_VD_WD]) begin
-        waddr[bank]         = f_vreg(waddr_i[VFU_VD_WD]);
+        waddr[bank]         = f_vreg(waddr_i[VFU_VD_WD], dual_mode_i, thid_i);
         wdata[bank]         = wdata_i[VFU_VD_WD];
         we[bank]            = 1'b1;
         wbe[bank]           = wbe_i[VFU_VD_WD];
         wvalid_o[VFU_VD_WD] = 1'b1;
       end else if (write_request[bank][VLSU_VD_WD]) begin
-        waddr[bank]          = f_vreg(waddr_i[VLSU_VD_WD]);
+        waddr[bank]          = f_vreg(waddr_i[VLSU_VD_WD], dual_mode_i, thid_i);
         wdata[bank]          = wdata_i[VLSU_VD_WD];
         we[bank]             = 1'b1;
         wbe[bank]            = wbe_i[VLSU_VD_WD];
         wvalid_o[VLSU_VD_WD] = 1'b1;
       end else if (write_request[bank][VSLDU_VD_WD]) begin
-        waddr[bank]           = f_vreg(waddr_i[VSLDU_VD_WD]);
+        waddr[bank]           = f_vreg(waddr_i[VSLDU_VD_WD], dual_mode_i, thid_i);
         wdata[bank]           = wdata_i[VSLDU_VD_WD];
         we[bank]              = 1'b1;
         wbe[bank]             = wbe_i[VSLDU_VD_WD];
@@ -122,7 +135,7 @@ module spatz_vrf
   always_comb begin: gen_read_request
     for (int bank = 0; bank < NrVRFBanks; bank++) begin
       for (int port = 0; port < NrReadPorts; port++) begin
-        read_request[bank][port] = re_i[port] && f_bank(raddr_i[port]) == bank;
+        read_request[bank][port] = re_i[port] && f_bank(raddr_i[port], dual_mode_i) == bank;
       end
     end
   end: gen_read_request
@@ -139,33 +152,33 @@ module spatz_vrf
     for (int unsigned bank = 0; bank < NrVRFBanks; bank++) begin
       // Bank read port 0 - Priority: VFU (2) -> VLSU
       if (read_request[bank][VFU_VS2_RD]) begin
-        raddr[bank][0]       = f_vreg(raddr_i[VFU_VS2_RD]);
+        raddr[bank][0]       = f_vreg(raddr_i[VFU_VS2_RD], dual_mode_i, thid_i);
         rdata_o[VFU_VS2_RD]  = rdata[bank][0];
         rvalid_o[VFU_VS2_RD] = 1'b1;
       end else if (read_request[bank][VLSU_VS2_RD]) begin
-        raddr[bank][0]        = f_vreg(raddr_i[VLSU_VS2_RD]);
+        raddr[bank][0]        = f_vreg(raddr_i[VLSU_VS2_RD], dual_mode_i, thid_i);
         rdata_o[VLSU_VS2_RD]  = rdata[bank][0];
         rvalid_o[VLSU_VS2_RD] = 1'b1;
       end
 
       // Bank read port 1 - Priority: VFU (1) -> VSLDU
       if (read_request[bank][VFU_VS1_RD]) begin
-        raddr[bank][1]       = f_vreg(raddr_i[VFU_VS1_RD]);
+        raddr[bank][1]       = f_vreg(raddr_i[VFU_VS1_RD], dual_mode_i, thid_i);
         rdata_o[VFU_VS1_RD]  = rdata[bank][1];
         rvalid_o[VFU_VS1_RD] = 1'b1;
       end else if (read_request[bank][VSLDU_VS2_RD]) begin
-        raddr[bank][1]         = f_vreg(raddr_i[VSLDU_VS2_RD]);
+        raddr[bank][1]         = f_vreg(raddr_i[VSLDU_VS2_RD], dual_mode_i, thid_i);
         rdata_o[VSLDU_VS2_RD]  = rdata[bank][1];
         rvalid_o[VSLDU_VS2_RD] = 1'b1;
       end
 
       // Bank read port 2 - Priority: VFU (D) -> VLSU
       if (read_request[bank][VFU_VD_RD]) begin
-        raddr[bank][2]      = f_vreg(raddr_i[VFU_VD_RD]);
+        raddr[bank][2]      = f_vreg(raddr_i[VFU_VD_RD], dual_mode_i, thid_i);
         rdata_o[VFU_VD_RD]  = rdata[bank][2];
         rvalid_o[VFU_VD_RD] = 1'b1;
       end else if (read_request[bank][VLSU_VD_RD]) begin
-        raddr[bank][2]       = f_vreg(raddr_i[VLSU_VD_RD]);
+        raddr[bank][2]       = f_vreg(raddr_i[VLSU_VD_RD], dual_mode_i, thid_i);
         rdata_o[VLSU_VD_RD]  = rdata[bank][2];
         rvalid_o[VLSU_VD_RD] = 1'b1;
       end
@@ -214,5 +227,23 @@ module spatz_vrf
 
   if (NrReadPorts / NrReadPortsPerBank > NrVRFBanks)
     $error("[spatz_vrf] The number of vregfile banks needs to be increased to handle the number of read ports.");
+
+  // The dual-thread layout puts the words of two half-length vregs in one row of all banks
+  if (DualThread && (NrVRFBanks != NrWordsPerVector || NrVRFBanks < 4))
+    $error("[spatz_vrf] The dual-thread layout needs NrVRFBanks == NrWordsPerVector >= 4.");
+
+`ifndef TARGET_SYNTHESIS
+  // In dual mode a thread only has NrVRFWords/2 words: the address MSB must stay clear
+  for (genvar p = 0; p < NrWritePorts; p++) begin : gen_assert_waddr
+    assert property (@(posedge clk_i) disable iff (!rst_ni)
+                     (dual_mode_i && we_i[p]) |-> !waddr_i[p][$clog2(NrVRFWords)-1])
+    else $error("[spatz_vrf] Write port %0d beyond the half VRF of a thread", p);
+  end
+  for (genvar p = 0; p < NrReadPorts; p++) begin : gen_assert_raddr
+    assert property (@(posedge clk_i) disable iff (!rst_ni)
+                     (dual_mode_i && re_i[p]) |-> !raddr_i[p][$clog2(NrVRFWords)-1])
+    else $error("[spatz_vrf] Read port %0d beyond the half VRF of a thread", p);
+  end
+`endif
 
 endmodule : spatz_vrf

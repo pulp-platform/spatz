@@ -21,6 +21,8 @@ module spatz_vlsu
   ) (
     input  logic                            clk_i,
     input  logic                            rst_ni,
+    // Dual-thread VRF layout: a vreg holds half as many words
+    input  logic                            dual_mode_i,
     // Spatz request
     input  spatz_req_t                      spatz_req_i,
     input  logic                            spatz_req_valid_i,
@@ -446,14 +448,20 @@ module spatz_vlsu
       mem_req_addr[port]        = (addr >> MAXEW) << MAXEW;
       mem_req_addr_offset[port] = addr[int'(MAXEW)-1:0];
 
-      pending_index[port] = (mem_idx_counter_q[port][$clog2(NrWordsPerVector*ELENB)-1:0] >> MAXEW) != vs2_vreg_addr[$clog2(NrWordsPerVector)-1:0];
+      // Word of the index vector this port needs vs. the word currently read from vs2
+      pending_index[port] = dual_mode_i ?
+        (mem_idx_counter_q[port][$clog2(NrWordsPerVector/2*ELENB)-1:0] >> MAXEW) != vs2_vreg_addr[$clog2(NrWordsPerVector)-2:0] :
+        (mem_idx_counter_q[port][$clog2(NrWordsPerVector*ELENB)-1:0] >> MAXEW) != vs2_vreg_addr[$clog2(NrWordsPerVector)-1:0];
     end
   end: gen_mem_req_addr
 
   // Calculate the register file address
   always_comb begin : gen_vreg_addr
-    vd_vreg_addr  = (commit_insn_q.vd << $clog2(NrWordsPerVector)) + $unsigned(vd_elem_id);
-    vs2_vreg_addr = (mem_spatz_req.vs2 << $clog2(NrWordsPerVector)) + $unsigned(vs2_elem_id_q);
+    // A vreg holds half as many words in the dual-thread layout
+    vd_vreg_addr  = (dual_mode_i ? commit_insn_q.vd << ($clog2(NrWordsPerVector) - 1) :
+                                   commit_insn_q.vd << $clog2(NrWordsPerVector)) + $unsigned(vd_elem_id);
+    vs2_vreg_addr = (dual_mode_i ? mem_spatz_req.vs2 << ($clog2(NrWordsPerVector) - 1) :
+                                   mem_spatz_req.vs2 << $clog2(NrWordsPerVector)) + $unsigned(vs2_elem_id_q);
   end
 
   ///////////////

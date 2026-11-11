@@ -19,6 +19,8 @@ module spatz_vfu
     input  logic             clk_i,
     input  logic             rst_ni,
     input  logic [31:0]      hart_id_i,
+    // Dual-thread VRF layout: a vreg holds half as many words
+    input  logic             dual_mode_i,
     // Spatz req
     input  spatz_req_t       spatz_req_i,
     input  logic             spatz_req_valid_i,
@@ -735,9 +737,12 @@ module spatz_vfu
     };
 
     if (spatz_req_valid && vl_q == '0) begin
-      vreg_addr_d[0] = (spatz_req.vs2 + vstart) << $clog2(NrWordsPerVector);
-      vreg_addr_d[1] = (spatz_req.vs1 + vstart) << $clog2(NrWordsPerVector);
-      vreg_addr_d[2] = (spatz_req.vd + vstart) << $clog2(NrWordsPerVector);
+      vreg_addr_d[0] = dual_mode_i ? (spatz_req.vs2 + vstart) << ($clog2(NrWordsPerVector) - 1) :
+                                     (spatz_req.vs2 + vstart) << $clog2(NrWordsPerVector);
+      vreg_addr_d[1] = dual_mode_i ? (spatz_req.vs1 + vstart) << ($clog2(NrWordsPerVector) - 1) :
+                                     (spatz_req.vs1 + vstart) << $clog2(NrWordsPerVector);
+      vreg_addr_d[2] = dual_mode_i ? (spatz_req.vd + vstart) << ($clog2(NrWordsPerVector) - 1) :
+                                     (spatz_req.vd + vstart) << $clog2(NrWordsPerVector);
 
       // Direct feedthrough
       vrf_raddr_o = vreg_addr_d;

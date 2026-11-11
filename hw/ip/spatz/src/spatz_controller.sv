@@ -23,6 +23,8 @@ module spatz_controller
   ) (
     input  logic                                   clk_i,
     input  logic                                   rst_ni,
+    // Dual-thread VRF layout: every vreg is half as long
+    input  logic                                   dual_mode_i,
     // Snitch Issue
     input  logic                                   issue_valid_i,
     output logic                                   issue_ready_o,
@@ -121,7 +123,7 @@ module spatz_controller
           vtype_d = spatz_req.vtype;
           if (!spatz_req.op_cfg.keep_vl) begin
             // Normal stripmining mode or set to MAXVL
-            vlmax = VLENB >> spatz_req.vtype.vsew;
+            vlmax = (dual_mode_i ? VLENB / 2 : VLENB) >> spatz_req.vtype.vsew;
 
             unique case (spatz_req.vtype.vlmul)
               LMUL_F2: vlmax >>= 1;
@@ -133,7 +135,8 @@ module spatz_controller
               default: vlmax = vlmax;
             endcase
 
-            vl_d = (spatz_req.rs1 == '1) ? (MAXVL >> spatz_req.vtype.vsew) : (int'(vlmax) < spatz_req.rs1) ? vlmax : spatz_req.rs1;
+            vl_d = (spatz_req.rs1 == '1) ? ((dual_mode_i ? MAXVL / 2 : MAXVL) >> spatz_req.vtype.vsew) :
+                   (int'(vlmax) < spatz_req.rs1) ? vlmax : spatz_req.rs1;
           end else begin
             // Keep vl mode
 
@@ -575,7 +578,7 @@ module spatz_controller
             riscv_instr::CSR_VSTART: rsp_d.data = elen_t'(vstart_q);
             riscv_instr::CSR_VL    : rsp_d.data = elen_t'(vl_q);
             riscv_instr::CSR_VTYPE : rsp_d.data = elen_t'(vtype_q);
-            riscv_instr::CSR_VLENB : rsp_d.data = elen_t'(VLENB);
+            riscv_instr::CSR_VLENB : rsp_d.data = elen_t'(dual_mode_i ? VLENB / 2 : VLENB);
             riscv_instr::CSR_VXSAT : rsp_d.data = '0;
             riscv_instr::CSR_VXRM  : rsp_d.data = '0;
             riscv_instr::CSR_VCSR  : rsp_d.data = '0;

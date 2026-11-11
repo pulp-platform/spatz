@@ -13,6 +13,8 @@
 // back again. Finally, the Vector Register File (VRF) is the main register file
 // that stores all of the currently used vectors close to the execution units.
 
+`include "common_cells/registers.svh"
+
 module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     parameter int                  unsigned NrMemPorts          = 1,
     parameter bit                           RegisterRsp         = 0,
@@ -28,6 +30,8 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     parameter type                          spatz_rsp_t         = logic,
     /// FPU configuration.
     parameter fpu_implementation_t          FPUImplementation   = fpu_implementation_t'(0),
+    /// Dual-thread support: in dual mode the VRF is split between two threads
+    parameter bit                           DualThread          = 1'b0,
     // Derived parameters. DO NOT CHANGE!
     parameter int                  unsigned NumOutstandingLoads = 8
   ) (
@@ -35,6 +39,11 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     input  logic                              rst_ni,
     input  logic                              testmode_i,
     input  logic             [31:0]           hart_id_i,
+    // Dual-thread mode: the VRF is split, each thread's vector registers are half as long
+    // (only with DualThread)
+    input  logic                              dual_mode_i,
+    // Thread of the instruction offered on the issue interface (only with DualThread)
+    input  logic                              issue_thid_i,
     // Snitch Interface
     input  logic                              issue_valid_i,
     output logic                              issue_ready_o,
@@ -77,6 +86,23 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   // Number of ports of the vector register file
   localparam NrWritePorts = 3;
   localparam NrReadPorts  = 6;
+
+  /////////////////
+  // Dual thread //
+  /////////////////
+
+  // The mode only changes while Spatz is drained. One thread at a time for now: the VRF uses the
+  // thread of the last issued instruction.
+  logic dual_mode;
+  logic vrf_thid;
+
+  if (DualThread) begin : gen_dual_thread
+    assign dual_mode = dual_mode_i;
+    `FFL(vrf_thid, issue_thid_i, issue_valid_i && issue_ready_o, 1'b0)
+  end else begin : gen_single_thread
+    assign dual_mode = 1'b0;
+    assign vrf_thid  = 1'b0;
+  end
 
   /////////////
   // Signals //
@@ -201,22 +227,25 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
 
   spatz_vrf #(
     .NrReadPorts (NrReadPorts ),
-    .NrWritePorts(NrWritePorts)
+    .NrWritePorts(NrWritePorts),
+    .DualThread  (DualThread  )
   ) i_vrf (
-    .clk_i     (clk_i     ),
-    .rst_ni    (rst_ni    ),
-    .testmode_i(testmode_i),
+    .clk_i      (clk_i     ),
+    .rst_ni     (rst_ni    ),
+    .testmode_i (testmode_i),
+    .dual_mode_i(dual_mode ),
+    .thid_i     (vrf_thid  ),
     // Write Ports
-    .waddr_i   (vrf_waddr ),
-    .wdata_i   (vrf_wdata ),
-    .we_i      (vrf_we    ),
-    .wbe_i     (vrf_wbe   ),
-    .wvalid_o  (vrf_wvalid),
+    .waddr_i    (vrf_waddr ),
+    .wdata_i    (vrf_wdata ),
+    .we_i       (vrf_we    ),
+    .wbe_i      (vrf_wbe   ),
+    .wvalid_o   (vrf_wvalid),
     // Read Ports
-    .raddr_i   (vrf_raddr ),
-    .re_i      (vrf_re    ),
-    .rdata_o   (vrf_rdata ),
-    .rvalid_o  (vrf_rvalid)
+    .raddr_i    (vrf_raddr ),
+    .re_i       (vrf_re    ),
+    .rdata_o    (vrf_rdata ),
+    .rvalid_o   (vrf_rvalid)
   );
 
   ////////////////
@@ -238,6 +267,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   ) i_controller (
     .clk_i            (clk_i           ),
     .rst_ni           (rst_ni          ),
+    .dual_mode_i      (dual_mode       ),
     // X-intf
     .issue_valid_i    (issue_valid     ),
     .issue_ready_o    (issue_ready     ),
@@ -282,6 +312,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     .clk_i            (clk_i                                                   ),
     .rst_ni           (rst_ni                                                  ),
     .hart_id_i        (hart_id_i                                               ),
+    .dual_mode_i      (dual_mode                                               ),
     // Request
     .spatz_req_i      (spatz_req                                               ),
     .spatz_req_valid_i(spatz_req_valid                                         ),
@@ -317,6 +348,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   ) i_vlsu (
     .clk_i                   (clk_i                                                ),
     .rst_ni                  (rst_ni                                               ),
+    .dual_mode_i             (dual_mode                                            ),
     // Request
     .spatz_req_i             (spatz_req                                            ),
     .spatz_req_valid_i       (spatz_req_valid                                      ),
@@ -354,6 +386,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   spatz_vsldu i_vsldu (
     .clk_i            (clk_i                                          ),
     .rst_ni           (rst_ni                                         ),
+    .dual_mode_i      (dual_mode                                      ),
     // Request
     .spatz_req_i      (spatz_req                                      ),
     .spatz_req_valid_i(spatz_req_valid                                ),

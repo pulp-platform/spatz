@@ -12,6 +12,8 @@ module spatz_vsldu
   import cf_math_pkg::idx_width; (
     input  logic             clk_i,
     input  logic             rst_ni,
+    // Dual-thread VRF layout: a vreg holds half as many words
+    input  logic             dual_mode_i,
     // Spatz request
     input  spatz_req_t       spatz_req_i,
     input  logic             spatz_req_valid_i,
@@ -370,8 +372,9 @@ module spatz_vsldu
       end else begin
         data_in = vrf_rdata_i;
 
-        // If we are already over the MAXVL, all continuing elements are zero
-        if ((vreg_counter_q >= MAXVL - slide_amount_q) || (vreg_operation_last && spatz_req.op_sld.insert))
+        // If we are already over the MAXVL, all continuing elements are zero (half in dual mode)
+        if ((vreg_counter_q >= (dual_mode_i ? MAXVL / 2 : MAXVL) - slide_amount_q) ||
+            (vreg_operation_last && spatz_req.op_sld.insert))
           data_in = '0;
       end
 
@@ -447,8 +450,13 @@ module spatz_vsldu
 
   always_comb begin
     sld_offset_rd   = is_slide_up ? (prefetch_q ? -slide_amount_q[$bits(vlen_t)-1:$clog2(VRFWordBWidth)] - 1 : -slide_amount_q[$bits(vlen_t)-1:$clog2(VRFWordBWidth)]) : prefetch_q ? slide_amount_q[$bits(vlen_t)-1:$clog2(VRFWordBWidth)] : slide_amount_q[$bits(vlen_t)-1:$clog2(VRFWordBWidth)] + 1;
-    vrf_raddr_o     = {spatz_req.vs2, $clog2(NrWordsPerVector)'(1'b0)} + vreg_counter_q[$bits(vlen_t)-1:$clog2(VRFWordBWidth)] + sld_offset_rd;
-    vrf_req_d.waddr = {spatz_req.vd, $clog2(NrWordsPerVector)'(1'b0)} + vreg_counter_q[$bits(vlen_t)-1:$clog2(VRFWordBWidth)];
+    // A vreg holds half as many words in the dual-thread layout
+    vrf_raddr_o     = (dual_mode_i ? {spatz_req.vs2, ($clog2(NrWordsPerVector) - 1)'(1'b0)} :
+                                     {spatz_req.vs2, $clog2(NrWordsPerVector)'(1'b0)}) +
+                      vreg_counter_q[$bits(vlen_t)-1:$clog2(VRFWordBWidth)] + sld_offset_rd;
+    vrf_req_d.waddr = (dual_mode_i ? {spatz_req.vd, ($clog2(NrWordsPerVector) - 1)'(1'b0)} :
+                                     {spatz_req.vd, $clog2(NrWordsPerVector)'(1'b0)}) +
+                      vreg_counter_q[$bits(vlen_t)-1:$clog2(VRFWordBWidth)];
   end
 
 endmodule : spatz_vsldu
