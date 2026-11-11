@@ -36,6 +36,7 @@ before_script:
   - rm -f "${HOME}/.gitconfig.lock"
   - rm -f "${HOME}/.gitconfig"
   - git config --global url."https://${READ_USER}:${READ_TOKEN}@iis-git.ee.ethz.ch/".insteadOf "https://iis-git.ee.ethz.ch/"
+  - git config --global url."https://${RELIDMA_USER}:${RELIDMA_TOKEN}@iis-git.ee.ethz.ch/space-pulp/relidma".insteadOf "https://iis-git.ee.ethz.ch/space-pulp/relidma"
 
 stages:
   - tools
