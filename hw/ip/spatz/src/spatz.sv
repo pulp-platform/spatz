@@ -52,6 +52,8 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     output logic                              rsp_valid_o,
     input  logic                              rsp_ready_i,
     output spatz_rsp_t                        rsp_o,
+    // Thread the response belongs to (only with DualThread)
+    output logic                              rsp_thid_o,
     // Memory Request
     output spatz_mem_req_t   [NrMemPorts-1:0] spatz_mem_req_o,
     output logic             [NrMemPorts-1:0] spatz_mem_req_valid_o,
@@ -62,6 +64,8 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     // Memory Finished
     output logic             [1:0]            spatz_mem_finished_o,
     output logic             [1:0]            spatz_mem_str_finished_o,
+    // Thread of the VLSU instruction signalled on spatz_mem_finished_o[1] (only with DualThread)
+    output logic                              spatz_mem_fin_thid_o,
     // High when every VLSU store has been acked by memory (for fences)
     output logic                              spatz_st_rsp_done_o,
     // FPU memory interface interface
@@ -91,17 +95,17 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   // Dual thread //
   /////////////////
 
-  // The mode only changes while Spatz is drained. One thread at a time for now: the VRF uses the
-  // thread of the last issued instruction.
+  // The mode only changes while Spatz is drained. Every instruction carries the thread it was
+  // issued by; the threads have separate CSRs, scoreboards and VRF halves.
   logic dual_mode;
-  logic vrf_thid;
+  logic issue_thid;
 
   if (DualThread) begin : gen_dual_thread
-    assign dual_mode = dual_mode_i;
-    `FFL(vrf_thid, issue_thid_i, issue_valid_i && issue_ready_o, 1'b0)
+    assign dual_mode  = dual_mode_i;
+    assign issue_thid = issue_thid_i;
   end else begin : gen_single_thread
-    assign dual_mode = 1'b0;
-    assign vrf_thid  = 1'b0;
+    assign dual_mode  = 1'b0;
+    assign issue_thid = 1'b0;
   end
 
   /////////////
@@ -135,6 +139,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   logic             issue_ready;
   spatz_issue_rsp_t issue_rsp;
   spatz_rsp_t       resp;
+  logic             resp_thid;
   logic             resp_valid;
   logic             resp_ready;
 
@@ -154,6 +159,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     assign issue_rsp_o   = issue_rsp;
 
     assign rsp_o       = resp;
+    assign rsp_thid_o  = resp_thid;
     assign rsp_valid_o = resp_valid;
     assign resp_ready  = rsp_ready_i;
 
@@ -166,6 +172,9 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     assign fp_lsu_mem_finished     = 1'b0;
     assign fp_lsu_mem_str_finished = 1'b0;
   end: gen_no_fpu_sequencer else begin: gen_fpu_sequencer
+    // Single thread only
+    assign rsp_thid_o = 1'b0;
+
     spatz_fpu_sequencer #(
       .dreq_t             (dreq_t              ),
       .drsp_t             (drsp_t              ),
@@ -234,7 +243,6 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     .rst_ni     (rst_ni    ),
     .testmode_i (testmode_i),
     .dual_mode_i(dual_mode ),
-    .thid_i     (vrf_thid  ),
     // Write Ports
     .waddr_i    (vrf_waddr ),
     .wdata_i    (vrf_wdata ),
@@ -269,6 +277,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     .rst_ni           (rst_ni          ),
     .dual_mode_i      (dual_mode       ),
     // X-intf
+    .issue_thid_i     (issue_thid      ),
     .issue_valid_i    (issue_valid     ),
     .issue_ready_o    (issue_ready     ),
     .issue_req_i      (issue_req       ),
@@ -276,6 +285,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     .rsp_valid_o      (resp_valid      ),
     .rsp_ready_i      (resp_ready      ),
     .rsp_o            (resp            ),
+    .rsp_thid_o       (resp_thid       ),
     // FPU side channel
     .fpu_rnd_mode_i   (fpu_rnd_mode_i  ),
     .fpu_fmt_mode_i   (fpu_fmt_mode_i  ),
@@ -376,6 +386,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     .spatz_mem_rsp_ready_o   (spatz_mem_rsp_ready_o                                ),
     .spatz_mem_finished_o    (spatz_mem_finished                                   ),
     .spatz_mem_str_finished_o(spatz_mem_str_finished                               ),
+    .mem_finished_thid_o     (spatz_mem_fin_thid_o                                 ),
     .spatz_st_rsp_done_o     (spatz_st_rsp_done_o                                  )
   );
 
@@ -425,5 +436,8 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
 
   if (NrMemPorts == 0)
     $error("[spatz] Spatz requires at least one memory port.");
+
+  if (DualThread && FPU)
+    $error("[spatz] Dual-thread Spatz does not support the FPU yet.");
 
 endmodule : spatz

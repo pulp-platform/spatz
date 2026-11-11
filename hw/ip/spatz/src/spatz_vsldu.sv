@@ -279,7 +279,9 @@ module spatz_vsldu
     end
 
     // Do we have to increment the counter?
-    vreg_counter_en = ((spatz_req.use_vs2 && vrf_re_o && vrf_rvalid_i) || !spatz_req.use_vs2) && ((spatz_req.use_vd && vrf_req_valid_d && vrf_req_ready_d) || !spatz_req.use_vd);
+    vreg_counter_en = ((spatz_req.use_vs2 && vrf_re_o        && vrf_rvalid_i)    || !spatz_req.use_vs2) &&
+                      ((spatz_req.use_vd  && vrf_req_valid_d && vrf_req_ready_d) || !spatz_req.use_vd);
+
     if (vreg_counter_en) begin
       if (vreg_operation_last)
         // Reset the counter
@@ -446,17 +448,25 @@ module spatz_vsldu
   // Address Generation //
   ////////////////////////
 
-  vlen_t sld_offset_rd;
+  vlen_t     sld_offset_rd;
+  vrf_addr_t sld_raddr, sld_waddr;
 
   always_comb begin
-    sld_offset_rd   = is_slide_up ? (prefetch_q ? -slide_amount_q[$bits(vlen_t)-1:$clog2(VRFWordBWidth)] - 1 : -slide_amount_q[$bits(vlen_t)-1:$clog2(VRFWordBWidth)]) : prefetch_q ? slide_amount_q[$bits(vlen_t)-1:$clog2(VRFWordBWidth)] : slide_amount_q[$bits(vlen_t)-1:$clog2(VRFWordBWidth)] + 1;
+    sld_offset_rd = is_slide_up ?
+                    (prefetch_q ? -slide_amount_q[$bits(vlen_t)-1:$clog2(VRFWordBWidth)] - 1 : -slide_amount_q[$bits(vlen_t)-1:$clog2(VRFWordBWidth)]) :
+                     prefetch_q ?  slide_amount_q[$bits(vlen_t)-1:$clog2(VRFWordBWidth)]     :  slide_amount_q[$bits(vlen_t)-1:$clog2(VRFWordBWidth)] + 1;
+
     // A vreg holds half as many words in the dual-thread layout
-    vrf_raddr_o     = (dual_mode_i ? {spatz_req.vs2, ($clog2(NrWordsPerVector) - 1)'(1'b0)} :
-                                     {spatz_req.vs2, $clog2(NrWordsPerVector)'(1'b0)}) +
-                      vreg_counter_q[$bits(vlen_t)-1:$clog2(VRFWordBWidth)] + sld_offset_rd;
-    vrf_req_d.waddr = (dual_mode_i ? {spatz_req.vd, ($clog2(NrWordsPerVector) - 1)'(1'b0)} :
-                                     {spatz_req.vd, $clog2(NrWordsPerVector)'(1'b0)}) +
-                      vreg_counter_q[$bits(vlen_t)-1:$clog2(VRFWordBWidth)];
+    sld_raddr     = (dual_mode_i ? {spatz_req.vs2, ($clog2(NrWordsPerVector) - 1)'(1'b0)} :
+                                   {spatz_req.vs2, $clog2(NrWordsPerVector)'(1'b0)}) +
+                    vreg_counter_q[$bits(vlen_t)-1:$clog2(VRFWordBWidth)] + sld_offset_rd;
+    sld_waddr     = (dual_mode_i ? {spatz_req.vd, ($clog2(NrWordsPerVector) - 1)'(1'b0)} :
+                                   {spatz_req.vd, $clog2(NrWordsPerVector)'(1'b0)}) +
+                    vreg_counter_q[$bits(vlen_t)-1:$clog2(VRFWordBWidth)];
+
+    // In the dual-thread layout the address MSB selects the thread's half of the VRF
+    vrf_raddr_o     = dual_mode_i ? {spatz_req.thid, sld_raddr[$bits(vrf_addr_t)-2:0]} : sld_raddr;
+    vrf_req_d.waddr = dual_mode_i ? {spatz_req.thid, sld_waddr[$bits(vrf_addr_t)-2:0]} : sld_waddr;
   end
 
 endmodule : spatz_vsldu

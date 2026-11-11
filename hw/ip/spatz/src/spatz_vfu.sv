@@ -50,6 +50,7 @@ module spatz_vfu
   // Instruction tag (propagated together with the operands through the pipelines)
   typedef struct packed {
     spatz_id_t id;
+    logic thid;
 
     vew_e vsew;
     vlen_t vstart;
@@ -299,6 +300,7 @@ module spatz_vfu
     if ((result_tag.last && fu_word_complete && (reduction_state_q inside {Reduction_NormalExecution, Reduction_Wait} || !result_tag.reduction)) || reduction_done) begin
       // On reduction_done the retiring op is spatz_req, and a reduction emits a vector response
       vfu_rsp_o.id      = reduction_done ? spatz_req.id : result_tag.id;
+      vfu_rsp_o.thid    = reduction_done ? spatz_req.thid : result_tag.thid;
       vfu_rsp_o.rd      = result_tag.vd_addr[GPRWidth-1:0];
       vfu_rsp_o.wb      = result_tag.wb && !reduction_done;
       vfu_rsp_o.result  = (result_tag.wb && !reduction_done) ? scalar_result : '0;
@@ -716,6 +718,10 @@ module spatz_vfu
   vrf_addr_t [2:0] vreg_addr_q, vreg_addr_d;
   `FF(vreg_addr_q, vreg_addr_d, '0)
 
+  // Thread bit of the dual-thread VRF address
+  vrf_addr_t thid_addr;
+  assign thid_addr = {spatz_req.thid, {($bits(vrf_addr_t)-1){1'b0}}};
+
   // Calculate new vector register address
   always_comb begin : vreg_addr_proc
     vreg_addr_d = vreg_addr_q;
@@ -726,6 +732,7 @@ module spatz_vfu
     // Tag (propagated with the operations)
     input_tag = '{
       id             : spatz_req.id,
+      thid           : spatz_req.thid,
       vsew           : spatz_req.vtype.vsew,
       vstart         : spatz_req.vstart,
       vd_addr        : spatz_req.op_arith.is_scalar ? vrf_addr_t'(spatz_req.rd) : vreg_addr_q[2],
@@ -737,11 +744,12 @@ module spatz_vfu
     };
 
     if (spatz_req_valid && vl_q == '0) begin
-      vreg_addr_d[0] = dual_mode_i ? (spatz_req.vs2 + vstart) << ($clog2(NrWordsPerVector) - 1) :
+      // In the dual-thread layout the address MSB selects the thread's half of the VRF
+      vreg_addr_d[0] = dual_mode_i ? ((spatz_req.vs2 + vstart) << ($clog2(NrWordsPerVector) - 1)) | thid_addr :
                                      (spatz_req.vs2 + vstart) << $clog2(NrWordsPerVector);
-      vreg_addr_d[1] = dual_mode_i ? (spatz_req.vs1 + vstart) << ($clog2(NrWordsPerVector) - 1) :
+      vreg_addr_d[1] = dual_mode_i ? ((spatz_req.vs1 + vstart) << ($clog2(NrWordsPerVector) - 1)) | thid_addr :
                                      (spatz_req.vs1 + vstart) << $clog2(NrWordsPerVector);
-      vreg_addr_d[2] = dual_mode_i ? (spatz_req.vd + vstart) << ($clog2(NrWordsPerVector) - 1) :
+      vreg_addr_d[2] = dual_mode_i ? ((spatz_req.vd + vstart) << ($clog2(NrWordsPerVector) - 1)) | thid_addr :
                                      (spatz_req.vd + vstart) << $clog2(NrWordsPerVector);
 
       // Direct feedthrough

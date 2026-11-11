@@ -52,6 +52,8 @@ module spatz_vlsu
     // Memory Finished
     output logic                            spatz_mem_finished_o,
     output logic                            spatz_mem_str_finished_o,
+    // Thread of the finished instruction
+    output logic                            mem_finished_thid_o,
     // High when every issued store has been acked by memory (for fences)
     output logic                            spatz_st_rsp_done_o
   );
@@ -283,6 +285,7 @@ module spatz_vlsu
 
   typedef struct packed {
     spatz_id_t id;
+    logic thid;
 
     vreg_t vd;
     vew_e vsew;
@@ -324,6 +327,7 @@ module spatz_vlsu
   assign commit_insn_valid = !commit_insn_empty;
   assign commit_insn_d     = '{
       id        : mem_spatz_req.id,
+      thid      : mem_spatz_req.thid,
       vd        : mem_spatz_req.vd,
       vsew      : mem_spatz_req.vtype.vsew,
       vl        : mem_spatz_req.vl,
@@ -404,6 +408,11 @@ module spatz_vlsu
   vrf_addr_t vd_vreg_addr;
   vrf_addr_t vs2_vreg_addr;
 
+  // Thread bit of the dual-thread VRF address
+  vrf_addr_t commit_thid_addr, mem_thid_addr;
+  assign commit_thid_addr = {commit_insn_q.thid, {($bits(vrf_addr_t)-1){1'b0}}};
+  assign mem_thid_addr    = {mem_spatz_req.thid, {($bits(vrf_addr_t)-1){1'b0}}};
+
   // Current element index and byte index that are being accessed at the register file
   vreg_elem_t vd_elem_id;
   vreg_elem_t vs2_elem_id_d, vs2_elem_id_q;
@@ -457,10 +466,11 @@ module spatz_vlsu
 
   // Calculate the register file address
   always_comb begin : gen_vreg_addr
-    // A vreg holds half as many words in the dual-thread layout
-    vd_vreg_addr  = (dual_mode_i ? commit_insn_q.vd << ($clog2(NrWordsPerVector) - 1) :
+    // A vreg holds half as many words in the dual-thread layout, where the address MSB selects
+    // the thread's half of the VRF
+    vd_vreg_addr  = (dual_mode_i ? (commit_insn_q.vd << ($clog2(NrWordsPerVector) - 1)) | commit_thid_addr :
                                    commit_insn_q.vd << $clog2(NrWordsPerVector)) + $unsigned(vd_elem_id);
-    vs2_vreg_addr = (dual_mode_i ? mem_spatz_req.vs2 << ($clog2(NrWordsPerVector) - 1) :
+    vs2_vreg_addr = (dual_mode_i ? (mem_spatz_req.vs2 << ($clog2(NrWordsPerVector) - 1)) | mem_thid_addr :
                                    mem_spatz_req.vs2 << $clog2(NrWordsPerVector)) + $unsigned(vs2_elem_id_q);
   end
 
@@ -515,6 +525,7 @@ module spatz_vlsu
   // for the case with more than one memory port)
   assign spatz_mem_finished_o     = commit_insn_valid && &commit_finished_q && mem_insn_finished_q[commit_insn_q.id];
   assign spatz_mem_str_finished_o = commit_insn_valid && &commit_finished_q && mem_insn_finished_q[commit_insn_q.id] && !commit_insn_q.is_load;
+  assign mem_finished_thid_o      = commit_insn_q.thid;
 
   // Do we start at the very fist element
   logic mem_is_vstart_zero;

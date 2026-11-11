@@ -25,7 +25,8 @@ module spatz_controller
     input  logic                                   rst_ni,
     // Dual-thread VRF layout: every vreg is half as long
     input  logic                                   dual_mode_i,
-    // Snitch Issue
+    // Snitch Issue, and the thread of the offered instruction
+    input  logic                                   issue_thid_i,
     input  logic                                   issue_valid_i,
     output logic                                   issue_ready_o,
     input  spatz_issue_req_t                       issue_req_i,
@@ -33,6 +34,8 @@ module spatz_controller
     output logic                                   rsp_valid_o,
     input  logic                                   rsp_ready_i,
     output spatz_rsp_t                             rsp_o,
+    // Thread the response belongs to
+    output logic                                   rsp_thid_o,
     // FPU untimed sidechannel
     input  roundmode_e                             fpu_rnd_mode_i,
     input  fmt_mode_t                              fpu_fmt_mode_i,
@@ -75,15 +78,26 @@ module spatz_controller
   // CSRs //
   //////////
 
-  // CSR registers
-  vlen_t  vstart_d, vstart_q;
-  vlen_t  vl_d, vl_q;
-  vtype_t vtype_d, vtype_q;
+  // Invalid vtype
+  localparam vtype_t VtypeIllegal = '{vill: 1'b1, vsew: EW_8, vlmul: LMUL_1, default: '0};
 
+  // CSR registers, one set per thread (thread 0 only without dual-thread support)
+  vlen_t  [1:0] vstart_d, vstart_q;
+  vlen_t  [1:0] vl_d, vl_q;
+  vtype_t [1:0] vtype_d, vtype_q;
 
   `FF(vstart_q, vstart_d, '0)
   `FF(vl_q, vl_d, '0)
-  `FF(vtype_q, vtype_d, '{vill: 1'b1, vsew: EW_8, vlmul: LMUL_1, default: '0})
+  `FF(vtype_q, vtype_d, {2{VtypeIllegal}})
+
+  // CSRs of the thread of the issued instruction
+  logic   req_thid;
+  vlen_t  req_vstart, req_vl;
+  vtype_t req_vtype;
+  assign req_thid   = buffer_spatz_req.thid;
+  assign req_vstart = vstart_q[req_thid];
+  assign req_vl     = vl_q[req_thid];
+  assign req_vtype  = vtype_q[req_thid];
 
   always_comb begin : proc_vcsr
     automatic logic [$clog2(MAXVL):0] vlmax = 0;
@@ -95,17 +109,17 @@ module spatz_controller
     if (spatz_req_valid) begin
       // Reset vstart to zero if we have a new non CSR operation
       if (spatz_req.op_cfg.reset_vstart)
-        vstart_d = '0;
+        vstart_d[req_thid] = '0;
 
       // Set new vstart if we have a VCSR instruction
       // that accesses the vstart register.
       if (spatz_req.op == VCSR) begin
         if (spatz_req.op_cfg.write_vstart) begin
-          vstart_d = vlen_t'(spatz_req.rs1);
+          vstart_d[req_thid] = vlen_t'(spatz_req.rs1);
         end else if (spatz_req.op_cfg.set_vstart) begin
-          vstart_d = vstart_q | vlen_t'(spatz_req.rs1);
+          vstart_d[req_thid] = req_vstart | vlen_t'(spatz_req.rs1);
         end else if (spatz_req.op_cfg.clear_vstart) begin
-          vstart_d = vstart_q & ~vlen_t'(spatz_req.rs1);
+          vstart_d[req_thid] = req_vstart & ~vlen_t'(spatz_req.rs1);
         end
       end
 
@@ -114,13 +128,13 @@ module spatz_controller
         // Check if vtype is valid
         if ((spatz_req.vtype.vsew > MAXEW) || (spatz_req.vtype.vlmul inside {LMUL_RES, LMUL_F8}) || (signed'(spatz_req.vtype.vlmul) + signed'($clog2(ELEN)) < signed'(spatz_req.vtype.vsew))) begin
           // Invalid
-          vtype_d = '{vill: 1'b1, vsew: EW_8, vlmul: LMUL_1, default: '0};
-          vl_d    = '0;
+          vtype_d[req_thid] = VtypeIllegal;
+          vl_d[req_thid]    = '0;
         end else begin
           // Valid
 
           // Set new vtype
-          vtype_d = spatz_req.vtype;
+          vtype_d[req_thid] = spatz_req.vtype;
           if (!spatz_req.op_cfg.keep_vl) begin
             // Normal stripmining mode or set to MAXVL
             vlmax = (dual_mode_i ? VLENB / 2 : VLENB) >> spatz_req.vtype.vsew;
@@ -135,15 +149,15 @@ module spatz_controller
               default: vlmax = vlmax;
             endcase
 
-            vl_d = (spatz_req.rs1 == '1) ? ((dual_mode_i ? MAXVL / 2 : MAXVL) >> spatz_req.vtype.vsew) :
-                   (int'(vlmax) < spatz_req.rs1) ? vlmax : spatz_req.rs1;
+            vl_d[req_thid] = (spatz_req.rs1 == '1) ? ((dual_mode_i ? MAXVL / 2 : MAXVL) >> spatz_req.vtype.vsew) :
+                             (int'(vlmax) < spatz_req.rs1) ? vlmax : spatz_req.rs1;
           end else begin
             // Keep vl mode
 
             // If new vtype changes ration, mark as illegal
-            if (($signed(spatz_req.vtype.vsew) - $signed(vtype_q.vsew)) != ($signed(spatz_req.vtype.vlmul) - $signed(vtype_q.vlmul))) begin
-              vtype_d = '{vill: 1'b1, vsew: EW_8, vlmul: LMUL_1, default: '0};
-              vl_d    = '0;
+            if (($signed(spatz_req.vtype.vsew) - $signed(req_vtype.vsew)) != ($signed(spatz_req.vtype.vlmul) - $signed(req_vtype.vlmul))) begin
+              vtype_d[req_thid] = VtypeIllegal;
+              vl_d[req_thid]    = '0;
             end
           end
         end
@@ -188,7 +202,7 @@ module spatz_controller
       decoder_req.rs2   = issue_req_i.data_argb;
       decoder_req.rsd   = issue_req_i.data_argc;
       decoder_req.rd    = issue_req_i.id;
-      decoder_req.vtype = vtype_q;
+      decoder_req.vtype = vtype_q[issue_thid_i];
       decoder_req_valid = 1'b1;
     end
   end // proc_decode
@@ -197,10 +211,15 @@ module spatz_controller
   // Request Buffer //
   ////////////////////
 
-  // Spatz request
-  spatz_req_t buffer_spatz_req;
+  // Spatz request, tagged with its thread
+  spatz_req_t decoded_spatz_req, buffer_spatz_req;
   // Buffer state signals
   logic       req_buffer_ready, req_buffer_valid, req_buffer_pop;
+
+  always_comb begin : proc_tag_thid
+    decoded_spatz_req      = decoder_rsp.spatz_req;
+    decoded_spatz_req.thid = issue_thid_i;
+  end
 
   // One element wide instruction buffer
   fall_through_register #(
@@ -212,7 +231,7 @@ module spatz_controller
     .testmode_i(1'b0                 ),
     .ready_o   (req_buffer_ready     ),
     .valid_o   (req_buffer_valid     ),
-    .data_i    (decoder_rsp.spatz_req),
+    .data_i    (decoded_spatz_req    ),
     .valid_i   (decoder_rsp_valid    ),
     .data_o    (buffer_spatz_req     ),
     .ready_i   (req_buffer_pop       )
@@ -222,12 +241,13 @@ module spatz_controller
   // Scoreboard //
   ////////////////
 
-  // Which instruction is reading and writing to each vector register?
+  // Which instruction is reading and writing to each vector register? One table per thread: the
+  // threads use separate halves of the VRF, so they never depend on each other.
   typedef struct packed {
     spatz_id_t id;
     logic valid;
   } [NRVREG-1:0] table_t;
-  table_t read_table_d, read_table_q, write_table_d, write_table_q;
+  table_t [1:0] read_table_d, read_table_q, write_table_d, write_table_q;
 
   `FF(read_table_q, read_table_d, '{default: '0})
   `FF(write_table_q, write_table_d, '{default: '0})
@@ -286,11 +306,13 @@ module spatz_controller
     // A unit has finished its VRF access. Reset the scoreboard. For each instruction, check
     // if a dependency existed. If so, invalidate it.
     if (vfu_rsp_valid_i) begin
-      for (int unsigned vreg = 0; vreg < NRVREG; vreg++) begin
-        if (read_table_q[vreg].id == vfu_rsp_i.id && read_table_q[vreg].valid)
-          read_table_d[vreg] = '0;
-        if (write_table_q[vreg].id == vfu_rsp_i.id && write_table_q[vreg].valid)
-          write_table_d[vreg] = '0;
+      for (int unsigned thid = 0; thid < 2; thid++) begin
+        for (int unsigned vreg = 0; vreg < NRVREG; vreg++) begin
+          if (read_table_q[thid][vreg].id == vfu_rsp_i.id && read_table_q[thid][vreg].valid)
+            read_table_d[thid][vreg] = '0;
+          if (write_table_q[thid][vreg].id == vfu_rsp_i.id && write_table_q[thid][vreg].valid)
+            write_table_d[thid][vreg] = '0;
+        end
       end
 
       scoreboard_d[vfu_rsp_i.id]             = '0;
@@ -300,11 +322,13 @@ module spatz_controller
         scoreboard_d[insn].deps[vfu_rsp_i.id] = 1'b0;
     end
     if (vlsu_rsp_valid_i) begin
-      for (int unsigned vreg = 0; vreg < NRVREG; vreg++) begin
-        if (read_table_q[vreg].id == vlsu_rsp_i.id && read_table_q[vreg].valid)
-          read_table_d[vreg] = '0;
-        if (write_table_q[vreg].id == vlsu_rsp_i.id && write_table_q[vreg].valid)
-          write_table_d[vreg] = '0;
+      for (int unsigned thid = 0; thid < 2; thid++) begin
+        for (int unsigned vreg = 0; vreg < NRVREG; vreg++) begin
+          if (read_table_q[thid][vreg].id == vlsu_rsp_i.id && read_table_q[thid][vreg].valid)
+            read_table_d[thid][vreg] = '0;
+          if (write_table_q[thid][vreg].id == vlsu_rsp_i.id && write_table_q[thid][vreg].valid)
+            write_table_d[thid][vreg] = '0;
+        end
       end
 
       scoreboard_d[vlsu_rsp_i.id]             = '0;
@@ -314,11 +338,13 @@ module spatz_controller
         scoreboard_d[insn].deps[vlsu_rsp_i.id] = 1'b0;
     end
     if (vsldu_rsp_valid_i) begin
-      for (int unsigned vreg = 0; vreg < NRVREG; vreg++) begin
-        if (read_table_q[vreg].id == vsldu_rsp_i.id && read_table_q[vreg].valid)
-          read_table_d[vreg] = '0;
-        if (write_table_q[vreg].id == vsldu_rsp_i.id && write_table_q[vreg].valid)
-          write_table_d[vreg] = '0;
+      for (int unsigned thid = 0; thid < 2; thid++) begin
+        for (int unsigned vreg = 0; vreg < NRVREG; vreg++) begin
+          if (read_table_q[thid][vreg].id == vsldu_rsp_i.id && read_table_q[thid][vreg].valid)
+            read_table_d[thid][vreg] = '0;
+          if (write_table_q[thid][vreg].id == vsldu_rsp_i.id && write_table_q[thid][vreg].valid)
+            write_table_d[thid][vreg] = '0;
+        end
       end
 
       scoreboard_d[vsldu_rsp_i.id]             = '0;
@@ -332,23 +358,23 @@ module spatz_controller
     if (spatz_req_valid && spatz_req.ex_unit != CON) begin
       // RAW hazard
       if (spatz_req.use_vs2) begin
-        scoreboard_d[spatz_req.id].deps[write_table_d[spatz_req.vs2].id] |= write_table_d[spatz_req.vs2].valid;
-        read_table_d[spatz_req.vs2] = {spatz_req.id, 1'b1};
+        scoreboard_d[spatz_req.id].deps[write_table_d[req_thid][spatz_req.vs2].id] |= write_table_d[req_thid][spatz_req.vs2].valid;
+        read_table_d[req_thid][spatz_req.vs2] = {spatz_req.id, 1'b1};
       end
       if (spatz_req.use_vs1) begin
-        scoreboard_d[spatz_req.id].deps[write_table_d[spatz_req.vs1].id] |= write_table_d[spatz_req.vs1].valid;
-        read_table_d[spatz_req.vs1] = {spatz_req.id, 1'b1};
+        scoreboard_d[spatz_req.id].deps[write_table_d[req_thid][spatz_req.vs1].id] |= write_table_d[req_thid][spatz_req.vs1].valid;
+        read_table_d[req_thid][spatz_req.vs1] = {spatz_req.id, 1'b1};
       end
       if (spatz_req.vd_is_src) begin
-        scoreboard_d[spatz_req.id].deps[write_table_d[spatz_req.vd].id] |= write_table_d[spatz_req.vd].valid;
-        read_table_d[spatz_req.vd] = {spatz_req.id, 1'b1};
+        scoreboard_d[spatz_req.id].deps[write_table_d[req_thid][spatz_req.vd].id] |= write_table_d[req_thid][spatz_req.vd].valid;
+        read_table_d[req_thid][spatz_req.vd] = {spatz_req.id, 1'b1};
       end
 
       // WAW and WAR hazards
       if (spatz_req.use_vd) begin
-        scoreboard_d[spatz_req.id].deps[write_table_d[spatz_req.vd].id] |= write_table_d[spatz_req.vd].valid;
-        scoreboard_d[spatz_req.id].deps[read_table_d[spatz_req.vd].id] |= read_table_d[spatz_req.vd].valid;
-        write_table_d[spatz_req.vd] = {spatz_req.id, 1'b1};
+        scoreboard_d[spatz_req.id].deps[write_table_d[req_thid][spatz_req.vd].id] |= write_table_d[req_thid][spatz_req.vd].valid;
+        scoreboard_d[spatz_req.id].deps[read_table_d[req_thid][spatz_req.vd].id] |= read_table_d[req_thid][spatz_req.vd].valid;
+        write_table_d[req_thid][spatz_req.vd] = {spatz_req.id, 1'b1};
       end
 
       // Is this a risky instruction which should not chain?
@@ -386,11 +412,13 @@ module spatz_controller
   assign vlsu_stall  = ~vlsu_req_ready_i & (spatz_req.ex_unit == LSU);
   assign vsldu_stall = ~vsldu_req_ready_i & (spatz_req.ex_unit == SLD);
 
-  // Running instructions
+  // Running instructions, and the thread of each
   logic      [NrParallelInstructions-1:0] running_insn_d, running_insn_q;
+  logic      [NrParallelInstructions-1:0] running_thid_d, running_thid_q;
   spatz_id_t                              next_insn_id;
   logic                                   running_insn_full;
   `FF(running_insn_q, running_insn_d, '0)
+  `FF(running_thid_q, running_thid_d, '0)
 
   find_first_one #(
     .WIDTH(NrParallelInstructions)
@@ -419,9 +447,9 @@ module spatz_controller
       case (spatz_req.ex_unit)
         VFU: begin
           // Overwrite all csrs in request
-          spatz_req.vtype  = vtype_q;
-          spatz_req.vl     = spatz_req.op_arith.widen_vs1 || spatz_req.op_arith.widen_vs2 ? vl_q * 2 : vl_q;
-          spatz_req.vstart = vstart_q;
+          spatz_req.vtype  = req_vtype;
+          spatz_req.vl     = spatz_req.op_arith.widen_vs1 || spatz_req.op_arith.widen_vs2 ? req_vl * 2 : req_vl;
+          spatz_req.vstart = req_vstart;
 
           // Is this a scalar request?
           if (spatz_req.op_arith.is_scalar) begin
@@ -433,15 +461,15 @@ module spatz_controller
 
         LSU: begin
           // Overwrite vl and vstart in request (preserve vtype with vsew)
-          spatz_req.vl     = vl_q;
-          spatz_req.vstart = vstart_q;
+          spatz_req.vl     = req_vl;
+          spatz_req.vstart = req_vstart;
         end
 
         SLD: begin
           // Overwrite all csrs in request
-          spatz_req.vtype  = vtype_q;
-          spatz_req.vl     = vl_q;
-          spatz_req.vstart = vstart_q;
+          spatz_req.vtype  = req_vtype;
+          spatz_req.vl     = req_vl;
+          spatz_req.vstart = req_vstart;
 
           // Is this a scalar request?
           if (spatz_req.op_arith.is_scalar) begin
@@ -461,10 +489,13 @@ module spatz_controller
   always_comb begin: proc_next_insn_id
     // Maintain state
     running_insn_d = running_insn_q;
+    running_thid_d = running_thid_q;
 
     // New instruction!
-    if (spatz_req_valid && spatz_req.ex_unit != CON)
+    if (spatz_req_valid && spatz_req.ex_unit != CON) begin
       running_insn_d[next_insn_id] = 1'b1;
+      running_thid_d[next_insn_id] = req_thid;
+    end
 
     // Finished a instruction
     if (vfu_rsp_valid_i)
@@ -479,8 +510,9 @@ module spatz_controller
   always_comb begin : acc_issue_resp
     issue_rsp_o = '0;
 
-    // Is there something running on Spatz? If so, prevent Snitch from reading the fcsr register
-    issue_rsp_o.isfloat = |running_insn_q;
+    // Is there something of this thread running on Spatz? If so, prevent Snitch from reading the
+    // fcsr register
+    issue_rsp_o.isfloat = |(running_insn_q & (issue_thid_i ? running_thid_q : ~running_thid_q));
 
     // We have a new valid instruction
     if (decoder_rsp_valid && !decoder_rsp.instr_illegal) begin
@@ -496,20 +528,20 @@ module spatz_controller
           // Matches the wb tag spatz_vfu.sv attaches to the request.
           issue_rsp_o.writeback = spatz_req.op_arith.is_scalar;
           // vtype is illegal -> illegal instruction
-          if (vtype_q.vill) begin
+          if (vtype_q[issue_thid_i].vill) begin
             issue_rsp_o.accept = 1'b0;
           end
         end // VFU
         LSU: begin
           issue_rsp_o.loadstore = 1'b1;
           // vtype is illegal -> illegal instruction
-          if (vtype_q.vill) begin
+          if (vtype_q[issue_thid_i].vill) begin
             issue_rsp_o.accept = 1'b0;
           end
         end // LSU
         SLD: begin
           // vtype is illegal -> illegal instruction
-          if (vtype_q.vill) begin
+          if (vtype_q[issue_thid_i].vill) begin
             issue_rsp_o.accept = 1'b0;
           end
         end // SLD
@@ -543,26 +575,32 @@ module spatz_controller
     .ready_i(vfu_rsp_ready                  )
   );
 
-  logic rsp_valid_d;
-  spatz_rsp_t rsp_d;
+  // Response to the core, registered together with the thread it belongs to
+  logic                        rsp_valid_d;
+  spatz_rsp_t                  rsp_d;
+  logic                        rsp_thid_d;
+  logic [$bits(spatz_rsp_t):0] rsp_thid_q;
   spill_register #(
-    .T     (spatz_rsp_t ),
-    .Bypass(!RegisterRsp)
+    .T     (logic [$bits(spatz_rsp_t):0]),
+    .Bypass(!RegisterRsp                )
   ) i_spatz_rsp_register (
-    .clk_i  (clk_i       ),
-    .rst_ni (rst_ni      ),
-    .data_i (rsp_d       ),
-    .valid_i(rsp_valid_d ),
-    .ready_o(rsp_ready_q ),
-    .data_o (rsp_o       ),
-    .valid_o(rsp_valid_o ),
-    .ready_i(rsp_ready_i )
+    .clk_i  (clk_i              ),
+    .rst_ni (rst_ni             ),
+    .data_i ({rsp_thid_d, rsp_d}),
+    .valid_i(rsp_valid_d        ),
+    .ready_o(rsp_ready_q        ),
+    .data_o (rsp_thid_q         ),
+    .valid_o(rsp_valid_o        ),
+    .ready_i(rsp_ready_i        )
   );
+
+  assign {rsp_thid_o, rsp_o} = rsp_thid_q;
 
   // Retire an operation/instruction and write back result to core
   // if necessary.
   always_comb begin : retire
     rsp_d       = '0;
+    rsp_thid_d  = 1'b0;
     rsp_valid_d = '0;
 
     vfu_rsp_ready = 1'b0;
@@ -571,13 +609,14 @@ module spatz_controller
 `ifdef MEMPOOL_SPATZ
       rsp_d.write = 1'b1;
 `endif
+      rsp_thid_d = req_thid;
       // Read CSR and write back to cpu
       if (spatz_req.op == VCSR) begin
         if (spatz_req.use_rd) begin
           unique case (spatz_req.op_csr.addr)
-            riscv_instr::CSR_VSTART: rsp_d.data = elen_t'(vstart_q);
-            riscv_instr::CSR_VL    : rsp_d.data = elen_t'(vl_q);
-            riscv_instr::CSR_VTYPE : rsp_d.data = elen_t'(vtype_q);
+            riscv_instr::CSR_VSTART: rsp_d.data = elen_t'(req_vstart);
+            riscv_instr::CSR_VL    : rsp_d.data = elen_t'(req_vl);
+            riscv_instr::CSR_VTYPE : rsp_d.data = elen_t'(req_vtype);
             riscv_instr::CSR_VLENB : rsp_d.data = elen_t'(dual_mode_i ? VLENB / 2 : VLENB);
             riscv_instr::CSR_VXSAT : rsp_d.data = '0;
             riscv_instr::CSR_VXRM  : rsp_d.data = '0;
@@ -590,10 +629,11 @@ module spatz_controller
       end else begin
         // Change configuration and send back vl
         rsp_d.id    = spatz_req.rd;
-        rsp_d.data  = elen_t'(vl_d);
+        rsp_d.data  = elen_t'(vl_d[req_thid]);
         rsp_valid_d = 1'b1;
       end
     end else if (vfu_rsp_valid) begin
+      rsp_thid_d    = vfu_rsp.thid;
       rsp_d.id      = vfu_rsp.rd;
       rsp_d.data    = vfu_rsp.result;
 `ifdef MEMPOOL_SPATZ
