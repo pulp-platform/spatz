@@ -98,6 +98,27 @@ void TEST_CASE7(void) {
   reset_vxsat;
 }
 
+void TEST_CASE8(void) {
+  uint32_t out_vxsat = 0;   // CSRs are 32-bit on Snitch; a 64-bit variable leaves the high half undefined
+
+  VSET(4, e8, m1);
+  VLOAD_8(v1, 255, 255, 255, 255);
+  VLOAD_8(v2, 255, 255, 255, 255);
+
+  // Case 30: a read must see an older saturation
+  reset_vxsat;
+  asm volatile("vsaddu.vv v3, v1, v2" ::: "v3");
+  read_vxsat(out_vxsat);
+  XCMP(30, out_vxsat, 1);   // bug: reads 0 (read overtakes the saturation)
+
+  // Case 31: a clear must not be undone by an older saturation
+  reset_vxsat;
+  asm volatile("vsaddu.vv v3, v1, v2" ::: "v3");
+  reset_vxsat;
+  read_vxsat(out_vxsat);
+  XCMP(8, out_vxsat, 0);   // bug: reads 1 (late saturation sets it again)
+}
+
 int main(void) {
   INIT_CHECK();
   enable_vec();
@@ -109,5 +130,6 @@ int main(void) {
   TEST_CASE5();
   TEST_CASE6();
   TEST_CASE7();
+  TEST_CASE8();
   EXIT_CHECK();
 }
