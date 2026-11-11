@@ -133,7 +133,9 @@ module spatz_cc
     output logic                              vfu_uncorrectable_error_o,
     // Snitch error outputs
     output logic                         snitch_correctable_error_o,
-    output logic                         snitch_uncorrectable_error_o
+    output logic                         snitch_uncorrectable_error_o,
+    output logic                         dma_correctable_error_o,
+    output logic                         dma_uncorrectable_error_o
   );
 
   // ECC protection width for TCDM codewords (parity bits only).
@@ -429,7 +431,9 @@ module spatz_cc
       .acc_pready_i     ( dma_pready               ),
       .hart_id_i        ( hart_id_i                ),
       .dma_perf_o       ( axi_dma_perf_o           ),
-      .dma_events_o     ( axi_dma_events_o         )
+      .dma_events_o     ( axi_dma_events_o         ),
+      .dma_correctable_error_o   ( dma_correctable_error_o   ),
+      .dma_uncorrectable_error_o ( dma_uncorrectable_error_o )
     );
 
   // no DMA instanciated
@@ -443,6 +447,8 @@ module spatz_cc
 
     assign dma_resp       = '0;
     assign axi_dma_perf_o = '0;
+    assign dma_correctable_error_o   = 1'b0;
+    assign dma_uncorrectable_error_o = 1'b0;
   end
 
   // Decide whether to go to SoC or TCDM

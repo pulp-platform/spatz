@@ -477,6 +477,8 @@ module spatz_cluster
   // Per-core whole-core TMR lockstep mismatch.
   logic [NrCores-1:0]  snitch_correctable_fault;
   logic [NrCores-1:0]  snitch_uncorrectable_fault;
+  logic [NrCores-1:0]  dma_correctable_fault;
+  logic [NrCores-1:0]  dma_uncorrectable_fault;
   // Per-cluster icache fault output
   logic icache_correctable_fault, icache_uncorrectable_fault;
 
@@ -508,6 +510,8 @@ module spatz_cluster
 
   logic [ErrorCounterWidth-1:0] icache_correctable_count;
   logic [ErrorCounterWidth-1:0] icache_uncorrectable_count;
+  logic [ErrorCounterWidth-1:0] dma_correctable_count;
+  logic [ErrorCounterWidth-1:0] dma_uncorrectable_count;
 
   logic [spatz_cluster_peripheral_reg_pkg::NumQuadUnits-1:0][ErrorCounterWidth-1:0] quad_correctable_count;
   logic [spatz_cluster_peripheral_reg_pkg::NumQuadUnits-1:0][ErrorCounterWidth-1:0] quad_uncorrectable_count;
@@ -556,6 +560,8 @@ module spatz_cluster
   .icache_uncorrectable_fault_i (icache_uncorrectable_fault),
   .quad_correctable_fault_i   ({quad_error[3][0], quad_error[2][0], quad_error[1][0], quad_error[0][0]}),
   .quad_uncorrectable_fault_i ({quad_error[3][1], quad_error[2][1], quad_error[1][1], quad_error[0][1]}),
+  .dma_correctable_fault_i    (|dma_correctable_fault),
+  .dma_uncorrectable_fault_i  (|dma_uncorrectable_fault),
 
   // Per-source counters.
   .vrf_correctable_count_o (vrf_correctable_count),
@@ -584,7 +590,9 @@ module spatz_cluster
   .icache_correctable_count_o (icache_correctable_count),
   .icache_uncorrectable_count_o (icache_uncorrectable_count),
   .quad_correctable_count_o   (quad_correctable_count),
-  .quad_uncorrectable_count_o (quad_uncorrectable_count)
+  .quad_uncorrectable_count_o (quad_uncorrectable_count),
+  .dma_correctable_count_o    (dma_correctable_count),
+  .dma_uncorrectable_count_o  (dma_uncorrectable_count)
 );
 
   // -------------
@@ -1269,6 +1277,8 @@ module spatz_cluster
         .snitch_correctable_error_o (snitch_correctable_fault[i]),
         .snitch_uncorrectable_error_o (snitch_uncorrectable_fault[i])
       );
+      assign dma_correctable_fault[i]   = 1'b0;
+      assign dma_uncorrectable_fault[i] = 1'b0;
       for (genvar j = 0; j < TcdmPorts; j++) begin
         always_comb begin
           quad_tcdm_req[j].q              = quad_tcdm_req_wo_user[j].q;
@@ -1364,7 +1374,9 @@ module spatz_cluster
         // .core_tmr_fault_o (core_tmr_fault[i])
         // Snitch error outputs
         .snitch_correctable_error_o (snitch_correctable_fault[i]),
-        .snitch_uncorrectable_error_o (snitch_uncorrectable_fault[i])
+        .snitch_uncorrectable_error_o (snitch_uncorrectable_fault[i]),
+        .dma_correctable_error_o (dma_correctable_fault[i]),
+        .dma_uncorrectable_error_o (dma_uncorrectable_fault[i])
       );
       for (genvar j = 0; j < TcdmPorts; j++) begin : gen_tcdm_user
         always_comb begin
@@ -1863,7 +1875,9 @@ module spatz_cluster
     .tcdm_interconnect_correctable_count_i (tcdm_interconnect_correctable_count ),
     .tcdm_interconnect_uncorrectable_count_i (tcdm_interconnect_uncorrectable_count ),
     .quad_correctable_count_i         (quad_correctable_count         ),
-    .quad_uncorrectable_count_i       (quad_uncorrectable_count       )
+    .quad_uncorrectable_count_i       (quad_uncorrectable_count       ),
+    .dma_correctable_count_i          (dma_correctable_count          ),
+    .dma_uncorrectable_count_i        (dma_uncorrectable_count        )
   );
 
   // 3. BootROM
