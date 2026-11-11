@@ -824,22 +824,22 @@ void TEST_CASE_D32(void) {
   uint32_t vlenb = get_vlenb();
   uint32_t n     = 4 * vlenb;      // VLMAX for e8/m4 (segments)
   uint32_t first = 3 * vlenb;      // first field-1 element that lands in v15
- 
+
   volatile uint8_t buf[8 * vlenb] __attribute__((aligned(8)));
   for (uint32_t i = 0; i < n; i++) {
     buf[2 * i]     = 0x22;                                          // field 0
     buf[2 * i + 1] = (i < first) ? 0x11 : (uint8_t)(i - first + 5); // field 1
   }
- 
+
   VSET(vlenb, e8, m1);
   asm volatile("vmv.v.i v15, -1" ::: "v15");
- 
+
   VSET(n, e8, m4);
   asm volatile("vlseg2e8.v v8, (%0)" :: "r"(buf) : V8_GROUP, "memory");
- 
+
   VSET(4, e8, m1);
   asm volatile("vadd.vi v4, v15, 0" ::: "v4");
- 
+
   VCMP_U8(165, v4, 5, 6, 7, 8);
 }
 

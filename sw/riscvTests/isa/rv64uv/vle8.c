@@ -152,19 +152,19 @@ void TEST_CASE7(void) {
 
 void TEST_CASE8(void) {
   uint32_t vlenb = get_vlenb();
- 
+
   volatile uint8_t buf[8 * vlenb] __attribute__((aligned(8)));
   for (uint32_t i = 0; i < 8 * vlenb; i++)
     buf[i] = 0x11;
- 
+
   VSET(8 * vlenb, e8, m8);
   asm volatile("vle8.v v8, (%0)" :: "r"(buf) : V8_GROUP, "memory");
- 
+
   VSET(vlenb, e8, m1);
   asm volatile("vmv.v.i v15, 3" ::: "v15");
- 
+
   drain_v8_m8(vlenb);              // check the FINAL value, after both writers are done
- 
+
   VSET(4, e8, m1);
   VCMP_U8(8, v15, 3, 3, 3, 3);
 }
