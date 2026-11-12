@@ -82,12 +82,13 @@ void TEST_CASE6(void) {
   VVCMP_U8(6, OUT, 170, 0x3C, 0xFF, 170);
 }
 
-// Round trip vlm -> vsm with an odd vl at e16: vl=21 -> 3 bytes
+// Round trip vlm -> vsm with an odd vl: vl=21 -> ceil(21/8)=3 bytes, 4th byte untouched.
+// SEW is e16 (ignored by vlm/vsm); LMUL=2 only so VLMAX >= 21 at VLEN=256.
 void TEST_CASE7(void) {
   volatile uint8_t INP[4] __attribute__((aligned(8))) = {0xC3, 0x5E, 0x0F, 0x77};
   volatile uint8_t OUT[4] __attribute__((aligned(8)));
   for (int i = 0; i < 4; i++) OUT[i] = 170;
-  VSET(21, e16, m1);
+  VSET(21, e8, m2);
   VCLEAR(v8);
   asm volatile(
       "vlm.v v8, (%0)\n\t"
