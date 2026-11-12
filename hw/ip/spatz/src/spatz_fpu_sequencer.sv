@@ -467,7 +467,9 @@ module spatz_fpu_sequencer
   always_comb begin
     // By default, forward instructions to Spatz
     issue_req_o   = issue_req_i;
-    issue_valid_o = issue_valid_i && !stall && !is_local;
+    // Valid must not depend on Spatz's ready: a forwarded op only waits for its operands and for
+    // room in the vector memory op counter
+    issue_valid_o = issue_valid_i && !is_local && operands_available && !vlsu_stall;
     issue_ready_o = (is_local && !stall) || (!is_local && issue_ready_i && !stall);
 
     // Replace integer operands with FP operands, if needed

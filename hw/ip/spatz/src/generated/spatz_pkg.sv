@@ -213,6 +213,8 @@ package spatz_pkg;
   typedef struct packed {
     // Instruction ID
     spatz_id_t id;
+    // Issuing thread (dual-thread Spatz)
+    logic thid;
 
     // Used vector registers
     vreg_t vs1;
@@ -297,6 +299,8 @@ package spatz_pkg;
   typedef struct packed {
     // Instruction ID
     spatz_id_t id;
+    // Thread of the instruction
+    logic thid;
 
     // WB
     elen_t result;

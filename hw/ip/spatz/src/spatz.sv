@@ -32,6 +32,8 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     parameter fpu_implementation_t          FPUImplementation   = fpu_implementation_t'(0),
     /// Dual-thread support: in dual mode the VRF is split between two threads
     parameter bit                           DualThread          = 1'b0,
+    /// The FPU sequencer (scalar FP registers, FP loads/stores) sits outside Spatz, one per core
+    parameter bit                           ExtFpuSequencer     = 1'b0,
     // Derived parameters. DO NOT CHANGE!
     parameter int                  unsigned NumOutstandingLoads = 8
   ) (
@@ -151,8 +153,9 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   assign spatz_mem_finished_o     = {spatz_mem_finished, fp_lsu_mem_finished};
   assign spatz_mem_str_finished_o = {spatz_mem_str_finished, fp_lsu_mem_str_finished};
 
-  if (!FPU) begin: gen_no_fpu_sequencer
-    // Spatz configured without an FPU. Just forward the requests to Spatz.
+  if (!FPU || ExtFpuSequencer) begin: gen_no_fpu_sequencer
+    // Spatz configured without an FPU, or with the FPU sequencer outside. Just forward the
+    // requests to Spatz.
     assign issue_req     = issue_req_i;
     assign issue_valid   = issue_valid_i;
     assign issue_ready_o = issue_ready;
@@ -437,7 +440,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   if (NrMemPorts == 0)
     $error("[spatz] Spatz requires at least one memory port.");
 
-  if (DualThread && FPU)
-    $error("[spatz] Dual-thread Spatz does not support the FPU yet.");
+  if (DualThread && FPU && !ExtFpuSequencer)
+    $error("[spatz] Dual-thread Spatz with an FPU needs the FPU sequencers outside Spatz.");
 
 endmodule : spatz
