@@ -131,6 +131,8 @@ module spatz_scalar_only import spatz_pkg::*; import rvv_pkg::*; import fpnew_pk
       .spatz_rsp_t      (spatz_rsp_t             ),
       .FPUImplementation(FPUImplementation)
     ) i_scalar (
+      .scalar_correctable_fault_o   (),
+      .scalar_uncorrectable_fault_o (),
       .clk_i            (clk_i              ),
       .rst_ni           (rst_ni             ),
       .hart_id_i        (hart_id_i          ),

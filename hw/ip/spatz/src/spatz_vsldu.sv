@@ -29,8 +29,17 @@ module spatz_vsldu
     output vrf_addr_t        vrf_raddr_o,
     output logic             vrf_re_o,
     input  vrf_data_t        vrf_rdata_i,
-    input  logic             vrf_rvalid_i
+    input  logic             vrf_rvalid_i,
+    output logic             vsldu_correctable_fault_o,
+    output logic             vsldu_uncorrectable_fault_o
   );
+
+  // TMR fault flags of the triplicated FFs
+  logic [12-1:0] ff_tmr_err_0;
+  logic ff_tmr_fault_any;
+  assign ff_tmr_fault_any = (|ff_tmr_err_0);
+  assign vsldu_correctable_fault_o   = ff_tmr_fault_any;
+  assign vsldu_uncorrectable_fault_o = 1'b0;
 
 // Include FF
 `include "common_cells/registers.svh"
@@ -45,7 +54,8 @@ module spatz_vsldu
   logic       spatz_req_valid;
   logic       spatz_req_ready;
 
-  spill_register #(
+  rel_spill_register #(
+    .TmrHandshake(1'b0),
     .T(spatz_req_t)
   ) i_operation_queue (
     .clk_i  (clk_i                                          ),
@@ -55,7 +65,10 @@ module spatz_vsldu
     .ready_o(spatz_req_ready_o                              ),
     .data_o (spatz_req                                      ),
     .valid_o(spatz_req_valid                                ),
-    .ready_i(spatz_req_ready                                )
+    .ready_i(spatz_req_ready                                ),
+    .err_o            (),
+    .data_corrector_o (),
+    .data_corrected_i ('0)
   );
 
 
@@ -118,7 +131,8 @@ module spatz_vsldu
   logic     vrf_req_valid_d, vrf_req_ready_d;
   logic     vrf_req_valid_q, vrf_req_ready_q;
 
-  spill_register #(
+  rel_spill_register #(
+    .TmrHandshake(1'b0),
     .T(vrf_req_t)
   ) i_vrf_req_register (
     .clk_i  (clk_i          ),
@@ -128,7 +142,10 @@ module spatz_vsldu
     .ready_o(vrf_req_ready_d),
     .data_o (vrf_req_q      ),
     .valid_o(vrf_req_valid_q),
-    .ready_i(vrf_req_ready_q)
+    .ready_i(vrf_req_ready_q),
+    .err_o            (),
+    .data_corrector_o (),
+    .data_corrected_i ('0)
   );
 
   // Per-cut RMW needed: fires when any cut has a mixed byte enable (0 < wbe[cut] < all-1).
@@ -147,7 +164,15 @@ module spatz_vsldu
   // spatz.sv decodes the old codeword and returns it via vrf_rdata_i.
   typedef enum logic { VSLDU_RMW_IDLE, VSLDU_RMW_PENDING } vsldu_rmw_e;
   vsldu_rmw_e vsldu_rmw_q, vsldu_rmw_d;
-  `FF(vsldu_rmw_q, vsldu_rmw_d, VSLDU_RMW_IDLE)
+  // TMR: vsldu_rmw_q (voted value in vsldu_rmw_q, copies vsldu_rmw_q0..2)
+  vsldu_rmw_e vsldu_rmw_q0, vsldu_rmw_q1, vsldu_rmw_q2;
+  `FF(vsldu_rmw_q0, vsldu_rmw_d, VSLDU_RMW_IDLE)
+  `FF(vsldu_rmw_q1, vsldu_rmw_d, VSLDU_RMW_IDLE)
+  `FF(vsldu_rmw_q2, vsldu_rmw_d, VSLDU_RMW_IDLE)
+  logic [$bits(vsldu_rmw_q)-1:0] vsldu_rmw_q_vote;
+  bitwise_TMR_voter_fail #(.DataWidth($bits(vsldu_rmw_q)), .VoterType(1)) i_vsldu_rmw_q_voter (
+    .a_i(vsldu_rmw_q0), .b_i(vsldu_rmw_q1), .c_i(vsldu_rmw_q2), .majority_o(vsldu_rmw_q_vote), .fault_detected_o(ff_tmr_err_0[0]));
+  assign vsldu_rmw_q = vsldu_rmw_e'(vsldu_rmw_q_vote);
 
   logic vsldu_rmw_stall; // 1 during the stall cycle: suppresses vrf_we_o
 
@@ -194,11 +219,25 @@ module spatz_vsldu
 
   // Number of bytes we slide up or down
   vlen_t slide_amount_q, slide_amount_d;
-  `FF(slide_amount_q, slide_amount_d, '0)
+  // TMR: slide_amount_q (voted value in slide_amount_q, copies slide_amount_q0..2)
+  vlen_t slide_amount_q0, slide_amount_q1, slide_amount_q2;
+  `FF(slide_amount_q0, slide_amount_d, '0)
+  `FF(slide_amount_q1, slide_amount_d, '0)
+  `FF(slide_amount_q2, slide_amount_d, '0)
+  logic [$bits(slide_amount_q)-1:0] slide_amount_q_vote;
+  bitwise_TMR_voter_fail #(.DataWidth($bits(slide_amount_q)), .VoterType(1)) i_slide_amount_q_voter (
+    .a_i(slide_amount_q0), .b_i(slide_amount_q1), .c_i(slide_amount_q2), .majority_o(slide_amount_q_vote), .fault_detected_o(ff_tmr_err_0[1]));
+  assign slide_amount_q = vlen_t'(slide_amount_q_vote);
 
   // Are we doing a vregfile read prefetch (when we slide down)
   logic prefetch_q, prefetch_d;
-  `FF(prefetch_q, prefetch_d, 1'b0);
+  // TMR: prefetch_q (voted value in prefetch_q, copies prefetch_q0..2)
+  logic prefetch_q0, prefetch_q1, prefetch_q2;
+  `FF(prefetch_q0, prefetch_d, 1'b0)
+  `FF(prefetch_q1, prefetch_d, 1'b0)
+  `FF(prefetch_q2, prefetch_d, 1'b0)
+  bitwise_TMR_voter_fail #(.DataWidth($bits(prefetch_q)), .VoterType(1)) i_prefetch_q_voter (
+    .a_i(prefetch_q0), .b_i(prefetch_q1), .c_i(prefetch_q2), .majority_o(prefetch_q), .fault_detected_o(ff_tmr_err_0[2]));
 
   ///////////////////
   // State Handler //
@@ -206,14 +245,26 @@ module spatz_vsldu
 
   // Currently running instructions
   logic [NrParallelInstructions-1:0] running_d, running_q;
-  `FF(running_q, running_d, '0)
+  // TMR: running_q (voted value in running_q, copies running_q0..2)
+  logic [NrParallelInstructions-1:0] running_q0, running_q1, running_q2;
+  `FF(running_q0, running_d, '0)
+  `FF(running_q1, running_d, '0)
+  `FF(running_q2, running_d, '0)
+  bitwise_TMR_voter_fail #(.DataWidth($bits(running_q)), .VoterType(1)) i_running_q_voter (
+    .a_i(running_q0), .b_i(running_q1), .c_i(running_q2), .majority_o(running_q), .fault_detected_o(ff_tmr_err_0[3]));
 
   // New instruction
   // Initialize the internal state one cycle in advance
   logic new_vsldu_request, new_vsldu_request_q;
   assign new_vsldu_request = spatz_req_valid && !running_q[spatz_req.id];
 
-  `FF(new_vsldu_request_q, new_vsldu_request, '0)
+  // TMR: new_vsldu_request_q (voted value in new_vsldu_request_q, copies new_vsldu_request_q0..2)
+  logic new_vsldu_request_q0, new_vsldu_request_q1, new_vsldu_request_q2;
+  `FF(new_vsldu_request_q0, new_vsldu_request, '0)
+  `FF(new_vsldu_request_q1, new_vsldu_request, '0)
+  `FF(new_vsldu_request_q2, new_vsldu_request, '0)
+  bitwise_TMR_voter_fail #(.DataWidth($bits(new_vsldu_request_q)), .VoterType(1)) i_new_vsldu_request_q_voter (
+    .a_i(new_vsldu_request_q0), .b_i(new_vsldu_request_q1), .c_i(new_vsldu_request_q2), .majority_o(new_vsldu_request_q), .fault_detected_o(ff_tmr_err_0[4]));
 
   typedef enum logic[1:0] {
     VREG_READ_V0_t_lo, // Add a state to read v0.t
@@ -222,7 +273,15 @@ module spatz_vsldu
     VREG_WAIT_FIRST_WRITE
   } vreg_operation_first_t;
   vreg_operation_first_t vreg_operation_first_q, vreg_operation_first_d;
-  `FF(vreg_operation_first_q, vreg_operation_first_d, VREG_IDLE)
+  // TMR: vreg_operation_first_q (voted value in vreg_operation_first_q, copies vreg_operation_first_q0..2)
+  vreg_operation_first_t vreg_operation_first_q0, vreg_operation_first_q1, vreg_operation_first_q2;
+  `FF(vreg_operation_first_q0, vreg_operation_first_d, VREG_IDLE)
+  `FF(vreg_operation_first_q1, vreg_operation_first_d, VREG_IDLE)
+  `FF(vreg_operation_first_q2, vreg_operation_first_d, VREG_IDLE)
+  logic [$bits(vreg_operation_first_q)-1:0] vreg_operation_first_q_vote;
+  bitwise_TMR_voter_fail #(.DataWidth($bits(vreg_operation_first_q)), .VoterType(1)) i_vreg_operation_first_q_voter (
+    .a_i(vreg_operation_first_q0), .b_i(vreg_operation_first_q1), .c_i(vreg_operation_first_q2), .majority_o(vreg_operation_first_q_vote), .fault_detected_o(ff_tmr_err_0[5]));
+  assign vreg_operation_first_q = vreg_operation_first_t'(vreg_operation_first_q_vote);
 
   // Accept a new operation or clear req register if we are finished
   always_comb begin
@@ -267,7 +326,15 @@ module spatz_vsldu
   vlen_t vreg_counter_delta;
   vlen_t vreg_counter_d;
   vlen_t vreg_counter_q;
-  `FF(vreg_counter_q, vreg_counter_d, '0)
+  // TMR: vreg_counter_q (voted value in vreg_counter_q, copies vreg_counter_q0..2)
+  vlen_t vreg_counter_q0, vreg_counter_q1, vreg_counter_q2;
+  `FF(vreg_counter_q0, vreg_counter_d, '0)
+  `FF(vreg_counter_q1, vreg_counter_d, '0)
+  `FF(vreg_counter_q2, vreg_counter_d, '0)
+  logic [$bits(vreg_counter_q)-1:0] vreg_counter_q_vote;
+  bitwise_TMR_voter_fail #(.DataWidth($bits(vreg_counter_q)), .VoterType(1)) i_vreg_counter_q_voter (
+    .a_i(vreg_counter_q0), .b_i(vreg_counter_q1), .c_i(vreg_counter_q2), .majority_o(vreg_counter_q_vote), .fault_detected_o(ff_tmr_err_0[6]));
+  assign vreg_counter_q = vlen_t'(vreg_counter_q_vote);
 
   // Count how many VRFWords we have already committed
   logic [$bits(vlen_t)-$clog2(VRFWordBWidth):0] vreg_counter_mod_wordBwidth;
@@ -283,8 +350,20 @@ module spatz_vsldu
   assign v0_t_lo_is_ready   = (vreg_operation_first_q == VREG_READ_V0_t_lo) && vrf_rvalid_i;
   assign v0_t_hi_is_ready   = (vreg_operation_first_q == VREG_READ_V0_t_hi) && vrf_rvalid_i;
 
-  `FFLARNC(v0_t_lo_read_done,1'b1,v0_t_lo_is_ready,vreg_operations_finished,1'b0,clk_i,rst_ni);
-  `FFLARNC(v0_t_hi_read_done,1'b1,v0_t_hi_is_ready,vreg_operations_finished,1'b0,clk_i,rst_ni);
+  // TMR: v0_t_lo_read_done (voted value in v0_t_lo_read_done, copies v0_t_lo_read_done0..2)
+  logic v0_t_lo_read_done0, v0_t_lo_read_done1, v0_t_lo_read_done2;
+  `FFLARNC(v0_t_lo_read_done0, 1'b1, v0_t_lo_is_ready, vreg_operations_finished, 1'b0, clk_i, rst_ni)
+  `FFLARNC(v0_t_lo_read_done1, 1'b1, v0_t_lo_is_ready, vreg_operations_finished, 1'b0, clk_i, rst_ni)
+  `FFLARNC(v0_t_lo_read_done2, 1'b1, v0_t_lo_is_ready, vreg_operations_finished, 1'b0, clk_i, rst_ni)
+  bitwise_TMR_voter_fail #(.DataWidth($bits(v0_t_lo_read_done)), .VoterType(1)) i_v0_t_lo_read_done_voter (
+    .a_i(v0_t_lo_read_done0), .b_i(v0_t_lo_read_done1), .c_i(v0_t_lo_read_done2), .majority_o(v0_t_lo_read_done), .fault_detected_o(ff_tmr_err_0[7]));
+  // TMR: v0_t_hi_read_done (voted value in v0_t_hi_read_done, copies v0_t_hi_read_done0..2)
+  logic v0_t_hi_read_done0, v0_t_hi_read_done1, v0_t_hi_read_done2;
+  `FFLARNC(v0_t_hi_read_done0, 1'b1, v0_t_hi_is_ready, vreg_operations_finished, 1'b0, clk_i, rst_ni)
+  `FFLARNC(v0_t_hi_read_done1, 1'b1, v0_t_hi_is_ready, vreg_operations_finished, 1'b0, clk_i, rst_ni)
+  `FFLARNC(v0_t_hi_read_done2, 1'b1, v0_t_hi_is_ready, vreg_operations_finished, 1'b0, clk_i, rst_ni)
+  bitwise_TMR_voter_fail #(.DataWidth($bits(v0_t_hi_read_done)), .VoterType(1)) i_v0_t_hi_read_done_voter (
+    .a_i(v0_t_hi_read_done0), .b_i(v0_t_hi_read_done1), .c_i(v0_t_hi_read_done2), .majority_o(v0_t_hi_read_done), .fault_detected_o(ff_tmr_err_0[8]));
 
   // v0 should be read from VRF
   vrf_data_t  operand_v0_t_lo,operand_v0_t_lo_q;
@@ -294,8 +373,24 @@ module spatz_vsldu
   assign operand_v0_t_hi = (vreg_operation_first_q == VREG_READ_V0_t_hi)? vrf_rdata_i:'0;
 
   // Backup v0.t
-  `FFL(operand_v0_t_lo_q, operand_v0_t_lo, v0_t_lo_is_ready, '0)
-  `FFL(operand_v0_t_hi_q, operand_v0_t_hi, v0_t_hi_is_ready, '0)
+  // TMR: operand_v0_t_lo_q (voted value in operand_v0_t_lo_q, copies operand_v0_t_lo_q0..2)
+  vrf_data_t operand_v0_t_lo_q0, operand_v0_t_lo_q1, operand_v0_t_lo_q2;
+  `FFL(operand_v0_t_lo_q0, operand_v0_t_lo, v0_t_lo_is_ready, '0)
+  `FFL(operand_v0_t_lo_q1, operand_v0_t_lo, v0_t_lo_is_ready, '0)
+  `FFL(operand_v0_t_lo_q2, operand_v0_t_lo, v0_t_lo_is_ready, '0)
+  logic [$bits(operand_v0_t_lo_q)-1:0] operand_v0_t_lo_q_vote;
+  bitwise_TMR_voter_fail #(.DataWidth($bits(operand_v0_t_lo_q)), .VoterType(1)) i_operand_v0_t_lo_q_voter (
+    .a_i(operand_v0_t_lo_q0), .b_i(operand_v0_t_lo_q1), .c_i(operand_v0_t_lo_q2), .majority_o(operand_v0_t_lo_q_vote), .fault_detected_o(ff_tmr_err_0[9]));
+  assign operand_v0_t_lo_q = vrf_data_t'(operand_v0_t_lo_q_vote);
+  // TMR: operand_v0_t_hi_q (voted value in operand_v0_t_hi_q, copies operand_v0_t_hi_q0..2)
+  vrf_data_t operand_v0_t_hi_q0, operand_v0_t_hi_q1, operand_v0_t_hi_q2;
+  `FFL(operand_v0_t_hi_q0, operand_v0_t_hi, v0_t_hi_is_ready, '0)
+  `FFL(operand_v0_t_hi_q1, operand_v0_t_hi, v0_t_hi_is_ready, '0)
+  `FFL(operand_v0_t_hi_q2, operand_v0_t_hi, v0_t_hi_is_ready, '0)
+  logic [$bits(operand_v0_t_hi_q)-1:0] operand_v0_t_hi_q_vote;
+  bitwise_TMR_voter_fail #(.DataWidth($bits(operand_v0_t_hi_q)), .VoterType(1)) i_operand_v0_t_hi_q_voter (
+    .a_i(operand_v0_t_hi_q0), .b_i(operand_v0_t_hi_q1), .c_i(operand_v0_t_hi_q2), .majority_o(operand_v0_t_hi_q_vote), .fault_detected_o(ff_tmr_err_0[10]));
+  assign operand_v0_t_hi_q = vrf_data_t'(operand_v0_t_hi_q_vote);
 
   logic [VLEN-1:0] operand_v0_t_q;
   assign operand_v0_t_q = {operand_v0_t_hi_q,operand_v0_t_lo_q};
@@ -428,7 +523,15 @@ module spatz_vsldu
 
   // Shift overflow register
   vrf_data_t shift_overflow_q, shift_overflow_d;
-  `FF(shift_overflow_q, shift_overflow_d, '0)
+  // TMR: shift_overflow_q (voted value in shift_overflow_q, copies shift_overflow_q0..2)
+  vrf_data_t shift_overflow_q0, shift_overflow_q1, shift_overflow_q2;
+  `FF(shift_overflow_q0, shift_overflow_d, '0)
+  `FF(shift_overflow_q1, shift_overflow_d, '0)
+  `FF(shift_overflow_q2, shift_overflow_d, '0)
+  logic [$bits(shift_overflow_q)-1:0] shift_overflow_q_vote;
+  bitwise_TMR_voter_fail #(.DataWidth($bits(shift_overflow_q)), .VoterType(1)) i_shift_overflow_q_voter (
+    .a_i(shift_overflow_q0), .b_i(shift_overflow_q1), .c_i(shift_overflow_q2), .majority_o(shift_overflow_q_vote), .fault_detected_o(ff_tmr_err_0[11]));
+  assign shift_overflow_q = vrf_data_t'(shift_overflow_q_vote);
 
   // Number of bytes we have to shift the elements around
   // inside the register element

@@ -674,7 +674,8 @@ module spatz_scalar_sequencer
   logic       fp_move_result_valid_o;
   logic       fp_move_result_ready_i;
 
-  spill_register #(
+  rel_spill_register #(
+    .TmrHandshake(1'b0),
     .T(spatz_rsp_t)
   ) i_fp_move_register (
     .clk_i     (clk_i                 ),
@@ -684,7 +685,10 @@ module spatz_scalar_sequencer
     .ready_o   (fp_move_result_ready_o),
     .data_o    (fp_move_result_o      ),
     .valid_o   (fp_move_result_valid_o),
-    .ready_i   (fp_move_result_ready_i)
+    .ready_i   (fp_move_result_ready_i),
+    .err_o            (),
+    .data_corrector_o (),
+    .data_corrected_i ('0)
   );
 
   //////////////

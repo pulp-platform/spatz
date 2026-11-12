@@ -77,7 +77,12 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     output logic                              vlsu_uncorrectable_error_o,
     // VFU error outputs
     output logic                              vfu_correctable_error_o,
-    output logic                              vfu_uncorrectable_error_o
+    output logic                              vfu_uncorrectable_error_o,
+    // controller errors
+    output logic                              controller_correctable_error_o,
+    output logic                              controller_uncorrectable_error_o,
+    output logic                              vsldu_correctable_error_o,
+    output logic                              vsldu_uncorrectable_error_o
   );
 
   ////////////////
@@ -366,6 +371,8 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     .spatz_issue_rsp_t(spatz_issue_rsp_t       ),
     .spatz_rsp_t      (spatz_rsp_t             )
   ) i_controller (
+    .controller_correctable_fault_o   (controller_correctable_error_o  ),
+    .controller_uncorrectable_fault_o (controller_uncorrectable_error_o),
     .clk_i            (clk_i           ),
     .rst_ni           (rst_ni          ),
     // X-intf
@@ -419,6 +426,8 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   // BUF //
   /////////
 
+logic vfu_buf_fault; // correctable fault of the VFU result buffer
+
 `ifdef BUF_FPU
   // Buffering of FPU writes to VRF to hide the conflicts
   // This feature allows to not stall the FPU and achieve high FPU utilizations
@@ -432,10 +441,17 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   // Ack 1'b1 to the VFU as long as the buffer is not full
   assign vrf_vfu_wvalid = sb_we[VFU_VD_WD] && !vfu_buf_full;
 
-  fifo_v3 #(
-    .FALL_THROUGH (1'b0        ),
-    .dtype        (vfu_buf_t   ),
-    .DEPTH        (FpuBufDepth )
+  // rel_fifo (redundancy_cells) has no dtype parameter -- only a plain DataWidth --
+  // so pack/unpack vfu_buf_t to flat bits at this boundary. data_i is already a
+  // concatenation (flat bits), so only data_o needs an explicit cast back.
+  localparam int unsigned VfuBufWidth = $bits(vfu_buf_t);
+  logic [VfuBufWidth-1:0] vfu_buf_data_bits;
+  assign vfu_buf_data = vfu_buf_t'(vfu_buf_data_bits);
+
+  rel_fifo #(
+    .FallThrough (1'b0        ),
+    .DataWidth   (VfuBufWidth ),
+    .Depth       (FpuBufDepth )
   ) i_vfu_buf (
     .clk_i      (clk_i                   ),
     .rst_ni     (rst_ni                  ),
@@ -451,8 +467,9 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
                   vfu_rsp,
                   vfu_rsp_valid}         ),
     .push_i     (vfu_buf_push            ),
-    .data_o     (vfu_buf_data            ),
-    .pop_i      (vfu_buf_pop             )
+    .data_o     (vfu_buf_data_bits       ),
+    .pop_i      (vfu_buf_pop             ),
+    .fault_o    (vfu_buf_fault           )
   );
 
 `ifdef DOUBLE_BW
@@ -511,6 +528,8 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   assign vrf_wdata_ecc[VLSU_VD_WD0] = vlsu_doublebw_wdata_ecc_raw[0];
   assign vrf_wdata_ecc[VLSU_VD_WD1] = vlsu_wd1_wdata_ecc;
 `endif
+`else
+  assign vfu_buf_fault = 1'b0;
 `endif
 
   always_comb begin
@@ -612,6 +631,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     );
   end : gen_vfu_vrf_wdata_encoder
 
+logic vfu_correctable_error_internal;
   spatz_vfu #(
     .FPUImplementation(FPUImplementation)
   ) i_vfu (
@@ -646,7 +666,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     .vrf_id_o         ({sb_id[SB_VFU_VD_WD], sb_id[SB_VFU_VD_RD:SB_VFU_VS2_RD]}),
     // FPU side-channel
     .fpu_status_o     (fpu_status_o                                            ),
-    .vfu_correctable_fault_o      (vfu_correctable_error_o                     ),
+    .vfu_correctable_fault_o      (vfu_correctable_error_internal              ),
     .vfu_uncorrectable_fault_o    (vfu_uncorrectable_error_o                   )
   );
 
@@ -737,7 +757,9 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   );
 `endif
 
-assign vlsu_correctable_error_o = vlsu_correctable_error_internal | vlsu_buf_fault;
+logic [1:0] vlsu_prev_tmr_fault;
+assign vlsu_correctable_error_o = vlsu_correctable_error_internal | vlsu_buf_fault | (|vlsu_prev_tmr_fault);
+assign vfu_correctable_error_o = vfu_correctable_error_internal | vfu_buf_fault;
 
 `ifdef DOUBLE_BW
   // tie off fault-monitor signals that are otherwise
@@ -785,15 +807,26 @@ assign vlsu_correctable_error_o = vlsu_correctable_error_internal | vlsu_buf_fau
     end
   end
 
-  always_ff @(posedge clk_i or negedge rst_ni) begin
-    if (!rst_ni) begin
-      vlsu_prev_merged_q <= '0;
-      vlsu_prev_waddr_q  <= '0;
-    end else begin
-      vlsu_prev_merged_q <= vlsu_prev_merged_d;
-      vlsu_prev_waddr_q  <= vlsu_prev_waddr_d;
+  // TMR: vlsu_prev_merged_q / vlsu_prev_waddr_q hold the voted value, copies hold the state
+  logic [N_FU*ELEN-1:0] vlsu_prev_merged_q_c [3];
+  vrf_addr_t            vlsu_prev_waddr_q_c  [3];
+  for (genvar t = 0; t < 3; t++) begin : gen_vlsu_prev_rep
+    always_ff @(posedge clk_i or negedge rst_ni) begin
+      if (!rst_ni) begin
+        vlsu_prev_merged_q_c[t] <= '0;
+        vlsu_prev_waddr_q_c[t]  <= '0;
+      end else begin
+        vlsu_prev_merged_q_c[t] <= vlsu_prev_merged_d;
+        vlsu_prev_waddr_q_c[t]  <= vlsu_prev_waddr_d;
+      end
     end
   end
+  bitwise_TMR_voter_fail #(.DataWidth($bits(vlsu_prev_merged_q)), .VoterType(1)) i_vlsu_prev_merged_voter (
+    .a_i(vlsu_prev_merged_q_c[0]), .b_i(vlsu_prev_merged_q_c[1]), .c_i(vlsu_prev_merged_q_c[2]),
+    .majority_o(vlsu_prev_merged_q), .fault_detected_o(vlsu_prev_tmr_fault[0]));
+  bitwise_TMR_voter_fail #(.DataWidth($bits(vlsu_prev_waddr_q)), .VoterType(1)) i_vlsu_prev_waddr_voter (
+    .a_i(vlsu_prev_waddr_q_c[0]), .b_i(vlsu_prev_waddr_q_c[1]), .c_i(vlsu_prev_waddr_q_c[2]),
+    .majority_o(vlsu_prev_waddr_q), .fault_detected_o(vlsu_prev_tmr_fault[1]));
 
   // Per-cut: decode VLSU write codeword, merge with accumulated bytes, re-encode for VRF
   logic [N_FU-1:0] vlsu_wr_sec_err_vec, vlsu_wr_ded_err_vec;
@@ -1021,7 +1054,9 @@ assign vlsu_correctable_error_o = vlsu_correctable_error_internal | vlsu_buf_fau
     .vrf_re_o         (sb_re[VSLDU_VS2_RD]                            ),
     .vrf_rdata_i      (vrf_rdata[VSLDU_VS2_RD]                        ),
     .vrf_rvalid_i     (vrf_rvalid[VSLDU_VS2_RD]                       ),
-    .vrf_id_o         ({sb_id[SB_VSLDU_VD_WD], sb_id[SB_VSLDU_VS2_RD]})
+    .vrf_id_o         ({sb_id[SB_VSLDU_VD_WD], sb_id[SB_VSLDU_VS2_RD]}),
+    .vsldu_correctable_fault_o  (vsldu_correctable_error_o  ),
+    .vsldu_uncorrectable_fault_o(vsldu_uncorrectable_error_o)
   );
 `endif // VENTAGLIO
 

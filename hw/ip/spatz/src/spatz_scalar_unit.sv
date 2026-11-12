@@ -33,6 +33,8 @@ module spatz_scalar_unit
     input  logic [31:0]                            hart_id_i,
     // Snitch Issue
     input  logic                                   issue_valid_i,
+    output logic                                   scalar_correctable_fault_o,
+    output logic                                   scalar_uncorrectable_fault_o,
     output logic                                   issue_ready_o,
     input  spatz_issue_req_t                       issue_req_i,
     output spatz_issue_rsp_t                       issue_rsp_o,
@@ -44,6 +46,12 @@ module spatz_scalar_unit
     input  fmt_mode_t                              fpu_fmt_mode_i,
     output status_t                                fpu_status_o
   );
+
+  // TMR fault flags of the triplicated FFs
+  logic [9-1:0] ff_tmr_err_0;
+  logic [12*(N_FPU)-1:0] ff_tmr_err_1;
+  logic ff_tmr_fault_any;
+  assign ff_tmr_fault_any = (|ff_tmr_err_0) | (|ff_tmr_err_1);
 
 // Include FF
 `include "common_cells/registers.svh"
@@ -149,7 +157,13 @@ module spatz_scalar_unit
   logic      [NrParallelInstructions-1:0] running_insn_d, running_insn_q;
   spatz_id_t                              next_insn_id;
   logic                                   running_insn_full;
-  `FF(running_insn_q, running_insn_d, '0)
+  // TMR: running_insn_q (voted value in running_insn_q, copies running_insn_q0..2)
+  logic      [NrParallelInstructions-1:0] running_insn_q0, running_insn_q1, running_insn_q2;
+  `FF(running_insn_q0, running_insn_d, '0)
+  `FF(running_insn_q1, running_insn_d, '0)
+  `FF(running_insn_q2, running_insn_d, '0)
+  bitwise_TMR_voter_fail #(.DataWidth($bits(running_insn_q)), .VoterType(1)) i_running_insn_q_voter (
+    .a_i(running_insn_q0), .b_i(running_insn_q1), .c_i(running_insn_q2), .majority_o(running_insn_q), .fault_detected_o(ff_tmr_err_0[0]));
 
   find_first_one #(
     .WIDTH(NrParallelInstructions)
@@ -207,7 +221,9 @@ module spatz_scalar_unit
   //////////////
 
 
-  spill_register #(
+  logic [1:0] vfu_scalar_response_err;
+  rel_spill_register #(
+    .TmrHandshake(1'b0),
     .T(vfu_rsp_t)
   ) i_vfu_scalar_response (
     .clk_i  (clk_i                          ),
@@ -217,10 +233,15 @@ module spatz_scalar_unit
     .ready_o(vfu_rsp_ready                  ),
     .data_o (spatz_rsp                      ),
     .valid_o(rsp_valid_d                    ),
-    .ready_i(rsp_ready_d                    )
+    .ready_i(rsp_ready_d                    ),
+    .err_o            (vfu_scalar_response_err),
+    .data_corrector_o (),
+    .data_corrected_i ('0)
   );
 
-  spill_register #(
+  logic [1:0] spatz_rsp_register_err;
+  rel_spill_register #(
+    .TmrHandshake(1'b0),
     .T     (spatz_rsp_t ),
     .Bypass(!RegisterRsp)
   ) i_spatz_rsp_register (
@@ -231,7 +252,10 @@ module spatz_scalar_unit
     .ready_o(rsp_ready_d ),
     .data_o (rsp_o       ),
     .valid_o(rsp_valid_o ),
-    .ready_i(rsp_ready_i )
+    .ready_i(rsp_ready_i ),
+    .err_o            (spatz_rsp_register_err),
+    .data_corrector_o (),
+    .data_corrected_i ('0)
   );
 
   // Retire an operation/instruction and write back result to core
@@ -270,7 +294,9 @@ module spatz_scalar_unit
   logic       spatz_req_valid;
   logic       spatz_req_ready;
 
-  spill_register #(
+  logic [1:0] operation_queue_err;
+  rel_spill_register #(
+    .TmrHandshake(1'b0),
     .T(spatz_req_t)
   ) i_operation_queue (
     .clk_i  (clk_i          ),
@@ -280,7 +306,10 @@ module spatz_scalar_unit
     .ready_o(vfu_req_ready  ),
     .data_o (spatz_req      ),
     .valid_o(spatz_req_valid),
-    .ready_i(spatz_req_ready)
+    .ready_i(spatz_req_ready),
+    .err_o            (operation_queue_err),
+    .data_corrector_o (),
+    .data_corrected_i ('0)
   );
 
   ///////////////
@@ -289,11 +318,25 @@ module spatz_scalar_unit
 
   // Vector length counter
   vlen_t vl_q, vl_d;
-  `FF(vl_q, vl_d, '0)
+  // TMR: vl_q (voted value in vl_q, copies vl_q0..2)
+  vlen_t vl_q0, vl_q1, vl_q2;
+  `FF(vl_q0, vl_d, '0)
+  `FF(vl_q1, vl_d, '0)
+  `FF(vl_q2, vl_d, '0)
+  logic [$bits(vl_q)-1:0] vl_q_vote;
+  bitwise_TMR_voter_fail #(.DataWidth($bits(vl_q)), .VoterType(1)) i_vl_q_voter (
+    .a_i(vl_q0), .b_i(vl_q1), .c_i(vl_q2), .majority_o(vl_q_vote), .fault_detected_o(ff_tmr_err_0[1]));
+  assign vl_q = vlen_t'(vl_q_vote);
 
   // Are we busy?
   logic busy_q, busy_d;
-  `FF(busy_q, busy_d, 1'b0)
+  // TMR: busy_q (voted value in busy_q, copies busy_q0..2)
+  logic busy_q0, busy_q1, busy_q2;
+  `FF(busy_q0, busy_d, 1'b0)
+  `FF(busy_q1, busy_d, 1'b0)
+  `FF(busy_q2, busy_d, 1'b0)
+  bitwise_TMR_voter_fail #(.DataWidth($bits(busy_q)), .VoterType(1)) i_busy_q_voter (
+    .a_i(busy_q0), .b_i(busy_q1), .c_i(busy_q2), .majority_o(busy_q), .fault_detected_o(ff_tmr_err_0[2]));
 
   // Number of elements in one VRF word
   logic [$clog2(N_FU*(ELEN/8)):0] nr_elem_word;
@@ -304,7 +347,15 @@ module spatz_scalar_unit
     VFU_RunningIPU, VFU_RunningFPU
    } state_t;
    state_t state_d, state_q;
-  `FF(state_q, state_d, VFU_RunningFPU)
+  // TMR: state_q (voted value in state_q, copies state_q0..2)
+  state_t state_q0, state_q1, state_q2;
+  `FF(state_q0, state_d, VFU_RunningFPU)
+  `FF(state_q1, state_d, VFU_RunningFPU)
+  `FF(state_q2, state_d, VFU_RunningFPU)
+  logic [$bits(state_q)-1:0] state_q_vote;
+  bitwise_TMR_voter_fail #(.DataWidth($bits(state_q)), .VoterType(1)) i_state_q_voter (
+    .a_i(state_q0), .b_i(state_q1), .c_i(state_q2), .majority_o(state_q_vote), .fault_detected_o(ff_tmr_err_0[3]));
+  assign state_q = state_t'(state_q_vote);
 
   // Propagate the tags through the functional units
   vfu_tag_t ipu_result_tag, fpu_result_tag, result_tag;
@@ -351,7 +402,13 @@ module spatz_scalar_unit
 
   // Currently running instructions
   logic [NrParallelInstructions-1:0] running_d, running_q;
-  `FF(running_q, running_d, '0)
+  // TMR: running_q (voted value in running_q, copies running_q0..2)
+  logic [NrParallelInstructions-1:0] running_q0, running_q1, running_q2;
+  `FF(running_q0, running_d, '0)
+  `FF(running_q1, running_d, '0)
+  `FF(running_q2, running_d, '0)
+  bitwise_TMR_voter_fail #(.DataWidth($bits(running_q)), .VoterType(1)) i_running_q_voter (
+    .a_i(running_q0), .b_i(running_q1), .c_i(running_q2), .majority_o(running_q), .fault_detected_o(ff_tmr_err_0[4]));
 
   // Is this a FPU instruction
   logic is_fpu_insn;
@@ -371,11 +428,23 @@ module spatz_scalar_unit
 
   // Are we producing the upper or lower part of the results of a narrowing instruction?
   logic narrowing_upper_d, narrowing_upper_q;
-  `FF(narrowing_upper_q, narrowing_upper_d, 1'b0)
+  // TMR: narrowing_upper_q (voted value in narrowing_upper_q, copies narrowing_upper_q0..2)
+  logic narrowing_upper_q0, narrowing_upper_q1, narrowing_upper_q2;
+  `FF(narrowing_upper_q0, narrowing_upper_d, 1'b0)
+  `FF(narrowing_upper_q1, narrowing_upper_d, 1'b0)
+  `FF(narrowing_upper_q2, narrowing_upper_d, 1'b0)
+  bitwise_TMR_voter_fail #(.DataWidth($bits(narrowing_upper_q)), .VoterType(1)) i_narrowing_upper_q_voter (
+    .a_i(narrowing_upper_q0), .b_i(narrowing_upper_q1), .c_i(narrowing_upper_q2), .majority_o(narrowing_upper_q), .fault_detected_o(ff_tmr_err_0[5]));
 
   // Are we reading the upper or lower part of the operands of a widening instruction?
   logic widening_upper_d, widening_upper_q;
-  `FF(widening_upper_q, widening_upper_d, 1'b0)
+  // TMR: widening_upper_q (voted value in widening_upper_q, copies widening_upper_q0..2)
+  logic widening_upper_q0, widening_upper_q1, widening_upper_q2;
+  `FF(widening_upper_q0, widening_upper_d, 1'b0)
+  `FF(widening_upper_q1, widening_upper_d, 1'b0)
+  `FF(widening_upper_q2, widening_upper_d, 1'b0)
+  bitwise_TMR_voter_fail #(.DataWidth($bits(widening_upper_q)), .VoterType(1)) i_widening_upper_q_voter (
+    .a_i(widening_upper_q0), .b_i(widening_upper_q1), .c_i(widening_upper_q2), .majority_o(widening_upper_q), .fault_detected_o(ff_tmr_err_0[6]));
 
   // Are any results valid?
   logic [N_FU*ELEN-1:0]  result;
@@ -619,10 +688,24 @@ module spatz_scalar_unit
     logic fpu_vectorial_op;
 
     logic [N_FPU-1:0] fpu_busy_d, fpu_busy_q;
-    `FF(fpu_busy_q, fpu_busy_d, '0)
+    // TMR: fpu_busy_q (voted value in fpu_busy_q, copies fpu_busy_q0..2)
+    logic [N_FPU-1:0] fpu_busy_q0, fpu_busy_q1, fpu_busy_q2;
+    `FF(fpu_busy_q0, fpu_busy_d, '0)
+    `FF(fpu_busy_q1, fpu_busy_d, '0)
+    `FF(fpu_busy_q2, fpu_busy_d, '0)
+    bitwise_TMR_voter_fail #(.DataWidth($bits(fpu_busy_q)), .VoterType(1)) i_fpu_busy_q_voter (
+      .a_i(fpu_busy_q0), .b_i(fpu_busy_q1), .c_i(fpu_busy_q2), .majority_o(fpu_busy_q), .fault_detected_o(ff_tmr_err_0[7]));
 
     status_t [N_FPU-1:0] fpu_status_d, fpu_status_q;
-    `FF(fpu_status_q, fpu_status_d, '0)
+    // TMR: fpu_status_q (voted value in fpu_status_q, copies fpu_status_q0..2)
+    status_t [N_FPU-1:0] fpu_status_q0, fpu_status_q1, fpu_status_q2;
+    `FF(fpu_status_q0, fpu_status_d, '0)
+    `FF(fpu_status_q1, fpu_status_d, '0)
+    `FF(fpu_status_q2, fpu_status_d, '0)
+    logic [$bits(fpu_status_q)-1:0] fpu_status_q_vote;
+    bitwise_TMR_voter_fail #(.DataWidth($bits(fpu_status_q)), .VoterType(1)) i_fpu_status_q_voter (
+      .a_i(fpu_status_q0), .b_i(fpu_status_q1), .c_i(fpu_status_q2), .majority_o(fpu_status_q_vote), .fault_detected_o(ff_tmr_err_0[8]));
+    assign fpu_status_q = (fpu_status_q_vote);
 
     always_comb begin: gen_decoder
       fpu_op           = fpnew_pkg::FMADD;
@@ -792,18 +875,108 @@ module spatz_scalar_unit
       logic fpu_in_valid_q;
       logic fpu_in_ready_d;
 
-      `FFL(fpu_operand1_q, fpu_operand1, int_fpu_in_valid && int_fpu_in_ready, '0)
-      `FFL(fpu_operand2_q, fpu_operand2, int_fpu_in_valid && int_fpu_in_ready, '0)
-      `FFL(fpu_operand3_q, fpu_operand3, int_fpu_in_valid && int_fpu_in_ready, '0)
-      `FFL(fpu_op_q, fpu_op, int_fpu_in_valid && int_fpu_in_ready, fpnew_pkg::FMADD)
-      `FFL(fpu_src_fmt_q, fpu_src_fmt, int_fpu_in_valid && int_fpu_in_ready, fpnew_pkg::FP32)
-      `FFL(fpu_dst_fmt_q, fpu_dst_fmt, int_fpu_in_valid && int_fpu_in_ready, fpnew_pkg::FP32)
-      `FFL(fpu_int_fmt_q, fpu_int_fmt, int_fpu_in_valid && int_fpu_in_ready, fpnew_pkg::INT8)
-      `FFL(fpu_op_mode_q, fpu_op_mode, int_fpu_in_valid && int_fpu_in_ready, 1'b0)
-      `FFL(fpu_vectorial_op_q, fpu_vectorial_op, int_fpu_in_valid && int_fpu_in_ready, 1'b0)
-      `FFL(rm_q, spatz_req.rm, int_fpu_in_valid && int_fpu_in_ready, fpnew_pkg::RNE)
-      `FFL(input_tag_q, input_tag, int_fpu_in_valid && int_fpu_in_ready, '{vsew: EW_8, default: '0})
-      `FFL(fpu_in_valid_q, int_fpu_in_valid, int_fpu_in_ready, 1'b0)
+      // TMR: fpu_operand1_q (voted value in fpu_operand1_q, copies fpu_operand1_q0..2)
+      elen_t fpu_operand1_q0, fpu_operand1_q1, fpu_operand1_q2;
+      `FFL(fpu_operand1_q0, fpu_operand1, int_fpu_in_valid && int_fpu_in_ready, '0)
+      `FFL(fpu_operand1_q1, fpu_operand1, int_fpu_in_valid && int_fpu_in_ready, '0)
+      `FFL(fpu_operand1_q2, fpu_operand1, int_fpu_in_valid && int_fpu_in_ready, '0)
+      logic [$bits(fpu_operand1_q)-1:0] fpu_operand1_q_vote;
+      bitwise_TMR_voter_fail #(.DataWidth($bits(fpu_operand1_q)), .VoterType(1)) i_fpu_operand1_q_voter (
+        .a_i(fpu_operand1_q0), .b_i(fpu_operand1_q1), .c_i(fpu_operand1_q2), .majority_o(fpu_operand1_q_vote), .fault_detected_o(ff_tmr_err_1[((0)*(N_FPU)+fpu)*12+0]));
+      assign fpu_operand1_q = elen_t'(fpu_operand1_q_vote);
+      // TMR: fpu_operand2_q (voted value in fpu_operand2_q, copies fpu_operand2_q0..2)
+      elen_t fpu_operand2_q0, fpu_operand2_q1, fpu_operand2_q2;
+      `FFL(fpu_operand2_q0, fpu_operand2, int_fpu_in_valid && int_fpu_in_ready, '0)
+      `FFL(fpu_operand2_q1, fpu_operand2, int_fpu_in_valid && int_fpu_in_ready, '0)
+      `FFL(fpu_operand2_q2, fpu_operand2, int_fpu_in_valid && int_fpu_in_ready, '0)
+      logic [$bits(fpu_operand2_q)-1:0] fpu_operand2_q_vote;
+      bitwise_TMR_voter_fail #(.DataWidth($bits(fpu_operand2_q)), .VoterType(1)) i_fpu_operand2_q_voter (
+        .a_i(fpu_operand2_q0), .b_i(fpu_operand2_q1), .c_i(fpu_operand2_q2), .majority_o(fpu_operand2_q_vote), .fault_detected_o(ff_tmr_err_1[((0)*(N_FPU)+fpu)*12+1]));
+      assign fpu_operand2_q = elen_t'(fpu_operand2_q_vote);
+      // TMR: fpu_operand3_q (voted value in fpu_operand3_q, copies fpu_operand3_q0..2)
+      elen_t fpu_operand3_q0, fpu_operand3_q1, fpu_operand3_q2;
+      `FFL(fpu_operand3_q0, fpu_operand3, int_fpu_in_valid && int_fpu_in_ready, '0)
+      `FFL(fpu_operand3_q1, fpu_operand3, int_fpu_in_valid && int_fpu_in_ready, '0)
+      `FFL(fpu_operand3_q2, fpu_operand3, int_fpu_in_valid && int_fpu_in_ready, '0)
+      logic [$bits(fpu_operand3_q)-1:0] fpu_operand3_q_vote;
+      bitwise_TMR_voter_fail #(.DataWidth($bits(fpu_operand3_q)), .VoterType(1)) i_fpu_operand3_q_voter (
+        .a_i(fpu_operand3_q0), .b_i(fpu_operand3_q1), .c_i(fpu_operand3_q2), .majority_o(fpu_operand3_q_vote), .fault_detected_o(ff_tmr_err_1[((0)*(N_FPU)+fpu)*12+2]));
+      assign fpu_operand3_q = elen_t'(fpu_operand3_q_vote);
+      // TMR: fpu_op_q (voted value in fpu_op_q, copies fpu_op_q0..2)
+      operation_e fpu_op_q0, fpu_op_q1, fpu_op_q2;
+      `FFL(fpu_op_q0, fpu_op, int_fpu_in_valid && int_fpu_in_ready, fpnew_pkg::FMADD)
+      `FFL(fpu_op_q1, fpu_op, int_fpu_in_valid && int_fpu_in_ready, fpnew_pkg::FMADD)
+      `FFL(fpu_op_q2, fpu_op, int_fpu_in_valid && int_fpu_in_ready, fpnew_pkg::FMADD)
+      logic [$bits(fpu_op_q)-1:0] fpu_op_q_vote;
+      bitwise_TMR_voter_fail #(.DataWidth($bits(fpu_op_q)), .VoterType(1)) i_fpu_op_q_voter (
+        .a_i(fpu_op_q0), .b_i(fpu_op_q1), .c_i(fpu_op_q2), .majority_o(fpu_op_q_vote), .fault_detected_o(ff_tmr_err_1[((0)*(N_FPU)+fpu)*12+3]));
+      assign fpu_op_q = operation_e'(fpu_op_q_vote);
+      // TMR: fpu_src_fmt_q (voted value in fpu_src_fmt_q, copies fpu_src_fmt_q0..2)
+      fp_format_e fpu_src_fmt_q0, fpu_src_fmt_q1, fpu_src_fmt_q2;
+      `FFL(fpu_src_fmt_q0, fpu_src_fmt, int_fpu_in_valid && int_fpu_in_ready, fpnew_pkg::FP32)
+      `FFL(fpu_src_fmt_q1, fpu_src_fmt, int_fpu_in_valid && int_fpu_in_ready, fpnew_pkg::FP32)
+      `FFL(fpu_src_fmt_q2, fpu_src_fmt, int_fpu_in_valid && int_fpu_in_ready, fpnew_pkg::FP32)
+      logic [$bits(fpu_src_fmt_q)-1:0] fpu_src_fmt_q_vote;
+      bitwise_TMR_voter_fail #(.DataWidth($bits(fpu_src_fmt_q)), .VoterType(1)) i_fpu_src_fmt_q_voter (
+        .a_i(fpu_src_fmt_q0), .b_i(fpu_src_fmt_q1), .c_i(fpu_src_fmt_q2), .majority_o(fpu_src_fmt_q_vote), .fault_detected_o(ff_tmr_err_1[((0)*(N_FPU)+fpu)*12+4]));
+      assign fpu_src_fmt_q = fp_format_e'(fpu_src_fmt_q_vote);
+      // TMR: fpu_dst_fmt_q (voted value in fpu_dst_fmt_q, copies fpu_dst_fmt_q0..2)
+      fp_format_e fpu_dst_fmt_q0, fpu_dst_fmt_q1, fpu_dst_fmt_q2;
+      `FFL(fpu_dst_fmt_q0, fpu_dst_fmt, int_fpu_in_valid && int_fpu_in_ready, fpnew_pkg::FP32)
+      `FFL(fpu_dst_fmt_q1, fpu_dst_fmt, int_fpu_in_valid && int_fpu_in_ready, fpnew_pkg::FP32)
+      `FFL(fpu_dst_fmt_q2, fpu_dst_fmt, int_fpu_in_valid && int_fpu_in_ready, fpnew_pkg::FP32)
+      logic [$bits(fpu_dst_fmt_q)-1:0] fpu_dst_fmt_q_vote;
+      bitwise_TMR_voter_fail #(.DataWidth($bits(fpu_dst_fmt_q)), .VoterType(1)) i_fpu_dst_fmt_q_voter (
+        .a_i(fpu_dst_fmt_q0), .b_i(fpu_dst_fmt_q1), .c_i(fpu_dst_fmt_q2), .majority_o(fpu_dst_fmt_q_vote), .fault_detected_o(ff_tmr_err_1[((0)*(N_FPU)+fpu)*12+5]));
+      assign fpu_dst_fmt_q = fp_format_e'(fpu_dst_fmt_q_vote);
+      // TMR: fpu_int_fmt_q (voted value in fpu_int_fmt_q, copies fpu_int_fmt_q0..2)
+      int_format_e fpu_int_fmt_q0, fpu_int_fmt_q1, fpu_int_fmt_q2;
+      `FFL(fpu_int_fmt_q0, fpu_int_fmt, int_fpu_in_valid && int_fpu_in_ready, fpnew_pkg::INT8)
+      `FFL(fpu_int_fmt_q1, fpu_int_fmt, int_fpu_in_valid && int_fpu_in_ready, fpnew_pkg::INT8)
+      `FFL(fpu_int_fmt_q2, fpu_int_fmt, int_fpu_in_valid && int_fpu_in_ready, fpnew_pkg::INT8)
+      logic [$bits(fpu_int_fmt_q)-1:0] fpu_int_fmt_q_vote;
+      bitwise_TMR_voter_fail #(.DataWidth($bits(fpu_int_fmt_q)), .VoterType(1)) i_fpu_int_fmt_q_voter (
+        .a_i(fpu_int_fmt_q0), .b_i(fpu_int_fmt_q1), .c_i(fpu_int_fmt_q2), .majority_o(fpu_int_fmt_q_vote), .fault_detected_o(ff_tmr_err_1[((0)*(N_FPU)+fpu)*12+6]));
+      assign fpu_int_fmt_q = int_format_e'(fpu_int_fmt_q_vote);
+      // TMR: fpu_op_mode_q (voted value in fpu_op_mode_q, copies fpu_op_mode_q0..2)
+      logic fpu_op_mode_q0, fpu_op_mode_q1, fpu_op_mode_q2;
+      `FFL(fpu_op_mode_q0, fpu_op_mode, int_fpu_in_valid && int_fpu_in_ready, 1'b0)
+      `FFL(fpu_op_mode_q1, fpu_op_mode, int_fpu_in_valid && int_fpu_in_ready, 1'b0)
+      `FFL(fpu_op_mode_q2, fpu_op_mode, int_fpu_in_valid && int_fpu_in_ready, 1'b0)
+      bitwise_TMR_voter_fail #(.DataWidth($bits(fpu_op_mode_q)), .VoterType(1)) i_fpu_op_mode_q_voter (
+        .a_i(fpu_op_mode_q0), .b_i(fpu_op_mode_q1), .c_i(fpu_op_mode_q2), .majority_o(fpu_op_mode_q), .fault_detected_o(ff_tmr_err_1[((0)*(N_FPU)+fpu)*12+7]));
+      // TMR: fpu_vectorial_op_q (voted value in fpu_vectorial_op_q, copies fpu_vectorial_op_q0..2)
+      logic fpu_vectorial_op_q0, fpu_vectorial_op_q1, fpu_vectorial_op_q2;
+      `FFL(fpu_vectorial_op_q0, fpu_vectorial_op, int_fpu_in_valid && int_fpu_in_ready, 1'b0)
+      `FFL(fpu_vectorial_op_q1, fpu_vectorial_op, int_fpu_in_valid && int_fpu_in_ready, 1'b0)
+      `FFL(fpu_vectorial_op_q2, fpu_vectorial_op, int_fpu_in_valid && int_fpu_in_ready, 1'b0)
+      bitwise_TMR_voter_fail #(.DataWidth($bits(fpu_vectorial_op_q)), .VoterType(1)) i_fpu_vectorial_op_q_voter (
+        .a_i(fpu_vectorial_op_q0), .b_i(fpu_vectorial_op_q1), .c_i(fpu_vectorial_op_q2), .majority_o(fpu_vectorial_op_q), .fault_detected_o(ff_tmr_err_1[((0)*(N_FPU)+fpu)*12+8]));
+      // TMR: rm_q (voted value in rm_q, copies rm_q0..2)
+      roundmode_e rm_q0, rm_q1, rm_q2;
+      `FFL(rm_q0, spatz_req.rm, int_fpu_in_valid && int_fpu_in_ready, fpnew_pkg::RNE)
+      `FFL(rm_q1, spatz_req.rm, int_fpu_in_valid && int_fpu_in_ready, fpnew_pkg::RNE)
+      `FFL(rm_q2, spatz_req.rm, int_fpu_in_valid && int_fpu_in_ready, fpnew_pkg::RNE)
+      logic [$bits(rm_q)-1:0] rm_q_vote;
+      bitwise_TMR_voter_fail #(.DataWidth($bits(rm_q)), .VoterType(1)) i_rm_q_voter (
+        .a_i(rm_q0), .b_i(rm_q1), .c_i(rm_q2), .majority_o(rm_q_vote), .fault_detected_o(ff_tmr_err_1[((0)*(N_FPU)+fpu)*12+9]));
+      assign rm_q = roundmode_e'(rm_q_vote);
+      // TMR: input_tag_q (voted value in input_tag_q, copies input_tag_q0..2)
+      vfu_tag_t input_tag_q0, input_tag_q1, input_tag_q2;
+      `FFL(input_tag_q0, input_tag, int_fpu_in_valid && int_fpu_in_ready, '{vsew: EW_8, default: '0})
+      `FFL(input_tag_q1, input_tag, int_fpu_in_valid && int_fpu_in_ready, '{vsew: EW_8, default: '0})
+      `FFL(input_tag_q2, input_tag, int_fpu_in_valid && int_fpu_in_ready, '{vsew: EW_8, default: '0})
+      logic [$bits(input_tag_q)-1:0] input_tag_q_vote;
+      bitwise_TMR_voter_fail #(.DataWidth($bits(input_tag_q)), .VoterType(1)) i_input_tag_q_voter (
+        .a_i(input_tag_q0), .b_i(input_tag_q1), .c_i(input_tag_q2), .majority_o(input_tag_q_vote), .fault_detected_o(ff_tmr_err_1[((0)*(N_FPU)+fpu)*12+10]));
+      assign input_tag_q = vfu_tag_t'(input_tag_q_vote);
+      // TMR: fpu_in_valid_q (voted value in fpu_in_valid_q, copies fpu_in_valid_q0..2)
+      logic fpu_in_valid_q0, fpu_in_valid_q1, fpu_in_valid_q2;
+      `FFL(fpu_in_valid_q0, int_fpu_in_valid, int_fpu_in_ready, 1'b0)
+      `FFL(fpu_in_valid_q1, int_fpu_in_valid, int_fpu_in_ready, 1'b0)
+      `FFL(fpu_in_valid_q2, int_fpu_in_valid, int_fpu_in_ready, 1'b0)
+      bitwise_TMR_voter_fail #(.DataWidth($bits(fpu_in_valid_q)), .VoterType(1)) i_fpu_in_valid_q_voter (
+        .a_i(fpu_in_valid_q0), .b_i(fpu_in_valid_q1), .c_i(fpu_in_valid_q2), .majority_o(fpu_in_valid_q), .fault_detected_o(ff_tmr_err_1[((0)*(N_FPU)+fpu)*12+11]));
       assign int_fpu_in_ready = !fpu_in_valid_q || fpu_in_valid_q && fpu_in_ready_d;
 
       fpnew_top #(
@@ -850,5 +1023,8 @@ module spatz_scalar_unit
     assign fpu_status_o     = '0;
   end: gen_no_fpu
 
+
+  assign scalar_correctable_fault_o   = vfu_scalar_response_err[0] | spatz_rsp_register_err[0] | operation_queue_err[0] | ff_tmr_fault_any;
+  assign scalar_uncorrectable_fault_o = vfu_scalar_response_err[1] | spatz_rsp_register_err[1] | operation_queue_err[1];
 
 endmodule : spatz_scalar_unit

@@ -30,6 +30,8 @@ module spatz_controller
     input  logic                                   rst_ni,
     // Snitch Issue
     input  logic                                   issue_valid_i,
+    output logic                                   controller_correctable_fault_o,
+    output logic                                   controller_uncorrectable_fault_o,
     output logic                                   issue_ready_o,
     input  spatz_issue_req_t                       issue_req_i,
     output spatz_issue_rsp_t                       issue_rsp_o,
@@ -80,6 +82,11 @@ module spatz_controller
 `endif
   );
 
+  // TMR fault flags of the triplicated FFs
+  logic [18-1:0] ff_tmr_err_0;
+  logic ff_tmr_fault_any;
+  assign ff_tmr_fault_any = (|ff_tmr_err_0);
+
 // Include FF
 `include "common_cells/registers.svh"
 
@@ -110,13 +117,59 @@ module spatz_controller
   sp_cfg_t VTL_cfg_d, VTL_cfg_q;    // Formats
 `endif
 
-  `FF(vstart_q,  vstart_d,  '0)
-  `FF(vl_q,      vl_d,      '0)
-  `FF(vtype_q,   vtype_d,   '{vill: 1'b1, vsew: EW_8, vlmul: LMUL_1, default: '0})
+  // TMR: vstart_q (voted value in vstart_q, copies vstart_q0..2)
+  vlen_t vstart_q0, vstart_q1, vstart_q2;
+  `FF(vstart_q0, vstart_d, '0)
+  `FF(vstart_q1, vstart_d, '0)
+  `FF(vstart_q2, vstart_d, '0)
+  logic [$bits(vstart_q)-1:0] vstart_q_vote;
+  bitwise_TMR_voter_fail #(.DataWidth($bits(vstart_q)), .VoterType(1)) i_vstart_q_voter (
+    .a_i(vstart_q0), .b_i(vstart_q1), .c_i(vstart_q2), .majority_o(vstart_q_vote), .fault_detected_o(ff_tmr_err_0[0]));
+  assign vstart_q = vlen_t'(vstart_q_vote);
+  // TMR: vl_q (voted value in vl_q, copies vl_q0..2)
+  vlen_t vl_q0, vl_q1, vl_q2;
+  `FF(vl_q0, vl_d, '0)
+  `FF(vl_q1, vl_d, '0)
+  `FF(vl_q2, vl_d, '0)
+  logic [$bits(vl_q)-1:0] vl_q_vote;
+  bitwise_TMR_voter_fail #(.DataWidth($bits(vl_q)), .VoterType(1)) i_vl_q_voter (
+    .a_i(vl_q0), .b_i(vl_q1), .c_i(vl_q2), .majority_o(vl_q_vote), .fault_detected_o(ff_tmr_err_0[1]));
+  assign vl_q = vlen_t'(vl_q_vote);
+  // TMR: vtype_q (voted value in vtype_q, copies vtype_q0..2)
+  vtype_t vtype_q0, vtype_q1, vtype_q2;
+  `FF(vtype_q0, vtype_d, '{vill: 1'b1, vsew: EW_8, vlmul: LMUL_1, default: '0})
+  `FF(vtype_q1, vtype_d, '{vill: 1'b1, vsew: EW_8, vlmul: LMUL_1, default: '0})
+  `FF(vtype_q2, vtype_d, '{vill: 1'b1, vsew: EW_8, vlmul: LMUL_1, default: '0})
+  logic [$bits(vtype_q)-1:0] vtype_q_vote;
+  bitwise_TMR_voter_fail #(.DataWidth($bits(vtype_q)), .VoterType(1)) i_vtype_q_voter (
+    .a_i(vtype_q0), .b_i(vtype_q1), .c_i(vtype_q2), .majority_o(vtype_q_vote), .fault_detected_o(ff_tmr_err_0[2]));
+  assign vtype_q = vtype_t'(vtype_q_vote);
 `ifdef VENTAGLIO
-  `FF(vtl_en_q,  vtl_en_d, 1'b0)     // VTL extension enable
-  `FF(VTLVreg_q, VTLVreg_d, '0)     // VTL register setting
-  `FF(VTL_cfg_q, VTL_cfg_d, '0)
+  // TMR: vtl_en_q (voted value in vtl_en_q, copies vtl_en_q0..2)
+  logic vtl_en_q0, vtl_en_q1, vtl_en_q2;
+  `FF(vtl_en_q0, vtl_en_d, 1'b0)
+  `FF(vtl_en_q1, vtl_en_d, 1'b0)
+  `FF(vtl_en_q2, vtl_en_d, 1'b0)
+  bitwise_TMR_voter_fail #(.DataWidth($bits(vtl_en_q)), .VoterType(1)) i_vtl_en_q_voter (
+    .a_i(vtl_en_q0), .b_i(vtl_en_q1), .c_i(vtl_en_q2), .majority_o(vtl_en_q), .fault_detected_o(ff_tmr_err_0[3]));
+  // TMR: VTLVreg_q (voted value in VTLVreg_q, copies VTLVreg_q0..2)
+  vid_t VTLVreg_q0, VTLVreg_q1, VTLVreg_q2;
+  `FF(VTLVreg_q0, VTLVreg_d, '0)
+  `FF(VTLVreg_q1, VTLVreg_d, '0)
+  `FF(VTLVreg_q2, VTLVreg_d, '0)
+  logic [$bits(VTLVreg_q)-1:0] VTLVreg_q_vote;
+  bitwise_TMR_voter_fail #(.DataWidth($bits(VTLVreg_q)), .VoterType(1)) i_VTLVreg_q_voter (
+    .a_i(VTLVreg_q0), .b_i(VTLVreg_q1), .c_i(VTLVreg_q2), .majority_o(VTLVreg_q_vote), .fault_detected_o(ff_tmr_err_0[4]));
+  assign VTLVreg_q = vid_t'(VTLVreg_q_vote);
+  // TMR: VTL_cfg_q (voted value in VTL_cfg_q, copies VTL_cfg_q0..2)
+  sp_cfg_t VTL_cfg_q0, VTL_cfg_q1, VTL_cfg_q2;
+  `FF(VTL_cfg_q0, VTL_cfg_d, '0)
+  `FF(VTL_cfg_q1, VTL_cfg_d, '0)
+  `FF(VTL_cfg_q2, VTL_cfg_d, '0)
+  logic [$bits(VTL_cfg_q)-1:0] VTL_cfg_q_vote;
+  bitwise_TMR_voter_fail #(.DataWidth($bits(VTL_cfg_q)), .VoterType(1)) i_VTL_cfg_q_voter (
+    .a_i(VTL_cfg_q0), .b_i(VTL_cfg_q1), .c_i(VTL_cfg_q2), .majority_o(VTL_cfg_q_vote), .fault_detected_o(ff_tmr_err_0[5]));
+  assign VTL_cfg_q = sp_cfg_t'(VTL_cfg_q_vote);
 `endif
 
 
@@ -284,8 +337,24 @@ module spatz_controller
   } [NRVREG-1:0] table_t;
   table_t read_table_d, read_table_q, write_table_d, write_table_q;
 
-  `FF(read_table_q, read_table_d, '{default: '0})
-  `FF(write_table_q, write_table_d, '{default: '0})
+  // TMR: read_table_q (voted value in read_table_q, copies read_table_q0..2)
+  table_t read_table_q0, read_table_q1, read_table_q2;
+  `FF(read_table_q0, read_table_d, '{default: '0})
+  `FF(read_table_q1, read_table_d, '{default: '0})
+  `FF(read_table_q2, read_table_d, '{default: '0})
+  logic [$bits(read_table_q)-1:0] read_table_q_vote;
+  bitwise_TMR_voter_fail #(.DataWidth($bits(read_table_q)), .VoterType(1)) i_read_table_q_voter (
+    .a_i(read_table_q0), .b_i(read_table_q1), .c_i(read_table_q2), .majority_o(read_table_q_vote), .fault_detected_o(ff_tmr_err_0[6]));
+  assign read_table_q = table_t'(read_table_q_vote);
+  // TMR: write_table_q (voted value in write_table_q, copies write_table_q0..2)
+  table_t write_table_q0, write_table_q1, write_table_q2;
+  `FF(write_table_q0, write_table_d, '{default: '0})
+  `FF(write_table_q1, write_table_d, '{default: '0})
+  `FF(write_table_q2, write_table_d, '{default: '0})
+  logic [$bits(write_table_q)-1:0] write_table_q_vote;
+  bitwise_TMR_voter_fail #(.DataWidth($bits(write_table_q)), .VoterType(1)) i_write_table_q_voter (
+    .a_i(write_table_q0), .b_i(write_table_q1), .c_i(write_table_q2), .majority_o(write_table_q_vote), .fault_detected_o(ff_tmr_err_0[7]));
+  assign write_table_q = table_t'(write_table_q_vote);
 
   // Port scoreboard. Keeps track of the dependencies of this instruction with other instructions
   typedef struct packed {
@@ -294,7 +363,15 @@ module spatz_controller
   } scoreboard_metadata_t;
 
   scoreboard_metadata_t [NrParallelInstructions-1:0] scoreboard_q, scoreboard_d;
-  `FF(scoreboard_q, scoreboard_d, '0)
+  // TMR: scoreboard_q (voted value in scoreboard_q, copies scoreboard_q0..2)
+  scoreboard_metadata_t [NrParallelInstructions-1:0] scoreboard_q0, scoreboard_q1, scoreboard_q2;
+  `FF(scoreboard_q0, scoreboard_d, '0)
+  `FF(scoreboard_q1, scoreboard_d, '0)
+  `FF(scoreboard_q2, scoreboard_d, '0)
+  logic [$bits(scoreboard_q)-1:0] scoreboard_q_vote;
+  bitwise_TMR_voter_fail #(.DataWidth($bits(scoreboard_q)), .VoterType(1)) i_scoreboard_q_voter (
+    .a_i(scoreboard_q0), .b_i(scoreboard_q1), .c_i(scoreboard_q2), .majority_o(scoreboard_q_vote), .fault_detected_o(ff_tmr_err_0[8]));
+  assign scoreboard_q = (scoreboard_q_vote);
 
 `ifdef VENTAGLIO
   ///////////////
@@ -308,7 +385,15 @@ module spatz_controller
     logic   [NrReadPorts-1:0]         read;
   } vtl_table_t;
   vtl_table_t [NrParallelInstructions-1:0] vtl_table_d, vtl_table_q;
-  `FF(vtl_table_q, vtl_table_d, '{default: '0})
+  // TMR: vtl_table_q (voted value in vtl_table_q, copies vtl_table_q0..2)
+  vtl_table_t [NrParallelInstructions-1:0] vtl_table_q0, vtl_table_q1, vtl_table_q2;
+  `FF(vtl_table_q0, vtl_table_d, '{default: '0})
+  `FF(vtl_table_q1, vtl_table_d, '{default: '0})
+  `FF(vtl_table_q2, vtl_table_d, '{default: '0})
+  logic [$bits(vtl_table_q)-1:0] vtl_table_q_vote;
+  bitwise_TMR_voter_fail #(.DataWidth($bits(vtl_table_q)), .VoterType(1)) i_vtl_table_q_voter (
+    .a_i(vtl_table_q0), .b_i(vtl_table_q1), .c_i(vtl_table_q2), .majority_o(vtl_table_q_vote), .fault_detected_o(ff_tmr_err_0[9]));
+  assign vtl_table_q = (vtl_table_q_vote);
 
   // For better wiring
   logic [NrParallelInstructions-1:0][NrVregfilePorts-1:0] vtl_table_wr;
@@ -333,23 +418,69 @@ module spatz_controller
   // Is this instruction a narrowing instruction?
   logic [NrParallelInstructions-1:0] narrow_q, narrow_d;
 
-  `FF(done_result_q, done_result_d, '0)
-  `FF(vl_cnt_q, vl_cnt_d, '0)
-  `FF(vl_max_q, vl_max_d, '0)
-  `FF(narrow_q, narrow_d, '0)
+  // TMR: done_result_q (voted value in done_result_q, copies done_result_q0..2)
+  logic [NumVLSUInterfaces-1:0] [NrParallelInstructions-1:0] done_result_q0, done_result_q1, done_result_q2;
+  `FF(done_result_q0, done_result_d, '0)
+  `FF(done_result_q1, done_result_d, '0)
+  `FF(done_result_q2, done_result_d, '0)
+  bitwise_TMR_voter_fail #(.DataWidth($bits(done_result_q)), .VoterType(1)) i_done_result_q_voter (
+    .a_i(done_result_q0), .b_i(done_result_q1), .c_i(done_result_q2), .majority_o(done_result_q), .fault_detected_o(ff_tmr_err_0[10]));
+  // TMR: vl_cnt_q (voted value in vl_cnt_q, copies vl_cnt_q0..2)
+  vlen_t [NrParallelInstructions-1:0] vl_cnt_q0, vl_cnt_q1, vl_cnt_q2;
+  `FF(vl_cnt_q0, vl_cnt_d, '0)
+  `FF(vl_cnt_q1, vl_cnt_d, '0)
+  `FF(vl_cnt_q2, vl_cnt_d, '0)
+  logic [$bits(vl_cnt_q)-1:0] vl_cnt_q_vote;
+  bitwise_TMR_voter_fail #(.DataWidth($bits(vl_cnt_q)), .VoterType(1)) i_vl_cnt_q_voter (
+    .a_i(vl_cnt_q0), .b_i(vl_cnt_q1), .c_i(vl_cnt_q2), .majority_o(vl_cnt_q_vote), .fault_detected_o(ff_tmr_err_0[11]));
+  assign vl_cnt_q = (vl_cnt_q_vote);
+  // TMR: vl_max_q (voted value in vl_max_q, copies vl_max_q0..2)
+  vlen_t [NrParallelInstructions-1:0] vl_max_q0, vl_max_q1, vl_max_q2;
+  `FF(vl_max_q0, vl_max_d, '0)
+  `FF(vl_max_q1, vl_max_d, '0)
+  `FF(vl_max_q2, vl_max_d, '0)
+  logic [$bits(vl_max_q)-1:0] vl_max_q_vote;
+  bitwise_TMR_voter_fail #(.DataWidth($bits(vl_max_q)), .VoterType(1)) i_vl_max_q_voter (
+    .a_i(vl_max_q0), .b_i(vl_max_q1), .c_i(vl_max_q2), .majority_o(vl_max_q_vote), .fault_detected_o(ff_tmr_err_0[12]));
+  assign vl_max_q = (vl_max_q_vote);
+  // TMR: narrow_q (voted value in narrow_q, copies narrow_q0..2)
+  logic [NrParallelInstructions-1:0] narrow_q0, narrow_q1, narrow_q2;
+  `FF(narrow_q0, narrow_d, '0)
+  `FF(narrow_q1, narrow_d, '0)
+  `FF(narrow_q2, narrow_d, '0)
+  bitwise_TMR_voter_fail #(.DataWidth($bits(narrow_q)), .VoterType(1)) i_narrow_q_voter (
+    .a_i(narrow_q0), .b_i(narrow_q1), .c_i(narrow_q2), .majority_o(narrow_q), .fault_detected_o(ff_tmr_err_0[13]));
 `else
   logic [NrParallelInstructions-1:0] wrote_result_q, wrote_result_d;
 `endif
 
-  `FF(wrote_result_q, wrote_result_d, '0)
+  // TMR: wrote_result_q (voted value in wrote_result_q, copies wrote_result_q0..2)
+  logic [NrParallelInstructions-1:0] wrote_result_q0, wrote_result_q1, wrote_result_q2;
+  `FF(wrote_result_q0, wrote_result_d, '0)
+  `FF(wrote_result_q1, wrote_result_d, '0)
+  `FF(wrote_result_q2, wrote_result_d, '0)
+  bitwise_TMR_voter_fail #(.DataWidth($bits(wrote_result_q)), .VoterType(1)) i_wrote_result_q_voter (
+    .a_i(wrote_result_q0), .b_i(wrote_result_q1), .c_i(wrote_result_q2), .majority_o(wrote_result_q), .fault_detected_o(ff_tmr_err_0[14]));
 
   // Is this instruction a narrowing or widening instruction?
   logic [NrParallelInstructions-1:0] narrow_wide_q, narrow_wide_d;
-  `FF(narrow_wide_q, narrow_wide_d, '0)
+  // TMR: narrow_wide_q (voted value in narrow_wide_q, copies narrow_wide_q0..2)
+  logic [NrParallelInstructions-1:0] narrow_wide_q0, narrow_wide_q1, narrow_wide_q2;
+  `FF(narrow_wide_q0, narrow_wide_d, '0)
+  `FF(narrow_wide_q1, narrow_wide_d, '0)
+  `FF(narrow_wide_q2, narrow_wide_d, '0)
+  bitwise_TMR_voter_fail #(.DataWidth($bits(narrow_wide_q)), .VoterType(1)) i_narrow_wide_q_voter (
+    .a_i(narrow_wide_q0), .b_i(narrow_wide_q1), .c_i(narrow_wide_q2), .majority_o(narrow_wide_q), .fault_detected_o(ff_tmr_err_0[15]));
 
   // Did this narrowing instruction write to the VRF in the previous cycle?
   logic [NrParallelInstructions-1:0] wrote_result_narrowing_q, wrote_result_narrowing_d;
-  `FF(wrote_result_narrowing_q, wrote_result_narrowing_d, '0)
+  // TMR: wrote_result_narrowing_q (voted value in wrote_result_narrowing_q, copies wrote_result_narrowing_q0..2)
+  logic [NrParallelInstructions-1:0] wrote_result_narrowing_q0, wrote_result_narrowing_q1, wrote_result_narrowing_q2;
+  `FF(wrote_result_narrowing_q0, wrote_result_narrowing_d, '0)
+  `FF(wrote_result_narrowing_q1, wrote_result_narrowing_d, '0)
+  `FF(wrote_result_narrowing_q2, wrote_result_narrowing_d, '0)
+  bitwise_TMR_voter_fail #(.DataWidth($bits(wrote_result_narrowing_q)), .VoterType(1)) i_wrote_result_narrowing_q_voter (
+    .a_i(wrote_result_narrowing_q0), .b_i(wrote_result_narrowing_q1), .c_i(wrote_result_narrowing_q2), .majority_o(wrote_result_narrowing_q), .fault_detected_o(ff_tmr_err_0[16]));
 
   always_comb begin : scoreboard
     // Maintain stated
@@ -736,7 +867,13 @@ module spatz_controller
   logic      [NrParallelInstructions-1:0] running_insn_d, running_insn_q;
   spatz_id_t                              next_insn_id;
   logic                                   running_insn_full;
-  `FF(running_insn_q, running_insn_d, '0)
+  // TMR: running_insn_q (voted value in running_insn_q, copies running_insn_q0..2)
+  logic      [NrParallelInstructions-1:0] running_insn_q0, running_insn_q1, running_insn_q2;
+  `FF(running_insn_q0, running_insn_d, '0)
+  `FF(running_insn_q1, running_insn_d, '0)
+  `FF(running_insn_q2, running_insn_d, '0)
+  bitwise_TMR_voter_fail #(.DataWidth($bits(running_insn_q)), .VoterType(1)) i_running_insn_q_voter (
+    .a_i(running_insn_q0), .b_i(running_insn_q1), .c_i(running_insn_q2), .majority_o(running_insn_q), .fault_detected_o(ff_tmr_err_0[17]));
   logic                                   insn_shortcut_en;
   spatz_id_t                              insn_shortcut_id;
 
@@ -915,7 +1052,9 @@ module spatz_controller
   logic     vfu_rsp_valid;
   logic     vfu_rsp_ready;
 
-  spill_register #(
+  logic [1:0] vfu_scalar_response_err;
+  rel_spill_register #(
+    .TmrHandshake(1'b0),
     .T(vfu_rsp_t)
   ) i_vfu_scalar_response (
     .clk_i  (clk_i                          ),
@@ -925,13 +1064,18 @@ module spatz_controller
     .ready_o(vfu_rsp_ready_o                ),
     .data_o (vfu_rsp                        ),
     .valid_o(vfu_rsp_valid                  ),
-    .ready_i(vfu_rsp_ready                  )
+    .ready_i(vfu_rsp_ready                  ),
+    .err_o            (vfu_scalar_response_err),
+    .data_corrector_o (),
+    .data_corrected_i ('0)
   );
 
   logic       rsp_valid_d;
   logic       rsp_ready_d;
   spatz_rsp_t rsp_d;
-  spill_register #(
+  logic [1:0] spatz_rsp_register_err;
+  rel_spill_register #(
+    .TmrHandshake(1'b0),
     .T     (spatz_rsp_t ),
     .Bypass(!RegisterRsp)
   ) i_spatz_rsp_register (
@@ -942,7 +1086,10 @@ module spatz_controller
     .ready_o(rsp_ready_d ),
     .data_o (rsp_o       ),
     .valid_o(rsp_valid_o ),
-    .ready_i(rsp_ready_i )
+    .ready_i(rsp_ready_i ),
+    .err_o            (spatz_rsp_register_err),
+    .data_corrector_o (),
+    .data_corrected_i ('0)
   );
 
   // Retire an operation/instruction and write back result to core
@@ -994,7 +1141,25 @@ module spatz_controller
   assign issue_ready_o = req_buffer_ready;
 
   // Send request off to execution units
-  assign spatz_req_o       = spatz_req;
+  // Simulation only: unused scalar operands (e.g. rs2 of an FP convert) can
+  // arrive as X from the core. The operation queues protect the whole
+  // spatz_req_t with one Hsiao codeword, so a single X bit would turn the
+  // entire decoded request into X. Replace X operand bits by 0 on the way out.
+  spatz_req_t spatz_req_clean;
+  always_comb begin
+    spatz_req_clean = spatz_req;
+`ifndef TARGET_SYNTHESIS
+    for (int unsigned b = 0; b < $bits(spatz_req.rs1); b++) begin
+      if ($isunknown(spatz_req.rs1[b])) spatz_req_clean.rs1[b] = 1'b0;
+      if ($isunknown(spatz_req.rs2[b])) spatz_req_clean.rs2[b] = 1'b0;
+      if ($isunknown(spatz_req.rsd[b])) spatz_req_clean.rsd[b] = 1'b0;
+    end
+`endif
+  end
+  assign spatz_req_o       = spatz_req_clean;
   assign spatz_req_valid_o = spatz_req_valid;
+
+  assign controller_correctable_fault_o   = vfu_scalar_response_err[0] | spatz_rsp_register_err[0] | ff_tmr_fault_any;
+  assign controller_uncorrectable_fault_o = vfu_scalar_response_err[1] | spatz_rsp_register_err[1];
 
 endmodule : spatz_controller
