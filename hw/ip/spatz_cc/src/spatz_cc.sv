@@ -402,7 +402,42 @@ module spatz_cc
   drsp_t                  data_tcdm_rsp;
   localparam int unsigned SelectWidth   = cf_math_pkg::idx_width(2);
   typedef logic [SelectWidth-1:0] select_t;
-  select_t slave_select;
+  select_t slave_select, addr_select;
+
+  // Atomics take the data port even for TCDM addresses, after the other port drains, to keep program order
+  dreq_t routed_dreq;
+  drsp_t routed_drsp;
+  logic       dreq_is_amo, hold;
+  logic       tcdm_issue, tcdm_done, data_issue, data_done;
+  logic [2:0] tcdm_pending_q, tcdm_pending_d;  // Requests on the TCDM port still waiting for a response
+  logic [2:0] data_pending_q, data_pending_d;  // Requests on the data port still waiting for a response
+  logic       amo_pending_q, amo_pending_d;    // An atomic among the data port's pending requests
+
+  assign dreq_is_amo  = merged_dreq.q.amo != reqrsp_pkg::AMONone;
+  assign slave_select = dreq_is_amo ? select_t'(0) : addr_select;
+  assign hold         = dreq_is_amo ? (tcdm_pending_q != '0) :
+                                      ((addr_select == select_t'(1)) & amo_pending_q);
+
+  always_comb begin
+    routed_dreq         = merged_dreq;
+    routed_dreq.q_valid = merged_dreq.q_valid & ~hold;
+    merged_drsp         = routed_drsp;
+    merged_drsp.q_ready = routed_drsp.q_ready & ~hold;
+  end
+
+  assign tcdm_issue     = data_tcdm_req.q_valid & data_tcdm_rsp.q_ready;
+  assign tcdm_done      = data_tcdm_rsp.p_valid & data_tcdm_req.p_ready;
+  assign data_issue     = data_req_o.q_valid & data_rsp_i.q_ready;
+  assign data_done      = data_rsp_i.p_valid & data_req_o.p_ready;
+  assign tcdm_pending_d = tcdm_pending_q + 3'(tcdm_issue) - 3'(tcdm_done);
+  assign data_pending_d = data_pending_q + 3'(data_issue) - 3'(data_done);
+  assign amo_pending_d  = (amo_pending_q | (data_issue & (data_req_o.q.amo != reqrsp_pkg::AMONone))) &
+                          (data_pending_d != '0);
+
+  `FF(tcdm_pending_q, tcdm_pending_d, '0)
+  `FF(data_pending_q, data_pending_d, '0)
+  `FF(amo_pending_q, amo_pending_d, 1'b0)
+
   reqrsp_demux #(
     .NrPorts   (2     ),
     .req_t     (dreq_t),
@@ -412,8 +447,8 @@ module spatz_cc
     .clk_i        (clk_i                      ),
     .rst_ni       (rst_ni                     ),
     .slv_select_i (slave_select               ),
-    .slv_req_i    (merged_dreq                ),
-    .slv_rsp_o    (merged_drsp                ),
+    .slv_req_i    (routed_dreq                ),
+    .slv_rsp_o    (routed_drsp                ),
     .mst_req_o    ({data_tcdm_req, data_req_o}),
     .mst_rsp_i    ({data_tcdm_rsp, data_rsp_i})
   );
@@ -440,7 +475,7 @@ module spatz_cc
   ) i_addr_decode_dync (
     .addr_i            (merged_dreq.q.addr),
     .addr_map_i        (addr_map          ),
-    .idx_o             (slave_select      ),
+    .idx_o             (addr_select       ),
     .dec_valid_o       (/* Unused */      ),
     .dec_error_o       (/* Unused */      ),
     .en_default_idx_i  (1'b1              ),
