@@ -63,6 +63,11 @@ module spatz_fpu_sequencer
     output logic            fpu_sequencer_uncorrectable_fault_o
   );
 
+  // TMR fault flags of the triplicated FFs
+  logic [4-1:0] ff_tmr_err_0;
+  logic ff_tmr_fault_any;
+  assign ff_tmr_fault_any = (|ff_tmr_err_0);
+
 `include "common_cells/registers.svh"
 `include "common_cells/assertions.svh"
 `include "reqrsp_interface/typedef.svh"
@@ -98,6 +103,7 @@ module spatz_fpu_sequencer
   assign fpr_raddr = {fs3, fs2, fs1};
 
   logic fpr_tmr_fault;
+  logic [1:0] fp_move_register_err;
   logic [NrReadPorts-1:0][FLEN-1:0] fpr_rdataA,fpr_rdataB,fpr_rdataC;
   snitch_regfileTMR #(
     .DATA_WIDTH    (FLEN        ),
@@ -141,7 +147,13 @@ module spatz_fpu_sequencer
 
   // Scoreboard
   logic [NrFPReg-1:0] sb_d, sb_q;
-  `FF(sb_q, sb_d, '0)
+  // TMR: sb_q (voted value in sb_q, copies sb_q0..2)
+  logic [NrFPReg-1:0] sb_q0, sb_q1, sb_q2;
+  `FF(sb_q0, sb_d, '0)
+  `FF(sb_q1, sb_d, '0)
+  `FF(sb_q2, sb_d, '0)
+  bitwise_TMR_voter_fail #(.DataWidth($bits(sb_q)), .VoterType(1)) i_sb_q_voter (
+    .a_i(sb_q0), .b_i(sb_q1), .c_i(sb_q2), .majority_o(sb_q), .fault_detected_o(ff_tmr_err_0[0]));
 
   // Are we using the registers?
   logic use_fs1, use_fs2, use_fs3, use_fd;
@@ -689,16 +701,30 @@ snitch_lsuTMR #(
   assign fpu_sequencer_correctable_fault_o = fpr_tmr_fault | fpr_rdataTmrError
                                           | fp_lsu_qreadyTmrError | fp_lsu_pdataTmrError
                                           | fp_lsu_ptagTmrError | fp_lsu_pvalidTmrError
-                                          | fp_lsu_mem_req_oTmrError;
-  assign fpu_sequencer_uncorrectable_fault_o = 1'b0;
+                                          | fp_lsu_mem_req_oTmrError
+                                          | fp_move_register_err[0]
+                                          | ff_tmr_fault_any;
+  assign fpu_sequencer_uncorrectable_fault_o = fp_move_register_err[1];
 
   // Number of memory operations in the accelerator
   logic [2:0] acc_mem_cnt_q, acc_mem_cnt_d;
-  `FFARN(acc_mem_cnt_q, acc_mem_cnt_d, '0, clk_i, rst_ni)
+  // TMR: acc_mem_cnt_q (voted value in acc_mem_cnt_q, copies acc_mem_cnt_q0..2)
+  logic [2:0] acc_mem_cnt_q0, acc_mem_cnt_q1, acc_mem_cnt_q2;
+  `FFARN(acc_mem_cnt_q0, acc_mem_cnt_d, '0, clk_i, rst_ni)
+  `FFARN(acc_mem_cnt_q1, acc_mem_cnt_d, '0, clk_i, rst_ni)
+  `FFARN(acc_mem_cnt_q2, acc_mem_cnt_d, '0, clk_i, rst_ni)
+  bitwise_TMR_voter_fail #(.DataWidth($bits(acc_mem_cnt_q)), .VoterType(1)) i_acc_mem_cnt_q_voter (
+    .a_i(acc_mem_cnt_q0), .b_i(acc_mem_cnt_q1), .c_i(acc_mem_cnt_q2), .majority_o(acc_mem_cnt_q), .fault_detected_o(ff_tmr_err_0[1]));
 
   // Number of store operations in the accelerator
   logic [2:0] acc_mem_str_cnt_q, acc_mem_str_cnt_d;
-  `FFARN(acc_mem_str_cnt_q, acc_mem_str_cnt_d, '0, clk_i, rst_ni)
+  // TMR: acc_mem_str_cnt_q (voted value in acc_mem_str_cnt_q, copies acc_mem_str_cnt_q0..2)
+  logic [2:0] acc_mem_str_cnt_q0, acc_mem_str_cnt_q1, acc_mem_str_cnt_q2;
+  `FFARN(acc_mem_str_cnt_q0, acc_mem_str_cnt_d, '0, clk_i, rst_ni)
+  `FFARN(acc_mem_str_cnt_q1, acc_mem_str_cnt_d, '0, clk_i, rst_ni)
+  `FFARN(acc_mem_str_cnt_q2, acc_mem_str_cnt_d, '0, clk_i, rst_ni)
+  bitwise_TMR_voter_fail #(.DataWidth($bits(acc_mem_str_cnt_q)), .VoterType(1)) i_acc_mem_str_cnt_q_voter (
+    .a_i(acc_mem_str_cnt_q0), .b_i(acc_mem_str_cnt_q1), .c_i(acc_mem_str_cnt_q2), .majority_o(acc_mem_str_cnt_q), .fault_detected_o(ff_tmr_err_0[2]));
 
   // Is the current instruction a vector load?
   logic is_vector_load;
@@ -783,7 +809,8 @@ snitch_lsuTMR #(
   logic       fp_move_result_valid_o;
   logic       fp_move_result_ready_i;
 
-  spill_register #(
+  rel_spill_register #(
+    .TmrHandshake(1'b0),
     .T(spatz_rsp_t)
   ) i_fp_move_register (
     .clk_i     (clk_i                 ),
@@ -793,7 +820,10 @@ snitch_lsuTMR #(
     .ready_o   (fp_move_result_ready_o),
     .data_o    (fp_move_result_o      ),
     .valid_o   (fp_move_result_valid_o),
-    .ready_i   (fp_move_result_ready_i)
+    .ready_i   (fp_move_result_ready_i),
+    .err_o            (fp_move_register_err),
+    .data_corrector_o (),
+    .data_corrected_i ('0)
   );
 
   //////////////
@@ -801,7 +831,13 @@ snitch_lsuTMR #(
   //////////////
 
   logic outstanding_store_q, outstanding_store_d;
-  `FF(outstanding_store_q, outstanding_store_d, 1'b0)
+  // TMR: outstanding_store_q (voted value in outstanding_store_q, copies outstanding_store_q0..2)
+  logic outstanding_store_q0, outstanding_store_q1, outstanding_store_q2;
+  `FF(outstanding_store_q0, outstanding_store_d, 1'b0)
+  `FF(outstanding_store_q1, outstanding_store_d, 1'b0)
+  `FF(outstanding_store_q2, outstanding_store_d, 1'b0)
+  bitwise_TMR_voter_fail #(.DataWidth($bits(outstanding_store_q)), .VoterType(1)) i_outstanding_store_q_voter (
+    .a_i(outstanding_store_q0), .b_i(outstanding_store_q1), .c_i(outstanding_store_q2), .majority_o(outstanding_store_q), .fault_detected_o(ff_tmr_err_0[3]));
 
   always_comb begin
     // We are not retiring anything, by default

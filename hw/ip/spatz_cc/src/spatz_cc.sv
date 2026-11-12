@@ -131,6 +131,11 @@ module spatz_cc
     // vfu error outputs
     output logic                              vfu_correctable_error_o,
     output logic                              vfu_uncorrectable_error_o,
+    // controller error outputs
+    output logic                              controller_correctable_error_o,
+    output logic                              controller_uncorrectable_error_o,
+    output logic                              vsldu_correctable_error_o,
+    output logic                              vsldu_uncorrectable_error_o,
     // Snitch error outputs
     output logic                         snitch_correctable_error_o,
     output logic                         snitch_uncorrectable_error_o
@@ -352,7 +357,12 @@ module spatz_cc
     .fpu_sequencer_uncorrectable_error_o (fpu_sequencer_uncorrectable_error_o),
     // vfu error outputs
     .vfu_correctable_error_o (vfu_correctable_error_o),
-    .vfu_uncorrectable_error_o (vfu_uncorrectable_error_o)
+    .vfu_uncorrectable_error_o (vfu_uncorrectable_error_o),
+    // controller error outputs
+    .controller_correctable_error_o (controller_correctable_error_o),
+    .controller_uncorrectable_error_o (controller_uncorrectable_error_o),
+    .vsldu_correctable_error_o (vsldu_correctable_error_o),
+    .vsldu_uncorrectable_error_o (vsldu_uncorrectable_error_o)
   );
 
   for (genvar p = 0; p < NumMemPortsPerSpatz; p++) begin: gen_tcdm_assignment
@@ -374,6 +384,7 @@ module spatz_cc
     assign spatz_mem_rsp_valid[p] = tcdm_rsp_i[p].p_valid;
   end
 
+  logic mux_resp_fifo_fault;
   reqrsp_mux #(
     .NrPorts     (2           ),
     .AddrWidth   (AddrWidth   ),
@@ -390,7 +401,8 @@ module spatz_cc
     .slv_rsp_o ({fp_lsu_mem_rsp, snitch_drsp_q}),
     .mst_req_o (merged_dreq                    ),
     .mst_rsp_i (merged_drsp                    ),
-    .idx_o     (/*not connected*/              )
+    .idx_o     (/*not connected*/              ),
+    .fault_o   (mux_resp_fifo_fault            )
   );
 
   if (Xdma) begin : gen_dma
@@ -524,7 +536,7 @@ module spatz_cc
     assign snitch_tcdm_rsp_dec = tcdm_rsp_i[NumMemPortsPerSpatz];
   end
 
-  assign snitch_correctable_error_o   = core_tmr_fault_o | snitch_tcdm_rsp_err[0];
+  assign snitch_correctable_error_o   = core_tmr_fault_o | mux_resp_fifo_fault | snitch_tcdm_rsp_err[0];
   assign snitch_uncorrectable_error_o = snitch_tcdm_rsp_err[1];
 
   reqrsp_to_tcdm #( // only for cross clock domain decoupling
