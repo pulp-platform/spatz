@@ -535,28 +535,58 @@ module spatz_doublebw_vlsu
 
   // rel_fifo (redundancy_cells) has no dtype parameter -- only a plain DataWidth --
   // so pack/unpack commit_metadata_t to flat bits at this boundary.
-  localparam int unsigned CommitMetadataWidth = $bits(commit_metadata_t);
-  logic [CommitMetadataWidth-1:0] commit_insn_d_bits, commit_insn_q_bits;
+  // rel_fifo's backing memory (mem_q) is a single, unreplicated copy -- its
+  // control logic (pointers/full/empty) is TMR'd, but a bit flip in storage
+  // itself is only caught if data_i already carries an ECC codeword. This
+  // payload doesn't, so encode -> rel_fifo -> decode, mirroring the
+  // operation-queue pattern (i_operation_queue_ecc_enc/dec) above.
+  localparam int unsigned CommitMetadataWidth  = $bits(commit_metadata_t);
+  localparam int unsigned CommitMetadataProtWidth  = hsiao_ecc_pkg::min_ecc(CommitMetadataWidth);
+  localparam int unsigned CommitMetadataEccWidth   = CommitMetadataWidth + CommitMetadataProtWidth;
+
+  logic [CommitMetadataWidth-1:0]    commit_insn_d_bits, commit_insn_q_bits;
+  logic [CommitMetadataEccWidth-1:0] commit_insn_d_ecc,  commit_insn_q_ecc;
+  logic [CommitMetadataProtWidth-1:0] commit_insn_dec_syndrome;
+  logic [1:0] commit_insn_dec_err;
+
   assign commit_insn_d_bits = commit_insn_d;
   assign commit_insn_q = commit_metadata_t'(commit_insn_q_bits);
 
+  hsiao_ecc_enc #(
+    .DataWidth(CommitMetadataWidth),
+    .ProtWidth(CommitMetadataProtWidth)
+  ) i_commit_insn_ecc_enc (
+    .in (commit_insn_d_bits),
+    .out(commit_insn_d_ecc )
+  );
+
   rel_fifo #(
-    .Depth       (3                ),
-    .FallThrough (1'b1             ),
-    .DataWidth   (CommitMetadataWidth)
+    .Depth       (3                     ),
+    .FallThrough (1'b1                  ),
+    .DataWidth   (CommitMetadataEccWidth)
   ) i_fifo_commit_insn (
     .clk_i     (clk_i            ),
     .rst_ni    (rst_ni           ),
     .flush_i   (1'b0             ),
     .testmode_i(1'b0             ),
-    .data_i    (commit_insn_d_bits    ),
+    .data_i    (commit_insn_d_ecc     ),
     .push_i    (commit_insn_push ),
     .full_o    (commit_insn_full ),
-    .data_o    (commit_insn_q_bits    ),
+    .data_o    (commit_insn_q_ecc     ),
     .empty_o   (commit_insn_empty),
     .pop_i     (commit_insn_pop  ),
     .usage_o   (/* Unused */     ),
     .fault_o   (commit_insn_fifo_fault)
+  );
+
+  hsiao_ecc_dec #(
+    .DataWidth(CommitMetadataWidth),
+    .ProtWidth(CommitMetadataProtWidth)
+  ) i_commit_insn_ecc_dec (
+    .in        (commit_insn_q_ecc        ),
+    .out       (commit_insn_q_bits       ),
+    .syndrome_o(commit_insn_dec_syndrome ),
+    .err_o     (commit_insn_dec_err      )
   );
 
   assign spatz_req_ready_o = spatz_req_ready & !commit_insn_full;
@@ -961,10 +991,30 @@ module spatz_doublebw_vlsu
   // Store the offsets of all loads, for realigning
   addr_offset_t [NrInterfaces-1:0] [N_FU-1:0] vreg_addr_offset;
   logic [NrInterfaces-1:0] [N_FU-1:0] offset_queue_full;
+
+  // rel_fifo's backing memory is a single, unreplicated copy -- addr_offset_t
+  // isn't ECC-protected elsewhere, so encode -> rel_fifo -> decode here, same
+  // as i_fifo_commit_insn above.
+  localparam int unsigned AddrOffsetWidth    = int'(MAXEW);
+  localparam int unsigned AddrOffsetProtWidth = hsiao_ecc_pkg::min_ecc(AddrOffsetWidth);
+  localparam int unsigned AddrOffsetEccWidth  = AddrOffsetWidth + AddrOffsetProtWidth;
+
+  logic [NrInterfaces-1:0][N_FU-1:0][AddrOffsetEccWidth-1:0]  offset_queue_d_ecc, offset_queue_q_ecc;
+  logic [NrInterfaces-1:0][N_FU-1:0][AddrOffsetProtWidth-1:0] offset_queue_dec_syndrome;
+  logic [NrInterfaces-1:0][N_FU-1:0][1:0]                     offset_queue_dec_err;
+
   for (genvar intf = 0; intf < NrInterfaces; intf++) begin : gen_offset_queue_intf
     for (genvar fu = 0; fu < N_FU; fu++) begin : gen_offset_queue_intf_fu
+      hsiao_ecc_enc #(
+        .DataWidth(AddrOffsetWidth),
+        .ProtWidth(AddrOffsetProtWidth)
+      ) i_offset_queue_ecc_enc (
+        .in (mem_req_addr_offset[intf][fu]),
+        .out(offset_queue_d_ecc[intf][fu] )
+      );
+
       rel_fifo #(
-        .DataWidth (int'(MAXEW)       ),
+        .DataWidth (AddrOffsetEccWidth),
         .Depth     (NrOutstandingLoads)
       ) i_offset_queue (
         .clk_i     (clk_i                                                                    ),
@@ -974,14 +1024,40 @@ module spatz_doublebw_vlsu
         .empty_o   (/* Unused */                                                             ),
         .full_o    (offset_queue_full[intf][fu]                                              ),
         .push_i    (spatz_mem_req_valid[intf][fu] && spatz_mem_req_ready[intf][fu] && mem_is_load),
-        .data_i    (mem_req_addr_offset[intf][fu]                                            ),
-        .data_o    (vreg_addr_offset[intf][fu]                                               ),
+        .data_i    (offset_queue_d_ecc[intf][fu]                                             ),
+        .data_o    (offset_queue_q_ecc[intf][fu]                                             ),
         .pop_i     (rob_pop[intf][fu] && commit_insn_q.is_load                               ),
         .usage_o   (/* Unused */                                                             ),
         .fault_o   (offset_queue_fault[intf][fu]                                             )
       );
+
+      hsiao_ecc_dec #(
+        .DataWidth(AddrOffsetWidth),
+        .ProtWidth(AddrOffsetProtWidth)
+      ) i_offset_queue_ecc_dec (
+        .in        (offset_queue_q_ecc[intf][fu]       ),
+        .out       (vreg_addr_offset[intf][fu]         ),
+        .syndrome_o(offset_queue_dec_syndrome[intf][fu]),
+        .err_o     (offset_queue_dec_err[intf][fu]     )
+      );
     end: gen_offset_queue_intf_fu
   end: gen_offset_queue_intf
+
+  // Reduce the per-port decode errors, qualified by the same read-valid
+  // condition as the fifo's own pop_i, onto the module error outputs below.
+  logic offset_queue_sec_err_any, offset_queue_ded_err_any;
+  always_comb begin : proc_offset_queue_err_reduce
+    offset_queue_sec_err_any = 1'b0;
+    offset_queue_ded_err_any = 1'b0;
+    for (int intf = 0; intf < NrInterfaces; intf++) begin
+      for (int fu = 0; fu < N_FU; fu++) begin
+        if (rob_pop[intf][fu] && commit_insn_q.is_load) begin
+          offset_queue_sec_err_any |= offset_queue_dec_err[intf][fu][0];
+          offset_queue_ded_err_any |= offset_queue_dec_err[intf][fu][1];
+        end
+      end
+    end
+  end
 
   ///////////////////////
   //  Output Register  //
@@ -2368,9 +2444,13 @@ module spatz_doublebw_vlsu
                                    | |vlsu_vd_sec_err_o | |vlsu_vs2_sec_err_o
                                    | handshake_tmr_fault_o | datapath_tmr_fault_o
                                    | (mem_spatz_req_valid & opq_dec_err[0])
+                                   | (commit_insn_valid & commit_insn_dec_err[0])
+                                   | offset_queue_sec_err_any
                                    | ff_tmr_fault_any | (|ff_tmr_err_idx);
   assign vlsu_uncorrectable_error_o = vlsu_st_ded_err_o | vlsu_ld_ded_err_o | vlsu_wr_ded_err_o
                                     | |vlsu_vd_ded_err_o | |vlsu_vs2_ded_err_o
                                     | fsm_illegal_state_o
-                                    | (mem_spatz_req_valid & opq_dec_err[1]);
+                                    | (mem_spatz_req_valid & opq_dec_err[1])
+                                    | (commit_insn_valid & commit_insn_dec_err[1])
+                                    | offset_queue_ded_err_any;
 endmodule : spatz_doublebw_vlsu
