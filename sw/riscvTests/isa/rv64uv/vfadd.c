@@ -439,6 +439,35 @@ void TEST_CASE8(void) {
 #endif
 };
 
+void TEST_CASE9(void) {
+  uint32_t fp_bits  = 0x3FC00000u;  // 1.5f
+  uint32_t int_val  = 100;
+ 
+  // Operands: splat across all 32 elements
+  VSET(32, e32, m4);
+  asm volatile("vmv.v.x v16, %0" :: "r"(fp_bits));   // FP 1.5f
+  asm volatile("vmv.v.x v20, %0" :: "r"(int_val));   // int 100
+  asm volatile("vmv.v.x v24, %0" :: "r"(int_val));   // int 100
+  asm volatile("vmv.v.i v8,  0");                    // destinations start at 0
+  asm volatile("vmv.v.i v12, 0");
+  asm volatile("vmv.v.i v28, 0");
+ 
+  asm volatile(
+    "vfadd.vv v8,  v16, v16 \n\t"   // A: 4 words, fills the write buffer
+    ::: "v8");
+ 
+  VSET(1, e32, m4);                 // same SEW and LMUL, only vl changes
+ 
+  asm volatile(
+    "vadd.vv  v12, v20, v24 \n\t"   // B: 1 word, IPU (result has nowhere to go)
+    "vfadd.vv v28, v16, v16 \n\t"   // C: 1 word, FPU (switch while B is pending)
+    ::: "v12", "v28");
+ 
+  VCMP_U32(24, v12, 200);             // B: lost on the switch -> stale 0 (or hang)
+  VCMP_U32(25, v28, 0x40400000u);     // C
+  VCMP_U32(26, v8,  0x40400000u);     // A, element 0
+}
+
 int main(void) {
   INIT_CHECK();
   enable_vec();
@@ -453,6 +482,7 @@ int main(void) {
   TEST_CASE6();
   TEST_CASE7();
   TEST_CASE8();
+  TEST_CASE9();
 
   EXIT_CHECK();
 }

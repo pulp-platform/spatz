@@ -4,6 +4,25 @@
 
 #include "vector_macros.h"
 
+#define V8_GROUP "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15"
+#define REPEAT7(stmt) do { for (int _i = 0; _i < 7; _i++) { stmt; } } while (0)
+
+static inline uint32_t get_vlenb(void) {
+  uint32_t vlenb;
+  asm volatile("csrr %0, vlenb" : "=r"(vlenb));
+  return vlenb;
+}
+
+static inline void drain_v8_m8(uint32_t vlenb) {
+  uint32_t tmp;
+  VSET(8 * vlenb, e8, m8);
+  asm volatile("vmv.s.x    v1, zero    \n\t"
+               "vredsum.vs v1, v8, v1  \n\t"
+               "vmv.x.s    %0, v1      \n\t"
+               : "=r"(tmp) :: "v1");
+  (void)tmp;
+}
+
 //**********Checking functionality of vle8 ********//
 void TEST_CASE1(void) {
   VSET(16, e8, m1);
@@ -106,6 +125,149 @@ void TEST_CASE6(void) {
                  49, 0xd3, 51, 0xd1, 53, 0x48, 55, 0x88, 57, 0xae, 59, 0x91, 61, 0x59, 63, 0x89);
 }
 
+void TEST_CASE7(void) {
+  uint32_t vlenb;
+  asm volatile("csrr %0, vlenb" : "=r"(vlenb));
+
+  // m8 group v8..v15; only v15 (the last register) gets 5,6,7,8,...
+  volatile uint8_t buf[8 * vlenb] __attribute__((aligned(8)));
+  for (uint32_t i = 0; i < 8 * vlenb; i++)
+    buf[i] = (i < 7 * vlenb) ? 0x11 : (uint8_t)(i - 7 * vlenb + 5);
+
+  // Poison v15 so a premature read is visible as 0xFF
+  VSET(vlenb, e8, m1);
+  asm volatile("vmv.v.i v15, -1" ::: "v15");
+
+  // Long producer: 8 * VLENB bytes, v15 is written at the very end
+  VSET(8 * vlenb, e8, m8);
+  asm volatile("vle8.v v8, (%0)" :: "r"(buf)
+               : "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "memory");
+
+  // Consumer reads the last register of the group at LMUL=1
+  VSET(4, e8, m1);
+  asm volatile("vadd.vi v4, v15, 0" ::: "v4");
+
+  VCMP_U8(7, v4, 5, 6, 7, 8);
+}
+
+void TEST_CASE8(void) {
+  uint32_t vlenb = get_vlenb();
+
+  volatile uint8_t buf[8 * vlenb] __attribute__((aligned(8)));
+  for (uint32_t i = 0; i < 8 * vlenb; i++)
+    buf[i] = 0x11;
+
+  VSET(8 * vlenb, e8, m8);
+  asm volatile("vle8.v v8, (%0)" :: "r"(buf) : V8_GROUP, "memory");
+
+  VSET(vlenb, e8, m1);
+  asm volatile("vmv.v.i v15, 3" ::: "v15");
+
+  drain_v8_m8(vlenb);              // check the FINAL value, after both writers are done
+
+  VSET(4, e8, m1);
+  VCMP_U8(8, v15, 3, 3, 3, 3);
+}
+
+void TEST_CASE9(void) {
+  uint32_t vlenb = get_vlenb();
+  volatile uint8_t src = 0x11;              // one byte, read 8 * vlenb times
+
+  // Long producer: every element of v8..v15 = 0x11, v15 written at the end
+  VSET(8 * vlenb, e8, m8);
+  asm volatile("vlse8.v v8, (%0), zero" :: "r"(&src)
+               : "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "memory");
+
+  // Short write to the last group member, issued right behind the load (no drain)
+  VSET(vlenb, e8, m1);
+  asm volatile("vmv.v.i v15, 3" ::: "v15");
+
+  VSET(4, e8, m1);
+  VCMP_U8(9, v15, 3, 3, 3, 3);             // 0x11 if the load's write landed last
+}
+
+void TEST_CASE10(void) {
+  uint32_t vlenb = get_vlenb();
+  volatile uint8_t src  = 0x11;   // old contents of the whole group
+  volatile uint8_t out  = 0;      // receives v15's elements last
+  volatile uint8_t sync = 0;
+  uint32_t result;
+
+  // Fill v8..v15 with 0x11
+  VSET(8 * vlenb, e8, m8);
+  asm volatile("vlse8.v v8, (%0), zero" :: "r"(&src) : V8_GROUP, "memory");
+
+  // Wait until the load has written v15 (replaces drain_v8_m8, no vmv.x.s):
+  // the 1-element store reads v15, and the scalar load waits for the store
+  VSET(1, e8, m1);
+  asm volatile("vse8.v v15, (%0)" :: "r"(&sync) : "memory");
+  (void)sync;
+
+  // Long store reading v8..v15; v15 is read at the end
+  VSET(8 * vlenb, e8, m8);
+  asm volatile("vsse8.v v8, (%0), zero" :: "r"(&out) : "memory");
+
+  // Must wait until the store has read v15
+  VSET(vlenb, e8, m1);
+  asm volatile("vmv.v.i v15, 3" ::: "v15");
+
+  // The scalar load waits for the vector store to finish
+  result = out;
+  XCMP(10, result, 0x11);         // 3 if vmv.v.i overtook the store's read of v15
+}
+
+void TEST_CASE11(void) {
+  uint32_t vlenb = get_vlenb();
+  volatile uint8_t src  = 0x11;   // old contents of the whole group
+  volatile uint8_t out  = 0;      // receives v15's elements last
+  volatile uint8_t sync = 0;
+  uint32_t result;
+
+  VSET(8 * vlenb, e8, m8);
+  asm volatile("vlse8.v v8, (%0), zero" :: "r"(&src) : V8_GROUP, "memory");
+
+  // Wait until the load has written v15
+  VSET(1, e8, m1);
+  asm volatile("vse8.v v15, (%0)" :: "r"(&sync) : "memory");
+  (void)sync;
+
+  // Long store reading v8..v15, v15 last (one memory access per element)
+  VSET(8 * vlenb, e8, m8);
+  asm volatile("vsse8.v v8, (%0), zero" :: "r"(&out) : "memory");
+
+  // Must wait until the store has read v15
+  VSET(vlenb, e8, m1);
+  asm volatile("vmv.v.i v15, 3" ::: "v15");
+
+  result = out;                   // waits for the vector store to finish
+  XCMP(11, result, 0x11);         // 3 if vmv.v.i overtook the store's read of v15
+}
+
+void TEST_CASE12(void) {
+  uint32_t vlenb;
+  asm volatile("csrr %0, vlenb" : "=r"(vlenb));
+
+  // m8 group v8..v15; only v15 (the last register) gets 5,6,7,8,...
+  volatile uint8_t buf[8 * vlenb] __attribute__((aligned(8)));
+  for (uint32_t i = 0; i < 8 * vlenb; i++)
+    buf[i] = (i < 7 * vlenb) ? 0x11 : (uint8_t)(i - 7 * vlenb + 5);
+
+  // Poison v15 so a premature read is visible as 0xFF
+  VSET(vlenb, e8, m1);
+  asm volatile("vmv.v.i v15, -1" ::: "v15");
+
+  // Long producer: 8 * VLENB bytes, v15 is written at the very end
+  VSET(8 * vlenb, e8, m8);
+  asm volatile("vle8.v v8, (%0)" :: "r"(buf)
+               : "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "memory");
+
+  // Consumer reads the last register of the group at LMUL=1
+  VSET(4, e8, m1);
+  asm volatile("vadd.vi v4, v15, 0" ::: "v4");
+
+  VCMP_U8(12, v4, 5, 6, 7, 8);
+}
+
 int main(void) {
   INIT_CHECK();
   enable_vec();
@@ -116,6 +278,12 @@ int main(void) {
   TEST_CASE4();
   TEST_CASE5();
   TEST_CASE6();
+  TEST_CASE7();
+  TEST_CASE8();
+  TEST_CASE9();
+  TEST_CASE10();
+  TEST_CASE11();
+  TEST_CASE12();
 
   EXIT_CHECK();
 }
