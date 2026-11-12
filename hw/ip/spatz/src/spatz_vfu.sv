@@ -49,9 +49,11 @@ module spatz_vfu
   );
 
   // TMR fault flags of the triplicated FFs
-  logic [37-1:0] ff_tmr_err_0;
+  logic [41-1:0] ff_tmr_err_0;
   logic [12*(N_FPU)-1:0] ff_tmr_err_1;
   logic ff_tmr_fault_any;
+  // FPU shadow-checker mismatch (any FPU)
+  logic fpu_shadow_fault_any;
   assign ff_tmr_fault_any = (|ff_tmr_err_0) | (|ff_tmr_err_1);
 
 // Include FF
@@ -78,6 +80,8 @@ module spatz_vfu
     // valid bytes in this VRF word
     logic [$clog2(VRFWordBWidth+1)-1:0] valid_bytes;
   } vfu_tag_t;
+
+  logic [N_FPU-1:0] fpu_load_ready;
 
   ///////////////////////
   //  Operation queue  //
@@ -170,7 +174,16 @@ module spatz_vfu
 
   // Number of elements in one VRF word
   logic [$clog2(N_FU*(ELEN/8)):0] nr_elem_word;
+  logic [$clog2((ELEN/8)):0] nr_elem_word_divsqrt;
   assign nr_elem_word = (N_FU * (1 << (MAXEW - spatz_req.vtype.vsew))) >> spatz_req.op_arith.is_narrowing;
+
+  logic is_divsqrt_insn;
+  assign is_divsqrt_insn = spatz_req.op inside {VFDIV, VFSQRT};
+
+  logic divsqrt_shared_active;
+  assign divsqrt_shared_active = is_divsqrt_insn && divsqrt_is_shared;
+
+  assign nr_elem_word_divsqrt = (1 << (MAXEW - spatz_req.vtype.vsew));
 
   // Are we running integer or floating-point instructions?
   typedef enum logic {
@@ -382,6 +395,16 @@ module spatz_vfu
   logic     vfu_rsp_valid_raw;
   vfu_rsp_t vfu_rsp_o_raw;
 
+  logic [$clog2(N_FU)-1:0] divsqrt_slot_q, divsqrt_slot_d;
+  logic last_divsqrt;
+
+  assign last_divsqrt = divsqrt_shared_active ? ((vl_q + (divsqrt_slot_q+1)*nr_elem_word_divsqrt) >= spatz_req.vl) : 1'b0;
+
+  // All the results of the current VRF word in the FUs are ready
+  logic fu_word_complete;
+  assign fu_word_complete = &(result_valid | ~pending_results);
+
+
   always_comb begin: control_proc
     // Maintain state
     vl_d              = vl_q;
@@ -440,14 +463,26 @@ module spatz_vfu
       endcase
 
     // Finished the execution!
-    if (spatz_req_valid && ((vl_d >= spatz_req.vl && !spatz_req.op_arith.is_reduction) || reduction_done)) begin
-      spatz_req_ready         = spatz_req_valid;
-      busy_d                  = 1'b0;
-      vl_d                    = '0;
-      last_request            = 1'b1;
-      running_d[spatz_req.id] = 1'b0;
-      widening_upper_d        = 1'b0;
-      narrowing_upper_d       = 1'b0;
+    if (spatz_req_valid && ((vl_d >= spatz_req.vl && !spatz_req.op_arith.is_reduction) || reduction_done || last_divsqrt)) begin
+      if(divsqrt_shared_active) begin
+          last_request            = 1'b1;
+        if(result_tag.last)begin
+          spatz_req_ready         = spatz_req_valid;
+          busy_d                  = 1'b0;
+          vl_d                    = '0;
+          running_d[spatz_req.id] = 1'b0;
+          widening_upper_d        = 1'b0;
+          narrowing_upper_d       = 1'b0;
+        end
+      end else begin
+        spatz_req_ready         = spatz_req_valid;
+        busy_d                  = 1'b0;
+        vl_d                    = '0;
+        last_request            = 1'b1;
+        running_d[spatz_req.id] = 1'b0;
+        widening_upper_d        = 1'b0;
+        narrowing_upper_d       = 1'b0;
+      end
     end
     // Do we have a new instruction?
     else if (spatz_req_valid && !running_d[spatz_req.id]) begin
@@ -462,7 +497,7 @@ module spatz_vfu
     end
 
     // An instruction finished execution
-    if ((result_tag.last && &(result_valid | ~pending_results) && reduction_state_q inside {Reduction_NormalExecution, Reduction_Wait}) || reduction_done) begin
+    if ((result_tag.last && fu_word_complete && reduction_state_q inside {Reduction_NormalExecution, Reduction_Wait}) || reduction_done) begin
       vfu_rsp_o_raw.id      = result_tag.id;
       vfu_rsp_o_raw.rd      = result_tag.vd_addr[GPRWidth-1:0];
       vfu_rsp_o_raw.wb      = result_tag.wb;
@@ -481,14 +516,11 @@ module spatz_vfu
   logic fpu_op_mode;
   logic fpu_vectorial_op;
 
-  logic [N_FPU-1:0] fpu_busy_d, fpu_busy_q;
-  // TMR: fpu_busy_q (voted value in fpu_busy_q, copies fpu_busy_q0..2)
-  logic [N_FPU-1:0] fpu_busy_q0, fpu_busy_q1, fpu_busy_q2;
-  `FF(fpu_busy_q0, fpu_busy_d, '0)
-  `FF(fpu_busy_q1, fpu_busy_d, '0)
-  `FF(fpu_busy_q2, fpu_busy_d, '0)
-  bitwise_TMR_voter_fail #(.DataWidth($bits(fpu_busy_q)), .VoterType(1)) i_fpu_busy_q_voter (
-    .a_i(fpu_busy_q0), .b_i(fpu_busy_q1), .c_i(fpu_busy_q2), .majority_o(fpu_busy_q), .fault_detected_o(ff_tmr_err_0[14]));
+  // FPU busy is taken combinationally from the FPUs (no register): with the
+  // iterative div/sqrt unit a registered copy lags one cycle and lets a
+  // reduction / IPU switch start while FPU0 is still busy.
+  // (ff_tmr_err_0[14], formerly fpu_busy_q, is reused by divsqrt_acc_q.)
+  logic [N_FPU-1:0] fpu_busy_d;
 
   status_t [N_FPU-1:0] fpu_status_d, fpu_status_q;
   // TMR: fpu_status_q (voted value in fpu_status_q, copies fpu_status_q0..2)
@@ -505,7 +537,7 @@ module spatz_vfu
       fpu_op           = fpnew_pkg::FMADD;
       fpu_op_mode      = 1'b0;
       fpu_vectorial_op = 1'b0;
-      is_fpu_busy      = |fpu_busy_q;
+      is_fpu_busy      = |fpu_busy_d;
       fpu_src_fmt      = fpnew_pkg::FP32;
       fpu_dst_fmt      = fpnew_pkg::FP32;
       fpu_int_fmt      = fpnew_pkg::INT32;
@@ -597,6 +629,8 @@ module spatz_vfu
           end
 
           VSDOTP: fpu_op = fpnew_pkg::SDOTP;
+          VFDIV:  fpu_op = fpnew_pkg::DIV;
+          VFSQRT: fpu_op = fpnew_pkg::SQRT;
 
           default:;
         endcase
@@ -776,11 +810,144 @@ module spatz_vfu
     operand3 = spatz_req.op_arith.is_scalar ? {1*N_FU{spatz_req.rsd}} : vrf_rdata_masked[2]; // VFU_VD_RD // operand3 is used in MAC computation, like VMADD
   end: operand_proc
 
-  assign in_ready     = state_q == VFU_RunningIPU ? ipu_in_ready     : fpu_in_ready;
-  assign result       = state_q == VFU_RunningIPU ? ipu_result       : fpu_result;
-  assign result_valid = state_q == VFU_RunningIPU ? ipu_result_valid : fpu_result_valid;
+  logic [N_FU*ELEN-1:0]  fpu_result_temp;
+  logic [N_FU*ELENB-1:0] fpu_result_valid_temp;
 
-  assign scalar_result = result[ELEN-1:0];
+
+
+  assign in_ready     = state_q == VFU_RunningIPU ? ipu_in_ready     : fpu_in_ready;
+  assign result       = state_q == VFU_RunningIPU ? ipu_result       : fpu_result_temp;
+  assign result_valid = state_q == VFU_RunningIPU ? ipu_result_valid : fpu_result_valid_temp;
+
+  ///////////////////////
+  //      DIV/SQRT     //
+  ///////////////////////
+
+  // Accumulate the slots already completed for the current VRF word
+  logic [N_FU*ELEN-1:0]  divsqrt_acc_d, divsqrt_acc_q;
+  logic [N_FU*ELENB-1:0] divsqrt_acc_valid_d, divsqrt_acc_valid_q;
+  // TMR: divsqrt_acc_q (voted value in divsqrt_acc_q, copies divsqrt_acc_q0..2)
+  logic [N_FU*ELEN-1:0] divsqrt_acc_q0, divsqrt_acc_q1, divsqrt_acc_q2;
+  `FF(divsqrt_acc_q0, divsqrt_acc_d, '0)
+  `FF(divsqrt_acc_q1, divsqrt_acc_d, '0)
+  `FF(divsqrt_acc_q2, divsqrt_acc_d, '0)
+  bitwise_TMR_voter_fail #(.DataWidth($bits(divsqrt_acc_q)), .VoterType(1)) i_divsqrt_acc_q_voter (
+    .a_i(divsqrt_acc_q0), .b_i(divsqrt_acc_q1), .c_i(divsqrt_acc_q2), .majority_o(divsqrt_acc_q), .fault_detected_o(ff_tmr_err_0[14]));
+  // TMR: divsqrt_acc_valid_q (voted value in divsqrt_acc_valid_q, copies divsqrt_acc_valid_q0..2)
+  logic [N_FU*ELENB-1:0] divsqrt_acc_valid_q0, divsqrt_acc_valid_q1, divsqrt_acc_valid_q2;
+  `FF(divsqrt_acc_valid_q0, divsqrt_acc_valid_d, '0)
+  `FF(divsqrt_acc_valid_q1, divsqrt_acc_valid_d, '0)
+  `FF(divsqrt_acc_valid_q2, divsqrt_acc_valid_d, '0)
+  bitwise_TMR_voter_fail #(.DataWidth($bits(divsqrt_acc_valid_q)), .VoterType(1)) i_divsqrt_acc_valid_q_voter (
+    .a_i(divsqrt_acc_valid_q0), .b_i(divsqrt_acc_valid_q1), .c_i(divsqrt_acc_valid_q2), .majority_o(divsqrt_acc_valid_q), .fault_detected_o(ff_tmr_err_0[37]));
+
+  logic divsqrt_shared_ready;
+  logic divsqrt_closing_slot;
+
+  // Handshake on FPU0 output
+  logic divsqrt_pop;
+
+  logic divsqrt_done_q, divsqrt_done_d;
+  // TMR: divsqrt_done_q (voted value in divsqrt_done_q, copies divsqrt_done_q0..2)
+  logic divsqrt_done_q0, divsqrt_done_q1, divsqrt_done_q2;
+  `FF(divsqrt_done_q0, divsqrt_done_d, 1'b0)
+  `FF(divsqrt_done_q1, divsqrt_done_d, 1'b0)
+  `FF(divsqrt_done_q2, divsqrt_done_d, 1'b0)
+  bitwise_TMR_voter_fail #(.DataWidth($bits(divsqrt_done_q)), .VoterType(1)) i_divsqrt_done_q_voter (
+    .a_i(divsqrt_done_q0), .b_i(divsqrt_done_q1), .c_i(divsqrt_done_q2), .majority_o(divsqrt_done_q), .fault_detected_o(ff_tmr_err_0[38]));
+
+  // Set once the last element of the instruction has been committed to the VRF
+  always_comb begin : proc_divsqrt_done
+    divsqrt_done_d = divsqrt_done_q;
+    if (divsqrt_pop && result_tag.last)
+      divsqrt_done_d = 1'b1;
+    else if (fpu_load_ready[0])
+      divsqrt_done_d = 1'b0;
+  end : proc_divsqrt_done
+
+  // This result completes the VRF word: last slot or last element of the instruction
+  assign divsqrt_closing_slot = (divsqrt_slot_q == N_FU - 1) || result_tag.last;
+
+  // Intermediate slots are always absorbed by the accumulator --> the closing slot is handed over only when the VRF commits the word
+  assign divsqrt_shared_ready = !divsqrt_done_q && (!divsqrt_closing_slot || vrf_wvalid_i);
+
+  assign divsqrt_pop = divsqrt_shared_active && (fpu_result_valid[ELENB-1:0] == '1) && divsqrt_shared_ready;
+
+  always_comb begin : proc_divsqrt_acc
+    divsqrt_acc_d       = divsqrt_acc_q;
+    divsqrt_acc_valid_d = divsqrt_acc_valid_q;
+
+    // Capture the slot handed over by FPU0
+    if (divsqrt_pop) begin
+      divsqrt_acc_d[divsqrt_slot_q*ELEN +: ELEN] = fpu_result[ELEN-1:0];
+      divsqrt_acc_valid_d[divsqrt_slot_q*ELENB +: ELENB] = '1;
+    end
+
+    // Word committed to the VRF, or not a shared divsqrt: restart clean
+    if (result_ready || !divsqrt_shared_active) begin
+      divsqrt_acc_d       = '0;
+      divsqrt_acc_valid_d = '0;
+    end
+  end : proc_divsqrt_acc
+
+  always_comb begin : proc_fpu_result_mux
+    fpu_result_temp       = '0;
+    fpu_result_valid_temp = '0;
+
+    if (divsqrt_shared_active && op1_is_ready && op2_is_ready) begin
+      fpu_result_temp       = divsqrt_acc_q;
+      fpu_result_valid_temp = divsqrt_acc_valid_q;
+
+      if (fpu_result_valid[ELENB-1:0] == '1) begin
+        fpu_result_temp[divsqrt_slot_q*ELEN +: ELEN ] = fpu_result[ELEN-1:0];
+        fpu_result_valid_temp[divsqrt_slot_q*ELENB +: ELENB] = '1;
+
+        if (result_tag.last)
+          fpu_result_valid_temp = '1;
+      end
+    end else begin
+      fpu_result_temp       = fpu_result;
+      fpu_result_valid_temp = fpu_result_valid;
+    end
+  end : proc_fpu_result_mux
+
+  assign scalar_result = (spatz_req.op_arith.is_scalar || result_tag.last) ? result[ELEN-1:0] : '0;
+
+  // TMR: divsqrt_slot_q (voted value in divsqrt_slot_q, copies divsqrt_slot_q0..2)
+  logic [$clog2(N_FU)-1:0] divsqrt_slot_q0, divsqrt_slot_q1, divsqrt_slot_q2;
+  `FF(divsqrt_slot_q0, divsqrt_slot_d, '0)
+  `FF(divsqrt_slot_q1, divsqrt_slot_d, '0)
+  `FF(divsqrt_slot_q2, divsqrt_slot_d, '0)
+  bitwise_TMR_voter_fail #(.DataWidth($bits(divsqrt_slot_q)), .VoterType(1)) i_divsqrt_slot_q_voter (
+    .a_i(divsqrt_slot_q0), .b_i(divsqrt_slot_q1), .c_i(divsqrt_slot_q2), .majority_o(divsqrt_slot_q), .fault_detected_o(ff_tmr_err_0[39]));
+
+  always_comb begin : proc_divsqrt_slot
+    divsqrt_slot_d = divsqrt_slot_q;
+    if (spatz_req_valid && !is_divsqrt_insn)
+      divsqrt_slot_d = '0;
+    else if (divsqrt_pop)
+      divsqrt_slot_d = (divsqrt_slot_q == N_FU - 1 || result_tag.last) ? '0 : divsqrt_slot_q + 1;
+  end : proc_divsqrt_slot
+
+  logic divsqrt_inflight_q, divsqrt_inflight_d;
+  // TMR: divsqrt_inflight_q (voted value in divsqrt_inflight_q, copies divsqrt_inflight_q0..2)
+  logic divsqrt_inflight_q0, divsqrt_inflight_q1, divsqrt_inflight_q2;
+  `FF(divsqrt_inflight_q0, divsqrt_inflight_d, 1'b0)
+  `FF(divsqrt_inflight_q1, divsqrt_inflight_d, 1'b0)
+  `FF(divsqrt_inflight_q2, divsqrt_inflight_d, 1'b0)
+  bitwise_TMR_voter_fail #(.DataWidth($bits(divsqrt_inflight_q)), .VoterType(1)) i_divsqrt_inflight_q_voter (
+    .a_i(divsqrt_inflight_q0), .b_i(divsqrt_inflight_q1), .c_i(divsqrt_inflight_q2), .majority_o(divsqrt_inflight_q), .fault_detected_o(ff_tmr_err_0[40]));
+
+  always_comb begin : proc_divsqrt_inflight
+    divsqrt_inflight_d = divsqrt_inflight_q;
+    if (divsqrt_shared_active && fpu_load_ready[0])
+      divsqrt_inflight_d = 1'b1;
+    else if (divsqrt_pop)
+      divsqrt_inflight_d = 1'b0;
+  end : proc_divsqrt_inflight
+
+
+  // assign scalar_result = result[ELEN-1:0];
 
   // TMR: operand_v0_t_lo_q (voted value in operand_v0_t_lo_q, copies operand_v0_t_lo_q0..2)
   logic [N_FU*ELEN-1:0] operand_v0_t_lo_q0, operand_v0_t_lo_q1, operand_v0_t_lo_q2;
@@ -911,6 +1078,14 @@ module spatz_vfu
       endcase
     end
   end
+  // FUs can accept a new word of operands
+  logic fu_can_accept;
+  assign fu_can_accept = spatz_req_valid && &(in_ready | ~valid_operations) && operands_ready && !stall;
+
+  // the word can only advance when all slots have been consumed
+  logic fu_word_can_advance;
+  assign fu_word_can_advance = !divsqrt_shared_active || (fu_word_complete && vrf_wvalid_i);
+
 
   always_comb begin: proc_reduction
     // Maintain state
@@ -1006,22 +1181,22 @@ module spatz_vfu
     unique case (reduction_state_q)
       Reduction_NormalExecution: begin
         // Did we issue a word to the FUs?
-        word_issued = spatz_req_valid && &(in_ready | ~valid_operations) && operands_ready && !stall;
+        word_issued = fu_can_accept && fu_word_can_advance;
 
         // Are we ready to accept a result?
-        result_ready = &(result_valid | ~pending_results) && ((result_tag.wb && vfu_rsp_ready_i) || vrf_wvalid_i || (spatz_req.op == VFCMP && !result_tag.last));
+        result_ready = fu_word_complete && ((result_tag.wb && vfu_rsp_ready_i) || vrf_wvalid_i || (spatz_req.op == VFCMP && !result_tag.last));
 
         // Initialize the pointers
         reduction_pointer_d = '0;
 
         // Do we have a new reduction instruction?
         if (spatz_req_valid && !running_q[spatz_req.id] && spatz_req.op_arith.is_reduction)
-          reduction_state_d = (!spatz_req.op_arith.vm) ? Reduction_Read_V0_t : is_fpu_busy ? Reduction_Wait : Reduction_Init;
+          reduction_state_d = (!spatz_req.op_arith.vm) ? Reduction_Read_V0_t : (is_fpu_busy || divsqrt_inflight_q) ? Reduction_Wait : Reduction_Init;
       end
 
       Reduction_Wait: begin
         // Are we ready to accept a result?
-        result_ready = &(result_valid | ~pending_results) && ((result_tag.wb && vfu_rsp_ready_i) || vrf_wvalid_i);
+        result_ready = fu_word_complete && ((result_tag.wb && vfu_rsp_ready_i) || vrf_wvalid_i);
 
         if (!is_fpu_busy)
           reduction_state_d = Reduction_Init;
@@ -1431,7 +1606,7 @@ module spatz_vfu
       default:;
     endcase
     // Got a new result
-    if (&(result_valid | ~pending_results) && !result_tag.reduction) begin
+    if (fu_word_complete && !result_tag.reduction) begin
       vreg_we  = !result_tag.wb;
       if (spatz_req.op == VFCMP) begin
         vreg_we    = result_tag.last;
@@ -1734,7 +1909,7 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
 
   assign is_ipu_busy = |int_ipu_busy;
   assign ipu_dup_fault = |int_ipu_dup_fault;
-  assign vfu_uncorrectable_fault_o = ipu_dup_fault | (spatz_req_valid & opq_dec_err[1]);
+  assign vfu_uncorrectable_fault_o = ipu_dup_fault | (spatz_req_valid & opq_dec_err[1]) | fpu_shadow_fault_any;
   assign vfu_correctable_fault_o = opq_spill_fault | (spatz_req_valid & opq_dec_err[0]) | ff_tmr_fault_any;
 
   logic [N_FU*ELEN-1:0] ipu_wide_operand1, ipu_wide_operand2, ipu_wide_operand3;
@@ -1921,9 +2096,31 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
   ////////////
   //  FPUs  //
   ////////////
+  function automatic int unsigned max_pipe_regs(
+    input fpnew_pkg::fmt_unsigned_t regs, input fpnew_pkg::fmt_logic_t cfg
+  );
+    automatic int unsigned res = 0;
+    for (int unsigned i = 0; i < fpnew_pkg::NUM_FP_FORMATS; i++)
+      if (cfg[i] && regs[i] > res) res = regs[i];
+    return res;
+  endfunction : max_pipe_regs
 
   if (FPU) begin: gen_fpu
     logic [N_FPU*ELEN-1:0] wide_operand1, wide_operand2, wide_operand3;
+    logic [N_FPU-1:0]      fpu_shadow_fault;
+
+    // Physically separate pipelines inside fpnew_top have their own fixed
+    // latency (max over enabled formats); mirror the same computation
+    // fpnew_top itself uses so the shadow checkers' delay lines can never
+    // drift from the real pipeline depth.
+    localparam int unsigned FpuShadowAddmulLatency = fpnew_pkg::get_num_regs_multi(
+      FPUImplementation.PipeRegs[fpnew_pkg::ADDMUL], FPUImplementation.UnitTypes[fpnew_pkg::ADDMUL], FPUFeatures.FpFmtMask);
+    localparam int unsigned FpuShadowDotpLatency = fpnew_pkg::get_num_regs_multi(
+      FPUImplementation.PipeRegs[fpnew_pkg::DOTP], FPUImplementation.UnitTypes[fpnew_pkg::DOTP], FPUFeatures.FpFmtMask);
+
+    localparam int unsigned FpuShadowNoncompLatency =
+      max_pipe_regs(FPUImplementation.PipeRegs[fpnew_pkg::NONCOMP], FPUFeatures.FpFmtMask);
+
     always_comb begin: gen_widening
       automatic logic [N_FPU*ELEN/2-1:0] shift_operand1 = !widening_upper_q ? operand1[N_FPU*ELEN/2-1:0] : operand1[N_FPU*ELEN-1:N_FPU*ELEN/2];
       automatic logic [N_FPU*ELEN/2-1:0] shift_operand2 = !widening_upper_q ? operand2[N_FPU*ELEN/2-1:0] : operand2[N_FPU*ELEN-1:N_FPU*ELEN/2];
@@ -1973,12 +2170,24 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
       assign fpu_result_valid[fpu*ELENB +: ELENB] = {ELENB{int_fpu_result_valid}};
 
       elen_t fpu_operand1, fpu_operand2, fpu_operand3;
-      assign fpu_operand1 = spatz_req.op_arith.switch_rs1_rd ? wide_operand3[fpu*ELEN +: ELEN] : wide_operand1[fpu*ELEN +: ELEN];
-      assign fpu_operand2 = wide_operand2[fpu*ELEN +: ELEN];
+      assign fpu_operand1 = (fpu == 0 && divsqrt_shared_active)
+        ? wide_operand1[divsqrt_slot_q*ELEN +: ELEN]: spatz_req.op_arith.switch_rs1_rd ? wide_operand3[fpu*ELEN +: ELEN] : wide_operand1[fpu*ELEN +: ELEN];
+      assign fpu_operand2 = (fpu == 0 && divsqrt_shared_active)
+        ? wide_operand2[divsqrt_slot_q*ELEN +: ELEN]:wide_operand2[fpu*ELEN +: ELEN];
       assign fpu_operand3 = (fpu_op == fpnew_pkg::ADD || spatz_req.op_arith.switch_rs1_rd) ? wide_operand1[fpu*ELEN +: ELEN] : wide_operand3[fpu*ELEN +: ELEN];
 
       logic int_fpu_in_valid;
       assign int_fpu_in_valid = spatz_req_valid && operands_ready && (!spatz_req.op_arith.is_scalar || fpu == 0) && is_fpu_insn;
+
+      // Shared div/sqrt: only FPU0 accepts, and only one element in flight at a time
+      logic int_fpu_in_valid_gated;
+      logic fpu_result_ready;
+
+      assign int_fpu_in_valid_gated = int_fpu_in_valid
+        && (fpu == 0 || !(divsqrt_shared_active))
+        && !(fpu == 0 && divsqrt_shared_active && divsqrt_inflight_q);
+
+      assign fpu_result_ready = (fpu == 0 && divsqrt_shared_active)? divsqrt_shared_ready : result_ready;
 
       // Generate an FPU pipeline
       elen_t fpu_operand1_q, fpu_operand2_q, fpu_operand3_q;
@@ -2089,16 +2298,21 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
       assign input_tag_q = vfu_tag_t'(input_tag_q_vote);
       // TMR: fpu_in_valid_q (voted value in fpu_in_valid_q, copies fpu_in_valid_q0..2)
       logic fpu_in_valid_q0, fpu_in_valid_q1, fpu_in_valid_q2;
-      `FFL(fpu_in_valid_q0, int_fpu_in_valid, int_fpu_in_ready, 1'b0)
-      `FFL(fpu_in_valid_q1, int_fpu_in_valid, int_fpu_in_ready, 1'b0)
-      `FFL(fpu_in_valid_q2, int_fpu_in_valid, int_fpu_in_ready, 1'b0)
+      `FFL(fpu_in_valid_q0, int_fpu_in_valid_gated, int_fpu_in_ready, 1'b0)
+      `FFL(fpu_in_valid_q1, int_fpu_in_valid_gated, int_fpu_in_ready, 1'b0)
+      `FFL(fpu_in_valid_q2, int_fpu_in_valid_gated, int_fpu_in_ready, 1'b0)
       bitwise_TMR_voter_fail #(.DataWidth($bits(fpu_in_valid_q)), .VoterType(1)) i_fpu_in_valid_q_voter (
         .a_i(fpu_in_valid_q0), .b_i(fpu_in_valid_q1), .c_i(fpu_in_valid_q2), .majority_o(fpu_in_valid_q), .fault_detected_o(ff_tmr_err_1[((0)*(N_FPU)+fpu)*12+11]));
       assign int_fpu_in_ready = !fpu_in_valid_q || fpu_in_valid_q && fpu_in_ready_d;
 
+      assign fpu_load_ready[fpu] = int_fpu_in_valid_gated && int_fpu_in_ready;
+
+      // Shared div/sqrt: only FPU0 instantiates the DIVSQRT opgroup
+      localparam fpu_implementation_t FPUImpl = (FDivSqrt && (!divsqrt_is_shared || fpu == 0)) ? FPUImplementation : without_divsqrt(FPUImplementation);
+
       fpnew_top #(
         .Features                   (FPUFeatures           ),
-        .Implementation             (FPUImplementation     ),
+        .Implementation             (FPUImpl               ),
         .TagType                    (vfu_tag_t             ),
         .StochasticRndImplementation(fpnew_pkg::DEFAULT_RSR)
       ) i_fpu (
@@ -2122,7 +2336,7 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
         .rnd_mode_i    (rm_q                                                   ),
         .result_o      (fpu_result[fpu*ELEN +: ELEN]                           ),
         .out_valid_o   (int_fpu_result_valid                                   ),
-        .out_ready_i   (result_ready                                           ),
+        .out_ready_i   (fpu_result_ready                                       ),
         .status_o      (fpu_status_d[fpu]                                      ),
         .tag_o         (tag                                                    )
       );
@@ -2130,7 +2344,52 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
       if (fpu == 0) begin: gen_fpu_tag
         assign fpu_result_tag = tag;
       end: gen_fpu_tag
+
+      // Shadow checker: recomputes FPU results on reduced units and flags
+      // mismatches (uncorrectable: the wrong result has already left the FPU).
+      // It observes the same voted (TMR) input registers that fpnew_top
+      // consumes: a single upset in one copy is masked and reported by that
+      // register's voter (ff_tmr_err_1), so no separate shadow copy of the
+      // input registers is kept here. The checker therefore covers the FPU
+      // datapath itself. DIV/SQRT (iterative) is only covered by the
+      // checker's accept/retire handshake tracking.
+      logic checker_fault;
+
+      spatz_fpu_shadow_checker #(
+        .ElenWidth        (ELEN                      ),
+        .AddmulLatency    (FpuShadowAddmulLatency    ),
+        .DotpLatency      (FpuShadowDotpLatency      ),
+        .NoncompLatency   (FpuShadowNoncompLatency   ),
+        .IdWidth          ($bits(spatz_id_t)         ),
+        .FPUFeatures      (FPUFeatures               ),
+        .FPUImplementation(FPUImpl                   )
+      ) i_fpu_shadow_checker (
+        .clk_i         (clk_i                          ),
+        .rst_ni        (rst_ni                         ),
+        .operand1_i    (fpu_operand1_q                 ),
+        .operand2_i    (fpu_operand2_q                 ),
+        .operand3_i    (fpu_operand3_q                 ),
+        .op_i          (fpu_op_q                       ),
+        .op_mod_i      (fpu_op_mode_q                  ),
+        .rnd_mode_i    (rm_q                           ),
+        .src_fmt_i     (fpu_src_fmt_q                  ),
+        .dst_fmt_i     (fpu_dst_fmt_q                  ),
+        .int_fmt_i     (fpu_int_fmt_q                  ),
+        .vectorial_op_i(fpu_vectorial_op_q             ),
+        .in_valid_i    (fpu_in_valid_q                 ),
+        .in_ready_i    (fpu_in_ready_d                 ),
+        .expected_id_i (input_tag_q.id                 ),
+        .result_id_i   (tag.id                         ),
+        .result_i      (fpu_result[fpu*ELEN +: ELEN]   ),
+        .result_valid_i(int_fpu_result_valid           ),
+        .result_ready_i(fpu_result_ready               ),
+        .fault_o       (checker_fault                  )
+      );
+
+      assign fpu_shadow_fault[fpu] = checker_fault;
     end : gen_fpnew
+
+    assign fpu_shadow_fault_any = |fpu_shadow_fault;
   end: gen_fpu else begin: gen_no_fpu
     assign is_fpu_busy      = 1'b0;
     assign fpu_in_ready     = '0;
@@ -2138,6 +2397,9 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
     assign fpu_result_valid = '0;
     assign fpu_result_tag   = '0;
     assign fpu_status_o     = '0;
+    assign fpu_shadow_fault_any = 1'b0;
+    assign fpu_load_ready   = '0;
   end: gen_no_fpu
 
 endmodule : spatz_vfu
+
