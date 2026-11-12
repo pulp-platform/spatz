@@ -157,7 +157,9 @@ int main(void) {
   TEST_CASE4();
   TEST_CASE5();
   TEST_CASE6();
-  TEST_CASE7();
+  #if ELEN == 64
+    TEST_CASE7();
+  #endif
   TEST_CASE8();
   TEST_CASE9();
   TEST_CASE10();
