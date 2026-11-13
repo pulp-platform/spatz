@@ -109,7 +109,7 @@ packages:
     - common_cells
     - common_verification
   relidma:
-    revision: 58525aac1fc9f6002e726ca7fc4dd6045700d398
+    revision: 503c4a5a86bdefeec39d23ef6df5f340f650be46
     version: null
     source:
       Git: https://iis-git.ee.ethz.ch/space-pulp/relidma.git
