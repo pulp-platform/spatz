@@ -6,6 +6,7 @@
 //         Basile Bougenot <bbougenot@student.ethz.ch>
 
 #include "vector_macros.h"
+#define REPEAT7(stmt) do { for (int _i = 0; _i < 7; _i++) { stmt; } } while (0)
 
 void TEST_CASE1() {
   VSET(16, e8, m8);
@@ -125,6 +126,74 @@ void TEST_CASE4 () {
 #endif
 }
 
+void TEST_CASE5() {
+  int32_t res; // Using int32_t to match XCMP's %d format
+
+  // SEW=8, Positive Value
+  VSET(16, e8, m8);
+  VLOAD_8(v8, 42, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
+  asm volatile("vmv.x.s %0, v8" : "=r"(res));
+  XCMP(17, res, 42); // XCMP checks scalar results
+
+  // SEW=8, Negative Value (Validates sign-extension to XLEN)
+  VLOAD_8(v8, -15, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
+  asm volatile("vmv.x.s %0, v8" : "=r"(res));
+  XCMP(18, res, -15);
+
+  // SEW=16, Positive Value
+  VSET(16, e16, m8);
+  VLOAD_16(v8, 1024, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
+  asm volatile("vmv.x.s %0, v8" : "=r"(res));
+  XCMP(19, res, 1024);
+
+  // SEW=16, Negative Value
+  VLOAD_16(v8, -2048, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
+  asm volatile("vmv.x.s %0, v8" : "=r"(res));
+  XCMP(20, res, -2048);
+
+  // SEW=32, Positive Value
+  VSET(16, e32, m8);
+  VLOAD_32(v8, 100000, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
+  asm volatile("vmv.x.s %0, v8" : "=r"(res));
+  XCMP(21, res, 100000);
+
+  // SEW=32, Negative Value
+  VLOAD_32(v8, -100000, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
+  asm volatile("vmv.x.s %0, v8" : "=r"(res));
+  XCMP(22, res, -100000);
+
+#if ELEN == 64
+  // SEW=64
+  VSET(16, e64, m8);
+  VLOAD_64(v8, 8000000000LL, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
+  asm volatile("vmv.x.s %0, v8" : "=r"(res));
+  XCMP(23, res, (int32_t)8000000000LL); // Cast to int32_t to match XLEN & XCMP
+#endif
+}
+
+void TEST_CASE6(void) {
+  volatile uint8_t buf[64] __attribute__((aligned(64)));   // local: lives in L1 (stack)
+  for (int i = 0; i < 64; i++) buf[i] = 0xff;
+  VSET(4, e8, m1);
+  asm volatile("vmv.v.i v0, -1");
+  register uintptr_t base asm("a0") = (uintptr_t)buf;
+  REPEAT7(asm volatile(".word 0x00050007" :: "r"(base) : "memory"));  // vle8.v v0, (a0), v0.t
+  VCMP_U8(24, v0, 0xff, 0xff, 0xff, 0xff);
+  VLOAD_8(v1, 1, 2, 3, 4);
+  VCMP_U8(25, v1, 1, 2, 3, 4);
+}
+
+void TEST_CASE7(void) {
+  volatile uint8_t buf[64] __attribute__((aligned(64)));   // local: lives in L1 (stack)
+  for (int i = 0; i < 64; i++) buf[i] = 0xff;
+  VSET(4, e8, m1);
+  asm volatile("vmv.v.i v0, -1");
+  REPEAT7(asm volatile("vle8.v v2, (%0), v0.t" :: "r"(buf) : "memory"));
+  VCMP_U8(26, v2, 0xff, 0xff, 0xff, 0xff);
+  VLOAD_8(v1, 1, 2, 3, 4);
+  VCMP_U8(27, v1, 1, 2, 3, 4);
+}
+
 int main(void) {
   INIT_CHECK();
   enable_vec();
@@ -133,6 +202,9 @@ int main(void) {
   TEST_CASE2();
   TEST_CASE3();
   TEST_CASE4();
+  TEST_CASE5();
+  TEST_CASE6();
+  TEST_CASE7();
 
   EXIT_CHECK();
 }
