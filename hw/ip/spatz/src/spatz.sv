@@ -444,14 +444,39 @@ logic vfu_buf_fault; // correctable fault of the VFU result buffer
   // rel_fifo (redundancy_cells) has no dtype parameter -- only a plain DataWidth --
   // so pack/unpack vfu_buf_t to flat bits at this boundary. data_i is already a
   // concatenation (flat bits), so only data_o needs an explicit cast back.
-  localparam int unsigned VfuBufWidth = $bits(vfu_buf_t);
-  logic [VfuBufWidth-1:0] vfu_buf_data_bits;
+  // rel_fifo's backing memory is a single, unreplicated copy and none of this
+  // concatenation carries ECC yet (vrf_wdata here is pre-ECC, encoded later
+  // per-cut downstream) -- encode the whole word -> rel_fifo -> decode.
+  localparam int unsigned VfuBufWidth     = $bits(vfu_buf_t);
+  localparam int unsigned VfuBufProtWidth = hsiao_ecc_pkg::min_ecc(VfuBufWidth);
+  localparam int unsigned VfuBufEccWidth  = VfuBufWidth + VfuBufProtWidth;
+
+  logic [VfuBufWidth-1:0]     vfu_buf_data_bits;
+  logic [VfuBufEccWidth-1:0]  vfu_buf_d_ecc, vfu_buf_q_ecc;
+  logic [VfuBufProtWidth-1:0] vfu_buf_dec_syndrome;
+  logic [1:0]                 vfu_buf_dec_err;
+  logic                       vfu_buf_ecc_sec_err, vfu_buf_ecc_ded_err;
   assign vfu_buf_data = vfu_buf_t'(vfu_buf_data_bits);
+  assign vfu_buf_ecc_sec_err = vfu_buf_pop & vfu_buf_dec_err[0];
+  assign vfu_buf_ecc_ded_err = vfu_buf_pop & vfu_buf_dec_err[1];
+
+  hsiao_ecc_enc #(
+    .DataWidth(VfuBufWidth),
+    .ProtWidth(VfuBufProtWidth)
+  ) i_vfu_buf_ecc_enc (
+    .in ({vrf_wdata[VFU_VD_WD],
+          vrf_waddr[VFU_VD_WD],
+          vrf_wbe  [VFU_VD_WD],
+          sb_id [SB_VFU_VD_WD],
+          vfu_rsp,
+          vfu_rsp_valid}),
+    .out(vfu_buf_d_ecc)
+  );
 
   rel_fifo #(
-    .FallThrough (1'b0        ),
-    .DataWidth   (VfuBufWidth ),
-    .Depth       (FpuBufDepth )
+    .FallThrough (1'b0           ),
+    .DataWidth   (VfuBufEccWidth ),
+    .Depth       (FpuBufDepth    )
   ) i_vfu_buf (
     .clk_i      (clk_i                   ),
     .rst_ni     (rst_ni                  ),
@@ -460,16 +485,21 @@ logic vfu_buf_fault; // correctable fault of the VFU result buffer
     .full_o     (vfu_buf_full            ),
     .empty_o    (vfu_buf_empty           ),
     .usage_o    (vfu_buf_usage           ),
-    .data_i     ({vrf_wdata[VFU_VD_WD],
-                  vrf_waddr[VFU_VD_WD],
-                  vrf_wbe  [VFU_VD_WD],
-                  sb_id [SB_VFU_VD_WD],
-                  vfu_rsp,
-                  vfu_rsp_valid}         ),
+    .data_i     (vfu_buf_d_ecc           ),
     .push_i     (vfu_buf_push            ),
-    .data_o     (vfu_buf_data_bits       ),
+    .data_o     (vfu_buf_q_ecc           ),
     .pop_i      (vfu_buf_pop             ),
     .fault_o    (vfu_buf_fault           )
+  );
+
+  hsiao_ecc_dec #(
+    .DataWidth(VfuBufWidth),
+    .ProtWidth(VfuBufProtWidth)
+  ) i_vfu_buf_ecc_dec (
+    .in        (vfu_buf_q_ecc       ),
+    .out       (vfu_buf_data_bits   ),
+    .syndrome_o(vfu_buf_dec_syndrome),
+    .err_o     (vfu_buf_dec_err     )
   );
 
 `ifdef DOUBLE_BW
@@ -493,14 +523,41 @@ logic vfu_buf_fault; // correctable fault of the VFU result buffer
   // rel_fifo (redundancy_cells) has no dtype parameter -- only a plain DataWidth --
   // so pack/unpack vlsu_buf_t to flat bits at this boundary. data_i is already a
   // concatenation (flat bits), so only data_o needs an explicit cast back.
-  localparam int unsigned VlsuBufWidth = $bits(vlsu_buf_t);
-  logic [VlsuBufWidth-1:0] vlsu_buf_data_bits;
+  // rel_fifo's backing memory is a single, unreplicated copy. The
+  // vlsu_doublebw_wdata_ecc_raw[1] field already carries its own ECC codeword,
+  // but the rest of the concatenation doesn't -- encode the whole word as one
+  // -> rel_fifo -> decode, same as i_vfu_buf above.
+  localparam int unsigned VlsuBufWidth     = $bits(vlsu_buf_t);
+  localparam int unsigned VlsuBufProtWidth = hsiao_ecc_pkg::min_ecc(VlsuBufWidth);
+  localparam int unsigned VlsuBufEccWidth  = VlsuBufWidth + VlsuBufProtWidth;
+
+  logic [VlsuBufWidth-1:0]     vlsu_buf_data_bits;
+  logic [VlsuBufEccWidth-1:0]  vlsu_buf_d_ecc, vlsu_buf_q_ecc;
+  logic [VlsuBufProtWidth-1:0] vlsu_buf_dec_syndrome;
+  logic [1:0]                  vlsu_buf_dec_err;
+  logic                        vlsu_buf_ecc_sec_err, vlsu_buf_ecc_ded_err;
   assign vlsu_buf_data = vlsu_buf_t'(vlsu_buf_data_bits);
+  assign vlsu_buf_ecc_sec_err = vlsu_buf_pop & vlsu_buf_dec_err[0];
+  assign vlsu_buf_ecc_ded_err = vlsu_buf_pop & vlsu_buf_dec_err[1];
   logic vlsu_buf_fault; // correctable fault
+
+  hsiao_ecc_enc #(
+    .DataWidth(VlsuBufWidth),
+    .ProtWidth(VlsuBufProtWidth)
+  ) i_vlsu_buf_ecc_enc (
+    .in ({vlsu_doublebw_wdata_ecc_raw[1],
+          vrf_waddr[VLSU_VD_WD1],
+          vrf_wbe  [VLSU_VD_WD1],
+          sb_id [SB_VLSU_VD_WD1],
+          vlsu_rsp,
+          vlsu_rsp_valid}),
+    .out(vlsu_buf_d_ecc)
+  );
+
   rel_fifo #(
-    .FallThrough (1'b0         ),
-    .DataWidth   (VlsuBufWidth ),
-    .Depth       (VlsuBufDepth )
+    .FallThrough (1'b0            ),
+    .DataWidth   (VlsuBufEccWidth ),
+    .Depth       (VlsuBufDepth    )
   ) i_vlsu_buf (
     .clk_i      (clk_i                    ),
     .rst_ni     (rst_ni                   ),
@@ -509,16 +566,21 @@ logic vfu_buf_fault; // correctable fault of the VFU result buffer
     .full_o     (vlsu_buf_full            ),
     .empty_o    (vlsu_buf_empty           ),
     .usage_o    (vlsu_buf_usage           ),
-    .data_i     ({vlsu_doublebw_wdata_ecc_raw[1],
-                  vrf_waddr[VLSU_VD_WD1],
-                  vrf_wbe  [VLSU_VD_WD1],
-                  sb_id [SB_VLSU_VD_WD1],
-                  vlsu_rsp,
-                  vlsu_rsp_valid}         ),
+    .data_i     (vlsu_buf_d_ecc           ),
     .push_i     (vlsu_buf_push            ),
-    .data_o     (vlsu_buf_data_bits       ),
+    .data_o     (vlsu_buf_q_ecc           ),
     .pop_i      (vlsu_buf_pop             ),
     .fault_o    (vlsu_buf_fault           ) // correctable fault
+  );
+
+  hsiao_ecc_dec #(
+    .DataWidth(VlsuBufWidth),
+    .ProtWidth(VlsuBufProtWidth)
+  ) i_vlsu_buf_ecc_dec (
+    .in        (vlsu_buf_q_ecc       ),
+    .out       (vlsu_buf_data_bits   ),
+    .syndrome_o(vlsu_buf_dec_syndrome),
+    .err_o     (vlsu_buf_dec_err     )
   );
 
   // VLSU (doublebw) writes ECC codewords directly to the VRF, bypassing the
@@ -530,6 +592,8 @@ logic vfu_buf_fault; // correctable fault of the VFU result buffer
 `endif
 `else
   assign vfu_buf_fault = 1'b0;
+  assign vfu_buf_ecc_sec_err = 1'b0;
+  assign vfu_buf_ecc_ded_err = 1'b0;
 `endif
 
   always_comb begin
@@ -632,6 +696,7 @@ logic vfu_buf_fault; // correctable fault of the VFU result buffer
   end : gen_vfu_vrf_wdata_encoder
 
 logic vfu_correctable_error_internal;
+logic vfu_uncorrectable_error_internal;
   spatz_vfu #(
     .FPUImplementation(FPUImplementation)
   ) i_vfu (
@@ -667,13 +732,14 @@ logic vfu_correctable_error_internal;
     // FPU side-channel
     .fpu_status_o     (fpu_status_o                                            ),
     .vfu_correctable_fault_o      (vfu_correctable_error_internal              ),
-    .vfu_uncorrectable_fault_o    (vfu_uncorrectable_error_o                   )
+    .vfu_uncorrectable_fault_o    (vfu_uncorrectable_error_internal            )
   );
 
   //////////
   // VLSU //
   //////////
  logic vlsu_correctable_error_internal;
+ logic vlsu_uncorrectable_error_internal;
 `ifdef DOUBLE_BW
   spatz_doublebw_vlsu #(
     .NrMemPorts      (NrMemPorts      ),
@@ -714,7 +780,7 @@ logic vfu_correctable_error_internal;
     .spatz_mem_finished_o    (spatz_mem_finished                                   ),
     .spatz_mem_str_finished_o(spatz_mem_str_finished                               ),
     .vlsu_correctable_error_o (vlsu_correctable_error_internal                     ),
-    .vlsu_uncorrectable_error_o (vlsu_uncorrectable_error_o                        )
+    .vlsu_uncorrectable_error_o (vlsu_uncorrectable_error_internal                 )
   );
 `else
   spatz_vlsu #(
@@ -758,8 +824,11 @@ logic vfu_correctable_error_internal;
 `endif
 
 logic [1:0] vlsu_prev_tmr_fault;
-assign vlsu_correctable_error_o = vlsu_correctable_error_internal | vlsu_buf_fault | (|vlsu_prev_tmr_fault);
-assign vfu_correctable_error_o = vfu_correctable_error_internal | vfu_buf_fault;
+assign vlsu_correctable_error_o = vlsu_correctable_error_internal | vlsu_buf_fault
+                                  | vlsu_buf_ecc_sec_err | (|vlsu_prev_tmr_fault);
+assign vlsu_uncorrectable_error_o = vlsu_uncorrectable_error_internal | vlsu_buf_ecc_ded_err;
+assign vfu_correctable_error_o = vfu_correctable_error_internal | vfu_buf_fault | vfu_buf_ecc_sec_err;
+assign vfu_uncorrectable_error_o = vfu_uncorrectable_error_internal | vfu_buf_ecc_ded_err;
 
 `ifdef DOUBLE_BW
   // tie off fault-monitor signals that are otherwise
