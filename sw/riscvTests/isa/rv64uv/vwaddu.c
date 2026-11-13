@@ -6,6 +6,13 @@
 //         Basile Bougenot <bbougenot@student.ethz.ch>
 
 #include "vector_macros.h"
+#define V8_GROUP "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15"
+
+static inline uint32_t get_vlenb(void) {
+  uint32_t vlenb;
+  asm volatile("csrr %0, vlenb" : "=r"(vlenb));
+  return vlenb;
+}
 
 void TEST_CASE1(void) {
   VSET(16, e8, m2);
@@ -254,6 +261,29 @@ void TEST_CASE8(void) {
 #endif
 }
 
+void TEST_CASE9(void) {
+  uint32_t vlenb = get_vlenb();
+  uint32_t n     = 4 * vlenb;      // VLMAX for e8/m4
+  uint32_t first = 7 * vlenb / 2;  // first EEW16 result element that lands in v15
+ 
+  volatile uint8_t src[4 * vlenb] __attribute__((aligned(8)));
+  for (uint32_t i = 0; i < n; i++)
+    src[i] = (i < first) ? 0x11 : (uint8_t)(i - first + 5);
+ 
+  VSET(vlenb / 2, e16, m1);
+  asm volatile("vmv.v.i v15, -1" ::: "v15");
+ 
+  VSET(n, e8, m4);
+  asm volatile("vle8.v  v16, (%0)" :: "r"(src) : "v16", "v17", "v18", "v19", "memory");
+  asm volatile("vmv.v.i v20, 0" ::: "v20", "v21", "v22", "v23");
+  asm volatile("vwaddu.vv v8, v16, v20" ::: V8_GROUP);   // v8..v15 = zext(src)
+ 
+  VSET(4, e16, m1);
+  asm volatile("vslidedown.vi v4, v15, 0" ::: "v4");
+ 
+  VCMP_U16(25, v4, 5, 6, 7, 8);
+}
+
 int main(void) {
   INIT_CHECK();
   enable_vec();
@@ -263,6 +293,7 @@ int main(void) {
   TEST_CASE2();
   TEST_CASE3();
   TEST_CASE4();
+  TEST_CASE9();
   // SKIP 5-8: vwaddu.wv and vwaddu.wx not supported
   // TEST_CASE5();
   // TEST_CASE6();
