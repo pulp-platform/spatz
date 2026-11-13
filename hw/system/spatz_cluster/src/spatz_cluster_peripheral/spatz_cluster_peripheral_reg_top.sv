@@ -6769,5 +6769,3 @@ module spatz_cluster_peripheral_reg_top_intf
   );
   
 endmodule
-
-
