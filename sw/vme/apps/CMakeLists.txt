@@ -47,10 +47,10 @@ add_subdirectory(tew32/fp16-gemm-alpha fp16-gemm-alpha)
 add_subdirectory(tew32/fp16-gemm-beta fp16-gemm-beta)
 
 ### Benchmarks
-# add_subdirectory(tew32/fp16-vq-matmul fp16-vq-matmul)
+add_subdirectory(tew32/fp16-vq-matmul fp16-vq-matmul)
 
 # add_subdirectory(tew32/fp16-vq-gemm fp16-vq-gemm)
-# add_subdirectory(tew32/fp16-dq-matmul fp16-dq-matmul)
+add_subdirectory(tew32/fp16-dq-matmul fp16-dq-matmul)
 
 # add_subdirectory(tew32/fp16-matmul-softmax fp16-matmul-softmax)
 # add_subdirectory(tew32/fp16-gemm-softmax fp16-gemm-softmax)

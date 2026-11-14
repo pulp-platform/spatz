@@ -1,118 +1,59 @@
-// Copyright 2026 ETH Zurich and University of Bologna.
-//
-// SPDX-License-Identifier: Apache-2.0
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//    http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-//
-// Author: Pei-Yu Lin, ETH Zürich
-
-#include <snrt.h>
 #include <printf.h>
+#include <snrt.h>
+#include <stdint.h>
 
-#include "matmul.h"
+#include "ope_runtime.h"
 #include DATAHEADER
-#include "kernel/matmul.c"
+#include "kernel/matmul.h"
 
-static inline uint32_t get_cycle(void) {
-    uint32_t cycle;
-    asm volatile("csrr %0, mcycle" : "=r"(cycle) : : "memory");
-    return cycle;
-}
+enum { M96 = 96, N128 = 128, K128 = 128, CBW = 16, CBN = 64, NCB = 2 };
 
-static inline uint32_t float_bits(float value) {
-    union { float f; uint32_t u; } bits = {.f = value};
-    return bits.u;
+static uint32_t check(const float *actual, const uint32_t *golden,
+                      uint32_t count, float *max_abs) {
+  uint32_t errors = 0;
+  *max_abs = 0.0f;
+  for (uint32_t i = 0; i < count; ++i) {
+    union { uint32_t u; float f; } ref = {.u = golden[i]};
+    float delta = actual[i] - ref.f;
+    if (delta < 0.0f) delta = -delta;
+    const float magnitude = ref.f < 0.0f ? -ref.f : ref.f;
+    if (delta > *max_abs) *max_abs = delta;
+    if (!(delta <= 1e-3f + 1e-3f * magnitude)) ++errors;
+  }
+  return errors;
 }
 
 int main(void) {
-    if (snrt_cluster_core_idx() != 0)
-        return 0;
+  if (snrt_cluster_core_idx() != 0) return 0;
+  enum { A_BYTES = M96 * K128 * 2,
+         C_BYTES = M96 * N128 * 4,
+         CB_BYTES = NCB * CBN * CBW * 4,
+         INDEX_BYTES = (K128 / 2) * (N128 / CBW / 2) * 4,
+         WORKSPACE_BYTES = K128 * N128 * 2,
+         BUFFER_BYTES = A_BYTES + C_BYTES + CB_BYTES + INDEX_BYTES +
+                        WORKSPACE_BYTES };
+  uint8_t *buffer = (uint8_t *)snrt_l1alloc(BUFFER_BYTES);
+  uint32_t *apack = (uint32_t *)buffer;
+  float *output = (float *)(buffer + A_BYTES);
+  uint32_t *cb0 = (uint32_t *)((uint8_t *)output + C_BYTES);
+  uint32_t *cb1 = cb0 + CBN * CBW;
+  uint32_t *idx = (uint32_t *)((uint8_t *)cb0 + CB_BYTES);
+  uint32_t *workspace = (uint32_t *)((uint8_t *)idx + INDEX_BYTES);
+  snrt_dma_start_1d(apack, vq_apack_dram, A_BYTES);
+  snrt_dma_start_1d(cb0, vq_cb_dram, CB_BYTES);
+  snrt_dma_start_1d(idx, vq_idx_dram, INDEX_BYTES);
+  snrt_dma_wait_all();
+  for (uint32_t i = 0; i < M96 * N128; ++i) output[i] = 0.0f;
 
-    uint32_t vlenb;
-    asm volatile("csrr %0, vlenb" : "=r"(vlenb));
-    if (vlenb != TE * sizeof(uint32_t)) {
-        printf("FP16 VQ MatMul requires VLEN=512 and TE=16\n");
-        return 2;
-    }
-
-    if (matmul_l.M != 64 || matmul_l.N != 64 ||
-        (matmul_l.K != 128 && matmul_l.K != 256 && matmul_l.K != 512)) {
-        printf("Unsupported MatMul shape: expected M64_N64_K128, K256, or K512\n");
-        return 2;
-    }
-    enum {
-        A_BYTES = sizeof(Atpack_dram),
-        B_BYTES = sizeof(Bmeta_dram),
-        CB_BYTES = sizeof(CB0_dram),
-        C_BYTES = sizeof(Cref_dram),
-        BUFFER_BYTES = A_BYTES + B_BYTES + 2 * CB_BYTES + C_BYTES
-    };
-    _Static_assert(BUFFER_BYTES <= SNRT_TCDM_SIZE, "MatMul buffers exceed TCDM");
-    uint8_t *const buffer = (uint8_t *)snrt_l1alloc(BUFFER_BYTES);
-    if (buffer == 0)
-        return 2;
-    __fp16 *const Atpack = (__fp16 *)buffer;
-    vq_group *const Bmeta = (vq_group *)(buffer + A_BYTES);
-    __fp16 *const cb0 = (__fp16 *)(buffer + A_BYTES + B_BYTES);
-    __fp16 *const cb1 = (__fp16 *)(buffer + A_BYTES + B_BYTES + CB_BYTES);
-    float *const C = (float *)(buffer + A_BYTES + B_BYTES + 2 * CB_BYTES);
-
-    snrt_dma_start_1d(Atpack, Atpack_dram, A_BYTES);
-    snrt_dma_start_1d(Bmeta, Bmeta_dram, B_BYTES);
-    snrt_dma_start_1d(cb0, CB0_dram, CB_BYTES);
-    snrt_dma_start_1d(cb1, CB1_dram, CB_BYTES);
-    snrt_dma_wait_all();
-
-    uint32_t start = get_cycle();
-    matmul_fp16_fp32_vq_1x2(Atpack, Bmeta, cb0, cb1, C);
-    const uint32_t cycles_1x2 = get_cycle() - start;
-
-    start = get_cycle();
-    matmul_fp16_fp32_vq_1x4(Atpack, Bmeta, cb0, cb1, C);
-    const uint32_t cycles_1x4 = get_cycle() - start;
-
-    uint32_t errors = 0;
-    float max_abs = 0.0f;
-    for (uint32_t row = 0; row < matmul_l.M; ++row) {
-        uint32_t row_errors = 0;
-        for (uint32_t col = 0; col < matmul_l.N; ++col) {
-            const uint32_t index = row * matmul_l.N + col;
-            const float expected = Cref_dram[index];
-            const float delta = C[index] > expected ? C[index] - expected : expected - C[index];
-            const float tolerance = 0.001f + 0.001f * (expected < 0.0f ? -expected : expected);
-            if (delta > max_abs)
-                max_abs = delta;
-            if (!(delta <= tolerance)) {
-                if (row_errors == 0)
-                    printf("row %u: errors at cols %u", row, col);
-                else
-                    printf(",%u", col);
-                ++row_errors;
-                ++errors;
-            }
-        }
-        if (row_errors != 0)
-            printf(" (%u errors)\n", row_errors);
-    }
-    const uint64_t useful_macs = (uint64_t)matmul_l.M * matmul_l.N * matmul_l.K;
-    const uint64_t peak_macs = (uint64_t)cycles_1x4 * CE * CE * 2;
-    const uint32_t utilization = peak_macs ? useful_macs * 10000 / peak_macs : 0;
-    printf("\n=== TEW32 FP16 VQ MatMul M%u_N%u_K%u (TE=16, 1 core) ===\n",
-           matmul_l.M, matmul_l.N, matmul_l.K);
-    printf("1x2 Cycles: %u\n", cycles_1x2);
-    printf("1x4 Cycles: %u\n", cycles_1x4);
-    printf("1x4 Utilization: %u.%02u%%\n", utilization / 100, utilization % 100);
-    printf("MaxAbsErr: 0x%08x\nErrors: %u\nStatus: %s\n",
-           float_bits(max_abs), errors, errors ? "FAIL" : "PASS");
-    return errors ? 1 : 0;
+  const uint32_t start = get_cycle();
+  vq_gemm_MT6x2(apack, workspace, idx, cb0, cb1, output,
+                 M96, N128, K128);
+  const uint32_t cycles = get_cycle() - start;
+  float max_abs;
+  const uint32_t errors = check(output, vq_golden_dram, M96 * N128, &max_abs);
+  union { float f; uint32_t u; } bits = {.f = max_abs};
+  printf("\n=== VQ-MatMul MT6x2 serial M96 N128 K128 ===\n");
+  printf("cycles: %u\nMaxAbsErr: 0x%08x\nErrors: %u\nStatus: %s\n",
+         cycles, bits.u, errors, errors ? "FAIL" : "PASS");
+  return errors ? 1 : 0;
 }
