@@ -49,7 +49,7 @@ module spatz_vfu
   );
 
   // TMR fault flags of the triplicated FFs
-  logic [41-1:0] ff_tmr_err_0;
+  logic [42-1:0] ff_tmr_err_0;
   logic [12*(N_FPU)-1:0] ff_tmr_err_1;
   logic ff_tmr_fault_any;
   // FPU shadow-checker mismatch (any FPU)
@@ -231,11 +231,22 @@ module spatz_vfu
     .a_i(operand_state_q0), .b_i(operand_state_q1), .c_i(operand_state_q2), .majority_o(operand_state_q_vote), .fault_detected_o(ff_tmr_err_0[3]));
   assign operand_state_q = operand_state_t'(operand_state_q_vote);
 
+  // Registered VRF read request (1-cycle latency): the VRF only sees vrf_re_o/vrf_raddr_o/vrf_id_o one
+  // cycle after the VFU computed them (see "Registered VRF read request" below). vrf_rvalid_eff is
+  // vrf_rvalid_i qualified with "this response belongs to the request I am issuing right now".
+  // NOTE: the VFU has no module parameter for its number of VRF read ports; it is fixed to 3 by the
+  // port list above (vrf_raddr_o/vrf_re_o/vrf_rdata_i/vrf_rvalid_i are all [2:0]):
+  // index 0 = VFU_VS2_RD, 1 = VFU_VS1_RD, 2 = VFU_VD_RD.
+  localparam int unsigned NrVfuReadPorts = 3;
+  vrf_addr_t [NrVfuReadPorts-1:0] vrf_raddr;   // combinational read address (before registering)
+  logic      [NrVfuReadPorts-1:0] vrf_re;      // combinational read enable  (before registering)
+  logic      [NrVfuReadPorts-1:0] vrf_rvalid_eff;
+
   // Are the VFU operands ready?
   logic op1_is_ready, op2_is_ready, op3_is_ready, operands_ready;
-  assign op1_is_ready   = spatz_req_valid && (operand_state_q == READ_OPERANDS) && ((!spatz_req.op_arith.is_reduction && (!spatz_req.use_vs1 || vrf_rvalid_i[1])) || (spatz_req.op_arith.is_reduction && reduction_operand_ready_q));
-  assign op2_is_ready   = spatz_req_valid && (operand_state_q == READ_OPERANDS) && ((!spatz_req.use_vs2 || vrf_rvalid_i[0]) || spatz_req.op_arith.is_reduction);
-  assign op3_is_ready   = spatz_req_valid && (operand_state_q == READ_OPERANDS) && (!spatz_req.vd_is_src || vrf_rvalid_i[2]);
+  assign op1_is_ready   = spatz_req_valid && (operand_state_q == READ_OPERANDS) && ((!spatz_req.op_arith.is_reduction && (!spatz_req.use_vs1 || vrf_rvalid_eff[1])) || (spatz_req.op_arith.is_reduction && reduction_operand_ready_q));
+  assign op2_is_ready   = spatz_req_valid && (operand_state_q == READ_OPERANDS) && ((!spatz_req.use_vs2 || vrf_rvalid_eff[0]) || spatz_req.op_arith.is_reduction);
+  assign op3_is_ready   = spatz_req_valid && (operand_state_q == READ_OPERANDS) && (!spatz_req.vd_is_src || vrf_rvalid_eff[2]);
   assign operands_ready = op1_is_ready && op2_is_ready && op3_is_ready && (!spatz_req.op_arith.is_scalar || vfu_rsp_ready_i) && !stall;
 
   // Valid operations
@@ -696,7 +707,7 @@ module spatz_vfu
   logic [N_FU*ELENB-1:0] in_ready;
 
   logic reduction_v0_t_is_ready;
-  assign reduction_v0_t_is_ready = (reduction_state_q == Reduction_Read_V0_t) && vrf_rvalid_i[0] && vrf_rvalid_i[1];
+  assign reduction_v0_t_is_ready = (reduction_state_q == Reduction_Read_V0_t) && vrf_rvalid_eff[0] && vrf_rvalid_eff[1];
   logic reduction_v0_t_read_done;
   // TMR: reduction_v0_t_read_done (voted value in reduction_v0_t_read_done, copies reduction_v0_t_read_done0..2)
   logic reduction_v0_t_read_done0, reduction_v0_t_read_done1, reduction_v0_t_read_done2;
@@ -728,7 +739,7 @@ module spatz_vfu
 
   // FSM to manage operands between normal calculation and v0.t fetching
   logic v0_t_is_ready;
-  assign v0_t_is_ready   = (operand_state_q == READ_V0_t) && vrf_rvalid_i[0] && vrf_rvalid_i[1];
+  assign v0_t_is_ready   = (operand_state_q == READ_V0_t) && vrf_rvalid_eff[0] && vrf_rvalid_eff[1];
   logic v0_t_read_done;
   // TMR: v0_t_read_done (voted value in v0_t_read_done, copies v0_t_read_done0..2)
   logic v0_t_read_done0, v0_t_read_done1, v0_t_read_done2;
@@ -1249,7 +1260,7 @@ module spatz_vfu
           end
         endcase
         // verilator lint_on SELRANGE
-        if (vrf_rvalid_i[0] && vrf_rvalid_i[1]) begin
+        if (vrf_rvalid_eff[0] && vrf_rvalid_eff[1]) begin
           reduction_operand_ready_d = 1'b1;
           reduction_pointer_d = reduction_pointer_q + 1;
           reduction_state_d = Reduction_Reduce;
@@ -1285,7 +1296,7 @@ module spatz_vfu
         `endif
 
         // verilator lint_on SELRANGE
-        if (vrf_rvalid_i[1]) begin
+        if (vrf_rvalid_eff[1]) begin
           reduction_operand_ready_d = 1'b1;
           reduction_pointer_d = reduction_pointer_q + 1;
           word_issued = is_fpu_insn ? 1'b1 : (VRFWordWidth==ELEN*N_IPU) ? 1'b1 : !(|pnt) ? 1'b1 : 1'b0;
@@ -1518,7 +1529,7 @@ module spatz_vfu
   always_comb begin : vreg_addr_proc
     vreg_addr_d = vreg_addr_q;
 
-    vrf_raddr_o = vreg_addr_d;
+    vrf_raddr = vreg_addr_d;
     vrf_waddr_o = vrf_addr_t'(result_tag.vd_addr);
 
     // Tag (propagated with the operations)
@@ -1538,16 +1549,16 @@ module spatz_vfu
     case(operand_state_q)
        READ_OPERANDS:begin
         if(switch_to_read_v0t) begin
-          vrf_raddr_o = vreg_addr_d;
+          vrf_raddr = vreg_addr_d;
 
         end else if(reduction_state_q == Reduction_Read_V0_t) begin
           vreg_addr_d[0] =  0 << $clog2(NrWordsPerVector);
           vreg_addr_d[1] =  1 << $clog2(NrWordsPerVector);
-          vrf_raddr_o = vreg_addr_d;
+          vrf_raddr = vreg_addr_d;
         end
         // RMW: redirect VD_RD (index 2) to write address so spatz.sv decodes old codeword
         if (vfu_rmw_q == VFU_RMW)
-          vrf_raddr_o[2] = vrf_addr_t'(result_tag.vd_addr);
+          vrf_raddr[2] = vrf_addr_t'(result_tag.vd_addr);
         // Skip normal vs1/vs2/vd address generation while servicing a reduction's
         // v0.t mask read (above): vl_q=='0 stays true for that whole phase, and
         // this branch is otherwise unconditional, so without this guard it
@@ -1561,7 +1572,7 @@ module spatz_vfu
             vreg_addr_d[2] = (spatz_req.vd + vstart) << $clog2(NrWordsPerVector);
 
           // Direct feedthrough
-          vrf_raddr_o = vreg_addr_d;
+          vrf_raddr = vreg_addr_d;
           if (!spatz_req.op_arith.is_scalar)
             input_tag.vd_addr = vfu_rsp_addr_t'(vreg_addr_d[2]);
 
@@ -1581,7 +1592,7 @@ module spatz_vfu
        READ_V0_t: begin
          vreg_addr_d[0] = ( 0 + vstart) << $clog2(NrWordsPerVector);
          vreg_addr_d[1] = ( 1 + vstart) << $clog2(NrWordsPerVector);
-         vrf_raddr_o = vreg_addr_d;
+         vrf_raddr = vreg_addr_d;
        end
        default:;
    endcase
@@ -1822,21 +1833,60 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
         if (vreg_we && vfu_rmw_needed)
           vfu_rmw_d = VFU_RMW;
       VFU_RMW:
-        if (vrf_rvalid_i[2])
+        if (vrf_rvalid_eff[2])
           vfu_rmw_d = VFU_NORMAL;
       default:;
     endcase
   end : vfu_rmw_fsm
 
   // In VFU_RMW: assert re[2] so spatz.sv reads old VD codeword at the write address.
-  assign vrf_re_o    = vreg_r_req | ((vfu_rmw_q == VFU_RMW) ? 3'b100 : 3'b000);
+  assign vrf_re    = vreg_r_req | ((vfu_rmw_q == VFU_RMW) ? 3'b100 : 3'b000);
+
+  // Registered VRF read request (cuts the VFU -> scoreboard -> VRF -> rvalid -> VFU path).
+  // vrf_re/vrf_raddr/read-id computed in cycle N are presented to the VRF in cycle N+1, together
+  // with a request context (operand state, id, ...). The response (rdata/rvalid) of cycle N+1 is
+  // consumed by the VFU only if the request it is making in cycle N+1 is identical to the one
+  // registered in cycle N (same port enabled, same address, same instruction id, same
+  // operand / v0.t / reduction-v0.t / RMW phase). Otherwise vrf_rvalid_eff stays low, the VFU
+  // stalls for a cycle, and the new request is registered. Stale responses (state changed,
+  // address advanced, instruction retired) are thus never consumed.
+  // Cost: the address advances after each consumed word, so a stream of words consumes at most
+  // one word every 2 cycles.
+  localparam int unsigned ReqContextW = $bits(operand_state_q) + 2 + $bits(spatz_req.id);
+  logic [ReqContextW-1:0] req_context;
+  assign req_context = {operand_state_q, reduction_state_q == Reduction_Read_V0_t, vfu_rmw_q == VFU_RMW, spatz_req.id};
+
+  typedef struct packed {
+    logic      [NrVfuReadPorts-1:0] re;
+    vrf_addr_t [NrVfuReadPorts-1:0] raddr;
+    logic      [ReqContextW-1:0]    context_q;
+  } vrf_req_t;
+  vrf_req_t vrf_req_d, vrf_req_q, vrf_req_q0, vrf_req_q1, vrf_req_q2;
+  assign vrf_req_d = '{re: vrf_re, raddr: vrf_raddr, context_q: req_context};
+  `FF(vrf_req_q0, vrf_req_d, '0)
+  `FF(vrf_req_q1, vrf_req_d, '0)
+  `FF(vrf_req_q2, vrf_req_d, '0)
+  logic [$bits(vrf_req_t)-1:0] vrf_req_q_vote;
+  bitwise_TMR_voter_fail #(.DataWidth($bits(vrf_req_t)), .VoterType(1)) i_vrf_req_q_voter (
+    .a_i(vrf_req_q0), .b_i(vrf_req_q1), .c_i(vrf_req_q2), .majority_o(vrf_req_q_vote), .fault_detected_o(ff_tmr_err_0[41]));
+  assign vrf_req_q = vrf_req_t'(vrf_req_q_vote);
+
+  assign vrf_re_o    = vrf_req_q.re;
+  assign vrf_raddr_o = vrf_req_q.raddr;
+
+  for (genvar port = 0; port < NrVfuReadPorts; port++) begin : gen_rvalid_eff
+    assign vrf_rvalid_eff[port] = vrf_rvalid_i[port] && vrf_req_q.re[port] && vrf_re[port] &&
+                                  (vrf_req_q.raddr[port] == vrf_raddr[port]) && (vrf_req_q.context_q == req_context);
+  end
   // NORMAL: suppress write when inner-cut partial write detected.
   // VFU_RMW: write merged codeword once read data is valid.
-  assign vrf_we_o    = (vfu_rmw_q == VFU_RMW) ? (vreg_we && vrf_rvalid_i[2])
+  assign vrf_we_o    = (vfu_rmw_q == VFU_RMW) ? (vreg_we && vrf_rvalid_eff[2])
                                                : (vreg_we && !vfu_rmw_needed);
   assign vrf_wbe_o   = (vfu_rmw_q == VFU_RMW) ? '1             : vreg_wbe;
   assign vrf_wdata_o = (vfu_rmw_q == VFU_RMW) ? vfu_rmw_merged : vrf_wdata_pre;
-  assign vrf_id_o    = {result_tag.id, {3{spatz_req.id}}};
+  // Read IDs belong to the registered request (stored in the request context, aligned with
+  // vrf_re_o); the write ID is not registered.
+  assign vrf_id_o    = {result_tag.id, {3{vrf_req_q.context_q[$bits(spatz_req.id)-1:0]}}};
 
   // Defer the "instruction complete" response for a VRF write (!wb) that
   // hasn't actually landed in the VRF yet this cycle -- whether stalled by
@@ -2351,8 +2401,8 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
       // consumes: a single upset in one copy is masked and reported by that
       // register's voter (ff_tmr_err_1), so no separate shadow copy of the
       // input registers is kept here. The checker therefore covers the FPU
-      // datapath itself. DIV/SQRT (iterative) is only covered by the
-      // checker's accept/retire handshake tracking.
+      // datapath itself. Given FPUImpl, the checker elaborates its reduced
+      // DIVSQRT shadow only where DIVSQRT exists (shared: FPU0 only).
       logic checker_fault;
 
       spatz_fpu_shadow_checker #(
@@ -2380,6 +2430,8 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
         .in_ready_i    (fpu_in_ready_d                 ),
         .expected_id_i (input_tag_q.id                 ),
         .result_id_i   (tag.id                         ),
+        .tag_narrowing_i       (input_tag_q.narrowing  ),
+        .result_tag_narrowing_i(tag.narrowing          ),
         .result_i      (fpu_result[fpu*ELEN +: ELEN]   ),
         .result_valid_i(int_fpu_result_valid           ),
         .result_ready_i(fpu_result_ready               ),
