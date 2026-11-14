@@ -9,6 +9,9 @@
 //            FP32 -> FP16ALT (E8M7), FP16 -> FP8 (E5M2), FP8 -> FP8.
 //   DOTP   : reduced fpnew SDOTP for the common FP16xFP16->FP32 case,
 //            mapped to FP8xFP8->FP16ALT and checked on exponent.
+//   DIVSQRT: reduced fpnew DIVSQRT (C910): FP32 -> FP16ALT (ULP tolerance),
+//            FP16 -> FP16 and FP16ALT -> FP16ALT (exact). Only elaborated
+//            where FPUImplementation enables DIVSQRT (shared: FPU0 only).
 //   NONCOMP: exact lightweight functional replica (SGNJ/MINMAX/CMP/CLASSIFY).
 //   CONV   : low-area semantic checker.  F2F/I2F compare FP exponent class;
 //            F2I compares integer leading-one position against FP exponent.
@@ -64,6 +67,13 @@ module spatz_fpu_shadow_checker
   input  logic [IdWidth-1:0]   expected_id_i,
   input  logic [IdWidth-1:0]   result_id_i,
 
+  // Pure-passthrough tag bit (vfu_tag_t.narrowing), threaded in/out solely to
+  // catch a corrupted tag-pipeline register inside any opgroup (e.g. a
+  // divsqrt/noncomp inp_pipe_tag_q.narrowing flop) -- see the tag-passthrough
+  // check below. Not used by any arithmetic/tolerance logic above.
+  input  logic                 tag_narrowing_i,
+  input  logic                 result_tag_narrowing_i,
+
   input  logic [ElenWidth-1:0] result_i,
   input  logic                 result_valid_i,
   input  logic                 result_ready_i,
@@ -89,15 +99,14 @@ module spatz_fpu_shadow_checker
     logic [LaneCntWidth-1:0]  num_lanes;
     fp_format_e               dst_fmt;
     logic [ElenWidth-1:0]     expected [MaxLanes];
-    // Carried through purely to detect real/shadow misalignment at compare
-    // time -- see expected_id_i/result_id_i above and reduced_addmul_tag_t.id
-    // for the same mechanism on ADDMUL/DOTP. NONCOMP never had this: its
-    // fixed-delay dline assumed the real NONCOMP unit's own internal pipe
-    // always advances in lockstep with NoncompLatency, which an internal
-    // valid-gating glitch (fpnew_noncomp.sv's inp_pipe_valid_q/out_pipe_valid_q
-    // gate whether every OTHER pipe register in that stage actually latches
-    // fresh data that cycle) can silently violate without ever showing up as
-    // a dropped/extra top-level accept or retire.
+    // Identifies which in-flight instruction this entry's expected value
+    // belongs to. result_i/result_valid_i/result_id_i are the FPU's single
+    // shared output bus across ALL opgroups, so this id is matched (not
+    // merely compared) against result_id_i to recognize the one retiring
+    // result that actually corresponds to this entry -- see noncomp_consumed
+    // below. A non-matching id simply means an unrelated instruction (any
+    // other opgroup, or NONCOMP with the id not yet reused) retired this
+    // cycle, not a fault.
     logic [IdWidth-1:0]       id;
   } noncomp_entry_t;
 
@@ -337,6 +346,15 @@ module spatz_fpu_shadow_checker
 
   noncomp_entry_t noncomp_dline [NoncompLatency];
 
+  // Fires only when the entry this shadow is tracking is actually the one
+  // retiring this cycle. result_i/result_valid_i/result_id_i are the FPU's
+  // single shared output bus across ALL opgroups (ADDMUL/DOTP/DIVSQRT/CONV
+  // too), so an id mismatch here just means "some other instruction retired
+  // this cycle" -- it must never by itself be treated as a fault.
+  logic noncomp_consumed;
+  assign noncomp_consumed = noncomp_dline[NoncompLatency-1].valid && result_valid_i &&
+                            (noncomp_dline[NoncompLatency-1].id == result_id_i);
+
   always_ff @(posedge clk_i or negedge rst_ni) begin
     if (!rst_ni) begin
       for (int i = 0; i < NoncompLatency; i++)
@@ -344,7 +362,7 @@ module spatz_fpu_shadow_checker
                               dst_fmt: fpnew_pkg::FP32,
                               expected: '{default: '0},
                               id: '0};
-    end else if (in_ready_i) begin
+    end else if (in_valid_i && is_noncomp_op && in_ready_i) begin // pushes only on an actual new NONCOMP accept
       for (int i = NoncompLatency - 1; i > 0; i--)
         noncomp_dline[i] <= noncomp_dline[i-1];
       noncomp_dline[0] <= '{
@@ -354,33 +372,28 @@ module spatz_fpu_shadow_checker
         expected:  noncomp_expected_comb,
         id:        expected_id_i
       };
+    end else if (noncomp_consumed) begin
+      // Just compared against its matching retiring result -- invalidate so
+      // a LATER, unrelated instruction retiring with a reused/wrapped-around
+      // id can't spuriously re-match this stale entry.
+      noncomp_dline[NoncompLatency-1].valid <= 1'b0;
     end
   end
 
   logic noncomp_fault_comb;
   always_comb begin
     noncomp_fault_comb = 1'b0;
-    if (noncomp_dline[NoncompLatency-1].valid && result_valid_i && in_ready_i) begin
-      // The shadow's own tracked instruction id must match the id attached
-      // to whatever real result is being sampled this cycle -- same
-      // real/shadow-desync check as reduced_addmul_fault_comb/
-      // reduced_dotp_fault_comb above, here catching an internal valid-pipe
-      // glitch inside the real NONCOMP unit shifting its actual completion
-      // timing away from this fixed-delay line's assumption.
-      if (noncomp_dline[NoncompLatency-1].id != result_id_i) begin
-        noncomp_fault_comb = 1'b1;
-      end else begin
-        automatic fp_format_e fmt = noncomp_dline[NoncompLatency-1].dst_fmt;
-        automatic int unsigned w = fp_width(fmt);
-        automatic logic [ElenWidth-1:0] lane_mask =
-          (w == ElenWidth) ? '1 : ((ElenWidth'(1) << w) - ElenWidth'(1));
-        for (int lane = 0; lane < MaxLanes; lane++) begin
-          if (lane < noncomp_dline[NoncompLatency-1].num_lanes) begin
-            automatic logic [ElenWidth-1:0] real_raw;
-            real_raw = (result_i >> (lane * w)) & lane_mask;
-            if (real_raw != noncomp_dline[NoncompLatency-1].expected[lane])
-              noncomp_fault_comb = 1'b1;
-          end
+    if (noncomp_consumed) begin
+      automatic fp_format_e fmt = noncomp_dline[NoncompLatency-1].dst_fmt;
+      automatic int unsigned w = fp_width(fmt);
+      automatic logic [ElenWidth-1:0] lane_mask =
+        (w == ElenWidth) ? '1 : ((ElenWidth'(1) << w) - ElenWidth'(1));
+      for (int lane = 0; lane < MaxLanes; lane++) begin
+        if (lane < noncomp_dline[NoncompLatency-1].num_lanes) begin
+          automatic logic [ElenWidth-1:0] real_raw;
+          real_raw = (result_i >> (lane * w)) & lane_mask;
+          if (real_raw != noncomp_dline[NoncompLatency-1].expected[lane])
+            noncomp_fault_comb = 1'b1;
         end
       end
     end
@@ -1627,6 +1640,390 @@ module spatz_fpu_shadow_checker
 
 
   // =====================================================================
+  // Reduced-precision FPnew DIVSQRT shadow
+  // =====================================================================
+  // Same methodology as the ADDMUL/DOTP shadows: a real fpnew opgroup block
+  // (OpGroup=DIVSQRT, the same C910/THMULTI divider type as the real FPU)
+  // fed only with operations the real FPU has accepted, at reduced precision:
+  //   real FP32    -> shadow FP16ALT (E8M7): mantissa truncated, exponent
+  //                   field unchanged (reduced_fp32_to_fp16alt), checked with
+  //                   an ordered-code ULP tolerance.
+  //   real FP16    -> shadow FP16 (E5M10): same precision, EXACT compare.
+  //   real FP16ALT -> shadow FP16ALT: same precision, EXACT compare (free:
+  //                   the shadow needs FP16ALT for the FP32 mapping anyway).
+  //   FP8/FP8ALT are not supported by the C910 divider at all.
+  //
+  // Difference to ADDMUL/DOTP: the divider is iterative and its latency
+  // depends on the format (C910 SRT: ~15 rounds for single, fewer for half),
+  // so the FP16ALT shadow of an FP32 op finishes EARLIER than the real one
+  // and the two are not in lockstep. The real FPU holds at most one div/sqrt
+  // in flight (the C910 unit is not pipelined; spatz_vfu additionally gates
+  // FPU0 with divsqrt_inflight_q), so a single pending slot -- keyed by the
+  // instruction id, like the ADDMUL/DOTP tag.id -- holds whichever result
+  // arrives first until the other one is there. The compare itself is then
+  // deferred one cycle off registered copies, as for ADDMUL/DOTP.
+  //
+  // Only elaborated where the given FPUImplementation actually enables the
+  // DIVSQRT opgroup (with a shared divider: FPU0 only).
+
+  // FP32 -> FP16ALT: each operand loses up to 1 ULP(E8M7) of relative
+  // precision to truncation; a quotient/root of perturbed operands deviates
+  // by at most ~2 ULP, plus the shadow's own rounding and the real result's
+  // truncation. No cancellation mechanism exists for div/sqrt, so no
+  // bypass/exp-bound classification is needed beyond subnormal operands.
+  // Same value as ReducedFp32Ulp (ADDMUL). Unvalidated against a fault-free
+  // div/sqrt kernel yet.
+  localparam int unsigned ReducedDivsqrtFp32Ulp  = 4;
+  // FP16/FP16ALT: same format and same divider on both sides -> bit-exact.
+  localparam int unsigned ReducedDivsqrtExactTol = 0;
+
+  localparam logic DivsqrtEnabled = fpnew_pkg::any_enabled_multi(
+    FPUImplementation.UnitTypes[DIVSQRT], FPUFeatures.FpFmtMask);
+  localparam int unsigned DivsqrtPipeRegs = fpnew_pkg::get_num_regs_multi(
+    FPUImplementation.PipeRegs[DIVSQRT], FPUImplementation.UnitTypes[DIVSQRT], FPUFeatures.FpFmtMask);
+
+  function automatic fmt_logic_t reduced_divsqrt_fmt_mask();
+    automatic fmt_logic_t m;
+    m = '0;
+    m[FP16]    = 1'b1;
+    m[FP16ALT] = 1'b1;
+    return m;
+  endfunction
+
+  function automatic fmt_unsigned_t reduced_divsqrt_pipe_regs();
+    automatic fmt_unsigned_t p;
+    p = '{default: '0};
+    // Same (merged) pipe depth as the real divider.
+    p[FP16]    = 32'(DivsqrtPipeRegs);
+    p[FP16ALT] = 32'(DivsqrtPipeRegs);
+    return p;
+  endfunction
+
+  function automatic fmt_unit_types_t reduced_divsqrt_unit_types();
+    automatic fmt_unit_types_t u;
+    u = '{default: DISABLED};
+    u[FP16]    = MERGED;
+    u[FP16ALT] = MERGED;
+    return u;
+  endfunction
+
+  // FP16 (E5M10) counterpart of reduced_mismatch16 (which decodes NaN with
+  // the FP16ALT E8M7 layout). Same ordered-code comparison.
+  function automatic logic reduced_mismatch_fp16(
+    input logic [15:0] a, input logic [15:0] b, input int unsigned tol
+  );
+    automatic logic [15:0] oa, ob, diff;
+    automatic logic nan_a, nan_b;
+    nan_a = (a[14:10] == 5'h1f) && (a[9:0] != 10'd0);
+    nan_b = (b[14:10] == 5'h1f) && (b[9:0] != 10'd0);
+    if (nan_a || nan_b) return !(nan_a && nan_b);
+    if (reduced_zero16(a) && reduced_zero16(b)) return 1'b0;
+    oa   = reduced_ordered16(a);
+    ob   = reduced_ordered16(b);
+    diff = (oa >= ob) ? (oa - ob) : (ob - oa);
+    return diff > 16'(tol);
+  endfunction
+
+  typedef struct packed {
+    fp_format_e         real_fmt;
+    logic               vectorial;
+    // FP32 only: an operand is subnormal, so its FP16ALT truncation can
+    // collapse to zero (e.g. x/0 = inf vs. a real huge value) -- skip.
+    logic               bypass;
+    logic [IdWidth-1:0] id;
+  } reduced_divsqrt_tag_t;
+
+  logic is_divsqrt_op;
+  assign is_divsqrt_op = (op_i inside {DIV, SQRT}) && (src_fmt_i == dst_fmt_i);
+
+  logic reduced_divsqrt_fault_comb;
+  logic reduced_divsqrt_dropped_op;
+
+  if (DivsqrtEnabled) begin : gen_reduced_divsqrt
+    logic [1:0][31:0]     ds_operands;
+    fp_format_e           ds_fmt;
+    logic                 ds_vectorial;
+    logic                 ds_supported;
+    reduced_divsqrt_tag_t ds_tag_i;
+    logic [31:0]          ds_result;
+    logic                 ds_in_ready, ds_out_valid;
+
+    always_comb begin
+      ds_operands  = '0;
+      ds_fmt       = FP16;
+      ds_vectorial = vectorial_op_i;
+      ds_supported = 1'b0;
+      ds_tag_i.real_fmt  = src_fmt_i;
+      ds_tag_i.vectorial = vectorial_op_i;
+      ds_tag_i.bypass    = 1'b0;
+      ds_tag_i.id        = expected_id_i;
+
+      unique case (src_fmt_i)
+        FP32: begin
+          ds_supported = 1'b1;
+          ds_fmt       = FP16ALT;
+          // One real FP32 element maps to one scalar E8M7 element.
+          ds_vectorial = 1'b0;
+          ds_tag_i.vectorial = 1'b0;
+          ds_operands[0][15:0] = reduced_fp32_to_fp16alt(operand1_i[31:0]);
+          ds_operands[1][15:0] = reduced_fp32_to_fp16alt(operand2_i[31:0]);
+          // DIV = op[0]/op[1]; SQRT reads op[0] only.
+          ds_tag_i.bypass = reduced_fp32_subnormal(operand1_i[31:0]) ||
+                            ((op_i == DIV) && reduced_fp32_subnormal(operand2_i[31:0]));
+        end
+        FP16: begin
+          ds_supported   = 1'b1;
+          ds_fmt         = FP16;
+          ds_operands[0] = operand1_i;
+          ds_operands[1] = operand2_i;
+        end
+        FP16ALT: begin
+          ds_supported   = 1'b1;
+          ds_fmt         = FP16ALT;
+          ds_operands[0] = operand1_i;
+          ds_operands[1] = operand2_i;
+        end
+        default: ds_supported = 1'b0;
+      endcase
+    end
+
+    logic ds_accept;
+    assign ds_accept = in_valid_i && in_ready_i && is_divsqrt_op && ds_supported;
+
+    fpnew_opgroup_block #(
+      .OpGroup       ( DIVSQRT                       ),
+      .Width         ( ElenWidth                     ),
+      .EnableVectors ( 1'b1                          ),
+      .DivSqrtSel    ( fpnew_pkg::THMULTI            ),
+      .FpFmtMask     ( reduced_divsqrt_fmt_mask()    ),
+      .IntFmtMask    ( FPUFeatures.IntFmtMask        ),
+      .FmtPipeRegs   ( reduced_divsqrt_pipe_regs()   ),
+      .FmtUnitTypes  ( reduced_divsqrt_unit_types()  ),
+      .PipeConfig    ( FPUImplementation.PipeConfig  ),
+      .TagType       ( logic                         )
+    ) i_reduced_divsqrt_shadow (
+      .clk_i,
+      .rst_ni,
+      .hart_id_i      ( '0 ),
+      .operands_i     ( ds_operands ),
+      .is_boxed_i     ( '1 ),
+      .rnd_mode_i,
+      .op_i,
+      .op_mod_i,
+      .src_fmt_i      ( ds_fmt ),
+      .dst_fmt_i      ( ds_fmt ),
+      .int_fmt_i,
+      .vectorial_op_i ( ds_vectorial ),
+      .tag_i          ( 1'b0 ),
+      .simd_mask_i    ( '1 ),
+      .in_valid_i     ( ds_accept ),
+      .in_ready_o     ( ds_in_ready ),
+      .flush_i        ( 1'b0 ),
+      .result_o       ( ds_result ),
+      .status_o       ( /* unused */ ),
+      .extension_bit_o( /* unused */ ),
+      .tag_o          ( /* unused */ ),
+      .out_valid_o    ( ds_out_valid ),
+      // Never backpressured: the result is parked in the pending slot below.
+      .out_ready_i    ( 1'b1 ),
+      .busy_o         ( /* unused */ )
+    );
+
+    // -------------------------------------------------------------------
+    // Pending slot: one accepted div/sqrt waiting for both results.
+    // -------------------------------------------------------------------
+    logic                 pend_q, pend_d;
+    reduced_divsqrt_tag_t pend_tag_q, pend_tag_d;
+    logic                 sh_done_q, sh_done_d, real_done_q, real_done_d;
+    logic [31:0]          sh_res_q, sh_res_d;
+    logic [ElenWidth-1:0] real_res_q, real_res_d;
+
+    logic                 sh_now, real_now, sh_have, real_have, complete;
+    logic [31:0]          sh_val;
+    logic [ElenWidth-1:0] real_val;
+
+    assign sh_now   = pend_q && !sh_done_q && ds_out_valid;
+    assign real_now = pend_q && !real_done_q && result_valid_i && result_ready_i &&
+                      (result_id_i == pend_tag_q.id);
+    assign sh_have  = sh_done_q   || sh_now;
+    assign real_have = real_done_q || real_now;
+    assign sh_val   = sh_done_q   ? sh_res_q   : ds_result;
+    assign real_val = real_done_q ? real_res_q : result_i;
+    assign complete = pend_q && sh_have && real_have;
+
+    always_comb begin
+      pend_d      = pend_q;
+      pend_tag_d  = pend_tag_q;
+      sh_done_d   = sh_done_q   || sh_now;
+      real_done_d = real_done_q || real_now;
+      sh_res_d    = sh_now   ? ds_result : sh_res_q;
+      real_res_d  = real_now ? result_i  : real_res_q;
+
+      if (complete) begin
+        pend_d      = 1'b0;
+        sh_done_d   = 1'b0;
+        real_done_d = 1'b0;
+      end
+      if (ds_accept && ds_in_ready) begin
+        pend_d      = 1'b1;
+        pend_tag_d  = ds_tag_i;
+        sh_done_d   = 1'b0;
+        real_done_d = 1'b0;
+      end
+    end
+
+    always_ff @(posedge clk_i or negedge rst_ni) begin
+      if (!rst_ni) begin
+        pend_q      <= 1'b0;
+        pend_tag_q  <= '{real_fmt: FP32, default: '0};
+        sh_done_q   <= 1'b0;
+        real_done_q <= 1'b0;
+        sh_res_q    <= '0;
+        real_res_q  <= '0;
+      end else begin
+        pend_q      <= pend_d;
+        pend_tag_q  <= pend_tag_d;
+        sh_done_q   <= sh_done_d;
+        real_done_q <= real_done_d;
+        sh_res_q    <= sh_res_d;
+        real_res_q  <= real_res_d;
+      end
+    end
+
+    // Deferred compare stage (registered copies, as for ADDMUL/DOTP).
+    logic                 cmp_valid_q;
+    reduced_divsqrt_tag_t cmp_tag_q;
+    logic [31:0]          cmp_sh_q;
+    logic [ElenWidth-1:0] cmp_real_q;
+    // Control-level desync, reported one cycle later with the compare.
+    logic                 desync_q;
+
+    // Real result before the shadow's: the shadow runs the same or a
+    // shorter iteration count with the same pipe depth and is never
+    // backpressured, so this can only be a real/shadow desync. A new accept
+    // while the previous op is still pending likewise means the one-in-
+    // flight invariant was broken (the slot is overwritten).
+    logic desync_comb;
+    assign desync_comb = (real_now && !sh_have) ||
+                         (ds_accept && pend_q && !complete);
+
+    always_ff @(posedge clk_i or negedge rst_ni) begin
+      if (!rst_ni) begin
+        cmp_valid_q <= 1'b0;
+        cmp_tag_q   <= '{real_fmt: FP32, default: '0};
+        cmp_sh_q    <= '0;
+        cmp_real_q  <= '0;
+        desync_q    <= 1'b0;
+      end else begin
+        cmp_valid_q <= complete;
+        cmp_tag_q   <= pend_tag_q;
+        cmp_sh_q    <= sh_val;
+        cmp_real_q  <= real_val;
+        desync_q    <= desync_comb;
+      end
+    end
+
+    always_comb begin
+      reduced_divsqrt_fault_comb = desync_q;
+
+      if (cmp_valid_q) begin
+        unique case (cmp_tag_q.real_fmt)
+          FP32: begin
+            automatic logic [15:0] real_q;
+            real_q = reduced_fp32_to_fp16alt(cmp_real_q[31:0]);
+            // was: !reduced_fp32_subnormal(cmp_real_q[31:0]) -- self-referential,
+            // skipped the check whenever the REAL (possibly fault-corrupted)
+            // result itself looked subnormal, letting a fault that drives an
+            // otherwise-normal result into subnormal range mask itself. Use the
+            // shadow's own (fault-independent) result instead: it genuinely
+            // reflects whether this is a degenerate FP16ALT case.
+            //
+            // Known residual gap (previously analyzed, not yet retested): if
+            // the shadow's own division underflows all the way to exact zero
+            // on an otherwise-legitimate (fault-free) subnormal result,
+            // reduced_fp16alt_subnormal(cmp_sh_q) is false (it requires a
+            // nonzero mantissa) so this bypass won't fire, and
+            // reduced_mismatch16 only suppresses a mismatch when BOTH sides
+            // are zero -- a possible false-positive path distinct from the
+            // NONCOMP id-matching bug that caused the previously-observed
+            // false positives (see noncomp_consumed above). Re-applied as-is
+            // to isolate and retest against real fault-campaign data now that
+            // the NONCOMP bug is fixed.
+            // if (!cmp_tag_q.bypass && !reduced_fp32_subnormal(cmp_real_q[31:0]) &&
+            if (!cmp_tag_q.bypass && !reduced_fp16alt_subnormal(cmp_sh_q[15:0]) &&
+                reduced_mismatch16(cmp_sh_q[15:0], real_q, ReducedDivsqrtFp32Ulp)) begin
+              reduced_divsqrt_fault_comb = 1'b1;
+              `ifndef SYNTHESIS
+                $display("[REDUCED_DIVSQRT_FP32] shadow=%h real32=%h real_q=%h",
+                         cmp_sh_q[15:0], cmp_real_q[31:0], real_q);
+              `endif
+            end
+          end
+
+          FP16: begin
+            automatic int unsigned lanes;
+            lanes = cmp_tag_q.vectorial ? 2 : 1;
+            for (int lane = 0; lane < 2; lane++) begin
+              if (lane < lanes) begin
+                automatic logic [15:0] real_lane, shadow_lane;
+                real_lane   = cmp_real_q >> (16 * lane);
+                shadow_lane = cmp_sh_q[16*lane +: 16];
+                if (reduced_mismatch_fp16(shadow_lane, real_lane, ReducedDivsqrtExactTol)) begin
+                  reduced_divsqrt_fault_comb = 1'b1;
+                  `ifndef SYNTHESIS
+                    $display("[REDUCED_DIVSQRT_FP16] lane=%0d shadow=%h real=%h",
+                             lane, shadow_lane, real_lane);
+                  `endif
+                end
+              end
+            end
+          end
+
+          FP16ALT: begin
+            automatic int unsigned lanes;
+            lanes = cmp_tag_q.vectorial ? 2 : 1;
+            for (int lane = 0; lane < 2; lane++) begin
+              if (lane < lanes) begin
+                automatic logic [15:0] real_lane, shadow_lane;
+                real_lane   = cmp_real_q >> (16 * lane);
+                shadow_lane = cmp_sh_q[16*lane +: 16];
+                if (reduced_mismatch16(shadow_lane, real_lane, ReducedDivsqrtExactTol)) begin
+                  reduced_divsqrt_fault_comb = 1'b1;
+                  `ifndef SYNTHESIS
+                    $display("[REDUCED_DIVSQRT_FP16ALT] lane=%0d shadow=%h real=%h",
+                             lane, shadow_lane, real_lane);
+                  `endif
+                end
+              end
+            end
+          end
+
+          default: ;
+        endcase
+      end
+    end
+
+    // Same rule as reduced_addmul_dropped_op: the real FPU accepted a div/sqrt
+    // the shadow could not take, so it would otherwise go unchecked.
+    assign reduced_divsqrt_dropped_op = ds_accept && !ds_in_ready;
+
+`ifndef SYNTHESIS
+    always_ff @(posedge clk_i) begin
+      if (rst_ni) begin
+        if (ds_accept && !ds_in_ready)
+          $display("[REDUCED_DIVSQRT] shadow not ready when real FPU accepted an operation");
+        if (desync_comb)
+          $display("[REDUCED_DIVSQRT] real/shadow desync (real before shadow, or overlapping accept)");
+      end
+    end
+`endif
+  end : gen_reduced_divsqrt
+  else begin : gen_no_reduced_divsqrt
+    assign reduced_divsqrt_fault_comb = 1'b0;
+    assign reduced_divsqrt_dropped_op = 1'b0;
+  end : gen_no_reduced_divsqrt
+
+  // =====================================================================
   // Handshake-level plausibility check
   // =====================================================================
   // in_valid_i/expected_id_i now source from an independently-registered
@@ -1680,13 +2077,41 @@ module spatz_fpu_shadow_checker
   end
 
   // =====================================================================
+  // Tag-passthrough check (narrowing bit)
+  // =====================================================================
+  // vfu_tag_t.narrowing is pure passthrough metadata carried alongside the
+  // operands through every opgroup's own tag pipeline, used only downstream
+  // (in spatz_vfu.sv) to route/pack the FPU's numeric result -- it never
+  // enters any arithmetic/tolerance check above, so a corrupted tag-pipeline
+  // register (e.g. a divsqrt/noncomp inp_pipe_tag_q.narrowing flop) would
+  // otherwise go completely unchecked even though it can silently misroute
+  // an otherwise-correct result. Tracked the same way as the id itself: one
+  // entry per outstanding instruction slot, written at accept and checked
+  // against the real tag retiring alongside result_i.
+  logic narrowing_q [2**IdWidth];
+
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (!rst_ni) begin
+      for (int i = 0; i < 2**IdWidth; i++) narrowing_q[i] <= 1'b0;
+    end else if (accept_event) begin
+      narrowing_q[expected_id_i] <= tag_narrowing_i;
+    end
+  end
+
+  logic tag_fault_comb;
+  assign tag_fault_comb = retire_event && (narrowing_q[result_id_i] != result_tag_narrowing_i);
+
+  // =====================================================================
   // Final fault output
   // =====================================================================
   logic fault_comb, fault_q;
   assign fault_comb = reduced_addmul_fault_comb || reduced_dotp_fault_comb ||
                       noncomp_fault_comb || conv_fault_comb ||
+                      reduced_divsqrt_fault_comb ||
                       reduced_addmul_dropped_op || reduced_dotp_dropped_op ||
-                      handshake_fault_comb;
+                      reduced_divsqrt_dropped_op ||
+                      handshake_fault_comb ||
+                      tag_fault_comb;
 
   always_ff @(posedge clk_i or negedge rst_ni) begin
     if (!rst_ni) fault_q <= 1'b0;
