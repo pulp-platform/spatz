@@ -13,6 +13,7 @@ MKFILE_DIR  := $(dir $(MKFILE_PATH))
 # Configuration file
 SPATZ_CLUSTER_CFG         ?= spatz_cluster.doublebw.dram.hjson
 SPATZ_CLUSTER_CFG_PATH    := $(SPATZ_CLUSTER_DIR)/cfg/$(SPATZ_CLUSTER_CFG)
+VME_TE32                  ?= OFF
 SPATZ_CLUSTER_CFG_DEFINES += -DMEM_DRAM_ORIGIN=$(shell python3 -c "import jstyleson; f = open('$(SPATZ_CLUSTER_CFG_PATH)'); print(jstyleson.load(f)['dram']['address'])")
 SPATZ_CLUSTER_CFG_DEFINES += -DMEM_DRAM_SIZE=$(shell python3 -c "import jstyleson; f = open('$(SPATZ_CLUSTER_CFG_PATH)'); print(jstyleson.load(f)['dram']['length'])")
 SPATZ_CLUSTER_CFG_DEFINES += -DSNRT_BASE_HARTID=$(shell python3 -c "import jstyleson; f = open('$(SPATZ_CLUSTER_CFG_PATH)'); print(jstyleson.load(f)['cluster']['cluster_base_hartid'])")
@@ -36,6 +37,8 @@ BUF_FPU := $(shell python3 -c "import jstyleson; print(jstyleson.load(open('$(SP
 # hjson (a Spatz/cluster-level extension), define VENTAGLIO so the RTL `ifdef
 # VENTAGLIO ... `endif blocks pull in the VTL integration.
 SPATZ_CLUSTER_VENTAGLIO := $(shell python3 -c "import jstyleson; f = open('$(SPATZ_CLUSTER_CFG_PATH)'); print(1 if jstyleson.load(f)['cluster'].get('ventaglio', False) else 0)")
+# OPE sources are enabled by default; the cluster configuration can override it.
+SPATZ_CLUSTER_OPE := $(shell python3 -c "import jstyleson; f = open('$(SPATZ_CLUSTER_CFG_PATH)'); print(1 if jstyleson.load(f)['cluster'].get('ope', True) else 0)")
 
 ifeq ($(DOUBLE_BW),1)
 	DEFS += -DDOUBLE_BW
@@ -50,6 +53,11 @@ ifeq ($(SPATZ_CLUSTER_VENTAGLIO),1)
 	DEFS += -DVENTAGLIO
 	BENDER_CFG_TARGETS += -t ventaglio
 	SPATZ_CLUSTER_CFG_DEFINES += -DSPATZ_CLUSTER_VENTAGLIO=1
+endif
+
+ifeq ($(SPATZ_CLUSTER_OPE),1)
+	DEFS += -DOPE
+	BENDER_CFG_TARGETS += -t ope
 endif
 
 # Include Makefrag
@@ -253,7 +261,7 @@ sw: clean.sw spatz.gendata
 ## Build SW into sw/build with the LLVM toolchain (including tests) for Questasim simulator
 sw.vsim: clean.sw bin/spatz_cluster.vsim spatz.gendata
 	mkdir -p sw/build
-	cd sw/build && ${CMAKE} -DLLVM_PATH=${LLVM_INSTALL_DIR} -DGCC_PATH=${GCC_INSTALL_DIR} -DPYTHON=${PYTHON} -DSNITCH_SIMULATOR=../../../../../hw/system/spatz_cluster/bin/spatz_cluster.vsim -DBUILD_TESTS=ON -DSPATZ_CLUSTER_CFG=${SPATZ_CLUSTER_CFG} ${SPATZ_CLUSTER_CFG_DEFINES} .. && make -j8
+	cd sw/build && ${CMAKE} -DLLVM_PATH=${LLVM_INSTALL_DIR} -DGCC_PATH=${GCC_INSTALL_DIR} -DPYTHON=${PYTHON} -DSNITCH_SIMULATOR=../../../../../hw/system/spatz_cluster/bin/spatz_cluster.vsim -DBUILD_TESTS=ON -DVME_TE32=${VME_TE32} -DSPATZ_CLUSTER_CFG=${SPATZ_CLUSTER_CFG} ${SPATZ_CLUSTER_CFG_DEFINES} .. && make -j8
 
 ## Build SW and run all tests with Questasim simulator
 sw.test.vsim: sw.vsim

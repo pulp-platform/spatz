@@ -1,7 +1,13 @@
 # Spatz OPE Architecture and Dataflow
 
 This document describes the current Outer Product Engine (OPE) RTL. It is not an ISA specification or a simulation sign-off.
-The top-level module is `spatz_ope.sv`; computation and storage are implemented by `opope_fma.sv` and `opope_accumulator.sv`.
+The OPE supports the RISC-V Vector Matrix Extension, excluding memory instructions and matrix-configuration instructions.
+Its datapath contains a distributed `CE×CE` MAC array and a distributed `CE×CE` accumulator array. The floating-point
+arithmetic is collectively referred to as the FPU and contains both FMA and SDOTP datapaths; the accumulator stores their
+results and provides the feedback addend for subsequent operations.
+
+The top-level module is `spatz_ope.sv`; floating-point arithmetic and storage are implemented by the FPU datapaths and
+`opope_accumulator.sv`.
 Shared request and tile types come from `spatz_pkg` and `rvv_pkg`; floating-point formats come from `fpnew_pkg`.
 
 ## 1. Architecture
@@ -18,7 +24,7 @@ Decoder + Controller
         |       +--> MAC FIFO --> current/next --> VRF read [0:1]  |
         |       |                                  |              |
         |       |                                  v              |
-        |       |                     CE x CE FMA pipeline        |
+        |       |                     CE x CE FPU pipeline        |
         |       |                      ^           |              |
         |       |                      +-- forward-+              |
         |       |                      ^           | drain/write  |
@@ -32,7 +38,7 @@ Decoder + Controller
                               v
                            L1 TCDM
 
-FMA pipeline <--> FMA-side accumulator port
+FPU pipeline <--> FPU-side accumulator port
 
 MAC/VT/TV/Clean completion --> response buffers --> arbiter --> Controller
 VLSU completion --------------------------------------------> Controller
@@ -63,17 +69,19 @@ Internal request selection prioritizes Clean, VT, TV, then MAC; active datapaths
 
 | Parameter | Value | Meaning |
 | --- | --- | --- |
-| `TE = TileEdge` | 16 | Maximum logical tile edge |
+| `TE = TileEdge` | 16 | Maximum logical tile edge in the current configuration |
 | `CE = OPEComputeEdge` | 8 | Outer-product compute edge per beat |
+| `EnableTEW16` | 0 | Elaborate the same-format FP16 FMA datapath when set |
 | `AccElemWidth` | 32 bits | Fixed physical accumulator word width |
 | `VRFWordWidth` | 256 bits | Width of each VRF read/write port |
-| `NumPipeRegs` | 4 | FMA pipeline register stages |
+| `NumPipeRegs` | 4 | Arithmetic pipeline register stages |
 | `SpatialBeats = (TE / CE)^2` | 4 | Spatial beats for a full tile |
 | `AccDepth` | 16 | Accumulator entries per compute lane |
-| `TileDataWidth` | 512 bits | OPE/VLSU tile data interface width |
+| `TileDataWidth` | 512 bits | OPE/VLSU tile-row data width |
 
-Each of the CE x CE lanes has dedicated FP16 and FP32 FMA units and a 32-bit accumulator bank.
-Runtime TEW selects the arithmetic path; the two formats do not simultaneously compute two results for one element.
+Each CE x CE lane always has an FP32 FMA and two mixed-format SDOTP wrappers for standard FP16 and FP16ALT.
+The same-format FP16 FMA is generated only when `EnableTEW16=1`; it is absent by default.
+Runtime SEW, TEW and ALT-format state select exactly one result path for an operation.
 Physical storage is `CE * CE * AccDepth * AccElemWidth / 8`, currently 4096 bytes.
 TEW8 is supported for byte storage, moves and clearing only. No FP8 MAC is enabled.
 
@@ -95,7 +103,7 @@ C[i,j] += sum(A[i,k] * B[k,j]),  i < tm, j < tn, k < tk
 5. The lane mask prevents writes outside tm/tn. Issuing the final beat produces MAC completion.
 
 The work per instruction is `ceil(tm / CE) * ceil(tn / CE) * tk` beats.
-For tm=tn=16 and CE=8, tk=1 uses four beats and tk=2 uses eight. This is issue work, not end-to-end latency under stalls.
+For tm=tn=32 and CE=8, tk=1 uses 16 beats and tk=2 uses 32. This is issue work, not end-to-end latency under stalls.
 
 **Multiple-beat benefit:** a CE x CE array is reused across a larger TE x TE tile and across K reduction steps.
 The hardware does not need one FMA per element of the entire tile, and software does not issue a separate instruction for every rank-1 step.
@@ -105,24 +113,47 @@ Fringe tiles do not require padded arithmetic to protect the result, and inactiv
 This avoids valid work on inactive lanes but does not imply every combinational node is clock-gated.
 Real power and utilization still depend on operand delivery, stores and pipeline stalls.
 
-Each source supplies one VRF word per beat. The configuration must satisfy `CE * SEW <= VRFWordWidth`.
+Each source supplies one VRF word per beat. The configuration must satisfy
+`CE * SEW <= VRFWordWidth` for FMA and `CE * TEW <= VRFWordWidth` for packed SDOTP.
 Increasing CE alone does not add a multiword operand collector.
 
 ### Different SEW and TEW
 
-SEW controls vector operand extraction, bit offsets and K-row stride. TEW controls accumulation precision and the tile byte footprint.
+For same-width FMA, SEW controls operand extraction and K-row stride. For widening
+SDOTP, each base-vector element contains packed K lanes and has width TEW.
+TEW also controls accumulation precision and the tile byte footprint.
 `mtype.mtwiden` encodes a multiplier: 01 means 1, 10 means 2, and 11 means 4; 00 invalidates matrix state.
 The element width is `TEW = SEW * multiplier`, not SEW times the raw encoded field.
 
 | SEW / TEW | Current behavior |
 | --- | --- |
 | 8 / 8 | Raw-byte tile load/store, TV/VT and VTZERO; no FP8 MAC |
-| 16 / 16 | FP16 inputs, FP16 accumulation/rounding, selected 16-bit slice |
-| 16 / 32 | FP16 or alternate FP16 inputs widened to FP32, FP32 FMA/accumulation, full word |
+| 16 / 16 | Same-format FP16 FMA when `EnableTEW16=1`; unsupported by the default OPE instance |
+| 16 / 32 | FP16 or FP16ALT source and FP32 destination through the corresponding SDOTP wrapper |
 | 32 / 32 | Native FP32 inputs and accumulation |
 
-For SEW16/TEW32, vector loads provide 16-bit operands, and the FP32 FMA input path converts them to FP32 before arithmetic.
-The accumulator remains FP32; it does not narrow each result back to FP16. Tile memory transfers use the 32-bit TEW layout.
+An `opope_fma` accepts operands only in its configured `FpFormat`; it performs no FP16-to-FP32 type conversion.
+When source and destination formats differ, the OPE enables either the FP16-to-FP32 or FP16ALT-to-FP32
+`opope_sdotp_wrapper`. The FP32 FMA is enabled only for a native FP32 source and FP32 destination.
+The mixed-format result and accumulator remain FP32. Tile memory transfers use the 32-bit TEW layout.
+For FP16-to-FP32 with TK=2, each input word is `{even_K_fp16, odd_K_fp16}`.
+OPE maps the high halfword to lane 0 and the low halfword to lane 1, computing
+`C += A_even * B_even + A_odd * B_odd`. No implicit-register operand fetch or
+operand stream-register buffer is needed. A/B each supply one 256-bit VRF word
+per accepted beat (eight packed elements). A 16x16 tile on 8x8 CEs takes four
+spatial issue beats, independent of TK; pipeline latency and stalls are additional.
+The controller still tracks implicit row-stride register dependencies.
+The packed TE16 software keeps matrix arithmetic configured as
+SEW16/TWIDEN2/TK2. Store-afterK and store-interleave execute one `msetmtype`
+followed by `msettn 16` and then interleave individual VLE32 operations with
+VTFMM instructions. VLE32 uses its instruction EEW for the memory transfer, so
+it transfers sixteen packed 32-bit elements while matrix VSEW remains 16.
+
+The vsetvl variant deliberately groups four packed rows in one vector load.
+It executes `vsetvli e32,m4`, which produces VL=64 and lets one VLE32 fill
+v0-v3, v8-v11, v16-v19 or v24-v27. `msetmtype` then restores the unchanged
+SEW16/TWIDEN2/TK2 state. The following `msettn` receives 64, but the controller
+clamps TN and VL to the configured ETE=16.
 TV/VT are bit transfers, not floating-point conversions, and require SEW==TEW.
 To move a FP32 tile through the VRF, establish valid SEW32/TEW32 matrix state; `vsetvli` alone is insufficient because it clears mtype.
 Complete old-format work appropriately before changing configuration; do not reinterpret slices while old results remain resident.
@@ -168,13 +199,14 @@ and resetting zero metadata. Reset also physically clears memory.
 When draining for VTZERO or discard, superseded resident results can be consumed without writing them back.
 VTZERO initializes one logical tile; VTDISCARD clears all tile state and must not be used as a single-byte-tile clear.
 
-## 3. FMA Pipeline, Forwarding and Switching
+## 3. Arithmetic Pipeline, Forwarding and Switching
 
 ### Data and Tags
 
-Each `opope_fma` has four distributed register stages. The FP16/FP32 ready signals are aggregated into `fma_pipe_ready`.
-`fma_pipe_advance` advances computation and tag state together. Tags contain valid, tile ID, TEW, spatial beat, lane mask and `write_acc`.
-FMA results do not need an instruction ID because MAC completion is generated at issue. Request and response queues still retain IDs
+The FMA and SDOTP datapaths have four distributed register stages. Their ready signals are aggregated into `fma_pipe_ready`;
+disabled or unselected paths remain ready and do not produce a valid result.
+`fma_pipe_advance` advances the selected computation, its valid pipeline and tag state together. Tags contain valid, tile ID,
+TEW, spatial beat, lane mask and `write_acc`. Arithmetic results do not need an instruction ID because MAC completion is generated at issue. Request and response queues still retain IDs
 because one core can have multiple outstanding instructions.
 
 Each FMA tag stage includes a valid bit. Pipeline empty/full uses OR/AND reductions of the valid vector, while
@@ -196,7 +228,7 @@ Forwarding uses actual tags and handshakes, not a fixed software instruction-spa
 
 A different incoming MAC tile raises `resident_switch_req`; the switch occurs when that MAC actually fires.
 Existing pipeline tags are marked `write_acc`, so old-tile results write back while the new tile starts from its own accumulator data.
-Overlap is permitted only when operand, busy and FMA-ready conditions allow it.
+Overlap is permitted only when operand, busy and FPU-ready conditions allow it.
 
 External VTSE/VTLE, VT/TV or clean operations that need resident state trigger a drain.
 Drain completion uses the old tile's next-state busy map, not global pipeline emptiness; successor work may remain in flight.
@@ -205,7 +237,7 @@ supersede them and can discard the drained values. A full drain-reason enum is t
 An external same-tile read can trigger draining even with a younger MAC queued. That younger MAC waits for the read.
 Requiring every queued MAC to disappear first could create a circular wait between VTSE and MAC.
 
-## 4. Accumulator Byte Mapping
+## 4. Accumulator Organization and Byte Mapping
 
 A logical tile ID names an architectural view. A physical slot stores 32-bit words.
 TEW16 places two logical tiles in a slot; TEW8 places four. These are views of the same storage, not additional copies.
@@ -237,25 +269,73 @@ one muxed port:
 
 | Side | Read purpose | Write purpose | Transfer organization |
 | --- | --- | --- | --- |
-| FMA | Read one selected lane/beat as the addend | Write one retired FMA result | One 32-bit word per lane |
+| FPU | Read one selected lane/beat as the addend | Write one retired FMA or SDOTP result | One 32-bit word per lane |
 | VRF | VT tile-to-vector read and TV read-modify-write | TV vector-to-tile update | Grouped words feeding a `VRFWordWidth` move |
 | VLSU | VTSE tile-row read and VTLE read-modify-write | VTLE memory-to-tile update | `TileDataWidth`, currently 512 bits |
 
-The FMA side uses `fma_raddr_i/fma_rdata_o` and `fma_waddr_i/fma_wdata_i/fma_wen_i`.
-The VRF and VLSU sides each have independent grouped read and write addresses, data and byte enables.
-Consequently, accesses to non-conflicting accumulator locations can occur in the same cycle: for example, an FMA result may
-write one tile while TV updates another and VTSE reads a third.
+The FPU side uses `fma_raddr_i/fma_rdata_o` and `fma_waddr_i/fma_wdata_i/fma_wen_i`.
+For a MAC operation, the FPU read address is generated from the selected physical tile slot and spatial beat. The selected
+32-bit word is then used as the addend; TEW8 selects one byte, TEW16 selects one half-word, and TEW32 selects the complete
+word. When the arithmetic pipeline retires, the result is written back to the same physical slot and beat with the matching
+byte enables. Thus, the accumulator memory stores the feedback value, while the FPU performs the actual multiply-accumulate
+operation through either the FMA or SDOTP datapath.
+
+The physical address is generated in two stages. First, the architectural tile ID is converted into a physical slot and a
+byte or half-word offset. For example, `mt0`, `mt4`, `mt8`, and `mt12` select physical slots 0, 1, 2, and 3 for TEW32.
+For a matrix element at logical coordinates `(row, col)`, the local compute bank is selected by `row % CE` and `col % CE`,
+while the spatial beat is calculated as `(row / CE) * NrComputeGroupsPerTileEdge + (col / CE)`. The final address is
+`physical_slot * SpatialBeats + spatial_beat`. Therefore, each lane-local bank stores all spatial beats for all four
+physical slots, and the same addressing rule is used by the FMA, VRF, and VLSU paths.
+
+The VRF and VLSU sides each have independent grouped read and write addresses, data and byte enables. These paths are
+intended to access non-conflicting accumulator locations concurrently; for example, an FPU result may write one tile while
+TV updates another tile and VTSE reads a third. The arbitration and hazard logic must still prevent overlapping accesses to
+the same physical slot, spatial beat, and byte range.
+
+The grouped width is required by the VME tile-subset model; it is not an implementation-only widening of the accumulator
+interface. A tile-subset specifier identifies an architectural tile and selects either a row or a column. Therefore, one
+tile move instruction describes a logical row or column of the selected tile rather than one isolated accumulator word. The
+OPE must consequently assemble or consume the complete active subset while preserving the mapping between the architectural
+tile and the distributed compute array. A row is distributed over the eight compute lanes. If the tile edge is larger than
+the compute-array edge, the row contains several compute groups along that edge, and each group contributes one consecutive
+accumulator word in every lane-local bank. These words are therefore accessed as one aligned group.
+
+For an eight-by-eight compute array, a tile with edge 16 contains two compute groups along each edge. A row operation thus
+groups two consecutive accumulator words per lane, giving eight lanes multiplied by two words and 32 bits per word, or
+512 logical bits. With tile edge 32, the same architectural row contains four compute groups and the grouped width becomes
+1024 bits. The corresponding column operation has the same architectural meaning; internally, the VLSU gathers or scatters
+the required lane-local words and uses read-modify-write when only one column is being updated. These internal accesses are
+implementation details of one architectural row or column operation, consistent with the TSS semantics.
+
+This also explains why grouped width must not be confused with a single-cycle VRF transfer. The grouped width describes the
+logical accumulator payload selected by the VME instruction. The shared VAU/VRF interface is only 256 bits wide, so a 512-bit
+tile row is transferred over two VRF cycles and a 1024-bit tile row over four cycles. The VLSU-to-OPE tile interface can carry
+the wider logical row, while the VRF path serializes that same row according to its physical port width.
 
 `RD_PORTS` and `WR_PORTS` do **not** count independent clients. They specify how many consecutive physical accumulator words
-one grouped VRF/VLSU access transfers from a common aligned base address. With TE=16 and CE=8, `GroupsPerEdge=2`; across the
-eight compute columns, two 32-bit words per lane form one 512-bit tile row:
+one grouped VRF/VLSU access transfers from a common aligned base address. The implementation sets both values to
+`NrComputeGroupsPerTileEdge`, which is `TE / CE`. With TE=16 and CE=8, two consecutive accumulator rows are grouped per
+lane. Across the eight compute lanes, this forms one logical 512-bit tile row:
 
 ```text
-CE * GroupsPerEdge * AccElemWidth = 8 * 2 * 32 = 512 bits
+CE * NrComputeGroupsPerTileEdge * AccElemWidth = 8 * 2 * 32 = 512 bits
 ```
 
+With TE=32 and CE=8, `NrComputeGroupsPerTileEdge=4`, so four consecutive accumulator rows are grouped per lane and the
+logical tile-row width becomes 1024 bits:
+
+```text
+CE * NrComputeGroupsPerTileEdge * AccElemWidth = 8 * 4 * 32 = 1024 bits
+```
+
+The VRF word itself is only 256 bits because the vector register file is shared with the VAU through three read ports and
+one write port. Consequently, a TE=16 tile row requires two 256-bit VAU/VRF transfers, while a TE=32 tile row requires four.
+The VLSU-to-OPE tile-row data width is independent of the VRF word width and is directly determined by `TE * AccElemWidth`:
+512 bits for TE=16 and 1024 bits for TE=32.
+
 The implementation derives `AddrWidth`, `RdPortIdxWidth` and `WrPortIdxWidth` from `DEPTH`, `RD_PORTS` and `WR_PORTS`.
-Grouped base addresses are aligned to the corresponding number of consecutive words.
+Grouped read and write addresses are aligned to the corresponding number of consecutive words, so the grouped transfer starts
+at a common aligned base address and accesses `base + 0` through `base + NrComputeGroupsPerTileEdge - 1`.
 
 Independent ports do not remove data dependencies. Two writes must serialize when they target an overlapping physical
 tile/beat/byte footprint. Different logical tile IDs can still share a physical 32-bit word under TEW8 or TEW16, so conflict
@@ -269,6 +349,28 @@ Zero metadata uses the same physical-slot/beat/byte mapping.
 Move elements-per-word counters use `vrf_elem_count_t` so VRFWordWidth/8 fits even when it exceeds TE.
 
 ## 5. External Tile Path: VLSU
+
+### Vector Memory EEW
+
+The decoder records the element width encoded by standard vector load/store
+instructions in `op_mem.ew`. Unit-stride and strided accesses interpret this
+field as data EEW. Indexed accesses retain the existing split: `op_mem.ew` is
+the index EEW and VSEW is the data EEW.
+
+Both VLSU implementations derive a common data EEW with that rule. The data
+EEW controls conversion of VL/VSTART to byte counts, element size, stride
+normalization, load commit metadata, store strobes and memory request size.
+Consequently, VLE32 transfers 32-bit elements even while the current matrix
+VTYPE has VSEW=16. This removes the software-only VTYPE switch that was
+previously needed around each packed load.
+
+The controller continues to install the current architectural VTYPE when an
+LSU request is dispatched; the decoder's memory EEW survives separately in
+`op_mem.ew`. For VTFMM, the scoreboard still records the architectural
+implicit row-stride vector-register reads according to VSEW and TK, even
+though widening SDOTP obtains both packed FP16 lanes from each base vector
+element. `msetmtype` updates matrix VTYPE/mtype and clears VL; `msettn` restores
+TN and VL with the LMUL/ETE limits applied.
 
 VTLE/VTSE run in the VLSU, not in the OPE's four request queues.
 VLSU owns TSS interpretation, memory addressing, byte strobes, transactions and completion.
@@ -344,8 +446,9 @@ For example, FP32 with LMUL=2 and `tk=2` records `{v0,v1,v8,v9}` for a source ba
 entered in `read_table` for WAR protection.
 
 LMUL expands the VRF footprint protected by the scoreboard; it does not independently add OPE MAC steps. MAC execution is
-still controlled by `tm`, `tn` and `tk`: spatial beat address generation crosses vector-register boundaries naturally, while
-`tk` selects the separately strided K rows.
+controlled by `tm` and `tn`: spatial beat address generation crosses vector-register boundaries naturally.
+For same-width FMA, `tk` selects separately strided K rows; widening SDOTP consumes
+the packed K lanes in each base-vector element in parallel, without extra reduction beats.
 
 ### Address-Aware VRF Chaining in `DOUBLE_BW`
 
@@ -398,7 +501,41 @@ VTDISCARD's all-ones mask is independent of TEW and TSS. It waits for older tile
 and younger tile operations wait for discard retirement. Discard is not a MAC and does not use the MAC/MAC exemption.
 OPE drain/idle guards remain necessary because an older MAC can respond before all its pipeline data is retired.
 
-## 8. Maintenance and Verification
+## 8. Packed FP16 Software
+
+The TE16 rolled FP16xFP16-to-FP32 generators first quantize A and B to FP16,
+then compute the golden C with FP32 operands and accumulation. They pack two
+adjacent reduction rows into each `uint32_t` word:
+
+```text
+word[31:16] = K[2p]
+word[15:0]  = K[2p+1]
+```
+
+Both operands use this order, so one widening SDOTP performs the two matching
+products. The generated layouts are `A[m_tile][K/2][TE]` and
+`B[n_tile][K/2][TE]`; no FP16 value is converted to FP32 in memory.
+
+`matmul_l.K`, `MATMUL_K_CHUNK`, `valid_k`, and the K argument passed to
+`matmul_fp16_fp32` all remain original FP16 reduction counts. Only packed-memory
+calculations divide K by two: DMA extents and source offsets count packed
+32-bit words. The kernel A/B parameters are `const __fp16 *`, so a complete
+tile advances by `TE*K` halfwords. Each four-instruction VTFMM phase consumes
+eight original K rows, hence the middle-loop count is `K/8 - 3`. Every VLE32
+transfers packed words directly; C and the golden reference remain FP32.
+
+The rolled schedules follow their FP32 counterparts after removing the
+implicit row-stride VLE/VTFMM operations. Store-afterK distributes individual
+VLE32 operations between VTFMM instructions and stores four completed tiles
+after the K loop. Store-interleave overlaps tile stores, vector loads and
+VTFMMs and retains its cross-block path. The vsetvl schedule replaces four
+individual loads with one e32,m4 grouped load, restoring matrix state before
+VTFMM as described above.
+
+Utilization counts real FP16 FMAs. Peak throughput is `CE * CE * 2` FMAs per
+cycle because each CE lane consumes two packed FP16 products per SDOTP.
+
+## 9. Maintenance and Verification
 
 Shared configuration comes from `hw/ip/spatz/src/spatz_pkg.sv.tpl`; do not edit only the generated package.
 The cluster template currently links to this source. Check CE/TE, VRF operand width, accumulator depth and tile bandwidth together.

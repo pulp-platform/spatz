@@ -1,0 +1,10 @@
+{
+    kernel: "GEMM",
+    M: 64,
+    N: 64,
+    K: 256,
+    TM: 16,
+    TN: 16,
+    scaler: 0.5,
+    seed: 42
+}

@@ -14,7 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// Author: Pei-Yu Lin <peilin@ethz.ch>
+// Author: Pei-Yu Lin, ETH Zürich
 
 #pragma once
 
@@ -23,7 +23,7 @@
 enum {
     CE = 8,
     TE = 16,
-    CHUNK_SIZE = 64,
+    CHUNK_SIZE = 4 * TE,
     M_BLOCK = 4 * TE,
     N_BLOCK = 2 * TE,
     A_TILES_PER_BLOCK = M_BLOCK / TE,
@@ -38,13 +38,6 @@ static inline uint32_t get_cycle(void)
     return c;
 }
 
-// Reading fcsr stalls Snitch while any Spatz scoreboard entry is live. Use it
-// to turn an asynchronous kernel return into an architectural completion point.
-static inline void wait_spatz(void)
-{
-    uint32_t fcsr;
-    asm volatile("csrr %0, fcsr" : "=r"(fcsr) :: "memory");
-}
 
 // FP16 VME matmul over TE=16. One logical block is 4*TE by 2*TE:
 //

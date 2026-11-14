@@ -23,3 +23,6 @@ toolchain/
 *.a
 *.la
 *.lo
+
+# Generated VME application data headers
+/vme/apps/**/data/data_*_*_*.h
