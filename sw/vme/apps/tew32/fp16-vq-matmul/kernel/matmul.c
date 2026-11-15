@@ -1,340 +1,591 @@
 #include "matmul.h"
-#define MATRIX_CONFIG \
-    "msetmtype %[mt], %[vt]\n" "msettn zero, %[tn]\n"
-#define MATRIX_INPUTS \
-    [mt] "r"((TE << 10) | (2u << 5) | 2u), [vt] "r"(0xC8), [tn] "r"(TE)
 
-__attribute__((noinline, aligned(64)))
-void matmul_fp16_fp32_vq_1x2(const __fp16 *Atpack, const vq_group *Bmeta,
-                           const __fp16 *cb0, const __fp16 *cb1, float *C) {
-    _Static_assert(K_CHUNK % 8 == 0, "K must be a multiple of eight");
-    const uint32_t *a = (const uint32_t *)Atpack;
-    enum { K_GROUPS = K_CHUNK / 8 };
+#ifdef VQ_MT6_DEBUG
+#define VQ_MT2_BLOCK_ENTRY_MARKER "li t0,0xdeadbeef\n sw t0,0(a2)\n"
+#else
+#define VQ_MT2_BLOCK_ENTRY_MARKER ""
+#endif
 
-    for (unsigned mb = 0; mb < 4; ++mb) {
-        const uint32_t *ab = a + mb * TE * (K_CHUNK / 2);
-        for (unsigned nb = 0; nb < 4; nb += 2) {
-            const vq_group *meta0 = Bmeta + nb * K_GROUPS;
-            const vq_group *meta1 = meta0 + K_GROUPS;
+/* Fixed M64xN128xK128 schedule.  The kernel is intentionally one assembly
+ * body: no C loop and no preprocessor schedule macro is used.
+ *
+ * 4x1 tiles: mt0/mt4/mt8/mt12 are M0/M1/M2/M3 for one N16 block.
+ * v0-v15 hold the four activation tiles, v16-v19 the four decoded
+ * codewords, and v20-v21 are decode temporaries.
+ */
+__asm__(
+    ".text\n"
+    ".balign 64\n"
+    ".global vq_gemm_fused_singlebank\n"
+    ".type vq_gemm_fused_singlebank,@function\n"
+    "vq_gemm_fused_singlebank:\n"
+    "addi sp,sp,-48\n"
+    "sw s0,0(sp)\n sw s1,4(sp)\n sw s2,8(sp)\n sw s3,12(sp)\n"
+    "sw s4,16(sp)\n sw s5,20(sp)\n sw s6,24(sp)\n sw s7,28(sp)\n"
+    "sw s8,32(sp)\n sw s9,36(sp)\n sw s10,40(sp)\n sw s11,44(sp)\n"
+    "mv s0,a0\n"                  /* apack */
+    "mv s1,a2\n"                  /* index words */
+    "mv s2,a3\n"                  /* cb0 */
+    "mv s3,a4\n"                  /* cb1 */
+    "mv s4,a5\n"                  /* output */
+    "li s5,0\n"                   /* N16 block */
+    "li s9,512\n"                 /* C row stride */
+    "li s10,0x4042\n"             /* e16, tk=2, widening */
+    "li s11,0xc8\n"
 
-            // Preload A and the two raw codebook vectors for mt0.
-            asm volatile(
-                MATRIX_CONFIG
-                "vtzero mt0\n"
-                "vtzero mt4\n"
-                "vsetvli zero, %[vl32], e32, m4, ta, ma\n"
-                "vle32.v v0, (%[ap])\n"
-                "vsetvli zero, %[vl16], e16, m4, ta, ma\n"
-                "vle16.v v8, (%[i0])\n"
-                "vle16.v v12, (%[j0])\n"
-                "vluxei16.v v16, (%[cb0]), v8\n"
-                "vluxei16.v v20, (%[cb1]), v12\n"
-                :
-                : [ap] "r"(ab), [i0] "r"(meta0[0].off0),
-                  [j0] "r"(meta0[0].off1),
-                  [cb0] "r"(cb0), [cb1] "r"(cb1),
-                  [vl32] "r"(64), [vl16] "r"(128), MATRIX_INPUTS
-                : "v0", "v1", "v2", "v3", "v8", "v9", "v10", "v11",
-                  "v12", "v13", "v14", "v15", "v16", "v17", "v18", "v19",
-                  "v20", "v21", "v22", "v23", "memory");
+    /* Preload block zero, K-pair group zero. */
+    "li s6,0\n"
+    "mv s7,s1\n"
+    "lw t0,0(s7)\n la a4,.Lpre16\n j .Ldecode16\n"
+    ".Lpre16:\n lw t0,16(s7)\n la a4,.Lpre17\n j .Ldecode17\n"
+    ".Lpre17:\n lw t0,32(s7)\n la a4,.Lpre18\n j .Ldecode18\n"
+    ".Lpre18:\n lw t0,48(s7)\n la a4,.Lpre19\n j .Ldecode19\n"
+    ".Lpre19:\n"
+    "mv s8,s0\n"
+    "li t6,64\n li t5,4096\n mv t4,s8\n"
+    "vsetvli zero,t6,e32,m4,ta,ma\n"
+    "vle32.v v0,(t4)\n add t4,t4,t5\n"
+    "vle32.v v4,(t4)\n add t4,t4,t5\n"
+    "vle32.v v8,(t4)\n add t4,t4,t5\n"
+    "vle32.v v12,(t4)\n"
+    "msetmtype s10,s11\n li t6,16\n msettn zero,t6\n"
+    "vtzero mt0\n vtzero mt4\n vtzero mt8\n vtzero mt12\n"
+    "li a5,15\n"
+    "j .Lkloop\n"
 
-            #pragma clang loop unroll(disable)
-            for (unsigned kg = 0; kg + 1 < K_GROUPS; ++kg) {
-                const vq_group *next0 = meta0 + kg + 1;
-                const vq_group *curr1 = meta1 + kg;
-                const vq_group *curr0 = meta0 + kg;
-                asm volatile(
-                    // Finish mt0 preprocessing while preloading mt4 indices.
-                    "vle16.v v8, (%[i1])\n"
-                    "vle16.v v12, (%[j1])\n"
-                    "vfadd.vv v16, v16, v20\n"
-                    "vle16.v v28, (%[s0])\n"
-                    "vluxei16.v v24, (%[cb0]), v8\n"
-                    "vfmul.vv v16, v28, v16\n"
-                    "vluxei16.v v28, (%[cb1]), v12\n"
-                    MATRIX_CONFIG
-                    "vtfmm.tvv mt0, v0, v16\n"
-                    "vtfmm.tvv mt0, v1, v17\n"
-                    "vtfmm.tvv mt0, v2, v18\n"
-                    "vtfmm.tvv mt0, v3, v19\n"
-                    // Finish mt4 preprocessing while gathering the next mt0.
-                    "vsetvli zero, %[vl16], e16, m4, ta, ma\n"
-                    "vle16.v v8, (%[ni0])\n"
-                    "vle16.v v12, (%[nj0])\n"
-                    "vfadd.vv v24, v24, v28\n"
-                    "vle16.v v20, (%[s1])\n"
-                    "vluxei16.v v16, (%[cb0]), v8\n"
-                    "vfmul.vv v24, v20, v24\n"
-                    "vluxei16.v v20, (%[cb1]), v12\n"
-                    MATRIX_CONFIG
-                    "vtfmm.tvv mt4, v0, v24\n"
-                    "vtfmm.tvv mt4, v1, v25\n"
-                    "vtfmm.tvv mt4, v2, v26\n"
-                    "vtfmm.tvv mt4, v3, v27\n"
-                    // The next raw mt0 vectors are resident; preload only A.
-                    "vsetvli zero, %[vl32], e32, m4, ta, ma\n"
-                    "vle32.v v0, (%[nap])\n"
-                    "vsetvli zero, %[vl16], e16, m4, ta, ma\n"
-                    :
-                    : [i1] "r"(curr1->off0), [j1] "r"(curr1->off1),
-                      [s1] "r"(curr1->scale), [ni0] "r"(next0->off0),
-                      [nj0] "r"(next0->off1), [s0] "r"(curr0->scale),
-                      [nap] "r"(ab + (kg + 1) * 64),
-                      [cb0] "r"(cb0), [cb1] "r"(cb1),
-                      [vl32] "r"(64), [vl16] "r"(128), MATRIX_INPUTS
-                    : "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7",
-                      "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15",
-                      "v16", "v17", "v18", "v19", "v20", "v21", "v22", "v23",
-                      "v24", "v25", "v26", "v27", "v28", "v29", "v30", "v31",
-                      "memory");
-            }
+    /* Next N block: its group zero was decoded/loaded in the prior tail.
+     * Drain the deferred old mt12 across the first eight mt0/mt4 MACs. */
+    ".Lcrossblock:\n"
+    "msetmtype s10,s11\n li t6,16\n msettn zero,t6\n vtzero mt0\n"
+    "mv s8,s0\n addi s8,s8,256\n addi s7,s7,64\n"
+    "msetmtype s10,s11\n li t6,16\n msettn zero,t6\n"
+    "vtfmm.tvv mt0,v0,v16\n"
+    ".rept 2\n vtse32 t5,(t4)\n add t4,t4,s9\n addi t5,t5,1\n .endr\n"
+    "vtfmm.tvv mt0,v1,v17\n"
+    ".rept 2\n vtse32 t5,(t4)\n add t4,t4,s9\n addi t5,t5,1\n .endr\n"
+    "vtfmm.tvv mt0,v2,v18\n"
+    ".rept 2\n vtse32 t5,(t4)\n add t4,t4,s9\n addi t5,t5,1\n .endr\n"
+    "vtfmm.tvv mt0,v3,v19\n"
+    ".rept 2\n vtse32 t5,(t4)\n add t4,t4,s9\n addi t5,t5,1\n .endr\n"
+    "msetmtype s10,s11\n li t6,16\n msettn zero,t6\n vtzero mt4\n"
+    "vtfmm.tvv mt4,v4,v16\n"
+    ".rept 2\n vtse32 t5,(t4)\n add t4,t4,s9\n addi t5,t5,1\n .endr\n"
+    "vtfmm.tvv mt4,v5,v17\n"
+    ".rept 2\n vtse32 t5,(t4)\n add t4,t4,s9\n addi t5,t5,1\n .endr\n"
+    "vtfmm.tvv mt4,v6,v18\n"
+    ".rept 2\n vtse32 t5,(t4)\n add t4,t4,s9\n addi t5,t5,1\n .endr\n"
+    "vtfmm.tvv mt4,v7,v19\n"
+    ".rept 2\n vtse32 t5,(t4)\n add t4,t4,s9\n addi t5,t5,1\n .endr\n"
+    "li t6,64\n vsetvli zero,t6,e32,m4,ta,ma\n vle32.v v0,(s8)\n"
+    "msetmtype s10,s11\n li t6,16\n msettn zero,t6\n vtzero mt12\n"
 
-            // Drain the final raw mt0 group and decode/compute mt4.
-            const vq_group *last0 = meta0 + K_GROUPS - 1;
-            const vq_group *last1 = meta1 + K_GROUPS - 1;
-            asm volatile(
-                "vle16.v v8, (%[i1])\n"
-                "vle16.v v12, (%[j1])\n"
-                "vfadd.vv v16, v16, v20\n"
-                "vle16.v v28, (%[s0])\n"
-                "vluxei16.v v24, (%[cb0]), v8\n"
-                "vfmul.vv v16, v28, v16\n"
-                "vluxei16.v v28, (%[cb1]), v12\n"
-                MATRIX_CONFIG
-                "vtfmm.tvv mt0, v0, v16\n"
-                "vtfmm.tvv mt0, v1, v17\n"
-                "vtfmm.tvv mt0, v2, v18\n"
-                "vtfmm.tvv mt0, v3, v19\n"
-                "vsetvli zero, %[vl16], e16, m4, ta, ma\n"
-                "vfadd.vv v24, v24, v28\n"
-                "vle16.v v20, (%[s1])\n"
-                "vfmul.vv v24, v20, v24\n"
-                MATRIX_CONFIG
-                "vtfmm.tvv mt4, v0, v24\n"
-                "vtfmm.tvv mt4, v1, v25\n"
-                "vtfmm.tvv mt4, v2, v26\n"
-                "vtfmm.tvv mt4, v3, v27\n"
-                :
-                : [i1] "r"(last1->off0), [j1] "r"(last1->off1),
-                  [s0] "r"(last0->scale), [s1] "r"(last1->scale),
-                  [cb0] "r"(cb0), [cb1] "r"(cb1),
-                  [vl16] "r"(128), MATRIX_INPUTS
-                : "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7",
-                  "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15",
-                  "v16", "v17", "v18", "v19", "v20", "v21", "v22", "v23",
-                  "v24", "v25", "v26", "v27", "v28", "v29", "v30", "v31",
-                  "memory");
+    "vtzero mt8\n"
+    "vtfmm.tvv mt8,v8,v16\n vtfmm.tvv mt8,v9,v17\n"
+    "vtfmm.tvv mt8,v10,v18\n vtfmm.tvv mt8,v11,v19\n"
+    "li t6,64\n li t3,4096\n add t0,s8,t3\n"
+    "vsetvli zero,t6,e32,m4,ta,ma\n vle32.v v4,(t0)\n"
 
-            for (unsigned tile = 0; tile < 2; ++tile) {
-                uintptr_t tss = tile * 0x20000000u;
-                uintptr_t out = (uintptr_t)(C + mb * TE * 64 + (nb + tile) * TE);
-                for (unsigned row = 0; row < TE; ++row)
-                    asm volatile(
-                        "vtse32 %0, (%1)\n"
-                        "addi %0, %0, 1\n"
-                        "addi %1, %1, 256\n"
-                        : "+&r"(tss), "+&r"(out) : : "memory");
-            }
-        }
-    }
-}
+    /* One decoded successor is placed after each mt12 consumer. */
+    "msetmtype s10,s11\n li t6,16\n msettn zero,t6\n"
+    "vtfmm.tvv mt12,v12,v16\n lw t0,0(s7)\n la a4,.Lcross16\n j .Ldecode16\n"
+    ".Lcross16:\n vtfmm.tvv mt12,v13,v17\n lw t0,16(s7)\n la a4,.Lcross17\n j .Ldecode17\n"
+    ".Lcross17:\n vtfmm.tvv mt12,v14,v18\n lw t0,32(s7)\n la a4,.Lcross18\n j .Ldecode18\n"
+    ".Lcross18:\n vtfmm.tvv mt12,v15,v19\n lw t0,48(s7)\n la a4,.Lcross19\n j .Ldecode19\n"
+    ".Lcross19:\n"
+    "li t6,64\n li t3,8192\n add t0,s8,t3\n"
+    "vsetvli zero,t6,e32,m4,ta,ma\n vle32.v v8,(t0)\n"
+    "li t3,12288\n add t0,s8,t3\n vle32.v v12,(t0)\n"
+    "li a5,14\n"
 
-__attribute__((noinline, aligned(64)))
-void matmul_fp16_fp32_vq_1x4(const __fp16 *Atpack, const vq_group *Bmeta,
-                           const __fp16 *cb0, const __fp16 *cb1, float *C) {
-    _Static_assert(K_CHUNK % 8 == 0, "K must be a multiple of eight");
-    const uint32_t *a = (const uint32_t *)Atpack;
-    enum { K_GROUPS = K_CHUNK / 8 };
+    /* K groups 0..14 for block zero, and 1..14 thereafter.  Each M tile's
+     * next activation is loaded as soon as its current four MACs issue. */
+    ".Lkloop:\n"
+    "addi s8,s8,256\n addi s7,s7,64\n"
+    "msetmtype s10,s11\n li t6,16\n msettn zero,t6\n"
+    "vtfmm.tvv mt0,v0,v16\n vtfmm.tvv mt0,v1,v17\n"
+    "vtfmm.tvv mt0,v2,v18\n vtfmm.tvv mt0,v3,v19\n"
+    "msetmtype s10,s11\n li t6,16\n msettn zero,t6\n"
+    "vtfmm.tvv mt4,v4,v16\n vtfmm.tvv mt4,v5,v17\n"
+    "vtfmm.tvv mt4,v6,v18\n vtfmm.tvv mt4,v7,v19\n"
+    "li t6,64\n vsetvli zero,t6,e32,m4,ta,ma\n vle32.v v0,(s8)\n"
 
-    for (unsigned mb = 0; mb < 4; ++mb) {
-        const uint32_t *ab = a + mb * TE * (K_CHUNK / 2);
-        const vq_group *meta0 = Bmeta;
-        const vq_group *meta1 = meta0 + K_GROUPS;
-        const vq_group *meta2 = meta1 + K_GROUPS;
-        const vq_group *meta3 = meta2 + K_GROUPS;
+    "msetmtype s10,s11\n li t6,16\n msettn zero,t6\n"
+    "vtfmm.tvv mt8,v8,v16\n vtfmm.tvv mt8,v9,v17\n"
+    "vtfmm.tvv mt8,v10,v18\n vtfmm.tvv mt8,v11,v19\n"
+    "li t6,64\n li t3,4096\n add t0,s8,t3\n"
+    "vsetvli zero,t6,e32,m4,ta,ma\n vle32.v v4,(t0)\n"
 
-        asm volatile(
-            MATRIX_CONFIG
-            "vtzero mt0\n"
-            "vtzero mt4\n"
-            "vtzero mt8\n"
-            "vtzero mt12\n"
-            "vsetvli zero, %[vl32], e32, m4, ta, ma\n"
-            "vle32.v v0, (%[ap])\n"
-            "vsetvli zero, %[vl16], e16, m4, ta, ma\n"
-            "vle16.v v8, (%[i0])\n"
-            "vle16.v v12, (%[j0])\n"
-            "vluxei16.v v16, (%[cb0]), v8\n"
-            "vluxei16.v v20, (%[cb1]), v12\n"
-            :
-            : [ap] "r"(ab), [i0] "r"(meta0[0].off0),
-              [j0] "r"(meta0[0].off1), [cb0] "r"(cb0), [cb1] "r"(cb1),
-              [vl32] "r"(64), [vl16] "r"(128), MATRIX_INPUTS
-            : "v0", "v1", "v2", "v3", "v8", "v9", "v10", "v11",
-              "v12", "v13", "v14", "v15", "v16", "v17", "v18", "v19",
-              "v20", "v21", "v22", "v23", "memory");
+    "msetmtype s10,s11\n li t6,16\n msettn zero,t6\n"
+    "vtfmm.tvv mt12,v12,v16\n lw t0,0(s7)\n la a4,.Lloop16\n j .Ldecode16\n"
+    ".Lloop16:\n vtfmm.tvv mt12,v13,v17\n lw t0,16(s7)\n la a4,.Lloop17\n j .Ldecode17\n"
+    ".Lloop17:\n vtfmm.tvv mt12,v14,v18\n lw t0,32(s7)\n la a4,.Lloop18\n j .Ldecode18\n"
+    ".Lloop18:\n vtfmm.tvv mt12,v15,v19\n lw t0,48(s7)\n la a4,.Lloop19\n j .Ldecode19\n"
+    ".Lloop19:\n"
+    "li t6,64\n li t3,8192\n add t0,s8,t3\n"
+    "vsetvli zero,t6,e32,m4,ta,ma\n vle32.v v8,(t0)\n"
+    "li t3,12288\n add t0,s8,t3\n vle32.v v12,(t0)\n"
+    "addi a5,a5,-1\n bnez a5,.Lkloop\n"
 
-        #pragma clang loop unroll(disable)
-        for (unsigned kg = 0; kg + 1 < K_GROUPS; ++kg) {
-            const vq_group *curr0 = meta0 + kg;
-            const vq_group *curr1 = meta1 + kg;
-            const vq_group *curr2 = meta2 + kg;
-            const vq_group *curr3 = meta3 + kg;
-            const vq_group *next0 = curr0 + 1;
-            asm volatile(
-                "vle16.v v8, (%[i1])\n"
-                "vle16.v v12, (%[j1])\n"
-                "vfadd.vv v16, v16, v20\n"
-                "vle16.v v28, (%[s0])\n"
-                "vluxei16.v v24, (%[cb0]), v8\n"
-                "vfmul.vv v16, v28, v16\n"
-                "vluxei16.v v28, (%[cb1]), v12\n"
-                MATRIX_CONFIG
-                "vtfmm.tvv mt0, v0, v16\n"
-                "vtfmm.tvv mt0, v1, v17\n"
-                "vtfmm.tvv mt0, v2, v18\n"
-                "vtfmm.tvv mt0, v3, v19\n"
+    /* K group 15. mt4 drains mt0, mt8 drains mt4, and mt12 drains mt8. */
+    "msetmtype s10,s11\n li t6,16\n msettn zero,t6\n"
+    "vtfmm.tvv mt0,v0,v16\n vtfmm.tvv mt0,v1,v17\n"
+    "vtfmm.tvv mt0,v2,v18\n vtfmm.tvv mt0,v3,v19\n"
+    "slli t0,s5,6\n add t4,s4,t0\n li t5,0\n"
+    "msetmtype s10,s11\n li t6,16\n msettn zero,t6\n"
+    "vtfmm.tvv mt4,v4,v16\n"
+    ".rept 4\n vtse32 t5,(t4)\n add t4,t4,s9\n addi t5,t5,1\n .endr\n"
+    "vtfmm.tvv mt4,v5,v17\n"
+    ".rept 4\n vtse32 t5,(t4)\n add t4,t4,s9\n addi t5,t5,1\n .endr\n"
+    "vtfmm.tvv mt4,v6,v18\n"
+    ".rept 4\n vtse32 t5,(t4)\n add t4,t4,s9\n addi t5,t5,1\n .endr\n"
+    "vtfmm.tvv mt4,v7,v19\n"
+    ".rept 4\n vtse32 t5,(t4)\n add t4,t4,s9\n addi t5,t5,1\n .endr\n"
+    "li t6,64\n vsetvli zero,t6,e32,m4,ta,ma\n vle32.v v0,(s0)\n"
 
-                "vsetvli zero, %[vl16], e16, m4, ta, ma\n"
-                "vle16.v v8, (%[i2])\n"
-                "vle16.v v12, (%[j2])\n"
-                "vfadd.vv v24, v24, v28\n"
-                "vle16.v v20, (%[s1])\n"
-                "vluxei16.v v16, (%[cb0]), v8\n"
-                "vfmul.vv v24, v20, v24\n"
-                "vluxei16.v v20, (%[cb1]), v12\n"
-                MATRIX_CONFIG
-                "vtfmm.tvv mt4, v0, v24\n"
-                "vtfmm.tvv mt4, v1, v25\n"
-                "vtfmm.tvv mt4, v2, v26\n"
-                "vtfmm.tvv mt4, v3, v27\n"
+    "slli t0,s5,6\n add t4,s4,t0\n li t3,8192\n add t4,t4,t3\n li t5,0x20000000\n"
+    "msetmtype s10,s11\n li t6,16\n msettn zero,t6\n"
+    "vtfmm.tvv mt8,v8,v16\n"
+    ".rept 4\n vtse32 t5,(t4)\n add t4,t4,s9\n addi t5,t5,1\n .endr\n"
+    "vtfmm.tvv mt8,v9,v17\n"
+    ".rept 4\n vtse32 t5,(t4)\n add t4,t4,s9\n addi t5,t5,1\n .endr\n"
+    "vtfmm.tvv mt8,v10,v18\n"
+    ".rept 4\n vtse32 t5,(t4)\n add t4,t4,s9\n addi t5,t5,1\n .endr\n"
+    "vtfmm.tvv mt8,v11,v19\n"
+    ".rept 4\n vtse32 t5,(t4)\n add t4,t4,s9\n addi t5,t5,1\n .endr\n"
+    "li t6,64\n li t3,4096\n add t0,s0,t3\n"
+    "vsetvli zero,t6,e32,m4,ta,ma\n vle32.v v4,(t0)\n"
 
-                "vsetvli zero, %[vl16], e16, m4, ta, ma\n"
-                "vle16.v v8, (%[i3])\n"
-                "vle16.v v12, (%[j3])\n"
-                "vfadd.vv v16, v16, v20\n"
-                "vle16.v v28, (%[s2])\n"
-                "vluxei16.v v24, (%[cb0]), v8\n"
-                "vfmul.vv v16, v28, v16\n"
-                "vluxei16.v v28, (%[cb1]), v12\n"
-                MATRIX_CONFIG
-                "vtfmm.tvv mt8, v0, v16\n"
-                "vtfmm.tvv mt8, v1, v17\n"
-                "vtfmm.tvv mt8, v2, v18\n"
-                "vtfmm.tvv mt8, v3, v19\n"
+    "slli t0,s5,6\n add t4,s4,t0\n li t3,16384\n add t4,t4,t3\n li t5,0x40000000\n"
+    "li t0,7\n beq s5,t0,.Llast_mt12\n"
 
-                "vsetvli zero, %[vl16], e16, m4, ta, ma\n"
-                "vle16.v v8, (%[ni0])\n"
-                "vle16.v v12, (%[nj0])\n"
-                "vfadd.vv v24, v24, v28\n"
-                "vle16.v v20, (%[s3])\n"
-                "vluxei16.v v16, (%[cb0]), v8\n"
-                "vfmul.vv v24, v20, v24\n"
-                "vluxei16.v v20, (%[cb1]), v12\n"
-                MATRIX_CONFIG
-                "vtfmm.tvv mt12, v0, v24\n"
-                "vtfmm.tvv mt12, v1, v25\n"
-                "vtfmm.tvv mt12, v2, v26\n"
-                "vtfmm.tvv mt12, v3, v27\n"
-                "vsetvli zero, %[vl32], e32, m4, ta, ma\n"
-                "vle32.v v0, (%[nap])\n"
-                "vsetvli zero, %[vl16], e16, m4, ta, ma\n"
-                :
-                : [i1] "r"(curr1->off0), [j1] "r"(curr1->off1),
-                  [i2] "r"(curr2->off0), [j2] "r"(curr2->off1),
-                  [i3] "r"(curr3->off0), [j3] "r"(curr3->off1),
-                  [ni0] "r"(next0->off0), [nj0] "r"(next0->off1),
-                  [s0] "r"(curr0->scale), [s1] "r"(curr1->scale),
-                  [s2] "r"(curr2->scale), [s3] "r"(curr3->scale),
-                  [nap] "r"(ab + (kg + 1) * 64),
-                  [cb0] "r"(cb0), [cb1] "r"(cb1),
-                  [vl32] "r"(64), [vl16] "r"(128), MATRIX_INPUTS
-                : "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7",
-                  "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15",
-                  "v16", "v17", "v18", "v19", "v20", "v21", "v22", "v23",
-                  "v24", "v25", "v26", "v27", "v28", "v29", "v30", "v31",
-                  "memory");
-        }
+    /* During mt12, decode the next N block's group zero into v16-v19. */
+    "addi t0,s5,1\n andi t1,t0,1\n"
+    "slli s6,t1,3\n slli t2,t1,2\n add s6,s6,t2\n"
+    "slli t2,t1,1\n add s6,s6,t2\n" /* shift = 0 or 14 */
+    "srli t1,t0,1\n slli t1,t1,2\n add s7,s1,t1\n"
+    "msetmtype s10,s11\n li t6,16\n msettn zero,t6\n"
+    "vtfmm.tvv mt12,v12,v16\n lw t0,0(s7)\n la a4,.Ltail16\n j .Ldecode16\n"
+    ".Ltail16:\n .rept 4\n vtse32 t5,(t4)\n add t4,t4,s9\n addi t5,t5,1\n .endr\n"
+    "vtfmm.tvv mt12,v13,v17\n lw t0,16(s7)\n la a4,.Ltail17\n j .Ldecode17\n"
+    ".Ltail17:\n .rept 4\n vtse32 t5,(t4)\n add t4,t4,s9\n addi t5,t5,1\n .endr\n"
+    "vtfmm.tvv mt12,v14,v18\n lw t0,32(s7)\n la a4,.Ltail18\n j .Ldecode18\n"
+    ".Ltail18:\n .rept 4\n vtse32 t5,(t4)\n add t4,t4,s9\n addi t5,t5,1\n .endr\n"
+    "vtfmm.tvv mt12,v15,v19\n lw t0,48(s7)\n la a4,.Ltail19\n j .Ldecode19\n"
+    ".Ltail19:\n .rept 4\n vtse32 t5,(t4)\n add t4,t4,s9\n addi t5,t5,1\n .endr\n"
+    "li t6,64\n li t3,8192\n add t0,s0,t3\n"
+    "vsetvli zero,t6,e32,m4,ta,ma\n vle32.v v8,(t0)\n"
+    "li t3,12288\n add t0,s0,t3\n vle32.v v12,(t0)\n"
+    "slli t0,s5,6\n add t4,s4,t0\n li t3,24576\n add t4,t4,t3\n li t5,0x60000000\n"
+    "addi s5,s5,1\n j .Lcrossblock\n"
 
-        const vq_group *last0 = meta0 + K_GROUPS - 1;
-        const vq_group *last1 = meta1 + K_GROUPS - 1;
-        const vq_group *last2 = meta2 + K_GROUPS - 1;
-        const vq_group *last3 = meta3 + K_GROUPS - 1;
-        asm volatile(
-            "vle16.v v8, (%[i1])\n"
-            "vle16.v v12, (%[j1])\n"
-            "vfadd.vv v16, v16, v20\n"
-            "vle16.v v28, (%[s0])\n"
-            "vluxei16.v v24, (%[cb0]), v8\n"
-            "vfmul.vv v16, v28, v16\n"
-            "vluxei16.v v28, (%[cb1]), v12\n"
-            MATRIX_CONFIG
-            "vtfmm.tvv mt0, v0, v16\n"
-            "vtfmm.tvv mt0, v1, v17\n"
-            "vtfmm.tvv mt0, v2, v18\n"
-            "vtfmm.tvv mt0, v3, v19\n"
+    /* Final mt12 has no successor to preload. */
+    ".Llast_mt12:\n"
+    "msetmtype s10,s11\n li t6,16\n msettn zero,t6\n"
+    "vtfmm.tvv mt12,v12,v16\n"
+    ".rept 4\n vtse32 t5,(t4)\n add t4,t4,s9\n addi t5,t5,1\n .endr\n"
+    "vtfmm.tvv mt12,v13,v17\n"
+    ".rept 4\n vtse32 t5,(t4)\n add t4,t4,s9\n addi t5,t5,1\n .endr\n"
+    "vtfmm.tvv mt12,v14,v18\n"
+    ".rept 4\n vtse32 t5,(t4)\n add t4,t4,s9\n addi t5,t5,1\n .endr\n"
+    "vtfmm.tvv mt12,v15,v19\n"
+    ".rept 4\n vtse32 t5,(t4)\n add t4,t4,s9\n addi t5,t5,1\n .endr\n"
+    "slli t0,s5,6\n add t4,s4,t0\n li t3,24576\n add t4,t4,t3\n li t5,0x60000000\n"
+    ".rept 16\n vtse32 t5,(t4)\n add t4,t4,s9\n addi t5,t5,1\n .endr\n"
+    "li t0,32764\n add t0,s4,t0\n lw zero,0(t0)\n"
+    "j .Ldone\n"
 
-            "vsetvli zero, %[vl16], e16, m4, ta, ma\n"
-            "vle16.v v8, (%[i2])\n"
-            "vle16.v v12, (%[j2])\n"
-            "vfadd.vv v24, v24, v28\n"
-            "vle16.v v20, (%[s1])\n"
-            "vluxei16.v v16, (%[cb0]), v8\n"
-            "vfmul.vv v24, v20, v24\n"
-            "vluxei16.v v20, (%[cb1]), v12\n"
-            MATRIX_CONFIG
-            "vtfmm.tvv mt4, v0, v24\n"
-            "vtfmm.tvv mt4, v1, v25\n"
-            "vtfmm.tvv mt4, v2, v26\n"
-            "vtfmm.tvv mt4, v3, v27\n"
+    /* Four concrete decode destinations; a4 is the assembly return label. */
+    ".Ldecode16:\n"
+    "srl t1,t0,s6\n andi t1,t1,127\n slli t1,t1,6\n add a6,s2,t1\n"
+    "addi t2,s6,7\n srl t1,t0,t2\n andi t1,t1,127\n slli t1,t1,6\n add a7,s3,t1\n"
+    "li t6,32\n vsetvli zero,t6,e16,m1,ta,ma\n"
+    "vle16.v v20,(a6)\n vle16.v v21,(a7)\n vfadd.vv v16,v20,v21\n"
+    "msetmtype s10,s11\n li t6,16\n msettn zero,t6\n jr a4\n"
+    ".Ldecode17:\n"
+    "srl t1,t0,s6\n andi t1,t1,127\n slli t1,t1,6\n add a6,s2,t1\n"
+    "addi t2,s6,7\n srl t1,t0,t2\n andi t1,t1,127\n slli t1,t1,6\n add a7,s3,t1\n"
+    "li t6,32\n vsetvli zero,t6,e16,m1,ta,ma\n"
+    "vle16.v v20,(a6)\n vle16.v v21,(a7)\n vfadd.vv v17,v20,v21\n"
+    "msetmtype s10,s11\n li t6,16\n msettn zero,t6\n jr a4\n"
+    ".Ldecode18:\n"
+    "srl t1,t0,s6\n andi t1,t1,127\n slli t1,t1,6\n add a6,s2,t1\n"
+    "addi t2,s6,7\n srl t1,t0,t2\n andi t1,t1,127\n slli t1,t1,6\n add a7,s3,t1\n"
+    "li t6,32\n vsetvli zero,t6,e16,m1,ta,ma\n"
+    "vle16.v v20,(a6)\n vle16.v v21,(a7)\n vfadd.vv v18,v20,v21\n"
+    "msetmtype s10,s11\n li t6,16\n msettn zero,t6\n jr a4\n"
+    ".Ldecode19:\n"
+    "srl t1,t0,s6\n andi t1,t1,127\n slli t1,t1,6\n add a6,s2,t1\n"
+    "addi t2,s6,7\n srl t1,t0,t2\n andi t1,t1,127\n slli t1,t1,6\n add a7,s3,t1\n"
+    "li t6,32\n vsetvli zero,t6,e16,m1,ta,ma\n"
+    "vle16.v v20,(a6)\n vle16.v v21,(a7)\n vfadd.vv v19,v20,v21\n"
+    "msetmtype s10,s11\n li t6,16\n msettn zero,t6\n jr a4\n"
 
-            "vsetvli zero, %[vl16], e16, m4, ta, ma\n"
-            "vle16.v v8, (%[i3])\n"
-            "vle16.v v12, (%[j3])\n"
-            "vfadd.vv v16, v16, v20\n"
-            "vle16.v v28, (%[s2])\n"
-            "vluxei16.v v24, (%[cb0]), v8\n"
-            "vfmul.vv v16, v28, v16\n"
-            "vluxei16.v v28, (%[cb1]), v12\n"
-            MATRIX_CONFIG
-            "vtfmm.tvv mt8, v0, v16\n"
-            "vtfmm.tvv mt8, v1, v17\n"
-            "vtfmm.tvv mt8, v2, v18\n"
-            "vtfmm.tvv mt8, v3, v19\n"
+    ".Ldone:\n"
+    "lw s0,0(sp)\n lw s1,4(sp)\n lw s2,8(sp)\n lw s3,12(sp)\n"
+    "lw s4,16(sp)\n lw s5,20(sp)\n lw s6,24(sp)\n lw s7,28(sp)\n"
+    "lw s8,32(sp)\n lw s9,36(sp)\n lw s10,40(sp)\n lw s11,44(sp)\n"
+    "addi sp,sp,48\n ret\n"
+    ".size vq_gemm_fused_singlebank,.-vq_gemm_fused_singlebank\n");
 
-            "vsetvli zero, %[vl16], e16, m4, ta, ma\n"
-            "vfadd.vv v24, v24, v28\n"
-            "vle16.v v20, (%[s3])\n"
-            "vfmul.vv v24, v20, v24\n"
-            MATRIX_CONFIG
-            "vtfmm.tvv mt12, v0, v24\n"
-            "vtfmm.tvv mt12, v1, v25\n"
-            "vtfmm.tvv mt12, v2, v26\n"
-            "vtfmm.tvv mt12, v3, v27\n"
-            :
-            : [i1] "r"(last1->off0), [j1] "r"(last1->off1),
-              [i2] "r"(last2->off0), [j2] "r"(last2->off1),
-              [i3] "r"(last3->off0), [j3] "r"(last3->off1),
-              [s0] "r"(last0->scale), [s1] "r"(last1->scale),
-              [s2] "r"(last2->scale), [s3] "r"(last3->scale),
-              [cb0] "r"(cb0), [cb1] "r"(cb1),
-              [vl16] "r"(128), MATRIX_INPUTS
-            : "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7",
-              "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15",
-              "v16", "v17", "v18", "v19", "v20", "v21", "v22", "v23",
-              "v24", "v25", "v26", "v27", "v28", "v29", "v30", "v31",
-              "memory");
+/* Standalone decoded-weight GEMM for the M32 remainder.  This is a copied,
+ * self-contained 2x2 VTSE kernel: it neither includes nor calls another
+ * matmul implementation.  It extends matmul_fp16_fp32() to runtime M/N/K
+ * parameters and to the decoded-weight layout produced by MT4x1_storeW.
+ * A and B contain packed FP16 K-pairs in uint32_t elements. */
+__asm__(
+    ".text\n"
+    ".balign 64\n"
+    ".global vq_gemm_MT2x2\n"
+    ".type vq_gemm_MT2x2,@function\n"
+    "vq_gemm_MT2x2:\n"
+    "addi sp,sp,-48\n"
+    "sw s0,0(sp)\n sw s1,4(sp)\n sw s2,8(sp)\n sw s3,12(sp)\n"
+    "sw s4,16(sp)\n sw s5,20(sp)\n sw s6,24(sp)\n sw s7,28(sp)\n"
+    "sw s8,32(sp)\n sw s9,36(sp)\n sw s10,40(sp)\n sw s11,44(sp)\n"
+    "mv s0,a0\n"
+    "mv s1,a1\n"
+    "mv s2,a2\n"
+    "slli s3,a4,2\n"
+    "srli s4,a5,3\n"
+    "srli s5,a4,5\n"
+    "li s6,256\n"
+    "li s7,4096\n"
+    "li s10,0x4042\n"
+    "li s11,0xc8\n"
+    "li a4,16\n"
 
-        for (unsigned tile = 0; tile < 4; ++tile) {
-            uintptr_t tss = tile * 0x20000000u;
-            uintptr_t out = (uintptr_t)(C + mb * TE * 64 + tile * TE);
-            for (unsigned row = 0; row < TE; ++row)
-                asm volatile(
-                    "vtse32 %0, (%1)\n"
-                    "addi %0, %0, 1\n"
-                    "addi %1, %1, 256\n"
-                    : "+&r"(tss), "+&r"(out) : : "memory");
-        }
-    }
-}
+    ".L2tile_block:\n"
+    "mv t0,s0\n add t1,s0,s7\n"
+    "mv t2,s1\n add t3,s1,s7\n"
+    "mv a5,s4\n"
+    "msetmtype s10,s11\n msettn zero,a4\n"
+    "vtzero mt0\n vtzero mt4\n vtzero mt8\n vtzero mt12\n"
+    /* Preload K8 group zero into bank A. */
+    "li t6,64\n vsetvli zero,t6,e32,m4,ta,ma\n"
+    "vle32.v v0,(t0)\n vle32.v v8,(t1)\n"
+    "vle32.v v16,(t2)\n vle32.v v24,(t3)\n"
+    "add t0,t0,s6\n add t1,t1,s6\n"
+    "add t2,t2,s6\n add t3,t3,s6\n"
+    "msetmtype s10,s11\n msettn zero,a4\n"
+
+    /* Seven full pairs; bank A computes while bank B loads, then vice versa. */
+    "srli a5,s4,1\n addi a5,a5,-1\n"
+    ".L2tile_pairloop:\n"
+    "vtfmm.tvv mt0,v0,v16\n vtfmm.tvv mt0,v1,v17\n"
+    "vtfmm.tvv mt0,v2,v18\n vtfmm.tvv mt0,v3,v19\n"
+    ".L2tile_after_first_mt0:\n"
+    "li t6,64\n vsetvli zero,t6,e32,m4,ta,ma\n"
+    "vle32.v v4,(t0)\n vle32.v v12,(t1)\n"
+    "msetmtype s10,s11\n msettn zero,a4\n"
+    "vtfmm.tvv mt4,v0,v24\n add t0,t0,s6\n"
+    "vtfmm.tvv mt4,v1,v25\n add t1,t1,s6\n"
+    "vtfmm.tvv mt4,v2,v26\n vtfmm.tvv mt4,v3,v27\n"
+    ".L2tile_after_first_mt4:\n"
+    "li t6,64\n vsetvli zero,t6,e32,m4,ta,ma\n"
+    "vle32.v v20,(t2)\n vle32.v v28,(t3)\n"
+    "msetmtype s10,s11\n msettn zero,a4\n"
+    "vtfmm.tvv mt8,v8,v16\n vtfmm.tvv mt8,v9,v17\n"
+    "vtfmm.tvv mt8,v10,v18\n vtfmm.tvv mt8,v11,v19\n"
+    ".L2tile_after_first_mt8:\n"
+    "add t2,t2,s6\n"
+    "vtfmm.tvv mt12,v8,v24\n"
+    "vtfmm.tvv mt12,v9,v25\n add t3,t3,s6\n"
+    "vtfmm.tvv mt12,v10,v26\n vtfmm.tvv mt12,v11,v27\n"
+    "li t6,64\n"
+    "vtfmm.tvv mt0,v4,v20\n vtfmm.tvv mt0,v5,v21\n"
+    "vtfmm.tvv mt0,v6,v22\n vtfmm.tvv mt0,v7,v23\n"
+    "vsetvli zero,t6,e32,m4,ta,ma\n"
+    "vle32.v v0,(t0)\n vle32.v v8,(t1)\n"
+    "msetmtype s10,s11\n msettn zero,a4\n"
+    "vtfmm.tvv mt4,v4,v28\n add t0,t0,s6\n"
+    "vtfmm.tvv mt4,v5,v29\n add t1,t1,s6\n"
+    "vtfmm.tvv mt4,v6,v30\n vtfmm.tvv mt4,v7,v31\n"
+    "li t6,64\n vsetvli zero,t6,e32,m4,ta,ma\n"
+    "vle32.v v16,(t2)\n vle32.v v24,(t3)\n"
+    "msetmtype s10,s11\n msettn zero,a4\n"
+    "vtfmm.tvv mt8,v12,v20\n vtfmm.tvv mt8,v13,v21\n"
+    "vtfmm.tvv mt8,v14,v22\n vtfmm.tvv mt8,v15,v23\n"
+    "addi a5,a5,-1\n"
+    "vtfmm.tvv mt12,v12,v28\n add t2,t2,s6\n"
+    "vtfmm.tvv mt12,v13,v29\n add t3,t3,s6\n"
+    "vtfmm.tvv mt12,v14,v30\n"
+    "vtfmm.tvv mt12,v15,v31\n bnez a5,.L2tile_pairloop\n"
+
+    /* Peeled final pair: A computes while B loads, then B finishes. */
+    "vtfmm.tvv mt0,v0,v16\n vtfmm.tvv mt0,v1,v17\n"
+    "vtfmm.tvv mt0,v2,v18\n vtfmm.tvv mt0,v3,v19\n"
+    "li t6,64\n vsetvli zero,t6,e32,m4,ta,ma\n"
+    "vle32.v v4,(t0)\n msetmtype s10,s11\n msettn zero,a4\n"
+    "vtfmm.tvv mt4,v0,v24\n vtfmm.tvv mt4,v1,v25\n"
+    "vtfmm.tvv mt4,v2,v26\n vtfmm.tvv mt4,v3,v27\n"
+    "li t6,64\n vsetvli zero,t6,e32,m4,ta,ma\n"
+    "vle32.v v12,(t1)\n msetmtype s10,s11\n msettn zero,a4\n"
+    "vtfmm.tvv mt8,v8,v16\n vtfmm.tvv mt8,v9,v17\n"
+    "vtfmm.tvv mt8,v10,v18\n vtfmm.tvv mt8,v11,v19\n"
+    "li t6,64\n vsetvli zero,t6,e32,m4,ta,ma\n"
+    "vle32.v v20,(t2)\n msetmtype s10,s11\n msettn zero,a4\n"
+    "vtfmm.tvv mt12,v8,v24\n vtfmm.tvv mt12,v9,v25\n"
+    "vtfmm.tvv mt12,v10,v26\n vtfmm.tvv mt12,v11,v27\n"
+    "li t6,64\n vsetvli zero,t6,e32,m4,ta,ma\n"
+    "vle32.v v28,(t3)\n msetmtype s10,s11\n msettn zero,a4\n"
+    "vtfmm.tvv mt0,v4,v20\n vtfmm.tvv mt0,v5,v21\n"
+    "vtfmm.tvv mt0,v6,v22\n vtfmm.tvv mt0,v7,v23\n"
+    "mv t4,s2\n li t5,0\n"
+    /* The preceding tile is complete.  Retire one row between every final
+       MAC so the tile mover latency is hidden without starving operands. */
+    "vtfmm.tvv mt4,v4,v28\n vtse32 t5,(t4)\n add t4,t4,s3\n addi t5,t5,1\n"
+    "vtfmm.tvv mt4,v5,v29\n vtse32 t5,(t4)\n add t4,t4,s3\n addi t5,t5,1\n"
+    "vtfmm.tvv mt4,v6,v30\n vtse32 t5,(t4)\n add t4,t4,s3\n addi t5,t5,1\n"
+    "vtfmm.tvv mt4,v7,v31\n vtse32 t5,(t4)\n add t4,t4,s3\n addi t5,t5,1\n"
+    "addi s8,s2,64\n li s9,0x20000000\n"
+    "vtfmm.tvv mt8,v12,v20\n vtse32 s9,(s8)\n add s8,s8,s3\n addi s9,s9,1\n"
+    "vtfmm.tvv mt8,v13,v21\n vtse32 s9,(s8)\n add s8,s8,s3\n addi s9,s9,1\n"
+    "vtfmm.tvv mt8,v14,v22\n vtse32 s9,(s8)\n add s8,s8,s3\n addi s9,s9,1\n"
+    "vtfmm.tvv mt8,v15,v23\n vtse32 s9,(s8)\n add s8,s8,s3\n addi s9,s9,1\n"
+    "slli a0,s3,4\n add a0,s2,a0\n li a1,0x40000000\n"
+    "vtfmm.tvv mt12,v12,v28\n vtse32 a1,(a0)\n add a0,a0,s3\n addi a1,a1,1\n"
+    "vtfmm.tvv mt12,v13,v29\n vtse32 a1,(a0)\n add a0,a0,s3\n addi a1,a1,1\n"
+    "vtfmm.tvv mt12,v14,v30\n vtse32 a1,(a0)\n add a0,a0,s3\n addi a1,a1,1\n"
+    "vtfmm.tvv mt12,v15,v31\n vtse32 a1,(a0)\n add a0,a0,s3\n addi a1,a1,1\n"
+    /* a0 has advanced four rows; form mt12's untouched base explicitly. */
+    "slli a2,s3,4\n add a2,s2,a2\n addi a2,a2,64\n li a3,0x60000000\n"
+    ".rept 12\n vtse32 t5,(t4)\n add t4,t4,s3\n addi t5,t5,1\n .endr\n"
+    "mv t4,s8\n mv t5,s9\n"
+    ".rept 12\n vtse32 t5,(t4)\n add t4,t4,s3\n addi t5,t5,1\n .endr\n"
+    "mv t4,a0\n mv t5,a1\n"
+    ".rept 12\n vtse32 t5,(t4)\n add t4,t4,s3\n addi t5,t5,1\n .endr\n"
+    "mv t4,a2\n mv t5,a3\n"
+    ".rept 16\n vtse32 t5,(t4)\n add t4,t4,s3\n addi t5,t5,1\n .endr\n"
+    "li t0,8192\n add s1,s1,t0\n"
+    "addi s2,s2,128\n"
+    "addi s5,s5,-1\n bnez s5,.L2tile_block\n"
+    "sub t4,t4,s3\n lw zero,0(t4)\n"
+    "lw s0,0(sp)\n lw s1,4(sp)\n lw s2,8(sp)\n lw s3,12(sp)\n"
+    "lw s4,16(sp)\n lw s5,20(sp)\n lw s6,24(sp)\n lw s7,28(sp)\n"
+    "lw s8,32(sp)\n lw s9,36(sp)\n lw s10,40(sp)\n lw s11,44(sp)\n"
+    "addi sp,sp,48\n ret\n"
+    ".size vq_gemm_MT2x2,.-vq_gemm_MT2x2\n");
+
+#if 0
+/* Archived slow experiment: the LMUL=8 / long-VTFMM-burst remainder was
+ * correct but measured 881 cycles slower than vq_gemm_MT2x2.  Keep it out
+ * of production binaries so only the measured-fast schedule is linked.
+ *
+ * M32 decoded-weight remainder using one LMUL=8 load per two K8 groups.
+ * The upper halves v4/v12/v20/v28 hold the successor group, eliminating
+ * half of the vector loads and vector/matrix mode transitions. */
+__asm__(
+    ".text\n .balign 64\n"
+    ".global vq_gemm_MT2x2_lmul8\n"
+    ".type vq_gemm_MT2x2_lmul8,@function\n"
+    "vq_gemm_MT2x2_lmul8:\n"
+    "addi sp,sp,-48\n"
+    "sw s0,0(sp)\n sw s1,4(sp)\n sw s2,8(sp)\n sw s3,12(sp)\n"
+    "sw s4,16(sp)\n sw s5,20(sp)\n sw s6,24(sp)\n sw s7,28(sp)\n"
+    "sw s8,32(sp)\n sw s9,36(sp)\n sw s10,40(sp)\n sw s11,44(sp)\n"
+    "mv s0,a0\n mv s1,a1\n mv s2,a2\n"
+    "slli s3,a4,2\n srli s4,a5,3\n srli s5,a4,5\n"
+    "li s6,256\n li s7,4096\n"
+    "li s10,0x4042\n li s11,0xc8\n li a4,16\n"
+
+    ".L28_block:\n"
+    "mv t0,s0\n add t1,s0,s7\n mv t2,s1\n add t3,s1,s7\n"
+    "msetmtype s10,s11\n msettn zero,a4\n"
+    "vtzero mt0\n vtzero mt4\n vtzero mt8\n vtzero mt12\n"
+    "mv a5,s4\n li t6,64\n"
+    ".L28_pair:\n"
+    "vsetvli zero,t6,e32,m4,ta,ma\n"
+    "vle32.v v0,(t0)\n vle32.v v8,(t1)\n"
+    "vle32.v v16,(t2)\n vle32.v v24,(t3)\n"
+    "msetmtype s10,s11\n msettn zero,a4\n"
+    "vtfmm.tvv mt0,v0,v16\n add t0,t0,s6\n"
+    "vtfmm.tvv mt0,v1,v17\n vtfmm.tvv mt0,v2,v18\n"
+    "vtfmm.tvv mt0,v3,v19\n add t2,t2,s6\n"
+    "vtfmm.tvv mt4,v0,v24\n add t1,t1,s6\n"
+    "vtfmm.tvv mt4,v1,v25\n vtfmm.tvv mt4,v2,v26\n"
+    "vtfmm.tvv mt4,v3,v27\n add t3,t3,s6\n"
+    "vtfmm.tvv mt8,v8,v16\n addi a5,a5,-1\n"
+    "vtfmm.tvv mt8,v9,v17\n vtfmm.tvv mt8,v10,v18\n"
+    "vtfmm.tvv mt8,v11,v19\n"
+    "vtfmm.tvv mt12,v8,v24\n vtfmm.tvv mt12,v9,v25\n"
+    "vtfmm.tvv mt12,v10,v26\n vtfmm.tvv mt12,v11,v27\n"
+    "bnez a5,.L28_pair\n"
+
+    "mv t4,s2\n li t5,0\n"
+    ".rept 16\n vtse32 t5,(t4)\n add t4,t4,s3\n addi t5,t5,1\n .endr\n"
+    "addi t4,s2,64\n li t5,0x20000000\n"
+    ".rept 16\n vtse32 t5,(t4)\n add t4,t4,s3\n addi t5,t5,1\n .endr\n"
+    "slli t6,s3,4\n add t4,s2,t6\n li t5,0x40000000\n"
+    ".rept 16\n vtse32 t5,(t4)\n add t4,t4,s3\n addi t5,t5,1\n .endr\n"
+    "slli t6,s3,4\n add t4,s2,t6\n addi t4,t4,64\n li t5,0x60000000\n"
+    ".rept 16\n vtse32 t5,(t4)\n add t4,t4,s3\n addi t5,t5,1\n .endr\n"
+    "li t6,8192\n add s1,s1,t6\n addi s2,s2,128\n"
+    "addi s5,s5,-1\n bnez s5,.L28_block\n"
+    "sub t4,t4,s3\n lw zero,0(t4)\n"
+    "lw s0,0(sp)\n lw s1,4(sp)\n lw s2,8(sp)\n lw s3,12(sp)\n"
+    "lw s4,16(sp)\n lw s5,20(sp)\n lw s6,24(sp)\n lw s7,28(sp)\n"
+    "lw s8,32(sp)\n lw s9,36(sp)\n lw s10,40(sp)\n lw s11,44(sp)\n"
+    "addi sp,sp,48\n ret\n"
+    ".size vq_gemm_MT2x2_lmul8,.-vq_gemm_MT2x2_lmul8\n");
+#endif
+
+/* M32xN16 decoded-weight GEMM.  Two accumulator tiles reduce the live tile
+ * set relative to MT2x2; alternating VRF banks keep one K8 group in flight.
+ * The complete N128 workload executes eight N16 blocks. */
+__asm__(
+    ".text\n .balign 64\n"
+    ".global vq_gemm_MT2x1\n"
+    ".type vq_gemm_MT2x1,@function\n"
+    "vq_gemm_MT2x1:\n"
+    "addi sp,sp,-48\n"
+    "sw s0,0(sp)\n sw s1,4(sp)\n sw s2,8(sp)\n sw s3,12(sp)\n"
+    "sw s4,16(sp)\n sw s5,20(sp)\n sw s6,24(sp)\n sw s7,28(sp)\n"
+    "sw s8,32(sp)\n sw s9,36(sp)\n sw s10,40(sp)\n sw s11,44(sp)\n"
+    "mv s0,a0\n mv s1,a1\n mv s2,a2\n"
+    "slli s3,a4,2\n"           /* FP32 C row stride. */
+    "srli s4,a5,3\n"           /* K8 groups. */
+    "srli s5,a4,4\n"           /* N16 blocks. */
+    "li s6,256\n li s7,4096\n"
+    "li s10,0x4042\n li s11,0xc8\n li a4,16\n"
+
+    ".L21_block:\n"
+    "mv t0,s0\n add t1,s0,s7\n mv t2,s1\n"
+    "msetmtype s10,s11\n msettn zero,a4\n"
+    "vtzero mt0\n vtzero mt4\n"
+    "li t6,64\n vsetvli zero,t6,e32,m4,ta,ma\n"
+    "vle32.v v0,(t0)\n vle32.v v8,(t1)\n vle32.v v16,(t2)\n"
+    "add t0,t0,s6\n add t1,t1,s6\n add t2,t2,s6\n"
+    "msetmtype s10,s11\n msettn zero,a4\n"
+    "srli a5,s4,1\n addi a5,a5,-1\n"
+
+    ".L21_pair:\n"
+    "vtfmm.tvv mt0,v0,v16\n vtfmm.tvv mt0,v1,v17\n"
+    "vtfmm.tvv mt0,v2,v18\n vtfmm.tvv mt0,v3,v19\n"
+    "vtfmm.tvv mt4,v8,v16\n vtfmm.tvv mt4,v9,v17\n"
+    "vtfmm.tvv mt4,v10,v18\n vtfmm.tvv mt4,v11,v19\n"
+    "li t6,64\n vsetvli zero,t6,e32,m4,ta,ma\n"
+    "vle32.v v4,(t0)\n vle32.v v12,(t1)\n vle32.v v20,(t2)\n"
+    "msetmtype s10,s11\n msettn zero,a4\n"
+    "vtfmm.tvv mt0,v4,v20\n add t0,t0,s6\n"
+    "vtfmm.tvv mt0,v5,v21\n add t1,t1,s6\n"
+    "vtfmm.tvv mt0,v6,v22\n add t2,t2,s6\n"
+    "vtfmm.tvv mt0,v7,v23\n"
+    "vtfmm.tvv mt4,v12,v20\n vtfmm.tvv mt4,v13,v21\n"
+    "vtfmm.tvv mt4,v14,v22\n vtfmm.tvv mt4,v15,v23\n"
+    "li t6,64\n vsetvli zero,t6,e32,m4,ta,ma\n"
+    "vle32.v v0,(t0)\n vle32.v v8,(t1)\n vle32.v v16,(t2)\n"
+    "msetmtype s10,s11\n msettn zero,a4\n"
+    "add t0,t0,s6\n add t1,t1,s6\n add t2,t2,s6\n"
+    "addi a5,a5,-1\n bnez a5,.L21_pair\n"
+
+    /* Groups 14 and 15. */
+    "vtfmm.tvv mt0,v0,v16\n vtfmm.tvv mt0,v1,v17\n"
+    "vtfmm.tvv mt0,v2,v18\n vtfmm.tvv mt0,v3,v19\n"
+    "vtfmm.tvv mt4,v8,v16\n vtfmm.tvv mt4,v9,v17\n"
+    "vtfmm.tvv mt4,v10,v18\n vtfmm.tvv mt4,v11,v19\n"
+    "li t6,64\n vsetvli zero,t6,e32,m4,ta,ma\n"
+    "vle32.v v4,(t0)\n vle32.v v12,(t1)\n vle32.v v20,(t2)\n"
+    "msetmtype s10,s11\n msettn zero,a4\n"
+    "vtfmm.tvv mt0,v4,v20\n vtfmm.tvv mt0,v5,v21\n"
+    "vtfmm.tvv mt0,v6,v22\n vtfmm.tvv mt0,v7,v23\n"
+    "vtfmm.tvv mt4,v12,v20\n vtfmm.tvv mt4,v13,v21\n"
+    "vtfmm.tvv mt4,v14,v22\n vtfmm.tvv mt4,v15,v23\n"
+
+    "mv t4,s2\n li t5,0\n"
+    ".rept 16\n vtse32 t5,(t4)\n add t4,t4,s3\n addi t5,t5,1\n .endr\n"
+    "slli t3,s3,4\n add t4,s2,t3\n li t5,0x20000000\n"
+    ".rept 16\n vtse32 t5,(t4)\n add t4,t4,s3\n addi t5,t5,1\n .endr\n"
+    "add s1,s1,s7\n addi s2,s2,64\n"
+    "addi s5,s5,-1\n bnez s5,.L21_block\n"
+    "sub t4,t4,s3\n lw zero,0(t4)\n"
+    "lw s0,0(sp)\n lw s1,4(sp)\n lw s2,8(sp)\n lw s3,12(sp)\n"
+    "lw s4,16(sp)\n lw s5,20(sp)\n lw s6,24(sp)\n lw s7,28(sp)\n"
+    "lw s8,32(sp)\n lw s9,36(sp)\n lw s10,40(sp)\n lw s11,44(sp)\n"
+    "addi sp,sp,48\n ret\n"
+    ".size vq_gemm_MT2x1,.-vq_gemm_MT2x1\n");
+
+/* One fixed N32 block using the exact validated MT2x2 body above.  This
+ * entry is used as the correctness baseline for the integrated MT6x2
+ * producer/consumer schedule; it keeps ldc=128 while executing one block. */
+__asm__(
+    ".text\n .balign 64\n"
+    ".global vq_gemm_MT2x2_block\n"
+    ".type vq_gemm_MT2x2_block,@function\n"
+    "vq_gemm_MT2x2_block:\n"
+    VQ_MT2_BLOCK_ENTRY_MARKER
+    "addi sp,sp,-48\n"
+    "sw s0,0(sp)\n sw s1,4(sp)\n sw s2,8(sp)\n sw s3,12(sp)\n"
+    "sw s4,16(sp)\n sw s5,20(sp)\n sw s6,24(sp)\n sw s7,28(sp)\n"
+    "sw s8,32(sp)\n sw s9,36(sp)\n sw s10,40(sp)\n sw s11,44(sp)\n"
+    "mv s0,a0\n mv s1,a1\n mv s2,a2\n"
+    "li s3,512\n li s4,16\n li s5,1\n"
+    "li s6,256\n li s7,4096\n"
+    "li s10,0x4042\n li s11,0xc8\n li a4,16\n"
+    "j .L2tile_block\n"
+    ".size vq_gemm_MT2x2_block,.-vq_gemm_MT2x2_block\n");
+
+/* Fixed N32 entry used by MT6x2 while the producer's mt12 still owns a
+ * pending 16-row store stream in t4/t5.  Four stores after each of the first
+ * four consumer VTFMMs finish that stream before mt12 is reused. */
+__asm__(
+    ".text\n .balign 64\n"
+    ".global vq_gemm_MT2x2_block_overlap\n"
+    ".type vq_gemm_MT2x2_block_overlap,@function\n"
+    "vq_gemm_MT2x2_block_overlap:\n"
+    "addi sp,sp,-48\n"
+    "sw s0,0(sp)\n sw s1,4(sp)\n sw s2,8(sp)\n sw s3,12(sp)\n"
+    "sw s4,16(sp)\n sw s5,20(sp)\n sw s6,24(sp)\n sw s7,28(sp)\n"
+    "sw s8,32(sp)\n sw s9,36(sp)\n sw s10,40(sp)\n sw s11,44(sp)\n"
+    "mv s0,a0\n mv s1,a1\n mv s2,a2\n"
+    "li s3,512\n li s4,16\n li s5,1\n"
+    "li s6,256\n li s7,4096\n"
+    "li s10,0x4042\n li s11,0xc8\n li a4,16\n"
+    "mv t0,s0\n add t1,s0,s7\n"
+    "mv t2,s1\n add t3,s1,s7\n"
+    "mv a5,s4\n"
+    "msetmtype s10,s11\n msettn zero,a4\n"
+    "vtzero mt0\n vtzero mt4\n vtzero mt8\n"
+    "li t6,64\n vsetvli zero,t6,e32,m4,ta,ma\n"
+    "vle32.v v0,(t0)\n vle32.v v8,(t1)\n"
+    "vle32.v v16,(t2)\n vle32.v v24,(t3)\n"
+    "add t0,t0,s6\n add t1,t1,s6\n"
+    "add t2,t2,s6\n add t3,t3,s6\n"
+    "msetmtype s10,s11\n msettn zero,a4\n"
+    "srli a5,s4,1\n addi a5,a5,-1\n"
+    "vtfmm.tvv mt0,v0,v16\n"
+    "vtse32 t5,(t4)\n add t4,t4,s9\n addi t5,t5,1\n"
+    "vtfmm.tvv mt0,v1,v17\n"
+    "vtse32 t5,(t4)\n add t4,t4,s9\n addi t5,t5,1\n"
+    "vtfmm.tvv mt0,v2,v18\n"
+    "vtse32 t5,(t4)\n add t4,t4,s9\n addi t5,t5,1\n"
+    "vtfmm.tvv mt0,v3,v19\n"
+    "vtse32 t5,(t4)\n add t4,t4,s9\n addi t5,t5,1\n"
+    "li t6,64\n vsetvli zero,t6,e32,m4,ta,ma\n"
+    "vle32.v v4,(t0)\n vle32.v v12,(t1)\n"
+    "add t0,t0,s6\n add t1,t1,s6\n"
+    "msetmtype s10,s11\n msettn zero,a4\n"
+    "vtfmm.tvv mt4,v0,v24\n"
+    "vtse32 t5,(t4)\n add t4,t4,s9\n addi t5,t5,1\n"
+    "vtfmm.tvv mt4,v1,v25\n"
+    "vtse32 t5,(t4)\n add t4,t4,s9\n addi t5,t5,1\n"
+    "vtfmm.tvv mt4,v2,v26\n"
+    "vtse32 t5,(t4)\n add t4,t4,s9\n addi t5,t5,1\n"
+    "vtfmm.tvv mt4,v3,v27\n"
+    "vtse32 t5,(t4)\n add t4,t4,s9\n addi t5,t5,1\n"
+    "li t6,64\n vsetvli zero,t6,e32,m4,ta,ma\n"
+    "vle32.v v20,(t2)\n vle32.v v28,(t3)\n"
+    "msetmtype s10,s11\n msettn zero,a4\n"
+    "vtfmm.tvv mt8,v8,v16\n"
+    ".rept 2\n vtse32 t5,(t4)\n add t4,t4,s9\n addi t5,t5,1\n .endr\n"
+    "vtfmm.tvv mt8,v9,v17\n"
+    ".rept 2\n vtse32 t5,(t4)\n add t4,t4,s9\n addi t5,t5,1\n .endr\n"
+    "vtfmm.tvv mt8,v10,v18\n"
+    ".rept 2\n vtse32 t5,(t4)\n add t4,t4,s9\n addi t5,t5,1\n .endr\n"
+    "vtfmm.tvv mt8,v11,v19\n"
+    ".rept 2\n vtse32 t5,(t4)\n add t4,t4,s9\n addi t5,t5,1\n .endr\n"
+    "msetmtype s10,s11\n msettn zero,a4\n vtzero mt12\n"
+    "j .L2tile_after_first_mt8\n"
+    ".size vq_gemm_MT2x2_block_overlap,.-vq_gemm_MT2x2_block_overlap\n");
+
+#undef VQ_MT2_BLOCK_ENTRY_MARKER
 

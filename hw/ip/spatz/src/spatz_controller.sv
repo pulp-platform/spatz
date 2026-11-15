@@ -922,6 +922,10 @@ module spatz_controller
         sb_enable_o[port] = sb_enable_i[port] && sb_id_ok[sb_id_i[port]][0];
       else if (port inside {SB_VLSU_VS2_RD1, SB_VLSU_VD_RD1, SB_VLSU_VD_WD1})
         sb_enable_o[port] = sb_enable_i[port] && sb_id_ok[sb_id_i[port]][1];
+      else if (port inside {SB_VFU_VS2_RD, SB_VFU_VS1_RD, SB_VFU_VD_RD})
+        // VFU/OPE reads can reach the next word before this instruction writes
+        // its first result. Write progress cannot identify the word being read.
+        sb_enable_o[port] = sb_enable_i[port] && !(|scoreboard_q[sb_id_i[port]].deps);
       else
         sb_enable_o[port] = sb_enable_i[port] && sb_id_ok_auto[sb_id_i[port]];
 `else
