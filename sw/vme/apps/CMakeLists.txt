@@ -63,6 +63,7 @@ add_subdirectory(tew32/fp16-ln-gemm-gelu fp16-ln-gemm-gelu)
 # add_subdirectory(tew32/fp16-gemm-residual-separate fp16-gemm-residual-separate)
 # add_subdirectory(tew32/fp16-gemm-fused-residual fp16-gemm-fused-residual)
 add_subdirectory(tew32/fp16-flashattn fp16-flashattn)
+add_subdirectory(tew32/fp16-flashattn-l2 fp16-flashattn-l2)
 add_subdirectory(tew32/fp16-gathermlp-dlrm fp16-gathermlp-dlrm)
 add_subdirectory(tew32/fp16-gathermlp-gcn fp16-gathermlp-gcn)
 
