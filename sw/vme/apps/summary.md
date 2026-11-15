@@ -28,20 +28,21 @@ applies to other fused kernels: completed tiles can drain while independent
 tiles compute, reducing exposed store latency and separate prologue/epilogue
 time.
 
-VME still cannot beat O-POPE on the retained plain MatMul-ReLU workload.  Its
-single-issue front end can fetch and issue only one instruction per cycle, so
-matrix setup, tile moves, RVV ReLU, stores, and scalar address updates compete
-with the instructions that feed the matrix MAC queue.  O-POPE's more
-specialized data path exposes less of that instruction-delivery overhead.
+VME's single-issue front end can fetch and issue only one instruction per
+cycle, so matrix setup, tile moves, RVV ReLU, stores, and scalar address
+updates compete with the instructions that feed the matrix MAC queue.  The
+staggered schedule overcomes that disadvantage on the retained workload by
+placing independent scalar work between matrix instructions and by overlapping
+the previous pair's drain with the next pair's reduction.
 
 The staggered strategy nevertheless makes VME competitive: it places the
 unavoidable move, ReLU, store, and address instructions into otherwise idle
 windows between independent matrix operations.  The current
-`M192xN64xK128` VME kernel takes 17,172 cycles versus 16,614 cycles for
-optimized O-POPE, a remaining gap of 558 cycles (3.36%).  This result is
-evidence that four-tile ping-pong can hide most of VME's flexible
-post-processing overhead, even though it does not remove the single-issue
-front-end limit.
+`M192xN64xK128` VME kernel takes 16,414 cycles versus 16,614 cycles for
+optimized O-POPE, a reduction of 200 cycles (1.20%).  This result shows that
+four-tile ping-pong can hide VME's flexible post-processing overhead and
+slightly outperform the specialized path despite the single-issue front-end
+limit.
 
 ## 2. RVV and VME fusion
 

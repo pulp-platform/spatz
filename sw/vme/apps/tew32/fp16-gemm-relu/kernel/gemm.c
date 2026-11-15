@@ -191,6 +191,17 @@ static inline __attribute__((always_inline)) void gr_load_operands16(
                "vtfmm.tvv " #mt_ ", v1, v25\n"                       \
                "vtfmm.tvv " #mt_ ", v2, v26\n"                       \
                "vtfmm.tvv " #mt_ ", v3, v27" ::: "memory")
+#define GR_FMA4_SECOND_LO_PREP(mt_, a_, b1_, next_offset_, next_a_,       \
+                                next_b1_)                                  \
+  asm volatile("vtfmm.tvv " #mt_ ", v0, v24\n"                        \
+               "add %[na], %[a], %[off]\n"                               \
+               "vtfmm.tvv " #mt_ ", v1, v25\n"                        \
+               "add %[nb1], %[b1], %[off]\n"                             \
+               "vtfmm.tvv " #mt_ ", v2, v26\n"                        \
+               "vtfmm.tvv " #mt_ ", v3, v27"                           \
+               : [na] "=&r"(next_a_), [nb1] "=&r"(next_b1_)             \
+               : [a] "r"(a_), [b1] "r"(b1_), [off] "r"(next_offset_)   \
+               : "memory")
 #define GR_FMA4_SECOND_HI(mt_)                                            \
   asm volatile("vtfmm.tvv " #mt_ ", v4, v28\n"                       \
                "vtfmm.tvv " #mt_ ", v5, v29\n"                       \
@@ -228,17 +239,6 @@ static inline __attribute__((always_inline)) void gr_preload_b0_16(
                "vle16.v v16, (%1)"
                :: "r"((uintptr_t)(16 * TE)), "r"(b0)
                : "v16", "v17", "v18", "v19", "v20", "v21", "v22", "v23",
-                 "memory");
-}
-
-static inline __attribute__((always_inline)) void gr_preload_a_b1_16(
-    const uint32_t *a, const uint32_t *b1) {
-  asm volatile("vsetvli zero, %0, e16, m8, ta, ma\n"
-               "vle16.v v0, (%1)\n"
-               "vle16.v v24, (%2)"
-               :: "r"((uintptr_t)(16 * TE)), "r"(a), "r"(b1)
-               : "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7",
-                 "v24", "v25", "v26", "v27", "v28", "v29", "v30", "v31",
                  "memory");
 }
 
@@ -478,10 +478,14 @@ static inline __attribute__((always_inline)) void gr_compute_drain_pair(
     if (batch + 1 != TE / 2)
       gr_preload_b0_16((const uint32_t *)next_b0_addr);
     gr_set_compute_type();
+    const uint32_t *next_a;
+    const uint32_t *next_b1;
     if (high)
-      GR_FMA4_SECOND_LO(mt12);
+      GR_FMA4_SECOND_LO_PREP(mt12, a, b1, next_offset, next_a, next_b1);
     else
-      GR_FMA4_SECOND_LO(mt4);
+      GR_FMA4_SECOND_LO_PREP(mt4, a, b1, next_offset, next_a, next_b1);
+    if (batch + 1 != TE / 2)
+      gr_preload_a_b1_half(next_a, next_b1, 0);
 
     float *out0 = previous + row * ldc;
     float *out1 = out0 + ldc;
@@ -497,8 +501,7 @@ static inline __attribute__((always_inline)) void gr_compute_drain_pair(
     else
       GR_FMA4_SECOND_HI(mt4);
     if (batch + 1 != TE / 2)
-      gr_preload_a_b1_16(a + (kg + 1) * GR_GROUP16_WORDS,
-                         b1 + (kg + 1) * GR_GROUP16_WORDS);
+      gr_preload_a_b1_half(next_a, next_b1, 1);
   }
   gr_add_bias_pair(current, ldc, high);
 }
