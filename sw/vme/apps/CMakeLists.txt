@@ -59,7 +59,7 @@ add_subdirectory(tew32/fp16-dq-matmul fp16-dq-matmul)
 # add_subdirectory(tew32/fp16-embed-ln-gemm fp16-embed-ln-gemm)
 # add_subdirectory(tew32/fp16_conv_relu fp16_conv_relu)
 
-# add_subdirectory(tew32/fp16-gemm-relu fp16-gemm-relu)
+add_subdirectory(tew32/fp16-gemm-relu fp16-gemm-relu)
 # add_subdirectory(tew32/fp16-gemm-gelu fp16-gemm-gelu)
 # add_subdirectory(tew32/fp16-gemm-residual-separate fp16-gemm-residual-separate)
 # add_subdirectory(tew32/fp16-gemm-fused-residual fp16-gemm-fused-residual)
