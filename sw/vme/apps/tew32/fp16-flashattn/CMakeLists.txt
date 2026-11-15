@@ -84,5 +84,5 @@ if(BUILD_TESTS AND "te16" IN_LIST VME_TILE_VARIANT)
         TQ=64 T_SIZE=256 D_SIZE=64 DV_SIZE=64 BC=64 NT=4
         FLASH_PV_ZERO_SEED=1 FLASH_RECIP2=1)
     target_compile_options(${_flash_target} PRIVATE
-        -fno-vectorize -fno-slp-vectorize)
+        -fno-vectorize -fno-slp-vectorize -falign-loops=1)
 endif()

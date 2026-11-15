@@ -4,9 +4,8 @@ The folder retains three workloads: `Tq16,T64,d64,dv16`,
 `Tq64,T64,d64,dv64,Bc64`, and `Tq64,T256,d64,dv64,Bc64`.
 The detailed diagram and interval trace below describe the third workload.
 The rebuilt direct `Tq16` target passed RTL golden at 6,036 cycles on
-2026-11-14; its earlier ELF measured 6,055 cycles. The reproducible
-`Tq64,T64` and `Tq64,T256` measurements are 20,177 and 73,859 cycles
-respectively.
+2026-11-14. The reproducible `Tq64,T64` and `Tq64,T256` measurements are
+20,313 and 73,616 cycles respectively.
 
 ## What each retained workload does
 
@@ -48,7 +47,7 @@ storage, and output shape differ.
 
 [Open the Tq64/T64 four-stage diagram](tq64-key64-four-stage.html).
 
-The clean production binary takes **20,177 cycles** and passes the FP32
+The clean production binary takes **20,313 cycles** and passes the FP32
 golden check. Enabling the stage counters changes instruction placement and
 raises the total to 20,638 cycles, so the following values describe the
 instrumented schedule; they must not be added to the clean result.
@@ -122,12 +121,11 @@ O-POPE subtile counters were captured.
 
 ## Verified result
 
-- Clean RTL: **73,859 cycles**, golden **PASS**.
-- The 2026-11-14 Questa run improved the previous 79,966-cycle result by
-  **6,107 cycles (7.64%)** and completed with `Errors: 0`, `Warnings: 0`.
+- Clean RTL: **73,616 cycles**, golden **PASS**.
+- The 2026-11-14 Questa run completed with `Errors: 0`, `Warnings: 0`.
 - The exponential is unchanged from O-POPE: degree-5 Taylor followed by all
-  six repeated squarings.  The 20,177-cycle single-block result also uses
-  this exponential; its improvement came from normalize/store scheduling.
+  six repeated squarings. The 20,313-cycle single-block result also uses this
+  exponential.
 
 ## VME versus optimized O-POPE
 
@@ -136,17 +134,15 @@ metadata, the same O-POPE-compatible exponential, and the same FP32 golden
 output check. The optimized 85,869-cycle O-POPE result is the relevant T256
 reference; the older 104,222-cycle checked-out baseline is not used here.
 
-| Implementation | RTL cycles | Difference versus O-POPE | Result |
-|---|---:|---:|---|
-| Optimized O-POPE — `Tq64,T64` | 22,128 | baseline | PASS |
-| **VME single-key-block — `Tq64,T64`** | **20,177** | **-1,951 (-8.82%)** | **PASS** |
-| Optimized O-POPE — `Tq64,T256` | 85,869 | baseline | PASS |
-| **VME global-max4 — `Tq64,T256`** | **73,859** | **-12,010 (-13.99%)** | **PASS** |
+| Implementation | RTL cycles | Result |
+|---|---:|---|
+| Optimized O-POPE — `Tq64,T64` | 22,128 | PASS |
+| **VME single-key-block — `Tq64,T64`** | **20,313** | **PASS** |
+| Optimized O-POPE — `Tq64,T256` | 85,869 | PASS |
+| **VME global-max4 — `Tq64,T256`** | **73,616** | **PASS** |
 
-For T64, VME is **1,951 cycles faster** and gives a **1.0967x speedup**. For
-T256, VME is **12,010 cycles faster** and gives a **1.1626x speedup**. VME and
-O-POPE are simulated from their respective RTL builds, so these are
-matched-workload comparisons rather than same-binary comparisons. Four
+VME and O-POPE are simulated from their respective RTL builds, so these are
+matched-workload results rather than same-binary results. Four
 independent T64 calls are not used as a T256 result because they reset the
 maximum, denominator and output state and therefore do not implement the
 same attention problem.
@@ -189,22 +185,21 @@ produce/consume/release rather than retaining every intermediate.
 
 ## Instrumented stage breakdown
 
-The stage profile predates the current address-elimination changes. Its
-instrumented run was 81,613 cycles and its matching clean binary was 79,966
-cycles. The counter deltas below remain exact for that historical
-instrumented schedule, but must not be added to the current 73,859-cycle
+The current instrumented run is 75,678 cycles; the matching clean binary is
+73,616 cycles. Counter reads and reporting perturb instruction placement, so
+the stage values are used as a breakdown rather than summed into the clean
 result.
 
 | Stage | Operations | Cycles |
 |---|---|---:|
-| 1. Four QK blocks | configure/zero four matrix tiles; load Q/K; `vtfmm`; interleaved score stores | 11,474 |
-| 2. Global maximum | load all score rows; four-way `vfmax`; cross-block row reduction; store `m` | 3,030 |
-| 3. Exp, denominator, pack P | subtract global max; degree-5 Taylor; six squares; row sum; FP32-to-FP16 narrowing; strided packed-P stores | 48,698 |
-| 4. Tile-resident PV | zero each output tile once; accumulate four `P_b*V_b` blocks; store each tile once | 16,642 |
-| Epilogue | two-step reciprocal; normalize output; final stores | 880 |
-| Accounted stage sum | | 80,724 |
-| Profile call/timer overhead | | 889 |
-| **Profile total** | | **81,613** |
+| 1. Four QK blocks | configure/zero four matrix tiles; load Q/K; `vtfmm`; interleaved score stores | 11,356 |
+| 2. Global maximum | load all score rows; four-way `vfmax`; cross-block row reduction; store `m` | 3,022 |
+| 3. Exp, denominator, pack P | subtract global max; degree-5 Taylor; six squares; row sum; FP32-to-FP16 narrowing; strided packed-P stores | 48,718 |
+| 4. Tile-resident PV | zero each output tile once; accumulate four `P_b*V_b` blocks; store each tile once | 9,958 |
+| Epilogue | two-step reciprocal; normalize output; final stores | 887 |
+| Accounted stage sum | | 73,941 |
+| Profile call/timer overhead | | 1,737 |
+| **Profile total** | | **75,678** |
 
 ### Per key block
 
@@ -212,10 +207,10 @@ Global max is a shared operation and is charged to block 0 in the table.
 
 | Block | QK | Shared max | Exp/sum/pack | PV MAC contribution |
 |---:|---:|---:|---:|---:|
-| 0 | 2,978 | 3,030 | 12,185 | 2,194 |
-| 1 | 2,832 | 0 | 12,171 | 2,236 |
-| 2 | 2,832 | 0 | 12,171 | 2,236 |
-| 3 | 2,832 | 0 | 12,171 | 2,236 |
+| 0 | 2,971 | 3,022 | 12,193 | 2,070 |
+| 1 | 2,795 | 0 | 12,175 | 2,016 |
+| 2 | 2,795 | 0 | 12,175 | 2,016 |
+| 3 | 2,795 | 0 | 12,175 | 2,016 |
 
 The four algorithmic stages for each block are therefore:
 
@@ -255,7 +250,7 @@ times to them would double-count overlap, so QK is reported per key block.
 The native Questa VCD was converted to an event-interval CSV; therefore the
 trace itself does not add cycles. This retained trace describes the previous
 79,966-cycle ELF and passed its golden check; a new VCD was not captured for
-the current 73,859-cycle ELF.
+the current 73,616-cycle ELF.
 
 | Region | Cycles in clean trace | VFU request/running/FPU-busy | Utilization |
 |---|---:|---:|---:|

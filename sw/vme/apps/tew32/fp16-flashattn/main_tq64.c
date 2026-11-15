@@ -39,8 +39,7 @@ int main(void) {
       .k = snrt_l1alloc(NT * (D_SIZE / 2) * BC * sizeof(uint32_t)),
       .v = snrt_l1alloc(NT * (BC / 2) * DV_SIZE * sizeof(uint32_t)),
       .scores = snrt_l1alloc(NT * BC * TQ * sizeof(float)),
-      .probabilities =
-          snrt_l1alloc(NT * (BC / 2) * TQ * sizeof(uint32_t)),
+      .probabilities = snrt_l1alloc(NT * (BC / 2) * TQ * sizeof(uint32_t)),
       .output = snrt_l1alloc(DV_SIZE * TQ * sizeof(float)),
       .row_max = snrt_l1alloc(TQ * sizeof(float)),
       .row_sum = snrt_l1alloc(TQ * sizeof(float)),
@@ -56,18 +55,15 @@ int main(void) {
   snrt_dma_start_1d(b.v, fa_vw_dram, sizeof(fa_vw_dram));
   snrt_dma_start_1d(b.row_max, fa_m_dram, sizeof(fa_m_dram));
   snrt_dma_wait_all();
-  ope_vzero(b.row_sum, TQ);
-  ope_vzero(b.output, DV_SIZE * TQ);
+  ope_vzero(b.row_sum, TQ);          // row-wise sum (vector) is initialized to 0
+  ope_vzero(b.output, DV_SIZE * TQ); // output[TQ, DV] (matrix) is initialized to 0
 
   flashattn_tq64_configure(&b);
   const unsigned begin = get_cycle();
-  start_kernel();
   flashattn_tq64_run();
-  stop_kernel();
   const unsigned cycles = get_cycle() - begin;
 
-  PRINTF("\n----- fp16 flashattn fused Tq%d T%d d%d -----\n", TQ, T_SIZE,
-         D_SIZE);
+  PRINTF("\n----- fp16 flashattn fused Tq%d T%d d%d -----\n", TQ, T_SIZE, D_SIZE);
   PRINTF("The execution took %u cycles.\n", cycles);
   print_stage_counters();
   const int errors = ope_check_fp32(b.output, (const float *)fa_golden,

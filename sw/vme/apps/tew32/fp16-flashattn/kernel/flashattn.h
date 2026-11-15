@@ -104,14 +104,10 @@ void flashattn_tq64_get_counters(flashattn_tq64_counters_t *counters);
   "vfmul.vf " x1 ", " x1 ", %[ope_scale]\n" \
   "vfmul.vf " x2 ", " x2 ", %[ope_scale]\n" \
   "vfmul.vf " x3 ", " x3 ", %[ope_scale]\n" \
-  "vfmv.v.f " t0 ", %[ope_c5]\n" \
-  "vfmv.v.f " t1 ", %[ope_c5]\n" \
-  "vfmv.v.f " t2 ", %[ope_c5]\n" \
-  "vfmv.v.f " t3 ", %[ope_c5]\n" \
-  "vfmul.vv " t0 ", " t0 ", " x0 "\n" \
-  "vfmul.vv " t1 ", " t1 ", " x1 "\n" \
-  "vfmul.vv " t2 ", " t2 ", " x2 "\n" \
-  "vfmul.vv " t3 ", " t3 ", " x3 "\n" \
+  "vfmul.vf " t0 ", " x0 ", %[ope_c5]\n" \
+  "vfmul.vf " t1 ", " x1 ", %[ope_c5]\n" \
+  "vfmul.vf " t2 ", " x2 ", %[ope_c5]\n" \
+  "vfmul.vf " t3 ", " x3 ", %[ope_c5]\n" \
   "vfadd.vf " t0 ", " t0 ", %[ope_c4]\n" \
   "vfadd.vf " t1 ", " t1 ", %[ope_c4]\n" \
   "vfadd.vf " t2 ", " t2 ", %[ope_c4]\n" \
@@ -172,6 +168,7 @@ void flashattn_tq64_get_counters(flashattn_tq64_counters_t *counters);
   "vfmul.vv " x1 ", " x1 ", " x1 "\n" \
   "vfmul.vv " x2 ", " x2 ", " x2 "\n" \
   "vfmul.vv " x3 ", " x3 ", " x3 "\n"
+
 #endif  // FLASHATTN_IMPLEMENTATION
 
 // --------------------------------------------------------------------------

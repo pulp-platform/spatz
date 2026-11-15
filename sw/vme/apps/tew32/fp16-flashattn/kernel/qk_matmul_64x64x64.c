@@ -116,8 +116,6 @@ static __attribute__((always_inline)) inline void qk_matmul_64x64x64(
         "vtfmm.tvv mt4, v1, v25\n"
         "vtfmm.tvv mt4, v2, v26\n"
         "vtfmm.tvv mt4, v3, v27\n"
-        "msetmtype %[mtype], %[vtype]\n"
-        "msettn x0, %[vl]\n"
         "vtfmm.tvv mt8, v8, v16\n"
         "vtfmm.tvv mt8, v9, v17\n"
         "vtfmm.tvv mt8, v10, v18\n"

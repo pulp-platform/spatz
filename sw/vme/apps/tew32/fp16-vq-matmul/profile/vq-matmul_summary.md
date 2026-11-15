@@ -65,19 +65,12 @@ tile draining does not become a fully separate phase.
 
 ## End-to-end RTL results
 
-| Workload | Implementation | RTL cycles | Reduction vs O-POPE | Speedup | Validation |
-|---|---|---:|---:|---:|---|
-| M64, Kred128, Nout128 | O-POPE | 19,000 | -- | 1.000x | reference |
-| M64, Kred128, Nout128 | VME historical best | 14,483 | 4,517 | 1.312x | historical result |
-| M96, Kred128, Nout128 | O-POPE | 23,089 | -- | 1.000x | reference |
-| M96, Kred128, Nout128 | VME MT6x2 historical | 19,075 | 4,014 | 1.210x | PASS; historical ELF |
-| M96, Kred128, Nout128 | VME MT6x2 optimized | 18,554 | 4,535 | 1.244x | golden PASS; two pre-existing stream-arbiter assertions |
-
-The current reproducible M96 comparison is therefore **23,089 / 18,554 =
-1.244x**. This supersedes the historical 19,075-cycle result. Relative to the
-19,278-cycle baseline, dependency-aware scheduling and address/copy cleanup
-remove 724 cycles (3.76%). The latest cleanup removes 181 cycles (0.97%) from
-the previous 18,735-cycle result.
+| Workload | Implementation | RTL cycles | Validation |
+|---|---|---:|---|
+| M64, Kred128, Nout128 | O-POPE | 19,000 | reference |
+| M64, Kred128, Nout128 | VME MT4x1 | 14,483 | PASS |
+| M96, Kred128, Nout128 | O-POPE | 23,089 | reference |
+| M96, Kred128, Nout128 | VME MT6x2 | 18,554 | golden PASS; two stream-arbiter assertions |
 
 The decisive change delays the LMUL4 decoded-weight `vse32` read with three
 independent activation address/load instructions. This prevents the store
@@ -108,13 +101,12 @@ work, and final `vtse32` tile drains are interleaved with independent
 `vtfmm.tvv` operations. DQ-MatMul keeps that optimization in
 `dq_matmul_MT8x2`.
 
-| Kernel | Workload | Implementation | O-POPE cycles | VME cycles | Cycle reduction | Speedup |
-|---|---|---|---:|---:|---:|---:|
-| VQ-MatMul | M64 x N128 x K128 | `MT4x1` | 19,000 | 14,483 | 4,517 | 1.312x |
-| VQ-MatMul | M96 x N128 x K128 | `MT6x2` historical | 23,089 | 19,075 | 4,014 | 1.210x |
-| VQ-MatMul | M96 x N128 x K128 | `MT6x2` optimized | 23,089 | 18,554 | 4,535 | 1.244x |
-| DQ-MatMul | M64 x N128 x K64 | `MT4x1` | 9,709 | 7,521 | 2,188 | 1.291x |
-| DQ-MatMul | M128 x N128 x K64 | `MT8x2` | 13,785 | 13,015 | 770 | 1.059x |
+| Kernel | Workload | Implementation | O-POPE cycles | VME cycles |
+|---|---|---|---:|---:|
+| VQ-MatMul | M64 x N128 x K128 | `MT4x1` | 19,000 | 14,483 |
+| VQ-MatMul | M96 x N128 x K128 | `MT6x2` | 23,089 | 18,554 |
+| DQ-MatMul | M64 x N128 x K64 | `MT4x1` | 9,709 | 7,521 |
+| DQ-MatMul | M128 x N128 x K64 | `MT8x2` | 13,785 | 12,990 |
 
 The component measurements below are useful for locating costs, but are not
 additive because their standalone entry points use different timer boundaries
@@ -122,8 +114,8 @@ from the integrated kernels.
 
 | Kernel | Producer/cache component | Cycles | Consumer component | Cycles | Full kernel | Cycles |
 |---|---|---:|---|---:|---|---:|
-| VQ-MatMul | `MT4x1_cacheW` | 14,869 | `MT2x2` | 5,200 | `MT6x2` | 19,075 historical / 18,554 current |
-| DQ-MatMul | `MT4x1_cacheW` | 7,887 | `MT2x2` | 5,314 | `MT8x2` | 13,015 current |
+| VQ-MatMul | `MT4x1_cacheW` | 14,869 | `MT2x2` | 5,200 | `MT6x2` | 18,554 |
+| DQ-MatMul | `MT4x1_cacheW` | 7,887 | `MT2x2` | 5,314 | `MT8x2` | 12,990 current |
 
 ## Reproduction
 

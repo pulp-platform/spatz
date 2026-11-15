@@ -45,8 +45,11 @@ static inline __attribute__((always_inline)) void set_fp16_matrix_mode(void) {
                  "vle32.v v24, (%0)\n"                                    \
                  "vle32.v v26, (%1)\n"                                    \
                  "vle32.v v28, (%2)\n"                                    \
-                 "vle32.v v30, (%3)"                                      \
-                 :: "r"(QPTR), "r"(KPTR), "r"((QPTR) + 2 * kTile),        \
+                 "vle32.v v30, (%3)\n"                                    \
+                 "addi %0, %0, 256\n"                                    \
+                 "addi %1, %1, 256"                                       \
+                 : "+r"(QPTR), "+r"(KPTR)                                  \
+                 : "r"((QPTR) + 2 * kTile),                                \
                     "r"((KPTR) + 2 * kTile), "r"((uintptr_t)(2 * kTile))   \
                  : "v24", "v25", "v26", "v27", "v28", "v29", "v30",  \
                    "v31", "memory");                                      \
@@ -55,8 +58,6 @@ static inline __attribute__((always_inline)) void set_fp16_matrix_mode(void) {
                  "vtfmm.tvv " TILE ", v25, v27\n"                         \
                  "vtfmm.tvv " TILE ", v28, v30\n"                         \
                  "vtfmm.tvv " TILE ", v29, v31" ::: "memory");           \
-    QPTR += 4 * kTile;                                                     \
-    KPTR += 4 * kTile;                                                     \
   } while (0)
 #elif defined(FLASH_QK_M4) && FLASH_QK_M4
 // Diagnostic only: this faster two-load schedule failed the output check.
@@ -132,7 +133,7 @@ static inline __attribute__((always_inline)) void drain_mt0_and_max(void) {
       "vtmv.v.t v7, t0\n" "addi t0, t0, 1\n" // mv MT0[col=2] -> v7
       "vfmax.vv v2, v2, v5\n"                // max of col=0
       "vtmv.v.t v8, t0\n" "addi t0, t0, 1\n"
-      "vfmax.vv v4, v4, v6\n"                // max of col=1 
+      "vfmax.vv v4, v4, v6\n"                // max of col=1
       "vtmv.v.t v9, t0\n" "addi t0, t0, 1\n"
       "vfmax.vv v2, v2, v7\n"
       "vtmv.v.t v10, t0\n" "addi t0, t0, 1\n"
@@ -159,7 +160,7 @@ static inline __attribute__((always_inline)) void drain_mt0_and_max(void) {
       "vfmax.vv v4, v4, v18\n"
       "vfmax.vv v2, v2, v19\n"                // max of col=14
       "vfmax.vv v4, v4, v20\n"                // max of col=15
-      "vfmax.vv v2, v2, v4"                   // update max -> v2  
+      "vfmax.vv v2, v2, v4"                   // update max -> v2
       ::: "t0", "v4", "memory");
   asm volatile("vfsub.vv v3, v0, v2\n" SOFTMAX_EXP_ASM("v3", "v23")
                :: EXP_INPUTS : "v23", "memory");
@@ -506,84 +507,6 @@ static inline __attribute__((always_inline)) void update_output(
 #endif
 }
 
-#if FLASH_EARLY_DRAIN
-// Four probability source registers are dead after two PV pairs. Refill them
-// from the next score tile while the preceding PV work retires into mt4.
-static inline __attribute__((always_inline)) void update_output_predrain(
-    const uint32_t *v, uint32_t *pair_scratch, uintptr_t score_base) {
-  set_pv_mode();
-  asm volatile("vmv.v.v v2, v0\nvmv.v.v v4, v0" ::: "v4", "memory");
-#if FLASH_EARLY_DRAIN == 2
-#define FLASH_DRAIN_PAIR(A, B, BASE, PAIR)                             \
-  do {                                                                 \
-    set_pv_mode();                                                     \
-    asm volatile("vtmv.v.t " A ", %0\n"                              \
-                 "vtmv.v.t " B ", %1\n"                              \
-                 "vfmax.vv v2, v2, " A "\n"                          \
-                 "vfmax.vv v4, v4, " B                                \
-                 :: "r"((BASE) + 2 * (PAIR)),                         \
-                    "r"((BASE) + 2 * (PAIR) + 1)                     \
-                 : "memory");                                        \
-  } while (0)
-  FLASH_PV_PAIR("v5", "v6", v, pair_scratch);
-  FLASH_DRAIN_PAIR("v5", "v6", score_base, 0);
-  FLASH_PV_PAIR("v7", "v8", v, pair_scratch);
-  FLASH_DRAIN_PAIR("v7", "v8", score_base, 1);
-  FLASH_PV_PAIR("v9", "v10", v, pair_scratch);
-  FLASH_DRAIN_PAIR("v9", "v10", score_base, 2);
-  FLASH_PV_PAIR("v11", "v12", v, pair_scratch);
-  FLASH_DRAIN_PAIR("v11", "v12", score_base, 3);
-  FLASH_PV_PAIR("v13", "v14", v, pair_scratch);
-  FLASH_DRAIN_PAIR("v13", "v14", score_base, 4);
-  FLASH_PV_PAIR("v15", "v16", v, pair_scratch);
-  FLASH_DRAIN_PAIR("v15", "v16", score_base, 5);
-  FLASH_PV_PAIR("v17", "v18", v, pair_scratch);
-  FLASH_DRAIN_PAIR("v17", "v18", score_base, 6);
-  FLASH_PV_PAIR("v19", "v20", v, pair_scratch);
-  FLASH_DRAIN_PAIR("v19", "v20", score_base, 7);
-#undef FLASH_DRAIN_PAIR
-#else
-#define FLASH_DRAIN_QUAD(A, B, C, D, BASE, GROUP)                         \
-  do {                                                                    \
-    set_pv_mode();                                                        \
-    asm volatile("vtmv.v.t " A ", %0\n"                                   \
-                 "vtmv.v.t " B ", %1\n"                                   \
-                 "vtmv.v.t " C ", %2\n"                                   \
-                 "vfmax.vv v2, v2, " A "\n"                               \
-                 "vtmv.v.t " D ", %3\n"                                   \
-                 "vfmax.vv v4, v4, " B "\n"                               \
-                 "vfmax.vv v2, v2, " C "\n"                               \
-                 "vfmax.vv v4, v4, " D                                   \
-                 :: "r"((BASE) + 4 * (GROUP)),                            \
-                    "r"((BASE) + 4 * (GROUP) + 1),                        \
-                    "r"((BASE) + 4 * (GROUP) + 2),                        \
-                    "r"((BASE) + 4 * (GROUP) + 3)                        \
-                 : "memory");                                           \
-  } while (0)
-  FLASH_PV_PAIR("v5", "v6", v, pair_scratch);
-  FLASH_PV_PAIR("v7", "v8", v, pair_scratch);
-  FLASH_DRAIN_QUAD("v5", "v6", "v7", "v8", score_base, 0);
-  FLASH_PV_PAIR("v9", "v10", v, pair_scratch);
-  FLASH_PV_PAIR("v11", "v12", v, pair_scratch);
-  FLASH_DRAIN_QUAD("v9", "v10", "v11", "v12", score_base, 1);
-  FLASH_PV_PAIR("v13", "v14", v, pair_scratch);
-  FLASH_PV_PAIR("v15", "v16", v, pair_scratch);
-  FLASH_DRAIN_QUAD("v13", "v14", "v15", "v16", score_base, 2);
-  FLASH_PV_PAIR("v17", "v18", v, pair_scratch);
-  FLASH_PV_PAIR("v19", "v20", v, pair_scratch);
-  FLASH_DRAIN_QUAD("v17", "v18", "v19", "v20", score_base, 3);
-#undef FLASH_DRAIN_QUAD
-#endif
-}
-
-static inline __attribute__((always_inline)) void finish_predrained_max(void) {
-  set_pv_mode();
-  asm volatile("vfmax.vv v2, v2, v4" ::: "memory");
-  asm volatile("vfsub.vv v3, v0, v2\n" SOFTMAX_EXP_ASM("v3", "v23")
-               :: EXP_INPUTS : "v23", "memory");
-}
-#endif
-
 static inline __attribute__((always_inline)) void normalize_and_store(float *o) {
   set_vector_mode();
   asm volatile(RECIP_ASM("v1", "v2", "v23")
@@ -623,20 +546,15 @@ void __attribute__((noinline, aligned(64))) flashattn_tq16(
                  "the first direct-VRF schedule is T64 D64 DV16");
 
   set_vector_mode();
-  asm volatile("vfmv.v.f v0, %0\nvmv.v.i v1, 0"
+  asm volatile("vfmv.v.f v0, %0\n vmv.v.i v1, 0"
                :: "f"(-1e30f) : "memory");
   set_pv_mode();
   asm volatile("vtzero mt4" ::: "memory");
 
   qk_tile_mt0(q, k);
   for (unsigned stage = 0; stage < kKeyStages; ++stage) {
-#if FLASH_EARLY_DRAIN
-    if (stage == 0) drain_mt0_and_max();
-    else finish_predrained_max();
-#else
     if ((stage & 1u) == 0) drain_mt0_and_max();
     else drain_mt8_and_max();
-#endif
 
     if (stage + 1 < kKeyStages) {
       const uint32_t *next_k =
@@ -654,15 +572,7 @@ void __attribute__((noinline, aligned(64))) flashattn_tq16(
                  :: "r"(output + 16) : "memory");
     scale_output();
     const uint32_t *stage_v = v + stage * (kTile / 2) * kTile;
-#if FLASH_EARLY_DRAIN
-    if (stage + 1 < kKeyStages)
-      update_output_predrain(stage_v, pair_scratch,
-                             (stage & 1u) ? 0x01000000u : 0x41000000u);
-    else
-      update_output(stage_v, pair_scratch);
-#else
     update_output(stage_v, pair_scratch);
-#endif
   }
   normalize_and_store(output);
 }

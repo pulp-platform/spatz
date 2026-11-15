@@ -67,17 +67,12 @@ load ensures the stores have completed before returning.
 
 ## End-to-end RTL results
 
-| Workload | Implementation | RTL cycles | Reduction vs O-POPE | Speedup | Validation |
-|---|---|---:|---:|---:|---|
-| M64, Kred64, Nout128 | O-POPE | 9,709 | -- | 1.000x | reference |
-| M64, Kred64, Nout128 | VME MT4x1 direct | 7,521 | 2,188 | 1.291x | PASS |
-| M128, Kred64, Nout128 | O-POPE | 13,785 | -- | 1.000x | reference |
-| M128, Kred64, Nout128 | VME MT8x2 historical | 13,087 | 698 | 1.053x | PASS; historical ELF |
-| M128, Kred64, Nout128 | VME MT8x2 current | 13,015 | 770 | 1.059x | PASS; zero simulator errors |
-
-The current reproducible full-workload comparison is **13,785 / 13,015 =
-1.059x**. Address/copy cleanup increased the prior 12,928-cycle result by 87
-cycles (0.67%), while preserving golden correctness.
+| Workload | Implementation | RTL cycles | Validation |
+|---|---|---:|---|
+| M64, Kred64, Nout128 | O-POPE | 9,709 | reference |
+| M64, Kred64, Nout128 | VME MT4x1 direct | 7,521 | PASS |
+| M128, Kred64, Nout128 | O-POPE | 13,785 | reference |
+| M128, Kred64, Nout128 | VME MT8x2 | 12,797 | PASS; zero simulator errors |
 
 ## Component measurements
 
@@ -86,10 +81,10 @@ cycles (0.67%), while preserving golden correctness.
 | `MT4x1` direct | 7,521 | complete M64 direct-decode benchmark |
 | `MT4x1_cacheW` | 7,887 | M64 producer that also materializes decoded weights |
 | `MT2x2` | 5,314 | cached-weight consumer/component measurement |
-| `MT8x2` | 13,087 historical / 13,015 current | complete M128 two-panel kernel |
+| `MT8x2` | 12,797 | complete M128 two-panel kernel |
 
 The 7,887- and 5,314-cycle component measurements are diagnostic entry-point
-results, not additive phases of the 13,015-cycle kernel. The integrated kernel
+results, not additive phases of the 12,797-cycle kernel. The integrated kernel
 uses different boundaries and overlaps cache production/consumption support,
 matrix issue, activation loads, and output stores.
 
@@ -107,8 +102,8 @@ are:
 
 | Kernel | Producer/cache component | Cycles | Consumer component | Cycles | Full kernel | Cycles |
 |---|---|---:|---|---:|---|---:|
-| VQ-MatMul | `MT4x1_cacheW` | 14,869 | `MT2x2` | 5,200 | `MT6x2` | 19,075 historical / 18,554 current |
-| DQ-MatMul | `MT4x1_cacheW` | 7,887 | `MT2x2` | 5,314 | `MT8x2` | 13,015 current |
+| VQ-MatMul | `MT4x1_cacheW` | 14,869 | `MT2x2` | 5,200 | `MT6x2` | 18,554 |
+| DQ-MatMul | `MT4x1_cacheW` | 7,887 | `MT2x2` | 5,314 | `MT8x2` | 12,797 current |
 
 ## Reproduction
 

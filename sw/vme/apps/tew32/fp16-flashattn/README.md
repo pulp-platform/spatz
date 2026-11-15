@@ -9,8 +9,8 @@ scores, softmax metadata and outputs are FP32.
 | Workload | Target | Recorded RTL cycles |
 |---|---|---:|
 | `Tq16,T64,d64,dv16` | `test-vme-fp16-flashattn-vrf_TQ16_T64_D64_DV16` | 6,036 |
-| `Tq64,T64,d64,dv64,Bc64` | `test-vme-fp16-flashattn-key64-single_TQ64_T64_D64_DV64` | 20,177 |
-| `Tq64,T256,d64,dv64,Bc64` | `test-vme-fp16-flashattn-global-max4_TQ64_T256_D64_DV64` | 73,859 |
+| `Tq64,T64,d64,dv64,Bc64` | `test-vme-fp16-flashattn-key64-single_TQ64_T64_D64_DV64` | 20,313 |
+| `Tq64,T256,d64,dv64,Bc64` | `test-vme-fp16-flashattn-global-max4_TQ64_T256_D64_DV64` | 73,616 |
 
 The TQ16 kernel is a small direct-VRF schedule. The TQ64 kernel uses 64-key
 blocks; for T256 it makes all four score blocks resident, computes one global
@@ -61,9 +61,8 @@ counters are needed; these counters perturb the production cycle count.
 ## Results and algorithm notes
 
 The direct TQ16 target passed RTL golden checking at 6,036 cycles on
-2026-11-14; its earlier ELF measured 6,055 cycles. The exponential remains the
-degree-5 Taylor approximation with six squarings used by the matched O-POPE
-benchmark.
+2026-11-14. The exponential remains the degree-5 Taylor approximation with
+six squarings used by the matched O-POPE benchmark.
 
-For T256, the matched optimized O-POPE result is 85,869 cycles; VME's current
-73,859-cycle result is 12,010 cycles faster.
+For T256, the current VME result is 73,616 cycles and the matched optimized
+O-POPE reference is 85,869 cycles.
