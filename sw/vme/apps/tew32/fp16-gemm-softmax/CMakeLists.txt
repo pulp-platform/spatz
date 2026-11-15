@@ -11,7 +11,7 @@ if(BUILD_TESTS AND "te16" IN_LIST VME_TILE_VARIANT)
         file(WRITE "${_config}" "{ M: 64, N: 64, K: ${_k}, TM: 16, TN: 16, seed: 42 }\n")
         add_custom_command(
             OUTPUT "${_header}"
-            COMMAND ${Python3_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/script/gen_data.py" -c "${_config}"
+            COMMAND ${PYTHON} "${CMAKE_CURRENT_SOURCE_DIR}/script/gen_data.py" -c "${_config}"
             DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/script/gen_data.py" "${_config}"
                     "${CMAKE_CURRENT_SOURCE_DIR}/data/layer.h"
             VERBATIM)

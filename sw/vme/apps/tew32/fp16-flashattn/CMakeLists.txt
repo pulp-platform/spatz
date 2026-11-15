@@ -8,7 +8,7 @@ set(_direct_header "${CMAKE_CURRENT_BINARY_DIR}/data/data_tq16_t64_d64_dv16.h")
 
 add_custom_command(
     OUTPUT "${_flash_header}"
-    COMMAND ${Python3_EXECUTABLE}
+    COMMAND ${PYTHON}
             "${CMAKE_CURRENT_SOURCE_DIR}/script/gen_data_tq64.py"
             --output "${_flash_header}"
     DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/script/gen_data_tq64.py"
@@ -16,7 +16,7 @@ add_custom_command(
     VERBATIM)
 add_custom_command(
     OUTPUT "${_key64_header}"
-    COMMAND ${Python3_EXECUTABLE}
+    COMMAND ${PYTHON}
             "${CMAKE_CURRENT_SOURCE_DIR}/script/gen_data_tq64.py"
             --output "${_key64_header}" --T 64
     DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/script/gen_data_tq64.py"
@@ -24,7 +24,7 @@ add_custom_command(
     VERBATIM)
 add_custom_command(
     OUTPUT "${_direct_header}"
-    COMMAND ${Python3_EXECUTABLE}
+    COMMAND ${PYTHON}
             "${CMAKE_CURRENT_SOURCE_DIR}/script/gen_data_tq16.py"
             --output "${_direct_header}"
     DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/script/gen_data_tq16.py"

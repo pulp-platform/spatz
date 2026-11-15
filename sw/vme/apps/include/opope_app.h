@@ -1,0 +1,133 @@
+// VME copy of baseline_spatz/sw/opopeBenchmarks/include/opope_app.h without the O-POPE HWPE parts
+// Copyright 2025 ETH Zurich and University of Bologna.
+// Licensed under the Apache License, Version 2.0, see LICENSE for details.
+// SPDX-License-Identifier: Apache-2.0
+
+// Common definitions of the O-POPE + Spatz applications.
+//
+// O-POPE computes Z = Y + X*W in FP32 (X: MxN, W: NxK, Y/Z: MxK), in place over Y, with
+//   - X stored TRANSPOSED in memory: element X[m][n] is at xT[n*M + m],
+//   - W and Y/Z stored row-major.
+// A plain matmul is obtained by zero-filling Y.
+
+#ifndef OPOPE_APP_H
+#define OPOPE_APP_H
+
+// Enable snRuntime printf (PRINTF is a no-op otherwise)
+#ifndef __SNRT_USE_PRINT
+#define __SNRT_USE_PRINT
+#endif
+
+#include <benchmark.h>
+#include <debug.h>
+#include <snrt.h>
+#include <stdint.h>
+#include <stdio.h>
+
+// (VME) no HWPE: hal_opope.h and the O-POPE GeMM wrappers are not needed
+
+#ifdef OPOPE_VERBOSE
+#define OPOPE_VERBOSE_CHECK 1
+#else
+#define OPOPE_VERBOSE_CHECK 0
+#endif
+
+// Phase tracing, enabled with -DOPOPE_VERBOSE (useful to locate hangs)
+#ifdef OPOPE_VERBOSE
+#define OPOPE_TRACE(...) PRINTF(__VA_ARGS__)
+#else
+#define OPOPE_TRACE(...) ((void)0)
+#endif
+
+#define OPOPE_MAX(a, b) ((a) > (b) ? (a) : (b))
+#define OPOPE_MIN(a, b) ((a) < (b) ? (a) : (b))
+
+// Allocate `count` elements of `type` in L1 (the O-POPE only accesses the TCDM). Returns -1 from
+// the calling function if the L1 is exhausted.
+#define OPOPE_L1_ALLOC(ptr, type, count)                                    \
+  do {                                                                      \
+    (ptr) = (type *)snrt_l1alloc((count) * sizeof(type));                   \
+    if ((ptr) == 0) {                                                       \
+      PRINTF("L1 allocation of %u bytes failed\n",                          \
+             (unsigned)((count) * sizeof(type)));                           \
+      return -1;                                                            \
+    }                                                                       \
+  } while (0)
+
+// Wait until all the vector memory operations issued so far have completed: the scalar core cannot
+// issue a load while Spatz memory requests are in flight, so a dummy scalar load from the TCDM
+// drains them. `tcdm_ptr` must point into the L1.
+//
+// CAUTION with STRIDED vector accesses (vlse32/vsse32) on this cluster: with some strides and
+// addresses (observed: 320 B and 128 B, with two accesses back to back) the VLSU never completes
+// (the simulation looks hung), while stride 8 B (de/interleaving 32-bit pairs) is fine. Do not
+// use strides other than 8 B; avoid transposes through strided accesses (lay the data out so that
+// no transpose is needed). Also avoid odd vl with strided accesses (the last element is wrong).
+// Drain after strided accesses to keep a single one in flight.
+static inline void opope_vsync(const void *tcdm_ptr) { (void)*(volatile uint32_t *)tcdm_ptr; }
+
+// FP32 GeMM on O-POPE: Z = Y + X*W (see above for the layouts). Returns when the job is done.
+// The core sleeps on the O-POPE end-of-job event (machine external interrupt).
+
+
+// Widening FP16 -> FP32 GeMM on O-POPE (SDOTP datapath): Z = Y + X*W with FP16 X (MxN) and W (NxK) and
+// FP32 Y/Z (MxK). Two FP16 values are packed per 32-bit word ALONG N (N must be even):
+//   xT[p][m] = { X[m][2p] (bits 15:0), X[m][2p+1] (bits 31:16) }   p = 0..N/2-1  ([N/2][M] words)
+//   w [p][j] = { W[2p][j], W[2p+1][j] }                                          ([N/2][K] words)
+
+
+// O-POPE constraint (observed): M must be a multiple of 16. Otherwise the job processes M rounded up
+// to a multiple of 16 and also WRITES the extra rows past the end of Z (garbage), corrupting
+// whatever follows Z in memory (N and K may be any size >= 16). Use the assert in the data
+// generators, or pad Z with extra rows.
+
+// Compare FP32 arrays: |a - g| <= abs_tol + rel_tol * |g|. Returns the number of mismatches.
+static inline int opope_check_fp32(const float *actual, const float *golden, unsigned int len,
+                                   float rel_tol, float abs_tol) {
+  int errors = 0;
+  for (unsigned int i = 0; i < len; i++) {
+    float d = actual[i] - golden[i];
+    if (d < 0) d = -d;
+    float g = golden[i] < 0 ? -golden[i] : golden[i];
+    if (!(d <= abs_tol + rel_tol * g)) {  // also catches NaN
+      if (errors == 0 || (errors < 8 && OPOPE_VERBOSE_CHECK))
+        // (no FP division on this cluster, so printf("%f") would trap: print the raw bits)
+        PRINTF("Mismatch @ %u: got 0x%x, expected 0x%x\n", i, ((const uint32_t *)actual)[i],
+               ((const uint32_t *)golden)[i]);
+      errors++;
+    }
+  }
+  return errors;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Small RVV helpers (FP32, LMUL=8, 1-D loops)
+// ---------------------------------------------------------------------------------------------
+
+// dst[0..n) = 0
+static inline void opope_vzero(float *dst, unsigned int n) {
+  unsigned int vl;
+  while (n > 0) {
+    asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(n));
+    asm volatile("vmv.v.i v0, 0");
+    asm volatile("vse32.v v0, (%0)" ::"r"(dst) : "memory");
+    dst += vl;
+    n -= vl;
+  }
+}
+
+
+// Zero-fill a TCDM buffer with the cluster DMA (initial data placement: call it before start_kernel(), exactly
+// like the other operand transfers). Y of a plain GeMM (Z = X*W) is such a buffer.
+static uint32_t opope_zero_src[256] __attribute__((section(".data"))) = {0};
+static inline void opope_dma_zero(void *dst, unsigned int bytes) {
+  uint8_t *d = (uint8_t *)dst;
+  while (bytes > 0) {
+    unsigned int n = bytes < sizeof(opope_zero_src) ? bytes : (unsigned int)sizeof(opope_zero_src);
+    snrt_dma_start_1d(d, opope_zero_src, n);
+    d += n;
+    bytes -= n;
+  }
+}
+
+#endif  // OPOPE_APP_H
