@@ -1,0 +1,14 @@
+// Copyright 2020 ETH Zurich and University of Bologna.
+// Solderpad Hardware License, Version 0.51, see LICENSE for details.
+// SPDX-License-Identifier: SHL-0.51
+
+// Parameters for LOAD_SOFT_BITS
+
+{
+    kernel: "LOAD_SOFT_BITS"
+    lifting_size: 1024,
+    num_cores: 1,
+    buffer_nodes: 8,
+    valid_frac: 0.75,
+    tail_frac:  0.1
+}

@@ -1,0 +1,13 @@
+// Copyright 2026 ETH Zurich and University of Bologna.
+// Solderpad Hardware License, Version 0.51, see LICENSE for details.
+// SPDX-License-Identifier: SHL-0.51
+
+// Parameters for Compute var to check
+{
+    kernel: "COMPUTE_VAR_TO_CHECK"
+    lifting_size: 14,
+    num_cores: 1,
+    inf_prob: 0.05,
+    equal_prob: 0.05,
+    saturate_prob: 0.15 
+}

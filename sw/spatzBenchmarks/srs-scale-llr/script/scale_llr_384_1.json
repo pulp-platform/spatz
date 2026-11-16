@@ -1,0 +1,11 @@
+// Copyright 2020 ETH Zurich and University of Bologna.
+// Solderpad Hardware License, Version 0.51, see LICENSE for details.
+// SPDX-License-Identifier: SHL-0.51
+
+// Parameters for scale_llr
+{
+    kernel: "SCALE_LLR"
+    lifting_size: 384,
+    num_cores: 1,
+    inf_prob: 0.01
+}

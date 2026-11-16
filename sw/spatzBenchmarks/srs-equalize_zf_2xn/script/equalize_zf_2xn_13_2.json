@@ -1,0 +1,15 @@
+// Copyright 2026 ETH Zurich and University of Bologna.
+// Solderpad Hardware License, Version 0.51, see LICENSE for details.
+// SPDX-License-Identifier: SHL-0.51
+
+
+// Parameters for equalize_zf_2xn
+{
+    kernel: "EQUALIZE_ZF_2XN"
+    nof_re: 13,
+    rx_ports: 2,
+    tx_scaling: 1.0,
+    noise_var: 0.1
+}
+
+

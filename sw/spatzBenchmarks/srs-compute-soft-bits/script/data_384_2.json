@@ -1,0 +1,13 @@
+// Copyright 2020 ETH Zurich and University of Bologna.
+// Solderpad Hardware License, Version 0.51, see LICENSE for details.
+// SPDX-License-Identifier: SHL-0.51
+
+// Parameters for Compute soft bits
+{
+    kernel: "COMPUTE_SOFT_BITS"
+    lifting_size: 384,
+    num_cores: 2,
+    inf_prob: 0.05,
+    opposite_prob: 0.05,
+    saturate_prob: 0.15 
+}

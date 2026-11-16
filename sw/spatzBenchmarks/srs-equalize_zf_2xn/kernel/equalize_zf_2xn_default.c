@@ -1,0 +1,168 @@
+#include "equalize_zf_2xn.h"
+#include <stddef.h>
+#include <snrt.h>
+#include <float.h>
+#include <stdint.h>
+#include <stdbool.h>
+#include <string.h>
+
+void equalize_zf_2xn_default(float *eq_symbols, float *noise_vars, const uint16_t *ch_symbols,
+    const uint16_t *ch_estimates, const float noise_var_est, float tx_scaling, uint32_t nof_re, uint32_t rx_ports) {
+  uint32_t remaining = nof_re;
+  uint32_t vl;
+  uint32_t stride = 4;
+  uint32_t stride2 = 8;
+  uint32_t stride4 = 16;
+  uint32_t pos_normal = 1 << 6;
+  uint32_t inf = 0x7F800000;
+  uint32_t normal = 0x42;
+  float one = 1.0f;
+  // temp var
+  uint32_t sub_min = 0xFF800000;
+  uint32_t lim     = 0x7F000000;
+  uint32_t nof_layers = 2;
+  uint32_t bits;
+  memcpy(&bits, &noise_var_est, sizeof(bits));
+  if ((bits - 0x00800000u) >= 0x7F000000u) {
+    asm volatile("vsetvli  %0, %1, e32, m8, ta, mu" : "=r"(vl): "r"(remaining));
+    asm volatile("vmv.v.i v8,  0");
+    asm volatile("vmv.v.x v16,  %0" :: "r"(inf));
+    do {
+      asm volatile("vsetvli  %0, %1, e32, m8, ta, mu" : "=r"(vl): "r"(remaining));
+      // eq_symbols = 0, noise_vars = inf,
+      asm volatile("vse32.v v8, (%0)" :: "r"(eq_symbols) : "memory");
+      asm volatile("vse32.v v8, (%0)" :: "r"(eq_symbols + nof_re) : "memory");
+      asm volatile("vse32.v v8, (%0)" :: "r"(eq_symbols + 2 * nof_re) : "memory");
+      asm volatile("vse32.v v8, (%0)" :: "r"(eq_symbols + 3 * nof_re) : "memory");
+      asm volatile("vse32.v v16, (%0)" :: "r"(noise_vars) : "memory");
+      asm volatile("vse32.v v16, (%0)" :: "r"(noise_vars + nof_re) : "memory");
+
+      remaining  -= vl;
+      eq_symbols += vl;
+      noise_vars += vl;
+      } while (remaining > 0);
+    return;
+  }
+  float nv_scaled = noise_var_est / tx_scaling;
+
+  asm volatile("csrwi 0x800, 0x2");
+  do {
+  asm volatile("vsetvli %0, zero, e32, m8, ta, mu" : "=r"(vl));
+  asm volatile("vmv.v.i v0,  0");
+  asm volatile("vmv.v.i v8, 0");
+  asm volatile("vmv.v.i v16, 0");
+  asm volatile("vmv.v.i v24, 0");
+  asm volatile("vsetvli %0, %1, e16, m1, ta, mu" : "=r"(vl) : "r"(remaining));
+
+  for (uint32_t i_port = 0; i_port < rx_ports; i_port++) {
+    // load ch estimates layer 0, Re part 
+    asm volatile("vlse16.v v1, (%0), %1" :: "r"(ch_estimates + i_port * 2 * nof_re), "r"(stride) : "memory");
+    // load ch estimates layer 0, Im part 
+    asm volatile("vlse16.v v2, (%0), %1" :: "r"(ch_estimates + i_port * 2 * nof_re + 1), "r"(stride) : "memory");
+    // load ch estimates layer 1, Re part 
+    asm volatile("vlse16.v v3, (%0), %1" :: "r"(ch_estimates + (rx_ports + i_port) * 2 * nof_re), "r"(stride) : "memory");
+    // load ch estimates layer 1, Im part 
+    asm volatile("vlse16.v v4, (%0), %1" :: "r"(ch_estimates + (rx_ports + i_port) * 2 * nof_re + 1), "r"(stride) : "memory");
+    // Calculate norm layer 1
+    asm volatile("vfwmacc.vv v6, v1, v1");
+    asm volatile("vfwmacc.vv v6, v2, v2");
+    // Calculate norm layer 2
+    asm volatile("vfwmacc.vv v8, v3, v3");
+    asm volatile("vfwmacc.vv v8, v4, v4");
+    // Calculate the anti-diagonal coefficients, which are xi and xi_conj.
+    // xi.re
+    asm volatile("vfwmacc.vv v10, v1, v3");
+    asm volatile("vfwmacc.vv v10, v2, v4");
+    // xi.im
+    asm volatile("vfwmacc.vv v12, v1, v4");
+    asm volatile("vfwnmsac.vv v12, v2, v3");
+
+    // load re_in layer 0, Re part 
+    asm volatile("vlse16.v v5, (%0), %1" :: "r"(ch_symbols + i_port * 2 * nof_re), "r"(stride) : "memory");
+    // load re_in layer 0, Im part 
+    asm volatile("vlse16.v v14, (%0), %1" :: "r"(ch_symbols + i_port * 2 * nof_re + 1), "r"(stride) : "memory");
+
+    // matched_input channel 0
+    asm volatile("vfwmacc.vv v18, v1, v5");
+    asm volatile("vfwmacc.vv v18, v2, v14");
+
+    asm volatile("vfwmacc.vv v20, v1, v14");
+    asm volatile("vfwnmsac.vv v20, v2, v5");
+
+    // matched_input channel 1
+    asm volatile("vfwmacc.vv v22, v3, v5");
+    asm volatile("vfwmacc.vv v22, v4, v14");
+
+    asm volatile("vfwmacc.vv v24, v3, v14");
+    asm volatile("vfwnmsac.vv v24, v4, v5");
+  }
+  
+  asm volatile("vsetvli  %0, %1, e32, m2, ta, mu" : "=r"(vl): "r"(remaining));
+  // Calculate xi_mod_sq 
+  asm volatile("vfmul.vv v26, v10, v10");
+  asm volatile("vfmacc.vv v26, v12, v12");
+  // Calculate the denominators. (d_pinv)
+  asm volatile("vfmsac.vv v26, v6, v8");
+  asm volatile("vfmul.vf v26, v26, %0" :: "f"(tx_scaling));
+  // d_nvars
+
+  asm volatile("vfclass.v v30, v26");
+  asm volatile("vand.vx v30, v30, %0" :: "r"(normal));
+  asm volatile("vmsne.vi v0, v30, 0");
+
+  asm volatile("vfmv.v.f  v2, %0" :: "f"(one));
+
+  // Apply Zero Forcing algorithm. This is equivalent to multiplying the input signal with the pseudo-inverse of the
+  // channel matrix.
+  // Re part
+  asm volatile("vfmul.vv v16, v8, v18");
+  asm volatile("vfnmsac.vv v16, v10, v22");
+  asm volatile("vfmacc.vv v16, v12, v24");
+  asm volatile("vmv.v.i v30, 0");
+  // Calculate d_pinv_rcp
+  asm volatile("vfdiv.vv v4, v2, v26");
+  asm volatile("vfmul.vv v30, v16, v4, v0.t");
+  asm volatile("vsse32.v v30, (%0), %1" :: "r"(eq_symbols), "r"(stride4) : "memory");
+  // Im part
+  asm volatile("vfmul.vv v16, v8, v20");
+  asm volatile("vfnmsac.vv v16, v10, v24");
+  asm volatile("vfnmsac.vv v16, v12, v22");
+  asm volatile("vmv.v.i v30, 0");
+  asm volatile("vfmul.vv v30, v16, v4, v0.t");
+  asm volatile("vsse32.v v30, (%0), %1" :: "r"(eq_symbols+1), "r"(stride4) : "memory");
+
+  // Re part
+  asm volatile("vfmul.vv v16, v6, v22");
+  asm volatile("vfnmsac.vv v16, v10, v18");
+  asm volatile("vfnmsac.vv v16, v12, v20");
+  asm volatile("vmv.v.i v30, 0");
+  asm volatile("vfmul.vv v30, v16, v4, v0.t");
+  asm volatile("vsse32.v v30, (%0), %1" :: "r"(eq_symbols+2), "r"(stride4) : "memory");
+  // Im part
+  asm volatile("vfmul.vv v16, v6, v24");
+  asm volatile("vfnmsac.vv v16, v10, v20");
+  asm volatile("vfmacc.vv v16, v12, v18");
+  asm volatile("vmv.v.i v30, 0");
+  asm volatile("vfmul.vv v30, v16, v4, v0.t");
+  asm volatile("vsse32.v v30, (%0), %1" :: "r"(eq_symbols+3), "r"(stride4) : "memory");
+  // Calculate post-equalization noise variances.
+  // noise_vars L0 = nv * norm1 * d_nvars_rcp
+  asm volatile("vfmul.vf v16, v8, %0" :: "f"(nv_scaled));
+  asm volatile("vmv.v.x  v30, %0"     :: "r"(inf));
+  asm volatile("vfmul.vv v30, v16, v4, v0.t");
+  asm volatile("vsse32.v v30, (%0), %1" :: "r"(noise_vars), "r"(stride2) : "memory");
+
+  // noise_vars L1 = nv * norm0 * d_nvars_rcp
+  asm volatile("vfmul.vf v16, v6, %0" :: "f"(nv_scaled));
+  asm volatile("vmv.v.x  v30, %0"     :: "r"(inf));
+  asm volatile("vfmul.vv v30, v16, v4, v0.t");
+  asm volatile("vsse32.v v30, (%0), %1" :: "r"(noise_vars + 1), "r"(stride2) : "memory");
+
+  remaining    -= vl;
+  ch_symbols   += 2 * vl;
+  ch_estimates += 2 * vl;
+  eq_symbols   += 4 * vl;
+  noise_vars   += 2 * vl;
+
+  } while (remaining > 0);
+}
