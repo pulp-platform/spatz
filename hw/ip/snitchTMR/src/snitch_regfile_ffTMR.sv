@@ -29,6 +29,7 @@ module snitch_regfileTMR #(
   parameter int unsigned ADDR_WIDTH     = 4
 )(
   input logic clk_i,
+  input logic rst_ni,
   input logic [NR_READ_PORTS - 1:0] [ADDR_WIDTH - 1:0] raddr_iA,
   input logic [NR_READ_PORTS - 1:0] [ADDR_WIDTH - 1:0] raddr_iB,
   input logic [NR_READ_PORTS - 1:0] [ADDR_WIDTH - 1:0] raddr_iC,
@@ -105,64 +106,85 @@ always_comb
     end
   end
 
-always_ff @( posedge clk_iA )
+always_ff @( posedge clk_iA or negedge rst_ni )
   begin : register_write_behavioralA
-    for(int unsigned j = 0; j<NR_WRITE_PORTS; j++)
-    begin
-      for(int unsigned i = 0; i<NumWords; i++)
+    if (!rst_ni)
       begin
-        if (we_decA[j][i])
+        memA <= '0;
+      end
+    else
+      begin
+      for(int unsigned j = 0; j<NR_WRITE_PORTS; j++)
+      begin
+        for(int unsigned i = 0; i<NumWords; i++)
+        begin
+          if (we_decA[j][i])
+            begin
+              memA[i] <= wdata_iVotedA[j];
+            end
+
+        end
+        if (ZERO_REG_ZERO)
           begin
-            memA[i] <= wdata_iVotedA[j];
+            memA[0] <= '0;
           end
 
       end
-      if (ZERO_REG_ZERO)
-        begin
-          memA[0] <= '0;
-        end
-
-    end
+      end
   end
 
-always_ff @( posedge clk_iB )
+always_ff @( posedge clk_iB or negedge rst_ni )
   begin : register_write_behavioralB
-    for(int unsigned j = 0; j<NR_WRITE_PORTS; j++)
-    begin
-      for(int unsigned i = 0; i<NumWords; i++)
+    if (!rst_ni)
       begin
-        if (we_decB[j][i])
+        memB <= '0;
+      end
+    else
+      begin
+      for(int unsigned j = 0; j<NR_WRITE_PORTS; j++)
+      begin
+        for(int unsigned i = 0; i<NumWords; i++)
+        begin
+          if (we_decB[j][i])
+            begin
+              memB[i] <= wdata_iVotedB[j];
+            end
+
+        end
+        if (ZERO_REG_ZERO)
           begin
-            memB[i] <= wdata_iVotedB[j];
+            memB[0] <= '0;
           end
 
       end
-      if (ZERO_REG_ZERO)
-        begin
-          memB[0] <= '0;
-        end
-
-    end
+      end
   end
 
-always_ff @( posedge clk_iC )
+always_ff @( posedge clk_iC or negedge rst_ni )
   begin : register_write_behavioralC
-    for(int unsigned j = 0; j<NR_WRITE_PORTS; j++)
-    begin
-      for(int unsigned i = 0; i<NumWords; i++)
+    if (!rst_ni)
       begin
-        if (we_decC[j][i])
+        memC <= '0;
+      end
+    else
+      begin
+      for(int unsigned j = 0; j<NR_WRITE_PORTS; j++)
+      begin
+        for(int unsigned i = 0; i<NumWords; i++)
+        begin
+          if (we_decC[j][i])
+            begin
+              memC[i] <= wdata_iVotedC[j];
+            end
+
+        end
+        if (ZERO_REG_ZERO)
           begin
-            memC[i] <= wdata_iVotedC[j];
+            memC[0] <= '0;
           end
 
       end
-      if (ZERO_REG_ZERO)
-        begin
-          memC[0] <= '0;
-        end
-
-    end
+      end
   end
 for(genvar i = 0; i<NR_READ_PORTS; i++)
   begin : gen_read_port
