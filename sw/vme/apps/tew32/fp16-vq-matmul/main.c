@@ -2,7 +2,7 @@
 #include <snrt.h>
 #include <stdint.h>
 
-#include "ope_runtime.h"
+#include "runtime.h"
 #include DATAHEADER
 #include "kernel/matmul.h"
 

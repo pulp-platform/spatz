@@ -76,7 +76,7 @@ function(add_fp16_vse_variant precision variant source_dir)
         add_custom_command(
             OUTPUT "${_header}"
             COMMAND ${CMAKE_COMMAND} -E make_directory "${_variant_data_dir}"
-            COMMAND ${PYTHON} "${_variant_script}" -c "${_config}"
+            COMMAND ${Python3_EXECUTABLE} "${_variant_script}" -c "${_config}"
             DEPENDS "${_variant_script}" "${_config}"
                     "${source_dir}/data/layer.h"
             VERBATIM)
@@ -124,9 +124,12 @@ foreach(_precision IN ITEMS ${VME_TILE_VARIANT})
             add_fp16_vse_variant(${_precision} unrolled-store-interleave
                 "${CMAKE_CURRENT_SOURCE_DIR}/${_precision}/unrolled/store_interleave/K${_k}"
                 "${_unrolled_shape}")
-            add_fp16_vse_variant(${_precision} unrolled-vsetvl
-                "${CMAKE_CURRENT_SOURCE_DIR}/${_precision}/unrolled/vsetvl/K${_k}"
+            add_fp16_vse_variant(${_precision} unrolled-store-group
+                "${CMAKE_CURRENT_SOURCE_DIR}/${_precision}/unrolled/store_group/K${_k}"
                 "${_unrolled_shape}")
+            # Do not build the stale FP32-style consecutive-register schedule.
+            # With FP16 matrix mode, its interleaved e32 loads use EMUL=2 and
+            # odd destination bases are architecturally illegal.
         endforeach()
     else()
         # Build all te32 LMUL=2 scheduling variants.

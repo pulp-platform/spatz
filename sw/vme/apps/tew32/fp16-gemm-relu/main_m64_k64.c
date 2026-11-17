@@ -1,17 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <printf.h>
+#include "runtime.h"
 #include <snrt.h>
 
 #include "gemm.h"
 #include "data/data_64_64_64.h"
 #include "kernel/gemm.c"
-
-static inline uint32_t get_cycle(void) {
-  uint32_t cycle;
-  asm volatile("csrr %0, mcycle" : "=r"(cycle) :: "memory");
-  return cycle;
-}
 
 static inline uint32_t float_bits(float value) {
   union { float f; uint32_t u; } bits = {.f = value};

@@ -7,7 +7,7 @@ endif()
 if(BUILD_TESTS)
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/bin/logs")
     set(_target fp16-gemm-relu-fused_M192_N64_K128)
-    add_snitch_test(${_target} "${CMAKE_CURRENT_SOURCE_DIR}/fused/main.c")
+    add_snitch_test(${_target} "${CMAKE_CURRENT_SOURCE_DIR}/main.c")
     set(_test_target "test-${SNITCH_TEST_PREFIX}${_target}")
     target_include_directories(${_test_target} PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}/kernel")

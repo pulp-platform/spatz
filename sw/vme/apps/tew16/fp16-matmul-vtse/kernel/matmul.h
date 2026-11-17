@@ -31,14 +31,6 @@ enum {
 };
 
 // Read the hardware cycle counter.
-static inline uint32_t get_cycle(void)
-{
-    uint32_t c;
-    asm volatile("csrr %0, mcycle" : "=r"(c));
-    return c;
-}
-
-
 // FP16 VME matmul over TE=16. One logical block is 4*TE by 2*TE:
 //
 //   mt0/mt4/mt8/mt12  = A0/A1/A2/A3 * B0

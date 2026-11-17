@@ -3,7 +3,7 @@
 #include <printf.h>
 #include <snrt.h>
 
-#include "ope_runtime.h"
+#include "runtime.h"
 #include DATAHEADER
 #include "kernel/flashattn.h"
 
@@ -55,8 +55,8 @@ int main(void) {
   snrt_dma_start_1d(b.v, fa_vw_dram, sizeof(fa_vw_dram));
   snrt_dma_start_1d(b.row_max, fa_m_dram, sizeof(fa_m_dram));
   snrt_dma_wait_all();
-  ope_vzero(b.row_sum, TQ);          // row-wise sum (vector) is initialized to 0
-  ope_vzero(b.output, DV_SIZE * TQ); // output[TQ, DV] (matrix) is initialized to 0
+  transformer_vzero(b.row_sum, TQ);          // row-wise sum (vector) is initialized to 0
+  transformer_vzero(b.output, DV_SIZE * TQ); // output[TQ, DV] (matrix) is initialized to 0
 
   flashattn_tq64_configure(&b);
   const unsigned begin = get_cycle();
@@ -66,7 +66,7 @@ int main(void) {
   PRINTF("\n----- fp16 flashattn fused Tq%d T%d d%d -----\n", TQ, T_SIZE, D_SIZE);
   PRINTF("The execution took %u cycles.\n", cycles);
   print_stage_counters();
-  const int errors = ope_check_fp32(b.output, (const float *)fa_golden,
+  const int errors = transformer_check_fp32(b.output, (const float *)fa_golden,
                                     DV_SIZE * TQ, 1e-3f, 1e-3f);
   PRINTF(errors ? "FAIL: %d mismatches\n" : "PASS\n", errors);
   return errors ? 1 : 0;

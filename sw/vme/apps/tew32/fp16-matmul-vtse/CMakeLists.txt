@@ -75,7 +75,7 @@ function(add_fp16_vtse_variant precision variant source_dir)
         add_custom_command(
             OUTPUT "${_header}"
             COMMAND ${CMAKE_COMMAND} -E make_directory "${_variant_data_dir}"
-            COMMAND ${PYTHON} "${_variant_script}" -c "${_config}"
+            COMMAND ${Python3_EXECUTABLE} "${_variant_script}" -c "${_config}"
             DEPENDS "${_variant_script}" "${_config}"
                     "${source_dir}/data/layer.h"
             VERBATIM)
@@ -129,8 +129,9 @@ foreach(_precision IN ITEMS ${VME_TILE_VARIANT})
         add_fp16_vtse_variant(${_precision} unrolled-store-interleave
             "${CMAKE_CURRENT_SOURCE_DIR}/${_precision}/unrolled/store_interleave/K${_k}"
             "${_unrolled_shape}")
-        add_fp16_vtse_variant(${_precision} unrolled-vsetvl
-            "${CMAKE_CURRENT_SOURCE_DIR}/${_precision}/unrolled/vsetvl/K${_k}"
-            "${_unrolled_shape}")
+        # FP16 widening leaves the matrix operand view at SEW=16.  The old
+        # unrolled-vsetvl sources interleave e32 loads into consecutive vector
+        # registers after msetmtype, which makes odd bases illegal (EMUL=2).
+        # Keep those experimental sources out of the validated target matrix.
     endforeach()
 endforeach()

@@ -2,7 +2,7 @@ find_package(Python3 COMPONENTS Interpreter REQUIRED)
 
 set(dq_header "${CMAKE_CURRENT_BINARY_DIR}/data_mt4_m128_n64_k128_cbw16.h")
 add_custom_command(OUTPUT "${dq_header}"
-  COMMAND ${PYTHON} "${CMAKE_CURRENT_SOURCE_DIR}/script/gen_mt4x1_data.py"
+  COMMAND ${Python3_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/script/gen_mt4x1_data.py"
           --m 128 --output "${dq_header}"
   DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/script/gen_mt4x1_data.py"
   VERBATIM)

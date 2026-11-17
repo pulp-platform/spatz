@@ -2,7 +2,7 @@ find_package(Python3 COMPONENTS Interpreter REQUIRED)
 
 set(vq_header "${CMAKE_CURRENT_BINARY_DIR}/data/data_m96_n128_k128.h")
 add_custom_command(OUTPUT "${vq_header}"
-  COMMAND ${PYTHON} "${CMAKE_CURRENT_SOURCE_DIR}/script/gen_opope_data.py"
+  COMMAND ${Python3_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/script/gen_opope_data.py"
           --config "${CMAKE_CURRENT_SOURCE_DIR}/script/m96_n128_k128.json"
           --output "${vq_header}"
   DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/script/gen_opope_data.py"

@@ -1,6 +1,6 @@
 #include <printf.h>
 #include <snrt.h>
-#include "ope_runtime.h"
+#include "runtime.h"
 #include DATAHEADER
 #include "kernel/dq_matmul_mt8x2.h"
 

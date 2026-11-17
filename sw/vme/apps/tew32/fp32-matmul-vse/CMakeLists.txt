@@ -46,14 +46,18 @@ function(add_fp32_vse_variant precision variant source_dir)
         math(EXPR _panel_bytes
              "32 * ${_tile_edge} * ${_k} + 64 * ${_tile_edge} * ${_tile_edge}")
         math(EXPR _double_buffer_bytes "2 * ${_panel_bytes}")
-        if(_double_buffer_bytes GREATER SNRT_TCDM_SIZE)
+        if(_panel_bytes GREATER SNRT_TCDM_SIZE)
             message(STATUS
                 "Skipping FP32 VSE ${precision}/${variant} M${_m} N${_n} K${_k}: "
-                "double buffering requires ${_double_buffer_bytes} bytes, "
+                "one buffer requires ${_panel_bytes} bytes, "
                 "but TCDM provides ${SNRT_TCDM_SIZE} bytes")
             continue()
         endif()
-        set(_buffer_count 2)
+        if(_double_buffer_bytes GREATER SNRT_TCDM_SIZE)
+            set(_buffer_count 1)
+        else()
+            set(_buffer_count 2)
+        endif()
 
         set(_variant_build_dir
             "${CMAKE_CURRENT_BINARY_DIR}/generated/${precision}/${variant}/K${_k}")
@@ -76,7 +80,7 @@ function(add_fp32_vse_variant precision variant source_dir)
         add_custom_command(
             OUTPUT "${_header}"
             COMMAND ${CMAKE_COMMAND} -E make_directory "${_variant_data_dir}"
-            COMMAND ${PYTHON} "${_variant_script}" -c "${_config}"
+            COMMAND ${Python3_EXECUTABLE} "${_variant_script}" -c "${_config}"
             DEPENDS "${_variant_script}" "${_config}"
                     "${source_dir}/data/layer.h"
             VERBATIM)

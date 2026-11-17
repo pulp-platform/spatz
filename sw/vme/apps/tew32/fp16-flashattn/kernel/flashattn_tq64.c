@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
-#include "ope_runtime.h"
+#include "runtime.h"
 #define FLASHATTN_IMPLEMENTATION
 #define FLASHATTN_TQ64_IMPLEMENTATION
 #include "flashattn.h"
 #define PG_GEMM_ATTRIBUTES static __attribute__((always_inline)) inline
 #define PG_USE_VTLE_SEED 1
-#include "pipeline_gemm.h"
 #include "kernel/qk_matmul_64x64x64.c"
 
 static uint32_t *qw, *kw, *vw, *pw;

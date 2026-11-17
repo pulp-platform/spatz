@@ -19,6 +19,7 @@
 // main.c - fp16 x fp16 = fp16 VME GEMM functional check
 
 #include <snrt.h>
+#include "runtime.h"
 #include <string.h>
 #include <printf.h>
 
@@ -76,11 +77,6 @@ static inline uint32_t float_bits(float value) {
     return bits.u;
 }
 
-static inline uint32_t cycle_count(void) {
-    uint32_t cycles;
-    asm volatile("csrr %0, mcycle" : "=r"(cycles));
-    return cycles;
-}
 static snrt_dma_txid_t fill_panel(__fp16 *dst, const __fp16 *src,
                                   uint32_t panel_tiles,
                                   uint32_t valid_tiles,
@@ -195,11 +191,11 @@ int main(void) {
         uint32_t fcsr;
 
         if (iter == 0)
-            start_cycle = cycle_count();
+            start_cycle = get_cycle();
         matmul_fp16((const __fp16 *)(base + A_OFFSET),
                     (const __fp16 *)(base + B_OFFSET),
                     (__fp16 *)(base + C_OFFSET), valid_m, valid_n, valid_k);
-        end_cycle = cycle_count();
+        end_cycle = get_cycle();
 
         snrt_dma_start_1d(partials + (size_t)iter * C_ELEMENTS,
                           base + C_OFFSET, C_BYTES);

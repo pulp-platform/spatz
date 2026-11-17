@@ -3,7 +3,7 @@
 #include <printf.h>
 #include <snrt.h>
 
-#include "ope_runtime.h"
+#include "runtime.h"
 #include DATAHEADER
 #include "kernel/flashattn.h"
 
@@ -26,7 +26,7 @@ int main(void) {
   const uint32_t begin = get_cycle();
   flashattn_tq16(q, k, v, pair_scratch, output);
   const uint32_t cycles = get_cycle() - begin;
-  const int errors = ope_check_fp32(output, (const float *)flash_golden,
+  const int errors = transformer_check_fp32(output, (const float *)flash_golden,
                                     FLASH_TQ * FLASH_DV, 2e-3f, 2e-3f);
   PRINTF("\n=== VME direct-VRF FlashAttention Tq16 T64 d64 dv16 ===\n");
   PRINTF("cycles: %u\n", cycles);

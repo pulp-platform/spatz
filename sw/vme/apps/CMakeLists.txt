@@ -33,7 +33,8 @@ else()
 endif()
 message(STATUS "Building VME ${VME_TILE_VARIANT} kernels")
 
-### Microbenchmarks
+# Microbenchmarks: matrix-engine scheduling
+# These isolate tile-GEMM instruction scheduling and store-path effects.
 if(VME_ENABLE_FMA32)
     add_subdirectory(tew32/fp32-matmul-vtse fp32-matmul-vtse)
     add_subdirectory(tew32/fp32-matmul-vse fp32-matmul-vse)
@@ -42,30 +43,31 @@ else()
 endif()
 add_subdirectory(tew32/fp16-matmul-vtse fp16-matmul-vtse)
 add_subdirectory(tew32/fp16-matmul-vse fp16-matmul-vse)
+
+# Microbenchmarks: vector-side scheduling
+# These isolate RVV post-processing and its interaction with tile GEMM.
 add_subdirectory(tew32/fp16-gemm-unit fp16-gemm-unit)
 add_subdirectory(tew32/fp16-gemm-alpha fp16-gemm-alpha)
 add_subdirectory(tew32/fp16-gemm-beta fp16-gemm-beta)
 
-### Benchmarks
+# Application benchmarks: memory-bound
+# Quantization/dequantization and the associated L1 traffic dominate these
+# applications relative to their matrix-engine work.
 add_subdirectory(tew32/fp16-vq-matmul fp16-vq-matmul)
-
-# add_subdirectory(tew32/fp16-vq-gemm fp16-vq-gemm)
 add_subdirectory(tew32/fp16-dq-matmul fp16-dq-matmul)
 
-# add_subdirectory(tew32/fp16-matmul-softmax fp16-matmul-softmax)
-# add_subdirectory(tew32/fp16-gemm-softmax fp16-gemm-softmax)
-# add_subdirectory(tew32/fp16-gemm-softmax-ce fp16-gemm-softmax-ce)
 # add_subdirectory(tew32/fp16-ln-gemm fp16-ln-gemm)
-# add_subdirectory(tew32/fp16-embed-ln-gemm fp16-embed-ln-gemm)
 # add_subdirectory(tew32/fp16_conv_relu fp16_conv_relu)
-
-add_subdirectory(tew32/fp16-gemm-relu fp16-gemm-relu)
-# add_subdirectory(tew32/fp16-gemm-gelu fp16-gemm-gelu)
-# add_subdirectory(tew32/fp16-gemm-residual-separate fp16-gemm-residual-separate)
-# add_subdirectory(tew32/fp16-gemm-fused-residual fp16-gemm-fused-residual)
-add_subdirectory(tew32/fp16-flashattn fp16-flashattn)
 # add_subdirectory(tew32/fp16-gathermlp-dlrm fp16-gathermlp-dlrm)
 # add_subdirectory(tew32/fp16-gathermlp-gcn fp16-gathermlp-gcn)
 
+# Application benchmarks: matrix-dominant
+# The primary timed work is tile GEMM / outer-product accumulation.
+add_subdirectory(tew32/fp16-gemm-relu fp16-gemm-relu)
+add_subdirectory(tew32/fp16-flashattn fp16-flashattn)
+
+# add_subdirectory(tew32/fp16-matmul-softmax fp16-matmul-softmax)
+# add_subdirectory(tew32/fp16-gemm-softmax fp16-gemm-softmax)
+# add_subdirectory(tew32/fp16-gemm-gelu fp16-gemm-gelu)
 # add_subdirectory(tew32/fp16-attention-head fp16-attention-head)
 # add_subdirectory(tew32/fp16-mlp-block fp16-mlp-block)

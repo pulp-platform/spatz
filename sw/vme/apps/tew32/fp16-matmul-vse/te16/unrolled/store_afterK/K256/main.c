@@ -17,17 +17,12 @@
 // Author: Pei-Yu Lin, ETH Zürich
 
 #include <snrt.h>
+#include "runtime.h"
 #include <printf.h>
 
 #include DATAHEADER
 #include "matmul.h"
 #include "kernel/matmul.c"
-
-static inline uint32_t get_cycle(void) {
-    uint32_t cycle;
-    asm volatile("csrr %0, mcycle" : "=r"(cycle));
-    return cycle;
-}
 
 _Static_assert(K_CHUNK % 8 == 0, "packed kernel requires K divisible by 8");
 

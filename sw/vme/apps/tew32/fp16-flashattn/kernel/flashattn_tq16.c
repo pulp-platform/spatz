@@ -2,7 +2,7 @@
 
 #include <stdint.h>
 
-#include "ope_runtime.h"
+#include "runtime.h"
 #define FLASHATTN_IMPLEMENTATION
 #include "kernel/flashattn.h"
 
@@ -213,58 +213,58 @@ static inline __attribute__((always_inline)) void drain_mt8_and_max(void) {
 
 // Four independent score columns through the exponential polynomial.
 #define FLASH_EXP_QUAD_ASM(x0, x1, x2, x3, t0, t1, t2, t3) \
-    "vfmax.vf " x0 ", " x0 ", %[ope_lo]\n" \
-    "vfmax.vf " x1 ", " x1 ", %[ope_lo]\n" \
-    "vfmax.vf " x2 ", " x2 ", %[ope_lo]\n" \
-    "vfmax.vf " x3 ", " x3 ", %[ope_lo]\n" \
-    "vfmul.vf " x0 ", " x0 ", %[ope_scale]\n" \
-    "vfmul.vf " x1 ", " x1 ", %[ope_scale]\n" \
-    "vfmul.vf " x2 ", " x2 ", %[ope_scale]\n" \
-    "vfmul.vf " x3 ", " x3 ", %[ope_scale]\n" \
-    "vfmv.v.f " t0 ", %[ope_c5]\n" \
-    "vfmv.v.f " t1 ", %[ope_c5]\n" \
-    "vfmv.v.f " t2 ", %[ope_c5]\n" \
-    "vfmv.v.f " t3 ", %[ope_c5]\n" \
+    "vfmax.vf " x0 ", " x0 ", %[transformer_lo]\n" \
+    "vfmax.vf " x1 ", " x1 ", %[transformer_lo]\n" \
+    "vfmax.vf " x2 ", " x2 ", %[transformer_lo]\n" \
+    "vfmax.vf " x3 ", " x3 ", %[transformer_lo]\n" \
+    "vfmul.vf " x0 ", " x0 ", %[transformer_scale]\n" \
+    "vfmul.vf " x1 ", " x1 ", %[transformer_scale]\n" \
+    "vfmul.vf " x2 ", " x2 ", %[transformer_scale]\n" \
+    "vfmul.vf " x3 ", " x3 ", %[transformer_scale]\n" \
+    "vfmv.v.f " t0 ", %[transformer_c5]\n" \
+    "vfmv.v.f " t1 ", %[transformer_c5]\n" \
+    "vfmv.v.f " t2 ", %[transformer_c5]\n" \
+    "vfmv.v.f " t3 ", %[transformer_c5]\n" \
     "vfmul.vv " t0 ", " t0 ", " x0 "\n" \
     "vfmul.vv " t1 ", " t1 ", " x1 "\n" \
     "vfmul.vv " t2 ", " t2 ", " x2 "\n" \
     "vfmul.vv " t3 ", " t3 ", " x3 "\n" \
-    "vfadd.vf " t0 ", " t0 ", %[ope_c4]\n" \
-    "vfadd.vf " t1 ", " t1 ", %[ope_c4]\n" \
-    "vfadd.vf " t2 ", " t2 ", %[ope_c4]\n" \
-    "vfadd.vf " t3 ", " t3 ", %[ope_c4]\n" \
+    "vfadd.vf " t0 ", " t0 ", %[transformer_c4]\n" \
+    "vfadd.vf " t1 ", " t1 ", %[transformer_c4]\n" \
+    "vfadd.vf " t2 ", " t2 ", %[transformer_c4]\n" \
+    "vfadd.vf " t3 ", " t3 ", %[transformer_c4]\n" \
     "vfmul.vv " t0 ", " t0 ", " x0 "\n" \
     "vfmul.vv " t1 ", " t1 ", " x1 "\n" \
     "vfmul.vv " t2 ", " t2 ", " x2 "\n" \
     "vfmul.vv " t3 ", " t3 ", " x3 "\n" \
-    "vfadd.vf " t0 ", " t0 ", %[ope_c3]\n" \
-    "vfadd.vf " t1 ", " t1 ", %[ope_c3]\n" \
-    "vfadd.vf " t2 ", " t2 ", %[ope_c3]\n" \
-    "vfadd.vf " t3 ", " t3 ", %[ope_c3]\n" \
+    "vfadd.vf " t0 ", " t0 ", %[transformer_c3]\n" \
+    "vfadd.vf " t1 ", " t1 ", %[transformer_c3]\n" \
+    "vfadd.vf " t2 ", " t2 ", %[transformer_c3]\n" \
+    "vfadd.vf " t3 ", " t3 ", %[transformer_c3]\n" \
     "vfmul.vv " t0 ", " t0 ", " x0 "\n" \
     "vfmul.vv " t1 ", " t1 ", " x1 "\n" \
     "vfmul.vv " t2 ", " t2 ", " x2 "\n" \
     "vfmul.vv " t3 ", " t3 ", " x3 "\n" \
-    "vfadd.vf " t0 ", " t0 ", %[ope_c2]\n" \
-    "vfadd.vf " t1 ", " t1 ", %[ope_c2]\n" \
-    "vfadd.vf " t2 ", " t2 ", %[ope_c2]\n" \
-    "vfadd.vf " t3 ", " t3 ", %[ope_c2]\n" \
+    "vfadd.vf " t0 ", " t0 ", %[transformer_c2]\n" \
+    "vfadd.vf " t1 ", " t1 ", %[transformer_c2]\n" \
+    "vfadd.vf " t2 ", " t2 ", %[transformer_c2]\n" \
+    "vfadd.vf " t3 ", " t3 ", %[transformer_c2]\n" \
     "vfmul.vv " t0 ", " t0 ", " x0 "\n" \
     "vfmul.vv " t1 ", " t1 ", " x1 "\n" \
     "vfmul.vv " t2 ", " t2 ", " x2 "\n" \
     "vfmul.vv " t3 ", " t3 ", " x3 "\n" \
-    "vfadd.vf " t0 ", " t0 ", %[ope_one]\n" \
-    "vfadd.vf " t1 ", " t1 ", %[ope_one]\n" \
-    "vfadd.vf " t2 ", " t2 ", %[ope_one]\n" \
-    "vfadd.vf " t3 ", " t3 ", %[ope_one]\n" \
+    "vfadd.vf " t0 ", " t0 ", %[transformer_one]\n" \
+    "vfadd.vf " t1 ", " t1 ", %[transformer_one]\n" \
+    "vfadd.vf " t2 ", " t2 ", %[transformer_one]\n" \
+    "vfadd.vf " t3 ", " t3 ", %[transformer_one]\n" \
     "vfmul.vv " t0 ", " t0 ", " x0 "\n" \
     "vfmul.vv " t1 ", " t1 ", " x1 "\n" \
     "vfmul.vv " t2 ", " t2 ", " x2 "\n" \
     "vfmul.vv " t3 ", " t3 ", " x3 "\n" \
-    "vfadd.vf " t0 ", " t0 ", %[ope_one]\n" \
-    "vfadd.vf " t1 ", " t1 ", %[ope_one]\n" \
-    "vfadd.vf " t2 ", " t2 ", %[ope_one]\n" \
-    "vfadd.vf " t3 ", " t3 ", %[ope_one]\n" \
+    "vfadd.vf " t0 ", " t0 ", %[transformer_one]\n" \
+    "vfadd.vf " t1 ", " t1 ", %[transformer_one]\n" \
+    "vfadd.vf " t2 ", " t2 ", %[transformer_one]\n" \
+    "vfadd.vf " t3 ", " t3 ", %[transformer_one]\n" \
     "vfmul.vv " x0 ", " t0 ", " t0 "\n" \
     "vfmul.vv " x1 ", " t1 ", " t1 "\n" \
     "vfmul.vv " x2 ", " t2 ", " t2 "\n" \
@@ -286,11 +286,11 @@ static inline __attribute__((always_inline)) void drain_mt8_and_max(void) {
                "vfsub.vv " REG3 ", " REG3 ", v2\n"                       \
                FLASH_EXP_QUAD_ASM(REG0, REG1, REG2, REG3, "v28", "v29", \
                                   "v30", "v31")                            \
-               :: [ope_lo] "f"(-16.0f), [ope_scale] "f"(0.125f),           \
-                  [ope_c5] "f"(0.0083333333f),                            \
-                  [ope_c4] "f"(0.0416666667f),                            \
-                  [ope_c3] "f"(0.1666666667f), [ope_c2] "f"(0.5f),         \
-                  [ope_one] "f"(1.0f)                                     \
+               :: [transformer_lo] "f"(-16.0f), [transformer_scale] "f"(0.125f),           \
+                  [transformer_c5] "f"(0.0083333333f),                            \
+                  [transformer_c4] "f"(0.0416666667f),                            \
+                  [transformer_c3] "f"(0.1666666667f), [transformer_c2] "f"(0.5f),         \
+                  [transformer_one] "f"(1.0f)                                     \
                : "v28", "v29", "v30", "v31", "memory")
 
 #define FLASH_EXP_QK_QUAD(REG0, REG1, REG2, REG3, TILE, QPTR, KPTR)       \
@@ -457,7 +457,7 @@ static inline __attribute__((always_inline)) void scale_output(void) {
     asm volatile("vsse16.v v25, (%0), %1"                                   \
                  :: "r"((uint16_t *)(SCRATCH) + 1), "r"((uintptr_t)4)      \
                  : "memory");                                               \
-    ope_vsync(SCRATCH);                                                       \
+    wait_for_vector_store(SCRATCH);                                                       \
     asm volatile(                                                             \
         "vsetivli zero, 16, e32, m1, ta, ma\n"                              \
         "vle32.v v26, (%0)\n"                                               \

@@ -3,56 +3,71 @@
 
 find_package(Python3 COMPONENTS Interpreter REQUIRED)
 
-add_subdirectory(rolled rolled)
-
 set(_source "${CMAKE_CURRENT_SOURCE_DIR}")
 
-function(add_fp16_simple_gemm_unrolled variant)
-    foreach(_k IN ITEMS 128 256 512)
-        # Packing two FP16 values into one word preserves the original byte size.
-        math(EXPR _a_bytes "64 * ${_k} * 2")
-        math(EXPR _b_bytes "${_k} * 64 * 2")
-        math(EXPR _c_bytes "64 * 64 * 4")
-        math(EXPR _buffer_bytes
-             "${_a_bytes} + ${_b_bytes} + ${_c_bytes}")
-        math(EXPR _required_tcdm_bytes "2 * ${_buffer_bytes}")
-        if(_required_tcdm_bytes GREATER SNRT_TCDM_SIZE)
-            message(STATUS
-                "Skipping fp16-gemm-unit unrolled ${variant} M64 N64 K${_k}: "
-                "double buffering requires ${_required_tcdm_bytes} TCDM bytes, "
-                "but only ${SNRT_TCDM_SIZE} are configured")
-            continue()
+foreach(_k IN ITEMS 128 256 512)
+    # Packing two FP16 values into one word preserves the original byte size.
+    math(EXPR _a_bytes "64 * ${_k} * 2")
+    math(EXPR _b_bytes "${_k} * 64 * 2")
+    math(EXPR _c_bytes "64 * 64 * 4")
+    math(EXPR _required_tcdm_bytes
+         "${_a_bytes} + ${_b_bytes} + ${_c_bytes}")
+    if(_required_tcdm_bytes GREATER SNRT_TCDM_SIZE)
+        message(STATUS
+            "Skipping fp16-gemm-unit M64 N64 K${_k}: requires "
+            "${_required_tcdm_bytes} TCDM bytes, but only "
+            "${SNRT_TCDM_SIZE} are configured")
+        continue()
+    endif()
+
+    set(_target "fp16-gemm-unit_M64_N64_K${_k}")
+    set(_config "${_source}/script/gemm_64_64_${_k}.json")
+    set(_header "${_source}/data/data_64_64_${_k}.h")
+
+    add_custom_command(
+        OUTPUT "${_header}"
+        COMMAND ${Python3_EXECUTABLE} "${_source}/script/gen_data.py"
+                -c "${_config}"
+        DEPENDS "${_source}/script/gen_data.py"
+                "${_config}"
+                "${_source}/data/layer.h"
+        VERBATIM)
+
+    if(BUILD_TESTS)
+        add_custom_target(generate-${_target} DEPENDS "${_header}")
+        add_snitch_test(${_target} "${_source}/main.c")
+        set(_test_target "test-${SNITCH_TEST_PREFIX}${_target}")
+        add_dependencies(${_test_target} generate-${_target})
+        target_include_directories(${_test_target} PRIVATE
+            "${_source}" "${_source}/kernel" "${_source}/data")
+        target_compile_definitions(${_test_target} PRIVATE
+            K_CHUNK=${_k}
+            DATAHEADER="data/data_64_64_${_k}.h")
+
+        if(_k EQUAL 128)
+            set(_staggered_target "fp16-gemm-unit-staggered_M64_N64_K128")
+            add_snitch_test(${_staggered_target} "${_source}/main.c")
+            set(_staggered_test_target
+                "test-${SNITCH_TEST_PREFIX}${_staggered_target}")
+            add_dependencies(${_staggered_test_target} generate-${_target})
+            target_include_directories(${_staggered_test_target} PRIVATE
+                "${_source}" "${_source}/kernel" "${_source}/data")
+            target_compile_definitions(${_staggered_test_target} PRIVATE
+                GEMM_STAGGERED=1
+                K_CHUNK=128
+                DATAHEADER="data/data_64_64_128.h")
+
+            set(_lockstep_target "fp16-gemm-unit-lockstep_M64_N64_K128")
+            add_snitch_test(${_lockstep_target} "${_source}/main.c")
+            set(_lockstep_test_target
+                "test-${SNITCH_TEST_PREFIX}${_lockstep_target}")
+            add_dependencies(${_lockstep_test_target} generate-${_target})
+            target_include_directories(${_lockstep_test_target} PRIVATE
+                "${_source}" "${_source}/kernel" "${_source}/data")
+            target_compile_definitions(${_lockstep_test_target} PRIVATE
+                GEMM_LOCKSTEP=1
+                K_CHUNK=128
+                DATAHEADER="data/data_64_64_128.h")
         endif()
-
-        set(_dir "${_source}/unrolled/${variant}/K${_k}")
-        set(_target "fp16-gemm-unit-unrolled-${variant}_M64_N64_K${_k}")
-        set(_config "${_dir}/script/matmul_64_64_${_k}.json")
-        set(_header "${_dir}/data/data_64_64_${_k}.h")
-
-        add_custom_command(
-            OUTPUT "${_header}"
-            COMMAND ${PYTHON} "${_dir}/script/gen_data.py"
-                    -c "${_config}"
-            DEPENDS "${_dir}/script/gen_data.py"
-                    "${_config}"
-                    "${_dir}/data/layer.h"
-            VERBATIM)
-
-        if(BUILD_TESTS)
-            add_custom_target(generate-${_target} DEPENDS "${_header}")
-            add_snitch_test(${_target} "${_dir}/main.c")
-            set(_test_target "test-${SNITCH_TEST_PREFIX}${_target}")
-            add_dependencies(${_test_target} generate-${_target})
-            target_include_directories(${_test_target} PRIVATE
-                "${_dir}" "${_dir}/kernel" "${_dir}/data")
-            target_compile_definitions(${_test_target} PRIVATE
-                MATMUL_K_CHUNK=${_k}
-                MATMUL_BUFFER_COUNT=2
-                DATAHEADER="data/data_64_64_${_k}.h")
-        endif()
-    endforeach()
-endfunction()
-
-# add_fp16_simple_gemm_unrolled(store_afterK)
-# add_fp16_simple_gemm_unrolled(store_interleave)
-# add_fp16_simple_gemm_unrolled(vsetvl)
+    endif()
+endforeach()

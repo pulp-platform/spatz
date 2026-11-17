@@ -169,8 +169,26 @@ __attribute__((noinline, aligned(64))) void matmul_fp16_fp32(
       asm volatile("vtmv.v.t v15, %0\naddi %0, %0, 1" : "+r"(tss12) : : "v15", "memory");
       asm volatile("vtmv.v.t v19, %0\naddi %0, %0, 1" : "+r"(tss12) : : "v19", "memory");
       asm volatile("vtmv.v.t v23, %0\naddi %0, %0, 1" : "+r"(tss12) : : "v23", "memory");
-      asm volatile("vsetvli x0, %0, e32, m8, ta, ma" : : "r"(bias_vl) : "memory");
+#ifdef MATMUL_FUSED_RELU
+      {
+        float *row0 = (float *)ptr;
+        asm volatile("vsetvli x0, %0, e32, m4, ta, ma\n"
+                     "vfadd.vf v8, v8, %1\n"
+                     "vfadd.vf v12, v12, %2\n"
+                     "vfadd.vf v16, v16, %3\n"
+                     "vfadd.vf v20, v20, %4"
+                     :: "r"(group_vl), "f"(row0[0]), "f"(row0[64]),
+                        "f"(row0[128]), "f"(row0[192])
+                     : "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15",
+                       "v16", "v17", "v18", "v19", "v20", "v21", "v22", "v23",
+                       "memory");
+      }
+#endif
+      asm volatile("vsetvli x0, %0, e32, m8, ta, ma\n"
+                   "vfmax.vf v8, v8, %1"
+                   :: "r"(bias_vl), "f"(0.0f) : "memory");
       asm volatile("vse32.v v8, (%0)\n" "addi %0, %0, %1" : "+r"(ptr) : "i"(c_stride) : "memory");
+      asm volatile("vfmax.vf v16, v16, %0" :: "f"(0.0f) : "memory");
       asm volatile("vse32.v v16, (%0)\n" "addi %0, %0, %1" : "+r"(ptr) : "i"(c_stride) : "memory");
 
       // Rows 4-15: four contiguous 64-element rows per batch.
@@ -185,7 +203,20 @@ __attribute__((noinline, aligned(64))) void matmul_fp16_fp32(
       asm volatile("vtmv.v.t v14, %0\naddi %0, %0, 1" : "+r"(tss8) : : "v14", "memory");
       asm volatile("vtmv.v.t v11, %0\naddi %0, %0, 1" : "+r"(tss12) : : "v11", "memory");
       asm volatile("vtmv.v.t v15, %0\naddi %0, %0, 1" : "+r"(tss12) : : "v15", "memory");
-      asm volatile("vsetvli x0, %0, e32, m8, ta, ma" : : "r"(bias_vl) : "memory");
+#ifdef MATMUL_FUSED_RELU
+      {
+        float *row0 = (float *)ptr;
+        asm volatile("vsetvli x0, %0, e32, m4, ta, ma\n"
+                     "vfadd.vf v8, v8, %1\n"
+                     "vfadd.vf v12, v12, %2"
+                     :: "r"(group_vl), "f"(row0[0]), "f"(row0[64])
+                     : "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15",
+                       "memory");
+      }
+#endif
+      asm volatile("vsetvli x0, %0, e32, m8, ta, ma\n"
+                   "vfmax.vf v8, v8, %1"
+                   :: "r"(bias_vl), "f"(0.0f) : "memory");
       asm volatile("vse32.v v8, (%0)\n" "addi %0, %0, %1\n"
                    : "+r"(ptr) : "i"(c_stride) : "memory");
       asm volatile("msetmtype %0, %1\n" "msettn x0, %2" : : "r"(store_mtype), "r"(store_vtype), "r"(tile_vl) : "memory");
@@ -197,7 +228,20 @@ __attribute__((noinline, aligned(64))) void matmul_fp16_fp32(
       asm volatile("vtmv.v.t v22, %0\naddi %0, %0, 1" : "+r"(tss8) : : "v22", "memory");
       asm volatile("vtmv.v.t v19, %0\naddi %0, %0, 1" : "+r"(tss12) : : "v19", "memory");
       asm volatile("vtmv.v.t v23, %0\naddi %0, %0, 1" : "+r"(tss12) : : "v23", "memory");
-      asm volatile("vsetvli x0, %0, e32, m8, ta, ma" : : "r"(bias_vl) : "memory");
+#ifdef MATMUL_FUSED_RELU
+      {
+        float *row2 = (float *)ptr;
+        asm volatile("vsetvli x0, %0, e32, m4, ta, ma\n"
+                     "vfadd.vf v16, v16, %1\n"
+                     "vfadd.vf v20, v20, %2"
+                     :: "r"(group_vl), "f"(row2[0]), "f"(row2[64])
+                     : "v16", "v17", "v18", "v19", "v20", "v21", "v22", "v23",
+                       "memory");
+      }
+#endif
+      asm volatile("vsetvli x0, %0, e32, m8, ta, ma\n"
+                   "vfmax.vf v16, v16, %1"
+                   :: "r"(bias_vl), "f"(0.0f) : "memory");
       asm volatile("vse32.v v16, (%0)\n" "addi %0, %0, %1\n"
                    : "+r"(ptr) : "i"(c_stride) : "memory");
       }

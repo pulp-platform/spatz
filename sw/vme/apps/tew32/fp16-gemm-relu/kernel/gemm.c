@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "gemm.h"
-#include "gather_gemm_1x4.h"
+#include "runtime.h"
 
 enum {
   GR_TILE_WORDS_K64 = 32 * TE,
@@ -542,12 +542,12 @@ gemm_relu_staggered_m192_n64_k128(const __fp16 *Atpack,
   const unsigned groups = 8;
 
 #if BENCHMARK
-  unsigned phase = gg_get_cycle();
+  unsigned phase = get_cycle();
 #endif
   gr_compute_pair16(a_words, b_words, b_words + tile_words, 0, groups);
   gr_add_bias_pair(C, 64, 0);
 #if BENCHMARK
-  unsigned now = gg_get_cycle();
+  unsigned now = get_cycle();
   gg_setup_cycles += now - phase;
   phase = now;
 #endif
@@ -581,13 +581,13 @@ gemm_relu_staggered_m192_n64_k128(const __fp16 *Atpack,
     }
   }
 #if BENCHMARK
-  now = gg_get_cycle();
+  now = get_cycle();
   gg_compute_cycles += now - phase;
   phase = now;
 #endif
   gr_drain_pair(previous, 64, previous_high);
 #if BENCHMARK
-  now = gg_get_cycle();
+  now = get_cycle();
   gg_drain_cycles += now - phase;
 #endif
   asm volatile("lw zero, 0(%0)" :: "r"(C) : "memory");
@@ -602,11 +602,11 @@ static inline __attribute__((always_inline)) void gemm_relu_staggered_m64_k64(
   const uint32_t *b3 = b2 + GR_TILE_WORDS_K64;
 
 #if BENCHMARK
-  unsigned phase = gg_get_cycle();
+  unsigned phase = get_cycle();
 #endif
   gr_compute_pair(a_words, b0, b1, 0, 8);
 #if BENCHMARK
-  unsigned now = gg_get_cycle();
+  unsigned now = get_cycle();
   gg_setup_cycles += now - phase;
   phase = now;
 #endif
@@ -618,13 +618,13 @@ static inline __attribute__((always_inline)) void gemm_relu_staggered_m64_k64(
     gr_compute_drain_pair_k64(a, b2, b3, C + mb * 64, 1);
   }
 #if BENCHMARK
-  now = gg_get_cycle();
+  now = get_cycle();
   gg_compute_cycles += now - phase;
   phase = now;
 #endif
   gr_drain_pair(C + (64 - TE) * 64 + 2 * TE, 64, 1);
 #if BENCHMARK
-  now = gg_get_cycle();
+  now = get_cycle();
   gg_drain_cycles += now - phase;
 #endif
   asm volatile("lw zero, 0(%0)" :: "r"(C) : "memory");

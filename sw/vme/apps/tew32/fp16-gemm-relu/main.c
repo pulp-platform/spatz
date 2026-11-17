@@ -17,19 +17,18 @@
 // Author: Pei-Yu Lin, ETH Zürich
 
 #include <snrt.h>
+#include "runtime.h"
 #include <printf.h>
+
+#ifndef APP_FUSED
+#define APP_FUSED 1
+#endif
 
 #include "gemm.h"
 #include DATAHEADER
 #include "kernel/gemm.c"
 
 enum { M_DIM = COUT_SIZE, N_DIM = T_SIZE, K_DIM = C_SIZE };
-
-static inline uint32_t get_cycle(void) {
-    uint32_t cycle;
-    asm volatile("csrr %0, mcycle" : "=r"(cycle) : : "memory");
-    return cycle;
-}
 
 static inline uint32_t float_bits(float value) {
     union { float f; uint32_t u; } bits = {.f = value};

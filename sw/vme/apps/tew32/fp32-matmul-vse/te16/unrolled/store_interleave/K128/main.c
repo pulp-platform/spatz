@@ -17,17 +17,12 @@
 // Author: Pei-Yu Lin, ETH Zürich
 
 #include <snrt.h>
+#include "runtime.h"
 #include <printf.h>
 
 #include DATAHEADER
 #include "matmul.h"
 #include "kernel/matmul.c"
-
-static inline uint32_t get_cycle(void) {
-    uint32_t cycle;
-    asm volatile("csrr %0, mcycle" : "=r"(cycle));
-    return cycle;
-}
 
 _Static_assert(BUFFER_BYTES <= L1_BUFFER_STRIDE,
                "matmul panel exceeds its L1 buffer partition");

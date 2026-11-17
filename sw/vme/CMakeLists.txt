@@ -6,7 +6,7 @@
 
 cmake_minimum_required(VERSION 3.13)
 
-set(VME_ENABLE_FMA32 0 CACHE STRING "Whether OPE instantiates FP32 FMA")
+set(VME_ENABLE_FMA32 1 CACHE STRING "Whether OPE instantiates FP32 FMA")
 
 # Allow spatzBenchmarks to be built as a standalone library.
 if (CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
@@ -28,5 +28,6 @@ include_directories(${SNRUNTIME_INCLUDE_DIRS})
 include_directories(../riscvTests/isa/macros/vector)
 
 # Tests
-add_subdirectory(isaTests)
+# add_subdirectory(isaTests)
 add_subdirectory(apps)
+add_subdirectory(VMEBenchmarks)

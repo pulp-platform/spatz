@@ -19,7 +19,7 @@
 // FP16-to-FP32 alpha-beta GEMM kernel for TE=16, CE=8, and four accumulator tiles.
 
 #include "gemm.h"
-#include "gemm_macro.h"
+#include "matmul_helpers.h"
 
 __attribute__((noinline, aligned(64))) void gemm_fp16_fp32_beta_vle(
     const __fp16 *Atpack, const __fp16 *Bpack, float *C,

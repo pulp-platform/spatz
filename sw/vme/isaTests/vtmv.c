@@ -135,6 +135,80 @@ void TEST_CASE4(void) {
     asm volatile("vtdiscard" ::: "memory");
 }
 
+// TC5: a complete 16-element row must span both 256-bit VRF words.
+void TEST_CASE5(void) {
+    const uintptr_t TN = 16, TM = 16;
+
+    VSET(16, e32, m1);
+    VLOAD_32(v8,  0, 1, 2, 3, 4, 5, 6, 7,
+                   8, 9, 10, 11, 12, 13, 14, 15);
+
+    asm volatile("msetmtypei 1, 2, 0" ::: "memory");
+    asm volatile("msettn x0, %0" :: "r"(TN) : "memory");
+    asm volatile("msettm x0, %0" :: "r"(TM) : "memory");
+    asm volatile("vtzero mt0" ::: "memory");
+
+    uintptr_t tss = TSS_ROW(0, 0);
+    asm volatile("vtmv.t.v %[tss], v8" :: [tss]"r"(tss) : "memory");
+    asm volatile("vtmv.v.t v1, %[tss]" :: [tss]"r"(tss) : "memory");
+
+    VSET(16, e32, m1);
+    VCMP_U32(5, v1, 0, 1, 2, 3, 4, 5, 6, 7,
+                   8, 9, 10, 11, 12, 13, 14, 15);
+    asm volatile("vtdiscard" ::: "memory");
+}
+
+// TC6: a complete 16-element column has the same vector semantics as a row.
+void TEST_CASE6(void) {
+    const uintptr_t TN = 16, TM = 16;
+
+    VSET(16, e32, m1);
+    VLOAD_32(v8,  16, 17, 18, 19, 20, 21, 22, 23,
+                   24, 25, 26, 27, 28, 29, 30, 31);
+
+    asm volatile("msetmtypei 1, 2, 0" ::: "memory");
+    asm volatile("msettn x0, %0" :: "r"(TN) : "memory");
+    asm volatile("msettm x0, %0" :: "r"(TM) : "memory");
+    asm volatile("vtzero mt0" ::: "memory");
+
+    uintptr_t tss = TSS_COL(0, 0);
+    asm volatile("vtmv.t.v %[tss], v8" :: [tss]"r"(tss) : "memory");
+    asm volatile("vtmv.v.t v1, %[tss]" :: [tss]"r"(tss) : "memory");
+
+    VSET(16, e32, m1);
+    VCMP_U32(6, v1, 16, 17, 18, 19, 20, 21, 22, 23,
+                   24, 25, 26, 27, 28, 29, 30, 31);
+    asm volatile("vtdiscard" ::: "memory");
+}
+
+// TC7: cross-check the spatial mapping instead of only round-tripping the
+// same selector.  Row writes must be observable as columns, and vice versa.
+void TEST_CASE7(void) {
+    const uintptr_t TN = 16, TM = 16;
+    uint32_t *src = snrt_l1alloc(16 * 16 * sizeof(*src));
+
+    VSET(16, e32, m1);
+    asm volatile("msetmtypei 1, 2, 0" ::: "memory");
+    asm volatile("msettn x0, %0" :: "r"(TN) : "memory");
+    asm volatile("msettm x0, %0" :: "r"(TM) : "memory");
+    asm volatile("vtzero mt0" ::: "memory");
+
+    for (uintptr_t row = 0; row < 16; ++row) {
+        for (uintptr_t col = 0; col < 16; ++col)
+            src[row * 16 + col] = (uint32_t)row;
+        const uintptr_t tss = TSS_ROW(0, row);
+        asm volatile("vtle32 %[tss], (%[src])"
+                     :: [tss]"r"(tss), [src]"r"(src + row * 16) : "memory");
+    }
+    uintptr_t tss = TSS_COL(0, 0);
+    asm volatile("vtmv.v.t v1, %[tss]" :: [tss]"r"(tss) : "memory");
+    VSET(16, e32, m1);
+    VCMP_U32(7, v1, 0, 1, 2, 3, 4, 5, 6, 7,
+                   8, 9, 10, 11, 12, 13, 14, 15);
+
+    asm volatile("vtdiscard" ::: "memory");
+}
+
 int main(void) {
     INIT_CHECK();
 
@@ -143,6 +217,9 @@ int main(void) {
     TEST_CASE2();
     TEST_CASE3();
     TEST_CASE4();
+    TEST_CASE5();
+    TEST_CASE6();
+    TEST_CASE7();
 #endif
 
     EXIT_CHECK();
