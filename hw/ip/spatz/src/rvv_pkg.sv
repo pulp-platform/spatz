@@ -30,7 +30,7 @@ package rvv_pkg;
 
   typedef struct packed {
     logic   vill;    // bit[XLEN-1]: illegal flag
-    logic   altfmt;  // self-def bit[8]: alternate format for VME
+    logic   altfmt;  // bit[8]:      config by msetmtype rs2[8] or msetmtypei instr[28]
     logic   vma;     // bit[7]:      mask-agnostic
     logic   vta;     // bit[6]:      tail-agnostic
     vew_e   vsew;    // bits[5:3]:   SEW encoding

@@ -2,105 +2,61 @@
 // Solderpad Hardware License, Version 0.51, see LICENSE for details.
 // SPDX-License-Identifier: SHL-0.51
 //
-// Authors: Pei-Yu Lin (peilin@ethz.ch)
+// Author: Pei-Yu Lin, ETH Zürich
 //
-// msettn — Set tile N dimension (tn = number of output columns)
-//
-// -------------------------------------------------------
 // Test cases:
-//   TC1: mtwiden=3, SEW=e8, request tn=4  → min(4, ETE)=4
-//   TC2: mtwiden=3, SEW=e8, request tn>ETE → clamped to ETE
-//   TC3: mtwiden=3, SEW=e8, request tn=0  → 0
-//   TC4: mtwiden=0 — standard vl path, no ETE limit
-//   TC5: returned rd == vl CSR
+//   For every supported SEW/TWIDEN pair, check TN requests below, at, and above
+//   LMUL * EVE and TE, including a zero source and preserved matrix/vector state.
 
 #include <stdint.h>
 #include "vector_macros.h"
+#define VME_DIMENSION_TEST
 #include "vector_matrix_macros.h"
 
-static inline uintptr_t min3(uintptr_t a, uintptr_t b, uintptr_t c) {
-    uintptr_t tmp;
-    tmp = (a < b) ? a : b;
-    return (tmp < c) ? tmp : c;
-}
+// Each case checks one request independently of previous test state.
+static void check_request(const vme_test_config_t *cfg, uintptr_t vlenb,
+                          uintptr_t request, unsigned id, int zero_source) {
+    uintptr_t rd, mtype, vtype, vl;
+    uintptr_t expected = vme_test_min(request, vme_test_capacity(cfg, vlenb));
+    uintptr_t initial_mtype = MTYPE(cfg->mtwiden, 1, 1);
+    vme_test_setup(cfg);
+    asm volatile("csrr %0, vtype" : "=r"(vtype));
+    XCMP(id, vtype, vme_test_vtype(cfg, vlenb));
+    asm volatile("csrr %0, 0xC23" : "=r"(mtype));
+    XCMP(id + 1, mtype, initial_mtype);
 
-void TEST_CASE1(void) {
-    uintptr_t vl_val;
-    uintptr_t req_tn = 4;
+    if (zero_source)
+        asm volatile("msettn %0, zero" : "=r"(rd) :: "memory");
+    else
+        asm volatile("msettn %0, %1" : "=r"(rd) : "r"(request) : "memory");
+    asm volatile("csrr %0, 0xC23" : "=r"(mtype));
+    asm volatile("csrr %0, vl" : "=r"(vl));
+    asm volatile("csrr %0, vtype" : "=r"(vtype));
+    XCMP(id + 2, rd, expected);
+    XCMP(id + 3, vl, expected);
+    XCMP(id + 4, mtype, initial_mtype);
+    XCMP(id + 5, vtype, vme_test_vtype(cfg, vlenb));
 
-    asm volatile("msetmtypei 0x3, 0x0" ::: "memory");
-    asm volatile("msettn x0, %[tn]" :: [tn]"r"(req_tn) : "memory");
-    asm volatile("csrr %[BUF], vl" : [BUF]"=r"(vl_val));
-
-    XCMP(1, vl_val, 4);
-}
-
-void TEST_CASE2(void) {
-    uintptr_t vl_val;
-    uintptr_t req_tn = 0xFFFF;
-    uintptr_t expected;
-    uintptr_t vlenb, vlen_bits, tew_bits;
-    uintptr_t lmul_eve, ete;
-
-    asm volatile("csrr %0, vlenb" : "=r"(vlenb));
-    vlen_bits = vlenb * 8u;
-    tew_bits  = 8u * 4u;      // SEW=e8, TWIDEN=4 => TEW=32
-    lmul_eve  = vlen_bits / tew_bits;
-    ete       = (vlen_bits / 2u) / tew_bits;
-    expected  = min3(req_tn, lmul_eve, ete);
-
-    asm volatile("msetmtypei 0x3, 0x0" ::: "memory");
-    asm volatile("msettn x0, %[tn]" :: [tn]"r"(req_tn) : "memory");
-    asm volatile("csrr %[BUF], vl" : [BUF]"=r"(vl_val));
-
-    XCMP(2, vl_val, expected);
-}
-
-void TEST_CASE3(void) {
-    uintptr_t vl_val;
-    uintptr_t req_tn = 0;
-
-    asm volatile("msetmtypei 0x3, 0x0" ::: "memory");
-    asm volatile("msettn x0, %[tn]" :: [tn]"r"(req_tn) : "memory");
-    asm volatile("csrr %[BUF], vl" : [BUF]"=r"(vl_val));
-
-    XCMP(3, vl_val, 0);
-}
-
-void TEST_CASE4(void) {
-    uintptr_t vl_val;
-    uintptr_t req_tn = 8;
-
-    asm volatile("msetmtypei 0x0, 0x0" ::: "memory");
-    asm volatile("msettn x0, %[tn]" :: [tn]"r"(req_tn) : "memory");
-    asm volatile("csrr %[BUF], vl" : [BUF]"=r"(vl_val));
-
-    XCMP(4, vl_val, 8);
-}
-
-void TEST_CASE5(void) {
-    uintptr_t rd_val = 0xDEAD;
-    uintptr_t vl_val;
-    uintptr_t req_tn = 4;
-
-    asm volatile("msetmtypei 0x3, 0x0" ::: "memory");
-    asm volatile("msettn %[rd], %[tn]" : [rd]"=r"(rd_val) : [tn]"r"(req_tn) : "memory");
-    asm volatile("csrr %[BUF], vl" : [BUF]"=r"(vl_val));
-
-    XCMP(5, rd_val, 4);
-    XCMP(6, vl_val, rd_val);
+    // rd=x0 discards the result but must still update the destination CSR.
+    vme_test_setup(cfg);
+    asm volatile("msettn zero, %0" :: "r"(request) : "memory");
+    asm volatile("csrr %0, 0xC23" : "=r"(mtype));
+    asm volatile("csrr %0, vl" : "=r"(vl));
+    XCMP(id + 7, vl, expected);
 }
 
 int main(void) {
     INIT_CHECK();
-    enable_vec();
-    enable_vme();
-
-    TEST_CASE1();
-    TEST_CASE2();
-    TEST_CASE3();
-    TEST_CASE4();
-    TEST_CASE5();
-
+    uintptr_t vlenb;
+    asm volatile("csrr %0, vlenb" : "=r"(vlenb));
+    for (unsigned c = 0; c < sizeof(vme_test_configs) / sizeof(vme_test_configs[0]); ++c) {
+        const vme_test_config_t *cfg = &vme_test_configs[c];
+        uintptr_t limit = vme_test_capacity(cfg, vlenb);
+        uintptr_t requests[] = {0, 1, limit - 1, limit, limit + 1, UINTPTR_MAX, 0};
+        printf("msettn: SEW=%u TWIDEN=%u TE=%u capacity=%u\n",
+               cfg->sew, cfg->twiden, VME_TEST_TE, (unsigned)limit);
+        for (unsigned r = 0; r < sizeof(requests) / sizeof(requests[0]); ++r)
+            check_request(cfg, vlenb, requests[r], 100 * (c + 1) + 10 * r, r == 6);
+    }
     EXIT_CHECK();
 }

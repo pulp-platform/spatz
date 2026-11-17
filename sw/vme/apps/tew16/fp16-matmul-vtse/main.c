@@ -14,11 +14,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// Author: Pei-Yu Lin <peilin@ethz.ch>
+// Author: Pei-Yu Lin, ETH Zürich
 
 // main.c - fp16 x fp16 = fp16 VME GEMM functional check
 
 #include <snrt.h>
+#include "runtime.h"
 #include <string.h>
 #include <printf.h>
 
@@ -26,7 +27,6 @@
 #include "kernel/matmul.c"
 
 enum {
-    TCDM_BYTES = 128 * 1024,
     M_CHUNK = CHUNK_SIZE,
     N_CHUNK = CHUNK_SIZE,
     K_CHUNK = CHUNK_SIZE * 2,
@@ -43,14 +43,14 @@ enum {
     C_OFFSET = B_OFFSET + B_BYTES,
     BUFFER_BYTES = C_OFFSET + C_BYTES,
     L1_BUFFER_COUNT = 2,
-    L1_BUFFER_STRIDE = TCDM_BYTES / L1_BUFFER_COUNT,
+    L1_BUFFER_STRIDE = SNRT_TCDM_SIZE / L1_BUFFER_COUNT,
     L1_BYTES = L1_BUFFER_STRIDE + BUFFER_BYTES,
 };
 
 _Static_assert(BUFFER_BYTES <= L1_BUFFER_STRIDE,
-               "one M64xN64xK128 TEW16 buffer must fit in 64 KiB");
-_Static_assert(L1_BYTES <= TCDM_BYTES,
-               "two matmul buffers exceed the 128 KiB TCDM");
+               "one M64xN64xK128 TEW16 buffer must fit in 128 KiB");
+_Static_assert(L1_BYTES <= SNRT_TCDM_SIZE,
+               "two matmul buffers exceed the configured TCDM capacity");
 
 static const __fp16 zero_tile_dram[TILE_INPUTS]
     __attribute__((section(".dram"), aligned(64))) = {0};
@@ -77,11 +77,6 @@ static inline uint32_t float_bits(float value) {
     return bits.u;
 }
 
-static inline uint32_t cycle_count(void) {
-    uint32_t cycles;
-    asm volatile("csrr %0, mcycle" : "=r"(cycles));
-    return cycles;
-}
 static snrt_dma_txid_t fill_panel(__fp16 *dst, const __fp16 *src,
                                   uint32_t panel_tiles,
                                   uint32_t valid_tiles,
@@ -196,13 +191,11 @@ int main(void) {
         uint32_t fcsr;
 
         if (iter == 0)
-            start_cycle = cycle_count();
+            start_cycle = get_cycle();
         matmul_fp16((const __fp16 *)(base + A_OFFSET),
                     (const __fp16 *)(base + B_OFFSET),
                     (__fp16 *)(base + C_OFFSET), valid_m, valid_n, valid_k);
-        end_cycle = cycle_count();
-        // Keep completion synchronization outside the measured kernel window.
-        wait_spatz();
+        end_cycle = get_cycle();
 
         snrt_dma_start_1d(partials + (size_t)iter * C_ELEMENTS,
                           base + C_OFFSET, C_BYTES);

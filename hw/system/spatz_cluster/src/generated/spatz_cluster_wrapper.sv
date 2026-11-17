@@ -50,14 +50,14 @@ package spatz_cluster_pkg;
   //  Spatz Cluster //
   ////////////////////
 
-  localparam int unsigned NumCores = 2;
+  localparam int unsigned NumCores = 1;
 
   localparam int unsigned ICacheLineWidth = 256;
   localparam int unsigned ICacheLineCount = 64;
   localparam int unsigned ICacheWays = 2;
 
   localparam int unsigned TCDMStartAddr = 32'h100000;
-  localparam int unsigned TCDMSize      = 32'h80000;
+  localparam int unsigned TCDMSize      = 32'h20000;
   localparam logic AddrMisalign =  1'b1; // 0-aligned, 1-misalign
   localparam int unsigned PeriStartAddr = TCDMStartAddr + TCDMSize;
 
@@ -77,68 +77,6 @@ package spatz_cluster_pkg;
   };
 
   localparam fpnew_pkg::fpu_implementation_t FPUImplementation [NumCores] = '{
-    '{
-        PipeRegs: // FMA Block
-                  '{
-                    '{  1, // FP32
-                        2, // FP64
-                        0, // FP16
-                        0, // FP8
-                        0, // FP16alt
-                        0  // FP8alt
-                      },
-                    '{1, 1, 1, 1, 1, 1},   // DIVSQRT
-                    '{1,
-                      1,
-                      1,
-                      1,
-                      1,
-                      1},   // NONCOMP
-                    '{2,
-                      2,
-                      2,
-                      2,
-                      2,
-                      2},   // CONV
-                    '{2,
-                      2,
-                      2,
-                      2,
-                      2,
-                      2}    // DOTP
-                    },
-        UnitTypes: '{'{fpnew_pkg::MERGED,
-                       fpnew_pkg::MERGED,
-                       fpnew_pkg::MERGED,
-                       fpnew_pkg::MERGED,
-                       fpnew_pkg::MERGED,
-                       fpnew_pkg::MERGED},  // FMA
-                    '{fpnew_pkg::DISABLED,
-                        fpnew_pkg::DISABLED,
-                        fpnew_pkg::DISABLED,
-                        fpnew_pkg::DISABLED,
-                        fpnew_pkg::DISABLED,
-                        fpnew_pkg::DISABLED}, // DIVSQRT
-                    '{fpnew_pkg::PARALLEL,
-                        fpnew_pkg::PARALLEL,
-                        fpnew_pkg::PARALLEL,
-                        fpnew_pkg::PARALLEL,
-                        fpnew_pkg::PARALLEL,
-                        fpnew_pkg::PARALLEL}, // NONCOMP
-                    '{fpnew_pkg::MERGED,
-                        fpnew_pkg::MERGED,
-                        fpnew_pkg::MERGED,
-                        fpnew_pkg::MERGED,
-                        fpnew_pkg::MERGED,
-                        fpnew_pkg::MERGED},   // CONV
-                    '{fpnew_pkg::MERGED,
-                        fpnew_pkg::MERGED,
-                        fpnew_pkg::MERGED,
-                        fpnew_pkg::MERGED,
-                        fpnew_pkg::MERGED,
-                        fpnew_pkg::MERGED}},  // DOTP
-        PipeConfig: fpnew_pkg::BEFORE
-    },
     '{
         PipeRegs: // FMA Block
                   '{
@@ -238,9 +176,9 @@ module spatz_cluster_wrapper
   input  axi_out_resp_t axi_out_resp_i
 );
 
-  localparam int unsigned NumIntOutstandingLoads   [NumCores] = '{1, 1};
-  localparam int unsigned NumIntOutstandingMem     [NumCores] = '{4, 4};
-  localparam int unsigned NumSpatzOutstandingLoads [NumCores] = '{4, 4};
+  localparam int unsigned NumIntOutstandingLoads   [NumCores] = '{1};
+  localparam int unsigned NumIntOutstandingMem     [NumCores] = '{4};
+  localparam int unsigned NumSpatzOutstandingLoads [NumCores] = '{4};
   localparam int unsigned NumSpatzFPUs             [NumCores] = '{default: 4};
   localparam int unsigned NumSpatzIPUs             [NumCores] = '{default: 1};
   localparam int unsigned NumSpatzTCDMPorts        [NumCores] = '{default: 8};
@@ -289,10 +227,11 @@ module spatz_cluster_wrapper
     .NarrowAXIDataWidth (SpatzNarrowAxiDataWidth),
     .BootAddr (32'h1000),
     .ClusterPeriphSize (64),
-    .NrCores (2),
-    .TCDMDepth (4096),
+    .NrCores (1),
+    .TCDMDepth (1024),
     .TCDMSize (TCDMSize),
     .NrBanks (16),
+    .UseInstructionBuffer (0),
     .ICacheLineWidth (spatz_cluster_pkg::ICacheLineWidth),
     .ICacheLineCount (spatz_cluster_pkg::ICacheLineCount),
     .ICacheWays (spatz_cluster_pkg::ICacheWays),
@@ -309,7 +248,7 @@ module spatz_cluster_wrapper
     .axi_in_resp_t (axi_in_resp_t),
     .axi_out_req_t (spatz_axi_iwc_out_req_t),
     .axi_out_resp_t (spatz_axi_iwc_out_resp_t),
-    .Xdma (2'b01),
+    .Xdma (1'b1),
     .DMAAxiReqFifoDepth (3),
     .DMAReqFifoDepth (3),
     .RegisterOffloadRsp (1),

@@ -1,0 +1,4 @@
+data/data_*.h
+!data/data_c64_t64_v128.h
+!data/data_c128_t64_v192.h
+__pycache__/

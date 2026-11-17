@@ -14,7 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// Author: Pei-Yu Lin <peilin@ethz.ch>
+// Author: Pei-Yu Lin, ETH Zürich
 
 // Specialized FP16 VME matmul kernel for M=N=64, K=64 or K=128.
 // TE=16, CE=8, and eight logical tiles.
