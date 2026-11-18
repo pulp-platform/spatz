@@ -101,7 +101,7 @@ packages:
     - fpnew
     - redundancy_cells
   redundancy_cells:
-    revision: c960e197cc85fe70be800e8f8c690ddc432f8a8c
+    revision: 1c7b0a4f60d1857e94826c5d9bd782317d531618
     version: null
     source:
       Git: https://github.com/pulp-platform/redundancy_cells.git
