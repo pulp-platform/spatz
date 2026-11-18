@@ -33,6 +33,7 @@ module snitch_regfileTMR #(
   parameter int unsigned ADDR_WIDTH     = 4
 )(
   input logic clk_i,
+  input logic rst_ni,
   input logic [NR_READ_PORTS - 1:0] [ADDR_WIDTH - 1:0] raddr_iA,
   input logic [NR_READ_PORTS - 1:0] [ADDR_WIDTH - 1:0] raddr_iB,
   input logic [NR_READ_PORTS - 1:0] [ADDR_WIDTH - 1:0] raddr_iC,
