@@ -172,6 +172,14 @@ module spatz_vfu
   logic [$clog2(N_FU*(ELEN/8)):0] nr_elem_word;
   assign nr_elem_word = (N_FU * (1 << (MAXEW - spatz_req.vtype.vsew))) >> spatz_req.op_arith.is_narrowing;
 
+  logic is_divsqrt_insn;
+  assign is_divsqrt_insn = spatz_req.op inside {VFDIV, VFSQRT};
+
+  logic divsqrt_shared_active;
+  assign divsqrt_shared_active = is_divsqrt_insn && divsqrt_is_shared;
+
+  assign nr_elem_word_divsqrt = (1 << (MAXEW - spatz_req.vtype.vsew));
+
   // Are we running integer or floating-point instructions?
   typedef enum logic {
     VFU_RunningIPU, VFU_RunningFPU
@@ -382,6 +390,15 @@ module spatz_vfu
   logic     vfu_rsp_valid_raw;
   vfu_rsp_t vfu_rsp_o_raw;
 
+  logic [$clog2(N_FU)-1:0] divsqrt_slot_q, divsqrt_slot_d;
+  logic last_divsqrt;
+
+  assign last_divsqrt = divsqrt_shared_active ? ((vl_q + (divsqrt_slot_q+1)*nr_elem_word_divsqrt) >= spatz_req.vl) : 1'b0;
+
+  // All the results of the current VRF word in the FUs are ready
+  logic fu_word_complete;
+  assign fu_word_complete = &(result_valid | ~pending_results);
+
   always_comb begin: control_proc
     // Maintain state
     vl_d              = vl_q;
@@ -440,14 +457,26 @@ module spatz_vfu
       endcase
 
     // Finished the execution!
-    if (spatz_req_valid && ((vl_d >= spatz_req.vl && !spatz_req.op_arith.is_reduction) || reduction_done)) begin
-      spatz_req_ready         = spatz_req_valid;
-      busy_d                  = 1'b0;
-      vl_d                    = '0;
-      last_request            = 1'b1;
-      running_d[spatz_req.id] = 1'b0;
-      widening_upper_d        = 1'b0;
-      narrowing_upper_d       = 1'b0;
+    if (spatz_req_valid && ((vl_d >= spatz_req.vl && !spatz_req.op_arith.is_reduction) || reduction_done || last_divsqrt)) begin
+      if(divsqrt_shared_active) begin
+          last_request            = 1'b1;
+        if(result_tag.last)begin
+          spatz_req_ready         = spatz_req_valid;
+          busy_d                  = 1'b0;
+          vl_d                    = '0;
+          running_d[spatz_req.id] = 1'b0;
+          widening_upper_d        = 1'b0;
+          narrowing_upper_d       = 1'b0;
+        end
+      end else begin
+        spatz_req_ready         = spatz_req_valid;
+        busy_d                  = 1'b0;
+        vl_d                    = '0;
+        last_request            = 1'b1;
+        running_d[spatz_req.id] = 1'b0;
+        widening_upper_d        = 1'b0;
+        narrowing_upper_d       = 1'b0;
+      end
     end
     // Do we have a new instruction?
     else if (spatz_req_valid && !running_d[spatz_req.id]) begin
@@ -780,7 +809,132 @@ module spatz_vfu
   assign result       = state_q == VFU_RunningIPU ? ipu_result       : fpu_result;
   assign result_valid = state_q == VFU_RunningIPU ? ipu_result_valid : fpu_result_valid;
 
-  assign scalar_result = result[ELEN-1:0];
+    ///////////////////////
+  //      DIV/SQRT     //
+  ///////////////////////
+
+  // Accumulate the slots already completed for the current VRF word
+  logic [N_FU*ELEN-1:0]  divsqrt_acc_d, divsqrt_acc_q;
+  logic [N_FU*ELENB-1:0] divsqrt_acc_valid_d, divsqrt_acc_valid_q;
+  // TMR: divsqrt_acc_q (voted value in divsqrt_acc_q, copies divsqrt_acc_q0..2)
+  logic [N_FU*ELEN-1:0] divsqrt_acc_q0, divsqrt_acc_q1, divsqrt_acc_q2;
+  `FF(divsqrt_acc_q0, divsqrt_acc_d, '0)
+  `FF(divsqrt_acc_q1, divsqrt_acc_d, '0)
+  `FF(divsqrt_acc_q2, divsqrt_acc_d, '0)
+  bitwise_TMR_voter_fail #(.DataWidth($bits(divsqrt_acc_q)), .VoterType(1)) i_divsqrt_acc_q_voter (
+    .a_i(divsqrt_acc_q0), .b_i(divsqrt_acc_q1), .c_i(divsqrt_acc_q2), .majority_o(divsqrt_acc_q), .fault_detected_o(ff_tmr_err_0[14]));
+  // TMR: divsqrt_acc_valid_q (voted value in divsqrt_acc_valid_q, copies divsqrt_acc_valid_q0..2)
+  logic [N_FU*ELENB-1:0] divsqrt_acc_valid_q0, divsqrt_acc_valid_q1, divsqrt_acc_valid_q2;
+  `FF(divsqrt_acc_valid_q0, divsqrt_acc_valid_d, '0)
+  `FF(divsqrt_acc_valid_q1, divsqrt_acc_valid_d, '0)
+  `FF(divsqrt_acc_valid_q2, divsqrt_acc_valid_d, '0)
+  bitwise_TMR_voter_fail #(.DataWidth($bits(divsqrt_acc_valid_q)), .VoterType(1)) i_divsqrt_acc_valid_q_voter (
+    .a_i(divsqrt_acc_valid_q0), .b_i(divsqrt_acc_valid_q1), .c_i(divsqrt_acc_valid_q2), .majority_o(divsqrt_acc_valid_q), .fault_detected_o(ff_tmr_err_0[37]));
+
+  logic divsqrt_shared_ready;
+  logic divsqrt_closing_slot;
+
+  // Handshake on FPU0 output
+  logic divsqrt_pop;
+
+  logic divsqrt_done_q, divsqrt_done_d;
+  // TMR: divsqrt_done_q (voted value in divsqrt_done_q, copies divsqrt_done_q0..2)
+  logic divsqrt_done_q0, divsqrt_done_q1, divsqrt_done_q2;
+  `FF(divsqrt_done_q0, divsqrt_done_d, 1'b0)
+  `FF(divsqrt_done_q1, divsqrt_done_d, 1'b0)
+  `FF(divsqrt_done_q2, divsqrt_done_d, 1'b0)
+  bitwise_TMR_voter_fail #(.DataWidth($bits(divsqrt_done_q)), .VoterType(1)) i_divsqrt_done_q_voter (
+    .a_i(divsqrt_done_q0), .b_i(divsqrt_done_q1), .c_i(divsqrt_done_q2), .majority_o(divsqrt_done_q), .fault_detected_o(ff_tmr_err_0[38]));
+
+  // Set once the last element of the instruction has been committed to the VRF
+  always_comb begin : proc_divsqrt_done
+    divsqrt_done_d = divsqrt_done_q;
+    if (divsqrt_pop && result_tag.last)
+      divsqrt_done_d = 1'b1;
+    else if (fpu_load_ready[0])
+      divsqrt_done_d = 1'b0;
+  end : proc_divsqrt_done
+
+  // This result completes the VRF word: last slot or last element of the instruction
+  assign divsqrt_closing_slot = (divsqrt_slot_q == N_FU - 1) || result_tag.last;
+
+  // Intermediate slots are always absorbed by the accumulator --> the closing slot is handed over only when the VRF commits the word
+  assign divsqrt_shared_ready = !divsqrt_done_q && (!divsqrt_closing_slot || vrf_wvalid_i);
+
+  assign divsqrt_pop = divsqrt_shared_active && (fpu_result_valid[ELENB-1:0] == '1) && divsqrt_shared_ready;
+
+  always_comb begin : proc_divsqrt_acc
+    divsqrt_acc_d       = divsqrt_acc_q;
+    divsqrt_acc_valid_d = divsqrt_acc_valid_q;
+
+    // Capture the slot handed over by FPU0
+    if (divsqrt_pop) begin
+      divsqrt_acc_d[divsqrt_slot_q*ELEN +: ELEN] = fpu_result[ELEN-1:0];
+      divsqrt_acc_valid_d[divsqrt_slot_q*ELENB +: ELENB] = '1;
+    end
+
+    // Word committed to the VRF, or not a shared divsqrt: restart clean
+    if (result_ready || !divsqrt_shared_active) begin
+      divsqrt_acc_d       = '0;
+      divsqrt_acc_valid_d = '0;
+    end
+  end : proc_divsqrt_acc
+
+  always_comb begin : proc_fpu_result_mux
+    fpu_result_temp       = '0;
+    fpu_result_valid_temp = '0;
+
+    if (divsqrt_shared_active && op1_is_ready && op2_is_ready) begin
+      fpu_result_temp       = divsqrt_acc_q;
+      fpu_result_valid_temp = divsqrt_acc_valid_q;
+
+      if (fpu_result_valid[ELENB-1:0] == '1) begin
+        fpu_result_temp[divsqrt_slot_q*ELEN +: ELEN ] = fpu_result[ELEN-1:0];
+        fpu_result_valid_temp[divsqrt_slot_q*ELENB +: ELENB] = '1;
+
+        if (result_tag.last)
+          fpu_result_valid_temp = '1;
+      end
+    end else begin
+      fpu_result_temp       = fpu_result;
+      fpu_result_valid_temp = fpu_result_valid;
+    end
+  end : proc_fpu_result_mux
+
+  assign scalar_result = (spatz_req.op_arith.is_scalar || result_tag.last) ? result[ELEN-1:0] : '0;
+
+  // TMR: divsqrt_slot_q (voted value in divsqrt_slot_q, copies divsqrt_slot_q0..2)
+  logic [$clog2(N_FU)-1:0] divsqrt_slot_q0, divsqrt_slot_q1, divsqrt_slot_q2;
+  `FF(divsqrt_slot_q0, divsqrt_slot_d, '0)
+  `FF(divsqrt_slot_q1, divsqrt_slot_d, '0)
+  `FF(divsqrt_slot_q2, divsqrt_slot_d, '0)
+  bitwise_TMR_voter_fail #(.DataWidth($bits(divsqrt_slot_q)), .VoterType(1)) i_divsqrt_slot_q_voter (
+    .a_i(divsqrt_slot_q0), .b_i(divsqrt_slot_q1), .c_i(divsqrt_slot_q2), .majority_o(divsqrt_slot_q), .fault_detected_o(ff_tmr_err_0[39]));
+
+  always_comb begin : proc_divsqrt_slot
+    divsqrt_slot_d = divsqrt_slot_q;
+    if (spatz_req_valid && !is_divsqrt_insn)
+      divsqrt_slot_d = '0;
+    else if (divsqrt_pop)
+      divsqrt_slot_d = (divsqrt_slot_q == N_FU - 1 || result_tag.last) ? '0 : divsqrt_slot_q + 1;
+  end : proc_divsqrt_slot
+
+  logic divsqrt_inflight_q, divsqrt_inflight_d;
+  // TMR: divsqrt_inflight_q (voted value in divsqrt_inflight_q, copies divsqrt_inflight_q0..2)
+  logic divsqrt_inflight_q0, divsqrt_inflight_q1, divsqrt_inflight_q2;
+  `FF(divsqrt_inflight_q0, divsqrt_inflight_d, 1'b0)
+  `FF(divsqrt_inflight_q1, divsqrt_inflight_d, 1'b0)
+  `FF(divsqrt_inflight_q2, divsqrt_inflight_d, 1'b0)
+  bitwise_TMR_voter_fail #(.DataWidth($bits(divsqrt_inflight_q)), .VoterType(1)) i_divsqrt_inflight_q_voter (
+    .a_i(divsqrt_inflight_q0), .b_i(divsqrt_inflight_q1), .c_i(divsqrt_inflight_q2), .majority_o(divsqrt_inflight_q), .fault_detected_o(ff_tmr_err_0[40]));
+
+  always_comb begin : proc_divsqrt_inflight
+    divsqrt_inflight_d = divsqrt_inflight_q;
+    if (divsqrt_shared_active && fpu_load_ready[0])
+      divsqrt_inflight_d = 1'b1;
+    else if (divsqrt_pop)
+      divsqrt_inflight_d = 1'b0;
+  end : proc_divsqrt_inflight
 
   // TMR: operand_v0_t_lo_q (voted value in operand_v0_t_lo_q, copies operand_v0_t_lo_q0..2)
   logic [N_FU*ELEN-1:0] operand_v0_t_lo_q0, operand_v0_t_lo_q1, operand_v0_t_lo_q2;
@@ -911,6 +1065,13 @@ module spatz_vfu
       endcase
     end
   end
+  // FUs can accept a new word of operands
+  logic fu_can_accept;
+  assign fu_can_accept = spatz_req_valid && &(in_ready | ~valid_operations) && operands_ready && !stall;
+
+  // the word can only advance when all slots have been consumed
+  logic fu_word_can_advance;
+  assign fu_word_can_advance = !divsqrt_shared_active || (fu_word_complete && vrf_wvalid_i);
 
   always_comb begin: proc_reduction
     // Maintain state
@@ -1016,7 +1177,7 @@ module spatz_vfu
 
         // Do we have a new reduction instruction?
         if (spatz_req_valid && !running_q[spatz_req.id] && spatz_req.op_arith.is_reduction)
-          reduction_state_d = (!spatz_req.op_arith.vm) ? Reduction_Read_V0_t : is_fpu_busy ? Reduction_Wait : Reduction_Init;
+          reduction_state_d = (!spatz_req.op_arith.vm) ? Reduction_Read_V0_t : (is_fpu_busy || divsqrt_inflight_q) ? Reduction_Wait : Reduction_Init;
       end
 
       Reduction_Wait: begin
@@ -1923,6 +2084,14 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
   ////////////
   //  FPUs  //
   ////////////
+  function automatic int unsigned max_pipe_regs(
+    input fpnew_pkg::fmt_unsigned_t regs, input fpnew_pkg::fmt_logic_t cfg
+  );
+    automatic int unsigned res = 0;
+    for (int unsigned i = 0; i < fpnew_pkg::NUM_FP_FORMATS; i++)
+      if (cfg[i] && regs[i] > res) res = regs[i];
+    return res;
+  endfunction : max_pipe_regs
 
   if (FPU) begin: gen_fpu
     logic [N_FPU*ELEN-1:0] wide_operand1, wide_operand2, wide_operand3;
@@ -1990,8 +2159,10 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
       assign fpu_result_valid[fpu*ELENB +: ELENB] = {ELENB{int_fpu_result_valid}};
 
       elen_t fpu_operand1, fpu_operand2, fpu_operand3;
-      assign fpu_operand1 = spatz_req.op_arith.switch_rs1_rd ? wide_operand3[fpu*ELEN +: ELEN] : wide_operand1[fpu*ELEN +: ELEN];
-      assign fpu_operand2 = wide_operand2[fpu*ELEN +: ELEN];
+      assign fpu_operand1 = (fpu == 0 && divsqrt_shared_active)
+        ? wide_operand1[divsqrt_slot_q*ELEN +: ELEN]: spatz_req.op_arith.switch_rs1_rd ? wide_operand3[fpu*ELEN +: ELEN] : wide_operand1[fpu*ELEN +: ELEN];
+      assign fpu_operand2 = (fpu == 0 && divsqrt_shared_active)
+        ? wide_operand2[divsqrt_slot_q*ELEN +: ELEN]:wide_operand2[fpu*ELEN +: ELEN];
       assign fpu_operand3 = (fpu_op == fpnew_pkg::ADD || spatz_req.op_arith.switch_rs1_rd) ? wide_operand1[fpu*ELEN +: ELEN] : wide_operand3[fpu*ELEN +: ELEN];
 
       logic int_fpu_in_valid;
