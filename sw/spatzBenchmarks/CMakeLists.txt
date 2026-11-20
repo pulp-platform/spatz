@@ -146,6 +146,8 @@ add_library(srs-equalize_zf_1xn srs-equalize_zf_1xn/kernel/equalize_zf_1xn.c)
 add_library(srs-equalize_zf_2xn srs-equalize_zf_2xn/kernel/equalize_zf_2xn.c)
 add_library(srs-equalize_zf_srs srs-equalize_zf_srs/kernel/equalize_zf_2xn.c)
 
+add_library(srs-demodulate_soft_BPSK srs-demodulate_soft_BPSK/kernel/demodulate_soft_BPSK.c)
+
 # Tests
 enable_testing()
 set(SNITCH_TEST_PREFIX spatzBenchmarks-)
@@ -330,6 +332,8 @@ add_spatz_test_twoParam(srs-equalize_zf_2xn srs-equalize_zf_2xn/main.c 1024 4)
 add_spatz_test_twoParam(srs-equalize_zf_srs srs-equalize_zf_srs/main.c 612 2)
 add_spatz_test_twoParam(srs-equalize_zf_srs srs-equalize_zf_srs/main.c 612 4)
 add_spatz_test_twoParam(srs-equalize_zf_srs srs-equalize_zf_srs/main.c 4096 4)
+add_spatz_test_oneParam(srs-demodulate_soft_BPSK srs-demodulate_soft_BPSK/main.c 10)
+add_spatz_test_oneParam(srs-demodulate_soft_BPSK srs-demodulate_soft_BPSK/main.c 1024)
 
 # Ventaglio sparse benchmarks. The kernels carry BOTH a Ventaglio (vfx)
 # implementation and a baseline RVV reference compiled in via the
