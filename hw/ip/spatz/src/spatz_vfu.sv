@@ -2123,7 +2123,7 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
       `FFL(fpu_in_valid_q2, int_fpu_in_valid, int_fpu_in_ready, 1'b0)
       bitwise_TMR_voter_fail #(.DataWidth($bits(fpu_in_valid_q)), .VoterType(1)) i_fpu_in_valid_q_voter (
         .a_i(fpu_in_valid_q0), .b_i(fpu_in_valid_q1), .c_i(fpu_in_valid_q2), .majority_o(fpu_in_valid_q), .fault_detected_o(ff_tmr_err_1[((0)*(N_FPU)+fpu)*16+11]));
-      
+
       // assigned further by the replay FSM block
       logic  replay_pending;
       logic  replay_release_done;  // replay result handed over this cycle
