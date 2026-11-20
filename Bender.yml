@@ -152,6 +152,7 @@ sources:
     - hw/ip/spatz/src/spatz_fpu_sequencer.sv
     - hw/ip/spatz/src/spatz_ipu.sv
     - hw/ip/spatz/src/spatz_ipu_dmr.sv
+    - hw/ip/spatz/src/spatz_fpu_shadow_checker.sv
     - hw/ip/spatz/src/spatz_vfu.sv
     - hw/ip/spatz/src/spatz_vlsu.sv
     - hw/ip/spatz/src/spatz_doublebw_vlsu.sv
