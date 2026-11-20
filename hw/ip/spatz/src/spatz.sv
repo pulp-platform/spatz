@@ -56,6 +56,9 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     output spatz_rsp_t                        rsp_o,
     // Thread the response belongs to (only with DualThread)
     output logic                              rsp_thid_o,
+    // A new VLSU / VFU instruction would be accepted by its unit right away
+    output logic                              issue_vlsu_ready_o,
+    output logic                              issue_vfu_ready_o,
     // Memory Request
     output spatz_mem_req_t   [NrMemPorts-1:0] spatz_mem_req_o,
     output logic             [NrMemPorts-1:0] spatz_mem_req_valid_o,
@@ -198,6 +201,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
       .resp_ready_i             ( rsp_ready_i            ),
       // Spatz interface
       .issue_req_o              ( issue_req              ),
+      .issue_is_vlsu_o          (                        ),
       .issue_valid_o            ( issue_valid            ),
       .issue_ready_i            ( issue_ready            ),
       .issue_rsp_i              ( issue_rsp              ),
@@ -289,6 +293,8 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     .rsp_ready_i      (resp_ready      ),
     .rsp_o            (resp            ),
     .rsp_thid_o       (resp_thid       ),
+    .issue_vlsu_ready_o(issue_vlsu_ready_o),
+    .issue_vfu_ready_o (issue_vfu_ready_o ),
     // FPU side channel
     .fpu_rnd_mode_i   (fpu_rnd_mode_i  ),
     .fpu_fmt_mode_i   (fpu_fmt_mode_i  ),

@@ -36,6 +36,9 @@ module spatz_controller
     output spatz_rsp_t                             rsp_o,
     // Thread the response belongs to
     output logic                                   rsp_thid_o,
+    // A new instruction for the VLSU / VFU would leave the request buffer right away
+    output logic                                   issue_vlsu_ready_o,
+    output logic                                   issue_vfu_ready_o,
     // FPU untimed sidechannel
     input  roundmode_e                             fpu_rnd_mode_i,
     input  fmt_mode_t                              fpu_fmt_mode_i,
@@ -431,6 +434,10 @@ module spatz_controller
   // Pop the buffer if we do not have a unit stall
   // Configuration instructions should wait until the core is ready to accept back the answer
   assign req_buffer_pop = ~stall & (rsp_ready_q | (spatz_req.ex_unit != CON)) & req_buffer_valid && !running_insn_full;
+
+  // Unit queue has room and an instruction ID is free (registered state only)
+  assign issue_vlsu_ready_o = vlsu_req_ready_i & ~running_insn_full;
+  assign issue_vfu_ready_o  = vfu_req_ready_i & ~running_insn_full;
 
   // Issue new operation to execution units
   always_comb begin : ex_issue

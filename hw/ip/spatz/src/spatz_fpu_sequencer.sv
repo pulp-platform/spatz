@@ -41,6 +41,8 @@ module spatz_fpu_sequencer
     output logic             issue_valid_o,
     input  logic             issue_ready_i,
     input  spatz_issue_rsp_t issue_rsp_i,
+    // The offered instruction is a vector load/store
+    output logic             issue_is_vlsu_o,
     input  spatz_rsp_t       resp_i,
     input  logic             resp_valid_i,
     output logic             resp_ready_o,
@@ -605,6 +607,8 @@ module spatz_fpu_sequencer
     riscv_instr::MSE8_V_A, riscv_instr::MSE8_V_B, riscv_instr::MSE8_V_C, riscv_instr::MSE16_V_A,
     riscv_instr::MSE16_V_B, riscv_instr::MSE16_V_C, riscv_instr::MSE32_V_A, riscv_instr::MSE32_V_B,
     riscv_instr::MSE32_V_C, riscv_instr::MSE64_V_A, riscv_instr::MSE64_V_B, riscv_instr::MSE64_V_C};
+
+  assign issue_is_vlsu_o = is_vector_load | is_vector_store;
 
   // Do we need to delay is load/store because of the VLSU?
   assign vlsu_stall = (is_store && acc_mem_cnt_q != '0) || (is_load && acc_mem_str_cnt_q != '0) || acc_mem_cnt_q == '1;
