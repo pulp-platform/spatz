@@ -13,7 +13,7 @@ dependencies:
   axi:                { git: "https://github.com/pulp-platform/axi.git",                 version: =0.39.11       }
   axi_riscv_atomics:  { git: "https://github.com/pulp-platform/axi_riscv_atomics.git",   version: 0.7.0          }
   common_cells:       { git: "https://github.com/pulp-platform/common_cells.git",        rev:     a8d8a006       }
-  FPnew:              { git: "https://github.com/pulp-platform/cvfpu.git",               rev:     pulp-v0.1.3    }
+  FPnew:              { git: "https://github.com/pulp-platform/cvfpu.git",               rev:     pulp-v0.2.3    }
   idma:               { git: "https://github.com/pulp-platform/iDMA.git",                version: 0.6.4          }
   register_interface: { git: "https://github.com/pulp-platform/register_interface.git",  version: 0.4.7          }
   cluster_icache:     { git: "https://github.com/pulp-platform/cluster_icache.git",      rev:     maoyuan/parity_tmr_icache}
