@@ -49,11 +49,18 @@ module spatz_vfu
   );
 
   // TMR fault flags of the triplicated FFs
-  logic [42-1:0] ff_tmr_err_0;
-  logic [12*(N_FPU)-1:0] ff_tmr_err_1;
+  logic [41-1:0] ff_tmr_err_0;
+  // widened from 12 to 16 per-fpu slots: +4 for the replay-controller
+  // registers added below (replay_state_q, replay_result_q, release_tag_q,
+  // confirmed_fault_q)
+  // logic [12*(N_FPU)-1:0] ff_tmr_err_1;
+  logic [16*(N_FPU)-1:0] ff_tmr_err_1;
   logic ff_tmr_fault_any;
   // FPU shadow-checker mismatch (any FPU)
   logic fpu_shadow_fault_any;
+  // Confirmed temporal-redundancy replay mismatch (any FPU) -- see
+  // gen_fpnew's replay FSM below.
+  logic fpu_replay_confirmed_fault_any;
   assign ff_tmr_fault_any = (|ff_tmr_err_0) | (|ff_tmr_err_1);
 
 // Include FF
@@ -77,6 +84,9 @@ module spatz_vfu
 
     // Is this a reduction?
     logic reduction;
+    // Does this word belong to a bypass-classified instruction under temporal-redundancy
+    // replay (set on both the pass-1 and the pass-2 push, see gen_fpnew's replay FSM)?
+    logic replay;
     // valid bytes in this VRF word
     logic [$clog2(VRFWordBWidth+1)-1:0] valid_bytes;
   } vfu_tag_t;
@@ -103,7 +113,7 @@ module spatz_vfu
 
   opq_ecc_t opq_enc_data, opq_data;
   logic [OpqDataWidth-1:0] opq_dec_data;
-  logic                    opq_spill_fault;
+  logic [1:0]              opq_spill_err;
   logic [OpqProtWidth-1:0] opq_dec_syndrome;
   logic [1:0]              opq_dec_err;
 
@@ -129,7 +139,7 @@ module spatz_vfu
     .data_o           (opq_data                                       ),
     .valid_o          (spatz_req_valid                                ),
     .ready_i          (spatz_req_ready                                ),
-    .fault_o          (opq_spill_fault                                ),
+    .err_o            (opq_spill_err                                  ),
     .data_corrector_o (                                               ),
     .data_corrected_i ('0                                             )
   );
@@ -231,22 +241,11 @@ module spatz_vfu
     .a_i(operand_state_q0), .b_i(operand_state_q1), .c_i(operand_state_q2), .majority_o(operand_state_q_vote), .fault_detected_o(ff_tmr_err_0[3]));
   assign operand_state_q = operand_state_t'(operand_state_q_vote);
 
-  // Registered VRF read request (1-cycle latency): the VRF only sees vrf_re_o/vrf_raddr_o/vrf_id_o one
-  // cycle after the VFU computed them (see "Registered VRF read request" below). vrf_rvalid_eff is
-  // vrf_rvalid_i qualified with "this response belongs to the request I am issuing right now".
-  // NOTE: the VFU has no module parameter for its number of VRF read ports; it is fixed to 3 by the
-  // port list above (vrf_raddr_o/vrf_re_o/vrf_rdata_i/vrf_rvalid_i are all [2:0]):
-  // index 0 = VFU_VS2_RD, 1 = VFU_VS1_RD, 2 = VFU_VD_RD.
-  localparam int unsigned NrVfuReadPorts = 3;
-  vrf_addr_t [NrVfuReadPorts-1:0] vrf_raddr;   // combinational read address (before registering)
-  logic      [NrVfuReadPorts-1:0] vrf_re;      // combinational read enable  (before registering)
-  logic      [NrVfuReadPorts-1:0] vrf_rvalid_eff;
-
   // Are the VFU operands ready?
   logic op1_is_ready, op2_is_ready, op3_is_ready, operands_ready;
-  assign op1_is_ready   = spatz_req_valid && (operand_state_q == READ_OPERANDS) && ((!spatz_req.op_arith.is_reduction && (!spatz_req.use_vs1 || vrf_rvalid_eff[1])) || (spatz_req.op_arith.is_reduction && reduction_operand_ready_q));
-  assign op2_is_ready   = spatz_req_valid && (operand_state_q == READ_OPERANDS) && ((!spatz_req.use_vs2 || vrf_rvalid_eff[0]) || spatz_req.op_arith.is_reduction);
-  assign op3_is_ready   = spatz_req_valid && (operand_state_q == READ_OPERANDS) && (!spatz_req.vd_is_src || vrf_rvalid_eff[2]);
+  assign op1_is_ready   = spatz_req_valid && (operand_state_q == READ_OPERANDS) && ((!spatz_req.op_arith.is_reduction && (!spatz_req.use_vs1 || vrf_rvalid_i[1])) || (spatz_req.op_arith.is_reduction && reduction_operand_ready_q));
+  assign op2_is_ready   = spatz_req_valid && (operand_state_q == READ_OPERANDS) && ((!spatz_req.use_vs2 || vrf_rvalid_i[0]) || spatz_req.op_arith.is_reduction);
+  assign op3_is_ready   = spatz_req_valid && (operand_state_q == READ_OPERANDS) && (!spatz_req.vd_is_src || vrf_rvalid_i[2]);
   assign operands_ready = op1_is_ready && op2_is_ready && op3_is_ready && (!spatz_req.op_arith.is_scalar || vfu_rsp_ready_i) && !stall;
 
   // Valid operations
@@ -707,7 +706,7 @@ module spatz_vfu
   logic [N_FU*ELENB-1:0] in_ready;
 
   logic reduction_v0_t_is_ready;
-  assign reduction_v0_t_is_ready = (reduction_state_q == Reduction_Read_V0_t) && vrf_rvalid_eff[0] && vrf_rvalid_eff[1];
+  assign reduction_v0_t_is_ready = (reduction_state_q == Reduction_Read_V0_t) && vrf_rvalid_i[0] && vrf_rvalid_i[1];
   logic reduction_v0_t_read_done;
   // TMR: reduction_v0_t_read_done (voted value in reduction_v0_t_read_done, copies reduction_v0_t_read_done0..2)
   logic reduction_v0_t_read_done0, reduction_v0_t_read_done1, reduction_v0_t_read_done2;
@@ -739,7 +738,7 @@ module spatz_vfu
 
   // FSM to manage operands between normal calculation and v0.t fetching
   logic v0_t_is_ready;
-  assign v0_t_is_ready   = (operand_state_q == READ_V0_t) && vrf_rvalid_eff[0] && vrf_rvalid_eff[1];
+  assign v0_t_is_ready   = (operand_state_q == READ_V0_t) && vrf_rvalid_i[0] && vrf_rvalid_i[1];
   logic v0_t_read_done;
   // TMR: v0_t_read_done (voted value in v0_t_read_done, copies v0_t_read_done0..2)
   logic v0_t_read_done0, v0_t_read_done1, v0_t_read_done2;
@@ -1260,7 +1259,7 @@ module spatz_vfu
           end
         endcase
         // verilator lint_on SELRANGE
-        if (vrf_rvalid_eff[0] && vrf_rvalid_eff[1]) begin
+        if (vrf_rvalid_i[0] && vrf_rvalid_i[1]) begin
           reduction_operand_ready_d = 1'b1;
           reduction_pointer_d = reduction_pointer_q + 1;
           reduction_state_d = Reduction_Reduce;
@@ -1296,7 +1295,7 @@ module spatz_vfu
         `endif
 
         // verilator lint_on SELRANGE
-        if (vrf_rvalid_eff[1]) begin
+        if (vrf_rvalid_i[1]) begin
           reduction_operand_ready_d = 1'b1;
           reduction_pointer_d = reduction_pointer_q + 1;
           word_issued = is_fpu_insn ? 1'b1 : (VRFWordWidth==ELEN*N_IPU) ? 1'b1 : !(|pnt) ? 1'b1 : 1'b0;
@@ -1529,7 +1528,7 @@ module spatz_vfu
   always_comb begin : vreg_addr_proc
     vreg_addr_d = vreg_addr_q;
 
-    vrf_raddr = vreg_addr_d;
+    vrf_raddr_o = vreg_addr_d;
     vrf_waddr_o = vrf_addr_t'(result_tag.vd_addr);
 
     // Tag (propagated with the operations)
@@ -1543,22 +1542,23 @@ module spatz_vfu
       narrowing      : spatz_req.op_arith.is_narrowing,
       narrowing_upper: narrowing_upper_q,
       reduction      : spatz_req.op_arith.is_reduction,
+      replay         : 1'b0,
       valid_bytes    : valid_bytes_wr // count of the number of valid bytes in the VRF word (write side)
     };
 
     case(operand_state_q)
        READ_OPERANDS:begin
         if(switch_to_read_v0t) begin
-          vrf_raddr = vreg_addr_d;
+          vrf_raddr_o = vreg_addr_d;
 
         end else if(reduction_state_q == Reduction_Read_V0_t) begin
           vreg_addr_d[0] =  0 << $clog2(NrWordsPerVector);
           vreg_addr_d[1] =  1 << $clog2(NrWordsPerVector);
-          vrf_raddr = vreg_addr_d;
+          vrf_raddr_o = vreg_addr_d;
         end
         // RMW: redirect VD_RD (index 2) to write address so spatz.sv decodes old codeword
         if (vfu_rmw_q == VFU_RMW)
-          vrf_raddr[2] = vrf_addr_t'(result_tag.vd_addr);
+          vrf_raddr_o[2] = vrf_addr_t'(result_tag.vd_addr);
         // Skip normal vs1/vs2/vd address generation while servicing a reduction's
         // v0.t mask read (above): vl_q=='0 stays true for that whole phase, and
         // this branch is otherwise unconditional, so without this guard it
@@ -1572,7 +1572,7 @@ module spatz_vfu
             vreg_addr_d[2] = (spatz_req.vd + vstart) << $clog2(NrWordsPerVector);
 
           // Direct feedthrough
-          vrf_raddr = vreg_addr_d;
+          vrf_raddr_o = vreg_addr_d;
           if (!spatz_req.op_arith.is_scalar)
             input_tag.vd_addr = vfu_rsp_addr_t'(vreg_addr_d[2]);
 
@@ -1592,7 +1592,7 @@ module spatz_vfu
        READ_V0_t: begin
          vreg_addr_d[0] = ( 0 + vstart) << $clog2(NrWordsPerVector);
          vreg_addr_d[1] = ( 1 + vstart) << $clog2(NrWordsPerVector);
-         vrf_raddr = vreg_addr_d;
+         vrf_raddr_o = vreg_addr_d;
        end
        default:;
    endcase
@@ -1833,60 +1833,24 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
         if (vreg_we && vfu_rmw_needed)
           vfu_rmw_d = VFU_RMW;
       VFU_RMW:
-        if (vrf_rvalid_eff[2])
+        if (vrf_rvalid_i[2])
           vfu_rmw_d = VFU_NORMAL;
       default:;
     endcase
   end : vfu_rmw_fsm
 
   // In VFU_RMW: assert re[2] so spatz.sv reads old VD codeword at the write address.
-  assign vrf_re    = vreg_r_req | ((vfu_rmw_q == VFU_RMW) ? 3'b100 : 3'b000);
+  assign vrf_re_o    = vreg_r_req | ((vfu_rmw_q == VFU_RMW) ? 3'b100 : 3'b000);
 
-  // Registered VRF read request (cuts the VFU -> scoreboard -> VRF -> rvalid -> VFU path).
-  // vrf_re/vrf_raddr/read-id computed in cycle N are presented to the VRF in cycle N+1, together
-  // with a request context (operand state, id, ...). The response (rdata/rvalid) of cycle N+1 is
-  // consumed by the VFU only if the request it is making in cycle N+1 is identical to the one
-  // registered in cycle N (same port enabled, same address, same instruction id, same
-  // operand / v0.t / reduction-v0.t / RMW phase). Otherwise vrf_rvalid_eff stays low, the VFU
-  // stalls for a cycle, and the new request is registered. Stale responses (state changed,
-  // address advanced, instruction retired) are thus never consumed.
-  // Cost: the address advances after each consumed word, so a stream of words consumes at most
-  // one word every 2 cycles.
-  localparam int unsigned ReqContextW = $bits(operand_state_q) + 2 + $bits(spatz_req.id);
-  logic [ReqContextW-1:0] req_context;
-  assign req_context = {operand_state_q, reduction_state_q == Reduction_Read_V0_t, vfu_rmw_q == VFU_RMW, spatz_req.id};
-
-  typedef struct packed {
-    logic      [NrVfuReadPorts-1:0] re;
-    vrf_addr_t [NrVfuReadPorts-1:0] raddr;
-    logic      [ReqContextW-1:0]    context_q;
-  } vrf_req_t;
-  vrf_req_t vrf_req_d, vrf_req_q, vrf_req_q0, vrf_req_q1, vrf_req_q2;
-  assign vrf_req_d = '{re: vrf_re, raddr: vrf_raddr, context_q: req_context};
-  `FF(vrf_req_q0, vrf_req_d, '0)
-  `FF(vrf_req_q1, vrf_req_d, '0)
-  `FF(vrf_req_q2, vrf_req_d, '0)
-  logic [$bits(vrf_req_t)-1:0] vrf_req_q_vote;
-  bitwise_TMR_voter_fail #(.DataWidth($bits(vrf_req_t)), .VoterType(1)) i_vrf_req_q_voter (
-    .a_i(vrf_req_q0), .b_i(vrf_req_q1), .c_i(vrf_req_q2), .majority_o(vrf_req_q_vote), .fault_detected_o(ff_tmr_err_0[41]));
-  assign vrf_req_q = vrf_req_t'(vrf_req_q_vote);
-
-  assign vrf_re_o    = vrf_req_q.re;
-  assign vrf_raddr_o = vrf_req_q.raddr;
-
-  for (genvar port = 0; port < NrVfuReadPorts; port++) begin : gen_rvalid_eff
-    assign vrf_rvalid_eff[port] = vrf_rvalid_i[port] && vrf_req_q.re[port] && vrf_re[port] &&
-                                  (vrf_req_q.raddr[port] == vrf_raddr[port]) && (vrf_req_q.context_q == req_context);
-  end
   // NORMAL: suppress write when inner-cut partial write detected.
   // VFU_RMW: write merged codeword once read data is valid.
-  assign vrf_we_o    = (vfu_rmw_q == VFU_RMW) ? (vreg_we && vrf_rvalid_eff[2])
+  assign vrf_we_o    = (vfu_rmw_q == VFU_RMW) ? (vreg_we && vrf_rvalid_i[2])
                                                : (vreg_we && !vfu_rmw_needed);
   assign vrf_wbe_o   = (vfu_rmw_q == VFU_RMW) ? '1             : vreg_wbe;
   assign vrf_wdata_o = (vfu_rmw_q == VFU_RMW) ? vfu_rmw_merged : vrf_wdata_pre;
   // Read IDs belong to the registered request (stored in the request context, aligned with
   // vrf_re_o); the write ID is not registered.
-  assign vrf_id_o    = {result_tag.id, {3{vrf_req_q.context_q[$bits(spatz_req.id)-1:0]}}};
+  assign vrf_id_o    = {result_tag.id, {3{spatz_req.id}}};
 
   // Defer the "instruction complete" response for a VRF write (!wb) that
   // hasn't actually landed in the VRF yet this cycle -- whether stalled by
@@ -1959,8 +1923,11 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
 
   assign is_ipu_busy = |int_ipu_busy;
   assign ipu_dup_fault = |int_ipu_dup_fault;
-  assign vfu_uncorrectable_fault_o = ipu_dup_fault | (spatz_req_valid & opq_dec_err[1]) | fpu_shadow_fault_any;
-  assign vfu_correctable_fault_o = opq_spill_fault | (spatz_req_valid & opq_dec_err[0]) | ff_tmr_fault_any;
+  // assign vfu_uncorrectable_fault_o = ipu_dup_fault | (spatz_req_valid & opq_dec_err[1]) | fpu_shadow_fault_any;
+  assign vfu_uncorrectable_fault_o = ipu_dup_fault | (spatz_req_valid & opq_dec_err[1])
+                                   | fpu_shadow_fault_any | fpu_replay_confirmed_fault_any
+                                   | opq_spill_err[1];
+  assign vfu_correctable_fault_o = opq_spill_err[0] | (spatz_req_valid & opq_dec_err[0]) | ff_tmr_fault_any;
 
   logic [N_FU*ELEN-1:0] ipu_wide_operand1, ipu_wide_operand2, ipu_wide_operand3;
   always_comb begin: gen_ipu_widening
@@ -2158,6 +2125,9 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
   if (FPU) begin: gen_fpu
     logic [N_FPU*ELEN-1:0] wide_operand1, wide_operand2, wide_operand3;
     logic [N_FPU-1:0]      fpu_shadow_fault;
+    // Confirmed temporal-redundancy replay mismatch, per lane -- see
+    // gen_fpnew's replay FSM below.
+    logic [N_FPU-1:0]      fpu_replay_confirmed_fault;
 
     // Physically separate pipelines inside fpnew_top have their own fixed
     // latency (max over enabled formats); mirror the same computation
@@ -2212,6 +2182,9 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
     end: gen_widening
 
     for (genvar fpu = 0; unsigned'(fpu) < N_FPU; fpu++) begin : gen_fpnew
+      // int_fpu_result_valid/tag are now driven by the replay-release mux
+      // further below, not directly by i_fpu's own out_valid_o/tag_o -- see
+      // fpu_result_raw/tag_raw/int_fpu_result_valid_raw.
       logic int_fpu_result_valid;
       logic int_fpu_in_ready;
       vfu_tag_t tag;
@@ -2227,7 +2200,13 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
       assign fpu_operand3 = (fpu_op == fpnew_pkg::ADD || spatz_req.op_arith.switch_rs1_rd) ? wide_operand1[fpu*ELEN +: ELEN] : wide_operand3[fpu*ELEN +: ELEN];
 
       logic int_fpu_in_valid;
-      assign int_fpu_in_valid = spatz_req_valid && operands_ready && (!spatz_req.op_arith.is_scalar || fpu == 0) && is_fpu_insn;
+      // All-or-nothing load: a lane may only take a word when every lane that takes part can take it
+      // (same condition as fu_can_accept). Otherwise lanes that are ready load the word while others
+      // are not, word_issued stays low, and the word is loaded again -> lanes fall out of step
+      // (partial words, fu_word_complete never reached). Needed now that operands_ready can pulse
+      // while FPU0 (shared div/sqrt lane) is not ready (registered VRF read request).
+      assign int_fpu_in_valid = spatz_req_valid && operands_ready && (!spatz_req.op_arith.is_scalar || fpu == 0) && is_fpu_insn
+                                && &(in_ready | ~valid_operations);
 
       // Shared div/sqrt: only FPU0 accepts, and only one element in flight at a time
       logic int_fpu_in_valid_gated;
@@ -2258,7 +2237,7 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
       `FFL(fpu_operand1_q2, fpu_operand1, int_fpu_in_valid && int_fpu_in_ready, '0)
       logic [$bits(fpu_operand1_q)-1:0] fpu_operand1_q_vote;
       bitwise_TMR_voter_fail #(.DataWidth($bits(fpu_operand1_q)), .VoterType(1)) i_fpu_operand1_q_voter (
-        .a_i(fpu_operand1_q0), .b_i(fpu_operand1_q1), .c_i(fpu_operand1_q2), .majority_o(fpu_operand1_q_vote), .fault_detected_o(ff_tmr_err_1[((0)*(N_FPU)+fpu)*12+0]));
+        .a_i(fpu_operand1_q0), .b_i(fpu_operand1_q1), .c_i(fpu_operand1_q2), .majority_o(fpu_operand1_q_vote), .fault_detected_o(ff_tmr_err_1[((0)*(N_FPU)+fpu)*16+0]));
       assign fpu_operand1_q = elen_t'(fpu_operand1_q_vote);
       // TMR: fpu_operand2_q (voted value in fpu_operand2_q, copies fpu_operand2_q0..2)
       elen_t fpu_operand2_q0, fpu_operand2_q1, fpu_operand2_q2;
@@ -2267,7 +2246,7 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
       `FFL(fpu_operand2_q2, fpu_operand2, int_fpu_in_valid && int_fpu_in_ready, '0)
       logic [$bits(fpu_operand2_q)-1:0] fpu_operand2_q_vote;
       bitwise_TMR_voter_fail #(.DataWidth($bits(fpu_operand2_q)), .VoterType(1)) i_fpu_operand2_q_voter (
-        .a_i(fpu_operand2_q0), .b_i(fpu_operand2_q1), .c_i(fpu_operand2_q2), .majority_o(fpu_operand2_q_vote), .fault_detected_o(ff_tmr_err_1[((0)*(N_FPU)+fpu)*12+1]));
+        .a_i(fpu_operand2_q0), .b_i(fpu_operand2_q1), .c_i(fpu_operand2_q2), .majority_o(fpu_operand2_q_vote), .fault_detected_o(ff_tmr_err_1[((0)*(N_FPU)+fpu)*16+1]));
       assign fpu_operand2_q = elen_t'(fpu_operand2_q_vote);
       // TMR: fpu_operand3_q (voted value in fpu_operand3_q, copies fpu_operand3_q0..2)
       elen_t fpu_operand3_q0, fpu_operand3_q1, fpu_operand3_q2;
@@ -2276,7 +2255,7 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
       `FFL(fpu_operand3_q2, fpu_operand3, int_fpu_in_valid && int_fpu_in_ready, '0)
       logic [$bits(fpu_operand3_q)-1:0] fpu_operand3_q_vote;
       bitwise_TMR_voter_fail #(.DataWidth($bits(fpu_operand3_q)), .VoterType(1)) i_fpu_operand3_q_voter (
-        .a_i(fpu_operand3_q0), .b_i(fpu_operand3_q1), .c_i(fpu_operand3_q2), .majority_o(fpu_operand3_q_vote), .fault_detected_o(ff_tmr_err_1[((0)*(N_FPU)+fpu)*12+2]));
+        .a_i(fpu_operand3_q0), .b_i(fpu_operand3_q1), .c_i(fpu_operand3_q2), .majority_o(fpu_operand3_q_vote), .fault_detected_o(ff_tmr_err_1[((0)*(N_FPU)+fpu)*16+2]));
       assign fpu_operand3_q = elen_t'(fpu_operand3_q_vote);
       // TMR: fpu_op_q (voted value in fpu_op_q, copies fpu_op_q0..2)
       operation_e fpu_op_q0, fpu_op_q1, fpu_op_q2;
@@ -2285,7 +2264,7 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
       `FFL(fpu_op_q2, fpu_op, int_fpu_in_valid && int_fpu_in_ready, fpnew_pkg::FMADD)
       logic [$bits(fpu_op_q)-1:0] fpu_op_q_vote;
       bitwise_TMR_voter_fail #(.DataWidth($bits(fpu_op_q)), .VoterType(1)) i_fpu_op_q_voter (
-        .a_i(fpu_op_q0), .b_i(fpu_op_q1), .c_i(fpu_op_q2), .majority_o(fpu_op_q_vote), .fault_detected_o(ff_tmr_err_1[((0)*(N_FPU)+fpu)*12+3]));
+        .a_i(fpu_op_q0), .b_i(fpu_op_q1), .c_i(fpu_op_q2), .majority_o(fpu_op_q_vote), .fault_detected_o(ff_tmr_err_1[((0)*(N_FPU)+fpu)*16+3]));
       assign fpu_op_q = operation_e'(fpu_op_q_vote);
       // TMR: fpu_src_fmt_q (voted value in fpu_src_fmt_q, copies fpu_src_fmt_q0..2)
       fp_format_e fpu_src_fmt_q0, fpu_src_fmt_q1, fpu_src_fmt_q2;
@@ -2294,7 +2273,7 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
       `FFL(fpu_src_fmt_q2, fpu_src_fmt, int_fpu_in_valid && int_fpu_in_ready, fpnew_pkg::FP32)
       logic [$bits(fpu_src_fmt_q)-1:0] fpu_src_fmt_q_vote;
       bitwise_TMR_voter_fail #(.DataWidth($bits(fpu_src_fmt_q)), .VoterType(1)) i_fpu_src_fmt_q_voter (
-        .a_i(fpu_src_fmt_q0), .b_i(fpu_src_fmt_q1), .c_i(fpu_src_fmt_q2), .majority_o(fpu_src_fmt_q_vote), .fault_detected_o(ff_tmr_err_1[((0)*(N_FPU)+fpu)*12+4]));
+        .a_i(fpu_src_fmt_q0), .b_i(fpu_src_fmt_q1), .c_i(fpu_src_fmt_q2), .majority_o(fpu_src_fmt_q_vote), .fault_detected_o(ff_tmr_err_1[((0)*(N_FPU)+fpu)*16+4]));
       assign fpu_src_fmt_q = fp_format_e'(fpu_src_fmt_q_vote);
       // TMR: fpu_dst_fmt_q (voted value in fpu_dst_fmt_q, copies fpu_dst_fmt_q0..2)
       fp_format_e fpu_dst_fmt_q0, fpu_dst_fmt_q1, fpu_dst_fmt_q2;
@@ -2303,7 +2282,7 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
       `FFL(fpu_dst_fmt_q2, fpu_dst_fmt, int_fpu_in_valid && int_fpu_in_ready, fpnew_pkg::FP32)
       logic [$bits(fpu_dst_fmt_q)-1:0] fpu_dst_fmt_q_vote;
       bitwise_TMR_voter_fail #(.DataWidth($bits(fpu_dst_fmt_q)), .VoterType(1)) i_fpu_dst_fmt_q_voter (
-        .a_i(fpu_dst_fmt_q0), .b_i(fpu_dst_fmt_q1), .c_i(fpu_dst_fmt_q2), .majority_o(fpu_dst_fmt_q_vote), .fault_detected_o(ff_tmr_err_1[((0)*(N_FPU)+fpu)*12+5]));
+        .a_i(fpu_dst_fmt_q0), .b_i(fpu_dst_fmt_q1), .c_i(fpu_dst_fmt_q2), .majority_o(fpu_dst_fmt_q_vote), .fault_detected_o(ff_tmr_err_1[((0)*(N_FPU)+fpu)*16+5]));
       assign fpu_dst_fmt_q = fp_format_e'(fpu_dst_fmt_q_vote);
       // TMR: fpu_int_fmt_q (voted value in fpu_int_fmt_q, copies fpu_int_fmt_q0..2)
       int_format_e fpu_int_fmt_q0, fpu_int_fmt_q1, fpu_int_fmt_q2;
@@ -2312,7 +2291,7 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
       `FFL(fpu_int_fmt_q2, fpu_int_fmt, int_fpu_in_valid && int_fpu_in_ready, fpnew_pkg::INT8)
       logic [$bits(fpu_int_fmt_q)-1:0] fpu_int_fmt_q_vote;
       bitwise_TMR_voter_fail #(.DataWidth($bits(fpu_int_fmt_q)), .VoterType(1)) i_fpu_int_fmt_q_voter (
-        .a_i(fpu_int_fmt_q0), .b_i(fpu_int_fmt_q1), .c_i(fpu_int_fmt_q2), .majority_o(fpu_int_fmt_q_vote), .fault_detected_o(ff_tmr_err_1[((0)*(N_FPU)+fpu)*12+6]));
+        .a_i(fpu_int_fmt_q0), .b_i(fpu_int_fmt_q1), .c_i(fpu_int_fmt_q2), .majority_o(fpu_int_fmt_q_vote), .fault_detected_o(ff_tmr_err_1[((0)*(N_FPU)+fpu)*16+6]));
       assign fpu_int_fmt_q = int_format_e'(fpu_int_fmt_q_vote);
       // TMR: fpu_op_mode_q (voted value in fpu_op_mode_q, copies fpu_op_mode_q0..2)
       logic fpu_op_mode_q0, fpu_op_mode_q1, fpu_op_mode_q2;
@@ -2320,14 +2299,14 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
       `FFL(fpu_op_mode_q1, fpu_op_mode, int_fpu_in_valid && int_fpu_in_ready, 1'b0)
       `FFL(fpu_op_mode_q2, fpu_op_mode, int_fpu_in_valid && int_fpu_in_ready, 1'b0)
       bitwise_TMR_voter_fail #(.DataWidth($bits(fpu_op_mode_q)), .VoterType(1)) i_fpu_op_mode_q_voter (
-        .a_i(fpu_op_mode_q0), .b_i(fpu_op_mode_q1), .c_i(fpu_op_mode_q2), .majority_o(fpu_op_mode_q), .fault_detected_o(ff_tmr_err_1[((0)*(N_FPU)+fpu)*12+7]));
+        .a_i(fpu_op_mode_q0), .b_i(fpu_op_mode_q1), .c_i(fpu_op_mode_q2), .majority_o(fpu_op_mode_q), .fault_detected_o(ff_tmr_err_1[((0)*(N_FPU)+fpu)*16+7]));
       // TMR: fpu_vectorial_op_q (voted value in fpu_vectorial_op_q, copies fpu_vectorial_op_q0..2)
       logic fpu_vectorial_op_q0, fpu_vectorial_op_q1, fpu_vectorial_op_q2;
       `FFL(fpu_vectorial_op_q0, fpu_vectorial_op, int_fpu_in_valid && int_fpu_in_ready, 1'b0)
       `FFL(fpu_vectorial_op_q1, fpu_vectorial_op, int_fpu_in_valid && int_fpu_in_ready, 1'b0)
       `FFL(fpu_vectorial_op_q2, fpu_vectorial_op, int_fpu_in_valid && int_fpu_in_ready, 1'b0)
       bitwise_TMR_voter_fail #(.DataWidth($bits(fpu_vectorial_op_q)), .VoterType(1)) i_fpu_vectorial_op_q_voter (
-        .a_i(fpu_vectorial_op_q0), .b_i(fpu_vectorial_op_q1), .c_i(fpu_vectorial_op_q2), .majority_o(fpu_vectorial_op_q), .fault_detected_o(ff_tmr_err_1[((0)*(N_FPU)+fpu)*12+8]));
+        .a_i(fpu_vectorial_op_q0), .b_i(fpu_vectorial_op_q1), .c_i(fpu_vectorial_op_q2), .majority_o(fpu_vectorial_op_q), .fault_detected_o(ff_tmr_err_1[((0)*(N_FPU)+fpu)*16+8]));
       // TMR: rm_q (voted value in rm_q, copies rm_q0..2)
       roundmode_e rm_q0, rm_q1, rm_q2;
       `FFL(rm_q0, (spatz_req.op == VFCMP && spatz_req.rm == fpnew_pkg::RUP) ? fpnew_pkg::RDN : spatz_req.rm, int_fpu_in_valid && int_fpu_in_ready, fpnew_pkg::RNE)
@@ -2335,7 +2314,7 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
       `FFL(rm_q2, (spatz_req.op == VFCMP && spatz_req.rm == fpnew_pkg::RUP) ? fpnew_pkg::RDN : spatz_req.rm, int_fpu_in_valid && int_fpu_in_ready, fpnew_pkg::RNE)
       logic [$bits(rm_q)-1:0] rm_q_vote;
       bitwise_TMR_voter_fail #(.DataWidth($bits(rm_q)), .VoterType(1)) i_rm_q_voter (
-        .a_i(rm_q0), .b_i(rm_q1), .c_i(rm_q2), .majority_o(rm_q_vote), .fault_detected_o(ff_tmr_err_1[((0)*(N_FPU)+fpu)*12+9]));
+        .a_i(rm_q0), .b_i(rm_q1), .c_i(rm_q2), .majority_o(rm_q_vote), .fault_detected_o(ff_tmr_err_1[((0)*(N_FPU)+fpu)*16+9]));
       assign rm_q = roundmode_e'(rm_q_vote);
       // TMR: input_tag_q (voted value in input_tag_q, copies input_tag_q0..2)
       vfu_tag_t input_tag_q0, input_tag_q1, input_tag_q2;
@@ -2344,7 +2323,7 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
       `FFL(input_tag_q2, input_tag, int_fpu_in_valid && int_fpu_in_ready, '{vsew: EW_8, default: '0})
       logic [$bits(input_tag_q)-1:0] input_tag_q_vote;
       bitwise_TMR_voter_fail #(.DataWidth($bits(input_tag_q)), .VoterType(1)) i_input_tag_q_voter (
-        .a_i(input_tag_q0), .b_i(input_tag_q1), .c_i(input_tag_q2), .majority_o(input_tag_q_vote), .fault_detected_o(ff_tmr_err_1[((0)*(N_FPU)+fpu)*12+10]));
+        .a_i(input_tag_q0), .b_i(input_tag_q1), .c_i(input_tag_q2), .majority_o(input_tag_q_vote), .fault_detected_o(ff_tmr_err_1[((0)*(N_FPU)+fpu)*16+10]));
       assign input_tag_q = vfu_tag_t'(input_tag_q_vote);
       // TMR: fpu_in_valid_q (voted value in fpu_in_valid_q, copies fpu_in_valid_q0..2)
       logic fpu_in_valid_q0, fpu_in_valid_q1, fpu_in_valid_q2;
@@ -2352,13 +2331,48 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
       `FFL(fpu_in_valid_q1, int_fpu_in_valid_gated, int_fpu_in_ready, 1'b0)
       `FFL(fpu_in_valid_q2, int_fpu_in_valid_gated, int_fpu_in_ready, 1'b0)
       bitwise_TMR_voter_fail #(.DataWidth($bits(fpu_in_valid_q)), .VoterType(1)) i_fpu_in_valid_q_voter (
-        .a_i(fpu_in_valid_q0), .b_i(fpu_in_valid_q1), .c_i(fpu_in_valid_q2), .majority_o(fpu_in_valid_q), .fault_detected_o(ff_tmr_err_1[((0)*(N_FPU)+fpu)*12+11]));
-      assign int_fpu_in_ready = !fpu_in_valid_q || fpu_in_valid_q && fpu_in_ready_d;
+        .a_i(fpu_in_valid_q0), .b_i(fpu_in_valid_q1), .c_i(fpu_in_valid_q2), .majority_o(fpu_in_valid_q), .fault_detected_o(ff_tmr_err_1[((0)*(N_FPU)+fpu)*16+11]));
+      // Forward declarations only (assigned further below, by the replay FSM
+      // block): this tool requires a logic's declaration to textually precede
+      // every reference to it, even within the same generate-for body, and
+      // these two are first referenced here (int_fpu_in_ready) and in
+      // replay_match_comb's assign, both before their "natural" spot next to
+      // the rest of the replay FSM.
+      logic  replay_pending;
+      logic  replay_release_done;  // replay result handed over this cycle (assigned after replay_state_q)
+      elen_t replay_result_q;
+      // Extra !replay_pending term: while a bypass-classified instruction's
+      // temporal-redundancy replay is in flight (see below), the skid
+      // register above must not be reloaded, since its still-resident
+      // operands/op/tag are exactly what gets re-pushed into i_fpu a second
+      // time.
+      // assign int_fpu_in_ready = !fpu_in_valid_q || fpu_in_valid_q && fpu_in_ready_d;
+      // The skid register is also released in the cycle the replay result is handed over
+      // (REPLAY_RELEASE && fpu_result_ready). Otherwise fpu_in_valid_q stays set after the replay,
+      // replay_start_comb (fpu_in_valid_q && fpu_in_ready_d && bypass_risk) fires again for the
+      // already-completed word, and a second, orphan result appears in this lane only
+      // (fu_word_complete never reached -> deadlock).
+      assign int_fpu_in_ready = ((!fpu_in_valid_q || fpu_in_valid_q && fpu_in_ready_d) && !replay_pending)
+                                || replay_release_done;
 
       assign fpu_load_ready[fpu] = int_fpu_in_valid_gated && int_fpu_in_ready;
 
       // Shared div/sqrt: only FPU0 instantiates the DIVSQRT opgroup
       localparam fpu_implementation_t FPUImpl = (FDivSqrt && (!divsqrt_is_shared || fpu == 0)) ? FPUImplementation : without_divsqrt(FPUImplementation);
+
+      // i_fpu's own raw ports: pass-1 and pass-2 of a replay both land here
+      // before the release mux (below) decides what the rest of this module
+      // actually gets to see.
+      elen_t    fpu_result_raw;
+      vfu_tag_t tag_raw;
+      logic     int_fpu_result_valid_raw;
+      logic     fpu_i_in_valid, fpu_i_out_ready;
+      // Tag entering i_fpu: input_tag_q plus the replay marker. bypass_risk is only high in the
+      // IDLE accept cycle of a bypass-classified word (pass-1); pass-2 is pushed in REPLAY_PUSH.
+      // The marker travels through i_fpu's own tag pipeline and lets the replay FSM tell the
+      // replayed word's results (replay=1) apart from older words still in flight (replay=0).
+      // (declared here, assigned after replay_state_q/bypass_risk are declared below)
+      vfu_tag_t fpu_tag_in;
 
       fpnew_top #(
         .Features                   (FPUFeatures           ),
@@ -2373,7 +2387,8 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
         .busy_o        (fpu_busy_d[fpu]                                        ),
         .operands_i    ({fpu_operand3_q, fpu_operand2_q, fpu_operand1_q}       ),
         // Only the FPU0 executes scalar instructions
-        .in_valid_i    (fpu_in_valid_q                                         ),
+        // .in_valid_i    (fpu_in_valid_q                                         ),
+        .in_valid_i    (fpu_i_in_valid                                         ),
         .in_ready_o    (fpu_in_ready_d                                         ),
         .op_i          (fpu_op_q                                               ),
         .src_fmt_i     (fpu_src_fmt_q                                          ),
@@ -2381,15 +2396,170 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
         .int_fmt_i     (fpu_int_fmt_q                                          ),
         .vectorial_op_i(fpu_vectorial_op_q                                     ),
         .op_mod_i      (fpu_op_mode_q                                          ),
-        .tag_i         (input_tag_q                                            ),
+        .tag_i         (fpu_tag_in                                             ),
         .simd_mask_i   ('1                                                     ),
         .rnd_mode_i    (rm_q                                                   ),
-        .result_o      (fpu_result[fpu*ELEN +: ELEN]                           ),
-        .out_valid_o   (int_fpu_result_valid                                   ),
-        .out_ready_i   (fpu_result_ready                                       ),
+        // .result_o      (fpu_result[fpu*ELEN +: ELEN]                           ),
+        .result_o      (fpu_result_raw                                         ),
+        // .out_valid_o   (int_fpu_result_valid                                   ),
+        .out_valid_o   (int_fpu_result_valid_raw                               ),
+        // .out_ready_i   (fpu_result_ready                                       ),
+        .out_ready_i   (fpu_i_out_ready                                        ),
         .status_o      (fpu_status_d[fpu]                                      ),
-        .tag_o         (tag                                                    )
+        // .tag_o         (tag                                                    )
+        .tag_o         (tag_raw                                                )
       );
+
+      // =====================================================================
+      // Temporal-redundancy replay for bypass-classified (cancellation-risk/
+      // subnormal) ADDMUL/SDOTP/DIVSQRT instructions.
+      //
+      // The shadow checker's own reduced-precision comparison necessarily
+      // loosens (exponent-plausibility bound) or skips entirely for these
+      // instructions -- a real, structural blind spot (see
+      // i_fpu_shadow_checker.bypass_risk_o's own comment). Instead of trusting
+      // that loosened check, re-execute the same instruction a second time
+      // through this lane's own real, exact i_fpu and compare the two real
+      // results bit-exact. Every other instruction (bypass_risk low) is
+      // completely unaffected: fpu_i_in_valid/fpu_i_out_ready pass straight
+      // through and the release mux below is a no-op in REPLAY_IDLE.
+      // =====================================================================
+      typedef enum logic [2:0] {
+        REPLAY_IDLE,
+        REPLAY_WAIT_FIRST,  // waiting for i_fpu's pass-1 result
+        REPLAY_PUSH,        // re-asserting in_valid_i for pass 2
+        REPLAY_WAIT_SECOND, // waiting for i_fpu's pass-2 result (compare here)
+        REPLAY_RELEASE      // resolved result parked, waiting for the real
+                             // (shared/lockstep) fpu_result_ready
+      } replay_state_e;
+
+      logic bypass_risk;
+
+      replay_state_e replay_state_d;
+      // TMR: replay_state_q (voted value in replay_state_q, copies replay_state_q0..2)
+      replay_state_e replay_state_q0, replay_state_q1, replay_state_q2;
+      `FF(replay_state_q0, replay_state_d, REPLAY_IDLE)
+      `FF(replay_state_q1, replay_state_d, REPLAY_IDLE)
+      `FF(replay_state_q2, replay_state_d, REPLAY_IDLE)
+      logic [$bits(replay_state_q0)-1:0] replay_state_q_vote;
+      bitwise_TMR_voter_fail #(.DataWidth($bits(replay_state_q0)), .VoterType(1)) i_replay_state_q_voter (
+        .a_i(replay_state_q0), .b_i(replay_state_q1), .c_i(replay_state_q2), .majority_o(replay_state_q_vote), .fault_detected_o(ff_tmr_err_1[((0)*(N_FPU)+fpu)*16+12]));
+      replay_state_e replay_state_q;
+      assign replay_state_q = replay_state_e'(replay_state_q_vote);
+
+      always_comb begin
+        fpu_tag_in        = input_tag_q;
+        fpu_tag_in.replay = bypass_risk || (replay_state_q == REPLAY_PUSH);
+      end
+
+      logic replay_start_comb;
+      // Must be live the SAME cycle as the first accept (fpu_in_valid_q &&
+      // fpu_in_ready_d): the skid register's own existing back-to-back
+      // turnaround would otherwise let a new instruction overwrite
+      // fpu_operand1_q/2_q/3_q etc. before bypass_risk is even sampled.
+      assign replay_start_comb = fpu_in_valid_q && fpu_in_ready_d && bypass_risk;
+      assign replay_pending    = (replay_state_q != REPLAY_IDLE) || replay_start_comb;
+      assign replay_release_done = (replay_state_q == REPLAY_RELEASE) && fpu_result_ready;
+
+      // fpu_in_valid_q itself stays asserted (held, not reloaded -- see
+      // int_fpu_in_ready above) for the whole replay window, so it alone
+      // can't be used as i_fpu's in_valid_i throughout: it must be
+      // deasserted in the WAIT states (or i_fpu would be free to accept
+      // extra, uncontrolled repeats of the same instruction) and reasserted
+      // only for the one deliberate pass-2 push.
+      assign fpu_i_in_valid = fpu_in_valid_q &&
+        (replay_state_q == REPLAY_IDLE || replay_state_q == REPLAY_PUSH);
+
+      // Correction: i_fpu's own out_ready_i must be decoupled from the
+      // shared/lockstep fpu_result_ready while mid-replay -- fpu_result_ready
+      // depends (via fu_word_complete/pending_results) on this very lane's
+      // result_valid, so holding the externally-visible valid low while also
+      // leaving out_ready_i tied to fpu_result_ready would deadlock instead of
+      // just adding latency.
+      // Only the replayed word's own results (tag_raw.replay) are decoupled; results of older
+      // words still in flight keep the normal handshake and are forwarded (see the release mux).
+      assign fpu_i_out_ready = ((replay_state_q inside
+                                 {REPLAY_WAIT_FIRST, REPLAY_PUSH, REPLAY_WAIT_SECOND})
+                                && tag_raw.replay)
+                                ? 1'b1 : fpu_result_ready;
+
+      logic capture_first_comb, capture_second_comb, replay_match_comb;
+      assign capture_first_comb  = (replay_state_q == REPLAY_WAIT_FIRST)
+                                    && int_fpu_result_valid_raw && tag_raw.replay && fpu_i_out_ready;
+      assign capture_second_comb = (replay_state_q == REPLAY_WAIT_SECOND)
+                                    && int_fpu_result_valid_raw && tag_raw.replay && fpu_i_out_ready;
+      assign replay_match_comb   = (fpu_result_raw == replay_result_q);
+
+      always_comb begin
+        replay_state_d = replay_state_q;
+        unique case (replay_state_q)
+          REPLAY_IDLE:        if (replay_start_comb)   replay_state_d = REPLAY_WAIT_FIRST;
+          REPLAY_WAIT_FIRST:  if (capture_first_comb)  replay_state_d = REPLAY_PUSH;
+          REPLAY_PUSH:        if (fpu_in_ready_d)      replay_state_d = REPLAY_WAIT_SECOND;
+          REPLAY_WAIT_SECOND: if (capture_second_comb) replay_state_d = REPLAY_RELEASE;
+          REPLAY_RELEASE:     if (fpu_result_ready)    replay_state_d = REPLAY_IDLE;
+          default: replay_state_d = REPLAY_IDLE;
+        endcase
+      end
+
+      // TMR: replay_result_q -- holds pass-1's result (for the compare),
+      // then pass-2's result (the value actually released downstream).
+      elen_t replay_result_q0, replay_result_q1, replay_result_q2;
+      `FFL(replay_result_q0, fpu_result_raw, capture_first_comb || capture_second_comb, '0)
+      `FFL(replay_result_q1, fpu_result_raw, capture_first_comb || capture_second_comb, '0)
+      `FFL(replay_result_q2, fpu_result_raw, capture_first_comb || capture_second_comb, '0)
+      logic [$bits(replay_result_q0)-1:0] replay_result_q_vote;
+      bitwise_TMR_voter_fail #(.DataWidth($bits(replay_result_q0)), .VoterType(1)) i_replay_result_q_voter (
+        .a_i(replay_result_q0), .b_i(replay_result_q1), .c_i(replay_result_q2), .majority_o(replay_result_q_vote), .fault_detected_o(ff_tmr_err_1[((0)*(N_FPU)+fpu)*16+13]));
+      // replay_result_q itself declared earlier (forward declaration, see
+      // int_fpu_in_ready's comment above) -- only the assign lives here.
+      assign replay_result_q = elen_t'(replay_result_q_vote);
+
+      // TMR: release_tag_q -- pass-2's own tag_o, forwarded on release so a
+      // tag-pipeline corruption inside i_fpu is still catchable exactly as
+      // for a non-replayed instruction.
+      vfu_tag_t release_tag_q0, release_tag_q1, release_tag_q2;
+      `FFL(release_tag_q0, tag_raw, capture_second_comb, '{vsew: EW_8, default: '0})
+      `FFL(release_tag_q1, tag_raw, capture_second_comb, '{vsew: EW_8, default: '0})
+      `FFL(release_tag_q2, tag_raw, capture_second_comb, '{vsew: EW_8, default: '0})
+      logic [$bits(release_tag_q0)-1:0] release_tag_q_vote;
+      bitwise_TMR_voter_fail #(.DataWidth($bits(release_tag_q0)), .VoterType(1)) i_release_tag_q_voter (
+        .a_i(release_tag_q0), .b_i(release_tag_q1), .c_i(release_tag_q2), .majority_o(release_tag_q_vote), .fault_detected_o(ff_tmr_err_1[((0)*(N_FPU)+fpu)*16+14]));
+      vfu_tag_t release_tag_q;
+      assign release_tag_q = vfu_tag_t'(release_tag_q_vote);
+
+      // TMR: confirmed_fault_q -- non-sticky, re-evaluated every cycle (same
+      // shape as the shadow checker's own fault_q), pulses for one cycle when
+      // pass-1 and pass-2 disagree. Policy: flag only, still forward a result
+      // (pass-2's, via the release mux below) -- matches the existing
+      // fault_o precedent elsewhere in this checker (diagnostic/software-
+      // visible only, no hardware-level recovery or halt).
+      logic confirmed_fault_d;
+      assign confirmed_fault_d = capture_second_comb && !replay_match_comb;
+      logic confirmed_fault_q0, confirmed_fault_q1, confirmed_fault_q2;
+      `FF(confirmed_fault_q0, confirmed_fault_d, 1'b0)
+      `FF(confirmed_fault_q1, confirmed_fault_d, 1'b0)
+      `FF(confirmed_fault_q2, confirmed_fault_d, 1'b0)
+      logic confirmed_fault_q;
+      bitwise_TMR_voter_fail #(.DataWidth(1), .VoterType(1)) i_confirmed_fault_q_voter (
+        .a_i(confirmed_fault_q0), .b_i(confirmed_fault_q1), .c_i(confirmed_fault_q2), .majority_o(confirmed_fault_q), .fault_detected_o(ff_tmr_err_1[((0)*(N_FPU)+fpu)*16+15]));
+      assign fpu_replay_confirmed_fault[fpu] = confirmed_fault_q;
+
+      // Release mux: drives the same names the rest of this module (VRF
+      // writeback, divsqrt accumulation, the shadow checker's own
+      // result_i/result_valid_i, etc.) already reads, so nothing downstream
+      // needs to change -- from their perspective a bypass-classified
+      // instruction simply took one extra round-trip of latency, which this
+      // handshake already tolerates today (e.g. ordinary VRF-write
+      // backpressure holds out_ready_i low for multiple cycles too).
+      assign int_fpu_result_valid =
+        (replay_state_q == REPLAY_RELEASE) ? 1'b1
+        : (replay_state_q == REPLAY_IDLE)  ? int_fpu_result_valid_raw
+        : (int_fpu_result_valid_raw && !tag_raw.replay); // WAIT_*/PUSH: forward older words' results
+      assign fpu_result[fpu*ELEN +: ELEN] =
+        (replay_state_q == REPLAY_RELEASE) ? replay_result_q : fpu_result_raw;
+      assign tag =
+        (replay_state_q == REPLAY_RELEASE) ? release_tag_q : tag_raw;
 
       if (fpu == 0) begin: gen_fpu_tag
         assign fpu_result_tag = tag;
@@ -2426,22 +2596,35 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
         .dst_fmt_i     (fpu_dst_fmt_q                  ),
         .int_fmt_i     (fpu_int_fmt_q                  ),
         .vectorial_op_i(fpu_vectorial_op_q             ),
-        .in_valid_i    (fpu_in_valid_q                 ),
+        // Gated to REPLAY_IDLE: fpu_in_valid_q stays held (not reloaded)
+        // through a whole replay sequence, and fpu_in_ready_d legitimately
+        // pulses again for the deliberate pass-2 push -- without this gate
+        // the checker would see that push as a second, spurious accept of
+        // the same instruction (same still-resident operands/id) rather than
+        // the one genuine accept it must track. The original accept itself
+        // always happens while replay_state_q is still REPLAY_IDLE (the
+        // state only advances on the clock edge after), so this never
+        // suppresses a real new instruction.
+        // .in_valid_i    (fpu_in_valid_q                 ),
+        .in_valid_i    (fpu_in_valid_q && (replay_state_q == REPLAY_IDLE)),
         .in_ready_i    (fpu_in_ready_d                 ),
         .expected_id_i (input_tag_q.id                 ),
         .result_id_i   (tag.id                         ),
         .tag_narrowing_i       (input_tag_q.narrowing  ),
         .result_tag_narrowing_i(tag.narrowing          ),
+        .result_tag_replay_i   (tag.replay             ),
         .result_i      (fpu_result[fpu*ELEN +: ELEN]   ),
         .result_valid_i(int_fpu_result_valid           ),
         .result_ready_i(fpu_result_ready               ),
-        .fault_o       (checker_fault                  )
+        .fault_o       (checker_fault                  ),
+        .bypass_risk_o (bypass_risk                    )
       );
 
       assign fpu_shadow_fault[fpu] = checker_fault;
     end : gen_fpnew
 
     assign fpu_shadow_fault_any = |fpu_shadow_fault;
+    assign fpu_replay_confirmed_fault_any = |fpu_replay_confirmed_fault;
   end: gen_fpu else begin: gen_no_fpu
     assign is_fpu_busy      = 1'b0;
     assign fpu_in_ready     = '0;
@@ -2450,8 +2633,8 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
     assign fpu_result_tag   = '0;
     assign fpu_status_o     = '0;
     assign fpu_shadow_fault_any = 1'b0;
+    assign fpu_replay_confirmed_fault_any = 1'b0;
     assign fpu_load_ready   = '0;
   end: gen_no_fpu
 
 endmodule : spatz_vfu
-
