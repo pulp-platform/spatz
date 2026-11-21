@@ -16,9 +16,6 @@
 //   CONV   : low-area semantic checker.  F2F/I2F compare FP exponent class;
 //            F2I compares integer leading-one position against FP exponent.
 //            Numerically fragile/ambiguous cases are bypassed deliberately.
-//
-// The legacy hand-written fixed-point ADDMUL/DOTP datapath and its large
-// delay-line/opnd/cmp register structures have been removed completely.
 
 module spatz_fpu_shadow_checker
   import fpnew_pkg::*;
@@ -78,7 +75,16 @@ module spatz_fpu_shadow_checker
   input  logic                 result_valid_i,
   input  logic                 result_ready_i,
 
-  output logic                 fault_o
+  output logic                 fault_o,
+  // Combinational, valid the same cycle as in_valid_i && in_ready_i (accept):
+  // this instruction is classified cancellation-risk/subnormal (ADDMUL's
+  // bypass_lane, DOTP's/DIVSQRT's bypass), so the comparison above is a loose
+  // exponent-plausibility bound or skipped rather than a real value check.
+  // Consumed by spatz_vfu.sv to trigger a temporal-redundancy replay (re-run
+  // the same instruction through the real exact FPU a second time and compare
+  // bit-exact) for exactly these cases, instead of trusting this checker's own
+  // necessarily-loosened reduced-precision check.
+  output logic                 bypass_risk_o
 );
 
   localparam int unsigned MaxLanes     = ElenWidth / 8;
@@ -1738,6 +1744,9 @@ module spatz_fpu_shadow_checker
 
   logic reduced_divsqrt_fault_comb;
   logic reduced_divsqrt_dropped_op;
+  // ds_tag_i.bypass (set below) only exists inside the DivsqrtEnabled branch;
+  // mirrored out here at module scope for bypass_risk_o's assign further down.
+  logic reduced_divsqrt_bypass_risk;
 
   if (DivsqrtEnabled) begin : gen_reduced_divsqrt
     logic [1:0][31:0]     ds_operands;
@@ -1789,6 +1798,7 @@ module spatz_fpu_shadow_checker
 
     logic ds_accept;
     assign ds_accept = in_valid_i && in_ready_i && is_divsqrt_op && ds_supported;
+    assign reduced_divsqrt_bypass_risk = ds_accept && ds_tag_i.bypass;
 
     fpnew_opgroup_block #(
       .OpGroup       ( DIVSQRT                       ),
@@ -2019,8 +2029,9 @@ module spatz_fpu_shadow_checker
 `endif
   end : gen_reduced_divsqrt
   else begin : gen_no_reduced_divsqrt
-    assign reduced_divsqrt_fault_comb = 1'b0;
-    assign reduced_divsqrt_dropped_op = 1'b0;
+    assign reduced_divsqrt_fault_comb  = 1'b0;
+    assign reduced_divsqrt_dropped_op  = 1'b0;
+    assign reduced_divsqrt_bypass_risk = 1'b0;
   end : gen_no_reduced_divsqrt
 
   // =====================================================================
@@ -2119,5 +2130,16 @@ module spatz_fpu_shadow_checker
   end
 
   assign fault_o = fault_q;
+
+  // See bypass_risk_o's port comment: reuses the same accept-time
+  // classification each opgroup already computes for its own loosened check
+  // above (reduced_addmul_tag_i.bypass_lane, reduced_dotp_tag_i.bypass,
+  // reduced_divsqrt_bypass_risk) -- no new classification logic here.
+  assign bypass_risk_o =
+    (in_valid_i && in_ready_i && is_addmul_op && reduced_addmul_supported &&
+     |reduced_addmul_tag_i.bypass_lane) ||
+    (in_valid_i && in_ready_i && is_dotp_op && reduced_dotp_supported &&
+     reduced_dotp_tag_i.bypass) ||
+    reduced_divsqrt_bypass_risk; // already self-gated on in_valid_i && in_ready_i via ds_accept
 
 endmodule : spatz_fpu_shadow_checker
