@@ -7624,7 +7624,7 @@ always_comb
               illegal_instC = 1'b1;
             end
         end
-      riscv_instr::MLD_LHS, riscv_instr::MLD_RHS : 
+      riscv_instr::MLD_LHS, riscv_instr::MLD_RHS :
         begin
           if (RMM)
             begin
@@ -7641,7 +7641,7 @@ always_comb
               illegal_instC = 1'b1;
             end
         end
-      riscv_instr::MST : 
+      riscv_instr::MST :
         begin
           if (RMM)
             begin
@@ -7659,7 +7659,7 @@ always_comb
               illegal_instC = 1'b1;
             end
         end
-      default : 
+      default :
         begin
           illegal_instC = 1'b1;
         end

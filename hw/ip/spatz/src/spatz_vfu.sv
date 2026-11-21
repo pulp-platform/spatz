@@ -807,11 +807,14 @@ module spatz_vfu
     operand3 = spatz_req.op_arith.is_scalar ? {1*N_FU{spatz_req.rsd}} : vrf_rdata_masked[2]; // VFU_VD_RD // operand3 is used in MAC computation, like VMADD
   end: operand_proc
 
-  assign in_ready     = state_q == VFU_RunningIPU ? ipu_in_ready     : fpu_in_ready;
-  assign result       = state_q == VFU_RunningIPU ? ipu_result       : fpu_result;
-  assign result_valid = state_q == VFU_RunningIPU ? ipu_result_valid : fpu_result_valid;
+  logic [N_FU*ELEN-1:0]  fpu_result_temp;
+  logic [N_FU*ELENB-1:0] fpu_result_valid_temp;
 
-    ///////////////////////
+  assign in_ready     = state_q == VFU_RunningIPU ? ipu_in_ready     : fpu_in_ready;
+  assign result       = state_q == VFU_RunningIPU ? ipu_result       : fpu_result_temp;
+  assign result_valid = state_q == VFU_RunningIPU ? ipu_result_valid : fpu_result_valid_temp;
+
+  ///////////////////////
   //      DIV/SQRT     //
   ///////////////////////
 
