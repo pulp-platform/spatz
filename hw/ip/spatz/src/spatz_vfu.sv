@@ -81,6 +81,8 @@ module spatz_vfu
     logic [$clog2(VRFWordBWidth+1)-1:0] valid_bytes;
   } vfu_tag_t;
 
+  logic [N_FPU-1:0] fpu_load_ready;
+
   ///////////////////////
   //  Operation queue  //
   ///////////////////////
@@ -2312,6 +2314,7 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
       // time.
       assign int_fpu_in_ready = ((!fpu_in_valid_q || fpu_in_valid_q && fpu_in_ready_d) && !replay_pending)
                                 || replay_release_done;
+      assign fpu_load_ready[fpu] = int_fpu_in_valid_gated && int_fpu_in_ready;
 
       // Shared div/sqrt: only FPU0 instantiates the DIVSQRT opgroup
       localparam fpu_implementation_t FPUImpl = (FDivSqrt && (!divsqrt_is_shared || fpu == 0)) ? FPUImplementation : without_divsqrt(FPUImplementation);
