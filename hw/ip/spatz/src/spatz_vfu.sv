@@ -626,6 +626,8 @@ module spatz_vfu
           end
 
           VSDOTP: fpu_op = fpnew_pkg::SDOTP;
+          VFDIV:  fpu_op = fpnew_pkg::DIV;
+          VFSQRT: fpu_op = fpnew_pkg::SQRT;
 
           default:;
         endcase

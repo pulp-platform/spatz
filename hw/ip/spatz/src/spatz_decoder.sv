@@ -1072,6 +1072,14 @@ module spatz_decoder
               endcase
 
               unique casez (decoder_req_i.instr)
+                riscv_instr::VFDIV_VV,
+                riscv_instr::VFDIV_VF: begin
+                  spatz_req.op = VFDIV;
+                end
+
+                riscv_instr::VFSQRT_V: begin
+                  spatz_req.op = VFSQRT;
+                end
                 riscv_instr::VFADD_VV,
                 riscv_instr::VFADD_VF: spatz_req.op = VFADD;
                 riscv_instr::VFSUB_VV: begin
@@ -1678,6 +1686,8 @@ module spatz_decoder
           end
 
           // Scalar half-precision floating-point instructions
+          riscv_instr::FDIV_H,
+          riscv_instr::FSQRT_H,
           riscv_instr::FADD_H,
           riscv_instr::FSUB_H,
           riscv_instr::FMUL_H,

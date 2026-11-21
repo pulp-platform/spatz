@@ -111,6 +111,8 @@ package spatz_pkg;
   localparam int unsigned NrParallelInstructions = 4;
 `endif
 
+  localparam bit divsqrt_is_shared = 1;
+
   // Largest element width that Spatz supports
   localparam vew_e MAXEW = RVD ? EW_64 : EW_32;
 
@@ -179,7 +181,7 @@ package spatz_pkg;
     // VCSR
     VCSR,
     // Floating point instructions
-    VFADD, VFSUB, VFMUL,
+    VFADD, VFDIV, VFSQRT, VFSUB, VFMUL,
     VFMINMAX, VFSGNJ, VFCMP, VFCLASS,
     VF2I, VF2U, VI2F, VU2F, VF2F,
     VFMADD, VFMSUB, VFNMSUB, VFNMADD, VSDOTP,
@@ -474,8 +476,8 @@ package spatz_pkg;
   //  FPU Configuration  //
   /////////////////////////
 
-  // No support for floating-point division and square-root for now
-  localparam bit FDivSqrt = 1'b0;
+  // floating-point division and square-root
+  localparam bit FDivSqrt = 1'b1;
 
   localparam int unsigned FLEN = RVD ? 64 : 32;
 
@@ -564,6 +566,18 @@ package spatz_pkg;
     widen_fp8_to_fp16.sign     = operand.sign;
     widen_fp8_to_fp16.exponent = operand.exponent;
     widen_fp8_to_fp16.mantissa = {operand.mantissa, 8'b0};
+  endfunction
+
+  //////////////
+  // DIV SQRT //
+  //////////////
+
+  // Return a copy of `base` with the DIVSQRT unit class disabled across all formats.
+  function automatic fpnew_pkg::fpu_implementation_t without_divsqrt(
+      input fpnew_pkg::fpu_implementation_t base);
+    fpnew_pkg::fpu_implementation_t tmp = base;
+    tmp.UnitTypes[1] = '{default: fpnew_pkg::DISABLED};
+    return tmp;
   endfunction
 
   //////////////
