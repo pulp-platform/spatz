@@ -78,7 +78,7 @@ module spatz_vfu
     // Is this a reduction?
     logic reduction;
     // Does this word belong to a bypass-classified instruction under temporal-redundancy
-    // replay (set on both the pass-1 and the pass-2 push, see gen_fpnew's replay FSM)?
+    // replay (set on both the pass-1 and the pass-2 push)?
     logic replay;
     // valid bytes in this VRF word
     logic [$clog2(VRFWordBWidth+1)-1:0] valid_bytes;
@@ -2330,11 +2330,7 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
       vfu_tag_t tag_raw;
       logic     int_fpu_result_valid_raw;
       logic     fpu_i_in_valid, fpu_i_out_ready;
-      // Tag entering i_fpu: input_tag_q plus the replay marker. bypass_risk is only high in the
-      // IDLE accept cycle of a bypass-classified word (pass-1); pass-2 is pushed in REPLAY_PUSH.
-      // The marker travels through i_fpu's own tag pipeline and lets the replay FSM tell the
-      // replayed word's results (replay=1) apart from older words still in flight (replay=0).
-      // (declared here, assigned after replay_state_q/bypass_risk are declared below)
+      // Tag entering i_fpu: input_tag_q plus the replay marker.
       vfu_tag_t fpu_tag_in;
 
       fpnew_top #(
@@ -2428,7 +2424,7 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
       // leaving out_ready_i tied to fpu_result_ready would deadlock instead of
       // just adding latency.
       // Only the replayed word's own results (tag_raw.replay) are decoupled; results of older
-      // words still in flight keep the normal handshake and are forwarded (see the release mux).
+      // words still in flight keep the normal handshake and are forwarded.
       assign fpu_i_out_ready = ((replay_state_q inside
                                  {REPLAY_WAIT_FIRST, REPLAY_PUSH, REPLAY_WAIT_SECOND})
                                 && tag_raw.replay)

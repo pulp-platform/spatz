@@ -3,10 +3,11 @@
 // SPDX-License-Identifier: SHL-0.51
 //
 // Low-area shadow verification checker for one Spatz fpnew lane.
+// Author: Maoyuan Cai (maoyuan.cai@unibo.it)
 //
 // Protection strategy in this cleaned version:
 //   ADDMUL : reduced-precision fpnew datapath
-//            FP32 -> FP16ALT (E8M7), FP16 -> FP8 (E5M2), FP8 -> FP8.
+//            FP32 -> FP16ALT (E8M7), FP16 -> FP8 (E5M2), FP8 -> FP8, FP16ALT -> FP16ALT.
 //   DOTP   : reduced fpnew SDOTP for the common FP16xFP16->FP32 case,
 //            mapped to FP8xFP8->FP16ALT and checked on exponent.
 //   DIVSQRT: reduced fpnew DIVSQRT (C910): FP32 -> FP16ALT (ULP tolerance),
@@ -15,7 +16,6 @@
 //   NONCOMP: exact lightweight functional replica (SGNJ/MINMAX/CMP/CLASSIFY).
 //   CONV   : low-area semantic checker.  F2F/I2F compare FP exponent class;
 //            F2I compares integer leading-one position against FP exponent.
-//            Numerically fragile/ambiguous cases are bypassed deliberately.
 
 module spatz_fpu_shadow_checker
   import fpnew_pkg::*;
