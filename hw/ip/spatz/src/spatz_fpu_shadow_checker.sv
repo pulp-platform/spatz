@@ -71,6 +71,11 @@ module spatz_fpu_shadow_checker
   input  logic                 tag_narrowing_i,
   input  logic                 result_tag_narrowing_i,
 
+  // Replay marker (vfu_tag_t.replay) of the result retiring on result_i. The expected
+  // value is bypass_risk_o of the same word at accept (that is what spatz_vfu injects into
+  // the tag), so a corrupted replay bit in an opgroup's tag pipeline is caught here.
+  input  logic                 result_tag_replay_i,
+
   input  logic [ElenWidth-1:0] result_i,
   input  logic                 result_valid_i,
   input  logic                 result_ready_i,
@@ -2109,8 +2114,20 @@ module spatz_fpu_shadow_checker
     end
   end
 
+  // Replay marker, same scheme: expected value = bypass_risk_o of the accepted word.
+  logic replay_q [2**IdWidth];
+
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (!rst_ni) begin
+      for (int i = 0; i < 2**IdWidth; i++) replay_q[i] <= 1'b0;
+    end else if (accept_event) begin
+      replay_q[expected_id_i] <= bypass_risk_o;
+    end
+  end
+
   logic tag_fault_comb;
-  assign tag_fault_comb = retire_event && (narrowing_q[result_id_i] != result_tag_narrowing_i);
+  assign tag_fault_comb = retire_event && ((narrowing_q[result_id_i] != result_tag_narrowing_i) ||
+                                           (replay_q[result_id_i]    != result_tag_replay_i));
 
   // =====================================================================
   // Final fault output

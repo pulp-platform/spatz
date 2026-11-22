@@ -77,6 +77,9 @@ module spatz_vfu
 
     // Is this a reduction?
     logic reduction;
+    // Does this word belong to a bypass-classified instruction under temporal-redundancy
+    // replay (set on both the pass-1 and the pass-2 push, see gen_fpnew's replay FSM)?
+    logic replay;
     // valid bytes in this VRF word
     logic [$clog2(VRFWordBWidth+1)-1:0] valid_bytes;
   } vfu_tag_t;
@@ -1525,6 +1528,7 @@ module spatz_vfu
       narrowing      : spatz_req.op_arith.is_narrowing,
       narrowing_upper: narrowing_upper_q,
       reduction      : spatz_req.op_arith.is_reduction,
+      replay         : 1'b0,
       valid_bytes    : valid_bytes_wr // count of the number of valid bytes in the VRF word (write side)
     };
 
@@ -2326,6 +2330,12 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
       vfu_tag_t tag_raw;
       logic     int_fpu_result_valid_raw;
       logic     fpu_i_in_valid, fpu_i_out_ready;
+      // Tag entering i_fpu: input_tag_q plus the replay marker. bypass_risk is only high in the
+      // IDLE accept cycle of a bypass-classified word (pass-1); pass-2 is pushed in REPLAY_PUSH.
+      // The marker travels through i_fpu's own tag pipeline and lets the replay FSM tell the
+      // replayed word's results (replay=1) apart from older words still in flight (replay=0).
+      // (declared here, assigned after replay_state_q/bypass_risk are declared below)
+      vfu_tag_t fpu_tag_in;
 
       fpnew_top #(
         .Features                   (FPUFeatures           ),
@@ -2348,7 +2358,7 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
         .int_fmt_i     (fpu_int_fmt_q                                          ),
         .vectorial_op_i(fpu_vectorial_op_q                                     ),
         .op_mod_i      (fpu_op_mode_q                                          ),
-        .tag_i         (input_tag_q                                            ),
+        .tag_i         (fpu_tag_in                                             ),
         .simd_mask_i   ('1                                                     ),
         .rnd_mode_i    (rm_q                                                   ),
         .result_o      (fpu_result_raw                                         ),
@@ -2391,6 +2401,11 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
       replay_state_e replay_state_q;
       assign replay_state_q = replay_state_e'(replay_state_q_voted);
 
+      always_comb begin
+        fpu_tag_in        = input_tag_q;
+        fpu_tag_in.replay = bypass_risk || (replay_state_q == REPLAY_PUSH);
+      end
+
       logic replay_start_comb;
       // Must be live the SAME cycle as the first accept (fpu_in_valid_q &&
       // fpu_in_ready_d): the skid register's own existing back-to-back
@@ -2412,15 +2427,18 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
       // result_valid, so holding the externally-visible valid low while also
       // leaving out_ready_i tied to fpu_result_ready would deadlock instead of
       // just adding latency.
-      assign fpu_i_out_ready = (replay_state_q inside
+      // Only the replayed word's own results (tag_raw.replay) are decoupled; results of older
+      // words still in flight keep the normal handshake and are forwarded (see the release mux).
+      assign fpu_i_out_ready = ((replay_state_q inside
                                  {REPLAY_WAIT_FIRST, REPLAY_PUSH, REPLAY_WAIT_SECOND})
+                                && tag_raw.replay)
                                 ? 1'b1 : fpu_result_ready;
 
       logic capture_first_comb, capture_second_comb, replay_match_comb;
       assign capture_first_comb  = (replay_state_q == REPLAY_WAIT_FIRST)
-                                    && int_fpu_result_valid_raw && fpu_i_out_ready;
+                                    && int_fpu_result_valid_raw && tag_raw.replay && fpu_i_out_ready;
       assign capture_second_comb = (replay_state_q == REPLAY_WAIT_SECOND)
-                                    && int_fpu_result_valid_raw && fpu_i_out_ready;
+                                    && int_fpu_result_valid_raw && tag_raw.replay && fpu_i_out_ready;
       assign replay_match_comb   = (fpu_result_raw == replay_result_q);
 
       always_comb begin
@@ -2485,7 +2503,8 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
       // backpressure holds out_ready_i low for multiple cycles too).
       assign int_fpu_result_valid =
         (replay_state_q == REPLAY_RELEASE) ? 1'b1
-        : (replay_state_q == REPLAY_IDLE)  ? int_fpu_result_valid_raw : 1'b0;
+        : (replay_state_q == REPLAY_IDLE)  ? int_fpu_result_valid_raw
+        : (int_fpu_result_valid_raw && !tag_raw.replay); // WAIT_*/PUSH: forward older words' results
       assign fpu_result[fpu*ELEN +: ELEN] =
         (replay_state_q == REPLAY_RELEASE) ? replay_result_q : fpu_result_raw;
       assign tag =
@@ -2532,6 +2551,7 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
         .result_id_i   (tag.id                         ),
         .tag_narrowing_i       (input_tag_q.narrowing  ),
         .result_tag_narrowing_i(tag.narrowing          ),
+        .result_tag_replay_i   (tag.replay             ),
         .result_i      (fpu_result[fpu*ELEN +: ELEN]   ),
         .result_valid_i(int_fpu_result_valid           ),
         .result_ready_i(fpu_result_ready               ),

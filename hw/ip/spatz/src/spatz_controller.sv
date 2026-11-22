@@ -768,7 +768,11 @@ module spatz_controller
         read_table_d[spatz_req.vd] = {spatz_req.id, 1'b1};
       end
       // tackling v0 RAW hazard
-      if (!spatz_req.op_arith.vm) begin
+      // v0 is only a source if the op is actually masked. The decoder sets vm in op_mem for
+      // loads/stores (op_arith.vm stays 0), so use the per-unit vm bit: otherwise every
+      // load/store (e.g. vle v0) overwrites read_table_d[0] with itself and loses the WAR
+      // dependency on the real last reader of v0 checked in the WAW/WAR block below.
+      if ((spatz_req.ex_unit == LSU) ? !spatz_req.op_mem.vm : !spatz_req.op_arith.vm) begin
         scoreboard_d[spatz_req.id].deps[write_table_d[0].id] |= write_table_d[0].valid;
         read_table_d[0] = {spatz_req.id, 1'b1};
       end
