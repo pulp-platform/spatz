@@ -310,8 +310,10 @@ module spatz_controller
   // Buffer state signals
   logic       req_buffer_ready, req_buffer_valid, req_buffer_pop;
 
+  logic req_buffer_ecc_correctable, req_buffer_ecc_uncorrectable, req_buffer_fifo_correctable;
+
   // One element wide instruction buffer
-  fall_through_register #(
+  rel_fall_through_register #(
     .T(spatz_req_t)
   ) i_req_buffer (
     .clk_i     (clk_i                ),
@@ -323,7 +325,10 @@ module spatz_controller
     .data_i    (decoder_rsp.spatz_req),
     .valid_i   (decoder_rsp_valid    ),
     .data_o    (buffer_spatz_req     ),
-    .ready_i   (req_buffer_pop       )
+    .ready_i   (req_buffer_pop       ),
+    .ecc_correctable_o   (req_buffer_ecc_correctable  ),
+    .ecc_uncorrectable_o (req_buffer_ecc_uncorrectable),
+    .fifo_correctable_o  (req_buffer_fifo_correctable )
   );
 
   ////////////////
@@ -766,7 +771,11 @@ module spatz_controller
         read_table_d[spatz_req.vd] = {spatz_req.id, 1'b1};
       end
       // tackling v0 RAW hazard
-      if (!spatz_req.op_arith.vm) begin
+      // v0 is only a source if the op is actually masked. The decoder sets vm in op_mem for
+      // loads/stores (op_arith.vm stays 0), so use the per-unit vm bit: otherwise every
+      // load/store (e.g. vle v0) overwrites read_table_d[0] with itself and loses the WAR
+      // dependency on the real last reader of v0 checked in the WAW/WAR block below.
+      if ((spatz_req.ex_unit == LSU) ? !spatz_req.op_mem.vm : !spatz_req.op_arith.vm) begin
         scoreboard_d[spatz_req.id].deps[write_table_d[0].id] |= write_table_d[0].valid;
         read_table_d[0] = {spatz_req.id, 1'b1};
       end
@@ -1050,7 +1059,7 @@ module spatz_controller
   logic     vfu_rsp_valid;
   logic     vfu_rsp_ready;
 
-  logic vfu_scalar_response_fault;
+  logic [1:0] vfu_scalar_response_err;
   rel_spill_register #(
     .TmrHandshake(1'b0),
     .T(vfu_rsp_t)
@@ -1063,7 +1072,7 @@ module spatz_controller
     .data_o (vfu_rsp                        ),
     .valid_o(vfu_rsp_valid                  ),
     .ready_i(vfu_rsp_ready                  ),
-    .fault_o          (vfu_scalar_response_fault),
+    .err_o            (vfu_scalar_response_err),
     .data_corrector_o (),
     .data_corrected_i ('0)
   );
@@ -1071,7 +1080,7 @@ module spatz_controller
   logic       rsp_valid_d;
   logic       rsp_ready_d;
   spatz_rsp_t rsp_d;
-  logic spatz_rsp_register_fault;
+  logic [1:0] spatz_rsp_register_err;
   rel_spill_register #(
     .TmrHandshake(1'b0),
     .T     (spatz_rsp_t ),
@@ -1085,7 +1094,7 @@ module spatz_controller
     .data_o (rsp_o       ),
     .valid_o(rsp_valid_o ),
     .ready_i(rsp_ready_i ),
-    .fault_o          (spatz_rsp_register_fault),
+    .err_o            (spatz_rsp_register_err),
     .data_corrector_o (),
     .data_corrected_i ('0)
   );
@@ -1158,7 +1167,9 @@ module spatz_controller
   assign spatz_req_valid_o = spatz_req_valid;
 
   // No uncorrectable fault source in the spill registers
-  assign controller_uncorrectable_fault_o = 1'b0;
-  assign controller_correctable_fault_o = vfu_scalar_response_fault | spatz_rsp_register_fault | ff_tmr_fault_any;
+  assign controller_uncorrectable_fault_o = vfu_scalar_response_err[1] | spatz_rsp_register_err[1]
+                                            | req_buffer_ecc_uncorrectable;
+  assign controller_correctable_fault_o = vfu_scalar_response_err[0] | spatz_rsp_register_err[0] | ff_tmr_fault_any
+                                          | req_buffer_ecc_correctable | req_buffer_fifo_correctable;
 
 endmodule : spatz_controller
