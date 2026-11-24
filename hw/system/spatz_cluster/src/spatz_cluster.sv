@@ -450,6 +450,9 @@ module spatz_cluster
   logic               icache_prefetch_enable;
   logic [NrCores-1:0] cl_interrupt;
 
+  // Per-core uncorrectable-fault recovery interrupt (ORed onto mcip alongside cl_interrupt).
+  logic [NrCores-1:0] uncorrectable_irq;
+
   // --------------
   // Error Monitor
   // --------------
@@ -469,10 +472,16 @@ module spatz_cluster
   logic [NrCores-1:0]  fpu_sequencer_uncorrectable_fault;
   logic [NrCores-1:0]  vfu_correctable_fault;
   logic [NrCores-1:0]  vfu_uncorrectable_fault;
+  logic [NrCores-1:0]  controller_correctable_fault;
+  logic [NrCores-1:0]  controller_uncorrectable_fault;
+  logic [NrCores-1:0]  vsldu_correctable_fault;
+  logic [NrCores-1:0]  vsldu_uncorrectable_fault;
 
   // Per-core whole-core TMR lockstep mismatch.
   logic [NrCores-1:0]  snitch_correctable_fault;
   logic [NrCores-1:0]  snitch_uncorrectable_fault;
+  // Per-cluster icache fault output
+  logic icache_correctable_fault, icache_uncorrectable_fault;
 
   logic [NumTcdmBanks-1:0] tcdm_rd_correctable_fault;
   logic [NumTcdmBanks-1:0] tcdm_rd_uncorrectable_fault;
@@ -484,8 +493,14 @@ module spatz_cluster
   logic [NrCores-1:0][ErrorCounterWidth-1:0]  vrf_uncorrectable_count;
   logic [NrCores-1:0][ErrorCounterWidth-1:0]  fpu_sequencer_correctable_count;
   logic [NrCores-1:0][ErrorCounterWidth-1:0]  fpu_sequencer_uncorrectable_count;
+  logic [NrCores-1:0][ErrorCounterWidth-1:0]  vlsu_correctable_count;
+  logic [NrCores-1:0][ErrorCounterWidth-1:0]  vlsu_uncorrectable_count;
   logic [NrCores-1:0][ErrorCounterWidth-1:0]  vfu_correctable_count;
   logic [NrCores-1:0][ErrorCounterWidth-1:0]  vfu_uncorrectable_count;
+  logic [NrCores-1:0][ErrorCounterWidth-1:0]  controller_correctable_count;
+  logic [NrCores-1:0][ErrorCounterWidth-1:0]  controller_uncorrectable_count;
+  logic [NrCores-1:0][ErrorCounterWidth-1:0]  vsldu_correctable_count;
+  logic [NrCores-1:0][ErrorCounterWidth-1:0]  vsldu_uncorrectable_count;
 
   logic [NumTcdmBanks-1:0][ErrorCounterWidth-1:0] tcdm_rd_correctable_count;
   logic [NumTcdmBanks-1:0][ErrorCounterWidth-1:0] tcdm_rd_uncorrectable_count;
@@ -494,13 +509,25 @@ module spatz_cluster
 
   logic [ErrorCounterWidth-1:0] tcdm_interconnect_correctable_count;
   logic [ErrorCounterWidth-1:0] tcdm_interconnect_uncorrectable_count;
+  logic [ErrorCounterWidth-1:0] axi_interconnect_correctable_count;
+  logic [ErrorCounterWidth-1:0] axi_interconnect_uncorrectable_count;
 
   logic [NrCores-1:0][ErrorCounterWidth-1:0] snitch_correctable_count;
   logic [NrCores-1:0][ErrorCounterWidth-1:0] snitch_uncorrectable_count;
 
+  logic [ErrorCounterWidth-1:0] icache_correctable_count;
+  logic [ErrorCounterWidth-1:0] icache_uncorrectable_count;
+
   // OR of every TCDM interconnect fault
   logic tcdm_interconnect_correctable_fault_any;
   logic tcdm_interconnect_uncorrectable_fault_any;
+  // AXI interconnect faults: core-to-AXI reqrsp mux response FIFO (correctable);
+  // no uncorrectable source yet.
+  logic axi_interconnect_correctable_fault_any;
+  logic axi_interconnect_uncorrectable_fault_any;
+  // Fault outputs of the protected buffers in i_axi_to_tcdm (SoC -> TCDM adapter)
+  logic axi_to_tcdm_ecc_correctable, axi_to_tcdm_ecc_uncorrectable, axi_to_tcdm_fifo_correctable;
+  logic core_axi_mux_fault;
   // OR of every ICache parity fault
   logic icache_parity_fault_any;
   // OR of every ICache TMR fault
@@ -529,6 +556,10 @@ module spatz_cluster
   .fpu_sequencer_uncorrectable_fault_i (fpu_sequencer_uncorrectable_fault),
   .vfu_correctable_fault_i (vfu_correctable_fault),
   .vfu_uncorrectable_fault_i (vfu_uncorrectable_fault),
+  .controller_correctable_fault_i (controller_correctable_fault),
+  .controller_uncorrectable_fault_i (controller_uncorrectable_fault),
+  .vsldu_correctable_fault_i (vsldu_correctable_fault),
+  .vsldu_uncorrectable_fault_i (vsldu_uncorrectable_fault),
   // tcdm faults
   .tcdm_rd_correctable_fault_i (tcdm_rd_correctable_fault),
   .tcdm_rd_uncorrectable_fault_i (tcdm_rd_uncorrectable_fault),
@@ -537,20 +568,29 @@ module spatz_cluster
   // tcdm interconnect faults
   .tcdm_interconnect_correctable_fault_i (tcdm_interconnect_correctable_fault_any),
   .tcdm_interconnect_uncorrectable_fault_i (tcdm_interconnect_uncorrectable_fault_any),
+  // axi interconnect faults
+  .axi_interconnect_correctable_fault_i (axi_interconnect_correctable_fault_any),
+  .axi_interconnect_uncorrectable_fault_i (axi_interconnect_uncorrectable_fault_any),
   // snitch core faults
   .snitch_correctable_fault_i (snitch_correctable_fault),
   .snitch_uncorrectable_fault_i (snitch_uncorrectable_fault),
   // cluster_icache parity/TMR faults
-  .icache_correctable_fault_i (icache_tmr_fault_any | icache_parity_fault_any),
-  .icache_uncorrectable_fault_i (1'b0),
+  .icache_correctable_fault_i (icache_correctable_fault),
+  .icache_uncorrectable_fault_i (icache_uncorrectable_fault),
 
   // Per-source counters.
   .vrf_correctable_count_o (vrf_correctable_count),
   .vrf_uncorrectable_count_o(vrf_uncorrectable_count),
   .fpu_sequencer_correctable_count_o (fpu_sequencer_correctable_count),
   .fpu_sequencer_uncorrectable_count_o (fpu_sequencer_uncorrectable_count),
+  .vlsu_correctable_count_o (vlsu_correctable_count),
+  .vlsu_uncorrectable_count_o (vlsu_uncorrectable_count),
   .vfu_correctable_count_o (vfu_correctable_count),
   .vfu_uncorrectable_count_o (vfu_uncorrectable_count),
+  .controller_correctable_count_o (controller_correctable_count),
+  .controller_uncorrectable_count_o (controller_uncorrectable_count),
+  .vsldu_correctable_count_o (vsldu_correctable_count),
+  .vsldu_uncorrectable_count_o (vsldu_uncorrectable_count),
 
   .tcdm_rd_correctable_count_o (tcdm_rd_correctable_count),
   .tcdm_rd_uncorrectable_count_o (tcdm_rd_uncorrectable_count),
@@ -560,8 +600,14 @@ module spatz_cluster
   .tcdm_interconnect_correctable_count_o (tcdm_interconnect_correctable_count),
   .tcdm_interconnect_uncorrectable_count_o (tcdm_interconnect_uncorrectable_count),
 
+  .axi_interconnect_correctable_count_o (axi_interconnect_correctable_count),
+  .axi_interconnect_uncorrectable_count_o (axi_interconnect_uncorrectable_count),
+
   .snitch_correctable_count_o (snitch_correctable_count),
-  .snitch_uncorrectable_count_o (snitch_uncorrectable_count)
+  .snitch_uncorrectable_count_o (snitch_uncorrectable_count),
+
+  .icache_correctable_count_o (icache_correctable_count),
+  .icache_uncorrectable_count_o (icache_uncorrectable_count)
 );
 
   // -------------
@@ -911,8 +957,11 @@ module spatz_cluster
         .syndrome_o (                    ),
         .err_o      (amo_wctrl_err       )
       );
+      logic wctrl_vld;
+      assign wctrl_vld = |amo_req_valid_rep[j]; // request entering this bank's amo_shim
+                                                 // any of the three redundant valids of bank j is high
       assign tcdm_wctrl_correctable_fault[i][j]   = amo_wctrl_err[0];
-      assign tcdm_wctrl_uncorrectable_fault[i][j] = amo_wctrl_err[1];
+      assign tcdm_wctrl_uncorrectable_fault[i][j] = amo_wctrl_err[1] & wctrl_vld; // gate uncorrectable fault to avoid "X" states leading to reboot
       assign {amo_wstrb_dec, amo_amo_dec, amo_write_dec} = amo_wctrl_dec;
 
       // Replace the SRAM to a ECC_enhanced version w/ inputECC
@@ -967,7 +1016,7 @@ module spatz_cluster
         .err_o      (mem_addr_err    )
       );
       assign tcdm_addr_correctable_fault[i][j]   = mem_addr_err[0];
-      assign tcdm_addr_uncorrectable_fault[i][j] = mem_addr_err[1];
+      assign tcdm_addr_uncorrectable_fault[i][j] = mem_addr_err[1]& mem_cs; // gated uncorrectable fault to avoid "X" states leading to reboot
 
       // Decode mem_be_ecc right before the SRAM
       hsiao_ecc_dec #(
@@ -979,7 +1028,7 @@ module spatz_cluster
         .err_o      (mem_be_err  )
       );
       assign tcdm_be_correctable_fault[i][j]   = mem_be_err[0];
-      assign tcdm_be_uncorrectable_fault[i][j] = mem_be_err[1];
+      assign tcdm_be_uncorrectable_fault[i][j] = mem_be_err[1]& mem_cs; // gated uncorrectable fault to avoid "X" states leading to reboot
       // AMO shim: 39-bit native interface. Non-AMO codewords pass through unchanged;
       // AMO/SC operations decode internally (via Hsiao systematic property on mem_rdata_i),
       // apply the ALU, and re-encode the result before writing back to SRAM.
@@ -1156,7 +1205,7 @@ module spatz_cluster
     i_sync_mtip (.clk_i, .rst_ni, .serial_i (mtip_i[i]), .serial_o (irq.mtip));
     sync #(.STAGES (2))
     i_sync_msip (.clk_i, .rst_ni, .serial_i (msip_i[i]), .serial_o (irq.msip));
-    assign irq.mcip = cl_interrupt[i];
+    assign irq.mcip = cl_interrupt[i] | uncorrectable_irq[i];
 
 
     logic [31:0] hart_id;
@@ -1343,6 +1392,11 @@ module spatz_cluster
         // vfu error outputs
         .vfu_correctable_error_o (vfu_correctable_fault[i]),
         .vfu_uncorrectable_error_o (vfu_uncorrectable_fault[i]),
+        // controller error outputs
+        .controller_correctable_error_o (controller_correctable_fault[i]),
+        .controller_uncorrectable_error_o (controller_uncorrectable_fault[i]),
+        .vsldu_correctable_error_o (vsldu_correctable_fault[i]),
+        .vsldu_uncorrectable_error_o (vsldu_uncorrectable_fault[i]),
         // Snitch error outputs
         .snitch_correctable_error_o (snitch_correctable_fault[i]),
         .snitch_uncorrectable_error_o (snitch_uncorrectable_fault[i])
@@ -1563,14 +1617,14 @@ module spatz_cluster
   end
 
   // icache L0/L1 parity + TMR faults from the reliability-hardened cluster_icache
-  logic [NrCores-1:0] icache_l0_tag_parity_fault;
-  logic [NrCores-1:0] icache_l0_data_parity_fault;
-  logic icache_l1_tag_parity_fault;
-  logic icache_l1_data_parity_fault;
-  logic icache_l1_tag_meta_tmr_fault;
-  logic icache_l1_fifo_tmr_fault;
+  // logic [NrCores-1:0] icache_l0_tag_parity_fault;
+  // logic [NrCores-1:0] icache_l0_data_parity_fault;
+  // logic icache_l1_tag_parity_fault;
+  // logic icache_l1_data_parity_fault;
+  // logic icache_l1_tag_meta_tmr_fault;
+  // logic icache_l1_fifo_tmr_fault;
 
-  snitch_icache #(
+  snitch_icacheTMR #(
     .NR_FETCH_PORTS     ( NrCores                                            ),
     .L0_LINE_COUNT      ( 8                                                  ),
     .LINE_WIDTH         ( ICacheLineWidth                                    ),
@@ -1609,21 +1663,22 @@ module spatz_cluster
     .sram_cfg_data_i      ( '0                       ),
     .axi_req_o            ( wide_axi_mst_req[ICache] ),
     .axi_rsp_i            ( wide_axi_mst_rsp[ICache] ),
-    .fifo_tmr_fault_o     ( icache_l1_fifo_tmr_fault )
+    .icache_correctable_error_o     ( icache_correctable_fault ),
+    .icache_uncorrectable_error_o   ( icache_uncorrectable_fault  )
   );
 
-  for (genvar i = 0; i < NrCores; i++) begin : gen_icache_fault_unpack
-    assign icache_l0_tag_parity_fault[i]  = icache_events[i].l0_tag_parity_error;
-    assign icache_l0_data_parity_fault[i] = icache_events[i].l0_data_parity_error;
-  end
+  // for (genvar i = 0; i < NrCores; i++) begin : gen_icache_fault_unpack
+  //   assign icache_l0_tag_parity_fault[i]  = icache_events[i].l0_tag_parity_error;
+  //   assign icache_l0_data_parity_fault[i] = icache_events[i].l0_data_parity_error;
+  // end
 
-  assign icache_l1_tag_parity_fault   = icache_l1_events.l1_tag_parity_error;
-  assign icache_l1_data_parity_fault  = icache_l1_events.l1_data_parity_error;
-  assign icache_l1_tag_meta_tmr_fault = icache_l1_events.l1_tag_meta_tmr_error;
+  // assign icache_l1_tag_parity_fault   = icache_l1_events.l1_tag_parity_error;
+  // assign icache_l1_data_parity_fault  = icache_l1_events.l1_data_parity_error;
+  // assign icache_l1_tag_meta_tmr_fault = icache_l1_events.l1_tag_meta_tmr_error;
 
-  assign icache_parity_fault_any = |icache_l0_tag_parity_fault | |icache_l0_data_parity_fault
-                                   | icache_l1_tag_parity_fault | icache_l1_data_parity_fault;
-  assign icache_tmr_fault_any = icache_l1_tag_meta_tmr_fault | icache_l1_fifo_tmr_fault;
+  // assign icache_parity_fault_any = |icache_l0_tag_parity_fault | |icache_l0_data_parity_fault
+  //                                  | icache_l1_tag_parity_fault | icache_l1_data_parity_fault;
+  // assign icache_tmr_fault_any = icache_l1_tag_meta_tmr_fault | icache_l1_fifo_tmr_fault;
   // --------
   // Cores SoC
   // --------
@@ -1662,8 +1717,13 @@ module spatz_cluster
     .slv_rsp_o (filtered_core_rsp),
     .mst_req_o (core_to_axi_req  ),
     .mst_rsp_i (core_to_axi_rsp  ),
-    .idx_o     (/*unused*/       )
+    .idx_o     (/*unused*/       ),
+    .fault_o   (core_axi_mux_fault)
   );
+
+  assign axi_interconnect_correctable_fault_any   = core_axi_mux_fault
+                                                  | axi_to_tcdm_ecc_correctable | axi_to_tcdm_fifo_correctable;
+  assign axi_interconnect_uncorrectable_fault_any = axi_to_tcdm_ecc_uncorrectable;
 
   reqrsp_to_axi #(
     .DataWidth    (NarrowDataWidth),
@@ -1749,7 +1809,10 @@ module spatz_cluster
     .axi_req_i  (narrow_axi_slv_req[TCDM]),
     .axi_rsp_o  (narrow_axi_slv_rsp[TCDM]),
     .tcdm_req_o (axi_soc_req_pre         ),
-    .tcdm_rsp_i (axi_soc_rsp_pre        )
+    .tcdm_rsp_i (axi_soc_rsp_pre        ),
+    .ecc_correctable_o   (axi_to_tcdm_ecc_correctable  ),
+    .ecc_uncorrectable_o (axi_to_tcdm_ecc_uncorrectable),
+    .fifo_correctable_o  (axi_to_tcdm_fifo_correctable )
   );
 
   // SoC request address ECC, encoded before the ECC shim (the shim's RMW path
@@ -1787,6 +1850,19 @@ module spatz_cluster
   );
 
   // 2. Peripherals
+  // uncorrectable faults aggregate
+  logic [NrCores-1:0] uncorrectable_fault_irq_en;
+  always_comb begin
+    for (int i = 0; i < NrCores; i++) begin
+    uncorrectable_fault_irq_en[i] = vrf_uncorrectable_fault[i] || vlsu_uncorrectable_fault[i] ||
+                                        fpu_sequencer_uncorrectable_fault[i] || vfu_uncorrectable_fault[i] ||
+                                        controller_uncorrectable_fault[i] || vsldu_uncorrectable_fault[i] ||
+                                        |tcdm_rd_uncorrectable_fault || |tcdm_scrub_uncorrectable_fault ||
+                                        tcdm_interconnect_uncorrectable_fault_any || axi_interconnect_uncorrectable_fault_any ||
+                                        snitch_uncorrectable_fault[i] || icache_uncorrectable_fault;
+    end
+  end
+
   axi_to_reg #(
     .ADDR_WIDTH         (AxiAddrWidth     ),
     .DATA_WIDTH         (NarrowDataWidth  ),
@@ -1833,20 +1909,35 @@ module spatz_cluster
     .dma_events_i             (dma_events            ),
     .icache_events_i          (icache_events         ),
     .cluster_probe_o          (cluster_probe_o       ),
+    // uncorrectable faults enables irq
+    .uncorrectable_fault_irq_en (uncorrectable_fault_irq_en),
+    .uncorrectable_irq_o        (uncorrectable_irq),
     // Error monitor
     .err_monitor_clear_o              (err_monitor_clear              ),
     .vrf_correctable_count_i          (vrf_correctable_count          ),
     .vrf_uncorrectable_count_i        (vrf_uncorrectable_count        ),
     .fpu_sequencer_correctable_count_i (fpu_sequencer_correctable_count ),
     .fpu_sequencer_uncorrectable_count_i (fpu_sequencer_uncorrectable_count ),
+    .vlsu_correctable_count_i        (vlsu_correctable_count        ),
+    .vlsu_uncorrectable_count_i      (vlsu_uncorrectable_count      ),
     .vfu_correctable_count_i         (vfu_correctable_count         ),
     .vfu_uncorrectable_count_i       (vfu_uncorrectable_count       ),
+    .controller_correctable_count_i  (controller_correctable_count  ),
+    .controller_uncorrectable_count_i (controller_uncorrectable_count ),
+    .vsldu_correctable_count_i  (vsldu_correctable_count  ),
+    .vsldu_uncorrectable_count_i (vsldu_uncorrectable_count ),
     .tcdm_rd_correctable_count_i      (tcdm_rd_correctable_count      ),
     .tcdm_rd_uncorrectable_count_i    (tcdm_rd_uncorrectable_count    ),
     .tcdm_scrub_correctable_count_i   (tcdm_scrub_correctable_count   ),
     .tcdm_scrub_uncorrectable_count_i (tcdm_scrub_uncorrectable_count ),
     .snitch_correctable_count_i (snitch_correctable_count ),
-    .snitch_uncorrectable_count_i (snitch_uncorrectable_count )
+    .snitch_uncorrectable_count_i (snitch_uncorrectable_count ),
+    .tcdm_interconnect_correctable_count_i   (tcdm_interconnect_correctable_count  ),
+    .tcdm_interconnect_uncorrectable_count_i (tcdm_interconnect_uncorrectable_count),
+    .icache_correctable_count_i   (icache_correctable_count  ),
+    .icache_uncorrectable_count_i (icache_uncorrectable_count),
+    .axi_interconnect_correctable_count_i   (axi_interconnect_correctable_count  ),
+    .axi_interconnect_uncorrectable_count_i (axi_interconnect_uncorrectable_count)
   );
 
   // 3. BootROM

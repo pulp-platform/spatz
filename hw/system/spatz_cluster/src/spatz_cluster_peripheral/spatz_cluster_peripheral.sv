@@ -64,7 +64,10 @@ module spatz_cluster_peripheral
   input  logic [31:0]                                     icache_correctable_count_i,
   input  logic [31:0]                                     icache_uncorrectable_count_i,
   input  logic [31:0]                                     axi_interconnect_correctable_count_i,
-  input  logic [31:0]                                     axi_interconnect_uncorrectable_count_i
+  input  logic [31:0]                                     axi_interconnect_uncorrectable_count_i,
+  // uncorrectable faults enables irq
+  input logic   [NrCores-1:0]                             uncorrectable_fault_irq_en,
+  output logic [NrCores-1:0]                              uncorrectable_irq_o
 );
 
   // Pipeline register to ease timing.
@@ -106,6 +109,27 @@ module spatz_cluster_peripheral
   end
   `FF(cl_clint_q, cl_clint_d, '0, clk_i, rst_ni)
   assign cl_clint_o = cl_clint_q[NrCores-1:0];
+
+  // Uncorrectable-fault recovery interrupt: a sticky per-hart status bit, set by any
+  // uncorrectable fault pulse (if enabled for that hart) and cleared by software writing 1
+  // to UNCORRECTABLE_IRQ_CLEAR. A fault arriving in the same cycle as a clear always wins,
+  // so the interrupt can never be silently dropped.
+  logic [31:0] uncorrectable_irq_d, uncorrectable_irq_q;
+
+  always_comb begin
+    uncorrectable_irq_d = uncorrectable_irq_q;
+    if (reg2hw.uncorrectable_irq_clear.qe) begin
+      uncorrectable_irq_d &= ~reg2hw.uncorrectable_irq_clear.q;
+    end
+    for (int i = 0; i < NrCores; i++) begin
+      if (reg2hw.uncorrectable_irq_enable.q[i] && uncorrectable_fault_irq_en[i]) begin
+        uncorrectable_irq_d[i] = 1'b1;
+      end
+    end
+  end
+  `FF(uncorrectable_irq_q, uncorrectable_irq_d, '0, clk_i, rst_ni)
+  assign hw2reg.uncorrectable_irq_status.d = uncorrectable_irq_q;
+  assign uncorrectable_irq_o = uncorrectable_irq_q[NrCores-1:0];
 
   // Enable icache prefetch
   assign icache_prefetch_enable_o = reg2hw.icache_prefetch_enable.q;

@@ -583,6 +583,13 @@ module spatz_cluster_peripheral_reg_top #(
   logic vsldu_correctable_count_re;
   logic [31:0] vsldu_uncorrectable_count_qs;
   logic vsldu_uncorrectable_count_re;
+  logic [31:0] uncorrectable_irq_enable_qs;
+  logic [31:0] uncorrectable_irq_enable_wd;
+  logic uncorrectable_irq_enable_we;
+  logic [31:0] uncorrectable_irq_status_qs;
+  logic uncorrectable_irq_status_re;
+  logic [31:0] uncorrectable_irq_clear_wd;
+  logic uncorrectable_irq_clear_we;
 
   // Register instances
 
@@ -4880,9 +4887,68 @@ module spatz_cluster_peripheral_reg_top #(
   );
 
 
+  // R[uncorrectable_irq_enable]: V(False)
+
+  prim_subreg #(
+    .DW      (32),
+    .SWACCESS("RW"),
+    .RESVAL  (32'h0)
+  ) u_uncorrectable_irq_enable (
+    .clk_i   (clk_i    ),
+    .rst_ni  (rst_ni  ),
+
+    // from register interface
+    .we     (uncorrectable_irq_enable_we),
+    .wd     (uncorrectable_irq_enable_wd),
+
+    // from internal hardware
+    .de     (1'b0),
+    .d      ('0  ),
+
+    // to internal hardware
+    .qe     (),
+    .q      (reg2hw.uncorrectable_irq_enable.q ),
+
+    // to register interface (read)
+    .qs     (uncorrectable_irq_enable_qs)
+  );
 
 
-  logic [161:0] addr_hit;
+  // R[uncorrectable_irq_status]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_uncorrectable_irq_status (
+    .re     (uncorrectable_irq_status_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.uncorrectable_irq_status.d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.uncorrectable_irq_status.q ),
+    .qs     (uncorrectable_irq_status_qs)
+  );
+
+
+  // R[uncorrectable_irq_clear]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_uncorrectable_irq_clear (
+    .re     (1'b0),
+    .we     (uncorrectable_irq_clear_we),
+    .wd     (uncorrectable_irq_clear_wd),
+    .d      ('0),
+    .qre    (),
+    .qe     (reg2hw.uncorrectable_irq_clear.qe),
+    .q      (reg2hw.uncorrectable_irq_clear.q ),
+    .qs     ()
+  );
+
+
+
+
+  logic [164:0] addr_hit;
   always_comb begin
     addr_hit = '0;
     addr_hit[  0] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_PERF_COUNTER_ENABLE_0_OFFSET);
@@ -5047,6 +5113,9 @@ module spatz_cluster_peripheral_reg_top #(
     addr_hit[159] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_ICACHE_UNCORRECTABLE_COUNT_OFFSET);
     addr_hit[160] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_VSLDU_CORRECTABLE_COUNT_OFFSET);
     addr_hit[161] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_VSLDU_UNCORRECTABLE_COUNT_OFFSET);
+    addr_hit[162] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_UNCORRECTABLE_IRQ_ENABLE_OFFSET);
+    addr_hit[163] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_UNCORRECTABLE_IRQ_STATUS_OFFSET);
+    addr_hit[164] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_UNCORRECTABLE_IRQ_CLEAR_OFFSET);
   end
 
   assign addrmiss = (reg_re || reg_we) ? ~|addr_hit : 1'b0 ;
@@ -5215,7 +5284,10 @@ module spatz_cluster_peripheral_reg_top #(
                (addr_hit[158] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[158] & ~reg_be))) |
                (addr_hit[159] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[159] & ~reg_be))) |
                (addr_hit[160] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[160] & ~reg_be))) |
-               (addr_hit[161] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[161] & ~reg_be)))));
+               (addr_hit[161] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[161] & ~reg_be))) |
+               (addr_hit[162] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[162] & ~reg_be))) |
+               (addr_hit[163] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[163] & ~reg_be))) |
+               (addr_hit[164] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[164] & ~reg_be)))));
   end
 
   assign perf_counter_enable_0_cycle_0_we = addr_hit[0] & reg_we & !reg_error;
@@ -5736,6 +5808,14 @@ module spatz_cluster_peripheral_reg_top #(
   assign vsldu_correctable_count_re = addr_hit[160] & reg_re & !reg_error;
 
   assign vsldu_uncorrectable_count_re = addr_hit[161] & reg_re & !reg_error;
+
+  assign uncorrectable_irq_enable_we = addr_hit[162] & reg_we & !reg_error;
+  assign uncorrectable_irq_enable_wd = reg_wdata[31:0];
+
+  assign uncorrectable_irq_status_re = addr_hit[163] & reg_re & !reg_error;
+
+  assign uncorrectable_irq_clear_we = addr_hit[164] & reg_we & !reg_error;
+  assign uncorrectable_irq_clear_wd = reg_wdata[31:0];
 
   // Read data return
   always_comb begin
@@ -6447,6 +6527,18 @@ module spatz_cluster_peripheral_reg_top #(
 
       addr_hit[161]: begin
         reg_rdata_next[31:0] = vsldu_uncorrectable_count_qs;
+      end
+
+      addr_hit[162]: begin
+        reg_rdata_next[31:0] = uncorrectable_irq_enable_qs;
+      end
+
+      addr_hit[163]: begin
+        reg_rdata_next[31:0] = uncorrectable_irq_status_qs;
+      end
+
+      addr_hit[164]: begin
+        reg_rdata_next[31:0] = '0;
       end
 
       default: begin

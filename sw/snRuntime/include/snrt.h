@@ -52,6 +52,11 @@ struct snrt_peripherals {
      *
      */
     volatile uint32_t *cl_clint;
+    /**
+     * @brief Uncorrectable-fault recovery IRQ registers (ENABLE/STATUS/CLEAR)
+     *
+     */
+    volatile uint32_t *uncorrectable_irq;
 };
 
 /// Barrier to use with snrt_barrier

@@ -15,11 +15,24 @@
 #define cl_clint_set(x) *(clint_p + 0) = (x)
 #define cl_clint_clr(x) *(clint_p + 2) = (x)
 
+/// The uncorrectable-fault recovery IRQ registers (ENABLE/STATUS/CLEAR) sit at
+/// consecutive 64-bit-wide slots in the cluster peripheral, same as the clint above.
+#define uncorrectable_irq_status_get() (*(uncorrectable_irq_p + 2))
+#define uncorrectable_irq_clear_set(x) *(uncorrectable_irq_p + 4) = (x)
+
+/// Recovery is a plain restart of the whole program from the top of main(), so a fault
+/// that keeps recurring (e.g. a permanently broken cell or a false positive) can't retry forever.
+#define SNRT_RECOVERY_MAX_RETRIES 3
+#define SNRT_EXIT_UNRECOVERABLE_FAULT 0xFA17u
+
 //================================================================================
 // Data
 //================================================================================
 static volatile uint32_t clint_mutex = 0;
 static __thread volatile uint32_t *clint_p;
+static __thread volatile uint32_t *uncorrectable_irq_p;
+static __thread uint32_t snrt_recovery_top_of_stack;
+static __thread uint32_t snrt_recovery_retry_count;
 
 //================================================================================
 // ISR definitions
@@ -35,6 +48,9 @@ void irq_m_cluster(uint32_t core_idx);
 //================================================================================
 
 extern void _snrt_exit(uint32_t code);
+// Restart entry point in start.S.in: resets sp to the saved pristine stack top
+// for this hart, then re-enters main() via the normal crt0 tail.
+extern void snrt_recovery_restart_point(void);
 
 //================================================================================
 // Public functions
@@ -43,6 +59,57 @@ extern void _snrt_exit(uint32_t code);
 void snrt_int_init(struct snrt_team_root *team) {
     // Put the clint address in tls for faster access
     clint_p = team->peripherals.cl_clint;
+    uncorrectable_irq_p = team->peripherals.uncorrectable_irq;
+    
+    // Arm the uncorrectable-fault recovery interrupt once, from one hart.
+    // Layout (64-bit slots): [0] ENABLE, [2] STATUS, [4] CLEAR
+    if (snrt_cluster_core_idx() == 0) {
+        uncorrectable_irq_clear_set(0xFFFFFFFFu);   // drop anything latched during boot
+        uncorrectable_irq_p[0] = 0xFFFFFFFFu;       // enable for all harts
+    }
+
+    // Uncorrectable-fault recovery relies on the cluster-local interrupt (mcip);
+    // this project treats reliability features as unconditional defaults, so
+    // enable it here rather than requiring every program to opt in.
+    snrt_interrupt_enable(IRQ_M_CLUSTER);
+    snrt_interrupt_global_enable();
+}
+
+/**
+ * @brief Called from start.S.in once per hart, right after this hart's stack
+ * pointer is finalized, to remember the pristine stack top for later
+ * fault-recovery restarts.
+ *
+ * @param sp_value this hart's stack pointer immediately after crt0 stack setup
+ */
+void snrt_recovery_save_sp(uint32_t sp_value) {
+    snrt_recovery_top_of_stack = sp_value;
+}
+
+/**
+ * @brief Called from snrt_recovery_restart_point in start.S.in to recover the
+ * stack pointer saved by snrt_recovery_save_sp.
+ */
+uint32_t snrt_recovery_get_saved_sp(void) { return snrt_recovery_top_of_stack; }
+
+/**
+ * @brief Recover from a Class-A uncorrectable fault (VRF/TCDM ECC, FPU
+ * shadow-checker mismatch, icache parity, control-FSM illegal-state) by
+ * clearing the fault and restarting the whole program from the top of
+ * main(), or giving up after too many retries.
+ * @details The corrupted data itself can't be un-corrupted, but every
+ * benchmark in this suite re-fetches its inputs from DRAM and overwrites
+ * (rather than accumulates into) its outputs, so restarting from the top is
+ * equivalent to a fresh, correct run.
+ *
+ * @param cluster_core_idx index of this hart within the cluster
+ */
+static void snrt_recover_from_uncorrectable_fault(uint32_t cluster_core_idx) {
+    uncorrectable_irq_clear_set(1u << cluster_core_idx);
+    if (++snrt_recovery_retry_count > SNRT_RECOVERY_MAX_RETRIES) {
+        _snrt_exit(SNRT_EXIT_UNRECOVERABLE_FAULT);
+    }
+    write_csr(mepc, (uintptr_t)&snrt_recovery_restart_point);
 }
 
 /**
@@ -69,7 +136,11 @@ void __snrt_isr(void) {
                 break;
             case IRQ_M_CLUSTER:
                 core_idx = snrt_cluster_core_idx();
-                irq_m_cluster(core_idx);
+                if (uncorrectable_irq_status_get() & (1u << core_idx)) {
+                    snrt_recover_from_uncorrectable_fault(core_idx);
+                } else {
+                    irq_m_cluster(core_idx);
+                }
                 break;
         }
     } else {

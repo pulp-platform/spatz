@@ -205,6 +205,24 @@ snrt.crt0.init_tls:
     blt       t0, t2, 1b
 2:
 
+    # Save this hart's pristine stack-top for fault-recovery restarts (see
+    # snrt_recovery_restart_point / snrt_recovery_save_sp in interrupt.c).
+snrt.crt0.save_recovery_sp:
+    addi      sp, sp, -20
+    sw        a0, 0(sp)
+    sw        a1, 4(sp)
+    sw        a2, 8(sp)
+    sw        a3, 12(sp)
+    sw        a4, 16(sp)
+    addi      a0, sp, 20
+    call      snrt_recovery_save_sp
+    lw        a0, 0(sp)
+    lw        a1, 4(sp)
+    lw        a2, 8(sp)
+    lw        a3, 12(sp)
+    lw        a4, 16(sp)
+    addi      sp, sp, 20
+
     # Prepare interrupts
 snrt.crt0.init_interrupt:
     la t0, __snrt_crt0_interrupt_handler
@@ -249,6 +267,18 @@ snrt.crt0.end:
 1:
     wfi
     j       1b
+
+    # Recovery entry point for an uncorrectable-fault restart (see
+    # snrt_recover_from_uncorrectable_fault in interrupt.c, which redirects
+    # mepc here). Resets sp to this hart's pristine stack top -- the trap
+    # epilogue only unwinds to wherever sp was at the original fault, not to
+    # the top -- then falls into the normal call-main/barrier/exit tail so
+    # repeated restarts don't leak stack.
+snrt_recovery_restart_point:
+    .globl snrt_recovery_restart_point
+    call    snrt_recovery_get_saved_sp
+    mv      sp, a0
+    j       snrt.crt0.main
 
 __snrt_crt0_interrupt_handler:
     .align 4

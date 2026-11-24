@@ -81,6 +81,9 @@ void _snrt_init_team(uint32_t cluster_core_id, uint32_t cluster_core_num,
     team->peripherals.cl_clint =
         (uint32_t *)(spm_start + bootdata->tcdm_size +
                      SPATZ_CLUSTER_PERIPHERAL_CL_CLINT_SET_REG_OFFSET);
+    team->peripherals.uncorrectable_irq =
+        (uint32_t *)(spm_start + bootdata->tcdm_size +
+                     SPATZ_CLUSTER_PERIPHERAL_UNCORRECTABLE_IRQ_ENABLE_REG_OFFSET);
 
     // Init allocator
     snrt_alloc_init(team, sizeof(struct putc_buffer));
