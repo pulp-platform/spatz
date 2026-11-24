@@ -8912,6 +8912,7 @@ snitch_regfileTMR #(
     .ADDR_WIDTH     ( RegWidth )
   )i_snitch_regfile (
     .clk_i(clk_i),
+    .rst_ni(~rst_i),
     .raddr_iA(gpr_raddrA),
     .raddr_iB(gpr_raddrB),
     .raddr_iC(gpr_raddrC),
