@@ -53,6 +53,8 @@ module spatz_vfu
   // widened from 12 to 16 per-fpu slots: +4 for the replay-controller registers
   logic [16*(N_FPU)-1:0] ff_tmr_err_1;
   logic ff_tmr_fault_any;
+  // FPU shadow-checker mismatch (any FPU)
+  logic fpu_shadow_fault_any;
   logic fpu_replay_confirmed_fault_any;
   assign ff_tmr_fault_any = (|ff_tmr_err_0) | (|ff_tmr_err_1);
 
