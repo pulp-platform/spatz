@@ -49,7 +49,7 @@ module spatz_vfu
   );
 
   // TMR fault flags of the triplicated FFs
-  logic [37-1:0] ff_tmr_err_0;
+  logic [41-1:0] ff_tmr_err_0;
   // widened from 12 to 16 per-fpu slots: +4 for the replay-controller registers
   logic [16*(N_FPU)-1:0] ff_tmr_err_1;
   logic ff_tmr_fault_any;
