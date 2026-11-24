@@ -567,6 +567,22 @@ module spatz_cluster_peripheral_reg_top #(
   logic vfu_uncorrectable_count_re;
   logic [31:0] snitch_uncorrectable_count_qs;
   logic snitch_uncorrectable_count_re;
+  logic [31:0] controller_correctable_count_qs;
+  logic controller_correctable_count_re;
+  logic [31:0] controller_uncorrectable_count_qs;
+  logic controller_uncorrectable_count_re;
+  logic [31:0] axi_interconnect_correctable_count_qs;
+  logic axi_interconnect_correctable_count_re;
+  logic [31:0] axi_interconnect_uncorrectable_count_qs;
+  logic axi_interconnect_uncorrectable_count_re;
+  logic [31:0] icache_correctable_count_qs;
+  logic icache_correctable_count_re;
+  logic [31:0] icache_uncorrectable_count_qs;
+  logic icache_uncorrectable_count_re;
+  logic [31:0] vsldu_correctable_count_qs;
+  logic vsldu_correctable_count_re;
+  logic [31:0] vsldu_uncorrectable_count_qs;
+  logic vsldu_uncorrectable_count_re;
 
   // Register instances
 
@@ -4729,8 +4745,144 @@ module spatz_cluster_peripheral_reg_top #(
 
 
 
+  // Subregister 0 of Multireg controller_correctable_count
+  // R[controller_correctable_count]: V(True)
 
-  logic [153:0] addr_hit;
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_controller_correctable_count (
+    .re     (controller_correctable_count_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.controller_correctable_count[0].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.controller_correctable_count[0].q ),
+    .qs     (controller_correctable_count_qs)
+  );
+
+
+
+  // Subregister 0 of Multireg controller_uncorrectable_count
+  // R[controller_uncorrectable_count]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_controller_uncorrectable_count (
+    .re     (controller_uncorrectable_count_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.controller_uncorrectable_count[0].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.controller_uncorrectable_count[0].q ),
+    .qs     (controller_uncorrectable_count_qs)
+  );
+
+
+  // R[axi_interconnect_correctable_count]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_axi_interconnect_correctable_count (
+    .re     (axi_interconnect_correctable_count_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.axi_interconnect_correctable_count.d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.axi_interconnect_correctable_count.q ),
+    .qs     (axi_interconnect_correctable_count_qs)
+  );
+
+
+  // R[axi_interconnect_uncorrectable_count]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_axi_interconnect_uncorrectable_count (
+    .re     (axi_interconnect_uncorrectable_count_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.axi_interconnect_uncorrectable_count.d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.axi_interconnect_uncorrectable_count.q ),
+    .qs     (axi_interconnect_uncorrectable_count_qs)
+  );
+
+
+  // R[icache_correctable_count]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_icache_correctable_count (
+    .re     (icache_correctable_count_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.icache_correctable_count.d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.icache_correctable_count.q ),
+    .qs     (icache_correctable_count_qs)
+  );
+
+
+  // R[icache_uncorrectable_count]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_icache_uncorrectable_count (
+    .re     (icache_uncorrectable_count_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.icache_uncorrectable_count.d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.icache_uncorrectable_count.q ),
+    .qs     (icache_uncorrectable_count_qs)
+  );
+
+
+
+  // Subregister 0 of Multireg vsldu_correctable_count
+  // R[vsldu_correctable_count]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_vsldu_correctable_count (
+    .re     (vsldu_correctable_count_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.vsldu_correctable_count[0].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.vsldu_correctable_count[0].q ),
+    .qs     (vsldu_correctable_count_qs)
+  );
+
+
+
+  // Subregister 0 of Multireg vsldu_uncorrectable_count
+  // R[vsldu_uncorrectable_count]: V(True)
+
+  prim_subreg_ext #(
+    .DW    (32)
+  ) u_vsldu_uncorrectable_count (
+    .re     (vsldu_uncorrectable_count_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.vsldu_uncorrectable_count[0].d),
+    .qre    (),
+    .qe     (),
+    .q      (reg2hw.vsldu_uncorrectable_count[0].q ),
+    .qs     (vsldu_uncorrectable_count_qs)
+  );
+
+
+
+
+  logic [161:0] addr_hit;
   always_comb begin
     addr_hit = '0;
     addr_hit[  0] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_PERF_COUNTER_ENABLE_0_OFFSET);
@@ -4887,6 +5039,14 @@ module spatz_cluster_peripheral_reg_top #(
     addr_hit[151] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_VFU_CORRECTABLE_COUNT_OFFSET);
     addr_hit[152] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_VFU_UNCORRECTABLE_COUNT_OFFSET);
     addr_hit[153] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_SNITCH_UNCORRECTABLE_COUNT_OFFSET);
+    addr_hit[154] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_CONTROLLER_CORRECTABLE_COUNT_OFFSET);
+    addr_hit[155] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_CONTROLLER_UNCORRECTABLE_COUNT_OFFSET);
+    addr_hit[156] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_AXI_INTERCONNECT_CORRECTABLE_COUNT_OFFSET);
+    addr_hit[157] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_AXI_INTERCONNECT_UNCORRECTABLE_COUNT_OFFSET);
+    addr_hit[158] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_ICACHE_CORRECTABLE_COUNT_OFFSET);
+    addr_hit[159] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_ICACHE_UNCORRECTABLE_COUNT_OFFSET);
+    addr_hit[160] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_VSLDU_CORRECTABLE_COUNT_OFFSET);
+    addr_hit[161] = (reg_addr == SPATZ_CLUSTER_PERIPHERAL_VSLDU_UNCORRECTABLE_COUNT_OFFSET);
   end
 
   assign addrmiss = (reg_re || reg_we) ? ~|addr_hit : 1'b0 ;
@@ -5047,7 +5207,15 @@ module spatz_cluster_peripheral_reg_top #(
                (addr_hit[150] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[150] & ~reg_be))) |
                (addr_hit[151] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[151] & ~reg_be))) |
                (addr_hit[152] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[152] & ~reg_be))) |
-               (addr_hit[153] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[153] & ~reg_be)))));
+               (addr_hit[153] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[153] & ~reg_be))) |
+               (addr_hit[154] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[154] & ~reg_be))) |
+               (addr_hit[155] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[155] & ~reg_be))) |
+               (addr_hit[156] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[156] & ~reg_be))) |
+               (addr_hit[157] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[157] & ~reg_be))) |
+               (addr_hit[158] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[158] & ~reg_be))) |
+               (addr_hit[159] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[159] & ~reg_be))) |
+               (addr_hit[160] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[160] & ~reg_be))) |
+               (addr_hit[161] & (|(SPATZ_CLUSTER_PERIPHERAL_PERMIT[161] & ~reg_be)))));
   end
 
   assign perf_counter_enable_0_cycle_0_we = addr_hit[0] & reg_we & !reg_error;
@@ -5552,6 +5720,22 @@ module spatz_cluster_peripheral_reg_top #(
   assign vfu_uncorrectable_count_re = addr_hit[152] & reg_re & !reg_error;
 
   assign snitch_uncorrectable_count_re = addr_hit[153] & reg_re & !reg_error;
+
+  assign controller_correctable_count_re = addr_hit[154] & reg_re & !reg_error;
+
+  assign controller_uncorrectable_count_re = addr_hit[155] & reg_re & !reg_error;
+
+  assign axi_interconnect_correctable_count_re = addr_hit[156] & reg_re & !reg_error;
+
+  assign axi_interconnect_uncorrectable_count_re = addr_hit[157] & reg_re & !reg_error;
+
+  assign icache_correctable_count_re = addr_hit[158] & reg_re & !reg_error;
+
+  assign icache_uncorrectable_count_re = addr_hit[159] & reg_re & !reg_error;
+
+  assign vsldu_correctable_count_re = addr_hit[160] & reg_re & !reg_error;
+
+  assign vsldu_uncorrectable_count_re = addr_hit[161] & reg_re & !reg_error;
 
   // Read data return
   always_comb begin
@@ -6231,6 +6415,38 @@ module spatz_cluster_peripheral_reg_top #(
 
       addr_hit[153]: begin
         reg_rdata_next[31:0] = snitch_uncorrectable_count_qs;
+      end
+
+      addr_hit[154]: begin
+        reg_rdata_next[31:0] = controller_correctable_count_qs;
+      end
+
+      addr_hit[155]: begin
+        reg_rdata_next[31:0] = controller_uncorrectable_count_qs;
+      end
+
+      addr_hit[156]: begin
+        reg_rdata_next[31:0] = axi_interconnect_correctable_count_qs;
+      end
+
+      addr_hit[157]: begin
+        reg_rdata_next[31:0] = axi_interconnect_uncorrectable_count_qs;
+      end
+
+      addr_hit[158]: begin
+        reg_rdata_next[31:0] = icache_correctable_count_qs;
+      end
+
+      addr_hit[159]: begin
+        reg_rdata_next[31:0] = icache_uncorrectable_count_qs;
+      end
+
+      addr_hit[160]: begin
+        reg_rdata_next[31:0] = vsldu_correctable_count_qs;
+      end
+
+      addr_hit[161]: begin
+        reg_rdata_next[31:0] = vsldu_uncorrectable_count_qs;
       end
 
       default: begin
