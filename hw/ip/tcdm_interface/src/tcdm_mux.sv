@@ -78,7 +78,7 @@ module tcdm_mux #(
       .ready_i ({fifo_ready, mst_rsp_i.q_ready})
     );
 
-    stream_fifo #(
+    rel_stream_fifo #(
       .FALL_THROUGH (1'b0),
       .DEPTH (RespDepth),
       .T (select_t)
@@ -93,7 +93,12 @@ module tcdm_mux #(
       .ready_o (fifo_ready),
       .data_o (fifo_out_select),
       .valid_o (),
-      .ready_i (mst_rsp_i.p_valid)
+      .ready_i (mst_rsp_i.p_valid),
+      // tcdm_mux is only used in tests/interface wrappers, not in the cluster:
+      // the fault outputs are intentionally left unconnected.
+      .ecc_correctable_o   (),
+      .ecc_uncorrectable_o (),
+      .fifo_correctable_o  ()
     );
   end else begin : gen_no_mux
     assign mst_req_o = slv_req_i;

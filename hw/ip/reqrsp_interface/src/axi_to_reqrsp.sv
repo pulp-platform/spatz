@@ -50,6 +50,10 @@ module axi_to_reqrsp #(
   input  logic                           rst_ni,
   /// The unit is busy handling an AXI4+ATOP request.
   output logic                           busy_o,
+  /// Fault outputs of the protected sel/meta buffers
+  output logic                           ecc_correctable_o,
+  output logic                           ecc_uncorrectable_o,
+  output logic                           fifo_correctable_o,
   /// AXI4+ATOP slave port, request input.
   input  axi_req_t                       axi_req_i,
   /// AXI4+ATOP slave port, response output.
@@ -260,7 +264,10 @@ module axi_to_reqrsp #(
   assign sel_b = meta.write & meta.last;
   assign sel_r = ~meta.write | meta.atop[5];
 
-  stream_fifo #(
+  logic sel_ecc_correctable, sel_ecc_uncorrectable, sel_fifo_correctable;
+  logic buf_ecc_correctable, buf_ecc_uncorrectable, buf_fifo_correctable;
+
+  rel_stream_fifo #(
     .FALL_THROUGH ( 1'b1             ),
     .DEPTH        ( 32'd1 + BufDepth ),
     .T            ( logic[1:0]       )
@@ -275,10 +282,13 @@ module axi_to_reqrsp #(
     .data_o     ({sel_buf_b,    sel_buf_r}),
     .valid_o    ( sel_buf_valid           ),
     .ready_i    ( sel_buf_ready           ),
-    .usage_o    ( /* unused */            )
+    .usage_o    ( /* unused */            ),
+    .ecc_correctable_o   ( sel_ecc_correctable   ),
+    .ecc_uncorrectable_o ( sel_ecc_uncorrectable ),
+    .fifo_correctable_o  ( sel_fifo_correctable  )
   );
 
-  stream_fifo #(
+  rel_stream_fifo #(
     .FALL_THROUGH ( 1'b1             ),
     .DEPTH        ( 32'd1 + BufDepth ),
     .T            ( meta_t           )
@@ -293,8 +303,15 @@ module axi_to_reqrsp #(
     .data_o     ( meta_buf       ),
     .valid_o    ( meta_buf_valid ),
     .ready_i    ( meta_buf_ready ),
-    .usage_o    ( /* unused */   )
+    .usage_o    ( /* unused */   ),
+    .ecc_correctable_o   ( buf_ecc_correctable   ),
+    .ecc_uncorrectable_o ( buf_ecc_uncorrectable ),
+    .fifo_correctable_o  ( buf_fifo_correctable  )
   );
+
+  assign ecc_correctable_o   = sel_ecc_correctable   | buf_ecc_correctable;
+  assign ecc_uncorrectable_o = sel_ecc_uncorrectable | buf_ecc_uncorrectable;
+  assign fifo_correctable_o  = sel_fifo_correctable  | buf_fifo_correctable;
 
   assign reqrsp_req_o.q = '{
     addr: meta.addr,
@@ -437,6 +454,9 @@ module axi_to_reqrsp_intf #(
   input  logic   rst_ni,
   /// The unit is busy handling an AXI4+ATOP request.
   output logic   busy_o,
+  output logic   ecc_correctable_o,
+  output logic   ecc_uncorrectable_o,
+  output logic   fifo_correctable_o,
   REQRSP_BUS     reqrsp,
   AXI_BUS        axi
 );
@@ -477,6 +497,9 @@ module axi_to_reqrsp_intf #(
     .clk_i,
     .rst_ni,
     .busy_o,
+    .ecc_correctable_o,
+    .ecc_uncorrectable_o,
+    .fifo_correctable_o,
     .axi_req_i (axi_req),
     .axi_rsp_o (axi_rsp),
     .reqrsp_req_o (reqrsp_req),

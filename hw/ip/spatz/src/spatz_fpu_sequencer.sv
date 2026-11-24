@@ -112,7 +112,7 @@ module spatz_fpu_sequencer
   //   .we_i   (fpr_we   )
   // );
 logic fpr_tmr_fault;
-logic fp_move_register_fault;
+logic [1:0] fp_move_register_err;
 logic [NrReadPorts-1:0][FLEN-1:0] fpr_rdataA,fpr_rdataB,fpr_rdataC;
   snitch_regfileTMR #(
     .DATA_WIDTH    (FLEN        ),
@@ -122,6 +122,7 @@ logic [NrReadPorts-1:0][FLEN-1:0] fpr_rdataA,fpr_rdataB,fpr_rdataC;
     .ZERO_REG_ZERO (0           )
   )i_fpr (
     .clk_i(clk_i),
+    .rst_ni(rst_ni),
     .raddr_iA(fpr_raddr),
     .raddr_iB(fpr_raddr),
     .raddr_iC(fpr_raddr),
@@ -468,6 +469,7 @@ logic [NrReadPorts-1:0][FLEN-1:0] fpr_rdataA,fpr_rdataB,fpr_rdataC;
         end
 
         // Vector instructions with FP scalar operand
+        riscv_instr::VFDIV_VF,
         riscv_instr::VFADD_VF,
         riscv_instr::VFSUB_VF,
         riscv_instr::VFMIN_VF,
@@ -757,7 +759,7 @@ snitch_lsuTMR #(
     .tmrErr(fp_lsu_mem_req_oTmrError)
   );
 
-  assign fpu_sequencer_uncorrectable_fault_o = '0;
+  assign fpu_sequencer_uncorrectable_fault_o = fp_move_register_err[1];
 
   // Number of memory operations in the accelerator
   logic [2:0] acc_mem_cnt_d, acc_mem_cnt_q0, acc_mem_cnt_q1, acc_mem_cnt_q2, acc_mem_cnt_qVoted;
@@ -886,7 +888,7 @@ snitch_lsuTMR #(
     .data_o    (fp_move_result_o      ),
     .valid_o   (fp_move_result_valid_o),
     .ready_i   (fp_move_result_ready_i),
-    .fault_o          (fp_move_register_fault),
+    .err_o            (fp_move_register_err),
     .data_corrector_o (),
     .data_corrected_i ('0)
   );
@@ -1017,7 +1019,7 @@ snitch_lsuTMR #(
                                           | fp_lsu_qreadyTmrError | fp_lsu_pdataTmrError
                                           | fp_lsu_ptagTmrError | fp_lsu_pvalidTmrError
                                           | fp_lsu_mem_req_oTmrError
-                                          | fp_move_register_fault
+                                          | fp_move_register_err[0]
                                           | outstanding_store_qTmrError
                                           | sb_qTmrError
                                           | acc_mem_cnt_qTmrError

@@ -6,4 +6,4 @@ overrides:
   axi:                { git: "https://github.com/pulp-platform/axi.git",                version: =0.39.1-beta   }
   idma:               { git: "https://github.com/pulp-platform/iDMA.git",               version: 0.6.4          }
   register_interface: { git: "https://github.com/pulp-platform/register_interface.git", version: 0.3.9          }
-  common_cells:       { git: "https://github.com/pulp-platform/common_cells.git",       version: 1.38.0         }
+  redundancy_cells  : { path: "/scratch2/maocai/relSpatz_release/spatz/hw/redundancy_cells"}

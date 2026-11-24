@@ -126,8 +126,10 @@ module spatz_scalar_unit
   // Buffer state signals
   logic       req_buffer_ready, req_buffer_valid, req_buffer_pop;
 
+  logic req_buffer_ecc_correctable, req_buffer_ecc_uncorrectable, req_buffer_fifo_correctable;
+
   // One element wide instruction buffer
-  fall_through_register #(
+  rel_fall_through_register #(
     .T(spatz_req_t)
   ) i_req_buffer (
     .clk_i     (clk_i                ),
@@ -139,7 +141,10 @@ module spatz_scalar_unit
     .data_i    (decoder_rsp.spatz_req),
     .valid_i   (decoder_rsp_valid    ),
     .data_o    (buffer_spatz_req     ),
-    .ready_i   (req_buffer_pop       )
+    .ready_i   (req_buffer_pop       ),
+    .ecc_correctable_o   (req_buffer_ecc_correctable  ),
+    .ecc_uncorrectable_o (req_buffer_ecc_uncorrectable),
+    .fifo_correctable_o  (req_buffer_fifo_correctable )
   );
 
   /////////////
@@ -221,7 +226,7 @@ module spatz_scalar_unit
   //////////////
 
 
-  logic vfu_scalar_response_fault;
+  logic [1:0] vfu_scalar_response_err;
   rel_spill_register #(
     .TmrHandshake(1'b0),
     .T(vfu_rsp_t)
@@ -234,12 +239,12 @@ module spatz_scalar_unit
     .data_o (spatz_rsp                      ),
     .valid_o(rsp_valid_d                    ),
     .ready_i(rsp_ready_d                    ),
-    .fault_o          (vfu_scalar_response_fault),
+    .err_o            (vfu_scalar_response_err),
     .data_corrector_o (),
     .data_corrected_i ('0)
   );
 
-  logic spatz_rsp_register_fault;
+  logic [1:0] spatz_rsp_register_err;
   rel_spill_register #(
     .TmrHandshake(1'b0),
     .T     (spatz_rsp_t ),
@@ -253,7 +258,7 @@ module spatz_scalar_unit
     .data_o (rsp_o       ),
     .valid_o(rsp_valid_o ),
     .ready_i(rsp_ready_i ),
-    .fault_o          (spatz_rsp_register_fault),
+    .err_o            (spatz_rsp_register_err),
     .data_corrector_o (),
     .data_corrected_i ('0)
   );
@@ -294,7 +299,7 @@ module spatz_scalar_unit
   logic       spatz_req_valid;
   logic       spatz_req_ready;
 
-  logic operation_queue_fault;
+  logic [1:0] operation_queue_err;
   rel_spill_register #(
     .TmrHandshake(1'b0),
     .T(spatz_req_t)
@@ -307,7 +312,7 @@ module spatz_scalar_unit
     .data_o (spatz_req      ),
     .valid_o(spatz_req_valid),
     .ready_i(spatz_req_ready),
-    .fault_o          (operation_queue_fault),
+    .err_o            (operation_queue_err),
     .data_corrector_o (),
     .data_corrected_i ('0)
   );
@@ -1025,7 +1030,8 @@ module spatz_scalar_unit
 
 
   // No uncorrectable fault source in the spill registers
-  assign scalar_uncorrectable_fault_o = 1'b0;
-  assign scalar_correctable_fault_o = vfu_scalar_response_fault | spatz_rsp_register_fault | operation_queue_fault | ff_tmr_fault_any;
+  assign scalar_uncorrectable_fault_o = vfu_scalar_response_err[1] | spatz_rsp_register_err[1] | operation_queue_err[1]
+                                      | req_buffer_ecc_uncorrectable;
+  assign scalar_correctable_fault_o = vfu_scalar_response_err[0] | spatz_rsp_register_err[0] | operation_queue_err[0] | req_buffer_ecc_correctable | req_buffer_fifo_correctable | ff_tmr_fault_any;
 
 endmodule : spatz_scalar_unit

@@ -96,9 +96,11 @@ module spatz_doublebw_vlsu
   // rel_fifo/rel_spill_register TMR-correction flags, aggregated onto
   // datapath_tmr_fault_o (declared here, ahead of any use, to avoid implicit
   // net inference at the port-connection sites below).
-  logic operation_queue_fault, commit_insn_fifo_fault;
-  logic [NrInterfaces-1:0] vrf_req_register_fault;
-  logic [NrInterfaces-1:0][N_FU-1:0] reorder_buffer_fault, offset_queue_fault, mem_req_register_fault;
+  logic commit_insn_fifo_fault;
+  logic [1:0] operation_queue_err;
+  logic [NrInterfaces-1:0][1:0] vrf_req_register_err;
+  logic [NrInterfaces-1:0][N_FU-1:0] reorder_buffer_fault, offset_queue_fault;
+  logic [NrInterfaces-1:0][N_FU-1:0][1:0] mem_req_register_err;
 
   ////////////////
   // Parameters //
@@ -172,7 +174,7 @@ module spatz_doublebw_vlsu
     .data_o (opq_data                                       ),
     .valid_o(mem_spatz_req_valid                            ),
     .ready_i(mem_spatz_req_ready                            ),
-    .fault_o ( operation_queue_fault ),
+    .err_o ( operation_queue_err ),
     .data_corrector_o ( ),
     .data_corrected_i ( '0 )
   );
@@ -1171,7 +1173,7 @@ module spatz_doublebw_vlsu
       .data_o (vrf_req_q[intf]      ),
       .valid_o(vrf_req_valid_q[intf]),
       .ready_i(vrf_req_ready_q[intf]),
-      .fault_o ( vrf_req_register_fault[intf] ),
+      .err_o ( vrf_req_register_err[intf] ),
       .data_corrector_o ( ),
       .data_corrected_i ( '0 )
     );
@@ -2377,7 +2379,7 @@ module spatz_doublebw_vlsu
         .data_o  (spatz_mem_req_o[port]          ),
         .valid_o (spatz_mem_req_valid_o[port]    ),
         .ready_i (spatz_mem_req_ready_i[port]    ),
-        .fault_o ( mem_req_register_fault[intf][fu] ),
+        .err_o ( mem_req_register_err[intf][fu] ),
         .data_corrector_o ( ),
         .data_corrected_i ( '0 )
       );
@@ -2427,9 +2429,25 @@ module spatz_doublebw_vlsu
                                 | (|mem_counter_tmr_fault) | (|mem_idx_counter_tmr_fault)
                                 | (|commit_counter_tmr_fault) | (|store_count_tmr_fault);
 
-  assign datapath_tmr_fault_o = operation_queue_fault | commit_insn_fifo_fault
-                               | (|vrf_req_register_fault) | (|reorder_buffer_fault)
-                               | (|offset_queue_fault) | (|mem_req_register_fault);
+  // rel_spill_register err_o: [0] correctable (TMR/ECC-corrected), [1] uncorrectable
+  logic datapath_ded_err;
+  always_comb begin
+    datapath_ded_err = operation_queue_err[1];
+    for (int i = 0; i < NrInterfaces; i++) begin
+      datapath_ded_err |= vrf_req_register_err[i][1];
+      for (int f = 0; f < N_FU; f++) datapath_ded_err |= mem_req_register_err[i][f][1];
+    end
+  end
+  logic datapath_sec_err;
+  always_comb begin
+    datapath_sec_err = operation_queue_err[0];
+    for (int i = 0; i < NrInterfaces; i++) begin
+      datapath_sec_err |= vrf_req_register_err[i][0];
+      for (int f = 0; f < N_FU; f++) datapath_sec_err |= mem_req_register_err[i][f][0];
+    end
+  end
+  assign datapath_tmr_fault_o = datapath_sec_err | commit_insn_fifo_fault
+                               | (|reorder_buffer_fault) | (|offset_queue_fault);
 
   assign vlsu_correctable_error_o = vlsu_st_sec_err_o | vlsu_ld_sec_err_o | vlsu_wr_sec_err_o
                                    | |vlsu_vd_sec_err_o | |vlsu_vs2_sec_err_o
@@ -2443,5 +2461,6 @@ module spatz_doublebw_vlsu
                                     | fsm_illegal_state_o
                                     | (mem_spatz_req_valid & opq_dec_err[1])
                                     | (commit_insn_valid & commit_insn_dec_err[1])
-                                    | offset_queue_ded_err_any;
+                                    | offset_queue_ded_err_any
+                                    | datapath_ded_err;
 endmodule : spatz_doublebw_vlsu

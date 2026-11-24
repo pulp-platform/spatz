@@ -36,6 +36,21 @@ module tb_bin;
     end
   end
 
+  `ifdef TARGET_ZOIX
+    `ifdef TARGET_POST_SYNTHESIS
+      // `include "/strobe/dora_rel_spatz/strobe_tb_bin_FS_ps.sv"
+      // `include "/strobe/dora_rel_spatz/strobe_tb_bin_FD_ps.sv"
+      `include "/strobe/dora_rel_spatz/strobe_tb_bin_OC_OU_ps.sv"
+      `include "/strobe/dora_rel_spatz/strobe_tb_bin_FD_softmax_output_window_ps.sv"
+    `else
+        `include "./strobe/strobe_tb_bin_OC_OU.sv"
+        // `include "./strobe/strobe_tb_bin_FS.sv"
+        // `include "./strobe/strobe_tb_bin_FD.sv"
+        // `include "./strobe/strobe_tb_bin_FD_output_window.sv"
+        `include "./strobe/strobe_tb_bin_FD_softmax_output_window.sv"
+    `endif
+  `endif
+
   // Start `fesvr`.
   initial begin
     automatic int exit_code;

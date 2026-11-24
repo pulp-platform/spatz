@@ -32,18 +32,19 @@ packages:
     dependencies:
     - common_cells
   cluster_icache:
-    revision: 231e79689b1556b4cffb6fc2e23bd13abeb29f08
+    revision: 4ecd36088321c65874f1e8c967d38a9b3519cda4
     version: null
     source:
       Git: https://github.com/pulp-platform/cluster_icache.git
     dependencies:
     - axi
     - common_cells
+    - register_interface
     - scm
     - tech_cells_generic
   common_cells:
-    revision: 1281545696eb3fcba50ec5b4275993476a3c710e
-    version: 1.40.0
+    revision: ac9dbf583183cafdcda2d956adb87472f95609aa
+    version: null
     source:
       Git: https://github.com/pulp-platform/common_cells.git
     dependencies:
@@ -56,7 +57,7 @@ packages:
       Git: https://github.com/pulp-platform/common_verification.git
     dependencies: []
   fpnew:
-    revision: a8e0cba6dd50f357ece73c2c955d96efc3c6c315
+    revision: e5aa6a01b5bbe1675c3aa8872e1203413ded83d1
     version: null
     source:
       Git: https://github.com/pulp-platform/cvfpu.git
@@ -99,10 +100,10 @@ packages:
     - common_cells
     - fpnew
   redundancy_cells:
-    revision: 2e84face0d1401f0468a70a44c490ec89ef94e9e
+    revision: null
     version: null
     source:
-      Git: https://github.com/pulp-platform/redundancy_cells.git
+      Path: hw/redundancy_cells
     dependencies:
     - common_cells
     - common_verification

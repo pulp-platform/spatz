@@ -27,3 +27,8 @@ install
 .projectBender.lock
 *.do
 sw/quadrilateroBenchmarks/matmul/*/data/data_*
+.claude/
+.vscode/
+sw/LLM/
+hw/ip/snitchTMR_snapshot_20261029/
+hw/ip/cluster_icache_michael/

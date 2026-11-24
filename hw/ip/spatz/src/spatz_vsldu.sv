@@ -66,7 +66,7 @@ module spatz_vsldu
     .data_o (spatz_req                                      ),
     .valid_o(spatz_req_valid                                ),
     .ready_i(spatz_req_ready                                ),
-    .fault_o          (),
+    .err_o            (),
     .data_corrector_o (),
     .data_corrected_i ('0)
   );
@@ -143,7 +143,7 @@ module spatz_vsldu
     .data_o (vrf_req_q      ),
     .valid_o(vrf_req_valid_q),
     .ready_i(vrf_req_ready_q),
-    .fault_o          (),
+    .err_o            (),
     .data_corrector_o (),
     .data_corrected_i ('0)
   );

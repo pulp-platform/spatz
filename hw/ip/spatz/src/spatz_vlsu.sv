@@ -93,7 +93,8 @@ module spatz_vlsu
 
   logic spatz_req_ready;
 
-  spill_register #(
+  rel_spill_register #(
+    .TmrHandshake(1'b0),
     .T(spatz_req_t)
   ) i_operation_queue (
     .clk_i  (clk_i                                          ),
@@ -103,7 +104,10 @@ module spatz_vlsu
     .ready_o(spatz_req_ready                                ),
     .data_o (mem_spatz_req                                  ),
     .valid_o(mem_spatz_req_valid                            ),
-    .ready_i(mem_spatz_req_ready                            )
+    .ready_i(mem_spatz_req_ready                            ),
+    .err_o            (),
+    .data_corrector_o (),
+    .data_corrected_i ('0)
   );
 
   // Convert the vl to number of bytes for all element widths
@@ -716,7 +720,8 @@ module spatz_vlsu
   logic     vrf_req_valid_d, vrf_req_ready_d;
   logic     vrf_req_valid_q, vrf_req_ready_q;
 
-  spill_register #(
+  rel_spill_register #(
+    .TmrHandshake(1'b0),
     .T(vrf_req_t)
   ) i_vrf_req_register (
     .clk_i  (clk_i          ),
@@ -726,7 +731,10 @@ module spatz_vlsu
     .ready_o(vrf_req_ready_d),
     .data_o (vrf_req_q      ),
     .valid_o(vrf_req_valid_q),
-    .ready_i(vrf_req_ready_q)
+    .ready_i(vrf_req_ready_q),
+    .err_o            (),
+    .data_corrector_o (),
+    .data_corrected_i ('0)
   );
 
   //////////////////////////
@@ -1505,7 +1513,8 @@ module spatz_vlsu
 
   // Create memory requests
   for (genvar port = 0; port < NrMemPorts; port++) begin : gen_mem_req
-    spill_register #(
+    rel_spill_register #(
+      .TmrHandshake(1'b0),
       .T(spatz_mem_req_t)
     ) i_spatz_mem_req_register (
       .clk_i   (clk_i                      ),
@@ -1515,7 +1524,10 @@ module spatz_vlsu
       .ready_o (spatz_mem_req_ready[port]  ),
       .data_o  (spatz_mem_req_o[port]      ),
       .valid_o (spatz_mem_req_valid_o[port]),
-      .ready_i (spatz_mem_req_ready_i[port])
+      .ready_i (spatz_mem_req_ready_i[port]),
+      .err_o            (),
+      .data_corrector_o (),
+      .data_corrected_i ('0)
     );
 `ifdef MEMPOOL_SPATZ
     // ID is required in Mempool-Spatz

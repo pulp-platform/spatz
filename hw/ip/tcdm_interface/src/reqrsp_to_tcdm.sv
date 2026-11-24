@@ -21,7 +21,11 @@ module reqrsp_to_tcdm #(
   input  reqrsp_req_t reqrsp_req_i,
   output reqrsp_rsp_t reqrsp_rsp_o,
   output tcdm_req_t   tcdm_req_o,
-  input  tcdm_rsp_t   tcdm_rsp_i
+  input  tcdm_rsp_t   tcdm_rsp_i,
+  // Fault outputs of the protected response buffer
+  output logic        ecc_correctable_o,
+  output logic        ecc_uncorrectable_o,
+  output logic        fifo_correctable_o
 );
 
   typedef logic [AddrWidth-1:0] addr_t;
@@ -32,7 +36,7 @@ module reqrsp_to_tcdm #(
   rr_req_chan_t req;
   rr_rsp_chan_t rsp;
 
-  stream_to_mem #(
+  rel_stream_to_mem #(
     .mem_req_t (rr_req_chan_t),
     .mem_resp_t (rr_rsp_chan_t),
     .BufDepth (BufDepth)
@@ -49,7 +53,10 @@ module reqrsp_to_tcdm #(
     .mem_req_valid_o (tcdm_req_o.q_valid),
     .mem_req_ready_i (tcdm_rsp_i.q_ready),
     .mem_resp_i (rsp),
-    .mem_resp_valid_i (tcdm_rsp_i.p_valid)
+    .mem_resp_valid_i (tcdm_rsp_i.p_valid),
+    .ecc_correctable_o,
+    .ecc_uncorrectable_o,
+    .fifo_correctable_o
   );
 
   //re-write struct assignment to support "-fsim"
@@ -111,7 +118,11 @@ module reqrsp_to_tcdm_intf #(
     .reqrsp_req_i (reqrsp_req),
     .reqrsp_rsp_o (reqrsp_rsp),
     .tcdm_req_o (tcdm_req),
-    .tcdm_rsp_i (tcdm_rsp)
+    .tcdm_rsp_i (tcdm_rsp),
+    // interface wrapper (tests only): fault outputs not used
+    .ecc_correctable_o   (),
+    .ecc_uncorrectable_o (),
+    .fifo_correctable_o  ()
   );
 
   `REQRSP_ASSIGN_TO_REQ(reqrsp_req, reqrsp)

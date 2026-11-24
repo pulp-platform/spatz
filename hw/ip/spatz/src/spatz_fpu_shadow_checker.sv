@@ -980,27 +980,17 @@ module spatz_fpu_shadow_checker
   // module: fpnew_top's own final result mux (the round-robin arbiter
   // combining per-opgroup outputs, fpnew_opgroup_block.sv/fpnew_top.sv) is
   // combinational, not registered, so result_i already carries that tail
-  // delay before this module even sees it -- confirmed historically in this
-  // exact file (see the "Two deferred compare-pipeline stages" / "Output
-  // register" comments this module used to carry, back when the old
-  // hand-written ADDMUL/DOTP datapath needed two full deferred stages to
-  // fit its own decode+compare logic in the remaining budget: "fpnew's own
-  // remaining tail logic at ~0.7ns... against a ~1.1ns per-cycle budget").
+  // delay before this module even sees it.
   //
   // CONV's and NONCOMP's comparators stay combinational on result_i
-  // directly: both are a bare bit-pattern equality, the specific case
-  // that history already validated as cheap enough to share a cycle with
-  // fpnew's tail. reduced_mismatch16/8 (decode + two sign-conditional
+  // directly: both are a bare bit-pattern equality. reduced_mismatch16/8 (decode + two sign-conditional
   // ordered-code transforms + subtract + threshold compare) and
   // reduced_dotp_exp_mismatch (field extraction + 4 special-case checks +
   // subtract + compare) are NOT that cheap -- real, un-measured risk of
   // repeating the same violation, so their result_i-side work is deferred
   // one cycle: capture result_i/result_valid_i and each shadow's own
   // (transient) result_o/tag_o together, then run the actual comparison
-  // off the registered copies next cycle. Safe to add a cycle of latency
-  // here for the same reason the old two-stage split was: fault_o never
-  // gates a VRF write or a retirement handshake, only a diagnostic counter
-  // and a sticky, software-masked interrupt bit.
+  // off the registered copies next cycle.
   // ---------------------------------------------------------------------
   logic [ElenWidth-1:0] result_i_q;
   logic                 result_valid_q;

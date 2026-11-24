@@ -26,7 +26,9 @@ module reqrsp_demux #(
     input  req_t               slv_req_i,
     output rsp_t               slv_rsp_o,
     output req_t [NrPorts-1:0] mst_req_o,
-    input  rsp_t [NrPorts-1:0] mst_rsp_i
+    input  rsp_t [NrPorts-1:0] mst_rsp_i,
+    /// Correctable (TMR-masked) fault reported by the response-routing FIFO.
+    output logic               fault_o
 );
 
   logic [NrPorts-1:0] fwd;
@@ -58,9 +60,10 @@ module reqrsp_demux #(
   end
 
   // Remember selected master for correct forwarding of read data/acknowledge.
-  fifo_v3 #(
-    .DATA_WIDTH ( NrPorts ),
-    .DEPTH ( RespDepth )
+  rel_fifo #(
+    .FallThrough ( 1'b0 ),
+    .DataWidth ( NrPorts ),
+    .Depth ( RespDepth )
   ) i_id_fifo (
     .clk_i,
     .rst_ni,
@@ -73,7 +76,8 @@ module reqrsp_demux #(
     .data_i (fifo_data),
     .push_i (push_id_fifo),
     .data_o (fwd),
-    .pop_i (pop_id_fifo)
+    .pop_i (pop_id_fifo),
+    .fault_o (fault_o)
   );
 
   // Response data routing.
@@ -141,7 +145,8 @@ module reqrsp_demux_intf #(
     .slv_req_i (reqrsp_slv_req),
     .slv_rsp_o (reqrsp_slv_rsp),
     .mst_req_o (reqrsp_mst_req),
-    .mst_rsp_i (reqrsp_mst_rsp)
+    .mst_rsp_i (reqrsp_mst_rsp),
+    .fault_o ()
   );
 
   `REQRSP_ASSIGN_TO_REQ(reqrsp_slv_req, slv)

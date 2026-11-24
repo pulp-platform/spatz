@@ -541,7 +541,11 @@ module spatz_quadrilatero_cc
     .reqrsp_req_i (data_tcdm_req      ),
     .reqrsp_rsp_o (data_tcdm_rsp      ),
     .tcdm_req_o   (snitch_tcdm_req_raw),// 32-bit ata_tcdm_req + 7-bit 0-pad
-    .tcdm_rsp_i   (snitch_tcdm_rsp_dec)
+    .tcdm_rsp_i   (snitch_tcdm_rsp_dec),
+    // this wrapper has no correctable/uncorrectable error outputs: left unconnected
+    .ecc_correctable_o   (),
+    .ecc_uncorrectable_o (),
+    .fifo_correctable_o  ()
   );
 
   // ECC-encode Snitch's 32-bit write data → 39-bit codeword for the TCDM bus.

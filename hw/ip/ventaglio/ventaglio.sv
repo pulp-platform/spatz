@@ -85,7 +85,8 @@ module ventaglio
   logic       spatz_req_valid;
   logic       spatz_req_ready;
 
-  spill_register #(
+  rel_spill_register #(
+    .TmrHandshake(1'b0),
     .T(spatz_req_t)
   ) i_operation_queue (
     .clk_i  (clk_i                                              ),
@@ -95,7 +96,10 @@ module ventaglio
     .ready_o(vtl_req_ready_o                                     ),
     .data_o (spatz_req                                          ),
     .valid_o(spatz_req_valid                                    ),
-    .ready_i(spatz_req_ready                                    )
+    .ready_i(spatz_req_ready                                    ),
+    .err_o            (),
+    .data_corrector_o (),
+    .data_corrected_i ('0)
   );
 
 
@@ -207,7 +211,8 @@ module ventaglio
   assign idx_spill_pop = spatz_req_ready && spatz_req_valid
                          && !spatz_req.op_vtl.clear_buffer;
 
-  spill_register #(
+  rel_spill_register #(
+    .TmrHandshake(1'b0),
     .T(vrf_data_t)
   ) i_idx_spill (
     .clk_i  (clk_i             ),
@@ -217,7 +222,10 @@ module ventaglio
     .ready_o(/*    UNUSED    */),
     .data_o (index_q           ),
     .valid_o(index_valid_q     ),
-    .ready_i(idx_spill_pop     )
+    .ready_i(idx_spill_pop     ),
+    .err_o            (),
+    .data_corrector_o (),
+    .data_corrected_i ('0)
   );
 
   // Master VRF read-request buffer. Carries {id, addr} so vrf_re_o /
@@ -236,7 +244,8 @@ module ventaglio
   assign vrf_id_o[0] = idx_req_out.id;
   assign vrf_raddr_o = idx_req_out.addr;
 
-  spill_register #(
+  rel_spill_register #(
+    .TmrHandshake(1'b0),
     .T(idx_req_t)
   ) i_idx_req_reg (
     .clk_i  (clk_i             ),
@@ -246,7 +255,10 @@ module ventaglio
     .ready_o(/*    UNUSED    */),
     .data_o (idx_req_out       ),
     .valid_o(vrf_re_o          ),
-    .ready_i(vrf_rvalid_i      )
+    .ready_i(vrf_rvalid_i      ),
+    .err_o            (),
+    .data_corrector_o (),
+    .data_corrected_i ('0)
   );
 
   ////////////////////////////////

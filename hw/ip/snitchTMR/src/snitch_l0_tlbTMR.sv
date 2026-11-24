@@ -615,7 +615,7 @@ majorityVoter miss_dVoterA (
     .tmrErr(miss_dTmrErrorA)
   );
 
-majorityVoter #(.WIDTH( (($size(pte_dVotedA))*((((NrEntries-1)>0) ? (NrEntries-1) : - ( NrEntries-1 ) )+1)) )) pte_dVoterA (
+majorityVoter #(.WIDTH( (($bits(l0_pte_t))*NrEntries) )) pte_dVoterA (
     .inA(pte_dA),
     .inB(pte_dB),
     .inC(pte_dC),
@@ -663,7 +663,7 @@ majorityVoter miss_dVoterB (
     .tmrErr(miss_dTmrErrorB)
   );
 
-majorityVoter #(.WIDTH( (($size(pte_dVotedA))*((((NrEntries-1)>0) ? (NrEntries-1) : - ( NrEntries-1 ) )+1)) )) pte_dVoterB (
+majorityVoter #(.WIDTH( (($bits(l0_pte_t))*NrEntries) )) pte_dVoterB (
     .inA(pte_dA),
     .inB(pte_dB),
     .inC(pte_dC),
@@ -711,7 +711,7 @@ majorityVoter miss_dVoterC (
     .tmrErr(miss_dTmrErrorC)
   );
 
-majorityVoter #(.WIDTH( (($size(pte_dVotedA))*((((NrEntries-1)>0) ? (NrEntries-1) : - ( NrEntries-1 ) )+1)) )) pte_dVoterC (
+majorityVoter #(.WIDTH( (($bits(l0_pte_t))*NrEntries) )) pte_dVoterC (
     .inA(pte_dA),
     .inB(pte_dB),
     .inC(pte_dC),

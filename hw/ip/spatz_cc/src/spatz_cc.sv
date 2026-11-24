@@ -7,6 +7,7 @@
 `include "common_cells/assertions.svh"
 `include "common_cells/registers.svh"
 `include "snitch_vm/typedef.svh"
+`include "reqrsp_interface/typedef.svh"
 
 /// Spatz Core Complex (CC)
 /// Contains the Snitch Integer Core + Spatz Vector Unit
@@ -132,6 +133,11 @@ module spatz_cc
     // vfu error outputs
     output logic                              vfu_correctable_error_o,
     output logic                              vfu_uncorrectable_error_o,
+    // controller error outputs
+    output logic                              controller_correctable_error_o,
+    output logic                              controller_uncorrectable_error_o,
+    output logic                              vsldu_correctable_error_o,
+    output logic                              vsldu_uncorrectable_error_o,
     // Snitch error outputs
     output logic                         snitch_correctable_error_o,
     output logic                         snitch_uncorrectable_error_o
@@ -249,23 +255,61 @@ module spatz_cc
     .core_tmr_fault_o      (core_tmr_fault_o         )
   );
 
-  reqrsp_iso #(
-    .AddrWidth (AddrWidth                       ),
-    .DataWidth (DataWidth                       ),
-    .req_t     (dreq_t                          ),
-    .rsp_t     (drsp_t                          ),
-    .BypassReq (!RegisterCoreReq                ),
-    .BypassRsp (!IsoCrossing && !RegisterCoreRsp)
-  ) i_reqrsp_iso (
-    .src_clk_i  (clk_d2_i     ),
-    .src_rst_ni (rst_ni       ),
-    .src_req_i  (snitch_dreq_d),
-    .src_rsp_o  (snitch_drsp_d),
-    .dst_clk_i  (clk_i        ),
-    .dst_rst_ni (rst_ni       ),
-    .dst_req_o  (snitch_dreq_q),
-    .dst_rsp_i  (snitch_drsp_q)
+  
+  // Triplicated reqrsp_iso: every replica sees the same inputs, the
+  // outputs are majority-voted. The src-side response and the dst-side
+  // request are the only signals driven by the replicas.
+  localparam int unsigned NumIsoReplicas = 3;
+
+  dreq_t snitch_dreq_q_rep [NumIsoReplicas];
+  drsp_t snitch_drsp_d_rep [NumIsoReplicas];
+
+  for (genvar t = 0; t < NumIsoReplicas; t++) begin : gen_reqrsp_iso_rep
+    reqrsp_iso #(
+      .AddrWidth (AddrWidth                       ),
+      .DataWidth (DataWidth                       ),
+      .req_t     (dreq_t                          ),
+      .rsp_t     (drsp_t                          ),
+      .BypassReq (!RegisterCoreReq                ),
+      .BypassRsp (!IsoCrossing && !RegisterCoreRsp)
+    ) i_reqrsp_iso (
+      .src_clk_i  (clk_d2_i              ),
+      .src_rst_ni (rst_ni                ),
+      .src_req_i  (snitch_dreq_d         ),
+      .src_rsp_o  (snitch_drsp_d_rep[t]  ),
+      .dst_clk_i  (clk_i                 ),
+      .dst_rst_ni (rst_ni                ),
+      .dst_req_o  (snitch_dreq_q_rep[t]  ),
+      .dst_rsp_i  (snitch_drsp_q         )
+    );
+  end
+
+  logic iso_req_tmr_fault, iso_rsp_tmr_fault;
+  logic iso_tmr_fault;
+
+  bitwise_TMR_voter_fail #(
+    .DataWidth ($bits(dreq_t)),
+    .VoterType (1            )
+  ) i_iso_req_voter (
+    .a_i              (snitch_dreq_q_rep[0]),
+    .b_i              (snitch_dreq_q_rep[1]),
+    .c_i              (snitch_dreq_q_rep[2]),
+    .majority_o       (snitch_dreq_q       ),
+    .fault_detected_o (iso_req_tmr_fault   )
   );
+
+  bitwise_TMR_voter_fail #(
+    .DataWidth ($bits(drsp_t)),
+    .VoterType (1            )
+  ) i_iso_rsp_voter (
+    .a_i              (snitch_drsp_d_rep[0]),
+    .b_i              (snitch_drsp_d_rep[1]),
+    .c_i              (snitch_drsp_d_rep[2]),
+    .majority_o       (snitch_drsp_d       ),
+    .fault_detected_o (iso_rsp_tmr_fault   )
+  );
+
+  assign iso_tmr_fault = iso_req_tmr_fault | iso_rsp_tmr_fault;
 
   // Accelerator Demux Port
   stream_demux #(
@@ -355,7 +399,12 @@ module spatz_cc
     .fpu_sequencer_uncorrectable_error_o (fpu_sequencer_uncorrectable_error_o),
     // vfu error outputs
     .vfu_correctable_error_o (vfu_correctable_error_o),
-    .vfu_uncorrectable_error_o (vfu_uncorrectable_error_o)
+    .vfu_uncorrectable_error_o (vfu_uncorrectable_error_o),
+    // controller error outputs
+    .controller_correctable_error_o (controller_correctable_error_o),
+    .controller_uncorrectable_error_o (controller_uncorrectable_error_o),
+    .vsldu_correctable_error_o (vsldu_correctable_error_o),
+    .vsldu_uncorrectable_error_o (vsldu_uncorrectable_error_o)
   );
 
   for (genvar p = 0; p < NumMemPortsPerSpatz; p++) begin: gen_tcdm_assignment
@@ -377,24 +426,66 @@ module spatz_cc
     assign spatz_mem_rsp_valid[p] = tcdm_rsp_i[p].p_valid;
   end
 
-  reqrsp_mux #(
-    .NrPorts     (2           ),
-    .AddrWidth   (AddrWidth   ),
-    .DataWidth   (DataWidth   ),
-    .req_t       (dreq_t      ),
-    .rsp_t       (drsp_t      ),
-    // TODO(zarubaf): Wire-up to top-level.
-    .RespDepth   (4           ),
-    .RegisterReq ({1'b1, 1'b0})
-  ) i_reqrsp_mux (
-    .clk_i     (clk_i                          ),
-    .rst_ni    (rst_ni                         ),
-    .slv_req_i ({fp_lsu_mem_req, snitch_dreq_q}),
-    .slv_rsp_o ({fp_lsu_mem_rsp, snitch_drsp_q}),
-    .mst_req_o (merged_dreq                    ),
-    .mst_rsp_i (merged_drsp                    ),
-    .idx_o     (/*not connected*/              )
+  // Triplicated reqrsp_mux: every replica sees the same inputs, the outputs
+  // are majority-voted. idx_o is unused and therefore not replicated.
+  localparam int unsigned NumMuxReplicas = 3;
+
+  dreq_t               merged_dreq_rep [NumMuxReplicas];
+  logic [NumMuxReplicas-1:0] mux_resp_fifo_fault;
+  logic [1:0][$bits(drsp_t)-1:0] mux_slv_rsp_rep [NumMuxReplicas];
+
+  for (genvar t = 0; t < NumMuxReplicas; t++) begin : gen_reqrsp_mux_rep
+    drsp_t [1:0] mux_slv_rsp;
+    reqrsp_mux #(
+      .NrPorts     (2           ),
+      .AddrWidth   (AddrWidth   ),
+      .DataWidth   (DataWidth   ),
+      .req_t       (dreq_t      ),
+      .rsp_t       (drsp_t      ),
+      // TODO(zarubaf): Wire-up to top-level.
+      .RespDepth   (4           ),
+      .RegisterReq ({1'b1, 1'b0})
+    ) i_reqrsp_mux (
+      .clk_i     (clk_i                          ),
+      .rst_ni    (rst_ni                         ),
+      .slv_req_i ({fp_lsu_mem_req, snitch_dreq_q}),
+      .slv_rsp_o (mux_slv_rsp                    ),
+      .mst_req_o (merged_dreq_rep[t]             ),
+      .mst_rsp_i (merged_drsp                    ),
+      .idx_o     (/*not connected*/              ),
+      .fault_o   (mux_resp_fifo_fault[t]         )
+    );
+    assign mux_slv_rsp_rep[t] = mux_slv_rsp;
+  end
+
+  logic mux_req_tmr_fault, mux_rsp_tmr_fault;
+  logic mux_tmr_fault;
+  logic [1:0][$bits(drsp_t)-1:0] mux_slv_rsp_voted;
+
+  bitwise_TMR_voter_fail #(
+    .DataWidth ($bits(dreq_t)),
+    .VoterType (1            )
+  ) i_mux_req_voter (
+    .a_i              (merged_dreq_rep[0]),
+    .b_i              (merged_dreq_rep[1]),
+    .c_i              (merged_dreq_rep[2]),
+    .majority_o       (merged_dreq       ),
+    .fault_detected_o (mux_req_tmr_fault )
   );
+
+  bitwise_TMR_voter_fail #(
+    .DataWidth (2*$bits(drsp_t)),
+    .VoterType (1              )
+  ) i_mux_rsp_voter (
+    .a_i              (mux_slv_rsp_rep[0]),
+    .b_i              (mux_slv_rsp_rep[1]),
+    .c_i              (mux_slv_rsp_rep[2]),
+    .majority_o       (mux_slv_rsp_voted ),
+    .fault_detected_o (mux_rsp_tmr_fault )
+  );
+
+  assign {fp_lsu_mem_rsp, snitch_drsp_q} = mux_slv_rsp_voted;
+  assign mux_tmr_fault = mux_req_tmr_fault | mux_rsp_tmr_fault | (|mux_resp_fifo_fault);
 
   if (Xdma) begin : gen_dma
     axi_dma_tc_snitch_fe #(
@@ -454,6 +545,7 @@ module spatz_cc
   localparam int unsigned SelectWidth   = cf_math_pkg::idx_width(2);
   typedef logic [SelectWidth-1:0] select_t;
   select_t slave_select;
+  logic demux_resp_fifo_fault;
   reqrsp_demux #(
     .NrPorts   (2     ),
     .req_t     (dreq_t),
@@ -466,7 +558,8 @@ module spatz_cc
     .slv_req_i    (merged_dreq                ),
     .slv_rsp_o    (merged_drsp                ),
     .mst_req_o    ({data_tcdm_req, data_req_o}),
-    .mst_rsp_i    ({data_tcdm_rsp, data_rsp_i})
+    .mst_rsp_i    ({data_tcdm_rsp, data_rsp_i}),
+    .fault_o      (demux_resp_fifo_fault      )
   );
 
   typedef struct packed {
@@ -499,52 +592,89 @@ module spatz_cc
 
   // Route Snitch/FP-LSU scalar TCDM through intermediate signals so we can
   // encode write data and decode read data at the 39-bit TCDM bus boundary.
-  tcdm_req_t snitch_tcdm_req_raw;
-  tcdm_rsp_t snitch_tcdm_rsp_dec;
+  //
+  // reqrsp_to_tcdm buffers responses in a FIFO (flip-flops). To keep the
+  // read data ECC-protected while it sits in that FIFO, the module is
+  // instantiated with codeword-wide (TCDMProtDataWidth) reqrsp types: the
+  // raw 39-bit codeword from the TCDM goes through the FIFO and is decoded
+  // only AFTER it, on the way to the 32-bit Snitch-side interface.
+  typedef logic [AddrWidth-1:0]          snitch_rr_addr_t;
+  typedef logic [TCDMProtDataWidth-1:0]  snitch_rr_data_t;
+  typedef logic [TCDMProtDataWidth/8-1:0] snitch_rr_strb_t;
+  `REQRSP_TYPEDEF_ALL(snitch_rr, snitch_rr_addr_t, snitch_rr_data_t, snitch_rr_strb_t)
 
-  // ECC-decode the 39-bit TCDM read response → corrected 32-bit data.
-  // Decoded data is placed in snitch_tcdm_rsp_dec.p.data[TCDMDataWidth-1:0] with
-  // explicit zeros in the upper SnitchTCDMProtWidth bits (parity position).
-  // reqrsp_to_tcdm receives snitch_tcdm_rsp_dec and sees the corrected value
-  // when it extracts p.data[DataWidth-1:0] internally.
-  logic [1:0] snitch_tcdm_rsp_err;
+  tcdm_req_t       snitch_tcdm_req_raw;
+  snitch_rr_req_t  data_tcdm_req_wide;
+  snitch_rr_rsp_t  data_tcdm_rsp_wide;
+
+  // Request: zero-extend the 32-bit write data (encoded after the module).
+  always_comb begin
+    data_tcdm_req_wide         = '0;
+    data_tcdm_req_wide.q.addr  = data_tcdm_req.q.addr;
+    data_tcdm_req_wide.q.write = data_tcdm_req.q.write;
+    data_tcdm_req_wide.q.amo   = data_tcdm_req.q.amo;
+    data_tcdm_req_wide.q.data  = snitch_rr_data_t'(data_tcdm_req.q.data);
+    data_tcdm_req_wide.q.strb  = data_tcdm_req.q.strb;
+    data_tcdm_req_wide.q.size  = data_tcdm_req.q.size;
+    data_tcdm_req_wide.q_valid = data_tcdm_req.q_valid;
+    data_tcdm_req_wide.p_ready = data_tcdm_req.p_ready;
+  end
+
+  // Response: ECC-decode the codeword leaving the reqrsp_to_tcdm FIFO.
+  logic [1:0]               snitch_tcdm_rsp_err;
+  logic [TCDMDataWidth-1:0] snitch_rdata;
+  always_comb begin
+    data_tcdm_rsp         = '0;
+    data_tcdm_rsp.p.data  = snitch_rdata;
+    data_tcdm_rsp.p.error = data_tcdm_rsp_wide.p.error;
+    data_tcdm_rsp.p_valid = data_tcdm_rsp_wide.p_valid;
+    data_tcdm_rsp.q_ready = data_tcdm_rsp_wide.q_ready;
+  end
   if (TCDMProtDataWidth > TCDMDataWidth) begin : gen_snitch_rdata_dec
     logic [TCDMDataWidth-1:0] snitch_rdata_corrected;
+    logic [1:0]               snitch_rdata_err;
     hsiao_ecc_dec #(
       .DataWidth (TCDMDataWidth      ),
       .ProtWidth (SnitchTCDMProtWidth)
     ) i_snitch_rdata_dec (
-      .in        (tcdm_rsp_i[NumMemPortsPerSpatz].p.data),
+      .in        (data_tcdm_rsp_wide.p.data),
       .out       (snitch_rdata_corrected),
       .syndrome_o(),
-      .err_o     (snitch_tcdm_rsp_err)
+      .err_o     (snitch_rdata_err)
     );
-    always_comb begin
-      snitch_tcdm_rsp_dec        = tcdm_rsp_i[NumMemPortsPerSpatz];
-      snitch_tcdm_rsp_dec.p.data = {{SnitchTCDMProtWidth{1'b0}}, snitch_rdata_corrected};
-    end
+    assign snitch_rdata         = snitch_rdata_corrected;
+    // only meaningful while the FIFO output holds a valid response
+    assign snitch_tcdm_rsp_err  = data_tcdm_rsp_wide.p_valid ? snitch_rdata_err : 2'b00;
   end else begin : gen_snitch_no_rdata_dec
-    assign snitch_tcdm_rsp_dec = tcdm_rsp_i[NumMemPortsPerSpatz];
+    assign snitch_rdata         = data_tcdm_rsp_wide.p.data;
+    assign snitch_tcdm_rsp_err  = '0;
   end
 
-  assign snitch_correctable_error_o   = core_tmr_fault_o | snitch_tcdm_rsp_err[0];
-  assign snitch_uncorrectable_error_o = snitch_tcdm_rsp_err[1];
+  // fault outputs of the reqrsp_to_tcdm response buffer
+  logic r2t_ecc_correctable, r2t_ecc_uncorrectable, r2t_fifo_correctable;
+
+  assign snitch_correctable_error_o   = core_tmr_fault_o | iso_tmr_fault | mux_tmr_fault | demux_resp_fifo_fault | snitch_tcdm_rsp_err[0]
+                                       | r2t_ecc_correctable | r2t_fifo_correctable;
+  assign snitch_uncorrectable_error_o = snitch_tcdm_rsp_err[1] | r2t_ecc_uncorrectable;
 
   reqrsp_to_tcdm #( // only for cross clock domain decoupling
-    .AddrWidth    (AddrWidth ),
-    .DataWidth    (DataWidth ),
-    .BufDepth     (4         ),
-    .reqrsp_req_t (dreq_t    ),
-    .reqrsp_rsp_t (drsp_t    ),
-    .tcdm_req_t   (tcdm_req_t),
-    .tcdm_rsp_t   (tcdm_rsp_t)
+    .AddrWidth    (AddrWidth        ),
+    .DataWidth    (TCDMProtDataWidth),
+    .BufDepth     (4                ),
+    .reqrsp_req_t (snitch_rr_req_t  ),
+    .reqrsp_rsp_t (snitch_rr_rsp_t  ),
+    .tcdm_req_t   (tcdm_req_t       ),
+    .tcdm_rsp_t   (tcdm_rsp_t       )
   ) i_reqrsp_to_tcdm (
-    .clk_i        (clk_i              ),
-    .rst_ni       (rst_ni             ),
-    .reqrsp_req_i (data_tcdm_req      ),
-    .reqrsp_rsp_o (data_tcdm_rsp      ),
-    .tcdm_req_o   (snitch_tcdm_req_raw),// 32-bit ata_tcdm_req + 7-bit 0-pad
-    .tcdm_rsp_i   (snitch_tcdm_rsp_dec)
+    .clk_i        (clk_i                            ),
+    .rst_ni       (rst_ni                           ),
+    .reqrsp_req_i (data_tcdm_req_wide               ),
+    .reqrsp_rsp_o (data_tcdm_rsp_wide               ),
+    .tcdm_req_o   (snitch_tcdm_req_raw              ),
+    .tcdm_rsp_i   (tcdm_rsp_i[NumMemPortsPerSpatz]  ),
+    .ecc_correctable_o   (r2t_ecc_correctable  ),
+    .ecc_uncorrectable_o (r2t_ecc_uncorrectable),
+    .fifo_correctable_o  (r2t_fifo_correctable )
   );
 
   // ECC-encode Snitch's 32-bit write data → 39-bit codeword for the TCDM bus.
