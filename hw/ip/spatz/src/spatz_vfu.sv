@@ -185,6 +185,7 @@ module spatz_vfu
   logic divsqrt_shared_active;
   assign divsqrt_shared_active = is_divsqrt_insn && divsqrt_is_shared;
 
+  logic [$clog2((ELEN/8)):0] nr_elem_word_divsqrt;
   assign nr_elem_word_divsqrt = (1 << (MAXEW - spatz_req.vtype.vsew));
 
   // Are we running integer or floating-point instructions?
@@ -517,14 +518,11 @@ module spatz_vfu
   logic fpu_op_mode;
   logic fpu_vectorial_op;
 
-  logic [N_FPU-1:0] fpu_busy_d, fpu_busy_q;
-  // TMR: fpu_busy_q (voted value in fpu_busy_q, copies fpu_busy_q0..2)
-  logic [N_FPU-1:0] fpu_busy_q0, fpu_busy_q1, fpu_busy_q2;
-  `FF(fpu_busy_q0, fpu_busy_d, '0)
-  `FF(fpu_busy_q1, fpu_busy_d, '0)
-  `FF(fpu_busy_q2, fpu_busy_d, '0)
-  bitwise_TMR_voter_fail #(.DataWidth($bits(fpu_busy_q)), .VoterType(1)) i_fpu_busy_q_voter (
-    .a_i(fpu_busy_q0), .b_i(fpu_busy_q1), .c_i(fpu_busy_q2), .majority_o(fpu_busy_q), .fault_detected_o(ff_tmr_err_0[14]));
+  // FPU busy is taken combinationally from the FPUs (no register): with the
+  // iterative div/sqrt unit a registered copy lags one cycle and lets a
+  // reduction / IPU switch start while FPU0 is still busy.
+  // (ff_tmr_err_0[14], formerly fpu_busy_q, is reused by divsqrt_acc_q.)
+  logic [N_FPU-1:0] fpu_busy_d;
 
   status_t [N_FPU-1:0] fpu_status_d, fpu_status_q;
   // TMR: fpu_status_q (voted value in fpu_status_q, copies fpu_status_q0..2)
@@ -541,7 +539,7 @@ module spatz_vfu
       fpu_op           = fpnew_pkg::FMADD;
       fpu_op_mode      = 1'b0;
       fpu_vectorial_op = 1'b0;
-      is_fpu_busy      = |fpu_busy_q;
+      is_fpu_busy      = |fpu_busy_d;
       fpu_src_fmt      = fpnew_pkg::FP32;
       fpu_dst_fmt      = fpnew_pkg::FP32;
       fpu_int_fmt      = fpnew_pkg::INT32;
@@ -1179,10 +1177,10 @@ module spatz_vfu
     unique case (reduction_state_q)
       Reduction_NormalExecution: begin
         // Did we issue a word to the FUs?
-        word_issued = spatz_req_valid && &(in_ready | ~valid_operations) && operands_ready && !stall;
+        word_issued = fu_can_accept && fu_word_can_advance;
 
         // Are we ready to accept a result?
-        result_ready = &(result_valid | ~pending_results) && ((result_tag.wb && vfu_rsp_ready_i) || vrf_wvalid_i || (spatz_req.op == VFCMP && !result_tag.last));
+        result_ready = fu_word_complete && ((result_tag.wb && vfu_rsp_ready_i) || vrf_wvalid_i || (spatz_req.op == VFCMP && !result_tag.last));
 
         // Initialize the pointers
         reduction_pointer_d = '0;
@@ -1194,7 +1192,7 @@ module spatz_vfu
 
       Reduction_Wait: begin
         // Are we ready to accept a result?
-        result_ready = &(result_valid | ~pending_results) && ((result_tag.wb && vfu_rsp_ready_i) || vrf_wvalid_i);
+        result_ready = fu_word_complete && ((result_tag.wb && vfu_rsp_ready_i) || vrf_wvalid_i);
 
         if (!is_fpu_busy)
           reduction_state_d = Reduction_Init;
@@ -2302,9 +2300,9 @@ assign vfcmp_result_accepted = (spatz_req.op == VFCMP) && &(result_valid | ~pend
       assign input_tag_q = vfu_tag_t'(input_tag_q_vote);
       // TMR: fpu_in_valid_q (voted value in fpu_in_valid_q, copies fpu_in_valid_q0..2)
       logic fpu_in_valid_q0, fpu_in_valid_q1, fpu_in_valid_q2;
-      `FFL(fpu_in_valid_q0, int_fpu_in_valid, int_fpu_in_ready, 1'b0)
-      `FFL(fpu_in_valid_q1, int_fpu_in_valid, int_fpu_in_ready, 1'b0)
-      `FFL(fpu_in_valid_q2, int_fpu_in_valid, int_fpu_in_ready, 1'b0)
+      `FFL(fpu_in_valid_q0, int_fpu_in_valid_gated, int_fpu_in_ready, 1'b0)
+      `FFL(fpu_in_valid_q1, int_fpu_in_valid_gated, int_fpu_in_ready, 1'b0)
+      `FFL(fpu_in_valid_q2, int_fpu_in_valid_gated, int_fpu_in_ready, 1'b0)
       bitwise_TMR_voter_fail #(.DataWidth($bits(fpu_in_valid_q)), .VoterType(1)) i_fpu_in_valid_q_voter (
         .a_i(fpu_in_valid_q0), .b_i(fpu_in_valid_q1), .c_i(fpu_in_valid_q2), .majority_o(fpu_in_valid_q), .fault_detected_o(ff_tmr_err_1[((0)*(N_FPU)+fpu)*16+11]));
 
