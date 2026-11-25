@@ -16,7 +16,6 @@ module spatz_cluster_peripheral
   parameter type reg_rsp_t = logic,
   parameter type         tcdm_events_t = logic,
   parameter type         dma_events_t = logic,
-  parameter int unsigned NumTcdmBanks = 1,
   // Nr of course in the cluster
   parameter logic [31:0] NrCores       = 0,
   /// Derived parameter *Do not override*
@@ -39,37 +38,8 @@ module spatz_cluster_peripheral
   input  dma_events_t                dma_events_i,
   input  snitch_icache_pkg::icache_l0_events_t [NrCores-1:0] icache_events_i,
 
-  // Error monitor interface
-  output logic                                            err_monitor_clear_o,
-  input  logic [NumVrfUnits-1:0][31:0]                    vrf_correctable_count_i,
-  input  logic [NumVrfUnits-1:0][31:0]                    vrf_uncorrectable_count_i,
-  input  logic [NumVrfUnits-1:0][31:0]                       fpu_sequencer_correctable_count_i,
-  input  logic [NumVrfUnits-1:0][31:0]                       fpu_sequencer_uncorrectable_count_i,
-  input  logic [NumVrfUnits-1:0][31:0]                       vlsu_correctable_count_i,
-  input  logic [NumVrfUnits-1:0][31:0]                       vlsu_uncorrectable_count_i,
-  input  logic [NumVrfUnits-1:0][31:0]                       vfu_correctable_count_i,
-  input  logic [NumVrfUnits-1:0][31:0]                       vfu_uncorrectable_count_i,
-  input  logic [NumVrfUnits-1:0][31:0]                       controller_correctable_count_i,
-  input  logic [NumVrfUnits-1:0][31:0]                       controller_uncorrectable_count_i,
-  input  logic [NumVrfUnits-1:0][31:0]                       vsldu_correctable_count_i,
-  input  logic [NumVrfUnits-1:0][31:0]                       vsldu_uncorrectable_count_i,
-  input  logic [NumTcdmBanks-1:0][31:0]                   tcdm_rd_correctable_count_i,
-  input  logic [NumTcdmBanks-1:0][31:0]                   tcdm_rd_uncorrectable_count_i,
-  input  logic [NumTcdmBanks-1:0][31:0]                   tcdm_scrub_correctable_count_i,
-  input  logic [NumTcdmBanks-1:0][31:0]                   tcdm_scrub_uncorrectable_count_i,
-  input  logic [NumVrfUnits-1:0][31:0]                    snitch_correctable_count_i,
-  input  logic [NumVrfUnits-1:0][31:0]                    snitch_uncorrectable_count_i,
-  input  logic [31:0]                                     icache_correctable_count_i,
-  input  logic [31:0]                                     icache_uncorrectable_count_i,
-  input  logic [31:0]                                     tcdm_interconnect_correctable_count_i,
-  input  logic [31:0]                                     tcdm_interconnect_uncorrectable_count_i,
-  input  logic [31:0]                                     axi_interconnect_correctable_count_i,
-  input  logic [31:0]                                     axi_interconnect_uncorrectable_count_i,
-  input  logic [NumQuadUnits-1:0][31:0]                   quad_correctable_count_i,
-  input  logic [NumQuadUnits-1:0][31:0]                   quad_uncorrectable_count_i,
-  input  logic [31:0]                                     dma_correctable_count_i,
-  input  logic [31:0]                                     dma_uncorrectable_count_i,
-  output logic [31:0]                                     quad_cfg_array_o
+  output logic [47:0]                perf_counter0_o,
+  output logic [31:0]                quad_cfg_array_o
 );
 
   // Pipeline register to ease timing.
@@ -276,51 +246,7 @@ module spatz_cluster_peripheral
 
   `FF(perf_counter_q, perf_counter_d, '0, clk_i, rst_ni)
 
-  // Error monitor registers
-  assign err_monitor_clear_o = reg2hw.err_monitor_clear.q;
-
-  for (genvar i = 0; i < NumVrfUnits; i++) begin : gen_snitch_count_assign
-    assign hw2reg.snitch_correctable_count[i].d     = snitch_correctable_count_i[i];
-    assign hw2reg.snitch_uncorrectable_count[i].d     = snitch_uncorrectable_count_i[i];
-  end
-
-  // generate icache count assign
-  assign hw2reg.icache_correctable_count.d     = icache_correctable_count_i;
-  assign hw2reg.icache_uncorrectable_count.d     = icache_uncorrectable_count_i;
-  assign hw2reg.dma_correctable_count.d     = dma_correctable_count_i;
-  assign hw2reg.dma_uncorrectable_count.d     = dma_uncorrectable_count_i;
-
-  for (genvar i = 0; i < NumVrfUnits; i++) begin : gen_inner_spatz_count_assign
-    assign hw2reg.vrf_correctable_count[i].d   = vrf_correctable_count_i[i];
-    assign hw2reg.vrf_uncorrectable_count[i].d = vrf_uncorrectable_count_i[i];
-    assign hw2reg.fpu_sequencer_correctable_count[i].d   = fpu_sequencer_correctable_count_i[i];
-    assign hw2reg.fpu_sequencer_uncorrectable_count[i].d = fpu_sequencer_uncorrectable_count_i[i];
-    assign hw2reg.vlsu_correctable_count[i].d   = vlsu_correctable_count_i[i];
-    assign hw2reg.vlsu_uncorrectable_count[i].d = vlsu_uncorrectable_count_i[i];
-    assign hw2reg.vfu_correctable_count[i].d   = vfu_correctable_count_i[i];
-    assign hw2reg.vfu_uncorrectable_count[i].d = vfu_uncorrectable_count_i[i];
-    assign hw2reg.controller_correctable_count[i].d   = controller_correctable_count_i[i];
-    assign hw2reg.controller_uncorrectable_count[i].d = controller_uncorrectable_count_i[i];
-    assign hw2reg.vsldu_correctable_count[i].d   = vsldu_correctable_count_i[i];
-    assign hw2reg.vsldu_uncorrectable_count[i].d = vsldu_uncorrectable_count_i[i];
-  end
-
-  for (genvar i = 0; i < NumTcdmBanks; i++) begin : gen_tcdm_count_assign
-    assign hw2reg.tcdm_rd_correctable_count[i].d     = tcdm_rd_correctable_count_i[i];
-    assign hw2reg.tcdm_rd_uncorrectable_count[i].d   = tcdm_rd_uncorrectable_count_i[i];
-    assign hw2reg.tcdm_scrub_correctable_count[i].d   = tcdm_scrub_correctable_count_i[i];
-    assign hw2reg.tcdm_scrub_uncorrectable_count[i].d = tcdm_scrub_uncorrectable_count_i[i];
-  end
-
-  assign hw2reg.tcdm_interconnect_correctable_count.d = tcdm_interconnect_correctable_count_i;
-  assign hw2reg.tcdm_interconnect_uncorrectable_count.d = tcdm_interconnect_uncorrectable_count_i;
-  assign hw2reg.axi_interconnect_correctable_count.d = axi_interconnect_correctable_count_i;
-  assign hw2reg.axi_interconnect_uncorrectable_count.d = axi_interconnect_uncorrectable_count_i;
-
-  for (genvar i = 0; i < NumQuadUnits; i++) begin : gen_quad_count_assign
-    assign hw2reg.quad_correctable_count[i].d   = quad_correctable_count_i[i];
-    assign hw2reg.quad_uncorrectable_count[i].d = quad_uncorrectable_count_i[i];
-  end
+  assign perf_counter0_o = perf_counter_q[0];
 
   assign quad_cfg_array_o = reg2hw.quad_cfg_array.q;
 

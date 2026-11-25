@@ -15,6 +15,15 @@ packages:
     - common_cells
     - common_verification
     - tech_cells_generic
+  axi_obi:
+    revision: 205c9bb338df6955a0c4a300c5140d9ce413ec56
+    version: null
+    source:
+      Git: https://github.com/pulp-platform/axi_obi.git
+    dependencies:
+    - axi
+    - common_cells
+    - obi
   axi_riscv_atomics:
     revision: 97dcb14ef057cbe5bd70dda2060b5bb9e7e04c6d
     version: 0.7.0
@@ -72,13 +81,14 @@ packages:
     dependencies:
     - common_cells
   obi:
-    revision: 0155fc34e900c7c884e081c0a1114a247937ff69
-    version: 0.1.7
+    revision: 82508226b717fa8c4d14bd6bd608df49e35c4202
+    version: null
     source:
       Git: https://github.com/pulp-platform/obi.git
     dependencies:
     - common_cells
     - common_verification
+    - redundancy_cells
   quadrilatero:
     revision: ed01a94a98f445f2842be84541068ab71441b12e
     version: null
@@ -120,6 +130,17 @@ packages:
     - common_cells
     - common_verification
     - obi
+  reri:
+    revision: 9224dd2c3a99a2f11636b3c719b924510127bd88
+    version: null
+    source:
+      Git: https://iis-git.ee.ethz.ch/space-pulp/reri.git
+    dependencies:
+    - axi
+    - axi_obi
+    - common_cells
+    - obi
+    - redundancy_cells
   riscv-dbg:
     revision: deed17e18c0d61ce8dc554300bb4dd5c39be2a13
     version: 0.10.1
