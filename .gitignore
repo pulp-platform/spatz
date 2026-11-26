@@ -27,3 +27,4 @@ install
 .projectBender.lock
 *.do
 sw/quadrilateroBenchmarks/matmul/*/data/data_*
+hw/system/spatz_cluster/script/redundancy/redundant_regs_spec.tcl

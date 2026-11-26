@@ -20,6 +20,9 @@ dependencies:
   riscv-dbg:          { git: "https://github.com/pulp-platform/riscv-dbg.git",           version: 0.10.0         }
   tech_cells_generic: { git: "https://github.com/pulp-platform/tech_cells_generic.git",  version: 0.2.13         }
   redundancy_cells  : { git: "https://github.com/pulp-platform/redundancy_cells.git",    rev:     dora           }
+  obi:                { git: "https://github.com/pulp-platform/obi.git",                 rev:     dcamma/obi     }
+  axi_obi:            { git: "https://github.com/pulp-platform/axi_obi.git",             rev:     205c9bb3       }
+  reri:               { git: "https://iis-git.ee.ethz.ch/space-pulp/reri.git",           rev:     dcamma/dora    }
   quadrilatero      : { git: "https://iis-git.ee.ethz.ch/quadrilatero/quadrilatero.git", rev:     dcamma/dora    }
 
 export_include_dirs:
@@ -221,7 +224,7 @@ sources:
       # intentionally does not double as an on-access error-report checkpoint
       # (TCDM errors are reported via scrubbing only).
       - hw/ip/redundancy_cells/scrub_timer.sv
-      - hw/ip/redundancy_cells/spatz_fault_monitor.sv
+      - hw/ip/redundancy_cells/spatz_ras.sv
       # Level 1
       - hw/system/spatz_cluster/src/spatz_barrier.sv
       - hw/system/spatz_cluster/src/spatz_cluster_peripheral/spatz_cluster_peripheral_reg_top.sv

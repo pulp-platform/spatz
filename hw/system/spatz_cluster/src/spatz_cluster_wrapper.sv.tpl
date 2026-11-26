@@ -557,6 +557,9 @@ module ${cfg['name']}_wrapper
     .axi_core_default_user_i,
 % endif
     .cluster_probe_o,
+    .ras_lo_o       ( /* Unused */ ),
+    .ras_hi_o       ( /* Unused */ ),
+    .ras_plat_o     ( /* Unused */ ),
 % if cfg['axi_cdc_enable']:
     // AXI Slave Port
     .axi_in_req_i   ( axi_to_cluster_req  ),
