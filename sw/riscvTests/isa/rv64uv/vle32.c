@@ -287,6 +287,150 @@ void TEST_CASE11(void) {
   VCMP_U32(11, v1, 0, 0, 0x03, 0x04);
 }
 
+// vstart whose byte offset is not aligned to the VRF word (ELENB = 8 with RVD),
+// on a vl that spans all FUs: vl=16 e32 = 64 bytes = 2 VRF rows of 4 FUs x 8 B.
+// The elements before vstart must keep the guard value. A hang here (rather
+// than a wrong value) points at the VLSU commit catch-up logic.
+static void vle32_unaligned_vstart(int casenum, unsigned long vstart) {
+  volatile uint32_t MEM[16] __attribute__((aligned(64)));
+  for (int i = 0; i < 16; i++) MEM[i] = i + 1;
+
+  // LMUL=2 so VLMAX >= 16 also with VLEN=256 (with m1, vl would be cut to 8)
+  VSET(16, e32, m2);
+  asm volatile("vmv.v.x v2, %0" :: "r"(0xdeadbeef) : "v2", "v3");
+  asm volatile(
+      "csrw    vstart, %1\n\t"
+      "vle32.v v2, (%0)"
+      ::"r"(MEM), "r"(vstart) : "memory", "v2", "v3");
+  asm volatile("csrw vstart, 0");
+
+  if (vstart == 1) {
+    VCMP_U32(casenum, v2, 0xdeadbeef, 2, 3, 4, 5, 6, 7, 8,
+                          9, 10, 11, 12, 13, 14, 15, 16);
+  } else { // vstart == 5: byte 20, in the middle of FU 2's word
+    VCMP_U32(casenum, v2, 0xdeadbeef, 0xdeadbeef, 0xdeadbeef, 0xdeadbeef,
+                          0xdeadbeef, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16);
+  }
+}
+
+// vstart = 1 -> byte 4, middle of FU 0's word
+void TEST_CASE12(void) { vle32_unaligned_vstart(12, 1); }
+
+// vstart = 5 -> byte 20, middle of FU 2's word
+void TEST_CASE13(void) { vle32_unaligned_vstart(13, 5); }
+
+// Same as above, but vl=32 e32 = 128 B. With the double-bandwidth VLSU the
+// vector is split 64 B / 64 B between the two interfaces, so each interface
+// spans 2 VRF rows (4 FUs x 8 B) and its FUs below the starting FU are a full
+// row ahead. On the standard VLSU this covers 4 rows on one interface.
+// LMUL=4 so VLMAX >= 32 also with VLEN=256.
+static void vle32_unaligned_vstart_long(int casenum, unsigned long vstart) {
+  // MEM is reused for the read-back to keep the frame small: main's frame plus
+  // this one plus printf must fit in the 1 KiB per-core stack
+  volatile uint32_t MEM[32] __attribute__((aligned(64)));
+  volatile uint32_t *RES = MEM;
+  for (int i = 0; i < 32; i++) MEM[i] = i + 1;
+
+  VSET(32, e32, m4);
+  asm volatile("vmv.v.x v4, %0" :: "r"(0xdeadbeef) : "v4", "v5", "v6", "v7");
+  asm volatile(
+      "csrw    vstart, %1\n\t"
+      "vle32.v v4, (%0)"
+      ::"r"(MEM), "r"(vstart) : "memory", "v4", "v5", "v6", "v7");
+  asm volatile("csrw vstart, 0");
+  asm volatile("vse32.v v4, (%0)" ::"r"(RES) : "memory");
+
+  for (int i = 0; i < 32; i++) {
+    uint32_t exp = (i < (int)vstart) ? 0xdeadbeef : (uint32_t)(i + 1);
+    if (RES[i] != exp) {
+      printf("[TC %d] Index %d FAILED. Got \"%u\", expected \"%u\".\n", casenum, i, RES[i], exp);
+      num_failed++;
+      return;
+    }
+  }
+  printf("[TC %d] PASSED.\n", casenum);
+}
+
+// vstart = 5 -> byte 20: interface 0, middle of FU 2's word, FUs 0-1 a row ahead
+void TEST_CASE14(void) { vle32_unaligned_vstart_long(14, 5); }
+
+// vstart = 21 -> byte 84: interface 1 (local byte 20), same pattern there;
+// interface 0 has nothing to do
+void TEST_CASE15(void) { vle32_unaligned_vstart_long(15, 21); }
+
+// vstart = 9 -> byte 36: interface 0 row 1 (local byte 36, middle of FU 0's
+// word), so interface 0 writes 1 row while interface 1 writes 2. After the
+// first paired write, interface 1 must be able to write its second row alone.
+void TEST_CASE16(void) { vle32_unaligned_vstart_long(16, 9); }
+
+// Same layout as the vl=32 tests above, but the destination is consumed by a
+// VFU instruction issued right after the load (RAW through the scoreboard).
+// With the double-bandwidth VLSU, vstart=21 makes interface 1 write alone and
+// vstart=9 makes its second row go out alone; the vadd must still wait for
+// those writes. Expected: 2*0xdeadbeef (mod 2^32) below vstart, 2*(i+1) above.
+static void vle32_vstart_raw(int casenum, unsigned long vstart) {
+  volatile uint32_t MEM[32] __attribute__((aligned(64)));
+  volatile uint32_t *RES = MEM; // reused for the read-back (stack space)
+  for (int i = 0; i < 32; i++) MEM[i] = i + 1;
+
+  VSET(32, e32, m4);
+  asm volatile("vmv.v.x v4, %0\n\t"
+               "vmv.v.i v8, 0"
+               :: "r"(0xdeadbeef) : "v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11");
+  asm volatile(
+      "csrw    vstart, %1\n\t"
+      "vle32.v v4, (%0)\n\t"
+      "vadd.vv v8, v4, v4"
+      ::"r"(MEM), "r"(vstart) : "memory", "v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11");
+  asm volatile("csrw vstart, 0");
+  asm volatile("vse32.v v8, (%0)" ::"r"(RES) : "memory");
+
+  for (int i = 0; i < 32; i++) {
+    uint32_t exp = (i < (int)vstart) ? (uint32_t)(0xdeadbeefu * 2u) : (uint32_t)(2 * (i + 1));
+    if (RES[i] != exp) {
+      printf("[TC %d] Index %d FAILED. Got \"%u\", expected \"%u\".\n", casenum, i, RES[i], exp);
+      num_failed++;
+      return;
+    }
+  }
+  printf("[TC %d] PASSED.\n", casenum);
+}
+
+// vstart = 21 -> byte 84: only interface 1 writes (double-bandwidth VLSU)
+void TEST_CASE17(void) { vle32_vstart_raw(17, 21); }
+
+// vstart = 9 -> byte 36: interface 1's second row is written alone
+void TEST_CASE18(void) { vle32_vstart_raw(18, 9); }
+
+// Single-row load with vstart in FU 2: vl=8 e32 = one VRF row. With vstart=5
+// FUs 0 and 1 have no work at all. Load counterpart of vse32 TEST_CASE12.
+static void vle32_single_row_vstart(int casenum, unsigned long vstart) {
+  volatile uint32_t MEM[8] __attribute__((aligned(64)));
+  for (int i = 0; i < 8; i++) MEM[i] = i + 1;
+
+  VSET(8, e32, m1);
+  asm volatile("vmv.v.x v2, %0" :: "r"(0xdeadbeef) : "v2");
+  asm volatile(
+      "csrw    vstart, %1\n\t"
+      "vle32.v v2, (%0)"
+      ::"r"(MEM), "r"(vstart) : "memory", "v2");
+  asm volatile("csrw vstart, 0");
+  asm volatile("vse32.v v2, (%0)" ::"r"(MEM) : "memory");
+
+  for (int i = 0; i < 8; i++) {
+    uint32_t exp = (i < (int)vstart) ? 0xdeadbeef : (uint32_t)(i + 1);
+    if (MEM[i] != exp) {
+      printf("[TC %d] Index %d FAILED. Got \"%u\", expected \"%u\".\n", casenum, i, MEM[i], exp);
+      num_failed++;
+      return;
+    }
+  }
+  printf("[TC %d] PASSED.\n", casenum);
+}
+
+// vstart = 5 -> byte 20: FUs 0-1 idle, FU 2 mid-word, FU 3 catches up
+void TEST_CASE19(void) { vle32_single_row_vstart(19, 5); }
+
 int main(void) {
   INIT_CHECK();
   enable_vec();
@@ -302,6 +446,14 @@ int main(void) {
   TEST_CASE9();
   TEST_CASE10();
   TEST_CASE11();
+  TEST_CASE12();
+  TEST_CASE13();
+  TEST_CASE14();
+  TEST_CASE15();
+  TEST_CASE16();
+  TEST_CASE17();
+  TEST_CASE18();
+  TEST_CASE19();
 
   EXIT_CHECK();
 }
