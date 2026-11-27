@@ -133,7 +133,7 @@ packages:
     - riscv-dbg
     - tech_cells_generic
   spatz_vpu:
-    revision: d2854faf164f77f82f4e7dafd3cbe6a987eff323
+    revision: bb636916ef67a39d12c70abcc261f5cc7de14171
     version: null
     source:
       Git: https://github.com/pulp-platform/spatz_vpu.git

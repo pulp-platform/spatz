@@ -198,6 +198,244 @@ void TEST_CASE9(void) {
   }
 }
 
+// Write a reserved vsew into vtype: per spec this sets vill=1 and vl=0
+static inline void set_vill(void) {
+  unsigned long vtype = (4 << 3) | 0; // vsew=4 is reserved -> vill
+  unsigned long avl   = 16;
+  asm volatile("vsetvl zero, %0, %1" :: "r"(avl), "r"(vtype));
+}
+
+// Fill v20..v21 entirely with a guard byte so a dropped load is visible
+static inline void fill_v20_v21(uint8_t val) {
+  VSETMAX(e8, m2);
+  asm volatile("vmv.v.x v20, %0" :: "r"(val) : "v20", "v21");
+}
+
+// Whole-register load must execute when vill=1 (and therefore vl=0)
+void TEST_CASE10(void) {
+  uint32_t vlenb = get_vlenb_hw();
+  volatile uint8_t INP[2 * 64] __attribute__((aligned(64)));
+  for (int i = 0; i < 2 * 64; i++) INP[i] = 200 - i;
+
+  fill_v20_v21(170);
+
+  set_vill();
+  unsigned long vl_csr, vtype_csr;
+  asm volatile("csrr %0, vl"    : "=r"(vl_csr));
+  asm volatile("csrr %0, vtype" : "=r"(vtype_csr));
+  asm volatile("vl2re8.v v20, (%0)" :: "r"(INP) : "memory", "v20", "v21");
+
+  // Sanity: the scenario was really vill=1, vl=0
+  const unsigned long exp_csr[] = {0, 1};
+  VCMP(unsigned long, "%lu", 25, exp_csr, vl_csr,
+       (vtype_csr >> (8 * sizeof(unsigned long) - 1)) & 1);
+
+  // Restore a legal vtype; VCMP_U8 consumes v20/v21 right away (RAW on the load)
+  VSET(16, e8, m1);
+  VCMP_U8(26, v20, 200, 199, 198, 197, 196, 195, 194, 193, 192, 191, 190, 189, 188, 187, 186, 185);
+  if (vlenb == 32) {
+    VCMP_U8(27, v21, 168, 167, 166, 165, 164, 163, 162, 161, 160, 159, 158, 157, 156, 155, 154, 153);
+  } else {
+    VCMP_U8(27, v21, 136, 135, 134, 133, 132, 131, 130, 129, 128, 127, 126, 125, 124, 123, 122, 121);
+  }
+}
+
+// Whole-register load must execute with a legal vtype but vl=0
+void TEST_CASE11(void) {
+  uint32_t vlenb = get_vlenb_hw();
+  volatile uint8_t INP[2 * 64] __attribute__((aligned(64)));
+  for (int i = 0; i < 2 * 64; i++) INP[i] = i + 3;
+
+  fill_v20_v21(170);
+
+  VSET(0, e8, m1);
+  unsigned long vl_csr;
+  asm volatile("csrr %0, vl" : "=r"(vl_csr));
+  asm volatile("vl2re8.v v20, (%0)" :: "r"(INP) : "memory", "v20", "v21");
+
+  const unsigned long exp_vl[] = {0};
+  VCMP(unsigned long, "%lu", 28, exp_vl, vl_csr);
+
+  VSET(16, e8, m1);
+  VCMP_U8(29, v20, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18);
+  if (vlenb == 32) {
+    VCMP_U8(30, v21, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50);
+  } else {
+    VCMP_U8(30, v21, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82);
+  }
+}
+
+// Compare 16 bytes against the pattern (i * 7 + 1) starting at byte index `start`
+static void check_pattern(int casenum, const volatile uint8_t *got, uint32_t start) {
+  for (int k = 0; k < 16; k++) {
+    uint8_t exp = (uint8_t)((start + k) * 7 + 1);
+    if (got[k] != exp) {
+      printf("[TC %d] Index %d FAILED. Got %hhu, expected %hhu.\n", casenum, k, got[k], exp);
+      num_failed++;
+      return;
+    }
+  }
+  printf("[TC %d] PASSED.\n", casenum);
+}
+
+// RAW hazard across units: a vl4re8.v issued with vill=1 (vl=0) must still be
+// tracked by the scoreboard, so a VFU and an SLD consumer issued right after
+// it must wait for the load. v15 is the last register written by the load,
+// which gives the widest window for an untracked read to see stale data.
+// Kept to 4 registers (256 B buffer) so the frame plus the printf call chain
+// fits in the 1 KiB per-core stack.
+void TEST_CASE12(void) {
+  uint32_t vlenb = get_vlenb_hw();
+  volatile uint8_t INP[4 * 64] __attribute__((aligned(64)));
+  volatile uint8_t RES_VFU[16] __attribute__((aligned(16)));
+  volatile uint8_t RES_SLD[16] __attribute__((aligned(16)));
+  for (int i = 0; i < 4 * 64; i++) INP[i] = (uint8_t)(i * 7 + 1);
+
+  // Guard the whole destination group
+  VSETMAX(e8, m4);
+  asm volatile("vmv.v.x v12, %0" :: "r"(170) : "v12", "v13", "v14", "v15");
+
+  unsigned long vtype_ill = (4 << 3) | 0; // reserved vsew -> vill=1, vl=0
+  unsigned long avl       = 16;
+  unsigned long vl_tmp;
+  asm volatile(
+    "vsetvl   zero, %[avl], %[vill]\n\t"
+    "vl4re8.v v12, (%[inp])\n\t"
+    "vsetvli  %[tmp], %[avl], e8, m1, ta, ma\n\t"
+    "vor.vv   v24, v15, v15\n\t"        // VFU reads v15
+    "vslidedown.vi v26, v15, 0\n\t"     // SLD reads v15
+    "vse8.v   v24, (%[rv])\n\t"
+    "vse8.v   v26, (%[rs])"
+    : [tmp] "=&r"(vl_tmp)
+    : [avl] "r"(avl), [vill] "r"(vtype_ill), [inp] "r"(INP),
+      [rv] "r"(RES_VFU), [rs] "r"(RES_SLD)
+    : "memory", "v12", "v13", "v14", "v15", "v24", "v26");
+
+  // v15 holds bytes [3*vlenb, 4*vlenb) of INP
+  check_pattern(31, RES_VFU, 3 * vlenb);
+  check_pattern(32, RES_SLD, 3 * vlenb);
+}
+
+// vstart >= evl (evl = 2 * vlenb for vl2re8.v) must be a no-op: v20/v21 keep
+// the guard, and the load must still complete. The vor.vv depends on v21, so
+// it waits for the load in the scoreboard and would hang if the VLSU never
+// sent its response (a no-work load has no VRF write to carry it).
+static void vlre_no_work(int casenum, unsigned long vstart) {
+  volatile uint8_t INP[2 * 64] __attribute__((aligned(64)));
+  for (int i = 0; i < 2 * 64; i++) INP[i] = i;
+
+  fill_v20_v21(170);
+  VSET(16, e8, m1);
+  asm volatile("vmv.v.i v22, 0" ::: "v22");
+  asm volatile(
+      "csrw     vstart, %1\n\t"
+      "vl2re8.v v20, (%0)\n\t"
+      "vor.vv   v22, v21, v21"
+      ::"r"(INP), "r"(vstart) : "memory", "v20", "v21", "v22");
+  asm volatile("csrw vstart, 0");
+
+  VCMP_U8(casenum, v22, 170, 170, 170, 170, 170, 170, 170, 170,
+                        170, 170, 170, 170, 170, 170, 170, 170);
+  VCMP_U8(casenum + 1, v20, 170, 170, 170, 170, 170, 170, 170, 170,
+                            170, 170, 170, 170, 170, 170, 170, 170);
+}
+
+// vstart == evl
+void TEST_CASE13(void) { vlre_no_work(33, 2 * get_vlenb_hw()); }
+
+// vstart > evl: counters start past their limit
+void TEST_CASE14(void) { vlre_no_work(35, 2 * get_vlenb_hw() + 3); }
+
+// vstart counts EEW elements for vl<nf>re<eew>.v, not bytes:
+// vl1re32.v with vstart=1 must skip element 0 (bytes 0..3) and resume at byte 4.
+// v21 is outside the 1-register group and must stay untouched.
+void TEST_CASE15(void) {
+  volatile uint8_t INP[64] __attribute__((aligned(64)));
+  for (int i = 0; i < 64; i++) INP[i] = i + 10;
+
+  fill_v20_v21(170);
+  VSET(16, e8, m1);
+  asm volatile(
+      "csrw      vstart, %1\n\t"
+      "vl1re32.v v20, (%0)"
+      ::"r"(INP), "r"(1) : "memory", "v20");
+  asm volatile("csrw vstart, 0");
+
+  VCMP_U8(37, v20, 170, 170, 170, 170, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25);
+  VCMP_U8(38, v21, 170, 170, 170, 170, 170, 170, 170, 170,
+                   170, 170, 170, 170, 170, 170, 170, 170);
+}
+
+// vstart == evl in EEW elements (evl = 2 * vlenb / 4 for vl2re32.v) must be a
+// no-op. Read as a byte offset it would only be half of v20, so the load would
+// wrongly write the rest of v20 and all of v21. The vor.vv depends on v21 and
+// checks that the no-work load still completes.
+void TEST_CASE16(void) {
+  uint32_t vlenb = get_vlenb_hw();
+  volatile uint8_t INP[2 * 64] __attribute__((aligned(64)));
+  for (int i = 0; i < 2 * 64; i++) INP[i] = i;
+
+  fill_v20_v21(170);
+  VSET(16, e8, m1);
+  asm volatile("vmv.v.i v22, 0" ::: "v22");
+  asm volatile(
+      "csrw      vstart, %1\n\t"
+      "vl2re32.v v20, (%0)\n\t"
+      "vor.vv    v22, v21, v21"
+      ::"r"(INP), "r"((unsigned long)(2 * vlenb / 4)) : "memory", "v20", "v21", "v22");
+  asm volatile("csrw vstart, 0");
+
+  VCMP_U8(39, v22, 170, 170, 170, 170, 170, 170, 170, 170,
+                   170, 170, 170, 170, 170, 170, 170, 170);
+  VCMP_U8(40, v21, 170, 170, 170, 170, 170, 170, 170, 170,
+                   170, 170, 170, 170, 170, 170, 170, 170);
+}
+
+// Whole-register load with EEW=8 and a vstart not aligned to the VRF word
+// (ELENB = 8 with RVD). vstart counts bytes here, so the VLSU sees it unchanged.
+// The whole group is read back with vs<nf>r.v: bytes below vstart keep the
+// guard (170), the rest must match memory.
+static void vlre8_unaligned_vstart(int casenum, int nreg, unsigned long vstart) {
+  uint32_t vlenb = get_vlenb_hw();
+  volatile uint8_t INP[2 * 64] __attribute__((aligned(64)));
+  volatile uint8_t *RES = INP; // reused for the read-back (stack space)
+  for (int i = 0; i < 2 * 64; i++) INP[i] = (uint8_t)(i * 3 + 1);
+
+  fill_v20_v21(170);
+  VSET(16, e8, m1);
+  if (nreg == 1) {
+    asm volatile(
+        "csrw     vstart, %1\n\t"
+        "vl1re8.v v20, (%0)"
+        ::"r"(INP), "r"(vstart) : "memory", "v20");
+    asm volatile("csrw vstart, 0");
+    asm volatile("vs1r.v v20, (%0)" ::"r"(RES) : "memory");
+  } else {
+    asm volatile(
+        "csrw     vstart, %1\n\t"
+        "vl2re8.v v20, (%0)"
+        ::"r"(INP), "r"(vstart) : "memory", "v20", "v21");
+    asm volatile("csrw vstart, 0");
+    asm volatile("vs2r.v v20, (%0)" ::"r"(RES) : "memory");
+  }
+
+  for (uint32_t i = 0; i < nreg * vlenb; i++) {
+    uint8_t exp = (i < vstart) ? 170 : (uint8_t)(i * 3 + 1);
+    if (RES[i] != exp) {
+      printf("[TC %d] Index %u FAILED. Got \"%hhu\", expected \"%hhu\".\n", casenum, i, RES[i], exp);
+      num_failed++;
+      return;
+    }
+  }
+  printf("[TC %d] PASSED.\n", casenum);
+}
+
+// vl1re8.v, vstart = 1 -> byte 1, middle of FU 0's word
+void TEST_CASE17(void) { vlre8_unaligned_vstart(41, 1, 1); }
+
+// vl2re8.v, vstart = 45 -> byte 45, row 1, middle of FU 1's word
+void TEST_CASE18(void) { vlre8_unaligned_vstart(42, 2, 45); }
+
 int main(void) {
   INIT_CHECK();
   enable_vec();
@@ -211,6 +449,15 @@ int main(void) {
   TEST_CASE7();
   TEST_CASE8();
   TEST_CASE9();
+  TEST_CASE10();
+  TEST_CASE11();
+  TEST_CASE12();
+  TEST_CASE13();
+  TEST_CASE14();
+  TEST_CASE15();
+  TEST_CASE16();
+  TEST_CASE17();
+  TEST_CASE18();
 
   EXIT_CHECK();
 }

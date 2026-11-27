@@ -97,6 +97,35 @@ void TEST_CASE7(void) {
   VVCMP_U8(7, OUT, 0xC3, 0x5E, 0x0F, 170);
 }
 
+// vstart >= evl must be a no-op: no byte of OUT may be written (the guard
+// covers well past evl to catch counters running beyond their limit), and the
+// store must still complete. The vmv.v.i overwrites vs3 right after the store
+// (WAR), and the vle8.v read-back is ordered after the store in the VLSU.
+static void vsm_no_work(int casenum, unsigned long vstart) {
+  volatile uint8_t OUT[16] __attribute__((aligned(8)));
+  for (int i = 0; i < 16; i++) OUT[i] = 170;
+  VSET(4, e8, m1);
+  VLOAD_8(v8, 0xA5, 0x3C, 0xFF, 0x81);
+  VSET(8, e8, m1); // evl = ceil(8/8) = 1 byte
+  asm volatile(
+      "csrw    vstart, %1\n\t"
+      "vsm.v   v8, (%0)\n\t"
+      "vmv.v.i v8, 0"
+      ::"r"(OUT), "r"(vstart) : "memory", "v8");
+  asm volatile("csrw vstart, 0");
+  // Read OUT back through the VLSU (ordered after the store)
+  VSET(16, e8, m1);
+  asm volatile("vle8.v v10, (%0)" ::"r"(OUT) : "memory", "v10");
+  VCMP_U8(casenum, v10, 170, 170, 170, 170, 170, 170, 170, 170,
+                        170, 170, 170, 170, 170, 170, 170, 170);
+}
+
+// vstart == evl (vl=8 -> evl=1, vstart=1)
+void TEST_CASE8(void) { vsm_no_work(8, 1); }
+
+// vstart > evl (vl=8 -> evl=1, vstart=2): counters start past their limit
+void TEST_CASE9(void) { vsm_no_work(9, 2); }
+
 int main(void) {
   INIT_CHECK();
   enable_vec();
@@ -108,6 +137,8 @@ int main(void) {
   TEST_CASE5();
   TEST_CASE6();
   TEST_CASE7();
+  TEST_CASE8();
+  TEST_CASE9();
 
   EXIT_CHECK();
 }

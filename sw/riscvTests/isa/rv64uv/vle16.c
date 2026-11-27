@@ -176,6 +176,46 @@ void TEST_CASE8(void) {
   VCMP_U16(7, v4, 5, 6, 7, 8);
 }
 
+// vstart not aligned to the VRF word (ELENB = 8 with RVD) with 2-byte
+// elements, on a vl that spans several rows: vl=64 e16 = 128 B = 4 rows on the
+// standard VLSU, 2 rows per interface on the double-bandwidth VLSU.
+// LMUL=4 so VLMAX >= 64 also with VLEN=256. Elements below vstart keep the
+// guard (0xdead); the rest must match memory.
+static void vle16_unaligned_vstart(int casenum, unsigned long vstart) {
+  volatile uint16_t MEM[64] __attribute__((aligned(64)));
+  volatile uint16_t *RES = MEM; // reused for the read-back (stack space)
+  for (int i = 0; i < 64; i++) MEM[i] = (uint16_t)(i * 3 + 1);
+
+  VSET(64, e16, m4);
+  asm volatile("vmv.v.x v4, %0" :: "r"(0xdead) : "v4", "v5", "v6", "v7");
+  asm volatile(
+      "csrw    vstart, %1\n\t"
+      "vle16.v v4, (%0)"
+      ::"r"(MEM), "r"(vstart) : "memory", "v4", "v5", "v6", "v7");
+  asm volatile("csrw vstart, 0");
+  asm volatile("vse16.v v4, (%0)" ::"r"(RES) : "memory");
+
+  for (int i = 0; i < 64; i++) {
+    uint16_t exp = (i < (int)vstart) ? 0xdead : (uint16_t)(i * 3 + 1);
+    if (RES[i] != exp) {
+      printf("[TC %d] Index %d FAILED. Got \"%hu\", expected \"%hu\".\n", casenum, i, RES[i], exp);
+      num_failed++;
+      return;
+    }
+  }
+  printf("[TC %d] PASSED.\n", casenum);
+}
+
+// vstart = 1 -> byte 2, middle of FU 0's word
+void TEST_CASE9(void) { vle16_unaligned_vstart(9, 1); }
+
+// vstart = 7 -> byte 14, middle of FU 1's word; FU 0 a row ahead
+void TEST_CASE10(void) { vle16_unaligned_vstart(10, 7); }
+
+// vstart = 23 -> byte 46: row 1 (standard) / interface 0 row 1 (double-bw),
+// middle of FU 1's word
+void TEST_CASE11(void) { vle16_unaligned_vstart(11, 23); }
+
 int main(void) {
 INIT_CHECK();
 enable_vec();
@@ -187,5 +227,8 @@ TEST_CASE5();
 TEST_CASE6();
 TEST_CASE7();
 TEST_CASE8();
+TEST_CASE9();
+TEST_CASE10();
+TEST_CASE11();
 EXIT_CHECK();
 }

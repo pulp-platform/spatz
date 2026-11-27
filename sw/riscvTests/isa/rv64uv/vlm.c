@@ -80,6 +80,30 @@ void TEST_CASE6(void) {
   VCMP_U8(7, v8, 7, 0x3C, 0xFF);
 }
 
+// vstart >= evl must be a no-op: v8 keeps its old value, and the vlm.v must
+// still complete. The vor.vv depends on v8, so it waits for the vlm.v in the
+// scoreboard and would hang if the VLSU never sent its response.
+static void vlm_no_work(int casenum, unsigned long vstart) {
+  volatile uint8_t INP[8] __attribute__((aligned(8))) = {0xA5, 0x3C, 0xFF, 0x81, 0x5A, 0x99, 0x42, 0x18};
+  VSET(16, e8, m1);
+  asm volatile("vmv.v.i v8, 7\n\t"
+               "vmv.v.i v9, 0" ::: "v8", "v9");
+  VSET(8, e8, m1); // evl = ceil(8/8) = 1 byte
+  asm volatile(
+      "csrw   vstart, %1\n\t"
+      "vlm.v  v8, (%0)\n\t"
+      "vor.vv v9, v8, v8"
+      ::"r"(INP), "r"(vstart) : "memory", "v8", "v9");
+  asm volatile("csrw vstart, 0");
+  VCMP_U8(casenum, v9, 7, 7, 7, 7, 7, 7, 7, 7);
+}
+
+// vstart == evl (vl=8 -> evl=1, vstart=1)
+void TEST_CASE7(void) { vlm_no_work(8, 1); }
+
+// vstart > evl (vl=8 -> evl=1, vstart=2): counters start past their limit
+void TEST_CASE8(void) { vlm_no_work(9, 2); }
+
 int main(void) {
   INIT_CHECK();
   enable_vec();
@@ -90,6 +114,8 @@ int main(void) {
   TEST_CASE4();
   TEST_CASE5();
   TEST_CASE6();
+  TEST_CASE7();
+  TEST_CASE8();
 
   EXIT_CHECK();
 }

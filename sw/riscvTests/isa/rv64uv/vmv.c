@@ -194,6 +194,41 @@ void TEST_CASE7(void) {
   VCMP_U8(27, v1, 1, 2, 3, 4);
 }
 
+// vmv.x.s sign extension must follow the vmv.x.s itself, not whatever
+// instruction the VFU request queue has advanced to when the result retires.
+// v8 = {0x80, 0x7f, ...} at e8: element 0 is -128, and bytes [1:0] read as
+// e16 are 0x7f80.
+
+// vmv.x.s followed directly by an ordinary vector op: the result must still
+// be sign-extended (bug: 0x00000080 instead of 0xffffff80)
+void TEST_CASE8(void) {
+  int32_t res;
+  VSET(16, e8, m1);
+  VLOAD_8(v8, 0x80, 0x7f, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
+  VLOAD_8(v17, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
+  asm volatile(
+      "vmv.x.s %0, v8\n\t"
+      "vadd.vv v16, v17, v17"
+      : "=&r"(res) :: "v16");
+  XCMP(28, res, -128);
+}
+
+// vmv.x.s at e8 followed directly by vmv.x.s at e16: each result must be
+// extended with its own SEW (bug: the e8 result extended as e16 = 0x7f80)
+void TEST_CASE9(void) {
+  int32_t res8, res16;
+  unsigned long avl = 16, vl_tmp;
+  VSET(16, e8, m1);
+  VLOAD_8(v8, 0x80, 0x7f, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8);
+  asm volatile(
+      "vmv.x.s %0, v8\n\t"
+      "vsetvli %2, %3, e16, m1, ta, ma\n\t"
+      "vmv.x.s %1, v8"
+      : "=&r"(res8), "=&r"(res16), "=&r"(vl_tmp) : "r"(avl));
+  XCMP(29, res8, -128);
+  XCMP(30, res16, 0x7f80);
+}
+
 int main(void) {
   INIT_CHECK();
   enable_vec();
@@ -205,6 +240,8 @@ int main(void) {
   TEST_CASE5();
   TEST_CASE6();
   TEST_CASE7();
+  TEST_CASE8();
+  TEST_CASE9();
 
   EXIT_CHECK();
 }
